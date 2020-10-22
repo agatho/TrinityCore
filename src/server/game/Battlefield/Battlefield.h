@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -76,8 +76,8 @@ class Map;
 class Player;
 class Unit;
 class WorldPacket;
-
 struct Position;
+struct QuaternionData;
 struct WorldSafeLocsEntry;
 
 namespace WorldPackets
@@ -86,11 +86,6 @@ namespace WorldPackets
     {
         class InitWorldStates;
     }
-}
-
-namespace G3D
-{
-    class Quat;
 }
 
 typedef std::vector<BfGraveyard*> GraveyardVect;
@@ -168,6 +163,7 @@ class TC_GAME_API BfGraveyard
 {
     public:
         BfGraveyard(Battlefield* Bf);
+        virtual ~BfGraveyard() = default;
 
         // Method to changing who controls the graveyard
         void GiveControlTo(TeamId team);
@@ -304,7 +300,7 @@ class TC_GAME_API Battlefield : public ZoneScript
 
         // Graveyard methods
         // Find which graveyard the player must be teleported to to be resurrected by spiritguide
-        WorldSafeLocsEntry const* GetClosestGraveYard(Player* player);
+        WorldSafeLocsEntry const* GetClosestGraveyard(Player* player);
 
         virtual void AddPlayerToResurrectQueue(ObjectGuid npc_guid, ObjectGuid player_guid);
         void RemovePlayerFromResurrectQueue(ObjectGuid player_guid);
@@ -313,7 +309,7 @@ class TC_GAME_API Battlefield : public ZoneScript
 
         // Misc methods
         Creature* SpawnCreature(uint32 entry, Position const& pos);
-        GameObject* SpawnGameObject(uint32 entry, Position const& pos, G3D::Quat const& rot);
+        GameObject* SpawnGameObject(uint32 entry, Position const& pos, QuaternionData const& rot);
 
         Creature* GetCreature(ObjectGuid guid);
         GameObject* GetGameObject(ObjectGuid guid);

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -18,9 +18,11 @@
 #include "AreaTriggerDataStore.h"
 #include "AreaTriggerTemplate.h"
 #include "DatabaseEnv.h"
+#include "DB2Stores.h"
 #include "Log.h"
 #include "ObjectMgr.h"
 #include "Timer.h"
+#include <cmath>
 
 namespace
 {
@@ -31,9 +33,9 @@ namespace
 void AreaTriggerDataStore::LoadAreaTriggerTemplates()
 {
     uint32 oldMSTime = getMSTime();
-    std::unordered_map<uint32, std::vector<G3D::Vector2>> verticesByAreaTrigger;
-    std::unordered_map<uint32, std::vector<G3D::Vector2>> verticesTargetByAreaTrigger;
-    std::unordered_map<uint32, std::vector<G3D::Vector3>> splinesBySpellMisc;
+    std::unordered_map<uint32, std::vector<TaggedPosition<Position::XY>>> verticesByAreaTrigger;
+    std::unordered_map<uint32, std::vector<TaggedPosition<Position::XY>>> verticesTargetByAreaTrigger;
+    std::unordered_map<uint32, std::vector<Position>> splinesBySpellMisc;
     std::unordered_map<uint32, std::vector<AreaTriggerAction>> actionsByAreaTrigger;
 
     //                                                            0              1           2            3
@@ -102,13 +104,7 @@ void AreaTriggerDataStore::LoadAreaTriggerTemplates()
         {
             Field* splineFields = splines->Fetch();
             uint32 spellMiscId = splineFields[0].GetUInt32();
-
-            G3D::Vector3 spline;
-            spline.x = splineFields[1].GetFloat();
-            spline.y = splineFields[2].GetFloat();
-            spline.z = splineFields[3].GetFloat();
-
-            splinesBySpellMisc[spellMiscId].push_back(spline);
+            splinesBySpellMisc[spellMiscId].emplace_back(splineFields[1].GetFloat(), splineFields[2].GetFloat(), splineFields[3].GetFloat());
         }
         while (splines->NextRow());
     }
@@ -151,8 +147,8 @@ void AreaTriggerDataStore::LoadAreaTriggerTemplates()
         while (templates->NextRow());
     }
 
-    //                                                                  0            1              2            3             4             5              6                  7             8
-    if (QueryResult areatriggerSpellMiscs = WorldDatabase.Query("SELECT SpellMiscId, AreaTriggerId, MoveCurveId, ScaleCurveId, MorphCurveId, FacingCurveId, DecalPropertiesId, TimeToTarget, TimeToTargetScale FROM `spell_areatrigger`"))
+    //                                                                  0            1              2            3             4             5              6       7          8                  9             10
+    if (QueryResult areatriggerSpellMiscs = WorldDatabase.Query("SELECT SpellMiscId, AreaTriggerId, MoveCurveId, ScaleCurveId, MorphCurveId, FacingCurveId, AnimId, AnimKitId, DecalPropertiesId, TimeToTarget, TimeToTargetScale FROM `spell_areatrigger`"))
     {
         do
         {
@@ -186,10 +182,13 @@ void AreaTriggerDataStore::LoadAreaTriggerTemplates()
 
 #undef VALIDATE_AND_SET_CURVE
 
-            miscTemplate.DecalPropertiesId = areatriggerSpellMiscFields[6].GetUInt32();
+            miscTemplate.AnimId = areatriggerSpellMiscFields[6].GetInt32();
+            miscTemplate.AnimKitId = areatriggerSpellMiscFields[7].GetInt32();
 
-            miscTemplate.TimeToTarget       = areatriggerSpellMiscFields[7].GetUInt32();
-            miscTemplate.TimeToTargetScale  = areatriggerSpellMiscFields[8].GetUInt32();
+            miscTemplate.DecalPropertiesId = areatriggerSpellMiscFields[8].GetUInt32();
+
+            miscTemplate.TimeToTarget       = areatriggerSpellMiscFields[9].GetUInt32();
+            miscTemplate.TimeToTargetScale  = areatriggerSpellMiscFields[10].GetUInt32();
 
             miscTemplate.SplinePoints = std::move(splinesBySpellMisc[miscTemplate.MiscId]);
 
@@ -200,6 +199,51 @@ void AreaTriggerDataStore::LoadAreaTriggerTemplates()
     else
     {
         TC_LOG_INFO("server.loading", ">> Loaded 0 Spell AreaTrigger templates. DB table `spell_areatrigger` is empty.");
+    }
+
+    //                                                                  0            1           2             3                4             5        6                 7
+    if (QueryResult circularMovementInfos = WorldDatabase.Query("SELECT SpellMiscId, StartDelay, CircleRadius, BlendFromRadius, InitialAngle, ZOffset, CounterClockwise, CanLoop FROM `spell_areatrigger_circular` ORDER BY `SpellMiscId`"))
+    {
+        do
+        {
+            Field* circularMovementInfoFields = circularMovementInfos->Fetch();
+            uint32 spellMiscId = circularMovementInfoFields[0].GetUInt32();
+
+            auto atSpellMiscItr = _areaTriggerTemplateSpellMisc.find(spellMiscId);
+            if (atSpellMiscItr == _areaTriggerTemplateSpellMisc.end())
+            {
+                TC_LOG_ERROR("sql.sql", "Table `spell_areatrigger_circular` reference invalid SpellMiscId %u", spellMiscId);
+                continue;
+            }
+
+            AreaTriggerOrbitInfo& orbitInfo = atSpellMiscItr->second.OrbitInfo;
+
+            orbitInfo.StartDelay                    = circularMovementInfoFields[1].GetUInt32();
+
+#define VALIDATE_AND_SET_FLOAT(Float, Value) \
+            orbitInfo.Float = Value; \
+            if (!std::isfinite(orbitInfo.Float)) \
+            { \
+                TC_LOG_ERROR("sql.sql", "Table `spell_areatrigger_circular` has listed areatrigger (MiscId: %u) with invalid " #Float " (%f), set to 0!", \
+                    spellMiscId, orbitInfo.Float); \
+                orbitInfo.Float = 0.0f; \
+            }
+
+            VALIDATE_AND_SET_FLOAT(Radius,          circularMovementInfoFields[2].GetFloat());
+            VALIDATE_AND_SET_FLOAT(BlendFromRadius, circularMovementInfoFields[3].GetFloat());
+            VALIDATE_AND_SET_FLOAT(InitialAngle,    circularMovementInfoFields[4].GetFloat());
+            VALIDATE_AND_SET_FLOAT(ZOffset,         circularMovementInfoFields[5].GetFloat());
+
+#undef VALIDATE_AND_SET_FLOAT
+
+            orbitInfo.CounterClockwise              = circularMovementInfoFields[6].GetBool();
+            orbitInfo.CanLoop                       = circularMovementInfoFields[7].GetBool();
+        }
+        while (circularMovementInfos->NextRow());
+    }
+    else
+    {
+        TC_LOG_INFO("server.loading", ">> Loaded 0 AreaTrigger templates circular movement infos. DB table `spell_areatrigger_circular` is empty.");
     }
 
     TC_LOG_INFO("server.loading", ">> Loaded " SZFMTD " spell areatrigger templates in %u ms.", _areaTriggerTemplateStore.size(), GetMSTimeDiffToNow(oldMSTime));

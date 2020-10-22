@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -22,9 +22,9 @@ Comment:
 Category: Scholomance
 */
 
+#include "scholomance.h"
 #include "ScriptMgr.h"
 #include "ScriptedCreature.h"
-#include "scholomance.h"
 
 enum Spells
 {
@@ -103,7 +103,7 @@ class boss_the_ravenian : public CreatureScript
 
         CreatureAI* GetAI(Creature* creature) const override
         {
-            return new boss_theravenianAI(creature);
+            return GetScholomanceAI<boss_theravenianAI>(creature);
         }
 };
 

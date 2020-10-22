@@ -1,6 +1,5 @@
 /*
- * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
- * Copyright (C) 2005-2009 MaNGOS <http://getmangos.com/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -20,13 +19,14 @@
 #define __WORLDSOCKET_H__
 
 #include "Common.h"
-#include "BigNumber.h"
+#include "AsyncCallbackProcessor.h"
+#include "AuthDefines.h"
 #include "DatabaseEnvFwd.h"
 #include "MessageBuffer.h"
-#include "QueryCallbackProcessor.h"
 #include "Socket.h"
 #include "WorldPacketCrypt.h"
 #include "MPSCQueue.h"
+#include <array>
 #include <chrono>
 #include <functional>
 #include <mutex>
@@ -36,7 +36,7 @@ class EncryptablePacket;
 class WorldPacket;
 class WorldSession;
 enum ConnectionType : int8;
-enum OpcodeClient : uint32;
+enum OpcodeClient : uint16;
 
 namespace WorldPackets
 {
@@ -55,10 +55,9 @@ namespace WorldPackets
 struct PacketHeader
 {
     uint32 Size;
-    uint16 Command;
+    uint8 Tag[12];
 
-    bool IsValidSize() { return Size < 0x10000; }
-    bool IsValidOpcode();
+    bool IsValidSize() { return Size < 0x40000; }
 };
 
 #pragma pack(pop)
@@ -72,6 +71,7 @@ class TC_GAME_API WorldSocket : public Socket<WorldSocket>
     static uint8 const AuthCheckSeed[16];
     static uint8 const SessionKeySeed[16];
     static uint8 const ContinuedSessionSeed[16];
+    static uint8 const EncryptionKeySeed[16];
 
     typedef Socket<WorldSocket> BaseSocket;
 
@@ -126,16 +126,15 @@ private:
     void LoadSessionPermissionsCallback(PreparedQueryResult result);
     void HandleConnectToFailed(WorldPackets::Auth::ConnectToFailed& connectToFailed);
     bool HandlePing(WorldPackets::Auth::Ping& ping);
-    void HandleEnableEncryptionAck();
+    void HandleEnterEncryptedModeAck();
 
     ConnectionType _type;
     uint64 _key;
 
-    BigNumber _serverChallenge;
+    std::array<uint8, 16> _serverChallenge;
     WorldPacketCrypt _authCrypt;
-    BigNumber _encryptSeed;
-    BigNumber _decryptSeed;
-    BigNumber _sessionKey;
+    SessionKey _sessionKey;
+    std::array<uint8, 16> _encryptKey;
 
     std::chrono::steady_clock::time_point _LastPingTime;
     uint32 _OverSpeedPings;

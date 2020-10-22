@@ -1,5 +1,5 @@
 /*
-* Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
+* This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
 *
 * This program is free software; you can redistribute it and/or modify it
 * under the terms of the GNU General Public License as published by the
@@ -25,12 +25,13 @@
 
 #include "BattlefieldTB.h"
 #include "AchievementMgr.h"
-#include "CreatureTextMgr.h"
 #include "Battleground.h"
+#include "CreatureTextMgr.h"
+#include "GameObject.h"
 #include "MapManager.h"
-#include "ObjectMgr.h"
-#include "Opcodes.h"
+#include "ObjectAccessor.h"
 #include "Player.h"
+#include "Random.h"
 #include "SpellAuras.h"
 #include "TemporarySummon.h"
 #include "World.h"
@@ -97,7 +98,7 @@ bool BattlefieldTB::SetupBattlefield()
         TolBaradCapturePoint* capturePoint = new TolBaradCapturePoint(this, GetDefenderTeam());
 
         //Spawn flag pole
-        if (GameObject* go = SpawnGameObject(TBCapturePoints[i].entryFlagPole[GetDefenderTeam()], TBCapturePoints[i].pos, G3D::Quat()))
+        if (GameObject* go = SpawnGameObject(TBCapturePoints[i].entryFlagPole[GetDefenderTeam()], TBCapturePoints[i].pos, QuaternionData::fromEulerAnglesZYX(TBCapturePoints[i].pos.GetOrientation(), 0.0f, 0.0f)))
         {
             go->SetGoArtKit(GetDefenderTeam() == TEAM_ALLIANCE ? TB_GO_ARTKIT_FLAG_ALLIANCE : TB_GO_ARTKIT_FLAG_HORDE);
             capturePoint->SetCapturePointData(go);
@@ -107,7 +108,7 @@ bool BattlefieldTB::SetupBattlefield()
 
     // Spawn towers
     for (uint8 i = 0; i < TB_TOWERS_COUNT; i++)
-        if (GameObject* go = SpawnGameObject(TBTowers[i].entry, TBTowers[i].pos, G3D::Quat()))
+        if (GameObject* go = SpawnGameObject(TBTowers[i].entry, TBTowers[i].pos, QuaternionData::fromEulerAnglesZYX(TBTowers[i].pos.GetOrientation(), 0.0f, 0.0f)))
             Towers.insert(go->GetGUID());
 
     // Init Graveyards
@@ -345,8 +346,8 @@ void BattlefieldTB::FillInitialWorldStates(WorldPackets::WorldState::InitWorldSt
     packet.Worldstates.emplace_back(uint32(TB_WS_ALLIANCE_CONTROLS_SHOW), int32(!IsWarTime() && GetDefenderTeam() == TEAM_ALLIANCE ? 1 : 0));
     packet.Worldstates.emplace_back(uint32(TB_WS_HORDE_CONTROLS_SHOW), int32(!IsWarTime() && GetDefenderTeam() == TEAM_HORDE ? 1 : 0));
 
-    packet.Worldstates.emplace_back(uint32(TB_WS_TIME_BATTLE_END), int32(IsWarTime() ? time(NULL) + (m_Timer / 1000) : 0));
-    packet.Worldstates.emplace_back(uint32(TB_WS_TIME_NEXT_BATTLE), int32(!IsWarTime() ? time(NULL) + (m_Timer / 1000) : 0));
+    packet.Worldstates.emplace_back(uint32(TB_WS_TIME_BATTLE_END), int32(IsWarTime() ? time(nullptr) + (m_Timer / 1000) : 0));
+    packet.Worldstates.emplace_back(uint32(TB_WS_TIME_NEXT_BATTLE), int32(!IsWarTime() ? time(nullptr) + (m_Timer / 1000) : 0));
 
     // Not sure if TB
     //packet.Worldstates.emplace_back(uint32(TB_WS_65_UNKNOWN), int32(0));
@@ -511,7 +512,7 @@ void BattlefieldTB::UpdateNPCsAndGameObjects()
             TolBaradCapturePoint* capturePoint = new TolBaradCapturePoint(this, GetDefenderTeam());
 
             //Spawn flag pole
-            if (GameObject* go = SpawnGameObject(TBCapturePoints[i].entryFlagPole[GetDefenderTeam()], TBCapturePoints[i].pos, G3D::Quat()))
+            if (GameObject* go = SpawnGameObject(TBCapturePoints[i].entryFlagPole[GetDefenderTeam()], TBCapturePoints[i].pos, QuaternionData::fromEulerAnglesZYX(TBCapturePoints[i].pos.GetOrientation(), 0.0f, 0.0f)))
             {
                 go->SetGoArtKit(GetDefenderTeam() == TEAM_ALLIANCE ? TB_GO_ARTKIT_FLAG_ALLIANCE : TB_GO_ARTKIT_FLAG_HORDE);
                 capturePoint->SetCapturePointData(go);
@@ -548,7 +549,7 @@ void BattlefieldTB::UpdateNPCsAndGameObjects()
 
         // Spawn portals
         for (uint8 i = 0; i < TB_PORTAL_MAX; i++)
-            if (GameObject* go = SpawnGameObject(TBPortalEntry[GetDefenderTeam()], TBPortals[i], G3D::Quat()))
+            if (GameObject* go = SpawnGameObject(TBPortalEntry[GetDefenderTeam()], TBPortals[i], QuaternionData::fromEulerAnglesZYX(TBPortals[i].GetOrientation(), 0.0f, 0.0f)))
                 TemporaryGOs.insert(go->GetGUID());
 
         // Update towers
@@ -574,7 +575,7 @@ void BattlefieldTB::UpdateNPCsAndGameObjects()
 
     // Spawn banners
     for (uint8 i = 0; i < TB_BANNER_MAX; i++)
-        if (GameObject* go = SpawnGameObject(TBBannerEntry[GetDefenderTeam()], TBBanners[i], G3D::Quat()))
+        if (GameObject* go = SpawnGameObject(TBBannerEntry[GetDefenderTeam()], TBBanners[i], QuaternionData::fromEulerAnglesZYX(TBBanners[i].GetOrientation(), 0.0f, 0.0f)))
             TemporaryGOs.insert(go->GetGUID());
 
     // Set graveyard controls
@@ -608,7 +609,7 @@ void BattlefieldTB::OnCreatureCreate(Creature* creature)
                 HideNpc(creature);
             break;
         case NPC_ABANDONED_SIEGE_ENGINE:
-            creature->setFaction(TBFactions[GetDefenderTeam()]);
+            creature->SetFaction(TBFactions[GetDefenderTeam()]);
             creature->CastSpell(creature, SPELL_THICK_LAYER_OF_RUST, true);
             break;
         case NPC_SIEGE_ENGINE_TURRET:
@@ -744,7 +745,7 @@ void BattlefieldTB::TowerDestroyed(TBTowerId tbTowerId)
     // Add 5 minute bonus time
     m_Timer += m_BonusTime;
 
-    SendUpdateWorldState(TB_WS_TIME_BATTLE_END, uint32(time(NULL) + (m_Timer / 1000)));
+    SendUpdateWorldState(TB_WS_TIME_BATTLE_END, uint32(time(nullptr) + (m_Timer / 1000)));
 
     SendWarning(TBTowers[tbTowerId].textDamaged);
 
@@ -849,14 +850,14 @@ void TolBaradCapturePoint::ChangeTeam(TeamId /*oldTeam*/)
             break;
         case BF_CAPTUREPOINT_OBJECTIVESTATE_HORDE_ALLIANCE_CHALLENGE:
             m_Bf->SendWarning(TBCapturePoints[iBase].textLost[TEAM_HORDE]);
-            //no break here!
+            /* fallthrough */
         case BF_CAPTUREPOINT_OBJECTIVESTATE_NEUTRAL_ALLIANCE_CHALLENGE:
             SendUpdateWorldState(TBCapturePoints[iBase].wsCapturing[TEAM_ALLIANCE], uint32(1));
             GetCapturePointGo()->SetGoArtKit(TB_GO_ARTKIT_FLAG_NONE);
             break;
         case BF_CAPTUREPOINT_OBJECTIVESTATE_ALLIANCE_HORDE_CHALLENGE:
             m_Bf->SendWarning(TBCapturePoints[iBase].textLost[TEAM_ALLIANCE]);
-            //no break here!
+            /* fallthrough */
         case BF_CAPTUREPOINT_OBJECTIVESTATE_NEUTRAL_HORDE_CHALLENGE:
             SendUpdateWorldState(TBCapturePoints[iBase].wsCapturing[TEAM_HORDE], uint32(1));
             GetCapturePointGo()->SetGoArtKit(TB_GO_ARTKIT_FLAG_NONE);
@@ -866,5 +867,5 @@ void TolBaradCapturePoint::ChangeTeam(TeamId /*oldTeam*/)
     }
 
     // Update counter
-    m_Bf->ProcessEvent(NULL, EVENT_COUNT_CAPTURED_BASE);
+    m_Bf->ProcessEvent(nullptr, EVENT_COUNT_CAPTURED_BASE);
 }

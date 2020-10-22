@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -16,10 +16,14 @@
  */
 
 #include "ScriptMgr.h"
+#include "CreatureTextMgr.h"
+#include "GameObject.h"
+#include "InstanceScript.h"
+#include "MotionMaster.h"
+#include "ObjectAccessor.h"
+#include "Player.h"
 #include "ScriptedCreature.h"
 #include "ScriptedGossip.h"
-#include "Player.h"
-#include "CreatureTextMgr.h"
 #include "SpellScript.h"
 #include "zulaman.h"
 
@@ -87,9 +91,9 @@ class npc_voljin_zulaman : public CreatureScript
         {
             npc_voljin_zulamanAI(Creature* creature) : ScriptedAI(creature), _instance(creature->GetInstanceScript())
             {
-                me->SetDisplayId(me->GetCreatureTemplate()->Modelid1);
+                me->SetDisplayFromModel(0);
                 if (_instance->GetData(DATA_ZULAMAN_STATE) == NOT_STARTED)
-                    me->SetFlag(UNIT_NPC_FLAGS, UNIT_NPC_FLAG_GOSSIP);
+                    me->AddNpcFlag(UNIT_NPC_FLAG_GOSSIP);
             }
 
             void Reset() override
@@ -97,21 +101,22 @@ class npc_voljin_zulaman : public CreatureScript
                 _gongCount = 0;
             }
 
-            void sGossipSelect(Player* player, uint32 menuId, uint32 gossipListId) override
+            bool GossipSelect(Player* player, uint32 menuId, uint32 gossipListId) override
             {
                 if (_instance->GetData(DATA_ZULAMAN_STATE) != NOT_STARTED)
-                    return;
+                    return true;
 
                 if (me->GetCreatureTemplate()->GossipMenuId == menuId && !gossipListId)
                 {
                     _events.Reset();
-                    me->SetUInt32Value(UNIT_FIELD_MOUNTDISPLAYID, 0);
-                    me->RemoveFlag(UNIT_NPC_FLAGS, UNIT_NPC_FLAG_GOSSIP);
-                    me->SetUInt32Value(OBJECT_DYNAMIC_FLAGS, UNIT_DYNFLAG_NONE);
+                    me->SetMountDisplayId(0);
+                    me->RemoveNpcFlag(UNIT_NPC_FLAG_GOSSIP);
+                    me->SetDynamicFlags(UNIT_DYNFLAG_NONE);
                     _events.ScheduleEvent(EVENT_INTRO_MOVEPOINT_1, 1000);
                     Talk(SAY_INTRO_1, player);
                     me->SetWalk(true);
                 }
+                return false;
             }
 
             void DoAction(int32 action) override
@@ -145,7 +150,7 @@ class npc_voljin_zulaman : public CreatureScript
                         case EVENT_BANGING_THE_GONG:
                             DoCast(me, SPELL_BANGING_THE_GONG);
                             if (GameObject* strangeGong = ObjectAccessor::GetGameObject(*me, _instance->GetGuidData(DATA_STRANGE_GONG)))
-                                strangeGong->RemoveFlag(GAMEOBJECT_FLAGS, GO_FLAG_NOT_SELECTABLE);
+                                strangeGong->RemoveFlag(GO_FLAG_NOT_SELECTABLE);
                             me->SetVirtualItem(0, uint32(ITEM_VIRTUAL_ITEM));
                             break;
                         case EVENT_START_DOOR_OPENING_1:
@@ -155,7 +160,7 @@ class npc_voljin_zulaman : public CreatureScript
                         case EVENT_START_DOOR_OPENING_2:
                             me->SetVirtualItem(0, uint32(0));
                             if (GameObject* strangeGong = ObjectAccessor::GetGameObject(*me, _instance->GetGuidData(DATA_STRANGE_GONG)))
-                                strangeGong->SetFlag(GAMEOBJECT_FLAGS, GO_FLAG_NOT_SELECTABLE);
+                                strangeGong->AddFlag(GO_FLAG_NOT_SELECTABLE);
                             _events.ScheduleEvent(EVENT_START_DOOR_OPENING_3, 500);
                             break;
                         case EVENT_START_DOOR_OPENING_3:
@@ -176,7 +181,7 @@ class npc_voljin_zulaman : public CreatureScript
                             break;
                         case EVENT_START_DOOR_OPENING_7:
                             if (Creature* hexLordTrigger = ObjectAccessor::GetCreature(*me, _instance->GetGuidData(DATA_HEXLORD_TRIGGER)))
-                                sCreatureTextMgr->SendChat(hexLordTrigger, SAY_HEXLOR_INTRO, 0, CHAT_MSG_ADDON, LANG_ADDON, TEXT_RANGE_MAP);
+                                sCreatureTextMgr->SendChat(hexLordTrigger, SAY_HEXLOR_INTRO, nullptr, CHAT_MSG_ADDON, LANG_ADDON, TEXT_RANGE_MAP);
                             break;
                         default:
                             break;
@@ -214,7 +219,7 @@ class npc_voljin_zulaman : public CreatureScript
 
         CreatureAI* GetAI(Creature* creature) const override
         {
-            return GetInstanceAI<npc_voljin_zulamanAI>(creature);
+            return GetZulAmanAI<npc_voljin_zulamanAI>(creature);
         }
 };
 

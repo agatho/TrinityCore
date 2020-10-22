@@ -1,6 +1,5 @@
 /*
- * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
- * Copyright (C) 2005-2009 MaNGOS <http://getmangos.com/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -31,18 +30,16 @@ class SpellInfo;
 
 class TC_GAME_API HostileRefManager : public RefManager<Unit, ThreatManager>
 {
-    private:
-        Unit* iOwner;
     public:
-        explicit HostileRefManager(Unit* owner) { iOwner = owner; }
+        explicit HostileRefManager(Unit* owner) : iOwner(owner) { }
         ~HostileRefManager();
 
-        Unit* GetOwner() { return iOwner; }
+        Unit* GetOwner() const { return iOwner; }
 
         // send threat to all my hateres for the victim
         // The victim is hated than by them as well
         // use for buffs and healing threat functionality
-        void threatAssist(Unit* victim, float baseThreat, SpellInfo const* threatSpell = NULL);
+        void threatAssist(Unit* victim, float baseThreat, SpellInfo const* threatSpell = nullptr);
 
         void addTempThreat(float threat, bool apply);
 
@@ -54,6 +51,9 @@ class TC_GAME_API HostileRefManager : public RefManager<Unit, ThreatManager>
 
         // Remove specific faction references
         void deleteReferencesForFaction(uint32 faction);
+
+        // for combat bugs
+        void deleteReferencesOutOfRange(float range);
 
         HostileReference* getFirst() { return ((HostileReference*) RefManager<Unit, ThreatManager>::getFirst()); }
 
@@ -68,6 +68,9 @@ class TC_GAME_API HostileRefManager : public RefManager<Unit, ThreatManager>
         void deleteReference(Unit* creature);
 
         void UpdateVisibility();
+
+    private:
+        Unit* iOwner;
 };
 //=================================================
 #endif

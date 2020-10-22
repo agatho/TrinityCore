@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -15,17 +15,14 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "ObjectMgr.h"
 #include "ScriptMgr.h"
-#include "InstanceScript.h"
-#include "ScriptedCreature.h"
-#include "Map.h"
-#include "PoolMgr.h"
-#include "AccountMgr.h"
+#include "Creature.h"
+#include "CreatureAI.h"
+#include "GameObject.h"
 #include "halls_of_origination.h"
-#include "Player.h"
-#include "WorldPacket.h"
-#include "WorldSession.h"
+#include "InstanceScript.h"
+#include "Map.h"
+#include <sstream>
 
 DoorData const doorData[] =
 {
@@ -65,7 +62,7 @@ class instance_halls_of_origination : public InstanceMapScript
                 {
                     case GO_ANHUURS_BRIDGE:
                         AnhuursBridgeGUID = go->GetGUID();
-                        // no break
+                        /* fallthrough */
                     case GO_DOODAD_ULDUM_ELEVATOR_COL01:
                     case GO_VAULT_OF_LIGHTS_DOOR:
                     case GO_DOODAD_ULDUM_LIGHTMACHINE_01:

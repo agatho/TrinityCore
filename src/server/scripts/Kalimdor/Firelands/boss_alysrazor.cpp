@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -15,17 +15,19 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "ObjectMgr.h"
 #include "ScriptMgr.h"
-#include "ScriptedCreature.h"
-#include "PassiveAI.h"
-#include "SpellScript.h"
-#include "MoveSplineInit.h"
-#include "Cell.h"
 #include "CellImpl.h"
-#include "GridNotifiers.h"
-#include "GridNotifiersImpl.h"
+#include "DB2Stores.h"
 #include "firelands.h"
+#include "GridNotifiersImpl.h"
+#include "MotionMaster.h"
+#include "MoveSplineInit.h"
+#include "ObjectAccessor.h"
+#include "PassiveAI.h"
+#include "ScriptedCreature.h"
+#include "SpellInfo.h"
+#include "SpellScript.h"
+#include "TemporarySummon.h"
 
 enum Texts
 {
@@ -179,7 +181,7 @@ class npc_harbinger_of_flame : public CreatureScript
 
             void EnterCombat(Unit* /*target*/) override
             {
-                for (ObjectGuid const& birdGuid : me->GetChannelObjects())
+                for (ObjectGuid const& birdGuid : me->m_unitData->ChannelObjects)
                     if (Creature* bird = ObjectAccessor::GetCreature(*me, birdGuid))
                         DoZoneInCombat(bird, 200.0f);
 
@@ -225,7 +227,7 @@ class npc_harbinger_of_flame : public CreatureScript
                     switch (eventId)
                     {
                         case EVENT_FIEROBLAST:
-                            if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0, 0.0f, false, -SPELL_RIDE_MONSTROSITY))
+                            if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0, 0.0f, false, true, -SPELL_RIDE_MONSTROSITY))
                                 DoCast(target, SPELL_FIEROBLAST_TRASH);
                             _events.RescheduleEvent(EVENT_FIEROBLAST, 500);  // cast time is longer, but thanks to UNIT_STATE_CASTING check it won't trigger more often (need this because this creature gets a stacking haste aura)
                             break;
@@ -245,7 +247,7 @@ class npc_harbinger_of_flame : public CreatureScript
 
         CreatureAI* GetAI(Creature* creature) const override
         {
-            return new npc_harbinger_of_flameAI(creature);
+            return GetFirelandsAI<npc_harbinger_of_flameAI>(creature);
         }
 };
 
@@ -295,8 +297,8 @@ class npc_blazing_monstrosity : public CreatureScript
 
                 // Our passenger is another vehicle (boardable by players)
                 DoCast(passenger, SPELL_SHARE_HEALTH, true);
-                passenger->setFaction(35);
-                passenger->RemoveFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NOT_SELECTABLE);
+                passenger->SetFaction(35);
+                passenger->RemoveUnitFlag(UNIT_FLAG_NOT_SELECTABLE);
 
                 // Hack to relocate vehicle on vehicle so exiting players are not moved under map
                 Movement::MoveSplineInit init(passenger);
@@ -328,7 +330,7 @@ class npc_blazing_monstrosity : public CreatureScript
                     switch (eventId)
                     {
                         case EVENT_START_SPITTING:
-                            if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0, 0.0f, false, -SPELL_RIDE_MONSTROSITY))
+                            if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0, 0.0f, false, true, -SPELL_RIDE_MONSTROSITY))
                                 DoCast(target, SPELL_MOLTEN_BARRAGE);
                             break;
                         case EVENT_CONTINUE_SPITTING:
@@ -347,7 +349,7 @@ class npc_blazing_monstrosity : public CreatureScript
 
         CreatureAI* GetAI(Creature* creature) const override
         {
-            return new npc_blazing_monstrosityAI(creature);
+            return GetFirelandsAI<npc_blazing_monstrosityAI>(creature);
         }
 };
 
@@ -387,7 +389,7 @@ class npc_molten_barrage : public CreatureScript
 
         CreatureAI* GetAI(Creature* creature) const override
         {
-            return new npc_molten_barrageAI(creature);
+            return GetFirelandsAI<npc_molten_barrageAI>(creature);
         }
 };
 
@@ -490,7 +492,7 @@ class npc_egg_pile : public CreatureScript
 
         CreatureAI* GetAI(Creature* creature) const override
         {
-            return new npc_egg_pileAI(creature);
+            return GetFirelandsAI<npc_egg_pileAI>(creature);
         }
 };
 
@@ -541,17 +543,14 @@ class spell_alysrazor_turn_monstrosity : public SpellScriptLoader
 
             bool Validate(SpellInfo const* /*spellInfo*/) override
             {
-                if (!sSpellMgr->GetSpellInfo(SPELL_GENERIC_DUMMY_CAST))
-                    return false;
-                if (!sSpellMgr->GetSpellInfo(SPELL_KNOCKBACK_RIGHT))
-                    return false;
-                if (!sSpellMgr->GetSpellInfo(SPELL_KNOCKBACK_LEFT))
-                    return false;
-                if (!sSpellMgr->GetSpellInfo(SPELL_KNOCKBACK_FORWARD))
-                    return false;
-                if (!sSpellMgr->GetSpellInfo(SPELL_KNOCKBACK_BACK))
-                    return false;
-                return true;
+                return ValidateSpellInfo(
+                {
+                    SPELL_GENERIC_DUMMY_CAST,
+                    SPELL_KNOCKBACK_RIGHT,
+                    SPELL_KNOCKBACK_LEFT,
+                    SPELL_KNOCKBACK_FORWARD,
+                    SPELL_KNOCKBACK_BACK
+                });
             }
 
             void KnockBarrage(SpellEffIndex effIndex)
@@ -636,8 +635,8 @@ class spell_alysrazor_aggro_closest : public SpellScriptLoader
             void HandleEffect(SpellEffIndex effIndex)
             {
                 PreventHitDefaultEffect(effIndex);
-                float curThreat = GetCaster()->getThreatManager().getThreat(GetHitUnit(), true);
-                GetCaster()->getThreatManager().addThreat(GetHitUnit(), -curThreat + 50000.0f / std::min(1.0f, GetCaster()->GetDistance(GetHitUnit())));
+                float curThreat = GetCaster()->GetThreatManager().getThreat(GetHitUnit(), true);
+                GetCaster()->GetThreatManager().AddThreat(GetHitUnit(), -curThreat + 50000.0f / std::min(1.0f, GetCaster()->GetDistance(GetHitUnit())));
             }
 
             void UpdateThreat()
@@ -670,9 +669,7 @@ class spell_alysrazor_fieroblast : public SpellScriptLoader
 
             bool Validate(SpellInfo const* /*spellInfo*/) override
             {
-                if (!sSpellMgr->GetSpellInfo(SPELL_FIRE_IT_UP))
-                    return false;
-                return true;
+                return ValidateSpellInfo({ SPELL_FIRE_IT_UP });
             }
 
             void FireItUp()

@@ -1,6 +1,5 @@
 /*
- * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
- * Copyright (C) 2005-2011 MaNGOS <http://getmangos.com/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -19,7 +18,8 @@
 #ifndef MODELHEADERS_H
 #define MODELHEADERS_H
 
-#include "cascfile.h"    // integer typedefs
+#include "Define.h"
+#include "vec3d.h"
 
 #pragma pack(push,1)
 
@@ -65,7 +65,10 @@ struct ModelHeader
     uint32 ofsTransLookup;
     uint32 nTexAnimLookup;
     uint32 ofsTexAnimLookup;
-    float floats[14];
+    AaBox3D boundingBox;
+    float boundingSphereRadius;
+    AaBox3D collisionBox;
+    float collisionSphereRadius;
     uint32 nBoundingTriangles;
     uint32 ofsBoundingTriangles;
     uint32 nBoundingVertices;

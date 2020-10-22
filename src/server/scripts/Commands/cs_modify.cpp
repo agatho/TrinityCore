@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -24,13 +24,17 @@ EndScriptData */
 
 #include "ScriptMgr.h"
 #include "Chat.h"
+#include "DB2Stores.h"
 #include "Log.h"
 #include "ObjectMgr.h"
 #include "Pet.h"
+#include "PhasingHandler.h"
 #include "Player.h"
 #include "RBAC.h"
 #include "ReputationMgr.h"
+#include "SpellMgr.h"
 #include "SpellPackets.h"
+#include "WorldSession.h"
 
 class modify_commandscript : public CommandScript
 {
@@ -50,7 +54,6 @@ public:
         };
         static std::vector<ChatCommand> modifyCommandTable =
         {
-            { "bit",          rbac::RBAC_PERM_COMMAND_MODIFY_BIT,          false, &HandleModifyBitCommand,           "" },
             { "currency",     rbac::RBAC_PERM_COMMAND_MODIFY_CURRENCY,     false, &HandleModifyCurrencyCommand,      "" },
             { "drunk",        rbac::RBAC_PERM_COMMAND_MODIFY_DRUNK,        false, &HandleModifyDrunkCommand,         "" },
             { "energy",       rbac::RBAC_PERM_COMMAND_MODIFY_ENERGY,       false, &HandleModifyEnergyCommand,        "" },
@@ -66,17 +69,18 @@ public:
             { "reputation",   rbac::RBAC_PERM_COMMAND_MODIFY_REPUTATION,   false, &HandleModifyRepCommand,           "" },
             { "runicpower",   rbac::RBAC_PERM_COMMAND_MODIFY_RUNICPOWER,   false, &HandleModifyRunicPowerCommand,    "" },
             { "scale",        rbac::RBAC_PERM_COMMAND_MODIFY_SCALE,        false, &HandleModifyScaleCommand,         "" },
-            { "speed",        rbac::RBAC_PERM_COMMAND_MODIFY_SPEED,        false, NULL,           "", modifyspeedCommandTable },
+            { "speed",        rbac::RBAC_PERM_COMMAND_MODIFY_SPEED,        false, nullptr,           "", modifyspeedCommandTable },
             { "spell",        rbac::RBAC_PERM_COMMAND_MODIFY_SPELL,        false, &HandleModifySpellCommand,         "" },
             { "standstate",   rbac::RBAC_PERM_COMMAND_MODIFY_STANDSTATE,   false, &HandleModifyStandStateCommand,    "" },
             { "talentpoints", rbac::RBAC_PERM_COMMAND_MODIFY_TALENTPOINTS, false, &HandleModifyTalentCommand,        "" },
             { "xp",           rbac::RBAC_PERM_COMMAND_MODIFY_XP,           false, &HandleModifyXPCommand,            "" },
+            { "power",        rbac::RBAC_PERM_COMMAND_MODIFY_POWER,        false, &HandleModifyPowerCommand,         "" },
         };
         static std::vector<ChatCommand> commandTable =
         {
             { "morph",   rbac::RBAC_PERM_COMMAND_MORPH,   false, &HandleModifyMorphCommand,          "" },
             { "demorph", rbac::RBAC_PERM_COMMAND_DEMORPH, false, &HandleDeMorphCommand,              "" },
-            { "modify",  rbac::RBAC_PERM_COMMAND_MODIFY,  false, NULL,                 "", modifyCommandTable },
+            { "modify",  rbac::RBAC_PERM_COMMAND_MODIFY,  false, nullptr,                 "", modifyCommandTable },
         };
         return commandTable;
     }
@@ -92,7 +96,7 @@ public:
         }
     }
 
-    static bool CheckModifyResources(ChatHandler* handler, const char* args, Player* target, int32& res, int32& resmax, int8 const multiplier = 1)
+    static bool CheckModifyResources(ChatHandler* handler, char const* args, Player* target, int32& res, int32& resmax, int8 const multiplier = 1)
     {
         if (!*args)
             return false;
@@ -121,7 +125,7 @@ public:
     }
 
     //Edit Player HP
-    static bool HandleModifyHPCommand(ChatHandler* handler, const char* args)
+    static bool HandleModifyHPCommand(ChatHandler* handler, char const* args)
     {
         int32 hp, hpmax;
         Player* target = handler->getSelectedPlayerOrSelf();
@@ -136,7 +140,7 @@ public:
     }
 
     //Edit Player Mana
-    static bool HandleModifyManaCommand(ChatHandler* handler, const char* args)
+    static bool HandleModifyManaCommand(ChatHandler* handler, char const* args)
     {
         int32 mana, manamax;
         Player* target = handler->getSelectedPlayerOrSelf();
@@ -152,7 +156,7 @@ public:
     }
 
     //Edit Player Energy
-    static bool HandleModifyEnergyCommand(ChatHandler* handler, const char* args)
+    static bool HandleModifyEnergyCommand(ChatHandler* handler, char const* args)
     {
         int32 energy, energymax;
         Player* target = handler->getSelectedPlayerOrSelf();
@@ -162,14 +166,13 @@ public:
             NotifyModification(handler, target, LANG_YOU_CHANGE_ENERGY, LANG_YOURS_ENERGY_CHANGED, energy / energyMultiplier, energymax / energyMultiplier);
             target->SetMaxPower(POWER_ENERGY, energymax);
             target->SetPower(POWER_ENERGY, energy);
-            TC_LOG_DEBUG("misc", handler->GetTrinityString(LANG_CURRENT_ENERGY), target->GetMaxPower(POWER_ENERGY));
             return true;
         }
         return false;
     }
 
     //Edit Player Rage
-    static bool HandleModifyRageCommand(ChatHandler* handler, const char* args)
+    static bool HandleModifyRageCommand(ChatHandler* handler, char const* args)
     {
         int32 rage, ragemax;
         Player* target = handler->getSelectedPlayerOrSelf();
@@ -185,7 +188,7 @@ public:
     }
 
     // Edit Player Runic Power
-    static bool HandleModifyRunicPowerCommand(ChatHandler* handler, const char* args)
+    static bool HandleModifyRunicPowerCommand(ChatHandler* handler, char const* args)
     {
         int32 rune, runemax;
         Player* target = handler->getSelectedPlayerOrSelf();
@@ -201,11 +204,8 @@ public:
     }
 
     //Edit Player Faction
-    static bool HandleModifyFactionCommand(ChatHandler* handler, const char* args)
+    static bool HandleModifyFactionCommand(ChatHandler* handler, char const* args)
     {
-        if (!*args)
-            return false;
-
         char* pfactionid = handler->extractKeyFromLink((char*)args, "Hfaction");
 
         Creature* target = handler->getSelectedCreature();
@@ -218,38 +218,39 @@ public:
 
         if (!pfactionid)
         {
-            uint32 factionid = target->getFaction();
-            uint32 flag      = target->GetUInt32Value(UNIT_FIELD_FLAGS);
-            uint64 npcflag   = target->GetUInt64Value(UNIT_NPC_FLAGS);
-            uint32 dyflag    = target->GetUInt32Value(OBJECT_DYNAMIC_FLAGS);
-            handler->PSendSysMessage(LANG_CURRENT_FACTION, target->GetGUID().ToString().c_str(), factionid, flag, npcflag, dyflag);
+            uint32 factionid = target->GetFaction();
+            uint32 flag      = target->m_unitData->Flags;
+            uint64 npcflag;
+            memcpy(&npcflag, target->m_unitData->NpcFlags.begin(), sizeof(uint64));
+            uint32 dyflag    = target->m_objectData->DynamicFlags;
+            handler->PSendSysMessage(LANG_CURRENT_FACTION, target->GetGUID().ToString().c_str(), factionid, flag, std::to_string(npcflag).c_str(), dyflag);
             return true;
         }
 
-        uint32 factionid = atoi(pfactionid);
+        uint32 factionid = atoul(pfactionid);
         uint32 flag;
 
-        char *pflag = strtok(NULL, " ");
+        char *pflag = strtok(nullptr, " ");
         if (!pflag)
-            flag = target->GetUInt32Value(UNIT_FIELD_FLAGS);
+            flag = target->m_unitData->Flags;
         else
-            flag = atoi(pflag);
+            flag = atoul(pflag);
 
-        char* pnpcflag = strtok(NULL, " ");
+        char* pnpcflag = strtok(nullptr, " ");
 
         uint64 npcflag;
         if (!pnpcflag)
-            npcflag = target->GetUInt64Value(UNIT_NPC_FLAGS);
+            memcpy(&npcflag, target->m_unitData->NpcFlags.begin(), sizeof(uint64));
         else
-            npcflag = std::strtoull(pnpcflag, nullptr, 10);
+            npcflag = atoull(pnpcflag);
 
-        char* pdyflag = strtok(NULL, " ");
+        char* pdyflag = strtok(nullptr, " ");
 
         uint32  dyflag;
         if (!pdyflag)
-            dyflag = target->GetUInt32Value(OBJECT_DYNAMIC_FLAGS);
+            dyflag = target->m_objectData->DynamicFlags;
         else
-            dyflag = atoi(pdyflag);
+            dyflag = atoul(pdyflag);
 
         if (!sFactionTemplateStore.LookupEntry(factionid))
         {
@@ -258,18 +259,19 @@ public:
             return false;
         }
 
-        handler->PSendSysMessage(LANG_YOU_CHANGE_FACTION, target->GetGUID().ToString().c_str(), factionid, flag, npcflag, dyflag);
+        handler->PSendSysMessage(LANG_YOU_CHANGE_FACTION, target->GetGUID().ToString().c_str(), factionid, flag, std::to_string(npcflag).c_str(), dyflag);
 
-        target->setFaction(factionid);
-        target->SetUInt32Value(UNIT_FIELD_FLAGS, flag);
-        target->SetUInt64Value(UNIT_NPC_FLAGS, npcflag);
-        target->SetUInt32Value(OBJECT_DYNAMIC_FLAGS, dyflag);
+        target->SetFaction(factionid);
+        target->SetUnitFlags(UnitFlags(flag));
+        target->SetNpcFlags(NPCFlags(npcflag & 0xFFFFFFFF));
+        target->SetNpcFlags2(NPCFlags2(npcflag >> 32));
+        target->SetDynamicFlags(dyflag);
 
         return true;
     }
 
     //Edit Player Spell
-    static bool HandleModifySpellCommand(ChatHandler* handler, const char* args)
+    static bool HandleModifySpellCommand(ChatHandler* handler, char const* args)
     {
         if (!*args)
             return false;
@@ -278,17 +280,17 @@ public:
         if (!pspellflatid)
             return false;
 
-        char* pop = strtok(NULL, " ");
+        char* pop = strtok(nullptr, " ");
         if (!pop)
             return false;
 
-        char* pval = strtok(NULL, " ");
+        char* pval = strtok(nullptr, " ");
         if (!pval)
             return false;
 
         uint16 mark;
 
-        char* pmark = strtok(NULL, " ");
+        char* pmark = strtok(nullptr, " ");
 
         uint8 spellflatid = atoi(pspellflatid);
         uint8 op   = atoi(pop);
@@ -299,7 +301,7 @@ public:
             mark = atoi(pmark);
 
         Player* target = handler->getSelectedPlayerOrSelf();
-        if (target == NULL)
+        if (target == nullptr)
         {
             handler->SendSysMessage(LANG_NO_CHAR_SELECTED);
             handler->SetSentErrorMessage(true);
@@ -322,13 +324,13 @@ public:
         modData.ModifierValue = float(val);
         spellMod.ModifierData.push_back(modData);
         packet.Modifiers.push_back(spellMod);
-        target->GetSession()->SendPacket(packet.Write());
+        target->SendDirectMessage(packet.Write());
 
         return true;
     }
 
     //Edit Player TP
-    static bool HandleModifyTalentCommand(ChatHandler* /*handler*/, const char* /*args*/)
+    static bool HandleModifyTalentCommand(ChatHandler* /*handler*/, char const* /*args*/)
     {
         /* TODO: 6.x remove this
         if (!*args)
@@ -374,7 +376,7 @@ public:
         return false;
     }
 
-    static bool CheckModifySpeed(ChatHandler* handler, const char* args, Unit* target, float& speed, float minimumBound, float maximumBound, bool checkInFlight = true)
+    static bool CheckModifySpeed(ChatHandler* handler, char const* args, Unit* target, float& speed, float minimumBound, float maximumBound, bool checkInFlight = true)
     {
         if (!*args)
             return false;
@@ -412,7 +414,7 @@ public:
     }
 
     //Edit Player Aspeed
-    static bool HandleModifyASpeedCommand(ChatHandler* handler, const char* args)
+    static bool HandleModifyASpeedCommand(ChatHandler* handler, char const* args)
     {
         float allSpeed;
         Player* target = handler->getSelectedPlayerOrSelf();
@@ -429,7 +431,7 @@ public:
     }
 
     //Edit Player Speed
-    static bool HandleModifySpeedCommand(ChatHandler* handler, const char* args)
+    static bool HandleModifySpeedCommand(ChatHandler* handler, char const* args)
     {
         float Speed;
         Player* target = handler->getSelectedPlayerOrSelf();
@@ -443,7 +445,7 @@ public:
     }
 
     //Edit Player Swim Speed
-    static bool HandleModifySwimCommand(ChatHandler* handler, const char* args)
+    static bool HandleModifySwimCommand(ChatHandler* handler, char const* args)
     {
         float swimSpeed;
         Player* target = handler->getSelectedPlayerOrSelf();
@@ -457,7 +459,7 @@ public:
     }
 
     //Edit Player Backwards Walk Speed
-    static bool HandleModifyBWalkCommand(ChatHandler* handler, const char* args)
+    static bool HandleModifyBWalkCommand(ChatHandler* handler, char const* args)
     {
         float backSpeed;
         Player* target = handler->getSelectedPlayerOrSelf();
@@ -471,7 +473,7 @@ public:
     }
 
     //Edit Player Fly
-    static bool HandleModifyFlyCommand(ChatHandler* handler, const char* args)
+    static bool HandleModifyFlyCommand(ChatHandler* handler, char const* args)
     {
         float flySpeed;
         Player* target = handler->getSelectedPlayerOrSelf();
@@ -485,240 +487,37 @@ public:
     }
 
     //Edit Player or Creature Scale
-    static bool HandleModifyScaleCommand(ChatHandler* handler, const char* args)
+    static bool HandleModifyScaleCommand(ChatHandler* handler, char const* args)
     {
         float Scale;
         Unit* target = handler->getSelectedUnit();
         if (CheckModifySpeed(handler, args, target, Scale, 0.1f, 10.0f, false))
         {
             NotifyModification(handler, target, LANG_YOU_CHANGE_SIZE, LANG_YOURS_SIZE_CHANGED, Scale);
-            target->SetObjectScale(Scale);
+            if (Creature* creatureTarget = target->ToCreature())
+                creatureTarget->SetDisplayId(creatureTarget->GetDisplayId(), Scale);
+            else
+                target->SetObjectScale(Scale);
             return true;
         }
         return false;
     }
 
     //Enable Player mount
-    static bool HandleModifyMountCommand(ChatHandler* handler, const char* args)
+    static bool HandleModifyMountCommand(ChatHandler* handler, char const* args)
     {
         if (!*args)
             return false;
 
-        uint16 mId = 1147;
-        float speed = (float)15;
-        uint32 num = 0;
+        const char* mount_cstr = strtok(const_cast<char*>(args), " ");
+        const char* speed_cstr = strtok(nullptr, " ");
 
-        num = atoi((char*)args);
-        switch (num)
+        if (!mount_cstr || !speed_cstr)
+            return false;
+
+        uint32 mount = atoul(args);
+        if (!sCreatureDisplayInfoStore.HasRecord(mount))
         {
-        case 1:
-            mId=14340;
-            break;
-        case 2:
-            mId=4806;
-            break;
-        case 3:
-            mId=6471;
-            break;
-        case 4:
-            mId=12345;
-            break;
-        case 5:
-            mId=6472;
-            break;
-        case 6:
-            mId=6473;
-            break;
-        case 7:
-            mId=10670;
-            break;
-        case 8:
-            mId=10719;
-            break;
-        case 9:
-            mId=10671;
-            break;
-        case 10:
-            mId=10672;
-            break;
-        case 11:
-            mId=10720;
-            break;
-        case 12:
-            mId=14349;
-            break;
-        case 13:
-            mId=11641;
-            break;
-        case 14:
-            mId=12244;
-            break;
-        case 15:
-            mId=12242;
-            break;
-        case 16:
-            mId=14578;
-            break;
-        case 17:
-            mId=14579;
-            break;
-        case 18:
-            mId=14349;
-            break;
-        case 19:
-            mId=12245;
-            break;
-        case 20:
-            mId=14335;
-            break;
-        case 21:
-            mId=207;
-            break;
-        case 22:
-            mId=2328;
-            break;
-        case 23:
-            mId=2327;
-            break;
-        case 24:
-            mId=2326;
-            break;
-        case 25:
-            mId=14573;
-            break;
-        case 26:
-            mId=14574;
-            break;
-        case 27:
-            mId=14575;
-            break;
-        case 28:
-            mId=604;
-            break;
-        case 29:
-            mId=1166;
-            break;
-        case 30:
-            mId=2402;
-            break;
-        case 31:
-            mId=2410;
-            break;
-        case 32:
-            mId=2409;
-            break;
-        case 33:
-            mId=2408;
-            break;
-        case 34:
-            mId=2405;
-            break;
-        case 35:
-            mId=14337;
-            break;
-        case 36:
-            mId=6569;
-            break;
-        case 37:
-            mId=10661;
-            break;
-        case 38:
-            mId=10666;
-            break;
-        case 39:
-            mId=9473;
-            break;
-        case 40:
-            mId=9476;
-            break;
-        case 41:
-            mId=9474;
-            break;
-        case 42:
-            mId=14374;
-            break;
-        case 43:
-            mId=14376;
-            break;
-        case 44:
-            mId=14377;
-            break;
-        case 45:
-            mId=2404;
-            break;
-        case 46:
-            mId=2784;
-            break;
-        case 47:
-            mId=2787;
-            break;
-        case 48:
-            mId=2785;
-            break;
-        case 49:
-            mId=2736;
-            break;
-        case 50:
-            mId=2786;
-            break;
-        case 51:
-            mId=14347;
-            break;
-        case 52:
-            mId=14346;
-            break;
-        case 53:
-            mId=14576;
-            break;
-        case 54:
-            mId=9695;
-            break;
-        case 55:
-            mId=9991;
-            break;
-        case 56:
-            mId=6448;
-            break;
-        case 57:
-            mId=6444;
-            break;
-        case 58:
-            mId=6080;
-            break;
-        case 59:
-            mId=6447;
-            break;
-        case 60:
-            mId=4805;
-            break;
-        case 61:
-            mId=9714;
-            break;
-        case 62:
-            mId=6448;
-            break;
-        case 63:
-            mId=6442;
-            break;
-        case 64:
-            mId=14632;
-            break;
-        case 65:
-            mId=14332;
-            break;
-        case 66:
-            mId=14331;
-            break;
-        case 67:
-            mId=8469;
-            break;
-        case 68:
-            mId=2830;
-            break;
-        case 69:
-            mId=2346;
-            break;
-        default:
             handler->SendSysMessage(LANG_NO_MOUNT);
             handler->SetSentErrorMessage(true);
             return false;
@@ -736,29 +535,19 @@ public:
         if (handler->HasLowerSecurity(target, ObjectGuid::Empty))
             return false;
 
+        float speed;
+        if (!CheckModifySpeed(handler, speed_cstr, target, speed, 0.1f, 50.0f))
+            return false;
+
         NotifyModification(handler, target, LANG_YOU_GIVE_MOUNT, LANG_MOUNT_GIVED);
-
-        target->SetUInt32Value(UNIT_FIELD_FLAGS, UNIT_FLAG_PVP);
-        target->Mount(mId);
-
-        WorldPacket data(SMSG_MOVE_SET_RUN_SPEED, (8+4+1+4));
-        data << target->GetGUID();
-        data << (uint32)0;
-        data << (uint8)0;                                       //new 2.1.0
-        data << float(speed);
-        target->SendMessageToSet(&data, true);
-
-        data.Initialize(SMSG_MOVE_SET_SWIM_SPEED, (8+4+4));
-        data << target->GetGUID();
-        data << (uint32)0;
-        data << float(speed);
-        target->SendMessageToSet(&data, true);
-
+        target->Mount(mount);
+        target->SetSpeedRate(MOVE_RUN, speed);
+        target->SetSpeedRate(MOVE_FLIGHT, speed);
         return true;
     }
 
     //Edit Player money
-    static bool HandleModifyMoneyCommand(ChatHandler* handler, const char* args)
+    static bool HandleModifyMoneyCommand(ChatHandler* handler, char const* args)
     {
         if (!*args)
             return false;
@@ -787,7 +576,7 @@ public:
         {
             int64 newmoney = int64(targetMoney) + moneyToAdd;
 
-            TC_LOG_DEBUG("misc", handler->GetTrinityString(LANG_CURRENT_MONEY), uint32(targetMoney), int32(moneyToAdd), uint32(newmoney));
+            TC_LOG_DEBUG("misc", handler->GetTrinityString(LANG_CURRENT_MONEY), std::to_string(targetMoney).c_str(), std::to_string(moneyToAdd).c_str(), std::to_string(newmoney).c_str());
             if (newmoney <= 0)
             {
                 NotifyModification(handler, target, LANG_YOU_TAKE_ALL_MONEY, LANG_YOURS_ALL_MONEY_GONE);
@@ -799,88 +588,32 @@ public:
                 if (newmoney > static_cast<int64>(MAX_MONEY_AMOUNT))
                     newmoney = MAX_MONEY_AMOUNT;
 
-                handler->PSendSysMessage(LANG_YOU_TAKE_MONEY, moneyToAddMsg, handler->GetNameLink(target).c_str());
+                handler->PSendSysMessage(LANG_YOU_TAKE_MONEY, std::to_string(moneyToAddMsg).c_str(), handler->GetNameLink(target).c_str());
                 if (handler->needReportToTarget(target))
-                    ChatHandler(target->GetSession()).PSendSysMessage(LANG_YOURS_MONEY_TAKEN, handler->GetNameLink().c_str(), moneyToAddMsg);
+                    ChatHandler(target->GetSession()).PSendSysMessage(LANG_YOURS_MONEY_TAKEN, handler->GetNameLink().c_str(), std::to_string(moneyToAddMsg).c_str());
                 target->SetMoney(newmoney);
             }
         }
         else
         {
-            handler->PSendSysMessage(LANG_YOU_GIVE_MONEY, uint32(moneyToAdd), handler->GetNameLink(target).c_str());
+            handler->PSendSysMessage(LANG_YOU_GIVE_MONEY, std::to_string(moneyToAdd).c_str(), handler->GetNameLink(target).c_str());
             if (handler->needReportToTarget(target))
-                ChatHandler(target->GetSession()).PSendSysMessage(LANG_YOURS_MONEY_GIVEN, handler->GetNameLink().c_str(), uint32(moneyToAdd));
+                ChatHandler(target->GetSession()).PSendSysMessage(LANG_YOURS_MONEY_GIVEN, handler->GetNameLink().c_str(), std::to_string(moneyToAdd).c_str());
 
             if (moneyToAdd >= int64(MAX_MONEY_AMOUNT))
                 moneyToAdd = MAX_MONEY_AMOUNT;
 
-            if (targetMoney >= uint64(MAX_MONEY_AMOUNT) - moneyToAdd)
-                moneyToAdd -= targetMoney;
+            moneyToAdd = std::min(moneyToAdd, int64(MAX_MONEY_AMOUNT - targetMoney));
 
             target->ModifyMoney(moneyToAdd);
         }
 
-        TC_LOG_DEBUG("misc", handler->GetTrinityString(LANG_NEW_MONEY), uint32(targetMoney), int32(moneyToAdd), uint32(target->GetMoney()));
+        TC_LOG_DEBUG("misc", handler->GetTrinityString(LANG_NEW_MONEY), std::to_string(targetMoney).c_str(), std::to_string(moneyToAdd).c_str(), std::to_string(target->GetMoney()).c_str());
 
         return true;
     }
 
-    //Edit Unit field
-    static bool HandleModifyBitCommand(ChatHandler* handler, const char* args)
-    {
-        if (!*args)
-            return false;
-
-        Unit* target = handler->getSelectedUnit();
-        if (!target)
-        {
-            handler->SendSysMessage(LANG_NO_CHAR_SELECTED);
-            handler->SetSentErrorMessage(true);
-            return false;
-        }
-
-        // check online security
-        if (target->GetTypeId() == TYPEID_PLAYER && handler->HasLowerSecurity(target->ToPlayer(), ObjectGuid::Empty))
-            return false;
-
-        char* pField = strtok((char*)args, " ");
-        if (!pField)
-            return false;
-
-        char* pBit = strtok(NULL, " ");
-        if (!pBit)
-            return false;
-
-        uint16 field = atoi(pField);
-        uint32 bit   = atoi(pBit);
-
-        if (field < OBJECT_END || field >= target->GetValuesCount())
-        {
-            handler->SendSysMessage(LANG_BAD_VALUE);
-            handler->SetSentErrorMessage(true);
-            return false;
-        }
-        if (bit < 1 || bit > 32)
-        {
-            handler->SendSysMessage(LANG_BAD_VALUE);
-            handler->SetSentErrorMessage(true);
-            return false;
-        }
-
-        if (target->HasFlag(field, (1<<(bit-1))))
-        {
-            target->RemoveFlag(field, (1<<(bit-1)));
-            handler->PSendSysMessage(LANG_REMOVE_BIT, bit, field);
-        }
-        else
-        {
-            target->SetFlag(field, (1<<(bit-1)));
-            handler->PSendSysMessage(LANG_SET_BIT, bit, field);
-        }
-        return true;
-    }
-
-    static bool HandleModifyHonorCommand(ChatHandler* handler, const char* args)
+    static bool HandleModifyHonorCommand(ChatHandler* handler, char const* args)
     {
         if (!*args)
             return false;
@@ -897,7 +630,7 @@ public:
         if (handler->HasLowerSecurity(target, ObjectGuid::Empty))
             return false;
 
-        int32 amount = (uint32)atoi(args);
+        int32 amount = atoi(args);
 
         handler->PSendSysMessage("NOT IMPLEMENTED: %d honor NOT added.", amount);
 
@@ -906,7 +639,7 @@ public:
         return true;
     }
 
-    static bool HandleModifyDrunkCommand(ChatHandler* handler, const char* args)
+    static bool HandleModifyDrunkCommand(ChatHandler* handler, char const* args)
     {
         if (!*args)
             return false;
@@ -921,7 +654,7 @@ public:
         return true;
     }
 
-    static bool HandleModifyRepCommand(ChatHandler* handler, const char* args)
+    static bool HandleModifyRepCommand(ChatHandler* handler, char const* args)
     {
         if (!*args)
             return false;
@@ -945,7 +678,7 @@ public:
         uint32 factionId = atoi(factionTxt);
 
         int32 amount = 0;
-        char *rankTxt = strtok(NULL, " ");
+        char *rankTxt = strtok(nullptr, " ");
         if (!factionId || !rankTxt)
             return false;
 
@@ -974,7 +707,7 @@ public:
 
                 if (wrank.substr(0, wrankStr.size()) == wrankStr)
                 {
-                    char *deltaTxt = strtok(NULL, " ");
+                    char *deltaTxt = strtok(nullptr, " ");
                     if (deltaTxt)
                     {
                         int32 delta = atoi(deltaTxt);
@@ -1009,25 +742,25 @@ public:
 
         if (factionEntry->ReputationIndex < 0)
         {
-            handler->PSendSysMessage(LANG_COMMAND_FACTION_NOREP_ERROR, factionEntry->Name->Str[handler->GetSessionDbcLocale()], factionId);
+            handler->PSendSysMessage(LANG_COMMAND_FACTION_NOREP_ERROR, factionEntry->Name[handler->GetSessionDbcLocale()], factionId);
             handler->SetSentErrorMessage(true);
             return false;
         }
 
         target->GetReputationMgr().SetOneFactionReputation(factionEntry, amount, false);
         target->GetReputationMgr().SendState(target->GetReputationMgr().GetState(factionEntry));
-        handler->PSendSysMessage(LANG_COMMAND_MODIFY_REP, factionEntry->Name->Str[handler->GetSessionDbcLocale()], factionId,
+        handler->PSendSysMessage(LANG_COMMAND_MODIFY_REP, factionEntry->Name[handler->GetSessionDbcLocale()], factionId,
             handler->GetNameLink(target).c_str(), target->GetReputationMgr().GetReputation(factionEntry));
         return true;
     }
 
     //morph creature or player
-    static bool HandleModifyMorphCommand(ChatHandler* handler, const char* args)
+    static bool HandleModifyMorphCommand(ChatHandler* handler, char const* args)
     {
         if (!*args)
             return false;
 
-        uint32 display_id = (uint32)atoi((char*)args);
+        uint32 display_id = atoul(args);
 
         Unit* target = handler->getSelectedUnit();
         if (!target)
@@ -1043,14 +776,23 @@ public:
     }
 
     // Toggles a phaseid on a player
-    static bool HandleModifyPhaseCommand(ChatHandler* handler, const char* args)
+    static bool HandleModifyPhaseCommand(ChatHandler* handler, char const* args)
     {
         if (!*args)
             return false;
 
-        uint32 phaseId = uint32(atoul(args));
+        char* phaseText = strtok((char*)args, " ");
+        if (!phaseText)
+            return false;
 
-        if (!sPhaseStore.LookupEntry(phaseId))
+        uint32 phaseId = uint32(strtoul(phaseText, nullptr, 10));
+        uint32 visibleMapId = 0;
+
+        char* visibleMapIdText = strtok(nullptr, " ");
+        if (visibleMapIdText)
+            visibleMapId = uint32(strtoul(visibleMapIdText, nullptr, 10));
+
+        if (phaseId && !sPhaseStore.LookupEntry(phaseId))
         {
             handler->SendSysMessage(LANG_PHASE_NOTFOUND);
             handler->SetSentErrorMessage(true);
@@ -1058,30 +800,47 @@ public:
         }
 
         Unit* target = handler->getSelectedUnit();
-        if (!target)
-            target = handler->GetSession()->GetPlayer();
 
-        target->SetInPhase(phaseId, true, !target->IsInPhase(phaseId));
+        if (visibleMapId)
+        {
+            MapEntry const* visibleMap = sMapStore.LookupEntry(visibleMapId);
+            if (!visibleMap || visibleMap->ParentMapID != int32(target->GetMapId()))
+            {
+                handler->SendSysMessage(LANG_PHASE_NOTFOUND);
+                handler->SetSentErrorMessage(true);
+                return false;
+            }
 
-        if (target->GetTypeId() == TYPEID_PLAYER)
-            target->ToPlayer()->SendUpdatePhasing();
+            if (!target->GetPhaseShift().HasVisibleMapId(visibleMapId))
+                PhasingHandler::AddVisibleMapId(target, visibleMapId);
+            else
+                PhasingHandler::RemoveVisibleMapId(target, visibleMapId);
+        }
+
+        if (phaseId)
+        {
+            if (!target->GetPhaseShift().HasPhase(phaseId))
+                PhasingHandler::AddPhase(target, phaseId, true);
+            else
+                PhasingHandler::RemovePhase(target, phaseId, true);
+        }
 
         return true;
     }
 
     //change standstate
-    static bool HandleModifyStandStateCommand(ChatHandler* handler, const char* args)
+    static bool HandleModifyStandStateCommand(ChatHandler* handler, char const* args)
     {
         if (!*args)
             return false;
 
         uint32 anim_id = atoi((char*)args);
-        handler->GetSession()->GetPlayer()->SetUInt32Value(UNIT_NPC_EMOTESTATE, anim_id);
+        handler->GetSession()->GetPlayer()->SetEmoteState(Emote(anim_id));
 
         return true;
     }
 
-    static bool HandleModifyGenderCommand(ChatHandler* handler, const char* args)
+    static bool HandleModifyGenderCommand(ChatHandler* handler, char const* args)
     {
         if (!*args)
             return false;
@@ -1126,8 +885,8 @@ public:
         }
 
         // Set gender
-        target->SetByteValue(UNIT_FIELD_BYTES_0, UNIT_BYTES_0_OFFSET_GENDER, gender);
-        target->SetByteValue(PLAYER_BYTES_3, PLAYER_BYTES_3_OFFSET_GENDER, gender);
+        target->SetGender(gender);
+        target->SetNativeSex(gender);
 
         // Change display ID
         target->InitDisplayIds();
@@ -1142,7 +901,7 @@ public:
         return true;
     }
 //demorph player or unit
-    static bool HandleDeMorphCommand(ChatHandler* handler, const char* /*args*/)
+    static bool HandleDeMorphCommand(ChatHandler* handler, char const* /*args*/)
     {
         Unit* target = handler->getSelectedUnit();
         if (!target)
@@ -1175,7 +934,7 @@ public:
         if (!currencyType)
             return false;
 
-        uint32 amount = atoi(strtok(NULL, " "));
+        uint32 amount = atoi(strtok(nullptr, " "));
         if (!amount)
             return false;
 
@@ -1185,7 +944,7 @@ public:
     }
 
     // mod xp command
-    static bool HandleModifyXPCommand(ChatHandler *handler, const char* args)
+    static bool HandleModifyXPCommand(ChatHandler *handler, char const* args)
     {
         if (!*args)
             return false;
@@ -1212,6 +971,74 @@ public:
 
         // we can run the command
         target->GiveXP(xp, nullptr);
+        return true;
+    }
+
+    // Edit Player Power
+    static bool HandleModifyPowerCommand(ChatHandler* handler, const char* args)
+    {
+        if (!*args)
+            return false;
+
+        Player* target = handler->getSelectedPlayerOrSelf();
+        if (handler->HasLowerSecurity(target, ObjectGuid::Empty))
+            return false;
+
+        char* powerTypeToken = strtok((char*)args, " ");
+        if (!powerTypeToken)
+            return false;
+
+        PowerTypeEntry const* powerType = sDB2Manager.GetPowerTypeByName(powerTypeToken);
+        if (!powerType)
+        {
+            handler->SendSysMessage(LANG_INVALID_POWER_NAME);
+            handler->SetSentErrorMessage(true);
+            return false;
+        }
+
+        if (target->GetPowerIndex(Powers(powerType->PowerTypeEnum)) == MAX_POWERS)
+        {
+            handler->SendSysMessage(LANG_INVALID_POWER_NAME);
+            handler->SetSentErrorMessage(true);
+            return false;
+        }
+
+        char* amount = strtok(nullptr, " ");
+        if (!amount)
+            return false;
+
+        int32 powerAmount = atoi(amount);
+
+        if (powerAmount < 1)
+        {
+            handler->SendSysMessage(LANG_BAD_VALUE);
+            handler->SetSentErrorMessage(true);
+            return false;
+        }
+
+        std::string formattedPowerName = powerType->NameGlobalStringTag;
+        bool upperCase = true;
+        for (char& c : formattedPowerName)
+        {
+            if (upperCase)
+            {
+                c = char(::toupper(c));
+                upperCase = false;
+            }
+            else
+                c = char(::tolower(c));
+
+            if (c == '_')
+            {
+                c = ' ';
+                upperCase = true;
+            }
+        }
+
+        NotifyModification(handler, target, LANG_YOU_CHANGE_POWER, LANG_YOUR_POWER_CHANGED, formattedPowerName.c_str(), powerAmount, powerAmount);
+        powerAmount *= powerType->DisplayModifier;
+        target->SetMaxPower(Powers(powerType->PowerTypeEnum), powerAmount);
+        target->SetPower(Powers(powerType->PowerTypeEnum), powerAmount);
         return true;
     }
 };

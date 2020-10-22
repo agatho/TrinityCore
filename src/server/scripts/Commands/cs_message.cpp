@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -28,11 +28,14 @@ EndScriptData */
 #include "Channel.h"
 #include "ChannelMgr.h"
 #include "DatabaseEnv.h"
+#include "DB2Stores.h"
 #include "Language.h"
+#include "ObjectAccessor.h"
 #include "ObjectMgr.h"
 #include "Player.h"
 #include "RBAC.h"
 #include "World.h"
+#include "WorldSession.h"
 
 class message_commandscript : public CommandScript
 {
@@ -47,11 +50,11 @@ public:
         };
         static std::vector<ChatCommand> channelCommandTable =
         {
-            { "set", rbac::RBAC_PERM_COMMAND_CHANNEL_SET, true, NULL, "", channelSetCommandTable },
+            { "set", rbac::RBAC_PERM_COMMAND_CHANNEL_SET, true, nullptr, "", channelSetCommandTable },
         };
         static std::vector<ChatCommand> commandTable =
         {
-            { "channel",        rbac::RBAC_PERM_COMMAND_CHANNEL,        true, NULL,                         "", channelCommandTable  },
+            { "channel",        rbac::RBAC_PERM_COMMAND_CHANNEL,        true, nullptr,                      "", channelCommandTable  },
             { "nameannounce",   rbac::RBAC_PERM_COMMAND_NAMEANNOUNCE,   true, &HandleNameAnnounceCommand,   "" },
             { "gmnameannounce", rbac::RBAC_PERM_COMMAND_GMNAMEANNOUNCE, true, &HandleGMNameAnnounceCommand, "" },
             { "announce",       rbac::RBAC_PERM_COMMAND_ANNOUNCE,       true, &HandleAnnounceCommand,       "" },
@@ -80,7 +83,7 @@ public:
             if (!channelEntry)
                 continue;
 
-            if (strstr(channelEntry->Name->Str[handler->GetSessionDbcLocale()], channelStr))
+            if (strstr(channelEntry->Name[handler->GetSessionDbcLocale()], channelStr))
             {
                 channelId = i;
                 break;
@@ -94,7 +97,7 @@ public:
             if (!entry)
                 continue;
 
-            if (strstr(entry->AreaName->Str[handler->GetSessionDbcLocale()], channelStr))
+            if (strstr(entry->AreaName[handler->GetSessionDbcLocale()], channelStr))
             {
                 zoneEntry = entry;
                 break;
@@ -112,7 +115,7 @@ public:
             if (channel)
                 channel->SetOwnership(true);
 
-            PreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_UPD_CHANNEL_OWNERSHIP);
+            CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_UPD_CHANNEL_OWNERSHIP);
             stmt->setUInt8 (0, 1);
             stmt->setString(1, channelStr);
             CharacterDatabase.Execute(stmt);
@@ -123,7 +126,7 @@ public:
             if (channel)
                 channel->SetOwnership(false);
 
-            PreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_UPD_CHANNEL_OWNERSHIP);
+            CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_UPD_CHANNEL_OWNERSHIP);
             stmt->setUInt8 (0, 0);
             stmt->setString(1, channelStr);
             CharacterDatabase.Execute(stmt);
@@ -236,7 +239,7 @@ public:
 
         if (argStr == "remove")
         {
-            std::string name = strtok(NULL, " ");
+            std::string name = strtok(nullptr, " ");
             if (normalizePlayerName(name))
             {
                 if (Player* player = ObjectAccessor::FindPlayerByName(name))

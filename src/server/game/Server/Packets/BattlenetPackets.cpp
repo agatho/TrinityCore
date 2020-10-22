@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -52,15 +52,16 @@ WorldPacket const* WorldPackets::Battlenet::Response::Write()
     return &_worldPacket;
 }
 
-WorldPacket const* WorldPackets::Battlenet::SetSessionState::Write()
+WorldPacket const* WorldPackets::Battlenet::ConnectionStatus::Write()
 {
     _worldPacket.WriteBits(State, 2);
+    _worldPacket.WriteBit(SuppressNotification);
     _worldPacket.FlushBits();
 
     return &_worldPacket;
 }
 
-WorldPacket const* WorldPackets::Battlenet::RealmListTicket::Write()
+WorldPacket const* WorldPackets::Battlenet::ChangeRealmTicketResponse::Write()
 {
     _worldPacket << uint32(Token);
     _worldPacket.WriteBit(Allow);
@@ -82,7 +83,7 @@ void WorldPackets::Battlenet::Request::Read()
     Data.WriteCompleted(protoSize);
 }
 
-void WorldPackets::Battlenet::RequestRealmListTicket::Read()
+void WorldPackets::Battlenet::ChangeRealmTicket::Read()
 {
     _worldPacket >> Token;
     _worldPacket.read(Secret.data(), Secret.size());

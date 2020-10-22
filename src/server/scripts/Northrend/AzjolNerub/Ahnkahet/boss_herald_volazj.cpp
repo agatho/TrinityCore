@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -20,10 +20,16 @@
  */
 
 #include "ScriptMgr.h"
-#include "ScriptedCreature.h"
 #include "ahnkahet.h"
+#include "InstanceScript.h"
+#include "Map.h"
+#include "ObjectAccessor.h"
+#include "PhasingHandler.h"
 #include "Player.h"
+#include "ScriptedCreature.h"
 #include "SpellInfo.h"
+#include "SpellMgr.h"
+#include "TemporarySummon.h"
 
 enum Spells
 {
@@ -94,7 +100,7 @@ public:
 
         void DamageTaken(Unit* /*pAttacker*/, uint32 &damage) override
         {
-            if (me->HasFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NOT_SELECTABLE))
+            if (me->HasUnitFlag(UNIT_FLAG_NOT_SELECTABLE))
                 damage = 0;
 
             if ((GetHealthPct(0) >= 66 && GetHealthPct(damage) < 66)||
@@ -105,7 +111,7 @@ public:
             }
         }
 
-        void SpellHitTarget(Unit* target, const SpellInfo* spell) override
+        void SpellHitTarget(Unit* target, SpellInfo const* spell) override
         {
             if (spell->Id == SPELL_INSANITY)
             {
@@ -118,19 +124,19 @@ public:
                     // Channel visual
                     DoCast(me, INSANITY_VISUAL, true);
                     // Unattackable
-                    me->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NOT_SELECTABLE);
+                    me->AddUnitFlag(UNIT_FLAG_NOT_SELECTABLE);
                     me->SetControlled(true, UNIT_STATE_STUNNED);
                 }
 
                 // phase the player
                 target->CastSpell(target, SPELL_INSANITY_TARGET + insanityHandled, true);
 
-                SpellInfo const* spellInfo = sSpellMgr->GetSpellInfo(SPELL_INSANITY_TARGET + insanityHandled);
+                SpellInfo const* spellInfo = sSpellMgr->GetSpellInfo(SPELL_INSANITY_TARGET + insanityHandled, GetDifficulty());
                 if (!spellInfo)
                     return;
 
                 // summon twisted party members for this target
-                Map::PlayerList const &players = me->GetMap()->GetPlayers();
+                Map::PlayerList const& players = me->GetMap()->GetPlayers();
                 for (Map::PlayerList::const_iterator i = players.begin(); i != players.end(); ++i)
                 {
                     Player* player = i->GetSource();
@@ -142,7 +148,7 @@ public:
                         // clone
                         player->CastSpell(summon, SPELL_CLONE_PLAYER, true);
                         // phase the summon
-                        summon->SetInPhase(spellInfo->GetEffect(EFFECT_0)->MiscValueB, true, true);
+                        PhasingHandler::AddPhase(summon, spellInfo->GetEffect(EFFECT_0)->MiscValueB, true);
                     }
                 }
                 ++insanityHandled;
@@ -151,7 +157,7 @@ public:
 
         void ResetPlayersPhase()
         {
-            Map::PlayerList const &players = me->GetMap()->GetPlayers();
+            Map::PlayerList const& players = me->GetMap()->GetPlayers();
             for (Map::PlayerList::const_iterator i = players.begin(); i != players.end(); ++i)
             {
                 Player* player = i->GetSource();
@@ -168,15 +174,15 @@ public:
             instance->DoStopCriteriaTimer(CRITERIA_TIMED_TYPE_EVENT, ACHIEV_QUICK_DEMISE_START_EVENT);
 
             // Visible for all players in insanity
-            me->SetInPhase(169, true, true);
             for (uint32 i = 173; i <= 177; ++i)
-                me->SetInPhase(i, true, true);
+                PhasingHandler::AddPhase(me, i, false);
+            PhasingHandler::AddPhase(me, 169, true);
 
             ResetPlayersPhase();
 
             // Cleanup
             Summons.DespawnAll();
-            me->RemoveFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NOT_SELECTABLE);
+            me->RemoveUnitFlag(UNIT_FLAG_NOT_SELECTABLE);
             me->SetControlled(false, UNIT_STATE_STUNNED);
         }
 
@@ -208,7 +214,7 @@ public:
                         return;
                     else
                     {
-                        nextPhase = *visage->GetPhases().begin();
+                        nextPhase = visage->GetPhaseShift().GetPhases().begin()->Id;
                         break;
                     }
                 }
@@ -239,7 +245,7 @@ public:
                     return;
 
                 insanityHandled = 0;
-                me->RemoveFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NOT_SELECTABLE);
+                me->RemoveUnitFlag(UNIT_FLAG_NOT_SELECTABLE);
                 me->SetControlled(false, UNIT_STATE_STUNNED);
                 me->RemoveAurasDueToSpell(INSANITY_VISUAL);
             }
@@ -285,7 +291,7 @@ public:
 
     CreatureAI* GetAI(Creature* creature) const override
     {
-        return GetInstanceAI<boss_volazjAI>(creature);
+        return GetAhnKahetAI<boss_volazjAI>(creature);
     }
 };
 

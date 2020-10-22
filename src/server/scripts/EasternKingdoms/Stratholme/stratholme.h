@@ -1,6 +1,5 @@
 /*
- * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
- * Copyright (C) 2006-2009 ScriptDev2 <https://scriptdev2.svn.sourceforge.net/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -19,6 +18,9 @@
 #ifndef DEF_STRATHOLME_H
 #define DEF_STRATHOLME_H
 
+#include "CreatureAIImpl.h"
+
+#define StratholmeScriptName "instance_stratholme"
 #define DataHeader "STR"
 
 enum STRDataTypes
@@ -81,5 +83,10 @@ enum STRSpellIds
     SPELL_BARON_ULTIMATUM               = 27861
 };
 
-#endif
+template <class AI, class T>
+inline AI* GetStratholmeAI(T* obj)
+{
+    return GetInstanceAI<AI>(obj, StratholmeScriptName);
+}
 
+#endif

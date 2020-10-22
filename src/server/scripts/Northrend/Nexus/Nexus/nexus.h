@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -17,6 +17,8 @@
 
 #ifndef DEF_NEXUS_H
 #define DEF_NEXUS_H
+
+#include "CreatureAIImpl.h"
 
 #define NexusScriptName "instance_nexus"
 #define DataHeader "NEX"
@@ -62,5 +64,11 @@ enum NEXGameObjectIds
     GO_ORMOROKS_CONTAINMET_SPHERE     = 188528,
     GO_TELESTRAS_CONTAINMET_SPHERE    = 188526
 };
+
+template <class AI, class T>
+inline AI* GetNexusAI(T* obj)
+{
+    return GetInstanceAI<AI>(obj, NexusScriptName);
+}
 
 #endif

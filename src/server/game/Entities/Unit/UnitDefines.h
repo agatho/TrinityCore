@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -21,13 +21,14 @@
 #include "Define.h"
 #include <string>
 
-#define DEFAULT_COMBAT_REACH        1.5f
 #define MIN_MELEE_REACH             2.0f
 #define NOMINAL_MELEE_RANGE         5.0f
 #define MELEE_RANGE                 (NOMINAL_MELEE_RANGE - MIN_MELEE_REACH * 2) //center to center for players
 #define BASE_MINDAMAGE 1.0f
 #define BASE_MAXDAMAGE 2.0f
 #define BASE_ATTACK_TIME 2000
+
+#define MAX_EQUIPMENT_ITEMS 3
 
 // byte value (UNIT_FIELD_BYTES_1, 0)
 enum UnitStandStateType : uint8
@@ -45,43 +46,20 @@ enum UnitStandStateType : uint8
 };
 
 // byte flag value (UNIT_FIELD_BYTES_1, 2)
-enum UnitStandFlags : uint8
+enum UnitVisFlags : uint8
 {
-    UNIT_STAND_FLAGS_UNK1         = 0x01,
-    UNIT_STAND_FLAGS_CREEP        = 0x02,
-    UNIT_STAND_FLAGS_UNTRACKABLE  = 0x04,
-    UNIT_STAND_FLAGS_UNK4         = 0x08,
-    UNIT_STAND_FLAGS_UNK5         = 0x10,
-    UNIT_STAND_FLAGS_ALL          = 0xFF
-};
-
-enum UnitBytes0Offsets : uint8
-{
-    UNIT_BYTES_0_OFFSET_RACE            = 0,
-    UNIT_BYTES_0_OFFSET_CLASS           = 1,
-    UNIT_BYTES_0_OFFSET_PLAYER_CLASS    = 2,
-    UNIT_BYTES_0_OFFSET_GENDER          = 3
-};
-
-enum UnitBytes1Offsets : uint8
-{
-    UNIT_BYTES_1_OFFSET_STAND_STATE = 0,
-    UNIT_BYTES_1_OFFSET_PET_TALENTS = 1,    // unused
-    UNIT_BYTES_1_OFFSET_VIS_FLAG    = 2,
-    UNIT_BYTES_1_OFFSET_ANIM_TIER   = 3
-};
-
-enum UnitBytes2Offsets : uint8
-{
-    UNIT_BYTES_2_OFFSET_SHEATH_STATE    = 0,
-    UNIT_BYTES_2_OFFSET_PVP_FLAG        = 1,
-    UNIT_BYTES_2_OFFSET_PET_FLAGS       = 2,
-    UNIT_BYTES_2_OFFSET_SHAPESHIFT_FORM = 3
+    UNIT_VIS_FLAGS_UNK1         = 0x01,
+    UNIT_VIS_FLAGS_CREEP        = 0x02,
+    UNIT_VIS_FLAGS_UNTRACKABLE  = 0x04,
+    UNIT_VIS_FLAGS_UNK4         = 0x08,
+    UNIT_VIS_FLAGS_UNK5         = 0x10,
+    UNIT_VIS_FLAGS_ALL          = 0xFF
 };
 
 // byte flags value (UNIT_FIELD_BYTES_1, 3)
 enum UnitBytes1_Flags : uint8
 {
+    UNIT_BYTE1_FLAG_NONE            = 0x00,
     UNIT_BYTE1_FLAG_ALWAYS_STAND    = 0x01,
     UNIT_BYTE1_FLAG_HOVER           = 0x02,
     UNIT_BYTE1_FLAG_UNK_3           = 0x04,
@@ -101,6 +79,7 @@ enum SheathState : uint8
 // byte (1 from 0..3) of UNIT_FIELD_BYTES_2
 enum UnitPVPStateFlags : uint8
 {
+    UNIT_BYTE2_FLAG_NONE        = 0x00,
     UNIT_BYTE2_FLAG_PVP         = 0x01,
     UNIT_BYTE2_FLAG_UNK1        = 0x02,
     UNIT_BYTE2_FLAG_FFA_PVP     = 0x04,
@@ -112,11 +91,73 @@ enum UnitPVPStateFlags : uint8
 };
 
 // byte (2 from 0..3) of UNIT_FIELD_BYTES_2
-enum UnitRename : uint8
+enum UnitPetFlag : uint8
 {
-    UNIT_CAN_BE_RENAMED     = 0x01,
-    UNIT_CAN_BE_ABANDONED   = 0x02
+    UNIT_PET_FLAG_NONE              = 0x0,
+    UNIT_PET_FLAG_CAN_BE_RENAMED    = 0x01,
+    UNIT_PET_FLAG_CAN_BE_ABANDONED  = 0x02
 };
+
+// high byte (3 from 0..3) of UNIT_FIELD_BYTES_2
+enum ShapeshiftForm
+{
+    FORM_NONE                       = 0,
+    FORM_CAT_FORM                   = 1,
+    FORM_TREE_OF_LIFE               = 2,
+    FORM_TRAVEL_FORM                = 3,
+    FORM_AQUATIC_FORM               = 4,
+    FORM_BEAR_FORM                  = 5,
+    FORM_AMBIENT                    = 6,
+    FORM_GHOUL                      = 7,
+    FORM_DIRE_BEAR_FORM             = 8,
+    FORM_CRANE_STANCE               = 9,
+    FORM_THARONJA_SKELETON          = 10,
+    FORM_DARKMOON_TEST_OF_STRENGTH  = 11,
+    FORM_BLB_PLAYER                 = 12,
+    FORM_SHADOW_DANCE               = 13,
+    FORM_CREATURE_BEAR              = 14,
+    FORM_CREATURE_CAT               = 15,
+    FORM_GHOST_WOLF                 = 16,
+    FORM_BATTLE_STANCE              = 17,
+    FORM_DEFENSIVE_STANCE           = 18,
+    FORM_BERSERKER_STANCE           = 19,
+    FORM_SERPENT_STANCE             = 20,
+    FORM_ZOMBIE                     = 21,
+    FORM_METAMORPHOSIS              = 22,
+    FORM_OX_STANCE                  = 23,
+    FORM_TIGER_STANCE               = 24,
+    FORM_UNDEAD                     = 25,
+    FORM_FRENZY                     = 26,
+    FORM_FLIGHT_FORM_EPIC           = 27,
+    FORM_SHADOWFORM                 = 28,
+    FORM_FLIGHT_FORM                = 29,
+    FORM_STEALTH                    = 30,
+    FORM_MOONKIN_FORM               = 31,
+    FORM_SPIRIT_OF_REDEMPTION       = 32,
+    FORM_GLADIATOR_STANCE           = 33,
+    FORM_METAMORPHOSIS_2            = 34,
+    FORM_MOONKIN_FORM_RESTORATION   = 35,
+    FORM_TREANT_FORM                = 36,
+    FORM_SPIRIT_OWL_FORM            = 37,
+    FORM_SPIRIT_OWL_FORM_2          = 38,
+    FORM_WISP_FORM                  = 39,
+    FORM_WISP_FORM_2                = 40,
+};
+
+enum UnitMoveType
+{
+    MOVE_WALK           = 0,
+    MOVE_RUN            = 1,
+    MOVE_RUN_BACK       = 2,
+    MOVE_SWIM           = 3,
+    MOVE_SWIM_BACK      = 4,
+    MOVE_TURN_RATE      = 5,
+    MOVE_FLIGHT         = 6,
+    MOVE_FLIGHT_BACK    = 7,
+    MOVE_PITCH_RATE     = 8
+};
+
+#define MAX_MOVE_TYPE     9
 
 // Value masks for UNIT_FIELD_FLAGS
 enum UnitFlags : uint32
@@ -132,7 +173,7 @@ enum UnitFlags : uint32
     UNIT_FLAG_IMMUNE_TO_PC          = 0x00000100,           // disables combat/assistance with PlayerCharacters (PC) - see Unit::_IsValidAttackTarget, Unit::_IsValidAssistTarget
     UNIT_FLAG_IMMUNE_TO_NPC         = 0x00000200,           // disables combat/assistance with NonPlayerCharacters (NPC) - see Unit::_IsValidAttackTarget, Unit::_IsValidAssistTarget
     UNIT_FLAG_LOOTING               = 0x00000400,           // loot animation
-    UNIT_FLAG_PET_IN_COMBAT         = 0x00000800,           // in combat?, 2.0.8
+    UNIT_FLAG_PET_IN_COMBAT         = 0x00000800,           // on player pets: whether the pet is chasing a target to attack || on other units: whether any of the unit's minions is in combat
     UNIT_FLAG_PVP                   = 0x00001000,           // changed in 3.0.3
     UNIT_FLAG_SILENCED              = 0x00002000,           // silenced, 2.1.1
     UNIT_FLAG_CANNOT_SWIM           = 0x00004000,           // 2.0.8
@@ -168,6 +209,7 @@ enum UnitFlags2 : uint32
     UNIT_FLAG2_FORCE_MOVEMENT               = 0x00000040,
     UNIT_FLAG2_DISARM_OFFHAND               = 0x00000080,
     UNIT_FLAG2_DISABLE_PRED_STATS           = 0x00000100,   // Player has disabled predicted stats (Used by raid frames)
+    UNIT_FLAG2_ALLOW_CHANGING_TALENTS       = 0x00000200,   // Allows changing talents outside rest area
     UNIT_FLAG2_DISARM_RANGED                = 0x00000400,   // this does not disable ranged weapon display (maybe additional flag needed?)
     UNIT_FLAG2_REGENERATE_POWER             = 0x00000800,
     UNIT_FLAG2_RESTRICT_PARTY_INTERACTION   = 0x00001000,   // Restrict interaction to party or raid
@@ -189,47 +231,54 @@ enum UnitFlags3 : uint32
 };
 
 /// Non Player Character flags
-enum NPCFlags : uint64
+enum NPCFlags : uint32
 {
-    UNIT_NPC_FLAG_NONE                  = 0x0000000000,
-    UNIT_NPC_FLAG_GOSSIP                = 0x0000000001,     // 100%
-    UNIT_NPC_FLAG_QUESTGIVER            = 0x0000000002,     // 100%
-    UNIT_NPC_FLAG_UNK1                  = 0x0000000004,
-    UNIT_NPC_FLAG_UNK2                  = 0x0000000008,
-    UNIT_NPC_FLAG_TRAINER               = 0x0000000010,     // 100%
-    UNIT_NPC_FLAG_TRAINER_CLASS         = 0x0000000020,     // 100%
-    UNIT_NPC_FLAG_TRAINER_PROFESSION    = 0x0000000040,     // 100%
-    UNIT_NPC_FLAG_VENDOR                = 0x0000000080,     // 100%
-    UNIT_NPC_FLAG_VENDOR_AMMO           = 0x0000000100,     // 100%, general goods vendor
-    UNIT_NPC_FLAG_VENDOR_FOOD           = 0x0000000200,     // 100%
-    UNIT_NPC_FLAG_VENDOR_POISON         = 0x0000000400,     // guessed
-    UNIT_NPC_FLAG_VENDOR_REAGENT        = 0x0000000800,     // 100%
-    UNIT_NPC_FLAG_REPAIR                = 0x0000001000,     // 100%
-    UNIT_NPC_FLAG_FLIGHTMASTER          = 0x0000002000,     // 100%
-    UNIT_NPC_FLAG_SPIRITHEALER          = 0x0000004000,     // guessed
-    UNIT_NPC_FLAG_SPIRITGUIDE           = 0x0000008000,     // guessed
-    UNIT_NPC_FLAG_INNKEEPER             = 0x0000010000,     // 100%
-    UNIT_NPC_FLAG_BANKER                = 0x0000020000,     // 100%
-    UNIT_NPC_FLAG_PETITIONER            = 0x0000040000,     // 100% 0xC0000 = guild petitions, 0x40000 = arena team petitions
-    UNIT_NPC_FLAG_TABARDDESIGNER        = 0x0000080000,     // 100%
-    UNIT_NPC_FLAG_BATTLEMASTER          = 0x0000100000,     // 100%
-    UNIT_NPC_FLAG_AUCTIONEER            = 0x0000200000,     // 100%
-    UNIT_NPC_FLAG_STABLEMASTER          = 0x0000400000,     // 100%
-    UNIT_NPC_FLAG_GUILD_BANKER          = 0x0000800000,     // cause client to send 997 opcode
-    UNIT_NPC_FLAG_SPELLCLICK            = 0x0001000000,     // cause client to send 1015 opcode (spell click)
-    UNIT_NPC_FLAG_PLAYER_VEHICLE        = 0x0002000000,     // players with mounts that have vehicle data should have it set
-    UNIT_NPC_FLAG_MAILBOX               = 0x0004000000,     // mailbox
-    UNIT_NPC_FLAG_ARTIFACT_POWER_RESPEC = 0x0008000000,     // artifact powers reset
-    UNIT_NPC_FLAG_TRANSMOGRIFIER        = 0x0010000000,     // transmogrification
-    UNIT_NPC_FLAG_VAULTKEEPER           = 0x0020000000,     // void storage
-    UNIT_NPC_FLAG_BLACK_MARKET          = 0x0080000000,     // black market
-    UNIT_NPC_FLAG_ITEM_UPGRADE_MASTER   = 0x0100000000,
-    UNIT_NPC_FLAG_GARRISON_ARCHITECT    = 0x0200000000,
-    UNIT_NPC_FLAG_STEERING              = 0x0400000000,
-    UNIT_NPC_FLAG_SHIPMENT_CRAFTER      = 0x1000000000,
-    UNIT_NPC_FLAG_GARRISON_MISSION_NPC  = 0x2000000000,
-    UNIT_NPC_FLAG_TRADESKILL_NPC        = 0x4000000000,
-    UNIT_NPC_FLAG_BLACK_MARKET_VIEW     = 0x8000000000
+    UNIT_NPC_FLAG_NONE                  = 0x00000000,
+    UNIT_NPC_FLAG_GOSSIP                = 0x00000001,     // 100%
+    UNIT_NPC_FLAG_QUESTGIVER            = 0x00000002,     // 100%
+    UNIT_NPC_FLAG_UNK1                  = 0x00000004,
+    UNIT_NPC_FLAG_UNK2                  = 0x00000008,
+    UNIT_NPC_FLAG_TRAINER               = 0x00000010,     // 100%
+    UNIT_NPC_FLAG_TRAINER_CLASS         = 0x00000020,     // 100%
+    UNIT_NPC_FLAG_TRAINER_PROFESSION    = 0x00000040,     // 100%
+    UNIT_NPC_FLAG_VENDOR                = 0x00000080,     // 100%
+    UNIT_NPC_FLAG_VENDOR_AMMO           = 0x00000100,     // 100%, general goods vendor
+    UNIT_NPC_FLAG_VENDOR_FOOD           = 0x00000200,     // 100%
+    UNIT_NPC_FLAG_VENDOR_POISON         = 0x00000400,     // guessed
+    UNIT_NPC_FLAG_VENDOR_REAGENT        = 0x00000800,     // 100%
+    UNIT_NPC_FLAG_REPAIR                = 0x00001000,     // 100%
+    UNIT_NPC_FLAG_FLIGHTMASTER          = 0x00002000,     // 100%
+    UNIT_NPC_FLAG_SPIRITHEALER          = 0x00004000,     // guessed
+    UNIT_NPC_FLAG_SPIRITGUIDE           = 0x00008000,     // guessed
+    UNIT_NPC_FLAG_INNKEEPER             = 0x00010000,     // 100%
+    UNIT_NPC_FLAG_BANKER                = 0x00020000,     // 100%
+    UNIT_NPC_FLAG_PETITIONER            = 0x00040000,     // 100% 0xC0000 = guild petitions, 0x40000 = arena team petitions
+    UNIT_NPC_FLAG_TABARDDESIGNER        = 0x00080000,     // 100%
+    UNIT_NPC_FLAG_BATTLEMASTER          = 0x00100000,     // 100%
+    UNIT_NPC_FLAG_AUCTIONEER            = 0x00200000,     // 100%
+    UNIT_NPC_FLAG_STABLEMASTER          = 0x00400000,     // 100%
+    UNIT_NPC_FLAG_GUILD_BANKER          = 0x00800000,     //
+    UNIT_NPC_FLAG_SPELLCLICK            = 0x01000000,     //
+    UNIT_NPC_FLAG_PLAYER_VEHICLE        = 0x02000000,     // players with mounts that have vehicle data should have it set
+    UNIT_NPC_FLAG_MAILBOX               = 0x04000000,     // mailbox
+    UNIT_NPC_FLAG_ARTIFACT_POWER_RESPEC = 0x08000000,     // artifact powers reset
+    UNIT_NPC_FLAG_TRANSMOGRIFIER        = 0x10000000,     // transmogrification
+    UNIT_NPC_FLAG_VAULTKEEPER           = 0x20000000,     // void storage
+    UNIT_NPC_FLAG_WILD_BATTLE_PET       = 0x40000000,     // Pet that player can fight (Battle Pet)
+    UNIT_NPC_FLAG_BLACK_MARKET          = 0x80000000     // black market
+};
+
+enum NPCFlags2 : uint32
+{
+    UNIT_NPC_FLAG_2_NONE                    = 0x000,
+    UNIT_NPC_FLAG_2_ITEM_UPGRADE_MASTER     = 0x001,
+    UNIT_NPC_FLAG_2_GARRISON_ARCHITECT      = 0x002,
+    UNIT_NPC_FLAG_2_STEERING                = 0x004,
+    UNIT_NPC_FLAG_2_SHIPMENT_CRAFTER        = 0x010,
+    UNIT_NPC_FLAG_2_GARRISON_MISSION_NPC    = 0x020,
+    UNIT_NPC_FLAG_2_TRADESKILL_NPC          = 0x040,
+    UNIT_NPC_FLAG_2_BLACK_MARKET_VIEW       = 0x080,
+    UNIT_NPC_FLAG_2_CONTRIBUTION_COLLECTOR  = 0x400
 };
 
 enum MovementFlags : uint32
@@ -314,7 +363,7 @@ enum MovementFlags2 : uint32
     MOVEMENTFLAG2_DOUBLE_JUMP                               = 0x00020000,
     // these flags cannot be sent (18 bits in packet)
     MOVEMENTFLAG2_UNK18                                     = 0x00040000,
-    MOVEMENTFLAG2_UNK19                                     = 0x00080000,
+    MOVEMENTFLAG2_AWAITING_LOAD                             = 0x00080000,
     MOVEMENTFLAG2_INTERPOLATED_MOVEMENT                     = 0x00100000,
     MOVEMENTFLAG2_INTERPOLATED_TURNING                      = 0x00200000,
     MOVEMENTFLAG2_INTERPOLATED_PITCHING                     = 0x00400000
@@ -355,6 +404,33 @@ enum HitInfo
 struct DeclinedName
 {
     std::string name[MAX_DECLINED_NAME_CASES];
+};
+
+enum ActiveStates
+{
+    ACT_PASSIVE  = 0x01,                                    // 0x01 - passive
+    ACT_DISABLED = 0x81,                                    // 0x80 - castable
+    ACT_ENABLED  = 0xC1,                                    // 0x40 | 0x80 - auto cast + castable
+    ACT_COMMAND  = 0x07,                                    // 0x01 | 0x02 | 0x04
+    ACT_REACTION = 0x06,                                    // 0x02 | 0x04
+    ACT_DECIDE   = 0x00                                     // custom
+};
+
+enum ReactStates
+{
+    REACT_PASSIVE    = 0,
+    REACT_DEFENSIVE  = 1,
+    REACT_AGGRESSIVE = 2,
+    REACT_ASSIST     = 3
+};
+
+enum CommandStates : uint8
+{
+    COMMAND_STAY    = 0,
+    COMMAND_FOLLOW  = 1,
+    COMMAND_ATTACK  = 2,
+    COMMAND_ABANDON = 3,
+    COMMAND_MOVE_TO = 4
 };
 
 #endif // UnitDefines_h__

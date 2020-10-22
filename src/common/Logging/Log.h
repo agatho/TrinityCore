@@ -1,6 +1,5 @@
 /*
- * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
- * Copyright (C) 2005-2009 MaNGOS <http://getmangos.com/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -31,11 +30,11 @@ class Appender;
 class Logger;
 struct LogMessage;
 
-namespace boost
+namespace Trinity
 {
-    namespace asio
+    namespace Asio
     {
-        class io_service;
+        class IoContext;
     }
 }
 
@@ -43,7 +42,7 @@ namespace boost
 
 typedef Appender*(*AppenderCreatorFn)(uint8 id, std::string const& name, LogLevel level, AppenderFlags flags, std::vector<char const*>&& extraArgs);
 
-template<class AppenderImpl>
+template <class AppenderImpl>
 Appender* CreateAppender(uint8 id, std::string const& name, LogLevel level, AppenderFlags flags, std::vector<char const*>&& extraArgs)
 {
     return new AppenderImpl(id, name, level, flags, std::forward<std::vector<char const*>>(extraArgs));
@@ -62,7 +61,7 @@ class TC_COMMON_API Log
     public:
         static Log* instance();
 
-        void Initialize(boost::asio::io_service* ioService);
+        void Initialize(Trinity::Asio::IoContext* ioContext);
         void SetSynchronous();  // Not threadsafe - should only be called from main() after all threads are joined
         void LoadFromConfig();
         void Close();
@@ -110,7 +109,7 @@ class TC_COMMON_API Log
         void ReadAppendersFromConfig();
         void ReadLoggersFromConfig();
         void RegisterAppender(uint8 index, AppenderCreatorFn appenderCreateFn);
-        void outMessage(std::string const& filter, LogLevel const level, std::string&& message);
+        void outMessage(std::string const& filter, LogLevel level, std::string&& message);
         void outCommand(std::string&& message, std::string&& param1);
 
         std::unordered_map<uint8, AppenderCreatorFn> appenderFactory;
@@ -122,8 +121,8 @@ class TC_COMMON_API Log
         std::string m_logsDir;
         std::string m_logsTimestamp;
 
-        boost::asio::io_service* _ioService;
-        Trinity::AsioStrand* _strand;
+        Trinity::Asio::IoContext* _ioContext;
+        Trinity::Asio::Strand* _strand;
 };
 
 #define sLog Log::instance()
@@ -142,7 +141,7 @@ class TC_COMMON_API Log
     }
 
 #if TRINITY_PLATFORM != TRINITY_PLATFORM_WINDOWS
-void check_args(const char*, ...) ATTR_PRINTF(1, 2);
+void check_args(char const*, ...) ATTR_PRINTF(1, 2);
 void check_args(std::string const&, ...);
 
 // This will catch format errors on build time

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -48,7 +48,7 @@ namespace WorldPackets
             bool _Display = false;
         };
 
-        class ChannelNotify final : public ServerPacket
+        class TC_GAME_API ChannelNotify final : public ServerPacket
         {
         public:
             ChannelNotify() : ServerPacket(SMSG_CHANNEL_NOTIFY, 80) { }
@@ -80,6 +80,7 @@ namespace WorldPackets
             int32 InstanceID    = 0;
             uint32 _ChannelFlags = 0; ///< @see enum ChannelFlags
             std::string _Channel;     ///< Channel Name
+            ObjectGuid ChannelGUID;
         };
 
         class ChannelNotifyLeft final : public ServerPacket

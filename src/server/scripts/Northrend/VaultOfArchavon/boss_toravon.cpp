@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -16,6 +16,8 @@
  */
 
 #include "ScriptMgr.h"
+#include "InstanceScript.h"
+#include "ObjectAccessor.h"
 #include "ScriptedCreature.h"
 #include "vault_of_archavon.h"
 
@@ -117,7 +119,7 @@ class boss_toravon : public CreatureScript
 
         CreatureAI* GetAI(Creature* creature) const override
         {
-            return new boss_toravonAI(creature);
+            return GetVaultOfArchavonAI<boss_toravonAI>(creature);
         }
 };
 
@@ -172,7 +174,7 @@ class npc_frost_warder : public CreatureScript
 
         CreatureAI* GetAI(Creature* creature) const override
         {
-            return new npc_frost_warderAI(creature);
+            return GetVaultOfArchavonAI<npc_frost_warderAI>(creature);
         }
 };
 
@@ -233,7 +235,7 @@ public:
 
     CreatureAI* GetAI(Creature* creature) const override
     {
-        return new npc_frozen_orbAI(creature);
+        return GetVaultOfArchavonAI<npc_frozen_orbAI>(creature);
     }
 };
 
@@ -250,7 +252,7 @@ class npc_frozen_orb_stalker : public CreatureScript
             npc_frozen_orb_stalkerAI(Creature* creature) : ScriptedAI(creature)
             {
                 creature->SetVisible(false);
-                creature->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NOT_SELECTABLE | UNIT_FLAG_NON_ATTACKABLE);
+                creature->AddUnitFlag(UnitFlags(UNIT_FLAG_NOT_SELECTABLE | UNIT_FLAG_NON_ATTACKABLE));
                 me->SetControlled(true, UNIT_STATE_ROOT);
                 creature->SetReactState(REACT_PASSIVE);
 
@@ -275,7 +277,7 @@ class npc_frozen_orb_stalker : public CreatureScript
                 {
                     Position pos;
                     me->GetNearPoint(toravon, pos.m_positionX, pos.m_positionY, pos.m_positionZ, 0.0f, 10.0f, 0.0f);
-                    me->SetPosition(pos);
+                    me->UpdatePosition(pos);
                     DoCast(me, SPELL_FROZEN_ORB_SUMMON);
                 }
             }
@@ -287,7 +289,7 @@ class npc_frozen_orb_stalker : public CreatureScript
 
         CreatureAI* GetAI(Creature* creature) const override
         {
-            return GetInstanceAI<npc_frozen_orb_stalkerAI>(creature);
+            return GetVaultOfArchavonAI<npc_frozen_orb_stalkerAI>(creature);
         }
 };
 

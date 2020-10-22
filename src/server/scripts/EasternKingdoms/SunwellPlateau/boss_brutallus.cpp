@@ -1,6 +1,5 @@
 /*
- * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
- * Copyright (C) 2006-2009 ScriptDev2 <https://scriptdev2.svn.sourceforge.net/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -22,8 +21,9 @@ SD%Complete: 80
 SDComment: Find a way to start the intro, best code for the intro
 EndScriptData */
 
-#include "Log.h"
 #include "ScriptMgr.h"
+#include "InstanceScript.h"
+#include "Log.h"
 #include "ScriptedCreature.h"
 #include "sunwell_plateau.h"
 
@@ -148,14 +148,14 @@ public:
             if (!Intro || IsIntro)
                 return;
 
-            if (Creature* Madrigosa = ObjectAccessor::GetCreature(*me, instance->GetGuidData(DATA_MADRIGOSA)))
+            if (Creature* Madrigosa = instance->GetCreature(DATA_MADRIGOSA))
             {
                 Madrigosa->Respawn();
                 Madrigosa->setActive(true);
                 IsIntro = true;
                 Madrigosa->SetMaxHealth(me->GetMaxHealth());
                 Madrigosa->SetHealth(me->GetMaxHealth());
-                me->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NON_ATTACKABLE);
+                me->AddUnitFlag(UNIT_FLAG_NON_ATTACKABLE);
                 me->Attack(Madrigosa, true);
                 Madrigosa->Attack(me, true);
             }
@@ -169,7 +169,7 @@ public:
 
         void EndIntro()
         {
-            me->RemoveFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NON_ATTACKABLE);
+            me->RemoveUnitFlag(UNIT_FLAG_NON_ATTACKABLE);
             Intro = false;
             IsIntro = false;
         }
@@ -183,7 +183,7 @@ public:
 
         void DoIntro()
         {
-            Creature* Madrigosa = ObjectAccessor::GetCreature(*me, instance->GetGuidData(DATA_MADRIGOSA));
+            Creature* Madrigosa = instance->GetCreature(DATA_MADRIGOSA);
             if (!Madrigosa)
                 return;
 
@@ -195,8 +195,8 @@ public:
                     ++IntroPhase;
                     break;
                 case 1:
-                    me->SetInFront(Madrigosa);
-                    Madrigosa->SetInFront(me);
+                    me->SetFacingToObject(Madrigosa);
+                    Madrigosa->SetFacingToObject(me);
                     Madrigosa->AI()->Talk(YELL_MADR_INTRO, me);
                     IntroPhaseTimer = 9000;
                     ++IntroPhase;
@@ -286,7 +286,7 @@ public:
                 {
                     if (IntroFrostBoltTimer <= diff)
                     {
-                        if (Creature* Madrigosa = ObjectAccessor::GetCreature(*me, instance->GetGuidData(DATA_MADRIGOSA)))
+                        if (Creature* Madrigosa = instance->GetCreature(DATA_MADRIGOSA))
                         {
                             Madrigosa->CastSpell(me, SPELL_INTRO_FROSTBOLT, true);
                             IntroFrostBoltTimer = 2000;
@@ -320,14 +320,8 @@ public:
 
             if (BurnTimer <= diff)
             {
-                std::list<Unit*> targets;
-                SelectTargetList(targets, 10, SELECT_TARGET_RANDOM, 100, true);
-                for (std::list<Unit*>::const_iterator i = targets.begin(); i != targets.end(); ++i)
-                    if (!(*i)->HasAura(SPELL_BURN))
-                    {
-                        (*i)->CastSpell((*i), SPELL_BURN, true);
-                        break;
-                    }
+                if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0, 100.0f, true, true, -SPELL_BURN))
+                    target->CastSpell(target, SPELL_BURN, true);
                 BurnTimer = urand(60000, 180000);
             } else BurnTimer -= diff;
 

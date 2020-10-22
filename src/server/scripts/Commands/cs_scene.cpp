@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -17,10 +17,12 @@
 
 #include "ScriptMgr.h"
 #include "Chat.h"
+#include "DB2Stores.h"
 #include "Language.h"
 #include "ObjectMgr.h"
 #include "Player.h"
 #include "RBAC.h"
+#include "WorldSession.h"
 
 class scene_commandscript : public CommandScript
 {
@@ -38,7 +40,7 @@ public:
         };
         static std::vector<ChatCommand> commandTable =
         {
-            { "scene",          rbac::RBAC_PERM_COMMAND_SCENE,              true, NULL,                             "", sceneCommandTable }
+            { "scene",          rbac::RBAC_PERM_COMMAND_SCENE,              true, nullptr,                          "", sceneCommandTable }
         };
         return commandTable;
     }
@@ -87,7 +89,7 @@ public:
             return false;
 
         char const* scenePackageIdStr = strtok((char*)args, " ");
-        char const* flagsStr = strtok(NULL, "");
+        char const* flagsStr = strtok(nullptr, "");
 
         if (!scenePackageIdStr)
             return false;

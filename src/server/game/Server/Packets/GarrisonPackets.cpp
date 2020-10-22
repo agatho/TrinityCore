@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -110,7 +110,7 @@ ByteBuffer& operator<<(ByteBuffer& data, WorldPackets::Garrison::GarrisonMission
     return data;
 }
 
-ByteBuffer& operator<<(ByteBuffer& data, WorldPackets::Garrison::GarrisonMissionAreaBonus const& areaBonus)
+ByteBuffer& operator<<(ByteBuffer& data, WorldPackets::Garrison::GarrisonMissionBonusAbility const& areaBonus)
 {
     data << uint32(areaBonus.GarrMssnBonusAbilityID);
     data << uint32(areaBonus.StartTime);
@@ -121,6 +121,7 @@ ByteBuffer& operator<<(ByteBuffer& data, WorldPackets::Garrison::GarrisonMission
 ByteBuffer& operator<<(ByteBuffer& data, WorldPackets::Garrison::GarrisonTalent const& talent)
 {
     data << int32(talent.GarrTalentID);
+    data << int32(talent.Rank);
     data << int32(talent.ResearchStartTime);
     data << int32(talent.Flags);
 
@@ -148,7 +149,6 @@ ByteBuffer& operator<<(ByteBuffer& data, WorldPackets::Garrison::GarrisonInfo co
     data << uint32(garrison.ArchivedMissions.size());
     data << int32(garrison.NumFollowerActivationsRemaining);
     data << uint32(garrison.NumMissionsStartedToday);
-    data << int32(garrison.FollowerSoftCap);
 
     for (WorldPackets::Garrison::GarrisonPlotInfo* plot : garrison.Plots)
         data << *plot;
@@ -157,20 +157,20 @@ ByteBuffer& operator<<(ByteBuffer& data, WorldPackets::Garrison::GarrisonInfo co
         data << *mission;
 
     for (std::vector<WorldPackets::Garrison::GarrisonMissionReward> const& missionReward : garrison.MissionRewards)
-    {
         data << uint32(missionReward.size());
+
+    for (std::vector<WorldPackets::Garrison::GarrisonMissionReward> const& missionReward : garrison.MissionRewards)
         for (WorldPackets::Garrison::GarrisonMissionReward const& missionRewardItem : missionReward)
             data << missionRewardItem;
-    }
 
     for (std::vector<WorldPackets::Garrison::GarrisonMissionReward> const& missionReward : garrison.MissionOvermaxRewards)
-    {
         data << uint32(missionReward.size());
+
+    for (std::vector<WorldPackets::Garrison::GarrisonMissionReward> const& missionReward : garrison.MissionOvermaxRewards)
         for (WorldPackets::Garrison::GarrisonMissionReward const& missionRewardItem : missionReward)
             data << missionRewardItem;
-    }
 
-    for (WorldPackets::Garrison::GarrisonMissionAreaBonus const* areaBonus : garrison.MissionAreaBonuses)
+    for (WorldPackets::Garrison::GarrisonMissionBonusAbility const* areaBonus : garrison.MissionAreaBonuses)
         data << *areaBonus;
 
     for (WorldPackets::Garrison::GarrisonTalent const& talent : garrison.Talents)
@@ -193,10 +193,21 @@ ByteBuffer& operator<<(ByteBuffer& data, WorldPackets::Garrison::GarrisonInfo co
     return data;
 }
 
+ByteBuffer& operator<<(ByteBuffer& data, WorldPackets::Garrison::FollowerSoftCapInfo const& followerSoftCapInfo)
+{
+    data << int32(followerSoftCapInfo.GarrFollowerTypeID);
+    data << uint32(followerSoftCapInfo.Count);
+    return data;
+}
+
 WorldPacket const* WorldPackets::Garrison::GetGarrisonInfoResult::Write()
 {
     _worldPacket << int32(FactionIndex);
     _worldPacket << uint32(Garrisons.size());
+    _worldPacket << uint32(FollowerSoftCaps.size());
+    for (FollowerSoftCapInfo const& followerSoftCapInfo : FollowerSoftCaps)
+        _worldPacket << followerSoftCapInfo;
+
     for (GarrisonInfo const& garrison : Garrisons)
         _worldPacket << garrison;
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -28,9 +28,14 @@
  EndContentData */
 
 #include "ScriptMgr.h"
-#include "ScriptedCreature.h"
+#include "DB2Structure.h"
+#include "Map.h"
+#include "MotionMaster.h"
+#include "ObjectAccessor.h"
 #include "PassiveAI.h"
+#include "PetDefines.h"
 #include "Player.h"
+#include "ScriptedCreature.h"
 
 enum BabyBlizzardBearMisc
 {

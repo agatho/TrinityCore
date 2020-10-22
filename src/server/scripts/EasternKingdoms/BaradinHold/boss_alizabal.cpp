@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -16,10 +16,12 @@
  */
 
 #include "ScriptMgr.h"
-#include "ScriptedCreature.h"
-#include "Player.h"
-#include "ObjectAccessor.h"
 #include "baradin_hold.h"
+#include "InstanceScript.h"
+#include "MotionMaster.h"
+#include "ObjectAccessor.h"
+#include "Player.h"
+#include "ScriptedCreature.h"
 
 enum Texts
 {
@@ -47,7 +49,7 @@ enum Actions
     ACTION_INTRO            = 1
 };
 
-    enum Points
+enum Points
 {
     POINT_STORM             = 1
 };
@@ -159,7 +161,7 @@ class boss_alizabal : public CreatureScript
                                 case 0:
                                     if (!_skewer)
                                     {
-                                        if (Unit* target = SelectTarget(SELECT_TARGET_TOPAGGRO, 0))
+                                        if (Unit* target = SelectTarget(SELECT_TARGET_MAXTHREAT, 0))
                                         {
                                             DoCast(target, SPELL_SKEWER, true);
                                             Talk(SAY_SKEWER);
@@ -201,7 +203,7 @@ class boss_alizabal : public CreatureScript
                                     }
                                     else if (!_skewer)
                                     {
-                                        if (Unit* target = SelectTarget(SELECT_TARGET_TOPAGGRO, 0))
+                                        if (Unit* target = SelectTarget(SELECT_TARGET_MAXTHREAT, 0))
                                         {
                                             DoCast(target, SPELL_SKEWER, true);
                                             Talk(SAY_SKEWER);

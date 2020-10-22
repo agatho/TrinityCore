@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -28,7 +28,6 @@
 #include "SharedDefines.h"
 #include <array>
 #include <map>
-#include <set>
 
 enum MountStatusFlags : uint8;
 enum UnitStandStateType : uint8;
@@ -97,6 +96,14 @@ namespace WorldPackets
             int32 GameTimeHolidayOffset = 0;
         };
 
+        class ResetWeeklyCurrency final : public ServerPacket
+        {
+        public:
+            ResetWeeklyCurrency() : ServerPacket(SMSG_RESET_WEEKLY_CURRENCY, 0) { }
+
+            WorldPacket const* Write() override { return &_worldPacket; }
+        };
+
         class SetCurrency final : public ServerPacket
         {
         public:
@@ -110,6 +117,9 @@ namespace WorldPackets
             Optional<int32> WeeklyQuantity;
             Optional<int32> TrackedQuantity;
             Optional<int32> MaxQuantity;
+            Optional<int32> QuantityChange;
+            Optional<int32> QuantityGainSource;
+            Optional<int32> QuantityLostSource;
             bool SuppressChatLog = false;
         };
 
@@ -195,18 +205,18 @@ namespace WorldPackets
             uint32 MovieID = 0;
         };
 
-        class UITimeRequest final : public ClientPacket
+        class ServerTimeOffsetRequest final : public ClientPacket
         {
         public:
-            UITimeRequest(WorldPacket&& packet) : ClientPacket(CMSG_UI_TIME_REQUEST, std::move(packet)) { }
+            ServerTimeOffsetRequest(WorldPacket&& packet) : ClientPacket(CMSG_SERVER_TIME_OFFSET_REQUEST, std::move(packet)) { }
 
             void Read() override { }
         };
 
-        class UITime final : public ServerPacket
+        class ServerTimeOffset final : public ServerPacket
         {
         public:
-            UITime() : ServerPacket(SMSG_UI_TIME, 4) { }
+            ServerTimeOffset() : ServerPacket(SMSG_SERVER_TIME_OFFSET, 4) { }
 
             WorldPacket const* Write() override;
 
@@ -247,6 +257,8 @@ namespace WorldPackets
             uint32 DifficultyID     = 0;
             uint8 IsTournamentRealm = 0;
             bool XRealmPvpAlert     = false;
+            bool BlockExitingLoadingScreen = false;     // when set to true, sending SMSG_UPDATE_OBJECT with CreateObject Self bit = true will not hide loading screen
+                                                        // instead it will be done after this packet is sent again with false in this bit and SMSG_UPDATE_OBJECT Values for player
             Optional<uint32> RestrictedAccountMaxLevel;
             Optional<uint32> RestrictedAccountMaxMoney;
             Optional<uint32> InstanceGroupSize;
@@ -259,7 +271,7 @@ namespace WorldPackets
 
             void Read() override;
 
-            int32 DifficultyID = 0;
+            uint32 DifficultyID = 0;
         };
 
         class SetRaidDifficulty final : public ClientPacket
@@ -418,6 +430,17 @@ namespace WorldPackets
             UnitStandStateType State = UnitStandStateType(0);
         };
 
+        class SetAnimTier final : public ServerPacket
+        {
+        public:
+            SetAnimTier(): ServerPacket(SMSG_SET_ANIM_TIER, 16 + 1) { }
+
+            WorldPacket const* Write() override;
+
+            ObjectGuid Unit;
+            int32 Tier = 0;
+        };
+
         class StartMirrorTimer final : public ServerPacket
         {
         public:
@@ -479,9 +502,10 @@ namespace WorldPackets
 
             int32 Level = 0;
             int32 HealthDelta = 0;
-            std::array<int32, 6> PowerDelta;
-            std::array<int32, MAX_STATS> StatDelta;
-            int32 Cp = 0;
+            std::array<int32, 6> PowerDelta = { };
+            std::array<int32, MAX_STATS> StatDelta = { };
+            int32 NumNewTalents = 0;
+            int32 NumNewPvpTalentSlots = 0;
         };
 
         class PlayMusic final : public ServerPacket
@@ -529,19 +553,31 @@ namespace WorldPackets
             WorldPacket const* Write() override { return &_worldPacket; }
         };
 
-        class PhaseShift final : public ServerPacket
+        struct PhaseShiftDataPhase
+        {
+            uint16 PhaseFlags = 0;
+            uint16 Id = 0;
+        };
+
+        struct PhaseShiftData
+        {
+            uint32 PhaseShiftFlags = 0;
+            std::vector<PhaseShiftDataPhase> Phases;
+            ObjectGuid PersonalGUID;
+        };
+
+        class PhaseShiftChange final : public ServerPacket
         {
         public:
-            PhaseShift() : ServerPacket(SMSG_PHASE_SHIFT_CHANGE, 4) { }
+            PhaseShiftChange() : ServerPacket(SMSG_PHASE_SHIFT_CHANGE, 16 + 4 + 4 + 16 + 4 + 4 + 4) { }
 
             WorldPacket const* Write() override;
 
-            ObjectGuid ClientGUID;
-            ObjectGuid PersonalGUID;
-            std::set<uint32> PhaseShifts;
-            std::set<uint32> PreloadMapIDs;
-            std::set<uint32> UiWorldMapAreaIDSwaps;
-            std::set<uint32> VisibleMapIDs;
+            ObjectGuid Client;
+            PhaseShiftData Phaseshift;
+            std::vector<uint16> PreloadMapIDs;
+            std::vector<uint16> UiMapPhaseIDs;
+            std::vector<uint16> VisibleMapIDs;
         };
 
         class ZoneUnderAttack final : public ServerPacket
@@ -767,20 +803,6 @@ namespace WorldPackets
             bool EnablePVP = false;
         };
 
-        class WorldTeleport final : public ClientPacket
-        {
-        public:
-            WorldTeleport(WorldPacket&& packet) : ClientPacket(CMSG_WORLD_TELEPORT, std::move(packet)) { }
-
-            void Read() override;
-
-            uint32 MapID = 0;
-            ObjectGuid TransportGUID;
-            TaggedPosition<Position::XYZ> Pos;
-            float Facing = 0.0f;
-            int32 LfgDungeonID = 0;
-        };
-
         class AccountHeirloomUpdate final : public ServerPacket
         {
         public:
@@ -879,6 +901,28 @@ namespace WorldPackets
 
             uint32 MountSpellID = 0;
             bool IsFavorite = false;
+        };
+
+        class CloseInteraction final : public ClientPacket
+        {
+        public:
+            CloseInteraction(WorldPacket&& packet) : ClientPacket(CMSG_CLOSE_INTERACTION, std::move(packet)) { }
+
+            void Read() override;
+
+            ObjectGuid SourceGuid;
+        };
+
+        class StartTimer final : public ServerPacket
+        {
+        public:
+            StartTimer() : ServerPacket(SMSG_START_TIMER, 12) { }
+
+            WorldPacket const* Write() override;
+
+            int32 Type = 0;
+            int32 TimeLeft = 0;
+            int32 TotalTime = 0;
         };
     }
 }

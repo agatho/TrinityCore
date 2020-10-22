@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -22,18 +22,19 @@ Comment: All gm related commands
 Category: commandscripts
 EndScriptData */
 
+#include "ScriptMgr.h"
 #include "AccountMgr.h"
 #include "Chat.h"
 #include "DatabaseEnv.h"
 #include "Language.h"
-#include "ObjectMgr.h"
+#include "ObjectAccessor.h"
 #include "Opcodes.h"
 #include "Player.h"
 #include "Realm.h"
-#include "ScriptMgr.h"
 #include "World.h"
-#include <boost/thread/shared_mutex.hpp>
+#include "WorldSession.h"
 #include <boost/thread/locks.hpp>
+#include <boost/thread/shared_mutex.hpp>
 
 class gm_commandscript : public CommandScript
 {
@@ -53,7 +54,7 @@ public:
         };
         static std::vector<ChatCommand> commandTable =
         {
-            { "gm", rbac::RBAC_PERM_COMMAND_GM, false, NULL, "", gmCommandTable },
+            { "gm", rbac::RBAC_PERM_COMMAND_GM, false, nullptr, "", gmCommandTable },
         };
         return commandTable;
     }
@@ -105,9 +106,15 @@ public:
 
         WorldPacket data;
         if (strncmp(args, "on", 3) == 0)
+        {
             target->SetCanFly(true);
+            target->SetCanTransitionBetweenSwimAndFly(true);
+        }
         else if (strncmp(args, "off", 4) == 0)
+        {
             target->SetCanFly(false);
+            target->SetCanTransitionBetweenSwimAndFly(false);
+        }
         else
         {
             handler->SendSysMessage(LANG_USE_BOL);
@@ -163,7 +170,7 @@ public:
     static bool HandleGMListFullCommand(ChatHandler* handler, char const* /*args*/)
     {
         ///- Get the accounts with GM Level >0
-        PreparedStatement* stmt = LoginDatabase.GetPreparedStatement(LOGIN_SEL_GM_ACCOUNTS);
+        LoginDatabasePreparedStatement* stmt = LoginDatabase.GetPreparedStatement(LOGIN_SEL_GM_ACCOUNTS);
         stmt->setUInt8(0, uint8(SEC_MODERATOR));
         stmt->setInt32(1, int32(realm.Id.Realm));
         PreparedQueryResult result = LoginDatabase.Query(stmt);

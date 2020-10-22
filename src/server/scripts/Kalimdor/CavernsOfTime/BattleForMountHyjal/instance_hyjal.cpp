@@ -1,6 +1,5 @@
  /*
- * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
- * Copyright (C) 2006-2009 ScriptDev2 <https://scriptdev2.svn.sourceforge.net/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -24,10 +23,14 @@ SDCategory: Caverns of Time, Mount Hyjal
 EndScriptData */
 
 #include "ScriptMgr.h"
-#include "InstanceScript.h"
-#include "ScriptedCreature.h"
+#include "Creature.h"
+#include "CreatureAI.h"
+#include "GameObject.h"
 #include "hyjal.h"
+#include "InstanceScript.h"
 #include "Log.h"
+#include "Map.h"
+#include <sstream>
 
 /* Battle of Mount Hyjal encounters:
 0 - Rage Winterchill event
@@ -51,7 +54,7 @@ ObjectData const creatureData[] =
 class instance_hyjal : public InstanceMapScript
 {
 public:
-    instance_hyjal() : InstanceMapScript("instance_hyjal", 534) { }
+    instance_hyjal() : InstanceMapScript(HyjalScriptName, 534) { }
 
     InstanceScript* GetInstanceScript(InstanceMap* map) const override
     {
@@ -60,7 +63,7 @@ public:
 
     struct instance_mount_hyjal_InstanceMapScript : public InstanceScript
     {
-        instance_mount_hyjal_InstanceMapScript(Map* map) : InstanceScript(map)
+        instance_mount_hyjal_InstanceMapScript(InstanceMap* map) : InstanceScript(map)
         {
             SetHeaders(DataHeader);
             LoadObjectData(creatureData, nullptr);
@@ -277,7 +280,7 @@ public:
             return str_data;
         }
 
-        void Load(const char* in) override
+        void Load(char const* in) override
         {
             if (!in)
             {

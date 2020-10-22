@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -27,11 +27,17 @@ namespace WorldPackets
 {
     namespace Talent
     {
+        struct PvPTalent
+        {
+            uint16 PvPTalentID = 0;
+            uint8 Slot = 0;
+        };
+
         struct TalentGroupInfo
         {
             uint32 SpecID = 0;
             std::vector<uint16> TalentIDs;
-            std::vector<uint16> PvPTalentIDs;
+            std::vector<PvPTalent> PvPTalents;
         };
 
         struct TalentInfoUpdate
@@ -83,10 +89,10 @@ namespace WorldPackets
             uint8 RespecType = 0;
         };
 
-        class LearnTalentsFailed final : public ServerPacket
+        class LearnTalentFailed final : public ServerPacket
         {
         public:
-            LearnTalentsFailed() : ServerPacket(SMSG_LEARN_TALENTS_FAILED, 1 + 4 + 4 + 2 * MAX_TALENT_TIERS) { }
+            LearnTalentFailed() : ServerPacket(SMSG_LEARN_TALENT_FAILED, 1 + 4 + 4 + 2 * MAX_TALENT_TIERS) { }
 
             WorldPacket const* Write() override;
 
@@ -112,6 +118,28 @@ namespace WorldPackets
 
             std::vector<GlyphBinding> Glyphs;
             bool IsFullUpdate = false;
+        };
+
+        class LearnPvpTalents final : public ClientPacket
+        {
+        public:
+            LearnPvpTalents(WorldPacket&& packet) : ClientPacket(CMSG_LEARN_PVP_TALENTS, std::move(packet)) { }
+
+            void Read() override;
+
+            Array<PvPTalent, 4> Talents;
+        };
+
+        class LearnPvpTalentFailed final : public ServerPacket
+        {
+        public:
+            LearnPvpTalentFailed() : ServerPacket(SMSG_LEARN_PVP_TALENT_FAILED, 1 + 4 + 4 + (2 + 1) * MAX_PVP_TALENT_SLOTS) { }
+
+            WorldPacket const* Write() override;
+
+            uint32 Reason = 0;
+            int32 SpellID = 0;
+            std::vector<PvPTalent> Talents;
         };
     }
 }

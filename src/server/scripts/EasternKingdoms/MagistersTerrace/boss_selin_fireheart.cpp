@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -16,8 +16,11 @@
  */
 
 #include "ScriptMgr.h"
-#include "ScriptedCreature.h"
+#include "InstanceScript.h"
 #include "magisters_terrace.h"
+#include "MotionMaster.h"
+#include "ObjectAccessor.h"
+#include "ScriptedCreature.h"
 
 enum Says
 {
@@ -84,7 +87,7 @@ class boss_selin_fireheart : public CreatureScript
                     if (!creature->IsAlive())
                         creature->Respawn();
 
-                    creature->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NOT_SELECTABLE);
+                    creature->AddUnitFlag(UNIT_FLAG_NOT_SELECTABLE);
                 }
 
                 _Reset();
@@ -123,7 +126,7 @@ class boss_selin_fireheart : public CreatureScript
                     Crystals.remove(CrystalChosen);
 
                     float x, y, z;
-                    CrystalChosen->GetClosePoint(x, y, z, me->GetObjectSize(), CONTACT_DISTANCE);
+                    CrystalChosen->GetClosePoint(x, y, z, me->GetCombatReach(), CONTACT_DISTANCE);
 
                     events.SetPhase(PHASE_DRAIN);
                     me->SetWalk(false);
@@ -165,7 +168,7 @@ class boss_selin_fireheart : public CreatureScript
                     Unit* CrystalChosen = ObjectAccessor::GetUnit(*me, CrystalGUID);
                     if (CrystalChosen && CrystalChosen->IsAlive())
                     {
-                        CrystalChosen->RemoveFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NOT_SELECTABLE);
+                        CrystalChosen->RemoveUnitFlag(UNIT_FLAG_NOT_SELECTABLE);
                         CrystalChosen->CastSpell(me, SPELL_MANA_RAGE, true);
                         events.ScheduleEvent(EVENT_EMPOWER, 10000, PHASE_DRAIN);
                     }
@@ -263,7 +266,7 @@ class boss_selin_fireheart : public CreatureScript
 
         CreatureAI* GetAI(Creature* creature) const override
         {
-            return GetInstanceAI<boss_selin_fireheartAI>(creature);
+            return GetMagistersTerraceAI<boss_selin_fireheartAI>(creature);
         };
 };
 
@@ -289,7 +292,7 @@ class npc_fel_crystal : public CreatureScript
 
         CreatureAI* GetAI(Creature* creature) const override
         {
-            return GetInstanceAI<npc_fel_crystalAI>(creature);
+            return GetMagistersTerraceAI<npc_fel_crystalAI>(creature);
         };
 };
 

@@ -1,4 +1,4 @@
-# Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
+# This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
 #
 # This file is free software; as a special exception the author gives
 # unlimited permission to copy and/or distribute it, with or without
@@ -14,7 +14,9 @@ CollectSourceFiles(
 
 add_library(extractor_common STATIC ${PRIVATE_SOURCES})
 
-target_link_libraries(extractor_common 
+target_link_libraries(extractor_common
+  PRIVATE
+    trinity-core-interface
   PUBLIC
     casc
     common)

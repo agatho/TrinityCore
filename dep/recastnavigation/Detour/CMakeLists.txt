@@ -1,4 +1,4 @@
-# Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
+# This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
 #
 # This file is free software; as a special exception the author gives
 # unlimited permission to copy and/or distribute it, with or without
@@ -24,6 +24,8 @@ target_include_directories(Detour
     ${CMAKE_CURRENT_SOURCE_DIR}/Include)
 
 target_link_libraries(Detour
+  PRIVATE
+    trinity-dependency-interface
   PUBLIC
     zlib)
 

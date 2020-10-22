@@ -1,6 +1,5 @@
 /*
- * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
- * Copyright (C) 2005-2011 MaNGOS <http://getmangos.com/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -21,25 +20,74 @@
 
 #include "cascfile.h"
 #include "wmo.h"
+#include <memory>
 #include <string>
 #include <vector>
 
 class ADTFile;
 
+#pragma pack(push, 1)
+namespace WDT
+{
+    struct MPHD
+    {
+        uint32 Flags;
+        uint32 LgtFileDataID;
+        uint32 OccFileDataID;
+        uint32 FogsFileDataID;
+        uint32 MpvFileDataID;
+        uint32 TexFileDataID;
+        uint32 WdlFileDataID;
+        uint32 Pd4FileDataID;
+    };
+
+    struct MAIN
+    {
+        struct SMAreaInfo
+        {
+            uint32 Flag;
+            uint32 AsyncId;
+        } Data[64][64];
+    };
+
+    struct MAID
+    {
+        struct SMAreaFileIDs
+        {
+            uint32 RootADT;         // FileDataID of mapname_xx_yy.adt
+            uint32 Obj0ADT;         // FileDataID of mapname_xx_yy_obj0.adt
+            uint32 Obj1ADT;         // FileDataID of mapname_xx_yy_obj1.adt
+            uint32 Tex0ADT;         // FileDataID of mapname_xx_yy_tex0.adt
+            uint32 LodADT;          // FileDataID of mapname_xx_yy_lod.adt
+            uint32 MapTexture;      // FileDataID of mapname_xx_yy.blp
+            uint32 MapTextureN;     // FileDataID of mapname_xx_yy_n.blp
+            uint32 MinimapTexture;  // FileDataID of mapxx_yy.blp
+        } Data[64][64];
+    };
+}
+#pragma pack(pop)
+
 class WDTFile
 {
-private:
-    CASCFile WDT;
-    std::string filename;
 public:
-    WDTFile(char* file_name, char* file_name1);
-    ~WDTFile(void);
-    bool init(char* map_id, unsigned int mapID);
+    WDTFile(uint32 fileDataId, std::string const& description, std::string mapName, bool cache);
+    ~WDTFile();
+    bool init(uint32 mapId);
 
-    std::vector<std::string> gWmoInstansName;
-    int gnWMO;
-
-    ADTFile* GetMap(int x, int z);
+    ADTFile* GetMap(int32 x, int32 y);
+    void FreeADT(ADTFile* adt);
+private:
+    CASCFile _file;
+    WDT::MPHD _header;
+    WDT::MAIN _adtInfo;
+    std::unique_ptr<WDT::MAID> _adtFileDataIds;
+    std::string _mapName;
+    std::vector<std::string> _wmoNames;
+    struct ADTCache
+    {
+        std::unique_ptr<ADTFile> file[64][64];
+    };
+    std::unique_ptr<ADTCache> _adtCache;
 };
 
 #endif

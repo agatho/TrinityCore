@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -50,16 +50,27 @@ namespace WorldPackets
             bool CurrentSpecOnly = false;
         };
 
-        class TransmogCollectionUpdate final : public ServerPacket
+        class AccountTransmogUpdate final : public ServerPacket
         {
         public:
-            TransmogCollectionUpdate() : ServerPacket(SMSG_TRANSMOG_COLLECTION_UPDATE) { }
+            AccountTransmogUpdate() : ServerPacket(SMSG_ACCOUNT_TRANSMOG_UPDATE) { }
 
             WorldPacket const* Write() override;
 
             bool IsFullUpdate = false;
             bool IsSetFavorite = false;
             std::vector<uint32> FavoriteAppearances;
+            std::vector<uint32> NewAppearances;
+        };
+
+        class TransmogrifyNPC final : public ServerPacket
+        {
+        public:
+            TransmogrifyNPC(ObjectGuid const& guid) : ServerPacket(SMSG_TRANSMOGRIFY_NPC, 16), Guid(guid) { }
+
+            WorldPacket const* Write() override;
+
+            ObjectGuid Guid;
         };
     }
 }

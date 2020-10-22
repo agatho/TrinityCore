@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -16,11 +16,16 @@
  */
 
 #include "ScriptMgr.h"
-#include "ScriptedCreature.h"
-#include "SpellScript.h"
-#include "SpellAuras.h"
-#include "SpellAuraEffects.h"
 #include "azjol_nerub.h"
+#include "InstanceScript.h"
+#include "Map.h"
+#include "MotionMaster.h"
+#include "ObjectAccessor.h"
+#include "ScriptedCreature.h"
+#include "SpellAuraEffects.h"
+#include "SpellAuras.h"
+#include "SpellScript.h"
+#include "TemporarySummon.h"
 
 enum Events
 {
@@ -93,7 +98,7 @@ enum Spells
     SPELL_ANIMATE_BONES_2                   = 53336,
 };
 
-enum SummonGroups
+enum SummonGroups : uint32
 {
     SUMMON_GROUP_CRUSHER_1      = 1,
     SUMMON_GROUP_CRUSHER_2      = 2,
@@ -158,7 +163,7 @@ public:
 
         bool IsInCombatWithPlayer() const
         {
-            std::list<HostileReference*> const& refs = me->getThreatManager().getThreatList();
+            std::list<HostileReference*> const& refs = me->GetThreatManager().getThreatList();
             for (HostileReference const* hostileRef : refs)
             {
                 if (Unit const* target = hostileRef->getTarget())
@@ -274,29 +279,22 @@ public:
             _anubar.push_back(guid);
         }
 
-        void Initialize()
+        void InitializeAI() override
         {
-            me->SetFloatValue(UNIT_FIELD_BOUNDINGRADIUS, 9.0f);
-            me->SetFloatValue(UNIT_FIELD_COMBATREACH, 9.0f);
+            BossAI::InitializeAI();
+            me->SetBoundingRadius(9.0f);
+            me->SetCombatReach(9.0f);
             _enteredCombat = false;
             _doorsWebbed = false;
             _lastPlayerCombatState = false;
             SetStep(0);
+        }
+
+        void JustAppeared() override
+        {
+            BossAI::JustAppeared();
             SetCombatMovement(true);
             SummonCrusherPack(SUMMON_GROUP_CRUSHER_1);
-        }
-
-        void InitializeAI() override
-        {
-            BossAI::InitializeAI();
-            if (me->IsAlive())
-                Initialize();
-        }
-
-        void JustRespawned() override
-        {
-            BossAI::JustRespawned();
-            Initialize();
         }
 
         void UpdateAI(uint32 diff) override
@@ -380,7 +378,7 @@ public:
             summons.Summon(summon);
             // Do not enter combat with zone
         }
-        
+
         private:
             bool _enteredCombat; // has a player entered combat with the first crusher pack? (talk and spawn two more packs)
             bool _doorsWebbed;   // obvious - have we reached the top and webbed the doors shut? (trigger for hadronox denied achievement)
@@ -616,7 +614,7 @@ class npc_anub_ar_crusher_champion : public CreatureScript
         }
 };
 
-static const Position cryptFiendWaypoints[] = 
+static const Position cryptFiendWaypoints[] =
 {
     { 520.3911f, 548.7895f, 732.0118f, 5.0091f   },
     { },
@@ -775,7 +773,7 @@ struct npc_hadronox_foeAI : public ScriptedAI
                         me->GetMotionMaster()->MovePoint(MOVE_DOWNSTAIRS_2, downstairsMoves2[_mySpawn]);
                         break;
                     }
-                    // intentional missing break
+                    /* fallthrough */
                 case MOVE_HADRONOX:
                 case MOVE_HADRONOX_REAL:
                 {
@@ -789,7 +787,7 @@ struct npc_hadronox_foeAI : public ScriptedAI
                                 me->GetMotionMaster()->MovePoint(MOVE_HADRONOX, hadronoxStep[2]);
                                 break;
                             }
-                        me->GetMotionMaster()->MoveChase(hadronox);
+                        AttackStart(hadronox);
                     }
                     break;
                 }
@@ -951,11 +949,10 @@ class spell_hadronox_periodic_summon_template_AuraScript : public AuraScript
         spell_hadronox_periodic_summon_template_AuraScript(uint32 topSpellId, uint32 bottomSpellId) : AuraScript(), _topSpellId(topSpellId), _bottomSpellId(bottomSpellId) { }
         PrepareAuraScript(spell_hadronox_periodic_summon_template_AuraScript);
 
+    private:
         bool Validate(SpellInfo const* /*spell*/) override
         {
-            return
-                (sSpellMgr->GetSpellInfo(_topSpellId) != nullptr) &&
-                (sSpellMgr->GetSpellInfo(_bottomSpellId) != nullptr);
+            return ValidateSpellInfo({ _topSpellId, _bottomSpellId });
         }
 
         void HandleApply(AuraEffect const* /*eff*/, AuraEffectHandleModes /*mode*/)
@@ -971,6 +968,8 @@ class spell_hadronox_periodic_summon_template_AuraScript : public AuraScript
                 return;
             InstanceScript* instance = caster->GetInstanceScript();
             if (!instance)
+                return;
+            if (!instance->instance->HavePlayers())
                 return;
             if (instance->GetBossState(DATA_HADRONOX) == DONE)
                 GetAura()->Remove();
@@ -989,7 +988,6 @@ class spell_hadronox_periodic_summon_template_AuraScript : public AuraScript
             OnEffectPeriodic += AuraEffectPeriodicFn(spell_hadronox_periodic_summon_template_AuraScript::HandlePeriodic, EFFECT_0, SPELL_AURA_PERIODIC_DUMMY);
         }
 
-    private:
         uint32 _topSpellId;
         uint32 _bottomSpellId;
 };
@@ -1056,7 +1054,7 @@ class spell_hadronox_leeching_poison : public SpellScriptLoader
 
         bool Validate(SpellInfo const* /*spell*/) override
         {
-            return sSpellMgr->GetSpellInfo(SPELL_LEECH_POISON_HEAL) != nullptr;
+            return ValidateSpellInfo({ SPELL_LEECH_POISON_HEAL });
         }
 
         void HandleEffectRemove(AuraEffect const* /*aurEff*/, AuraEffectHandleModes /*mode*/)
@@ -1094,11 +1092,7 @@ class spell_hadronox_web_doors : public SpellScriptLoader
 
             bool Validate(SpellInfo const* /*spell*/) override
             {
-                return (
-                    sSpellMgr->GetSpellInfo(SPELL_SUMMON_CHAMPION_PERIODIC) &&
-                    sSpellMgr->GetSpellInfo(SPELL_SUMMON_CRYPT_FIEND_PERIODIC) &&
-                    sSpellMgr->GetSpellInfo(SPELL_SUMMON_NECROMANCER_PERIODIC)
-                    );
+                return ValidateSpellInfo({ SPELL_SUMMON_CHAMPION_PERIODIC, SPELL_SUMMON_CRYPT_FIEND_PERIODIC, SPELL_SUMMON_NECROMANCER_PERIODIC });
             }
 
             void HandleDummy(SpellEffIndex /*effIndex*/)

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -325,7 +325,7 @@ bool Deserializer::Double(double d)
     switch (field->cpp_type())
     {
         case google::protobuf::FieldDescriptor::CPPTYPE_FLOAT:
-            SET_FIELD(message, field, Float, d);
+            SET_FIELD(message, field, Float, float(d));
             break;
         case google::protobuf::FieldDescriptor::CPPTYPE_DOUBLE:
             SET_FIELD(message, field, Double, d);

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -16,12 +16,14 @@
  */
 
 #include "ScriptMgr.h"
-#include "ScriptedCreature.h"
-#include "GridNotifiers.h"
-#include "GridNotifiersImpl.h"
-#include "Cell.h"
 #include "CellImpl.h"
+#include "GridNotifiersImpl.h"
+#include "InstanceScript.h"
+#include "MotionMaster.h"
+#include "ObjectAccessor.h"
 #include "obsidian_sanctum.h"
+#include "ScriptedCreature.h"
+#include "TemporarySummon.h"
 
 enum Enums
 {
@@ -175,8 +177,7 @@ struct dummy_dragonAI : public ScriptedAI
 
     void Reset() override
     {
-        if (me->HasFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NON_ATTACKABLE))
-            me->RemoveFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NON_ATTACKABLE);
+        me->RemoveUnitFlag(UNIT_FLAG_NON_ATTACKABLE);
 
         events.Reset();
         Initialize();
@@ -218,7 +219,7 @@ struct dummy_dragonAI : public ScriptedAI
             me->SetInCombatWithZone();
             if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0, 0, true))
             {
-                me->AddThreat(target, 1.0f);
+                AddThreat(target, 1.0f);
                 me->Attack(target, true);
                 me->GetMotionMaster()->MoveChase(target);
             }
@@ -322,7 +323,7 @@ struct dummy_dragonAI : public ScriptedAI
     void JustDied(Unit* /*killer*/) override
     {
         if (!_canLoot)
-            me->SetLootRecipient(NULL);
+            me->SetLootRecipient(nullptr);
 
         uint32 spellId = 0;
 
@@ -736,7 +737,7 @@ class npc_acolyte_of_vesperon : public CreatureScript
                         vesperon->RemoveAurasDueToSpell(SPELL_TWILIGHT_TORMENT_VESP);
                 }
 
-                Map::PlayerList const &PlayerList = me->GetMap()->GetPlayers();
+                Map::PlayerList const& PlayerList = me->GetMap()->GetPlayers();
 
                 if (PlayerList.isEmpty())
                     return;
@@ -874,7 +875,7 @@ public:
             me->SetReactState(REACT_PASSIVE);
             events.ScheduleEvent(EVENT_TSUNAMI_TIMER, 100);
             events.ScheduleEvent(EVENT_TSUNAMI_BUFF, 1000);
-            me->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NON_ATTACKABLE | UNIT_FLAG_NOT_SELECTABLE);
+            me->AddUnitFlag(UnitFlags(UNIT_FLAG_NON_ATTACKABLE | UNIT_FLAG_NOT_SELECTABLE));
         }
 
         void UpdateAI(uint32 diff) override
@@ -904,7 +905,7 @@ public:
 
     CreatureAI* GetAI(Creature* creature) const override
     {
-        return new npc_flame_tsunamiAI(creature);
+        return GetObsidianSanctumAI<npc_flame_tsunamiAI>(creature);
     }
 };
 
@@ -931,7 +932,7 @@ public:
 
         void Reset() override
         {
-            me->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NON_ATTACKABLE | UNIT_FLAG_NOT_SELECTABLE);
+            me->AddUnitFlag(UnitFlags(UNIT_FLAG_NON_ATTACKABLE | UNIT_FLAG_NOT_SELECTABLE));
             me->AddAura(46265, me); // Wrong, can't find proper visual
             me->AddAura(69422, me);
             events.ScheduleEvent(EVENT_VOID_BLAST, 5000);
@@ -958,7 +959,7 @@ public:
 
     CreatureAI* GetAI(Creature* creature) const override
     {
-        return new npc_twilight_fissureAI(creature);
+        return GetObsidianSanctumAI<npc_twilight_fissureAI>(creature);
     }
 };
 
@@ -1013,7 +1014,7 @@ public:
 
     CreatureAI* GetAI(Creature* creature) const override
     {
-        return new npc_twilight_whelpAI(creature);
+        return GetObsidianSanctumAI<npc_twilight_whelpAI>(creature);
     }
 };
 
@@ -1065,4 +1066,3 @@ void AddSC_obsidian_sanctum()
     new achievement_twilight_duo();
     new achievement_twilight_zone();
 }
-

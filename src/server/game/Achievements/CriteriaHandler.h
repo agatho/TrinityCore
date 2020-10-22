@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -34,6 +34,7 @@ struct AchievementEntry;
 struct CriteriaEntry;
 struct CriteriaTreeEntry;
 struct ModifierTreeEntry;
+struct QuestObjective;
 struct ScenarioStepEntry;
 
 struct ModifierTreeNode
@@ -44,10 +45,11 @@ struct ModifierTreeNode
 
 enum CriteriaFlagsCu
 {
-    CRITERIA_FLAG_CU_PLAYER     = 0x1,
-    CRITERIA_FLAG_CU_ACCOUNT    = 0x2,
-    CRITERIA_FLAG_CU_GUILD      = 0x4,
-    CRITERIA_FLAG_CU_SCENARIO   = 0x8
+    CRITERIA_FLAG_CU_PLAYER             = 0x1,
+    CRITERIA_FLAG_CU_ACCOUNT            = 0x2,
+    CRITERIA_FLAG_CU_GUILD              = 0x4,
+    CRITERIA_FLAG_CU_SCENARIO           = 0x8,
+    CRITERIA_FLAG_CU_QUEST_OBJECTIVE    = 0x10
 };
 
 struct Criteria
@@ -59,6 +61,7 @@ struct Criteria
 };
 
 typedef std::vector<Criteria const*> CriteriaList;
+typedef std::unordered_map<uint32, CriteriaList> CriteriaListByAsset;
 
 struct CriteriaTree
 {
@@ -66,6 +69,7 @@ struct CriteriaTree
     CriteriaTreeEntry const* Entry = nullptr;
     AchievementEntry const* Achievement = nullptr;
     ScenarioStepEntry const* ScenarioStep = nullptr;
+    struct QuestObjective const* QuestObjective = nullptr;
     struct Criteria const* Criteria = nullptr;
     std::vector<CriteriaTree const*> Children;
 };
@@ -234,14 +238,14 @@ struct CriteriaData
     }
 
     bool IsValid(Criteria const* criteria);
-    bool Meets(uint32 criteriaId, Player const* source, Unit const* target, uint32 miscValue1 = 0) const;
+    bool Meets(uint32 criteriaId, Player const* source, Unit const* target, uint32 miscValue1 = 0, uint32 miscValue2 = 0) const;
 };
 
 struct CriteriaDataSet
 {
     CriteriaDataSet() : _criteriaId(0) { }
     void Add(CriteriaData const& data) { _storage.push_back(data); }
-    bool Meets(Player const* source, Unit const* target, uint32 miscValue = 0) const;
+    bool Meets(Player const* source, Unit const* target, uint32 miscValue1 = 0, uint32 miscValue2 = 0) const;
     void SetCriteriaId(uint32 id) { _criteriaId = id; }
 private:
     uint32 _criteriaId;
@@ -296,10 +300,11 @@ protected:
     bool ConditionsSatisfied(Criteria const* criteria, Player* referencePlayer) const;
     bool RequirementsSatisfied(Criteria const* criteria, uint64 miscValue1, uint64 miscValue2, uint64 miscValue3, Unit const* unit, Player* referencePlayer) const;
     virtual bool RequiredAchievementSatisfied(uint32 /*achievementId*/) const { return false; }
-    bool AdditionalRequirementsSatisfied(ModifierTreeNode const* parent, uint64 miscValue1, uint64 miscValue2, Unit const* unit, Player* referencePlayer) const;
+    bool ModifierTreeSatisfied(ModifierTreeNode const* parent, uint64 miscValue1, uint64 miscValue2, Unit const* unit, Player* referencePlayer) const;
+    bool ModifierSatisfied(ModifierTreeEntry const* modifier, uint64 miscValue1, uint64 miscValue2, Unit const* unit, Player* referencePlayer) const;
 
     virtual std::string GetOwnerInfo() const = 0;
-    virtual CriteriaList const& GetCriteriaByType(CriteriaTypes type) const = 0;
+    virtual CriteriaList const& GetCriteriaByType(CriteriaTypes type, uint32 asset) const = 0;
 
     CriteriaProgressMap _criteriaProgress;
     std::map<uint32, uint32 /*ms time left*/> _timeCriteriaTrees;
@@ -316,10 +321,7 @@ public:
 
     static CriteriaMgr* Instance();
 
-    CriteriaList const& GetPlayerCriteriaByType(CriteriaTypes type) const
-    {
-        return _criteriasByType[type];
-    }
+    CriteriaList const& GetPlayerCriteriaByType(CriteriaTypes type, uint32 asset) const;
 
     CriteriaList const& GetGuildCriteriaByType(CriteriaTypes type) const
     {
@@ -329,6 +331,11 @@ public:
     CriteriaList const& GetScenarioCriteriaByType(CriteriaTypes type) const
     {
         return _scenarioCriteriasByType[type];
+    }
+
+    CriteriaList const& GetQuestObjectiveCriteriaByType(CriteriaTypes type) const
+    {
+        return _questObjectiveCriteriasByType[type];
     }
 
     CriteriaTreeList const* GetCriteriaTreesByCriteria(uint32 criteriaId) const
@@ -342,10 +349,16 @@ public:
         return _criteriasByTimedType[type];
     }
 
+    CriteriaList const* GetCriteriaByFailEvent(CriteriaCondition condition, int32 asset)
+    {
+        auto itr = _criteriasByFailEvent[condition].find(asset);
+        return itr != _criteriasByFailEvent[condition].end() ? &itr->second : nullptr;
+    }
+
     CriteriaDataSet const* GetCriteriaDataSet(Criteria const* Criteria) const
     {
         CriteriaDataMap::const_iterator iter = _criteriaDataMap.find(Criteria->ID);
-        return iter != _criteriaDataMap.end() ? &iter->second : NULL;
+        return iter != _criteriaDataMap.end() ? &iter->second : nullptr;
     }
 
     static bool IsGroupCriteriaType(CriteriaTypes type)
@@ -393,10 +406,13 @@ private:
 
     // store criterias by type to speed up lookup
     CriteriaList _criteriasByType[CRITERIA_TYPE_TOTAL];
+    CriteriaListByAsset _criteriasByAsset[CRITERIA_TYPE_TOTAL];
     CriteriaList _guildCriteriasByType[CRITERIA_TYPE_TOTAL];
     CriteriaList _scenarioCriteriasByType[CRITERIA_TYPE_TOTAL];
+    CriteriaList _questObjectiveCriteriasByType[CRITERIA_TYPE_TOTAL];
 
     CriteriaList _criteriasByTimedType[CRITERIA_TIMED_TYPE_MAX];
+    std::unordered_map<int32, CriteriaList> _criteriasByFailEvent[CRITERIA_CONDITION_MAX];
 };
 
 #define sCriteriaMgr CriteriaMgr::Instance()

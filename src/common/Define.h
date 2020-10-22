@@ -1,6 +1,5 @@
 /*
- * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
- * Copyright (C) 2005-2009 MaNGOS <http://getmangos.com/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -37,6 +36,9 @@
 #    undef _GLIBCXX_SYNCHRONIZATION_HAPPENS_AFTER
 #    define _GLIBCXX_SYNCHRONIZATION_HAPPENS_BEFORE(A) ANNOTATE_HAPPENS_BEFORE(A)
 #    define _GLIBCXX_SYNCHRONIZATION_HAPPENS_AFTER(A)  ANNOTATE_HAPPENS_AFTER(A)
+#  endif
+#  if defined(VALGRIND)
+#    include <valgrind/memcheck.h>
 #  endif
 #endif
 
@@ -158,7 +160,8 @@ enum DBCFormer
     FT_FLOAT = 'f',                                         // float
     FT_INT = 'i',                                           // uint32
     FT_BYTE = 'b',                                          // uint8
-    FT_SHORT = 'h'                                          // uint16
+    FT_SHORT = 'h',                                         // uint16
+    FT_LONG = 'l'                                           // uint64
 };
 
 #endif //TRINITY_DEFINE_H

@@ -1,6 +1,5 @@
 /*
- * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
- * Copyright (C) 2005-2009 MaNGOS <http://getmangos.com/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -152,7 +151,7 @@ enum TrinityStrings
     LANG_YOU_CHANGE_ENERGY              = 122,
     LANG_YOURS_ENERGY_CHANGED           = 123,
 
-    LANG_CURRENT_ENERGY                 = 124,              //log
+    LANG_CURRENT_ENERGY                 = 124,
     LANG_YOU_CHANGE_RAGE                = 125,
     LANG_YOURS_RAGE_CHANGED             = 126,
     LANG_YOU_CHANGE_LVL                 = 127,
@@ -212,18 +211,19 @@ enum TrinityStrings
     LANG_LIQUID_STATUS                  = 175,
     LANG_INVALID_GAMEOBJECT_TYPE        = 176,
     LANG_GAMEOBJECT_DAMAGED             = 177,
+    LANG_GRID_POSITION                  = 178,
 
-    LANG_PHASING_SUCCESS                = 178,
-    LANG_PHASING_FAILED                 = 179,
-    LANG_PHASING_LAST_PHASE             = 180,
-    LANG_PHASING_LIST                   = 181,
-    LANG_PHASING_PHASEMASK              = 182,
-    LANG_PHASING_REPORT_STATUS          = 183,
-    LANG_PHASING_NO_DEFINITIONS         = 184,              // Phasing
+    LANG_PHASESHIFT_STATUS              = 179,
+    LANG_PHASESHIFT_PHASES              = 180,
+    LANG_PHASESHIFT_VISIBLE_MAP_IDS     = 181,
+    LANG_PHASESHIFT_UI_WORLD_MAP_AREA_SWAPS = 182,
+    LANG_PHASE_FLAG_COSMETIC            = 183,
+    LANG_PHASE_FLAG_PERSONAL            = 184,
 
-    LANG_GRID_POSITION                  = 185,
+    //                                    185 not used
     LANG_TRANSPORT_POSITION             = 186,
-    // Room for more level 1              187-199 not used
+    LANG_PARTIAL_GROUP_SUMMON           = 187,
+    // Room for more level 1              188-199 not used
 
     // level 2 chat
     LANG_NO_SELECTION                   = 200,
@@ -322,7 +322,15 @@ enum TrinityStrings
     LANG_COMMAND_WHISPERON              = 285,
     LANG_COMMAND_WHISPEROFF             = 286,
     LANG_COMMAND_CREATGUIDNOTFOUND      = 287,
-      // TICKET STRINGS NEED REWRITE // 288-296 FREE
+    LANG_COMMAND_NOT_DEAD_OR_NO_LOOT    = 288,
+    LANG_COMMAND_NPC_SHOWLOOT_HEADER    = 289,
+    LANG_COMMAND_NPC_SHOWLOOT_LABEL     = 290,
+    LANG_COMMAND_NPC_SHOWLOOT_ENTRY     = 291,
+    LANG_COMMAND_NPC_SHOWLOOT_MONEY     = 292,
+    LANG_COMMAND_NPC_SHOWLOOT_LABEL_2   = 293,
+    LANG_COMMAND_NPC_SHOWLOOT_SUBLABEL  = 294,
+    LANG_COMMAND_NPC_SHOWLOOT_ENTRY_2   = 295,
+      // 296 free
 
       // END
     LANG_COMMAND_SPAWNDIST              = 297,
@@ -548,7 +556,7 @@ enum TrinityStrings
     LANG_MOVEGENS_IDLE                  = 527,
     LANG_MOVEGENS_RANDOM                = 528,
     LANG_MOVEGENS_WAYPOINT              = 529,
-    LANG_MOVEGENS_ANIMAL_RANDOM         = 530,
+    //                                  = 530, not used
     LANG_MOVEGENS_CONFUSED              = 531,
     LANG_MOVEGENS_CHASE_PLAYER          = 532,
     LANG_MOVEGENS_CHASE_CREATURE        = 533,
@@ -634,79 +642,7 @@ enum TrinityStrings
 
     // End Level 3 list, continued at 1100
 
-    // Battleground
-    LANG_BG_A_WINS                      = 600,
-    LANG_BG_H_WINS                      = 601,
-
-    LANG_BG_WS_START_TWO_MINUTES        = 753,
-    LANG_BG_WS_START_ONE_MINUTE         = 602,
-    LANG_BG_WS_START_HALF_MINUTE        = 603,
-    LANG_BG_WS_HAS_BEGUN                = 604,
-
-    LANG_BG_WS_CAPTURED_HF              = 605,
-    LANG_BG_WS_CAPTURED_AF              = 606,
-    LANG_BG_WS_DROPPED_HF               = 607,
-    LANG_BG_WS_DROPPED_AF               = 608,
-    LANG_BG_WS_RETURNED_AF              = 609,
-    LANG_BG_WS_RETURNED_HF              = 610,
-    LANG_BG_WS_PICKEDUP_HF              = 611,
-    LANG_BG_WS_PICKEDUP_AF              = 612,
-    LANG_BG_WS_F_PLACED                 = 613,
-    LANG_BG_WS_ALLIANCE_FLAG_RESPAWNED  = 614,
-    LANG_BG_WS_HORDE_FLAG_RESPAWNED     = 615,
-
-    LANG_BG_EY_START_TWO_MINUTES        = 755,
-    LANG_BG_EY_START_ONE_MINUTE         = 636,
-    LANG_BG_EY_START_HALF_MINUTE        = 637,
-    LANG_BG_EY_HAS_BEGUN                = 638,
-
-    LANG_BG_AB_ALLY                     = 650,
-    LANG_BG_AB_HORDE                    = 651,
-    LANG_BG_AB_NODE_STABLES             = 652,
-    LANG_BG_AB_NODE_BLACKSMITH          = 653,
-    LANG_BG_AB_NODE_FARM                = 654,
-    LANG_BG_AB_NODE_LUMBER_MILL         = 655,
-    LANG_BG_AB_NODE_GOLD_MINE           = 656,
-    LANG_BG_AB_NODE_TAKEN               = 657,
-    LANG_BG_AB_NODE_DEFENDED            = 658,
-    LANG_BG_AB_NODE_ASSAULTED           = 659,
-    LANG_BG_AB_NODE_CLAIMED             = 660,
-
-    LANG_BG_AB_START_TWO_MINUTES        = 754,
-    LANG_BG_AB_START_ONE_MINUTE         = 661,
-    LANG_BG_AB_START_HALF_MINUTE        = 662,
-    LANG_BG_AB_HAS_BEGUN                = 663,
-    LANG_BG_AB_A_NEAR_VICTORY           = 664,
-    LANG_BG_AB_H_NEAR_VICTORY           = 665,
-    LANG_BG_MARK_BY_MAIL                = 666,
-
-    LANG_BG_EY_HAS_TAKEN_A_M_TOWER      = 667,
-    LANG_BG_EY_HAS_TAKEN_H_M_TOWER      = 668,
-    LANG_BG_EY_HAS_TAKEN_A_D_RUINS      = 669,
-    LANG_BG_EY_HAS_TAKEN_H_D_RUINS      = 670,
-    LANG_BG_EY_HAS_TAKEN_A_B_TOWER      = 671,
-    LANG_BG_EY_HAS_TAKEN_H_B_TOWER      = 672,
-    LANG_BG_EY_HAS_TAKEN_A_F_RUINS      = 673,
-    LANG_BG_EY_HAS_TAKEN_H_F_RUINS      = 674,
-    LANG_BG_EY_HAS_LOST_A_M_TOWER       = 675,
-    LANG_BG_EY_HAS_LOST_H_M_TOWER       = 676,
-    LANG_BG_EY_HAS_LOST_A_D_RUINS       = 677,
-    LANG_BG_EY_HAS_LOST_H_D_RUINS       = 678,
-    LANG_BG_EY_HAS_LOST_A_B_TOWER       = 679,
-    LANG_BG_EY_HAS_LOST_H_B_TOWER       = 680,
-    LANG_BG_EY_HAS_LOST_A_F_RUINS       = 681,
-    LANG_BG_EY_HAS_LOST_H_F_RUINS       = 682,
-    LANG_BG_EY_HAS_TAKEN_FLAG           = 683,
-    LANG_BG_EY_CAPTURED_FLAG_A          = 684,
-    LANG_BG_EY_CAPTURED_FLAG_H          = 685,
-    LANG_BG_EY_DROPPED_FLAG             = 686,
-    LANG_BG_EY_RESETED_FLAG             = 687,
-
-    LANG_ARENA_ONE_TOOLOW               = 700,
-    LANG_ARENA_ONE_MINUTE               = 701,
-    LANG_ARENA_THIRTY_SECONDS           = 702,
-    LANG_ARENA_FIFTEEN_SECONDS          = 703,
-    LANG_ARENA_HAS_BEGUN                = 704,
+    // 600-704 - free
 
     LANG_WAIT_BEFORE_SPEAKING           = 705,
     LANG_NOT_EQUIPPED_ITEM              = 706,
@@ -729,9 +665,7 @@ enum TrinityStrings
     LANG_ARENA_GROUP_TOO_LARGE          = 721,              // "Your group is too large for this arena. Please regroup to join."
     LANG_ARENA_YOUR_TEAM_ONLY           = 722,              // "Your group has members not in your arena team. Please regroup to join."
     LANG_ARENA_NOT_ENOUGH_PLAYERS       = 723,              // "Your group does not have enough players to join this match."
-    LANG_ARENA_GOLD_WINS                = 724,              // "The Gold Team wins!"
-    LANG_ARENA_GREEN_WINS               = 725,              // "The Green Team wins!"
-//                                      = 726, not used
+    // 724-726 - free
     LANG_BG_GROUP_OFFLINE_MEMBER        = 727,              // "Your group has an offline member. Please remove him before joining."
     LANG_BG_GROUP_MIXED_FACTION         = 728,              // "Your group has players from the opposing faction. You can't join the battleground as a group."
     LANG_BG_GROUP_MIXED_LEVELS          = 729,              // "Your group has players from different battleground brakets. You can't join as group."
@@ -759,14 +693,13 @@ enum TrinityStrings
     LANG_BATTLEGROUND_PREMATURE_FINISH_WARNING = 750,       // "Not enough players. This game will close in %u mins."
     LANG_BATTLEGROUND_PREMATURE_FINISH_WARNING_SECS = 751,  // "Not enough players. This game will close in %u seconds."
 //                                      = 752, see LANG_PINFO_ACC_IP
-//  LANG_BG_WS_START_TWO_MINUTES        = 753, - defined above
-//  LANG_BG_AB_START_TWO_MINUTES        = 754, - defined above
-//  LANG_BG_EY_START_TWO_MINUTES        = 755, - defined above
+    // 753-755 - free
 
-    // Room for BG/ARENA                = 773-784, 788-799 not used
+    // Room for BG/ARENA                = 773-784
     LANG_ARENA_TESTING                  = 785,
     LANG_AUTO_ANN                       = 786,
     LANG_ANNOUNCE_COLOR                 = 787,
+    // 788-799 - free
 
     // in game strings
     LANG_PET_INVALID_NAME               = 800,
@@ -1001,7 +934,12 @@ enum TrinityStrings
     LANG_ACCOUNT_BNET_UNLINKED          = 1188,
     LANG_ACCOUNT_BNET_NOT_LINKED        = 1189,
     LANG_DISALLOW_TICKETS_CONFIG        = 1190,
-    // Room for more level 3              1191-1198 not used
+    LANG_BAN_EXISTS                     = 1191,
+	LANG_CHANGEACCOUNT_SUCCESS          = 1192,
+    LANG_GROUP_NOT_IN_RAID_GROUP        = 1193,
+    LANG_GROUP_ROLE_CHANGED             = 1194,
+    LANG_LEADER_CANNOT_BE_ASSISTANT     = 1195,
+    // Room for more level 3              1196-1198 not used
 
     // Debug commands
     LANG_DEBUG_AREATRIGGER_LEFT         = 1999,
@@ -1011,41 +949,7 @@ enum TrinityStrings
     LANG_DEBUG_AREATRIGGER_OFF          = 1203,
     LANG_DEBUG_AREATRIGGER_ENTERED      = 1204,
 
-    // Isle of Conquest
-    LANG_BG_IC_START_TWO_MINUTES        = 1205,
-    LANG_BG_IC_START_ONE_MINUTE         = 1206,
-    LANG_BG_IC_START_HALF_MINUTE        = 1207,
-    LANG_BG_IC_HAS_BEGUN                = 1208,
-    LANG_BG_IC_ALLIANCE_KEEP            = 1209,
-    LANG_BG_IC_HORDE_KEEP               = 1210,
-    LANG_BG_IC_TEAM_WINS                = 1211,
-    LANG_BG_IC_WEST_GATE_DESTROYED      = 1212,
-    LANG_BG_IC_EAST_GATE_DESTROYED      = 1213,
-    LANG_BG_IC_SOUTH_GATE_DESTROYED     = 1214,
-    LANG_BG_IC_NORTH_GATE_DESTROYED     = 1215,
-    LANG_BG_IC_TEAM_ASSAULTED_NODE_1    = 1216,
-    LANG_BG_IC_TEAM_DEFENDED_NODE       = 1217,
-    LANG_BG_IC_TEAM_ASSAULTED_NODE_2    = 1218,
-    LANG_BG_IC_TEAM_HAS_TAKEN_NODE      = 1219,
-    LANG_BG_IC_WORKSHOP                 = 1220,
-    LANG_BG_IC_DOCKS                    = 1221,
-    LANG_BG_IC_REFINERY                 = 1222,
-    LANG_BG_IC_QUARRY                   = 1223,
-    LANG_BG_IC_HANGAR                   = 1224,
-    //                                    1225-1299
-    LANG_BG_IC_ALLIANCE                 = 1300,
-    LANG_BG_IC_HORDE                    = 1301,
-
-    //                                    1302-1325
-    // AV
-    LANG_BG_AV_START_ONE_MINUTE         = 1326,
-    LANG_BG_AV_START_HALF_MINUTE        = 1327,
-    LANG_BG_AV_HAS_BEGUN                = 1328,
-    LANG_BG_AV_A_NEAR_LOSE              = 1329,
-    LANG_BG_AV_H_NEAR_LOSE              = 1330,
-    //                                    1331-1332
-    LANG_BG_AV_START_TWO_MINUTES        = 1333,
-    // FREE IDS                           1334-2002
+    // 1205-2002 - free
 
     // Ticket Strings 2003-2028
     LANG_COMMAND_TICKETCLOSED           = 2003,
@@ -1150,12 +1054,26 @@ enum TrinityStrings
     LANG_DEBUG_SCENE_OBJECT_LIST        = 5068,
     LANG_DEBUG_SCENE_OBJECT_DETAIL      = 5069,
 
-    LANG_NPCINFO_UNIT_FIELD_FLAGS_2     = 5070,
-    LANG_NPCINFO_UNIT_FIELD_FLAGS_3     = 5071,
-    LANG_NPCINFO_NPC_FLAGS              = 5072,
+    // Strings added for dynamic_spawning
+    LANG_SPAWNINFO_GROUP_ID             = 5070,
+    LANG_SPAWNINFO_COMPATIBILITY_MODE   = 5071,
+    LANG_SPAWNINFO_GUIDINFO             = 5072,
+    LANG_SPAWNINFO_SPAWNID_LOCATION     = 5073,
+    LANG_SPAWNINFO_DISTANCEFROMPLAYER   = 5074,
+    LANG_SPAWNGROUP_BADGROUP            = 5075,
+    LANG_SPAWNGROUP_SPAWNCOUNT          = 5076,
+    LANG_LIST_RESPAWNS_RANGE            = 5077,
+    LANG_LIST_RESPAWNS_ZONE             = 5078,
+    LANG_LIST_RESPAWNS_LISTHEADER       = 5079,
+    LANG_LIST_RESPAWNS_OVERDUE          = 5080,
+    LANG_LIST_RESPAWNS_CREATURES        = 5081,
+    LANG_LIST_RESPAWNS_GAMEOBJECTS      = 5082,
 
-    // Room for more Trinity strings      5073-9999
+    LANG_NPCINFO_UNIT_FIELD_FLAGS_2     = 5084,
+    LANG_NPCINFO_UNIT_FIELD_FLAGS_3     = 5085,
+    LANG_NPCINFO_NPC_FLAGS              = 5086,
 
+    // Room for more Trinity strings      5087-6603
     // Level requirement notifications
     LANG_SAY_REQ                        = 6604,
     LANG_WHISPER_REQ                    = 6605,
@@ -1210,14 +1128,7 @@ enum TrinityStrings
     LANG_OPVP_ZM_GOSSIP_ALLIANCE        = 10054,
     LANG_OPVP_ZM_GOSSIP_HORDE           = 10055,
 
-    LANG_BG_SA_START_TWO_MINUTES            = 10056,
-    LANG_BG_SA_START_ONE_MINUTE             = 10057,
-    LANG_BG_SA_START_HALF_MINUTE            = 10058,
-    // unused                                 10059-10062
-    LANG_BG_SA_ALLIANCE_CAPTURED_RELIC      = 10063, //The Alliance captured the titan portal!
-    LANG_BG_SA_HORDE_CAPTURED_RELIC         = 10064, //The Horde captured the titan portal!
-    LANG_BG_SA_ROUND_TWO_ONE_MINUTE         = 10065, //Round 2 of the Battle for the Strand of the Ancients begins in 1 minute.
-    LANG_BG_SA_ROUND_TWO_START_HALF_MINUTE  = 10066, //Round 2 begins in 30 seconds. Prepare yourselves!
+    // 10056-10066 - free
 
     // Use for custom patches             11000-11999
     LANG_AUTO_BROADCAST                 = 11000,
@@ -1246,6 +1157,9 @@ enum TrinityStrings
     LANG_CREATURE_NOT_AI_ENABLED                  = 11015,
     LANG_SELECT_PLAYER_OR_PET                     = 11016,
     LANG_SHUTDOWN_DELAYED                         = 11017,
-    LANG_SHUTDOWN_CANCELLED                       = 11018
+    LANG_SHUTDOWN_CANCELLED                       = 11018,
+    LANG_YOU_CHANGE_POWER                         = 11019,
+    LANG_YOUR_POWER_CHANGED                       = 11020,
+    LANG_INVALID_POWER_NAME                       = 11021
 };
 #endif

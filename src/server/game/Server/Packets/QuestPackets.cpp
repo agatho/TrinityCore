@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -65,6 +65,8 @@ WorldPacket const* WorldPackets::Quest::QueryQuestInfoResponse::Write()
         _worldPacket << int32(Info.QuestID);
         _worldPacket << int32(Info.QuestType);
         _worldPacket << int32(Info.QuestLevel);
+        _worldPacket << int32(Info.QuestScalingFactionGroup);
+        _worldPacket << int32(Info.QuestMaxScalingLevel);
         _worldPacket << int32(Info.QuestPackageID);
         _worldPacket << int32(Info.QuestMinLevel);
         _worldPacket << int32(Info.QuestSortID);
@@ -87,6 +89,7 @@ WorldPacket const* WorldPackets::Quest::QueryQuestInfoResponse::Write()
         _worldPacket << int32(Info.StartItem);
         _worldPacket << uint32(Info.Flags);
         _worldPacket << uint32(Info.FlagsEx);
+        _worldPacket << uint32(Info.FlagsEx2);
 
         for (uint32 i = 0; i < QUEST_REWARD_ITEM_COUNT; ++i)
         {
@@ -114,6 +117,7 @@ WorldPacket const* WorldPackets::Quest::QueryQuestInfoResponse::Write()
         _worldPacket << int32(Info.RewardNumSkillUps);
 
         _worldPacket << int32(Info.PortraitGiver);
+        _worldPacket << int32(Info.PortraitGiverMount);
         _worldPacket << int32(Info.PortraitTurnIn);
 
         for (uint32 i = 0; i < QUEST_REWARD_REPUTATIONS_COUNT; ++i)
@@ -139,9 +143,11 @@ WorldPacket const* WorldPackets::Quest::QueryQuestInfoResponse::Write()
         _worldPacket << int32(Info.TimeAllowed);
 
         _worldPacket << uint32(Info.Objectives.size());
-        _worldPacket << int32(Info.AllowableRaces);
-        _worldPacket << int32(Info.QuestRewardID);
+        _worldPacket << uint64(Info.AllowableRaces.RawValue);
+        _worldPacket << int32(Info.TreasurePickerID);
         _worldPacket << int32(Info.Expansion);
+        _worldPacket << int32(Info.ManagedWorldStateID);
+        _worldPacket << int32(Info.QuestSessionBonus);
 
         _worldPacket.WriteBits(Info.LogTitle.size(), 9);
         _worldPacket.WriteBits(Info.LogDescription.size(), 12);
@@ -201,6 +207,15 @@ WorldPacket const* WorldPackets::Quest::QuestUpdateAddCredit::Write()
     return &_worldPacket;
 };
 
+WorldPacket const* WorldPackets::Quest::QuestUpdateAddCreditSimple::Write()
+{
+    _worldPacket << int32(QuestID);
+    _worldPacket << int32(ObjectID);
+    _worldPacket << uint8(ObjectiveType);
+
+    return &_worldPacket;
+}
+
 WorldPacket const* WorldPackets::Quest::QuestUpdateAddPvPCredit::Write()
 {
     _worldPacket << int32(QuestID);
@@ -212,13 +227,6 @@ WorldPacket const* WorldPackets::Quest::QuestUpdateAddPvPCredit::Write()
 ByteBuffer& operator<<(ByteBuffer& data, WorldPackets::Quest::QuestRewards const& questRewards)
 {
     data << int32(questRewards.ChoiceItemCount);
-
-    for (uint32 i = 0; i < QUEST_REWARD_CHOICES_COUNT; ++i)
-    {
-        data << int32(questRewards.ChoiceItems[i].ItemID);
-        data << int32(questRewards.ChoiceItems[i].Quantity);
-    }
-
     data << int32(questRewards.ItemCount);
 
     for (uint32 i = 0; i < QUEST_REWARD_ITEM_COUNT; ++i)
@@ -256,7 +264,13 @@ ByteBuffer& operator<<(ByteBuffer& data, WorldPackets::Quest::QuestRewards const
 
     data << int32(questRewards.SkillLineID);
     data << int32(questRewards.NumSkillUps);
-    data << int32(questRewards.RewardID);
+    data << int32(questRewards.TreasurePickerID);
+
+    for (uint32 i = 0; i < QUEST_REWARD_CHOICES_COUNT; ++i)
+    {
+        data << questRewards.ChoiceItems[i].Item;
+        data << int32(questRewards.ChoiceItems[i].Quantity);
+    }
 
     data.WriteBit(questRewards.IsBoostSpell);
     data.FlushBits();
@@ -291,8 +305,9 @@ WorldPacket const* WorldPackets::Quest::QuestGiverOfferRewardMessage::Write()
 {
     _worldPacket << QuestData; // WorldPackets::Quest::QuestGiverOfferReward
     _worldPacket << int32(QuestPackageID);
-    _worldPacket << int32(PortraitTurnIn);
     _worldPacket << int32(PortraitGiver);
+    _worldPacket << int32(PortraitGiverMount);
+    _worldPacket << int32(PortraitTurnIn);
 
     _worldPacket.WriteBits(QuestTitle.size(), 9);
     _worldPacket.WriteBits(RewardText.size(), 12);
@@ -350,14 +365,16 @@ WorldPacket const* WorldPackets::Quest::QuestGiverQuestDetails::Write()
     _worldPacket << int32(QuestID);
     _worldPacket << int32(QuestPackageID);
     _worldPacket << int32(PortraitGiver);
-    _worldPacket << int32(SuggestedPartyMembers);
+    _worldPacket << int32(PortraitGiverMount);
+    _worldPacket << int32(PortraitTurnIn);
     _worldPacket << uint32(QuestFlags[0]); // Flags
     _worldPacket << uint32(QuestFlags[1]); // FlagsEx
-    _worldPacket << int32(PortraitTurnIn);
+    _worldPacket << int32(SuggestedPartyMembers);
     _worldPacket << uint32(LearnSpells.size());
-    _worldPacket << int32(DescEmotes.size());
-    _worldPacket << int32(Objectives.size());
+    _worldPacket << uint32(DescEmotes.size());
+    _worldPacket << uint32(Objectives.size());
     _worldPacket << int32(QuestStartItemID);
+    _worldPacket << int32(QuestSessionBonus);
 
     for (int32 spell : LearnSpells)
         _worldPacket << int32(spell);
@@ -383,9 +400,10 @@ WorldPacket const* WorldPackets::Quest::QuestGiverQuestDetails::Write()
     _worldPacket.WriteBits(PortraitGiverName.size(), 8);
     _worldPacket.WriteBits(PortraitTurnInText.size(), 10);
     _worldPacket.WriteBits(PortraitTurnInName.size(), 8);
-    _worldPacket.WriteBit(DisplayPopup);
-    _worldPacket.WriteBit(StartCheat);
     _worldPacket.WriteBit(AutoLaunched);
+    _worldPacket.WriteBit(false);   // unused in client
+    _worldPacket.WriteBit(StartCheat);
+    _worldPacket.WriteBit(DisplayPopup);
     _worldPacket.FlushBits();
 
     _worldPacket << Rewards; // WorldPackets::Quest::QuestRewards
@@ -466,20 +484,21 @@ void WorldPackets::Quest::QuestLogRemoveQuest::Read()
     _worldPacket >> Entry;
 }
 
-WorldPacket const* WorldPackets::Quest::QuestGiverQuestList::Write()
+WorldPacket const* WorldPackets::Quest::QuestGiverQuestListMessage::Write()
 {
     _worldPacket << QuestGiverGUID;
     _worldPacket << uint32(GreetEmoteDelay);
     _worldPacket << uint32(GreetEmoteType);
-    _worldPacket << uint32(GossipTexts.size());
+    _worldPacket << uint32(QuestDataText.size());
     _worldPacket.WriteBits(Greeting.size(), 11);
     _worldPacket.FlushBits();
 
-    for (GossipTextData const& gossip : GossipTexts)
+    for (GossipText const& gossip : QuestDataText)
     {
         _worldPacket << uint32(gossip.QuestID);
         _worldPacket << uint32(gossip.QuestType);
-        _worldPacket << uint32(gossip.QuestLevel);
+        _worldPacket << int32(gossip.QuestLevel);
+        _worldPacket << int32(gossip.QuestMaxScalingLevel);
         _worldPacket << uint32(gossip.QuestFlags);
         _worldPacket << uint32(gossip.QuestFlagsEx);
         _worldPacket.WriteBit(gossip.Repeatable);
@@ -575,7 +594,7 @@ WorldPacket const* WorldPackets::Quest::DailyQuestsReset::Write()
     return &_worldPacket;
 }
 
-WorldPacket const* WorldPackets::Quest::WorldQuestUpdate::Write()
+WorldPacket const* WorldPackets::Quest::WorldQuestUpdateResponse::Write()
 {
     _worldPacket << uint32(WorldQuestUpdates.size());
 
@@ -589,4 +608,103 @@ WorldPacket const* WorldPackets::Quest::WorldQuestUpdate::Write()
     }
 
     return &_worldPacket;
+}
+
+ByteBuffer& operator<<(ByteBuffer& data, WorldPackets::Quest::PlayerChoiceResponseRewardEntry const& playerChoiceResponseRewardEntry)
+{
+    data << playerChoiceResponseRewardEntry.Item;
+    data << int32(playerChoiceResponseRewardEntry.Quantity);
+    return data;
+}
+
+ByteBuffer& operator<<(ByteBuffer& data, WorldPackets::Quest::PlayerChoiceResponseReward const& playerChoiceResponseReward)
+{
+    data << int32(playerChoiceResponseReward.TitleID);
+    data << int32(playerChoiceResponseReward.PackageID);
+    data << int32(playerChoiceResponseReward.SkillLineID);
+    data << uint32(playerChoiceResponseReward.SkillPointCount);
+    data << uint32(playerChoiceResponseReward.ArenaPointCount);
+    data << uint32(playerChoiceResponseReward.HonorPointCount);
+    data << uint64(playerChoiceResponseReward.Money);
+    data << uint32(playerChoiceResponseReward.Xp);
+    data << uint32(playerChoiceResponseReward.Items.size());
+    data << uint32(playerChoiceResponseReward.Currencies.size());
+    data << uint32(playerChoiceResponseReward.Factions.size());
+    data << uint32(playerChoiceResponseReward.ItemChoices.size());
+
+    for (WorldPackets::Quest::PlayerChoiceResponseRewardEntry const& item : playerChoiceResponseReward.Items)
+        data << item;
+
+    for (WorldPackets::Quest::PlayerChoiceResponseRewardEntry const& currency : playerChoiceResponseReward.Currencies)
+        data << currency;
+
+    for (WorldPackets::Quest::PlayerChoiceResponseRewardEntry const& faction : playerChoiceResponseReward.Factions)
+        data << faction;
+
+    for (WorldPackets::Quest::PlayerChoiceResponseRewardEntry const& itemChoice : playerChoiceResponseReward.ItemChoices)
+        data << itemChoice;
+
+    return data;
+}
+
+ByteBuffer& operator<<(ByteBuffer& data, WorldPackets::Quest::PlayerChoiceResponse const& playerChoiceResponse)
+{
+    data << int32(playerChoiceResponse.ResponseID);
+    data << int32(playerChoiceResponse.ChoiceArtFileID);
+    data << int32(playerChoiceResponse.Flags);
+    data << uint32(playerChoiceResponse.WidgetSetID);
+    data << uint32(playerChoiceResponse.UiTextureAtlasElementID);
+    data << uint32(playerChoiceResponse.SoundKitID);
+    data << uint8(playerChoiceResponse.GroupID);
+
+    data.WriteBits(playerChoiceResponse.Answer.length(), 9);
+    data.WriteBits(playerChoiceResponse.Header.length(), 9);
+    data.WriteBits(playerChoiceResponse.SubHeader.length() , 7);
+    data.WriteBits(playerChoiceResponse.ButtonTooltip.length(), 9);
+    data.WriteBits(playerChoiceResponse.Description.length(), 11);
+    data.WriteBits(playerChoiceResponse.Confirmation.length(), 7);
+    data.WriteBit(playerChoiceResponse.RewardQuestID.is_initialized());
+    data.WriteBit(playerChoiceResponse.Reward.is_initialized());
+    data.FlushBits();
+
+    if (playerChoiceResponse.Reward)
+        data << *playerChoiceResponse.Reward;
+
+    data.WriteString(playerChoiceResponse.Answer);
+    data.WriteString(playerChoiceResponse.Header);
+    data.WriteString(playerChoiceResponse.SubHeader);
+    data.WriteString(playerChoiceResponse.ButtonTooltip);
+    data.WriteString(playerChoiceResponse.Description);
+    data.WriteString(playerChoiceResponse.Confirmation);
+
+    if (playerChoiceResponse.RewardQuestID)
+        data << uint32(*playerChoiceResponse.RewardQuestID);
+
+    return data;
+}
+
+WorldPacket const* WorldPackets::Quest::DisplayPlayerChoice::Write()
+{
+    _worldPacket << int32(ChoiceID);
+    _worldPacket << uint32(Responses.size());
+    _worldPacket << SenderGUID;
+    _worldPacket << int32(UiTextureKitID);
+    _worldPacket << uint32(SoundKitID);
+    _worldPacket.WriteBits(Question.length(), 8);
+    _worldPacket.WriteBit(CloseChoiceFrame);
+    _worldPacket.WriteBit(HideWarboardHeader);
+    _worldPacket.WriteBit(KeepOpenAfterChoice);
+    _worldPacket.FlushBits();
+
+    for (PlayerChoiceResponse const& response : Responses)
+        _worldPacket << response;
+
+    _worldPacket.WriteString(Question);
+    return &_worldPacket;
+}
+
+void WorldPackets::Quest::ChoiceResponse::Read()
+{
+    _worldPacket >> ChoiceID;
+    _worldPacket >> ResponseID;
 }

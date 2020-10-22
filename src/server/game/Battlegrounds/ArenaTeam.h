@@ -1,6 +1,5 @@
 /*
- * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
- * Copyright (C) 2005-2009 MaNGOS <http://getmangos.com/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -128,7 +127,7 @@ class TC_GAME_API ArenaTeam
         static uint8 GetTypeBySlot(uint8 slot);
         ObjectGuid GetCaptain() const { return CaptainGuid; }
         std::string const& GetName() const { return TeamName; }
-        const ArenaTeamStats& GetStats() const { return Stats; }
+        ArenaTeamStats const& GetStats() const { return Stats; }
 
         uint32 GetRating() const          { return Stats.Rating; }
         uint32 GetAverageMMR(Group* group) const;
@@ -173,7 +172,7 @@ class TC_GAME_API ArenaTeam
 
 
 
-        void FinishWeek();
+        bool FinishWeek(); // returns true if arena team played this week
         void FinishGame(int32 mod);
 
     protected:
@@ -193,4 +192,3 @@ class TC_GAME_API ArenaTeam
         ArenaTeamStats Stats;
 };
 #endif
-

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -33,7 +33,6 @@ namespace WorldPackets
         public:
             struct DBQueryRecord
             {
-                ObjectGuid GUID;
                 uint32 RecordID = 0;
             };
 
@@ -59,49 +58,46 @@ namespace WorldPackets
             ByteBuffer Data;
         };
 
-        class HotfixList final : public ServerPacket
+        class AvailableHotfixes final : public ServerPacket
         {
         public:
-            HotfixList(int32 hotfixCacheVersion, std::map<int32, HotfixData> const& hotfixes)
-                : ServerPacket(SMSG_HOTFIX_LIST), HotfixCacheVersion(hotfixCacheVersion), Hotfixes(hotfixes) { }
+            AvailableHotfixes(int32 virtualRealmAddress, uint32 hotfixCount, DB2Manager::HotfixContainer const& hotfixes)
+                : ServerPacket(SMSG_AVAILABLE_HOTFIXES), VirtualRealmAddress(virtualRealmAddress), HotfixCount(hotfixCount), Hotfixes(hotfixes) { }
 
             WorldPacket const* Write() override;
 
-            int32 HotfixCacheVersion;
-            std::map<int32, HotfixData> const& Hotfixes;
+            int32 VirtualRealmAddress;
+            uint32 HotfixCount;
+            DB2Manager::HotfixContainer const& Hotfixes;
         };
 
-        class HotfixQuery final : public ClientPacket
+        class HotfixRequest final : public ClientPacket
         {
         public:
-            HotfixQuery(WorldPacket&& packet) : ClientPacket(CMSG_HOTFIX_QUERY, std::move(packet)) { }
+            HotfixRequest(WorldPacket&& packet) : ClientPacket(CMSG_HOTFIX_REQUEST, std::move(packet)) { }
 
             void Read() override;
 
-            std::vector<int32> Hotfixes;
+            uint32 ClientBuild = 0;
+            uint32 DataBuild = 0;
+            std::vector<DB2Manager::HotfixRecord> Hotfixes;
         };
 
-        class HotfixQueryResponse final : public ServerPacket
+        class HotfixConnect final : public ServerPacket
         {
         public:
-            struct HotfixRecord
-            {
-                uint32 TableHash = 0;
-                int32 RecordID = 0;
-                Optional<ByteBuffer> HotfixData;
-            };
-
             struct HotfixData
             {
-                int32 ID = 0;
-                std::vector<HotfixRecord> Records;
+                DB2Manager::HotfixRecord Record;
+                Optional<uint32> Size;
             };
 
-            HotfixQueryResponse() : ServerPacket(SMSG_HOTFIX_QUERY_RESPONSE) { }
+            HotfixConnect() : ServerPacket(SMSG_HOTFIX_CONNECT) { }
 
             WorldPacket const* Write() override;
 
             std::vector<HotfixData> Hotfixes;
+            ByteBuffer HotfixContent;
         };
     }
 }

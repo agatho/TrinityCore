@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -16,10 +16,11 @@
  */
 
 #include "ScriptMgr.h"
-#include "ObjectMgr.h"
+#include "GameObject.h"
 #include "InstanceScript.h"
+#include "Map.h"
+#include "MotionMaster.h"
 #include "razorfen_downs.h"
-#include "Player.h"
 #include "TemporarySummon.h"
 
 Position const PosSummonTutenkash[15] =
@@ -51,7 +52,7 @@ public:
 
     struct instance_razorfen_downs_InstanceMapScript : public InstanceScript
     {
-        instance_razorfen_downs_InstanceMapScript(Map* map) : InstanceScript(map)
+        instance_razorfen_downs_InstanceMapScript(InstanceMap* map) : InstanceScript(map)
         {
             SetHeaders(DataHeader);
             SetBossNumber(EncounterCount);
@@ -70,7 +71,7 @@ public:
                 case GO_GONG:
                     goGongGUID = gameObject->GetGUID();
                     if (GetBossState(DATA_TUTEN_KASH) == DONE)
-                        gameObject->SetFlag(GAMEOBJECT_FLAGS, GO_FLAG_NOT_SELECTABLE);
+                        gameObject->AddFlag(GO_FLAG_NOT_SELECTABLE);
                     break;
                 case GO_IDOL_OVEN_FIRE:
                 case GO_IDOL_CUP_FIRE:
@@ -113,7 +114,7 @@ public:
                     case IN_PROGRESS:
                     {
                         if (GameObject* go = instance->GetGameObject(goGongGUID))
-                            go->SetFlag(GAMEOBJECT_FLAGS, GO_FLAG_NOT_SELECTABLE);
+                            go->AddFlag(GO_FLAG_NOT_SELECTABLE);
 
                         switch (gongWave)
                         {
@@ -135,13 +136,9 @@ public:
                         }
 
                         if (GameObject* go = instance->GetGameObject(goGongGUID))
-                        {
                             for (uint8 i = summonLowRange; i < summonHighRange; ++i)
-                            {
-                                Creature* creature = go->SummonCreature(summonCreature, PosSummonTutenkash[i]);
+                                if (Creature* creature = go->SummonCreature(summonCreature, PosSummonTutenkash[i]))
                                     creature->GetMotionMaster()->MovePoint(0, 2533.479f + float(irand(-5, 5)), 870.020f + float(irand(-5, 5)), 47.678f);
-                            }
-                        }
 
                         ++gongWave;
                         break;
@@ -151,7 +148,7 @@ public:
                         {
                             fiendsKilled = 0;
                             if (GameObject* go = instance->GetGameObject(goGongGUID))
-                                go->RemoveFlag(GAMEOBJECT_FLAGS, GO_FLAG_NOT_SELECTABLE);
+                                go->RemoveFlag(GO_FLAG_NOT_SELECTABLE);
                         }
                         break;
                     case NPC_TOMB_REAVER:
@@ -159,7 +156,7 @@ public:
                         {
                             reaversKilled = 0;
                             if (GameObject* go = instance->GetGameObject(goGongGUID))
-                                go->RemoveFlag(GAMEOBJECT_FLAGS, GO_FLAG_NOT_SELECTABLE);
+                                go->RemoveFlag(GO_FLAG_NOT_SELECTABLE);
                         }
                         break;
                 }

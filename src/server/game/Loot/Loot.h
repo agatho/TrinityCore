@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -20,6 +20,7 @@
 
 #include "Define.h"
 #include "ConditionMgr.h"
+#include "DBCEnums.h"
 #include "ItemEnchantmentMgr.h"
 #include "ObjectGuid.h"
 #include "RefManager.h"
@@ -102,7 +103,7 @@ enum LootType : uint8
     LOOT_FISHING_JUNK           = 22                        // unsupported by client, sending LOOT_FISHING instead
 };
 
-enum LootError
+enum LootError : uint8
 {
     LOOT_ERROR_DIDNT_KILL               = 0,    // You don't have permission to loot that corpse.
     LOOT_ERROR_TOO_FAR                  = 4,    // You are too far away to loot that corpse.
@@ -133,13 +134,12 @@ enum LootSlotType
 struct TC_GAME_API LootItem
 {
     uint32  itemid;
-    uint32  randomSuffix;
-    ItemRandomEnchantmentId randomPropertyId;
-    int32   upgradeId;
+    ItemRandomBonusListId randomBonusListId;
     std::vector<int32> BonusListIDs;
-    uint8   context;
+    ItemContext context;
     ConditionContainer conditions;                               // additional loot condition
     GuidSet allowedGUIDs;
+    ObjectGuid rollWinnerGUID;                                   // Stores the guid of person who won loot, if his bags are full only he can see the item in loot list!
     uint8   count             : 8;
     bool    is_looted         : 1;
     bool    is_blocked        : 1;
@@ -148,16 +148,14 @@ struct TC_GAME_API LootItem
     bool    is_counted        : 1;
     bool    needs_quest       : 1;                          // quest drop
     bool    follow_loot_rules : 1;
-    bool    canSave;
 
     // Constructor, copies most fields from LootStoreItem, generates random count and random suffixes/properties
     // Should be called for non-reference LootStoreItem entries only (reference = 0)
     explicit LootItem(LootStoreItem const& li);
 
     // Empty constructor for creating an empty LootItem to be filled in with DB data
-    LootItem() : itemid(0), randomSuffix(0), randomPropertyId(), upgradeId(0), context(0), count(0), is_looted(false), is_blocked(false),
-                 freeforall(false), is_underthreshold(false), is_counted(false), needs_quest(false), follow_loot_rules(false),
-                 canSave(true){ };
+    LootItem() : itemid(0), randomBonusListId(0), context(ItemContext::NONE), count(0), is_looted(false), is_blocked(false),
+                 freeforall(false), is_underthreshold(false), is_counted(false), needs_quest(false), follow_loot_rules(false) { };
 
     // Basic checks for player/item compatibility - if false no chance to see the item in the loot
     bool AllowedForPlayer(Player const* player) const;
@@ -165,21 +163,21 @@ struct TC_GAME_API LootItem
     GuidSet const& GetAllowedLooters() const { return allowedGUIDs; }
 };
 
-struct QuestItem
+struct NotNormalLootItem
 {
-    uint8   index;                                          // position in quest_items;
+    uint8   index;                                          // position in quest_items or items;
     bool    is_looted;
 
-    QuestItem()
+    NotNormalLootItem()
         : index(0), is_looted(false) { }
 
-    QuestItem(uint8 _index, bool _islooted = false)
+    NotNormalLootItem(uint8 _index, bool _islooted = false)
         : index(_index), is_looted(_islooted) { }
 };
 
-typedef std::vector<QuestItem> QuestItemList;
+typedef std::vector<NotNormalLootItem> NotNormalLootItemList;
 typedef std::vector<LootItem> LootItemList;
-typedef std::unordered_map<ObjectGuid, QuestItemList*> QuestItemMap;
+typedef std::unordered_map<ObjectGuid, NotNormalLootItemList*> NotNormalLootItemMap;
 
 //=====================================================
 
@@ -199,21 +197,18 @@ public:
     typedef LinkedListHead::Iterator<LootValidatorRef> iterator;
 
     LootValidatorRef* getFirst() { return (LootValidatorRef*)RefManager<Loot, LootValidatorRef>::getFirst(); }
-    LootValidatorRef* getLast() { return (LootValidatorRef*)RefManager<Loot, LootValidatorRef>::getLast(); }
 
     iterator begin() { return iterator(getFirst()); }
-    iterator end() { return iterator(NULL); }
-    iterator rbegin() { return iterator(getLast()); }
-    iterator rend() { return iterator(NULL); }
+    iterator end() { return iterator(nullptr); }
 };
 
 //=====================================================
 
 struct TC_GAME_API Loot
 {
-    QuestItemMap const& GetPlayerQuestItems() const { return PlayerQuestItems; }
-    QuestItemMap const& GetPlayerFFAItems() const { return PlayerFFAItems; }
-    QuestItemMap const& GetPlayerNonQuestNonFFAConditionalItems() const { return PlayerNonQuestNonFFAConditionalItems; }
+    NotNormalLootItemMap const& GetPlayerQuestItems() const { return PlayerQuestItems; }
+    NotNormalLootItemMap const& GetPlayerFFAItems() const { return PlayerFFAItems; }
+    NotNormalLootItemMap const& GetPlayerNonQuestNonFFAConditionalItems() const { return PlayerNonQuestNonFFAConditionalItems; }
 
     std::vector<LootItem> items;
     std::vector<LootItem> quest_items;
@@ -233,10 +228,6 @@ struct TC_GAME_API Loot
     ObjectGuid const& GetGUID() const { return _GUID; }
     void SetGUID(ObjectGuid const& guid) { _GUID = guid; }
 
-    // For deleting items at loot removal since there is no backward interface to the Item()
-    void DeleteLootItemFromContainerItemDB(uint32 itemID);
-    void DeleteLootMoneyFromContainerItemDB();
-
     // if loot becomes invalid this reference is used to inform the listener
     void addLootValidatorRef(LootValidatorRef* pLootValidatorRef)
     {
@@ -255,16 +246,16 @@ struct TC_GAME_API Loot
     void RemoveLooter(ObjectGuid GUID) { PlayersLooting.erase(GUID); }
 
     void generateMoneyLoot(uint32 minAmount, uint32 maxAmount);
-    bool FillLoot(uint32 lootId, LootStore const& store, Player* lootOwner, bool personal, bool noEmptyError = false, uint16 lootMode = LOOT_MODE_DEFAULT);
+    bool FillLoot(uint32 lootId, LootStore const& store, Player* lootOwner, bool personal, bool noEmptyError = false, uint16 lootMode = LOOT_MODE_DEFAULT, ItemContext context = ItemContext::NONE);
 
     // Inserts the item into the loot (called by LootTemplate processors)
     void AddItem(LootStoreItem const & item);
 
     LootItem const* GetItemInSlot(uint32 lootSlot) const;
-    LootItem* LootItemInSlot(uint32 lootslot, Player* player, QuestItem** qitem = NULL, QuestItem** ffaitem = NULL, QuestItem** conditem = NULL);
+    LootItem* LootItemInSlot(uint32 lootslot, Player* player, NotNormalLootItem** qitem = nullptr, NotNormalLootItem** ffaitem = nullptr, NotNormalLootItem** conditem = nullptr);
     uint32 GetMaxSlotInLootFor(Player* player) const;
     bool hasItemForAll() const;
-    bool hasItemFor(Player* player) const;
+    bool hasItemFor(Player const* player) const;
     bool hasOverThresholdItem() const;
 
     // Builds data for SMSG_LOOT_RESPONSE
@@ -273,21 +264,21 @@ struct TC_GAME_API Loot
 private:
 
     void FillNotNormalLootFor(Player* player, bool presentAtLooting);
-    QuestItemList* FillFFALoot(Player* player);
-    QuestItemList* FillQuestLoot(Player* player);
-    QuestItemList* FillNonQuestNonFFAConditionalLoot(Player* player, bool presentAtLooting);
+    NotNormalLootItemList* FillFFALoot(Player* player);
+    NotNormalLootItemList* FillQuestLoot(Player* player);
+    NotNormalLootItemList* FillNonQuestNonFFAConditionalLoot(Player* player, bool presentAtLooting);
 
     GuidSet PlayersLooting;
-    QuestItemMap PlayerQuestItems;
-    QuestItemMap PlayerFFAItems;
-    QuestItemMap PlayerNonQuestNonFFAConditionalItems;
+    NotNormalLootItemMap PlayerQuestItems;
+    NotNormalLootItemMap PlayerFFAItems;
+    NotNormalLootItemMap PlayerNonQuestNonFFAConditionalItems;
 
     // All rolls are registered here. They need to know, when the loot is not valid anymore
     LootValidatorRefManager i_LootValidatorRefManager;
 
     // Loot GUID
     ObjectGuid _GUID;
-    uint8 _difficultyBonusTreeMod;
+    ItemContext _itemContext;
 };
 
 class TC_GAME_API AELootResult

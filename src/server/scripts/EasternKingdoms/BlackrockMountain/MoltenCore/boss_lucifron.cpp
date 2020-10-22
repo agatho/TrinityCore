@@ -1,6 +1,5 @@
 /*
- * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
- * Copyright (C) 2006-2009 ScriptDev2 <https://scriptdev2.svn.sourceforge.net/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -23,10 +22,10 @@ SDComment:
 SDCategory: Molten Core
 EndScriptData */
 
-#include "ObjectMgr.h"
 #include "ScriptMgr.h"
-#include "ScriptedCreature.h"
 #include "molten_core.h"
+#include "ObjectMgr.h"
+#include "ScriptedCreature.h"
 
 enum Spells
 {
@@ -101,7 +100,7 @@ class boss_lucifron : public CreatureScript
 
         CreatureAI* GetAI(Creature* creature) const override
         {
-            return new boss_lucifronAI(creature);
+            return GetMoltenCoreAI<boss_lucifronAI>(creature);
         }
 };
 

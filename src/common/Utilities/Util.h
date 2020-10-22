@@ -1,6 +1,5 @@
 /*
- * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
- * Copyright (C) 2005-2009 MaNGOS <http://getmangos.com/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -21,9 +20,12 @@
 
 #include "Define.h"
 #include "Errors.h"
+#include <array>
 #include <string>
-#include <sstream>
 #include <vector>
+#include "advstd.h"
+
+enum LocaleConstant : uint8;
 
 class TC_COMMON_API Tokenizer
 {
@@ -55,20 +57,13 @@ private:
 
 TC_COMMON_API void stripLineInvisibleChars(std::string &src);
 
-TC_COMMON_API int64 MoneyStringToMoney(const std::string& moneyString);
+TC_COMMON_API int64 MoneyStringToMoney(std::string const& moneyString);
 
-TC_COMMON_API struct tm* localtime_r(const time_t* time, struct tm *result);
+TC_COMMON_API struct tm* localtime_r(time_t const* time, struct tm *result);
 
 TC_COMMON_API std::string secsToTimeString(uint64 timeInSecs, bool shortText = false, bool hoursOnly = false);
-TC_COMMON_API uint32 TimeStringToSecs(const std::string& timestring);
+TC_COMMON_API uint32 TimeStringToSecs(std::string const& timestring);
 TC_COMMON_API std::string TimeToTimestampStr(time_t t);
-
-inline void ApplyPercentModFloatVar(float& var, float val, bool apply)
-{
-    if (val == -100.0f)     // prevent set var to zero
-        val = -99.99f;
-    var *= (apply ? (100.0f + val) / 100.0f : 100.0f / (100.0f + val));
-}
 
 // Percentage calculation
 template <class T, class U>
@@ -249,6 +244,10 @@ inline wchar_t wcharToUpper(wchar_t wchar)
         return wchar_t(uint16(wchar)-0x0020);
     if (wchar == 0x0451)                                     // CYRILLIC SMALL LETTER IO
         return wchar_t(0x0401);
+    if (wchar == 0x0153)                                     // LATIN SMALL LIGATURE OE
+        return wchar_t(0x0152);
+    if (wchar == 0x00FF)                                     // LATIN SMALL LETTER Y WITH DIAERESIS
+        return wchar_t(0x0178);
 
     return wchar;
 }
@@ -275,11 +274,17 @@ inline wchar_t wcharToLower(wchar_t wchar)
         return wchar_t(0x00DF);
     if (wchar == 0x0401)                                     // CYRILLIC CAPITAL LETTER IO
         return wchar_t(0x0451);
+    if (wchar == 0x0152)                                     // LATIN CAPITAL LIGATURE OE
+        return wchar_t(0x0153);
+    if (wchar == 0x0178)                                     // LATIN CAPITAL LETTER Y WITH DIAERESIS
+        return wchar_t(0x00FF);
     if (wchar >= 0x0410 && wchar <= 0x042F)                  // CYRILLIC CAPITAL LETTER A - CYRILLIC CAPITAL LETTER YA
         return wchar_t(uint16(wchar)+0x0020);
 
     return wchar;
 }
+
+TC_COMMON_API std::wstring wstrCaseAccentInsensitiveParse(std::wstring const& wstr, LocaleConstant locale);
 
 TC_COMMON_API void wstrToUpper(std::wstring& str);
 TC_COMMON_API void wstrToLower(std::wstring& str);
@@ -298,26 +303,26 @@ TC_COMMON_API bool IsIPAddress(char const* ipaddress);
 TC_COMMON_API uint32 CreatePIDFile(std::string const& filename);
 TC_COMMON_API uint32 GetPID();
 
-TC_COMMON_API std::string ByteArrayToHexStr(uint8 const* bytes, uint32 length, bool reverse = false);
+TC_COMMON_API std::string ByteArrayToHexStr(uint8 const* bytes, size_t length, bool reverse = false);
+template <typename Container>
+std::string ByteArrayToHexStr(Container const& c, bool reverse = false) { return ByteArrayToHexStr(advstd::data(c), advstd::size(c), reverse); }
 TC_COMMON_API void HexStrToByteArray(std::string const& str, uint8* out, bool reverse = false);
+template <size_t Size>
+void HexStrToByteArray(std::string const& str, std::array<uint8, Size>& buf, bool reverse = false)
+{
+    ASSERT(str.size() == (2 * Size));
+    HexStrToByteArray(str, buf.data(), reverse);
+}
+template <size_t Size>
+std::array<uint8, Size> HexStrToByteArray(std::string const& str, bool reverse = false)
+{
+    std::array<uint8, Size> arr;
+    HexStrToByteArray(str, arr, reverse);
+    return arr;
+}
 
 TC_COMMON_API bool StringToBool(std::string const& str);
-
-template<class Container>
-std::string StringJoin(Container const& c, std::string delimiter)
-{
-    if (c.empty())
-        return "";
-
-    std::ostringstream os;
-    auto itr = c.begin();
-    os << *itr++;
-
-    for (; itr != c.end(); ++itr)
-        os << delimiter << *itr;
-
-    return os.str();
-}
+TC_COMMON_API float DegToRad(float degrees);
 
 // simple class for not-modifyable list
 template <typename T>
@@ -332,9 +337,9 @@ class HookList final
         typedef typename ContainerType::const_iterator const_iterator;
         typedef typename ContainerType::iterator iterator;
 
-        HookList<T>& operator+=(T t)
+        HookList<T>& operator+=(T&& t)
         {
-            _container.push_back(t);
+            _container.push_back(std::move(t));
             return *this;
         }
 
@@ -396,7 +401,7 @@ public:
         part[3] = p4;
     }
 
-    inline bool operator <(const flag128 &right) const
+    inline bool operator<(flag128 const& right) const
     {
         for (uint8 i = 4; i > 0; --i)
         {
@@ -408,7 +413,7 @@ public:
         return false;
     }
 
-    inline bool operator ==(const flag128 &right) const
+    inline bool operator==(flag128 const& right) const
     {
         return
             (
@@ -419,27 +424,17 @@ public:
             );
     }
 
-    inline bool operator !=(const flag128 &right) const
+    inline bool operator!=(flag128 const& right) const
     {
-        return !this->operator ==(right);
+        return !(*this == right);
     }
 
-    inline flag128 & operator =(const flag128 &right)
+    inline flag128 operator&(flag128 const& right) const
     {
-        part[0] = right.part[0];
-        part[1] = right.part[1];
-        part[2] = right.part[2];
-        part[3] = right.part[3];
-        return *this;
+        return flag128(part[0] & right.part[0], part[1] & right.part[1], part[2] & right.part[2], part[3] & right.part[3]);
     }
 
-    inline flag128 operator &(const flag128 &right) const
-    {
-        return flag128(part[0] & right.part[0], part[1] & right.part[1],
-            part[2] & right.part[2], part[3] & right.part[3]);
-    }
-
-    inline flag128 & operator &=(const flag128 &right)
+    inline flag128& operator&=(flag128 const& right)
     {
         part[0] &= right.part[0];
         part[1] &= right.part[1];
@@ -448,13 +443,12 @@ public:
         return *this;
     }
 
-    inline flag128 operator |(const flag128 &right) const
+    inline flag128 operator|(flag128 const& right) const
     {
-        return flag128(part[0] | right.part[0], part[1] | right.part[1],
-            part[2] | right.part[2], part[3] | right.part[3]);
+        return flag128(part[0] | right.part[0], part[1] | right.part[1], part[2] | right.part[2], part[3] | right.part[3]);
     }
 
-    inline flag128 & operator |=(const flag128 &right)
+    inline flag128& operator |=(flag128 const& right)
     {
         part[0] |= right.part[0];
         part[1] |= right.part[1];
@@ -463,18 +457,17 @@ public:
         return *this;
     }
 
-    inline flag128 operator ~() const
+    inline flag128 operator~() const
     {
         return flag128(~part[0], ~part[1], ~part[2], ~part[3]);
     }
 
-    inline flag128 operator ^(const flag128 &right) const
+    inline flag128 operator^(flag128 const& right) const
     {
-        return flag128(part[0] ^ right.part[0], part[1] ^ right.part[1],
-            part[2] ^ right.part[2], part[3] ^ right.part[3]);
+        return flag128(part[0] ^ right.part[0], part[1] ^ right.part[1], part[2] ^ right.part[2], part[3] ^ right.part[3]);
     }
 
-    inline flag128 & operator ^=(const flag128 &right)
+    inline flag128& operator^=(flag128 const& right)
     {
         part[0] ^= right.part[0];
         part[1] ^= right.part[1];
@@ -490,15 +483,15 @@ public:
 
     inline bool operator !() const
     {
-        return !this->operator bool();
+        return !(bool(*this));
     }
 
-    inline uint32 & operator [](uint8 el)
+    inline uint32& operator[](uint8 el)
     {
         return part[el];
     }
 
-    inline const uint32 & operator [](uint8 el) const
+    inline uint32 const& operator [](uint8 el) const
     {
         return part[el];
     }
@@ -535,5 +528,22 @@ bool CompareValues(ComparisionType type, T val1, T val2)
             return false;
     }
 }
+
+template<typename E>
+constexpr typename std::underlying_type<E>::type AsUnderlyingType(E enumValue)
+{
+    static_assert(std::is_enum<E>::value, "AsUnderlyingType can only be used with enums");
+    return static_cast<typename std::underlying_type<E>::type>(enumValue);
+}
+
+template<typename T>
+struct NonDefaultConstructible
+{
+    constexpr /*implicit*/ NonDefaultConstructible(T value) : Value(std::move(value))
+    {
+    }
+
+    T Value;
+};
 
 #endif

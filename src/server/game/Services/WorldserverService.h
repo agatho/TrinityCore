@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -22,12 +22,17 @@
 #include "account_service.pb.h"
 #include "authentication_service.pb.h"
 #include "challenge_service.pb.h"
-#include "channel_service.pb.h"
+#include "club_listener.pb.h"
+#include "club_membership_listener.pb.h"
+#include "club_membership_service.pb.h"
+#include "club_service.pb.h"
 #include "connection_service.pb.h"
 #include "friends_service.pb.h"
 #include "game_utilities_service.pb.h"
+#include "presence_listener.pb.h"
 #include "presence_service.pb.h"
 #include "report_service.pb.h"
+#include "api/client/v2/report_service.pb.h"
 #include "resource_service.pb.h"
 #include "user_manager_service.pb.h"
 
@@ -59,8 +64,8 @@ namespace Battlenet
     public:
         GameUtilitiesService(WorldSession* session);
 
-        uint32 HandleProcessClientRequest(game_utilities::v1::ClientRequest const* request, game_utilities::v1::ClientResponse* response) override;
-        uint32 HandleGetAllValuesForAttribute(game_utilities::v1::GetAllValuesForAttributeRequest const* request, game_utilities::v1::GetAllValuesForAttributeResponse* response) override;
+        uint32 HandleProcessClientRequest(game_utilities::v1::ClientRequest const* request, game_utilities::v1::ClientResponse* response, std::function<void(ServiceBase*, uint32, ::google::protobuf::Message const*)>& continuation) override;
+        uint32 HandleGetAllValuesForAttribute(game_utilities::v1::GetAllValuesForAttributeRequest const* request, game_utilities::v1::GetAllValuesForAttributeResponse* response, std::function<void(ServiceBase*, uint32, ::google::protobuf::Message const*)>& continuation) override;
 
     private:
         uint32 HandleRealmListRequest(std::unordered_map<std::string, Variant const*> params, game_utilities::v1::ClientResponse* response);

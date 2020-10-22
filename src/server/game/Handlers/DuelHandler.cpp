@@ -1,6 +1,5 @@
 /*
- * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
- * Copyright (C) 2005-2009 MaNGOS <http://getmangos.com/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -49,7 +48,7 @@ void WorldSession::HandleCanDuel(WorldPackets::Duel::CanDuel& packet)
 
 void WorldSession::HandleDuelResponseOpcode(WorldPackets::Duel::DuelResponse& duelResponse)
 {
-    if (duelResponse.Accepted)
+    if (duelResponse.Accepted && !duelResponse.Forfeited)
         HandleDuelAccepted();
     else
         HandleDuelCancelled();
@@ -69,7 +68,7 @@ void WorldSession::HandleDuelAccepted()
     TC_LOG_DEBUG("network", "Player 1 is: %s (%s)", player->GetGUID().ToString().c_str(), player->GetName().c_str());
     TC_LOG_DEBUG("network", "Player 2 is: %s (%s)", plTarget->GetGUID().ToString().c_str(), plTarget->GetName().c_str());
 
-    time_t now = time(NULL);
+    time_t now = time(nullptr);
     player->duel->startTimer = now;
     plTarget->duel->startTimer = now;
 
@@ -77,6 +76,8 @@ void WorldSession::HandleDuelAccepted()
     WorldPacket const* worldPacket = packet.Write();
     player->GetSession()->SendPacket(worldPacket);
     plTarget->GetSession()->SendPacket(worldPacket);
+    player->EnablePvpRules();
+    plTarget->EnablePvpRules();
 }
 
 void WorldSession::HandleDuelCancelled()

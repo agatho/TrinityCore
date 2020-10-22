@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -79,7 +79,7 @@ WorldPacket const* WorldPackets::Scenario::ScenarioCompleted::Write()
     return &_worldPacket;
 }
 
-WorldPacket const* WorldPackets::Scenario::ScenarioBoot::Write()
+WorldPacket const* WorldPackets::Scenario::ScenarioVacate::Write()
 {
     _worldPacket << int32(ScenarioID);
     _worldPacket << int32(Unk1);
@@ -109,8 +109,7 @@ WorldPacket const* WorldPackets::Scenario::ScenarioPOIs::Write()
         {
             _worldPacket << int32(scenarioPOI.BlobIndex);
             _worldPacket << int32(scenarioPOI.MapID);
-            _worldPacket << int32(scenarioPOI.WorldMapAreaID);
-            _worldPacket << int32(scenarioPOI.Floor);
+            _worldPacket << int32(scenarioPOI.UiMapID);
             _worldPacket << int32(scenarioPOI.Priority);
             _worldPacket << int32(scenarioPOI.Flags);
             _worldPacket << int32(scenarioPOI.WorldEffectID);

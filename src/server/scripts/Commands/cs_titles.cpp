@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -24,8 +24,8 @@ EndScriptData */
 
 #include "ScriptMgr.h"
 #include "Chat.h"
+#include "DB2Stores.h"
 #include "Language.h"
-#include "ObjectMgr.h"
 #include "Player.h"
 #include "RBAC.h"
 
@@ -45,11 +45,11 @@ public:
             { "add",     rbac::RBAC_PERM_COMMAND_TITLES_ADD,     false, &HandleTitlesAddCommand,     "" },
             { "current", rbac::RBAC_PERM_COMMAND_TITLES_CURRENT, false, &HandleTitlesCurrentCommand, "" },
             { "remove",  rbac::RBAC_PERM_COMMAND_TITLES_REMOVE,  false, &HandleTitlesRemoveCommand,  "" },
-            { "set",     rbac::RBAC_PERM_COMMAND_TITLES_SET,     false, NULL,       "", titlesSetCommandTable },
+            { "set",     rbac::RBAC_PERM_COMMAND_TITLES_SET,     false, nullptr,       "", titlesSetCommandTable },
         };
         static std::vector<ChatCommand> commandTable =
         {
-            { "titles", rbac::RBAC_PERM_COMMAND_TITLES, false, NULL, "", titlesCommandTable },
+            { "titles", rbac::RBAC_PERM_COMMAND_TITLES, false, nullptr, "", titlesCommandTable },
         };
         return commandTable;
     }
@@ -61,8 +61,8 @@ public:
         if (!id_p)
             return false;
 
-        int32 id = atoi(id_p);
-        if (id <= 0)
+        uint32 id = atoul(id_p);
+        if (id == 0)
         {
             handler->PSendSysMessage(LANG_INVALID_TITLE_ID, id);
             handler->SetSentErrorMessage(true);
@@ -92,10 +92,10 @@ public:
         std::string tNameLink = handler->GetNameLink(target);
 
         target->SetTitle(titleInfo);                            // to be sure that title now known
-        target->SetUInt32Value(PLAYER_CHOSEN_TITLE, titleInfo->MaskID);
+        target->SetChosenTitle(titleInfo->MaskID);
 
         handler->PSendSysMessage(LANG_TITLE_CURRENT_RES, id,
-            (target->getGender() == GENDER_MALE ? titleInfo->NameMale : titleInfo->NameFemale)->Str[handler->GetSessionDbcLocale()],
+            (target->getGender() == GENDER_MALE ? titleInfo->Name : titleInfo->Name1)[handler->GetSessionDbcLocale()],
             tNameLink.c_str());
         return true;
     }
@@ -107,8 +107,8 @@ public:
         if (!id_p)
             return false;
 
-        int32 id = atoi(id_p);
-        if (id <= 0)
+        uint32 id = atoul(id_p);
+        if (id == 0)
         {
             handler->PSendSysMessage(LANG_INVALID_TITLE_ID, id);
             handler->SetSentErrorMessage(true);
@@ -137,13 +137,13 @@ public:
 
         std::string tNameLink = handler->GetNameLink(target);
 
-        char titleNameStr[80];
-        snprintf(titleNameStr, 80,
-            (target->getGender() == GENDER_MALE ? titleInfo->NameMale : titleInfo->NameFemale)->Str[handler->GetSessionDbcLocale()],
-            target->GetName().c_str());
+        std::string titleNameStr = Trinity::StringFormat(
+            (target->getGender() == GENDER_MALE ? titleInfo->Name : titleInfo->Name1)[handler->GetSessionDbcLocale()],
+            target->GetName().c_str()
+        );
 
         target->SetTitle(titleInfo);
-        handler->PSendSysMessage(LANG_TITLE_ADD_RES, id, titleNameStr, tNameLink.c_str());
+        handler->PSendSysMessage(LANG_TITLE_ADD_RES, id, titleNameStr.c_str(), tNameLink.c_str());
 
         return true;
     }
@@ -155,8 +155,8 @@ public:
         if (!id_p)
             return false;
 
-        int32 id = atoi(id_p);
-        if (id <= 0)
+        uint32 id = atoul(id_p);
+        if (id == 0)
         {
             handler->PSendSysMessage(LANG_INVALID_TITLE_ID, id);
             handler->SetSentErrorMessage(true);
@@ -187,16 +187,16 @@ public:
 
         std::string tNameLink = handler->GetNameLink(target);
 
-        char titleNameStr[80];
-        snprintf(titleNameStr, 80,
-            (target->getGender() == GENDER_MALE ? titleInfo->NameMale : titleInfo->NameFemale)->Str[handler->GetSessionDbcLocale()],
-            target->GetName().c_str());
+        std::string titleNameStr = Trinity::StringFormat(
+            (target->getGender() == GENDER_MALE ? titleInfo->Name : titleInfo->Name1)[handler->GetSessionDbcLocale()],
+            target->GetName().c_str()
+        );
 
-        handler->PSendSysMessage(LANG_TITLE_REMOVE_RES, id, titleNameStr, tNameLink.c_str());
+        handler->PSendSysMessage(LANG_TITLE_REMOVE_RES, id, titleNameStr.c_str(), tNameLink.c_str());
 
-        if (!target->HasTitle(target->GetInt32Value(PLAYER_CHOSEN_TITLE)))
+        if (!target->HasTitle(target->m_playerData->PlayerTitle))
         {
-            target->SetUInt32Value(PLAYER_CHOSEN_TITLE, 0);
+            target->SetChosenTitle(0);
             handler->PSendSysMessage(LANG_CURRENT_TITLE_RESET, tNameLink.c_str());
         }
 
@@ -233,12 +233,12 @@ public:
 
         titles &= ~titles2;                                     // remove non-existing titles
 
-        target->SetUInt64Value(PLAYER__FIELD_KNOWN_TITLES, titles);
+        target->SetKnownTitles(0, titles);
         handler->SendSysMessage(LANG_DONE);
 
-        if (!target->HasTitle(target->GetInt32Value(PLAYER_CHOSEN_TITLE)))
+        if (!target->HasTitle(target->m_playerData->PlayerTitle))
         {
-            target->SetUInt32Value(PLAYER_CHOSEN_TITLE, 0);
+            target->SetChosenTitle(0);
             handler->PSendSysMessage(LANG_CURRENT_TITLE_RESET, handler->GetNameLink(target).c_str());
         }
 

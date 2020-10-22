@@ -1,6 +1,5 @@
 /*
- * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
- * Copyright (C) 2005-2009 MaNGOS <http://getmangos.com/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -20,6 +19,7 @@
 #include "Channel.h"
 #include "ChannelMgr.h"
 #include "ChannelPackets.h"
+#include "DB2Stores.h"
 #include "Log.h"
 #include "ObjectMgr.h"                                      // for normalizePlayerName
 #include "Player.h"
@@ -145,9 +145,6 @@ void WorldSession::HandleChannelPlayerCommand(WorldPackets::Channel::ChannelPlay
             case CMSG_CHAT_CHANNEL_MODERATOR:
                 channel->SetModerator(GetPlayer(), packet.Name);
                 break;
-            case CMSG_CHAT_CHANNEL_MUTE:
-                channel->SetMute(GetPlayer(), packet.Name);
-                break;
             case CMSG_CHAT_CHANNEL_SET_OWNER:
                 channel->SetOwner(GetPlayer(), packet.Name);
                 break;
@@ -159,9 +156,6 @@ void WorldSession::HandleChannelPlayerCommand(WorldPackets::Channel::ChannelPlay
                 break;
             case CMSG_CHAT_CHANNEL_UNMODERATOR:
                 channel->UnsetModerator(GetPlayer(), packet.Name);
-                break;
-            case CMSG_CHAT_CHANNEL_UNMUTE:
-                channel->UnsetMute(GetPlayer(), packet.Name);
                 break;
             case CMSG_CHAT_CHANNEL_UNSILENCE_ALL:
                 channel->UnsilenceAll(GetPlayer(), packet.Name);

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -20,6 +20,12 @@
 
 #include "Battleground.h"
 #include "BattlegroundScore.h"
+
+enum BG_TP_Objectives
+{
+    BG_TP_FLAG_CAPTURES = 290,
+    BG_TP_FLAG_RETURNS  = 291
+};
 
 class BattlegroundTPScore final : public BattlegroundScore
 {
@@ -42,10 +48,12 @@ class BattlegroundTPScore final : public BattlegroundScore
             }
         }
 
-        void BuildObjectivesBlock(std::vector<int32>& stats) override
+        void BuildPvPLogPlayerDataPacket(WorldPackets::Battleground::PVPMatchStatistics::PVPMatchPlayerStatistics& playerData) const override
         {
-            stats.push_back(FlagCaptures);
-            stats.push_back(FlagReturns);
+            BattlegroundScore::BuildPvPLogPlayerDataPacket(playerData);
+
+            playerData.Stats.emplace_back(BG_TP_FLAG_CAPTURES, FlagCaptures);
+            playerData.Stats.emplace_back(BG_TP_FLAG_RETURNS, FlagReturns);
         }
 
         uint32 GetAttr1() const final override { return FlagCaptures; }
@@ -58,7 +66,7 @@ class BattlegroundTPScore final : public BattlegroundScore
 class BattlegroundTP : public Battleground
 {
     public:
-        BattlegroundTP();
+        BattlegroundTP(BattlegroundTemplate const* battlegroundTemplate);
         ~BattlegroundTP();
 };
 

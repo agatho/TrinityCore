@@ -1,6 +1,5 @@
 /*
- * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
- * Copyright (C) 2006-2009 ScriptDev2 <https://scriptdev2.svn.sourceforge.net/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -30,6 +29,8 @@ npc_lesser_shadow_fissure
 EndContentData */
 
 #include "ScriptMgr.h"
+#include "InstanceScript.h"
+#include "ObjectAccessor.h"
 #include "ScriptedCreature.h"
 #include "shattered_halls.h"
 
@@ -109,7 +110,7 @@ class boss_grand_warlock_nethekurse : public CreatureScript
             void Reset() override
             {
                 _Reset();
-                me->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NON_ATTACKABLE);
+                me->AddUnitFlag(UNIT_FLAG_NON_ATTACKABLE);
 
                 Initialize();
             }
@@ -145,7 +146,7 @@ class boss_grand_warlock_nethekurse : public CreatureScript
                         {
                             IsIntroEvent = false;
                             IsMainEvent = true;
-                            me->RemoveFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NON_ATTACKABLE);
+                            me->RemoveUnitFlag(UNIT_FLAG_NON_ATTACKABLE);
                         }
                         break;
                     default:
@@ -162,7 +163,7 @@ class boss_grand_warlock_nethekurse : public CreatureScript
                 PeonEngagedCount = 4;
                 PeonKilledCount = 4;
                 IsMainEvent = true;
-                me->RemoveFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NON_ATTACKABLE);
+                me->RemoveUnitFlag(UNIT_FLAG_NON_ATTACKABLE);
             }
 
             void AttackStart(Unit* who) override
@@ -206,13 +207,13 @@ class boss_grand_warlock_nethekurse : public CreatureScript
 
             void JustSummoned(Creature* summoned) override
             {
-                summoned->setFaction(16);
-                summoned->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NON_ATTACKABLE);
-                summoned->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NOT_SELECTABLE);
+                summoned->SetFaction(FACTION_MONSTER_2);
+                summoned->AddUnitFlag(UNIT_FLAG_NON_ATTACKABLE);
+                summoned->AddUnitFlag(UNIT_FLAG_NOT_SELECTABLE);
 
                 //triggered spell of consumption does not properly show it's SpellVisual, wrong spellid?
                 summoned->CastSpell(summoned, SPELL_TEMPORARY_VISUAL, true);
-                summoned->CastSpell(summoned, SPELL_CONSUMPTION, false, 0, 0, me->GetGUID());
+                summoned->CastSpell(summoned, SPELL_CONSUMPTION, false, nullptr, nullptr, me->GetGUID());
             }
 
             void KilledUnit(Unit* /*victim*/) override
@@ -299,7 +300,7 @@ class boss_grand_warlock_nethekurse : public CreatureScript
 
         CreatureAI* GetAI(Creature* creature) const override
         {
-            return GetInstanceAI<boss_grand_warlock_nethekurseAI>(creature);
+            return GetShatteredHallsAI<boss_grand_warlock_nethekurseAI>(creature);
         }
 };
 
@@ -367,7 +368,7 @@ class npc_fel_orc_convert : public CreatureScript
 
         CreatureAI* GetAI(Creature* creature) const override
         {
-            return GetInstanceAI<npc_fel_orc_convertAI>(creature);
+            return GetShatteredHallsAI<npc_fel_orc_convertAI>(creature);
         }
 };
 
@@ -392,7 +393,7 @@ class npc_lesser_shadow_fissure : public CreatureScript
 
         CreatureAI* GetAI(Creature* creature) const override
         {
-            return new npc_lesser_shadow_fissureAI(creature);
+            return GetShatteredHallsAI<npc_lesser_shadow_fissureAI>(creature);
         }
 };
 

@@ -1,6 +1,5 @@
 /*
- * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
- * Copyright (C) 2005-2009 MaNGOS <http://getmangos.com/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -20,13 +19,13 @@
 #define TRINITY_GRIDNOTIFIERSIMPL_H
 
 #include "GridNotifiers.h"
-#include "WorldPacket.h"
 #include "Corpse.h"
-#include "Player.h"
-#include "UpdateData.h"
 #include "CreatureAI.h"
+#include "Player.h"
 #include "SpellAuras.h"
-#include "Opcodes.h"
+#include "UpdateData.h"
+#include "WorldPacket.h"
+#include "WorldSession.h"
 
 template<class T>
 inline void Trinity::VisibleNotifier::Visit(GridRefManager<T> &m)
@@ -323,7 +322,7 @@ void Trinity::WorldObjectListSearcher<Check>::Visit(PlayerMapType &m)
 
     for (PlayerMapType::iterator itr=m.begin(); itr != m.end(); ++itr)
         if (i_check(itr->GetSource()))
-            i_objects.push_back(itr->GetSource());
+            Insert(itr->GetSource());
 }
 
 template<class Check>
@@ -334,7 +333,7 @@ void Trinity::WorldObjectListSearcher<Check>::Visit(CreatureMapType &m)
 
     for (CreatureMapType::iterator itr=m.begin(); itr != m.end(); ++itr)
         if (i_check(itr->GetSource()))
-            i_objects.push_back(itr->GetSource());
+            Insert(itr->GetSource());
 }
 
 template<class Check>
@@ -345,7 +344,7 @@ void Trinity::WorldObjectListSearcher<Check>::Visit(CorpseMapType &m)
 
     for (CorpseMapType::iterator itr=m.begin(); itr != m.end(); ++itr)
         if (i_check(itr->GetSource()))
-            i_objects.push_back(itr->GetSource());
+            Insert(itr->GetSource());
 }
 
 template<class Check>
@@ -356,7 +355,7 @@ void Trinity::WorldObjectListSearcher<Check>::Visit(GameObjectMapType &m)
 
     for (GameObjectMapType::iterator itr=m.begin(); itr != m.end(); ++itr)
         if (i_check(itr->GetSource()))
-            i_objects.push_back(itr->GetSource());
+            Insert(itr->GetSource());
 }
 
 template<class Check>
@@ -367,7 +366,7 @@ void Trinity::WorldObjectListSearcher<Check>::Visit(DynamicObjectMapType &m)
 
     for (DynamicObjectMapType::iterator itr=m.begin(); itr != m.end(); ++itr)
         if (i_check(itr->GetSource()))
-            i_objects.push_back(itr->GetSource());
+            Insert(itr->GetSource());
 }
 
 template<class Check>
@@ -378,7 +377,7 @@ void Trinity::WorldObjectListSearcher<Check>::Visit(AreaTriggerMapType &m)
 
     for (AreaTriggerMapType::iterator itr=m.begin(); itr != m.end(); ++itr)
         if (i_check(itr->GetSource()))
-            i_objects.push_back(itr->GetSource());
+            Insert(itr->GetSource());
 }
 
 template<class Check>
@@ -389,7 +388,7 @@ void Trinity::WorldObjectListSearcher<Check>::Visit(ConversationMapType &m)
 
     for (ConversationMapType::iterator itr = m.begin(); itr != m.end(); ++itr)
         if (i_check(itr->GetSource()))
-            i_objects.push_back(itr->GetSource());
+            Insert(itr->GetSource());
 }
 
 // Gameobject searchers
@@ -433,7 +432,7 @@ void Trinity::GameObjectListSearcher<Check>::Visit(GameObjectMapType &m)
     for (GameObjectMapType::iterator itr=m.begin(); itr != m.end(); ++itr)
         if (itr->GetSource()->IsInPhase(_searcher))
             if (i_check(itr->GetSource()))
-                i_objects.push_back(itr->GetSource());
+                Insert(itr->GetSource());
 }
 
 // Unit searchers
@@ -510,7 +509,7 @@ void Trinity::UnitListSearcher<Check>::Visit(PlayerMapType &m)
     for (PlayerMapType::iterator itr=m.begin(); itr != m.end(); ++itr)
         if (itr->GetSource()->IsInPhase(_searcher))
             if (i_check(itr->GetSource()))
-                i_objects.push_back(itr->GetSource());
+                Insert(itr->GetSource());
 }
 
 template<class Check>
@@ -519,7 +518,7 @@ void Trinity::UnitListSearcher<Check>::Visit(CreatureMapType &m)
     for (CreatureMapType::iterator itr=m.begin(); itr != m.end(); ++itr)
         if (itr->GetSource()->IsInPhase(_searcher))
             if (i_check(itr->GetSource()))
-                i_objects.push_back(itr->GetSource());
+                Insert(itr->GetSource());
 }
 
 // Creature searchers
@@ -563,7 +562,7 @@ void Trinity::CreatureListSearcher<Check>::Visit(CreatureMapType &m)
     for (CreatureMapType::iterator itr=m.begin(); itr != m.end(); ++itr)
         if (itr->GetSource()->IsInPhase(_searcher))
             if (i_check(itr->GetSource()))
-                i_objects.push_back(itr->GetSource());
+                Insert(itr->GetSource());
 }
 
 template<class Check>
@@ -572,7 +571,7 @@ void Trinity::PlayerListSearcher<Check>::Visit(PlayerMapType &m)
     for (PlayerMapType::iterator itr=m.begin(); itr != m.end(); ++itr)
         if (itr->GetSource()->IsInPhase(_searcher))
             if (i_check(itr->GetSource()))
-                i_objects.push_back(itr->GetSource());
+                Insert(itr->GetSource());
 }
 
 template<class Check>

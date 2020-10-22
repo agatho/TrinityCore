@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -21,6 +21,7 @@ Category: Tanaris, ZulFarrak
 */
 
 #include "ScriptMgr.h"
+#include "InstanceScript.h"
 #include "ScriptedCreature.h"
 #include "zulfarrak.h"
 
@@ -47,11 +48,6 @@ enum Events
     EVENT_HEALING_WAVE          = 4
 };
 
-enum Faction
-{
-    ZUMRAH_FRIENDLY_FACTION     = 35
-};
-
 class boss_zum_rah : public CreatureScript
 {
 public:
@@ -73,7 +69,7 @@ public:
 
         void Reset() override
         {
-            me->setFaction(ZUMRAH_FRIENDLY_FACTION); // areatrigger sets faction to enemy
+            me->SetFaction(FACTION_FRIENDLY); // areatrigger sets faction to enemy
             Initialize();
         }
 
@@ -157,7 +153,7 @@ public:
 
     CreatureAI* GetAI(Creature* creature) const override
     {
-        return GetInstanceAI<boss_zum_rahAI>(creature);
+        return GetZulFarrakAI<boss_zum_rahAI>(creature);
     }
 };
 

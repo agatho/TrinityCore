@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -16,21 +16,21 @@
  */
 
 #include "Metric.h"
-#include "AsioHacksImpl.h"
 #include "Common.h"
 #include "Config.h"
+#include "DeadlineTimer.h"
 #include "Log.h"
+#include "Strand.h"
 #include "Util.h"
 #include <boost/algorithm/string/replace.hpp>
-#include <boost/asio/deadline_timer.hpp>
 #include <boost/asio/ip/tcp.hpp>
 
-void Metric::Initialize(std::string const& realmName, boost::asio::io_service& ioService, std::function<void()> overallStatusLogger)
+void Metric::Initialize(std::string const& realmName, Trinity::Asio::IoContext& ioContext, std::function<void()> overallStatusLogger)
 {
-    _dataStream = Trinity::make_unique<boost::asio::ip::tcp::iostream>();
+    _dataStream = std::make_unique<boost::asio::ip::tcp::iostream>();
     _realmName = FormatInfluxDBTagValue(realmName);
-    _batchTimer = Trinity::make_unique<boost::asio::deadline_timer>(ioService);
-    _overallStatusTimer = Trinity::make_unique<boost::asio::deadline_timer>(ioService);
+    _batchTimer = std::make_unique<Trinity::Asio::DeadlineTimer>(ioContext);
+    _overallStatusTimer = std::make_unique<Trinity::Asio::DeadlineTimer>(ioContext);
     _overallStatusLogger = overallStatusLogger;
     LoadFromConfigs();
 }
@@ -215,8 +215,8 @@ void Metric::ScheduleSend()
 
 void Metric::ForceSend()
 {
-    // Send what's queued only if io_service is stopped (so only on shutdown)
-    if (_enabled && _batchTimer->get_io_service().stopped())
+    // Send what's queued only if IoContext is stopped (so only on shutdown)
+    if (_enabled && Trinity::Asio::get_io_context(*_batchTimer).stopped())
         SendBatch();
 }
 
@@ -249,7 +249,7 @@ std::string Metric::FormatInfluxDBValue(std::string const& value)
     return '"' + boost::replace_all_copy(value, "\"", "\\\"") + '"';
 }
 
-std::string Metric::FormatInfluxDBValue(const char* value)
+std::string Metric::FormatInfluxDBValue(char const* value)
 {
     return FormatInfluxDBValue(std::string(value));
 }

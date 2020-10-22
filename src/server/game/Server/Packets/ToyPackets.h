@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -43,18 +43,27 @@ namespace WorldPackets
             void Read() override;
 
             WorldPackets::Spells::SpellCastRequest Cast;
-            uint32 ItemID = 0;
         };
 
-        class AccountToysUpdate final : public ServerPacket
+        class AccountToyUpdate final : public ServerPacket
         {
         public:
-            AccountToysUpdate() : ServerPacket(SMSG_ACCOUNT_TOYS_UPDATE, 1 + 4 + 1) { }
+            AccountToyUpdate() : ServerPacket(SMSG_ACCOUNT_TOY_UPDATE, 1 + 4 + 1) { }
 
             WorldPacket const* Write() override;
 
             bool IsFullUpdate = false;
             ToyBoxContainer const* Toys = nullptr;
+        };
+
+        class ToyClearFanfare final : public ClientPacket
+        {
+        public:
+            ToyClearFanfare(WorldPacket&& packet) : ClientPacket(CMSG_TOY_CLEAR_FANFARE, std::move(packet)) { }
+
+            void Read() override;
+
+            uint32 ItemID = 0;
         };
     }
 }

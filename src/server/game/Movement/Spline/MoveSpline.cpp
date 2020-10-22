@@ -1,19 +1,18 @@
 /*
- * Copyright (C) 2005-2011 MaNGOS <http://getmangos.com/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
+ * This program is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License as published by the
+ * Free Software Foundation; either version 2 of the License, or (at your
+ * option) any later version.
  *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ * This program is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
+ * more details.
  *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+ * You should have received a copy of the GNU General Public License along
+ * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
 #include "MoveSpline.h"
@@ -145,9 +144,9 @@ struct CommonInitializer
     }
 };
 
-void MoveSpline::init_spline(const MoveSplineInitArgs& args)
+void MoveSpline::init_spline(MoveSplineInitArgs const& args)
 {
-    const SplineBase::EvaluationMode modes[2] = {SplineBase::ModeLinear, SplineBase::ModeCatmullrom};
+    static SplineBase::EvaluationMode const modes[2] = { SplineBase::ModeLinear, SplineBase::ModeCatmullrom };
     if (args.flags.cyclic)
     {
         uint32 cyclic_point = 0;
@@ -157,9 +156,7 @@ void MoveSpline::init_spline(const MoveSplineInitArgs& args)
         spline.init_cyclic_spline(&args.path[0], args.path.size(), modes[args.flags.isSmooth()], cyclic_point);
     }
     else
-    {
         spline.init_spline(&args.path[0], args.path.size(), modes[args.flags.isSmooth()]);
-    }
 
     // init spline timestamps
     if (splineflags.falling)
@@ -236,7 +233,7 @@ bool MoveSplineInitArgs::Validate(Unit* unit) const
         return false;\
     }
     CHECK(path.size() > 1);
-    CHECK(velocity > 0.01f);
+    CHECK(velocity >= 0.01f);
     CHECK(time_perc >= 0.f && time_perc <= 1.f);
     CHECK(_checkPathLengths());
     if (spellEffectExtra)
@@ -257,6 +254,14 @@ bool MoveSplineInitArgs::_checkPathLengths() const
                 return false;
     return true;
 }
+MoveSplineInitArgs::MoveSplineInitArgs(size_t path_capacity /*= 16*/) : path_Idx_offset(0), velocity(0.f),
+parabolic_amplitude(0.f), time_perc(0.f), splineId(0), initialOrientation(0.f),
+walk(false), HasVelocity(false), TransformForTransport(true)
+{
+    path.reserve(path_capacity);
+}
+
+MoveSplineInitArgs::~MoveSplineInitArgs() = default;
 
 /// ============================================================================================
 

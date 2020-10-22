@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -19,6 +19,7 @@
 #define PetPackets_h__
 
 #include "Packet.h"
+#include "PetDefines.h"
 #include "Position.h"
 #include "ObjectGuid.h"
 #include "Optional.h"
@@ -111,7 +112,7 @@ namespace WorldPackets
             uint8 CommandState = 0;
             uint8 Flag = 0;
 
-            std::array<int, 10> ActionButtons;
+            std::array<int, 10> ActionButtons = { };
 
             std::vector<uint32> Actions;
             std::vector<PetSpellCooldown> Cooldowns;
@@ -125,7 +126,7 @@ namespace WorldPackets
             uint32 CreatureID = 0;
             uint32 DisplayID = 0;
             uint32 ExperienceLevel = 0;
-            uint32 PetFlags = 0;
+            uint8 PetFlags = 0;
             std::string PetName;
         };
 
@@ -138,6 +139,16 @@ namespace WorldPackets
 
             ObjectGuid StableMaster;
             std::vector<PetStableInfo> Pets;
+        };
+
+        class PetStableResult final : public ServerPacket
+        {
+        public:
+            PetStableResult() : ServerPacket(SMSG_PET_STABLE_RESULT, 1) { }
+
+            WorldPacket const* Write() override;
+
+            uint8 Result = 0;
         };
 
         class PetLearnedSpells final : public ServerPacket
@@ -237,6 +248,27 @@ namespace WorldPackets
             uint16 SpecID = 0;
         };
 
+        class PetActionFeedback final : public ServerPacket
+        {
+        public:
+            PetActionFeedback() : ServerPacket(SMSG_PET_ACTION_FEEDBACK, 4 + 1) { }
+
+            WorldPacket const* Write() override;
+
+            int32 SpellID = 0;
+            ::PetActionFeedback Response = ::PetActionFeedback::None;
+        };
+
+        class PetActionSound final : public ServerPacket
+        {
+        public:
+            PetActionSound() : ServerPacket(SMSG_PET_ACTION_SOUND, 18 + 4) { }
+
+            WorldPacket const* Write() override;
+
+            ObjectGuid UnitGUID;
+            int32 Action = 0;
+        };
     }
 }
 

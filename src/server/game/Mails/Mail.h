@@ -1,6 +1,5 @@
 /*
- * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
- * Copyright (C) 2005-2009 MaNGOS <http://getmangos.com/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -20,28 +19,30 @@
 #define TRINITY_MAIL_H
 
 #include "Common.h"
+#include "DatabaseEnvFwd.h"
 #include "ObjectGuid.h"
-#include "Transaction.h"
 #include <map>
 
-struct AuctionEntry;
 struct CalendarEvent;
+class AuctionHouseObject;
 class BlackMarketEntry;
 class Item;
 class Object;
 class Player;
 
 #define MAIL_BODY_ITEM_TEMPLATE 8383                        // - plain letter, A Dusty Unsent Letter: 889
-#define MAX_MAIL_ITEMS 12
+#define MAX_CLIENT_MAIL_ITEMS 12                            // max number of items a player is allowed to attach
+#define MAX_MAIL_ITEMS 16
 
 enum MailMessageType
 {
-    MAIL_NORMAL         = 0,
-    MAIL_AUCTION        = 2,
-    MAIL_CREATURE       = 3,                                // client send CMSG_CREATURE_QUERY on this mailmessagetype
-    MAIL_GAMEOBJECT     = 4,                                // client send CMSG_GAMEOBJECT_QUERY on this mailmessagetype
-    MAIL_CALENDAR       = 5,
-    MAIL_BLACKMARKET    = 6
+    MAIL_NORMAL           = 0,
+    MAIL_AUCTION          = 2,
+    MAIL_CREATURE         = 3,                              // client send CMSG_CREATURE_QUERY on this mailmessagetype
+    MAIL_GAMEOBJECT       = 4,                              // client send CMSG_GAMEOBJECT_QUERY on this mailmessagetype
+    MAIL_CALENDAR         = 5,
+    MAIL_BLACKMARKET      = 6,
+    MAIL_COMMERCE_AUCTION = 7                               // wow token auction
 };
 
 enum MailCheckMask
@@ -91,7 +92,7 @@ class TC_GAME_API MailSender
         }
         MailSender(Object* sender, MailStationery stationery = MAIL_STATIONERY_DEFAULT);
         MailSender(CalendarEvent* sender);
-        MailSender(AuctionEntry* sender);
+        MailSender(AuctionHouseObject const* sender);
         MailSender(BlackMarketEntry* sender);
         MailSender(Player* sender);
         MailSender(uint32 senderEntry);
@@ -108,9 +109,10 @@ class TC_GAME_API MailSender
 class TC_GAME_API MailReceiver
 {
     public:                                                 // Constructors
-        explicit MailReceiver(ObjectGuid::LowType receiver_lowguid) : m_receiver(NULL), m_receiver_lowguid(receiver_lowguid) { }
+        explicit MailReceiver(ObjectGuid::LowType receiver_lowguid) : m_receiver(nullptr), m_receiver_lowguid(receiver_lowguid) { }
         MailReceiver(Player* receiver);
         MailReceiver(Player* receiver, ObjectGuid::LowType receiver_lowguid);
+        MailReceiver(Player* receiver, ObjectGuid receiverGuid);
     public:                                                 // Accessors
         Player* GetPlayer() const { return m_receiver; }
         ObjectGuid::LowType GetPlayerGUIDLow() const { return m_receiver_lowguid; }
@@ -142,12 +144,12 @@ class TC_GAME_API MailDraft
         MailDraft& AddCOD(uint64 COD) { m_COD = COD; return *this; }
 
     public:                                                 // finishers
-        void SendReturnToSender(uint32 sender_acc, ObjectGuid::LowType sender_guid, ObjectGuid::LowType receiver_guid, SQLTransaction& trans);
-        void SendMailTo(SQLTransaction& trans, MailReceiver const& receiver, MailSender const& sender, MailCheckMask checked = MAIL_CHECK_MASK_NONE, uint32 deliver_delay = 0);
+        void SendReturnToSender(uint32 sender_acc, ObjectGuid::LowType sender_guid, ObjectGuid::LowType receiver_guid, CharacterDatabaseTransaction& trans);
+        void SendMailTo(CharacterDatabaseTransaction& trans, MailReceiver const& receiver, MailSender const& sender, MailCheckMask checked = MAIL_CHECK_MASK_NONE, uint32 deliver_delay = 0);
 
     private:
-        void deleteIncludedItems(SQLTransaction& trans, bool inDB = false);
-        void prepareItems(Player* receiver, SQLTransaction& trans);                // called from SendMailTo for generate mailTemplateBase items
+        void deleteIncludedItems(CharacterDatabaseTransaction& trans, bool inDB = false);
+        void prepareItems(Player* receiver, CharacterDatabaseTransaction& trans);                // called from SendMailTo for generate mailTemplateBase items
 
         uint16      m_mailTemplateId;
         bool        m_mailTemplateItemsNeed;

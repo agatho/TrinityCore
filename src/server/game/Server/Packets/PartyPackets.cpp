@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -17,12 +17,14 @@
 
 #include "PartyPackets.h"
 #include "Pet.h"
+#include "PhasingHandler.h"
 #include "Player.h"
 #include "Realm.h"
 #include "SpellAuraEffects.h"
 #include "SpellAuras.h"
 #include "Vehicle.h"
 #include "World.h"
+#include "WorldSession.h"
 
 WorldPacket const* WorldPackets::Party::PartyCommandResult::Write()
 {
@@ -31,7 +33,7 @@ WorldPacket const* WorldPackets::Party::PartyCommandResult::Write()
     _worldPacket.WriteBits(Command, 4);
     _worldPacket.WriteBits(Result, 6);
 
-    _worldPacket << ResultData;
+    _worldPacket << uint32(ResultData);
     _worldPacket << ResultGUID;
     _worldPacket.WriteString(Name);
 
@@ -76,12 +78,12 @@ WorldPacket const* WorldPackets::Party::PartyInvite::Write()
     _worldPacket << InviterBNetAccountId;
     _worldPacket << uint16(Unk1);
     _worldPacket << uint32(ProposedRoles);
-    _worldPacket << int32(LfgSlots.size());
-    _worldPacket << LfgCompletedMask;
+    _worldPacket << uint32(LfgSlots.size());
+    _worldPacket << uint32(LfgCompletedMask);
 
     _worldPacket.WriteString(InviterName);
 
-    for (int32 LfgSlot : LfgSlots)
+    for (uint32 LfgSlot : LfgSlots)
         _worldPacket << LfgSlot;
 
     return &_worldPacket;
@@ -210,7 +212,7 @@ ByteBuffer& operator<<(ByteBuffer& data, WorldPackets::Party::PartyMemberStats c
     data << int16(memberStats.PositionY);
     data << int16(memberStats.PositionZ);
     data << int32(memberStats.VehicleSeat);
-    data << int32(memberStats.Auras.size());
+    data << uint32(memberStats.Auras.size());
     data << memberStats.Phases;
 
     for (WorldPackets::Party::PartyMemberAuraStates const& aura : memberStats.Auras)
@@ -225,7 +227,7 @@ ByteBuffer& operator<<(ByteBuffer& data, WorldPackets::Party::PartyMemberStats c
     return data;
 }
 
-WorldPacket const* WorldPackets::Party::PartyMemberState::Write()
+WorldPacket const* WorldPackets::Party::PartyMemberFullState::Write()
 {
     _worldPacket.WriteBit(ForEnemy);
 
@@ -316,15 +318,13 @@ WorldPacket const* WorldPackets::Party::SendRaidTargetUpdateSingle::Write()
 
 WorldPacket const* WorldPackets::Party::SendRaidTargetUpdateAll::Write()
 {
-    _worldPacket << PartyIndex;
+    _worldPacket << uint8(PartyIndex);
+    _worldPacket << uint32(TargetIcons.size());
 
-    _worldPacket << int32(TargetIcons.size());
-
-    std::map<uint8, ObjectGuid>::const_iterator itr;
-    for (itr = TargetIcons.begin(); itr != TargetIcons.end(); itr++)
+    for (auto itr = TargetIcons.begin(); itr != TargetIcons.end(); ++itr)
     {
         _worldPacket << itr->second;
-        _worldPacket << itr->first;
+        _worldPacket << uint8(itr->first);
     }
 
     return &_worldPacket;
@@ -418,7 +418,9 @@ WorldPacket const* WorldPackets::Party::GroupNewLeader::Write()
 ByteBuffer& operator<<(ByteBuffer& data, WorldPackets::Party::PartyPlayerInfo const& playerInfo)
 {
     data.WriteBits(playerInfo.Name.size(), 6);
+    data.WriteBits(playerInfo.VoiceStateID.size() + 1, 6);
     data.WriteBit(playerInfo.FromSocialQueue);
+    data.WriteBit(playerInfo.VoiceChatSilenced);
     data << playerInfo.GUID;
     data << uint8(playerInfo.Status);
     data << uint8(playerInfo.Subgroup);
@@ -426,6 +428,8 @@ ByteBuffer& operator<<(ByteBuffer& data, WorldPackets::Party::PartyPlayerInfo co
     data << uint8(playerInfo.RolesAssigned);
     data << uint8(playerInfo.Class);
     data.WriteString(playerInfo.Name);
+    if (!playerInfo.VoiceStateID.empty())
+        data << playerInfo.VoiceStateID;
 
     return data;
 }
@@ -522,13 +526,13 @@ void WorldPackets::Party::ClearRaidMarker::Read()
 
 WorldPacket const* WorldPackets::Party::RaidMarkersChanged::Write()
 {
-    _worldPacket << PartyIndex;
-    _worldPacket << ActiveMarkers;
+    _worldPacket << uint8(PartyIndex);
+    _worldPacket << uint32(ActiveMarkers);
 
     _worldPacket.WriteBits(RaidMarkers.size(), 4);
     _worldPacket.FlushBits();
 
-    for (RaidMarker* raidMarker : RaidMarkers)
+    for (RaidMarker const* raidMarker : RaidMarkers)
     {
         _worldPacket << raidMarker->TransportGUID;
         _worldPacket << raidMarker->Location.GetMapId();
@@ -538,7 +542,7 @@ WorldPacket const* WorldPackets::Party::RaidMarkersChanged::Write()
     return &_worldPacket;
 }
 
-void WorldPackets::Party::PartyMemberState::Initialize(Player const* player)
+void WorldPackets::Party::PartyMemberFullState::Initialize(Player const* player)
 {
     ForEnemy = false;
 
@@ -552,7 +556,7 @@ void WorldPackets::Party::PartyMemberState::Initialize(Player const* player)
 
     if (!player->IsAlive())
     {
-        if (player->HasFlag(PLAYER_FLAGS, PLAYER_FLAGS_GHOST))
+        if (player->HasPlayerFlag(PLAYER_FLAGS_GHOST))
             MemberStats.Status |= MEMBER_STATUS_GHOST;
         else
             MemberStats.Status |= MEMBER_STATUS_DEAD;
@@ -578,10 +582,10 @@ void WorldPackets::Party::PartyMemberState::Initialize(Player const* player)
     MemberStats.MaxHealth = player->GetMaxHealth();
 
     // Power
-    MemberStats.PowerType = player->getPowerType();
+    MemberStats.PowerType = player->GetPowerType();
     MemberStats.PowerDisplayID = 0;
-    MemberStats.CurrentPower = player->GetPower(player->getPowerType());
-    MemberStats.MaxPower = player->GetMaxPower(player->getPowerType());
+    MemberStats.CurrentPower = player->GetPower(player->GetPowerType());
+    MemberStats.MaxPower = player->GetMaxPower(player->GetPowerType());
 
     // Position
     MemberStats.ZoneID = player->GetZoneId();
@@ -589,9 +593,9 @@ void WorldPackets::Party::PartyMemberState::Initialize(Player const* player)
     MemberStats.PositionY = int16(player->GetPositionY());
     MemberStats.PositionZ = int16(player->GetPositionZ());
 
-    MemberStats.SpecID = player->GetUInt32Value(PLAYER_FIELD_CURRENT_SPEC_ID);
-    MemberStats.PartyType[0] = player->GetByteValue(PLAYER_BYTES_3, PLAYER_BYTES_3_OFFSET_PARTY_TYPE) & 0xF;
-    MemberStats.PartyType[1] = player->GetByteValue(PLAYER_BYTES_3, PLAYER_BYTES_3_OFFSET_PARTY_TYPE) >> 4;
+    MemberStats.SpecID = player->GetPrimarySpecialization();
+    MemberStats.PartyType[0] = player->m_playerData->PartyType & 0xF;
+    MemberStats.PartyType[1] = player->m_playerData->PartyType >> 4;
     MemberStats.WmoGroupID = 0;
     MemberStats.WmoDoodadPlacementID = 0;
 
@@ -624,16 +628,7 @@ void WorldPackets::Party::PartyMemberState::Initialize(Player const* player)
     }
 
     // Phases
-    std::set<uint32> const& phases = player->GetPhases();
-    MemberStats.Phases.PhaseShiftFlags = 0x08 | (phases.size() ? 0x10 : 0);
-    MemberStats.Phases.PersonalGUID = ObjectGuid::Empty;
-    for (uint32 phaseId : phases)
-    {
-        WorldPackets::Party::PartyMemberPhase phase;
-        phase.Id = phaseId;
-        phase.Flags = 1;
-        MemberStats.Phases.List.push_back(phase);
-    }
+    PhasingHandler::FillPartyMemberPhase(&MemberStats.Phases, player->GetPhaseShift());
 
     // Pet
     if (player->GetPet())
@@ -681,4 +676,3 @@ WorldPacket const* WorldPackets::Party::PartyKillLog::Write()
 
     return &_worldPacket;
 }
-

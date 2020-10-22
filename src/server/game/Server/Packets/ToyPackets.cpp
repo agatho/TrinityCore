@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -24,26 +24,34 @@ void WorldPackets::Toy::AddToy::Read()
 
 void WorldPackets::Toy::UseToy::Read()
 {
-    _worldPacket >> ItemID;
     _worldPacket >> Cast;
 }
 
-WorldPacket const* WorldPackets::Toy::AccountToysUpdate::Write()
+WorldPacket const* WorldPackets::Toy::AccountToyUpdate::Write()
 {
     _worldPacket.WriteBit(IsFullUpdate);
     _worldPacket.FlushBits();
 
-    // both lists have to have the same size
-    _worldPacket << int32(Toys->size());
-    _worldPacket << int32(Toys->size());
+    // all lists have to have the same size
+    _worldPacket << int32(Toys->size()); // ids
+    _worldPacket << int32(Toys->size()); // favorites
+    _worldPacket << int32(Toys->size()); // fanfare
 
-    for (auto const& item : *Toys)
-        _worldPacket << uint32(item.first);
+    for (auto const& toy : *Toys)
+        _worldPacket << uint32(toy.first);
 
-    for (auto const& favourite : *Toys)
-        _worldPacket.WriteBit(favourite.second);
+    for (auto const& toy : *Toys)
+        _worldPacket.WriteBit(toy.second.HasFlag(ToyFlags::Favorite));
+
+    for (auto const& toy : *Toys)
+        _worldPacket.WriteBit(toy.second.HasFlag(ToyFlags::HasFanfare));
 
     _worldPacket.FlushBits();
 
     return &_worldPacket;
+}
+
+void WorldPackets::Toy::ToyClearFanfare::Read()
+{
+    _worldPacket >> ItemID;
 }

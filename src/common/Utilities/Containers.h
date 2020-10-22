@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -53,17 +53,29 @@ namespace Trinity
             return size;
         }
 
+        // resizes <container> to have at most <requestedSize> elements
+        // if it has more than <requestedSize> elements, the elements to keep are selected randomly
         template<class C>
         void RandomResize(C& container, std::size_t requestedSize)
         {
-            uint32 currentSize = uint32(Size(container));
-            while (currentSize > requestedSize)
+            static_assert(std::is_base_of<std::forward_iterator_tag, typename std::iterator_traits<typename C::iterator>::iterator_category>::value, "Invalid container passed to Trinity::Containers::RandomResize");
+            if (Size(container) <= requestedSize)
+                return;
+            auto keepIt = std::begin(container), curIt = std::begin(container);
+            uint32 elementsToKeep = requestedSize, elementsToProcess = Size(container);
+            while (elementsToProcess)
             {
-                auto itr = std::begin(container);
-                std::advance(itr, urand(0, currentSize - 1));
-                container.erase(itr);
-                --currentSize;
+                // this element has chance (elementsToKeep / elementsToProcess) of being kept
+                if (urand(1, elementsToProcess) <= elementsToKeep)
+                {
+                    *keepIt = std::move(*curIt);
+                    ++keepIt;
+                    --elementsToKeep;
+                }
+                ++curIt;
+                --elementsToProcess;
             }
+            container.erase(keepIt, std::end(container));
         }
 
         template<class C, class Predicate>
@@ -71,12 +83,10 @@ namespace Trinity
         {
             //! First use predicate filter
             C containerCopy;
+            std::copy_if(std::begin(container), std::end(container), std::inserter(containerCopy, std::end(containerCopy)), predicate);
 
             if (requestedSize)
-            {
-                std::copy_if(std::begin(container), std::end(container), std::inserter(containerCopy, std::end(containerCopy)), predicate);
                 RandomResize(containerCopy, requestedSize);
-            }
 
             container = std::move(containerCopy);
         }
@@ -104,7 +114,7 @@ namespace Trinity
          * Note: container cannot be empty
          */
         template<class C>
-        inline auto SelectRandomWeightedContainerElement(C const& container, std::vector<double> weights) -> decltype(std::begin(container))
+        inline auto SelectRandomWeightedContainerElement(C const& container, std::vector<double> const& weights) -> decltype(std::begin(container))
         {
             auto it = std::begin(container);
             std::advance(it, urandweighted(weights.size(), weights.data()));
@@ -120,7 +130,7 @@ namespace Trinity
          * Note: container cannot be empty
          */
         template<class C, class Fn>
-        auto SelectRandomWeightedContainerElement(C const& container, Fn weightExtractor) -> decltype(std::begin(container))
+        inline auto SelectRandomWeightedContainerElement(C const& container, Fn weightExtractor) -> decltype(std::begin(container))
         {
             std::vector<double> weights;
             weights.reserve(Size(container));
@@ -163,7 +173,7 @@ namespace Trinity
          * @return true if containers have a common element, false otherwise.
         */
         template<class Iterator1, class Iterator2>
-        bool Intersects(Iterator1 first1, Iterator1 last1, Iterator2 first2, Iterator2 last2)
+        inline bool Intersects(Iterator1 first1, Iterator1 last1, Iterator2 first2, Iterator2 last2)
         {
             while (first1 != last1 && first2 != last2)
             {
@@ -171,6 +181,37 @@ namespace Trinity
                     ++first1;
                 else if (*first2 < *first1)
                     ++first2;
+                else
+                    return true;
+            }
+
+            return false;
+        }
+
+        /**
+         * @fn bool Trinity::Containers::Intersects(Iterator first1, Iterator last1, Iterator first2, Iterator last2, Predicate&& equalPred)
+         *
+         * @brief Checks if two SORTED containers have a common element
+         *
+         * @param first1 Iterator pointing to start of the first container
+         * @param last1 Iterator pointing to end of the first container
+         * @param first2 Iterator pointing to start of the second container
+         * @param last2 Iterator pointing to end of the second container
+         * @param equalPred Additional predicate to exclude elements
+         *
+         * @return true if containers have a common element, false otherwise.
+        */
+        template<class Iterator1, class Iterator2, class Predicate>
+        inline bool Intersects(Iterator1 first1, Iterator1 last1, Iterator2 first2, Iterator2 last2, Predicate&& equalPred)
+        {
+            while (first1 != last1 && first2 != last2)
+            {
+                if (*first1 < *first2)
+                    ++first1;
+                else if (*first2 < *first1)
+                    ++first2;
+                else if (!equalPred(*first1, *first2))
+                    ++first1, ++first2;
                 else
                     return true;
             }
@@ -188,33 +229,8 @@ namespace Trinity
             return itr != map.end() ? AddressOrSelf(itr->second) : nullptr;
         }
 
-        /**
-         * @class IteratorPair
-         *
-         * @brief Utility class to enable range for loop syntax for multimap.equal_range uses
-         */
-        template<class iterator>
-        class IteratorPair
-        {
-        public:
-            IteratorPair() : _iterators() { }
-            IteratorPair(std::pair<iterator, iterator> iterators) : _iterators(iterators) { }
-
-            iterator begin() const { return _iterators.first; }
-            iterator end() const { return _iterators.second; }
-
-        private:
-            std::pair<iterator, iterator> _iterators;
-        };
-
-        template<class M>
-        inline auto MapEqualRange(M& map, typename M::key_type const& key) -> IteratorPair<decltype(map.begin())>
-        {
-            return { map.equal_range(key) };
-        }
-
         template<class K, class V, template<class, class, class...> class M, class... Rest>
-        void MultimapErasePair(M<K, V, Rest...>& multimap, K const& key, V const& value)
+        inline void MultimapErasePair(M<K, V, Rest...>& multimap, K const& key, V const& value)
         {
             auto range = multimap.equal_range(key);
             for (auto itr = range.first; itr != range.second;)

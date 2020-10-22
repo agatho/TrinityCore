@@ -1,6 +1,5 @@
 /*
- * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
- * Copyright (C) 2006-2009 ScriptDev2 <https://scriptdev2.svn.sourceforge.net/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -24,13 +23,14 @@ Category: Caverns of Time, The Black Morass
 */
 
 #include "ScriptMgr.h"
+#include "EventMap.h"
 #include "InstanceScript.h"
-#include "the_black_morass.h"
-#include "Player.h"
-#include "TemporarySummon.h"
-#include "SpellInfo.h"
-#include "ScriptedCreature.h"
 #include "Log.h"
+#include "Map.h"
+#include "Player.h"
+#include "SpellInfo.h"
+#include "the_black_morass.h"
+#include "TemporarySummon.h"
 
 enum Misc
 {
@@ -72,7 +72,7 @@ enum EventIds
 class instance_the_black_morass : public InstanceMapScript
 {
 public:
-    instance_the_black_morass() : InstanceMapScript("instance_the_black_morass", 269) { }
+    instance_the_black_morass() : InstanceMapScript(TBMScriptName, 269) { }
 
     InstanceScript* GetInstanceScript(InstanceMap* map) const override
     {
@@ -81,7 +81,7 @@ public:
 
     struct instance_the_black_morass_InstanceMapScript : public InstanceScript
     {
-        instance_the_black_morass_InstanceMapScript(Map* map) : InstanceScript(map)
+        instance_the_black_morass_InstanceMapScript(InstanceMap* map) : InstanceScript(map)
         {
             SetHeaders(DataHeader);
             Clear();
@@ -181,7 +181,7 @@ public:
                         {
                             if (medivh->IsAlive())
                             {
-                                medivh->DealDamage(medivh, medivh->GetHealth(), NULL, DIRECT_DAMAGE, SPELL_SCHOOL_MASK_NORMAL, NULL, false);
+                                medivh->DealDamage(medivh, medivh->GetHealth(), nullptr, DIRECT_DAMAGE, SPELL_SCHOOL_MASK_NORMAL, nullptr, false);
                                 m_auiEncounter[0] = FAIL;
                                 m_auiEncounter[1] = NOT_STARTED;
                             }
@@ -271,13 +271,13 @@ public:
             Position pos = me->GetRandomNearPosition(10.0f);
 
             //normalize Z-level if we can, if rift is not at ground level.
-            pos.m_positionZ = std::max(me->GetMap()->GetHeight(pos.m_positionX, pos.m_positionY, MAX_HEIGHT), me->GetMap()->GetWaterLevel(pos.m_positionX, pos.m_positionY));
+            pos.m_positionZ = std::max(me->GetMap()->GetHeight(me->GetPhaseShift(), pos.m_positionX, pos.m_positionY, MAX_HEIGHT), me->GetMap()->GetWaterLevel(me->GetPhaseShift(), pos.m_positionX, pos.m_positionY));
 
             if (Creature* summon = me->SummonCreature(entry, pos, TEMPSUMMON_TIMED_OR_DEAD_DESPAWN, 600000))
                 return summon;
 
             TC_LOG_DEBUG("scripts", "Instance The Black Morass: What just happened there? No boss, no loot, no fun...");
-            return NULL;
+            return nullptr;
         }
 
         void DoSpawnPortal()
@@ -298,16 +298,16 @@ public:
                     TEMPSUMMON_CORPSE_DESPAWN, 0);
                 if (temp)
                 {
-                    temp->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NON_ATTACKABLE);
-                    temp->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NOT_SELECTABLE);
+                    temp->AddUnitFlag(UNIT_FLAG_NON_ATTACKABLE);
+                    temp->AddUnitFlag(UNIT_FLAG_NOT_SELECTABLE);
 
                     if (Creature* boss = SummonedPortalBoss(temp))
                     {
                         if (boss->GetEntry() == NPC_AEONUS)
-                            boss->AddThreat(medivh, 0.0f);
+                            boss->GetThreatManager().AddThreat(medivh, 0.0f);
                         else
                         {
-                            boss->AddThreat(temp, 0.0f);
+                            boss->GetThreatManager().AddThreat(temp, 0.0f);
                             temp->CastSpell(boss, SPELL_RIFT_CHANNEL, false);
                         }
                     }

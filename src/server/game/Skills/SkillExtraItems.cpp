@@ -1,6 +1,5 @@
 /*
- * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
- * Copyright (C) 2005-2009 MaNGOS <http://getmangos.com/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -19,9 +18,9 @@
 #include "SkillExtraItems.h"
 #include "DatabaseEnv.h"
 #include "Log.h"
-#include "Player.h"
 #include "ObjectMgr.h"
-#include <map>
+#include "Player.h"
+#include "SpellMgr.h"
 
 // some type definitions
 // no use putting them in the header file, they're only used in this .cpp
@@ -72,14 +71,14 @@ void LoadSkillPerfectItemTable()
 
         uint32 spellId = fields[0].GetUInt32();
 
-        if (!sSpellMgr->GetSpellInfo(spellId))
+        if (!sSpellMgr->GetSpellInfo(spellId, DIFFICULTY_NONE))
         {
             TC_LOG_ERROR("sql.sql", "Skill perfection data for spell %u has a non-existing spell id in the `skill_perfect_item_template`!", spellId);
             continue;
         }
 
         uint32 requiredSpecialization = fields[1].GetUInt32();
-        if (!sSpellMgr->GetSpellInfo(requiredSpecialization))
+        if (!sSpellMgr->GetSpellInfo(requiredSpecialization, DIFFICULTY_NONE))
         {
             TC_LOG_ERROR("sql.sql", "Skill perfection data for spell %u has a non-existing required specialization spell id %u in the `skill_perfect_item_template`!", spellId, requiredSpecialization);
             continue;
@@ -159,14 +158,14 @@ void LoadSkillExtraItemTable()
 
         uint32 spellId = fields[0].GetUInt32();
 
-        if (!sSpellMgr->GetSpellInfo(spellId))
+        if (!sSpellMgr->GetSpellInfo(spellId, DIFFICULTY_NONE))
         {
             TC_LOG_ERROR("sql.sql", "Skill specialization %u has a non-existing spell id in the `skill_extra_item_template`!", spellId);
             continue;
         }
 
         uint32 requiredSpecialization = fields[1].GetUInt32();
-        if (!sSpellMgr->GetSpellInfo(requiredSpecialization))
+        if (!sSpellMgr->GetSpellInfo(requiredSpecialization, DIFFICULTY_NONE))
         {
             TC_LOG_ERROR("sql.sql", "Skill specialization %u has a non-existing required specialization spell id %u in the `skill_extra_item_template`!", spellId, requiredSpecialization);
             continue;
@@ -207,9 +206,6 @@ bool CanCreatePerfectItem(Player* player, uint32 spellId, float &perfectCreateCh
         return false;
 
     SkillPerfectItemEntry const* thisEntry = &ret->second;
-    // lack of entry means no perfection proc possible
-    if (!thisEntry)
-        return false;
 
     // if you don't have the spell needed, then no procs for you
     if (!player->HasSpell(thisEntry->requiredSpecialization))
@@ -231,10 +227,6 @@ bool CanCreateExtraItems(Player* player, uint32 spellId, float &additionalChance
         return false;
 
     SkillExtraItemEntry const* specEntry = &ret->second;
-
-    // if no entry, then no extra items can be created
-    if (!specEntry)
-        return false;
 
     // the player doesn't have the required specialization, return false
     if (!player->HasSpell(specEntry->requiredSpecialization))

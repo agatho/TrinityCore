@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -78,6 +78,20 @@ void WorldPackets::Loot::LootItem::Read()
     }
 }
 
+void WorldPackets::Loot::MasterLootItem::Read()
+{
+    uint32 Count;
+    _worldPacket >> Count;
+    _worldPacket >> Target;
+
+    Loot.resize(Count);
+    for (uint32 i = 0; i < Count; ++i)
+    {
+        _worldPacket >> Loot[i].Object;
+        _worldPacket >> Loot[i].LootListID;
+    }
+}
+
 WorldPacket const* WorldPackets::Loot::LootRemoved::Write()
 {
     _worldPacket << Owner;
@@ -94,7 +108,8 @@ void WorldPackets::Loot::LootRelease::Read()
 
 WorldPacket const* WorldPackets::Loot::LootMoneyNotify::Write()
 {
-    _worldPacket << Money;
+    _worldPacket << uint64(Money);
+    _worldPacket << uint64(MoneyMod);
     _worldPacket.WriteBit(SoleLooter);
     _worldPacket.FlushBits();
 
@@ -197,6 +212,16 @@ WorldPacket const* WorldPackets::Loot::LootRollsComplete::Write()
 {
     _worldPacket << LootObj;
     _worldPacket << uint8(LootListID);
+
+    return &_worldPacket;
+}
+
+WorldPacket const* WorldPackets::Loot::MasterLootCandidateList::Write()
+{
+    _worldPacket << LootObj;
+    _worldPacket << uint32(Players.size());
+    for (ObjectGuid const& player : Players)
+        _worldPacket << player;
 
     return &_worldPacket;
 }

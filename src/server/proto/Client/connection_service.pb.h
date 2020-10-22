@@ -773,6 +773,27 @@ class TC_PROTO_API EchoRequest : public ::google::protobuf::Message {
   inline ::std::string* release_payload();
   inline void set_allocated_payload(::std::string* payload);
 
+  // optional .bgs.protocol.ProcessId forward = 4;
+  inline bool has_forward() const;
+  inline void clear_forward();
+  static const int kForwardFieldNumber = 4;
+  inline const ::bgs::protocol::ProcessId& forward() const;
+  inline ::bgs::protocol::ProcessId* mutable_forward();
+  inline ::bgs::protocol::ProcessId* release_forward();
+  inline void set_allocated_forward(::bgs::protocol::ProcessId* forward);
+
+  // optional string forward_client_id = 5;
+  inline bool has_forward_client_id() const;
+  inline void clear_forward_client_id();
+  static const int kForwardClientIdFieldNumber = 5;
+  inline const ::std::string& forward_client_id() const;
+  inline void set_forward_client_id(const ::std::string& value);
+  inline void set_forward_client_id(const char* value);
+  inline void set_forward_client_id(const char* value, size_t size);
+  inline ::std::string* mutable_forward_client_id();
+  inline ::std::string* release_forward_client_id();
+  inline void set_allocated_forward_client_id(::std::string* forward_client_id);
+
   // @@protoc_insertion_point(class_scope:bgs.protocol.connection.v1.EchoRequest)
  private:
   inline void set_has_time();
@@ -781,6 +802,10 @@ class TC_PROTO_API EchoRequest : public ::google::protobuf::Message {
   inline void clear_has_network_only();
   inline void set_has_payload();
   inline void clear_has_payload();
+  inline void set_has_forward();
+  inline void clear_has_forward();
+  inline void set_has_forward_client_id();
+  inline void clear_has_forward_client_id();
 
   ::google::protobuf::UnknownFieldSet _unknown_fields_;
 
@@ -788,6 +813,8 @@ class TC_PROTO_API EchoRequest : public ::google::protobuf::Message {
   mutable int _cached_size_;
   ::google::protobuf::uint64 time_;
   ::std::string* payload_;
+  ::bgs::protocol::ProcessId* forward_;
+  ::std::string* forward_client_id_;
   bool network_only_;
   friend void TC_PROTO_API protobuf_AddDesc_connection_5fservice_2eproto();
   friend void protobuf_AssignDesc_connection_5fservice_2eproto();
@@ -1147,25 +1174,24 @@ class TC_PROTO_API ConnectionService : public ServiceBase
   static google::protobuf::ServiceDescriptor const* descriptor();
 
   // client methods --------------------------------------------------
+  void Connect(::bgs::protocol::connection::v1::ConnectRequest const* request, std::function<void(::bgs::protocol::connection::v1::ConnectResponse const*)> responseCallback, bool client = false, bool server = false);
+  void Bind(::bgs::protocol::connection::v1::BindRequest const* request, std::function<void(::bgs::protocol::connection::v1::BindResponse const*)> responseCallback, bool client = false, bool server = false);
+  void Echo(::bgs::protocol::connection::v1::EchoRequest const* request, std::function<void(::bgs::protocol::connection::v1::EchoResponse const*)> responseCallback, bool client = false, bool server = false);
+  void ForceDisconnect(::bgs::protocol::connection::v1::DisconnectNotification const* request, bool client = false, bool server = false);
+  void KeepAlive(::bgs::protocol::NoData const* request, bool client = false, bool server = false);
+  void Encrypt(::bgs::protocol::connection::v1::EncryptRequest const* request, std::function<void(::bgs::protocol::NoData const*)> responseCallback, bool client = false, bool server = false);
+  void RequestDisconnect(::bgs::protocol::connection::v1::DisconnectRequest const* request, bool client = false, bool server = false);
 
-  void Connect(::bgs::protocol::connection::v1::ConnectRequest const* request, std::function<void(::bgs::protocol::connection::v1::ConnectResponse const*)> responseCallback);
-  void Bind(::bgs::protocol::connection::v1::BindRequest const* request, std::function<void(::bgs::protocol::connection::v1::BindResponse const*)> responseCallback);
-  void Echo(::bgs::protocol::connection::v1::EchoRequest const* request, std::function<void(::bgs::protocol::connection::v1::EchoResponse const*)> responseCallback);
-  void ForceDisconnect(::bgs::protocol::connection::v1::DisconnectNotification const* request);
-  void KeepAlive(::bgs::protocol::NoData const* request);
-  void Encrypt(::bgs::protocol::connection::v1::EncryptRequest const* request, std::function<void(::bgs::protocol::NoData const*)> responseCallback);
-  void RequestDisconnect(::bgs::protocol::connection::v1::DisconnectRequest const* request);
-  // server methods --------------------------------------------------
-
-  void CallServerMethod(uint32 token, uint32 methodId, MessageBuffer buffer) override final;
+  void CallServerMethod(uint32 token, uint32 methodId, MessageBuffer buffer) final;
 
  protected:
-  virtual uint32 HandleConnect(::bgs::protocol::connection::v1::ConnectRequest const* request, ::bgs::protocol::connection::v1::ConnectResponse* response);
-  virtual uint32 HandleBind(::bgs::protocol::connection::v1::BindRequest const* request, ::bgs::protocol::connection::v1::BindResponse* response);
-  virtual uint32 HandleEcho(::bgs::protocol::connection::v1::EchoRequest const* request, ::bgs::protocol::connection::v1::EchoResponse* response);
+  // server methods --------------------------------------------------
+  virtual uint32 HandleConnect(::bgs::protocol::connection::v1::ConnectRequest const* request, ::bgs::protocol::connection::v1::ConnectResponse* response, std::function<void(ServiceBase*, uint32, ::google::protobuf::Message const*)>& continuation);
+  virtual uint32 HandleBind(::bgs::protocol::connection::v1::BindRequest const* request, ::bgs::protocol::connection::v1::BindResponse* response, std::function<void(ServiceBase*, uint32, ::google::protobuf::Message const*)>& continuation);
+  virtual uint32 HandleEcho(::bgs::protocol::connection::v1::EchoRequest const* request, ::bgs::protocol::connection::v1::EchoResponse* response, std::function<void(ServiceBase*, uint32, ::google::protobuf::Message const*)>& continuation);
   virtual uint32 HandleForceDisconnect(::bgs::protocol::connection::v1::DisconnectNotification const* request);
   virtual uint32 HandleKeepAlive(::bgs::protocol::NoData const* request);
-  virtual uint32 HandleEncrypt(::bgs::protocol::connection::v1::EncryptRequest const* request, ::bgs::protocol::NoData* response);
+  virtual uint32 HandleEncrypt(::bgs::protocol::connection::v1::EncryptRequest const* request, ::bgs::protocol::NoData* response, std::function<void(ServiceBase*, uint32, ::google::protobuf::Message const*)>& continuation);
   virtual uint32 HandleRequestDisconnect(::bgs::protocol::connection::v1::DisconnectRequest const* request);
 
  private:
@@ -1938,6 +1964,123 @@ inline void EchoRequest::set_allocated_payload(::std::string* payload) {
     payload_ = const_cast< ::std::string*>(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   }
   // @@protoc_insertion_point(field_set_allocated:bgs.protocol.connection.v1.EchoRequest.payload)
+}
+
+// optional .bgs.protocol.ProcessId forward = 4;
+inline bool EchoRequest::has_forward() const {
+  return (_has_bits_[0] & 0x00000008u) != 0;
+}
+inline void EchoRequest::set_has_forward() {
+  _has_bits_[0] |= 0x00000008u;
+}
+inline void EchoRequest::clear_has_forward() {
+  _has_bits_[0] &= ~0x00000008u;
+}
+inline void EchoRequest::clear_forward() {
+  if (forward_ != NULL) forward_->::bgs::protocol::ProcessId::Clear();
+  clear_has_forward();
+}
+inline const ::bgs::protocol::ProcessId& EchoRequest::forward() const {
+  // @@protoc_insertion_point(field_get:bgs.protocol.connection.v1.EchoRequest.forward)
+  return forward_ != NULL ? *forward_ : *default_instance_->forward_;
+}
+inline ::bgs::protocol::ProcessId* EchoRequest::mutable_forward() {
+  set_has_forward();
+  if (forward_ == NULL) forward_ = new ::bgs::protocol::ProcessId;
+  // @@protoc_insertion_point(field_mutable:bgs.protocol.connection.v1.EchoRequest.forward)
+  return forward_;
+}
+inline ::bgs::protocol::ProcessId* EchoRequest::release_forward() {
+  clear_has_forward();
+  ::bgs::protocol::ProcessId* temp = forward_;
+  forward_ = NULL;
+  return temp;
+}
+inline void EchoRequest::set_allocated_forward(::bgs::protocol::ProcessId* forward) {
+  delete forward_;
+  forward_ = forward;
+  if (forward) {
+    set_has_forward();
+  } else {
+    clear_has_forward();
+  }
+  // @@protoc_insertion_point(field_set_allocated:bgs.protocol.connection.v1.EchoRequest.forward)
+}
+
+// optional string forward_client_id = 5;
+inline bool EchoRequest::has_forward_client_id() const {
+  return (_has_bits_[0] & 0x00000010u) != 0;
+}
+inline void EchoRequest::set_has_forward_client_id() {
+  _has_bits_[0] |= 0x00000010u;
+}
+inline void EchoRequest::clear_has_forward_client_id() {
+  _has_bits_[0] &= ~0x00000010u;
+}
+inline void EchoRequest::clear_forward_client_id() {
+  if (forward_client_id_ != &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    forward_client_id_->clear();
+  }
+  clear_has_forward_client_id();
+}
+inline const ::std::string& EchoRequest::forward_client_id() const {
+  // @@protoc_insertion_point(field_get:bgs.protocol.connection.v1.EchoRequest.forward_client_id)
+  return *forward_client_id_;
+}
+inline void EchoRequest::set_forward_client_id(const ::std::string& value) {
+  set_has_forward_client_id();
+  if (forward_client_id_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    forward_client_id_ = new ::std::string;
+  }
+  forward_client_id_->assign(value);
+  // @@protoc_insertion_point(field_set:bgs.protocol.connection.v1.EchoRequest.forward_client_id)
+}
+inline void EchoRequest::set_forward_client_id(const char* value) {
+  set_has_forward_client_id();
+  if (forward_client_id_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    forward_client_id_ = new ::std::string;
+  }
+  forward_client_id_->assign(value);
+  // @@protoc_insertion_point(field_set_char:bgs.protocol.connection.v1.EchoRequest.forward_client_id)
+}
+inline void EchoRequest::set_forward_client_id(const char* value, size_t size) {
+  set_has_forward_client_id();
+  if (forward_client_id_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    forward_client_id_ = new ::std::string;
+  }
+  forward_client_id_->assign(reinterpret_cast<const char*>(value), size);
+  // @@protoc_insertion_point(field_set_pointer:bgs.protocol.connection.v1.EchoRequest.forward_client_id)
+}
+inline ::std::string* EchoRequest::mutable_forward_client_id() {
+  set_has_forward_client_id();
+  if (forward_client_id_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    forward_client_id_ = new ::std::string;
+  }
+  // @@protoc_insertion_point(field_mutable:bgs.protocol.connection.v1.EchoRequest.forward_client_id)
+  return forward_client_id_;
+}
+inline ::std::string* EchoRequest::release_forward_client_id() {
+  clear_has_forward_client_id();
+  if (forward_client_id_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    return NULL;
+  } else {
+    ::std::string* temp = forward_client_id_;
+    forward_client_id_ = const_cast< ::std::string*>(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+    return temp;
+  }
+}
+inline void EchoRequest::set_allocated_forward_client_id(::std::string* forward_client_id) {
+  if (forward_client_id_ != &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    delete forward_client_id_;
+  }
+  if (forward_client_id) {
+    set_has_forward_client_id();
+    forward_client_id_ = forward_client_id;
+  } else {
+    clear_has_forward_client_id();
+    forward_client_id_ = const_cast< ::std::string*>(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  }
+  // @@protoc_insertion_point(field_set_allocated:bgs.protocol.connection.v1.EchoRequest.forward_client_id)
 }
 
 // -------------------------------------------------------------------

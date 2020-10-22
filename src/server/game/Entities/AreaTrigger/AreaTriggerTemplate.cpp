@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -23,11 +23,7 @@
 
 AreaTriggerScaleInfo::AreaTriggerScaleInfo()
 {
-    memset(OverrideScale, 0, sizeof(OverrideScale));
-    memset(ExtraScale, 0, sizeof(ExtraScale));
-
-    ExtraScale[5].AsFloat = 1.0000001f;
-    ExtraScale[6].AsInt32 = 1;
+    memset(Data.Raw, 0, sizeof(Data.Raw));
 }
 
 AreaTriggerTemplate::AreaTriggerTemplate()
@@ -65,9 +61,10 @@ void AreaTriggerTemplate::InitMaxSearchRadius()
             if (PolygonDatas.Height <= 0.0f)
                 PolygonDatas.Height = 1.0f;
 
-            for (G3D::Vector2 const& vertice : PolygonVertices)
+            Position center(0.0f, 0.0f);
+            for (TaggedPosition<Position::XY> const& vertice : PolygonVertices)
             {
-                float pointDist = vertice.length();
+                float pointDist = center.GetExactDist2d(vertice);
 
                 if (pointDist > MaxSearchRadius)
                     MaxSearchRadius = pointDist;
@@ -95,10 +92,20 @@ AreaTriggerMiscTemplate::AreaTriggerMiscTemplate()
     MorphCurveId = 0;
     FacingCurveId = 0;
 
+    AnimId = 0;
+    AnimKitId = 0;
+
     DecalPropertiesId = 0;
 
     TimeToTarget = 0;
     TimeToTargetScale = 0;
+
+    // legacy code from before it was known what each curve field does
+    // wtf? thats not how you pack curve data
+    float tmp = 1.0000001f;
+    memcpy(&ExtraScale.Data.Raw[5], &tmp, sizeof(tmp));
+    // also OverrideActive does nothing on ExtraScale
+    ExtraScale.Data.Structured.OverrideActive = 1;
 
     Template = nullptr;
 }

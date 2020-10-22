@@ -1,6 +1,5 @@
 /*
- * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
- * Copyright (C) 2005-2009 MaNGOS <http://getmangos.com/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -29,6 +28,23 @@ enum BG_WS_TimerOrScore
     BG_WS_FLAG_DROP_TIME    = 10000,
     BG_WS_SPELL_FORCE_TIME  = 600000,
     BG_WS_SPELL_BRUTAL_TIME = 900000
+};
+
+enum BG_WS_BroadcastTexts
+{
+    BG_WS_TEXT_START_ONE_MINUTE         = 10015,
+    BG_WS_TEXT_START_HALF_MINUTE        = 10016,
+    BG_WS_TEXT_BATTLE_HAS_BEGUN         = 10014,
+
+    BG_WS_TEXT_CAPTURED_HORDE_FLAG      = 9801,
+    BG_WS_TEXT_CAPTURED_ALLIANCE_FLAG   = 9802,
+    BG_WS_TEXT_FLAGS_PLACED             = 9803,
+    BG_WS_TEXT_ALLIANCE_FLAG_PICKED_UP  = 9804,
+    BG_WS_TEXT_ALLIANCE_FLAG_DROPPED    = 9805,
+    BG_WS_TEXT_HORDE_FLAG_PICKED_UP     = 9807,
+    BG_WS_TEXT_HORDE_FLAG_DROPPED       = 9806,
+    BG_WS_TEXT_ALLIANCE_FLAG_RETURNED   = 9808,
+    BG_WS_TEXT_HORDE_FLAG_RETURNED      = 9809,
 };
 
 enum BG_WS_Sound
@@ -176,10 +192,12 @@ struct BattlegroundWGScore final : public BattlegroundScore
             }
         }
 
-        void BuildObjectivesBlock(std::vector<int32>& stats) override
+        void BuildPvPLogPlayerDataPacket(WorldPackets::Battleground::PVPMatchStatistics::PVPMatchPlayerStatistics& playerData) const override
         {
-            stats.push_back(FlagCaptures);
-            stats.push_back(FlagReturns);
+            BattlegroundScore::BuildPvPLogPlayerDataPacket(playerData);
+
+            playerData.Stats.emplace_back(WS_OBJECTIVE_CAPTURE_FLAG, FlagCaptures);
+            playerData.Stats.emplace_back(WS_OBJECTIVE_RETURN_FLAG, FlagReturns);
         }
 
         uint32 GetAttr1() const final override { return FlagCaptures; }
@@ -193,7 +211,7 @@ class BattlegroundWS : public Battleground
 {
     public:
         /* Construction */
-        BattlegroundWS();
+        BattlegroundWS(BattlegroundTemplate const* battlegroundTemplate);
         ~BattlegroundWS();
 
         /* inherited from BattlegroundClass */
@@ -227,7 +245,7 @@ class BattlegroundWS : public Battleground
         bool SetupBattleground() override;
         void Reset() override;
         void EndBattleground(uint32 winner) override;
-        WorldSafeLocsEntry const* GetClosestGraveYard(Player* player) override;
+        WorldSafeLocsEntry const* GetClosestGraveyard(Player* player) override;
         WorldSafeLocsEntry const* GetExploitTeleportLocation(Team team) override;
 
         void UpdateFlagState(uint32 team, uint32 value);

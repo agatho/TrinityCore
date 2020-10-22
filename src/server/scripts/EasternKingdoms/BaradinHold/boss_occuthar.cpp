@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -16,11 +16,14 @@
  */
 
 #include "ScriptMgr.h"
-#include "ScriptedCreature.h"
-#include "Vehicle.h"
-#include "SpellScript.h"
-#include "SpellAuraEffects.h"
 #include "baradin_hold.h"
+#include "InstanceScript.h"
+#include "ObjectAccessor.h"
+#include "ScriptedCreature.h"
+#include "SpellAuraEffects.h"
+#include "SpellScript.h"
+#include "TemporarySummon.h"
+#include "Vehicle.h"
 
 enum Spells
 {
@@ -209,7 +212,7 @@ class FocusedFireTargetSelector : public std::unary_function<Unit *, bool>
 
         bool operator() (WorldObject* target)
         {
-            if (target == _victim && _me->getThreatManager().getThreatList().size() > 1)
+            if (target == _victim && _me->GetThreatManager().getThreatList().size() > 1)
                 return true;
 
             if (target->GetTypeId() != TYPEID_PLAYER)
@@ -267,9 +270,7 @@ class spell_occuthar_eyes_of_occuthar : public SpellScriptLoader
 
             bool Validate(SpellInfo const* spellInfo) override
             {
-                if (!sSpellMgr->GetSpellInfo(spellInfo->GetEffect(EFFECT_0)->CalcValue()))
-                    return false;
-                return true;
+                return ValidateSpellInfo({ uint32(spellInfo->GetEffect(EFFECT_0)->CalcValue()) });
             }
 
             bool Load() override
@@ -317,7 +318,7 @@ class spell_occuthar_eyes_of_occuthar_vehicle : public SpellScriptLoader
 
             bool Load() override
             {
-                return GetCaster()->GetInstanceScript() != NULL;
+                return InstanceHasScript(GetCaster(), BHScriptName);
             }
 
             void HandleScript()
@@ -363,7 +364,7 @@ class spell_occuthar_occuthars_destruction : public SpellScriptLoader
                 if (Unit* caster = GetCaster())
                 {
                     if (IsExpired())
-                        caster->CastSpell((Unit*)NULL, SPELL_OCCUTHARS_DESTUCTION, true, NULL, aurEff);
+                        caster->CastSpell(nullptr, SPELL_OCCUTHARS_DESTUCTION, true, nullptr, aurEff);
 
                     caster->ToCreature()->DespawnOrUnsummon(500);
                 }

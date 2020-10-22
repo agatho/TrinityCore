@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -57,7 +57,7 @@ public:
 
     struct instance_dire_maul_InstanceMapScript : public InstanceScript
     {
-        instance_dire_maul_InstanceMapScript(Map* map) : InstanceScript(map)
+        instance_dire_maul_InstanceMapScript(InstanceMap* map) : InstanceScript(map)
         {
             SetBossNumber(EncounterCount);
         }
@@ -67,7 +67,6 @@ public:
     {
         return new instance_dire_maul_InstanceMapScript(map);
     }
-
 };
 
 void AddSC_instance_dire_maul()

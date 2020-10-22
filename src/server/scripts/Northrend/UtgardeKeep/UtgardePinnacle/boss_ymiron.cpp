@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -16,10 +16,12 @@
  */
 
 #include "ScriptMgr.h"
+#include "MotionMaster.h"
+#include "ObjectAccessor.h"
 #include "ScriptedCreature.h"
-#include "utgarde_pinnacle.h"
 #include "SpellInfo.h"
-#include "SpellScript.h"
+#include "TemporarySummon.h"
+#include "utgarde_pinnacle.h"
 
 enum Spells
 {
@@ -171,7 +173,7 @@ public:
                 {
                     DoCast(ancestor, SPELL_CHANNEL_YMIRON_TO_SPIRIT);
                     ancestor->CastSpell(me, SPELL_CHANNEL_SPIRIT_TO_YMIRON, true);
-                    ancestor->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NON_ATTACKABLE | UNIT_FLAG_NOT_SELECTABLE);
+                    ancestor->AddUnitFlag(UnitFlags(UNIT_FLAG_NON_ATTACKABLE | UNIT_FLAG_NOT_SELECTABLE));
                     ancestor->SetDisableGravity(true);
                     ActiveAncestorGUID = ancestor->GetGUID();
                 }
@@ -191,7 +193,7 @@ public:
                 case NPC_AVENGING_SPIRIT:
                     if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0))
                     {
-                        summon->AddThreat(target, 0.0f);
+                        AddThreat(target, 0.0f, summon);
                         summon->AI()->AttackStart(target);
                     }
                     break;

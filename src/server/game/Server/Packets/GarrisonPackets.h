@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -122,7 +122,7 @@ namespace WorldPackets
             int32 Unknown = 0;
         };
 
-        struct GarrisonMissionAreaBonus
+        struct GarrisonMissionBonusAbility
         {
             uint32 GarrMssnBonusAbilityID = 0;
             time_t StartTime = time_t(0);
@@ -131,6 +131,7 @@ namespace WorldPackets
         struct GarrisonTalent
         {
             int32 GarrTalentID = 0;
+            int32 Rank = 0;
             time_t ResearchStartTime = time_t(0);
             int32 Flags = 0;
         };
@@ -142,17 +143,22 @@ namespace WorldPackets
             uint32 GarrSiteLevelID = 0;
             uint32 NumFollowerActivationsRemaining = 0;
             uint32 NumMissionsStartedToday = 0;   // might mean something else, but sending 0 here enables follower abilities "Increase success chance of the first mission of the day by %."
-            int32 FollowerSoftCap = 0;
             std::vector<GarrisonPlotInfo*> Plots;
             std::vector<GarrisonBuildingInfo const*> Buildings;
             std::vector<GarrisonFollower const*> Followers;
             std::vector<GarrisonMission const*> Missions;
             std::vector<std::vector<GarrisonMissionReward>> MissionRewards;
             std::vector<std::vector<GarrisonMissionReward>> MissionOvermaxRewards;
-            std::vector<GarrisonMissionAreaBonus const*> MissionAreaBonuses;
+            std::vector<GarrisonMissionBonusAbility const*> MissionAreaBonuses;
             std::vector<GarrisonTalent> Talents;
             std::vector<bool> CanStartMission;
             std::vector<int32> ArchivedMissions;
+        };
+
+        struct FollowerSoftCapInfo
+        {
+            int32 GarrFollowerTypeID;
+            uint32 Count;
         };
 
         class GetGarrisonInfoResult final : public ServerPacket
@@ -164,6 +170,7 @@ namespace WorldPackets
 
             uint32 FactionIndex = 0;
             std::vector<GarrisonInfo> Garrisons;
+            std::vector<FollowerSoftCapInfo> FollowerSoftCaps;
         };
 
         struct GarrisonRemoteBuildingInfo
@@ -230,7 +237,7 @@ namespace WorldPackets
         class GarrisonBuildingRemoved final : public ServerPacket
         {
         public:
-            GarrisonBuildingRemoved() : ServerPacket(SMSG_GARRISON_BUILDING_REMOVED, 4 + 4 + 4) { }
+            GarrisonBuildingRemoved() : ServerPacket(SMSG_GARRISON_BUILDING_REMOVED, 4 + 4 + 4 + 4) { }
 
             WorldPacket const* Write() override;
 
@@ -243,7 +250,7 @@ namespace WorldPackets
         class GarrisonLearnBlueprintResult final : public ServerPacket
         {
         public:
-            GarrisonLearnBlueprintResult() : ServerPacket(SMSG_GARRISON_LEARN_BLUEPRINT_RESULT, 4 + 4) { }
+            GarrisonLearnBlueprintResult() : ServerPacket(SMSG_GARRISON_LEARN_BLUEPRINT_RESULT, 4 + 4 + 4) { }
 
             WorldPacket const* Write() override;
 
@@ -347,7 +354,7 @@ namespace WorldPackets
         class GarrisonRemoveFollowerResult final : public ServerPacket
         {
         public:
-            GarrisonRemoveFollowerResult() : ServerPacket(SMSG_GARRISON_REMOVE_FOLLOWER_RESULT, 8 + 4) { }
+            GarrisonRemoveFollowerResult() : ServerPacket(SMSG_GARRISON_REMOVE_FOLLOWER_RESULT, 8 + 4 + 4 + 4) { }
 
             WorldPacket const* Write() override;
 

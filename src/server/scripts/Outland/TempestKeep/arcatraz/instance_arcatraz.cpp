@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -16,8 +16,10 @@
  */
 
 #include "ScriptMgr.h"
-#include "InstanceScript.h"
 #include "arcatraz.h"
+#include "Creature.h"
+#include "GameObject.h"
+#include "InstanceScript.h"
 
 DoorData const doorData[] =
 {
@@ -33,7 +35,7 @@ class instance_arcatraz : public InstanceMapScript
 
         struct instance_arcatraz_InstanceMapScript : public InstanceScript
         {
-            instance_arcatraz_InstanceMapScript(Map* map) : InstanceScript(map)
+            instance_arcatraz_InstanceMapScript(InstanceMap* map) : InstanceScript(map)
             {
                 SetHeaders(DataHeader);
                 SetBossNumber(EncounterCount);
@@ -64,12 +66,10 @@ class instance_arcatraz : public InstanceMapScript
 
             void OnGameObjectCreate(GameObject* go) override
             {
+                InstanceScript::OnGameObjectCreate(go);
+
                 switch (go->GetEntry())
                 {
-                    case GO_CONTAINMENT_CORE_SECURITY_FIELD_ALPHA:
-                    case GO_CONTAINMENT_CORE_SECURITY_FIELD_BETA:
-                        AddDoor(go, true);
-                        break;
                     case GO_STASIS_POD_ALPHA:
                         StasisPodGUIDs[0] = go->GetGUID();
                         break;
@@ -87,19 +87,6 @@ class instance_arcatraz : public InstanceMapScript
                         break;
                     case GO_WARDENS_SHIELD:
                         WardensShieldGUID = go->GetGUID();
-                        break;
-                    default:
-                        break;
-                }
-            }
-
-            void OnGameObjectRemove(GameObject* go) override
-            {
-                switch (go->GetEntry())
-                {
-                    case GO_CONTAINMENT_CORE_SECURITY_FIELD_ALPHA:
-                    case GO_CONTAINMENT_CORE_SECURITY_FIELD_BETA:
-                        AddDoor(go, false);
                         break;
                     default:
                         break;
@@ -207,4 +194,3 @@ void AddSC_instance_arcatraz()
 {
     new instance_arcatraz();
 }
-

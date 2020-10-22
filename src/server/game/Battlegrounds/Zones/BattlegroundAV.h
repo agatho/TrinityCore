@@ -1,6 +1,5 @@
 /*
- * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
- * Copyright (C) 2005-2009 MaNGOS <http://getmangos.com/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -53,6 +52,16 @@
 enum SharedActions
 {
     ACTION_BUFF_YELL    = -30001
+};
+
+enum BG_AV_BroadcastTexts
+{
+    BG_AV_TEXT_START_ONE_MINUTE     = 10638,
+    BG_AV_TEXT_START_HALF_MINUTE    = 10639,
+    BG_AV_TEXT_BATTLE_HAS_BEGUN     = 10640,
+
+    BG_AV_TEXT_ALLIANCE_NEAR_LOSE   = 23210,
+    BG_AV_TEXT_HORDE_NEAR_LOSE      = 23211
 };
 
 enum BG_AV_Sounds
@@ -1476,7 +1485,8 @@ enum BG_AV_Objectives
     AV_OBJECTIVE_ASSAULT_TOWER      = 61,
     AV_OBJECTIVE_ASSAULT_GRAVEYARD  = 63,
     AV_OBJECTIVE_DEFEND_TOWER       = 64,
-    AV_OBJECTIVE_DEFEND_GRAVEYARD   = 65
+    AV_OBJECTIVE_DEFEND_GRAVEYARD   = 65,
+    AV_OBJECTIVE_SECONDARY_OBJECTIVE= 82
 };
 
 struct StaticNodeInfo
@@ -1587,13 +1597,15 @@ struct BattlegroundAVScore final : public BattlegroundScore
             }
         }
 
-        void BuildObjectivesBlock(std::vector<int32>& stats) override
+        void BuildPvPLogPlayerDataPacket(WorldPackets::Battleground::PVPMatchStatistics::PVPMatchPlayerStatistics& playerData) const override
         {
-            stats.push_back(GraveyardsAssaulted);
-            stats.push_back(GraveyardsDefended);
-            stats.push_back(TowersAssaulted);
-            stats.push_back(TowersDefended);
-            stats.push_back(MinesCaptured);
+            BattlegroundScore::BuildPvPLogPlayerDataPacket(playerData);
+
+            playerData.Stats.emplace_back(AV_OBJECTIVE_ASSAULT_GRAVEYARD, GraveyardsAssaulted);
+            playerData.Stats.emplace_back(AV_OBJECTIVE_DEFEND_GRAVEYARD, GraveyardsDefended);
+            playerData.Stats.emplace_back(AV_OBJECTIVE_ASSAULT_TOWER, TowersAssaulted);
+            playerData.Stats.emplace_back(AV_OBJECTIVE_DEFEND_TOWER, TowersDefended);
+            playerData.Stats.emplace_back(AV_OBJECTIVE_SECONDARY_OBJECTIVE, MinesCaptured);
         }
 
         uint32 GetAttr1() const final override { return GraveyardsAssaulted; }
@@ -1612,7 +1624,7 @@ struct BattlegroundAVScore final : public BattlegroundScore
 class BattlegroundAV : public Battleground
 {
     public:
-        BattlegroundAV();
+        BattlegroundAV(BattlegroundTemplate const* battlegroundTemplate);
         ~BattlegroundAV();
 
         /* inherited from BattlegroundClass */
@@ -1638,7 +1650,7 @@ class BattlegroundAV : public Battleground
 
         void EndBattleground(uint32 winner) override;
 
-        WorldSafeLocsEntry const* GetClosestGraveYard(Player* player) override;
+        WorldSafeLocsEntry const* GetClosestGraveyard(Player* player) override;
         WorldSafeLocsEntry const* GetExploitTeleportLocation(Team team) override;
 
         // Achievement: Av perfection and Everything counts
@@ -1675,7 +1687,7 @@ class BattlegroundAV : public Battleground
         bool IsTower(BG_AV_Nodes node) { return m_Nodes[node].Tower; }
 
         /*mine*/
-        void ChangeMineOwner(uint8 mine, uint32 team, bool initial=false);
+        void ChangeMineOwner(uint8 mine, uint32 team, bool initial = false);
 
         /*worldstates*/
         void FillInitialWorldStates(WorldPackets::WorldState::InitWorldStates& packet) override;

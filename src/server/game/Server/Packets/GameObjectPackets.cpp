@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -66,6 +66,14 @@ WorldPacket const* WorldPackets::GameObject::GameObjectCustomAnim::Write()
     _worldPacket << uint32(CustomAnim);
     _worldPacket.WriteBit(PlayAsDespawn);
     _worldPacket.FlushBits();
+
+    return &_worldPacket;
+}
+
+WorldPacket const* WorldPackets::GameObject::GameObjectUILink::Write()
+{
+    _worldPacket << ObjectGUID;
+    _worldPacket << int32(UILink);
 
     return &_worldPacket;
 }

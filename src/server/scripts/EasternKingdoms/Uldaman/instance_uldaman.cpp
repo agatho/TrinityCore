@@ -1,6 +1,5 @@
 /*
- * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
- * Copyright (C) 2006-2007 ScriptDev2 <https://scriptdev2.svn.sourceforge.net/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -24,10 +23,16 @@ SDCategory: Uldaman
 EndScriptData */
 
 #include "ScriptMgr.h"
-#include "InstanceScript.h"
-#include "uldaman.h"
+#include "Creature.h"
 #include "CreatureAI.h"
+#include "GameObject.h"
+#include "InstanceScript.h"
 #include "Log.h"
+#include "Map.h"
+#include "MotionMaster.h"
+#include "ObjectAccessor.h"
+#include "uldaman.h"
+#include <sstream>
 
 enum Spells
 {
@@ -52,11 +57,11 @@ const Position IronayaPoint = { -231.228f, 246.6135f, -49.01617f, 0.0f };
 class instance_uldaman : public InstanceMapScript
 {
     public:
-        instance_uldaman() : InstanceMapScript("instance_uldaman", 70) { }
+        instance_uldaman() : InstanceMapScript(UldamanScriptName, 70) { }
 
         struct instance_uldaman_InstanceMapScript : public InstanceScript
         {
-            instance_uldaman_InstanceMapScript(Map* map) : InstanceScript(map)
+            instance_uldaman_InstanceMapScript(InstanceMap* map) : InstanceScript(map)
             {
                 SetHeaders(DataHeader);
                 memset(&m_auiEncounter, 0, sizeof(m_auiEncounter));
@@ -117,7 +122,7 @@ class instance_uldaman : public InstanceMapScript
 
                     case GO_ANCIENT_VAULT_DOOR:
                         go->SetGoState(GO_STATE_READY);
-                        go->SetUInt32Value(GAMEOBJECT_FLAGS, 33);
+                        go->SetFlags(GameObjectFlags(GO_FLAG_IN_USE | GO_FLAG_NODESPAWN));
                         ancientVaultDoor = go->GetGUID();
 
                         if (m_auiEncounter[1] == DONE)
@@ -137,7 +142,7 @@ class instance_uldaman : public InstanceMapScript
                         if (m_auiEncounter[2] == DONE)
                         {
                             HandleGameObject(ObjectGuid::Empty, true, go);
-                            go->SetUInt32Value(GAMEOBJECT_FLAGS, GO_FLAG_INTERACT_COND);
+                            go->AddFlag(GO_FLAG_INTERACT_COND);
                         }
                         break;
                 }
@@ -145,9 +150,9 @@ class instance_uldaman : public InstanceMapScript
 
             void SetFrozenState(Creature* creature)
             {
-                creature->setFaction(35);
+                creature->SetFaction(FACTION_FRIENDLY);
                 creature->RemoveAllAuras();
-                creature->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NOT_SELECTABLE);
+                creature->AddUnitFlag(UNIT_FLAG_NOT_SELECTABLE);
                 creature->SetControlled(true, UNIT_STATE_ROOT);
                 creature->AddAura(SPELL_MINION_FREEZE_ANIM, creature);
             }
@@ -167,7 +172,7 @@ class instance_uldaman : public InstanceMapScript
                 if (!go)
                     return;
 
-                go->SetUInt32Value(GAMEOBJECT_FLAGS, GO_FLAG_INTERACT_COND);
+                go->AddFlag(GO_FLAG_INTERACT_COND);
             }
 
             void ActivateStoneKeepers()
@@ -180,8 +185,8 @@ class instance_uldaman : public InstanceMapScript
                         if (!target || !target->IsAlive())
                             continue;
                         target->SetControlled(false, UNIT_STATE_ROOT);
-                        target->setFaction(14);
-                        target->RemoveFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NOT_SELECTABLE);
+                        target->SetFaction(FACTION_MONSTER);
+                        target->RemoveUnitFlag(UNIT_FLAG_NOT_SELECTABLE);
                         target->RemoveAura(SPELL_MINION_FREEZE_ANIM);
 
                         return;        // only want the first one we find
@@ -201,11 +206,11 @@ class instance_uldaman : public InstanceMapScript
                 for (GuidVector::const_iterator i = archaedasWallMinions.begin(); i != archaedasWallMinions.end(); ++i)
                 {
                     Creature* target = instance->GetCreature(*i);
-                    if (!target || !target->IsAlive() || target->getFaction() == 14)
+                    if (!target || !target->IsAlive() || target->GetFaction() == FACTION_MONSTER)
                         continue;
                     target->SetControlled(false, UNIT_STATE_ROOT);
-                    target->RemoveFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NOT_SELECTABLE);
-                    target->setFaction(14);
+                    target->RemoveUnitFlag(UNIT_FLAG_NOT_SELECTABLE);
+                    target->SetFaction(FACTION_MONSTER);
                     target->RemoveAura(SPELL_MINION_FREEZE_ANIM);
                     archaedas->CastSpell(target, SPELL_AWAKEN_VAULT_WALKER, true);
                     target->CastSpell(target, SPELL_ARCHAEDAS_AWAKEN, true);
@@ -221,30 +226,27 @@ class instance_uldaman : public InstanceMapScript
                 for (GuidVector::const_iterator i = archaedasWallMinions.begin(); i != archaedasWallMinions.end(); ++i)
                 {
                     Creature* target = instance->GetCreature(*i);
-                    if (!target || target->isDead() || target->getFaction() != 14)
+                    if (!target || target->isDead() || target->GetFaction() != 14)
                         continue;
-                    target->setDeathState(JUST_DIED);
-                    target->RemoveCorpse();
+                    target->DespawnOrUnsummon();
                 }
 
                 // Vault Walkers
                 for (GuidVector::const_iterator i = vaultWalkers.begin(); i != vaultWalkers.end(); ++i)
                 {
                     Creature* target = instance->GetCreature(*i);
-                    if (!target || target->isDead() || target->getFaction() != 14)
+                    if (!target || target->isDead() || target->GetFaction() != 14)
                         continue;
-                    target->setDeathState(JUST_DIED);
-                    target->RemoveCorpse();
+                    target->DespawnOrUnsummon();
                 }
 
                 // Earthen Guardians
                 for (GuidVector::const_iterator i = earthenGuardians.begin(); i != earthenGuardians.end(); ++i)
                 {
                     Creature* target = instance->GetCreature(*i);
-                    if (!target || target->isDead() || target->getFaction() != 14)
+                    if (!target || target->isDead() || target->GetFaction() != 14)
                         continue;
-                    target->setDeathState(JUST_DIED);
-                    target->RemoveCorpse();
+                    target->DespawnOrUnsummon();
                 }
             }
 
@@ -268,9 +270,9 @@ class instance_uldaman : public InstanceMapScript
                 if (!ironaya)
                     return;
 
-                ironaya->setFaction(415);
+                ironaya->SetFaction(FACTION_TITAN);
                 ironaya->SetControlled(false, UNIT_STATE_ROOT);
-                ironaya->RemoveFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NOT_SELECTABLE);
+                ironaya->RemoveUnitFlag(UNIT_FLAG_NOT_SELECTABLE);
 
                 ironaya->GetMotionMaster()->Clear();
                 ironaya->GetMotionMaster()->MovePoint(0, IronayaPoint);
@@ -417,7 +419,7 @@ class instance_uldaman : public InstanceMapScript
                 return str_data;
             }
 
-            void Load(const char* in) override
+            void Load(char const* in) override
             {
                 if (!in)
                 {

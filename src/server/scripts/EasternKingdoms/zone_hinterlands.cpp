@@ -1,6 +1,5 @@
 /*
- * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
- * Copyright (C) 2006-2009 ScriptDev2 <https://scriptdev2.svn.sourceforge.net/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -28,9 +27,9 @@ npc_oox09hl
 EndContentData */
 
 #include "ScriptMgr.h"
-#include "ScriptedCreature.h"
-#include "ScriptedEscortAI.h"
+#include "MotionMaster.h"
 #include "Player.h"
+#include "ScriptedEscortAI.h"
 
 /*######
 ## npc_oox09hl
@@ -45,9 +44,7 @@ enum eOOX
     SAY_OOX_END             = 4,
     QUEST_RESQUE_OOX_09     = 836,
     NPC_MARAUDING_OWL       = 7808,
-    NPC_VILE_AMBUSHER       = 7809,
-    FACTION_ESCORTEE_A      = 774,
-    FACTION_ESCORTEE_H      = 775
+    NPC_VILE_AMBUSHER       = 7809
 };
 
 class npc_oox09hl : public CreatureScript
@@ -55,9 +52,9 @@ class npc_oox09hl : public CreatureScript
 public:
     npc_oox09hl() : CreatureScript("npc_oox09hl") { }
 
-    struct npc_oox09hlAI : public npc_escortAI
+    struct npc_oox09hlAI : public EscortAI
     {
-        npc_oox09hlAI(Creature* creature) : npc_escortAI(creature) { }
+        npc_oox09hlAI(Creature* creature) : EscortAI(creature) { }
 
         void Reset() override { }
 
@@ -74,18 +71,18 @@ public:
             summoned->GetMotionMaster()->MovePoint(0, me->GetPositionX(), me->GetPositionY(), me->GetPositionZ());
         }
 
-        void sQuestAccept(Player* player, Quest const* quest) override
+        void QuestAccept(Player* player, Quest const* quest) override
         {
             if (quest->GetQuestId() == QUEST_RESQUE_OOX_09)
             {
                 me->SetStandState(UNIT_STAND_STATE_STAND);
-                me->setFaction(player->GetTeam() == ALLIANCE ? FACTION_ESCORTEE_A : FACTION_ESCORTEE_H);
+                me->SetFaction(player->GetTeam() == ALLIANCE ? FACTION_ESCORTEE_A_PASSIVE : FACTION_ESCORTEE_H_PASSIVE);
                 Talk(SAY_OOX_START, player);
-                npc_escortAI::Start(false, false, player->GetGUID(), quest);
+                EscortAI::Start(false, false, player->GetGUID(), quest);
             }
         }
 
-        void WaypointReached(uint32 waypointId) override
+        void WaypointReached(uint32 waypointId, uint32 /*pathId*/) override
         {
             switch (waypointId)
             {
@@ -103,7 +100,7 @@ public:
             }
         }
 
-        void WaypointStart(uint32 pointId) override
+        void WaypointStarted(uint32 pointId, uint32 /*pathId*/) override
         {
             switch (pointId)
             {
@@ -144,8 +141,7 @@ enum Sharpbeak
     SPELL_EJECT_ALL_PASSENGERS    = 50630
 };
 
-uint32 const campPathSize = 12;
-G3D::Vector3 const campPath[campPathSize] =
+Position const campPath[] =
 {
     { -75.40077f, -4037.111f, 114.6418f },
     { -68.80193f, -4034.235f, 123.6844f },
@@ -160,9 +156,9 @@ G3D::Vector3 const campPath[campPathSize] =
     { -169.123f, -3582.08f, 282.866f },
     { -241.8403f, -3625.01f, 247.4203f }
 };
+size_t constexpr campPathSize = std::extent<decltype(campPath)>::value;
 
-uint32 const jinthaalorPathSize = 20;
-G3D::Vector3 const jinthaalorPath[jinthaalorPathSize] =
+Position const jinthaalorPath[] =
 {
     { -249.4681f, -3632.487f, 232.6947f },
     { -241.606f, -3627.713f, 236.61870f },
@@ -185,6 +181,7 @@ G3D::Vector3 const jinthaalorPath[jinthaalorPathSize] =
     { -76.90625f, -4040.207f, 126.0433f },
     { -77.51563f, -4022.026f, 123.2135f }
 };
+size_t constexpr jinthaalorPathSize = std::extent<decltype(jinthaalorPath)>::value;
 
 class npc_sharpbeak : public CreatureScript
 {
@@ -211,11 +208,11 @@ public:
             switch (me->GetEntry())
             {
                 case NPC_SHARPBEAK_CAMP:
-                    me->GetMotionMaster()->MoveSmoothPath(campPathSize, campPath, campPathSize, false);
+                    me->GetMotionMaster()->MoveSmoothPath(uint32(campPathSize), campPath, campPathSize, false);
                     endPoint = campPathSize;
                     break;
                 case NPC_SHARPBEAK_JINTHAALOR:
-                    me->GetMotionMaster()->MoveSmoothPath(jinthaalorPathSize, jinthaalorPath, jinthaalorPathSize, false, true);
+                    me->GetMotionMaster()->MoveSmoothPath(uint32(jinthaalorPathSize), jinthaalorPath, jinthaalorPathSize, false, true);
                     endPoint = jinthaalorPathSize;
                     break;
             }
@@ -228,8 +225,9 @@ public:
                 DoCast(SPELL_EJECT_ALL_PASSENGERS);
             }
         }
-        private:
-            uint8 endPoint;
+
+    private:
+        size_t endPoint;
     };
 
     CreatureAI* GetAI(Creature* creature) const override

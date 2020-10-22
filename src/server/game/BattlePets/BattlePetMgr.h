@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -107,7 +107,7 @@ public:
     static uint8 GetDefaultPetQuality(uint32 species);
 
     void LoadFromDB(PreparedQueryResult pets, PreparedQueryResult slots);
-    void SaveToDB(SQLTransaction& trans);
+    void SaveToDB(LoginDatabaseTransaction& trans);
 
     BattlePet* GetPet(ObjectGuid guid);
     void AddPet(uint32 species, uint32 creatureId, uint16 breed, uint8 quality, uint16 level = 1);
@@ -115,21 +115,23 @@ public:
 
     uint8 GetPetCount(uint32 species) const;
 
-    WorldPackets::BattlePet::BattlePetSlot* GetSlot(uint8 slot) { return &_slots[slot]; }
+    WorldPackets::BattlePet::BattlePetSlot* GetSlot(uint8 slot) { return slot < _slots.size() ? &_slots[slot] : nullptr; }
     void UnlockSlot(uint8 slot);
 
     WorldSession* GetOwner() const { return _owner; }
 
     uint16 GetTrapLevel() const { return _trapLevel; }
-    std::vector<BattlePet> GetLearnedPets() const;
-    std::vector<WorldPackets::BattlePet::BattlePetSlot> GetSlots() const { return _slots; }
+    uint16 GetMaxPetLevel() const;
+    std::vector<WorldPackets::BattlePet::BattlePetSlot> const& GetSlots() const { return _slots; }
 
     void CageBattlePet(ObjectGuid guid);
     void HealBattlePetsPct(uint8 pct);
 
     void SummonPet(ObjectGuid guid);
+    void DismissPet();
 
-    void SendUpdates(std::vector<BattlePet> pets, bool petAdded);
+    void SendJournal();
+    void SendUpdates(std::vector<std::reference_wrapper<BattlePet>> pets, bool petAdded);
     void SendError(BattlePetError error, uint32 creatureId);
 
 private:

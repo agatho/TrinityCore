@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -24,6 +24,8 @@
 
 namespace Movement
 {
+    template<class index_type>
+    class Spline;
     class MoveSpline;
 }
 
@@ -31,6 +33,12 @@ namespace WorldPackets
 {
     namespace Movement
     {
+        struct MovementAck
+        {
+            MovementInfo Status;
+            int32 AckIndex = 0;
+        };
+
         class ClientPlayerMovement final : public ClientPacket
         {
         public:
@@ -38,7 +46,7 @@ namespace WorldPackets
 
             void Read() override;
 
-            MovementInfo movementInfo;
+            MovementInfo Status;
         };
 
         class TC_GAME_API MoveUpdate final : public ServerPacket
@@ -48,7 +56,7 @@ namespace WorldPackets
 
             WorldPacket const* Write() override;
 
-            MovementInfo* movementInfo = nullptr;
+            MovementInfo* Status = nullptr;
         };
 
         struct MonsterSplineFilterKey
@@ -73,6 +81,14 @@ namespace WorldPackets
             uint32 SpellVisualID = 0;
             uint32 ProgressCurveID = 0;
             uint32 ParabolicCurveID = 0;
+            float JumpGravity = 0.0f;
+        };
+
+        struct MonsterSplineJumpExtraData
+        {
+            float JumpGravity = 0.0f;
+            uint32 StartTime = 0;
+            uint32 Duration = 0;
         };
 
         struct MovementSpline
@@ -83,8 +99,7 @@ namespace WorldPackets
             uint32 TierTransStartTime   = 0;
             int32 Elapsed               = 0;
             uint32 MoveTime             = 0;
-            float JumpGravity           = 0.0f;
-            uint32 SpecialTime          = 0;
+            uint32 FadeObjectTime       = 0;
             std::vector<TaggedPosition<Position::XYZ>> Points;   // Spline path
             uint8 Mode                  = 0;    // Spline mode - actually always 0 in this packet - Catmullrom mode appears only in SMSG_UPDATE_OBJECT. In this packet it is determined by flags
             uint8 VehicleExitVoluntary  = 0;
@@ -93,6 +108,7 @@ namespace WorldPackets
             std::vector<TaggedPosition<Position::PackedXYZ>> PackedDeltas;
             Optional<MonsterSplineFilter> SplineFilter;
             Optional<MonsterSplineSpellEffectExtraData> SpellEffectExtraData;
+            Optional<MonsterSplineJumpExtraData> JumpExtraData;
             float FaceDirection         = 0.0f;
             ObjectGuid FaceGUID;
             TaggedPosition<Position::XYZ> FaceSpot;
@@ -111,6 +127,9 @@ namespace WorldPackets
         {
         public:
             static void WriteCreateObjectSplineDataBlock(::Movement::MoveSpline const& moveSpline, ByteBuffer& data);
+            static void WriteCreateObjectAreaTriggerSpline(::Movement::Spline<int32> const& spline, ByteBuffer& data);
+
+            static void WriteMovementForceWithDirection(MovementForce const& movementForce, ByteBuffer& data, Position const* objectPosition = nullptr);
         };
 
         class MonsterMove final : public ServerPacket
@@ -157,7 +176,7 @@ namespace WorldPackets
 
             WorldPacket const* Write() override;
 
-            MovementInfo* movementInfo = nullptr;
+            MovementInfo* Status = nullptr;
             float Speed = 1.0f;
         };
 
@@ -196,6 +215,7 @@ namespace WorldPackets
             WorldPacket const* Write() override;
 
             int32 MapID = -1;
+            TaggedPosition<Position::XYZ> OldMapPosition;
             Optional<ShipTransferPending> Ship;
             Optional<int32> TransferSpellID;
         };
@@ -257,16 +277,6 @@ namespace WorldPackets
             uint8 PreloadWorld = 0;
         };
 
-        struct MovementForce
-        {
-            ObjectGuid ID;
-            TaggedPosition<Position::XYZ> Origin;
-            TaggedPosition<Position::XYZ> Direction;
-            uint32 TransportID  = 0;
-            float Magnitude     = 0;
-            uint8 Type          = 0;
-        };
-
         class MoveUpdateTeleport final : public ServerPacket
         {
         public:
@@ -274,8 +284,8 @@ namespace WorldPackets
 
             WorldPacket const* Write() override;
 
-            MovementInfo* movementInfo = nullptr;
-            std::vector<MovementForce> MovementForces;
+            MovementInfo* Status = nullptr;
+            ::MovementForces::Container const* MovementForces = nullptr;
             Optional<float> SwimBackSpeed;
             Optional<float> FlightSpeed;
             Optional<float> SwimSpeed;
@@ -287,25 +297,71 @@ namespace WorldPackets
             Optional<float> PitchRate;
         };
 
-        class MoveUpdateApplyMovementForce final : public ServerPacket
+        class MoveApplyMovementForce final : public ServerPacket
         {
         public:
-            MoveUpdateApplyMovementForce() : ServerPacket(SMSG_MOVE_UPDATE_APPLY_MOVEMENT_FORCE) { }
+            MoveApplyMovementForce() : ServerPacket(SMSG_MOVE_APPLY_MOVEMENT_FORCE, 16 + 4 + 16 + 12 + 12 + 4 + 4 + 1) { }
 
             WorldPacket const* Write() override;
 
-            MovementInfo* movementInfo = nullptr;
+            ObjectGuid MoverGUID;
+            int32 SequenceIndex = 0;
+            MovementForce const* Force = nullptr;
+        };
+
+        class MoveApplyMovementForceAck final : public ClientPacket
+        {
+        public:
+            MoveApplyMovementForceAck(WorldPacket&& packet) : ClientPacket(CMSG_MOVE_APPLY_MOVEMENT_FORCE_ACK, std::move(packet)) { }
+
+            void Read() override;
+
+            MovementAck Ack;
             MovementForce Force;
+        };
+
+        class MoveRemoveMovementForce final : public ServerPacket
+        {
+        public:
+            MoveRemoveMovementForce() : ServerPacket(SMSG_MOVE_REMOVE_MOVEMENT_FORCE, 16 + 4 + 16) { }
+
+            WorldPacket const* Write() override;
+
+            ObjectGuid MoverGUID;
+            int32 SequenceIndex = 0;
+            ObjectGuid ID;
+        };
+
+        class MoveRemoveMovementForceAck final : public ClientPacket
+        {
+        public:
+            MoveRemoveMovementForceAck(WorldPacket&& packet) : ClientPacket(CMSG_MOVE_REMOVE_MOVEMENT_FORCE_ACK, std::move(packet)) { }
+
+            void Read() override;
+
+            MovementAck Ack;
+            ObjectGuid ID;
+        };
+
+        class MoveUpdateApplyMovementForce final : public ServerPacket
+        {
+        public:
+            MoveUpdateApplyMovementForce() : ServerPacket(SMSG_MOVE_UPDATE_APPLY_MOVEMENT_FORCE, sizeof(MovementInfo) + 16 + 12 + 12 + 4 + 4 + 1) { }
+
+            WorldPacket const* Write() override;
+
+            MovementInfo* Status = nullptr;
+            MovementForce const* Force = nullptr;
         };
 
         class MoveUpdateRemoveMovementForce final : public ServerPacket
         {
         public:
-            MoveUpdateRemoveMovementForce() : ServerPacket(SMSG_MOVE_UPDATE_REMOVE_MOVEMENT_FORCE) { }
+            MoveUpdateRemoveMovementForce() : ServerPacket(SMSG_MOVE_UPDATE_REMOVE_MOVEMENT_FORCE, sizeof(MovementInfo) + 16) { }
 
             WorldPacket const* Write() override;
 
-            MovementInfo* movementInfo = nullptr;
+            MovementInfo* Status = nullptr;
             ObjectGuid TriggerGUID;
         };
 
@@ -319,12 +375,6 @@ namespace WorldPackets
             ObjectGuid MoverGUID;
             int32 AckIndex = 0;
             int32 MoveTime = 0;
-        };
-
-        struct MovementAck
-        {
-            MovementInfo movementInfo;
-            int32 AckIndex = 0;
         };
 
         class MovementAckMessage final : public ClientPacket
@@ -394,7 +444,7 @@ namespace WorldPackets
 
             WorldPacket const* Write() override;
 
-            MovementInfo* movementInfo = nullptr;
+            MovementInfo* Status = nullptr;
         };
 
         class MoveKnockBackAck final : public ClientPacket
@@ -438,7 +488,7 @@ namespace WorldPackets
 
             WorldPacket const* Write() override;
 
-            MovementInfo* movementInfo = nullptr;
+            MovementInfo* Status = nullptr;
             float Scale = 1.0f;
             float Height = 1.0f;
         };
@@ -496,7 +546,7 @@ namespace WorldPackets
 
             void Read() override;
 
-            MovementInfo movementInfo;
+            MovementInfo Status;
             int32 SplineID = 0;
         };
 
@@ -580,7 +630,7 @@ namespace WorldPackets
                 Optional<int32> VehicleRecID;
                 Optional<CollisionHeightInfo> CollisionHeight;
                 Optional<MovementForce> MovementForce_;
-                Optional<ObjectGuid> Unknown;
+                Optional<ObjectGuid> MovementForceGUID;
             };
 
             MoveSetCompoundState() : ServerPacket(SMSG_MOVE_SET_COMPOUND_STATE, 4 + 1) { }
@@ -604,5 +654,6 @@ ByteBuffer& operator<<(ByteBuffer& data, MovementInfo const& movementInfo);
 ByteBuffer& operator>>(ByteBuffer& data, MovementInfo::TransportInfo& transportInfo);
 ByteBuffer& operator<<(ByteBuffer& data, MovementInfo::TransportInfo const& transportInfo);
 ByteBuffer& operator>>(ByteBuffer& data, WorldPackets::Movement::MovementAck& movementAck);
+ByteBuffer& operator<<(ByteBuffer& data, MovementForce const& movementForce);
 
 #endif // MovementPackets_h__

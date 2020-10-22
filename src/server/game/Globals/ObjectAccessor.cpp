@@ -1,6 +1,5 @@
 /*
- * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
- * Copyright (C) 2005-2009 MaNGOS <http://getmangos.com/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -60,7 +59,7 @@ T* HashMapHolder<T>::Find(ObjectGuid guid)
     boost::shared_lock<boost::shared_mutex> lock(*GetLock());
 
     typename MapType::iterator itr = GetContainer().find(guid);
-    return (itr != GetContainer().end()) ? itr->second : NULL;
+    return (itr != GetContainer().end()) ? itr->second : nullptr;
 }
 
 template<class T>
@@ -157,9 +156,11 @@ Object* ObjectAccessor::GetObjectByTypeMask(WorldObject const& p, ObjectGuid con
         case HighGuid::AreaTrigger:
             if (typemask & TYPEMASK_AREATRIGGER)
                 return GetAreaTrigger(p, guid);
+            break;
         case HighGuid::Conversation:
             if (typemask & TYPEMASK_CONVERSATION)
                 return GetConversation(p, guid);
+            break;
         case HighGuid::Corpse:
             break;
         default:
@@ -247,18 +248,13 @@ Creature* ObjectAccessor::GetCreatureOrPetOrVehicle(WorldObject const& u, Object
     if (guid.IsCreatureOrVehicle())
         return GetCreature(u, guid);
 
-    return NULL;
+    return nullptr;
 }
 
 Player* ObjectAccessor::FindPlayer(ObjectGuid const& guid)
 {
     Player* player = HashMapHolder<Player>::Find(guid);
     return player && player->IsInWorld() ? player : nullptr;
-}
-
-Player* ObjectAccessor::FindConnectedPlayer(ObjectGuid const& guid)
-{
-    return HashMapHolder<Player>::Find(guid);
 }
 
 Player* ObjectAccessor::FindPlayerByName(std::string const& name)
@@ -268,6 +264,17 @@ Player* ObjectAccessor::FindPlayerByName(std::string const& name)
         return nullptr;
 
     return player;
+}
+
+Player* ObjectAccessor::FindPlayerByLowGUID(ObjectGuid::LowType lowguid)
+{
+    ObjectGuid guid = ObjectGuid::Create<HighGuid::Player>(lowguid);
+    return ObjectAccessor::FindPlayer(guid);
+}
+
+Player* ObjectAccessor::FindConnectedPlayer(ObjectGuid const& guid)
+{
+    return HashMapHolder<Player>::Find(guid);
 }
 
 Player* ObjectAccessor::FindConnectedPlayerByName(std::string const& name)

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -20,6 +20,7 @@
 #include "DatabaseEnv.h"
 #include "DB2Stores.h"
 #include "Log.h"
+#include "ObjectMgr.h"
 #include "Timer.h"
 
 namespace
@@ -36,6 +37,7 @@ void ConversationDataStore::LoadConversationTemplates()
     _conversationTemplateStore.clear();
 
     std::unordered_map<uint32, std::vector<ConversationActorTemplate const*>> actorsByConversation;
+    std::unordered_map<uint32, std::vector<ObjectGuid::LowType>> actorGuidsByConversation;
 
     if (QueryResult actorTemplates = WorldDatabase.Query("SELECT Id, CreatureId, CreatureModelId FROM conversation_actor_template"))
     {
@@ -60,7 +62,7 @@ void ConversationDataStore::LoadConversationTemplates()
         TC_LOG_INFO("server.loading", ">> Loaded 0 Conversation actor templates. DB table `conversation_actor_template` is empty.");
     }
 
-    if (QueryResult lineTemplates = WorldDatabase.Query("SELECT Id, StartTime, UiCameraID, ActorIdx, Unk FROM conversation_line_template"))
+    if (QueryResult lineTemplates = WorldDatabase.Query("SELECT Id, StartTime, UiCameraID, ActorIdx, Flags FROM conversation_line_template"))
     {
         uint32 oldMSTime = getMSTime();
 
@@ -80,8 +82,8 @@ void ConversationDataStore::LoadConversationTemplates()
             conversationLine.Id         = id;
             conversationLine.StartTime  = fields[1].GetUInt32();
             conversationLine.UiCameraID = fields[2].GetUInt32();
-            conversationLine.ActorIdx   = fields[3].GetUInt16();
-            conversationLine.Unk        = fields[4].GetUInt16();
+            conversationLine.ActorIdx   = fields[3].GetUInt8();
+            conversationLine.Flags      = fields[4].GetUInt8();
         }
         while (lineTemplates->NextRow());
 
@@ -92,7 +94,7 @@ void ConversationDataStore::LoadConversationTemplates()
         TC_LOG_INFO("server.loading", ">> Loaded 0 Conversation line templates. DB table `conversation_line_template` is empty.");
     }
 
-    if (QueryResult actors = WorldDatabase.Query("SELECT ConversationId, ConversationActorId, Idx FROM conversation_actors"))
+    if (QueryResult actors = WorldDatabase.Query("SELECT ConversationId, ConversationActorId, ConversationActorGuid, Idx FROM conversation_actors"))
     {
         uint32 oldMSTime = getMSTime();
         uint32 count = 0;
@@ -101,20 +103,43 @@ void ConversationDataStore::LoadConversationTemplates()
         {
             Field* fields = actors->Fetch();
 
-            uint32 conversationId = fields[0].GetUInt32();
-            uint32 actorId = fields[1].GetUInt32();
-            uint16 idx = fields[2].GetUInt16();
+            uint32 conversationId         = fields[0].GetUInt32();
+            uint32 actorId                = fields[1].GetUInt32();
+            ObjectGuid::LowType actorGuid = fields[2].GetUInt64();
+            uint16 idx                    = fields[3].GetUInt16();
 
-            if (ConversationActorTemplate const* conversationActorTemplate = Trinity::Containers::MapGetValuePtr(_conversationActorTemplateStore, actorId))
+            if (actorId != 0 && actorGuid != 0)
             {
-                std::vector<ConversationActorTemplate const*>& actors = actorsByConversation[conversationId];
-                if (actors.size() <= idx)
-                    actors.resize(idx + 1);
-                actors[idx] = conversationActorTemplate;
-                ++count;
+                TC_LOG_ERROR("sql.sql", "Table `conversation_actors` references both actor (ID: %u) and actorGuid (GUID: " UI64FMTD ") for Conversation %u, skipped.", actorId, actorGuid, conversationId);
+                continue;
             }
-            else
-                TC_LOG_ERROR("sql.sql", "Table `conversation_actors` references an invalid actor (ID: %u) for Conversation %u, skipped", actorId, conversationId);
+
+            if (actorId != 0)
+            {
+                if (ConversationActorTemplate const* conversationActorTemplate = Trinity::Containers::MapGetValuePtr(_conversationActorTemplateStore, actorId))
+                {
+                    std::vector<ConversationActorTemplate const*>& actors = actorsByConversation[conversationId];
+                    if (actors.size() <= idx)
+                        actors.resize(idx + 1);
+                    actors[idx] = conversationActorTemplate;
+                    ++count;
+                }
+                else
+                    TC_LOG_ERROR("sql.sql", "Table `conversation_actors` references an invalid actor (ID: %u) for Conversation %u, skipped", actorId, conversationId);
+            }
+            else if (actorGuid != 0)
+            {
+                if (sObjectMgr->GetCreatureData(actorGuid))
+                {
+                    std::vector<ObjectGuid::LowType>& guids = actorGuidsByConversation[conversationId];
+                    if (guids.size() <= idx)
+                        guids.resize(idx + 1);
+                    guids[idx] = actorGuid;
+                    ++count;
+                }
+                else
+                    TC_LOG_ERROR("sql.sql", "Table `conversation_actors` references an invalid creature guid (GUID: " UI64FMTD ") for Conversation %u, skipped", actorGuid, conversationId);
+            }
         }
         while (actors->NextRow());
 
@@ -125,7 +150,7 @@ void ConversationDataStore::LoadConversationTemplates()
         TC_LOG_INFO("server.loading", ">> Loaded 0 Conversation actors. DB table `conversation_actors` is empty.");
     }
 
-    if (QueryResult templates = WorldDatabase.Query("SELECT Id, FirstLineId, LastLineEndTime, VerifiedBuild FROM conversation_template"))
+    if (QueryResult templates = WorldDatabase.Query("SELECT Id, FirstLineId, LastLineEndTime, TextureKitId, ScriptName FROM conversation_template"))
     {
         uint32 oldMSTime = getMSTime();
 
@@ -137,8 +162,11 @@ void ConversationDataStore::LoadConversationTemplates()
             conversationTemplate.Id                 = fields[0].GetUInt32();
             conversationTemplate.FirstLineId        = fields[1].GetUInt32();
             conversationTemplate.LastLineEndTime    = fields[2].GetUInt32();
+            conversationTemplate.TextureKitId       = fields[3].GetUInt32();
+            conversationTemplate.ScriptId           = sObjectMgr->GetScriptId(fields[4].GetString());
 
             conversationTemplate.Actors = std::move(actorsByConversation[conversationTemplate.Id]);
+            conversationTemplate.ActorGuids = std::move(actorGuidsByConversation[conversationTemplate.Id]);
 
             ConversationLineEntry const* currentConversationLine = sConversationLineStore.LookupEntry(conversationTemplate.FirstLineId);
             if (!currentConversationLine)
@@ -151,13 +179,13 @@ void ConversationDataStore::LoadConversationTemplates()
                 else
                     TC_LOG_ERROR("sql.sql", "Table `conversation_line_template` has missing template for line (ID: %u) in Conversation %u, skipped", currentConversationLine->ID, conversationTemplate.Id);
 
-                if (!currentConversationLine->NextLineID)
+                if (!currentConversationLine->NextConversationLineID)
                     break;
 
-                currentConversationLine = sConversationLineStore.AssertEntry(currentConversationLine->NextLineID);
+                currentConversationLine = sConversationLineStore.AssertEntry(currentConversationLine->NextConversationLineID);
             }
 
-            _conversationTemplateStore[conversationTemplate.Id] = conversationTemplate;
+            _conversationTemplateStore[conversationTemplate.Id] = std::move(conversationTemplate);
         }
         while (templates->NextRow());
 

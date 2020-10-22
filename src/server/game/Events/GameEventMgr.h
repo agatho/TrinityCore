@@ -1,6 +1,5 @@
 /*
- * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
- * Copyright (C) 2005-2009 MaNGOS <http://getmangos.com/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -85,25 +84,16 @@ struct ModelEquip
     uint8 equipement_id_prev;
 };
 
-struct NPCVendorEntry
-{
-    uint32 entry;                                           // creature entry
-    uint32 item;                                            // item id
-    int32  maxcount;                                        // 0 for infinite
-    uint32 incrtime;                                        // time for restore items amount if maxcount != 0
-    uint32 ExtendedCost;
-    uint8 Type;                                             // 1 item, 2 currency
-};
-
-class Player;
 class Creature;
+class Player;
 class Quest;
+struct VendorItem;
 
 class TC_GAME_API GameEventMgr
 {
     private:
         GameEventMgr();
-        ~GameEventMgr() { }
+        ~GameEventMgr();
 
     public:
         static GameEventMgr* instance();
@@ -127,7 +117,6 @@ class TC_GAME_API GameEventMgr
         void HandleWorldEventGossip(Player* player, Creature* c);
         uint64 GetNPCFlag(Creature* cr);
         uint32 GetNpcTextId(uint32 guid);
-        uint16 GetEventIdForQuest(Quest const* quest) const;
     private:
         void SendWorldStateUpdate(Player* player, uint16 event_id);
         void AddActiveEvent(uint16 event_id) { m_ActiveEvents.insert(event_id); }
@@ -160,8 +149,8 @@ class TC_GAME_API GameEventMgr
         typedef std::pair<uint32, uint32> QuestRelation;
         typedef std::list<QuestRelation> QuestRelList;
         typedef std::vector<QuestRelList> GameEventQuestMap;
-        typedef std::list<NPCVendorEntry> NPCVendorList;
-        typedef std::vector<NPCVendorList> GameEventNPCVendorMap;
+        typedef std::unordered_map<uint32, std::vector<VendorItem>> NPCVendorMap;
+        typedef std::vector<NPCVendorMap> GameEventNPCVendorMap;
         typedef std::map<uint32 /*quest id*/, GameEventQuestToEventConditionNum> QuestIdToEventConditionMap;
         typedef std::pair<ObjectGuid::LowType /*guid*/, uint64 /*npcflag*/> GuidNPCFlagPair;
         typedef std::list<GuidNPCFlagPair> NPCFlagList;
@@ -179,7 +168,6 @@ class TC_GAME_API GameEventMgr
         QuestIdToEventConditionMap mQuestToEventConditions;
         GameEventNPCFlagMap mGameEventNPCFlags;
         ActiveEvents m_ActiveEvents;
-        std::unordered_map<uint32, uint16> _questToEventLinks;
         bool isSystemInit;
     public:
         GameEventGuidMap  mGameEventCreatureGuids;
@@ -192,4 +180,3 @@ TC_GAME_API bool IsHolidayActive(HolidayIds id);
 TC_GAME_API bool IsEventActive(uint16 event_id);
 
 #endif
-

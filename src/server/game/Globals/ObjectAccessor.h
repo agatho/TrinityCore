@@ -1,6 +1,5 @@
 /*
- * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
- * Copyright (C) 2005-2009 MaNGOS <http://getmangos.com/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -48,6 +47,7 @@ class TC_GAME_API HashMapHolder
     HashMapHolder() { }
 
 public:
+
     typedef std::unordered_map<ObjectGuid, T*> MapType;
 
     static void Insert(T* o);
@@ -84,6 +84,7 @@ namespace ObjectAccessor
     // ACCESS LIKE THAT IS NOT THREAD SAFE
     TC_GAME_API Player* FindPlayer(ObjectGuid const&);
     TC_GAME_API Player* FindPlayerByName(std::string const& name);
+    TC_GAME_API Player* FindPlayerByLowGUID(ObjectGuid::LowType lowguid);
 
     // this returns Player even if he is not in world, for example teleporting
     TC_GAME_API Player* FindConnectedPlayer(ObjectGuid const&);
@@ -114,4 +115,3 @@ namespace ObjectAccessor
 };
 
 #endif
-

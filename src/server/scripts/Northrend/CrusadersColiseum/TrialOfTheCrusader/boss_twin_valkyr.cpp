@@ -1,6 +1,5 @@
 /*
- * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
- * Copyright (C) 2006-2010 ScriptDev2 <https://scriptdev2.svn.sourceforge.net/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -21,14 +20,15 @@
 //    - Hardcoded bullets spawner
 
 #include "ScriptMgr.h"
+#include "CellImpl.h"
+#include "GridNotifiersImpl.h"
+#include "InstanceScript.h"
+#include "MotionMaster.h"
+#include "ObjectAccessor.h"
 #include "ScriptedCreature.h"
 #include "ScriptedGossip.h"
-#include "SpellScript.h"
 #include "SpellAuraEffects.h"
-#include "GridNotifiers.h"
-#include "GridNotifiersImpl.h"
-#include "Cell.h"
-#include "CellImpl.h"
+#include "SpellScript.h"
 #include "trial_of_the_crusader.h"
 
 enum Texts
@@ -167,7 +167,7 @@ struct boss_twin_baseAI : public BossAI
 
     void Reset() override
     {
-        me->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NON_ATTACKABLE | UNIT_FLAG_NOT_SELECTABLE);
+        me->AddUnitFlag(UnitFlags(UNIT_FLAG_NON_ATTACKABLE | UNIT_FLAG_NOT_SELECTABLE));
         me->SetReactState(REACT_PASSIVE);
         me->ModifyAuraState(AuraState, true);
         /* Uncomment this once that they are floating above the ground
@@ -193,7 +193,8 @@ struct boss_twin_baseAI : public BossAI
         switch (uiId)
         {
             case 1:
-                me->RemoveFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NON_ATTACKABLE | UNIT_FLAG_IMMUNE_TO_PC | UNIT_FLAG_NOT_SELECTABLE);
+                me->RemoveUnitFlag(UnitFlags(UNIT_FLAG_NON_ATTACKABLE | UNIT_FLAG_NOT_SELECTABLE));
+                me->SetImmuneToPC(false);
                 me->SetReactState(REACT_AGGRESSIVE);
                 break;
             default:
@@ -235,13 +236,13 @@ struct boss_twin_baseAI : public BossAI
         {
             if (!pSister->IsAlive())
             {
-                me->SetFlag(OBJECT_DYNAMIC_FLAGS, UNIT_DYNFLAG_LOOTABLE);
-                pSister->SetFlag(OBJECT_DYNAMIC_FLAGS, UNIT_DYNFLAG_LOOTABLE);
+                me->AddDynamicFlag(UNIT_DYNFLAG_LOOTABLE);
+                pSister->AddDynamicFlag(UNIT_DYNFLAG_LOOTABLE);
                 _JustDied();
             }
             else
             {
-                me->RemoveFlag(OBJECT_DYNAMIC_FLAGS, UNIT_DYNFLAG_LOOTABLE);
+                me->RemoveDynamicFlag(UNIT_DYNFLAG_LOOTABLE);
                 instance->SetBossState(BOSS_VALKIRIES, SPECIAL);
             }
         }
@@ -309,7 +310,7 @@ struct boss_twin_baseAI : public BossAI
                 events.ScheduleEvent(EVENT_TWIN_SPIKE, 20 * IN_MILLISECONDS);
                 break;
             case EVENT_TOUCH:
-                if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0, 200.0f, true, OtherEssenceSpellId))
+                if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0, 200.0f, true, true, OtherEssenceSpellId))
                     me->CastCustomSpell(TouchSpellId, SPELLVALUE_MAX_TARGETS, 1, target, false);
                 events.ScheduleEvent(EVENT_TOUCH, urand(10 * IN_MILLISECONDS, 15 * IN_MILLISECONDS));
                 break;
@@ -443,7 +444,7 @@ class boss_fjola : public CreatureScript
 
         CreatureAI* GetAI(Creature* creature) const override
         {
-            return GetInstanceAI<boss_fjolaAI>(creature);
+            return GetTrialOfTheCrusaderAI<boss_fjolaAI>(creature);
         }
 };
 
@@ -476,7 +477,7 @@ class boss_eydis : public CreatureScript
 
         CreatureAI* GetAI(Creature* creature) const override
         {
-            return GetInstanceAI<boss_eydisAI>(creature);
+            return GetTrialOfTheCrusaderAI<boss_eydisAI>(creature);
         }
 };
 
@@ -506,20 +507,20 @@ class npc_essence_of_twin : public CreatureScript
 
                 return spellReturned;
             }
+
+            bool GossipHello(Player* player) override
+            {
+                player->RemoveAurasDueToSpell(GetData(ESSENCE_REMOVE));
+                player->CastSpell(player, GetData(ESSENCE_APPLY), true);
+                CloseGossipMenuFor(player);
+                return true;
+            }
         };
 
         CreatureAI* GetAI(Creature* creature) const override
         {
-            return new npc_essence_of_twinAI(creature);
+            return GetTrialOfTheCrusaderAI<npc_essence_of_twinAI>(creature);
         };
-
-        bool OnGossipHello(Player* player, Creature* creature) override
-        {
-            player->RemoveAurasDueToSpell(creature->GetAI()->GetData(ESSENCE_REMOVE));
-            player->CastSpell(player, creature->GetAI()->GetData(ESSENCE_APPLY), true);
-            CloseGossipMenuFor(player);
-            return true;
-        }
 };
 
 struct npc_unleashed_ballAI : public ScriptedAI
@@ -550,7 +551,7 @@ struct npc_unleashed_ballAI : public ScriptedAI
 
     void Reset() override
     {
-        me->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NON_ATTACKABLE | UNIT_FLAG_NOT_SELECTABLE);
+        me->AddUnitFlag(UnitFlags(UNIT_FLAG_NON_ATTACKABLE | UNIT_FLAG_NOT_SELECTABLE));
         me->SetReactState(REACT_PASSIVE);
         me->SetDisableGravity(true);
         me->SetCanFly(true);
@@ -609,7 +610,7 @@ class npc_unleashed_dark : public CreatureScript
 
         CreatureAI* GetAI(Creature* creature) const override
         {
-            return new npc_unleashed_darkAI(creature);
+            return GetTrialOfTheCrusaderAI<npc_unleashed_darkAI>(creature);
         }
 };
 
@@ -630,9 +631,9 @@ class npc_unleashed_light : public CreatureScript
                     {
                         DoCastAOE(SPELL_UNLEASHED_LIGHT);
                         me->GetMotionMaster()->MoveIdle();
-                        me->DespawnOrUnsummon(1*IN_MILLISECONDS);
+                        me->DespawnOrUnsummon(1 * IN_MILLISECONDS);
                     }
-                    RangeCheckTimer = 0.5*IN_MILLISECONDS;
+                    RangeCheckTimer = IN_MILLISECONDS / 2;
                 }
                 else
                     RangeCheckTimer -= diff;
@@ -641,7 +642,7 @@ class npc_unleashed_light : public CreatureScript
 
         CreatureAI* GetAI(Creature* creature) const override
         {
-            return new npc_unleashed_lightAI(creature);
+            return GetTrialOfTheCrusaderAI<npc_unleashed_lightAI>(creature);
         }
 };
 
@@ -670,7 +671,7 @@ class npc_bullet_controller : public CreatureScript
 
         CreatureAI* GetAI(Creature* creature) const override
         {
-            return new npc_bullet_controllerAI(creature);
+            return GetTrialOfTheCrusaderAI<npc_bullet_controllerAI>(creature);
         }
 };
 
@@ -729,21 +730,17 @@ class spell_valkyr_essences : public SpellScriptLoader
         {
             PrepareAuraScript(spell_valkyr_essences_AuraScript);
 
-        public:
-            spell_valkyr_essences_AuraScript()
-            {
-                spellId = 0;
-            }
-
-        private:
-            uint32 spellId;
-
             bool Load() override
             {
-                spellId = SPELL_SURGE_OF_SPEED;
-                if (!sSpellMgr->GetSpellInfo(spellId))
-                    return false;
-                return true;
+                return ValidateSpellInfo(
+                {
+                    SPELL_SURGE_OF_SPEED,
+                    SPELL_LIGHT_VORTEX_DAMAGE,
+                    SPELL_DARK_VORTEX_DAMAGE,
+                    SPELL_POWERING_UP,
+                    SPELL_UNLEASHED_DARK,
+                    SPELL_UNLEASHED_LIGHT
+                });
             }
 
             void Absorb(AuraEffect* /*aurEff*/, DamageInfo & dmgInfo, uint32 & /*absorbAmount*/)
@@ -753,54 +750,44 @@ class spell_valkyr_essences : public SpellScriptLoader
                     if (dmgInfo.GetSpellInfo())
                     {
                         if (urand(0, 99) < 5)
-                            GetTarget()->CastSpell(GetTarget(), spellId, true);
+                            GetTarget()->CastSpell(GetTarget(), SPELL_SURGE_OF_SPEED, true);
 
                         // Twin Vortex part
-                        uint32 lightVortex = SPELL_LIGHT_VORTEX_DAMAGE;
-                        uint32 darkVortex = SPELL_DARK_VORTEX_DAMAGE;
                         int32 stacksCount = dmgInfo.GetSpellInfo()->GetEffect(EFFECT_0)->CalcValue() / 1000 - 1;
 
-                        if (lightVortex && darkVortex && stacksCount)
+                        if (stacksCount)
                         {
-                            if (dmgInfo.GetSpellInfo()->Id == darkVortex || dmgInfo.GetSpellInfo()->Id == lightVortex)
+                            if (dmgInfo.GetSpellInfo()->Id == SPELL_DARK_VORTEX_DAMAGE || dmgInfo.GetSpellInfo()->Id == SPELL_LIGHT_VORTEX_DAMAGE)
                             {
-                                Aura* pAura = owner->GetAura(SPELL_POWERING_UP);
-                                if (pAura)
+                                if (Aura* aura = owner->GetAura(SPELL_POWERING_UP))
                                 {
-                                    pAura->ModStackAmount(stacksCount);
+                                    aura->ModStackAmount(stacksCount);
                                     owner->CastSpell(owner, SPELL_POWERING_UP, true);
                                 }
                                 else
                                 {
                                     owner->CastSpell(owner, SPELL_POWERING_UP, true);
-                                    if (Aura* pTemp = owner->GetAura(SPELL_POWERING_UP))
-                                        pTemp->ModStackAmount(stacksCount);
+                                    if (Aura* newAura = owner->GetAura(SPELL_POWERING_UP))
+                                        newAura->ModStackAmount(stacksCount);
                                 }
                             }
                         }
 
                         // Picking floating balls
-                        uint32 unleashedDark = SPELL_UNLEASHED_DARK;
-                        uint32 unleashedLight = SPELL_UNLEASHED_LIGHT;
-
-                        if (unleashedDark && unleashedLight)
+                        if (dmgInfo.GetSpellInfo()->Id == SPELL_UNLEASHED_DARK || dmgInfo.GetSpellInfo()->Id == SPELL_UNLEASHED_LIGHT)
                         {
-                            if (dmgInfo.GetSpellInfo()->Id == unleashedDark || dmgInfo.GetSpellInfo()->Id == unleashedLight)
+                            // need to do the things in this order, else players might have 100 charges of Powering Up without anything happening
+                            if (Aura* aura = owner->GetAura(SPELL_POWERING_UP))
                             {
-                                // need to do the things in this order, else players might have 100 charges of Powering Up without anything happening
-                                Aura* pAura = owner->GetAura(SPELL_POWERING_UP);
-                                if (pAura)
-                                {
-                                    // 2 lines together add the correct amount of buff stacks
-                                    pAura->ModStackAmount(stacksCount);
-                                    owner->CastSpell(owner, SPELL_POWERING_UP, true);
-                                }
-                                else
-                                {
-                                    owner->CastSpell(owner, SPELL_POWERING_UP, true);
-                                    if (Aura* pTemp = owner->GetAura(SPELL_POWERING_UP))
-                                        pTemp->ModStackAmount(stacksCount);
-                                }
+                                // 2 lines together add the correct amount of buff stacks
+                                aura->ModStackAmount(stacksCount);
+                                owner->CastSpell(owner, SPELL_POWERING_UP, true);
+                            }
+                            else
+                            {
+                                owner->CastSpell(owner, SPELL_POWERING_UP, true);
+                                if (Aura* newAura = owner->GetAura(SPELL_POWERING_UP))
+                                    newAura->ModStackAmount(stacksCount);
                             }
                         }
                     }

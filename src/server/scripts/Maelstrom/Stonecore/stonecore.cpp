@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -15,12 +15,14 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "ObjectGuid.h"
-#include "ObjectMgr.h"
 #include "ScriptMgr.h"
+#include "GameObject.h"
+#include "InstanceScript.h"
+#include "MotionMaster.h"
+#include "ObjectMgr.h"
+#include "Player.h"
 #include "ScriptedCreature.h"
 #include "SpellScript.h"
-#include "Player.h"
 #include "stonecore.h"
 
 enum Texts
@@ -158,7 +160,7 @@ class npc_sc_millhouse_manastorm : public CreatureScript
                         break;
                 }
 
-                me->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_IN_COMBAT);
+                me->AddUnitFlag(UNIT_FLAG_IN_COMBAT);
             }
 
             void MovementInform(uint32 type, uint32 pointId) override
@@ -171,12 +173,12 @@ class npc_sc_millhouse_manastorm : public CreatureScript
 
                 me->RemoveAllAuras();
                 me->CombatStop(true);
-                me->DeleteThreatList();
+                me->GetThreatManager().ClearAllThreat();
 
                 switch (pointId)
                 {
                     case POINT_MILLHOUSE_GROUP_2:
-                        me->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_IN_COMBAT);
+                        me->AddUnitFlag(UNIT_FLAG_IN_COMBAT);
                         me->SetReactState(REACT_AGGRESSIVE);
                         if (Creature* worldtrigger = me->FindNearestCreature(NPC_WORLDTRIGGER, 200.0f))
                             me->SetFacingToObject(worldtrigger);
@@ -185,7 +187,7 @@ class npc_sc_millhouse_manastorm : public CreatureScript
                         events.ScheduleEvent(EVENT_READY_FOR_COMBAT, 10000);
                         break;
                     case POINT_MILLHOUSE_GROUP_3:
-                        me->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_IN_COMBAT);
+                        me->AddUnitFlag(UNIT_FLAG_IN_COMBAT);
                         me->SetReactState(REACT_AGGRESSIVE);
                         me->SetFacingTo(5.931499f);
                         DoCast(me, SPELL_ANCHOR_HERE);
@@ -234,7 +236,7 @@ class npc_sc_millhouse_manastorm : public CreatureScript
                             events.ScheduleEvent(EVENT_FEAR, 18000);
                             break;
                         case EVENT_READY_FOR_COMBAT:
-                            me->RemoveFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_IN_COMBAT);
+                            me->RemoveUnitFlag(UNIT_FLAG_IN_COMBAT);
                             me->SetReactState(REACT_AGGRESSIVE);
                             ScheduleEvents();
                             break;
@@ -264,7 +266,7 @@ class npc_sc_millhouse_manastorm : public CreatureScript
 
         CreatureAI* GetAI(Creature* creature) const override
         {
-            return GetInstanceAI<npc_sc_millhouse_manastormAI>(creature);
+            return GetStonecoreAI<npc_sc_millhouse_manastormAI>(creature);
         }
 };
 
@@ -343,7 +345,7 @@ class spell_sc_twilight_documents : public SpellScriptLoader
             void SpawnGameObject(SpellEffIndex /*effIndex*/)
             {
                 if (WorldLocation* loc = GetHitDest())
-                    GetCaster()->SummonGameObject(GAMEOBJECT_TWILIGHT_DOCUMENTS, *loc, G3D::Quat(), 7200);
+                    GetCaster()->SummonGameObject(GAMEOBJECT_TWILIGHT_DOCUMENTS, *loc, QuaternionData::fromEulerAnglesZYX(loc->GetOrientation(), 0.0f, 0.0f), 7200);
             }
 
             void Register() override

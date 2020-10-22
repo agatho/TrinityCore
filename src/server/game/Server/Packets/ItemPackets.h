@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -19,10 +19,13 @@
 #define ItemPackets_h__
 
 #include "Packet.h"
-#include "Item.h"
+#include "DBCEnums.h"
+#include "ItemDefines.h"
 #include "ItemPacketsCommon.h"
 #include "PacketUtilities.h"
+#include "ObjectGuid.h"
 #include "Optional.h"
+#include <array>
 
 struct VoidStorageItem;
 
@@ -344,9 +347,9 @@ namespace WorldPackets
             int32 Quantity                  = 0;
             int32 QuantityInInventory       = 0;
             int32 DungeonEncounterID       = 0;
+            int32 BattlePetSpeciesID        = 0;
             int32 BattlePetBreedID          = 0;
             uint32 BattlePetBreedQuality    = 0;
-            int32 BattlePetSpeciesID        = 0;
             int32 BattlePetLevel            = 0;
             ObjectGuid ItemGUID;
             bool Pushed                     = false;
@@ -421,6 +424,21 @@ namespace WorldPackets
             uint32 Cooldown = 0;
         };
 
+        class EnchantmentLog final : public ServerPacket
+        {
+        public:
+            EnchantmentLog() : ServerPacket(SMSG_ENCHANTMENT_LOG, 0) { }
+
+            WorldPacket const* Write() override;
+
+            ObjectGuid Owner;
+            ObjectGuid Caster;
+            ObjectGuid ItemGUID;
+            int32 ItemID = 0;
+            int32 Enchantment = 0;
+            int32 EnchantSlot = 0;
+        };
+
         class ItemEnchantTimeUpdate final : public ServerPacket
         {
         public:
@@ -444,30 +462,6 @@ namespace WorldPackets
             ObjectGuid ItemGuid;
         };
 
-        class UpgradeItem final : public ClientPacket
-        {
-        public:
-            UpgradeItem(WorldPacket&& packet) : ClientPacket(CMSG_UPGRADE_ITEM, std::move(packet)) { }
-
-            void Read() override;
-
-            ObjectGuid ItemMaster;
-            ObjectGuid ItemGUID;
-            int32 ContainerSlot = 0;
-            int32 UpgradeID = 0;
-            int32 Slot = 0;
-        };
-
-        class ItemUpgradeResult final : public ServerPacket
-        {
-        public:
-            ItemUpgradeResult() : ServerPacket(SMSG_ITEM_UPGRADE_RESULT, 1) { }
-
-            WorldPacket const* Write() override;
-
-            bool Success = false;
-        };
-
         class SocketGems final : public ClientPacket
         {
         public:
@@ -476,17 +470,67 @@ namespace WorldPackets
             void Read() override;
 
             ObjectGuid ItemGuid;
-            ObjectGuid GemItem[MAX_GEM_SOCKETS];
+            std::array<ObjectGuid, MAX_ITEM_PROTO_SOCKETS> GemItem = { };
         };
 
-        class SocketGemsResult final : public ServerPacket
+        class SocketGemsSuccess final : public ServerPacket
         {
         public:
-            SocketGemsResult() : ServerPacket(SMSG_SOCKET_GEMS, 16 + 4 * 3 + 4) { }
+            SocketGemsSuccess() : ServerPacket(SMSG_SOCKET_GEMS_SUCCESS, 16 + 4 * 3 + 4) { }
 
             WorldPacket const* Write() override;
 
             ObjectGuid Item;
+        };
+
+        class SortBags final : public ClientPacket
+        {
+        public:
+            SortBags(WorldPacket&& packet) : ClientPacket(CMSG_SORT_BAGS, std::move(packet)) { }
+
+            void Read() override { }
+        };
+
+        class SortBankBags final : public ClientPacket
+        {
+        public:
+            SortBankBags(WorldPacket&& packet) : ClientPacket(CMSG_SORT_BANK_BAGS, std::move(packet)) { }
+
+            void Read() override { }
+        };
+
+        class SortReagentBankBags final : public ClientPacket
+        {
+        public:
+            SortReagentBankBags(WorldPacket&& packet) : ClientPacket(CMSG_SORT_REAGENT_BANK_BAGS, std::move(packet)) { }
+
+            void Read() override { }
+        };
+
+        class BagCleanupFinished final : public ServerPacket
+        {
+        public:
+            BagCleanupFinished() : ServerPacket(SMSG_BAG_CLEANUP_FINISHED, 0) { }
+
+            WorldPacket const* Write() override { return &_worldPacket; }
+        };
+
+        class RemoveNewItem final : public ClientPacket
+        {
+        public:
+            RemoveNewItem(WorldPacket&& packet) : ClientPacket(CMSG_REMOVE_NEW_ITEM, std::move(packet)) { }
+
+            void Read() override;
+
+            ObjectGuid ItemGuid;
+        };
+
+        class InventoryFullOverflow final : public ServerPacket
+        {
+        public:
+            InventoryFullOverflow() : ServerPacket(SMSG_INVENTORY_FULL_OVERFLOW, 0) { }
+
+            WorldPacket const* Write() override { return &_worldPacket; }
         };
     }
 }

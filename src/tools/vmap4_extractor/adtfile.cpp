@@ -1,6 +1,5 @@
 /*
- * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
- * Copyright (C) 2005-2011 MaNGOS <http://getmangos.com/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -18,19 +17,16 @@
 
 #include "vmapexport.h"
 #include "adtfile.h"
-
+#include "StringFormat.h"
 #include <algorithm>
 #include <cstdio>
-
-#ifdef WIN32
-#define snprintf _snprintf
-#endif
+#include "Errors.h"
 
 char const* GetPlainName(char const* FileName)
 {
     const char * szTemp;
 
-    if((szTemp = strrchr(FileName, '\\')) != NULL)
+    if((szTemp = strrchr(FileName, '\\')) != nullptr)
         FileName = szTemp + 1;
     return FileName;
 }
@@ -39,7 +35,7 @@ char* GetPlainName(char* FileName)
 {
     char * szTemp;
 
-    if((szTemp = strrchr(FileName, '\\')) != NULL)
+    if((szTemp = strrchr(FileName, '\\')) != nullptr)
         FileName = szTemp + 1;
     return FileName;
 }
@@ -63,74 +59,89 @@ void FixNameCase(char* name, size_t len)
 
 void FixNameSpaces(char* name, size_t len)
 {
-    for (size_t i=0; i<len-3; i++)
-    {
-        if(name[i] == ' ')
+    if (len < 3)
+        return;
+
+    for (size_t i = 0; i < len - 3; i++)
+        if (name[i] == ' ')
             name[i] = '_';
-    }
+}
+
+void NormalizeFileName(char* name, size_t len)
+{
+    if (len >= 4 && !memcmp(name, "FILE", 4)) // name is FileDataId formatted, do not normalize
+        return;
+
+    FixNameCase(name, len);
+    FixNameSpaces(name, len);
 }
 
 char* GetExtension(char* FileName)
 {
     if (char* szTemp = strrchr(FileName, '.'))
         return szTemp;
-    return NULL;
+    return nullptr;
 }
 
-extern CASC::StorageHandle CascStorage;
+extern std::shared_ptr<CASC::Storage> CascStorage;
 
-ADTFile::ADTFile(char* filename) : ADT(CascStorage, filename, false), nWMO(0), nMDX(0)
+ADTFile::ADTFile(std::string const& filename, bool cache) : _file(CascStorage, filename.c_str(), false)
 {
-    Adtfilename.append(filename);
+    cacheable = cache;
+    dirfileCache = nullptr;
 }
 
-bool ADTFile::init(uint32 map_num, uint32 tileX, uint32 tileY)
+ADTFile::ADTFile(uint32 fileDataId, std::string const& description, bool cache) : _file(CascStorage, fileDataId, description, false)
 {
-    if (ADT.isEof())
+    cacheable = cache;
+    dirfileCache = nullptr;
+}
+
+bool ADTFile::init(uint32 map_num, uint32 originalMapId)
+{
+    if (dirfileCache)
+        return initFromCache(map_num, originalMapId);
+
+    if (_file.isEof())
         return false;
 
     uint32 size;
     std::string dirname = std::string(szWorkDirWmo) + "/dir_bin";
-    FILE *dirfile;
-    dirfile = fopen(dirname.c_str(), "ab");
+    FILE* dirfile = fopen(dirname.c_str(), "ab");
     if(!dirfile)
     {
         printf("Can't open dirfile!'%s'\n", dirname.c_str());
         return false;
     }
 
-    while (!ADT.isEof())
+    if (cacheable)
+        dirfileCache = new std::vector<ADTOutputCache>();
+
+    while (!_file.isEof())
     {
         char fourcc[5];
-        ADT.read(&fourcc,4);
-        ADT.read(&size, 4);
+        _file.read(&fourcc,4);
+        _file.read(&size, 4);
         flipcc(fourcc);
         fourcc[4] = 0;
 
-        size_t nextpos = ADT.getPos() + size;
+        size_t nextpos = _file.getPos() + size;
 
-        if (!strcmp(fourcc,"MCIN"))
-        {
-        }
-        else if (!strcmp(fourcc,"MTEX"))
-        {
-        }
-        else if (!strcmp(fourcc,"MMDX"))
+        if (!strcmp(fourcc,"MMDX"))
         {
             if (size)
             {
                 char* buf = new char[size];
-                ADT.read(buf, size);
+                _file.read(buf, size);
                 char* p = buf;
                 while (p < buf + size)
                 {
                     std::string path(p);
 
                     char* s = GetPlainName(p);
-                    FixNameCase(s, strlen(s));
-                    FixNameSpaces(s, strlen(s));
+                    NormalizeFileName(s, strlen(s));
 
-                    ModelInstanceNames.push_back(s);
+                    ModelInstanceNames.emplace_back(s);
 
                     ExtractSingleModel(path);
 
@@ -144,17 +155,16 @@ bool ADTFile::init(uint32 map_num, uint32 tileX, uint32 tileY)
             if (size)
             {
                 char* buf = new char[size];
-                ADT.read(buf, size);
+                _file.read(buf, size);
                 char* p = buf;
                 while (p < buf + size)
                 {
                     std::string path(p);
 
                     char* s = GetPlainName(p);
-                    FixNameCase(s, strlen(s));
-                    FixNameSpaces(s, strlen(s));
+                    NormalizeFileName(s, strlen(s));
 
-                    WmoInstanceNames.push_back(s);
+                    WmoInstanceNames.emplace_back(s);
 
                     ExtractSingleWmo(path);
 
@@ -164,16 +174,25 @@ bool ADTFile::init(uint32 map_num, uint32 tileX, uint32 tileY)
             }
         }
         //======================
-        else if (!strcmp(fourcc,"MDDF"))
+        else if (!strcmp(fourcc, "MDDF"))
         {
             if (size)
             {
-                nMDX = (int)size / 36;
-                for (int i=0; i<nMDX; ++i)
+                uint32 doodadCount = size / sizeof(ADT::MDDF);
+                for (uint32 i = 0; i < doodadCount; ++i)
                 {
-                    uint32 id;
-                    ADT.read(&id, 4);
-                    ModelInstance inst(ADT, ModelInstanceNames[id].c_str(), map_num, tileX, tileY, dirfile);
+                    ADT::MDDF doodadDef;
+                    _file.read(&doodadDef, sizeof(ADT::MDDF));
+                    if (!(doodadDef.Flags & 0x40))
+                    {
+                        Doodad::Extract(doodadDef, ModelInstanceNames[doodadDef.Id].c_str(), map_num, originalMapId, dirfile, dirfileCache);
+                    }
+                    else
+                    {
+                        std::string fileName = Trinity::StringFormat("FILE%08X.xxx", doodadDef.Id);
+                        ExtractSingleModel(fileName);
+                        Doodad::Extract(doodadDef, fileName.c_str(), map_num, originalMapId, dirfile, dirfileCache);
+                    }
                 }
 
                 ModelInstanceNames.clear();
@@ -183,12 +202,23 @@ bool ADTFile::init(uint32 map_num, uint32 tileX, uint32 tileY)
         {
             if (size)
             {
-                nWMO = (int)size / 64;
-                for (int i=0; i<nWMO; ++i)
+                uint32 mapObjectCount = size / sizeof(ADT::MODF);
+                for (uint32 i = 0; i < mapObjectCount; ++i)
                 {
-                    uint32 id;
-                    ADT.read(&id, 4);
-                    WMOInstance inst(ADT, WmoInstanceNames[id].c_str(), map_num, tileX, tileY, dirfile);
+                    ADT::MODF mapObjDef;
+                    _file.read(&mapObjDef, sizeof(ADT::MODF));
+                    if (!(mapObjDef.Flags & 0x8))
+                    {
+                        MapObject::Extract(mapObjDef, WmoInstanceNames[mapObjDef.Id].c_str(), false, map_num, originalMapId, dirfile, dirfileCache);
+                        Doodad::ExtractSet(WmoDoodads[WmoInstanceNames[mapObjDef.Id]], mapObjDef, false, map_num, originalMapId, dirfile, dirfileCache);
+                    }
+                    else
+                    {
+                        std::string fileName = Trinity::StringFormat("FILE%08X.xxx", mapObjDef.Id);
+                        ExtractSingleWmo(fileName);
+                        MapObject::Extract(mapObjDef, fileName.c_str(), false, map_num, originalMapId, dirfile, dirfileCache);
+                        Doodad::ExtractSet(WmoDoodads[fileName], mapObjDef, false, map_num, originalMapId, dirfile, dirfileCache);
+                    }
                 }
 
                 WmoInstanceNames.clear();
@@ -196,15 +226,43 @@ bool ADTFile::init(uint32 map_num, uint32 tileX, uint32 tileY)
         }
 
         //======================
-        ADT.seek(nextpos);
+        _file.seek(nextpos);
     }
 
-    ADT.close();
+    _file.close();
+    fclose(dirfile);
+    return true;
+}
+
+bool ADTFile::initFromCache(uint32 map_num, uint32 originalMapId)
+{
+    if (dirfileCache->empty())
+        return true;
+
+    std::string dirname = std::string(szWorkDirWmo) + "/dir_bin";
+    FILE* dirfile = fopen(dirname.c_str(), "ab");
+    if (!dirfile)
+    {
+        printf("Can't open dirfile!'%s'\n", dirname.c_str());
+        return false;
+    }
+
+    for (ADTOutputCache const& cached : *dirfileCache)
+    {
+        fwrite(&map_num, sizeof(uint32), 1, dirfile);
+        uint32 flags = cached.Flags;
+        if (map_num != originalMapId)
+            flags |= MOD_PARENT_SPAWN;
+        fwrite(&flags, sizeof(uint32), 1, dirfile);
+        fwrite(cached.Data.data(), cached.Data.size(), 1, dirfile);
+    }
+
     fclose(dirfile);
     return true;
 }
 
 ADTFile::~ADTFile()
 {
-    ADT.close();
+    _file.close();
+    delete dirfileCache;
 }

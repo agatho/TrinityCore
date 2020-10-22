@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -16,13 +16,14 @@
  */
 
 #include "ScriptMgr.h"
+#include "InstanceScript.h"
+#include "ObjectAccessor.h"
+#include "PassiveAI.h"
+#include "pit_of_saron.h"
+#include "Player.h"
 #include "ScriptedCreature.h"
 #include "SpellScript.h"
-#include "SpellAuraEffects.h"
-#include "pit_of_saron.h"
-#include "PassiveAI.h"
 #include "Vehicle.h"
-#include "Player.h"
 
 enum Spells
 {
@@ -39,6 +40,19 @@ enum Events
     EVENT_FIREBALL              = 1,
     EVENT_TACTICAL_BLINK        = 2,
 };
+
+bool ScheduledIcicleSummons::Execute(uint64 /*time*/, uint32 /*diff*/)
+{
+    if (roll_chance_i(12))
+    {
+        _trigger->CastSpell(_trigger, SPELL_ICICLE_SUMMON, true);
+        _trigger->m_Events.AddEvent(new ScheduledIcicleSummons(_trigger), _trigger->m_Events.CalculateTime(urand(20000, 35000)));
+    }
+    else
+        _trigger->m_Events.AddEvent(new ScheduledIcicleSummons(_trigger), _trigger->m_Events.CalculateTime(urand(1000, 20000)));
+
+    return true;
+}
 
 class npc_ymirjar_flamebearer : public CreatureScript
 {
@@ -101,7 +115,7 @@ class npc_ymirjar_flamebearer : public CreatureScript
 
         CreatureAI* GetAI(Creature* creature) const override
         {
-            return new npc_ymirjar_flamebearerAI(creature);
+            return GetPitOfSaronAI<npc_ymirjar_flamebearerAI>(creature);
         }
 };
 
@@ -155,7 +169,7 @@ class npc_iceborn_protodrake : public CreatureScript
 
         CreatureAI* GetAI(Creature* creature) const override
         {
-            return new npc_iceborn_protodrakeAI(creature);
+            return GetPitOfSaronAI<npc_iceborn_protodrakeAI>(creature);
         }
 };
 
@@ -214,7 +228,7 @@ class npc_geist_ambusher : public CreatureScript
 
         CreatureAI* GetAI(Creature* creature) const override
         {
-            return new npc_geist_ambusherAI(creature);
+            return GetPitOfSaronAI<npc_geist_ambusherAI>(creature);
         }
 };
 
@@ -257,7 +271,7 @@ class npc_pit_of_saron_icicle : public CreatureScript
         {
             npc_pit_of_saron_icicleAI(Creature* creature) : PassiveAI(creature)
             {
-                me->SetDisplayId(me->GetCreatureTemplate()->Modelid1);
+                me->SetDisplayFromModel(0);
             }
 
             void IsSummonedBy(Unit* summoner) override
@@ -303,12 +317,7 @@ class spell_pos_ice_shards : public SpellScriptLoader
             bool Load() override
             {
                 // This script should execute only in Pit of Saron
-                if (InstanceMap* instance = GetCaster()->GetMap()->ToInstanceMap())
-                    if (instance->GetInstanceScript())
-                        if (instance->GetScriptId() == sObjectMgr->GetScriptId(PoSScriptName))
-                            return true;
-
-                return false;
+                return InstanceHasScript(GetCaster(), PoSScriptName);
             }
 
             void HandleScriptEffect(SpellEffIndex /*effIndex*/)

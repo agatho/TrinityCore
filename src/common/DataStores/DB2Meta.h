@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -20,27 +20,18 @@
 
 #include "Define.h"
 
-struct TC_COMMON_API DB2FieldDefault
+struct TC_COMMON_API DB2MetaField
 {
-    DB2FieldDefault(uint8 u8);
-    DB2FieldDefault(uint16 u16);
-    DB2FieldDefault(uint32 u32);
-    DB2FieldDefault(float f);
-    DB2FieldDefault(char const* str);
+    DB2MetaField(DBCFormer type, uint8 arraySize, bool isSigned);
 
-    union
-    {
-        uint8 AsUInt8;
-        uint16 AsUInt16;
-        uint32 AsUInt32;
-        float AsFloat;
-        char const* AsString;
-    };
+    DBCFormer Type;
+    uint8 ArraySize;
+    bool IsSigned;
 };
 
 struct TC_COMMON_API DB2Meta
 {
-    DB2Meta(int32 indexField, uint32 fieldCount, uint32 layoutHash, char const* types, uint8 const* arraySizes, DB2FieldDefault const* fieldDefaults);
+    DB2Meta(uint32 fileDataId, int32 indexField, uint32 fieldCount, uint32 fileFieldCount, uint32 layoutHash, DB2MetaField const* fields, int32 parentIndexField);
 
     bool HasIndexFieldInData() const;
 
@@ -50,24 +41,21 @@ struct TC_COMMON_API DB2Meta
     // Returns size of final loaded structure
     uint32 GetRecordSize() const;
 
+    uint32 GetIndexFieldOffset() const;
+    int32 GetParentIndexFieldOffset() const;
+
     uint32 GetDbIndexField() const;
     uint32 GetDbFieldCount() const;
 
+    bool IsSignedField(uint32 field) const;
+
+    uint32 FileDataId;
     int32 IndexField;
+    int32 ParentIndexField;
     uint32 FieldCount;
+    uint32 FileFieldCount;
     uint32 LayoutHash;
-    char const* Types;
-    uint8 const* ArraySizes;
-    DB2FieldDefault const* FieldDefaults;
-};
-
-struct TC_COMMON_API DB2FieldMeta
-{
-    DB2FieldMeta(bool isSigned, DBCFormer type, char const* name);
-
-    bool IsSigned;
-    DBCFormer Type;
-    char const* Name;
+    DB2MetaField const* Fields;
 };
 
 #endif // DB2Meta_h__

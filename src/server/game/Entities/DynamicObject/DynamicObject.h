@@ -1,6 +1,5 @@
 /*
- * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
- * Copyright (C) 2005-2009 MaNGOS <http://getmangos.com/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -39,6 +38,15 @@ class TC_GAME_API DynamicObject : public WorldObject, public GridObject<DynamicO
         DynamicObject(bool isWorldObject);
         ~DynamicObject();
 
+    protected:
+        void BuildValuesCreate(ByteBuffer* data, Player const* target) const override;
+        void BuildValuesUpdate(ByteBuffer* data, Player const* target) const override;
+        void ClearUpdateMask(bool remove) override;
+
+    public:
+        void BuildValuesUpdateForPlayerWithMask(UpdateData* data, UF::ObjectData::Mask const& requestedObjectMask,
+            UF::DynamicObjectData::Mask const& requestedDynamicObjectMask, Player const* target) const;
+
         void AddToWorld() override;
         void RemoveFromWorld() override;
 
@@ -55,16 +63,18 @@ class TC_GAME_API DynamicObject : public WorldObject, public GridObject<DynamicO
         Unit* GetCaster() const { return _caster; }
         void BindToCaster();
         void UnbindFromCaster();
-        uint32 GetSpellId() const {  return GetUInt32Value(DYNAMICOBJECT_SPELLID); }
-        ObjectGuid GetCasterGUID() const { return GetGuidValue(DYNAMICOBJECT_CASTER); }
-        float GetRadius() const { return GetFloatValue(DYNAMICOBJECT_RADIUS); }
+        uint32 GetSpellId() const { return m_dynamicObjectData->SpellID; }
+        SpellInfo const* GetSpellInfo() const;
+        ObjectGuid GetCasterGUID() const { return m_dynamicObjectData->Caster; }
+        float GetRadius() const { return m_dynamicObjectData->Radius; }
+
+        UF::UpdateField<UF::DynamicObjectData, 0, TYPEID_DYNAMICOBJECT> m_dynamicObjectData;
 
     protected:
         Aura* _aura;
         Aura* _removedAura;
         Unit* _caster;
         int32 _duration; // for non-aura dynobjects
-        uint32 _spellXSpellVisualId;
         bool _isViewpoint;
 };
 #endif

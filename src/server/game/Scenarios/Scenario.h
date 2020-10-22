@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -22,6 +22,7 @@
 #include <unordered_set>
 
 struct ScenarioData;
+struct ScenarioEntry;
 struct ScenarioStepEntry;
 
 namespace WorldPackets
@@ -64,6 +65,7 @@ class TC_GAME_API Scenario : public CriteriaHandler
 
         bool IsComplete();
         void SetStepState(ScenarioStepEntry const* step, ScenarioStepState state) { _stepStates[step] = state; }
+        ScenarioEntry const* GetEntry() const;
         ScenarioStepState GetStepState(ScenarioStepEntry const* step);
         ScenarioStepEntry const* GetStep() const { return _currentstep; }
         ScenarioStepEntry const* GetFirstStep() const;
@@ -91,7 +93,7 @@ class TC_GAME_API Scenario : public CriteriaHandler
         std::vector<WorldPackets::Scenario::BonusObjectiveData> GetBonusObjectivesData();
         std::vector<WorldPackets::Achievement::CriteriaProgress> GetCriteriasProgress();
 
-        CriteriaList const& GetCriteriaByType(CriteriaTypes type) const override;
+        CriteriaList const& GetCriteriaByType(CriteriaTypes type, uint32 asset) const override;
         ScenarioData const* _data;
 
     private:

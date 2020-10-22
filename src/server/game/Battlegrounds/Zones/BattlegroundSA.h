@@ -1,6 +1,5 @@
 /*
- * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
- * Copyright (C) 2005-2009 MaNGOS <http://getmangos.com/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -302,6 +301,12 @@ enum BG_SA_Objects
     BG_SA_MAXOBJ = BG_SA_BOMB+68
 };
 
+enum BG_SA_Objectives
+{
+    BG_SA_GATES_DESTROYED       = 231,
+    BG_SA_DEMOLISHERS_DESTROYED = 232
+};
+
 Position const BG_SA_ObjSpawnlocs[BG_SA_MAXOBJ] =
 {
     { 1411.57f, 108.163f, 28.692f, 5.441f },
@@ -482,6 +487,15 @@ float const BG_SA_GYOrientation[BG_SA_MAX_GY] =
     6.148f, // defender last GY
 };
 
+enum BG_SA_BroadcastTexts
+{
+    BG_SA_TEXT_ALLIANCE_CAPTURED_TITAN_PORTAL   = 28944,
+    BG_SA_TEXT_HORDE_CAPTURED_TITAN_PORTAL      = 28945,
+
+    BG_SA_TEXT_ROUND_TWO_START_ONE_MINUTE       = 29448,
+    BG_SA_TEXT_ROUND_TWO_START_HALF_MINUTE      = 29449
+};
+
 struct GateInfo
 {
     uint8 GateId;
@@ -531,10 +545,12 @@ struct BattlegroundSAScore final : public BattlegroundScore
             }
         }
 
-        void BuildObjectivesBlock(std::vector<int32>& stats) override
+        void BuildPvPLogPlayerDataPacket(WorldPackets::Battleground::PVPMatchStatistics::PVPMatchPlayerStatistics& playerData) const override
         {
-            stats.push_back(DemolishersDestroyed);
-            stats.push_back(GatesDestroyed);
+            BattlegroundScore::BuildPvPLogPlayerDataPacket(playerData);
+
+            playerData.Stats.emplace_back(BG_SA_DEMOLISHERS_DESTROYED, DemolishersDestroyed);
+            playerData.Stats.emplace_back(BG_SA_GATES_DESTROYED, GatesDestroyed);
         }
 
         uint32 GetAttr1() const final override { return DemolishersDestroyed; }
@@ -548,7 +564,7 @@ struct BattlegroundSAScore final : public BattlegroundScore
 class BattlegroundSA : public Battleground
 {
     public:
-        BattlegroundSA();
+        BattlegroundSA(BattlegroundTemplate const* battlegroundTemplate);
         ~BattlegroundSA();
 
         /**
@@ -572,9 +588,9 @@ class BattlegroundSA : public Battleground
         /// Called when a player kill a unit in bg
         void HandleKillUnit(Creature* creature, Player* killer) override;
         /// Return the nearest graveyard where player can respawn
-        WorldSafeLocsEntry const* GetClosestGraveYard(Player* player) override;
+        WorldSafeLocsEntry const* GetClosestGraveyard(Player* player) override;
         /// Called when someone activates an event
-        void ProcessEvent(WorldObject* /*obj*/, uint32 /*eventId*/, WorldObject* /*invoker*/ = NULL) override;
+        void ProcessEvent(WorldObject* /*obj*/, uint32 /*eventId*/, WorldObject* /*invoker*/ = nullptr) override;
         /// Called when a player click on flag (graveyard flag)
         void EventPlayerClickedOnFlag(Player* source, GameObject* go) override;
         /// Called when a player clicked on relic
@@ -586,7 +602,7 @@ class BattlegroundSA : public Battleground
             for (uint8 i = 0; i < MAX_GATES; ++i)
                 if (Gates[i].GameObjectId == entry)
                     return &Gates[i];
-            return NULL;
+            return nullptr;
         }
 
         /// Called on battleground ending
@@ -599,10 +615,12 @@ class BattlegroundSA : public Battleground
         /* Scorekeeping */
 
         // Achievement: Not Even a Scratch
-        bool CheckAchievementCriteriaMeet(uint32 criteriaId, Player const* source, Unit const* target = NULL, uint32 miscValue = 0) override;
+        bool CheckAchievementCriteriaMeet(uint32 criteriaId, Player const* source, Unit const* target = nullptr, uint32 miscValue = 0) override;
 
         // Control Phase Shift
         bool IsSpellAllowed(uint32 spellId, Player const* player) const override;
+
+        bool UpdatePlayerScore(Player* player, uint32 type, uint32 value, bool doAddHonor = true) override;
 
     private:
 

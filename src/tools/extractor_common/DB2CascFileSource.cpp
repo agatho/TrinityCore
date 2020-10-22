@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -16,12 +16,14 @@
  */
 
 #include "DB2CascFileSource.h"
+#include "StringFormat.h"
 #include <CascLib.h>
 
-DB2CascFileSource::DB2CascFileSource(CASC::StorageHandle const& storage, std::string fileName)
+DB2CascFileSource::DB2CascFileSource(std::shared_ptr<CASC::Storage const> storage, uint32 fileDataId, bool printErrors /*= true*/)
 {
-    _fileHandle = CASC::OpenFile(storage, fileName.c_str(), CASC_LOCALE_NONE, true);
-    _fileName = std::move(fileName);
+    _storageHandle = storage;
+    _fileHandle.reset(storage->OpenFile(fileDataId, CASC_LOCALE_NONE, printErrors, true));
+    _fileName = Trinity::StringFormat("FileDataId: %u", fileDataId);
 }
 
 bool DB2CascFileSource::IsOpen() const
@@ -31,16 +33,39 @@ bool DB2CascFileSource::IsOpen() const
 
 bool DB2CascFileSource::Read(void* buffer, std::size_t numBytes)
 {
-    DWORD bytesRead = 0;
-    return CASC::ReadFile(_fileHandle, buffer, numBytes, &bytesRead) && numBytes == bytesRead;
+    uint32 bytesRead = 0;
+    return _fileHandle->ReadFile(buffer, numBytes, &bytesRead) && numBytes == bytesRead;
 }
 
-std::size_t DB2CascFileSource::GetPosition() const
+int64 DB2CascFileSource::GetPosition() const
 {
-    return CASC::GetFilePointer(_fileHandle);
+    return _fileHandle->GetPointer();
+}
+
+bool DB2CascFileSource::SetPosition(int64 position)
+{
+    return _fileHandle->SetPointer(position);
+}
+
+int64 DB2CascFileSource::GetFileSize() const
+{
+    return _fileHandle->GetSize();
+}
+
+CASC::File* DB2CascFileSource::GetNativeHandle() const
+{
+    return _fileHandle.get();
 }
 
 char const* DB2CascFileSource::GetFileName() const
 {
     return _fileName.c_str();
+}
+
+DB2EncryptedSectionHandling DB2CascFileSource::HandleEncryptedSection(DB2SectionHeader const& sectionHeader) const
+{
+    if (std::shared_ptr<CASC::Storage const> storage = _storageHandle.lock())
+        return storage->HasTactKey(sectionHeader.TactId) ? DB2EncryptedSectionHandling::Process : DB2EncryptedSectionHandling::Skip;
+
+    return DB2EncryptedSectionHandling::Skip;
 }

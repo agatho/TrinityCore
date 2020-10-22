@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -17,6 +17,8 @@
 
 #ifndef ARCATRAZ_H
 #define ARCATRAZ_H
+
+#include "CreatureAIImpl.h"
 
 #define ArcatrazScriptName "instance_arcatraz"
 #define DataHeader         "AZ"
@@ -62,10 +64,10 @@ enum AZGameObjectIds
     GO_WARDENS_SHIELD                           = 184802  // shield 'protecting' mellichar
 };
 
-template<class AI>
-AI* GetArcatrazAI(Creature* creature)
+template <class AI, class T>
+inline AI* GetArcatrazAI(T* obj)
 {
-    return GetInstanceAI<AI>(creature, ArcatrazScriptName);
+    return GetInstanceAI<AI>(obj, ArcatrazScriptName);
 }
 
 #endif // ARCATRAZ_H

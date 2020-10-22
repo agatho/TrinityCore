@@ -1,6 +1,5 @@
 /*
- * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
- * Copyright (C) 2005-2009 MaNGOS <http://getmangos.com/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -21,7 +20,7 @@
 #include "ItemTemplate.h"
 #include "Player.h"
 
-uint32 const SocketColorToGemTypeMask[19] =
+int32 const SocketColorToGemTypeMask[19] =
 {
     0,
     SOCKET_COLOR_META,
@@ -46,10 +45,10 @@ uint32 const SocketColorToGemTypeMask[19] =
 
 char const* ItemTemplate::GetName(LocaleConstant locale) const
 {
-    if (!strlen(ExtendedData->Name->Str[locale]))
+    if (!strlen(ExtendedData->Display[locale]))
         return GetDefaultLocaleName();
 
-    return ExtendedData->Name->Str[locale];
+    return ExtendedData->Display[locale];
 }
 
 
@@ -113,7 +112,7 @@ uint32 ItemTemplate::GetSkill() const
 
 char const* ItemTemplate::GetDefaultLocaleName() const
 {
-    return ExtendedData->Name->Str[sWorld->GetDefaultDbcLocale()];
+    return ExtendedData->Display[sWorld->GetDefaultDbcLocale()];
 }
 
 uint32 ItemTemplate::GetArmor(uint32 itemLevel) const
@@ -141,7 +140,31 @@ uint32 ItemTemplate::GetArmor(uint32 itemLevel) const
         if (GetSubClass() < ITEM_SUBCLASS_ARMOR_CLOTH || GetSubClass() > ITEM_SUBCLASS_ARMOR_PLATE)
             return 0;
 
-        return uint32(armorQuality->QualityMod[quality] * armorTotal->Value[GetSubClass() - 1] * location->Modifier[GetSubClass() - 1] + 0.5f);
+        float total = 1.0f;
+        float locationModifier = 1.0f;
+        switch (GetSubClass())
+        {
+            case ITEM_SUBCLASS_ARMOR_CLOTH:
+                total = armorTotal->Cloth;
+                locationModifier = location->Clothmodifier;
+                break;
+            case ITEM_SUBCLASS_ARMOR_LEATHER:
+                total = armorTotal->Leather;
+                locationModifier = location->Leathermodifier;
+                break;
+            case ITEM_SUBCLASS_ARMOR_MAIL:
+                total = armorTotal->Mail;
+                locationModifier = location->Chainmodifier;
+                break;
+            case ITEM_SUBCLASS_ARMOR_PLATE:
+                total = armorTotal->Plate;
+                locationModifier = location->Platemodifier;
+                break;
+            default:
+                break;
+        }
+
+        return uint32(armorQuality->Qualitymod[quality] * total * locationModifier + 0.5f);
     }
 
     // shields
@@ -152,28 +175,23 @@ uint32 ItemTemplate::GetArmor(uint32 itemLevel) const
     return uint32(shield->Quality[quality] + 0.5f);
 }
 
-void ItemTemplate::GetDamage(uint32 itemLevel, float& minDamage, float& maxDamage) const
+float ItemTemplate::GetDPS(uint32 itemLevel) const
 {
-    minDamage = maxDamage = 0.0f;
     uint32 quality = ItemQualities(GetQuality()) != ITEM_QUALITY_HEIRLOOM ? ItemQualities(GetQuality()) : ITEM_QUALITY_RARE;
     if (GetClass() != ITEM_CLASS_WEAPON || quality > ITEM_QUALITY_ARTIFACT)
-        return;
-
-    // get the right store here
-    if (GetInventoryType() > INVTYPE_RANGEDRIGHT)
-        return;
+        return 0.0f;
 
     float dps = 0.0f;
     switch (GetInventoryType())
     {
         case INVTYPE_AMMO:
-            dps = sItemDamageAmmoStore.AssertEntry(itemLevel)->DPS[quality];
+            dps = sItemDamageAmmoStore.AssertEntry(itemLevel)->Quality[quality];
             break;
         case INVTYPE_2HWEAPON:
             if (GetFlags2() & ITEM_FLAG2_CASTER_WEAPON)
-                dps = sItemDamageTwoHandCasterStore.AssertEntry(itemLevel)->DPS[quality];
+                dps = sItemDamageTwoHandCasterStore.AssertEntry(itemLevel)->Quality[quality];
             else
-                dps = sItemDamageTwoHandStore.AssertEntry(itemLevel)->DPS[quality];
+                dps = sItemDamageTwoHandStore.AssertEntry(itemLevel)->Quality[quality];
             break;
         case INVTYPE_RANGED:
         case INVTYPE_THROWN:
@@ -181,42 +199,55 @@ void ItemTemplate::GetDamage(uint32 itemLevel, float& minDamage, float& maxDamag
             switch (GetSubClass())
             {
                 case ITEM_SUBCLASS_WEAPON_WAND:
-                    dps = sItemDamageOneHandCasterStore.AssertEntry(itemLevel)->DPS[quality];
+                    dps = sItemDamageOneHandCasterStore.AssertEntry(itemLevel)->Quality[quality];
                     break;
                 case ITEM_SUBCLASS_WEAPON_BOW:
                 case ITEM_SUBCLASS_WEAPON_GUN:
                 case ITEM_SUBCLASS_WEAPON_CROSSBOW:
                     if (GetFlags2() & ITEM_FLAG2_CASTER_WEAPON)
-                        dps = sItemDamageTwoHandCasterStore.AssertEntry(itemLevel)->DPS[quality];
+                        dps = sItemDamageTwoHandCasterStore.AssertEntry(itemLevel)->Quality[quality];
                     else
-                        dps = sItemDamageTwoHandStore.AssertEntry(itemLevel)->DPS[quality];
+                        dps = sItemDamageTwoHandStore.AssertEntry(itemLevel)->Quality[quality];
                     break;
                 default:
-                    return;
+                    break;
             }
             break;
         case INVTYPE_WEAPON:
         case INVTYPE_WEAPONMAINHAND:
         case INVTYPE_WEAPONOFFHAND:
             if (GetFlags2() & ITEM_FLAG2_CASTER_WEAPON)
-                dps = sItemDamageOneHandCasterStore.AssertEntry(itemLevel)->DPS[quality];
+                dps = sItemDamageOneHandCasterStore.AssertEntry(itemLevel)->Quality[quality];
             else
-                dps = sItemDamageOneHandStore.AssertEntry(itemLevel)->DPS[quality];
+                dps = sItemDamageOneHandStore.AssertEntry(itemLevel)->Quality[quality];
             break;
         default:
-            return;
+            break;
     }
 
-    float avgDamage = dps * GetDelay() * 0.001f;
-    minDamage = (GetStatScalingFactor() * -0.5f + 1.0f) * avgDamage;
-    maxDamage = floor(float(avgDamage * (GetStatScalingFactor() * 0.5f + 1.0f) + 0.5f));
+    return dps;
 }
 
-bool ItemTemplate::IsUsableByLootSpecialization(Player const* player) const
+void ItemTemplate::GetDamage(uint32 itemLevel, float& minDamage, float& maxDamage) const
 {
-    uint32 spec = player->GetUInt32Value(PLAYER_FIELD_LOOT_SPEC_ID);
+    minDamage = maxDamage = 0.0f;
+    float dps = GetDPS(itemLevel);
+    if (dps > 0.0f)
+    {
+        float avgDamage = dps * GetDelay() * 0.001f;
+        minDamage = (GetDmgVariance() * -0.5f + 1.0f) * avgDamage;
+        maxDamage = floor(float(avgDamage * (GetDmgVariance() * 0.5f + 1.0f) + 0.5f));
+    }
+}
+
+bool ItemTemplate::IsUsableByLootSpecialization(Player const* player, bool alwaysAllowBoundToAccount) const
+{
+    if (GetFlags() & ITEM_FLAG_IS_BOUND_TO_ACCOUNT && alwaysAllowBoundToAccount)
+        return true;
+
+    uint32 spec = player->GetLootSpecId();
     if (!spec)
-        spec = player->GetUInt32Value(PLAYER_FIELD_CURRENT_SPEC_ID);
+        spec = player->GetPrimarySpecialization();
     if (!spec)
         spec = player->GetDefaultSpecId();
 

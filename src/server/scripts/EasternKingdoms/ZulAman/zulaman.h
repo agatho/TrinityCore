@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -18,8 +18,10 @@
 #ifndef DEF_ZULAMAN_H
 #define DEF_ZULAMAN_H
 
+#include "CreatureAIImpl.h"
+
 uint32 const EncounterCount = 6;
-#define ZulAmanScriptName "instance_zulaman"
+#define ZulamanScriptName "instance_zulaman"
 #define DataHeader "ZA"
 
 enum ZADataTypes
@@ -78,14 +80,10 @@ enum ZAWorldStates
     WORLD_STATE_ZULAMAN_TIMER           = 3106,
 };
 
-template<class AI>
-CreatureAI* GetZulAmanAI(Creature* creature)
+template <class AI, class T>
+inline AI* GetZulAmanAI(T* obj)
 {
-    if (InstanceMap* instance = creature->GetMap()->ToInstanceMap())
-        if (instance->GetInstanceScript())
-            if (instance->GetScriptId() == sObjectMgr->GetScriptId(ZulAmanScriptName))
-                return new AI(creature);
-    return NULL;
+    return GetInstanceAI<AI>(obj, ZulamanScriptName);
 }
 
 #endif

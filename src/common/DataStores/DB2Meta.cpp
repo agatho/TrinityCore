@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -16,35 +16,15 @@
  */
 
 #include "DB2Meta.h"
+#include "Common.h"
 #include "Errors.h"
 
-DB2FieldDefault::DB2FieldDefault(uint8 u8)
+DB2MetaField::DB2MetaField(DBCFormer type, uint8 arraySize, bool isSigned) : Type(type), ArraySize(arraySize), IsSigned(isSigned)
 {
-    AsUInt8 = u8;
 }
 
-DB2FieldDefault::DB2FieldDefault(uint16 u16)
-{
-    AsUInt16 = u16;
-}
-
-DB2FieldDefault::DB2FieldDefault(uint32 u32)
-{
-    AsUInt32 = u32;
-}
-
-DB2FieldDefault::DB2FieldDefault(float f)
-{
-    AsFloat = f;
-}
-
-DB2FieldDefault::DB2FieldDefault(char const* str)
-{
-    AsString = str;
-}
-
-DB2Meta::DB2Meta(int32 indexField, uint32 fieldCount, uint32 layoutHash, char const* types, uint8 const* arraySizes, DB2FieldDefault const* fieldDefaults)
-    : IndexField(indexField), FieldCount(fieldCount), LayoutHash(layoutHash), Types(types), ArraySizes(arraySizes), FieldDefaults(fieldDefaults)
+DB2Meta::DB2Meta(uint32 fileDataId, int32 indexField, uint32 fieldCount, uint32 fileFieldCount, uint32 layoutHash, DB2MetaField const* fields, int32 parentIndexField)
+    : FileDataId(fileDataId),IndexField(indexField), ParentIndexField(parentIndexField), FieldCount(fieldCount), FileFieldCount(fileFieldCount), LayoutHash(layoutHash), Fields(fields)
 {
 }
 
@@ -63,9 +43,15 @@ uint32 DB2Meta::GetRecordSize() const
     uint32 size = 0;
     for (uint32 i = 0; i < FieldCount; ++i)
     {
-        for (uint8 j = 0; j < ArraySizes[i]; ++j)
+        for (uint8 j = 0; j < Fields[i].ArraySize; ++j)
         {
-            switch (Types[i])
+            if (i >= FileFieldCount && int32(i) == ParentIndexField)
+            {
+                size += 4;
+                continue;
+            }
+
+            switch (Fields[i].Type)
             {
                 case FT_BYTE:
                     size += 1;
@@ -77,11 +63,17 @@ uint32 DB2Meta::GetRecordSize() const
                 case FT_INT:
                     size += 4;
                     break;
+                case FT_LONG:
+                    size += 8;
+                    break;
                 case FT_STRING:
+                    size += sizeof(LocalizedString);
+                    break;
+                case FT_STRING_NOT_LOCALIZED:
                     size += sizeof(char*);
                     break;
                 default:
-                    ASSERT(false, "Unsupported column type specified %c", Types[i]);
+                    ASSERT(false, "Unsupported column type specified %c", Fields[i].Type);
                     break;
             }
         }
@@ -93,6 +85,98 @@ uint32 DB2Meta::GetRecordSize() const
     return size;
 }
 
+uint32 DB2Meta::GetIndexFieldOffset() const
+{
+    if (IndexField == -1)
+        return 0;
+
+    uint32 offset = 0;
+
+    for (int32 i = 0; i < IndexField; ++i)
+    {
+        for (uint8 j = 0; j < Fields[i].ArraySize; ++j)
+        {
+            if (i >= int32(FileFieldCount) && i == ParentIndexField)
+            {
+                offset += 4;
+                continue;
+            }
+
+            switch (Fields[i].Type)
+            {
+                case FT_BYTE:
+                    offset += 1;
+                    break;
+                case FT_SHORT:
+                    offset += 2;
+                    break;
+                case FT_FLOAT:
+                case FT_INT:
+                    offset += 4;
+                    break;
+                case FT_LONG:
+                    offset += 8;
+                    break;
+                case FT_STRING:
+                    offset += sizeof(LocalizedString);
+                    break;
+                case FT_STRING_NOT_LOCALIZED:
+                    offset += sizeof(char*);
+                    break;
+                default:
+                    ASSERT(false, "Unsupported column type specified %c", Fields[i].Type);
+                    break;
+            }
+        }
+    }
+
+    return offset;
+}
+
+int32 DB2Meta::GetParentIndexFieldOffset() const
+{
+    if (ParentIndexField == -1)
+        return -1;
+
+    uint32 offset = 0;
+    if (!HasIndexFieldInData())
+        offset += 4;
+
+    for (int32 i = 0; i < ParentIndexField; ++i)
+    {
+        for (uint8 j = 0; j < Fields[i].ArraySize; ++j)
+        {
+            switch (Fields[i].Type)
+            {
+                case FT_BYTE:
+                    offset += 1;
+                    break;
+                case FT_SHORT:
+                    offset += 2;
+                    break;
+                case FT_FLOAT:
+                case FT_INT:
+                    offset += 4;
+                    break;
+                case FT_LONG:
+                    offset += 8;
+                    break;
+                case FT_STRING:
+                    offset += sizeof(LocalizedString);
+                    break;
+                case FT_STRING_NOT_LOCALIZED:
+                    offset += sizeof(char*);
+                    break;
+                default:
+                    ASSERT(false, "Unsupported column type specified %c", Fields[i].Type);
+                    break;
+            }
+        }
+    }
+
+    return offset;
+}
+
 uint32 DB2Meta::GetDbIndexField() const
 {
     if (IndexField == -1)
@@ -100,7 +184,7 @@ uint32 DB2Meta::GetDbIndexField() const
 
     uint32 index = 0;
     for (uint32 i = 0; i < FieldCount && i < uint32(IndexField); ++i)
-        index += ArraySizes[i];
+        index += Fields[i].ArraySize;
 
     return index;
 }
@@ -109,7 +193,7 @@ uint32 DB2Meta::GetDbFieldCount() const
 {
     uint32 fields = 0;
     for (uint32 i = 0; i < FieldCount; ++i)
-        fields += ArraySizes[i];
+        fields += Fields[i].ArraySize;
 
     if (!HasIndexFieldInData())
         ++fields;
@@ -117,7 +201,23 @@ uint32 DB2Meta::GetDbFieldCount() const
     return fields;
 }
 
-DB2FieldMeta::DB2FieldMeta(bool isSigned, DBCFormer type, char const* name)
-    : IsSigned(isSigned), Type(type), Name(name)
+bool DB2Meta::IsSignedField(uint32 field) const
 {
+    switch (Fields[field].Type)
+    {
+        case FT_STRING:
+        case FT_STRING_NOT_LOCALIZED:
+        case FT_FLOAT:
+            return false;
+        case FT_INT:
+        case FT_BYTE:
+        case FT_SHORT:
+        case FT_LONG:
+        default:
+            break;
+    }
+    if (field == uint32(IndexField) || field == uint32(ParentIndexField))
+        return false;
+
+    return Fields[field].IsSigned;
 }

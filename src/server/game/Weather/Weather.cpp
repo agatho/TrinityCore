@@ -1,6 +1,5 @@
 /*
- * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
- * Copyright (C) 2005-2009 MaNGOS <http://getmangos.com/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -20,16 +19,15 @@
     \ingroup world
 */
 
+#include "GameTime.h"
 #include "Weather.h"
-#include "WorldPacket.h"
-#include "Player.h"
-#include "World.h"
 #include "Log.h"
-#include "Util.h"
-#include "ScriptMgr.h"
-#include "WorldSession.h"
 #include "MiscPackets.h"
+#include "Player.h"
 #include "Random.h"
+#include "ScriptMgr.h"
+#include "Util.h"
+#include "World.h"
 
 /// Create the Weather object
 Weather::Weather(uint32 zone, WeatherData const* weatherChances)
@@ -93,7 +91,7 @@ bool Weather::ReGenerate()
 
     //78 days between January 1st and March 20nd; 365/4=91 days by season
     // season source http://aa.usno.navy.mil/data/docs/EarthSeasons.html
-    time_t gtime = sWorld->GetGameTime();
+    time_t gtime = GameTime::GetGameTime();
     struct tm ltime;
     localtime_r(&gtime, &ltime);
     uint32 season = ((ltime.tm_yday - 78 + 365) / 91) % 4;
@@ -195,7 +193,13 @@ bool Weather::ReGenerate()
 void Weather::SendWeatherUpdateToPlayer(Player* player)
 {
     WorldPackets::Misc::Weather weather(GetWeatherState(), m_grade);
-    player->GetSession()->SendPacket(weather.Write());
+    player->SendDirectMessage(weather.Write());
+}
+
+void Weather::SendFineWeatherUpdateToPlayer(Player* player)
+{
+    WorldPackets::Misc::Weather weather(WEATHER_STATE_FINE);
+    player->SendDirectMessage(weather.Write());
 }
 
 /// Send the new weather to all players in the zone
