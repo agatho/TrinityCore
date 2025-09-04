@@ -12,7 +12,16 @@ CollectSourceFiles(
   ${CMAKE_CURRENT_SOURCE_DIR}
   PRIVATE_SOURCES
   # Exclude
-  ${CMAKE_CURRENT_SOURCE_DIR}/PrecompiledHeaders)
+  ${CMAKE_CURRENT_SOURCE_DIR}/PrecompiledHeaders
+  ${CMAKE_CURRENT_SOURCE_DIR}/AI/Playerbots)
+
+# Conditionally include playerbot sources when WITH_PLAYERBOTS is enabled
+if(WITH_PLAYERBOTS)
+  CollectSourceFiles(
+    ${CMAKE_CURRENT_SOURCE_DIR}/AI/Playerbots
+    PLAYERBOT_SOURCES)
+  list(APPEND PRIVATE_SOURCES ${PLAYERBOT_SOURCES})
+endif()
 
 if(USE_COREPCH)
   set(PRIVATE_PCH_HEADER PrecompiledHeaders/gamePCH.h)

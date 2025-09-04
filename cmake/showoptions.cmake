@@ -202,4 +202,17 @@ if(BUILD_SHARED_LIBS)
   WarnAboutSpacesInBuildPath()
 endif()
 
+if(WITH_PLAYERBOTS)
+  message("")
+  message(" *** WITH_PLAYERBOTS - INFO!")
+  message(" *** Playerbot AI system has been enabled!")
+  message(" *** This adds intelligent bot players to enhance server population.")
+  message(" *** Bots can participate in dungeons, raids, PvP, and social activities.")
+  target_compile_definitions(trinity-compile-option-interface
+    INTERFACE
+      WITH_PLAYERBOTS)
+else()
+  message("* Build with Playerbots  : No  (default)")
+endif()
+
 message("")
