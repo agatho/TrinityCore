@@ -1543,6 +1543,71 @@ void ScriptMgr::OnWorldUpdate(uint32 diff)
     FOREACH_SCRIPT(WorldScript)->OnUpdate(diff);
 }
 
+#ifdef WITH_PLAYERBOTS
+bool ScriptMgr::OnPlayerbotCheckLFGQueue(lfg::Lfg5Guids const& guidsList)
+{
+    bool result = true;
+    FOREACH_SCRIPT(PlayerbotScript)
+    {
+        if (!tmpscript->OnPlayerbotCheckLFGQueue(guidsList))
+        {
+            result = false;
+            break;
+        }
+    }
+    return result;
+}
+
+void ScriptMgr::OnPlayerbotCheckKillTask(Player* player, Unit* victim)
+{
+    FOREACH_SCRIPT(PlayerbotScript)->OnPlayerbotCheckKillTask(player, victim);
+}
+
+void ScriptMgr::OnPlayerbotCheckPetitionAccount(Player* player, bool& found)
+{
+    FOREACH_SCRIPT(PlayerbotScript)->OnPlayerbotCheckPetitionAccount(player, found);
+}
+
+bool ScriptMgr::OnPlayerbotCheckUpdatesToSend(Player* player)
+{
+    bool result = true;
+    FOREACH_SCRIPT(PlayerbotScript)
+    {
+        if (!tmpscript->OnPlayerbotCheckUpdatesToSend(player))
+        {
+            result = false;
+            break;
+        }
+    }
+    return result;
+}
+
+void ScriptMgr::OnPlayerbotPacketSent(Player* player, WorldPacket const* packet)
+{
+    FOREACH_SCRIPT(PlayerbotScript)->OnPlayerbotPacketSent(player, packet);
+}
+
+void ScriptMgr::OnPlayerbotUpdate(uint32 diff)
+{
+    FOREACH_SCRIPT(PlayerbotScript)->OnPlayerbotUpdate(diff);
+}
+
+void ScriptMgr::OnPlayerbotUpdateSessions(Player* player)
+{
+    FOREACH_SCRIPT(PlayerbotScript)->OnPlayerbotUpdateSessions(player);
+}
+
+void ScriptMgr::OnPlayerbotLogout(Player* player)
+{
+    FOREACH_SCRIPT(PlayerbotScript)->OnPlayerbotLogout(player);
+}
+
+void ScriptMgr::OnPlayerbotLogoutBots()
+{
+    FOREACH_SCRIPT(PlayerbotScript)->OnPlayerbotLogoutBots();
+}
+#endif
+
 void ScriptMgr::OnHonorCalculation(float& honor, uint8 level, float multiplier)
 {
     FOREACH_SCRIPT(FormulaScript)->OnHonorCalculation(honor, level, multiplier);
@@ -2479,6 +2544,54 @@ void WorldScript::OnStartup()
 void WorldScript::OnShutdown()
 {
 }
+
+#ifdef WITH_PLAYERBOTS
+PlayerbotScript::PlayerbotScript(char const* name) noexcept
+    : ScriptObject(name)
+{
+    ScriptRegistry<PlayerbotScript>::Instance()->AddScript(this);
+}
+
+PlayerbotScript::~PlayerbotScript() = default;
+
+bool PlayerbotScript::OnPlayerbotCheckLFGQueue(lfg::Lfg5Guids const& /*guidsList*/)
+{
+    return true;
+}
+
+void PlayerbotScript::OnPlayerbotCheckKillTask(Player* /*player*/, Unit* /*victim*/)
+{
+}
+
+void PlayerbotScript::OnPlayerbotCheckPetitionAccount(Player* /*player*/, bool& /*found*/)
+{
+}
+
+bool PlayerbotScript::OnPlayerbotCheckUpdatesToSend(Player* /*player*/)
+{
+    return true;
+}
+
+void PlayerbotScript::OnPlayerbotPacketSent(Player* /*player*/, WorldPacket const* /*packet*/)
+{
+}
+
+void PlayerbotScript::OnPlayerbotUpdate(uint32 /*diff*/)
+{
+}
+
+void PlayerbotScript::OnPlayerbotUpdateSessions(Player* /*player*/)
+{
+}
+
+void PlayerbotScript::OnPlayerbotLogout(Player* /*player*/)
+{
+}
+
+void PlayerbotScript::OnPlayerbotLogoutBots()
+{
+}
+#endif
 
 FormulaScript::FormulaScript(char const* name) noexcept
     : ScriptObject(name)

@@ -79,6 +79,11 @@ public:
     
     void SetEnabled(bool enabled);
     bool IsEnabled() const { return _enabled; }
+    
+    // Session lifecycle hooks
+    void OnBotLogin();
+    void OnBotLogout();
+    void OnSessionUpdate(uint32 diff);
 
 protected:
     // TrinityCore PlayerAI integration
@@ -96,6 +101,7 @@ private:
     bool _enabled;
     uint32 _lastUpdate;
     uint32 _updateFrequency; // milliseconds between updates
+    uint32 _sessionUpdateTimer;
     
     // Error handling
     uint32 _errorCount;

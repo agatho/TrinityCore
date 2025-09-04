@@ -1,0 +1,522 @@
+# TrinityCore Playerbot Integration - Master Plan
+
+**Project:** Integration of mod-playerbots into TrinityCore  
+**Created:** 2025-09-03  
+**Status:** Planning Phase  
+**Timeline:** 7-10 months (31-42 weeks)
+
+## Executive Summary
+
+Integration of mod-playerbots (1000+ files) from AzerothCore into TrinityCore requires porting substantial infrastructure including database layers, script hooks, and performance optimizations. This is a major architectural enhancement to enable AI-controlled players that simulate higher server population for offline gameplay.
+
+## Project Goals
+
+- **Primary:** Port mod-playerbots to current TrinityCore version
+- **Performance:** Utilize all CPU cores, efficient database connections
+- **Target:** 100+ concurrent bots with <10% impact on human players
+- **Use Case:** Enable children to play offline without internet connectivity
+
+## Repository Analysis Summary
+
+### TrinityCore (Target Platform)
+- **Architecture:** Dual-server (worldserver/bnetserver) with robust `PlayerAI` framework
+- **Strengths:** Existing AI infrastructure, performance-oriented design, modular architecture
+- **Integration Points:** PlayerAI system, ScriptMgr hooks, database layer
+
+### mod-playerbots (Source Code)
+- **Scale:** 514 C++ files, 598 headers - sophisticated bot management system
+- **Architecture:** Strategy-Action AI pattern with dependency injection
+- **Features:** Complete bot lifecycle, combat AI, social systems, economy integration
+- **Database:** Separate `acore_playerbots` database with 11+ core tables
+
+### AzerothCore (Infrastructure Source)
+- **Critical Infrastructure:** PlayerbotsDatabaseConnection, script hooks, module system
+- **API Differences:** Simplified threading, different database patterns
+- **Required Porting:** Database layer, script hooks, compilation system
+
+## Detailed Phase Implementation Plan
+
+---
+
+## Phase 1: Foundation Infrastructure (4-6 weeks)
+
+### 🔔 Pre-Phase 1 Preparation Tasks (To Complete During Phase 1)
+
+**3. Risk Mitigation Setup:**
+- [ ] Create feature toggles for incremental integration
+- [ ] Implement rollback mechanisms for each major component  
+- [ ] Set up automated testing pipeline early
+- [ ] Plan for performance regression detection
+
+**5. Collaboration Planning:**
+- [ ] Set up code review process (including additional AI review)
+- [ ] Create progress tracking system beyond todo lists
+- [ ] Plan for community feedback if making this public
+- [ ] Consider licensing compatibility between repositories
+
+**💡 REMINDER: Complete these tasks alongside Phase 1 database and infrastructure work**
+
+---
+
+### 1.1 Database Infrastructure Setup
+
+**Objective:** Port complete playerbot database layer from AzerothCore
+
+#### Database Connection System
+- **Port `PlayerbotsDatabaseConnection` class**
+  - Source: `azerothcore-wotlk/src/server/database/Database/`
+  - Target: `src/server/database/Database/DatabaseWorkerPoolPlayerbot.h`
+  - **40+ prepared statements** for bot operations
+  - Connection pooling specifically for bot queries
+  - Integration with TrinityCore's DatabaseWorkerPool architecture
+
+#### Database Schema Integration
+- **Core Tables to Port (11 critical tables):**
+  1. `playerbots_db_store` - Generic key-value storage
+  2. `playerbots_random_bots` - Random bot management
+  3. `playerbots_custom_strategy` - User-defined bot behaviors
+  4. `playerbots_travelnode` - Pathfinding waypoints
+  5. `playerbots_travelnode_link` - Travel connections
+  6. `playerbots_travelnode_path` - Pre-calculated paths
+  7. `playerbots_guild_tasks` - Guild activity system
+  8. `playerbots_equip_cache` - Equipment optimization
+  9. `playerbots_speech` - Bot dialogue system
+  10. `ai_playerbot_texts` - Localized bot responses
+  11. `playerbots_weightscales` - Stat calculation system
+
+- **SQL Migration Strategy:**
+  - Convert AzerothCore SQL format to TrinityCore standards
+  - Place in `sql/base/` for base schema
+  - Create update scripts for `sql/updates/world/`
+  - Integrate with TrinityCore's update system
+
+#### CMake Integration
+- **Add conditional compilation:**
+  ```cmake
+  option(WITH_PLAYERBOTS "Enable Playerbot Module" OFF)
+  ```
+- **Database compilation flags**
+- **Module detection and initialization**
+
+### 1.2 Script Hook System Implementation
+
+**Objective:** Port AzerothCore's playerbot script hooks to TrinityCore
+
+#### ScriptMgr Extensions
+- **Port `PlayerbotScript` base class**
+- **Implement 9 critical hooks:**
+  1. `OnPlayerbotUpdate(uint32 diff)` - Main bot processing loop
+  2. `OnPlayerbotCheckLFGQueue(lfg::Lfg5Guids const& guidsList)` - LFG integration
+  3. `OnPlayerbotPacketSent(Player* player, WorldPacket const* packet)` - Packet interception
+  4. `OnPlayerbotLogout(Player* player)` - Bot logout handling
+  5. `OnPlayerbotCheckKillTask(Player* player, Unit* victim)` - Combat tracking
+  6. `OnPlayerbotCheckPetitionAccount(Player* player, bool& found)` - Guild system
+  7. `OnPlayerbotCheckUpdatesToSend(Player* player)` - Update optimization
+  8. `OnPlayerbotUpdateSessions(Player* player)` - Session management
+  9. `OnPlayerbotLogoutBots()` - Batch bot logout
+
+#### Integration Points
+- **World::Update Integration:** Add `OnPlayerbotUpdate` call in main update loop
+- **WorldSession Extensions:** Packet handling hooks for bot operations
+- **Player Lifecycle:** Login/logout event handling
+
+### 1.3 Module System Foundation
+
+**Objective:** Create TrinityCore module framework for bots
+
+#### Compilation Framework
+- **Feature Detection:** Runtime detection of playerbot module
+- **Conditional Compilation:** Clean separation of bot code
+- **Configuration Integration:** Merge with existing TrinityCore config system
+
+**Deliverables Phase 1:**
+- ✅ Working playerbot database connection system
+- ✅ Complete SQL schema integration  
+- ✅ Conditional compilation framework
+- ✅ Complete script hook infrastructure
+
+---
+
+## Phase 2: Core Bot Framework (6-8 weeks)
+
+### 2.1 AI Architecture Porting
+
+**Objective:** Port fundamental bot AI decision-making system
+
+#### Core AI Classes
+- **`Engine`** - AI processing engine with strategy execution
+- **`Strategy`** - Behavioral strategy framework with class/role specialization
+- **`Action`** - Individual bot action system with priority queuing
+- **`Trigger`** - Event-based condition system
+- **`Value`** - Dynamic data value system with caching
+
+#### Context and Configuration
+- **`AiObjectContext`** - Dependency injection container adaptation
+- **`PlayerbotAIConfig`** - Configuration system integration
+- **`ServerFacade`** - TrinityCore API abstraction layer
+
+### 2.2 Bot Session Management
+
+**Objective:** Virtual WorldSession handling for bots
+
+#### Session Architecture
+- **Virtual WorldSession Creation:** Bot sessions without network sockets
+- **Packet Simulation:** Generate appropriate packets for bot actions
+- **Authentication Integration:** Bot login without network authentication
+- **Lifecycle Management:** Bot creation, maintenance, and cleanup
+
+#### Player Integration
+- **Bot Player Objects:** Extend Player class for bot-specific functionality
+- **Memory Management:** Efficient handling of multiple Player objects
+- **State Persistence:** Bot state saving and loading
+
+### 2.3 Basic Movement System
+
+**Objective:** Port travel and pathfinding system
+
+#### Travel Management
+- **`TravelMgr`** - Advanced pathfinding with node networks
+- **Travel Nodes:** Port complete travel node database
+- **Path Optimization:** Pre-calculated optimal routes
+- **Integration with MotionMaster:** Adapt to TrinityCore's movement system
+
+**Deliverables Phase 2:**
+- ✅ Working AI framework with strategy/action system
+- ✅ Bot session management system  
+- ✅ Basic movement and pathfinding
+- ✅ Configuration and context management
+
+---
+
+## Phase 3: Game System Integration (8-10 weeks)
+
+### 3.1 Combat AI Integration
+
+**Objective:** Complete combat system for all classes
+
+#### Combat Framework
+- **Class-Specific Strategies:** All 12 classes with specialization support
+- **Spell Casting Integration:** Adapt to TrinityCore's spell system
+- **Target Selection:** Advanced targeting with threat awareness
+- **Cooldown Management:** Optimal ability rotation systems
+
+#### Group Combat
+- **Party Coordination:** Tank/heal/DPS role coordination
+- **Raid Management:** 25-man raid bot coordination
+- **Threat Management:** Advanced aggro control
+- **Formation Management:** Positioning and movement coordination
+
+### 3.2 Social Systems
+
+**Objective:** Complete social interaction capabilities
+
+#### Chat and Communication
+- **Chat Filtering:** Intelligent response system
+- **Speech System:** Natural language bot responses
+- **Command Recognition:** Player command interpretation
+- **Roleplay Elements:** Immersive bot behavior
+
+#### Group Management
+- **Automatic Formation:** Smart party/raid creation
+- **Leader Election:** Dynamic leadership assignment
+- **LFG Integration:** Dungeon finder participation
+- **Cross-realm Support:** Multi-server bot coordination
+
+### 3.3 Economy Integration
+
+**Objective:** Bot economic participation
+
+#### Auction House System
+- **Market Analysis:** Price tracking and prediction
+- **Intelligent Trading:** Profit optimization algorithms
+- **Item Valuation:** Advanced stat weighting systems
+- **Market Manipulation Prevention:** Ethical trading boundaries
+
+#### Trading and Commerce
+- **Player Trading:** Secure bot-player transactions
+- **Vendor Optimization:** Intelligent buying/selling
+- **Mail System:** Automated item distribution
+- **Guild Banks:** Shared resource management
+
+**Deliverables Phase 3:**
+- ✅ Complete combat AI for all classes
+- ✅ Working social and chat systems
+- ✅ Economic participation features
+- ✅ Group and guild integration
+
+---
+
+## Phase 4: Advanced Features (6-8 weeks)
+
+### 4.1 Quest and Achievement Automation
+
+**Objective:** Intelligent progression systems
+
+#### Quest AI System
+- **Quest Selection Algorithms:** Optimal quest path selection
+- **Automated Completion:** Intelligent quest execution
+- **Party Quest Coordination:** Group quest management
+- **Chain Quest Management:** Long-term progression planning
+
+#### Achievement System
+- **Achievement Hunting:** Automated achievement completion
+- **Progress Optimization:** Efficient achievement pathfinding
+- **Social Achievements:** Coordinated group achievements
+- **Meta Achievement:** Long-term achievement strategies
+
+### 4.2 Advanced Item Management
+
+**Objective:** Sophisticated item optimization
+
+#### Equipment Optimization
+- **Stat Weight Calculations:** Class/spec specific optimization
+- **Upgrade Path Planning:** Long-term gear progression
+- **Enchantment Systems:** Automatic enchanting decisions
+- **Gem and Socket Optimization:** Advanced itemization
+
+#### Crafting Integration
+- **Profession Management:** Automated skill progression
+- **Recipe Optimization:** Profit and skill maximization
+- **Resource Management:** Efficient material usage
+- **Market Integration:** Crafting for economic benefit
+
+**Deliverables Phase 4:**
+- ✅ Automated quest and achievement systems
+- ✅ Advanced item optimization
+- ✅ Profession and crafting integration
+- ✅ Long-term progression planning
+
+---
+
+## Phase 5: Performance Optimization (4-6 weeks)
+
+### 5.1 Multi-threading Implementation
+
+**Objective:** Optimize for high concurrent bot counts
+
+#### Threading Architecture
+- **Bot Processing Threads:** Dedicated threads for bot AI calculations
+- **Map-based Threading:** Distribute bots across map threads
+- **Database Thread Optimization:** Separate bot database operations
+- **Synchronization:** Thread-safe bot state management
+
+#### CPU Utilization
+- **Core Distribution:** Utilize all available CPU cores
+- **Priority Scheduling:** Critical vs background bot operations
+- **Load Balancing:** Dynamic bot distribution across threads
+- **Performance Monitoring:** Real-time CPU usage tracking
+
+### 5.2 Database Performance Tuning
+
+**Objective:** Optimize database performance for bot operations
+
+#### Connection Management
+- **Dedicated Pools:** Separate connection pools for bot operations
+- **Query Batching:** Group bot queries for efficiency
+- **Async Operations:** Non-blocking database operations
+- **Cache Optimization:** Intelligent caching of frequent queries
+
+#### Query Optimization
+- **Prepared Statement Tuning:** Optimize all 40+ bot statements
+- **Index Optimization:** Database index strategy for bot tables
+- **Query Analysis:** Performance profiling and optimization
+- **Connection Pooling:** Optimal pool sizing and management
+
+### 5.3 Memory Management
+
+**Objective:** Efficient memory usage for large bot populations
+
+#### Memory Optimization
+- **Object Pooling:** Reuse objects for frequent operations
+- **Smart Caching:** Cache expensive calculations
+- **Memory Profiling:** Continuous memory usage monitoring
+- **Garbage Collection:** Efficient cleanup of bot resources
+
+**Deliverables Phase 5:**
+- ✅ Multi-threaded bot processing utilizing all CPU cores
+- ✅ Optimized database performance for bot operations
+- ✅ Memory-efficient scaling to 100+ concurrent bots
+- ✅ Performance monitoring and profiling tools
+
+---
+
+## Phase 6: Integration and Polish (3-4 weeks)
+
+### 6.1 Configuration and Management Systems
+
+**Objective:** User-friendly bot management interface
+
+#### Configuration Framework
+- **Complete Config Port:** All mod-playerbots configuration options
+- **Runtime Configuration:** Dynamic bot behavior changes
+- **Admin Commands:** Comprehensive bot management commands
+- **Web Interface:** Optional web-based management (future enhancement)
+
+#### Management Tools
+- **Bot Creation:** Streamlined bot character creation
+- **Behavior Customization:** User-definable bot strategies
+- **Performance Monitoring:** Real-time bot performance metrics
+- **Troubleshooting Tools:** Debug and diagnostic capabilities
+
+### 6.2 Documentation and Testing
+
+**Objective:** Production readiness and documentation
+
+#### Comprehensive Testing
+- **Integration Testing:** Full feature testing with real players
+- **Load Testing:** Large-scale bot deployment validation
+- **Performance Testing:** Stress testing under various conditions
+- **Regression Testing:** Ensure no impact on existing functionality
+
+#### Documentation Package
+- **Installation Guide:** Complete setup instructions
+- **Configuration Reference:** All configuration options documented
+- **Admin Guide:** Bot management and troubleshooting
+- **Developer Documentation:** API and extension guide
+
+**Deliverables Phase 6:**
+- ✅ Complete management and configuration system
+- ✅ Comprehensive documentation package
+- ✅ Production-ready deployment package
+- ✅ Full testing and validation suite
+
+---
+
+## Risk Assessment and Mitigation
+
+### High-Risk Areas
+
+#### 1. Database Integration Complexity
+**Risk:** Substantial schema changes may destabilize existing systems  
+**Mitigation:**
+- Incremental schema integration with rollback capability
+- Comprehensive testing with existing character data
+- Separate database option for bot-specific data
+
+#### 2. Performance Impact on Existing Players
+**Risk:** Bot processing may degrade human player experience  
+**Mitigation:**
+- Dedicated threading for bot operations
+- Configurable bot limits and processing priorities
+- Continuous performance monitoring and optimization
+
+#### 3. API Compatibility Challenges
+**Risk:** Significant API differences between AzerothCore and TrinityCore  
+**Mitigation:**
+- ServerFacade abstraction layer for API compatibility
+- Comprehensive API mapping and testing
+- Gradual feature integration with compatibility validation
+
+#### 4. Code Complexity and Maintenance
+**Risk:** Large codebase integration increases maintenance burden  
+**Mitigation:**
+- Modular integration allowing feature toggles
+- Comprehensive documentation and code comments
+- Automated testing for regression prevention
+
+### Medium-Risk Areas
+
+#### 5. Threading Complexity
+**Risk:** Multi-threaded bot processing with shared world state  
+**Mitigation:**
+- Leverage TrinityCore's existing threading model
+- Thread-safe bot state management
+- Extensive concurrency testing
+
+#### 6. Memory Usage Scaling
+**Risk:** Memory requirements may grow non-linearly with bot count  
+**Mitigation:**
+- Object pooling and caching strategies
+- Memory profiling and optimization
+- Configurable memory limits and bot caps
+
+## Success Metrics
+
+### Functional Requirements
+- ✅ **Bot Population:** 100+ concurrent bots operational
+- ✅ **Feature Completeness:** All major bot features working (combat, social, economy)
+- ✅ **Stability:** 99.9% uptime with mixed bot/human population
+- ✅ **Compatibility:** Zero impact on existing TrinityCore functionality
+
+### Performance Requirements
+- ✅ **CPU Utilization:** Effective use of all available CPU cores
+- ✅ **Database Performance:** <100ms response time for bot queries
+- ✅ **Memory Usage:** Linear scaling with bot count
+- ✅ **Player Impact:** <10% performance impact on human players
+
+### Integration Requirements
+- ✅ **Seamless Interaction:** Natural bot-player interaction
+- ✅ **Administrative Control:** Complete bot management capabilities
+- ✅ **Configuration Flexibility:** Runtime behavior modification
+- ✅ **Documentation:** Comprehensive user and developer guides
+
+## Implementation Dependencies
+
+### Phase Dependencies
+1. **Phase 2 depends on Phase 1:** AI framework requires database infrastructure
+2. **Phase 3 depends on Phase 2:** Game integration requires core bot framework
+3. **Phase 4 depends on Phase 3:** Advanced features require basic game integration
+4. **Phase 5 depends on Phases 1-4:** Performance optimization requires complete functionality
+5. **Phase 6 depends on Phase 5:** Polish requires optimized, stable system
+
+### External Dependencies
+- **AzerothCore Source Access:** Required for infrastructure porting
+- **TrinityCore Compatibility:** Must maintain backward compatibility
+- **Database System:** MySQL/MariaDB with performance optimization
+- **Testing Environment:** Capable of supporting large bot populations
+
+## Resource Requirements
+
+### Development Resources
+- **Senior C++ Developer:** Deep knowledge of TrinityCore and AzerothCore architectures
+- **Database Specialist:** MySQL optimization and schema design
+- **Performance Engineer:** Multi-threading and optimization expertise
+- **QA Engineer:** Large-scale testing and validation
+
+### Infrastructure Resources
+- **Development Server:** Capable of running 100+ concurrent bots
+- **Database Server:** High-performance MySQL instance
+- **Testing Environment:** Multiple configurations for compatibility testing
+- **CI/CD Pipeline:** Automated testing and integration validation
+
+## Monitoring and Validation
+
+### Development Milestones
+- **Weekly Progress Reviews:** Track phase completion and blockers
+- **Performance Benchmarks:** Regular performance validation
+- **Integration Testing:** Continuous compatibility validation
+- **Code Reviews:** Peer review of all integration code
+
+### Quality Gates
+- **Phase Completion Criteria:** Specific deliverables for each phase
+- **Performance Thresholds:** Must meet performance requirements before proceeding
+- **Regression Testing:** No degradation of existing functionality
+- **Documentation Standards:** Complete documentation for each component
+
+## Long-term Maintenance Plan
+
+### Code Maintenance
+- **Modular Architecture:** Enable/disable bot functionality easily
+- **Version Compatibility:** Maintain compatibility with TrinityCore updates
+- **Documentation Updates:** Keep documentation current with code changes
+- **Community Support:** Enable community contributions and extensions
+
+### Performance Monitoring
+- **Continuous Profiling:** Regular performance analysis and optimization
+- **Scalability Testing:** Regular validation of bot population scaling
+- **Resource Usage:** Monitor CPU, memory, and database utilization
+- **User Feedback:** Collect and address performance concerns
+
+---
+
+## Conclusion
+
+This integration represents a **significant software engineering undertaking** requiring deep expertise in both TrinityCore and AzerothCore architectures. The project will substantially enhance TrinityCore's capabilities, enabling offline gameplay with AI population simulation.
+
+**Key Success Factors:**
+1. **Methodical Phase Execution:** Each phase builds foundation for the next
+2. **Performance Focus:** Continuous optimization and monitoring
+3. **Compatibility Preservation:** Zero impact on existing functionality
+4. **Quality Assurance:** Comprehensive testing at each phase
+
+**Timeline Summary:** 7-10 months with clear phase gates and deliverables, resulting in a production-ready playerbot system integrated into TrinityCore.

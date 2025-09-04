@@ -85,6 +85,10 @@ struct WorldStateTemplate;
 
 namespace Trinity::ChatCommands { struct ChatCommandBuilder; }
 
+#ifdef WITH_PLAYERBOTS
+namespace lfg { using Lfg5Guids = std::array<ObjectGuid, 5>; }
+#endif
+
 enum BattlegroundTypeId : uint32;
 enum Difficulty : uint8;
 enum DuelCompleteType : uint8;
@@ -279,6 +283,46 @@ class TC_GAME_API WorldScript : public ScriptObject
         // Called when the world is actually shut down.
         virtual void OnShutdown();
 };
+
+#ifdef WITH_PLAYERBOTS
+class TC_GAME_API PlayerbotScript : public ScriptObject
+{
+    protected:
+
+        explicit PlayerbotScript(char const* name) noexcept;
+
+    public:
+
+        ~PlayerbotScript();
+
+        // Called when LFG queue is checked for bots
+        virtual bool OnPlayerbotCheckLFGQueue(lfg::Lfg5Guids const& guidsList);
+
+        // Called when bot checks kill task completion
+        virtual void OnPlayerbotCheckKillTask(Player* player, Unit* victim);
+
+        // Called when bot checks petition account
+        virtual void OnPlayerbotCheckPetitionAccount(Player* player, bool& found);
+
+        // Called when bot checks updates to send
+        virtual bool OnPlayerbotCheckUpdatesToSend(Player* player);
+
+        // Called when packet is sent to bot player
+        virtual void OnPlayerbotPacketSent(Player* player, WorldPacket const* packet);
+
+        // Called on bot update cycle (main processing loop)
+        virtual void OnPlayerbotUpdate(uint32 diff);
+
+        // Called when bot sessions need updating
+        virtual void OnPlayerbotUpdateSessions(Player* player);
+
+        // Called when bot player logs out
+        virtual void OnPlayerbotLogout(Player* player);
+
+        // Called when all bots should log out
+        virtual void OnPlayerbotLogoutBots();
+};
+#endif
 
 class TC_GAME_API FormulaScript : public ScriptObject
 {
@@ -1105,6 +1149,20 @@ class TC_GAME_API ScriptMgr
         void OnWorldUpdate(uint32 diff);
         void OnStartup();
         void OnShutdown();
+
+#ifdef WITH_PLAYERBOTS
+    public: /* PlayerbotScript */
+
+        bool OnPlayerbotCheckLFGQueue(lfg::Lfg5Guids const& guidsList);
+        void OnPlayerbotCheckKillTask(Player* player, Unit* victim);
+        void OnPlayerbotCheckPetitionAccount(Player* player, bool& found);
+        bool OnPlayerbotCheckUpdatesToSend(Player* player);
+        void OnPlayerbotPacketSent(Player* player, WorldPacket const* packet);
+        void OnPlayerbotUpdate(uint32 diff);
+        void OnPlayerbotUpdateSessions(Player* player);
+        void OnPlayerbotLogout(Player* player);
+        void OnPlayerbotLogoutBots();
+#endif
 
     public: /* FormulaScript */
 

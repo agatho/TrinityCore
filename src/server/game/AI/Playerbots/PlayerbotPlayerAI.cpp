@@ -28,7 +28,7 @@
 PlayerbotPlayerAI::PlayerbotPlayerAI(Player* player)
     : PlayerAI(player), _engine(nullptr), _aiObjectContext(nullptr),
       _state(PlayerbotState::INACTIVE), _enabled(false), _lastUpdate(0),
-      _updateFrequency(1000), _errorCount(0), _lastError(0)
+      _updateFrequency(1000), _sessionUpdateTimer(0), _errorCount(0), _lastError(0)
 {
     TC_LOG_DEBUG("playerbots", "PlayerbotPlayerAI created for player {}", player->GetName());
 }
@@ -390,6 +390,76 @@ void PlayerbotPlayerAI::SynchronizeWithPlayerAI()
 {
     // Ensure bot actions don't conflict with base PlayerAI
     // This is a placeholder for future synchronization logic
+}
+
+void PlayerbotPlayerAI::OnBotLogin()
+{
+    TC_LOG_DEBUG("playerbots", "PlayerbotPlayerAI::OnBotLogin for player {}", me->GetName());
+    
+    // Initialize bot-specific settings on login
+    _sessionUpdateTimer = 0;
+    
+    if (_state == PlayerbotState::INACTIVE && _enabled)
+    {
+        Initialize();
+    }
+    
+    // Load bot configuration from database
+    // TODO: Implement configuration loading
+    
+    // Set default strategies if needed
+    if (_state == PlayerbotState::ACTIVE && _engine)
+    {
+        InitializeDefaultStrategies();
+    }
+}
+
+void PlayerbotPlayerAI::OnBotLogout()
+{
+    TC_LOG_DEBUG("playerbots", "PlayerbotPlayerAI::OnBotLogout for player {}", me->GetName());
+    
+    // Save bot state before logout
+    // TODO: Implement state saving
+    
+    // Clean up any ongoing actions
+    if (_engine)
+    {
+        _engine->Cleanup();
+    }
+    
+    // Reset session timer
+    _sessionUpdateTimer = 0;
+    
+    SetEnabled(false);
+}
+
+void PlayerbotPlayerAI::OnSessionUpdate(uint32 diff)
+{
+    if (!_enabled)
+        return;
+        
+    _sessionUpdateTimer += diff;
+    
+    // Perform periodic session maintenance every 30 seconds
+    if (_sessionUpdateTimer >= 30000)
+    {
+        _sessionUpdateTimer = 0;
+        
+        // Check if bot is still valid
+        if (!IsValidForBotting())
+        {
+            TC_LOG_WARN("playerbots", "Bot {} is no longer valid, disabling", me->GetName());
+            SetEnabled(false);
+            return;
+        }
+        
+        // Perform session-specific maintenance
+        // TODO: Add session maintenance tasks like:
+        // - Check for disconnect conditions
+        // - Validate bot configuration
+        // - Update bot statistics
+        // - Handle long-term behavior patterns
+    }
 }
 
 #endif // WITH_PLAYERBOTS
