@@ -24,6 +24,14 @@ target_compile_definitions(trinity-compile-option-interface
 # An interface library to make the target features available to other targets
 add_library(trinity-feature-interface INTERFACE)
 
+# Configure playerbot module
+if(WITH_PLAYERBOTS)
+  target_compile_definitions(trinity-feature-interface
+    INTERFACE
+      WITH_PLAYERBOTS)
+  message(STATUS "Playerbot: Module enabled")
+endif()
+
 # An interface library to make the warnings level available to other targets
 # This interface taget is set-up through the platform specific script
 add_library(trinity-warning-interface INTERFACE)

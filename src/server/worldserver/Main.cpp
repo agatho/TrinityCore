@@ -661,6 +661,10 @@ bool StartDB()
         .AddDatabase(WorldDatabase, "World")
         .AddDatabase(HotfixDatabase, "Hotfix");
 
+#ifdef WITH_PLAYERBOTS
+    loader.AddDatabase(PlayerbotsDatabase, "Playerbots");
+#endif
+
     if (!loader.Load())
         return false;
 

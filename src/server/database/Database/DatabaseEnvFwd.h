@@ -32,6 +32,10 @@ class HotfixDatabaseConnection;
 class LoginDatabaseConnection;
 class WorldDatabaseConnection;
 
+#ifdef WITH_PLAYERBOTS
+class PlayerbotsDatabaseConnection;
+#endif
+
 class PreparedStatementBase;
 
 template<typename T>
@@ -41,6 +45,10 @@ using CharacterDatabasePreparedStatement = PreparedStatement<CharacterDatabaseCo
 using HotfixDatabasePreparedStatement = PreparedStatement<HotfixDatabaseConnection>;
 using LoginDatabasePreparedStatement = PreparedStatement<LoginDatabaseConnection>;
 using WorldDatabasePreparedStatement = PreparedStatement<WorldDatabaseConnection>;
+
+#ifdef WITH_PLAYERBOTS
+using PlayerbotsDatabasePreparedStatement = PreparedStatement<PlayerbotsDatabaseConnection>;
+#endif
 
 class PreparedResultSet;
 using PreparedQueryResult = std::shared_ptr<PreparedResultSet>;
@@ -66,6 +74,10 @@ using HotfixDatabaseTransaction = SQLTransaction<HotfixDatabaseConnection>;
 using LoginDatabaseTransaction = SQLTransaction<LoginDatabaseConnection>;
 using WorldDatabaseTransaction = SQLTransaction<WorldDatabaseConnection>;
 
+#ifdef WITH_PLAYERBOTS
+using PlayerbotsDatabaseTransaction = SQLTransaction<PlayerbotsDatabaseConnection>;
+#endif
+
 class SQLQueryHolderBase;
 
 template<typename T>
@@ -75,6 +87,10 @@ using CharacterDatabaseQueryHolder = SQLQueryHolder<CharacterDatabaseConnection>
 using HotfixDatabaseQueryHolder = SQLQueryHolder<HotfixDatabaseConnection>;
 using LoginDatabaseQueryHolder = SQLQueryHolder<LoginDatabaseConnection>;
 using WorldDatabaseQueryHolder = SQLQueryHolder<WorldDatabaseConnection>;
+
+#ifdef WITH_PLAYERBOTS
+using PlayerbotsDatabaseQueryHolder = SQLQueryHolder<PlayerbotsDatabaseConnection>;
+#endif
 
 class SQLQueryHolderCallback;
 bool InvokeAsyncCallbackIfReady(SQLQueryHolderCallback& callback);

@@ -50,8 +50,14 @@ public:
         DATABASE_CHARACTER  = 2,
         DATABASE_WORLD      = 4,
         DATABASE_HOTFIX     = 8,
+#ifdef WITH_PLAYERBOTS
+        DATABASE_PLAYERBOTS = 16,
+#endif
 
         DATABASE_MASK_ALL   = DATABASE_LOGIN | DATABASE_CHARACTER | DATABASE_WORLD | DATABASE_HOTFIX
+#ifdef WITH_PLAYERBOTS
+                             | DATABASE_PLAYERBOTS
+#endif
     };
 
 private:

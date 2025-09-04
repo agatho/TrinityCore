@@ -182,6 +182,39 @@ BaseLocation DBUpdater<HotfixDatabaseConnection>::GetBaseLocationType()
     return LOCATION_DOWNLOAD;
 }
 
+#ifdef WITH_PLAYERBOTS
+// Playerbots Database
+template<>
+std::string DBUpdater<PlayerbotsDatabaseConnection>::GetConfigEntry()
+{
+    return "Updates.Playerbots";
+}
+
+template<>
+std::string DBUpdater<PlayerbotsDatabaseConnection>::GetTableName()
+{
+    return "Playerbots";
+}
+
+template<>
+std::string DBUpdater<PlayerbotsDatabaseConnection>::GetBaseFile()
+{
+    return BuiltInConfig::GetSourceDirectory() + "/sql/base/playerbots_database.sql";
+}
+
+template<>
+bool DBUpdater<PlayerbotsDatabaseConnection>::IsEnabled(uint32 const updateMask)
+{
+    return (updateMask & DatabaseLoader::DATABASE_PLAYERBOTS) ? true : false;
+}
+
+template<>
+BaseLocation DBUpdater<PlayerbotsDatabaseConnection>::GetBaseLocationType()
+{
+    return LOCATION_REPOSITORY;
+}
+#endif
+
 // All
 template<class T>
 BaseLocation DBUpdater<T>::GetBaseLocationType()
@@ -451,3 +484,7 @@ template class TC_DATABASE_API DBUpdater<LoginDatabaseConnection>;
 template class TC_DATABASE_API DBUpdater<WorldDatabaseConnection>;
 template class TC_DATABASE_API DBUpdater<CharacterDatabaseConnection>;
 template class TC_DATABASE_API DBUpdater<HotfixDatabaseConnection>;
+
+#ifdef WITH_PLAYERBOTS
+template class TC_DATABASE_API DBUpdater<PlayerbotsDatabaseConnection>;
+#endif

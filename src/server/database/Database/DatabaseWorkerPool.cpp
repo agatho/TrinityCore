@@ -24,6 +24,10 @@
 #include "Implementation/WorldDatabase.h"
 #include "Implementation/CharacterDatabase.h"
 #include "Implementation/HotfixDatabase.h"
+
+#ifdef WITH_PLAYERBOTS
+#include "Implementation/PlayerbotsDatabase.h"
+#endif
 #include "Log.h"
 #include "MySQLPreparedStatement.h"
 #include "PreparedStatement.h"
@@ -620,3 +624,7 @@ template class TC_DATABASE_API DatabaseWorkerPool<LoginDatabaseConnection>;
 template class TC_DATABASE_API DatabaseWorkerPool<WorldDatabaseConnection>;
 template class TC_DATABASE_API DatabaseWorkerPool<CharacterDatabaseConnection>;
 template class TC_DATABASE_API DatabaseWorkerPool<HotfixDatabaseConnection>;
+
+#ifdef WITH_PLAYERBOTS
+template class TC_DATABASE_API DatabaseWorkerPool<PlayerbotsDatabaseConnection>;
+#endif
