@@ -17,372 +17,230 @@
 
 #ifdef WITH_PLAYERBOTS
 
-#include "PlayerbotAction.h"
-#include "PlayerbotPlayerAI.h"
 #include "PlayerbotCommon.h"
+#include "PlayerbotPlayerAI.h"
 #include "Player.h"
-#include "Unit.h"
-#include "Spell.h"
+#include "Pet.h"
+#include "MotionMaster.h"
 #include "SpellInfo.h"
 #include "SpellMgr.h"
+#include "SpellHistory.h"
 #include "Log.h"
 
 // PlayerbotAction Implementation
 PlayerbotAction::PlayerbotAction(PlayerbotPlayerAI* ai, std::string const& name)
-    : _ai(ai), _name(name)
+    : PlayerbotAIAware(ai), _name(name)
 {
 }
 
-Player* PlayerbotAction::GetBot() const
+// PlayerbotSpellAction Implementation
+Unit* PlayerbotSpellAction::GetSpellTarget() const
 {
-    return _ai ? _ai->GetPlayer() : nullptr;
+    return _ai->GetCurrentTarget();
 }
 
-bool PlayerbotAction::CanCastSpell(uint32 spellId) const
+bool PlayerbotSpellAction::Execute(PlayerbotEvent const& event)
+{
+    Unit* target = GetSpellTarget();
+    
+    // Allow actions to override target selection
+    if (!target)
+        return false;
+    
+    return CastSpell(target);
+}
+
+bool PlayerbotSpellAction::CastSpell(Unit* target, bool triggered)
 {
     Player* bot = GetBot();
-    if (!bot)
+    if (!bot || !_spellId)
         return false;
-
-    SpellInfo const* spellInfo = sSpellMgr->GetSpellInfo(spellId);
-    if (!spellInfo)
+    
+    // Use provided target or get default target
+    if (!target)
+        target = GetSpellTarget();
+    
+    if (!target)
         return false;
-
-    // Check if bot knows the spell
-    if (!bot->HasSpell(spellId))
+    
+    // Validate spell can be cast
+    if (!CanCastSpell(target))
         return false;
+    
+    // Use TrinityCore's spell casting system
+    SpellCastResult result = bot->CastSpell(target, _spellId, triggered);
+    
+    LogAction("Cast spell " + std::to_string(_spellId) + " on " + target->GetName());
+    
+    return result == SPELL_CAST_OK;
+}
 
-    // Check spell cooldown
-    if (bot->HasSpellCooldown(spellId))
+bool PlayerbotSpellAction::CanCastSpell(Unit* target) const
+{
+    if (!target || !IsSpellReady())
         return false;
-
-    // Check mana/energy cost
-    if (bot->GetPower(POWER_MANA) < spellInfo->ManaCost)
+    
+    if (!HasEnoughMana())
         return false;
-
+    
+    if (!IsInRange(target))
+        return false;
+    
     return true;
 }
 
-bool PlayerbotAction::IsInCombat() const
+bool PlayerbotSpellAction::IsSpellReady() const
 {
     Player* bot = GetBot();
-    return bot && bot->IsInCombat();
+    if (!bot || !_spellId)
+        return false;
+    
+    // Check if spell is known
+    if (!bot->HasSpell(_spellId))
+        return false;
+    
+    // Check if spell is on cooldown using SpellHistory
+    if (bot->GetSpellHistory()->HasCooldown(_spellId))
+        return false;
+    
+    return true;
 }
 
-Unit* PlayerbotAction::GetTarget() const
+bool PlayerbotSpellAction::HasEnoughMana() const
 {
     Player* bot = GetBot();
-    return bot ? bot->GetSelectedUnit() : nullptr;
+    if (!bot || !_spellId)
+        return false;
+    
+    SpellInfo const* spellInfo = sSpellMgr->GetSpellInfo(_spellId, DIFFICULTY_NONE);
+    if (!spellInfo)
+        return false;
+    
+    // Check power costs using modern TrinityCore API
+    std::vector<SpellPowerCost> costs = spellInfo->CalcPowerCost(bot, spellInfo->GetSchoolMask());
+    
+    for (SpellPowerCost const& cost : costs)
+    {
+        if (cost.Amount > 0 && bot->GetPower(cost.Power) < cost.Amount)
+            return false;
+    }
+    
+    return true;
 }
 
-Unit* PlayerbotAction::GetCurrentTarget() const
+bool PlayerbotSpellAction::IsInRange(Unit* target) const
+{
+    Player* bot = GetBot();
+    if (!bot || !target || !_spellId)
+        return false;
+    
+    SpellInfo const* spellInfo = sSpellMgr->GetSpellInfo(_spellId, DIFFICULTY_NONE);
+    if (!spellInfo)
+        return false;
+    
+    float distance = bot->GetDistance(target);
+    float maxRange = spellInfo->GetMaxRange(false);
+    float minRange = spellInfo->GetMinRange(false);
+    
+    return distance >= minRange && distance <= maxRange;
+}
+
+// PlayerbotStrategy Implementation
+PlayerbotStrategy::PlayerbotStrategy(PlayerbotPlayerAI* ai, std::string const& name)
+    : PlayerbotAIAware(ai), _name(name), _type(0)
+{
+}
+
+// PlayerbotTrigger Implementation
+PlayerbotTrigger::PlayerbotTrigger(PlayerbotPlayerAI* ai, std::string const& name)
+    : PlayerbotAIAware(ai), _name(name)
+{
+}
+
+// PlayerbotAIAware utility method implementations
+Player* PlayerbotAIAware::GetBot() const
+{
+    return _ai->GetBot();
+}
+
+Unit* PlayerbotAIAware::GetTarget() const
 {
     Player* bot = GetBot();
     return bot ? bot->GetVictim() : nullptr;
 }
 
-void PlayerbotAction::LogAction(std::string const& message) const
+Unit* PlayerbotAIAware::GetCurrentTarget() const
+{
+    return GetTarget(); // Same as GetTarget for now
+}
+
+bool PlayerbotAIAware::IsInCombat() const
 {
     Player* bot = GetBot();
-    TC_LOG_DEBUG("playerbots", "Bot {}: Action '{}' - {}", 
-                 bot ? bot->GetName() : "Unknown", _name, message);
+    return bot ? bot->IsInCombat() : false;
 }
 
-void PlayerbotAction::LogError(std::string const& error) const
-{
-    Player* bot = GetBot();
-    TC_LOG_ERROR("playerbots", "Bot {}: Action '{}' ERROR - {}", 
-                 bot ? bot->GetName() : "Unknown", _name, error);
-}
-
-// PlayerbotMovementAction Implementation
-PlayerbotMovementAction::PlayerbotMovementAction(PlayerbotPlayerAI* ai, std::string const& name)
-    : PlayerbotAction(ai, name), _lastMovement(0)
-{
-}
-
-bool PlayerbotMovementAction::Execute(PlayerbotEvent event)
-{
-    Unit* target = GetTarget();
-    if (!target)
-    {
-        LogError("No target for movement action");
-        return false;
-    }
-
-    // Rate limit movement commands
-    uint32 now = getMSTime();
-    if (now - _lastMovement < MOVEMENT_COOLDOWN)
-        return false;
-
-    _lastMovement = now;
-
-    try
-    {
-        return ExecuteMovement(target);
-    }
-    catch (std::exception const& e)
-    {
-        LogError("Exception in movement execution: " + std::string(e.what()));
-        return false;
-    }
-}
-
-bool PlayerbotMovementAction::MoveTo(float x, float y, float z)
-{
-    Player* bot = GetBot();
-    if (!bot)
-        return false;
-
-    // Use TrinityCore's movement system
-    bot->GetMotionMaster()->MovePoint(0, x, y, z);
-    LogAction("Moving to position (" + std::to_string(x) + ", " + std::to_string(y) + ", " + std::to_string(z) + ")");
-    return true;
-}
-
-bool PlayerbotMovementAction::MoveTo(Unit* target, float distance)
-{
-    if (!target)
-        return false;
-
-    Position pos = target->GetPosition();
-    
-    // Calculate position at specified distance from target
-    if (distance > 0.0f)
-    {
-        float angle = target->GetAngle(GetBot());
-        pos.m_positionX += cos(angle) * distance;
-        pos.m_positionY += sin(angle) * distance;
-    }
-
-    return MoveTo(pos.m_positionX, pos.m_positionY, pos.m_positionZ);
-}
-
-bool PlayerbotMovementAction::IsInRange(Unit* target, float distance) const
-{
-    return GetDistance(target) <= distance;
-}
-
-float PlayerbotMovementAction::GetDistance(Unit* target) const
+bool PlayerbotAIAware::IsInMeleeRange(Unit* target) const
 {
     Player* bot = GetBot();
     if (!bot || !target)
-        return std::numeric_limits<float>::max();
+        return false;
+    return bot->GetDistance(target) <= bot->GetMeleeRange(target);
+}
 
+float PlayerbotAIAware::GetDistance(Unit* target) const
+{
+    Player* bot = GetBot();
+    if (!bot || !target)
+        return 100000.0f; // Very large distance if invalid
     return bot->GetDistance(target);
 }
 
-// PlayerbotSpellAction Implementation
-PlayerbotSpellAction::PlayerbotSpellAction(PlayerbotPlayerAI* ai, std::string const& name, uint32 spellId)
-    : PlayerbotAction(ai, name), _spellId(spellId)
-{
-}
-
-bool PlayerbotSpellAction::Execute(PlayerbotEvent event)
-{
-    if (!CanCastSpell())
-    {
-        LogAction("Cannot cast spell " + std::to_string(_spellId));
-        return false;
-    }
-
-    Unit* target = GetSpellTarget();
-    if (!target)
-    {
-        LogError("No target for spell " + std::to_string(_spellId));
-        return false;
-    }
-
-    return CastSpell(target);
-}
-
-bool PlayerbotSpellAction::IsPossible() const
-{
-    return CanCastSpell(_spellId);
-}
-
-uint32 PlayerbotSpellAction::GetCooldown() const
+void PlayerbotAIAware::LogAction(std::string const& message) const
 {
     Player* bot = GetBot();
-    if (!bot)
-        return 0;
-
-    return bot->GetSpellCooldownDelay(_spellId);
-}
-
-Unit* PlayerbotSpellAction::GetSpellTarget() const
-{
-    return GetTarget();
-}
-
-bool PlayerbotSpellAction::CanCastSpell() const
-{
-    return PlayerbotAction::CanCastSpell(_spellId);
-}
-
-bool PlayerbotSpellAction::CastSpell(Unit* target)
-{
-    return CastSpell(_spellId, target);
-}
-
-bool PlayerbotSpellAction::CastSpell(uint32 spellId, Unit* target)
-{
-    Player* bot = GetBot();
-    if (!bot)
-        return false;
-
-    SpellInfo const* spellInfo = sSpellMgr->GetSpellInfo(spellId);
-    if (!spellInfo)
-        return false;
-
-    // Create spell cast
-    Spell* spell = new Spell(bot, spellInfo, TRIGGERED_NONE);
-    if (!spell)
-        return false;
-
-    // Set target if specified
-    if (target)
-    {
-        SpellCastTargets targets;
-        targets.SetUnitTarget(target);
-        spell->m_targets = targets;
-    }
-
-    // Execute the spell cast
-    SpellCastResult result = spell->prepare();
-    
-    if (result == SPELL_CAST_OK)
-    {
-        LogAction("Successfully cast spell " + std::to_string(spellId) + " on " + 
-                 (target ? target->GetName() : "self"));
-        return true;
-    }
+    if (bot)
+        TC_LOG_DEBUG("playerbots", "Bot {}: {}", bot->GetName(), message);
     else
-    {
-        LogError("Failed to cast spell " + std::to_string(spellId) + ", result: " + std::to_string(result));
-        delete spell;
-        return false;
-    }
+        TC_LOG_DEBUG("playerbots", "Unknown Bot: {}", message);
 }
 
-uint32 PlayerbotSpellAction::GetManaCost() const
-{
-    SpellInfo const* spellInfo = sSpellMgr->GetSpellInfo(_spellId);
-    return spellInfo ? spellInfo->ManaCost : 0;
-}
-
-uint32 PlayerbotSpellAction::GetCastTime() const
-{
-    SpellInfo const* spellInfo = sSpellMgr->GetSpellInfo(_spellId);
-    return spellInfo ? spellInfo->CastTime : 0;
-}
-
-float PlayerbotSpellAction::GetSpellRange() const
-{
-    SpellInfo const* spellInfo = sSpellMgr->GetSpellInfo(_spellId);
-    return spellInfo ? spellInfo->GetMaxRange() : 0.0f;
-}
-
-// PlayerbotAttackAction Implementation
-PlayerbotAttackAction::PlayerbotAttackAction(PlayerbotPlayerAI* ai, std::string const& name)
-    : PlayerbotMovementAction(ai, name)
-{
-}
-
-bool PlayerbotAttackAction::Execute(PlayerbotEvent event)
-{
-    Unit* target = GetAttackTarget();
-    if (!target)
-    {
-        LogError("No attack target");
-        return false;
-    }
-
-    // If not in melee range, move closer
-    if (!IsInMeleeRange(target))
-    {
-        return ExecuteMovement(target);
-    }
-
-    // Start attacking
-    return Attack(target);
-}
-
-bool PlayerbotAttackAction::IsUseful() const
-{
-    Unit* target = GetAttackTarget();
-    return target && target->IsAlive() && target->IsHostileTo(GetBot());
-}
-
-bool PlayerbotAttackAction::ExecuteMovement(Unit* target)
-{
-    if (!target)
-        return false;
-
-    // Move to melee range
-    float meleeRange = GetBot()->GetMeleeReach() + target->GetCombatReach();
-    return MoveTo(target, meleeRange * 0.8f); // Move slightly closer than max range
-}
-
-Unit* PlayerbotAttackAction::GetAttackTarget() const
-{
-    Unit* target = GetCurrentTarget();
-    if (!target)
-        target = GetTarget();
-    
-    return target;
-}
-
-bool PlayerbotAttackAction::Attack(Unit* target, bool usePet)
+void PlayerbotAIAware::LogError(std::string const& message) const
 {
     Player* bot = GetBot();
-    if (!bot || !target)
-        return false;
-
-    // Start attack if not already attacking
-    if (!bot->IsInCombat() || bot->GetVictim() != target)
-    {
-        return StartAttack(target);
-    }
-
-    // Continue attacking - let the core combat system handle auto-attacks
-    LogAction("Continuing attack on " + target->GetName());
-    return true;
+    if (bot)
+        TC_LOG_ERROR("playerbots", "Bot {}: {}", bot->GetName(), message);
+    else
+        TC_LOG_ERROR("playerbots", "Unknown Bot: {}", message);
 }
 
-bool PlayerbotAttackAction::IsInMeleeRange(Unit* target) const
-{
-    Player* bot = GetBot();
-    if (!bot || !target)
-        return false;
-
-    float meleeRange = bot->GetMeleeReach() + target->GetCombatReach();
-    return GetDistance(target) <= meleeRange;
-}
-
-bool PlayerbotAttackAction::StartAttack(Unit* target)
-{
-    Player* bot = GetBot();
-    if (!bot || !target)
-        return false;
-
-    // Set the target and start attacking
-    bot->SetTarget(target->GetGUID());
-    bot->Attack(target, true);
-    
-    LogAction("Started attacking " + target->GetName());
-    return true;
-}
-
-bool PlayerbotAttackAction::ShouldUsePet() const
+bool PlayerbotAIAware::HasPet() const
 {
     Player* bot = GetBot();
     if (!bot)
         return false;
-
-    // Check if bot has a pet and it's alive
     Pet* pet = bot->GetPet();
     return pet && pet->IsAlive();
+}
+
+bool PlayerbotAIAware::IsPetInCombat() const
+{
+    Player* bot = GetBot();
+    if (!bot)
+        return false;
+    Pet* pet = bot->GetPet();
+    return pet && pet->IsInCombat();
+}
+
+bool PlayerbotAIAware::MoveTo(float x, float y, float z) const
+{
+    Player* bot = GetBot();
+    if (!bot)
+        return false;
+    
+    // Use TrinityCore's movement system
+    bot->GetMotionMaster()->MovePoint(0, x, y, z);
+    return true;
 }
 
 #endif // WITH_PLAYERBOTS

@@ -1547,9 +1547,9 @@ void ScriptMgr::OnWorldUpdate(uint32 diff)
 bool ScriptMgr::OnPlayerbotCheckLFGQueue(lfg::Lfg5Guids const& guidsList)
 {
     bool result = true;
-    FOREACH_SCRIPT(PlayerbotScript)
+    FOR_SCRIPTS_RET(PlayerbotScript, itr, end, result)
     {
-        if (!tmpscript->OnPlayerbotCheckLFGQueue(guidsList))
+        if (!itr->second->OnPlayerbotCheckLFGQueue(guidsList))
         {
             result = false;
             break;
@@ -1571,9 +1571,9 @@ void ScriptMgr::OnPlayerbotCheckPetitionAccount(Player* player, bool& found)
 bool ScriptMgr::OnPlayerbotCheckUpdatesToSend(Player* player)
 {
     bool result = true;
-    FOREACH_SCRIPT(PlayerbotScript)
+    FOR_SCRIPTS_RET(PlayerbotScript, itr, end, result)
     {
-        if (!tmpscript->OnPlayerbotCheckUpdatesToSend(player))
+        if (!itr->second->OnPlayerbotCheckUpdatesToSend(player))
         {
             result = false;
             break;

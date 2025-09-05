@@ -207,6 +207,24 @@ bool PlayerbotPlayerAI::HasStrategy(std::string const& name) const
     return _engine->HasStrategy(name);
 }
 
+void PlayerbotPlayerAI::AddStrategy(std::string const& strategy)
+{
+    if (!_engine)
+        return;
+
+    _engine->AddStrategy(strategy);
+    TC_LOG_DEBUG("playerbots", "Player {} added strategy: {}", me->GetName(), strategy);
+}
+
+void PlayerbotPlayerAI::RemoveStrategy(std::string const& strategy)
+{
+    if (!_engine)
+        return;
+
+    _engine->RemoveStrategy(strategy);
+    TC_LOG_DEBUG("playerbots", "Player {} removed strategy: {}", me->GetName(), strategy);
+}
+
 bool PlayerbotPlayerAI::ExecuteAction(std::string const& action, std::string const& qualifier)
 {
     if (!_engine)
@@ -281,6 +299,28 @@ void PlayerbotPlayerAI::DoAutoAttackIfReady()
     {
         PlayerAI::DoAutoAttackIfReady();
     }
+}
+
+Player* PlayerbotPlayerAI::GetBot() const
+{
+    return me;
+}
+
+Unit* PlayerbotPlayerAI::GetCurrentTarget() const
+{
+    return me->GetSelectedUnit();
+}
+
+bool PlayerbotPlayerAI::IsInCombat() const
+{
+    return me->IsInCombat();
+}
+
+bool PlayerbotPlayerAI::IsInMeleeRange(Unit* target) const
+{
+    if (!target)
+        return false;
+    return me->GetDistance(target) <= me->GetMeleeRange(target);
 }
 
 bool PlayerbotPlayerAI::InitializeEngine()
@@ -424,7 +464,6 @@ void PlayerbotPlayerAI::OnBotLogout()
     // Clean up any ongoing actions
     if (_engine)
     {
-        _engine->Cleanup();
     }
     
     // Reset session timer

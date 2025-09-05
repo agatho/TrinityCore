@@ -24,6 +24,19 @@
 #include <vector>
 
 class PlayerbotPlayerAI;
+class Unit;
+class Player;
+
+/**
+ * @brief Threat assessment for combat actions
+ */
+enum class ThreatType : uint8
+{
+    NONE = 0,
+    SINGLE = 1,
+    AOE = 2,
+    DEFENSIVE = 3
+};
 
 /**
  * @brief Base class for all playerbot AI components that need access to the AI instance
@@ -37,6 +50,19 @@ public:
 protected:
     PlayerbotPlayerAI* _ai;
     PlayerbotPlayerAI* GetAI() const { return _ai; }
+    
+    // Common utility methods
+    Player* GetBot() const;
+    Unit* GetTarget() const;
+    Unit* GetCurrentTarget() const;
+    bool IsInCombat() const;
+    bool IsInMeleeRange(Unit* target) const;
+    float GetDistance(Unit* target) const;
+    void LogAction(std::string const& message) const;
+    void LogError(std::string const& message) const;
+    bool HasPet() const;
+    bool IsPetInCombat() const;
+    bool MoveTo(float x, float y, float z) const;
 };
 
 /**
@@ -81,12 +107,55 @@ public:
     virtual bool Execute(PlayerbotEvent const& event) = 0;
     virtual bool isUseful() { return true; }
     virtual bool isPossible() { return true; }
+    virtual float GetRelevance() const { return 0.5f; }
+    virtual uint32 GetCooldown() const { return 0; }
+    virtual ThreatType GetThreatType() const { return ThreatType::SINGLE; }
 
     std::string const& GetName() const { return _name; }
     void SetName(std::string const& name) { _name = name; }
 
 protected:
     std::string _name;
+};
+
+/**
+ * @brief Base class for spell-casting actions
+ */
+class TC_GAME_API PlayerbotSpellAction : public PlayerbotAction
+{
+public:
+    PlayerbotSpellAction(PlayerbotPlayerAI* ai, std::string const& name, uint32 spellId) 
+        : PlayerbotAction(ai, name), _spellId(spellId) {}
+
+    virtual Unit* GetSpellTarget() const;
+    uint32 GetSpellId() const { return _spellId; }
+
+    // Default Execute implementation using spell casting
+    virtual bool Execute(PlayerbotEvent const& event) override;
+
+protected:
+    // Core spell casting method using TrinityCore patterns
+    bool CastSpell(Unit* target = nullptr, bool triggered = false);
+    
+    // Spell validation methods
+    bool CanCastSpell(Unit* target = nullptr) const;
+    bool IsSpellReady() const;
+    bool HasEnoughMana() const;
+    bool IsInRange(Unit* target) const;
+
+    uint32 _spellId;
+};
+
+/**
+ * @brief Base class for movement-based actions
+ */
+class TC_GAME_API PlayerbotMovementAction : public PlayerbotAction
+{
+public:
+    PlayerbotMovementAction(PlayerbotPlayerAI* ai, std::string const& name) 
+        : PlayerbotAction(ai, name) {}
+
+    virtual bool ExecuteMovement(Unit* target) { return false; }
 };
 
 /**
@@ -100,6 +169,12 @@ public:
 
     virtual void InitializeActions() {}
     virtual void InitializeTriggers() {}
+    virtual float GetActionPriority(std::string const& actionName) const { return 0.5f; }
+    
+    // Action registration (placeholder for now)  
+    void RegisterAction(std::string const& name, std::unique_ptr<PlayerbotAction> action) {}
+    template<typename T>
+    void RegisterTrigger(std::string const& name, std::unique_ptr<T> trigger) {}
 
     std::string const& GetName() const { return _name; }
     void SetName(std::string const& name) { _name = name; }
@@ -121,7 +196,7 @@ public:
     explicit PlayerbotTrigger(PlayerbotPlayerAI* ai, std::string const& name = "unknown");
     virtual ~PlayerbotTrigger() = default;
 
-    virtual bool IsActive() = 0;
+    virtual bool IsActive() { return false; }
     virtual PlayerbotEvent Check() { return PlayerbotEvent(); }
 
     std::string const& GetName() const { return _name; }
@@ -130,6 +205,7 @@ public:
 protected:
     std::string _name;
 };
+
 
 /**
  * @brief Base class for bot values

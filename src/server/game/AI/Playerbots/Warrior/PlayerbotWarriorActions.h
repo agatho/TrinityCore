@@ -62,6 +62,7 @@ namespace WarriorSpells
     constexpr uint32 BATTLE_SHOUT = 6673;
     constexpr uint32 COMMANDING_SHOUT = 469;
     constexpr uint32 INTIMIDATING_SHOUT = 5246;
+    constexpr uint32 DEMORALIZING_SHOUT = 1160;
     
     // Legacy abilities (may not be available in current expansion)
     constexpr uint32 HEROIC_STRIKE = 78;      // Removed in modern WoW
@@ -83,6 +84,8 @@ protected:
     // Modern warrior mechanics (simplified stance system)
     bool IsInDefensiveStance() const;
     bool IsInBerserkerStance() const;
+    bool IsInBattleStance() const;
+    bool SwitchToStance(uint32 stanceSpellId);
     bool HasShield() const;
     bool HasTwoHandedWeapon() const;
     
@@ -104,7 +107,7 @@ public:
     PlayerbotColossusSmashAction(PlayerbotPlayerAI* ai) 
         : PlayerbotWarriorAction(ai, "colossus smash", WarriorSpells::COLOSSUS_SMASH) {}
     
-    virtual bool IsUseful() const override;
+    virtual bool isUseful() override;
     virtual float GetRelevance() const override;
 };
 
@@ -114,7 +117,7 @@ public:
     PlayerbotExecuteAction(PlayerbotPlayerAI* ai) 
         : PlayerbotWarriorAction(ai, "execute", WarriorSpells::EXECUTE) {}
     
-    virtual bool IsUseful() const override;
+    virtual bool isUseful() override;
     virtual float GetRelevance() const override;
     
 protected:
@@ -127,7 +130,7 @@ public:
     PlayerbotSlamAction(PlayerbotPlayerAI* ai) 
         : PlayerbotWarriorAction(ai, "slam", WarriorSpells::SLAM) {}
     
-    virtual bool IsUseful() const override;
+    virtual bool isUseful() override;
     virtual float GetRelevance() const override;
 };
 
@@ -137,7 +140,7 @@ public:
     PlayerbotRendAction(PlayerbotPlayerAI* ai) 
         : PlayerbotWarriorAction(ai, "rend", WarriorSpells::REND) {}
     
-    virtual bool IsUseful() const override;
+    virtual bool isUseful() override;
     virtual float GetRelevance() const override;
 };
 
@@ -147,8 +150,8 @@ public:
     PlayerbotChargeAction(PlayerbotPlayerAI* ai) 
         : PlayerbotWarriorAction(ai, "charge", WarriorSpells::CHARGE) {}
     
-    virtual bool Execute(PlayerbotEvent event) override;
-    virtual bool IsUseful() const override;
+    virtual bool Execute(PlayerbotEvent const& event) override;
+    virtual bool isUseful() override;
     virtual float GetRelevance() const override;
 
 private:
@@ -161,8 +164,8 @@ public:
     PlayerbotMortalStrikeAction(PlayerbotPlayerAI* ai) 
         : PlayerbotWarriorAction(ai, "mortal strike", WarriorSpells::MORTAL_STRIKE) {}
     
-    virtual bool IsUseful() const override;
-    virtual bool IsPossible() const override;
+    virtual bool isUseful() override;
+    virtual bool isPossible() override;
 };
 
 class TC_GAME_API PlayerbotOverpowerAction : public PlayerbotWarriorAction
@@ -171,8 +174,8 @@ public:
     PlayerbotOverpowerAction(PlayerbotPlayerAI* ai) 
         : PlayerbotWarriorAction(ai, "overpower", WarriorSpells::OVERPOWER) {}
     
-    virtual bool IsUseful() const override;
-    virtual bool IsPossible() const override;
+    virtual bool isUseful() override;
+    virtual bool isPossible() override;
 };
 
 // Combat Actions - Protection Specialization
@@ -182,7 +185,7 @@ public:
     PlayerbotSunderArmorAction(PlayerbotPlayerAI* ai) 
         : PlayerbotWarriorAction(ai, "sunder armor", WarriorSpells::SUNDER_ARMOR) {}
     
-    virtual bool IsUseful() const override;
+    virtual bool isUseful() override;
     virtual float GetRelevance() const override;
 
 private:
@@ -195,8 +198,8 @@ public:
     PlayerbotTauntAction(PlayerbotPlayerAI* ai) 
         : PlayerbotWarriorAction(ai, "taunt", WarriorSpells::TAUNT) {}
     
-    virtual bool IsUseful() const override;
-    virtual bool IsPossible() const override;
+    virtual bool isUseful() override;
+    virtual bool isPossible() override;
 
 protected:
     virtual Unit* GetSpellTarget() const override;
@@ -208,8 +211,8 @@ public:
     PlayerbotRevengeAction(PlayerbotPlayerAI* ai) 
         : PlayerbotWarriorAction(ai, "revenge", WarriorSpells::REVENGE) {}
     
-    virtual bool IsUseful() const override;
-    virtual bool IsPossible() const override;
+    virtual bool isUseful() override;
+    virtual bool isPossible() override;
 };
 
 class TC_GAME_API PlayerbotShieldSlamAction : public PlayerbotWarriorAction
@@ -218,8 +221,8 @@ public:
     PlayerbotShieldSlamAction(PlayerbotPlayerAI* ai) 
         : PlayerbotWarriorAction(ai, "shield slam", WarriorSpells::SHIELD_SLAM) {}
     
-    virtual bool IsUseful() const override;
-    virtual bool IsPossible() const override;
+    virtual bool isUseful() override;
+    virtual bool isPossible() override;
 };
 
 // Modern Protection Core Abilities
@@ -229,8 +232,8 @@ public:
     PlayerbotIgnorePainAction(PlayerbotPlayerAI* ai) 
         : PlayerbotWarriorAction(ai, "ignore pain", WarriorSpells::IGNORE_PAIN) {}
     
-    virtual bool IsUseful() const override;
-    virtual bool IsPossible() const override;
+    virtual bool isUseful() override;
+    virtual bool isPossible() override;
     virtual float GetRelevance() const override;
 };
 
@@ -240,8 +243,8 @@ public:
     PlayerbotAvatarAction(PlayerbotPlayerAI* ai) 
         : PlayerbotWarriorAction(ai, "avatar", WarriorSpells::AVATAR) {}
     
-    virtual bool IsUseful() const override;
-    virtual bool IsPossible() const override;
+    virtual bool isUseful() override;
+    virtual bool isPossible() override;
     virtual float GetRelevance() const override;
 };
 
@@ -252,8 +255,8 @@ public:
     PlayerbotBloodthirstAction(PlayerbotPlayerAI* ai) 
         : PlayerbotWarriorAction(ai, "bloodthirst", WarriorSpells::BLOODTHIRST) {}
     
-    virtual bool IsUseful() const override;
-    virtual bool IsPossible() const override;
+    virtual bool isUseful() override;
+    virtual bool isPossible() override;
 };
 
 class TC_GAME_API PlayerbotWhirlwindAction : public PlayerbotWarriorAction
@@ -262,8 +265,8 @@ public:
     PlayerbotWhirlwindAction(PlayerbotPlayerAI* ai) 
         : PlayerbotWarriorAction(ai, "whirlwind", WarriorSpells::WHIRLWIND) {}
     
-    virtual bool IsUseful() const override;
-    virtual bool IsPossible() const override;
+    virtual bool isUseful() override;
+    virtual bool isPossible() override;
     virtual ThreatType GetThreatType() const override { return ThreatType::AOE; }
 };
 
@@ -274,8 +277,8 @@ public:
     PlayerbotRampageAction(PlayerbotPlayerAI* ai) 
         : PlayerbotWarriorAction(ai, "rampage", WarriorSpells::RAMPAGE) {}
     
-    virtual bool IsUseful() const override;
-    virtual bool IsPossible() const override;
+    virtual bool isUseful() override;
+    virtual bool isPossible() override;
     virtual float GetRelevance() const override;
 };
 
@@ -285,8 +288,8 @@ public:
     PlayerbotRagingBlowAction(PlayerbotPlayerAI* ai) 
         : PlayerbotWarriorAction(ai, "raging blow", WarriorSpells::RAGING_BLOW) {}
     
-    virtual bool IsUseful() const override;
-    virtual bool IsPossible() const override;
+    virtual bool isUseful() override;
+    virtual bool isPossible() override;
     virtual float GetRelevance() const override;
 };
 
@@ -296,8 +299,8 @@ public:
     PlayerbotRecklessnessAction(PlayerbotPlayerAI* ai) 
         : PlayerbotWarriorAction(ai, "recklessness", WarriorSpells::RECKLESSNESS) {}
     
-    virtual bool IsUseful() const override;
-    virtual bool IsPossible() const override;
+    virtual bool isUseful() override;
+    virtual bool isPossible() override;
     virtual float GetRelevance() const override;
 };
 
@@ -308,7 +311,7 @@ public:
     PlayerbotBattleShoutAction(PlayerbotPlayerAI* ai) 
         : PlayerbotWarriorAction(ai, "battle shout", WarriorSpells::BATTLE_SHOUT) {}
     
-    virtual bool IsUseful() const override;
+    virtual bool isUseful() override;
 
 protected:
     virtual Unit* GetSpellTarget() const override;
@@ -323,7 +326,7 @@ public:
     PlayerbotDemoralizingShoutAction(PlayerbotPlayerAI* ai) 
         : PlayerbotWarriorAction(ai, "demoralizing shout", WarriorSpells::DEMORALIZING_SHOUT) {}
     
-    virtual bool IsUseful() const override;
+    virtual bool isUseful() override;
     virtual ThreatType GetThreatType() const override { return ThreatType::AOE; }
 };
 
@@ -333,7 +336,7 @@ public:
     PlayerbotBloodrageAction(PlayerbotPlayerAI* ai) 
         : PlayerbotWarriorAction(ai, "bloodrage", WarriorSpells::BLOODRAGE) {}
     
-    virtual bool IsUseful() const override;
+    virtual bool isUseful() override;
 
 protected:
     virtual Unit* GetSpellTarget() const override;
@@ -351,9 +354,9 @@ public:
     PlayerbotPummelAction(PlayerbotPlayerAI* ai) 
         : PlayerbotWarriorAction(ai, "pummel", WarriorSpells::PUMMEL) {}
     
-    virtual bool Execute(PlayerbotEvent event) override;
-    virtual bool IsUseful() const override;
-    virtual bool IsPossible() const override;
+    virtual bool Execute(PlayerbotEvent const& event) override;
+    virtual bool isUseful() override;
+    virtual bool isPossible() override;
     virtual float GetRelevance() const override;
 
 protected:

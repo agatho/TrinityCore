@@ -32,25 +32,25 @@
 // PlayerbotWarriorAction Base Class Implementation
 bool PlayerbotWarriorAction::IsInDefensiveStance() const
 {
-    Player* bot = GetBot();
+    Player* bot = _ai->GetBot();
     return bot && bot->HasAura(WarriorSpells::DEFENSIVE_STANCE);
 }
 
 bool PlayerbotWarriorAction::IsInBerserkerStance() const
 {
-    Player* bot = GetBot();
+    Player* bot = _ai->GetBot();
     return bot && bot->HasAura(WarriorSpells::BERSERKER_STANCE);
 }
 
 bool PlayerbotWarriorAction::HasEnrage() const
 {
-    Player* bot = GetBot();
+    Player* bot = _ai->GetBot();
     return bot && bot->HasAura(WarriorSpells::ENRAGE);
 }
 
 uint32 PlayerbotWarriorAction::GetRageAmount() const
 {
-    Player* bot = GetBot();
+    Player* bot = _ai->GetBot();
     return bot ? bot->GetPower(POWER_RAGE) : 0;
 }
 
@@ -62,7 +62,7 @@ bool PlayerbotWarriorAction::IsExecuteRange(Unit* target) const
     float healthPct = GetTargetHealthPercent(target);
     
     // Modern execute thresholds: 35% for Arms, 20% for Fury/Protection
-    if (GetBot()->HasSpell(WarriorSpells::MORTAL_STRIKE)) // Arms spec
+    if (_ai->GetBot()->HasSpell(WarriorSpells::MORTAL_STRIKE)) // Arms spec
         return healthPct <= 0.35f;
     else
         return healthPct <= 0.20f;
@@ -83,7 +83,7 @@ float PlayerbotWarriorAction::GetTargetHealthPercent(Unit* target) const
 
 uint32 PlayerbotWarriorAction::CountNearbyEnemies(float range) const
 {
-    Player* bot = GetBot();
+    Player* bot = _ai->GetBot();
     if (!bot)
         return 0;
 
@@ -104,7 +104,7 @@ uint32 PlayerbotWarriorAction::CountNearbyEnemies(float range) const
 
 bool PlayerbotWarriorAction::HasShield() const
 {
-    Player* bot = GetBot();
+    Player* bot = _ai->GetBot();
     if (!bot)
         return false;
 
@@ -114,7 +114,7 @@ bool PlayerbotWarriorAction::HasShield() const
 
 bool PlayerbotWarriorAction::HasTwoHandedWeapon() const
 {
-    Player* bot = GetBot();
+    Player* bot = _ai->GetBot();
     if (!bot)
         return false;
 
@@ -126,8 +126,29 @@ bool PlayerbotWarriorAction::HasTwoHandedWeapon() const
     return inventoryType == INVTYPE_2HWEAPON;
 }
 
+bool PlayerbotWarriorAction::SwitchToStance(uint32 stanceSpellId)
+{
+    Player* bot = GetBot();
+    if (!bot)
+        return false;
+    
+    // Check if already in desired stance
+    if (bot->HasAura(stanceSpellId))
+        return true;
+    
+    // Cast the stance spell using proper spell casting
+    return CastSpell(bot, false);
+}
+
+bool PlayerbotWarriorAction::IsInBattleStance() const
+{
+    // In modern WoW, there's no separate Battle Stance - it's baseline
+    // Return true if not in Defensive or Berserker stance
+    return !IsInDefensiveStance() && !IsInBerserkerStance();
+}
+
 // Modern Arms Combat Actions
-bool PlayerbotColossusSmashAction::IsUseful() const
+bool PlayerbotColossusSmashAction::isUseful()
 {
     Unit* target = GetCurrentTarget();
     if (!target || !IsInCombat())
@@ -143,7 +164,7 @@ float PlayerbotColossusSmashAction::GetRelevance() const
     return 0.95f;
 }
 
-bool PlayerbotExecuteAction::IsUseful() const
+bool PlayerbotExecuteAction::isUseful()
 {
     Unit* target = GetCurrentTarget();
     if (!target || !IsInCombat())
@@ -167,7 +188,7 @@ float PlayerbotExecuteAction::GetRelevance() const
     return 0.9f;
 }
 
-bool PlayerbotSlamAction::IsUseful() const
+bool PlayerbotSlamAction::isUseful()
 {
     Unit* target = GetCurrentTarget();
     if (!target || !IsInCombat())
@@ -183,18 +204,8 @@ float PlayerbotSlamAction::GetRelevance() const
     return 0.4f;
 }
 
-float PlayerbotHeroicStrikeAction::GetRelevance() const
-{
-    Player* bot = GetBot();
-    if (!bot)
-        return 0.0f;
 
-    // Higher relevance with more rage
-    uint32 rage = bot->GetPower(POWER_RAGE);
-    return std::min(rage / 100.0f, 1.0f);
-}
-
-bool PlayerbotRendAction::IsUseful() const
+bool PlayerbotRendAction::isUseful()
 {
     Unit* target = GetCurrentTarget();
     if (!target || !IsInCombat())
@@ -215,27 +226,21 @@ float PlayerbotRendAction::GetRelevance() const
     return targetHealthPct > 0.7f ? 0.8f : 0.3f;
 }
 
-bool PlayerbotChargeAction::Execute(PlayerbotEvent event)
+bool PlayerbotChargeAction::Execute(PlayerbotEvent const& event)
 {
-    Unit* target = GetCurrentTarget();
+    Unit* target = GetSpellTarget();
     if (!target)
         return false;
 
-    // Switch to battle stance if needed
-    if (!IsInBattleStance())
-    {
-        if (!SwitchToStance(WarriorSpells::BATTLE_STANCE))
-            return false;
-    }
-
-    // Check if we're in charge range
+    // Check if we're in charge range  
     if (!IsInChargeRange(target))
         return false;
 
+    // Use base class spell casting
     return CastSpell(target);
 }
 
-bool PlayerbotChargeAction::IsUseful() const
+bool PlayerbotChargeAction::isUseful()
 {
     Unit* target = GetCurrentTarget();
     if (!target)
@@ -267,38 +272,38 @@ bool PlayerbotChargeAction::IsInChargeRange(Unit* target) const
     return distance >= 8.0f && distance <= 25.0f;
 }
 
-bool PlayerbotMortalStrikeAction::IsUseful() const
+bool PlayerbotMortalStrikeAction::isUseful()
 {
-    return IsInBattleStance() && IsInCombat() && IsInMeleeRange(GetCurrentTarget());
+    return IsInCombat() && IsInMeleeRange(GetCurrentTarget());
 }
 
-bool PlayerbotMortalStrikeAction::IsPossible() const
+bool PlayerbotMortalStrikeAction::isPossible()
 {
-    Player* bot = GetBot();
+    Player* bot = _ai->GetBot();
     if (!bot)
         return false;
 
     // Requires Arms specialization (simplified check)
-    return bot->HasSpell(WarriorSpells::MORTAL_STRIKE) && PlayerbotWarriorAction::IsPossible();
+    return bot->HasSpell(WarriorSpells::MORTAL_STRIKE) && PlayerbotWarriorAction::isPossible();
 }
 
-bool PlayerbotOverpowerAction::IsUseful() const
+bool PlayerbotOverpowerAction::isUseful()
 {
     Unit* target = GetCurrentTarget();
-    if (!target || !IsInBattleStance())
+    if (!target)
         return false;
 
     // Use overpower after enemy dodge (simplified - would need dodge tracking)
     return IsInMeleeRange(target);
 }
 
-bool PlayerbotOverpowerAction::IsPossible() const
+bool PlayerbotOverpowerAction::isPossible()
 {
-    return IsInBattleStance() && PlayerbotWarriorAction::IsPossible();
+    return PlayerbotWarriorAction::isPossible();
 }
 
 // Protection Combat Actions
-bool PlayerbotSunderArmorAction::IsUseful() const
+bool PlayerbotSunderArmorAction::isUseful()
 {
     Unit* target = GetCurrentTarget();
     if (!target || !IsInCombat())
@@ -329,7 +334,7 @@ uint32 PlayerbotSunderArmorAction::GetSunderArmorStacks(Unit* target) const
     return 0;
 }
 
-bool PlayerbotTauntAction::IsUseful() const
+bool PlayerbotTauntAction::isUseful()
 {
     Unit* target = GetCurrentTarget();
     if (!target || !IsInDefensiveStance())
@@ -339,73 +344,73 @@ bool PlayerbotTauntAction::IsUseful() const
     return target->GetVictim() != GetBot();
 }
 
-bool PlayerbotTauntAction::IsPossible() const
+bool PlayerbotTauntAction::isPossible()
 {
-    return IsInDefensiveStance() && PlayerbotWarriorAction::IsPossible();
+    return IsInDefensiveStance() && PlayerbotWarriorAction::isPossible();
 }
 
 Unit* PlayerbotTauntAction::GetSpellTarget() const
 {
     // Find enemy attacking party members
-    Player* bot = GetBot();
+    Player* bot = _ai->GetBot();
     if (!bot)
         return nullptr;
 
     if (Group* group = bot->GetGroup())
     {
-        for (GroupReference* itr = group->GetFirstMember(); itr; itr = itr->next())
-        {
-            Player* member = itr->GetSource();
-            if (!member || member == bot || !member->IsAlive())
-                continue;
+        // TODO: Fix Group API - for (GroupReference* itr = group->GetFirstMember(); itr; itr = itr->next())
+        // {
+        //     Player* member = itr->GetSource();
+        //     if (!member || member == bot || !member->IsAlive())
+        //         continue;
 
-            if (Unit* attacker = member->GetAttackerForHelper())
-            {
-                if (attacker->IsValidAttackTarget(bot))
-                    return attacker;
-            }
-        }
+        //     if (Unit* attacker = member->GetAttackerForHelper())
+        //     {
+        //         if (attacker->IsValidAttackTarget(bot))
+        //             return attacker;
+        //     }
+        // }
     }
 
     return GetCurrentTarget();
 }
 
-bool PlayerbotRevengeAction::IsUseful() const
+bool PlayerbotRevengeAction::isUseful()
 {
     return IsInDefensiveStance() && IsInCombat() && HasShield();
 }
 
-bool PlayerbotRevengeAction::IsPossible() const
+bool PlayerbotRevengeAction::isPossible()
 {
-    return IsInDefensiveStance() && HasShield() && PlayerbotWarriorAction::IsPossible();
+    return IsInDefensiveStance() && HasShield() && PlayerbotWarriorAction::isPossible();
 }
 
-bool PlayerbotShieldSlamAction::IsUseful() const
+bool PlayerbotShieldSlamAction::isUseful()
 {
     return IsInDefensiveStance() && IsInCombat() && HasShield();
 }
 
-bool PlayerbotShieldSlamAction::IsPossible() const
+bool PlayerbotShieldSlamAction::isPossible()
 {
-    return IsInDefensiveStance() && HasShield() && PlayerbotWarriorAction::IsPossible();
+    return IsInDefensiveStance() && HasShield() && PlayerbotWarriorAction::isPossible();
 }
 
 // Fury Combat Actions
-bool PlayerbotBloodthirstAction::IsUseful() const
+bool PlayerbotBloodthirstAction::isUseful()
 {
     return IsInBerserkerStance() && IsInCombat() && IsInMeleeRange(GetCurrentTarget());
 }
 
-bool PlayerbotBloodthirstAction::IsPossible() const
+bool PlayerbotBloodthirstAction::isPossible()
 {
-    Player* bot = GetBot();
+    Player* bot = _ai->GetBot();
     if (!bot)
         return false;
 
-    return bot->HasSpell(WarriorSpells::BLOODTHIRST) && PlayerbotWarriorAction::IsPossible();
+    return bot->HasSpell(WarriorSpells::BLOODTHIRST) && PlayerbotWarriorAction::isPossible();
 }
 
-bool PlayerbotWhirlwindAction::IsUseful() const
+bool PlayerbotWhirlwindAction::isUseful()
 {
     if (!IsInBerserkerStance() || !IsInCombat())
         return false;
@@ -414,13 +419,13 @@ bool PlayerbotWhirlwindAction::IsUseful() const
     return CountNearbyEnemies() >= 3;
 }
 
-bool PlayerbotWhirlwindAction::IsPossible() const
+bool PlayerbotWhirlwindAction::isPossible()
 {
-    return IsInBerserkerStance() && PlayerbotWarriorAction::IsPossible();
+    return IsInBerserkerStance() && PlayerbotWarriorAction::isPossible();
 }
 
 // Utility Actions
-bool PlayerbotBattleShoutAction::IsUseful() const
+bool PlayerbotBattleShoutAction::isUseful()
 {
     return NeedsBattleShout();
 }
@@ -432,7 +437,7 @@ Unit* PlayerbotBattleShoutAction::GetSpellTarget() const
 
 bool PlayerbotBattleShoutAction::NeedsBattleShout() const
 {
-    Player* bot = GetBot();
+    Player* bot = _ai->GetBot();
     if (!bot)
         return false;
 
@@ -441,25 +446,25 @@ bool PlayerbotBattleShoutAction::NeedsBattleShout() const
         !bot->HasAura(WarriorSpells::COMMANDING_SHOUT))
         return true;
 
-    // Check group members
-    if (Group* group = bot->GetGroup())
-    {
-        for (GroupReference* itr = group->GetFirstMember(); itr; itr = itr->next())
-        {
-            Player* member = itr->GetSource();
-            if (!member || !member->IsAlive())
-                continue;
-
-            if (!member->HasAura(WarriorSpells::BATTLE_SHOUT) && 
-                !member->HasAura(WarriorSpells::COMMANDING_SHOUT))
-                return true;
-        }
-    }
+    // TODO: Check group members for buff status
+    // if (Group* group = bot->GetGroup())
+    // {
+    //     for (GroupReference const& itr : group->GetMembers())
+    //     {
+    //         Player* member = itr.GetSource();
+    //         if (!member || !member->IsAlive())
+    //             continue;
+    //
+    //         if (!member->HasAura(WarriorSpells::BATTLE_SHOUT) && 
+    //             !member->HasAura(WarriorSpells::COMMANDING_SHOUT))
+    //             return true;
+    //     }
+    // }
 
     return false;
 }
 
-bool PlayerbotDemoralizingShoutAction::IsUseful() const
+bool PlayerbotDemoralizingShoutAction::isUseful()
 {
     if (!IsInCombat())
         return false;
@@ -468,7 +473,7 @@ bool PlayerbotDemoralizingShoutAction::IsUseful() const
     return CountNearbyEnemies() >= 2;
 }
 
-bool PlayerbotBloodrageAction::IsUseful() const
+bool PlayerbotBloodrageAction::isUseful()
 {
     return IsRageNeeded();
 }
@@ -480,7 +485,7 @@ Unit* PlayerbotBloodrageAction::GetSpellTarget() const
 
 bool PlayerbotBloodrageAction::IsRageNeeded() const
 {
-    Player* bot = GetBot();
+    Player* bot = _ai->GetBot();
     if (!bot)
         return false;
 
@@ -489,31 +494,32 @@ bool PlayerbotBloodrageAction::IsRageNeeded() const
 }
 
 // Interrupt Action
-bool PlayerbotPummelAction::Execute(PlayerbotEvent event)
+bool PlayerbotPummelAction::Execute(PlayerbotEvent const& event)
 {
     Unit* target = FindCastingTarget();
     if (!target)
         return false;
 
-    // Switch to berserker stance if needed
+    // Switch to berserker stance if needed for Pummel
     if (!IsInBerserkerStance())
     {
         if (!SwitchToStance(WarriorSpells::BERSERKER_STANCE))
             return false;
     }
 
+    // Use base class spell casting
     return CastSpell(target);
 }
 
-bool PlayerbotPummelAction::IsUseful() const
+bool PlayerbotPummelAction::isUseful()
 {
     Unit* target = FindCastingTarget();
     return target && ShouldInterrupt(target);
 }
 
-bool PlayerbotPummelAction::IsPossible() const
+bool PlayerbotPummelAction::isPossible()
 {
-    return IsInBerserkerStance() && PlayerbotWarriorAction::IsPossible();
+    return IsInBerserkerStance() && PlayerbotWarriorAction::isPossible();
 }
 
 float PlayerbotPummelAction::GetRelevance() const
@@ -533,7 +539,7 @@ Unit* PlayerbotPummelAction::GetSpellTarget() const
 
 Unit* PlayerbotPummelAction::FindCastingTarget() const
 {
-    Player* bot = GetBot();
+    Player* bot = _ai->GetBot();
     if (!bot)
         return nullptr;
 
@@ -581,7 +587,7 @@ bool PlayerbotPummelAction::ShouldInterrupt(Unit* target) const
 }
 
 // Modern Fury Combat Actions
-bool PlayerbotRampageAction::IsUseful() const
+bool PlayerbotRampageAction::isUseful()
 {
     Unit* target = GetCurrentTarget();
     if (!target || !IsInCombat())
@@ -591,9 +597,9 @@ bool PlayerbotRampageAction::IsUseful() const
     return GetRageAmount() >= 85 && !HasEnrage();
 }
 
-bool PlayerbotRampageAction::IsPossible() const
+bool PlayerbotRampageAction::isPossible()
 {
-    return GetRageAmount() >= 85 && PlayerbotWarriorAction::IsPossible();
+    return GetRageAmount() >= 85 && PlayerbotWarriorAction::isPossible();
 }
 
 float PlayerbotRampageAction::GetRelevance() const
@@ -604,7 +610,7 @@ float PlayerbotRampageAction::GetRelevance() const
     return 0.7f; // Still high priority when Enrage is active
 }
 
-bool PlayerbotRagingBlowAction::IsUseful() const
+bool PlayerbotRagingBlowAction::isUseful()
 {
     Unit* target = GetCurrentTarget();
     if (!target || !IsInCombat())
@@ -614,9 +620,9 @@ bool PlayerbotRagingBlowAction::IsUseful() const
     return IsInMeleeRange(target) && HasEnrage();
 }
 
-bool PlayerbotRagingBlowAction::IsPossible() const
+bool PlayerbotRagingBlowAction::isPossible()
 {
-    return GetRageAmount() >= 25 && PlayerbotWarriorAction::IsPossible();
+    return GetRageAmount() >= 25 && PlayerbotWarriorAction::isPossible();
 }
 
 float PlayerbotRagingBlowAction::GetRelevance() const
@@ -627,7 +633,7 @@ float PlayerbotRagingBlowAction::GetRelevance() const
     return 0.5f; // Lower priority without Enrage
 }
 
-bool PlayerbotRecklessnessAction::IsUseful() const
+bool PlayerbotRecklessnessAction::isUseful()
 {
     Unit* target = GetCurrentTarget();
     if (!target || !IsInCombat())
@@ -637,11 +643,11 @@ bool PlayerbotRecklessnessAction::IsUseful() const
     return !HasEnrage() && GetTargetHealthPercent(target) > 0.5f;
 }
 
-bool PlayerbotRecklessnessAction::IsPossible() const
+bool PlayerbotRecklessnessAction::isPossible()
 {
-    Player* bot = GetBot();
+    Player* bot = _ai->GetBot();
     return bot && bot->HasSpell(WarriorSpells::RECKLESSNESS) && 
-           PlayerbotWarriorAction::IsPossible();
+           PlayerbotWarriorAction::isPossible();
 }
 
 float PlayerbotRecklessnessAction::GetRelevance() const
@@ -651,9 +657,9 @@ float PlayerbotRecklessnessAction::GetRelevance() const
 }
 
 // Modern Protection Combat Actions
-bool PlayerbotIgnorePainAction::IsUseful() const
+bool PlayerbotIgnorePainAction::isUseful()
 {
-    Player* bot = GetBot();
+    Player* bot = _ai->GetBot();
     if (!bot || !IsInCombat())
         return false;
 
@@ -662,14 +668,14 @@ bool PlayerbotIgnorePainAction::IsUseful() const
     return healthPct < 0.8f && GetRageAmount() >= 40;
 }
 
-bool PlayerbotIgnorePainAction::IsPossible() const
+bool PlayerbotIgnorePainAction::isPossible()
 {
-    return GetRageAmount() >= 40 && PlayerbotWarriorAction::IsPossible();
+    return GetRageAmount() >= 40 && PlayerbotWarriorAction::isPossible();
 }
 
 float PlayerbotIgnorePainAction::GetRelevance() const
 {
-    Player* bot = GetBot();
+    Player* bot = _ai->GetBot();
     if (!bot)
         return 0.0f;
     
@@ -678,7 +684,7 @@ float PlayerbotIgnorePainAction::GetRelevance() const
     return 1.0f - healthPct;
 }
 
-bool PlayerbotAvatarAction::IsUseful() const
+bool PlayerbotAvatarAction::isUseful()
 {
     if (!IsInCombat())
         return false;
@@ -687,11 +693,11 @@ bool PlayerbotAvatarAction::IsUseful() const
     return CountNearbyEnemies(8.0f) >= 2;
 }
 
-bool PlayerbotAvatarAction::IsPossible() const
+bool PlayerbotAvatarAction::isPossible()
 {
-    Player* bot = GetBot();
+    Player* bot = _ai->GetBot();
     return bot && bot->HasSpell(WarriorSpells::AVATAR) && 
-           PlayerbotWarriorAction::IsPossible();
+           PlayerbotWarriorAction::isPossible();
 }
 
 float PlayerbotAvatarAction::GetRelevance() const

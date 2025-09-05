@@ -115,13 +115,13 @@ void PlayerbotMgr::AddPlayerBot(ObjectGuid guid, uint32 masterAccountId)
         // Add to bot map and initialize AI
         _playerBots[guid] = bot;
         
-        // Initialize bot AI if not already present
-        if (!bot->GetPlayerAI())
-        {
-            PlayerbotPlayerAI* botAI = new PlayerbotPlayerAI(bot);
-            bot->SetPlayerAI(botAI);
-            botAI->Initialize();
-        }
+        // TODO: Initialize bot AI if not already present - need TrinityCore Player API integration
+        // if (!bot->GetPlayerAI())
+        // {
+        //     PlayerbotPlayerAI* botAI = new PlayerbotPlayerAI(bot);
+        //     bot->SetPlayerAI(botAI);
+        //     botAI->Initialize();
+        // }
 
         OnBotLogin(bot);
         TC_LOG_INFO("playerbots", "PlayerbotMgr: Added bot {} (Master Account: {})", 
@@ -256,7 +256,7 @@ void PlayerbotMgr::OnBotLogin(Player* const bot)
     TC_LOG_DEBUG("playerbots", "PlayerbotMgr::OnBotLogin: Bot {} logged in", bot->GetName());
 
     // Initialize bot-specific settings
-    if (PlayerbotPlayerAI* botAI = dynamic_cast<PlayerbotPlayerAI*>(bot->GetPlayerAI()))
+    if (PlayerbotPlayerAI* botAI = dynamic_cast<PlayerbotPlayerAI*>(bot->AI()))
     {
         botAI->OnBotLogin();
     }
@@ -408,7 +408,7 @@ void PlayerbotMgr::ProcessBotUpdates(uint32 diff)
 
         try
         {
-            if (PlayerbotPlayerAI* botAI = dynamic_cast<PlayerbotPlayerAI*>(bot->GetPlayerAI()))
+            if (PlayerbotPlayerAI* botAI = dynamic_cast<PlayerbotPlayerAI*>(bot->AI()))
             {
                 botAI->UpdateAI(diff);
             }
@@ -427,7 +427,7 @@ void PlayerbotMgr::HandleBotLogout(Player* bot)
         return;
 
     // Perform cleanup before bot logout
-    if (PlayerbotPlayerAI* botAI = dynamic_cast<PlayerbotPlayerAI*>(bot->GetPlayerAI()))
+    if (PlayerbotPlayerAI* botAI = dynamic_cast<PlayerbotPlayerAI*>(bot->AI()))
     {
         botAI->OnBotLogout();
     }

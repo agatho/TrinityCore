@@ -25,6 +25,7 @@
 #include <string>
 #include <list>
 #include <memory>
+#include "PlayerbotCommon.h"
 
 class PlayerbotPlayerAI;
 class PlayerbotAiObjectContext;

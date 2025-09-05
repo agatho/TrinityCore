@@ -69,6 +69,8 @@ public:
     void ChangeStrategy(std::string const& strategies);
     std::string ListStrategies() const;
     bool HasStrategy(std::string const& name) const;
+    void AddStrategy(std::string const& strategy);
+    void RemoveStrategy(std::string const& strategy);
     
     // Action execution
     bool ExecuteAction(std::string const& action, std::string const& qualifier = "");
@@ -84,12 +86,18 @@ public:
     void OnBotLogin();
     void OnBotLogout();
     void OnSessionUpdate(uint32 diff);
+    
+    // Convenience methods for actions
+    Player* GetBot() const;
+    Unit* GetCurrentTarget() const;
+    bool IsInCombat() const;
+    bool IsInMeleeRange(Unit* target) const;
 
 protected:
     // TrinityCore PlayerAI integration
     Unit* SelectAttackTarget() const override;
-    void DoRangedAttackIfReady() override;
-    void DoAutoAttackIfReady() override;
+    void DoRangedAttackIfReady();
+    void DoAutoAttackIfReady();
 
 private:
     // Core components

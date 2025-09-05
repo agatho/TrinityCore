@@ -20,7 +20,23 @@
 
 #ifdef WITH_PLAYERBOTS
 
-#include "PlayerbotAction.h"
+#include "PlayerbotCommon.h"
+
+/**
+ * @brief Base class for combat actions that target enemies
+ */
+class TC_GAME_API PlayerbotAttackAction : public PlayerbotAction
+{
+public:
+    PlayerbotAttackAction(PlayerbotPlayerAI* ai, std::string const& name) 
+        : PlayerbotAction(ai, name) {}
+
+    virtual bool IsInMeleeRange(Unit* target) const;
+    virtual bool MoveTo(Unit* target, float distance = 0.0f);
+    virtual bool Attack(Unit* target);
+    virtual Unit* GetAttackTarget() const;
+    virtual uint32 GetCooldown() const { return 0; }
+};
 
 /**
  * @brief Basic melee attack action
@@ -30,8 +46,8 @@ class TC_GAME_API PlayerbotMeleeAction : public PlayerbotAttackAction
 public:
     PlayerbotMeleeAction(PlayerbotPlayerAI* ai) : PlayerbotAttackAction(ai, "melee") {}
 
-    virtual bool Execute(PlayerbotEvent event) override;
-    virtual bool IsUseful() const override;
+    virtual bool Execute(PlayerbotEvent const& event) override;
+    virtual bool isUseful() override;
     virtual float GetRelevance() const override;
 
 protected:
@@ -46,8 +62,8 @@ class TC_GAME_API PlayerbotSwitchToMeleeAction : public PlayerbotAction
 public:
     PlayerbotSwitchToMeleeAction(PlayerbotPlayerAI* ai) : PlayerbotAction(ai, "switch to melee") {}
 
-    virtual bool Execute(PlayerbotEvent event) override;
-    virtual bool IsUseful() const override;
+    virtual bool Execute(PlayerbotEvent const& event) override;
+    virtual bool isUseful() override;
 };
 
 /**
@@ -58,8 +74,8 @@ class TC_GAME_API PlayerbotSwitchToRangedAction : public PlayerbotAction
 public:
     PlayerbotSwitchToRangedAction(PlayerbotPlayerAI* ai) : PlayerbotAction(ai, "switch to ranged") {}
 
-    virtual bool Execute(PlayerbotEvent event) override;
-    virtual bool IsUseful() const override;
+    virtual bool Execute(PlayerbotEvent const& event) override;
+    virtual bool isUseful() override;
 };
 
 /**
@@ -70,8 +86,8 @@ class TC_GAME_API PlayerbotAutoAttackAction : public PlayerbotAttackAction
 public:
     PlayerbotAutoAttackAction(PlayerbotPlayerAI* ai) : PlayerbotAttackAction(ai, "auto attack") {}
 
-    virtual bool Execute(PlayerbotEvent event) override;
-    virtual bool IsUseful() const override;
+    virtual bool Execute(PlayerbotEvent const& event) override;
+    virtual bool isUseful() override;
     virtual uint32 GetCooldown() const override { return 100; } // 100ms between checks
 };
 
@@ -83,9 +99,9 @@ class TC_GAME_API PlayerbotPetAttackAction : public PlayerbotAction
 public:
     PlayerbotPetAttackAction(PlayerbotPlayerAI* ai) : PlayerbotAction(ai, "pet attack") {}
 
-    virtual bool Execute(PlayerbotEvent event) override;
-    virtual bool IsUseful() const override;
-    virtual bool IsPossible() const override;
+    virtual bool Execute(PlayerbotEvent const& event) override;
+    virtual bool isUseful() override;
+    virtual bool isPossible() override;
 
 private:
     bool HasPet() const;
@@ -100,8 +116,8 @@ class TC_GAME_API PlayerbotFleeAction : public PlayerbotMovementAction
 public:
     PlayerbotFleeAction(PlayerbotPlayerAI* ai) : PlayerbotMovementAction(ai, "flee") {}
 
-    virtual bool Execute(PlayerbotEvent event) override;
-    virtual bool IsUseful() const override;
+    virtual bool Execute(PlayerbotEvent const& event) override;
+    virtual bool isUseful() override;
     virtual float GetRelevance() const override;
 
 protected:
@@ -121,7 +137,7 @@ public:
     PlayerbotCombatSpellAction(PlayerbotPlayerAI* ai, std::string const& name, uint32 spellId)
         : PlayerbotSpellAction(ai, name, spellId) {}
 
-    virtual bool IsUseful() const override;
+    virtual bool isUseful() override;
     virtual ThreatType GetThreatType() const override;
 
 protected:
@@ -132,7 +148,7 @@ protected:
     Unit* GetNearestHostileTarget() const;
     Unit* GetWeakestHostileTarget() const;
 
-private:
+protected:
     bool IsValidCombatTarget(Unit* target) const;
 };
 
@@ -145,7 +161,7 @@ public:
     PlayerbotDefensiveSpellAction(PlayerbotPlayerAI* ai, std::string const& name, uint32 spellId)
         : PlayerbotSpellAction(ai, name, spellId) {}
 
-    virtual bool IsUseful() const override;
+    virtual bool isUseful() override;
     virtual float GetRelevance() const override;
 
 protected:
@@ -165,7 +181,7 @@ public:
     PlayerbotHealAction(PlayerbotPlayerAI* ai, std::string const& name, uint32 spellId)
         : PlayerbotSpellAction(ai, name, spellId) {}
 
-    virtual bool IsUseful() const override;
+    virtual bool isUseful() override;
     virtual float GetRelevance() const override;
 
 protected:
@@ -187,7 +203,7 @@ public:
     PlayerbotAoEAction(PlayerbotPlayerAI* ai, std::string const& name, uint32 spellId)
         : PlayerbotCombatSpellAction(ai, name, spellId) {}
 
-    virtual bool IsUseful() const override;
+    virtual bool isUseful() override;
     virtual ThreatType GetThreatType() const override { return ThreatType::AOE; }
     virtual float GetRelevance() const override;
 

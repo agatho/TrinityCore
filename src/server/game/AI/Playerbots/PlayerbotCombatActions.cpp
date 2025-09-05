@@ -28,34 +28,70 @@
 #include "Log.h"
 #include "Group.h"
 
+// PlayerbotAttackAction Base Implementation  
+bool PlayerbotAttackAction::IsInMeleeRange(Unit* target) const
+{
+    Player* bot = _ai->GetBot();
+    if (!bot || !target)
+        return false;
+    
+    float distance = bot->GetDistance(target);
+    return distance <= bot->GetMeleeRange(target);
+}
+
+bool PlayerbotAttackAction::MoveTo(Unit* target, float distance)
+{
+    Player* bot = _ai->GetBot();
+    if (!bot || !target)
+        return false;
+    
+    // Simple movement - in a real implementation this would use the movement system
+    return true; // Placeholder
+}
+
+bool PlayerbotAttackAction::Attack(Unit* target)
+{
+    Player* bot = _ai->GetBot();
+    if (!bot || !target)
+        return false;
+    
+    bot->Attack(target, true);
+    return true;
+}
+
+Unit* PlayerbotAttackAction::GetAttackTarget() const
+{
+    return _ai->GetCurrentTarget();
+}
+
 // PlayerbotMeleeAction Implementation
-bool PlayerbotMeleeAction::Execute(PlayerbotEvent event)
+bool PlayerbotMeleeAction::Execute(PlayerbotEvent const& event)
 {
     Unit* target = GetAttackTarget();
     if (!target)
         return false;
 
-    Player* bot = GetBot();
+    Player* bot = _ai->GetBot();
     if (!bot)
         return false;
 
     // Move to melee range if needed
     if (!IsInMeleeRange(target))
     {
-        return MoveTo(target, bot->GetMeleeReach() * 0.8f);
+        return MoveTo(target, bot->GetMeleeRange(target) * 0.8f);
     }
 
     // Start melee attack
     return Attack(target);
 }
 
-bool PlayerbotMeleeAction::IsUseful() const
+bool PlayerbotMeleeAction::isUseful()
 {
     Unit* target = GetAttackTarget();
     if (!target || !target->IsAlive())
         return false;
 
-    Player* bot = GetBot();
+    Player* bot = _ai->GetBot();
     if (!bot)
         return false;
 
@@ -71,8 +107,8 @@ float PlayerbotMeleeAction::GetRelevance() const
         return 0.0f;
 
     // Higher relevance when target is close
-    float distance = GetDistance(target);
-    float meleeRange = GetBot()->GetMeleeReach() + target->GetCombatReach();
+    float distance = _ai->GetBot()->GetDistance(target);
+    float meleeRange = _ai->GetBot()->GetMeleeRange(target) + target->GetCombatReach();
     
     if (distance <= meleeRange)
         return 1.0f;
@@ -88,7 +124,7 @@ Unit* PlayerbotMeleeAction::GetAttackTarget() const
 }
 
 // PlayerbotSwitchToMeleeAction Implementation
-bool PlayerbotSwitchToMeleeAction::Execute(PlayerbotEvent event)
+bool PlayerbotSwitchToMeleeAction::Execute(PlayerbotEvent const& event)
 {
     PlayerbotPlayerAI* ai = GetAI();
     if (!ai)
@@ -102,7 +138,7 @@ bool PlayerbotSwitchToMeleeAction::Execute(PlayerbotEvent event)
     return true;
 }
 
-bool PlayerbotSwitchToMeleeAction::IsUseful() const
+bool PlayerbotSwitchToMeleeAction::isUseful()
 {
     Unit* target = GetTarget();
     if (!target)
@@ -117,7 +153,7 @@ bool PlayerbotSwitchToMeleeAction::IsUseful() const
 }
 
 // PlayerbotSwitchToRangedAction Implementation
-bool PlayerbotSwitchToRangedAction::Execute(PlayerbotEvent event)
+bool PlayerbotSwitchToRangedAction::Execute(PlayerbotEvent const& event)
 {
     PlayerbotPlayerAI* ai = GetAI();
     if (!ai)
@@ -131,7 +167,7 @@ bool PlayerbotSwitchToRangedAction::Execute(PlayerbotEvent event)
     return true;
 }
 
-bool PlayerbotSwitchToRangedAction::IsUseful() const
+bool PlayerbotSwitchToRangedAction::isUseful()
 {
     Unit* target = GetTarget();
     if (!target)
@@ -141,7 +177,7 @@ bool PlayerbotSwitchToRangedAction::IsUseful() const
     if (!ai)
         return false;
 
-    Player* bot = GetBot();
+    Player* bot = _ai->GetBot();
     if (!bot)
         return false;
 
@@ -156,9 +192,9 @@ bool PlayerbotSwitchToRangedAction::IsUseful() const
 }
 
 // PlayerbotAutoAttackAction Implementation
-bool PlayerbotAutoAttackAction::Execute(PlayerbotEvent event)
+bool PlayerbotAutoAttackAction::Execute(PlayerbotEvent const& event)
 {
-    Player* bot = GetBot();
+    Player* bot = _ai->GetBot();
     Unit* target = GetAttackTarget();
     
     if (!bot || !target)
@@ -172,7 +208,7 @@ bool PlayerbotAutoAttackAction::Execute(PlayerbotEvent event)
     }
 
     // Make sure auto attack is enabled
-    if (!bot->IsAutoAttacking())
+    if (!bot->GetVictim() || bot->GetVictim() != target)
     {
         bot->Attack(target, true);
         LogAction("Started auto attacking " + target->GetName());
@@ -182,26 +218,26 @@ bool PlayerbotAutoAttackAction::Execute(PlayerbotEvent event)
     return false; // Auto attack is already active
 }
 
-bool PlayerbotAutoAttackAction::IsUseful() const
+bool PlayerbotAutoAttackAction::isUseful()
 {
-    Player* bot = GetBot();
+    Player* bot = _ai->GetBot();
     Unit* target = GetAttackTarget();
     
     if (!bot || !target)
         return false;
 
     // Useful if we're not auto attacking but should be
-    return bot->IsInCombat() && !bot->IsAutoAttacking() && 
+    return bot->IsInCombat() && (!bot->GetVictim() || bot->GetVictim() != target) && 
            IsInMeleeRange(target);
 }
 
 // PlayerbotPetAttackAction Implementation
-bool PlayerbotPetAttackAction::Execute(PlayerbotEvent event)
+bool PlayerbotPetAttackAction::Execute(PlayerbotEvent const& event)
 {
     if (!HasPet())
         return false;
 
-    Player* bot = GetBot();
+    Player* bot = _ai->GetBot();
     Pet* pet = bot->GetPet();
     Unit* target = GetTarget();
 
@@ -216,19 +252,19 @@ bool PlayerbotPetAttackAction::Execute(PlayerbotEvent event)
     return true;
 }
 
-bool PlayerbotPetAttackAction::IsUseful() const
+bool PlayerbotPetAttackAction::isUseful()
 {
     return HasPet() && !IsPetInCombat() && IsInCombat();
 }
 
-bool PlayerbotPetAttackAction::IsPossible() const
+bool PlayerbotPetAttackAction::isPossible()
 {
     return HasPet();
 }
 
 bool PlayerbotPetAttackAction::HasPet() const
 {
-    Player* bot = GetBot();
+    Player* bot = _ai->GetBot();
     if (!bot)
         return false;
 
@@ -238,7 +274,7 @@ bool PlayerbotPetAttackAction::HasPet() const
 
 bool PlayerbotPetAttackAction::IsPetInCombat() const
 {
-    Player* bot = GetBot();
+    Player* bot = _ai->GetBot();
     if (!bot)
         return false;
 
@@ -247,7 +283,7 @@ bool PlayerbotPetAttackAction::IsPetInCombat() const
 }
 
 // PlayerbotFleeAction Implementation
-bool PlayerbotFleeAction::Execute(PlayerbotEvent event)
+bool PlayerbotFleeAction::Execute(PlayerbotEvent const& event)
 {
     if (!ShouldFlee())
         return false;
@@ -263,7 +299,7 @@ bool PlayerbotFleeAction::Execute(PlayerbotEvent event)
     return MoveTo(x, y, z);
 }
 
-bool PlayerbotFleeAction::IsUseful() const
+bool PlayerbotFleeAction::isUseful()
 {
     return ShouldFlee();
 }
@@ -273,7 +309,7 @@ float PlayerbotFleeAction::GetRelevance() const
     if (!ShouldFlee())
         return 0.0f;
 
-    Player* bot = GetBot();
+    Player* bot = _ai->GetBot();
     if (!bot)
         return 0.0f;
 
@@ -290,7 +326,7 @@ bool PlayerbotFleeAction::ExecuteMovement(Unit* target)
 
 bool PlayerbotFleeAction::ShouldFlee() const
 {
-    Player* bot = GetBot();
+    Player* bot = _ai->GetBot();
     if (!bot || !bot->IsInCombat())
         return false;
 
@@ -301,7 +337,7 @@ bool PlayerbotFleeAction::ShouldFlee() const
 
 bool PlayerbotFleeAction::FindSafePosition(float& x, float& y, float& z) const
 {
-    Player* bot = GetBot();
+    Player* bot = _ai->GetBot();
     if (!bot)
         return false;
 
@@ -320,14 +356,14 @@ bool PlayerbotFleeAction::FindSafePosition(float& x, float& y, float& z) const
 }
 
 // PlayerbotCombatSpellAction Implementation
-bool PlayerbotCombatSpellAction::IsUseful() const
+bool PlayerbotCombatSpellAction::isUseful()
 {
-    return IsInCombat() && PlayerbotSpellAction::IsUseful();
+    return IsInCombat() && PlayerbotSpellAction::isUseful();
 }
 
-PlayerbotAction::ThreatType PlayerbotCombatSpellAction::GetThreatType() const
+ThreatType PlayerbotCombatSpellAction::GetThreatType() const
 {
-    SpellInfo const* spellInfo = sSpellMgr->GetSpellInfo(GetSpellId());
+    SpellInfo const* spellInfo = sSpellMgr->GetSpellInfo(GetSpellId(), DIFFICULTY_NONE);
     if (!spellInfo)
         return ThreatType::NONE;
 
@@ -354,7 +390,7 @@ Unit* PlayerbotCombatSpellAction::GetBestHostileTarget() const
 
 Unit* PlayerbotCombatSpellAction::GetNearestHostileTarget() const
 {
-    Player* bot = GetBot();
+    Player* bot = _ai->GetBot();
     if (!bot)
         return nullptr;
 
@@ -385,7 +421,7 @@ Unit* PlayerbotCombatSpellAction::GetNearestHostileTarget() const
 
 Unit* PlayerbotCombatSpellAction::GetWeakestHostileTarget() const
 {
-    Player* bot = GetBot();
+    Player* bot = _ai->GetBot();
     if (!bot)
         return nullptr;
 
@@ -419,7 +455,7 @@ bool PlayerbotCombatSpellAction::IsValidCombatTarget(Unit* target) const
     if (!target || !target->IsAlive())
         return false;
 
-    Player* bot = GetBot();
+    Player* bot = _ai->GetBot();
     if (!bot)
         return false;
 
@@ -427,9 +463,9 @@ bool PlayerbotCombatSpellAction::IsValidCombatTarget(Unit* target) const
 }
 
 // PlayerbotDefensiveSpellAction Implementation
-bool PlayerbotDefensiveSpellAction::IsUseful() const
+bool PlayerbotDefensiveSpellAction::isUseful()
 {
-    return ShouldUseDefensiveSpell() && PlayerbotSpellAction::IsUseful();
+    return ShouldUseDefensiveSpell() && PlayerbotSpellAction::isUseful();
 }
 
 float PlayerbotDefensiveSpellAction::GetRelevance() const
@@ -459,7 +495,7 @@ bool PlayerbotDefensiveSpellAction::ShouldUseDefensiveSpell() const
 
 float PlayerbotDefensiveSpellAction::GetHealthPercentage() const
 {
-    Player* bot = GetBot();
+    Player* bot = _ai->GetBot();
     if (!bot)
         return 1.0f;
 
@@ -467,10 +503,10 @@ float PlayerbotDefensiveSpellAction::GetHealthPercentage() const
 }
 
 // PlayerbotHealAction Implementation
-bool PlayerbotHealAction::IsUseful() const
+bool PlayerbotHealAction::isUseful()
 {
     Unit* target = GetBestHealTarget();
-    return target && NeedsHealing(target) && PlayerbotSpellAction::IsUseful();
+    return target && NeedsHealing(target) && PlayerbotSpellAction::isUseful();
 }
 
 float PlayerbotHealAction::GetRelevance() const
@@ -500,7 +536,7 @@ Unit* PlayerbotHealAction::GetSpellTarget() const
 Unit* PlayerbotHealAction::GetBestHealTarget() const
 {
     // Priority: self, then group members, then nearby friendlies
-    Player* bot = GetBot();
+    Player* bot = _ai->GetBot();
     if (!bot)
         return nullptr;
 
@@ -511,9 +547,9 @@ Unit* PlayerbotHealAction::GetBestHealTarget() const
     // Check group members
     if (Group* group = bot->GetGroup())
     {
-        for (GroupReference* itr = group->GetFirstMember(); itr; itr = itr->next())
+        for (GroupReference const& itr : group->GetMembers())
         {
-            Player* member = itr->GetSource();
+            Player* member = itr.GetSource();
             if (member && member != bot && NeedsHealing(member))
                 return member;
         }
@@ -524,7 +560,7 @@ Unit* PlayerbotHealAction::GetBestHealTarget() const
 
 Unit* PlayerbotHealAction::GetMostWoundedTarget() const
 {
-    Player* bot = GetBot();
+    Player* bot = _ai->GetBot();
     if (!bot)
         return nullptr;
 
@@ -568,10 +604,10 @@ float PlayerbotHealAction::GetHealingThreshold() const
 }
 
 // PlayerbotAoEAction Implementation
-bool PlayerbotAoEAction::IsUseful() const
+bool PlayerbotAoEAction::isUseful()
 {
     return CountNearbyEnemies() >= GetMinEnemyCount() && 
-           PlayerbotCombatSpellAction::IsUseful();
+           PlayerbotCombatSpellAction::isUseful();
 }
 
 float PlayerbotAoEAction::GetRelevance() const
@@ -586,7 +622,7 @@ float PlayerbotAoEAction::GetRelevance() const
 
 uint32 PlayerbotAoEAction::CountNearbyEnemies() const
 {
-    Player* bot = GetBot();
+    Player* bot = _ai->GetBot();
     if (!bot)
         return 0;
 
