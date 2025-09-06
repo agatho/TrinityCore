@@ -17,8 +17,10 @@
 
 #include "PlayerbotRogueStrategy.h"
 #include "PlayerbotRogueActions.h"
+#include "PlayerbotPlayerAI.h"
 #include "Player.h"
 #include "SpellAuraEffects.h"
+#include "SpellHistory.h"
 #include "Group.h"
 
 PlayerbotRogueStrategy::PlayerbotRogueStrategy(PlayerbotPlayerAI* ai, std::string const& name)
@@ -37,14 +39,14 @@ void PlayerbotRogueStrategy::InitializeTriggers()
 void PlayerbotRogueStrategy::RegisterCommonActions()
 {
     // Utility actions
-    _actions["stealth"] = std::make_unique<CastStealth>(_ai);
-    _actions["vanish"] = std::make_unique<CastVanish>(_ai);
-    _actions["kick"] = std::make_unique<CastKick>(_ai);
-    _actions["feint"] = std::make_unique<CastFeint>(_ai);
-    _actions["cloak of shadows"] = std::make_unique<CastCloakOfShadows>(_ai);
-    _actions["evasion"] = std::make_unique<CastEvasion>(_ai);
-    _actions["crimson vial"] = std::make_unique<CastCrimsonVial>(_ai);
-    _actions["sprint"] = std::make_unique<CastSprint>(_ai);
+    RegisterAction("stealth", std::make_unique<CastStealth>(_ai));
+    RegisterAction("vanish", std::make_unique<CastVanish>(_ai));
+    RegisterAction("kick", std::make_unique<CastKick>(_ai));
+    RegisterAction("feint", std::make_unique<CastFeint>(_ai));
+    RegisterAction("cloak of shadows", std::make_unique<CastCloakOfShadows>(_ai));
+    RegisterAction("evasion", std::make_unique<CastEvasion>(_ai));
+    RegisterAction("crimson vial", std::make_unique<CastCrimsonVial>(_ai));
+    RegisterAction("sprint", std::make_unique<CastSprint>(_ai));
 }
 
 void PlayerbotRogueStrategy::RegisterCommonTriggers()
@@ -293,15 +295,15 @@ void PlayerbotAssassinationRogueStrategy::InitializeTriggers()
 
 void PlayerbotAssassinationRogueStrategy::RegisterAssassinationActions()
 {
-    _actions["mutilate"] = std::make_unique<CastMutilate>(_ai);
-    _actions["envenom"] = std::make_unique<CastEnvenom>(_ai);
-    _actions["garrote"] = std::make_unique<CastGarrote>(_ai);
-    _actions["rupture"] = std::make_unique<CastRupture>(_ai);
-    _actions["vendetta"] = std::make_unique<CastVendetta>(_ai);
-    _actions["deathmark"] = std::make_unique<CastDeathmark>(_ai);
-    _actions["kingsbane"] = std::make_unique<CastKingsbane>(_ai);
-    _actions["shiv"] = std::make_unique<CastShiv>(_ai);
-    _actions["fan of knives"] = std::make_unique<CastFanOfKnives>(_ai);
+    RegisterAction("mutilate", std::make_unique<CastMutilate>(_ai));
+    RegisterAction("envenom", std::make_unique<CastEnvenom>(_ai));
+    RegisterAction("garrote", std::make_unique<CastGarrote>(_ai));
+    RegisterAction("rupture", std::make_unique<CastRupture>(_ai));
+    RegisterAction("vendetta", std::make_unique<CastVendetta>(_ai));
+    RegisterAction("deathmark", std::make_unique<CastDeathmark>(_ai));
+    RegisterAction("kingsbane", std::make_unique<CastKingsbane>(_ai));
+    RegisterAction("shiv", std::make_unique<CastShiv>(_ai));
+    RegisterAction("fan of knives", std::make_unique<CastFanOfKnives>(_ai));
 }
 
 void PlayerbotAssassinationRogueStrategy::RegisterAssassinationTriggers()
@@ -508,14 +510,14 @@ void PlayerbotOutlawRogueStrategy::InitializeTriggers()
 
 void PlayerbotOutlawRogueStrategy::RegisterOutlawActions()
 {
-    _actions["sinister strike"] = std::make_unique<CastSinisterStrike>(_ai);
-    _actions["dispatch"] = std::make_unique<CastDispatch>(_ai);
-    _actions["pistol shot"] = std::make_unique<CastPistolShot>(_ai);
-    _actions["between the eyes"] = std::make_unique<CastBetweenTheEyes>(_ai);
-    _actions["roll the bones"] = std::make_unique<CastRollTheBones>(_ai);
-    _actions["adrenaline rush"] = std::make_unique<CastAdrenalineRush>(_ai);
-    _actions["blade flurry"] = std::make_unique<CastBladeFlurry>(_ai);
-    _actions["killing spree"] = std::make_unique<CastKillingSpree>(_ai);
+    RegisterAction("sinister strike", std::make_unique<CastSinisterStrike>(_ai));
+    RegisterAction("dispatch", std::make_unique<CastDispatch>(_ai));
+    RegisterAction("pistol shot", std::make_unique<CastPistolShot>(_ai));
+    RegisterAction("between the eyes", std::make_unique<CastBetweenTheEyes>(_ai));
+    RegisterAction("roll the bones", std::make_unique<CastRollTheBones>(_ai));
+    RegisterAction("adrenaline rush", std::make_unique<CastAdrenalineRush>(_ai));
+    RegisterAction("blade flurry", std::make_unique<CastBladeFlurry>(_ai));
+    RegisterAction("killing spree", std::make_unique<CastKillingSpree>(_ai));
 }
 
 void PlayerbotOutlawRogueStrategy::RegisterOutlawTriggers()
@@ -709,14 +711,14 @@ void PlayerbotSubtletyRogueStrategy::InitializeTriggers()
 
 void PlayerbotSubtletyRogueStrategy::RegisterSubtletyActions()
 {
-    _actions["backstab"] = std::make_unique<CastBackstab>(_ai);
-    _actions["eviscerate"] = std::make_unique<CastEviscerate>(_ai);
-    _actions["shadowstrike"] = std::make_unique<CastShadowstrike>(_ai);
-    _actions["shadow dance"] = std::make_unique<CastShadowDance>(_ai);
-    _actions["symbols of death"] = std::make_unique<CastSymbolsOfDeath>(_ai);
-    _actions["shadow clone"] = std::make_unique<CastShadowClone>(_ai);
-    _actions["black powder"] = std::make_unique<CastBlackPowder>(_ai);
-    _actions["shuriken storm"] = std::make_unique<CastShurikenStorm>(_ai);
+    RegisterAction("backstab", std::make_unique<CastBackstab>(_ai));
+    RegisterAction("eviscerate", std::make_unique<CastEviscerate>(_ai));
+    RegisterAction("shadowstrike", std::make_unique<CastShadowstrike>(_ai));
+    RegisterAction("shadow dance", std::make_unique<CastShadowDance>(_ai));
+    RegisterAction("symbols of death", std::make_unique<CastSymbolsOfDeath>(_ai));
+    RegisterAction("shadow clone", std::make_unique<CastShadowClone>(_ai));
+    RegisterAction("black powder", std::make_unique<CastBlackPowder>(_ai));
+    RegisterAction("shuriken storm", std::make_unique<CastShurikenStorm>(_ai));
 }
 
 void PlayerbotSubtletyRogueStrategy::RegisterSubtletyTriggers()

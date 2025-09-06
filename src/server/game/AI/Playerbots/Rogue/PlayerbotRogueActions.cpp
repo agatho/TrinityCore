@@ -16,6 +16,7 @@
  */
 
 #include "PlayerbotRogueActions.h"
+#include "PlayerbotPlayerAI.h"
 #include "Player.h"
 #include "SpellMgr.h"
 #include "SpellAuraEffects.h"
@@ -30,13 +31,13 @@ uint32 PlayerbotRogueAction::GetEnergyAmount() const
 uint32 PlayerbotRogueAction::GetComboPoints() const
 {
     Player* bot = _ai->GetBot();
-    return bot ? bot->GetComboPoints() : 0;
+    return bot ? bot->GetPower(POWER_COMBO_POINTS) : 0;
 }
 
 uint32 PlayerbotRogueAction::GetComboPoints(Unit* target) const
 {
     Player* bot = _ai->GetBot();
-    return (bot && target) ? bot->GetComboPoints(target->GetGUID()) : 0;
+    return bot ? bot->GetPower(POWER_COMBO_POINTS) : 0;
 }
 
 bool PlayerbotRogueAction::HasEnoughEnergy(uint32 cost) const
@@ -75,7 +76,7 @@ bool PlayerbotRogueAction::isSubtlety() const
 bool PlayerbotRogueAction::IsStealthed() const
 {
     Player* bot = _ai->GetBot();
-    return bot && bot->IsInStealth();
+    return bot && bot->HasStealthAura();
 }
 
 bool PlayerbotRogueAction::IsBehindTarget(Unit* target) const

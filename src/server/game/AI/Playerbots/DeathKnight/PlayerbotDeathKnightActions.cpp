@@ -16,6 +16,7 @@
  */
 
 #include "PlayerbotDeathKnightActions.h"
+#include "PlayerbotPlayerAI.h"
 #include "Player.h"
 #include "SpellMgr.h"
 #include "SpellAuraEffects.h"

@@ -17,8 +17,10 @@
 
 #include "PlayerbotDeathKnightStrategy.h"
 #include "PlayerbotDeathKnightActions.h"
+#include "PlayerbotPlayerAI.h"
 #include "Player.h"
 #include "SpellAuraEffects.h"
+#include "SpellHistory.h"
 #include "Group.h"
 
 PlayerbotDeathKnightStrategy::PlayerbotDeathKnightStrategy(PlayerbotPlayerAI* ai, std::string const& name)
@@ -37,13 +39,13 @@ void PlayerbotDeathKnightStrategy::InitializeTriggers()
 void PlayerbotDeathKnightStrategy::RegisterCommonActions()
 {
     // Utility actions
-    _actions["death grip"] = std::make_unique<CastDeathGrip>(_ai);
-    _actions["death and decay"] = std::make_unique<CastDeathAndDecay>(_ai);
-    _actions["anti magic shell"] = std::make_unique<CastAntiMagicShell>(_ai);
-    _actions["icebound fortitude"] = std::make_unique<CastIceboundFortitude>(_ai);
-    _actions["mind freeze"] = std::make_unique<CastMindFreeze>(_ai);
-    _actions["dark command"] = std::make_unique<CastDarkCommand>(_ai);
-    _actions["raise dead"] = std::make_unique<CastRaiseDead>(_ai);
+    RegisterAction("death grip", std::make_unique<CastDeathGrip>(_ai));
+    RegisterAction("death and decay", std::make_unique<CastDeathAndDecay>(_ai));
+    RegisterAction("anti magic shell", std::make_unique<CastAntiMagicShell>(_ai));
+    RegisterAction("icebound fortitude", std::make_unique<CastIceboundFortitude>(_ai));
+    RegisterAction("mind freeze", std::make_unique<CastMindFreeze>(_ai));
+    RegisterAction("dark command", std::make_unique<CastDarkCommand>(_ai));
+    RegisterAction("raise dead", std::make_unique<CastRaiseDead>(_ai));
 }
 
 void PlayerbotDeathKnightStrategy::RegisterCommonTriggers()
@@ -325,14 +327,14 @@ void PlayerbotBloodDeathKnightStrategy::InitializeTriggers()
 
 void PlayerbotBloodDeathKnightStrategy::RegisterBloodActions()
 {
-    _actions["heart strike"] = std::make_unique<CastHeartStrike>(_ai);
-    _actions["blood boil"] = std::make_unique<CastBloodBoil>(_ai);
-    _actions["death strike"] = std::make_unique<CastDeathStrike>(_ai);
-    _actions["marrowrend"] = std::make_unique<CastMarrowrend>(_ai);
-    _actions["vampiric blood"] = std::make_unique<CastVampiricBlood>(_ai);
-    _actions["dancing rune weapon"] = std::make_unique<CastDancingRuneWeapon>(_ai);
-    _actions["tombstone"] = std::make_unique<CastTombstone>(_ai);
-    _actions["bonestorm"] = std::make_unique<CastBonestorm>(_ai);
+    RegisterAction("heart strike", std::make_unique<CastHeartStrike>(_ai));
+    RegisterAction("blood boil", std::make_unique<CastBloodBoil>(_ai));
+    RegisterAction("death strike", std::make_unique<CastDeathStrike>(_ai));
+    RegisterAction("marrowrend", std::make_unique<CastMarrowrend>(_ai));
+    RegisterAction("vampiric blood", std::make_unique<CastVampiricBlood>(_ai));
+    RegisterAction("dancing rune weapon", std::make_unique<CastDancingRuneWeapon>(_ai));
+    RegisterAction("tombstone", std::make_unique<CastTombstone>(_ai));
+    RegisterAction("bonestorm", std::make_unique<CastBonestorm>(_ai));
 }
 
 void PlayerbotBloodDeathKnightStrategy::RegisterBloodTriggers()
@@ -525,16 +527,16 @@ void PlayerbotFrostDeathKnightStrategy::InitializeTriggers()
 
 void PlayerbotFrostDeathKnightStrategy::RegisterFrostActions()
 {
-    _actions["obliterate"] = std::make_unique<CastObliterate>(_ai);
-    _actions["frost strike"] = std::make_unique<CastFrostStrike>(_ai);
-    _actions["howling blast"] = std::make_unique<CastHowlingBlast>(_ai);
-    _actions["glacial advance"] = std::make_unique<CastGlacialAdvance>(_ai);
-    _actions["frostscythe"] = std::make_unique<CastFrostscythe>(_ai);
-    _actions["remorseless winter"] = std::make_unique<CastRemorselessWinter>(_ai);
-    _actions["pillar of frost"] = std::make_unique<CastPillarOfFrost>(_ai);
-    _actions["empower rune weapon"] = std::make_unique<CastEmpowerRuneWeapon>(_ai);
-    _actions["breath of sindragosa"] = std::make_unique<CastBreathOfSindragosa>(_ai);
-    _actions["frostwyrms fury"] = std::make_unique<CastFrostwyrmsFury>(_ai);
+    RegisterAction("obliterate", std::make_unique<CastObliterate>(_ai));
+    RegisterAction("frost strike", std::make_unique<CastFrostStrike>(_ai));
+    RegisterAction("howling blast", std::make_unique<CastHowlingBlast>(_ai));
+    RegisterAction("glacial advance", std::make_unique<CastGlacialAdvance>(_ai));
+    RegisterAction("frostscythe", std::make_unique<CastFrostscythe>(_ai));
+    RegisterAction("remorseless winter", std::make_unique<CastRemorselessWinter>(_ai));
+    RegisterAction("pillar of frost", std::make_unique<CastPillarOfFrost>(_ai));
+    RegisterAction("empower rune weapon", std::make_unique<CastEmpowerRuneWeapon>(_ai));
+    RegisterAction("breath of sindragosa", std::make_unique<CastBreathOfSindragosa>(_ai));
+    RegisterAction("frostwyrms fury", std::make_unique<CastFrostwyrmsFury>(_ai));
 }
 
 void PlayerbotFrostDeathKnightStrategy::RegisterFrostTriggers()
@@ -741,16 +743,16 @@ void PlayerbotUnholyDeathKnightStrategy::InitializeTriggers()
 
 void PlayerbotUnholyDeathKnightStrategy::RegisterUnholyActions()
 {
-    _actions["festering strike"] = std::make_unique<CastFesteringStrike>(_ai);
-    _actions["scourge strike"] = std::make_unique<CastScourgeStrike>(_ai);
-    _actions["death coil"] = std::make_unique<CastDeathCoil>(_ai);
-    _actions["epidemic"] = std::make_unique<CastEpidemic>(_ai);
-    _actions["outbreak"] = std::make_unique<CastOutbreak>(_ai);
-    _actions["dark transformation"] = std::make_unique<CastDarkTransformation>(_ai);
-    _actions["apocalypse"] = std::make_unique<CastApocalypse>(_ai);
-    _actions["army of the dead"] = std::make_unique<CastArmyOfTheDead>(_ai);
-    _actions["soul reaper"] = std::make_unique<CastSoulReaper>(_ai);
-    _actions["defile"] = std::make_unique<CastDefile>(_ai);
+    RegisterAction("festering strike", std::make_unique<CastFesteringStrike>(_ai));
+    RegisterAction("scourge strike", std::make_unique<CastScourgeStrike>(_ai));
+    RegisterAction("death coil", std::make_unique<CastDeathCoil>(_ai));
+    RegisterAction("epidemic", std::make_unique<CastEpidemic>(_ai));
+    RegisterAction("outbreak", std::make_unique<CastOutbreak>(_ai));
+    RegisterAction("dark transformation", std::make_unique<CastDarkTransformation>(_ai));
+    RegisterAction("apocalypse", std::make_unique<CastApocalypse>(_ai));
+    RegisterAction("army of the dead", std::make_unique<CastArmyOfTheDead>(_ai));
+    RegisterAction("soul reaper", std::make_unique<CastSoulReaper>(_ai));
+    RegisterAction("defile", std::make_unique<CastDefile>(_ai));
 }
 
 void PlayerbotUnholyDeathKnightStrategy::RegisterUnholyTriggers()
