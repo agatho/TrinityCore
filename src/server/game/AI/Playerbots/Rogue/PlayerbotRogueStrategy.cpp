@@ -80,7 +80,7 @@ float PlayerbotRogueStrategy::GetActionPriority(std::string const& actionName) c
 bool PlayerbotRogueStrategy::ShouldUseStealth() const
 {
     Player* bot = _ai->GetBot();
-    if (!bot || bot->IsInCombat() || bot->IsInStealth())
+    if (!bot || bot->IsInCombat() || bot->HasStealthAura())
         return false;
     
     return bot->HasSpell(RogueSpells::STEALTH) && 
@@ -90,7 +90,7 @@ bool PlayerbotRogueStrategy::ShouldUseStealth() const
 bool PlayerbotRogueStrategy::ShouldUseVanish() const
 {
     Player* bot = _ai->GetBot();
-    if (!bot || !bot->IsInCombat() || bot->IsInStealth())
+    if (!bot || !bot->IsInCombat() || bot->HasStealthAura())
         return false;
     
     // Use vanish when low health or to reset combat
@@ -183,13 +183,13 @@ uint32 PlayerbotRogueStrategy::GetEnergyPercent() const
 uint32 PlayerbotRogueStrategy::GetComboPoints() const
 {
     Player* bot = _ai->GetBot();
-    return bot ? bot->GetComboPoints() : 0;
+    return bot ? bot->GetPower(POWER_COMBO_POINTS) : 0;
 }
 
 uint32 PlayerbotRogueStrategy::GetComboPoints(Unit* target) const
 {
     Player* bot = _ai->GetBot();
-    return (bot && target) ? bot->GetComboPoints(target->GetGUID()) : 0;
+    return (bot && target) ? bot->GetPower(POWER_COMBO_POINTS) : 0;
 }
 
 bool PlayerbotRogueStrategy::HasMaxComboPoints() const
@@ -222,11 +222,15 @@ bool PlayerbotRogueStrategy::isSubtlety() const
 
 Unit* PlayerbotRogueStrategy::FindBestTarget() const
 {
-    Unit* currentTarget = _ai->GetTarget();
-    if (currentTarget && currentTarget->IsAlive() && _ai->GetBot()->IsValidAttackTarget(currentTarget))
+    Player* bot = _ai->GetBot();
+    if (!bot)
+        return nullptr;
+        
+    Unit* currentTarget = bot->GetSelectedUnit();
+    if (currentTarget && currentTarget->IsAlive() && bot->IsValidAttackTarget(currentTarget))
         return currentTarget;
     
-    Unit* target = _ai->GetBot()->GetVictim();
+    Unit* target = bot->GetVictim();
     if (target && target->IsAlive())
         return target;
     
@@ -242,13 +246,13 @@ bool PlayerbotRogueStrategy::IsInCombat() const
 bool PlayerbotRogueStrategy::IsStealthed() const
 {
     Player* bot = _ai->GetBot();
-    return bot && bot->IsInStealth();
+    return bot && bot->HasStealthAura();
 }
 
 bool PlayerbotRogueStrategy::IsBehindTarget(Unit* target) const
 {
     Player* bot = _ai->GetBot();
-    return bot && target && bot->IsBehind(target);
+    return bot && target && bot->isInBack(target);
 }
 
 uint32 PlayerbotRogueStrategy::CountNearbyEnemies(float range) const
@@ -261,7 +265,7 @@ uint32 PlayerbotRogueStrategy::CountNearbyEnemies(float range) const
     std::list<Unit*> targets;
     Trinity::AnyUnfriendlyUnitInObjectRangeCheck check(bot, bot, range);
     Trinity::UnitListSearcher<Trinity::AnyUnfriendlyUnitInObjectRangeCheck> searcher(bot, targets, check);
-    bot->VisitNearbyObject(range, searcher);
+    Cell::VisitAllObjects(bot, searcher, range);
     
     for (Unit* unit : targets)
     {

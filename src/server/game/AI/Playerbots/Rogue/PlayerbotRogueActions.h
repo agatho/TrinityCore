@@ -141,6 +141,7 @@ protected:
     bool NeedsHealing() const;
     Unit* FindBestTarget() const;
     uint32 CountNearbyEnemies(float range = 8.0f) const;
+    bool IsSpellReady(uint32 spellId) const;
 };
 
 // Assassination Rogue Actions

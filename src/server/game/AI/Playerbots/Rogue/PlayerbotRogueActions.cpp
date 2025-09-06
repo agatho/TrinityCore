@@ -20,6 +20,7 @@
 #include "Player.h"
 #include "SpellMgr.h"
 #include "SpellAuraEffects.h"
+#include "SpellHistory.h"
 #include "Group.h"
 
 uint32 PlayerbotRogueAction::GetEnergyAmount() const
@@ -82,12 +83,12 @@ bool PlayerbotRogueAction::IsStealthed() const
 bool PlayerbotRogueAction::IsBehindTarget(Unit* target) const
 {
     Player* bot = _ai->GetBot();
-    return bot && target && bot->IsBehind(target);
+    return bot && target && bot->isInBack(target);
 }
 
 bool PlayerbotRogueAction::ShouldUseOpener() const
 {
-    return IsStealthed() || HasSpellReady(RogueSpells::SHADOWSTEP);
+    return IsStealthed() || IsSpellReady(RogueSpells::SHADOWSTEP);
 }
 
 bool PlayerbotRogueAction::HasRuptureOnTarget(Unit* target) const
@@ -145,7 +146,7 @@ bool PlayerbotRogueAction::IsInMeleeRange(Unit* target) const
 
 bool PlayerbotRogueAction::ShouldInterrupt() const
 {
-    Unit* target = _ai->GetTarget();
+    Unit* target = FindBestTarget();
     if (!target || !target->IsNonMeleeSpellCast(false))
         return false;
     
@@ -161,11 +162,16 @@ bool PlayerbotRogueAction::NeedsHealing() const
 
 Unit* PlayerbotRogueAction::FindBestTarget() const
 {
-    Unit* currentTarget = _ai->GetTarget();
-    if (currentTarget && currentTarget->IsAlive() && _ai->GetBot()->IsValidAttackTarget(currentTarget))
+    Player* bot = _ai->GetBot();
+    if (!bot)
+        return nullptr;
+    
+    // First check current target
+    Unit* currentTarget = bot->GetSelectedUnit();
+    if (currentTarget && currentTarget->IsAlive() && bot->IsValidAttackTarget(currentTarget))
         return currentTarget;
     
-    Unit* target = _ai->GetBot()->GetVictim();
+    Unit* target = bot->GetVictim();
     if (target && target->IsAlive())
         return target;
     
@@ -182,7 +188,7 @@ uint32 PlayerbotRogueAction::CountNearbyEnemies(float range) const
     std::list<Unit*> targets;
     Trinity::AnyUnfriendlyUnitInObjectRangeCheck check(bot, bot, range);
     Trinity::UnitListSearcher<Trinity::AnyUnfriendlyUnitInObjectRangeCheck> searcher(bot, targets, check);
-    bot->VisitNearbyObject(range, searcher);
+    Cell::VisitAllObjects(bot, searcher, range);
     
     for (Unit* unit : targets)
     {
@@ -193,7 +199,7 @@ uint32 PlayerbotRogueAction::CountNearbyEnemies(float range) const
     return count;
 }
 
-bool PlayerbotRogueAction::HasSpellReady(uint32 spellId) const
+bool PlayerbotRogueAction::IsSpellReady(uint32 spellId) const
 {
     Player* bot = _ai->GetBot();
     return bot && bot->HasSpell(spellId) && !bot->GetSpellHistory()->HasCooldown(spellId);
