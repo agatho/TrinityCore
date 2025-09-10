@@ -113,4 +113,17 @@ void PlayerbotsDatabaseConnection::DoPrepareStatements()
     PrepareStatement(PLAYERBOTS_INS_PREFERRED_MOUNTS, "REPLACE INTO playerbots_preferred_mounts (guid, type, entry) VALUES (?, ?, ?)", CONNECTION_ASYNC);
     PrepareStatement(PLAYERBOTS_SEL_BOT_CONFIG, "SELECT value FROM playerbots_db_store WHERE guid = ? AND `key` = ?", CONNECTION_SYNCH);
     PrepareStatement(PLAYERBOTS_UPD_BOT_CONFIG, "REPLACE INTO playerbots_db_store (guid, `key`, value) VALUES (?, ?, ?)", CONNECTION_ASYNC);
+
+    // Profession Management
+    PrepareStatement(PLAYERBOTS_SEL_PROFESSION_DATA, "SELECT profession_id, skill_level, max_skill_level, total_crafted, gold_spent, gold_earned, profitability FROM playerbots_profession_data WHERE guid = ?", CONNECTION_SYNCH);
+    PrepareStatement(PLAYERBOTS_INS_PROFESSION_DATA, "REPLACE INTO playerbots_profession_data (guid, profession_id, skill_level, max_skill_level, total_crafted, gold_spent, gold_earned, profitability) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", CONNECTION_ASYNC);
+    PrepareStatement(PLAYERBOTS_UPD_PROFESSION_DATA, "UPDATE playerbots_profession_data SET skill_level = ?, max_skill_level = ?, total_crafted = ?, gold_spent = ?, gold_earned = ?, profitability = ? WHERE guid = ? AND profession_id = ?", CONNECTION_ASYNC);
+
+    // Social Relations Management - CRITICAL for PlayerbotSocialManager.cpp functionality
+    PrepareStatement(PLAYERBOTS_SEL_SOCIAL_RELATIONS_NOTES, "SELECT notes FROM playerbot_social_relations WHERE botGuid = ? AND playerGuid = ?", CONNECTION_SYNCH);
+    PrepareStatement(PLAYERBOTS_SEL_SOCIAL_RELATIONS_ALL, "SELECT playerGuid, playerName, relationType, trustLevel, interactionCount, positiveInteractions, negativeInteractions, lastInteractionTime, notes FROM playerbot_social_relations WHERE botGuid = ?", CONNECTION_SYNCH);
+    PrepareStatement(PLAYERBOTS_DEL_SOCIAL_RELATIONS_ALL, "DELETE FROM playerbot_social_relations WHERE botGuid = ?", CONNECTION_ASYNC);
+    PrepareStatement(PLAYERBOTS_REP_SOCIAL_RELATIONS, "REPLACE INTO playerbot_social_relations (botGuid, playerGuid, playerName, relationType, trustLevel, interactionCount, positiveInteractions, negativeInteractions, lastInteractionTime, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", CONNECTION_ASYNC);
+    PrepareStatement(PLAYERBOTS_SEL_SOCIAL_RELATIONS_BY_PLAYER, "SELECT botGuid, relationType, trustLevel, interactionCount, positiveInteractions, negativeInteractions, lastInteractionTime, notes FROM playerbot_social_relations WHERE playerGuid = ?", CONNECTION_SYNCH);
+    PrepareStatement(PLAYERBOTS_DEL_SOCIAL_RELATIONS_BY_PLAYER, "DELETE FROM playerbot_social_relations WHERE botGuid = ? AND playerGuid = ?", CONNECTION_ASYNC);
 }
