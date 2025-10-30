@@ -8447,6 +8447,14 @@ SpellEvent::~SpellEvent()
     if (m_Spell->getState() != SPELL_STATE_FINISHED)
         m_Spell->cancel();
 
+
+    // Clear spell mod taking spell before destruction to prevent assertion failure
+    // When KillAllEvents() is called (logout, map change, instance reset), spell events are destroyed
+    // without going through the normal delayed handler that clears m_spellModTakingSpell
+    // This causes ASSERT(m_caster->ToPlayer()->m_spellModTakingSpell != this) to fail in ~Spell()
+    if (m_Spell->GetCaster() && m_Spell->GetCaster()->GetTypeId() == TYPEID_PLAYER)
+        m_Spell->GetCaster()->ToPlayer()->SetSpellModTakingSpell(m_Spell, false);
+
     if (!m_Spell->IsDeletable())
     {
         TC_LOG_ERROR("spells", "~SpellEvent: {} {} tried to delete non-deletable spell {}. Was not deleted, causes memory leak.",
