@@ -97,7 +97,7 @@ public:
      * @param dungeonId LFG dungeon ID
      * @return true if teleportation was successful
      */
-    virtual bool TeleportPlayerToDungeon(uint32 dungeonId) = 0;
+    virtual bool TeleportPlayerToDungeon(Player* player, uint32 dungeonId) = 0;
 
     /**
      * @brief Teleport entire group to dungeon

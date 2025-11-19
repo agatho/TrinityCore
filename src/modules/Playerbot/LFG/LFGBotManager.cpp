@@ -16,7 +16,6 @@
  */
 
 #include "LFGBotManager.h"
-#include "Core/PlayerBotHelpers.h"  // GetBotAI, GetGameSystems
 #include "LFGBotSelector.h"
 #include "LFGRoleDetector.h"
 #include "LFGGroupCoordinator.h"
@@ -425,16 +424,13 @@ uint32 LFGBotManager::PopulateQueue(ObjectGuid playerGuid, uint8 neededRoles, lf
     // Queue tanks
     if ((neededRoles & lfg::PLAYER_ROLE_TANK) && tanksNeeded > 0)
     {
-        // Use static method for system-wide bot discovery (Phase 7 compliant)
-        std::vector<Player*> tanks = LFGBotSelector::FindAvailableTanks(minLevel, maxLevel, tanksNeeded, humanPlayer);
+        std::vector<Player*> tanks = LFGBotSelector::instance()->FindTanks(minLevel, maxLevel, tanksNeeded);
         for (Player* tank : tanks)
         {
             if (QueueBot(tank, lfg::PLAYER_ROLE_TANK, dungeons))
             {
                 RegisterBotAssignment(playerGuid, tank->GetGUID(), lfg::PLAYER_ROLE_TANK, dungeons);
                 ++botsQueued;
-                TC_LOG_INFO("playerbot.lfg", "Queued tank bot {} (level {}) for human player {}",
-                    tank->GetName(), tank->getLevel(), humanPlayer->GetName());
             }
         }
     }
@@ -442,16 +438,13 @@ uint32 LFGBotManager::PopulateQueue(ObjectGuid playerGuid, uint8 neededRoles, lf
     // Queue healers
     if ((neededRoles & lfg::PLAYER_ROLE_HEALER) && healersNeeded > 0)
     {
-        // Use static method for system-wide bot discovery (Phase 7 compliant)
-        std::vector<Player*> healers = LFGBotSelector::FindAvailableHealers(minLevel, maxLevel, healersNeeded, humanPlayer);
+        std::vector<Player*> healers = LFGBotSelector::instance()->FindHealers(minLevel, maxLevel, healersNeeded);
         for (Player* healer : healers)
         {
             if (QueueBot(healer, lfg::PLAYER_ROLE_HEALER, dungeons))
             {
                 RegisterBotAssignment(playerGuid, healer->GetGUID(), lfg::PLAYER_ROLE_HEALER, dungeons);
                 ++botsQueued;
-                TC_LOG_INFO("playerbot.lfg", "Queued healer bot {} (level {}) for human player {}",
-                    healer->GetName(), healer->getLevel(), humanPlayer->GetName());
             }
         }
     }
@@ -459,16 +452,13 @@ uint32 LFGBotManager::PopulateQueue(ObjectGuid playerGuid, uint8 neededRoles, lf
     // Queue DPS
     if ((neededRoles & lfg::PLAYER_ROLE_DAMAGE) && dpsNeeded > 0)
     {
-        // Use static method for system-wide bot discovery (Phase 7 compliant)
-        std::vector<Player*> dps = LFGBotSelector::FindAvailableDPS(minLevel, maxLevel, dpsNeeded, humanPlayer);
+        std::vector<Player*> dps = LFGBotSelector::instance()->FindDPS(minLevel, maxLevel, dpsNeeded);
         for (Player* dpsPlayer : dps)
         {
             if (QueueBot(dpsPlayer, lfg::PLAYER_ROLE_DAMAGE, dungeons))
             {
                 RegisterBotAssignment(playerGuid, dpsPlayer->GetGUID(), lfg::PLAYER_ROLE_DAMAGE, dungeons);
                 ++botsQueued;
-                TC_LOG_INFO("playerbot.lfg", "Queued DPS bot {} (level {}) for human player {}",
-                    dpsPlayer->GetName(), dpsPlayer->getLevel(), humanPlayer->GetName());
             }
         }
     }

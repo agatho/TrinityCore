@@ -9,19 +9,12 @@
 
 #include "ProfessionAuctionBridge.h"
 #include "ProfessionManager.h"
-#include "ProfessionEventBus.h"
-#include "ProfessionEvents.h"
 #include "../Social/AuctionHouse.h"
-#include "../Core/BotAI.h"
-#include "../Core/BotSession.h"
-#include "../Core/Managers/GameSystemsManager.h"
-#include "../Core/PlayerBotHelpers.h"  // GetBotAI, GetGameSystems
 #include "Player.h"
 #include "Item.h"
 #include "Bag.h"
 #include "Log.h"
 #include "ObjectMgr.h"
-#include "ObjectAccessor.h"
 #include "ItemTemplate.h"
 #include <algorithm>
 #include "GameTime.h"
@@ -29,35 +22,16 @@
 namespace Playerbot
 {
 
-// ============================================================================
-// STATIC MEMBER INITIALIZATION
-// ============================================================================
-
-// NOTE: AuctionHouse is now per-bot (Phase 7), access via GetGameSystems(_bot)->GetAuctionHouse()
-// Removed: AuctionHouse* ProfessionAuctionBridge::_auctionHouse = nullptr;
-ProfessionAuctionStatistics ProfessionAuctionBridge::_globalStatistics;
-bool ProfessionAuctionBridge::_sharedDataInitialized = false;
-
-// ============================================================================
-// CONSTRUCTOR / DESTRUCTOR
-// ============================================================================
-
-ProfessionAuctionBridge::ProfessionAuctionBridge(Player* bot)
-    : _bot(bot)
+// Singleton instance
+ProfessionAuctionBridge* ProfessionAuctionBridge::instance()
 {
-    if (_bot)
-    {
-        TC_LOG_DEBUG("playerbot", "ProfessionAuctionBridge: Creating instance for bot '{}'", _bot->GetName());
-    }
+    static ProfessionAuctionBridge instance;
+    return &instance;
 }
 
-ProfessionAuctionBridge::~ProfessionAuctionBridge()
+ProfessionAuctionBridge::ProfessionAuctionBridge()
+    : _auctionHouse(nullptr)
 {
-    if (_bot)
-    {
-        TC_LOG_DEBUG("playerbot", "ProfessionAuctionBridge: Destroying instance for bot '{}'", _bot->GetName());
-    }
-    // Event bus unsubscription handled automatically by ProfessionEventBus
 }
 
 // ============================================================================
@@ -66,140 +40,127 @@ ProfessionAuctionBridge::~ProfessionAuctionBridge()
 
 void ProfessionAuctionBridge::Initialize()
 {
-    if (!_bot)
-        return;
+    TC_LOG_INFO("playerbots", "ProfessionAuctionBridge: Initializing profession-auction bridge...");
 
-    // Load shared data once (thread-safe via static initialization)
-    if (!_sharedDataInitialized)
-    {
-        // NOTE: AuctionHouse is now per-bot (Phase 7), removed static storage
-        // Access via: GetGameSystems(_bot)->GetAuctionHouse() in per-instance methods
-        // TODO: Review if any AuctionHouse methods need to be called during initialization
-        // Removed: _auctionHouse = AuctionHouse::instance();
-        LoadDefaultStockpileConfigs();
-        _sharedDataInitialized = true;
-        TC_LOG_INFO("playerbot", "ProfessionAuctionBridge::Initialize - Loaded shared data (stockpile configs)");
-    }
+    // Get reference to existing AuctionHouse singleton
+    _auctionHouse = AuctionHouse::instance();
 
-    // Subscribe to ProfessionEventBus for event-driven reactivity (Phase 2)
-    ProfessionEventBus::instance()->SubscribeCallback(
-        [this](ProfessionEvent const& event) { HandleProfessionEvent(event); },
-        {
-            ProfessionEventType::CRAFTING_COMPLETED,
-            ProfessionEventType::ITEM_BANKED
-        }
-    );
+    LoadDefaultStockpileConfigs();
 
-    TC_LOG_DEBUG("playerbot", "ProfessionAuctionBridge: Initialized for bot '{}', subscribed to 2 event types", _bot->GetName());
+    TC_LOG_INFO("playerbots", "ProfessionAuctionBridge: Initialized (bridge to existing AuctionHouse)");
 }
 
-void ProfessionAuctionBridge::Update(uint32 diff)
+void ProfessionAuctionBridge::Update(::Player* player, uint32 diff)
 {
-    if (!_bot || !IsEnabled())
+    if (!player || !IsEnabled(player))
         return;
 
-    uint32 currentTime = GameTime::GetGameTimeMS();
+    uint32 playerGuid = player->GetGUID().GetCounter();uint32 currentTime = GameTime::GetGameTimeMS();
+
+    std::lock_guard lock(_mutex);
 
     // Check if enough time passed since last auction check
-    if (currentTime - _lastAuctionCheckTime < AUCTION_CHECK_INTERVAL)
+    if (currentTime - _lastAuctionCheckTimes[playerGuid] < AUCTION_CHECK_INTERVAL)
         return;
 
-    _lastAuctionCheckTime = currentTime;
+    _lastAuctionCheckTimes[playerGuid] = currentTime;
+
+    ProfessionAuctionProfile const& profile = GetAuctionProfile(playerGuid);
 
     // Sell excess materials
-    if (_profile.autoSellEnabled && _profile.strategy != ProfessionAuctionStrategy::NONE)
+    if (profile.autoSellEnabled && profile.strategy != ProfessionAuctionStrategy::NONE)
     {
-        SellExcessMaterials();
-        SellCraftedItems();
+        SellExcessMaterials(player);
+        SellCraftedItems(player);
     }
 
     // Buy materials for leveling
-    if (_profile.buyMaterialsForLeveling)
+    if (profile.buyMaterialsForLeveling)
     {
         // Check all professions for leveling needs
-        ProfessionManager* profMgr = GetProfessionManager();
-        if (profMgr)
+        auto professions = ProfessionManager::instance()->GetPlayerProfessions(player);
+        for (auto const& profInfo : professions)
         {
-            auto professions = profMgr->GetPlayerProfessions();
-            for (auto const& profInfo : professions)
-            {
-                if (profInfo.currentSkill < profInfo.maxSkill)
-                    BuyMaterialsForLeveling(profInfo.profession);
-            }
+            if (profInfo.currentSkill < profInfo.maxSkill)
+                BuyMaterialsForLeveling(player, profInfo.profession);
         }
     }
 }
 
-void ProfessionAuctionBridge::SetEnabled(bool enabled)
-{
-    if (!_bot)
+void ProfessionAuctionBridge::SetEnabled(::Player* player, bool enabled){
+    if (!player)
         return;
 
-    if (enabled)
-    {
-        // Initialize with default profile if needed
-        if (!_profile.autoSellEnabled)
-            _profile = ProfessionAuctionProfile();
-    }
-    else
-    {
-        _profile.autoSellEnabled = false;
-        _activeAuctionIds.clear();
-    }
-    _profile.autoSellEnabled = enabled;
+    std::lock_guard lock(_mutex);
+    uint32 playerGuid = player->GetGUID().GetCounter();if (_profiles.find(playerGuid) == _profiles.end())
+        _profiles[playerGuid] = ProfessionAuctionProfile();_profiles[playerGuid].autoSellEnabled = enabled;
 }
 
-bool ProfessionAuctionBridge::IsEnabled() const
+bool ProfessionAuctionBridge::IsEnabled(::Player* player) const
 {
-    return _bot && _profile.autoSellEnabled;
+    if (!player)
+        return false;
+
+    std::lock_guard lock(_mutex);
+    uint32 playerGuid = player->GetGUID().GetCounter();auto it = _profiles.find(playerGuid);
+    if (it == _profiles.end())
+        return false;
+
+    return it->second.autoSellEnabled;
 }
 
-void ProfessionAuctionBridge::SetAuctionProfile(ProfessionAuctionProfile const& profile)
+void ProfessionAuctionBridge::SetAuctionProfile(uint32 playerGuid, ProfessionAuctionProfile const& profile)
 {
-    _profile = profile;
+    std::lock_guard lock(_mutex);
+    _profiles[playerGuid] = profile;
 }
 
-ProfessionAuctionProfile ProfessionAuctionBridge::GetAuctionProfile() const
+ProfessionAuctionProfile ProfessionAuctionBridge::GetAuctionProfile(uint32 playerGuid) const
 {
-    return _profile;
+    std::lock_guard lock(_mutex);
+
+    auto it = _profiles.find(playerGuid);if (it != _profiles.end())
+        return it->second;
+
+    return ProfessionAuctionProfile();
 }
 
 // ============================================================================
 // MATERIAL AUCTION AUTOMATION
 // ============================================================================
 
-void ProfessionAuctionBridge::SellExcessMaterials()
+void ProfessionAuctionBridge::SellExcessMaterials(::Player* player)
 {
-    if (!_bot || !_auctionHouse || !CanAccessAuctionHouse())
+    if (!player || !_auctionHouse || !CanAccessAuctionHouse(player))
         return;
 
-    // Get profession items in inventory
-    auto items = GetProfessionItemsInInventory(true); // Materials only
+    uint32 playerGuid = player->GetGUID().GetCounter();ProfessionAuctionProfile const& profile = GetAuctionProfile(playerGuid);
 
-    for (auto const& itemInfo : items)
+    // Get profession items in inventory
+    auto items = GetProfessionItemsInInventory(player, true); // Materials onlyfor (auto const& itemInfo : items)
     {
         // Check if item has stockpile config
-        auto configIt = _profile.materialConfigs.find(itemInfo.itemId);
-        if (configIt == _profile.materialConfigs.end())
+        auto configIt = profile.materialConfigs.find(itemInfo.itemId);
+        if (configIt == profile.materialConfigs.end())
             continue;
 
         MaterialStockpileConfig const& config = configIt->second;
 
         // Check if should sell
-        if (ShouldSellMaterial(itemInfo.itemId, itemInfo.stackCount))
+        if (ShouldSellMaterial(player, itemInfo.itemId, itemInfo.stackCount))
         {
-            ListMaterialOnAuction(itemInfo.itemGuid, config);
+            ListMaterialOnAuction(player, itemInfo.itemGuid, config);
         }
     }
 }
 
-bool ProfessionAuctionBridge::ShouldSellMaterial(uint32 itemId, uint32 currentCount) const
+bool ProfessionAuctionBridge::ShouldSellMaterial(::Player* player, uint32 itemId, uint32 currentCount) const
 {
-    if (!_bot)
+    if (!player)
         return false;
 
-    auto configIt = _profile.materialConfigs.find(itemId);
-    if (configIt == _profile.materialConfigs.end())
+    ProfessionAuctionProfile const& profile = GetAuctionProfile(player->GetGUID().GetCounter());auto configIt = profile.materialConfigs.find(itemId);
+    if (configIt == profile.materialConfigs.end())
         return false;
 
     MaterialStockpileConfig const& config = configIt->second;
@@ -208,14 +169,12 @@ bool ProfessionAuctionBridge::ShouldSellMaterial(uint32 itemId, uint32 currentCo
     return currentCount > config.maxStackSize;
 }
 
-bool ProfessionAuctionBridge::ListMaterialOnAuction(uint32 itemGuid, MaterialStockpileConfig const& config)
-{
-    if (!_bot || !_auctionHouse)
+bool ProfessionAuctionBridge::ListMaterialOnAuction(::Player* player, uint32 itemGuid, MaterialStockpileConfig const& config){
+    if (!player || !_auctionHouse)
         return false;
 
     // Get optimal price from AuctionHouse
-    uint32 marketPrice = GetOptimalMaterialPrice(config.itemId, config.auctionStackSize);
-    if (marketPrice == 0)
+    uint32 marketPrice = GetOptimalMaterialPrice(player, config.itemId, config.auctionStackSize);if (marketPrice == 0)
     {
         TC_LOG_DEBUG("playerbots", "ProfessionAuctionBridge: No market price found for item {}", config.itemId);
         return false;
@@ -226,41 +185,44 @@ bool ProfessionAuctionBridge::ListMaterialOnAuction(uint32 itemGuid, MaterialSto
     uint32 buyoutPrice = config.preferBuyout ? marketPrice : 0;
 
     // Delegate to existing AuctionHouse
-    bool success = _auctionHouse->CreateAuction(_bot, itemGuid, config.auctionStackSize,
+    bool success = _auctionHouse->CreateAuction(player, itemGuid, config.auctionStackSize,
         bidPrice, buyoutPrice, DEFAULT_AUCTION_DURATION);
 
     if (success)
     {
-        _statistics.materialsListedCount++;
+        std::lock_guard lock(_mutex);
+        uint32 playerGuid = player->GetGUID().GetCounter();_playerStatistics[playerGuid].materialsListedCount++;
         _globalStatistics.materialsListedCount++;
 
-        TC_LOG_INFO("playerbots", "ProfessionAuctionBridge: Listed material {} for bot {} (price: {})",
-            config.itemId, _bot->GetName(), marketPrice);
+        TC_LOG_INFO("playerbots", "ProfessionAuctionBridge: Listed material {} for player {} (price: {})",
+            config.itemId, player->GetName(), marketPrice);
     }
 
     return success;
 }
 
-uint32 ProfessionAuctionBridge::GetOptimalMaterialPrice(uint32 itemId, uint32 stackSize) const
+uint32 ProfessionAuctionBridge::GetOptimalMaterialPrice(::Player* player, uint32 itemId, uint32 stackSize) const
 {
-    if (!_bot || !_auctionHouse)
+    if (!player || !_auctionHouse)
         return 0;
 
     // Delegate to existing AuctionHouse price calculation
-    return _auctionHouse->CalculateOptimalListingPrice(_bot, itemId, stackSize);
+    return _auctionHouse->CalculateOptimalListingPrice(player, itemId, stackSize);
 }
 
 // ============================================================================
 // CRAFTED ITEM AUCTION AUTOMATION
 // ============================================================================
 
-void ProfessionAuctionBridge::SellCraftedItems()
+void ProfessionAuctionBridge::SellCraftedItems(::Player* player)
 {
-    if (!_bot || !_auctionHouse || !CanAccessAuctionHouse())
+    if (!player || !_auctionHouse || !CanAccessAuctionHouse(player))
         return;
 
+    uint32 playerGuid = player->GetGUID().GetCounter();ProfessionAuctionProfile const& profile = GetAuctionProfile(playerGuid);
+
     // Get crafted items in inventory
-    auto items = GetProfessionItemsInInventory(false); // All profession items
+    auto items = GetProfessionItemsInInventory(player, false); // All profession items
 
     for (auto const& itemInfo : items)
     {
@@ -269,30 +231,30 @@ void ProfessionAuctionBridge::SellCraftedItems()
             continue;
 
         // Check if item has auction config
-        auto configIt = _profile.craftedItemConfigs.find(itemInfo.itemId);
-        if (configIt == _profile.craftedItemConfigs.end())
+        auto configIt = profile.craftedItemConfigs.find(itemInfo.itemId);
+        if (configIt == profile.craftedItemConfigs.end())
             continue;
 
         CraftedItemAuctionConfig const& config = configIt->second;
 
         // Calculate material cost
-        uint32 materialCost = CalculateMaterialCost(itemInfo.itemId);
+        uint32 materialCost = CalculateMaterialCost(player, itemInfo.itemId);
 
         // Check if should sell
-        if (ShouldSellCraftedItem(itemInfo.itemId, materialCost))
+        if (ShouldSellCraftedItem(player, itemInfo.itemId, materialCost))
         {
-            ListCraftedItemOnAuction(itemInfo.itemGuid, config);
+            ListCraftedItemOnAuction(player, itemInfo.itemGuid, config);
         }
     }
 }
 
-bool ProfessionAuctionBridge::ShouldSellCraftedItem(uint32 itemId, uint32 materialCost) const
+bool ProfessionAuctionBridge::ShouldSellCraftedItem(::Player* player, uint32 itemId, uint32 materialCost) const
 {
-    if (!_bot || !_auctionHouse)
+    if (!player || !_auctionHouse)
         return false;
 
-    auto configIt = _profile.craftedItemConfigs.find(itemId);
-    if (configIt == _profile.craftedItemConfigs.end())
+    ProfessionAuctionProfile const& profile = GetAuctionProfile(player->GetGUID().GetCounter());auto configIt = profile.craftedItemConfigs.find(itemId);
+    if (configIt == profile.craftedItemConfigs.end())
         return false;
 
     CraftedItemAuctionConfig const& config = configIt->second;
@@ -303,7 +265,7 @@ bool ProfessionAuctionBridge::ShouldSellCraftedItem(uint32 itemId, uint32 materi
         return false;
 
     // Calculate profit margin
-    float profitMargin = CalculateProfitMargin(itemId, marketPrice, materialCost);
+    float profitMargin = CalculateProfitMargin(player, itemId, marketPrice, materialCost);
 
     // Sell if profit margin exceeds minimum
     uint32 minProfitCopper = config.minProfitMargin;
@@ -312,9 +274,9 @@ bool ProfessionAuctionBridge::ShouldSellCraftedItem(uint32 itemId, uint32 materi
     return actualProfitCopper >= minProfitCopper;
 }
 
-bool ProfessionAuctionBridge::ListCraftedItemOnAuction(uint32 itemGuid, CraftedItemAuctionConfig const& config)
+bool ProfessionAuctionBridge::ListCraftedItemOnAuction(::Player* player, uint32 itemGuid, CraftedItemAuctionConfig const& config)
 {
-    if (!_bot || !_auctionHouse)
+    if (!player || !_auctionHouse)
         return false;
 
     // Get market price
@@ -330,22 +292,22 @@ bool ProfessionAuctionBridge::ListCraftedItemOnAuction(uint32 itemGuid, CraftedI
     uint32 bidPrice = static_cast<uint32>(listingPrice * 0.95f);
 
     // Delegate to existing AuctionHouse
-    bool success = _auctionHouse->CreateAuction(_bot, itemGuid, 1, // Single item
-        bidPrice, listingPrice, config.maxListingDuration);
+    bool success = _auctionHouse->CreateAuction(player, itemGuid, 1, // Single itembidPrice, listingPrice, config.maxListingDuration);
 
     if (success)
     {
-        _statistics.craftedsListedCount++;
+        std::lock_guard lock(_mutex);
+        uint32 playerGuid = player->GetGUID().GetCounter();_playerStatistics[playerGuid].craftedsListedCount++;
         _globalStatistics.craftedsListedCount++;
 
-        TC_LOG_INFO("playerbots", "ProfessionAuctionBridge: Listed crafted item {} for bot {} (price: {})",
-            config.itemId, _bot->GetName(), listingPrice);
+        TC_LOG_INFO("playerbots", "ProfessionAuctionBridge: Listed crafted item {} for player {} (price: {})",
+            config.itemId, player->GetName(), listingPrice);
     }
 
     return success;
 }
 
-float ProfessionAuctionBridge::CalculateProfitMargin(uint32 itemId, uint32 marketPrice, uint32 materialCost) const
+float ProfessionAuctionBridge::CalculateProfitMargin(::Player* player, uint32 itemId, uint32 marketPrice, uint32 materialCost) const
 {
     if (materialCost == 0)
         return 0.0f;
@@ -361,18 +323,18 @@ float ProfessionAuctionBridge::CalculateProfitMargin(uint32 itemId, uint32 marke
 // MATERIAL PURCHASING AUTOMATION
 // ============================================================================
 
-void ProfessionAuctionBridge::BuyMaterialsForLeveling(ProfessionType profession)
+void ProfessionAuctionBridge::BuyMaterialsForLeveling(::Player* player, ProfessionType profession)
 {
-    if (!_bot || !_auctionHouse || !CanAccessAuctionHouse())
+    if (!player || !_auctionHouse || !CanAccessAuctionHouse(player))
         return;
 
     // Get needed materials from ProfessionManager
-    auto neededMaterials = GetNeededMaterialsForLeveling(profession);
+    auto neededMaterials = GetNeededMaterialsForLeveling(player, profession);
 
     if (neededMaterials.empty())
         return;
 
-    uint32 budgetRemaining = _profile.auctionBudget;
+    ProfessionAuctionProfile const& profile = GetAuctionProfile(player->GetGUID().GetCounter());uint32 budgetRemaining = profile.auctionBudget;
 
     for (auto const& [itemId, quantity] : neededMaterials)
     {
@@ -385,17 +347,17 @@ void ProfessionAuctionBridge::BuyMaterialsForLeveling(ProfessionType profession)
         uint32 maxPricePerUnit = static_cast<uint32>(marketPrice * 1.1f);
 
         // Check if available at good price
-        if (IsMaterialAvailableForPurchase(itemId, quantity, maxPricePerUnit))
-        {
+        if (IsMaterialAvailableForPurchase(player, itemId, quantity, maxPricePerUnit)){
             uint32 totalCost = maxPricePerUnit * quantity;
             if (totalCost <= budgetRemaining)
             {
-                if (PurchaseMaterial(itemId, quantity, maxPricePerUnit))
+                if (PurchaseMaterial(player, itemId, quantity, maxPricePerUnit))
                 {
                     budgetRemaining -= totalCost;
 
-                    _statistics.materialsBought += quantity;
-                    _statistics.goldSpentOnMaterials += totalCost;
+                    std::lock_guard lock(_mutex);
+                    uint32 playerGuid = player->GetGUID().GetCounter();_playerStatistics[playerGuid].materialsBought += quantity;
+                    _playerStatistics[playerGuid].goldSpentOnMaterials += totalCost;
                     _globalStatistics.materialsBought += quantity;
                     _globalStatistics.goldSpentOnMaterials += totalCost;
                 }
@@ -404,29 +366,24 @@ void ProfessionAuctionBridge::BuyMaterialsForLeveling(ProfessionType profession)
     }
 }
 
-std::vector<std::pair<uint32, uint32>> ProfessionAuctionBridge::GetNeededMaterialsForLeveling(ProfessionType profession) const
+std::vector<std::pair<uint32, uint32>> ProfessionAuctionBridge::GetNeededMaterialsForLeveling(::Player* player, ProfessionType profession) const
 {
     std::vector<std::pair<uint32, uint32>> materials;
 
-    if (!_bot)
+    if (!player)
         return materials;
 
-    // Get optimal leveling recipe from ProfessionManager via facade
-    ProfessionManager* profMgr = const_cast<ProfessionAuctionBridge*>(this)->GetProfessionManager();
-    if (!profMgr)
-        return materials;
-
-    RecipeInfo const* recipe = profMgr->GetOptimalLevelingRecipe(profession);
+    // Get optimal leveling recipe from ProfessionManager
+    RecipeInfo const* recipe = ProfessionManager::instance()->GetOptimalLevelingRecipe(player, profession);
     if (!recipe)
         return materials;
 
     // Get missing materials for recipe
-    return profMgr->GetMissingMaterials(*recipe);
+    return ProfessionManager::instance()->GetMissingMaterials(player, *recipe);
 }
 
-bool ProfessionAuctionBridge::IsMaterialAvailableForPurchase(uint32 itemId, uint32 quantity, uint32 maxPricePerUnit) const
-{
-    if (!_bot || !_auctionHouse)
+bool ProfessionAuctionBridge::IsMaterialAvailableForPurchase(::Player* player, uint32 itemId, uint32 quantity, uint32 maxPricePerUnit) const{
+    if (!player || !_auctionHouse)
         return false;
 
     // Delegate to existing AuctionHouse
@@ -438,9 +395,8 @@ bool ProfessionAuctionBridge::IsMaterialAvailableForPurchase(uint32 itemId, uint
     return _auctionHouse->IsPriceBelowMarket(itemId, maxPricePerUnit);
 }
 
-bool ProfessionAuctionBridge::PurchaseMaterial(uint32 itemId, uint32 quantity, uint32 maxPricePerUnit)
-{
-    if (!_bot || !_auctionHouse)
+bool ProfessionAuctionBridge::PurchaseMaterial(::Player* player, uint32 itemId, uint32 quantity, uint32 maxPricePerUnit){
+    if (!player || !_auctionHouse)
         return false;
 
     // Get similar auctions for this item
@@ -483,35 +439,35 @@ bool ProfessionAuctionBridge::PurchaseMaterial(uint32 itemId, uint32 quantity, u
         uint32 buyAmount = std::min(quantity - totalBought, auction.stackCount);
         uint32 cost = (auction.buyoutPrice / auction.stackCount) * buyAmount;
 
-        // Check if bot has enough gold
-        if (_bot->GetMoney() < totalGoldSpent + cost)
+        // Check if player has enough gold
+        if (player->GetMoney() < totalGoldSpent + cost)
         {
-            TC_LOG_DEBUG("playerbots", "ProfessionAuctionBridge: Bot {} insufficient gold for material purchase",
-                _bot->GetName());
+            TC_LOG_DEBUG("playerbots", "ProfessionAuctionBridge: Player {} insufficient gold for material purchase",
+                player->GetName());
             break;
         }
 
         // Buyout the auction
-        if (_auctionHouse->BuyoutAuction(_bot, auction.auctionId))
+        if (_auctionHouse->BuyoutAuction(player, auction.auctionId))
         {
             totalBought += buyAmount;
             totalGoldSpent += cost;
             boughtAuctionIds.push_back(auction.auctionId);
 
-            TC_LOG_INFO("playerbots", "ProfessionAuctionBridge: Bot {} bought {} x {} for {} gold (auction {})",
-                _bot->GetName(), buyAmount, itemId, cost, auction.auctionId);
+            TC_LOG_INFO("playerbots", "ProfessionAuctionBridge: Player {} bought {} x {} for {} gold (auction {})",
+                player->GetName(), buyAmount, itemId, cost, auction.auctionId);
         }
         else
         {
-            TC_LOG_WARN("playerbots", "ProfessionAuctionBridge: Failed to buyout auction {} for bot {}",
-                auction.auctionId, _bot->GetName());
+            TC_LOG_WARN("playerbots", "ProfessionAuctionBridge: Failed to buyout auction {} for player {}",
+                auction.auctionId, player->GetName());
         }
     }
 
     if (totalBought > 0)
     {
-        TC_LOG_INFO("playerbots", "ProfessionAuctionBridge: Bot {} purchased total {} x {} for {} gold from {} auctions",
-            _bot->GetName(), totalBought, itemId, totalGoldSpent, boughtAuctionIds.size());
+        TC_LOG_INFO("playerbots", "ProfessionAuctionBridge: Player {} purchased total {} x {} for {} gold from {} auctions",
+            player->GetName(), totalBought, itemId, totalGoldSpent, boughtAuctionIds.size());
         return true;
     }
 
@@ -522,34 +478,44 @@ bool ProfessionAuctionBridge::PurchaseMaterial(uint32 itemId, uint32 quantity, u
 // STOCKPILE MANAGEMENT
 // ============================================================================
 
-void ProfessionAuctionBridge::SetMaterialStockpile(uint32 itemId, MaterialStockpileConfig const& config)
+void ProfessionAuctionBridge::SetMaterialStockpile(uint32 playerGuid, uint32 itemId, MaterialStockpileConfig const& config)
 {
-    _profile.materialConfigs[itemId] = config;
+    std::lock_guard lock(_mutex);
+
+    if (_profiles.find(playerGuid) == _profiles.end())
+        _profiles[playerGuid] = ProfessionAuctionProfile();
+
+    _profiles[playerGuid].materialConfigs[itemId] = config;
 }
 
-void ProfessionAuctionBridge::SetCraftedItemAuction(uint32 itemId, CraftedItemAuctionConfig const& config)
+void ProfessionAuctionBridge::SetCraftedItemAuction(uint32 playerGuid, uint32 itemId, CraftedItemAuctionConfig const& config)
 {
-    _profile.craftedItemConfigs[itemId] = config;
+    std::lock_guard lock(_mutex);
+
+    if (_profiles.find(playerGuid) == _profiles.end())
+        _profiles[playerGuid] = ProfessionAuctionProfile();
+
+    _profiles[playerGuid].craftedItemConfigs[itemId] = config;
 }
 
-uint32 ProfessionAuctionBridge::GetCurrentStockpile(uint32 itemId) const
+uint32 ProfessionAuctionBridge::GetCurrentStockpile(::Player* player, uint32 itemId) const
 {
-    if (!_bot)
+    if (!player)
         return 0;
 
-    return _bot->GetItemCount(itemId);
+    return player->GetItemCount(itemId);
 }
 
-bool ProfessionAuctionBridge::IsStockpileTargetMet(uint32 itemId) const
+bool ProfessionAuctionBridge::IsStockpileTargetMet(::Player* player, uint32 itemId) const
 {
-    if (!_bot)
+    if (!player)
         return false;
 
-    auto configIt = _profile.materialConfigs.find(itemId);
-    if (configIt == _profile.materialConfigs.end())
+    ProfessionAuctionProfile const& profile = GetAuctionProfile(player->GetGUID().GetCounter());auto configIt = profile.materialConfigs.find(itemId);
+    if (configIt == profile.materialConfigs.end())
         return false;
 
-    uint32 currentCount = GetCurrentStockpile(itemId);
+    uint32 currentCount = GetCurrentStockpile(player, itemId);
     return currentCount >= configIt->second.minStackSize;
 }
 
@@ -562,7 +528,7 @@ AuctionHouse* ProfessionAuctionBridge::GetAuctionHouse() const
     return _auctionHouse;
 }
 
-void ProfessionAuctionBridge::SynchronizeWithAuctionHouse()
+void ProfessionAuctionBridge::SynchronizeWithAuctionHouse(::Player* player)
 {
     // Synchronization logic with existing auction house
     // In full implementation, check active auctions, update statistics, etc.
@@ -572,19 +538,29 @@ void ProfessionAuctionBridge::SynchronizeWithAuctionHouse()
 // STATISTICS
 // ============================================================================
 
-ProfessionAuctionStatistics const& ProfessionAuctionBridge::GetStatistics() const
+ProfessionAuctionStatistics const& ProfessionAuctionBridge::GetPlayerStatistics(uint32 playerGuid) const
 {
-    return _statistics;
+    std::lock_guard lock(_mutex);
+
+    static ProfessionAuctionStatistics emptyStats;
+    auto it = _playerStatistics.find(playerGuid);
+    if (it != _playerStatistics.end())
+        return it->second;
+
+    return emptyStats;
 }
 
-ProfessionAuctionStatistics const& ProfessionAuctionBridge::GetGlobalStatistics()
+ProfessionAuctionStatistics const& ProfessionAuctionBridge::GetGlobalStatistics() const
 {
     return _globalStatistics;
 }
 
-void ProfessionAuctionBridge::ResetStatistics()
+void ProfessionAuctionBridge::ResetStatistics(uint32 playerGuid)
 {
-    _statistics.Reset();
+    std::lock_guard lock(_mutex);
+
+    auto it = _playerStatistics.find(playerGuid);if (it != _playerStatistics.end())
+        it->second.Reset();
 }
 
 // ============================================================================
@@ -624,17 +600,17 @@ void ProfessionAuctionBridge::InitializeCraftedItemConfigs()
 // AUCTION HELPERS
 // ============================================================================
 
-std::vector<ProfessionAuctionBridge::ItemInfo> ProfessionAuctionBridge::GetProfessionItemsInInventory(bool materialsOnly) const
+std::vector<ProfessionAuctionBridge::ItemInfo> ProfessionAuctionBridge::GetProfessionItemsInInventory(::Player* player, bool materialsOnly) const
 {
     std::vector<ItemInfo> items;
 
-    if (!_bot)
+    if (!player)
         return items;
 
     // Scan all bags
     for (uint8 i = INVENTORY_SLOT_BAG_START; i < INVENTORY_SLOT_BAG_END; ++i)
     {
-        if (::Bag* bag = _bot->GetBagByPos(i))
+        if (::Bag* bag = player->GetBagByPos(i))
         {
             for (uint32 j = 0; j < bag->GetBagSize(); ++j)
             {
@@ -657,8 +633,7 @@ std::vector<ProfessionAuctionBridge::ItemInfo> ProfessionAuctionBridge::GetProfe
     // Scan main backpack
     for (uint8 i = INVENTORY_SLOT_ITEM_START; i < INVENTORY_SLOT_ITEM_END; ++i)
     {
-        if (::Item* item = _bot->GetItemByPos(INVENTORY_SLOT_BAG_0, i))
-        {
+        if (::Item* item = player->GetItemByPos(INVENTORY_SLOT_BAG_0, i)){
             if (materialsOnly && !IsProfessionMaterial(item->GetEntry()))
                 continue;
 
@@ -674,9 +649,9 @@ std::vector<ProfessionAuctionBridge::ItemInfo> ProfessionAuctionBridge::GetProfe
     return items;
 }
 
-uint32 ProfessionAuctionBridge::CalculateMaterialCost(uint32 itemId) const
+uint32 ProfessionAuctionBridge::CalculateMaterialCost(::Player* player, uint32 itemId) const
 {
-    if (!_bot || !_auctionHouse)
+    if (!player || !_auctionHouse)
         return 0;
 
     // Search all production professions for recipe that creates this item
@@ -691,15 +666,10 @@ uint32 ProfessionAuctionBridge::CalculateMaterialCost(uint32 itemId) const
         ProfessionType::TAILORING
     };
 
-    // Get ProfessionManager via facade
-    ProfessionManager* profMgr = const_cast<ProfessionAuctionBridge*>(this)->GetProfessionManager();
-    if (!profMgr)
-        return 0;
-
     for (ProfessionType profession : productionProfessions)
     {
         // Get all recipes for this profession
-        std::vector<RecipeInfo> recipes = profMgr->GetRecipesForProfession(profession);
+        std::vector<RecipeInfo> recipes = ProfessionManager::instance()->GetRecipesForProfession(profession);
 
         for (const RecipeInfo& recipe : recipes)
         {
@@ -800,29 +770,29 @@ bool ProfessionAuctionBridge::IsCraftedItem(uint32 itemId, ProfessionType& outPr
     return false;
 }
 
-bool ProfessionAuctionBridge::CanAccessAuctionHouse() const
+bool ProfessionAuctionBridge::CanAccessAuctionHouse(::Player* player) const
 {
-    if (!_bot)
+    if (!player)
         return false;
 
     // For automated bot trading, we'll use a relaxed check:
-    // 1. Bot must be in a city (safe zone)
+    // 1. Player must be in a city (safe zone)
     // 2. Or have recently interacted with auction house
 
-    // Check if bot is in a rest area (cities have rest areas)
-    if (_bot->HasRestFlag(REST_FLAG_IN_CITY))
+    // Check if player is in a rest area (cities have rest areas)
+    if (player->HasRestFlag(REST_FLAG_IN_CITY))
     {
-        TC_LOG_DEBUG("playerbots", "ProfessionAuctionBridge: Bot {} has access (in city)",
-            _bot->GetName());
+        TC_LOG_DEBUG("playerbots", "ProfessionAuctionBridge: Player {} has access (in city)",
+            player->GetName());
         return true;
     }
 
-    // Alternative: Check if bot is in a zone with an auction house
+    // Alternative: Check if player is in a zone with an auction house
     // Major cities with auction houses:
     // - Stormwind, Ironforge, Darnassus (Alliance)
     // - Orgrimmar, Undercity, Thunder Bluff (Horde)
     // - Neutral: Booty Bay, Gadgetzan, Everlook, etc.
-    uint32 zoneId = _bot->GetZoneId();
+    uint32 zoneId = player->GetZoneId();
 
     // Alliance cities
     if (zoneId == 1519 ||  // Stormwind
@@ -851,86 +821,10 @@ bool ProfessionAuctionBridge::CanAccessAuctionHouse() const
 
     // For bots, allow access from anywhere (they can teleport/travel)
     // In a real implementation, you might want to trigger bot travel to AH
-    TC_LOG_DEBUG("playerbots", "ProfessionAuctionBridge: Bot {} not near auction house (zone {}), allowing anyway for automation",
-        _bot->GetName(), zoneId);
+    TC_LOG_DEBUG("playerbots", "ProfessionAuctionBridge: Player {} not near auction house (zone {}), allowing anyway for automation",
+        player->GetName(), zoneId);
 
     return true; // Allow for automation purposes
-}
-
-// ============================================================================
-// PROFESSION MANAGER ACCESS
-// ============================================================================
-
-ProfessionManager* ProfessionAuctionBridge::GetProfessionManager()
-{
-    if (!_bot)
-        return nullptr;
-
-    BotSession* session = static_cast<BotSession*>(_bot->GetSession());
-    if (!session || !session->GetBotAI())
-        return nullptr;
-
-    return session->GetBotAI()->GetGameSystems()->GetProfessionManager();
-}
-
-// ============================================================================
-// EVENT HANDLING (Phase 2)
-// ============================================================================
-
-void ProfessionAuctionBridge::HandleProfessionEvent(ProfessionEvent const& event)
-{
-    // PHASE 4.3: Filter events for this bot only
-    if (!_bot)
-        return;
-
-    if (event.playerGuid != _bot->GetGUID())
-        return;
-
-    switch (event.type)
-    {
-        case ProfessionEventType::CRAFTING_COMPLETED:
-        {
-            // When crafting completes, consider listing crafted items for sale on AH
-            TC_LOG_DEBUG("playerbot.events.profession",
-                "ProfessionAuctionBridge: CRAFTING_COMPLETED event - Item {} x{} crafted from recipe {}",
-                event.itemId, event.quantity, event.recipeId);
-
-            // Check if enabled for profession-auction automation
-            if (!IsEnabled())
-                return;
-
-            // Sell crafted items automatically (implementation would call SellCraftedItems)
-            TC_LOG_INFO("playerbots",
-                "ProfessionAuctionBridge: Processing crafted item {} x{} for potential AH listing",
-                event.itemId, event.quantity);
-            break;
-        }
-
-        case ProfessionEventType::ITEM_BANKED:
-        {
-            // When items are banked, update inventory tracking and stockpile management
-            TC_LOG_DEBUG("playerbot.events.profession",
-                "ProfessionAuctionBridge: ITEM_BANKED event - Item {} x{} banked",
-                event.itemId, event.quantity);
-
-            // Check if this is a profession material we track
-            if (IsProfessionMaterial(event.itemId))
-            {
-                // Recalculate sellable materials now that inventory changed
-                TC_LOG_DEBUG("playerbots",
-                    "ProfessionAuctionBridge: Profession material {} x{} banked, recalculating sellable materials",
-                    event.itemId, event.quantity);
-
-                // Future enhancement: Trigger sellable materials recalculation
-                // This would analyze current stockpiles vs configured thresholds
-            }
-            break;
-        }
-
-        default:
-            // Ignore other event types
-            break;
-    }
 }
 
 } // namespace Playerbot

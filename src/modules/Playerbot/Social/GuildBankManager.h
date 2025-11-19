@@ -71,36 +71,33 @@ struct GuildBankItem
 class TC_GAME_API GuildBankManager final : public IGuildBankManager
 {
 public:
-    explicit GuildBankManager(Player* bot);
-    ~GuildBankManager();
-    GuildBankManager(GuildBankManager const&) = delete;
-    GuildBankManager& operator=(GuildBankManager const&) = delete;
+    static GuildBankManager* instance();
 
     // Core guild bank operations using TrinityCore's Guild system
-    bool DepositItem(uint32 itemGuid, uint32 tabId, uint32 stackCount) override;
-    bool WithdrawItem(uint32 tabId, uint32 slotId, uint32 stackCount) override;
-    bool MoveItem(uint32 fromTab, uint32 fromSlot, uint32 toTab, uint32 toSlot) override;
-    bool CanAccessGuildBank(uint32 tabId) override;
+    bool DepositItem(Player* player, uint32 itemGuid, uint32 tabId, uint32 stackCount) override;
+    bool WithdrawItem(Player* player, uint32 tabId, uint32 slotId, uint32 stackCount) override;
+    bool MoveItem(Player* player, uint32 fromTab, uint32 fromSlot, uint32 toTab, uint32 toSlot) override;
+    bool CanAccessGuildBank(Player* player, uint32 tabId) override;
 
     // Intelligent bank management
-    void AutoOrganizeGuildBank() override;
-    void OptimizeItemPlacement() override;
-    void AnalyzeGuildBankContents() override;
-    void PlanBankReorganization();
+    void AutoOrganizeGuildBank(Player* player) override;
+    void OptimizeItemPlacement(Player* player) override;
+    void AnalyzeGuildBankContents(Player* player) override;
+    void PlanBankReorganization(Player* player);
 
     // Automated deposit strategies
-    void AutoDepositItems() override;
-    void DepositExcessConsumables() override;
-    void DepositCraftingMaterials() override;
-    void DepositValuableItems();
-    void DepositDuplicateEquipment();
+    void AutoDepositItems(Player* player) override;
+    void DepositExcessConsumables(Player* player) override;
+    void DepositCraftingMaterials(Player* player) override;
+    void DepositValuableItems(Player* player);
+    void DepositDuplicateEquipment(Player* player);
 
     // Automated withdrawal strategies
-    void AutoWithdrawNeededItems() override;
-    void WithdrawConsumables() override;
-    void WithdrawCraftingMaterials() override;
-    void WithdrawRepairItems();
-    void WithdrawRequestedItems();
+    void AutoWithdrawNeededItems(Player* player) override;
+    void WithdrawConsumables(Player* player) override;
+    void WithdrawCraftingMaterials(Player* player) override;
+    void WithdrawRepairItems(Player* player);
+    void WithdrawRequestedItems(Player* player);
 
     // Bank organization and optimization
     struct BankOrganizationPlan
@@ -115,8 +112,8 @@ public:
         BankOrganizationPlan() : estimatedTime(0), organizationScore(0.0f) {}
     };
 
-    BankOrganizationPlan CreateOrganizationPlan();
-    void ExecuteOrganizationPlan(const BankOrganizationPlan& plan);
+    BankOrganizationPlan CreateOrganizationPlan(Player* player);
+    void ExecuteOrganizationPlan(Player* player, const BankOrganizationPlan& plan);
     float CalculateOrganizationScore(Guild* guild);
 
     // Bank monitoring and analysis
@@ -136,30 +133,30 @@ public:
             , organizationLevel(0.5f), lastAnalysisTime(GameTime::GetGameTimeMS()) {}
     };
 
-    BankAnalysis AnalyzeGuildBank();
+    BankAnalysis AnalyzeGuildBank(Player* player);
     void UpdateBankAnalysis(uint32 guildId);
     std::vector<uint32> IdentifyDuplicateItems(Guild* guild);
     std::vector<uint32> IdentifyUnusedItems(Guild* guild);
 
     // Bank permissions and access control
-    bool HasDepositRights(uint32 tabId);
-    bool HasWithdrawRights(uint32 tabId);
-    uint32 GetDailyWithdrawLimit(uint32 tabId);
-    uint32 GetRemainingWithdraws(uint32 tabId);
-    void TrackBankUsage(BankOperation operation);
+    bool HasDepositRights(Player* player, uint32 tabId);
+    bool HasWithdrawRights(Player* player, uint32 tabId);
+    uint32 GetDailyWithdrawLimit(Player* player, uint32 tabId);
+    uint32 GetRemainingWithdraws(Player* player, uint32 tabId);
+    void TrackBankUsage(Player* player, BankOperation operation);
 
     // Item categorization and intelligence
     GuildBankItemType DetermineItemCategory(uint32 itemId);
     uint32 EstimateItemValue(uint32 itemId, uint32 stackCount = 1);
     bool IsItemNeededByGuild(Guild* guild, uint32 itemId);
     std::vector<uint32> GetSimilarItems(uint32 itemId);
-    bool ShouldItemBeInGuildBank(uint32 itemId);
+    bool ShouldItemBeInGuildBank(Player* player, uint32 itemId);
 
     // Bank space optimization
-    void OptimizeBankSpace();
+    void OptimizeBankSpace(Player* player);
     std::vector<uint32> IdentifyLowValueItems(Guild* guild);
-    void ConsolidateStacks(uint32 tabId);
-    void RemoveExpiredItems();
+    void ConsolidateStacks(Player* player, uint32 tabId);
+    void RemoveExpiredItems(Player* player);
     uint32 CalculateAvailableSpace(Guild* guild, uint32 tabId);
 
     // Member interaction with bank
@@ -180,17 +177,17 @@ public:
             , contributionScore(0.5f), trustLevel(0.8f) {}
     };
 
-    MemberBankProfile GetMemberBankProfile();
-    void UpdateMemberBankProfile(BankOperation operation, uint32 itemId);
+    MemberBankProfile GetMemberBankProfile(uint32 playerGuid);
+    void UpdateMemberBankProfile(uint32 playerGuid, BankOperation operation, uint32 itemId);
     std::vector<uint32> GetTopContributors(uint32 guildId);
     std::vector<uint32> GetFrequentUsers(uint32 guildId);
 
     // Automated bank maintenance
-    void PerformBankMaintenance();
-    void CleanupBankTabs();
+    void PerformBankMaintenance(Player* player);
+    void CleanupBankTabs(Player* player);
     void UpdateItemPrices(Guild* guild);
-    void ArchiveOldItems();
-    void GenerateBankReport();
+    void ArchiveOldItems(Player* player);
+    void GenerateBankReport(Player* player);
 
     // Performance monitoring
     struct BankMetrics
@@ -227,14 +224,14 @@ public:
     void CleanupBankData();
 
 private:
-    Player* _bot;
+    GuildBankManager();
     ~GuildBankManager() = default;
 
     // Core bank data
     std::unordered_map<uint32, BankAnalysis> _guildBankAnalysis; // guildId -> analysis
     std::unordered_map<uint32, MemberBankProfile> _memberProfiles; // playerGuid -> profile
     std::unordered_map<uint32, BankMetrics> _guildMetrics; // guildId -> metrics
-    
+    mutable Playerbot::OrderedRecursiveMutex<Playerbot::LockOrder::BEHAVIOR_MANAGER> _bankMutex;
 
     // Item categorization system
     std::unordered_map<uint32, GuildBankItemType> _itemCategories; // itemId -> category
@@ -263,13 +260,13 @@ private:
     // Helper functions
     void InitializeItemCategories();
     void LoadGuildBankData(uint32 guildId);
-    bool ValidateBankOperation(BankOperation operation, uint32 tabId);
-    void LogBankTransaction(BankOperation operation, uint32 itemId, uint32 tabId);
+    bool ValidateBankOperation(Player* player, BankOperation operation, uint32 tabId);
+    void LogBankTransaction(uint32 playerGuid, BankOperation operation, uint32 itemId, uint32 tabId);
 
     // Organization algorithms
     void CalculateOptimalTabLayout(Guild* guild, std::unordered_map<uint32, GuildBankItemType>& layout);
     std::vector<std::pair<uint32, uint32>> PlanItemMoves(Guild* guild, const BankOrganizationPlan& plan);
-    void ExecuteItemMove(uint32 fromTab, uint32 fromSlot, uint32 toTab, uint32 toSlot);
+    void ExecuteItemMove(Player* player, uint32 fromTab, uint32 fromSlot, uint32 toTab, uint32 toSlot);
     float EvaluateOrganizationEfficiency(Guild* guild);
 
     // Item analysis
@@ -279,9 +276,9 @@ private:
     bool IsItemRedundant(Guild* guild, uint32 itemId);
 
     // Access control validation
-    bool ValidateTabAccess(uint32 tabId, BankOperation operation);
-    void UpdateUsageLimits(BankOperation operation, uint32 tabId);
-    void EnforceWithdrawLimits(uint32 tabId, uint32 requestedAmount);
+    bool ValidateTabAccess(Player* player, uint32 tabId, BankOperation operation);
+    void UpdateUsageLimits(Player* player, BankOperation operation, uint32 tabId);
+    void EnforceWithdrawLimits(Player* player, uint32 tabId, uint32 requestedAmount);
 
     // Performance optimization
     void CacheBankData(uint32 guildId);

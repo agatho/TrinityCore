@@ -10,9 +10,6 @@
 #include "FarmingCoordinator.h"
 #include "ProfessionManager.h"
 #include "GatheringManager.h"
-#include "../Core/Managers/GameSystemsManager.h"
-#include "../Core/Sessions/BotSession.h"
-#include "../AI/BotAI.h"
 #include "Player.h"
 #include "Log.h"
 #include "Map.h"
@@ -21,40 +18,15 @@
 namespace Playerbot
 {
 
-// ============================================================================
-// STATIC MEMBER INITIALIZATION
-// ============================================================================
-
-std::unordered_map<ProfessionType, std::vector<FarmingZoneInfo>> FarmingCoordinator::_farmingZones;
-bool FarmingCoordinator::_farmingZonesInitialized = false;
-FarmingStatistics FarmingCoordinator::_globalStatistics;
-std::atomic<uint32> FarmingCoordinator::_nextSessionId{1};
-
-// ============================================================================
-// CONSTRUCTOR / DESTRUCTOR
-// ============================================================================
-
-FarmingCoordinator::FarmingCoordinator(Player* bot)
-    : _bot(bot)
+// Singleton instance
+FarmingCoordinator* FarmingCoordinator::instance()
 {
-    // Initialize shared zone database once (thread-safe with static flag)
-    if (!_farmingZonesInitialized)
-    {
-        LoadFarmingZones();
-        _farmingZonesInitialized = true;
-        TC_LOG_INFO("playerbots", "FarmingCoordinator: Loaded farming zones for {} professions",
-            _farmingZones.size());
-    }
+    static FarmingCoordinator instance;
+    return &instance;
 }
 
-FarmingCoordinator::~FarmingCoordinator()
+FarmingCoordinator::FarmingCoordinator()
 {
-    // Cleanup per-bot resources
-    if (_activeSession.isActive)
-    {
-        TC_LOG_DEBUG("playerbots", "FarmingCoordinator: Cleaning up active session for bot {}",
-            _bot ? _bot->GetName() : "unknown");
-    }
 }
 
 // ============================================================================
@@ -63,151 +35,179 @@ FarmingCoordinator::~FarmingCoordinator()
 
 void FarmingCoordinator::Initialize()
 {
-    // Per-bot initialization (zones already loaded in constructor)
-    TC_LOG_DEBUG("playerbots", "FarmingCoordinator: Initialized for bot {}",
-        _bot ? _bot->GetName() : "unknown");
+    TC_LOG_INFO("playerbots", "FarmingCoordinator: Initializing farming coordination system...");
+
+    LoadFarmingZones();
+    InitializeZoneDatabase();
+
+    TC_LOG_INFO("playerbots", "FarmingCoordinator: Loaded farming zones for {} professions",
+        _farmingZones.size());
 }
 
 void FarmingCoordinator::Update(::Player* player, uint32 diff)
 {
-    if (!_bot || !_enabled)
+    if (!player || !IsEnabled(player))
         return;
 
+    uint32 playerGuid = player->GetGUID().GetCounter();
     uint32 currentTime = GameTime::GetGameTimeMS();
 
-    // Check if bot has active farming session
-    if (_activeSession.isActive)
+    std::lock_guard lock(_mutex);
+
+    // Check if player has active farming session
+    auto sessionIt = _activeSessions.find(playerGuid);
+    if (sessionIt != _activeSessions.end())
     {
-        UpdateFarmingSession(diff);
+        UpdateFarmingSession(player, diff);
         return;
     }
 
     // Check if enough time passed since last check
-    static uint32 lastCheckTime = 0;
-    if (currentTime - lastCheckTime < FARMING_CHECK_INTERVAL)
+    static std::unordered_map<uint32, uint32> lastCheckTimes;
+    if (currentTime - lastCheckTimes[playerGuid] < FARMING_CHECK_INTERVAL)
         return;
 
-    lastCheckTime = currentTime;
+    lastCheckTimes[playerGuid] = currentTime;
 
     // Check if any profession needs farming
-    auto professionsNeedingFarm = GetProfessionsNeedingFarm();
+    auto professionsNeedingFarm = GetProfessionsNeedingFarm(player);
     if (!professionsNeedingFarm.empty())
     {
         // Start farming session for highest priority profession
         ProfessionType profession = professionsNeedingFarm.front();
-        TC_LOG_INFO("playerbots", "FarmingCoordinator: Bot {} needs farming for profession {}",
-            _bot->GetName(), static_cast<uint16>(profession));
+        TC_LOG_INFO("playerbots", "FarmingCoordinator: Player {} needs farming for profession {}",
+            player->GetName(), static_cast<uint16>(profession));
 
-        StartFarmingSession(profession, FarmingSessionType::SKILL_CATCHUP);
+        StartFarmingSession(player, profession, FarmingSessionType::SKILL_CATCHUP);
     }
 }
 
-void FarmingCoordinator::SetEnabled(bool enabled)
+void FarmingCoordinator::SetEnabled(::Player* player, bool enabled)
 {
-    _enabled = enabled;
+    if (!player)
+        return;
+
+    std::lock_guard lock(_mutex);
+    uint32 playerGuid = player->GetGUID().GetCounter();
+    if (_profiles.find(playerGuid) == _profiles.end())
+        _profiles[playerGuid] = FarmingCoordinatorProfile();
+
+    _profiles[playerGuid].autoFarm = enabled;
 }
 
-bool FarmingCoordinator::IsEnabled() const
+bool FarmingCoordinator::IsEnabled(::Player* player) const
 {
-    return _enabled;
+    if (!player)
+        return false;
+
+    std::lock_guard lock(_mutex);
+    uint32 playerGuid = player->GetGUID().GetCounter();
+    auto it = _profiles.find(playerGuid);
+    if (it == _profiles.end())
+        return false;
+
+    return it->second.autoFarm;
 }
 
-void FarmingCoordinator::SetCoordinatorProfile(FarmingCoordinatorProfile const& profile)
+void FarmingCoordinator::SetCoordinatorProfile(uint32 playerGuid, FarmingCoordinatorProfile const& profile)
 {
-    _profile = profile;
+    std::lock_guard lock(_mutex);
+    _profiles[playerGuid] = profile;
 }
 
-FarmingCoordinatorProfile FarmingCoordinator::GetCoordinatorProfile() const
+FarmingCoordinatorProfile FarmingCoordinator::GetCoordinatorProfile(uint32 playerGuid) const
 {
-    return _profile;
+    std::lock_guard lock(_mutex);
+
+    auto it = _profiles.find(playerGuid);
+    if (it != _profiles.end())
+        return it->second;
+
+    return FarmingCoordinatorProfile();
 }
 
 // ============================================================================
 // SKILL ANALYSIS
 // ============================================================================
 
-bool FarmingCoordinator::NeedsFarming(ProfessionType profession) const
+bool FarmingCoordinator::NeedsFarming(::Player* player, ProfessionType profession) const
 {
-    if (!_bot)
+    if (!player)
         return false;
 
-    int32 skillGap = GetSkillGap(profession);
-    return skillGap > static_cast<int32>(_profile.skillGapThreshold);
+    int32 skillGap = GetSkillGap(player, profession);
+    FarmingCoordinatorProfile const& profile = GetCoordinatorProfile(player->GetGUID().GetCounter());
+    return skillGap > static_cast<int32>(profile.skillGapThreshold);
 }
 
-int32 FarmingCoordinator::GetSkillGap(ProfessionType profession) const
+int32 FarmingCoordinator::GetSkillGap(::Player* player, ProfessionType profession) const
 {
-    if (!_bot)
+    if (!player)
         return 0;
 
-    ProfessionManager* profMgr = const_cast<FarmingCoordinator*>(this)->GetProfessionManager();
-    if (!profMgr)
-        return 0;
-
-    uint16 currentSkill = profMgr->GetProfessionSkill(profession);
-    uint16 targetSkill = GetTargetSkillLevel(profession);
+    uint16 currentSkill = ProfessionManager::instance()->GetProfessionSkill(player, profession);
+    uint16 targetSkill = GetTargetSkillLevel(player, profession);
 
     return static_cast<int32>(targetSkill) - static_cast<int32>(currentSkill);
 }
 
-uint16 FarmingCoordinator::GetTargetSkillLevel(ProfessionType profession) const
+uint16 FarmingCoordinator::GetTargetSkillLevel(::Player* player, ProfessionType profession) const
 {
-    if (!_bot)
+    if (!player)
         return 0;
 
-    uint16 charLevel = _bot->GetLevel();
+    FarmingCoordinatorProfile const& profile = GetCoordinatorProfile(player->GetGUID().GetCounter());
+    uint16 charLevel = player->GetLevel();
     // Target = Character Level × skillLevelMultiplier (default: 5.0)
-    return static_cast<uint16>(charLevel * _profile.skillLevelMultiplier);
+    return static_cast<uint16>(charLevel * profile.skillLevelMultiplier);
 }
 
-std::vector<ProfessionType> FarmingCoordinator::GetProfessionsNeedingFarm() const
+std::vector<ProfessionType> FarmingCoordinator::GetProfessionsNeedingFarm(::Player* player) const
 {
     std::vector<ProfessionType> professions;
 
-    if (!_bot)
-        return professions;
-
-    ProfessionManager* profMgr = const_cast<FarmingCoordinator*>(this)->GetProfessionManager();
-    if (!profMgr)
+    if (!player)
         return professions;
 
     // Get all player professions
-    auto playerProfessions = profMgr->GetPlayerProfessions();
+    auto playerProfessions = ProfessionManager::instance()->GetPlayerProfessions(player);
 
     // Check each profession for skill gap
     for (auto const& profInfo : playerProfessions)
     {
-        if (NeedsFarming(profInfo.profession))
+        if (NeedsFarming(player, profInfo.profession))
         {
+            int32 skillGap = GetSkillGap(player, profInfo.profession);
             professions.push_back(profInfo.profession);
         }
     }
 
     // Sort by skill gap (largest gap first)
     std::sort(professions.begin(), professions.end(),
-        [this](ProfessionType a, ProfessionType b)
+        [this, player](ProfessionType a, ProfessionType b)
         {
-            return GetSkillGap(a) > GetSkillGap(b);
+            return GetSkillGap(player, a) > GetSkillGap(player, b);
         });
 
     return professions;
 }
 
-uint32 FarmingCoordinator::CalculateFarmingDuration(ProfessionType profession) const
+uint32 FarmingCoordinator::CalculateFarmingDuration(::Player* player, ProfessionType profession) const
 {
-    if (!_bot)
+    if (!player)
         return 0;
 
-    int32 skillGap = GetSkillGap(profession);
+    int32 skillGap = GetSkillGap(player, profession);
     if (skillGap <= 0)
         return 0;
 
+    FarmingCoordinatorProfile const& profile = GetCoordinatorProfile(player->GetGUID().GetCounter());
     // Estimate: ~10 skill points per 5 minutes of farming
     uint32 estimatedDuration = (skillGap / 10) * 300000; // 5 minutes in ms
 
     // Clamp to min/max
-    estimatedDuration = std::max(estimatedDuration, _profile.minFarmingDuration);
-    estimatedDuration = std::min(estimatedDuration, _profile.maxFarmingDuration);
+    estimatedDuration = std::max(estimatedDuration, profile.minFarmingDuration);
+    estimatedDuration = std::min(estimatedDuration, profile.maxFarmingDuration);
 
     return estimatedDuration;
 }
@@ -216,21 +216,22 @@ uint32 FarmingCoordinator::CalculateFarmingDuration(ProfessionType profession) c
 // FARMING SESSION MANAGEMENT
 // ============================================================================
 
-bool FarmingCoordinator::StartFarmingSession(ProfessionType profession, FarmingSessionType sessionType)
+bool FarmingCoordinator::StartFarmingSession(::Player* player, ProfessionType profession, FarmingSessionType sessionType)
 {
-    if (!_bot || !CanStartFarming())
+    if (!player || !CanStartFarming(player))
         return false;
 
+    std::lock_guard lock(_mutex);
+    uint32 playerGuid = player->GetGUID().GetCounter();
     // Check if session already active
-    if (_activeSession.isActive)
+    if (_activeSessions.find(playerGuid) != _activeSessions.end())
     {
-        TC_LOG_DEBUG("playerbots", "FarmingCoordinator: Bot {} already has active farming session",
-            _bot->GetName());
+        TC_LOG_DEBUG("playerbots", "FarmingCoordinator: Player {} already has active farming session", player->GetName());
         return false;
     }
 
     // Get optimal farming zone
-    FarmingZoneInfo const* zone = GetOptimalFarmingZone(profession);
+    FarmingZoneInfo const* zone = GetOptimalFarmingZone(player, profession);
     if (!zone)
     {
         TC_LOG_ERROR("playerbots", "FarmingCoordinator: No suitable farming zone found for profession {}",
@@ -238,93 +239,111 @@ bool FarmingCoordinator::StartFarmingSession(ProfessionType profession, FarmingS
         return false;
     }
 
-    ProfessionManager* profMgr = GetProfessionManager();
-    if (!profMgr)
-        return false;
-
     // Create farming session
-    _activeSession.sessionId = GenerateSessionId();
-    _activeSession.playerGuid = _bot->GetGUID().GetCounter();
-    _activeSession.sessionType = sessionType;
-    _activeSession.profession = profession;
-    _activeSession.zone = *zone;
-    _activeSession.startTime = GameTime::GetGameTimeMS();
-    _activeSession.duration = CalculateFarmingDuration(profession);
-    _activeSession.startingSkill = profMgr->GetProfessionSkill(profession);
-    _activeSession.targetSkill = GetTargetSkillLevel(profession);
-    _activeSession.nodesGathered = 0;
-    _activeSession.materialsCollected = 0;
-    _activeSession.isActive = true;
-    _activeSession.originalPosition = _bot->GetPosition();
+    FarmingSession session;
+    session.sessionId = GenerateSessionId();
+    session.playerGuid = playerGuid;
+    session.sessionType = sessionType;
+    session.profession = profession;
+    session.zone = *zone;
+    session.startTime = GameTime::GetGameTimeMS();
+    session.duration = CalculateFarmingDuration(player, profession);
+    session.startingSkill = ProfessionManager::instance()->GetProfessionSkill(player, profession);
+    session.targetSkill = GetTargetSkillLevel(player, profession);
+    session.nodesGathered = 0;
+    session.materialsCollected = 0;
+    session.isActive = true;
+    session.originalPosition = player->GetPosition();
+
+    _activeSessions[playerGuid] = session;
 
     // Travel to farming zone
-    if (!TravelToFarmingZone(*zone))
+    if (!TravelToFarmingZone(player, *zone))
     {
         TC_LOG_ERROR("playerbots", "FarmingCoordinator: Failed to travel to farming zone");
-        _activeSession = FarmingSession(); // Reset session
+        _activeSessions.erase(playerGuid);
         return false;
     }
 
-    TC_LOG_INFO("playerbots", "FarmingCoordinator: Started farming session {} for bot {} (skill {} -> {})",
-        _activeSession.sessionId, _bot->GetName(), _activeSession.startingSkill, _activeSession.targetSkill);
+    TC_LOG_INFO("playerbots", "FarmingCoordinator: Started farming session {} for player {} (skill {} -> {})",
+        session.sessionId, player->GetName(), session.startingSkill, session.targetSkill);
 
     return true;
 }
 
-void FarmingCoordinator::StopFarmingSession()
+void FarmingCoordinator::StopFarmingSession(::Player* player)
 {
-    if (!_bot || !_activeSession.isActive)
+    if (!player)
         return;
 
-    _activeSession.isActive = false;
+    std::lock_guard lock(_mutex);
+    uint32 playerGuid = player->GetGUID().GetCounter();
+    auto it = _activeSessions.find(playerGuid);
+    if (it == _activeSessions.end())
+        return;
+
+    FarmingSession& session = it->second;
+    session.isActive = false;
 
     // Update statistics
-    uint32 sessionTime = GameTime::GetGameTimeMS() - _activeSession.startTime;
-    _statistics.sessionsCompleted++;
-    _statistics.totalTimeSpent += sessionTime;
-    _statistics.totalNodesGathered += _activeSession.nodesGathered;
-    _statistics.zonesVisited++;
+    _playerStatistics[playerGuid].sessionsCompleted++;
+    _playerStatistics[playerGuid].totalTimeSpent += (GameTime::GetGameTimeMS() - session.startTime);
+    _playerStatistics[playerGuid].totalNodesGathered += session.nodesGathered;
+    _playerStatistics[playerGuid].zonesVisited++;
 
     _globalStatistics.sessionsCompleted++;
-    _globalStatistics.totalTimeSpent += sessionTime;
-    _globalStatistics.totalNodesGathered += _activeSession.nodesGathered;
+    _globalStatistics.totalTimeSpent += (GameTime::GetGameTimeMS() - session.startTime);
+    _globalStatistics.totalNodesGathered += session.nodesGathered;
 
     // Return to original position
-    if (_profile.returnToOriginalPosition)
-        ReturnToOriginalPosition(_activeSession);
+    FarmingCoordinatorProfile const& profile = GetCoordinatorProfile(playerGuid);
+    if (profile.returnToOriginalPosition)
+        ReturnToOriginalPosition(player, session);
 
     // Record last farming time for cooldown
-    _lastFarmingTime = GameTime::GetGameTimeMS();
+    _lastFarmingTimes[playerGuid] = GameTime::GetGameTimeMS();
+    TC_LOG_INFO("playerbots", "FarmingCoordinator: Stopped farming session {} for player {} (gathered {} nodes)",
+        session.sessionId, player->GetName(), session.nodesGathered);
 
-    TC_LOG_INFO("playerbots", "FarmingCoordinator: Stopped farming session {} for bot {} (gathered {} nodes)",
-        _activeSession.sessionId, _bot->GetName(), _activeSession.nodesGathered);
-
-    // Reset session
-    _activeSession = FarmingSession();
+    _activeSessions.erase(playerGuid);
 }
 
-FarmingSession const* FarmingCoordinator::GetActiveFarmingSession() const
+FarmingSession const* FarmingCoordinator::GetActiveFarmingSession(uint32 playerGuid) const
 {
-    if (_activeSession.isActive)
-        return &_activeSession;
+    std::lock_guard lock(_mutex);
+
+    auto it = _activeSessions.find(playerGuid);
+    if (it != _activeSessions.end())
+        return &it->second;
 
     return nullptr;
 }
 
-bool FarmingCoordinator::HasActiveFarmingSession() const
+bool FarmingCoordinator::HasActiveFarmingSession(::Player* player) const
 {
-    return _activeSession.isActive;
+    if (!player)
+        return false;
+
+    std::lock_guard lock(_mutex);
+    return _activeSessions.find(player->GetGUID().GetCounter()) != _activeSessions.end();
 }
 
-void FarmingCoordinator::UpdateFarmingSession(uint32 diff)
+void FarmingCoordinator::UpdateFarmingSession(::Player* player, uint32 diff)
 {
-    if (!_bot || !_activeSession.isActive)
+    if (!player)
         return;
 
+    uint32 playerGuid = player->GetGUID().GetCounter();
+    auto it = _activeSessions.find(playerGuid);
+    if (it == _activeSessions.end())
+        return;
+
+    FarmingSession& session = it->second;
+
     // Check if session should end
-    if (ShouldEndFarmingSession(_activeSession))
+    if (ShouldEndFarmingSession(player, session))
     {
-        StopFarmingSession();
+        StopFarmingSession(player);
         return;
     }
 
@@ -335,18 +354,13 @@ void FarmingCoordinator::UpdateFarmingSession(uint32 diff)
     // Update session progress (gather stats from GatheringAutomation)
     // In full implementation, track nodes gathered during this session
 }
-
-bool FarmingCoordinator::ShouldEndFarmingSession(FarmingSession const& session) const
+bool FarmingCoordinator::ShouldEndFarmingSession(::Player* player, FarmingSession const& session) const
 {
-    if (!_bot)
-        return true;
-
-    ProfessionManager* profMgr = const_cast<FarmingCoordinator*>(this)->GetProfessionManager();
-    if (!profMgr)
+    if (!player)
         return true;
 
     // Check if skill target reached
-    uint16 currentSkill = profMgr->GetProfessionSkill(session.profession);
+    uint16 currentSkill = ProfessionManager::instance()->GetProfessionSkill(player, session.profession);
     if (currentSkill >= session.targetSkill)
     {
         TC_LOG_INFO("playerbots", "FarmingCoordinator: Skill target reached ({} >= {})",
@@ -362,8 +376,8 @@ bool FarmingCoordinator::ShouldEndFarmingSession(FarmingSession const& session) 
         return true;
     }
 
-    // Check if bot is in combat, dead, etc.
-    if (_bot->IsInCombat() || !_bot->IsAlive())
+    // Check if player is in combat, dead, etc.
+    if (player->IsInCombat() || !player->IsAlive())
         return true;
 
     return false;
@@ -373,12 +387,12 @@ bool FarmingCoordinator::ShouldEndFarmingSession(FarmingSession const& session) 
 // ZONE SELECTION
 // ============================================================================
 
-FarmingZoneInfo const* FarmingCoordinator::GetOptimalFarmingZone(ProfessionType profession) const
+FarmingZoneInfo const* FarmingCoordinator::GetOptimalFarmingZone(::Player* player, ProfessionType profession) const
 {
-    if (!_bot)
+    if (!player)
         return nullptr;
 
-    auto zones = GetSuitableZones(profession);
+    auto zones = GetSuitableZones(player, profession);
     if (zones.empty())
         return nullptr;
 
@@ -388,7 +402,7 @@ FarmingZoneInfo const* FarmingCoordinator::GetOptimalFarmingZone(ProfessionType 
 
     for (auto const& zone : zones)
     {
-        float score = CalculateZoneScore(zone);
+        float score = CalculateZoneScore(player, zone);
         if (score > bestScore)
         {
             bestScore = score;
@@ -396,27 +410,25 @@ FarmingZoneInfo const* FarmingCoordinator::GetOptimalFarmingZone(ProfessionType 
         }
     }
 
+    std::lock_guard lock(_mutex);
     return bestZone;
 }
 
-std::vector<FarmingZoneInfo> FarmingCoordinator::GetSuitableZones(ProfessionType profession) const
+std::vector<FarmingZoneInfo> FarmingCoordinator::GetSuitableZones(::Player* player, ProfessionType profession) const
 {
     std::vector<FarmingZoneInfo> suitable;
 
-    if (!_bot)
+    if (!player)
         return suitable;
+
+    std::lock_guard lock(_mutex);
 
     auto it = _farmingZones.find(profession);
     if (it == _farmingZones.end())
         return suitable;
 
-    ProfessionManager* profMgr = const_cast<FarmingCoordinator*>(this)->GetProfessionManager();
-    if (!profMgr)
-        return suitable;
-
-    uint16 skillLevel = profMgr->GetProfessionSkill(profession);
-    uint8 charLevel = _bot->GetLevel();
-
+    uint16 skillLevel = ProfessionManager::instance()->GetProfessionSkill(player, profession);
+    uint8 charLevel = player->GetLevel();
     // Filter zones by skill level and character level
     for (auto const& zone : it->second)
     {
@@ -431,20 +443,20 @@ std::vector<FarmingZoneInfo> FarmingCoordinator::GetSuitableZones(ProfessionType
     return suitable;
 }
 
-float FarmingCoordinator::CalculateZoneScore(FarmingZoneInfo const& zone) const
+float FarmingCoordinator::CalculateZoneScore(::Player* player, FarmingZoneInfo const& zone) const
 {
-    if (!_bot)
+    if (!player)
         return 0.0f;
 
     float score = 100.0f;
 
     // Distance penalty (closer is better)
-    float distance = _bot->GetDistance(zone.centerPosition);
+    float distance = player->GetDistance(zone.centerPosition);
     float distancePenalty = distance / 1000.0f; // Penalty per 1000 yards
     score -= distancePenalty * 10.0f;
 
     // Level match bonus
-    uint8 charLevel = _bot->GetLevel();
+    uint8 charLevel = player->GetLevel();
     int8 levelDiff = std::abs(static_cast<int8>(charLevel) - static_cast<int8>(zone.recommendedCharLevel));
     if (levelDiff == 0)
         score += 20.0f;
@@ -462,25 +474,26 @@ float FarmingCoordinator::CalculateZoneScore(FarmingZoneInfo const& zone) const
 // MATERIAL MANAGEMENT
 // ============================================================================
 
-bool FarmingCoordinator::HasReachedStockpileTarget(uint32 itemId) const
+bool FarmingCoordinator::HasReachedStockpileTarget(::Player* player, uint32 itemId) const
 {
-    uint32 currentCount = GetMaterialCount(itemId);
-    return currentCount >= _profile.materialStockpileTarget;
+    uint32 currentCount = GetMaterialCount(player, itemId);
+    FarmingCoordinatorProfile const& profile = GetCoordinatorProfile(player->GetGUID().GetCounter());
+    return currentCount >= profile.materialStockpileTarget;
 }
 
-uint32 FarmingCoordinator::GetMaterialCount(uint32 itemId) const
+uint32 FarmingCoordinator::GetMaterialCount(::Player* player, uint32 itemId) const
 {
-    if (!_bot)
+    if (!player)
         return 0;
 
-    return _bot->GetItemCount(itemId);
+    return player->GetItemCount(itemId);
 }
 
-std::vector<std::pair<uint32, uint32>> FarmingCoordinator::GetNeededMaterials(ProfessionType profession) const
+std::vector<std::pair<uint32, uint32>> FarmingCoordinator::GetNeededMaterials(::Player* player, ProfessionType profession) const
 {
     std::vector<std::pair<uint32, uint32>> materials;
 
-    if (!_bot)
+    if (!player)
         return materials;
 
     // In full implementation, query auction house targets from ProfessionAuctionBridge
@@ -493,19 +506,30 @@ std::vector<std::pair<uint32, uint32>> FarmingCoordinator::GetNeededMaterials(Pr
 // STATISTICS
 // ============================================================================
 
-FarmingStatistics const& FarmingCoordinator::GetStatistics() const
+FarmingStatistics const& FarmingCoordinator::GetPlayerStatistics(uint32 playerGuid) const
 {
-    return _statistics;
+    std::lock_guard lock(_mutex);
+
+    static FarmingStatistics emptyStats;
+    auto it = _playerStatistics.find(playerGuid);
+    if (it != _playerStatistics.end())
+        return it->second;
+
+    return emptyStats;
 }
 
-FarmingStatistics const& FarmingCoordinator::GetGlobalStatistics()
+FarmingStatistics const& FarmingCoordinator::GetGlobalStatistics() const
 {
     return _globalStatistics;
 }
 
-void FarmingCoordinator::ResetStatistics()
+void FarmingCoordinator::ResetStatistics(uint32 playerGuid)
 {
-    _statistics.Reset();
+    std::lock_guard lock(_mutex);
+
+    auto it = _playerStatistics.find(playerGuid);
+    if (it != _playerStatistics.end())
+        it->second.Reset();
 }
 
 // ============================================================================
@@ -591,100 +615,73 @@ uint32 FarmingCoordinator::GenerateSessionId()
     return _nextSessionId.fetch_add(1);
 }
 
-bool FarmingCoordinator::TravelToFarmingZone(FarmingZoneInfo const& zone)
+bool FarmingCoordinator::TravelToFarmingZone(::Player* player, FarmingZoneInfo const& zone)
 {
-    if (!_bot)
+    if (!player)
         return false;
 
     // Simple movement to zone center
     // In full implementation, use proper pathfinding or teleport
-    _bot->TeleportTo(_bot->GetMapId(), zone.centerPosition.GetPositionX(),
+    player->TeleportTo(player->GetMapId(), zone.centerPosition.GetPositionX(),
         zone.centerPosition.GetPositionY(), zone.centerPosition.GetPositionZ(),
         zone.centerPosition.GetOrientation());
 
     return true;
 }
 
-void FarmingCoordinator::ReturnToOriginalPosition(FarmingSession const& session)
+void FarmingCoordinator::ReturnToOriginalPosition(::Player* player, FarmingSession const& session)
 {
-    if (!_bot)
+    if (!player)
         return;
 
-    _bot->TeleportTo(_bot->GetMapId(), session.originalPosition.GetPositionX(),
+    player->TeleportTo(player->GetMapId(), session.originalPosition.GetPositionX(),
         session.originalPosition.GetPositionY(), session.originalPosition.GetPositionZ(),
         session.originalPosition.GetOrientation());
 }
 
-bool FarmingCoordinator::CanStartFarming() const
+bool FarmingCoordinator::CanStartFarming(::Player* player) const
 {
-    if (!_bot)
+    if (!player)
         return false;
 
     // Check if in combat
-    if (_bot->IsInCombat())
+    if (player->IsInCombat())
         return false;
 
     // Check if alive
-    if (!_bot->IsAlive())
+    if (!player->IsAlive())
         return false;
 
     // Check if in group (optional - may want to farm while grouped)
-    // if (_bot->GetGroup())
+    // if (player->GetGroup())
     //     return false;
 
     // Check farming cooldown
-    if (_lastFarmingTime > 0)
+    std::lock_guard lock(_mutex);
+    uint32 playerGuid = player->GetGUID().GetCounter();
+    auto it = _lastFarmingTimes.find(playerGuid);
+    if (it != _lastFarmingTimes.end())
     {
-        uint32 timeSinceLastFarm = GameTime::GetGameTimeMS() - _lastFarmingTime;
-        if (timeSinceLastFarm < _profile.farmingCooldown)
+        FarmingCoordinatorProfile const& profile = GetCoordinatorProfile(playerGuid);
+        uint32 timeSinceLastFarm = GameTime::GetGameTimeMS() - it->second;
+
+        if (timeSinceLastFarm < profile.farmingCooldown)
             return false;
     }
 
     return true;
 }
 
-bool FarmingCoordinator::ValidateFarmingSession(FarmingSession const& session) const
+bool FarmingCoordinator::ValidateFarmingSession(::Player* player, FarmingSession const& session) const
 {
-    if (!_bot || !session.isActive)
+    if (!player || !session.isActive)
         return false;
 
-    ProfessionManager* profMgr = const_cast<FarmingCoordinator*>(this)->GetProfessionManager();
-    if (!profMgr)
-        return false;
-
-    // Validate bot still has the profession
-    if (!profMgr->HasProfession(session.profession))
+    // Validate player still has the profession
+    if (!ProfessionManager::instance()->HasProfession(player, session.profession))
         return false;
 
     return true;
-}
-
-// ============================================================================
-// INTEGRATION HELPERS
-// ============================================================================
-
-ProfessionManager* FarmingCoordinator::GetProfessionManager()
-{
-    if (!_bot)
-        return nullptr;
-
-    BotSession* session = static_cast<BotSession*>(_bot->GetSession());
-    if (!session || !session->GetBotAI())
-        return nullptr;
-
-    return session->GetBotAI()->GetGameSystems()->GetProfessionManager();
-}
-
-GatheringManager* FarmingCoordinator::GetGatheringManager()
-{
-    if (!_bot)
-        return nullptr;
-
-    BotSession* session = static_cast<BotSession*>(_bot->GetSession());
-    if (!session || !session->GetBotAI())
-        return nullptr;
-
-    return session->GetBotAI()->GetGameSystems()->GetGatheringManager();
 }
 
 } // namespace Playerbot

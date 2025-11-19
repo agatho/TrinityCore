@@ -131,10 +131,7 @@ struct QuestProgressData
 class TC_GAME_API QuestCompletion final : public IQuestCompletion
 {
 public:
-    explicit QuestCompletion(Player* bot);
-    ~QuestCompletion();
-    QuestCompletion(QuestCompletion const&) = delete;
-    QuestCompletion& operator=(QuestCompletion const&) = delete;
+    static QuestCompletion* instance();
 
     // Core quest completion management
     bool StartQuestCompletion(uint32 questId, Player* bot) override;
@@ -290,14 +287,14 @@ public:
     void ValidateQuestStates() override;
 
 private:
-    Player* _bot;
+    QuestCompletion();
     ~QuestCompletion() = default;
 
     // Core data structures
     std::unordered_map<uint32, std::vector<QuestProgressData>> _botQuestProgress; // botGuid -> quests
     std::unordered_map<uint32, QuestCompletionStrategy> _botStrategies;
     std::unordered_map<uint32, QuestCompletionMetrics> _botMetrics;
-    
+    mutable Playerbot::OrderedRecursiveMutex<Playerbot::LockOrder::QUEST_MANAGER> _completionMutex;
 
     // Objective execution state
     std::unordered_map<uint32, uint32> _botCurrentObjective; // botGuid -> objectiveIndex
@@ -307,7 +304,7 @@ private:
     // Group coordination data
     std::unordered_map<uint32, std::vector<uint32>> _groupQuestSharing; // groupId -> questIds
     std::unordered_map<uint32, std::unordered_map<uint32, uint32>> _groupObjectiveSync; // groupId -> questId -> syncTime
-    
+    mutable Playerbot::OrderedRecursiveMutex<Playerbot::LockOrder::QUEST_MANAGER> _groupMutex;
 
     // Performance tracking
     QuestCompletionMetrics _globalMetrics;

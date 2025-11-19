@@ -63,13 +63,13 @@ SharedBlackboard* IntegratedAIContext::GetZoneBlackboard() const
     return _cachedZoneBlackboard;
 }
 
-TacticalCoordinator* IntegratedAIContext::GetTacticalCoordinator() const
+Coordination::GroupCoordinator* IntegratedAIContext::GetGroupCoordinator() const
 {
-    if (!_cachedTacticalCoordinator && _bot)
+    if (!_cachedGroupCoordinator && _bot)
     {
-        _cachedTacticalCoordinator = _bot->GetTacticalCoordinator();
+        _cachedGroupCoordinator = _bot->GetTacticalCoordinator();
     }
-    return _cachedTacticalCoordinator;
+    return _cachedGroupCoordinator;
 }
 
 Coordination::RaidOrchestrator* IntegratedAIContext::GetRaidOrchestrator() const
@@ -235,7 +235,7 @@ BTStatus BTCheckGroupFocusTarget::TickWithContext(IntegratedAIContext& context)
 
 BTStatus BTFollowGroupStrategy::TickWithContext(IntegratedAIContext& context)
 {
-    TacticalCoordinator* coordinator = context.GetTacticalCoordinator();
+    Coordination::GroupCoordinator* coordinator = context.GetGroupCoordinator();
     if (!coordinator)
         return BTStatus::FAILURE;
 

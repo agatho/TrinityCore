@@ -882,7 +882,7 @@ bool UnifiedInterruptSystem::RequestInterruptPositioning(Player* bot, Unit* targ
         return false;
 
     BotAI* botAI = aiIt->second;
-    if (!botAI || !botAI->GetUnifiedMovementCoordinator())
+    if (!botAI || !botAI->GetMovementArbiter())
         return false;
 
     // Get interrupt range
@@ -1205,7 +1205,7 @@ bool UnifiedInterruptSystem::ExecuteLOSBreak(Player* bot, Unit* target)
         return false;
 
     BotAI* botAI = aiIt->second;
-    if (!botAI || !botAI->GetUnifiedMovementCoordinator())
+    if (!botAI || !botAI->GetMovementArbiter())
         return false;
 
     // Find position behind obstacle
@@ -1242,7 +1242,7 @@ bool UnifiedInterruptSystem::ExecuteRangeEscape(Player* bot, Unit* target)
         return false;
 
     BotAI* botAI = aiIt->second;
-    if (!botAI || !botAI->GetUnifiedMovementCoordinator())
+    if (!botAI || !botAI->GetMovementArbiter())
         return false;
 
     Position targetPos = target->GetPosition();

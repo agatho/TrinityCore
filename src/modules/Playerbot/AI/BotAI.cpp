@@ -11,7 +11,7 @@
  */
 
 #include "BotAI.h"
-#include "Core/Managers/GameSystemsManager.h"
+#include "BehaviorPriorityManager.h"
 #include "Strategy/Strategy.h"
 #include "Strategy/GroupCombatStrategy.h"
 #include "Strategy/SoloCombatStrategy.h"
@@ -21,12 +21,35 @@
 #include "Strategy/RestStrategy.h"
 #include "Actions/Action.h"
 #include "Triggers/Trigger.h"
+#include "Group/GroupInvitationHandler.h"
 #include "Movement/LeaderFollowBehavior.h"
+#include "Game/QuestManager.h"
+#include "Social/TradeManager.h"
+#include "Professions/GatheringManager.h"
+#include "Economy/AuctionManager.h"
+#include "Combat/TargetScanner.h"
+#include "Combat/CombatStateManager.h"
+#include "Equipment/EquipmentManager.h"
+#include "Professions/ProfessionManager.h"
+#include "Professions/ProfessionAuctionBridge.h"
+#include "Professions/GatheringMaterialsBridge.h"
+#include "Professions/AuctionMaterialsBridge.h"
+#include "Banking/BankingManager.h"
+#include "Advanced/GroupCoordinator.h"
+#include "Coordination/GroupCoordinator.h"
+#include "Spatial/SpatialGridManager.h"
+#include "Spatial/DoubleBufferedSpatialGrid.h"
+// Phase 7.3: Direct EventDispatcher integration (BotEventSystem and Observers removed as dead code)
+#include "Core/Events/EventDispatcher.h"
+#include "Core/Managers/ManagerRegistry.h"
+#include "Decision/DecisionFusionSystem.h"
+#include "Decision/ActionPriorityQueue.h"
+#include "Decision/BehaviorTree.h"
+#include "Lifecycle/DeathRecoveryManager.h"
+#include "Movement/Arbiter/MovementArbiter.h"
 #include "Movement/Arbiter/MovementRequest.h"
 #include "Movement/Arbiter/MovementPriorityMapper.h"
 #include "Session/BotPriorityManager.h"
-#include "Spatial/SpatialGridManager.h"
-#include "Spatial/DoubleBufferedSpatialGrid.h"
 #include "Player.h"
 #include "Unit.h"
 #include "Creature.h"
@@ -60,27 +83,164 @@ bool TriggerResultComparator::operator()(TriggerResult const& a, TriggerResult c
 
 BotAI::BotAI(Player* bot) : _bot(bot)
 {
+
     // Initialize performance tracking
     _performanceMetrics.lastUpdate = std::chrono::steady_clock::now();
 
-    // ========================================================================
-    // PHASE 6: GAME SYSTEMS FACADE - Consolidate all 17 manager instances
-    // ========================================================================
-    // Previously: 17 separate manager unique_ptrs created here + timers
-    // Now: Single facade owns and manages all 17 managers + timers
-    // Benefits: Reduced god class complexity, improved testability, easier maintenance
+    // Initialize priority-based behavior manager
+    _priorityManager = std::make_unique<BehaviorPriorityManager>(this);
 
-    _gameSystems = std::make_unique<GameSystemsManager>(_bot, this);
-    _gameSystems->Initialize(_bot);
+    // Initialize group management
+    _groupInvitationHandler = std::make_unique<GroupInvitationHandler>(_bot);
 
-    TC_LOG_INFO("module.playerbot", "📋 GAME SYSTEMS FACADE: {} - All 17 managers initialized via facade",
-                _bot->GetName());
+    // Initialize target scanner for autonomous enemy detection
+    _targetScanner = std::make_unique<TargetScanner>(_bot);
+
+    // Initialize all game system managers
+    _questManager = std::make_unique<QuestManager>(_bot, this);
+    _tradeManager = std::make_unique<TradeManager>(_bot, this);
+    _gatheringManager = std::make_unique<GatheringManager>(_bot, this);
+    _auctionManager = std::make_unique<AuctionManager>(_bot, this);
+    _groupCoordinator = std::make_unique<GroupCoordinator>(_bot, this);
+
+    // Initialize death recovery system
+    _deathRecoveryManager = std::make_unique<DeathRecoveryManager>(_bot, this);
+
+    // Initialize movement arbiter for priority-based movement request arbitration
+    _movementArbiter = std::make_unique<MovementArbiter>(_bot);
+
+    // Initialize combat state manager for automatic combat state synchronization
+    _combatStateManager = std::make_unique<CombatStateManager>(_bot, this);
 
     // Phase 4: Initialize Shared Blackboard (thread-safe shared state system)
     _sharedBlackboard = BlackboardManager::GetBotBlackboard(_bot->GetGUID());
 
-    // Initialize default strategies for basic functionality
-    InitializeDefaultStrategies();
+    // Phase 2 Week 3: Initialize Hybrid AI Decision System (Utility AI + Behavior Trees)
+    InitializeHybridAI();
+
+    TC_LOG_INFO("module.playerbot", "📋 MANAGERS INITIALIZED: {} - Quest, Trade, Gathering, Auction, Group, DeathRecovery, MovementArbiter, CombatState, SharedBlackboard, HybridAI systems ready",
+                _bot->GetName());
+
+    // Phase 7.1: Initialize event dispatcher and manager registry
+    _eventDispatcher = std::make_unique<Events::EventDispatcher>(512);  // Initial queue size: 512 events
+    _managerRegistry = std::make_unique<ManagerRegistry>();
+
+    TC_LOG_INFO("module.playerbot", "🔄 EVENT DISPATCHER & MANAGER REGISTRY: {} - Phase 7.1 integration ready",
+                _bot->GetName());
+
+    // Phase 5E: Initialize decision fusion system for unified action arbitration
+    _decisionFusion = std::make_unique<bot::ai::DecisionFusionSystem>();
+
+    TC_LOG_INFO("module.playerbot", "🎯 DECISION FUSION SYSTEM: {} - Phase 5E unified arbitration ready",
+                _bot->GetName());
+
+    // Phase 5 Enhancement: Initialize action priority queue for spell priority management
+    _actionPriorityQueue = std::make_unique<bot::ai::ActionPriorityQueue>();
+
+    TC_LOG_INFO("module.playerbot", "📋 ACTION PRIORITY QUEUE: {} - Phase 5 spell priority system ready",
+                _bot->GetName());
+
+    // Phase 5 Enhancement: Initialize behavior tree for hierarchical combat decisions
+    _behaviorTree = std::make_unique<bot::ai::BehaviorTree>("DefaultTree");
+
+    TC_LOG_INFO("module.playerbot", "🌲 BEHAVIOR TREE: {} - Phase 5 hierarchical decision system ready",
+                _bot->GetName());
+
+    // Phase 7.3: Legacy Phase 6 observer system removed (dead code)
+    // Events now flow directly: PlayerbotEventScripts → EventDispatcher → Managers
+
+    // Phase 7.1: Register managers with ManagerRegistry and subscribe to events
+    // Events flow: TrinityCore ScriptMgr → PlayerbotEventScripts → EventDispatcher → Managers
+    if (_managerRegistry && _eventDispatcher)
+    {
+        // Note: We can't transfer ownership yet since managers are still used directly
+        // For now, we just initialize them through the registry
+        // Full migration to ManagerRegistry will happen after testing
+
+        // Initialize managers through IManagerBase interface
+        if (_questManager)
+        {
+            _questManager->Initialize();
+            TC_LOG_INFO("module.playerbot.managers", "✅ QuestManager initialized via IManagerBase");
+
+            // Subscribe QuestManager to quest events
+            _eventDispatcher->Subscribe(StateMachine::EventType::QUEST_ACCEPTED, _questManager.get());
+            _eventDispatcher->Subscribe(StateMachine::EventType::QUEST_COMPLETED, _questManager.get());
+            _eventDispatcher->Subscribe(StateMachine::EventType::QUEST_TURNED_IN, _questManager.get());
+            _eventDispatcher->Subscribe(StateMachine::EventType::QUEST_ABANDONED, _questManager.get());
+            _eventDispatcher->Subscribe(StateMachine::EventType::QUEST_FAILED, _questManager.get());
+            _eventDispatcher->Subscribe(StateMachine::EventType::QUEST_STATUS_CHANGED, _questManager.get());
+            _eventDispatcher->Subscribe(StateMachine::EventType::QUEST_OBJECTIVE_COMPLETE, _questManager.get());
+            _eventDispatcher->Subscribe(StateMachine::EventType::QUEST_OBJECTIVE_PROGRESS, _questManager.get());
+            _eventDispatcher->Subscribe(StateMachine::EventType::QUEST_ITEM_COLLECTED, _questManager.get());
+            _eventDispatcher->Subscribe(StateMachine::EventType::QUEST_CREATURE_KILLED, _questManager.get());
+            _eventDispatcher->Subscribe(StateMachine::EventType::QUEST_EXPLORATION, _questManager.get());
+            _eventDispatcher->Subscribe(StateMachine::EventType::QUEST_REWARD_RECEIVED, _questManager.get());
+            _eventDispatcher->Subscribe(StateMachine::EventType::QUEST_REWARD_CHOSEN, _questManager.get());
+            _eventDispatcher->Subscribe(StateMachine::EventType::QUEST_EXPERIENCE_GAINED, _questManager.get());
+            _eventDispatcher->Subscribe(StateMachine::EventType::QUEST_REPUTATION_GAINED, _questManager.get());
+            _eventDispatcher->Subscribe(StateMachine::EventType::QUEST_CHAIN_ADVANCED, _questManager.get());
+            TC_LOG_INFO("module.playerbot.managers", "🔗 QuestManager subscribed to 16 quest events");
+        }
+
+        if (_tradeManager)
+        {
+            _tradeManager->Initialize();
+            TC_LOG_INFO("module.playerbot.managers", "✅ TradeManager initialized via IManagerBase");
+
+            // Subscribe TradeManager to trade events
+            _eventDispatcher->Subscribe(StateMachine::EventType::TRADE_INITIATED, _tradeManager.get());
+            _eventDispatcher->Subscribe(StateMachine::EventType::TRADE_ACCEPTED, _tradeManager.get());
+            _eventDispatcher->Subscribe(StateMachine::EventType::TRADE_CANCELLED, _tradeManager.get());
+            _eventDispatcher->Subscribe(StateMachine::EventType::TRADE_ITEM_ADDED, _tradeManager.get());
+            _eventDispatcher->Subscribe(StateMachine::EventType::TRADE_GOLD_ADDED, _tradeManager.get());
+            _eventDispatcher->Subscribe(StateMachine::EventType::GOLD_RECEIVED, _tradeManager.get());
+            _eventDispatcher->Subscribe(StateMachine::EventType::GOLD_SPENT, _tradeManager.get());
+            _eventDispatcher->Subscribe(StateMachine::EventType::LOW_GOLD_WARNING, _tradeManager.get());
+            _eventDispatcher->Subscribe(StateMachine::EventType::VENDOR_PURCHASE, _tradeManager.get());
+            _eventDispatcher->Subscribe(StateMachine::EventType::VENDOR_SALE, _tradeManager.get());
+            _eventDispatcher->Subscribe(StateMachine::EventType::REPAIR_COST, _tradeManager.get());
+            TC_LOG_INFO("module.playerbot.managers", "🔗 TradeManager subscribed to 11 trade/gold events");
+        }
+
+        if (_gatheringManager)
+        {
+            _gatheringManager->Initialize();
+            TC_LOG_INFO("module.playerbot.managers", "✅ GatheringManager initialized via IManagerBase");
+        }
+
+        if (_auctionManager)
+        {
+            _auctionManager->Initialize();
+            TC_LOG_INFO("module.playerbot.managers", "✅ AuctionManager initialized via IManagerBase");
+
+            // Subscribe AuctionManager to auction events
+            _eventDispatcher->Subscribe(StateMachine::EventType::AUCTION_BID_PLACED, _auctionManager.get());
+            _eventDispatcher->Subscribe(StateMachine::EventType::AUCTION_WON, _auctionManager.get());
+            _eventDispatcher->Subscribe(StateMachine::EventType::AUCTION_OUTBID, _auctionManager.get());
+            _eventDispatcher->Subscribe(StateMachine::EventType::AUCTION_EXPIRED, _auctionManager.get());
+            _eventDispatcher->Subscribe(StateMachine::EventType::AUCTION_SOLD, _auctionManager.get());
+            TC_LOG_INFO("module.playerbot.managers", "🔗 AuctionManager subscribed to 5 auction events");
+        }
+
+        if (_groupCoordinator)
+        {
+            _groupCoordinator->Initialize();
+            TC_LOG_INFO("module.playerbot.managers", "✅ GroupCoordinator initialized - Dungeon/Raid coordination active");
+        }// CRITICAL: Initialize combat state manager for automatic combat state synchronization
+        if (_combatStateManager)
+        {
+            _combatStateManager->Initialize();
+            TC_LOG_INFO("module.playerbot.managers", "✅ CombatStateManager initialized - DAMAGE_TAKEN event subscription active");
+        }
+
+        TC_LOG_INFO("module.playerbot.managers",
+            "🎯 PHASE 7.1 INTEGRATION COMPLETE: {} - {} managers initialized, {} events subscribed",_bot->GetName(),
+            (_questManager ? 1 : 0) + (_tradeManager ? 1 : 0) + (_gatheringManager ? 1 : 0) + (_auctionManager ? 1 : 0) + (_combatStateManager ? 1 : 0),
+            16 + 11 + 5 + 1); // Quest + Trade + Auction + Combat event subscriptions
+    }
+
+    // Initialize default strategies for basic functionalityInitializeDefaultStrategies();
 
     // Initialize default triggers
     sBotAIFactory->InitializeDefaultTriggers(this);
@@ -174,21 +334,74 @@ BotAI::~BotAI()
     UnsubscribeFromEventBuses();
 
     // ========================================================================
-    // PHASE 6: GAME SYSTEMS FACADE - Automatic Manager Cleanup
+    // CRITICAL FIX: Explicit Manager Destruction Order
     // ========================================================================
-    // The GameSystemsManager facade destructor handles correct cleanup order:
-    // 1. Managers destroyed in dependency order (most dependent first)
-    // 2. EventDispatcher destroyed last (after all managers unsubscribed)
-    // No manual reset() calls needed - facade handles everything!
     //
-    // Benefits: Simplified destructor, guaranteed correct cleanup order,
-    // no risk of forgetting a manager or getting the order wrong.
+    // Problem: C++ destroys members in REVERSE declaration order
+    // - _eventDispatcher (line 640) destroyed BEFORE _combatStateManager (line 637)
+    // - Managers try to UnsubscribeAll() from already-destroyed EventDispatcher
+    // - Results in ACCESS_VIOLATION at EventDispatcher.cpp:132
+    //
+    // Solution: Manually destroy managers HERE, before automatic destruction
+    // - Ensures EventDispatcher is still alive during manager cleanup
+    // - Managers can safely call UnsubscribeAll() during OnShutdown()
+    // - EventDispatcher will then be destroyed after all managers are gone
+    //
+    // Destruction Order (CORRECT):
+    // 1. Manual reset() of managers (HERE) ← Managers alive, EventDispatcher alive ✅
+    // 2. Automatic _eventDispatcher destruction ← All managers gone, safe ✅
     // ========================================================================
 
-    TC_LOG_DEBUG("module.playerbot", "BotAI::~BotAI: Facade will destroy all managers for bot '{}'",
-        _bot ? _bot->GetName() : "Unknown");
+    TC_LOG_DEBUG("module.playerbot", "BotAI::~BotAI: Begin explicit manager cleanup for bot '{}'",_bot ? _bot->GetName() : "Unknown");
 
-    // Phase 4: Cleanup Shared Blackboard
+    // Destroy managers in dependency order (most dependent first)
+    // Each manager's OnShutdown() will safely call EventDispatcher::UnsubscribeAll()
+
+    // 1. Combat state manager - monitors other managers
+    if (_combatStateManager)
+    {
+        TC_LOG_DEBUG("module.playerbot", "BotAI::~BotAI: Destroying CombatStateManager");
+        _combatStateManager.reset();
+    }
+
+    // 2. Death recovery manager - may interact with combat
+    if (_deathRecoveryManager){
+        TC_LOG_DEBUG("module.playerbot", "BotAI::~BotAI: Destroying DeathRecoveryManager");
+        _deathRecoveryManager.reset();
+    }
+
+    // 3. Movement arbiter - coordinates movement requests
+    if (_movementArbiter)
+    {
+        TC_LOG_DEBUG("module.playerbot", "BotAI::~BotAI: Destroying MovementArbiter");
+        _movementArbiter.reset();
+    }
+
+    // 4. Game system managers (order doesn't matter, no interdependencies)
+    if (_questManager)
+    {
+        TC_LOG_DEBUG("module.playerbot", "BotAI::~BotAI: Destroying QuestManager");
+        _questManager.reset();
+    }
+
+    if (_tradeManager)
+    {
+        TC_LOG_DEBUG("module.playerbot", "BotAI::~BotAI: Destroying TradeManager");
+        _tradeManager.reset();
+    }
+
+    if (_gatheringManager)
+    {TC_LOG_DEBUG("module.playerbot", "BotAI::~BotAI: Destroying GatheringManager");
+        _gatheringManager.reset();
+    }
+
+    if (_auctionManager)
+    {
+        TC_LOG_DEBUG("module.playerbot", "BotAI::~BotAI: Destroying AuctionManager");
+        _auctionManager.reset();
+    }
+
+    if (_groupCoordinator){TC_LOG_DEBUG("module.playerbot", "BotAI::~BotAI: Destroying GroupCoordinator");_groupCoordinator.reset();}// Phase 4: Cleanup Shared Blackboard
     if (_sharedBlackboard && _bot)
     {
         TC_LOG_DEBUG("module.playerbot", "BotAI::~BotAI: Removing bot from BlackboardManager");
@@ -196,12 +409,31 @@ BotAI::~BotAI()
         _sharedBlackboard = nullptr;
     }
 
-    // Facade (_gameSystems) will be automatically destroyed here,
-    // which triggers GameSystemsManager::~GameSystemsManager()
-    // and cleans up all 17 managers in correct dependency order
+    // 5. Support systems
+    if (_targetScanner)
+    {
+        TC_LOG_DEBUG("module.playerbot", "BotAI::~BotAI: Destroying TargetScanner");
+        _targetScanner.reset();}
 
-    TC_LOG_INFO("module.playerbot", "BotAI::~BotAI: Destructor complete for bot '{}'",
-        _bot ? _bot->GetName() : "Unknown");
+    if (_groupInvitationHandler)
+    {
+        TC_LOG_DEBUG("module.playerbot", "BotAI::~BotAI: Destroying GroupInvitationHandler");
+        _groupInvitationHandler.reset();
+    }
+
+    if (_priorityManager){
+        TC_LOG_DEBUG("module.playerbot", "BotAI::~BotAI: Destroying BehaviorPriorityManager");
+        _priorityManager.reset();
+    }
+
+    TC_LOG_DEBUG("module.playerbot", "BotAI::~BotAI: ✅ All managers destroyed, EventDispatcher can now safely destruct");
+
+    // Now automatic destruction proceeds:
+    // - _managerRegistry destroyed (no dependencies)
+    // - _eventDispatcher destroyed (all subscribers already unsubscribed during manager cleanup above)
+    // - No more ACCESS_VIOLATION because all managers are already gone!
+
+    TC_LOG_INFO("module.playerbot", "BotAI::~BotAI: Destructor complete for bot '{}'",_bot ? _bot->GetName() : "Unknown");
 }
 
 // ============================================================================
@@ -261,14 +493,13 @@ void BotAI::UpdateAI(uint32 diff)
     // ========================================================================
     // Death recovery MUST run even when bot is dead (ghost state)
     // This allows bots to release spirit, run to corpse, and resurrect
-    if (auto deathRecovery = GetDeathRecoveryManager())
-        deathRecovery->Update(diff);
+    if (_deathRecoveryManager)
+        _deathRecoveryManager->Update(diff);
 
     // PRIORITY: If bot is in death recovery, skip expensive AI updates
     // Death recovery handles its own movement (corpse run), so we don't need strategies/combat
     // But we still allow managers to update (see PHASE 5) to prevent system freezing
-    auto deathRecovery = GetDeathRecoveryManager();
-    bool isInDeathRecovery = deathRecovery && deathRecovery->IsInDeathRecovery();
+    bool isInDeathRecovery = _deathRecoveryManager && _deathRecoveryManager->IsInDeathRecovery();
 
     // Performance tracking - declare BEFORE the if block so it's accessible after
     auto startTime = std::chrono::high_resolution_clock::now();
@@ -409,24 +640,25 @@ TC_LOG_ERROR("playerbot", "Exception while accessing group member for bot {}", _
     }  // End of if (!isInDeathRecovery) block - normal AI skipped when dead
 
     // ========================================================================
-    // PHASE 6: GAME SYSTEMS FACADE - All manager updates delegated to facade
+    // CRITICAL: Movement Arbiter MUST update even during death recovery
     // ========================================================================
-    // Facade handles:
-    // - All 17 manager updates (Quest, Trade, Gathering, Auction, etc.)
-    // - UnifiedMovementCoordinator (CRITICAL for death recovery corpse navigation)
-    // - EventDispatcher and ManagerRegistry processing
-    // - Equipment, Profession, Banking automation timers
-    // - Singleton manager bridge updates (GatheringMaterialsBridge, etc.)
-    //
+    // Death recovery uses MovementArbiter for corpse navigation with HIGHEST priority (255)
+    // If we skip this, bots can't move to their corpse!
+    if (_movementArbiter)
+        _movementArbiter->Update(diff);
+
+    // ========================================================================
+    // PHASE 5: MANAGER UPDATES - Throttled heavyweight operations
+    // ========================================================================// Managers run even during death recovery to prevent system freezing
+    // Update all BehaviorManager-based managers
+    // These handle quest, trade, gathering with their own throttling
     // NOTE: Managers continue to update even during death recovery to prevent system freezing
-    if (_gameSystems)
-        _gameSystems->Update(diff);
+    UpdateManagers(diff);
 
     // Phase 3: Update Tactical Group Coordinator (throttled to 500ms intervals)
-    if (auto tacticalCoordinator = GetTacticalCoordinator())
+    if (_tacticalCoordinator && _bot->GetGroup())
     {
-        if (_bot->GetGroup())
-            tacticalCoordinator->Update(diff);
+        _tacticalCoordinator->Update(diff);
     }
 
     // ========================================================================
@@ -1093,8 +1325,13 @@ void BotAI::OnGroupJoined(Group* group)
     // Deactivate solo strategy when joining a group
     DeactivateStrategy("solo");
 
-    // Phase 3: Tactical coordinator now integrated into Advanced/GroupCoordinator
-    // TacticalCoordinator is created by GroupCoordinator::Initialize()
+    // Phase 3: Initialize Tactical Group Coordinator for combat coordination
+    if (group && !_tacticalCoordinator)
+    {
+        _tacticalCoordinator = std::make_unique<Coordination::GroupCoordinator>(group);
+        TC_LOG_INFO("playerbot.coordination", "🎯 Tactical Coordinator initialized for bot {} in group {}",
+            _bot->GetName(), group->GetGUID().ToString());
+    }
 
     // Set state to following if not in combat (no lock needed - atomic operation)
     if (!IsInCombat())
@@ -1616,46 +1853,167 @@ void BotAI::UpdateValues(uint32 diff)
     // This includes distances, health percentages, resource levels, etc.
 }
 
-// ============================================================================
-// LEGACY UPDATEMANAGERS - Now handled by GameSystemsManager facade
-// ============================================================================
-// This function is deprecated and kept only for reference.
-// All functionality moved to GameSystemsManager::UpdateManagers()
-//
-// Phase 6 Migration:
-// - All manager updates → GameSystemsManager::UpdateManagers()
-// - All timers → GameSystemsManager member variables
-// - EventDispatcher processing → GameSystemsManager::UpdateManagers()
-// - ManagerRegistry updates → GameSystemsManager::UpdateManagers()
-
 void BotAI::UpdateManagers(uint32 diff)
 {
-    // DEPRECATED: This function is no longer used.
-    // All manager updates are now handled by:
-    //   _gameSystems->Update(diff)
-    //
-    // See GameSystemsManager::UpdateManagers() for the actual implementation.
-    TC_LOG_WARN("module.playerbot", "BotAI::UpdateManagers called but deprecated - using facade instead");
+    // Phase 7.1: Integrated EventDispatcher + ManagerRegistry architecture
+    // This replaces the old manual manager update approach with centralized event routing
+    // DEBUG LOGGING THROTTLE: Only log every 50 seconds for whitelisted test bots
+    // Using per-bot instance variable instead of static to prevent cross-bot interference
+    _debugLogAccumulator += diff;
+    static const std::set<std::string> testBots = {"Anderenz", "Boone", "Nelona", "Sevtap"};
+    bool isTestBot = _bot && (testBots.find(_bot->GetName()) != testBots.end());bool shouldLog = isTestBot && (_debugLogAccumulator >= 50000);
+    if (shouldLog) _debugLogAccumulator = 0;
+
+    if (shouldLog)
+    {
+        TC_LOG_ERROR("module.playerbot", "🔧 UpdateManagers ENTRY: Bot {}, IsInWorld()={}", _bot->GetName(), _bot->IsInWorld());}
+
+    if (!_bot || !_bot->IsInWorld())
+    {
+        if (shouldLog)
+            TC_LOG_ERROR("module.playerbot", "❌ UpdateManagers EARLY RETURN: Bot {} not in world", _bot->GetName());
+        return;
+    }
+
+    // ========================================================================
+    // PHASE 7.1: EVENT DISPATCHER - Process queued events first
+    // ========================================================================
+    // Events from observers are queued and dispatched to managers.
+    // This is the bridge between Phase 6 (observers) and Phase 7 (managers).
+    if (_eventDispatcher)
+    {
+        // Process up to 100 events per update cycle to maintain performance
+        uint32 eventsProcessed = _eventDispatcher->ProcessQueue(100);
+
+        if (eventsProcessed > 0)
+        {
+            TC_LOG_TRACE("module.playerbot.events",
+                "Bot {} processed {} events this cycle",_bot->GetName(), eventsProcessed);
+        }
+
+        // Warn if queue is backing up (>500 events indicates processing bottleneck)
+        size_t queueSize = _eventDispatcher->GetQueueSize();
+        if (queueSize > 500)
+        {
+            TC_LOG_WARN("module.playerbot.events",
+                "Bot {} event queue backlog: {} events pending",_bot->GetName(), queueSize);
+        }
+    }
+
+    // ========================================================================
+    // PHASE 7.1: MANAGER REGISTRY - Update all registered managers
+    // ========================================================================
+    // The ManagerRegistry coordinates all manager updates with throttling.
+    // This replaces the old manual update approach for each manager.
+    if (_managerRegistry)
+    {
+        uint32 managersUpdated = _managerRegistry->UpdateAll(diff);
+
+        if (managersUpdated > 0)
+        {
+            TC_LOG_TRACE("module.playerbot.managers",
+                "Bot {} updated {} managers this cycle",_bot->GetName(), managersUpdated);
+        }
+    }
+
+    // ========================================================================
+    // LEGACY: Keep old manager updates for now during Phase 7 transition
+    // ========================================================================
+    // These will be removed once all managers are integrated with IManagerBase
+    // and registered in ManagerRegistry during Phase 7.2-7.6
+
+    // Quest manager handles quest acceptance, turn-in, and tracking
+    if (_questManager)
+    {// TC_LOG_ERROR("module.playerbot", "🎯 Calling QuestManager->Update() for bot {}", _bot->GetName());
+        _questManager->Update(diff);// TC_LOG_ERROR("module.playerbot", "✅ Returned from QuestManager->Update() for bot {}", _bot->GetName());
+    }
+
+    // Trade manager handles vendor interactions, repairs, and consumables
+    if (_tradeManager)
+    {// TC_LOG_ERROR("module.playerbot", "🎯 Calling TradeManager->Update() for bot {}", _bot->GetName());
+        _tradeManager->Update(diff);// TC_LOG_ERROR("module.playerbot", "✅ Returned from TradeManager->Update() for bot {}", _bot->GetName());
+    }
+
+    // Gathering manager handles mining, herbalism, skinning
+    if (_gatheringManager)
+    {// TC_LOG_ERROR("module.playerbot", "🎯 Calling GatheringManager->Update() for bot {}", _bot->GetName());
+        _gatheringManager->Update(diff);// TC_LOG_ERROR("module.playerbot", "✅ Returned from GatheringManager->Update() for bot {}", _bot->GetName());
+    }
+
+    // Gathering materials bridge coordinates gathering with crafting needs
+    GatheringMaterialsBridge::instance()->Update(_bot, diff);
+
+    // Auction manager handles auction house buying, selling, and market scanning
+    if (_auctionManager)
+    {// TC_LOG_ERROR("module.playerbot", "🎯 Calling AuctionManager->Update() for bot {}", _bot->GetName());
+        _auctionManager->Update(diff);// TC_LOG_ERROR("module.playerbot", "✅ Returned from AuctionManager->Update() for bot {}", _bot->GetName());
+    }
+
+    // Profession auction bridge coordinates profession materials with auction house
+    ProfessionAuctionBridge::instance()->Update(_bot, diff);
+
+    // Auction materials bridge provides smart material sourcing decisions
+    AuctionMaterialsBridge::instance()->Update(_bot, diff);
+
+    // Group coordinator handles group/raid mechanics, role assignment, and coordination
+    if (_groupCoordinator)
+    {
+        _groupCoordinator->Update(diff);
+    }
+
+    // ========================================================================
+    // EQUIPMENT AUTO-EQUIP - Check every 10 seconds
+    // ========================================================================
+    // EquipmentManager is a singleton that handles gear optimization for all bots
+    // Only check periodically to avoid excessive inventory scanning
+    _equipmentCheckTimer += diff;
+    if (_equipmentCheckTimer >= 10000) // 10 seconds
+    {
+        _equipmentCheckTimer = 0;
+
+        // Auto-equip better gear from inventory
+        EquipmentManager::instance()->AutoEquipBestGear(_bot);
+    }
+
+    // ========================================================================
+    // PROFESSION AUTOMATION - Check every 15 seconds
+    // ========================================================================
+    // ProfessionManager handles auto-learning, auto-leveling, and crafting automation
+    // Less frequent checks to avoid excessive profession processing
+    _professionCheckTimer += diff;
+    if (_professionCheckTimer >= 15000) // 15 seconds
+    {
+        _professionCheckTimer = 0;
+
+        // Update profession automation (auto-learn, auto-level, crafting)
+        ProfessionManager::instance()->Update(_bot, diff);
+    }
+
+    // ========================================================================
+    // BANKING AUTOMATION - Check every 5 minutes
+    // ========================================================================
+    // BankingManager handles personal bank automation
+    // Less frequent checks to avoid excessive bank travel
+    _bankingCheckTimer += diff;
+    if (_bankingCheckTimer >= 300000) // 5 minutes
+    {
+        _bankingCheckTimer = 0;
+
+        // Update banking automation (auto-deposit gold/items, auto-withdraw materials)
+        BankingManager::instance()->Update(_bot, diff);
+    }// TC_LOG_ERROR("module.playerbot", "✅ UpdateManagers COMPLETE for bot {}", _bot->GetName());
 }
 
 // ============================================================================
-// UNIFIED MOVEMENT COORDINATOR INTEGRATION - Convenience Methods
+// MOVEMENT ARBITER INTEGRATION - Convenience Methods
 // ============================================================================
-// Phase 2 Migration: Migrated from MovementArbiter to UnifiedMovementCoordinator
-
-// ============================================================================
-// UNIFIED MOVEMENT COORDINATOR DELEGATION - Phase 6 Facade Pattern
-// ============================================================================
-// These methods delegate to UnifiedMovementCoordinator via the facade.
-// Previously accessed _unifiedMovementCoordinator directly, now uses facade.
 
 bool BotAI::RequestMovement(MovementRequest const& request)
 {
-    auto movementCoordinator = GetUnifiedMovementCoordinator();
-    if (!movementCoordinator)
+    if (!_movementArbiter)
         return false;
 
-    return movementCoordinator->RequestMovement(request);
+    return _movementArbiter->RequestMovement(request);
 }
 
 bool BotAI::RequestPointMovement(
@@ -1664,8 +2022,7 @@ bool BotAI::RequestPointMovement(
     std::string const& reason,
     std::string const& sourceSystem)
 {
-    auto movementCoordinator = GetUnifiedMovementCoordinator();
-    if (!movementCoordinator)
+    if (!_movementArbiter)
         return false;
 
     MovementRequest req = MovementRequest::MakePointMovement(
@@ -1678,7 +2035,7 @@ bool BotAI::RequestPointMovement(
         reason,
         sourceSystem);
 
-    return movementCoordinator->RequestMovement(req);
+    return _movementArbiter->RequestMovement(req);
 }
 
 bool BotAI::RequestChaseMovement(
@@ -1687,8 +2044,7 @@ bool BotAI::RequestChaseMovement(
     std::string const& reason,
     std::string const& sourceSystem)
 {
-    auto movementCoordinator = GetUnifiedMovementCoordinator();
-    if (!movementCoordinator)
+    if (!_movementArbiter)
         return false;
 
     MovementRequest req = MovementRequest::MakeChaseMovement(
@@ -1699,7 +2055,7 @@ bool BotAI::RequestChaseMovement(
         reason,
         sourceSystem);
 
-    return movementCoordinator->RequestMovement(req);
+    return _movementArbiter->RequestMovement(req);
 }
 
 bool BotAI::RequestFollowMovement(
@@ -1709,7 +2065,7 @@ bool BotAI::RequestFollowMovement(
     std::string const& reason,
     std::string const& sourceSystem)
 {
-    if (!_unifiedMovementCoordinator)
+    if (!_movementArbiter)
         return false;
 
     MovementRequest req = MovementRequest::MakeFollowMovement(
@@ -1721,13 +2077,13 @@ bool BotAI::RequestFollowMovement(
         reason,
         sourceSystem);
 
-    return _unifiedMovementCoordinator->RequestMovement(req);
+    return _movementArbiter->RequestMovement(req);
 }
 
 void BotAI::StopAllMovement()
 {
-    if (_unifiedMovementCoordinator)
-        _unifiedMovementCoordinator->StopMovement();
+    if (_movementArbiter)
+        _movementArbiter->StopMovement();
 }
 
 // NOTE: BotAIFactory implementation is in BotAIFactory.cpp

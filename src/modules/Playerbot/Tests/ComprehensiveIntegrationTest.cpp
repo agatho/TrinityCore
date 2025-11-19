@@ -37,8 +37,7 @@
 #include "AI/BehaviorTree/BehaviorTree.h"
 #include "AI/BehaviorTree/BehaviorTreeFactory.h"
 #include "AI/HybridAIController.h"
-// TODO: Update test after GroupCoordinator consolidation (old AI/Coordination/GroupCoordinator removed)
-// #include "AI/Coordination/GroupCoordinator.h"
+#include "AI/Coordination/GroupCoordinator.h"
 #include "AI/Coordination/RaidOrchestrator.h"
 #include "AI/Coordination/ZoneOrchestrator.h"
 #include "AI/Blackboard/SharedBlackboard.h"
@@ -128,8 +127,6 @@ TEST_CASE("Integration: Group coordination hierarchy", "[integration][phase3][co
 {
     ComprehensiveIntegrationFixture fixture;
 
-    // TODO: Re-enable after updating to use Advanced/GroupCoordinator with TacticalCoordinator
-    /*
     SECTION("GroupCoordinator assigns tactical roles and objectives")
     {
         GroupCoordinator coordinator(nullptr);
@@ -140,7 +137,6 @@ TEST_CASE("Integration: Group coordination hierarchy", "[integration][phase3][co
 
         REQUIRE(coordinator.GetFocusTarget() == targetGuid);
     }
-    */
 
     SECTION("RoleCoordinators coordinate role-specific tactics")
     {
@@ -436,11 +432,10 @@ TEST_CASE("Integration: Complete raid scenario", "[integration][scenario][raid]"
         // Boss encounter strategy registered
         // (Would use OnyxiaStrategy or similar)
 
-        // TODO: Update to use Advanced/GroupCoordinator with TacticalCoordinator
         // Group coordinators assign focus targets
-        // GroupCoordinator group(nullptr);
+        GroupCoordinator group(nullptr);
         ObjectGuid bossGuid = ObjectGuid::Create<HighGuid::Creature>(0, 10184, 1);
-        // group.SetFocusTarget(bossGuid);
+        group.SetFocusTarget(bossGuid);
 
         // Role coordinators assign specific duties
         RoleCoordinatorManager roles;

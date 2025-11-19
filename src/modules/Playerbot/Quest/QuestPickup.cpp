@@ -34,11 +34,11 @@ namespace Playerbot
 {
 
 // Singleton instance
-QuestPickup::QuestPickup(Player* bot) : _bot(bot) {
-    if (!_bot) TC_LOG_ERROR("playerbot.quest", "QuestPickup: null bot!");
+QuestPickup* QuestPickup::instance()
+{
+    static QuestPickup instance;
+    return &instance;
 }
-
-QuestPickup::~QuestPickup() {}
 
 // Constructor
 QuestPickup::QuestPickup()
@@ -80,6 +80,7 @@ void QuestPickup::ScanCreatureQuestGivers()
             for (auto it = questRelations.begin(); it != questRelations.end(); ++it)
                 info.availableQuests.push_back(*it);
 
+            std::lock_guard lock(_giverMutex);
             _questGivers[entry] = info;
 
             // Map quests to this giver
@@ -111,6 +112,7 @@ void QuestPickup::ScanGameObjectQuestGivers()
             for (auto it = questRelations.begin(); it != questRelations.end(); ++it)
                 info.availableQuests.push_back(*it);
 
+            std::lock_guard lock(_giverMutex);
             _questGivers[entry] = info;
 
             // Map quests to this giver
@@ -137,6 +139,7 @@ void QuestPickup::ScanItemQuestStarters()
             QuestGiverInfo info(entry, QuestGiverType::ITEM_USE, pos);
             info.availableQuests.push_back(questId);
 
+            std::lock_guard lock(_giverMutex);
             _questGivers[entry] = info;
             _questToGivers[questId].push_back(entry);
         }
@@ -551,6 +554,7 @@ std::vector<uint32> QuestPickup::GetAvailableQuestsFromGiver(uint32 questGiverGu
 
     // Check cached giver info
     {
+        std::lock_guard lock(_giverMutex);
         auto it = _questGivers.find(questGiverGuid);
         if (it != _questGivers.end())
         {
@@ -878,6 +882,8 @@ bool QuestPickup::IsInRangeOfQuestGiver(Player* bot, uint32 questGiverGuid)
 // Get quest giver location
 Position QuestPickup::GetQuestGiverLocation(uint32 questGiverGuid)
 {
+    std::lock_guard lock(_giverMutex);
+
     auto it = _questGivers.find(questGiverGuid);
     if (it != _questGivers.end())
         return it->second.location;
@@ -1003,6 +1009,7 @@ void QuestPickup::ProcessQuestPickupQueue(Player* bot)
         return;
 
     uint32 botGuid = bot->GetGUID().GetCounter();
+    std::lock_guard lock(_pickupMutex);
     auto it = _botPickupQueues.find(botGuid);
     if (it == _botPickupQueues.end() || it->second.empty())
         return;
@@ -1041,6 +1048,7 @@ void QuestPickup::ProcessQuestPickupQueue(Player* bot)
 // Schedule quest pickup
 void QuestPickup::ScheduleQuestPickup(const QuestPickupRequest& request)
 {
+    std::lock_guard lock(_pickupMutex);
     _botPickupQueues[request.botGuid].push_back(request);
     TC_LOG_DEBUG("playerbot.quest", "Scheduled quest {} pickup for bot {}",
                  request.questId, request.botGuid);
@@ -1049,6 +1057,8 @@ void QuestPickup::ScheduleQuestPickup(const QuestPickupRequest& request)
 // Cancel quest pickup
 void QuestPickup::CancelQuestPickup(uint32 questId, uint32 botGuid)
 {
+    std::lock_guard lock(_pickupMutex);
+
     auto it = _botPickupQueues.find(botGuid);
     if (it == _botPickupQueues.end())
         return;
@@ -1162,6 +1172,8 @@ void QuestPickup::ScanZoneForQuests(Player* bot, uint32 zoneId)
 // Get quest givers in zone
 std::vector<uint32> QuestPickup::GetZoneQuestGivers(uint32 zoneId)
 {
+    std::lock_guard lock(_giverMutex);
+
     auto it = _zoneQuestGivers.find(zoneId);
     if (it != _zoneQuestGivers.end())
         return it->second;
@@ -1213,6 +1225,8 @@ bool QuestPickup::ShouldMoveToNextZone(Player* bot)
 // Get bot pickup metrics
 QuestPickup::QuestPickupMetrics QuestPickup::GetBotPickupMetrics(uint32 botGuid)
 {
+    std::lock_guard lock(_pickupMutex);
+
     auto it = _botMetrics.find(botGuid);
     if (it != _botMetrics.end())
         return it->second;  // Copy constructor will be used
@@ -1229,11 +1243,14 @@ QuestPickup::QuestPickupMetrics QuestPickup::GetGlobalPickupMetrics()
 // Configuration setters/getters
 void QuestPickup::SetQuestAcceptanceStrategy(uint32 botGuid, QuestAcceptanceStrategy strategy)
 {
+    std::lock_guard lock(_pickupMutex);
     _botStrategies[botGuid] = strategy;
 }
 
 QuestAcceptanceStrategy QuestPickup::GetQuestAcceptanceStrategy(uint32 botGuid)
 {
+    std::lock_guard lock(_pickupMutex);
+
     auto it = _botStrategies.find(botGuid);
     if (it != _botStrategies.end())
         return it->second;
@@ -1243,11 +1260,14 @@ QuestAcceptanceStrategy QuestPickup::GetQuestAcceptanceStrategy(uint32 botGuid)
 
 void QuestPickup::SetQuestPickupFilter(uint32 botGuid, const QuestPickupFilter& filter)
 {
+    std::lock_guard lock(_pickupMutex);
     _botFilters[botGuid] = filter;
 }
 
 QuestPickupFilter QuestPickup::GetQuestPickupFilter(uint32 botGuid)
 {
+    std::lock_guard lock(_pickupMutex);
+
     auto it = _botFilters.find(botGuid);
     if (it != _botFilters.end())
         return it->second;
@@ -1304,6 +1324,8 @@ void QuestPickup::Update(uint32 diff)
 void QuestPickup::ProcessPickupQueue()
 {
     // Process all bot pickup queues
+    std::lock_guard lock(_pickupMutex);
+
     for (auto& [botGuid, queue] : _botPickupQueues)
     {
         if (queue.empty())
@@ -1319,6 +1341,7 @@ void QuestPickup::ProcessPickupQueue()
 
 void QuestPickup::CleanupExpiredRequests()
 {
+    std::lock_guard lock(_pickupMutex);
     uint32 currentTime = GameTime::GetGameTimeMS();
 
     for (auto& [botGuid, queue] : _botPickupQueues)
@@ -1360,6 +1383,8 @@ void QuestPickup::CacheFrequentlyAccessedQuests()
 
 void QuestPickup::UpdateQuestPickupStatistics(uint32 botGuid, bool wasSuccessful, uint32 timeSpent)
 {
+    std::lock_guard lock(_pickupMutex);
+
     // Update bot metrics
     auto& botMetrics = _botMetrics[botGuid];
     if (wasSuccessful)
@@ -1388,6 +1413,8 @@ void QuestPickup::UpdateQuestPickupStatistics(uint32 botGuid, bool wasSuccessful
 // Helper functions
 QuestGiverType QuestPickup::DetermineQuestGiverType(uint32 questGiverGuid)
 {
+    std::lock_guard lock(_giverMutex);
+
     auto it = _questGivers.find(questGiverGuid);
     if (it != _questGivers.end())
         return it->second.type;
@@ -1397,6 +1424,7 @@ QuestGiverType QuestPickup::DetermineQuestGiverType(uint32 questGiverGuid)
 
 bool QuestPickup::ValidateQuestGiver(uint32 questGiverGuid)
 {
+    std::lock_guard lock(_giverMutex);
     return _questGivers.find(questGiverGuid) != _questGivers.end();
 }
 
@@ -1485,6 +1513,8 @@ bool QuestPickup::IsQuestAvailable(uint32 questId, Player* bot)
 
 void QuestPickup::UpdateQuestGiverInteraction(uint32 questGiverGuid, Player* bot)
 {
+    std::lock_guard lock(_giverMutex);
+
     auto it = _questGivers.find(questGiverGuid);
     if (it != _questGivers.end())
     {

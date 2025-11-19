@@ -26,7 +26,7 @@
 #include <cmath>
 #include "../../Spatial/SpatialGridManager.h"
 #include "ObjectAccessor.h"
-#include "../../Movement/UnifiedMovementCoordinator.h  // Phase 2: Unified movement system"
+#include "../../Movement/Arbiter/MovementArbiter.h"
 #include "../../Movement/Arbiter/MovementPriorityMapper.h"
 #include "../BotAI.h"
 #include "UnitAI.h"
@@ -535,7 +535,7 @@ bool InterruptManager::ExecuteInterruptPlan(const InterruptPlan& plan)
         {
             // PHASE 6B: Use Movement Arbiter with INTERRUPT_POSITIONING priority (220)
             BotAI* botAI = dynamic_cast<BotAI*>(_bot->GetAI());
-            if (botAI && botAI->GetUnifiedMovementCoordinator())
+            if (botAI && botAI->GetMovementArbiter())
             {
                 botAI->RequestPointMovement(
                     PlayerBotMovementPriority::INTERRUPT_POSITIONING,
@@ -1182,7 +1182,7 @@ bool InterruptManager::AttemptMovementInterrupt(Unit* target)
 
     // PHASE 6B: Use Movement Arbiter with INTERRUPT_POSITIONING priority (220)
     BotAI* botAI = dynamic_cast<BotAI*>(_bot->GetAI());
-    if (botAI && botAI->GetUnifiedMovementCoordinator())
+    if (botAI && botAI->GetMovementArbiter())
     {
         botAI->RequestPointMovement(
             PlayerBotMovementPriority::INTERRUPT_POSITIONING,

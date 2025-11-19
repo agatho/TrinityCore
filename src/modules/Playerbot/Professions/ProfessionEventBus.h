@@ -6,38 +6,47 @@
  * Free Software Foundation; either version 2 of the License, or (at your
  * option) any later version.
  *
- * PROFESSION EVENT BUS - Phase 5 Template Migration
+ * PROFESSION EVENT BUS
  *
- * **Phase 5 Migration:** This EventBus is now a thin adapter over the
- * GenericEventBus<ProfessionEvent> template, eliminating ~220 lines of
- * duplicate infrastructure code while maintaining 100% backward compatibility.
+ * Event-driven architecture for profession systems:
+ * - OnRecipeLearned: Recipe added to profession
+ * - OnSkillUp: Profession skill increased
+ * - OnCraftingStarted: Bot begins crafting item
+ * - OnCraftingCompleted: Bot finishes crafting item
+ * - OnCraftingFailed: Crafting attempt failed
+ * - OnMaterialsNeeded: Bot needs materials for recipe
+ * - OnMaterialGathered: Bot gathered materials
+ * - OnMaterialPurchased: Bot bought materials from AH
+ * - OnItemBanked: Bot deposited item to bank
+ * - OnItemWithdrawn: Bot withdrew item from bank
+ * - OnGoldBanked: Bot deposited gold
+ * - OnGoldWithdrawn: Bot withdrew gold
  *
- * **Architecture:**
- * ```
- * ProfessionEventBus (adapter) -> EventBus<ProfessionEvent> (template infrastructure)
- * ```
- *
- * **Code Reduction:** ~440 lines (header + impl) → ~120 lines header only (73% reduction)
- *
- * **Event Types:**
- * - Recipe learning and profession skill progression
- * - Crafting lifecycle (started, completed, failed)
- * - Material management (gathering, purchasing)
- * - Banking operations (item and gold transactions)
- *
- * **Subscribers:**
- * - BotAI: Core bot event handling
+ * Subscribers:
  * - ProfessionManager: Recipe learning, skill tracking
  * - GatheringMaterialsBridge: Material gathering coordination
  * - AuctionMaterialsBridge: Material sourcing decisions
+ * - ProfessionAuctionBridge: Auction integration
  * - BankingManager: Banking automation
+ *
+ * Integration:
+ * - Similar pattern to AuctionEventBus
+ * - BotAI can subscribe to events
+ * - Callback-based subscription for non-BotAI systems
  */
 
 #ifndef PLAYERBOT_PROFESSION_EVENT_BUS_H
 #define PLAYERBOT_PROFESSION_EVENT_BUS_H
 
-#include "Core/Events/GenericEventBus.h"
-#include "ProfessionEvents.h"
+#include "Define.h"
+#include "Threading/LockHierarchy.h"
+#include "ObjectGuid.h"
+#include "ProfessionManager.h"
+#include <chrono>
+#include <string>
+#include <vector>
+#include <unordered_map>
+#include <mutex>
 #include <functional>
 
 namespace Playerbot
@@ -46,173 +55,168 @@ namespace Playerbot
 class BotAI;
 
 /**
- * @brief Profession Event Bus - Template-powered event dispatch
+ * @brief Profession event types
+ */
+enum class ProfessionEventType : uint8
+{
+    RECIPE_LEARNED = 0,         // Bot learned new recipe
+    SKILL_UP,                   // Profession skill increased
+    CRAFTING_STARTED,           // Bot started crafting item
+    CRAFTING_COMPLETED,         // Bot completed crafting item
+    CRAFTING_FAILED,            // Crafting attempt failed
+    MATERIALS_NEEDED,           // Bot needs materials for recipe
+    MATERIAL_GATHERED,          // Bot gathered material from node
+    MATERIAL_PURCHASED,         // Bot bought material from AH
+    ITEM_BANKED,                // Bot deposited item to bank
+    ITEM_WITHDRAWN,             // Bot withdrew item from bank
+    GOLD_BANKED,                // Bot deposited gold to bank
+    GOLD_WITHDRAWN,             // Bot withdrew gold from bank
+    MAX_PROFESSION_EVENT
+};
+
+/**
+ * @brief Profession event data
+ */
+struct ProfessionEvent
+{
+    ProfessionEventType type;
+    ObjectGuid playerGuid;
+    ProfessionType profession;
+    uint32 recipeId;
+    uint32 itemId;
+    uint32 quantity;
+    uint32 skillBefore;
+    uint32 skillAfter;
+    uint32 goldAmount;              // For banking events
+    std::string reason;             // Human-readable event reason
+    std::chrono::steady_clock::time_point timestamp;
+
+    // Factory methods for each event type
+    static ProfessionEvent RecipeLearned(ObjectGuid playerGuid, ProfessionType profession, uint32 recipeId);
+    static ProfessionEvent SkillUp(ObjectGuid playerGuid, ProfessionType profession, uint32 skillBefore, uint32 skillAfter);
+    static ProfessionEvent CraftingStarted(ObjectGuid playerGuid, ProfessionType profession, uint32 recipeId, uint32 itemId);
+    static ProfessionEvent CraftingCompleted(ObjectGuid playerGuid, ProfessionType profession, uint32 recipeId, uint32 itemId, uint32 quantity);
+    static ProfessionEvent CraftingFailed(ObjectGuid playerGuid, ProfessionType profession, uint32 recipeId, std::string const& reason);
+    static ProfessionEvent MaterialsNeeded(ObjectGuid playerGuid, ProfessionType profession, uint32 recipeId);
+    static ProfessionEvent MaterialGathered(ObjectGuid playerGuid, ProfessionType profession, uint32 itemId, uint32 quantity);
+    static ProfessionEvent MaterialPurchased(ObjectGuid playerGuid, uint32 itemId, uint32 quantity, uint32 goldSpent);
+    static ProfessionEvent ItemBanked(ObjectGuid playerGuid, uint32 itemId, uint32 quantity);
+    static ProfessionEvent ItemWithdrawn(ObjectGuid playerGuid, uint32 itemId, uint32 quantity);
+    static ProfessionEvent GoldBanked(ObjectGuid playerGuid, uint32 goldAmount);
+    static ProfessionEvent GoldWithdrawn(ObjectGuid playerGuid, uint32 goldAmount);
+
+    bool IsValid() const;
+    std::string ToString() const;
+};
+
+/**
+ * @brief Event bus for profession system events
  *
- * **Phase 5 Template Integration:**
- * Now delegates all core functionality to GenericEventBus<ProfessionEvent>,
- * maintaining the existing public API for backward compatibility.
- *
- * **Features:**
- * - Priority queue processing (HIGH priority for crafting/materials, LOW for skill-ups)
- * - Event expiry (events expire after 30 seconds to 30 minutes based on type)
- * - Type-safe event handling via IEventHandler<ProfessionEvent> interface
- * - Thread-safe subscription management
- * - Callback-based subscriptions for non-BotAI systems
- *
- * **Migration Note:**
- * The .cpp implementation file has been removed - all infrastructure is provided by
- * the GenericEventBus template.
+ * DESIGN: Singleton event bus following AuctionEventBus pattern
+ * - Thread-safe event publishing and subscription
+ * - Supports BotAI subscribers and callback-based subscribers
+ * - Event statistics tracking
+ * - Type-filtered subscriptions
  */
 class TC_GAME_API ProfessionEventBus final
 {
 public:
-    static ProfessionEventBus* instance()
-    {
-        static ProfessionEventBus inst;
-        return &inst;
-    }
+    static ProfessionEventBus* instance();
 
     /**
-     * @brief Event handler callback type for non-BotAI subscribers
+     * Publish event to all subscribers
+     */
+    bool PublishEvent(ProfessionEvent const& event);
+
+    /**
+     * Event handler callback
      */
     using EventHandler = std::function<void(ProfessionEvent const&)>;
-
-    // ========================================================================
-    // EVENT PUBLISHING
-    // ========================================================================
-
-    /**
-     * @brief Publish profession event to all subscribers
-     * @param event The profession event to publish
-     * @return true if event was valid and published, false otherwise
-     *
-     * Events are validated via ProfessionEvent::IsValid() before publishing.
-     * Events are ordered by priority (HIGH > MEDIUM > LOW > BATCH) and timestamp.
-     */
-    bool PublishEvent(ProfessionEvent const& event)
-    {
-        return EventBus<ProfessionEvent>::instance()->PublishEvent(event);
-    }
 
     // ========================================================================
     // BOTAI SUBSCRIPTION
     // ========================================================================
 
     /**
-     * @brief Subscribe BotAI to specific profession event types
-     * @param subscriber BotAI instance (must inherit from IEventHandler<ProfessionEvent>)
-     * @param types Vector of event types to subscribe to
-     *
-     * BotAI will receive events via HandleEvent(ProfessionEvent const&) interface.
+     * Subscribe BotAI to specific event types
      */
-    void Subscribe(BotAI* subscriber, std::vector<ProfessionEventType> const& types)
-    {
-        EventBus<ProfessionEvent>::instance()->Subscribe(subscriber, types);
-    }
+    void Subscribe(BotAI* subscriber, std::vector<ProfessionEventType> const& types);
 
     /**
-     * @brief Subscribe BotAI to all profession event types
-     * @param subscriber BotAI instance (must inherit from IEventHandler<ProfessionEvent>)
+     * Subscribe BotAI to all event types
      */
-    void SubscribeAll(BotAI* subscriber)
-    {
-        std::vector<ProfessionEventType> allTypes;
-        for (uint8 i = 0; i < static_cast<uint8>(ProfessionEventType::MAX_PROFESSION_EVENT); ++i)
-            allTypes.push_back(static_cast<ProfessionEventType>(i));
-        EventBus<ProfessionEvent>::instance()->Subscribe(subscriber, allTypes);
-    }
+    void SubscribeAll(BotAI* subscriber);
 
     /**
-     * @brief Unsubscribe BotAI from all profession events
-     * @param subscriber BotAI instance to unsubscribe
+     * Unsubscribe BotAI from all events
      */
-    void Unsubscribe(BotAI* subscriber)
-    {
-        EventBus<ProfessionEvent>::instance()->Unsubscribe(subscriber);
-    }
+    void Unsubscribe(BotAI* subscriber);
 
     // ========================================================================
     // CALLBACK SUBSCRIPTION (for non-BotAI systems)
     // ========================================================================
 
     /**
-     * @brief Subscribe callback to specific profession event types
-     * @param handler Callback function to invoke for matching events
-     * @param types Vector of event types to subscribe to
-     * @return Subscription ID for later unsubscribe
-     *
-     * Use this for non-BotAI systems (managers, bridges) that need event notifications.
+     * Subscribe callback to specific event types
+     * Returns subscription ID for later unsubscribe
      */
-    uint32 SubscribeCallback(EventHandler handler, std::vector<ProfessionEventType> const& types)
-    {
-        return EventBus<ProfessionEvent>::instance()->SubscribeCallback(
-            [handler](ProfessionEvent const& event) { handler(event); },
-            types
-        );
-    }
+    uint32 SubscribeCallback(EventHandler handler, std::vector<ProfessionEventType> const& types);
 
     /**
-     * @brief Unsubscribe callback by subscription ID
-     * @param subscriptionId ID returned from SubscribeCallback
+     * Unsubscribe callback by subscription ID
      */
-    void UnsubscribeCallback(uint32 subscriptionId)
-    {
-        EventBus<ProfessionEvent>::instance()->UnsubscribeCallback(subscriptionId);
-    }
+    void UnsubscribeCallback(uint32 subscriptionId);
 
     // ========================================================================
-    // STATISTICS & DIAGNOSTICS
+    // STATISTICS
     // ========================================================================
 
-    /**
-     * @brief Get total number of profession events published (all time)
-     */
-    uint64 GetTotalEventsPublished() const
-    {
-        return EventBus<ProfessionEvent>::instance()->GetTotalEventsProcessed();
-    }
+    uint64 GetTotalEventsPublished() const { return _totalEventsPublished; }
+    uint64 GetEventCount(ProfessionEventType type) const;
 
     /**
-     * @brief Get count of specific profession event type published
-     * @param type Event type to query
+     * Get subscriber count for event type
      */
-    uint64 GetEventCount(ProfessionEventType type) const
-    {
-        return EventBus<ProfessionEvent>::instance()->GetEventTypeCount(type);
-    }
-
-    /**
-     * @brief Get number of subscribers for specific event type
-     * @param type Event type to query
-     */
-    uint32 GetSubscriberCount(ProfessionEventType type) const
-    {
-        return EventBus<ProfessionEvent>::instance()->GetSubscriberCountForType(type);
-    }
-
-    /**
-     * @brief Get total number of active subscriptions (all types)
-     */
-    uint32 GetTotalSubscriberCount() const
-    {
-        return EventBus<ProfessionEvent>::instance()->GetSubscriberCount();
-    }
-
-    /**
-     * @brief Get number of pending events in queue
-     */
-    uint32 GetPendingEventCount() const
-    {
-        return EventBus<ProfessionEvent>::instance()->GetQueueSize();
-    }
+    uint32 GetSubscriberCount(ProfessionEventType type) const;
 
 private:
     ProfessionEventBus() = default;
     ~ProfessionEventBus() = default;
 
-    // Non-copyable
-    ProfessionEventBus(ProfessionEventBus const&) = delete;
-    ProfessionEventBus& operator=(ProfessionEventBus const&) = delete;
+    /**
+     * Deliver event to all subscribed listeners
+     */
+    void DeliverEvent(ProfessionEvent const& event);
+
+    // ========================================================================
+    // SUBSCRIPTION STORAGE
+    // ========================================================================
+
+    // BotAI subscribers (type -> subscribers)
+    std::unordered_map<ProfessionEventType, std::vector<BotAI*>> _subscribers;
+
+    // Global subscribers (all events)
+    std::vector<BotAI*> _globalSubscribers;
+
+    // Callback subscriptions
+    struct CallbackSubscription
+    {
+        uint32 id;
+        EventHandler handler;
+        std::vector<ProfessionEventType> types;
+    };
+    std::vector<CallbackSubscription> _callbackSubscriptions;
+    uint32 _nextCallbackId = 1;
+
+    // ========================================================================
+    // STATISTICS
+    // ========================================================================
+
+    std::unordered_map<ProfessionEventType, uint64> _eventCounts;
+    uint64 _totalEventsPublished = 0;
+
+    // Thread safety
+    mutable Playerbot::OrderedRecursiveMutex<Playerbot::LockOrder::TRADE_MANAGER> _subscriberMutex;
 };
 
 } // namespace Playerbot

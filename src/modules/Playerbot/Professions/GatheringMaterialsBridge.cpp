@@ -5,60 +5,29 @@
  * under the terms of the GNU General Public License as published by the
  * Free Software Foundation; either version 2 of the License, or (at your
  * option) any later version.
- *
- * Phase 4.1 Refactoring (2025-11-18):
- * - Converted from global singleton to per-bot instance
- * - All methods now operate on _bot member (no Player* parameters)
- * - Per-bot data stored as direct members (not maps)
- * - Shared data loaded once via static initialization
  */
 
 #include "GatheringMaterialsBridge.h"
 #include "ProfessionManager.h"
-#include "ProfessionDatabase.h"
-#include "ProfessionEventBus.h"
-#include "ProfessionEvents.h"
 #include "GatheringManager.h"
 #include "Player.h"
 #include "Log.h"
 #include "Session/BotSession.h"
 #include "AI/BotAI.h"
-#include "Core/Managers/GameSystemsManager.h"
 #include <algorithm>
 
 namespace Playerbot
 {
 
-// ============================================================================
-// STATIC MEMBER INITIALIZATION
-// ============================================================================
-
-std::unordered_map<uint32, GatheringNodeType> GatheringMaterialsBridge::_materialToNodeType;
-GatheringMaterialsStatistics GatheringMaterialsBridge::_globalStatistics;
-bool GatheringMaterialsBridge::_sharedDataInitialized = false;
-
-// ============================================================================
-// CONSTRUCTOR / DESTRUCTOR
-// ============================================================================
-
-GatheringMaterialsBridge::GatheringMaterialsBridge(Player* bot)
-    : _bot(bot)
+// Singleton instance
+GatheringMaterialsBridge* GatheringMaterialsBridge::instance()
 {
-    if (_bot)
-    {
-        TC_LOG_DEBUG("playerbot", "GatheringMaterialsBridge: Creating instance for bot '{}'", _bot->GetName());
-    }
+    static GatheringMaterialsBridge instance;
+    return &instance;
 }
 
-GatheringMaterialsBridge::~GatheringMaterialsBridge()
+GatheringMaterialsBridge::GatheringMaterialsBridge()
 {
-    if (_bot)
-    {
-        TC_LOG_DEBUG("playerbot", "GatheringMaterialsBridge: Destroying instance for bot '{}'", _bot->GetName());
-
-        // Unsubscribe from event bus
-        // Note: Event bus handles cleanup automatically when subscriber is destroyed
-    }
 }
 
 // ============================================================================
@@ -67,93 +36,112 @@ GatheringMaterialsBridge::~GatheringMaterialsBridge()
 
 void GatheringMaterialsBridge::Initialize()
 {
-    if (!_bot)
-        return;
+    TC_LOG_INFO("playerbots", "GatheringMaterialsBridge: Initializing gathering-crafting bridge...");
 
-    TC_LOG_DEBUG("playerbot", "GatheringMaterialsBridge: Initializing for bot '{}'", _bot->GetName());
+    LoadNodeMaterialMappings();
+    InitializeGatheringProfessionMaterials();
 
-    // Load shared data once (thread-safe via static initialization)
-    if (!_sharedDataInitialized)
-    {
-        LoadNodeMaterialMappings();
-        InitializeGatheringProfessionMaterials();
-        _sharedDataInitialized = true;
-
-        TC_LOG_INFO("playerbots", "GatheringMaterialsBridge: Initialized shared data with {} material-node mappings",
-            _materialToNodeType.size());
-    }
-
-    // Subscribe to ProfessionEventBus for event-driven reactivity (Phase 2)
-    // Each bot instance subscribes, but filters events by playerGuid
-    ProfessionEventBus::instance()->SubscribeCallback(
-        [this](ProfessionEvent const& event) { HandleProfessionEvent(event); },
-        {
-            ProfessionEventType::MATERIALS_NEEDED,
-            ProfessionEventType::MATERIAL_GATHERED,
-            ProfessionEventType::CRAFTING_COMPLETED
-        }
-    );
-
-    TC_LOG_DEBUG("playerbot", "GatheringMaterialsBridge: Initialization complete for bot '{}', subscribed to 3 event types",
-        _bot->GetName());
+    TC_LOG_INFO("playerbots", "GatheringMaterialsBridge: Initialized with {} material-node mappings",
+        _materialToNodeType.size());
 }
 
-void GatheringMaterialsBridge::Update(uint32 diff)
+void GatheringMaterialsBridge::Update(::Player* player, uint32 diff)
 {
-    if (!_bot || !_enabled)
+    if (!player || !IsEnabled(player))
         return;
 
+    uint32 playerGuid = player->GetGUID().GetCounter();
+
+    std::lock_guard lock(_mutex);
+
     // Update material requirements every 30 seconds
+    static std::unordered_map<uint32, uint32> lastRequirementUpdate;
     uint32 currentTime = GameTime::GetGameTimeMS();
 
-    if (currentTime - _lastRequirementUpdate >= REQUIREMENT_UPDATE_INTERVAL)
+    if (currentTime - lastRequirementUpdate[playerGuid] >= REQUIREMENT_UPDATE_INTERVAL)
     {
-        UpdateMaterialRequirements();
-        _lastRequirementUpdate = currentTime;
+        UpdateMaterialRequirements(player);
+        lastRequirementUpdate[playerGuid] = currentTime;
     }
 
     // Update active gathering session
-    if (_activeSession.isActive)
+    auto sessionIt = _playerActiveSessions.find(playerGuid);
+    if (sessionIt != _playerActiveSessions.end())
     {
-        UpdateGatheringSession();
+        UpdateGatheringSession(sessionIt->second);
     }
 }
 
-void GatheringMaterialsBridge::SetEnabled(bool enabled)
+void GatheringMaterialsBridge::SetEnabled(::Player* player, bool enabled)
 {
-    _enabled = enabled;
+    if (!player)
+        return;
+
+    std::lock_guard lock(_mutex);
+    uint32 playerGuid = player->GetGUID().GetCounter();
+    _enabledState[playerGuid] = enabled;
 }
 
-bool GatheringMaterialsBridge::IsEnabled() const
+bool GatheringMaterialsBridge::IsEnabled(::Player* player) const
 {
-    return _enabled;
+    if (!player)
+        return false;
+
+    std::lock_guard lock(_mutex);
+    uint32 playerGuid = player->GetGUID().GetCounter();
+
+    auto it = _enabledState.find(playerGuid);
+    if (it != _enabledState.end())
+        return it->second;
+
+    return false; // Disabled by default
 }
 
 // ============================================================================
 // MATERIAL REQUIREMENT ANALYSIS
 // ============================================================================
 
-std::vector<MaterialRequirement> GatheringMaterialsBridge::GetNeededMaterials()
+std::vector<MaterialRequirement> GatheringMaterialsBridge::GetNeededMaterials(::Player* player)
 {
-    return _materialRequirements;
+    std::vector<MaterialRequirement> needed;
+
+    if (!player)
+        return needed;
+
+    std::lock_guard lock(_mutex);
+    uint32 playerGuid = player->GetGUID().GetCounter();
+
+    // Return cached requirements if available
+    auto it = _materialRequirements.find(playerGuid);
+    if (it != _materialRequirements.end())
+        return it->second;
+
+    return needed;
 }
 
-bool GatheringMaterialsBridge::IsItemNeededForCrafting(uint32 itemId)
+bool GatheringMaterialsBridge::IsItemNeededForCrafting(::Player* player, uint32 itemId)
 {
-    if (!_bot)
+    if (!player)
         return false;
 
     // Check if player knows any recipes that use this material
-    return PlayerKnowsRecipesUsingMaterial(itemId);
+    return PlayerKnowsRecipesUsingMaterial(player, itemId);
 }
 
-MaterialPriority GatheringMaterialsBridge::GetMaterialPriority(uint32 itemId)
+MaterialPriority GatheringMaterialsBridge::GetMaterialPriority(::Player* player, uint32 itemId)
 {
-    if (!_bot)
+    if (!player)
         return MaterialPriority::NONE;
 
-    // Check cached requirements first
-    for (MaterialRequirement const& req : _materialRequirements)
+    std::lock_guard lock(_mutex);
+    uint32 playerGuid = player->GetGUID().GetCounter();
+
+    auto it = _materialRequirements.find(playerGuid);
+    if (it == _materialRequirements.end())
+        return MaterialPriority::NONE;
+
+    // Find material in requirements
+    for (const MaterialRequirement& req : it->second)
     {
         if (req.itemId == itemId)
             return req.priority;
@@ -162,59 +150,68 @@ MaterialPriority GatheringMaterialsBridge::GetMaterialPriority(uint32 itemId)
     return MaterialPriority::NONE;
 }
 
-void GatheringMaterialsBridge::UpdateMaterialRequirements()
+void GatheringMaterialsBridge::UpdateMaterialRequirements(::Player* player)
 {
-    if (!_bot)
+    if (!player)
         return;
 
-    _materialRequirements.clear();
+    std::lock_guard lock(_mutex);
+    uint32 playerGuid = player->GetGUID().GetCounter();
 
-    // Get ProfessionManager via GameSystemsManager facade
-    BotSession* session = static_cast<BotSession*>(_bot->GetSession());
-    if (!session || !session->GetBotAI())
-        return;
+    std::vector<MaterialRequirement> requirements;
 
-    ProfessionManager* profMgr = session->GetBotAI()->GetGameSystems()->GetProfessionManager();
-    if (!profMgr)
-        return;
+    // Get all player's professions
+    auto professions = ProfessionManager::instance()->GetPlayerProfessions(player);
 
-    // Get bot's professions
-    std::vector<ProfessionSkillInfo> professions = profMgr->GetPlayerProfessions();
-
-    for (ProfessionSkillInfo const& profInfo : professions)
+    for (const ProfessionSkillInfo& profInfo : professions)
     {
-        // Get optimal leveling recipe for this profession
-        RecipeInfo const* recipe = profMgr->GetOptimalLevelingRecipe(profInfo.profession);
+        // Skip if profession is maxed
+        if (profInfo.currentSkill >= profInfo.maxSkill)
+            continue;
+
+        // Get optimal leveling recipe for profession
+        RecipeInfo const* recipe = ProfessionManager::instance()->GetOptimalLevelingRecipe(player, profInfo.profession);
         if (!recipe)
             continue;
 
         // Get missing materials for this recipe
-        auto missingMaterials = profMgr->GetMissingMaterials(*recipe);
+        auto missingMaterials = ProfessionManager::instance()->GetMissingMaterials(player, *recipe);
 
-        for (auto const& [itemId, quantity] : missingMaterials)
+        for (const auto& [itemId, quantity] : missingMaterials)
         {
             MaterialRequirement req;
             req.itemId = itemId;
             req.quantityNeeded = quantity;
-            req.quantityHave = _bot->GetItemCount(itemId);
+            req.quantityHave = player->GetItemCount(itemId);
             req.forProfession = profInfo.profession;
             req.forRecipeId = recipe->recipeId;
 
-            // Calculate priority based on skill-up chance
-            float skillUpChance = profMgr->GetSkillUpChance(*recipe);
+            // Determine priority based on skill-up potential
+            float skillUpChance = ProfessionManager::instance()->GetSkillUpChance(player, *recipe);
             if (skillUpChance >= 1.0f)
-                req.priority = MaterialPriority::HIGH;        // Orange recipe
+                req.priority = MaterialPriority::HIGH;      // Orange recipe
             else if (skillUpChance >= 0.5f)
-                req.priority = MaterialPriority::MEDIUM;      // Yellow recipe
+                req.priority = MaterialPriority::MEDIUM;    // Yellow recipe
+            else if (skillUpChance > 0.0f)
+                req.priority = MaterialPriority::LOW;       // Green recipe
             else
-                req.priority = MaterialPriority::LOW;         // Green/gray recipe
+                req.priority = MaterialPriority::NONE;      // Gray recipe - skip
 
-            _materialRequirements.push_back(req);
+            if (req.priority != MaterialPriority::NONE && !req.IsFulfilled())
+                requirements.push_back(req);
         }
     }
 
-    TC_LOG_TRACE("playerbot", "GatheringMaterialsBridge: Updated {} material requirements for bot '{}'",
-        _materialRequirements.size(), _bot->GetName());
+    // Sort by priority (highest first)
+    std::sort(requirements.begin(), requirements.end(),
+        [](const MaterialRequirement& a, const MaterialRequirement& b) {
+            return static_cast<uint8>(a.priority) > static_cast<uint8>(b.priority);
+        });
+
+    _materialRequirements[playerGuid] = requirements;
+
+    TC_LOG_DEBUG("playerbots", "GatheringMaterialsBridge: Updated material requirements for player {} - {} materials needed",
+        player->GetName(), requirements.size());
 }
 
 // ============================================================================
@@ -222,133 +219,191 @@ void GatheringMaterialsBridge::UpdateMaterialRequirements()
 // ============================================================================
 
 std::vector<GatheringNode> GatheringMaterialsBridge::PrioritizeNodesByNeeds(
+    ::Player* player,
     std::vector<GatheringNode> const& nodes)
 {
+    if (!player || nodes.empty())
+        return nodes;
+
+    // Create copy to sort
     std::vector<GatheringNode> prioritized = nodes;
 
-    // Sort nodes by: 1) Material need priority, 2) Distance
+    // Sort by score (highest first)
     std::sort(prioritized.begin(), prioritized.end(),
-        [this](GatheringNode const& a, GatheringNode const& b)
-        {
-            float scoreA = CalculateNodeScore(a);
-            float scoreB = CalculateNodeScore(b);
-            return scoreA > scoreB;  // Higher score first
+        [this, player](const GatheringNode& a, const GatheringNode& b) {
+            return CalculateNodeScore(player, a) > CalculateNodeScore(player, b);
         });
 
     return prioritized;
 }
 
-bool GatheringMaterialsBridge::StartGatheringForMaterial(uint32 itemId, uint32 quantity)
+bool GatheringMaterialsBridge::StartGatheringForMaterial(::Player* player, uint32 itemId, uint32 quantity)
 {
-    if (!_bot)
+    if (!player)
         return false;
 
-    // Check if already gathering
-    if (_activeSession.isActive)
+    std::lock_guard lock(_mutex);
+    uint32 playerGuid = player->GetGUID().GetCounter();
+
+    // Check if already has active session
+    if (_playerActiveSessions.find(playerGuid) != _playerActiveSessions.end())
     {
-        TC_LOG_DEBUG("playerbot", "GatheringMaterialsBridge: Bot '{}' already has active gathering session",
-            _bot->GetName());
+        TC_LOG_DEBUG("playerbots", "GatheringMaterialsBridge: Player {} already has active gathering session",
+            player->GetName());
         return false;
     }
 
-    // Get node type for this material
-    GatheringNodeType nodeType = GetNodeTypeForMaterial(itemId);
-    if (nodeType == GatheringNodeType::NONE)
-    {
-        TC_LOG_WARN("playerbot", "GatheringMaterialsBridge: No node type found for item {}", itemId);
+    // Create gathering session
+    uint32 sessionId = CreateGatheringSession(player, itemId, quantity);
+    if (sessionId == 0)
         return false;
+
+    // Configure gathering manager
+    GatheringManager* gatheringMgr = GetGatheringManager(player);
+    if (gatheringMgr)
+    {
+        ConfigureGatheringForMaterials(player, true);
+        gatheringMgr->SetPrioritizeSkillUps(false); // Prioritize materials over skill-ups
     }
 
-    // Start gathering session
-    StartSession(itemId, quantity);
+    _globalStatistics.gatheringSessionsStarted++;
+    _playerStatistics[playerGuid].gatheringSessionsStarted++;
+
+    TC_LOG_INFO("playerbots", "GatheringMaterialsBridge: Started gathering session {} for player {} - target: {} x {}",
+        sessionId, player->GetName(), quantity, itemId);
 
     return true;
 }
 
-void GatheringMaterialsBridge::StopGatheringSession()
+void GatheringMaterialsBridge::StopGatheringSession(uint32 sessionId)
 {
-    if (_activeSession.isActive)
-    {
-        CompleteGatheringSession(false);  // Mark as not successful
-    }
-}
+    std::lock_guard lock(_mutex);
 
-GatheringMaterialSession const* GatheringMaterialsBridge::GetActiveSession() const
-{
-    return _activeSession.isActive ? &_activeSession : nullptr;
-}
-
-void GatheringMaterialsBridge::OnMaterialGathered(uint32 itemId, uint32 quantity)
-{
-    if (!_bot)
+    auto it = _activeSessions.find(sessionId);
+    if (it == _activeSessions.end())
         return;
 
-    TC_LOG_TRACE("playerbot", "GatheringMaterialsBridge: Bot '{}' gathered {} x{}",
-        _bot->GetName(), itemId, quantity);
+    CompleteGatheringSession(sessionId, false);
+}
 
-    // Update active session if matching
-    if (_activeSession.isActive && _activeSession.targetItemId == itemId)
+GatheringMaterialSession const* GatheringMaterialsBridge::GetActiveSession(uint32 playerGuid) const
+{
+    std::lock_guard lock(_mutex);
+
+    auto it = _playerActiveSessions.find(playerGuid);
+    if (it == _playerActiveSessions.end())
+        return nullptr;
+
+    auto sessionIt = _activeSessions.find(it->second);
+    if (sessionIt == _activeSessions.end())
+        return nullptr;
+
+    return &sessionIt->second;
+}
+
+void GatheringMaterialsBridge::OnMaterialGathered(::Player* player, uint32 itemId, uint32 quantity)
+{
+    if (!player)
+        return;
+
+    std::lock_guard lock(_mutex);
+    uint32 playerGuid = player->GetGUID().GetCounter();
+
+    // Check if this material is for an active gathering session
+    auto sessionIdIt = _playerActiveSessions.find(playerGuid);
+    if (sessionIdIt == _playerActiveSessions.end())
+        return;
+
+    auto sessionIt = _activeSessions.find(sessionIdIt->second);
+    if (sessionIt == _activeSessions.end())
+        return;
+
+    GatheringMaterialSession& session = sessionIt->second;
+
+    // Check if this is the target item
+    if (session.targetItemId == itemId)
     {
-        _activeSession.gatheredSoFar += quantity;
+        session.gatheredSoFar += quantity;
+
+        _globalStatistics.materialsGatheredForCrafting += quantity;
+        _playerStatistics[playerGuid].materialsGatheredForCrafting += quantity;
+
+        TC_LOG_DEBUG("playerbots", "GatheringMaterialsBridge: Session {} gathered {} x {} ({}/{})",
+            session.sessionId, quantity, itemId, session.gatheredSoFar, session.targetQuantity);
 
         // Check if session complete
-        if (_activeSession.gatheredSoFar >= _activeSession.targetQuantity)
+        if (session.gatheredSoFar >= session.targetQuantity)
         {
-            CompleteGatheringSession(true);  // Mark as successful
+            CompleteGatheringSession(session.sessionId, true);
         }
     }
-
-    // Update statistics
-    _statistics.materialsGatheredForCrafting += quantity;
-    _globalStatistics.materialsGatheredForCrafting += quantity;
-
-    // Update material requirements
-    UpdateMaterialRequirements();
 }
 
 // ============================================================================
 // GATHERING NODE SCORING
 // ============================================================================
 
-float GatheringMaterialsBridge::CalculateNodeScore(GatheringNode const& node)
+float GatheringMaterialsBridge::CalculateNodeScore(::Player* player, GatheringNode const& node)
 {
-    if (!_bot)
+    if (!player)
         return 0.0f;
 
-    float score = 0.0f;
+    float score = 100.0f; // Base score
 
-    // Base score: Does node provide needed materials?
-    if (DoesNodeProvideNeededMaterial(node))
+    // Factor 1: Distance (closer = higher score)
+    float distanceFactor = 1.0f / (1.0f + node.distance / 10.0f); // Normalize to 0-1
+    score *= distanceFactor;
+
+    // Factor 2: Material need priority
+    // We don't know exact item yield from node, so we estimate based on node type
+    MaterialPriority priority = MaterialPriority::NONE;
+    auto requirements = GetNeededMaterials(player);
+
+    for (const MaterialRequirement& req : requirements)
     {
-        score += 100.0f;
-
-        // Bonus for high-priority materials
-        // (Would need to check material priority from node's loot table)
+        GatheringNodeType nodeType = GetNodeTypeForMaterial(req.itemId);
+        if (nodeType == node.nodeType)
+        {
+            priority = req.priority;
+            break;
+        }
     }
 
-    // Distance penalty (closer is better)
-    if (_bot->GetPosition().GetExactDist(&node.position) > 0.0f)
+    // Apply priority multiplier
+    float priorityMultiplier = 1.0f;
+    switch (priority)
     {
-        float distance = _bot->GetPosition().GetExactDist(&node.position);
-        score -= distance / 10.0f;  // Reduce score by 0.1 per yard
+        case MaterialPriority::CRITICAL: priorityMultiplier = 5.0f; break;
+        case MaterialPriority::HIGH:     priorityMultiplier = 3.0f; break;
+        case MaterialPriority::MEDIUM:   priorityMultiplier = 2.0f; break;
+        case MaterialPriority::LOW:      priorityMultiplier = 1.2f; break;
+        case MaterialPriority::NONE:     priorityMultiplier = 1.0f; break;
     }
 
-    // Skill-up potential bonus
-    // (Node provides skill-up - would need gathering skill vs node level)
+    score *= priorityMultiplier;
+
+    // Factor 3: Skill-up potential (if no material need, prefer skill-ups)
+    if (priority == MaterialPriority::NONE)
+    {
+        // Would need skill-up chance calculation here
+        // For now, just give slight bonus to nodes at appropriate skill level
+        score *= 1.1f;
+    }
 
     return score;
 }
 
-bool GatheringMaterialsBridge::DoesNodeProvideNeededMaterial(GatheringNode const& node)
+bool GatheringMaterialsBridge::DoeNodeProvideNeededMaterial(::Player* player, GatheringNode const& node)
 {
-    if (!_bot)
+    if (!player)
         return false;
 
-    // Check if any of our needed materials come from this node type
-    for (MaterialRequirement const& req : _materialRequirements)
+    auto requirements = GetNeededMaterials(player);
+
+    for (const MaterialRequirement& req : requirements)
     {
-        GatheringNodeType requiredNodeType = GetNodeTypeForMaterial(req.itemId);
-        if (requiredNodeType == node.nodeType)
+        GatheringNodeType nodeType = GetNodeTypeForMaterial(req.itemId);
+        if (nodeType == node.nodeType)
             return true;
     }
 
@@ -357,15 +412,18 @@ bool GatheringMaterialsBridge::DoesNodeProvideNeededMaterial(GatheringNode const
 
 uint32 GatheringMaterialsBridge::GetEstimatedYield(GatheringNode const& node)
 {
-    // Estimated yield based on node type and level
-    // This would need to query loot tables, but for now use defaults
+    // Estimate based on node type
+    // This is a simplification - real implementation would query node spawn data
     switch (node.nodeType)
     {
-        case GatheringNodeType::HERB:
-        case GatheringNodeType::MINERAL:
-            return 2;  // Average 2 items per node
-        case GatheringNodeType::GAS_CLOUD:
-            return 3;  // Gas clouds give more
+        case GatheringNodeType::MINING_VEIN:
+            return 3;  // Average 3 ore per vein
+        case GatheringNodeType::HERB_NODE:
+            return 2;  // Average 2 herbs per node
+        case GatheringNodeType::CREATURE_CORPSE:
+            return 1;  // 1 leather per skinnable corpse
+        case GatheringNodeType::FISHING_POOL:
+            return 5;  // Average 5 fish per pool
         default:
             return 1;
     }
@@ -375,122 +433,89 @@ uint32 GatheringMaterialsBridge::GetEstimatedYield(GatheringNode const& node)
 // INTEGRATION WITH GATHERING MANAGER
 // ============================================================================
 
-void GatheringMaterialsBridge::ConfigureGatheringForMaterials(bool prioritizeMaterials)
+void GatheringMaterialsBridge::ConfigureGatheringForMaterials(::Player* player, bool prioritizeMaterials)
 {
-    // Configuration would be applied to GatheringManager
-    // For now, this is a placeholder
+    GatheringManager* gatheringMgr = GetGatheringManager(player);
+    if (!gatheringMgr)
+        return;
+
+    gatheringMgr->SetPrioritizeSkillUps(!prioritizeMaterials);
 }
 
-GatheringManager* GatheringMaterialsBridge::GetGatheringManager()
+GatheringManager* GatheringMaterialsBridge::GetGatheringManager(::Player* player)
 {
-    if (!_bot)
+    if (!player)
         return nullptr;
 
-    BotSession* session = static_cast<BotSession*>(_bot->GetSession());
-    if (!session || !session->GetBotAI())
+    // Get the player's session
+    WorldSession* session = player->GetSession();
+    if (!session || !session->IsBot())
         return nullptr;
 
-    return session->GetBotAI()->GetGameSystems()->GetGatheringManager();
+    // Cast to BotSession and get BotAI
+    BotSession* botSession = static_cast<BotSession*>(session);
+    BotAI* ai = botSession->GetAI();
+    if (!ai)
+        return nullptr;
+
+    // Return the GatheringManager from BotAI
+    return ai->GetGatheringManager();
 }
 
-void GatheringMaterialsBridge::SynchronizeWithGatheringManager()
+void GatheringMaterialsBridge::SynchronizeWithGatheringManager(::Player* player)
 {
-    // Synchronization logic placeholder
-    // Would coordinate state with GatheringManager
+    // Synchronization logic if needed
 }
 
 // ============================================================================
 // STATISTICS
 // ============================================================================
 
-GatheringMaterialsStatistics const& GatheringMaterialsBridge::GetStatistics() const
+GatheringMaterialsStatistics const& GatheringMaterialsBridge::GetPlayerStatistics(uint32 playerGuid) const
 {
-    return _statistics;
+    std::lock_guard lock(_mutex);
+
+    static GatheringMaterialsStatistics emptyStats;
+    auto it = _playerStatistics.find(playerGuid);
+    if (it != _playerStatistics.end())
+        return it->second;
+
+    return emptyStats;
 }
 
-GatheringMaterialsStatistics const& GatheringMaterialsBridge::GetGlobalStatistics()
+GatheringMaterialsStatistics const& GatheringMaterialsBridge::GetGlobalStatistics() const
 {
     return _globalStatistics;
 }
 
-void GatheringMaterialsBridge::ResetStatistics()
+void GatheringMaterialsBridge::ResetStatistics(uint32 playerGuid)
 {
-    _statistics.Reset();
+    std::lock_guard lock(_mutex);
+
+    auto it = _playerStatistics.find(playerGuid);
+    if (it != _playerStatistics.end())
+        it->second.Reset();
 }
 
 // ============================================================================
-// EVENT HANDLING (Phase 2)
-// ============================================================================
-
-void GatheringMaterialsBridge::HandleProfessionEvent(ProfessionEvent const& event)
-{
-    if (!_bot)
-        return;
-
-    // Filter events: Only process events for THIS bot
-    if (event.playerGuid != _bot->GetGUID())
-        return;
-
-    switch (event.type)
-    {
-        case ProfessionEventType::MATERIALS_NEEDED:
-        {
-            TC_LOG_TRACE("playerbot", "GatheringMaterialsBridge: Bot '{}' received MATERIALS_NEEDED event for recipe {}",
-                _bot->GetName(), event.recipeId);
-            UpdateMaterialRequirements();
-            break;
-        }
-
-        case ProfessionEventType::MATERIAL_GATHERED:
-        {
-            TC_LOG_TRACE("playerbot", "GatheringMaterialsBridge: Bot '{}' received MATERIAL_GATHERED event for item {} x{}",
-                _bot->GetName(), event.itemId, event.quantity);
-            OnMaterialGathered(event.itemId, event.quantity);
-            break;
-        }
-
-        case ProfessionEventType::CRAFTING_COMPLETED:
-        {
-            TC_LOG_TRACE("playerbot", "GatheringMaterialsBridge: Bot '{}' received CRAFTING_COMPLETED event",
-                _bot->GetName());
-            UpdateMaterialRequirements();  // Recalculate needs
-            break;
-        }
-
-        default:
-            break;
-    }
-}
-
-// ============================================================================
-// INITIALIZATION HELPERS (Static - shared across all bots)
+// INITIALIZATION HELPERS
 // ============================================================================
 
 void GatheringMaterialsBridge::LoadNodeMaterialMappings()
 {
-    _materialToNodeType.clear();
+    // Map common crafting materials to their gathering node types
+    // This would ideally be loaded from database in full implementation
 
-    // TODO: Load from database or configuration
-    // For now, hardcode common materials
+    // Mining materials
+    // Copper, Tin, Iron, Gold, Mithril, Thorium, Fel Iron, Adamantite, Cobalt, Saronite, Titanium, etc.
+    // For now, we'll handle this dynamically by checking item class
 
-    // Herbs
-    _materialToNodeType[2447] = GatheringNodeType::HERB;    // Peacebloom
-    _materialToNodeType[765] = GatheringNodeType::HERB;     // Silverleaf
-    _materialToNodeType[2449] = GatheringNodeType::HERB;    // Earthroot
-
-    // Ores
-    _materialToNodeType[2770] = GatheringNodeType::MINERAL; // Copper Ore
-    _materialToNodeType[2771] = GatheringNodeType::MINERAL; // Tin Ore
-    _materialToNodeType[2772] = GatheringNodeType::MINERAL; // Iron Ore
-
-    TC_LOG_DEBUG("playerbots", "GatheringMaterialsBridge: Loaded {} material-node mappings",
-        _materialToNodeType.size());
+    TC_LOG_DEBUG("playerbots", "GatheringMaterialsBridge: Loaded node-material mappings");
 }
 
 void GatheringMaterialsBridge::InitializeGatheringProfessionMaterials()
 {
-    // Additional initialization for gathering profession materials
-    // Placeholder for future expansion
+    TC_LOG_DEBUG("playerbots", "GatheringMaterialsBridge: Initialized gathering profession materials");
 }
 
 // ============================================================================
@@ -499,58 +524,57 @@ void GatheringMaterialsBridge::InitializeGatheringProfessionMaterials()
 
 GatheringNodeType GatheringMaterialsBridge::GetNodeTypeForMaterial(uint32 itemId) const
 {
-    auto it = _materialToNodeType.find(itemId);
-    if (it != _materialToNodeType.end())
-        return it->second;
+    // Check if this is a known mining material
+    // This is simplified - real implementation would check item properties
+    ItemTemplate const* itemTemplate = sObjectMgr->GetItemTemplate(itemId);
+    if (!itemTemplate)
+        return GatheringNodeType::NONE;
 
-    // Try to infer from profession database
-    // Check if item is from herbalism, mining, or skinning profession
-    RecipeInfo const* recipe = ProfessionDatabase::instance()->GetRecipe(itemId);
-    if (recipe)
+    uint32 itemClass = itemTemplate->GetClass();
+    uint32 itemSubClass = itemTemplate->GetSubClass();
+
+    // Trade goods
+    if (itemClass == ITEM_CLASS_TRADE_GOODS)
     {
-        switch (recipe->profession)
-        {
-            case ProfessionType::HERBALISM:
-                return GatheringNodeType::HERB;
-            case ProfessionType::MINING:
-                return GatheringNodeType::MINERAL;
-            case ProfessionType::SKINNING:
-                return GatheringNodeType::NONE;  // Skinning doesn't use nodes
-            default:
-                break;
-        }
+        // Metal & Stone = Mining
+        if (itemSubClass == 7 || itemSubClass == 12)
+            return GatheringNodeType::MINING_VEIN;
+
+        // Herb = Herbalism
+        if (itemSubClass == 9)
+            return GatheringNodeType::HERB_NODE;
+
+        // Leather = Skinning
+        if (itemSubClass == 6)
+            return GatheringNodeType::CREATURE_CORPSE;
+
+        // Fish = Fishing
+        if (itemSubClass == 8)
+            return GatheringNodeType::FISHING_POOL;
     }
 
     return GatheringNodeType::NONE;
 }
 
-std::vector<RecipeInfo> GatheringMaterialsBridge::GetRecipesThatUseMaterial(uint32 itemId)
+std::vector<RecipeInfo> GatheringMaterialsBridge::GetRecipesThatUseMaterial(::Player* player, uint32 itemId)
 {
     std::vector<RecipeInfo> recipes;
 
-    if (!_bot)
+    if (!player)
         return recipes;
 
-    BotSession* session = static_cast<BotSession*>(_bot->GetSession());
-    if (!session || !session->GetBotAI())
-        return recipes;
+    // Get all player's professions
+    auto professions = ProfessionManager::instance()->GetPlayerProfessions(player);
 
-    ProfessionManager* profMgr = session->GetBotAI()->GetGameSystems()->GetProfessionManager();
-    if (!profMgr)
-        return recipes;
-
-    // Get all professions
-    std::vector<ProfessionSkillInfo> professions = profMgr->GetPlayerProfessions();
-
-    for (ProfessionSkillInfo const& profInfo : professions)
+    for (const ProfessionSkillInfo& profInfo : professions)
     {
         // Get all recipes for this profession
-        std::vector<RecipeInfo> professionRecipes = profMgr->GetRecipesForProfession(profInfo.profession);
+        auto professionRecipes = ProfessionManager::instance()->GetRecipesForProfession(profInfo.profession);
 
-        for (RecipeInfo const& recipe : professionRecipes)
+        for (const RecipeInfo& recipe : professionRecipes)
         {
             // Check if recipe uses this material
-            for (RecipeInfo::Reagent const& reagent : recipe.reagents)
+            for (const RecipeInfo::Reagent& reagent : recipe.reagents)
             {
                 if (reagent.itemId == itemId)
                 {
@@ -564,119 +588,110 @@ std::vector<RecipeInfo> GatheringMaterialsBridge::GetRecipesThatUseMaterial(uint
     return recipes;
 }
 
-bool GatheringMaterialsBridge::PlayerKnowsRecipesUsingMaterial(uint32 itemId)
+bool GatheringMaterialsBridge::PlayerKnowsRecipesUsingMaterial(::Player* player, uint32 itemId)
 {
-    if (!_bot)
+    if (!player)
         return false;
 
-    std::vector<RecipeInfo> recipes = GetRecipesThatUseMaterial(itemId);
-
-    BotSession* session = static_cast<BotSession*>(_bot->GetSession());
-    if (!session || !session->GetBotAI())
-        return false;
-
-    ProfessionManager* profMgr = session->GetBotAI()->GetGameSystems()->GetProfessionManager();
-    if (!profMgr)
-        return false;
+    auto recipes = GetRecipesThatUseMaterial(player, itemId);
 
     // Check if player knows any of these recipes
-    for (RecipeInfo const& recipe : recipes)
+    for (const RecipeInfo& recipe : recipes)
     {
-        if (profMgr->KnowsRecipe(recipe.recipeId))
+        if (ProfessionManager::instance()->KnowsRecipe(player, recipe.recipeId))
             return true;
     }
 
     return false;
 }
 
-float GatheringMaterialsBridge::CalculateGatheringOpportunityCost(uint32 itemId, uint32 quantity)
+float GatheringMaterialsBridge::CalculateGatheringOpportunityCost(::Player* player, uint32 itemId, uint32 quantity)
 {
-    // Opportunity cost calculation
-    // What else could bot do instead of gathering?
-    // For now, return a default cost estimate
+    // Opportunity cost = time to gather vs time to earn gold to buy
+    // This is simplified - real implementation would consider:
+    // - Gathering speed (nodes per hour)
+    // - Yield per node
+    // - Travel time to gathering zones
+    // - Gold earning rate (questing, other activities)
+    // - Current auction house prices
 
-    float timeToGather = quantity * 60.0f;  // Assume 60 seconds per item
-    float goldPerHour = 100.0f * 10000.0f;  // Assume 100g/hour farming rate
-
-    float opportunityCost = (timeToGather / 3600.0f) * goldPerHour;  // Convert to gold value
-
-    return opportunityCost;
+    return 1.0f; // Placeholder
 }
 
 // ============================================================================
 // GATHERING SESSION MANAGEMENT
 // ============================================================================
 
-void GatheringMaterialsBridge::StartSession(uint32 itemId, uint32 quantity)
+uint32 GatheringMaterialsBridge::CreateGatheringSession(::Player* player, uint32 itemId, uint32 quantity)
 {
-    if (!_bot)
-        return;
+    if (!player)
+        return 0;
 
-    _activeSession = GatheringMaterialSession();
-    _activeSession.targetItemId = itemId;
-    _activeSession.targetQuantity = quantity;
-    _activeSession.gatheredSoFar = 0;
-    _activeSession.nodeType = GetNodeTypeForMaterial(itemId);
-    _activeSession.startTime = GameTime::GetGameTimeMS();
-    _activeSession.isActive = true;
-    _activeSession.startPosition = *_bot->GetPosition();
+    uint32 sessionId = _nextSessionId++;
+    uint32 playerGuid = player->GetGUID().GetCounter();
 
-    _statistics.gatheringSessionsStarted++;
-    _globalStatistics.gatheringSessionsStarted++;
+    GatheringMaterialSession session;
+    session.sessionId = sessionId;
+    session.playerGuid = playerGuid;
+    session.targetItemId = itemId;
+    session.targetQuantity = quantity;
+    session.nodeType = GetNodeTypeForMaterial(itemId);
+    session.startPosition = player->GetPosition();
 
-    TC_LOG_DEBUG("playerbot", "GatheringMaterialsBridge: Bot '{}' started gathering session for item {} x{}",
-        _bot->GetName(), itemId, quantity);
+    _activeSessions[sessionId] = session;
+    _playerActiveSessions[playerGuid] = sessionId;
+
+    return sessionId;
 }
 
-void GatheringMaterialsBridge::UpdateGatheringSession()
+void GatheringMaterialsBridge::UpdateGatheringSession(uint32 sessionId)
 {
-    if (!_activeSession.isActive)
+    auto it = _activeSessions.find(sessionId);
+    if (it == _activeSessions.end())
         return;
 
-    // Check for timeout
-    uint32 currentTime = GameTime::GetGameTimeMS();
-    uint32 duration = currentTime - _activeSession.startTime;
+    GatheringMaterialSession& session = it->second;
 
-    if (duration >= MAX_GATHERING_SESSION_DURATION)
+    // Check if session has timed out
+    if (session.GetDuration() > MAX_GATHERING_SESSION_DURATION)
     {
-        TC_LOG_WARN("playerbot", "GatheringMaterialsBridge: Bot '{}' gathering session timed out after {} minutes",
-            _bot->GetName(), duration / 60000);
-        CompleteGatheringSession(false);
+        TC_LOG_WARN("playerbots", "GatheringMaterialsBridge: Session {} timed out after {} ms",
+            sessionId, session.GetDuration());
+        CompleteGatheringSession(sessionId, false);
     }
 }
 
-void GatheringMaterialsBridge::CompleteGatheringSession(bool success)
+void GatheringMaterialsBridge::CompleteGatheringSession(uint32 sessionId, bool success)
 {
-    if (!_activeSession.isActive)
+    auto it = _activeSessions.find(sessionId);
+    if (it == _activeSessions.end())
         return;
 
-    _activeSession.isActive = false;
-    _activeSession.endTime = GameTime::GetGameTimeMS();
+    GatheringMaterialSession& session = it->second;
+    session.isActive = false;
+    session.endTime = GameTime::GetGameTimeMS();
 
-    uint32 duration = _activeSession.endTime - _activeSession.startTime;
-    _statistics.timeSpentGathering += duration;
-    _globalStatistics.timeSpentGathering += duration;
+    uint32 playerGuid = session.playerGuid;
 
     if (success)
     {
-        _statistics.gatheringSessionsCompleted++;
         _globalStatistics.gatheringSessionsCompleted++;
+        _playerStatistics[playerGuid].gatheringSessionsCompleted++;
+        _globalStatistics.timeSpentGathering += session.GetDuration();
+        _playerStatistics[playerGuid].timeSpentGathering += session.GetDuration();
 
-        TC_LOG_DEBUG("playerbot", "GatheringMaterialsBridge: Bot '{}' completed gathering session successfully (gathered {} / {})",
-            _bot->GetName(), _activeSession.gatheredSoFar, _activeSession.targetQuantity);
+        TC_LOG_INFO("playerbots", "GatheringMaterialsBridge: Session {} completed successfully - gathered {}/{} in {} ms",
+            sessionId, session.gatheredSoFar, session.targetQuantity, session.GetDuration());
     }
     else
     {
-        TC_LOG_DEBUG("playerbot", "GatheringMaterialsBridge: Bot '{}' gathering session ended unsuccessfully (gathered {} / {})",
-            _bot->GetName(), _activeSession.gatheredSoFar, _activeSession.targetQuantity);
+        TC_LOG_WARN("playerbots", "GatheringMaterialsBridge: Session {} failed - only gathered {}/{} in {} ms",
+            sessionId, session.gatheredSoFar, session.targetQuantity, session.GetDuration());
     }
 
-    // Calculate efficiency
-    if (_activeSession.targetQuantity > 0)
-    {
-        float efficiency = (float)_activeSession.gatheredSoFar / _activeSession.targetQuantity;
-        _statistics.averageGatheringEfficiency = efficiency;
-    }
+    // Remove from active sessions
+    _playerActiveSessions.erase(playerGuid);
+    _activeSessions.erase(sessionId);
 }
 
 } // namespace Playerbot

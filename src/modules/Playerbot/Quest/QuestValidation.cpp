@@ -26,11 +26,11 @@
 namespace Playerbot
 {
 
-QuestValidation::QuestValidation(Player* bot) : _bot(bot) {
-    if (!_bot) TC_LOG_ERROR("playerbot.quest", "QuestValidation: null bot!");
+QuestValidation* QuestValidation::instance()
+{
+    static QuestValidation instance;
+    return &instance;
 }
-
-QuestValidation::~QuestValidation() {}
 
 bool QuestValidation::ValidateQuestAcceptance(uint32 questId, Player* bot)
 {
@@ -926,6 +926,8 @@ bool QuestValidation::ValidateQuestDifficulty(uint32 questId, Player* bot)
 
 QuestValidation::ValidationResult QuestValidation::GetCachedValidation(uint32 questId, uint32 botGuid)
 {
+    std::lock_guard lock(_cacheMutex);
+
     uint64_t key = ((uint64_t)questId << 32) | botGuid;
     auto it = _validationCache.find(key);
 
@@ -939,6 +941,8 @@ QuestValidation::ValidationResult QuestValidation::GetCachedValidation(uint32 qu
 
 void QuestValidation::CacheValidationResult(uint32 questId, uint32 botGuid, const ValidationResult& result)
 {
+    std::lock_guard lock(_cacheMutex);
+
     uint64_t key = ((uint64_t)questId << 32) | botGuid;
     ValidationResult cached = result;
     cached.cacheExpiry = GameTime::GetGameTimeMS() + _cacheTimeoutMs;
@@ -947,6 +951,8 @@ void QuestValidation::CacheValidationResult(uint32 questId, uint32 botGuid, cons
 
 void QuestValidation::InvalidateValidationCache(uint32 botGuid)
 {
+    std::lock_guard lock(_cacheMutex);
+
     // Remove all entries for this bot
     auto it = _validationCache.begin();
     while (it != _validationCache.end())
@@ -961,6 +967,8 @@ void QuestValidation::InvalidateValidationCache(uint32 botGuid)
 
 void QuestValidation::CleanupExpiredCache()
 {
+    std::lock_guard lock(_cacheMutex);
+
     uint32 now = GameTime::GetGameTimeMS();
     auto it = _validationCache.begin();
     while (it != _validationCache.end())

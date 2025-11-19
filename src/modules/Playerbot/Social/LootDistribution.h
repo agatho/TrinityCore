@@ -176,28 +176,25 @@ struct PlayerLootProfile
 class TC_GAME_API LootDistribution final : public ILootDistribution
 {
 public:
-    explicit LootDistribution(Player* bot);
-    ~LootDistribution();
-    LootDistribution(LootDistribution const&) = delete;
-    LootDistribution& operator=(LootDistribution const&) = delete;
+    static LootDistribution* instance();
 
     // Core loot distribution functionality
     void HandleGroupLoot(Group* group, Loot* loot) override;
     void InitiateLootRoll(Group* group, const LootItem& item) override;
-    void ProcessPlayerLootDecision(uint32 rollId, LootRollType rollType) override;
+    void ProcessPlayerLootDecision(Player* player, uint32 rollId, LootRollType rollType) override;
     void CompleteLootRoll(uint32 rollId) override;
 
     // Loot analysis and decision making
-    LootRollType DetermineLootDecision(const LootItem& item) override;
-    LootPriority AnalyzeItemPriority(const LootItem& item) override;
-    bool IsItemUpgrade(const LootItem& item) override;
-    bool IsClassAppropriate(const LootItem& item) override;
+    LootRollType DetermineLootDecision(Player* player, const LootItem& item) override;
+    LootPriority AnalyzeItemPriority(Player* player, const LootItem& item) override;
+    bool IsItemUpgrade(Player* player, const LootItem& item) override;
+    bool IsClassAppropriate(Player* player, const LootItem& item) override;
 
     // Need/Greed/Pass logic implementation
-    bool CanPlayerNeedItem(const LootItem& item) override;
-    bool ShouldPlayerGreedItem(const LootItem& item) override;
-    bool ShouldPlayerPassItem(const LootItem& item);
-    bool CanPlayerDisenchantItem(const LootItem& item);
+    bool CanPlayerNeedItem(Player* player, const LootItem& item) override;
+    bool ShouldPlayerGreedItem(Player* player, const LootItem& item) override;
+    bool ShouldPlayerPassItem(Player* player, const LootItem& item);
+    bool CanPlayerDisenchantItem(Player* player, const LootItem& item);
 
     // Roll processing and winner determination
     void ProcessLootRolls(uint32 rollId) override;
@@ -206,11 +203,11 @@ public:
     void HandleLootRollTimeout(uint32 rollId) override;
 
     // Loot distribution strategies
-    void ExecuteNeedBeforeGreedStrategy(const LootItem& item, LootRollType& decision);
-    void ExecuteClassPriorityStrategy(const LootItem& item, LootRollType& decision);
-    void ExecuteUpgradePriorityStrategy(const LootItem& item, LootRollType& decision);
-    void ExecuteFairDistributionStrategy(const LootItem& item, LootRollType& decision);
-    void ExecuteMainSpecPriorityStrategy(const LootItem& item, LootRollType& decision);
+    void ExecuteNeedBeforeGreedStrategy(Player* player, const LootItem& item, LootRollType& decision);
+    void ExecuteClassPriorityStrategy(Player* player, const LootItem& item, LootRollType& decision);
+    void ExecuteUpgradePriorityStrategy(Player* player, const LootItem& item, LootRollType& decision);
+    void ExecuteFairDistributionStrategy(Player* player, const LootItem& item, LootRollType& decision);
+    void ExecuteMainSpecPriorityStrategy(Player* player, const LootItem& item, LootRollType& decision);
 
     // Group loot settings and policies
     void SetGroupLootMethod(Group* group, LootMethod method) override;
@@ -288,14 +285,14 @@ public:
         }
     };
 
-    LootMetrics GetPlayerLootMetrics() override;
+    LootMetrics GetPlayerLootMetrics(uint32 playerGuid) override;
     LootMetrics GetGroupLootMetrics(uint32 groupId) override;
     LootMetrics GetGlobalLootMetrics() override;
 
     // Advanced loot features
     void HandleReservedItems(Group* group, const std::vector<uint32>& reservedItems, Player* reserver);
     void ProcessLootCouncilDecision(Group* group, const LootItem& item, Player* recipient);
-    void HandlePersonalLoot(const LootItem& item);
+    void HandlePersonalLoot(Player* player, const LootItem& item);
     void ManageLootHistory(Group* group, const LootItem& item, Player* recipient);
 
     // Loot prediction and optimization
@@ -305,15 +302,15 @@ public:
     void AnalyzeGroupLootComposition(Group* group);
 
     // Player preferences and configuration
-    void SetPlayerLootStrategy(LootDecisionStrategy strategy) override;
-    LootDecisionStrategy GetPlayerLootStrategy() override;
-    void SetPlayerLootPreferences(const PlayerLootProfile& profile);
-    PlayerLootProfile GetPlayerLootProfile();
+    void SetPlayerLootStrategy(uint32 playerGuid, LootDecisionStrategy strategy) override;
+    LootDecisionStrategy GetPlayerLootStrategy(uint32 playerGuid) override;
+    void SetPlayerLootPreferences(uint32 playerGuid, const PlayerLootProfile& profile);
+    PlayerLootProfile GetPlayerLootProfile(uint32 playerGuid);
 
     // Error handling and edge cases
     void HandleLootConflicts(uint32 rollId) override;
-    void HandleInvalidLootRoll(uint32 rollId);
-    void HandlePlayerDisconnectDuringRoll(uint32 rollId);
+    void HandleInvalidLootRoll(uint32 rollId, uint32 playerGuid);
+    void HandlePlayerDisconnectDuringRoll(uint32 rollId, uint32 playerGuid);
     void RecoverFromLootSystemError(uint32 rollId);
 
     // Update and maintenance
@@ -323,7 +320,7 @@ public:
     void ValidateLootStates();
 
 private:
-    Player* _bot;
+    LootDistribution();
     ~LootDistribution() = default;
 
     // Core data structures
@@ -331,7 +328,7 @@ private:
     std::unordered_map<uint32, PlayerLootProfile> _playerLootProfiles; // playerGuid -> profile
     std::unordered_map<uint32, LootFairnessTracker> _groupFairnessTracking; // groupId -> fairness
     std::unordered_map<uint32, LootMetrics> _playerMetrics; // playerGuid -> metrics
-    
+    mutable Playerbot::OrderedRecursiveMutex<Playerbot::LockOrder::LOOT_MANAGER> _lootMutex;
 
     // Roll management
     std::atomic<uint32> _nextRollId{1};
@@ -341,33 +338,33 @@ private:
     // Loot analysis cache
     std::unordered_map<uint32, std::unordered_map<uint32, LootPriority>> _itemPriorityCache; // playerGuid -> itemId -> priority
     std::unordered_map<uint32, std::unordered_map<uint32, bool>> _upgradeCache; // playerGuid -> itemId -> isUpgrade
-    
+    mutable Playerbot::OrderedRecursiveMutex<Playerbot::LockOrder::LOOT_MANAGER> _cacheMutex;
 
     // Performance tracking
     LootMetrics _globalMetrics;
 
     // Helper functions
-    void InitializePlayerLootProfile();
-    void AnalyzeItemForPlayer(const LootItem& item);
-    void UpdateItemPriorityCache(const LootItem& item, LootPriority priority);
-    bool IsItemCachedUpgrade(uint32 itemId);
-    void InvalidatePlayerCache();
+    void InitializePlayerLootProfile(Player* player);
+    void AnalyzeItemForPlayer(Player* player, const LootItem& item);
+    void UpdateItemPriorityCache(Player* player, const LootItem& item, LootPriority priority);
+    bool IsItemCachedUpgrade(Player* player, uint32 itemId);
+    void InvalidatePlayerCache(uint32 playerGuid);
 
     // Item analysis functions
     void PopulateLootItemData(LootItem& item);
     bool ShouldInitiateRoll(Group* group, const LootItem& item);
     void HandleAutoLoot(Group* group, const LootItem& item);
-    bool CanParticipateInRoll(const LootItem& item);
-    float CalculateUpgradeValue(const LootItem& item);
-    bool IsItemUsefulForOffSpec(const LootItem& item);
+    bool CanParticipateInRoll(Player* player, const LootItem& item);
+    float CalculateUpgradeValue(Player* player, const LootItem& item);
+    bool IsItemUsefulForOffSpec(Player* player, const LootItem& item);
     bool IsItemTypeUsefulForClass(uint8 playerClass, const ItemTemplate* itemTemplate);
-    bool IsItemForMainSpec(const LootItem& item);
-    bool IsArmorUpgrade(const LootItem& item);
-    bool IsWeaponUpgrade(const LootItem& item);
-    bool IsAccessoryUpgrade(const LootItem& item);
-    float CalculateItemScore(const LootItem& item);
-    float CalculateItemScore(Item* item);
-    float CalculateStatPriority(uint32 statType);
+    bool IsItemForMainSpec(Player* player, const LootItem& item);
+    bool IsArmorUpgrade(Player* player, const LootItem& item);
+    bool IsWeaponUpgrade(Player* player, const LootItem& item);
+    bool IsAccessoryUpgrade(Player* player, const LootItem& item);
+    float CalculateItemScore(Player* player, const LootItem& item);
+    float CalculateItemScore(Player* player, Item* item);
+    float CalculateStatPriority(Player* player, uint32 statType);
 
     // Roll processing helpers
     void BroadcastLootRoll(Group* group, const LootRoll& roll);
@@ -380,19 +377,19 @@ private:
     // Fairness and distribution algorithms
     void UpdateGroupLootHistory(uint32 groupId, uint32 winnerGuid, const LootItem& item);
     void BalanceLootDistribution(Group* group);
-    void AdjustLootDecisionsForFairness(Group* group, LootRollType& decision);
-    bool ShouldConsiderFairnessAdjustment(Group* group);
+    void AdjustLootDecisionsForFairness(Group* group, Player* player, LootRollType& decision);
+    bool ShouldConsiderFairnessAdjustment(Group* group, Player* player);
 
     // Strategy implementations
-    LootRollType ExecuteStrategy(const LootItem& item, LootDecisionStrategy strategy);
-    void ApplyStrategyModifiers(const LootItem& item, LootRollType& decision);
-    void ConsiderGroupComposition(Group* group, const LootItem& item, LootRollType& decision);
+    LootRollType ExecuteStrategy(Player* player, const LootItem& item, LootDecisionStrategy strategy);
+    void ApplyStrategyModifiers(Player* player, const LootItem& item, LootRollType& decision);
+    void ConsiderGroupComposition(Group* group, Player* player, const LootItem& item, LootRollType& decision);
 
     // Performance optimization
     void OptimizeLootProcessing();
     void PreloadItemData(const std::vector<LootItem>& items);
-    void CachePlayerEquipment();
-    void UpdateLootMetrics(const LootRoll& roll, bool wasWinner);
+    void CachePlayerEquipment(Player* player);
+    void UpdateLootMetrics(uint32 playerGuid, const LootRoll& roll, bool wasWinner);
 
     // Constants
     static constexpr uint32 LOOT_ROLL_TIMEOUT = 60000; // 60 seconds

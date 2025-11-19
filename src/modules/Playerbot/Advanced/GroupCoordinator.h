@@ -27,7 +27,6 @@ enum Difficulty : uint8;
 namespace Playerbot
 {
     class BotAI;
-    class TacticalCoordinator;
 
     /**
      * GroupCoordinator - Advanced group and raid coordination for PlayerBots
@@ -37,17 +36,6 @@ namespace Playerbot
      * - Raid coordination and boss strategies
      * - Loot distribution and rolling
      * - Group quest sharing and completion
-     * - Tactical coordination (via TacticalCoordinator subsystem)
-     *
-     * ARCHITECTURE:
-     * - Per-bot instance managing this bot's group participation
-     * - Uses shared TacticalCoordinator for cross-bot tactical decisions
-     * - Integrates with BotAI event system
-     *
-     * SUBSYSTEMS:
-     * - TacticalCoordinator: Handles interrupt/dispel/focus coordination (shared)
-     * - Social coordination: Invites, quests, loot (per-bot)
-     * - Raid mechanics: Boss strategies, positioning (per-bot)
      */
     class GroupCoordinator
     {
@@ -149,13 +137,6 @@ namespace Playerbot
         Unit* GetGroupTarget() const;
         void CoordinateCrowdControl(Unit* target);
         void CallForHelp(Unit* attacker);
-
-        // Tactical coordination (delegates to TacticalCoordinator)
-        TacticalCoordinator* GetTacticalCoordinator() const { return m_tacticalCoordinator.get(); }
-        void RequestInterrupt(ObjectGuid targetGuid);
-        void RequestDispel(ObjectGuid targetGuid);
-        bool IsGroupCooldownAvailable(std::string const& cooldownName) const;
-        void UseGroupCooldown(std::string const& cooldownName, uint32 durationMs);
 
         // Resurrection and recovery
         void RequestResurrection();
@@ -317,9 +298,6 @@ namespace Playerbot
         Player* m_bot;
         BotAI* m_ai;
         bool m_enabled;
-
-        // Tactical coordination subsystem (shared across group)
-        std::shared_ptr<TacticalCoordinator> m_tacticalCoordinator;
 
         // Role assignment
         GroupRole m_assignedRole;

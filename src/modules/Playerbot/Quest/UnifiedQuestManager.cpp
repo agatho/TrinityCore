@@ -8,7 +8,6 @@
  */
 
 #include "UnifiedQuestManager.h"
-#include "Core/PlayerBotHelpers.h"  // GetBotAI, GetGameSystems
 #include "Log.h"
 #include "Timer.h"
 #include <sstream>
@@ -49,92 +48,68 @@ UnifiedQuestManager::~UnifiedQuestManager()
 bool UnifiedQuestManager::PickupModule::PickupQuest(uint32 questId, Player* bot, uint32 questGiverGuid)
 {
     _questsPickedUp++;
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        return systems->GetQuestPickup()->PickupQuest(questId, questGiverGuid);
-    return {};
+    return QuestPickup::instance()->PickupQuest(questId, bot, questGiverGuid);
 }
 
 bool UnifiedQuestManager::PickupModule::PickupQuestFromGiver(Player* bot, uint32 questGiverGuid, uint32 questId)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        return systems->GetQuestPickup()->PickupQuestFromGiver(questGiverGuid, questId);
-    return {};
+    return QuestPickup::instance()->PickupQuestFromGiver(bot, questGiverGuid, questId);
 }
 
 void UnifiedQuestManager::PickupModule::PickupAvailableQuests(Player* bot)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        systems->GetQuestPickup()->PickupAvailableQuests();
+    QuestPickup::instance()->PickupAvailableQuests(bot);
 }
 
 void UnifiedQuestManager::PickupModule::PickupQuestsInArea(Player* bot, float radius)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        systems->GetQuestPickup()->PickupQuestsInArea(radius);
+    QuestPickup::instance()->PickupQuestsInArea(bot, radius);
 }
 
 std::vector<uint32> UnifiedQuestManager::PickupModule::DiscoverNearbyQuests(Player* bot, float scanRadius)
 {
     _questsDiscovered++;
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        return systems->GetQuestPickup()->DiscoverNearbyQuests(scanRadius);
-    return {};
+    return QuestPickup::instance()->DiscoverNearbyQuests(bot, scanRadius);
 }
 
 std::vector<QuestGiverInfo> UnifiedQuestManager::PickupModule::ScanForQuestGivers(Player* bot, float scanRadius)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        return systems->GetQuestPickup()->ScanForQuestGivers(scanRadius);
-    return {};
+    return QuestPickup::instance()->ScanForQuestGivers(bot, scanRadius);
 }
 
 std::vector<uint32> UnifiedQuestManager::PickupModule::GetAvailableQuestsFromGiver(uint32 questGiverGuid, Player* bot)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        return systems->GetQuestPickup()->GetAvailableQuestsFromGiver(questGiverGuid);
-    return {};
+    return QuestPickup::instance()->GetAvailableQuestsFromGiver(questGiverGuid, bot);
 }
 
 QuestEligibility UnifiedQuestManager::PickupModule::CheckQuestEligibility(uint32 questId, Player* bot)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        return systems->GetQuestPickup()->CheckQuestEligibility(questId);
-    return {};
+    return QuestPickup::instance()->CheckQuestEligibility(questId, bot);
 }
 
 bool UnifiedQuestManager::PickupModule::CanAcceptQuest(uint32 questId, Player* bot)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        return systems->GetQuestPickup()->CanAcceptQuest(questId);
-    return {};
+    return QuestPickup::instance()->CanAcceptQuest(questId, bot);
 }
 
 bool UnifiedQuestManager::PickupModule::MeetsQuestRequirements(uint32 questId, Player* bot)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        return systems->GetQuestPickup()->MeetsQuestRequirements(questId);
-    return {};
+    return QuestPickup::instance()->MeetsQuestRequirements(questId, bot);
 }
 
 std::vector<uint32> UnifiedQuestManager::PickupModule::FilterQuests(const std::vector<uint32>& questIds, Player* bot, const QuestPickupFilter& filter)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        return systems->GetQuestPickup()->FilterQuests(questIds, filter);
-    return {};
+    return QuestPickup::instance()->FilterQuests(questIds, bot, filter);
 }
 
 std::vector<uint32> UnifiedQuestManager::PickupModule::PrioritizeQuests(const std::vector<uint32>& questIds, Player* bot, QuestAcceptanceStrategy strategy)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        return systems->GetQuestPickup()->PrioritizeQuests(questIds, strategy);
-    return {};
+    return QuestPickup::instance()->PrioritizeQuests(questIds, bot, strategy);
 }
 
 bool UnifiedQuestManager::PickupModule::ShouldAcceptQuest(uint32 questId, Player* bot)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        return systems->GetQuestPickup()->ShouldAcceptQuest(questId);
-    return {};
+    return QuestPickup::instance()->ShouldAcceptQuest(questId, bot);
 }
 
 // ============================================================================
@@ -143,202 +118,164 @@ bool UnifiedQuestManager::PickupModule::ShouldAcceptQuest(uint32 questId, Player
 
 bool UnifiedQuestManager::CompletionModule::StartQuestCompletion(uint32 questId, Player* bot)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        return systems->GetQuestCompletion()->StartQuestCompletion(questId);
-    return {};
+    return QuestCompletion::instance()->StartQuestCompletion(questId, bot);
 }
 
 void UnifiedQuestManager::CompletionModule::UpdateQuestProgress(Player* bot)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        systems->GetQuestCompletion()->UpdateQuestProgress();
+    QuestCompletion::instance()->UpdateQuestProgress(bot);
 }
 
 void UnifiedQuestManager::CompletionModule::CompleteQuest(uint32 questId, Player* bot)
 {
     _questsCompleted++;
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        systems->GetQuestCompletion()->CompleteQuest(questId);
+    QuestCompletion::instance()->CompleteQuest(questId, bot);
 }
 
 bool UnifiedQuestManager::CompletionModule::TurnInQuest(uint32 questId, Player* bot)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        return systems->GetQuestCompletion()->TurnInQuest(questId);
-    return {};
+    return QuestCompletion::instance()->TurnInQuest(questId, bot);
 }
 
 void UnifiedQuestManager::CompletionModule::TrackQuestObjectives(Player* bot)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        systems->GetQuestCompletion()->TrackQuestObjectives();
+    QuestCompletion::instance()->TrackQuestObjectives(bot);
 }
 
 void UnifiedQuestManager::CompletionModule::ExecuteObjective(Player* bot, QuestObjectiveData& objective)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        systems->GetQuestCompletion()->ExecuteObjective(objective);
+    QuestCompletion::instance()->ExecuteObjective(bot, objective);
 }
 
 void UnifiedQuestManager::CompletionModule::UpdateObjectiveProgress(Player* bot, uint32 questId, uint32 objectiveIndex)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        systems->GetQuestCompletion()->UpdateObjectiveProgress(questId, objectiveIndex);
+    QuestCompletion::instance()->UpdateObjectiveProgress(bot, questId, objectiveIndex);
 }
 
 bool UnifiedQuestManager::CompletionModule::IsObjectiveComplete(const QuestObjectiveData& objective)
 {
     _objectivesCompleted++;
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        return systems->GetQuestCompletion()->IsObjectiveComplete(objective);
-    return {};
+    return QuestCompletion::instance()->IsObjectiveComplete(objective);
 }
 
 void UnifiedQuestManager::CompletionModule::HandleKillObjective(Player* bot, QuestObjectiveData& objective)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        systems->GetQuestCompletion()->HandleKillObjective(objective);
+    QuestCompletion::instance()->HandleKillObjective(bot, objective);
 }
 
 void UnifiedQuestManager::CompletionModule::HandleCollectObjective(Player* bot, QuestObjectiveData& objective)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        systems->GetQuestCompletion()->HandleCollectObjective(objective);
+    QuestCompletion::instance()->HandleCollectObjective(bot, objective);
 }
 
 void UnifiedQuestManager::CompletionModule::HandleTalkToNpcObjective(Player* bot, QuestObjectiveData& objective)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        systems->GetQuestCompletion()->HandleTalkToNpcObjective(objective);
+    QuestCompletion::instance()->HandleTalkToNpcObjective(bot, objective);
 }
 
 void UnifiedQuestManager::CompletionModule::HandleLocationObjective(Player* bot, QuestObjectiveData& objective)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        systems->GetQuestCompletion()->HandleLocationObjective(objective);
+    QuestCompletion::instance()->HandleLocationObjective(bot, objective);
 }
 
 void UnifiedQuestManager::CompletionModule::HandleGameObjectObjective(Player* bot, QuestObjectiveData& objective)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        systems->GetQuestCompletion()->HandleGameObjectObjective(objective);
+    QuestCompletion::instance()->HandleGameObjectObjective(bot, objective);
 }
 
 void UnifiedQuestManager::CompletionModule::HandleSpellCastObjective(Player* bot, QuestObjectiveData& objective)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        systems->GetQuestCompletion()->HandleSpellCastObjective(objective);
+    QuestCompletion::instance()->HandleSpellCastObjective(bot, objective);
 }
 
 void UnifiedQuestManager::CompletionModule::HandleEmoteObjective(Player* bot, QuestObjectiveData& objective)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        systems->GetQuestCompletion()->HandleEmoteObjective(objective);
+    QuestCompletion::instance()->HandleEmoteObjective(bot, objective);
 }
 
 void UnifiedQuestManager::CompletionModule::HandleEscortObjective(Player* bot, QuestObjectiveData& objective)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        systems->GetQuestCompletion()->HandleEscortObjective(objective);
+    QuestCompletion::instance()->HandleEscortObjective(bot, objective);
 }
 
 void UnifiedQuestManager::CompletionModule::NavigateToObjective(Player* bot, const QuestObjectiveData& objective)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        systems->GetQuestCompletion()->NavigateToObjective(objective);
+    QuestCompletion::instance()->NavigateToObjective(bot, objective);
 }
 
 bool UnifiedQuestManager::CompletionModule::FindObjectiveTarget(Player* bot, QuestObjectiveData& objective)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        return systems->GetQuestCompletion()->FindObjectiveTarget(objective);
-    return {};
+    return QuestCompletion::instance()->FindObjectiveTarget(bot, objective);
 }
 
 std::vector<Position> UnifiedQuestManager::CompletionModule::GetObjectiveLocations(const QuestObjectiveData& objective)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        return systems->GetQuestCompletion()->GetObjectiveLocations(objective);
-    return {};
+    return QuestCompletion::instance()->GetObjectiveLocations(objective);
 }
 
 Position UnifiedQuestManager::CompletionModule::GetOptimalObjectivePosition(Player* bot, const QuestObjectiveData& objective)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        return systems->GetQuestCompletion()->GetOptimalObjectivePosition(objective);
-    return {};
+    return QuestCompletion::instance()->GetOptimalObjectivePosition(bot, objective);
 }
 
 void UnifiedQuestManager::CompletionModule::CoordinateGroupQuestCompletion(Group* group, uint32 questId)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        systems->GetQuestCompletion()->CoordinateGroupQuestCompletion(group, questId);
+    QuestCompletion::instance()->CoordinateGroupQuestCompletion(group, questId);
 }
 
 void UnifiedQuestManager::CompletionModule::ShareObjectiveProgress(Group* group, uint32 questId)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        systems->GetQuestCompletion()->ShareObjectiveProgress(group, questId);
+    QuestCompletion::instance()->ShareObjectiveProgress(group, questId);
 }
 
 void UnifiedQuestManager::CompletionModule::SynchronizeGroupObjectives(Group* group, uint32 questId)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        systems->GetQuestCompletion()->SynchronizeGroupObjectives(group, questId);
+    QuestCompletion::instance()->SynchronizeGroupObjectives(group, questId);
 }
 
 void UnifiedQuestManager::CompletionModule::HandleGroupObjectiveConflict(Group* group, uint32 questId, uint32 objectiveIndex)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        systems->GetQuestCompletion()->HandleGroupObjectiveConflict(group, questId, objectiveIndex);
+    QuestCompletion::instance()->HandleGroupObjectiveConflict(group, questId, objectiveIndex);
 }
 
 void UnifiedQuestManager::CompletionModule::OptimizeQuestCompletionOrder(Player* bot)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        systems->GetQuestCompletion()->OptimizeQuestCompletionOrder();
+    QuestCompletion::instance()->OptimizeQuestCompletionOrder(bot);
 }
 
 void UnifiedQuestManager::CompletionModule::OptimizeObjectiveSequence(Player* bot, uint32 questId)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        systems->GetQuestCompletion()->OptimizeObjectiveSequence(questId);
+    QuestCompletion::instance()->OptimizeObjectiveSequence(bot, questId);
 }
 
 void UnifiedQuestManager::CompletionModule::FindEfficientCompletionPath(Player* bot, const std::vector<uint32>& questIds)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        systems->GetQuestCompletion()->FindEfficientCompletionPath(questIds);
+    QuestCompletion::instance()->FindEfficientCompletionPath(bot, questIds);
 }
 
 void UnifiedQuestManager::CompletionModule::MinimizeTravelTime(Player* bot, const std::vector<QuestObjectiveData>& objectives)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        systems->GetQuestCompletion()->MinimizeTravelTime(objectives);
+    QuestCompletion::instance()->MinimizeTravelTime(bot, objectives);
 }
 
 void UnifiedQuestManager::CompletionModule::DetectStuckState(Player* bot, uint32 questId)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        systems->GetQuestCompletion()->DetectStuckState(questId);
+    QuestCompletion::instance()->DetectStuckState(bot, questId);
 }
 
 void UnifiedQuestManager::CompletionModule::HandleStuckObjective(Player* bot, QuestObjectiveData& objective)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        systems->GetQuestCompletion()->HandleStuckObjective(objective);
+    QuestCompletion::instance()->HandleStuckObjective(bot, objective);
 }
 
 void UnifiedQuestManager::CompletionModule::RecoverFromStuckState(Player* bot, uint32 questId)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        systems->GetQuestCompletion()->RecoverFromStuckState(questId);
+    QuestCompletion::instance()->RecoverFromStuckState(bot, questId);
 }
 
 void UnifiedQuestManager::CompletionModule::SkipProblematicObjective(Player* bot, QuestObjectiveData& objective)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        systems->GetQuestCompletion()->SkipProblematicObjective(objective);
+    QuestCompletion::instance()->SkipProblematicObjective(bot, objective);
 }
 
 // ============================================================================
@@ -348,8 +285,7 @@ void UnifiedQuestManager::CompletionModule::SkipProblematicObjective(Player* bot
 bool UnifiedQuestManager::ValidationModule::ValidateQuest(uint32 questId, Player* bot)
 {
     _validationsPerformed++;
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        systems->GetQuestValidation()->ValidateQuest(questId);
+    bool result = QuestValidation::instance()->ValidateQuest(questId, bot);
     if (result)
         _validationsPassed++;
     return result;
@@ -357,307 +293,223 @@ bool UnifiedQuestManager::ValidationModule::ValidateQuest(uint32 questId, Player
 
 bool UnifiedQuestManager::ValidationModule::ValidateQuestRequirements(uint32 questId, Player* bot)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        return systems->GetQuestValidation()->ValidateQuestRequirements(questId);
-    return {};
+    return QuestValidation::instance()->ValidateQuestRequirements(questId, bot);
 }
 
 std::vector<std::string> UnifiedQuestManager::ValidationModule::GetValidationErrors(uint32 questId, Player* bot)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        return systems->GetQuestValidation()->GetValidationErrors(questId);
-    return {};
+    return QuestValidation::instance()->GetValidationErrors(questId, bot);
 }
 
 bool UnifiedQuestManager::ValidationModule::ValidateLevelRequirements(uint32 questId, Player* bot)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        return systems->GetQuestValidation()->ValidateLevelRequirements(questId);
-    return {};
+    return QuestValidation::instance()->ValidateLevelRequirements(questId, bot);
 }
 
 bool UnifiedQuestManager::ValidationModule::ValidateClassRequirements(uint32 questId, Player* bot)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        return systems->GetQuestValidation()->ValidateClassRequirements(questId);
-    return {};
+    return QuestValidation::instance()->ValidateClassRequirements(questId, bot);
 }
 
 bool UnifiedQuestManager::ValidationModule::ValidateRaceRequirements(uint32 questId, Player* bot)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        return systems->GetQuestValidation()->ValidateRaceRequirements(questId);
-    return {};
+    return QuestValidation::instance()->ValidateRaceRequirements(questId, bot);
 }
 
 bool UnifiedQuestManager::ValidationModule::ValidateSkillRequirements(uint32 questId, Player* bot)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        return systems->GetQuestValidation()->ValidateSkillRequirements(questId);
-    return {};
+    return QuestValidation::instance()->ValidateSkillRequirements(questId, bot);
 }
 
 bool UnifiedQuestManager::ValidationModule::ValidateQuestPrerequisites(uint32 questId, Player* bot)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        return systems->GetQuestValidation()->ValidateQuestPrerequisites(questId);
-    return {};
+    return QuestValidation::instance()->ValidateQuestPrerequisites(questId, bot);
 }
 
 bool UnifiedQuestManager::ValidationModule::ValidateQuestChain(uint32 questId, Player* bot)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        return systems->GetQuestValidation()->ValidateQuestChain(questId);
-    return {};
+    return QuestValidation::instance()->ValidateQuestChain(questId, bot);
 }
 
 bool UnifiedQuestManager::ValidationModule::HasCompletedPrerequisites(uint32 questId, Player* bot)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        return systems->GetQuestValidation()->HasCompletedPrerequisites(questId);
-    return {};
+    return QuestValidation::instance()->HasCompletedPrerequisites(questId, bot);
 }
 
 std::vector<uint32> UnifiedQuestManager::ValidationModule::GetMissingPrerequisites(uint32 questId, Player* bot)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        return systems->GetQuestValidation()->GetMissingPrerequisites(questId);
-    return {};
+    return QuestValidation::instance()->GetMissingPrerequisites(questId, bot);
 }
 
 bool UnifiedQuestManager::ValidationModule::ValidateReputationRequirements(uint32 questId, Player* bot)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        return systems->GetQuestValidation()->ValidateReputationRequirements(questId);
-    return {};
+    return QuestValidation::instance()->ValidateReputationRequirements(questId, bot);
 }
 
 bool UnifiedQuestManager::ValidationModule::ValidateFactionRequirements(uint32 questId, Player* bot)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        return systems->GetQuestValidation()->ValidateFactionRequirements(questId);
-    return {};
+    return QuestValidation::instance()->ValidateFactionRequirements(questId, bot);
 }
 
 bool UnifiedQuestManager::ValidationModule::HasRequiredReputation(uint32 questId, Player* bot, uint32 factionId)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        return systems->GetQuestValidation()->HasRequiredReputation(questId, factionId);
-    return {};
+    return QuestValidation::instance()->HasRequiredReputation(questId, bot, factionId);
 }
 
 bool UnifiedQuestManager::ValidationModule::ValidateItemRequirements(uint32 questId, Player* bot)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        return systems->GetQuestValidation()->ValidateItemRequirements(questId);
-    return {};
+    return QuestValidation::instance()->ValidateItemRequirements(questId, bot);
 }
 
 bool UnifiedQuestManager::ValidationModule::HasRequiredItems(uint32 questId, Player* bot)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        return systems->GetQuestValidation()->HasRequiredItems(questId);
-    return {};
+    return QuestValidation::instance()->HasRequiredItems(questId, bot);
 }
 
 bool UnifiedQuestManager::ValidationModule::HasInventorySpace(uint32 questId, Player* bot)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        return systems->GetQuestValidation()->HasInventorySpace(questId);
-    return {};
+    return QuestValidation::instance()->HasInventorySpace(questId, bot);
 }
 
 std::vector<uint32> UnifiedQuestManager::ValidationModule::GetMissingQuestItems(uint32 questId, Player* bot)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        return systems->GetQuestValidation()->GetMissingQuestItems(questId);
-    return {};
+    return QuestValidation::instance()->GetMissingQuestItems(questId, bot);
 }
 
 bool UnifiedQuestManager::ValidationModule::ValidateQuestAvailability(uint32 questId, Player* bot)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        return systems->GetQuestValidation()->ValidateQuestAvailability(questId);
-    return {};
+    return QuestValidation::instance()->ValidateQuestAvailability(questId, bot);
 }
 
 bool UnifiedQuestManager::ValidationModule::ValidateSeasonalAvailability(uint32 questId)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        return systems->GetQuestValidation()->ValidateSeasonalAvailability(questId);
-    return {};
+    return QuestValidation::instance()->ValidateSeasonalAvailability(questId);
 }
 
 bool UnifiedQuestManager::ValidationModule::ValidateDailyQuestLimits(uint32 questId, Player* bot)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        return systems->GetQuestValidation()->ValidateDailyQuestLimits(questId);
-    return {};
+    return QuestValidation::instance()->ValidateDailyQuestLimits(questId, bot);
 }
 
 bool UnifiedQuestManager::ValidationModule::ValidateQuestTimer(uint32 questId, Player* bot)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        return systems->GetQuestValidation()->ValidateQuestTimer(questId);
-    return {};
+    return QuestValidation::instance()->ValidateQuestTimer(questId, bot);
 }
 
 bool UnifiedQuestManager::ValidationModule::ValidateZoneRequirements(uint32 questId, Player* bot)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        return systems->GetQuestValidation()->ValidateZoneRequirements(questId);
-    return {};
+    return QuestValidation::instance()->ValidateZoneRequirements(questId, bot);
 }
 
 bool UnifiedQuestManager::ValidationModule::ValidateAreaRequirements(uint32 questId, Player* bot)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        return systems->GetQuestValidation()->ValidateAreaRequirements(questId);
-    return {};
+    return QuestValidation::instance()->ValidateAreaRequirements(questId, bot);
 }
 
 bool UnifiedQuestManager::ValidationModule::IsInCorrectZone(uint32 questId, Player* bot)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        return systems->GetQuestValidation()->IsInCorrectZone(questId);
-    return {};
+    return QuestValidation::instance()->IsInCorrectZone(questId, bot);
 }
 
 bool UnifiedQuestManager::ValidationModule::CanQuestBeStartedAtLocation(uint32 questId, const Position& location)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        return systems->GetQuestValidation()->CanQuestBeStartedAtLocation(questId, location);
-    return {};
+    return QuestValidation::instance()->CanQuestBeStartedAtLocation(questId, location);
 }
 
 bool UnifiedQuestManager::ValidationModule::ValidateGroupRequirements(uint32 questId, Player* bot)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        return systems->GetQuestValidation()->ValidateGroupRequirements(questId);
-    return {};
+    return QuestValidation::instance()->ValidateGroupRequirements(questId, bot);
 }
 
 bool UnifiedQuestManager::ValidationModule::ValidatePartyQuestRequirements(uint32 questId, Player* bot)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        return systems->GetQuestValidation()->ValidatePartyQuestRequirements(questId);
-    return {};
+    return QuestValidation::instance()->ValidatePartyQuestRequirements(questId, bot);
 }
 
 bool UnifiedQuestManager::ValidationModule::ValidateRaidQuestRequirements(uint32 questId, Player* bot)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        return systems->GetQuestValidation()->ValidateRaidQuestRequirements(questId);
-    return {};
+    return QuestValidation::instance()->ValidateRaidQuestRequirements(questId, bot);
 }
 
 bool UnifiedQuestManager::ValidationModule::CanGroupMemberShareQuest(uint32 questId, Player* sharer, Player* receiver)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        return systems->GetQuestValidation()->CanGroupMemberShareQuest(questId, sharer, receiver);
-    return {};
+    return QuestValidation::instance()->CanGroupMemberShareQuest(questId, sharer, receiver);
 }
 
 bool UnifiedQuestManager::ValidationModule::ValidateWithContext(ValidationContext& context)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        return systems->GetQuestValidation()->ValidateWithContext(context);
-    return {};
+    return QuestValidation::instance()->ValidateWithContext(context);
 }
 
 bool UnifiedQuestManager::ValidationModule::ValidateQuestObjectives(uint32 questId, Player* bot)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        return systems->GetQuestValidation()->ValidateQuestObjectives(questId);
-    return {};
+    return QuestValidation::instance()->ValidateQuestObjectives(questId, bot);
 }
 
 bool UnifiedQuestManager::ValidationModule::ValidateQuestRewards(uint32 questId, Player* bot)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        return systems->GetQuestValidation()->ValidateQuestRewards(questId);
-    return {};
+    return QuestValidation::instance()->ValidateQuestRewards(questId, bot);
 }
 
 bool UnifiedQuestManager::ValidationModule::ValidateQuestDifficulty(uint32 questId, Player* bot)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        return systems->GetQuestValidation()->ValidateQuestDifficulty(questId);
-    return {};
+    return QuestValidation::instance()->ValidateQuestDifficulty(questId, bot);
 }
 
 ValidationResult UnifiedQuestManager::ValidationModule::GetCachedValidation(uint32 questId, uint32 botGuid)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        return systems->GetQuestValidation()->GetCachedValidation(questId, botGuid);
-    return {};
+    return QuestValidation::instance()->GetCachedValidation(questId, botGuid);
 }
 
 void UnifiedQuestManager::ValidationModule::CacheValidationResult(uint32 questId, uint32 botGuid, const ValidationResult& result)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        systems->GetQuestValidation()->CacheValidationResult(questId, botGuid, result);
+    QuestValidation::instance()->CacheValidationResult(questId, botGuid, result);
 }
 
 void UnifiedQuestManager::ValidationModule::InvalidateValidationCache(uint32 botGuid)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        systems->GetQuestValidation()->InvalidateValidationCache(botGuid);
+    QuestValidation::instance()->InvalidateValidationCache(botGuid);
 }
 
 void UnifiedQuestManager::ValidationModule::CleanupExpiredCache()
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        systems->GetQuestValidation()->CleanupExpiredCache();
+    QuestValidation::instance()->CleanupExpiredCache();
 }
 
 std::unordered_map<uint32, ValidationResult> UnifiedQuestManager::ValidationModule::ValidateMultipleQuests(
     const std::vector<uint32>& questIds, Player* bot)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        return systems->GetQuestValidation()->ValidateMultipleQuests(questIds);
-    return {};
+    return QuestValidation::instance()->ValidateMultipleQuests(questIds, bot);
 }
 
 std::vector<uint32> UnifiedQuestManager::ValidationModule::FilterValidQuests(const std::vector<uint32>& questIds, Player* bot)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        return systems->GetQuestValidation()->FilterValidQuests(questIds);
-    return {};
+    return QuestValidation::instance()->FilterValidQuests(questIds, bot);
 }
 
 std::vector<uint32> UnifiedQuestManager::ValidationModule::GetEligibleQuests(Player* bot, const std::vector<uint32>& candidates)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        return systems->GetQuestValidation()->GetEligibleQuests(candidates);
-    return {};
+    return QuestValidation::instance()->GetEligibleQuests(bot, candidates);
 }
 
 std::string UnifiedQuestManager::ValidationModule::GetDetailedValidationReport(uint32 questId, Player* bot)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        return systems->GetQuestValidation()->GetDetailedValidationReport(questId);
-    return {};
+    return QuestValidation::instance()->GetDetailedValidationReport(questId, bot);
 }
 
 void UnifiedQuestManager::ValidationModule::LogValidationFailure(uint32 questId, Player* bot, const std::string& reason)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        systems->GetQuestValidation()->LogValidationFailure(questId, reason);
+    QuestValidation::instance()->LogValidationFailure(questId, bot, reason);
 }
 
 std::vector<std::string> UnifiedQuestManager::ValidationModule::GetRecommendationsForFailedQuest(uint32 questId, Player* bot)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        return systems->GetQuestValidation()->GetRecommendationsForFailedQuest(questId);
-    return {};
+    return QuestValidation::instance()->GetRecommendationsForFailedQuest(questId, bot);
 }
 
 ValidationMetrics UnifiedQuestManager::ValidationModule::GetValidationMetrics()
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        return systems->GetQuestValidation()->GetValidationMetrics();
-    return {};
+    return QuestValidation::instance()->GetValidationMetrics();
 }
 
 // ============================================================================
@@ -667,312 +519,248 @@ ValidationMetrics UnifiedQuestManager::ValidationModule::GetValidationMetrics()
 bool UnifiedQuestManager::TurnInModule::TurnInQuestWithReward(uint32 questId, Player* bot)
 {
     _questsTurnedIn++;
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        return systems->GetQuestTurnIn()->TurnInQuest(questId);
-    return {};
+    return QuestTurnIn::instance()->TurnInQuest(questId, bot);
 }
 
 void UnifiedQuestManager::TurnInModule::ProcessQuestTurnIn(Player* bot, uint32 questId)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        systems->GetQuestTurnIn()->ProcessQuestTurnIn(questId);
+    QuestTurnIn::instance()->ProcessQuestTurnIn(bot, questId);
 }
 
 void UnifiedQuestManager::TurnInModule::ProcessBatchTurnIn(Player* bot, const TurnInBatch& batch)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        systems->GetQuestTurnIn()->ProcessBatchTurnIn(batch);
+    QuestTurnIn::instance()->ProcessBatchTurnIn(bot, batch);
 }
 
 void UnifiedQuestManager::TurnInModule::ScheduleQuestTurnIn(Player* bot, uint32 questId, uint32 delayMs)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        systems->GetQuestTurnIn()->ScheduleQuestTurnIn(questId, delayMs);
+    QuestTurnIn::instance()->ScheduleQuestTurnIn(bot, questId, delayMs);
 }
 
 std::vector<uint32> UnifiedQuestManager::TurnInModule::GetCompletedQuests(Player* bot)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        return systems->GetQuestTurnIn()->GetCompletedQuests();
-    return {};
+    return QuestTurnIn::instance()->GetCompletedQuests(bot);
 }
 
 bool UnifiedQuestManager::TurnInModule::IsQuestReadyForTurnIn(uint32 questId, Player* bot)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        return systems->GetQuestTurnIn()->IsQuestReadyForTurnIn(questId);
-    return {};
+    return QuestTurnIn::instance()->IsQuestReadyForTurnIn(questId, bot);
 }
 
 void UnifiedQuestManager::TurnInModule::MonitorQuestCompletion(Player* bot)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        systems->GetQuestTurnIn()->MonitorQuestCompletion();
+    QuestTurnIn::instance()->MonitorQuestCompletion(bot);
 }
 
 void UnifiedQuestManager::TurnInModule::HandleQuestCompletion(Player* bot, uint32 questId)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        systems->GetQuestTurnIn()->HandleQuestCompletion(questId);
+    QuestTurnIn::instance()->HandleQuestCompletion(bot, questId);
 }
 
 void UnifiedQuestManager::TurnInModule::PlanOptimalTurnInRoute(Player* bot)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        systems->GetQuestTurnIn()->PlanOptimalTurnInRoute();
+    QuestTurnIn::instance()->PlanOptimalTurnInRoute(bot);
 }
 
 TurnInBatch UnifiedQuestManager::TurnInModule::CreateTurnInBatch(Player* bot, const std::vector<uint32>& questIds)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        return systems->GetQuestTurnIn()->CreateTurnInBatch(questIds);
-    return {};
+    return QuestTurnIn::instance()->CreateTurnInBatch(bot, questIds);
 }
 
 void UnifiedQuestManager::TurnInModule::OptimizeTurnInSequence(Player* bot, std::vector<QuestTurnInData>& turnIns)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        systems->GetQuestTurnIn()->OptimizeTurnInSequence(turnIns);
+    QuestTurnIn::instance()->OptimizeTurnInSequence(bot, turnIns);
 }
 
 void UnifiedQuestManager::TurnInModule::MinimizeTurnInTravel(Player* bot)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        systems->GetQuestTurnIn()->MinimizeTurnInTravel();
+    QuestTurnIn::instance()->MinimizeTurnInTravel(bot);
 }
 
 bool UnifiedQuestManager::TurnInModule::FindQuestTurnInNpc(Player* bot, uint32 questId)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        return systems->GetQuestTurnIn()->FindQuestTurnInNpc(questId);
-    return {};
+    return QuestTurnIn::instance()->FindQuestTurnInNpc(bot, questId);
 }
 
 Position UnifiedQuestManager::TurnInModule::GetQuestTurnInLocation(uint32 questId)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        return systems->GetQuestTurnIn()->GetQuestTurnInLocation(questId);
-    return {};
+    return QuestTurnIn::instance()->GetQuestTurnInLocation(questId);
 }
 
 bool UnifiedQuestManager::TurnInModule::NavigateToQuestGiver(Player* bot, uint32 questGiverGuid)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        return systems->GetQuestTurnIn()->NavigateToQuestGiver(questGiverGuid);
-    return {};
+    return QuestTurnIn::instance()->NavigateToQuestGiver(bot, questGiverGuid);
 }
 
 bool UnifiedQuestManager::TurnInModule::IsAtQuestGiver(Player* bot, uint32 questGiverGuid)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        return systems->GetQuestTurnIn()->IsAtQuestGiver(questGiverGuid);
-    return {};
+    return QuestTurnIn::instance()->IsAtQuestGiver(bot, questGiverGuid);
 }
 
 void UnifiedQuestManager::TurnInModule::AnalyzeQuestRewards(QuestTurnInData& turnInData, Player* bot)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        systems->GetQuestTurnIn()->AnalyzeQuestRewards(turnInData);
+    QuestTurnIn::instance()->AnalyzeQuestRewards(turnInData, bot);
 }
 
 uint32 UnifiedQuestManager::TurnInModule::SelectOptimalReward(const std::vector<QuestRewardItem>& rewards, Player* bot, RewardSelectionStrategy strategy)
 {
     _rewardsSelected++;
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        return systems->GetQuestTurnIn()->SelectOptimalReward(rewards, strategy);
-    return {};
+    return QuestTurnIn::instance()->SelectOptimalReward(rewards, bot, strategy);
 }
 
 void UnifiedQuestManager::TurnInModule::EvaluateItemUpgrades(const std::vector<QuestRewardItem>& rewards, Player* bot)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        systems->GetQuestTurnIn()->EvaluateItemUpgrades(rewards);
+    QuestTurnIn::instance()->EvaluateItemUpgrades(rewards, bot);
 }
 
 float UnifiedQuestManager::TurnInModule::CalculateItemValue(const QuestRewardItem& reward, Player* bot)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        return systems->GetQuestTurnIn()->CalculateItemValue(reward);
-    return {};
+    return QuestTurnIn::instance()->CalculateItemValue(reward, bot);
 }
 
 void UnifiedQuestManager::TurnInModule::CoordinateGroupTurnIns(Group* group)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        systems->GetQuestTurnIn()->CoordinateGroupTurnIns(group);
+    QuestTurnIn::instance()->CoordinateGroupTurnIns(group);
 }
 
 void UnifiedQuestManager::TurnInModule::SynchronizeGroupRewardSelection(Group* group, uint32 questId)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        systems->GetQuestTurnIn()->SynchronizeGroupRewardSelection(group, questId);
+    QuestTurnIn::instance()->SynchronizeGroupRewardSelection(group, questId);
 }
 
 void UnifiedQuestManager::TurnInModule::HandleGroupTurnInConflicts(Group* group, uint32 questId)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        systems->GetQuestTurnIn()->HandleGroupTurnInConflicts(group, questId);
+    QuestTurnIn::instance()->HandleGroupTurnInConflicts(group, questId);
 }
 
 void UnifiedQuestManager::TurnInModule::ShareTurnInProgress(Group* group)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        systems->GetQuestTurnIn()->ShareTurnInProgress(group);
+    QuestTurnIn::instance()->ShareTurnInProgress(group);
 }
 
 void UnifiedQuestManager::TurnInModule::HandleQuestGiverDialog(Player* bot, uint32 questGiverGuid, uint32 questId)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        systems->GetQuestTurnIn()->HandleQuestGiverDialog(questGiverGuid, questId);
+    QuestTurnIn::instance()->HandleQuestGiverDialog(bot, questGiverGuid, questId);
 }
 
 void UnifiedQuestManager::TurnInModule::SelectQuestReward(Player* bot, uint32 questId, uint32 rewardIndex)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        systems->GetQuestTurnIn()->SelectQuestReward(questId, rewardIndex);
+    QuestTurnIn::instance()->SelectQuestReward(bot, questId, rewardIndex);
 }
 
 void UnifiedQuestManager::TurnInModule::ConfirmQuestTurnIn(Player* bot, uint32 questId)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        systems->GetQuestTurnIn()->ConfirmQuestTurnIn(questId);
+    QuestTurnIn::instance()->ConfirmQuestTurnIn(bot, questId);
 }
 
 void UnifiedQuestManager::TurnInModule::HandleTurnInDialog(Player* bot, uint32 questId)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        systems->GetQuestTurnIn()->HandleTurnInDialog(questId);
+    QuestTurnIn::instance()->HandleTurnInDialog(bot, questId);
 }
 
 void UnifiedQuestManager::TurnInModule::ExecuteImmediateTurnInStrategy(Player* bot)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        systems->GetQuestTurnIn()->ExecuteImmediateTurnInStrategy();
+    QuestTurnIn::instance()->ExecuteImmediateTurnInStrategy(bot);
 }
 
 void UnifiedQuestManager::TurnInModule::ExecuteBatchTurnInStrategy(Player* bot)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        systems->GetQuestTurnIn()->ExecuteBatchTurnInStrategy();
+    QuestTurnIn::instance()->ExecuteBatchTurnInStrategy(bot);
 }
 
 void UnifiedQuestManager::TurnInModule::ExecuteOptimalRoutingStrategy(Player* bot)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        systems->GetQuestTurnIn()->ExecuteOptimalRoutingStrategy();
+    QuestTurnIn::instance()->ExecuteOptimalRoutingStrategy(bot);
 }
 
 void UnifiedQuestManager::TurnInModule::ExecuteGroupCoordinationStrategy(Player* bot)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        systems->GetQuestTurnIn()->ExecuteGroupCoordinationStrategy();
+    QuestTurnIn::instance()->ExecuteGroupCoordinationStrategy(bot);
 }
 
 void UnifiedQuestManager::TurnInModule::ExecuteRewardOptimizationStrategy(Player* bot)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        systems->GetQuestTurnIn()->ExecuteRewardOptimizationStrategy();
+    QuestTurnIn::instance()->ExecuteRewardOptimizationStrategy(bot);
 }
 
 void UnifiedQuestManager::TurnInModule::ExecuteChainContinuationStrategy(Player* bot)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        systems->GetQuestTurnIn()->ExecuteChainContinuationStrategy();
+    QuestTurnIn::instance()->ExecuteChainContinuationStrategy(bot);
 }
 
 void UnifiedQuestManager::TurnInModule::HandleQuestChainProgression(Player* bot, uint32 completedQuestId)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        systems->GetQuestTurnIn()->HandleQuestChainProgression(completedQuestId);
+    QuestTurnIn::instance()->HandleQuestChainProgression(bot, completedQuestId);
 }
 
 uint32 UnifiedQuestManager::TurnInModule::GetNextQuestInChain(uint32 completedQuestId)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        return systems->GetQuestTurnIn()->GetNextQuestInChain(completedQuestId);
-    return {};
+    return QuestTurnIn::instance()->GetNextQuestInChain(completedQuestId);
 }
 
 void UnifiedQuestManager::TurnInModule::AutoAcceptFollowUpQuests(Player* bot, uint32 completedQuestId)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        systems->GetQuestTurnIn()->AutoAcceptFollowUpQuests(completedQuestId);
+    QuestTurnIn::instance()->AutoAcceptFollowUpQuests(bot, completedQuestId);
 }
 
 void UnifiedQuestManager::TurnInModule::PrioritizeChainQuests(Player* bot)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        systems->GetQuestTurnIn()->PrioritizeChainQuests();
+    QuestTurnIn::instance()->PrioritizeChainQuests(bot);
 }
 
 void UnifiedQuestManager::TurnInModule::SetTurnInStrategy(uint32 botGuid, TurnInStrategy strategy)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        systems->GetQuestTurnIn()->SetTurnInStrategy(botGuid, strategy);
+    QuestTurnIn::instance()->SetTurnInStrategy(botGuid, strategy);
 }
 
 TurnInStrategy UnifiedQuestManager::TurnInModule::GetTurnInStrategy(uint32 botGuid)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        return systems->GetQuestTurnIn()->GetTurnInStrategy(botGuid);
-    return {};
+    return QuestTurnIn::instance()->GetTurnInStrategy(botGuid);
 }
 
 void UnifiedQuestManager::TurnInModule::SetRewardSelectionStrategy(uint32 botGuid, RewardSelectionStrategy strategy)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        systems->GetQuestTurnIn()->SetRewardSelectionStrategy(botGuid, strategy);
+    QuestTurnIn::instance()->SetRewardSelectionStrategy(botGuid, strategy);
 }
 
 RewardSelectionStrategy UnifiedQuestManager::TurnInModule::GetRewardSelectionStrategy(uint32 botGuid)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        return systems->GetQuestTurnIn()->GetRewardSelectionStrategy(botGuid);
-    return {};
+    return QuestTurnIn::instance()->GetRewardSelectionStrategy(botGuid);
 }
 
 void UnifiedQuestManager::TurnInModule::SetBatchTurnInThreshold(uint32 botGuid, uint32 threshold)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        systems->GetQuestTurnIn()->SetBatchTurnInThreshold(botGuid, threshold);
+    QuestTurnIn::instance()->SetBatchTurnInThreshold(botGuid, threshold);
 }
 
 void UnifiedQuestManager::TurnInModule::HandleTurnInError(Player* bot, uint32 questId, const std::string& error)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        systems->GetQuestTurnIn()->HandleTurnInError(questId, error);
+    QuestTurnIn::instance()->HandleTurnInError(bot, questId, error);
 }
 
 void UnifiedQuestManager::TurnInModule::RecoverFromTurnInFailure(Player* bot, uint32 questId)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        systems->GetQuestTurnIn()->RecoverFromTurnInFailure(questId);
+    QuestTurnIn::instance()->RecoverFromTurnInFailure(bot, questId);
 }
 
 void UnifiedQuestManager::TurnInModule::RetryFailedTurnIn(Player* bot, uint32 questId)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        systems->GetQuestTurnIn()->RetryFailedTurnIn(questId);
+    QuestTurnIn::instance()->RetryFailedTurnIn(bot, questId);
 }
 
 void UnifiedQuestManager::TurnInModule::ValidateTurnInState(Player* bot, uint32 questId)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        systems->GetQuestTurnIn()->ValidateTurnInState(questId);
+    QuestTurnIn::instance()->ValidateTurnInState(bot, questId);
 }
 
 TurnInMetrics UnifiedQuestManager::TurnInModule::GetBotTurnInMetrics(uint32 botGuid)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        return systems->GetQuestTurnIn()->GetBotTurnInMetrics(botGuid);
-    return {};
+    return QuestTurnIn::instance()->GetBotTurnInMetrics(botGuid);
 }
 
 TurnInMetrics UnifiedQuestManager::TurnInModule::GetGlobalTurnInMetrics()
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        return systems->GetQuestTurnIn()->GetGlobalTurnInMetrics();
-    return {};
+    return QuestTurnIn::instance()->GetGlobalTurnInMetrics();
 }
 
 // ============================================================================
@@ -981,266 +769,204 @@ TurnInMetrics UnifiedQuestManager::TurnInModule::GetGlobalTurnInMetrics()
 
 std::vector<uint32> UnifiedQuestManager::DynamicModule::DiscoverAvailableQuests(Player* bot)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        return systems->GetDynamicQuestSystem()->DiscoverAvailableQuests();
-    return {};
+    return DynamicQuestSystem::instance()->DiscoverAvailableQuests(bot);
 }
 
 std::vector<uint32> UnifiedQuestManager::DynamicModule::GetRecommendedQuests(Player* bot, QuestStrategy strategy)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        return systems->GetDynamicQuestSystem()->GetRecommendedQuests(strategy);
-    return {};
+    return DynamicQuestSystem::instance()->GetRecommendedQuests(bot, strategy);
 }
 
 bool UnifiedQuestManager::DynamicModule::AssignQuestToBot(uint32 questId, Player* bot)
 {
     _questsAssigned++;
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        return systems->GetDynamicQuestSystem()->AssignQuestToBot(questId);
-    return {};
+    return DynamicQuestSystem::instance()->AssignQuestToBot(questId, bot);
 }
 
 void UnifiedQuestManager::DynamicModule::AutoAssignQuests(Player* bot, uint32 maxQuests)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        systems->GetDynamicQuestSystem()->AutoAssignQuests(maxQuests);
+    DynamicQuestSystem::instance()->AutoAssignQuests(bot, maxQuests);
 }
 
 QuestPriority UnifiedQuestManager::DynamicModule::CalculateQuestPriority(uint32 questId, Player* bot)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        return systems->GetDynamicQuestSystem()->CalculateQuestPriority(questId);
-    return {};
+    return DynamicQuestSystem::instance()->CalculateQuestPriority(questId, bot);
 }
 
 std::vector<uint32> UnifiedQuestManager::DynamicModule::SortQuestsByPriority(const std::vector<uint32>& questIds, Player* bot)
 {
     _questsOptimized++;
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        return systems->GetDynamicQuestSystem()->SortQuestsByPriority(questIds);
-    return {};
+    return DynamicQuestSystem::instance()->SortQuestsByPriority(questIds, bot);
 }
 
 bool UnifiedQuestManager::DynamicModule::ShouldAbandonQuest(uint32 questId, Player* bot)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        return systems->GetDynamicQuestSystem()->ShouldAbandonQuest(questId);
-    return {};
+    return DynamicQuestSystem::instance()->ShouldAbandonQuest(questId, bot);
 }
 
 void UnifiedQuestManager::DynamicModule::UpdateQuestProgressDynamic(Player* bot)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        systems->GetDynamicQuestSystem()->UpdateQuestProgress();
+    DynamicQuestSystem::instance()->UpdateQuestProgress(bot);
 }
 
 void UnifiedQuestManager::DynamicModule::ExecuteQuestObjective(Player* bot, uint32 questId, uint32 objectiveIndex)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        systems->GetDynamicQuestSystem()->ExecuteQuestObjective(questId, objectiveIndex);
+    DynamicQuestSystem::instance()->ExecuteQuestObjective(bot, questId, objectiveIndex);
 }
 
 bool UnifiedQuestManager::DynamicModule::CanCompleteQuestObjective(Player* bot, uint32 questId, uint32 objectiveIndex)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        return systems->GetDynamicQuestSystem()->CanCompleteQuestObjective(questId, objectiveIndex);
-    return {};
+    return DynamicQuestSystem::instance()->CanCompleteQuestObjective(bot, questId, objectiveIndex);
 }
 
 void UnifiedQuestManager::DynamicModule::HandleQuestCompletionDynamic(Player* bot, uint32 questId)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        systems->GetDynamicQuestSystem()->HandleQuestCompletion(questId);
+    DynamicQuestSystem::instance()->HandleQuestCompletion(bot, questId);
 }
 
 bool UnifiedQuestManager::DynamicModule::FormQuestGroup(uint32 questId, Player* initiator)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        return systems->GetDynamicQuestSystem()->FormQuestGroup(questId, initiator);
-    return {};
+    return DynamicQuestSystem::instance()->FormQuestGroup(questId, initiator);
 }
 
 void UnifiedQuestManager::DynamicModule::CoordinateGroupQuest(Group* group, uint32 questId)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        systems->GetDynamicQuestSystem()->CoordinateGroupQuest(group, questId);
+    DynamicQuestSystem::instance()->CoordinateGroupQuest(group, questId);
 }
 
 void UnifiedQuestManager::DynamicModule::ShareQuestProgress(Group* group, uint32 questId)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        systems->GetDynamicQuestSystem()->ShareQuestProgress(group, questId);
+    DynamicQuestSystem::instance()->ShareQuestProgress(group, questId);
 }
 
 bool UnifiedQuestManager::DynamicModule::CanShareQuest(uint32 questId, Player* from, Player* to)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        return systems->GetDynamicQuestSystem()->CanShareQuest(questId, from, to);
-    return {};
+    return DynamicQuestSystem::instance()->CanShareQuest(questId, from, to);
 }
 
 Position UnifiedQuestManager::DynamicModule::GetNextQuestLocation(Player* bot, uint32 questId)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        return systems->GetDynamicQuestSystem()->GetNextQuestLocation(questId);
-    return {};
+    return DynamicQuestSystem::instance()->GetNextQuestLocation(bot, questId);
 }
 
 std::vector<Position> UnifiedQuestManager::DynamicModule::GenerateQuestPath(Player* bot, uint32 questId)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        return systems->GetDynamicQuestSystem()->GenerateQuestPath(questId);
-    return {};
+    return DynamicQuestSystem::instance()->GenerateQuestPath(bot, questId);
 }
 
 void UnifiedQuestManager::DynamicModule::HandleQuestNavigation(Player* bot, uint32 questId)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        systems->GetDynamicQuestSystem()->HandleQuestNavigation(questId);
+    DynamicQuestSystem::instance()->HandleQuestNavigation(bot, questId);
 }
 
 bool UnifiedQuestManager::DynamicModule::IsQuestLocationReachable(Player* bot, const Position& location)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        return systems->GetDynamicQuestSystem()->IsQuestLocationReachable(location);
-    return {};
+    return DynamicQuestSystem::instance()->IsQuestLocationReachable(bot, location);
 }
 
 void UnifiedQuestManager::DynamicModule::AdaptQuestDifficulty(uint32 questId, Player* bot)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        systems->GetDynamicQuestSystem()->AdaptQuestDifficulty(questId);
+    DynamicQuestSystem::instance()->AdaptQuestDifficulty(questId, bot);
 }
 
 void UnifiedQuestManager::DynamicModule::HandleQuestStuckState(Player* bot, uint32 questId)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        systems->GetDynamicQuestSystem()->HandleQuestStuckState(questId);
+    DynamicQuestSystem::instance()->HandleQuestStuckState(bot, questId);
 }
 
 void UnifiedQuestManager::DynamicModule::RetryFailedObjective(Player* bot, uint32 questId, uint32 objectiveIndex)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        systems->GetDynamicQuestSystem()->RetryFailedObjective(questId, objectiveIndex);
+    DynamicQuestSystem::instance()->RetryFailedObjective(bot, questId, objectiveIndex);
 }
 
 void UnifiedQuestManager::DynamicModule::OptimizeQuestOrder(Player* bot)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        systems->GetDynamicQuestSystem()->OptimizeQuestOrder();
+    DynamicQuestSystem::instance()->OptimizeQuestOrder(bot);
 }
 
 void UnifiedQuestManager::DynamicModule::TrackQuestChains(Player* bot)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        systems->GetDynamicQuestSystem()->TrackQuestChains();
+    DynamicQuestSystem::instance()->TrackQuestChains(bot);
 }
 
 std::vector<uint32> UnifiedQuestManager::DynamicModule::GetQuestChain(uint32 questId)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        return systems->GetDynamicQuestSystem()->GetQuestChain(questId);
-    return {};
+    return DynamicQuestSystem::instance()->GetQuestChain(questId);
 }
 
 uint32 UnifiedQuestManager::DynamicModule::GetNextQuestInChainDynamic(uint32 completedQuestId)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        return systems->GetDynamicQuestSystem()->GetNextQuestInChain(completedQuestId);
-    return {};
+    return DynamicQuestSystem::instance()->GetNextQuestInChain(completedQuestId);
 }
 
 void UnifiedQuestManager::DynamicModule::AdvanceQuestChain(Player* bot, uint32 completedQuestId)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        systems->GetDynamicQuestSystem()->AdvanceQuestChain(completedQuestId);
+    DynamicQuestSystem::instance()->AdvanceQuestChain(bot, completedQuestId);
 }
 
 void UnifiedQuestManager::DynamicModule::OptimizeZoneQuests(Player* bot)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        systems->GetDynamicQuestSystem()->OptimizeZoneQuests();
+    DynamicQuestSystem::instance()->OptimizeZoneQuests(bot);
 }
 
 std::vector<uint32> UnifiedQuestManager::DynamicModule::GetZoneQuests(uint32 zoneId, Player* bot)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        return systems->GetDynamicQuestSystem()->GetZoneQuests(zoneId);
-    return {};
+    return DynamicQuestSystem::instance()->GetZoneQuests(zoneId, bot);
 }
 
 void UnifiedQuestManager::DynamicModule::PlanZoneCompletion(Player* bot, uint32 zoneId)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        systems->GetDynamicQuestSystem()->PlanZoneCompletion(zoneId);
+    DynamicQuestSystem::instance()->PlanZoneCompletion(bot, zoneId);
 }
 
 bool UnifiedQuestManager::DynamicModule::ShouldMoveToNewZone(Player* bot)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        return systems->GetDynamicQuestSystem()->ShouldMoveToNewZone();
-    return {};
+    return DynamicQuestSystem::instance()->ShouldMoveToNewZone(bot);
 }
 
 QuestReward UnifiedQuestManager::DynamicModule::AnalyzeQuestReward(uint32 questId, Player* bot)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        return systems->GetDynamicQuestSystem()->AnalyzeQuestReward(questId);
-    return {};
+    return DynamicQuestSystem::instance()->AnalyzeQuestReward(questId, bot);
 }
 
 float UnifiedQuestManager::DynamicModule::CalculateQuestValue(uint32 questId, Player* bot)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        return systems->GetDynamicQuestSystem()->CalculateQuestValue(questId);
-    return {};
+    return DynamicQuestSystem::instance()->CalculateQuestValue(questId, bot);
 }
 
 bool UnifiedQuestManager::DynamicModule::IsQuestWorthwhile(uint32 questId, Player* bot)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        return systems->GetDynamicQuestSystem()->IsQuestWorthwhile(questId);
-    return {};
+    return DynamicQuestSystem::instance()->IsQuestWorthwhile(questId, bot);
 }
 
 void UnifiedQuestManager::DynamicModule::SetQuestStrategy(uint32 botGuid, QuestStrategy strategy)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        systems->GetDynamicQuestSystem()->SetQuestStrategy(botGuid, strategy);
+    DynamicQuestSystem::instance()->SetQuestStrategy(botGuid, strategy);
 }
 
 QuestStrategy UnifiedQuestManager::DynamicModule::GetQuestStrategy(uint32 botGuid)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        return systems->GetDynamicQuestSystem()->GetQuestStrategy(botGuid);
-    return {};
+    return DynamicQuestSystem::instance()->GetQuestStrategy(botGuid);
 }
 
 void UnifiedQuestManager::DynamicModule::SetMaxConcurrentQuests(uint32 botGuid, uint32 maxQuests)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        systems->GetDynamicQuestSystem()->SetMaxConcurrentQuests(botGuid, maxQuests);
+    DynamicQuestSystem::instance()->SetMaxConcurrentQuests(botGuid, maxQuests);
 }
 
 void UnifiedQuestManager::DynamicModule::EnableQuestGrouping(uint32 botGuid, bool enable)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        systems->GetDynamicQuestSystem()->EnableQuestGrouping(botGuid, enable);
+    DynamicQuestSystem::instance()->EnableQuestGrouping(botGuid, enable);
 }
 
 QuestMetrics UnifiedQuestManager::DynamicModule::GetBotQuestMetrics(uint32 botGuid)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        return systems->GetDynamicQuestSystem()->GetBotQuestMetrics(botGuid);
-    return {};
+    return DynamicQuestSystem::instance()->GetBotQuestMetrics(botGuid);
 }
 
 QuestMetrics UnifiedQuestManager::DynamicModule::GetGlobalQuestMetrics()
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        return systems->GetDynamicQuestSystem()->GetGlobalQuestMetrics();
-    return {};
+    return DynamicQuestSystem::instance()->GetGlobalQuestMetrics();
 }
 
 // ============================================================================
@@ -1895,42 +1621,34 @@ ValidationMetrics UnifiedQuestManager::GetValidationMetrics()
 void UnifiedQuestManager::Update(uint32 diff)
 {
     // Delegate updates to individual managers
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        systems->GetQuestCompletion()->Update(diff);
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        systems->GetQuestTurnIn()->Update(diff);
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        systems->GetDynamicQuestSystem()->Update(diff);
+    QuestCompletion::instance()->Update(diff);
+    QuestTurnIn::instance()->Update(diff);
+    DynamicQuestSystem::instance()->Update(diff);
 }
 
 void UnifiedQuestManager::UpdateBotTurnIns(Player* bot, uint32 diff)
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        systems->GetQuestTurnIn()->UpdateBotTurnIns(diff);
+    QuestTurnIn::instance()->UpdateBotTurnIns(bot, diff);
 }
 
 void UnifiedQuestManager::ProcessScheduledTurnIns()
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        systems->GetQuestTurnIn()->ProcessScheduledTurnIns();
+    QuestTurnIn::instance()->ProcessScheduledTurnIns();
 }
 
 void UnifiedQuestManager::CleanupCompletedTurnIns()
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        systems->GetQuestTurnIn()->CleanupCompletedTurnIns();
+    QuestTurnIn::instance()->CleanupCompletedTurnIns();
 }
 
 void UnifiedQuestManager::CleanupCompletedQuests()
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        systems->GetDynamicQuestSystem()->CleanupCompletedQuests();
+    DynamicQuestSystem::instance()->CleanupCompletedQuests();
 }
 
 void UnifiedQuestManager::ValidateQuestStates()
 {
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        systems->GetDynamicQuestSystem()->ValidateQuestStates();
+    DynamicQuestSystem::instance()->ValidateQuestStates();
 }
 
 } // namespace Playerbot

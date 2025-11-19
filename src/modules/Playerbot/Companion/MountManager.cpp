@@ -24,46 +24,19 @@ namespace Playerbot
 {
 
 // ============================================================================
-// STATIC MEMBER INITIALIZATION
+// Singleton Instance Management
 // ============================================================================
 
-std::unordered_map<uint32, MountInfo> MountManager::_mountDatabase;
-bool MountManager::_mountDatabaseInitialized = false;
-MountManager::MountMetrics MountManager::_globalMetrics;
-
-// ============================================================================
-// PER-BOT LIFECYCLE
-// ============================================================================
-
-MountManager::MountManager(Player* bot)
-    : _bot(bot)
+MountManager* MountManager::instance()
 {
-    if (!_bot)
-    {
-        TC_LOG_ERROR("playerbot.mount", "MountManager: Attempted to create with null bot!");
-        return;
-    }
-
-    // Initialize shared mount database once (thread-safe)
-    if (!_mountDatabaseInitialized)
-    {
-        TC_LOG_INFO("playerbot.mount", "MountManager: Loading mount database...");
-        LoadMountDatabase();
-        _mountDatabaseInitialized = true;
-        TC_LOG_INFO("playerbot.mount", "MountManager: Initialized mount database with {} mounts", _mountDatabase.size());
-    }
-
-    TC_LOG_DEBUG("playerbot.mount", "MountManager: Created for bot {} ({})",
-                 _bot->GetName(), _bot->GetGUID().ToString());
+    static MountManager instance;
+    return &instance;
 }
 
-MountManager::~MountManager()
+MountManager::MountManager()
 {
-    if (_bot)
-    {
-        TC_LOG_DEBUG("playerbot.mount", "MountManager: Destroyed for bot {} ({})",
-                     _bot->GetName(), _bot->GetGUID().ToString());
-    }
+    TC_LOG_INFO("server.loading", "Initializing MountManager system...");
+    _globalMetrics.Reset();
 }
 
 // ============================================================================
@@ -72,49 +45,57 @@ MountManager::~MountManager()
 
 void MountManager::Initialize()
 {
-    // Database already loaded in constructor
-    TC_LOG_DEBUG("playerbot.mount", "MountManager: Initialized for bot {}",
-        _bot ? _bot->GetName() : "unknown");
+    // No lock needed - mount data is per-bot instance data
+
+    TC_LOG_INFO("server.loading", "Loading mount database...");
+    LoadMountDatabase();
+
+    TC_LOG_INFO("server.loading", "MountManager initialized with {} mounts", _mountDatabase.size());
 }
 
-void MountManager::Update(uint32 diff)
+void MountManager::Update(::Player* player, uint32 diff)
 {
-    if (!_bot || !_bot->IsInWorld())
+    if (!player || !player->IsInWorld())
         return;
 
-        // Throttle updates
-    // Use _lastUpdateTime directly
-    if (GameTime::GetGameTimeMS() - _lastUpdateTime < MOUNT_UPDATE_INTERVAL)
-        return;
-    _lastUpdateTime = GameTime::GetGameTimeMS();
+    uint32 playerGuid = player->GetGUID().GetCounter();
+    // Throttle updates
+    auto lastUpdateItr = _lastUpdateTimes.find(playerGuid);
+    if (lastUpdateItr != _lastUpdateTimes.end())
+    {
+        if (GameTime::GetGameTimeMS() - lastUpdateItr->second < MOUNT_UPDATE_INTERVAL)
+            return;
+    }
+    _lastUpdateTimes[playerGuid] = GameTime::GetGameTimeMS();
 
     // Get automation profile
-    // Use _profile directly
+    MountAutomationProfile profile = GetAutomationProfile(playerGuid);
 
-    if (!_profile.autoMount)
+    if (!profile.autoMount)
         return;
 
     // Check if player should dismount (combat, indoors, etc.)
-    if (IsMounted())
+    if (IsMounted(player))
     {
-        if (_profile.dismountInCombat && IsInCombat())
+        if (profile.dismountInCombat && IsInCombat(player))
         {
-            DismountPlayer();
+            DismountPlayer(player);
             return;
         }
 
         // Update mounted time tracking
-        // Update mounted time using _mountTimestamp
-    if (_mountTimestamp > 0)
-    {
-        _metrics.totalMountedTime += diff;
-        _globalMetrics.totalMountedTime += diff;
-    }
+        auto timestampItr = _mountTimestamps.find(playerGuid);
+        if (timestampItr != _mountTimestamps.end())
+        {
+            uint64 mountedTime = GameTime::GetGameTimeMS() - timestampItr->second;
+            _playerMetrics[playerGuid].totalMountedTime += diff;
+            _globalMetrics.totalMountedTime += diff;
+        }
     }
     else
     {
         // Check if player should remount after combat
-        if (_profile.remountAfterCombat && !IsInCombat())
+        if (profile.remountAfterCombat && !IsInCombat(player))
         {
             // Check if player was recently in combat
             // This would require tracking combat exit time
@@ -123,152 +104,162 @@ void MountManager::Update(uint32 diff)
     }
 }
 
-bool MountManager::MountPlayer()
+bool MountManager::MountPlayer(::Player* player)
 {
-    if (!_bot || !_bot->IsInWorld())
+    if (!player || !player->IsInWorld())
         return false;
 
-    if (IsMounted())
+    if (IsMounted(player))
         return true; // Already mounted
 
-    if (!ValidateMountUsage())
+    if (!ValidateMountUsage(player))
         return false;
 
-    MountInfo const* mount = GetBestMount();
+    MountInfo const* mount = GetBestMount(player);
     if (!mount)
     {
         TC_LOG_DEBUG("module.playerbot", "MountManager::MountPlayer - No suitable mount found for player {}",
-            _bot->GetName());
+            player->GetName());
         return false;
     }
 
-    if (!CastMountSpell(mount->spellId))
+    if (!CastMountSpell(player, mount->spellId))
         return false;
 
-        // Track mount usage
-    _currentMount = mount->spellId;
-    _mountTimestamp = GameTime::GetGameTimeMS();
+    uint32 playerGuid = player->GetGUID().GetCounter();
+    // Track mount usage
+    _activeMounts[playerGuid] = mount->spellId;
+    _mountTimestamps[playerGuid] = GameTime::GetGameTimeMS();
     // Update metrics
-    _metrics.timesMounted++;
+    _playerMetrics[playerGuid].timesMounted++;
     _globalMetrics.timesMounted++;
 
     if (mount->isFlyingMount)
     {
-        _metrics.flyingMountUsage++;
+        _playerMetrics[playerGuid].flyingMountUsage++;
         _globalMetrics.flyingMountUsage++;
     }
 
     if (mount->isDragonridingMount)
     {
-        _metrics.dragonridingUsage++;
+        _playerMetrics[playerGuid].dragonridingUsage++;
         _globalMetrics.dragonridingUsage++;
     }
 
     TC_LOG_DEBUG("module.playerbot", "MountManager::MountPlayer - Player {} mounted on {} (spell {})",
-        _bot->GetName(), mount->name, mount->spellId);
+        player->GetName(), mount->name, mount->spellId);
     return true;
 }
 
-bool MountManager::DismountPlayer()
+bool MountManager::DismountPlayer(::Player* player)
 {
-    if (!_bot || !_bot->IsInWorld())
+    if (!player || !player->IsInWorld())
         return false;
 
-    if (!IsMounted())
+    if (!IsMounted(player))
         return false;
 
-    _bot->RemoveAurasByType(SPELL_AURA_MOUNTED);
+    player->RemoveAurasByType(SPELL_AURA_MOUNTED);
 
-        // Update metrics
-    _metrics.timesDismounted++;
+    uint32 playerGuid = player->GetGUID().GetCounter();
+    // Update metrics
+    _playerMetrics[playerGuid].timesDismounted++;
     _globalMetrics.timesDismounted++;
 
     // Clear mount tracking
+    _activeMounts.erase(playerGuid);
+    _mountTimestamps.erase(playerGuid);
 
     TC_LOG_DEBUG("module.playerbot", "MountManager::DismountPlayer - Player {} dismounted",
-        _bot->GetName());
+        player->GetName());
 
     return true;
 }
 
-bool MountManager::IsMounted() const
+bool MountManager::IsMounted(::Player* player) const
 {
-    if (!_bot)
+    if (!player)
         return false;
 
-    return _bot->IsMounted();
+    return player->IsMounted();
 }
 
-bool MountManager::ShouldAutoMount(Position const& destination) const
+bool MountManager::ShouldAutoMount(::Player* player, Position const& destination) const
 {
-    if (!_bot)
+    if (!player)
         return false;
 
-    MountAutomationProfile profile = GetAutomationProfile();
-    if (!_profile.autoMount)
+    MountAutomationProfile profile = GetAutomationProfile(player->GetGUID().GetCounter());
+    if (!profile.autoMount)
         return false;
 
     // Calculate distance to destination
-    float distance = _bot->GetExactDist(&destination);
+    float distance = player->GetExactDist(&destination);
 
-    return distance >= _profile.minDistanceForMount;
+    return distance >= profile.minDistanceForMount;
 }
 
 // ============================================================================
 // Mount Selection
 // ============================================================================
 
-MountInfo const* MountManager::GetBestMount() const
+MountInfo const* MountManager::GetBestMount(::Player* player) const
 {
-    if (!_bot)
+    if (!player)
         return nullptr;
 
     // No lock needed - mount data is per-bot instance data
 
-    if (_knownMounts.empty())
+    uint32 playerGuid = player->GetGUID().GetCounter();
+    auto playerMountsItr = _playerMounts.find(playerGuid);
+
+    if (playerMountsItr == _playerMounts.end() || playerMountsItr->second.empty())
         return nullptr;
 
-    // Use _profile directly
+    MountAutomationProfile profile = GetAutomationProfile(playerGuid);
 
     // Priority 1: Dragonriding (if enabled and available)
-    if (_profile.useDragonriding && CanUseDragonriding())
+    if (profile.useDragonriding && CanUseDragonriding(player))
     {
-        MountInfo const* dragonMount = GetDragonridingMount();
+        MountInfo const* dragonMount = GetDragonridingMount(player);
         if (dragonMount)
             return dragonMount;
     }
 
     // Priority 2: Flying mount (if zone allows)
-    if (_profile.preferFlyingMount && CanUseFlyingMount())
+    if (profile.preferFlyingMount && CanUseFlyingMount(player))
     {
-        MountInfo const* flyingMount = GetFlyingMount();
+        MountInfo const* flyingMount = GetFlyingMount(player);
         if (flyingMount)
             return flyingMount;
     }
 
     // Priority 3: Aquatic mount (if underwater)
-    if (IsPlayerUnderwater())
+    if (IsPlayerUnderwater(player))
     {
-        MountInfo const* aquaticMount = GetAquaticMount();
+        MountInfo const* aquaticMount = GetAquaticMount(player);
         if (aquaticMount)
             return aquaticMount;
     }
 
     // Priority 4: Ground mount (fallback)
-    return GetGroundMount();
+    return GetGroundMount(player);
 }
 
-MountInfo const* MountManager::GetFlyingMount() const
+MountInfo const* MountManager::GetFlyingMount(::Player* player) const
 {
-    if (!_bot)
+    if (!player)
         return nullptr;
 
     // No lock needed - mount data is per-bot instance data
 
-    if (_knownMounts.empty())
+    uint32 playerGuid = player->GetGUID().GetCounter();
+    auto playerMountsItr = _playerMounts.find(playerGuid);
+
+    if (playerMountsItr == _playerMounts.end())
         return nullptr;
 
-    MountSpeed maxSpeed = GetMaxMountSpeed();
+    MountSpeed maxSpeed = GetMaxMountSpeed(player);
 
     // Find fastest flying mount player knows
     MountInfo const* bestMount = nullptr;
@@ -284,7 +275,7 @@ MountInfo const* MountManager::GetFlyingMount() const
         if (!mount.isFlyingMount)
             continue;
 
-        if (!CanUseMount( mount))
+        if (!CanUseMount(player, mount))
             continue;
 
         if (mount.speed > maxSpeed)
@@ -297,22 +288,25 @@ MountInfo const* MountManager::GetFlyingMount() const
     return bestMount;
 }
 
-MountInfo const* MountManager::GetGroundMount() const
+MountInfo const* MountManager::GetGroundMount(::Player* player) const
 {
-    if (!_bot)
+    if (!player)
         return nullptr;
 
     // No lock needed - mount data is per-bot instance data
 
-    if (_knownMounts.empty())
+    uint32 playerGuid = player->GetGUID().GetCounter();
+    auto playerMountsItr = _playerMounts.find(playerGuid);
+    if (playerMountsItr == _playerMounts.end())
         return nullptr;
 
-    // Use _profile directly
+    MountSpeed maxSpeed = GetMaxMountSpeed(player);
+    MountAutomationProfile profile = GetAutomationProfile(playerGuid);
 
     // Check for preferred mounts first
-    if (!_profile.preferredMounts.empty())
+    if (!profile.preferredMounts.empty())
     {
-        for (uint32 preferredSpellId : _profile.preferredMounts)
+        for (uint32 preferredSpellId : profile.preferredMounts)
         {
             if (playerMountsItr->second.find(preferredSpellId) != playerMountsItr->second.end())
             {
@@ -320,7 +314,7 @@ MountInfo const* MountManager::GetGroundMount() const
                 if (mountItr != _mountDatabase.end())
                 {
                     MountInfo const& mount = mountItr->second;
-                    if (mount.type == MountType::GROUND && CanUseMount( mount))
+                    if (mount.type == MountType::GROUND && CanUseMount(player, mount))
                         return &mount;
                 }
             }
@@ -341,7 +335,7 @@ MountInfo const* MountManager::GetGroundMount() const
         if (mount.type != MountType::GROUND)
             continue;
 
-        if (!CanUseMount( mount))
+        if (!CanUseMount(player, mount))
             continue;
 
         if (mount.speed > maxSpeed)
@@ -354,14 +348,17 @@ MountInfo const* MountManager::GetGroundMount() const
     return bestMount;
 }
 
-MountInfo const* MountManager::GetAquaticMount() const
+MountInfo const* MountManager::GetAquaticMount(::Player* player) const
 {
-    if (!_bot)
+    if (!player)
         return nullptr;
 
     // No lock needed - mount data is per-bot instance data
 
-    if (_knownMounts.empty())
+    uint32 playerGuid = player->GetGUID().GetCounter();
+    auto playerMountsItr = _playerMounts.find(playerGuid);
+
+    if (playerMountsItr == _playerMounts.end())
         return nullptr;
 
     for (uint32 spellId : playerMountsItr->second)
@@ -375,23 +372,26 @@ MountInfo const* MountManager::GetAquaticMount() const
         if (!mount.isAquaticMount)
             continue;
 
-        if (CanUseMount( mount))
+        if (CanUseMount(player, mount))
             return &mount;
     }
 
     return nullptr;
 }
 
-MountInfo const* MountManager::GetDragonridingMount() const
+MountInfo const* MountManager::GetDragonridingMount(::Player* player) const
 {
-    if (!_bot)
+    if (!player)
         return nullptr;
 
     // No lock needed - mount data is per-bot instance data
 
-    if (_knownMounts.empty())
+    uint32 playerGuid = player->GetGUID().GetCounter();
+    auto playerMountsItr = _playerMounts.find(playerGuid);
+    if (playerMountsItr == _playerMounts.end())
         return nullptr;
 
+    for (uint32 spellId : playerMountsItr->second)
     {
         auto mountItr = _mountDatabase.find(spellId);
         if (mountItr == _mountDatabase.end())
@@ -402,100 +402,202 @@ MountInfo const* MountManager::GetDragonridingMount() const
         if (!mount.isDragonridingMount)
             continue;
 
-        if (CanUseMount( mount))
+        if (CanUseMount(player, mount))
             return &mount;
     }
 
     return nullptr;
 }
 
-bool MountManager::CanUseFlyingMount() const
+bool MountManager::CanUseFlyingMount(::Player* player) const
 {
-    if (!_bot)
+    if (!player)
         return false;
 
     // Check if player has flying skill
-    if (!HasRidingSkill())
+    if (!HasRidingSkill(player))
         return false;
 
-    uint32 ridingSkill = GetRidingSkill();
+    uint32 ridingSkill = GetRidingSkill(player);
     if (ridingSkill < 150) // Requires expert riding (150)
         return false;
 
     // Check if zone allows flying
-    return !IsInNoFlyZone();
+    return !IsInNoFlyZone(player);
 }
 
-bool MountManager::IsPlayerUnderwater() const
+bool MountManager::IsPlayerUnderwater(::Player* player) const
 {
-    if (!_bot)
+    if (!player)
         return false;
 
-    return _bot->IsUnderWater();
+    return player->IsUnderWater();
 }
 
-bool MountManager::CanUseDragonriding() const
+bool MountManager::CanUseDragonriding(::Player* player) const
 {
-    if (!_bot)
+    if (!player)
         return false;
 
     // Check if player is in dragonriding zone
-    return IsInDragonridingZone();
+    return IsInDragonridingZone(player);
 }
 
 // ============================================================================
 // Mount Collection
 // ============================================================================
 
-std::vector<MountInfo> MountManager::GetPlayerMounts() const
+std::vector<MountInfo> MountManager::GetPlayerMounts(::Player* player) const
 {
     std::vector<MountInfo> mounts;
 
-    if (!_bot)
+    if (!player)
         return mounts;
 
-    for (uint32 spellId : _knownMounts)
+    // No lock needed - mount data is per-bot instance data
+
+    uint32 playerGuid = player->GetGUID().GetCounter();
+    auto playerMountsItr = _playerMounts.find(playerGuid);
+
+    if (playerMountsItr == _playerMounts.end())
+        return mounts;
+
+    for (uint32 spellId : playerMountsItr->second)
     {
-        auto dbItr = _mountDatabase.find(spellId);
-        if (dbItr != _mountDatabase.end())
-            mounts.push_back(dbItr->second);
+        auto mountItr = _mountDatabase.find(spellId);
+        if (mountItr != _mountDatabase.end())
+            mounts.push_back(mountItr->second);
     }
 
     return mounts;
+}
+
+bool MountManager::KnowsMount(::Player* player, uint32 spellId) const
+{
+    if (!player)
+        return false;
+
+    return player->HasSpell(spellId);
+}
+
+bool MountManager::LearnMount(::Player* player, uint32 spellId)
+{
+    if (!player)
+        return false;
+
+    // No lock needed - mount data is per-bot instance data
+
+    auto mountItr = _mountDatabase.find(spellId);
+    if (mountItr == _mountDatabase.end())
+    {
+        TC_LOG_ERROR("module.playerbot", "MountManager::LearnMount - Unknown mount spell ID {}", spellId);
+        return false;
+    }
+
+    if (!CanUseMount(player, mountItr->second))
+    {
+        TC_LOG_DEBUG("module.playerbot", "MountManager::LearnMount - Player {} cannot use mount {}",
+            player->GetName(), spellId);
+        return false;
+    }
+    if (player->HasSpell(spellId))
+        return true; // Already knows
+    player->LearnSpell(spellId, false);
+
+    uint32 playerGuid = player->GetGUID().GetCounter();
+    _playerMounts[playerGuid].insert(spellId);
+
+    _playerMetrics[playerGuid].mountsLearned++;
+    _globalMetrics.mountsLearned++;
+
+    TC_LOG_INFO("module.playerbot", "MountManager::LearnMount - Player {} learned mount {} ({})",
+        player->GetName(), mountItr->second.name, spellId);
+
+    return true;
+}
+
+uint32 MountManager::GetMountCount(::Player* player) const
+{
+    if (!player)
+        return 0;
+
+    // No lock needed - mount data is per-bot instance data
+
+    uint32 playerGuid = player->GetGUID().GetCounter();
+    auto playerMountsItr = _playerMounts.find(playerGuid);
+
+    if (playerMountsItr == _playerMounts.end())
+        return 0;
+
+    return static_cast<uint32>(playerMountsItr->second.size());
+}
+
+bool MountManager::CanUseMount(::Player* player, MountInfo const& mount) const
+{
+    if (!player)
+        return false;
+
+    // Check level requirement
+    if (player->GetLevel() < mount.requiredLevel)
+        return false;
+
+    // Check riding skill requirement
+    uint32 ridingSkill = GetRidingSkill(player);
+    if (ridingSkill < mount.requiredSkill)
+        return false;
+
+    // Check zone restrictions
+    if (!mount.zoneRestrictions.empty())
+    {
+        uint32 currentZone = GetCurrentZoneId(player);
+        bool allowed = false;
+        for (uint32 allowedZone : mount.zoneRestrictions)
+        {
+            if (currentZone == allowedZone)
+            {
+                allowed = true;
+                break;
+            }
+        }
+        if (!allowed)
+            return false;
+    }
+
+    return true;
 }
 
 // ============================================================================
 // Riding Skill
 // ============================================================================
 
-uint32 MountManager::GetRidingSkill() const
+uint32 MountManager::GetRidingSkill(::Player* player) const
 {
-    if (!_bot)
+    if (!player)
         return 0;
 
     // Check for riding skill spells
-    if (_bot->HasSpell(SPELL_MOUNT_RIDING_MASTER))
+    if (player->HasSpell(SPELL_MOUNT_RIDING_MASTER))
         return 300;
-    if (_bot->HasSpell(SPELL_MOUNT_RIDING_ARTISAN))
+    if (player->HasSpell(SPELL_MOUNT_RIDING_ARTISAN))
         return 225;
-    if (_bot->HasSpell(SPELL_MOUNT_RIDING_EXPERT))
+    if (player->HasSpell(SPELL_MOUNT_RIDING_EXPERT))
         return 150;
-    if (_bot->HasSpell(SPELL_MOUNT_RIDING_JOURNEYMAN))
+    if (player->HasSpell(SPELL_MOUNT_RIDING_JOURNEYMAN))
         return 75;
-    if (_bot->HasSpell(SPELL_MOUNT_RIDING_APPRENTICE))
+    if (player->HasSpell(SPELL_MOUNT_RIDING_APPRENTICE))
         return 75;
 
     return 0;
 }
 
-bool MountManager::HasRidingSkill() const
+bool MountManager::HasRidingSkill(::Player* player) const
 {
-    return GetRidingSkill() > 0;
+    return GetRidingSkill(player) > 0;
 }
 
-bool MountManager::LearnRidingSkill(uint32 skillLevel)
+bool MountManager::LearnRidingSkill(::Player* player, uint32 skillLevel)
 {
-    if (!_bot)
+    if (!player)
         return false;
 
     uint32 spellId = 0;
@@ -518,19 +620,19 @@ bool MountManager::LearnRidingSkill(uint32 skillLevel)
             TC_LOG_ERROR("module.playerbot", "MountManager::LearnRidingSkill - Invalid skill level {}", skillLevel);
             return false;
     }
-    if (_bot->HasSpell(spellId))
+    if (player->HasSpell(spellId))
         return true; // Already knows
-    _bot->LearnSpell(spellId, false);
+    player->LearnSpell(spellId, false);
 
     TC_LOG_INFO("module.playerbot", "MountManager::LearnRidingSkill - Player {} learned riding skill {}",
-        _bot->GetName(), skillLevel);
+        player->GetName(), skillLevel);
 
     return true;
 }
 
-MountSpeed MountManager::GetMaxMountSpeed() const
+MountSpeed MountManager::GetMaxMountSpeed(::Player* player) const
 {
-    uint32 ridingSkill = GetRidingSkill();
+    uint32 ridingSkill = GetRidingSkill(player);
 
     if (ridingSkill >= 300)
         return MountSpeed::EPIC_PLUS;
@@ -553,12 +655,12 @@ bool MountManager::IsMultiPassengerMount(MountInfo const& mount) const
     return mount.isMultiPassenger && mount.passengerCount > 1;
 }
 
-uint32 MountManager::GetAvailablePassengerSeats() const
+uint32 MountManager::GetAvailablePassengerSeats(::Player* player) const
 {
-    if (!_bot || !IsMounted())
+    if (!player || !IsMounted(player))
         return 0;
 
-    Vehicle* vehicle = _bot->GetVehicleKit();
+    Vehicle* vehicle = player->GetVehicleKit();
     if (!vehicle)
         return 0;
 
@@ -575,7 +677,7 @@ uint32 MountManager::GetAvailablePassengerSeats() const
     return totalSeats > occupiedSeats ? (totalSeats - occupiedSeats) : 0;
 }
 
-bool MountManager::AddPassenger(::Player* passenger)
+bool MountManager::AddPassenger(::Player* mountedPlayer, ::Player* passenger)
 {
     if (!mountedPlayer || !passenger)
         return false;
@@ -617,23 +719,38 @@ bool MountManager::RemovePassenger(::Player* passenger)
 // Automation Profiles
 // ============================================================================
 
-void MountManager::SetAutomationProfile(MountAutomationProfile const& profile)
+void MountManager::SetAutomationProfile(uint32 playerGuid, MountAutomationProfile const& profile)
 {
-    _profile = profile;
+    // No lock needed - mount data is per-bot instance data
+    _playerProfiles[playerGuid] = profile;
 }
 
-MountAutomationProfile MountManager::GetAutomationProfile() const
+MountAutomationProfile MountManager::GetAutomationProfile(uint32 playerGuid) const
 {
-    return _profile;
+    // No lock needed - mount data is per-bot instance data
+
+    auto profileItr = _playerProfiles.find(playerGuid);
+    if (profileItr != _playerProfiles.end())
+        return profileItr->second;
+
+    // Return default profile
+    return MountAutomationProfile();
 }
 
 // ============================================================================
 // Metrics
 // ============================================================================
 
-MountManager::MountMetrics const& MountManager::GetMetrics() const
+MountManager::MountMetrics const& MountManager::GetPlayerMetrics(uint32 playerGuid) const
 {
-    return _metrics;
+    // No lock needed - mount data is per-bot instance data
+
+    auto metricsItr = _playerMetrics.find(playerGuid);
+    if (metricsItr != _playerMetrics.end())
+        return metricsItr->second;
+
+    static MountMetrics emptyMetrics;
+    return emptyMetrics;
 }
 
 MountManager::MountMetrics const& MountManager::GetGlobalMetrics() const
@@ -768,58 +885,58 @@ void MountManager::InitializeWarWithinMounts()
 // Mount Casting Helpers
 // ============================================================================
 
-bool MountManager::CastMountSpell(uint32 spellId)
+bool MountManager::CastMountSpell(::Player* player, uint32 spellId)
 {
-    if (!_bot)
+    if (!player)
         return false;
 
-    if (!CanCastMountSpell( spellId))
+    if (!CanCastMountSpell(player, spellId))
         return false;
 
     SpellInfo const* spellInfo = sSpellMgr->GetSpellInfo(spellId, DIFFICULTY_NONE);
 
     // Cast mount spell
-    _bot->CastSpell(_bot, spellId, false);
+    player->CastSpell(player, spellId, false);
 
-    HandleMountCastResult( spellId, true);
-
-    return true;
-}
-
-bool MountManager::CanCastMountSpell(uint32 spellId) const
-{
-    if (!_bot)
-        return false;
-
-    if (!_bot->HasSpell(spellId))
-        return false;
-
-    if (_bot->IsMounted())
-        return false;
-
-    if (IsInCombat())
-        return false;
-
-    if (IsIndoors())
-        return false;
+    HandleMountCastResult(player, spellId, true);
 
     return true;
 }
 
-void MountManager::HandleMountCastResult(uint32 spellId, bool success)
+bool MountManager::CanCastMountSpell(::Player* player, uint32 spellId) const
 {
-    if (!_bot)
+    if (!player)
+        return false;
+
+    if (!player->HasSpell(spellId))
+        return false;
+
+    if (player->IsMounted())
+        return false;
+
+    if (IsInCombat(player))
+        return false;
+
+    if (IsIndoors(player))
+        return false;
+
+    return true;
+}
+
+void MountManager::HandleMountCastResult(::Player* player, uint32 spellId, bool success)
+{
+    if (!player)
         return;
 
     if (success)
     {
         TC_LOG_DEBUG("module.playerbot", "MountManager::HandleMountCastResult - Player {} successfully cast mount spell {}",
-            _bot->GetName(), spellId);
+            player->GetName(), spellId);
     }
     else
     {
         TC_LOG_WARN("module.playerbot", "MountManager::HandleMountCastResult - Player {} failed to cast mount spell {}",
-            _bot->GetName(), spellId);
+            player->GetName(), spellId);
     }
 }
 
@@ -827,12 +944,12 @@ void MountManager::HandleMountCastResult(uint32 spellId, bool success)
 // Zone Detection Helpers
 // ============================================================================
 
-bool MountManager::IsInNoFlyZone() const
+bool MountManager::IsInNoFlyZone(::Player* player) const
 {
-    if (!_bot)
+    if (!player)
         return true;
 
-    Map* map = _bot->GetMap();
+    Map* map = player->GetMap();
     if (!map)
         return true;
 
@@ -840,14 +957,14 @@ bool MountManager::IsInNoFlyZone() const
     return !map->IsFlyingAllowed();
 }
 
-bool MountManager::IsInDragonridingZone() const
+bool MountManager::IsInDragonridingZone(::Player* player) const
 {
-    if (!_bot)
+    if (!player)
         return false;
 
     // Dragonriding is available in Dragon Isles zones (Dragonflight expansion)
     // This would check specific zone IDs
-    uint32 zoneId = GetCurrentZoneId();
+    uint32 zoneId = GetCurrentZoneId(player);
 
     // Example Dragon Isles zones
     std::vector<uint32> dragonIslesZones = {
@@ -866,38 +983,38 @@ bool MountManager::IsInDragonridingZone() const
     return false;
 }
 
-bool MountManager::IsInAquaticZone() const
+bool MountManager::IsInAquaticZone(::Player* player) const
 {
-    if (!_bot)
+    if (!player)
         return false;
 
-    return IsPlayerUnderwater();
+    return IsPlayerUnderwater(player);
 }
 
-uint32 MountManager::GetCurrentZoneId() const
+uint32 MountManager::GetCurrentZoneId(::Player* player) const
 {
-    if (!_bot)
+    if (!player)
         return 0;
 
-    return _bot->GetZoneId();
+    return player->GetZoneId();
 }
 
 // ============================================================================
 // Validation Helpers
 // ============================================================================
 
-bool MountManager::ValidateMountUsage() const
+bool MountManager::ValidateMountUsage(::Player* player) const
 {
-    if (!_bot)
+    if (!player)
         return false;
 
-    if (IsInCombat())
+    if (IsInCombat(player))
         return false;
 
-    if (IsIndoors())
+    if (IsIndoors(player))
         return false;
 
-    if (IsInInstance())
+    if (IsInInstance(player))
     {
         // Some instances allow mounts, others don't
         // This would check instance-specific mount permissions
@@ -907,28 +1024,28 @@ bool MountManager::ValidateMountUsage() const
     return true;
 }
 
-bool MountManager::IsInCombat() const
+bool MountManager::IsInCombat(::Player* player) const
 {
-    if (!_bot)
+    if (!player)
         return false;
 
-    return _bot->IsInCombat();
+    return player->IsInCombat();
 }
 
-bool MountManager::IsIndoors() const
+bool MountManager::IsIndoors(::Player* player) const
 {
-    if (!_bot)
+    if (!player)
         return true;
 
-    return !_bot->IsOutdoors();
+    return !player->IsOutdoors();
 }
 
-bool MountManager::IsInInstance() const
+bool MountManager::IsInInstance(::Player* player) const
 {
-    if (!_bot)
+    if (!player)
         return false;
 
-    Map* map = _bot->GetMap();
+    Map* map = player->GetMap();
     if (!map)
         return false;
 

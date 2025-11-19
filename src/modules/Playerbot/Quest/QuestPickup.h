@@ -150,10 +150,7 @@ struct QuestPickupFilter
 class TC_GAME_API QuestPickup final : public IQuestPickup
 {
 public:
-    explicit QuestPickup(Player* bot);
-    ~QuestPickup();
-    QuestPickup(QuestPickup const&) = delete;
-    QuestPickup& operator=(QuestPickup const&) = delete;
+    static QuestPickup* instance();
 
     // Core quest pickup functionality
     bool PickupQuest(uint32 questId, Player* bot, uint32 questGiverGuid = 0) override;
@@ -328,7 +325,7 @@ public:
     static constexpr uint32 GROUP_QUEST_COORDINATION_TIMEOUT = 15000; // 15 seconds
 
 private:
-    Player* _bot;
+    QuestPickup();
     ~QuestPickup() = default;
 
     // Core data structures
@@ -336,13 +333,13 @@ private:
     std::unordered_map<uint32, QuestAcceptanceStrategy> _botStrategies;
     std::unordered_map<uint32, QuestPickupFilter> _botFilters;
     std::unordered_map<uint32, QuestPickupMetrics> _botMetrics;
-    
+    mutable Playerbot::OrderedRecursiveMutex<Playerbot::LockOrder::QUEST_MANAGER> _pickupMutex;
 
     // Quest giver database
     std::unordered_map<uint32, QuestGiverInfo> _questGivers; // giverGuid -> info
     std::unordered_map<uint32, std::vector<uint32>> _questToGivers; // questId -> giverGuids
     std::unordered_map<uint32, std::vector<uint32>> _zoneQuestGivers; // zoneId -> giverGuids
-    
+    mutable Playerbot::OrderedRecursiveMutex<Playerbot::LockOrder::QUEST_MANAGER> _giverMutex;
 
     // Quest chain data
     std::unordered_map<uint32, std::vector<uint32>> _questChains; // chainId -> questIds

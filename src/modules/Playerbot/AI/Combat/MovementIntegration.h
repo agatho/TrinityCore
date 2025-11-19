@@ -20,7 +20,6 @@ class GameObject;
 namespace Playerbot
 {
     enum class CombatSituation : uint8;
-    class PositionManager;  // Forward declaration for positioning integration
 
     /**
      * @enum MovementUrgency
@@ -149,7 +148,7 @@ namespace Playerbot
     class TC_GAME_API MovementIntegration
     {
     public:
-        explicit MovementIntegration(Player* bot, PositionManager* positionManager);
+        explicit MovementIntegration(Player* bot);
         ~MovementIntegration() = default;
 
         /**
@@ -333,7 +332,6 @@ namespace Playerbot
 
     private:
         Player* _bot;
-        PositionManager* _positionManager;  // Injected dependency for positioning calculations
         std::vector<DangerZone> _dangerZones;
         MovementCommand _currentCommand;
         uint32 _lastUpdate;

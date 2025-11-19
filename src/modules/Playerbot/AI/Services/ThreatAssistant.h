@@ -65,12 +65,12 @@ struct ThreatTarget
  * @brief Unified threat management for all tank specs
  *
  * **Problem**: Taunt logic duplicated 35+ times across tank specs
- * - ProtectionWarrior.h
- * - ProtectionPaladin.h
- * - BloodDeathKnight.h
- * - VengeanceDemonHunter.h
- * - GuardianDruid.h
- * - BrewmasterMonk.h
+ * - ProtectionWarriorRefactored.h
+ * - ProtectionPaladinRefactored.h
+ * - BloodDeathKnightRefactored.h
+ * - VengeanceDemonHunterRefactored.h
+ * - GuardianDruidRefactored.h
+ * - BrewmasterMonkRefactored.h
  * - Total: ~500 lines of duplication
  *
  * **Solution**: Single unified service with sophisticated threat assessment

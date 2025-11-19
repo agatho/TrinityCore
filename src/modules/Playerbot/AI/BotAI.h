@@ -22,8 +22,6 @@
 #include "Core/DI/Interfaces/IBotAIFactory.h"
 #include "ObjectCache.h"
 #include "Blackboard/SharedBlackboard.h"
-#include "Core/Events/IEventHandler.h"
-#include "Core/Managers/IGameSystemsManager.h"
 #include <memory>
 #include <vector>
 #include <string>
@@ -48,12 +46,15 @@ class GatheringManager;
 class AuctionManager;
 class GroupCoordinator; // Advanced/GroupCoordinator
 class DeathRecoveryManager;
-class UnifiedMovementCoordinator; // Phase 2: Unified Movement System (Week 3 complete)
+class MovementArbiter;
 class CombatStateManager;
 enum class PlayerBotMovementPriority : uint8;
 
 // Phase 3: Tactical Coordination forward declarations
-class TacticalCoordinator;
+namespace Coordination
+{
+    class GroupCoordinator;
+}
 
 // Phase 4: Event structure forward declarations
 struct GroupEvent;
@@ -67,7 +68,6 @@ struct SocialEvent;
 struct AuctionEvent;
 struct NPCEvent;
 struct InstanceEvent;
-struct ProfessionEvent;
 
 namespace Events
 {
@@ -122,18 +122,7 @@ struct AIUpdateResult
     std::chrono::microseconds updateTime{0};
 };
 
-class TC_GAME_API BotAI : public IEventHandler<LootEvent>,
-                           public IEventHandler<QuestEvent>,
-                           public IEventHandler<CombatEvent>,
-                           public IEventHandler<CooldownEvent>,
-                           public IEventHandler<AuraEvent>,
-                           public IEventHandler<ResourceEvent>,
-                           public IEventHandler<SocialEvent>,
-                           public IEventHandler<AuctionEvent>,
-                           public IEventHandler<NPCEvent>,
-                           public IEventHandler<InstanceEvent>,
-                           public IEventHandler<GroupEvent>,
-                           public IEventHandler<ProfessionEvent>
+class TC_GAME_API BotAI
 {
 public:
     explicit BotAI(Player* bot);
@@ -236,8 +225,8 @@ public:
     void OnGroupJoined(Group* group);
     void OnGroupLeft();
     void HandleGroupChange();
-    GroupInvitationHandler* GetGroupInvitationHandler() { return _gameSystems ? _gameSystems->GetGroupInvitationHandler() : nullptr; }
-    GroupInvitationHandler const* GetGroupInvitationHandler() const { return _gameSystems ? _gameSystems->GetGroupInvitationHandler() : nullptr; }
+    GroupInvitationHandler* GetGroupInvitationHandler() { return _groupInvitationHandler.get(); }
+    GroupInvitationHandler const* GetGroupInvitationHandler() const { return _groupInvitationHandler.get(); }
 
     // ========================================================================
     // TARGET MANAGEMENT - Combat targeting
@@ -257,49 +246,31 @@ public:
     bool IsMoving() const;
 
     // ========================================================================
-    // GAME SYSTEM MANAGERS - Quest, profession, trade management (Phase 6: Delegation)
+    // GAME SYSTEM MANAGERS - Quest, profession, trade management
     // ========================================================================
-    // All managers are owned by _gameSystems facade, not BotAI directly.
 
-    /**
-     * @brief Get the GameSystemsManager facade (Phase 6/7)
-     * Provides direct access to the facade that owns all 48 per-bot managers.
-     * @return Pointer to game systems manager, or nullptr if not initialized
-     */
-    IGameSystemsManager* GetGameSystems() { return _gameSystems.get(); }
-    IGameSystemsManager const* GetGameSystems() const { return _gameSystems.get(); }
+    QuestManager* GetQuestManager() { return _questManager.get(); }
+    QuestManager const* GetQuestManager() const { return _questManager.get(); }
 
-    // Legacy individual getters for backward compatibility
-    QuestManager* GetQuestManager() { return _gameSystems ? _gameSystems->GetQuestManager() : nullptr; }
-    QuestManager const* GetQuestManager() const { return _gameSystems ? _gameSystems->GetQuestManager() : nullptr; }
+    TradeManager* GetTradeManager() { return _tradeManager.get(); }
+    TradeManager const* GetTradeManager() const { return _tradeManager.get(); }
 
-    TradeManager* GetTradeManager() { return _gameSystems ? _gameSystems->GetTradeManager() : nullptr; }
-    TradeManager const* GetTradeManager() const { return _gameSystems ? _gameSystems->GetTradeManager() : nullptr; }
+    GatheringManager* GetGatheringManager() { return _gatheringManager.get(); }
+    GatheringManager const* GetGatheringManager() const { return _gatheringManager.get(); }
 
-    GatheringManager* GetGatheringManager() { return _gameSystems ? _gameSystems->GetGatheringManager() : nullptr; }
-    GatheringManager const* GetGatheringManager() const { return _gameSystems ? _gameSystems->GetGatheringManager() : nullptr; }
+    AuctionManager* GetAuctionManager() { return _auctionManager.get(); }
+    AuctionManager const* GetAuctionManager() const { return _auctionManager.get(); }
 
-    AuctionManager* GetAuctionManager() { return _gameSystems ? _gameSystems->GetAuctionManager() : nullptr; }
-    AuctionManager const* GetAuctionManager() const { return _gameSystems ? _gameSystems->GetAuctionManager() : nullptr; }
-
-    Advanced::GroupCoordinator* GetGroupCoordinator() { return _gameSystems ? _gameSystems->GetGroupCoordinator() : nullptr; }
-    Advanced::GroupCoordinator const* GetGroupCoordinator() const { return _gameSystems ? _gameSystems->GetGroupCoordinator() : nullptr; }
+    GroupCoordinator* GetGroupCoordinator() { return _groupCoordinator.get(); }
+    GroupCoordinator const* GetGroupCoordinator() const { return _groupCoordinator.get(); }
 
     /**
      * @brief Get Tactical Group Coordinator (Phase 3)
      * Combat-focused coordination separate from Advanced/GroupCoordinator
      * @return Pointer to tactical coordinator, or nullptr if not in group
      */
-    TacticalCoordinator* GetTacticalCoordinator()
-    {
-        auto gc = _gameSystems ? _gameSystems->GetGroupCoordinator() : nullptr;
-        return gc ? gc->GetTacticalCoordinator() : nullptr;
-    }
-    TacticalCoordinator const* GetTacticalCoordinator() const
-    {
-        auto gc = _gameSystems ? _gameSystems->GetGroupCoordinator() : nullptr;
-        return gc ? gc->GetTacticalCoordinator() : nullptr;
-    }
+    Coordination::GroupCoordinator* GetTacticalCoordinator() { return _tacticalCoordinator.get(); }
+    Coordination::GroupCoordinator const* GetTacticalCoordinator() const { return _tacticalCoordinator.get(); }
 
     // ========================================================================
     // UTILITY AI DECISION SYSTEM - Hybrid AI Phase 1
@@ -320,10 +291,10 @@ public:
     void UpdateHybridAI(uint32 diff);
 
     /**
-     * @brief Get Hybrid AI Controller (Phase 2 Week 3 / Phase 6: Facade Delegation)
+     * @brief Get Hybrid AI Controller (Phase 2 Week 3)
      * @return Pointer to controller, or nullptr if not initialized
      */
-    class HybridAIController* GetHybridAI() const { return _gameSystems ? _gameSystems->GetHybridAI() : nullptr; }
+    class HybridAIController* GetHybridAI() const { return _hybridAI.get(); }
 
     /**
      * @brief Get Shared Blackboard (Phase 4)
@@ -332,21 +303,18 @@ public:
     SharedBlackboard* GetSharedBlackboard() const { return _sharedBlackboard; }
 
     // ========================================================================
-    // DEATH RECOVERY - Resurrection management (Phase 6: Facade Delegation)
+    // DEATH RECOVERY - Resurrection management
     // ========================================================================
 
-    DeathRecoveryManager* GetDeathRecoveryManager() { return _gameSystems ? _gameSystems->GetDeathRecoveryManager() : nullptr; }
-    DeathRecoveryManager const* GetDeathRecoveryManager() const { return _gameSystems ? _gameSystems->GetDeathRecoveryManager() : nullptr; }
+    DeathRecoveryManager* GetDeathRecoveryManager() { return _deathRecoveryManager.get(); }
+    DeathRecoveryManager const* GetDeathRecoveryManager() const { return _deathRecoveryManager.get(); }
 
     // ========================================================================
-    // UNIFIED MOVEMENT COORDINATOR - Phase 2 Migration / Phase 6 Facade Delegation
+    // MOVEMENT ARBITER - Enterprise movement request arbitration
     // ========================================================================
-    // Primary movement system - consolidates MovementArbiter, CombatMovementStrategy,
-    // GroupFormationManager, and MovementIntegration into unified interface.
-    // Migration complete: All user code now uses UnifiedMovementCoordinator.
 
-    UnifiedMovementCoordinator* GetUnifiedMovementCoordinator() { return _gameSystems ? _gameSystems->GetMovementCoordinator() : nullptr; }
-    UnifiedMovementCoordinator const* GetUnifiedMovementCoordinator() const { return _gameSystems ? _gameSystems->GetMovementCoordinator() : nullptr; }
+    MovementArbiter* GetMovementArbiter() { return _movementArbiter.get(); }
+    MovementArbiter const* GetMovementArbiter() const { return _movementArbiter.get(); }
 
     /**
      * Request movement via the Movement Arbiter
@@ -648,39 +616,6 @@ public:
      */
     virtual void OnInstanceEvent(InstanceEvent const& event);
 
-    /**
-     * Profession event handler - Called when profession-related events occur
-     * Override in ClassAI for class-specific profession handling
-     *
-     * @param event Profession event (crafting, learning, banking, materials)
-     *
-     * Default implementation:
-     * - Handles recipe learning notifications
-     * - Tracks crafting progress and completion
-     * - Manages material gathering and purchasing
-     * - Coordinates banking operations
-     */
-    virtual void OnProfessionEvent(ProfessionEvent const& event);
-
-    // ========================================================================
-    // IEVENTHANDLER INTERFACE IMPLEMENTATIONS (Phase 5)
-    // ========================================================================
-    // These methods implement the IEventHandler<T> interfaces and delegate
-    // to the existing OnXxxEvent() methods for backward compatibility
-
-    void HandleEvent(LootEvent const& event) override { OnLootEvent(event); }
-    void HandleEvent(QuestEvent const& event) override { OnQuestEvent(event); }
-    void HandleEvent(CombatEvent const& event) override { OnCombatEvent(event); }
-    void HandleEvent(CooldownEvent const& event) override { OnCooldownEvent(event); }
-    void HandleEvent(AuraEvent const& event) override { OnAuraEvent(event); }
-    void HandleEvent(ResourceEvent const& event) override { OnResourceEvent(event); }
-    void HandleEvent(SocialEvent const& event) override { OnSocialEvent(event); }
-    void HandleEvent(AuctionEvent const& event) override { OnAuctionEvent(event); }
-    void HandleEvent(NPCEvent const& event) override { OnNPCEvent(event); }
-    void HandleEvent(InstanceEvent const& event) override { OnInstanceEvent(event); }
-    void HandleEvent(GroupEvent const& event) override { OnGroupEvent(event); }
-    void HandleEvent(ProfessionEvent const& event) override { OnProfessionEvent(event); }
-
     // ========================================================================
     // PERFORMANCE METRICS - Monitoring and optimization
     // ========================================================================
@@ -789,6 +724,10 @@ protected:
     // Strategy system
     std::unordered_map<std::string, std::unique_ptr<Strategy>> _strategies;
     std::vector<std::string> _activeStrategies;
+    std::unique_ptr<BehaviorPriorityManager> _priorityManager;
+
+    // Hybrid AI Decision System: Utility AI + Behavior Trees (Phase 2 Week 3)
+    std::unique_ptr<class HybridAIController> _hybridAI;
 
     // Shared Blackboard: Thread-safe shared state system (Phase 4)
     SharedBlackboard* _sharedBlackboard = nullptr;
@@ -805,7 +744,8 @@ protected:
     // Value cache
     std::unordered_map<std::string, float> _values;
 
-    // Group management state
+    // Group management
+    std::unique_ptr<GroupInvitationHandler> _groupInvitationHandler;
     bool _wasInGroup = false;
 
     // Solo strategy activation tracking
@@ -814,16 +754,52 @@ protected:
     // Login spell event cleanup tracking (prevents LOGINEFFECT crash)
     bool _firstUpdateComplete = false;
 
-    // ========================================================================
-    // PHASE 6: GAME SYSTEMS FACADE - Consolidates all 17 manager instances
-    // ========================================================================
-    // Previously scattered across BotAI: 17 manager unique_ptrs + timers
-    // Now unified: Single facade owns all managers, provides delegation getters
-    // Benefits: Testability, maintainability, reduced coupling (73 → ~10 deps)
-    std::unique_ptr<IGameSystemsManager> _gameSystems;
+    // Target scanning for autonomous engagement
+    std::unique_ptr<TargetScanner> _targetScanner;
+
+    // Game system managers
+    std::unique_ptr<QuestManager> _questManager;
+    std::unique_ptr<TradeManager> _tradeManager;
+    std::unique_ptr<GatheringManager> _gatheringManager;
+    std::unique_ptr<AuctionManager> _auctionManager;
+    std::unique_ptr<GroupCoordinator> _groupCoordinator; // Advanced/GroupCoordinator - loot/quest/formation
+
+    // Phase 3: Tactical Group Coordination (separate from Advanced/GroupCoordinator)
+    std::unique_ptr<Coordination::GroupCoordinator> _tacticalCoordinator;
+
+    // Death recovery system
+    std::unique_ptr<DeathRecoveryManager> _deathRecoveryManager;
+
+    // Movement arbiter - Enterprise movement request arbitration
+    std::unique_ptr<MovementArbiter> _movementArbiter;
+
+    // Combat state manager - Automatic combat state synchronization via DAMAGE_TAKEN events
+    std::unique_ptr<CombatStateManager> _combatStateManager;
+
+    // Phase 7.1: Event system integration
+    std::unique_ptr<Events::EventDispatcher> _eventDispatcher;
+    std::unique_ptr<ManagerRegistry> _managerRegistry;
+
+    // Phase 5E: Decision fusion system - Unified arbitration for all decision-making
+    std::unique_ptr<bot::ai::DecisionFusionSystem> _decisionFusion;
+
+    // Phase 5 Enhancement: Action priority queue - Spell priority management
+    std::unique_ptr<bot::ai::ActionPriorityQueue> _actionPriorityQueue;
+
+    // Phase 5 Enhancement: Behavior tree - Hierarchical combat flow
+    std::unique_ptr<bot::ai::BehaviorTree> _behaviorTree;
 
     // Performance tracking
     mutable PerformanceMetrics _performanceMetrics;
+
+    // Equipment auto-equip timer (check every 10 seconds)
+    uint32 _equipmentCheckTimer = 0;
+
+    // Profession automation timer (check every 15 seconds)
+    uint32 _professionCheckTimer = 0;
+
+    // Banking automation timer (check every 5 minutes)
+    uint32 _bankingCheckTimer = 0;
 
     // CRITICAL FIX #19: ObjectAccessor Deadlock Resolution
     // Cache for all ObjectAccessor results to eliminate recursive TrinityCore
@@ -854,6 +830,7 @@ protected:
 
     // Debug tracking
     uint32 _lastDebugLogTime = 0;
+    uint32 _debugLogAccumulator = 0; // Per-bot accumulator for manager update logging throttle
 };
 
 // ========================================================================

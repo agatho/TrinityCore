@@ -18,7 +18,7 @@
 #ifndef PLAYERBOT_ARCANEMAGEWEIGHTED_H
 #define PLAYERBOT_ARCANEMAGEWEIGHTED_H
 
-#include "ArcaneMage.h"
+#include "ArcaneMageRefactored.h"
 #include "../../Common/ActionScoringEngine.h"
 #include "../../Common/CombatContextDetector.h"
 #include "../../BehaviorTree/BehaviorTree.h"

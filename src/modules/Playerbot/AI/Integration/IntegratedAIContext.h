@@ -20,6 +20,7 @@
 
 #include "AI/BehaviorTree/BehaviorTree.h"
 #include "AI/Blackboard/SharedBlackboard.h"
+#include "AI/Coordination/GroupCoordinator.h"
 #include "AI/Coordination/RaidOrchestrator.h"
 #include "AI/Coordination/ZoneOrchestrator.h"
 #include "Define.h"
@@ -30,11 +31,11 @@ namespace Playerbot
 {
 
 class BotAI;
-class TacticalCoordinator;
 
 // Forward declarations from Coordination namespace
 namespace Coordination
 {
+    class GroupCoordinator;
     class RaidOrchestrator;
     class ZoneOrchestrator;
 }
@@ -81,9 +82,9 @@ public:
     SharedBlackboard* GetZoneBlackboard() const;
 
     /**
-     * @brief Get tactical coordinator (for combat coordination)
+     * @brief Get group coordinator
      */
-    TacticalCoordinator* GetTacticalCoordinator() const;
+    Coordination::GroupCoordinator* GetGroupCoordinator() const;
 
     /**
      * @brief Get raid orchestrator
@@ -145,7 +146,7 @@ private:
     mutable SharedBlackboard* _cachedGroupBlackboard = nullptr;
     mutable SharedBlackboard* _cachedRaidBlackboard = nullptr;
     mutable SharedBlackboard* _cachedZoneBlackboard = nullptr;
-    mutable TacticalCoordinator* _cachedTacticalCoordinator = nullptr;
+    mutable Coordination::GroupCoordinator* _cachedGroupCoordinator = nullptr;
     mutable Coordination::RaidOrchestrator* _cachedRaidOrchestrator = nullptr;
     mutable Coordination::ZoneOrchestrator* _cachedZoneOrchestrator = nullptr;
 };

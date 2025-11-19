@@ -8,7 +8,6 @@
  */
 
 #include "QuestCompletion.h"
-#include "Core/PlayerBotHelpers.h"  // GetBotAI, GetGameSystems
 #include "Log.h"
 #include "ObjectMgr.h"
 #include "World.h"
@@ -42,11 +41,11 @@ constexpr float QUEST_GIVER_INTERACTION_RANGE = 5.0f;
 /**
  * @brief Singleton instance implementation
  */
-QuestCompletion::QuestCompletion(Player* bot) : _bot(bot) {
-    if (!_bot) TC_LOG_ERROR("playerbot.quest", "QuestCompletion: null bot!");
+QuestCompletion* QuestCompletion::instance()
+{
+    static QuestCompletion instance;
+    return &instance;
 }
-
-QuestCompletion::~QuestCompletion() {}
 
 /**
  * @brief Constructor
@@ -77,6 +76,7 @@ bool QuestCompletion::StartQuestCompletion(uint32 questId, Player* bot)
         return false;
     }
 
+    std::lock_guard lock(_completionMutex);
     // Initialize quest progress tracking
     QuestProgressData progress(questId, bot->GetGUID().GetCounter());
     progress.questGiverGuid = 0; // Will be populated when quest giver is found
@@ -110,6 +110,8 @@ void QuestCompletion::UpdateQuestProgress(Player* bot)
 {
     if (!bot)
         return;
+
+    std::lock_guard lock(_completionMutex);
 
     auto it = _botQuestProgress.find(bot->GetGUID().GetCounter());
     if (it == _botQuestProgress.end())
@@ -201,6 +203,8 @@ void QuestCompletion::CompleteQuest(uint32 questId, Player* bot)
     // Mark quest as complete
     bot->CompleteQuest(questId);
 
+    std::lock_guard lock(_completionMutex);
+
     // Update progress tracking
     auto it = _botQuestProgress.find(bot->GetGUID().GetCounter());
     if (it != _botQuestProgress.end())
@@ -225,9 +229,8 @@ void QuestCompletion::CompleteQuest(uint32 questId, Player* bot)
     TC_LOG_DEBUG("playerbot", "QuestCompletion::CompleteQuest - Bot %s completed quest %u",
         bot->GetName().c_str(), questId);
 
-    // Schedule turn-in through QuestTurnIn system (per-bot)
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        systems->GetQuestTurnIn()->ScheduleQuestTurnIn(questId);
+    // Schedule turn-in through QuestTurnIn system
+    QuestTurnIn::instance()->ScheduleQuestTurnIn(bot, questId);
 }
 
 /**
@@ -241,10 +244,8 @@ bool QuestCompletion::TurnInQuest(uint32 questId, Player* bot)
     if (!bot || !questId)
         return false;
 
-    // Delegate to QuestTurnIn system (per-bot)
-    if (IGameSystemsManager* systems = GetGameSystems(bot))
-        return systems->GetQuestTurnIn()->TurnInQuest(questId);
-    return false;
+    // Delegate to QuestTurnIn system
+    return QuestTurnIn::instance()->TurnInQuest(questId, bot);
 }
 
 /**
@@ -255,6 +256,8 @@ void QuestCompletion::TrackQuestObjectives(Player* bot)
 {
     if (!bot)
         return;
+
+    std::lock_guard lock(_completionMutex);
 
     auto it = _botQuestProgress.find(bot->GetGUID().GetCounter());
     if (it == _botQuestProgress.end())
@@ -361,6 +364,8 @@ void QuestCompletion::UpdateObjectiveProgress(Player* bot, uint32 questId, uint3
 {
     if (!bot)
         return;
+
+    std::lock_guard lock(_completionMutex);
 
     auto it = _botQuestProgress.find(bot->GetGUID().GetCounter());
     if (it == _botQuestProgress.end())
@@ -1373,6 +1378,8 @@ void QuestCompletion::ShareObjectiveProgress(Group* group, uint32 questId)
     if (!group)
         return;
 
+    std::lock_guard lock(_groupMutex);
+
     // Update group quest sharing data
     _groupQuestSharing[group->GetGUID().GetCounter()].push_back(questId);
     _groupObjectiveSync[group->GetGUID().GetCounter()][questId] = GameTime::GetGameTimeMS();
@@ -1390,6 +1397,8 @@ void QuestCompletion::DetectStuckState(Player* bot, uint32 questId)
 
     TC_LOG_DEBUG("playerbot", "QuestCompletion::DetectStuckState - Bot %s stuck on quest %u",
         bot->GetName().c_str(), questId);
+
+    std::lock_guard lock(_completionMutex);
 
     auto it = _botQuestProgress.find(bot->GetGUID().GetCounter());
     if (it == _botQuestProgress.end())
@@ -1427,6 +1436,8 @@ void QuestCompletion::RecoverFromStuckState(Player* bot, uint32 questId)
         bot->GetName().c_str(), questId);
 
     // Try different recovery strategies
+    std::lock_guard lock(_completionMutex);
+
     auto it = _botQuestProgress.find(bot->GetGUID().GetCounter());
     if (it == _botQuestProgress.end())
         return;
@@ -1463,6 +1474,8 @@ void QuestCompletion::RecoverFromStuckState(Player* bot, uint32 questId)
  */
 QuestCompletion::QuestCompletionMetrics::Snapshot QuestCompletion::GetBotCompletionMetrics(uint32 botGuid)
 {
+    std::lock_guard lock(_completionMutex);
+
     auto it = _botMetrics.find(botGuid);
     if (it != _botMetrics.end())
         return it->second.CreateSnapshot();
@@ -1487,6 +1500,7 @@ QuestCompletion::QuestCompletionMetrics::Snapshot QuestCompletion::GetGlobalComp
  */
 void QuestCompletion::SetQuestCompletionStrategy(uint32 botGuid, QuestCompletionStrategy strategy)
 {
+    std::lock_guard lock(_completionMutex);
     _botStrategies[botGuid] = strategy;
 }
 
@@ -1497,6 +1511,8 @@ void QuestCompletion::SetQuestCompletionStrategy(uint32 botGuid, QuestCompletion
  */
 QuestCompletionStrategy QuestCompletion::GetQuestCompletionStrategy(uint32 botGuid)
 {
+    std::lock_guard lock(_completionMutex);
+
     auto it = _botStrategies.find(botGuid);
     if (it != _botStrategies.end())
         return it->second;
@@ -1528,6 +1544,8 @@ void QuestCompletion::Update(uint32 diff)
  */
 void QuestCompletion::CleanupCompletedQuests()
 {
+    std::lock_guard lock(_completionMutex);
+
     uint32 currentTime = GameTime::GetGameTimeMS();
 
     for (auto& [botGuid, progressList] : _botQuestProgress)

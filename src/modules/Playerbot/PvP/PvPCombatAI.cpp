@@ -22,10 +22,6 @@
 #include <cmath>
 #include "../Spatial/SpatialGridManager.h"  // Spatial grid for deadlock fix
 
-
-// Static member initialization
-PvPCombatAI::PvPMetrics PvPCombatAI::_globalMetrics;
-
 namespace Playerbot
 {
 
@@ -33,23 +29,15 @@ namespace Playerbot
 // SINGLETON
 // ============================================================================
 
-PvPCombatAI::PvPCombatAI(Player* bot)
-    : _bot(bot)
+PvPCombatAI* PvPCombatAI::instance()
 {
-    if (!_bot)
-    {
-        TC_LOG_ERROR("playerbot.pvp", "PvPCombatAI: Attempted to create with null bot!");
-        return;
-    }
-
-    TC_LOG_DEBUG("playerbot.pvp", "PvPCombatAI: Created for bot {} ({})",
-                 _bot->GetName(), _bot->GetGUID().ToString());
+    static PvPCombatAI instance;
+    return &instance;
 }
 
-PvPCombatAI::~PvPCombatAI()
+PvPCombatAI::PvPCombatAI()
 {
-    TC_LOG_DEBUG("playerbot.pvp", "PvPCombatAI: Destroyed for bot {} ({})",
-                 _bot->GetName(), _bot->GetGUID().ToString());
+    TC_LOG_INFO("playerbot", "PvPCombatAI initialized");
 }
 
 // ============================================================================
@@ -58,6 +46,7 @@ PvPCombatAI::~PvPCombatAI()
 
 void PvPCombatAI::Initialize()
 {
+    std::lock_guard lock(_mutex);
 
     TC_LOG_INFO("playerbot", "PvPCombatAI: Initializing PvP combat systems...");
 
@@ -67,81 +56,82 @@ void PvPCombatAI::Initialize()
     TC_LOG_INFO("playerbot", "PvPCombatAI: Initialization complete");
 }
 
-void PvPCombatAI::Update(uint32 diff)
+void PvPCombatAI::Update(::Player* player, uint32 diff)
 {
-    if (!player || !_bot->IsInWorld())
+    if (!player || !player->IsInWorld())
         return;
 
-    
+    uint32 playerGuid = player->GetGUID().GetCounter();
     uint32 currentTime = GameTime::GetGameTimeMS();
 
     // Throttle updates (100ms for PvP responsiveness)
-    if (_lastUpdateTime > 0)
+    if (_lastUpdateTimes.count(playerGuid))
     {
-        uint32 timeSinceLastUpdate = currentTime - _lastUpdateTime;
+        uint32 timeSinceLastUpdate = currentTime - _lastUpdateTimes[playerGuid];
         if (timeSinceLastUpdate < COMBAT_UPDATE_INTERVAL)
             return;
     }
 
-    _lastUpdateTime = currentTime;
+    _lastUpdateTimes[playerGuid] = currentTime;
+    std::lock_guard lock(_mutex);
 
     // Get combat profile
-    PvPCombatProfile profile = GetCombatProfile();
-    PvPCombatState state = GetCombatState();
+    PvPCombatProfile profile = GetCombatProfile(playerGuid);
+    PvPCombatState state = GetCombatState(player);
     // Not in combat - idle state
-    if (!_bot->IsInCombat())
+    if (!player->IsInCombat())
     {
         if (state != PvPCombatState::IDLE)
-            SetCombatState(PvPCombatState::IDLE);
+            SetCombatState(player, PvPCombatState::IDLE);
         return;
     }
 
     // Auto-interrupt enemy casts
     if (profile.autoInterrupt)
     {
-        ::Unit* target = _bot->GetSelectedUnit();
+        ::Unit* target = player->GetSelectedUnit();
         if (target && target->HasUnitState(UNIT_STATE_CASTING))
         {
-            if (ShouldInterrupt(target))
-                InterruptCast(target);
+            if (ShouldInterrupt(player, target))
+                InterruptCast(player, target);
         }
     }
 
     // Auto-use defensive cooldowns
     if (profile.autoDefensiveCooldowns)
     {
-        uint32 healthPct = _bot->GetHealthPct();
+        uint32 healthPct = player->GetHealthPct();
         if (healthPct < profile.defensiveHealthThreshold)
-            UseDefensiveCooldown();
+            UseDefensiveCooldown(player);
     }
 
     // Auto-trinket CC
     if (profile.autoTrinket)
     {
-        if (_bot->HasUnitState(UNIT_STATE_CONTROLLED) ||
-            _bot->HasUnitState(UNIT_STATE_STUNNED))
+        if (player->HasUnitState(UNIT_STATE_CONTROLLED) ||
+            player->HasUnitState(UNIT_STATE_STUNNED))
         {
-            UseTrinket();
+            UseTrinket(player);
         }
     }
 
     // Auto-peel for allies
     if (profile.autoPeel)
     {
-        ::Unit* allyNeedingPeel = FindAllyNeedingPeel();
+        ::Unit* allyNeedingPeel = FindAllyNeedingPeel(player);
         if (allyNeedingPeel)
-            PeelForAlly(allyNeedingPeel);
+            PeelForAlly(player, allyNeedingPeel);
     }
     // Target selection and offensive actions
-    ::Unit* currentTarget = _bot->GetSelectedUnit();
+    ::Unit* currentTarget = player->GetSelectedUnit();
 
     // Check if should switch target
-    if (ShouldSwitchTarget())
+    if (ShouldSwitchTarget(player))
     {
-        ::Unit* newTarget = SelectBestTarget();
+        ::Unit* newTarget = SelectBestTarget(player);
         if (newTarget && newTarget != currentTarget)
         {
-            _bot->SetSelection(newTarget->GetGUID());
+            player->SetSelection(newTarget->GetGUID());
             currentTarget = newTarget;
         }
     }
@@ -151,13 +141,13 @@ void PvPCombatAI::Update(uint32 diff)
 
     // Execute CC chain if enabled
     if (profile.autoCCChain)
-        ExecuteCCChain(currentTarget);
+        ExecuteCCChain(player, currentTarget);
 
     // Execute offensive burst if target is low
     if (profile.autoOffensiveBurst)
     {
-        if (ShouldBurstTarget(currentTarget))
-            ExecuteOffensiveBurst(currentTarget);
+        if (ShouldBurstTarget(player, currentTarget))
+            ExecuteOffensiveBurst(player, currentTarget);
     }
 }
 
@@ -165,22 +155,22 @@ void PvPCombatAI::Update(uint32 diff)
 // TARGET SELECTION
 // ============================================================================
 
-::Unit* PvPCombatAI::SelectBestTarget() const
+::Unit* PvPCombatAI::SelectBestTarget(::Player* player) const
 {
     if (!player)
         return nullptr;
 
-    std::vector<::Unit*> enemies = GetEnemyPlayers(40.0f);
+    std::vector<::Unit*> enemies = GetEnemyPlayers(player, 40.0f);
     if (enemies.empty())
         return nullptr;
 
-    PvPCombatProfile profile = GetCombatProfile(_bot->GetGUID().GetCounter());
+    PvPCombatProfile profile = GetCombatProfile(player->GetGUID().GetCounter());
 
     // Assess threat for all enemies
     std::vector<std::pair<::Unit*, float>> threatScores;
     for (::Unit* enemy : enemies)
     {
-        ThreatAssessment assessment = AssessThreat(enemy);
+        ThreatAssessment assessment = AssessThreat(player, enemy);
         threatScores.push_back({enemy, assessment.threatScore});
     }
 
@@ -191,12 +181,12 @@ void PvPCombatAI::Update(uint32 diff)
     return threatScores.empty() ? nullptr : threatScores[0].first;
 }
 
-ThreatAssessment PvPCombatAI::AssessThreat(::Unit* target) const
+ThreatAssessment PvPCombatAI::AssessThreat(::Player* player, ::Unit* target) const
 {
     ThreatAssessment assessment;
     assessment.targetGuid = target->GetGUID();
     assessment.healthPercent = target->GetHealthPct();
-    assessment.distanceToPlayer = static_cast<uint32>(std::sqrt(_bot->GetExactDistSq(target))); // Calculate once from squared distance
+    assessment.distanceToPlayer = static_cast<uint32>(std::sqrt(player->GetExactDistSq(target))); // Calculate once from squared distance
     // Check if healer
     assessment.isHealer = IsHealer(target);
 
@@ -204,22 +194,22 @@ ThreatAssessment PvPCombatAI::AssessThreat(::Unit* target) const
     assessment.isCaster = IsCaster(target);
 
     // Check if attacking ally
-    assessment.isAttackingAlly = IsTargetAttackingAlly(target);
+    assessment.isAttackingAlly = IsTargetAttackingAlly(target, player);
 
     // Estimate DPS
     assessment.damageOutput = EstimateDPS(target);
 
     // Calculate threat score
-    assessment.threatScore = CalculateThreatScore(target);
+    assessment.threatScore = CalculateThreatScore(player, target);
 
     return assessment;
 }
 
-std::vector<::Unit*> PvPCombatAI::GetEnemyPlayers(float range) const
+std::vector<::Unit*> PvPCombatAI::GetEnemyPlayers(::Player* player, float range) const
 {
     std::vector<::Unit*> enemies;
 
-    if (!player || !_bot->GetMap())
+    if (!player || !player->GetMap())
         return enemies;
 
     // Find all hostile players in range
@@ -227,7 +217,7 @@ std::vector<::Unit*> PvPCombatAI::GetEnemyPlayers(float range) const
     Trinity::PlayerListSearcher<Trinity::AnyPlayerInObjectRangeCheck> searcher(player, enemies, checker);
     // DEADLOCK FIX: Spatial grid replaces Cell::Visit
     {
-        Map* cellVisitMap = _bot->GetMap();
+        Map* cellVisitMap = player->GetMap();
         if (!cellVisitMap)
             return std::vector<ObjectGuid>();
 
@@ -241,7 +231,7 @@ std::vector<::Unit*> PvPCombatAI::GetEnemyPlayers(float range) const
         if (spatialGrid)
         {
             std::vector<ObjectGuid> nearbyGuids = spatialGrid->QueryNearbyCreatureGuids(
-                _bot->GetPosition(), range);
+                player->GetPosition(), range);
 
             for (ObjectGuid guid : nearbyGuids)
             {
@@ -258,16 +248,16 @@ std::vector<::Unit*> PvPCombatAI::GetEnemyPlayers(float range) const
     enemies.erase(std::remove_if(enemies.begin(), enemies.end(),
         [player](::Unit* unit) {
             return !unit->IsPlayer() ||
-                   !_bot->IsHostileTo(unit) ||
+                   !player->IsHostileTo(unit) ||
                    unit->IsDead();
         }), enemies.end());
 
     return enemies;
 }
 
-std::vector<::Unit*> PvPCombatAI::GetEnemyHealers() const
+std::vector<::Unit*> PvPCombatAI::GetEnemyHealers(::Player* player) const
 {
-    std::vector<::Unit*> enemies = GetEnemyPlayers(40.0f);
+    std::vector<::Unit*> enemies = GetEnemyPlayers(player, 40.0f);
     std::vector<::Unit*> healers;
 
     for (::Unit* enemy : enemies)
@@ -279,12 +269,12 @@ std::vector<::Unit*> PvPCombatAI::GetEnemyHealers() const
     return healers;
 }
 
-bool PvPCombatAI::ShouldSwitchTarget() const
+bool PvPCombatAI::ShouldSwitchTarget(::Player* player) const
 {
     if (!player)
         return false;
 
-    ::Unit* currentTarget = _bot->GetSelectedUnit();
+    ::Unit* currentTarget = player->GetSelectedUnit();
     if (!currentTarget || currentTarget->IsDead())
         return true;
 
@@ -293,13 +283,13 @@ bool PvPCombatAI::ShouldSwitchTarget() const
         return false;
 
     // Check if a better target exists
-    ::Unit* bestTarget = SelectBestTarget();
+    ::Unit* bestTarget = SelectBestTarget(player);
     if (!bestTarget || bestTarget == currentTarget)
         return false;
 
     // Switch if best target has significantly higher threat score
-    ThreatAssessment currentAssessment = AssessThreat(currentTarget);
-    ThreatAssessment bestAssessment = AssessThreat(bestTarget);
+    ThreatAssessment currentAssessment = AssessThreat(player, currentTarget);
+    ThreatAssessment bestAssessment = AssessThreat(player, bestTarget);
 
     return bestAssessment.threatScore > (currentAssessment.threatScore * 1.3f);
 }
@@ -308,17 +298,19 @@ bool PvPCombatAI::ShouldSwitchTarget() const
 // CC CHAIN COORDINATION
 // ============================================================================
 
-bool PvPCombatAI::ExecuteCCChain(::Unit* target)
+bool PvPCombatAI::ExecuteCCChain(::Player* player, ::Unit* target)
 {
     if (!player || !target)
         return false;
 
-    PvPCombatProfile profile = GetCombatProfile(_bot->GetGUID().GetCounter());
+    std::lock_guard lock(_mutex);
+
+    PvPCombatProfile profile = GetCombatProfile(player->GetGUID().GetCounter());
     if (!profile.autoCCChain)
         return false;
 
     // Get next CC ability
-    uint32 ccSpellId = GetNextCCAbility(target);
+    uint32 ccSpellId = GetNextCCAbility(player, target);
     if (ccSpellId == 0)
         return false;
 
@@ -328,12 +320,12 @@ bool PvPCombatAI::ExecuteCCChain(::Unit* target)
         return false;
 
     // Cast CC
-    if (_bot->GetSpellHistory()->HasCooldown(ccSpellId))
+    if (player->GetSpellHistory()->HasCooldown(ccSpellId))
         return false;
 
     // Full implementation: Cast spell using TrinityCore spell system
     TC_LOG_DEBUG("playerbot", "PvPCombatAI: Player {} casting CC spell {} on target {}",
-        _bot->GetGUID().GetCounter(), ccSpellId, target->GetGUID().GetCounter());
+        player->GetGUID().GetCounter(), ccSpellId, target->GetGUID().GetCounter());
 
     // Track CC usage
     ObjectGuid targetGuid = target->GetGUID();
@@ -344,20 +336,20 @@ bool PvPCombatAI::ExecuteCCChain(::Unit* target)
     _ccChains[targetGuid].lastCCTime = GameTime::GetGameTimeMS();
 
     // Update metrics
-    
-    _metrics.ccChainsExecuted++;
+    uint32 playerGuid = player->GetGUID().GetCounter();
+    _playerMetrics[playerGuid].ccChainsExecuted++;
     _globalMetrics.ccChainsExecuted++;
 
     return true;
 }
 
-uint32 PvPCombatAI::GetNextCCAbility(::Unit* target) const
+uint32 PvPCombatAI::GetNextCCAbility(::Player* player, ::Unit* target) const
 {
     if (!player || !target)
         return 0;
 
     // Get available CC types for player's class
-    std::vector<CCType> availableCC = GetAvailableCCTypes();
+    std::vector<CCType> availableCC = GetAvailableCCTypes(player);
 
     // Filter by diminishing returns
     for (CCType ccType : availableCC)
@@ -365,8 +357,8 @@ uint32 PvPCombatAI::GetNextCCAbility(::Unit* target) const
         if (IsTargetCCImmune(target, ccType))
             continue;
 
-        uint32 spellId = GetCCSpellId(ccType);
-        if (spellId != 0 && !IsCCOnCooldown(ccType))
+        uint32 spellId = GetCCSpellId(player, ccType);
+        if (spellId != 0 && !IsCCOnCooldown(player, ccType))
             return spellId;
     }
 
@@ -389,6 +381,8 @@ void PvPCombatAI::TrackCCUsed(::Unit* target, CCType ccType)
 {
     if (!target)
         return;
+
+    std::lock_guard lock(_mutex);
 
     ObjectGuid targetGuid = target->GetGUID();
     if (!_ccChains.count(targetGuid))
@@ -428,42 +422,42 @@ bool PvPCombatAI::IsTargetCCImmune(::Unit* target, CCType ccType) const
 // DEFENSIVE COOLDOWNS
 // ============================================================================
 
-bool PvPCombatAI::UseDefensiveCooldown()
+bool PvPCombatAI::UseDefensiveCooldown(::Player* player)
 {
     if (!player)
         return false;
 
-    uint32 cdSpellId = GetBestDefensiveCooldown();
+    uint32 cdSpellId = GetBestDefensiveCooldown(player);
     if (cdSpellId == 0)
         return false;
 
-    if (_bot->GetSpellHistory()->HasCooldown(cdSpellId))
+    if (player->GetSpellHistory()->HasCooldown(cdSpellId))
         return false;
 
     TC_LOG_INFO("playerbot", "PvPCombatAI: Player {} using defensive cooldown {}",
-        _bot->GetGUID().GetCounter(), cdSpellId);
+        player->GetGUID().GetCounter(), cdSpellId);
 
     // Full implementation: Cast spell
 
     // Update metrics
-    
-    _metrics.defensivesUsed++;
+    uint32 playerGuid = player->GetGUID().GetCounter();
+    _playerMetrics[playerGuid].defensivesUsed++;
     _globalMetrics.defensivesUsed++;
 
     return true;
 }
 
-uint32 PvPCombatAI::GetBestDefensiveCooldown() const
+uint32 PvPCombatAI::GetBestDefensiveCooldown(::Player* player) const
 {
     if (!player)
         return 0;
 
-    uint32 healthPct = _bot->GetHealthPct();
+    uint32 healthPct = player->GetHealthPct();
     // Use immunity if very low health
-    if (healthPct < 20 && ShouldUseImmunity())
+    if (healthPct < 20 && ShouldUseImmunity(player))
     {
         // Class-specific immunity spells
-        switch (_bot->getClass())
+        switch (player->getClass())
         {
             case CLASS_PALADIN: return 642;  // Divine Shield
             case CLASS_MAGE: return 45438;   // Ice Block
@@ -474,35 +468,35 @@ uint32 PvPCombatAI::GetBestDefensiveCooldown() const
 
     // Get class-specific defensive cooldowns
     std::vector<uint32> defensives;
-    switch (_bot->getClass())
+    switch (player->getClass())
     {
-        case CLASS_WARRIOR: defensives = GetWarriorDefensiveCooldowns(); break;
-        case CLASS_PALADIN: defensives = GetPaladinDefensiveCooldowns(); break;
-        case CLASS_HUNTER: defensives = GetHunterDefensiveCooldowns(); break;
-        case CLASS_ROGUE: defensives = GetRogueDefensiveCooldowns(); break;
-        case CLASS_PRIEST: defensives = GetPriestDefensiveCooldowns(); break;
-        case CLASS_DEATH_KNIGHT: defensives = GetDeathKnightDefensiveCooldowns(); break;
-        case CLASS_SHAMAN: defensives = GetShamanDefensiveCooldowns(); break;
-        case CLASS_MAGE: defensives = GetMageDefensiveCooldowns(); break;
-        case CLASS_WARLOCK: defensives = GetWarlockDefensiveCooldowns(); break;
-        case CLASS_MONK: defensives = GetMonkDefensiveCooldowns(); break;
-        case CLASS_DRUID: defensives = GetDruidDefensiveCooldowns(); break;
-        case CLASS_DEMON_HUNTER: defensives = GetDemonHunterDefensiveCooldowns(); break;
-        case CLASS_EVOKER: defensives = GetEvokerDefensiveCooldowns(); break;
+        case CLASS_WARRIOR: defensives = GetWarriorDefensiveCooldowns(player); break;
+        case CLASS_PALADIN: defensives = GetPaladinDefensiveCooldowns(player); break;
+        case CLASS_HUNTER: defensives = GetHunterDefensiveCooldowns(player); break;
+        case CLASS_ROGUE: defensives = GetRogueDefensiveCooldowns(player); break;
+        case CLASS_PRIEST: defensives = GetPriestDefensiveCooldowns(player); break;
+        case CLASS_DEATH_KNIGHT: defensives = GetDeathKnightDefensiveCooldowns(player); break;
+        case CLASS_SHAMAN: defensives = GetShamanDefensiveCooldowns(player); break;
+        case CLASS_MAGE: defensives = GetMageDefensiveCooldowns(player); break;
+        case CLASS_WARLOCK: defensives = GetWarlockDefensiveCooldowns(player); break;
+        case CLASS_MONK: defensives = GetMonkDefensiveCooldowns(player); break;
+        case CLASS_DRUID: defensives = GetDruidDefensiveCooldowns(player); break;
+        case CLASS_DEMON_HUNTER: defensives = GetDemonHunterDefensiveCooldowns(player); break;
+        case CLASS_EVOKER: defensives = GetEvokerDefensiveCooldowns(player); break;
         default: return 0;
     }
 
     // Find first available defensive
     for (uint32 spellId : defensives)
     {
-        if (!_bot->GetSpellHistory()->HasCooldown(spellId))
+        if (!player->GetSpellHistory()->HasCooldown(spellId))
             return spellId;
     }
 
     return 0;
 }
 
-bool PvPCombatAI::ShouldUseImmunity() const
+bool PvPCombatAI::ShouldUseImmunity(::Player* player) const
 {
     if (!player)
         return false;
@@ -512,24 +506,24 @@ bool PvPCombatAI::ShouldUseImmunity() const
     // 2. Multiple enemies attacking
     // 3. Under heavy burst damage
 
-    uint32 healthPct = _bot->GetHealthPct();
+    uint32 healthPct = player->GetHealthPct();
     if (healthPct < 20)
         return true;
 
-    std::vector<::Unit*> attackers = GetEnemyPlayers(10.0f);
+    std::vector<::Unit*> attackers = GetEnemyPlayers(player, 10.0f);
     if (attackers.size() >= 2)
         return true;
 
     return false;
 }
 
-bool PvPCombatAI::UseTrinket()
+bool PvPCombatAI::UseTrinket(::Player* player)
 {
     if (!player)
         return false;
 
     TC_LOG_DEBUG("playerbot", "PvPCombatAI: Player {} using PvP trinket",
-        _bot->GetGUID().GetCounter());
+        player->GetGUID().GetCounter());
 
     // Full implementation: Use trinket item (42292 or 208683)
     // PvP trinkets break CC and provide immunity
@@ -541,33 +535,35 @@ bool PvPCombatAI::UseTrinket()
 // OFFENSIVE BURSTS
 // ============================================================================
 
-bool PvPCombatAI::ExecuteOffensiveBurst(::Unit* target)
+bool PvPCombatAI::ExecuteOffensiveBurst(::Player* player, ::Unit* target)
 {
     if (!player || !target)
         return false;
 
+    std::lock_guard lock(_mutex);
+
     TC_LOG_INFO("playerbot", "PvPCombatAI: Player {} executing offensive burst on target {}",
-        _bot->GetGUID().GetCounter(), target->GetGUID().GetCounter());
+        player->GetGUID().GetCounter(), target->GetGUID().GetCounter());
 
     // Stack offensive cooldowns
-    bool success = StackOffensiveCooldowns();
+    bool success = StackOffensiveCooldowns(player);
 
     if (success)
     {
-        
-        _metrics.burstsExecuted++;
+        uint32 playerGuid = player->GetGUID().GetCounter();
+        _playerMetrics[playerGuid].burstsExecuted++;
         _globalMetrics.burstsExecuted++;
     }
 
     return success;
 }
 
-bool PvPCombatAI::ShouldBurstTarget(::Unit* target) const
+bool PvPCombatAI::ShouldBurstTarget(::Player* player, ::Unit* target) const
 {
     if (!player || !target)
         return false;
 
-    PvPCombatProfile profile = GetCombatProfile(_bot->GetGUID().GetCounter());
+    PvPCombatProfile profile = GetCombatProfile(player->GetGUID().GetCounter());
     // Burst if target below threshold
     if (target->GetHealthPct() < profile.burstHealthThreshold)
         return true;
@@ -579,40 +575,40 @@ bool PvPCombatAI::ShouldBurstTarget(::Unit* target) const
     return false;
 }
 
-std::vector<uint32> PvPCombatAI::GetOffensiveCooldowns() const
+std::vector<uint32> PvPCombatAI::GetOffensiveCooldowns(::Player* player) const
 {
     if (!player)
         return {};
 
-    switch (_bot->getClass())
+    switch (player->getClass())
     {
-        case CLASS_WARRIOR: return GetWarriorOffensiveCooldowns();
-        case CLASS_PALADIN: return GetPaladinOffensiveCooldowns();
-        case CLASS_HUNTER: return GetHunterOffensiveCooldowns();
-        case CLASS_ROGUE: return GetRogueOffensiveCooldowns();
-        case CLASS_PRIEST: return GetPriestOffensiveCooldowns();
-        case CLASS_DEATH_KNIGHT: return GetDeathKnightOffensiveCooldowns();
-        case CLASS_SHAMAN: return GetShamanOffensiveCooldowns();
-        case CLASS_MAGE: return GetMageOffensiveCooldowns();
-        case CLASS_WARLOCK: return GetWarlockOffensiveCooldowns();
-        case CLASS_MONK: return GetMonkOffensiveCooldowns();
-        case CLASS_DRUID: return GetDruidOffensiveCooldowns();
-        case CLASS_DEMON_HUNTER: return GetDemonHunterOffensiveCooldowns();
-        case CLASS_EVOKER: return GetEvokerOffensiveCooldowns();
+        case CLASS_WARRIOR: return GetWarriorOffensiveCooldowns(player);
+        case CLASS_PALADIN: return GetPaladinOffensiveCooldowns(player);
+        case CLASS_HUNTER: return GetHunterOffensiveCooldowns(player);
+        case CLASS_ROGUE: return GetRogueOffensiveCooldowns(player);
+        case CLASS_PRIEST: return GetPriestOffensiveCooldowns(player);
+        case CLASS_DEATH_KNIGHT: return GetDeathKnightOffensiveCooldowns(player);
+        case CLASS_SHAMAN: return GetShamanOffensiveCooldowns(player);
+        case CLASS_MAGE: return GetMageOffensiveCooldowns(player);
+        case CLASS_WARLOCK: return GetWarlockOffensiveCooldowns(player);
+        case CLASS_MONK: return GetMonkOffensiveCooldowns(player);
+        case CLASS_DRUID: return GetDruidOffensiveCooldowns(player);
+        case CLASS_DEMON_HUNTER: return GetDemonHunterOffensiveCooldowns(player);
+        case CLASS_EVOKER: return GetEvokerOffensiveCooldowns(player);
         default: return {};
     }
 }
-bool PvPCombatAI::StackOffensiveCooldowns()
+bool PvPCombatAI::StackOffensiveCooldowns(::Player* player)
 {
     if (!player)
         return false;
 
-    std::vector<uint32> cooldowns = GetOffensiveCooldowns();
+    std::vector<uint32> cooldowns = GetOffensiveCooldowns(player);
     bool usedAny = false;
 
     for (uint32 spellId : cooldowns)
     {
-        if (!_bot->GetSpellHistory()->HasCooldown(spellId))
+        if (!player->GetSpellHistory()->HasCooldown(spellId))
         {
             // Full implementation: Cast spell
             TC_LOG_DEBUG("playerbot", "PvPCombatAI: Using offensive CD {}", spellId);
@@ -627,32 +623,32 @@ bool PvPCombatAI::StackOffensiveCooldowns()
 // INTERRUPT COORDINATION
 // ============================================================================
 
-bool PvPCombatAI::InterruptCast(::Unit* target)
+bool PvPCombatAI::InterruptCast(::Player* player, ::Unit* target)
 {
     if (!player || !target)
         return false;
 
-    uint32 interruptSpell = GetInterruptSpell();
+    uint32 interruptSpell = GetInterruptSpell(player);
     if (interruptSpell == 0)
         return false;
 
-    if (_bot->GetSpellHistory()->HasCooldown(interruptSpell))
+    if (player->GetSpellHistory()->HasCooldown(interruptSpell))
         return false;
 
     TC_LOG_INFO("playerbot", "PvPCombatAI: Player {} interrupting target {} cast",
-        _bot->GetGUID().GetCounter(), target->GetGUID().GetCounter());
+        player->GetGUID().GetCounter(), target->GetGUID().GetCounter());
 
     // Full implementation: Cast interrupt spell
 
     // Update metrics
-    
-    _metrics.interruptsLanded++;
+    uint32 playerGuid = player->GetGUID().GetCounter();
+    _playerMetrics[playerGuid].interruptsLanded++;
     _globalMetrics.interruptsLanded++;
 
     return true;
 }
 
-bool PvPCombatAI::ShouldInterrupt(::Unit* target) const
+bool PvPCombatAI::ShouldInterrupt(::Player* player, ::Unit* target) const
 {
     if (!player || !target)
         return false;
@@ -666,14 +662,14 @@ bool PvPCombatAI::ShouldInterrupt(::Unit* target) const
     return true;
 }
 
-uint32 PvPCombatAI::GetInterruptSpell() const
+uint32 PvPCombatAI::GetInterruptSpell(::Player* player) const
 {
     if (!player)
         return 0;
 
-    switch (_bot->getClass())
+    switch (player->getClass())
     {
-        case CLASS_WARRIOR: return GetWarriorInterruptSpell();
+        case CLASS_WARRIOR: return GetWarriorInterruptSpell(player);
         case CLASS_PALADIN: return 96231;  // Rebuke
         case CLASS_HUNTER: return 187650;  // Counter Shot
         case CLASS_ROGUE: return 1766;     // Kick
@@ -694,34 +690,34 @@ uint32 PvPCombatAI::GetInterruptSpell() const
 // PEEL MECHANICS
 // ============================================================================
 
-bool PvPCombatAI::PeelForAlly(::Unit* ally)
+bool PvPCombatAI::PeelForAlly(::Player* player, ::Unit* ally)
 {
     if (!player || !ally)
         return false;
 
-    uint32 peelSpell = GetPeelAbility();
+    uint32 peelSpell = GetPeelAbility(player);
     if (peelSpell == 0)
         return false;
 
     TC_LOG_INFO("playerbot", "PvPCombatAI: Player {} peeling for ally {}",
-        _bot->GetGUID().GetCounter(), ally->GetGUID().GetCounter());
+        player->GetGUID().GetCounter(), ally->GetGUID().GetCounter());
 
     // Full implementation: Cast peel ability (CC on attacker)
 
     // Update metrics
-    
-    _metrics.peelsPerformed++;
+    uint32 playerGuid = player->GetGUID().GetCounter();
+    _playerMetrics[playerGuid].peelsPerformed++;
     _globalMetrics.peelsPerformed++;
 
     return true;
 }
 
-::Unit* PvPCombatAI::FindAllyNeedingPeel() const
+::Unit* PvPCombatAI::FindAllyNeedingPeel(::Player* player) const
 {
     if (!player)
         return nullptr;
 
-    Group* group = _bot->GetGroup();
+    Group* group = player->GetGroup();
     if (!group)
         return nullptr;
 
@@ -746,13 +742,13 @@ bool PvPCombatAI::PeelForAlly(::Unit* ally)
     return allyNeedingPeel;
 }
 
-uint32 PvPCombatAI::GetPeelAbility() const
+uint32 PvPCombatAI::GetPeelAbility(::Player* player) const
 {
     if (!player)
         return 0;
 
     // Return class-specific peel abilities (CC, knockback, etc.)
-    switch (_bot->getClass())
+    switch (player->getClass())
     {
         case CLASS_WARRIOR: return 5246;   // Intimidating Shout
         case CLASS_PALADIN: return 853;    // Hammer of Justice
@@ -775,37 +771,64 @@ uint32 PvPCombatAI::GetPeelAbility() const
 // COMBAT STATE
 // ============================================================================
 
-void PvPCombatAI::SetCombatState(PvPCombatState state)
+void PvPCombatAI::SetCombatState(::Player* player, PvPCombatState state)
 {
-    _combatState = state;
+    if (!player)
+        return;
+
+    std::lock_guard lock(_mutex);
+    _combatStates[player->GetGUID().GetCounter()] = state;
 }
 
-PvPCombatState PvPCombatAI::GetCombatState() const
+PvPCombatState PvPCombatAI::GetCombatState(::Player* player) const
 {
-    return _combatState;
+    if (!player)
+        return PvPCombatState::IDLE;
+
+    std::lock_guard lock(_mutex);
+
+    uint32 playerGuid = player->GetGUID().GetCounter();
+    if (_combatStates.count(playerGuid))
+        return _combatStates.at(playerGuid);
+
+    return PvPCombatState::IDLE;
 }
 
 // ============================================================================
 // PROFILES
 // ============================================================================
 
-void PvPCombatAI::SetCombatProfile(PvPCombatProfile const& profile)
+void PvPCombatAI::SetCombatProfile(uint32 playerGuid, PvPCombatProfile const& profile)
 {
-    _profile = profile;
+    std::lock_guard lock(_mutex);
+    _playerProfiles[playerGuid] = profile;
 }
 
-PvPCombatProfile PvPCombatAI::GetCombatProfile() const
+PvPCombatProfile PvPCombatAI::GetCombatProfile(uint32 playerGuid) const
 {
-    return _profile;
+    std::lock_guard lock(_mutex);
+
+    if (_playerProfiles.count(playerGuid))
+        return _playerProfiles.at(playerGuid);
+
+    return PvPCombatProfile(); // Default profile
 }
 
 // ============================================================================
 // METRICS
 // ============================================================================
 
-PvPCombatAI::PvPMetrics const& PvPCombatAI::GetMetrics() const
+PvPCombatAI::PvPMetrics const& PvPCombatAI::GetPlayerMetrics(uint32 playerGuid) const
 {
-    return _metrics;
+    std::lock_guard lock(_mutex);
+
+    if (!_playerMetrics.count(playerGuid))
+    {
+        static PvPMetrics emptyMetrics;
+        return emptyMetrics;
+    }
+
+    return _playerMetrics.at(playerGuid);
 }
 
 PvPCombatAI::PvPMetrics const& PvPCombatAI::GetGlobalMetrics() const
@@ -822,9 +845,9 @@ bool PvPCombatAI::IsHealer(::Unit* unit) const
         return false;
 
     ::Player* player = unit->ToPlayer();
-    uint32 spec = _bot->GetPrimaryTalentTree(_bot->GetActiveSpec());
+    uint32 spec = player->GetPrimaryTalentTree(player->GetActiveSpec());
     // Check if player is in healing spec
-    switch (_bot->getClass())
+    switch (player->getClass())
     {
         case CLASS_PRIEST:
             return spec == TALENT_TREE_PRIEST_DISCIPLINE || spec == TALENT_TREE_PRIEST_HOLY;
@@ -849,7 +872,7 @@ bool PvPCombatAI::IsCaster(::Unit* unit) const
         return false;
 
     ::Player* player = unit->ToPlayer();
-    switch (_bot->getClass())
+    switch (player->getClass())
     {
         case CLASS_MAGE:
         case CLASS_WARLOCK:
@@ -874,7 +897,7 @@ uint32 PvPCombatAI::EstimateDPS(::Unit* unit) const
     return 5000; // Placeholder
 }
 
-float PvPCombatAI::CalculateThreatScore(::Unit* target) const
+float PvPCombatAI::CalculateThreatScore(::Player* player, ::Unit* target) const
 {
     if (!player || !target)
         return 0.0f;
@@ -890,11 +913,11 @@ float PvPCombatAI::CalculateThreatScore(::Unit* target) const
         score *= LOW_HEALTH_THREAT_MULTIPLIER;
 
     // Attacking ally multiplier
-    if (IsTargetAttackingAlly(target))
+    if (IsTargetAttackingAlly(target, player))
         score *= ATTACKING_ALLY_MULTIPLIER;
 
     // Distance penalty
-    float distance = std::sqrt(_bot->GetExactDistSq(target)); // Calculate once from squared distance
+    float distance = std::sqrt(player->GetExactDistSq(target)); // Calculate once from squared distance
     if (distance > 30.0f)
         score *= 0.5f;
 
@@ -905,12 +928,12 @@ float PvPCombatAI::CalculateThreatScore(::Unit* target) const
     return score;
 }
 
-bool PvPCombatAI::IsInCCRange(::Unit* target, CCType ccType) const
+bool PvPCombatAI::IsInCCRange(::Player* player, ::Unit* target, CCType ccType) const
 {
     if (!player || !target)
         return false;
 
-    float distance = std::sqrt(_bot->GetExactDistSq(target)); // Calculate once from squared distance
+    float distance = std::sqrt(player->GetExactDistSq(target)); // Calculate once from squared distance
 
     // Range check based on CC type
     switch (ccType)
@@ -929,16 +952,16 @@ bool PvPCombatAI::IsInCCRange(::Unit* target, CCType ccType) const
     }
 }
 
-bool PvPCombatAI::HasCCAvailable(CCType ccType) const
+bool PvPCombatAI::HasCCAvailable(::Player* player, CCType ccType) const
 {
     if (!player)
         return false;
 
-    uint32 spellId = GetCCSpellId(ccType);
-    return spellId != 0 && !_bot->GetSpellHistory()->HasCooldown(spellId);
+    uint32 spellId = GetCCSpellId(player, ccType);
+    return spellId != 0 && !player->GetSpellHistory()->HasCooldown(spellId);
 }
 
-uint32 PvPCombatAI::GetCCSpellId(CCType ccType) const
+uint32 PvPCombatAI::GetCCSpellId(::Player* player, CCType ccType) const
 {
     if (!player)
         return 0;
@@ -946,7 +969,7 @@ uint32 PvPCombatAI::GetCCSpellId(CCType ccType) const
     // Return class-specific CC spell IDs
     // Simplified - full implementation has complete spell mapping
 
-    switch (_bot->getClass())
+    switch (player->getClass())
     {
         case CLASS_WARRIOR:
             if (ccType == CCType::STUN) return 46968; // Shockwave
@@ -972,16 +995,16 @@ uint32 PvPCombatAI::GetCCSpellId(CCType ccType) const
     return 0;
 }
 
-bool PvPCombatAI::IsCCOnCooldown(CCType ccType) const
+bool PvPCombatAI::IsCCOnCooldown(::Player* player, CCType ccType) const
 {
     if (!player)
         return true;
 
-    uint32 spellId = GetCCSpellId(ccType);
-    return spellId == 0 || _bot->GetSpellHistory()->HasCooldown(spellId);
+    uint32 spellId = GetCCSpellId(player, ccType);
+    return spellId == 0 || player->GetSpellHistory()->HasCooldown(spellId);
 }
 
-std::vector<CCType> PvPCombatAI::GetAvailableCCTypes() const
+std::vector<CCType> PvPCombatAI::GetAvailableCCTypes(::Player* player) const
 {
     std::vector<CCType> ccTypes;
 
@@ -989,7 +1012,7 @@ std::vector<CCType> PvPCombatAI::GetAvailableCCTypes() const
         return ccTypes;
 
     // Return available CC types based on class
-    switch (_bot->getClass())
+    switch (player->getClass())
     {
         case CLASS_WARRIOR:
             ccTypes.push_back(CCType::STUN);
@@ -1024,7 +1047,7 @@ std::vector<CCType> PvPCombatAI::GetAvailableCCTypes() const
     return ccTypes;
 }
 
-bool PvPCombatAI::IsTargetAttackingAlly(::Unit* target) const
+bool PvPCombatAI::IsTargetAttackingAlly(::Unit* target, ::Player* player) const
 {
     if (!target || !player)
         return false;
@@ -1034,7 +1057,7 @@ bool PvPCombatAI::IsTargetAttackingAlly(::Unit* target) const
         return false;
 
     // Check if victim is in player's group
-    Group* group = _bot->GetGroup();
+    Group* group = player->GetGroup();
     if (!group)
         return false;
 
@@ -1045,7 +1068,7 @@ bool PvPCombatAI::IsTargetAttackingAlly(::Unit* target) const
 // CLASS-SPECIFIC HELPERS - WARRIOR
 // ============================================================================
 
-std::vector<uint32> PvPCombatAI::GetWarriorDefensiveCooldowns() const
+std::vector<uint32> PvPCombatAI::GetWarriorDefensiveCooldowns(::Player* player) const
 {
     std::vector<uint32> cooldowns;
     cooldowns.push_back(871);    // Shield Wall
@@ -1055,7 +1078,7 @@ std::vector<uint32> PvPCombatAI::GetWarriorDefensiveCooldowns() const
     return cooldowns;
 }
 
-std::vector<uint32> PvPCombatAI::GetWarriorOffensiveCooldowns() const
+std::vector<uint32> PvPCombatAI::GetWarriorOffensiveCooldowns(::Player* player) const
 {
     std::vector<uint32> cooldowns;
     cooldowns.push_back(1719);   // Recklessness
@@ -1064,7 +1087,7 @@ std::vector<uint32> PvPCombatAI::GetWarriorOffensiveCooldowns() const
     return cooldowns;
 }
 
-uint32 PvPCombatAI::GetWarriorInterruptSpell() const
+uint32 PvPCombatAI::GetWarriorInterruptSpell(::Player* player) const
 {
     return 6552; // Pummel
 }
@@ -1073,7 +1096,7 @@ uint32 PvPCombatAI::GetWarriorInterruptSpell() const
 // CLASS-SPECIFIC HELPERS - PALADIN
 // ============================================================================
 
-std::vector<uint32> PvPCombatAI::GetPaladinDefensiveCooldowns() const
+std::vector<uint32> PvPCombatAI::GetPaladinDefensiveCooldowns(::Player* player) const
 {
     std::vector<uint32> cooldowns;
     cooldowns.push_back(642);    // Divine Shield
@@ -1083,7 +1106,7 @@ std::vector<uint32> PvPCombatAI::GetPaladinDefensiveCooldowns() const
     return cooldowns;
 }
 
-std::vector<uint32> PvPCombatAI::GetPaladinOffensiveCooldowns() const
+std::vector<uint32> PvPCombatAI::GetPaladinOffensiveCooldowns(::Player* player) const
 {
     std::vector<uint32> cooldowns;
     cooldowns.push_back(31884);  // Avenging Wrath
@@ -1095,7 +1118,7 @@ std::vector<uint32> PvPCombatAI::GetPaladinOffensiveCooldowns() const
 // CLASS-SPECIFIC HELPERS - HUNTER
 // ============================================================================
 
-std::vector<uint32> PvPCombatAI::GetHunterDefensiveCooldowns() const
+std::vector<uint32> PvPCombatAI::GetHunterDefensiveCooldowns(::Player* player) const
 {
     std::vector<uint32> cooldowns;
     cooldowns.push_back(186265); // Aspect of the Turtle
@@ -1104,7 +1127,7 @@ std::vector<uint32> PvPCombatAI::GetHunterDefensiveCooldowns() const
     return cooldowns;
 }
 
-std::vector<uint32> PvPCombatAI::GetHunterOffensiveCooldowns() const
+std::vector<uint32> PvPCombatAI::GetHunterOffensiveCooldowns(::Player* player) const
 {
     std::vector<uint32> cooldowns;
     cooldowns.push_back(19574);  // Bestial Wrath
@@ -1117,7 +1140,7 @@ std::vector<uint32> PvPCombatAI::GetHunterOffensiveCooldowns() const
 // CLASS-SPECIFIC HELPERS - ROGUE
 // ============================================================================
 
-std::vector<uint32> PvPCombatAI::GetRogueDefensiveCooldowns() const
+std::vector<uint32> PvPCombatAI::GetRogueDefensiveCooldowns(::Player* player) const
 {
     std::vector<uint32> cooldowns;
     cooldowns.push_back(31224);  // Cloak of Shadows
@@ -1126,7 +1149,7 @@ std::vector<uint32> PvPCombatAI::GetRogueDefensiveCooldowns() const
     return cooldowns;
 }
 
-std::vector<uint32> PvPCombatAI::GetRogueOffensiveCooldowns() const
+std::vector<uint32> PvPCombatAI::GetRogueOffensiveCooldowns(::Player* player) const
 {
     std::vector<uint32> cooldowns;
     cooldowns.push_back(13750);  // Adrenaline Rush
@@ -1139,7 +1162,7 @@ std::vector<uint32> PvPCombatAI::GetRogueOffensiveCooldowns() const
 // CLASS-SPECIFIC HELPERS - PRIEST
 // ============================================================================
 
-std::vector<uint32> PvPCombatAI::GetPriestDefensiveCooldowns() const
+std::vector<uint32> PvPCombatAI::GetPriestDefensiveCooldowns(::Player* player) const
 {
     std::vector<uint32> cooldowns;
     cooldowns.push_back(47585);  // Dispersion
@@ -1148,7 +1171,7 @@ std::vector<uint32> PvPCombatAI::GetPriestDefensiveCooldowns() const
     return cooldowns;
 }
 
-std::vector<uint32> PvPCombatAI::GetPriestOffensiveCooldowns() const
+std::vector<uint32> PvPCombatAI::GetPriestOffensiveCooldowns(::Player* player) const
 {
     std::vector<uint32> cooldowns;
     cooldowns.push_back(10060);  // Power Infusion
@@ -1160,7 +1183,7 @@ std::vector<uint32> PvPCombatAI::GetPriestOffensiveCooldowns() const
 // CLASS-SPECIFIC HELPERS - DEATH KNIGHT
 // ============================================================================
 
-std::vector<uint32> PvPCombatAI::GetDeathKnightDefensiveCooldowns() const
+std::vector<uint32> PvPCombatAI::GetDeathKnightDefensiveCooldowns(::Player* player) const
 {
     std::vector<uint32> cooldowns;
     cooldowns.push_back(48792);  // Icebound Fortitude
@@ -1169,7 +1192,7 @@ std::vector<uint32> PvPCombatAI::GetDeathKnightDefensiveCooldowns() const
     return cooldowns;
 }
 
-std::vector<uint32> PvPCombatAI::GetDeathKnightOffensiveCooldowns() const
+std::vector<uint32> PvPCombatAI::GetDeathKnightOffensiveCooldowns(::Player* player) const
 {
     std::vector<uint32> cooldowns;
     cooldowns.push_back(51271);  // Pillar of Frost
@@ -1182,7 +1205,7 @@ std::vector<uint32> PvPCombatAI::GetDeathKnightOffensiveCooldowns() const
 // CLASS-SPECIFIC HELPERS - SHAMAN
 // ============================================================================
 
-std::vector<uint32> PvPCombatAI::GetShamanDefensiveCooldowns() const
+std::vector<uint32> PvPCombatAI::GetShamanDefensiveCooldowns(::Player* player) const
 {
     std::vector<uint32> cooldowns;
     cooldowns.push_back(108271); // Astral Shift
@@ -1190,7 +1213,7 @@ std::vector<uint32> PvPCombatAI::GetShamanDefensiveCooldowns() const
     return cooldowns;
 }
 
-std::vector<uint32> PvPCombatAI::GetShamanOffensiveCooldowns() const
+std::vector<uint32> PvPCombatAI::GetShamanOffensiveCooldowns(::Player* player) const
 {
     std::vector<uint32> cooldowns;
     cooldowns.push_back(51533);  // Feral Spirit
@@ -1202,7 +1225,7 @@ std::vector<uint32> PvPCombatAI::GetShamanOffensiveCooldowns() const
 // CLASS-SPECIFIC HELPERS - MAGE
 // ============================================================================
 
-std::vector<uint32> PvPCombatAI::GetMageDefensiveCooldowns() const
+std::vector<uint32> PvPCombatAI::GetMageDefensiveCooldowns(::Player* player) const
 {
     std::vector<uint32> cooldowns;
     cooldowns.push_back(45438);  // Ice Block
@@ -1211,7 +1234,7 @@ std::vector<uint32> PvPCombatAI::GetMageDefensiveCooldowns() const
     return cooldowns;
 }
 
-std::vector<uint32> PvPCombatAI::GetMageOffensiveCooldowns() const
+std::vector<uint32> PvPCombatAI::GetMageOffensiveCooldowns(::Player* player) const
 {
     std::vector<uint32> cooldowns;
     cooldowns.push_back(12042);  // Arcane Power
@@ -1224,7 +1247,7 @@ std::vector<uint32> PvPCombatAI::GetMageOffensiveCooldowns() const
 // CLASS-SPECIFIC HELPERS - WARLOCK
 // ============================================================================
 
-std::vector<uint32> PvPCombatAI::GetWarlockDefensiveCooldowns() const
+std::vector<uint32> PvPCombatAI::GetWarlockDefensiveCooldowns(::Player* player) const
 {
     std::vector<uint32> cooldowns;
     cooldowns.push_back(104773); // Unending Resolve
@@ -1232,7 +1255,7 @@ std::vector<uint32> PvPCombatAI::GetWarlockDefensiveCooldowns() const
     return cooldowns;
 }
 
-std::vector<uint32> PvPCombatAI::GetWarlockOffensiveCooldowns() const
+std::vector<uint32> PvPCombatAI::GetWarlockOffensiveCooldowns(::Player* player) const
 {
     std::vector<uint32> cooldowns;
     cooldowns.push_back(113860); // Dark Soul
@@ -1244,7 +1267,7 @@ std::vector<uint32> PvPCombatAI::GetWarlockOffensiveCooldowns() const
 // CLASS-SPECIFIC HELPERS - MONK
 // ============================================================================
 
-std::vector<uint32> PvPCombatAI::GetMonkDefensiveCooldowns() const
+std::vector<uint32> PvPCombatAI::GetMonkDefensiveCooldowns(::Player* player) const
 {
     std::vector<uint32> cooldowns;
     cooldowns.push_back(122783); // Diffuse Magic
@@ -1253,7 +1276,7 @@ std::vector<uint32> PvPCombatAI::GetMonkDefensiveCooldowns() const
     return cooldowns;
 }
 
-std::vector<uint32> PvPCombatAI::GetMonkOffensiveCooldowns() const
+std::vector<uint32> PvPCombatAI::GetMonkOffensiveCooldowns(::Player* player) const
 {
     std::vector<uint32> cooldowns;
     cooldowns.push_back(137639); // Storm, Earth, and Fire
@@ -1265,7 +1288,7 @@ std::vector<uint32> PvPCombatAI::GetMonkOffensiveCooldowns() const
 // CLASS-SPECIFIC HELPERS - DRUID
 // ============================================================================
 
-std::vector<uint32> PvPCombatAI::GetDruidDefensiveCooldowns() const
+std::vector<uint32> PvPCombatAI::GetDruidDefensiveCooldowns(::Player* player) const
 {
     std::vector<uint32> cooldowns;
     cooldowns.push_back(22812);  // Barkskin
@@ -1274,7 +1297,7 @@ std::vector<uint32> PvPCombatAI::GetDruidDefensiveCooldowns() const
     return cooldowns;
 }
 
-std::vector<uint32> PvPCombatAI::GetDruidOffensiveCooldowns() const
+std::vector<uint32> PvPCombatAI::GetDruidOffensiveCooldowns(::Player* player) const
 {
     std::vector<uint32> cooldowns;
     cooldowns.push_back(106951); // Berserk
@@ -1286,7 +1309,7 @@ std::vector<uint32> PvPCombatAI::GetDruidOffensiveCooldowns() const
 // CLASS-SPECIFIC HELPERS - DEMON HUNTER
 // ============================================================================
 
-std::vector<uint32> PvPCombatAI::GetDemonHunterDefensiveCooldowns() const
+std::vector<uint32> PvPCombatAI::GetDemonHunterDefensiveCooldowns(::Player* player) const
 {
     std::vector<uint32> cooldowns;
     cooldowns.push_back(196555); // Netherwalk
@@ -1295,7 +1318,7 @@ std::vector<uint32> PvPCombatAI::GetDemonHunterDefensiveCooldowns() const
     return cooldowns;
 }
 
-std::vector<uint32> PvPCombatAI::GetDemonHunterOffensiveCooldowns() const
+std::vector<uint32> PvPCombatAI::GetDemonHunterOffensiveCooldowns(::Player* player) const
 {
     std::vector<uint32> cooldowns;
     cooldowns.push_back(191427); // Metamorphosis (DPS)
@@ -1307,7 +1330,7 @@ std::vector<uint32> PvPCombatAI::GetDemonHunterOffensiveCooldowns() const
 // CLASS-SPECIFIC HELPERS - EVOKER
 // ============================================================================
 
-std::vector<uint32> PvPCombatAI::GetEvokerDefensiveCooldowns() const
+std::vector<uint32> PvPCombatAI::GetEvokerDefensiveCooldowns(::Player* player) const
 {
     std::vector<uint32> cooldowns;
     cooldowns.push_back(363916); // Obsidian Scales
@@ -1315,7 +1338,7 @@ std::vector<uint32> PvPCombatAI::GetEvokerDefensiveCooldowns() const
     return cooldowns;
 }
 
-std::vector<uint32> PvPCombatAI::GetEvokerOffensiveCooldowns() const
+std::vector<uint32> PvPCombatAI::GetEvokerOffensiveCooldowns(::Player* player) const
 {
     std::vector<uint32> cooldowns;
     cooldowns.push_back(375087); // Dragonrage

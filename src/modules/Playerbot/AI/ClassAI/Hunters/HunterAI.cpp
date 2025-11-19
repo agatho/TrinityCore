@@ -9,9 +9,9 @@
 
 #include "HunterAI.h"
 #include "../../Combat/CombatBehaviorIntegration.h"
-#include "BeastMasteryHunter.h"
-#include "MarksmanshipHunter.h"
-#include "SurvivalHunter.h"
+#include "BeastMasteryHunterRefactored.h"
+#include "MarksmanshipHunterRefactored.h"
+#include "SurvivalHunterRefactored.h"
 #include "../BaselineRotationManager.h"
 #include "Player.h"
 #include "Pet.h"
@@ -29,7 +29,7 @@
 #include <chrono>
 #include "../../../Spatial/SpatialGridManager.h"
 #include "../../../Spatial/SpatialGridQueryHelpers.h"  // PHASE 5F: Thread-safe queries
-#include "../../../Movement/UnifiedMovementCoordinator.h  // Phase 2: Unified movement system"
+#include "../../../Movement/Arbiter/MovementArbiter.h"
 #include "../../../Movement/Arbiter/MovementPriorityMapper.h"
 #include "../../BotAI.h"
 #include "UnitAI.h"
@@ -1496,7 +1496,7 @@ void HunterAI::MaintainRange(::Unit* target){
         Position pos = GetOptimalPosition(target);
 
         // PHASE 6C: Use Movement Arbiter with ROLE_POSITIONING priority (170)
-        BotAI* botAI = dynamic_cast<BotAI*>(_bot->GetAI());        if (botAI && botAI->GetUnifiedMovementCoordinator())
+        BotAI* botAI = dynamic_cast<BotAI*>(_bot->GetAI());        if (botAI && botAI->GetMovementArbiter())
         {
 
             botAI->RequestPointMovement(

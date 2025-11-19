@@ -129,8 +129,6 @@ struct ArenaProfile
 /**
  * @brief Arena AI - Complete arena automation
  *
- * **Phase 7.1: Per-Bot Instance Pattern (27th Manager)**
- *
  * Features:
  * - 2v2/3v3/5v5 bracket strategies
  * - Team composition analysis
@@ -139,32 +137,28 @@ struct ArenaProfile
  * - Positioning algorithms
  * - Composition-specific counters
  * - Adaptive strategy based on match state
- * - Performance optimized (per-bot isolation, zero mutex)
- *
- * **Ownership:**
- * - Owned by GameSystemsManager (27th manager)
- * - Each bot has independent arena state and strategy
- * - Shared arena map data across all bots (static)
  */
 class TC_GAME_API ArenaAI final : public IArenaAI
 {
 public:
+    static ArenaAI* instance();
+
     // ============================================================================
     // INITIALIZATION
     // ============================================================================
 
     void Initialize() override;
-    void Update(uint32 diff) override;
+    void Update(::Player* player, uint32 diff) override;
 
     /**
      * Called when arena match starts
      */
-    void OnMatchStart() override;
+    void OnMatchStart(::Player* player) override;
 
     /**
      * Called when arena match ends
      */
-    void OnMatchEnd(bool won) override;
+    void OnMatchEnd(::Player* player, bool won) override;
 
     // ============================================================================
     // STRATEGY SELECTION
@@ -173,7 +167,7 @@ public:
     /**
      * Analyze team composition and select strategy
      */
-    void AnalyzeTeamComposition() override;
+    void AnalyzeTeamComposition(::Player* player) override;
 
     /**
      * Get recommended strategy for composition
@@ -184,7 +178,7 @@ public:
     /**
      * Adapt strategy based on match state
      */
-    void AdaptStrategy() override;
+    void AdaptStrategy(::Player* player) override;
 
     // ============================================================================
     // TARGET SELECTION
@@ -193,17 +187,17 @@ public:
     /**
      * Select focus target for arena
      */
-    ::Unit* SelectFocusTarget() const override;
+    ::Unit* SelectFocusTarget(::Player* player) const override;
 
     /**
      * Check if should switch target
      */
-    bool ShouldSwitchTarget(::Unit* currentTarget) const override;
+    bool ShouldSwitchTarget(::Player* player, ::Unit* currentTarget) const override;
 
     /**
      * Get kill target priority
      */
-    std::vector<::Unit*> GetKillTargetPriority() const override;
+    std::vector<::Unit*> GetKillTargetPriority(::Player* player) const override;
 
     // ============================================================================
     // POSITIONING
@@ -212,32 +206,32 @@ public:
     /**
      * Execute positioning strategy
      */
-    void ExecutePositioning() override;
+    void ExecutePositioning(::Player* player) override;
 
     /**
      * Find best pillar for kiting
      */
-    ArenaPillar const* FindBestPillar() const override;
+    ArenaPillar const* FindBestPillar(::Player* player) const override;
 
     /**
      * Move to pillar for LoS
      */
-    bool MoveToPillar(ArenaPillar const& pillar) override;
+    bool MoveToPillar(::Player* player, ArenaPillar const& pillar) override;
 
     /**
      * Check if using pillar effectively
      */
-    bool IsUsingPillarEffectively() const override;
+    bool IsUsingPillarEffectively(::Player* player) const override;
 
     /**
      * Maintain optimal distance from enemies
      */
-    bool MaintainOptimalDistance() override;
+    bool MaintainOptimalDistance(::Player* player) override;
 
     /**
      * Regroup with teammates
      */
-    bool RegroupWithTeam() override;
+    bool RegroupWithTeam(::Player* player) override;
 
     // ============================================================================
     // PILLAR KITING
@@ -246,17 +240,17 @@ public:
     /**
      * Check if should pillar kite
      */
-    bool ShouldPillarKite() const override;
+    bool ShouldPillarKite(::Player* player) const override;
 
     /**
      * Execute pillar kite
      */
-    bool ExecutePillarKite() override;
+    bool ExecutePillarKite(::Player* player) override;
 
     /**
      * Break line of sight with pillar
      */
-    bool BreakLoSWithPillar(::Unit* enemy) override;
+    bool BreakLoSWithPillar(::Player* player, ::Unit* enemy) override;
 
     // ============================================================================
     // COOLDOWN COORDINATION
@@ -265,17 +259,17 @@ public:
     /**
      * Coordinate offensive burst with team
      */
-    bool CoordinateOffensiveBurst() override;
+    bool CoordinateOffensiveBurst(::Player* player) override;
 
     /**
      * Check if team is ready for burst
      */
-    bool IsTeamReadyForBurst() const override;
+    bool IsTeamReadyForBurst(::Player* player) const override;
 
     /**
      * Signal team for burst
      */
-    void SignalBurst() override;
+    void SignalBurst(::Player* player) override;
 
     // ============================================================================
     // CC COORDINATION
@@ -284,35 +278,35 @@ public:
     /**
      * Coordinate CC chain with team
      */
-    bool CoordinateCCChain(::Unit* target) override;
+    bool CoordinateCCChain(::Player* player, ::Unit* target) override;
 
     /**
      * Check if teammate has CC available
      */
-    bool TeammateHasCCAvailable() const override;
+    bool TeammateHasCCAvailable(::Player* player) const override;
 
     /**
      * Signal CC target to team
      */
-    void SignalCCTarget(::Unit* target) override;
+    void SignalCCTarget(::Player* player, ::Unit* target) override;
 
     // ============================================================================
     // COMP-SPECIFIC STRATEGIES
     // ============================================================================
 
     // 2v2 Strategies
-    void Execute2v2Strategy() override;
-    void Execute2v2DoubleDPS() override;
-    void Execute2v2DPSHealer() override;
+    void Execute2v2Strategy(::Player* player) override;
+    void Execute2v2DoubleDPS(::Player* player) override;
+    void Execute2v2DPSHealer(::Player* player) override;
 
     // 3v3 Strategies
-    void Execute3v3Strategy() override;
-    void Execute3v3TripleDPS() override;
-    void Execute3v3DoubleDPSHealer() override;
-    void Execute3v3TankDPSHealer() override;
+    void Execute3v3Strategy(::Player* player) override;
+    void Execute3v3TripleDPS(::Player* player) override;
+    void Execute3v3DoubleDPSHealer(::Player* player) override;
+    void Execute3v3TankDPSHealer(::Player* player) override;
 
     // 5v5 Strategies
-    void Execute5v5Strategy() override;
+    void Execute5v5Strategy(::Player* player) override;
 
     // ============================================================================
     // COMPOSITION COUNTERS
@@ -326,41 +320,41 @@ public:
     /**
      * Counter RMP (Rogue/Mage/Priest)
      */
-    void CounterRMP() override;
+    void CounterRMP(::Player* player) override;
 
     /**
      * Counter TSG (Warrior/DK/Healer)
      */
-    void CounterTSG() override;
+    void CounterTSG(::Player* player) override;
 
     /**
      * Counter Turbo Cleave (Warrior/Shaman/Healer)
      */
-    void CounterTurboCleave() override;
+    void CounterTurboCleave(::Player* player) override;
 
     // ============================================================================
     // MATCH STATE TRACKING
     // ============================================================================
 
-    ArenaMatchState GetMatchState() const override;
-    void UpdateMatchState() override;
+    ArenaMatchState GetMatchState(::Player* player) const override;
+    void UpdateMatchState(::Player* player) override;
 
     /**
      * Check if team is winning
      */
-    bool IsTeamWinning() const override;
+    bool IsTeamWinning(::Player* player) const override;
 
     /**
      * Get match duration (seconds)
      */
-    uint32 GetMatchDuration() const override;
+    uint32 GetMatchDuration(::Player* player) const override;
 
     // ============================================================================
     // PROFILES
     // ============================================================================
 
-    void SetArenaProfile(ArenaProfile const& profile) override;
-    ArenaProfile GetArenaProfile() const override;
+    void SetArenaProfile(uint32 playerGuid, ArenaProfile const& profile) override;
+    ArenaProfile GetArenaProfile(uint32 playerGuid) const override;
 
     // ============================================================================
     // METRICS
@@ -402,34 +396,24 @@ public:
         }
     };
 
-    ArenaMetrics const& GetMetrics() const override;
+    ArenaMetrics const& GetPlayerMetrics(uint32 playerGuid) const override;
     ArenaMetrics const& GetGlobalMetrics() const override;
 
-public:
-    /**
-     * @brief Construct arena AI for specific bot
-     * @param bot The bot player this manager serves
-     */
-    explicit ArenaAI(Player* bot);
-    ~ArenaAI();
-
-    // Non-copyable
-    ArenaAI(ArenaAI const&) = delete;
-    ArenaAI& operator=(ArenaAI const&) = delete;
-
 private:
+    ArenaAI();
+    ~ArenaAI() = default;
 
     // ============================================================================
     // HELPER FUNCTIONS
     // ============================================================================
 
-    ArenaBracket GetArenaBracket() const;
-    TeamComposition GetTeamComposition() const;
-    TeamComposition GetEnemyTeamComposition() const;
-    std::vector<::Player*> GetTeammates() const;
-    std::vector<::Unit*> GetEnemyTeam() const;
-    bool IsInLineOfSight(::Unit* target) const;
-    float GetOptimalRangeForClass() const;
+    ArenaBracket GetArenaBracket(::Player* player) const;
+    TeamComposition GetTeamComposition(::Player* player) const;
+    TeamComposition GetEnemyTeamComposition(::Player* player) const;
+    std::vector<::Player*> GetTeammates(::Player* player) const;
+    std::vector<::Unit*> GetEnemyTeam(::Player* player) const;
+    bool IsInLineOfSight(::Player* player, ::Unit* target) const;
+    float GetOptimalRangeForClass(::Player* player) const;
     bool IsTeammateInDanger(::Player* teammate) const;
 
     // ============================================================================

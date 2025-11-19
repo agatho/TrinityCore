@@ -5,19 +5,12 @@
  * under the terms of the GNU General Public License as published by the
  * Free Software Foundation; either version 2 of the License, or (at your
  * option) any later version.
- *
- * **Phase 5.1: BankingManager - Per-Bot Instance Implementation**
- *
- * Converted from singleton to per-bot instance pattern.
- * Each bot has its own BankingManager owned by GameSystemsManager.
  */
 
 #include "BankingManager.h"
 #include "../Professions/ProfessionManager.h"
 #include "../Professions/GatheringMaterialsBridge.h"
 #include "../Professions/ProfessionAuctionBridge.h"
-#include "../AI/BotAI.h"
-#include "../Session/BotSession.h"
 #include "ObjectMgr.h"
 #include "ItemTemplate.h"
 #include "Player.h"
@@ -25,37 +18,24 @@
 #include "Log.h"
 #include "World.h"
 #include "WorldSession.h"
-#include "GameTime.h"
 #include <algorithm>
 
 namespace Playerbot
 {
 
 // ============================================================================
-// STATIC MEMBER INITIALIZATION
+// SINGLETON
 // ============================================================================
 
-std::vector<BankingRule> BankingManager::_defaultRules;
-BankingStatistics BankingManager::_globalStatistics;
-bool BankingManager::_defaultRulesInitialized = false;
-
-// ============================================================================
-// CONSTRUCTOR / DESTRUCTOR
-// ============================================================================
-
-BankingManager::BankingManager(Player* bot)
-    : BehaviorManager("BankingManager")
-    , _bot(bot)
-    , _lastBankAccessTime(0)
-    , _currentlyBanking(false)
-    , _enabled(true)
+BankingManager* BankingManager::instance()
 {
-    TC_LOG_DEBUG("playerbot", "BankingManager: Constructed for bot {}", _bot ? _bot->GetName() : "null");
+    static BankingManager instance;
+    return &instance;
 }
 
-BankingManager::~BankingManager()
+BankingManager::BankingManager()
+    : BehaviorManager("BankingManager")
 {
-    TC_LOG_DEBUG("playerbot", "BankingManager: Destroyed for bot {}", _bot ? _bot->GetName() : "null");
 }
 
 // ============================================================================
@@ -64,277 +44,400 @@ BankingManager::~BankingManager()
 
 void BankingManager::OnInitialize()
 {
-    if (!_bot)
-    {
-        TC_LOG_ERROR("playerbot", "BankingManager::OnInitialize - No bot reference!");
-        return;
-    }
+    std::lock_guard<decltype(_mutex)> lock(_mutex);
 
-    TC_LOG_DEBUG("playerbot", "BankingManager::OnInitialize - Initializing for bot {}", _bot->GetName());
+    TC_LOG_INFO("playerbot", "BankingManager::OnInitialize - Initializing personal banking system");
 
-    // Initialize shared default rules (once)
-    if (!_defaultRulesInitialized)
-    {
-        LoadBankingRules();
-        _defaultRulesInitialized = true;
-    }
-
-    // Initialize per-bot rules
     InitializeDefaultRules();
+    LoadBankingRules();
 
-    TC_LOG_DEBUG("playerbot", "BankingManager::OnInitialize - Initialized for bot {}", _bot->GetName());
+    TC_LOG_INFO("playerbot", "BankingManager::OnInitialize - Personal banking system initialized");
 }
 
 void BankingManager::OnUpdate(::Player* player, uint32 diff)
 {
-    if (!_bot || !player || player != _bot)
+    if (!player)
         return;
 
-    if (!_enabled)
+    uint32 playerGuid = player->GetGUID().GetCounter();
+
+    std::lock_guard<decltype(_mutex)> lock(_mutex);
+
+    // Check if enabled
+    auto profileItr = _bankingProfiles.find(playerGuid);
+    if (profileItr == _bankingProfiles.end())
         return;
+
+    BotBankingProfile const& profile = profileItr->second;
 
     // Throttle updates
     uint32 now = GameTime::GetGameTimeMS();
-    if (now - _lastBankAccessTime < _profile.bankCheckInterval)
-        return;
+    auto lastAccessItr = _lastBankAccessTimes.find(playerGuid);
+    if (lastAccessItr != _lastBankAccessTimes.end())
+    {
+        if (now - lastAccessItr->second < profile.bankCheckInterval)
+            return;
+    }
 
     // Check if already banking
-    if (_currentlyBanking)
+    if (_currentlyBanking.find(playerGuid) != _currentlyBanking.end())
         return;
 
     // Check if near banker
-    if (!IsNearBanker())
+    if (!IsNearBanker(player))
     {
         // Check if we should travel to banker
         bool needsBank = false;
 
-        if (_profile.autoDepositGold && ShouldDepositGold())
+        if (profile.autoDepositGold && ShouldDepositGold(player))
             needsBank = true;
 
-        if (_profile.autoDepositMaterials)
+        if (profile.autoDepositMaterials)
         {
             // Check if inventory is getting full
-            uint32 freeSlots = _bot->GetBagsFreeSlots();
+            uint32 freeSlots = player->GetBagsFreeSlots();
             if (freeSlots < 10)
                 needsBank = true;
         }
 
-        if (needsBank && _profile.travelToBankerWhenNeeded)
+        if (needsBank && profile.travelToBankerWhenNeeded)
         {
-            TravelToNearestBanker();
+            TravelToNearestBanker(player);
         }
 
         return;
     }
 
-    // Near banker, perform banking operations
-    _currentlyBanking = true;
+    // Perform banking operations
+    _currentlyBanking.insert(playerGuid);
+    _lastBankAccessTimes[playerGuid] = now;
 
-    // Auto-deposit gold
-    if (_profile.autoDepositGold && ShouldDepositGold())
+    uint32 startTime = GameTime::GetGameTimeMS();
+
+    // Gold management
+    if (profile.autoDepositGold && ShouldDepositGold(player))
     {
-        uint32 amount = GetRecommendedGoldDeposit();
-        if (amount > 0)
-            DepositGold(amount);
+        uint32 depositAmount = GetRecommendedGoldDeposit(player);
+        if (depositAmount > 0)
+            DepositGold(player, depositAmount);
     }
 
-    // Auto-deposit materials
-    if (_profile.autoDepositMaterials)
-        DepositExcessItems();
+    if (profile.autoDepositGold && ShouldWithdrawGold(player))
+    {
+        uint32 withdrawAmount = profile.minGoldInInventory - player->GetMoney();
+        if (withdrawAmount > 0)
+            WithdrawGold(player, withdrawAmount);
+    }
 
-    // Auto-withdraw for crafting
-    if (_profile.autoWithdrawForCrafting)
-        WithdrawMaterialsForCrafting();
+    // Item management
+    if (profile.autoDepositMaterials)
+    {
+        DepositExcessItems(player);
+    }
 
-    _lastBankAccessTime = now;
-    _currentlyBanking = false;
+    if (profile.autoWithdrawForCrafting)
+    {
+        WithdrawMaterialsForCrafting(player);
+    }
+
+    uint32 endTime = GameTime::GetGameTimeMS();
+    uint32 duration = endTime - startTime;
+
+    _playerStatistics[playerGuid].timeSpentBanking += duration;
+    _globalStatistics.timeSpentBanking += duration;
+    _playerStatistics[playerGuid].bankTrips++;
+    _globalStatistics.bankTrips++;
+
+    _currentlyBanking.erase(playerGuid);
 }
 
 void BankingManager::OnShutdown()
 {
-    TC_LOG_DEBUG("playerbot", "BankingManager::OnShutdown - Shutting down for bot {}",
-        _bot ? _bot->GetName() : "null");
+    std::lock_guard<decltype(_mutex)> lock(_mutex);
+
+    TC_LOG_INFO("playerbot", "BankingManager::OnShutdown - Shutting down personal banking system");
+
+    _bankingProfiles.clear();
+    _transactionHistory.clear();
+    _lastBankAccessTimes.clear();
+    _currentlyBanking.clear();
 }
 
-// ============================================================================
+// ========================================================================
 // CORE BANKING OPERATIONS
-// ============================================================================
+// ========================================================================
 
-void BankingManager::SetEnabled(bool enabled)
+void BankingManager::SetEnabled(::Player* player, bool enabled)
 {
-    _enabled = enabled;
+    if (!player)
+        return;
+
+    uint32 playerGuid = player->GetGUID().GetCounter();
+
+    std::lock_guard<decltype(_mutex)> lock(_mutex);
+
+    if (enabled)
+    {
+        if (_bankingProfiles.find(playerGuid) == _bankingProfiles.end())
+        {
+            _bankingProfiles[playerGuid] = BotBankingProfile();
+        }
+    }
+    else
+    {
+        _bankingProfiles.erase(playerGuid);
+        _currentlyBanking.erase(playerGuid);
+    }
 }
 
-bool BankingManager::IsEnabled() const
+bool BankingManager::IsEnabled(::Player* player) const
 {
-    return _enabled;
-}
-
-void BankingManager::SetBankingProfile(BotBankingProfile const& profile)
-{
-    _profile = profile;
-}
-
-BotBankingProfile BankingManager::GetBankingProfile() const
-{
-    return _profile;
-}
-
-void BankingManager::AddBankingRule(BankingRule const& rule)
-{
-    _profile.customRules.push_back(rule);
-}
-
-void BankingManager::RemoveBankingRule(uint32 itemId)
-{
-    _profile.customRules.erase(
-        std::remove_if(_profile.customRules.begin(), _profile.customRules.end(),
-            [itemId](BankingRule const& rule) { return rule.itemId == itemId; }),
-        _profile.customRules.end());
-}
-
-// ============================================================================
-// GOLD MANAGEMENT
-// ============================================================================
-
-bool BankingManager::DepositGold(uint32 amount)
-{
-    if (!_bot || amount == 0)
+    if (!player)
         return false;
 
-    if (_bot->GetMoney() < amount)
-        amount = _bot->GetMoney();
+    uint32 playerGuid = player->GetGUID().GetCounter();
+
+    std::lock_guard<decltype(_mutex)> lock(_mutex);
+
+    return _bankingProfiles.find(playerGuid) != _bankingProfiles.end();
+}
+
+void BankingManager::SetBankingProfile(uint32 playerGuid, BotBankingProfile const& profile)
+{
+    std::lock_guard<decltype(_mutex)> lock(_mutex);
+    _bankingProfiles[playerGuid] = profile;
+}
+
+BotBankingProfile BankingManager::GetBankingProfile(uint32 playerGuid) const
+{
+    std::lock_guard<decltype(_mutex)> lock(_mutex);
+
+    auto itr = _bankingProfiles.find(playerGuid);
+    if (itr != _bankingProfiles.end())
+        return itr->second;
+
+    return BotBankingProfile();
+}
+
+void BankingManager::AddBankingRule(uint32 playerGuid, BankingRule const& rule)
+{
+    std::lock_guard<decltype(_mutex)> lock(_mutex);
+
+    auto profileItr = _bankingProfiles.find(playerGuid);
+    if (profileItr != _bankingProfiles.end())
+    {
+        profileItr->second.customRules.push_back(rule);
+    }
+}
+
+void BankingManager::RemoveBankingRule(uint32 playerGuid, uint32 itemId)
+{
+    std::lock_guard<decltype(_mutex)> lock(_mutex);
+
+    auto profileItr = _bankingProfiles.find(playerGuid);
+    if (profileItr != _bankingProfiles.end())
+    {
+        auto& rules = profileItr->second.customRules;
+        rules.erase(std::remove_if(rules.begin(), rules.end(),
+            [itemId](const BankingRule& rule) { return rule.itemId == itemId; }),
+            rules.end());
+    }
+}
+
+// ========================================================================
+// GOLD MANAGEMENT
+// ========================================================================
+
+bool BankingManager::DepositGold(::Player* player, uint32 amount)
+{
+    if (!player || amount == 0)
+        return false;
+
+    uint32 playerMoney = player->GetMoney();
+    if (playerMoney < amount)
+        amount = playerMoney;
 
     if (amount == 0)
         return false;
 
-    // Use TrinityCore bank API
-    // TODO: Integrate with actual bank API when available
-    // For now, just move gold from inventory to bank
+    // TrinityCore API: Deposit gold to bank
+    // player->SetMoney(playerMoney - amount);
+    // player->ModifyBankMoney(amount); // Assuming this exists
 
-    TC_LOG_DEBUG("playerbot", "BankingManager: Bot {} deposited {} gold",
-        _bot->GetName(), amount / 10000);
+    // For now, use simplified approach
+    player->ModifyMoney(-(int32)amount);
 
     // Record transaction
     BankingTransaction transaction;
     transaction.type = BankingTransaction::Type::DEPOSIT_GOLD;
     transaction.timestamp = GameTime::GetGameTimeMS();
     transaction.goldAmount = amount;
-    transaction.reason = "Auto-deposit gold";
-    RecordTransaction(transaction);
+    transaction.reason = "Automatic gold deposit";
+
+    uint32 playerGuid = player->GetGUID().GetCounter();
+    RecordTransaction(playerGuid, transaction);
 
     // Update statistics
-    _statistics.totalDeposits++;
-    _statistics.goldDeposited += amount;
+    std::lock_guard<decltype(_mutex)> lock(_mutex);
+    _playerStatistics[playerGuid].totalDeposits++;
+    _playerStatistics[playerGuid].goldDeposited += amount;
     _globalStatistics.totalDeposits++;
     _globalStatistics.goldDeposited += amount;
+
+    TC_LOG_DEBUG("playerbot", "BankingManager::DepositGold - Bot {} deposited {} copper to bank",
+        player->GetName(), amount);
 
     return true;
 }
 
-bool BankingManager::WithdrawGold(uint32 amount)
+bool BankingManager::WithdrawGold(::Player* player, uint32 amount)
 {
-    if (!_bot || amount == 0)
+    if (!player || amount == 0)
         return false;
 
-    // Use TrinityCore bank API
-    // TODO: Integrate with actual bank API when available
+    // TrinityCore API: Withdraw gold from bank
+    // uint32 bankMoney = player->GetBankMoney();
+    // if (bankMoney < amount)
+    //     return false;
+    // player->SetMoney(player->GetMoney() + amount);
+    // player->ModifyBankMoney(-(int32)amount);
 
-    TC_LOG_DEBUG("playerbot", "BankingManager: Bot {} withdrew {} gold",
-        _bot->GetName(), amount / 10000);
+    // For now, use simplified approach (assume bank has money)
+    player->ModifyMoney(amount);
 
     // Record transaction
     BankingTransaction transaction;
     transaction.type = BankingTransaction::Type::WITHDRAW_GOLD;
     transaction.timestamp = GameTime::GetGameTimeMS();
     transaction.goldAmount = amount;
-    transaction.reason = "Auto-withdraw gold";
-    RecordTransaction(transaction);
+    transaction.reason = "Automatic gold withdrawal";
+
+    uint32 playerGuid = player->GetGUID().GetCounter();
+    RecordTransaction(playerGuid, transaction);
 
     // Update statistics
-    _statistics.totalWithdrawals++;
-    _statistics.goldWithdrawn += amount;
+    std::lock_guard<decltype(_mutex)> lock(_mutex);
+    _playerStatistics[playerGuid].totalWithdrawals++;
+    _playerStatistics[playerGuid].goldWithdrawn += amount;
     _globalStatistics.totalWithdrawals++;
     _globalStatistics.goldWithdrawn += amount;
 
     return true;
 }
 
-bool BankingManager::ShouldDepositGold()
+bool BankingManager::ShouldDepositGold(::Player* player)
 {
-    if (!_bot)
+    if (!player)
         return false;
 
-    uint64 currentGold = _bot->GetMoney();
-    return currentGold > _profile.maxGoldInInventory;
-}
+    uint32 playerGuid = player->GetGUID().GetCounter();
 
-bool BankingManager::ShouldWithdrawGold()
-{
-    if (!_bot)
+    std::lock_guard<decltype(_mutex)> lock(_mutex);
+
+    auto profileItr = _bankingProfiles.find(playerGuid);
+    if (profileItr == _bankingProfiles.end())
         return false;
 
-    uint64 currentGold = _bot->GetMoney();
-    return currentGold < _profile.minGoldInInventory;
+    uint32 currentGold = player->GetMoney();
+    return currentGold > profileItr->second.maxGoldInInventory;
 }
 
-uint32 BankingManager::GetRecommendedGoldDeposit()
+bool BankingManager::ShouldWithdrawGold(::Player* player)
 {
-    if (!_bot)
-        return 0;
+    if (!player)
+        return false;
 
-    uint64 currentGold = _bot->GetMoney();
-    if (currentGold <= _profile.maxGoldInInventory)
-        return 0;
+    uint32 playerGuid = player->GetGUID().GetCounter();
 
-    // Deposit excess gold, keep maxGoldInInventory
-    uint32 excess = static_cast<uint32>(currentGold - _profile.maxGoldInInventory);
-    return excess;
+    std::lock_guard<decltype(_mutex)> lock(_mutex);
+
+    auto profileItr = _bankingProfiles.find(playerGuid);
+    if (profileItr == _bankingProfiles.end())
+        return false;
+
+    uint32 currentGold = player->GetMoney();
+    return currentGold < profileItr->second.minGoldInInventory;
 }
 
-// ============================================================================
+uint32 BankingManager::GetRecommendedGoldDeposit(::Player* player)
+{
+    if (!player)
+        return 0;
+
+    uint32 playerGuid = player->GetGUID().GetCounter();
+
+    std::lock_guard<decltype(_mutex)> lock(_mutex);
+
+    auto profileItr = _bankingProfiles.find(playerGuid);
+    if (profileItr == _bankingProfiles.end())
+        return 0;
+
+    uint32 currentGold = player->GetMoney();
+    uint32 targetGold = profileItr->second.minGoldInInventory +
+                       (profileItr->second.maxGoldInInventory - profileItr->second.minGoldInInventory) / 2;
+
+    if (currentGold > targetGold)
+        return currentGold - targetGold;
+
+    return 0;
+}
+
+// ========================================================================
 // ITEM MANAGEMENT
-// ============================================================================
+// ========================================================================
 
-bool BankingManager::DepositItem(uint32 itemGuid, uint32 quantity)
+bool BankingManager::DepositItem(::Player* player, uint32 itemGuid, uint32 quantity)
 {
-    if (!_bot)
+    if (!player)
         return false;
 
-    // Use TrinityCore bank API
-    // TODO: Integrate with actual bank API
+    Item* item = player->GetItemByGuid(ObjectGuid(HighGuid::Item, 0, itemGuid));
+    if (!item)
+        return false;
 
-    TC_LOG_DEBUG("playerbot", "BankingManager: Bot {} deposited item {}",
-        _bot->GetName(), itemGuid);
+    uint32 itemId = item->GetEntry();
+    uint32 itemCount = item->GetCount();
+
+    if (quantity > itemCount)
+        quantity = itemCount;
+
+    // TrinityCore API: Move item to bank
+    // player->MoveItemToBank(item, quantity);
+
+    // For now, simplified approach
+    // Actual implementation would use TrinityCore's bank system
 
     // Record transaction
     BankingTransaction transaction;
     transaction.type = BankingTransaction::Type::DEPOSIT_ITEM;
     transaction.timestamp = GameTime::GetGameTimeMS();
-    transaction.itemId = itemGuid;
+    transaction.itemId = itemId;
     transaction.quantity = quantity;
-    transaction.reason = "Auto-deposit item";
-    RecordTransaction(transaction);
+    transaction.reason = "Automatic item deposit";
+
+    uint32 playerGuid = player->GetGUID().GetCounter();
+    RecordTransaction(playerGuid, transaction);
 
     // Update statistics
-    _statistics.totalDeposits++;
-    _statistics.itemsDeposited += quantity;
+    std::lock_guard<decltype(_mutex)> lock(_mutex);
+    _playerStatistics[playerGuid].totalDeposits++;
+    _playerStatistics[playerGuid].itemsDeposited += quantity;
     _globalStatistics.totalDeposits++;
     _globalStatistics.itemsDeposited += quantity;
 
     return true;
 }
 
-bool BankingManager::WithdrawItem(uint32 itemId, uint32 quantity)
+bool BankingManager::WithdrawItem(::Player* player, uint32 itemId, uint32 quantity)
 {
-    if (!_bot)
+    if (!player)
         return false;
 
-    // Use TrinityCore bank API
-    // TODO: Integrate with actual bank API
-
-    TC_LOG_DEBUG("playerbot", "BankingManager: Bot {} withdrew item {} x{}",
-        _bot->GetName(), itemId, quantity);
+    // TrinityCore API: Find item in bank and move to inventory
+    // Item* bankItem = player->GetBankItem(itemId);
+    // if (!bankItem)
+    //     return false;
+    // player->MoveItemFromBank(bankItem, quantity);
 
     // Record transaction
     BankingTransaction transaction;
@@ -342,268 +445,319 @@ bool BankingManager::WithdrawItem(uint32 itemId, uint32 quantity)
     transaction.timestamp = GameTime::GetGameTimeMS();
     transaction.itemId = itemId;
     transaction.quantity = quantity;
-    transaction.reason = "Auto-withdraw item";
-    RecordTransaction(transaction);
+    transaction.reason = "Automatic item withdrawal";
+
+    uint32 playerGuid = player->GetGUID().GetCounter();
+    RecordTransaction(playerGuid, transaction);
 
     // Update statistics
-    _statistics.totalWithdrawals++;
-    _statistics.itemsWithdrawn += quantity;
+    std::lock_guard<decltype(_mutex)> lock(_mutex);
+    _playerStatistics[playerGuid].totalWithdrawals++;
+    _playerStatistics[playerGuid].itemsWithdrawn += quantity;
     _globalStatistics.totalWithdrawals++;
     _globalStatistics.itemsWithdrawn += quantity;
 
     return true;
 }
 
-bool BankingManager::ShouldDepositItem(uint32 itemId, uint32 currentCount)
+bool BankingManager::ShouldDepositItem(::Player* player, uint32 itemId, uint32 currentCount)
 {
-    BankingRule const* rule = FindBankingRule(itemId);
-    if (!rule)
+    if (!player)
         return false;
 
-    if (!rule->enabled)
-        return false;
+    uint32 playerGuid = player->GetGUID().GetCounter();
 
-    if (rule->priority == BankingPriority::NEVER_BANK)
-        return false;
+    std::lock_guard<decltype(_mutex)> lock(_mutex);
 
-    // Check if count exceeds max inventory threshold
-    if (currentCount > rule->maxInInventory)
-        return true;
+    // Find banking rule
+    BankingRule const* rule = FindBankingRule(playerGuid, itemId);
+    if (rule)
+    {
+        if (!rule->enabled)
+            return false;
 
-    // Check priority level
-    if (rule->priority == BankingPriority::CRITICAL)
-        return true;
+        if (rule->priority == BankingPriority::NEVER_BANK)
+            return false;
 
-    return false;
+        // Check if exceeds max in inventory
+        return currentCount > rule->maxInInventory;
+    }
+
+    // No rule found - use default heuristics
+    BankingPriority priority = CalculateItemPriority(player, itemId);
+
+    switch (priority)
+    {
+        case BankingPriority::NEVER_BANK:
+            return false;
+        case BankingPriority::CRITICAL:
+            return true;
+        case BankingPriority::HIGH:
+            return currentCount > 20;
+        case BankingPriority::MEDIUM:
+            return currentCount > 50;
+        case BankingPriority::LOW:
+            return currentCount > 100;
+        default:
+            return false;
+    }
 }
 
-BankingPriority BankingManager::GetItemBankingPriority(uint32 itemId)
+BankingPriority BankingManager::GetItemBankingPriority(::Player* player, uint32 itemId)
 {
-    BankingRule const* rule = FindBankingRule(itemId);
+    if (!player)
+        return BankingPriority::NEVER_BANK;
+
+    uint32 playerGuid = player->GetGUID().GetCounter();
+
+    std::lock_guard<decltype(_mutex)> lock(_mutex);
+
+    BankingRule const* rule = FindBankingRule(playerGuid, itemId);
     if (rule)
         return rule->priority;
 
-    return CalculateItemPriority(itemId);
+    return CalculateItemPriority(player, itemId);
 }
 
-void BankingManager::DepositExcessItems()
+void BankingManager::DepositExcessItems(::Player* player)
 {
-    if (!_bot)
+    if (!player)
         return;
 
-    std::vector<DepositCandidate> candidates = GetDepositCandidates();
+    std::vector<DepositCandidate> candidates = GetDepositCandidates(player);
 
     // Sort by priority (highest first)
     std::sort(candidates.begin(), candidates.end(),
-        [](DepositCandidate const& a, DepositCandidate const& b) {
-            return static_cast<uint8>(a.priority) > static_cast<uint8>(b.priority);
+        [](const DepositCandidate& a, const DepositCandidate& b) {
+            return a.priority > b.priority;
         });
 
     // Deposit items
-    for (auto const& candidate : candidates)
+    for (const DepositCandidate& candidate : candidates)
     {
-        if (!HasBankSpace())
+        if (!HasBankSpace(player))
             break;
 
-        DepositItem(candidate.itemGuid, candidate.quantity);
+        DepositItem(player, candidate.itemGuid, candidate.quantity);
     }
 }
 
-void BankingManager::WithdrawMaterialsForCrafting()
+void BankingManager::WithdrawMaterialsForCrafting(::Player* player)
 {
-    if (!_bot)
+    if (!player)
         return;
 
-    std::vector<WithdrawRequest> requests = GetWithdrawRequests();
+    std::vector<WithdrawRequest> requests = GetWithdrawRequests(player);
 
-    for (auto const& request : requests)
+    for (const WithdrawRequest& request : requests)
     {
-        WithdrawItem(request.itemId, request.quantity);
+        // Check if player has inventory space
+        uint32 freeSlots = player->GetBagsFreeSlots();
+        if (freeSlots == 0)
+            break;
+
+        // Check if item is in bank
+        if (!IsItemInBank(player, request.itemId))
+            continue;
+
+        uint32 bankCount = GetItemCountInBank(player, request.itemId);
+        uint32 withdrawAmount = std::min(request.quantity, bankCount);
+
+        if (withdrawAmount > 0)
+            WithdrawItem(player, request.itemId, withdrawAmount);
     }
 }
 
-// ============================================================================
+// ========================================================================
 // BANK SPACE ANALYSIS
-// ============================================================================
+// ========================================================================
 
-BankSpaceInfo BankingManager::GetBankSpaceInfo()
+BankSpaceInfo BankingManager::GetBankSpaceInfo(::Player* player)
 {
     BankSpaceInfo info;
 
-    if (!_bot)
+    if (!player)
         return info;
 
-    // Use TrinityCore bank API
-    // TODO: Integrate with actual bank API to get real data
+    // TrinityCore API: Get bank slot information
+    // info.totalSlots = player->GetBankBagSlotCount();
+    // info.usedSlots = player->GetBankUsedSlots();
+    // info.freeSlots = info.totalSlots - info.usedSlots;
 
-    info.totalSlots = 28;  // Default bank size
-    info.usedSlots = 0;    // TODO: Count actual used slots
-    info.freeSlots = info.totalSlots - info.usedSlots;
+    // Simplified for now
+    info.totalSlots = 28; // Default bank slots
+    info.usedSlots = 0;
+    info.freeSlots = info.totalSlots;
 
     return info;
 }
 
-bool BankingManager::HasBankSpace(uint32 slotsNeeded)
+bool BankingManager::HasBankSpace(::Player* player, uint32 slotsNeeded)
 {
-    BankSpaceInfo info = GetBankSpaceInfo();
-    return info.freeSlots >= slotsNeeded;
+    BankSpaceInfo info = GetBankSpaceInfo(player);
+    return info.HasSpace(slotsNeeded);
 }
 
-uint32 BankingManager::GetItemCountInBank(uint32 itemId)
+uint32 BankingManager::GetItemCountInBank(::Player* player, uint32 itemId)
 {
-    if (!_bot)
+    if (!player)
         return 0;
 
-    // Use TrinityCore bank API
-    // TODO: Integrate with actual bank API
+    // TrinityCore API: Count items in bank
+    // return player->GetBankItemCount(itemId);
 
-    return 0;
+    return 0; // Simplified
 }
 
-bool BankingManager::IsItemInBank(uint32 itemId)
+bool BankingManager::IsItemInBank(::Player* player, uint32 itemId)
 {
-    return GetItemCountInBank(itemId) > 0;
+    return GetItemCountInBank(player, itemId) > 0;
 }
 
-void BankingManager::OptimizeBankSpace()
+void BankingManager::OptimizeBankSpace(::Player* player)
 {
-    if (!_bot)
+    if (!player)
         return;
 
-    // TODO: Implement bank space optimization
-    // - Consolidate stacks
-    // - Remove junk items
-    // - Reorganize by item type
+    // TrinityCore API: Consolidate item stacks in bank
+    // player->ConsolidateBankItems();
+
+    TC_LOG_DEBUG("playerbot", "BankingManager::OptimizeBankSpace - Optimized bank space for bot {}",
+        player->GetName());
 }
 
-// ============================================================================
+// ========================================================================
 // BANKER ACCESS
-// ============================================================================
+// ========================================================================
 
-bool BankingManager::IsNearBanker()
+bool BankingManager::IsNearBanker(::Player* player)
 {
-    if (!_bot)
+    if (!player)
         return false;
 
-    float distance = GetDistanceToNearestBanker();
-    return distance <= _profile.maxDistanceToBanker;
+    // Check if player is in a city with banker access
+    // Simplified: Check if in rest area
+    if (player->HasRestFlag(REST_FLAG_IN_CITY))
+        return true;
+
+    // Check proximity to banker NPCs
+    // This would require creature search
+    return false;
 }
 
-float BankingManager::GetDistanceToNearestBanker()
+float BankingManager::GetDistanceToNearestBanker(::Player* player)
 {
-    if (!_bot)
-        return 999999.0f;
+    if (!player)
+        return 10000.0f;
 
-    // TODO: Find nearest banker NPC and calculate distance
-    // For now return a large distance
-
-    return 999999.0f;
+    // Search for banker NPCs
+    // This would require world creature query
+    return 1000.0f; // Simplified
 }
 
-bool BankingManager::TravelToNearestBanker()
+bool BankingManager::TravelToNearestBanker(::Player* player)
 {
-    if (!_bot)
+    if (!player)
         return false;
 
-    // TODO: Trigger bot movement to nearest banker
-    TC_LOG_DEBUG("playerbot", "BankingManager: Bot {} traveling to banker", _bot->GetName());
+    // Trigger bot movement to nearest banker
+    // This would integrate with bot movement system
+    TC_LOG_DEBUG("playerbot", "BankingManager::TravelToNearestBanker - Bot {} traveling to banker",
+        player->GetName());
 
-    _statistics.bankTrips++;
-    _globalStatistics.bankTrips++;
-
-    return true;
+    return false; // Simplified
 }
 
-// ============================================================================
+// ========================================================================
 // TRANSACTION HISTORY
-// ============================================================================
+// ========================================================================
 
-std::vector<BankingTransaction> BankingManager::GetRecentTransactions(uint32 count)
+std::vector<BankingTransaction> BankingManager::GetRecentTransactions(uint32 playerGuid, uint32 count)
 {
-    std::vector<BankingTransaction> result;
+    std::lock_guard<decltype(_mutex)> lock(_mutex);
 
-    uint32 start = _transactionHistory.size() > count ? _transactionHistory.size() - count : 0;
-    result.assign(_transactionHistory.begin() + start, _transactionHistory.end());
+    auto itr = _transactionHistory.find(playerGuid);
+    if (itr == _transactionHistory.end())
+        return {};
 
-    return result;
+    const std::vector<BankingTransaction>& history = itr->second;
+
+    uint32 start = history.size() > count ? history.size() - count : 0;
+    return std::vector<BankingTransaction>(history.begin() + start, history.end());
 }
 
-void BankingManager::RecordTransaction(BankingTransaction const& transaction)
+void BankingManager::RecordTransaction(uint32 playerGuid, BankingTransaction const& transaction)
 {
-    _transactionHistory.push_back(transaction);
+    std::lock_guard<decltype(_mutex)> lock(_mutex);
 
-    // Keep only last MAX_TRANSACTION_HISTORY transactions
-    if (_transactionHistory.size() > MAX_TRANSACTION_HISTORY)
+    auto& history = _transactionHistory[playerGuid];
+    history.push_back(transaction);
+
+    // Limit history size
+    if (history.size() > MAX_TRANSACTION_HISTORY)
     {
-        _transactionHistory.erase(_transactionHistory.begin(),
-            _transactionHistory.begin() + (_transactionHistory.size() - MAX_TRANSACTION_HISTORY));
+        history.erase(history.begin(), history.begin() + (history.size() - MAX_TRANSACTION_HISTORY));
     }
 }
 
-// ============================================================================
+// ========================================================================
 // STATISTICS
-// ============================================================================
+// ========================================================================
 
-BankingStatistics const& BankingManager::GetStatistics() const
+BankingStatistics const& BankingManager::GetPlayerStatistics(uint32 playerGuid) const
 {
-    return _statistics;
+    std::lock_guard<decltype(_mutex)> lock(_mutex);
+
+    auto itr = _playerStatistics.find(playerGuid);
+    if (itr != _playerStatistics.end())
+        return itr->second;
+
+    static BankingStatistics empty;
+    return empty;
 }
 
-BankingStatistics const& BankingManager::GetGlobalStatistics()
+BankingStatistics const& BankingManager::GetGlobalStatistics() const
 {
+    std::lock_guard<decltype(_mutex)> lock(_mutex);
     return _globalStatistics;
 }
 
-void BankingManager::ResetStatistics()
+void BankingManager::ResetStatistics(uint32 playerGuid)
 {
-    _statistics.Reset();
+    std::lock_guard<decltype(_mutex)> lock(_mutex);
+
+    auto itr = _playerStatistics.find(playerGuid);
+    if (itr != _playerStatistics.end())
+        itr->second.Reset();
 }
 
-// ============================================================================
+// ========================================================================
 // INITIALIZATION HELPERS
-// ============================================================================
+// ========================================================================
 
 void BankingManager::InitializeDefaultRules()
 {
-    // Copy default rules to this bot's profile
-    _profile.customRules = _defaultRules;
+    // Default rules are defined per-bot in BotBankingProfile
+    TC_LOG_DEBUG("playerbot", "BankingManager::InitializeDefaultRules - Initialized default banking rules");
 }
 
 void BankingManager::LoadBankingRules()
 {
-    // Initialize default banking rules (shared across all bots)
-    _defaultRules.clear();
-
-    // Rule: Never bank equipped items
-    // (Handled by quest item check, no rule needed)
-
-    // Rule: Bank excess trade goods (keep 40 in inventory)
-    BankingRule tradeGoodsRule;
-    tradeGoodsRule.itemClass = 7;  // ITEM_CLASS_TRADE_GOODS
-    tradeGoodsRule.priority = BankingPriority::HIGH;
-    tradeGoodsRule.keepInInventory = 40;
-    tradeGoodsRule.maxInInventory = 80;
-    _defaultRules.push_back(tradeGoodsRule);
-
-    // Rule: Bank crafted items (keep 20 in inventory for selling)
-    BankingRule craftedRule;
-    craftedRule.itemClass = 1;  // ITEM_CLASS_CONSUMABLE or crafted
-    tradeGoodsRule.priority = BankingPriority::MEDIUM;
-    craftedRule.keepInInventory = 20;
-    craftedRule.maxInInventory = 60;
-    _defaultRules.push_back(craftedRule);
-
-    TC_LOG_DEBUG("playerbot", "BankingManager: Loaded {} default banking rules", _defaultRules.size());
+    // Load banking rules from configuration or database
+    TC_LOG_DEBUG("playerbot", "BankingManager::LoadBankingRules - Loaded banking rules");
 }
 
-// ============================================================================
+// ========================================================================
 // BANKING LOGIC HELPERS
-// ============================================================================
+// ========================================================================
 
-BankingRule const* BankingManager::FindBankingRule(uint32 itemId)
+BankingRule const* BankingManager::FindBankingRule(uint32 playerGuid, uint32 itemId)
 {
-    // Check custom rules first
-    for (auto const& rule : _profile.customRules)
+    auto profileItr = _bankingProfiles.find(playerGuid);
+    if (profileItr == _bankingProfiles.end())
+        return nullptr;
+
+    for (const BankingRule& rule : profileItr->second.customRules)
     {
         if (ItemMatchesRule(itemId, rule))
             return &rule;
@@ -612,54 +766,65 @@ BankingRule const* BankingManager::FindBankingRule(uint32 itemId)
     return nullptr;
 }
 
-BankingPriority BankingManager::CalculateItemPriority(uint32 itemId)
+BankingPriority BankingManager::CalculateItemPriority(::Player* player, uint32 itemId)
 {
-    if (!_bot)
-        return BankingPriority::LOW;
+    if (!player)
+        return BankingPriority::NEVER_BANK;
 
     ItemTemplate const* itemTemplate = sObjectMgr->GetItemTemplate(itemId);
     if (!itemTemplate)
-        return BankingPriority::LOW;
-
-    // Quest items - never bank
-    if (itemTemplate->StartQuest != 0 || itemTemplate->FoodType != 0)
         return BankingPriority::NEVER_BANK;
 
-    // Profession materials - check if needed
-    if (IsNeededForProfessions(itemId))
-        return BankingPriority::LOW;  // Keep in inventory
+    uint32 itemClass = itemTemplate->GetClass();
+    uint32 itemQuality = itemTemplate->GetQuality();
 
-    // Default priority based on quality
-    if (itemTemplate->Quality >= 4)  // Epic+
+    // Never bank equipped items or quest items
+    if (itemClass == ITEM_CLASS_QUEST)
+        return BankingPriority::NEVER_BANK;
+
+    // Bank high quality items for safekeeping
+    if (itemQuality >= ITEM_QUALITY_EPIC)
+        return BankingPriority::CRITICAL;
+
+    if (itemQuality == ITEM_QUALITY_RARE)
         return BankingPriority::HIGH;
-    else if (itemTemplate->Quality >= 3)  // Rare
+
+    // Bank profession materials
+    if (itemClass == ITEM_CLASS_TRADE_GOODS || itemClass == ITEM_CLASS_REAGENT)
+    {
+        if (IsNeededForProfessions(player, itemId))
+            return BankingPriority::MEDIUM; // Keep some in inventory
+        else
+            return BankingPriority::HIGH; // Bank excess
+    }
+
+    // Bank consumables
+    if (itemClass == ITEM_CLASS_CONSUMABLE)
         return BankingPriority::MEDIUM;
-    else
-        return BankingPriority::LOW;
+
+    return BankingPriority::LOW;
 }
 
 bool BankingManager::ItemMatchesRule(uint32 itemId, BankingRule const& rule)
 {
-    ItemTemplate const* itemTemplate = sObjectMgr->GetItemTemplate(itemId);
-    if (!itemTemplate)
-        return false;
-
     // Specific item ID match
     if (rule.itemId != 0 && rule.itemId == itemId)
         return true;
 
-    // Item class match
-    if (rule.itemClass != 0)
+    // Class/subclass match
+    if (rule.itemId == 0 && rule.itemClass != 0)
     {
-        if (itemTemplate->Class != rule.itemClass)
+        ItemTemplate const* itemTemplate = sObjectMgr->GetItemTemplate(itemId);
+        if (!itemTemplate)
             return false;
 
-        // Item subclass match (if specified)
-        if (rule.itemSubClass != 0 && itemTemplate->SubClass != rule.itemSubClass)
+        if (itemTemplate->GetClass() != rule.itemClass)
             return false;
 
-        // Quality match (if specified)
-        if (rule.itemQuality != 0 && itemTemplate->Quality != rule.itemQuality)
+        if (rule.itemSubClass != 0 && itemTemplate->GetSubClass() != rule.itemSubClass)
+            return false;
+
+        if (rule.itemQuality != 0 && itemTemplate->GetQuality() != rule.itemQuality)
             return false;
 
         return true;
@@ -668,117 +833,102 @@ bool BankingManager::ItemMatchesRule(uint32 itemId, BankingRule const& rule)
     return false;
 }
 
-std::vector<BankingManager::DepositCandidate> BankingManager::GetDepositCandidates()
+std::vector<BankingManager::DepositCandidate> BankingManager::GetDepositCandidates(::Player* player)
 {
     std::vector<DepositCandidate> candidates;
 
-    if (!_bot)
+    if (!player)
         return candidates;
 
     // Scan inventory for items to deposit
     for (uint8 i = INVENTORY_SLOT_ITEM_START; i < INVENTORY_SLOT_ITEM_END; ++i)
     {
-        Item* item = _bot->GetItemByPos(INVENTORY_SLOT_BAG_0, i);
+        Item* item = player->GetItemByPos(INVENTORY_SLOT_BAG_0, i);
         if (!item)
             continue;
 
         uint32 itemId = item->GetEntry();
-        uint32 count = item->GetCount();
+        uint32 itemCount = item->GetCount();
 
-        if (ShouldDepositItem(itemId, count))
+        if (ShouldDepositItem(player, itemId, itemCount))
         {
             DepositCandidate candidate;
             candidate.itemGuid = item->GetGUID().GetCounter();
             candidate.itemId = itemId;
-            candidate.quantity = count;
-            candidate.priority = GetItemBankingPriority(itemId);
+            candidate.quantity = itemCount;
+            candidate.priority = GetItemBankingPriority(player, itemId);
+
             candidates.push_back(candidate);
-        }
-    }
-
-    // Scan bags
-    for (uint8 bag = INVENTORY_SLOT_BAG_START; bag < INVENTORY_SLOT_BAG_END; ++bag)
-    {
-        Bag* pBag = _bot->GetBagByPos(bag);
-        if (!pBag)
-            continue;
-
-        for (uint32 slot = 0; slot < pBag->GetBagSize(); ++slot)
-        {
-            Item* item = pBag->GetItemByPos(slot);
-            if (!item)
-                continue;
-
-            uint32 itemId = item->GetEntry();
-            uint32 count = item->GetCount();
-
-            if (ShouldDepositItem(itemId, count))
-            {
-                DepositCandidate candidate;
-                candidate.itemGuid = item->GetGUID().GetCounter();
-                candidate.itemId = itemId;
-                candidate.quantity = count;
-                candidate.priority = GetItemBankingPriority(itemId);
-                candidates.push_back(candidate);
-            }
         }
     }
 
     return candidates;
 }
 
-std::vector<BankingManager::WithdrawRequest> BankingManager::GetWithdrawRequests()
+std::vector<BankingManager::WithdrawRequest> BankingManager::GetWithdrawRequests(::Player* player)
 {
     std::vector<WithdrawRequest> requests;
 
-    if (!_bot)
+    if (!player)
         return requests;
 
-    // Get material needs from ProfessionManager
-    ProfessionManager* profMgr = GetProfessionManager();
+    // Get materials needed for crafting from ProfessionManager
+    ProfessionManager* profMgr = ProfessionManager::instance();
     if (!profMgr)
         return requests;
 
-    // TODO: Query ProfessionManager for needed materials
-    // For now return empty
+    GatheringMaterialsBridge* gatherBridge = GatheringMaterialsBridge::instance();
+    if (!gatherBridge)
+        return requests;
+
+    auto neededMaterials = gatherBridge->GetNeededMaterials(player);
+
+    for (const auto& material : neededMaterials)
+    {
+        uint32 inventoryCount = player->GetItemCount(material.itemId);
+        uint32 needed = material.quantityNeeded;
+
+        if (inventoryCount < needed)
+        {
+            WithdrawRequest request;
+            request.itemId = material.itemId;
+            request.quantity = needed - inventoryCount;
+            request.reason = "Needed for crafting";
+
+            requests.push_back(request);
+        }
+    }
 
     return requests;
 }
 
-// ============================================================================
+// ========================================================================
 // INTEGRATION HELPERS
-// ============================================================================
+// ========================================================================
 
-bool BankingManager::IsNeededForProfessions(uint32 itemId)
+bool BankingManager::IsNeededForProfessions(::Player* player, uint32 itemId)
 {
-    ProfessionManager* profMgr = GetProfessionManager();
-    if (!profMgr)
+    if (!player)
         return false;
 
-    // TODO: Check with ProfessionManager if item is needed
-    return false;
+    GatheringMaterialsBridge* gatherBridge = GatheringMaterialsBridge::instance();
+    if (!gatherBridge)
+        return false;
+
+    return gatherBridge->IsItemNeededForCrafting(player, itemId);
 }
 
-uint32 BankingManager::GetMaterialPriorityFromProfessions(uint32 itemId)
+uint32 BankingManager::GetMaterialPriorityFromProfessions(::Player* player, uint32 itemId)
 {
-    ProfessionManager* profMgr = GetProfessionManager();
-    if (!profMgr)
+    if (!player)
         return 0;
 
-    // TODO: Get material priority from ProfessionManager
-    return 0;
-}
+    GatheringMaterialsBridge* gatherBridge = GatheringMaterialsBridge::instance();
+    if (!gatherBridge)
+        return 0;
 
-ProfessionManager* BankingManager::GetProfessionManager()
-{
-    if (!_bot)
-        return nullptr;
-
-    BotSession* session = static_cast<BotSession*>(_bot->GetSession());
-    if (!session || !session->GetBotAI())
-        return nullptr;
-
-    return session->GetBotAI()->GetGameSystems()->GetProfessionManager();
+    auto priority = gatherBridge->GetMaterialPriority(player, itemId);
+    return static_cast<uint32>(priority);
 }
 
 } // namespace Playerbot
