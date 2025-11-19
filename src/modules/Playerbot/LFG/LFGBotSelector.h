@@ -39,7 +39,9 @@ class Player;
  *
  * Uses intelligent prioritization to select the best bots for each role.
  *
- * Singleton implementation using Meyer's singleton pattern (thread-safe).
+ * NOTE: Provides both instance() singleton access (for state tracking)
+ * and static utility methods (for stateless queries) to support Phase 7
+ * per-bot architecture while maintaining system-wide bot discovery.
  */
 class TC_GAME_API LFGBotSelector final : public Playerbot::ILFGBotSelector
 {
@@ -48,7 +50,7 @@ private:
     ~LFGBotSelector();
 
 public:
-    // Singleton access
+    // Singleton access (for state tracking)
     static LFGBotSelector* instance();
 
     // Delete copy/move constructors and assignment operators
@@ -56,6 +58,52 @@ public:
     LFGBotSelector(LFGBotSelector&&) = delete;
     LFGBotSelector& operator=(LFGBotSelector const&) = delete;
     LFGBotSelector& operator=(LFGBotSelector&&) = delete;
+
+    // ========================================================================
+    // STATIC UTILITY METHODS (Phase 7 - System-wide bot discovery)
+    // ========================================================================
+    // These methods provide stateless bot discovery for LFG queue filling.
+    // They delegate to the singleton instance for state tracking.
+
+    /**
+     * @brief Find available tank bots (static utility)
+     *
+     * Convenience method for LFG queue population. Finds best available tanks
+     * matching criteria and optionally excludes bots already grouped with a human.
+     *
+     * @param minLevel Minimum level requirement
+     * @param maxLevel Maximum level requirement
+     * @param count Number of tanks needed
+     * @param humanPlayer Optional human player to avoid same-group bots
+     * @return Vector of tank bot Player pointers
+     */
+    static std::vector<Player*> FindAvailableTanks(
+        uint8 minLevel,
+        uint8 maxLevel,
+        uint32 count,
+        Player* humanPlayer = nullptr);
+
+    /**
+     * @brief Find available healer bots (static utility)
+     */
+    static std::vector<Player*> FindAvailableHealers(
+        uint8 minLevel,
+        uint8 maxLevel,
+        uint32 count,
+        Player* humanPlayer = nullptr);
+
+    /**
+     * @brief Find available DPS bots (static utility)
+     */
+    static std::vector<Player*> FindAvailableDPS(
+        uint8 minLevel,
+        uint8 maxLevel,
+        uint32 count,
+        Player* humanPlayer = nullptr);
+
+    // ========================================================================
+    // INSTANCE METHODS (Original singleton interface)
+    // ========================================================================
 
     /**
      * @brief Find available tank bots within level range

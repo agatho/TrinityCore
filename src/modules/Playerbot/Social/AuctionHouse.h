@@ -26,6 +26,7 @@
 namespace Playerbot
 {
 
+
 enum class AuctionStrategy : uint8
 {
     CONSERVATIVE    = 0,  // Buy below market value, list at market value
@@ -102,21 +103,24 @@ struct AuctionSearchQuery
 class TC_GAME_API AuctionHouse final : public IAuctionHouse
 {
 public:
-    static AuctionHouse* instance();
+    explicit AuctionHouse(Player* bot);
+    ~AuctionHouse();
+    AuctionHouse(AuctionHouse const&) = delete;
+    AuctionHouse& operator=(AuctionHouse const&) = delete;
 
     // Core auction house operations using TrinityCore's AuctionHouseMgr
-    void SearchAuctionHouse(Player* player, const AuctionSearchQuery& query) override;
-    bool PlaceAuctionBid(Player* player, uint32 auctionId, uint32 bidAmount) override;
-    bool BuyoutAuction(Player* player, uint32 auctionId) override;
-    bool CreateAuction(Player* player, uint32 itemGuid, uint32 stackCount, uint32 bid, uint32 buyout, uint32 duration) override;
-    bool CancelAuction(Player* player, uint32 auctionId) override;
+    void SearchAuctionHouse(const AuctionSearchQuery& query) override;
+    bool PlaceAuctionBid(uint32 auctionId, uint32 bidAmount) override;
+    bool BuyoutAuction(uint32 auctionId) override;
+    bool CreateAuction(uint32 itemGuid, uint32 stackCount, uint32 bid, uint32 buyout, uint32 duration) override;
+    bool CancelAuction(uint32 auctionId) override;
 
     // Intelligent auction strategies
-    void ExecuteAuctionStrategy(Player* player, AuctionStrategy strategy) override;
-    void ScanForBargains(Player* player) override;
-    void AutoSellItems(Player* player, const std::vector<uint32>& itemGuids) override;
-    void AutoBuyNeededItems(Player* player) override;
-    void ManageActiveAuctions(Player* player) override;
+    void ExecuteAuctionStrategy(AuctionStrategy strategy) override;
+    void ScanForBargains() override;
+    void AutoSellItems(const std::vector<uint32>& itemGuids) override;
+    void AutoBuyNeededItems() override;
+    void ManageActiveAuctions() override;
 
     // Market analysis and price discovery
     float GetMarketPrice(uint32 itemId, uint32 stackSize = 1) override;
@@ -150,8 +154,8 @@ public:
             , maxAuctionsActive(10) {}
     };
 
-    void SetAuctionProfile(uint32 playerGuid, const AuctionProfile& profile) override;
-    AuctionProfile GetAuctionProfile(uint32 playerGuid) override;
+    void SetAuctionProfile(const AuctionProfile& profile) override;
+    AuctionProfile GetAuctionProfile() override;
 
     // Auction monitoring and automation
     struct AuctionSession
@@ -173,30 +177,30 @@ public:
             , budgetUsed(0), itemsSold(0), itemsBought(0), isActive(true) {}
     };
 
-    uint32 StartAuctionSession(Player* player, AuctionActionType primaryAction) override;
+    uint32 StartAuctionSession(AuctionActionType primaryAction) override;
     void UpdateAuctionSession(uint32 sessionId) override;
     void CompleteAuctionSession(uint32 sessionId) override;
     AuctionSession GetAuctionSession(uint32 sessionId) override;
 
     // Price optimization and profit calculation
-    uint32 CalculateOptimalListingPrice(Player* player, uint32 itemId, uint32 stackSize) override;
-    uint32 CalculateMaxBidAmount(Player* player, uint32 itemId, uint32 stackSize) override;
+    uint32 CalculateOptimalListingPrice(uint32 itemId, uint32 stackSize) override;
+    uint32 CalculateMaxBidAmount(uint32 itemId, uint32 stackSize) override;
     float CalculatePotentialProfit(const AuctionItem& auction, uint32 resellPrice) override;
-    bool IsWorthBuying(Player* player, const AuctionItem& auction) override;
-    bool ShouldUndercut(Player* player, uint32 itemId, uint32 currentLowest) override;
+    bool IsWorthBuying(const AuctionItem& auction) override;
+    bool ShouldUndercut(uint32 itemId, uint32 currentLowest) override;
 
     // Market intelligence and learning
     void TrackPriceMovement(uint32 itemId, uint32 price, uint32 timestamp) override;
     void AnalyzeMarketTrends(uint32 itemId) override;
-    void LearnFromAuctionOutcome(Player* player, uint32 auctionId, bool wasSuccessful) override;
-    void AdaptAuctionBehavior(Player* player) override;
+    void LearnFromAuctionOutcome(uint32 auctionId, bool wasSuccessful) override;
+    void AdaptAuctionBehavior() override;
 
     // Specialized auction services
-    void HandleConsumableAutomation(Player* player) override;
-    void HandleEquipmentUpgrades(Player* player) override;
-    void HandleCraftingMaterials(Player* player) override;
-    void HandleCollectibleTrading(Player* player) override;
-    void HandleBulkItemTrading(Player* player) override;
+    void HandleConsumableAutomation() override;
+    void HandleEquipmentUpgrades() override;
+    void HandleCraftingMaterials() override;
+    void HandleCollectibleTrading() override;
+    void HandleBulkItemTrading() override;
 
     // Competition analysis
     void AnalyzeCompetition(uint32 itemId) override;
@@ -239,26 +243,26 @@ public:
         }
     };
 
-    AuctionMetrics GetPlayerAuctionMetrics(uint32 playerGuid) override;
+    AuctionMetrics GetAuctionMetrics() override;
     AuctionMetrics GetGlobalAuctionMetrics() override;
 
     // Auction house integration with TrinityCore
     void LoadAuctionData() override;
     void SynchronizeWithAuctionHouseMgr() override;
-    AuctionHouseObject* GetAuctionHouseForPlayer(Player* player) override;
-    bool ValidateAuctionAccess(Player* player, uint32 auctionHouseId) override;
+    AuctionHouseObject* GetAuctionHouseForPlayer() override;
+    bool ValidateAuctionAccess(uint32 auctionHouseId) override;
 
     // Configuration and customization
-    void SetAuctionHouseEnabled(uint32 playerGuid, bool enabled) override;
-    void SetMaxConcurrentAuctions(uint32 playerGuid, uint32 maxAuctions) override;
-    void SetAuctionBudget(uint32 playerGuid, uint32 budget) override;
-    void AddToWatchList(uint32 playerGuid, uint32 itemId) override;
-    void RemoveFromWatchList(uint32 playerGuid, uint32 itemId) override;
+    void SetAuctionHouseEnabled(bool enabled) override;
+    void SetMaxConcurrentAuctions(uint32 maxAuctions) override;
+    void SetAuctionBudget(uint32 budget) override;
+    void AddToWatchList(uint32 itemId) override;
+    void RemoveFromWatchList(uint32 itemId) override;
 
     // Error handling and recovery
     void HandleAuctionError(uint32 sessionId, const std::string& error) override;
     void RecoverFromAuctionFailure(uint32 sessionId) override;
-    void HandleInsufficientFunds(Player* player, uint32 requiredAmount) override;
+    void HandleInsufficientFunds(uint32 requiredAmount) override;
     void HandleAuctionTimeout(uint32 auctionId) override;
 
     // Update and maintenance
@@ -268,15 +272,16 @@ public:
     void CleanupExpiredData() override;
 
 private:
-    AuctionHouse();
-    ~AuctionHouse() = default;
+    Player* _bot;
 
-    // Core auction data
-    std::unordered_map<uint32, AuctionProfile> _playerProfiles; // playerGuid -> profile
-    std::unordered_map<uint32, AuctionSession> _activeSessions; // sessionId -> session
-    std::unordered_map<uint32, AuctionMetrics> _playerMetrics; // playerGuid -> metrics
-    std::atomic<uint32> _nextSessionId{1};
-    mutable Playerbot::OrderedRecursiveMutex<Playerbot::LockOrder::TRADE_MANAGER> _auctionMutex;
+    // Per-bot instance data
+    AuctionProfile _profile;
+    std::unordered_map<uint32, AuctionSession> _activeSessions; // sessionId -> session (this bot's sessions)
+    AuctionMetrics _metrics;
+    bool _auctionHouseEnabled{true};
+
+    // Shared static data (session IDs must be unique across all bots)
+    static std::atomic<uint32> _nextSessionId;
 
     // Market data and analysis
     struct MarketData
@@ -295,11 +300,12 @@ private:
             , lastAnalysisTime(GameTime::GetGameTimeMS()) {}
     };
 
-    std::unordered_map<uint32, MarketData> _marketData; // itemId -> market data
-    std::unordered_map<uint32, std::vector<AuctionItem>> _auctionCache; // itemId -> cached auctions
-    mutable Playerbot::OrderedRecursiveMutex<Playerbot::LockOrder::TRADE_MANAGER> _marketMutex;
+    // Shared static market data (all bots share market intelligence)
+    static std::unordered_map<uint32, MarketData> _marketData;
+    static std::unordered_map<uint32, std::vector<AuctionItem>> _auctionCache;
+    static Playerbot::OrderedRecursiveMutex<Playerbot::LockOrder::TRADE_MANAGER> _marketMutex;
 
-    // Competition tracking
+    // Competition tracking (shared)
     struct CompetitorProfile
     {
         uint32 sellerGuid;
@@ -317,18 +323,18 @@ private:
             , lastActivity(GameTime::GetGameTimeMS()) {}
     };
 
-    std::unordered_map<uint32, CompetitorProfile> _competitors; // sellerGuid -> profile
+    static std::unordered_map<uint32, CompetitorProfile> _competitors; // sellerGuid -> profile
 
     // Performance tracking
-    AuctionMetrics _globalMetrics;
+    static AuctionMetrics _globalMetrics;
 
     // Strategy implementations
-    void ExecuteConservativeStrategy(Player* player, AuctionSession& session);
-    void ExecuteAggressiveStrategy(Player* player, AuctionSession& session);
-    void ExecuteOpportunisticStrategy(Player* player, AuctionSession& session);
-    void ExecuteMarketMakerStrategy(Player* player, AuctionSession& session);
-    void ExecuteCollectorStrategy(Player* player, AuctionSession& session);
-    void ExecuteProfitFocusedStrategy(Player* player, AuctionSession& session);
+    void ExecuteConservativeStrategy(AuctionSession& session);
+    void ExecuteAggressiveStrategy(AuctionSession& session);
+    void ExecuteOpportunisticStrategy(AuctionSession& session);
+    void ExecuteMarketMakerStrategy(AuctionSession& session);
+    void ExecuteCollectorStrategy(AuctionSession& session);
+    void ExecuteProfitFocusedStrategy(AuctionSession& session);
 
     // Market analysis helpers
     void UpdateItemMarketData(uint32 itemId);
@@ -339,8 +345,8 @@ private:
     // Search and filtering
     std::vector<AuctionItem> FilterAuctionResults(const std::vector<AuctionItem>& auctions,
                                                  const AuctionSearchQuery& query);
-    std::vector<AuctionItem> FindBargainAuctions(Player* player, float maxPriceRatio = 0.8f);
-    std::vector<AuctionItem> FindFlipOpportunities(Player* player);
+    std::vector<AuctionItem> FindBargainAuctions( float maxPriceRatio = 0.8f);
+    std::vector<AuctionItem> FindFlipOpportunities();
     bool MatchesSearchCriteria(const AuctionItem& auction, const AuctionSearchQuery& query);
 
     // Price calculation algorithms
@@ -350,16 +356,16 @@ private:
     float CalculateExpectedReturn(const AuctionItem& auction, uint32 resellPrice);
 
     // Auction execution helpers
-    bool ExecuteBuyAction(Player* player, const AuctionItem& auction);
-    bool ExecuteSellAction(Player* player, uint32 itemGuid, uint32 stackCount, uint32 price);
-    bool ExecuteCancelAction(Player* player, uint32 auctionId);
-    void ProcessActionQueue(Player* player, AuctionSession& session);
+    bool ExecuteBuyAction( const AuctionItem& auction);
+    bool ExecuteSellAction( uint32 itemGuid, uint32 stackCount, uint32 price);
+    bool ExecuteCancelAction( uint32 auctionId);
+    void ProcessActionQueue( AuctionSession& session);
 
     // Learning and adaptation
-    void UpdateSuccessRates(Player* player, bool wasSuccessful, AuctionActionType actionType);
-    void AdaptPricingStrategy(Player* player);
+    void UpdateSuccessRates( bool wasSuccessful, AuctionActionType actionType);
+    void AdaptPricingStrategy();
     void LearnMarketPatterns(uint32 itemId);
-    void UpdatePlayerPreferences(Player* player, uint32 itemId, bool wasPurchased);
+    void UpdatePlayerPreferences( uint32 itemId, bool wasPurchased);
 
     // Performance optimization
     void CacheFrequentAuctions();

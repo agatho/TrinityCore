@@ -16,7 +16,8 @@
  */
 
 #include "PlayerbotCommands.h"
-#include "Movement/GroupFormationManager.h"
+#include "Movement/UnifiedMovementCoordinator.h"
+#include "AI/BotAI.h"
 #include "Config/ConfigManager.h"
 #include "Monitoring/BotMonitor.h"
 #include "MotionMaster.h"
@@ -360,93 +361,94 @@ namespace Playerbot
     {
         Player* player = handler->GetSession()->GetPlayer();
         if (!player)
-
             return false;
 
         Group* group = player->GetGroup();
         if (!group)
         {
-
             handler->SendSysMessage("You must be in a group to set a formation.");
-
             return false;
         }
 
-        // Convert formation type string to enum
+        // Map formation type string to FormationType enum (from FormationManager)
         FormationType type;
         if (formationType == "wedge")
-
             type = FormationType::WEDGE;
         else if (formationType == "diamond")
-
             type = FormationType::DIAMOND;
         else if (formationType == "square" || formationType == "defensive")
-
-            type = FormationType::DEFENSIVE_SQUARE;
+            type = FormationType::BOX;  // BOX is the defensive square formation
         else if (formationType == "arrow")
-
-            type = FormationType::ARROW;
+            type = FormationType::WEDGE;  // Arrow formation maps to wedge (similar tactical purpose)
         else if (formationType == "line")
-
             type = FormationType::LINE;
         else if (formationType == "column")
-
             type = FormationType::COLUMN;
         else if (formationType == "scatter")
-
-            type = FormationType::SCATTER;
+            type = FormationType::SPREAD;  // Spread is the scattered formation
         else if (formationType == "circle")
-
             type = FormationType::CIRCLE;
+        else if (formationType == "dungeon")
+            type = FormationType::DUNGEON;
+        else if (formationType == "raid")
+            type = FormationType::RAID;
         else
         {
-
             handler->PSendSysMessage("Unknown formation type '%s'. Use .bot formation list to see available formations.",
-
                                     formationType.c_str());
-
             return false;
         }
 
-        // Collect group members
+        // Collect all group members
         std::vector<Player*> groupMembers;
         for (GroupReference const& itr : group->GetMembers())
         {
-
             if (Player* member = itr.GetSource())
-
                 groupMembers.push_back(member);
         }
 
-        // Create formation
-        FormationLayout formation = GroupFormationManager::CreateFormation(type,
-
-                                                                           static_cast<uint32>(groupMembers.size()));
-
-        // Assign bots to formation
-        std::vector<Player*> bots;
+        // Set player as formation leader and have all bots join the formation
+        uint32 botsJoined = 0;
         for (Player* member : groupMembers)
         {
+            // Skip the player issuing the command (they become the leader)
+            if (member == player)
+                continue;
 
-            if (member != player) // Exclude leader
+            // Get bot's AI and UnifiedMovementCoordinator
+            BotAI* botAI = dynamic_cast<BotAI*>(member->GetAI());
+            if (!botAI)
+                continue;
 
-                bots.push_back(member);
+            UnifiedMovementCoordinator* coordinator = botAI->GetUnifiedMovementCoordinator();
+            if (!coordinator)
+                continue;
+
+            // Set the player as formation leader
+            coordinator->SetFormationLeader(player);
+
+            // Join the formation with all group members
+            if (coordinator->JoinFormation(groupMembers, type))
+            {
+                ++botsJoined;
+                TC_LOG_DEBUG("playerbot", "Bot {} joined formation {} with leader {}",
+                    member->GetName(), static_cast<uint32>(type), player->GetName());
+            }
         }
 
-        std::vector<BotFormationAssignment> assignments =
-
-            GroupFormationManager::AssignBotsToFormation(player, bots, formation);
-
-        // Move bots to formation positions
-        for (auto const& assignment : assignments)
+        // Update formations to calculate positions
+        for (Player* member : groupMembers)
         {
+            if (member == player)
+                continue;
 
-            assignment.bot->GetMotionMaster()->MovePoint(0, assignment.position.position);
+            BotAI* botAI = dynamic_cast<BotAI*>(member->GetAI());
+            if (botAI && botAI->GetUnifiedMovementCoordinator())
+                botAI->GetUnifiedMovementCoordinator()->UpdateFormation(0);
         }
 
-        handler->PSendSysMessage("Formation '%s' applied to %u group members.",
-
-                                formationType.c_str(), static_cast<uint32>(assignments.size()));
+        handler->PSendSysMessage("Formation '%s' applied: %u bots joined formation around %s.",
+                                formationType.c_str(), botsJoined, player->GetName().c_str());
 
         return true;
     }
@@ -871,17 +873,18 @@ namespace Playerbot
     {
         std::ostringstream oss;
 
-        oss << "1. wedge     - V-shaped penetration formation (30� angle)\n";
-        oss << "2. diamond   - Balanced 4-point diamond with interior fill\n";
-        oss << "3. square    - Defensive square (tanks corners, healers center)\n";
-        oss << "4. arrow     - Tight arrowhead assault formation (20� angle)\n";
-        oss << "5. line      - Horizontal line for maximum width coverage\n";
-        oss << "6. column    - Vertical single-file march formation\n";
-        oss << "7. scatter   - Random dispersal for anti-AoE tactics\n";
-        oss << "8. circle    - 360� perimeter coverage formation\n";
+        oss << "1. wedge      - V-shaped penetration formation (tank at point)\n";
+        oss << "2. diamond    - Balanced 4-point diamond with interior fill\n";
+        oss << "3. square     - Defensive box (tanks corners, healers center)\n";
+        oss << "4. line       - Horizontal line for maximum width coverage\n";
+        oss << "5. column     - Vertical single-file march formation\n";
+        oss << "6. scatter    - Spread formation for anti-AoE tactics\n";
+        oss << "7. circle     - 360° perimeter coverage formation\n";
+        oss << "8. dungeon    - Optimized dungeon formation (tank/healer/dps roles)\n";
+        oss << "9. raid       - Raid formation with 5-person groups\n";
         oss << "\n";
         oss << "Usage: .bot formation <type>\n";
-        oss << "Example: .bot formation wedge";
+        oss << "Example: .bot formation dungeon";
 
         return oss.str();
     }

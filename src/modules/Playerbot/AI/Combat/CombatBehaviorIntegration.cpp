@@ -8,6 +8,8 @@
  */
 
 #include "CombatBehaviorIntegration.h"
+#include "BotThreatManager.h"      // Core threat management infrastructure
+#include "PositionManager.h"       // Enterprise-grade positioning algorithms
 #include "CombatStateAnalyzer.h"
 #include "AdaptiveBehaviorManager.h"
 #include "TargetManager.h"
@@ -46,6 +48,10 @@ CombatBehaviorIntegration::CombatBehaviorIntegration(Player* bot) :
     _successfulActions(0),
     _failedActions(0)
 {
+    // Initialize core infrastructure first (dependencies for other managers)
+    _threatManager = std::make_unique<BotThreatManager>(bot);
+    _positionManager = std::make_unique<PositionManager>(bot, _threatManager.get());
+
     // Initialize all manager components
     _stateAnalyzer = std::make_unique<CombatStateAnalyzer>(bot);
     _behaviorManager = std::make_unique<AdaptiveBehaviorManager>(bot);
@@ -53,8 +59,8 @@ CombatBehaviorIntegration::CombatBehaviorIntegration(Player* bot) :
     _interruptManager = std::make_unique<InterruptManager>(bot);
     _crowdControlManager = std::make_unique<CrowdControlManager>(bot);
     _defensiveManager = std::make_unique<DefensiveManager>(bot);
-    _movementIntegration = std::make_unique<MovementIntegration>(bot);
-    TC_LOG_DEBUG("bot.playerbot", "CombatBehaviorIntegration initialized for bot {}", bot->GetName());
+    _movementIntegration = std::make_unique<MovementIntegration>(bot, _positionManager.get());
+    TC_LOG_DEBUG("bot.playerbot", "CombatBehaviorIntegration initialized for bot {} with ThreatManager and PositionManager", bot->GetName());
 }
 
 CombatBehaviorIntegration::~CombatBehaviorIntegration() = default;

@@ -159,7 +159,7 @@
 #include "Social/AuctionHouse.h"
 #include "Professions/ProfessionAuctionBridge.h"
 #include "LFG/LFGRoleDetector.h"
-#include "Social/VendorInteraction.h"
+// Social/VendorInteraction.h removed - skeleton with no implementation
 #include "LFG/LFGBotSelector.h"
 #include "Social/GuildIntegration.h"
 #include "Dungeon/DungeonBehavior.h"
@@ -250,13 +250,15 @@ inline void RegisterPlayerbotServices()
         TC_LOG_INFO("playerbot.di", "  - Registered IConfigManager");
 
         // Register BotLifecycleManager (Phase 2)
-        container.RegisterInstance<IBotLifecycleManager>(
-            std::shared_ptr<IBotLifecycleManager>(
-                BotLifecycleManager::instance(),
-                [](IBotLifecycleManager*) {} // No-op deleter (singleton)
-            )
-        );
-        TC_LOG_INFO("playerbot.di", "  - Registered IBotLifecycleManager");
+        // NOTE: BotLifecycleManager is now per-bot (Phase 7) - access via GameSystemsManager
+        // Removed singleton registration
+        // container.RegisterInstance<IBotLifecycleManager>(
+        // std::shared_ptr<IBotLifecycleManager>(
+        // BotLifecycleManager::instance(),
+        // [](IBotLifecycleManager*) {} // No-op deleter (singleton)
+        // )
+        // );
+        // TC_LOG_INFO("playerbot.di", "  - Registered IBotLifecycleManager");
 
         // Register BotDatabasePool (Phase 2)
         container.RegisterInstance<IBotDatabasePool>(
@@ -285,14 +287,9 @@ inline void RegisterPlayerbotServices()
         );
         TC_LOG_INFO("playerbot.di", "  - Registered IDungeonScriptMgr");
 
-        // Register EquipmentManager (Phase 4)
-        container.RegisterInstance<IEquipmentManager>(
-            std::shared_ptr<IEquipmentManager>(
-                Playerbot::EquipmentManager::instance(),
-                [](IEquipmentManager*) {} // No-op deleter (singleton)
-            )
-        );
-        TC_LOG_INFO("playerbot.di", "  - Registered IEquipmentManager");
+        // NOTE: EquipmentManager is now per-bot (Phase 6.1)
+        // No longer registered as singleton - owned by GameSystemsManager
+        // Access via: botAI->GetGameSystems()->GetEquipmentManager()
 
         // Register BotAccountMgr (Phase 4)
         container.RegisterInstance<IBotAccountMgr>(
@@ -304,13 +301,15 @@ inline void RegisterPlayerbotServices()
         TC_LOG_INFO("playerbot.di", "  - Registered IBotAccountMgr");
 
         // Register LFGBotManager (Phase 5)
-        container.RegisterInstance<ILFGBotManager>(
-            std::shared_ptr<ILFGBotManager>(
-                LFGBotManager::instance(),
-                [](ILFGBotManager*) {} // No-op deleter (singleton)
-            )
-        );
-        TC_LOG_INFO("playerbot.di", "  - Registered ILFGBotManager");
+        // NOTE: LFGBotManager is now per-bot (Phase 7) - access via GameSystemsManager
+        // Removed singleton registration
+        // container.RegisterInstance<ILFGBotManager>(
+        // std::shared_ptr<ILFGBotManager>(
+        // LFGBotManager::instance(),
+        // [](ILFGBotManager*) {} // No-op deleter (singleton)
+        // )
+        // );
+        // TC_LOG_INFO("playerbot.di", "  - Registered ILFGBotManager");
 
         // Register BotGearFactory (Phase 5)
         container.RegisterInstance<IBotGearFactory>(
@@ -430,13 +429,15 @@ inline void RegisterPlayerbotServices()
         TC_LOG_INFO("playerbot.di", "  - Registered IGroupEventBus");
 
         // Register LFGGroupCoordinator (Phase 12)
-        container.RegisterInstance<ILFGGroupCoordinator>(
-            std::shared_ptr<ILFGGroupCoordinator>(
-                Playerbot::LFGGroupCoordinator::instance(),
-                [](ILFGGroupCoordinator*) {} // No-op deleter (singleton)
-            )
-        );
-        TC_LOG_INFO("playerbot.di", "  - Registered ILFGGroupCoordinator");
+        // NOTE: LFGGroupCoordinator is now per-bot (Phase 7) - access via GameSystemsManager
+        // Removed singleton registration
+        // container.RegisterInstance<ILFGGroupCoordinator>(
+        // std::shared_ptr<ILFGGroupCoordinator>(
+        // Playerbot::LFGGroupCoordinator::instance(),
+        // [](ILFGGroupCoordinator*) {} // No-op deleter (singleton)
+        // )
+        // );
+        // TC_LOG_INFO("playerbot.di", "  - Registered ILFGGroupCoordinator");
 
         // Register LootEventBus (Phase 13)
         container.RegisterInstance<ILootEventBus>(
@@ -538,13 +539,15 @@ inline void RegisterPlayerbotServices()
         TC_LOG_INFO("playerbot.di", "  - Registered ILootAnalysis");
 
         // Register GuildBankManager (Phase 21)
-        container.RegisterInstance<IGuildBankManager>(
-            std::shared_ptr<IGuildBankManager>(
-                Playerbot::GuildBankManager::instance(),
-                [](IGuildBankManager*) {} // No-op deleter (singleton)
-            )
-        );
-        TC_LOG_INFO("playerbot.di", "  - Registered IGuildBankManager");
+        // NOTE: GuildBankManager is now per-bot (Phase 7) - access via GameSystemsManager
+        // Removed singleton registration
+        // container.RegisterInstance<IGuildBankManager>(
+        // std::shared_ptr<IGuildBankManager>(
+        // Playerbot::GuildBankManager::instance(),
+        // [](IGuildBankManager*) {} // No-op deleter (singleton)
+        // )
+        // );
+        // TC_LOG_INFO("playerbot.di", "  - Registered IGuildBankManager");
 
         // Register LootCoordination (Phase 22)
         container.RegisterInstance<ILootCoordination>(
@@ -555,14 +558,15 @@ inline void RegisterPlayerbotServices()
         );
         TC_LOG_INFO("playerbot.di", "  - Registered ILootCoordination");
 
-        // Register LootDistribution (Phase 23)
-        container.RegisterInstance<ILootDistribution>(
-            std::shared_ptr<ILootDistribution>(
-                Playerbot::LootDistribution::instance(),
-                [](ILootDistribution*) {} // No-op deleter (singleton)
-            )
-        );
-        TC_LOG_INFO("playerbot.di", "  - Registered ILootDistribution");
+        // NOTE: LootDistribution is now per-bot (Phase 7) - access via GameSystemsManager
+        // Removed singleton registration
+        // container.RegisterInstance<ILootDistribution>(
+        //     std::shared_ptr<ILootDistribution>(
+        //         Playerbot::LootDistribution::instance(),
+        //         [](ILootDistribution*) {} // No-op deleter (singleton)
+        //     )
+        // );
+        // TC_LOG_INFO("playerbot.di", "  - Registered ILootDistribution");
 
         // Register UnifiedLootManager (Manager Consolidation)
         // Consolidates: LootAnalysis, LootCoordination, LootDistribution
@@ -594,31 +598,37 @@ inline void RegisterPlayerbotServices()
         TC_LOG_INFO("playerbot.di", "  - Registered IMarketAnalysis");
 
         // Register TradeSystem (Phase 25)
-        container.RegisterInstance<ITradeSystem>(
-            std::shared_ptr<ITradeSystem>(
-                Playerbot::TradeSystem::instance(),
-                [](ITradeSystem*) {} // No-op deleter (singleton)
-            )
-        );
-        TC_LOG_INFO("playerbot.di", "  - Registered ITradeSystem");
+        // NOTE: TradeSystem is now per-bot (Phase 7) - access via GameSystemsManager
+        // Removed singleton registration
+        // container.RegisterInstance<ITradeSystem>(
+        // std::shared_ptr<ITradeSystem>(
+        // Playerbot::TradeSystem::instance(),
+        // [](ITradeSystem*) {} // No-op deleter (singleton)
+        // )
+        // );
+        // TC_LOG_INFO("playerbot.di", "  - Registered ITradeSystem");
 
         // Register QuestPickup (Phase 26)
-        container.RegisterInstance<IQuestPickup>(
-            std::shared_ptr<IQuestPickup>(
-                Playerbot::QuestPickup::instance(),
-                [](IQuestPickup*) {} // No-op deleter (singleton)
-            )
-        );
-        TC_LOG_INFO("playerbot.di", "  - Registered IQuestPickup");
+        // NOTE: QuestPickup is now per-bot (Phase 7) - access via GameSystemsManager
+        // Removed singleton registration
+        // container.RegisterInstance<IQuestPickup>(
+        // std::shared_ptr<IQuestPickup>(
+        // Playerbot::QuestPickup::instance(),
+        // [](IQuestPickup*) {} // No-op deleter (singleton)
+        // )
+        // );
+        // TC_LOG_INFO("playerbot.di", "  - Registered IQuestPickup");
 
         // Register GuildEventCoordinator (Phase 27)
-        container.RegisterInstance<IGuildEventCoordinator>(
-            std::shared_ptr<IGuildEventCoordinator>(
-                Playerbot::GuildEventCoordinator::instance(),
-                [](IGuildEventCoordinator*) {} // No-op deleter (singleton)
-            )
-        );
-        TC_LOG_INFO("playerbot.di", "  - Registered IGuildEventCoordinator");
+        // NOTE: GuildEventCoordinator is now per-bot (Phase 7) - access via GameSystemsManager
+        // Removed singleton registration
+        // container.RegisterInstance<IGuildEventCoordinator>(
+        // std::shared_ptr<IGuildEventCoordinator>(
+        // Playerbot::GuildEventCoordinator::instance(),
+        // [](IGuildEventCoordinator*) {} // No-op deleter (singleton)
+        // )
+        // );
+        // TC_LOG_INFO("playerbot.di", "  - Registered IGuildEventCoordinator");
 
         // Register ProfessionManager (Phase 28)
         container.RegisterInstance<IProfessionManager>(
@@ -630,76 +640,76 @@ inline void RegisterPlayerbotServices()
         TC_LOG_INFO("playerbot.di", "  - Registered IProfessionManager");
 
         // Register QuestCompletion (Phase 29)
-        container.RegisterInstance<IQuestCompletion>(
-            std::shared_ptr<IQuestCompletion>(
-                Playerbot::QuestCompletion::instance(),
-                [](IQuestCompletion*) {} // No-op deleter (singleton)
-            )
-        );
-        TC_LOG_INFO("playerbot.di", "  - Registered IQuestCompletion");
+        // NOTE: QuestCompletion is now per-bot (Phase 7) - access via GameSystemsManager
+        // Removed singleton registration
+        // container.RegisterInstance<IQuestCompletion>(
+        // std::shared_ptr<IQuestCompletion>(
+        // Playerbot::QuestCompletion::instance(),
+        // [](IQuestCompletion*) {} // No-op deleter (singleton)
+        // )
+        // );
+        // TC_LOG_INFO("playerbot.di", "  - Registered IQuestCompletion");
 
         // Register QuestValidation (Phase 30)
-        container.RegisterInstance<IQuestValidation>(
-            std::shared_ptr<IQuestValidation>(
-                Playerbot::QuestValidation::instance(),
-                [](IQuestValidation*) {} // No-op deleter (singleton)
-            )
-        );
-        TC_LOG_INFO("playerbot.di", "  - Registered IQuestValidation");
+        // NOTE: QuestValidation is now per-bot (Phase 7) - access via GameSystemsManager
+        // Removed singleton registration
+        // container.RegisterInstance<IQuestValidation>(
+        // std::shared_ptr<IQuestValidation>(
+        // Playerbot::QuestValidation::instance(),
+        // [](IQuestValidation*) {} // No-op deleter (singleton)
+        // )
+        // );
+        // TC_LOG_INFO("playerbot.di", "  - Registered IQuestValidation");
 
         // Register QuestTurnIn (Phase 31)
-        container.RegisterInstance<IQuestTurnIn>(
-            std::shared_ptr<IQuestTurnIn>(
-                Playerbot::QuestTurnIn::instance(),
-                [](IQuestTurnIn*) {} // No-op deleter (singleton)
-            )
-        );
-        TC_LOG_INFO("playerbot.di", "  - Registered IQuestTurnIn");
+        // NOTE: QuestTurnIn is now per-bot (Phase 7) - access via GameSystemsManager
+        // Removed singleton registration
+        // container.RegisterInstance<IQuestTurnIn>(
+        // std::shared_ptr<IQuestTurnIn>(
+        // Playerbot::QuestTurnIn::instance(),
+        // [](IQuestTurnIn*) {} // No-op deleter (singleton)
+        // )
+        // );
+        // TC_LOG_INFO("playerbot.di", "  - Registered IQuestTurnIn");
 
         // Register RoleAssignment (Phase 32)
-        container.RegisterInstance<IRoleAssignment>(
-            std::shared_ptr<IRoleAssignment>(
-                Playerbot::RoleAssignment::instance(),
-                [](IRoleAssignment*) {} // No-op deleter (singleton)
-            )
-        );
-        TC_LOG_INFO("playerbot.di", "  - Registered IRoleAssignment");
+        // NOTE: RoleAssignment is now per-bot (Phase 7) - access via GameSystemsManager
+        // Removed singleton registration
+        // container.RegisterInstance<IRoleAssignment>(
+        // std::shared_ptr<IRoleAssignment>(
+        // Playerbot::RoleAssignment::instance(),
+        // [](IRoleAssignment*) {} // No-op deleter (singleton)
+        // )
+        // );
+        // TC_LOG_INFO("playerbot.di", "  - Registered IRoleAssignment");
 
         // Register DynamicQuestSystem (Phase 33)
-        container.RegisterInstance<IDynamicQuestSystem>(
-            std::shared_ptr<IDynamicQuestSystem>(
-                Playerbot::DynamicQuestSystem::instance(),
-                [](IDynamicQuestSystem*) {} // No-op deleter (singleton)
-            )
-        );
-        TC_LOG_INFO("playerbot.di", "  - Registered IDynamicQuestSystem");
+        // NOTE: DynamicQuestSystem is now per-bot (Phase 7) - access via GameSystemsManager
+        // Removed singleton registration
+        // container.RegisterInstance<IDynamicQuestSystem>(
+        // std::shared_ptr<IDynamicQuestSystem>(
+        // Playerbot::DynamicQuestSystem::instance(),
+        // [](IDynamicQuestSystem*) {} // No-op deleter (singleton)
+        // )
+        // );
+        // TC_LOG_INFO("playerbot.di", "  - Registered IDynamicQuestSystem");
 
-        // Register FarmingCoordinator (Phase 34)
-        container.RegisterInstance<IFarmingCoordinator>(
-            std::shared_ptr<IFarmingCoordinator>(
-                Playerbot::FarmingCoordinator::instance(),
-                [](IFarmingCoordinator*) {} // No-op deleter (singleton)
-            )
-        );
-        TC_LOG_INFO("playerbot.di", "  - Registered IFarmingCoordinator");
+        // NOTE: FarmingCoordinator is now per-bot (Phase 5.2)
+        // No longer registered as singleton - owned by GameSystemsManager
+        // Access via: botAI->GetGameSystems()->GetFarmingCoordinator()
 
-        // Register AuctionHouse (Phase 35)
-        container.RegisterInstance<IAuctionHouse>(
-            std::shared_ptr<IAuctionHouse>(
-                Playerbot::AuctionHouse::instance(),
-                [](IAuctionHouse*) {} // No-op deleter (singleton)
-            )
-        );
-        TC_LOG_INFO("playerbot.di", "  - Registered IAuctionHouse");
+        // NOTE: AuctionHouse is now per-bot (Phase 7) - access via GameSystemsManager
+        // Removed singleton registration
+        // container.RegisterInstance<IAuctionHouse>(
+        //     std::shared_ptr<IAuctionHouse>(
+        //         Playerbot::AuctionHouse::instance(),
+        //         [](IAuctionHouse*) {} // No-op deleter (singleton)
+        //     )
+        // );
+        // TC_LOG_INFO("playerbot.di", "  - Registered IAuctionHouse");
 
-        // Register ProfessionAuctionBridge (Phase 36)
-        container.RegisterInstance<IProfessionAuctionBridge>(
-            std::shared_ptr<IProfessionAuctionBridge>(
-                Playerbot::ProfessionAuctionBridge::instance(),
-                [](IProfessionAuctionBridge*) {} // No-op deleter (singleton)
-            )
-        );
-        TC_LOG_INFO("playerbot.di", "  - Registered IProfessionAuctionBridge");
+        // ProfessionAuctionBridge now per-bot (Phase 4.3) - managed by GameSystemsManager
+        // DI registration removed - access via GameSystemsManager::GetProfessionAuctionBridge()
 
         // Register LFGRoleDetector (Phase 37)
         container.RegisterInstance<ILFGRoleDetector>(
@@ -710,32 +720,32 @@ inline void RegisterPlayerbotServices()
         );
         TC_LOG_INFO("playerbot.di", "  - Registered ILFGRoleDetector");
 
-        // Register VendorInteraction (Phase 38)
-        container.RegisterInstance<IVendorInteraction>(
-            std::shared_ptr<IVendorInteraction>(
-                Playerbot::VendorInteraction::instance(),
-                [](IVendorInteraction*) {} // No-op deleter (singleton)
-            )
-        );
-        TC_LOG_INFO("playerbot.di", "  - Registered IVendorInteraction");
+        // Register VendorInteraction (Phase 38) - REMOVED
+        // VendorInteraction skeleton had no implementation
+        // Real vendor code is in Interaction/VendorInteractionManager (not using DI)
+        // TODO: Consider migrating VendorInteractionManager to DI in future
 
         // Register LFGBotSelector (Phase 39)
-        container.RegisterInstance<ILFGBotSelector>(
-            std::shared_ptr<ILFGBotSelector>(
-                LFGBotSelector::instance(),
-                [](ILFGBotSelector*) {} // No-op deleter (singleton)
-            )
-        );
-        TC_LOG_INFO("playerbot.di", "  - Registered ILFGBotSelector");
+        // NOTE: LFGBotSelector is now per-bot (Phase 7) - access via GameSystemsManager
+        // Removed singleton registration
+        // container.RegisterInstance<ILFGBotSelector>(
+        // std::shared_ptr<ILFGBotSelector>(
+        // LFGBotSelector::instance(),
+        // [](ILFGBotSelector*) {} // No-op deleter (singleton)
+        // )
+        // );
+        // TC_LOG_INFO("playerbot.di", "  - Registered ILFGBotSelector");
 
         // Register GuildIntegration (Phase 40)
-        container.RegisterInstance<IGuildIntegration>(
-            std::shared_ptr<IGuildIntegration>(
-                Playerbot::GuildIntegration::instance(),
-                [](IGuildIntegration*) {} // No-op deleter (singleton)
-            )
-        );
-        TC_LOG_INFO("playerbot.di", "  - Registered IGuildIntegration");
+        // NOTE: GuildIntegration is now per-bot (Phase 7) - access via GameSystemsManager
+        // Removed singleton registration
+        // container.RegisterInstance<IGuildIntegration>(
+        // std::shared_ptr<IGuildIntegration>(
+        // Playerbot::GuildIntegration::instance(),
+        // [](IGuildIntegration*) {} // No-op deleter (singleton)
+        // )
+        // );
+        // TC_LOG_INFO("playerbot.di", "  - Registered IGuildIntegration");
 
         // Register DungeonBehavior (Phase 41)
         container.RegisterInstance<IDungeonBehavior>(
@@ -747,13 +757,15 @@ inline void RegisterPlayerbotServices()
         TC_LOG_INFO("playerbot.di", "  - Registered IDungeonBehavior");
 
         // Register InstanceCoordination (Phase 42)
-        container.RegisterInstance<IInstanceCoordination>(
-            std::shared_ptr<IInstanceCoordination>(
-                Playerbot::InstanceCoordination::instance(),
-                [](IInstanceCoordination*) {} // No-op deleter (singleton)
-            )
-        );
-        TC_LOG_INFO("playerbot.di", "  - Registered IInstanceCoordination");
+        // NOTE: InstanceCoordination is now per-bot (Phase 7) - access via GameSystemsManager
+        // Removed singleton registration
+        // container.RegisterInstance<IInstanceCoordination>(
+        // std::shared_ptr<IInstanceCoordination>(
+        // Playerbot::InstanceCoordination::instance(),
+        // [](IInstanceCoordination*) {} // No-op deleter (singleton)
+        // )
+        // );
+        // TC_LOG_INFO("playerbot.di", "  - Registered IInstanceCoordination");
 
         // Register EncounterStrategy (Phase 43)
         container.RegisterInstance<IEncounterStrategy>(
@@ -765,13 +777,15 @@ inline void RegisterPlayerbotServices()
         TC_LOG_INFO("playerbot.di", "  - Registered IEncounterStrategy");
 
         // Register ObjectiveTracker (Phase 44)
-        container.RegisterInstance<IObjectiveTracker>(
-            std::shared_ptr<IObjectiveTracker>(
-                Playerbot::ObjectiveTracker::instance(),
-                [](IObjectiveTracker*) {} // No-op deleter (singleton)
-            )
-        );
-        TC_LOG_INFO("playerbot.di", "  - Registered IObjectiveTracker");
+        // NOTE: ObjectiveTracker is now per-bot (Phase 7) - access via GameSystemsManager
+        // Removed singleton registration
+        // container.RegisterInstance<IObjectiveTracker>(
+        // std::shared_ptr<IObjectiveTracker>(
+        // Playerbot::ObjectiveTracker::instance(),
+        // [](IObjectiveTracker*) {} // No-op deleter (singleton)
+        // )
+        // );
+        // TC_LOG_INFO("playerbot.di", "  - Registered IObjectiveTracker");
 
         // Register UnifiedInterruptSystem (Phase 45)
         container.RegisterInstance<IUnifiedInterruptSystem>(
@@ -810,22 +824,26 @@ inline void RegisterPlayerbotServices()
         TC_LOG_INFO("playerbot.di", "  - Registered IStrategyFactory");
 
         // Register BotWorldSessionMgr (Phase 49)
-        container.RegisterInstance<IBotWorldSessionMgr>(
-            std::shared_ptr<IBotWorldSessionMgr>(
-                Playerbot::BotWorldSessionMgr::instance(),
-                [](IBotWorldSessionMgr*) {} // No-op deleter (singleton)
-            )
-        );
-        TC_LOG_INFO("playerbot.di", "  - Registered IBotWorldSessionMgr");
+        // NOTE: BotWorldSessionMgr is now per-bot (Phase 7) - access via GameSystemsManager
+        // Removed singleton registration
+        // container.RegisterInstance<IBotWorldSessionMgr>(
+        // std::shared_ptr<IBotWorldSessionMgr>(
+        // Playerbot::BotWorldSessionMgr::instance(),
+        // [](IBotWorldSessionMgr*) {} // No-op deleter (singleton)
+        // )
+        // );
+        // TC_LOG_INFO("playerbot.di", "  - Registered IBotWorldSessionMgr");
 
         // Register BotPriorityManager (Phase 50)
-        container.RegisterInstance<IBotPriorityManager>(
-            std::shared_ptr<IBotPriorityManager>(
-                Playerbot::BotPriorityManager::instance(),
-                [](IBotPriorityManager*) {} // No-op deleter (singleton)
-            )
-        );
-        TC_LOG_INFO("playerbot.di", "  - Registered IBotPriorityManager");
+        // NOTE: BotPriorityManager is now per-bot (Phase 7) - access via GameSystemsManager
+        // Removed singleton registration
+        // container.RegisterInstance<IBotPriorityManager>(
+        // std::shared_ptr<IBotPriorityManager>(
+        // Playerbot::BotPriorityManager::instance(),
+        // [](IBotPriorityManager*) {} // No-op deleter (singleton)
+        // )
+        // );
+        // TC_LOG_INFO("playerbot.di", "  - Registered IBotPriorityManager");
 
         // Register BotResourcePool (Phase 51)
         container.RegisterInstance<IBotResourcePool>(
@@ -908,14 +926,9 @@ inline void RegisterPlayerbotServices()
         );
         TC_LOG_INFO("playerbot.di", "  - Registered IBotWorldEntryQueue");
 
-        // Register MountManager (Phase 60)
-        container.RegisterInstance<Playerbot::IMountManager>(
-            std::shared_ptr<Playerbot::IMountManager>(
-                Playerbot::MountManager::instance(),
-                [](Playerbot::IMountManager*) {} // No-op deleter (singleton)
-            )
-        );
-        TC_LOG_INFO("playerbot.di", "  - Registered IMountManager");
+        // NOTE: MountManager is now per-bot (Phase 6.2)
+        // No longer registered as singleton - owned by GameSystemsManager
+        // Access via: botAI->GetGameSystems()->GetMountManager()
 
         // Register PlayerbotCharacterDBInterface (Phase 61)
         container.RegisterInstance<Playerbot::IPlayerbotCharacterDBInterface>(
@@ -926,32 +939,17 @@ inline void RegisterPlayerbotServices()
         );
         TC_LOG_INFO("playerbot.di", "  - Registered IPlayerbotCharacterDBInterface");
 
-        // Register BattlePetManager (Phase 62)
-        container.RegisterInstance<Playerbot::IBattlePetManager>(
-            std::shared_ptr<Playerbot::IBattlePetManager>(
-                Playerbot::BattlePetManager::instance(),
-                [](Playerbot::IBattlePetManager*) {} // No-op deleter (singleton)
-            )
-        );
-        TC_LOG_INFO("playerbot.di", "  - Registered IBattlePetManager");
+        // NOTE: BattlePetManager is now per-bot (Phase 6.3)
+        // No longer registered as singleton - owned by GameSystemsManager
+        // Access via: botAI->GetGameSystems()->GetBattlePetManager()
 
-        // Register ArenaAI (Phase 63)
-        container.RegisterInstance<Playerbot::IArenaAI>(
-            std::shared_ptr<Playerbot::IArenaAI>(
-                Playerbot::ArenaAI::instance(),
-                [](Playerbot::IArenaAI*) {} // No-op deleter (singleton)
-            )
-        );
-        TC_LOG_INFO("playerbot.di", "  - Registered IArenaAI");
+        // NOTE: ArenaAI is now per-bot (Phase 7.1)
+        // No longer registered as singleton - owned by GameSystemsManager
+        // Access via: botAI->GetGameSystems()->GetArenaAI()
 
-        // Register PvPCombatAI (Phase 64)
-        container.RegisterInstance<Playerbot::IPvPCombatAI>(
-            std::shared_ptr<Playerbot::IPvPCombatAI>(
-                Playerbot::PvPCombatAI::instance(),
-                [](Playerbot::IPvPCombatAI*) {} // No-op deleter (singleton)
-            )
-        );
-        TC_LOG_INFO("playerbot.di", "  - Registered IPvPCombatAI");
+        // NOTE: PvPCombatAI is now per-bot (Phase 7.1.2)
+        // No longer registered as singleton - owned by GameSystemsManager
+        // Access via: botAI->GetGameSystems()->GetPvPCombatAI()
 
         // Register PerformanceBenchmark (Phase 65)
         container.RegisterInstance<Playerbot::IPerformanceBenchmark>(

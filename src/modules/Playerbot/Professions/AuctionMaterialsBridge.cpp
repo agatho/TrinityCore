@@ -11,8 +11,14 @@
 #include "GatheringMaterialsBridge.h"
 #include "ProfessionAuctionBridge.h"
 #include "ProfessionManager.h"
+#include "ProfessionEventBus.h"
+#include "ProfessionEvents.h"
 #include "../Professions/GatheringManager.h"
+#include "../Core/BotAI.h"
+#include "../Core/BotSession.h"
+#include "../Core/Managers/GameSystemsManager.h"
 #include "ObjectMgr.h"
+#include "ObjectAccessor.h"
 #include "ItemTemplate.h"
 #include "Log.h"
 #include <algorithm>
@@ -22,17 +28,33 @@ namespace Playerbot
 {
 
 // ============================================================================
-// SINGLETON
+// STATIC MEMBER INITIALIZATION
 // ============================================================================
 
-AuctionMaterialsBridge* AuctionMaterialsBridge::instance()
+std::unordered_map<uint32, uint32> AuctionMaterialsBridge::_vendorMaterials;
+MaterialSourcingStatistics AuctionMaterialsBridge::_globalStatistics;
+bool AuctionMaterialsBridge::_sharedDataInitialized = false;
+
+// ============================================================================
+// CONSTRUCTOR / DESTRUCTOR
+// ============================================================================
+
+AuctionMaterialsBridge::AuctionMaterialsBridge(Player* bot)
+    : _bot(bot)
 {
-    static AuctionMaterialsBridge instance;
-    return &instance;
+    if (_bot)
+    {
+        TC_LOG_DEBUG("playerbot", "AuctionMaterialsBridge: Creating instance for bot '{}'", _bot->GetName());
+    }
 }
 
-AuctionMaterialsBridge::AuctionMaterialsBridge()
+AuctionMaterialsBridge::~AuctionMaterialsBridge()
 {
+    if (_bot)
+    {
+        TC_LOG_DEBUG("playerbot", "AuctionMaterialsBridge: Destroying instance for bot '{}'", _bot->GetName());
+    }
+    // Event bus unsubscription handled automatically by ProfessionEventBus
 }
 
 // ============================================================================
@@ -41,99 +63,85 @@ AuctionMaterialsBridge::AuctionMaterialsBridge()
 
 void AuctionMaterialsBridge::Initialize()
 {
-    std::lock_guard<decltype(_mutex)> lock(_mutex);
-
-    TC_LOG_INFO("playerbot", "AuctionMaterialsBridge::Initialize - Initializing smart material sourcing system");
-
-    LoadVendorMaterials();
-    InitializeDefaultEconomicParameters();
-
-    TC_LOG_INFO("playerbot", "AuctionMaterialsBridge::Initialize - Smart material sourcing system initialized");
-}
-
-void AuctionMaterialsBridge::Update(::Player* player, uint32 diff)
-{
-    if (!player)
+    if (!_bot)
         return;
 
-    uint32 playerGuid = player->GetGUID().GetCounter();
+    // Load shared data once (thread-safe via static initialization)
+    if (!_sharedDataInitialized)
+    {
+        LoadVendorMaterials();
+        InitializeDefaultEconomicParameters();
+        _sharedDataInitialized = true;
+        TC_LOG_INFO("playerbot", "AuctionMaterialsBridge::Initialize - Loaded shared data (vendor materials)");
+    }
 
-    std::lock_guard<decltype(_mutex)> lock(_mutex);
+    // Subscribe to ProfessionEventBus for event-driven reactivity (Phase 2)
+    ProfessionEventBus::instance()->SubscribeCallback(
+        [this](ProfessionEvent const& event) { HandleProfessionEvent(event); },
+        {
+            ProfessionEventType::MATERIALS_NEEDED,
+            ProfessionEventType::MATERIAL_PURCHASED
+        }
+    );
 
-    // Check if enabled for this player
-    auto profileItr = _economicProfiles.find(playerGuid);
-    if (profileItr == _economicProfiles.end())
+    TC_LOG_DEBUG("playerbot", "AuctionMaterialsBridge: Initialized for bot '{}', subscribed to 2 event types", _bot->GetName());
+}
+
+void AuctionMaterialsBridge::Update(uint32 diff)
+{
+    if (!_bot)
+        return;
+
+    // Check if enabled
+    if (_profile.strategy == MaterialSourcingStrategy::NONE)
         return;
 
     // Throttle updates
     uint32 now = GameTime::GetGameTimeMS();
-    auto lastUpdateItr = _lastUpdateTimes.find(playerGuid);
-    if (lastUpdateItr != _lastUpdateTimes.end())
-    {
-        if (now - lastUpdateItr->second < DECISION_UPDATE_INTERVAL)
-            return;
-    }
-    _lastUpdateTimes[playerGuid] = now;
+    if (now - _lastUpdateTime < DECISION_UPDATE_INTERVAL)
+        return;
+    _lastUpdateTime = now;
 
     // Check if we have an active plan to execute
-    auto planItr = _activePlans.find(playerGuid);
-    if (planItr != _activePlans.end() && profileItr->second.autoExecutePlans)
+    if (_activePlan.recipeId != 0 && _profile.autoExecutePlans)
     {
-        ExecuteAcquisitionPlan(player, planItr->second);
+        ExecuteAcquisitionPlan(_activePlan);
     }
 }
 
-void AuctionMaterialsBridge::SetEnabled(::Player* player, bool enabled)
+void AuctionMaterialsBridge::SetEnabled(bool enabled)
 {
-    if (!player)
+    if (!_bot)
         return;
-
-    uint32 playerGuid = player->GetGUID().GetCounter();
-
-    std::lock_guard<decltype(_mutex)> lock(_mutex);
 
     if (enabled)
     {
-        // Create default profile if doesn't exist
-        if (_economicProfiles.find(playerGuid) == _economicProfiles.end())
+        // Initialize with default profile if needed
+        if (_profile.strategy == MaterialSourcingStrategy::NONE)
         {
-            _economicProfiles[playerGuid] = BotEconomicProfile();
+            _profile = BotEconomicProfile();
         }
     }
     else
     {
-        _economicProfiles.erase(playerGuid);
-        _activePlans.erase(playerGuid);
+        _profile.strategy = MaterialSourcingStrategy::NONE;
+        _activePlan = MaterialAcquisitionPlan();
     }
 }
 
-bool AuctionMaterialsBridge::IsEnabled(::Player* player) const
+bool AuctionMaterialsBridge::IsEnabled() const
 {
-    if (!player)
-        return false;
-
-    uint32 playerGuid = player->GetGUID().GetCounter();
-
-    std::lock_guard<decltype(_mutex)> lock(_mutex);
-
-    return _economicProfiles.find(playerGuid) != _economicProfiles.end();
+    return _bot && _profile.strategy != MaterialSourcingStrategy::NONE;
 }
 
-void AuctionMaterialsBridge::SetEconomicProfile(uint32 playerGuid, BotEconomicProfile const& profile)
+void AuctionMaterialsBridge::SetEconomicProfile(BotEconomicProfile const& profile)
 {
-    std::lock_guard<decltype(_mutex)> lock(_mutex);
-    _economicProfiles[playerGuid] = profile;
+    _profile = profile;
 }
 
-BotEconomicProfile AuctionMaterialsBridge::GetEconomicProfile(uint32 playerGuid) const
+BotEconomicProfile AuctionMaterialsBridge::GetEconomicProfile() const
 {
-    std::lock_guard<decltype(_mutex)> lock(_mutex);
-
-    auto itr = _economicProfiles.find(playerGuid);
-    if (itr != _economicProfiles.end())
-        return itr->second;
-
-    return BotEconomicProfile();
+    return _profile;
 }
 
 // ============================================================================
@@ -141,7 +149,6 @@ BotEconomicProfile AuctionMaterialsBridge::GetEconomicProfile(uint32 playerGuid)
 // ============================================================================
 
 MaterialSourcingDecision AuctionMaterialsBridge::GetBestMaterialSource(
-    ::Player* player,
     uint32 itemId,
     uint32 quantity)
 {
@@ -149,50 +156,39 @@ MaterialSourcingDecision AuctionMaterialsBridge::GetBestMaterialSource(
     decision.itemId = itemId;
     decision.quantityNeeded = quantity;
 
-    if (!player)
+    if (!_bot)
     {
-        decision.rationale = "Invalid player";
+        decision.rationale = "Invalid bot";
         return decision;
     }
 
-    uint32 playerGuid = player->GetGUID().GetCounter();
-
-    std::lock_guard<decltype(_mutex)> lock(_mutex);
-
     // Get economic profile
-    auto profileItr = _economicProfiles.find(playerGuid);
-    EconomicParameters params;
-    MaterialSourcingStrategy strategy = MaterialSourcingStrategy::BALANCED;
-
-    if (profileItr != _economicProfiles.end())
-    {
-        params = profileItr->second.parameters;
-        strategy = profileItr->second.strategy;
-    }
+    EconomicParameters params = _profile.parameters;
+    MaterialSourcingStrategy strategy = _profile.strategy;
 
     // Analyze all acquisition methods
-    decision.canGather = CanGatherMaterial(player, itemId);
-    decision.canBuyAuction = IsMaterialAvailableOnAH(player, itemId, quantity);
-    decision.canCraft = CanCraftMaterial(player, itemId);
+    decision.canGather = CanGatherMaterial(itemId);
+    decision.canBuyAuction = IsMaterialAvailableOnAH(itemId, quantity);
+    decision.canCraft = CanCraftMaterial(itemId);
     decision.canBuyVendor = IsAvailableFromVendor(itemId);
 
     // Calculate costs for each method
     if (decision.canGather)
     {
-        decision.gatheringTimeEstimate = EstimateGatheringTime(player, itemId, quantity);
-        decision.gatheringTimeCost = CalculateGatheringTimeCost(player, itemId, quantity);
+        decision.gatheringTimeEstimate = EstimateGatheringTime(itemId, quantity);
+        decision.gatheringTimeCost = CalculateGatheringTimeCost(itemId, quantity);
     }
 
     if (decision.canBuyAuction)
     {
-        decision.auctionCost = GetAuctionPrice(player, itemId, quantity);
-        decision.auctionTimeEstimate = EstimateAuctionPurchaseTime(player);
+        decision.auctionCost = GetAuctionPrice(itemId, quantity);
+        decision.auctionTimeEstimate = EstimateAuctionPurchaseTime();
     }
 
     if (decision.canCraft)
     {
-        decision.craftingCost = CalculateCraftingCost(player, itemId, quantity);
-        decision.craftingTimeEstimate = EstimateCraftingTime(player, itemId, quantity);
+        decision.craftingCost = CalculateCraftingCost(itemId, quantity);
+        decision.craftingTimeEstimate = EstimateCraftingTime(itemId, quantity);
     }
 
     if (decision.canBuyVendor)
@@ -228,7 +224,7 @@ MaterialSourcingDecision AuctionMaterialsBridge::GetBestMaterialSource(
 
             if (decision.canGather)
             {
-                float score = ScoreAcquisitionMethod(player, MaterialAcquisitionMethod::GATHER, itemId, quantity, params);
+                float score = ScoreAcquisitionMethod(MaterialAcquisitionMethod::GATHER, itemId, quantity, params);
                 if (score > bestScore)
                 {
                     bestScore = score;
@@ -238,7 +234,7 @@ MaterialSourcingDecision AuctionMaterialsBridge::GetBestMaterialSource(
 
             if (decision.canBuyAuction)
             {
-                float score = ScoreAcquisitionMethod(player, MaterialAcquisitionMethod::BUY_AUCTION, itemId, quantity, params);
+                float score = ScoreAcquisitionMethod(MaterialAcquisitionMethod::BUY_AUCTION, itemId, quantity, params);
                 if (score > bestScore)
                 {
                     bestScore = score;
@@ -248,7 +244,7 @@ MaterialSourcingDecision AuctionMaterialsBridge::GetBestMaterialSource(
 
             if (decision.canCraft)
             {
-                float score = ScoreAcquisitionMethod(player, MaterialAcquisitionMethod::CRAFT, itemId, quantity, params);
+                float score = ScoreAcquisitionMethod(MaterialAcquisitionMethod::CRAFT, itemId, quantity, params);
                 if (score > bestScore)
                 {
                     bestScore = score;
@@ -258,7 +254,7 @@ MaterialSourcingDecision AuctionMaterialsBridge::GetBestMaterialSource(
 
             if (decision.canBuyVendor)
             {
-                float score = ScoreAcquisitionMethod(player, MaterialAcquisitionMethod::VENDOR, itemId, quantity, params);
+                float score = ScoreAcquisitionMethod(MaterialAcquisitionMethod::VENDOR, itemId, quantity, params);
                 if (score > bestScore)
                 {
                     bestScore = score;
@@ -347,31 +343,31 @@ MaterialSourcingDecision AuctionMaterialsBridge::GetBestMaterialSource(
     }
 
     // Calculate opportunity cost and net benefit
-    decision.opportunityCost = CalculateOpportunityCost(player, decision.recommendedMethod, itemId, quantity);
+    decision.opportunityCost = CalculateOpportunityCost(decision.recommendedMethod, itemId, quantity);
     decision.netBenefit = -decision.opportunityCost; // Simplified
 
     // Generate rationale and confidence
     decision.rationale = GenerateDecisionRationale(decision);
-    decision.decisionConfidence = CalculateDecisionConfidence(player, decision);
+    decision.decisionConfidence = CalculateDecisionConfidence(decision);
 
     // Update statistics
     switch (decision.recommendedMethod)
     {
         case MaterialAcquisitionMethod::GATHER:
             _globalStatistics.decisionsGather++;
-            _playerStatistics[playerGuid].decisionsGather++;
+            _statistics.decisionsGather++;
             break;
         case MaterialAcquisitionMethod::BUY_AUCTION:
             _globalStatistics.decisionsBuy++;
-            _playerStatistics[playerGuid].decisionsBuy++;
+            _statistics.decisionsBuy++;
             break;
         case MaterialAcquisitionMethod::CRAFT:
             _globalStatistics.decisionsCraft++;
-            _playerStatistics[playerGuid].decisionsCraft++;
+            _statistics.decisionsCraft++;
             break;
         case MaterialAcquisitionMethod::VENDOR:
             _globalStatistics.decisionsVendor++;
-            _playerStatistics[playerGuid].decisionsVendor++;
+            _statistics.decisionsVendor++;
             break;
         default:
             break;
@@ -381,17 +377,16 @@ MaterialSourcingDecision AuctionMaterialsBridge::GetBestMaterialSource(
 }
 
 MaterialAcquisitionPlan AuctionMaterialsBridge::GetMaterialAcquisitionPlan(
-    ::Player* player,
     uint32 recipeId)
 {
     MaterialAcquisitionPlan plan;
     plan.recipeId = recipeId;
 
-    if (!player)
+    if (!_bot)
         return plan;
 
-    // Get recipe info from ProfessionManager
-    ProfessionManager* profMgr = ProfessionManager::instance();
+    // Get recipe info from ProfessionManager via GameSystemsManager
+    ProfessionManager* profMgr = GetProfessionManager();
     if (!profMgr)
         return plan;
 
@@ -427,7 +422,7 @@ MaterialAcquisitionPlan AuctionMaterialsBridge::GetMaterialAcquisitionPlan(
     // Get material decisions for each reagent
     for (const RecipeInfo::Reagent& reagent : recipe->reagents)
     {
-        MaterialSourcingDecision decision = GetBestMaterialSource(player, reagent.itemId, reagent.quantity);
+        MaterialSourcingDecision decision = GetBestMaterialSource(reagent.itemId, reagent.quantity);
         plan.materialDecisions.push_back(decision);
 
         // Accumulate costs and time
@@ -464,33 +459,31 @@ MaterialAcquisitionPlan AuctionMaterialsBridge::GetMaterialAcquisitionPlan(
         plan.efficiencyScore = 1.0f / (1.0f + plan.timeScore + plan.costScore);
     }
 
-    std::lock_guard<decltype(_mutex)> lock(_mutex);
     _globalStatistics.plansGenerated++;
 
     return plan;
 }
 
 MaterialAcquisitionPlan AuctionMaterialsBridge::GetLevelingMaterialPlan(
-    ::Player* player,
     ProfessionType profession,
     uint32 targetSkill)
 {
     MaterialAcquisitionPlan plan;
     plan.profession = profession;
 
-    if (!player)
+    if (!_bot)
         return plan;
 
-    ProfessionManager* profMgr = ProfessionManager::instance();
+    ProfessionManager* profMgr = GetProfessionManager();
     if (!profMgr)
         return plan;
 
     // Get optimal leveling recipe
-    RecipeInfo const* recipe = profMgr->GetOptimalLevelingRecipe(player, profession);
+    RecipeInfo const* recipe = profMgr->GetOptimalLevelingRecipe(profession);
     if (!recipe)
         return plan;
 
-    return GetMaterialAcquisitionPlan(player, recipe->recipeId);
+    return GetMaterialAcquisitionPlan(recipe->recipeId);
 }
 
 // ============================================================================
@@ -498,33 +491,25 @@ MaterialAcquisitionPlan AuctionMaterialsBridge::GetLevelingMaterialPlan(
 // ============================================================================
 
 bool AuctionMaterialsBridge::IsBuyingCheaperThanGathering(
-    ::Player* player,
     uint32 itemId,
     uint32 quantity)
 {
-    if (!player)
+    if (!_bot)
         return false;
 
     // Get auction price
-    uint32 auctionCost = GetAuctionPrice(player, itemId, quantity);
+    uint32 auctionCost = GetAuctionPrice(itemId, quantity);
     if (auctionCost == 0)
         return false; // Not available
 
     // Get gathering time cost
-    uint32 gatheringCost = CalculateGatheringTimeCost(player, itemId, quantity);
+    uint32 gatheringCost = CalculateGatheringTimeCost(itemId, quantity);
     if (gatheringCost == 0)
         return true; // Can't gather, so buying is the only option
 
     // Add auction travel time
-    uint32 auctionTime = EstimateAuctionPurchaseTime(player);
-    uint32 playerGuid = player->GetGUID().GetCounter();
-
-    std::lock_guard<decltype(_mutex)> lock(_mutex);
-
-    EconomicParameters params;
-    auto profileItr = _economicProfiles.find(playerGuid);
-    if (profileItr != _economicProfiles.end())
-        params = profileItr->second.parameters;
+    uint32 auctionTime = EstimateAuctionPurchaseTime();
+    EconomicParameters params = _profile.parameters;
 
     uint32 totalAuctionCost = auctionCost + (auctionTime * params.goldPerHour / 3600);
 
@@ -532,20 +517,19 @@ bool AuctionMaterialsBridge::IsBuyingCheaperThanGathering(
 }
 
 uint32 AuctionMaterialsBridge::CalculateGatheringTimeCost(
-    ::Player* player,
     uint32 itemId,
     uint32 quantity)
 {
-    if (!player)
+    if (!_bot)
         return 0;
 
     // Estimate gathering time
-    uint32 gatheringTime = EstimateGatheringTime(player, itemId, quantity);
+    uint32 gatheringTime = EstimateGatheringTime(itemId, quantity);
     if (gatheringTime == 0)
         return 0;
 
     // Get bot's gold per hour rate
-    float goldPerHour = GetBotGoldPerHour(player);
+    float goldPerHour = GetBotGoldPerHour();
 
     // Time value cost = (time in seconds) * (gold per hour / 3600)
     uint32 timeCost = static_cast<uint32>(gatheringTime * (goldPerHour / 3600.0f));
@@ -554,27 +538,26 @@ uint32 AuctionMaterialsBridge::CalculateGatheringTimeCost(
 }
 
 float AuctionMaterialsBridge::CalculateOpportunityCost(
-    ::Player* player,
     MaterialAcquisitionMethod method,
     uint32 itemId,
     uint32 quantity)
 {
-    if (!player)
+    if (!_bot)
         return 0.0f;
 
-    float goldPerHour = GetBotGoldPerHour(player);
+    float goldPerHour = GetBotGoldPerHour();
     uint32 timeSpent = 0;
 
     switch (method)
     {
         case MaterialAcquisitionMethod::GATHER:
-            timeSpent = EstimateGatheringTime(player, itemId, quantity);
+            timeSpent = EstimateGatheringTime(itemId, quantity);
             break;
         case MaterialAcquisitionMethod::BUY_AUCTION:
-            timeSpent = EstimateAuctionPurchaseTime(player);
+            timeSpent = EstimateAuctionPurchaseTime();
             break;
         case MaterialAcquisitionMethod::CRAFT:
-            timeSpent = EstimateCraftingTime(player, itemId, quantity);
+            timeSpent = EstimateCraftingTime(itemId, quantity);
             break;
         case MaterialAcquisitionMethod::VENDOR:
             timeSpent = 10; // Minimal time
@@ -589,21 +572,17 @@ float AuctionMaterialsBridge::CalculateOpportunityCost(
     return opportunityCost;
 }
 
-float AuctionMaterialsBridge::GetBotGoldPerHour(::Player* player)
+float AuctionMaterialsBridge::GetBotGoldPerHour()
 {
-    if (!player)
+    if (!_bot)
         return DEFAULT_GOLD_PER_HOUR;
 
-    uint32 playerGuid = player->GetGUID().GetCounter();
-
-    std::lock_guard<decltype(_mutex)> lock(_mutex);
-
-    auto profileItr = _economicProfiles.find(playerGuid);
-    if (profileItr != _economicProfiles.end())
-        return profileItr->second.parameters.goldPerHour;
+    // Use profile if configured
+    if (_profile.parameters.goldPerHour > 0)
+        return _profile.parameters.goldPerHour;
 
     // Estimate based on level
-    uint8 level = player->GetLevel();
+    uint8 level = _bot->GetLevel();
     if (level >= 80)
         return 150.0f * 10000.0f; // 150 gold/hour
     else if (level >= 70)
@@ -614,32 +593,29 @@ float AuctionMaterialsBridge::GetBotGoldPerHour(::Player* player)
         return 50.0f * 10000.0f;  // 50 gold/hour
     else
         return 25.0f * 10000.0f;  // 25 gold/hour
-
-    return DEFAULT_GOLD_PER_HOUR;
 }
 
 // ============================================================================
 // GATHERING FEASIBILITY ANALYSIS
 // ============================================================================
 
-bool AuctionMaterialsBridge::CanGatherMaterial(::Player* player, uint32 itemId)
+bool AuctionMaterialsBridge::CanGatherMaterial(uint32 itemId)
 {
-    if (!player)
+    if (!_bot)
         return false;
 
     GatheringMaterialsBridge* gatherBridge = GetGatheringBridge();
     if (!gatherBridge)
         return false;
 
-    return gatherBridge->IsItemNeededForCrafting(player, itemId);
+    return gatherBridge->IsItemNeededForCrafting(itemId);
 }
 
 uint32 AuctionMaterialsBridge::EstimateGatheringTime(
-    ::Player* player,
     uint32 itemId,
     uint32 quantity)
 {
-    if (!player)
+    if (!_bot)
         return 0;
 
     // Base time per node (average)
@@ -655,14 +631,7 @@ uint32 AuctionMaterialsBridge::EstimateGatheringTime(
     uint32 totalTime = nodesNeeded * timePerNode;
 
     // Apply gathering efficiency
-    uint32 playerGuid = player->GetGUID().GetCounter();
-
-    std::lock_guard<decltype(_mutex)> lock(_mutex);
-
-    float efficiency = DEFAULT_GATHERING_EFFICIENCY;
-    auto profileItr = _economicProfiles.find(playerGuid);
-    if (profileItr != _economicProfiles.end())
-        efficiency = profileItr->second.parameters.gatheringEfficiency;
+    float efficiency = _profile.parameters.gatheringEfficiency;
 
     // Adjust for efficiency
     totalTime = static_cast<uint32>(totalTime / efficiency);
@@ -670,22 +639,12 @@ uint32 AuctionMaterialsBridge::EstimateGatheringTime(
     return totalTime;
 }
 
-float AuctionMaterialsBridge::GetGatheringSuccessProbability(
-    ::Player* player,
-    uint32 itemId)
+float AuctionMaterialsBridge::GetGatheringSuccessProbability(uint32 itemId)
 {
-    if (!player)
+    if (!_bot)
         return 0.0f;
 
-    uint32 playerGuid = player->GetGUID().GetCounter();
-
-    std::lock_guard<decltype(_mutex)> lock(_mutex);
-
-    auto profileItr = _economicProfiles.find(playerGuid);
-    if (profileItr != _economicProfiles.end())
-        return profileItr->second.parameters.gatheringEfficiency;
-
-    return DEFAULT_GATHERING_EFFICIENCY;
+    return _profile.parameters.gatheringEfficiency;
 }
 
 // ============================================================================
@@ -693,11 +652,10 @@ float AuctionMaterialsBridge::GetGatheringSuccessProbability(
 // ============================================================================
 
 bool AuctionMaterialsBridge::IsMaterialAvailableOnAH(
-    ::Player* player,
     uint32 itemId,
     uint32 quantity)
 {
-    if (!player)
+    if (!_bot)
         return false;
 
     ProfessionAuctionBridge* auctionBridge = GetAuctionBridge();
@@ -706,27 +664,26 @@ bool AuctionMaterialsBridge::IsMaterialAvailableOnAH(
 
     uint32 maxPricePerUnit = UINT32_MAX;
 
-    return auctionBridge->IsMaterialAvailableForPurchase(player, itemId, quantity, maxPricePerUnit);
+    return auctionBridge->IsMaterialAvailableForPurchase(itemId, quantity, maxPricePerUnit);
 }
 
 uint32 AuctionMaterialsBridge::GetAuctionPrice(
-    ::Player* player,
     uint32 itemId,
     uint32 quantity)
 {
-    if (!player)
+    if (!_bot)
         return 0;
 
     ProfessionAuctionBridge* auctionBridge = GetAuctionBridge();
     if (!auctionBridge)
         return 0;
 
-    return auctionBridge->GetOptimalMaterialPrice(player, itemId, quantity);
+    return auctionBridge->GetOptimalMaterialPrice(itemId, quantity);
 }
 
-uint32 AuctionMaterialsBridge::EstimateAuctionPurchaseTime(::Player* player)
+uint32 AuctionMaterialsBridge::EstimateAuctionPurchaseTime()
 {
-    if (!player)
+    if (!_bot)
         return 0;
 
     // Travel time to AH + transaction time
@@ -737,14 +694,14 @@ uint32 AuctionMaterialsBridge::EstimateAuctionPurchaseTime(::Player* player)
 // CRAFTING ANALYSIS
 // ============================================================================
 
-bool AuctionMaterialsBridge::CanCraftMaterial(::Player* player, uint32 itemId)
+bool AuctionMaterialsBridge::CanCraftMaterial(uint32 itemId)
 {
-    if (!player)
+    if (!_bot)
         return false;
 
     // Some materials can be crafted (e.g., enchanting reagents)
-    // Check if player knows any recipe that produces this item
-    ProfessionManager* profMgr = ProfessionManager::instance();
+    // Check if bot knows any recipe that produces this item
+    ProfessionManager* profMgr = GetProfessionManager();
     if (!profMgr)
         return false;
 
@@ -769,15 +726,14 @@ bool AuctionMaterialsBridge::CanCraftMaterial(::Player* player, uint32 itemId)
 }
 
 uint32 AuctionMaterialsBridge::CalculateCraftingCost(
-    ::Player* player,
     uint32 itemId,
     uint32 quantity)
 {
-    if (!player)
+    if (!_bot)
         return 0;
 
     // Find recipe and calculate reagent costs
-    ProfessionManager* profMgr = ProfessionManager::instance();
+    ProfessionManager* profMgr = GetProfessionManager();
     if (!profMgr)
         return 0;
 
@@ -798,13 +754,13 @@ uint32 AuctionMaterialsBridge::CalculateCraftingCost(
                 uint32 totalCost = 0;
                 for (const RecipeInfo::Reagent& reagent : recipe.reagents)
                 {
-                    uint32 reagentCost = GetAuctionPrice(player, reagent.itemId, reagent.quantity * quantity);
+                    uint32 reagentCost = GetAuctionPrice(reagent.itemId, reagent.quantity * quantity);
                     totalCost += reagentCost;
                 }
 
                 // Add time value of crafting
-                uint32 craftingTime = EstimateCraftingTime(player, itemId, quantity);
-                float goldPerHour = GetBotGoldPerHour(player);
+                uint32 craftingTime = EstimateCraftingTime(itemId, quantity);
+                float goldPerHour = GetBotGoldPerHour();
                 totalCost += static_cast<uint32>(craftingTime * (goldPerHour / 3600.0f));
 
                 return totalCost;
@@ -816,11 +772,10 @@ uint32 AuctionMaterialsBridge::CalculateCraftingCost(
 }
 
 uint32 AuctionMaterialsBridge::EstimateCraftingTime(
-    ::Player* player,
     uint32 itemId,
     uint32 quantity)
 {
-    if (!player)
+    if (!_bot)
         return 0;
 
     // Crafting takes ~3 seconds per item
@@ -833,14 +788,11 @@ uint32 AuctionMaterialsBridge::EstimateCraftingTime(
 
 bool AuctionMaterialsBridge::IsAvailableFromVendor(uint32 itemId)
 {
-    std::lock_guard<decltype(_mutex)> lock(_mutex);
     return _vendorMaterials.find(itemId) != _vendorMaterials.end();
 }
 
 uint32 AuctionMaterialsBridge::GetVendorPrice(uint32 itemId)
 {
-    std::lock_guard<decltype(_mutex)> lock(_mutex);
-
     auto itr = _vendorMaterials.find(itemId);
     if (itr != _vendorMaterials.end())
         return itr->second;
@@ -853,23 +805,21 @@ uint32 AuctionMaterialsBridge::GetVendorPrice(uint32 itemId)
 // ============================================================================
 
 bool AuctionMaterialsBridge::ExecuteAcquisitionPlan(
-    ::Player* player,
     MaterialAcquisitionPlan const& plan)
 {
-    if (!player)
+    if (!_bot)
         return false;
 
     bool allSuccessful = true;
 
     for (const MaterialSourcingDecision& decision : plan.materialDecisions)
     {
-        if (!AcquireMaterial(player, decision))
+        if (!AcquireMaterial(decision))
             allSuccessful = false;
     }
 
     if (allSuccessful)
     {
-        std::lock_guard<decltype(_mutex)> lock(_mutex);
         _globalStatistics.plansExecuted++;
     }
 
@@ -877,10 +827,9 @@ bool AuctionMaterialsBridge::ExecuteAcquisitionPlan(
 }
 
 bool AuctionMaterialsBridge::AcquireMaterial(
-    ::Player* player,
     MaterialSourcingDecision const& decision)
 {
-    if (!player)
+    if (!_bot)
         return false;
 
     switch (decision.recommendedMethod)
@@ -889,7 +838,7 @@ bool AuctionMaterialsBridge::AcquireMaterial(
         {
             GatheringMaterialsBridge* gatherBridge = GetGatheringBridge();
             if (gatherBridge)
-                return gatherBridge->StartGatheringForMaterial(player, decision.itemId, decision.quantityNeeded);
+                return gatherBridge->StartGatheringForMaterial(decision.itemId, decision.quantityNeeded);
             break;
         }
 
@@ -897,14 +846,14 @@ bool AuctionMaterialsBridge::AcquireMaterial(
         {
             ProfessionAuctionBridge* auctionBridge = GetAuctionBridge();
             if (auctionBridge)
-                return auctionBridge->PurchaseMaterial(player, decision.itemId, decision.quantityNeeded, UINT32_MAX);
+                return auctionBridge->PurchaseMaterial(decision.itemId, decision.quantityNeeded, UINT32_MAX);
             break;
         }
 
         case MaterialAcquisitionMethod::CRAFT:
         {
             // Delegate to ProfessionManager
-            ProfessionManager* profMgr = ProfessionManager::instance();
+            ProfessionManager* profMgr = GetProfessionManager();
             if (profMgr)
             {
                 // This would trigger crafting automation
@@ -931,31 +880,19 @@ bool AuctionMaterialsBridge::AcquireMaterial(
 // STATISTICS
 // ============================================================================
 
-MaterialSourcingStatistics const& AuctionMaterialsBridge::GetPlayerStatistics(uint32 playerGuid) const
+MaterialSourcingStatistics const& AuctionMaterialsBridge::GetStatistics() const
 {
-    std::lock_guard<decltype(_mutex)> lock(_mutex);
-
-    auto itr = _playerStatistics.find(playerGuid);
-    if (itr != _playerStatistics.end())
-        return itr->second;
-
-    static MaterialSourcingStatistics empty;
-    return empty;
+    return _statistics;
 }
 
-MaterialSourcingStatistics const& AuctionMaterialsBridge::GetGlobalStatistics() const
+MaterialSourcingStatistics const& AuctionMaterialsBridge::GetGlobalStatistics()
 {
-    std::lock_guard<decltype(_mutex)> lock(_mutex);
     return _globalStatistics;
 }
 
-void AuctionMaterialsBridge::ResetStatistics(uint32 playerGuid)
+void AuctionMaterialsBridge::ResetStatistics()
 {
-    std::lock_guard<decltype(_mutex)> lock(_mutex);
-
-    auto itr = _playerStatistics.find(playerGuid);
-    if (itr != _playerStatistics.end())
-        itr->second.Reset();
+    _statistics.Reset();
 }
 
 // ============================================================================
@@ -1002,13 +939,12 @@ void AuctionMaterialsBridge::InitializeDefaultEconomicParameters()
 // ============================================================================
 
 float AuctionMaterialsBridge::ScoreAcquisitionMethod(
-    ::Player* player,
     MaterialAcquisitionMethod method,
     uint32 itemId,
     uint32 quantity,
     EconomicParameters const& params)
 {
-    if (!player)
+    if (!_bot)
         return 0.0f;
 
     float score = 100.0f;
@@ -1017,7 +953,7 @@ float AuctionMaterialsBridge::ScoreAcquisitionMethod(
     {
         case MaterialAcquisitionMethod::GATHER:
         {
-            uint32 timeCost = CalculateGatheringTimeCost(player, itemId, quantity);
+            uint32 timeCost = CalculateGatheringTimeCost(itemId, quantity);
             // Lower time cost = higher score
             score = 100.0f / (1.0f + timeCost / 10000.0f);
 
@@ -1028,7 +964,7 @@ float AuctionMaterialsBridge::ScoreAcquisitionMethod(
 
         case MaterialAcquisitionMethod::BUY_AUCTION:
         {
-            uint32 goldCost = GetAuctionPrice(player, itemId, quantity);
+            uint32 goldCost = GetAuctionPrice(itemId, quantity);
             // Lower gold cost = higher score
             score = 100.0f / (1.0f + goldCost / 10000.0f);
 
@@ -1039,7 +975,7 @@ float AuctionMaterialsBridge::ScoreAcquisitionMethod(
 
         case MaterialAcquisitionMethod::CRAFT:
         {
-            uint32 totalCost = CalculateCraftingCost(player, itemId, quantity);
+            uint32 totalCost = CalculateCraftingCost(itemId, quantity);
             score = 100.0f / (1.0f + totalCost / 10000.0f);
             break;
         }
@@ -1112,10 +1048,9 @@ std::string AuctionMaterialsBridge::GenerateDecisionRationale(
 }
 
 float AuctionMaterialsBridge::CalculateDecisionConfidence(
-    ::Player* player,
     MaterialSourcingDecision const& decision)
 {
-    if (!player)
+    if (!_bot)
         return 0.0f;
 
     float confidence = 1.0f;
@@ -1142,14 +1077,97 @@ float AuctionMaterialsBridge::CalculateDecisionConfidence(
 // INTEGRATION HELPERS
 // ============================================================================
 
-GatheringMaterialsBridge* AuctionMaterialsBridge::GetGatheringBridge() const
+GatheringMaterialsBridge* AuctionMaterialsBridge::GetGatheringBridge()
 {
-    return GatheringMaterialsBridge::instance();
+    if (!_bot)
+        return nullptr;
+
+    BotSession* session = static_cast<BotSession*>(_bot->GetSession());
+    if (!session || !session->GetBotAI())
+        return nullptr;
+
+    return session->GetBotAI()->GetGameSystems()->GetGatheringMaterialsBridge();
 }
 
-ProfessionAuctionBridge* AuctionMaterialsBridge::GetAuctionBridge() const
+ProfessionAuctionBridge* AuctionMaterialsBridge::GetAuctionBridge()
 {
-    return ProfessionAuctionBridge::instance();
+    if (!_bot)
+        return nullptr;
+
+    BotSession* session = static_cast<BotSession*>(_bot->GetSession());
+    if (!session || !session->GetBotAI())
+        return nullptr;
+
+    return session->GetBotAI()->GetGameSystems()->GetProfessionAuctionBridge();
+}
+
+ProfessionManager* AuctionMaterialsBridge::GetProfessionManager()
+{
+    if (!_bot)
+        return nullptr;
+
+    BotSession* session = static_cast<BotSession*>(_bot->GetSession());
+    if (!session || !session->GetBotAI())
+        return nullptr;
+
+    return session->GetBotAI()->GetGameSystems()->GetProfessionManager();
+}
+
+// ============================================================================
+// EVENT HANDLING (Phase 2)
+// ============================================================================
+
+void AuctionMaterialsBridge::HandleProfessionEvent(ProfessionEvent const& event)
+{
+    if (!_bot)
+        return;
+
+    // Filter events: Only process events for THIS bot
+    if (event.playerGuid != _bot->GetGUID())
+        return;
+
+    switch (event.type)
+    {
+        case ProfessionEventType::MATERIALS_NEEDED:
+        {
+            // When materials are needed, analyze AH prices and recommend buy vs gather
+            TC_LOG_DEBUG("playerbot.events.profession",
+                "AuctionMaterialsBridge: MATERIALS_NEEDED event for bot '{}' - Item {} x{} needed for profession {}",
+                _bot->GetName(), event.itemId, event.quantity, static_cast<uint32>(event.profession));
+
+            // Analyze best sourcing method for this material
+            MaterialSourcingDecision decision = GetBestMaterialSource(event.itemId, event.quantity);
+
+            // Log recommendation
+            TC_LOG_DEBUG("playerbot",
+                "AuctionMaterialsBridge: Bot '{}' material sourcing for {} x{}: {}",
+                _bot->GetName(), event.itemId, event.quantity, decision.rationale);
+
+            // Statistics already updated in GetBestMaterialSource()
+            break;
+        }
+
+        case ProfessionEventType::MATERIAL_PURCHASED:
+        {
+            // When materials are purchased, track spending and update economic metrics
+            TC_LOG_DEBUG("playerbot.events.profession",
+                "AuctionMaterialsBridge: Bot '{}' MATERIAL_PURCHASED event - Item {} x{} for {} gold",
+                _bot->GetName(), event.itemId, event.quantity, event.goldAmount);
+
+            // Update bot's economic profile
+            _profile.totalGoldSpentOnMaterials += event.goldAmount;
+            _profile.totalMaterialsBought += event.quantity;
+
+            TC_LOG_DEBUG("playerbot",
+                "AuctionMaterialsBridge: Bot '{}' tracked {} gold spent on {} x{}",
+                _bot->GetName(), event.goldAmount, event.itemId, event.quantity);
+            break;
+        }
+
+        default:
+            // Ignore other event types
+            break;
+    }
 }
 
 } // namespace Playerbot

@@ -33,18 +33,18 @@ public:
     // Core loot distribution functionality
     virtual void HandleGroupLoot(Group* group, Loot* loot) = 0;
     virtual void InitiateLootRoll(Group* group, const LootItem& item) = 0;
-    virtual void ProcessPlayerLootDecision(Player* player, uint32 rollId, LootRollType rollType) = 0;
+    virtual void ProcessPlayerLootDecision(uint32 rollId, LootRollType rollType) = 0;
     virtual void CompleteLootRoll(uint32 rollId) = 0;
 
     // Loot analysis and decision making
-    virtual LootRollType DetermineLootDecision(Player* player, const LootItem& item) = 0;
-    virtual LootPriority AnalyzeItemPriority(Player* player, const LootItem& item) = 0;
-    virtual bool IsItemUpgrade(Player* player, const LootItem& item) = 0;
-    virtual bool IsClassAppropriate(Player* player, const LootItem& item) = 0;
+    virtual LootRollType DetermineLootDecision(const LootItem& item) = 0;
+    virtual LootPriority AnalyzeItemPriority(const LootItem& item) = 0;
+    virtual bool IsItemUpgrade(const LootItem& item) = 0;
+    virtual bool IsClassAppropriate(const LootItem& item) = 0;
 
     // Need/Greed/Pass logic implementation
-    virtual bool CanPlayerNeedItem(Player* player, const LootItem& item) = 0;
-    virtual bool ShouldPlayerGreedItem(Player* player, const LootItem& item) = 0;
+    virtual bool CanPlayerNeedItem(const LootItem& item) = 0;
+    virtual bool ShouldPlayerGreedItem(const LootItem& item) = 0;
 
     // Roll processing and winner determination
     virtual void ProcessLootRolls(uint32 rollId) = 0;
@@ -60,13 +60,13 @@ public:
     virtual LootFairnessTracker GetGroupLootFairness(uint32 groupId) = 0;
 
     // Performance monitoring
-    virtual LootMetrics GetPlayerLootMetrics(uint32 playerGuid) = 0;
+    virtual LootMetrics GetPlayerLootMetrics() = 0;
     virtual LootMetrics GetGroupLootMetrics(uint32 groupId) = 0;
     virtual LootMetrics GetGlobalLootMetrics() = 0;
 
     // Player preferences and configuration
-    virtual void SetPlayerLootStrategy(uint32 playerGuid, LootDecisionStrategy strategy) = 0;
-    virtual LootDecisionStrategy GetPlayerLootStrategy(uint32 playerGuid) = 0;
+    virtual void SetPlayerLootStrategy(LootDecisionStrategy strategy) = 0;
+    virtual LootDecisionStrategy GetPlayerLootStrategy() = 0;
 
     // Error handling and edge cases
     virtual void HandleLootConflicts(uint32 rollId) = 0;

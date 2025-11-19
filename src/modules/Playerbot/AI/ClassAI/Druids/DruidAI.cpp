@@ -8,10 +8,10 @@
  */
 
 #include "DruidAI.h"
-#include "BalanceDruidRefactored.h"
-#include "FeralDruidRefactored.h"
-#include "GuardianDruidRefactored.h"
-#include "RestorationDruidRefactored.h"
+#include "BalanceDruid.h"
+#include "FeralDruid.h"
+#include "GuardianDruid.h"
+#include "RestorationDruid.h"
 #include "../BaselineRotationManager.h"
 #include "../../Combat/CombatBehaviorIntegration.h"
 #include "Player.h"

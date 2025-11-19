@@ -30,44 +30,44 @@ public:
 
     // Core mount management
     virtual void Initialize() = 0;
-    virtual void Update(::Player* player, uint32 diff) = 0;
-    virtual bool MountPlayer(::Player* player) = 0;
-    virtual bool DismountPlayer(::Player* player) = 0;
-    virtual bool IsMounted(::Player* player) const = 0;
-    virtual bool ShouldAutoMount(::Player* player, Position const& destination) const = 0;
+    virtual void Update(uint32 diff) = 0;
+    virtual bool MountPlayer() = 0;
+    virtual bool DismountPlayer() = 0;
+    virtual bool IsMounted() const = 0;
+    virtual bool ShouldAutoMount(Position const& destination) const = 0;
 
     // Mount selection
-    virtual MountInfo const* GetBestMount(::Player* player) const = 0;
-    virtual MountInfo const* GetFlyingMount(::Player* player) const = 0;
-    virtual MountInfo const* GetGroundMount(::Player* player) const = 0;
-    virtual MountInfo const* GetAquaticMount(::Player* player) const = 0;
-    virtual MountInfo const* GetDragonridingMount(::Player* player) const = 0;
-    virtual bool CanUseFlyingMount(::Player* player) const = 0;
-    virtual bool IsPlayerUnderwater(::Player* player) const = 0;
-    virtual bool CanUseDragonriding(::Player* player) const = 0;
+    virtual MountInfo const* GetBestMount() const = 0;
+    virtual MountInfo const* GetFlyingMount() const = 0;
+    virtual MountInfo const* GetGroundMount() const = 0;
+    virtual MountInfo const* GetAquaticMount() const = 0;
+    virtual MountInfo const* GetDragonridingMount() const = 0;
+    virtual bool CanUseFlyingMount() const = 0;
+    virtual bool IsPlayerUnderwater() const = 0;
+    virtual bool CanUseDragonriding() const = 0;
 
     // Mount collection
-    virtual std::vector<MountInfo> GetPlayerMounts(::Player* player) const = 0;
-    virtual bool KnowsMount(::Player* player, uint32 spellId) const = 0;
-    virtual bool LearnMount(::Player* player, uint32 spellId) = 0;
-    virtual uint32 GetMountCount(::Player* player) const = 0;
-    virtual bool CanUseMount(::Player* player, MountInfo const& mount) const = 0;
+    virtual std::vector<MountInfo> GetPlayerMounts() const = 0;
+    virtual bool KnowsMount(uint32 spellId) const = 0;
+    virtual bool LearnMount(uint32 spellId) = 0;
+    virtual uint32 GetMountCount() const = 0;
+    virtual bool CanUseMount(MountInfo const& mount) const = 0;
 
     // Riding skill
-    virtual uint32 GetRidingSkill(::Player* player) const = 0;
-    virtual bool HasRidingSkill(::Player* player) const = 0;
-    virtual bool LearnRidingSkill(::Player* player, uint32 skillLevel) = 0;
-    virtual MountSpeed GetMaxMountSpeed(::Player* player) const = 0;
+    virtual uint32 GetRidingSkill() const = 0;
+    virtual bool HasRidingSkill() const = 0;
+    virtual bool LearnRidingSkill(uint32 skillLevel) = 0;
+    virtual MountSpeed GetMaxMountSpeed() const = 0;
 
     // Multi-passenger mounts
     virtual bool IsMultiPassengerMount(MountInfo const& mount) const = 0;
-    virtual uint32 GetAvailablePassengerSeats(::Player* player) const = 0;
-    virtual bool AddPassenger(::Player* mountedPlayer, ::Player* passenger) = 0;
+    virtual uint32 GetAvailablePassengerSeats() const = 0;
+    virtual bool AddPassenger(::Player* passenger) = 0;
     virtual bool RemovePassenger(::Player* passenger) = 0;
 
     // Automation
-    virtual void SetAutomationProfile(uint32 playerGuid, MountAutomationProfile const& profile) = 0;
-    virtual MountAutomationProfile GetAutomationProfile(uint32 playerGuid) const = 0;
+    virtual void SetAutomationProfile(MountAutomationProfile const& profile) = 0;
+    virtual MountAutomationProfile GetAutomationProfile() const = 0;
 
     // Database initialization
     virtual void LoadMountDatabase() = 0;

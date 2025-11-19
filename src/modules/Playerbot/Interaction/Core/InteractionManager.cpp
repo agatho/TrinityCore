@@ -10,7 +10,8 @@
 #include "InteractionManager.h"
 #include "GossipHandler.h"
 #include "InteractionValidator.h"
-#include "../Vendors/VendorInteraction.h"
+// #include "../Vendors/VendorInteraction.h"  // REMOVED: Skeleton with no implementation
+#include "../VendorInteractionManager.h"  // Real vendor implementation
 // #include "../Trainers/TrainerInteraction.h"  // TODO: Create this file
 // #include "../Services/InnkeeperInteraction.h"  // TODO: Create this file
 // #include "../Services/FlightMasterInteraction.h"  // TODO: Create this file

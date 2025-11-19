@@ -24,16 +24,48 @@ namespace Playerbot
 // SINGLETON
 // ============================================================================
 
-BattlePetManager* BattlePetManager::instance()
+BattlePetManager::BattlePetManager(Player* bot)
+    : _bot(bot)
 {
-    static BattlePetManager instance;
-    return &instance;
+    if (!_bot)
+    {
+        TC_LOG_ERROR("playerbot.battlepet", "BattlePetManager: Attempted to create with null bot!");
+        return;
+    }
+
+    // Initialize shared database once
+    if (!_databaseInitialized)
+    {
+        TC_LOG_INFO("playerbot.battlepet", "BattlePetManager: Loading pet database...");
+        LoadPetDatabase();
+        InitializeAbilityDatabase();
+        LoadRarePetList();
+        _databaseInitialized = true;
+        TC_LOG_INFO("playerbot.battlepet", "BattlePetManager: Database initialized - {} pets, {} abilities",
+                   _petDatabase.size(), _abilityDatabase.size());
+    }
+
+    TC_LOG_DEBUG("playerbot.battlepet", "BattlePetManager: Created for bot {} ({})",
+                 _bot->GetName(), _bot->GetGUID().ToString());
 }
 
-BattlePetManager::BattlePetManager()
+BattlePetManager::~BattlePetManager()
 {
-    TC_LOG_INFO("playerbot", "BattlePetManager initialized");
+    TC_LOG_DEBUG("playerbot.battlepet", "BattlePetManager: Destroyed for bot {} ({})",
+                 _bot ? _bot->GetName() : "Unknown",
+                 _bot ? _bot->GetGUID().ToString() : "Unknown");
 }
+
+
+// Static member initialization
+std::unordered_map<uint32, BattlePetInfo> BattlePetManager::_petDatabase;
+std::unordered_map<uint32, std::vector<Position>> BattlePetManager::_rarePetSpawns;
+std::unordered_map<uint32, BattlePetManager::AbilityInfo> BattlePetManager::_abilityDatabase;
+BattlePetManager::PetMetrics BattlePetManager::_globalMetrics;
+bool BattlePetManager::_databaseInitialized = false;
+
+
+
 
 // ============================================================================
 // INITIALIZATION
@@ -133,28 +165,26 @@ void BattlePetManager::LoadRarePetList()
 // CORE PET MANAGEMENT
 // ============================================================================
 
-void BattlePetManager::Update(::Player* player, uint32 diff)
+void BattlePetManager::Update(uint32 diff)
 {
-    if (!player)
+    if (!_bot)
         return;
-
-    uint32 playerGuid = player->GetGUID().GetCounter();
     uint32 currentTime = GameTime::GetGameTimeMS();
 
     // Throttle updates
-    if (_lastUpdateTimes.count(playerGuid))
+    if (false)
     {
-        uint32 timeSinceLastUpdate = currentTime - _lastUpdateTimes[playerGuid];
+        uint32 timeSinceLastUpdate = currentTime - _lastUpdateTime;
         if (timeSinceLastUpdate < PET_UPDATE_INTERVAL)
             return;
     }
 
-    _lastUpdateTimes[playerGuid] = currentTime;
+    _lastUpdateTime = currentTime;
 
     // No lock needed - battle pet data is per-bot instance data
 
     // Get automation profile
-    PetBattleAutomationProfile profile = GetAutomationProfile(playerGuid);
+    PetBattleAutomationProfile profile = GetAutomationProfile();
 
     // Auto-level pets if enabled
     if (profile.autoLevel)
@@ -167,7 +197,7 @@ void BattlePetManager::Update(::Player* player, uint32 diff)
     // Heal pets if needed
     if (profile.healBetweenBattles)
     {
-        for (auto const& [speciesId, petInfo] : _playerPetInstances[playerGuid])
+        for (auto const& [speciesId, petInfo] : _petInstances)
         {
             if (NeedsHealing(player, speciesId))
                 HealPet(player, speciesId);
@@ -175,47 +205,41 @@ void BattlePetManager::Update(::Player* player, uint32 diff)
     }
 }
 
-std::vector<BattlePetInfo> BattlePetManager::GetPlayerPets(::Player* player) const
+std::vector<BattlePetInfo> BattlePetManager::GetPlayerPets() const
 {
-    if (!player)
+    if (!_bot)
         return {};
 
     // No lock needed - battle pet data is per-bot instance data
-
-    uint32 playerGuid = player->GetGUID().GetCounter();
     std::vector<BattlePetInfo> pets;
 
-    if (_playerPetInstances.count(playerGuid))
+    if (!_petInstances.empty())
     {
-        for (auto const& [speciesId, petInfo] : _playerPetInstances.at(playerGuid))
+        for (auto const& [speciesId, petInfo] : _petInstances)
             pets.push_back(petInfo);
     }
 
     return pets;
 }
 
-bool BattlePetManager::OwnsPet(::Player* player, uint32 speciesId) const
+bool BattlePetManager::OwnsPet(uint32 speciesId) const
 {
-    if (!player)
+    if (!_bot)
         return false;
 
     // No lock needed - battle pet data is per-bot instance data
-
-    uint32 playerGuid = player->GetGUID().GetCounter();
-    if (!_playerPets.count(playerGuid))
+    if (!!_ownedPets.empty())
         return false;
 
-    return _playerPets.at(playerGuid).count(speciesId) > 0;
+    return _ownedPets.count(speciesId) > 0;
 }
 
-bool BattlePetManager::CapturePet(::Player* player, uint32 speciesId, PetQuality quality)
+bool BattlePetManager::CapturePet(uint32 speciesId, PetQuality quality)
 {
-    if (!player)
+    if (!_bot)
         return false;
 
     // No lock needed - battle pet data is per-bot instance data
-
-    uint32 playerGuid = player->GetGUID().GetCounter();
     // Check if pet exists in database
     if (!_petDatabase.count(speciesId))
     {
@@ -224,10 +248,10 @@ bool BattlePetManager::CapturePet(::Player* player, uint32 speciesId, PetQuality
     }
 
     // Check if player already owns pet (if avoid duplicates enabled)
-    PetBattleAutomationProfile profile = GetAutomationProfile(playerGuid);
+    PetBattleAutomationProfile profile = GetAutomationProfile();
     if (profile.avoidDuplicates && OwnsPet(player, speciesId))
     {
-        TC_LOG_DEBUG("playerbot", "BattlePetManager: Player {} already owns pet {}, skipping capture", playerGuid, speciesId);
+        TC_LOG_DEBUG("playerbot", "BattlePetManager: bot {} (_bot->GetGUID().GetCounter()) already owns pet {}, skipping capture", _bot->GetGUID().GetCounter(), speciesId);
         return false;
     }
 
@@ -236,71 +260,66 @@ bool BattlePetManager::CapturePet(::Player* player, uint32 speciesId, PetQuality
     petInfo.quality = quality;
 
     // Add to player's collection
-    _playerPets[playerGuid].insert(speciesId);
-    _playerPetInstances[playerGuid][speciesId] = petInfo;
+    _ownedPets.insert(speciesId);
+    _petInstances[speciesId] = petInfo;
     // Update metrics
-    _playerMetrics[playerGuid].petsCollected++;
+    _metrics.petsCollected++;
     _globalMetrics.petsCollected++;
 
     if (quality == PetQuality::RARE || petInfo.isRare)
     {
-        _playerMetrics[playerGuid].raresCaptured++;
+        _metrics.raresCaptured++;
         _globalMetrics.raresCaptured++;
     }
 
-    TC_LOG_INFO("playerbot", "BattlePetManager: Player {} captured pet {} (species {}, quality {})",
-        playerGuid, petInfo.name, speciesId, static_cast<uint32>(quality));
+    TC_LOG_INFO("playerbot", "BattlePetManager: bot {} (_bot->GetGUID().GetCounter()) captured pet {} (species {}, quality {})", _bot->GetGUID().GetCounter(), petInfo.name, speciesId, static_cast<uint32>(quality));
 
     return true;
 }
 
-bool BattlePetManager::ReleasePet(::Player* player, uint32 speciesId)
+bool BattlePetManager::ReleasePet(uint32 speciesId)
 {
-    if (!player)
+    if (!_bot)
         return false;
 
     // No lock needed - battle pet data is per-bot instance data
-
-    uint32 playerGuid = player->GetGUID().GetCounter();
     if (!OwnsPet(player, speciesId))
         return false;
 
     // Remove from collection
-    _playerPets[playerGuid].erase(speciesId);
-    _playerPetInstances[playerGuid].erase(speciesId);
+    _ownedPets.erase(speciesId);
+    _petInstances.erase(speciesId);
 
-    TC_LOG_INFO("playerbot", "BattlePetManager: Player {} released pet {}", playerGuid, speciesId);
+    TC_LOG_INFO("playerbot", "BattlePetManager: bot {} (_bot->GetGUID().GetCounter()) released pet {}", _bot->GetGUID().GetCounter(), speciesId);
 
     return true;
 }
 
-uint32 BattlePetManager::GetPetCount(::Player* player) const
+uint32 BattlePetManager::GetPetCount() const
 {
-    if (!player)
+    if (!_bot)
         return 0;
 
     // No lock needed - battle pet data is per-bot instance data
-
-    uint32 playerGuid = player->GetGUID().GetCounter();
-    if (!_playerPets.count(playerGuid))
+    if (!!_ownedPets.empty())
         return 0;
 
-    return static_cast<uint32>(_playerPets.at(playerGuid).size());
+    return static_cast<uint32>(_ownedPets.size());
 }
 
 // ============================================================================
 // PET BATTLE AI
 // ============================================================================
 
-bool BattlePetManager::StartPetBattle(::Player* player, uint32 targetNpcId)
+bool BattlePetManager::StartPetBattle(uint32 targetNpcId)
 {
-    if (!player)
+    if (!_bot)
         return false;
 
     // Validate player has pets
     if (GetPetCount(player) == 0)
     {
-        TC_LOG_DEBUG("playerbot", "BattlePetManager: Player {} has no pets for battle", player->GetGUID().GetCounter());
+        TC_LOG_DEBUG("playerbot", "BattlePetManager: bot {} (_bot->GetGUID().GetCounter()) has no pets for battle", _bot->GetGUID().GetCounter());
         return false;
     }
 
@@ -308,28 +327,28 @@ bool BattlePetManager::StartPetBattle(::Player* player, uint32 targetNpcId)
     PetTeam activeTeam = GetActiveTeam(player);
     if (activeTeam.petSpeciesIds.empty())
     {
-        TC_LOG_DEBUG("playerbot", "BattlePetManager: Player {} has no active pet team", player->GetGUID().GetCounter());
+        TC_LOG_DEBUG("playerbot", "BattlePetManager: bot {} (_bot->GetGUID().GetCounter()) has no active pet team", _bot->GetGUID().GetCounter());
         return false;
     }
 
     // Start battle (integrate with TrinityCore battle pet system)
-    TC_LOG_INFO("playerbot", "BattlePetManager: Player {} starting battle with NPC {}",
-        player->GetGUID().GetCounter(), targetNpcId);
+    TC_LOG_INFO("playerbot", "BattlePetManager: bot {} (_bot->GetGUID().GetCounter()) starting battle with NPC {}",
+        _bot->GetGUID().GetCounter(), targetNpcId);
 
     // Full implementation: Call TrinityCore battle pet API to start battle
     return true;
 }
 
-bool BattlePetManager::ExecuteBattleTurn(::Player* player)
+bool BattlePetManager::ExecuteBattleTurn()
 {
-    if (!player)
+    if (!_bot)
         return false;
 
     // Select best ability
     uint32 abilityId = SelectBestAbility(player);
     if (abilityId == 0)
     {
-        TC_LOG_DEBUG("playerbot", "BattlePetManager: No valid ability found for player {}", player->GetGUID().GetCounter());
+        TC_LOG_DEBUG("playerbot", "BattlePetManager: No valid ability found for bot {} (_bot->GetGUID().GetCounter())", _bot->GetGUID().GetCounter());
         return false;
     }
 
@@ -337,16 +356,14 @@ bool BattlePetManager::ExecuteBattleTurn(::Player* player)
     return UseAbility(player, abilityId);
 }
 
-uint32 BattlePetManager::SelectBestAbility(::Player* player) const
+uint32 BattlePetManager::SelectBestAbility() const
 {
-    if (!player)
+    if (!_bot)
         return 0;
 
     // No lock needed - battle pet data is per-bot instance data
-
-    uint32 playerGuid = player->GetGUID().GetCounter();
     // Get automation profile
-    PetBattleAutomationProfile profile = GetAutomationProfile(playerGuid);
+    PetBattleAutomationProfile profile = GetAutomationProfile();
     if (!profile.useOptimalAbilities)
         return 0; // Let player choose manually
 
@@ -356,11 +373,11 @@ uint32 BattlePetManager::SelectBestAbility(::Player* player) const
         return 0;
 
     uint32 activePetSpecies = activeTeam.petSpeciesIds[0];
-    if (!_playerPetInstances.count(playerGuid) ||
-        !_playerPetInstances.at(playerGuid).count(activePetSpecies))
+    if (!!_petInstances.empty() ||
+        !_petInstances.count(activePetSpecies))
         return 0;
 
-    BattlePetInfo const& activePet = _playerPetInstances.at(playerGuid).at(activePetSpecies);
+    BattlePetInfo const& activePet = _petInstances.at(activePetSpecies);
 
     // Get opponent family (stub - full implementation queries battle state)
     PetFamily opponentFamily = PetFamily::BEAST; // Example
@@ -382,39 +399,37 @@ uint32 BattlePetManager::SelectBestAbility(::Player* player) const
     return bestAbility;
 }
 
-bool BattlePetManager::SwitchActivePet(::Player* player, uint32 petIndex)
+bool BattlePetManager::SwitchActivePet(uint32 petIndex)
 {
-    if (!player)
+    if (!_bot)
         return false;
 
-    TC_LOG_INFO("playerbot", "BattlePetManager: Player {} switching to pet index {}",
-        player->GetGUID().GetCounter(), petIndex);
+    TC_LOG_INFO("playerbot", "BattlePetManager: bot {} (_bot->GetGUID().GetCounter()) switching to pet index {}",
+        _bot->GetGUID().GetCounter(), petIndex);
 
     // Full implementation: Call TrinityCore battle pet API to switch pet
     return true;
 }
 
-bool BattlePetManager::UseAbility(::Player* player, uint32 abilityId)
+bool BattlePetManager::UseAbility(uint32 abilityId)
 {
-    if (!player)
+    if (!_bot)
         return false;
 
-    TC_LOG_DEBUG("playerbot", "BattlePetManager: Player {} using ability {}",
-        player->GetGUID().GetCounter(), abilityId);
+    TC_LOG_DEBUG("playerbot", "BattlePetManager: bot {} (_bot->GetGUID().GetCounter()) using ability {}",
+        _bot->GetGUID().GetCounter(), abilityId);
 
     // Full implementation: Call TrinityCore battle pet API to use ability
     return true;
 }
 
-bool BattlePetManager::ShouldCapturePet(::Player* player) const
+bool BattlePetManager::ShouldCapturePet() const
 {
-    if (!player)
+    if (!_bot)
         return false;
 
     // No lock needed - battle pet data is per-bot instance data
-
-    uint32 playerGuid = player->GetGUID().GetCounter();
-    PetBattleAutomationProfile profile = GetAutomationProfile(playerGuid);
+    PetBattleAutomationProfile profile = GetAutomationProfile();
 
     if (!profile.autoBattle)
         return false;
@@ -427,12 +442,12 @@ bool BattlePetManager::ShouldCapturePet(::Player* player) const
     return profile.collectRares; // Simplified
 }
 
-bool BattlePetManager::ForfeitBattle(::Player* player)
+bool BattlePetManager::ForfeitBattle()
 {
-    if (!player)
+    if (!_bot)
         return false;
 
-    TC_LOG_INFO("playerbot", "BattlePetManager: Player {} forfeiting battle", player->GetGUID().GetCounter());
+    TC_LOG_INFO("playerbot", "BattlePetManager: bot {} (_bot->GetGUID().GetCounter()) forfeiting battle", _bot->GetGUID().GetCounter());
 
     // Full implementation: Call TrinityCore battle pet API to forfeit
     return true;
@@ -442,37 +457,35 @@ bool BattlePetManager::ForfeitBattle(::Player* player)
 // PET LEVELING
 // ============================================================================
 
-void BattlePetManager::AutoLevelPets(::Player* player)
+void BattlePetManager::AutoLevelPets()
 {
-    if (!player)
+    if (!_bot)
         return;
 
     std::vector<BattlePetInfo> petsNeedingLevel = GetPetsNeedingLevel(player);
     if (petsNeedingLevel.empty())
         return;
 
-    TC_LOG_DEBUG("playerbot", "BattlePetManager: Player {} has {} pets needing leveling",
-        player->GetGUID().GetCounter(), petsNeedingLevel.size());
+    TC_LOG_DEBUG("playerbot", "BattlePetManager: bot {} (_bot->GetGUID().GetCounter()) has {} pets needing leveling",
+        _bot->GetGUID().GetCounter(), petsNeedingLevel.size());
 
     // Full implementation: Queue battles with appropriate opponents to level pets
 }
 
-std::vector<BattlePetInfo> BattlePetManager::GetPetsNeedingLevel(::Player* player) const
+std::vector<BattlePetInfo> BattlePetManager::GetPetsNeedingLevel() const
 {
-    if (!player)
+    if (!_bot)
         return {};
 
     // No lock needed - battle pet data is per-bot instance data
-
-    uint32 playerGuid = player->GetGUID().GetCounter();
-    PetBattleAutomationProfile profile = GetAutomationProfile(playerGuid);
+    PetBattleAutomationProfile profile = GetAutomationProfile();
 
     std::vector<BattlePetInfo> result;
 
-    if (!_playerPetInstances.count(playerGuid))
+    if (!!_petInstances.empty())
         return result;
 
-    for (auto const& [speciesId, petInfo] : _playerPetInstances.at(playerGuid))
+    for (auto const& [speciesId, petInfo] : _petInstances)
     {
         if (petInfo.level < profile.maxPetLevel)
             result.push_back(petInfo);
@@ -491,23 +504,21 @@ uint32 BattlePetManager::GetXPRequiredForLevel(uint32 currentLevel) const
     return static_cast<uint32>(100 * std::pow(1.1f, currentLevel));
 }
 
-void BattlePetManager::AwardPetXP(::Player* player, uint32 speciesId, uint32 xp)
+void BattlePetManager::AwardPetXP(uint32 speciesId, uint32 xp)
 {
-    if (!player)
+    if (!_bot)
         return;
 
     // No lock needed - battle pet data is per-bot instance data
-
-    uint32 playerGuid = player->GetGUID().GetCounter();
-    if (!_playerPetInstances.count(playerGuid) ||
-        !_playerPetInstances[playerGuid].count(speciesId))
+    if (!!_petInstances.empty() ||
+        !_petInstances.count(speciesId))
         return;
 
-    BattlePetInfo& petInfo = _playerPetInstances[playerGuid][speciesId];
+    BattlePetInfo& petInfo = _petInstances[speciesId];
     petInfo.xp += xp;
 
     // Update metrics
-    _playerMetrics[playerGuid].totalXPGained += xp;
+    _metrics.totalXPGained += xp;
     _globalMetrics.totalXPGained += xp;
 
     // Check for level up
@@ -523,19 +534,17 @@ void BattlePetManager::AwardPetXP(::Player* player, uint32 speciesId, uint32 xp)
         speciesId, xp, petInfo.xp, xpRequired);
 }
 
-bool BattlePetManager::LevelUpPet(::Player* player, uint32 speciesId)
+bool BattlePetManager::LevelUpPet(uint32 speciesId)
 {
-    if (!player)
+    if (!_bot)
         return false;
 
     // No lock needed - battle pet data is per-bot instance data
-
-    uint32 playerGuid = player->GetGUID().GetCounter();
-    if (!_playerPetInstances.count(playerGuid) ||
-        !_playerPetInstances[playerGuid].count(speciesId))
+    if (!!_petInstances.empty() ||
+        !_petInstances.count(speciesId))
         return false;
 
-    BattlePetInfo& petInfo = _playerPetInstances[playerGuid][speciesId];
+    BattlePetInfo& petInfo = _petInstances[speciesId];
 
     if (petInfo.level >= 25)
         return false;
@@ -550,7 +559,7 @@ bool BattlePetManager::LevelUpPet(::Player* player, uint32 speciesId)
     petInfo.speed = static_cast<uint32>(10 + (petInfo.level * 1.5f * qualityMultiplier));
 
     // Update metrics
-    _playerMetrics[playerGuid].petsLeveled++;
+    _metrics.petsLeveled++;
     _globalMetrics.petsLeveled++;
 
     TC_LOG_INFO("playerbot", "BattlePetManager: Pet {} leveled up to {} (health: {}, power: {}, speed: {})",
@@ -570,15 +579,12 @@ bool BattlePetManager::CreatePetTeam(::Player* player, std::string const& teamNa
         return false;
 
     // No lock needed - battle pet data is per-bot instance data
-
-    uint32 playerGuid = player->GetGUID().GetCounter();
     // Validate player owns all pets
     for (uint32 speciesId : petSpeciesIds)
     {
         if (!OwnsPet(player, speciesId))
         {
-            TC_LOG_ERROR("playerbot", "BattlePetManager: Player {} does not own pet {}",
-                playerGuid, speciesId);
+            TC_LOG_ERROR("playerbot", "BattlePetManager: bot {} (_bot->GetGUID().GetCounter()) does not own pet {}", _bot->GetGUID().GetCounter(), speciesId);
             return false;
         }
     }
@@ -588,52 +594,46 @@ bool BattlePetManager::CreatePetTeam(::Player* player, std::string const& teamNa
     team.petSpeciesIds = petSpeciesIds;
     team.isActive = false;
 
-    _playerTeams[playerGuid].push_back(team);
+    _petTeams.push_back(team);
 
-    TC_LOG_INFO("playerbot", "BattlePetManager: Player {} created team '{}' with {} pets",
-        playerGuid, teamName, petSpeciesIds.size());
+    TC_LOG_INFO("playerbot", "BattlePetManager: bot {} (_bot->GetGUID().GetCounter()) created team '{}' with {} pets", _bot->GetGUID().GetCounter(), teamName, petSpeciesIds.size());
 
     return true;
 }
 
-std::vector<PetTeam> BattlePetManager::GetPlayerTeams(::Player* player) const
+std::vector<PetTeam> BattlePetManager::GetPlayerTeams() const
 {
-    if (!player)
+    if (!_bot)
         return {};
 
     // No lock needed - battle pet data is per-bot instance data
-
-    uint32 playerGuid = player->GetGUID().GetCounter();
-    if (!_playerTeams.count(playerGuid))
+    if (!!_petTeams.empty())
         return {};
 
-    return _playerTeams.at(playerGuid);
+    return _petTeams;
 }
 
-bool BattlePetManager::SetActiveTeam(::Player* player, std::string const& teamName)
+bool BattlePetManager::SetActiveTeam(std::string const& teamName)
 {
-    if (!player)
+    if (!_bot)
         return false;
 
     // No lock needed - battle pet data is per-bot instance data
-
-    uint32 playerGuid = player->GetGUID().GetCounter();
-    if (!_playerTeams.count(playerGuid))
+    if (!!_petTeams.empty())
         return false;
 
     // Deactivate all teams first
-    for (PetTeam& team : _playerTeams[playerGuid])
+    for (PetTeam& team : _petTeams)
         team.isActive = false;
 
     // Activate requested team
-    for (PetTeam& team : _playerTeams[playerGuid])
+    for (PetTeam& team : _petTeams)
     {
         if (team.teamName == teamName)
         {
             team.isActive = true;
-            _activeTeams[playerGuid] = teamName;
-            TC_LOG_INFO("playerbot", "BattlePetManager: Player {} activated team '{}'",
-                playerGuid, teamName);
+            _activeTeam = teamName;
+            TC_LOG_INFO("playerbot", "BattlePetManager: bot {} (_bot->GetGUID().GetCounter()) activated team '{}'", _bot->GetGUID().GetCounter(), teamName);
 
             return true;
         }
@@ -642,18 +642,16 @@ bool BattlePetManager::SetActiveTeam(::Player* player, std::string const& teamNa
     return false;
 }
 
-PetTeam BattlePetManager::GetActiveTeam(::Player* player) const
+PetTeam BattlePetManager::GetActiveTeam() const
 {
-    if (!player)
+    if (!_bot)
         return PetTeam();
 
     // No lock needed - battle pet data is per-bot instance data
-
-    uint32 playerGuid = player->GetGUID().GetCounter();
-    if (!_playerTeams.count(playerGuid))
+    if (!!_petTeams.empty())
         return PetTeam();
 
-    for (PetTeam const& team : _playerTeams.at(playerGuid))
+    for (PetTeam const& team : _petTeams)
     {
         if (team.isActive)
             return team;
@@ -665,21 +663,19 @@ PetTeam BattlePetManager::GetActiveTeam(::Player* player) const
 std::vector<uint32> BattlePetManager::OptimizeTeamForOpponent(::Player* player,
     PetFamily opponentFamily) const
 {
-    if (!player)
+    if (!_bot)
         return {};
 
     // No lock needed - battle pet data is per-bot instance data
-
-    uint32 playerGuid = player->GetGUID().GetCounter();
     std::vector<uint32> optimizedTeam;
 
-    if (!_playerPetInstances.count(playerGuid))
+    if (!!_petInstances.empty())
         return optimizedTeam;
 
     // Score each pet based on type effectiveness against opponent
     std::vector<std::pair<uint32, float>> petScores;
 
-    for (auto const& [speciesId, petInfo] : _playerPetInstances.at(playerGuid))
+    for (auto const& [speciesId, petInfo] : _petInstances)
     {
         float effectiveness = CalculateTypeEffectiveness(petInfo.family, opponentFamily);
         float levelScore = petInfo.level / 25.0f;
@@ -704,20 +700,18 @@ std::vector<uint32> BattlePetManager::OptimizeTeamForOpponent(::Player* player,
 // PET HEALING
 // ============================================================================
 
-bool BattlePetManager::HealAllPets(::Player* player)
+bool BattlePetManager::HealAllPets()
 {
-    if (!player)
+    if (!_bot)
         return false;
 
     // No lock needed - battle pet data is per-bot instance data
-
-    uint32 playerGuid = player->GetGUID().GetCounter();
-    if (!_playerPetInstances.count(playerGuid))
+    if (!!_petInstances.empty())
         return false;
 
     uint32 healedCount = 0;
 
-    for (auto& [speciesId, petInfo] : _playerPetInstances[playerGuid])
+    for (auto& [speciesId, petInfo] : _petInstances)
     {
         if (petInfo.health < petInfo.maxHealth)
         {
@@ -726,60 +720,56 @@ bool BattlePetManager::HealAllPets(::Player* player)
         }
     }
 
-    TC_LOG_INFO("playerbot", "BattlePetManager: Healed {} pets for player {}",
-        healedCount, playerGuid);
+    TC_LOG_INFO("playerbot", "BattlePetManager: Healed {} pets for bot {} (_bot->GetGUID().GetCounter())",
+        healedCount, _bot->GetGUID().GetCounter());
 
     return healedCount > 0;
 }
-bool BattlePetManager::HealPet(::Player* player, uint32 speciesId)
+bool BattlePetManager::HealPet(uint32 speciesId)
 {
-    if (!player)
+    if (!_bot)
         return false;
 
     // No lock needed - battle pet data is per-bot instance data
-
-    uint32 playerGuid = player->GetGUID().GetCounter();
-    if (!_playerPetInstances.count(playerGuid) ||
-        !_playerPetInstances[playerGuid].count(speciesId))
+    if (!!_petInstances.empty() ||
+        !_petInstances.count(speciesId))
         return false;
 
-    BattlePetInfo& petInfo = _playerPetInstances[playerGuid][speciesId];
+    BattlePetInfo& petInfo = _petInstances[speciesId];
 
     if (petInfo.health >= petInfo.maxHealth)
         return false;
 
     petInfo.health = petInfo.maxHealth;
 
-    TC_LOG_DEBUG("playerbot", "BattlePetManager: Healed pet {} for player {}",
-        speciesId, playerGuid);
+    TC_LOG_DEBUG("playerbot", "BattlePetManager: Healed pet {} for bot {} (_bot->GetGUID().GetCounter())",
+        speciesId, _bot->GetGUID().GetCounter());
 
     return true;
 }
 
-bool BattlePetManager::NeedsHealing(::Player* player, uint32 speciesId) const
+bool BattlePetManager::NeedsHealing(uint32 speciesId) const
 {
-    if (!player)
+    if (!_bot)
         return false;
 
     // No lock needed - battle pet data is per-bot instance data
+    PetBattleAutomationProfile profile = GetAutomationProfile();
 
-    uint32 playerGuid = player->GetGUID().GetCounter();
-    PetBattleAutomationProfile profile = GetAutomationProfile(playerGuid);
-
-    if (!_playerPetInstances.count(playerGuid) ||
-        !_playerPetInstances.at(playerGuid).count(speciesId))
+    if (!!_petInstances.empty() ||
+        !_petInstances.count(speciesId))
         return false;
 
-    BattlePetInfo const& petInfo = _playerPetInstances.at(playerGuid).at(speciesId);
+    BattlePetInfo const& petInfo = _petInstances.at(speciesId);
 
     float healthPercent = (static_cast<float>(petInfo.health) / petInfo.maxHealth) * 100.0f;
 
     return healthPercent < profile.minHealthPercent;
 }
 
-uint32 BattlePetManager::FindNearestPetHealer(::Player* player) const
+uint32 BattlePetManager::FindNearestPetHealer() const
 {
-    if (!player)
+    if (!_bot)
         return 0;
 
     // Full implementation: Query creature database for battle pet healers
@@ -793,17 +783,17 @@ uint32 BattlePetManager::FindNearestPetHealer(::Player* player) const
 // RARE PET TRACKING
 // ============================================================================
 
-void BattlePetManager::TrackRarePetSpawns(::Player* player)
+void BattlePetManager::TrackRarePetSpawns()
 {
-    if (!player)
+    if (!_bot)
         return;
 
     std::vector<uint32> rarePetsInZone = GetRarePetsInZone(player);
     if (rarePetsInZone.empty())
         return;
 
-    TC_LOG_DEBUG("playerbot", "BattlePetManager: Found {} rare pets in zone for player {}",
-        rarePetsInZone.size(), player->GetGUID().GetCounter());
+    TC_LOG_DEBUG("playerbot", "BattlePetManager: Found {} rare pets in zone for bot {} (_bot->GetGUID().GetCounter())",
+        rarePetsInZone.size(), _bot->GetGUID().GetCounter());
 
     // Full implementation: Navigate to nearest rare pet spawn
 }
@@ -818,9 +808,9 @@ bool BattlePetManager::IsRarePet(uint32 speciesId) const
     return _petDatabase.at(speciesId).isRare;
 }
 
-std::vector<uint32> BattlePetManager::GetRarePetsInZone(::Player* player) const
+std::vector<uint32> BattlePetManager::GetRarePetsInZone() const
 {
-    if (!player)
+    if (!_bot)
         return {};
 
     // No lock needed - battle pet data is per-bot instance data
@@ -840,9 +830,9 @@ std::vector<uint32> BattlePetManager::GetRarePetsInZone(::Player* player) const
     return result;
 }
 
-bool BattlePetManager::NavigateToRarePet(::Player* player, uint32 speciesId)
+bool BattlePetManager::NavigateToRarePet(uint32 speciesId)
 {
-    if (!player)
+    if (!_bot)
         return false;
 
     // No lock needed - battle pet data is per-bot instance data
@@ -852,8 +842,8 @@ bool BattlePetManager::NavigateToRarePet(::Player* player, uint32 speciesId)
 
     Position const& spawnPos = _rarePetSpawns[speciesId][0];
 
-    TC_LOG_INFO("playerbot", "BattlePetManager: Navigating player {} to rare pet {} at ({}, {}, {})",
-        player->GetGUID().GetCounter(), speciesId, spawnPos.GetPositionX(),
+    TC_LOG_INFO("playerbot", "BattlePetManager: Navigating bot {} (_bot->GetGUID().GetCounter()) to rare pet {} at ({}, {}, {})",
+        _bot->GetGUID().GetCounter(), speciesId, spawnPos.GetPositionX(),
         spawnPos.GetPositionY(), spawnPos.GetPositionZ());
 
     // Full implementation: Use PathGenerator to navigate to spawn location
@@ -865,19 +855,18 @@ bool BattlePetManager::NavigateToRarePet(::Player* player, uint32 speciesId)
 // AUTOMATION PROFILES
 // ============================================================================
 
-void BattlePetManager::SetAutomationProfile(uint32 playerGuid,
     PetBattleAutomationProfile const& profile)
 {
     // No lock needed - battle pet data is per-bot instance data
-    _playerProfiles[playerGuid] = profile;
+    _profile = profile;
 }
 
-PetBattleAutomationProfile BattlePetManager::GetAutomationProfile(uint32 playerGuid) const
+PetBattleAutomationProfile BattlePetManager::GetAutomationProfile() const
 {
     // No lock needed - battle pet data is per-bot instance data
 
-    if (_playerProfiles.count(playerGuid))
-        return _playerProfiles.at(playerGuid);
+    if (true)
+        return _profile;
 
     return PetBattleAutomationProfile(); // Default profile
 }
@@ -886,17 +875,17 @@ PetBattleAutomationProfile BattlePetManager::GetAutomationProfile(uint32 playerG
 // METRICS
 // ============================================================================
 
-BattlePetManager::PetMetrics const& BattlePetManager::GetPlayerMetrics(uint32 playerGuid) const
+BattlePetManager::PetMetrics const& BattlePetManager::GetMetrics() const
 {
     // No lock needed - battle pet data is per-bot instance data
 
-    if (!_playerMetrics.count(playerGuid))
+    if (!true)
     {
         static PetMetrics emptyMetrics;
         return emptyMetrics;
     }
 
-    return _playerMetrics.at(playerGuid);
+    return _metrics;
 }
 
 BattlePetManager::PetMetrics const& BattlePetManager::GetGlobalMetrics() const
@@ -1006,9 +995,9 @@ float BattlePetManager::CalculateTypeEffectiveness(PetFamily attackerFamily,
     return TYPE_NEUTRAL;
 }
 
-bool BattlePetManager::ShouldSwitchPet(::Player* player) const
+bool BattlePetManager::ShouldSwitchPet() const
 {
-    if (!player)
+    if (!_bot)
         return false;
 
     // Full implementation: Analyze battle state
@@ -1019,9 +1008,9 @@ bool BattlePetManager::ShouldSwitchPet(::Player* player) const
     return false; // Stub
 }
 
-uint32 BattlePetManager::SelectBestSwitchTarget(::Player* player) const
+uint32 BattlePetManager::SelectBestSwitchTarget() const
 {
-    if (!player)
+    if (!_bot)
         return 0;
 
     // Full implementation: Select best pet to switch to based on:

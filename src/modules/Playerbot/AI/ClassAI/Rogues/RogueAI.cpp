@@ -9,9 +9,9 @@
 
 #include "RogueAI.h"
 #include "../BaselineRotationManager.h"
-#include "AssassinationRogueRefactored.h"
-#include "OutlawRogueRefactored.h"
-#include "SubtletyRogueRefactored.h"
+#include "AssassinationRogue.h"
+#include "OutlawRogue.h"
+#include "SubtletyRogue.h"
 #include "../../Combat/CombatBehaviorIntegration.h"
 #include "Player.h"
 #include "Group.h"

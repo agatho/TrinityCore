@@ -37,11 +37,11 @@ namespace Playerbot
 /**
  * @brief Singleton instance implementation
  */
-QuestTurnIn* QuestTurnIn::instance()
-{
-    static QuestTurnIn instance;
-    return &instance;
+QuestTurnIn::QuestTurnIn(Player* bot) : _bot(bot) {
+    if (!_bot) TC_LOG_ERROR("playerbot.quest", "QuestTurnIn: null bot!");
 }
+
+QuestTurnIn::~QuestTurnIn() {}
 
 /**
  * @brief Constructor
@@ -96,8 +96,6 @@ void QuestTurnIn::ProcessQuestTurnIn(Player* bot, uint32 questId)
 {
     if (!bot || !questId)
         return;
-
-    std::lock_guard lock(_turnInMutex);
 
     // Initialize turn-in data
     InitializeTurnInData(bot, questId);
@@ -154,8 +152,6 @@ void QuestTurnIn::ScheduleQuestTurnIn(Player* bot, uint32 questId, uint32 delayM
 {
     if (!bot || !questId)
         return;
-
-    std::lock_guard lock(_batchMutex);
 
     // Add to scheduled turn-ins
     _scheduledTurnIns.push({ bot->GetGUID().GetCounter(), questId });
@@ -255,7 +251,6 @@ void QuestTurnIn::HandleQuestCompletion(Player* bot, uint32 questId)
 
         case TurnInStrategy::BATCH_TURNIN:
         {
-            std::lock_guard lock(_turnInMutex);
             auto& queue = _botTurnInQueues[bot->GetGUID().GetCounter()];
             // Check if we have enough for batch
             if (queue.size() >= BATCH_TURNIN_THRESHOLD)
@@ -405,7 +400,6 @@ bool QuestTurnIn::FindQuestTurnInNpc(Player* bot, uint32 questId)
         questEnder = ObjectAccessor::GetCreature(*bot, questEnderGuid);
     if (questEnder)
     {
-        std::lock_guard lock(_turnInMutex);
         _questToTurnInNpc[questId] = questEnder->GetGUID().GetCounter();
         _questGiverLocations[questEnder->GetGUID().GetCounter()] = questEnder->GetPosition();
 
@@ -424,8 +418,6 @@ bool QuestTurnIn::FindQuestTurnInNpc(Player* bot, uint32 questId)
  */
 Position QuestTurnIn::GetQuestTurnInLocation(uint32 questId)
 {
-    std::lock_guard lock(_turnInMutex);
-
     auto it = _questToTurnInNpc.find(questId);
     if (it != _questToTurnInNpc.end())
     {
@@ -447,8 +439,6 @@ bool QuestTurnIn::NavigateToQuestGiver(Player* bot, uint32 questGiverGuid)
 {
     if (!bot || !questGiverGuid)
         return false;
-
-    std::lock_guard lock(_turnInMutex);
 
     auto it = _questGiverLocations.find(questGiverGuid);
     if (it == _questGiverLocations.end())
@@ -774,8 +764,6 @@ void QuestTurnIn::HandleTurnInDialog(Player* bot, uint32 questId)
     if (!bot || !questId)
         return;
 
-    std::lock_guard lock(_turnInMutex);
-
     auto it = _botTurnInQueues.find(bot->GetGUID().GetCounter());
     if (it == _botTurnInQueues.end())
         return;
@@ -869,7 +857,6 @@ void QuestTurnIn::AutoAcceptFollowUpQuests(Player* bot, uint32 completedQuestId)
  */
 void QuestTurnIn::SetTurnInStrategy(uint32 botGuid, TurnInStrategy strategy)
 {
-    std::lock_guard lock(_turnInMutex);
     _botTurnInStrategies[botGuid] = strategy;
 }
 
@@ -880,8 +867,6 @@ void QuestTurnIn::SetTurnInStrategy(uint32 botGuid, TurnInStrategy strategy)
  */
 TurnInStrategy QuestTurnIn::GetTurnInStrategy(uint32 botGuid)
 {
-    std::lock_guard lock(_turnInMutex);
-
     auto it = _botTurnInStrategies.find(botGuid);
     if (it != _botTurnInStrategies.end())
         return it->second;
@@ -896,7 +881,6 @@ TurnInStrategy QuestTurnIn::GetTurnInStrategy(uint32 botGuid)
  */
 void QuestTurnIn::SetRewardSelectionStrategy(uint32 botGuid, RewardSelectionStrategy strategy)
 {
-    std::lock_guard lock(_turnInMutex);
     _botRewardStrategies[botGuid] = strategy;
 }
 
@@ -907,8 +891,6 @@ void QuestTurnIn::SetRewardSelectionStrategy(uint32 botGuid, RewardSelectionStra
  */
 RewardSelectionStrategy QuestTurnIn::GetRewardSelectionStrategy(uint32 botGuid)
 {
-    std::lock_guard lock(_turnInMutex);
-
     auto it = _botRewardStrategies.find(botGuid);
     if (it != _botRewardStrategies.end())
         return it->second;
@@ -1013,8 +995,6 @@ void QuestTurnIn::Update(uint32 diff)
  */
 void QuestTurnIn::ProcessScheduledTurnIns()
 {
-    std::lock_guard lock(_batchMutex);
-
     uint32 processed = 0;
     while (!_scheduledTurnIns.empty() && processed < MAX_SCHEDULED_TURNINS)
     {
@@ -1037,8 +1017,6 @@ void QuestTurnIn::ProcessScheduledTurnIns()
  */
 void QuestTurnIn::CleanupCompletedTurnIns()
 {
-    std::lock_guard lock(_turnInMutex);
-
     uint32 currentTime = GameTime::GetGameTimeMS();
     // Clean up old turn-in data
     for (auto& [botGuid, turnIns] : _botTurnInQueues)
@@ -1061,8 +1039,6 @@ void QuestTurnIn::CleanupCompletedTurnIns()
  */
 QuestTurnIn::TurnInMetrics::Snapshot QuestTurnIn::GetBotTurnInMetrics(uint32 botGuid)
 {
-    std::lock_guard lock(_turnInMutex);
-
     auto it = _botMetrics.find(botGuid);
     if (it != _botMetrics.end())
         return it->second.CreateSnapshot();
@@ -1088,8 +1064,6 @@ void QuestTurnIn::InitializeTurnInData(Player* bot, uint32 questId)
 {
     if (!bot || !questId)
         return;
-
-    std::lock_guard lock(_turnInMutex);
 
     QuestTurnInData turnInData(questId, bot->GetGUID().GetCounter(), 0);
     turnInData.isCompleted = false;
@@ -1434,8 +1408,6 @@ void QuestTurnIn::HandleInvalidQuestState(Player* bot, uint32 questId)
     TC_LOG_ERROR("playerbot", "QuestTurnIn::HandleInvalidQuestState - Invalid state for quest %u", questId);
 
     // Remove quest from turn-in queue
-    std::lock_guard lock(_turnInMutex);
-
     auto it = _botTurnInQueues.find(bot->GetGUID().GetCounter());
     if (it != _botTurnInQueues.end())
     {

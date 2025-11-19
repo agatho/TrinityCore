@@ -23,7 +23,7 @@
 #include "Log.h"
 #include "World.h"
 #include "AI/BotAI.h"
-#include "Movement/Arbiter/MovementArbiter.h"
+#include "Movement/UnifiedMovementCoordinator.h  // Phase 2: Unified movement system"
 #include "Movement/Arbiter/MovementRequest.h"
 #include "Movement/Arbiter/MovementPriorityMapper.h"
 #include <algorithm>
@@ -1285,7 +1285,7 @@ void MechanicAwareness::ExecuteMovementResponse(Player* bot, const Position& saf
     // PHASE 3 MIGRATION: Use Movement Arbiter with CRITICAL priority
     // This ensures boss mechanics ALWAYS override combat positioning, following, etc.
     BotAI* botAI = dynamic_cast<BotAI*>(bot->GetAI());
-    if (botAI && botAI->GetMovementArbiter())
+    if (botAI && botAI->GetUnifiedMovementCoordinator())
     {
         // Use Movement Arbiter for priority-based arbitration
         bool accepted = botAI->RequestPointMovement(

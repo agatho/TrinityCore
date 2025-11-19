@@ -3,9 +3,9 @@
  */
 
 #include "MageAI.h"
-#include "ArcaneMageRefactored.h"
-#include "FireMageRefactored.h"
-#include "FrostMageRefactored.h"
+#include "ArcaneMage.h"
+#include "FireMage.h"
+#include "FrostMage.h"
 #include "../BaselineRotationManager.h"
 #include "Player.h"
 #include "Log.h"

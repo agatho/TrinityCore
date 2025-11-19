@@ -18,11 +18,11 @@
 namespace Playerbot
 {
 
-RoleAssignment* RoleAssignment::instance()
-{
-    static RoleAssignment _instance;
-    return &_instance;
+RoleAssignment::RoleAssignment(Player* bot) : _bot(bot) {
+    if (!_bot) TC_LOG_ERROR("playerbot.group", "RoleAssignment: null bot!");
 }
+
+RoleAssignment::~RoleAssignment() {}
 
 RoleAssignment::RoleAssignment()
 {
@@ -36,8 +36,6 @@ bool RoleAssignment::AssignRoles(Group* group, RoleAssignmentStrategy strategy)
 {
     if (!group)
         return false;
-
-    std::lock_guard lock(_assignmentMutex);
 
     uint32 groupId = group->GetGUID().GetCounter();
     _groupStrategies[groupId] = strategy;
@@ -102,8 +100,6 @@ bool RoleAssignment::AssignRole(uint32 playerGuid, GroupRole role, Group* group)
     if (!group)
         return false;
 
-    std::lock_guard lock(_assignmentMutex);
-
     Player* player = ObjectAccessor::FindPlayer(ObjectGuid::Create<HighGuid::Player>(playerGuid));
     if (!player)
         return false;
@@ -125,7 +121,7 @@ bool RoleAssignment::AssignRole(uint32 playerGuid, GroupRole role, Group* group)
     NotifyRoleAssignment(player, role, group);
 
     TC_LOG_DEBUG("playerbot", "RoleAssignment: Assigned role %u to player %s in group %u",
-                 static_cast<uint8>(role), player->GetName().c_str(), group->GetGUID().GetCounter());
+                 static_cast<uint8>(role), _bot->GetName().c_str(), group->GetGUID().GetCounter());
 
     return true;
 }
@@ -134,8 +130,6 @@ bool RoleAssignment::SwapRoles(uint32 player1Guid, uint32 player2Guid, Group* gr
 {
     if (!group)
         return false;
-
-    std::lock_guard lock(_assignmentMutex);
 
     auto it1 = _playerProfiles.find(player1Guid);
     auto it2 = _playerProfiles.find(player2Guid);
@@ -163,12 +157,12 @@ bool RoleAssignment::SwapRoles(uint32 player1Guid, uint32 player2Guid, Group* gr
     return true;
 }
 
-PlayerRoleProfile RoleAssignment::AnalyzePlayerCapabilities(Player* player)
+PlayerRoleProfile RoleAssignment::AnalyzePlayerCapabilities()
 {
     if (!player)
         return PlayerRoleProfile(0, 0, 0, 0);
 
-    PlayerRoleProfile profile(player->GetGUID().GetCounter(), player->getClass(), 0, player->GetLevel());
+    PlayerRoleProfile profile(_bot->GetGUID().GetCounter(), _bot->getClass(), 0, _bot->GetLevel());
 
     BuildPlayerProfile(profile, player);
     CalculateRoleCapabilities(profile, player);
@@ -178,7 +172,7 @@ PlayerRoleProfile RoleAssignment::AnalyzePlayerCapabilities(Player* player)
     return profile;
 }
 
-std::vector<RoleScore> RoleAssignment::CalculateRoleScores(Player* player, Group* group)
+std::vector<RoleScore> RoleAssignment::CalculateRoleScores( Group* group)
 {
     std::vector<RoleScore> scores;
 
@@ -191,9 +185,9 @@ std::vector<RoleScore> RoleAssignment::CalculateRoleScores(Player* player, Group
         GroupRole role = static_cast<GroupRole>(roleInt);
         RoleScore score(role);
 
-        score.effectiveness = CalculateClassRoleEffectiveness(player->getClass(), 0, role);
+        score.effectiveness = CalculateClassRoleEffectiveness(_bot->getClass(), 0, role);
         score.gearScore = CalculateGearScore(player, role);
-        score.experienceScore = CalculateExperienceScore(player->GetGUID().GetCounter(), role);
+        score.experienceScore = CalculateExperienceScore(_bot->GetGUID().GetCounter(), role);
         score.synergy = CalculateSynergyScore(player, role, group);
         score.availabilityScore = 1.0f; // Default availability
 
@@ -210,7 +204,7 @@ std::vector<RoleScore> RoleAssignment::CalculateRoleScores(Player* player, Group
     return scores;
 }
 
-GroupRole RoleAssignment::RecommendRole(Player* player, Group* group)
+GroupRole RoleAssignment::RecommendRole( Group* group)
 {
     if (!player)
         return GroupRole::NONE;
@@ -229,8 +223,6 @@ GroupComposition RoleAssignment::AnalyzeGroupComposition(Group* group)
 
     if (!group)
         return composition;
-
-    std::lock_guard lock(_assignmentMutex);
 
     // Count assigned roles
     for (GroupReference const& itr : group->GetMembers())
@@ -299,12 +291,11 @@ std::vector<GroupRole> RoleAssignment::GetMissingRoles(Group* group)
     return missingRoles;
 }
 
-bool RoleAssignment::CanPlayerSwitchRole(Player* player, GroupRole newRole, Group* group)
+bool RoleAssignment::CanPlayerSwitchRole( GroupRole newRole, Group* group)
 {
     if (!player)
         return false;
 
-    uint32 playerGuid = player->GetGUID().GetCounter();
     auto profileIt = _playerProfiles.find(playerGuid);
 
     if (profileIt == _playerProfiles.end())
@@ -525,8 +516,8 @@ void RoleAssignment::BuildPlayerProfile(PlayerRoleProfile& profile, Player* play
     if (!player)
         return;
 
-    profile.playerClass = player->getClass();
-    profile.playerLevel = player->GetLevel();
+    profile.playerClass = _bot->getClass();
+    profile.playerLevel = _bot->GetLevel();
     profile.lastRoleUpdate = GameTime::GetGameTimeMS();
 
     // Set default preferences based on class
@@ -548,10 +539,10 @@ void RoleAssignment::CalculateRoleCapabilities(PlayerRoleProfile& profile, Playe
     if (!player)
         return;
 
-    uint8 playerClass = player->getClass();
+    uint8 playerClass = _bot->getClass();
     // Get player's active specialization
     uint8 playerSpec = 0;
-    if (ChrSpecialization primarySpec = player->GetPrimarySpecialization())
+    if (ChrSpecialization primarySpec = _bot->GetPrimarySpecialization())
     {
         playerSpec = static_cast<uint8>(primarySpec);
     }
@@ -618,7 +609,7 @@ float RoleAssignment::CalculateClassRoleEffectiveness(uint8 playerClass, uint8 p
     return 0.0f;
 }
 
-float RoleAssignment::CalculateGearScore(Player* player, GroupRole role)
+float RoleAssignment::CalculateGearScore( GroupRole role)
 {
     if (!player)
         return 0.0f;
@@ -630,7 +621,7 @@ float RoleAssignment::CalculateGearScore(Player* player, GroupRole role)
     // Analyze equipped items
     for (uint8 slot = EQUIPMENT_SLOT_START; slot < EQUIPMENT_SLOT_END; ++slot)
     {
-        Item* item = player->GetItemByPos(INVENTORY_SLOT_BAG_0, slot);
+        Item* item = _bot->GetItemByPos(INVENTORY_SLOT_BAG_0, slot);
         if (!item)
             continue;
 
@@ -722,15 +713,13 @@ float RoleAssignment::CalculateGearScore(Player* player, GroupRole role)
     float finalScore = (itemLevelScore * 0.7f) + (roleAppropriateness * 0.3f);
 
     TC_LOG_DEBUG("playerbot", "RoleAssignment: Gear score for player {} in role {}: {:.2f} (iLvl: {:.1f}, appropriateness: {:.2f})",
-                 player->GetName(), static_cast<uint8>(role), finalScore, averageItemLevel, roleAppropriateness);
+                 _bot->GetName(), static_cast<uint8>(role), finalScore, averageItemLevel, roleAppropriateness);
 
     return finalScore;
 }
 
 float RoleAssignment::CalculateExperienceScore(uint32 playerGuid, GroupRole role)
 {
-    std::lock_guard lock(_performanceMutex);
-
     auto playerIt = _rolePerformance.find(playerGuid);
     if (playerIt == _rolePerformance.end())
         return 0.5f; // Default experience
@@ -742,13 +731,13 @@ float RoleAssignment::CalculateExperienceScore(uint32 playerGuid, GroupRole role
     return roleIt->second.averageEffectiveness.load();
 }
 
-float RoleAssignment::CalculateSynergyScore(Player* player, GroupRole role, Group* group)
+float RoleAssignment::CalculateSynergyScore( GroupRole role, Group* group)
 {
     if (!player || !group)
         return 0.5f;
 
     float synergyScore = 0.5f; // Base score
-    uint8 playerClass = player->getClass();
+    uint8 playerClass = _bot->getClass();
 
     // Get group composition
     std::unordered_map<uint8, uint32> classCounts; // class -> count
@@ -758,7 +747,7 @@ float RoleAssignment::CalculateSynergyScore(Player* player, GroupRole role, Grou
     {
         if (Player* member = itr.GetSource())
         {
-            if (member->GetGUID() == player->GetGUID())
+            if (member->GetGUID() == _bot->GetGUID())
                 continue; // Skip the player we're evaluating
 
             uint8 memberClass = member->getClass();
@@ -952,12 +941,12 @@ float RoleAssignment::CalculateSynergyScore(Player* player, GroupRole role, Grou
     synergyScore = std::max(0.0f, std::min(1.0f, synergyScore));
 
     TC_LOG_DEBUG("playerbot", "RoleAssignment: Synergy score for player {} (class {}) in role {}: {:.2f}",
-                 player->GetName(), playerClass, static_cast<uint8>(role), synergyScore);
+                 _bot->GetName(), playerClass, static_cast<uint8>(role), synergyScore);
 
     return synergyScore;
 }
 
-GroupRole RoleAssignment::DetermineOptimalRole(Player* player, Group* group, RoleAssignmentStrategy strategy)
+GroupRole RoleAssignment::DetermineOptimalRole( Group* group, RoleAssignmentStrategy strategy)
 {
     if (!player)
         return GroupRole::NONE;
@@ -974,7 +963,6 @@ GroupRole RoleAssignment::DetermineOptimalRole(Player* player, Group* group, Rol
             // Only consider primary roles
             for (const auto& score : scores)
             {
-                uint32 playerGuid = player->GetGUID().GetCounter();
                 auto profileIt = _playerProfiles.find(playerGuid);
                 if (profileIt != _playerProfiles.end())
                 {
@@ -1054,7 +1042,7 @@ void RoleAssignment::ExecuteOptimalStrategy(Group* group)
     // Assign roles
     for (const auto& [player, role] : assignments)
     {
-        AssignRole(player->GetGUID().GetCounter(), role, group);
+        AssignRole(_bot->GetGUID().GetCounter(), role, group);
     }
 }
 
@@ -1091,7 +1079,7 @@ void RoleAssignment::AnalyzePlayerGear(PlayerRoleProfile& profile, Player* playe
         roleScore.gearScore = gearScore;
 
         TC_LOG_DEBUG("playerbot", "RoleAssignment: Player {} gear score for role {}: {:.2f}",
-                     player->GetName(), static_cast<uint8>(role), gearScore);
+                     _bot->GetName(), static_cast<uint8>(role), gearScore);
     }
 
     // Analyze overall gear quality
@@ -1103,7 +1091,7 @@ void RoleAssignment::AnalyzePlayerGear(PlayerRoleProfile& profile, Player* playe
 
     for (uint8 slot = EQUIPMENT_SLOT_START; slot < EQUIPMENT_SLOT_END; ++slot)
     {
-        Item* item = player->GetItemByPos(INVENTORY_SLOT_BAG_0, slot);
+        Item* item = _bot->GetItemByPos(INVENTORY_SLOT_BAG_0, slot);
         if (!item)
             continue;
 
@@ -1127,7 +1115,7 @@ void RoleAssignment::AnalyzePlayerGear(PlayerRoleProfile& profile, Player* playe
                 hasTankGear = true;
 
             // Healer stats
-            if (statType == ITEM_MOD_SPIRIT && player->GetPowerType() == POWER_MANA)
+            if (statType == ITEM_MOD_SPIRIT && _bot->GetPowerType() == POWER_MANA)
                 hasHealerGear = true;
 
             // DPS stats
@@ -1143,7 +1131,7 @@ void RoleAssignment::AnalyzePlayerGear(PlayerRoleProfile& profile, Player* playe
         profile.overallRating = averageItemLevel / 30.0f; // Normalize to 0-10 scale
 
         TC_LOG_DEBUG("playerbot", "RoleAssignment: Player {} average item level: {:.1f}, overall rating: {:.1f}",
-                     player->GetName(), averageItemLevel, profile.overallRating);
+                     _bot->GetName(), averageItemLevel, profile.overallRating);
     }
 
     // Update role capabilities based on gear
@@ -1174,10 +1162,6 @@ void RoleAssignment::UpdateRoleExperience(PlayerRoleProfile& profile, Player* pl
 {
     if (!player)
         return;
-
-    std::lock_guard lock(_performanceMutex);
-
-    uint32 playerGuid = player->GetGUID().GetCounter();
 
     // Get performance data
     auto playerIt = _rolePerformance.find(playerGuid);
@@ -1226,7 +1210,7 @@ void RoleAssignment::UpdateRoleExperience(PlayerRoleProfile& profile, Player* pl
         roleScore.effectiveness = avgEffectiveness;
 
         TC_LOG_DEBUG("playerbot", "RoleAssignment: Player {} experience for role {}: {:.2f} (encounters: {}, effectiveness: {:.2f}, success rate: {:.2f})",
-                     player->GetName(), static_cast<uint8>(role), experienceScore,
+                     _bot->GetName(), static_cast<uint8>(role), experienceScore,
                      encounterCount, avgEffectiveness, successRate);
 
         // Update role capability based on experience
@@ -1275,7 +1259,7 @@ void RoleAssignment::UpdateRoleExperience(PlayerRoleProfile& profile, Player* pl
     profile.lastRoleUpdate = GameTime::GetGameTimeMS();
 
     TC_LOG_DEBUG("playerbot", "RoleAssignment: Player {} role experience updated, {} alternative roles available",
-                 player->GetName(), profile.alternativeRoles.size());
+                 _bot->GetName(), profile.alternativeRoles.size());
 }
 
 bool RoleAssignment::ValidateRoleAssignment(Group* group)
@@ -1284,7 +1268,7 @@ bool RoleAssignment::ValidateRoleAssignment(Group* group)
     return IsCompositionViable(composition);
 }
 
-void RoleAssignment::NotifyRoleAssignment(Player* player, GroupRole role, Group* group)
+void RoleAssignment::NotifyRoleAssignment( GroupRole role, Group* group)
 {
     if (!player)
         return;
@@ -1294,7 +1278,7 @@ void RoleAssignment::NotifyRoleAssignment(Player* player, GroupRole role, Group*
     };
 
     TC_LOG_DEBUG("playerbot", "RoleAssignment: Player %s assigned role %s",
-                 player->GetName().c_str(), roleNames[static_cast<int>(role)]);
+                 _bot->GetName().c_str(), roleNames[static_cast<int>(role)]);
 }
 
 void RoleAssignment::RefreshPlayerProfiles()

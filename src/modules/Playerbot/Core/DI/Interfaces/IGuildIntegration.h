@@ -38,100 +38,100 @@ public:
     virtual ~IGuildIntegration() = default;
 
     // Core guild functionality
-    virtual void ProcessGuildInteraction(Player* player) = 0;
-    virtual void HandleGuildChat(Player* player, const GuildChatMessage& message) = 0;
-    virtual void ParticipateInGuildActivities(Player* player) = 0;
-    virtual void ManageGuildResponsibilities(Player* player) = 0;
+    virtual void ProcessGuildInteraction() = 0;
+    virtual void HandleGuildChat(const GuildChatMessage& message) = 0;
+    virtual void ParticipateInGuildActivities() = 0;
+    virtual void ManageGuildResponsibilities() = 0;
 
     // Guild chat automation
-    virtual void AutomateGuildChatParticipation(Player* player) = 0;
-    virtual void RespondToGuildChat(Player* player, const GuildChatMessage& message) = 0;
-    virtual void InitiateGuildConversation(Player* player) = 0;
-    virtual void ShareGuildInformation(Player* player, const std::string& topic) = 0;
+    virtual void AutomateGuildChatParticipation() = 0;
+    virtual void RespondToGuildChat(const GuildChatMessage& message) = 0;
+    virtual void InitiateGuildConversation() = 0;
+    virtual void ShareGuildInformation(const std::string& topic) = 0;
 
     // Guild bank management
-    virtual void AutomateGuildBankInteractions(Player* player) = 0;
-    virtual void DepositItemsToGuildBank(Player* player) = 0;
-    virtual void WithdrawNeededItems(Player* player) = 0;
-    virtual void OrganizeGuildBank(Player* player) = 0;
-    virtual void ManageGuildBankPermissions(Player* player) = 0;
+    virtual void AutomateGuildBankInteractions() = 0;
+    virtual void DepositItemsToGuildBank() = 0;
+    virtual void WithdrawNeededItems() = 0;
+    virtual void OrganizeGuildBank() = 0;
+    virtual void ManageGuildBankPermissions() = 0;
 
     // Guild event coordination
-    virtual void CoordinateGuildEvents(Player* player) = 0;
-    virtual void ScheduleGuildActivities(Player* player) = 0;
-    virtual void ManageGuildCalendar(Player* player) = 0;
-    virtual void OrganizeGuildRuns(Player* player) = 0;
+    virtual void CoordinateGuildEvents() = 0;
+    virtual void ScheduleGuildActivities() = 0;
+    virtual void ManageGuildCalendar() = 0;
+    virtual void OrganizeGuildRuns() = 0;
 
     // Guild profiles and participation
-    virtual void SetGuildProfile(uint32 playerGuid, const GuildProfile& profile) = 0;
-    virtual GuildProfile GetGuildProfile(uint32 playerGuid) = 0;
-    virtual GuildParticipation GetGuildParticipation(uint32 playerGuid) = 0;
-    virtual void UpdateGuildParticipation(uint32 playerGuid, GuildActivityType activityType) = 0;
+    virtual void SetGuildProfile(const GuildProfile& profile) = 0;
+    virtual GuildProfile GetGuildProfile() = 0;
+    virtual GuildParticipation GetGuildParticipation() = 0;
+    virtual void UpdateGuildParticipation(GuildActivityType activityType) = 0;
 
     // Guild recruitment assistance
-    virtual void AssistWithRecruitment(Player* player) = 0;
-    virtual void EvaluateRecruitmentCandidates(Player* player) = 0;
-    virtual void WelcomeNewGuildMembers(Player* player) = 0;
-    virtual void MentorJuniorMembers(Player* player) = 0;
+    virtual void AssistWithRecruitment() = 0;
+    virtual void EvaluateRecruitmentCandidates() = 0;
+    virtual void WelcomeNewGuildMembers() = 0;
+    virtual void MentorJuniorMembers() = 0;
 
     // Guild leadership support
-    virtual void SupportGuildLeadership(Player* player) = 0;
-    virtual void HandleOfficerDuties(Player* player) = 0;
-    virtual void AssistWithGuildManagement(Player* player) = 0;
-    virtual void ProvideMemberFeedback(Player* player) = 0;
+    virtual void SupportGuildLeadership() = 0;
+    virtual void HandleOfficerDuties() = 0;
+    virtual void AssistWithGuildManagement() = 0;
+    virtual void ProvideMemberFeedback() = 0;
 
     // Chat intelligence and response generation
-    virtual std::string GenerateGuildChatResponse(Player* player, const GuildChatMessage& message) = 0;
-    virtual std::string GenerateConversationStarter(Player* player) = 0;
-    virtual bool ShouldRespondToMessage(Player* player, const GuildChatMessage& message) = 0;
-    virtual void LearnFromGuildConversations(Player* player) = 0;
+    virtual std::string GenerateGuildChatResponse(const GuildChatMessage& message) = 0;
+    virtual std::string GenerateConversationStarter() = 0;
+    virtual bool ShouldRespondToMessage(const GuildChatMessage& message) = 0;
+    virtual void LearnFromGuildConversations() = 0;
 
     // Guild achievement coordination
-    virtual void ContributeToGuildAchievements(Player* player) = 0;
+    virtual void ContributeToGuildAchievements() = 0;
     virtual void CoordinateAchievementEfforts(Guild* guild) = 0;
-    virtual void TrackAchievementProgress(Player* player) = 0;
-    virtual void CelebrateGuildAchievements(Player* player) = 0;
+    virtual void TrackAchievementProgress() = 0;
+    virtual void CelebrateGuildAchievements() = 0;
 
     // Guild social features
-    virtual void OrganizeSocialEvents(Player* player) = 0;
-    virtual void ParticipateInGuildTradition(Player* player) = 0;
-    virtual void MaintainGuildFriendships(Player* player) = 0;
-    virtual void HandleGuildConflicts(Player* player) = 0;
+    virtual void OrganizeSocialEvents() = 0;
+    virtual void ParticipateInGuildTradition() = 0;
+    virtual void MaintainGuildFriendships() = 0;
+    virtual void HandleGuildConflicts() = 0;
 
     // Performance monitoring
-    virtual GuildMetrics GetPlayerGuildMetrics(uint32 playerGuid) = 0;
+    virtual GuildMetrics GetPlayerGuildMetrics() = 0;
     virtual GuildMetrics GetGuildBotMetrics(uint32 guildId) = 0;
 
     // Guild bank automation
-    virtual void OptimizeGuildBankUsage(Player* player) = 0;
-    virtual void AutoDepositValuableItems(Player* player) = 0;
-    virtual void AutoWithdrawNeededConsumables(Player* player) = 0;
-    virtual void ManageGuildBankTabs(Player* player) = 0;
-    virtual void TrackGuildBankActivity(Player* player) = 0;
+    virtual void OptimizeGuildBankUsage() = 0;
+    virtual void AutoDepositValuableItems() = 0;
+    virtual void AutoWithdrawNeededConsumables() = 0;
+    virtual void ManageGuildBankTabs() = 0;
+    virtual void TrackGuildBankActivity() = 0;
 
     // Guild event management
-    virtual void CreateGuildEvent(Player* player, const std::string& eventType) = 0;
-    virtual void ManageGuildCalendarEvents(Player* player) = 0;
-    virtual void CoordinateRaidScheduling(Player* player) = 0;
-    virtual void OrganizePvPEvents(Player* player) = 0;
+    virtual void CreateGuildEvent(const std::string& eventType) = 0;
+    virtual void ManageGuildCalendarEvents() = 0;
+    virtual void CoordinateRaidScheduling() = 0;
+    virtual void OrganizePvPEvents() = 0;
 
     // Advanced guild AI
     virtual void AnalyzeGuildDynamics(Guild* guild) = 0;
-    virtual void AdaptToGuildCulture(Player* player) = 0;
+    virtual void AdaptToGuildCulture() = 0;
     virtual void DetectGuildMoodAndTone(Guild* guild) = 0;
-    virtual void AdjustBehaviorToGuildNorms(Player* player) = 0;
+    virtual void AdjustBehaviorToGuildNorms() = 0;
 
     // Configuration and customization
-    virtual void SetGuildAutomationLevel(uint32 playerGuid, float level) = 0;
-    virtual void EnableGuildActivity(uint32 playerGuid, GuildActivityType activity, bool enable) = 0;
-    virtual void SetGuildChatFrequency(uint32 playerGuid, float frequency) = 0;
-    virtual void ConfigureGuildBankAccess(uint32 playerGuid, bool autoDeposit, bool autoWithdraw) = 0;
+    virtual void SetGuildAutomationLevel(float level) = 0;
+    virtual void EnableGuildActivity(GuildActivityType activity, bool enable) = 0;
+    virtual void SetGuildChatFrequency(float frequency) = 0;
+    virtual void ConfigureGuildBankAccess(bool autoDeposit, bool autoWithdraw) = 0;
 
     // Error handling and recovery
-    virtual void HandleGuildInteractionError(uint32 playerGuid, const std::string& error) = 0;
-    virtual void RecoverFromGuildFailure(uint32 playerGuid) = 0;
-    virtual void HandleGuildLeaving(Player* player) = 0;
-    virtual void HandleGuildInvitations(Player* player, uint32 guildId) = 0;
+    virtual void HandleGuildInteractionError(const std::string& error) = 0;
+    virtual void RecoverFromGuildFailure() = 0;
+    virtual void HandleGuildLeaving() = 0;
+    virtual void HandleGuildInvitations(uint32 guildId) = 0;
 
     // Update and maintenance
     virtual void Update(uint32 diff) = 0;

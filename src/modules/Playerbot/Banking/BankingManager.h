@@ -216,16 +216,33 @@ struct BankSpaceInfo
 /**
  * @brief Banking Manager - Personal bank automation
  *
- * DESIGN PRINCIPLE: Follows BehaviorManager pattern
- * - Throttled updates (5 minute intervals by default)
- * - Thread-safe operations
- * - Integrates with profession and gathering systems
+ * **Phase 5.1: Singleton → Per-Bot Instance Pattern**
+ *
+ * DESIGN PRINCIPLE: Per-bot instance owned by GameSystemsManager
+ * - Each bot has its own BankingManager instance
+ * - No mutex locking (per-bot isolation)
+ * - Direct member access (no map lookups)
+ * - Integrates with profession and gathering systems via facade
  * - Does NOT handle guild bank (use GuildBankManager)
+ *
+ * **Ownership:**
+ * - Owned by GameSystemsManager via std::unique_ptr
+ * - Constructed per-bot with Player* reference
+ * - Destroyed with bot cleanup
  */
 class TC_GAME_API BankingManager final : public BehaviorManager
 {
 public:
-    static BankingManager* instance();
+    /**
+     * @brief Construct banking manager for bot
+     * @param bot The bot player this manager serves
+     */
+    explicit BankingManager(Player* bot);
+
+    /**
+     * @brief Destructor - cleanup per-bot resources
+     */
+    ~BankingManager();
 
     // ========================================================================
     // LIFECYCLE (BehaviorManager override)
@@ -240,22 +257,22 @@ public:
     // ========================================================================
 
     /**
-     * Enable/disable banking automation for player
+     * Enable/disable banking automation for this bot
      */
-    void SetEnabled(::Player* player, bool enabled);
-    bool IsEnabled(::Player* player) const;
+    void SetEnabled(bool enabled);
+    bool IsEnabled() const;
 
     /**
-     * Set banking profile for bot
+     * Set banking profile for this bot
      */
-    void SetBankingProfile(uint32 playerGuid, BotBankingProfile const& profile);
-    BotBankingProfile GetBankingProfile(uint32 playerGuid) const;
+    void SetBankingProfile(BotBankingProfile const& profile);
+    BotBankingProfile GetBankingProfile() const;
 
     /**
-     * Add custom banking rule
+     * Add custom banking rule for this bot
      */
-    void AddBankingRule(uint32 playerGuid, BankingRule const& rule);
-    void RemoveBankingRule(uint32 playerGuid, uint32 itemId);
+    void AddBankingRule(BankingRule const& rule);
+    void RemoveBankingRule(uint32 itemId);
 
     // ========================================================================
     // GOLD MANAGEMENT
@@ -265,28 +282,28 @@ public:
      * Deposit gold to bank
      * Automatically called when gold exceeds maxGoldInInventory
      */
-    bool DepositGold(::Player* player, uint32 amount);
+    bool DepositGold(uint32 amount);
 
     /**
      * Withdraw gold from bank
      * Automatically called when gold falls below minGoldInInventory
      */
-    bool WithdrawGold(::Player* player, uint32 amount);
+    bool WithdrawGold(uint32 amount);
 
     /**
      * Check if bot should deposit gold
      */
-    bool ShouldDepositGold(::Player* player);
+    bool ShouldDepositGold();
 
     /**
      * Check if bot should withdraw gold
      */
-    bool ShouldWithdrawGold(::Player* player);
+    bool ShouldWithdrawGold();
 
     /**
      * Get recommended gold deposit amount
      */
-    uint32 GetRecommendedGoldDeposit(::Player* player);
+    uint32 GetRecommendedGoldDeposit();
 
     // ========================================================================
     // ITEM MANAGEMENT
@@ -296,34 +313,34 @@ public:
      * Deposit item to bank
      * Delegates to TrinityCore bank system
      */
-    bool DepositItem(::Player* player, uint32 itemGuid, uint32 quantity);
+    bool DepositItem(uint32 itemGuid, uint32 quantity);
 
     /**
      * Withdraw item from bank
      * Delegates to TrinityCore bank system
      */
-    bool WithdrawItem(::Player* player, uint32 itemId, uint32 quantity);
+    bool WithdrawItem(uint32 itemId, uint32 quantity);
 
     /**
      * Check if item should be banked based on rules
      */
-    bool ShouldDepositItem(::Player* player, uint32 itemId, uint32 currentCount);
+    bool ShouldDepositItem(uint32 itemId, uint32 currentCount);
 
     /**
      * Get banking priority for item
      */
-    BankingPriority GetItemBankingPriority(::Player* player, uint32 itemId);
+    BankingPriority GetItemBankingPriority(uint32 itemId);
 
     /**
      * Scan inventory and deposit items based on rules
      */
-    void DepositExcessItems(::Player* player);
+    void DepositExcessItems();
 
     /**
      * Withdraw materials needed for crafting
      * Coordinates with ProfessionManager for material needs
      */
-    void WithdrawMaterialsForCrafting(::Player* player);
+    void WithdrawMaterialsForCrafting();
 
     // ========================================================================
     // BANK SPACE ANALYSIS
@@ -332,79 +349,80 @@ public:
     /**
      * Get current bank space information
      */
-    BankSpaceInfo GetBankSpaceInfo(::Player* player);
+    BankSpaceInfo GetBankSpaceInfo();
 
     /**
-     * Check if player has bank space
+     * Check if bot has bank space
      */
-    bool HasBankSpace(::Player* player, uint32 slotsNeeded = 1);
+    bool HasBankSpace(uint32 slotsNeeded = 1);
 
     /**
      * Get item count in bank
      */
-    uint32 GetItemCountInBank(::Player* player, uint32 itemId);
+    uint32 GetItemCountInBank(uint32 itemId);
 
     /**
      * Check if item is in bank
      */
-    bool IsItemInBank(::Player* player, uint32 itemId);
+    bool IsItemInBank(uint32 itemId);
 
     /**
      * Optimize bank space (consolidate stacks, remove junk)
      */
-    void OptimizeBankSpace(::Player* player);
+    void OptimizeBankSpace();
 
     // ========================================================================
     // BANKER ACCESS
     // ========================================================================
 
     /**
-     * Check if player is near banker
+     * Check if bot is near banker
      */
-    bool IsNearBanker(::Player* player);
+    bool IsNearBanker();
 
     /**
      * Get distance to nearest banker
      */
-    float GetDistanceToNearestBanker(::Player* player);
+    float GetDistanceToNearestBanker();
 
     /**
      * Travel to nearest banker (triggers bot movement)
      */
-    bool TravelToNearestBanker(::Player* player);
+    bool TravelToNearestBanker();
 
     // ========================================================================
     // TRANSACTION HISTORY
     // ========================================================================
 
     /**
-     * Get recent banking transactions
+     * Get recent banking transactions for this bot
      */
-    std::vector<BankingTransaction> GetRecentTransactions(uint32 playerGuid, uint32 count = 10);
+    std::vector<BankingTransaction> GetRecentTransactions(uint32 count = 10);
 
     /**
-     * Record banking transaction
+     * Record banking transaction for this bot
      */
-    void RecordTransaction(uint32 playerGuid, BankingTransaction const& transaction);
+    void RecordTransaction(BankingTransaction const& transaction);
 
     // ========================================================================
     // STATISTICS
     // ========================================================================
 
-    BankingStatistics const& GetPlayerStatistics(uint32 playerGuid) const;
-    BankingStatistics const& GetGlobalStatistics() const;
-    void ResetStatistics(uint32 playerGuid);
+    BankingStatistics const& GetStatistics() const;
+    static BankingStatistics const& GetGlobalStatistics();
+    void ResetStatistics();
 
 private:
-    BankingManager();
-    ~BankingManager() = default;
+    // Non-copyable
+    BankingManager(BankingManager const&) = delete;
+    BankingManager& operator=(BankingManager const&) = delete;
 
     // ========================================================================
     // INITIALIZATION HELPERS
     // ========================================================================
 
     void InitializeDefaultRules();
-    void LoadBankingRules();
+    static void LoadBankingRules();  // Load shared rules once
 
     // ========================================================================
     // BANKING LOGIC HELPERS
@@ -413,17 +431,17 @@ private:
     /**
      * Find applicable banking rule for item
      */
-    BankingRule const* FindBankingRule(uint32 playerGuid, uint32 itemId);
+    BankingRule const* FindBankingRule(uint32 itemId);
 
     /**
      * Calculate item banking priority using rules and heuristics
      */
-    BankingPriority CalculateItemPriority(::Player* player, uint32 itemId);
+    BankingPriority CalculateItemPriority(uint32 itemId);
 
     /**
      * Check if item matches banking rule
      */
-    bool ItemMatchesRule(uint32 itemId, BankingRule const& rule);
+    static bool ItemMatchesRule(uint32 itemId, BankingRule const& rule);
 
     /**
      * Get items to deposit from inventory
@@ -435,7 +453,7 @@ private:
         uint32 quantity;
         BankingPriority priority;
     };
-    std::vector<DepositCandidate> GetDepositCandidates(::Player* player);
+    std::vector<DepositCandidate> GetDepositCandidates();
 
     /**
      * Get materials to withdraw for crafting
@@ -446,7 +464,7 @@ private:
         uint32 quantity;
         std::string reason;
     };
-    std::vector<WithdrawRequest> GetWithdrawRequests(::Player* player);
+    std::vector<WithdrawRequest> GetWithdrawRequests();
 
     // ========================================================================
     // INTEGRATION HELPERS
@@ -455,34 +473,37 @@ private:
     /**
      * Check if item is needed for professions
      */
-    bool IsNeededForProfessions(::Player* player, uint32 itemId);
+    bool IsNeededForProfessions(uint32 itemId);
 
     /**
      * Get material priority from profession system
      */
-    uint32 GetMaterialPriorityFromProfessions(::Player* player, uint32 itemId);
+    uint32 GetMaterialPriorityFromProfessions(uint32 itemId);
+
+    /**
+     * Get ProfessionManager via GameSystemsManager facade
+     */
+    class ProfessionManager* GetProfessionManager();
 
     // ========================================================================
-    // DATA STRUCTURES
+    // PER-BOT INSTANCE DATA
     // ========================================================================
 
-    // Banking profiles (playerGuid -> profile)
-    std::unordered_map<uint32, BotBankingProfile> _bankingProfiles;
+    Player* _bot;                                   // Bot reference (non-owning)
+    BotBankingProfile _profile;                     // Banking profile for this bot
+    std::vector<BankingTransaction> _transactionHistory; // Transaction history
+    BankingStatistics _statistics;                  // Statistics for this bot
+    uint32 _lastBankAccessTime{0};                  // Last bank access timestamp
+    bool _currentlyBanking{false};                  // Is bot currently banking
+    bool _enabled{true};                            // Banking automation enabled
 
-    // Transaction history (playerGuid -> transactions)
-    std::unordered_map<uint32, std::vector<BankingTransaction>> _transactionHistory;
+    // ========================================================================
+    // SHARED STATIC DATA
+    // ========================================================================
 
-    // Statistics
-    std::unordered_map<uint32, BankingStatistics> _playerStatistics;
-    BankingStatistics _globalStatistics;
-
-    // Last bank access times (playerGuid -> timestamp)
-    std::unordered_map<uint32, uint32> _lastBankAccessTimes;
-
-    // Currently banking (playerGuid -> true/false)
-    std::set<uint32> _currentlyBanking;
-
-    mutable Playerbot::OrderedRecursiveMutex<Playerbot::LockOrder::TRADE_MANAGER> _mutex;
+    static std::vector<BankingRule> _defaultRules;  // Default banking rules
+    static BankingStatistics _globalStatistics;     // Global statistics across all bots
+    static bool _defaultRulesInitialized;           // Initialization flag
 
     // Update intervals
     static constexpr uint32 BANKING_CHECK_INTERVAL = 300000;       // 5 minutes

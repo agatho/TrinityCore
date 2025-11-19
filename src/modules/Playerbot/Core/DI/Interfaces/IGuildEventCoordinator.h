@@ -38,13 +38,13 @@ public:
     virtual void ProcessEventInvitations(uint32 eventId) = 0;
 
     // Event planning and scheduling
-    virtual void PlanGuildEvents(Player* player) = 0;
-    virtual void ScheduleRecurringEvents(Player* player) = 0;
+    virtual void PlanGuildEvents() = 0;
+    virtual void ScheduleRecurringEvents() = 0;
 
     // Event recruitment and coordination
     virtual void RecruitEventParticipants(Player* organizer, uint32 eventId) = 0;
-    virtual void ManageEventSignups(Player* player, uint32 eventId) = 0;
-    virtual void AssignEventRoles(Player* player, uint32 eventId) = 0;
+    virtual void ManageEventSignups(uint32 eventId) = 0;
+    virtual void AssignEventRoles(uint32 eventId) = 0;
 
     // Event execution and management
     virtual void ExecuteGuildEvent(uint32 eventId) = 0;
@@ -53,14 +53,14 @@ public:
     virtual void HandleEventCompletion(uint32 eventId) = 0;
 
     // Event profiles
-    virtual void SetEventProfile(uint32 playerGuid, const EventCoordinationProfile& profile) = 0;
-    virtual EventCoordinationProfile GetEventProfile(uint32 playerGuid) = 0;
+    virtual void SetEventProfile(const EventCoordinationProfile& profile) = 0;
+    virtual EventCoordinationProfile GetEventProfile() = 0;
 
     // Event analytics
-    virtual EventParticipation GetEventParticipation(uint32 playerGuid) = 0;
+    virtual EventParticipation GetEventParticipation() = 0;
 
     // Event optimization
-    virtual void OptimizeEventScheduling(Player* player) = 0;
+    virtual void OptimizeEventScheduling() = 0;
     virtual void AnalyzeGuildEventPatterns(uint32 guildId) = 0;
 
     // Event communication
@@ -74,7 +74,7 @@ public:
 
     // Performance monitoring
     virtual EventMetrics GetGuildEventMetrics(uint32 guildId) = 0;
-    virtual EventMetrics GetPlayerEventMetrics(uint32 playerGuid) = 0;
+    virtual EventMetrics GetPlayerEventMetrics() = 0;
 
     // Configuration
     virtual void SetEventCoordinationEnabled(uint32 guildId, bool enabled) = 0;

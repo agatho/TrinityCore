@@ -27,7 +27,7 @@
 #include "../AI/BotAI.h"
 #include "../Spatial/SpatialGridManager.h"  // Lock-free spatial grid for deadlock fix
 #include "../Spatial/SpatialGridQueryHelpers.h"  // PHASE 5C: Thread-safe helpers
-#include "../Movement/Arbiter/MovementArbiter.h"
+#include "../Movement/UnifiedMovementCoordinator.h"  // Phase 2: Unified movement system
 #include "../Movement/Arbiter/MovementPriorityMapper.h"
 #include "UnitAI.h"
 #include <algorithm>
@@ -312,9 +312,9 @@ void AdvancedBehaviorManager::AvoidDangerZone(Position const& center, float radi
         // Find safe position outside radius
         Position safePos = FindSafePosition(m_bot->GetPosition());
 
-        // PHASE 6B: Use Movement Arbiter with DUNGEON_MECHANIC priority (205)
+        // Phase 2: Use Unified Movement Coordinator with DUNGEON_MECHANIC priority (205)
         BotAI* botAI = dynamic_cast<BotAI*>(m_bot->GetAI());
-        if (botAI && botAI->GetMovementArbiter())
+        if (botAI && botAI->GetUnifiedMovementCoordinator())
         {
             bool accepted = botAI->RequestPointMovement(
                 PlayerBotMovementPriority::DUNGEON_MECHANIC,
@@ -395,9 +395,9 @@ void AdvancedBehaviorManager::MoveToBossSafeSpot(Creature* boss)
 
     Position safePos = FindSafePosition(m_bot->GetPosition());
 
-    // PHASE 6B: Use Movement Arbiter with DUNGEON_MECHANIC priority (205)
+    // Phase 2: Use Unified Movement Coordinator with DUNGEON_MECHANIC priority (205)
     BotAI* botAI = dynamic_cast<BotAI*>(m_bot->GetAI());
-    if (botAI && botAI->GetMovementArbiter())
+    if (botAI && botAI->GetUnifiedMovementCoordinator())
     {
         bool accepted = botAI->RequestPointMovement(
             PlayerBotMovementPriority::DUNGEON_MECHANIC,
@@ -616,7 +616,7 @@ void AdvancedBehaviorManager::DefendBase(GameObject* flag)
 
     // PHASE 6B: Use Movement Arbiter with PVP_FLAG_CAPTURE priority (210)
     BotAI* botAI = dynamic_cast<BotAI*>(m_bot->GetAI());
-    if (botAI && botAI->GetMovementArbiter())
+    if (botAI && botAI->GetUnifiedMovementCoordinator())
     {
         bool accepted = botAI->RequestPointMovement(
             PlayerBotMovementPriority::PVP_FLAG_CAPTURE,
@@ -695,7 +695,7 @@ void AdvancedBehaviorManager::AttackBase(GameObject* flag)
 
     // PHASE 6B: Use Movement Arbiter with PVP_FLAG_CAPTURE priority (210)
     BotAI* botAI = dynamic_cast<BotAI*>(m_bot->GetAI());
-    if (botAI && botAI->GetMovementArbiter())
+    if (botAI && botAI->GetUnifiedMovementCoordinator())
     {
         bool accepted = botAI->RequestPointMovement(
             PlayerBotMovementPriority::PVP_FLAG_CAPTURE,
@@ -731,7 +731,7 @@ void AdvancedBehaviorManager::EscortFlagCarrier(Player* carrier)
     // Follow flag carrier
     // PHASE 6B: Use Movement Arbiter with PVP_TACTICAL priority (120)
     BotAI* botAI = dynamic_cast<BotAI*>(m_bot->GetAI());
-    if (botAI && botAI->GetMovementArbiter())
+    if (botAI && botAI->GetUnifiedMovementCoordinator())
     {
         bool accepted = botAI->RequestFollowMovement(
             PlayerBotMovementPriority::PVP_TACTICAL,
@@ -817,7 +817,7 @@ void AdvancedBehaviorManager::CaptureObjective(GameObject* objective)
 
     // PHASE 6B: Use Movement Arbiter with PVP_FLAG_CAPTURE priority (210)
     BotAI* botAI = dynamic_cast<BotAI*>(m_bot->GetAI());
-    if (botAI && botAI->GetMovementArbiter())
+    if (botAI && botAI->GetUnifiedMovementCoordinator())
     {
         bool accepted = botAI->RequestPointMovement(
             PlayerBotMovementPriority::PVP_FLAG_CAPTURE,

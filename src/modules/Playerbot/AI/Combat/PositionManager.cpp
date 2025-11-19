@@ -500,6 +500,157 @@ Position PositionManager::FindKitingPosition(Unit* threat, float minDistance)
     return bestPosition.position;
 }
 
+Position PositionManager::FindTankPosition(Unit* target)
+{
+    if (!target)
+        return _bot->GetPosition();
+
+    // Tank should be in front of the target, facing it away from group
+    float angle = target->GetOrientation();
+    // Position slightly to the side to avoid frontal cone attacks
+    angle += 0.2f; // Slight offset
+
+    // Tank positioning distance (5 yards - melee range)
+    float distance = 5.0f;
+
+    Position tankPos = PositionUtils::CalculatePositionAtAngle(target->GetPosition(), distance, angle);
+
+    // Validate position is reachable
+    if (!ValidatePosition(tankPos, PositionValidation::BASIC))
+    {
+        // Try alternative angles if primary position invalid
+        for (float offsetAngle : {-0.2f, 0.4f, -0.4f})
+        {
+            Position altPos = PositionUtils::CalculatePositionAtAngle(target->GetPosition(), distance, angle + offsetAngle);
+            if (ValidatePosition(altPos, PositionValidation::BASIC))
+                return altPos;
+        }
+    }
+
+    return tankPos;
+}
+
+Position PositionManager::FindHealerPosition(const std::vector<Player*>& groupMembers)
+{
+    if (!_bot)
+        return Position();
+
+    // Healers should be at medium range (18 yards), central to the group
+    float healerDistance = 18.0f;
+
+    // Find the group center
+    Position groupCenter;
+    if (!groupMembers.empty())
+    {
+        float sumX = 0.0f, sumY = 0.0f, sumZ = 0.0f;
+        uint32 count = 0;
+
+        for (Player* member : groupMembers)
+        {
+            if (member && member != _bot)
+            {
+                sumX += member->GetPositionX();
+                sumY += member->GetPositionY();
+                sumZ += member->GetPositionZ();
+                ++count;
+            }
+        }
+
+        if (count > 0)
+        {
+            groupCenter.Relocate(sumX / count, sumY / count, sumZ / count);
+        }
+        else
+        {
+            groupCenter = _bot->GetPosition();
+        }
+    }
+    else
+    {
+        groupCenter = _bot->GetPosition();
+    }
+
+    // Use spatial grid to find optimal position with LOS to most allies
+    Map* map = _bot->GetMap();
+    Position bestPos = groupCenter;
+    int maxVisibleAllies = 0;
+
+    if (map)
+    {
+        DoubleBufferedSpatialGrid* spatialGrid = sSpatialGridManager.GetGrid(map);
+        if (!spatialGrid)
+        {
+            sSpatialGridManager.CreateGrid(map);
+            spatialGrid = sSpatialGridManager.GetGrid(map);
+        }
+
+        if (spatialGrid)
+        {
+            // Query nearby players (lock-free!)
+            std::vector<DoubleBufferedSpatialGrid::PlayerSnapshot> nearbyPlayers =
+                spatialGrid->QueryNearbyPlayers(_bot->GetPosition(), 40.0f);
+
+            // Test different positions around the group center
+            for (float testAngle = 0; testAngle < 2 * M_PI; testAngle += static_cast<float>(M_PI / 4))
+            {
+                Position testPos = PositionUtils::CalculatePositionAtAngle(groupCenter, healerDistance, testAngle);
+
+                if (!ValidatePosition(testPos, PositionValidation::BASIC))
+                    continue;
+
+                int visibleAllies = 0;
+
+                // Count visible allies using snapshot positions
+                for (auto const& snapshot : nearbyPlayers)
+                {
+                    if (snapshot.guid == _bot->GetGUID())
+                        continue; // Skip self
+
+                    // Simple distance check for LOS proxy
+                    float dx = testPos.GetPositionX() - snapshot.position.GetPositionX();
+                    float dy = testPos.GetPositionY() - snapshot.position.GetPositionY();
+                    float dz = testPos.GetPositionZ() - snapshot.position.GetPositionZ();
+                    float distSq = dx * dx + dy * dy + dz * dz;
+
+                    // Healers need to be within 40 yards of allies
+                    if (distSq < 40.0f * 40.0f)
+                        ++visibleAllies;
+                }
+
+                if (visibleAllies > maxVisibleAllies)
+                {
+                    maxVisibleAllies = visibleAllies;
+                    bestPos = testPos;
+                }
+            }
+        }
+    }
+
+    return bestPos;
+}
+
+Position PositionManager::FindDpsPosition(Unit* target, PositionType type)
+{
+    if (!target)
+        return _bot->GetPosition();
+
+    // Route to appropriate DPS positioning based on type
+    switch (type)
+    {
+        case PositionType::MELEE_COMBAT:
+        case PositionType::MELEE_DPS:
+            return FindMeleePosition(target, true); // Prefer behind for DPS
+
+        case PositionType::RANGED_DPS:
+        case PositionType::RANGED_CASTER:
+            return FindRangedPosition(target, 25.0f); // Standard ranged distance
+
+        default:
+            // Default to ranged for unknown types
+            return FindRangedPosition(target, 20.0f);
+    }
+}
+
 bool PositionManager::IsPositionSafe(const Position& pos, const MovementContext& context)
 {
     if (IsInDangerZone(pos))

@@ -22,7 +22,7 @@
 #include "MechanicAwareness.h"
 #include "ThreatAbilities.h"
 #include "ClassAI/ClassAI.h"
-#include "Movement/Arbiter/MovementArbiter.h"
+#include "Movement/UnifiedMovementCoordinator.h"  // Phase 2: Unified movement system
 #include "Movement/Arbiter/MovementPriority.h"
 #include "AI/BotAI.h"
 #include "Group.h"
@@ -436,7 +436,7 @@ void CombatAIIntegrator::UpdatePositioning(uint32 diff)
                 {
                     // PHASE 6B: Use Movement Arbiter with COMBAT_MOVEMENT_STRATEGY priority (130)
                     BotAI* botAI = dynamic_cast<BotAI*>(_bot->GetAI());
-                    if (botAI && botAI->GetMovementArbiter())
+                    if (botAI && botAI->GetUnifiedMovementCoordinator())
                     {
                         bool accepted = botAI->RequestPointMovement(
                             PlayerBotMovementPriority::COMBAT_MOVEMENT_STRATEGY,
@@ -625,7 +625,7 @@ void CombatAIIntegrator::UpdatePathfinding(uint32 diff)
 
             // PHASE 6B: Use Movement Arbiter with COMBAT_MOVEMENT_STRATEGY priority (130)
             BotAI* botAI = dynamic_cast<BotAI*>(_bot->GetAI());
-            if (botAI && botAI->GetMovementArbiter())
+            if (botAI && botAI->GetUnifiedMovementCoordinator())
             {
                 botAI->RequestPointMovement(
                     PlayerBotMovementPriority::COMBAT_MOVEMENT_STRATEGY,
@@ -659,7 +659,7 @@ void CombatAIIntegrator::UpdatePathfinding(uint32 diff)
                 {
                     // PHASE 6B: Use Movement Arbiter with COMBAT_MOVEMENT_STRATEGY priority (130)
                     BotAI* botAI = dynamic_cast<BotAI*>(_bot->GetAI());
-                    if (botAI && botAI->GetMovementArbiter())
+                    if (botAI && botAI->GetUnifiedMovementCoordinator())
                     {
                         botAI->RequestPointMovement(
                             PlayerBotMovementPriority::COMBAT_MOVEMENT_STRATEGY,
@@ -691,7 +691,7 @@ void CombatAIIntegrator::HandleEngagingPhase()
 
         // PHASE 6B: Use Movement Arbiter with COMBAT_MOVEMENT_STRATEGY priority (130)
         BotAI* botAI = dynamic_cast<BotAI*>(_bot->GetAI());
-        if (botAI && botAI->GetMovementArbiter())
+        if (botAI && botAI->GetUnifiedMovementCoordinator())
         {
             botAI->RequestPointMovement(
                 PlayerBotMovementPriority::COMBAT_MOVEMENT_STRATEGY,
@@ -748,7 +748,7 @@ void CombatAIIntegrator::HandleSustainedPhase()
     {
         // PHASE 6B: Use Movement Arbiter with COMBAT_MOVEMENT_STRATEGY priority (130)
         BotAI* botAI = dynamic_cast<BotAI*>(_bot->GetAI());
-        if (botAI && botAI->GetMovementArbiter())
+        if (botAI && botAI->GetUnifiedMovementCoordinator())
         {
             botAI->RequestPointMovement(
                 PlayerBotMovementPriority::COMBAT_MOVEMENT_STRATEGY,
@@ -796,7 +796,7 @@ void CombatAIIntegrator::HandleDefensivePhase()
 
         // PHASE 3 MIGRATION: Use Movement Arbiter with EMERGENCY_DEFENSIVE priority (240)
         BotAI* botAI = dynamic_cast<BotAI*>(_bot->GetAI());
-        if (botAI && botAI->GetMovementArbiter())
+        if (botAI && botAI->GetUnifiedMovementCoordinator())
         {
             bool accepted = botAI->RequestPointMovement(
                 PlayerBotMovementPriority::EMERGENCY_DEFENSIVE,  // Priority 240 - CRITICAL emergency flee
@@ -840,7 +840,7 @@ void CombatAIIntegrator::HandleKitingPhase()
 
     // PHASE 6B: Use Movement Arbiter with COMBAT_MOVEMENT_STRATEGY priority (130)
     BotAI* botAI = dynamic_cast<BotAI*>(_bot->GetAI());
-    if (botAI && botAI->GetMovementArbiter())
+    if (botAI && botAI->GetUnifiedMovementCoordinator())
     {
         botAI->RequestPointMovement(
             PlayerBotMovementPriority::COMBAT_MOVEMENT_STRATEGY,
@@ -883,7 +883,7 @@ void CombatAIIntegrator::HandleRepositioningPhase()
         {
             // PHASE 6B: Use Movement Arbiter with COMBAT_MOVEMENT_STRATEGY priority (130)
             BotAI* botAI = dynamic_cast<BotAI*>(_bot->GetAI());
-            if (botAI && botAI->GetMovementArbiter())
+            if (botAI && botAI->GetUnifiedMovementCoordinator())
             {
                 botAI->RequestPointMovement(
                     PlayerBotMovementPriority::COMBAT_MOVEMENT_STRATEGY,

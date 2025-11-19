@@ -20,11 +20,23 @@
  * - Coordinates with ProfessionManager for crafting
  * - Works with GatheringAutomation for material collection
  * - Uses FarmingCoordinator for stockpile management
+ * - Subscribes to ProfessionEventBus for event-driven reactivity (Phase 2)
  *
  * Design Pattern: Bridge Pattern
  * - Decouples profession logic from auction logic
  * - All auction operations delegated to existing AuctionHouse class
  * - This class only manages profession-auction coordination
+ *
+ * Event Integration (Phase 2 - 2025-11-18):
+ * - CRAFTING_COMPLETED → List crafted items for sale on AH
+ * - ITEM_BANKED → Update inventory tracking and stockpile management
+ *
+ * Phase 4.3 Refactoring (2025-11-18):
+ * - Converted from global singleton to per-bot instance
+ * - Integrated into GameSystemsManager facade (20→21 managers)
+ * - All methods now operate on _bot member (no Player* parameters)
+ * - Per-bot data stored as direct members (not maps)
+ * - Event filtering by playerGuid for per-bot event handling
  */
 
 #pragma once
@@ -153,42 +165,54 @@ struct ProfessionAuctionStatistics
 };
 
 /**
- * @brief Bridge between profession system and auction house
+ * @brief Bridge between profession system and auction house (per-bot instance)
  *
  * DESIGN PRINCIPLE: This class does NOT implement auction operations.
  * All auction operations are delegated to the existing AuctionHouse singleton.
  * This class only coordinates profession-specific auction logic.
+ *
+ * PHASE 4.3: Converted to per-bot instance pattern (owned by GameSystemsManager)
  */
 class TC_GAME_API ProfessionAuctionBridge final : public IProfessionAuctionBridge
 {
 public:
-    static ProfessionAuctionBridge* instance();
+    /**
+     * @brief Construct bridge for specific bot
+     * @param bot The bot this bridge serves (non-owning)
+     */
+    explicit ProfessionAuctionBridge(Player* bot);
+
+    /**
+     * @brief Destructor - unsubscribes from event bus
+     */
+    ~ProfessionAuctionBridge();
 
     // ============================================================================
     // CORE BRIDGE MANAGEMENT
     // ============================================================================
 
     /**
-     * Initialize profession auction bridge on server startup
+     * Initialize profession auction bridge (loads shared data)
+     * NOTE: Called per-bot, but loads shared world data only once
      */
     void Initialize() override;
 
     /**
-     * Update profession auction automation for player (called periodically)
+     * Update profession auction automation (called periodically)
      */
-    void Update(::Player* player, uint32 diff) override;
+    void Update(uint32 diff) override;
 
     /**
-     * Enable/disable profession auction automation for player
+     * Enable/disable profession auction automation
      */
-    void SetEnabled(::Player* player, bool enabled) override;
-    bool IsEnabled(::Player* player) const override;
+    void SetEnabled(bool enabled) override;
+    bool IsEnabled() const override;
 
     /**
-     * Get auction profile for player
+     * Set/get auction profile for this bot
      */
-    void SetAuctionProfile(uint32 playerGuid, ProfessionAuctionProfile const& profile) override;
-    ProfessionAuctionProfile GetAuctionProfile(uint32 playerGuid) const override;
+    void SetAuctionProfile(ProfessionAuctionProfile const& profile) override;
+    ProfessionAuctionProfile GetAuctionProfile() const override;
 
     // ============================================================================
     // MATERIAL AUCTION AUTOMATION
@@ -198,24 +222,24 @@ public:
      * Scan inventory for excess materials and list on auction house
      * Uses existing AuctionHouse::CreateAuction internally
      */
-    void SellExcessMaterials(::Player* player) override;
+    void SellExcessMaterials() override;
 
     /**
      * Check if material should be sold based on stockpile config
      */
-    bool ShouldSellMaterial(::Player* player, uint32 itemId, uint32 currentCount) const override;
+    bool ShouldSellMaterial(uint32 itemId, uint32 currentCount) const override;
 
     /**
      * List material on auction house
      * Delegates to AuctionHouse::CreateAuction
      */
-    bool ListMaterialOnAuction(::Player* player, uint32 itemGuid, MaterialStockpileConfig const& config) override;
+    bool ListMaterialOnAuction(uint32 itemGuid, MaterialStockpileConfig const& config) override;
 
     /**
      * Get optimal price for material based on market analysis
      * Uses AuctionHouse::CalculateOptimalListingPrice
      */
-    uint32 GetOptimalMaterialPrice(::Player* player, uint32 itemId, uint32 stackSize) const override;
+    uint32 GetOptimalMaterialPrice(uint32 itemId, uint32 stackSize) const override;
 
     // ============================================================================
     // CRAFTED ITEM AUCTION AUTOMATION
@@ -225,24 +249,24 @@ public:
      * Scan inventory for crafted items and list profitable ones
      * Uses existing AuctionHouse::CreateAuction internally
      */
-    void SellCraftedItems(::Player* player) override;
+    void SellCraftedItems() override;
 
     /**
      * Check if crafted item should be sold based on profit margin
      */
-    bool ShouldSellCraftedItem(::Player* player, uint32 itemId, uint32 materialCost) const override;
+    bool ShouldSellCraftedItem(uint32 itemId, uint32 materialCost) const override;
 
     /**
      * List crafted item on auction house
      * Delegates to AuctionHouse::CreateAuction
      */
-    bool ListCraftedItemOnAuction(::Player* player, uint32 itemGuid, CraftedItemAuctionConfig const& config) override;
+    bool ListCraftedItemOnAuction(uint32 itemGuid, CraftedItemAuctionConfig const& config) override;
 
     /**
      * Calculate profit margin for crafted item
      * = (sale_price - material_cost) / material_cost
      */
-    float CalculateProfitMargin(::Player* player, uint32 itemId, uint32 marketPrice, uint32 materialCost) const override;
+    float CalculateProfitMargin(uint32 itemId, uint32 marketPrice, uint32 materialCost) const override;
 
     // ============================================================================
     // MATERIAL PURCHASING AUTOMATION
@@ -252,25 +276,25 @@ public:
      * Buy materials from auction house for profession leveling
      * Uses existing AuctionHouse::BuyoutAuction internally
      */
-    void BuyMaterialsForLeveling(::Player* player, ProfessionType profession) override;
+    void BuyMaterialsForLeveling(ProfessionType profession) override;
 
     /**
      * Get materials needed for next profession skill-up
      * Queries ProfessionManager for optimal leveling recipe
      */
-    std::vector<std::pair<uint32, uint32>> GetNeededMaterialsForLeveling(::Player* player, ProfessionType profession) const override;
+    std::vector<std::pair<uint32, uint32>> GetNeededMaterialsForLeveling(ProfessionType profession) const override;
 
     /**
      * Check if material is available on auction house at good price
      * Uses AuctionHouse::GetMarketPrice and IsPriceBelowMarket
      */
-    bool IsMaterialAvailableForPurchase(::Player* player, uint32 itemId, uint32 quantity, uint32 maxPricePerUnit) const override;
+    bool IsMaterialAvailableForPurchase(uint32 itemId, uint32 quantity, uint32 maxPricePerUnit) const override;
 
     /**
      * Purchase specific material from auction house
      * Delegates to AuctionHouse::BuyoutAuction
      */
-    bool PurchaseMaterial(::Player* player, uint32 itemId, uint32 quantity, uint32 maxPricePerUnit) override;
+    bool PurchaseMaterial(uint32 itemId, uint32 quantity, uint32 maxPricePerUnit) override;
 
     // ============================================================================
     // STOCKPILE MANAGEMENT
@@ -279,22 +303,22 @@ public:
     /**
      * Configure material stockpile target
      */
-    void SetMaterialStockpile(uint32 playerGuid, uint32 itemId, MaterialStockpileConfig const& config) override;
+    void SetMaterialStockpile(uint32 itemId, MaterialStockpileConfig const& config) override;
 
     /**
      * Configure crafted item auction behavior
      */
-    void SetCraftedItemAuction(uint32 playerGuid, uint32 itemId, CraftedItemAuctionConfig const& config) override;
+    void SetCraftedItemAuction(uint32 itemId, CraftedItemAuctionConfig const& config) override;
 
     /**
      * Get current stockpile status for material
      */
-    uint32 GetCurrentStockpile(::Player* player, uint32 itemId) const override;
+    uint32 GetCurrentStockpile(uint32 itemId) const override;
 
     /**
      * Check if stockpile target is met
      */
-    bool IsStockpileTargetMet(::Player* player, uint32 itemId) const override;
+    bool IsStockpileTargetMet(uint32 itemId) const override;
 
     // ============================================================================
     // INTEGRATION WITH EXISTING AUCTION HOUSE
@@ -310,23 +334,31 @@ public:
      * Synchronize with auction house session
      * Called when auction house operations are in progress
      */
-    void SynchronizeWithAuctionHouse(::Player* player) override;
+    void SynchronizeWithAuctionHouse() override;
 
     // ============================================================================
     // STATISTICS
     // ============================================================================
 
-    ProfessionAuctionStatistics const& GetPlayerStatistics(uint32 playerGuid) const override;
-    ProfessionAuctionStatistics const& GetGlobalStatistics() const override;
+    ProfessionAuctionStatistics const& GetStatistics() const override;
+    static ProfessionAuctionStatistics const& GetGlobalStatistics();
 
     /**
-     * Reset statistics for player
+     * Reset statistics for this bot
      */
-    void ResetStatistics(uint32 playerGuid) override;
+    void ResetStatistics() override;
 
 private:
-    ProfessionAuctionBridge();
-    ~ProfessionAuctionBridge() = default;
+
+    // ============================================================================
+    // EVENT HANDLING (Phase 2)
+    // ============================================================================
+
+    /**
+     * @brief Handle profession events from ProfessionEventBus
+     * Reacts to CRAFTING_COMPLETED, ITEM_BANKED
+     */
+    void HandleProfessionEvent(struct ProfessionEvent const& event);
 
     // ============================================================================
     // INITIALIZATION HELPERS
@@ -352,12 +384,12 @@ private:
         uint32 stackCount;
         uint32 quality;
     };
-    std::vector<ItemInfo> GetProfessionItemsInInventory(::Player* player, bool materialsOnly = false) const;
+    std::vector<ItemInfo> GetProfessionItemsInInventory(bool materialsOnly = false) const;
 
     /**
      * Calculate material cost for crafted item
      */
-    uint32 CalculateMaterialCost(::Player* player, uint32 itemId) const;
+    uint32 CalculateMaterialCost(uint32 itemId) const;
 
     /**
      * Check if item is profession-related material
@@ -372,34 +404,40 @@ private:
     /**
      * Validate auction house access
      */
-    bool CanAccessAuctionHouse(::Player* player) const;
+    bool CanAccessAuctionHouse() const;
+
+    /**
+     * Get ProfessionManager via GameSystemsManager
+     */
+    ProfessionManager* GetProfessionManager();
 
     // ============================================================================
-    // DATA STRUCTURES
+    // PER-BOT DATA MEMBERS (Phase 4.3: Converted from maps)
     // ============================================================================
 
-    // Auction profiles (playerGuid -> profile)
-    std::unordered_map<uint32, ProfessionAuctionProfile> _profiles;
+    Player* _bot;                                       // Bot player reference (non-owning)
+    ProfessionAuctionProfile _profile;                  // Bot's auction profile
+    uint32 _lastAuctionCheckTime{0};                    // Last auction check timestamp
+    std::vector<uint32> _activeAuctionIds;              // Active auction IDs for tracking
+    ProfessionAuctionStatistics _statistics;            // Per-bot statistics
 
-    // Last auction check time (playerGuid -> timestamp)
-    std::unordered_map<uint32, uint32> _lastAuctionCheckTimes;
-
-    // Active auction IDs for tracking (playerGuid -> auction IDs)
-    std::unordered_map<uint32, std::vector<uint32>> _activeAuctionIds;
-
-    // Statistics
-    std::unordered_map<uint32, ProfessionAuctionStatistics> _playerStatistics;
-    ProfessionAuctionStatistics _globalStatistics;
+    // ============================================================================
+    // SHARED DATA MEMBERS (Static - shared across all bots)
+    // ============================================================================
 
     // Reference to existing auction house (set in Initialize)
-    AuctionHouse* _auctionHouse;
-
-    mutable Playerbot::OrderedRecursiveMutex<Playerbot::LockOrder::TRADE_MANAGER> _mutex;
+    static AuctionHouse* _auctionHouse;
+    static ProfessionAuctionStatistics _globalStatistics;
+    static bool _sharedDataInitialized;
 
     // Update intervals
     static constexpr uint32 AUCTION_CHECK_INTERVAL = 600000;        // 10 minutes
     static constexpr uint32 MATERIAL_SCAN_INTERVAL = 300000;        // 5 minutes
     static constexpr uint32 DEFAULT_AUCTION_DURATION = 24 * 3600;   // 24 hours
+
+    // Non-copyable
+    ProfessionAuctionBridge(ProfessionAuctionBridge const&) = delete;
+    ProfessionAuctionBridge& operator=(ProfessionAuctionBridge const&) = delete;
 };
 
 } // namespace Playerbot

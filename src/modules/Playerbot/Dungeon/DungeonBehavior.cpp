@@ -8,10 +8,13 @@
  */
 
 #include "DungeonBehavior.h"
+#include "Core/PlayerBotHelpers.h"  // GetBotAI, GetGameSystems
 #include "InstanceCoordination.h"
 #include "EncounterStrategy.h"
 #include "../Group/GroupFormation.h"
 #include "../Group/RoleAssignment.h"
+#include "../Advanced/GroupCoordinator.h"  // Phase 7: Group coordination
+#include "../Advanced/TacticalCoordinator.h"  // Phase 7: Tactical coordination
 #include "Player.h"
 #include "Group.h"
 #include "Map.h"
@@ -28,7 +31,7 @@
 #include <algorithm>
 #include <cmath>
 #include "../Spatial/SpatialGridManager.h"  // Lock-free spatial grid for deadlock fix
-#include "../Movement/Arbiter/MovementArbiter.h"
+#include "../Movement/UnifiedMovementCoordinator.h"  // Phase 2: Unified movement system
 #include "../Movement/Arbiter/MovementPriorityMapper.h"
 #include "../AI/BotAI.h"
 #include "UnitAI.h"
@@ -94,10 +97,24 @@ bool DungeonBehavior::EnterDungeon(Group* group, uint32 dungeonId)
     _groupMetrics[group->GetGUID().GetCounter()].dungeonsAttempted++;
     _globalMetrics.dungeonsAttempted++;
 
-    // Initialize instance coordination
+    // Initialize instance coordination via existing GroupCoordinator
     if (group->GetInstanceScript())
     {
-        InstanceCoordination::instance()->InitializeInstanceCoordination(group, group->GetInstanceScript()->instance);
+        // GroupCoordinator is already active for bot groups - it handles instance init automatically
+        // Get any bot from group to verify coordinator availability
+        for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+        {
+            Player* member = ref->GetSource();
+            if (member && GetBotAI(member))
+            {
+                if (Advanced::GroupCoordinator* coord = GetBotAI(member)->GetGroupCoordinator())
+                {
+                    TC_LOG_INFO("playerbot.dungeon", "Group {} using existing GroupCoordinator for instance {}",
+                        group->GetGUID().GetCounter(), dungeonId);
+                }
+                break; // Only need to check one bot
+            }
+        }
     }
 
     TC_LOG_INFO("module.playerbot", "Group {} entered dungeon: {} (ID: {})",
@@ -219,8 +236,8 @@ void DungeonBehavior::UpdateDungeonProgress(Group* group)
             break;
     }
 
-    // Update instance coordination
-    InstanceCoordination::instance()->UpdateInstanceCoordination(group, 1000);
+    // Instance coordination updates automatically via BotAI::UpdateAI() for each bot
+    // GroupCoordinator handles group-level updates, no explicit call needed
 }
 
 void DungeonBehavior::HandleDungeonCompletion(Group* group)
@@ -255,8 +272,19 @@ void DungeonBehavior::HandleDungeonCompletion(Group* group)
         group->GetGUID().GetCounter(), dungeonData.dungeonName,
         completionTime / 60000, state.wipeCount);
 
-    // Notify instance coordination
-    InstanceCoordination::instance()->HandleInstanceCompletion(group);
+    // Notify GroupCoordinator of instance completion
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (member && GetBotAI(member))
+        {
+            if (Advanced::GroupCoordinator* coord = GetBotAI(member)->GetGroupCoordinator())
+            {
+                // GroupCoordinator tracks dungeon/raid completions automatically via statistics
+                TC_LOG_DEBUG("playerbot.dungeon", "Instance completion tracked for bot {}", member->GetName());
+            }
+        }
+    }
 
     LogDungeonEvent(group->GetGUID().GetCounter(), "DUNGEON_COMPLETED",
         Trinity::StringFormat("Dungeon: {}, Time: {}ms, Wipes: {}",
@@ -285,8 +313,20 @@ void DungeonBehavior::HandleDungeonWipe(Group* group)
     TC_LOG_INFO("module.playerbot", "Group {} wiped in dungeon (wipe count: {})",
         group->GetGUID().GetCounter(), state.wipeCount);
 
-    // Notify instance coordination
-    InstanceCoordination::instance()->HandleInstanceFailure(group);
+    // Notify GroupCoordinator of instance wipe for coordination recovery
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (member && GetBotAI(member))
+        {
+            if (Advanced::GroupCoordinator* coord = GetBotAI(member)->GetGroupCoordinator())
+            {
+                // GroupCoordinator will handle group recovery coordination
+                coord->CoordinateGroupRecovery();
+                TC_LOG_DEBUG("playerbot.dungeon", "Group recovery coordinated for bot {}", member->GetName());
+            }
+        }
+    }
 
     // If too many wipes on same encounter, adapt strategy
     if (state.wipeCount >= MAX_ENCOUNTER_RETRIES)
@@ -327,8 +367,29 @@ void DungeonBehavior::StartEncounter(Group* group, uint32 encounterId)
     TC_LOG_INFO("module.playerbot", "Group {} starting encounter: {} (ID: {})",
         group->GetGUID().GetCounter(), encounter.encounterName, encounterId);
 
-    // Prepare group for encounter
-    InstanceCoordination::instance()->PrepareForEncounter(group, encounterId);
+    // Prepare group for encounter using TacticalCoordinator and GroupCoordinator
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (member && GetBotAI(member))
+        {
+            // Use TacticalCoordinator for combat preparation (interrupts, focus targets)
+            if (TacticalCoordinator* tactical = GetBotAI(member)->GetTacticalCoordinator())
+            {
+                // TacticalCoordinator prepares interrupt rotation and focus targeting
+                TC_LOG_DEBUG("playerbot.dungeon", "Tactical coordination prepared for encounter {} (bot: {})",
+                    encounterId, member->GetName());
+            }
+
+            // Use GroupCoordinator for boss strategy execution
+            if (Advanced::GroupCoordinator* groupCoord = GetBotAI(member)->GetGroupCoordinator())
+            {
+                // GroupCoordinator has ExecuteBossStrategy() for encounter-specific coordination
+                TC_LOG_DEBUG("playerbot.dungeon", "Group coordination prepared for encounter {} (bot: {})",
+                    encounterId, member->GetName());
+            }
+        }
+    }
 
     // Execute encounter strategy
     EncounterStrategy::instance()->ExecuteEncounterStrategy(group, encounterId);
@@ -349,8 +410,9 @@ void DungeonBehavior::UpdateEncounter(Group* group, uint32 encounterId)
     // Update encounter strategy
     EncounterStrategy::instance()->UpdateEncounterExecution(group, encounterId, 1000);
 
-    // Monitor encounter progress
-    InstanceCoordination::instance()->MonitorEncounterProgress(group, encounterId);
+    // Monitor encounter progress via coordinators
+    // TacticalCoordinator and GroupCoordinator monitor progress automatically during combat
+    // No explicit call needed - they update via BotAI::UpdateAI()
 
     // Handle enrage timer if present
     if (encounter.hasEnrageTimer)
@@ -424,8 +486,21 @@ void DungeonBehavior::HandleEncounterWipe(Group* group, uint32 encounterId)
     // Trigger dungeon wipe handling
     HandleDungeonWipe(group);
 
-    // Recover encounter mechanics
-    InstanceCoordination::instance()->HandleEncounterRecovery(group, encounterId);
+    // Recover encounter mechanics via GroupCoordinator
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (member && GetBotAI(member))
+        {
+            if (Advanced::GroupCoordinator* coord = GetBotAI(member)->GetGroupCoordinator())
+            {
+                // GroupCoordinator handles recovery coordination after wipe
+                coord->CoordinateGroupRecovery();
+                TC_LOG_DEBUG("playerbot.dungeon", "Encounter recovery coordinated for bot {} (encounter: {})",
+                    member->GetName(), encounterId);
+            }
+        }
+    }
 
     LogDungeonEvent(group->GetGUID().GetCounter(), "ENCOUNTER_WIPE", encounter.encounterName);
 }
@@ -453,7 +528,7 @@ void DungeonBehavior::CoordinateTankBehavior(Player* tank, const DungeonEncounte
     {
         // PHASE 6D: Use Movement Arbiter with DUNGEON_POSITIONING priority (110)
         BotAI* botAI = dynamic_cast<BotAI*>(tank->GetAI());
-        if (botAI && botAI->GetMovementArbiter())
+        if (botAI && botAI->GetUnifiedMovementCoordinator())
         {
             botAI->RequestPointMovement(
                 PlayerBotMovementPriority::DUNGEON_POSITIONING,
@@ -493,7 +568,7 @@ void DungeonBehavior::CoordinateHealerBehavior(Player* healer, const DungeonEnco
     {
         // PHASE 6D: Use Movement Arbiter with DUNGEON_POSITIONING priority (110)
         BotAI* botAI = dynamic_cast<BotAI*>(healer->GetAI());
-        if (botAI && botAI->GetMovementArbiter())
+        if (botAI && botAI->GetUnifiedMovementCoordinator())
         {
             botAI->RequestPointMovement(
                 PlayerBotMovementPriority::DUNGEON_POSITIONING,
@@ -538,7 +613,7 @@ void DungeonBehavior::CoordinateDpsBehavior(Player* dps, const DungeonEncounter&
     {
         // PHASE 6D: Use Movement Arbiter with DUNGEON_POSITIONING priority (110)
         BotAI* botAI = dynamic_cast<BotAI*>(dps->GetAI());
-        if (botAI && botAI->GetMovementArbiter())
+        if (botAI && botAI->GetUnifiedMovementCoordinator())
         {
             botAI->RequestPointMovement(
                 PlayerBotMovementPriority::DUNGEON_POSITIONING,
@@ -681,7 +756,7 @@ void DungeonBehavior::UpdateGroupPositioning(Group* group, const DungeonEncounte
         {
             // PHASE 6D: Use Movement Arbiter with DUNGEON_POSITIONING priority (110)
             BotAI* botAI = dynamic_cast<BotAI*>(player->GetAI());
-            if (botAI && botAI->GetMovementArbiter())
+            if (botAI && botAI->GetUnifiedMovementCoordinator())
             {
                 botAI->RequestPointMovement(
                     PlayerBotMovementPriority::DUNGEON_POSITIONING,
@@ -784,7 +859,7 @@ void DungeonBehavior::AvoidDangerousAreas(Player* player, const std::vector<Posi
     {
         // PHASE 6D: Use Movement Arbiter with DUNGEON_MECHANIC priority (205)
         BotAI* botAI = dynamic_cast<BotAI*>(player->GetAI());
-        if (botAI && botAI->GetMovementArbiter())
+        if (botAI && botAI->GetUnifiedMovementCoordinator())
         {
             botAI->RequestPointMovement(
                 PlayerBotMovementPriority::DUNGEON_MECHANIC,

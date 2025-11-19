@@ -10,101 +10,93 @@
 #ifndef PLAYERBOT_NPC_EVENT_BUS_H
 #define PLAYERBOT_NPC_EVENT_BUS_H
 
-#include "Define.h"
-#include "Threading/LockHierarchy.h"
-#include "ObjectGuid.h"
+#include "Core/Events/GenericEventBus.h"
+#include "NPCEvents.h"
 #include "Core/DI/Interfaces/INPCEventBus.h"
-#include <chrono>
-#include <string>
-#include <vector>
-#include <unordered_map>
-#include <mutex>
-#include <functional>
 
 namespace Playerbot
 {
 
-class BotAI;
-
-enum class NPCEventType : uint8
-{
-    GOSSIP_MENU_RECEIVED = 0,
-    GOSSIP_COMPLETE,
-    VENDOR_LIST_RECEIVED,
-    TRAINER_LIST_RECEIVED,
-    TRAINER_SERVICE_RESULT,
-    BANK_OPENED,
-    SPIRIT_HEALER_CONFIRM,
-    PETITION_LIST_RECEIVED,
-    MAX_NPC_EVENT
-};
-
-struct NPCEvent
-{
-    NPCEventType type;
-    ObjectGuid playerGuid;
-    ObjectGuid npcGuid;
-    uint32 menuId;
-    uint32 textId;
-    uint32 vendorEntry;
-    uint32 trainerEntry;
-    uint32 trainerService;
-    uint32 petitionEntry;
-    std::vector<uint32> gossipOptions;
-    std::vector<uint32> availableItems;  // For vendor/trainer
-    std::chrono::steady_clock::time_point timestamp;
-
-    static NPCEvent GossipMenuReceived(ObjectGuid playerGuid, ObjectGuid npcGuid, uint32 menuId, uint32 textId, std::vector<uint32> options);
-    static NPCEvent GossipComplete(ObjectGuid playerGuid, ObjectGuid npcGuid);
-    static NPCEvent VendorListReceived(ObjectGuid playerGuid, ObjectGuid npcGuid, uint32 vendorEntry, std::vector<uint32> items);
-    static NPCEvent TrainerListReceived(ObjectGuid playerGuid, ObjectGuid npcGuid, uint32 trainerEntry, std::vector<uint32> spells);
-    static NPCEvent TrainerServiceResult(ObjectGuid playerGuid, uint32 trainerService);
-    static NPCEvent BankOpened(ObjectGuid playerGuid, ObjectGuid npcGuid);
-    static NPCEvent SpiritHealerConfirm(ObjectGuid playerGuid, ObjectGuid npcGuid);
-    static NPCEvent PetitionListReceived(ObjectGuid playerGuid, ObjectGuid npcGuid, uint32 petitionEntry);
-
-    bool IsValid() const;
-    std::string ToString() const;
-};
-
+/**
+ * @brief NPC Event Bus - Now powered by GenericEventBus template
+ *
+ * **Phase 5 Migration:** This EventBus is now a thin adapter over the
+ * GenericEventBus<NPCEvent> template, maintaining the INPCEventBus
+ * interface for backward compatibility while eliminating duplicate
+ * infrastructure code.
+ *
+ * **Architecture:**
+ * ```
+ * NPCEventBus (DI adapter) -> INPCEventBus (interface)
+ *                           -> EventBus<NPCEvent> (template infrastructure)
+ * ```
+ *
+ * **Supports Both:**
+ * - BotAI* subscriptions (via IEventHandler<NPCEvent>)
+ * - Callback subscriptions (via std::function<void(NPCEvent const&)>)
+ *
+ * **Code Reduction:** ~490 lines → ~120 lines (76% reduction)
+ */
 class TC_GAME_API NPCEventBus final : public INPCEventBus
 {
 public:
-    static NPCEventBus* instance();
-    bool PublishEvent(NPCEvent const& event) override;
+    static NPCEventBus* instance()
+    {
+        static NPCEventBus inst;
+        return &inst;
+    }
 
     using EventHandler = std::function<void(NPCEvent const&)>;
 
-    void Subscribe(BotAI* subscriber, std::vector<NPCEventType> const& types) override;
-    void SubscribeAll(BotAI* subscriber) override;
-    void Unsubscribe(BotAI* subscriber) override;
+    // Delegate all core functionality to template
+    bool PublishEvent(NPCEvent const& event) override
+    {
+        return EventBus<NPCEvent>::instance()->PublishEvent(event);
+    }
 
-    uint32 SubscribeCallback(EventHandler handler, std::vector<NPCEventType> const& types) override;
-    void UnsubscribeCallback(uint32 subscriptionId) override;
+    void Subscribe(BotAI* subscriber, std::vector<NPCEventType> const& types) override
+    {
+        EventBus<NPCEvent>::instance()->Subscribe(subscriber, types);
+    }
 
-    uint64 GetTotalEventsPublished() const override { return _totalEventsPublished; }
-    uint64 GetEventCount(NPCEventType type) const override;
+    void SubscribeAll(BotAI* subscriber) override
+    {
+        std::vector<NPCEventType> allTypes;
+        for (uint8 i = 0; i < static_cast<uint8>(NPCEventType::MAX_NPC_EVENT); ++i)
+            allTypes.push_back(static_cast<NPCEventType>(i));
+        EventBus<NPCEvent>::instance()->Subscribe(subscriber, allTypes);
+    }
+
+    void Unsubscribe(BotAI* subscriber) override
+    {
+        EventBus<NPCEvent>::instance()->Unsubscribe(subscriber);
+    }
+
+    // Callback subscription support
+    uint32 SubscribeCallback(EventHandler handler, std::vector<NPCEventType> const& types) override
+    {
+        return EventBus<NPCEvent>::instance()->SubscribeCallback(handler, types);
+    }
+
+    void UnsubscribeCallback(uint32 subscriptionId) override
+    {
+        EventBus<NPCEvent>::instance()->UnsubscribeCallback(subscriptionId);
+    }
+
+    // Statistics
+    uint64 GetTotalEventsPublished() const override
+    {
+        return EventBus<NPCEvent>::instance()->GetTotalEventsPublished();
+    }
+
+    uint64 GetEventCount(NPCEventType type) const override
+    {
+        return EventBus<NPCEvent>::instance()->GetEventCount(type);
+    }
 
 private:
     NPCEventBus() = default;
-    void DeliverEvent(NPCEvent const& event);
-
-    std::unordered_map<NPCEventType, std::vector<BotAI*>> _subscribers;
-    std::vector<BotAI*> _globalSubscribers;
-
-    struct CallbackSubscription
-    {
-        uint32 id;
-        EventHandler handler;
-        std::vector<NPCEventType> types;
-    };
-    std::vector<CallbackSubscription> _callbackSubscriptions;
-    uint32 _nextCallbackId = 1;
-
-    std::unordered_map<NPCEventType, uint64> _eventCounts;
-    uint64 _totalEventsPublished = 0;
-
-    mutable Playerbot::OrderedRecursiveMutex<Playerbot::LockOrder::BEHAVIOR_MANAGER> _subscriberMutex;
+    ~NPCEventBus() = default;
 };
 
 } // namespace Playerbot

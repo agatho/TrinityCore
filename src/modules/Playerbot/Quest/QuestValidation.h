@@ -68,7 +68,10 @@ struct ValidationResult
 class TC_GAME_API QuestValidation final : public IQuestValidation
 {
 public:
-    static QuestValidation* instance();
+    explicit QuestValidation(Player* bot);
+    ~QuestValidation();
+    QuestValidation(QuestValidation const&) = delete;
+    QuestValidation& operator=(QuestValidation const&) = delete;
 
     // Core validation methods
     bool ValidateQuestAcceptance(uint32 questId, Player* bot) override;
@@ -210,12 +213,12 @@ public:
     void Update(uint32 diff) override;
 
 private:
-    QuestValidation();
+    Player* _bot;
     ~QuestValidation() = default;
 
     // Validation cache
     std::unordered_map<uint64, ValidationResult> _validationCache; // (questId << 32 | botGuid) -> result
-    mutable Playerbot::OrderedRecursiveMutex<Playerbot::LockOrder::QUEST_MANAGER> _cacheMutex;
+    
 
     // Configuration
     std::atomic<bool> _strictValidation{true};

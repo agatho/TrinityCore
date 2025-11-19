@@ -37,15 +37,15 @@ public:
 
     // Core role assignment
     virtual bool AssignRoles(Group* group, RoleAssignmentStrategy strategy) = 0;
-    virtual bool AssignRole(uint32 playerGuid, GroupRole role, Group* group) = 0;
+    virtual bool AssignRole(GroupRole role, Group* group) = 0;
     virtual bool SwapRoles(uint32 player1Guid, uint32 player2Guid, Group* group) = 0;
     virtual void OptimizeRoleDistribution(Group* group) = 0;
 
     // Role analysis and scoring
-    virtual PlayerRoleProfile AnalyzePlayerCapabilities(Player* player) = 0;
-    virtual std::vector<RoleScore> CalculateRoleScores(Player* player, Group* group) = 0;
-    virtual GroupRole RecommendRole(Player* player, Group* group) = 0;
-    virtual float CalculateRoleSynergy(Player* player, GroupRole role, Group* group) = 0;
+    virtual PlayerRoleProfile AnalyzePlayerCapabilities() = 0;
+    virtual std::vector<RoleScore> CalculateRoleScores(Group* group) = 0;
+    virtual GroupRole RecommendRole(Group* group) = 0;
+    virtual float CalculateRoleSynergy(GroupRole role, Group* group) = 0;
 
     // Group composition analysis
     virtual GroupComposition AnalyzeGroupComposition(Group* group) = 0;
@@ -57,7 +57,7 @@ public:
     virtual void HandleRoleConflict(Group* group, GroupRole conflictedRole) = 0;
     virtual void RebalanceRoles(Group* group) = 0;
     virtual void AdaptToGroupChanges(Group* group, Player* newMember = nullptr, Player* leavingMember = nullptr) = 0;
-    virtual bool CanPlayerSwitchRole(Player* player, GroupRole newRole, Group* group) = 0;
+    virtual bool CanPlayerSwitchRole(GroupRole newRole, Group* group) = 0;
 
     // Content-specific role optimization
     virtual void OptimizeForDungeon(Group* group, uint32 dungeonId) = 0;
@@ -66,14 +66,14 @@ public:
     virtual void OptimizeForQuesting(Group* group, uint32 questId) = 0;
 
     // Role preferences and constraints
-    virtual void SetPlayerRolePreference(uint32 playerGuid, GroupRole preferredRole) = 0;
-    virtual GroupRole GetPlayerRolePreference(uint32 playerGuid) = 0;
-    virtual void SetRoleFlexibility(uint32 playerGuid, bool isFlexible) = 0;
-    virtual void AddRoleConstraint(uint32 playerGuid, GroupRole role, RoleCapability capability) = 0;
+    virtual void SetPlayerRolePreference(GroupRole preferredRole) = 0;
+    virtual GroupRole GetPlayerRolePreference() = 0;
+    virtual void SetRoleFlexibility(bool isFlexible) = 0;
+    virtual void AddRoleConstraint(GroupRole role, RoleCapability capability) = 0;
 
     // Role performance tracking
-    virtual RolePerformance GetPlayerRolePerformance(uint32 playerGuid, GroupRole role) = 0;
-    virtual void UpdateRolePerformance(uint32 playerGuid, GroupRole role, bool wasSuccessful, float effectiveness) = 0;
+    virtual RolePerformance GetPlayerRolePerformance(GroupRole role) = 0;
+    virtual void UpdateRolePerformance(GroupRole role, bool wasSuccessful, float effectiveness) = 0;
 
     // Role assignment validation
     virtual bool ValidateRoleAssignment(Group* group) = 0;

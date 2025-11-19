@@ -40,7 +40,10 @@ public:
     struct ObjectiveState;
     struct ObjectivePriority;
 
-    static ObjectiveTracker* instance();
+    explicit ObjectiveTracker(Player* bot);
+    ~ObjectiveTracker();
+    ObjectiveTracker(ObjectiveTracker const&) = delete;
+    ObjectiveTracker& operator=(ObjectiveTracker const&) = delete;
 
     // Core objective tracking
     void StartTrackingObjective(Player* bot, const QuestObjectiveData& objective) override;
@@ -184,14 +187,14 @@ public:
     Position FindObjectiveTargetLocation(Player* bot, const QuestObjectiveData& objective) override;
 
 private:
-    ObjectiveTracker();
+    Player* _bot;
     ~ObjectiveTracker() = default;
 
     // Tracking data storage
     std::unordered_map<uint32, std::vector<ObjectiveState>> _botObjectiveStates; // botGuid -> objectives
     std::unordered_map<uint32, std::vector<ObjectivePriority>> _botObjectivePriorities; // botGuid -> priorities
     std::unordered_map<uint32, ObjectiveAnalytics> _botAnalytics;
-    mutable Playerbot::OrderedRecursiveMutex<Playerbot::LockOrder::QUEST_MANAGER> _trackingMutex;
+    
 
     // Target tracking and caching
     struct TargetTrackingData
@@ -213,7 +216,7 @@ private:
     };
 
     std::unordered_map<uint32, TargetTrackingData> _targetTracking; // targetId -> data
-    mutable Playerbot::OrderedRecursiveMutex<Playerbot::LockOrder::QUEST_MANAGER> _targetMutex;
+    
 
     // Group coordination data
     std::unordered_map<uint32, std::unordered_map<uint32, uint32>> _groupObjectiveAssignments; // groupId -> memberGuid -> objectiveIndex

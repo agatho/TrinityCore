@@ -163,6 +163,21 @@ struct MovementArbiterConfig
 /**
  * Movement Arbiter
  *
+ * @deprecated This class is being migrated to UnifiedMovementCoordinator.
+ *             Direct usage of MovementArbiter will be removed in Week 3 of Phase 2 migration.
+ *             Use UnifiedMovementCoordinator instead, which consolidates MovementArbiter,
+ *             CombatMovementStrategy, GroupFormationManager, and MovementIntegration
+ *             into a single unified movement system.
+ *
+ *             Migration: See docs/playerbot/MOVEMENT_MIGRATION_GUIDE.md
+ *             New API:   bot->GetBotAI()->GetUnifiedMovementCoordinator()->RequestMovement(...)
+ *             Old API:   bot->GetBotAI()->GetMovementArbiter()->RequestMovement(...)
+ *
+ *             Timeline:
+ *             - Week 1: Both systems coexist (compatibility mode)
+ *             - Week 2: Primary systems migrated
+ *             - Week 3: MovementArbiter removed completely
+ *
  * Central coordinator for all PlayerBot movement requests.
  * Implements priority-based arbitration with deduplication.
  *

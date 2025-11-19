@@ -64,71 +64,71 @@ public:
 
     // Initialization
     virtual void Initialize() = 0;
-    virtual void Update(::Player* player, uint32 diff) = 0;
-    virtual void OnMatchStart(::Player* player) = 0;
-    virtual void OnMatchEnd(::Player* player, bool won) = 0;
+    virtual void Update(uint32 diff) = 0;
+    virtual void OnMatchStart() = 0;
+    virtual void OnMatchEnd(bool won) = 0;
 
     // Strategy selection
-    virtual void AnalyzeTeamComposition(::Player* player) = 0;
+    virtual void AnalyzeTeamComposition() = 0;
     virtual ArenaStrategy GetStrategyForComposition(TeamComposition teamComp, TeamComposition enemyComp) const = 0;
-    virtual void AdaptStrategy(::Player* player) = 0;
+    virtual void AdaptStrategy() = 0;
 
     // Target selection
-    virtual ::Unit* SelectFocusTarget(::Player* player) const = 0;
-    virtual bool ShouldSwitchTarget(::Player* player, ::Unit* currentTarget) const = 0;
-    virtual std::vector<::Unit*> GetKillTargetPriority(::Player* player) const = 0;
+    virtual ::Unit* SelectFocusTarget() const = 0;
+    virtual bool ShouldSwitchTarget(::Unit* currentTarget) const = 0;
+    virtual std::vector<::Unit*> GetKillTargetPriority() const = 0;
 
     // Positioning
-    virtual void ExecutePositioning(::Player* player) = 0;
-    virtual ArenaPillar const* FindBestPillar(::Player* player) const = 0;
-    virtual bool MoveToPillar(::Player* player, ArenaPillar const& pillar) = 0;
-    virtual bool IsUsingPillarEffectively(::Player* player) const = 0;
-    virtual bool MaintainOptimalDistance(::Player* player) = 0;
-    virtual bool RegroupWithTeam(::Player* player) = 0;
+    virtual void ExecutePositioning() = 0;
+    virtual ArenaPillar const* FindBestPillar() const = 0;
+    virtual bool MoveToPillar(ArenaPillar const& pillar) = 0;
+    virtual bool IsUsingPillarEffectively() const = 0;
+    virtual bool MaintainOptimalDistance() = 0;
+    virtual bool RegroupWithTeam() = 0;
 
     // Pillar kiting
-    virtual bool ShouldPillarKite(::Player* player) const = 0;
-    virtual bool ExecutePillarKite(::Player* player) = 0;
-    virtual bool BreakLoSWithPillar(::Player* player, ::Unit* enemy) = 0;
+    virtual bool ShouldPillarKite() const = 0;
+    virtual bool ExecutePillarKite() = 0;
+    virtual bool BreakLoSWithPillar(::Unit* enemy) = 0;
 
     // Cooldown coordination
-    virtual bool CoordinateOffensiveBurst(::Player* player) = 0;
-    virtual bool IsTeamReadyForBurst(::Player* player) const = 0;
-    virtual void SignalBurst(::Player* player) = 0;
+    virtual bool CoordinateOffensiveBurst() = 0;
+    virtual bool IsTeamReadyForBurst() const = 0;
+    virtual void SignalBurst() = 0;
 
     // CC coordination
-    virtual bool CoordinateCCChain(::Player* player, ::Unit* target) = 0;
-    virtual bool TeammateHasCCAvailable(::Player* player) const = 0;
-    virtual void SignalCCTarget(::Player* player, ::Unit* target) = 0;
+    virtual bool CoordinateCCChain(::Unit* target) = 0;
+    virtual bool TeammateHasCCAvailable() const = 0;
+    virtual void SignalCCTarget(::Unit* target) = 0;
 
     // Comp-specific strategies
-    virtual void Execute2v2Strategy(::Player* player) = 0;
-    virtual void Execute2v2DoubleDPS(::Player* player) = 0;
-    virtual void Execute2v2DPSHealer(::Player* player) = 0;
-    virtual void Execute3v3Strategy(::Player* player) = 0;
-    virtual void Execute3v3TripleDPS(::Player* player) = 0;
-    virtual void Execute3v3DoubleDPSHealer(::Player* player) = 0;
-    virtual void Execute3v3TankDPSHealer(::Player* player) = 0;
-    virtual void Execute5v5Strategy(::Player* player) = 0;
+    virtual void Execute2v2Strategy() = 0;
+    virtual void Execute2v2DoubleDPS() = 0;
+    virtual void Execute2v2DPSHealer() = 0;
+    virtual void Execute3v3Strategy() = 0;
+    virtual void Execute3v3TripleDPS() = 0;
+    virtual void Execute3v3DoubleDPSHealer() = 0;
+    virtual void Execute3v3TankDPSHealer() = 0;
+    virtual void Execute5v5Strategy() = 0;
 
     // Composition counters
     virtual ArenaStrategy GetCounterStrategy(TeamComposition enemyComp) const = 0;
-    virtual void CounterRMP(::Player* player) = 0;
-    virtual void CounterTSG(::Player* player) = 0;
-    virtual void CounterTurboCleave(::Player* player) = 0;
+    virtual void CounterRMP() = 0;
+    virtual void CounterTSG() = 0;
+    virtual void CounterTurboCleave() = 0;
 
     // Match state tracking
-    virtual ArenaMatchState GetMatchState(::Player* player) const = 0;
-    virtual void UpdateMatchState(::Player* player) = 0;
-    virtual bool IsTeamWinning(::Player* player) const = 0;
-    virtual uint32 GetMatchDuration(::Player* player) const = 0;
+    virtual ArenaMatchState GetMatchState() const = 0;
+    virtual void UpdateMatchState() = 0;
+    virtual bool IsTeamWinning() const = 0;
+    virtual uint32 GetMatchDuration() const = 0;
 
     // Profiles
-    virtual void SetArenaProfile(uint32 playerGuid, ArenaProfile const& profile) = 0;
-    virtual ArenaProfile GetArenaProfile(uint32 playerGuid) const = 0;
+    virtual void SetArenaProfile(ArenaProfile const& profile) = 0;
+    virtual ArenaProfile GetArenaProfile() const = 0;
 
     // Metrics
-    virtual ArenaMetrics const& GetPlayerMetrics(uint32 playerGuid) const = 0;
+    virtual ArenaMetrics const& GetMetrics() const = 0;
     virtual ArenaMetrics const& GetGlobalMetrics() const = 0;
 };
 

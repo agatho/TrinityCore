@@ -69,11 +69,11 @@ struct TargetPriority
  * @brief Unified healing target selection for all healer specs
  *
  * **Problem**: SelectHealingTarget() duplicated 8+ times across healer specs
- * - HolyPriestRefactored.h
- * - MistweaverMonkRefactored.h
- * - HolyPaladinRefactored.h
- * - RestorationDruidRefactored.h
- * - RestorationShamanRefactored.h
+ * - HolyPriest.h
+ * - MistweaverMonk.h
+ * - HolyPaladin.h
+ * - RestorationDruid.h
+ * - RestorationShaman.h
  * - 3+ other specs
  * - Total: ~1,600 lines of duplication
  *

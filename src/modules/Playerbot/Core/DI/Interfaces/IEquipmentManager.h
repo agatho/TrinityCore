@@ -34,10 +34,16 @@ namespace Playerbot
     enum class ItemCategory : uint8;
 
 /**
- * @brief Interface for Equipment Management
+ * @brief Interface for Equipment Management (Phase 6.1 - Per-Bot Pattern)
  *
  * Abstracts equipment evaluation, comparison, and auto-equip functionality
  * to enable dependency injection and testing.
+ *
+ * **Phase 6.1 Conversion**: Singleton → Per-Bot Instance
+ * - Each bot has its own EquipmentManager instance
+ * - No Player* parameters needed (manager owns bot reference)
+ * - Zero mutex locking (per-bot isolation)
+ * - Owned by GameSystemsManager (24th manager)
  *
  * **Responsibilities:**
  * - Evaluate and compare items for upgrades
@@ -52,9 +58,9 @@ namespace Playerbot
  *
  * Example:
  * @code
- * auto equipMgr = Services::Container().Resolve<IEquipmentManager>();
- * equipMgr->AutoEquipBestGear(player);
- * auto junkItems = equipMgr->IdentifyJunkItems(player);
+ * auto equipMgr = botAI->GetGameSystems()->GetEquipmentManager();
+ * equipMgr->AutoEquipBestGear();
+ * auto junkItems = equipMgr->IdentifyJunkItems();
  * @endcode
  */
 class TC_GAME_API IEquipmentManager
@@ -89,66 +95,58 @@ public:
     virtual ~IEquipmentManager() = default;
 
     /**
-     * @brief Auto-equip best gear from inventory
-     * @param player Player to equip
+     * @brief Auto-equip best gear from inventory (operates on bot instance)
      */
-    virtual void AutoEquipBestGear(::Player* player) = 0;
+    virtual void AutoEquipBestGear() = 0;
 
     /**
      * @brief Compare two items for upgrade
-     * @param player Player context
      * @param currentItem Currently equipped item
      * @param newItem New item to compare
      * @return Comparison result
      */
-    virtual ItemComparisonResult CompareItems(::Player* player, ::Item* currentItem, ::Item* newItem) = 0;
+    virtual ItemComparisonResult CompareItems(::Item* currentItem, ::Item* newItem) = 0;
 
     /**
      * @brief Calculate item score based on stat priorities
-     * @param player Player context
      * @param item Item to score
      * @return Item score
      */
-    virtual float CalculateItemScore(::Player* player, ::Item* item) = 0;
+    virtual float CalculateItemScore(::Item* item) = 0;
 
     /**
      * @brief Check if item is an upgrade
-     * @param player Player context
      * @param item Item to check
      * @return true if upgrade, false otherwise
      */
-    virtual bool IsItemUpgrade(::Player* player, ::Item* item) = 0;
+    virtual bool IsItemUpgrade(::Item* item) = 0;
 
     /**
      * @brief Calculate score for item template (quest rewards, vendors)
-     * @param player Player context
      * @param itemTemplate Item template to score
      * @return Item score
      */
-    virtual float CalculateItemTemplateScore(::Player* player, ItemTemplate const* itemTemplate) = 0;
+    virtual float CalculateItemTemplateScore(ItemTemplate const* itemTemplate) = 0;
 
     /**
      * @brief Identify junk items in inventory
-     * @param player Player to scan
      * @return List of junk item GUIDs
      */
-    virtual std::vector<ObjectGuid> IdentifyJunkItems(::Player* player) = 0;
+    virtual std::vector<ObjectGuid> IdentifyJunkItems() = 0;
 
     /**
      * @brief Check if item is junk
-     * @param player Player context
      * @param item Item to check
      * @return true if junk, false otherwise
      */
-    virtual bool IsJunkItem(::Player* player, ::Item* item) = 0;
+    virtual bool IsJunkItem(::Item* item) = 0;
 
     /**
      * @brief Check if item is protected from selling
-     * @param player Player context
      * @param item Item to check
      * @return true if protected, false otherwise
      */
-    virtual bool IsProtectedItem(::Player* player, ::Item* item) = 0;
+    virtual bool IsProtectedItem(::Item* item) = 0;
 
     /**
      * @brief Check if BoE item is valuable for AH
@@ -158,28 +156,25 @@ public:
     virtual bool IsValuableBoE(::Item* item) = 0;
 
     /**
-     * @brief Get consumable needs for player
-     * @param player Player to check
+     * @brief Get consumable needs for this bot
      * @return Map of itemId -> quantity needed
      */
-    virtual std::unordered_map<uint32, uint32> GetConsumableNeeds(::Player* player) = 0;
+    virtual std::unordered_map<uint32, uint32> GetConsumableNeeds() = 0;
 
     /**
-     * @brief Check if player needs consumable restocking
-     * @param player Player to check
+     * @brief Check if this bot needs consumable restocking
      * @return true if needs restocking, false otherwise
      */
-    virtual bool NeedsConsumableRestocking(::Player* player) = 0;
+    virtual bool NeedsConsumableRestocking() = 0;
 
     /**
-     * @brief Get player-specific metrics
-     * @param playerGuid Player GUID
+     * @brief Get metrics for this bot
      * @return Equipment metrics
      */
-    virtual EquipmentMetrics const& GetPlayerMetrics(uint32 playerGuid) = 0;
+    virtual EquipmentMetrics const& GetMetrics() = 0;
 
     /**
-     * @brief Get global metrics
+     * @brief Get global metrics across all bots
      * @return Global equipment metrics
      */
     virtual EquipmentMetrics const& GetGlobalMetrics() = 0;

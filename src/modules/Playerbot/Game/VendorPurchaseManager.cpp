@@ -26,6 +26,8 @@
 #include "ObjectAccessor.h"
 #include "ObjectMgr.h"
 #include "Player.h"
+#include "AI/BotAI.h"
+#include "Core/Managers/GameSystemsManager.h"
 #include <algorithm>
 #include <cmath>
 
@@ -280,9 +282,23 @@ namespace Playerbot
         if (!(itemTemplate->GetAllowableClass() & player->GetClassMask()))
             return false;
 
-        // Delegate to EquipmentManager for gear evaluation
-        // This ensures consistent gear scoring across all bot systems
-        EquipmentManager* equipMgr = EquipmentManager::instance();
+        // Get EquipmentManager from bot's GameSystemsManager (Phase 6.1)
+        Player* mutablePlayer = const_cast<Player*>(player);
+        BotAI* botAI = dynamic_cast<BotAI*>(mutablePlayer->GetAI());
+
+        // Only bots have EquipmentManager - non-bots can't use this feature
+        if (!botAI)
+        {
+            TC_LOG_DEBUG("playerbot.vendor", "VendorPurchaseManager: Player is not a bot, cannot evaluate gear");
+            return false;
+        }
+
+        EquipmentManager* equipMgr = botAI->GetGameSystems()->GetEquipmentManager();
+        if (!equipMgr)
+        {
+            TC_LOG_ERROR("playerbot.vendor", "VendorPurchaseManager: EquipmentManager not available");
+            return false;
+        }
 
         // Get equipment slot for this item
         uint8 equipSlot = equipMgr->GetItemEquipmentSlot(itemTemplate);
@@ -293,10 +309,10 @@ namespace Playerbot
         }
 
         // Get currently equipped item in that slot
-        Player* mutablePlayer = const_cast<Player*>(player);
         Item* currentItem = mutablePlayer->GetItemByPos(INVENTORY_SLOT_BAG_0, equipSlot);
+
         // Calculate score for vendor item using class/spec stat priorities
-        float vendorItemScore = equipMgr->CalculateItemTemplateScore(mutablePlayer, itemTemplate);
+        float vendorItemScore = equipMgr->CalculateItemTemplateScore(itemTemplate);
 
         // If no item equipped, vendor item is an upgrade if it has positive score
         if (!currentItem)
@@ -312,7 +328,7 @@ namespace Playerbot
         }
 
         // Calculate score for currently equipped item
-        float currentItemScore = equipMgr->CalculateItemScore(mutablePlayer, currentItem);
+        float currentItemScore = equipMgr->CalculateItemScore(currentItem);
 
         // Compare scores
         float scoreDifference = vendorItemScore - currentItemScore;

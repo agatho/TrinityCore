@@ -17,7 +17,7 @@
 
 #include "catch2/catch_test_macros.hpp"
 #include "AI/Coordination/RoleCoordinator.h"
-#include "AI/Coordination/GroupCoordinator.h"
+// Note: Old AI/Coordination/GroupCoordinator removed - now using Advanced/GroupCoordinator with TacticalCoordinator
 
 using namespace Playerbot;
 

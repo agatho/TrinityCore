@@ -20,7 +20,7 @@
 #include "CellImpl.h"
 #include "../../Spatial/SpatialGridManager.h"
 #include "ObjectAccessor.h"
-#include "../../Movement/Arbiter/MovementArbiter.h"
+#include "../../Movement/UnifiedMovementCoordinator.h  // Phase 2: Unified movement system"
 #include "../../Movement/Arbiter/MovementPriorityMapper.h"
 #include "../BotAI.h"
 #include "UnitAI.h"
@@ -904,7 +904,7 @@ bool KitingManager::ExecuteMovementToPosition(const Position& target)
     {
         // PHASE 6B: Use Movement Arbiter with KITING priority (175)
         BotAI* botAI = dynamic_cast<BotAI*>(_bot->GetAI());
-        if (botAI && botAI->GetMovementArbiter())
+        if (botAI && botAI->GetUnifiedMovementCoordinator())
         {
             bool accepted = botAI->RequestPointMovement(
                 PlayerBotMovementPriority::KITING,

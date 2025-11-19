@@ -5,9 +5,16 @@
  * under the terms of the GNU General Public License as published by the
  * Free Software Foundation; either version 2 of the License, or (at your
  * option) any later version.
+ *
+ * Phase 1B Refactoring (2025-11-18):
+ * - Converted from global singleton to per-bot instance
+ * - Removed Initialize() - now in ProfessionDatabase
+ * - All methods now operate on _bot member (no Player* parameters)
+ * - Shared data queries delegate to ProfessionDatabase
  */
 
 #include "ProfessionManager.h"
+#include "ProfessionDatabase.h"
 #include "Player.h"
 #include "Item.h"
 #include "Bag.h"
@@ -23,387 +30,88 @@ namespace Playerbot
 {
 
 // ============================================================================
-// SINGLETON
+// STATIC MEMBERS
 // ============================================================================
 
-ProfessionManager* ProfessionManager::instance()
+ProfessionManager::ProfessionMetrics ProfessionManager::_globalMetrics;
+
+// ============================================================================
+// CONSTRUCTOR / DESTRUCTOR
+// ============================================================================
+
+ProfessionManager::ProfessionManager(Player* bot)
+    : _bot(bot)
+    , _lastUpdateTime(0)
 {
-    static ProfessionManager instance;
-    return &instance;
+    if (_bot)
+    {
+        TC_LOG_DEBUG("playerbot", "ProfessionManager: Creating instance for bot '{}'", _bot->GetName());
+    }
 }
 
-ProfessionManager::ProfessionManager()
+ProfessionManager::~ProfessionManager()
 {
+    if (_bot)
+    {
+        TC_LOG_DEBUG("playerbot", "ProfessionManager: Destroying instance for bot '{}'", _bot->GetName());
+    }
 }
 
 // ============================================================================
-// INITIALIZATION
+// INITIALIZATION (NOW NO-OP)
 // ============================================================================
 
 void ProfessionManager::Initialize()
 {
-    TC_LOG_INFO("playerbots", "ProfessionManager: Initializing profession system...");
-
-    LoadRecipeDatabase();
-    LoadProfessionRecommendations();
-    InitializeClassProfessions();
-    InitializeProfessionPairs();
-    InitializeRaceBonuses();
-
-    TC_LOG_INFO("playerbots", "ProfessionManager: Initialized {} recipes, {} profession pairs, {} racial bonuses",
-        _recipeDatabase.size(), _professionPairs.size(), _raceBonuses.size());
-}
-
-void ProfessionManager::LoadRecipeDatabase()
-{
-    _recipeDatabase.clear();
-    _professionRecipes.clear();
-
-    uint32 recipeCount = 0;
-
-    // Iterate all SkillLineAbility entries from DB2
-    for (SkillLineAbilityEntry const* ability : sSkillLineAbilityStore)
-    {
-        if (!ability)
-            continue;
-
-        // Check if this is a profession skill
-        ProfessionType profession = GetProfessionTypeFromSkillId(ability->SkillLine);
-        if (profession == ProfessionType::NONE)
-            continue;
-
-        // Get spell info
-        SpellInfo const* spellInfo = sSpellMgr->GetSpellInfo(ability->Spell, DIFFICULTY_NONE);
-        if (!spellInfo)
-            continue;
-
-        // Create recipe info
-        RecipeInfo recipe;
-        recipe.spellId = ability->Spell;
-        recipe.recipeId = ability->ID;  // Use SkillLineAbility ID as recipe ID
-        recipe.profession = profession;
-        recipe.requiredSkill = ability->MinSkillLineRank;
-
-        // Calculate skill-up thresholds
-        recipe.skillUpOrange = ability->TrivialSkillLineRankHigh;
-        recipe.skillUpYellow = (ability->TrivialSkillLineRankHigh + ability->TrivialSkillLineRankLow) / 2;
-        recipe.skillUpGreen = ability->TrivialSkillLineRankLow;
-        recipe.skillUpGray = (ability->TrivialSkillLineRankLow > 25) ? (ability->TrivialSkillLineRankLow - 25) : 0;
-
-        // Determine acquisition method
-        SkillLineAbilityAcquireMethod acquireMethod = ability->GetAcquireMethod();
-        if (acquireMethod == SkillLineAbilityAcquireMethod::Learned ||
-            acquireMethod == SkillLineAbilityAcquireMethod::AutomaticSkillRank ||
-            acquireMethod == SkillLineAbilityAcquireMethod::LearnedOrAutomaticCharLevel)
-        {
-            recipe.isTrainer = true;
-            recipe.isDiscovery = false;
-            recipe.isWorldDrop = false;
-        }
-        else
-        {
-            recipe.isTrainer = false;
-            recipe.isDiscovery = false;
-            recipe.isWorldDrop = true;
-        }
-
-        // Extract reagents from SpellReagents DB2
-        for (SpellReagentsEntry const* reagents : sSpellReagentsStore)
-        {
-            if (reagents->SpellID == static_cast<int32>(ability->Spell))
-            {
-                for (uint8 i = 0; i < MAX_SPELL_REAGENTS; ++i)
-                {
-                    if (reagents->Reagent[i] > 0)
-                    {
-                        RecipeInfo::Reagent reagent;
-                        reagent.itemId = reagents->Reagent[i];
-                        reagent.quantity = reagents->ReagentCount[i];
-                        recipe.reagents.push_back(reagent);
-                    }
-                }
-                break;  // Found reagents, no need to continue
-            }
-        }
-
-        // Extract product item from spell effects
-        for (SpellEffectInfo const& effect : spellInfo->GetEffects())
-        {
-            if (effect.Effect == SPELL_EFFECT_CREATE_ITEM)
-            {
-                recipe.productItemId = effect.ItemType;
-                // Try to get quantity from BasePoints (often 1)
-                recipe.productQuantity = (effect.BasePoints > 0) ? effect.BasePoints : 1;
-                break;
-            }
-        }
-
-        // Only add if recipe has a product (is actually a crafting spell)
-        if (recipe.productItemId > 0)
-        {
-            _recipeDatabase[recipe.recipeId] = recipe;
-            _professionRecipes[profession].push_back(recipe.recipeId);
-            recipeCount++;
-        }
-    }
-
-    TC_LOG_INFO("playerbots", "ProfessionManager: Loaded {} recipes from SkillLineAbility DB2", recipeCount);
-}
-
-// Helper method to convert skill ID to profession type
-ProfessionType ProfessionManager::GetProfessionTypeFromSkillId(uint16 skillId) const
-{
-    switch (skillId)
-    {
-        case SKILL_ALCHEMY:         return ProfessionType::ALCHEMY;
-        case SKILL_BLACKSMITHING:   return ProfessionType::BLACKSMITHING;
-        case SKILL_ENCHANTING:      return ProfessionType::ENCHANTING;
-        case SKILL_ENGINEERING:     return ProfessionType::ENGINEERING;
-        case SKILL_INSCRIPTION:     return ProfessionType::INSCRIPTION;
-        case SKILL_JEWELCRAFTING:   return ProfessionType::JEWELCRAFTING;
-        case SKILL_LEATHERWORKING:  return ProfessionType::LEATHERWORKING;
-        case SKILL_TAILORING:       return ProfessionType::TAILORING;
-        case SKILL_MINING:          return ProfessionType::MINING;
-        case SKILL_HERBALISM:       return ProfessionType::HERBALISM;
-        case SKILL_SKINNING:        return ProfessionType::SKINNING;
-        case SKILL_COOKING:         return ProfessionType::COOKING;
-        case SKILL_FISHING:         return ProfessionType::FISHING;
-        case 129:                   return ProfessionType::FIRST_AID;  // First Aid
-        default:                    return ProfessionType::NONE;
-    }
-}
-
-void ProfessionManager::LoadProfessionRecommendations()
-{
-    _classRecommendations.clear();
-
-    InitializeWarriorProfessions();
-    InitializePaladinProfessions();
-    InitializeHunterProfessions();
-    InitializeRogueProfessions();
-    InitializePriestProfessions();
-    InitializeShamanProfessions();
-    InitializeMageProfessions();
-    InitializeWarlockProfessions();
-    InitializeDruidProfessions();
-    InitializeDeathKnightProfessions();
-    InitializeMonkProfessions();
-    InitializeDemonHunterProfessions();
-    InitializeEvokerProfessions();
-
-    TC_LOG_DEBUG("playerbots", "ProfessionManager: Loaded recommendations for {} classes",
-        _classRecommendations.size());
-}
-
-void ProfessionManager::InitializeClassProfessions()
-{
-    // Already done in LoadProfessionRecommendations
-}
-
-// ============================================================================
-// CLASS-SPECIFIC PROFESSION RECOMMENDATIONS
-// ============================================================================
-
-void ProfessionManager::InitializeWarriorProfessions()
-{
-    // Warriors wear plate: Blacksmithing + Mining
-    // Alternative: Engineering for gadgets
-    _classRecommendations[CLASS_WARRIOR] = {
-        ProfessionType::BLACKSMITHING,
-        ProfessionType::MINING,
-        ProfessionType::ENGINEERING
-    };
-}
-
-void ProfessionManager::InitializePaladinProfessions()
-{
-    // Paladins wear plate: Blacksmithing + Mining
-    // Alternative: Jewelcrafting for gems
-    _classRecommendations[CLASS_PALADIN] = {
-        ProfessionType::BLACKSMITHING,
-        ProfessionType::MINING,
-        ProfessionType::JEWELCRAFTING
-    };
-}
-
-void ProfessionManager::InitializeHunterProfessions()
-{
-    // Hunters wear mail: Leatherworking + Skinning
-    // Alternative: Engineering for ranged weapons
-    _classRecommendations[CLASS_HUNTER] = {
-        ProfessionType::LEATHERWORKING,
-        ProfessionType::SKINNING,
-        ProfessionType::ENGINEERING
-    };
-}
-
-void ProfessionManager::InitializeRogueProfessions()
-{
-    // Rogues wear leather: Leatherworking + Skinning
-    // Alternative: Engineering for gadgets
-    _classRecommendations[CLASS_ROGUE] = {
-        ProfessionType::LEATHERWORKING,
-        ProfessionType::SKINNING,
-        ProfessionType::ENGINEERING
-    };
-}
-
-void ProfessionManager::InitializePriestProfessions()
-{
-    // Priests wear cloth: Tailoring + Enchanting
-    // Alternative: Alchemy for potions
-    _classRecommendations[CLASS_PRIEST] = {
-        ProfessionType::TAILORING,
-        ProfessionType::ENCHANTING,
-        ProfessionType::ALCHEMY,
-        ProfessionType::HERBALISM
-    };
-}
-
-void ProfessionManager::InitializeShamanProfessions()
-{
-    // Shamans wear mail: Leatherworking + Skinning (or Blacksmithing + Mining)
-    // Alternative: Alchemy for potions, Jewelcrafting
-    _classRecommendations[CLASS_SHAMAN] = {
-        ProfessionType::LEATHERWORKING,
-        ProfessionType::SKINNING,
-        ProfessionType::ALCHEMY,
-        ProfessionType::HERBALISM,
-        ProfessionType::JEWELCRAFTING
-    };
-}
-
-void ProfessionManager::InitializeMageProfessions()
-{
-    // Mages wear cloth: Tailoring + Enchanting
-    // Alternative: Alchemy for potions
-    _classRecommendations[CLASS_MAGE] = {
-        ProfessionType::TAILORING,
-        ProfessionType::ENCHANTING,
-        ProfessionType::ALCHEMY,
-        ProfessionType::HERBALISM
-    };
-}
-
-void ProfessionManager::InitializeWarlockProfessions()
-{
-    // Warlocks wear cloth: Tailoring + Enchanting
-    // Alternative: Alchemy for potions
-    _classRecommendations[CLASS_WARLOCK] = {
-        ProfessionType::TAILORING,
-        ProfessionType::ENCHANTING,
-        ProfessionType::ALCHEMY,
-        ProfessionType::HERBALISM
-    };
-}
-
-void ProfessionManager::InitializeDruidProfessions()
-{
-    // Druids wear leather: Leatherworking + Skinning
-    // Alternative: Alchemy for potions, Herbalism
-    _classRecommendations[CLASS_DRUID] = {
-        ProfessionType::LEATHERWORKING,
-        ProfessionType::SKINNING,
-        ProfessionType::ALCHEMY,
-        ProfessionType::HERBALISM
-    };
-}
-
-void ProfessionManager::InitializeDeathKnightProfessions()
-{
-    // Death Knights wear plate: Blacksmithing + Mining
-    // Alternative: Jewelcrafting
-    _classRecommendations[CLASS_DEATH_KNIGHT] = {
-        ProfessionType::BLACKSMITHING,
-        ProfessionType::MINING,
-        ProfessionType::JEWELCRAFTING
-    };
-}
-
-void ProfessionManager::InitializeMonkProfessions()
-{
-    // Monks wear leather: Leatherworking + Skinning
-    // Alternative: Alchemy for potions
-    _classRecommendations[CLASS_MONK] = {
-        ProfessionType::LEATHERWORKING,
-        ProfessionType::SKINNING,
-        ProfessionType::ALCHEMY,
-        ProfessionType::HERBALISM
-    };
-}
-
-void ProfessionManager::InitializeDemonHunterProfessions()
-{
-    // Demon Hunters wear leather: Leatherworking + Skinning
-    // Alternative: Alchemy
-    _classRecommendations[CLASS_DEMON_HUNTER] = {
-        ProfessionType::LEATHERWORKING,
-        ProfessionType::SKINNING,
-        ProfessionType::ALCHEMY,
-        ProfessionType::HERBALISM
-    };
-}
-
-void ProfessionManager::InitializeEvokerProfessions()
-{
-    // Evokers wear mail: Leatherworking + Skinning (or Blacksmithing + Mining)
-    // Alternative: Jewelcrafting, Enchanting
-    _classRecommendations[CLASS_EVOKER] = {
-        ProfessionType::LEATHERWORKING,
-        ProfessionType::SKINNING,
-        ProfessionType::JEWELCRAFTING,
-        ProfessionType::ENCHANTING
-    };
+    // No-op: Shared data initialization moved to ProfessionDatabase::instance()->Initialize()
+    // This method kept for interface compatibility
 }
 
 // ============================================================================
 // CORE PROFESSION MANAGEMENT
 // ============================================================================
 
-void ProfessionManager::Update(::Player* player, uint32 diff)
+void ProfessionManager::Update(uint32 diff)
 {
-    if (!player)
+    if (!_bot)
         return;
-
-    uint32 playerGuid = player->GetGUID().GetCounter();
 
     // Throttle updates to PROFESSION_UPDATE_INTERVAL
     uint32 now = GameTime::GetGameTimeMS();
-    if (_lastUpdateTimes[playerGuid] + PROFESSION_UPDATE_INTERVAL > now)
+    if (_lastUpdateTime + PROFESSION_UPDATE_INTERVAL > now)
         return;
 
-    _lastUpdateTimes[playerGuid] = now;
+    _lastUpdateTime = now;
 
     // Auto-learn professions if none learned
-    ProfessionAutomationProfile const& profile = GetAutomationProfile(playerGuid);
-    if (profile.autoLearnProfessions)
+    if (_profile.autoLearnProfessions)
     {
-        std::vector<ProfessionSkillInfo> professions = GetPlayerProfessions(player);
+        std::vector<ProfessionSkillInfo> professions = GetPlayerProfessions();
         if (professions.empty())
         {
-            AutoLearnProfessionsForClass(player);
+            AutoLearnProfessionsForClass();
         }
     }
 
     // Process crafting queue
-    if (profile.autoLevelProfessions)
+    if (_profile.autoLevelProfessions)
     {
-        ProcessCraftingQueue(player, diff);
+        ProcessCraftingQueue(diff);
     }
 }
 
-bool ProfessionManager::LearnProfession(::Player* player, ProfessionType profession)
+bool ProfessionManager::LearnProfession(ProfessionType profession)
 {
-    if (!player || profession == ProfessionType::NONE)
+    if (!_bot || profession == ProfessionType::NONE)
         return false;
 
     uint32 skillId = static_cast<uint32>(profession);
 
     // Check if already has profession
-    if (player->HasSkill(skillId))
+    if (_bot->HasSkill(skillId))
     {
         TC_LOG_DEBUG("playerbots", "Player {} already has profession {}",
-            player->GetName(), skillId);
+            _bot->GetName(), skillId);
         return false;
     }
 
@@ -413,7 +121,7 @@ bool ProfessionManager::LearnProfession(::Player* player, ProfessionType profess
     {
         // Count current major professions
         uint32 majorProfessionCount = 0;
-        std::vector<ProfessionSkillInfo> currentProfessions = GetPlayerProfessions(player);
+        std::vector<ProfessionSkillInfo> currentProfessions = GetPlayerProfessions();
         for (ProfessionSkillInfo const& info : currentProfessions)
         {
             if (info.isPrimary)
@@ -424,55 +132,54 @@ bool ProfessionManager::LearnProfession(::Player* player, ProfessionType profess
         if (majorProfessionCount >= 2)
         {
             TC_LOG_WARN("playerbots", "Player {} already has 2 major professions, cannot learn {}",
-                player->GetName(), skillId);
+                _bot->GetName(), skillId);
             return false;
         }
     }
 
     // Learn profession (set skill to 1, max based on level)
-    uint16 maxSkill = std::min<uint16>(player->GetLevel() * 5, 450);
-    player->SetSkill(skillId, 1, 1, maxSkill);
+    uint16 maxSkill = std::min<uint16>(_bot->GetLevel() * 5, 450);
+    _bot->SetSkill(skillId, 1, 1, maxSkill);
 
     TC_LOG_DEBUG("playerbots", "Player {} learned profession {} (max skill: {})",
-        player->GetName(), skillId, maxSkill);
+        _bot->GetName(), skillId, maxSkill);
 
     // Update metrics
-    // No lock needed - profession data is per-bot instance data
-    _playerMetrics[player->GetGUID().GetCounter()].professionsLearned++;
+    _metrics.professionsLearned++;
     _globalMetrics.professionsLearned++;
 
     return true;
 }
 
-bool ProfessionManager::HasProfession(::Player* player, ProfessionType profession) const
+bool ProfessionManager::HasProfession(ProfessionType profession) const
 {
-    if (!player || profession == ProfessionType::NONE)
+    if (!_bot || profession == ProfessionType::NONE)
         return false;
 
-    return player->HasSkill(static_cast<uint32>(profession));
+    return _bot->HasSkill(static_cast<uint32>(profession));
 }
 
-uint16 ProfessionManager::GetProfessionSkill(::Player* player, ProfessionType profession) const
+uint16 ProfessionManager::GetProfessionSkill(ProfessionType profession) const
 {
-    if (!player || profession == ProfessionType::NONE)
+    if (!_bot || profession == ProfessionType::NONE)
         return 0;
 
-    return player->GetSkillValue(static_cast<uint32>(profession));
+    return _bot->GetSkillValue(static_cast<uint32>(profession));
 }
 
-uint16 ProfessionManager::GetMaxProfessionSkill(::Player* player, ProfessionType profession) const
+uint16 ProfessionManager::GetMaxProfessionSkill(ProfessionType profession) const
 {
-    if (!player || profession == ProfessionType::NONE)
+    if (!_bot || profession == ProfessionType::NONE)
         return 0;
 
-    return player->GetMaxSkillValue(static_cast<uint32>(profession));
+    return _bot->GetMaxSkillValue(static_cast<uint32>(profession));
 }
 
-std::vector<ProfessionSkillInfo> ProfessionManager::GetPlayerProfessions(::Player* player) const
+std::vector<ProfessionSkillInfo> ProfessionManager::GetPlayerProfessions() const
 {
     std::vector<ProfessionSkillInfo> professions;
 
-    if (!player)
+    if (!_bot)
         return professions;
 
     // Check all profession types
@@ -495,12 +202,12 @@ std::vector<ProfessionSkillInfo> ProfessionManager::GetPlayerProfessions(::Playe
 
     for (ProfessionType profession : allProfessions)
     {
-        if (HasProfession(player, profession))
+        if (HasProfession(profession))
         {
             ProfessionSkillInfo info;
             info.profession = profession;
-            info.currentSkill = GetProfessionSkill(player, profession);
-            info.maxSkill = GetMaxProfessionSkill(player, profession);
+            info.currentSkill = GetProfessionSkill(profession);
+            info.maxSkill = GetMaxProfessionSkill(profession);
             info.lastUpdate = GameTime::GetGameTimeMS();
             info.isPrimary = GetProfessionCategory(profession) != ProfessionCategory::SECONDARY;
 
@@ -511,21 +218,21 @@ std::vector<ProfessionSkillInfo> ProfessionManager::GetPlayerProfessions(::Playe
     return professions;
 }
 
-bool ProfessionManager::UnlearnProfession(::Player* player, ProfessionType profession)
+bool ProfessionManager::UnlearnProfession(ProfessionType profession)
 {
-    if (!player || profession == ProfessionType::NONE)
+    if (!_bot || profession == ProfessionType::NONE)
         return false;
 
     uint32 skillId = static_cast<uint32>(profession);
 
-    if (!player->HasSkill(skillId))
+    if (!_bot->HasSkill(skillId))
         return false;
 
     // Set skill to 0 to unlearn
-    player->SetSkill(skillId, 0, 0, 0);
+    _bot->SetSkill(skillId, 0, 0, 0);
 
     TC_LOG_DEBUG("playerbots", "Player {} unlearned profession {}",
-        player->GetName(), skillId);
+        _bot->GetName(), skillId);
 
     return true;
 }
@@ -534,13 +241,13 @@ bool ProfessionManager::UnlearnProfession(::Player* player, ProfessionType profe
 // AUTO-LEARN SYSTEM
 // ============================================================================
 
-void ProfessionManager::AutoLearnProfessionsForClass(::Player* player)
+void ProfessionManager::AutoLearnProfessionsForClass()
 {
-    if (!player)
+    if (!_bot)
         return;
 
-    uint8 classId = player->GetClass();
-    uint8 raceId = player->GetRace();
+    uint8 classId = _bot->GetClass();
+    uint8 raceId = _bot->GetRace();
     std::vector<ProfessionType> recommended = GetRecommendedProfessions(classId);
 
     if (recommended.empty())
@@ -561,7 +268,7 @@ void ProfessionManager::AutoLearnProfessionsForClass(::Player* player)
         {
             firstProf = profession;
             TC_LOG_INFO("playerbots", "Player {} ({} race) selected {} due to +{} racial bonus",
-                player->GetName(), static_cast<uint32>(raceId), static_cast<uint32>(profession), raceBonus);
+                _bot->GetName(), static_cast<uint32>(raceId), static_cast<uint32>(profession), raceBonus);
             break;
         }
     }
@@ -577,7 +284,7 @@ void ProfessionManager::AutoLearnProfessionsForClass(::Player* player)
             {
                 secondProf = pair;
                 TC_LOG_INFO("playerbots", "Player {} selected {} as beneficial pair with {}",
-                    player->GetName(), static_cast<uint32>(secondProf), static_cast<uint32>(firstProf));
+                    _bot->GetName(), static_cast<uint32>(secondProf), static_cast<uint32>(firstProf));
                 break;
             }
         }
@@ -609,303 +316,160 @@ void ProfessionManager::AutoLearnProfessionsForClass(::Player* player)
     // Learn the selected professions
     if (firstProf != ProfessionType::NONE)
     {
-        LearnProfession(player, firstProf);
+        LearnProfession(firstProf);
     }
 
     if (secondProf != ProfessionType::NONE)
     {
-        LearnProfession(player, secondProf);
+        LearnProfession(secondProf);
     }
 
     // Always learn secondary professions (unlimited)
-    LearnProfession(player, ProfessionType::COOKING);
-    LearnProfession(player, ProfessionType::FISHING);
+    LearnProfession(ProfessionType::COOKING);
+    LearnProfession(ProfessionType::FISHING);
 }
 
 std::vector<ProfessionType> ProfessionManager::GetRecommendedProfessions(uint8 classId) const
 {
-    auto it = _classRecommendations.find(classId);
-    if (it != _classRecommendations.end())
-        return it->second;
-
-    return {};
+    // Delegate to ProfessionDatabase
+    return ProfessionDatabase::instance()->GetRecommendedProfessions(classId);
 }
 
 bool ProfessionManager::IsProfessionSuitableForClass(uint8 classId, ProfessionType profession) const
 {
-    std::vector<ProfessionType> recommended = GetRecommendedProfessions(classId);
-    return std::find(recommended.begin(), recommended.end(), profession) != recommended.end();
+    // Delegate to ProfessionDatabase
+    return ProfessionDatabase::instance()->IsProfessionSuitableForClass(classId, profession);
 }
 
 ProfessionCategory ProfessionManager::GetProfessionCategory(ProfessionType profession) const
 {
-    switch (profession)
-    {
-        case ProfessionType::MINING:
-        case ProfessionType::HERBALISM:
-        case ProfessionType::SKINNING:
-            return ProfessionCategory::GATHERING;
-
-        case ProfessionType::COOKING:
-        case ProfessionType::FISHING:
-        case ProfessionType::FIRST_AID:
-            return ProfessionCategory::SECONDARY;
-
-        default:
-            return ProfessionCategory::PRODUCTION;
-    }
+    // Delegate to ProfessionDatabase
+    return ProfessionDatabase::instance()->GetProfessionCategory(profession);
 }
 
 std::vector<ProfessionType> ProfessionManager::GetBeneficialPairs(ProfessionType profession) const
 {
-    auto it = _professionPairs.find(profession);
-    if (it != _professionPairs.end())
-        return it->second;
-
-    return {};
+    // Delegate to ProfessionDatabase
+    return ProfessionDatabase::instance()->GetBeneficialPairs(profession);
 }
 
 bool ProfessionManager::IsBeneficialPair(ProfessionType prof1, ProfessionType prof2) const
 {
-    std::vector<ProfessionType> pairs1 = GetBeneficialPairs(prof1);
-    if (std::find(pairs1.begin(), pairs1.end(), prof2) != pairs1.end())
-        return true;
-
-    std::vector<ProfessionType> pairs2 = GetBeneficialPairs(prof2);
-    if (std::find(pairs2.begin(), pairs2.end(), prof1) != pairs2.end())
-        return true;
-
-    return false;
+    // Delegate to ProfessionDatabase
+    return ProfessionDatabase::instance()->IsBeneficialPair(prof1, prof2);
 }
 
 uint16 ProfessionManager::GetRaceProfessionBonus(uint8 raceId, ProfessionType profession) const
 {
-    auto raceIt = _raceBonuses.find(raceId);
-    if (raceIt == _raceBonuses.end())
-        return 0;
-
-    auto profIt = raceIt->second.find(profession);
-    if (profIt != raceIt->second.end())
-        return profIt->second;
-
-    return 0;
-}
-
-void ProfessionManager::InitializeProfessionPairs()
-{
-    _professionPairs.clear();
-
-    // GATHERING → PRODUCTION PAIRS
-
-    // Mining pairs
-    _professionPairs[ProfessionType::MINING] = {
-        ProfessionType::BLACKSMITHING,
-        ProfessionType::ENGINEERING,
-        ProfessionType::JEWELCRAFTING
-    };
-
-    // Herbalism pairs
-    _professionPairs[ProfessionType::HERBALISM] = {
-        ProfessionType::ALCHEMY,
-        ProfessionType::INSCRIPTION
-    };
-
-    // Skinning pairs
-    _professionPairs[ProfessionType::SKINNING] = {
-        ProfessionType::LEATHERWORKING
-    };
-
-    // PRODUCTION → GATHERING PAIRS (reciprocal)
-
-    // Blacksmithing pairs
-    _professionPairs[ProfessionType::BLACKSMITHING] = {
-        ProfessionType::MINING
-    };
-
-    // Engineering pairs
-    _professionPairs[ProfessionType::ENGINEERING] = {
-        ProfessionType::MINING
-    };
-
-    // Jewelcrafting pairs
-    _professionPairs[ProfessionType::JEWELCRAFTING] = {
-        ProfessionType::MINING
-    };
-
-    // Alchemy pairs
-    _professionPairs[ProfessionType::ALCHEMY] = {
-        ProfessionType::HERBALISM
-    };
-
-    // Inscription pairs
-    _professionPairs[ProfessionType::INSCRIPTION] = {
-        ProfessionType::HERBALISM
-    };
-
-    // Leatherworking pairs
-    _professionPairs[ProfessionType::LEATHERWORKING] = {
-        ProfessionType::SKINNING
-    };
-
-    // SPECIAL PAIRS
-
-    // Tailoring + Enchanting (cloth gear to disenchant)
-    _professionPairs[ProfessionType::TAILORING] = {
-        ProfessionType::ENCHANTING
-    };
-
-    // Enchanting + Tailoring (mutual benefit)
-    _professionPairs[ProfessionType::ENCHANTING] = {
-        ProfessionType::TAILORING
-    };
-
-    TC_LOG_DEBUG("playerbots", "ProfessionManager: Initialized {} beneficial profession pairs",
-        _professionPairs.size());
-}
-
-void ProfessionManager::InitializeRaceBonuses()
-{
-    _raceBonuses.clear();
-    // WoW 11.2 Racial Profession Bonuses
-
-    // TAUREN (+15 Herbalism)
-    _raceBonuses[RACE_TAUREN][ProfessionType::HERBALISM] = 15;
-
-    // BLOOD ELF (+10 Enchanting)
-    _raceBonuses[RACE_BLOODELF][ProfessionType::ENCHANTING] = 10;
-
-    // DRAENEI (+10 Jewelcrafting)
-    _raceBonuses[RACE_DRAENEI][ProfessionType::JEWELCRAFTING] = 10;
-
-    // WORGEN (+15 Skinning)
-    _raceBonuses[RACE_WORGEN][ProfessionType::SKINNING] = 15;
-    // GOBLIN (+15 Alchemy)
-    _raceBonuses[RACE_GOBLIN][ProfessionType::ALCHEMY] = 15;
-    // PANDAREN (+15 Cooking)
-    _raceBonuses[RACE_PANDAREN_NEUTRAL][ProfessionType::COOKING] = 15;
-    _raceBonuses[RACE_PANDAREN_ALLIANCE][ProfessionType::COOKING] = 15;
-    _raceBonuses[RACE_PANDAREN_HORDE][ProfessionType::COOKING] = 15;
-
-    // DARK IRON DWARF (+5 Blacksmithing) - Constant may not exist in 11.2, commenting out
-    // _raceBonuses[RACE_DARKIRONDWARF][ProfessionType::BLACKSMITHING] = 5;
-
-    // KUL TIRAN (+5 Fishing, +5 Cooking) - Constant may not exist in 11.2, commenting out
-    // _raceBonuses[RACE_KULTIRAN][ProfessionType::FISHING] = 5;
-    // _raceBonuses[RACE_KULTIRAN][ProfessionType::COOKING] = 5;
-
-    TC_LOG_DEBUG("playerbots", "ProfessionManager: Initialized racial bonuses for {} races",
-        _raceBonuses.size());
+    // Delegate to ProfessionDatabase
+    return ProfessionDatabase::instance()->GetRaceProfessionBonus(raceId, profession);
 }
 
 // ============================================================================
 // RECIPE MANAGEMENT
 // ============================================================================
 
-bool ProfessionManager::LearnRecipe(::Player* player, uint32 recipeId)
+bool ProfessionManager::LearnRecipe(uint32 recipeId)
 {
-    if (!player)
+    if (!_bot)
         return false;
 
-    auto it = _recipeDatabase.find(recipeId);
-    if (it == _recipeDatabase.end())
+    RecipeInfo const* recipe = ProfessionDatabase::instance()->GetRecipe(recipeId);
+    if (!recipe)
     {
         TC_LOG_WARN("playerbots", "Unknown recipe ID: {}", recipeId);
         return false;
     }
 
-    RecipeInfo const& recipe = it->second;
-
     // Check if player has the profession
-    if (!HasProfession(player, recipe.profession))
+    if (!HasProfession(recipe->profession))
     {
         TC_LOG_DEBUG("playerbots", "Player {} doesn't have profession {} for recipe {}",
-            player->GetName(), static_cast<uint32>(recipe.profession), recipeId);
+            _bot->GetName(), static_cast<uint32>(recipe->profession), recipeId);
         return false;
     }
 
     // Check skill requirement
-    uint16 skill = GetProfessionSkill(player, recipe.profession);
-    if (skill < recipe.requiredSkill)
+    uint16 skill = GetProfessionSkill(recipe->profession);
+    if (skill < recipe->requiredSkill)
     {
         TC_LOG_DEBUG("playerbots", "Player {} skill {} too low for recipe {} (requires {})",
-            player->GetName(), skill, recipeId, recipe.requiredSkill);
+            _bot->GetName(), skill, recipeId, recipe->requiredSkill);
         return false;
     }
 
     // Learn the spell
-    player->LearnSpell(recipe.spellId, false);
+    _bot->LearnSpell(recipe->spellId, false);
 
     TC_LOG_DEBUG("playerbots", "Player {} learned recipe {} (spell {})",
-        player->GetName(), recipeId, recipe.spellId);
+        _bot->GetName(), recipeId, recipe->spellId);
 
     // Update metrics
-    // No lock needed - profession data is per-bot instance data
-    _playerMetrics[player->GetGUID().GetCounter()].recipesLearned++;
+    _metrics.recipesLearned++;
     _globalMetrics.recipesLearned++;
+
     return true;
 }
 
-bool ProfessionManager::KnowsRecipe(::Player* player, uint32 recipeId) const
+bool ProfessionManager::KnowsRecipe(uint32 recipeId) const
 {
-    if (!player)
+    if (!_bot)
         return false;
 
-    auto it = _recipeDatabase.find(recipeId);
-    if (it == _recipeDatabase.end())
+    RecipeInfo const* recipe = ProfessionDatabase::instance()->GetRecipe(recipeId);
+    if (!recipe)
         return false;
 
-    return player->HasSpell(it->second.spellId);
+    return _bot->HasSpell(recipe->spellId);
 }
 
 std::vector<RecipeInfo> ProfessionManager::GetRecipesForProfession(ProfessionType profession) const
 {
+    // Delegate to ProfessionDatabase
+    std::vector<uint32> recipeIds = ProfessionDatabase::instance()->GetRecipesForProfession(profession);
     std::vector<RecipeInfo> recipes;
 
-    auto it = _professionRecipes.find(profession);
-    if (it == _professionRecipes.end())
-        return recipes;
-
-    for (uint32 recipeId : it->second)
+    for (uint32 recipeId : recipeIds)
     {
-        auto recipeIt = _recipeDatabase.find(recipeId);
-        if (recipeIt != _recipeDatabase.end())
-            recipes.push_back(recipeIt->second);
+        RecipeInfo const* recipe = ProfessionDatabase::instance()->GetRecipe(recipeId);
+        if (recipe)
+            recipes.push_back(*recipe);
     }
 
     return recipes;
 }
 
-std::vector<RecipeInfo> ProfessionManager::GetCraftableRecipes(::Player* player, ProfessionType profession) const
+std::vector<RecipeInfo> ProfessionManager::GetCraftableRecipes(ProfessionType profession) const
 {
     std::vector<RecipeInfo> craftable;
 
-    if (!player)
+    if (!_bot)
         return craftable;
 
     std::vector<RecipeInfo> allRecipes = GetRecipesForProfession(profession);
 
     for (RecipeInfo const& recipe : allRecipes)
     {
-        if (CanCraftRecipe(player, recipe))
+        if (CanCraftRecipe(recipe))
             craftable.push_back(recipe);
     }
 
     return craftable;
 }
 
-RecipeInfo const* ProfessionManager::GetOptimalLevelingRecipe(::Player* player, ProfessionType profession) const
+RecipeInfo const* ProfessionManager::GetOptimalLevelingRecipe(ProfessionType profession) const
 {
-    if (!player)
+    if (!_bot)
         return nullptr;
 
-    std::vector<RecipeInfo> craftable = GetCraftableRecipes(player, profession);
+    std::vector<RecipeInfo> craftable = GetCraftableRecipes(profession);
 
     RecipeInfo const* best = nullptr;
     float bestChance = 0.0f;
 
     for (RecipeInfo const& recipe : craftable)
     {
-        float chance = GetSkillUpChance(player, recipe);
+        float chance = GetSkillUpChance(recipe);
         if (chance > bestChance)
         {
             bestChance = chance;
@@ -916,30 +480,30 @@ RecipeInfo const* ProfessionManager::GetOptimalLevelingRecipe(::Player* player, 
     return best;
 }
 
-bool ProfessionManager::CanCraftRecipe(::Player* player, RecipeInfo const& recipe) const
+bool ProfessionManager::CanCraftRecipe(RecipeInfo const& recipe) const
 {
-    if (!player)
+    if (!_bot)
         return false;
 
     // Must know the recipe
-    if (!player->HasSpell(recipe.spellId))
+    if (!_bot->HasSpell(recipe.spellId))
         return false;
 
     // Must have skill
-    uint16 skill = GetProfessionSkill(player, recipe.profession);
+    uint16 skill = GetProfessionSkill(recipe.profession);
     if (skill < recipe.requiredSkill)
         return false;
 
     // Must have materials
-    return HasMaterialsForRecipe(player, recipe);
+    return HasMaterialsForRecipe(recipe);
 }
 
-float ProfessionManager::GetSkillUpChance(::Player* player, RecipeInfo const& recipe) const
+float ProfessionManager::GetSkillUpChance(RecipeInfo const& recipe) const
 {
-    if (!player)
+    if (!_bot)
         return 0.0f;
 
-    uint16 skill = GetProfessionSkill(player, recipe.profession);
+    uint16 skill = GetProfessionSkill(recipe.profession);
 
     // Orange: always skill up
     if (skill < recipe.skillUpOrange)
@@ -961,12 +525,12 @@ float ProfessionManager::GetSkillUpChance(::Player* player, RecipeInfo const& re
 // CRAFTING AUTOMATION
 // ============================================================================
 
-bool ProfessionManager::AutoLevelProfession(::Player* player, ProfessionType profession)
+bool ProfessionManager::AutoLevelProfession(ProfessionType profession)
 {
-    if (!player)
+    if (!_bot)
         return false;
 
-    RecipeInfo const* recipe = GetOptimalLevelingRecipe(player, profession);
+    RecipeInfo const* recipe = GetOptimalLevelingRecipe(profession);
     if (!recipe)
     {
         TC_LOG_DEBUG("playerbots", "No optimal leveling recipe found for profession {}",
@@ -974,81 +538,72 @@ bool ProfessionManager::AutoLevelProfession(::Player* player, ProfessionType pro
         return false;
     }
 
-    return CraftItem(player, *recipe, 1);
+    return CraftItem(*recipe, 1);
 }
 
-bool ProfessionManager::CraftItem(::Player* player, RecipeInfo const& recipe, uint32 quantity)
+bool ProfessionManager::CraftItem(RecipeInfo const& recipe, uint32 quantity)
 {
-    if (!player || quantity == 0)
+    if (!_bot || quantity == 0)
         return false;
 
-    if (!CanCraftRecipe(player, recipe))
+    if (!CanCraftRecipe(recipe))
         return false;
 
     // Queue the craft
-    QueueCraft(player, recipe.recipeId, quantity);
+    QueueCraft(recipe.recipeId, quantity);
 
     return true;
 }
 
-void ProfessionManager::QueueCraft(::Player* player, uint32 recipeId, uint32 quantity)
+void ProfessionManager::QueueCraft(uint32 recipeId, uint32 quantity)
 {
-    if (!player || quantity == 0)
+    if (!_bot || quantity == 0)
         return;
-
-    uint32 playerGuid = player->GetGUID().GetCounter();
 
     CraftingTask task;
     task.recipeId = recipeId;
     task.quantity = quantity;
     task.queueTime = GameTime::GetGameTimeMS();
 
-    // No lock needed - profession data is per-bot instance data
-    _craftingQueues[playerGuid].push_back(task);
+    _craftingQueue.push_back(task);
 
     TC_LOG_DEBUG("playerbots", "Queued {} x{} for player {}",
-        recipeId, quantity, player->GetName());
+        recipeId, quantity, _bot->GetName());
 }
 
-void ProfessionManager::ProcessCraftingQueue(::Player* player, uint32 diff)
+void ProfessionManager::ProcessCraftingQueue(uint32 diff)
 {
-    if (!player)
+    if (!_bot)
         return;
 
-    uint32 playerGuid = player->GetGUID().GetCounter();
-
-    // No lock needed - profession data is per-bot instance data
-    auto it = _craftingQueues.find(playerGuid);
-    if (it == _craftingQueues.end() || it->second.empty())
+    if (_craftingQueue.empty())
         return;
 
-    CraftingTask& task = it->second.front();
+    CraftingTask& task = _craftingQueue.front();
 
-    auto recipeIt = _recipeDatabase.find(task.recipeId);
-    if (recipeIt == _recipeDatabase.end())
+    RecipeInfo const* recipe = ProfessionDatabase::instance()->GetRecipe(task.recipeId);
+    if (!recipe)
     {
         // Invalid recipe, remove from queue
-        it->second.erase(it->second.begin());
+        _craftingQueue.erase(_craftingQueue.begin());
         return;
     }
 
-    RecipeInfo const& recipe = recipeIt->second;
-
     // Check if we can craft
-    if (!CanCraftRecipe(player, recipe))
+    if (!CanCraftRecipe(*recipe))
     {
         TC_LOG_DEBUG("playerbots", "Cannot craft recipe {}, removing from queue", task.recipeId);
-        it->second.erase(it->second.begin());
+        _craftingQueue.erase(_craftingQueue.begin());
         return;
     }
 
     // Craft one item
-    if (CastCraftingSpell(player, recipe))
+    if (CastCraftingSpell(*recipe))
     {
         task.quantity--;
 
         // Update metrics
-        _playerMetrics[playerGuid].itemsCrafted++;
+        _metrics.itemsCrafted++;
         _globalMetrics.itemsCrafted++;
 
         TC_LOG_DEBUG("playerbots", "Crafted 1x {} ({} remaining in queue)",
@@ -1056,18 +611,18 @@ void ProfessionManager::ProcessCraftingQueue(::Player* player, uint32 diff)
 
         // Remove if finished
         if (task.quantity == 0)
-            it->second.erase(it->second.begin());
+            _craftingQueue.erase(_craftingQueue.begin());
     }
 }
 
-bool ProfessionManager::HasMaterialsForRecipe(::Player* player, RecipeInfo const& recipe) const
+bool ProfessionManager::HasMaterialsForRecipe(RecipeInfo const& recipe) const
 {
-    if (!player)
+    if (!_bot)
         return false;
 
     for (RecipeInfo::Reagent const& reagent : recipe.reagents)
     {
-        uint32 count = player->GetItemCount(reagent.itemId);
+        uint32 count = _bot->GetItemCount(reagent.itemId);
         if (count < reagent.quantity)
             return false;
     }
@@ -1075,16 +630,16 @@ bool ProfessionManager::HasMaterialsForRecipe(::Player* player, RecipeInfo const
     return true;
 }
 
-std::vector<std::pair<uint32, uint32>> ProfessionManager::GetMissingMaterials(::Player* player, RecipeInfo const& recipe) const
+std::vector<std::pair<uint32, uint32>> ProfessionManager::GetMissingMaterials(RecipeInfo const& recipe) const
 {
     std::vector<std::pair<uint32, uint32>> missing;
 
-    if (!player)
+    if (!_bot)
         return missing;
 
     for (RecipeInfo::Reagent const& reagent : recipe.reagents)
     {
-        uint32 have = player->GetItemCount(reagent.itemId);
+        uint32 have = _bot->GetItemCount(reagent.itemId);
         if (have < reagent.quantity)
         {
             missing.push_back({reagent.itemId, reagent.quantity - have});
@@ -1098,13 +653,13 @@ std::vector<std::pair<uint32, uint32>> ProfessionManager::GetMissingMaterials(::
 // CRAFTING HELPERS
 // ============================================================================
 
-bool ProfessionManager::CastCraftingSpell(::Player* player, RecipeInfo const& recipe)
+bool ProfessionManager::CastCraftingSpell(RecipeInfo const& recipe)
 {
-    if (!player)
+    if (!_bot)
         return false;
 
     // Consume materials
-    if (!ConsumeMaterials(player, recipe))
+    if (!ConsumeMaterials(recipe))
         return false;
 
     // Cast crafting spell
@@ -1113,49 +668,48 @@ bool ProfessionManager::CastCraftingSpell(::Player* player, RecipeInfo const& re
         return false;
 
     // Update profession skill
-    player->UpdateCraftSkill(spellInfo);
+    _bot->UpdateCraftSkill(spellInfo);
 
     // Skill point gain
-    uint16 oldSkill = GetProfessionSkill(player, recipe.profession);
-    uint16 newSkill = GetProfessionSkill(player, recipe.profession);
+    uint16 oldSkill = GetProfessionSkill(recipe.profession);
+    uint16 newSkill = GetProfessionSkill(recipe.profession);
     if (newSkill > oldSkill)
     {
-        // No lock needed - profession data is per-bot instance data
-        _playerMetrics[player->GetGUID().GetCounter()].skillPointsGained += (newSkill - oldSkill);
+        _metrics.skillPointsGained += (newSkill - oldSkill);
         _globalMetrics.skillPointsGained += (newSkill - oldSkill);
     }
 
-    HandleCraftingResult(player, recipe, true);
+    HandleCraftingResult(recipe, true);
 
     return true;
 }
 
-bool ProfessionManager::ConsumeMaterials(::Player* player, RecipeInfo const& recipe)
+bool ProfessionManager::ConsumeMaterials(RecipeInfo const& recipe)
 {
-    if (!player)
+    if (!_bot)
         return false;
 
     // Check we have all materials first
-    if (!HasMaterialsForRecipe(player, recipe))
+    if (!HasMaterialsForRecipe(recipe))
         return false;
 
     // Destroy reagents
     for (RecipeInfo::Reagent const& reagent : recipe.reagents)
     {
-        player->DestroyItemCount(reagent.itemId, reagent.quantity, true);
+        _bot->DestroyItemCount(reagent.itemId, reagent.quantity, true);
     }
 
     return true;
 }
 
-void ProfessionManager::HandleCraftingResult(::Player* player, RecipeInfo const& recipe, bool success)
+void ProfessionManager::HandleCraftingResult(RecipeInfo const& recipe, bool success)
 {
-    if (!player || !success)
+    if (!_bot || !success)
         return;
 
     // Item will be created by spell effect, we don't create it manually
     TC_LOG_DEBUG("playerbots", "Player {} successfully crafted item {} from recipe {}",
-        player->GetName(), recipe.productItemId, recipe.recipeId);
+        _bot->GetName(), recipe.productItemId, recipe.recipeId);
 }
 
 // ============================================================================
@@ -1168,49 +722,36 @@ uint16 ProfessionManager::CalculateSkillUpAmount(RecipeInfo const& recipe, uint1
     return 1;
 }
 
-bool ProfessionManager::ShouldCraftForSkillUp(::Player* player, RecipeInfo const& recipe) const
+bool ProfessionManager::ShouldCraftForSkillUp(RecipeInfo const& recipe) const
 {
-    float chance = GetSkillUpChance(player, recipe);
-    ProfessionAutomationProfile const& profile = GetAutomationProfile(player->GetGUID().GetCounter());
+    if (!_bot)
+        return false;
 
-    return chance >= profile.skillUpThreshold;
+    float chance = GetSkillUpChance(recipe);
+    return chance >= _profile.skillUpThreshold;
 }
 
 // ============================================================================
 // AUTOMATION PROFILES
 // ============================================================================
 
-void ProfessionManager::SetAutomationProfile(uint32 playerGuid, ProfessionAutomationProfile const& profile)
+void ProfessionManager::SetAutomationProfile(ProfessionAutomationProfile const& profile)
 {
-    // No lock needed - profession data is per-bot instance data
-    _playerProfiles[playerGuid] = profile;
+    _profile = profile;
 }
 
-ProfessionAutomationProfile ProfessionManager::GetAutomationProfile(uint32 playerGuid) const
+ProfessionAutomationProfile ProfessionManager::GetAutomationProfile() const
 {
-    // No lock needed - profession data is per-bot instance data
-    auto it = _playerProfiles.find(playerGuid);
-    if (it != _playerProfiles.end())
-        return it->second;
-
-    // Return default profile
-    return ProfessionAutomationProfile();
+    return _profile;
 }
 
 // ============================================================================
 // METRICS
 // ============================================================================
 
-ProfessionManager::ProfessionMetrics const& ProfessionManager::GetPlayerMetrics(uint32 playerGuid) const
+ProfessionManager::ProfessionMetrics const& ProfessionManager::GetMetrics() const
 {
-    // No lock needed - profession data is per-bot instance data
-    auto it = _playerMetrics.find(playerGuid);
-    if (it != _playerMetrics.end())
-        return it->second;
-
-    // Return default metrics if not found
-    static ProfessionMetrics defaultMetrics;
-    return defaultMetrics;
+    return _metrics;
 }
 
 ProfessionManager::ProfessionMetrics const& ProfessionManager::GetGlobalMetrics() const

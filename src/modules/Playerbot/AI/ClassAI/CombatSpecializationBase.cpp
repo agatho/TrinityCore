@@ -27,7 +27,7 @@
 #include <numeric>
 #include "../../Spatial/SpatialGridManager.h"
 #include "../../Spatial/SpatialGridQueryHelpers.h"  // PHASE 5F: Thread-safe queries
-#include "../../Movement/Arbiter/MovementArbiter.h"
+#include "../../Movement/UnifiedMovementCoordinator.h  // Phase 2: Unified movement system"
 #include "../../Movement/Arbiter/MovementPriority.h"
 #include "../BotAI.h"
 #include "UnitAI.h"
@@ -1192,7 +1192,7 @@ void CombatSpecializationBase::UpdatePositioning(::Unit* target)
         PlayerBotMovementPriority priority = PlayerBotMovementPriority::ROLE_POSITIONING;  // Priority 170
 
         BotAI* botAI = dynamic_cast<BotAI*>(_bot->GetAI());
-        if (botAI && botAI->GetMovementArbiter())
+        if (botAI && botAI->GetUnifiedMovementCoordinator())
         {
 
             bool accepted = botAI->RequestPointMovement(

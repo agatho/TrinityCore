@@ -28,7 +28,7 @@
 #include <algorithm>
 #include <cmath>
 #include "../Spatial/SpatialGridManager.h"  // Lock-free spatial grid for deadlock fix
-#include "../Movement/Arbiter/MovementArbiter.h"
+#include "../Movement/UnifiedMovementCoordinator.h"  // Phase 2: Unified movement system
 #include "../Movement/Arbiter/MovementPriorityMapper.h"
 #include "../AI/BotAI.h"
 #include "UnitAI.h"
@@ -361,7 +361,7 @@ void EncounterStrategy::HandleAoEDamageMechanic(Group* group, const Position& da
 
             // PHASE 6B: Use Movement Arbiter with DUNGEON_MECHANIC priority (205)
             BotAI* botAI = dynamic_cast<BotAI*>(player->GetAI());
-            if (botAI && botAI->GetMovementArbiter())
+            if (botAI && botAI->GetUnifiedMovementCoordinator())
             {
                 bool accepted = botAI->RequestPointMovement(
                     PlayerBotMovementPriority::DUNGEON_MECHANIC,
@@ -504,7 +504,7 @@ void EncounterStrategy::UpdateEncounterPositioning(Group* group, uint32 encounte
         {
             // PHASE 6B: Use Movement Arbiter with DUNGEON_MECHANIC priority (205)
             BotAI* botAI = dynamic_cast<BotAI*>(player->GetAI());
-            if (botAI && botAI->GetMovementArbiter())
+            if (botAI && botAI->GetUnifiedMovementCoordinator())
             {
                 bool accepted = botAI->RequestPointMovement(
                     PlayerBotMovementPriority::DUNGEON_MECHANIC,
@@ -589,7 +589,7 @@ void EncounterStrategy::AvoidMechanicAreas(Group* group, const std::vector<Posit
 
                 // PHASE 6B: Use Movement Arbiter with DUNGEON_MECHANIC priority (205)
                 BotAI* botAI = dynamic_cast<BotAI*>(player->GetAI());
-                if (botAI && botAI->GetMovementArbiter())
+                if (botAI && botAI->GetUnifiedMovementCoordinator())
                 {
                     bool accepted = botAI->RequestPointMovement(
                         PlayerBotMovementPriority::DUNGEON_MECHANIC,
@@ -1316,7 +1316,7 @@ void EncounterStrategy::HandleGenericGroundAvoidance(::Player* player, ::Creatur
 
                 // PHASE 6B: Use Movement Arbiter with DUNGEON_MECHANIC priority (205)
                 BotAI* botAI = dynamic_cast<BotAI*>(player->GetAI());
-                if (botAI && botAI->GetMovementArbiter())
+                if (botAI && botAI->GetUnifiedMovementCoordinator())
                 {
                     bool accepted = botAI->RequestPointMovement(
                         PlayerBotMovementPriority::DUNGEON_MECHANIC,
@@ -1452,7 +1452,7 @@ void EncounterStrategy::HandleGenericPositioning(::Player* player, ::Creature* b
             player->GetGUID().GetCounter());
         // PHASE 6B: Use Movement Arbiter with DUNGEON_MECHANIC priority (205)
         BotAI* botAI = dynamic_cast<BotAI*>(player->GetAI());
-        if (botAI && botAI->GetMovementArbiter())
+        if (botAI && botAI->GetUnifiedMovementCoordinator())
         {
             bool accepted = botAI->RequestPointMovement(
                 PlayerBotMovementPriority::DUNGEON_MECHANIC,
@@ -1617,7 +1617,7 @@ void EncounterStrategy::HandleGenericSpread(::Player* player, ::Creature* boss, 
 
             // PHASE 6B: Use Movement Arbiter with DUNGEON_MECHANIC priority (205)
             BotAI* botAI = dynamic_cast<BotAI*>(player->GetAI());
-            if (botAI && botAI->GetMovementArbiter())
+            if (botAI && botAI->GetUnifiedMovementCoordinator())
             {
                 bool accepted = botAI->RequestPointMovement(
                     PlayerBotMovementPriority::DUNGEON_MECHANIC,
@@ -1680,7 +1680,7 @@ void EncounterStrategy::HandleGenericStack(::Player* player, ::Creature* boss)
 
         // PHASE 6B: Use Movement Arbiter with DUNGEON_MECHANIC priority (205)
         BotAI* botAI = dynamic_cast<BotAI*>(player->GetAI());
-        if (botAI && botAI->GetMovementArbiter())
+        if (botAI && botAI->GetUnifiedMovementCoordinator())
         {
             bool accepted = botAI->RequestPointMovement(
                 PlayerBotMovementPriority::DUNGEON_MECHANIC,

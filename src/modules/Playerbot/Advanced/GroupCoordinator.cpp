@@ -8,6 +8,7 @@
  */
 
 #include "GroupCoordinator.h"
+#include "TacticalCoordinator.h"
 #include "BotAI.h"
 #include "Player.h"
 #include "Group.h"
@@ -72,6 +73,16 @@ namespace Playerbot
         m_assignedRole = DetermineRole();
         m_preferredRole = m_assignedRole;
 
+        // Initialize tactical coordinator if in a group
+        if (m_bot->GetGroup())
+        {
+            // Create shared tactical coordinator for the group
+            // Note: In a production implementation, this should be shared across all group members
+            // For now, each bot creates its own instance
+            m_tacticalCoordinator = std::make_shared<TacticalCoordinator>(m_bot->GetGroup());
+            m_tacticalCoordinator->Initialize();
+        }
+
         // Load boss strategies
         LoadBossStrategies();
 
@@ -110,6 +121,10 @@ namespace Playerbot
         // Update queue status
         if (m_queueInfo.isQueued)
             UpdateQueueStatus();
+
+        // Update tactical coordinator
+        if (m_tacticalCoordinator)
+            m_tacticalCoordinator->Update(diff);
 
         EndPerformanceTimer();
         UpdatePerformanceMetrics();
@@ -1203,6 +1218,73 @@ namespace Playerbot
         {
             SyncGroupQuests();
         }
+    }
+
+    // ========================================================================
+    // TACTICAL COORDINATION DELEGATION
+    // ========================================================================
+
+    void GroupCoordinator::RequestInterrupt(ObjectGuid targetGuid)
+    {
+        if (!m_tacticalCoordinator)
+        {
+            TC_LOG_WARN("bot.playerbot", "Bot %s: Cannot request interrupt - no tactical coordinator",
+                m_bot->GetName().c_str());
+            return;
+        }
+
+        ObjectGuid assignedBot = m_tacticalCoordinator->AssignInterrupt(targetGuid);
+
+        if (!assignedBot.IsEmpty())
+        {
+            TC_LOG_DEBUG("bot.playerbot", "Bot %s: Interrupt assigned to %s for target %s",
+                m_bot->GetName().c_str(),
+                assignedBot.ToString().c_str(),
+                targetGuid.ToString().c_str());
+        }
+    }
+
+    void GroupCoordinator::RequestDispel(ObjectGuid targetGuid)
+    {
+        if (!m_tacticalCoordinator)
+        {
+            TC_LOG_WARN("bot.playerbot", "Bot %s: Cannot request dispel - no tactical coordinator",
+                m_bot->GetName().c_str());
+            return;
+        }
+
+        ObjectGuid assignedBot = m_tacticalCoordinator->AssignDispel(targetGuid);
+
+        if (!assignedBot.IsEmpty())
+        {
+            TC_LOG_DEBUG("bot.playerbot", "Bot %s: Dispel assigned to %s for target %s",
+                m_bot->GetName().c_str(),
+                assignedBot.ToString().c_str(),
+                targetGuid.ToString().c_str());
+        }
+    }
+
+    bool GroupCoordinator::IsGroupCooldownAvailable(std::string const& cooldownName) const
+    {
+        if (!m_tacticalCoordinator)
+            return true; // No coordinator = no cooldown tracking
+
+        return m_tacticalCoordinator->IsGroupCooldownAvailable(cooldownName);
+    }
+
+    void GroupCoordinator::UseGroupCooldown(std::string const& cooldownName, uint32 durationMs)
+    {
+        if (!m_tacticalCoordinator)
+        {
+            TC_LOG_WARN("bot.playerbot", "Bot %s: Cannot use group cooldown - no tactical coordinator",
+                m_bot->GetName().c_str());
+            return;
+        }
+
+        m_tacticalCoordinator->UseGroupCooldown(cooldownName, durationMs);
+
+        TC_LOG_DEBUG("bot.playerbot", "Bot %s: Group cooldown %s used (duration: %ums)",
+            m_bot->GetName().c_str(), cooldownName.c_str(), durationMs);
     }
 
 } // namespace Playerbot

@@ -8,6 +8,7 @@
  */
 
 #include "QuestStrategy.h"
+#include "Core/PlayerBotHelpers.h"  // GetBotAI, GetGameSystems
 #include "../BotAI.h"
 #include "Player.h"
 #include "Group.h"
@@ -29,7 +30,7 @@
 #include "../../Spatial/SpatialGridManager.h"  // Lock-free spatial grid for deadlock fix
 #include "../../Spatial/SpatialGridQueryHelpers.h"  // Thread-safe spatial queries
 #include "../../Equipment/EquipmentManager.h"  // For reward evaluation
-#include "../../Movement/Arbiter/MovementArbiter.h"
+#include "../../Movement/UnifiedMovementCoordinator.h  // Phase 2: Unified movement system"
 #include "../../Movement/Arbiter/MovementPriorityMapper.h"
 #include "LootItemType.h"  // For LootItemType enum used in RewardQuest
 #include "UnitAI.h"
@@ -180,7 +181,7 @@ void QuestStrategy::UpdateBehavior(BotAI* ai, uint32 diff)
     uint32 currentTime = GameTime::GetGameTimeMS();
     if (currentTime - _lastObjectiveUpdate > 2000) // Every 2 seconds
     {
-        ObjectiveTracker::instance()->UpdateBotTracking(bot, diff);
+        (GetGameSystems(bot) ? GetGameSystems(bot)->GetObjectiveTracker()->UpdateBotTracking(diff) : (void)0);
         _lastObjectiveUpdate = currentTime;
     }
 
@@ -224,7 +225,7 @@ void QuestStrategy::ProcessQuestObjectives(BotAI* ai)
     TC_LOG_ERROR("module.playerbot.quest", "📍 ProcessQuestObjectives: Bot {} starting objective processing", bot->GetName());
 
     // Get highest priority objective from ObjectiveTracker
-    ObjectiveTracker::ObjectivePriority priority = ObjectiveTracker::instance()->GetHighestPriorityObjective(bot);
+    ObjectiveTracker::ObjectivePriority priority = (GetGameSystems(bot) ? GetGameSystems(bot)->GetObjectiveTracker()->GetHighestPriorityObjective() : ObjectiveTracker::ObjectivePriority());
 
     TC_LOG_ERROR("module.playerbot.quest", "🎯 ProcessQuestObjectives: Bot {} - priority.questId={}, priority.objectiveIndex={}",
                  bot->GetName(), priority.questId, priority.objectiveIndex);
@@ -268,11 +269,11 @@ void QuestStrategy::ProcessQuestObjectives(BotAI* ai)
                 // Create objective data using constructor (questId, index, type, targetId, requiredCount)
                 QuestObjectiveData objData(questId, i, objType, objective.ObjectID, objective.Amount);
 
-                ObjectiveTracker::instance()->StartTrackingObjective(bot, objData);
+                (GetGameSystems(bot) ? GetGameSystems(bot)->GetObjectiveTracker()->StartTrackingObjective(objData) : (void)0);
             }
         }
         // Try again after initialization
-        priority = ObjectiveTracker::instance()->GetHighestPriorityObjective(bot);
+        priority = (GetGameSystems(bot) ? GetGameSystems(bot)->GetObjectiveTracker()->GetHighestPriorityObjective() : ObjectiveTracker::ObjectivePriority());
         TC_LOG_ERROR("module.playerbot.quest", "🔄 ProcessQuestObjectives: Bot {} after initialization - priority.questId={}, priority.objectiveIndex={}",
                      bot->GetName(), priority.questId, priority.objectiveIndex);
 
@@ -308,8 +309,7 @@ void QuestStrategy::ProcessQuestObjectives(BotAI* ai)
         }
     }
     // Get objective state
-    ObjectiveTracker::ObjectiveState objective = ObjectiveTracker::instance()->GetObjectiveState(
-        bot, priority.questId, priority.objectiveIndex);
+    ObjectiveTracker::ObjectiveState objective = (GetGameSystems(bot) ? GetGameSystems(bot)->GetObjectiveTracker()->GetObjectiveState( priority.questId, priority.objectiveIndex) : ObjectiveTracker::ObjectiveState());
 
     // Cache current objective info
     _currentQuestId = objective.questId;
@@ -660,7 +660,7 @@ void QuestStrategy::EngageQuestTargets(BotAI* ai, ObjectiveTracker::ObjectiveSta
 
                 // PHASE 5 MIGRATION: Use Movement Arbiter with QUEST priority (50)
                 BotAI* botAI = dynamic_cast<BotAI*>(bot->GetAI());
-                if (botAI && botAI->GetMovementArbiter())
+                if (botAI && botAI->GetUnifiedMovementCoordinator())
                 {
                     bool accepted = botAI->RequestPointMovement(
                         PlayerBotMovementPriority::QUEST,  // Priority 50 - LOW tier
@@ -863,7 +863,7 @@ void QuestStrategy::UseQuestItemOnTarget(BotAI* ai, ObjectiveTracker::ObjectiveS
     uint32 targetObjectId = questObjective.ObjectID;
 
     // Scan for target GameObject in 200-yard radius (same as FindQuestObject)
-    std::vector<uint32> objects = ObjectiveTracker::instance()->ScanForGameObjects(bot, targetObjectId, 200.0f);
+    std::vector<uint32> objects = (GetGameSystems(bot) ? GetGameSystems(bot)->GetObjectiveTracker()->ScanForGameObjects( targetObjectId, 200.0f) : std::vector<uint32>());
 
     TC_LOG_ERROR("module.playerbot.quest", "🔍 UseQuestItemOnTarget: Scanning for GameObject {} - found {} objects",
                  targetObjectId, objects.size());
@@ -1208,7 +1208,7 @@ ObjectiveTracker::ObjectivePriority QuestStrategy::GetCurrentObjective(BotAI* ai
         return ObjectiveTracker::ObjectivePriority(0, 0);
 
     Player* bot = ai->GetBot();
-    return ObjectiveTracker::instance()->GetHighestPriorityObjective(bot);
+    return (GetGameSystems(bot) ? GetGameSystems(bot)->GetObjectiveTracker()->GetHighestPriorityObjective() : ObjectiveTracker::ObjectivePriority());
 }
 
 bool QuestStrategy::HasActiveObjectives(BotAI* ai) const
@@ -1307,7 +1307,7 @@ Position QuestStrategy::GetObjectivePosition(BotAI* ai, ObjectiveTracker::Object
                                       static_cast<QuestObjectiveType>(questObjective.Type),
                                       questObjective.ObjectID, questObjective.Amount);
 
-            Position newPos = ObjectiveTracker::instance()->FindObjectiveTargetLocation(bot, objData);
+            Position newPos = (GetGameSystems(bot) ? GetGameSystems(bot)->GetObjectiveTracker()->FindObjectiveTargetLocation(objData) : Position());
             // Check if we got a valid position
             if (newPos.GetExactDist2d(0.0f, 0.0f) > 0.1f)
             {
@@ -2143,39 +2143,47 @@ bool QuestStrategy::CompleteQuestTurnIn(BotAI* ai, uint32 questId, ::Unit* quest
 
     if (hasChoiceRewards)
     {
-        Playerbot::EquipmentManager* equipMgr = Playerbot::EquipmentManager::instance();
-
-        float bestScore = -10000.0f; // Start with very low score
-        uint32 bestChoice = 0;
-        bool foundUsableReward = false;
-
-        TC_LOG_ERROR("module.playerbot.quest", "🎁 Evaluating {} reward choices for quest {}",
-                     QUEST_REWARD_CHOICES_COUNT, questId);
-
-        for (uint32 i = 0; i < QUEST_REWARD_CHOICES_COUNT; ++i)
+        // Get EquipmentManager via GameSystemsManager facade (Phase 6.1)
+        Playerbot::EquipmentManager* equipMgr = ai->GetGameSystems()->GetEquipmentManager();
+        if (!equipMgr)
         {
-            uint32 itemId = quest->RewardChoiceItemId[i];
-            if (itemId == 0)
-                continue;
+            TC_LOG_ERROR("module.playerbot.quest", "⚠️ EquipmentManager not available for quest reward selection");
+            // Fall back to first choice
+            selectedRewardIndex = 0;
+        }
+        else
+        {
+            float bestScore = -10000.0f; // Start with very low score
+            uint32 bestChoice = 0;
+            bool foundUsableReward = false;
 
-            ItemTemplate const* itemTemplate = sObjectMgr->GetItemTemplate(itemId);
-            if (!itemTemplate)
+            TC_LOG_ERROR("module.playerbot.quest", "🎁 Evaluating {} reward choices for quest {}",
+                         QUEST_REWARD_CHOICES_COUNT, questId);
+
+            for (uint32 i = 0; i < QUEST_REWARD_CHOICES_COUNT; ++i)
             {
-                TC_LOG_WARN("module.playerbot.quest", "⚠️ Invalid item template for reward choice {} (itemId {})",
-                            i, itemId);
-                continue;
-            }
+                uint32 itemId = quest->RewardChoiceItemId[i];
+                if (itemId == 0)
+                    continue;
 
-            // Check if bot can equip this item (class/level restrictions)
-            if (!equipMgr->CanPlayerEquipItem(bot, itemTemplate))
-            {
-                TC_LOG_TRACE("module.playerbot.quest", "❌ Bot {} cannot equip reward choice {}: {} (class/level restriction)",
-                             bot->GetName(), i, itemTemplate->GetName(LOCALE_enUS));
-                continue;
-            }
+                ItemTemplate const* itemTemplate = sObjectMgr->GetItemTemplate(itemId);
+                if (!itemTemplate)
+                {
+                    TC_LOG_WARN("module.playerbot.quest", "⚠️ Invalid item template for reward choice {} (itemId {})",
+                                i, itemId);
+                    continue;
+                }
 
-            // Calculate comprehensive item score using EquipmentManager's stat priority system
-            float itemScore = equipMgr->CalculateItemTemplateScore(bot, itemTemplate);
+                // Check if bot can equip this item (class/level restrictions)
+                if (!equipMgr->CanEquipItem(itemTemplate))
+                {
+                    TC_LOG_TRACE("module.playerbot.quest", "❌ Bot {} cannot equip reward choice {}: {} (class/level restriction)",
+                                 bot->GetName(), i, itemTemplate->GetName(LOCALE_enUS));
+                    continue;
+                }
+
+                // Calculate comprehensive item score using EquipmentManager's stat priority system
+                float itemScore = equipMgr->CalculateItemTemplateScore(itemTemplate);
 
             TC_LOG_ERROR("module.playerbot.quest", "   Choice {}: {} - Score: {:.2f} (ilvl {}, quality {})",
                          i,
@@ -2216,6 +2224,7 @@ bool QuestStrategy::CompleteQuestTurnIn(BotAI* ai, uint32 questId, ::Unit* quest
                 }
             }
         }
+        } // end else (equipMgr available)
     }
     else
     {

@@ -46,6 +46,86 @@ LFGBotSelector* LFGBotSelector::instance()
     return &instance;
 }
 
+// ============================================================================
+// STATIC UTILITY METHODS (Phase 7 - System-wide bot discovery)
+// ============================================================================
+
+std::vector<Player*> LFGBotSelector::FindAvailableTanks(
+    uint8 minLevel,
+    uint8 maxLevel,
+    uint32 count,
+    Player* humanPlayer)
+{
+    std::vector<Player*> tanks = instance()->FindTanks(minLevel, maxLevel, count);
+
+    // Filter out bots already grouped with the human player
+    if (humanPlayer && humanPlayer->GetGroup())
+    {
+        ObjectGuid humanGroupGuid = humanPlayer->GetGroup()->GetGUID();
+        tanks.erase(
+            std::remove_if(tanks.begin(), tanks.end(),
+                [humanGroupGuid](Player* bot) {
+                    Group* botGroup = bot->GetGroup();
+                    return botGroup && botGroup->GetGUID() == humanGroupGuid;
+                }),
+            tanks.end());
+    }
+
+    return tanks;
+}
+
+std::vector<Player*> LFGBotSelector::FindAvailableHealers(
+    uint8 minLevel,
+    uint8 maxLevel,
+    uint32 count,
+    Player* humanPlayer)
+{
+    std::vector<Player*> healers = instance()->FindHealers(minLevel, maxLevel, count);
+
+    // Filter out bots already grouped with the human player
+    if (humanPlayer && humanPlayer->GetGroup())
+    {
+        ObjectGuid humanGroupGuid = humanPlayer->GetGroup()->GetGUID();
+        healers.erase(
+            std::remove_if(healers.begin(), healers.end(),
+                [humanGroupGuid](Player* bot) {
+                    Group* botGroup = bot->GetGroup();
+                    return botGroup && botGroup->GetGUID() == humanGroupGuid;
+                }),
+            healers.end());
+    }
+
+    return healers;
+}
+
+std::vector<Player*> LFGBotSelector::FindAvailableDPS(
+    uint8 minLevel,
+    uint8 maxLevel,
+    uint32 count,
+    Player* humanPlayer)
+{
+    std::vector<Player*> dps = instance()->FindDPS(minLevel, maxLevel, count);
+
+    // Filter out bots already grouped with the human player
+    if (humanPlayer && humanPlayer->GetGroup())
+    {
+        ObjectGuid humanGroupGuid = humanPlayer->GetGroup()->GetGUID();
+        dps.erase(
+            std::remove_if(dps.begin(), dps.end(),
+                [humanGroupGuid](Player* bot) {
+                    Group* botGroup = bot->GetGroup();
+                    return botGroup && botGroup->GetGUID() == humanGroupGuid;
+                }),
+            dps.end());
+    }
+
+    return dps;
+}
+
+// ============================================================================
+// INSTANCE METHODS (Original singleton interface)
+// ============================================================================
+
 std::vector<Player*> LFGBotSelector::FindTanks(uint8 minLevel, uint8 maxLevel, uint32 count)
 {
     return FindBotsForRole(minLevel, maxLevel, lfg::PLAYER_ROLE_TANK, count);

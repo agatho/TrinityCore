@@ -20,11 +20,23 @@
  * - Uses ProfessionAuctionBridge for auction market prices
  * - Uses ProfessionManager to determine crafting value
  * - Coordinates with GatheringManager for gathering feasibility
+ * - Subscribes to ProfessionEventBus for event-driven reactivity (Phase 2)
  *
  * Design Pattern: Bridge + Strategy Pattern
  * - Bridges auction and gathering systems with intelligent decision-making
  * - Strategy pattern for different economic models (time-value, opportunity cost)
  * - All decisions based on configurable economic parameters
+ *
+ * Event Integration (Phase 2 - 2025-11-18):
+ * - MATERIALS_NEEDED → Analyze AH prices and recommend buy vs gather
+ * - MATERIAL_PURCHASED → Track spending and update economic metrics
+ *
+ * Phase 4.2 Refactoring (2025-11-18):
+ * - Converted from global singleton to per-bot instance
+ * - Integrated into GameSystemsManager facade (19→20 managers)
+ * - All methods now operate on _bot member (no Player* parameters)
+ * - Per-bot data stored as direct members (not maps)
+ * - Event filtering by playerGuid for per-bot event handling
  */
 
 #pragma once
@@ -233,42 +245,54 @@ struct MaterialSourcingStatistics
 };
 
 /**
- * @brief Bridge for intelligent material sourcing decisions
+ * @brief Bridge for intelligent material sourcing decisions (per-bot instance)
  *
  * DESIGN PRINCIPLE: This class makes decisions but does NOT execute them.
  * Execution is delegated to GatheringMaterialsBridge and ProfessionAuctionBridge.
  * This class only provides economic analysis and recommendations.
+ *
+ * PHASE 4.2: Converted to per-bot instance pattern (owned by GameSystemsManager)
  */
 class TC_GAME_API AuctionMaterialsBridge final
 {
 public:
-    static AuctionMaterialsBridge* instance();
+    /**
+     * @brief Construct bridge for specific bot
+     * @param bot The bot this bridge serves (non-owning)
+     */
+    explicit AuctionMaterialsBridge(Player* bot);
+
+    /**
+     * @brief Destructor - unsubscribes from event bus
+     */
+    ~AuctionMaterialsBridge();
 
     // ========================================================================
     // CORE BRIDGE MANAGEMENT
     // ========================================================================
 
     /**
-     * Initialize auction materials bridge on server startup
+     * Initialize material sourcing bridge (loads shared data)
+     * NOTE: Called per-bot, but loads shared world data only once
      */
     void Initialize();
 
     /**
-     * Update material sourcing decisions for player (called periodically)
+     * Update material sourcing decisions (called periodically)
      */
-    void Update(::Player* player, uint32 diff);
+    void Update(uint32 diff);
 
     /**
-     * Enable/disable smart material sourcing for player
+     * Enable/disable smart material sourcing
      */
-    void SetEnabled(::Player* player, bool enabled);
-    bool IsEnabled(::Player* player) const;
+    void SetEnabled(bool enabled);
+    bool IsEnabled() const;
 
     /**
      * Set economic profile for bot
      */
-    void SetEconomicProfile(uint32 playerGuid, BotEconomicProfile const& profile);
-    BotEconomicProfile GetEconomicProfile(uint32 playerGuid) const;
+    void SetEconomicProfile(BotEconomicProfile const& profile);
+    BotEconomicProfile GetEconomicProfile() const;
 
     // ========================================================================
     // MATERIAL SOURCING DECISIONS
@@ -279,7 +303,6 @@ public:
      * Analyzes all acquisition methods and returns optimal recommendation
      */
     MaterialSourcingDecision GetBestMaterialSource(
-        ::Player* player,
         uint32 itemId,
         uint32 quantity);
 
@@ -288,7 +311,6 @@ public:
      * Multi-material optimization considering all reagents
      */
     MaterialAcquisitionPlan GetMaterialAcquisitionPlan(
-        ::Player* player,
         uint32 recipeId);
 
     /**
@@ -296,7 +318,6 @@ public:
      * Optimizes material acquisition across multiple recipes
      */
     MaterialAcquisitionPlan GetLevelingMaterialPlan(
-        ::Player* player,
         ProfessionType profession,
         uint32 targetSkill);
 
@@ -309,7 +330,6 @@ public:
      * Factors in time value of gathering
      */
     bool IsBuyingCheaperThanGathering(
-        ::Player* player,
         uint32 itemId,
         uint32 quantity);
 
@@ -318,7 +338,6 @@ public:
      * = gathering_time_seconds * (gold_per_hour / 3600)
      */
     uint32 CalculateGatheringTimeCost(
-        ::Player* player,
         uint32 itemId,
         uint32 quantity);
 
@@ -327,7 +346,6 @@ public:
      * What else could the bot do with that time/gold?
      */
     float CalculateOpportunityCost(
-        ::Player* player,
         MaterialAcquisitionMethod method,
         uint32 itemId,
         uint32 quantity);
@@ -336,24 +354,23 @@ public:
      * Get bot's estimated gold per hour farming rate
      * Based on level, gear, class, and historical data
      */
-    float GetBotGoldPerHour(::Player* player);
+    float GetBotGoldPerHour();
 
     // ========================================================================
     // GATHERING FEASIBILITY ANALYSIS
     // ========================================================================
 
     /**
-     * Check if player can gather this material
+     * Check if bot can gather this material
      * Requires gathering profession at appropriate skill
      */
-    bool CanGatherMaterial(::Player* player, uint32 itemId);
+    bool CanGatherMaterial(uint32 itemId);
 
     /**
      * Estimate time required to gather material
      * Factors in node density, competition, travel time
      */
     uint32 EstimateGatheringTime(
-        ::Player* player,
         uint32 itemId,
         uint32 quantity);
 
@@ -361,9 +378,7 @@ public:
      * Get gathering success probability
      * Based on skill level vs required level
      */
-    float GetGatheringSuccessProbability(
-        ::Player* player,
-        uint32 itemId);
+    float GetGatheringSuccessProbability(uint32 itemId);
 
     // ========================================================================
     // AUCTION HOUSE ANALYSIS
@@ -374,7 +389,6 @@ public:
      * Uses auctionPriceThreshold from economic parameters
      */
     bool IsMaterialAvailableOnAH(
-        ::Player* player,
         uint32 itemId,
         uint32 quantity);
 
@@ -383,7 +397,6 @@ public:
      * Delegates to ProfessionAuctionBridge
      */
     uint32 GetAuctionPrice(
-        ::Player* player,
         uint32 itemId,
         uint32 quantity);
 
@@ -391,24 +404,23 @@ public:
      * Estimate time to buy from auction house
      * Includes travel time to AH + transaction time
      */
-    uint32 EstimateAuctionPurchaseTime(::Player* player);
+    uint32 EstimateAuctionPurchaseTime();
 
     // ========================================================================
     // CRAFTING ANALYSIS
     // ========================================================================
 
     /**
-     * Check if player can craft this material
+     * Check if bot can craft this material
      * Some "materials" are actually crafted items (e.g., enchanting reagents)
      */
-    bool CanCraftMaterial(::Player* player, uint32 itemId);
+    bool CanCraftMaterial(uint32 itemId);
 
     /**
      * Calculate cost to craft material
      * Includes reagent costs + time value
      */
     uint32 CalculateCraftingCost(
-        ::Player* player,
         uint32 itemId,
         uint32 quantity);
 
@@ -416,7 +428,6 @@ public:
      * Estimate time required to craft material
      */
     uint32 EstimateCraftingTime(
-        ::Player* player,
         uint32 itemId,
         uint32 quantity);
 
@@ -442,28 +453,32 @@ public:
      * Execute material acquisition plan
      * Coordinates with GatheringMaterialsBridge and ProfessionAuctionBridge
      */
-    bool ExecuteAcquisitionPlan(
-        ::Player* player,
-        MaterialAcquisitionPlan const& plan);
+    bool ExecuteAcquisitionPlan(MaterialAcquisitionPlan const& plan);
 
     /**
      * Acquire single material using recommended method
      */
-    bool AcquireMaterial(
-        ::Player* player,
-        MaterialSourcingDecision const& decision);
+    bool AcquireMaterial(MaterialSourcingDecision const& decision);
 
     // ========================================================================
     // STATISTICS
     // ========================================================================
 
-    MaterialSourcingStatistics const& GetPlayerStatistics(uint32 playerGuid) const;
-    MaterialSourcingStatistics const& GetGlobalStatistics() const;
-    void ResetStatistics(uint32 playerGuid);
+    MaterialSourcingStatistics const& GetStatistics() const;
+    static MaterialSourcingStatistics const& GetGlobalStatistics();
+    void ResetStatistics();
 
 private:
-    AuctionMaterialsBridge();
-    ~AuctionMaterialsBridge() = default;
+
+    // ========================================================================
+    // EVENT HANDLING (Phase 2)
+    // ========================================================================
+
+    /**
+     * @brief Handle profession events from ProfessionEventBus
+     * Reacts to MATERIALS_NEEDED, MATERIAL_PURCHASED
+     */
+    void HandleProfessionEvent(struct ProfessionEvent const& event);
 
     // ========================================================================
     // INITIALIZATION HELPERS
@@ -481,7 +496,6 @@ private:
      * Higher score = better choice
      */
     float ScoreAcquisitionMethod(
-        ::Player* player,
         MaterialAcquisitionMethod method,
         uint32 itemId,
         uint32 quantity,
@@ -497,37 +511,34 @@ private:
      * Calculate decision confidence based on data quality
      */
     float CalculateDecisionConfidence(
-        ::Player* player,
         MaterialSourcingDecision const& decision);
 
     // ========================================================================
     // INTEGRATION HELPERS
     // ========================================================================
 
-    GatheringMaterialsBridge* GetGatheringBridge() const;
-    ProfessionAuctionBridge* GetAuctionBridge() const;
+    GatheringMaterialsBridge* GetGatheringBridge();
+    ProfessionAuctionBridge* GetAuctionBridge();
+    ProfessionManager* GetProfessionManager();
 
     // ========================================================================
-    // DATA STRUCTURES
+    // PER-BOT DATA MEMBERS (Phase 4.2: Converted from maps)
     // ========================================================================
 
-    // Economic profiles (playerGuid -> profile)
-    std::unordered_map<uint32, BotEconomicProfile> _economicProfiles;
+    Player* _bot;                                       // Bot player reference (non-owning)
+    BotEconomicProfile _profile;                        // Bot's economic profile
+    MaterialAcquisitionPlan _activePlan;                // Active acquisition plan (if any)
+    MaterialSourcingStatistics _statistics;             // Per-bot statistics
+    uint32 _lastUpdateTime{0};                          // Last update timestamp
 
-    // Vendor materials (itemId -> vendor price)
-    std::unordered_map<uint32, uint32> _vendorMaterials;
+    // ========================================================================
+    // SHARED DATA MEMBERS (Static - shared across all bots)
+    // ========================================================================
 
-    // Active acquisition plans (playerGuid -> plan)
-    std::unordered_map<uint32, MaterialAcquisitionPlan> _activePlans;
-
-    // Statistics
-    std::unordered_map<uint32, MaterialSourcingStatistics> _playerStatistics;
-    MaterialSourcingStatistics _globalStatistics;
-
-    // Last update times (playerGuid -> timestamp)
-    std::unordered_map<uint32, uint32> _lastUpdateTimes;
-
-    mutable Playerbot::OrderedRecursiveMutex<Playerbot::LockOrder::TRADE_MANAGER> _mutex;
+    // Vendor materials (itemId -> vendor price) - world data
+    static std::unordered_map<uint32, uint32> _vendorMaterials;
+    static MaterialSourcingStatistics _globalStatistics;
+    static bool _sharedDataInitialized;
 
     // Update intervals
     static constexpr uint32 DECISION_UPDATE_INTERVAL = 60000;      // 1 minute
@@ -537,6 +548,10 @@ private:
     static constexpr float DEFAULT_GOLD_PER_HOUR = 100.0f * 10000.0f; // 100 gold
     static constexpr float DEFAULT_GATHERING_EFFICIENCY = 0.8f;    // 80% success rate
     static constexpr uint32 AUCTION_HOUSE_TRAVEL_TIME = 120;       // 2 minutes
+
+    // Non-copyable
+    AuctionMaterialsBridge(AuctionMaterialsBridge const&) = delete;
+    AuctionMaterialsBridge& operator=(AuctionMaterialsBridge const&) = delete;
 };
 
 } // namespace Playerbot

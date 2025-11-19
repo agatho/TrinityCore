@@ -11,11 +11,12 @@
  * @file BotAI_EventHandlers.cpp
  * @brief Default implementations of event handlers for BotAI
  *
- * This file contains the default event handler implementations for all 11 event buses.
+ * This file contains the default event handler implementations for all 12 event buses.
  * ClassAI implementations can override these virtual methods for specialized behavior.
  *
  * Phase 4: Event Bus Integration
- * - 11 event handlers fully implemented
+ * Phase 5: Template Migration (ProfessionEventBus added)
+ * - 12 event handlers fully implemented
  * - Delegates to managers where appropriate
  * - Provides sensible defaults for autonomous behavior
  */
@@ -32,6 +33,7 @@
 #include "Auction/AuctionEventBus.h"
 #include "NPC/NPCEventBus.h"
 #include "Instance/InstanceEventBus.h"
+#include "Professions/ProfessionEventBus.h"
 #include "Game/QuestManager.h"
 #include "Social/TradeManager.h"
 #include "Economy/AuctionManager.h"
@@ -69,8 +71,9 @@ void BotAI::SubscribeToEventBuses()
     AuctionEventBus::instance()->SubscribeAll(this);
     NPCEventBus::instance()->SubscribeAll(this);
     InstanceEventBus::instance()->SubscribeAll(this);
+    ProfessionEventBus::instance()->SubscribeAll(this);
 
-    TC_LOG_DEBUG("playerbot.events", "Bot {} subscribed to all 11 event buses",
+    TC_LOG_DEBUG("playerbot.events", "Bot {} subscribed to all 12 event buses",
         _bot->GetName());
 }
 
@@ -91,6 +94,7 @@ void BotAI::UnsubscribeFromEventBuses()
     AuctionEventBus::instance()->Unsubscribe(this);
     NPCEventBus::instance()->Unsubscribe(this);
     InstanceEventBus::instance()->Unsubscribe(this);
+    ProfessionEventBus::instance()->Unsubscribe(this);
 
     TC_LOG_DEBUG("playerbot.events", "Bot {} unsubscribed from all event buses",
         _bot->GetName());
@@ -703,6 +707,88 @@ void BotAI::OnInstanceEvent(InstanceEvent const& event)
             // Instance warnings (lockout warnings, reset notifications)
             TC_LOG_INFO("playerbot.events.instance", "Bot {}: Instance message: {}",
                 _bot->GetName(), event.message);
+            break;
+
+        default:
+            break;
+    }
+}
+
+// ============================================================================
+// PROFESSION EVENT HANDLER
+// ============================================================================
+
+void BotAI::OnProfessionEvent(ProfessionEvent const& event)
+{
+    if (!_bot)
+        return;
+
+    switch (event.type)
+    {
+        case ProfessionEventType::RECIPE_LEARNED:
+            TC_LOG_DEBUG("playerbot.events.profession", "Bot {}: Learned recipe {} for {}",
+                _bot->GetName(), event.recipeId, static_cast<uint32>(event.profession));
+            // Trigger profession system update to evaluate new crafting options
+            break;
+
+        case ProfessionEventType::SKILL_UP:
+            TC_LOG_DEBUG("playerbot.events.profession", "Bot {}: Profession {} skill increased from {} to {}",
+                _bot->GetName(), static_cast<uint32>(event.profession),
+                event.skillBefore, event.skillAfter);
+            break;
+
+        case ProfessionEventType::CRAFTING_STARTED:
+            TC_LOG_TRACE("playerbot.events.profession", "Bot {}: Started crafting recipe {} (item {})",
+                _bot->GetName(), event.recipeId, event.itemId);
+            break;
+
+        case ProfessionEventType::CRAFTING_COMPLETED:
+            TC_LOG_DEBUG("playerbot.events.profession", "Bot {}: Completed crafting item {} x{} from recipe {}",
+                _bot->GetName(), event.itemId, event.quantity, event.recipeId);
+            // Track successful crafts for profession progression
+            break;
+
+        case ProfessionEventType::CRAFTING_FAILED:
+            TC_LOG_WARN("playerbot.events.profession", "Bot {}: Crafting failed for recipe {} - {}",
+                _bot->GetName(), event.recipeId, event.reason);
+            // Profession system should handle retry logic or material acquisition
+            break;
+
+        case ProfessionEventType::MATERIALS_NEEDED:
+            TC_LOG_DEBUG("playerbot.events.profession", "Bot {}: Materials needed for recipe {} ({})",
+                _bot->GetName(), event.recipeId, static_cast<uint32>(event.profession));
+            // Trigger material acquisition (gathering, AH purchase, or bank withdrawal)
+            break;
+
+        case ProfessionEventType::MATERIAL_GATHERED:
+            TC_LOG_TRACE("playerbot.events.profession", "Bot {}: Gathered material {} x{} for {}",
+                _bot->GetName(), event.itemId, event.quantity,
+                static_cast<uint32>(event.profession));
+            break;
+
+        case ProfessionEventType::MATERIAL_PURCHASED:
+            TC_LOG_DEBUG("playerbot.events.profession", "Bot {}: Purchased material {} x{} for {} gold",
+                _bot->GetName(), event.itemId, event.quantity, event.goldAmount);
+            break;
+
+        case ProfessionEventType::ITEM_BANKED:
+            TC_LOG_TRACE("playerbot.events.profession", "Bot {}: Banked item {} x{}",
+                _bot->GetName(), event.itemId, event.quantity);
+            break;
+
+        case ProfessionEventType::ITEM_WITHDRAWN:
+            TC_LOG_DEBUG("playerbot.events.profession", "Bot {}: Withdrew item {} x{} from bank",
+                _bot->GetName(), event.itemId, event.quantity);
+            break;
+
+        case ProfessionEventType::GOLD_BANKED:
+            TC_LOG_TRACE("playerbot.events.profession", "Bot {}: Banked {} gold",
+                _bot->GetName(), event.goldAmount);
+            break;
+
+        case ProfessionEventType::GOLD_WITHDRAWN:
+            TC_LOG_DEBUG("playerbot.events.profession", "Bot {}: Withdrew {} gold from bank",
+                _bot->GetName(), event.goldAmount);
             break;
 
         default:

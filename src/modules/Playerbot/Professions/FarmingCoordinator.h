@@ -153,37 +153,60 @@ struct FarmingStatistics
 
 /**
  * @brief Complete farming coordination system for profession leveling
+ *
+ * **Phase 5.2: Singleton → Per-Bot Instance Pattern**
+ *
+ * DESIGN PRINCIPLE: Per-bot instance owned by GameSystemsManager
+ * - Each bot has its own FarmingCoordinator instance
+ * - No mutex locking (per-bot isolation)
+ * - Direct member access (no map lookups)
+ * - Integrates with profession and gathering systems via facade
+ * - Coordinates skill leveling with character progression
+ *
+ * **Ownership:**
+ * - Owned by GameSystemsManager via std::unique_ptr
+ * - Constructed per-bot with Player* reference
+ * - Destroyed with bot cleanup
  */
 class TC_GAME_API FarmingCoordinator final : public IFarmingCoordinator
 {
 public:
-    static FarmingCoordinator* instance();
+    /**
+     * @brief Construct farming coordinator for bot
+     * @param bot The bot player this manager serves
+     */
+    explicit FarmingCoordinator(Player* bot);
+
+    /**
+     * @brief Destructor - cleanup per-bot resources
+     */
+    ~FarmingCoordinator();
 
     // ============================================================================
     // CORE FARMING COORDINATION
     // ============================================================================
 
     /**
-     * Initialize farming coordinator on server startup
+     * Initialize farming coordinator (called once per bot)
      */
     void Initialize() override;
 
     /**
-     * Update farming coordination for player (called periodically)
+     * Update farming coordination (called periodically)
      */
     void Update(::Player* player, uint32 diff) override;
 
     /**
-     * Enable/disable farming coordination for player
+     * Enable/disable farming coordination for this bot
      */
-    void SetEnabled(::Player* player, bool enabled) override;
-    bool IsEnabled(::Player* player) const override;
+    void SetEnabled(bool enabled) override;
+    bool IsEnabled() const override;
 
     /**
-     * Get coordination profile for player
+     * Get coordination profile for this bot
      */
-    void SetCoordinatorProfile(uint32 playerGuid, FarmingCoordinatorProfile const& profile) override;
-    FarmingCoordinatorProfile GetCoordinatorProfile(uint32 playerGuid) const override;
+    void SetCoordinatorProfile(FarmingCoordinatorProfile const& profile) override;
+    FarmingCoordinatorProfile GetCoordinatorProfile() const override;
 
     // ============================================================================
     // SKILL ANALYSIS
@@ -193,30 +216,30 @@ public:
      * Check if profession skill needs catch-up farming
      * Returns true if skill gap exceeds threshold
      */
-    bool NeedsFarming(::Player* player, ProfessionType profession) const override;
+    bool NeedsFarming(ProfessionType profession) const override;
 
     /**
      * Calculate skill gap for profession
      * Returns: (target skill) - (current skill)
      * Positive = behind, Negative = ahead
      */
-    int32 GetSkillGap(::Player* player, ProfessionType profession) const override;
+    int32 GetSkillGap(ProfessionType profession) const override;
 
     /**
      * Get target skill level for character level
      * Formula: character_level × skillLevelMultiplier
      */
-    uint16 GetTargetSkillLevel(::Player* player, ProfessionType profession) const override;
+    uint16 GetTargetSkillLevel(ProfessionType profession) const override;
 
     /**
      * Get professions that need farming (sorted by priority)
      */
-    std::vector<ProfessionType> GetProfessionsNeedingFarm(::Player* player) const override;
+    std::vector<ProfessionType> GetProfessionsNeedingFarm() const override;
 
     /**
      * Calculate recommended farming duration based on skill gap
      */
-    uint32 CalculateFarmingDuration(::Player* player, ProfessionType profession) const override;
+    uint32 CalculateFarmingDuration(ProfessionType profession) const override;
 
     // ============================================================================
     // FARMING SESSION MANAGEMENT
@@ -225,32 +248,32 @@ public:
     /**
      * Start farming session for profession
      */
-    bool StartFarmingSession(::Player* player, ProfessionType profession, FarmingSessionType sessionType = FarmingSessionType::SKILL_CATCHUP) override;
+    bool StartFarmingSession(ProfessionType profession, FarmingSessionType sessionType = FarmingSessionType::SKILL_CATCHUP) override;
 
     /**
      * Stop active farming session
      */
-    void StopFarmingSession(::Player* player) override;
+    void StopFarmingSession() override;
 
     /**
-     * Get active farming session for player
+     * Get active farming session for this bot
      */
-    FarmingSession const* GetActiveFarmingSession(uint32 playerGuid) const override;
+    FarmingSession const* GetActiveFarmingSession() const override;
 
     /**
-     * Check if player has active farming session
+     * Check if this bot has active farming session
      */
-    bool HasActiveFarmingSession(::Player* player) const override;
+    bool HasActiveFarmingSession() const override;
 
     /**
      * Update farming session progress
      */
-    void UpdateFarmingSession(::Player* player, uint32 diff) override;
+    void UpdateFarmingSession(uint32 diff) override;
 
     /**
      * Check if farming session should end
      */
-    bool ShouldEndFarmingSession(::Player* player, FarmingSession const& session) const override;
+    bool ShouldEndFarmingSession(FarmingSession const& session) const override;
 
     // ============================================================================
     // ZONE SELECTION
@@ -259,12 +282,12 @@ public:
     /**
      * Get optimal farming zone for profession and skill level
      */
-    FarmingZoneInfo const* GetOptimalFarmingZone(::Player* player, ProfessionType profession) const override;
+    FarmingZoneInfo const* GetOptimalFarmingZone(ProfessionType profession) const override;
 
     /**
      * Get all suitable zones for skill level
      */
-    std::vector<FarmingZoneInfo> GetSuitableZones(::Player* player, ProfessionType profession) const override;
+    std::vector<FarmingZoneInfo> GetSuitableZones(ProfessionType profession) const override;
 
     /**
      * Calculate zone score based on:
@@ -273,7 +296,7 @@ public:
      * - Skill-up potential
      * - Safety (PvP risk)
      */
-    float CalculateZoneScore(::Player* player, FarmingZoneInfo const& zone) const override;
+    float CalculateZoneScore(FarmingZoneInfo const& zone) const override;
 
     // ============================================================================
     // MATERIAL MANAGEMENT
@@ -282,43 +305,51 @@ public:
     /**
      * Check if material stockpile target reached
      */
-    bool HasReachedStockpileTarget(::Player* player, uint32 itemId) const override;
+    bool HasReachedStockpileTarget(uint32 itemId) const override;
 
     /**
      * Get current material count in inventory
      */
-    uint32 GetMaterialCount(::Player* player, uint32 itemId) const override;
+    uint32 GetMaterialCount(uint32 itemId) const override;
 
     /**
      * Get materials needed for auction house target
      */
-    std::vector<std::pair<uint32, uint32>> GetNeededMaterials(::Player* player, ProfessionType profession) const override;
+    std::vector<std::pair<uint32, uint32>> GetNeededMaterials(ProfessionType profession) const override;
 
     // ============================================================================
     // STATISTICS
     // ============================================================================
 
-    FarmingStatistics const& GetPlayerStatistics(uint32 playerGuid) const override;
-    FarmingStatistics const& GetGlobalStatistics() const override;
+    /**
+     * Get statistics for this bot
+     */
+    FarmingStatistics const& GetStatistics() const override;
 
     /**
-     * Reset statistics for player
+     * Get global statistics across all bots
      */
-    void ResetStatistics(uint32 playerGuid) override;
+    static FarmingStatistics const& GetGlobalStatistics();
+
+    /**
+     * Reset statistics for this bot
+     */
+    void ResetStatistics() override;
 
 private:
-    FarmingCoordinator();
-    ~FarmingCoordinator() = default;
+    // Non-copyable
+    FarmingCoordinator(FarmingCoordinator const&) = delete;
+    FarmingCoordinator& operator=(FarmingCoordinator const&) = delete;
 
     // ============================================================================
     // INITIALIZATION HELPERS
     // ============================================================================
 
-    void LoadFarmingZones();
-    void InitializeZoneDatabase();
-    void InitializeMiningZones();
-    void InitializeHerbalismZones();
-    void InitializeSkinningZones();
+    static void LoadFarmingZones();  // Load shared zone database once
+    static void InitializeZoneDatabase();
+    static void InitializeMiningZones();
+    static void InitializeHerbalismZones();
+    static void InitializeSkinningZones();
 
     // ============================================================================
     // FARMING HELPERS
@@ -327,52 +358,67 @@ private:
     /**
      * Generate unique session ID
      */
-    uint32 GenerateSessionId();
+    static uint32 GenerateSessionId();
 
     /**
      * Teleport/navigate bot to farming zone
      */
-    bool TravelToFarmingZone(::Player* player, FarmingZoneInfo const& zone);
+    bool TravelToFarmingZone(FarmingZoneInfo const& zone);
 
     /**
      * Return bot to original position after farming
      */
-    void ReturnToOriginalPosition(::Player* player, FarmingSession const& session);
+    void ReturnToOriginalPosition(FarmingSession const& session);
 
     /**
      * Check if farming conditions are met (not in combat, not in group, etc.)
      */
-    bool CanStartFarming(::Player* player) const;
+    bool CanStartFarming() const;
 
     /**
      * Validate farming session is still valid
      */
-    bool ValidateFarmingSession(::Player* player, FarmingSession const& session) const;
+    bool ValidateFarmingSession(FarmingSession const& session) const;
 
     // ============================================================================
-    // DATA STRUCTURES
+    // INTEGRATION HELPERS
     // ============================================================================
 
-    // Active farming sessions (playerGuid -> session)
-    std::unordered_map<uint32, FarmingSession> _activeSessions;
+    /**
+     * Get ProfessionManager via GameSystemsManager facade
+     */
+    class ProfessionManager* GetProfessionManager();
+
+    /**
+     * Get GatheringManager via GameSystemsManager facade
+     */
+    class GatheringManager* GetGatheringManager();
+
+    // ============================================================================
+    // PER-BOT INSTANCE DATA
+    // ============================================================================
+
+    Player* _bot;                               // Bot reference (non-owning)
+    FarmingSession _activeSession;              // Active farming session for this bot
+    FarmingCoordinatorProfile _profile;         // Coordination profile for this bot
+    FarmingStatistics _statistics;              // Statistics for this bot
+    uint32 _lastFarmingTime{0};                 // Last farming timestamp for cooldown
+    bool _enabled{true};                        // Farming automation enabled
+
+    // ============================================================================
+    // SHARED STATIC DATA
+    // ============================================================================
 
     // Farming zone database (profession -> zones sorted by skill level)
-    std::unordered_map<ProfessionType, std::vector<FarmingZoneInfo>> _farmingZones;
+    // Shared across all bots, initialized once
+    static std::unordered_map<ProfessionType, std::vector<FarmingZoneInfo>> _farmingZones;
+    static bool _farmingZonesInitialized;
 
-    // Coordination profiles (playerGuid -> profile)
-    std::unordered_map<uint32, FarmingCoordinatorProfile> _profiles;
+    // Global statistics across all bots
+    static FarmingStatistics _globalStatistics;
 
-    // Last farming time (playerGuid -> timestamp) for cooldown tracking
-    std::unordered_map<uint32, uint32> _lastFarmingTimes;
-
-    // Statistics
-    std::unordered_map<uint32, FarmingStatistics> _playerStatistics;
-    FarmingStatistics _globalStatistics;
-
-    mutable Playerbot::OrderedRecursiveMutex<Playerbot::LockOrder::PROFESSION_MANAGER> _mutex;
-
-    // Session ID generator
-    std::atomic<uint32> _nextSessionId{1};
+    // Session ID generator (shared across all bots)
+    static std::atomic<uint32> _nextSessionId;
 
     // Update intervals
     static constexpr uint32 FARMING_CHECK_INTERVAL = 10000;     // 10 seconds

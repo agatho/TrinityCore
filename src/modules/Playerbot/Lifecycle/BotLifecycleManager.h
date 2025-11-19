@@ -233,11 +233,11 @@ private:
     // Activity tracking
     BotActivity _currentActivity;
     std::queue<BotActivity> _activityQueue;
-    mutable Playerbot::OrderedRecursiveMutex<Playerbot::LockOrder::BOT_SPAWNER> _activityMutex;
+    
 
     // Performance metrics
     BotPerformanceMetrics _metrics;
-    mutable Playerbot::OrderedRecursiveMutex<Playerbot::LockOrder::BOT_SPAWNER> _metricsMutex;
+    
 
     // Idle management
     uint32 _idleTimer;
@@ -257,7 +257,10 @@ private:
 class TC_GAME_API BotLifecycleManager final : public IBotLifecycleManager
 {
 public:
-    static BotLifecycleManager* instance();
+    explicit BotLifecycleManager(Player* bot);
+    ~BotLifecycleManager();
+    BotLifecycleManager(BotLifecycleManager const&) = delete;
+    BotLifecycleManager& operator=(BotLifecycleManager const&) = delete;
 
     // === IBotLifecycleManager interface implementation ===
 
@@ -348,19 +351,19 @@ public:
     void RegisterEventHandler(LifecycleEventHandler handler) override;
 
 private:
-    BotLifecycleManager();
+    Player* _bot;
     ~BotLifecycleManager();
 
     // Bot storage
     std::unordered_map<ObjectGuid, std::shared_ptr<BotLifecycle>> _botLifecycles;
-    mutable Playerbot::OrderedRecursiveMutex<Playerbot::LockOrder::BOT_SPAWNER> _lifecycleMutex;
+    
 
     // Configuration
     uint32 _maxConcurrentLogins = 10;
     uint32 _updateInterval = 100; // milliseconds
 
     // Statistics tracking
-    mutable Playerbot::OrderedRecursiveMutex<Playerbot::LockOrder::BOT_SPAWNER> _statsMutex;
+    
     std::chrono::steady_clock::time_point _lastStatsUpdate;
     static constexpr auto STATS_UPDATE_INTERVAL = std::chrono::seconds(1);
 

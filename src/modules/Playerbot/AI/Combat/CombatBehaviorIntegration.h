@@ -33,6 +33,8 @@ namespace Playerbot
     class CrowdControlManager;
     class DefensiveManager;
     class MovementIntegration;
+    class BotThreatManager;
+    class PositionManager;
 
     enum class CombatSituation : uint8;
     enum class BotRole : uint8;
@@ -181,6 +183,10 @@ namespace Playerbot
 
         // Member variables
         Player* _bot;
+
+        // Core infrastructure (created first - dependencies for other managers)
+        std::unique_ptr<BotThreatManager> _threatManager;
+        std::unique_ptr<PositionManager> _positionManager;
 
         // Manager instances
         std::unique_ptr<CombatStateAnalyzer> _stateAnalyzer;

@@ -28,7 +28,7 @@
 #include "Log.h"
 #include "World.h"
 #include "WorldSession.h"
-#include "Arbiter/MovementArbiter.h"
+#include "UnifiedMovementCoordinator.h"  // Phase 2: Unified movement system
 #include "Arbiter/MovementRequest.h"
 #include "Arbiter/MovementPriorityMapper.h"
 #include "UnitAI.h"
@@ -1301,7 +1301,7 @@ bool LeaderFollowBehavior::StartMovement(Player* bot, const Position& destinatio
 
             // PHASE 5 MIGRATION: Use Movement Arbiter with FOLLOW priority (70)
             BotAI* botAI = dynamic_cast<BotAI*>(bot->GetAI());
-            if (botAI && botAI->GetMovementArbiter())
+            if (botAI && botAI->GetUnifiedMovementCoordinator())
             {
                 // Create follow movement request with angle for formation
                 MovementRequest req = MovementRequest::MakeFollowMovement(
@@ -1313,7 +1313,7 @@ bool LeaderFollowBehavior::StartMovement(Player* bot, const Position& destinatio
                     "Following group leader in formation",
                     "LeaderFollowBehavior");
 
-                bool accepted = botAI->GetMovementArbiter()->RequestMovement(req);
+                bool accepted = botAI->GetUnifiedMovementCoordinator()->RequestMovement(req);
                 if (accepted)
                 {
                     TC_LOG_ERROR("module.playerbot", "✅ StartMovement: Bot {} now following {} at {:.1f}yd, angle {:.1f}rad (was: {})",

@@ -8,9 +8,9 @@
  */
 
 #include "WarriorAI.h"
-#include "ArmsWarriorRefactored.h"
-#include "FuryWarriorRefactored.h"
-#include "ProtectionWarriorRefactored.h"
+#include "ArmsWarrior.h"
+#include "FuryWarrior.h"
+#include "ProtectionWarrior.h"
 #include "../BaselineRotationManager.h"
 #include "../../Combat/CombatBehaviorIntegration.h"
 #include "Player.h"

@@ -22,7 +22,7 @@
 #include "SpellInfo.h"
 #include "../../Spatial/SpatialGridManager.h"
 #include "../../Spatial/SpatialGridQueryHelpers.h"  // PHASE 5B: Thread-safe helpers
-#include "../../Movement/Arbiter/MovementArbiter.h"
+#include "../../Movement/UnifiedMovementCoordinator.h"  // Phase 2: Unified movement system
 #include "../../Movement/Arbiter/MovementRequest.h"
 #include "../../Movement/Arbiter/MovementPriorityMapper.h"
 #include "../BotAI.h"
@@ -199,7 +199,7 @@ bool ObstacleAvoidanceManager::ExecuteAvoidanceManeuver(const AvoidanceManeuver&
 
                     // PHASE 3 MIGRATION (MISSED): Use Movement Arbiter with OBSTACLE_AVOIDANCE_EMERGENCY priority (245)
                     BotAI* botAI = dynamic_cast<BotAI*>(_bot->GetAI());
-                    if (botAI && botAI->GetMovementArbiter())
+                    if (botAI && botAI->GetUnifiedMovementCoordinator())
                     {
                         bool accepted = botAI->RequestPointMovement(
                             PlayerBotMovementPriority::OBSTACLE_AVOIDANCE_EMERGENCY,  // Priority 245 - CRITICAL tier
@@ -232,7 +232,7 @@ bool ObstacleAvoidanceManager::ExecuteAvoidanceManeuver(const AvoidanceManeuver&
 
                     // PHASE 6A: Use Movement Arbiter with OBSTACLE_AVOIDANCE_EMERGENCY priority (245)
                     BotAI* botAI = dynamic_cast<BotAI*>(_bot->GetAI());
-                    if (botAI && botAI->GetMovementArbiter())
+                    if (botAI && botAI->GetUnifiedMovementCoordinator())
                     {
                         MovementRequest req = MovementRequest::MakeJumpMovement(
                             PlayerBotMovementPriority::OBSTACLE_AVOIDANCE_EMERGENCY,  // Priority 245 - CRITICAL tier
@@ -243,7 +243,7 @@ bool ObstacleAvoidanceManager::ExecuteAvoidanceManeuver(const AvoidanceManeuver&
                             "Jumping over obstacle",
                             "ObstacleAvoidanceManager");
 
-                        bool accepted = botAI->GetMovementArbiter()->RequestMovement(req);
+                        bool accepted = botAI->GetUnifiedMovementCoordinator()->RequestMovement(req);
                         if (!accepted)
                         {
                             TC_LOG_TRACE("playerbot.movement.arbiter",
@@ -266,7 +266,7 @@ bool ObstacleAvoidanceManager::ExecuteAvoidanceManeuver(const AvoidanceManeuver&
 
                     // PHASE 3 MIGRATION (MISSED): Use Movement Arbiter with OBSTACLE_AVOIDANCE_EMERGENCY priority (245)
                     BotAI* botAI = dynamic_cast<BotAI*>(_bot->GetAI());
-                    if (botAI && botAI->GetMovementArbiter())
+                    if (botAI && botAI->GetUnifiedMovementCoordinator())
                     {
                         bool accepted = botAI->RequestPointMovement(
                             PlayerBotMovementPriority::OBSTACLE_AVOIDANCE_EMERGENCY,  // Priority 245 - CRITICAL tier

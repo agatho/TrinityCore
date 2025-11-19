@@ -2,8 +2,13 @@
   "hooks": {
     "SessionStart": [
       {
+        "description": "Install and configure dependencies (TBB, phmap, Boost)",
+        "command": "\"$CLAUDE_PROJECT_DIR\"/scripts/install_dependencies.sh",
+        "timeout": 900000
+      },
+      {
         "description": "Display project status and current phase",
-        "command": "echo '=== TrinityCore Playerbot - German Windows Environment ===' && echo 'Branch: playerbot-dev' && echo 'Baseline: a933e3dae4 (Remote branch with orphaned null check fixes)' && echo 'Compiler: MSVC 14.44 (Visual Studio 2022 Enterprise)' && echo 'Target: worldserver (RelWithDebInfo)' && echo 'Language: German (error messages in German)' && echo '' && echo 'Mission: Fix compilation errors until worldserver.exe builds with 0 errors' && echo 'Workflow: analyze → fix → build → commit → repeat' && echo ''"
+        "command": "echo '=== TrinityCore Playerbot - Iterative Compilation Environment ===' && echo 'Branch: '$(git branch --show-current) && echo 'Latest commit: '$(git log --oneline -1) && echo '' && echo 'Mission: Fix compilation errors until PlayerBot module builds with 0 errors' && echo 'Workflow: analyze → fix → build → commit → repeat' && echo ''"
       },
       {
         "description": "Check git branch and status",

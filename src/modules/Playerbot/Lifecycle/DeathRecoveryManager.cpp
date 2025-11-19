@@ -34,7 +34,7 @@
 #include "Opcodes.h"  // For CMSG_RECLAIM_CORPSE
 
 // PHASE 3 MIGRATION: Movement Arbiter Integration
-#include "Movement/Arbiter/MovementArbiter.h"
+#include "Movement/UnifiedMovementCoordinator.h  // Phase 2: Unified movement system"
 #include "Movement/Arbiter/MovementRequest.h"
 #include "Movement/Arbiter/MovementPriorityMapper.h"
 
@@ -1034,7 +1034,7 @@ bool DeathRecoveryManager::NavigateToCorpse()
     // PHASE 3 MIGRATION: Use Movement Arbiter with DEATH_RECOVERY priority (255)
     // Death recovery has the ABSOLUTE HIGHEST priority - must override ALL other movement
     BotAI* botAI = dynamic_cast<BotAI*>(m_bot->GetAI());
-    if (botAI && botAI->GetMovementArbiter())
+    if (botAI && botAI->GetUnifiedMovementCoordinator())
     {
         // CORPSE RUN MOVEMENT FIX: Throttle movement updates to 500ms to prevent spell mod crashes
         // Rapid movement recalculation causes Spell.cpp:603 assertion failure (m_spellModTakingSpell corruption)
@@ -1276,7 +1276,7 @@ bool DeathRecoveryManager::NavigateToSpiritHealer()
     // PHASE 3 MIGRATION: Use Movement Arbiter with DEATH_RECOVERY priority (255)
     // Death recovery has the ABSOLUTE HIGHEST priority - must override ALL other movement
     BotAI* botAI = dynamic_cast<BotAI*>(m_bot->GetAI());
-    if (botAI && botAI->GetMovementArbiter())
+    if (botAI && botAI->GetUnifiedMovementCoordinator())
     {
         Position spiritHealerPos(spiritHealer->GetPositionX(),
                                 spiritHealer->GetPositionY(),

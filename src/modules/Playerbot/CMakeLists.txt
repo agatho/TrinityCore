@@ -153,10 +153,6 @@ set(PLAYERBOT_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/AI/Strategy/SoloCombatStrategy.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/AI/Strategy/SoloCombatStrategy.h
 
-    # Phase 2.2: CombatMovementStrategy - Role-based Combat Positioning
-    ${CMAKE_CURRENT_SOURCE_DIR}/AI/Strategy/CombatMovementStrategy.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/AI/Strategy/CombatMovementStrategy.h
-
     # AI Action System (basic)
     ${CMAKE_CURRENT_SOURCE_DIR}/AI/Actions/Action.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/AI/Actions/Action.h
@@ -175,6 +171,12 @@ set(PLAYERBOT_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/Core/Managers/IManagerBase.h
     ${CMAKE_CURRENT_SOURCE_DIR}/Core/Managers/ManagerRegistry.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Core/Managers/ManagerRegistry.h
+
+    # Phase 6: Game Systems Facade - BotAI Decoupling
+    ${CMAKE_CURRENT_SOURCE_DIR}/Core/Managers/IGameSystemsManager.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/Core/Managers/GameSystemsManager.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Core/Managers/GameSystemsManager.h
+
     ${CMAKE_CURRENT_SOURCE_DIR}/Core/Events/EventDispatcher.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Core/Events/EventDispatcher.h
 
@@ -365,8 +367,9 @@ set(PLAYERBOT_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/Group/RoleAssignment.h
 
     # Group Event System - Event-Driven Architecture for Group Coordination
-    ${CMAKE_CURRENT_SOURCE_DIR}/Group/GroupEventBus.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Group/GroupEventBus.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/Group/GroupEvents.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Group/GroupEvents.h
     ${CMAKE_CURRENT_SOURCE_DIR}/Group/GroupEventHandler.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Group/GroupEventHandler.h
     ${CMAKE_CURRENT_SOURCE_DIR}/Group/PlayerbotGroupScript.cpp
@@ -392,26 +395,36 @@ set(PLAYERBOT_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/Network/ParseInstancePacket_Typed.cpp
 
     # Phase 4: Complete Event Bus System (All 11 Buses)
-    ${CMAKE_CURRENT_SOURCE_DIR}/Combat/CombatEventBus.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Combat/CombatEventBus.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/Cooldown/CooldownEventBus.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Combat/CombatEvents.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Combat/CombatEvents.h
     ${CMAKE_CURRENT_SOURCE_DIR}/Cooldown/CooldownEventBus.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/Aura/AuraEventBus.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Cooldown/CooldownEvents.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Cooldown/CooldownEvents.h
     ${CMAKE_CURRENT_SOURCE_DIR}/Aura/AuraEventBus.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/Loot/LootEventBus.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Aura/AuraEvents.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Aura/AuraEvents.h
     ${CMAKE_CURRENT_SOURCE_DIR}/Loot/LootEventBus.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/Quest/QuestEventBus.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Loot/LootEvents.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Loot/LootEvents.h
     ${CMAKE_CURRENT_SOURCE_DIR}/Quest/QuestEventBus.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/Resource/ResourceEventBus.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Quest/QuestEvents.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Quest/QuestEvents.h
     ${CMAKE_CURRENT_SOURCE_DIR}/Resource/ResourceEventBus.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/Social/SocialEventBus.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Resource/ResourceEvents.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Resource/ResourceEvents.h
     ${CMAKE_CURRENT_SOURCE_DIR}/Social/SocialEventBus.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/Auction/AuctionEventBus.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Social/SocialEvents.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Social/SocialEvents.h
     ${CMAKE_CURRENT_SOURCE_DIR}/Auction/AuctionEventBus.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/NPC/NPCEventBus.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Auction/AuctionEvents.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Auction/AuctionEvents.h
     ${CMAKE_CURRENT_SOURCE_DIR}/NPC/NPCEventBus.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/Instance/InstanceEventBus.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/NPC/NPCEvents.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/NPC/NPCEvents.h
     ${CMAKE_CURRENT_SOURCE_DIR}/Instance/InstanceEventBus.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/Instance/InstanceEvents.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Instance/InstanceEvents.h
 
     # Phase 4: BotAI Event Handler Integration
     ${CMAKE_CURRENT_SOURCE_DIR}/AI/BotAI_EventHandlers.cpp
@@ -426,8 +439,6 @@ set(PLAYERBOT_SOURCES
 
     ${CMAKE_CURRENT_SOURCE_DIR}/Movement/QuestPathfinder.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Movement/QuestPathfinder.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/Movement/GroupFormationManager.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/Movement/GroupFormationManager.h
 
     # Phase 2: Account Management System
     ${CMAKE_CURRENT_SOURCE_DIR}/Account/BotAccountMgr.cpp
@@ -489,6 +500,7 @@ set(PLAYERBOT_SOURCES
     # ${CMAKE_CURRENT_SOURCE_DIR}/Lifecycle/BotPerformanceMonitor.h
     ${CMAKE_CURRENT_SOURCE_DIR}/Lifecycle/BotSpawnEventBus.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Lifecycle/BotSpawnEventBus.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/Lifecycle/BotSpawnEvents.h
 
     # Performance Optimization System (Phase 5)
     ${CMAKE_CURRENT_SOURCE_DIR}/Performance/ObjectPool.h
@@ -628,6 +640,8 @@ set(PLAYERBOT_SOURCES
     # Profession System - Complete Crafting + Gathering Automation (Phase 1, 2, 3)
     ${CMAKE_CURRENT_SOURCE_DIR}/Professions/ProfessionManager.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Professions/ProfessionManager.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/Professions/ProfessionDatabase.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Professions/ProfessionDatabase.h
     # Phase 2.4: Replaced by GatheringManager (BehaviorManager pattern)
     ${CMAKE_CURRENT_SOURCE_DIR}/Professions/GatheringManager.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Professions/GatheringManager.h
@@ -639,8 +653,9 @@ set(PLAYERBOT_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/Professions/GatheringMaterialsBridge.h
     ${CMAKE_CURRENT_SOURCE_DIR}/Professions/AuctionMaterialsBridge.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Professions/AuctionMaterialsBridge.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/Professions/ProfessionEventBus.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Professions/ProfessionEventBus.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/Professions/ProfessionEvents.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Professions/ProfessionEvents.h
 
     # Banking System - Personal Bank Automation
     ${CMAKE_CURRENT_SOURCE_DIR}/Banking/BankingManager.cpp
@@ -757,7 +772,6 @@ set(PLAYERBOT_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/Interaction/Core/GossipHandler.h
     ${CMAKE_CURRENT_SOURCE_DIR}/Interaction/Core/InteractionValidator.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Interaction/Core/InteractionValidator.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/Interaction/Vendors/VendorInteraction.h
     ${CMAKE_CURRENT_SOURCE_DIR}/Interaction/VendorInteractionManager.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Interaction/VendorInteractionManager.h
     ${CMAKE_CURRENT_SOURCE_DIR}/Interaction/FlightMasterManager.cpp
@@ -872,8 +886,6 @@ source_group("AI\\Strategy" FILES
     ${CMAKE_CURRENT_SOURCE_DIR}/AI/Strategy/LootStrategy.h
     ${CMAKE_CURRENT_SOURCE_DIR}/AI/Strategy/RestStrategy.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/AI/Strategy/RestStrategy.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/AI/Strategy/CombatMovementStrategy.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/AI/Strategy/CombatMovementStrategy.h
 )
 
 source_group("AI\\Actions" FILES
@@ -950,8 +962,9 @@ source_group("Group" FILES
     ${CMAKE_CURRENT_SOURCE_DIR}/Group/RoleDefinitions.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Group/RoleDefinitions.h
     ${CMAKE_CURRENT_SOURCE_DIR}/Group/RoleAssignment.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/Group/GroupEventBus.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Group/GroupEventBus.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/Group/GroupEvents.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Group/GroupEvents.h
     ${CMAKE_CURRENT_SOURCE_DIR}/Group/GroupEventHandler.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Group/GroupEventHandler.h
     ${CMAKE_CURRENT_SOURCE_DIR}/Group/PlayerbotGroupScript.cpp
@@ -982,53 +995,63 @@ source_group("Movement" FILES
 )
 
 source_group("Resource" FILES
-    ${CMAKE_CURRENT_SOURCE_DIR}/Resource/ResourceEventBus.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Resource/ResourceEventBus.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/Resource/ResourceEvents.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Resource/ResourceEvents.h
 )
 
 source_group("Social" FILES
-    ${CMAKE_CURRENT_SOURCE_DIR}/Social/SocialEventBus.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Social/SocialEventBus.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/Social/SocialEvents.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Social/SocialEvents.h
 )
 
 source_group("Auction" FILES
-    ${CMAKE_CURRENT_SOURCE_DIR}/Auction/AuctionEventBus.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Auction/AuctionEventBus.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/Auction/AuctionEvents.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Auction/AuctionEvents.h
 )
 
 source_group("NPC" FILES
-    ${CMAKE_CURRENT_SOURCE_DIR}/NPC/NPCEventBus.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/NPC/NPCEventBus.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/NPC/NPCEvents.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/NPC/NPCEvents.h
 )
 
 source_group("Instance" FILES
-    ${CMAKE_CURRENT_SOURCE_DIR}/Instance/InstanceEventBus.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Instance/InstanceEventBus.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/Instance/InstanceEvents.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Instance/InstanceEvents.h
 )
 
 source_group("Combat" FILES
-    ${CMAKE_CURRENT_SOURCE_DIR}/Combat/CombatEventBus.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Combat/CombatEventBus.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/Combat/CombatEvents.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Combat/CombatEvents.h
 )
 
 source_group("Cooldown" FILES
-    ${CMAKE_CURRENT_SOURCE_DIR}/Cooldown/CooldownEventBus.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Cooldown/CooldownEventBus.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/Cooldown/CooldownEvents.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Cooldown/CooldownEvents.h
 )
 
 source_group("Aura" FILES
-    ${CMAKE_CURRENT_SOURCE_DIR}/Aura/AuraEventBus.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Aura/AuraEventBus.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/Aura/AuraEvents.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Aura/AuraEvents.h
 )
 
 source_group("Loot" FILES
-    ${CMAKE_CURRENT_SOURCE_DIR}/Loot/LootEventBus.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Loot/LootEventBus.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/Loot/LootEvents.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Loot/LootEvents.h
 )
 
 source_group("Quest" FILES
-    ${CMAKE_CURRENT_SOURCE_DIR}/Quest/QuestEventBus.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Quest/QuestEventBus.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/Quest/QuestEvents.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Quest/QuestEvents.h
 )
 
 source_group("Account" FILES
@@ -1072,6 +1095,7 @@ source_group("Lifecycle" FILES
     # ${CMAKE_CURRENT_SOURCE_DIR}/Lifecycle/BotPerformanceMonitor.h
     ${CMAKE_CURRENT_SOURCE_DIR}/Lifecycle/BotSpawnEventBus.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Lifecycle/BotSpawnEventBus.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/Lifecycle/BotSpawnEvents.h
     ${CMAKE_CURRENT_SOURCE_DIR}/Lifecycle/DeathRecoveryManager.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Lifecycle/DeathRecoveryManager.h
     ${CMAKE_CURRENT_SOURCE_DIR}/Lifecycle/ResourceMonitor.cpp
@@ -1159,6 +1183,8 @@ source_group("Talents" FILES
 source_group("Professions" FILES
     ${CMAKE_CURRENT_SOURCE_DIR}/Professions/ProfessionManager.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Professions/ProfessionManager.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/Professions/ProfessionDatabase.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Professions/ProfessionDatabase.h
     ${CMAKE_CURRENT_SOURCE_DIR}/Professions/GatheringManager.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Professions/GatheringManager.h
     ${CMAKE_CURRENT_SOURCE_DIR}/Professions/FarmingCoordinator.cpp
@@ -1169,8 +1195,9 @@ source_group("Professions" FILES
     ${CMAKE_CURRENT_SOURCE_DIR}/Professions/GatheringMaterialsBridge.h
     ${CMAKE_CURRENT_SOURCE_DIR}/Professions/AuctionMaterialsBridge.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Professions/AuctionMaterialsBridge.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/Professions/ProfessionEventBus.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Professions/ProfessionEventBus.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/Professions/ProfessionEvents.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Professions/ProfessionEvents.h
 )
 
 source_group("Banking" FILES
@@ -1288,7 +1315,6 @@ source_group("Interaction" FILES
     ${CMAKE_CURRENT_SOURCE_DIR}/Interaction/Core/GossipHandler.h
     ${CMAKE_CURRENT_SOURCE_DIR}/Interaction/Core/InteractionValidator.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Interaction/Core/InteractionValidator.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/Interaction/Vendors/VendorInteraction.h
     ${CMAKE_CURRENT_SOURCE_DIR}/Interaction/VendorInteractionManager.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Interaction/VendorInteractionManager.h
     ${CMAKE_CURRENT_SOURCE_DIR}/Interaction/FlightMasterManager.cpp

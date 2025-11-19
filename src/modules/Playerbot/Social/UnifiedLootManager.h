@@ -28,17 +28,16 @@ namespace Playerbot
 /**
  * @brief Unified loot management system
  *
- * Consolidates three separate managers into one cohesive system:
- * - LootAnalysis: Item evaluation and upgrade detection
- * - LootCoordination: Session management and orchestration
- * - LootDistribution: Roll handling and distribution execution
+ * This system provides a unified interface for loot management operations.
+ * Note: LootAnalysis and LootCoordination were stub interfaces with no implementations
+ * and have been removed during consolidation. Real loot logic is in LootDistribution.
  *
  * **Architecture:**
  * ```
  * UnifiedLootManager
- *   ├─> AnalysisModule     (item scoring, upgrade detection)
- *   ├─> CoordinationModule (session management, orchestration)
- *   └─> DistributionModule (roll handling, distribution)
+ *   ├─> AnalysisModule     (TODO: Implement item scoring, upgrade detection)
+ *   ├─> CoordinationModule (TODO: Implement session management, orchestration)
+ *   └─> DistributionModule (delegates to LootDistribution for now)
  * ```
  *
  * **Thread Safety:**
@@ -46,11 +45,10 @@ namespace Playerbot
  * - Modules share data through thread-safe interfaces
  * - Lock ordering prevents deadlocks
  *
- * **Migration Path:**
- * - Old managers (LootAnalysis, LootCoordination, LootDistribution) still work
- * - New code should use UnifiedLootManager
- * - Gradually migrate callsites over time
- * - Eventually deprecate old managers
+ * **Status:**
+ * - AnalysisModule and CoordinationModule need real implementations
+ * - DistributionModule delegates to existing LootDistribution system
+ * - Ready for future feature development
  */
 class TC_GAME_API UnifiedLootManager final : public IUnifiedLootManager
 {
@@ -223,6 +221,20 @@ private:
         void HandleLootNinja(Group* group, uint32 suspectedPlayer);
 
     private:
+        // Helper methods for group loot coordination
+        void HandleMasterLoot(Group* group, LootItem const& item);
+        void HandleGroupLoot(Group* group, LootItem const& item);
+
+        struct BotRollEvaluation {
+            Player* bot;
+            LootRollType rollType;
+            uint32 rollValue;
+            float upgradeValue;
+            LootPriority priority;
+        };
+
+        Player* DetermineGroupLootWinner(std::vector<BotRollEvaluation>& rolls);
+
         struct LootRoll
         {
             uint32 rollId;

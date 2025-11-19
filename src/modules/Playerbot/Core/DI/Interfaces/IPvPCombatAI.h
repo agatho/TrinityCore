@@ -56,54 +56,54 @@ public:
 
     // Initialization
     virtual void Initialize() = 0;
-    virtual void Update(::Player* player, uint32 diff) = 0;
+    virtual void Update(uint32 diff) = 0;
 
     // Target selection
-    virtual ::Unit* SelectBestTarget(::Player* player) const = 0;
-    virtual ThreatAssessment AssessThreat(::Player* player, ::Unit* target) const = 0;
-    virtual std::vector<::Unit*> GetEnemyPlayers(::Player* player, float range) const = 0;
-    virtual std::vector<::Unit*> GetEnemyHealers(::Player* player) const = 0;
-    virtual bool ShouldSwitchTarget(::Player* player) const = 0;
+    virtual ::Unit* SelectBestTarget() const = 0;
+    virtual ThreatAssessment AssessThreat(::Unit* target) const = 0;
+    virtual std::vector<::Unit*> GetEnemyPlayers(float range) const = 0;
+    virtual std::vector<::Unit*> GetEnemyHealers() const = 0;
+    virtual bool ShouldSwitchTarget() const = 0;
 
     // CC chain coordination
-    virtual bool ExecuteCCChain(::Player* player, ::Unit* target) = 0;
-    virtual uint32 GetNextCCAbility(::Player* player, ::Unit* target) const = 0;
+    virtual bool ExecuteCCChain(::Unit* target) = 0;
+    virtual uint32 GetNextCCAbility(::Unit* target) const = 0;
     virtual uint32 GetDiminishingReturnsLevel(::Unit* target, CCType ccType) const = 0;
     virtual void TrackCCUsed(::Unit* target, CCType ccType) = 0;
     virtual bool IsTargetCCImmune(::Unit* target, CCType ccType) const = 0;
 
     // Defensive cooldowns
-    virtual bool UseDefensiveCooldown(::Player* player) = 0;
-    virtual uint32 GetBestDefensiveCooldown(::Player* player) const = 0;
-    virtual bool ShouldUseImmunity(::Player* player) const = 0;
-    virtual bool UseTrinket(::Player* player) = 0;
+    virtual bool UseDefensiveCooldown() = 0;
+    virtual uint32 GetBestDefensiveCooldown() const = 0;
+    virtual bool ShouldUseImmunity() const = 0;
+    virtual bool UseTrinket() = 0;
 
     // Offensive bursts
-    virtual bool ExecuteOffensiveBurst(::Player* player, ::Unit* target) = 0;
-    virtual bool ShouldBurstTarget(::Player* player, ::Unit* target) const = 0;
-    virtual std::vector<uint32> GetOffensiveCooldowns(::Player* player) const = 0;
-    virtual bool StackOffensiveCooldowns(::Player* player) = 0;
+    virtual bool ExecuteOffensiveBurst(::Unit* target) = 0;
+    virtual bool ShouldBurstTarget(::Unit* target) const = 0;
+    virtual std::vector<uint32> GetOffensiveCooldowns() const = 0;
+    virtual bool StackOffensiveCooldowns() = 0;
 
     // Interrupt coordination
-    virtual bool InterruptCast(::Player* player, ::Unit* target) = 0;
-    virtual bool ShouldInterrupt(::Player* player, ::Unit* target) const = 0;
-    virtual uint32 GetInterruptSpell(::Player* player) const = 0;
+    virtual bool InterruptCast(::Unit* target) = 0;
+    virtual bool ShouldInterrupt(::Unit* target) const = 0;
+    virtual uint32 GetInterruptSpell() const = 0;
 
     // Peel mechanics
-    virtual bool PeelForAlly(::Player* player, ::Unit* ally) = 0;
-    virtual ::Unit* FindAllyNeedingPeel(::Player* player) const = 0;
-    virtual uint32 GetPeelAbility(::Player* player) const = 0;
+    virtual bool PeelForAlly(::Unit* ally) = 0;
+    virtual ::Unit* FindAllyNeedingPeel() const = 0;
+    virtual uint32 GetPeelAbility() const = 0;
 
     // Combat state
-    virtual void SetCombatState(::Player* player, PvPCombatState state) = 0;
-    virtual PvPCombatState GetCombatState(::Player* player) const = 0;
+    virtual void SetCombatState(PvPCombatState state) = 0;
+    virtual PvPCombatState GetCombatState() const = 0;
 
     // Profiles
-    virtual void SetCombatProfile(uint32 playerGuid, PvPCombatProfile const& profile) = 0;
-    virtual PvPCombatProfile GetCombatProfile(uint32 playerGuid) const = 0;
+    virtual void SetCombatProfile(PvPCombatProfile const& profile) = 0;
+    virtual PvPCombatProfile GetCombatProfile() const = 0;
 
     // Metrics
-    virtual PvPMetrics const& GetPlayerMetrics(uint32 playerGuid) const = 0;
+    virtual PvPMetrics const& GetMetrics() const = 0;
     virtual PvPMetrics const& GetGlobalMetrics() const = 0;
 };
 

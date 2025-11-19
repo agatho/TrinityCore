@@ -20,16 +20,46 @@
 namespace Playerbot
 {
 
-EquipmentManager* EquipmentManager::instance()
+// ============================================================================
+// STATIC MEMBER INITIALIZATION
+// ============================================================================
+
+std::unordered_map<uint16, StatPriority> EquipmentManager::_statPriorities;
+bool EquipmentManager::_statPrioritiesInitialized = false;
+EquipmentManager::EquipmentMetrics EquipmentManager::_globalMetrics;
+
+// ============================================================================
+// PER-BOT LIFECYCLE
+// ============================================================================
+
+EquipmentManager::EquipmentManager(Player* bot)
+    : _bot(bot)
 {
-    static EquipmentManager instance;
-    return &instance;
+    if (!_bot)
+    {
+        TC_LOG_ERROR("playerbot.equipment", "EquipmentManager: Attempted to create with null bot!");
+        return;
+    }
+
+    // Initialize shared stat priorities once (thread-safe)
+    if (!_statPrioritiesInitialized)
+    {
+        InitializeStatPriorities();
+        _statPrioritiesInitialized = true;
+        TC_LOG_INFO("playerbot.equipment", "EquipmentManager: Initialized stat priorities for all 13 classes");
+    }
+
+    TC_LOG_DEBUG("playerbot.equipment", "EquipmentManager: Created for bot {} ({})",
+                 _bot->GetName(), _bot->GetGUID().ToString());
 }
 
-EquipmentManager::EquipmentManager()
+EquipmentManager::~EquipmentManager()
 {
-    InitializeStatPriorities();
-    TC_LOG_INFO("playerbot", "EquipmentManager: Initialized with stat priorities for all 13 classes");
+    if (_bot)
+    {
+        TC_LOG_DEBUG("playerbot.equipment", "EquipmentManager: Destroyed for bot {} ({})",
+                     _bot->GetName(), _bot->GetGUID().ToString());
+    }
 }
 
 // ============================================================================
@@ -51,6 +81,8 @@ void EquipmentManager::InitializeStatPriorities()
     InitializeMonkPriorities();
     InitializeDemonHunterPriorities();
     InitializeEvokerPriorities();
+
+    TC_LOG_INFO("playerbot.equipment", "Initialized stat priorities for all 13 classes");
 }
 
 void EquipmentManager::InitializeWarriorPriorities()
@@ -706,33 +738,29 @@ void EquipmentManager::InitializeEvokerPriorities()
 // CORE EQUIPMENT EVALUATION
 // ============================================================================
 
-void EquipmentManager::AutoEquipBestGear(::Player* player)
+void EquipmentManager::AutoEquipBestGear()
 {
-    if (!player)
+    if (!_bot)
         return;
 
-    // No lock needed - equipment data is per-bot instance data
-
-    uint32 playerGuid = player->GetGUID().GetCounter();
-    EquipmentAutomationProfile profile = GetAutomationProfile(playerGuid);
-    if (!profile.autoEquipEnabled)
+    if (!_profile.autoEquipEnabled)
         return;
 
-    TC_LOG_DEBUG("playerbot.equipment", "AutoEquipBestGear: Scanning inventory for player {}",
-                 player->GetName());
+    TC_LOG_DEBUG("playerbot.equipment", "AutoEquipBestGear: Scanning inventory for bot {}",
+                 _bot->GetName());
 
     uint32 upgradesFound = 0;
 
     // Scan all inventory bags for equippable items
     for (uint8 bag = INVENTORY_SLOT_BAG_START; bag < INVENTORY_SLOT_BAG_END; ++bag)
     {
-        if (Bag* pBag = player->GetBagByPos(bag))
+        if (Bag* pBag = _bot->GetBagByPos(bag))
         {
             for (uint32 slot = 0; slot < pBag->GetBagSize(); ++slot)
             {
                 if (::Item* item = pBag->GetItemByPos(slot))
                 {
-                    if (IsItemUpgrade(player, item))
+                    if (IsItemUpgrade(item))
                     {
                         ItemTemplate const* proto = item->GetTemplate();
                         if (!proto)
@@ -742,24 +770,24 @@ void EquipmentManager::AutoEquipBestGear(::Player* player)
                         if (equipSlot != EQUIPMENT_SLOT_END)
                         {
                             // Get currently equipped item
-                            ::Item* currentItem = GetEquippedItemInSlot(player, equipSlot);
+                            ::Item* currentItem = GetEquippedItemInSlot(equipSlot);
 
                             // Compare items
-                            ItemComparisonResult result = CompareItems(player, currentItem, item);
-                            if (result.isUpgrade && result.scoreDifference >= profile.minUpgradeThreshold)
+                            ItemComparisonResult result = CompareItems(currentItem, item);
+                            if (result.isUpgrade && result.scoreDifference >= _profile.minUpgradeThreshold)
                             {
                                 TC_LOG_INFO("playerbot.equipment",
-                                           "🎯 UPGRADE FOUND: Player {} - {} is upgrade over {} (Score: {:.2f} -> {:.2f}, Reason: {})",
-                                           player->GetName(),
+                                           "🎯 UPGRADE FOUND: Bot {} - {} is upgrade over {} (Score: {:.2f} -> {:.2f}, Reason: {})",
+                                           _bot->GetName(),
                                            proto->GetName(DEFAULT_LOCALE),
                                            currentItem ? currentItem->GetTemplate()->GetName(DEFAULT_LOCALE) : "Empty Slot",
                                            result.currentItemScore,
                                            result.newItemScore,
                                            result.upgradeReason);
 
-                                EquipItemInSlot(player, item, equipSlot);
+                                EquipItemInSlot(item, equipSlot);
                                 upgradesFound++;
-                                UpdateMetrics(playerGuid, true, true);
+                                UpdateMetrics(true, true);
                             }
                         }
                     }
@@ -771,9 +799,9 @@ void EquipmentManager::AutoEquipBestGear(::Player* player)
     // Also check main bag (backpack)
     for (uint8 slot = INVENTORY_SLOT_ITEM_START; slot < INVENTORY_SLOT_ITEM_END; ++slot)
     {
-        if (::Item* item = player->GetItemByPos(INVENTORY_SLOT_BAG_0, slot))
+        if (::Item* item = _bot->GetItemByPos(INVENTORY_SLOT_BAG_0, slot))
         {
-            if (IsItemUpgrade(player, item))
+            if (IsItemUpgrade(item))
             {
                 ItemTemplate const* proto = item->GetTemplate();
                 if (!proto)
@@ -782,17 +810,17 @@ void EquipmentManager::AutoEquipBestGear(::Player* player)
                 uint8 equipSlot = GetItemEquipmentSlot(proto);
                 if (equipSlot != EQUIPMENT_SLOT_END)
                 {
-                    ::Item* currentItem = GetEquippedItemInSlot(player, equipSlot);
-                    ItemComparisonResult result = CompareItems(player, currentItem, item);
-                    if (result.isUpgrade && result.scoreDifference >= profile.minUpgradeThreshold)
+                    ::Item* currentItem = GetEquippedItemInSlot(equipSlot);
+                    ItemComparisonResult result = CompareItems(currentItem, item);
+                    if (result.isUpgrade && result.scoreDifference >= _profile.minUpgradeThreshold)
                     {
                         TC_LOG_INFO("playerbot.equipment",
-                                   "🎯 UPGRADE FOUND: Player {} - {} (Score improvement: {:.2f})",
-                                   player->GetName(), proto->GetName(DEFAULT_LOCALE), result.scoreDifference);
+                                   "🎯 UPGRADE FOUND: Bot {} - {} (Score improvement: {:.2f})",
+                                   _bot->GetName(), proto->GetName(DEFAULT_LOCALE), result.scoreDifference);
 
-                        EquipItemInSlot(player, item, equipSlot);
+                        EquipItemInSlot(item, equipSlot);
                         upgradesFound++;
-                        UpdateMetrics(playerGuid, true, true);
+                        UpdateMetrics(true, true);
                     }
                 }
             }
@@ -801,25 +829,25 @@ void EquipmentManager::AutoEquipBestGear(::Player* player)
 
     if (upgradesFound > 0)
     {
-        TC_LOG_INFO("playerbot.equipment", "✅ AutoEquip Complete: Player {} equipped {} upgrades",
-                   player->GetName(), upgradesFound);
+        TC_LOG_INFO("playerbot.equipment", "✅ AutoEquip Complete: Bot {} equipped {} upgrades",
+                   _bot->GetName(), upgradesFound);
     }
 }
 
-ItemComparisonResult EquipmentManager::CompareItems(::Player* player, ::Item* currentItem, ::Item* newItem)
+ItemComparisonResult EquipmentManager::CompareItems(::Item* currentItem, ::Item* newItem)
 {
     ItemComparisonResult result;
 
-    if (!player || !newItem)
+    if (!_bot || !newItem)
         return result;
 
     // Calculate scores
-    result.newItemScore = CalculateItemScore(player, newItem);
+    result.newItemScore = CalculateItemScore(newItem);
 
     if (currentItem)
     {
-        result.currentItemScore = CalculateItemScore(player, currentItem);
-        result.currentItemLevel = currentItem->GetItemLevel(player);
+        result.currentItemScore = CalculateItemScore(currentItem);
+        result.currentItemLevel = currentItem->GetItemLevel(_bot);
     }
     else
     {
@@ -827,14 +855,13 @@ ItemComparisonResult EquipmentManager::CompareItems(::Player* player, ::Item* cu
         result.currentItemLevel = 0;
     }
 
-    result.newItemLevel = newItem->GetItemLevel(player);
+    result.newItemLevel = newItem->GetItemLevel(_bot);
 
     // Determine if upgrade
     result.scoreDifference = result.newItemScore - result.currentItemScore;
 
-    EquipmentAutomationProfile profile = GetAutomationProfile(player->GetGUID().GetCounter());
     // Item level preference
-    if (profile.preferHigherItemLevel && result.newItemLevel > result.currentItemLevel + 5)
+    if (_profile.preferHigherItemLevel && result.newItemLevel > result.currentItemLevel + 5)
     {
         result.isUpgrade = true;
         result.upgradeReason = "Higher item level (" + std::to_string(result.newItemLevel) + " vs " +
@@ -843,7 +870,7 @@ ItemComparisonResult EquipmentManager::CompareItems(::Player* player, ::Item* cu
     }
 
     // Stat score comparison
-    if (result.scoreDifference > profile.minUpgradeThreshold)
+    if (result.scoreDifference > _profile.minUpgradeThreshold)
     {
         result.isUpgrade = true;
         result.upgradeReason = "Better stat allocation (Score: " + std::to_string(result.scoreDifference) + " improvement)";
@@ -852,16 +879,16 @@ ItemComparisonResult EquipmentManager::CompareItems(::Player* player, ::Item* cu
     return result;
 }
 
-float EquipmentManager::CalculateItemScore(::Player* player, ::Item* item)
+float EquipmentManager::CalculateItemScore(::Item* item)
 {
-    if (!player || !item)
+    if (!_bot || !item)
         return 0.0f;
 
     ItemTemplate const* proto = item->GetTemplate();
     if (!proto)
         return 0.0f;
 
-    StatPriority const& priority = GetStatPriority(player);
+    StatPriority const& priority = GetStatPriority();
 
     // Calculate weighted stat total
     float totalScore = 0.0f;
@@ -876,42 +903,42 @@ float EquipmentManager::CalculateItemScore(::Player* player, ::Item* item)
     }
 
     // Add item level as base score
-    totalScore += static_cast<float>(item->GetItemLevel(player)) * priority.GetStatWeight(StatType::ITEM_LEVEL);
-    TC_LOG_TRACE("playerbot.equipment", "Item {} score for player {}: {:.2f}",
-                 proto->GetName(DEFAULT_LOCALE), player->GetName(), totalScore);
+    totalScore += static_cast<float>(item->GetItemLevel(_bot)) * priority.GetStatWeight(StatType::ITEM_LEVEL);
+    TC_LOG_TRACE("playerbot.equipment", "Item {} score for bot {}: {:.2f}",
+                 proto->GetName(DEFAULT_LOCALE), _bot->GetName(), totalScore);
 
     return totalScore;
 }
 
-bool EquipmentManager::IsItemUpgrade(::Player* player, ::Item* item)
+bool EquipmentManager::IsItemUpgrade(::Item* item)
 {
-    if (!player || !item)
+    if (!_bot || !item)
         return false;
 
     ItemTemplate const* proto = item->GetTemplate();
     if (!proto)
         return false;
 
-    // Check if player can equip this item
-    if (!CanPlayerEquipItem(player, proto))
+    // Check if bot can equip this item
+    if (!CanEquipItem(proto))
         return false;
 
     uint8 equipSlot = GetItemEquipmentSlot(proto);
     if (equipSlot == EQUIPMENT_SLOT_END)
         return false;
 
-    ::Item* currentItem = GetEquippedItemInSlot(player, equipSlot);
+    ::Item* currentItem = GetEquippedItemInSlot(equipSlot);
 
-    ItemComparisonResult result = CompareItems(player, currentItem, item);
+    ItemComparisonResult result = CompareItems(currentItem, item);
     return result.isUpgrade;
 }
 
-float EquipmentManager::CalculateItemTemplateScore(::Player* player, ItemTemplate const* itemTemplate)
+float EquipmentManager::CalculateItemTemplateScore(ItemTemplate const* itemTemplate)
 {
-    if (!player || !itemTemplate)
+    if (!_bot || !itemTemplate)
         return 0.0f;
 
-    StatPriority const& priority = GetStatPriority(player);
+    StatPriority const& priority = GetStatPriority();
     // Calculate weighted stat total using the same algorithm as CalculateItemScore()
     float totalScore = 0.0f;
 
@@ -926,8 +953,8 @@ float EquipmentManager::CalculateItemTemplateScore(::Player* player, ItemTemplat
 
     // Add item level as base score
     totalScore += static_cast<float>(itemTemplate->GetBaseItemLevel()) * priority.GetStatWeight(StatType::ITEM_LEVEL);
-    TC_LOG_TRACE("playerbot.equipment", "ItemTemplate {} score for player {}: {:.2f}",
-                 itemTemplate->GetName(DEFAULT_LOCALE), player->GetName(), totalScore);
+    TC_LOG_TRACE("playerbot.equipment", "ItemTemplate {} score for bot {}: {:.2f}",
+                 itemTemplate->GetName(DEFAULT_LOCALE), _bot->GetName(), totalScore);
 
     return totalScore;
 }
@@ -936,27 +963,26 @@ float EquipmentManager::CalculateItemTemplateScore(::Player* player, ItemTemplat
 // JUNK IDENTIFICATION - COMPLETE IMPLEMENTATION
 // ============================================================================
 
-std::vector<ObjectGuid> EquipmentManager::IdentifyJunkItems(::Player* player)
+std::vector<ObjectGuid> EquipmentManager::IdentifyJunkItems()
 {
     std::vector<ObjectGuid> junkItems;
 
-    if (!player)
+    if (!_bot)
         return junkItems;
 
-    EquipmentAutomationProfile profile = GetAutomationProfile(player->GetGUID().GetCounter());
-    if (!profile.autoSellJunkEnabled)
+    if (!_profile.autoSellJunkEnabled)
         return junkItems;
 
     // Scan all inventory for junk
     for (uint8 bag = INVENTORY_SLOT_BAG_START; bag < INVENTORY_SLOT_BAG_END; ++bag)
     {
-        if (Bag* pBag = player->GetBagByPos(bag))
+        if (Bag* pBag = _bot->GetBagByPos(bag))
         {
             for (uint32 slot = 0; slot < pBag->GetBagSize(); ++slot)
             {
                 if (::Item* item = pBag->GetItemByPos(slot))
                 {
-                    if (IsJunkItem(player, item) && !IsProtectedItem(player, item))
+                    if (IsJunkItem(item) && !IsProtectedItem(item))
                     {
                         junkItems.push_back(item->GetGUID());
                         TC_LOG_DEBUG("playerbot.equipment", "Identified junk: {} ({})",
@@ -970,24 +996,24 @@ std::vector<ObjectGuid> EquipmentManager::IdentifyJunkItems(::Player* player)
     // Check main bag
     for (uint8 slot = INVENTORY_SLOT_ITEM_START; slot < INVENTORY_SLOT_ITEM_END; ++slot)
     {
-        if (::Item* item = player->GetItemByPos(INVENTORY_SLOT_BAG_0, slot))
+        if (::Item* item = _bot->GetItemByPos(INVENTORY_SLOT_BAG_0, slot))
         {
-            if (IsJunkItem(player, item) && !IsProtectedItem(player, item))
+            if (IsJunkItem(item) && !IsProtectedItem(item))
             {
                 junkItems.push_back(item->GetGUID());
             }
         }
     }
 
-    TC_LOG_INFO("playerbot.equipment", "Identified {} junk items for player {}",
-                junkItems.size(), player->GetName());
+    TC_LOG_INFO("playerbot.equipment", "Identified {} junk items for bot {}",
+                junkItems.size(), _bot->GetName());
 
     return junkItems;
 }
 
-bool EquipmentManager::IsJunkItem(::Player* player, ::Item* item)
+bool EquipmentManager::IsJunkItem(::Item* item)
 {
-    if (!player || !item)
+    if (!_bot || !item)
         return false;
 
     ItemTemplate const* proto = item->GetTemplate();
@@ -999,26 +1025,26 @@ bool EquipmentManager::IsJunkItem(::Player* player, ::Item* item)
         return true;
 
     // Check item level threshold
-    EquipmentAutomationProfile profile = GetAutomationProfile(player->GetGUID().GetCounter());
-    if (item->GetItemLevel(player) < profile.minItemLevelToKeep && player->GetLevel() > 20)
+    // Use _profile directly
+    if (item->GetItemLevel(_bot) < _profile.minItemLevelToKeep && _bot->GetLevel() > 20)
         return true;
 
     // If it's equipment, check if it's worse than what we have
     if (proto->GetInventoryType() != INVTYPE_NON_EQUIP)
     {
-        if (IsOutdatedGear(player, item))
+        if (IsOutdatedGear(item))
             return true;
 
-        if (HasWrongPrimaryStats(player, item))
+        if (HasWrongPrimaryStats(item))
             return true;
     }
 
     return false;
 }
 
-bool EquipmentManager::IsProtectedItem(::Player* player, ::Item* item)
+bool EquipmentManager::IsProtectedItem(::Item* item)
 {
-    if (!player || !item)
+    if (!_bot || !item)
         return false;
 
     ItemTemplate const* proto = item->GetTemplate();
@@ -1030,12 +1056,12 @@ bool EquipmentManager::IsProtectedItem(::Player* player, ::Item* item)
         return true;
 
     // Never sell soulbound items with high item level
-    if (item->IsSoulBound() && item->GetItemLevel(player) >= player->GetLevel())
+    if (item->IsSoulBound() && item->GetItemLevel(_bot) >= _bot->GetLevel())
         return true;
 
     // Never sell set items (if profile says so)
-    EquipmentAutomationProfile profile = GetAutomationProfile(player->GetGUID().GetCounter());
-    if (profile.considerSetBonuses && IsSetItem(item))
+    // Use _profile directly
+    if (_profile.considerSetBonuses && IsSetItem(item))
         return true;
 
     // Never sell valuable BoE
@@ -1044,7 +1070,7 @@ bool EquipmentManager::IsProtectedItem(::Player* player, ::Item* item)
 
     // Check never-sell list
     uint32 itemId = proto->GetId();
-    if (profile.neverSellItems.find(itemId) != profile.neverSellItems.end())
+    if (_profile.neverSellItems.find(itemId) != _profile.neverSellItems.end())
         return true;
 
     // Never sell rare+ consumables
@@ -1082,17 +1108,17 @@ bool EquipmentManager::IsValuableBoE(::Item* item)
 // CONSUMABLE MANAGEMENT - COMPLETE IMPLEMENTATION
 // ============================================================================
 
-std::unordered_map<uint32, uint32> EquipmentManager::GetConsumableNeeds(::Player* player)
+std::unordered_map<uint32, uint32> EquipmentManager::GetConsumableNeeds()
 {
     std::unordered_map<uint32, uint32> needs;
 
-    if (!player)
+    if (!_bot)
         return needs;
 
-    std::vector<uint32> classConsumables = GetClassConsumables(player->GetClass());
+    std::vector<uint32> classConsumables = GetClassConsumables(_bot->GetClass());
     for (uint32 itemId : classConsumables)
     {
-        uint32 currentCount = GetConsumableCount(player, itemId);
+        uint32 currentCount = GetConsumableCount(itemId);
         uint32 recommendedCount = 20; // Stack size recommendation
 
         if (currentCount < recommendedCount)
@@ -1102,15 +1128,15 @@ std::unordered_map<uint32, uint32> EquipmentManager::GetConsumableNeeds(::Player
     }
 
     // Food and water (all classes)
-    uint32 foodLevel = GetRecommendedFoodLevel(player);
-    uint32 currentFood = GetConsumableCount(player, foodLevel);
+    uint32 foodLevel = GetRecommendedFoodLevel();
+    uint32 currentFood = GetConsumableCount(foodLevel);
     if (currentFood < 20)
         needs[foodLevel] = 20 - currentFood;
 
-    if (player->GetPowerType() == POWER_MANA)
+    if (_bot->GetPowerType() == POWER_MANA)
     {
-        uint32 waterLevel = GetRecommendedPotionLevel(player);
-        uint32 currentWater = GetConsumableCount(player, waterLevel);
+        uint32 waterLevel = GetRecommendedPotionLevel();
+        uint32 currentWater = GetConsumableCount(waterLevel);
         if (currentWater < 20)
             needs[waterLevel] = 20 - currentWater;
     }
@@ -1118,9 +1144,9 @@ std::unordered_map<uint32, uint32> EquipmentManager::GetConsumableNeeds(::Player
     return needs;
 }
 
-bool EquipmentManager::NeedsConsumableRestocking(::Player* player)
+bool EquipmentManager::NeedsConsumableRestocking()
 {
-    auto needs = GetConsumableNeeds(player);
+    auto needs = GetConsumableNeeds();
     return !needs.empty();
 }
 
@@ -1157,28 +1183,28 @@ std::vector<uint32> EquipmentManager::GetClassConsumables(uint8 classId)
     return consumables;
 }
 
-uint32 EquipmentManager::GetConsumableCount(::Player* player, uint32 itemId)
+uint32 EquipmentManager::GetConsumableCount(uint32 itemId)
 {
-    if (!player)
+    if (!_bot)
         return 0;
 
-    return player->GetItemCount(itemId, true); // includeBank = true
+    return _bot->GetItemCount(itemId, true); // includeBank = true
 }
 
 // ============================================================================
 // STAT PRIORITY SYSTEM
 // ============================================================================
 
-StatPriority const& EquipmentManager::GetStatPriority(::Player* player)
+StatPriority const& EquipmentManager::GetStatPriority()
 {
-    if (!player)
+    if (!_bot)
     {
         static StatPriority defaultPriority(0, 0);
         return defaultPriority;
     }
 
-    uint8 classId = player->GetClass();
-    uint8 specId = static_cast<uint8>(player->GetPrimarySpecialization());
+    uint8 classId = _bot->GetClass();
+    uint8 specId = static_cast<uint8>(_bot->GetPrimarySpecialization());
     uint16 key = MakeStatPriorityKey(classId, specId);
 
     auto it = _statPriorities.find(key);
@@ -1213,13 +1239,13 @@ StatPriority const& EquipmentManager::GetStatPriorityByClassSpec(uint8 classId, 
     return defaultPriority;
 }
 
-void EquipmentManager::UpdatePlayerStatPriority(::Player* player)
+void EquipmentManager::UpdateStatPriority()
 {
-    // Called when player changes spec - priority automatically updated via GetStatPriority()
-    if (player)
+    // Called when _bot changes spec - priority automatically updated via GetStatPriority()
+    if (_bot)
     {
-        TC_LOG_DEBUG("playerbot.equipment", "Updated stat priority for player {} (Class: {}, Spec: {})",
-                     player->GetName(), static_cast<uint32>(player->GetClass()), static_cast<uint32>(player->GetPrimarySpecialization()));
+        TC_LOG_DEBUG("playerbot.equipment", "Updated stat priority for _bot {} (Class: {}, Spec: {})",
+                     _bot->GetName(), static_cast<uint32>(_bot->GetClass()), static_cast<uint32>(_bot->GetPrimarySpecialization()));
     }
 }
 
@@ -1268,21 +1294,21 @@ ItemCategory EquipmentManager::GetItemCategory(::Item* item)
     return ItemCategory::UNKNOWN;
 }
 
-bool EquipmentManager::CanPlayerEquipItem(::Player* player, ItemTemplate const* itemTemplate)
+bool EquipmentManager::CanEquipItem(ItemTemplate const* itemTemplate)
 {
-    if (!player || !itemTemplate)
+    if (!_bot || !itemTemplate)
         return false;
 
     // Check level requirement
-    if (player->GetLevel() < itemTemplate->GetBaseRequiredLevel())
+    if (_bot->GetLevel() < itemTemplate->GetBaseRequiredLevel())
         return false;
 
     // Check class restriction
-    if (itemTemplate->GetAllowableClass() && !(itemTemplate->GetAllowableClass() & (1 << (player->GetClass() - 1))))
+    if (itemTemplate->GetAllowableClass() && !(itemTemplate->GetAllowableClass() & (1 << (_bot->GetClass() - 1))))
         return false;
 
     // Check race restriction
-    if (!itemTemplate->GetAllowableRace().IsEmpty() && !itemTemplate->GetAllowableRace().HasRace(player->GetRace()))
+    if (!itemTemplate->GetAllowableRace().IsEmpty() && !itemTemplate->GetAllowableRace().HasRace(_bot->GetRace()))
         return false;
 
     return true;
@@ -1337,16 +1363,16 @@ bool EquipmentManager::IsSetItem(::Item* item)
     return proto->GetItemSet() != 0;
 }
 
-uint32 EquipmentManager::GetEquippedSetPieceCount(::Player* player, uint32 setId)
+uint32 EquipmentManager::GetEquippedSetPieceCount(uint32 setId)
 {
-    if (!player || setId == 0)
+    if (!_bot || setId == 0)
         return 0;
 
     uint32 count = 0;
 
     for (uint8 slot = EQUIPMENT_SLOT_START; slot < EQUIPMENT_SLOT_END; ++slot)
     {
-        if (::Item* item = player->GetItemByPos(INVENTORY_SLOT_BAG_0, slot))
+        if (::Item* item = _bot->GetItemByPos(INVENTORY_SLOT_BAG_0, slot))
         {
             ItemTemplate const* proto = item->GetTemplate();
             if (proto && proto->GetItemSet() == setId)
@@ -1408,37 +1434,23 @@ int32 EquipmentManager::GetItemStatValue(::Item* item, StatType stat)
 // AUTOMATION CONTROL
 // ============================================================================
 
-void EquipmentManager::SetAutomationProfile(uint32 playerGuid, EquipmentAutomationProfile const& profile)
+void EquipmentManager::SetAutomationProfile(EquipmentAutomationProfile const& profile)
 {
-    // No lock needed - equipment data is per-bot instance data
-    _playerProfiles[playerGuid] = profile;
+    _profile = profile;
 }
 
-EquipmentManager::EquipmentAutomationProfile EquipmentManager::GetAutomationProfile(uint32 playerGuid)
+EquipmentManager::EquipmentAutomationProfile const& EquipmentManager::GetAutomationProfile() const
 {
-    // No lock needed - equipment data is per-bot instance data
-
-    auto it = _playerProfiles.find(playerGuid);
-    if (it != _playerProfiles.end())
-        return it->second;
-
-    return EquipmentAutomationProfile(); // Return default
+    return _profile;
 }
 
 // ============================================================================
 // METRICS
 // ============================================================================
 
-EquipmentManager::EquipmentMetrics const& EquipmentManager::GetPlayerMetrics(uint32 playerGuid)
+EquipmentManager::EquipmentMetrics const& EquipmentManager::GetMetrics()
 {
-    // No lock needed - equipment data is per-bot instance data
-
-    auto it = _playerMetrics.find(playerGuid);
-    if (it != _playerMetrics.end())
-        return it->second;
-
-    // Create default metrics (use operator[] which default-constructs)
-    return _playerMetrics[playerGuid];
+    return _metrics;
 }
 
 EquipmentManager::EquipmentMetrics const& EquipmentManager::GetGlobalMetrics()
@@ -1450,29 +1462,29 @@ EquipmentManager::EquipmentMetrics const& EquipmentManager::GetGlobalMetrics()
 // HELPER METHODS IMPLEMENTATION
 // ============================================================================
 
-bool EquipmentManager::IsOutdatedGear(::Player* player, ::Item* item)
+bool EquipmentManager::IsOutdatedGear(::Item* item)
 {
-    if (!player || !item)
+    if (!_bot || !item)
         return false;
 
-    // Item is outdated if it's 10+ levels below player level
-    uint32 itemLevel = item->GetItemLevel(player);
-    uint32 playerLevel = player->GetLevel();
+    // Item is outdated if it's 10+ levels below bot level
+    uint32 itemLevel = item->GetItemLevel(_bot);
+    uint32 playerLevel = _bot->GetLevel();
     return (playerLevel > itemLevel + 10);
 }
 
-bool EquipmentManager::HasWrongPrimaryStats(::Player* player, ::Item* item)
+bool EquipmentManager::HasWrongPrimaryStats(::Item* item)
 {
-    if (!player || !item)
+    if (!_bot || !item)
         return false;
 
     ItemTemplate const* proto = item->GetTemplate();
     if (!proto || proto->GetInventoryType() == INVTYPE_NON_EQUIP)
         return false;
 
-    // Get player's primary stat
+    // Get bot's primary stat
     StatType primaryStat;
-    uint8 classId = player->GetClass();
+    uint8 classId = _bot->GetClass();
     switch (classId)
     {
         case CLASS_WARRIOR:
@@ -1508,17 +1520,17 @@ bool EquipmentManager::HasWrongPrimaryStats(::Player* player, ::Item* item)
     return (primaryStatValue == 0 && proto->GetClass() == ITEM_CLASS_ARMOR);
 }
 
-::Item* EquipmentManager::GetEquippedItemInSlot(::Player* player, uint8 slot)
+::Item* EquipmentManager::GetEquippedItemInSlot(uint8 slot)
 {
-    if (!player || slot >= EQUIPMENT_SLOT_END)
+    if (!_bot || slot >= EQUIPMENT_SLOT_END)
         return nullptr;
 
-    return player->GetItemByPos(INVENTORY_SLOT_BAG_0, slot);
+    return _bot->GetItemByPos(INVENTORY_SLOT_BAG_0, slot);
 }
 
-bool EquipmentManager::CanEquipInSlot(::Player* player, ::Item* item, uint8 slot)
+bool EquipmentManager::CanEquipInSlot(::Item* item, uint8 slot)
 {
-    if (!player || !item)
+    if (!_bot || !item)
         return false;
 
     ItemTemplate const* proto = item->GetTemplate();
@@ -1526,44 +1538,44 @@ bool EquipmentManager::CanEquipInSlot(::Player* player, ::Item* item, uint8 slot
         return false;
 
     // Basic checks
-    if (!CanPlayerEquipItem(player, proto))
+    if (!CanEquipItem(proto))
         return false;
 
     uint8 itemSlot = GetItemEquipmentSlot(proto);
     return (itemSlot == slot);
 }
 
-void EquipmentManager::EquipItemInSlot(::Player* player, ::Item* item, uint8 slot)
+void EquipmentManager::EquipItemInSlot(::Item* item, uint8 slot)
 {
-    if (!player || !item)
+    if (!_bot || !item)
         return;
 
     // Use TrinityCore's EquipItem method
     uint16 dest;
-    InventoryResult result = player->CanEquipItem(slot, dest, item, false);
+    InventoryResult result = _bot->CanEquipItem(slot, dest, item, false);
     if (result == EQUIP_ERR_OK)
     {
-        player->RemoveItem(item->GetBagSlot(), item->GetSlot(), true);
-        player->EquipItem(dest, item, true);
+        _bot->RemoveItem(item->GetBagSlot(), item->GetSlot(), true);
+        _bot->EquipItem(dest, item, true);
 
-        TC_LOG_INFO("playerbot.equipment", "✅ Equipped {} in slot {} for player {}",
-                   item->GetTemplate()->GetName(DEFAULT_LOCALE), slot, player->GetName());
+        TC_LOG_INFO("playerbot.equipment", "✅ Equipped {} in slot {} for _bot {}",
+                   item->GetTemplate()->GetName(DEFAULT_LOCALE), slot, _bot->GetName());
     }
     else
     {
-        TC_LOG_ERROR("playerbot.equipment", "❌ Failed to equip {} for player {} (Error: {})",
-                     item->GetTemplate()->GetName(DEFAULT_LOCALE), player->GetName(), static_cast<uint32>(result));
+        TC_LOG_ERROR("playerbot.equipment", "❌ Failed to equip {} for _bot {} (Error: {})",
+                     item->GetTemplate()->GetName(DEFAULT_LOCALE), _bot->GetName(), static_cast<uint32>(result));
     }
 }
 
-uint32 EquipmentManager::GetRecommendedFoodLevel(::Player* player)
+uint32 EquipmentManager::GetRecommendedFoodLevel()
 {
-    if (!player)
+    if (!_bot)
         return 0;
 
-    // Return appropriate food item ID based on player level
+    // Return appropriate food item ID based on bot level
     // This would need actual WoW item IDs
-    uint32 level = player->GetLevel();
+    uint32 level = _bot->GetLevel();
     if (level >= 60) return 35953; // Example: Dragonfruit Pie
     if (level >= 50) return 33254; // Example: Stormchops
     if (level >= 40) return 27854; // Example: Smoked Talbuk
@@ -1572,13 +1584,13 @@ uint32 EquipmentManager::GetRecommendedFoodLevel(::Player* player)
     return 4540; // Example: Tough Hunk of Bread
 }
 
-uint32 EquipmentManager::GetRecommendedPotionLevel(::Player* player)
+uint32 EquipmentManager::GetRecommendedPotionLevel()
 {
-    if (!player)
+    if (!_bot)
         return 0;
 
     // Return appropriate water/mana potion item ID
-    uint32 level = player->GetLevel();
+    uint32 level = _bot->GetLevel();
     if (level >= 60) return 33445; // Example: Honeymint Tea
     if (level >= 50) return 28399; // Example: Filtered Draenic Water
     if (level >= 40) return 8077;  // Example: Conjured Sparkling Water
@@ -1670,22 +1682,18 @@ float EquipmentManager::CalculateTotalStats(ItemTemplate const* proto, std::vect
     return total;
 }
 
-void EquipmentManager::UpdateMetrics(uint32 playerGuid, bool wasEquipped, bool wasUpgrade, uint32 goldValue)
+void EquipmentManager::UpdateMetrics(bool wasEquipped, bool wasUpgrade, uint32 goldValue)
 {
-    // No lock needed - equipment data is per-bot instance data
-
-    auto& metrics = _playerMetrics[playerGuid];
-
     if (wasEquipped)
-        metrics.itemsEquipped++;
+        _metrics.itemsEquipped++;
 
     if (wasUpgrade)
-        metrics.upgradesFound++;
+        _metrics.upgradesFound++;
 
     if (goldValue > 0)
-        metrics.totalGoldFromJunk += goldValue;
+        _metrics.totalGoldFromJunk += goldValue;
 
-    // Update global
+    // Update global metrics
     if (wasEquipped)
         _globalMetrics.itemsEquipped++;
 
@@ -1696,12 +1704,12 @@ void EquipmentManager::UpdateMetrics(uint32 playerGuid, bool wasEquipped, bool w
         _globalMetrics.totalGoldFromJunk += goldValue;
 }
 
-void EquipmentManager::LogEquipmentDecision(::Player* player, std::string const& action, std::string const& reason)
+void EquipmentManager::LogEquipmentDecision(std::string const& action, std::string const& reason)
 {
-    if (player)
+    if (_bot)
     {
-        TC_LOG_DEBUG("playerbot.equipment", "Equipment Decision - Player: {}, Action: {}, Reason: {}",
-                     player->GetName(), action, reason);
+        TC_LOG_DEBUG("playerbot.equipment", "Equipment Decision - Bot: {}, Action: {}, Reason: {}",
+                     _bot->GetName(), action, reason);
     }
 }
 
