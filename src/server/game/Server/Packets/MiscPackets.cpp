@@ -849,4 +849,9 @@ WorldPacket const* AccountWarbandSceneUpdate::Write()
 
     return &_worldPacket;
 }
+
+void ChromieTimeSelectExpansion::Read()
+{
+    _worldPacket >> ExpansionID;
+}
 }
