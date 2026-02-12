@@ -42,6 +42,7 @@
 #include "Spell.h"
 #include "SpellHistory.h"
 #include "SpellMgr.h"
+#include "SpellPackets.h"
 #include "SpellScript.h"
 #include "ThreatManager.h"
 #include "Unit.h"
@@ -3099,6 +3100,91 @@ void AuraEffect::HandleAuraModFixate(AuraApplication const* aurApp, uint8 mode, 
         caster->GetThreatManager().ClearFixate();
 }
 
+LossOfControlType GetLossOfControlType(AuraType auraType, Mechanics mechanic)
+{
+    switch (auraType)
+    {
+        case SPELL_AURA_MOD_STUN:
+        case SPELL_AURA_MOD_STUN_DISABLE_GRAVITY:
+            switch (mechanic)
+            {
+                case MECHANIC_STUN:     return LOC_STUN;
+                case MECHANIC_FREEZE:   return LOC_FREEZE;
+                case MECHANIC_KNOCKOUT: return LOC_STUN_MECHANIC;
+                default:                return LOC_STUN;
+            }
+        case SPELL_AURA_MOD_CONFUSE:
+            return LOC_CONFUSE;
+        case SPELL_AURA_MOD_FEAR:
+        case SPELL_AURA_MOD_FEAR_2:
+            return mechanic == MECHANIC_HORROR ? LOC_HORROR : LOC_FEAR;
+        case SPELL_AURA_MOD_ROOT:
+        case SPELL_AURA_MOD_ROOT_2:
+        case SPELL_AURA_MOD_ROOT_DISABLE_GRAVITY:
+            return LOC_ROOT;
+        case SPELL_AURA_MOD_CHARM:
+        case SPELL_AURA_AOE_CHARM:
+            return LOC_CHARM;
+        case SPELL_AURA_MOD_SILENCE:
+            return LOC_SILENCE;
+        case SPELL_AURA_MOD_PACIFY:
+            return LOC_PACIFY;
+        case SPELL_AURA_MOD_PACIFY_SILENCE:
+            return LOC_SILENCE;
+        case SPELL_AURA_TRANSFORM:
+            if (mechanic == MECHANIC_POLYMORPH)
+                return LOC_INCAPACITATE;
+            return LOC_NONE;
+        default:
+            break;
+    }
+
+    switch (mechanic)
+    {
+        case MECHANIC_SLEEP:    return LOC_SLEEP;
+        case MECHANIC_SAPPED:   return LOC_INCAPACITATE;
+        case MECHANIC_BANISH:   return LOC_INCAPACITATE;
+        case MECHANIC_DISARM:   return LOC_DISARM;
+        default:                return LOC_NONE;
+    }
+}
+
+static void SendLossOfControl(AuraApplication const* aurApp, AuraEffect const* auraEffect, bool apply)
+{
+    Player* player = aurApp->GetTarget()->ToPlayer();
+    if (!player)
+        return;
+
+    Aura const* aura = aurApp->GetBase();
+    SpellInfo const* spellInfo = aura->GetSpellInfo();
+    Mechanics mechanic = static_cast<Mechanics>(spellInfo->GetEffects()[auraEffect->GetEffIndex()].Mechanic);
+    if (mechanic == MECHANIC_NONE)
+        mechanic = static_cast<Mechanics>(spellInfo->Mechanic);
+
+    LossOfControlType type = GetLossOfControlType(auraEffect->GetAuraType(), mechanic);
+    if (type == LOC_NONE)
+        return;
+
+    if (apply)
+    {
+        WorldPackets::Spells::AddLossOfControl packet;
+        packet.SpellID = spellInfo->Id;
+        packet.Caster = aura->GetCasterGUID();
+        packet.Duration = aura->GetMaxDuration() > 0 ? aura->GetMaxDuration() : 0;
+        packet.DurationRemaining = aura->GetDuration() > 0 ? aura->GetDuration() : 0;
+        packet.LockoutSchoolMask = spellInfo->GetSchoolMask();
+        packet.Type = type;
+        packet.MechanicType = mechanic;
+        player->SendDirectMessage(packet.Write());
+    }
+    else
+    {
+        WorldPackets::Spells::LossOfControlAuraUpdate update;
+        // Send empty update to signal removal - client tracks by spell/aura slot
+        player->SendDirectMessage(update.Write());
+    }
+}
+
 /*****************************/
 /***        CONTROL        ***/
 /*****************************/
@@ -3113,6 +3199,8 @@ void AuraEffect::HandleModConfuse(AuraApplication const* aurApp, uint8 mode, boo
     target->SetControlled(apply, UNIT_STATE_CONFUSED);
     if (apply)
         target->GetThreatManager().EvaluateSuppressed();
+
+    SendLossOfControl(aurApp, this, apply);
 }
 
 void AuraEffect::HandleModFear(AuraApplication const* aurApp, uint8 mode, bool apply) const
@@ -3123,6 +3211,8 @@ void AuraEffect::HandleModFear(AuraApplication const* aurApp, uint8 mode, bool a
     Unit* target = aurApp->GetTarget();
 
     target->SetControlled(apply, UNIT_STATE_FLEEING);
+
+    SendLossOfControl(aurApp, this, apply);
 }
 
 void AuraEffect::HandleAuraModStun(AuraApplication const* aurApp, uint8 mode, bool apply) const
@@ -3135,6 +3225,8 @@ void AuraEffect::HandleAuraModStun(AuraApplication const* aurApp, uint8 mode, bo
     target->SetControlled(apply, UNIT_STATE_STUNNED);
     if (apply)
         target->GetThreatManager().EvaluateSuppressed();
+
+    SendLossOfControl(aurApp, this, apply);
 }
 
 void AuraEffect::HandleAuraModRoot(AuraApplication const* aurApp, uint8 mode, bool apply) const
@@ -3145,6 +3237,8 @@ void AuraEffect::HandleAuraModRoot(AuraApplication const* aurApp, uint8 mode, bo
     Unit* target = aurApp->GetTarget();
 
     target->SetControlled(apply, UNIT_STATE_ROOT);
+
+    SendLossOfControl(aurApp, this, apply);
 }
 
 void AuraEffect::HandlePreventFleeing(AuraApplication const* aurApp, uint8 mode, bool apply) const
@@ -3187,6 +3281,8 @@ void AuraEffect::HandleAuraModRootAndDisableGravity(AuraApplication const* aurAp
     target->SetControlled(apply, UNIT_STATE_ROOT);
 
     ::HandleAuraDisableGravity(target, apply);
+
+    SendLossOfControl(aurApp, this, apply);
 }
 
 void AuraEffect::HandleAuraModStunAndDisableGravity(AuraApplication const* aurApp, uint8 mode, bool apply) const
@@ -3202,6 +3298,8 @@ void AuraEffect::HandleAuraModStunAndDisableGravity(AuraApplication const* aurAp
         target->GetThreatManager().EvaluateSuppressed();
 
     ::HandleAuraDisableGravity(target, apply);
+
+    SendLossOfControl(aurApp, this, apply);
 }
 
 void AuraEffect::HandleAuraDisableGravity(AuraApplication const* aurApp, uint8 mode, bool apply) const

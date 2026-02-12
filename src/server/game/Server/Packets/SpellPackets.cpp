@@ -1163,4 +1163,31 @@ void KeyboundOverride::Read()
 {
     _worldPacket >> OverrideID;
 }
+
+WorldPacket const* AddLossOfControl::Write()
+{
+    _worldPacket << int32(SpellID);
+    _worldPacket << Caster;
+    _worldPacket << uint32(Duration);
+    _worldPacket << uint32(DurationRemaining);
+    _worldPacket << uint32(LockoutSchoolMask);
+    _worldPacket << uint8(Type);
+    _worldPacket << uint8(MechanicType);
+
+    return &_worldPacket;
+}
+
+WorldPacket const* LossOfControlAuraUpdate::Write()
+{
+    _worldPacket << uint32(LossOfControlInfos.size());
+    for (LossOfControlInfo const& info : LossOfControlInfos)
+    {
+        _worldPacket << uint8(info.AuraSlot);
+        _worldPacket << uint8(info.EffectIndex);
+        _worldPacket << uint8(info.Type);
+        _worldPacket << uint8(info.MechanicType);
+    }
+
+    return &_worldPacket;
+}
 }

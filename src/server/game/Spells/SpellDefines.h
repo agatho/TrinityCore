@@ -36,7 +36,9 @@ class Player;
 class Spell;
 class Unit;
 class WorldObject;
+enum AuraType : uint32;
 enum Difficulty : uint8;
+enum Mechanics : uint32;
 enum ProcFlags : uint32;
 enum ProcFlags2 : int32;
 enum SpellCastResult : int32;
@@ -577,5 +579,26 @@ public:
         return *this;
     }
 };
+
+enum LossOfControlType : uint8
+{
+    LOC_NONE              = 0,
+    LOC_STUN              = 1,
+    LOC_SLEEP             = 2,
+    LOC_INCAPACITATE      = 3,
+    LOC_CONFUSE           = 4,
+    LOC_CHARM             = 5,
+    LOC_ROOT              = 6,
+    LOC_SILENCE           = 7,
+    LOC_SCHOOL_INTERRUPT  = 8,
+    LOC_DISARM            = 9,
+    LOC_FEAR              = 10,
+    LOC_HORROR            = 11,
+    LOC_STUN_MECHANIC     = 12,
+    LOC_FREEZE            = 13,
+    LOC_PACIFY            = 14,
+};
+
+TC_GAME_API LossOfControlType GetLossOfControlType(AuraType auraType, Mechanics mechanic);
 
 #endif

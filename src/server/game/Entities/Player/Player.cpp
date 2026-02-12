@@ -24781,6 +24781,49 @@ void Player::SendInitialPacketsAfterAddToMap()
     }
 
     SendAurasForTarget(this);
+
+    // Send Loss of Control UI state for any active CC auras
+    {
+        static constexpr AuraType locAuraTypes[] =
+        {
+            SPELL_AURA_MOD_STUN, SPELL_AURA_MOD_STUN_DISABLE_GRAVITY,
+            SPELL_AURA_MOD_CONFUSE, SPELL_AURA_MOD_FEAR,
+            SPELL_AURA_MOD_ROOT, SPELL_AURA_MOD_ROOT_DISABLE_GRAVITY,
+            SPELL_AURA_MOD_SILENCE, SPELL_AURA_MOD_PACIFY,
+            SPELL_AURA_MOD_PACIFY_SILENCE, SPELL_AURA_MOD_CHARM,
+        };
+
+        WorldPackets::Spells::LossOfControlAuraUpdate locUpdate;
+        for (AuraType auraType : locAuraTypes)
+        {
+            for (AuraEffect const* eff : GetAuraEffectsByType(auraType))
+            {
+                AuraApplication const* aurApp = eff->GetBase()->GetApplicationOfTarget(GetGUID());
+                if (!aurApp)
+                    continue;
+
+                SpellInfo const* spellInfo = eff->GetBase()->GetSpellInfo();
+                Mechanics mechanic = static_cast<Mechanics>(spellInfo->GetEffects()[eff->GetEffIndex()].Mechanic);
+                if (mechanic == MECHANIC_NONE)
+                    mechanic = static_cast<Mechanics>(spellInfo->Mechanic);
+
+                LossOfControlType locType = GetLossOfControlType(auraType, mechanic);
+                if (locType == LOC_NONE)
+                    continue;
+
+                WorldPackets::Spells::LossOfControlAuraUpdate::LossOfControlInfo info;
+                info.AuraSlot = static_cast<uint8>(aurApp->GetSlot());
+                info.EffectIndex = static_cast<uint8>(eff->GetEffIndex());
+                info.Type = locType;
+                info.MechanicType = mechanic;
+                locUpdate.LossOfControlInfos.push_back(info);
+            }
+        }
+
+        if (!locUpdate.LossOfControlInfos.empty())
+            SendDirectMessage(locUpdate.Write());
+    }
+
     SendEnchantmentDurations();                             // must be after add to map
     SendItemDurations();                                    // must be after add to map
     SendItemPassives();                                     // must be after add to map
