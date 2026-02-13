@@ -6614,7 +6614,7 @@ struct DataTagXHouseDecorRecordMeta
     {
         { .Type = FT_INT,                  .ArraySize =  1, .IsSigned = false },
         { .Type = FT_INT,                  .ArraySize =  1, .IsSigned =  true },
-        { .Type = FT_INT,                  .ArraySize =  1, .IsSigned =  true },
+        { .Type = FT_INT,                  .ArraySize =  1, .IsSigned = false },
     };
 
     static constexpr DB2Meta Instance =
@@ -6788,7 +6788,7 @@ struct DecorDyeSlotMeta
     {
         { .Type = FT_INT,                  .ArraySize =  1, .IsSigned = false },
         { .Type = FT_INT,                  .ArraySize =  1, .IsSigned =  true },
-        { .Type = FT_INT,                  .ArraySize =  1, .IsSigned =  true },
+        { .Type = FT_INT,                  .ArraySize =  1, .IsSigned = false },
         { .Type = FT_INT,                  .ArraySize =  1, .IsSigned =  true },
         { .Type = FT_INT,                  .ArraySize =  1, .IsSigned =  true },
     };
@@ -6812,7 +6812,7 @@ struct DecorSubcategoryMeta
         { .Type = FT_STRING,               .ArraySize =  1, .IsSigned =  true },
         { .Type = FT_INT,                  .ArraySize =  1, .IsSigned = false },
         { .Type = FT_INT,                  .ArraySize =  1, .IsSigned =  true },
-        { .Type = FT_INT,                  .ArraySize =  1, .IsSigned =  true },
+        { .Type = FT_INT,                  .ArraySize =  1, .IsSigned = false },
         { .Type = FT_INT,                  .ArraySize =  1, .IsSigned =  true },
     };
 
@@ -6833,7 +6833,7 @@ struct DecorXDecorSubcategoryMeta
     static constexpr DB2MetaField Fields[3] =
     {
         { .Type = FT_INT,                  .ArraySize =  1, .IsSigned = false },
-        { .Type = FT_INT,                  .ArraySize =  1, .IsSigned =  true },
+        { .Type = FT_INT,                  .ArraySize =  1, .IsSigned = false },
         { .Type = FT_INT,                  .ArraySize =  1, .IsSigned =  true },
     };
 
@@ -15778,7 +15778,7 @@ struct NeighborhoodInitiativeMeta
         .ParentIndexField   = -1,
         .FieldCount         = 9,
         .FileFieldCount     = 9,
-        .LayoutHash         = 0x1C8B2515,
+        .LayoutHash         = 0xF67761EA,
         .Fields             = Fields
     };
 };
@@ -15882,7 +15882,7 @@ struct NeighborhoodNameGenMeta
         { .Type = FT_STRING,               .ArraySize =  1, .IsSigned =  true },
         { .Type = FT_STRING,               .ArraySize =  1, .IsSigned =  true },
         { .Type = FT_STRING,               .ArraySize =  1, .IsSigned =  true },
-        { .Type = FT_INT,                  .ArraySize =  1, .IsSigned =  true },
+        { .Type = FT_INT,                  .ArraySize =  1, .IsSigned = false },
     };
 
     static constexpr DB2Meta Instance =
@@ -15909,7 +15909,7 @@ struct NeighborhoodPlotMeta
         { .Type = FT_FLOAT,                .ArraySize =  3, .IsSigned =  true },
         { .Type = FT_FLOAT,                .ArraySize =  3, .IsSigned =  true },
         { .Type = FT_INT,                  .ArraySize =  1, .IsSigned = false },
-        { .Type = FT_INT,                  .ArraySize =  1, .IsSigned =  true },
+        { .Type = FT_INT,                  .ArraySize =  1, .IsSigned = false },
         { .Type = FT_INT,                  .ArraySize =  1, .IsSigned =  true },
         { .Type = FT_INT,                  .ArraySize =  1, .IsSigned =  true },
         { .Type = FT_INT,                  .ArraySize =  1, .IsSigned =  true },
@@ -18986,10 +18986,10 @@ struct RoomComponentMeta
 {
     static constexpr DB2MetaField Fields[9] =
     {
-        { .Type = FT_FLOAT,                .ArraySize =  3, .IsSigned =  true },
-        { .Type = FT_FLOAT,                .ArraySize =  3, .IsSigned =  true },
+        { .Type = FT_FLOAT,                .ArraySize =  3, .IsSigned = false },
+        { .Type = FT_FLOAT,                .ArraySize =  3, .IsSigned = false },
         { .Type = FT_INT,                  .ArraySize =  1, .IsSigned = false },
-        { .Type = FT_INT,                  .ArraySize =  1, .IsSigned =  true },
+        { .Type = FT_INT,                  .ArraySize =  1, .IsSigned = false },
         { .Type = FT_INT,                  .ArraySize =  1, .IsSigned =  true },
         { .Type = FT_BYTE,                 .ArraySize =  1, .IsSigned = false },
         { .Type = FT_INT,                  .ArraySize =  1, .IsSigned =  true },
@@ -19108,8 +19108,8 @@ struct RoomWmoDataMeta
 {
     static constexpr DB2MetaField Fields[2] =
     {
-        { .Type = FT_FLOAT,                .ArraySize =  6, .IsSigned =  true },
-        { .Type = FT_FLOAT,                .ArraySize =  1, .IsSigned =  true },
+        { .Type = FT_FLOAT,                .ArraySize =  6, .IsSigned = false },
+        { .Type = FT_FLOAT,                .ArraySize =  1, .IsSigned = false },
     };
 
     static constexpr DB2Meta Instance =

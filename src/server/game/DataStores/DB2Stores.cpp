@@ -921,9 +921,10 @@ uint32 DB2Manager::LoadStores(std::string const& dataPath, LocaleConstant defaul
     LOAD_DB2(sNamesReservedStore);
     LOAD_DB2(sNamesReservedLocaleStore);
     LOAD_DB2(sNeighborhoodInitiativeStore);
-    LOAD_DB2(sNeighborhoodInitiativeRewardStore);
-    LOAD_DB2(sNeighborhoodInitiativeTaskStore);
-    LOAD_DB2(sNeighborhoodInitiativeXTaskStore);
+    // These DB2 files don't exist in client data yet (V12 housing content, not shipped)
+    //LOAD_DB2(sNeighborhoodInitiativeRewardStore);
+    //LOAD_DB2(sNeighborhoodInitiativeTaskStore);
+    //LOAD_DB2(sNeighborhoodInitiativeXTaskStore);
     LOAD_DB2(sNeighborhoodMapStore);
     LOAD_DB2(sNeighborhoodNameGenStore);
     LOAD_DB2(sNeighborhoodPlotStore);

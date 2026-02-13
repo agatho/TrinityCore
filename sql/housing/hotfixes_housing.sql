@@ -5,7 +5,7 @@
 -- They belong in the `hotfixes` database and must be executed AFTER
 -- the base hotfixes_database.sql schema has been applied.
 --
--- 24 base tables + 10 locale tables = 34 total
+-- 24 base tables + 11 locale tables = 35 total
 -- ---------------------------------------------------------------------------
 
 -- Table structure for table `data_tag_x_house_decor_record`
@@ -17,7 +17,7 @@ DROP TABLE IF EXISTS `data_tag_x_house_decor_record`;
 CREATE TABLE `data_tag_x_house_decor_record` (
   `ID` int unsigned NOT NULL DEFAULT '0',
   `DataTagID` int NOT NULL DEFAULT '0',
-  `HouseDecorID` int NOT NULL DEFAULT '0',
+  `HouseDecorID` int unsigned NOT NULL DEFAULT '0',
   `VerifiedBuild` int NOT NULL DEFAULT '0',
   PRIMARY KEY (`ID`,`VerifiedBuild`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -77,7 +77,7 @@ DROP TABLE IF EXISTS `decor_dye_slot`;
 CREATE TABLE `decor_dye_slot` (
   `ID` int unsigned NOT NULL DEFAULT '0',
   `SlotIndex` int NOT NULL DEFAULT '0',
-  `HouseDecorID` int NOT NULL DEFAULT '0',
+  `HouseDecorID` int unsigned NOT NULL DEFAULT '0',
   `DyeChannelType` int NOT NULL DEFAULT '0',
   `DefaultDyeRecordID` int NOT NULL DEFAULT '0',
   `VerifiedBuild` int NOT NULL DEFAULT '0',
@@ -96,7 +96,7 @@ CREATE TABLE `decor_subcategory` (
   `Name` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
   `ID` int unsigned NOT NULL DEFAULT '0',
   `IconFileDataID` int NOT NULL DEFAULT '0',
-  `DecorCategoryID` int NOT NULL DEFAULT '0',
+  `DecorCategoryID` int unsigned NOT NULL DEFAULT '0',
   `DisplayIndex` int NOT NULL DEFAULT '0',
   `VerifiedBuild` int NOT NULL DEFAULT '0',
   PRIMARY KEY (`ID`,`VerifiedBuild`)
@@ -139,7 +139,7 @@ DROP TABLE IF EXISTS `decor_x_decor_subcategory`;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `decor_x_decor_subcategory` (
   `ID` int unsigned NOT NULL DEFAULT '0',
-  `DecorSubcategoryID` int NOT NULL DEFAULT '0',
+  `DecorSubcategoryID` int unsigned NOT NULL DEFAULT '0',
   `HouseDecorID` int NOT NULL DEFAULT '0',
   `VerifiedBuild` int NOT NULL DEFAULT '0',
   PRIMARY KEY (`ID`,`VerifiedBuild`)
@@ -650,7 +650,7 @@ CREATE TABLE `neighborhood_name_gen` (
   `Prefix` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
   `Suffix` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
   `FullName` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
-  `NeighborhoodMapID` int NOT NULL DEFAULT '0',
+  `NeighborhoodMapID` int unsigned NOT NULL DEFAULT '0',
   `VerifiedBuild` int NOT NULL DEFAULT '0',
   PRIMARY KEY (`ID`,`VerifiedBuild`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -711,7 +711,7 @@ CREATE TABLE `neighborhood_plot` (
   `TeleportPositionY` float NOT NULL DEFAULT '0',
   `TeleportPositionZ` float NOT NULL DEFAULT '0',
   `ID` int unsigned NOT NULL DEFAULT '0',
-  `NeighborhoodMapID` int NOT NULL DEFAULT '0',
+  `NeighborhoodMapID` int unsigned NOT NULL DEFAULT '0',
   `Field_010` int NOT NULL DEFAULT '0',
   `CornerstoneGameObjectID` int NOT NULL DEFAULT '0',
   `PlotIndex` int NOT NULL DEFAULT '0',
@@ -739,7 +739,7 @@ CREATE TABLE `room_component` (
   `OffsetRotY` float NOT NULL DEFAULT '0',
   `OffsetRotZ` float NOT NULL DEFAULT '0',
   `ID` int unsigned NOT NULL DEFAULT '0',
-  `RoomWmoDataID` int NOT NULL DEFAULT '0',
+  `RoomWmoDataID` int unsigned NOT NULL DEFAULT '0',
   `ModelFileDataID` int NOT NULL DEFAULT '0',
   `Type` tinyint unsigned NOT NULL DEFAULT '0',
   `MeshStyleFilterID` int NOT NULL DEFAULT '0',
