@@ -412,6 +412,10 @@ bool InstanceScript::SetBossState(uint32 id, EncounterState state)
                     InitializeCombatResurrections(1, resInterval);
                     SendEncounterStart(1, 9, resInterval, resInterval);
 
+                    dungeonEncounter = bossInfo->GetDungeonEncounterForDifficulty(instance->GetDifficultyID());
+                    if (dungeonEncounter)
+                        SendRealmEncounterStart(dungeonEncounter->ID);
+
                     instance->DoOnPlayers([](Player* player)
                     {
                         player->AtStartOfEncounter(EncounterType::DungeonEncounter);
@@ -422,6 +426,10 @@ bool InstanceScript::SetBossState(uint32 id, EncounterState state)
                 {
                     ResetCombatResurrections();
                     SendEncounterEnd();
+
+                    dungeonEncounter = bossInfo->GetDungeonEncounterForDifficulty(instance->GetDifficultyID());
+                    if (dungeonEncounter)
+                        SendRealmEncounterEnd(dungeonEncounter->ID, false);
 
                     instance->DoOnPlayers([](Player* player)
                     {
@@ -436,6 +444,8 @@ bool InstanceScript::SetBossState(uint32 id, EncounterState state)
                     dungeonEncounter = bossInfo->GetDungeonEncounterForDifficulty(instance->GetDifficultyID());
                     if (dungeonEncounter)
                     {
+                        SendRealmEncounterEnd(dungeonEncounter->ID, true);
+
                         instance->DoOnPlayers([&](Player* player)
                         {
                             if (!player->IsLockedToDungeonEncounter(dungeonEncounter->ID))
@@ -894,6 +904,44 @@ void InstanceScript::SendEncounterEnd()
 {
     WorldPackets::Instance::InstanceEncounterEnd encounterEndMessage;
     instance->SendToPlayers(encounterEndMessage.Write());
+}
+
+void InstanceScript::SendRealmEncounterStart(uint32 dungeonEncounterId)
+{
+    WorldPackets::Instance::EncounterStart encounterStart;
+    encounterStart.DungeonEncounterID = dungeonEncounterId;
+    encounterStart.DifficultyID = instance->GetDifficultyID();
+    encounterStart.GroupSize = instance->GetPlayersCountExceptGMs();
+    encounterStart.UnkEncounterDataID = 0;
+
+    instance->SendToPlayers(encounterStart.Write());
+}
+
+void InstanceScript::SendRealmEncounterEnd(uint32 dungeonEncounterId, bool success)
+{
+    WorldPackets::Instance::EncounterEnd encounterEnd;
+    encounterEnd.DungeonEncounterID = dungeonEncounterId;
+    encounterEnd.DifficultyID = instance->GetDifficultyID();
+    encounterEnd.GroupSize = instance->GetPlayersCountExceptGMs();
+    encounterEnd.Success = success;
+
+    instance->SendToPlayers(encounterEnd.Write());
+}
+
+void InstanceScript::SendUpdateAllowReleaseInProgress(bool allowRelease)
+{
+    WorldPackets::Instance::InstanceEncounterUpdateAllowReleaseInProgress packet;
+    packet.AllowRelease = allowRelease;
+
+    instance->SendToPlayers(packet.Write());
+}
+
+void InstanceScript::SendUpdateSuppressRelease(bool suppressRelease)
+{
+    WorldPackets::Instance::InstanceEncounterUpdateSuppressRelease packet;
+    packet.SuppressRelease = suppressRelease;
+
+    instance->SendToPlayers(packet.Write());
 }
 
 void InstanceScript::SendBossKillCredit(uint32 encounterId)

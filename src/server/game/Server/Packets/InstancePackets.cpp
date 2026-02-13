@@ -202,4 +202,73 @@ WorldPacket const* BossKill::Write()
 
     return &_worldPacket;
 }
+
+WorldPacket const* EncounterStart::Write()
+{
+    _worldPacket << uint32(DungeonEncounterID);
+    _worldPacket << uint32(DifficultyID);
+    _worldPacket << uint32(GroupSize);
+    _worldPacket << int32(UnkEncounterDataID);
+
+    return &_worldPacket;
+}
+
+WorldPacket const* EncounterEnd::Write()
+{
+    _worldPacket << uint32(DungeonEncounterID);
+    _worldPacket << uint32(DifficultyID);
+    _worldPacket << uint32(GroupSize);
+    _worldPacket << Bits<1>(Success);
+    _worldPacket.FlushBits();
+
+    return &_worldPacket;
+}
+
+WorldPacket const* InstanceEncounterUpdateAllowReleaseInProgress::Write()
+{
+    _worldPacket << Bits<1>(AllowRelease);
+    _worldPacket.FlushBits();
+
+    return &_worldPacket;
+}
+
+WorldPacket const* InstanceEncounterUpdateSuppressRelease::Write()
+{
+    _worldPacket << Bits<1>(SuppressRelease);
+    _worldPacket.FlushBits();
+
+    return &_worldPacket;
+}
+
+WorldPacket const* InstanceGroupSizeChanged::Write()
+{
+    _worldPacket << uint32(GroupSize);
+
+    return &_worldPacket;
+}
+
+WorldPacket const* LegacyLootRules::Write()
+{
+    _worldPacket << Bits<1>(LegacyRulesActive);
+    _worldPacket.FlushBits();
+
+    return &_worldPacket;
+}
+
+void InstanceAbandonVoteResponse::Read()
+{
+    _worldPacket >> Bits<1>(Accept);
+}
+
+void SetDifficultyID::Read()
+{
+    _worldPacket >> DifficultyID;
+}
+
+WorldPacket const* ChangePlayerDifficultyResult::Write()
+{
+    _worldPacket << uint8(Result);
+
+    return &_worldPacket;
+}
 }

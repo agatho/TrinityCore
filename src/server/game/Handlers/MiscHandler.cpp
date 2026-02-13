@@ -1097,6 +1097,39 @@ void WorldSession::HandleInstanceLockResponse(WorldPackets::Instance::InstanceLo
     _player->SetPendingBind(0, 0);
 }
 
+void WorldSession::HandleStartInstanceAbandonVote(WorldPackets::Instance::StartInstanceAbandonVote& /*packet*/)
+{
+    // Instance abandon voting not yet implemented
+    // Would need to start a vote for all group members in the instance
+}
+
+void WorldSession::HandleInstanceAbandonVoteResponse(WorldPackets::Instance::InstanceAbandonVoteResponse& /*packet*/)
+{
+    // Instance abandon vote response not yet implemented
+}
+
+void WorldSession::HandleSetDifficultyID(WorldPackets::Instance::SetDifficultyID& setDifficultyID)
+{
+    DifficultyEntry const* difficultyEntry = sDifficultyStore.LookupEntry(setDifficultyID.DifficultyID);
+    if (!difficultyEntry)
+    {
+        TC_LOG_DEBUG("network", "WorldSession::HandleSetDifficultyID: player {} sent an invalid difficulty {}",
+            _player->GetGUID().ToString(), setDifficultyID.DifficultyID);
+        return;
+    }
+
+    if (difficultyEntry->InstanceType == MAP_INSTANCE)
+        _player->SendDungeonDifficulty(Difficulty(setDifficultyID.DifficultyID));
+    else if (difficultyEntry->InstanceType == MAP_RAID)
+        _player->SendRaidDifficulty(difficultyEntry->Flags & 0x4 ? true : false, Difficulty(setDifficultyID.DifficultyID)); // 0x4 = legacy
+}
+
+void WorldSession::HandleToggleDifficulty(WorldPackets::Instance::ToggleDifficulty& /*toggleDifficulty*/)
+{
+    // Toggle difficulty is a simplified interface for switching between
+    // normal/heroic modes - not yet implemented
+}
+
 void WorldSession::HandleViolenceLevel(WorldPackets::Misc::ViolenceLevel& /*violenceLevel*/)
 {
     // do something?
