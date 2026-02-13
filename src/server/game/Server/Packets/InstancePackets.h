@@ -296,6 +296,172 @@ namespace WorldPackets
             WorldPacket const* Write() override;
             uint32 DungeonEncounterID = 0;
         };
+
+        // ============================================================
+        // Realm-wide encounter packets
+        // ============================================================
+
+        class EncounterStart final : public ServerPacket
+        {
+        public:
+            explicit EncounterStart() : ServerPacket(SMSG_ENCOUNTER_START, 4 + 4 + 4 + 4) { }
+
+            WorldPacket const* Write() override;
+
+            uint32 DungeonEncounterID = 0;
+            uint32 DifficultyID = 0;
+            uint32 GroupSize = 0;
+            int32 UnkEncounterDataID = 0;
+        };
+
+        class EncounterEnd final : public ServerPacket
+        {
+        public:
+            explicit EncounterEnd() : ServerPacket(SMSG_ENCOUNTER_END, 4 + 4 + 4 + 1) { }
+
+            WorldPacket const* Write() override;
+
+            uint32 DungeonEncounterID = 0;
+            uint32 DifficultyID = 0;
+            uint32 GroupSize = 0;
+            bool Success = false;
+        };
+
+        // ============================================================
+        // Release control packets
+        // ============================================================
+
+        class InstanceEncounterUpdateAllowReleaseInProgress final : public ServerPacket
+        {
+        public:
+            explicit InstanceEncounterUpdateAllowReleaseInProgress() : ServerPacket(SMSG_INSTANCE_ENCOUNTER_UPDATE_ALLOW_RELEASE_IN_PROGRESS, 1) { }
+
+            WorldPacket const* Write() override;
+
+            bool AllowRelease = false;
+        };
+
+        class InstanceEncounterUpdateSuppressRelease final : public ServerPacket
+        {
+        public:
+            explicit InstanceEncounterUpdateSuppressRelease() : ServerPacket(SMSG_INSTANCE_ENCOUNTER_UPDATE_SUPPRESS_RELEASE, 1) { }
+
+            WorldPacket const* Write() override;
+
+            bool SuppressRelease = false;
+        };
+
+        // ============================================================
+        // Instance group/difficulty packets
+        // ============================================================
+
+        class InstanceGroupSizeChanged final : public ServerPacket
+        {
+        public:
+            explicit InstanceGroupSizeChanged() : ServerPacket(SMSG_INSTANCE_GROUP_SIZE_CHANGED, 4) { }
+
+            WorldPacket const* Write() override;
+
+            uint32 GroupSize = 0;
+        };
+
+        class LegacyLootRules final : public ServerPacket
+        {
+        public:
+            explicit LegacyLootRules() : ServerPacket(SMSG_LEGACY_LOOT_RULES, 1) { }
+
+            WorldPacket const* Write() override;
+
+            bool LegacyRulesActive = false;
+        };
+
+        // ============================================================
+        // Abandon vote packets
+        // ============================================================
+
+        class StartInstanceAbandonVote final : public ClientPacket
+        {
+        public:
+            explicit StartInstanceAbandonVote(WorldPacket&& packet) : ClientPacket(CMSG_START_INSTANCE_ABANDON_VOTE, std::move(packet)) { }
+
+            void Read() override { }
+        };
+
+        class InstanceAbandonVoteResponse final : public ClientPacket
+        {
+        public:
+            explicit InstanceAbandonVoteResponse(WorldPacket&& packet) : ClientPacket(CMSG_INSTANCE_ABANDON_VOTE_RESPONSE, std::move(packet)) { }
+
+            void Read() override;
+
+            bool Accept = false;
+        };
+
+        class InstanceAbandonVoteStarted final : public ServerPacket
+        {
+        public:
+            explicit InstanceAbandonVoteStarted() : ServerPacket(SMSG_INSTANCE_ABANDON_VOTE_STARTED, 0) { }
+
+            WorldPacket const* Write() override { return &_worldPacket; }
+        };
+
+        class InstanceAbandonVoteCompleted final : public ServerPacket
+        {
+        public:
+            explicit InstanceAbandonVoteCompleted() : ServerPacket(SMSG_INSTANCE_ABANDON_VOTE_COMPLETED, 0) { }
+
+            WorldPacket const* Write() override { return &_worldPacket; }
+        };
+
+        class InstanceAbandonVotePlayerLeft final : public ServerPacket
+        {
+        public:
+            explicit InstanceAbandonVotePlayerLeft() : ServerPacket(SMSG_INSTANCE_ABANDON_VOTE_PLAYER_LEFT, 0) { }
+
+            WorldPacket const* Write() override { return &_worldPacket; }
+        };
+
+        class InstanceAbandonVoteResponseSMSG final : public ServerPacket
+        {
+        public:
+            explicit InstanceAbandonVoteResponseSMSG() : ServerPacket(SMSG_INSTANCE_ABANDON_VOTE_RESPONSE, 0) { }
+
+            WorldPacket const* Write() override { return &_worldPacket; }
+        };
+
+        // ============================================================
+        // Difficulty packets
+        // ============================================================
+
+        class SetDifficultyID final : public ClientPacket
+        {
+        public:
+            explicit SetDifficultyID(WorldPacket&& packet) : ClientPacket(CMSG_SET_DIFFICULTY_ID, std::move(packet)) { }
+
+            void Read() override;
+
+            uint32 DifficultyID = 0;
+        };
+
+        class ToggleDifficulty final : public ClientPacket
+        {
+        public:
+            explicit ToggleDifficulty(WorldPacket&& packet) : ClientPacket(CMSG_TOGGLE_DIFFICULTY, std::move(packet)) { }
+
+            void Read() override { }
+        };
+
+        class ChangePlayerDifficultyResult final : public ServerPacket
+        {
+        public:
+            explicit ChangePlayerDifficultyResult() : ServerPacket(SMSG_CHANGE_PLAYER_DIFFICULTY_RESULT, 4) { }
+
+            WorldPacket const* Write() override;
+
+            uint8 Result = 0;
+            // 0 = success, various error codes
+        };
+
     }
 }
 

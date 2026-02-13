@@ -535,9 +535,13 @@ namespace WorldPackets
 
     namespace Instance
     {
+        class InstanceAbandonVoteResponse;
         class InstanceInfo;
         class InstanceLockResponse;
         class ResetInstances;
+        class SetDifficultyID;
+        class StartInstanceAbandonVote;
+        class ToggleDifficulty;
     }
 
     namespace Item
@@ -1933,6 +1937,10 @@ class TC_GAME_API WorldSession
         void HandleWhoIsOpcode(WorldPackets::Who::WhoIsRequest& packet);
         void HandleResetInstancesOpcode(WorldPackets::Instance::ResetInstances& packet);
         void HandleInstanceLockResponse(WorldPackets::Instance::InstanceLockResponse& packet);
+        void HandleStartInstanceAbandonVote(WorldPackets::Instance::StartInstanceAbandonVote& packet);
+        void HandleInstanceAbandonVoteResponse(WorldPackets::Instance::InstanceAbandonVoteResponse& packet);
+        void HandleSetDifficultyID(WorldPackets::Instance::SetDifficultyID& packet);
+        void HandleToggleDifficulty(WorldPackets::Instance::ToggleDifficulty& packet);
 
         // Looking for Dungeon/Raid
         void SendLfgPlayerLockInfo();
