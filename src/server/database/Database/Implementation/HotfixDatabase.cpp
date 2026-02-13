@@ -891,6 +891,7 @@ void HotfixDatabaseConnection::DoPrepareStatements()
     PrepareStatement(HOTFIX_SEL_HOUSE_EXTERIOR_WMO_DATA, "SELECT Name, ID, Flags FROM house_exterior_wmo_data"
         " WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
     PREPARE_MAX_ID_STMT(HOTFIX_SEL_HOUSE_EXTERIOR_WMO_DATA, "SELECT MAX(ID) + 1 FROM house_exterior_wmo_data", CONNECTION_SYNCH);
+    PREPARE_LOCALE_STMT(HOTFIX_SEL_HOUSE_EXTERIOR_WMO_DATA, "SELECT ID, Name_lang FROM house_exterior_wmo_data_locale WHERE (`VerifiedBuild` > 0) = ? AND locale = ?", CONNECTION_SYNCH);
 
     // HouseLevelData.db2
     PrepareStatement(HOTFIX_SEL_HOUSE_LEVEL_DATA, "SELECT ID, Level, QuestID FROM house_level_data"
