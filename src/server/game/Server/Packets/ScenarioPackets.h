@@ -120,6 +120,28 @@ public:
 
     std::vector<ScenarioPOIData> ScenarioPOIDataStats;
 };
+
+class ScenarioShowCriteria final : public ServerPacket
+{
+public:
+    explicit ScenarioShowCriteria() : ServerPacket(SMSG_SCENARIO_SHOW_CRITERIA, 4) { }
+
+    WorldPacket const* Write() override;
+
+    int32 CriteriaTreeID = 0;
+};
+
+class ScenarioUIUpdate final : public ServerPacket
+{
+public:
+    explicit ScenarioUIUpdate() : ServerPacket(SMSG_SCENARIO_UI_UPDATE, 4 + 4 + 1) { }
+
+    WorldPacket const* Write() override;
+
+    int32 ScenarioStep = 0;
+    int32 TimerDuration = 0;
+    bool ShowUI = true;
+};
 }
 
 #endif // TRINITYCORE_SCENARIO_PACKETS_H
