@@ -47,4 +47,20 @@ WorldPacket const* TotemMoved::Write()
 
     return &_worldPacket;
 }
+
+WorldPacket const* TotemDurationChanged::Write()
+{
+    _worldPacket << Totem;
+    _worldPacket << Duration;
+
+    return &_worldPacket;
+}
+
+WorldPacket const* TotemRemoved::Write()
+{
+    _worldPacket << Totem;
+    _worldPacket << uint8(Slot);
+
+    return &_worldPacket;
+}
 }
