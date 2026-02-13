@@ -1238,4 +1238,34 @@ void KeyboundOverride::Read()
 {
     _worldPacket >> OverrideID;
 }
+
+WorldPacket const* SpellCategoryCooldown::Write()
+{
+    _worldPacket << Size<int32>(CategoryCooldowns);
+
+    for (SpellCategoryCooldownEntry const& entry : CategoryCooldowns)
+    {
+        _worldPacket << int32(entry.Category);
+        _worldPacket << int32(entry.ModCooldown);
+    }
+
+    return &_worldPacket;
+}
+
+WorldPacket const* SpellFailureMessage::Write()
+{
+    _worldPacket << CasterUnit;
+    _worldPacket << int32(SpellID);
+    _worldPacket << uint8(Reason);
+
+    return &_worldPacket;
+}
+
+WorldPacket const* RestartGlobalCooldown::Write()
+{
+    _worldPacket << int32(SpellID);
+    _worldPacket << Duration;
+
+    return &_worldPacket;
+}
 }

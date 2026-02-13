@@ -1312,6 +1312,49 @@ namespace WorldPackets
         };
 
         ByteBuffer& operator>>(ByteBuffer& buffer, SpellCastRequest& request);
+
+        // ============================================================
+        // Spell Category Cooldown
+        // ============================================================
+
+        struct SpellCategoryCooldownEntry
+        {
+            int32 Category = 0;
+            int32 ModCooldown = 0; // in ms
+        };
+
+        class SpellCategoryCooldown final : public ServerPacket
+        {
+        public:
+            explicit SpellCategoryCooldown() : ServerPacket(SMSG_SPELL_CATEGORY_COOLDOWN, 4) { }
+
+            WorldPacket const* Write() override;
+
+            std::vector<SpellCategoryCooldownEntry> CategoryCooldowns;
+        };
+
+        class SpellFailureMessage final : public ServerPacket
+        {
+        public:
+            explicit SpellFailureMessage() : ServerPacket(SMSG_SPELL_FAILURE_MESSAGE, 16 + 4 + 1) { }
+
+            WorldPacket const* Write() override;
+
+            ObjectGuid CasterUnit;
+            int32 SpellID = 0;
+            uint8 Reason = 0;
+        };
+
+        class RestartGlobalCooldown final : public ServerPacket
+        {
+        public:
+            explicit RestartGlobalCooldown() : ServerPacket(SMSG_RESTART_GLOBAL_COOLDOWN, 4 + 4) { }
+
+            WorldPacket const* Write() override;
+
+            int32 SpellID = 0;
+            WorldPackets::Duration<Milliseconds, int32> Duration;
+        };
     }
 }
 

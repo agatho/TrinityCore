@@ -63,6 +63,28 @@ namespace WorldPackets
             uint8 Slot = 0;
             uint8 NewSlot = 0;
         };
+
+        class TotemDurationChanged final : public ServerPacket
+        {
+        public:
+            explicit TotemDurationChanged() : ServerPacket(SMSG_TOTEM_DURATION_CHANGED, 16 + 4) { }
+
+            WorldPacket const* Write() override;
+
+            ObjectGuid Totem;
+            WorldPackets::Duration<Milliseconds, int32> Duration;
+        };
+
+        class TotemRemoved final : public ServerPacket
+        {
+        public:
+            explicit TotemRemoved() : ServerPacket(SMSG_TOTEM_REMOVED, 16 + 1) { }
+
+            WorldPacket const* Write() override;
+
+            ObjectGuid Totem;
+            uint8 Slot = 0;
+        };
     }
 }
 
