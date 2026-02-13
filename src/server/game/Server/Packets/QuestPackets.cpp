@@ -941,4 +941,36 @@ WorldPacket const* ForceSpawnTrackingUpdate::Write()
 
     return &_worldPacket;
 }
+
+void QuestSessionBeginResponse::Read()
+{
+    _worldPacket >> Bits<1>(Accept);
+}
+
+WorldPacket const* QuestSessionResult::Write()
+{
+    _worldPacket << uint8(Result);
+
+    return &_worldPacket;
+}
+
+WorldPacket const* QuestSessionReadyCheckResponse::Write()
+{
+    _worldPacket << Player;
+    _worldPacket << Bits<1>(Accept);
+    _worldPacket.FlushBits();
+
+    return &_worldPacket;
+}
+
+WorldPacket const* QuestSessionInfoResponse::Write()
+{
+    _worldPacket << SessionOwner;
+    _worldPacket << Size<int32>(QuestIDs);
+
+    for (int32 questId : QuestIDs)
+        _worldPacket << int32(questId);
+
+    return &_worldPacket;
+}
 }

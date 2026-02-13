@@ -864,6 +864,76 @@ namespace WorldPackets
 
             int32 QuestID = 0;
         };
+
+        // ============================================================
+        // Quest Session packets
+        // ============================================================
+
+        class QuestSessionRequestStart final : public ClientPacket
+        {
+        public:
+            explicit QuestSessionRequestStart(WorldPacket&& packet) : ClientPacket(CMSG_QUEST_SESSION_REQUEST_START, std::move(packet)) { }
+
+            void Read() override { }
+        };
+
+        class QuestSessionRequestStop final : public ClientPacket
+        {
+        public:
+            explicit QuestSessionRequestStop(WorldPacket&& packet) : ClientPacket(CMSG_QUEST_SESSION_REQUEST_STOP, std::move(packet)) { }
+
+            void Read() override { }
+        };
+
+        class QuestSessionBeginResponse final : public ClientPacket
+        {
+        public:
+            explicit QuestSessionBeginResponse(WorldPacket&& packet) : ClientPacket(CMSG_QUEST_SESSION_BEGIN_RESPONSE, std::move(packet)) { }
+
+            void Read() override;
+
+            bool Accept = false;
+        };
+
+        class QuestSessionResult final : public ServerPacket
+        {
+        public:
+            explicit QuestSessionResult() : ServerPacket(SMSG_QUEST_SESSION_RESULT, 1) { }
+
+            WorldPacket const* Write() override;
+
+            uint8 Result = 0; // 0 = started, 1 = stopped, other = error
+        };
+
+        class QuestSessionReadyCheck final : public ServerPacket
+        {
+        public:
+            explicit QuestSessionReadyCheck() : ServerPacket(SMSG_QUEST_SESSION_READY_CHECK, 0) { }
+
+            WorldPacket const* Write() override { return &_worldPacket; }
+        };
+
+        class QuestSessionReadyCheckResponse final : public ServerPacket
+        {
+        public:
+            explicit QuestSessionReadyCheckResponse() : ServerPacket(SMSG_QUEST_SESSION_READY_CHECK_RESPONSE, 16 + 1) { }
+
+            WorldPacket const* Write() override;
+
+            ObjectGuid Player;
+            bool Accept = false;
+        };
+
+        class QuestSessionInfoResponse final : public ServerPacket
+        {
+        public:
+            explicit QuestSessionInfoResponse() : ServerPacket(SMSG_QUEST_SESSION_INFO_RESPONSE, 16) { }
+
+            WorldPacket const* Write() override;
+
+            ObjectGuid SessionOwner;
+            std::vector<int32> QuestIDs;
+        };
     }
 }
 
