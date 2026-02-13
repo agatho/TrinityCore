@@ -173,8 +173,6 @@ struct NeighborhoodInitiativeData
     int32 Duration = 0;
     int32 RequiredParticipants = 0;
     int32 RewardCurrencyID = 0;
-    int32 RewardCurrencyAmount = 0;
-    int32 PlayerConditionID = 0;
 };
 
 struct NeighborhoodInitiativeRewardData

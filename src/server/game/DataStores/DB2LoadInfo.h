@@ -4390,7 +4390,7 @@ struct NamesReservedLocaleLoadInfo
 
 struct NeighborhoodInitiativeLoadInfo
 {
-    static constexpr DB2FieldMeta Fields[9] =
+    static constexpr DB2FieldMeta Fields[7] =
     {
         { .IsSigned = false, .Type = FT_STRING, .Name = "Name" },
         { .IsSigned = false, .Type = FT_STRING, .Name = "Description" },
@@ -4399,11 +4399,9 @@ struct NeighborhoodInitiativeLoadInfo
         { .IsSigned = true, .Type = FT_INT, .Name = "Duration" },
         { .IsSigned = true, .Type = FT_INT, .Name = "RequiredParticipants" },
         { .IsSigned = true, .Type = FT_INT, .Name = "RewardCurrencyID" },
-        { .IsSigned = true, .Type = FT_INT, .Name = "RewardCurrencyAmount" },
-        { .IsSigned = true, .Type = FT_INT, .Name = "PlayerConditionID" },
     };
 
-    static constexpr DB2LoadInfo Instance{ Fields, 9, &NeighborhoodInitiativeMeta::Instance, HOTFIX_SEL_NEIGHBORHOOD_INITIATIVE };
+    static constexpr DB2LoadInfo Instance{ Fields, 7, &NeighborhoodInitiativeMeta::Instance, HOTFIX_SEL_NEIGHBORHOOD_INITIATIVE };
 };
 
 struct NeighborhoodInitiativeRewardLoadInfo

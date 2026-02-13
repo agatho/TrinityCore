@@ -3320,8 +3320,6 @@ struct NeighborhoodInitiativeEntry
     int32 Duration;
     int32 RequiredParticipants;
     int32 RewardCurrencyID;
-    int32 RewardCurrencyAmount;
-    int32 PlayerConditionID;
 };
 
 struct NeighborhoodInitiativeRewardEntry

@@ -15758,13 +15758,11 @@ struct NamesReservedLocaleMeta
 
 struct NeighborhoodInitiativeMeta
 {
-    static constexpr DB2MetaField Fields[9] =
+    static constexpr DB2MetaField Fields[7] =
     {
         { .Type = FT_STRING,               .ArraySize =  1, .IsSigned =  true },
         { .Type = FT_STRING,               .ArraySize =  1, .IsSigned =  true },
         { .Type = FT_INT,                  .ArraySize =  1, .IsSigned = false },
-        { .Type = FT_INT,                  .ArraySize =  1, .IsSigned =  true },
-        { .Type = FT_INT,                  .ArraySize =  1, .IsSigned =  true },
         { .Type = FT_INT,                  .ArraySize =  1, .IsSigned =  true },
         { .Type = FT_INT,                  .ArraySize =  1, .IsSigned =  true },
         { .Type = FT_INT,                  .ArraySize =  1, .IsSigned =  true },
@@ -15776,8 +15774,8 @@ struct NeighborhoodInitiativeMeta
         .FileDataId         = 6699736,
         .IndexField         = 2,
         .ParentIndexField   = -1,
-        .FieldCount         = 9,
-        .FileFieldCount     = 9,
+        .FieldCount         = 7,
+        .FileFieldCount     = 7,
         .LayoutHash         = 0xF67761EA,
         .Fields             = Fields
     };

@@ -500,8 +500,6 @@ CREATE TABLE `neighborhood_initiative` (
   `Duration` int NOT NULL DEFAULT '0',
   `RequiredParticipants` int NOT NULL DEFAULT '0',
   `RewardCurrencyID` int NOT NULL DEFAULT '0',
-  `RewardCurrencyAmount` int NOT NULL DEFAULT '0',
-  `PlayerConditionID` int NOT NULL DEFAULT '0',
   `VerifiedBuild` int NOT NULL DEFAULT '0',
   PRIMARY KEY (`ID`,`VerifiedBuild`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

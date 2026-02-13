@@ -510,8 +510,6 @@ void HousingMgr::LoadNeighborhoodInitiativeData()
         data.Duration = entry->Duration;
         data.RequiredParticipants = entry->RequiredParticipants;
         data.RewardCurrencyID = entry->RewardCurrencyID;
-        data.RewardCurrencyAmount = entry->RewardCurrencyAmount;
-        data.PlayerConditionID = entry->PlayerConditionID;
     }
 
     TC_LOG_DEBUG("housing", "HousingMgr::LoadNeighborhoodInitiativeData: Loaded {} NeighborhoodInitiative entries", uint32(_neighborhoodInitiativeStore.size()));

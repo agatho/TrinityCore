@@ -1361,7 +1361,7 @@ void HotfixDatabaseConnection::DoPrepareStatements()
 
     // NeighborhoodInitiative.db2
     PrepareStatement(HOTFIX_SEL_NEIGHBORHOOD_INITIATIVE, "SELECT Name, Description, ID, InitiativeType, Duration, RequiredParticipants, "
-        "RewardCurrencyID, RewardCurrencyAmount, PlayerConditionID FROM neighborhood_initiative"
+        "RewardCurrencyID FROM neighborhood_initiative"
         " WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
     PREPARE_MAX_ID_STMT(HOTFIX_SEL_NEIGHBORHOOD_INITIATIVE, "SELECT MAX(ID) + 1 FROM neighborhood_initiative", CONNECTION_SYNCH);
     PREPARE_LOCALE_STMT(HOTFIX_SEL_NEIGHBORHOOD_INITIATIVE, "SELECT ID, Name_lang, Description_lang FROM neighborhood_initiative_locale WHERE (`VerifiedBuild` > 0) = ? AND locale = ?", CONNECTION_SYNCH);
