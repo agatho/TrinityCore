@@ -632,6 +632,92 @@ namespace WorldPackets
 
             std::vector<int32> SpellID;
         };
+
+        // ============================================================
+        // Item Interaction / Upgrades
+        // ============================================================
+
+        class PerformItemInteraction final : public ClientPacket
+        {
+        public:
+            explicit PerformItemInteraction(WorldPacket&& packet) : ClientPacket(CMSG_PERFORM_ITEM_INTERACTION, std::move(packet)) { }
+
+            void Read() override;
+
+            ObjectGuid Banker;
+            ObjectGuid ItemGuid;
+            int32 InteractionID = 0;
+        };
+
+        class ItemInteractionComplete final : public ServerPacket
+        {
+        public:
+            explicit ItemInteractionComplete() : ServerPacket(SMSG_ITEM_INTERACTION_COMPLETE, 4) { }
+
+            WorldPacket const* Write() override;
+
+            int32 InteractionID = 0;
+        };
+
+        class ConvertItemToBindToAccount final : public ClientPacket
+        {
+        public:
+            explicit ConvertItemToBindToAccount(WorldPacket&& packet) : ClientPacket(CMSG_CONVERT_ITEM_TO_BIND_TO_ACCOUNT, std::move(packet)) { }
+
+            void Read() override;
+
+            ObjectGuid ItemGuid;
+        };
+
+        class ItemChanged final : public ServerPacket
+        {
+        public:
+            explicit ItemChanged() : ServerPacket(SMSG_ITEM_CHANGED, 16 + 4) { }
+
+            WorldPacket const* Write() override;
+
+            ObjectGuid ItemGuid;
+            int32 ChangeType = 0;
+        };
+
+        class SocketGemsFailure final : public ServerPacket
+        {
+        public:
+            explicit SocketGemsFailure() : ServerPacket(SMSG_SOCKET_GEMS_FAILURE, 16) { }
+
+            WorldPacket const* Write() override;
+
+            ObjectGuid Item;
+        };
+
+        class BackpackDefaultSizeChanged final : public ServerPacket
+        {
+        public:
+            explicit BackpackDefaultSizeChanged() : ServerPacket(SMSG_BACKPACK_DEFAULT_SIZE_CHANGED, 4) { }
+
+            WorldPacket const* Write() override;
+
+            int32 Size = 0;
+        };
+
+        class InventoryFixupComplete final : public ServerPacket
+        {
+        public:
+            explicit InventoryFixupComplete() : ServerPacket(SMSG_INVENTORY_FIXUP_COMPLETE, 0) { }
+
+            WorldPacket const* Write() override;
+        };
+
+        class ConvertItemsToCurrencyValue final : public ServerPacket
+        {
+        public:
+            explicit ConvertItemsToCurrencyValue() : ServerPacket(SMSG_CONVERT_ITEMS_TO_CURRENCY_VALUE, 4 + 8) { }
+
+            WorldPacket const* Write() override;
+
+            int32 CurrencyType = 0;
+            uint64 Quantity = 0;
+        };
     }
 }
 

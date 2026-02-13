@@ -571,6 +571,8 @@ namespace WorldPackets
         class SetBackpackAutosortDisabled;
         class SetBackpackSellJunkDisabled;
         class SetBankAutosortDisabled;
+        class PerformItemInteraction;
+        class ConvertItemToBindToAccount;
     }
 
     namespace LFG
@@ -829,6 +831,8 @@ namespace WorldPackets
         class CloseQuestChoice;
         class UiMapQuestLinesRequest;
         class SpawnTrackingUpdate;
+        class QueryQuestItemUsability;
+        class CloseQuestChoice;
     }
 
     namespace RaF
@@ -1820,6 +1824,8 @@ class TC_GAME_API WorldSession
         void HandleUiMapQuestLinesRequest(WorldPackets::Quest::UiMapQuestLinesRequest& uiMapQuestLinesRequest);
         void HandleQueryTreasurePicker(WorldPackets::Query::QueryTreasurePicker const& queryTreasurePicker);
         void HandleSpawnTrackingUpdate(WorldPackets::Quest::SpawnTrackingUpdate& spawnTrackingUpdate);
+        void HandleQueryQuestItemUsability(WorldPackets::Quest::QueryQuestItemUsability& queryQuestItemUsability);
+        void HandleCloseQuestChoice(WorldPackets::Quest::CloseQuestChoice& closeQuestChoice);
 
         void HandleChatMessageOpcode(WorldPackets::Chat::ChatMessage& chatMessage);
         void HandleChatMessageWhisperOpcode(WorldPackets::Chat::ChatMessageWhisper& chatMessageWhisper);
@@ -1969,6 +1975,8 @@ class TC_GAME_API WorldSession
         void HandleSortBags(WorldPackets::Item::SortBags& sortBags);
         void HandleSortBankBags(WorldPackets::Item::SortBankBags& sortBankBags);
         void HandleRemoveNewItem(WorldPackets::Item::RemoveNewItem& removeNewItem);
+        void HandlePerformItemInteraction(WorldPackets::Item::PerformItemInteraction& performItemInteraction);
+        void HandleConvertItemToBindToAccount(WorldPackets::Item::ConvertItemToBindToAccount& convertItemToBindToAccount);
 
         void HandleCancelTempEnchantmentOpcode(WorldPackets::Item::CancelTempEnchantment& cancelTempEnchantment);
 

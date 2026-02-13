@@ -962,4 +962,52 @@ WorldPacket const* ForceSpawnTrackingUpdate::Write()
 
     return &_worldPacket;
 }
+
+void QueryQuestItemUsability::Read()
+{
+    uint32 count = _worldPacket.read<uint32>();
+    if (count > 500)
+        OnInvalidArraySize(count, 500);
+
+    ItemGUIDs.resize(count);
+    for (ObjectGuid& guid : ItemGUIDs)
+        _worldPacket >> guid;
+}
+
+WorldPacket const* QuestItemUsabilityResponse::Write()
+{
+    _worldPacket << Size<uint32>(Usabilities);
+    for (uint8 usability : Usabilities)
+        _worldPacket << uint8(usability);
+
+    return &_worldPacket;
+}
+
+WorldPacket const* DisplayQuestPopup::Write()
+{
+    _worldPacket << int32(QuestID);
+
+    return &_worldPacket;
+}
+
+WorldPacket const* ShowQuestCompletionText::Write()
+{
+    _worldPacket << int32(QuestID);
+
+    return &_worldPacket;
+}
+
+WorldPacket const* ResetQuestPOI::Write()
+{
+    return &_worldPacket;
+}
+
+WorldPacket const* GossipQuestUpdate::Write()
+{
+    _worldPacket << QuestGiverGUID;
+    _worldPacket << int32(QuestID);
+    _worldPacket << int32(QuestFlags);
+
+    return &_worldPacket;
+}
 }

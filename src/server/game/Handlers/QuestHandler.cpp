@@ -27,6 +27,8 @@
 #include "GameTime.h"
 #include "GossipDef.h"
 #include "Group.h"
+#include "Item.h"
+#include "ItemTemplate.h"
 #include "Log.h"
 #include "Memory.h"
 #include "ObjectAccessor.h"
@@ -933,4 +935,37 @@ void WorldSession::HandleSpawnTrackingUpdate(WorldPackets::Quest::SpawnTrackingU
     }
 
     SendPacket(response.Write());
+}
+
+void WorldSession::HandleQueryQuestItemUsability(WorldPackets::Quest::QueryQuestItemUsability& queryQuestItemUsability)
+{
+    WorldPackets::Quest::QuestItemUsabilityResponse response;
+    response.Usabilities.reserve(queryQuestItemUsability.ItemGUIDs.size());
+
+    for (ObjectGuid const& itemGuid : queryQuestItemUsability.ItemGUIDs)
+    {
+        Item const* item = _player->GetItemByGuid(itemGuid);
+        if (!item)
+        {
+            response.Usabilities.push_back(0);
+            continue;
+        }
+
+        // Check if the item starts a quest or is needed for an active quest
+        uint8 usability = 0;
+        if (uint32 questId = item->GetTemplate()->GetStartQuest())
+        {
+            if (_player->CanTakeQuest(sObjectMgr->GetQuestTemplate(questId), false))
+                usability = 1;
+        }
+
+        response.Usabilities.push_back(usability);
+    }
+
+    SendPacket(response.Write());
+}
+
+void WorldSession::HandleCloseQuestChoice(WorldPackets::Quest::CloseQuestChoice& /*closeQuestChoice*/)
+{
+    // Client notification that player closed quest choice UI - no server action needed
 }
