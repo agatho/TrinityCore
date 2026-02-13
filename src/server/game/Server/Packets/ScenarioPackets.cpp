@@ -136,4 +136,21 @@ WorldPacket const* ScenarioPOIs::Write()
 
     return &_worldPacket;
 }
+
+WorldPacket const* ScenarioShowCriteria::Write()
+{
+    _worldPacket << int32(CriteriaTreeID);
+
+    return &_worldPacket;
+}
+
+WorldPacket const* ScenarioUIUpdate::Write()
+{
+    _worldPacket << int32(ScenarioStep);
+    _worldPacket << int32(TimerDuration);
+    _worldPacket << Bits<1>(ShowUI);
+    _worldPacket.FlushBits();
+
+    return &_worldPacket;
+}
 }

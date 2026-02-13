@@ -297,6 +297,60 @@ void WorldSession::HandleAutoDepositCharacterBank(WorldPackets::Bank::AutoDeposi
     }
 }
 
+void WorldSession::HandleAccountBankDepositMoney(WorldPackets::Bank::AccountBankDepositMoney const& accountBankDepositMoney)
+{
+    if (!CanUseBank(accountBankDepositMoney.Banker))
+    {
+        TC_LOG_ERROR("network", "WORLD: HandleAccountBankDepositMoney - Unit ({}) not found or you can't interact with him.", accountBankDepositMoney.Banker);
+        return;
+    }
+
+    if (accountBankDepositMoney.Money == 0)
+        return;
+
+    if (!_player->HasEnoughMoney(accountBankDepositMoney.Money))
+        return;
+
+    _player->ModifyMoney(-int64(accountBankDepositMoney.Money));
+
+    uint64 accountBankMoney = _player->m_activePlayerData->AccountBankCoinage;
+    accountBankMoney += accountBankDepositMoney.Money;
+    _player->SetUpdateFieldValue(_player->m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::AccountBankCoinage), accountBankMoney);
+}
+
+void WorldSession::HandleAccountBankWithdrawMoney(WorldPackets::Bank::AccountBankWithdrawMoney const& accountBankWithdrawMoney)
+{
+    if (!CanUseBank(accountBankWithdrawMoney.Banker))
+    {
+        TC_LOG_ERROR("network", "WORLD: HandleAccountBankWithdrawMoney - Unit ({}) not found or you can't interact with him.", accountBankWithdrawMoney.Banker);
+        return;
+    }
+
+    if (accountBankWithdrawMoney.Money == 0)
+        return;
+
+    uint64 accountBankMoney = _player->m_activePlayerData->AccountBankCoinage;
+    if (accountBankMoney < accountBankWithdrawMoney.Money)
+        return;
+
+    accountBankMoney -= accountBankWithdrawMoney.Money;
+    _player->SetUpdateFieldValue(_player->m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::AccountBankCoinage), accountBankMoney);
+
+    _player->ModifyMoney(int64(accountBankWithdrawMoney.Money));
+}
+
+void WorldSession::HandleAutoDepositAccountBank(WorldPackets::Bank::AutoDepositAccountBank const& autoDepositAccountBank)
+{
+    if (!CanUseBank(autoDepositAccountBank.Banker))
+    {
+        TC_LOG_DEBUG("network", "WORLD: HandleAutoDepositAccountBank - {} not found or you can't interact with him.", autoDepositAccountBank.Banker);
+        return;
+    }
+
+    // TODO: implement auto-deposit of warbound items to account bank tabs
+    // Requires ItemSearchLocation::AccountBank support (currently NYI)
+}
+
 void WorldSession::SendShowBank(ObjectGuid guid, PlayerInteractionType interactionType)
 {
     _player->PlayerTalkClass->GetInteractionData().StartInteraction(guid, interactionType);
