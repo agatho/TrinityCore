@@ -698,12 +698,6 @@ CREATE TABLE `neighborhood_plot` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
-  `VerifiedBuild` int NOT NULL DEFAULT '0',
-  PRIMARY KEY (`ID`,`VerifiedBuild`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-/*!40101 SET character_set_client = @saved_cs_client */;
-
---
 -- Table structure for table `room_component`
 --
 
@@ -766,3 +760,7 @@ CREATE TABLE `room_wmo_data` (
   `BoundingBoxMaxY` float NOT NULL DEFAULT '0',
   `BoundingBoxMaxZ` float NOT NULL DEFAULT '0',
   `Height` float NOT NULL DEFAULT '0',
+  `VerifiedBuild` int NOT NULL DEFAULT '0',
+  PRIMARY KEY (`ID`,`VerifiedBuild`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
