@@ -24,6 +24,11 @@
 #include "World.h"
 #include <algorithm>
 
+namespace
+{
+    char const* SafeStr(char const* str) { return str ? str : ""; }
+}
+
 HousingMgr::HousingMgr() = default;
 HousingMgr::~HousingMgr() = default;
 
@@ -79,7 +84,7 @@ void HousingMgr::LoadHouseDecorData()
     {
         HouseDecorData& data = _houseDecorStore[entry->ID];
         data.ID = entry->ID;
-        data.Name = entry->Name[sWorld->GetDefaultDbcLocale()];
+        data.Name = SafeStr(entry->Name[sWorld->GetDefaultDbcLocale()]);
         data.InitialRotation[0] = entry->InitialRotation.X;
         data.InitialRotation[1] = entry->InitialRotation.Y;
         data.InitialRotation[2] = entry->InitialRotation.Z;
@@ -147,7 +152,7 @@ void HousingMgr::LoadHouseRoomData()
     {
         HouseRoomData& data = _houseRoomStore[entry->ID];
         data.ID = entry->ID;
-        data.Name = entry->Name[sWorld->GetDefaultDbcLocale()];
+        data.Name = SafeStr(entry->Name[sWorld->GetDefaultDbcLocale()]);
         data.Size = entry->Size;
         data.Flags = entry->Flags;
         data.Field_002 = entry->Field_002;
@@ -165,7 +170,7 @@ void HousingMgr::LoadHouseThemeData()
     {
         HouseThemeData& data = _houseThemeStore[entry->ID];
         data.ID = entry->ID;
-        data.Name = entry->Name[sWorld->GetDefaultDbcLocale()];
+        data.Name = SafeStr(entry->Name[sWorld->GetDefaultDbcLocale()]);
         data.ThemeSetID = entry->IconFileDataID;
         data.UiModelSceneID = entry->CategoryID;
     }
@@ -179,7 +184,7 @@ void HousingMgr::LoadHouseDecorThemeSetData()
     {
         HouseDecorThemeSetData& data = _houseDecorThemeSetStore[entry->ID];
         data.ID = entry->ID;
-        data.Name = entry->Name[sWorld->GetDefaultDbcLocale()];
+        data.Name = SafeStr(entry->Name[sWorld->GetDefaultDbcLocale()]);
         data.HouseThemeID = entry->ThemeID;
         data.HouseDecorCategoryID = entry->IconFileDataID;
     }
@@ -252,9 +257,9 @@ void HousingMgr::LoadNeighborhoodNameGenData()
     {
         NeighborhoodNameGenData data;
         data.ID = entry->ID;
-        data.Prefix = entry->Prefix[sWorld->GetDefaultDbcLocale()];
-        data.Middle = entry->Suffix[sWorld->GetDefaultDbcLocale()];
-        data.Suffix = entry->FullName[sWorld->GetDefaultDbcLocale()];
+        data.Prefix = SafeStr(entry->Prefix[sWorld->GetDefaultDbcLocale()]);
+        data.Middle = SafeStr(entry->Suffix[sWorld->GetDefaultDbcLocale()]);
+        data.Suffix = SafeStr(entry->FullName[sWorld->GetDefaultDbcLocale()]);
         data.NeighborhoodMapID = entry->NeighborhoodMapID;
         _nameGenByMap[entry->NeighborhoodMapID].push_back(std::move(data));
     }
@@ -471,7 +476,7 @@ void HousingMgr::LoadHouseExteriorWmoData()
     {
         HouseExteriorWmoData& data = _houseExteriorWmoStore[entry->ID];
         data.ID = entry->ID;
-        data.Name = entry->Name[sWorld->GetDefaultDbcLocale()];
+        data.Name = SafeStr(entry->Name[sWorld->GetDefaultDbcLocale()]);
         data.Flags = entry->Flags;
     }
 
@@ -484,8 +489,8 @@ void HousingMgr::LoadHouseLevelRewardInfoData()
     {
         HouseLevelRewardInfoData& data = _houseLevelRewardInfoStore[entry->ID];
         data.ID = entry->ID;
-        data.Name = entry->Name[sWorld->GetDefaultDbcLocale()];
-        data.Description = entry->Description[sWorld->GetDefaultDbcLocale()];
+        data.Name = SafeStr(entry->Name[sWorld->GetDefaultDbcLocale()]);
+        data.Description = SafeStr(entry->Description[sWorld->GetDefaultDbcLocale()]);
         data.HouseLevelID = entry->HouseLevelID;
         data.RewardType = entry->RewardType;
         data.RewardValue = entry->RewardValue;
@@ -504,8 +509,8 @@ void HousingMgr::LoadNeighborhoodInitiativeData()
     {
         NeighborhoodInitiativeData& data = _neighborhoodInitiativeStore[entry->ID];
         data.ID = entry->ID;
-        data.Name = entry->Name[sWorld->GetDefaultDbcLocale()];
-        data.Description = entry->Description[sWorld->GetDefaultDbcLocale()];
+        data.Name = SafeStr(entry->Name[sWorld->GetDefaultDbcLocale()]);
+        data.Description = SafeStr(entry->Description[sWorld->GetDefaultDbcLocale()]);
         data.InitiativeType = entry->InitiativeType;
         data.Duration = entry->Duration;
         data.RequiredParticipants = entry->RequiredParticipants;
@@ -535,8 +540,8 @@ void HousingMgr::LoadNeighborhoodInitiativeTaskData()
     {
         NeighborhoodInitiativeTaskData& data = _neighborhoodInitiativeTaskStore[entry->ID];
         data.ID = entry->ID;
-        data.Name = entry->Name[sWorld->GetDefaultDbcLocale()];
-        data.Description = entry->Description[sWorld->GetDefaultDbcLocale()];
+        data.Name = SafeStr(entry->Name[sWorld->GetDefaultDbcLocale()]);
+        data.Description = SafeStr(entry->Description[sWorld->GetDefaultDbcLocale()]);
         data.TaskType = entry->TaskType;
         data.RequiredCount = entry->RequiredCount;
         data.TargetID = entry->TargetID;
@@ -706,7 +711,7 @@ void HousingMgr::LoadDecorCategoryData()
     {
         DecorCategoryData& data = _decorCategoryStore[entry->ID];
         data.ID = entry->ID;
-        data.Name = entry->Name[sWorld->GetDefaultDbcLocale()];
+        data.Name = SafeStr(entry->Name[sWorld->GetDefaultDbcLocale()]);
         data.IconFileDataID = entry->IconFileDataID;
         data.DisplayIndex = entry->DisplayIndex;
     }
@@ -720,7 +725,7 @@ void HousingMgr::LoadDecorSubcategoryData()
     {
         DecorSubcategoryData& data = _decorSubcategoryStore[entry->ID];
         data.ID = entry->ID;
-        data.Name = entry->Name[sWorld->GetDefaultDbcLocale()];
+        data.Name = SafeStr(entry->Name[sWorld->GetDefaultDbcLocale()]);
         data.IconFileDataID = entry->IconFileDataID;
         data.DecorCategoryID = entry->DecorCategoryID;
         data.DisplayIndex = entry->DisplayIndex;
