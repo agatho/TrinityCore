@@ -1033,6 +1033,28 @@ namespace WorldPackets
             bool IsFullUpdate = false;
             WarbandSceneCollectionContainer const* WarbandScenes = nullptr;
         };
+
+        class MultiFloorNewFloor final : public ServerPacket
+        {
+        public:
+            explicit MultiFloorNewFloor() : ServerPacket(SMSG_MULTI_FLOOR_NEW_FLOOR, 4 + 4) { }
+
+            WorldPacket const* Write() override;
+
+            int32 MapID = -1;
+            int32 FloorIndex = 0;
+        };
+
+        class MultiFloorLeaveFloor final : public ServerPacket
+        {
+        public:
+            explicit MultiFloorLeaveFloor() : ServerPacket(SMSG_MULTI_FLOOR_LEAVE_FLOOR, 4 + 4) { }
+
+            WorldPacket const* Write() override;
+
+            int32 MapID = -1;
+            int32 FloorIndex = 0;
+        };
     }
 }
 

@@ -843,4 +843,20 @@ WorldPacket const* AccountWarbandSceneUpdate::Write()
 
     return &_worldPacket;
 }
+
+WorldPacket const* MultiFloorNewFloor::Write()
+{
+    _worldPacket << int32(MapID);
+    _worldPacket << int32(FloorIndex);
+
+    return &_worldPacket;
+}
+
+WorldPacket const* MultiFloorLeaveFloor::Write()
+{
+    _worldPacket << int32(MapID);
+    _worldPacket << int32(FloorIndex);
+
+    return &_worldPacket;
+}
 }
