@@ -979,6 +979,14 @@ WorldPacket const* QuestItemUsabilityResponse::Write()
     _worldPacket << Size<uint32>(Usabilities);
     for (uint8 usability : Usabilities)
         _worldPacket << uint8(usability);
+void QuestSessionBeginResponse::Read()
+{
+    _worldPacket >> Bits<1>(Accept);
+}
+
+WorldPacket const* QuestSessionResult::Write()
+{
+    _worldPacket << uint8(Result);
 
     return &_worldPacket;
 }
@@ -986,6 +994,11 @@ WorldPacket const* QuestItemUsabilityResponse::Write()
 WorldPacket const* DisplayQuestPopup::Write()
 {
     _worldPacket << int32(QuestID);
+WorldPacket const* QuestSessionReadyCheckResponse::Write()
+{
+    _worldPacket << Player;
+    _worldPacket << Bits<1>(Accept);
+    _worldPacket.FlushBits();
 
     return &_worldPacket;
 }
@@ -1007,6 +1020,13 @@ WorldPacket const* GossipQuestUpdate::Write()
     _worldPacket << QuestGiverGUID;
     _worldPacket << int32(QuestID);
     _worldPacket << int32(QuestFlags);
+WorldPacket const* QuestSessionInfoResponse::Write()
+{
+    _worldPacket << SessionOwner;
+    _worldPacket << Size<int32>(QuestIDs);
+
+    for (int32 questId : QuestIDs)
+        _worldPacket << int32(questId);
 
     return &_worldPacket;
 }
