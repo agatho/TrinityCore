@@ -63,7 +63,7 @@ void WorldSession::HandleHouseExteriorSetHousePosition(WorldPackets::Housing::Ho
     response.Result = static_cast<uint32>(HOUSING_RESULT_SUCCESS);
     SendPacket(response.Write());
 
-    TC_LOG_DEBUG("network", "CMSG_HOUSE_EXTERIOR_COMMIT_POSITION received for player {}", player->GetGUID().ToString());
+    TC_LOG_INFO("housing", "CMSG_HOUSE_EXTERIOR_COMMIT_POSITION received for player {}", player->GetGUID().ToString());
 }
 
 // ============================================================
@@ -83,7 +83,7 @@ void WorldSession::HandleHouseInteriorLeaveHouse(WorldPackets::Housing::HouseInt
     // Clear editing mode when leaving
     housing->SetEditorMode(HOUSING_EDITOR_MODE_NONE);
 
-    TC_LOG_DEBUG("network", "CMSG_HOUSE_INTERIOR_LEAVE_HOUSE: Player {} leaving house interior",
+    TC_LOG_INFO("housing", "CMSG_HOUSE_INTERIOR_LEAVE_HOUSE: Player {} leaving house interior",
         player->GetGUID().ToString());
 }
 
@@ -112,7 +112,7 @@ void WorldSession::HandleHousingDecorSetEditMode(WorldPackets::Housing::HousingD
     response.Result = static_cast<uint32>(HOUSING_RESULT_SUCCESS);
     SendPacket(response.Write());
 
-    TC_LOG_DEBUG("network", "CMSG_HOUSING_DECOR_SET_EDITOR_MODE_ACTIVE Active: {}", housingDecorSetEditMode.Active);
+    TC_LOG_INFO("housing", "CMSG_HOUSING_DECOR_SET_EDITOR_MODE_ACTIVE Active: {}", housingDecorSetEditMode.Active);
 }
 
 void WorldSession::HandleHousingDecorPlace(WorldPackets::Housing::HousingDecorPlace const& housingDecorPlace)
@@ -142,7 +142,7 @@ void WorldSession::HandleHousingDecorPlace(WorldPackets::Housing::HousingDecorPl
     response.Result = static_cast<uint32>(result);
     SendPacket(response.Write());
 
-    TC_LOG_DEBUG("network", "CMSG_HOUSING_DECOR_PLACE_NEW_DECOR DecorEntryID: {}, Result: {}",
+    TC_LOG_INFO("housing", "CMSG_HOUSING_DECOR_PLACE_NEW_DECOR DecorEntryID: {}, Result: {}",
         housingDecorPlace.DecorEntryID, uint32(result));
 }
 
@@ -172,7 +172,7 @@ void WorldSession::HandleHousingDecorMove(WorldPackets::Housing::HousingDecorMov
     response.Result = static_cast<uint32>(result);
     SendPacket(response.Write());
 
-    TC_LOG_DEBUG("network", "CMSG_HOUSING_DECOR_MOVE_DECOR DecorGuid: {}, Result: {}",
+    TC_LOG_INFO("housing", "CMSG_HOUSING_DECOR_MOVE_DECOR DecorGuid: {}, Result: {}",
         housingDecorMove.DecorGuid.ToString(), uint32(result));
 }
 
@@ -197,7 +197,7 @@ void WorldSession::HandleHousingDecorRemove(WorldPackets::Housing::HousingDecorR
     response.Result = static_cast<uint32>(result);
     SendPacket(response.Write());
 
-    TC_LOG_DEBUG("network", "CMSG_HOUSING_DECOR_REMOVE_PLACED_DECOR_ENTRY DecorGuid: {}, Result: {}",
+    TC_LOG_INFO("housing", "CMSG_HOUSING_DECOR_REMOVE_PLACED_DECOR_ENTRY DecorGuid: {}, Result: {}",
         housingDecorRemove.DecorGuid.ToString(), uint32(result));
 }
 
@@ -237,7 +237,7 @@ void WorldSession::HandleHousingDecorLock(WorldPackets::Housing::HousingDecorLoc
     response.Locked = newLockedState;
     SendPacket(response.Write());
 
-    TC_LOG_DEBUG("network", "CMSG_HOUSING_DECOR_SELECT_DECOR HouseGuid: {}, DecorGuid: {} (entry: {}), Locked: {}",
+    TC_LOG_INFO("housing", "CMSG_HOUSING_DECOR_SELECT_DECOR HouseGuid: {}, DecorGuid: {} (entry: {}), Locked: {}",
         housingDecorLock.HouseGuid.ToString(), housingDecorLock.DecorGuid.ToString(),
         decor->DecorEntryId, newLockedState);
 }
@@ -267,7 +267,7 @@ void WorldSession::HandleHousingDecorSetDyeSlots(WorldPackets::Housing::HousingD
     response.Result = static_cast<uint32>(result);
     SendPacket(response.Write());
 
-    TC_LOG_DEBUG("network", "CMSG_HOUSING_DECOR_COMMIT_DYES DecorGuid: {}, Result: {}",
+    TC_LOG_INFO("housing", "CMSG_HOUSING_DECOR_COMMIT_DYES DecorGuid: {}, Result: {}",
         housingDecorSetDyeSlots.DecorGuid.ToString(), uint32(result));
 }
 
@@ -292,7 +292,7 @@ void WorldSession::HandleHousingDecorDeleteFromStorage(WorldPackets::Housing::Ho
     response.Result = static_cast<uint32>(result);
     SendPacket(response.Write());
 
-    TC_LOG_DEBUG("network", "CMSG_HOUSING_DECOR_CATALOG_DESTROY_ENTRY CatalogEntryID: {}, Result: {}",
+    TC_LOG_INFO("housing", "CMSG_HOUSING_DECOR_CATALOG_DESTROY_ENTRY CatalogEntryID: {}, Result: {}",
         housingDecorDeleteFromStorage.CatalogEntryID, uint32(result));
 }
 
@@ -317,7 +317,7 @@ void WorldSession::HandleHousingDecorDeleteFromStorageById(WorldPackets::Housing
     response.Result = static_cast<uint32>(result);
     SendPacket(response.Write());
 
-    TC_LOG_DEBUG("network", "CMSG_HOUSING_DECOR_CATALOG_DESTROY_ALL CatalogEntryID: {}, Result: {}",
+    TC_LOG_INFO("housing", "CMSG_HOUSING_DECOR_CATALOG_DESTROY_ALL CatalogEntryID: {}, Result: {}",
         housingDecorDeleteFromStorageById.CatalogEntryID, uint32(result));
 }
 
@@ -333,7 +333,7 @@ void WorldSession::HandleHousingDecorRequestStorage(WorldPackets::Housing::Housi
         WorldPackets::Housing::HousingDecorRequestStorageResponse response;
         response.Result = static_cast<uint32>(HOUSING_RESULT_HOUSE_NOT_FOUND);
         SendPacket(response.Write());
-        TC_LOG_DEBUG("network", "CMSG_HOUSING_DECOR_CATALOG_CREATE_SEARCHER: Player {} has no house",
+        TC_LOG_INFO("housing", "CMSG_HOUSING_DECOR_CATALOG_CREATE_SEARCHER: Player {} has no house",
             player->GetGUID().ToString());
         return;
     }
@@ -353,7 +353,7 @@ void WorldSession::HandleHousingDecorRequestStorage(WorldPackets::Housing::Housi
     }
     SendPacket(response.Write());
 
-    TC_LOG_DEBUG("network", "CMSG_HOUSING_DECOR_CATALOG_CREATE_SEARCHER HouseGuid: {}, CatalogEntries: {}",
+    TC_LOG_INFO("housing", "CMSG_HOUSING_DECOR_CATALOG_CREATE_SEARCHER HouseGuid: {}, CatalogEntries: {}",
         housingDecorRequestStorage.HouseGuid.ToString(), uint32(entries.size()));
 }
 
@@ -384,7 +384,7 @@ void WorldSession::HandleHousingDecorRedeemDeferredDecor(WorldPackets::Housing::
 
     // The client is starting to place a new decor from the catalog. Server verifies it exists
     // and the catalog entry is available. The actual PlaceDecor happens via CMSG_HOUSING_DECOR_PLACE_NEW_DECOR.
-    TC_LOG_DEBUG("network", "CMSG_HOUSING_DECOR_START_PLACING_NEW_DECOR HouseGuid: {}, CatalogEntryID: {} ({})",
+    TC_LOG_INFO("housing", "CMSG_HOUSING_DECOR_START_PLACING_NEW_DECOR HouseGuid: {}, CatalogEntryID: {} ({})",
         housingDecorRedeemDeferredDecor.HouseGuid.ToString(), housingDecorRedeemDeferredDecor.CatalogEntryID,
         decorData->Name);
 
@@ -418,7 +418,7 @@ void WorldSession::HandleHousingFixtureSetEditMode(WorldPackets::Housing::Housin
     response.Result = static_cast<uint32>(HOUSING_RESULT_SUCCESS);
     SendPacket(response.Write());
 
-    TC_LOG_DEBUG("network", "CMSG_HOUSING_FIXTURE_SET_EDITOR_MODE_ACTIVE Active: {}", housingFixtureSetEditMode.Active);
+    TC_LOG_INFO("housing", "CMSG_HOUSING_FIXTURE_SET_EDITOR_MODE_ACTIVE Active: {}", housingFixtureSetEditMode.Active);
 }
 
 void WorldSession::HandleHousingFixtureSetCoreFixture(WorldPackets::Housing::HousingFixtureSetCoreFixture const& housingFixtureSetCoreFixture)
@@ -442,7 +442,7 @@ void WorldSession::HandleHousingFixtureSetCoreFixture(WorldPackets::Housing::Hou
     response.Result = static_cast<uint32>(result);
     SendPacket(response.Write());
 
-    TC_LOG_DEBUG("network", "CMSG_HOUSING_FIXTURE_SELECT_CORE_FIXTURE FixturePointID: {}, OptionID: {}, Result: {}",
+    TC_LOG_INFO("housing", "CMSG_HOUSING_FIXTURE_SELECT_CORE_FIXTURE FixturePointID: {}, OptionID: {}, Result: {}",
         housingFixtureSetCoreFixture.FixturePointID, housingFixtureSetCoreFixture.OptionID, uint32(result));
 }
 
@@ -467,7 +467,7 @@ void WorldSession::HandleHousingFixtureCreateFixture(WorldPackets::Housing::Hous
     response.Result = static_cast<uint32>(result);
     SendPacket(response.Write());
 
-    TC_LOG_DEBUG("network", "CMSG_HOUSING_FIXTURE_CREATE_FIXTURE FixturePointID: {}, OptionID: {}, Result: {}",
+    TC_LOG_INFO("housing", "CMSG_HOUSING_FIXTURE_CREATE_FIXTURE FixturePointID: {}, OptionID: {}, Result: {}",
         housingFixtureCreateFixture.FixturePointID, housingFixtureCreateFixture.OptionID, uint32(result));
 }
 
@@ -492,7 +492,7 @@ void WorldSession::HandleHousingFixtureDeleteFixture(WorldPackets::Housing::Hous
     response.Result = static_cast<uint32>(result);
     SendPacket(response.Write());
 
-    TC_LOG_DEBUG("network", "CMSG_HOUSING_FIXTURE_REMOVE FixturePointID: {}, Result: {}",
+    TC_LOG_INFO("housing", "CMSG_HOUSING_FIXTURE_REMOVE FixturePointID: {}, Result: {}",
         housingFixtureDeleteFixture.FixturePointID, uint32(result));
 }
 
@@ -521,7 +521,7 @@ void WorldSession::HandleHousingRoomSetLayoutEditMode(WorldPackets::Housing::Hou
     response.Result = static_cast<uint32>(HOUSING_RESULT_SUCCESS);
     SendPacket(response.Write());
 
-    TC_LOG_DEBUG("network", "CMSG_HOUSING_ROOM_SET_EDITOR_MODE_ACTIVE Active: {}", housingRoomSetLayoutEditMode.Active);
+    TC_LOG_INFO("housing", "CMSG_HOUSING_ROOM_SET_EDITOR_MODE_ACTIVE Active: {}", housingRoomSetLayoutEditMode.Active);
 }
 
 void WorldSession::HandleHousingRoomAdd(WorldPackets::Housing::HousingRoomAdd const& housingRoomAdd)
@@ -546,7 +546,7 @@ void WorldSession::HandleHousingRoomAdd(WorldPackets::Housing::HousingRoomAdd co
     response.Result = static_cast<uint32>(result);
     SendPacket(response.Write());
 
-    TC_LOG_DEBUG("network", "CMSG_HOUSING_ROOM_ADD RoomID: {}, SlotIndex: {}, Result: {}",
+    TC_LOG_INFO("housing", "CMSG_HOUSING_ROOM_ADD RoomID: {}, SlotIndex: {}, Result: {}",
         housingRoomAdd.RoomID, housingRoomAdd.SlotIndex, uint32(result));
 }
 
@@ -571,7 +571,7 @@ void WorldSession::HandleHousingRoomRemove(WorldPackets::Housing::HousingRoomRem
     response.Result = static_cast<uint32>(result);
     SendPacket(response.Write());
 
-    TC_LOG_DEBUG("network", "CMSG_HOUSING_ROOM_REMOVE_ROOM RoomGuid: {}, Result: {}",
+    TC_LOG_INFO("housing", "CMSG_HOUSING_ROOM_REMOVE_ROOM RoomGuid: {}, Result: {}",
         housingRoomRemove.RoomGuid.ToString(), uint32(result));
 }
 
@@ -596,7 +596,7 @@ void WorldSession::HandleHousingRoomRotate(WorldPackets::Housing::HousingRoomRot
     response.Result = static_cast<uint32>(result);
     SendPacket(response.Write());
 
-    TC_LOG_DEBUG("network", "CMSG_HOUSING_ROOM_ROTATE_ROOM RoomGuid: {}, Clockwise: {}, Result: {}",
+    TC_LOG_INFO("housing", "CMSG_HOUSING_ROOM_ROTATE_ROOM RoomGuid: {}, Clockwise: {}, Result: {}",
         housingRoomRotate.RoomGuid.ToString(), housingRoomRotate.Clockwise, uint32(result));
 }
 
@@ -622,7 +622,7 @@ void WorldSession::HandleHousingRoomMoveRoom(WorldPackets::Housing::HousingRoomM
     response.Result = static_cast<uint32>(result);
     SendPacket(response.Write());
 
-    TC_LOG_DEBUG("network", "CMSG_HOUSING_ROOM_MOVE RoomGuid: {}, NewSlotIndex: {}, Result: {}",
+    TC_LOG_INFO("housing", "CMSG_HOUSING_ROOM_MOVE RoomGuid: {}, NewSlotIndex: {}, Result: {}",
         housingRoomMoveRoom.RoomGuid.ToString(), housingRoomMoveRoom.NewSlotIndex, uint32(result));
 }
 
@@ -648,7 +648,7 @@ void WorldSession::HandleHousingRoomSetComponentTheme(WorldPackets::Housing::Hou
     response.Result = static_cast<uint32>(result);
     SendPacket(response.Write());
 
-    TC_LOG_DEBUG("network", "CMSG_HOUSING_ROOM_SET_COMPONENT_THEME RoomGuid: {}, ThemeSetID: {}, Result: {}",
+    TC_LOG_INFO("housing", "CMSG_HOUSING_ROOM_SET_COMPONENT_THEME RoomGuid: {}, ThemeSetID: {}, Result: {}",
         housingRoomSetComponentTheme.RoomGuid.ToString(), housingRoomSetComponentTheme.ThemeSetID, uint32(result));
 }
 
@@ -675,7 +675,7 @@ void WorldSession::HandleHousingRoomApplyComponentMaterials(WorldPackets::Housin
     response.Result = static_cast<uint32>(result);
     SendPacket(response.Write());
 
-    TC_LOG_DEBUG("network", "CMSG_HOUSING_ROOM_APPLY_COMPONENT_MATERIALS RoomGuid: {}, WallpaperID: {}, Result: {}",
+    TC_LOG_INFO("housing", "CMSG_HOUSING_ROOM_APPLY_COMPONENT_MATERIALS RoomGuid: {}, WallpaperID: {}, Result: {}",
         housingRoomApplyComponentMaterials.RoomGuid.ToString(), housingRoomApplyComponentMaterials.WallpaperID, uint32(result));
 }
 
@@ -701,7 +701,7 @@ void WorldSession::HandleHousingRoomSetDoorType(WorldPackets::Housing::HousingRo
     response.Result = static_cast<uint32>(result);
     SendPacket(response.Write());
 
-    TC_LOG_DEBUG("network", "CMSG_HOUSING_ROOM_SET_DOOR_TYPE RoomGuid: {}, DoorTypeID: {}, Result: {}",
+    TC_LOG_INFO("housing", "CMSG_HOUSING_ROOM_SET_DOOR_TYPE RoomGuid: {}, DoorTypeID: {}, Result: {}",
         housingRoomSetDoorType.RoomGuid.ToString(), housingRoomSetDoorType.DoorTypeID, uint32(result));
 }
 
@@ -727,7 +727,7 @@ void WorldSession::HandleHousingRoomSetCeilingType(WorldPackets::Housing::Housin
     response.Result = static_cast<uint32>(result);
     SendPacket(response.Write());
 
-    TC_LOG_DEBUG("network", "CMSG_HOUSING_ROOM_SET_CEILING_TYPE RoomGuid: {}, CeilingTypeID: {}, Result: {}",
+    TC_LOG_INFO("housing", "CMSG_HOUSING_ROOM_SET_CEILING_TYPE RoomGuid: {}, CeilingTypeID: {}, Result: {}",
         housingRoomSetCeilingType.RoomGuid.ToString(), housingRoomSetCeilingType.CeilingTypeID, uint32(result));
 }
 
@@ -752,7 +752,7 @@ void WorldSession::HandleHousingSvcsGuildCreateNeighborhood(WorldPackets::Housin
         response.NeighborhoodGuid = neighborhood->GetGuid();
     SendPacket(response.Write());
 
-    TC_LOG_DEBUG("network", "CMSG_HOUSING_SVCS_GUILD_CREATE_NEIGHBORHOOD Name: {}, Result: {}",
+    TC_LOG_INFO("housing", "CMSG_HOUSING_SVCS_GUILD_CREATE_NEIGHBORHOOD Name: {}, Result: {}",
         housingSvcsGuildCreateNeighborhood.Name, neighborhood ? "success" : "failed");
 }
 
@@ -779,7 +779,7 @@ void WorldSession::HandleHousingSvcsNeighborhoodReservePlot(WorldPackets::Housin
     response.Result = static_cast<uint32>(result);
     SendPacket(response.Write());
 
-    TC_LOG_DEBUG("network", "CMSG_HOUSING_SVCS_NEIGHBORHOOD_RESERVE_PLOT PlotIndex: {}, Result: {}",
+    TC_LOG_INFO("housing", "CMSG_HOUSING_SVCS_NEIGHBORHOOD_RESERVE_PLOT PlotIndex: {}, Result: {}",
         housingSvcsNeighborhoodReservePlot.PlotIndex, uint32(result));
 }
 
@@ -795,7 +795,7 @@ void WorldSession::HandleHousingSvcsRelinquishHouse(WorldPackets::Housing::Housi
     response.Result = static_cast<uint32>(HOUSING_RESULT_SUCCESS);
     SendPacket(response.Write());
 
-    TC_LOG_DEBUG("network", "CMSG_HOUSING_SVCS_RELINQUISH_HOUSE processed");
+    TC_LOG_INFO("housing", "CMSG_HOUSING_SVCS_RELINQUISH_HOUSE processed");
 }
 
 void WorldSession::HandleHousingSvcsUpdateHouseSettings(WorldPackets::Housing::HousingSvcsUpdateHouseSettings const& housingSvcsUpdateHouseSettings)
@@ -820,7 +820,7 @@ void WorldSession::HandleHousingSvcsUpdateHouseSettings(WorldPackets::Housing::H
     response.Result = static_cast<uint32>(HOUSING_RESULT_SUCCESS);
     SendPacket(response.Write());
 
-    TC_LOG_DEBUG("network", "CMSG_HOUSING_SVCS_UPDATE_HOUSE_SETTINGS HouseGuid: {}",
+    TC_LOG_INFO("housing", "CMSG_HOUSING_SVCS_UPDATE_HOUSE_SETTINGS HouseGuid: {}",
         housingSvcsUpdateHouseSettings.HouseGuid.ToString());
 }
 
@@ -846,7 +846,7 @@ void WorldSession::HandleHousingSvcsPlayerViewHousesByPlayer(WorldPackets::Housi
     }
     SendPacket(response.Write());
 
-    TC_LOG_DEBUG("network", "CMSG_HOUSING_SVCS_PLAYER_VIEW_HOUSES_BY_PLAYER PlayerGuid: {}, FoundNeighborhoods: {}",
+    TC_LOG_INFO("housing", "CMSG_HOUSING_SVCS_PLAYER_VIEW_HOUSES_BY_PLAYER PlayerGuid: {}, FoundNeighborhoods: {}",
         housingSvcsPlayerViewHousesByPlayer.PlayerGuid.ToString(), uint32(neighborhoods.size()));
 }
 
@@ -862,7 +862,7 @@ void WorldSession::HandleHousingSvcsPlayerViewHousesByBnetAccount(WorldPackets::
     response.Result = static_cast<uint32>(HOUSING_RESULT_SUCCESS);
     SendPacket(response.Write());
 
-    TC_LOG_DEBUG("network", "CMSG_HOUSING_SVCS_PLAYER_VIEW_HOUSES_BY_BNET_ACCOUNT BnetAccountGuid: {}",
+    TC_LOG_INFO("housing", "CMSG_HOUSING_SVCS_PLAYER_VIEW_HOUSES_BY_BNET_ACCOUNT BnetAccountGuid: {}",
         housingSvcsPlayerViewHousesByBnetAccount.BnetAccountGuid.ToString());
 }
 
@@ -872,23 +872,12 @@ void WorldSession::HandleHousingSvcsGetPlayerHousesInfo(WorldPackets::Housing::H
     if (!player)
         return;
 
+    TC_LOG_INFO("housing", ">>> CMSG_HOUSING_SVCS_GET_PLAYER_HOUSES_INFO received (Player: {})", player->GetGUID().ToString());
+
     Housing* housing = player->GetHousing();
-    if (housing)
-    {
-        TC_LOG_DEBUG("network", "CMSG_HOUSING_SVCS_GET_PLAYER_HOUSES_INFO: Player {} has house level {}, "
-            "{} decor, {} rooms, {} fixtures",
-            player->GetGUID().ToString(), housing->GetLevel(),
-            housing->GetDecorCount(), uint32(housing->GetRooms().size()),
-            uint32(housing->GetFixtures().size()));
-    }
-    else
-    {
-        TC_LOG_DEBUG("network", "CMSG_HOUSING_SVCS_GET_PLAYER_HOUSES_INFO: Player {} has no house",
-            player->GetGUID().ToString());
-    }
 
     WorldPackets::Housing::HousingSvcsGetPlayerHousesInfoResponse response;
-    response.Result = static_cast<uint32>(housing ? HOUSING_RESULT_SUCCESS : HOUSING_RESULT_HOUSE_NOT_FOUND);
+    response.Result = static_cast<uint32>(HOUSING_RESULT_SUCCESS);  // Always SUCCESS; empty list = no houses
     if (housing)
     {
         WorldPackets::Housing::HousingSvcsGetPlayerHousesInfoResponse::HouseInfoData info;
@@ -899,6 +888,9 @@ void WorldSession::HandleHousingSvcsGetPlayerHousesInfo(WorldPackets::Housing::H
         response.Houses.push_back(info);
     }
     SendPacket(response.Write());
+
+    TC_LOG_INFO("housing", "<<< SMSG_HOUSING_SVCS_GET_PLAYER_HOUSES_INFO_RESPONSE sent (Result: {}, HouseCount: {})",
+        response.Result, uint32(response.Houses.size()));
 }
 
 void WorldSession::HandleHousingSvcsTeleportToPlot(WorldPackets::Housing::HousingSvcsTeleportToPlot const& housingSvcsTeleportToPlot)
@@ -944,7 +936,7 @@ void WorldSession::HandleHousingSvcsTeleportToPlot(WorldPackets::Housing::Housin
         player->TeleportTo(mapData->MapID, targetPlot->TeleportPosition[0], targetPlot->TeleportPosition[1],
             targetPlot->TeleportPosition[2], 0.0f);
 
-        TC_LOG_DEBUG("network", "CMSG_HOUSING_SVCS_TELEPORT_TO_PLOT: Teleporting player {} to plot {} on map {}",
+        TC_LOG_INFO("housing", "CMSG_HOUSING_SVCS_TELEPORT_TO_PLOT: Teleporting player {} to plot {} on map {}",
             player->GetGUID().ToString(), housingSvcsTeleportToPlot.PlotIndex, mapData->MapID);
     }
     else
@@ -953,7 +945,7 @@ void WorldSession::HandleHousingSvcsTeleportToPlot(WorldPackets::Housing::Housin
         player->TeleportTo(mapData->MapID, mapData->Origin[0], mapData->Origin[1],
             mapData->Origin[2], 0.0f);
 
-        TC_LOG_DEBUG("network", "CMSG_HOUSING_SVCS_TELEPORT_TO_PLOT: Plot {} not found, teleporting to neighborhood origin on map {}",
+        TC_LOG_INFO("housing", "CMSG_HOUSING_SVCS_TELEPORT_TO_PLOT: Plot {} not found, teleporting to neighborhood origin on map {}",
             housingSvcsTeleportToPlot.PlotIndex, mapData->MapID);
     }
 }
@@ -966,7 +958,7 @@ void WorldSession::HandleHousingSvcsStartTutorial(WorldPackets::Housing::Housing
 
     // Fire-and-forget: the client UI guides the player through the tutorial flow
     // (create/join neighborhood → reserve plot → buy house). No SMSG response expected.
-    TC_LOG_DEBUG("network", "CMSG_HOUSING_SVCS_START_TUTORIAL: Player {} started housing tutorial",
+    TC_LOG_INFO("housing", "CMSG_HOUSING_SVCS_START_TUTORIAL: Player {} started housing tutorial",
         player->GetGUID().ToString());
 }
 
@@ -991,7 +983,7 @@ void WorldSession::HandleHousingSvcsAcceptNeighborhoodOwnership(WorldPackets::Ho
     response.Result = static_cast<uint32>(HOUSING_RESULT_SUCCESS);
     SendPacket(response.Write());
 
-    TC_LOG_DEBUG("network", "CMSG_HOUSING_SVCS_ACCEPT_NEIGHBORHOOD_OWNERSHIP NeighborhoodGuid: {}",
+    TC_LOG_INFO("housing", "CMSG_HOUSING_SVCS_ACCEPT_NEIGHBORHOOD_OWNERSHIP NeighborhoodGuid: {}",
         housingSvcsAcceptNeighborhoodOwnership.NeighborhoodGuid.ToString());
 }
 
@@ -1007,7 +999,7 @@ void WorldSession::HandleHousingSvcsRejectNeighborhoodOwnership(WorldPackets::Ho
     response.Result = static_cast<uint32>(HOUSING_RESULT_SUCCESS);
     SendPacket(response.Write());
 
-    TC_LOG_DEBUG("network", "CMSG_HOUSING_SVCS_REJECT_NEIGHBORHOOD_OWNERSHIP: Player {} declined ownership of neighborhood {}",
+    TC_LOG_INFO("housing", "CMSG_HOUSING_SVCS_REJECT_NEIGHBORHOOD_OWNERSHIP: Player {} declined ownership of neighborhood {}",
         player->GetGUID().ToString(), housingSvcsRejectNeighborhoodOwnership.NeighborhoodGuid.ToString());
 }
 
@@ -1037,7 +1029,7 @@ void WorldSession::HandleHousingSvcsGetPotentialHouseOwners(WorldPackets::Housin
     }
 
     std::vector<Neighborhood::Member> const& members = neighborhood->GetMembers();
-    TC_LOG_DEBUG("network", "CMSG_HOUSING_SVCS_GET_POTENTIAL_HOUSE_OWNERS: Neighborhood has {} members",
+    TC_LOG_INFO("housing", "CMSG_HOUSING_SVCS_GET_POTENTIAL_HOUSE_OWNERS: Neighborhood has {} members",
         uint32(members.size()));
 
     WorldPackets::Housing::HousingSvcsGetPotentialHouseOwnersResponse response;
@@ -1084,7 +1076,7 @@ void WorldSession::HandleHousingSvcsGetHouseFinderInfo(WorldPackets::Housing::Ho
     }
     SendPacket(response.Write());
 
-    TC_LOG_DEBUG("network", "CMSG_HOUSING_SVCS_GET_HOUSE_FINDER_INFO: {} public neighborhoods available",
+    TC_LOG_INFO("housing", "CMSG_HOUSING_SVCS_GET_HOUSE_FINDER_INFO: {} public neighborhoods available",
         uint32(publicNeighborhoods.size()));
 }
 
@@ -1103,7 +1095,7 @@ void WorldSession::HandleHousingSvcsGetHouseFinderNeighborhood(WorldPackets::Hou
         return;
     }
 
-    TC_LOG_DEBUG("network", "CMSG_HOUSING_SVCS_GET_HOUSE_FINDER_NEIGHBORHOOD: '{}' MapID:{} Members:{} Public:{}",
+    TC_LOG_INFO("housing", "CMSG_HOUSING_SVCS_GET_HOUSE_FINDER_NEIGHBORHOOD: '{}' MapID:{} Members:{} Public:{}",
         neighborhood->GetName(), neighborhood->GetNeighborhoodMapID(),
         neighborhood->GetMemberCount(), neighborhood->IsPublic());
 
@@ -1144,7 +1136,7 @@ void WorldSession::HandleHousingSvcsGetBnetFriendNeighborhoods(WorldPackets::Hou
     response.Result = static_cast<uint32>(HOUSING_RESULT_SUCCESS);
     SendPacket(response.Write());
 
-    TC_LOG_DEBUG("network", "CMSG_HOUSING_SVCS_GET_BNET_FRIEND_NEIGHBORHOODS BnetAccountGuid: {}",
+    TC_LOG_INFO("housing", "CMSG_HOUSING_SVCS_GET_BNET_FRIEND_NEIGHBORHOODS BnetAccountGuid: {}",
         housingSvcsGetBnetFriendNeighborhoods.BnetAccountGuid.ToString());
 }
 
@@ -1162,7 +1154,7 @@ void WorldSession::HandleHousingSvcsDeleteAllNeighborhoodInvites(WorldPackets::H
     response.Result = static_cast<uint32>(HOUSING_RESULT_SUCCESS);
     SendPacket(response.Write());
 
-    TC_LOG_DEBUG("network", "CMSG_HOUSING_SVCS_DELETE_ALL_NEIGHBORHOOD_INVITES: Player {} declined all invitations",
+    TC_LOG_INFO("housing", "CMSG_HOUSING_SVCS_DELETE_ALL_NEIGHBORHOOD_INVITES: Player {} declined all invitations",
         player->GetGUID().ToString());
 }
 
@@ -1179,17 +1171,23 @@ void WorldSession::HandleHousingHouseStatus(WorldPackets::Housing::HousingHouseS
     Housing* housing = player->GetHousing();
 
     WorldPackets::Housing::HousingHouseStatusResponse response;
-    response.Result = static_cast<uint32>(housing ? HOUSING_RESULT_SUCCESS : HOUSING_RESULT_HOUSE_NOT_FOUND);
+    // Bit 5 (0x20) of Flags = housing service active (controls client dispatch path)
+    response.Flags = 0x20;
     if (housing)
     {
         response.HouseGuid = housing->GetHouseGuid();
-        response.Level = housing->GetLevel();
-        response.Favor = housing->GetFavor64();
+        response.OwnerGuid = player->GetGUID();
+        response.Status = 1;  // Has house
+        response.Flags |= 0x80;  // bit 7 = has house
     }
     SendPacket(response.Write());
 
-    TC_LOG_DEBUG("network", "CMSG_HOUSING_HOUSE_STATUS HouseGuid: {} - Result: {}",
-        housingHouseStatus.HouseGuid.ToString(), response.Result);
+    TC_LOG_INFO("housing", ">>> CMSG_HOUSING_HOUSE_STATUS received (HouseGuid: {})", housingHouseStatus.HouseGuid.ToString());
+    TC_LOG_INFO("housing", "<<< SMSG_HOUSING_HOUSE_STATUS_RESPONSE sent (Status: {}, Flags: 0x{:02X}, HouseGuid: {}, "
+        "NeighborhoodGuid: {}, OwnerGuid: {}, PlotGuid: {})",
+        response.Status, response.Flags,
+        response.HouseGuid.ToString(), response.NeighborhoodGuid.ToString(),
+        response.OwnerGuid.ToString(), response.PlotGuid.ToString());
 }
 
 void WorldSession::HandleHousingGetPlayerPermissions(WorldPackets::Housing::HousingGetPlayerPermissions const& housingGetPlayerPermissions)
@@ -1198,13 +1196,16 @@ void WorldSession::HandleHousingGetPlayerPermissions(WorldPackets::Housing::Hous
     if (!player)
         return;
 
+    TC_LOG_INFO("housing", ">>> CMSG_HOUSING_GET_PLAYER_PERMISSIONS received (HouseGuid: {})",
+        housingGetPlayerPermissions.HouseGuid.ToString());
+
     WorldPackets::Housing::HousingGetPlayerPermissionsResponse response;
     response.Result = static_cast<uint32>(HOUSING_RESULT_SUCCESS);
     response.Permissions = 0xFFFFFFFF;  // Grant all permissions for house owner
     SendPacket(response.Write());
 
-    TC_LOG_DEBUG("network", "CMSG_HOUSING_GET_PLAYER_PERMISSIONS HouseGuid: {}",
-        housingGetPlayerPermissions.HouseGuid.ToString());
+    TC_LOG_INFO("housing", "<<< SMSG_HOUSING_GET_PLAYER_PERMISSIONS_RESPONSE sent (Result: {}, Permissions: 0x{:08X})",
+        response.Result, response.Permissions);
 }
 
 void WorldSession::HandleHousingGetCurrentHouseInfo(WorldPackets::Housing::HousingGetCurrentHouseInfo const& housingGetCurrentHouseInfo)
@@ -1213,26 +1214,13 @@ void WorldSession::HandleHousingGetCurrentHouseInfo(WorldPackets::Housing::Housi
     if (!player)
         return;
 
+    TC_LOG_INFO("housing", ">>> CMSG_HOUSING_GET_CURRENT_HOUSE_INFO received (HouseGuid: {})",
+        housingGetCurrentHouseInfo.HouseGuid.ToString());
+
     Housing* housing = player->GetHousing();
-    if (housing)
-    {
-        TC_LOG_DEBUG("network", "CMSG_HOUSING_GET_CURRENT_HOUSE_INFO HouseGuid: {}, Level: {}, Favor: {}, "
-            "Decor: {}/{}, Rooms: {}, Fixtures: {}, PlotIndex: {}",
-            housingGetCurrentHouseInfo.HouseGuid.ToString(),
-            housing->GetLevel(), housing->GetFavor(),
-            housing->GetDecorCount(), housing->GetMaxDecorCount(),
-            uint32(housing->GetRooms().size()),
-            uint32(housing->GetFixtures().size()),
-            housing->GetPlotIndex());
-    }
-    else
-    {
-        TC_LOG_DEBUG("network", "CMSG_HOUSING_GET_CURRENT_HOUSE_INFO HouseGuid: {} - Player {} has no house",
-            housingGetCurrentHouseInfo.HouseGuid.ToString(), player->GetGUID().ToString());
-    }
 
     WorldPackets::Housing::HousingGetCurrentHouseInfoResponse response;
-    response.Result = static_cast<uint32>(housing ? HOUSING_RESULT_SUCCESS : HOUSING_RESULT_HOUSE_NOT_FOUND);
+    response.Result = static_cast<uint32>(HOUSING_RESULT_SUCCESS);  // Always SUCCESS; empty data = no house
     if (housing)
     {
         response.HouseGuid = housing->GetHouseGuid();
@@ -1246,6 +1234,9 @@ void WorldSession::HandleHousingGetCurrentHouseInfo(WorldPackets::Housing::Housi
         response.FixtureCount = static_cast<uint32>(housing->GetFixtures().size());
     }
     SendPacket(response.Write());
+
+    TC_LOG_INFO("housing", "<<< SMSG_HOUSING_GET_CURRENT_HOUSE_INFO_RESPONSE sent (Result: {}, HasHouse: {})",
+        response.Result, housing ? "yes" : "no");
 }
 
 void WorldSession::HandleHousingResetKioskMode(WorldPackets::Housing::HousingResetKioskMode const& /*housingResetKioskMode*/)
@@ -1260,7 +1251,7 @@ void WorldSession::HandleHousingResetKioskMode(WorldPackets::Housing::HousingRes
     response.Result = static_cast<uint32>(HOUSING_RESULT_SUCCESS);
     SendPacket(response.Write());
 
-    TC_LOG_DEBUG("network", "CMSG_HOUSING_RESET_KIOSK_MODE processed for player {}",
+    TC_LOG_INFO("housing", "CMSG_HOUSING_RESET_KIOSK_MODE processed for player {}",
         player->GetGUID().ToString());
 }
 
@@ -1288,7 +1279,7 @@ void WorldSession::HandleQueryNeighborhoodInfo(WorldPackets::Housing::QueryNeigh
 
     SendPacket(response.Write());
 
-    TC_LOG_DEBUG("network", "CMSG_QUERY_NEIGHBORHOOD_INFO NeighborhoodGuid: {}, Found: {}",
+    TC_LOG_INFO("housing", "CMSG_QUERY_NEIGHBORHOOD_INFO NeighborhoodGuid: {}, Found: {}",
         queryNeighborhoodInfo.NeighborhoodGuid.ToString(), response.Allow);
 }
 
@@ -1321,7 +1312,7 @@ void WorldSession::HandleInvitePlayerToNeighborhood(WorldPackets::Housing::Invit
     response.Result = static_cast<uint32>(result);
     SendPacket(response.Write());
 
-    TC_LOG_DEBUG("network", "CMSG_INVITE_PLAYER_TO_NEIGHBORHOOD PlayerGuid: {}, Result: {}",
+    TC_LOG_INFO("housing", "CMSG_INVITE_PLAYER_TO_NEIGHBORHOOD PlayerGuid: {}, Result: {}",
         invitePlayerToNeighborhood.PlayerGuid.ToString(), uint32(result));
 }
 
@@ -1338,6 +1329,6 @@ void WorldSession::HandleGuildGetOthersOwnedHouses(WorldPackets::Housing::GuildG
     response.Result = static_cast<uint32>(HOUSING_RESULT_SUCCESS);
     SendPacket(response.Write());
 
-    TC_LOG_DEBUG("network", "CMSG_GUILD_GET_OTHERS_OWNED_HOUSES PlayerGuid: {}, FoundNeighborhoods: {}",
+    TC_LOG_INFO("housing", "CMSG_GUILD_GET_OTHERS_OWNED_HOUSES PlayerGuid: {}, FoundNeighborhoods: {}",
         guildGetOthersOwnedHouses.PlayerGuid.ToString(), uint32(neighborhoods.size()));
 }
