@@ -2209,9 +2209,9 @@ struct HouseEntry
 
 struct HouseDecorEntry
 {
-    uint32 ID;
-    LocalizedString Name;
-    DBCPosition3D InitialRotation;
+    LocalizedString Name;                    // Meta field 0: FT_STRING
+    DBCPosition3D InitialRotation;           // Meta field 1: FT_FLOAT[3]
+    uint32 ID;                               // Meta field 2: IndexField
     int32 Field_003;
     int32 GameObjectID;
     int32 Flags;
@@ -2249,8 +2249,8 @@ struct HouseDecorThemeSetEntry
 
 struct HouseExteriorWmoDataEntry
 {
-    uint32 ID;
-    LocalizedString Name;
+    LocalizedString Name;                    // Meta field 0: FT_STRING
+    uint32 ID;                               // Meta field 1: IndexField
     int32 Flags;
 };
 
@@ -2263,9 +2263,9 @@ struct HouseLevelDataEntry
 
 struct HouseLevelRewardInfoEntry
 {
-    uint32 ID;
-    LocalizedString Name;
-    LocalizedString Description;
+    LocalizedString Name;                    // Meta field 0: FT_STRING
+    LocalizedString Description;             // Meta field 1: FT_STRING
+    uint32 ID;                               // Meta field 2: IndexField
     int32 HouseLevelID;
     int32 RewardType;
     int32 RewardValue;
@@ -2285,17 +2285,17 @@ struct HouseRoomEntry
 
 struct HouseThemeEntry
 {
-    uint32 ID;
-    LocalizedString Name;
+    LocalizedString Name;                    // Meta field 0: FT_STRING
+    uint32 ID;                               // Meta field 1: IndexField
     int32 IconFileDataID;
     int32 CategoryID;
 };
 
 struct RoomComponentEntry
 {
-    uint32 ID;
-    DBCPosition3D OffsetPos;
-    DBCPosition3D OffsetRot;
+    DBCPosition3D OffsetPos;                 // Meta field 0: FT_FLOAT[3]
+    DBCPosition3D OffsetRot;                 // Meta field 1: FT_FLOAT[3]
+    uint32 ID;                               // Meta field 2: IndexField
     int32 RoomWmoDataID;
     int32 ModelFileDataID;
     uint8 Type;
@@ -3313,9 +3313,9 @@ struct NamesReservedLocaleEntry
 
 struct NeighborhoodInitiativeEntry
 {
-    uint32 ID;
-    LocalizedString Name;
-    LocalizedString Description;
+    LocalizedString Name;                    // Meta field 0: FT_STRING
+    LocalizedString Description;             // Meta field 1: FT_STRING
+    uint32 ID;                               // Meta field 2: IndexField
     int32 InitiativeType;
     int32 Duration;
     int32 RequiredParticipants;
@@ -3332,9 +3332,9 @@ struct NeighborhoodInitiativeRewardEntry
 
 struct NeighborhoodInitiativeTaskEntry
 {
-    uint32 ID;
-    LocalizedString Name;
-    LocalizedString Description;
+    LocalizedString Name;                    // Meta field 0: FT_STRING
+    LocalizedString Description;             // Meta field 1: FT_STRING
+    uint32 ID;                               // Meta field 2: IndexField
     int32 TaskType;
     int32 RequiredCount;
     int32 TargetID;
@@ -3351,8 +3351,8 @@ struct NeighborhoodInitiativeXTaskEntry
 
 struct NeighborhoodMapEntry
 {
-    uint32 ID;
-    DBCPosition3D Position;
+    DBCPosition3D Position;                  // Meta field 0: FT_FLOAT[3]
+    uint32 ID;                               // Meta field 1: IndexField
     int32 MapID;
     float Radius;
     uint32 PlotCount;
@@ -3370,14 +3370,14 @@ struct NeighborhoodNameGenEntry
 
 struct NeighborhoodPlotEntry
 {
-    uint32 ID;
-    uint64 Cost;
-    char const* Name;
-    DBCPosition3D HousePosition;             // Was named HousePosition before 12.0.0.64975
-    DBCPosition3D HouseRotation;             // Was named HouseRotation before 12.0.0.64975
-    DBCPosition3D CornerstonePosition;
-    DBCPosition3D CornerstoneRotation;
-    DBCPosition3D TeleportPosition;
+    uint64 Cost;                             // Meta field 0: FT_LONG
+    char const* Name;                        // Meta field 1: FT_STRING_NOT_LOCALIZED
+    DBCPosition3D HousePosition;             // Meta field 2: FT_FLOAT[3]
+    DBCPosition3D HouseRotation;             // Meta field 3: FT_FLOAT[3]
+    DBCPosition3D CornerstonePosition;       // Meta field 4: FT_FLOAT[3]
+    DBCPosition3D CornerstoneRotation;       // Meta field 5: FT_FLOAT[3]
+    DBCPosition3D TeleportPosition;          // Meta field 6: FT_FLOAT[3]
+    uint32 ID;                               // Meta field 7: IndexField
     int32 NeighborhoodMapID;
     int32 Field_010;
     int32 CornerstoneGameObjectID;
