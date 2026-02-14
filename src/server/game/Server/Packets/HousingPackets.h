@@ -519,6 +519,26 @@ namespace WorldPackets::Housing
         void Read() override { }
     };
 
+    class HousingHouseStatus final : public ClientPacket
+    {
+    public:
+        explicit HousingHouseStatus(WorldPacket&& packet) : ClientPacket(CMSG_HOUSING_HOUSE_STATUS, std::move(packet)) { }
+
+        void Read() override;
+
+        ObjectGuid HouseGuid;
+    };
+
+    class HousingGetPlayerPermissions final : public ClientPacket
+    {
+    public:
+        explicit HousingGetPlayerPermissions(WorldPacket&& packet) : ClientPacket(CMSG_HOUSING_GET_PLAYER_PERMISSIONS, std::move(packet)) { }
+
+        void Read() override;
+
+        ObjectGuid HouseGuid;
+    };
+
     // ============================================================
     // Other Housing CMSG
     // ============================================================

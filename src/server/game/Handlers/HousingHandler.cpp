@@ -839,19 +839,34 @@ void WorldSession::HandleHousingSvcsStartTutorial(WorldPackets::Housing::Housing
     if (!player)
         return;
 
-    // The tutorial is primarily client-driven. The server acknowledges the request
-    // and ensures the player has housing initialized.
     Housing* housing = player->GetHousing();
-    if (housing)
+    if (!housing)
     {
-        TC_LOG_DEBUG("network", "CMSG_HOUSING_SVCS_START_TUTORIAL: Player {} starting housing tutorial (level {})",
-            player->GetGUID().ToString(), housing->GetLevel());
-    }
-    else
-    {
-        TC_LOG_DEBUG("network", "CMSG_HOUSING_SVCS_START_TUTORIAL: Player {} has no house yet",
+        // Tutorial creates the player's first house - use empty neighborhood and plot 0
+        player->CreateHousing(ObjectGuid::Empty, 0);
+        housing = player->GetHousing();
+
+        TC_LOG_DEBUG("network", "CMSG_HOUSING_SVCS_START_TUTORIAL: Created house for player {}",
             player->GetGUID().ToString());
     }
+
+    // Send CreateBasicHouse response so the client knows the house was created
+    WorldPackets::Housing::HousingFixtureCreateBasicHouseResponse createResponse;
+    createResponse.Result = static_cast<uint32>(housing ? HOUSING_RESULT_SUCCESS : HOUSING_RESULT_DB_ERROR);
+    if (housing)
+        createResponse.HouseGuid = housing->GetHouseGuid();
+    SendPacket(createResponse.Write());
+
+    // Also send house status so the client UI initializes
+    WorldPackets::Housing::HousingHouseStatusResponse statusResponse;
+    statusResponse.Result = static_cast<uint32>(housing ? HOUSING_RESULT_SUCCESS : HOUSING_RESULT_DB_ERROR);
+    if (housing)
+    {
+        statusResponse.HouseGuid = housing->GetHouseGuid();
+        statusResponse.Level = housing->GetLevel();
+        statusResponse.Favor = housing->GetFavor64();
+    }
+    SendPacket(statusResponse.Write());
 }
 
 void WorldSession::HandleHousingSvcsAcceptNeighborhoodOwnership(WorldPackets::Housing::HousingSvcsAcceptNeighborhoodOwnership const& housingSvcsAcceptNeighborhoodOwnership)
@@ -1045,6 +1060,43 @@ void WorldSession::HandleHousingSvcsDeleteAllNeighborhoodInvites(WorldPackets::H
 // ============================================================
 // Housing Misc
 // ============================================================
+
+void WorldSession::HandleHousingHouseStatus(WorldPackets::Housing::HousingHouseStatus const& housingHouseStatus)
+{
+    Player* player = GetPlayer();
+    if (!player)
+        return;
+
+    Housing* housing = player->GetHousing();
+
+    WorldPackets::Housing::HousingHouseStatusResponse response;
+    response.Result = static_cast<uint32>(housing ? HOUSING_RESULT_SUCCESS : HOUSING_RESULT_HOUSE_NOT_FOUND);
+    if (housing)
+    {
+        response.HouseGuid = housing->GetHouseGuid();
+        response.Level = housing->GetLevel();
+        response.Favor = housing->GetFavor64();
+    }
+    SendPacket(response.Write());
+
+    TC_LOG_DEBUG("network", "CMSG_HOUSING_HOUSE_STATUS HouseGuid: {} - Result: {}",
+        housingHouseStatus.HouseGuid.ToString(), response.Result);
+}
+
+void WorldSession::HandleHousingGetPlayerPermissions(WorldPackets::Housing::HousingGetPlayerPermissions const& housingGetPlayerPermissions)
+{
+    Player* player = GetPlayer();
+    if (!player)
+        return;
+
+    WorldPackets::Housing::HousingGetPlayerPermissionsResponse response;
+    response.Result = static_cast<uint32>(HOUSING_RESULT_SUCCESS);
+    response.Permissions = 0xFFFFFFFF;  // Grant all permissions for house owner
+    SendPacket(response.Write());
+
+    TC_LOG_DEBUG("network", "CMSG_HOUSING_GET_PLAYER_PERMISSIONS HouseGuid: {}",
+        housingGetPlayerPermissions.HouseGuid.ToString());
+}
 
 void WorldSession::HandleHousingGetCurrentHouseInfo(WorldPackets::Housing::HousingGetCurrentHouseInfo const& housingGetCurrentHouseInfo)
 {

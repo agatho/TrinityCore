@@ -273,6 +273,16 @@ void HousingGetCurrentHouseInfo::Read()
     _worldPacket >> HouseGuid;
 }
 
+void HousingHouseStatus::Read()
+{
+    _worldPacket >> HouseGuid;
+}
+
+void HousingGetPlayerPermissions::Read()
+{
+    _worldPacket >> HouseGuid;
+}
+
 // --- Other Housing CMSG ---
 
 void DeclineNeighborhoodInvites::Read()

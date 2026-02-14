@@ -460,7 +460,9 @@ namespace WorldPackets
         class HousingSvcsGetHouseFinderNeighborhood;
         class HousingSvcsGetBnetFriendNeighborhoods;
         class HousingSvcsDeleteAllNeighborhoodInvites;
+        class HousingHouseStatus;
         class HousingGetCurrentHouseInfo;
+        class HousingGetPlayerPermissions;
         class HousingResetKioskMode;
         class DeclineNeighborhoodInvites;
         class QueryNeighborhoodInfo;
@@ -1572,7 +1574,9 @@ class TC_GAME_API WorldSession
         void HandleHousingSvcsDeleteAllNeighborhoodInvites(WorldPackets::Housing::HousingSvcsDeleteAllNeighborhoodInvites const& housingSvcsDeleteAllNeighborhoodInvites);
 
         // Housing - Misc
+        void HandleHousingHouseStatus(WorldPackets::Housing::HousingHouseStatus const& housingHouseStatus);
         void HandleHousingGetCurrentHouseInfo(WorldPackets::Housing::HousingGetCurrentHouseInfo const& housingGetCurrentHouseInfo);
+        void HandleHousingGetPlayerPermissions(WorldPackets::Housing::HousingGetPlayerPermissions const& housingGetPlayerPermissions);
         void HandleHousingResetKioskMode(WorldPackets::Housing::HousingResetKioskMode const& housingResetKioskMode);
         void HandleDeclineNeighborhoodInvites(WorldPackets::Housing::DeclineNeighborhoodInvites const& declineNeighborhoodInvites);
         void HandleQueryNeighborhoodInfo(WorldPackets::Housing::QueryNeighborhoodInfo const& queryNeighborhoodInfo);
