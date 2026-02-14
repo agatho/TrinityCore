@@ -312,8 +312,9 @@ void WorldSession::HandleNeighborhoodCharterSendSignatureRequest(WorldPackets::N
     Player* targetPlayer = ObjectAccessor::FindPlayer(neighborhoodCharterSendSignatureRequest.TargetPlayerGuid);
     if (!targetPlayer)
     {
-        TC_LOG_DEBUG("housing", "HandleNeighborhoodCharterSendSignatureRequest: Target player {} not found",
-            neighborhoodCharterSendSignatureRequest.TargetPlayerGuid.ToString());
+        WorldPackets::Housing::HousingSvcsNotifyPermissionsFailure response;
+        response.Result = static_cast<uint32>(HOUSING_RESULT_PLAYER_NOT_FOUND);
+        SendPacket(response.Write());
         return;
     }
 
