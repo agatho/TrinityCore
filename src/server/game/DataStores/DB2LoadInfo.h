@@ -9023,6 +9023,25 @@ struct WeeklyRewardChestThresholdLoadInfo
     };
 
     static constexpr DB2LoadInfo Instance{ Fields, 4, &WeeklyRewardChestThresholdMeta::Instance, HOTFIX_SEL_WEEKLY_REWARD_CHEST_THRESHOLD };
+struct WarbandScenePlacementLoadInfo
+{
+    static constexpr DB2FieldMeta Fields[12] =
+    {
+        { .IsSigned = false, .Type = FT_FLOAT, .Name = "PositionX" },
+        { .IsSigned = false, .Type = FT_FLOAT, .Name = "PositionY" },
+        { .IsSigned = false, .Type = FT_FLOAT, .Name = "PositionZ" },
+        { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "WarbandSceneID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "SlotType" },
+        { .IsSigned = false, .Type = FT_FLOAT, .Name = "Rotation" },
+        { .IsSigned = false, .Type = FT_FLOAT, .Name = "Scale" },
+        { .IsSigned = false, .Type = FT_INT, .Name = "Field_11_0_0_54210_004" },
+        { .IsSigned = false, .Type = FT_INT, .Name = "Field_11_0_0_54210_005" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "SlotID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "Field_11_1_0_58221_009" },
+    };
+
+    static constexpr DB2LoadInfo Instance{ Fields, 12, &WarbandScenePlacementMeta::Instance, HOTFIX_SEL_WARBAND_SCENE_PLACEMENT };
 };
 
 struct WmoAreaTableLoadInfo

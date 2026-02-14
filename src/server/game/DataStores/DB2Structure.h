@@ -6358,6 +6358,18 @@ struct WeeklyRewardChestThresholdEntry
     int8 Type;              // WeeklyRewardChestThresholdType: 1=MythicPlus, 2=RankedPVP, 3=Raid, 4=AlsoReceive, 5=Concession
     int32 Threshold;        // count required to unlock this slot (M+: 1/4/8)
     int32 Index;            // slot index 0/1/2 (rows are not unique per index; the highest ID per (Type,Index) is the live one)
+struct WarbandScenePlacementEntry
+{
+    DBCPosition3D Position;
+    uint32 ID;
+    int32 WarbandSceneID;
+    int32 SlotType;
+    float Rotation;
+    float Scale;
+    uint32 Field_11_0_0_54210_004;
+    uint32 Field_11_0_0_54210_005;
+    int32 SlotID;
+    int32 Field_11_1_0_58221_009;
 };
 
 struct WMOAreaTableEntry

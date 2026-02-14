@@ -2813,6 +2813,11 @@ void HotfixDatabaseConnection::DoPrepareStatements()
     PrepareStatement(HOTFIX_SEL_WEEKLY_REWARD_CHEST_THRESHOLD, "SELECT ID, Type, Threshold, `Index` FROM weekly_reward_chest_threshold"
         " WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
     PREPARE_MAX_ID_STMT(HOTFIX_SEL_WEEKLY_REWARD_CHEST_THRESHOLD, "SELECT MAX(ID) + 1 FROM weekly_reward_chest_threshold", CONNECTION_SYNCH);
+    // WarbandScenePlacement.db2
+    PrepareStatement(HOTFIX_SEL_WARBAND_SCENE_PLACEMENT, "SELECT PositionX, PositionY, PositionZ, ID, WarbandSceneID, SlotType, Rotation, Scale, "
+        "Field_11_0_0_54210_004, Field_11_0_0_54210_005, SlotID, Field_11_1_0_58221_009 FROM warband_scene_placement"
+        " WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_WARBAND_SCENE_PLACEMENT, "SELECT MAX(ID) + 1 FROM warband_scene_placement", CONNECTION_SYNCH);
 
     // WmoAreaTable.db2
     PrepareStatement(HOTFIX_SEL_WMO_AREA_TABLE, "SELECT AreaName, ID, WmoID, NameSetID, WmoGroupID, SoundProviderPref, SoundProviderPrefUnderwater, "
