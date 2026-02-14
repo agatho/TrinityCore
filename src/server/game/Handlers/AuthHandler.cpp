@@ -151,6 +151,7 @@ void WorldSession::SendFeatureSystemStatusGlueScreen()
         { "bpayStoreEnable"sv, "0"sv },
         { "recentAlliesEnabledClient"sv, "0"sv },
         { "browserEnabled"sv, "0"sv },
+        { "performHousingExpansionCheckClient"sv, "1"sv },
         { "housingEnableCreateGuildNeighborhood"sv, "1"sv },
         { "housingEnableDeleteHouse"sv, "1"sv },
         { "housingServiceEnabled"sv, "1"sv },
@@ -158,6 +159,7 @@ void WorldSession::SendFeatureSystemStatusGlueScreen()
         { "housingEnableCreateCharterNeighborhood"sv, "1"sv },
         { "housingEnableBuyHouse"sv, "1"sv },
         { "housingMarketEnabled"sv, "1"sv },
+        { "housingExteriorTypeByNeighborhoodFactionRestriction"sv, "0"sv },
     };
 
     WorldPackets::System::MirrorVars variables;
