@@ -748,7 +748,11 @@ namespace WorldPackets::Housing
     public:
         HousingDecorRequestStorageResponse() : ServerPacket(SMSG_HOUSING_DECOR_REQUEST_STORAGE_RESPONSE) { }
         WorldPacket const* Write() override;
-        uint32 Result = 0;
+
+        // Wire format (sniff-confirmed, 8 bytes minimum):
+        // PackedGUID BNetAccountGUID + uint8 ResultCode
+        ObjectGuid BNetAccountGuid;
+        uint8 ResultCode = 0;
 
         struct CatalogEntryData
         {
@@ -1024,16 +1028,18 @@ namespace WorldPackets::Housing
     public:
         HousingSvcsGetPlayerHousesInfoResponse() : ServerPacket(SMSG_HOUSING_SVCS_GET_PLAYER_HOUSES_INFO_RESPONSE) { }
         WorldPacket const* Write() override;
-        uint32 Result = 0;
 
+        // Wire format (sniff-confirmed, 5 bytes minimum):
+        // uint32 HouseCount + uint8 Unknown
         struct HouseInfoData
         {
             ObjectGuid HouseGuid;
             ObjectGuid NeighborhoodGuid;
             uint8 PlotIndex = 0;
-            uint32 Level = 0;
+            uint8 Level = 0;
         };
         std::vector<HouseInfoData> Houses;
+        uint8 Unknown = 0;
     };
 
     class HousingSvcsPlayerViewHousesResponse final : public ServerPacket
@@ -1253,13 +1259,12 @@ namespace WorldPackets::Housing
         HousingHouseStatusResponse() : ServerPacket(SMSG_HOUSING_HOUSE_STATUS_RESPONSE) { }
         WorldPacket const* Write() override;
 
-        // Wire format: 4 sparse-encoded ObjectGuids + 2 uint8 bytes
-        ObjectGuid HouseGuid;           // GUID 1: house entity
-        ObjectGuid NeighborhoodGuid;    // GUID 2: neighborhood
-        ObjectGuid OwnerGuid;           // GUID 3: owner
-        ObjectGuid PlotGuid;            // GUID 4: plot
-        uint8 Status = 0;               // House status (0=none, 1=active)
-        uint8 Flags = 0;                // Bit flags (bits 5,6,7 significant)
+        // Wire format (sniff-confirmed, 30 bytes):
+        // PackedGUID HouseGUID + PackedGUID OwnerBNetGUID + PackedGUID OwnerPlayerGUID + uint32 Status
+        ObjectGuid HouseGuid;
+        ObjectGuid OwnerBNetGuid;
+        ObjectGuid OwnerPlayerGuid;
+        uint32 Status = 0;
     };
 
     class HousingGetCurrentHouseInfoResponse final : public ServerPacket
@@ -1267,16 +1272,17 @@ namespace WorldPackets::Housing
     public:
         HousingGetCurrentHouseInfoResponse() : ServerPacket(SMSG_HOUSING_GET_CURRENT_HOUSE_INFO_RESPONSE) { }
         WorldPacket const* Write() override;
-        uint32 Result = 0;
+
+        // Wire format (sniff-confirmed, 33 bytes):
+        // PackedGUID HouseGUID + PackedGUID OwnerPlayerGUID + PackedGUID NeighborhoodGUID
+        // + uint8 PlotIndex + uint8 HouseProperties + uint8 HouseLevel + uint32 Reserved
         ObjectGuid HouseGuid;
+        ObjectGuid OwnerPlayerGuid;
         ObjectGuid NeighborhoodGuid;
         uint8 PlotIndex = 0;
-        uint32 Level = 0;
-        uint64 Favor = 0;
-        uint32 SettingsFlags = 0;
-        uint32 DecorCount = 0;
-        uint32 RoomCount = 0;
-        uint32 FixtureCount = 0;
+        uint8 HouseProperties = 0;
+        uint8 HouseLevel = 0;
+        uint32 Reserved = 0;
     };
 
     class HousingExportHouseResponse final : public ServerPacket
@@ -1294,8 +1300,11 @@ namespace WorldPackets::Housing
     public:
         HousingGetPlayerPermissionsResponse() : ServerPacket(SMSG_HOUSING_GET_PLAYER_PERMISSIONS_RESPONSE) { }
         WorldPacket const* Write() override;
-        uint32 Result = 0;
-        uint32 Permissions = 0;
+
+        // Wire format (sniff-confirmed, 12 bytes):
+        // PackedGUID HouseGUID + uint16 PermissionFlags
+        ObjectGuid HouseGuid;
+        uint16 PermissionFlags = 0;
     };
 
     class HousingResetKioskModeResponse final : public ServerPacket

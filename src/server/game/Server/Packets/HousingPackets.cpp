@@ -449,7 +449,8 @@ WorldPacket const* HousingDecorDeleteFromStorageResponse::Write()
 
 WorldPacket const* HousingDecorRequestStorageResponse::Write()
 {
-    _worldPacket << uint32(Result);
+    _worldPacket << BNetAccountGuid;
+    _worldPacket << uint8(ResultCode);
     _worldPacket << uint32(Entries.size());
     for (auto const& entry : Entries)
     {
@@ -670,14 +671,14 @@ WorldPacket const* HousingSvcsCancelRelinquishHouseResponse::Write()
 
 WorldPacket const* HousingSvcsGetPlayerHousesInfoResponse::Write()
 {
-    _worldPacket << uint32(Result);
     _worldPacket << uint32(Houses.size());
+    _worldPacket << uint8(Unknown);
     for (auto const& house : Houses)
     {
         _worldPacket << house.HouseGuid;
         _worldPacket << house.NeighborhoodGuid;
         _worldPacket << uint8(house.PlotIndex);
-        _worldPacket << uint32(house.Level);
+        _worldPacket << uint8(house.Level);
     }
     return &_worldPacket;
 }
@@ -872,26 +873,21 @@ WorldPacket const* HousingSvcsDeleteAllNeighborhoodInvitesResponse::Write()
 WorldPacket const* HousingHouseStatusResponse::Write()
 {
     _worldPacket << HouseGuid;
-    _worldPacket << NeighborhoodGuid;
-    _worldPacket << OwnerGuid;
-    _worldPacket << PlotGuid;
-    _worldPacket << uint8(Status);
-    _worldPacket << uint8(Flags);
+    _worldPacket << OwnerBNetGuid;
+    _worldPacket << OwnerPlayerGuid;
+    _worldPacket << uint32(Status);
     return &_worldPacket;
 }
 
 WorldPacket const* HousingGetCurrentHouseInfoResponse::Write()
 {
-    _worldPacket << uint32(Result);
     _worldPacket << HouseGuid;
+    _worldPacket << OwnerPlayerGuid;
     _worldPacket << NeighborhoodGuid;
     _worldPacket << uint8(PlotIndex);
-    _worldPacket << uint32(Level);
-    _worldPacket << uint64(Favor);
-    _worldPacket << uint32(SettingsFlags);
-    _worldPacket << uint32(DecorCount);
-    _worldPacket << uint32(RoomCount);
-    _worldPacket << uint32(FixtureCount);
+    _worldPacket << uint8(HouseProperties);
+    _worldPacket << uint8(HouseLevel);
+    _worldPacket << uint32(Reserved);
     return &_worldPacket;
 }
 
@@ -907,8 +903,8 @@ WorldPacket const* HousingExportHouseResponse::Write()
 
 WorldPacket const* HousingGetPlayerPermissionsResponse::Write()
 {
-    _worldPacket << uint32(Result);
-    _worldPacket << uint32(Permissions);
+    _worldPacket << HouseGuid;
+    _worldPacket << uint16(PermissionFlags);
     return &_worldPacket;
 }
 
