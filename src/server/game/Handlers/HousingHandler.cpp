@@ -24,6 +24,7 @@
 #include "NeighborhoodCharter.h"
 #include "NeighborhoodMgr.h"
 #include "ObjectAccessor.h"
+#include "ObjectMgr.h"
 #include "Player.h"
 
 // ============================================================
@@ -773,7 +774,13 @@ void WorldSession::HandleHousingSvcsNeighborhoodReservePlot(WorldPackets::Housin
 
     HousingResult result = neighborhood->PurchasePlot(player->GetGUID(), housingSvcsNeighborhoodReservePlot.PlotIndex);
     if (result == HOUSING_RESULT_SUCCESS)
+    {
         player->CreateHousing(housingSvcsNeighborhoodReservePlot.NeighborhoodGuid, housingSvcsNeighborhoodReservePlot.PlotIndex);
+
+        // Grant "Acquire a house" kill credit for quest 91863 (objective 17)
+        static constexpr uint32 NPC_KILL_CREDIT_BUY_HOME = 248858;
+        player->KilledMonsterCredit(NPC_KILL_CREDIT_BUY_HOME);
+    }
 
     WorldPackets::Housing::HousingSvcsNeighborhoodReservePlotResponse response;
     response.Result = static_cast<uint32>(result);
@@ -973,9 +980,22 @@ void WorldSession::HandleHousingSvcsStartTutorial(WorldPackets::Housing::Housing
             player->GetGUID().ToString());
     }
 
-    // Step 2: Teleport the player to the housing neighborhood via faction-specific spell.
-    // Alliance: 1258476 → Founder's Point (map 2735)
-    // Horde:    1258484 → Razorwind Shores (map 2736)
+    // Step 2: Auto-accept the "My First Home" quest (91863) so the player can
+    // progress through the tutorial by interacting with the steward NPC.
+    static constexpr uint32 QUEST_MY_FIRST_HOME = 91863;
+    if (Quest const* quest = sObjectMgr->GetQuestTemplate(QUEST_MY_FIRST_HOME))
+    {
+        if (player->CanAddQuest(quest, true))
+        {
+            player->AddQuestAndCheckCompletion(quest, nullptr);
+            TC_LOG_INFO("housing", "CMSG_HOUSING_SVCS_START_TUTORIAL: Auto-accepted quest {} for player {}",
+                QUEST_MY_FIRST_HOME, player->GetGUID().ToString());
+        }
+    }
+
+    // Step 3: Teleport the player to the housing neighborhood via faction-specific spell.
+    // Alliance: 1258476 -> Founder's Point (map 2735)
+    // Horde:    1258484 -> Razorwind Shores (map 2736)
     static constexpr uint32 SPELL_HOUSING_TUTORIAL_ALLIANCE = 1258476;
     static constexpr uint32 SPELL_HOUSING_TUTORIAL_HORDE    = 1258484;
 

@@ -772,6 +772,10 @@ void WorldSession::HandleNeighborhoodBuyHouse(WorldPackets::Neighborhood::Neighb
     {
         player->CreateHousing(neighborhoodBuyHouse.NeighborhoodGuid, neighborhoodBuyHouse.PlotIndex);
 
+        // Grant "Acquire a house" kill credit for quest 91863 (objective 17)
+        static constexpr uint32 NPC_KILL_CREDIT_BUY_HOME = 248858;
+        player->KilledMonsterCredit(NPC_KILL_CREDIT_BUY_HOME);
+
         WorldPackets::Neighborhood::NeighborhoodBuyHouseResponse response;
         response.Result = static_cast<uint32>(HOUSING_RESULT_SUCCESS);
         SendPacket(response.Write());

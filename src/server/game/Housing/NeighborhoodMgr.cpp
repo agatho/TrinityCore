@@ -326,6 +326,9 @@ Neighborhood* NeighborhoodMgr::FindOrCreateTutorialNeighborhood(ObjectGuid playe
     {
         if (neighborhood->GetNeighborhoodMapID() == targetMapId && neighborhood->IsPublic())
         {
+            // Ensure the player is a member (they may not be if they didn't create this neighborhood)
+            neighborhood->AddResident(playerGuid);
+
             TC_LOG_DEBUG("housing", "FindOrCreateTutorialNeighborhood: Found existing public neighborhood '{}' for player {}",
                 neighborhood->GetName(), playerGuid.ToString());
             return neighborhood.get();

@@ -86,6 +86,7 @@ public:
     std::vector<PlotInfo> const& GetPlots() const { return _plots; }
 
     // Members
+    HousingResult AddResident(ObjectGuid playerGuid);
     Member const* GetMember(ObjectGuid playerGuid) const;
     std::vector<Member> const& GetMembers() const { return _members; }
     bool IsMember(ObjectGuid playerGuid) const;

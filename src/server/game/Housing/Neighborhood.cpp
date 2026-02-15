@@ -458,6 +458,43 @@ HousingResult Neighborhood::AcceptInvitation(ObjectGuid playerGuid)
     return HOUSING_RESULT_SUCCESS;
 }
 
+HousingResult Neighborhood::AddResident(ObjectGuid playerGuid)
+{
+    // Already a member?
+    if (IsMember(playerGuid))
+        return HOUSING_RESULT_SUCCESS;
+
+    // Check neighborhood not full
+    if (_members.size() >= MAX_NEIGHBORHOOD_PLOTS)
+    {
+        TC_LOG_DEBUG("housing", "Neighborhood::AddResident: Neighborhood '{}' is full ({} members)",
+            _name, _members.size());
+        return HOUSING_RESULT_NEIGHBORHOOD_FULL;
+    }
+
+    Member newMember;
+    newMember.PlayerGuid    = playerGuid;
+    newMember.Role          = NEIGHBORHOOD_ROLE_RESIDENT;
+    newMember.JoinTime      = static_cast<uint32>(GameTime::GetGameTime());
+    newMember.PlotIndex     = INVALID_PLOT_INDEX;
+    _members.push_back(newMember);
+
+    // Persist to DB
+    CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_INS_NEIGHBORHOOD_MEMBER);
+    uint8 index = 0;
+    stmt->setUInt64(index++, _guid.GetCounter());
+    stmt->setUInt64(index++, newMember.PlayerGuid.GetCounter());
+    stmt->setUInt8(index++, newMember.Role);
+    stmt->setUInt32(index++, newMember.JoinTime);
+    stmt->setUInt8(index++, newMember.PlotIndex);
+    CharacterDatabase.Execute(stmt);
+
+    TC_LOG_DEBUG("housing", "Neighborhood::AddResident: Player {} joined neighborhood '{}' as resident",
+        playerGuid.ToString(), _name);
+
+    return HOUSING_RESULT_SUCCESS;
+}
+
 HousingResult Neighborhood::DeclineInvitation(ObjectGuid playerGuid)
 {
     auto it = std::find_if(_pendingInvites.begin(), _pendingInvites.end(),
@@ -621,6 +658,13 @@ HousingResult Neighborhood::PurchasePlot(ObjectGuid playerGuid, uint8 plotIndex)
     newPlot.PlotIndex   = plotIndex;
     newPlot.OwnerGuid   = playerGuid;
     _plots.push_back(newPlot);
+
+    // Persist the plot assignment to DB
+    CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_UPD_NEIGHBORHOOD_MEMBER_PLOT);
+    stmt->setUInt8(0, plotIndex);
+    stmt->setUInt64(1, _guid.GetCounter());
+    stmt->setUInt64(2, playerGuid.GetCounter());
+    CharacterDatabase.Execute(stmt);
 
     TC_LOG_DEBUG("housing", "Neighborhood::PurchasePlot: Player {} purchased plot {} in neighborhood '{}'",
         playerGuid.ToString(), plotIndex, _name);
