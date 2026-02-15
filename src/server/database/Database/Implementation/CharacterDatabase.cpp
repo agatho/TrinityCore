@@ -825,6 +825,8 @@ void CharacterDatabaseConnection::DoPrepareStatements()
     PrepareStatement(CHAR_SEL_NEIGHBORHOOD, "SELECT guid, name, neighborhoodMapId, ownerGuid, factionRestriction, isPublic, createTime FROM neighborhoods WHERE guid = ?", CONNECTION_SYNCH);
     PrepareStatement(CHAR_INS_NEIGHBORHOOD, "INSERT INTO neighborhoods (guid, name, neighborhoodMapId, ownerGuid, factionRestriction, isPublic, createTime) VALUES (?, ?, ?, ?, ?, ?, ?)", CONNECTION_ASYNC);
     PrepareStatement(CHAR_REP_NEIGHBORHOOD, "REPLACE INTO neighborhoods (guid, name, neighborhoodMapId, ownerGuid, factionRestriction, isPublic, createTime) VALUES (?, ?, ?, ?, ?, ?, ?)", CONNECTION_ASYNC);
+    PrepareStatement(CHAR_UPD_NEIGHBORHOOD_PUBLIC, "UPDATE neighborhoods SET isPublic = ? WHERE guid = ?", CONNECTION_ASYNC);
+    PrepareStatement(CHAR_UPD_NEIGHBORHOOD_NAME, "UPDATE neighborhoods SET name = ? WHERE guid = ?", CONNECTION_ASYNC);
     PrepareStatement(CHAR_DEL_NEIGHBORHOOD, "DELETE FROM neighborhoods WHERE guid = ?", CONNECTION_ASYNC);
     PrepareStatement(CHAR_SEL_NEIGHBORHOOD_MEMBERS, "SELECT playerGuid, role, joinTime, plotIndex FROM neighborhood_members WHERE neighborhoodGuid = ?", CONNECTION_SYNCH);
     PrepareStatement(CHAR_INS_NEIGHBORHOOD_MEMBER, "INSERT INTO neighborhood_members (neighborhoodGuid, playerGuid, role, joinTime, plotIndex) VALUES (?, ?, ?, ?, ?)", CONNECTION_ASYNC);

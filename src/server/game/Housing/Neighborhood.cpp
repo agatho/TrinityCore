@@ -183,6 +183,11 @@ void Neighborhood::SetName(std::string const& name)
 {
     _name = name;
 
+    CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_UPD_NEIGHBORHOOD_NAME);
+    stmt->setString(0, _name);
+    stmt->setUInt64(1, _guid.GetCounter());
+    CharacterDatabase.Execute(stmt);
+
     TC_LOG_DEBUG("housing", "Neighborhood::SetName: Neighborhood {} renamed to '{}'",
         _guid.ToString(), _name);
 }
@@ -190,6 +195,11 @@ void Neighborhood::SetName(std::string const& name)
 void Neighborhood::SetPublic(bool isPublic)
 {
     _isPublic = isPublic;
+
+    CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_UPD_NEIGHBORHOOD_PUBLIC);
+    stmt->setBool(0, _isPublic);
+    stmt->setUInt64(1, _guid.GetCounter());
+    CharacterDatabase.Execute(stmt);
 
     TC_LOG_DEBUG("housing", "Neighborhood::SetPublic: Neighborhood '{}' public status set to {}",
         _name, _isPublic);
