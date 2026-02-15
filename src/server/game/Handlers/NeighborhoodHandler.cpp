@@ -295,6 +295,8 @@ void WorldSession::HandleNeighborhoodCharterAddSignature(WorldPackets::Neighborh
 
     WorldPackets::Neighborhood::NeighborhoodCharterAddSignatureResponse response;
     response.Result = static_cast<uint32>(HOUSING_RESULT_SUCCESS);
+    response.CharterGuid = neighborhoodCharterAddSignature.CharterGuid;
+    response.SignerGuid = player->GetGUID();
     SendPacket(response.Write());
 
     TC_LOG_DEBUG("housing", "Player {} signed charter {} ({}/{} signatures)",
@@ -405,6 +407,7 @@ void WorldSession::HandleNeighborhoodUpdateName(WorldPackets::Neighborhood::Neig
 
     WorldPackets::Neighborhood::NeighborhoodUpdateNameResponse response;
     response.Result = static_cast<uint32>(HOUSING_RESULT_SUCCESS);
+    response.NeighborhoodGuid = neighborhoodUpdateName.NeighborhoodGuid;
     SendPacket(response.Write());
 
     // Send guild rename notification if player is in a guild
@@ -503,6 +506,8 @@ void WorldSession::HandleNeighborhoodAddSecondaryOwner(WorldPackets::Neighborhoo
 
     WorldPackets::Neighborhood::NeighborhoodAddSecondaryOwnerResponse response;
     response.Result = static_cast<uint32>(result);
+    response.NeighborhoodGuid = neighborhoodAddSecondaryOwner.NeighborhoodGuid;
+    response.PlayerGuid = neighborhoodAddSecondaryOwner.PlayerGuid;
     SendPacket(response.Write());
 
     // Broadcast roster update and refresh manager mirror data for all online members
@@ -579,6 +584,8 @@ void WorldSession::HandleNeighborhoodRemoveSecondaryOwner(WorldPackets::Neighbor
 
     WorldPackets::Neighborhood::NeighborhoodRemoveSecondaryOwnerResponse response;
     response.Result = static_cast<uint32>(result);
+    response.NeighborhoodGuid = neighborhoodRemoveSecondaryOwner.NeighborhoodGuid;
+    response.PlayerGuid = neighborhoodRemoveSecondaryOwner.PlayerGuid;
     SendPacket(response.Write());
 
     // Broadcast roster update and refresh manager mirror data for all online members
@@ -655,6 +662,8 @@ void WorldSession::HandleNeighborhoodInviteResident(WorldPackets::Neighborhood::
 
     WorldPackets::Neighborhood::NeighborhoodInviteResidentResponse response;
     response.Result = static_cast<uint32>(result);
+    response.NeighborhoodGuid = neighborhoodInviteResident.NeighborhoodGuid;
+    response.InviteeGuid = neighborhoodInviteResident.PlayerGuid;
     SendPacket(response.Write());
 
     // Notify the invitee that they received a neighborhood invite
@@ -712,6 +721,8 @@ void WorldSession::HandleNeighborhoodCancelInvitation(WorldPackets::Neighborhood
 
     WorldPackets::Neighborhood::NeighborhoodCancelInvitationResponse response;
     response.Result = static_cast<uint32>(result);
+    response.NeighborhoodGuid = neighborhoodCancelInvitation.NeighborhoodGuid;
+    response.InviteeGuid = neighborhoodCancelInvitation.InviteeGuid;
     SendPacket(response.Write());
 
     TC_LOG_DEBUG("housing", "CancelInvitation result: {} for invitee {} in neighborhood {}",
@@ -744,6 +755,7 @@ void WorldSession::HandleNeighborhoodPlayerDeclineInvite(WorldPackets::Neighborh
 
     WorldPackets::Neighborhood::NeighborhoodDeclineInvitationResponse response;
     response.Result = static_cast<uint32>(result);
+    response.NeighborhoodGuid = neighborhoodPlayerDeclineInvite.NeighborhoodGuid;
     SendPacket(response.Write());
 
     TC_LOG_DEBUG("housing", "DeclineInvitation result: {} for player {} in neighborhood {}",
@@ -777,6 +789,21 @@ void WorldSession::HandleNeighborhoodPlayerGetInvite(WorldPackets::Neighborhood:
 
     WorldPackets::Neighborhood::NeighborhoodPlayerGetInviteResponse response;
     response.Result = static_cast<uint32>(hasInvite ? HOUSING_RESULT_SUCCESS : HOUSING_RESULT_NOT_ALLOWED);
+    response.NeighborhoodGuid = neighborhoodPlayerGetInvite.NeighborhoodGuid;
+    if (hasInvite)
+    {
+        // Populate invite details from the pending invite
+        for (auto const& invite : neighborhood->GetPendingInvites())
+        {
+            if (invite.InviteeGuid == player->GetGUID())
+            {
+                response.InviterGuid = invite.InviterGuid;
+                response.InviteTime = invite.InviteTime;
+                break;
+            }
+        }
+        response.NeighborhoodName = neighborhood->GetName();
+    }
     SendPacket(response.Write());
 
     TC_LOG_DEBUG("housing", "Player {} {} a pending invite to neighborhood {}",
@@ -899,6 +926,10 @@ void WorldSession::HandleNeighborhoodBuyHouse(WorldPackets::Neighborhood::Neighb
 
         WorldPackets::Neighborhood::NeighborhoodBuyHouseResponse response;
         response.Result = static_cast<uint32>(HOUSING_RESULT_SUCCESS);
+        response.NeighborhoodGuid = neighborhoodBuyHouse.NeighborhoodGuid;
+        response.PlotIndex = neighborhoodBuyHouse.PlotIndex;
+        if (Housing const* h = player->GetHousing())
+            response.HouseGuid = h->GetHouseGuid();
         SendPacket(response.Write());
 
         // Broadcast roster update to other neighborhood members
@@ -978,6 +1009,8 @@ void WorldSession::HandleNeighborhoodMoveHouse(WorldPackets::Neighborhood::Neigh
 
     WorldPackets::Neighborhood::NeighborhoodMoveHouseResponse response;
     response.Result = static_cast<uint32>(result);
+    response.NeighborhoodGuid = housing->GetNeighborhoodGuid();
+    response.NewPlotIndex = neighborhoodMoveHouse.NewPlotIndex;
     SendPacket(response.Write());
 
     TC_LOG_DEBUG("housing", "MoveHouse result: {} for plot {} to index {}",
@@ -1041,6 +1074,8 @@ void WorldSession::HandleNeighborhoodOfferOwnership(WorldPackets::Neighborhood::
 
     WorldPackets::Neighborhood::NeighborhoodOfferOwnershipResponse response;
     response.Result = static_cast<uint32>(result);
+    response.NeighborhoodGuid = neighborhoodOfferOwnership.NeighborhoodGuid;
+    response.NewOwnerGuid = neighborhoodOfferOwnership.NewOwnerGuid;
     SendPacket(response.Write());
 
     // Notify the new owner and broadcast to all members
@@ -1175,6 +1210,8 @@ void WorldSession::HandleNeighborhoodEvictPlot(WorldPackets::Neighborhood::Neigh
 
     WorldPackets::Neighborhood::NeighborhoodEvictPlotResponse response;
     response.Result = static_cast<uint32>(result);
+    response.NeighborhoodGuid = neighborhoodEvictPlot.NeighborhoodGuid;
+    response.PlotGuid = neighborhoodEvictPlot.PlotGuid;
     SendPacket(response.Write());
 
     // Send eviction notice to the evicted player and broadcast roster update
