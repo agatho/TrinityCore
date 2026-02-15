@@ -440,6 +440,19 @@ HousingResult Housing::MoveDecor(ObjectGuid decorGuid, float x, float y, float z
     decor.RotationZ = rotZ;
     decor.RotationW = rotW;
 
+    // Immediate persist for crash safety
+    CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_UPD_CHARACTER_HOUSING_DECOR_POSITION);
+    stmt->setFloat(0, x);
+    stmt->setFloat(1, y);
+    stmt->setFloat(2, z);
+    stmt->setFloat(3, rotX);
+    stmt->setFloat(4, rotY);
+    stmt->setFloat(5, rotZ);
+    stmt->setFloat(6, rotW);
+    stmt->setUInt64(7, _owner->GetGUID().GetCounter());
+    stmt->setUInt64(8, decorGuid.GetCounter());
+    CharacterDatabase.Execute(stmt);
+
     TC_LOG_DEBUG("housing", "Housing::MoveDecor: Player {} moved decor {} to ({}, {}, {}) in house {}",
         _owner->GetName(), decorGuid.ToString(), x, y, z, _houseGuid.ToString());
 
@@ -491,6 +504,15 @@ HousingResult Housing::CommitDecorDyes(ObjectGuid decorGuid, std::array<uint32, 
 
     itr->second.DyeSlots = dyeSlots;
 
+    // Immediate persist for crash safety
+    CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_UPD_CHARACTER_HOUSING_DECOR_DYES);
+    stmt->setUInt32(0, dyeSlots[0]);
+    stmt->setUInt32(1, dyeSlots[1]);
+    stmt->setUInt32(2, dyeSlots[2]);
+    stmt->setUInt64(3, _owner->GetGUID().GetCounter());
+    stmt->setUInt64(4, decorGuid.GetCounter());
+    CharacterDatabase.Execute(stmt);
+
     TC_LOG_DEBUG("housing", "Housing::CommitDecorDyes: Player {} updated dyes on decor {} in house {}",
         _owner->GetName(), decorGuid.ToString(), _houseGuid.ToString());
 
@@ -508,6 +530,13 @@ HousingResult Housing::SetDecorLocked(ObjectGuid decorGuid, bool locked)
         return HOUSING_RESULT_DECOR_INVALID_GUID;
 
     itr->second.Locked = locked;
+
+    // Immediate persist for crash safety
+    CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_UPD_CHARACTER_HOUSING_DECOR_LOCKED);
+    stmt->setUInt8(0, locked ? 1 : 0);
+    stmt->setUInt64(1, _owner->GetGUID().GetCounter());
+    stmt->setUInt64(2, decorGuid.GetCounter());
+    CharacterDatabase.Execute(stmt);
 
     TC_LOG_DEBUG("housing", "Housing::SetDecorLocked: Player {} {} decor {} in house {}",
         _owner->GetName(), locked ? "locked" : "unlocked", decorGuid.ToString(), _houseGuid.ToString());
@@ -678,6 +707,8 @@ HousingResult Housing::RotateRoom(ObjectGuid roomGuid, bool clockwise)
     else
         room.Orientation = (room.Orientation + 3) % 4; // +3 mod 4 == -1 mod 4
 
+    PersistRoomToDB(roomGuid, room);
+
     TC_LOG_DEBUG("housing", "Housing::RotateRoom: Player {} rotated room {} to orientation {} in house {}",
         _owner->GetName(), roomGuid.ToString(), room.Orientation, _houseGuid.ToString());
 
@@ -706,6 +737,9 @@ HousingResult Housing::MoveRoom(ObjectGuid roomGuid, uint32 newSlotIndex, Object
         itr->second.SlotIndex = swapItr->second.SlotIndex;
         swapItr->second.SlotIndex = tempSlot;
 
+        PersistRoomToDB(roomGuid, itr->second);
+        PersistRoomToDB(swapRoomGuid, swapItr->second);
+
         TC_LOG_DEBUG("housing", "Housing::MoveRoom: Player {} swapped room {} and room {} in house {}",
             _owner->GetName(), roomGuid.ToString(), swapRoomGuid.ToString(), _houseGuid.ToString());
     }
@@ -719,6 +753,8 @@ HousingResult Housing::MoveRoom(ObjectGuid roomGuid, uint32 newSlotIndex, Object
         }
 
         itr->second.SlotIndex = newSlotIndex;
+
+        PersistRoomToDB(roomGuid, itr->second);
 
         TC_LOG_DEBUG("housing", "Housing::MoveRoom: Player {} moved room {} to slot {} in house {}",
             _owner->GetName(), roomGuid.ToString(), newSlotIndex, _houseGuid.ToString());
@@ -822,6 +858,8 @@ HousingResult Housing::ApplyRoomTheme(ObjectGuid roomGuid, uint32 themeSetId, st
 
     itr->second.ThemeId = themeSetId;
 
+    PersistRoomToDB(roomGuid, itr->second);
+
     TC_LOG_DEBUG("housing", "Housing::ApplyRoomTheme: Player {} applied theme {} to room {} ({} components) in house {}",
         _owner->GetName(), themeSetId, roomGuid.ToString(), componentIds.size(), _houseGuid.ToString());
 
@@ -852,6 +890,8 @@ HousingResult Housing::ApplyRoomWallpaper(ObjectGuid roomGuid, uint32 wallpaperI
     itr->second.WallpaperId = wallpaperId;
     itr->second.MaterialId = materialId;
 
+    PersistRoomToDB(roomGuid, itr->second);
+
     TC_LOG_DEBUG("housing", "Housing::ApplyRoomWallpaper: Player {} applied wallpaper {} (material {}) to room {} ({} components) in house {}",
         _owner->GetName(), wallpaperId, materialId, roomGuid.ToString(), componentIds.size(), _houseGuid.ToString());
 
@@ -871,6 +911,8 @@ HousingResult Housing::SetDoorType(ObjectGuid roomGuid, uint32 doorTypeId, uint8
     itr->second.DoorTypeId = doorTypeId;
     itr->second.DoorSlot = doorSlot;
 
+    PersistRoomToDB(roomGuid, itr->second);
+
     TC_LOG_DEBUG("housing", "Housing::SetDoorType: Player {} set door type {} (slot {}) on room {} in house {}",
         _owner->GetName(), doorTypeId, doorSlot, roomGuid.ToString(), _houseGuid.ToString());
 
@@ -889,6 +931,8 @@ HousingResult Housing::SetCeilingType(ObjectGuid roomGuid, uint32 ceilingTypeId,
 
     itr->second.CeilingTypeId = ceilingTypeId;
     itr->second.CeilingSlot = ceilingSlot;
+
+    PersistRoomToDB(roomGuid, itr->second);
 
     TC_LOG_DEBUG("housing", "Housing::SetCeilingType: Player {} set ceiling type {} (slot {}) on room {} in house {}",
         _owner->GetName(), ceilingTypeId, ceilingSlot, roomGuid.ToString(), _houseGuid.ToString());
@@ -928,6 +972,19 @@ HousingResult Housing::SelectFixtureOption(uint32 fixturePointId, uint32 optionI
     fixture.FixturePointId = fixturePointId;
     fixture.OptionId = optionId;
 
+    // Immediate persist — use REPLACE semantics (delete old + insert new)
+    if (!isNew)
+        PersistFixtureToDB(fixturePointId, optionId);
+    else
+    {
+        CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_INS_CHARACTER_HOUSING_FIXTURES);
+        uint8 index = 0;
+        stmt->setUInt64(index++, _owner->GetGUID().GetCounter());
+        stmt->setUInt32(index++, fixturePointId);
+        stmt->setUInt32(index++, optionId);
+        CharacterDatabase.Execute(stmt);
+    }
+
     TC_LOG_DEBUG("housing", "Housing::SelectFixtureOption: Player {} set fixture point {} to option {} in house {} (budget: {}/{})",
         _owner->GetName(), fixturePointId, optionId, _houseGuid.ToString(),
         _fixtureWeightUsed, GetMaxFixtureBudget());
@@ -946,6 +1003,14 @@ HousingResult Housing::RemoveFixture(uint32 fixturePointId)
         return HOUSING_RESULT_FIXTURE_INVALID_DATA;
 
     _fixtures.erase(itr);
+
+    // Immediate persist — delete single fixture from DB
+    {
+        CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_DEL_CHARACTER_HOUSING_FIXTURE_SINGLE);
+        stmt->setUInt64(0, _owner->GetGUID().GetCounter());
+        stmt->setUInt32(1, fixturePointId);
+        CharacterDatabase.Execute(stmt);
+    }
 
     // Refund fixture budget
     uint32 const fixtureWeightCost = 1;
@@ -1183,4 +1248,32 @@ uint64 Housing::GenerateDecorDbId()
 uint64 Housing::GenerateRoomDbId()
 {
     return _roomDbIdGenerator++;
+}
+
+void Housing::PersistRoomToDB(ObjectGuid roomGuid, Room const& room)
+{
+    CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_UPD_CHARACTER_HOUSING_ROOM);
+    uint8 index = 0;
+    stmt->setUInt32(index++, room.SlotIndex);
+    stmt->setUInt32(index++, room.Orientation);
+    stmt->setUInt8(index++, room.Mirrored ? 1 : 0);
+    stmt->setUInt32(index++, room.ThemeId);
+    stmt->setUInt32(index++, room.WallpaperId);
+    stmt->setUInt32(index++, room.MaterialId);
+    stmt->setUInt32(index++, room.DoorTypeId);
+    stmt->setUInt8(index++, room.DoorSlot);
+    stmt->setUInt32(index++, room.CeilingTypeId);
+    stmt->setUInt8(index++, room.CeilingSlot);
+    stmt->setUInt64(index++, _owner->GetGUID().GetCounter());
+    stmt->setUInt64(index++, roomGuid.GetCounter());
+    CharacterDatabase.Execute(stmt);
+}
+
+void Housing::PersistFixtureToDB(uint32 fixturePointId, uint32 optionId)
+{
+    CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_UPD_CHARACTER_HOUSING_FIXTURE);
+    stmt->setUInt32(0, optionId);
+    stmt->setUInt64(1, _owner->GetGUID().GetCounter());
+    stmt->setUInt32(2, fixturePointId);
+    CharacterDatabase.Execute(stmt);
 }

@@ -168,6 +168,10 @@ private:
     ObjectGuid FindBaseRoomGuid() const;
     bool IsRoomGraphConnectedWithout(ObjectGuid excludeRoomGuid) const;
 
+    // Immediate DB persistence helpers
+    void PersistRoomToDB(ObjectGuid roomGuid, Room const& room);
+    void PersistFixtureToDB(uint32 fixturePointId, uint32 optionId);
+
     Player* _owner;
     ObjectGuid _houseGuid;
     ObjectGuid _neighborhoodGuid;
