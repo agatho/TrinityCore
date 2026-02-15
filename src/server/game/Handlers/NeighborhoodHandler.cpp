@@ -325,6 +325,11 @@ void WorldSession::HandleNeighborhoodCharterSendSignatureRequest(WorldPackets::N
     signRequest.RequesterGuid = player->GetGUID();
     targetPlayer->SendDirectMessage(signRequest.Write());
 
+    // Acknowledge to the requester that the signature request was sent
+    WorldPackets::Neighborhood::NeighborhoodCharterAddSignatureResponse ackResponse;
+    ackResponse.Result = static_cast<uint32>(HOUSING_RESULT_SUCCESS);
+    SendPacket(ackResponse.Write());
+
     TC_LOG_DEBUG("housing", "Player {} requested signature from {} for charter {}",
         player->GetGUID().ToString(), targetPlayer->GetGUID().ToString(), charterId);
 }
@@ -780,6 +785,13 @@ void WorldSession::HandleNeighborhoodBuyHouse(WorldPackets::Neighborhood::Neighb
     if (result == HOUSING_RESULT_SUCCESS)
     {
         player->CreateHousing(neighborhoodBuyHouse.NeighborhoodGuid, neighborhoodBuyHouse.PlotIndex);
+
+        // Update the PlotInfo with the newly created HouseGuid and Battle.net account GUID
+        if (Housing const* housing = player->GetHousing())
+        {
+            neighborhood->UpdatePlotHouseInfo(neighborhoodBuyHouse.PlotIndex,
+                housing->GetHouseGuid(), GetBattlenetAccountGUID());
+        }
 
         // Grant "Acquire a house" kill credit for quest 91863 (objective 17)
         static constexpr uint32 NPC_KILL_CREDIT_BUY_HOME = 248858;

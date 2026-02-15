@@ -597,10 +597,36 @@ HousingResult Neighborhood::TransferOwnership(ObjectGuid newOwnerGuid)
     // Promote new owner, demote old owner to manager
     newOwner->Role = NEIGHBORHOOD_ROLE_OWNER;
     oldOwner->Role = NEIGHBORHOOD_ROLE_MANAGER;
+    ObjectGuid previousOwnerGuid = _ownerGuid;
     _ownerGuid = newOwnerGuid;
 
+    // Persist the ownership change to the database
+    CharacterDatabaseTransaction trans = CharacterDatabase.BeginTransaction();
+
+    // Update the neighborhood's ownerGuid
+    CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_UPD_NEIGHBORHOOD_OWNER);
+    stmt->setUInt64(0, newOwnerGuid.GetCounter());
+    stmt->setUInt64(1, _guid.GetCounter());
+    trans->Append(stmt);
+
+    // Update the old owner's role to manager
+    stmt = CharacterDatabase.GetPreparedStatement(CHAR_UPD_NEIGHBORHOOD_MEMBER_ROLE);
+    stmt->setUInt8(0, NEIGHBORHOOD_ROLE_MANAGER);
+    stmt->setUInt64(1, _guid.GetCounter());
+    stmt->setUInt64(2, previousOwnerGuid.GetCounter());
+    trans->Append(stmt);
+
+    // Update the new owner's role to owner
+    stmt = CharacterDatabase.GetPreparedStatement(CHAR_UPD_NEIGHBORHOOD_MEMBER_ROLE);
+    stmt->setUInt8(0, NEIGHBORHOOD_ROLE_OWNER);
+    stmt->setUInt64(1, _guid.GetCounter());
+    stmt->setUInt64(2, newOwnerGuid.GetCounter());
+    trans->Append(stmt);
+
+    CharacterDatabase.CommitTransaction(trans);
+
     TC_LOG_DEBUG("housing", "Neighborhood::TransferOwnership: Ownership of neighborhood '{}' transferred from {} to {}",
-        _name, oldOwner->PlayerGuid.ToString(), newOwnerGuid.ToString());
+        _name, previousOwnerGuid.ToString(), newOwnerGuid.ToString());
 
     return HOUSING_RESULT_SUCCESS;
 }
@@ -672,6 +698,25 @@ HousingResult Neighborhood::PurchasePlot(ObjectGuid playerGuid, uint8 plotIndex)
     return HOUSING_RESULT_SUCCESS;
 }
 
+void Neighborhood::UpdatePlotHouseInfo(uint8 plotIndex, ObjectGuid houseGuid, ObjectGuid ownerBnetGuid)
+{
+    for (PlotInfo& plot : _plots)
+    {
+        if (plot.PlotIndex == plotIndex)
+        {
+            plot.HouseGuid = houseGuid;
+            plot.OwnerBnetGuid = ownerBnetGuid;
+
+            TC_LOG_DEBUG("housing", "Neighborhood::UpdatePlotHouseInfo: Plot {} updated with HouseGuid {} and BnetGuid {} in neighborhood '{}'",
+                plotIndex, houseGuid.ToString(), ownerBnetGuid.ToString(), _name);
+            return;
+        }
+    }
+
+    TC_LOG_DEBUG("housing", "Neighborhood::UpdatePlotHouseInfo: Plot {} not found in neighborhood '{}'",
+        plotIndex, _name);
+}
+
 HousingResult Neighborhood::MoveHouse(ObjectGuid sourcePlotOwner, uint8 newPlotIndex)
 {
     if (newPlotIndex >= MAX_NEIGHBORHOOD_PLOTS)
@@ -722,6 +767,13 @@ HousingResult Neighborhood::MoveHouse(ObjectGuid sourcePlotOwner, uint8 newPlotI
             break;
         }
     }
+
+    // Persist the plot move to DB
+    CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_UPD_NEIGHBORHOOD_MEMBER_PLOT);
+    stmt->setUInt8(0, newPlotIndex);
+    stmt->setUInt64(1, _guid.GetCounter());
+    stmt->setUInt64(2, sourcePlotOwner.GetCounter());
+    CharacterDatabase.Execute(stmt);
 
     TC_LOG_DEBUG("housing", "Neighborhood::MoveHouse: Player {} moved house from plot {} to plot {} in neighborhood '{}'",
         sourcePlotOwner.ToString(), oldPlotIndex, newPlotIndex, _name);

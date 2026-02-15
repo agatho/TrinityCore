@@ -84,6 +84,15 @@ void WorldSession::HandleHouseInteriorLeaveHouse(WorldPackets::Housing::HouseInt
     // Clear editing mode when leaving
     housing->SetEditorMode(HOUSING_EDITOR_MODE_NONE);
 
+    // Send updated house status to acknowledge the interior exit
+    WorldPackets::Housing::HousingHouseStatusResponse response;
+    response.HouseGuid = housing->GetHouseGuid();
+    response.NeighborhoodGuid = housing->GetNeighborhoodGuid();
+    response.OwnerGuid = player->GetGUID();
+    response.Status = 1;  // House active, not in interior
+    response.Flags = 0x20; // Standard flags
+    SendPacket(response.Write());
+
     TC_LOG_INFO("housing", "CMSG_HOUSE_INTERIOR_LEAVE_HOUSE: Player {} leaving house interior",
         player->GetGUID().ToString());
 }
@@ -777,6 +786,13 @@ void WorldSession::HandleHousingSvcsNeighborhoodReservePlot(WorldPackets::Housin
     {
         player->CreateHousing(housingSvcsNeighborhoodReservePlot.NeighborhoodGuid, housingSvcsNeighborhoodReservePlot.PlotIndex);
 
+        // Update the PlotInfo with the newly created HouseGuid and Battle.net account GUID
+        if (Housing const* housing = player->GetHousing())
+        {
+            neighborhood->UpdatePlotHouseInfo(housingSvcsNeighborhoodReservePlot.PlotIndex,
+                housing->GetHouseGuid(), GetBattlenetAccountGUID());
+        }
+
         // Grant "Acquire a house" kill credit for quest 91863 (objective 17)
         static constexpr uint32 NPC_KILL_CREDIT_BUY_HOME = 248858;
         player->KilledMonsterCredit(NPC_KILL_CREDIT_BUY_HOME);
@@ -973,11 +989,23 @@ void WorldSession::HandleHousingSvcsStartTutorial(WorldPackets::Housing::Housing
     {
         TC_LOG_INFO("housing", "CMSG_HOUSING_SVCS_START_TUTORIAL: Player {} assigned to neighborhood '{}' ({})",
             player->GetGUID().ToString(), neighborhood->GetName(), neighborhood->GetGuid().ToString());
+
+        // Send house status to client so it knows the tutorial neighborhood was assigned
+        WorldPackets::Housing::HousingHouseStatusResponse statusResponse;
+        statusResponse.NeighborhoodGuid = neighborhood->GetGuid();
+        statusResponse.Flags = 0x20;
+        SendPacket(statusResponse.Write());
     }
     else
     {
         TC_LOG_ERROR("housing", "CMSG_HOUSING_SVCS_START_TUTORIAL: Failed to find/create tutorial neighborhood for player {}",
             player->GetGUID().ToString());
+
+        // Notify client of failure
+        WorldPackets::Housing::HousingSvcsNotifyPermissionsFailure failResponse;
+        failResponse.Result = static_cast<uint32>(HOUSING_RESULT_NEIGHBORHOOD_NOT_FOUND);
+        SendPacket(failResponse.Write());
+        return;
     }
 
     // Step 2: Auto-accept the "My First Home" quest (91863) so the player can

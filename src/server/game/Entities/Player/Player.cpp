@@ -18581,6 +18581,21 @@ bool Player::LoadFromDB(ObjectGuid guid, CharacterDatabaseQueryHolder const& hol
             WowCS::GetRawFragmentData(m_playerHouseInfoComponentData));
     }
 
+    // Populate PlayerHouseInfoComponentData::Houses with the player's house data
+    // so the client knows about houses through the UpdateField system
+    if (_housing && !_housing->GetHouseGuid().IsEmpty())
+    {
+        UF::PlayerMirrorHouse& mirrorHouse = AddDynamicUpdateFieldValue(
+            m_values.ModifyValue(&Player::m_playerHouseInfoComponentData, 0)
+                .ModifyValue(&UF::PlayerHouseInfoComponentData::Houses));
+        mirrorHouse.Guid = _housing->GetHouseGuid();
+        mirrorHouse.NeighborhoodGUID = _housing->GetNeighborhoodGuid();
+        mirrorHouse.Level = _housing->GetLevel();
+        mirrorHouse.Favor = static_cast<uint32>(std::min<uint64>(_housing->GetFavor64(), std::numeric_limits<uint32>::max()));
+        mirrorHouse.MapID = 0; // Will be resolved when entering neighborhood
+        mirrorHouse.PlotID = _housing->GetPlotIndex();
+    }
+
     _InitHonorLevelOnLoadFromDB(fields.honor, fields.honorLevel);
 
     _restMgr->LoadRestBonus(REST_TYPE_HONOR, fields.honorRestState, fields.honorRestBonus);
