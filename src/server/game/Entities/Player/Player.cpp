@@ -65,6 +65,9 @@
 #include "GitRevision.h"
 #include "Housing.h"
 #include "HousingMgr.h"
+#include "HousingPackets.h"
+#include "Neighborhood.h"
+#include "NeighborhoodMgr.h"
 #include "GossipDef.h"
 #include "GridNotifiers.h"
 #include "GridNotifiersImpl.h"
@@ -24838,6 +24841,69 @@ void Player::SendInitialPacketsAfterAddToMap()
 
     if (_garrison)
         _garrison->SendRemoteInfo();
+
+    // Send housing neighborhood notifications when entering a neighborhood map.
+    // The client needs SMSG_HOUSING_HOUSE_STATUS_RESPONSE with NeighborhoodGuid
+    // to know it's in a neighborhood and trigger roster/map requests.
+    // It also needs NeighborhoodMirrorData populated on the Account entity
+    // for the map to render plot markers.
+    if (sHousingMgr.IsNeighborhoodWorldMap(GetMapId()))
+    {
+        std::vector<Neighborhood*> neighborhoods = sNeighborhoodMgr.GetNeighborhoodsForPlayer(GetGUID());
+        if (!neighborhoods.empty())
+        {
+            Neighborhood* neighborhood = neighborhoods[0];
+            Housing* housing = GetHousing();
+
+            // Send proactive HouseStatus so client knows about the neighborhood
+            WorldPackets::Housing::HousingHouseStatusResponse statusResponse;
+            statusResponse.Flags = 0x20;  // bit 5 = housing service active
+            statusResponse.NeighborhoodGuid = neighborhood->GetGuid();
+            if (housing)
+            {
+                statusResponse.HouseGuid = housing->GetHouseGuid();
+                statusResponse.OwnerGuid = GetGUID();
+                statusResponse.Status = 1;
+                statusResponse.Flags |= 0x80;  // bit 7 = has house
+            }
+            SendDirectMessage(statusResponse.Write());
+
+            // Populate NeighborhoodMirrorData on the Account entity so the
+            // client gets neighborhood info through the UpdateField system.
+            Battlenet::Account& account = GetSession()->GetBattlenetAccount();
+            account.SetNeighborhoodMirrorName(neighborhood->GetName());
+            account.SetNeighborhoodMirrorOwner(neighborhood->GetOwnerGuid());
+
+            // Add all plots with houses so the client knows which plots are occupied
+            account.ClearNeighborhoodMirrorHouses();
+            for (auto const& plot : neighborhood->GetPlots())
+            {
+                if (!plot.HouseGuid.IsEmpty())
+                    account.AddNeighborhoodMirrorHouse(plot.HouseGuid, plot.OwnerGuid);
+            }
+
+            // Proactively send the roster so the client has plot occupancy data
+            // for the map without needing to request it.
+            WorldPackets::Neighborhood::NeighborhoodGetRosterResponse rosterResponse;
+            rosterResponse.Result = 0; // Success
+            auto const& members = neighborhood->GetMembers();
+            rosterResponse.Members.reserve(members.size());
+            for (auto const& member : members)
+            {
+                WorldPackets::Neighborhood::NeighborhoodGetRosterResponse::RosterMemberData data;
+                data.PlayerGuid = member.PlayerGuid;
+                data.Role = member.Role;
+                data.PlotIndex = member.PlotIndex;
+                data.JoinTime = member.JoinTime;
+                rosterResponse.Members.push_back(data);
+            }
+            SendDirectMessage(rosterResponse.Write());
+
+            TC_LOG_INFO("housing", "Player {} entered neighborhood map {} - sent HouseStatus + roster + NeighborhoodMirrorData (Neighborhood: '{}' {}, Members: {}, Plots: {}, HasHouse: {})",
+                GetGUID().ToString(), GetMapId(), neighborhood->GetName(), neighborhood->GetGuid().ToString(),
+                members.size(), neighborhood->GetPlots().size(), housing ? "yes" : "no");
+        }
+    }
 
     UpdateItemLevelAreaBasedScaling();
 

@@ -111,4 +111,26 @@ void Account::SetHousingBudgets(uint32 interiorDecor, uint32 exteriorDecor, uint
     SetUpdateFieldValue(m_values.ModifyValue(&Account::m_housingPlayerHouseData).ModifyValue(&UF::HousingPlayerHouseData::RoomPlacementBudget), room);
     SetUpdateFieldValue(m_values.ModifyValue(&Account::m_housingPlayerHouseData).ModifyValue(&UF::HousingPlayerHouseData::ExteriorFixtureBudget), fixture);
 }
+
+void Account::SetNeighborhoodMirrorName(std::string const& name)
+{
+    SetUpdateFieldValue(m_values.ModifyValue(&Account::m_neighborhoodMirrorData).ModifyValue(&UF::NeighborhoodMirrorData::Name), name);
+}
+
+void Account::SetNeighborhoodMirrorOwner(ObjectGuid ownerGuid)
+{
+    SetUpdateFieldValue(m_values.ModifyValue(&Account::m_neighborhoodMirrorData).ModifyValue(&UF::NeighborhoodMirrorData::OwnerGUID), ownerGuid);
+}
+
+void Account::AddNeighborhoodMirrorHouse(ObjectGuid houseGuid, ObjectGuid ownerGuid)
+{
+    UF::PlayerHouseInfo& houseInfo = AddDynamicUpdateFieldValue(m_values.ModifyValue(&Account::m_neighborhoodMirrorData).ModifyValue(&UF::NeighborhoodMirrorData::Houses));
+    houseInfo.HouseGUID = houseGuid;
+    houseInfo.OwnerGUID = ownerGuid;
+}
+
+void Account::ClearNeighborhoodMirrorHouses()
+{
+    ClearDynamicUpdateFieldValues(m_values.ModifyValue(&Account::m_neighborhoodMirrorData).ModifyValue(&UF::NeighborhoodMirrorData::Houses));
+}
 }

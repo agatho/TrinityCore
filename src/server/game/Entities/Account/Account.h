@@ -43,6 +43,12 @@ public:
     void SetHousingFavor(uint64 favor);
     void SetHousingBudgets(uint32 interiorDecor, uint32 exteriorDecor, uint32 room, uint32 fixture);
 
+    // Neighborhood mirror data
+    void SetNeighborhoodMirrorName(std::string const& name);
+    void SetNeighborhoodMirrorOwner(ObjectGuid ownerGuid);
+    void AddNeighborhoodMirrorHouse(ObjectGuid houseGuid, ObjectGuid ownerGuid);
+    void ClearNeighborhoodMirrorHouses();
+
     UF::UpdateField<UF::HousingStorageData, int32(WowCS::EntityFragment::FHousingStorage_C), 0> m_housingStorageData;
     UF::UpdateField<UF::HousingPlayerHouseData, int32(WowCS::EntityFragment::FHousingPlayerHouse_C), 0> m_housingPlayerHouseData;
     UF::UpdateField<UF::NeighborhoodMirrorData, int32(WowCS::EntityFragment::FNeighborhoodMirrorData_C), 0> m_neighborhoodMirrorData;
