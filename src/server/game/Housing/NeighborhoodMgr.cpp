@@ -18,6 +18,8 @@
 #include "NeighborhoodMgr.h"
 #include "DatabaseEnv.h"
 #include "GameTime.h"
+#include "HousingDefines.h"
+#include "HousingMgr.h"
 #include "Log.h"
 #include "Neighborhood.h"
 #include "SharedDefines.h"
@@ -269,6 +271,77 @@ std::string NeighborhoodMgr::GetNeighborhoodName(ObjectGuid neighborhoodGuid) co
         return neighborhood->GetName();
 
     return "";
+}
+
+Neighborhood* NeighborhoodMgr::FindOrCreateTutorialNeighborhood(ObjectGuid playerGuid, uint32 teamId)
+{
+    // Check if player already belongs to a neighborhood
+    std::vector<Neighborhood*> existing = GetNeighborhoodsForPlayer(playerGuid);
+    if (!existing.empty())
+    {
+        TC_LOG_DEBUG("housing", "FindOrCreateTutorialNeighborhood: Player {} already in neighborhood '{}'",
+            playerGuid.ToString(), existing[0]->GetName());
+        return existing[0];
+    }
+
+    // Determine the correct NeighborhoodMapID for the player's faction
+    // NeighborhoodMap flags: bit 0 = Alliance, bit 1 = Horde, bit 2 = CanSystemGenerate
+    uint32 targetMapId = 0;
+    int32 factionRestriction = NEIGHBORHOOD_FACTION_NONE;
+
+    for (auto const& [id, data] : sHousingMgr.GetAllNeighborhoodMapData())
+    {
+        int32 flags = data.UiMapID; // UiMapID stores DB2 FactionRestriction/Flags field
+        bool isAlliance = (flags & 0x1) != 0;
+        bool isHorde = (flags & 0x2) != 0;
+        bool canSystemGenerate = (flags & 0x4) != 0;
+
+        if (!canSystemGenerate)
+            continue;
+
+        if (teamId == ALLIANCE && isAlliance)
+        {
+            targetMapId = id;
+            factionRestriction = NEIGHBORHOOD_FACTION_ALLIANCE;
+            break;
+        }
+        else if (teamId == HORDE && isHorde)
+        {
+            targetMapId = id;
+            factionRestriction = NEIGHBORHOOD_FACTION_HORDE;
+            break;
+        }
+    }
+
+    if (targetMapId == 0)
+    {
+        TC_LOG_ERROR("housing", "FindOrCreateTutorialNeighborhood: No system-generatable NeighborhoodMap found for team {}",
+            teamId);
+        return nullptr;
+    }
+
+    // Look for an existing public neighborhood on the target map with available plots
+    for (auto const& [guid, neighborhood] : _neighborhoods)
+    {
+        if (neighborhood->GetNeighborhoodMapID() == targetMapId && neighborhood->IsPublic())
+        {
+            TC_LOG_DEBUG("housing", "FindOrCreateTutorialNeighborhood: Found existing public neighborhood '{}' for player {}",
+                neighborhood->GetName(), playerGuid.ToString());
+            return neighborhood.get();
+        }
+    }
+
+    // Create a new system-generated neighborhood with the player as owner
+    std::string name = (teamId == ALLIANCE) ? "Founder's Point" : "Razorwind Shores";
+    Neighborhood* neighborhood = CreateNeighborhood(playerGuid, name, targetMapId, factionRestriction);
+    if (neighborhood)
+    {
+        neighborhood->SetPublic(true);
+        TC_LOG_INFO("housing", "FindOrCreateTutorialNeighborhood: Created tutorial neighborhood '{}' (map {}) for player {}",
+            name, targetMapId, playerGuid.ToString());
+    }
+
+    return neighborhood;
 }
 
 ObjectGuid NeighborhoodMgr::GenerateNeighborhoodGuid()

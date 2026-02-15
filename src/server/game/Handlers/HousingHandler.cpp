@@ -956,9 +956,26 @@ void WorldSession::HandleHousingSvcsStartTutorial(WorldPackets::Housing::Housing
     if (!player)
         return;
 
-    // Housing tutorial teleport spells (faction-specific)
-    // Alliance: 1258476 → teleports to Founder's Point
-    // Horde:    1258484 → teleports to Razorwind Shores
+    // Step 1: Find or create a tutorial neighborhood for the player's faction.
+    // The tutorial assigns the player to a system-generated neighborhood so they
+    // have a place to buy a plot and acquire a house.
+    Neighborhood* neighborhood = sNeighborhoodMgr.FindOrCreateTutorialNeighborhood(
+        player->GetGUID(), player->GetTeam());
+
+    if (neighborhood)
+    {
+        TC_LOG_INFO("housing", "CMSG_HOUSING_SVCS_START_TUTORIAL: Player {} assigned to neighborhood '{}' ({})",
+            player->GetGUID().ToString(), neighborhood->GetName(), neighborhood->GetGuid().ToString());
+    }
+    else
+    {
+        TC_LOG_ERROR("housing", "CMSG_HOUSING_SVCS_START_TUTORIAL: Failed to find/create tutorial neighborhood for player {}",
+            player->GetGUID().ToString());
+    }
+
+    // Step 2: Teleport the player to the housing neighborhood via faction-specific spell.
+    // Alliance: 1258476 → Founder's Point (map 2735)
+    // Horde:    1258484 → Razorwind Shores (map 2736)
     static constexpr uint32 SPELL_HOUSING_TUTORIAL_ALLIANCE = 1258476;
     static constexpr uint32 SPELL_HOUSING_TUTORIAL_HORDE    = 1258484;
 

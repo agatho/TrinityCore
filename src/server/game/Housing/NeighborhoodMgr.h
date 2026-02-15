@@ -53,6 +53,9 @@ public:
     std::vector<Neighborhood*> GetNeighborhoodsForPlayer(ObjectGuid playerGuid) const;
     std::string GetNeighborhoodName(ObjectGuid neighborhoodGuid) const;
 
+    // Tutorial support
+    Neighborhood* FindOrCreateTutorialNeighborhood(ObjectGuid playerGuid, uint32 teamId);
+
     // Charter support
     ObjectGuid GenerateNeighborhoodGuid();
 

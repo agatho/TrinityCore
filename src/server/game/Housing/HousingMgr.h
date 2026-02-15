@@ -249,6 +249,7 @@ public:
     HouseThemeData const* GetHouseThemeData(uint32 id) const;
     HouseDecorThemeSetData const* GetHouseDecorThemeSetData(uint32 id) const;
     NeighborhoodMapData const* GetNeighborhoodMapData(uint32 id) const;
+    std::unordered_map<uint32, NeighborhoodMapData> const& GetAllNeighborhoodMapData() const { return _neighborhoodMapStore; }
     HouseDecorMaterialData const* GetHouseDecorMaterialData(uint32 id) const;
     HouseExteriorWmoData const* GetHouseExteriorWmoData(uint32 id) const;
     HouseLevelRewardInfoData const* GetHouseLevelRewardInfoData(uint32 id) const;
