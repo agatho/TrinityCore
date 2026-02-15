@@ -1,5 +1,8 @@
 -- Housing Tutorial Quest Chain Setup
--- Chain: 93057 "A House For You" → 91863 "My First Home" → 91968 "Welcome Home" → 91969 "Time to Decorate"
+-- Two paths to the same destination:
+--   Path A (portal):   Accept 93057 from Stormwind Lyssabel → use portal → 93057 auto-offers 91863
+--   Path B (tutorial): Click "Start Tutorial" → teleport to neighborhood → pick up 91863 from Lyssabel
+-- Then: 91863 "My First Home" → 91968 "Welcome Home" → 91969 "Time to Decorate"
 -- Note: 93647 "Lumber For You" is an alternate breadcrumb to 91863 (auto-complete, no objectives)
 
 -- ============================================================================
@@ -22,9 +25,10 @@ DELETE FROM quest_template_addon WHERE ID IN (93057, 91863, 91968, 91969);
 -- 93057 "A House For You": Entry quest, no prerequisite
 INSERT INTO quest_template_addon (ID, PrevQuestID) VALUES (93057, 0);
 
--- 91863 "My First Home": Requires completing "A House For You"
--- Note: Also auto-offered via 93057.RewardNextQuest = 91863
-INSERT INTO quest_template_addon (ID, PrevQuestID) VALUES (91863, 93057);
+-- 91863 "My First Home": No hard prerequisite (reachable via portal path OR tutorial button)
+-- When using portal path, 93057.RewardNextQuest auto-offers 91863 on turn-in
+-- When using tutorial button, player picks up 91863 directly from neighborhood Lyssabel
+INSERT INTO quest_template_addon (ID, PrevQuestID) VALUES (91863, 0);
 
 -- 91968 "Welcome Home": Requires completing "My First Home"
 INSERT INTO quest_template_addon (ID, PrevQuestID) VALUES (91968, 91863);
