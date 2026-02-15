@@ -47,7 +47,9 @@ struct npc_housing_steward : public CreatureAI
         player->KilledMonsterCredit(NPC_KILL_CREDIT_GREET_STEWARD);
 
         // Show gossip menu with option to ask the steward to join the neighborhood
-        ClearGossipMenuFor(player);
+        InitGossipMenuFor(player, 0);
+        if (me->IsQuestGiver())
+            player->PrepareQuestMenu(me->GetGUID());
         AddGossipItemFor(player, GossipOptionNpc::None,
             "Ask the steward to become your neighbor.",
             GOSSIP_SENDER_MAIN, GOSSIP_ACTION_ASK_TO_JOIN);

@@ -1223,6 +1223,7 @@ void WorldSession::HandleHousingHouseStatus(WorldPackets::Housing::HousingHouseS
     if (housing)
     {
         response.HouseGuid = housing->GetHouseGuid();
+        response.NeighborhoodGuid = housing->GetNeighborhoodGuid();
         response.OwnerGuid = player->GetGUID();
         response.Status = 1;  // Has house
         response.Flags |= 0x80;  // bit 7 = has house

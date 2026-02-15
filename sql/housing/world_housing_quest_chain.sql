@@ -6,14 +6,18 @@
 -- Note: 93647 "Lumber For You" is an alternate breadcrumb to 91863 (auto-complete, no objectives)
 
 -- ============================================================================
--- 1. Set UNIT_NPC_FLAG_QUESTGIVER (0x2) on housing quest NPCs
+-- 1. Set NPC flags and scripts on housing quest NPCs
 -- ============================================================================
 
 -- Lyssabel Dawnpetal (Stormwind, near housing portal) - starts the housing chain
 UPDATE creature_template SET npcflag = npcflag | 2 WHERE entry = 256078;
 
--- Lyssabel Dawnpetal (Founder's Point neighborhood) - quest hub in the neighborhood
-UPDATE creature_template SET npcflag = npcflag | 2 WHERE entry = 233063;
+-- Lyssabel Dawnpetal (Founder's Point neighborhood) - quest hub + gossip steward
+-- GOSSIP (0x1) needed for gossip menu options, QUESTGIVER (0x2) for quests
+UPDATE creature_template SET npcflag = npcflag | 3, ScriptName = 'npc_housing_steward' WHERE entry = 233063;
+
+-- Tocho (Horde equivalent neighborhood steward) - gossip steward
+UPDATE creature_template SET npcflag = npcflag | 3, ScriptName = 'npc_housing_steward' WHERE entry = 233708;
 
 -- ============================================================================
 -- 2. Quest chain prerequisites via quest_template_addon
