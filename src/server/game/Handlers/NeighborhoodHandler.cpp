@@ -716,9 +716,18 @@ void WorldSession::HandleNeighborhoodGetInvites(WorldPackets::Neighborhood::Neig
 
     WorldPackets::Neighborhood::NeighborhoodGetInvitesResponse response;
     response.Result = static_cast<uint32>(HOUSING_RESULT_SUCCESS);
+    response.Invites.reserve(invites.size());
+    for (auto const& invite : invites)
+    {
+        WorldPackets::Neighborhood::NeighborhoodGetInvitesResponse::InviteData data;
+        data.InviteeGuid = invite.InviteeGuid;
+        data.InviterGuid = invite.InviterGuid;
+        data.InviteTime = invite.InviteTime;
+        response.Invites.push_back(data);
+    }
     SendPacket(response.Write());
 
-    TC_LOG_DEBUG("housing", "Neighborhood {} has {} pending invites",
+    TC_LOG_DEBUG("housing", "Neighborhood {} has {} pending invites sent",
         neighborhoodGetInvites.NeighborhoodGuid.ToString(), uint32(invites.size()));
 }
 
@@ -939,9 +948,19 @@ void WorldSession::HandleNeighborhoodGetRoster(WorldPackets::Neighborhood::Neigh
 
     WorldPackets::Neighborhood::NeighborhoodGetRosterResponse response;
     response.Result = static_cast<uint32>(HOUSING_RESULT_SUCCESS);
+    response.Members.reserve(members.size());
+    for (auto const& member : members)
+    {
+        WorldPackets::Neighborhood::NeighborhoodGetRosterResponse::RosterMemberData data;
+        data.PlayerGuid = member.PlayerGuid;
+        data.Role = member.Role;
+        data.PlotIndex = member.PlotIndex;
+        data.JoinTime = member.JoinTime;
+        response.Members.push_back(data);
+    }
     SendPacket(response.Write());
 
-    TC_LOG_DEBUG("housing", "Neighborhood {} roster: {} members",
+    TC_LOG_DEBUG("housing", "Neighborhood {} roster: {} members sent",
         neighborhoodGetRoster.NeighborhoodGuid.ToString(), uint32(members.size()));
 }
 
