@@ -39,6 +39,19 @@ namespace WorldPackets::Housing
         void Read() override { }
     };
 
+    class HouseExteriorLock final : public ClientPacket
+    {
+    public:
+        explicit HouseExteriorLock(WorldPacket&& packet) : ClientPacket(CMSG_HOUSE_EXTERIOR_LOCK, std::move(packet)) { }
+
+        void Read() override;
+
+        ObjectGuid HouseGuid;
+        ObjectGuid PlotGuid;
+        ObjectGuid NeighborhoodGuid;
+        bool Locked = false;
+    };
+
     // ============================================================
     // House Interior System (0x2Fxxxx)
     // ============================================================
@@ -221,6 +234,28 @@ namespace WorldPackets::Housing
 
         ObjectGuid HouseGuid;
         uint32 FixturePointID = 0;
+    };
+
+    class HousingFixtureSetHouseSize final : public ClientPacket
+    {
+    public:
+        explicit HousingFixtureSetHouseSize(WorldPacket&& packet) : ClientPacket(CMSG_HOUSING_FIXTURE_SET_HOUSE_SIZE, std::move(packet)) { }
+
+        void Read() override;
+
+        ObjectGuid HouseGuid;
+        uint8 Size = 0;
+    };
+
+    class HousingFixtureSetHouseType final : public ClientPacket
+    {
+    public:
+        explicit HousingFixtureSetHouseType(WorldPacket&& packet) : ClientPacket(CMSG_HOUSING_FIXTURE_SET_HOUSE_TYPE, std::move(packet)) { }
+
+        void Read() override;
+
+        ObjectGuid HouseGuid;
+        uint32 HouseExteriorWmoDataID = 0;
     };
 
     // ============================================================

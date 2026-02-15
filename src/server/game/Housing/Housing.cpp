@@ -20,6 +20,7 @@
 #include "DatabaseEnv.h"
 #include "DB2Stores.h"
 #include "HousingMgr.h"
+#include "HousingPackets.h"
 #include "Log.h"
 #include "ObjectMgr.h"
 #include "Player.h"
@@ -1050,6 +1051,16 @@ void Housing::AddFavor(uint64 amount)
         _owner->GetName(), _favor64, _houseGuid.ToString());
 
     SyncUpdateFields();
+
+    // Broadcast level/favor update to the owner
+    if (_owner && _owner->GetSession())
+    {
+        WorldPackets::Housing::HousingSvcsUpdateHousesLevelFavor favorUpdate;
+        favorUpdate.HouseGuid = _houseGuid;
+        favorUpdate.Level = _level;
+        favorUpdate.Favor = _favor64;
+        _owner->SendDirectMessage(favorUpdate.Write());
+    }
 }
 
 void Housing::OnQuestCompleted(uint32 questId)
@@ -1064,6 +1075,16 @@ void Housing::OnQuestCompleted(uint32 questId)
             _owner->GetName(), _level, questId, _houseGuid.ToString());
 
         SyncUpdateFields();
+
+        // Broadcast level/favor update to the owner
+        if (_owner && _owner->GetSession())
+        {
+            WorldPackets::Housing::HousingSvcsUpdateHousesLevelFavor levelUpdate;
+            levelUpdate.HouseGuid = _houseGuid;
+            levelUpdate.Level = _level;
+            levelUpdate.Favor = _favor64;
+            _owner->SendDirectMessage(levelUpdate.Write());
+        }
     }
 }
 

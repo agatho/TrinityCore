@@ -124,6 +124,26 @@ void HousingFixtureDeleteFixture::Read()
     _worldPacket >> FixturePointID;
 }
 
+void HousingFixtureSetHouseSize::Read()
+{
+    _worldPacket >> HouseGuid;
+    _worldPacket >> Size;
+}
+
+void HousingFixtureSetHouseType::Read()
+{
+    _worldPacket >> HouseGuid;
+    _worldPacket >> HouseExteriorWmoDataID;
+}
+
+void HouseExteriorLock::Read()
+{
+    _worldPacket >> HouseGuid;
+    _worldPacket >> PlotGuid;
+    _worldPacket >> NeighborhoodGuid;
+    _worldPacket >> Bits<1>(Locked);
+}
+
 // --- Room System ---
 
 void HousingRoomSetLayoutEditMode::Read()
