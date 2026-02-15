@@ -956,10 +956,20 @@ void WorldSession::HandleHousingSvcsStartTutorial(WorldPackets::Housing::Housing
     if (!player)
         return;
 
-    // Fire-and-forget: the client UI guides the player through the tutorial flow
-    // (create/join neighborhood → reserve plot → buy house). No SMSG response expected.
-    TC_LOG_INFO("housing", "CMSG_HOUSING_SVCS_START_TUTORIAL: Player {} started housing tutorial",
-        player->GetGUID().ToString());
+    // Housing tutorial teleport spells (faction-specific)
+    // Alliance: 1258476 → teleports to Founder's Point
+    // Horde:    1258484 → teleports to Razorwind Shores
+    static constexpr uint32 SPELL_HOUSING_TUTORIAL_ALLIANCE = 1258476;
+    static constexpr uint32 SPELL_HOUSING_TUTORIAL_HORDE    = 1258484;
+
+    uint32 spellId = player->GetTeam() == HORDE
+        ? SPELL_HOUSING_TUTORIAL_HORDE
+        : SPELL_HOUSING_TUTORIAL_ALLIANCE;
+
+    player->CastSpell(player, spellId, false);
+
+    TC_LOG_INFO("housing", "CMSG_HOUSING_SVCS_START_TUTORIAL: Player {} ({}) casting tutorial spell {}",
+        player->GetGUID().ToString(), player->GetTeam() == HORDE ? "Horde" : "Alliance", spellId);
 }
 
 void WorldSession::HandleHousingSvcsAcceptNeighborhoodOwnership(WorldPackets::Housing::HousingSvcsAcceptNeighborhoodOwnership const& housingSvcsAcceptNeighborhoodOwnership)
