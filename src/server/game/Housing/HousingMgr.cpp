@@ -207,7 +207,11 @@ void HousingMgr::LoadNeighborhoodMapData()
         data.UiMapID = entry->FactionRestriction;
     }
 
-    TC_LOG_DEBUG("housing", "HousingMgr::LoadNeighborhoodMapData: Loaded {} NeighborhoodMap entries", uint32(_neighborhoodMapStore.size()));
+    for (auto const& [id, data] : _neighborhoodMapStore)
+        TC_LOG_DEBUG("housing", "  NeighborhoodMap ID={} MapID={} Origin=({}, {}, {}) Spacing={} MaxPlots={} Flags={}",
+            data.ID, data.MapID, data.Origin[0], data.Origin[1], data.Origin[2], data.PlotSpacing, data.MaxPlots, data.UiMapID);
+
+    TC_LOG_INFO("housing", "HousingMgr::LoadNeighborhoodMapData: Loaded {} NeighborhoodMap entries", uint32(_neighborhoodMapStore.size()));
 }
 
 void HousingMgr::LoadNeighborhoodPlotData()
