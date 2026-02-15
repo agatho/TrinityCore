@@ -28,10 +28,6 @@ enum HousingTutorialData
     NPC_KILL_CREDIT_GREET_STEWARD   = 249851,
     NPC_KILL_CREDIT_ASK_STEWARD     = 248857,
 
-    // Gossip
-    GOSSIP_MENU_STEWARD             = 0,        // Custom gossip (text built in code)
-    NPC_TEXT_STEWARD_GREETING       = 601077,   // Lyssabel greeting text
-
     // Gossip actions
     GOSSIP_ACTION_ASK_TO_JOIN       = 1001,
 };
@@ -55,7 +51,7 @@ struct npc_housing_steward : public CreatureAI
         AddGossipItemFor(player, GossipOptionNpc::None,
             "Ask the steward to become your neighbor.",
             GOSSIP_SENDER_MAIN, GOSSIP_ACTION_ASK_TO_JOIN);
-        SendGossipMenuFor(player, NPC_TEXT_STEWARD_GREETING, me->GetGUID());
+        SendGossipMenuFor(player, DEFAULT_GOSSIP_MESSAGE, me->GetGUID());
 
         TC_LOG_DEBUG("housing", "npc_housing_steward: Player {} greeted steward {} (kill credit {})",
             player->GetGUID().ToString(), me->GetEntry(), NPC_KILL_CREDIT_GREET_STEWARD);
