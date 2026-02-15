@@ -164,6 +164,15 @@ bool Housing::LoadFromDB(PreparedQueryResult housing, PreparedQueryResult decor,
 
     // Recalculate budget weights from loaded data
     RecalculateBudgets();
+
+    // Populate HousingStorageData::Decor UpdateField for all placed decor
+    if (_owner && _owner->GetSession())
+    {
+        Battlenet::Account& account = _owner->GetSession()->GetBattlenetAccount();
+        for (auto const& [decorGuid, decor] : _placedDecor)
+            account.SetHousingDecorStorageEntry(decorGuid, _houseGuid, 0);
+    }
+
     SyncUpdateFields();
 
     TC_LOG_DEBUG("housing", "Housing::LoadFromDB: Loaded house for player {} (GUID {}): "
@@ -284,6 +293,15 @@ void Housing::DeleteFromDB(ObjectGuid::LowType ownerGuid, CharacterDatabaseTrans
     trans->Append(stmt);
 }
 
+void Housing::SetEditorMode(HousingEditorMode mode)
+{
+    _editorMode = mode;
+
+    // Sync to Player's PlayerHouseInfoComponentData UpdateField so the client knows the mode changed
+    if (_owner)
+        _owner->SetHousingEditorModeUpdateField(static_cast<uint8>(mode));
+}
+
 HousingResult Housing::Create(ObjectGuid neighborhoodGuid, uint8 plotIndex)
 {
     if (!_houseGuid.IsEmpty())
@@ -317,6 +335,14 @@ void Housing::Delete()
 
     TC_LOG_DEBUG("housing", "Housing::Delete: Player {} (GUID {}) deleted house {}",
         _owner->GetName(), _owner->GetGUID().GetCounter(), _houseGuid.ToString());
+
+    // Remove all decor storage entries from account UpdateField
+    if (_owner->GetSession() && !_placedDecor.empty())
+    {
+        Battlenet::Account& account = _owner->GetSession()->GetBattlenetAccount();
+        for (auto const& [decorGuid, decor] : _placedDecor)
+            account.RemoveHousingDecorStorageEntry(decorGuid);
+    }
 
     _houseGuid.Clear();
     _neighborhoodGuid.Clear();
@@ -405,6 +431,10 @@ HousingResult Housing::PlaceDecor(uint32 decorEntryId, float x, float y, float z
     // Update budget tracking
     _interiorDecorWeightUsed += weightCost;
 
+    // Update account decor storage UpdateField
+    if (_owner->GetSession())
+        _owner->GetSession()->GetBattlenetAccount().SetHousingDecorStorageEntry(decorGuid, _houseGuid, 0);
+
     TC_LOG_DEBUG("housing", "Housing::PlaceDecor: Player {} placed decor entry {} at ({}, {}, {}) in house {} (budget {}/{})",
         _owner->GetName(), decorEntryId, x, y, z, _houseGuid.ToString(),
         _interiorDecorWeightUsed, GetMaxInteriorDecorBudget());
@@ -485,6 +515,10 @@ HousingResult Housing::RemoveDecor(ObjectGuid decorGuid)
     _catalog[decorEntryId].Count++;
 
     _placedDecor.erase(itr);
+
+    // Remove from account decor storage UpdateField
+    if (_owner->GetSession())
+        _owner->GetSession()->GetBattlenetAccount().RemoveHousingDecorStorageEntry(decorGuid);
 
     TC_LOG_DEBUG("housing", "Housing::RemoveDecor: Player {} removed decor {} from house {}, returned to catalog",
         _owner->GetName(), decorGuid.ToString(), _houseGuid.ToString());
@@ -1082,13 +1116,25 @@ HousingResult Housing::DestroyAllCopies(uint32 decorEntryId)
     uint32 destroyedCount = itr->second.Count;
     _catalog.erase(itr);
 
-    // Also remove all placed decor of this entry
+    // Also remove all placed decor of this entry and their storage entries
+    std::vector<ObjectGuid> removedGuids;
     for (auto it = _placedDecor.begin(); it != _placedDecor.end(); )
     {
         if (it->second.DecorEntryId == decorEntryId)
+        {
+            removedGuids.push_back(it->first);
             it = _placedDecor.erase(it);
+        }
         else
             ++it;
+    }
+
+    // Remove from account decor storage UpdateField
+    if (_owner->GetSession() && !removedGuids.empty())
+    {
+        Battlenet::Account& account = _owner->GetSession()->GetBattlenetAccount();
+        for (ObjectGuid const& guid : removedGuids)
+            account.RemoveHousingDecorStorageEntry(guid);
     }
 
     TC_LOG_DEBUG("housing", "Housing::DestroyAllCopies: Player {} destroyed all copies ({}) of decor entry {} in house {}",

@@ -468,6 +468,9 @@ namespace WorldPackets
         class QueryNeighborhoodInfo;
         class InvitePlayerToNeighborhood;
         class GuildGetOthersOwnedHouses;
+        class HouseExteriorLock;
+        class HousingFixtureSetHouseSize;
+        class HousingFixtureSetHouseType;
     }
 
     namespace Neighborhood

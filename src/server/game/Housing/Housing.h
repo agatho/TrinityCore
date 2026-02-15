@@ -98,7 +98,7 @@ public:
     uint32 GetSettingsFlags() const { return _settingsFlags; }
 
     // Editor mode
-    void SetEditorMode(HousingEditorMode mode) { _editorMode = mode; }
+    void SetEditorMode(HousingEditorMode mode);
     HousingEditorMode GetEditorMode() const { return _editorMode; }
 
     // Decor operations

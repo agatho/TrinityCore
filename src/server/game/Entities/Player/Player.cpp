@@ -24897,6 +24897,19 @@ void Player::SendInitialPacketsAfterAddToMap()
                     account.AddNeighborhoodMirrorHouse(plot.HouseGuid, plot.OwnerGuid);
             }
 
+            // Add managers to mirror data
+            account.ClearNeighborhoodMirrorManagers();
+            for (auto const& member : neighborhood->GetMembers())
+            {
+                if (member.Role == NEIGHBORHOOD_ROLE_MANAGER || member.Role == NEIGHBORHOOD_ROLE_OWNER)
+                {
+                    ObjectGuid bnetGuid;
+                    if (Player* managerPlayer = ObjectAccessor::FindPlayer(member.PlayerGuid))
+                        bnetGuid = managerPlayer->GetSession()->GetBattlenetAccountGUID();
+                    account.AddNeighborhoodMirrorManager(bnetGuid, member.PlayerGuid);
+                }
+            }
+
             // Proactively send the roster so the client has plot occupancy data
             // for the map without needing to request it.
             WorldPackets::Neighborhood::NeighborhoodGetRosterResponse rosterResponse;
@@ -29822,6 +29835,15 @@ void Player::DeleteHousing()
     {
         _housing->Delete();
         _housing.reset();
+    }
+}
+
+void Player::SetHousingEditorModeUpdateField(uint8 mode)
+{
+    if (m_playerHouseInfoComponentData.has_value())
+    {
+        SetUpdateFieldValue(m_values.ModifyValue(&Player::m_playerHouseInfoComponentData, 0)
+            .ModifyValue(&UF::PlayerHouseInfoComponentData::EditorMode), mode);
     }
 }
 

@@ -16,6 +16,7 @@
  */
 
 #include "WorldSession.h"
+#include "Account.h"
 #include "DatabaseEnv.h"
 #include "Guild.h"
 #include "GuildMgr.h"
@@ -504,19 +505,34 @@ void WorldSession::HandleNeighborhoodAddSecondaryOwner(WorldPackets::Neighborhoo
     response.Result = static_cast<uint32>(result);
     SendPacket(response.Write());
 
-    // Broadcast roster update to all neighborhood members
+    // Broadcast roster update and refresh manager mirror data for all online members
     if (result == HOUSING_RESULT_SUCCESS)
     {
         for (auto const& member : neighborhood->GetMembers())
         {
-            if (member.PlayerGuid == player->GetGUID())
-                continue;
             if (Player* memberPlayer = ObjectAccessor::FindPlayer(member.PlayerGuid))
             {
-                WorldPackets::Neighborhood::NeighborhoodRosterResidentUpdate rosterUpdate;
-                rosterUpdate.PlayerGuid = neighborhoodAddSecondaryOwner.PlayerGuid;
-                rosterUpdate.NeighborhoodGuid = neighborhoodAddSecondaryOwner.NeighborhoodGuid;
-                memberPlayer->SendDirectMessage(rosterUpdate.Write());
+                if (member.PlayerGuid != player->GetGUID())
+                {
+                    WorldPackets::Neighborhood::NeighborhoodRosterResidentUpdate rosterUpdate;
+                    rosterUpdate.PlayerGuid = neighborhoodAddSecondaryOwner.PlayerGuid;
+                    rosterUpdate.NeighborhoodGuid = neighborhoodAddSecondaryOwner.NeighborhoodGuid;
+                    memberPlayer->SendDirectMessage(rosterUpdate.Write());
+                }
+
+                // Refresh manager mirror data on each online member's Account entity
+                Battlenet::Account& memberAccount = memberPlayer->GetSession()->GetBattlenetAccount();
+                memberAccount.ClearNeighborhoodMirrorManagers();
+                for (auto const& m : neighborhood->GetMembers())
+                {
+                    if (m.Role == NEIGHBORHOOD_ROLE_MANAGER || m.Role == NEIGHBORHOOD_ROLE_OWNER)
+                    {
+                        ObjectGuid bnetGuid;
+                        if (Player* mgr = ObjectAccessor::FindPlayer(m.PlayerGuid))
+                            bnetGuid = mgr->GetSession()->GetBattlenetAccountGUID();
+                        memberAccount.AddNeighborhoodMirrorManager(bnetGuid, m.PlayerGuid);
+                    }
+                }
             }
         }
     }
@@ -565,19 +581,34 @@ void WorldSession::HandleNeighborhoodRemoveSecondaryOwner(WorldPackets::Neighbor
     response.Result = static_cast<uint32>(result);
     SendPacket(response.Write());
 
-    // Broadcast roster update to all neighborhood members
+    // Broadcast roster update and refresh manager mirror data for all online members
     if (result == HOUSING_RESULT_SUCCESS)
     {
         for (auto const& member : neighborhood->GetMembers())
         {
-            if (member.PlayerGuid == player->GetGUID())
-                continue;
             if (Player* memberPlayer = ObjectAccessor::FindPlayer(member.PlayerGuid))
             {
-                WorldPackets::Neighborhood::NeighborhoodRosterResidentUpdate rosterUpdate;
-                rosterUpdate.PlayerGuid = neighborhoodRemoveSecondaryOwner.PlayerGuid;
-                rosterUpdate.NeighborhoodGuid = neighborhoodRemoveSecondaryOwner.NeighborhoodGuid;
-                memberPlayer->SendDirectMessage(rosterUpdate.Write());
+                if (member.PlayerGuid != player->GetGUID())
+                {
+                    WorldPackets::Neighborhood::NeighborhoodRosterResidentUpdate rosterUpdate;
+                    rosterUpdate.PlayerGuid = neighborhoodRemoveSecondaryOwner.PlayerGuid;
+                    rosterUpdate.NeighborhoodGuid = neighborhoodRemoveSecondaryOwner.NeighborhoodGuid;
+                    memberPlayer->SendDirectMessage(rosterUpdate.Write());
+                }
+
+                // Refresh manager mirror data on each online member's Account entity
+                Battlenet::Account& memberAccount = memberPlayer->GetSession()->GetBattlenetAccount();
+                memberAccount.ClearNeighborhoodMirrorManagers();
+                for (auto const& m : neighborhood->GetMembers())
+                {
+                    if (m.Role == NEIGHBORHOOD_ROLE_MANAGER || m.Role == NEIGHBORHOOD_ROLE_OWNER)
+                    {
+                        ObjectGuid bnetGuid;
+                        if (Player* mgr = ObjectAccessor::FindPlayer(m.PlayerGuid))
+                            bnetGuid = mgr->GetSession()->GetBattlenetAccountGUID();
+                        memberAccount.AddNeighborhoodMirrorManager(bnetGuid, m.PlayerGuid);
+                    }
+                }
             }
         }
     }
