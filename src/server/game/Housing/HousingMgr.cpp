@@ -116,11 +116,16 @@ void HousingMgr::LoadHouseLevelData()
         data.ID = entry->ID;
         data.Level = entry->Level;
         data.QuestID = entry->QuestID;
-        // Budget fields not in HouseLevelData DB2; populated from fallback defaults below
-        data.InteriorDecorPlacementBudget = static_cast<int32>(50 + entry->Level * 25);
-        data.ExteriorDecorPlacementBudget = static_cast<int32>(25 + entry->Level * 15);
-        data.RoomPlacementBudget = static_cast<int32>(20 + entry->Level * 10);
-        data.ExteriorFixtureBudget = static_cast<int32>(10 + entry->Level * 5);
+        // Budget values from captured game data; interior scales per level, others are constant
+        static constexpr int32 InteriorBudgetByLevel[] = { 0, 910, 1155, 1450, 1750, 2050 };
+        uint32 lvl = static_cast<uint32>(std::max<int32>(entry->Level, 1));
+        if (lvl <= 5)
+            data.InteriorDecorPlacementBudget = InteriorBudgetByLevel[lvl];
+        else
+            data.InteriorDecorPlacementBudget = 2050 + static_cast<int32>((lvl - 5) * 300); // +300/level extrapolation
+        data.ExteriorDecorPlacementBudget = 200;
+        data.RoomPlacementBudget = 19;
+        data.ExteriorFixtureBudget = 1000;
     }
 
     // Fallback defaults if no DB2 data available
@@ -132,10 +137,14 @@ void HousingMgr::LoadHouseLevelData()
             data.ID = level;
             data.Level = static_cast<int32>(level);
             data.QuestID = 0;
-            data.InteriorDecorPlacementBudget = static_cast<int32>(50 + level * 25);
-            data.ExteriorDecorPlacementBudget = static_cast<int32>(25 + level * 15);
-            data.RoomPlacementBudget = static_cast<int32>(20 + level * 10);
-            data.ExteriorFixtureBudget = static_cast<int32>(10 + level * 5);
+            static constexpr int32 InteriorBudgetByLevel[] = { 0, 910, 1155, 1450, 1750, 2050 };
+            if (level <= 5)
+                data.InteriorDecorPlacementBudget = InteriorBudgetByLevel[level];
+            else
+                data.InteriorDecorPlacementBudget = 2050 + static_cast<int32>((level - 5) * 300);
+            data.ExteriorDecorPlacementBudget = 200;
+            data.RoomPlacementBudget = 19;
+            data.ExteriorFixtureBudget = 1000;
         }
     }
 
@@ -400,8 +409,13 @@ uint32 HousingMgr::GetInteriorDecorBudgetForLevel(uint32 level) const
     if (levelData && levelData->InteriorDecorPlacementBudget > 0)
         return static_cast<uint32>(levelData->InteriorDecorPlacementBudget);
 
-    // Fallback: 50 base + 25 per level
-    return 50 + level * 25;
+    // Fallback: sniff-confirmed interior budgets
+    static constexpr uint32 InteriorBudgetByLevel[] = { 0, 910, 1155, 1450, 1750, 2050 };
+    if (level >= 1 && level <= 5)
+        return InteriorBudgetByLevel[level];
+    if (level > 5)
+        return 2050 + (level - 5) * 300;
+    return 910;
 }
 
 uint32 HousingMgr::GetExteriorDecorBudgetForLevel(uint32 level) const
@@ -410,8 +424,8 @@ uint32 HousingMgr::GetExteriorDecorBudgetForLevel(uint32 level) const
     if (levelData && levelData->ExteriorDecorPlacementBudget > 0)
         return static_cast<uint32>(levelData->ExteriorDecorPlacementBudget);
 
-    // Fallback: 25 base + 15 per level
-    return 25 + level * 15;
+    // Fallback: sniff-confirmed exterior budget (constant across levels)
+    return 200;
 }
 
 uint32 HousingMgr::GetRoomBudgetForLevel(uint32 level) const
@@ -420,8 +434,8 @@ uint32 HousingMgr::GetRoomBudgetForLevel(uint32 level) const
     if (levelData && levelData->RoomPlacementBudget > 0)
         return static_cast<uint32>(levelData->RoomPlacementBudget);
 
-    // Fallback: 20 base + 10 per level
-    return 20 + level * 10;
+    // Fallback: sniff-confirmed room budget (constant across levels)
+    return 19;
 }
 
 uint32 HousingMgr::GetFixtureBudgetForLevel(uint32 level) const
@@ -430,8 +444,8 @@ uint32 HousingMgr::GetFixtureBudgetForLevel(uint32 level) const
     if (levelData && levelData->ExteriorFixtureBudget > 0)
         return static_cast<uint32>(levelData->ExteriorFixtureBudget);
 
-    // Fallback: 10 base + 5 per level
-    return 10 + level * 5;
+    // Fallback: sniff-confirmed fixture budget (constant across levels)
+    return 1000;
 }
 
 uint32 HousingMgr::GetDecorWeightCost(uint32 decorEntryId) const

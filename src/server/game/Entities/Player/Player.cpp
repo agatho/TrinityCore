@@ -24723,6 +24723,13 @@ void Player::SendInitialPacketsBeforeAddToMap()
     // worldServerInfo.RestrictedAccountMaxMoney; /// @todo
     worldServerInfo.DifficultyID = GetMap()->GetDifficultyID();
     // worldServerInfo.XRealmPvpAlert;  /// @todo
+    if (Housing* housing = GetHousing())
+    {
+        worldServerInfo.HouseGUID = housing->GetHouseGuid();
+        worldServerInfo.HouseOwnerAccountGUID = GetSession()->GetBattlenetAccountGUID();
+        worldServerInfo.HouseCosmeticOwnerGUID = GetSession()->GetBattlenetAccountGUID();
+        worldServerInfo.NeighborhoodGUID = housing->GetNeighborhoodGuid();
+    }
     SendDirectMessage(worldServerInfo.Write());
 
     // Spell modifiers

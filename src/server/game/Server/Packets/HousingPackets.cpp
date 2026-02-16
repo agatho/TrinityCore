@@ -623,7 +623,7 @@ WorldPacket const* HousingRoomSetCeilingTypeResponse::Write()
 
 WorldPacket const* HousingSvcsNotifyPermissionsFailure::Write()
 {
-    _worldPacket << uint32(Result);
+    _worldPacket << uint16(Result);
     return &_worldPacket;
 }
 
@@ -1126,14 +1126,11 @@ WorldPacket const* NeighborhoodCharterSignatureRemovedNotification::Write()
 WorldPacket const* NeighborhoodPlayerEnterPlot::Write()
 {
     _worldPacket << PlayerGuid;
-    _worldPacket << PlotGuid;
     return &_worldPacket;
 }
 
 WorldPacket const* NeighborhoodPlayerLeavePlot::Write()
 {
-    _worldPacket << PlayerGuid;
-    _worldPacket << PlotGuid;
     return &_worldPacket;
 }
 
@@ -1283,8 +1280,12 @@ WorldPacket const* NeighborhoodGetRosterResponse::Write()
 
 WorldPacket const* NeighborhoodRosterResidentUpdate::Write()
 {
-    _worldPacket << PlayerGuid;
-    _worldPacket << NeighborhoodGuid;
+    _worldPacket << uint32(Residents.size());
+    for (auto const& resident : Residents)
+    {
+        _worldPacket << resident.PlayerGuid;
+        _worldPacket << uint16(resident.PlotIndex);
+    }
     return &_worldPacket;
 }
 

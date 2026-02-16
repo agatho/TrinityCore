@@ -966,7 +966,7 @@ namespace WorldPackets::Housing
     public:
         HousingSvcsNotifyPermissionsFailure() : ServerPacket(SMSG_HOUSING_SVCS_NOTIFY_PERMISSIONS_FAILURE) { }
         WorldPacket const* Write() override;
-        uint32 Result = 0;
+        uint16 Result = 0;  // Sniff-confirmed: 2-byte wire format (e.g. 0x0039 = 57)
     };
 
     class HousingSvcsGuildCreateNeighborhoodNotification final : public ServerPacket
@@ -1648,7 +1648,6 @@ namespace WorldPackets::Neighborhood
         NeighborhoodPlayerEnterPlot() : ServerPacket(SMSG_NEIGHBORHOOD_PLAYER_ENTER_PLOT) { }
         WorldPacket const* Write() override;
         ObjectGuid PlayerGuid;
-        ObjectGuid PlotGuid;
     };
 
     class NeighborhoodPlayerLeavePlot final : public ServerPacket
@@ -1656,8 +1655,6 @@ namespace WorldPackets::Neighborhood
     public:
         NeighborhoodPlayerLeavePlot() : ServerPacket(SMSG_NEIGHBORHOOD_PLAYER_LEAVE_PLOT) { }
         WorldPacket const* Write() override;
-        ObjectGuid PlayerGuid;
-        ObjectGuid PlotGuid;
     };
 
     class NeighborhoodEvictPlayerResponse final : public ServerPacket
@@ -1835,10 +1832,15 @@ namespace WorldPackets::Neighborhood
     class NeighborhoodRosterResidentUpdate final : public ServerPacket
     {
     public:
+        struct ResidentEntry
+        {
+            ObjectGuid PlayerGuid;
+            uint16 PlotIndex = 0;
+        };
+
         NeighborhoodRosterResidentUpdate() : ServerPacket(SMSG_NEIGHBORHOOD_ROSTER_RESIDENT_UPDATE) { }
         WorldPacket const* Write() override;
-        ObjectGuid PlayerGuid;
-        ObjectGuid NeighborhoodGuid;
+        std::vector<ResidentEntry> Residents;
     };
 
     class NeighborhoodInviteNameLookupResult final : public ServerPacket

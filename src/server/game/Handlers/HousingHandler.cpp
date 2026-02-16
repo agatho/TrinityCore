@@ -1107,7 +1107,7 @@ void WorldSession::HandleHousingSvcsTeleportToPlot(WorldPackets::Housing::Housin
     if (!neighborhood)
     {
         WorldPackets::Housing::HousingSvcsNotifyPermissionsFailure response;
-        response.Result = static_cast<uint32>(HOUSING_RESULT_NEIGHBORHOOD_NOT_FOUND);
+        response.Result = static_cast<uint16>(HOUSING_RESULT_NEIGHBORHOOD_NOT_FOUND);
         SendPacket(response.Write());
         return;
     }
@@ -1117,7 +1117,7 @@ void WorldSession::HandleHousingSvcsTeleportToPlot(WorldPackets::Housing::Housin
     if (!mapData)
     {
         WorldPackets::Housing::HousingSvcsNotifyPermissionsFailure response;
-        response.Result = static_cast<uint32>(HOUSING_RESULT_INVALID_PLOT);
+        response.Result = static_cast<uint16>(HOUSING_RESULT_INVALID_PLOT);
         SendPacket(response.Write());
         return;
     }
@@ -1185,7 +1185,7 @@ void WorldSession::HandleHousingSvcsStartTutorial(WorldPackets::Housing::Housing
 
         // Notify client of failure
         WorldPackets::Housing::HousingSvcsNotifyPermissionsFailure failResponse;
-        failResponse.Result = static_cast<uint32>(HOUSING_RESULT_NEIGHBORHOOD_NOT_FOUND);
+        failResponse.Result = static_cast<uint16>(HOUSING_RESULT_NEIGHBORHOOD_NOT_FOUND);
         SendPacket(failResponse.Write());
         return;
     }

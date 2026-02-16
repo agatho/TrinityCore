@@ -321,7 +321,7 @@ void WorldSession::HandleNeighborhoodCharterSendSignatureRequest(WorldPackets::N
     if (!targetPlayer)
     {
         WorldPackets::Housing::HousingSvcsNotifyPermissionsFailure response;
-        response.Result = static_cast<uint32>(HOUSING_RESULT_PLAYER_NOT_FOUND);
+        response.Result = static_cast<uint16>(HOUSING_RESULT_PLAYER_NOT_FOUND);
         SendPacket(response.Write());
         return;
     }
@@ -523,8 +523,7 @@ void WorldSession::HandleNeighborhoodAddSecondaryOwner(WorldPackets::Neighborhoo
                 if (member.PlayerGuid != player->GetGUID())
                 {
                     WorldPackets::Neighborhood::NeighborhoodRosterResidentUpdate rosterUpdate;
-                    rosterUpdate.PlayerGuid = neighborhoodAddSecondaryOwner.PlayerGuid;
-                    rosterUpdate.NeighborhoodGuid = neighborhoodAddSecondaryOwner.NeighborhoodGuid;
+                    rosterUpdate.Residents.push_back({ neighborhoodAddSecondaryOwner.PlayerGuid, uint16(member.PlotIndex) });
                     memberPlayer->SendDirectMessage(rosterUpdate.Write());
                 }
 
@@ -601,8 +600,7 @@ void WorldSession::HandleNeighborhoodRemoveSecondaryOwner(WorldPackets::Neighbor
                 if (member.PlayerGuid != player->GetGUID())
                 {
                     WorldPackets::Neighborhood::NeighborhoodRosterResidentUpdate rosterUpdate;
-                    rosterUpdate.PlayerGuid = neighborhoodRemoveSecondaryOwner.PlayerGuid;
-                    rosterUpdate.NeighborhoodGuid = neighborhoodRemoveSecondaryOwner.NeighborhoodGuid;
+                    rosterUpdate.Residents.push_back({ neighborhoodRemoveSecondaryOwner.PlayerGuid, uint16(member.PlotIndex) });
                     memberPlayer->SendDirectMessage(rosterUpdate.Write());
                 }
 
@@ -943,8 +941,7 @@ void WorldSession::HandleNeighborhoodBuyHouse(WorldPackets::Neighborhood::Neighb
             if (Player* memberPlayer = ObjectAccessor::FindPlayer(member.PlayerGuid))
             {
                 WorldPackets::Neighborhood::NeighborhoodRosterResidentUpdate rosterUpdate;
-                rosterUpdate.PlayerGuid = player->GetGUID();
-                rosterUpdate.NeighborhoodGuid = neighborhoodBuyHouse.NeighborhoodGuid;
+                rosterUpdate.Residents.push_back({ player->GetGUID(), uint16(neighborhoodBuyHouse.PlotIndex) });
                 memberPlayer->SendDirectMessage(rosterUpdate.Write());
             }
         }
@@ -1165,8 +1162,7 @@ void WorldSession::HandleNeighborhoodOfferOwnership(WorldPackets::Neighborhood::
             if (Player* memberPlayer = ObjectAccessor::FindPlayer(member.PlayerGuid))
             {
                 WorldPackets::Neighborhood::NeighborhoodRosterResidentUpdate rosterUpdate;
-                rosterUpdate.PlayerGuid = neighborhoodOfferOwnership.NewOwnerGuid;
-                rosterUpdate.NeighborhoodGuid = neighborhoodOfferOwnership.NeighborhoodGuid;
+                rosterUpdate.Residents.push_back({ neighborhoodOfferOwnership.NewOwnerGuid, uint16(member.PlotIndex) });
                 memberPlayer->SendDirectMessage(rosterUpdate.Write());
             }
         }
@@ -1304,8 +1300,7 @@ void WorldSession::HandleNeighborhoodEvictPlot(WorldPackets::Neighborhood::Neigh
             if (Player* memberPlayer = ObjectAccessor::FindPlayer(member.PlayerGuid))
             {
                 WorldPackets::Neighborhood::NeighborhoodRosterResidentUpdate rosterUpdate;
-                rosterUpdate.PlayerGuid = evictedPlayerGuid;
-                rosterUpdate.NeighborhoodGuid = neighborhoodEvictPlot.NeighborhoodGuid;
+                rosterUpdate.Residents.push_back({ evictedPlayerGuid, uint16(0) }); // evicted player no longer has a plot
                 memberPlayer->SendDirectMessage(rosterUpdate.Write());
             }
         }
