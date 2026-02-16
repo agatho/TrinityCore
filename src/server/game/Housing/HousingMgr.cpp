@@ -54,9 +54,6 @@ void HousingMgr::Initialize()
     LoadHouseExteriorWmoData();
     LoadHouseLevelRewardInfoData();
     LoadNeighborhoodInitiativeData();
-    LoadNeighborhoodInitiativeRewardData();
-    LoadNeighborhoodInitiativeTaskData();
-    LoadNeighborhoodInitiativeXTaskData();
     LoadRoomComponentData();
     LoadDecorCategoryData();
     LoadDecorSubcategoryData();
@@ -65,13 +62,12 @@ void HousingMgr::Initialize()
 
     TC_LOG_INFO("server.loading", ">> Loaded housing data: {} decor, {} levels, "
         "{} rooms, {} themes, {} decor materials, {} exterior wmos, {} level rewards, "
-        "{} initiatives, {} initiative tasks, {} neighborhood maps, {} neighborhood plots, "
+        "{} initiatives, {} neighborhood maps, {} neighborhood plots, "
         "{} decor categories, {} decor subcategories, {} decor dye slots in {}",
         uint32(_houseDecorStore.size()), uint32(_houseLevelDataStore.size()),
         uint32(_houseRoomStore.size()), uint32(_houseThemeStore.size()),
         uint32(_houseDecorMaterialStore.size()), uint32(_houseExteriorWmoStore.size()),
         uint32(_houseLevelRewardInfoStore.size()), uint32(_neighborhoodInitiativeStore.size()),
-        uint32(_neighborhoodInitiativeTaskStore.size()),
         uint32(_neighborhoodMapStore.size()), uint32(_neighborhoodPlotStore.size()),
         uint32(_decorCategoryStore.size()), uint32(_decorSubcategoryStore.size()),
         uint32(_decorDyeSlotStore.size()),
@@ -555,50 +551,6 @@ void HousingMgr::LoadNeighborhoodInitiativeData()
     TC_LOG_DEBUG("housing", "HousingMgr::LoadNeighborhoodInitiativeData: Loaded {} NeighborhoodInitiative entries", uint32(_neighborhoodInitiativeStore.size()));
 }
 
-void HousingMgr::LoadNeighborhoodInitiativeRewardData()
-{
-    for (NeighborhoodInitiativeRewardEntry const* entry : sNeighborhoodInitiativeRewardStore)
-    {
-        NeighborhoodInitiativeRewardData& data = _neighborhoodInitiativeRewardStore[entry->ID];
-        data.ID = entry->ID;
-        data.InitiativeID = entry->InitiativeID;
-        data.ChanceWeight = entry->ChanceWeight;
-        data.RewardValue = entry->RewardValue;
-    }
-
-    TC_LOG_DEBUG("housing", "HousingMgr::LoadNeighborhoodInitiativeRewardData: Loaded {} NeighborhoodInitiativeReward entries", uint32(_neighborhoodInitiativeRewardStore.size()));
-}
-
-void HousingMgr::LoadNeighborhoodInitiativeTaskData()
-{
-    for (NeighborhoodInitiativeTaskEntry const* entry : sNeighborhoodInitiativeTaskStore)
-    {
-        NeighborhoodInitiativeTaskData& data = _neighborhoodInitiativeTaskStore[entry->ID];
-        data.ID = entry->ID;
-        data.Name = SafeStr(entry->Name[sWorld->GetDefaultDbcLocale()]);
-        data.Description = SafeStr(entry->Description[sWorld->GetDefaultDbcLocale()]);
-        data.TaskType = entry->TaskType;
-        data.RequiredCount = entry->RequiredCount;
-        data.TargetID = entry->TargetID;
-        data.ProgressWeight = entry->ProgressWeight;
-        data.PlayerConditionID = entry->PlayerConditionID;
-    }
-
-    TC_LOG_DEBUG("housing", "HousingMgr::LoadNeighborhoodInitiativeTaskData: Loaded {} NeighborhoodInitiativeTask entries", uint32(_neighborhoodInitiativeTaskStore.size()));
-}
-
-void HousingMgr::LoadNeighborhoodInitiativeXTaskData()
-{
-    for (NeighborhoodInitiativeXTaskEntry const* entry : sNeighborhoodInitiativeXTaskStore)
-    {
-        // This is a mapping table: link tasks to initiatives
-        if (auto itr = _neighborhoodInitiativeTaskStore.find(entry->TaskID); itr != _neighborhoodInitiativeTaskStore.end())
-            _tasksByInitiative[entry->InitiativeID].push_back(&itr->second);
-    }
-
-    TC_LOG_DEBUG("housing", "HousingMgr::LoadNeighborhoodInitiativeXTaskData: Built task index for {} initiatives", uint32(_tasksByInitiative.size()));
-}
-
 void HousingMgr::LoadRoomComponentData()
 {
     uint32 doorwayCount = 0;
@@ -693,25 +645,7 @@ NeighborhoodInitiativeData const* HousingMgr::GetNeighborhoodInitiativeData(uint
     return nullptr;
 }
 
-NeighborhoodInitiativeRewardData const* HousingMgr::GetNeighborhoodInitiativeRewardData(uint32 id) const
-{
-    auto itr = _neighborhoodInitiativeRewardStore.find(id);
-    if (itr != _neighborhoodInitiativeRewardStore.end())
-        return &itr->second;
-
-    return nullptr;
-}
-
-NeighborhoodInitiativeTaskData const* HousingMgr::GetNeighborhoodInitiativeTaskData(uint32 id) const
-{
-    auto itr = _neighborhoodInitiativeTaskStore.find(id);
-    if (itr != _neighborhoodInitiativeTaskStore.end())
-        return &itr->second;
-
-    return nullptr;
-}
-
-// --- 3 indexed lookup accessors ---
+// --- 2 indexed lookup accessors ---
 
 std::vector<HouseDecorMaterialData const*> HousingMgr::GetMaterialsForDecor(uint32 houseDecorId) const
 {
@@ -726,15 +660,6 @@ std::vector<HouseLevelRewardInfoData const*> HousingMgr::GetRewardsForLevel(uint
 {
     auto itr = _rewardsByLevel.find(houseLevelId);
     if (itr != _rewardsByLevel.end())
-        return itr->second;
-
-    return {};
-}
-
-std::vector<NeighborhoodInitiativeTaskData const*> HousingMgr::GetTasksForInitiative(uint32 initiativeId) const
-{
-    auto itr = _tasksByInitiative.find(initiativeId);
-    if (itr != _tasksByInitiative.end())
         return itr->second;
 
     return {};
