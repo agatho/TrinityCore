@@ -243,9 +243,9 @@ void HousingRoomSetCeilingType::Read()
 void HousingSvcsGuildCreateNeighborhood::Read()
 {
     _worldPacket >> NeighborhoodTypeID;
-    _worldPacket >> Flags;
     _worldPacket >> SizedString::BitsSize<7>(NeighborhoodName);
 
+    _worldPacket >> Flags;
     _worldPacket >> SizedString::Data(NeighborhoodName);
 }
 
@@ -936,6 +936,29 @@ WorldPacket const* InvalidateNeighborhood::Write()
     return &_worldPacket;
 }
 
+// ============================================================
+// Initiative System SMSG Responses (0x4203xx)
+// ============================================================
+
+WorldPacket const* InitiativeServiceStatus::Write()
+{
+    _worldPacket.WriteBit(ServiceEnabled);
+    _worldPacket.FlushBits();
+    return &_worldPacket;
+}
+
+WorldPacket const* GetPlayerInitiativeInfoResult::Write()
+{
+    _worldPacket << uint32(Result);
+    return &_worldPacket;
+}
+
+WorldPacket const* GetInitiativeActivityLogResult::Write()
+{
+    _worldPacket << uint32(Result);
+    return &_worldPacket;
+}
+
 } // namespace WorldPackets::Housing
 
 // ============================================================
@@ -978,7 +1001,6 @@ void NeighborhoodCharterSendSignatureRequest::Read()
 
 void NeighborhoodUpdateName::Read()
 {
-    _worldPacket >> NeighborhoodGuid;
     _worldPacket >> SizedString::BitsSize<7>(NewName);
 
     _worldPacket >> SizedString::Data(NewName);
@@ -992,25 +1014,21 @@ void NeighborhoodSetPublicFlag::Read()
 
 void NeighborhoodAddSecondaryOwner::Read()
 {
-    _worldPacket >> NeighborhoodGuid;
     _worldPacket >> PlayerGuid;
 }
 
 void NeighborhoodRemoveSecondaryOwner::Read()
 {
-    _worldPacket >> NeighborhoodGuid;
     _worldPacket >> PlayerGuid;
 }
 
 void NeighborhoodInviteResident::Read()
 {
-    _worldPacket >> NeighborhoodGuid;
     _worldPacket >> PlayerGuid;
 }
 
 void NeighborhoodCancelInvitation::Read()
 {
-    _worldPacket >> NeighborhoodGuid;
     _worldPacket >> InviteeGuid;
 }
 
@@ -1019,36 +1037,27 @@ void NeighborhoodPlayerDeclineInvite::Read()
     _worldPacket >> NeighborhoodGuid;
 }
 
-void NeighborhoodPlayerGetInvite::Read()
-{
-    _worldPacket >> NeighborhoodGuid;
-}
-
-void NeighborhoodGetInvites::Read()
-{
-    _worldPacket >> NeighborhoodGuid;
-}
-
 void NeighborhoodBuyHouse::Read()
 {
-    _worldPacket >> NeighborhoodGuid;
     _worldPacket >> PlotIndex;
+    _worldPacket >> NeighborhoodGuid;
+    _worldPacket >> PlotGuid;
 }
 
 void NeighborhoodMoveHouse::Read()
 {
-    _worldPacket >> SourcePlotGuid;
-    _worldPacket >> NewPlotIndex;
+    _worldPacket >> NeighborhoodGuid;
+    _worldPacket >> PlotGuid;
 }
 
 void NeighborhoodOpenCornerstoneUI::Read()
 {
-    _worldPacket >> CornerstoneGuid;
+    _worldPacket >> PlotIndex;
+    _worldPacket >> NeighborhoodGuid;
 }
 
 void NeighborhoodOfferOwnership::Read()
 {
-    _worldPacket >> NeighborhoodGuid;
     _worldPacket >> NewOwnerGuid;
 }
 
@@ -1059,8 +1068,8 @@ void NeighborhoodGetRoster::Read()
 
 void NeighborhoodEvictPlot::Read()
 {
+    _worldPacket >> PlotIndex;
     _worldPacket >> NeighborhoodGuid;
-    _worldPacket >> PlotGuid;
 }
 
 // ============================================================
@@ -1312,6 +1321,18 @@ WorldPacket const* NeighborhoodEvictPlotNotice::Write()
     _worldPacket << NeighborhoodGuid;
     _worldPacket << PlotGuid;
     return &_worldPacket;
+}
+
+// --- Initiative System ---
+
+void GetAvailableInitiativeRequest::Read()
+{
+    _worldPacket >> NeighborhoodGuid;
+}
+
+void GetInitiativeActivityLogRequest::Read()
+{
+    _worldPacket >> NeighborhoodGuid;
 }
 
 } // namespace WorldPackets::Neighborhood

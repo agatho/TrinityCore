@@ -400,7 +400,7 @@ namespace WorldPackets::Housing
 
         uint32 NeighborhoodTypeID = 0;
         std::string NeighborhoodName;
-        uint32 Flags = 0;
+        uint8 Flags = 0;
     };
 
     class HousingSvcsNeighborhoodReservePlot final : public ClientPacket
@@ -1342,6 +1342,34 @@ namespace WorldPackets::Housing
         WorldPacket const* Write() override;
         ObjectGuid NeighborhoodGuid;
     };
+
+    // ============================================================
+    // Initiative System SMSG Responses (0x4203xx)
+    // ============================================================
+
+    class InitiativeServiceStatus final : public ServerPacket
+    {
+    public:
+        InitiativeServiceStatus() : ServerPacket(SMSG_INITIATIVE_SERVICE_STATUS) { }
+        WorldPacket const* Write() override;
+        bool ServiceEnabled = false;
+    };
+
+    class GetPlayerInitiativeInfoResult final : public ServerPacket
+    {
+    public:
+        GetPlayerInitiativeInfoResult() : ServerPacket(SMSG_GET_PLAYER_INITIATIVE_INFO_RESULT) { }
+        WorldPacket const* Write() override;
+        uint32 Result = 0;
+    };
+
+    class GetInitiativeActivityLogResult final : public ServerPacket
+    {
+    public:
+        GetInitiativeActivityLogResult() : ServerPacket(SMSG_GET_INITIATIVE_ACTIVITY_LOG_RESULT) { }
+        WorldPacket const* Write() override;
+        uint32 Result = 0;
+    };
 }
 
 namespace WorldPackets::Neighborhood
@@ -1421,7 +1449,6 @@ namespace WorldPackets::Neighborhood
 
         void Read() override;
 
-        ObjectGuid NeighborhoodGuid;
         std::string NewName;
     };
 
@@ -1443,7 +1470,6 @@ namespace WorldPackets::Neighborhood
 
         void Read() override;
 
-        ObjectGuid NeighborhoodGuid;
         ObjectGuid PlayerGuid;
     };
 
@@ -1454,7 +1480,6 @@ namespace WorldPackets::Neighborhood
 
         void Read() override;
 
-        ObjectGuid NeighborhoodGuid;
         ObjectGuid PlayerGuid;
     };
 
@@ -1465,7 +1490,6 @@ namespace WorldPackets::Neighborhood
 
         void Read() override;
 
-        ObjectGuid NeighborhoodGuid;
         ObjectGuid PlayerGuid;
     };
 
@@ -1476,7 +1500,6 @@ namespace WorldPackets::Neighborhood
 
         void Read() override;
 
-        ObjectGuid NeighborhoodGuid;
         ObjectGuid InviteeGuid;
     };
 
@@ -1495,9 +1518,7 @@ namespace WorldPackets::Neighborhood
     public:
         explicit NeighborhoodPlayerGetInvite(WorldPacket&& packet) : ClientPacket(CMSG_NEIGHBORHOOD_PLAYER_GET_INVITE, std::move(packet)) { }
 
-        void Read() override;
-
-        ObjectGuid NeighborhoodGuid;
+        void Read() override { }
     };
 
     class NeighborhoodGetInvites final : public ClientPacket
@@ -1505,9 +1526,7 @@ namespace WorldPackets::Neighborhood
     public:
         explicit NeighborhoodGetInvites(WorldPacket&& packet) : ClientPacket(CMSG_NEIGHBORHOOD_GET_INVITES, std::move(packet)) { }
 
-        void Read() override;
-
-        ObjectGuid NeighborhoodGuid;
+        void Read() override { }
     };
 
     class NeighborhoodBuyHouse final : public ClientPacket
@@ -1518,7 +1537,8 @@ namespace WorldPackets::Neighborhood
         void Read() override;
 
         ObjectGuid NeighborhoodGuid;
-        uint8 PlotIndex = 0;
+        ObjectGuid PlotGuid;
+        uint32 PlotIndex = 0;
     };
 
     class NeighborhoodMoveHouse final : public ClientPacket
@@ -1528,8 +1548,8 @@ namespace WorldPackets::Neighborhood
 
         void Read() override;
 
-        ObjectGuid SourcePlotGuid;
-        uint8 NewPlotIndex = 0;
+        ObjectGuid NeighborhoodGuid;
+        ObjectGuid PlotGuid;
     };
 
     class NeighborhoodOpenCornerstoneUI final : public ClientPacket
@@ -1539,7 +1559,8 @@ namespace WorldPackets::Neighborhood
 
         void Read() override;
 
-        ObjectGuid CornerstoneGuid;
+        ObjectGuid NeighborhoodGuid;
+        uint32 PlotIndex = 0;
     };
 
     class NeighborhoodOfferOwnership final : public ClientPacket
@@ -1549,7 +1570,6 @@ namespace WorldPackets::Neighborhood
 
         void Read() override;
 
-        ObjectGuid NeighborhoodGuid;
         ObjectGuid NewOwnerGuid;
     };
 
@@ -1571,7 +1591,7 @@ namespace WorldPackets::Neighborhood
         void Read() override;
 
         ObjectGuid NeighborhoodGuid;
-        ObjectGuid PlotGuid;
+        uint32 PlotIndex = 0;
     };
 
     // ============================================================
@@ -1870,6 +1890,30 @@ namespace WorldPackets::Neighborhood
         WorldPacket const* Write() override;
         ObjectGuid NeighborhoodGuid;
         ObjectGuid PlotGuid;
+    };
+    // --- Initiative System ---
+
+    class NeighborhoodInitiativeServiceStatusCheck final : public ClientPacket
+    {
+    public:
+        NeighborhoodInitiativeServiceStatusCheck(WorldPacket&& packet) : ClientPacket(CMSG_NEIGHBORHOOD_INITIATIVE_SERVICE_STATUS_CHECK, std::move(packet)) { }
+        void Read() override { }
+    };
+
+    class GetAvailableInitiativeRequest final : public ClientPacket
+    {
+    public:
+        GetAvailableInitiativeRequest(WorldPacket&& packet) : ClientPacket(CMSG_GET_AVAILABLE_INITIATIVE_REQUEST, std::move(packet)) { }
+        void Read() override;
+        ObjectGuid NeighborhoodGuid;
+    };
+
+    class GetInitiativeActivityLogRequest final : public ClientPacket
+    {
+    public:
+        GetInitiativeActivityLogRequest(WorldPacket&& packet) : ClientPacket(CMSG_GET_INITIATIVE_ACTIVITY_LOG_REQUEST, std::move(packet)) { }
+        void Read() override;
+        ObjectGuid NeighborhoodGuid;
     };
 }
 

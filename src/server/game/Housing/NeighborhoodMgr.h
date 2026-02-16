@@ -52,6 +52,7 @@ public:
     std::vector<Neighborhood*> GetPublicNeighborhoods() const;
     std::vector<Neighborhood*> GetNeighborhoodsForPlayer(ObjectGuid playerGuid) const;
     std::string GetNeighborhoodName(ObjectGuid neighborhoodGuid) const;
+    Neighborhood* FindNeighborhoodWithPendingInvite(ObjectGuid playerGuid);
 
     // Tutorial support
     Neighborhood* FindOrCreateTutorialNeighborhood(ObjectGuid playerGuid, uint32 teamId);

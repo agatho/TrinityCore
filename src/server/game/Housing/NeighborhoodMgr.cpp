@@ -274,6 +274,16 @@ std::string NeighborhoodMgr::GetNeighborhoodName(ObjectGuid neighborhoodGuid) co
     return "";
 }
 
+Neighborhood* NeighborhoodMgr::FindNeighborhoodWithPendingInvite(ObjectGuid playerGuid)
+{
+    for (auto const& [guid, neighborhood] : _neighborhoods)
+    {
+        if (neighborhood->HasPendingInvite(playerGuid))
+            return neighborhood.get();
+    }
+    return nullptr;
+}
+
 Neighborhood* NeighborhoodMgr::FindOrCreateTutorialNeighborhood(ObjectGuid playerGuid, uint32 teamId)
 {
     // Check if player already belongs to a neighborhood
