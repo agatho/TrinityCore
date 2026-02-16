@@ -18,10 +18,13 @@
 #include "WorldSession.h"
 #include "Account.h"
 #include "DatabaseEnv.h"
+#include "GameObject.h"
 #include "Guild.h"
 #include "GuildMgr.h"
 #include "Housing.h"
 #include "HousingDefines.h"
+#include "HousingMap.h"
+#include "HousingMgr.h"
 #include "HousingPackets.h"
 #include "Log.h"
 #include "Neighborhood.h"
@@ -960,6 +963,9 @@ void WorldSession::HandleNeighborhoodBuyHouse(WorldPackets::Neighborhood::Neighb
         TC_LOG_DEBUG("housing", "Player {} purchased plot {} in neighborhood {}",
             player->GetGUID().ToString(), neighborhoodBuyHouse.PlotIndex,
             neighborhoodBuyHouse.NeighborhoodGuid.ToString());
+
+        // Check if neighborhoods need expansion after plot purchase
+        sNeighborhoodMgr.CheckAndExpandNeighborhoods();
     }
     else
     {
@@ -1024,17 +1030,79 @@ void WorldSession::HandleNeighborhoodOpenCornerstoneUI(WorldPackets::Neighborhoo
     if (!player)
         return;
 
-    TC_LOG_INFO("housing", "CMSG_NEIGHBORHOOD_OPEN_CORNERSTONE_UI CornerstoneGuid: {}",
+    TC_LOG_DEBUG("housing", "CMSG_NEIGHBORHOOD_OPEN_CORNERSTONE_UI CornerstoneGuid: {}",
         neighborhoodOpenCornerstoneUI.CornerstoneGuid.ToString());
 
-    // Cornerstone interaction opens the neighborhood UI
-    // The client handles the UI display based on the cornerstone's neighborhood data
+    // Get the HousingMap and its neighborhood
+    HousingMap* housingMap = dynamic_cast<HousingMap*>(player->GetMap());
+    if (!housingMap || !housingMap->GetNeighborhood())
+    {
+        WorldPackets::Neighborhood::NeighborhoodOpenCornerstoneUIResponse response;
+        response.Result = static_cast<uint32>(HOUSING_RESULT_NEIGHBORHOOD_NOT_FOUND);
+        SendPacket(response.Write());
+
+        TC_LOG_DEBUG("housing", "HandleNeighborhoodOpenCornerstoneUI: Player {} not on a housing map",
+            player->GetGUID().ToString());
+        return;
+    }
+
+    Neighborhood* neighborhood = housingMap->GetNeighborhood();
+
+    // Find the cornerstone GO to determine its position
+    GameObject* cornerstone = player->GetMap()->GetGameObject(neighborhoodOpenCornerstoneUI.CornerstoneGuid);
+    if (!cornerstone)
+    {
+        WorldPackets::Neighborhood::NeighborhoodOpenCornerstoneUIResponse response;
+        response.Result = static_cast<uint32>(HOUSING_RESULT_RPC_ERROR);
+        SendPacket(response.Write());
+
+        TC_LOG_DEBUG("housing", "HandleNeighborhoodOpenCornerstoneUI: Cornerstone GO {} not found",
+            neighborhoodOpenCornerstoneUI.CornerstoneGuid.ToString());
+        return;
+    }
+
+    // Match the cornerstone's position to a plot index by finding the nearest plot
+    uint32 neighborhoodMapId = neighborhood->GetNeighborhoodMapID();
+    std::vector<NeighborhoodPlotData const*> plots = sHousingMgr.GetPlotsForMap(neighborhoodMapId);
+
+    uint8 matchedPlotIndex = INVALID_PLOT_INDEX;
+    uint64 matchedCost = 0;
+    float closestDist = 5.0f; // Max matching distance — cornerstone should be very close to its plot position
+
+    for (NeighborhoodPlotData const* plot : plots)
+    {
+        float dx = cornerstone->GetPositionX() - plot->CornerstonePosition[0];
+        float dy = cornerstone->GetPositionY() - plot->CornerstonePosition[1];
+        float dist = std::sqrt(dx * dx + dy * dy);
+
+        if (dist < closestDist)
+        {
+            closestDist = dist;
+            matchedPlotIndex = static_cast<uint8>(plot->PlotIndex);
+            matchedCost = plot->Cost;
+        }
+    }
+
+    if (matchedPlotIndex == INVALID_PLOT_INDEX)
+    {
+        WorldPackets::Neighborhood::NeighborhoodOpenCornerstoneUIResponse response;
+        response.Result = static_cast<uint32>(HOUSING_RESULT_RPC_ERROR);
+        SendPacket(response.Write());
+
+        TC_LOG_ERROR("housing", "HandleNeighborhoodOpenCornerstoneUI: No plot matched cornerstone at ({}, {}, {})",
+            cornerstone->GetPositionX(), cornerstone->GetPositionY(), cornerstone->GetPositionZ());
+        return;
+    }
+
     WorldPackets::Neighborhood::NeighborhoodOpenCornerstoneUIResponse response;
     response.Result = static_cast<uint32>(HOUSING_RESULT_SUCCESS);
+    response.NeighborhoodGuid = neighborhood->GetGuid();
+    response.PlotIndex = matchedPlotIndex;
+    response.Cost = matchedCost;
     SendPacket(response.Write());
 
-    TC_LOG_DEBUG("housing", "Player {} interacted with cornerstone {}",
-        player->GetGUID().ToString(), neighborhoodOpenCornerstoneUI.CornerstoneGuid.ToString());
+    TC_LOG_DEBUG("housing", "HandleNeighborhoodOpenCornerstoneUI: Player {} opened cornerstone UI for plot {} (cost: {}) in neighborhood '{}'",
+        player->GetGUID().ToString(), matchedPlotIndex, matchedCost, neighborhood->GetName());
 }
 
 void WorldSession::HandleNeighborhoodOfferOwnership(WorldPackets::Neighborhood::NeighborhoodOfferOwnership const& neighborhoodOfferOwnership)

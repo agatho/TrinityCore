@@ -56,6 +56,9 @@ public:
     // Tutorial support
     Neighborhood* FindOrCreateTutorialNeighborhood(ObjectGuid playerGuid, uint32 teamId);
 
+    // Expansion
+    void CheckAndExpandNeighborhoods();
+
     // Charter support
     ObjectGuid GenerateNeighborhoodGuid();
 
