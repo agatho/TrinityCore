@@ -2918,11 +2918,19 @@ INSERT INTO `creature_template_addon` (`entry`, `emote`, `aiAnimKit`, `movementA
 -- CREATURE TEMPLATE -> GOSSIP MENU LINKAGE
 -- ================================================================
 
-UPDATE `creature_template` SET `gossip_menu_id`=41191 WHERE `entry`=256078; -- Lyssabel Dawnpetal (Stormwind)
-UPDATE `creature_template` SET `gossip_menu_id`=40076 WHERE `entry`=248854; -- The Last Architect
-UPDATE `creature_template` SET `gossip_menu_id`=41379 WHERE `entry`=255126; -- Helmi Cooper (Dye Crafter)
-UPDATE `creature_template` SET `gossip_menu_id`=41352 WHERE `entry`=255104; -- Jorvan Longmoor (House Upgrader)
-UPDATE `creature_template` SET `gossip_menu_id`=35728 WHERE `entry` IN (236111,236112,236113,236115,236116,236117,236118,236119); -- All 8 Flightmasters
+DELETE FROM `creature_template_gossip` WHERE `CreatureID` IN (256078,248854,255126,255104,236111,236112,236113,236115,236116,236117,236118,236119);
+INSERT INTO `creature_template_gossip` (`CreatureID`, `MenuID`) VALUES (256078, 41191); -- Lyssabel Dawnpetal (Stormwind)
+INSERT INTO `creature_template_gossip` (`CreatureID`, `MenuID`) VALUES (248854, 40076); -- The Last Architect
+INSERT INTO `creature_template_gossip` (`CreatureID`, `MenuID`) VALUES (255126, 41379); -- Helmi Cooper (Dye Crafter)
+INSERT INTO `creature_template_gossip` (`CreatureID`, `MenuID`) VALUES (255104, 41352); -- Jorvan Longmoor (House Upgrader)
+INSERT INTO `creature_template_gossip` (`CreatureID`, `MenuID`) VALUES (236111, 35728); -- Flightmaster
+INSERT INTO `creature_template_gossip` (`CreatureID`, `MenuID`) VALUES (236112, 35728); -- Flightmaster
+INSERT INTO `creature_template_gossip` (`CreatureID`, `MenuID`) VALUES (236113, 35728); -- Flightmaster
+INSERT INTO `creature_template_gossip` (`CreatureID`, `MenuID`) VALUES (236115, 35728); -- Flightmaster
+INSERT INTO `creature_template_gossip` (`CreatureID`, `MenuID`) VALUES (236116, 35728); -- Flightmaster
+INSERT INTO `creature_template_gossip` (`CreatureID`, `MenuID`) VALUES (236117, 35728); -- Flightmaster
+INSERT INTO `creature_template_gossip` (`CreatureID`, `MenuID`) VALUES (236118, 35728); -- Flightmaster
+INSERT INTO `creature_template_gossip` (`CreatureID`, `MenuID`) VALUES (236119, 35728); -- Flightmaster
 
 -- ================================================================
 -- CREATURE SPAWNS (1538 total)
