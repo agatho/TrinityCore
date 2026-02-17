@@ -159,6 +159,10 @@ HousingMap* MapManager::CreateHousing(uint32 mapId, uint32 instanceId, uint32 ne
     map->LoadNeighborhoodData();
     map->InitSpawnGroupState();
 
+    // Eagerly spawn all plot GOs/ATs — housing maps need all plots visible
+    // regardless of which grids are currently loaded around the player
+    map->SpawnPlotGameObjects();
+
     TC_LOG_DEBUG("housing", "MapManager::CreateHousing: Created housing map {} instanceId {} for neighborhood {}",
         mapId, instanceId, neighborhoodId);
 
