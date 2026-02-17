@@ -64,6 +64,7 @@
 #include "GarrisonMgr.h"
 #include "GitRevision.h"
 #include "Housing.h"
+#include "HousingMap.h"
 #include "HousingMgr.h"
 #include "HousingPackets.h"
 #include "Neighborhood.h"
@@ -18568,7 +18569,7 @@ bool Player::LoadFromDB(ObjectGuid guid, CharacterDatabaseQueryHolder const& hol
         holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_HOUSING_ROOMS),
         holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_HOUSING_FIXTURES),
         holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_HOUSING_CATALOG)))
-        _housing = std::move(housing);
+        _housings.push_back(std::move(housing));
 
     // Always register PlayerHouseInfoComponent_C fragment on the Player entity.
     // The client requires this fragment to resolve housing data from the Player descriptor;
@@ -18581,19 +18582,22 @@ bool Player::LoadFromDB(ObjectGuid guid, CharacterDatabaseQueryHolder const& hol
             WowCS::GetRawFragmentData(m_playerHouseInfoComponentData));
     }
 
-    // Populate PlayerHouseInfoComponentData::Houses with the player's house data
+    // Populate PlayerHouseInfoComponentData::Houses with all the player's house data
     // so the client knows about houses through the UpdateField system
-    if (_housing && !_housing->GetHouseGuid().IsEmpty())
+    for (auto const& h : _housings)
     {
+        if (!h || h->GetHouseGuid().IsEmpty())
+            continue;
+
         UF::PlayerMirrorHouse& mirrorHouse = AddDynamicUpdateFieldValue(
             m_values.ModifyValue(&Player::m_playerHouseInfoComponentData, 0)
                 .ModifyValue(&UF::PlayerHouseInfoComponentData::Houses));
-        mirrorHouse.Guid = _housing->GetHouseGuid();
-        mirrorHouse.NeighborhoodGUID = _housing->GetNeighborhoodGuid();
-        mirrorHouse.Level = _housing->GetLevel();
-        mirrorHouse.Favor = static_cast<uint32>(std::min<uint64>(_housing->GetFavor64(), std::numeric_limits<uint32>::max()));
+        mirrorHouse.Guid = h->GetHouseGuid();
+        mirrorHouse.NeighborhoodGUID = h->GetNeighborhoodGuid();
+        mirrorHouse.Level = h->GetLevel();
+        mirrorHouse.Favor = static_cast<uint32>(std::min<uint64>(h->GetFavor64(), std::numeric_limits<uint32>::max()));
         mirrorHouse.MapID = 0; // Will be resolved when entering neighborhood
-        mirrorHouse.PlotID = _housing->GetPlotIndex();
+        mirrorHouse.PlotID = h->GetPlotIndex();
     }
 
     _InitHonorLevelOnLoadFromDB(fields.honor, fields.honorLevel);
@@ -20575,8 +20579,9 @@ void Player::SaveToDB(LoginDatabaseTransaction loginTransaction, CharacterDataba
     _SaveCharacterBankTabSettings(trans);
     if (_garrison)
         _garrison->SaveToDB(trans);
-    if (_housing)
-        _housing->SaveToDB(trans);
+    for (auto const& h : _housings)
+        if (h)
+            h->SaveToDB(trans);
 
     // check if stats should only be saved on logout
     // save stats can be out of transaction
@@ -24875,7 +24880,7 @@ void Player::SendInitialPacketsAfterAddToMap()
         if (!neighborhoods.empty())
         {
             Neighborhood* neighborhood = neighborhoods[0];
-            Housing* housing = GetHousing();
+            Housing* housing = GetHousingForNeighborhood(neighborhood->GetGuid());
 
             // Send proactive HouseStatus so client knows about the neighborhood
             WorldPackets::Housing::HousingHouseStatusResponse statusResponse;
@@ -24884,7 +24889,9 @@ void Player::SendInitialPacketsAfterAddToMap()
             if (housing)
             {
                 statusResponse.HouseGuid = housing->GetHouseGuid();
-                statusResponse.Status = 1;  // Has house
+                statusResponse.HouseStatus = 1;  // Has house
+                statusResponse.PlotIndex = housing->GetPlotIndex();
+                statusResponse.StatusFlags = 0;
             }
             SendDirectMessage(statusResponse.Write());
 
@@ -24898,6 +24905,8 @@ void Player::SendInitialPacketsAfterAddToMap()
             account.ClearNeighborhoodMirrorHouses();
             for (auto const& plot : neighborhood->GetPlots())
             {
+                if (!plot.IsOccupied())
+                    continue;
                 if (!plot.HouseGuid.IsEmpty())
                     account.AddNeighborhoodMirrorHouse(plot.HouseGuid, plot.OwnerGuid);
             }
@@ -24928,13 +24937,16 @@ void Player::SendInitialPacketsAfterAddToMap()
                 data.Role = member.Role;
                 data.PlotIndex = member.PlotIndex;
                 data.JoinTime = member.JoinTime;
+                if (member.PlotIndex != INVALID_PLOT_INDEX)
+                    if (Neighborhood::PlotInfo const* plotInfo = neighborhood->GetPlotInfo(member.PlotIndex))
+                        data.HouseGuid = plotInfo->HouseGuid;
                 rosterResponse.Members.push_back(data);
             }
             SendDirectMessage(rosterResponse.Write());
 
             TC_LOG_INFO("housing", "Player {} entered neighborhood map {} - sent HouseStatus + roster + NeighborhoodMirrorData (Neighborhood: '{}' {}, Members: {}, Plots: {}, HasHouse: {})",
                 GetGUID().ToString(), GetMapId(), neighborhood->GetName(), neighborhood->GetGuid().ToString(),
-                members.size(), neighborhood->GetPlots().size(), housing ? "yes" : "no");
+                members.size(), neighborhood->GetOccupiedPlotCount(), housing ? "yes" : "no");
         }
     }
 
@@ -29831,16 +29843,60 @@ void Player::CreateHousing(ObjectGuid neighborhoodGuid, uint8 plotIndex)
 {
     std::unique_ptr<Housing> housing(new Housing(this));
     if (housing->Create(neighborhoodGuid, plotIndex) == HOUSING_RESULT_SUCCESS)
-        _housing = std::move(housing);
+        _housings.push_back(std::move(housing));
 }
 
-void Player::DeleteHousing()
+void Player::DeleteHousing(ObjectGuid neighborhoodGuid)
 {
-    if (_housing)
+    auto it = std::find_if(_housings.begin(), _housings.end(),
+        [&neighborhoodGuid](std::unique_ptr<Housing> const& h) { return h && h->GetNeighborhoodGuid() == neighborhoodGuid; });
+    if (it != _housings.end())
     {
-        _housing->Delete();
-        _housing.reset();
+        (*it)->Delete();
+        _housings.erase(it);
     }
+}
+
+Housing* Player::GetHousing() const
+{
+    if (_housings.empty())
+        return nullptr;
+
+    // If on a HousingMap, return the housing for that map's neighborhood
+    if (IsInWorld())
+    {
+        if (HousingMap* housingMap = dynamic_cast<HousingMap*>(GetMap()))
+        {
+            if (Neighborhood* neighborhood = housingMap->GetNeighborhood())
+            {
+                ObjectGuid neighborhoodGuid = neighborhood->GetGuid();
+                for (auto const& h : _housings)
+                    if (h && h->GetNeighborhoodGuid() == neighborhoodGuid)
+                        return h.get();
+            }
+        }
+    }
+
+    // Default: return first housing
+    return _housings[0].get();
+}
+
+Housing* Player::GetHousingForNeighborhood(ObjectGuid neighborhoodGuid) const
+{
+    for (auto const& h : _housings)
+        if (h && h->GetNeighborhoodGuid() == neighborhoodGuid)
+            return h.get();
+    return nullptr;
+}
+
+std::vector<Housing const*> Player::GetAllHousings() const
+{
+    std::vector<Housing const*> result;
+    result.reserve(_housings.size());
+    for (auto const& h : _housings)
+        if (h)
+            result.push_back(h.get());
+    return result;
 }
 
 void Player::SetHousingEditorModeUpdateField(uint8 mode)
