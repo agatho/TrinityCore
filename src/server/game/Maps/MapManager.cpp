@@ -264,11 +264,19 @@ Map* MapManager::CreateMap(uint32 mapId, Player* player, Optional<uint32> lfgDun
     {
         // Determine which neighborhood instance this player belongs to
         uint32 neighborhoodMapId = sHousingMgr.GetNeighborhoodMapIdByWorldMap(mapId);
+        TC_LOG_DEBUG("maps", "MapManager::CreateMap: Neighborhood map entry - worldMapId={} neighborhoodMapId={}", mapId, neighborhoodMapId);
+
         Neighborhood* neighborhood = nullptr;
 
         // Check existing membership first
-        for (Neighborhood* n : sNeighborhoodMgr.GetNeighborhoodsForPlayer(player->GetGUID()))
+        auto playerNeighborhoods = sNeighborhoodMgr.GetNeighborhoodsForPlayer(player->GetGUID());
+        TC_LOG_DEBUG("maps", "MapManager::CreateMap: Player {} has {} neighborhood memberships",
+            player->GetGUID().ToString(), uint32(playerNeighborhoods.size()));
+
+        for (Neighborhood* n : playerNeighborhoods)
         {
+            TC_LOG_DEBUG("maps", "MapManager::CreateMap:   - Neighborhood '{}' guid={} neighborhoodMapId={} (looking for {})",
+                n->GetName(), n->GetGuid().ToString(), n->GetNeighborhoodMapID(), neighborhoodMapId);
             if (n->GetNeighborhoodMapID() == neighborhoodMapId)
             {
                 neighborhood = n;
@@ -278,8 +286,11 @@ Map* MapManager::CreateMap(uint32 mapId, Player* player, Optional<uint32> lfgDun
 
         // Auto-assign if not already a member
         if (!neighborhood)
+        {
+            TC_LOG_DEBUG("maps", "MapManager::CreateMap: No existing membership, auto-assigning tutorial neighborhood");
             neighborhood = sNeighborhoodMgr.FindOrCreateTutorialNeighborhood(
                 player->GetGUID(), player->GetTeam());
+        }
 
         if (!neighborhood)
         {
@@ -288,10 +299,22 @@ Map* MapManager::CreateMap(uint32 mapId, Player* player, Optional<uint32> lfgDun
             return nullptr;
         }
 
+        TC_LOG_DEBUG("maps", "MapManager::CreateMap: Using neighborhood '{}' guid={} counter={} neighborhoodMapId={}",
+            neighborhood->GetName(), neighborhood->GetGuid().ToString(),
+            neighborhood->GetGuid().GetCounter(), neighborhood->GetNeighborhoodMapID());
+
         newInstanceId = static_cast<uint32>(neighborhood->GetGuid().GetCounter());
         map = FindMap_i(mapId, newInstanceId);
         if (!map)
+        {
+            TC_LOG_DEBUG("maps", "MapManager::CreateMap: No existing map found, creating housing map={} instanceId={} neighborhoodId={}",
+                mapId, newInstanceId, newInstanceId);
             map = CreateHousing(mapId, newInstanceId, newInstanceId);
+        }
+        else
+        {
+            TC_LOG_DEBUG("maps", "MapManager::CreateMap: Reusing existing housing map={} instanceId={}", mapId, newInstanceId);
+        }
     }
     else
     {

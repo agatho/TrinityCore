@@ -55,12 +55,28 @@ void HousingMap::LoadGridObjects(NGridType* grid, Cell const& cell)
     Map::LoadGridObjects(grid, cell);
 
     if (!_neighborhood)
+    {
+        TC_LOG_ERROR("maps", "HousingMap::LoadGridObjects: _neighborhood is NULL for map {} instanceId {} neighborhoodId {} - skipping plot spawns",
+            GetId(), GetInstanceId(), _neighborhoodId);
         return;
+    }
 
     uint32 neighborhoodMapId = _neighborhood->GetNeighborhoodMapID();
     std::vector<NeighborhoodPlotData const*> plots = sHousingMgr.GetPlotsForMap(neighborhoodMapId);
 
+    TC_LOG_DEBUG("maps", "HousingMap::LoadGridObjects: map={} instanceId={} neighborhoodMapId={} plotCount={} cell=({},{}) grid={}",
+        GetId(), GetInstanceId(), neighborhoodMapId, uint32(plots.size()),
+        cell.GetCellCoord().x_coord, cell.GetCellCoord().y_coord, grid->GetGridId());
+
+    if (plots.empty())
+    {
+        TC_LOG_ERROR("maps", "HousingMap::LoadGridObjects: NO plots found for neighborhoodMapId={} (neighborhood='{}') - check DB2 NeighborhoodPlot data",
+            neighborhoodMapId, _neighborhood->GetName());
+    }
+
     uint32 goCount = 0;
+    uint32 cellSkipCount = 0;
+    uint32 noEntryCount = 0;
 
     for (NeighborhoodPlotData const* plot : plots)
     {
@@ -71,7 +87,10 @@ void HousingMap::LoadGridObjects(NGridType* grid, Cell const& cell)
         // Check if this plot's cornerstone position falls in the current cell
         CellCoord cellCoord = Trinity::ComputeCellCoord(x, y);
         if (cellCoord != cell.GetCellCoord())
+        {
+            ++cellSkipCount;
             continue;
+        }
 
         // Determine which GO to spawn: owned plot → CornerstoneGameObjectID, empty → PlotGameObjectID ("For Sale Sign")
         Neighborhood::PlotInfo const* plotInfo = _neighborhood->GetPlotInfo(static_cast<uint8>(plot->PlotIndex));
@@ -82,8 +101,17 @@ void HousingMap::LoadGridObjects(NGridType* grid, Cell const& cell)
         else
             goEntry = static_cast<uint32>(plot->PlotGameObjectID);
 
+        TC_LOG_DEBUG("maps", "HousingMap::LoadGridObjects: Plot {} at ({:.1f}, {:.1f}, {:.1f}) -> goEntry={} (Cornerstone={}, ForSale={}, owned={})",
+            plot->PlotIndex, x, y, z, goEntry, plot->CornerstoneGameObjectID, plot->PlotGameObjectID,
+            (plotInfo && !plotInfo->OwnerGuid.IsEmpty()) ? "yes" : "no");
+
         if (!goEntry)
+        {
+            TC_LOG_ERROR("maps", "HousingMap::LoadGridObjects: Plot {} has goEntry=0 (CornerstoneGO={}, PlotGO={}) - skipping",
+                plot->PlotIndex, plot->CornerstoneGameObjectID, plot->PlotGameObjectID);
+            ++noEntryCount;
             continue;
+        }
 
         // Build rotation from the stored euler angles
         float rotZ = plot->CornerstoneRotation[2];
@@ -146,11 +174,9 @@ void HousingMap::LoadGridObjects(NGridType* grid, Cell const& cell)
         }
     }
 
-    if (goCount > 0)
-    {
-        TC_LOG_DEBUG("maps", "HousingMap::LoadGridObjects: Spawned {} plot GOs for neighborhood '{}' in grid {} on map {}",
-            goCount, _neighborhood->GetName(), grid->GetGridId(), GetId());
-    }
+    TC_LOG_DEBUG("maps", "HousingMap::LoadGridObjects: Summary for grid {} cell ({},{}): spawned={} cellSkipped={} noEntry={} totalPlots={}",
+        grid->GetGridId(), cell.GetCellCoord().x_coord, cell.GetCellCoord().y_coord,
+        goCount, cellSkipCount, noEntryCount, uint32(plots.size()));
 }
 
 AreaTrigger* HousingMap::GetPlotAreaTrigger(uint8 plotIndex)
