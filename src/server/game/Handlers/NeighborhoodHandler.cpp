@@ -1235,7 +1235,19 @@ void WorldSession::HandleNeighborhoodGetRoster(WorldPackets::Neighborhood::Neigh
     TC_LOG_INFO("housing", "CMSG_NEIGHBORHOOD_GET_ROSTER NeighborhoodGuid: {}",
         neighborhoodGetRoster.NeighborhoodGuid.ToString());
 
-    Neighborhood* neighborhood = sNeighborhoodMgr.GetNeighborhood(neighborhoodGetRoster.NeighborhoodGuid);
+    // Try the GUID from the packet first; fall back to the player's current housing map neighborhood
+    ObjectGuid neighborhoodGuid = neighborhoodGetRoster.NeighborhoodGuid;
+    if (neighborhoodGuid.IsEmpty())
+    {
+        if (HousingMap* housingMap = dynamic_cast<HousingMap*>(player->GetMap()))
+            if (Neighborhood* mapNeighborhood = housingMap->GetNeighborhood())
+                neighborhoodGuid = mapNeighborhood->GetGuid();
+
+        TC_LOG_DEBUG("housing", "HandleNeighborhoodGetRoster: Client sent empty NeighborhoodGuid, resolved to {} from housing map",
+            neighborhoodGuid.ToString());
+    }
+
+    Neighborhood* neighborhood = sNeighborhoodMgr.GetNeighborhood(neighborhoodGuid);
     if (!neighborhood)
     {
         WorldPackets::Neighborhood::NeighborhoodGetRosterResponse response;

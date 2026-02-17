@@ -24735,6 +24735,12 @@ void Player::SendInitialPacketsBeforeAddToMap()
         worldServerInfo.HouseCosmeticOwnerGUID = GetSession()->GetBattlenetAccountGUID();
         worldServerInfo.NeighborhoodGUID = housing->GetNeighborhoodGuid();
     }
+    // Ensure NeighborhoodGUID is set for all players on a housing map,
+    // not just house owners — the client needs it for roster/bulletin requests
+    if (worldServerInfo.NeighborhoodGUID.IsEmpty())
+        if (HousingMap* housingMap = dynamic_cast<HousingMap*>(GetMap()))
+            if (Neighborhood* neighborhood = housingMap->GetNeighborhood())
+                worldServerInfo.NeighborhoodGUID = neighborhood->GetGuid();
     SendDirectMessage(worldServerInfo.Write());
 
     // Spell modifiers
