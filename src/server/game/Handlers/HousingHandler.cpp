@@ -1519,13 +1519,8 @@ void WorldSession::HandleHousingHouseStatus(WorldPackets::Housing::HousingHouseS
         response.PlotIndex = housing->GetPlotIndex();
         response.StatusFlags = 0;
     }
-    else
-    {
-        // Even without a house, identify the player so the client can
-        // associate them with the neighborhood context
-        response.OwnerBNetGuid = GetBattlenetAccountGUID();
-        response.OwnerPlayerGuid = player->GetGUID();
-    }
+    // No house: all fields stay at defaults (empty GUIDs, HouseStatus=0, PlotIndex=0xFF).
+    // Neighborhood context is provided separately via SMSG_HOUSING_GET_CURRENT_HOUSE_INFO_RESPONSE.
     SendPacket(response.Write());
 
     TC_LOG_INFO("housing", ">>> CMSG_HOUSING_HOUSE_STATUS received");

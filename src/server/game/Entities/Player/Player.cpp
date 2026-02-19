@@ -24889,17 +24889,18 @@ void Player::SendInitialPacketsAfterAddToMap()
             Neighborhood* neighborhood = neighborhoods[0];
             Housing* housing = GetHousingForNeighborhood(neighborhood->GetGuid());
 
-            // Send proactive HouseStatus so client knows about the neighborhood
+            // Send proactive HouseStatus so client knows about house ownership
             WorldPackets::Housing::HousingHouseStatusResponse statusResponse;
-            statusResponse.OwnerBNetGuid = GetSession()->GetBattlenetAccountGUID();
-            statusResponse.OwnerPlayerGuid = GetGUID();
             if (housing)
             {
                 statusResponse.HouseGuid = housing->GetHouseGuid();
+                statusResponse.OwnerBNetGuid = GetSession()->GetBattlenetAccountGUID();
+                statusResponse.OwnerPlayerGuid = GetGUID();
                 statusResponse.HouseStatus = 1;  // Has house
                 statusResponse.PlotIndex = housing->GetPlotIndex();
                 statusResponse.StatusFlags = 0;
             }
+            // No house: all fields stay at defaults (empty GUIDs, HouseStatus=0, PlotIndex=0xFF).
             SendDirectMessage(statusResponse.Write());
 
             // Populate NeighborhoodMirrorData on the Account entity so the
