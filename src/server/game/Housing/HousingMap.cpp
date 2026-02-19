@@ -303,13 +303,10 @@ bool HousingMap::AddPlayerToMap(Player* player, bool initPlayer /*= true*/)
         return false;
     }
 
-    // Auto-add player as neighborhood resident if not already a member
-    if (!_neighborhood->IsMember(player->GetGUID()))
-    {
-        _neighborhood->AddResident(player->GetGUID());
-        TC_LOG_DEBUG("housing", "HousingMap::AddPlayerToMap: Auto-added player {} as resident of neighborhood '{}'",
-            player->GetGUID().ToString(), _neighborhood->GetName());
-    }
+    // Do NOT auto-add the player as a neighborhood member here.
+    // Membership is granted when the player buys a plot or is invited.
+    // Auto-adding causes the client to resolve neighborhoodOwnerType as
+    // Self instead of None, which prevents the "For Sale" Cornerstone UI.
 
     // Track player housing if they own a house in this neighborhood
     Housing* housing = player->GetHousingForNeighborhood(_neighborhood->GetGuid());
@@ -323,14 +320,16 @@ bool HousingMap::AddPlayerToMap(Player* player, bool initPlayer /*= true*/)
     // and enable Cornerstone purchase UI interaction
     WorldPackets::Housing::HousingGetCurrentHouseInfoResponse houseInfo;
     houseInfo.NeighborhoodGuid = _neighborhood->GetGuid();
-    houseInfo.OwnerPlayerGuid = player->GetGUID();
     if (housing)
     {
         houseInfo.HouseGuid = housing->GetHouseGuid();
+        houseInfo.OwnerPlayerGuid = player->GetGUID();
         houseInfo.PlotIndex = housing->GetPlotIndex();
         houseInfo.HouseProperties = housing->GetSettingsFlags() & 0xFF;
         houseInfo.HouseLevel = static_cast<uint8>(housing->GetLevel());
     }
+    // No house: OwnerPlayerGuid stays empty. Only NeighborhoodGuid is set
+    // so the client knows which neighborhood it's viewing.
     player->SendDirectMessage(houseInfo.Write());
 
     TC_LOG_DEBUG("housing", "HousingMap::AddPlayerToMap: Sent neighborhood context to player {} (neighborhood='{}', hasHouse={})",

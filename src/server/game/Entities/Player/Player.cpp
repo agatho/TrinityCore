@@ -24877,16 +24877,13 @@ void Player::SendInitialPacketsAfterAddToMap()
         _garrison->SendRemoteInfo();
 
     // Send housing neighborhood notifications when entering a neighborhood map.
-    // The client needs SMSG_HOUSING_HOUSE_STATUS_RESPONSE with NeighborhoodGuid
-    // to know it's in a neighborhood and trigger roster/map requests.
-    // It also needs NeighborhoodMirrorData populated on the Account entity
-    // for the map to render plot markers.
-    if (sHousingMgr.IsNeighborhoodWorldMap(GetMapId()))
+    // The client needs NeighborhoodMirrorData populated on the Account entity
+    // for the map to render plot markers and roster data.
+    if (HousingMap* housingMap = dynamic_cast<HousingMap*>(GetMap()))
     {
-        std::vector<Neighborhood*> neighborhoods = sNeighborhoodMgr.GetNeighborhoodsForPlayer(GetGUID());
-        if (!neighborhoods.empty())
+        Neighborhood* neighborhood = housingMap->GetNeighborhood();
+        if (neighborhood)
         {
-            Neighborhood* neighborhood = neighborhoods[0];
             Housing* housing = GetHousingForNeighborhood(neighborhood->GetGuid());
 
             // Send proactive HouseStatus so client knows about house ownership

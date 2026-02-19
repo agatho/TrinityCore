@@ -1623,16 +1623,13 @@ void WorldSession::HandleHousingGetCurrentHouseInfo(WorldPackets::Housing::Housi
         response.HouseProperties = housing->GetSettingsFlags() & 0xFF;  // Packed property bits
         response.HouseLevel = static_cast<uint8>(housing->GetLevel());
     }
-    else if (sHousingMgr.IsNeighborhoodWorldMap(player->GetMapId()))
+    else if (HousingMap* housingMap = dynamic_cast<HousingMap*>(player->GetMap()))
     {
-        // Even without a house, provide the neighborhood context so the client
-        // knows which neighborhood the player is in (enables plot purchase UI)
-        std::vector<Neighborhood*> neighborhoods = sNeighborhoodMgr.GetNeighborhoodsForPlayer(player->GetGUID());
-        if (!neighborhoods.empty())
-        {
-            response.NeighborhoodGuid = neighborhoods[0]->GetGuid();
-            response.OwnerPlayerGuid = player->GetGUID();
-        }
+        // No house, but on a housing map — provide the neighborhood GUID so
+        // the client knows which neighborhood it's viewing (enables purchase UI).
+        // Do NOT set OwnerPlayerGuid — the player doesn't own anything yet.
+        if (Neighborhood* neighborhood = housingMap->GetNeighborhood())
+            response.NeighborhoodGuid = neighborhood->GetGuid();
     }
     SendPacket(response.Write());
 
