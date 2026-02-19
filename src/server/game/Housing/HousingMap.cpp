@@ -21,6 +21,7 @@
 #include "GridDefines.h"
 #include "Housing.h"
 #include "HousingMgr.h"
+#include "HousingPackets.h"
 #include "Log.h"
 #include "Neighborhood.h"
 #include "NeighborhoodMgr.h"
@@ -29,6 +30,7 @@
 #include "Player.h"
 #include "RealmList.h"
 #include "World.h"
+#include "WorldSession.h"
 #include "WorldStateMgr.h"
 
 HousingMap::HousingMap(uint32 id, time_t expiry, uint32 instanceId, Difficulty spawnMode, uint32 neighborhoodId)
@@ -310,10 +312,31 @@ bool HousingMap::AddPlayerToMap(Player* player, bool initPlayer /*= true*/)
     }
 
     // Track player housing if they own a house in this neighborhood
-    if (Housing* housing = player->GetHousingForNeighborhood(_neighborhood->GetGuid()))
+    Housing* housing = player->GetHousingForNeighborhood(_neighborhood->GetGuid());
+    if (housing)
         AddPlayerHousing(player->GetGUID(), housing);
 
-    return Map::AddPlayerToMap(player, initPlayer);
+    if (!Map::AddPlayerToMap(player, initPlayer))
+        return false;
+
+    // Send neighborhood context so the client can call SetViewingNeighborhood()
+    // and enable Cornerstone purchase UI interaction
+    WorldPackets::Housing::HousingGetCurrentHouseInfoResponse houseInfo;
+    houseInfo.NeighborhoodGuid = _neighborhood->GetGuid();
+    houseInfo.OwnerPlayerGuid = player->GetGUID();
+    if (housing)
+    {
+        houseInfo.HouseGuid = housing->GetHouseGuid();
+        houseInfo.PlotIndex = housing->GetPlotIndex();
+        houseInfo.HouseProperties = housing->GetSettingsFlags() & 0xFF;
+        houseInfo.HouseLevel = static_cast<uint8>(housing->GetLevel());
+    }
+    player->SendDirectMessage(houseInfo.Write());
+
+    TC_LOG_DEBUG("housing", "HousingMap::AddPlayerToMap: Sent neighborhood context to player {} (neighborhood='{}', hasHouse={})",
+        player->GetGUID().ToString(), _neighborhood->GetName(), housing ? "yes" : "no");
+
+    return true;
 }
 
 void HousingMap::RemovePlayerFromMap(Player* player, bool remove)
