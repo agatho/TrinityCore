@@ -1230,13 +1230,12 @@ void WorldSession::HandleHousingSvcsStartTutorial(WorldPackets::Housing::Housing
         TC_LOG_INFO("housing", "CMSG_HOUSING_SVCS_START_TUTORIAL: Player {} assigned to neighborhood '{}' ({})",
             player->GetGUID().ToString(), neighborhood->GetName(), neighborhood->GetGuid().ToString());
 
-        // Send house status to client so it knows the tutorial neighborhood was assigned
+        // Send empty house status — the player has no house yet during tutorial.
+        // HouseStatus=1 would tell the client "you own a house" which prevents
+        // the Cornerstone purchase UI from showing. Neighborhood context is
+        // provided separately via SMSG_HOUSING_GET_CURRENT_HOUSE_INFO_RESPONSE
+        // when the player enters the HousingMap.
         WorldPackets::Housing::HousingHouseStatusResponse statusResponse;
-        statusResponse.OwnerBNetGuid = GetBattlenetAccountGUID();
-        statusResponse.OwnerPlayerGuid = player->GetGUID();
-        statusResponse.HouseStatus = 1;  // Tutorial started
-        statusResponse.PlotIndex = 0xFF;
-        statusResponse.StatusFlags = 0;
         SendPacket(statusResponse.Write());
     }
     else
