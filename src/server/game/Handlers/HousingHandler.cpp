@@ -1002,21 +1002,9 @@ void WorldSession::HandleHousingSvcsNeighborhoodReservePlot(WorldPackets::Housin
         static constexpr uint32 NPC_KILL_CREDIT_BUY_HOME = 248858;
         player->KilledMonsterCredit(NPC_KILL_CREDIT_BUY_HOME);
 
-        // Swap the for-sale-sign GO to a cornerstone GO on the housing map
+        // Mark the plot Cornerstone as owned (GOState 1 = READY)
         if (HousingMap* housingMap = dynamic_cast<HousingMap*>(player->GetMap()))
-        {
-            uint32 neighborhoodMapId = neighborhood->GetNeighborhoodMapID();
-            std::vector<NeighborhoodPlotData const*> plotDataList = sHousingMgr.GetPlotsForMap(neighborhoodMapId);
-            for (NeighborhoodPlotData const* plotData : plotDataList)
-            {
-                if (plotData->PlotIndex == static_cast<int32>(housingSvcsNeighborhoodReservePlot.PlotIndex))
-                {
-                    if (uint32 cornerstoneEntry = static_cast<uint32>(plotData->CornerstoneGameObjectID))
-                        housingMap->SwapPlotGameObject(housingSvcsNeighborhoodReservePlot.PlotIndex, cornerstoneEntry);
-                    break;
-                }
-            }
-        }
+            housingMap->SetPlotOwnershipState(housingSvcsNeighborhoodReservePlot.PlotIndex, true);
     }
 
     WorldPackets::Housing::HousingSvcsNeighborhoodReservePlotResponse response;
