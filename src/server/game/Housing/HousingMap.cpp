@@ -128,6 +128,10 @@ void HousingMap::SpawnPlotGameObjects()
         // Retail sniff: all Cornerstone GOs have Flags=32 (GO_FLAG_NODESPAWN)
         go->SetFlag(GO_FLAG_NODESPAWN);
 
+        // Populate the FJamHousingCornerstone_C entity fragment so the client
+        // knows this is a Cornerstone and can render the "For Sale" / owned UI
+        go->InitHousingCornerstoneData(plot->Cost, static_cast<int32>(plot->PlotIndex));
+
         if (!AddToMap(go))
         {
             delete go;
