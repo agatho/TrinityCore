@@ -1308,18 +1308,21 @@ WorldPacket const* NeighborhoodGetRosterResponse::Write()
     _worldPacket << uint32(1); // Count B = 1 group
 
     // Step 3b: Single group entry (sub_7FF6A8B3A570)
-    _worldPacket << ObjectGuid::Empty;  // Group GUID 1 (empty in retail sniff)
-    _worldPacket << ObjectGuid::Empty;  // Group GUID 2 (empty in retail sniff)
-    _worldPacket << uint64(0);          // Value 1 (timestamp or flags, 0 in sniff)
-    _worldPacket << uint64(0);          // Value 2 (timestamp or flags, 0 in sniff)
+    // These GUIDs populate the HousingNeighborhoodState singleton (sub_7FF6F69ECCD0):
+    //   offset 352 = NeighborhoodGUID, offset 292 = ownerType (computed from OwnerGUID)
+    _worldPacket << GroupNeighborhoodGuid;  // PackedGUID — Neighborhood GUID
+    _worldPacket << GroupOwnerGuid;         // PackedGUID — Neighborhood owner GUID
+    _worldPacket << uint64(0);             // Value 1 (timestamp or flags, 0 in sniff)
+    _worldPacket << uint64(0);             // Value 2 (timestamp or flags, 0 in sniff)
 
     // Sub-array count within this group = number of residents
     _worldPacket << uint32(Members.size());
 
-    // String length for connected realm name (read before sub-entries, used after)
-    // When length <= 1, client treats as empty string and reads no bytes
-    uint8 realmNameLen = ConnectedRealmName.empty() ? 0 : static_cast<uint8>(ConnectedRealmName.size() + 1); // +1 for null terminator
-    _worldPacket << uint8(realmNameLen);
+    // Neighborhood name length (read before sub-entries, string data written after).
+    // Client stores at singleton offset 296 via sub_7FF6F97E62B0.
+    // When length <= 1, client treats as empty string and reads no bytes.
+    uint8 nameLen = NeighborhoodName.empty() ? 0 : static_cast<uint8>(NeighborhoodName.size() + 1); // +1 for null terminator
+    _worldPacket << uint8(nameLen);
 
     // Group flags (bit 7 unused for now)
     _worldPacket << uint8(0);
@@ -1335,9 +1338,9 @@ WorldPacket const* NeighborhoodGetRosterResponse::Write()
         _worldPacket << uint8(0);                // Entry flags (bit 7 = has optional uint64)
     }
 
-    // Step 3b-ix: Connected realm name string (realmNameLen bytes including null terminator)
-    if (realmNameLen > 1)
-        _worldPacket.append(reinterpret_cast<uint8 const*>(ConnectedRealmName.c_str()), realmNameLen);
+    // Step 3b-ix: Neighborhood name string (nameLen bytes including null terminator)
+    if (nameLen > 1)
+        _worldPacket.append(reinterpret_cast<uint8 const*>(NeighborhoodName.c_str()), nameLen);
 
     // Step 4: Main flags byte (bit 7 = has optional trailing GUID)
     _worldPacket << uint8(0);

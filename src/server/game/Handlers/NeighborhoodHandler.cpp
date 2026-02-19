@@ -1269,7 +1269,9 @@ void WorldSession::HandleNeighborhoodGetRoster(WorldPackets::Neighborhood::Neigh
 
     WorldPackets::Neighborhood::NeighborhoodGetRosterResponse response;
     response.Result = static_cast<uint8>(HOUSING_RESULT_SUCCESS);
-    response.ConnectedRealmName = std::to_string(GetVirtualRealmAddress());
+    response.GroupNeighborhoodGuid = neighborhood->GetGuid();
+    response.GroupOwnerGuid = neighborhood->GetOwnerGuid();
+    response.NeighborhoodName = neighborhood->GetName();
     response.Members.reserve(members.size());
     for (auto const& member : members)
     {

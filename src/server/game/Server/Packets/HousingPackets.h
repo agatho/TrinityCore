@@ -1876,8 +1876,11 @@ namespace WorldPackets::Neighborhood
         };
         std::vector<RosterMemberData> Members;
 
-        // Connected realm name string (e.g. "64-67-63" in retail)
-        std::string ConnectedRealmName;
+        // Group entry fields — the client deserializes these to populate
+        // the HousingNeighborhoodState singleton that GetCornerstoneNeighborhoodInfo() reads.
+        ObjectGuid GroupNeighborhoodGuid;   // Neighborhood GUID (stored at singleton offset 352)
+        ObjectGuid GroupOwnerGuid;          // Neighborhood owner GUID (used to compute neighborhoodOwnerType)
+        std::string NeighborhoodName;       // Displayed in Cornerstone UI (stored at singleton offset 296)
     };
 
     class NeighborhoodRosterResidentUpdate final : public ServerPacket

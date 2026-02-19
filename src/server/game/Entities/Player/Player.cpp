@@ -24933,7 +24933,9 @@ void Player::SendInitialPacketsAfterAddToMap()
             // for the map without needing to request it.
             WorldPackets::Neighborhood::NeighborhoodGetRosterResponse rosterResponse;
             rosterResponse.Result = 0; // Success
-            rosterResponse.ConnectedRealmName = std::to_string(GetVirtualRealmAddress());
+            rosterResponse.GroupNeighborhoodGuid = neighborhood->GetGuid();
+            rosterResponse.GroupOwnerGuid = neighborhood->GetOwnerGuid();
+            rosterResponse.NeighborhoodName = neighborhood->GetName();
             auto const& members = neighborhood->GetMembers();
             rosterResponse.Members.reserve(members.size());
             for (auto const& member : members)
