@@ -1778,8 +1778,10 @@ namespace WorldPackets::Neighborhood
         WorldPacket const* Write() override;
         uint32 Result = 0;
         ObjectGuid NeighborhoodGuid;
+        ObjectGuid PlotGuid;                // Plot owner GUID (empty for unclaimed "For Sale" plots)
         uint64 Cost = 0;
         uint8 PlotIndex = 0;
+        std::string NeighborhoodName;       // Neighborhood name displayed in Cornerstone UI
     };
 
     class NeighborhoodInviteResidentResponse final : public ServerPacket

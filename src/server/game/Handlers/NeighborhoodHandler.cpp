@@ -1141,8 +1141,10 @@ void WorldSession::HandleNeighborhoodOpenCornerstoneUI(WorldPackets::Neighborhoo
     WorldPackets::Neighborhood::NeighborhoodOpenCornerstoneUIResponse response;
     response.Result = static_cast<uint32>(HOUSING_RESULT_SUCCESS);
     response.NeighborhoodGuid = neighborhoodOpenCornerstoneUI.NeighborhoodGuid;
+    response.PlotGuid = ObjectGuid::Empty;  // Unclaimed plot — no owner
     response.PlotIndex = static_cast<uint8>(neighborhoodOpenCornerstoneUI.PlotIndex);
     response.Cost = plotCost;
+    response.NeighborhoodName = neighborhood->GetName();
     SendPacket(response.Write());
 
     TC_LOG_DEBUG("housing", "HandleNeighborhoodOpenCornerstoneUI: Player {} opened cornerstone UI for plot {} (cost: {}) in neighborhood '{}'",

@@ -1220,10 +1220,21 @@ WorldPacket const* NeighborhoodMoveHouseResponse::Write()
 
 WorldPacket const* NeighborhoodOpenCornerstoneUIResponse::Write()
 {
+    // Wire format verified against IDA client deserializer sub_7FF6F6E3E200 (12.0, opcode 0x5C000A)
     _worldPacket << uint32(Result);
-    _worldPacket << NeighborhoodGuid;
+    _worldPacket << NeighborhoodGuid;       // PackedGUID — neighborhood identity
+    _worldPacket << PlotGuid;               // PackedGUID — plot owner (empty = unclaimed "For Sale")
     _worldPacket << uint64(Cost);
     _worldPacket << uint8(PlotIndex);
+
+    // Length-prefixed string: uint32 byteCount (including null terminator) + bytes
+    // Client reader sub_7FF6F97E62B0 skips read when length <= 1
+    uint32 nameLen = NeighborhoodName.empty() ? 0 : static_cast<uint32>(NeighborhoodName.size() + 1);
+    _worldPacket << uint32(nameLen);
+    if (nameLen > 0)
+        _worldPacket.append(reinterpret_cast<uint8 const*>(NeighborhoodName.c_str()), nameLen);
+
+    _worldPacket << uint8(0);               // OptionalFieldBits — no optional sub-structs
     return &_worldPacket;
 }
 
