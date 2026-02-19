@@ -60,6 +60,9 @@ CREATE TABLE `character_housing` (
     `houseLevel` INT UNSIGNED NOT NULL DEFAULT 1 COMMENT 'Current upgrade level',
     `favor` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Accumulated favor currency',
     `settingsFlags` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Bitmask of HouseSettingsFlags',
+    `exteriorLocked` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Whether exterior editing is locked (1=locked, 0=unlocked)',
+    `houseSize` TINYINT UNSIGNED NOT NULL DEFAULT 2 COMMENT 'HousingFixtureSize: 1=Any, 2=Small, 3=Medium, 4=Large',
+    `houseType` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'HouseExteriorWmoData DB2 entry ID (architectural style)',
     `createTime` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Unix timestamp of house creation',
     PRIMARY KEY (`guid`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

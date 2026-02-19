@@ -9218,14 +9218,15 @@ void Player::SendInitWorldStates(uint32 zoneId, uint32 areaId)
 {
     uint32 mapId = GetMapId();
 
-    TC_LOG_DEBUG("network", "Player::SendInitWorldStates: Sending SMSG_INIT_WORLD_STATES for Map: {}, Zone: {}", mapId, zoneId);
-
     WorldPackets::WorldState::InitWorldStates packet;
     packet.MapID = mapId;
     packet.AreaID = zoneId;
     packet.SubareaID = areaId;
 
     sWorldStateMgr->FillInitialWorldStates(packet, GetMap(), areaId);
+
+    TC_LOG_INFO("housing", "Player::SendInitWorldStates: Map={} Zone={} Area={} WorldStateCount={}",
+        mapId, zoneId, areaId, uint32(packet.Worldstates.size()));
 
     SendDirectMessage(packet.Write());
 }
@@ -24934,13 +24935,13 @@ void Player::SendInitialPacketsAfterAddToMap()
             // for the map without needing to request it.
             WorldPackets::Neighborhood::NeighborhoodGetRosterResponse rosterResponse;
             rosterResponse.Result = 0; // Success
+            rosterResponse.ConnectedRealmName = std::to_string(GetVirtualRealmAddress());
             auto const& members = neighborhood->GetMembers();
             rosterResponse.Members.reserve(members.size());
             for (auto const& member : members)
             {
                 WorldPackets::Neighborhood::NeighborhoodGetRosterResponse::RosterMemberData data;
                 data.PlayerGuid = member.PlayerGuid;
-                data.Role = member.Role;
                 data.PlotIndex = member.PlotIndex;
                 data.JoinTime = member.JoinTime;
                 if (member.PlotIndex != INVALID_PLOT_INDEX)

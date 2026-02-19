@@ -27,7 +27,9 @@
 #include "ObjectGridLoader.h"
 #include "ObjectGuid.h"
 #include "Player.h"
+#include "RealmList.h"
 #include "World.h"
+#include "WorldStateMgr.h"
 
 HousingMap::HousingMap(uint32 id, time_t expiry, uint32 instanceId, Difficulty spawnMode, uint32 neighborhoodId)
     : Map(id, expiry, instanceId, spawnMode), _neighborhoodId(neighborhoodId), _neighborhood(nullptr)
@@ -134,6 +136,10 @@ void HousingMap::SpawnPlotGameObjects()
         // Track the plot GO for later swap (purchase/eviction)
         _plotGameObjects[static_cast<uint8>(plot->PlotIndex)] = go->GetGUID();
 
+        TC_LOG_DEBUG("housing", "HousingMap::SpawnPlotGameObjects: Plot {} GO entry={} displayId={} type={} name='{}' guid={}",
+            plot->PlotIndex, goEntry, go->GetGOInfo()->displayId, go->GetGOInfo()->type,
+            go->GetGOInfo()->name, go->GetGUID().ToString());
+
         ++goCount;
 
         // Spawn a plot AreaTrigger at the HousePosition for plot enter/exit detection
@@ -174,8 +180,24 @@ void HousingMap::SpawnPlotGameObjects()
         }
     }
 
-    TC_LOG_INFO("housing", "HousingMap::SpawnPlotGameObjects: Spawned {} GOs and {} ATs for {} plots in neighborhood '{}' (noEntry={})",
-        goCount, uint32(_plotAreaTriggers.size()), uint32(plots.size()), _neighborhood->GetName(), noEntryCount);
+    // Set per-plot WorldState values from DB2 so the client can render plot status on the map
+    // Sniff analysis: Value 0 = unoccupied/for-sale, Value 1 = occupied/has-house
+    uint32 wsSetCount = 0;
+    for (NeighborhoodPlotData const* plot : plots)
+    {
+        if (plot->WorldState != 0)
+        {
+            Neighborhood::PlotInfo const* plotInfo = _neighborhood->GetPlotInfo(static_cast<uint8>(plot->PlotIndex));
+            bool isOccupied = plotInfo && !plotInfo->OwnerGuid.IsEmpty();
+
+            int32 wsValue = isOccupied ? 1 : 0;
+            sWorldStateMgr->SetValue(plot->WorldState, wsValue, false, this);
+            ++wsSetCount;
+        }
+    }
+
+    TC_LOG_INFO("housing", "HousingMap::SpawnPlotGameObjects: Spawned {} GOs, {} ATs, set {} WorldStates for {} plots in neighborhood '{}' (noEntry={})",
+        goCount, uint32(_plotAreaTriggers.size()), wsSetCount, uint32(plots.size()), _neighborhood->GetName(), noEntryCount);
 }
 
 AreaTrigger* HousingMap::GetPlotAreaTrigger(uint8 plotIndex)
@@ -273,7 +295,7 @@ Housing* HousingMap::GetHousingForPlayer(ObjectGuid playerGuid) const
 
 void HousingMap::LoadNeighborhoodData()
 {
-    ObjectGuid neighborhoodGuid = ObjectGuid::Create<HighGuid::Housing>(/*subType*/ 4, /*arg1*/ 0, /*arg2*/ 0, static_cast<uint64>(_neighborhoodId));
+    ObjectGuid neighborhoodGuid = ObjectGuid::Create<HighGuid::Housing>(/*subType*/ 4, /*arg1*/ sRealmList->GetCurrentRealmId().Realm, /*arg2*/ 0, static_cast<uint64>(_neighborhoodId));
     _neighborhood = sNeighborhoodMgr.GetNeighborhood(neighborhoodGuid);
 
     if (!_neighborhood)
