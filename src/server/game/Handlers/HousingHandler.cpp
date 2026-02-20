@@ -173,7 +173,6 @@ void WorldSession::HandleHousingDecorSetEditMode(WorldPackets::Housing::HousingD
     if (!housing)
     {
         WorldPackets::Housing::HousingDecorSetEditModeResponse response;
-        response.Result = static_cast<uint32>(HOUSING_RESULT_HOUSE_NOT_FOUND);
         SendPacket(response.Write());
         return;
     }
@@ -181,11 +180,16 @@ void WorldSession::HandleHousingDecorSetEditMode(WorldPackets::Housing::HousingD
     housing->SetEditorMode(housingDecorSetEditMode.Active ? HOUSING_EDITOR_MODE_BASIC_DECOR : HOUSING_EDITOR_MODE_NONE);
 
     WorldPackets::Housing::HousingDecorSetEditModeResponse response;
-    response.Result = static_cast<uint32>(HOUSING_RESULT_SUCCESS);
+    response.HouseGuid = housing->GetHouseGuid();
+    response.PlotGuid = housing->GetPlotGuid();
     response.Active = housingDecorSetEditMode.Active;
+    response.Status = 0;
+    if (housingDecorSetEditMode.Active)
+        response.OwnerGuid = housing->GetNeighborhoodGuid();
     SendPacket(response.Write());
 
-    TC_LOG_INFO("housing", "CMSG_HOUSING_DECOR_SET_EDITOR_MODE_ACTIVE Active: {}", housingDecorSetEditMode.Active);
+    TC_LOG_INFO("housing", "CMSG_HOUSING_DECOR_SET_EDITOR_MODE_ACTIVE Active: {} HouseGuid: {}",
+        housingDecorSetEditMode.Active, housing->GetHouseGuid().ToString());
 }
 
 void WorldSession::HandleHousingDecorPlace(WorldPackets::Housing::HousingDecorPlace const& housingDecorPlace)
@@ -1629,8 +1633,8 @@ void WorldSession::HandleHousingGetPlayerPermissions(WorldPackets::Housing::Hous
     if (!player)
         return;
 
-    TC_LOG_INFO("housing", ">>> CMSG_HOUSING_GET_PLAYER_PERMISSIONS received (PlayerGuid: {})",
-        housingGetPlayerPermissions.PlayerGuid.has_value() ? housingGetPlayerPermissions.PlayerGuid->ToString() : "none");
+    TC_LOG_INFO("housing", ">>> CMSG_HOUSING_GET_PLAYER_PERMISSIONS received (HouseGuid: {})",
+        housingGetPlayerPermissions.HouseGuid.has_value() ? housingGetPlayerPermissions.HouseGuid->ToString() : "none");
 
     Housing* housing = player->GetHousing();
 
@@ -1639,10 +1643,12 @@ void WorldSession::HandleHousingGetPlayerPermissions(WorldPackets::Housing::Hous
     {
         response.HouseGuid = housing->GetHouseGuid();
 
-        // Determine which player we're checking permissions for
-        ObjectGuid targetGuid = housingGetPlayerPermissions.PlayerGuid.value_or(player->GetGUID());
+        // Client sends the HouseGuid it wants permissions for.
+        // If it matches our house, we're the owner.
+        ObjectGuid requestedHouseGuid = housingGetPlayerPermissions.HouseGuid.value_or(housing->GetHouseGuid());
+        bool isOwner = (requestedHouseGuid == housing->GetHouseGuid());
 
-        if (targetGuid == player->GetGUID())
+        if (isOwner)
         {
             // House owner gets full permissions
             // Sniff-verified: owner permissions are 0xE0 (bits 5,6,7)
@@ -1651,42 +1657,9 @@ void WorldSession::HandleHousingGetPlayerPermissions(WorldPackets::Housing::Hous
         }
         else
         {
-            // Evaluate permissions based on house settings
-            uint32 flags = housing->GetSettingsFlags();
-            uint32 permissions = 0;
-
-            // Resolve target player for relationship checks
-            Player* targetPlayer = ObjectAccessor::FindPlayer(targetGuid);
-            bool sameGuild = false;
-            if (targetPlayer && player->GetGuildId() && targetPlayer->GetGuildId() == player->GetGuildId())
-                sameGuild = true;
-
-            // House access permissions (interior)
-            if (flags & HOUSE_SETTING_HOUSE_ACCESS_ANYONE)
-                permissions |= HOUSE_SETTING_HOUSE_ACCESS_ANYONE;
-            if ((flags & HOUSE_SETTING_HOUSE_ACCESS_GUILD) && sameGuild)
-                permissions |= HOUSE_SETTING_HOUSE_ACCESS_GUILD;
-            if (flags & HOUSE_SETTING_HOUSE_ACCESS_NEIGHBORS)
-                permissions |= HOUSE_SETTING_HOUSE_ACCESS_NEIGHBORS;
-            if (flags & HOUSE_SETTING_HOUSE_ACCESS_FRIENDS)
-                permissions |= HOUSE_SETTING_HOUSE_ACCESS_FRIENDS;
-            if (flags & HOUSE_SETTING_HOUSE_ACCESS_PARTY)
-                permissions |= HOUSE_SETTING_HOUSE_ACCESS_PARTY;
-
-            // Plot access permissions (exterior)
-            if (flags & HOUSE_SETTING_PLOT_ACCESS_ANYONE)
-                permissions |= HOUSE_SETTING_PLOT_ACCESS_ANYONE;
-            if ((flags & HOUSE_SETTING_PLOT_ACCESS_GUILD) && sameGuild)
-                permissions |= HOUSE_SETTING_PLOT_ACCESS_GUILD;
-            if (flags & HOUSE_SETTING_PLOT_ACCESS_NEIGHBORS)
-                permissions |= HOUSE_SETTING_PLOT_ACCESS_NEIGHBORS;
-            if (flags & HOUSE_SETTING_PLOT_ACCESS_FRIENDS)
-                permissions |= HOUSE_SETTING_PLOT_ACCESS_FRIENDS;
-            if (flags & HOUSE_SETTING_PLOT_ACCESS_PARTY)
-                permissions |= HOUSE_SETTING_PLOT_ACCESS_PARTY;
-
-            response.ResultCode = 0;  // Success
-            response.PermissionFlags = static_cast<uint8>(permissions & 0xFF);
+            // Visitor: evaluate permissions based on house settings
+            response.ResultCode = 0;
+            response.PermissionFlags = 0x40;  // Sniff-verified: visitors get 0x40
         }
     }
     else

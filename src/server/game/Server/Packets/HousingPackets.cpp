@@ -317,10 +317,10 @@ void HousingSvcsGetBnetFriendNeighborhoods::Read()
 
 void HousingGetPlayerPermissions::Read()
 {
-    _worldPacket >> OptionalInit(PlayerGuid);
+    _worldPacket >> OptionalInit(HouseGuid);
 
-    if (PlayerGuid)
-        _worldPacket >> *PlayerGuid;
+    if (HouseGuid)
+        _worldPacket >> *HouseGuid;
 }
 
 void HousingSvcsGetPotentialHouseOwners::Read()
@@ -406,9 +406,13 @@ WorldPacket const* HouseExteriorSetHousePositionResponse::Write()
 
 WorldPacket const* HousingDecorSetEditModeResponse::Write()
 {
-    _worldPacket << uint32(Result);
-    _worldPacket.WriteBit(Active);
-    _worldPacket.FlushBits();
+    // Sniff-verified (0x510000): HouseGuid + PlotGuid + uint8(Active) + uint32(Status) + [if Active: OwnerGuid]
+    _worldPacket << HouseGuid;
+    _worldPacket << PlotGuid;
+    _worldPacket << uint8(Active ? 1 : 0);
+    _worldPacket << uint32(Status);
+    if (Active)
+        _worldPacket << OwnerGuid;
     return &_worldPacket;
 }
 

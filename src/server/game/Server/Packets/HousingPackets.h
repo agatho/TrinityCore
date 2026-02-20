@@ -614,7 +614,7 @@ namespace WorldPackets::Housing
 
         void Read() override;
 
-        Optional<ObjectGuid> PlayerGuid;
+        Optional<ObjectGuid> HouseGuid;
     };
 
     // ============================================================
@@ -740,8 +740,13 @@ namespace WorldPackets::Housing
     public:
         HousingDecorSetEditModeResponse() : ServerPacket(SMSG_HOUSING_DECOR_SET_EDIT_MODE_RESPONSE) { }
         WorldPacket const* Write() override;
-        uint32 Result = 0;
+
+        // Sniff-verified (0x510000): HouseGuid + PlotGuid + uint8 Active + uint32 Status + [if Active: OwnerGuid]
+        ObjectGuid HouseGuid;
+        ObjectGuid PlotGuid;
         bool Active = false;
+        uint32 Status = 0;
+        ObjectGuid OwnerGuid;   // Only serialized when Active=true
     };
 
     class HousingDecorMoveResponse final : public ServerPacket

@@ -29914,7 +29914,25 @@ void Player::CreateHousing(ObjectGuid neighborhoodGuid, uint8 plotIndex)
 {
     std::unique_ptr<Housing> housing(new Housing(this));
     if (housing->Create(neighborhoodGuid, plotIndex) == HOUSING_RESULT_SUCCESS)
+    {
+        // Immediately persist to DB so housing survives server restarts
+        CharacterDatabaseTransaction trans = CharacterDatabase.BeginTransaction();
+        housing->SaveToDB(trans);
+        CharacterDatabase.CommitTransaction(trans);
+
+        // Update PlayerHouseInfoComponentData::Houses UpdateField so dashboard works mid-session
+        UF::PlayerMirrorHouse& mirrorHouse = AddDynamicUpdateFieldValue(
+            m_values.ModifyValue(&Player::m_playerHouseInfoComponentData, 0)
+                .ModifyValue(&UF::PlayerHouseInfoComponentData::Houses));
+        mirrorHouse.Guid = housing->GetHouseGuid();
+        mirrorHouse.NeighborhoodGUID = housing->GetNeighborhoodGuid();
+        mirrorHouse.Level = housing->GetLevel();
+        mirrorHouse.Favor = 0;
+        mirrorHouse.MapID = 0;
+        mirrorHouse.PlotID = housing->GetPlotIndex();
+
         _housings.push_back(std::move(housing));
+    }
 }
 
 void Player::DeleteHousing(ObjectGuid neighborhoodGuid)
