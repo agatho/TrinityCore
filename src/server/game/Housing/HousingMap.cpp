@@ -178,8 +178,8 @@ void HousingMap::SpawnPlotGameObjects()
                 _plotAreaTriggers[plotIndex] = at->GetGUID();
                 _neighborhood->SetPlotAreaTriggerGuid(plotIndex, at->GetGUID());
 
-                TC_LOG_DEBUG("housing", "HousingMap::SpawnPlotGameObjects: Spawned plot AT for plot {} at ({}, {}, {}) in neighborhood '{}'",
-                    plotIndex, atPos.GetPositionX(), atPos.GetPositionY(), atPos.GetPositionZ(), _neighborhood->GetName());
+                TC_LOG_ERROR("housing", "HousingMap::SpawnPlotGameObjects: Spawned plot AT for plot {} at ({}, {}, {}) guid={} in neighborhood '{}'",
+                    plotIndex, atPos.GetPositionX(), atPos.GetPositionY(), atPos.GetPositionZ(), at->GetGUID().ToString(), _neighborhood->GetName());
             }
             else
             {
@@ -308,10 +308,36 @@ bool HousingMap::AddPlayerToMap(Player* player, bool initPlayer /*= true*/)
     // Auto-adding causes the client to resolve neighborhoodOwnerType as
     // Self instead of None, which prevents the "For Sale" Cornerstone UI.
 
-    // Track player housing if they own a house in this neighborhood
+    // Track player housing if they own a house in this neighborhood.
+    // First try exact GUID match, then fall back to checking all housings
+    // (handles legacy data where neighborhood GUID counter was from client's DB2 ID
+    // instead of the server's canonical counter).
     Housing* housing = player->GetHousingForNeighborhood(_neighborhood->GetGuid());
+    if (!housing)
+    {
+        // Fallback: check if any of the player's housings has a plot in this neighborhood
+        for (Housing const* h : player->GetAllHousings())
+        {
+            if (h && _neighborhood->GetPlotInfo(h->GetPlotIndex()))
+            {
+                housing = const_cast<Housing*>(h);
+                TC_LOG_ERROR("housing", "HousingMap::AddPlayerToMap: Fixed neighborhood GUID mismatch for player {} (stored={}, canonical={})",
+                    player->GetGUID().ToString(), h->GetNeighborhoodGuid().ToString(), _neighborhood->GetGuid().ToString());
+                // Fix the stored GUID so future lookups work
+                housing->SetNeighborhoodGuid(_neighborhood->GetGuid());
+                break;
+            }
+        }
+    }
     if (housing)
+    {
         AddPlayerHousing(player->GetGUID(), housing);
+
+        // Update PlayerMirrorHouse.MapID so the client knows this house is on the current map.
+        // Without this, MapID stays at 0 (set during login) and the client rejects
+        // edit mode with HOUSING_RESULT_ACTION_LOCKED_BY_COMBAT (error 1 = first non-success code).
+        player->UpdateHousingMapId(housing->GetHouseGuid(), static_cast<int32>(GetId()));
+    }
 
     if (!Map::AddPlayerToMap(player, initPlayer))
         return false;
@@ -321,24 +347,48 @@ bool HousingMap::AddPlayerToMap(Player* player, bool initPlayer /*= true*/)
     WorldPackets::Housing::HousingGetCurrentHouseInfoResponse houseInfo;
     if (housing)
     {
-        // Sniff-verified: OwnerGuid=HouseGUID, SecondaryOwnerGuid=PlotGUID, PlotGuid=NeighborhoodGUID
+        // Sniff-verified: SecondaryOwnerGuid=NeighborhoodGUID (context for edit mode), PlotGuid=PlotGUID
         houseInfo.HouseInfo.OwnerGuid = housing->GetHouseGuid();
-        houseInfo.HouseInfo.SecondaryOwnerGuid = housing->GetPlotGuid();
-        houseInfo.HouseInfo.PlotGuid = housing->GetNeighborhoodGuid();
+        houseInfo.HouseInfo.SecondaryOwnerGuid = housing->GetNeighborhoodGuid();
+        houseInfo.HouseInfo.PlotGuid = housing->GetPlotGuid();
         houseInfo.HouseInfo.Flags = housing->GetPlotIndex();
         houseInfo.HouseInfo.HouseTypeId = 32;
         houseInfo.HouseInfo.StatusFlags = 0;
     }
     else if (_neighborhood)
     {
-        // No house — provide neighborhood GUID in PlotGuid field for purchase UI context
-        houseInfo.HouseInfo.PlotGuid = _neighborhood->GetGuid();
+        // No house — provide neighborhood GUID in SecondaryOwnerGuid field for context
+        houseInfo.HouseInfo.SecondaryOwnerGuid = _neighborhood->GetGuid();
     }
     houseInfo.ResponseFlags = 0;
     player->SendDirectMessage(houseInfo.Write());
 
-    TC_LOG_DEBUG("housing", "HousingMap::AddPlayerToMap: Sent neighborhood context to player {} (neighborhood='{}', hasHouse={})",
-        player->GetGUID().ToString(), _neighborhood->GetName(), housing ? "yes" : "no");
+    // Proactively send ENTER_PLOT for the player's own plot so the client
+    // has plot context immediately (the AT-based ENTER_PLOT may fire later
+    // when the player physically moves into AT radius, but sniff shows
+    // retail sends this early in the map-enter sequence).
+    if (housing)
+    {
+        uint8 plotIndex = housing->GetPlotIndex();
+        auto atItr = _plotAreaTriggers.find(plotIndex);
+        if (atItr != _plotAreaTriggers.end())
+        {
+            WorldPackets::Neighborhood::NeighborhoodPlayerEnterPlot enterPlot;
+            enterPlot.PlotAreaTriggerGuid = atItr->second;
+            player->SendDirectMessage(enterPlot.Write());
+
+            TC_LOG_ERROR("housing", "HousingMap::AddPlayerToMap: Sent proactive ENTER_PLOT for plot {} AT {} to player {}",
+                plotIndex, atItr->second.ToString(), player->GetGUID().ToString());
+        }
+        else
+        {
+            TC_LOG_ERROR("housing", "HousingMap::AddPlayerToMap: No AT tracked for plot {} - ENTER_PLOT NOT sent (player {})",
+                plotIndex, player->GetGUID().ToString());
+        }
+    }
+
+    TC_LOG_ERROR("housing", "HousingMap::AddPlayerToMap: Sent neighborhood context to player {} (neighborhood='{}', hasHouse={}, plotATs={})",
+        player->GetGUID().ToString(), _neighborhood->GetName(), housing ? "yes" : "no", uint32(_plotAreaTriggers.size()));
 
     return true;
 }

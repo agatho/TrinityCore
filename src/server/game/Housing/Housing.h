@@ -92,6 +92,7 @@ public:
     Player* GetOwner() const { return _owner; }
     ObjectGuid GetHouseGuid() const { return _houseGuid; }
     ObjectGuid GetNeighborhoodGuid() const { return _neighborhoodGuid; }
+    void SetNeighborhoodGuid(ObjectGuid guid) { _neighborhoodGuid = guid; }
     ObjectGuid GetPlotGuid() const;
     uint8 GetPlotIndex() const { return _plotIndex; }
     uint32 GetCreateTime() const { return _createTime; }

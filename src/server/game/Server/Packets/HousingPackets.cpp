@@ -406,13 +406,18 @@ WorldPacket const* HouseExteriorSetHousePositionResponse::Write()
 
 WorldPacket const* HousingDecorSetEditModeResponse::Write()
 {
-    // Sniff-verified (0x510000): HouseGuid + PlotGuid + uint8(Active) + uint32(Status) + [if Active: OwnerGuid]
+    // Sniff-verified (0x510000, 29 bytes ON):
+    //   HouseGuid(packed) + PlotGuid(packed) + uint32(DecorCount) + uint8(Result) + PackedGuid[DecorCount]
+    // The uint8 between DecorCount and DecorGuids is a HousingResult status code:
+    //   0 = HOUSING_RESULT_SUCCESS (edit mode allowed)
+    //   1 = HOUSING_RESULT_ACTION_LOCKED_BY_COMBAT ("You can't do that while in combat")
+    // Sniff always shows 0x00 for successful edit mode transitions.
     _worldPacket << HouseGuid;
     _worldPacket << PlotGuid;
-    _worldPacket << uint8(Active ? 1 : 0);
-    _worldPacket << uint32(Status);
-    if (Active)
-        _worldPacket << OwnerGuid;
+    _worldPacket << uint32(DecorGuids.size());
+    _worldPacket << uint8(Result);
+    for (ObjectGuid const& guid : DecorGuids)
+        _worldPacket << guid;
     return &_worldPacket;
 }
 
@@ -909,9 +914,10 @@ static void WriteJamNeighborhoodRosterEntry(WorldPacket& packet, JamNeighborhood
 WorldPacket const* HousingHouseStatusResponse::Write()
 {
     // Sniff-verified (0x550000): 3x PackedGUID + uint32 Status
+    // GUID3 (NeighborhoodGuid) must match EditMode DecorGuids[0]
     _worldPacket << HouseGuid;
-    _worldPacket << HouseTemplateGuid;
     _worldPacket << PlotGuid;
+    _worldPacket << NeighborhoodGuid;
     _worldPacket << uint32(Status);
     return &_worldPacket;
 }
