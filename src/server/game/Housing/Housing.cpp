@@ -483,6 +483,38 @@ HousingResult Housing::PlaceDecor(uint32 decorEntryId, float x, float y, float z
     else
         _interiorDecorWeightUsed += weightCost;
 
+    // Immediate persist for crash safety
+    {
+        CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_INS_CHARACTER_HOUSING_DECOR);
+        uint8 index = 0;
+        stmt->setUInt64(index++, _owner->GetGUID().GetCounter());
+        stmt->setUInt64(index++, decorGuid.GetCounter());
+        stmt->setUInt32(index++, decorEntryId);
+        stmt->setFloat(index++, x);
+        stmt->setFloat(index++, y);
+        stmt->setFloat(index++, z);
+        stmt->setFloat(index++, rotX);
+        stmt->setFloat(index++, rotY);
+        stmt->setFloat(index++, rotZ);
+        stmt->setFloat(index++, rotW);
+        stmt->setUInt32(index++, 0); // dyeSlot0
+        stmt->setUInt32(index++, 0); // dyeSlot1
+        stmt->setUInt32(index++, 0); // dyeSlot2
+        stmt->setUInt64(index++, roomGuid.IsEmpty() ? 0 : roomGuid.GetCounter());
+        stmt->setUInt8(index++, 0);  // locked
+        CharacterDatabase.Execute(stmt);
+    }
+
+    // Also persist updated catalog count
+    {
+        CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_UPD_CHARACTER_HOUSING_CATALOG_COUNT);
+        auto catItr = _catalog.find(decorEntryId);
+        stmt->setUInt32(0, catItr != _catalog.end() ? catItr->second.Count : 0);
+        stmt->setUInt64(1, _owner->GetGUID().GetCounter());
+        stmt->setUInt32(2, decorEntryId);
+        CharacterDatabase.Execute(stmt);
+    }
+
     // Update account decor storage UpdateField
     if (_owner->GetSession())
         _owner->GetSession()->GetBattlenetAccount().SetHousingDecorStorageEntry(decorGuid, _houseGuid, 0);
@@ -578,6 +610,23 @@ HousingResult Housing::RemoveDecor(ObjectGuid decorGuid)
     _catalog[decorEntryId].Count++;
 
     _placedDecor.erase(itr);
+
+    // Immediate persist for crash safety — delete the placed decor row
+    {
+        CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_DEL_CHARACTER_HOUSING_DECOR_SINGLE);
+        stmt->setUInt64(0, _owner->GetGUID().GetCounter());
+        stmt->setUInt64(1, decorGuid.GetCounter());
+        CharacterDatabase.Execute(stmt);
+    }
+
+    // Persist updated catalog count
+    {
+        CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_UPD_CHARACTER_HOUSING_CATALOG_COUNT);
+        stmt->setUInt32(0, _catalog[decorEntryId].Count);
+        stmt->setUInt64(1, _owner->GetGUID().GetCounter());
+        stmt->setUInt32(2, decorEntryId);
+        CharacterDatabase.Execute(stmt);
+    }
 
     // Remove from account decor storage UpdateField
     if (_owner->GetSession())
