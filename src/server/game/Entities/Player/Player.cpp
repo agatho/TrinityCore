@@ -1984,7 +1984,20 @@ GameObject* Player::GetGameObjectIfCanInteractWith(ObjectGuid const& guid) const
         return nullptr;
 
     if (!go->IsWithinDistInMap(this))
+    {
+        // Debug: log interaction failures for housing cornerstones (type 48 = UI_LINK)
+        if (go->GetGoType() == GAMEOBJECT_TYPE_UI_LINK)
+        {
+            TC_LOG_DEBUG("housing", "Player::GetGameObjectIfCanInteractWith FAILED (distance/phase): "
+                "player={} go entry={} guid={} displayId={} dist={:.1f} "
+                "inMap={} inPhase={} atInteractDist={}",
+                GetGUID().ToString(), go->GetEntry(), go->GetGUID().ToString(),
+                go->GetGOInfo()->displayId, GetExactDist(go),
+                go->IsInMap(this), go->InSamePhase(this),
+                go->IsAtInteractDistance(this));
+        }
         return nullptr;
+    }
 
     return go;
 }
@@ -24742,7 +24755,27 @@ void Player::SendInitialPacketsBeforeAddToMap()
         if (HousingMap* housingMap = dynamic_cast<HousingMap*>(GetMap()))
             if (Neighborhood* neighborhood = housingMap->GetNeighborhood())
                 worldServerInfo.NeighborhoodGUID = neighborhood->GetGuid();
-    SendDirectMessage(worldServerInfo.Write());
+    WorldPacket const* wsiPkt = worldServerInfo.Write();
+    SendDirectMessage(wsiPkt);
+
+    TC_LOG_ERROR("housing", "=== SMSG_WORLD_SERVER_INFO (login) ===\n"
+        "  DifficultyID={}, IsTournament={}, XRealmPvp={}, BlockExit={}\n"
+        "  HouseGUID: {} (lo={:016X} hi={:016X})\n"
+        "  HouseOwnerAccountGUID: {} (lo={:016X} hi={:016X})\n"
+        "  HouseCosmeticOwnerGUID: {} (lo={:016X} hi={:016X})\n"
+        "  NeighborhoodGUID: {} (lo={:016X} hi={:016X})\n"
+        "  Packet size={} bytes",
+        worldServerInfo.DifficultyID, worldServerInfo.IsTournamentRealm,
+        worldServerInfo.XRealmPvpAlert, worldServerInfo.BlockExitingLoadingScreen,
+        worldServerInfo.HouseGUID.ToString(),
+        worldServerInfo.HouseGUID.GetRawValue(0), worldServerInfo.HouseGUID.GetRawValue(1),
+        worldServerInfo.HouseOwnerAccountGUID.ToString(),
+        worldServerInfo.HouseOwnerAccountGUID.GetRawValue(0), worldServerInfo.HouseOwnerAccountGUID.GetRawValue(1),
+        worldServerInfo.HouseCosmeticOwnerGUID.ToString(),
+        worldServerInfo.HouseCosmeticOwnerGUID.GetRawValue(0), worldServerInfo.HouseCosmeticOwnerGUID.GetRawValue(1),
+        worldServerInfo.NeighborhoodGUID.ToString(),
+        worldServerInfo.NeighborhoodGUID.GetRawValue(0), worldServerInfo.NeighborhoodGUID.GetRawValue(1),
+        wsiPkt->size());
 
     // Spell modifiers
     SendSpellModifiers();
@@ -24891,13 +24924,11 @@ void Player::SendInitialPacketsAfterAddToMap()
             if (housing)
             {
                 statusResponse.HouseGuid = housing->GetHouseGuid();
-                statusResponse.OwnerBNetGuid = GetSession()->GetBattlenetAccountGUID();
-                statusResponse.OwnerPlayerGuid = GetGUID();
-                statusResponse.HouseStatus = 1;  // Has house
-                statusResponse.PlotIndex = housing->GetPlotIndex();
-                statusResponse.StatusFlags = 0;
+                statusResponse.HouseTemplateGuid = ObjectGuid::Create<HighGuid::Housing>(3, 0, 7, 0);
+                statusResponse.PlotGuid = housing->GetPlotGuid();
+                statusResponse.Status = 0;
             }
-            // No house: all fields stay at defaults (empty GUIDs, HouseStatus=0, PlotIndex=0xFF).
+            // No house: all fields stay at defaults (empty GUIDs, Status=0).
             SendDirectMessage(statusResponse.Write());
 
             // Populate NeighborhoodMirrorData on the Account entity so the
@@ -24929,6 +24960,27 @@ void Player::SendInitialPacketsAfterAddToMap()
                 }
             }
 
+            // Proactively send the neighborhood name response BEFORE the roster.
+            // The client's NeighborhoodState singleton initializes all four display
+            // flags (+572..+575) to 1. Flag +574 is only cleared when the
+            // JamCliNeighborhoodName DataCache already contains the neighborhood
+            // name. By sending this packet first, we pre-populate that cache so
+            // the roster response's display function finds the name resolved.
+            {
+                WorldPackets::Housing::QueryNeighborhoodNameResponse nameResponse;
+                nameResponse.NeighborhoodGuid = neighborhood->GetGuid();
+                nameResponse.Allow = true;
+                nameResponse.Name = neighborhood->GetName();
+                SendDirectMessage(nameResponse.Write());
+
+                TC_LOG_ERROR("housing", "=== SMSG_QUERY_NEIGHBORHOOD_NAME_RESPONSE (0x460012) [login-preload] ===\n"
+                    "  Allow={}, Name='{}' (len={})\n"
+                    "  NeighborhoodGuid: {} (lo={:016X} hi={:016X})",
+                    nameResponse.Allow, nameResponse.Name, nameResponse.Name.size(),
+                    nameResponse.NeighborhoodGuid.ToString(),
+                    nameResponse.NeighborhoodGuid.GetRawValue(0), nameResponse.NeighborhoodGuid.GetRawValue(1));
+            }
+
             // Proactively send the roster so the client has plot occupancy data
             // for the map without needing to request it.
             WorldPackets::Neighborhood::NeighborhoodGetRosterResponse rosterResponse;
@@ -24949,7 +25001,19 @@ void Player::SendInitialPacketsAfterAddToMap()
                         data.HouseGuid = plotInfo->HouseGuid;
                 rosterResponse.Members.push_back(data);
             }
-            SendDirectMessage(rosterResponse.Write());
+            WorldPacket const* loginRosterPkt = rosterResponse.Write();
+            SendDirectMessage(loginRosterPkt);
+
+            // Debug: log raw GUID bytes to verify roster packet populates handler context correctly
+            TC_LOG_ERROR("housing", "=== SMSG_NEIGHBORHOOD_GET_ROSTER_RESPONSE (0x5C0012) [login] ===\n"
+                "  GroupNeighborhoodGuid: {} (lo={:016X} hi={:016X})\n"
+                "  GroupOwnerGuid: {} (lo={:016X} hi={:016X})\n"
+                "  NeighborhoodName='{}', Members={}, Packet size={} bytes",
+                rosterResponse.GroupNeighborhoodGuid.ToString(),
+                rosterResponse.GroupNeighborhoodGuid.GetRawValue(0), rosterResponse.GroupNeighborhoodGuid.GetRawValue(1),
+                rosterResponse.GroupOwnerGuid.ToString(),
+                rosterResponse.GroupOwnerGuid.GetRawValue(0), rosterResponse.GroupOwnerGuid.GetRawValue(1),
+                rosterResponse.NeighborhoodName, rosterResponse.Members.size(), loginRosterPkt->size());
 
             TC_LOG_INFO("housing", "Player {} entered neighborhood map {} - sent HouseStatus + roster + NeighborhoodMirrorData (Neighborhood: '{}' {}, Members: {}, Plots: {}, HasHouse: {})",
                 GetGUID().ToString(), GetMapId(), neighborhood->GetName(), neighborhood->GetGuid().ToString(),
