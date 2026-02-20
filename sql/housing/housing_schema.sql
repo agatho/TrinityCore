@@ -64,6 +64,10 @@ CREATE TABLE `character_housing` (
     `houseSize` TINYINT UNSIGNED NOT NULL DEFAULT 2 COMMENT 'HousingFixtureSize: 1=Any, 2=Small, 3=Medium, 4=Large',
     `houseType` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'HouseExteriorWmoData DB2 entry ID (architectural style)',
     `createTime` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Unix timestamp of house creation',
+    `posX` FLOAT NOT NULL DEFAULT 0 COMMENT 'House X position on plot',
+    `posY` FLOAT NOT NULL DEFAULT 0 COMMENT 'House Y position on plot',
+    `posZ` FLOAT NOT NULL DEFAULT 0 COMMENT 'House Z position on plot',
+    `facing` FLOAT NOT NULL DEFAULT 0 COMMENT 'House facing angle on plot',
     PRIMARY KEY (`guid`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 

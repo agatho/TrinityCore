@@ -741,12 +741,9 @@ namespace WorldPackets::Housing
         HousingDecorSetEditModeResponse() : ServerPacket(SMSG_HOUSING_DECOR_SET_EDIT_MODE_RESPONSE) { }
         WorldPacket const* Write() override;
 
-        // Sniff-verified (0x510000): HouseGuid + PlotGuid + uint32 DecorCount + uint8 Result + PackedGuid[DecorCount]
-        // Result is HousingResult: 0=SUCCESS, 1=ACTION_LOCKED_BY_COMBAT, etc.
-        ObjectGuid HouseGuid;
-        ObjectGuid PlotGuid;
-        uint8 Result = 0; // HOUSING_RESULT_SUCCESS
-        std::vector<ObjectGuid> DecorGuids;
+        // Same wire format as Fixture/Room edit mode responses: uint32(Result) + Bit(Active)
+        uint32 Result = 0;
+        bool Active = false;
     };
 
     class HousingDecorMoveResponse final : public ServerPacket

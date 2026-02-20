@@ -406,18 +406,10 @@ WorldPacket const* HouseExteriorSetHousePositionResponse::Write()
 
 WorldPacket const* HousingDecorSetEditModeResponse::Write()
 {
-    // Sniff-verified (0x510000, 29 bytes ON):
-    //   HouseGuid(packed) + PlotGuid(packed) + uint32(DecorCount) + uint8(Result) + PackedGuid[DecorCount]
-    // The uint8 between DecorCount and DecorGuids is a HousingResult status code:
-    //   0 = HOUSING_RESULT_SUCCESS (edit mode allowed)
-    //   1 = HOUSING_RESULT_ACTION_LOCKED_BY_COMBAT ("You can't do that while in combat")
-    // Sniff always shows 0x00 for successful edit mode transitions.
-    _worldPacket << HouseGuid;
-    _worldPacket << PlotGuid;
-    _worldPacket << uint32(DecorGuids.size());
-    _worldPacket << uint8(Result);
-    for (ObjectGuid const& guid : DecorGuids)
-        _worldPacket << guid;
+    // Same wire format as Fixture/Room edit mode responses: uint32(Result) + Bit(Active)
+    _worldPacket << uint32(Result);
+    _worldPacket.WriteBit(Active);
+    _worldPacket.FlushBits();
     return &_worldPacket;
 }
 
