@@ -15238,6 +15238,10 @@ uint32 Player::GetQuestXPReward(Quest const* quest)
     for (Unit::AuraEffectList::const_iterator i = ModXPPctAuras.begin(); i != ModXPPctAuras.end(); ++i)
         AddPct(XP, (*i)->GetAmount());
 
+    // Warband alt XP bonus (5% per max-level character on account, max 25%)
+    if (uint8 altCount = GetWarbandMaxLevelCharCount())
+        XP += XP * altCount * 5 / 100;
+
     return XP;
 }
 
@@ -18939,6 +18943,9 @@ bool Player::LoadFromDB(ObjectGuid guid, CharacterDatabaseQueryHolder const& hol
     // must be before inventory (some items required reputation check)
     m_reputationMgr->LoadFromDB(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_REPUTATION));
     m_reputationMgr->LoadAccountWideFromDB(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_ACCOUNT_REPUTATION));
+
+    if (PreparedQueryResult maxLevelResult = holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_WARBAND_MAX_LEVEL_COUNT))
+        _warbandMaxLevelCharCount = std::min((*maxLevelResult)[0].GetUInt64(), uint64(5));
 
     _LoadCharacterBankTabSettings(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_BANK_TAB_SETTINGS));
     _LoadAccountBankTabSettings(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_ACCOUNT_BANK_TAB_SETTINGS));
