@@ -376,6 +376,10 @@ bool LoginQueryHolder::Initialize()
     stmt->setUInt32(0, m_battlenetAccountId);
     res &= SetPreparedQuery(PLAYER_LOGIN_QUERY_LOAD_ACCOUNT_BANK_COINAGE, stmt);
 
+    stmt = CharacterDatabase.GetPreparedStatement(CHAR_SEL_ACCOUNT_REPUTATION);
+    stmt->setUInt32(0, m_battlenetAccountId);
+    res &= SetPreparedQuery(PLAYER_LOGIN_QUERY_LOAD_ACCOUNT_REPUTATION, stmt);
+
     return res;
 }
 
