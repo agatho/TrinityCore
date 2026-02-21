@@ -1530,6 +1530,9 @@ bool World::SetInitialWorldSettings()
     TC_LOG_INFO("server.loading", "Loading Reputation Spillover Data...");
     sObjectMgr->LoadReputationSpilloverTemplate();
 
+    TC_LOG_INFO("server.loading", "Loading Warband Reputation Factions...");
+    sObjectMgr->LoadWarbandReputationFactions();
+
     TC_LOG_INFO("server.loading", "Loading Points Of Interest Data...");
     sObjectMgr->LoadPointsOfInterest();
 
