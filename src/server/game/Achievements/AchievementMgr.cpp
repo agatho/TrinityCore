@@ -243,16 +243,17 @@ void PlayerAchievementMgr::DeleteFromDB(ObjectGuid const& guid)
     CharacterDatabase.CommitTransaction(trans);
 }
 
-void PlayerAchievementMgr::LoadFromDB(PreparedQueryResult achievementResult, PreparedQueryResult criteriaResult)
+void PlayerAchievementMgr::LoadFromDB(PreparedQueryResult achievementResult, PreparedQueryResult criteriaResult,
+                                       PreparedQueryResult warbandAchievementResult, PreparedQueryResult warbandCriteriaResult)
 {
-    if (achievementResult)
+    // Phase 1: Load warband (account-wide) achievements
+    if (warbandAchievementResult)
     {
         do
         {
-            Field* fields = achievementResult->Fetch();
+            Field* fields = warbandAchievementResult->Fetch();
             uint32 achievementid = fields[0].GetUInt32();
 
-            // must not happen: cleanup at server startup in sAchievementMgr->LoadCompletedAchievements()
             AchievementEntry const* achievement = sAchievementStore.LookupEntry(achievementid);
             if (!achievement)
                 continue;
@@ -269,9 +270,72 @@ void PlayerAchievementMgr::LoadFromDB(PreparedQueryResult achievementResult, Pre
                     if (CharTitlesEntry const* titleEntry = sCharTitlesStore.LookupEntry(titleId))
                         _owner->SetTitle(titleEntry);
 
+        } while (warbandAchievementResult->NextRow());
+    }
+
+    // Phase 2: Load warband (account-wide) criteria progress
+    if (warbandCriteriaResult)
+    {
+        time_t now = GameTime::GetGameTime();
+        do
+        {
+            Field* fields = warbandCriteriaResult->Fetch();
+            uint32 id = fields[0].GetUInt32();
+            uint64 counter = fields[1].GetUInt64();
+            time_t date = fields[2].GetInt64();
+
+            Criteria const* criteria = sCriteriaMgr->GetCriteria(id);
+            if (!criteria)
+                continue;
+
+            if (criteria->Entry->StartTimer && time_t(date + criteria->Entry->StartTimer) < now)
+                continue;
+
+            CriteriaProgress& progress = _criteriaProgress[id];
+            progress.Counter = counter;
+            progress.Date = date;
+            progress.PlayerGUID = _owner->GetGUID();
+            progress.Changed = false;
+        } while (warbandCriteriaResult->NextRow());
+    }
+
+    // Phase 3: Load character achievements
+    if (achievementResult)
+    {
+        do
+        {
+            Field* fields = achievementResult->Fetch();
+            uint32 achievementid = fields[0].GetUInt32();
+
+            AchievementEntry const* achievement = sAchievementStore.LookupEntry(achievementid);
+            if (!achievement)
+                continue;
+
+            // Already loaded from warband table - skip to avoid double points
+            if (_completedAchievements.count(achievementid))
+                continue;
+
+            CompletedAchievementData& ca = _completedAchievements[achievementid];
+            ca.Date = fields[1].GetInt64();
+
+            // If this is an account-wide achievement not yet in the warband table, promote it
+            if (achievement->Flags & ACHIEVEMENT_FLAG_ACCOUNT)
+                ca.Changed = true; // Will be saved to warband table on next save
+            else
+                ca.Changed = false;
+
+            _achievementPoints += achievement->Points;
+
+            // title achievement rewards are retroactive
+            if (AchievementReward const* reward = sAchievementMgr->GetAchievementReward(achievement))
+                if (uint32 titleId = reward->TitleId[Player::TeamForRace(_owner->GetRace()) == ALLIANCE ? 0 : 1])
+                    if (CharTitlesEntry const* titleEntry = sCharTitlesStore.LookupEntry(titleId))
+                        _owner->SetTitle(titleEntry);
+
         } while (achievementResult->NextRow());
     }
 
+    // Phase 4: Load character criteria progress
     if (criteriaResult)
     {
         time_t now = GameTime::GetGameTime();
@@ -298,12 +362,75 @@ void PlayerAchievementMgr::LoadFromDB(PreparedQueryResult achievementResult, Pre
             if (criteria->Entry->StartTimer && time_t(date + criteria->Entry->StartTimer) < now)
                 continue;
 
-            CriteriaProgress& progress = _criteriaProgress[id];
-            progress.Counter = counter;
-            progress.Date = date;
-            progress.PlayerGUID = _owner->GetGUID();
-            progress.Changed = false;
+            auto itr = _criteriaProgress.find(id);
+            if (itr != _criteriaProgress.end())
+            {
+                // Already loaded from warband - take the higher counter (promote if character has more)
+                if (counter > itr->second.Counter)
+                {
+                    itr->second.Counter = counter;
+                    itr->second.Date = date;
+                    itr->second.Changed = true; // Promotes higher value to warband table
+                }
+            }
+            else
+            {
+                CriteriaProgress& progress = _criteriaProgress[id];
+                progress.Counter = counter;
+                progress.Date = date;
+                progress.PlayerGUID = _owner->GetGUID();
+                progress.Changed = false;
+            }
         } while (criteriaResult->NextRow());
+    }
+}
+
+void PlayerAchievementMgr::SaveAccountWideToDB(CharacterDatabaseTransaction trans)
+{
+    uint32 bnetAccountId = _owner->GetSession()->GetBattlenetAccountId();
+
+    for (auto const& [achievementId, data] : _completedAchievements)
+    {
+        if (!data.Changed)
+            continue;
+
+        AchievementEntry const* achievement = sAchievementStore.LookupEntry(achievementId);
+        if (!achievement || !(achievement->Flags & ACHIEVEMENT_FLAG_ACCOUNT))
+            continue;
+
+        CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_REP_WARBAND_ACHIEVEMENT);
+        stmt->setUInt32(0, bnetAccountId);
+        stmt->setUInt32(1, achievementId);
+        stmt->setInt64(2, data.Date);
+        stmt->setUInt64(3, _owner->GetGUID().GetCounter());
+        trans->Append(stmt);
+    }
+
+    for (auto const& [criteriaId, progress] : _criteriaProgress)
+    {
+        if (!progress.Changed)
+            continue;
+
+        Criteria const* criteria = sCriteriaMgr->GetCriteria(criteriaId);
+        if (!criteria || !(criteria->FlagsCu & CRITERIA_FLAG_CU_ACCOUNT))
+            continue;
+
+        if (progress.Counter)
+        {
+            CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_REP_WARBAND_ACHIEVEMENT_PROGRESS);
+            stmt->setUInt32(0, bnetAccountId);
+            stmt->setUInt32(1, criteriaId);
+            stmt->setUInt64(2, progress.Counter);
+            stmt->setInt64(3, progress.Date);
+            trans->Append(stmt);
+        }
+        else
+        {
+            CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_DEL_WARBAND_ACHIEVEMENT_PROGRESS_BY_CRITERIA);
+            stmt->setUInt32(0, bnetAccountId);
+            stmt->setUInt32(1, criteriaId);
+            trans->Append(stmt);
+        }
     }
 }
 

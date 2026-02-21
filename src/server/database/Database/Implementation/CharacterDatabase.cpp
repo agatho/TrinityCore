@@ -873,6 +873,12 @@ void CharacterDatabaseConnection::DoPrepareStatements()
     PrepareStatement(CHAR_SEL_WARBAND_TAXI_MASK, "SELECT taximask FROM warband_taxi_mask WHERE battlenetAccountId = ?", CONNECTION_ASYNC);
     PrepareStatement(CHAR_REP_WARBAND_TAXI_MASK, "REPLACE INTO warband_taxi_mask (battlenetAccountId, taximask) VALUES (?, ?)", CONNECTION_ASYNC);
     PrepareStatement(CHAR_SEL_WARBAND_MAX_LEVEL_CHARS, "SELECT COUNT(*) FROM characters WHERE battlenetAccount = ? AND level = ? AND guid != ? AND deleteDate IS NULL", CONNECTION_ASYNC);
+
+    PrepareStatement(CHAR_SEL_WARBAND_ACHIEVEMENTS, "SELECT achievement, date, firstCharGuid FROM warband_achievement WHERE battlenetAccountId = ?", CONNECTION_ASYNC);
+    PrepareStatement(CHAR_SEL_WARBAND_ACHIEVEMENT_PROGRESS, "SELECT criteria, counter, date FROM warband_achievement_progress WHERE battlenetAccountId = ?", CONNECTION_ASYNC);
+    PrepareStatement(CHAR_REP_WARBAND_ACHIEVEMENT, "REPLACE INTO warband_achievement (battlenetAccountId, achievement, date, firstCharGuid) VALUES (?, ?, ?, ?)", CONNECTION_ASYNC);
+    PrepareStatement(CHAR_REP_WARBAND_ACHIEVEMENT_PROGRESS, "REPLACE INTO warband_achievement_progress (battlenetAccountId, criteria, counter, date) VALUES (?, ?, ?, ?)", CONNECTION_ASYNC);
+    PrepareStatement(CHAR_DEL_WARBAND_ACHIEVEMENT_PROGRESS_BY_CRITERIA, "DELETE FROM warband_achievement_progress WHERE battlenetAccountId = ? AND criteria = ?", CONNECTION_ASYNC);
 }
 
 CharacterDatabaseConnection::CharacterDatabaseConnection(MySQLConnectionInfo& connInfo, ConnectionFlags connectionFlags) : MySQLConnection(connInfo, connectionFlags)
