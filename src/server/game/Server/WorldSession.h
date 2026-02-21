@@ -826,6 +826,9 @@ namespace WorldPackets
         class QueryCountdownTimer;
         class SetCurrencyFlags;
         class ChromieTimeSelectExpansion;
+        class RequestCurrencyDataForAccountCharacters;
+        class TransferCurrencyFromAccountCharacter;
+        class GetCharacterCurrencyTransferLog;
     }
 
     namespace Movement
@@ -2590,6 +2593,10 @@ class TC_GAME_API WorldSession
         void HandleRequestLatestSplashScreen(WorldPackets::Misc::RequestLatestSplashScreen& requestLatestSplashScreen);
 
         void HandleSocialContractRequest(WorldPackets::Social::SocialContractRequest& socialContractRequest);
+
+        void HandleRequestCurrencyDataForAccountCharacters(WorldPackets::Misc::RequestCurrencyDataForAccountCharacters& packet);
+        void HandleTransferCurrencyFromAccountCharacter(WorldPackets::Misc::TransferCurrencyFromAccountCharacter& packet);
+        void HandleGetCharacterCurrencyTransferLog(WorldPackets::Misc::GetCharacterCurrencyTransferLog& packet);
 
         union ConnectToKey
         {
