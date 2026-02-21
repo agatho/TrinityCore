@@ -849,4 +849,65 @@ WorldPacket const* AccountWarbandSceneUpdate::Write()
 
     return &_worldPacket;
 }
+
+void TransferCurrencyFromAccountCharacter::Read()
+{
+    _worldPacket >> SourceCharacterGUID;
+    _worldPacket >> CurrencyID;
+    _worldPacket >> Quantity;
+}
+
+WorldPacket const* AccountCharacterCurrencyLists::Write()
+{
+    _worldPacket << Size<uint32>(Characters);
+    _worldPacket << Size<uint32>(CurrencyData);
+
+    for (CharacterCurrencyData const& character : Characters)
+    {
+        _worldPacket << character.CharacterGUID;
+        _worldPacket << uint8(character.ClassID);
+        _worldPacket << int32(character.Level);
+        _worldPacket << SizedString::BitsSize<6>(character.CharacterName);
+    }
+
+    _worldPacket.FlushBits();
+
+    for (CharacterCurrencyData const& character : Characters)
+        _worldPacket << SizedString::Data(character.CharacterName);
+
+    for (CurrencyQuantityData const& currency : CurrencyData)
+    {
+        _worldPacket << currency.CharacterGUID;
+        _worldPacket << int32(currency.CurrencyTypeID);
+        _worldPacket << int32(currency.Quantity);
+    }
+
+    return &_worldPacket;
+}
+
+WorldPacket const* CurrencyTransferResult::Write()
+{
+    _worldPacket << int32(CurrencyID);
+    _worldPacket << int32(Quantity);
+    _worldPacket << int32(TotalQuantity);
+    _worldPacket << uint32(Result);
+
+    return &_worldPacket;
+}
+
+WorldPacket const* CurrencyTransferLog::Write()
+{
+    _worldPacket << Size<uint32>(Entries);
+
+    for (CurrencyTransferLogEntry const& entry : Entries)
+    {
+        _worldPacket << int32(entry.CurrencyTypeID);
+        _worldPacket << entry.SourceCharacterGUID;
+        _worldPacket << entry.DestCharacterGUID;
+        _worldPacket << int32(entry.Quantity);
+        _worldPacket << uint32(entry.Timestamp);
+    }
+
+    return &_worldPacket;
+}
 }

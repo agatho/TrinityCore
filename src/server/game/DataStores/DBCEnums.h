@@ -884,7 +884,7 @@ enum class CurrencyTypesFlags : uint32
     DestroyExtraOnLoot                  = 0x00200000, // NYI
     DontShowTotalInTooltip              = 0x00400000, // NYI
     DontCoalesceInLootWindow            = 0x00800000, // NYI
-    AccountWide                         = 0x01000000, // NYI
+    AccountWide                         = 0x01000000,
     AllowOverflowMailer                 = 0x02000000, // NYI
     HideAsReward                        = 0x04000000, // NYI
     HasWarmodeBonus                     = 0x08000000, // NYI
