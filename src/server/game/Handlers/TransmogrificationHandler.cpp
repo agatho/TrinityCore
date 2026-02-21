@@ -66,9 +66,17 @@ void WorldSession::HandleTransmogrifyItems(WorldPackets::Transmogrification::Tra
             return false;
         }
         ItemTemplate const* itemTemplate = sObjectMgr->GetItemTemplate(itemModifiedAppearance->ItemID);
-        if (player->CanUseItem(itemTemplate) != EQUIP_ERR_OK)
+        if (!itemTemplate)
         {
-            TC_LOG_DEBUG("network", "WORLD: HandleTransmogrifyItems - {}, Name: {} tried to transmogrify using appearance he can never use ({}).", player->GetGUID().ToString(), player->GetName(), itemModifiedAppearanceId);
+            TC_LOG_DEBUG("network", "WORLD: HandleTransmogrifyItems - {}, Name: {} tried to transmogrify using invalid appearance ({}).", player->GetGUID().ToString(), player->GetName(), itemModifiedAppearanceId);
+            return false;
+        }
+        if (itemTemplate->HasFlag(ITEM_FLAG2_INTERNAL_ITEM)
+            || (itemTemplate->HasFlag(ITEM_FLAG2_FACTION_HORDE) && player->GetTeam() != HORDE)
+            || (itemTemplate->HasFlag(ITEM_FLAG2_FACTION_ALLIANCE) && player->GetTeam() != ALLIANCE)
+            || !itemTemplate->GetAllowableRace().HasRace(player->GetRace()))
+        {
+            TC_LOG_DEBUG("network", "WORLD: HandleTransmogrifyItems - {}, Name: {} tried to transmogrify using appearance they cannot use ({}).", player->GetGUID().ToString(), player->GetName(), itemModifiedAppearanceId);
             return false;
         }
 
