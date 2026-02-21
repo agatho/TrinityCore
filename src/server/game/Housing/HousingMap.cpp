@@ -536,10 +536,10 @@ GameObject* HousingMap::SpawnHouseForPlot(uint8 plotIndex, Position const* custo
         customPos ? 0.0f : targetPlot->HouseRotation[1],
         customPos ? 0.0f : targetPlot->HouseRotation[0]);
 
-    // Use PlotGameObjectID from DB2 if available, otherwise use a default house entry
-    uint32 goEntry = targetPlot->PlotGameObjectID > 0
-        ? static_cast<uint32>(targetPlot->PlotGameObjectID)
-        : 574432; // Default basic house structure
+    // PlotGameObjectID is the plot marker (For Sale sign), NOT the house structure.
+    // Use the default house structure GO (574432) for now.
+    // TODO: Look up house GO entry from HouseExteriorWmo based on house type when data is available.
+    uint32 goEntry = 574432; // Housing - Generic - Ground WMO (type 43, displayId 113521)
 
     Position pos(x, y, z, facing);
     GameObject* go = GameObject::CreateGameObject(goEntry, this, pos, rot, 255, GO_STATE_ACTIVE);
