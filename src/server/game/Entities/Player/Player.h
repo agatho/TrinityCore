@@ -1060,6 +1060,7 @@ enum PlayerLoginQueryIndex
     PLAYER_LOGIN_QUERY_LOAD_CONTENT_TRACKING,
     PLAYER_LOGIN_QUERY_LOAD_ACCOUNT_REPUTATION,
     PLAYER_LOGIN_QUERY_LOAD_WARBAND_TAXI_MASK,
+    PLAYER_LOGIN_QUERY_LOAD_WARBAND_MAX_LEVEL_COUNT,
     MAX_PLAYER_LOGIN_QUERY
 };
 
@@ -3003,6 +3004,8 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         void UpdateRenownRewards(FactionEntry const* renownFaction);
         void UpdateAllRenownRewards();   // login catch-up: grant any renown rewards earned before this feature existed
 
+        uint8 GetWarbandMaxLevelCharCount() const { return _warbandMaxLevelCharCount; }
+
         bool IsAdvancedCombatLoggingEnabled() const { return _advancedCombatLoggingEnabled; }
         void SetAdvancedCombatLogging(bool enabled) { _advancedCombatLoggingEnabled = enabled; }
 
@@ -3581,6 +3584,8 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
 
         std::unordered_map<int32 /*GarrisonType*/, std::unique_ptr<Garrison>> _garrisons;
         std::unique_ptr<MythicPlusData> _mythicPlusData;
+
+        uint8 _warbandMaxLevelCharCount = 0;
 
         bool _advancedCombatLoggingEnabled;
 
