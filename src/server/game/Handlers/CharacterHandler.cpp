@@ -390,6 +390,14 @@ bool LoginQueryHolder::Initialize()
     stmt->setUInt64(2, lowGuid);
     res &= SetPreparedQuery(PLAYER_LOGIN_QUERY_LOAD_WARBAND_MAX_LEVEL_COUNT, stmt);
 
+    stmt = CharacterDatabase.GetPreparedStatement(CHAR_SEL_WARBAND_ACHIEVEMENTS);
+    stmt->setUInt32(0, m_battlenetAccountId);
+    res &= SetPreparedQuery(PLAYER_LOGIN_QUERY_LOAD_WARBAND_ACHIEVEMENTS, stmt);
+
+    stmt = CharacterDatabase.GetPreparedStatement(CHAR_SEL_WARBAND_ACHIEVEMENT_PROGRESS);
+    stmt->setUInt32(0, m_battlenetAccountId);
+    res &= SetPreparedQuery(PLAYER_LOGIN_QUERY_LOAD_WARBAND_ACHIEVEMENT_PROGRESS, stmt);
+
     return res;
 }
 
