@@ -24,6 +24,7 @@
 #include "SharedDefines.h"
 #include <set>
 #include <map>
+#include <unordered_map>
 
 struct FactionEntry;
 struct FactionTemplateEntry;
@@ -47,6 +48,12 @@ enum class ReputationFlags : uint16
 };
 
 DEFINE_ENUM_FLAG(ReputationFlags);
+
+struct AccountReputationState
+{
+    int32 standing = 0;
+    int32 renownLevel = 0;
+};
 
 typedef uint32 RepListID;
 struct FactionState
@@ -74,6 +81,8 @@ class TC_GAME_API ReputationMgr
 
         void SaveToDB(CharacterDatabaseTransaction trans);
         void LoadFromDB(PreparedQueryResult result);
+        void LoadAccountWideFromDB(PreparedQueryResult result);
+        void SaveAccountWideToDB(CharacterDatabaseTransaction trans);
     public:                                                 // statics
         static std::set<int32> const ReputationRankThresholds;
         static const int32 Reputation_Cap;
@@ -161,6 +170,7 @@ class TC_GAME_API ReputationMgr
     private:
         Player* _player;
         FactionStateList _factions;
+        std::unordered_map<uint32 /*factionId*/, AccountReputationState> _accountReputation;
         ForcedReactions _forcedReactions;
         uint8 _visibleFactionCount :8;
         uint8 _honoredFactionCount :8;
