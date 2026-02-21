@@ -2106,8 +2106,6 @@ bool Item::CanTransmogrifyItemWithItem(Item const* item, ItemModifiedAppearanceE
                     return false;
                 break;
             case ITEM_CLASS_ARMOR:
-                if (source->GetSubClass() != ITEM_SUBCLASS_ARMOR_COSMETIC)
-                    return false;
                 if (source->GetInventoryType() != target->GetInventoryType())
                     if (ItemTransmogrificationSlots[source->GetInventoryType()] != ItemTransmogrificationSlots[target->GetInventoryType()])
                         return false;
