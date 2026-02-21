@@ -1518,6 +1518,16 @@ struct CurrencyTypesEntry
     {
         return GetFlags().HasFlag(CurrencyTypesFlags::TrackQuantity);
     }
+
+    bool IsAccountWide() const
+    {
+        return GetFlags().HasFlag(CurrencyTypesFlags::AccountWide);
+    }
+
+    bool IsAccountTransferable() const
+    {
+        return AccountTransferPercentage > 0.0f;
+    }
 };
 
 struct CurveEntry

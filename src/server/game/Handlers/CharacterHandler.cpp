@@ -1775,6 +1775,7 @@ void WorldSession::SendFeatureSystemStatus()
     features.IsChatMuted = !CanSpeak();
 
     features.SpeakForMeAllowed = false;
+    features.IsAccountCurrencyTransferEnabled = true;
 
     for (World::GameRule const& gameRule : sWorld->GetGameRules())
     {
