@@ -791,6 +791,134 @@ void ReputationMgr::LoadFromDB(PreparedQueryResult result)
     }
 }
 
+void ReputationMgr::LoadAccountWideFromDB(PreparedQueryResult result)
+{
+    if (!result)
+        return;
+
+    do
+    {
+        Field* fields = result->Fetch();
+        uint32 factionId = fields[0].GetUInt16();
+        int32 accountStanding = fields[1].GetInt32();
+        int32 accountRenownLevel = fields[2].GetInt32();
+
+        // Cache for later save comparison
+        AccountReputationState& accountState = _accountReputation[factionId];
+        accountState.standing = accountStanding;
+        accountState.renownLevel = accountRenownLevel;
+
+        FactionEntry const* factionEntry = sFactionStore.LookupEntry(factionId);
+        if (!factionEntry || !factionEntry->CanHaveReputation())
+            continue;
+
+        FactionState* state = &_factions[factionEntry->ReputationIndex];
+
+        if (IsRenownReputation(factionEntry))
+        {
+            // Renown faction: compare renown level first, then standing as tiebreaker
+            int32 charRenownLevel = GetRenownLevel(factionEntry);
+            int32 charStanding = state->Standing;
+
+            bool shouldSync = false;
+            if (accountRenownLevel > charRenownLevel)
+                shouldSync = true;
+            else if (accountRenownLevel == charRenownLevel && accountStanding > charStanding)
+                shouldSync = true;
+
+            if (shouldSync)
+            {
+                // Set renown currency to account level
+                if (accountRenownLevel != charRenownLevel)
+                {
+                    if (CurrencyTypesEntry const* currency = sCurrencyTypesStore.LookupEntry(factionEntry->RenownCurrencyID))
+                        _player->ModifyCurrency(currency->ID, accountRenownLevel - charRenownLevel, CurrencyGainSource::RenownRepGain, CurrencyDestroyReason::Cheat);
+                }
+
+                state->Standing = accountStanding;
+                state->needSave = true;
+                state->needSend = true;
+
+                SetVisible(state);
+            }
+        }
+        else
+        {
+            // Regular faction: higher standing delta wins
+            if (accountStanding > state->Standing)
+            {
+                int32 baseRep = GetBaseReputation(factionEntry);
+                ReputationRank oldRank = ReputationToRank(factionEntry, baseRep + state->Standing);
+                ReputationRank newRank = ReputationToRank(factionEntry, baseRep + accountStanding);
+
+                if (!factionEntry->FriendshipRepID)
+                    UpdateRankCounters(oldRank, newRank);
+
+                state->Standing = accountStanding;
+                state->needSave = true;
+                state->needSend = true;
+
+                SetVisible(state);
+            }
+        }
+    }
+    while (result->NextRow());
+}
+
+void ReputationMgr::SaveAccountWideToDB(CharacterDatabaseTransaction trans)
+{
+    uint32 bnetAccountId = _player->GetSession()->GetBattlenetAccountId();
+
+    for (auto& [reputationIndex, state] : _factions)
+    {
+        if (!state.needSave)
+            continue;
+
+        if (!sObjectMgr->IsWarbandReputationFaction(state.ID))
+            continue;
+
+        FactionEntry const* factionEntry = sFactionStore.LookupEntry(state.ID);
+        if (!factionEntry)
+            continue;
+
+        int32 currentStanding = state.Standing;
+        int32 currentRenownLevel = 0;
+
+        if (IsRenownReputation(factionEntry))
+            currentRenownLevel = GetRenownLevel(factionEntry);
+
+        // Only write if our value is higher than what's stored
+        auto itr = _accountReputation.find(state.ID);
+        if (itr != _accountReputation.end())
+        {
+            AccountReputationState const& cached = itr->second;
+
+            if (IsRenownReputation(factionEntry))
+            {
+                if (currentRenownLevel < cached.renownLevel)
+                    continue;
+                if (currentRenownLevel == cached.renownLevel && currentStanding <= cached.standing)
+                    continue;
+            }
+            else
+            {
+                if (currentStanding <= cached.standing)
+                    continue;
+            }
+        }
+
+        CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_REP_ACCOUNT_REPUTATION);
+        stmt->setUInt32(0, bnetAccountId);
+        stmt->setUInt16(1, uint16(state.ID));
+        stmt->setInt32(2, currentStanding);
+        stmt->setInt32(3, currentRenownLevel);
+        trans->Append(stmt);
+
+        // Update cache
+        _accountReputation[state.ID] = { currentStanding, currentRenownLevel };
+    }
+}
+
 void ReputationMgr::SaveToDB(CharacterDatabaseTransaction trans)
 {
     for (FactionStateList::iterator itr = _factions.begin(); itr != _factions.end(); ++itr)
