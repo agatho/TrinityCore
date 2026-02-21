@@ -880,6 +880,9 @@ void CharacterDatabaseConnection::DoPrepareStatements()
     // Denormalised Bnet account id refresh, applied at every login so the characters.battlenetAccount
     // column that the warband currency/alt-XP queries filter on is always populated (MJ-1).
     PrepareStatement(CHAR_UPD_CHARACTER_BNET_ACCOUNT, "UPDATE characters SET battlenetAccount = ? WHERE guid = ?", CONNECTION_ASYNC);
+
+    PrepareStatement(CHAR_SEL_WARBAND_TAXI_MASK, "SELECT taximask FROM warband_taxi_mask WHERE battlenetAccountId = ?", CONNECTION_ASYNC);
+    PrepareStatement(CHAR_REP_WARBAND_TAXI_MASK, "REPLACE INTO warband_taxi_mask (battlenetAccountId, taximask) VALUES (?, ?)", CONNECTION_ASYNC);
 }
 
 CharacterDatabaseConnection::CharacterDatabaseConnection(MySQLConnectionInfo& connInfo, ConnectionFlags connectionFlags) : MySQLConnection(connInfo, connectionFlags)
