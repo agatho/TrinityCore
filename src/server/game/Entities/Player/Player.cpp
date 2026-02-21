@@ -18927,6 +18927,12 @@ bool Player::LoadFromDB(ObjectGuid guid, CharacterDatabaseQueryHolder const& hol
     if (!m_taxi.LoadTaxiMask(fields.taximask))                   // must be before InitTaxiNodesForLevel
         TC_LOG_WARN("entities.player.loading", "Player::LoadFromDB: Player ({}) has invalid taximask ({}) in DB. Forced partial load.", GetGUID().ToString(), fields.taximask);
 
+    if (PreparedQueryResult warbandTaxiResult = holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_WARBAND_TAXI_MASK))
+    {
+        TaxiMask accountMask = PlayerTaxi::LoadTaxiMaskFromString((*warbandTaxiResult)[0].GetString());
+        m_taxi.MergeAccountTaxiMask(accountMask);
+    }
+
     uint32 extraflags = fields.extra_flags;
 
     _LoadPetStable(fields.summonedPetNumber, holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_PET_SLOTS));
@@ -21943,6 +21949,16 @@ void Player::SaveToDB(LoginDatabaseTransaction loginTransaction, CharacterDataba
 
     if (_mythicPlusData)
         _mythicPlusData->SaveToDB(trans);
+
+    // Warband account-wide flight-path sharing: persist the taxi mask per Bnet account.
+    {
+        std::ostringstream ss;
+        ss << m_taxi;
+        CharacterDatabasePreparedStatement* taxiStmt = CharacterDatabase.GetPreparedStatement(CHAR_REP_WARBAND_TAXI_MASK);
+        taxiStmt->setUInt32(0, GetSession()->GetBattlenetAccountId());
+        taxiStmt->setString(1, ss.str());
+        trans->Append(taxiStmt);
+    }
 
     // check if stats should only be saved on logout
     // save stats can be out of transaction
