@@ -211,6 +211,7 @@ void HousingMap::SpawnPlotGameObjects()
 
     // Spawn house structure GOs for owned plots
     uint32 houseCount = 0;
+    uint32 houseSuccessCount = 0;
     for (NeighborhoodPlotData const* plot : plots)
     {
         uint8 plotIdx = static_cast<uint8>(plot->PlotIndex);
@@ -218,27 +219,36 @@ void HousingMap::SpawnPlotGameObjects()
         if (!plotInfo || plotInfo->OwnerGuid.IsEmpty())
             continue;
 
+        TC_LOG_ERROR("housing", "HousingMap::SpawnPlotGameObjects: Plot {} is owned by {} - attempting house spawn (HousePos: {:.1f}, {:.1f}, {:.1f})",
+            plotIdx, plotInfo->OwnerGuid.ToString(),
+            plot->HousePosition[0], plot->HousePosition[1], plot->HousePosition[2]);
+
         // Try to get persisted position from the player's Housing object (if online)
         Housing* housing = GetHousingForPlayer(plotInfo->OwnerGuid);
+        GameObject* houseGo = nullptr;
         if (housing && housing->HasCustomPosition())
         {
             Position customPos = housing->GetHousePosition();
-            SpawnHouseForPlot(plotIdx, &customPos);
+            houseGo = SpawnHouseForPlot(plotIdx, &customPos);
         }
         else
         {
-            SpawnHouseForPlot(plotIdx); // DB2 default position
+            houseGo = SpawnHouseForPlot(plotIdx); // DB2 default position
         }
         ++houseCount;
+        if (houseGo)
+            ++houseSuccessCount;
+        else
+            TC_LOG_ERROR("housing", "HousingMap::SpawnPlotGameObjects: FAILED to spawn house for plot {} owned by {}",
+                plotIdx, plotInfo->OwnerGuid.ToString());
 
         // Spawn decor GOs if the player's Housing data is loaded
         if (housing)
             SpawnAllDecorForPlot(plotIdx, housing);
     }
 
-    if (houseCount > 0)
-        TC_LOG_INFO("housing", "HousingMap::SpawnPlotGameObjects: Spawned {} house GOs for owned plots in neighborhood '{}'",
-            houseCount, _neighborhood->GetName());
+    TC_LOG_ERROR("housing", "HousingMap::SpawnPlotGameObjects: House spawn results: {}/{} successful for neighborhood '{}'",
+        houseSuccessCount, houseCount, _neighborhood->GetName());
 }
 
 AreaTrigger* HousingMap::GetPlotAreaTrigger(uint8 plotIndex)
@@ -344,12 +354,23 @@ bool HousingMap::AddPlayerToMap(Player* player, bool initPlayer /*= true*/)
     // First try exact GUID match, then fall back to checking all housings
     // (handles legacy data where neighborhood GUID counter was from client's DB2 ID
     // instead of the server's canonical counter).
+    TC_LOG_ERROR("housing", "HousingMap::AddPlayerToMap: Looking up housing for player {} in neighborhood '{}' (guid={})",
+        player->GetGUID().ToString(), _neighborhood->GetName(), _neighborhood->GetGuid().ToString());
+
     Housing* housing = player->GetHousingForNeighborhood(_neighborhood->GetGuid());
     if (!housing)
     {
+        TC_LOG_ERROR("housing", "HousingMap::AddPlayerToMap: No housing found via GetHousingForNeighborhood. Checking fallback (allHousings count: {})",
+            uint32(player->GetAllHousings().size()));
+
         // Fallback: check if any of the player's housings has a plot in this neighborhood
         for (Housing const* h : player->GetAllHousings())
         {
+            TC_LOG_ERROR("housing", "HousingMap::AddPlayerToMap: Fallback check: housing plotIndex={} neighborhoodGuid={} houseGuid={}",
+                h ? h->GetPlotIndex() : 255,
+                h ? h->GetNeighborhoodGuid().ToString() : "null",
+                h ? h->GetHouseGuid().ToString() : "null");
+
             if (h && _neighborhood->GetPlotInfo(h->GetPlotIndex()))
             {
                 housing = const_cast<Housing*>(h);
@@ -361,8 +382,12 @@ bool HousingMap::AddPlayerToMap(Player* player, bool initPlayer /*= true*/)
             }
         }
     }
+
     if (housing)
     {
+        TC_LOG_ERROR("housing", "HousingMap::AddPlayerToMap: Player {} has housing: plotIndex={} houseType={} houseGuid={}",
+            player->GetGUID().ToString(), housing->GetPlotIndex(), housing->GetHouseType(), housing->GetHouseGuid().ToString());
+
         AddPlayerHousing(player->GetGUID(), housing);
 
         // Update PlayerMirrorHouse.MapID so the client knows this house is on the current map.
@@ -372,19 +397,32 @@ bool HousingMap::AddPlayerToMap(Player* player, bool initPlayer /*= true*/)
 
         // Spawn house GO if not already present (handles offline → online transition)
         uint8 plotIdx = housing->GetPlotIndex();
-        if (_houseGameObjects.find(plotIdx) == _houseGameObjects.end())
+        bool alreadySpawned = _houseGameObjects.find(plotIdx) != _houseGameObjects.end();
+        TC_LOG_ERROR("housing", "HousingMap::AddPlayerToMap: House GO for plot {}: alreadySpawned={} _houseGameObjects.size={}",
+            plotIdx, alreadySpawned, uint32(_houseGameObjects.size()));
+
+        if (!alreadySpawned)
         {
+            GameObject* go = nullptr;
             if (housing->HasCustomPosition())
             {
                 Position customPos = housing->GetHousePosition();
-                SpawnHouseForPlot(plotIdx, &customPos);
+                go = SpawnHouseForPlot(plotIdx, &customPos);
             }
             else
-                SpawnHouseForPlot(plotIdx);
+                go = SpawnHouseForPlot(plotIdx);
+
+            TC_LOG_ERROR("housing", "HousingMap::AddPlayerToMap: SpawnHouseForPlot result for plot {}: {}",
+                plotIdx, go ? go->GetGUID().ToString() : "FAILED");
         }
 
         // Spawn decor GOs if not already spawned for this plot
         SpawnAllDecorForPlot(plotIdx, housing);
+    }
+    else
+    {
+        TC_LOG_ERROR("housing", "HousingMap::AddPlayerToMap: Player {} has NO housing in this neighborhood (no house will spawn)",
+            player->GetGUID().ToString());
     }
 
     if (!Map::AddPlayerToMap(player, initPlayer))
@@ -541,11 +579,26 @@ GameObject* HousingMap::SpawnHouseForPlot(uint8 plotIndex, Position const* custo
     // TODO: Look up house GO entry from HouseExteriorWmo based on house type when data is available.
     uint32 goEntry = 574432; // Housing - Generic - Ground WMO (type 43, displayId 113521)
 
+    // Verify the GO template exists before attempting creation
+    GameObjectTemplate const* goTemplate = sObjectMgr->GetGameObjectTemplate(goEntry);
+    TC_LOG_ERROR("housing", "HousingMap::SpawnHouseForPlot: plot={} goEntry={} template={} pos=({:.2f}, {:.2f}, {:.2f}) facing={:.3f} rot=({:.3f}, {:.3f}, {:.3f}, {:.3f})",
+        plotIndex, goEntry, goTemplate ? "FOUND" : "MISSING",
+        x, y, z, facing, rot.x, rot.y, rot.z, rot.w);
+
+    if (!goTemplate)
+    {
+        TC_LOG_ERROR("housing", "HousingMap::SpawnHouseForPlot: GO template {} NOT FOUND in gameobject_template! House cannot spawn.", goEntry);
+        return nullptr;
+    }
+
+    TC_LOG_ERROR("housing", "HousingMap::SpawnHouseForPlot: GO template: entry={} type={} displayId={} name='{}' size={:.1f}",
+        goTemplate->entry, goTemplate->type, goTemplate->displayId, goTemplate->name, goTemplate->size);
+
     Position pos(x, y, z, facing);
     GameObject* go = GameObject::CreateGameObject(goEntry, this, pos, rot, 255, GO_STATE_ACTIVE);
     if (!go)
     {
-        TC_LOG_ERROR("housing", "HousingMap::SpawnHouseForPlot: Failed to create house GO entry {} at ({}, {}, {}) for plot {}",
+        TC_LOG_ERROR("housing", "HousingMap::SpawnHouseForPlot: CreateGameObject RETURNED NULL for entry {} at ({}, {}, {}) for plot {}",
             goEntry, x, y, z, plotIndex);
         return nullptr;
     }
@@ -556,14 +609,14 @@ GameObject* HousingMap::SpawnHouseForPlot(uint8 plotIndex, Position const* custo
     if (!AddToMap(go))
     {
         delete go;
-        TC_LOG_ERROR("housing", "HousingMap::SpawnHouseForPlot: Failed to add house GO to map for plot {}", plotIndex);
+        TC_LOG_ERROR("housing", "HousingMap::SpawnHouseForPlot: AddToMap FAILED for plot {} (GO entry {} was created but could not be placed on map)", plotIndex, goEntry);
         return nullptr;
     }
 
     _houseGameObjects[plotIndex] = go->GetGUID();
 
-    TC_LOG_INFO("housing", "HousingMap::SpawnHouseForPlot: Spawned house GO entry={} guid={} at ({:.1f}, {:.1f}, {:.1f}) for plot {} in neighborhood '{}'",
-        goEntry, go->GetGUID().ToString(), x, y, z, plotIndex, _neighborhood->GetName());
+    TC_LOG_ERROR("housing", "HousingMap::SpawnHouseForPlot: SUCCESS - house GO entry={} guid={} displayId={} at ({:.1f}, {:.1f}, {:.1f}) for plot {} in neighborhood '{}'",
+        goEntry, go->GetGUID().ToString(), go->GetDisplayId(), x, y, z, plotIndex, _neighborhood->GetName());
 
     return go;
 }
