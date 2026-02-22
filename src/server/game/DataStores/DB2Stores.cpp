@@ -131,6 +131,8 @@ DB2Storage<CurrencyTypesEntry>                  sCurrencyTypesStore("CurrencyTyp
 DB2Storage<CurveEntry>                          sCurveStore("Curve.db2", &CurveLoadInfo::Instance);
 DB2Storage<CurvePointEntry>                     sCurvePointStore("CurvePoint.db2", &CurvePointLoadInfo::Instance);
 DB2Storage<DestructibleModelDataEntry>          sDestructibleModelDataStore("DestructibleModelData.db2", &DestructibleModelDataLoadInfo::Instance);
+DB2Storage<DelvesSeasonEntry>                   sDelvesSeasonStore("DelvesSeason.db2", &DelvesSeasonLoadInfo::Instance);
+DB2Storage<DelvesSeasonXSpellEntry>             sDelvesSeasonXSpellStore("DelvesSeasonXSpell.db2", &DelvesSeasonXSpellLoadInfo::Instance);
 DB2Storage<DifficultyEntry>                     sDifficultyStore("Difficulty.db2", &DifficultyLoadInfo::Instance);
 DB2Storage<DungeonEncounterEntry>               sDungeonEncounterStore("DungeonEncounter.db2", &DungeonEncounterLoadInfo::Instance);
 DB2Storage<DurabilityCostsEntry>                sDurabilityCostsStore("DurabilityCosts.db2", &DurabilityCostsLoadInfo::Instance);
@@ -268,6 +270,7 @@ DB2Storage<PlayerDataElementAccountEntry>       sPlayerDataElementAccountStore("
 DB2Storage<PlayerDataElementCharacterEntry>     sPlayerDataElementCharacterStore("PlayerDataElementCharacter.db2", &PlayerDataElementCharacterLoadInfo::Instance);
 DB2Storage<PlayerDataFlagAccountEntry>          sPlayerDataFlagAccountStore("PlayerDataFlagAccount.db2", &PlayerDataFlagAccountLoadInfo::Instance);
 DB2Storage<PlayerDataFlagCharacterEntry>        sPlayerDataFlagCharacterStore("PlayerDataFlagCharacter.db2", &PlayerDataFlagCharacterLoadInfo::Instance);
+DB2Storage<PlayerCompanionInfoEntry>            sPlayerCompanionInfoStore("PlayerCompanionInfo.db2", &PlayerCompanionInfoLoadInfo::Instance);
 DB2Storage<PowerDisplayEntry>                   sPowerDisplayStore("PowerDisplay.db2", &PowerDisplayLoadInfo::Instance);
 DB2Storage<PowerTypeEntry>                      sPowerTypeStore("PowerType.db2", &PowerTypeLoadInfo::Instance);
 DB2Storage<PrestigeLevelInfoEntry>              sPrestigeLevelInfoStore("PrestigeLevelInfo.db2", &PrestigeLevelInfoLoadInfo::Instance);
@@ -505,6 +508,7 @@ namespace
     std::unordered_map<uint32 /*creatureDifficultyId*/, std::vector<int32>> _creatureLabels;
     std::unordered_multimap<uint32, CurrencyContainerEntry const*> _currencyContainers;
     CurvePointsContainer _curvePoints;
+    std::unordered_map<uint32, DB2Manager::DelvesSeasonXSpellContainer> _delvesSeasonXSpellsBySeasonId;
     EmotesTextSoundContainer _emoteTextSounds;
     std::unordered_map<std::pair<uint32 /*level*/, int32 /*expansion*/>, ExpectedStatEntry const*> _expectedStatsByLevel;
     std::unordered_map<uint32 /*contentTuningId*/, std::vector<ContentTuningXExpectedEntry const*>> _expectedStatModsByContentTuning;
@@ -772,6 +776,8 @@ uint32 DB2Manager::LoadStores(std::string const& dataPath, LocaleConstant defaul
     LOAD_DB2(sCurveStore);
     LOAD_DB2(sCurvePointStore);
     LOAD_DB2(sDestructibleModelDataStore);
+    LOAD_DB2(sDelvesSeasonStore);
+    LOAD_DB2(sDelvesSeasonXSpellStore);
     LOAD_DB2(sDifficultyStore);
     LOAD_DB2(sDungeonEncounterStore);
     LOAD_DB2(sDurabilityCostsStore);
@@ -909,6 +915,7 @@ uint32 DB2Manager::LoadStores(std::string const& dataPath, LocaleConstant defaul
     LOAD_DB2(sPlayerDataElementCharacterStore);
     LOAD_DB2(sPlayerDataFlagAccountStore);
     LOAD_DB2(sPlayerDataFlagCharacterStore);
+    LOAD_DB2(sPlayerCompanionInfoStore);
     LOAD_DB2(sPowerDisplayStore);
     LOAD_DB2(sPowerTypeStore);
     LOAD_DB2(sPrestigeLevelInfoStore);
@@ -1328,6 +1335,9 @@ void DB2Manager::IndexLoadedStores()
             std::ranges::transform(curvePoints, points.begin(), &CurvePointEntry::Pos);
         }
     }
+
+    for (DelvesSeasonXSpellEntry const* delvesSeasonXSpell : sDelvesSeasonXSpellStore)
+        _delvesSeasonXSpellsBySeasonId[delvesSeasonXSpell->DelvesSeasonID].push_back(delvesSeasonXSpell);
 
     for (EmotesTextSoundEntry const* emoteTextSound : sEmotesTextSoundStore)
         _emoteTextSounds[EmotesTextSoundContainer::key_type(emoteTextSound->EmotesTextID, emoteTextSound->RaceID, emoteTextSound->SexID, emoteTextSound->ClassID)] = emoteTextSound;
@@ -2446,6 +2456,11 @@ float DB2Manager::GetCurveValueAt(CurveInterpolationMode mode, std::span<DBCPosi
     }
 
     return 0.0f;
+}
+
+DB2Manager::DelvesSeasonXSpellContainer const* DB2Manager::GetDelvesSeasonSpells(uint32 delvesSeasonId) const
+{
+    return Trinity::Containers::MapGetValuePtr(_delvesSeasonXSpellsBySeasonId, delvesSeasonId);
 }
 
 std::string_view DB2Manager::GetDifficultyName(Difficulty difficulty)

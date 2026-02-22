@@ -98,6 +98,8 @@ TC_GAME_API extern DB2Storage<CriteriaTreeEntry>                    sCriteriaTre
 TC_GAME_API extern DB2Storage<CurrencyTypesEntry>                   sCurrencyTypesStore;
 TC_GAME_API extern DB2Storage<CurveEntry>                           sCurveStore;
 TC_GAME_API extern DB2Storage<DestructibleModelDataEntry>           sDestructibleModelDataStore;
+TC_GAME_API extern DB2Storage<DelvesSeasonEntry>                    sDelvesSeasonStore;
+TC_GAME_API extern DB2Storage<DelvesSeasonXSpellEntry>              sDelvesSeasonXSpellStore;
 TC_GAME_API extern DB2Storage<DifficultyEntry>                      sDifficultyStore;
 TC_GAME_API extern DB2Storage<DungeonEncounterEntry>                sDungeonEncounterStore;
 TC_GAME_API extern DB2Storage<DurabilityCostsEntry>                 sDurabilityCostsStore;
@@ -209,6 +211,7 @@ TC_GAME_API extern DB2Storage<PlayerDataElementAccountEntry>        sPlayerDataE
 TC_GAME_API extern DB2Storage<PlayerDataElementCharacterEntry>      sPlayerDataElementCharacterStore;
 TC_GAME_API extern DB2Storage<PlayerDataFlagAccountEntry>           sPlayerDataFlagAccountStore;
 TC_GAME_API extern DB2Storage<PlayerDataFlagCharacterEntry>         sPlayerDataFlagCharacterStore;
+TC_GAME_API extern DB2Storage<PlayerCompanionInfoEntry>             sPlayerCompanionInfoStore;
 TC_GAME_API extern DB2Storage<PowerDisplayEntry>                    sPowerDisplayStore;
 TC_GAME_API extern DB2Storage<PowerTypeEntry>                       sPowerTypeStore;
 TC_GAME_API extern DB2Storage<PVPStatEntry>                         sPVPStatStore;
@@ -447,6 +450,7 @@ public:
     using FriendshipRepReactionSet = std::set<FriendshipRepReactionEntry const*, FriendshipRepReactionEntryComparator>;
     using MapDifficultyConditionsContainer = std::vector<std::pair<uint32, PlayerConditionEntry const*>>;
     using MountTypeXCapabilitySet = std::set<MountTypeXCapabilityEntry const*, MountTypeXCapabilityEntryComparator>;
+    using DelvesSeasonXSpellContainer = std::vector<DelvesSeasonXSpellEntry const*>;
     using MountXDisplayContainer = std::vector<MountXDisplayEntry const*>;
 
     static DB2Manager& Instance();
@@ -500,6 +504,7 @@ public:
     std::pair<float, float> GetCurveXAxisRange(uint32 curveId) const;
     float GetCurveValueAt(uint32 curveId, float x) const;
     float GetCurveValueAt(CurveInterpolationMode mode, std::span<DBCPosition2D const> points, float x) const;
+    DelvesSeasonXSpellContainer const* GetDelvesSeasonSpells(uint32 delvesSeasonId) const;
     static std::string_view GetDifficultyName(Difficulty difficulty);
     EmotesTextSoundEntry const* GetTextSoundEmoteFor(uint32 emote, uint8 race, uint8 gender, uint8 class_) const;
     float EvaluateExpectedStat(ExpectedStatType stat, uint32 level, int32 expansion, uint32 contentTuningId, Classes unitClass, int32 mythicPlusMilestoneSeason) const;
