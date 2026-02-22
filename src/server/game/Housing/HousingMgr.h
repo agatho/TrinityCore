@@ -20,10 +20,13 @@
 
 #include "Define.h"
 #include "HousingDefines.h"
+#include "ObjectGuid.h"
 #include "Position.h"
 #include <string>
 #include <unordered_map>
 #include <vector>
+
+class Neighborhood;
 
 struct HouseDecorData
 {
@@ -241,6 +244,12 @@ public:
     std::vector<NeighborhoodPlotData const*> GetPlotsForMap(uint32 neighborhoodMapId) const;
     // Find a plot by its cornerstone GO entry within a specific neighborhood map
     NeighborhoodPlotData const* GetPlotByCornerstoneEntry(uint32 neighborhoodMapId, uint32 cornerstoneGoEntry) const;
+
+    // Resolve the canonical DB2 PlotIndex from a client-supplied GUID.
+    // The client sends the cornerstone GO GUID as "NeighborhoodGuid" in many CMSGs.
+    // We extract the GO entry from that GUID and look up the DB2 plot data.
+    // Returns the DB2 PlotIndex, or -1 if resolution failed (caller should use clientPlotIndex as fallback).
+    int32 ResolvePlotIndex(ObjectGuid cornerstoneGuid, Neighborhood const* neighborhood) const;
 
     // Check if a world MapID corresponds to a neighborhood map
     bool IsNeighborhoodWorldMap(uint32 mapId) const;

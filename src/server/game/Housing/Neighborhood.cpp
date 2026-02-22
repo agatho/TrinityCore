@@ -21,6 +21,7 @@
 #include "Log.h"
 #include "ObjectAccessor.h"
 #include "Player.h"
+#include "RealmList.h"
 #include <algorithm>
 
 Neighborhood::Neighborhood(ObjectGuid guid) : _guid(guid)
@@ -60,10 +61,10 @@ bool Neighborhood::LoadFromDB(PreparedQueryResult neighborhood, PreparedQueryRes
         {
             Field* memberFields = members->Fetch();
 
-            //          0          1     2
-            // SELECT playerGuid, role, joinTime,
-            //          3
-            //        plotIndex FROM neighborhood_members WHERE neighborhoodGuid = ?
+            //          0              1     2          3          4
+            // SELECT nm.playerGuid, nm.role, nm.joinTime, nm.plotIndex, ch.houseId
+            // FROM neighborhood_members nm LEFT JOIN character_housing ch ON nm.playerGuid = ch.guid
+            // WHERE nm.neighborhoodGuid = ?
 
             Member member;
             member.PlayerGuid   = ObjectGuid::Create<HighGuid::Player>(memberFields[0].GetUInt64());
@@ -78,7 +79,12 @@ bool Neighborhood::LoadFromDB(PreparedQueryResult neighborhood, PreparedQueryRes
             {
                 _plots[member.PlotIndex].PlotIndex  = member.PlotIndex;
                 _plots[member.PlotIndex].OwnerGuid  = member.PlayerGuid;
-                // HouseGuid and OwnerBnetGuid are resolved later when needed
+
+                // Resolve HouseGuid from character_housing JOIN (column 4)
+                uint64 houseId = memberFields[4].GetUInt64();
+                if (houseId != 0)
+                    _plots[member.PlotIndex].HouseGuid = ObjectGuid::Create<HighGuid::Housing>(
+                        /*subType*/ 3, /*arg1*/ sRealmList->GetCurrentRealmId().Realm, /*arg2*/ 7, houseId);
             }
         } while (members->NextRow());
     }

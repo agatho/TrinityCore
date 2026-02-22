@@ -163,6 +163,11 @@ HousingMap* MapManager::CreateHousing(uint32 mapId, uint32 instanceId, uint32 ne
     // regardless of which grids are currently loaded around the player
     map->SpawnPlotGameObjects();
 
+    // Lock all plot grids so they never unload when the player moves away.
+    // Housing maps span ~1500+ yards but normal grid visibility is ~170 yards;
+    // without locking, grids unload as the player leaves them and objects vanish.
+    map->LockPlotGrids();
+
     TC_LOG_DEBUG("housing", "MapManager::CreateHousing: Created housing map {} instanceId {} for neighborhood {}",
         mapId, instanceId, neighborhoodId);
 

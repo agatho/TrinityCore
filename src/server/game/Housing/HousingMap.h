@@ -24,6 +24,7 @@
 
 class AreaTrigger;
 class Housing;
+class MeshObject;
 class Neighborhood;
 class Player;
 
@@ -42,20 +43,39 @@ public:
     AreaTrigger* GetPlotAreaTrigger(uint8 plotIndex);
     GameObject* GetPlotGameObject(uint8 plotIndex);
     void SetPlotOwnershipState(uint8 plotIndex, bool owned);
+    HousingPlotOwnerType GetPlotOwnerTypeForPlayer(Player const* player, uint8 plotIndex) const;
+    void SendPerPlayerPlotWorldStates(Player* player);
     Neighborhood* GetNeighborhood() const { return _neighborhood; }
     uint32 GetNeighborhoodId() const { return _neighborhoodId; }
 
     void LoadNeighborhoodData();
     void SpawnPlotGameObjects();
+    void LockPlotGrids();
 
     // Player housing instance tracking
     void AddPlayerHousing(ObjectGuid playerGuid, Housing* housing);
     void RemovePlayerHousing(ObjectGuid playerGuid);
 
     // House structure GO management
-    GameObject* SpawnHouseForPlot(uint8 plotIndex, Position const* customPos = nullptr);
+    // Sniff-verified defaults: ExteriorComponentID=141 (Stucco Base), HouseExteriorWmoDataID=9 (Human theme)
+    GameObject* SpawnHouseForPlot(uint8 plotIndex, Position const* customPos = nullptr,
+        int32 exteriorComponentID = 141, int32 houseExteriorWmoDataID = 9);
     void DespawnHouseForPlot(uint8 plotIndex);
     GameObject* GetHouseGameObject(uint8 plotIndex);
+
+    // MeshObject management (housing fixture rendering)
+    // pos: local-space position for child pieces (or world position for root pieces)
+    // worldPos: if non-null, used for server-side grid placement (child pieces must be in parent's grid cell)
+    MeshObject* SpawnHouseMeshObject(uint8 plotIndex, int32 fileDataID, bool isWMO,
+        Position const& pos, QuaternionData const& rot, float scale,
+        ObjectGuid houseGuid, int32 exteriorComponentID, int32 houseExteriorWmoDataID,
+        uint8 exteriorComponentType = 9, uint8 houseSize = 2, int32 exteriorComponentHookID = -1,
+        ObjectGuid attachParent = ObjectGuid::Empty, uint8 attachFlags = 0,
+        Position const* worldPos = nullptr);
+    void SpawnFullHouseMeshObjects(uint8 plotIndex, Position const& housePos,
+        QuaternionData const& houseRot, ObjectGuid houseGuid,
+        int32 exteriorComponentID, int32 houseExteriorWmoDataID);
+    void DespawnAllMeshObjectsForPlot(uint8 plotIndex);
 
     // Decor GO management
     GameObject* SpawnDecorItem(uint8 plotIndex, Housing::PlacedDecor const& decor, ObjectGuid houseGuid);
@@ -73,6 +93,9 @@ private:
 
     // House structure GO tracking (plotIndex -> house GO GUID)
     std::unordered_map<uint8, ObjectGuid> _houseGameObjects;
+
+    // MeshObject tracking (plotIndex -> vector of MeshObject GUIDs)
+    std::unordered_map<uint8, std::vector<ObjectGuid>> _meshObjects;
 
     // Decor GO tracking
     std::unordered_map<uint8, std::vector<ObjectGuid>> _decorGameObjects;         // plotIndex -> decor GO GUIDs

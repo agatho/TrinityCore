@@ -19,6 +19,7 @@
 #include "DB2Stores.h"
 #include "DB2Structure.h"
 #include "Log.h"
+#include "Neighborhood.h"
 #include "Random.h"
 #include "Timer.h"
 #include "World.h"
@@ -393,6 +394,23 @@ NeighborhoodPlotData const* HousingMgr::GetPlotByCornerstoneEntry(uint32 neighbo
             return plot;
 
     return nullptr;
+}
+
+int32 HousingMgr::ResolvePlotIndex(ObjectGuid cornerstoneGuid, Neighborhood const* neighborhood) const
+{
+    if (!neighborhood)
+        return -1;
+
+    uint32 goEntry = cornerstoneGuid.GetEntry();
+    if (!goEntry)
+        return -1;
+
+    uint32 neighborhoodMapId = neighborhood->GetNeighborhoodMapID();
+    NeighborhoodPlotData const* plotData = GetPlotByCornerstoneEntry(neighborhoodMapId, goEntry);
+    if (!plotData)
+        return -1;
+
+    return plotData->PlotIndex;
 }
 
 std::string HousingMgr::GenerateNeighborhoodName(uint32 neighborhoodMapId) const

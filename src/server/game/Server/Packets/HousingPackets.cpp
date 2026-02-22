@@ -406,10 +406,15 @@ WorldPacket const* HouseExteriorSetHousePositionResponse::Write()
 
 WorldPacket const* HousingDecorSetEditModeResponse::Write()
 {
-    // Same wire format as Fixture/Room edit mode responses: uint32(Result) + Bit(Active)
+    // Sniff-verified wire format (horde housing sniff):
+    //   Enter: PackedGUID(HouseGuid) + PackedGUID(HouseGuid2) + uint8(1) + uint32(Result) + PackedGUID(DecorGuid)
+    //   Exit:  PackedGUID(HouseGuid) + PackedGUID(HouseGuid2) + uint8(0) + uint32(Result)
+    _worldPacket << HouseGuid;
+    _worldPacket << HouseGuid2;
+    _worldPacket << uint8(IsInEditMode);
     _worldPacket << uint32(Result);
-    _worldPacket.WriteBit(Active);
-    _worldPacket.FlushBits();
+    if (IsInEditMode)
+        _worldPacket << DecorGuid;
     return &_worldPacket;
 }
 

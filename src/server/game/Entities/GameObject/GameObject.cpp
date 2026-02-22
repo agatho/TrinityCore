@@ -4230,6 +4230,55 @@ void GameObject::InitHousingDecorData(ObjectGuid decorGuid, ObjectGuid houseGuid
         IsInWorld(), m_entityFragments.Count);
 }
 
+void GameObject::InitHousingFixtureData(ObjectGuid houseGuid, int32 exteriorComponentID, int32 houseExteriorWmoDataID,
+    uint8 exteriorComponentType /*= 9*/, uint8 houseSize /*= 2*/, int32 exteriorComponentHookID /*= -1*/)
+{
+    if (m_housingFixtureData.has_value())
+        return;
+
+    // Sniff-verified field values (11.2 retail MeshObject with FHousingFixture_C):
+    //   ExteriorComponentID: 141 (Stucco Base, small Human house)
+    //   HouseExteriorWmoDataID: 9 (Human/Generic theme, NOT 32)
+    //   ExteriorComponentHookID: -1 (base piece, no hook)
+    //   ExteriorComponentType: 9 (Base)
+    //   Field_59: 1
+    //   Size: 2 (small)
+    //   GameObjectGUID: 0 (empty)
+    //   Guid: MeshObject GUID (we use Housing GUID as safe substitute)
+
+    SetUpdateFieldValue(m_values.ModifyValue(&Object::m_housingFixtureData, 0)
+        .ModifyValue(&UF::HousingFixtureData::ExteriorComponentID), exteriorComponentID);
+    SetUpdateFieldValue(m_values.ModifyValue(&Object::m_housingFixtureData, 0)
+        .ModifyValue(&UF::HousingFixtureData::HouseExteriorWmoDataID), houseExteriorWmoDataID);
+    SetUpdateFieldValue(m_values.ModifyValue(&Object::m_housingFixtureData, 0)
+        .ModifyValue(&UF::HousingFixtureData::ExteriorComponentHookID), exteriorComponentHookID);
+    SetUpdateFieldValue(m_values.ModifyValue(&Object::m_housingFixtureData, 0)
+        .ModifyValue(&UF::HousingFixtureData::HouseGUID), houseGuid);
+    // Guid must be a Housing-type GUID (HighGuid::Housing, type 55). Client GUID resolver
+    // crashes if it receives a non-Housing, non-null GUID here (e.g. HighGuid::GameObject = 11)
+    // because it enters a conversion path that returns null, then dereferences at +0x64.
+    SetUpdateFieldValue(m_values.ModifyValue(&Object::m_housingFixtureData, 0)
+        .ModifyValue(&UF::HousingFixtureData::Guid), houseGuid);
+    // GameObjectGUID: sniff confirms 0x0 (empty) for all fixture pieces
+    SetUpdateFieldValue(m_values.ModifyValue(&Object::m_housingFixtureData, 0)
+        .ModifyValue(&UF::HousingFixtureData::ExteriorComponentType), exteriorComponentType);
+    SetUpdateFieldValue(m_values.ModifyValue(&Object::m_housingFixtureData, 0)
+        .ModifyValue(&UF::HousingFixtureData::Field_59), uint8(1)); // sniff: always 1
+    SetUpdateFieldValue(m_values.ModifyValue(&Object::m_housingFixtureData, 0)
+        .ModifyValue(&UF::HousingFixtureData::Size), houseSize);
+
+    m_entityFragments.Add(WowCS::EntityFragment::FHousingFixture_C, IsInWorld(),
+        WowCS::GetRawFragmentData(m_housingFixtureData));
+
+    TC_LOG_DEBUG("housing", "GameObject::InitHousingFixtureData: entry={} goGuid={} houseGuid={} "
+        "exteriorComponentID={} wmoDataID={} hookID={} componentType={} size={} field59=1 "
+        "isInWorld={} fragmentCount={}",
+        GetEntry(), GetGUID().ToString(), houseGuid.ToString(),
+        exteriorComponentID, houseExteriorWmoDataID, exteriorComponentHookID,
+        exteriorComponentType, houseSize,
+        IsInWorld(), m_entityFragments.Count);
+}
+
 std::span<uint32 const> GameObject::GetPauseTimes() const
 {
     std::span<uint32 const> result;
