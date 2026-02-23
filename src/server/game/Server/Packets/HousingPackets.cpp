@@ -994,6 +994,45 @@ WorldPacket const* InvalidateNeighborhood::Write()
 }
 
 // ============================================================
+// Decor Licensing/Refund SMSG Responses (0x42xxxx)
+// ============================================================
+
+WorldPacket const* GetDecorRefundListResponse::Write()
+{
+    _worldPacket << uint32(Decors.size());
+    for (auto const& decor : Decors)
+    {
+        _worldPacket << uint32(decor.DecorID);
+        _worldPacket << uint64(decor.RefundPrice);
+        _worldPacket << uint64(decor.ExpiryTime);
+        _worldPacket << uint32(decor.Flags);
+    }
+    return &_worldPacket;
+}
+
+WorldPacket const* GetAllLicensedDecorQuantitiesResponse::Write()
+{
+    _worldPacket << uint32(Quantities.size());
+    for (auto const& qty : Quantities)
+    {
+        _worldPacket << uint32(qty.DecorID);
+        _worldPacket << uint32(qty.Quantity);
+    }
+    return &_worldPacket;
+}
+
+WorldPacket const* LicensedDecorQuantitiesUpdate::Write()
+{
+    _worldPacket << uint32(Quantities.size());
+    for (auto const& qty : Quantities)
+    {
+        _worldPacket << uint32(qty.DecorID);
+        _worldPacket << uint32(qty.Quantity);
+    }
+    return &_worldPacket;
+}
+
+// ============================================================
 // Initiative System SMSG Responses (0x4203xx)
 // ============================================================
 
@@ -1007,12 +1046,64 @@ WorldPacket const* InitiativeServiceStatus::Write()
 WorldPacket const* GetPlayerInitiativeInfoResult::Write()
 {
     _worldPacket << uint32(Result);
+    _worldPacket << uint32(Tasks.size());
+    for (auto const& task : Tasks)
+    {
+        _worldPacket << uint32(task.TaskID);
+        _worldPacket << uint32(task.Progress);
+        _worldPacket << uint32(task.Status);
+    }
     return &_worldPacket;
 }
 
 WorldPacket const* GetInitiativeActivityLogResult::Write()
 {
     _worldPacket << uint32(Result);
+    _worldPacket << uint32(CompletedTasks.size());
+    for (auto const& entry : CompletedTasks)
+    {
+        _worldPacket << uint32(entry.InitiativeID);
+        _worldPacket << uint32(entry.TaskID);
+        _worldPacket << uint32(entry.CycleID);
+        _worldPacket << uint64(entry.CompletionTime);
+        _worldPacket << entry.PlayerGuid;
+        _worldPacket << uint32(entry.ContributionAmount);
+        _worldPacket << uint32(entry.Unknown1);
+        _worldPacket << uint64(entry.ExtraData);
+    }
+    return &_worldPacket;
+}
+
+WorldPacket const* InitiativeTaskComplete::Write()
+{
+    _worldPacket << uint32(InitiativeID);
+    _worldPacket << uint32(TaskID);
+    return &_worldPacket;
+}
+
+WorldPacket const* InitiativeComplete::Write()
+{
+    _worldPacket << uint32(InitiativeID);
+    return &_worldPacket;
+}
+
+WorldPacket const* ClearInitiativeTaskCriteriaProgress::Write()
+{
+    _worldPacket << uint32(InitiativeID);
+    _worldPacket << uint32(TaskID);
+    return &_worldPacket;
+}
+
+WorldPacket const* GetInitiativeRewardsResult::Write()
+{
+    _worldPacket << uint32(Result);
+    return &_worldPacket;
+}
+
+WorldPacket const* InitiativeRewardAvailable::Write()
+{
+    _worldPacket << uint32(InitiativeID);
+    _worldPacket << uint32(MilestoneIndex);
     return &_worldPacket;
 }
 

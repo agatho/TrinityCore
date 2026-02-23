@@ -107,6 +107,13 @@ TC_GAME_API extern DB2Storage<DurabilityCostsEntry>                 sDurabilityC
 TC_GAME_API extern DB2Storage<DurabilityQualityEntry>               sDurabilityQualityStore;
 TC_GAME_API extern DB2Storage<EmotesEntry>                          sEmotesStore;
 TC_GAME_API extern DB2Storage<EmotesTextEntry>                      sEmotesTextStore;
+TC_GAME_API extern DB2Storage<ExteriorComponentEntry>                sExteriorComponentStore;
+TC_GAME_API extern DB2Storage<ExteriorComponentExitPointEntry>       sExteriorComponentExitPointStore;
+TC_GAME_API extern DB2Storage<ExteriorComponentGroupEntry>           sExteriorComponentGroupStore;
+TC_GAME_API extern DB2Storage<ExteriorComponentGroupXHookEntry>      sExteriorComponentGroupXHookStore;
+TC_GAME_API extern DB2Storage<ExteriorComponentHookEntry>            sExteriorComponentHookStore;
+TC_GAME_API extern DB2Storage<ExteriorComponentTypeEntry>            sExteriorComponentTypeStore;
+TC_GAME_API extern DB2Storage<ExteriorComponentXGroupEntry>          sExteriorComponentXGroupStore;
 TC_GAME_API extern DB2Storage<FactionEntry>                         sFactionStore;
 TC_GAME_API extern DB2Storage<FactionTemplateEntry>                 sFactionTemplateStore;
 TC_GAME_API extern DB2Storage<FlightCapabilityEntry>                sFlightCapabilityStore;

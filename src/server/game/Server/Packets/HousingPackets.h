@@ -1419,6 +1419,75 @@ namespace WorldPackets::Housing
     };
 
     // ============================================================
+    // Decor Licensing/Refund JAM Structs
+    // ============================================================
+
+    struct JamClientRefundableDecor
+    {
+        uint32 DecorID = 0;
+        uint64 RefundPrice = 0;
+        uint64 ExpiryTime = 0;
+        uint32 Flags = 0;
+    };
+
+    struct JamLicensedDecorQuantity
+    {
+        uint32 DecorID = 0;
+        uint32 Quantity = 0;
+    };
+
+    // ============================================================
+    // Initiative JAM Structs
+    // ============================================================
+
+    struct JamPlayerInitiativeTaskInfo
+    {
+        uint32 TaskID = 0;
+        uint32 Progress = 0;
+        uint32 Status = 0;
+    };
+
+    struct NICompletedTasksEntry
+    {
+        uint32 InitiativeID = 0;
+        uint32 TaskID = 0;
+        uint32 CycleID = 0;
+        uint64 CompletionTime = 0;
+        ObjectGuid PlayerGuid;
+        uint32 ContributionAmount = 0;
+        uint32 Unknown1 = 0;
+        uint64 ExtraData = 0;
+    };
+
+    // ============================================================
+    // Decor Licensing/Refund SMSG Responses (0x42xxxx)
+    // ============================================================
+
+    class GetDecorRefundListResponse final : public ServerPacket
+    {
+    public:
+        GetDecorRefundListResponse() : ServerPacket(SMSG_GET_DECOR_REFUND_LIST_RESPONSE) { }
+        WorldPacket const* Write() override;
+        std::vector<JamClientRefundableDecor> Decors;
+    };
+
+    class GetAllLicensedDecorQuantitiesResponse final : public ServerPacket
+    {
+    public:
+        GetAllLicensedDecorQuantitiesResponse() : ServerPacket(SMSG_GET_ALL_LICENSED_DECOR_QUANTITIES_RESPONSE) { }
+        WorldPacket const* Write() override;
+        std::vector<JamLicensedDecorQuantity> Quantities;
+    };
+
+    class LicensedDecorQuantitiesUpdate final : public ServerPacket
+    {
+    public:
+        LicensedDecorQuantitiesUpdate() : ServerPacket(SMSG_LICENSED_DECOR_QUANTITIES_UPDATE) { }
+        WorldPacket const* Write() override;
+        std::vector<JamLicensedDecorQuantity> Quantities;
+    };
+
+    // ============================================================
     // Initiative System SMSG Responses (0x4203xx)
     // ============================================================
 
@@ -1436,6 +1505,7 @@ namespace WorldPackets::Housing
         GetPlayerInitiativeInfoResult() : ServerPacket(SMSG_GET_PLAYER_INITIATIVE_INFO_RESULT) { }
         WorldPacket const* Write() override;
         uint32 Result = 0;
+        std::vector<JamPlayerInitiativeTaskInfo> Tasks;
     };
 
     class GetInitiativeActivityLogResult final : public ServerPacket
@@ -1444,6 +1514,50 @@ namespace WorldPackets::Housing
         GetInitiativeActivityLogResult() : ServerPacket(SMSG_GET_INITIATIVE_ACTIVITY_LOG_RESULT) { }
         WorldPacket const* Write() override;
         uint32 Result = 0;
+        std::vector<NICompletedTasksEntry> CompletedTasks;
+    };
+
+    class InitiativeTaskComplete final : public ServerPacket
+    {
+    public:
+        InitiativeTaskComplete() : ServerPacket(SMSG_INITIATIVE_TASK_COMPLETE) { }
+        WorldPacket const* Write() override;
+        uint32 InitiativeID = 0;
+        uint32 TaskID = 0;
+    };
+
+    class InitiativeComplete final : public ServerPacket
+    {
+    public:
+        InitiativeComplete() : ServerPacket(SMSG_INITIATIVE_COMPLETE) { }
+        WorldPacket const* Write() override;
+        uint32 InitiativeID = 0;
+    };
+
+    class ClearInitiativeTaskCriteriaProgress final : public ServerPacket
+    {
+    public:
+        ClearInitiativeTaskCriteriaProgress() : ServerPacket(SMSG_CLEAR_INITIATIVE_TASK_CRITERIA_PROGRESS) { }
+        WorldPacket const* Write() override;
+        uint32 InitiativeID = 0;
+        uint32 TaskID = 0;
+    };
+
+    class GetInitiativeRewardsResult final : public ServerPacket
+    {
+    public:
+        GetInitiativeRewardsResult() : ServerPacket(SMSG_GET_INITIATIVE_REWARDS_RESULT) { }
+        WorldPacket const* Write() override;
+        uint32 Result = 0;
+    };
+
+    class InitiativeRewardAvailable final : public ServerPacket
+    {
+    public:
+        InitiativeRewardAvailable() : ServerPacket(SMSG_INITIATIVE_REWARD_AVAILABLE) { }
+        WorldPacket const* Write() override;
+        uint32 InitiativeID = 0;
+        uint32 MilestoneIndex = 0;
     };
 
     // ============================================================

@@ -658,6 +658,44 @@ void HotfixDatabaseConnection::DoPrepareStatements()
         " WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
     PREPARE_MAX_ID_STMT(HOTFIX_SEL_EXPECTED_STAT_MOD, "SELECT MAX(ID) + 1 FROM expected_stat_mod", CONNECTION_SYNCH);
 
+    // ExteriorComponent.db2
+    PrepareStatement(HOTFIX_SEL_EXTERIOR_COMPONENT, "SELECT Name, PositionX, PositionY, PositionZ, ID, Type, FileDataID, ConditionID, HookID, "
+        "Flags, Slot, SortOrder, ComponentGroupID, UiTextureKitID, ExteriorComponentTypeID FROM exterior_component"
+        " WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_EXTERIOR_COMPONENT, "SELECT MAX(ID) + 1 FROM exterior_component", CONNECTION_SYNCH);
+    PREPARE_LOCALE_STMT(HOTFIX_SEL_EXTERIOR_COMPONENT, "SELECT ID, Name_lang FROM exterior_component_locale WHERE (`VerifiedBuild` > 0) = ? AND locale = ?", CONNECTION_SYNCH);
+
+    // ExteriorComponentExitPoint.db2
+    PrepareStatement(HOTFIX_SEL_EXTERIOR_COMPONENT_EXIT_POINT, "SELECT PositionX, PositionY, PositionZ, RotationX, RotationY, RotationZ, ID, "
+        "ExteriorComponentID FROM exterior_component_exit_point WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_EXTERIOR_COMPONENT_EXIT_POINT, "SELECT MAX(ID) + 1 FROM exterior_component_exit_point", CONNECTION_SYNCH);
+
+    // ExteriorComponentGroup.db2
+    PrepareStatement(HOTFIX_SEL_EXTERIOR_COMPONENT_GROUP, "SELECT PositionX, PositionY, PositionZ, ID, ExteriorComponentID"
+        " FROM exterior_component_group WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_EXTERIOR_COMPONENT_GROUP, "SELECT MAX(ID) + 1 FROM exterior_component_group", CONNECTION_SYNCH);
+
+    // ExteriorComponentGroupXHook.db2
+    PrepareStatement(HOTFIX_SEL_EXTERIOR_COMPONENT_GROUP_X_HOOK, "SELECT ID, ExteriorComponentGroupID, ExteriorComponentHookID"
+        " FROM exterior_component_group_x_hook WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_EXTERIOR_COMPONENT_GROUP_X_HOOK, "SELECT MAX(ID) + 1 FROM exterior_component_group_x_hook", CONNECTION_SYNCH);
+
+    // ExteriorComponentHook.db2
+    PrepareStatement(HOTFIX_SEL_EXTERIOR_COMPONENT_HOOK, "SELECT PositionX, PositionY, PositionZ, RotationX, RotationY, RotationZ, ID, "
+        "ExteriorComponentTypeID, ExteriorComponentID FROM exterior_component_hook WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_EXTERIOR_COMPONENT_HOOK, "SELECT MAX(ID) + 1 FROM exterior_component_hook", CONNECTION_SYNCH);
+
+    // ExteriorComponentType.db2
+    PrepareStatement(HOTFIX_SEL_EXTERIOR_COMPONENT_TYPE, "SELECT Name, ID, Flags FROM exterior_component_type"
+        " WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_EXTERIOR_COMPONENT_TYPE, "SELECT MAX(ID) + 1 FROM exterior_component_type", CONNECTION_SYNCH);
+    PREPARE_LOCALE_STMT(HOTFIX_SEL_EXTERIOR_COMPONENT_TYPE, "SELECT ID, Name_lang FROM exterior_component_type_locale WHERE (`VerifiedBuild` > 0) = ? AND locale = ?", CONNECTION_SYNCH);
+
+    // ExteriorComponentXGroup.db2
+    PrepareStatement(HOTFIX_SEL_EXTERIOR_COMPONENT_X_GROUP, "SELECT ID, ExteriorComponentID, ExteriorComponentGroupID"
+        " FROM exterior_component_x_group WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_EXTERIOR_COMPONENT_X_GROUP, "SELECT MAX(ID) + 1 FROM exterior_component_x_group", CONNECTION_SYNCH);
+
     // Faction.db2
     PrepareStatement(HOTFIX_SEL_FACTION, "SELECT ID, ReputationRaceMask1, ReputationRaceMask2, ReputationRaceMask3, ReputationRaceMask4, Name, "
         "Description, ReputationIndex, ParentFactionID, Expansion, FriendshipRepID, Flags, ParagonFactionID, RenownFactionID, RenownCurrencyID, "

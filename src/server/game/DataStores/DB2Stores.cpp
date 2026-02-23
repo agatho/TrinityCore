@@ -143,6 +143,13 @@ DB2Storage<EmotesTextEntry>                     sEmotesTextStore("EmotesText.db2
 DB2Storage<EmotesTextSoundEntry>                sEmotesTextSoundStore("EmotesTextSound.db2", &EmotesTextSoundLoadInfo::Instance);
 DB2Storage<ExpectedStatEntry>                   sExpectedStatStore("ExpectedStat.db2", &ExpectedStatLoadInfo::Instance);
 DB2Storage<ExpectedStatModEntry>                sExpectedStatModStore("ExpectedStatMod.db2", &ExpectedStatModLoadInfo::Instance);
+DB2Storage<ExteriorComponentEntry>               sExteriorComponentStore("ExteriorComponent.db2", &ExteriorComponentLoadInfo::Instance);
+DB2Storage<ExteriorComponentExitPointEntry>      sExteriorComponentExitPointStore("ExteriorComponentExitPoint.db2", &ExteriorComponentExitPointLoadInfo::Instance);
+DB2Storage<ExteriorComponentGroupEntry>          sExteriorComponentGroupStore("ExteriorComponentGroup.db2", &ExteriorComponentGroupLoadInfo::Instance);
+DB2Storage<ExteriorComponentGroupXHookEntry>     sExteriorComponentGroupXHookStore("ExteriorComponentGroupXHook.db2", &ExteriorComponentGroupXHookLoadInfo::Instance);
+DB2Storage<ExteriorComponentHookEntry>           sExteriorComponentHookStore("ExteriorComponentHook.db2", &ExteriorComponentHookLoadInfo::Instance);
+DB2Storage<ExteriorComponentTypeEntry>           sExteriorComponentTypeStore("ExteriorComponentType.db2", &ExteriorComponentTypeLoadInfo::Instance);
+DB2Storage<ExteriorComponentXGroupEntry>         sExteriorComponentXGroupStore("ExteriorComponentXGroup.db2", &ExteriorComponentXGroupLoadInfo::Instance);
 DB2Storage<FactionEntry>                        sFactionStore("Faction.db2", &FactionLoadInfo::Instance);
 DB2Storage<FactionTemplateEntry>                sFactionTemplateStore("FactionTemplate.db2", &FactionTemplateLoadInfo::Instance);
 DB2Storage<FlightCapabilityEntry>               sFlightCapabilityStore("FlightCapability.db2", &FlightCapabilityLoadInfo::Instance);
@@ -794,6 +801,13 @@ uint32 DB2Manager::LoadStores(std::string const& dataPath, LocaleConstant defaul
     LOAD_DB2(sEmotesTextSoundStore);
     LOAD_DB2(sExpectedStatStore);
     LOAD_DB2(sExpectedStatModStore);
+    LOAD_DB2(sExteriorComponentStore);
+    LOAD_DB2(sExteriorComponentExitPointStore);
+    LOAD_DB2(sExteriorComponentGroupStore);
+    LOAD_DB2(sExteriorComponentGroupXHookStore);
+    LOAD_DB2(sExteriorComponentHookStore);
+    LOAD_DB2(sExteriorComponentTypeStore);
+    LOAD_DB2(sExteriorComponentXGroupStore);
     LOAD_DB2(sFactionStore);
     LOAD_DB2(sFactionTemplateStore);
     LOAD_DB2(sFlightCapabilityStore);

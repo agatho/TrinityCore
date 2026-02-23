@@ -1964,6 +1964,120 @@ struct ExpectedStatModLoadInfo
     static constexpr DB2LoadInfo Instance{ Fields, 10, &ExpectedStatModMeta::Instance, HOTFIX_SEL_EXPECTED_STAT_MOD };
 };
 
+struct ExteriorComponentLoadInfo
+{
+    // Field order must match metadata (IndexField=2, ID is 3rd meta field)
+    static constexpr DB2FieldMeta Fields[15] =
+    {
+        { .IsSigned = false, .Type = FT_STRING, .Name = "Name" },
+        { .IsSigned = false, .Type = FT_FLOAT, .Name = "PositionX" },
+        { .IsSigned = false, .Type = FT_FLOAT, .Name = "PositionY" },
+        { .IsSigned = false, .Type = FT_FLOAT, .Name = "PositionZ" },
+        { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
+        { .IsSigned = false, .Type = FT_BYTE, .Name = "Type" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "FileDataID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "ConditionID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "HookID" },
+        { .IsSigned = false, .Type = FT_BYTE, .Name = "Flags" },
+        { .IsSigned = false, .Type = FT_BYTE, .Name = "Slot" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "SortOrder" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "ComponentGroupID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "UiTextureKitID" },
+        { .IsSigned = false, .Type = FT_INT, .Name = "ExteriorComponentTypeID" },  // ParentIndexField - must be unsigned
+    };
+
+    static constexpr DB2LoadInfo Instance{ Fields, 15, &ExteriorComponentMeta::Instance, HOTFIX_SEL_EXTERIOR_COMPONENT };
+};
+
+struct ExteriorComponentExitPointLoadInfo
+{
+    // Field order must match metadata (IndexField=2, ID is 3rd meta field)
+    static constexpr DB2FieldMeta Fields[8] =
+    {
+        { .IsSigned = false, .Type = FT_FLOAT, .Name = "PositionX" },
+        { .IsSigned = false, .Type = FT_FLOAT, .Name = "PositionY" },
+        { .IsSigned = false, .Type = FT_FLOAT, .Name = "PositionZ" },
+        { .IsSigned = false, .Type = FT_FLOAT, .Name = "RotationX" },
+        { .IsSigned = false, .Type = FT_FLOAT, .Name = "RotationY" },
+        { .IsSigned = false, .Type = FT_FLOAT, .Name = "RotationZ" },
+        { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
+        { .IsSigned = false, .Type = FT_INT, .Name = "ExteriorComponentID" },  // ParentIndexField - must be unsigned
+    };
+
+    static constexpr DB2LoadInfo Instance{ Fields, 8, &ExteriorComponentExitPointMeta::Instance, HOTFIX_SEL_EXTERIOR_COMPONENT_EXIT_POINT };
+};
+
+struct ExteriorComponentGroupLoadInfo
+{
+    // Field order must match metadata (IndexField=1, ID is 2nd meta field)
+    static constexpr DB2FieldMeta Fields[5] =
+    {
+        { .IsSigned = false, .Type = FT_FLOAT, .Name = "PositionX" },
+        { .IsSigned = false, .Type = FT_FLOAT, .Name = "PositionY" },
+        { .IsSigned = false, .Type = FT_FLOAT, .Name = "PositionZ" },
+        { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
+        { .IsSigned = false, .Type = FT_INT, .Name = "ExteriorComponentID" },  // ParentIndexField - must be unsigned
+    };
+
+    static constexpr DB2LoadInfo Instance{ Fields, 5, &ExteriorComponentGroupMeta::Instance, HOTFIX_SEL_EXTERIOR_COMPONENT_GROUP };
+};
+
+struct ExteriorComponentGroupXHookLoadInfo
+{
+    static constexpr DB2FieldMeta Fields[3] =
+    {
+        { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
+        { .IsSigned = false, .Type = FT_INT, .Name = "ExteriorComponentGroupID" },  // ParentIndexField - must be unsigned
+        { .IsSigned = true, .Type = FT_INT, .Name = "ExteriorComponentHookID" },
+    };
+
+    static constexpr DB2LoadInfo Instance{ Fields, 3, &ExteriorComponentGroupXHookMeta::Instance, HOTFIX_SEL_EXTERIOR_COMPONENT_GROUP_X_HOOK };
+};
+
+struct ExteriorComponentHookLoadInfo
+{
+    // Field order must match metadata (IndexField=2, ID is 3rd meta field)
+    static constexpr DB2FieldMeta Fields[9] =
+    {
+        { .IsSigned = false, .Type = FT_FLOAT, .Name = "PositionX" },
+        { .IsSigned = false, .Type = FT_FLOAT, .Name = "PositionY" },
+        { .IsSigned = false, .Type = FT_FLOAT, .Name = "PositionZ" },
+        { .IsSigned = false, .Type = FT_FLOAT, .Name = "RotationX" },
+        { .IsSigned = false, .Type = FT_FLOAT, .Name = "RotationY" },
+        { .IsSigned = false, .Type = FT_FLOAT, .Name = "RotationZ" },
+        { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "ExteriorComponentTypeID" },
+        { .IsSigned = false, .Type = FT_INT, .Name = "ExteriorComponentID" },  // ParentIndexField - must be unsigned
+    };
+
+    static constexpr DB2LoadInfo Instance{ Fields, 9, &ExteriorComponentHookMeta::Instance, HOTFIX_SEL_EXTERIOR_COMPONENT_HOOK };
+};
+
+struct ExteriorComponentTypeLoadInfo
+{
+    // Field order must match metadata (IndexField=1, ID is 2nd meta field)
+    static constexpr DB2FieldMeta Fields[3] =
+    {
+        { .IsSigned = false, .Type = FT_STRING, .Name = "Name" },
+        { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "Flags" },
+    };
+
+    static constexpr DB2LoadInfo Instance{ Fields, 3, &ExteriorComponentTypeMeta::Instance, HOTFIX_SEL_EXTERIOR_COMPONENT_TYPE };
+};
+
+struct ExteriorComponentXGroupLoadInfo
+{
+    static constexpr DB2FieldMeta Fields[3] =
+    {
+        { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "ExteriorComponentID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "ExteriorComponentGroupID" },
+    };
+
+    static constexpr DB2LoadInfo Instance{ Fields, 3, &ExteriorComponentXGroupMeta::Instance, HOTFIX_SEL_EXTERIOR_COMPONENT_X_GROUP };
+};
+
 struct FactionLoadInfo
 {
     static constexpr DB2FieldMeta Fields[35] =

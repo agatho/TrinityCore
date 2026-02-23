@@ -1682,6 +1682,68 @@ struct ExpectedStatModEntry
     float CreatureSpellDamageMod;
 };
 
+struct ExteriorComponentEntry
+{
+    uint32 ID;
+    LocalizedString Name;
+    std::array<float, 3> Position;
+    uint8 Type;
+    int32 FileDataID;
+    int32 ConditionID;
+    int32 HookID;
+    uint8 Flags;
+    uint8 Slot;
+    int32 SortOrder;
+    int32 ComponentGroupID;
+    int32 UiTextureKitID;
+    uint32 ExteriorComponentTypeID;         // ParentIndexField - must be unsigned
+};
+
+struct ExteriorComponentExitPointEntry
+{
+    uint32 ID;
+    std::array<float, 3> Position;
+    std::array<float, 3> Rotation;
+    uint32 ExteriorComponentID;             // ParentIndexField - must be unsigned
+};
+
+struct ExteriorComponentGroupEntry
+{
+    uint32 ID;
+    std::array<float, 3> Position;
+    uint32 ExteriorComponentID;             // ParentIndexField - must be unsigned
+};
+
+struct ExteriorComponentGroupXHookEntry
+{
+    uint32 ID;
+    uint32 ExteriorComponentGroupID;        // ParentIndexField - must be unsigned
+    int32 ExteriorComponentHookID;
+};
+
+struct ExteriorComponentHookEntry
+{
+    uint32 ID;
+    std::array<float, 3> Position;
+    std::array<float, 3> Rotation;
+    int32 ExteriorComponentTypeID;
+    uint32 ExteriorComponentID;             // ParentIndexField - must be unsigned
+};
+
+struct ExteriorComponentTypeEntry
+{
+    uint32 ID;
+    LocalizedString Name;
+    int32 Flags;
+};
+
+struct ExteriorComponentXGroupEntry
+{
+    uint32 ID;
+    int32 ExteriorComponentID;
+    int32 ExteriorComponentGroupID;
+};
+
 struct FactionEntry
 {
     uint32 ID;
