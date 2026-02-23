@@ -1663,3 +1663,40 @@ void WorldSession::HandleGetInitiativeActivityLogRequest(WorldPackets::Neighborh
     TC_LOG_DEBUG("housing", "CMSG_GET_INITIATIVE_ACTIVITY_LOG_REQUEST NeighborhoodGuid: {}, Player: {}",
         getInitiativeActivityLogRequest.NeighborhoodGuid.ToString(), player->GetGUID().ToString());
 }
+
+void WorldSession::HandleInitiativeUpdateActiveNeighborhood(WorldPackets::Neighborhood::InitiativeUpdateActiveNeighborhood const& initiativeUpdateActiveNeighborhood)
+{
+    Player* player = GetPlayer();
+    if (!player)
+        return;
+
+    TC_LOG_DEBUG("housing", "CMSG_INITIATIVE_UPDATE_ACTIVE_NEIGHBORHOOD NeighborhoodGuid: {}, Player: {}",
+        initiativeUpdateActiveNeighborhood.NeighborhoodGuid.ToString(), player->GetGUID().ToString());
+
+    // This CMSG tells the server which neighborhood the player is currently viewing for
+    // initiative purposes. The server uses this to send targeted initiative updates
+    // (task progress, completions, reward availability) for the active neighborhood.
+    // For now, we acknowledge the request and update the initiative service status.
+
+    Neighborhood* neighborhood = sNeighborhoodMgr.ResolveNeighborhood(initiativeUpdateActiveNeighborhood.NeighborhoodGuid, player);
+    if (!neighborhood)
+    {
+        TC_LOG_DEBUG("housing", "CMSG_INITIATIVE_UPDATE_ACTIVE_NEIGHBORHOOD: Neighborhood not found for Player: {}",
+            player->GetGUID().ToString());
+        return;
+    }
+
+    // Send initiative service status to confirm the service is active
+    WorldPackets::Housing::InitiativeServiceStatus serviceStatus;
+    serviceStatus.ServiceEnabled = true;
+    SendPacket(serviceStatus.Write());
+
+    // Send current initiative info for the active neighborhood
+    WorldPackets::Housing::GetPlayerInitiativeInfoResult infoResult;
+    infoResult.Result = static_cast<uint32>(HOUSING_RESULT_SUCCESS);
+    // infoResult.Tasks is empty — no active initiative tasks yet
+    SendPacket(infoResult.Write());
+
+    TC_LOG_DEBUG("housing", "SMSG_INITIATIVE_SERVICE_STATUS + SMSG_GET_PLAYER_INITIATIVE_INFO_RESULT sent for NeighborhoodGuid: {}",
+        initiativeUpdateActiveNeighborhood.NeighborhoodGuid.ToString());
+}

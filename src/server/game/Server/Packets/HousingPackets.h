@@ -638,6 +638,26 @@ namespace WorldPackets::Housing
     };
 
     // ============================================================
+    // Decor Licensing / Refund CMSG
+    // ============================================================
+
+    class GetAllLicensedDecorQuantities final : public ClientPacket
+    {
+    public:
+        explicit GetAllLicensedDecorQuantities(WorldPacket&& packet) : ClientPacket(CMSG_GET_ALL_LICENSED_DECOR_QUANTITIES, std::move(packet)) { }
+
+        void Read() override { }
+    };
+
+    class GetDecorRefundList final : public ClientPacket
+    {
+    public:
+        explicit GetDecorRefundList(WorldPacket&& packet) : ClientPacket(CMSG_GET_DECOR_REFUND_LIST, std::move(packet)) { }
+
+        void Read() override { }
+    };
+
+    // ============================================================
     // Other Housing CMSG
     // ============================================================
 
@@ -2133,6 +2153,14 @@ namespace WorldPackets::Neighborhood
     {
     public:
         GetInitiativeActivityLogRequest(WorldPacket&& packet) : ClientPacket(CMSG_GET_INITIATIVE_ACTIVITY_LOG_REQUEST, std::move(packet)) { }
+        void Read() override;
+        ObjectGuid NeighborhoodGuid;
+    };
+
+    class InitiativeUpdateActiveNeighborhood final : public ClientPacket
+    {
+    public:
+        InitiativeUpdateActiveNeighborhood(WorldPacket&& packet) : ClientPacket(CMSG_INITIATIVE_UPDATE_ACTIVE_NEIGHBORHOOD, std::move(packet)) { }
         void Read() override;
         ObjectGuid NeighborhoodGuid;
     };

@@ -17,6 +17,7 @@
 
 #include "WorldSession.h"
 #include "AreaTrigger.h"
+#include "DB2Stores.h"
 #include "Guild.h"
 #include "GuildMgr.h"
 #include "Housing.h"
@@ -633,22 +634,49 @@ void WorldSession::HandleHousingFixtureSetCoreFixture(WorldPackets::Housing::Hou
         return;
     }
 
-    HousingResult result = housing->SelectFixtureOption(housingFixtureSetCoreFixture.ExteriorComponentID, 0);
+    // Validate ExteriorComponentID against DB2 store
+    uint32 componentID = housingFixtureSetCoreFixture.ExteriorComponentID;
+    ExteriorComponentEntry const* componentEntry = sExteriorComponentStore.LookupEntry(componentID);
+    if (!componentEntry)
+    {
+        TC_LOG_DEBUG("housing", "CMSG_HOUSING_FIXTURE_SET_CORE_FIXTURE ExteriorComponentID {} not found in DB2",
+            componentID);
+        WorldPackets::Housing::HousingFixtureSetCoreFixtureResponse response;
+        response.Result = static_cast<uint32>(HOUSING_RESULT_FIXTURE_NOT_FOUND);
+        SendPacket(response.Write());
+        return;
+    }
+
+    TC_LOG_DEBUG("housing", "CMSG_HOUSING_FIXTURE_SET_CORE_FIXTURE DB2 lookup: ExteriorComponentID={}, Name='{}', Type={}, Slot={}, HookID={}, ComponentGroupID={}, TypeID={}",
+        componentID, componentEntry->Name[DEFAULT_LOCALE], componentEntry->Type, componentEntry->Slot,
+        componentEntry->HookID, componentEntry->ComponentGroupID, componentEntry->ExteriorComponentTypeID);
+
+    // Validate ExteriorComponentType if present
+    if (componentEntry->ExteriorComponentTypeID)
+    {
+        ExteriorComponentTypeEntry const* typeEntry = sExteriorComponentTypeStore.LookupEntry(componentEntry->ExteriorComponentTypeID);
+        if (typeEntry)
+            TC_LOG_DEBUG("housing", "  -> ExteriorComponentType: ID={}, Name='{}', Flags={}", typeEntry->ID, typeEntry->Name[DEFAULT_LOCALE], typeEntry->Flags);
+        else
+            TC_LOG_DEBUG("housing", "  -> ExteriorComponentTypeID {} NOT FOUND in DB2", componentEntry->ExteriorComponentTypeID);
+    }
+
+    HousingResult result = housing->SelectFixtureOption(componentID, 0);
 
     WorldPackets::Housing::HousingFixtureSetCoreFixtureResponse response;
     response.Result = static_cast<uint32>(result);
-    response.FixtureRecordID = housingFixtureSetCoreFixture.ExteriorComponentID;
+    response.FixtureRecordID = componentID;
     SendPacket(response.Write());
 
     if (result == HOUSING_RESULT_SUCCESS)
     {
         WorldPackets::Housing::AccountExteriorFixtureCollectionUpdate collectionUpdate;
-        collectionUpdate.FixtureID = housingFixtureSetCoreFixture.ExteriorComponentID;
+        collectionUpdate.FixtureID = componentID;
         SendPacket(collectionUpdate.Write());
     }
 
-    TC_LOG_INFO("housing", "CMSG_HOUSING_FIXTURE_SET_CORE_FIXTURE FixtureGuid: {}, ExteriorComponentID: {}, Result: {}",
-        housingFixtureSetCoreFixture.FixtureGuid.ToString(), housingFixtureSetCoreFixture.ExteriorComponentID, uint32(result));
+    TC_LOG_DEBUG("housing", "CMSG_HOUSING_FIXTURE_SET_CORE_FIXTURE FixtureGuid: {}, ExteriorComponentID: {}, Result: {}",
+        housingFixtureSetCoreFixture.FixtureGuid.ToString(), componentID, uint32(result));
 }
 
 void WorldSession::HandleHousingFixtureCreateFixture(WorldPackets::Housing::HousingFixtureCreateFixture const& housingFixtureCreateFixture)
@@ -666,22 +694,55 @@ void WorldSession::HandleHousingFixtureCreateFixture(WorldPackets::Housing::Hous
         return;
     }
 
-    HousingResult result = housing->SelectFixtureOption(housingFixtureCreateFixture.ExteriorComponentHookID, housingFixtureCreateFixture.ExteriorComponentType);
+    uint32 hookID = housingFixtureCreateFixture.ExteriorComponentHookID;
+    uint32 componentType = housingFixtureCreateFixture.ExteriorComponentType;
+
+    // Validate ExteriorComponentHook against DB2 store
+    ExteriorComponentHookEntry const* hookEntry = sExteriorComponentHookStore.LookupEntry(hookID);
+    if (!hookEntry)
+    {
+        TC_LOG_DEBUG("housing", "CMSG_HOUSING_FIXTURE_CREATE_FIXTURE ExteriorComponentHookID {} not found in DB2", hookID);
+        WorldPackets::Housing::HousingFixtureCreateFixtureResponse response;
+        response.Result = static_cast<uint32>(HOUSING_RESULT_FIXTURE_NOT_FOUND);
+        SendPacket(response.Write());
+        return;
+    }
+
+    TC_LOG_DEBUG("housing", "CMSG_HOUSING_FIXTURE_CREATE_FIXTURE DB2 lookup: HookID={}, Position=({:.1f},{:.1f},{:.1f}), TypeID={}, ParentComponentID={}",
+        hookID, hookEntry->Position[0], hookEntry->Position[1], hookEntry->Position[2],
+        hookEntry->ExteriorComponentTypeID, hookEntry->ExteriorComponentID);
+
+    // Validate ExteriorComponentType against DB2 store
+    if (componentType)
+    {
+        ExteriorComponentTypeEntry const* typeEntry = sExteriorComponentTypeStore.LookupEntry(componentType);
+        if (typeEntry)
+            TC_LOG_DEBUG("housing", "  -> ExteriorComponentType: ID={}, Name='{}', Flags={}", typeEntry->ID, typeEntry->Name[DEFAULT_LOCALE], typeEntry->Flags);
+        else
+        {
+            TC_LOG_DEBUG("housing", "CMSG_HOUSING_FIXTURE_CREATE_FIXTURE ExteriorComponentType {} not found in DB2", componentType);
+            WorldPackets::Housing::HousingFixtureCreateFixtureResponse response;
+            response.Result = static_cast<uint32>(HOUSING_RESULT_FIXTURE_NOT_FOUND);
+            SendPacket(response.Write());
+            return;
+        }
+    }
+
+    HousingResult result = housing->SelectFixtureOption(hookID, componentType);
 
     WorldPackets::Housing::HousingFixtureCreateFixtureResponse response;
     response.Result = static_cast<uint32>(result);
-    // FixtureGuid will be set once backend returns the newly created fixture's GUID
     SendPacket(response.Write());
 
     if (result == HOUSING_RESULT_SUCCESS)
     {
         WorldPackets::Housing::AccountExteriorFixtureCollectionUpdate collectionUpdate;
-        collectionUpdate.FixtureID = housingFixtureCreateFixture.ExteriorComponentHookID;
+        collectionUpdate.FixtureID = hookID;
         SendPacket(collectionUpdate.Write());
     }
 
-    TC_LOG_INFO("housing", "CMSG_HOUSING_FIXTURE_CREATE_FIXTURE ExteriorComponentType: {}, ExteriorComponentHookID: {}, Result: {}",
-        housingFixtureCreateFixture.ExteriorComponentType, housingFixtureCreateFixture.ExteriorComponentHookID, uint32(result));
+    TC_LOG_DEBUG("housing", "CMSG_HOUSING_FIXTURE_CREATE_FIXTURE ExteriorComponentType: {}, ExteriorComponentHookID: {}, Result: {}",
+        componentType, hookID, uint32(result));
 }
 
 void WorldSession::HandleHousingFixtureDeleteFixture(WorldPackets::Housing::HousingFixtureDeleteFixture const& housingFixtureDeleteFixture)
@@ -699,15 +760,31 @@ void WorldSession::HandleHousingFixtureDeleteFixture(WorldPackets::Housing::Hous
         return;
     }
 
-    HousingResult result = housing->RemoveFixture(housingFixtureDeleteFixture.ExteriorComponentID);
+    uint32 componentID = housingFixtureDeleteFixture.ExteriorComponentID;
+
+    // Validate ExteriorComponentID against DB2 store
+    ExteriorComponentEntry const* componentEntry = sExteriorComponentStore.LookupEntry(componentID);
+    if (!componentEntry)
+    {
+        TC_LOG_DEBUG("housing", "CMSG_HOUSING_FIXTURE_DELETE_FIXTURE ExteriorComponentID {} not found in DB2", componentID);
+        WorldPackets::Housing::HousingFixtureDeleteFixtureResponse response;
+        response.Result = static_cast<uint32>(HOUSING_RESULT_FIXTURE_NOT_FOUND);
+        SendPacket(response.Write());
+        return;
+    }
+
+    TC_LOG_DEBUG("housing", "CMSG_HOUSING_FIXTURE_DELETE_FIXTURE DB2 lookup: ExteriorComponentID={}, Name='{}', Type={}, Slot={}",
+        componentID, componentEntry->Name[DEFAULT_LOCALE], componentEntry->Type, componentEntry->Slot);
+
+    HousingResult result = housing->RemoveFixture(componentID);
 
     WorldPackets::Housing::HousingFixtureDeleteFixtureResponse response;
     response.Result = static_cast<uint32>(result);
     response.FixtureGuid = housingFixtureDeleteFixture.FixtureGuid;
     SendPacket(response.Write());
 
-    TC_LOG_INFO("housing", "CMSG_HOUSING_FIXTURE_DELETE_FIXTURE FixtureGuid: {}, ExteriorComponentID: {}, Result: {}",
-        housingFixtureDeleteFixture.FixtureGuid.ToString(), housingFixtureDeleteFixture.ExteriorComponentID, uint32(result));
+    TC_LOG_DEBUG("housing", "CMSG_HOUSING_FIXTURE_DELETE_FIXTURE FixtureGuid: {}, ExteriorComponentID: {}, Result: {}",
+        housingFixtureDeleteFixture.FixtureGuid.ToString(), componentID, uint32(result));
 }
 
 void WorldSession::HandleHousingFixtureSetHouseSize(WorldPackets::Housing::HousingFixtureSetHouseSize const& housingFixtureSetHouseSize)
@@ -2070,4 +2147,48 @@ void WorldSession::HandleHousingPhotoSharingClearAuthorization(WorldPackets::Hou
 
     TC_LOG_DEBUG("housing", "CMSG_HOUSING_PHOTO_SHARING_CLEAR_AUTHORIZATION Player: {}",
         player->GetGUID().ToString());
+}
+
+// ============================================================
+// Decor Licensing / Refund Handlers
+// ============================================================
+
+void WorldSession::HandleGetAllLicensedDecorQuantities(WorldPackets::Housing::GetAllLicensedDecorQuantities const& /*getAllLicensedDecorQuantities*/)
+{
+    Player* player = GetPlayer();
+    if (!player)
+        return;
+
+    TC_LOG_DEBUG("housing", "CMSG_GET_ALL_LICENSED_DECOR_QUANTITIES Player: {}", player->GetGUID().ToString());
+
+    // Returns the player's licensed decor quantities. Since the housing decor licensing
+    // system is not yet fully implemented, we return an empty list to satisfy the client.
+    // When decor purchasing is implemented, this will query the player's account-wide
+    // decor license collection and return quantity data for each owned decor item.
+    WorldPackets::Housing::GetAllLicensedDecorQuantitiesResponse response;
+    // response.Quantities is empty — no licensed decor yet
+    SendPacket(response.Write());
+
+    TC_LOG_DEBUG("housing", "SMSG_GET_ALL_LICENSED_DECOR_QUANTITIES_RESPONSE sent to Player: {} with {} quantities",
+        player->GetGUID().ToString(), response.Quantities.size());
+}
+
+void WorldSession::HandleGetDecorRefundList(WorldPackets::Housing::GetDecorRefundList const& /*getDecorRefundList*/)
+{
+    Player* player = GetPlayer();
+    if (!player)
+        return;
+
+    TC_LOG_DEBUG("housing", "CMSG_GET_DECOR_REFUND_LIST Player: {}", player->GetGUID().ToString());
+
+    // Returns the list of refundable decor items. Since the housing decor purchasing
+    // system is not yet fully implemented, we return an empty list. When decor purchasing
+    // is implemented, this will return recently purchased decor items that are still within
+    // the refund window, including their refund price, expiry time, and flags.
+    WorldPackets::Housing::GetDecorRefundListResponse response;
+    // response.Decors is empty — no refundable decor yet
+    SendPacket(response.Write());
+
+    TC_LOG_DEBUG("housing", "SMSG_GET_DECOR_REFUND_LIST_RESPONSE sent to Player: {} with {} decors",
+        player->GetGUID().ToString(), response.Decors.size());
 }

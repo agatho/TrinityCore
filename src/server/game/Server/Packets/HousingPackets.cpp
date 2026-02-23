@@ -16,6 +16,7 @@
  */
 
 #include "HousingPackets.h"
+#include "Log.h"
 #include "PacketOperators.h"
 
 // ============================================================
@@ -34,6 +35,9 @@ void HouseExteriorCommitPosition::Read()
     _worldPacket >> PositionY;
     _worldPacket >> PositionZ;
     _worldPacket >> Facing;
+
+    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSE_EXTERIOR_COMMIT_POSITION HouseGuid: {} PlotGuid: {} Pos: ({}, {}, {}) Facing: {:.2f}",
+        HouseGuid.ToString(), PlotGuid.ToString(), PositionX, PositionY, PositionZ, Facing);
 }
 
 // --- Decor System ---
@@ -41,6 +45,8 @@ void HouseExteriorCommitPosition::Read()
 void HousingDecorSetEditMode::Read()
 {
     _worldPacket >> Bits<1>(Active);
+
+    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_DECOR_SET_EDIT_MODE Active: {}", Active);
 }
 
 void HousingDecorPlace::Read()
@@ -57,6 +63,10 @@ void HousingDecorPlace::Read()
     _worldPacket >> FixtureGuid;
     _worldPacket >> AttachParentGuid;
     _worldPacket >> DecorRecID;
+
+    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_DECOR_PLACE DecorGuid: {} Pos: ({}, {}, {}) Rot: ({}, {}, {}, {}) RoomGuid: {} FixtureGuid: {} DecorRecID: {}",
+        DecorGuid.ToString(), PositionX, PositionY, PositionZ, RotationX, RotationY, RotationZ, RotationW,
+        RoomGuid.ToString(), FixtureGuid.ToString(), DecorRecID);
 }
 
 void HousingDecorMove::Read()
@@ -76,11 +86,16 @@ void HousingDecorMove::Read()
     _worldPacket >> Flags;
     _worldPacket >> Field_86;
     _worldPacket >> Bits<1>(AttachToParent);
+
+    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_DECOR_MOVE DecorGuid: {} Pos: ({}, {}, {}) Flags: {} AttachToParent: {} DecorRecID: {}",
+        DecorGuid.ToString(), PositionX, PositionY, PositionZ, Flags, AttachToParent, DecorRecID);
 }
 
 void HousingDecorRemove::Read()
 {
     _worldPacket >> DecorGuid;
+
+    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_DECOR_REMOVE DecorGuid: {}", DecorGuid.ToString());
 }
 
 void HousingDecorLock::Read()
@@ -88,6 +103,8 @@ void HousingDecorLock::Read()
     _worldPacket >> DecorGuid;
     _worldPacket >> Bits<1>(Locked);
     _worldPacket >> Bits<1>(AnchorLocked);
+
+    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_DECOR_LOCK DecorGuid: {} Locked: {} AnchorLocked: {}", DecorGuid.ToString(), Locked, AnchorLocked);
 }
 
 void HousingDecorSetDyeSlots::Read()
@@ -95,6 +112,9 @@ void HousingDecorSetDyeSlots::Read()
     _worldPacket >> DecorGuid;
     for (int32& dyeColor : DyeColorID)
         _worldPacket >> dyeColor;
+
+    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_DECOR_SET_DYE_SLOTS DecorGuid: {} DyeColors: [{}, {}, {}]",
+        DecorGuid.ToString(), DyeColorID[0], DyeColorID[1], DyeColorID[2]);
 }
 
 void HousingDecorDeleteFromStorage::Read()
@@ -104,22 +124,30 @@ void HousingDecorDeleteFromStorage::Read()
     DecorGuids.resize(count);
     for (ObjectGuid& guid : DecorGuids)
         _worldPacket >> guid;
+
+    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_DECOR_DELETE_FROM_STORAGE Count: {}", count);
 }
 
 void HousingDecorDeleteFromStorageById::Read()
 {
     _worldPacket >> DecorRecID;
+
+    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_DECOR_DELETE_FROM_STORAGE_BY_ID DecorRecID: {}", DecorRecID);
 }
 
 void HousingDecorRequestStorage::Read()
 {
     _worldPacket >> HouseGuid;
+
+    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_DECOR_REQUEST_STORAGE HouseGuid: {}", HouseGuid.ToString());
 }
 
 void HousingDecorRedeemDeferredDecor::Read()
 {
     _worldPacket >> DeferredDecorID;
     _worldPacket >> RedemptionToken;
+
+    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_DECOR_REDEEM_DEFERRED DeferredDecorID: {} RedemptionToken: {}", DeferredDecorID, RedemptionToken);
 }
 
 // --- Fixture System ---
@@ -127,12 +155,16 @@ void HousingDecorRedeemDeferredDecor::Read()
 void HousingFixtureSetEditMode::Read()
 {
     _worldPacket >> Bits<1>(Active);
+
+    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_FIXTURE_SET_EDIT_MODE Active: {}", Active);
 }
 
 void HousingFixtureSetCoreFixture::Read()
 {
     _worldPacket >> FixtureGuid;
     _worldPacket >> ExteriorComponentID;
+
+    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_FIXTURE_SET_CORE_FIXTURE FixtureGuid: {} ExteriorComponentID: {}", FixtureGuid.ToString(), ExteriorComponentID);
 }
 
 void HousingFixtureCreateFixture::Read()
@@ -141,6 +173,9 @@ void HousingFixtureCreateFixture::Read()
     _worldPacket >> RoomGuid;
     _worldPacket >> ExteriorComponentType;
     _worldPacket >> ExteriorComponentHookID;
+
+    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_FIXTURE_CREATE AttachParentGuid: {} RoomGuid: {} ExteriorComponentType: {} HookID: {}",
+        AttachParentGuid.ToString(), RoomGuid.ToString(), ExteriorComponentType, ExteriorComponentHookID);
 }
 
 void HousingFixtureDeleteFixture::Read()
@@ -148,18 +183,24 @@ void HousingFixtureDeleteFixture::Read()
     _worldPacket >> FixtureGuid;
     _worldPacket >> RoomGuid;
     _worldPacket >> ExteriorComponentID;
+
+    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_FIXTURE_DELETE FixtureGuid: {} RoomGuid: {} ExteriorComponentID: {}", FixtureGuid.ToString(), RoomGuid.ToString(), ExteriorComponentID);
 }
 
 void HousingFixtureSetHouseSize::Read()
 {
     _worldPacket >> HouseGuid;
     _worldPacket >> Size;
+
+    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_FIXTURE_SET_HOUSE_SIZE HouseGuid: {} Size: {}", HouseGuid.ToString(), Size);
 }
 
 void HousingFixtureSetHouseType::Read()
 {
     _worldPacket >> HouseGuid;
     _worldPacket >> HouseExteriorWmoDataID;
+
+    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_FIXTURE_SET_HOUSE_TYPE HouseGuid: {} HouseExteriorWmoDataID: {}", HouseGuid.ToString(), HouseExteriorWmoDataID);
 }
 
 void HouseExteriorLock::Read()
@@ -168,6 +209,9 @@ void HouseExteriorLock::Read()
     _worldPacket >> PlotGuid;
     _worldPacket >> NeighborhoodGuid;
     _worldPacket >> Bits<1>(Locked);
+
+    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSE_EXTERIOR_LOCK HouseGuid: {} PlotGuid: {} NeighborhoodGuid: {} Locked: {}",
+        HouseGuid.ToString(), PlotGuid.ToString(), NeighborhoodGuid.ToString(), Locked);
 }
 
 // --- Room System ---
@@ -175,6 +219,8 @@ void HouseExteriorLock::Read()
 void HousingRoomSetLayoutEditMode::Read()
 {
     _worldPacket >> Bits<1>(Active);
+
+    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_ROOM_SET_LAYOUT_EDIT_MODE Active: {}", Active);
 }
 
 void HousingRoomAdd::Read()
@@ -184,17 +230,24 @@ void HousingRoomAdd::Read()
     _worldPacket >> Flags;
     _worldPacket >> FloorIndex;
     _worldPacket >> Bits<1>(AutoFurnish);
+
+    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_ROOM_ADD HouseGuid: {} HouseRoomID: {} Flags: {} FloorIndex: {} AutoFurnish: {}",
+        HouseGuid.ToString(), HouseRoomID, Flags, FloorIndex, AutoFurnish);
 }
 
 void HousingRoomRemove::Read()
 {
     _worldPacket >> RoomGuid;
+
+    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_ROOM_REMOVE RoomGuid: {}", RoomGuid.ToString());
 }
 
 void HousingRoomRotate::Read()
 {
     _worldPacket >> RoomGuid;
     _worldPacket >> Bits<1>(Clockwise);
+
+    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_ROOM_ROTATE RoomGuid: {} Clockwise: {}", RoomGuid.ToString(), Clockwise);
 }
 
 void HousingRoomMoveRoom::Read()
@@ -203,6 +256,9 @@ void HousingRoomMoveRoom::Read()
     _worldPacket >> TargetSlotIndex;
     _worldPacket >> TargetGuid;
     _worldPacket >> FloorIndex;
+
+    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_ROOM_MOVE RoomGuid: {} TargetSlotIndex: {} TargetGuid: {} FloorIndex: {}",
+        RoomGuid.ToString(), TargetSlotIndex, TargetGuid.ToString(), FloorIndex);
 }
 
 void HousingRoomSetComponentTheme::Read()
@@ -212,6 +268,9 @@ void HousingRoomSetComponentTheme::Read()
     _worldPacket >> HouseThemeID;
     for (uint32& componentID : RoomComponentIDs)
         _worldPacket >> componentID;
+
+    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_ROOM_SET_COMPONENT_THEME RoomGuid: {} HouseThemeID: {} ComponentCount: {}",
+        RoomGuid.ToString(), HouseThemeID, RoomComponentIDs.size());
 }
 
 void HousingRoomApplyComponentMaterials::Read()
@@ -222,6 +281,9 @@ void HousingRoomApplyComponentMaterials::Read()
     _worldPacket >> RoomComponentTypeParam;
     for (uint32& componentID : RoomComponentIDs)
         _worldPacket >> componentID;
+
+    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_ROOM_APPLY_COMPONENT_MATERIALS RoomGuid: {} TextureID: {} TypeParam: {} ComponentCount: {}",
+        RoomGuid.ToString(), RoomComponentTextureID, RoomComponentTypeParam, RoomComponentIDs.size());
 }
 
 void HousingRoomSetDoorType::Read()
@@ -229,6 +291,8 @@ void HousingRoomSetDoorType::Read()
     _worldPacket >> RoomGuid;
     _worldPacket >> RoomComponentID;
     _worldPacket >> RoomComponentType;
+
+    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_ROOM_SET_DOOR_TYPE RoomGuid: {} ComponentID: {} Type: {}", RoomGuid.ToString(), RoomComponentID, RoomComponentType);
 }
 
 void HousingRoomSetCeilingType::Read()
@@ -236,6 +300,8 @@ void HousingRoomSetCeilingType::Read()
     _worldPacket >> RoomGuid;
     _worldPacket >> RoomComponentID;
     _worldPacket >> RoomComponentType;
+
+    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_ROOM_SET_CEILING_TYPE RoomGuid: {} ComponentID: {} Type: {}", RoomGuid.ToString(), RoomComponentID, RoomComponentType);
 }
 
 // --- Housing Services System ---
@@ -247,6 +313,9 @@ void HousingSvcsGuildCreateNeighborhood::Read()
 
     _worldPacket >> Flags;
     _worldPacket >> SizedString::Data(NeighborhoodName);
+
+    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_SVCS_GUILD_CREATE_NEIGHBORHOOD TypeID: {} Flags: {} Name: '{}'",
+        NeighborhoodTypeID, Flags, NeighborhoodName);
 }
 
 void HousingSvcsNeighborhoodReservePlot::Read()
@@ -254,11 +323,16 @@ void HousingSvcsNeighborhoodReservePlot::Read()
     _worldPacket >> NeighborhoodGuid;
     _worldPacket >> PlotIndex;
     _worldPacket >> Bits<1>(Reserve);
+
+    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_SVCS_NEIGHBORHOOD_RESERVE_PLOT NeighborhoodGuid: {} PlotIndex: {} Reserve: {}",
+        NeighborhoodGuid.ToString(), PlotIndex, Reserve);
 }
 
 void HousingSvcsRelinquishHouse::Read()
 {
     _worldPacket >> HouseGuid;
+
+    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_SVCS_RELINQUISH_HOUSE HouseGuid: {}", HouseGuid.ToString());
 }
 
 void HousingSvcsUpdateHouseSettings::Read()
@@ -272,16 +346,23 @@ void HousingSvcsUpdateHouseSettings::Read()
 
     if (VisitorPermissionGuid)
         _worldPacket >> *VisitorPermissionGuid;
+
+    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_SVCS_UPDATE_HOUSE_SETTINGS HouseGuid: {} HasPlotSettings: {} HasVisitorPermission: {}",
+        HouseGuid.ToString(), PlotSettingsID.has_value(), VisitorPermissionGuid.has_value());
 }
 
 void HousingSvcsPlayerViewHousesByPlayer::Read()
 {
     _worldPacket >> PlayerGuid;
+
+    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_SVCS_PLAYER_VIEW_HOUSES_BY_PLAYER PlayerGuid: {}", PlayerGuid.ToString());
 }
 
 void HousingSvcsPlayerViewHousesByBnetAccount::Read()
 {
     _worldPacket >> BnetAccountGuid;
+
+    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_SVCS_PLAYER_VIEW_HOUSES_BY_BNET BnetAccountGuid: {}", BnetAccountGuid.ToString());
 }
 
 void HousingSvcsTeleportToPlot::Read()
@@ -290,26 +371,37 @@ void HousingSvcsTeleportToPlot::Read()
     _worldPacket >> OwnerGuid;
     _worldPacket >> PlotIndex;
     _worldPacket >> TeleportType;
+
+    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_SVCS_TELEPORT_TO_PLOT NeighborhoodGuid: {} OwnerGuid: {} PlotIndex: {} TeleportType: {}",
+        NeighborhoodGuid.ToString(), OwnerGuid.ToString(), PlotIndex, TeleportType);
 }
 
 void HousingSvcsAcceptNeighborhoodOwnership::Read()
 {
     _worldPacket >> NeighborhoodGuid;
+
+    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_SVCS_ACCEPT_NEIGHBORHOOD_OWNERSHIP NeighborhoodGuid: {}", NeighborhoodGuid.ToString());
 }
 
 void HousingSvcsRejectNeighborhoodOwnership::Read()
 {
     _worldPacket >> NeighborhoodGuid;
+
+    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_SVCS_REJECT_NEIGHBORHOOD_OWNERSHIP NeighborhoodGuid: {}", NeighborhoodGuid.ToString());
 }
 
 void HousingSvcsGetHouseFinderNeighborhood::Read()
 {
     _worldPacket >> NeighborhoodGuid;
+
+    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_SVCS_GET_HOUSE_FINDER_NEIGHBORHOOD NeighborhoodGuid: {}", NeighborhoodGuid.ToString());
 }
 
 void HousingSvcsGetBnetFriendNeighborhoods::Read()
 {
     _worldPacket >> BnetAccountGuid;
+
+    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_SVCS_GET_BNET_FRIEND_NEIGHBORHOODS BnetAccountGuid: {}", BnetAccountGuid.ToString());
 }
 
 // --- Housing Misc ---
@@ -321,11 +413,15 @@ void HousingGetPlayerPermissions::Read()
 
     if (HouseGuid)
         _worldPacket >> *HouseGuid;
+
+    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_GET_PLAYER_PERMISSIONS HasHouseGuid: {}", HouseGuid.has_value());
 }
 
 void HousingSvcsGetPotentialHouseOwners::Read()
 {
     _worldPacket >> NeighborhoodGuid;
+
+    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_SVCS_GET_POTENTIAL_HOUSE_OWNERS NeighborhoodGuid: {}", NeighborhoodGuid.ToString());
 }
 
 // --- Other Housing CMSG ---
@@ -333,22 +429,31 @@ void HousingSvcsGetPotentialHouseOwners::Read()
 void DeclineNeighborhoodInvites::Read()
 {
     _worldPacket >> Bits<1>(Allow);
+
+    TC_LOG_DEBUG("network.opcode", "CMSG_DECLINE_NEIGHBORHOOD_INVITES Allow: {}", Allow);
 }
 
 void QueryNeighborhoodInfo::Read()
 {
     _worldPacket >> NeighborhoodGuid;
+
+    TC_LOG_DEBUG("network.opcode", "CMSG_QUERY_NEIGHBORHOOD_INFO NeighborhoodGuid: {}", NeighborhoodGuid.ToString());
 }
 
 void InvitePlayerToNeighborhood::Read()
 {
     _worldPacket >> PlayerGuid;
     _worldPacket >> NeighborhoodGuid;
+
+    TC_LOG_DEBUG("network.opcode", "CMSG_INVITE_PLAYER_TO_NEIGHBORHOOD PlayerGuid: {} NeighborhoodGuid: {}",
+        PlayerGuid.ToString(), NeighborhoodGuid.ToString());
 }
 
 void GuildGetOthersOwnedHouses::Read()
 {
     _worldPacket >> PlayerGuid;
+
+    TC_LOG_DEBUG("network.opcode", "CMSG_GUILD_GET_OTHERS_OWNED_HOUSES PlayerGuid: {}", PlayerGuid.ToString());
 }
 
 // --- SMSG Packets ---
@@ -356,10 +461,6 @@ void GuildGetOthersOwnedHouses::Read()
 WorldPacket const* QueryNeighborhoodNameResponse::Write()
 {
     // Wire format verified against retail 12.0.1 build 65940 (opcode 0x460012)
-    // Retail: [PackedGUID] [0x80] [uint8 len] [string bytes]
-    // Byte after GUID: bit 7 = Allow, bits 6-0 = zero padding (NOT a length field)
-    // The 7-bit field was incorrectly used as SizedString::BitsSize<7> before,
-    // causing the client to read NameLen bytes before the uint8 prefix, shifting everything.
     _worldPacket << NeighborhoodGuid;
     _worldPacket << Bits<1>(Allow);
     _worldPacket.FlushBits();
@@ -370,12 +471,17 @@ WorldPacket const* QueryNeighborhoodNameResponse::Write()
         _worldPacket.WriteString(Name);
     }
 
+    TC_LOG_DEBUG("network.opcode", "SMSG_QUERY_NEIGHBORHOOD_NAME_RESPONSE NeighborhoodGuid: {} Allow: {} Name: '{}'",
+        NeighborhoodGuid.ToString(), Allow, Name);
+
     return &_worldPacket;
 }
 
 WorldPacket const* InvalidateNeighborhoodName::Write()
 {
     _worldPacket << NeighborhoodGuid;
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_INVALIDATE_NEIGHBORHOOD_NAME NeighborhoodGuid: {}", NeighborhoodGuid.ToString());
 
     return &_worldPacket;
 }
@@ -390,6 +496,9 @@ WorldPacket const* HouseExteriorLockResponse::Write()
     _worldPacket << HouseGuid;
     _worldPacket.WriteBit(Locked);
     _worldPacket.FlushBits();
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSE_EXTERIOR_LOCK_RESPONSE Result: {} HouseGuid: {} Locked: {}", Result, HouseGuid.ToString(), Locked);
+
     return &_worldPacket;
 }
 
@@ -397,6 +506,9 @@ WorldPacket const* HouseExteriorSetHousePositionResponse::Write()
 {
     _worldPacket << uint32(Result);
     _worldPacket << HouseGuid;
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSE_EXTERIOR_SET_HOUSE_POSITION_RESPONSE Result: {} HouseGuid: {}", Result, HouseGuid.ToString());
+
     return &_worldPacket;
 }
 
@@ -406,15 +518,16 @@ WorldPacket const* HouseExteriorSetHousePositionResponse::Write()
 
 WorldPacket const* HousingDecorSetEditModeResponse::Write()
 {
-    // Sniff-verified wire format (horde housing sniff):
-    //   Enter: PackedGUID(HouseGuid) + PackedGUID(HouseGuid2) + uint8(1) + uint32(Result) + PackedGUID(DecorGuid)
-    //   Exit:  PackedGUID(HouseGuid) + PackedGUID(HouseGuid2) + uint8(0) + uint32(Result)
     _worldPacket << HouseGuid;
     _worldPacket << HouseGuid2;
     _worldPacket << uint8(IsInEditMode);
     _worldPacket << uint32(Result);
     if (IsInEditMode)
         _worldPacket << DecorGuid;
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_DECOR_SET_EDIT_MODE_RESPONSE Result: {} HouseGuid: {} IsInEditMode: {}",
+        Result, HouseGuid.ToString(), IsInEditMode);
+
     return &_worldPacket;
 }
 
@@ -422,6 +535,9 @@ WorldPacket const* HousingDecorMoveResponse::Write()
 {
     _worldPacket << uint32(Result);
     _worldPacket << DecorGuid;
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_DECOR_MOVE_RESPONSE Result: {} DecorGuid: {}", Result, DecorGuid.ToString());
+
     return &_worldPacket;
 }
 
@@ -429,6 +545,9 @@ WorldPacket const* HousingDecorPlaceResponse::Write()
 {
     _worldPacket << uint32(Result);
     _worldPacket << DecorGuid;
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_DECOR_PLACE_RESPONSE Result: {} DecorGuid: {}", Result, DecorGuid.ToString());
+
     return &_worldPacket;
 }
 
@@ -436,6 +555,9 @@ WorldPacket const* HousingDecorRemoveResponse::Write()
 {
     _worldPacket << uint32(Result);
     _worldPacket << DecorGuid;
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_DECOR_REMOVE_RESPONSE Result: {} DecorGuid: {}", Result, DecorGuid.ToString());
+
     return &_worldPacket;
 }
 
@@ -445,6 +567,9 @@ WorldPacket const* HousingDecorLockResponse::Write()
     _worldPacket << DecorGuid;
     _worldPacket.WriteBit(Locked);
     _worldPacket.FlushBits();
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_DECOR_LOCK_RESPONSE Result: {} DecorGuid: {} Locked: {}", Result, DecorGuid.ToString(), Locked);
+
     return &_worldPacket;
 }
 
@@ -452,6 +577,9 @@ WorldPacket const* HousingDecorDeleteFromStorageResponse::Write()
 {
     _worldPacket << uint32(Result);
     _worldPacket << DecorGuid;
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_DECOR_DELETE_FROM_STORAGE_RESPONSE Result: {} DecorGuid: {}", Result, DecorGuid.ToString());
+
     return &_worldPacket;
 }
 
@@ -465,6 +593,10 @@ WorldPacket const* HousingDecorRequestStorageResponse::Write()
         _worldPacket << uint32(entry.DecorEntryId);
         _worldPacket << uint32(entry.Count);
     }
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_DECOR_REQUEST_STORAGE_RESPONSE ResultCode: {} EntryCount: {} BNetAccountGuid: {}",
+        ResultCode, Entries.size(), BNetAccountGuid.ToString());
+
     return &_worldPacket;
 }
 
@@ -472,6 +604,9 @@ WorldPacket const* HousingDecorAddToHouseChestResponse::Write()
 {
     _worldPacket << uint32(Result);
     _worldPacket << DecorGuid;
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_DECOR_ADD_TO_HOUSE_CHEST_RESPONSE Result: {} DecorGuid: {}", Result, DecorGuid.ToString());
+
     return &_worldPacket;
 }
 
@@ -479,6 +614,9 @@ WorldPacket const* HousingDecorSystemSetDyeSlotsResponse::Write()
 {
     _worldPacket << uint32(Result);
     _worldPacket << DecorGuid;
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_DECOR_SET_DYE_SLOTS_RESPONSE Result: {} DecorGuid: {}", Result, DecorGuid.ToString());
+
     return &_worldPacket;
 }
 
@@ -486,12 +624,18 @@ WorldPacket const* HousingRedeemDeferredDecorResponse::Write()
 {
     _worldPacket << uint32(Result);
     _worldPacket << uint32(DecorEntryID);
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_REDEEM_DEFERRED_DECOR_RESPONSE Result: {} DecorEntryID: {}", Result, DecorEntryID);
+
     return &_worldPacket;
 }
 
 WorldPacket const* HousingFirstTimeDecorAcquisition::Write()
 {
     _worldPacket << uint32(DecorEntryID);
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_FIRST_TIME_DECOR_ACQUISITION DecorEntryID: {}", DecorEntryID);
+
     return &_worldPacket;
 }
 
@@ -504,6 +648,9 @@ WorldPacket const* HousingFixtureSetEditModeResponse::Write()
     _worldPacket << uint32(Result);
     _worldPacket.WriteBit(Active);
     _worldPacket.FlushBits();
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_FIXTURE_SET_EDIT_MODE_RESPONSE Result: {} Active: {}", Result, Active);
+
     return &_worldPacket;
 }
 
@@ -511,6 +658,9 @@ WorldPacket const* HousingFixtureCreateBasicHouseResponse::Write()
 {
     _worldPacket << uint32(Result);
     _worldPacket << HouseGuid;
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_FIXTURE_CREATE_BASIC_HOUSE_RESPONSE Result: {} HouseGuid: {}", Result, HouseGuid.ToString());
+
     return &_worldPacket;
 }
 
@@ -518,6 +668,9 @@ WorldPacket const* HousingFixtureDeleteHouseResponse::Write()
 {
     _worldPacket << uint32(Result);
     _worldPacket << HouseGuid;
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_FIXTURE_DELETE_HOUSE_RESPONSE Result: {} HouseGuid: {}", Result, HouseGuid.ToString());
+
     return &_worldPacket;
 }
 
@@ -525,6 +678,9 @@ WorldPacket const* HousingFixtureSetHouseSizeResponse::Write()
 {
     _worldPacket << uint32(Result);
     _worldPacket << uint8(Size);
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_FIXTURE_SET_HOUSE_SIZE_RESPONSE Result: {} Size: {}", Result, Size);
+
     return &_worldPacket;
 }
 
@@ -532,6 +688,9 @@ WorldPacket const* HousingFixtureSetHouseTypeResponse::Write()
 {
     _worldPacket << uint32(Result);
     _worldPacket << int32(HouseExteriorTypeID);
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_FIXTURE_SET_HOUSE_TYPE_RESPONSE Result: {} HouseExteriorTypeID: {}", Result, HouseExteriorTypeID);
+
     return &_worldPacket;
 }
 
@@ -539,6 +698,9 @@ WorldPacket const* HousingFixtureSetCoreFixtureResponse::Write()
 {
     _worldPacket << uint32(Result);
     _worldPacket << int32(FixtureRecordID);
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_FIXTURE_SET_CORE_FIXTURE_RESPONSE Result: {} FixtureRecordID: {}", Result, FixtureRecordID);
+
     return &_worldPacket;
 }
 
@@ -546,6 +708,9 @@ WorldPacket const* HousingFixtureCreateFixtureResponse::Write()
 {
     _worldPacket << uint32(Result);
     _worldPacket << FixtureGuid;
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_FIXTURE_CREATE_FIXTURE_RESPONSE Result: {} FixtureGuid: {}", Result, FixtureGuid.ToString());
+
     return &_worldPacket;
 }
 
@@ -553,6 +718,9 @@ WorldPacket const* HousingFixtureDeleteFixtureResponse::Write()
 {
     _worldPacket << uint32(Result);
     _worldPacket << FixtureGuid;
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_FIXTURE_DELETE_FIXTURE_RESPONSE Result: {} FixtureGuid: {}", Result, FixtureGuid.ToString());
+
     return &_worldPacket;
 }
 
@@ -565,6 +733,9 @@ WorldPacket const* HousingRoomSetLayoutEditModeResponse::Write()
     _worldPacket << uint32(Result);
     _worldPacket.WriteBit(Active);
     _worldPacket.FlushBits();
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_ROOM_SET_LAYOUT_EDIT_MODE_RESPONSE Result: {} Active: {}", Result, Active);
+
     return &_worldPacket;
 }
 
@@ -572,6 +743,9 @@ WorldPacket const* HousingRoomAddResponse::Write()
 {
     _worldPacket << uint32(Result);
     _worldPacket << RoomGuid;
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_ROOM_ADD_RESPONSE Result: {} RoomGuid: {}", Result, RoomGuid.ToString());
+
     return &_worldPacket;
 }
 
@@ -579,6 +753,9 @@ WorldPacket const* HousingRoomRemoveResponse::Write()
 {
     _worldPacket << uint32(Result);
     _worldPacket << RoomGuid;
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_ROOM_REMOVE_RESPONSE Result: {} RoomGuid: {}", Result, RoomGuid.ToString());
+
     return &_worldPacket;
 }
 
@@ -586,6 +763,9 @@ WorldPacket const* HousingRoomUpdateResponse::Write()
 {
     _worldPacket << uint32(Result);
     _worldPacket << RoomGuid;
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_ROOM_UPDATE_RESPONSE Result: {} RoomGuid: {}", Result, RoomGuid.ToString());
+
     return &_worldPacket;
 }
 
@@ -595,6 +775,10 @@ WorldPacket const* HousingRoomSetComponentThemeResponse::Write()
     _worldPacket << RoomGuid;
     _worldPacket << int32(ComponentID);
     _worldPacket << int32(ThemeSetID);
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_ROOM_SET_COMPONENT_THEME_RESPONSE Result: {} RoomGuid: {} ComponentID: {} ThemeSetID: {}",
+        Result, RoomGuid.ToString(), ComponentID, ThemeSetID);
+
     return &_worldPacket;
 }
 
@@ -604,6 +788,10 @@ WorldPacket const* HousingRoomApplyComponentMaterialsResponse::Write()
     _worldPacket << RoomGuid;
     _worldPacket << int32(ComponentID);
     _worldPacket << int32(RoomComponentTextureRecordID);
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_ROOM_APPLY_COMPONENT_MATERIALS_RESPONSE Result: {} RoomGuid: {} ComponentID: {} TextureRecordID: {}",
+        Result, RoomGuid.ToString(), ComponentID, RoomComponentTextureRecordID);
+
     return &_worldPacket;
 }
 
@@ -613,6 +801,10 @@ WorldPacket const* HousingRoomSetDoorTypeResponse::Write()
     _worldPacket << RoomGuid;
     _worldPacket << int32(ComponentID);
     _worldPacket << uint8(DoorType);
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_ROOM_SET_DOOR_TYPE_RESPONSE Result: {} RoomGuid: {} ComponentID: {} DoorType: {}",
+        Result, RoomGuid.ToString(), ComponentID, DoorType);
+
     return &_worldPacket;
 }
 
@@ -622,6 +814,10 @@ WorldPacket const* HousingRoomSetCeilingTypeResponse::Write()
     _worldPacket << RoomGuid;
     _worldPacket << int32(ComponentID);
     _worldPacket << uint8(CeilingType);
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_ROOM_SET_CEILING_TYPE_RESPONSE Result: {} RoomGuid: {} ComponentID: {} CeilingType: {}",
+        Result, RoomGuid.ToString(), ComponentID, CeilingType);
+
     return &_worldPacket;
 }
 
@@ -632,12 +828,18 @@ WorldPacket const* HousingRoomSetCeilingTypeResponse::Write()
 WorldPacket const* HousingSvcsNotifyPermissionsFailure::Write()
 {
     _worldPacket << uint16(Result);
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_SVCS_NOTIFY_PERMISSIONS_FAILURE Result: {}", Result);
+
     return &_worldPacket;
 }
 
 WorldPacket const* HousingSvcsGuildCreateNeighborhoodNotification::Write()
 {
     _worldPacket << NeighborhoodGuid;
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_SVCS_GUILD_CREATE_NEIGHBORHOOD_NOTIFICATION NeighborhoodGuid: {}", NeighborhoodGuid.ToString());
+
     return &_worldPacket;
 }
 
@@ -645,6 +847,10 @@ WorldPacket const* HousingSvcsCreateCharterNeighborhoodResponse::Write()
 {
     _worldPacket << uint32(Result);
     _worldPacket << NeighborhoodGuid;
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_SVCS_CREATE_CHARTER_NEIGHBORHOOD_RESPONSE Result: {} NeighborhoodGuid: {}",
+        Result, NeighborhoodGuid.ToString());
+
     return &_worldPacket;
 }
 
@@ -653,6 +859,10 @@ WorldPacket const* HousingSvcsNeighborhoodReservePlotResponse::Write()
     _worldPacket << uint32(Result);
     _worldPacket << NeighborhoodGuid;
     _worldPacket << uint8(PlotIndex);
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_SVCS_NEIGHBORHOOD_RESERVE_PLOT_RESPONSE Result: {} NeighborhoodGuid: {} PlotIndex: {}",
+        Result, NeighborhoodGuid.ToString(), PlotIndex);
+
     return &_worldPacket;
 }
 
@@ -660,6 +870,10 @@ WorldPacket const* HousingSvcsClearPlotReservationResponse::Write()
 {
     _worldPacket << uint32(Result);
     _worldPacket << NeighborhoodGuid;
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_SVCS_CLEAR_PLOT_RESERVATION_RESPONSE Result: {} NeighborhoodGuid: {}",
+        Result, NeighborhoodGuid.ToString());
+
     return &_worldPacket;
 }
 
@@ -667,6 +881,9 @@ WorldPacket const* HousingSvcsRelinquishHouseResponse::Write()
 {
     _worldPacket << uint32(Result);
     _worldPacket << HouseGuid;
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_SVCS_RELINQUISH_HOUSE_RESPONSE Result: {} HouseGuid: {}", Result, HouseGuid.ToString());
+
     return &_worldPacket;
 }
 
@@ -674,6 +891,9 @@ WorldPacket const* HousingSvcsCancelRelinquishHouseResponse::Write()
 {
     _worldPacket << uint32(Result);
     _worldPacket << HouseGuid;
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_SVCS_CANCEL_RELINQUISH_HOUSE_RESPONSE Result: {} HouseGuid: {}", Result, HouseGuid.ToString());
+
     return &_worldPacket;
 }
 
@@ -681,11 +901,13 @@ static void WriteJamCurrentHouseInfo(WorldPacket& packet, JamCurrentHouseInfo co
 
 WorldPacket const* HousingSvcsGetPlayerHousesInfoResponse::Write()
 {
-    // Sniff-verified: uint32 Count + uint8 Unknown + JamCurrentHouseInfo per house
     _worldPacket << uint32(Houses.size());
     _worldPacket << uint8(Unknown);
     for (auto const& house : Houses)
         WriteJamCurrentHouseInfo(_worldPacket, house);
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_SVCS_GET_PLAYER_HOUSES_INFO_RESPONSE HouseCount: {} Unknown: {}", Houses.size(), Unknown);
+
     return &_worldPacket;
 }
 
@@ -702,6 +924,9 @@ WorldPacket const* HousingSvcsPlayerViewHousesResponse::Write()
     _worldPacket.FlushBits();
     for (auto const& neighborhood : Neighborhoods)
         _worldPacket << SizedString::Data(neighborhood.Name);
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_SVCS_PLAYER_VIEW_HOUSES_RESPONSE Result: {} NeighborhoodCount: {}", Result, Neighborhoods.size());
+
     return &_worldPacket;
 }
 
@@ -709,12 +934,15 @@ WorldPacket const* HousingSvcsChangeHouseCosmeticOwner::Write()
 {
     _worldPacket << HouseGuid;
     _worldPacket << NewOwnerGuid;
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_SVCS_CHANGE_HOUSE_COSMETIC_OWNER HouseGuid: {} NewOwnerGuid: {}",
+        HouseGuid.ToString(), NewOwnerGuid.ToString());
+
     return &_worldPacket;
 }
 
 WorldPacket const* HousingSvcsUpdateHousesLevelFavor::Write()
 {
-    // Sniff-verified (36 bytes): uint8 + 4x int32 + PackedGUID + 2x int32 + uint16
     _worldPacket << uint8(Type);
     _worldPacket << int32(PreviousFavor);
     _worldPacket << int32(PreviousLevel);
@@ -724,24 +952,37 @@ WorldPacket const* HousingSvcsUpdateHousesLevelFavor::Write()
     _worldPacket << int32(PreviousLevelId);
     _worldPacket << int32(NextLevelFavorCost);
     _worldPacket << uint16(Flags);
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_SVCS_UPDATE_HOUSES_LEVEL_FAVOR Type: {} PrevFavor: {} PrevLevel: {} NewLevel: {} HouseGuid: {}",
+        Type, PreviousFavor, PreviousLevel, NewLevel, HouseGuid.ToString());
+
     return &_worldPacket;
 }
 
 WorldPacket const* HousingSvcsGuildAddHouseNotification::Write()
 {
     _worldPacket << HouseGuid;
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_SVCS_GUILD_ADD_HOUSE_NOTIFICATION HouseGuid: {}", HouseGuid.ToString());
+
     return &_worldPacket;
 }
 
 WorldPacket const* HousingSvcsGuildRemoveHouseNotification::Write()
 {
     _worldPacket << HouseGuid;
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_SVCS_GUILD_REMOVE_HOUSE_NOTIFICATION HouseGuid: {}", HouseGuid.ToString());
+
     return &_worldPacket;
 }
 
 WorldPacket const* HousingSvcsGuildAppendNeighborhoodNotification::Write()
 {
     _worldPacket << NeighborhoodGuid;
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_SVCS_GUILD_APPEND_NEIGHBORHOOD_NOTIFICATION NeighborhoodGuid: {}", NeighborhoodGuid.ToString());
+
     return &_worldPacket;
 }
 
@@ -751,6 +992,10 @@ WorldPacket const* HousingSvcsGuildRenameNeighborhoodNotification::Write()
     _worldPacket << SizedString::BitsSize<7>(NewName);
     _worldPacket.FlushBits();
     _worldPacket << SizedString::Data(NewName);
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_SVCS_GUILD_RENAME_NEIGHBORHOOD_NOTIFICATION NeighborhoodGuid: {} NewName: '{}'",
+        NeighborhoodGuid.ToString(), NewName);
+
     return &_worldPacket;
 }
 
@@ -759,6 +1004,10 @@ WorldPacket const* HousingSvcsGuildGetHousingInfoResponse::Write()
     _worldPacket << uint32(Result);
     _worldPacket << NeighborhoodGuid;
     _worldPacket << HouseGuid;
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_SVCS_GUILD_GET_HOUSING_INFO_RESPONSE Result: {} NeighborhoodGuid: {} HouseGuid: {}",
+        Result, NeighborhoodGuid.ToString(), HouseGuid.ToString());
+
     return &_worldPacket;
 }
 
@@ -766,6 +1015,10 @@ WorldPacket const* HousingSvcsAcceptNeighborhoodOwnershipResponse::Write()
 {
     _worldPacket << uint32(Result);
     _worldPacket << NeighborhoodGuid;
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_SVCS_ACCEPT_NEIGHBORHOOD_OWNERSHIP_RESPONSE Result: {} NeighborhoodGuid: {}",
+        Result, NeighborhoodGuid.ToString());
+
     return &_worldPacket;
 }
 
@@ -773,6 +1026,10 @@ WorldPacket const* HousingSvcsRejectNeighborhoodOwnershipResponse::Write()
 {
     _worldPacket << uint32(Result);
     _worldPacket << NeighborhoodGuid;
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_SVCS_REJECT_NEIGHBORHOOD_OWNERSHIP_RESPONSE Result: {} NeighborhoodGuid: {}",
+        Result, NeighborhoodGuid.ToString());
+
     return &_worldPacket;
 }
 
@@ -780,6 +1037,10 @@ WorldPacket const* HousingSvcsNeighborhoodOwnershipTransferredResponse::Write()
 {
     _worldPacket << NeighborhoodGuid;
     _worldPacket << NewOwnerGuid;
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_SVCS_NEIGHBORHOOD_OWNERSHIP_TRANSFERRED NeighborhoodGuid: {} NewOwnerGuid: {}",
+        NeighborhoodGuid.ToString(), NewOwnerGuid.ToString());
+
     return &_worldPacket;
 }
 
@@ -795,6 +1056,9 @@ WorldPacket const* HousingSvcsGetPotentialHouseOwnersResponse::Write()
     _worldPacket.FlushBits();
     for (auto const& owner : PotentialOwners)
         _worldPacket << SizedString::Data(owner.PlayerName);
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_SVCS_GET_POTENTIAL_HOUSE_OWNERS_RESPONSE Result: {} OwnerCount: {}", Result, PotentialOwners.size());
+
     return &_worldPacket;
 }
 
@@ -803,6 +1067,10 @@ WorldPacket const* HousingSvcsUpdateHouseSettingsResponse::Write()
     _worldPacket << uint32(Result);
     _worldPacket << HouseGuid;
     _worldPacket << uint32(AccessFlags);
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_SVCS_UPDATE_HOUSE_SETTINGS_RESPONSE Result: {} HouseGuid: {} AccessFlags: {}",
+        Result, HouseGuid.ToString(), AccessFlags);
+
     return &_worldPacket;
 }
 
@@ -822,6 +1090,9 @@ WorldPacket const* HousingSvcsGetHouseFinderInfoResponse::Write()
     _worldPacket.FlushBits();
     for (auto const& entry : Entries)
         _worldPacket << SizedString::Data(entry.NeighborhoodName);
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_SVCS_GET_HOUSE_FINDER_INFO_RESPONSE Result: {} EntryCount: {}", Result, Entries.size());
+
     return &_worldPacket;
 }
 
@@ -843,6 +1114,10 @@ WorldPacket const* HousingSvcsGetHouseFinderNeighborhoodResponse::Write()
     _worldPacket << SizedString::Data(NeighborhoodName);
     for (auto const& plot : Plots)
         _worldPacket << SizedString::Data(plot.OwnerName);
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_SVCS_GET_HOUSE_FINDER_NEIGHBORHOOD_RESPONSE Result: {} NeighborhoodGuid: {} PlotCount: {} Name: '{}'",
+        Result, NeighborhoodGuid.ToString(), Plots.size(), NeighborhoodName);
+
     return &_worldPacket;
 }
 
@@ -859,16 +1134,23 @@ WorldPacket const* HousingSvcsGetBnetFriendNeighborhoodsResponse::Write()
     _worldPacket.FlushBits();
     for (auto const& neighborhood : Neighborhoods)
         _worldPacket << SizedString::Data(neighborhood.FriendName);
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_SVCS_GET_BNET_FRIEND_NEIGHBORHOODS_RESPONSE Result: {} NeighborhoodCount: {}", Result, Neighborhoods.size());
+
     return &_worldPacket;
 }
 
 WorldPacket const* HousingSvcsHouseFinderForceRefresh::Write()
 {
+    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_SVCS_HOUSE_FINDER_FORCE_REFRESH (no data)");
+
     return &_worldPacket;
 }
 
 WorldPacket const* HousingSvcRequestPlayerReloadData::Write()
 {
+    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_SVC_REQUEST_PLAYER_RELOAD_DATA (no data)");
+
     return &_worldPacket;
 }
 
@@ -876,6 +1158,10 @@ WorldPacket const* HousingSvcsDeleteAllNeighborhoodInvitesResponse::Write()
 {
     _worldPacket << uint32(Result);
     _worldPacket << NeighborhoodGuid;
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_SVCS_DELETE_ALL_NEIGHBORHOOD_INVITES_RESPONSE Result: {} NeighborhoodGuid: {}",
+        Result, NeighborhoodGuid.ToString());
+
     return &_worldPacket;
 }
 
@@ -910,20 +1196,25 @@ static void WriteJamNeighborhoodRosterEntry(WorldPacket& packet, JamNeighborhood
 
 WorldPacket const* HousingHouseStatusResponse::Write()
 {
-    // Sniff-verified (0x550000): 3x PackedGUID + uint32 Status
-    // GUID3 (NeighborhoodGuid) must match EditMode DecorGuids[0]
     _worldPacket << HouseGuid;
     _worldPacket << PlotGuid;
     _worldPacket << NeighborhoodGuid;
     _worldPacket << uint32(Status);
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_HOUSE_STATUS_RESPONSE HouseGuid: {} PlotGuid: {} NeighborhoodGuid: {} Status: {}",
+        HouseGuid.ToString(), PlotGuid.ToString(), NeighborhoodGuid.ToString(), Status);
+
     return &_worldPacket;
 }
 
 WorldPacket const* HousingGetCurrentHouseInfoResponse::Write()
 {
-    // IDA 12.0 verified (0x550001): JamCurrentHouseInfo + uint8 ResponseFlags
     WriteJamCurrentHouseInfo(_worldPacket, HouseInfo);
     _worldPacket << uint8(ResponseFlags);
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_GET_CURRENT_HOUSE_INFO_RESPONSE ResponseFlags: {} HouseTypeId: {}",
+        ResponseFlags, HouseInfo.HouseTypeId);
+
     return &_worldPacket;
 }
 
@@ -934,22 +1225,31 @@ WorldPacket const* HousingExportHouseResponse::Write()
     _worldPacket << SizedString::BitsSize<11>(ExportData);
     _worldPacket.FlushBits();
     _worldPacket << SizedString::Data(ExportData);
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_EXPORT_HOUSE_RESPONSE Result: {} HouseGuid: {} ExportDataLen: {}",
+        Result, HouseGuid.ToString(), ExportData.size());
+
     return &_worldPacket;
 }
 
 WorldPacket const* HousingGetPlayerPermissionsResponse::Write()
 {
-    // IDA 12.0 verified (0x550006): PackedGUID + uint8 ResultCode + uint8 Permissions
     _worldPacket << HouseGuid;
     _worldPacket << uint8(ResultCode);
     _worldPacket << uint8(PermissionFlags);
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_GET_PLAYER_PERMISSIONS_RESPONSE HouseGuid: {} ResultCode: {} PermissionFlags: {}",
+        HouseGuid.ToString(), ResultCode, PermissionFlags);
+
     return &_worldPacket;
 }
 
 WorldPacket const* HousingResetKioskModeResponse::Write()
 {
-    // IDA 12.0 verified (0x550007): single uint8
     _worldPacket << uint8(Result);
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_RESET_KIOSK_MODE_RESPONSE Result: {}", Result);
+
     return &_worldPacket;
 }
 
@@ -960,36 +1260,54 @@ WorldPacket const* HousingResetKioskModeResponse::Write()
 WorldPacket const* AccountExteriorFixtureCollectionUpdate::Write()
 {
     _worldPacket << uint32(FixtureID);
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_ACCOUNT_EXTERIOR_FIXTURE_COLLECTION_UPDATE FixtureID: {}", FixtureID);
+
     return &_worldPacket;
 }
 
 WorldPacket const* AccountHouseTypeCollectionUpdate::Write()
 {
     _worldPacket << uint32(HouseTypeID);
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_ACCOUNT_HOUSE_TYPE_COLLECTION_UPDATE HouseTypeID: {}", HouseTypeID);
+
     return &_worldPacket;
 }
 
 WorldPacket const* AccountRoomCollectionUpdate::Write()
 {
     _worldPacket << uint32(RoomID);
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_ACCOUNT_ROOM_COLLECTION_UPDATE RoomID: {}", RoomID);
+
     return &_worldPacket;
 }
 
 WorldPacket const* AccountRoomThemeCollectionUpdate::Write()
 {
     _worldPacket << uint32(ThemeID);
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_ACCOUNT_ROOM_THEME_COLLECTION_UPDATE ThemeID: {}", ThemeID);
+
     return &_worldPacket;
 }
 
 WorldPacket const* AccountRoomMaterialCollectionUpdate::Write()
 {
     _worldPacket << uint32(MaterialID);
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_ACCOUNT_ROOM_MATERIAL_COLLECTION_UPDATE MaterialID: {}", MaterialID);
+
     return &_worldPacket;
 }
 
 WorldPacket const* InvalidateNeighborhood::Write()
 {
     _worldPacket << NeighborhoodGuid;
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_INVALIDATE_NEIGHBORHOOD NeighborhoodGuid: {}", NeighborhoodGuid.ToString());
+
     return &_worldPacket;
 }
 
@@ -1007,6 +1325,12 @@ WorldPacket const* GetDecorRefundListResponse::Write()
         _worldPacket << uint64(decor.ExpiryTime);
         _worldPacket << uint32(decor.Flags);
     }
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_GET_DECOR_REFUND_LIST_RESPONSE DecorCount: {}", Decors.size());
+    for (size_t i = 0; i < Decors.size(); ++i)
+        TC_LOG_DEBUG("network.opcode", "  Decor[{}]: ID={} RefundPrice={} ExpiryTime={} Flags={}",
+            i, Decors[i].DecorID, Decors[i].RefundPrice, Decors[i].ExpiryTime, Decors[i].Flags);
+
     return &_worldPacket;
 }
 
@@ -1018,6 +1342,11 @@ WorldPacket const* GetAllLicensedDecorQuantitiesResponse::Write()
         _worldPacket << uint32(qty.DecorID);
         _worldPacket << uint32(qty.Quantity);
     }
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_GET_ALL_LICENSED_DECOR_QUANTITIES_RESPONSE QuantityCount: {}", Quantities.size());
+    for (size_t i = 0; i < Quantities.size(); ++i)
+        TC_LOG_DEBUG("network.opcode", "  Quantity[{}]: DecorID={} Quantity={}", i, Quantities[i].DecorID, Quantities[i].Quantity);
+
     return &_worldPacket;
 }
 
@@ -1029,6 +1358,11 @@ WorldPacket const* LicensedDecorQuantitiesUpdate::Write()
         _worldPacket << uint32(qty.DecorID);
         _worldPacket << uint32(qty.Quantity);
     }
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_LICENSED_DECOR_QUANTITIES_UPDATE QuantityCount: {}", Quantities.size());
+    for (size_t i = 0; i < Quantities.size(); ++i)
+        TC_LOG_DEBUG("network.opcode", "  Quantity[{}]: DecorID={} Quantity={}", i, Quantities[i].DecorID, Quantities[i].Quantity);
+
     return &_worldPacket;
 }
 
@@ -1040,6 +1374,9 @@ WorldPacket const* InitiativeServiceStatus::Write()
 {
     _worldPacket.WriteBit(ServiceEnabled);
     _worldPacket.FlushBits();
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_INITIATIVE_SERVICE_STATUS ServiceEnabled: {}", ServiceEnabled);
+
     return &_worldPacket;
 }
 
@@ -1053,6 +1390,11 @@ WorldPacket const* GetPlayerInitiativeInfoResult::Write()
         _worldPacket << uint32(task.Progress);
         _worldPacket << uint32(task.Status);
     }
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_GET_PLAYER_INITIATIVE_INFO_RESULT Result: {} TaskCount: {}", Result, Tasks.size());
+    for (size_t i = 0; i < Tasks.size(); ++i)
+        TC_LOG_DEBUG("network.opcode", "  Task[{}]: TaskID={} Progress={} Status={}", i, Tasks[i].TaskID, Tasks[i].Progress, Tasks[i].Status);
+
     return &_worldPacket;
 }
 
@@ -1071,6 +1413,12 @@ WorldPacket const* GetInitiativeActivityLogResult::Write()
         _worldPacket << uint32(entry.Unknown1);
         _worldPacket << uint64(entry.ExtraData);
     }
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_GET_INITIATIVE_ACTIVITY_LOG_RESULT Result: {} CompletedTaskCount: {}", Result, CompletedTasks.size());
+    for (size_t i = 0; i < CompletedTasks.size(); ++i)
+        TC_LOG_DEBUG("network.opcode", "  CompletedTask[{}]: InitiativeID={} TaskID={} CycleID={} Player={}",
+            i, CompletedTasks[i].InitiativeID, CompletedTasks[i].TaskID, CompletedTasks[i].CycleID, CompletedTasks[i].PlayerGuid.ToString());
+
     return &_worldPacket;
 }
 
@@ -1078,12 +1426,18 @@ WorldPacket const* InitiativeTaskComplete::Write()
 {
     _worldPacket << uint32(InitiativeID);
     _worldPacket << uint32(TaskID);
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_INITIATIVE_TASK_COMPLETE InitiativeID: {} TaskID: {}", InitiativeID, TaskID);
+
     return &_worldPacket;
 }
 
 WorldPacket const* InitiativeComplete::Write()
 {
     _worldPacket << uint32(InitiativeID);
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_INITIATIVE_COMPLETE InitiativeID: {}", InitiativeID);
+
     return &_worldPacket;
 }
 
@@ -1091,12 +1445,18 @@ WorldPacket const* ClearInitiativeTaskCriteriaProgress::Write()
 {
     _worldPacket << uint32(InitiativeID);
     _worldPacket << uint32(TaskID);
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_CLEAR_INITIATIVE_TASK_CRITERIA_PROGRESS InitiativeID: {} TaskID: {}", InitiativeID, TaskID);
+
     return &_worldPacket;
 }
 
 WorldPacket const* GetInitiativeRewardsResult::Write()
 {
     _worldPacket << uint32(Result);
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_GET_INITIATIVE_REWARDS_RESULT Result: {}", Result);
+
     return &_worldPacket;
 }
 
@@ -1104,18 +1464,27 @@ WorldPacket const* InitiativeRewardAvailable::Write()
 {
     _worldPacket << uint32(InitiativeID);
     _worldPacket << uint32(MilestoneIndex);
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_INITIATIVE_REWARD_AVAILABLE InitiativeID: {} MilestoneIndex: {}", InitiativeID, MilestoneIndex);
+
     return &_worldPacket;
 }
 
 WorldPacket const* HousingPhotoSharingAuthorizationResult::Write()
 {
     _worldPacket << uint32(Result);
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_PHOTO_SHARING_AUTHORIZATION_RESULT Result: {}", Result);
+
     return &_worldPacket;
 }
 
 WorldPacket const* HousingPhotoSharingAuthorizationClearedResult::Write()
 {
     _worldPacket << uint32(Result);
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_PHOTO_SHARING_AUTHORIZATION_CLEARED_RESULT Result: {}", Result);
+
     return &_worldPacket;
 }
 
@@ -1136,6 +1505,8 @@ void NeighborhoodCharterCreate::Read()
     _worldPacket >> SizedString::BitsSize<7>(Name);
 
     _worldPacket >> SizedString::Data(Name);
+
+    TC_LOG_DEBUG("network.opcode", "CMSG_NEIGHBORHOOD_CHARTER_CREATE MapID: {} FactionFlags: {} Name: '{}'", NeighborhoodMapID, FactionFlags, Name);
 }
 
 void NeighborhoodCharterEdit::Read()
@@ -1145,16 +1516,22 @@ void NeighborhoodCharterEdit::Read()
     _worldPacket >> SizedString::BitsSize<7>(Name);
 
     _worldPacket >> SizedString::Data(Name);
+
+    TC_LOG_DEBUG("network.opcode", "CMSG_NEIGHBORHOOD_CHARTER_EDIT MapID: {} FactionFlags: {} Name: '{}'", NeighborhoodMapID, FactionFlags, Name);
 }
 
 void NeighborhoodCharterAddSignature::Read()
 {
     _worldPacket >> CharterGuid;
+
+    TC_LOG_DEBUG("network.opcode", "CMSG_NEIGHBORHOOD_CHARTER_ADD_SIGNATURE CharterGuid: {}", CharterGuid.ToString());
 }
 
 void NeighborhoodCharterSendSignatureRequest::Read()
 {
     _worldPacket >> TargetPlayerGuid;
+
+    TC_LOG_DEBUG("network.opcode", "CMSG_NEIGHBORHOOD_CHARTER_SEND_SIGNATURE_REQUEST TargetPlayerGuid: {}", TargetPlayerGuid.ToString());
 }
 
 // --- Neighborhood Management System ---
@@ -1164,37 +1541,51 @@ void NeighborhoodUpdateName::Read()
     _worldPacket >> SizedString::BitsSize<7>(NewName);
 
     _worldPacket >> SizedString::Data(NewName);
+
+    TC_LOG_DEBUG("network.opcode", "CMSG_NEIGHBORHOOD_UPDATE_NAME NewName: '{}'", NewName);
 }
 
 void NeighborhoodSetPublicFlag::Read()
 {
     _worldPacket >> NeighborhoodGuid;
     _worldPacket >> Bits<1>(IsPublic);
+
+    TC_LOG_DEBUG("network.opcode", "CMSG_NEIGHBORHOOD_SET_PUBLIC_FLAG NeighborhoodGuid: {} IsPublic: {}", NeighborhoodGuid.ToString(), IsPublic);
 }
 
 void NeighborhoodAddSecondaryOwner::Read()
 {
     _worldPacket >> PlayerGuid;
+
+    TC_LOG_DEBUG("network.opcode", "CMSG_NEIGHBORHOOD_ADD_SECONDARY_OWNER PlayerGuid: {}", PlayerGuid.ToString());
 }
 
 void NeighborhoodRemoveSecondaryOwner::Read()
 {
     _worldPacket >> PlayerGuid;
+
+    TC_LOG_DEBUG("network.opcode", "CMSG_NEIGHBORHOOD_REMOVE_SECONDARY_OWNER PlayerGuid: {}", PlayerGuid.ToString());
 }
 
 void NeighborhoodInviteResident::Read()
 {
     _worldPacket >> PlayerGuid;
+
+    TC_LOG_DEBUG("network.opcode", "CMSG_NEIGHBORHOOD_INVITE_RESIDENT PlayerGuid: {}", PlayerGuid.ToString());
 }
 
 void NeighborhoodCancelInvitation::Read()
 {
     _worldPacket >> InviteeGuid;
+
+    TC_LOG_DEBUG("network.opcode", "CMSG_NEIGHBORHOOD_CANCEL_INVITATION InviteeGuid: {}", InviteeGuid.ToString());
 }
 
 void NeighborhoodPlayerDeclineInvite::Read()
 {
     _worldPacket >> NeighborhoodGuid;
+
+    TC_LOG_DEBUG("network.opcode", "CMSG_NEIGHBORHOOD_PLAYER_DECLINE_INVITE NeighborhoodGuid: {}", NeighborhoodGuid.ToString());
 }
 
 void NeighborhoodBuyHouse::Read()
@@ -1202,34 +1593,47 @@ void NeighborhoodBuyHouse::Read()
     _worldPacket >> PlotIndex;
     _worldPacket >> NeighborhoodGuid;
     _worldPacket >> PlotGuid;
+
+    TC_LOG_DEBUG("network.opcode", "CMSG_NEIGHBORHOOD_BUY_HOUSE PlotIndex: {} NeighborhoodGuid: {} PlotGuid: {}",
+        PlotIndex, NeighborhoodGuid.ToString(), PlotGuid.ToString());
 }
 
 void NeighborhoodMoveHouse::Read()
 {
     _worldPacket >> NeighborhoodGuid;
     _worldPacket >> PlotGuid;
+
+    TC_LOG_DEBUG("network.opcode", "CMSG_NEIGHBORHOOD_MOVE_HOUSE NeighborhoodGuid: {} PlotGuid: {}", NeighborhoodGuid.ToString(), PlotGuid.ToString());
 }
 
 void NeighborhoodOpenCornerstoneUI::Read()
 {
     _worldPacket >> PlotIndex;
     _worldPacket >> NeighborhoodGuid;
+
+    TC_LOG_DEBUG("network.opcode", "CMSG_NEIGHBORHOOD_OPEN_CORNERSTONE_UI PlotIndex: {} NeighborhoodGuid: {}", PlotIndex, NeighborhoodGuid.ToString());
 }
 
 void NeighborhoodOfferOwnership::Read()
 {
     _worldPacket >> NewOwnerGuid;
+
+    TC_LOG_DEBUG("network.opcode", "CMSG_NEIGHBORHOOD_OFFER_OWNERSHIP NewOwnerGuid: {}", NewOwnerGuid.ToString());
 }
 
 void NeighborhoodGetRoster::Read()
 {
     _worldPacket >> NeighborhoodGuid;
+
+    TC_LOG_DEBUG("network.opcode", "CMSG_NEIGHBORHOOD_GET_ROSTER NeighborhoodGuid: {}", NeighborhoodGuid.ToString());
 }
 
 void NeighborhoodEvictPlot::Read()
 {
     _worldPacket >> PlotIndex;
     _worldPacket >> NeighborhoodGuid;
+
+    TC_LOG_DEBUG("network.opcode", "CMSG_NEIGHBORHOOD_EVICT_PLOT PlotIndex: {} NeighborhoodGuid: {}", PlotIndex, NeighborhoodGuid.ToString());
 }
 
 // ============================================================
@@ -1240,6 +1644,9 @@ WorldPacket const* NeighborhoodCharterUpdateResponse::Write()
 {
     _worldPacket << uint32(Result);
     _worldPacket << CharterGuid;
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_NEIGHBORHOOD_CHARTER_UPDATE_RESPONSE Result: {} CharterGuid: {}", Result, CharterGuid.ToString());
+
     return &_worldPacket;
 }
 
@@ -1252,6 +1659,10 @@ WorldPacket const* NeighborhoodCharterOpenUIResponse::Write()
     _worldPacket << SizedString::BitsSize<7>(NeighborhoodName);
     _worldPacket.FlushBits();
     _worldPacket << SizedString::Data(NeighborhoodName);
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_NEIGHBORHOOD_CHARTER_OPEN_UI_RESPONSE Result: {} CharterGuid: {} MapID: {} SigCount: {} Name: '{}'",
+        Result, CharterGuid.ToString(), NeighborhoodMapID, SignatureCount, NeighborhoodName);
+
     return &_worldPacket;
 }
 
@@ -1259,6 +1670,10 @@ WorldPacket const* NeighborhoodCharterSignRequest::Write()
 {
     _worldPacket << CharterGuid;
     _worldPacket << RequesterGuid;
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_NEIGHBORHOOD_CHARTER_SIGN_REQUEST CharterGuid: {} RequesterGuid: {}",
+        CharterGuid.ToString(), RequesterGuid.ToString());
+
     return &_worldPacket;
 }
 
@@ -1267,6 +1682,10 @@ WorldPacket const* NeighborhoodCharterAddSignatureResponse::Write()
     _worldPacket << uint32(Result);
     _worldPacket << CharterGuid;
     _worldPacket << SignerGuid;
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_NEIGHBORHOOD_CHARTER_ADD_SIGNATURE_RESPONSE Result: {} CharterGuid: {} SignerGuid: {}",
+        Result, CharterGuid.ToString(), SignerGuid.ToString());
+
     return &_worldPacket;
 }
 
@@ -1278,6 +1697,10 @@ WorldPacket const* NeighborhoodCharterOpenConfirmationUIResponse::Write()
     _worldPacket << SizedString::BitsSize<7>(NeighborhoodName);
     _worldPacket.FlushBits();
     _worldPacket << SizedString::Data(NeighborhoodName);
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_NEIGHBORHOOD_CHARTER_OPEN_CONFIRMATION_UI_RESPONSE Result: {} CharterGuid: {} OwnerGuid: {} Name: '{}'",
+        Result, CharterGuid.ToString(), CharterOwnerGuid.ToString(), NeighborhoodName);
+
     return &_worldPacket;
 }
 
@@ -1285,6 +1708,10 @@ WorldPacket const* NeighborhoodCharterSignatureRemovedNotification::Write()
 {
     _worldPacket << CharterGuid;
     _worldPacket << SignerGuid;
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_NEIGHBORHOOD_CHARTER_SIGNATURE_REMOVED CharterGuid: {} SignerGuid: {}",
+        CharterGuid.ToString(), SignerGuid.ToString());
+
     return &_worldPacket;
 }
 
@@ -1295,67 +1722,90 @@ WorldPacket const* NeighborhoodCharterSignatureRemovedNotification::Write()
 WorldPacket const* NeighborhoodPlayerEnterPlot::Write()
 {
     _worldPacket << PlotAreaTriggerGuid;
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_NEIGHBORHOOD_PLAYER_ENTER_PLOT PlotAreaTriggerGuid: {}", PlotAreaTriggerGuid.ToString());
+
     return &_worldPacket;
 }
 
 WorldPacket const* NeighborhoodPlayerLeavePlot::Write()
 {
+    TC_LOG_DEBUG("network.opcode", "SMSG_NEIGHBORHOOD_PLAYER_LEAVE_PLOT (no data)");
+
     return &_worldPacket;
 }
 
 WorldPacket const* NeighborhoodEvictPlayerResponse::Write()
 {
     _worldPacket << PlayerGuid;
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_NEIGHBORHOOD_EVICT_PLAYER_RESPONSE PlayerGuid: {}", PlayerGuid.ToString());
+
     return &_worldPacket;
 }
 
 WorldPacket const* NeighborhoodUpdateNameResponse::Write()
 {
-    // IDA 12.0 verified (0x5C0003): single uint8
     _worldPacket << uint8(Result);
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_NEIGHBORHOOD_UPDATE_NAME_RESPONSE Result: {}", Result);
+
     return &_worldPacket;
 }
 
 WorldPacket const* NeighborhoodUpdateNameNotification::Write()
 {
-    // IDA 12.0 verified (0x5C0004): uint8(nameLen) + bytes[nameLen]
     uint8 nameLen = NewName.empty() ? 0 : static_cast<uint8>(NewName.size() + 1);
     _worldPacket << uint8(nameLen);
     if (nameLen > 0)
         _worldPacket.append(reinterpret_cast<uint8 const*>(NewName.c_str()), nameLen);
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_NEIGHBORHOOD_UPDATE_NAME_NOTIFICATION NewName: '{}' NameLen: {}", NewName, nameLen);
+
     return &_worldPacket;
 }
 
 WorldPacket const* NeighborhoodAddSecondaryOwnerResponse::Write()
 {
-    // IDA 12.0 verified (0x5C0006): PackedGUID + uint8 Result
     _worldPacket << PlayerGuid;
     _worldPacket << uint8(Result);
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_NEIGHBORHOOD_ADD_SECONDARY_OWNER_RESPONSE PlayerGuid: {} Result: {}",
+        PlayerGuid.ToString(), Result);
+
     return &_worldPacket;
 }
 
 WorldPacket const* NeighborhoodRemoveSecondaryOwnerResponse::Write()
 {
-    // IDA 12.0 verified (0x5C0007): PackedGUID + uint8 Result
     _worldPacket << PlayerGuid;
     _worldPacket << uint8(Result);
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_NEIGHBORHOOD_REMOVE_SECONDARY_OWNER_RESPONSE PlayerGuid: {} Result: {}",
+        PlayerGuid.ToString(), Result);
+
     return &_worldPacket;
 }
 
 WorldPacket const* NeighborhoodBuyHouseResponse::Write()
 {
-    // IDA 12.0 verified (0x5C0008): JamCurrentHouseInfo + uint8 Result
     Housing::WriteJamCurrentHouseInfo(_worldPacket, HouseInfo);
     _worldPacket << uint8(Result);
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_NEIGHBORHOOD_BUY_HOUSE_RESPONSE Result: {} HouseTypeId: {}", Result, HouseInfo.HouseTypeId);
+
     return &_worldPacket;
 }
 
 WorldPacket const* NeighborhoodMoveHouseResponse::Write()
 {
-    // IDA 12.0 verified (0x5C0009): JamCurrentHouseInfo + PackedGUID + uint8 Result
     Housing::WriteJamCurrentHouseInfo(_worldPacket, HouseInfo);
     _worldPacket << MoveTransactionGuid;
     _worldPacket << uint8(Result);
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_NEIGHBORHOOD_MOVE_HOUSE_RESPONSE Result: {} MoveTransactionGuid: {}",
+        Result, MoveTransactionGuid.ToString());
+
     return &_worldPacket;
 }
 
@@ -1393,62 +1843,81 @@ WorldPacket const* NeighborhoodOpenCornerstoneUIResponse::Write()
     if (StatusValue)
         _worldPacket << uint32(*StatusValue);
 
+    TC_LOG_DEBUG("network.opcode", "SMSG_NEIGHBORHOOD_OPEN_CORNERSTONE_UI_RESPONSE PlotIndex: {} Cost: {} PurchaseStatus: {} IsPlotOwned: {} CanPurchase: {} Name: '{}'",
+        PlotIndex, Cost, PurchaseStatus, IsPlotOwned, CanPurchase, NeighborhoodName);
+
     return &_worldPacket;
 }
 
 WorldPacket const* NeighborhoodInviteResidentResponse::Write()
 {
-    // IDA 12.0 verified (0x5C000B): uint8 Result + PackedGUID
     _worldPacket << uint8(Result);
     _worldPacket << InviteeGuid;
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_NEIGHBORHOOD_INVITE_RESIDENT_RESPONSE Result: {} InviteeGuid: {}", Result, InviteeGuid.ToString());
+
     return &_worldPacket;
 }
 
 WorldPacket const* NeighborhoodCancelInvitationResponse::Write()
 {
-    // IDA 12.0 verified (0x5C000C): uint8 Result + PackedGUID
     _worldPacket << uint8(Result);
     _worldPacket << InviteeGuid;
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_NEIGHBORHOOD_CANCEL_INVITATION_RESPONSE Result: {} InviteeGuid: {}", Result, InviteeGuid.ToString());
+
     return &_worldPacket;
 }
 
 WorldPacket const* NeighborhoodDeclineInvitationResponse::Write()
 {
-    // IDA 12.0 verified (0x5C000D): uint8 Result + PackedGUID
     _worldPacket << uint8(Result);
     _worldPacket << NeighborhoodGuid;
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_NEIGHBORHOOD_DECLINE_INVITATION_RESPONSE Result: {} NeighborhoodGuid: {}",
+        Result, NeighborhoodGuid.ToString());
+
     return &_worldPacket;
 }
 
 WorldPacket const* NeighborhoodPlayerGetInviteResponse::Write()
 {
-    // IDA 12.0 verified (0x5C000E): uint8 Result + JamNeighborhoodRosterEntry(48 bytes)
     _worldPacket << uint8(Result);
     Housing::WriteJamNeighborhoodRosterEntry(_worldPacket, Entry);
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_NEIGHBORHOOD_PLAYER_GET_INVITE_RESPONSE Result: {} PlayerGuid: {}",
+        Result, Entry.PlayerGuid.ToString());
+
     return &_worldPacket;
 }
 
 WorldPacket const* NeighborhoodGetInvitesResponse::Write()
 {
-    // IDA 12.0 verified (0x5C000F): uint8 Result + uint32 Count + RosterEntry[Count]
     _worldPacket << uint8(Result);
     _worldPacket << uint32(Invites.size());
     for (auto const& invite : Invites)
         Housing::WriteJamNeighborhoodRosterEntry(_worldPacket, invite);
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_NEIGHBORHOOD_GET_INVITES_RESPONSE Result: {} InviteCount: {}", Result, Invites.size());
+
     return &_worldPacket;
 }
 
 WorldPacket const* NeighborhoodInviteNotification::Write()
 {
-    // IDA 12.0 verified (0x5C0010): single PackedGUID
     _worldPacket << NeighborhoodGuid;
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_NEIGHBORHOOD_INVITE_NOTIFICATION NeighborhoodGuid: {}", NeighborhoodGuid.ToString());
+
     return &_worldPacket;
 }
 
 WorldPacket const* NeighborhoodOfferOwnershipResponse::Write()
 {
-    // IDA 12.0 verified (0x5C0011): single uint8 Result
     _worldPacket << uint8(Result);
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_NEIGHBORHOOD_OFFER_OWNERSHIP_RESPONSE Result: {}", Result);
+
     return &_worldPacket;
 }
 
@@ -1515,6 +1984,12 @@ WorldPacket const* NeighborhoodGetRosterResponse::Write()
 
     // Step 6: Optional trailing GUID (skipped since MainFlags.bit7 = 0)
 
+    TC_LOG_DEBUG("network.opcode", "SMSG_NEIGHBORHOOD_GET_ROSTER_RESPONSE Result: {} MemberCount: {} NeighborhoodGuid: {} Name: '{}'",
+        Result, Members.size(), GroupNeighborhoodGuid.ToString(), NeighborhoodName);
+    for (size_t i = 0; i < Members.size(); ++i)
+        TC_LOG_DEBUG("network.opcode", "  Member[{}]: PlayerGuid={} HouseGuid={} PlotIndex={} Online={}",
+            i, Members[i].PlayerGuid.ToString(), Members[i].HouseGuid.ToString(), Members[i].PlotIndex, Members[i].IsOnline);
+
     return &_worldPacket;
 }
 
@@ -1526,31 +2001,41 @@ WorldPacket const* NeighborhoodRosterResidentUpdate::Write()
         _worldPacket << resident.PlayerGuid;
         _worldPacket << uint16(resident.StatusFlags);
     }
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_NEIGHBORHOOD_ROSTER_RESIDENT_UPDATE ResidentCount: {}", Residents.size());
+
     return &_worldPacket;
 }
 
 WorldPacket const* NeighborhoodInviteNameLookupResult::Write()
 {
-    // IDA 12.0 verified (0x5C0014): uint8 Result + PackedGUID
     _worldPacket << uint8(Result);
     _worldPacket << PlayerGuid;
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_NEIGHBORHOOD_INVITE_NAME_LOOKUP_RESULT Result: {} PlayerGuid: {}", Result, PlayerGuid.ToString());
+
     return &_worldPacket;
 }
 
 WorldPacket const* NeighborhoodEvictPlotResponse::Write()
 {
-    // IDA 12.0 verified (0x5C0015): uint8 Result + PackedGUID
     _worldPacket << uint8(Result);
     _worldPacket << NeighborhoodGuid;
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_NEIGHBORHOOD_EVICT_PLOT_RESPONSE Result: {} NeighborhoodGuid: {}", Result, NeighborhoodGuid.ToString());
+
     return &_worldPacket;
 }
 
 WorldPacket const* NeighborhoodEvictPlotNotice::Write()
 {
-    // IDA 12.0 verified (0x5C0016): uint32 + PackedGUID + PackedGUID
     _worldPacket << uint32(PlotId);
     _worldPacket << NeighborhoodGuid;
     _worldPacket << PlotGuid;
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_NEIGHBORHOOD_EVICT_PLOT_NOTICE PlotId: {} NeighborhoodGuid: {} PlotGuid: {}",
+        PlotId, NeighborhoodGuid.ToString(), PlotGuid.ToString());
+
     return &_worldPacket;
 }
 
@@ -1559,11 +2044,22 @@ WorldPacket const* NeighborhoodEvictPlotNotice::Write()
 void GetAvailableInitiativeRequest::Read()
 {
     _worldPacket >> NeighborhoodGuid;
+
+    TC_LOG_DEBUG("network.opcode", "CMSG_GET_AVAILABLE_INITIATIVE_REQUEST NeighborhoodGuid: {}", NeighborhoodGuid.ToString());
 }
 
 void GetInitiativeActivityLogRequest::Read()
 {
     _worldPacket >> NeighborhoodGuid;
+
+    TC_LOG_DEBUG("network.opcode", "CMSG_GET_INITIATIVE_ACTIVITY_LOG_REQUEST NeighborhoodGuid: {}", NeighborhoodGuid.ToString());
+}
+
+void InitiativeUpdateActiveNeighborhood::Read()
+{
+    _worldPacket >> NeighborhoodGuid;
+
+    TC_LOG_DEBUG("network.opcode", "CMSG_INITIATIVE_UPDATE_ACTIVE_NEIGHBORHOOD NeighborhoodGuid: {}", NeighborhoodGuid.ToString());
 }
 
 } // namespace WorldPackets::Neighborhood

@@ -473,6 +473,8 @@ namespace WorldPackets
         class HousingPhotoSharingClearAuthorization;
         class HousingFixtureSetHouseSize;
         class HousingFixtureSetHouseType;
+        class GetAllLicensedDecorQuantities;
+        class GetDecorRefundList;
     }
 
     namespace Neighborhood
@@ -501,6 +503,7 @@ namespace WorldPackets
         class NeighborhoodInitiativeServiceStatusCheck;
         class GetAvailableInitiativeRequest;
         class GetInitiativeActivityLogRequest;
+        class InitiativeUpdateActiveNeighborhood;
     }
 
     namespace Inspect
@@ -1584,6 +1587,10 @@ class TC_GAME_API WorldSession
         void HandleHousingSvcsGetBnetFriendNeighborhoods(WorldPackets::Housing::HousingSvcsGetBnetFriendNeighborhoods const& housingSvcsGetBnetFriendNeighborhoods);
         void HandleHousingSvcsDeleteAllNeighborhoodInvites(WorldPackets::Housing::HousingSvcsDeleteAllNeighborhoodInvites const& housingSvcsDeleteAllNeighborhoodInvites);
 
+        // Housing - Decor Licensing / Refund
+        void HandleGetAllLicensedDecorQuantities(WorldPackets::Housing::GetAllLicensedDecorQuantities const& getAllLicensedDecorQuantities);
+        void HandleGetDecorRefundList(WorldPackets::Housing::GetDecorRefundList const& getDecorRefundList);
+
         // Housing - Photo Sharing
         void HandleHousingPhotoSharingCompleteAuthorization(WorldPackets::Housing::HousingPhotoSharingCompleteAuthorization const& packet);
         void HandleHousingPhotoSharingClearAuthorization(WorldPackets::Housing::HousingPhotoSharingClearAuthorization const& packet);
@@ -1625,6 +1632,7 @@ class TC_GAME_API WorldSession
         void HandleNeighborhoodInitiativeServiceStatusCheck(WorldPackets::Neighborhood::NeighborhoodInitiativeServiceStatusCheck const& packet);
         void HandleGetAvailableInitiativeRequest(WorldPackets::Neighborhood::GetAvailableInitiativeRequest const& getAvailableInitiativeRequest);
         void HandleGetInitiativeActivityLogRequest(WorldPackets::Neighborhood::GetInitiativeActivityLogRequest const& getInitiativeActivityLogRequest);
+        void HandleInitiativeUpdateActiveNeighborhood(WorldPackets::Neighborhood::InitiativeUpdateActiveNeighborhood const& initiativeUpdateActiveNeighborhood);
 
         void HandleEnableTaxiNodeOpcode(WorldPackets::Taxi::EnableTaxiNode& enableTaxiNode);
         void HandleTaxiNodeStatusQueryOpcode(WorldPackets::Taxi::TaxiNodeStatusQuery& taxiNodeStatusQuery);

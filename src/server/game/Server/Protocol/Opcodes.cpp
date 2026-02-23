@@ -488,11 +488,11 @@ void OpcodeTable::InitializeClientOpcodes()
     DEFINE_HANDLER(CMSG_GENERATE_RANDOM_CHARACTER_NAME,                     STATUS_AUTHED,    PROCESS_THREADUNSAFE, &WorldSession::HandleRandomizeCharNameOpcode);
     DEFINE_HANDLER(CMSG_GET_ACCOUNT_CHARACTER_LIST,                         STATUS_UNHANDLED, PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
     DEFINE_HANDLER(CMSG_GET_ACCOUNT_NOTIFICATIONS,                          STATUS_UNHANDLED, PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
-    DEFINE_HANDLER(CMSG_GET_ALL_LICENSED_DECOR_QUANTITIES,                  STATUS_UNHANDLED, PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
+    DEFINE_HANDLER(CMSG_GET_ALL_LICENSED_DECOR_QUANTITIES,                  STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleGetAllLicensedDecorQuantities);
     DEFINE_HANDLER(CMSG_GET_AVAILABLE_INITIATIVE_REQUEST,                   STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleGetAvailableInitiativeRequest);
     DEFINE_HANDLER(CMSG_GET_CHARACTER_CURRENCY_TRANSFER_LOG,                STATUS_UNHANDLED, PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
     DEFINE_HANDLER(CMSG_GET_CLIENT_CHECKOUT_LICENSES,                       STATUS_UNHANDLED, PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
-    DEFINE_HANDLER(CMSG_GET_DECOR_REFUND_LIST,                              STATUS_UNHANDLED, PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
+    DEFINE_HANDLER(CMSG_GET_DECOR_REFUND_LIST,                              STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleGetDecorRefundList);
     DEFINE_HANDLER(CMSG_GET_GARRISON_INFO,                                  STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleGetGarrisonInfo);
     DEFINE_HANDLER(CMSG_GET_INITIATIVE_ACTIVITY_LOG_REQUEST,                STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleGetInitiativeActivityLogRequest);
     DEFINE_HANDLER(CMSG_GET_ITEM_PURCHASE_DATA,                             STATUS_LOGGEDIN,  PROCESS_INPLACE,      &WorldSession::HandleGetItemPurchaseData);
@@ -615,7 +615,7 @@ void OpcodeTable::InitializeClientOpcodes()
     DEFINE_HANDLER(CMSG_IGNORE_TRADE,                                       STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleIgnoreTradeOpcode);
     DEFINE_HANDLER(CMSG_INITIATE_ROLE_POLL,                                 STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleInitiateRolePoll);
     DEFINE_HANDLER(CMSG_INITIATE_TRADE,                                     STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleInitiateTradeOpcode);
-    DEFINE_HANDLER(CMSG_INITIATIVE_UPDATE_ACTIVE_NEIGHBORHOOD,              STATUS_UNHANDLED, PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
+    DEFINE_HANDLER(CMSG_INITIATIVE_UPDATE_ACTIVE_NEIGHBORHOOD,              STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleInitiativeUpdateActiveNeighborhood);
     DEFINE_HANDLER(CMSG_INSPECT,                                            STATUS_LOGGEDIN,  PROCESS_INPLACE,      &WorldSession::HandleInspectOpcode);
     DEFINE_HANDLER(CMSG_INSTANCE_ABANDON_VOTE_RESPONSE,                     STATUS_UNHANDLED, PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
     DEFINE_HANDLER(CMSG_INSTANCE_LOCK_RESPONSE,                             STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleInstanceLockResponse);
