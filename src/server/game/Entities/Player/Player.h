@@ -2832,6 +2832,7 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         std::vector<Housing const*> GetAllHousings() const;
         void SetHousingEditorModeUpdateField(uint8 mode);
         void UpdateHousingMapId(ObjectGuid houseGuid, int32 mapId);
+        void UpdateInitiativeFavor(uint32 favor);
 
         bool IsAdvancedCombatLoggingEnabled() const { return _advancedCombatLoggingEnabled; }
         void SetAdvancedCombatLogging(bool enabled) { _advancedCombatLoggingEnabled = enabled; }

@@ -131,6 +131,7 @@ public:
     HousingResult SelectFixtureOption(uint32 fixturePointId, uint32 optionId);
     HousingResult RemoveFixture(uint32 fixturePointId);
     std::vector<Fixture const*> GetFixtures() const;
+    uint32 GetCoreExteriorComponentID() const;
 
     // Catalog operations
     HousingResult AddToCatalog(uint32 decorEntryId);

@@ -2417,6 +2417,75 @@ struct ImportPriceWeaponEntry
     float Data;
 };
 
+struct InitiativeCycleEntry
+{
+    uint32 ID;
+    int32 InitiativeID;
+    int32 CycleIndex;
+    int32 StartDay;
+    int32 Duration;
+    int32 Flags;
+};
+
+struct InitiativeCyclePriorityEntry
+{
+    uint32 ID;
+    int32 Priority;
+    int32 Weight;
+    int32 Flags;
+    uint32 InitiativeCycleID;               // ParentIndexField
+};
+
+struct InitiativeMilestoneEntry
+{
+    uint32 ID;
+    int32 MilestoneIndex;
+    float ProgressRequired;
+    int32 Flags;
+    uint32 InitiativeCycleID;               // ParentIndexField
+};
+
+struct InitiativeRewardEntry
+{
+    int64 RewardData;
+    LocalizedString Name;
+    LocalizedString Description;
+    uint32 ID;
+    int32 RewardType;
+    int32 RewardAmount;
+    int32 CurrencyID;
+    int32 ItemID;
+    int32 Flags;
+};
+
+struct InitiativeRewardXMilestoneEntry
+{
+    uint32 ID;
+    int32 InitiativeRewardID;
+    uint32 InitiativeMilestoneID;           // ParentIndexField
+};
+
+struct InitiativeTaskEntry
+{
+    LocalizedString Name;
+    LocalizedString Description;
+    uint32 ID;
+    int32 TaskType;
+    int32 TargetCount;
+    int32 CriteriaTreeID;
+    int32 SortOrder;
+    int32 Flags;
+    int32 UiTextureKitID;
+};
+
+struct InitiativeXTaskEntry
+{
+    uint32 ID;
+    int32 InitiativeTaskID;
+    int32 SortOrder;
+    uint32 NeighborhoodInitiativeID;        // ParentIndexField
+};
+
 struct ItemEntry
 {
     uint32 ID;

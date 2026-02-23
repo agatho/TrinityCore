@@ -197,6 +197,13 @@ DB2Storage<ImportPriceArmorEntry>               sImportPriceArmorStore("ImportPr
 DB2Storage<ImportPriceQualityEntry>             sImportPriceQualityStore("ImportPriceQuality.db2", &ImportPriceQualityLoadInfo::Instance);
 DB2Storage<ImportPriceShieldEntry>              sImportPriceShieldStore("ImportPriceShield.db2", &ImportPriceShieldLoadInfo::Instance);
 DB2Storage<ImportPriceWeaponEntry>              sImportPriceWeaponStore("ImportPriceWeapon.db2", &ImportPriceWeaponLoadInfo::Instance);
+DB2Storage<InitiativeCycleEntry>                sInitiativeCycleStore("InitiativeCycle.db2", &InitiativeCycleLoadInfo::Instance);
+DB2Storage<InitiativeCyclePriorityEntry>        sInitiativeCyclePriorityStore("InitiativeCyclePriority.db2", &InitiativeCyclePriorityLoadInfo::Instance);
+DB2Storage<InitiativeMilestoneEntry>            sInitiativeMilestoneStore("InitiativeMilestone.db2", &InitiativeMilestoneLoadInfo::Instance);
+DB2Storage<InitiativeRewardEntry>               sInitiativeRewardStore("InitiativeReward.db2", &InitiativeRewardLoadInfo::Instance);
+DB2Storage<InitiativeRewardXMilestoneEntry>     sInitiativeRewardXMilestoneStore("InitiativeRewardXMilestone.db2", &InitiativeRewardXMilestoneLoadInfo::Instance);
+DB2Storage<InitiativeTaskEntry>                 sInitiativeTaskStore("InitiativeTask.db2", &InitiativeTaskLoadInfo::Instance);
+DB2Storage<InitiativeXTaskEntry>                sInitiativeXTaskStore("InitiativeXTask.db2", &InitiativeXTaskLoadInfo::Instance);
 DB2Storage<ItemAppearanceEntry>                 sItemAppearanceStore("ItemAppearance.db2", &ItemAppearanceLoadInfo::Instance);
 DB2Storage<ItemArmorQualityEntry>               sItemArmorQualityStore("ItemArmorQuality.db2", &ItemArmorQualityLoadInfo::Instance);
 DB2Storage<ItemArmorShieldEntry>                sItemArmorShieldStore("ItemArmorShield.db2", &ItemArmorShieldLoadInfo::Instance);
@@ -855,6 +862,13 @@ uint32 DB2Manager::LoadStores(std::string const& dataPath, LocaleConstant defaul
     LOAD_DB2(sImportPriceQualityStore);
     LOAD_DB2(sImportPriceShieldStore);
     LOAD_DB2(sImportPriceWeaponStore);
+    LOAD_DB2(sInitiativeCycleStore);
+    LOAD_DB2(sInitiativeCyclePriorityStore);
+    LOAD_DB2(sInitiativeMilestoneStore);
+    LOAD_DB2(sInitiativeRewardStore);
+    LOAD_DB2(sInitiativeRewardXMilestoneStore);
+    LOAD_DB2(sInitiativeTaskStore);
+    LOAD_DB2(sInitiativeXTaskStore);
     LOAD_DB2(sItemAppearanceStore);
     LOAD_DB2(sItemArmorQualityStore);
     LOAD_DB2(sItemArmorShieldStore);

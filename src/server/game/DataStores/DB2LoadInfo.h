@@ -3004,6 +3004,110 @@ struct ImportPriceWeaponLoadInfo
     static constexpr DB2LoadInfo Instance{ Fields, 2, &ImportPriceWeaponMeta::Instance, HOTFIX_SEL_IMPORT_PRICE_WEAPON };
 };
 
+struct InitiativeCycleLoadInfo
+{
+    static constexpr DB2FieldMeta Fields[6] =
+    {
+        { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "InitiativeID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "CycleIndex" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "StartDay" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "Duration" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "Flags" },
+    };
+
+    static constexpr DB2LoadInfo Instance{ Fields, 6, &InitiativeCycleMeta::Instance, HOTFIX_SEL_INITIATIVE_CYCLE };
+};
+
+struct InitiativeCyclePriorityLoadInfo
+{
+    static constexpr DB2FieldMeta Fields[5] =
+    {
+        { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "Priority" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "Weight" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "Flags" },
+        { .IsSigned = false, .Type = FT_INT, .Name = "InitiativeCycleID" },
+    };
+
+    static constexpr DB2LoadInfo Instance{ Fields, 5, &InitiativeCyclePriorityMeta::Instance, HOTFIX_SEL_INITIATIVE_CYCLE_PRIORITY };
+};
+
+struct InitiativeMilestoneLoadInfo
+{
+    static constexpr DB2FieldMeta Fields[5] =
+    {
+        { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "MilestoneIndex" },
+        { .IsSigned = false, .Type = FT_FLOAT, .Name = "ProgressRequired" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "Flags" },
+        { .IsSigned = false, .Type = FT_INT, .Name = "InitiativeCycleID" },
+    };
+
+    static constexpr DB2LoadInfo Instance{ Fields, 5, &InitiativeMilestoneMeta::Instance, HOTFIX_SEL_INITIATIVE_MILESTONE };
+};
+
+struct InitiativeRewardLoadInfo
+{
+    static constexpr DB2FieldMeta Fields[9] =
+    {
+        { .IsSigned = true, .Type = FT_LONG, .Name = "RewardData" },
+        { .IsSigned = false, .Type = FT_STRING, .Name = "Name" },
+        { .IsSigned = false, .Type = FT_STRING, .Name = "Description" },
+        { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "RewardType" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "RewardAmount" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "CurrencyID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "ItemID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "Flags" },
+    };
+
+    static constexpr DB2LoadInfo Instance{ Fields, 9, &InitiativeRewardMeta::Instance, HOTFIX_SEL_INITIATIVE_REWARD };
+};
+
+struct InitiativeRewardXMilestoneLoadInfo
+{
+    static constexpr DB2FieldMeta Fields[3] =
+    {
+        { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "InitiativeRewardID" },
+        { .IsSigned = false, .Type = FT_INT, .Name = "InitiativeMilestoneID" },
+    };
+
+    static constexpr DB2LoadInfo Instance{ Fields, 3, &InitiativeRewardXMilestoneMeta::Instance, HOTFIX_SEL_INITIATIVE_REWARD_X_MILESTONE };
+};
+
+struct InitiativeTaskLoadInfo
+{
+    static constexpr DB2FieldMeta Fields[9] =
+    {
+        { .IsSigned = false, .Type = FT_STRING, .Name = "Name" },
+        { .IsSigned = false, .Type = FT_STRING, .Name = "Description" },
+        { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "TaskType" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "TargetCount" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "CriteriaTreeID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "SortOrder" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "Flags" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "UiTextureKitID" },
+    };
+
+    static constexpr DB2LoadInfo Instance{ Fields, 9, &InitiativeTaskMeta::Instance, HOTFIX_SEL_INITIATIVE_TASK };
+};
+
+struct InitiativeXTaskLoadInfo
+{
+    static constexpr DB2FieldMeta Fields[4] =
+    {
+        { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "InitiativeTaskID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "SortOrder" },
+        { .IsSigned = false, .Type = FT_INT, .Name = "NeighborhoodInitiativeID" },
+    };
+
+    static constexpr DB2LoadInfo Instance{ Fields, 4, &InitiativeXTaskMeta::Instance, HOTFIX_SEL_INITIATIVE_X_TASK };
+};
+
 struct ItemLoadInfo
 {
     static constexpr DB2FieldMeta Fields[16] =

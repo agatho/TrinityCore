@@ -67,6 +67,7 @@
 #include "HousingMap.h"
 #include "HousingMgr.h"
 #include "HousingPackets.h"
+#include "InitiativeManager.h"
 #include "Neighborhood.h"
 #include "NeighborhoodMgr.h"
 #include "GossipDef.h"
@@ -18613,6 +18614,15 @@ bool Player::LoadFromDB(ObjectGuid guid, CharacterDatabaseQueryHolder const& hol
         mirrorHouse.Favor = static_cast<uint32>(std::min<uint64>(h->GetFavor64(), std::numeric_limits<uint32>::max()));
         mirrorHouse.MapID = 0; // Will be resolved when entering neighborhood
         mirrorHouse.PlotID = h->GetPlotIndex();
+
+        // Initiative mirror fields — client reads InitiativeCycleID to display initiative UI
+        uint64 nhGuid = h->GetNeighborhoodGuid().GetCounter();
+        ActiveInitiative* activeInit = sInitiativeManager.GetActiveInitiative(nhGuid);
+        if (activeInit)
+        {
+            mirrorHouse.InitiativeCycleID = static_cast<int32>(sInitiativeManager.GetActiveCycleForInitiative(activeInit->InitiativeID));
+            mirrorHouse.InitiativeFavor = sInitiativeManager.GetPlayerContribution(nhGuid, activeInit->InitiativeID, GetGUID().GetCounter());
+        }
     }
 
     _InitHonorLevelOnLoadFromDB(fields.honor, fields.honorLevel);
@@ -30078,6 +30088,62 @@ void Player::UpdateHousingMapId(ObjectGuid houseGuid, int32 mapId)
 
     TC_LOG_ERROR("housing", "Player::UpdateHousingMapId: Updated house {} MapID to {} for player {}",
         houseGuid.ToString(), mapId, GetGUID().ToString());
+}
+
+void Player::UpdateInitiativeFavor(uint32 favor)
+{
+    if (!m_playerHouseInfoComponentData.has_value())
+        return;
+
+    UF::PlayerHouseInfoComponentData const& data = *m_playerHouseInfoComponentData;
+
+    struct HouseSnapshot
+    {
+        ObjectGuid Guid;
+        ObjectGuid NeighborhoodGUID;
+        uint32 Level;
+        uint32 Favor;
+        uint32 InitiativeFavor;
+        int32 InitiativeCycleID;
+        int32 MapID;
+        int32 PlotID;
+    };
+
+    std::vector<HouseSnapshot> snapshots;
+    snapshots.reserve(data.Houses.size());
+
+    for (uint32 i = 0; i < data.Houses.size(); ++i)
+    {
+        HouseSnapshot s;
+        s.Guid = data.Houses[i].Guid;
+        s.NeighborhoodGUID = data.Houses[i].NeighborhoodGUID;
+        s.Level = data.Houses[i].Level;
+        s.Favor = data.Houses[i].Favor;
+        s.InitiativeFavor = favor;
+        s.InitiativeCycleID = data.Houses[i].InitiativeCycleID;
+        s.MapID = data.Houses[i].MapID;
+        s.PlotID = data.Houses[i].PlotID;
+        snapshots.push_back(s);
+    }
+
+    // Clear and rebuild the Houses array
+    ClearDynamicUpdateFieldValues(m_values.ModifyValue(&Player::m_playerHouseInfoComponentData, 0)
+        .ModifyValue(&UF::PlayerHouseInfoComponentData::Houses));
+
+    for (auto const& s : snapshots)
+    {
+        UF::PlayerMirrorHouse& h = AddDynamicUpdateFieldValue(
+            m_values.ModifyValue(&Player::m_playerHouseInfoComponentData, 0)
+                .ModifyValue(&UF::PlayerHouseInfoComponentData::Houses));
+        h.Guid = s.Guid;
+        h.NeighborhoodGUID = s.NeighborhoodGUID;
+        h.Level = s.Level;
+        h.Favor = s.Favor;
+        h.InitiativeFavor = s.InitiativeFavor;
+        h.InitiativeCycleID = s.InitiativeCycleID;
+        h.MapID = s.MapID;
+        h.PlotID = s.PlotID;
+    }
 }
 
 void Player::SendMovementSetCollisionHeight(float height, WorldPackets::Movement::UpdateCollisionHeightReason reason)

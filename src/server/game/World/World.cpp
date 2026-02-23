@@ -57,6 +57,7 @@
 #include "GarrisonMgr.h"
 #include "GitRevision.h"
 #include "HousingMgr.h"
+#include "InitiativeManager.h"
 #include "NeighborhoodMgr.h"
 #include "GridNotifiersImpl.h"
 #include "GroupMgr.h"
@@ -1894,6 +1895,9 @@ bool World::SetInitialWorldSettings()
     TC_LOG_INFO("server.loading", "Loading neighborhood info...");
     sNeighborhoodMgr.Initialize();
 
+    TC_LOG_INFO("server.loading", "Loading initiative info...");
+    sInitiativeManager.Initialize();
+
     ///- Handle outdated emails (delete/return)
     TC_LOG_INFO("server.loading", "Returning old mails...");
     sObjectMgr->ReturnOrDeleteOldMails(false);
@@ -2337,6 +2341,8 @@ void World::Update(uint32 diff)
         TC_METRIC_TIMER("world_update_time", TC_METRIC_TAG("type", "Update battlefields"));
         sBattlefieldMgr->Update(diff);
     }
+
+    sInitiativeManager.Update(diff);
 
     ///- Delete all characters which have been deleted X days before
     if (m_timers[WUPDATE_DELETECHARS].Passed())

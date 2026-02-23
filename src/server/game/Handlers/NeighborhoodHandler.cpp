@@ -27,6 +27,7 @@
 #include "HousingMgr.h"
 #include "HousingPackets.h"
 #include "Log.h"
+#include "InitiativeManager.h"
 #include "Neighborhood.h"
 #include "NeighborhoodCharter.h"
 #include "NeighborhoodMgr.h"
@@ -1608,10 +1609,7 @@ void WorldSession::HandleNeighborhoodInitiativeServiceStatusCheck(WorldPackets::
     TC_LOG_DEBUG("housing", "CMSG_NEIGHBORHOOD_INITIATIVE_SERVICE_STATUS_CHECK for player {}",
         player->GetGUID().ToString());
 
-    // Respond with initiative service status (service is available)
-    WorldPackets::Housing::InitiativeServiceStatus response;
-    response.ServiceEnabled = true;
-    SendPacket(response.Write());
+    sInitiativeManager.SendInitiativeServiceStatus(this, true);
 }
 
 void WorldSession::HandleGetAvailableInitiativeRequest(WorldPackets::Neighborhood::GetAvailableInitiativeRequest const& getAvailableInitiativeRequest)
@@ -1629,11 +1627,8 @@ void WorldSession::HandleGetAvailableInitiativeRequest(WorldPackets::Neighborhoo
         return;
     }
 
-    // Initiative info is driven by DB2 data (NeighborhoodInitiative.db2) which the client
-    // already has. This response confirms the server acknowledges the initiative query.
-    WorldPackets::Housing::GetPlayerInitiativeInfoResult response;
-    response.Result = static_cast<uint32>(HOUSING_RESULT_SUCCESS);
-    SendPacket(response.Write());
+    uint64 nhGuid = neighborhood->GetGuid().GetCounter();
+    sInitiativeManager.SendPlayerInitiativeInfo(this, nhGuid);
 
     TC_LOG_DEBUG("housing", "CMSG_GET_AVAILABLE_INITIATIVE_REQUEST NeighborhoodGuid: {}, Player: {}",
         getAvailableInitiativeRequest.NeighborhoodGuid.ToString(), player->GetGUID().ToString());
@@ -1654,11 +1649,8 @@ void WorldSession::HandleGetInitiativeActivityLogRequest(WorldPackets::Neighborh
         return;
     }
 
-    // Activity log entries are tracked per-neighborhood. The response confirms the query
-    // and the client uses cached initiative data from DB2 to display the log.
-    WorldPackets::Housing::GetInitiativeActivityLogResult response;
-    response.Result = static_cast<uint32>(HOUSING_RESULT_SUCCESS);
-    SendPacket(response.Write());
+    uint64 nhGuid = neighborhood->GetGuid().GetCounter();
+    sInitiativeManager.SendActivityLog(this, nhGuid);
 
     TC_LOG_DEBUG("housing", "CMSG_GET_INITIATIVE_ACTIVITY_LOG_REQUEST NeighborhoodGuid: {}, Player: {}",
         getInitiativeActivityLogRequest.NeighborhoodGuid.ToString(), player->GetGUID().ToString());
@@ -1673,11 +1665,6 @@ void WorldSession::HandleInitiativeUpdateActiveNeighborhood(WorldPackets::Neighb
     TC_LOG_DEBUG("housing", "CMSG_INITIATIVE_UPDATE_ACTIVE_NEIGHBORHOOD NeighborhoodGuid: {}, Player: {}",
         initiativeUpdateActiveNeighborhood.NeighborhoodGuid.ToString(), player->GetGUID().ToString());
 
-    // This CMSG tells the server which neighborhood the player is currently viewing for
-    // initiative purposes. The server uses this to send targeted initiative updates
-    // (task progress, completions, reward availability) for the active neighborhood.
-    // For now, we acknowledge the request and update the initiative service status.
-
     Neighborhood* neighborhood = sNeighborhoodMgr.ResolveNeighborhood(initiativeUpdateActiveNeighborhood.NeighborhoodGuid, player);
     if (!neighborhood)
     {
@@ -1686,16 +1673,13 @@ void WorldSession::HandleInitiativeUpdateActiveNeighborhood(WorldPackets::Neighb
         return;
     }
 
-    // Send initiative service status to confirm the service is active
-    WorldPackets::Housing::InitiativeServiceStatus serviceStatus;
-    serviceStatus.ServiceEnabled = true;
-    SendPacket(serviceStatus.Write());
+    uint64 nhGuid = neighborhood->GetGuid().GetCounter();
 
-    // Send current initiative info for the active neighborhood
-    WorldPackets::Housing::GetPlayerInitiativeInfoResult infoResult;
-    infoResult.Result = static_cast<uint32>(HOUSING_RESULT_SUCCESS);
-    // infoResult.Tasks is empty — no active initiative tasks yet
-    SendPacket(infoResult.Write());
+    // Send initiative service status to confirm the service is active
+    sInitiativeManager.SendInitiativeServiceStatus(this, true);
+
+    // Send current initiative info for the active neighborhood (with real task progress)
+    sInitiativeManager.SendPlayerInitiativeInfo(this, nhGuid);
 
     TC_LOG_DEBUG("housing", "SMSG_INITIATIVE_SERVICE_STATUS + SMSG_GET_PLAYER_INITIATIVE_INFO_RESULT sent for NeighborhoodGuid: {}",
         initiativeUpdateActiveNeighborhood.NeighborhoodGuid.ToString());

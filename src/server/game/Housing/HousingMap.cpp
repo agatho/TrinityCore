@@ -245,19 +245,31 @@ void HousingMap::SpawnPlotGameObjects()
             plotIdx, plotInfo->OwnerGuid.ToString(),
             plot->HousePosition[0], plot->HousePosition[1], plot->HousePosition[2]);
 
-        // Try to get persisted position from the player's Housing object (if online)
+        // Try to get persisted position and fixture data from the player's Housing object (if online)
         Housing* housing = GetHousingForPlayer(plotInfo->OwnerGuid);
-        // TODO: When fixture persistence is implemented, read ExteriorComponentID from Housing.
-        // For now, use sniff-verified defaults: ExteriorComponentID=141 (Stucco Base), WmoDataID=9 (Human theme)
+        int32 exteriorComponentID = 141; // Default: Stucco Base
+        int32 houseExteriorWmoDataID = 9; // Default: Human theme
+        if (housing)
+        {
+            uint32 coreComponent = housing->GetCoreExteriorComponentID();
+            if (coreComponent)
+                exteriorComponentID = static_cast<int32>(coreComponent);
+            uint32 houseType = housing->GetHouseType();
+            if (houseType)
+                houseExteriorWmoDataID = static_cast<int32>(houseType);
+            TC_LOG_DEBUG("housing", "HousingMap::SpawnPlotGameObjects: Plot {} using persisted fixture data: ExteriorComponentID={}, WmoDataID={}",
+                plotIdx, exteriorComponentID, houseExteriorWmoDataID);
+        }
+
         GameObject* houseGo = nullptr;
         if (housing && housing->HasCustomPosition())
         {
             Position customPos = housing->GetHousePosition();
-            houseGo = SpawnHouseForPlot(plotIdx, &customPos);
+            houseGo = SpawnHouseForPlot(plotIdx, &customPos, exteriorComponentID, houseExteriorWmoDataID);
         }
         else
         {
-            houseGo = SpawnHouseForPlot(plotIdx); // DB2 default position + default fixture values
+            houseGo = SpawnHouseForPlot(plotIdx, nullptr, exteriorComponentID, houseExteriorWmoDataID);
         }
         ++houseCount;
         if (houseGo)
@@ -478,16 +490,27 @@ bool HousingMap::AddPlayerToMap(Player* player, bool initPlayer /*= true*/)
 
         if (!alreadySpawned)
         {
-            // TODO: When fixture persistence is implemented, read ExteriorComponentID from Housing.
-            // For now, use sniff-verified defaults (141, 9) via default parameters.
+            // Read persisted fixture data from Housing
+            int32 exteriorComponentID = 141; // Default: Stucco Base
+            int32 houseExteriorWmoDataID = 9; // Default: Human theme
+            uint32 coreComponent = housing->GetCoreExteriorComponentID();
+            if (coreComponent)
+                exteriorComponentID = static_cast<int32>(coreComponent);
+            uint32 houseType = housing->GetHouseType();
+            if (houseType)
+                houseExteriorWmoDataID = static_cast<int32>(houseType);
+
+            TC_LOG_DEBUG("housing", "HousingMap::AddPlayerToMap: Plot {} spawning house with ExteriorComponentID={}, WmoDataID={}",
+                plotIdx, exteriorComponentID, houseExteriorWmoDataID);
+
             GameObject* go = nullptr;
             if (housing->HasCustomPosition())
             {
                 Position customPos = housing->GetHousePosition();
-                go = SpawnHouseForPlot(plotIdx, &customPos);
+                go = SpawnHouseForPlot(plotIdx, &customPos, exteriorComponentID, houseExteriorWmoDataID);
             }
             else
-                go = SpawnHouseForPlot(plotIdx);
+                go = SpawnHouseForPlot(plotIdx, nullptr, exteriorComponentID, houseExteriorWmoDataID);
 
             TC_LOG_ERROR("housing", "HousingMap::AddPlayerToMap: SpawnHouseForPlot result for plot {}: {}",
                 plotIdx, go ? go->GetGUID().ToString() : "FAILED");

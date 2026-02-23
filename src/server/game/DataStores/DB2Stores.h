@@ -156,6 +156,13 @@ TC_GAME_API extern DB2Storage<ImportPriceArmorEntry>                sImportPrice
 TC_GAME_API extern DB2Storage<ImportPriceQualityEntry>              sImportPriceQualityStore;
 TC_GAME_API extern DB2Storage<ImportPriceShieldEntry>               sImportPriceShieldStore;
 TC_GAME_API extern DB2Storage<ImportPriceWeaponEntry>               sImportPriceWeaponStore;
+TC_GAME_API extern DB2Storage<InitiativeCycleEntry>                 sInitiativeCycleStore;
+TC_GAME_API extern DB2Storage<InitiativeCyclePriorityEntry>         sInitiativeCyclePriorityStore;
+TC_GAME_API extern DB2Storage<InitiativeMilestoneEntry>             sInitiativeMilestoneStore;
+TC_GAME_API extern DB2Storage<InitiativeRewardEntry>                sInitiativeRewardStore;
+TC_GAME_API extern DB2Storage<InitiativeRewardXMilestoneEntry>      sInitiativeRewardXMilestoneStore;
+TC_GAME_API extern DB2Storage<InitiativeTaskEntry>                  sInitiativeTaskStore;
+TC_GAME_API extern DB2Storage<InitiativeXTaskEntry>                 sInitiativeXTaskStore;
 TC_GAME_API extern DB2Storage<ItemAppearanceEntry>                  sItemAppearanceStore;
 TC_GAME_API extern DB2Storage<ItemArmorQualityEntry>                sItemArmorQualityStore;
 TC_GAME_API extern DB2Storage<ItemArmorShieldEntry>                 sItemArmorShieldStore;

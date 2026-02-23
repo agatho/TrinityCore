@@ -971,6 +971,36 @@ void HotfixDatabaseConnection::DoPrepareStatements()
     PrepareStatement(HOTFIX_SEL_IMPORT_PRICE_WEAPON, "SELECT ID, Data FROM import_price_weapon WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
     PREPARE_MAX_ID_STMT(HOTFIX_SEL_IMPORT_PRICE_WEAPON, "SELECT MAX(ID) + 1 FROM import_price_weapon", CONNECTION_SYNCH);
 
+    // InitiativeCycle.db2
+    PrepareStatement(HOTFIX_SEL_INITIATIVE_CYCLE, "SELECT ID, InitiativeID, CycleIndex, StartDay, Duration, Flags FROM initiative_cycle WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_INITIATIVE_CYCLE, "SELECT MAX(ID) + 1 FROM initiative_cycle", CONNECTION_SYNCH);
+
+    // InitiativeCyclePriority.db2
+    PrepareStatement(HOTFIX_SEL_INITIATIVE_CYCLE_PRIORITY, "SELECT ID, Priority, Weight, Flags, InitiativeCycleID FROM initiative_cycle_priority WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_INITIATIVE_CYCLE_PRIORITY, "SELECT MAX(ID) + 1 FROM initiative_cycle_priority", CONNECTION_SYNCH);
+
+    // InitiativeMilestone.db2
+    PrepareStatement(HOTFIX_SEL_INITIATIVE_MILESTONE, "SELECT ID, MilestoneIndex, ProgressRequired, Flags, InitiativeCycleID FROM initiative_milestone WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_INITIATIVE_MILESTONE, "SELECT MAX(ID) + 1 FROM initiative_milestone", CONNECTION_SYNCH);
+
+    // InitiativeReward.db2
+    PrepareStatement(HOTFIX_SEL_INITIATIVE_REWARD, "SELECT RewardData, Name, Description, ID, RewardType, RewardAmount, CurrencyID, ItemID, Flags FROM initiative_reward WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_INITIATIVE_REWARD, "SELECT MAX(ID) + 1 FROM initiative_reward", CONNECTION_SYNCH);
+    PREPARE_LOCALE_STMT(HOTFIX_SEL_INITIATIVE_REWARD, "SELECT ID, Name_lang, Description_lang FROM initiative_reward_locale WHERE (`VerifiedBuild` > 0) = ? AND locale = ?", CONNECTION_SYNCH);
+
+    // InitiativeRewardXMilestone.db2
+    PrepareStatement(HOTFIX_SEL_INITIATIVE_REWARD_X_MILESTONE, "SELECT ID, InitiativeRewardID, InitiativeMilestoneID FROM initiative_reward_x_milestone WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_INITIATIVE_REWARD_X_MILESTONE, "SELECT MAX(ID) + 1 FROM initiative_reward_x_milestone", CONNECTION_SYNCH);
+
+    // InitiativeTask.db2
+    PrepareStatement(HOTFIX_SEL_INITIATIVE_TASK, "SELECT Name, Description, ID, TaskType, TargetCount, CriteriaTreeID, SortOrder, Flags, UiTextureKitID FROM initiative_task WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_INITIATIVE_TASK, "SELECT MAX(ID) + 1 FROM initiative_task", CONNECTION_SYNCH);
+    PREPARE_LOCALE_STMT(HOTFIX_SEL_INITIATIVE_TASK, "SELECT ID, Name_lang, Description_lang FROM initiative_task_locale WHERE (`VerifiedBuild` > 0) = ? AND locale = ?", CONNECTION_SYNCH);
+
+    // InitiativeXTask.db2
+    PrepareStatement(HOTFIX_SEL_INITIATIVE_X_TASK, "SELECT ID, InitiativeTaskID, SortOrder, NeighborhoodInitiativeID FROM initiative_x_task WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_INITIATIVE_X_TASK, "SELECT MAX(ID) + 1 FROM initiative_x_task", CONNECTION_SYNCH);
+
     // Item.db2
     PrepareStatement(HOTFIX_SEL_ITEM, "SELECT ID, ClassID, SubclassID, Material, InventoryType, SheatheType, SoundOverrideSubclassID, IconFileDataID, "
         "ItemGroupSoundsID, ContentTuningID, ModifiedCraftingReagentItemID, Unknown1200, CraftingQualityID, ItemSquishEraID, "

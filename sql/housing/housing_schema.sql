@@ -19,6 +19,7 @@
 --   9.  neighborhood_charters              - Charter creation and tracking
 --   10. neighborhood_charter_signatures    - Charter co-signer records
 --   11. neighborhood_initiatives           - Community event progress
+--   12. neighborhood_initiative_contributions - Per-player contribution tracking
 --
 -- Constants referenced from HousingDefines.h:
 --   MAX_HOUSING_DECOR_PER_ROOM     = 50
@@ -267,4 +268,24 @@ CREATE TABLE `neighborhood_initiatives` (
     `completed` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Boolean: 1 = initiative completed',
     PRIMARY KEY (`id`),
     INDEX `idx_neighborhood` (`neighborhoodGuid`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---------------------------------------------------------------------------
+-- 12. neighborhood_initiative_contributions - Per-player contribution tracking
+--
+-- Tracks how much each player has contributed to each task within a
+-- neighborhood initiative. One row per (initiative, player, task) triple.
+-- The UNIQUE index allows INSERT ... ON DUPLICATE KEY UPDATE for upserts.
+-- ---------------------------------------------------------------------------
+DROP TABLE IF EXISTS `neighborhood_initiative_contributions`;
+CREATE TABLE `neighborhood_initiative_contributions` (
+    `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `initiativeDbId` BIGINT UNSIGNED NOT NULL COMMENT 'FK to neighborhood_initiatives.id',
+    `playerGuid` BIGINT UNSIGNED NOT NULL COMMENT 'Player character GUID',
+    `taskId` INT UNSIGNED NOT NULL COMMENT 'InitiativeTask DB2 entry ID',
+    `amount` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Cumulative contribution to this task',
+    `lastUpdated` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Unix timestamp of last contribution',
+    PRIMARY KEY (`id`),
+    UNIQUE INDEX `idx_initiative_player_task` (`initiativeDbId`, `playerGuid`, `taskId`),
+    INDEX `idx_player` (`playerGuid`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

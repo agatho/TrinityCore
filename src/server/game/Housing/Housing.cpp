@@ -1180,6 +1180,18 @@ std::vector<Housing::Fixture const*> Housing::GetFixtures() const
     return result;
 }
 
+uint32 Housing::GetCoreExteriorComponentID() const
+{
+    // The core fixture is the one set via SetCoreFixture (OptionId == 0).
+    // Its FixturePointId IS the ExteriorComponentID.
+    for (auto const& [pointId, fixture] : _fixtures)
+    {
+        if (fixture.OptionId == 0)
+            return fixture.FixturePointId;
+    }
+    return 0; // No core fixture set
+}
+
 HousingResult Housing::AddToCatalog(uint32 decorEntryId)
 {
     if (_houseGuid.IsEmpty())
