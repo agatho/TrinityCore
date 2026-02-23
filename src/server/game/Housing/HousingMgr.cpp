@@ -279,9 +279,11 @@ void HousingMgr::LoadNeighborhoodPlotData()
         // Log all plots with their WorldState IDs
         for (auto const* p : plotVec)
         {
-            TC_LOG_INFO("housing", "    Plot[{}]: ID={} ForSaleGO={} CornerstoneGO={} WorldState={} Cost={}",
+            TC_LOG_INFO("housing", "    Plot[{}]: ID={} ForSaleGO={} CornerstoneGO={} WorldState={} Cost={} HousePos=({:.4f}, {:.4f}, {:.4f}) HouseRot=({:.4f}, {:.4f}, {:.4f})",
                 p->PlotIndex, p->ID, p->PlotGameObjectID, p->CornerstoneGameObjectID,
-                p->WorldState, p->Cost);
+                p->WorldState, p->Cost,
+                p->HousePosition[0], p->HousePosition[1], p->HousePosition[2],
+                p->HouseRotation[0], p->HouseRotation[1], p->HouseRotation[2]);
         }
     }
 }
