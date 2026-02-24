@@ -1,7 +1,20 @@
 # Housing System Gap Analysis
 
-## Audit Date: 2026-02-12
+## Audit Date: 2026-02-12 (original) | **Updated: 2026-02-24**
 ## Branch: feature/housing-system
+
+> **NOTE**: This gap analysis was originally written on Feb 12. A comprehensive updated analysis
+> with full blizzlike workflow verification is available in:
+> **`NEIGHBORHOOD_BLIZZLIKE_ANALYSIS.md`** (same directory)
+>
+> **Key changes since Feb 12**:
+> - ALL 67 handlers are now FULLY WIRED (not stubs)
+> - 110+ SMSG Write() methods implemented (up from 2)
+> - Player integration COMPLETE (Housing loaded at login, fragments populated)
+> - Server startup hooks COMPLETE (HousingMgr + NeighborhoodMgr initialized in World.cpp)
+> - MeshObject 10-piece house assembly COMPLETE with sniff-verified data
+> - FNeighborhoodMirrorData_C COMPLETE on Account entity
+> - Critical path from login → house mesh spawn is ~95% blizzlike
 
 ---
 
