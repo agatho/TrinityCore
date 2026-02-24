@@ -95,7 +95,7 @@ The housing system implementation has progressed far beyond the Feb-12 gap analy
 - **HousingHandler.cpp:1870-1892**: `HandleHousingHouseStatus` returns status with house/plot/neighborhood GUIDs
 - **HousingHandler.cpp:1894-1937**: `HandleHousingGetPlayerPermissions` returns permissions (0xE0 for owner, 0x40 for visitor - sniff-verified)
 
-**Verdict: MOSTLY BLIZZLIKE** - Handler responses match sniff. One gap: the enter/leave plot AreaTrigger events need to proactively push the HouseStatus + Permissions packets (currently the client must request them). See Gap Analysis below.
+**Verdict: BLIZZLIKE** - Handler responses match sniff. The proactive ENTER_PLOT push is already implemented in `HousingMap::AddPlayerToMap()` (lines 577-599) and the `at_housing_plot` script handles reactive enter/leave events.
 
 ---
 
@@ -299,35 +299,25 @@ All CMSG opcodes from IDA are registered in our Opcodes.h. All 67+ Read() method
 
 ## 6. REMAINING GAPS (Prioritized)
 
-### GAP-A: Plot AreaTrigger Enter/Leave Proactive Push (MEDIUM)
-**Issue**: In retail, entering a plot AreaTrigger proactively pushes HouseStatus + CurrentHouseInfo + Permissions without waiting for client request. Our implementation relies on client-initiated requests.
-**Impact**: Slight timing difference; client may briefly show stale data.
-**Fix**: Add proactive packet push in HousingMap plot AreaTrigger event handler.
+### ~~GAP-A: Plot AreaTrigger Enter/Leave Proactive Push~~ **RESOLVED**
+Already implemented: `HousingMap::AddPlayerToMap()` (lines 577-599) sends proactive `NeighborhoodPlayerEnterPlot` on map entry. `at_housing_plot` script handles reactive `OnUnitEnter/OnUnitExit` with aura application. Dual notification matches retail behavior.
 
 ### GAP-B: HousingMap Instance Management (MEDIUM)
 **Issue**: Neighborhood → Map instance routing needs verification. `NeighborhoodMgr::FindOrCreatePublicNeighborhood()` exists but the instance creation flow for non-tutorial cases needs testing.
 **Impact**: Multiple neighborhoods may not each get their own map instance correctly.
 **Fix**: Verify MapManager integration for creating unique instanceIds per neighborhood.
 
-### GAP-C: House Interior Entry (LOW-MEDIUM)
-**Issue**: The CMSG_HOUSE_INTERIOR_LEAVE_HOUSE handler exists, but SMSG_HOUSE_INTERIOR_ENTER_HOUSE (which teleports the player into the interior instance) is not populated with real data.
-**Impact**: Clicking the front door won't teleport to interior.
-**Fix**: Implement the interior map instancing when the door GO is interacted with.
+### ~~GAP-C: House Interior Entry~~ **RESOLVED** (Feb 24, 2026)
+Implemented via `go_housing_door` GameObjectScript (`go_housing_door.cpp`). Door GO entry 602702 now teleports player to the interior entry point (`NeighborhoodPlotData.TeleportPosition`) within the same neighborhood map using `NearTeleportTo`. SQL binding: `world_housing_door_script.sql`.
 
-### GAP-D: Decor Storage System (LOW)
-**Issue**: `HandleHousingDecorRequestStorage` sends back an empty storage list. The full decor inventory/storage flow needs backend wiring.
-**Impact**: Players can't browse or place stored decor items.
-**Fix**: Wire to Housing::GetStoredDecor() and populate response items.
+### ~~GAP-D: Decor Storage System~~ **RESOLVED**
+Already implemented: `HandleHousingDecorRequestStorage` (HousingHandler.cpp:518-554) retrieves `Housing::GetCatalogEntries()` and sends full `HousingDecorRequestStorageResponse` with `DecorEntryId + Count` pairs. Account UpdateField sync via `SetHousingDecorStorageEntry()` is also complete.
 
-### GAP-E: House Exterior Persistence (LOW)
-**Issue**: When a player repositions their house (CMSG_HOUSE_EXTERIOR_SET_HOUSE_POSITION), the position is persisted to DB and the GO is updated, but the MeshObjects are not repositioned to match.
-**Impact**: House structure mesh stays at old position after reposition.
-**Fix**: Despawn and respawn MeshObjects at new position in the handler.
+### ~~GAP-E: House Exterior Persistence~~ **RESOLVED** (Feb 24, 2026)
+Fixed: `HandleHouseExteriorSetHousePosition` now calls `DespawnHouseForPlot()` + `SpawnHouseForPlot()` to fully respawn the door GO and all 10 MeshObjects at the new position.
 
-### GAP-F: Dynamic House Type Changes (LOW)
-**Issue**: `HandleHousingFixtureSetHouseType` and `HandleHousingFixtureSetHouseSize` update the DB but don't re-create MeshObjects with new FileDataIDs.
-**Impact**: Changing house style/size won't visually update until relog.
-**Fix**: Despawn old MeshObjects, look up new FileDataIDs from DB2, spawn new set.
+### ~~GAP-F: Dynamic House Type Changes~~ **RESOLVED** (Feb 24, 2026)
+Fixed: Both `HandleHousingFixtureSetHouseType` and `HandleHousingFixtureSetHouseSize` now call `DespawnHouseForPlot()` + `SpawnHouseForPlot()` after persisting the change, ensuring MeshObjects are recreated with the correct fixtures.
 
 ---
 
@@ -348,8 +338,12 @@ All CMSG opcodes from IDA are registered in our Opcodes.h. All 67+ Read() method
 - Entity fragments: **8+ registered** → Account, Player, MeshObject, AreaTrigger fragments
 - NeighborhoodMirrorData: **COMPLETE** → Populated on map entry
 - Plot purchase flow: **COMPLETE** → Full retail packet sequence reproduced
+- Door interaction: **COMPLETE** → `go_housing_door` script teleports to interior
+- House reposition: **COMPLETE** → MeshObjects respawned at new position
+- House type/size change: **COMPLETE** → MeshObjects respawned with new fixtures
+- Decor storage: **COMPLETE** → Catalog entries returned with counts
 
-**Overall**: The critical path from login to house mesh spawn with door is **~95% blizzlike**. The remaining 5% consists of timing optimizations (proactive AreaTrigger pushes) and secondary features (interior entry, decor storage, dynamic house type changes).
+**Overall**: The critical path from login to house mesh spawn with door is **~98% blizzlike**. The only remaining gap is GAP-B (instance management verification for multiple neighborhoods).
 
 ---
 

@@ -62,6 +62,7 @@ public:
         int32 exteriorComponentID = 141, int32 houseExteriorWmoDataID = 9);
     void DespawnHouseForPlot(uint8 plotIndex);
     GameObject* GetHouseGameObject(uint8 plotIndex);
+    int8 GetPlotIndexForHouseGO(ObjectGuid goGuid) const;
 
     // MeshObject management (housing fixture rendering)
     // pos: local-space position for child pieces (or world position for root pieces)

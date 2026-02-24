@@ -101,20 +101,23 @@ void WorldSession::HandleHouseExteriorSetHousePosition(WorldPackets::Housing::Ho
         houseExteriorCommitPosition.PositionZ,
         houseExteriorCommitPosition.Facing);
 
-    // Update the house GO position on the map
+    // Despawn and respawn house structure at new position
     if (HousingMap* housingMap = dynamic_cast<HousingMap*>(player->GetMap()))
     {
-        if (GameObject* houseGO = housingMap->GetHouseGameObject(housing->GetPlotIndex()))
-        {
-            Position newPos(houseExteriorCommitPosition.PositionX,
-                houseExteriorCommitPosition.PositionY,
-                houseExteriorCommitPosition.PositionZ,
-                houseExteriorCommitPosition.Facing);
-            houseGO->Relocate(newPos);
+        uint8 plotIndex = housing->GetPlotIndex();
 
-            QuaternionData rot = QuaternionData::fromEulerAnglesZYX(houseExteriorCommitPosition.Facing, 0.0f, 0.0f);
-            houseGO->SetLocalRotation(rot.x, rot.y, rot.z, rot.w);
-        }
+        // Despawn old house (door GO + all MeshObjects)
+        housingMap->DespawnHouseForPlot(plotIndex);
+
+        // Respawn at new position with current exterior component and house type
+        Position newPos(houseExteriorCommitPosition.PositionX,
+            houseExteriorCommitPosition.PositionY,
+            houseExteriorCommitPosition.PositionZ,
+            houseExteriorCommitPosition.Facing);
+
+        housingMap->SpawnHouseForPlot(plotIndex, &newPos,
+            static_cast<int32>(housing->GetCoreExteriorComponentID()),
+            static_cast<int32>(housing->GetHouseType()));
     }
 
     WorldPackets::Housing::HouseExteriorSetHousePositionResponse response;
@@ -122,7 +125,7 @@ void WorldSession::HandleHouseExteriorSetHousePosition(WorldPackets::Housing::Ho
     response.HouseGuid = housing->GetHouseGuid();
     SendPacket(response.Write());
 
-    TC_LOG_INFO("housing", "CMSG_HOUSE_EXTERIOR_COMMIT_POSITION: Player {} positioned house at ({}, {}, {}, {:.2f})",
+    TC_LOG_INFO("housing", "CMSG_HOUSE_EXTERIOR_COMMIT_POSITION: Player {} repositioned house at ({}, {}, {}, {:.2f})",
         player->GetGUID().ToString(),
         houseExteriorCommitPosition.PositionX, houseExteriorCommitPosition.PositionY,
         houseExteriorCommitPosition.PositionZ, houseExteriorCommitPosition.Facing);
@@ -830,6 +833,16 @@ void WorldSession::HandleHousingFixtureSetHouseSize(WorldPackets::Housing::Housi
     // Persist the new house size
     housing->SetHouseSize(requestedSize);
 
+    // Respawn house MeshObjects with updated size
+    if (HousingMap* housingMap = dynamic_cast<HousingMap*>(player->GetMap()))
+    {
+        uint8 plotIndex = housing->GetPlotIndex();
+        housingMap->DespawnHouseForPlot(plotIndex);
+        housingMap->SpawnHouseForPlot(plotIndex, nullptr,
+            static_cast<int32>(housing->GetCoreExteriorComponentID()),
+            static_cast<int32>(housing->GetHouseType()));
+    }
+
     WorldPackets::Housing::HousingFixtureSetHouseSizeResponse response;
     response.Result = static_cast<uint32>(HOUSING_RESULT_SUCCESS);
     response.Size = requestedSize;
@@ -883,6 +896,16 @@ void WorldSession::HandleHousingFixtureSetHouseType(WorldPackets::Housing::Housi
 
     // Persist the new house type
     housing->SetHouseType(wmoDataID);
+
+    // Respawn house MeshObjects with updated type
+    if (HousingMap* housingMap = dynamic_cast<HousingMap*>(player->GetMap()))
+    {
+        uint8 plotIndex = housing->GetPlotIndex();
+        housingMap->DespawnHouseForPlot(plotIndex);
+        housingMap->SpawnHouseForPlot(plotIndex, nullptr,
+            static_cast<int32>(housing->GetCoreExteriorComponentID()),
+            static_cast<int32>(wmoDataID));
+    }
 
     WorldPackets::Housing::HousingFixtureSetHouseTypeResponse response;
     response.Result = static_cast<uint32>(HOUSING_RESULT_SUCCESS);

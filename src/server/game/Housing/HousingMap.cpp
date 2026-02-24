@@ -1037,6 +1037,16 @@ GameObject* HousingMap::GetHouseGameObject(uint8 plotIndex)
     return GetGameObject(itr->second);
 }
 
+int8 HousingMap::GetPlotIndexForHouseGO(ObjectGuid goGuid) const
+{
+    for (auto const& [plotIndex, guid] : _houseGameObjects)
+    {
+        if (guid == goGuid)
+            return static_cast<int8>(plotIndex);
+    }
+    return -1;
+}
+
 // ============================================================
 // Decor GO Management
 // ============================================================
