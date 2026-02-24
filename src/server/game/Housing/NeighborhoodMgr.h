@@ -40,6 +40,7 @@ public:
 
     void Initialize();
     void LoadFromDB();
+    void Update(uint32 diff);
 
     // Neighborhood lifecycle
     Neighborhood* CreateNeighborhood(ObjectGuid ownerGuid, std::string const& name, uint32 neighborhoodMapID, int32 factionRestriction, bool isPublic = false);
@@ -82,6 +83,7 @@ private:
     std::unordered_map<ObjectGuid, std::unique_ptr<Neighborhood>> _neighborhoods;
     std::unordered_map<ObjectGuid, ObjectGuid> _ownerToNeighborhood; // owner guid -> neighborhood guid
     uint64 _nextGuid = 1;
+    uint32 _expansionCheckTimer = 0;
 };
 
 #define sNeighborhoodMgr NeighborhoodMgr::Instance()

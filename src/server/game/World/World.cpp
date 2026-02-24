@@ -2343,6 +2343,7 @@ void World::Update(uint32 diff)
     }
 
     sInitiativeManager.Update(diff);
+    sNeighborhoodMgr.Update(diff);
 
     ///- Delete all characters which have been deleted X days before
     if (m_timers[WUPDATE_DELETECHARS].Passed())

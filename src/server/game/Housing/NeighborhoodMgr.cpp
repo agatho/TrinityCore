@@ -43,6 +43,20 @@ void NeighborhoodMgr::Initialize()
     EnsurePublicNeighborhoods();
 }
 
+void NeighborhoodMgr::Update(uint32 diff)
+{
+    // Periodic neighborhood expansion check (every 60 seconds)
+    // Ensures new instances are created even if no one is actively purchasing plots
+    static constexpr uint32 EXPANSION_CHECK_INTERVAL = 60 * IN_MILLISECONDS;
+
+    _expansionCheckTimer += diff;
+    if (_expansionCheckTimer >= EXPANSION_CHECK_INTERVAL)
+    {
+        _expansionCheckTimer = 0;
+        CheckAndExpandNeighborhoods();
+    }
+}
+
 void NeighborhoodMgr::LoadFromDB()
 {
     uint32 oldMSTime = getMSTime();
