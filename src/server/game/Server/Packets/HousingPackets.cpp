@@ -513,6 +513,19 @@ WorldPacket const* HouseExteriorSetHousePositionResponse::Write()
 }
 
 // ============================================================
+// House Interior SMSG (0x2Fxxxx)
+// ============================================================
+
+WorldPacket const* HouseInteriorEnterHouse::Write()
+{
+    _worldPacket << HouseGuid;
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSE_INTERIOR_ENTER_HOUSE HouseGuid: {}", HouseGuid.ToString());
+
+    return &_worldPacket;
+}
+
+// ============================================================
 // Housing Decor SMSG Responses (0x51xxxx)
 // ============================================================
 
@@ -585,17 +598,14 @@ WorldPacket const* HousingDecorDeleteFromStorageResponse::Write()
 
 WorldPacket const* HousingDecorRequestStorageResponse::Write()
 {
+    // IDA-verified wire format: PackedGUID + uint8 ResultCode + uint8 Flags
+    // Flags bit 7: 1 = empty/no data, 0 = data available (client triggers refresh)
     _worldPacket << BNetAccountGuid;
     _worldPacket << uint8(ResultCode);
-    _worldPacket << uint32(Entries.size());
-    for (auto const& entry : Entries)
-    {
-        _worldPacket << uint32(entry.DecorEntryId);
-        _worldPacket << uint32(entry.Count);
-    }
+    _worldPacket << uint8(HasData ? 0x00 : 0x80);
 
-    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_DECOR_REQUEST_STORAGE_RESPONSE ResultCode: {} EntryCount: {} BNetAccountGuid: {}",
-        ResultCode, Entries.size(), BNetAccountGuid.ToString());
+    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_DECOR_REQUEST_STORAGE_RESPONSE ResultCode: {} HasData: {} BNetAccountGuid: {}",
+        ResultCode, HasData, BNetAccountGuid.ToString());
 
     return &_worldPacket;
 }
@@ -856,12 +866,10 @@ WorldPacket const* HousingSvcsCreateCharterNeighborhoodResponse::Write()
 
 WorldPacket const* HousingSvcsNeighborhoodReservePlotResponse::Write()
 {
-    _worldPacket << uint32(Result);
-    _worldPacket << NeighborhoodGuid;
-    _worldPacket << uint8(PlotIndex);
+    // Sniff-verified wire format: single uint8 Result (1 byte total)
+    _worldPacket << uint8(Result);
 
-    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_SVCS_NEIGHBORHOOD_RESERVE_PLOT_RESPONSE Result: {} NeighborhoodGuid: {} PlotIndex: {}",
-        Result, NeighborhoodGuid.ToString(), PlotIndex);
+    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_SVCS_NEIGHBORHOOD_RESERVE_PLOT_RESPONSE Result: {}", Result);
 
     return &_worldPacket;
 }
@@ -1590,12 +1598,13 @@ void NeighborhoodPlayerDeclineInvite::Read()
 
 void NeighborhoodBuyHouse::Read()
 {
-    _worldPacket >> PlotIndex;
-    _worldPacket >> NeighborhoodGuid;
-    _worldPacket >> PlotGuid;
+    // Sniff 12.0.1 (23 bytes): uint32(HouseStyleID) + PackedGUID(CornerstoneGuid) + uint16(Padding)
+    _worldPacket >> HouseStyleID;
+    _worldPacket >> CornerstoneGuid;
+    _worldPacket >> Padding;
 
-    TC_LOG_DEBUG("network.opcode", "CMSG_NEIGHBORHOOD_BUY_HOUSE PlotIndex: {} NeighborhoodGuid: {} PlotGuid: {}",
-        PlotIndex, NeighborhoodGuid.ToString(), PlotGuid.ToString());
+    TC_LOG_DEBUG("network.opcode", "CMSG_NEIGHBORHOOD_BUY_HOUSE HouseStyleID: {} CornerstoneGuid: {} Padding: {}",
+        HouseStyleID, CornerstoneGuid.ToString(), Padding);
 }
 
 void NeighborhoodMoveHouse::Read()

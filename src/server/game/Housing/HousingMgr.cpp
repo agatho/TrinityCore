@@ -18,9 +18,14 @@
 #include "HousingMgr.h"
 #include "DB2Stores.h"
 #include "DB2Structure.h"
+#include "Group.h"
+#include "Guild.h"
+#include "Housing.h"
 #include "Log.h"
 #include "Neighborhood.h"
+#include "Player.h"
 #include "Random.h"
+#include "SocialMgr.h"
 #include "Timer.h"
 #include "World.h"
 #include <algorithm>
@@ -208,17 +213,17 @@ void HousingMgr::LoadNeighborhoodMapData()
         data.Origin[1] = entry->Position.Y;
         data.Origin[2] = entry->Position.Z;
         data.MapID = entry->MapID;
-        data.PlotSpacing = entry->Radius;
-        data.MaxPlots = entry->PlotCount;
-        data.UiMapID = entry->FactionRestriction;
+        data.Radius = entry->Radius;
+        data.PlotCount = entry->PlotCount;
+        data.FactionRestriction = entry->FactionRestriction;
     }
 
     // Build reverse lookup: world MapID -> NeighborhoodMap ID
     for (auto const& [id, data] : _neighborhoodMapStore)
     {
         _worldMapToNeighborhoodMap[data.MapID] = id;
-        TC_LOG_DEBUG("housing", "  NeighborhoodMap ID={} MapID={} Origin=({}, {}, {}) Spacing={} MaxPlots={} Flags={}",
-            data.ID, data.MapID, data.Origin[0], data.Origin[1], data.Origin[2], data.PlotSpacing, data.MaxPlots, data.UiMapID);
+        TC_LOG_DEBUG("housing", "  NeighborhoodMap ID={} MapID={} Origin=({}, {}, {}) Radius={} PlotCount={} FactionRestriction=0x{:X}",
+            data.ID, data.MapID, data.Origin[0], data.Origin[1], data.Origin[2], data.Radius, data.PlotCount, data.FactionRestriction);
     }
 
     TC_LOG_INFO("housing", "HousingMgr::LoadNeighborhoodMapData: Loaded {} NeighborhoodMap entries", uint32(_neighborhoodMapStore.size()));
@@ -427,14 +432,25 @@ std::string HousingMgr::GenerateNeighborhoodName(uint32 neighborhoodMapId) const
     uint32 index = urand(0, static_cast<uint32>(nameGens.size()) - 1);
     NeighborhoodNameGenData const& entry = nameGens[index];
 
-    // Combine prefix + middle + suffix
+    // Retail sniff names use hyphen-separated tokens (e.g., "75-78-61", "86-90-6").
+    // The DB2 NeighborhoodNameGen entry has three string fields: Prefix, Suffix, FullName.
+    // Each entry stores three numeric tokens that are combined with hyphens.
+    // Internal mapping: data.Prefix = DB2 Prefix, data.Middle = DB2 Suffix, data.Suffix = DB2 FullName
     std::string name;
     if (!entry.Prefix.empty())
         name += entry.Prefix;
     if (!entry.Middle.empty())
+    {
+        if (!name.empty())
+            name += '-';
         name += entry.Middle;
+    }
     if (!entry.Suffix.empty())
+    {
+        if (!name.empty())
+            name += '-';
         name += entry.Suffix;
+    }
 
     if (name.empty())
         return "Unnamed Neighborhood";
@@ -520,18 +536,86 @@ uint32 HousingMgr::GetRoomWeightCost(uint32 roomEntryId) const
     return 1;
 }
 
-std::vector<uint32> HousingMgr::GetStarterDecorIds() const
+std::vector<uint32> HousingMgr::GetStarterDecorIds(uint32 teamId) const
 {
+    // Sniff 12.0.1 verified: Alliance and Horde receive different starter decor sets.
+    // HouseDecor.Flags encodes faction availability:
+    //   bit 0 (0x1) = Alliance, bit 1 (0x2) = Horde, 0 or 0x3 = both factions
+    // Sniff-observed sets:
+    //   Alliance: 389, 726, 1994, 1435, 9144
+    //   Horde:    1700, 81, 10952, 2549, 8910
+    static constexpr int32 HOUSE_DECOR_FLAG_FACTION_ALLIANCE = 0x1;
+    static constexpr int32 HOUSE_DECOR_FLAG_FACTION_HORDE    = 0x2;
+    static constexpr int32 HOUSE_DECOR_FLAG_FACTION_MASK     = 0x3;
+
+    int32 factionBit = (teamId == ALLIANCE) ? HOUSE_DECOR_FLAG_FACTION_ALLIANCE : HOUSE_DECOR_FLAG_FACTION_HORDE;
+
     std::vector<uint32> result;
     for (auto const& [id, decor] : _houseDecorStore)
     {
-        if (decor.StartingQuantity > 0)
+        if (decor.StartingQuantity <= 0)
+            continue;
+
+        int32 decorFaction = decor.Flags & HOUSE_DECOR_FLAG_FACTION_MASK;
+        // Include decor if: no faction restriction (0 or both bits set), or matches player's faction
+        if (decorFaction == 0 || decorFaction == HOUSE_DECOR_FLAG_FACTION_MASK || (decorFaction & factionBit))
         {
             for (int32 i = 0; i < decor.StartingQuantity; ++i)
                 result.push_back(id);
         }
     }
     return result;
+}
+
+bool HousingMgr::CanVisitorAccess(Player const* visitor, Player const* owner, uint32 settingsFlags, bool isInterior) const
+{
+    if (!visitor || !owner)
+        return false;
+
+    // Owner always has access
+    if (visitor->GetGUID() == owner->GetGUID())
+        return true;
+
+    // Select the correct flag group based on access type
+    uint32 anyoneFlag    = isInterior ? HOUSE_SETTING_HOUSE_ACCESS_ANYONE    : HOUSE_SETTING_PLOT_ACCESS_ANYONE;
+    uint32 neighborsFlag = isInterior ? HOUSE_SETTING_HOUSE_ACCESS_NEIGHBORS : HOUSE_SETTING_PLOT_ACCESS_NEIGHBORS;
+    uint32 guildFlag     = isInterior ? HOUSE_SETTING_HOUSE_ACCESS_GUILD     : HOUSE_SETTING_PLOT_ACCESS_GUILD;
+    uint32 friendsFlag   = isInterior ? HOUSE_SETTING_HOUSE_ACCESS_FRIENDS   : HOUSE_SETTING_PLOT_ACCESS_FRIENDS;
+    uint32 partyFlag     = isInterior ? HOUSE_SETTING_HOUSE_ACCESS_PARTY     : HOUSE_SETTING_PLOT_ACCESS_PARTY;
+
+    // If no flags are set at all, default to open access (sniff behavior: plots are public by default)
+    uint32 accessMask = isInterior
+        ? (HOUSE_SETTING_HOUSE_ACCESS_ANYONE | HOUSE_SETTING_HOUSE_ACCESS_NEIGHBORS |
+           HOUSE_SETTING_HOUSE_ACCESS_GUILD | HOUSE_SETTING_HOUSE_ACCESS_FRIENDS | HOUSE_SETTING_HOUSE_ACCESS_PARTY)
+        : (HOUSE_SETTING_PLOT_ACCESS_ANYONE | HOUSE_SETTING_PLOT_ACCESS_NEIGHBORS |
+           HOUSE_SETTING_PLOT_ACCESS_GUILD | HOUSE_SETTING_PLOT_ACCESS_FRIENDS | HOUSE_SETTING_PLOT_ACCESS_PARTY);
+
+    if ((settingsFlags & accessMask) == 0)
+        return true; // No restrictions configured — open to all
+
+    if (settingsFlags & anyoneFlag)
+        return true;
+
+    if ((settingsFlags & partyFlag) && visitor->GetGroup() && visitor->GetGroup() == owner->GetGroup())
+        return true;
+
+    if ((settingsFlags & guildFlag) && visitor->GetGuildId() != 0 && visitor->GetGuildId() == owner->GetGuildId())
+        return true;
+
+    if ((settingsFlags & friendsFlag) && owner->GetSocial() && owner->GetSocial()->HasFriend(visitor->GetGUID()))
+        return true;
+
+    if ((settingsFlags & neighborsFlag))
+    {
+        // Check if both players are in the same neighborhood
+        Housing const* ownerHousing = owner->GetHousing();
+        Housing const* visitorHousing = visitor->GetHousing();
+        if (ownerHousing && visitorHousing &&
+            ownerHousing->GetNeighborhoodGuid() == visitorHousing->GetNeighborhoodGuid())
+            return true;
+    }
+
+    return false;
 }
 
 HousingResult HousingMgr::ValidateDecorPlacement(uint32 decorId, Position const& pos, uint32 houseLevel) const

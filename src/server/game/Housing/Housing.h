@@ -104,6 +104,10 @@ public:
     void SetEditorMode(HousingEditorMode mode);
     HousingEditorMode GetEditorMode() const { return _editorMode; }
 
+    // Interior state tracking (set by door script, cleared on leave)
+    void SetInInterior(bool interior) { _isInInterior = interior; }
+    bool IsInInterior() const { return _isInInterior; }
+
     // Decor operations
     HousingResult PlaceDecor(uint32 decorEntryId, float x, float y, float z,
         float rotX, float rotY, float rotZ, float rotW, ObjectGuid roomGuid);
@@ -207,6 +211,7 @@ private:
     uint32 _settingsFlags;
     HousingEditorMode _editorMode;
     bool _exteriorLocked = false;
+    bool _isInInterior = false;
     uint8 _houseSize = HOUSING_FIXTURE_SIZE_SMALL;
     uint32 _houseType = 0;
     uint32 _createTime = 0;

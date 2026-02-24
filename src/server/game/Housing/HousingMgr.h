@@ -104,11 +104,11 @@ struct HouseDecorThemeSetData
 struct NeighborhoodMapData
 {
     uint32 ID = 0;
-    float Origin[3] = {};
-    int32 MapID = 0;
-    float PlotSpacing = 0.0f;
-    uint32 MaxPlots = 0;
-    int32 UiMapID = 0;
+    float Origin[3] = {};           // DB2: Position[3]
+    int32 MapID = 0;                // DB2: MapID
+    float Radius = 0.0f;            // DB2: Radius
+    uint32 PlotCount = 0;           // DB2: PlotCount
+    int32 FactionRestriction = 0;   // DB2: FactionRestriction (bitmask: 0x1=Alliance, 0x2=Horde, 0x4=SystemGenerate)
 };
 
 struct NeighborhoodPlotData
@@ -277,7 +277,13 @@ public:
     std::vector<RoomDoorInfo> const* GetRoomDoors(uint32 roomWmoDataId) const;
 
     // Starter decor (items granted on first house purchase)
-    std::vector<uint32> GetStarterDecorIds() const;
+    // Returns starter decor IDs filtered by faction (teamId: ALLIANCE=469, HORDE=67)
+    // Sniff-verified: Alliance and Horde receive different starter decor sets
+    std::vector<uint32> GetStarterDecorIds(uint32 teamId) const;
+
+    // Access control — checks if visitor can access a plot/house based on owner's settings
+    // accessMask = HOUSE_SETTING_HOUSE_ACCESS_* for interior, HOUSE_SETTING_PLOT_ACCESS_* for exterior
+    bool CanVisitorAccess(Player const* visitor, Player const* owner, uint32 settingsFlags, bool isInterior) const;
 
     // Validation
     HousingResult ValidateDecorPlacement(uint32 decorId, Position const& pos, uint32 houseLevel) const;

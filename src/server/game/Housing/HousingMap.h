@@ -85,6 +85,15 @@ public:
     void SpawnAllDecorForPlot(uint8 plotIndex, Housing const* housing);
     void UpdateDecorPosition(uint8 plotIndex, ObjectGuid decorGuid, Position const& pos, QuaternionData const& rot);
 
+    // Track which plot a player is currently visiting (set by at_housing_plot)
+    void SetPlayerCurrentPlot(ObjectGuid playerGuid, uint8 plotIndex) { _playerCurrentPlot[playerGuid] = plotIndex; }
+    void ClearPlayerCurrentPlot(ObjectGuid playerGuid) { _playerCurrentPlot.erase(playerGuid); }
+    int8 GetPlayerCurrentPlot(ObjectGuid playerGuid) const
+    {
+        auto itr = _playerCurrentPlot.find(playerGuid);
+        return itr != _playerCurrentPlot.end() ? static_cast<int8>(itr->second) : -1;
+    }
+
 private:
     uint32 _neighborhoodId;
     Neighborhood* _neighborhood;
@@ -103,6 +112,7 @@ private:
     std::unordered_map<ObjectGuid, ObjectGuid> _decorGuidToGoGuid;                // decor GUID -> GO GUID
     std::unordered_map<ObjectGuid, uint8> _decorGuidToPlotIndex;                  // decor GUID -> plotIndex
     std::unordered_set<uint8> _decorSpawnedPlots;                                 // plots whose decor has been spawned
+    std::unordered_map<ObjectGuid, uint8> _playerCurrentPlot;                    // player GUID -> current visited plot index
 };
 
 #endif // HousingMap_h__

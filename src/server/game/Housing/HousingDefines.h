@@ -629,8 +629,8 @@ static constexpr uint32 MAX_NEIGHBORHOOD_MANAGERS       = 5;
 static constexpr uint32 MIN_CHARTER_SIGNATURES          = 4;
 static constexpr uint8  INVALID_PLOT_INDEX              = 255;
 static constexpr uint32 HOUSING_MAX_NAME_LENGTH         = 64;
-static constexpr uint64 HOUSE_PURCHASE_COST_COPPER      = 10000000ULL * 10000ULL;  // 10M gold in copper
-static constexpr uint64 HOUSE_MOVE_COST_COPPER          = 1000ULL * 10000ULL;      // 1K gold in copper
+static constexpr uint64 HOUSE_PURCHASE_COST_COPPER      = 1000ULL * 10000ULL;      // 1000g (sniff: 0x989680 = 10,000,000 copper)
+static constexpr uint64 HOUSE_MOVE_COST_COPPER          = 500ULL * 10000ULL;       // 500g move cost
 static constexpr uint32 MAX_HOUSE_LEVEL                 = 20;
 
 #endif // TRINITYCORE_HOUSING_DEFINES_H

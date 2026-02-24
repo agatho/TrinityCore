@@ -954,29 +954,28 @@ void WorldSession::HandleNeighborhoodBuyHouse(WorldPackets::Neighborhood::Neighb
     if (!player)
         return;
 
-    TC_LOG_INFO("housing", "CMSG_NEIGHBORHOOD_BUY_HOUSE NeighborhoodGuid: {}, RawPlotIndex: {}, PlotGuid: {}",
-        neighborhoodBuyHouse.NeighborhoodGuid.ToString(), neighborhoodBuyHouse.PlotIndex,
-        neighborhoodBuyHouse.PlotGuid.ToString());
+    TC_LOG_INFO("housing", "CMSG_NEIGHBORHOOD_BUY_HOUSE HouseStyleID: {}, CornerstoneGuid: {}",
+        neighborhoodBuyHouse.HouseStyleID, neighborhoodBuyHouse.CornerstoneGuid.ToString());
 
-    Neighborhood* neighborhood = sNeighborhoodMgr.ResolveNeighborhood(neighborhoodBuyHouse.NeighborhoodGuid, player);
+    // CMSG contains CornerstoneGuid (not a NeighborhoodGuid) — resolve neighborhood from player's map
+    Neighborhood* neighborhood = sNeighborhoodMgr.ResolveNeighborhood(neighborhoodBuyHouse.CornerstoneGuid, player);
     if (!neighborhood)
     {
         WorldPackets::Neighborhood::NeighborhoodBuyHouseResponse response;
         response.Result = static_cast<uint8>(HOUSING_RESULT_NEIGHBORHOOD_NOT_FOUND);
         SendPacket(response.Write());
 
-        TC_LOG_DEBUG("housing", "HandleNeighborhoodBuyHouse: Neighborhood {} not found",
-            neighborhoodBuyHouse.NeighborhoodGuid.ToString());
+        TC_LOG_DEBUG("housing", "HandleNeighborhoodBuyHouse: Neighborhood not found for CornerstoneGuid {}",
+            neighborhoodBuyHouse.CornerstoneGuid.ToString());
         return;
     }
 
-    // Resolve the canonical DB2 PlotIndex from the cornerstone GO GUID.
-    // Never trust the client's PlotIndex field.
-    int32 resolved = sHousingMgr.ResolvePlotIndex(neighborhoodBuyHouse.NeighborhoodGuid, neighborhood);
+    // Resolve the canonical DB2 PlotIndex from the cornerstone GO GUID
+    int32 resolved = sHousingMgr.ResolvePlotIndex(neighborhoodBuyHouse.CornerstoneGuid, neighborhood);
     if (resolved < 0)
     {
-        TC_LOG_ERROR("housing", "HandleNeighborhoodBuyHouse: Failed to resolve PlotIndex from GUID {} (client sent {})",
-            neighborhoodBuyHouse.NeighborhoodGuid.ToString(), neighborhoodBuyHouse.PlotIndex);
+        TC_LOG_ERROR("housing", "HandleNeighborhoodBuyHouse: Failed to resolve PlotIndex from CornerstoneGuid {}",
+            neighborhoodBuyHouse.CornerstoneGuid.ToString());
         WorldPackets::Neighborhood::NeighborhoodBuyHouseResponse response;
         response.Result = static_cast<uint8>(HOUSING_RESULT_GENERIC_FAILURE);
         SendPacket(response.Write());
@@ -984,8 +983,8 @@ void WorldSession::HandleNeighborhoodBuyHouse(WorldPackets::Neighborhood::Neighb
     }
 
     uint8 resolvedPlotIndex = static_cast<uint8>(resolved);
-    TC_LOG_INFO("housing", "HandleNeighborhoodBuyHouse: Resolved PlotIndex {} (client sent {})",
-        resolvedPlotIndex, neighborhoodBuyHouse.PlotIndex);
+    TC_LOG_INFO("housing", "HandleNeighborhoodBuyHouse: Resolved PlotIndex {} from CornerstoneGuid {}, HouseStyleID {}",
+        resolvedPlotIndex, neighborhoodBuyHouse.CornerstoneGuid.ToString(), neighborhoodBuyHouse.HouseStyleID);
 
     // Auto-join neighborhood if not already a member — buying a plot implies joining
     if (!neighborhood->IsMember(player->GetGUID()))
@@ -998,7 +997,7 @@ void WorldSession::HandleNeighborhoodBuyHouse(WorldPackets::Neighborhood::Neighb
             SendPacket(response.Write());
 
             TC_LOG_DEBUG("housing", "HandleNeighborhoodBuyHouse: Failed to add player {} to neighborhood {} (result {})",
-                player->GetGUID().ToString(), neighborhoodBuyHouse.NeighborhoodGuid.ToString(), static_cast<uint32>(joinResult));
+                player->GetGUID().ToString(), neighborhood->GetGuid().ToString(), static_cast<uint32>(joinResult));
             return;
         }
         TC_LOG_INFO("housing", "HandleNeighborhoodBuyHouse: Auto-added player {} as resident of neighborhood '{}'",
@@ -1006,20 +1005,33 @@ void WorldSession::HandleNeighborhoodBuyHouse(WorldPackets::Neighborhood::Neighb
     }
 
     // Must not already own a house in this neighborhood
-    if (player->GetHousingForNeighborhood(neighborhoodBuyHouse.NeighborhoodGuid))
+    if (player->GetHousingForNeighborhood(neighborhood->GetGuid()))
     {
         WorldPackets::Neighborhood::NeighborhoodBuyHouseResponse response;
         response.Result = static_cast<uint8>(HOUSING_RESULT_INVALID_HOUSE);
         SendPacket(response.Write());
 
         TC_LOG_DEBUG("housing", "HandleNeighborhoodBuyHouse: Player {} already has a house in neighborhood {}",
-            player->GetGUID().ToString(), neighborhoodBuyHouse.NeighborhoodGuid.ToString());
+            player->GetGUID().ToString(), neighborhood->GetGuid().ToString());
+        return;
+    }
+
+    // Deduct gold cost (sniff-verified: 1000g = 10,000,000 copper)
+    if (!player->HasEnoughMoney(HOUSE_PURCHASE_COST_COPPER))
+    {
+        WorldPackets::Neighborhood::NeighborhoodBuyHouseResponse response;
+        response.Result = static_cast<uint8>(HOUSING_RESULT_GENERIC_FAILURE);
+        SendPacket(response.Write());
+
+        TC_LOG_DEBUG("housing", "HandleNeighborhoodBuyHouse: Player {} cannot afford house (need {} copper, has {})",
+            player->GetGUID().ToString(), HOUSE_PURCHASE_COST_COPPER, player->GetMoney());
         return;
     }
 
     HousingResult result = neighborhood->PurchasePlot(player->GetGUID(), resolvedPlotIndex);
     if (result == HOUSING_RESULT_SUCCESS)
     {
+        player->ModifyMoney(-static_cast<int64>(HOUSE_PURCHASE_COST_COPPER));
         // Use the server's canonical neighborhood GUID, NOT the client-supplied GUID.
         // Client may send DB2 NeighborhoodID as counter while server uses internal counter.
         player->CreateHousing(neighborhood->GetGuid(), resolvedPlotIndex);
@@ -1038,7 +1050,7 @@ void WorldSession::HandleNeighborhoodBuyHouse(WorldPackets::Neighborhood::Neighb
         // Retail sequence: FirstTimeDecorAcquisition → BuyHouseResponse → LevelFavor updates
 
         // 1. Send starter decor acquisition notifications (sniff: 7-8 packets before buy response)
-        std::vector<uint32> starterDecorIds = sHousingMgr.GetStarterDecorIds();
+        std::vector<uint32> starterDecorIds = sHousingMgr.GetStarterDecorIds(player->GetTeam());
         for (uint32 decorId : starterDecorIds)
         {
             WorldPackets::Housing::HousingFirstTimeDecorAcquisition decorAcq;
@@ -1191,12 +1203,25 @@ void WorldSession::HandleNeighborhoodMoveHouse(WorldPackets::Neighborhood::Neigh
         }
     }
 
+    // Deduct gold cost for house move
+    if (!player->HasEnoughMoney(HOUSE_MOVE_COST_COPPER))
+    {
+        WorldPackets::Neighborhood::NeighborhoodMoveHouseResponse response;
+        response.Result = static_cast<uint8>(HOUSING_RESULT_GENERIC_FAILURE);
+        SendPacket(response.Write());
+
+        TC_LOG_DEBUG("housing", "HandleNeighborhoodMoveHouse: Player {} cannot afford move (need {} copper, has {})",
+            player->GetGUID().ToString(), HOUSE_MOVE_COST_COPPER, player->GetMoney());
+        return;
+    }
+
     HousingResult result = neighborhood->MoveHouse(player->GetGUID(), targetPlotIndex);
 
     WorldPackets::Neighborhood::NeighborhoodMoveHouseResponse response;
     response.Result = static_cast<uint8>(result);
     if (result == HOUSING_RESULT_SUCCESS)
     {
+        player->ModifyMoney(-static_cast<int64>(HOUSE_MOVE_COST_COPPER));
         response.HouseInfo.OwnerGuid = player->GetGUID();
         response.HouseInfo.PlotGuid = neighborhoodMoveHouse.PlotGuid;
         if (Housing const* housing = player->GetHousing())

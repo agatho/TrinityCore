@@ -17,12 +17,16 @@
 
 #include "ScriptMgr.h"
 #include "GameObjectAI.h"
+#include "Group.h"
+#include "Guild.h"
 #include "Housing.h"
 #include "HousingMap.h"
 #include "HousingMgr.h"
 #include "HousingPackets.h"
 #include "Neighborhood.h"
+#include "ObjectAccessor.h"
 #include "Player.h"
+#include "SocialMgr.h"
 
 enum
 {
@@ -95,8 +99,38 @@ public:
                 return true;
             }
 
+            // Check visitor access permissions if this isn't the player's own plot
+            Neighborhood::PlotInfo const* plotInfo = neighborhood->GetPlotInfo(static_cast<uint8>(plotIndex));
+            if (plotInfo && plotInfo->OwnerGuid != player->GetGUID())
+            {
+                Player* owner = ObjectAccessor::FindPlayer(plotInfo->OwnerGuid);
+                if (owner)
+                {
+                    Housing const* ownerHousing = owner->GetHousing();
+                    if (ownerHousing && !sHousingMgr.CanVisitorAccess(player, owner, ownerHousing->GetSettingsFlags(), true))
+                    {
+                        TC_LOG_DEBUG("housing", "go_housing_door: Player {} denied interior access to plot {} (owner {} flags 0x{:X})",
+                            player->GetGUID().ToString(), plotIndex, plotInfo->OwnerGuid.ToString(),
+                            ownerHousing->GetSettingsFlags());
+                        return true;
+                    }
+                }
+            }
+
             // Animate the door
             me->UseDoorOrButton();
+
+            Housing* housing = player->GetHousing();
+
+            // Send SMSG_HOUSE_INTERIOR_ENTER_HOUSE to trigger client interior transition
+            if (housing)
+            {
+                housing->SetInInterior(true);
+
+                WorldPackets::Housing::HouseInteriorEnterHouse enterHouse;
+                enterHouse.HouseGuid = housing->GetHouseGuid();
+                player->SendDirectMessage(enterHouse.Write());
+            }
 
             // Teleport player to the interior entry point (same map, different position)
             player->NearTeleportTo(
@@ -106,7 +140,6 @@ public:
                 plotData->TeleportFacing);
 
             // Send house status response to update client context
-            Housing* housing = player->GetHousing();
             if (housing)
             {
                 WorldPackets::Housing::HousingHouseStatusResponse statusResponse;

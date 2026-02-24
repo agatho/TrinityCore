@@ -345,7 +345,7 @@ Neighborhood* NeighborhoodMgr::FindOrCreatePublicNeighborhood(uint32 teamId)
 
     for (auto const& [id, data] : sHousingMgr.GetAllNeighborhoodMapData())
     {
-        int32 flags = data.UiMapID;
+        int32 flags = data.FactionRestriction;
         bool isAlliance = (flags & 0x1) != 0;
         bool isHorde = (flags & 0x2) != 0;
         bool canSystemGenerate = (flags & 0x4) != 0;
@@ -381,12 +381,25 @@ Neighborhood* NeighborhoodMgr::FindOrCreatePublicNeighborhood(uint32 teamId)
 
 Neighborhood* NeighborhoodMgr::FindPublicNeighborhoodForMap(uint32 neighborhoodMapId) const
 {
+    // Return the least-loaded public neighborhood on this map.
+    // When multiple instances exist (after expansion), we want to distribute
+    // players evenly rather than always returning the first-created instance.
+    Neighborhood* best = nullptr;
+    uint32 bestOccupancy = MAX_NEIGHBORHOOD_PLOTS + 1;
+
     for (auto const& [guid, neighborhood] : _neighborhoods)
     {
         if (neighborhood->GetNeighborhoodMapID() == neighborhoodMapId && neighborhood->IsPublic())
-            return neighborhood.get();
+        {
+            uint32 occupancy = neighborhood->GetOccupiedPlotCount();
+            if (occupancy < bestOccupancy)
+            {
+                best = neighborhood.get();
+                bestOccupancy = occupancy;
+            }
+        }
     }
-    return nullptr;
+    return best;
 }
 
 void NeighborhoodMgr::EnsurePublicNeighborhoods()
@@ -412,7 +425,7 @@ void NeighborhoodMgr::EnsurePublicNeighborhoods()
     // Find system-generatable NeighborhoodMap entries for missing factions
     for (auto const& [id, data] : sHousingMgr.GetAllNeighborhoodMapData())
     {
-        int32 flags = data.UiMapID; // Stores faction/flags bitmask
+        int32 flags = data.FactionRestriction;
         bool isAlliance = (flags & 0x1) != 0;
         bool isHorde = (flags & 0x2) != 0;
         bool canSystemGenerate = (flags & 0x4) != 0;
@@ -477,9 +490,15 @@ void NeighborhoodMgr::CheckAndExpandNeighborhoods()
         for (Neighborhood* neighborhood : neighborhoods)
         {
             uint32 occupiedPlots = neighborhood->GetOccupiedPlotCount();
+            uint32 memberCount = neighborhood->GetMemberCount();
 
-            // If any neighborhood is below 50% occupation, there's still capacity
-            if (occupiedPlots < MAX_NEIGHBORHOOD_PLOTS / 2)
+            // Check both occupied plots AND member count — either can be the bottleneck.
+            // A neighborhood might have many members (invited/added) but few plots occupied,
+            // or vice versa. Use the higher of the two for capacity assessment.
+            uint32 usage = std::max(occupiedPlots, memberCount);
+
+            // If any neighborhood is below 50% usage, there's still capacity
+            if (usage < MAX_NEIGHBORHOOD_PLOTS / 2)
             {
                 hasCapacity = true;
                 break;
@@ -494,7 +513,7 @@ void NeighborhoodMgr::CheckAndExpandNeighborhoods()
         uint32 targetMapId = 0;
         for (auto const& [id, data] : sHousingMgr.GetAllNeighborhoodMapData())
         {
-            int32 flags = data.UiMapID;
+            int32 flags = data.FactionRestriction;
             bool isAlliance = (flags & 0x1) != 0;
             bool isHorde = (flags & 0x2) != 0;
             bool canSystemGenerate = (flags & 0x4) != 0;

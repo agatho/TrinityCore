@@ -562,8 +562,10 @@ CREATE TABLE `neighborhood_map` (
 
 DELETE FROM `neighborhood_map` WHERE `ID` IN (1, 2);
 INSERT INTO `neighborhood_map` (`PositionX`, `PositionY`, `PositionZ`, `ID`, `MapID`, `Radius`, `PlotCount`, `FactionRestriction`, `VerifiedBuild`) VALUES
-(1100, 200, 50, 1, 2736, 1500, 55, 0, 56263),
-(2997, 435, 114, 2, 2735, 1500, 55, 0, 56263);
+-- ID=1: Horde (Map 2736 Razorwind Shores), FactionRestriction=6 (0x2 Horde | 0x4 SystemGenerate)
+(1100, 200, 50, 1, 2736, 1500, 55, 6, 56263),
+-- ID=2: Alliance (Map 2735 Founder's Point), FactionRestriction=5 (0x1 Alliance | 0x4 SystemGenerate)
+(2997, 435, 114, 2, 2735, 1500, 55, 5, 56263);
 
 --
 -- Table structure for table `neighborhood_name_gen`
@@ -582,6 +584,57 @@ CREATE TABLE `neighborhood_name_gen` (
   PRIMARY KEY (`ID`,`VerifiedBuild`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Data for table `neighborhood_name_gen`
+-- Each entry provides three numeric tokens (Prefix, Suffix, FullName) combined as "X-Y-Z".
+-- NeighborhoodMapID 1 = Horde (Map 2736), NeighborhoodMapID 2 = Alliance (Map 2735)
+-- Sniff-verified names: Alliance "75-78-61", Horde "86-90-6" (12.0.1.65940)
+--
+
+INSERT INTO `neighborhood_name_gen` (`ID`, `Prefix`, `Suffix`, `FullName`, `NeighborhoodMapID`, `VerifiedBuild`) VALUES
+-- Alliance (NeighborhoodMapID=2)
+(1,  '75', '78', '61', 2, 65940),
+(2,  '23', '45', '12', 2, 65940),
+(3,  '91', '33', '88', 2, 65940),
+(4,  '14', '62', '7',  2, 65940),
+(5,  '52', '19', '43', 2, 65940),
+(6,  '38', '71', '25', 2, 65940),
+(7,  '67', '4',  '56', 2, 65940),
+(8,  '83', '27', '94', 2, 65940),
+(9,  '9',  '58', '31', 2, 65940),
+(10, '46', '82', '15', 2, 65940),
+(11, '71', '13', '69', 2, 65940),
+(12, '28', '96', '42', 2, 65940),
+(13, '55', '37', '8',  2, 65940),
+(14, '17', '64', '73', 2, 65940),
+(15, '89', '5',  '51', 2, 65940),
+(16, '34', '48', '22', 2, 65940),
+(17, '62', '81', '39', 2, 65940),
+(18, '7',  '53', '85', 2, 65940),
+(19, '43', '16', '67', 2, 65940),
+(20, '96', '72', '3',  2, 65940),
+-- Horde (NeighborhoodMapID=1)
+(21, '86', '90', '6',  1, 65940),
+(22, '44', '17', '55', 1, 65940),
+(23, '62', '8',  '29', 1, 65940),
+(24, '15', '73', '41', 1, 65940),
+(25, '77', '32', '93', 1, 65940),
+(26, '3',  '59', '18', 1, 65940),
+(27, '51', '84', '66', 1, 65940),
+(28, '29', '47', '2',  1, 65940),
+(29, '95', '21', '74', 1, 65940),
+(30, '68', '11', '38', 1, 65940),
+(31, '36', '65', '87', 1, 65940),
+(32, '12', '42', '53', 1, 65940),
+(33, '79', '26', '9',  1, 65940),
+(34, '54', '98', '31', 1, 65940),
+(35, '21', '7',  '64', 1, 65940),
+(36, '88', '35', '46', 1, 65940),
+(37, '47', '69', '14', 1, 65940),
+(38, '6',  '54', '82', 1, 65940),
+(39, '73', '18', '57', 1, 65940),
+(40, '31', '91', '23', 1, 65940);
 
 --
 -- Table structure for table `neighborhood_name_gen_locale`

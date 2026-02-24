@@ -18,11 +18,15 @@
 #include "ScriptMgr.h"
 #include "AreaTrigger.h"
 #include "AreaTriggerAI.h"
+#include "Housing.h"
+#include "HousingMap.h"
+#include "HousingMgr.h"
+#include "HousingPackets.h"
 #include "Log.h"
+#include "ObjectAccessor.h"
 #include "Player.h"
 #include "SpellMgr.h"
 #include "WorldSession.h"
-#include "HousingPackets.h"
 
 enum HousingPlotSpells
 {
@@ -50,10 +54,31 @@ struct at_housing_plot : AreaTriggerAI
 
         bool isOwnPlot = !ownerGuid.IsEmpty() && player->GetGUID() == ownerGuid;
 
+        // Check visitor access permissions for exterior (plot) access
+        if (!isOwnPlot && !ownerGuid.IsEmpty())
+        {
+            if (Player* owner = ObjectAccessor::FindPlayer(ownerGuid))
+            {
+                if (Housing const* ownerHousing = owner->GetHousing())
+                {
+                    if (!sHousingMgr.CanVisitorAccess(player, owner, ownerHousing->GetSettingsFlags(), false))
+                    {
+                        TC_LOG_DEBUG("housing", "at_housing_plot: Player {} denied plot access (owner {} flags 0x{:X})",
+                            player->GetGUID().ToString(), ownerGuid.ToString(), ownerHousing->GetSettingsFlags());
+                        return;
+                    }
+                }
+            }
+        }
+
         // Cast plot auras if the spells exist in DB2
         uint32 auraSpell = isOwnPlot ? SPELL_OWN_PLOT_AURA : SPELL_VISITING_PLOT_AURA;
         if (sSpellMgr->GetSpellInfo(auraSpell, DIFFICULTY_NONE))
             player->CastSpell(player, auraSpell, true);
+
+        // Track which plot the player is on (for HouseStatus queries)
+        if (HousingMap* housingMap = dynamic_cast<HousingMap*>(player->GetMap()))
+            housingMap->SetPlayerCurrentPlot(player->GetGUID(), static_cast<uint8>(plotId));
 
         // Notify the client that the player has entered a plot
         WorldPackets::Neighborhood::NeighborhoodPlayerEnterPlot enterPlot;
@@ -79,6 +104,10 @@ struct at_housing_plot : AreaTriggerAI
             player->RemoveAurasDueToSpell(SPELL_OWN_PLOT_AURA);
         if (sSpellMgr->GetSpellInfo(SPELL_VISITING_PLOT_AURA, DIFFICULTY_NONE))
             player->RemoveAurasDueToSpell(SPELL_VISITING_PLOT_AURA);
+
+        // Clear plot tracking
+        if (HousingMap* housingMap = dynamic_cast<HousingMap*>(player->GetMap()))
+            housingMap->ClearPlayerCurrentPlot(player->GetGUID());
 
         // Notify the client that the player has left the plot
         WorldPackets::Neighborhood::NeighborhoodPlayerLeavePlot leavePlot;

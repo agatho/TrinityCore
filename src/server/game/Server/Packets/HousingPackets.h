@@ -90,6 +90,16 @@ namespace WorldPackets::Housing
     // House Interior System (0x2Fxxxx)
     // ============================================================
 
+    class HouseInteriorEnterHouse final : public ServerPacket
+    {
+    public:
+        HouseInteriorEnterHouse() : ServerPacket(SMSG_HOUSE_INTERIOR_ENTER_HOUSE) { }
+        WorldPacket const* Write() override;
+        // IDA: CliHouseInteriorSystem sub 0 (0x2F0000)
+        // Wire format TBD (needs sniff verification) — sending HouseGuid for now
+        ObjectGuid HouseGuid;
+    };
+
     class HouseInteriorLeaveHouse final : public ClientPacket
     {
     public:
@@ -823,17 +833,14 @@ namespace WorldPackets::Housing
         HousingDecorRequestStorageResponse() : ServerPacket(SMSG_HOUSING_DECOR_REQUEST_STORAGE_RESPONSE) { }
         WorldPacket const* Write() override;
 
-        // Wire format (sniff-confirmed, 8 bytes minimum):
-        // PackedGUID BNetAccountGUID + uint8 ResultCode
+        // IDA-verified wire format (case 5308422):
+        // PackedGUID BNetAccountGUID + uint8 ResultCode + uint8 Flags
+        // Flags bit 7 = 1: empty/no storage data; bit 7 = 0: data available (client triggers refresh)
+        // Sniff-confirmed: 4 bytes for empty storage = 00 00 00 80
+        // Actual decor entries are NOT inline — delivered via UpdateObject fragments
         ObjectGuid BNetAccountGuid;
         uint8 ResultCode = 0;
-
-        struct CatalogEntryData
-        {
-            uint32 DecorEntryId = 0;
-            uint32 Count = 0;
-        };
-        std::vector<CatalogEntryData> Entries;
+        bool HasData = false;  // When false, Flags.bit7 = 1 (empty); when true, Flags.bit7 = 0
     };
 
     class HousingDecorAddToHouseChestResponse final : public ServerPacket
@@ -1065,9 +1072,8 @@ namespace WorldPackets::Housing
     public:
         HousingSvcsNeighborhoodReservePlotResponse() : ServerPacket(SMSG_HOUSING_SVCS_NEIGHBORHOOD_RESERVE_PLOT_RESPONSE) { }
         WorldPacket const* Write() override;
-        uint32 Result = 0;
-        ObjectGuid NeighborhoodGuid;
-        uint8 PlotIndex = 0;
+        // Sniff-verified wire format: single uint8 Result (1 byte total)
+        uint8 Result = 0;
     };
 
     class HousingSvcsClearPlotReservationResponse final : public ServerPacket
@@ -1765,9 +1771,10 @@ namespace WorldPackets::Neighborhood
 
         void Read() override;
 
-        ObjectGuid NeighborhoodGuid;
-        ObjectGuid PlotGuid;
-        uint32 PlotIndex = 0;
+        // Sniff 12.0.1: uint32(HouseStyleID) + PackedGUID(CornerstoneGuid) + uint16(Padding)
+        ObjectGuid CornerstoneGuid;
+        uint32 HouseStyleID = 0;
+        uint16 Padding = 0;
     };
 
     class NeighborhoodMoveHouse final : public ClientPacket
