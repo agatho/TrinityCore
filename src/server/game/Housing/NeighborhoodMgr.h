@@ -75,7 +75,14 @@ public:
     ObjectGuid GenerateNeighborhoodGuid();
 
     // Startup guarantee
+    void VerifyNeighborhoodFactions();
     void EnsurePublicNeighborhoods();
+
+    // Migrate members in wrong-faction public neighborhoods (legacy data fix)
+    void MigrateWrongFactionResidents();
+
+    // Regenerate names for public neighborhoods using base DB2 entry IDs
+    void RegenerateNeighborhoodNames();
 
 private:
     NeighborhoodMgr() = default;

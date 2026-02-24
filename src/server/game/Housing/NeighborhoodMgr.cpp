@@ -17,6 +17,7 @@
 
 #include "NeighborhoodMgr.h"
 #include "DatabaseEnv.h"
+#include "DB2Stores.h"
 #include "GameTime.h"
 #include "HousingDefines.h"
 #include "HousingMap.h"
@@ -27,6 +28,7 @@
 #include "Player.h"
 #include "RealmList.h"
 #include "SharedDefines.h"
+#include "StringFormat.h"
 #include "Timer.h"
 #include "World.h"
 
@@ -40,7 +42,10 @@ void NeighborhoodMgr::Initialize()
 {
     TC_LOG_INFO("server.loading", "Initializing NeighborhoodMgr...");
     LoadFromDB();
+    VerifyNeighborhoodFactions();
     EnsurePublicNeighborhoods();
+    MigrateWrongFactionResidents();
+    RegenerateNeighborhoodNames();
 }
 
 void NeighborhoodMgr::Update(uint32 diff)
@@ -416,6 +421,60 @@ Neighborhood* NeighborhoodMgr::FindPublicNeighborhoodForMap(uint32 neighborhoodM
     return best;
 }
 
+void NeighborhoodMgr::VerifyNeighborhoodFactions()
+{
+    // Verify that each public neighborhood's factionRestriction matches its NeighborhoodMap's faction flags.
+    // This fixes data inconsistencies from earlier code that may have assigned wrong faction values.
+    // Must run BEFORE EnsurePublicNeighborhoods and MigrateWrongFactionResidents.
+
+    auto const& allMaps = sHousingMgr.GetAllNeighborhoodMapData();
+    uint32 fixedCount = 0;
+
+    for (auto& [guid, nb] : _neighborhoods)
+    {
+        if (!nb->IsPublic())
+            continue;
+
+        uint32 mapId = nb->GetNeighborhoodMapID();
+        auto it = allMaps.find(mapId);
+        if (it == allMaps.end())
+            continue;
+
+        int32 mapFlags = it->second.FactionRestriction;
+        bool mapIsAlliance = (mapFlags & 0x1) != 0;
+        bool mapIsHorde = (mapFlags & 0x2) != 0;
+
+        // Determine the correct faction restriction from the NeighborhoodMap flags
+        int32 correctFaction = NEIGHBORHOOD_FACTION_NONE;
+        if (mapIsAlliance && !mapIsHorde)
+            correctFaction = NEIGHBORHOOD_FACTION_ALLIANCE;
+        else if (mapIsHorde && !mapIsAlliance)
+            correctFaction = NEIGHBORHOOD_FACTION_HORDE;
+
+        if (correctFaction == NEIGHBORHOOD_FACTION_NONE)
+            continue; // Ambiguous or no faction — skip
+
+        int32 currentFaction = nb->GetFactionRestriction();
+        if (currentFaction == correctFaction)
+            continue; // Already correct
+
+        TC_LOG_INFO("server.loading", ">> Fixing neighborhood '{}' (guid={}) factionRestriction: {} -> {} (based on NeighborhoodMap {} flags)",
+            nb->GetName(), guid.ToString(), currentFaction, correctFaction, mapId);
+
+        // Update in DB
+        CharacterDatabase.DirectExecute(
+            Trinity::StringFormat("UPDATE neighborhoods SET factionRestriction = {} WHERE guid = {}",
+                correctFaction, guid.GetCounter()).c_str());
+
+        // Update in memory
+        nb->SetFactionRestriction(correctFaction);
+        ++fixedCount;
+    }
+
+    if (fixedCount > 0)
+        TC_LOG_INFO("server.loading", ">> Fixed factionRestriction for {} neighborhood(s)", fixedCount);
+}
+
 void NeighborhoodMgr::EnsurePublicNeighborhoods()
 {
     // Ensure at least one public neighborhood exists per faction
@@ -479,6 +538,249 @@ void NeighborhoodMgr::EnsurePublicNeighborhoods()
     else if (!hasAlliancePublic || !hasHordePublic)
         TC_LOG_WARN("server.loading", ">> Missing public neighborhood for {} — no system-generatable NeighborhoodMap found",
             !hasAlliancePublic ? "Alliance" : "Horde");
+}
+
+void NeighborhoodMgr::MigrateWrongFactionResidents()
+{
+    // After EnsurePublicNeighborhoods creates missing faction neighborhoods,
+    // check if any members are in the wrong faction's public neighborhood.
+    // This handles legacy data from before faction restrictions were enforced:
+    // e.g. Alliance characters placed in a Horde neighborhood when only one existed.
+
+    // Find public neighborhoods by faction
+    uint64 allianceNbLow = 0;
+    uint64 hordeNbLow = 0;
+
+    for (auto const& [guid, nb] : _neighborhoods)
+    {
+        if (!nb->IsPublic())
+            continue;
+        if (nb->GetFactionRestriction() == NEIGHBORHOOD_FACTION_ALLIANCE && !allianceNbLow)
+            allianceNbLow = guid.GetCounter();
+        else if (nb->GetFactionRestriction() == NEIGHBORHOOD_FACTION_HORDE && !hordeNbLow)
+            hordeNbLow = guid.GetCounter();
+    }
+
+    if (!allianceNbLow || !hordeNbLow)
+        return;
+
+    // Query all members in faction-restricted public neighborhoods joined with their race
+    QueryResult result = CharacterDatabase.Query(
+        "SELECT nm.playerGuid, nm.neighborhoodGuid, nm.plotIndex, nm.role, nm.joinTime, c.race "
+        "FROM neighborhood_members nm "
+        "JOIN characters c ON nm.playerGuid = c.guid "
+        "JOIN neighborhoods n ON nm.neighborhoodGuid = n.guid "
+        "WHERE n.isPublic = 1 AND n.factionRestriction != 0");
+
+    if (!result)
+        return;
+
+    struct MemberInfo
+    {
+        uint64 PlayerGuidLow;
+        uint64 NbGuidLow;
+        uint8 PlotIndex;
+        uint8 Role;
+        uint32 JoinTime;
+        uint8 Race;
+    };
+
+    std::vector<MemberInfo> allMembers;
+    do
+    {
+        Field* fields = result->Fetch();
+        allMembers.push_back({
+            fields[0].GetUInt64(),
+            fields[1].GetUInt64(),
+            fields[2].GetUInt8(),
+            fields[3].GetUInt8(),
+            fields[4].GetUInt32(),
+            fields[5].GetUInt8()
+        });
+    } while (result->NextRow());
+
+    // Build set of existing memberships for quick lookup: (playerGuid, nbGuid)
+    std::set<std::pair<uint64, uint64>> membershipSet;
+    for (auto const& m : allMembers)
+        membershipSet.insert({m.PlayerGuidLow, m.NbGuidLow});
+
+    // Pre-populate used plots in each target neighborhood
+    std::set<uint8> usedPlotsInAlliance;
+    std::set<uint8> usedPlotsInHorde;
+    for (auto const& m : allMembers)
+    {
+        if (m.NbGuidLow == allianceNbLow && m.PlotIndex != INVALID_PLOT_INDEX)
+            usedPlotsInAlliance.insert(m.PlotIndex);
+        else if (m.NbGuidLow == hordeNbLow && m.PlotIndex != INVALID_PLOT_INDEX)
+            usedPlotsInHorde.insert(m.PlotIndex);
+    }
+
+    uint32 migratedCount = 0;
+
+    for (auto const& m : allMembers)
+    {
+        Team team = Player::TeamForRace(m.Race);
+        uint64 correctNbLow = (team == ALLIANCE) ? allianceNbLow : hordeNbLow;
+
+        if (m.NbGuidLow == correctNbLow)
+            continue; // Already in correct faction's neighborhood
+
+        bool alreadyInCorrect = membershipSet.count({m.PlayerGuidLow, correctNbLow}) > 0;
+
+        // Delete old wrong-faction membership
+        CharacterDatabasePreparedStatement* delStmt = CharacterDatabase.GetPreparedStatement(CHAR_DEL_NEIGHBORHOOD_MEMBER);
+        delStmt->setUInt64(0, m.NbGuidLow);
+        delStmt->setUInt64(1, m.PlayerGuidLow);
+        CharacterDatabase.DirectExecute(delStmt);
+
+        if (!alreadyInCorrect)
+        {
+            // Player doesn't have a membership in the correct neighborhood yet — create one
+            std::set<uint8>& usedPlots = (correctNbLow == allianceNbLow) ? usedPlotsInAlliance : usedPlotsInHorde;
+            uint8 newPlotIndex = m.PlotIndex;
+
+            // Check if character_housing already points to the correct neighborhood
+            // (e.g., player bought a new house there before migration ran)
+            QueryResult housingResult = CharacterDatabase.Query(
+                Trinity::StringFormat("SELECT plotIndex FROM character_housing WHERE guid = {} AND neighborhoodGuid = {}",
+                    m.PlayerGuidLow, correctNbLow).c_str());
+            if (housingResult)
+                newPlotIndex = housingResult->Fetch()[0].GetUInt8();
+
+            // Check for plot conflict in target neighborhood
+            if (newPlotIndex != INVALID_PLOT_INDEX && usedPlots.count(newPlotIndex))
+            {
+                // Find first available plot
+                newPlotIndex = INVALID_PLOT_INDEX;
+                for (uint8 i = 0; i < MAX_NEIGHBORHOOD_PLOTS; ++i)
+                {
+                    if (!usedPlots.count(i))
+                    {
+                        newPlotIndex = i;
+                        break;
+                    }
+                }
+            }
+
+            if (newPlotIndex != INVALID_PLOT_INDEX)
+                usedPlots.insert(newPlotIndex);
+
+            // Insert new membership in correct neighborhood
+            CharacterDatabasePreparedStatement* insStmt = CharacterDatabase.GetPreparedStatement(CHAR_INS_NEIGHBORHOOD_MEMBER);
+            insStmt->setUInt64(0, correctNbLow);
+            insStmt->setUInt64(1, m.PlayerGuidLow);
+            insStmt->setUInt8(2, m.Role);
+            insStmt->setUInt32(3, m.JoinTime);
+            insStmt->setUInt8(4, newPlotIndex);
+            CharacterDatabase.DirectExecute(insStmt);
+
+            // Update character_housing to point to correct neighborhood (only if it still references the old one)
+            CharacterDatabase.DirectExecute(
+                Trinity::StringFormat("UPDATE character_housing SET neighborhoodGuid = {}, plotIndex = {} WHERE guid = {} AND neighborhoodGuid = {}",
+                    correctNbLow, newPlotIndex, m.PlayerGuidLow, m.NbGuidLow).c_str());
+
+            TC_LOG_INFO("server.loading", ">> Migrated player {} from neighborhood {} to {} (plot {} -> {})",
+                m.PlayerGuidLow, m.NbGuidLow, correctNbLow, m.PlotIndex, newPlotIndex);
+        }
+        else
+        {
+            TC_LOG_INFO("server.loading", ">> Removed duplicate wrong-faction membership for player {} from neighborhood {}",
+                m.PlayerGuidLow, m.NbGuidLow);
+        }
+
+        ++migratedCount;
+    }
+
+    if (migratedCount > 0)
+    {
+        TC_LOG_INFO("server.loading", ">> Migrated {} resident(s) to correct faction neighborhoods — reloading", migratedCount);
+        LoadFromDB(); // Reload to pick up the changes
+    }
+}
+
+void NeighborhoodMgr::RegenerateNeighborhoodNames()
+{
+    // Neighborhood names are stored as "ID1-ID2-ID3" tokens referencing NeighborhoodNameGen
+    // entry IDs from the base DB2. Old names (from hotfix-era data) may contain text
+    // where the values are the TEXT content of overwritten entries, not actual DB2 entry IDs.
+    // Validate each public neighborhood's name: parse tokens, verify each is a real entry.
+    uint32 regenerated = 0;
+    for (auto& [guid, neighborhood] : _neighborhoods)
+    {
+        if (!neighborhood->IsPublic())
+            continue;
+
+        std::string const& name = neighborhood->GetName();
+        bool needsRegeneration = false;
+
+        // Validate: name must be "ID1-ID2-ID3" where each ID is a valid NeighborhoodNameGen entry
+        std::vector<std::string> tokens;
+        std::string token;
+        for (char c : name)
+        {
+            if (c == '-')
+            {
+                if (!token.empty())
+                    tokens.push_back(token);
+                token.clear();
+            }
+            else
+                token += c;
+        }
+        if (!token.empty())
+            tokens.push_back(token);
+
+        if (tokens.size() != 3)
+        {
+            needsRegeneration = true;
+        }
+        else
+        {
+            for (std::string const& t : tokens)
+            {
+                // Must be purely numeric
+                bool allDigits = !t.empty();
+                for (char c : t)
+                {
+                    if (c < '0' || c > '9')
+                    {
+                        allDigits = false;
+                        break;
+                    }
+                }
+                if (!allDigits)
+                {
+                    needsRegeneration = true;
+                    break;
+                }
+
+                // Must reference a valid NeighborhoodNameGen entry in the base DB2
+                uint32 entryId = std::stoul(t);
+                if (!sNeighborhoodNameGenStore.LookupEntry(entryId))
+                {
+                    needsRegeneration = true;
+                    break;
+                }
+            }
+        }
+
+        if (!needsRegeneration)
+            continue;
+
+        std::string newName = sHousingMgr.GenerateNeighborhoodName(neighborhood->GetNeighborhoodMapID());
+        if (newName == "Unnamed Neighborhood")
+            continue;
+
+        TC_LOG_INFO("server.loading", ">> Regenerating neighborhood (guid={}) name: '{}' -> '{}'",
+            guid.ToString(), name, newName);
+        neighborhood->SetName(newName);
+        ++regenerated;
+    }
+
+    if (regenerated > 0)
+        TC_LOG_INFO("server.loading", ">> Regenerated {} neighborhood name(s) using base DB2 entry IDs", regenerated);
+    else
+        TC_LOG_INFO("server.loading", ">> Public neighborhood names verified");
 }
 
 void NeighborhoodMgr::CheckAndExpandNeighborhoods()

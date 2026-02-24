@@ -68,6 +68,7 @@ public:
     uint32 GetNeighborhoodMapID() const { return _neighborhoodMapID; }
     ObjectGuid GetOwnerGuid() const { return _ownerGuid; }
     int32 GetFactionRestriction() const { return _factionRestriction; }
+    void SetFactionRestriction(int32 faction) { _factionRestriction = faction; }
     bool IsPublic() const { return _isPublic; }
     uint32 GetCreateTime() const { return _createTime; }
 

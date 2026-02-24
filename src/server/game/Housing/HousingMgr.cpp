@@ -26,6 +26,7 @@
 #include "Player.h"
 #include "Random.h"
 #include "SocialMgr.h"
+#include "StringFormat.h"
 #include "Timer.h"
 #include "World.h"
 #include <algorithm>
@@ -306,8 +307,12 @@ void HousingMgr::LoadNeighborhoodNameGenData()
         _nameGenByMap[entry->NeighborhoodMapID].push_back(std::move(data));
     }
 
-    TC_LOG_DEBUG("housing", "HousingMgr::LoadNeighborhoodNameGenData: Loaded name gen data for {} maps",
-        uint32(_nameGenByMap.size()));
+    uint32 totalEntries = 0;
+    for (auto const& [mapId, entries] : _nameGenByMap)
+        totalEntries += static_cast<uint32>(entries.size());
+
+    TC_LOG_INFO("housing", "HousingMgr::LoadNeighborhoodNameGenData: Loaded {} entries across {} maps from base DB2",
+        totalEntries, uint32(_nameGenByMap.size()));
 }
 
 HouseDecorData const* HousingMgr::GetHouseDecorData(uint32 id) const
@@ -427,35 +432,17 @@ std::string HousingMgr::GenerateNeighborhoodName(uint32 neighborhoodMapId) const
         return "Unnamed Neighborhood";
 
     std::vector<NeighborhoodNameGenData> const& nameGens = itr->second;
+    uint32 count = static_cast<uint32>(nameGens.size());
 
-    // Pick a random name gen entry from the set for this map
-    uint32 index = urand(0, static_cast<uint32>(nameGens.size()) - 1);
-    NeighborhoodNameGenData const& entry = nameGens[index];
+    // Retail neighborhood names use hyphen-separated NeighborhoodNameGen entry IDs
+    // (e.g., "75-78-61", "86-90-6"). The client resolves each token to localized
+    // text from its local NeighborhoodNameGen.db2 (Prefix, Suffix, FullName fields).
+    // Pick 3 random entries from this map's pool and combine their IDs.
+    uint32 id1 = nameGens[urand(0, count - 1)].ID;
+    uint32 id2 = nameGens[urand(0, count - 1)].ID;
+    uint32 id3 = nameGens[urand(0, count - 1)].ID;
 
-    // Retail sniff names use hyphen-separated tokens (e.g., "75-78-61", "86-90-6").
-    // The DB2 NeighborhoodNameGen entry has three string fields: Prefix, Suffix, FullName.
-    // Each entry stores three numeric tokens that are combined with hyphens.
-    // Internal mapping: data.Prefix = DB2 Prefix, data.Middle = DB2 Suffix, data.Suffix = DB2 FullName
-    std::string name;
-    if (!entry.Prefix.empty())
-        name += entry.Prefix;
-    if (!entry.Middle.empty())
-    {
-        if (!name.empty())
-            name += '-';
-        name += entry.Middle;
-    }
-    if (!entry.Suffix.empty())
-    {
-        if (!name.empty())
-            name += '-';
-        name += entry.Suffix;
-    }
-
-    if (name.empty())
-        return "Unnamed Neighborhood";
-
-    return name;
+    return Trinity::StringFormat("{}-{}-{}", id1, id2, id3);
 }
 
 uint32 HousingMgr::GetMaxDecorForLevel(uint32 level) const
