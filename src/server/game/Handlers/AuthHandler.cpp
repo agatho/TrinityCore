@@ -151,15 +151,26 @@ void WorldSession::SendFeatureSystemStatusGlueScreen()
         { "bpayStoreEnable"sv, "0"sv },
         { "recentAlliesEnabledClient"sv, "0"sv },
         { "browserEnabled"sv, "0"sv },
+        // Housing game rules
+        // NOTE: Boolean flags verified via IDA decompilation of 12.0.1 client.
+        // Float values sourced from 11.2.7 sniffs — may need re-verification against 12.0.1.
         { "performHousingExpansionCheckClient"sv, "1"sv },
-        { "housingEnableCreateGuildNeighborhood"sv, "1"sv },
-        { "housingEnableDeleteHouse"sv, "1"sv },
         { "housingServiceEnabled"sv, "1"sv },
+        { "housingEnableBuyHouse"sv, "1"sv },
+        { "housingEnableDeleteHouse"sv, "1"sv },
         { "housingEnableMoveHouse"sv, "1"sv },
         { "housingEnableCreateCharterNeighborhood"sv, "1"sv },
-        { "housingEnableBuyHouse"sv, "1"sv },
+        { "housingEnableCreateGuildNeighborhood"sv, "1"sv },
         { "housingMarketEnabled"sv, "1"sv },
         { "housingExteriorTypeByNeighborhoodFactionRestriction"sv, "0"sv },
+        // Decor scale limits (from 11.2.7 sniff — verify against 12.0.1 IDA)
+        { "housingExpertDecor_Scale_Indoor_Min"sv, "0.200000"sv },
+        { "housingExpertDecor_Scale_Indoor_Max"sv, "2.000000"sv },
+        { "housingExpertDecor_Scale_Outdoor_Min"sv, "0.200000"sv },
+        { "housingExpertDecor_Scale_Outdoor_Max"sv, "2.000000"sv },
+        // Decor report screenshot thresholds (from 11.2.7 sniff — verify against 12.0.1 IDA)
+        { "housingDecorReportScreenshotFacingDotThreshold"sv, "0.500000"sv },
+        { "housingDecorReportScreenshotDistanceThreshold"sv, "150.000000"sv },
     };
 
     WorldPackets::System::MirrorVars variables;

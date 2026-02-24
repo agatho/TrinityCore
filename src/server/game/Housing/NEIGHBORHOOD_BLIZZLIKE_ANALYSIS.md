@@ -3,7 +3,8 @@
 
 **Analysis Date**: 2026-02-24
 **Branch**: feature/housing-system
-**Data Sources**: IDA decompilation (12.0.0.65727), two retail sniff captures (Dec 2025), server implementation audit
+**Data Sources**: IDA decompilation (12.0.0.65727), two retail sniff captures (11.2.7.64978, Dec 2025), server implementation audit
+**Target Version**: WoW 12.0.1+ ONLY. Sniff data from 11.2.7 is used for protocol reference but must be verified against 12.0.1 IDA for any version-sensitive values (game rules, constants).
 
 ---
 
