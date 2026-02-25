@@ -454,7 +454,7 @@ void WorldSession::HandleHousingDecorPlace(WorldPackets::Housing::HousingDecorPl
     if (!housing)
     {
         WorldPackets::Housing::HousingDecorPlaceResponse response;
-        response.Result = static_cast<uint32>(HOUSING_RESULT_HOUSE_NOT_FOUND);
+        response.Result = static_cast<uint8>(HOUSING_RESULT_HOUSE_NOT_FOUND);
         SendPacket(response.Write());
         return;
     }
@@ -485,14 +485,21 @@ void WorldSession::HandleHousingDecorPlace(WorldPackets::Housing::HousingDecorPl
                     housingMap->SpawnDecorItem(housing->GetPlotIndex(), *newDecor, housing->GetHouseGuid());
             }
         }
+
+        // Sniff: UPDATE_OBJECT (BNetAccount with ChangeType=3, HouseGUID=set) arrives BEFORE response.
+        // PlaceDecor already called SetHousingDecorStorageEntry internally; flush now.
+        GetBattlenetAccount().SendUpdateToPlayer(player);
     }
 
+    // Sniff-verified: PackedGUID PlayerGuid + PackedGUID DecorGuid + uint8 Result
     WorldPackets::Housing::HousingDecorPlaceResponse response;
-    response.Result = static_cast<uint32>(result);
+    response.PlayerGuid = player->GetGUID();
+    response.DecorGuid = housingDecorPlace.DecorGuid;
+    response.Result = static_cast<uint8>(result);
     SendPacket(response.Write());
 
-    TC_LOG_INFO("housing", "CMSG_HOUSING_DECOR_PLACE DecorRecID: {}, Result: {}",
-        housingDecorPlace.DecorRecID, uint32(result));
+    TC_LOG_DEBUG("housing", "CMSG_HOUSING_DECOR_PLACE DecorGuid: {} DecorRecID: {} Result: {}",
+        housingDecorPlace.DecorGuid.ToString(), housingDecorPlace.DecorRecID, uint32(result));
 }
 
 void WorldSession::HandleHousingDecorMove(WorldPackets::Housing::HousingDecorMove const& housingDecorMove)
@@ -546,7 +553,8 @@ void WorldSession::HandleHousingDecorRemove(WorldPackets::Housing::HousingDecorR
     if (!housing)
     {
         WorldPackets::Housing::HousingDecorRemoveResponse response;
-        response.Result = static_cast<uint32>(HOUSING_RESULT_HOUSE_NOT_FOUND);
+        response.DecorGuid = housingDecorRemove.DecorGuid;
+        response.Result = static_cast<uint8>(HOUSING_RESULT_HOUSE_NOT_FOUND);
         SendPacket(response.Write());
         return;
     }
@@ -557,19 +565,25 @@ void WorldSession::HandleHousingDecorRemove(WorldPackets::Housing::HousingDecorR
 
     HousingResult result = housing->RemoveDecor(decorGuid);
 
-    // Despawn the decor GO from the map
+    // Despawn the decor GO from the map and update Account entity
     if (result == HOUSING_RESULT_SUCCESS)
     {
         if (HousingMap* housingMap = dynamic_cast<HousingMap*>(player->GetMap()))
             housingMap->DespawnDecorItem(plotIndex, decorGuid);
+
+        // Sniff: RemoveDecor deletes the Account entry, but retail keeps it with HouseGUID=Empty
+        // Re-add the entry with HouseGUID=Empty to return it to storage
+        Battlenet::Account& account = GetBattlenetAccount();
+        account.SetHousingDecorStorageEntry(decorGuid, ObjectGuid::Empty, 0);
+        account.SendUpdateToPlayer(player);
     }
 
     WorldPackets::Housing::HousingDecorRemoveResponse response;
-    response.Result = static_cast<uint32>(result);
     response.DecorGuid = decorGuid;
+    response.Result = static_cast<uint8>(result);
     SendPacket(response.Write());
 
-    TC_LOG_INFO("housing", "CMSG_HOUSING_DECOR_REMOVE_PLACED_DECOR_ENTRY DecorGuid: {}, Result: {}",
+    TC_LOG_DEBUG("housing", "CMSG_HOUSING_DECOR_REMOVE_PLACED_DECOR_ENTRY DecorGuid: {}, Result: {}",
         decorGuid.ToString(), uint32(result));
 }
 
@@ -583,34 +597,40 @@ void WorldSession::HandleHousingDecorLock(WorldPackets::Housing::HousingDecorLoc
     if (!housing)
     {
         WorldPackets::Housing::HousingDecorLockResponse response;
-        response.Result = static_cast<uint32>(HOUSING_RESULT_HOUSE_NOT_FOUND);
         response.DecorGuid = housingDecorLock.DecorGuid;
+        response.PlayerGuid = player->GetGUID();
+        response.LockState = 0;
         SendPacket(response.Write());
         return;
     }
 
-    // Toggle lock state on the decor item
+    // Use client's requested lock state (not toggle)
     Housing::PlacedDecor const* decor = housing->GetPlacedDecor(housingDecorLock.DecorGuid);
     if (!decor)
     {
         WorldPackets::Housing::HousingDecorLockResponse response;
-        response.Result = static_cast<uint32>(HOUSING_RESULT_DECOR_NOT_FOUND);
         response.DecorGuid = housingDecorLock.DecorGuid;
+        response.PlayerGuid = player->GetGUID();
+        response.LockState = 0;
         SendPacket(response.Write());
         return;
     }
 
-    bool newLockedState = !decor->Locked;
-    HousingResult result = housing->SetDecorLocked(housingDecorLock.DecorGuid, newLockedState);
+    HousingResult result = housing->SetDecorLocked(housingDecorLock.DecorGuid, housingDecorLock.Locked);
 
+    // Sniff wire format: DecorGuid + PlayerGuid + uint8 LockState
+    // LockState encodes 2 bits: 0xC0 = locked+anchor, 0x40 = unlocked+anchor
     WorldPackets::Housing::HousingDecorLockResponse response;
-    response.Result = static_cast<uint32>(result);
     response.DecorGuid = housingDecorLock.DecorGuid;
-    response.Locked = newLockedState;
+    response.PlayerGuid = player->GetGUID();
+    if (result == HOUSING_RESULT_SUCCESS)
+        response.LockState = housingDecorLock.Locked ? 0xC0 : 0x40;
+    else
+        response.LockState = 0;
     SendPacket(response.Write());
 
-    TC_LOG_INFO("housing", "CMSG_HOUSING_DECOR_LOCK DecorGuid: {} (entry: {}), Locked: {}",
-        housingDecorLock.DecorGuid.ToString(), decor->DecorEntryId, newLockedState);
+    TC_LOG_DEBUG("housing", "CMSG_HOUSING_DECOR_LOCK DecorGuid: {} (entry: {}), Locked: {}, LockState: 0x{:02X}",
+        housingDecorLock.DecorGuid.ToString(), decor->DecorEntryId, housingDecorLock.Locked, response.LockState);
 }
 
 void WorldSession::HandleHousingDecorSetDyeSlots(WorldPackets::Housing::HousingDecorSetDyeSlots const& housingDecorSetDyeSlots)

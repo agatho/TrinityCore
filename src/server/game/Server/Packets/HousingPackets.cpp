@@ -565,32 +565,42 @@ WorldPacket const* HousingDecorMoveResponse::Write()
 
 WorldPacket const* HousingDecorPlaceResponse::Write()
 {
-    _worldPacket << uint32(Result);
+    // Sniff-verified wire format: PackedGUID PlayerGuid + PackedGUID DecorGuid + uint8 Result
+    _worldPacket << PlayerGuid;
     _worldPacket << DecorGuid;
+    _worldPacket << uint8(Result);
 
-    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_DECOR_PLACE_RESPONSE Result: {} DecorGuid: {}", Result, DecorGuid.ToString());
+    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_DECOR_PLACE_RESPONSE PlayerGuid: {} DecorGuid: {} Result: {}",
+        PlayerGuid.ToString(), DecorGuid.ToString(), Result);
 
     return &_worldPacket;
 }
 
 WorldPacket const* HousingDecorRemoveResponse::Write()
 {
-    _worldPacket << uint32(Result);
+    // Sniff-verified wire format: PackedGUID DecorGuid + 7 zero bytes on success
+    // Breakdown: DecorGuid + uint8 Result + uint32 unknown(=0) + uint16 unknown(=0)
     _worldPacket << DecorGuid;
+    _worldPacket << uint8(Result);
+    _worldPacket << uint32(0);
+    _worldPacket << uint16(0);
 
-    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_DECOR_REMOVE_RESPONSE Result: {} DecorGuid: {}", Result, DecorGuid.ToString());
+    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_DECOR_REMOVE_RESPONSE DecorGuid: {} Result: {}",
+        DecorGuid.ToString(), Result);
 
     return &_worldPacket;
 }
 
 WorldPacket const* HousingDecorLockResponse::Write()
 {
-    _worldPacket << uint32(Result);
+    // Sniff-verified wire format: PackedGUID DecorGuid + PackedGUID PlayerGuid + uint8 LockState
+    // LockState: 0xC0 = lock acquired, 0x40 = lock released
     _worldPacket << DecorGuid;
-    _worldPacket.WriteBit(Locked);
-    _worldPacket.FlushBits();
+    _worldPacket << PlayerGuid;
+    _worldPacket << uint8(LockState);
 
-    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_DECOR_LOCK_RESPONSE Result: {} DecorGuid: {} Locked: {}", Result, DecorGuid.ToString(), Locked);
+    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_DECOR_LOCK_RESPONSE DecorGuid: {} PlayerGuid: {} LockState: 0x{:02X}",
+        DecorGuid.ToString(), PlayerGuid.ToString(), LockState);
 
     return &_worldPacket;
 }

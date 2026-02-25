@@ -809,8 +809,10 @@ namespace WorldPackets::Housing
     public:
         HousingDecorPlaceResponse() : ServerPacket(SMSG_HOUSING_DECOR_PLACE_RESPONSE) { }
         WorldPacket const* Write() override;
-        uint32 Result = 0;
+        // Sniff-verified wire format (26 bytes): PackedGUID PlayerGuid + PackedGUID DecorGuid + uint8 Result
+        ObjectGuid PlayerGuid;
         ObjectGuid DecorGuid;
+        uint8 Result = 0;
     };
 
     class HousingDecorRemoveResponse final : public ServerPacket
@@ -818,8 +820,9 @@ namespace WorldPackets::Housing
     public:
         HousingDecorRemoveResponse() : ServerPacket(SMSG_HOUSING_DECOR_REMOVE_RESPONSE) { }
         WorldPacket const* Write() override;
-        uint32 Result = 0;
+        // Sniff-verified wire format (19 bytes): PackedGUID DecorGuid + 7 zero bytes on success
         ObjectGuid DecorGuid;
+        uint8 Result = 0;
     };
 
     class HousingDecorLockResponse final : public ServerPacket
@@ -827,9 +830,11 @@ namespace WorldPackets::Housing
     public:
         HousingDecorLockResponse() : ServerPacket(SMSG_HOUSING_DECOR_LOCK_RESPONSE) { }
         WorldPacket const* Write() override;
-        uint32 Result = 0;
+        // Sniff-verified wire format (27 bytes): PackedGUID DecorGuid + PackedGUID PlayerGuid + uint8 LockState
+        // LockState: 0xC0 = lock acquired, 0x40 = lock released
         ObjectGuid DecorGuid;
-        bool Locked = false;
+        ObjectGuid PlayerGuid;
+        uint8 LockState = 0;
     };
 
     class HousingDecorDeleteFromStorageResponse final : public ServerPacket
