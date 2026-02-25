@@ -17,6 +17,7 @@
 
 #include "WorldSession.h"
 #include "Account.h"
+#include "DatabaseEnv.h"
 #include "AreaTrigger.h"
 #include "DB2Stores.h"
 #include "Guild.h"
@@ -738,35 +739,97 @@ void WorldSession::HandleHousingDecorRedeemDeferredDecor(WorldPackets::Housing::
     if (!player)
         return;
 
+    uint32 decorEntryId = housingDecorRedeemDeferredDecor.DeferredDecorID;
+    uint32 sequenceIndex = housingDecorRedeemDeferredDecor.RedemptionToken;
+
     Housing* housing = player->GetHousing();
     if (!housing)
     {
         WorldPackets::Housing::HousingRedeemDeferredDecorResponse response;
-        response.Result = static_cast<uint32>(HOUSING_RESULT_HOUSE_NOT_FOUND);
+        response.Result = static_cast<uint8>(HOUSING_RESULT_HOUSE_NOT_FOUND);
+        response.SequenceIndex = sequenceIndex;
         SendPacket(response.Write());
         return;
     }
 
     // Verify the deferred decor entry exists in DB2
-    HouseDecorData const* decorData = sHousingMgr.GetHouseDecorData(housingDecorRedeemDeferredDecor.DeferredDecorID);
+    HouseDecorData const* decorData = sHousingMgr.GetHouseDecorData(decorEntryId);
     if (!decorData)
     {
         WorldPackets::Housing::HousingRedeemDeferredDecorResponse response;
-        response.Result = static_cast<uint32>(HOUSING_RESULT_DECOR_NOT_FOUND);
+        response.Result = static_cast<uint8>(HOUSING_RESULT_DECOR_NOT_FOUND);
+        response.SequenceIndex = sequenceIndex;
         SendPacket(response.Write());
         return;
     }
 
     // Add the deferred decor to the player's catalog/storage
-    HousingResult result = housing->AddToCatalog(housingDecorRedeemDeferredDecor.DeferredDecorID);
+    HousingResult result = housing->AddToCatalog(decorEntryId);
+    if (result != HOUSING_RESULT_SUCCESS)
+    {
+        WorldPackets::Housing::HousingRedeemDeferredDecorResponse response;
+        response.Result = static_cast<uint8>(result);
+        response.SequenceIndex = sequenceIndex;
+        SendPacket(response.Write());
+        return;
+    }
 
+    // Generate a unique Housing GUID for the newly redeemed decor item.
+    // Uses the same pattern as Housing::LoadFromDB catalog GUID generation:
+    // base = playerCounter * 100000, uniqueId = base + decorEntryId * 100 + instanceIndex.
+    uint64 catalogGuidBase = player->GetGUID().GetCounter() * 100000;
+    uint32 instanceIndex = 0;
+    for (auto const* entry : housing->GetCatalogEntries())
+    {
+        if (entry->DecorEntryId == decorEntryId)
+        {
+            instanceIndex = entry->Count - 1; // Count was just incremented by AddToCatalog
+            break;
+        }
+    }
+    uint64 uniqueId = catalogGuidBase + decorEntryId * 100 + instanceIndex;
+    ObjectGuid decorGuid = ObjectGuid::Create<HighGuid::Housing>(0, 0, 0, uniqueId);
+
+    // Push the new decor entry to the Account entity's FHousingStorage_C fragment.
+    // Sniff: SourceType=3 marks it as redeemed from deferred queue. HouseGUID=empty (not yet placed).
+    Battlenet::Account& account = GetBattlenetAccount();
+    account.SetHousingDecorStorageEntry(decorGuid, ObjectGuid::Empty, 3);
+
+    // Sniff-verified packet order:
+    // 1. SMSG_HOUSING_REDEEM_DEFERRED_DECOR_RESPONSE (DecorGuid + Status=0 + SequenceIndex)
+    // 2. SMSG_UPDATE_OBJECT (BNetAccount entity with new Decor entry, ChangeType=1, SourceType=3)
     WorldPackets::Housing::HousingRedeemDeferredDecorResponse response;
-    response.Result = static_cast<uint32>(result);
-    response.DecorEntryID = housingDecorRedeemDeferredDecor.DeferredDecorID;
+    response.DecorGuid = decorGuid;
+    response.Result = 0;
+    response.SequenceIndex = sequenceIndex;
     SendPacket(response.Write());
 
-    TC_LOG_INFO("housing", "CMSG_HOUSING_DECOR_REDEEM_DEFERRED_DECOR DeferredDecorID: {}, Result: {}",
-        housingDecorRedeemDeferredDecor.DeferredDecorID, uint32(result));
+    // Push Account entity update to deliver the FHousingStorage_C change to the client
+    account.SendUpdateToPlayer(player);
+
+    // Persist the new catalog entry to DB (crash safety)
+    if (instanceIndex == 0)
+    {
+        // First copy of this decor — INSERT new row
+        CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_INS_CHARACTER_HOUSING_CATALOG);
+        uint8 idx = 0;
+        stmt->setUInt64(idx++, player->GetGUID().GetCounter());
+        stmt->setUInt32(idx++, decorEntryId);
+        stmt->setUInt32(idx++, 1);
+        CharacterDatabase.Execute(stmt);
+    }
+    else
+    {
+        // Additional copy — UPDATE existing row count
+        CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_UPD_CHARACTER_HOUSING_CATALOG_COUNT);
+        stmt->setUInt32(0, instanceIndex + 1);
+        stmt->setUInt64(1, player->GetGUID().GetCounter());
+        stmt->setUInt32(2, decorEntryId);
+        CharacterDatabase.Execute(stmt);
+    }
+
+    TC_LOG_DEBUG("housing", "CMSG_HOUSING_DECOR_REDEEM_DEFERRED_DECOR: Player {} redeemed decor {} → GUID {} (SourceType=3, Seq={})",
+        player->GetGUID().ToString(), decorEntryId, decorGuid.ToString(), sequenceIndex);
 }
 
 // ============================================================

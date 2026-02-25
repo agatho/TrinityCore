@@ -525,6 +525,15 @@ WorldPacket const* HouseInteriorEnterHouse::Write()
     return &_worldPacket;
 }
 
+WorldPacket const* HouseInteriorLeaveHouseResponse::Write()
+{
+    _worldPacket << uint8(TeleportReason);
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSE_INTERIOR_LEAVE_HOUSE_RESPONSE TeleportReason: {}", TeleportReason);
+
+    return &_worldPacket;
+}
+
 // ============================================================
 // Housing Decor SMSG Responses (0x51xxxx)
 // ============================================================
@@ -533,13 +542,13 @@ WorldPacket const* HousingDecorSetEditModeResponse::Write()
 {
     _worldPacket << HouseGuid;
     _worldPacket << HouseGuid2;
-    _worldPacket << uint8(IsInEditMode);
-    _worldPacket << uint32(Result);
-    if (IsInEditMode)
-        _worldPacket << DecorGuid;
+    _worldPacket << uint32(DecorGuids.size());
+    _worldPacket << uint8(Result);
+    for (ObjectGuid const& guid : DecorGuids)
+        _worldPacket << guid;
 
-    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_DECOR_SET_EDIT_MODE_RESPONSE Result: {} HouseGuid: {} IsInEditMode: {}",
-        Result, HouseGuid.ToString(), IsInEditMode);
+    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_DECOR_SET_EDIT_MODE_RESPONSE Result: {} HouseGuid: {} DecorCount: {}",
+        Result, HouseGuid.ToString(), uint32(DecorGuids.size()));
 
     return &_worldPacket;
 }
@@ -632,10 +641,13 @@ WorldPacket const* HousingDecorSystemSetDyeSlotsResponse::Write()
 
 WorldPacket const* HousingRedeemDeferredDecorResponse::Write()
 {
-    _worldPacket << uint32(Result);
-    _worldPacket << uint32(DecorEntryID);
+    // Sniff-verified wire format (17 bytes): PackedGUID DecorGuid + uint8 Status + uint32 SequenceIndex
+    _worldPacket << DecorGuid;
+    _worldPacket << uint8(Result);
+    _worldPacket << uint32(SequenceIndex);
 
-    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_REDEEM_DEFERRED_DECOR_RESPONSE Result: {} DecorEntryID: {}", Result, DecorEntryID);
+    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_REDEEM_DEFERRED_DECOR_RESPONSE DecorGuid: {} Result: {} SequenceIndex: {}",
+        DecorGuid.ToString(), Result, SequenceIndex);
 
     return &_worldPacket;
 }
@@ -1204,13 +1216,14 @@ static void WriteJamNeighborhoodRosterEntry(WorldPacket& packet, JamNeighborhood
 
 WorldPacket const* HousingHouseStatusResponse::Write()
 {
+    // Sniff+IDA-verified wire order: HouseGuid, NeighborhoodGuid, OwnerPlayerGuid, Status
     _worldPacket << HouseGuid;
-    _worldPacket << PlotGuid;
     _worldPacket << NeighborhoodGuid;
+    _worldPacket << OwnerPlayerGuid;
     _worldPacket << uint32(Status);
 
-    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_HOUSE_STATUS_RESPONSE HouseGuid: {} PlotGuid: {} NeighborhoodGuid: {} Status: {}",
-        HouseGuid.ToString(), PlotGuid.ToString(), NeighborhoodGuid.ToString(), Status);
+    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_HOUSE_STATUS_RESPONSE HouseGuid: {} NeighborhoodGuid: {} OwnerPlayerGuid: {} Status: {}",
+        HouseGuid.ToString(), NeighborhoodGuid.ToString(), OwnerPlayerGuid.ToString(), Status);
 
     return &_worldPacket;
 }

@@ -108,6 +108,19 @@ namespace WorldPackets::Housing
         void Read() override { }
     };
 
+    class HouseInteriorLeaveHouseResponse final : public ServerPacket
+    {
+    public:
+        HouseInteriorLeaveHouseResponse() : ServerPacket(SMSG_HOUSE_INTERIOR_LEAVE_HOUSE_RESPONSE) { }
+        WorldPacket const* Write() override;
+
+        // IDA: CliHouseInteriorSystem sub 1 (0x2F0001)
+        // HousingTeleportReason: None(0), Cheat(1), UnspecifiedSpellcast(2), Booted(3),
+        //   Homestone(4), Visit(5), Friend(6), GuildMember(7), PartyMember(8),
+        //   ExitingHouse(9), Portal(10), Tutorial(11)
+        uint8 TeleportReason = 9; // Default: ExitingHouse
+    };
+
     // ============================================================
     // Decor System (0x30xxxx)
     // ============================================================
@@ -771,14 +784,15 @@ namespace WorldPackets::Housing
         HousingDecorSetEditModeResponse() : ServerPacket(SMSG_HOUSING_DECOR_SET_EDIT_MODE_RESPONSE) { }
         WorldPacket const* Write() override;
 
-        // Sniff-verified wire format (29 bytes entering, 20 bytes exiting):
-        //   PackedGUID HouseGuid + PackedGUID HouseGuid2 + uint8 IsInEditMode + uint32 Result
-        //   + PackedGUID DecorGuid (only when entering edit mode)
+        // IDA+sniff-verified wire format (29 bytes entering with 1 decor, 20 bytes exiting):
+        //   PackedGUID HouseGuid + PackedGUID HouseGuid2 + uint32 DecorCount + uint8 Result
+        //   + DecorCount × PackedGUID DecorGUIDs
+        // Client enter/exit decision: searches DecorGUIDs for an internal GUID.
+        // If found → enter edit mode. If not found (or empty) → exit edit mode.
         ObjectGuid HouseGuid;
         ObjectGuid HouseGuid2;
-        uint8 IsInEditMode = 0;
-        uint32 Result = 0;
-        ObjectGuid DecorGuid;
+        std::vector<ObjectGuid> DecorGuids;
+        uint8 Result = 0;
     };
 
     class HousingDecorMoveResponse final : public ServerPacket
@@ -866,8 +880,9 @@ namespace WorldPackets::Housing
     public:
         HousingRedeemDeferredDecorResponse() : ServerPacket(SMSG_HOUSING_REDEEM_DEFERRED_DECOR_RESPONSE) { }
         WorldPacket const* Write() override;
-        uint32 Result = 0;
-        uint32 DecorEntryID = 0;
+        ObjectGuid DecorGuid;       // Sniff: PackedGUID — the new decor item's GUID (client uses for placement)
+        uint8 Result = 0;           // Sniff: uint8 Status (0 = success)
+        uint32 SequenceIndex = 0;   // Sniff: uint32 — echoes CMSG RedemptionToken
     };
 
     class HousingFirstTimeDecorAcquisition final : public ServerPacket
@@ -1340,12 +1355,12 @@ namespace WorldPackets::Housing
         HousingHouseStatusResponse() : ServerPacket(SMSG_HOUSING_HOUSE_STATUS_RESPONSE) { }
         WorldPacket const* Write() override;
 
-        // Wire format (sniff-verified, 0x550000):
-        // PackedGUID HouseGuid + PackedGUID PlotGuid + PackedGUID NeighborhoodGuid + uint32 Status
-        // GUID3 (NeighborhoodGuid) must match EditMode DecorGuids[0] for edit mode to activate
+        // Sniff+IDA-verified wire format (0x550000):
+        // PackedGUID HouseGuid + PackedGUID NeighborhoodGuid + PackedGUID OwnerPlayerGuid + uint32 Status
+        // OwnerPlayerGuid = the house owner's Player GUID (HighGuid::Player, NOT Housing type)
         ObjectGuid HouseGuid;
-        ObjectGuid PlotGuid;
         ObjectGuid NeighborhoodGuid;
+        ObjectGuid OwnerPlayerGuid;
         uint32 Status = 0;
     };
 
