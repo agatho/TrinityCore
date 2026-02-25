@@ -633,4 +633,22 @@ static constexpr uint64 HOUSE_PURCHASE_COST_COPPER      = 1000ULL * 10000ULL;   
 static constexpr uint64 HOUSE_MOVE_COST_COPPER          = 500ULL * 10000ULL;       // 500g move cost
 static constexpr uint32 MAX_HOUSE_LEVEL                 = 20;
 
+// Spell applied during housing decor edit mode (creates "phased-out" visual effect)
+// Sniff: aura slot 51, Flags=NoCaster, ActiveFlags=15, CastLevel=36
+static constexpr uint32 SPELL_HOUSING_EDIT_MODE_AURA    = 1263303;
+
+// Cosmetic phases removed when a player enters their own housing plot and
+// restored when they leave. Sniff-verified: 16 phases with ~10s delay.
+static constexpr uint32 HOUSING_COSMETIC_PHASES[] =
+{
+    25571, 26216, 27429, 27442, 27489, 27695,
+    28304, 28312, 28313, 28314, 28315, 28316,
+    28320, 28339, 28370, 28748
+};
+
+static constexpr uint32 HOUSING_COSMETIC_PHASE_COUNT = sizeof(HOUSING_COSMETIC_PHASES) / sizeof(HOUSING_COSMETIC_PHASES[0]);
+
+// Delay in milliseconds before cosmetic phase shifts take effect on plot enter/leave
+static constexpr uint32 HOUSING_COSMETIC_PHASE_DELAY_MS = 10000;
+
 #endif // TRINITYCORE_HOUSING_DEFINES_H

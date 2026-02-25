@@ -19,11 +19,13 @@
 #include "AreaTrigger.h"
 #include "AreaTriggerAI.h"
 #include "Housing.h"
+#include "HousingDefines.h"
 #include "HousingMap.h"
 #include "HousingMgr.h"
 #include "HousingPackets.h"
 #include "Log.h"
 #include "ObjectAccessor.h"
+#include "PhasingHandler.h"
 #include "Player.h"
 #include "SpellMgr.h"
 #include "WorldSession.h"
@@ -85,7 +87,29 @@ struct at_housing_plot : AreaTriggerAI
         enterPlot.PlotAreaTriggerGuid = at->GetGUID();
         player->SendDirectMessage(enterPlot.Write());
 
-        TC_LOG_ERROR("housing", "at_housing_plot: Player {} entered plot {} AT {} (own: {}, owner: {})",
+        // Cosmetic phase shift: when entering own plot, remove 16 cosmetic phases
+        // after a ~10 second delay (sniff-verified retail behavior).
+        // Only applies to the plot owner, not visitors.
+        if (isOwnPlot)
+        {
+            ObjectGuid playerGuid = player->GetGUID();
+            player->m_Events.AddEventAtOffset([playerGuid]()
+            {
+                Player* p = ObjectAccessor::FindPlayer(playerGuid);
+                if (!p || !p->IsInWorld())
+                    return;
+
+                for (uint32 i = 0; i < HOUSING_COSMETIC_PHASE_COUNT; ++i)
+                    PhasingHandler::RemovePhase(p, HOUSING_COSMETIC_PHASES[i], false);
+
+                PhasingHandler::SendToPlayer(p);
+
+                TC_LOG_DEBUG("housing", "at_housing_plot: Removed {} cosmetic phases for plot owner {}",
+                    HOUSING_COSMETIC_PHASE_COUNT, playerGuid.ToString());
+            }, Milliseconds(HOUSING_COSMETIC_PHASE_DELAY_MS));
+        }
+
+        TC_LOG_DEBUG("housing", "at_housing_plot: Player {} entered plot {} AT {} (own: {}, owner: {})",
             player->GetGUID().ToString(), plotId, at->GetGUID().ToString(), isOwnPlot,
             ownerGuid.IsEmpty() ? "none" : ownerGuid.ToString());
     }
@@ -98,6 +122,12 @@ struct at_housing_plot : AreaTriggerAI
         Player* player = unit->ToPlayer();
         if (!player)
             return;
+
+        ObjectGuid ownerGuid;
+        if (at->m_housingPlotAreaTriggerData.has_value())
+            ownerGuid = at->m_housingPlotAreaTriggerData->HouseOwnerGUID;
+
+        bool isOwnPlot = !ownerGuid.IsEmpty() && player->GetGUID() == ownerGuid;
 
         // Remove plot auras if they exist
         if (sSpellMgr->GetSpellInfo(SPELL_OWN_PLOT_AURA, DIFFICULTY_NONE))
@@ -113,8 +143,29 @@ struct at_housing_plot : AreaTriggerAI
         WorldPackets::Neighborhood::NeighborhoodPlayerLeavePlot leavePlot;
         player->SendDirectMessage(leavePlot.Write());
 
-        TC_LOG_ERROR("housing", "at_housing_plot: Player {} left plot AT {}",
-            player->GetGUID().ToString(), at->GetGUID().ToString());
+        // Cosmetic phase shift: when leaving own plot, restore 16 cosmetic phases
+        // after a ~10 second delay (sniff-verified retail behavior).
+        if (isOwnPlot)
+        {
+            ObjectGuid playerGuid = player->GetGUID();
+            player->m_Events.AddEventAtOffset([playerGuid]()
+            {
+                Player* p = ObjectAccessor::FindPlayer(playerGuid);
+                if (!p || !p->IsInWorld())
+                    return;
+
+                for (uint32 i = 0; i < HOUSING_COSMETIC_PHASE_COUNT; ++i)
+                    PhasingHandler::AddPhase(p, HOUSING_COSMETIC_PHASES[i], false);
+
+                PhasingHandler::SendToPlayer(p);
+
+                TC_LOG_DEBUG("housing", "at_housing_plot: Restored {} cosmetic phases for plot owner {}",
+                    HOUSING_COSMETIC_PHASE_COUNT, playerGuid.ToString());
+            }, Milliseconds(HOUSING_COSMETIC_PHASE_DELAY_MS));
+        }
+
+        TC_LOG_DEBUG("housing", "at_housing_plot: Player {} left plot AT {} (own: {})",
+            player->GetGUID().ToString(), at->GetGUID().ToString(), isOwnPlot);
     }
 };
 
