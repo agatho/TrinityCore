@@ -64,9 +64,9 @@ void HousingDecorPlace::Read()
     _worldPacket >> FixtureGuid;
     _worldPacket >> DecorRecID;
 
-    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_DECOR_PLACE DecorGuid: {} Pos: ({}, {}, {}) Yaw: {} Pitch: {} Roll: {} Scale: {} RoomGuid: {} AttachParent: {} DecorRecID: {}",
+    TC_LOG_INFO("network.opcode", "CMSG_HOUSING_DECOR_PLACE DecorGuid: {} Pos: ({}, {}, {}) Yaw: {} Pitch: {} Roll: {} Scale: {} RoomGuid: {} AttachParent: {} FixtureGuid: {} DecorRecID: {} (pktSize={})",
         DecorGuid.ToString(), PositionX, PositionY, PositionZ, Yaw, Pitch, Roll, Scale,
-        RoomGuid.ToString(), AttachParentGuid.ToString(), DecorRecID);
+        RoomGuid.ToString(), AttachParentGuid.ToString(), FixtureGuid.ToString(), DecorRecID, _worldPacket.size());
 }
 
 void HousingDecorMove::Read()
@@ -147,7 +147,7 @@ void HousingDecorRedeemDeferredDecor::Read()
     _worldPacket >> DeferredDecorID;
     _worldPacket >> RedemptionToken;
 
-    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_DECOR_REDEEM_DEFERRED DeferredDecorID: {} RedemptionToken: {}", DeferredDecorID, RedemptionToken);
+    TC_LOG_INFO("network.opcode", "CMSG_HOUSING_DECOR_REDEEM_DEFERRED DeferredDecorID: {} RedemptionToken: {} (pktSize={})", DeferredDecorID, RedemptionToken, _worldPacket.size());
 }
 
 // --- Fixture System ---
@@ -571,7 +571,7 @@ WorldPacket const* HousingDecorPlaceResponse::Write()
     _worldPacket << DecorGuid;
     _worldPacket << uint8(Status);
 
-    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_DECOR_PLACE_RESPONSE PlayerGuid: {} Result: {} DecorGuid: {} Status: {}",
+    TC_LOG_INFO("network.opcode", "SMSG_HOUSING_DECOR_PLACE_RESPONSE PlayerGuid: {} Result: {} DecorGuid: {} Status: {}",
         PlayerGuid.ToString(), Result, DecorGuid.ToString(), Status);
 
     return &_worldPacket;
@@ -586,7 +586,7 @@ WorldPacket const* HousingDecorRemoveResponse::Write()
     _worldPacket << uint32(0);
     _worldPacket << uint16(0);
 
-    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_DECOR_REMOVE_RESPONSE DecorGuid: {} Result: {}",
+    TC_LOG_INFO("network.opcode", "SMSG_HOUSING_DECOR_REMOVE_RESPONSE DecorGuid: {} Result: {}",
         DecorGuid.ToString(), Result);
 
     return &_worldPacket;
@@ -600,7 +600,7 @@ WorldPacket const* HousingDecorLockResponse::Write()
     _worldPacket << PlayerGuid;
     _worldPacket << uint8(LockState);
 
-    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_DECOR_LOCK_RESPONSE DecorGuid: {} PlayerGuid: {} LockState: 0x{:02X}",
+    TC_LOG_INFO("network.opcode", "SMSG_HOUSING_DECOR_LOCK_RESPONSE DecorGuid: {} PlayerGuid: {} LockState: 0x{:02X}",
         DecorGuid.ToString(), PlayerGuid.ToString(), LockState);
 
     return &_worldPacket;
@@ -657,7 +657,7 @@ WorldPacket const* HousingRedeemDeferredDecorResponse::Write()
     _worldPacket << uint8(Result);
     _worldPacket << uint32(SequenceIndex);
 
-    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_REDEEM_DEFERRED_DECOR_RESPONSE DecorGuid: {} Result: {} SequenceIndex: {}",
+    TC_LOG_INFO("network.opcode", "SMSG_HOUSING_REDEEM_DEFERRED_DECOR_RESPONSE DecorGuid: {} Result: {} SequenceIndex: {}",
         DecorGuid.ToString(), Result, SequenceIndex);
 
     return &_worldPacket;

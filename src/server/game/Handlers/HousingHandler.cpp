@@ -19,6 +19,7 @@
 #include "Account.h"
 #include <cmath>
 #include "DatabaseEnv.h"
+#include "RealmList.h"
 #include "AreaTrigger.h"
 #include "DB2Stores.h"
 #include "Guild.h"
@@ -511,9 +512,10 @@ void WorldSession::HandleHousingDecorPlace(WorldPackets::Housing::HousingDecorPl
     response.Status = 0;
     SendPacket(response.Write());
 
-    TC_LOG_DEBUG("housing", "CMSG_HOUSING_DECOR_PLACE DecorGuid: {} DecorRecID: {} Result: {} Pos: ({}, {}, {}) Yaw: {}",
+    TC_LOG_INFO("housing", "CMSG_HOUSING_DECOR_PLACE DecorGuid: {} DecorRecID: {} Result: {} Pos: ({}, {}, {}) Yaw: {} Scale: {}",
         housingDecorPlace.DecorGuid.ToString(), housingDecorPlace.DecorRecID, uint32(result),
-        housingDecorPlace.PositionX, housingDecorPlace.PositionY, housingDecorPlace.PositionZ, housingDecorPlace.Yaw);
+        housingDecorPlace.PositionX, housingDecorPlace.PositionY, housingDecorPlace.PositionZ,
+        housingDecorPlace.Yaw, housingDecorPlace.Scale);
 }
 
 void WorldSession::HandleHousingDecorMove(WorldPackets::Housing::HousingDecorMove const& housingDecorMove)
@@ -597,7 +599,7 @@ void WorldSession::HandleHousingDecorRemove(WorldPackets::Housing::HousingDecorR
     response.Result = static_cast<uint8>(result);
     SendPacket(response.Write());
 
-    TC_LOG_DEBUG("housing", "CMSG_HOUSING_DECOR_REMOVE_PLACED_DECOR_ENTRY DecorGuid: {}, Result: {}",
+    TC_LOG_INFO("housing", "CMSG_HOUSING_DECOR_REMOVE_PLACED_DECOR_ENTRY DecorGuid: {}, Result: {}",
         decorGuid.ToString(), uint32(result));
 }
 
@@ -643,7 +645,7 @@ void WorldSession::HandleHousingDecorLock(WorldPackets::Housing::HousingDecorLoc
         response.LockState = 0;
     SendPacket(response.Write());
 
-    TC_LOG_DEBUG("housing", "CMSG_HOUSING_DECOR_LOCK DecorGuid: {} (entry: {}), Locked: {}, LockState: 0x{:02X}",
+    TC_LOG_INFO("housing", "CMSG_HOUSING_DECOR_LOCK DecorGuid: {} (entry: {}), Locked: {}, LockState: 0x{:02X}",
         housingDecorLock.DecorGuid.ToString(), decor->DecorEntryId, housingDecorLock.Locked, response.LockState);
 }
 
@@ -809,8 +811,8 @@ void WorldSession::HandleHousingDecorRedeemDeferredDecor(WorldPackets::Housing::
     }
 
     // Generate a unique Housing GUID for the newly redeemed decor item.
-    // Uses the same pattern as Housing::LoadFromDB catalog GUID generation:
-    // base = playerCounter * 100000, uniqueId = base + decorEntryId * 100 + instanceIndex.
+    // Sniff-verified format: subType=1, arg1=realmId, arg2=decorEntryId, counter=unique
+    // subType=0 hits the default case in ObjectGuidFactory::CreateHousing → returns Empty!
     uint64 catalogGuidBase = player->GetGUID().GetCounter() * 100000;
     uint32 instanceIndex = 0;
     for (auto const* entry : housing->GetCatalogEntries())
@@ -822,7 +824,11 @@ void WorldSession::HandleHousingDecorRedeemDeferredDecor(WorldPackets::Housing::
         }
     }
     uint64 uniqueId = catalogGuidBase + decorEntryId * 100 + instanceIndex;
-    ObjectGuid decorGuid = ObjectGuid::Create<HighGuid::Housing>(0, 0, 0, uniqueId);
+    ObjectGuid decorGuid = ObjectGuid::Create<HighGuid::Housing>(
+        /*subType*/ 1,
+        /*arg1*/ sRealmList->GetCurrentRealmId().Realm,
+        /*arg2*/ decorEntryId,
+        uniqueId);
 
     // Push the new decor entry to the Account entity's FHousingStorage_C fragment.
     // Sniff: SourceType=3 marks it as redeemed from deferred queue. HouseGUID=empty (not yet placed).
@@ -862,7 +868,7 @@ void WorldSession::HandleHousingDecorRedeemDeferredDecor(WorldPackets::Housing::
         CharacterDatabase.Execute(stmt);
     }
 
-    TC_LOG_DEBUG("housing", "CMSG_HOUSING_DECOR_REDEEM_DEFERRED_DECOR: Player {} redeemed decor {} → GUID {} (SourceType=3, Seq={})",
+    TC_LOG_INFO("housing", "CMSG_HOUSING_DECOR_REDEEM_DEFERRED_DECOR: Player {} redeemed decor {} → GUID {} (SourceType=3, Seq={})",
         player->GetGUID().ToString(), decorEntryId, decorGuid.ToString(), sequenceIndex);
 }
 

@@ -61,6 +61,9 @@ bool Housing::LoadFromDB(PreparedQueryResult housing, PreparedQueryResult decor,
     _houseSize = fields[7].GetUInt8();
     _houseType = fields[8].GetUInt32();
     _createTime = fields[9].GetUInt32();
+
+    TC_LOG_ERROR("housing", "Housing::LoadFromDB: Loaded house HouseGuid={} NeighborhoodGuid={} PlotIndex={} Level={} HouseType={} for player {}",
+        _houseGuid.ToString(), _neighborhoodGuid.ToString(), _plotIndex, _level, _houseType, _owner->GetGUID().ToString());
     _housePosX = fields[10].GetFloat();
     _housePosY = fields[11].GetFloat();
     _housePosZ = fields[12].GetFloat();
@@ -173,15 +176,74 @@ bool Housing::LoadFromDB(PreparedQueryResult housing, PreparedQueryResult decor,
         } while (catalog->NextRow());
     }
 
+    // Fixup: if house exists but catalog is empty, populate with starter decor.
+    // This handles houses created before the catalog-population fix was added.
+    if (_catalog.empty() && !_houseGuid.IsEmpty() && _owner)
+    {
+        auto starterDecorWithQty = sHousingMgr.GetStarterDecorWithQuantities(_owner->GetTeam());
+        if (!starterDecorWithQty.empty())
+        {
+            for (auto const& [decorId, qty] : starterDecorWithQty)
+            {
+                CatalogEntry& entry = _catalog[decorId];
+                entry.DecorEntryId = decorId;
+                entry.Count = qty;
+            }
+            TC_LOG_ERROR("housing", "Housing::LoadFromDB: Catalog was empty for house {} — auto-populated {} starter decor types for player {}",
+                _houseGuid.ToString(), uint32(starterDecorWithQty.size()), _owner->GetGUID().ToString());
+
+            // Persist the fixup to DB so it only happens once
+            if (_owner->GetSession())
+            {
+                CharacterDatabaseTransaction trans = CharacterDatabase.BeginTransaction();
+                for (auto const& [entryId, entry] : _catalog)
+                {
+                    CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_INS_CHARACTER_HOUSING_CATALOG);
+                    uint8 idx = 0;
+                    stmt->setUInt64(idx++, _owner->GetGUID().GetCounter());
+                    stmt->setUInt32(idx++, entry.DecorEntryId);
+                    stmt->setUInt32(idx++, entry.Count);
+                    trans->Append(stmt);
+                }
+                CharacterDatabase.CommitTransaction(trans);
+            }
+        }
+    }
+
     // Recalculate budget weights from loaded data
     RecalculateBudgets();
 
-    // Populate HousingStorageData::Decor UpdateField for all placed decor
+    // Populate HousingStorageData::Decor UpdateField so the client can see decor
+    // in the edit mode UI. This includes BOTH placed decor AND catalog (unplaced) entries.
+    // The client derives its edit mode inventory from this UpdateField data.
     if (_owner && _owner->GetSession())
     {
         Battlenet::Account& account = _owner->GetSession()->GetBattlenetAccount();
+
+        // 1. Placed decor → SourceType=0
         for (auto const& [decorGuid, decor] : _placedDecor)
             account.SetHousingDecorStorageEntry(decorGuid, _houseGuid, 0);
+
+        // 2. Catalog (unplaced/available) entries → SourceType=1
+        // Each catalog entry needs a unique Housing GUID as the map key.
+        // Generate deterministic GUIDs from the decor entry ID so they're stable across relogs.
+        uint64 catalogGuidBase = _owner->GetGUID().GetCounter() * 100000; // avoid collision with placed decor
+        for (auto const& [entryId, entry] : _catalog)
+        {
+            for (uint32 i = 0; i < entry.Count; ++i)
+            {
+                uint64 uniqueId = catalogGuidBase + entryId * 100 + i;
+                ObjectGuid catalogDecorGuid = ObjectGuid::Create<HighGuid::Housing>(
+                    /*subType*/ 1,
+                    /*arg1*/ sRealmList->GetCurrentRealmId().Realm,
+                    /*arg2*/ entryId,
+                    uniqueId);
+                account.SetHousingDecorStorageEntry(catalogDecorGuid, _houseGuid, 0);
+            }
+        }
+
+        TC_LOG_ERROR("housing", "Housing::LoadFromDB: Pushed {} placed + {} catalog types to HousingStorageData for player {}",
+            uint32(_placedDecor.size()), uint32(_catalog.size()), _owner->GetGUID().ToString());
     }
 
     SyncUpdateFields();
@@ -344,8 +406,8 @@ HousingResult Housing::Create(ObjectGuid neighborhoodGuid, uint8 plotIndex)
     // Generate a new house guid using the owner's low guid as a base
     _houseGuid = ObjectGuid::Create<HighGuid::Housing>(/*subType*/ 3, /*arg1*/ sRealmList->GetCurrentRealmId().Realm, /*arg2*/ 7, _owner->GetGUID().GetCounter());
 
-    TC_LOG_DEBUG("housing", "Housing::Create: Player {} (GUID {}) created house on plot {} in neighborhood {}",
-        _owner->GetName(), _owner->GetGUID().GetCounter(), plotIndex, _neighborhoodGuid.ToString());
+    TC_LOG_ERROR("housing", "Housing::Create: Player {} (GUID {}) created house on plot {} in neighborhood {} — HouseGuid={}",
+        _owner->GetName(), _owner->GetGUID().GetCounter(), plotIndex, _neighborhoodGuid.ToString(), _houseGuid.ToString());
 
     SyncUpdateFields();
     return HOUSING_RESULT_SUCCESS;
