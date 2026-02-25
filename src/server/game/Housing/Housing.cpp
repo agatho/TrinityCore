@@ -224,13 +224,26 @@ bool Housing::LoadFromDB(PreparedQueryResult housing, PreparedQueryResult decor,
         for (auto const& [decorGuid, decor] : _placedDecor)
             account.SetHousingDecorStorageEntry(decorGuid, _houseGuid, 0);
 
-        // 2. Catalog (unplaced/available) entries → SourceType=1
-        // Each catalog entry needs a unique Housing GUID as the map key.
+        // 2. Catalog (unplaced/available) entries → HouseGUID=Empty, SourceType=0
+        // Sniff-verified: items in storage have HouseGUID=0x0 (Empty), placed items have non-empty HouseGUID.
+        // Catalog Count includes placed instances, so subtract them to get the storage-only count.
+        // Each storage entry needs a unique Housing GUID as the map key.
         // Generate deterministic GUIDs from the decor entry ID so they're stable across relogs.
+        std::unordered_map<uint32, uint32> placedCountByEntry;
+        for (auto const& [decorGuid, decor] : _placedDecor)
+            placedCountByEntry[decor.DecorEntryId]++;
+
         uint64 catalogGuidBase = _owner->GetGUID().GetCounter() * 100000; // avoid collision with placed decor
+        uint32 totalStorageItems = 0;
         for (auto const& [entryId, entry] : _catalog)
         {
-            for (uint32 i = 0; i < entry.Count; ++i)
+            uint32 placedOfType = 0;
+            auto pIt = placedCountByEntry.find(entryId);
+            if (pIt != placedCountByEntry.end())
+                placedOfType = pIt->second;
+
+            uint32 storageCount = entry.Count > placedOfType ? entry.Count - placedOfType : 0;
+            for (uint32 i = 0; i < storageCount; ++i)
             {
                 uint64 uniqueId = catalogGuidBase + entryId * 100 + i;
                 ObjectGuid catalogDecorGuid = ObjectGuid::Create<HighGuid::Housing>(
@@ -238,12 +251,13 @@ bool Housing::LoadFromDB(PreparedQueryResult housing, PreparedQueryResult decor,
                     /*arg1*/ sRealmList->GetCurrentRealmId().Realm,
                     /*arg2*/ entryId,
                     uniqueId);
-                account.SetHousingDecorStorageEntry(catalogDecorGuid, _houseGuid, 0);
+                account.SetHousingDecorStorageEntry(catalogDecorGuid, ObjectGuid::Empty, 0);
             }
+            totalStorageItems += storageCount;
         }
 
-        TC_LOG_ERROR("housing", "Housing::LoadFromDB: Pushed {} placed + {} catalog types to HousingStorageData for player {}",
-            uint32(_placedDecor.size()), uint32(_catalog.size()), _owner->GetGUID().ToString());
+        TC_LOG_INFO("housing", "Housing::LoadFromDB: Pushed {} placed + {} storage items ({} catalog types) to HousingStorageData for player {}",
+            uint32(_placedDecor.size()), totalStorageItems, uint32(_catalog.size()), _owner->GetGUID().ToString());
     }
 
     SyncUpdateFields();
