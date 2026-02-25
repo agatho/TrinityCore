@@ -784,15 +784,14 @@ namespace WorldPackets::Housing
         HousingDecorSetEditModeResponse() : ServerPacket(SMSG_HOUSING_DECOR_SET_EDIT_MODE_RESPONSE) { }
         WorldPacket const* Write() override;
 
-        // IDA+sniff-verified wire format (29 bytes entering with 1 decor, 20 bytes exiting):
-        //   PackedGUID HouseGuid + PackedGUID HouseGuid2 + uint32 DecorCount + uint8 Result
-        //   + DecorCount × PackedGUID DecorGUIDs
-        // Client enter/exit decision: searches DecorGUIDs for an internal GUID.
-        // If found → enter edit mode. If not found (or empty) → exit edit mode.
+        // Sniff-verified wire format (29 bytes entering, 20 bytes exiting):
+        //   PackedGUID HouseGuid + PackedGUID BNetAccountGuid + bit Enabled
+        //   + uint32 Result + [PackedGUID PlayerGuid if Enabled=true]
         ObjectGuid HouseGuid;
-        ObjectGuid HouseGuid2;
-        std::vector<ObjectGuid> DecorGuids;
-        uint8 Result = 0;
+        ObjectGuid BNetAccountGuid;
+        bool Enabled = false;
+        uint32 Result = 0;
+        ObjectGuid PlayerGuid;  // only serialized when Enabled=true
     };
 
     class HousingDecorMoveResponse final : public ServerPacket

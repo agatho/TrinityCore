@@ -541,14 +541,15 @@ WorldPacket const* HouseInteriorLeaveHouseResponse::Write()
 WorldPacket const* HousingDecorSetEditModeResponse::Write()
 {
     _worldPacket << HouseGuid;
-    _worldPacket << HouseGuid2;
-    _worldPacket << uint32(DecorGuids.size());
-    _worldPacket << uint8(Result);
-    for (ObjectGuid const& guid : DecorGuids)
-        _worldPacket << guid;
+    _worldPacket << BNetAccountGuid;
+    _worldPacket.WriteBit(Enabled);
+    _worldPacket.FlushBits();
+    _worldPacket << uint32(Result);
+    if (Enabled)
+        _worldPacket << PlayerGuid;
 
-    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_DECOR_SET_EDIT_MODE_RESPONSE Result: {} HouseGuid: {} DecorCount: {}",
-        Result, HouseGuid.ToString(), uint32(DecorGuids.size()));
+    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_DECOR_SET_EDIT_MODE_RESPONSE Result: {} HouseGuid: {} Enabled: {} PlayerGuid: {}",
+        Result, HouseGuid.ToString(), Enabled, PlayerGuid.ToString());
 
     return &_worldPacket;
 }

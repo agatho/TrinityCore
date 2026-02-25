@@ -17,8 +17,10 @@
 
 #include "HousingMap.h"
 #include <algorithm>
+#include <cmath>
 #include <set>
 #include "AreaTrigger.h"
+#include "DB2Stores.h"
 #include "GameObject.h"
 #include "GridDefines.h"
 #include "Housing.h"
@@ -37,6 +39,30 @@
 #include "World.h"
 #include "WorldSession.h"
 #include "WorldStateMgr.h"
+
+namespace
+{
+    std::string HexDumpPacket(WorldPacket const* packet, size_t maxBytes = 128)
+    {
+        if (!packet || packet->size() == 0)
+            return "(empty)";
+        size_t len = std::min(packet->size(), maxBytes);
+        std::string result;
+        result.reserve(len * 3 + 32);
+        uint8 const* raw = packet->data();
+        for (size_t i = 0; i < len; ++i)
+        {
+            if (i > 0 && i % 32 == 0)
+                result += "\n  ";
+            else if (i > 0)
+                result += ' ';
+            result += fmt::format("{:02X}", raw[i]);
+        }
+        if (len < packet->size())
+            result += fmt::format(" ...({} more)", packet->size() - len);
+        return result;
+    }
+}
 
 HousingMap::HousingMap(uint32 id, time_t expiry, uint32 instanceId, Difficulty spawnMode, uint32 neighborhoodId)
     : Map(id, expiry, instanceId, spawnMode), _neighborhoodId(neighborhoodId), _neighborhood(nullptr)
@@ -89,6 +115,15 @@ void HousingMap::SpawnPlotGameObjects()
     uint32 goCount = 0;
     uint32 noEntryCount = 0;
 
+    TC_LOG_ERROR("housing", "HousingMap::SpawnPlotGameObjects: DB2 PlotIndex→GOEntry mapping for {} plots on map {}:",
+        uint32(plots.size()), neighborhoodMapId);
+    for (NeighborhoodPlotData const* plot : plots)
+    {
+        TC_LOG_ERROR("housing", "  DB2 ID={} PlotIndex={} CornerstoneGOEntry={} Cost={} WorldState={} HousePos=({:.1f},{:.1f},{:.1f})",
+            plot->ID, plot->PlotIndex, plot->CornerstoneGameObjectID, plot->Cost, plot->WorldState,
+            plot->HousePosition[0], plot->HousePosition[1], plot->HousePosition[2]);
+    }
+
     for (NeighborhoodPlotData const* plot : plots)
     {
         float x = plot->CornerstonePosition[0];
@@ -98,7 +133,8 @@ void HousingMap::SpawnPlotGameObjects()
         // Ensure the grid at this position is loaded so we can add GOs
         LoadGrid(x, y);
 
-        // Retail always uses CornerstoneGameObjectID (457142) for ALL plots.
+        // Retail uses a UNIQUE CornerstoneGameObjectID per plot so the server can
+        // identify which plot a player interacted with.  All share type=48, displayId=110660.
         // Ownership state via GOState: 0 (ACTIVE) = Owned/Claimed, 1 (READY) = ForSale sign.
         Neighborhood::PlotInfo const* plotInfo = _neighborhood->GetPlotInfo(static_cast<uint8>(plot->PlotIndex));
         uint32 goEntry = static_cast<uint32>(plot->CornerstoneGameObjectID);
@@ -138,7 +174,7 @@ void HousingMap::SpawnPlotGameObjects()
         // Housing objects are dynamically spawned (no DB spawn record), so they have no
         // phase_area association. Explicitly mark them as universally visible so they're
         // seen by players regardless of what phases the player has from area-based phasing.
-        PhasingHandler::InitDbPhaseShift(go->GetPhaseShift(), 0, 0, 0);
+        PhasingHandler::InitDbPhaseShift(go->GetPhaseShift(), PHASE_USE_FLAGS_ALWAYS_VISIBLE, 0, 0);
 
         // Populate the FJamHousingCornerstone_C entity fragment so the client
         // knows this is a Cornerstone and can render the "For Sale" / owned UI
@@ -161,12 +197,18 @@ void HousingMap::SpawnPlotGameObjects()
 
         ++goCount;
 
-        // Spawn a plot AreaTrigger at the HousePosition for plot enter/exit detection
+        // Spawn a plot AreaTrigger at the HousePosition for plot enter/exit detection.
+        // Sniff-verified: Box shape (35x30x94 extents), oriented to match house facing.
+        // The client uses this AT's box bounds for decor placement validation (OutsidePlotBounds check).
         uint8 plotIndex = static_cast<uint8>(plot->PlotIndex);
         if (_plotAreaTriggers.find(plotIndex) == _plotAreaTriggers.end())
         {
             AreaTriggerCreatePropertiesId atId = { .Id = 37358, .IsCustom = false };
-            Position atPos(plot->HousePosition[0], plot->HousePosition[1], plot->HousePosition[2]);
+
+            // Use HouseRotationZ as the AT orientation (facing angle in radians).
+            // This aligns the box shape with the house mesh orientation.
+            float facing = plot->HouseRotation[2];
+            Position atPos(plot->HousePosition[0], plot->HousePosition[1], plot->HousePosition[2], facing);
 
             // Ensure the grid at the AT position is loaded too
             LoadGrid(atPos.GetPositionX(), atPos.GetPositionY());
@@ -175,7 +217,7 @@ void HousingMap::SpawnPlotGameObjects()
             if (at)
             {
                 // Mark AT as universally visible (same rationale as cornerstones above)
-                PhasingHandler::InitDbPhaseShift(at->GetPhaseShift(), 0, 0, 0);
+                PhasingHandler::InitDbPhaseShift(at->GetPhaseShift(), PHASE_USE_FLAGS_ALWAYS_VISIBLE, 0, 0);
 
                 ObjectGuid ownerGuid;
                 ObjectGuid houseGuid;
@@ -191,8 +233,13 @@ void HousingMap::SpawnPlotGameObjects()
                 _plotAreaTriggers[plotIndex] = at->GetGUID();
                 _neighborhood->SetPlotAreaTriggerGuid(plotIndex, at->GetGUID());
 
-                TC_LOG_ERROR("housing", "HousingMap::SpawnPlotGameObjects: Spawned plot AT for plot {} at ({}, {}, {}) guid={} in neighborhood '{}'",
-                    plotIndex, atPos.GetPositionX(), atPos.GetPositionY(), atPos.GetPositionZ(), at->GetGUID().ToString(), _neighborhood->GetName());
+                // Log shape info for diagnostics — Box(35,30,94) expected after SQL update
+                AreaTriggerCreateProperties const* props = at->GetCreateProperties();
+                char const* shapeName = props && props->Shape.IsBox() ? "Box" : (props && props->Shape.IsSphere() ? "Sphere" : "Other");
+                TC_LOG_ERROR("housing", "HousingMap::SpawnPlotGameObjects: Spawned plot AT for plot {} at ({}, {}, {}) facing={:.2f} shape={} boundsR2D={:.1f} guid={} in neighborhood '{}'",
+                    plotIndex, atPos.GetPositionX(), atPos.GetPositionY(), atPos.GetPositionZ(), facing,
+                    shapeName, at->GetCreateProperties() ? at->GetCreateProperties()->Shape.GetMaxSearchRadius() : 0.0f,
+                    at->GetGUID().ToString(), _neighborhood->GetName());
             }
             else
             {
@@ -553,26 +600,82 @@ bool HousingMap::AddPlayerToMap(Player* player, bool initPlayer /*= true*/)
     if (!Map::AddPlayerToMap(player, initPlayer))
         return false;
 
+    // === DIAGNOSTIC: Report plot GO state when player enters ===
+    {
+        uint32 neighborhoodMapId = _neighborhood->GetNeighborhoodMapID();
+        std::vector<NeighborhoodPlotData const*> plots = sHousingMgr.GetPlotsForMap(neighborhoodMapId);
+
+        TC_LOG_ERROR("housing", "=== HOUSING DIAGNOSTIC for player {} entering map {} ===", player->GetGUID().ToString(), GetId());
+        TC_LOG_ERROR("housing", "  Player position: ({:.1f}, {:.1f}, {:.1f})", player->GetPositionX(), player->GetPositionY(), player->GetPositionZ());
+        TC_LOG_ERROR("housing", "  NeighborhoodMapID={}, plots from DB2={}, _plotGameObjects.size={}, _plotAreaTriggers.size={}",
+            neighborhoodMapId, uint32(plots.size()), uint32(_plotGameObjects.size()), uint32(_plotAreaTriggers.size()));
+
+        // Show raw DB2 store size
+        TC_LOG_ERROR("housing", "  sNeighborhoodPlotStore entries (raw DB2): {}", uint32(sNeighborhoodPlotStore.GetNumRows()));
+        TC_LOG_ERROR("housing", "  HousingMgr._neighborhoodPlotStore entries: {}", uint32(sHousingMgr.GetPlotStoreSize()));
+
+        // Show first 3 plot GOs with their positions and distance to player
+        uint32 shown = 0;
+        for (auto const& [plotIdx, goGuid] : _plotGameObjects)
+        {
+            if (shown >= 3) break;
+            if (GameObject* go = GetGameObject(goGuid))
+            {
+                float dist = player->GetDistance(go);
+                TC_LOG_ERROR("housing", "  Plot[{}] GO: guid={} entry={} displayId={} type={} pos=({:.1f},{:.1f},{:.1f}) dist={:.1f}yd phase={}",
+                    plotIdx, goGuid.ToString(), go->GetEntry(), go->GetGOInfo()->displayId, go->GetGOInfo()->type,
+                    go->GetPositionX(), go->GetPositionY(), go->GetPositionZ(), dist,
+                    go->GetPhaseShift().GetPhases().empty() ? "unphased" : "phased");
+            }
+            else
+            {
+                TC_LOG_ERROR("housing", "  Plot[{}] GO guid={} NOT FOUND in map!", plotIdx, goGuid.ToString());
+            }
+            ++shown;
+        }
+
+        if (_plotGameObjects.empty())
+        {
+            TC_LOG_ERROR("housing", "  NO PLOT GOs tracked! SpawnPlotGameObjects may have failed.");
+            // Show first 3 plots from DB2 for debugging
+            for (uint32 i = 0; i < std::min<uint32>(3, uint32(plots.size())); ++i)
+            {
+                TC_LOG_ERROR("housing", "  DB2 Plot[{}]: ID={} CornerstoneGO={} CornerstonePos=({:.1f},{:.1f},{:.1f})",
+                    plots[i]->PlotIndex, plots[i]->ID, plots[i]->CornerstoneGameObjectID,
+                    plots[i]->CornerstonePosition[0], plots[i]->CornerstonePosition[1], plots[i]->CornerstonePosition[2]);
+            }
+        }
+        TC_LOG_ERROR("housing", "=== END HOUSING DIAGNOSTIC ===");
+    }
+
     // Send neighborhood context so the client can call SetViewingNeighborhood()
     // and enable Cornerstone purchase UI interaction
     WorldPackets::Housing::HousingGetCurrentHouseInfoResponse houseInfo;
     if (housing)
     {
-        // Sniff-verified: SecondaryOwnerGuid=NeighborhoodGUID (context for edit mode), PlotGuid=PlotGUID
+        // Sniff+IDA-verified: SecondaryOwnerGuid=OwnerPlayerGUID, PlotGuid=NeighborhoodGUID
         houseInfo.HouseInfo.OwnerGuid = housing->GetHouseGuid();
-        houseInfo.HouseInfo.SecondaryOwnerGuid = housing->GetNeighborhoodGuid();
-        houseInfo.HouseInfo.PlotGuid = housing->GetPlotGuid();
+        houseInfo.HouseInfo.SecondaryOwnerGuid = player->GetGUID(); // Owner's Player GUID
+        houseInfo.HouseInfo.PlotGuid = housing->GetNeighborhoodGuid();
         houseInfo.HouseInfo.Flags = housing->GetPlotIndex();
         houseInfo.HouseInfo.HouseTypeId = 32;
         houseInfo.HouseInfo.StatusFlags = 0;
     }
     else if (_neighborhood)
     {
-        // No house — provide neighborhood GUID in SecondaryOwnerGuid field for context
-        houseInfo.HouseInfo.SecondaryOwnerGuid = _neighborhood->GetGuid();
+        // No house — send player's GUID (client expects HighGuid::Player type)
+        houseInfo.HouseInfo.SecondaryOwnerGuid = player->GetGUID();
+        houseInfo.HouseInfo.PlotGuid = _neighborhood->GetGuid();
     }
     houseInfo.ResponseFlags = 0;
-    player->SendDirectMessage(houseInfo.Write());
+    WorldPacket const* houseInfoPkt = houseInfo.Write();
+    TC_LOG_ERROR("housing", "HousingMap::AddPlayerToMap CURRENT_HOUSE_INFO ({} bytes): {}",
+        houseInfoPkt->size(), HexDumpPacket(houseInfoPkt));
+    TC_LOG_ERROR("housing", "  Flags(PlotIndex)={}, HouseGuid={}, SecondaryOwner={}, PlotGuid={}, HouseType={}, hasHouse={}",
+        houseInfo.HouseInfo.Flags, houseInfo.HouseInfo.OwnerGuid.ToString(),
+        houseInfo.HouseInfo.SecondaryOwnerGuid.ToString(), houseInfo.HouseInfo.PlotGuid.ToString(),
+        houseInfo.HouseInfo.HouseTypeId, housing ? "yes" : "no");
+    player->SendDirectMessage(houseInfoPkt);
 
     // Proactively send ENTER_PLOT for the player's own plot so the client
     // has plot context immediately (the AT-based ENTER_PLOT may fire later
@@ -586,15 +689,22 @@ bool HousingMap::AddPlayerToMap(Player* player, bool initPlayer /*= true*/)
         {
             WorldPackets::Neighborhood::NeighborhoodPlayerEnterPlot enterPlot;
             enterPlot.PlotAreaTriggerGuid = atItr->second;
-            player->SendDirectMessage(enterPlot.Write());
+            WorldPacket const* enterPkt = enterPlot.Write();
+            TC_LOG_ERROR("housing", "HousingMap::AddPlayerToMap ENTER_PLOT ({} bytes): {}",
+                enterPkt->size(), HexDumpPacket(enterPkt));
+            player->SendDirectMessage(enterPkt);
 
             TC_LOG_ERROR("housing", "HousingMap::AddPlayerToMap: Sent proactive ENTER_PLOT for plot {} AT {} to player {}",
                 plotIndex, atItr->second.ToString(), player->GetGUID().ToString());
         }
         else
         {
-            TC_LOG_ERROR("housing", "HousingMap::AddPlayerToMap: No AT tracked for plot {} - ENTER_PLOT NOT sent (player {})",
-                plotIndex, player->GetGUID().ToString());
+            // Log all AT keys to help diagnose PlotIndex mismatches
+            std::string atKeys;
+            for (auto const& [key, guid] : _plotAreaTriggers)
+                atKeys += std::to_string(key) + " ";
+            TC_LOG_ERROR("housing", "HousingMap::AddPlayerToMap: No AT tracked for housing PlotIndex={} - ENTER_PLOT NOT sent. Available AT plotIndexes: [{}] (player {})",
+                plotIndex, atKeys, player->GetGUID().ToString());
         }
     }
 
@@ -760,6 +870,20 @@ GameObject* HousingMap::SpawnHouseForPlot(uint8 plotIndex, Position const* custo
 
     LoadGrid(x, y);
 
+    // Ground-clamp: the DB2 HousePosition Z can be below terrain level.
+    // Snap Z to the terrain height so the house sits on the surface.
+    {
+        PhaseShift emptyPhase;
+        PhasingHandler::InitDbPhaseShift(emptyPhase, 0, 0, 0);
+        float groundZ = GetStaticHeight(emptyPhase, x, y, z + 20.0f, true, 50.0f);
+        if (groundZ > INVALID_HEIGHT && std::abs(groundZ - z) > 1.0f)
+        {
+            TC_LOG_DEBUG("housing", "HousingMap::SpawnHouseForPlot: Ground-clamping plot {} Z from {:.2f} to {:.2f} (delta={:.2f})",
+                plotIndex, z, groundZ, groundZ - z);
+            z = groundZ;
+        }
+    }
+
     // Build rotation quaternion from euler angles
     QuaternionData rot = QuaternionData::fromEulerAnglesZYX(facing,
         customPos ? 0.0f : targetPlot->HouseRotation[1],
@@ -788,23 +912,29 @@ GameObject* HousingMap::SpawnHouseForPlot(uint8 plotIndex, Position const* custo
 
     // Spawn the front door GO (entry 602702, type Goober, displayId 116971)
     // Sniff confirms: door is a separate interactive GO, NOT a MeshObject.
-    // It is spawned at the house position with the house facing.
+    // The door must be offset from the house center to the front entrance.
+    // From mesh hierarchy: front wall at local X ≈ +5.4, so door at ≈ +5.5 forward.
     GameObject* doorGo = nullptr;
     uint32 doorEntry = 602702;
+    constexpr float DOOR_FORWARD_OFFSET = 5.5f;
+    float doorX = x + DOOR_FORWARD_OFFSET * std::cos(facing);
+    float doorY = y + DOOR_FORWARD_OFFSET * std::sin(facing);
+    Position doorPos(doorX, doorY, z, facing);
+
     GameObjectTemplate const* doorTemplate = sObjectMgr->GetGameObjectTemplate(doorEntry);
     if (doorTemplate)
     {
-        doorGo = GameObject::CreateGameObject(doorEntry, this, pos, rot, 255, GO_STATE_ACTIVE);
+        doorGo = GameObject::CreateGameObject(doorEntry, this, doorPos, rot, 255, GO_STATE_READY);
         if (doorGo)
         {
             doorGo->SetFlag(GO_FLAG_NODESPAWN);
-            PhasingHandler::InitDbPhaseShift(doorGo->GetPhaseShift(), 0, 0, 0);
+            PhasingHandler::InitDbPhaseShift(doorGo->GetPhaseShift(), PHASE_USE_FLAGS_ALWAYS_VISIBLE, 0, 0);
 
             if (AddToMap(doorGo))
             {
                 _houseGameObjects[plotIndex] = doorGo->GetGUID();
-                TC_LOG_ERROR("housing", "HousingMap::SpawnHouseForPlot: Door GO spawned - entry={} guid={} displayId={} at ({:.1f}, {:.1f}, {:.1f}) for plot {}",
-                    doorEntry, doorGo->GetGUID().ToString(), doorGo->GetDisplayId(), x, y, z, plotIndex);
+                TC_LOG_ERROR("housing", "HousingMap::SpawnHouseForPlot: Door GO spawned - entry={} guid={} displayId={} at ({:.1f}, {:.1f}, {:.1f}) (house center: {:.1f}, {:.1f}, {:.1f}) for plot {}",
+                    doorEntry, doorGo->GetGUID().ToString(), doorGo->GetDisplayId(), doorX, doorY, z, x, y, z, plotIndex);
             }
             else
             {
@@ -1090,7 +1220,7 @@ GameObject* HousingMap::SpawnDecorItem(uint8 plotIndex, Housing::PlacedDecor con
     go->SetFlag(GO_FLAG_NODESPAWN);
 
     // Universally visible (same rationale as cornerstones — no DB spawn, no phase_area)
-    PhasingHandler::InitDbPhaseShift(go->GetPhaseShift(), 0, 0, 0);
+    PhasingHandler::InitDbPhaseShift(go->GetPhaseShift(), PHASE_USE_FLAGS_ALWAYS_VISIBLE, 0, 0);
 
     // Populate the FHousingDecor_C entity fragment
     go->InitHousingDecorData(decor.Guid, houseGuid, decor.Locked ? 1 : 0);
