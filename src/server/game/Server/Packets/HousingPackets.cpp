@@ -55,18 +55,18 @@ void HousingDecorPlace::Read()
     _worldPacket >> PositionX;
     _worldPacket >> PositionY;
     _worldPacket >> PositionZ;
-    _worldPacket >> RotationX;
-    _worldPacket >> RotationY;
-    _worldPacket >> RotationZ;
-    _worldPacket >> RotationW;
+    _worldPacket >> Yaw;
+    _worldPacket >> Pitch;
+    _worldPacket >> Roll;
+    _worldPacket >> Scale;
     _worldPacket >> RoomGuid;
-    _worldPacket >> FixtureGuid;
     _worldPacket >> AttachParentGuid;
+    _worldPacket >> FixtureGuid;
     _worldPacket >> DecorRecID;
 
-    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_DECOR_PLACE DecorGuid: {} Pos: ({}, {}, {}) Rot: ({}, {}, {}, {}) RoomGuid: {} FixtureGuid: {} DecorRecID: {}",
-        DecorGuid.ToString(), PositionX, PositionY, PositionZ, RotationX, RotationY, RotationZ, RotationW,
-        RoomGuid.ToString(), FixtureGuid.ToString(), DecorRecID);
+    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_DECOR_PLACE DecorGuid: {} Pos: ({}, {}, {}) Yaw: {} Pitch: {} Roll: {} Scale: {} RoomGuid: {} AttachParent: {} DecorRecID: {}",
+        DecorGuid.ToString(), PositionX, PositionY, PositionZ, Yaw, Pitch, Roll, Scale,
+        RoomGuid.ToString(), AttachParentGuid.ToString(), DecorRecID);
 }
 
 void HousingDecorMove::Read()
@@ -565,13 +565,14 @@ WorldPacket const* HousingDecorMoveResponse::Write()
 
 WorldPacket const* HousingDecorPlaceResponse::Write()
 {
-    // Sniff-verified wire format: PackedGUID PlayerGuid + PackedGUID DecorGuid + uint8 Result
+    // Sniff-verified wire format (26 bytes): PackedGUID PlayerGuid + uint32 Result + PackedGUID DecorGuid + uint8 Status
     _worldPacket << PlayerGuid;
+    _worldPacket << uint32(Result);
     _worldPacket << DecorGuid;
-    _worldPacket << uint8(Result);
+    _worldPacket << uint8(Status);
 
-    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_DECOR_PLACE_RESPONSE PlayerGuid: {} DecorGuid: {} Result: {}",
-        PlayerGuid.ToString(), DecorGuid.ToString(), Result);
+    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_DECOR_PLACE_RESPONSE PlayerGuid: {} Result: {} DecorGuid: {} Status: {}",
+        PlayerGuid.ToString(), Result, DecorGuid.ToString(), Status);
 
     return &_worldPacket;
 }

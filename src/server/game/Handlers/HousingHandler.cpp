@@ -17,6 +17,7 @@
 
 #include "WorldSession.h"
 #include "Account.h"
+#include <cmath>
 #include "DatabaseEnv.h"
 #include "AreaTrigger.h"
 #include "DB2Stores.h"
@@ -454,15 +455,26 @@ void WorldSession::HandleHousingDecorPlace(WorldPackets::Housing::HousingDecorPl
     if (!housing)
     {
         WorldPackets::Housing::HousingDecorPlaceResponse response;
-        response.Result = static_cast<uint8>(HOUSING_RESULT_HOUSE_NOT_FOUND);
+        response.Result = static_cast<uint32>(HOUSING_RESULT_HOUSE_NOT_FOUND);
         SendPacket(response.Write());
         return;
     }
 
+    // Client sends Euler angles (Yaw/Pitch/Roll) — convert to quaternion for PlaceDecor
+    float halfYaw = housingDecorPlace.Yaw * 0.5f;
+    float halfPitch = housingDecorPlace.Pitch * 0.5f;
+    float halfRoll = housingDecorPlace.Roll * 0.5f;
+    float cy = std::cos(halfYaw), sy = std::sin(halfYaw);
+    float cp = std::cos(halfPitch), sp = std::sin(halfPitch);
+    float cr = std::cos(halfRoll), sr = std::sin(halfRoll);
+    float rotW = cy * cp * cr + sy * sp * sr;
+    float rotX = cy * cp * sr - sy * sp * cr;
+    float rotY = sy * cp * sr + cy * sp * cr;
+    float rotZ = sy * cp * cr - cy * sp * sr;
+
     HousingResult result = housing->PlaceDecor(housingDecorPlace.DecorRecID,
         housingDecorPlace.PositionX, housingDecorPlace.PositionY, housingDecorPlace.PositionZ,
-        housingDecorPlace.RotationX, housingDecorPlace.RotationY,
-        housingDecorPlace.RotationZ, housingDecorPlace.RotationW,
+        rotX, rotY, rotZ, rotW,
         housingDecorPlace.RoomGuid);
 
     // Spawn decor GO on the map if placement succeeded
@@ -491,15 +503,17 @@ void WorldSession::HandleHousingDecorPlace(WorldPackets::Housing::HousingDecorPl
         GetBattlenetAccount().SendUpdateToPlayer(player);
     }
 
-    // Sniff-verified: PackedGUID PlayerGuid + PackedGUID DecorGuid + uint8 Result
+    // Sniff-verified (26 bytes): PackedGUID PlayerGuid + uint32 Result + PackedGUID DecorGuid + uint8 Status
     WorldPackets::Housing::HousingDecorPlaceResponse response;
     response.PlayerGuid = player->GetGUID();
+    response.Result = static_cast<uint32>(result);
     response.DecorGuid = housingDecorPlace.DecorGuid;
-    response.Result = static_cast<uint8>(result);
+    response.Status = 0;
     SendPacket(response.Write());
 
-    TC_LOG_DEBUG("housing", "CMSG_HOUSING_DECOR_PLACE DecorGuid: {} DecorRecID: {} Result: {}",
-        housingDecorPlace.DecorGuid.ToString(), housingDecorPlace.DecorRecID, uint32(result));
+    TC_LOG_DEBUG("housing", "CMSG_HOUSING_DECOR_PLACE DecorGuid: {} DecorRecID: {} Result: {} Pos: ({}, {}, {}) Yaw: {}",
+        housingDecorPlace.DecorGuid.ToString(), housingDecorPlace.DecorRecID, uint32(result),
+        housingDecorPlace.PositionX, housingDecorPlace.PositionY, housingDecorPlace.PositionZ, housingDecorPlace.Yaw);
 }
 
 void WorldSession::HandleHousingDecorMove(WorldPackets::Housing::HousingDecorMove const& housingDecorMove)

@@ -146,13 +146,13 @@ namespace WorldPackets::Housing
         float PositionX = 0.0f;
         float PositionY = 0.0f;
         float PositionZ = 0.0f;
-        float RotationX = 0.0f;
-        float RotationY = 0.0f;
-        float RotationZ = 0.0f;
-        float RotationW = 1.0f;
+        float Yaw = 0.0f;          // Euler angle (radians), NOT quaternion
+        float Pitch = 0.0f;
+        float Roll = 0.0f;
+        float Scale = 1.0f;
         ObjectGuid RoomGuid;
-        ObjectGuid FixtureGuid;
         ObjectGuid AttachParentGuid;
+        ObjectGuid FixtureGuid;
         uint32 DecorRecID = 0;
     };
 
@@ -809,10 +809,11 @@ namespace WorldPackets::Housing
     public:
         HousingDecorPlaceResponse() : ServerPacket(SMSG_HOUSING_DECOR_PLACE_RESPONSE) { }
         WorldPacket const* Write() override;
-        // Sniff-verified wire format (26 bytes): PackedGUID PlayerGuid + PackedGUID DecorGuid + uint8 Result
+        // Sniff-verified wire format (26 bytes): PackedGUID PlayerGuid + uint32 Result + PackedGUID DecorGuid + uint8 Status
         ObjectGuid PlayerGuid;
+        uint32 Result = 0;
         ObjectGuid DecorGuid;
-        uint8 Result = 0;
+        uint8 Status = 0;
     };
 
     class HousingDecorRemoveResponse final : public ServerPacket
