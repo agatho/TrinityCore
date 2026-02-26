@@ -1062,6 +1062,18 @@ namespace WorldPackets
 
             WorldPacket const* Write() override { return &_worldPacket; }
         };
+
+        class SetCtrOptions final : public ServerPacket
+        {
+        public:
+            SetCtrOptions() : ServerPacket(SMSG_SET_CTR_OPTIONS, 4 + 1 + 4) { }
+
+            WorldPacket const* Write() override;
+
+            std::vector<uint32> ConditionalFlags;
+            uint8 FactionGroup = 0;
+            uint32 ChromieTimeExpansionMask = 0;
+        };
     }
 }
 

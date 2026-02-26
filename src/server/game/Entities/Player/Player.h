@@ -2355,6 +2355,8 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         static Team TeamForRace(uint8 race);
         static TeamId TeamIdForRace(uint8 race);
         static uint8 GetFactionGroupForRace(uint8 race);
+        void SetChromieTimeConditionalFlags(bool enabled);
+        void SendCtrOptions() const;
         Team GetTeam() const { return m_team; }
         TeamId GetTeamId() const { return GetTeamIdForTeam(m_team); }
         void SetFactionForRace(uint8 race);
