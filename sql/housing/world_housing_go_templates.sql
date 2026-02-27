@@ -1,3 +1,4 @@
+
 -- ============================================================================
 -- Housing Cornerstone & Plot GameObject Templates
 -- Per-plot GO entries extracted from retail GameObjects.db2 (build 65617)

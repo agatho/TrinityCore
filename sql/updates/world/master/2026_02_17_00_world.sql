@@ -8899,10 +8899,10 @@ INSERT INTO `areatrigger_create_properties` (
 ) VALUES (
     37358, 0, 37358, 0, 0,
     0, 0, 0, 0,
-    0, 0, 0, NULL,
+    0, 0, 621, 1282351,
     0, 1, 0,
-    0, 40, 40, 0, 0,
-    0, 0, 0, 0,
+    1, 35, 30, 94, 35,  -- Shape 1 = Box, ShapeData0-2 = extents, ShapeData3-5 = extentsTarget
+    30, 94, 0, 0,
     'at_housing_plot'
 );
 

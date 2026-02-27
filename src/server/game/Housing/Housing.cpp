@@ -472,6 +472,168 @@ void Housing::Delete()
     _catalog.clear();
 }
 
+ObjectGuid Housing::StartPlacingNewDecor(uint32 catalogEntryId, HousingResult& result)
+{
+    if (_houseGuid.IsEmpty())
+    {
+        result = HOUSING_RESULT_HOUSE_NOT_FOUND;
+        return ObjectGuid::Empty;
+    }
+
+    // Validate entry exists in catalog
+    auto catalogItr = _catalog.find(catalogEntryId);
+    if (catalogItr == _catalog.end() || catalogItr->second.Count == 0)
+    {
+        result = HOUSING_RESULT_DECOR_NOT_FOUND_IN_STORAGE;
+        return ObjectGuid::Empty;
+    }
+
+    // Check decor count limit
+    uint32 maxDecor = GetMaxDecorCount();
+    if (GetDecorCount() >= maxDecor)
+    {
+        result = HOUSING_RESULT_MAX_DECOR_REACHED;
+        return ObjectGuid::Empty;
+    }
+
+    // Generate a GUID for this pending placement
+    uint64 newDbId = GenerateDecorDbId();
+    ObjectGuid decorGuid = ObjectGuid::Create<HighGuid::Housing>(0, 0, 0, newDbId);
+
+    _pendingPlacements[decorGuid] = catalogEntryId;
+
+    result = HOUSING_RESULT_SUCCESS;
+    TC_LOG_DEBUG("housing", "Housing::StartPlacingNewDecor: Created pending placement {} for entry {} (catalog count: {})",
+        decorGuid.ToString(), catalogEntryId, catalogItr->second.Count);
+    return decorGuid;
+}
+
+uint32 Housing::GetPendingPlacementEntryId(ObjectGuid decorGuid) const
+{
+    auto itr = _pendingPlacements.find(decorGuid);
+    return itr != _pendingPlacements.end() ? itr->second : 0;
+}
+
+void Housing::CancelPendingPlacement(ObjectGuid decorGuid)
+{
+    _pendingPlacements.erase(decorGuid);
+}
+
+HousingResult Housing::PlaceDecorWithGuid(ObjectGuid decorGuid, uint32 decorEntryId, float x, float y, float z,
+    float rotX, float rotY, float rotZ, float rotW, ObjectGuid roomGuid)
+{
+    if (_houseGuid.IsEmpty())
+        return HOUSING_RESULT_HOUSE_NOT_FOUND;
+
+    if (!std::isfinite(x) || !std::isfinite(y) || !std::isfinite(z) ||
+        !std::isfinite(rotX) || !std::isfinite(rotY) || !std::isfinite(rotZ) || !std::isfinite(rotW))
+        return HOUSING_RESULT_BOUNDS_FAILURE_ROOM;
+
+    HousingResult validationResult = sHousingMgr.ValidateDecorPlacement(decorEntryId, Position(x, y, z), _level);
+    if (validationResult != HOUSING_RESULT_SUCCESS)
+        return validationResult;
+
+    uint32 maxDecor = GetMaxDecorCount();
+    if (GetDecorCount() >= maxDecor)
+        return HOUSING_RESULT_MAX_DECOR_REACHED;
+
+    uint32 weightCost = sHousingMgr.GetDecorWeightCost(decorEntryId);
+    if (roomGuid.IsEmpty())
+    {
+        if (_exteriorDecorWeightUsed + weightCost > GetMaxExteriorDecorBudget())
+            return HOUSING_RESULT_MAX_DECOR_REACHED;
+    }
+    else
+    {
+        if (_interiorDecorWeightUsed + weightCost > GetMaxInteriorDecorBudget())
+            return HOUSING_RESULT_MAX_DECOR_REACHED;
+    }
+
+    if (!roomGuid.IsEmpty())
+    {
+        auto roomItr = _rooms.find(roomGuid);
+        if (roomItr == _rooms.end())
+            return HOUSING_RESULT_ROOM_NOT_FOUND;
+
+        uint32 roomDecorCount = 0;
+        for (auto const& [guid, decor] : _placedDecor)
+        {
+            if (decor.RoomGuid == roomGuid)
+                ++roomDecorCount;
+        }
+        if (roomDecorCount >= MAX_HOUSING_DECOR_PER_ROOM)
+            return HOUSING_RESULT_MAX_DECOR_REACHED;
+    }
+
+    auto catalogItr = _catalog.find(decorEntryId);
+    if (catalogItr == _catalog.end() || catalogItr->second.Count == 0)
+        return HOUSING_RESULT_DECOR_NOT_FOUND_IN_STORAGE;
+
+    // Remove from pending placements
+    _pendingPlacements.erase(decorGuid);
+
+    PlacedDecor& decor = _placedDecor[decorGuid];
+    decor.Guid = decorGuid;
+    decor.DecorEntryId = decorEntryId;
+    decor.PosX = x;
+    decor.PosY = y;
+    decor.PosZ = z;
+    decor.RotationX = rotX;
+    decor.RotationY = rotY;
+    decor.RotationZ = rotZ;
+    decor.RotationW = rotW;
+    decor.DyeSlots = {};
+    decor.RoomGuid = roomGuid;
+
+    catalogItr->second.Count--;
+    if (catalogItr->second.Count == 0)
+        _catalog.erase(catalogItr);
+
+    if (roomGuid.IsEmpty())
+        _exteriorDecorWeightUsed += weightCost;
+    else
+        _interiorDecorWeightUsed += weightCost;
+
+    {
+        CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_INS_CHARACTER_HOUSING_DECOR);
+        uint8 index = 0;
+        stmt->setUInt64(index++, _owner->GetGUID().GetCounter());
+        stmt->setUInt64(index++, decorGuid.GetCounter());
+        stmt->setUInt32(index++, decorEntryId);
+        stmt->setFloat(index++, x);
+        stmt->setFloat(index++, y);
+        stmt->setFloat(index++, z);
+        stmt->setFloat(index++, rotX);
+        stmt->setFloat(index++, rotY);
+        stmt->setFloat(index++, rotZ);
+        stmt->setFloat(index++, rotW);
+        stmt->setUInt32(index++, 0);
+        stmt->setUInt32(index++, 0);
+        stmt->setUInt32(index++, 0);
+        stmt->setUInt64(index++, roomGuid.IsEmpty() ? 0 : roomGuid.GetCounter());
+        stmt->setUInt8(index++, 0);
+        CharacterDatabase.Execute(stmt);
+    }
+
+    {
+        CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_UPD_CHARACTER_HOUSING_CATALOG_COUNT);
+        auto catItr = _catalog.find(decorEntryId);
+        stmt->setUInt32(0, catItr != _catalog.end() ? catItr->second.Count : 0);
+        stmt->setUInt64(1, _owner->GetGUID().GetCounter());
+        stmt->setUInt32(2, decorEntryId);
+        CharacterDatabase.Execute(stmt);
+    }
+
+    if (_owner->GetSession())
+        _owner->GetSession()->GetBattlenetAccount().SetHousingDecorStorageEntry(decorGuid, _houseGuid, 0);
+
+    TC_LOG_DEBUG("housing", "Housing::PlaceDecorWithGuid: Player {} placed decor entry {} (GUID: {}) at ({}, {}, {}) in house {}",
+        _owner->GetName(), decorEntryId, decorGuid.ToString(), x, y, z, _houseGuid.ToString());
+
+    SyncUpdateFields();
+    return HOUSING_RESULT_SUCCESS;
+}
+
 HousingResult Housing::PlaceDecor(uint32 decorEntryId, float x, float y, float z,
     float rotX, float rotY, float rotZ, float rotW, ObjectGuid roomGuid)
 {

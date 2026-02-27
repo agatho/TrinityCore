@@ -8,7 +8,8 @@ DELETE FROM `areatrigger_template` WHERE `Id` = 37358 AND `IsCustom` = 0;
 INSERT INTO `areatrigger_template` (`Id`, `IsCustom`, `Flags`, `ActionSetId`, `ActionSetFlags`) VALUES
 (37358, 0, 0, 0, 0);
 
--- Create properties: Sphere shape, radius 40 yards, ScriptName for AI
+-- Create properties: Box shape (35x30x94 extents), DecalPropertiesId=621, SpellForVisuals=1282351
+-- Sniff-verified: ShapeType=1 (Box), BoundsRadius2D=46.098, DecalPropertiesID=621
 DELETE FROM `areatrigger_create_properties` WHERE `Id` = 37358 AND `IsCustom` = 0;
 INSERT INTO `areatrigger_create_properties` (
     `Id`, `IsCustom`, `AreaTriggerId`, `IsAreatriggerCustom`, `Flags`,
@@ -21,10 +22,10 @@ INSERT INTO `areatrigger_create_properties` (
 ) VALUES (
     37358, 0, 37358, 0, 0,
     0, 0, 0, 0,
-    0, 0, 0, NULL,
+    0, 0, 621, 1282351,
     0, 1, 0,
-    0, 40, 40, 0, 0,
-    0, 0, 0, 0,
+    1, 35, 30, 94, 35,  -- Shape 1 = Box, ShapeData0-2 = extents, ShapeData3-5 = extentsTarget
+    30, 94, 0, 0,
     'at_housing_plot'
 );
 
