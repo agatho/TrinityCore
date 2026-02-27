@@ -516,17 +516,26 @@ void WorldSession::HandleHousingDecorPlace(WorldPackets::Housing::HousingDecorPl
         return;
     }
 
-    // Look up the entry ID from pending placements (set during StartPlacingNewDecor)
+    // Look up the entry ID from pending placements (set during RedeemDeferredDecor/StartPlacingNewDecor).
+    // If the client already has the item in storage (e.g. pre-populated on login), it sends PLACE
+    // directly without REDEEM_DEFERRED first. In that case, extract decorEntryId from the Housing GUID.
+    // subType=1 Housing GUIDs encode arg2=decorEntryId in bits [31:0] of the high word.
     uint32 decorEntryId = housing->GetPendingPlacementEntryId(housingDecorPlace.DecorGuid);
     if (!decorEntryId)
     {
-        TC_LOG_ERROR("housing", "CMSG_HOUSING_DECOR_PLACE: No pending placement for DecorGuid {}", housingDecorPlace.DecorGuid.ToString());
-        WorldPackets::Housing::HousingDecorPlaceResponse response;
-        response.PlayerGuid = player->GetGUID();
-        response.DecorGuid = housingDecorPlace.DecorGuid;
-        response.Result = static_cast<uint8>(HOUSING_RESULT_DECOR_NOT_FOUND);
-        SendPacket(response.Write());
-        return;
+        decorEntryId = static_cast<uint32>(housingDecorPlace.DecorGuid.GetRawValue(1) & 0xFFFFFFFF);
+        if (!decorEntryId)
+        {
+            TC_LOG_ERROR("housing", "CMSG_HOUSING_DECOR_PLACE: No pending placement and could not extract EntryId from DecorGuid {}", housingDecorPlace.DecorGuid.ToString());
+            WorldPackets::Housing::HousingDecorPlaceResponse response;
+            response.PlayerGuid = player->GetGUID();
+            response.DecorGuid = housingDecorPlace.DecorGuid;
+            response.Result = static_cast<uint8>(HOUSING_RESULT_DECOR_NOT_FOUND);
+            SendPacket(response.Write());
+            return;
+        }
+
+        TC_LOG_DEBUG("housing", "CMSG_HOUSING_DECOR_PLACE: No pending placement for DecorGuid {}, extracted EntryId {} from GUID", housingDecorPlace.DecorGuid.ToString(), decorEntryId);
     }
 
     // Client sends Euler angles (via TaggedPosition<XYZ> Rotation) — convert to quaternion
