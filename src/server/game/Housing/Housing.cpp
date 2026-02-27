@@ -81,11 +81,20 @@ bool Housing::LoadFromDB(PreparedQueryResult housing, PreparedQueryResult decor,
             fields = decor->Fetch();
 
             uint64 decorDbId = fields[0].GetUInt64();
-            ObjectGuid decorGuid = ObjectGuid::Create<HighGuid::Housing>(0, 0, 0, decorDbId);
+            uint32 decorEntryId = fields[1].GetUInt32();
+            // Reconstruct the full Housing GUID with subType=1 + decorEntryId.
+            // The client uses subType=1 GUIDs (Housing-1-realmId-entryId-counter) for decor;
+            // storing only the counter and recreating with subType=0 produces a GUID mismatch
+            // that makes the Account entity storage stale after relog.
+            ObjectGuid decorGuid = ObjectGuid::Create<HighGuid::Housing>(
+                /*subType*/ 1,
+                /*arg1*/ sRealmList->GetCurrentRealmId().Realm,
+                /*arg2*/ decorEntryId,
+                decorDbId);
 
             PlacedDecor& placed = _placedDecor[decorGuid];
             placed.Guid = decorGuid;
-            placed.DecorEntryId = fields[1].GetUInt32();
+            placed.DecorEntryId = decorEntryId;
             placed.PosX = fields[2].GetFloat();
             placed.PosY = fields[3].GetFloat();
             placed.PosZ = fields[4].GetFloat();
