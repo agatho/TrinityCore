@@ -417,11 +417,21 @@ HousingResult Housing::Create(ObjectGuid neighborhoodGuid, uint8 plotIndex)
     _hasCustomPosition = false;
     _housePosX = _housePosY = _housePosZ = _houseFacing = 0.0f;
 
-    // Generate a new house guid using the owner's low guid as a base
-    _houseGuid = ObjectGuid::Create<HighGuid::Housing>(/*subType*/ 3, /*arg1*/ sRealmList->GetCurrentRealmId().Realm, /*arg2*/ 7, _owner->GetGUID().GetCounter());
+    // Generate a new house guid using BNetAccountId as the counter.
+    // Retail-verified: HouseGUID.Low always equals BNetAccountGUID.Low (the BNet account ID).
+    // Using player GUID counter produces small values that don't match the retail pattern
+    // and may cause the client's AABB/DB2 lookup to fail during decor placement bounds checks.
+    uint32 bnetAccountId = _owner->GetSession() ? _owner->GetSession()->GetBattlenetAccountId() : 0;
+    if (bnetAccountId == 0)
+    {
+        TC_LOG_ERROR("housing", "Housing::Create: BNetAccountId is 0 for player {} — falling back to player GUID counter",
+            _owner->GetGUID().ToString());
+        bnetAccountId = static_cast<uint32>(_owner->GetGUID().GetCounter());
+    }
+    _houseGuid = ObjectGuid::Create<HighGuid::Housing>(/*subType*/ 3, /*arg1*/ sRealmList->GetCurrentRealmId().Realm, /*arg2*/ 7, uint64(bnetAccountId));
 
-    TC_LOG_ERROR("housing", "Housing::Create: Player {} (GUID {}) created house on plot {} in neighborhood {} — HouseGuid={}",
-        _owner->GetName(), _owner->GetGUID().GetCounter(), plotIndex, _neighborhoodGuid.ToString(), _houseGuid.ToString());
+    TC_LOG_ERROR("housing", "Housing::Create: Player {} (BNetAcct {}) created house on plot {} in neighborhood {} — HouseGuid={}",
+        _owner->GetName(), bnetAccountId, plotIndex, _neighborhoodGuid.ToString(), _houseGuid.ToString());
 
     SyncUpdateFields();
     return HOUSING_RESULT_SUCCESS;

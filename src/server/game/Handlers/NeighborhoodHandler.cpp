@@ -1169,16 +1169,13 @@ void WorldSession::HandleNeighborhoodBuyHouse(WorldPackets::Neighborhood::Neighb
         // It does NOT re-request after purchase, so we must push the updated state.
         if (Housing* h = player->GetHousing())
         {
-            std::vector<Housing::CatalogEntry const*> entries = h->GetCatalogEntries();
-
             WorldPackets::Housing::HousingDecorRequestStorageResponse storageResp;
-            // Sniff: BNetAccountGuid is always empty
             storageResp.ResultCode = static_cast<uint8>(HOUSING_RESULT_SUCCESS);
-            storageResp.HasData = !entries.empty();
             SendPacket(storageResp.Write());
+            GetBattlenetAccount().SendUpdateToPlayer(player);
 
-            TC_LOG_ERROR("housing", "HandleNeighborhoodBuyHouse: Sent proactive DECOR_REQUEST_STORAGE_RESPONSE (HasData={}, CatalogEntries={})",
-                storageResp.HasData, uint32(entries.size()));
+            TC_LOG_ERROR("housing", "HandleNeighborhoodBuyHouse: Sent proactive STORAGE_RSP + Account update (CatalogEntries={})",
+                uint32(h->GetCatalogEntries().size()));
         }
 
         TC_LOG_ERROR("housing", "Player {} purchased plot {} in neighborhood '{}'",

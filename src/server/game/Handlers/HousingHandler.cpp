@@ -816,31 +816,38 @@ void WorldSession::HandleHousingDecorRequestStorage(WorldPackets::Housing::Housi
     if (!player)
         return;
 
+    TC_LOG_DEBUG("housing", "CMSG_HOUSING_DECOR_REQUEST_STORAGE: Player {} HouseGuid {}",
+        player->GetGUID().ToString(), housingDecorRequestStorage.HouseGuid.ToString());
+
     Housing* housing = player->GetHousing();
     if (!housing)
     {
         WorldPackets::Housing::HousingDecorRequestStorageResponse response;
-        // Sniff: BNetAccountGuid is always empty
         response.ResultCode = static_cast<uint8>(HOUSING_RESULT_HOUSE_NOT_FOUND);
-        response.HasData = false;
         SendPacket(response.Write());
-        TC_LOG_INFO("housing", "CMSG_HOUSING_DECOR_REQUEST_STORAGE: Player {} has no house",
+        TC_LOG_ERROR("housing", "CMSG_HOUSING_DECOR_REQUEST_STORAGE: Player {} has no house",
             player->GetGUID().ToString());
         return;
     }
 
-    // Sniff-verified: SMSG_HOUSING_DECOR_REQUEST_STORAGE_RESPONSE is an acknowledgement
-    // (PackedGUID + uint8 ResultCode + uint8 Flags). BNetAccountGuid is always empty in sniff.
-    // Actual decor entries are delivered via UpdateObject housing data fragments.
-    std::vector<Housing::CatalogEntry const*> entries = housing->GetCatalogEntries();
+    // Retail-verified flow (sniff instances 1 & 2):
+    //   1. SMSG_HOUSING_DECOR_REQUEST_STORAGE_RESPONSE (4 bytes: 00 00 00 80)
+    //   2. SMSG_UPDATE_OBJECT with BNetAccount entity (FHousingStorage_C fragment)
+    //   3. SMSG_HOUSING_SVCS_GET_PLAYER_HOUSES_INFO_RESPONSE
+    // The storage response is an acknowledgement (always Flags=0x80, BNetAccountGuid=Empty).
+    // Actual decor data is delivered via the Account entity's FHousingStorage_C fragment.
 
+    // 1. Send storage acknowledgement
     WorldPackets::Housing::HousingDecorRequestStorageResponse response;
-    // Sniff: BNetAccountGuid is always ObjectGuid::Empty (00 00 = 2-byte empty packed GUID)
     response.ResultCode = static_cast<uint8>(HOUSING_RESULT_SUCCESS);
-    response.HasData = !entries.empty();
     SendPacket(response.Write());
 
-    // Sniff-verified: Server sends GET_PLAYER_HOUSES_INFO_RESPONSE immediately after STORAGE_RSP
+    // 2. Send Account entity update with FHousingStorage_C fragment (decor catalog data).
+    //    Retail sniff Instance 2 shows SMSG_UPDATE_OBJECT (BNetAccount, 604 bytes) after STORAGE_RSP.
+    //    The client reads decor entries from this fragment, not from the STORAGE_RSP itself.
+    GetBattlenetAccount().SendUpdateToPlayer(player);
+
+    // 3. Send GET_PLAYER_HOUSES_INFO_RESPONSE
     WorldPackets::Housing::HousingSvcsGetPlayerHousesInfoResponse housesInfoResponse;
     for (Housing const* playerHousing : player->GetAllHousings())
     {
@@ -854,8 +861,10 @@ void WorldSession::HandleHousingDecorRequestStorage(WorldPackets::Housing::Housi
     }
     SendPacket(housesInfoResponse.Write());
 
-    TC_LOG_INFO("housing", "CMSG_HOUSING_DECOR_REQUEST_STORAGE HouseGuid: {}, CatalogEntries: {}, HouseCount: {}",
-        housingDecorRequestStorage.HouseGuid.ToString(), uint32(entries.size()), uint32(housesInfoResponse.Houses.size()));
+    TC_LOG_DEBUG("housing", "CMSG_HOUSING_DECOR_REQUEST_STORAGE: Sent STORAGE_RSP + Account update + HOUSES_INFO"
+        " | HouseGuid={} CatalogEntries={} HouseCount={}",
+        housingDecorRequestStorage.HouseGuid.ToString(),
+        uint32(housing->GetCatalogEntries().size()), uint32(housesInfoResponse.Houses.size()));
 }
 
 void WorldSession::HandleHousingDecorRedeemDeferredDecor(WorldPackets::Housing::HousingDecorRedeemDeferredDecor const& housingDecorRedeemDeferredDecor)
@@ -1642,15 +1651,13 @@ void WorldSession::HandleHousingSvcsNeighborhoodReservePlot(WorldPackets::Housin
                 SendPacket(decorAcq.Write());
             }
 
-            // Proactive storage response (client requested before purchase and got "no house")
-            std::vector<Housing::CatalogEntry const*> entries = housing->GetCatalogEntries();
+            // Proactive storage response + Account entity update (retail-verified flow)
             WorldPackets::Housing::HousingDecorRequestStorageResponse storageResp;
-            // Sniff: BNetAccountGuid is always empty
             storageResp.ResultCode = static_cast<uint8>(HOUSING_RESULT_SUCCESS);
-            storageResp.HasData = !entries.empty();
             SendPacket(storageResp.Write());
+            GetBattlenetAccount().SendUpdateToPlayer(player);
 
-            TC_LOG_ERROR("housing", "HandleHousingSvcsNeighborhoodReservePlot: Populated catalog with {} decor types, sent {} FirstTimeDecorAcquisition + storage response",
+            TC_LOG_ERROR("housing", "HandleHousingSvcsNeighborhoodReservePlot: Populated catalog with {} decor types, sent {} FirstTimeDecorAcquisition + storage + Account update",
                 uint32(starterDecorWithQty.size()), uint32(starterDecorIds.size()));
         }
 
