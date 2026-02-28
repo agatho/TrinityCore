@@ -173,10 +173,11 @@ bool Housing::LoadFromDB(PreparedQueryResult housing, PreparedQueryResult decor,
 
         if (!hasBaseRoom)
         {
-            HousingResult baseResult = PlaceRoom(/*roomEntryId*/ 18, /*slotIndex*/ 0, /*orientation*/ 0, /*mirrored*/ false);
-            TC_LOG_ERROR("housing", "Housing::LoadFromDB: Auto-placed base room (entry 18) in slot 0 "
+            uint32 baseRoomEntry = sHousingMgr.GetBaseRoomEntryId();
+            HousingResult baseResult = PlaceRoom(baseRoomEntry, /*slotIndex*/ 0, /*orientation*/ 0, /*mirrored*/ false);
+            TC_LOG_ERROR("housing", "Housing::LoadFromDB: Auto-placed base room (entry {}) in slot 0 "
                 "for house {} (migration fixup, result={})",
-                _houseGuid.ToString(), baseResult);
+                baseRoomEntry, _houseGuid.ToString(), baseResult);
         }
 
         // Step 2: Ensure correct visual room exists
@@ -535,9 +536,9 @@ HousingResult Housing::Create(ObjectGuid neighborhoodGuid, uint8 plotIndex)
 
     SyncUpdateFields();
 
-    // Every new house starts with a base room (HouseRoom.db2 entry 18, BASE_ROOM flag).
+    // Every new house starts with a base room (from DB2 BASE_ROOM flag, typically entry 18).
     // Without this, entering the interior spawns nothing and decor placement has no Geobox.
-    PlaceRoom(/*roomEntryId*/ 18, /*slotIndex*/ 0, /*orientation*/ 0, /*mirrored*/ false);
+    PlaceRoom(sHousingMgr.GetBaseRoomEntryId(), /*slotIndex*/ 0, /*orientation*/ 0, /*mirrored*/ false);
 
     // Also place a default visual room so the interior renders walls/floor/ceiling.
     // Base room (18) only provides the geobox boundary — visual geometry needs a separate room.

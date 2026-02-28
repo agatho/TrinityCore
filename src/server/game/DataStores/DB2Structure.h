@@ -2378,6 +2378,24 @@ struct RoomComponentOptionEntry
     int32 Flags;
 };
 
+struct RoomComponentOptionTextureEntry
+{
+    uint32 ID;
+    int32 RoomComponentOptionID;
+    int32 RoomComponentTextureID;
+};
+
+struct RoomComponentTextureEntry
+{
+    LocalizedString Name;
+    uint32 ID;
+    int32 Type;
+    int32 FileDataID;
+    int32 Flags;
+    int32 UiOrder;
+    uint32 RoomComponentID;                 // ParentIndexField
+};
+
 struct RoomWmoDataEntry
 {
     uint32 ID;

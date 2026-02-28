@@ -5448,6 +5448,34 @@ struct RoomComponentOptionLoadInfo
     static constexpr DB2LoadInfo Instance{ Fields, 8, &RoomComponentOptionMeta::Instance, HOTFIX_SEL_ROOM_COMPONENT_OPTION };
 };
 
+struct RoomComponentOptionTextureLoadInfo
+{
+    static constexpr DB2FieldMeta Fields[3] =
+    {
+        { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "RoomComponentOptionID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "RoomComponentTextureID" },
+    };
+
+    static constexpr DB2LoadInfo Instance{ Fields, 3, &RoomComponentOptionTextureMeta::Instance, HOTFIX_SEL_ROOM_COMPONENT_OPTION_TEXTURE };
+};
+
+struct RoomComponentTextureLoadInfo
+{
+    static constexpr DB2FieldMeta Fields[7] =
+    {
+        { .IsSigned = true, .Type = FT_STRING, .Name = "Name" },
+        { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "Type" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "FileDataID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "Flags" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "UiOrder" },
+        { .IsSigned = false, .Type = FT_INT, .Name = "RoomComponentID" },
+    };
+
+    static constexpr DB2LoadInfo Instance{ Fields, 7, &RoomComponentTextureMeta::Instance, HOTFIX_SEL_ROOM_COMPONENT_TEXTURE };
+};
+
 struct RoomWmoDataLoadInfo
 {
     static constexpr DB2FieldMeta Fields[8] =

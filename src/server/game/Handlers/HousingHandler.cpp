@@ -2204,8 +2204,11 @@ void WorldSession::HandleHousingSvcsGetHouseFinderInfo(WorldPackets::Housing::Ho
         entry.NeighborhoodGuid = neighborhood->GetGuid();
         entry.NeighborhoodName = neighborhood->GetName();
         entry.MapID = neighborhood->GetNeighborhoodMapID();
-        entry.TotalPlots = MAX_NEIGHBORHOOD_PLOTS;
-        entry.AvailablePlots = MAX_NEIGHBORHOOD_PLOTS - neighborhood->GetOccupiedPlotCount();
+        // Use DB2 PlotCount for display, falling back to MAX_NEIGHBORHOOD_PLOTS
+        NeighborhoodMapData const* nmData = sHousingMgr.GetNeighborhoodMapData(neighborhood->GetNeighborhoodMapID());
+        uint32 totalPlots = nmData ? nmData->PlotCount : MAX_NEIGHBORHOOD_PLOTS;
+        entry.TotalPlots = totalPlots;
+        entry.AvailablePlots = totalPlots - neighborhood->GetOccupiedPlotCount();
         entry.SuggestionReason = 32; // Random
         response.Entries.push_back(std::move(entry));
     }
