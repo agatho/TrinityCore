@@ -1684,9 +1684,9 @@ struct ExpectedStatModEntry
 
 struct ExteriorComponentEntry
 {
-    uint32 ID;
     LocalizedString Name;
     std::array<float, 3> Position;
+    uint32 ID;
     uint8 Type;
     int32 FileDataID;
     int32 ConditionID;
@@ -1701,16 +1701,16 @@ struct ExteriorComponentEntry
 
 struct ExteriorComponentExitPointEntry
 {
-    uint32 ID;
     std::array<float, 3> Position;
     std::array<float, 3> Rotation;
+    uint32 ID;
     uint32 ExteriorComponentID;             // ParentIndexField - must be unsigned
 };
 
 struct ExteriorComponentGroupEntry
 {
-    uint32 ID;
     std::array<float, 3> Position;
+    uint32 ID;
     uint32 ExteriorComponentID;             // ParentIndexField - must be unsigned
 };
 
