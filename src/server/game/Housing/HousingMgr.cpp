@@ -1156,7 +1156,7 @@ void HousingMgr::DumpRoomComponentTextureDiagnostics()
             continue;
         TC_LOG_INFO("housing", "  Texture [{}] Name='{}' Type={} FileDataID={} Flags={} UiOrder={} RoomComponentID={}",
             tex->ID,
-            tex->Name[sWorld->GetDefaultDbcLocale()],
+            SafeStr(tex->Name[sWorld->GetDefaultDbcLocale()]),
             tex->Type, tex->FileDataID, tex->Flags, tex->UiOrder, tex->RoomComponentID);
     }
 
@@ -1299,7 +1299,7 @@ void HousingMgr::DumpExteriorComponentDiagnostics()
         }
         TC_LOG_INFO("housing", "    [{}] Name='{}' FileDataID={} Type={} Slot={} HookID={} GroupID={} Flags={}",
             compID,
-            comp->Name[sWorld->GetDefaultDbcLocale()],
+            SafeStr(comp->Name[sWorld->GetDefaultDbcLocale()]),
             comp->FileDataID, comp->Type, comp->Slot, comp->HookID, comp->ComponentGroupID, comp->Flags);
     }
 
