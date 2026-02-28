@@ -71,8 +71,8 @@ bool Housing::LoadFromDB(PreparedQueryResult housing, PreparedQueryResult decor,
     _hasCustomPosition = (_housePosX != 0.0f || _housePosY != 0.0f || _housePosZ != 0.0f);
 
     // Load placed decor
-    //           0        1             2     3     4     5          6          7          8          9       10       11       12        13
-    // SELECT decorGuid, decorEntryId, posX, posY, posZ, rotationX, rotationY, rotationZ, rotationW, dyeSlot0, dyeSlot1, dyeSlot2, roomGuid, locked
+    //           0        1             2     3     4     5          6          7          8          9       10       11       12        13     14
+    // SELECT decorGuid, decorEntryId, posX, posY, posZ, rotationX, rotationY, rotationZ, rotationW, dyeSlot0, dyeSlot1, dyeSlot2, roomGuid, locked, placementTime
     // FROM character_housing_decor WHERE ownerGuid = ?
     if (decor)
     {
@@ -109,6 +109,7 @@ bool Housing::LoadFromDB(PreparedQueryResult housing, PreparedQueryResult decor,
             if (roomDbId)
                 placed.RoomGuid = ObjectGuid::Create<HighGuid::Housing>(/*subType*/ 2, 0, 0, roomDbId);
             placed.Locked = fields[13].GetUInt8() != 0;
+            placed.PlacementTime = static_cast<time_t>(fields[14].GetUInt64());
 
             if (decorDbId >= _decorDbIdGenerator)
                 _decorDbIdGenerator = decorDbId + 1;
@@ -418,6 +419,7 @@ void Housing::SaveToDB(CharacterDatabaseTransaction trans)
         stmt->setUInt32(index++, decor.DyeSlots[2]);
         stmt->setUInt64(index++, decor.RoomGuid.IsEmpty() ? 0 : decor.RoomGuid.GetCounter());
         stmt->setUInt8(index++, decor.Locked ? 1 : 0);
+        stmt->setUInt64(index++, static_cast<uint64>(decor.PlacementTime));
         trans->Append(stmt);
     }
 
@@ -724,6 +726,7 @@ HousingResult Housing::PlaceDecorWithGuid(ObjectGuid decorGuid, uint32 decorEntr
     decor.RotationW = rotW;
     decor.DyeSlots = {};
     decor.RoomGuid = roomGuid;
+    decor.PlacementTime = GameTime::GetGameTime();
 
     catalogItr->second.Count--;
     if (catalogItr->second.Count == 0)
@@ -752,6 +755,7 @@ HousingResult Housing::PlaceDecorWithGuid(ObjectGuid decorGuid, uint32 decorEntr
         stmt->setUInt32(index++, 0);
         stmt->setUInt64(index++, roomGuid.IsEmpty() ? 0 : roomGuid.GetCounter());
         stmt->setUInt8(index++, 0);
+        stmt->setUInt64(index++, static_cast<uint64>(decor.PlacementTime));
         CharacterDatabase.Execute(stmt);
     }
 
@@ -849,6 +853,7 @@ HousingResult Housing::PlaceDecor(uint32 decorEntryId, float x, float y, float z
     decor.RotationW = rotW;
     decor.DyeSlots = {};
     decor.RoomGuid = roomGuid;
+    decor.PlacementTime = GameTime::GetGameTime();
 
     // Decrement catalog count
     catalogItr->second.Count--;
@@ -880,6 +885,7 @@ HousingResult Housing::PlaceDecor(uint32 decorEntryId, float x, float y, float z
         stmt->setUInt32(index++, 0); // dyeSlot2
         stmt->setUInt64(index++, roomGuid.IsEmpty() ? 0 : roomGuid.GetCounter());
         stmt->setUInt8(index++, 0);  // locked
+        stmt->setUInt64(index++, static_cast<uint64>(decor.PlacementTime));
         CharacterDatabase.Execute(stmt);
     }
 
