@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS `room_component_option_texture` (
     `ID` int unsigned NOT NULL DEFAULT '0',
     `RoomComponentOptionID` int NOT NULL DEFAULT '0',
     `RoomComponentTextureID` int NOT NULL DEFAULT '0',
+    `Flags` int NOT NULL DEFAULT '0',
     `VerifiedBuild` int NOT NULL DEFAULT '0',
     PRIMARY KEY (`ID`,`VerifiedBuild`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

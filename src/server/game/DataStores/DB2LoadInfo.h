@@ -5450,14 +5450,15 @@ struct RoomComponentOptionLoadInfo
 
 struct RoomComponentOptionTextureLoadInfo
 {
-    static constexpr DB2FieldMeta Fields[3] =
+    static constexpr DB2FieldMeta Fields[4] =
     {
         { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
         { .IsSigned = true, .Type = FT_INT, .Name = "RoomComponentOptionID" },
         { .IsSigned = true, .Type = FT_INT, .Name = "RoomComponentTextureID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "Flags" },
     };
 
-    static constexpr DB2LoadInfo Instance{ Fields, 3, &RoomComponentOptionTextureMeta::Instance, HOTFIX_SEL_ROOM_COMPONENT_OPTION_TEXTURE };
+    static constexpr DB2LoadInfo Instance{ Fields, 4, &RoomComponentOptionTextureMeta::Instance, HOTFIX_SEL_ROOM_COMPONENT_OPTION_TEXTURE };
 };
 
 struct RoomComponentTextureLoadInfo

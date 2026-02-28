@@ -1667,7 +1667,7 @@ void HotfixDatabaseConnection::DoPrepareStatements()
     PREPARE_MAX_ID_STMT(HOTFIX_SEL_ROOM_COMPONENT_OPTION, "SELECT MAX(ID) + 1 FROM room_component_option", CONNECTION_SYNCH);
 
     // RoomComponentOptionTexture.db2
-    PrepareStatement(HOTFIX_SEL_ROOM_COMPONENT_OPTION_TEXTURE, "SELECT ID, RoomComponentOptionID, RoomComponentTextureID"
+    PrepareStatement(HOTFIX_SEL_ROOM_COMPONENT_OPTION_TEXTURE, "SELECT ID, RoomComponentOptionID, RoomComponentTextureID, Flags"
         " FROM room_component_option_texture WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
     PREPARE_MAX_ID_STMT(HOTFIX_SEL_ROOM_COMPONENT_OPTION_TEXTURE, "SELECT MAX(ID) + 1 FROM room_component_option_texture", CONNECTION_SYNCH);
 

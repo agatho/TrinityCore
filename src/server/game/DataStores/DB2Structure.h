@@ -2383,6 +2383,7 @@ struct RoomComponentOptionTextureEntry
     uint32 ID;
     int32 RoomComponentOptionID;
     int32 RoomComponentTextureID;
+    int32 Flags;
 };
 
 struct RoomComponentTextureEntry
