@@ -5465,7 +5465,7 @@ struct RoomComponentTextureLoadInfo
 {
     static constexpr DB2FieldMeta Fields[7] =
     {
-        { .IsSigned = true, .Type = FT_STRING, .Name = "Name" },
+        { .IsSigned = false, .Type = FT_STRING, .Name = "Name" },
         { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
         { .IsSigned = true, .Type = FT_INT, .Name = "Type" },
         { .IsSigned = true, .Type = FT_INT, .Name = "FileDataID" },
