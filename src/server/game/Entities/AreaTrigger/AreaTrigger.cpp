@@ -981,8 +981,9 @@ void AreaTrigger::HandleUnitEnter(Unit* unit)
 
         player->UpdateQuestObjectiveProgress(QUEST_OBJECTIVE_AREA_TRIGGER_ENTER, GetEntry(), 1);
 
-        if (GetTemplate()->ActionSetId)
-            player->UpdateCriteria(CriteriaType::EnterAreaTriggerWithActionSet, GetTemplate()->ActionSetId);
+        if (AreaTriggerTemplate const* areaTriggerTemplate = GetTemplate())
+            if (areaTriggerTemplate->ActionSetId)
+                player->UpdateCriteria(CriteriaType::EnterAreaTriggerWithActionSet, areaTriggerTemplate->ActionSetId);
     }
 
     DoActions(unit);
@@ -1012,8 +1013,9 @@ void AreaTrigger::HandleUnitExitInternal(Unit* unit, AreaTriggerExitReason exitM
         {
             player->UpdateQuestObjectiveProgress(QUEST_OBJECTIVE_AREA_TRIGGER_EXIT, GetEntry(), 1);
 
-            if (GetTemplate()->ActionSetId)
-                player->UpdateCriteria(CriteriaType::LeaveAreaTriggerWithActionSet, GetTemplate()->ActionSetId);
+            if (AreaTriggerTemplate const* areaTriggerTemplate = GetTemplate())
+                if (areaTriggerTemplate->ActionSetId)
+                    player->UpdateCriteria(CriteriaType::LeaveAreaTriggerWithActionSet, areaTriggerTemplate->ActionSetId);
         }
     }
 
