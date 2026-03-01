@@ -25,6 +25,7 @@
 #include "Optional.h"
 #include "Position.h"
 #include <array>
+#include <atomic>
 #include <unordered_map>
 #include <vector>
 
@@ -80,6 +81,10 @@ public:
     };
 
     explicit Housing(Player* owner);
+
+    // Global DB ID generators — must be called once during server startup
+    // before any Housing objects are loaded, to prevent cross-player ID collisions.
+    static void InitializeDbIdGenerators();
 
     bool LoadFromDB(PreparedQueryResult housing, PreparedQueryResult decor,
         PreparedQueryResult rooms, PreparedQueryResult fixtures, PreparedQueryResult catalog);
@@ -241,8 +246,9 @@ private:
     std::unordered_map<uint32 /*fixturePointId*/, Fixture> _fixtures;
     std::unordered_map<uint32 /*decorEntryId*/, CatalogEntry> _catalog;
 
-    uint64 _decorDbIdGenerator;
-    uint64 _roomDbIdGenerator;
+    // Global DB ID generators (atomic, shared across all Housing instances)
+    static std::atomic<uint64> s_nextDecorDbId;
+    static std::atomic<uint64> s_nextRoomDbId;
 };
 
 #endif // Housing_h__

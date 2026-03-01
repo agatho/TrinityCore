@@ -31,6 +31,10 @@
 #include <queue>
 #include <unordered_set>
 
+// Global DB ID generators — initialized from MAX(id) at server startup
+std::atomic<uint64> Housing::s_nextDecorDbId{1};
+std::atomic<uint64> Housing::s_nextRoomDbId{1};
+
 Housing::Housing(Player* owner)
     : _owner(owner)
     , _plotIndex(INVALID_PLOT_INDEX)
@@ -38,9 +42,27 @@ Housing::Housing(Player* owner)
     , _favor(0)
     , _settingsFlags(HOUSE_SETTING_HOUSE_ACCESS_ANYONE)
     , _editorMode(HOUSING_EDITOR_MODE_NONE)
-    , _decorDbIdGenerator(1)
-    , _roomDbIdGenerator(1)
 {
+}
+
+void Housing::InitializeDbIdGenerators()
+{
+    // Initialize global ID generators from current MAX(id) in the database.
+    // Must be called during server startup before any Housing objects are loaded.
+    {
+        QueryResult result = CharacterDatabase.Query("SELECT COALESCE(MAX(id), 0) FROM character_housing_decor");
+        uint64 maxDecorId = result ? (*result)[0].GetUInt64() : 0;
+        s_nextDecorDbId.store(maxDecorId + 1);
+        TC_LOG_INFO("housing", "Housing::InitializeDbIdGenerators: Decor ID generator starting at {} (MAX in DB: {})",
+            maxDecorId + 1, maxDecorId);
+    }
+    {
+        QueryResult result = CharacterDatabase.Query("SELECT COALESCE(MAX(id), 0) FROM character_housing_rooms");
+        uint64 maxRoomId = result ? (*result)[0].GetUInt64() : 0;
+        s_nextRoomDbId.store(maxRoomId + 1);
+        TC_LOG_INFO("housing", "Housing::InitializeDbIdGenerators: Room ID generator starting at {} (MAX in DB: {})",
+            maxRoomId + 1, maxRoomId);
+    }
 }
 
 bool Housing::LoadFromDB(PreparedQueryResult housing, PreparedQueryResult decor,
@@ -111,8 +133,11 @@ bool Housing::LoadFromDB(PreparedQueryResult housing, PreparedQueryResult decor,
             placed.Locked = fields[13].GetUInt8() != 0;
             placed.PlacementTime = static_cast<time_t>(fields[14].GetUInt64());
 
-            if (decorDbId >= _decorDbIdGenerator)
-                _decorDbIdGenerator = decorDbId + 1;
+            // Advance global generator if this loaded ID is at or above current value
+            // (safety net in case InitializeDbIdGenerators ran before data was loaded)
+            uint64 expected = s_nextDecorDbId.load();
+            while (decorDbId >= expected && !s_nextDecorDbId.compare_exchange_weak(expected, decorDbId + 1))
+                ;
 
         } while (decor->NextRow());
     }
@@ -133,7 +158,7 @@ bool Housing::LoadFromDB(PreparedQueryResult housing, PreparedQueryResult decor,
             // Fix up roomDbId=0 from old saves that used ObjectGuid::Empty (subType=0 produced Empty GUID).
             // Without this, all rooms get the same GUID key and overwrite each other in _rooms.
             if (roomDbId == 0)
-                roomDbId = _roomDbIdGenerator++;
+                roomDbId = GenerateRoomDbId();
 
             ObjectGuid roomGuid = ObjectGuid::Create<HighGuid::Housing>(/*subType*/ 2, 0, 0, roomDbId);
 
@@ -151,8 +176,10 @@ bool Housing::LoadFromDB(PreparedQueryResult housing, PreparedQueryResult decor,
             room.CeilingTypeId = fields[10].GetUInt32();
             room.CeilingSlot = fields[11].GetUInt8();
 
-            if (roomDbId >= _roomDbIdGenerator)
-                _roomDbIdGenerator = roomDbId + 1;
+            // Advance global generator if needed (safety net)
+            uint64 expected = s_nextRoomDbId.load();
+            while (roomDbId >= expected && !s_nextRoomDbId.compare_exchange_weak(expected, roomDbId + 1))
+                ;
 
         } while (rooms->NextRow());
     }
@@ -1905,12 +1932,12 @@ void Housing::SetHousePosition(float x, float y, float z, float facing)
 
 uint64 Housing::GenerateDecorDbId()
 {
-    return _decorDbIdGenerator++;
+    return s_nextDecorDbId.fetch_add(1);
 }
 
 uint64 Housing::GenerateRoomDbId()
 {
-    return _roomDbIdGenerator++;
+    return s_nextRoomDbId.fetch_add(1);
 }
 
 void Housing::PersistRoomToDB(ObjectGuid roomGuid, Room const& room)

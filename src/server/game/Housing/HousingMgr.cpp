@@ -74,6 +74,10 @@ void HousingMgr::Initialize()
     DumpExteriorComponentDiagnostics();
     DumpRoomComponentTextureDiagnostics();
 
+    // Initialize global DB ID generators from MAX(id) in character_housing_rooms/decor.
+    // Must happen before any Housing objects are loaded to prevent cross-player ID collisions.
+    Housing::InitializeDbIdGenerators();
+
     // Scan for base room entry from DB2 data (look for IsBaseRoom flag)
     for (auto const& [id, roomData] : _houseRoomStore)
     {

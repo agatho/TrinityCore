@@ -1229,9 +1229,22 @@ GameObject* HousingMap::SpawnHouseForPlot(uint8 plotIndex, Position const* custo
     Position pos(x, y, z, facing);
     Neighborhood::PlotInfo const* plotInfo = _neighborhood->GetPlotInfo(plotIndex);
 
-    TC_LOG_DEBUG("housing", "HousingMap::SpawnHouseForPlot: plot={} pos=({:.2f}, {:.2f}, {:.2f}) facing={:.3f} rot=({:.3f}, {:.3f}, {:.3f}, {:.3f}) hasPlotInfo={} hasHouseGuid={}",
+    TC_LOG_ERROR("housing", "HousingMap::SpawnHouseForPlot: plot={} pos=({:.2f}, {:.2f}, {:.2f}) facing={:.3f} "
+        "rot=({:.3f}, {:.3f}, {:.3f}, {:.3f}) hasPlotInfo={} hasHouseGuid={} extCompID={} wmoDataID={}",
         plotIndex, x, y, z, facing, rot.x, rot.y, rot.z, rot.w,
-        plotInfo != nullptr, plotInfo && !plotInfo->HouseGuid.IsEmpty());
+        plotInfo != nullptr, plotInfo && !plotInfo->HouseGuid.IsEmpty(),
+        exteriorComponentID, houseExteriorWmoDataID);
+
+    if (!plotInfo)
+    {
+        TC_LOG_ERROR("housing", "HousingMap::SpawnHouseForPlot: plotInfo is NULL for plot {} — "
+            "skipping MeshObject spawn (IsOccupied check failed?)", plotIndex);
+    }
+    else if (plotInfo->HouseGuid.IsEmpty())
+    {
+        TC_LOG_ERROR("housing", "HousingMap::SpawnHouseForPlot: HouseGuid is EMPTY for plot {} — "
+            "skipping MeshObject spawn (UpdatePlotHouseInfo not called?)", plotIndex);
+    }
 
     // Spawn all house MeshObjects (sniff-verified: 10 structural pieces for alliance, different for horde)
     // Pieces have a parent-child hierarchy: base piece (0) and door piece (1) are roots,
@@ -1240,6 +1253,11 @@ GameObject* HousingMap::SpawnHouseForPlot(uint8 plotIndex, Position const* custo
     {
         int32 faction = _neighborhood ? _neighborhood->GetFactionRestriction()
             : NEIGHBORHOOD_FACTION_ALLIANCE;
+        TC_LOG_ERROR("housing", "HousingMap::SpawnHouseForPlot: Spawning MeshObjects for plot {} — "
+            "HouseGuid={} faction={} ({})",
+            plotIndex, plotInfo->HouseGuid.ToString(), faction,
+            faction == NEIGHBORHOOD_FACTION_ALLIANCE ? "Alliance" : "Horde");
+
         SpawnFullHouseMeshObjects(plotIndex, pos, rot, plotInfo->HouseGuid,
             exteriorComponentID, houseExteriorWmoDataID, faction);
 

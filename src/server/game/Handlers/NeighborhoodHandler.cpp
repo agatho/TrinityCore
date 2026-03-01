@@ -1153,7 +1153,14 @@ void WorldSession::HandleNeighborhoodBuyHouse(WorldPackets::Neighborhood::Neighb
 
             // Spawn the house structure GO at DB2 default position
             // Uses sniff-verified defaults: ExteriorComponentID=141, WmoDataID=9
-            housingMap->SpawnHouseForPlot(resolvedPlotIndex);
+            TC_LOG_ERROR("housing", "HandleNeighborhoodBuyHouse: Calling SpawnHouseForPlot for plot {}", resolvedPlotIndex);
+            GameObject* houseGo = housingMap->SpawnHouseForPlot(resolvedPlotIndex);
+            TC_LOG_ERROR("housing", "HandleNeighborhoodBuyHouse: SpawnHouseForPlot result: {}",
+                houseGo ? houseGo->GetGUID().ToString() : "FAILED/NULL");
+        }
+        else
+        {
+            TC_LOG_ERROR("housing", "HandleNeighborhoodBuyHouse: Player map is NOT a HousingMap — cannot spawn house exterior!");
         }
 
         // Notify client that the basic house was created
