@@ -33,6 +33,7 @@
 #include "NeighborhoodMgr.h"
 #include "ObjectAccessor.h"
 #include "Player.h"
+#include "GameTime.h"
 #include "World.h"
 
 namespace
@@ -1380,32 +1381,32 @@ void WorldSession::HandleNeighborhoodOpenCornerstoneUI(WorldPackets::Neighborhoo
     bool isOwned = plotInfo && !plotInfo->OwnerGuid.IsEmpty();
 
     // Build cornerstone UI response — wire format verified against retail 12.0.1 build 65940.
-    // Retail sniff analysis (3 packets):
-    //   - Cost is ALWAYS 0 (cost comes from FJamHousingCornerstone_C entity fragment, not packet)
-    //   - PurchaseStatus is ALWAYS 0
-    //   - IsPlotOwned is ALWAYS false (ownership determined by PlotOwnerGuid being non-empty)
-    //   - CornerstoneGuid is ALWAYS empty
-    //   - CanPurchase is ALWAYS false
-    //   - Owned plots: PlotOwnerGuid=player GUID, NeighborhoodGuid=Housing GUID
-    //   - Unclaimed plots: PlotOwnerGuid=empty, NeighborhoodGuid=empty
+    // Horde retail sniff shows two patterns:
+    //   Packet 1 (PlotIndex=37): PurchaseStatus=73 (PlotReserved), Cost=10M — actively reserved plot
+    //   Packet 2 (PlotIndex=54): PurchaseStatus=0, Cost=10M, HasAlternatePrice — available plot
+    // PurchaseStatus=73 = HousingResult::PlotReserved, NOT "purchasable".
+    // For unclaimed purchasable plots: PurchaseStatus=0, Cost=plotCost.
     WorldPackets::Neighborhood::NeighborhoodOpenCornerstoneUIResponse response;
     response.PlotIndex = plotIndex;
-    response.Cost = 0;
     response.PurchaseStatus = 0;
+    response.NeighborhoodGuid = neighborhood->GetGuid();
+    response.CornerstoneGuid = neighborhoodOpenCornerstoneUI.NeighborhoodGuid; // GO GUID from CMSG
     response.IsPlotOwned = false;
     response.CanPurchase = false;
-    response.CornerstoneGuid = ObjectGuid::Empty;
     response.NeighborhoodName = neighborhood->GetName();
 
     if (isOwned)
     {
+        // Owned plot: show owner info, no purchase available
         response.PlotOwnerGuid = plotInfo->OwnerGuid;
-        response.NeighborhoodGuid = neighborhood->GetGuid();
+        response.Cost = 0;
     }
     else
     {
+        // Unclaimed plot: send cost so client can show purchase UI
         response.PlotOwnerGuid = ObjectGuid::Empty;
-        response.NeighborhoodGuid = ObjectGuid::Empty;
+        response.Cost = plotCost;
+        response.AlternatePrice = static_cast<uint64>(GameTime::GetGameTime()) + 7 * DAY;
     }
     WorldPacket const* pkt = response.Write();
     SendPacket(pkt);
