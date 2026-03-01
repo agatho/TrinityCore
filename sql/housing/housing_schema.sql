@@ -79,11 +79,12 @@ CREATE TABLE `character_housing` (
 -- Positions are relative to the room/house coordinate system.
 -- Rotation is stored as a quaternion (rotX, rotY, rotZ, rotW).
 -- Up to MAX_HOUSING_DYE_SLOTS (3) dye slots per decoration.
+-- Composite PK (ownerGuid, id): IDs are unique per player, not globally.
 -- ---------------------------------------------------------------------------
 DROP TABLE IF EXISTS `character_housing_decor`;
 CREATE TABLE `character_housing_decor` (
-    `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT 'Unique decoration placement ID',
     `ownerGuid` BIGINT UNSIGNED NOT NULL COMMENT 'FK to character_housing.guid',
+    `id` BIGINT UNSIGNED NOT NULL COMMENT 'Decor instance ID (unique per owner)',
     `houseDecorId` INT UNSIGNED NOT NULL COMMENT 'HouseDecor DB2 entry ID',
     `posX` FLOAT NOT NULL DEFAULT 0 COMMENT 'X position in room/house coordinates',
     `posY` FLOAT NOT NULL DEFAULT 0 COMMENT 'Y position in room/house coordinates',
@@ -98,8 +99,7 @@ CREATE TABLE `character_housing_decor` (
     `roomGuid` BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'FK to character_housing_rooms.id (0 = outdoor/unassigned)',
     `locked` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Whether the decor item is locked in place (1=locked, 0=unlocked)',
     `placementTime` BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Unix timestamp when decor was placed (for refund window)',
-    PRIMARY KEY (`id`),
-    INDEX `idx_owner` (`ownerGuid`)
+    PRIMARY KEY (`ownerGuid`, `id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ---------------------------------------------------------------------------
@@ -108,11 +108,12 @@ CREATE TABLE `character_housing_decor` (
 -- Each row represents a room placed in a player's house. Rooms occupy
 -- numbered slots and can be oriented and optionally mirrored.
 -- MAX_HOUSING_ROOMS_PER_HOUSE = 20 rooms per house.
+-- Composite PK (ownerGuid, id): IDs are unique per player, not globally.
 -- ---------------------------------------------------------------------------
 DROP TABLE IF EXISTS `character_housing_rooms`;
 CREATE TABLE `character_housing_rooms` (
-    `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT 'Unique room instance ID',
     `ownerGuid` BIGINT UNSIGNED NOT NULL COMMENT 'FK to character_housing.guid',
+    `id` BIGINT UNSIGNED NOT NULL COMMENT 'Room instance ID (unique per owner)',
     `houseRoomId` INT UNSIGNED NOT NULL COMMENT 'HouseRoom DB2 entry ID',
     `slotIndex` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Room slot within the house layout',
     `orientation` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Room rotation orientation value',
@@ -124,8 +125,7 @@ CREATE TABLE `character_housing_rooms` (
     `doorSlot` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Door slot index within the room',
     `ceilingTypeId` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Ceiling type for the room',
     `ceilingSlot` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Ceiling slot index within the room',
-    PRIMARY KEY (`id`),
-    INDEX `idx_owner` (`ownerGuid`)
+    PRIMARY KEY (`ownerGuid`, `id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ---------------------------------------------------------------------------
