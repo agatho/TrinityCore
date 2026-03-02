@@ -1052,6 +1052,12 @@ void WorldSession::HandleNeighborhoodBuyHouse(WorldPackets::Neighborhood::Neighb
         static constexpr uint32 NPC_KILL_CREDIT_BUY_HOME = 248858;
         player->KilledMonsterCredit(NPC_KILL_CREDIT_BUY_HOME);
 
+        // Mark all tutorials as seen (retail sniff: all 256 bits = 0xFF).
+        // Without this, the client gates cleanup/expert modes behind FrameTutorialAccount bits.
+        for (uint8 i = 0; i < MAX_ACCOUNT_TUTORIAL_VALUES; ++i)
+            SetTutorialInt(i, 0xFFFFFFFF);
+        SendTutorialsData();
+
         // Retail sequence: FirstTimeDecorAcquisition → BuyHouseResponse → LevelFavor updates
 
         // 1a. Populate the server-side decor catalog with starter items (so edit mode works)
@@ -1066,6 +1072,10 @@ void WorldSession::HandleNeighborhoodBuyHouse(WorldPackets::Neighborhood::Neighb
             }
             TC_LOG_ERROR("housing", "HandleNeighborhoodBuyHouse: Populated catalog with {} unique decor types for player {}",
                 uint32(starterDecorWithQty.size()), player->GetGUID().ToString());
+
+            // 1a2. Auto-place starter decor in the visual room (sniff-verified: retail pre-places items).
+            // The "Welcome Home" quest requires the player to remove 3 of these items.
+            housing->PlaceStarterDecor();
         }
 
         // 1b. Send FirstTimeDecorAcquisition notifications (sniff: 7-8 unique decor IDs)
@@ -1088,7 +1098,7 @@ void WorldSession::HandleNeighborhoodBuyHouse(WorldPackets::Neighborhood::Neighb
             response.House.OwnerGuid = player->GetGUID();
             response.House.NeighborhoodGuid = neighborhood->GetGuid();
             response.House.PlotId = resolvedPlotIndex;
-            response.House.AccessFlags = 32;
+            response.House.AccessFlags = h->GetSettingsFlags();
         }
         WorldPacket const* buyRespPkt = response.Write();
         SendPacket(buyRespPkt);
@@ -1180,11 +1190,26 @@ void WorldSession::HandleNeighborhoodBuyHouse(WorldPackets::Neighborhood::Neighb
             SendPacket(houseResponse.Write());
         }
 
+        // Update Account entity NeighborhoodMirrorData with the new house so the
+        // client's settings/permissions panel can identify the player as house owner.
+        {
+            Battlenet::Account& account = GetBattlenetAccount();
+            account.ClearNeighborhoodMirrorHouses();
+            for (auto const& plot : neighborhood->GetPlots())
+            {
+                if (plot.IsOccupied() && !plot.HouseGuid.IsEmpty())
+                    account.AddNeighborhoodMirrorHouse(plot.HouseGuid, plot.OwnerGuid);
+            }
+        }
+
         // Proactively send DECOR_REQUEST_STORAGE_RESPONSE after purchase.
         // The client requests storage at map entry (before purchase) and gets "no house".
         // It does NOT re-request after purchase, so we must push the updated state.
+        // Retail flow: populate storage entries into Account entity THEN send update.
         if (Housing* h = player->GetHousing())
         {
+            h->PopulateCatalogStorageEntries();
+
             WorldPackets::Housing::HousingDecorRequestStorageResponse storageResp;
             storageResp.ResultCode = static_cast<uint8>(HOUSING_RESULT_SUCCESS);
             SendPacket(storageResp.Write());
@@ -1302,7 +1327,7 @@ void WorldSession::HandleNeighborhoodMoveHouse(WorldPackets::Neighborhood::Neigh
             response.House.OwnerGuid = player->GetGUID();
             response.House.NeighborhoodGuid = housing->GetNeighborhoodGuid();
             response.House.PlotId = housing->GetPlotIndex();
-            response.House.AccessFlags = 32;
+            response.House.AccessFlags = housing->GetSettingsFlags();
         }
 
         // Broadcast roster update to other members

@@ -459,18 +459,18 @@ void WorldSession::HandleHousingDecorSetEditMode(WorldPackets::Housing::HousingD
         // 3. Send the edit mode response BEFORE the UpdateObject
         SendPacket(response.Write());
 
-        // 4. Apply edit mode unit flags (sniff: Flags adds PACIFIED, Flags2 adds NO_ACTIONS,
-        // SilencedSchoolMask=127 prevents all spellcasting while in editor)
-        player->SetUnitFlag(UNIT_FLAG_PACIFIED);
-        player->SetUnitFlag2(UNIT_FLAG2_NO_ACTIONS);
-        player->ReplaceAllSilencedSchoolMask(SPELL_SCHOOL_MASK_ALL);
+        // NOTE: Retail does NOT apply UNIT_FLAG_PACIFIED, UNIT_FLAG2_NO_ACTIONS, or
+        // SilencedSchoolMask during edit mode. Sniff analysis (horde_housing) confirms
+        // SilencedSchoolMask=0 and no Pacified/NoActions flags at any point.
+        // Previously we set these flags which caused the client to suppress left-click
+        // input entirely (NO_ACTIONS blocks all player actions including decor selection).
 
-        // 5. Send BNetAccount entity update with FHousingStorage_C fragment.
+        // 4. Send BNetAccount entity update with FHousingStorage_C fragment.
         // Sniff: BNetAccount CreateObject1 only sent on FIRST enter; SendUpdateToPlayer
         // handles this automatically via HaveAtClient check.
         GetBattlenetAccount().SendUpdateToPlayer(player);
 
-        TC_LOG_DEBUG("housing", "  EditMode ENTER: PlayerGUID={} BNetAccountGuid={} flags set (PACIFIED|NO_ACTIONS|SilencedAll)",
+        TC_LOG_DEBUG("housing", "  EditMode ENTER: PlayerGUID={} BNetAccountGuid={}",
             player->GetGUID().ToString(), response.BNetAccountGuid.ToString());
     }
     else
@@ -500,12 +500,7 @@ void WorldSession::HandleHousingDecorSetEditMode(WorldPackets::Housing::HousingD
         // 2. Send the edit mode response (empty AllowedEditor = exit)
         SendPacket(response.Write());
 
-        // 3. Remove edit mode unit flags
-        player->RemoveUnitFlag(UNIT_FLAG_PACIFIED);
-        player->RemoveUnitFlag2(UNIT_FLAG2_NO_ACTIONS);
-        player->ReplaceAllSilencedSchoolMask(SpellSchoolMask(0));
-
-        TC_LOG_DEBUG("housing", "  EditMode EXIT: flags cleared, BNetAccountGuid={}",
+        TC_LOG_DEBUG("housing", "  EditMode EXIT: BNetAccountGuid={}",
             response.BNetAccountGuid.ToString());
     }
 
@@ -878,9 +873,10 @@ void WorldSession::HandleHousingDecorRequestStorage(WorldPackets::Housing::Housi
     response.ResultCode = static_cast<uint8>(HOUSING_RESULT_SUCCESS);
     SendPacket(response.Write());
 
-    // 2. Send Account entity update with FHousingStorage_C fragment (decor catalog data).
-    //    Retail sniff Instance 2 shows SMSG_UPDATE_OBJECT (BNetAccount, 604 bytes) after STORAGE_RSP.
-    //    The client reads decor entries from this fragment, not from the STORAGE_RSP itself.
+    // 2. Populate catalog (unplaced) entries into Account entity, then send update.
+    //    Retail flow: placed decor is in Account entity from login; catalog entries are
+    //    populated on-demand here. The client reads decor from FHousingStorage_C fragment.
+    housing->PopulateCatalogStorageEntries();
     GetBattlenetAccount().SendUpdateToPlayer(player);
 
     // 3. Send GET_PLAYER_HOUSES_INFO_RESPONSE
@@ -892,7 +888,7 @@ void WorldSession::HandleHousingDecorRequestStorage(WorldPackets::Housing::Housi
         info.OwnerGuid = player->GetGUID();
         info.NeighborhoodGuid = playerHousing->GetNeighborhoodGuid();
         info.PlotId = playerHousing->GetPlotIndex();
-        info.AccessFlags = 32;
+        info.AccessFlags = playerHousing->GetSettingsFlags();
         housesInfoResponse.Houses.push_back(info);
     }
     SendPacket(housesInfoResponse.Write());
@@ -1871,7 +1867,7 @@ void WorldSession::HandleHousingSvcsNeighborhoodReservePlot(WorldPackets::Housin
                 houseInfo.House.OwnerGuid = player->GetGUID();
                 houseInfo.House.NeighborhoodGuid = housing->GetNeighborhoodGuid();
                 houseInfo.House.PlotId = housing->GetPlotIndex();
-                houseInfo.House.AccessFlags = 32;
+                houseInfo.House.AccessFlags = housing->GetSettingsFlags();
                 houseInfo.House.HasMoveOutTime = false;
                 houseInfo.Result = 0;
                 SendPacket(houseInfo.Write());
@@ -2003,21 +1999,59 @@ void WorldSession::HandleHousingSvcsUpdateHouseSettings(WorldPackets::Housing::H
         return;
     }
 
+    // Ownership check — only the house owner can change settings
+    if (housingSvcsUpdateHouseSettings.HouseGuid != housing->GetHouseGuid())
+    {
+        WorldPackets::Housing::HousingSvcsUpdateHouseSettingsResponse response;
+        response.Result = static_cast<uint8>(HOUSING_RESULT_PERMISSION_DENIED);
+        response.HouseGuid = housingSvcsUpdateHouseSettings.HouseGuid;
+        response.AccessFlags = housing->GetSettingsFlags();
+        SendPacket(response.Write());
+        return;
+    }
+
     if (housingSvcsUpdateHouseSettings.PlotSettingsID)
-        housing->SaveSettings(*housingSvcsUpdateHouseSettings.PlotSettingsID);
+    {
+        uint32 newFlags = *housingSvcsUpdateHouseSettings.PlotSettingsID & HOUSE_SETTING_VALID_MASK;
+        housing->SaveSettings(newFlags);
+    }
 
     WorldPackets::Housing::HousingSvcsUpdateHouseSettingsResponse response;
     response.Result = static_cast<uint8>(HOUSING_RESULT_SUCCESS);
     response.HouseGuid = housingSvcsUpdateHouseSettings.HouseGuid;
-    response.AccessFlags = housingSvcsUpdateHouseSettings.PlotSettingsID.value_or(0);
+    response.AccessFlags = housing->GetSettingsFlags();
     SendPacket(response.Write());
 
     // Settings changes (visibility, permissions) require house finder data refresh
     WorldPackets::Housing::HousingSvcsHouseFinderForceRefresh forceRefresh;
     SendPacket(forceRefresh.Write());
 
-    TC_LOG_INFO("housing", "CMSG_HOUSING_SVCS_UPDATE_HOUSE_SETTINGS HouseGuid: {}",
-        housingSvcsUpdateHouseSettings.HouseGuid.ToString());
+    // Broadcast updated house info to other players on the same map so they see the new AccessFlags
+    HousingMap* housingMap = dynamic_cast<HousingMap*>(player->GetMap());
+    if (housingMap)
+    {
+        WorldPackets::Housing::HousingGetCurrentHouseInfoResponse houseInfoUpdate;
+        houseInfoUpdate.House.HouseGuid = housing->GetHouseGuid();
+        houseInfoUpdate.House.OwnerGuid = player->GetGUID();
+        houseInfoUpdate.House.NeighborhoodGuid = housing->GetNeighborhoodGuid();
+        houseInfoUpdate.House.PlotId = housing->GetPlotIndex();
+        houseInfoUpdate.House.AccessFlags = housing->GetSettingsFlags();
+        houseInfoUpdate.Result = 0;
+        WorldPacket const* updatePkt = houseInfoUpdate.Write();
+
+        Map::PlayerList const& players = housingMap->GetPlayers();
+        for (auto const& pair : players)
+        {
+            if (Player* otherPlayer = pair.GetSource())
+            {
+                if (otherPlayer != player)
+                    otherPlayer->SendDirectMessage(updatePkt);
+            }
+        }
+    }
+
+    TC_LOG_INFO("housing", "CMSG_HOUSING_SVCS_UPDATE_HOUSE_SETTINGS HouseGuid: {} NewFlags: 0x{:03X}",
+        housingSvcsUpdateHouseSettings.HouseGuid.ToString(), housing->GetSettingsFlags());
 }
 
 void WorldSession::HandleHousingSvcsPlayerViewHousesByPlayer(WorldPackets::Housing::HousingSvcsPlayerViewHousesByPlayer const& housingSvcsPlayerViewHousesByPlayer)
@@ -2088,7 +2122,7 @@ void WorldSession::HandleHousingSvcsGetPlayerHousesInfo(WorldPackets::Housing::H
         info.OwnerGuid = player->GetGUID();
         info.NeighborhoodGuid = housing->GetNeighborhoodGuid();
         info.PlotId = housing->GetPlotIndex();
-        info.AccessFlags = 32;
+        info.AccessFlags = housing->GetSettingsFlags();
         if (housing->GetCreateTime())
         {
             info.HasMoveOutTime = true;
@@ -2699,9 +2733,34 @@ void WorldSession::HandleHousingGetPlayerPermissions(WorldPackets::Housing::Hous
         }
         else
         {
-            // Visitor: evaluate permissions based on house settings
+            // Visitor on another player's plot — check stored settings
             response.ResultCode = 0;
-            response.PermissionFlags = 0x40;  // Sniff-verified: visitors get 0x40
+            response.PermissionFlags = 0x00;
+
+            HousingMap* housingMap = dynamic_cast<HousingMap*>(player->GetMap());
+            if (housingMap)
+            {
+                int8 visitedPlot = housingMap->GetPlayerCurrentPlot(player->GetGUID());
+                if (visitedPlot >= 0)
+                {
+                    Neighborhood* neighborhood = housingMap->GetNeighborhood();
+                    if (neighborhood)
+                    {
+                        Neighborhood::PlotInfo const* plotInfo = neighborhood->GetPlotInfo(static_cast<uint8>(visitedPlot));
+                        if (plotInfo && plotInfo->IsOccupied())
+                        {
+                            Housing* plotHousing = housingMap->GetHousingForPlayer(plotInfo->OwnerGuid);
+                            if (plotHousing)
+                            {
+                                response.HouseGuid = plotHousing->GetHouseGuid();
+                                Player* ownerPlayer = ObjectAccessor::FindPlayer(plotInfo->OwnerGuid);
+                                bool hasAccess = ownerPlayer && sHousingMgr.CanVisitorAccess(player, ownerPlayer, plotHousing->GetSettingsFlags(), false);
+                                response.PermissionFlags = hasAccess ? 0x40 : 0x00;
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
     else
@@ -2749,7 +2808,7 @@ void WorldSession::HandleHousingGetCurrentHouseInfo(WorldPackets::Housing::Housi
             response.House.OwnerGuid = plotInfo->OwnerGuid;
             response.House.NeighborhoodGuid = neighborhood->GetGuid();
             response.House.PlotId = static_cast<uint8>(currentPlot);
-            response.House.AccessFlags = plotHousing ? plotHousing->GetHouseType() : 32;
+            response.House.AccessFlags = plotHousing ? plotHousing->GetSettingsFlags() : HOUSE_SETTING_DEFAULT;
         }
         else
         {
@@ -2766,7 +2825,7 @@ void WorldSession::HandleHousingGetCurrentHouseInfo(WorldPackets::Housing::Housi
         response.House.OwnerGuid = player->GetGUID();
         response.House.NeighborhoodGuid = housing->GetNeighborhoodGuid();
         response.House.PlotId = housing->GetPlotIndex();
-        response.House.AccessFlags = housing->GetHouseType();
+        response.House.AccessFlags = housing->GetSettingsFlags();
     }
     else if (housingMap)
     {
@@ -2777,7 +2836,7 @@ void WorldSession::HandleHousingGetCurrentHouseInfo(WorldPackets::Housing::Housi
     }
     response.Result = 0;
     WorldPacket const* houseInfoPkt = response.Write();
-    TC_LOG_DEBUG("housing", "SMSG_HOUSING_GET_CURRENT_HOUSE_INFO_RESPONSE ({} bytes) currentPlot={} HouseGuid={} OwnerGuid={} NeighborhoodGuid={} PlotId={} AccessFlags={}",
+    TC_LOG_ERROR("housing", "<<< SMSG_HOUSING_GET_CURRENT_HOUSE_INFO_RESPONSE ({} bytes) currentPlot={} HouseGuid={} OwnerGuid={} NeighborhoodGuid={} PlotId={} AccessFlags={}",
         houseInfoPkt->size(), currentPlot,
         response.House.HouseGuid.ToString(), response.House.OwnerGuid.ToString(),
         response.House.NeighborhoodGuid.ToString(), response.House.PlotId, response.House.AccessFlags);
@@ -3346,7 +3405,7 @@ void WorldSession::HandleHousingSvcsGetPlayerHousesInfoAlt(WorldPackets::Housing
         houseInfo.OwnerGuid = player->GetGUID();
         houseInfo.NeighborhoodGuid = housing->GetNeighborhoodGuid();
         houseInfo.PlotId = housing->GetPlotIndex();
-        houseInfo.AccessFlags = 0;
+        houseInfo.AccessFlags = housing->GetSettingsFlags();
         houseInfo.HasMoveOutTime = false;
         response.Houses.push_back(houseInfo);
     }
@@ -3553,7 +3612,7 @@ void WorldSession::HandleHousingSystemGetHouseInfoAlt(WorldPackets::Housing::Hou
         response.House.OwnerGuid = player->GetGUID();
         response.House.NeighborhoodGuid = housing->GetNeighborhoodGuid();
         response.House.PlotId = housing->GetPlotIndex();
-        response.House.AccessFlags = 0;
+        response.House.AccessFlags = housing->GetSettingsFlags();
         response.House.HasMoveOutTime = false;
         response.Result = static_cast<uint8>(HOUSING_RESULT_SUCCESS);
     }
