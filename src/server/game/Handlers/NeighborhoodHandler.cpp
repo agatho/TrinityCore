@@ -353,7 +353,7 @@ void WorldSession::HandleNeighborhoodCharterSendSignatureRequest(WorldPackets::N
     if (!targetPlayer)
     {
         WorldPackets::Housing::HousingSvcsNotifyPermissionsFailure response;
-        response.Result = static_cast<uint16>(HOUSING_RESULT_PLAYER_NOT_FOUND);
+        response.FailureType = static_cast<uint8>(HOUSING_RESULT_PLAYER_NOT_FOUND);
         SendPacket(response.Write());
         return;
     }
@@ -574,7 +574,7 @@ void WorldSession::HandleNeighborhoodAddSecondaryOwner(WorldPackets::Neighborhoo
                 if (member.PlayerGuid != player->GetGUID())
                 {
                     WorldPackets::Neighborhood::NeighborhoodRosterResidentUpdate rosterUpdate;
-                    rosterUpdate.Residents.push_back({ neighborhoodAddSecondaryOwner.PlayerGuid, uint16(member.PlotIndex) });
+                    rosterUpdate.Residents.push_back({ neighborhoodAddSecondaryOwner.PlayerGuid, 1 /*RoleChanged*/, NEIGHBORHOOD_ROLE_MANAGER });
                     memberPlayer->SendDirectMessage(rosterUpdate.Write());
                 }
 
@@ -661,7 +661,7 @@ void WorldSession::HandleNeighborhoodRemoveSecondaryOwner(WorldPackets::Neighbor
                 if (member.PlayerGuid != player->GetGUID())
                 {
                     WorldPackets::Neighborhood::NeighborhoodRosterResidentUpdate rosterUpdate;
-                    rosterUpdate.Residents.push_back({ neighborhoodRemoveSecondaryOwner.PlayerGuid, uint16(member.PlotIndex) });
+                    rosterUpdate.Residents.push_back({ neighborhoodRemoveSecondaryOwner.PlayerGuid, 1 /*RoleChanged*/, NEIGHBORHOOD_ROLE_RESIDENT });
                     memberPlayer->SendDirectMessage(rosterUpdate.Write());
                 }
 
@@ -955,6 +955,14 @@ void WorldSession::HandleNeighborhoodBuyHouse(WorldPackets::Neighborhood::Neighb
     if (!player)
         return;
 
+    if (!sWorld->getBoolConfig(CONFIG_HOUSING_ENABLE_BUY_HOUSE))
+    {
+        WorldPackets::Neighborhood::NeighborhoodBuyHouseResponse response;
+        response.Result = static_cast<uint8>(HOUSING_RESULT_SERVICE_NOT_AVAILABLE);
+        SendPacket(response.Write());
+        return;
+    }
+
     TC_LOG_INFO("housing", "CMSG_NEIGHBORHOOD_BUY_HOUSE HouseStyleID: {}, CornerstoneGuid: {}",
         neighborhoodBuyHouse.HouseStyleID, neighborhoodBuyHouse.CornerstoneGuid.ToString());
 
@@ -1130,7 +1138,7 @@ void WorldSession::HandleNeighborhoodBuyHouse(WorldPackets::Neighborhood::Neighb
             if (Player* memberPlayer = ObjectAccessor::FindPlayer(member.PlayerGuid))
             {
                 WorldPackets::Neighborhood::NeighborhoodRosterResidentUpdate rosterUpdate;
-                rosterUpdate.Residents.push_back({ player->GetGUID(), uint16(resolvedPlotIndex) });
+                rosterUpdate.Residents.push_back({ player->GetGUID(), 0 /*Added*/, NEIGHBORHOOD_ROLE_RESIDENT });
                 memberPlayer->SendDirectMessage(rosterUpdate.Write());
             }
         }
@@ -1167,7 +1175,7 @@ void WorldSession::HandleNeighborhoodBuyHouse(WorldPackets::Neighborhood::Neighb
         if (Housing const* h = player->GetHousing())
         {
             WorldPackets::Housing::HousingFixtureCreateBasicHouseResponse houseResponse;
-            houseResponse.Result = static_cast<uint32>(HOUSING_RESULT_SUCCESS);
+            houseResponse.Result = static_cast<uint8>(HOUSING_RESULT_SUCCESS);
             houseResponse.HouseGuid = h->GetHouseGuid();
             SendPacket(houseResponse.Write());
         }
@@ -1210,6 +1218,14 @@ void WorldSession::HandleNeighborhoodMoveHouse(WorldPackets::Neighborhood::Neigh
     if (!player)
         return;
 
+    if (!sWorld->getBoolConfig(CONFIG_HOUSING_ENABLE_MOVE_HOUSE))
+    {
+        WorldPackets::Neighborhood::NeighborhoodMoveHouseResponse response;
+        response.Result = static_cast<uint8>(HOUSING_RESULT_SERVICE_NOT_AVAILABLE);
+        SendPacket(response.Write());
+        return;
+    }
+
     TC_LOG_INFO("housing", "CMSG_NEIGHBORHOOD_MOVE_HOUSE NeighborhoodGuid: {}, PlotGuid: {}",
         neighborhoodMoveHouse.NeighborhoodGuid.ToString(), neighborhoodMoveHouse.PlotGuid.ToString());
 
@@ -1225,18 +1241,24 @@ void WorldSession::HandleNeighborhoodMoveHouse(WorldPackets::Neighborhood::Neigh
         return;
     }
 
-    // Resolve the target plot index from the PlotGuid
-    uint8 targetPlotIndex = INVALID_PLOT_INDEX;
-    for (auto const& plot : neighborhood->GetPlots())
+    // Resolve the target plot index from the PlotGuid (cornerstone GO GUID)
+    // Target is a VACANT plot, so we resolve via DB2 cornerstone entry
+    int32 resolvedTarget = sHousingMgr.ResolvePlotIndex(neighborhoodMoveHouse.PlotGuid, neighborhood);
+    uint8 targetPlotIndex = (resolvedTarget >= 0) ? static_cast<uint8>(resolvedTarget) : INVALID_PLOT_INDEX;
+
+    if (targetPlotIndex == INVALID_PLOT_INDEX)
     {
-        if (!plot.IsOccupied())
-            continue;
-        if (plot.PlotGuid == neighborhoodMoveHouse.PlotGuid)
-        {
-            targetPlotIndex = plot.PlotIndex;
-            break;
-        }
+        WorldPackets::Neighborhood::NeighborhoodMoveHouseResponse response;
+        response.Result = static_cast<uint8>(HOUSING_RESULT_PLOT_NOT_FOUND);
+        SendPacket(response.Write());
+        TC_LOG_DEBUG("housing", "HandleNeighborhoodMoveHouse: Could not resolve target plot from GUID {}",
+            neighborhoodMoveHouse.PlotGuid.ToString());
+        return;
     }
+
+    // Capture old plot index before move for entity cleanup
+    Neighborhood::Member const* memberInfo = neighborhood->GetMember(player->GetGUID());
+    uint8 oldPlotIndex = memberInfo ? memberInfo->PlotIndex : INVALID_PLOT_INDEX;
 
     // Deduct gold cost for house move
     if (!player->HasEnoughMoney(HOUSE_MOVE_COST_COPPER))
@@ -1257,6 +1279,23 @@ void WorldSession::HandleNeighborhoodMoveHouse(WorldPackets::Neighborhood::Neigh
     if (result == HOUSING_RESULT_SUCCESS)
     {
         player->ModifyMoney(-static_cast<int64>(HOUSE_MOVE_COST_COPPER));
+
+        // Despawn entities at old plot, respawn at new plot
+        if (HousingMap* housingMap = dynamic_cast<HousingMap*>(player->GetMap()))
+        {
+            if (oldPlotIndex != INVALID_PLOT_INDEX)
+            {
+                housingMap->DespawnAllDecorForPlot(oldPlotIndex);
+                housingMap->DespawnAllMeshObjectsForPlot(oldPlotIndex);
+                housingMap->DespawnRoomForPlot(oldPlotIndex);
+                housingMap->DespawnHouseForPlot(oldPlotIndex);
+                housingMap->SetPlotOwnershipState(oldPlotIndex, false);
+            }
+
+            housingMap->SetPlotOwnershipState(targetPlotIndex, true);
+            housingMap->SpawnHouseForPlot(targetPlotIndex);
+        }
+
         if (Housing const* housing = player->GetHousing())
         {
             response.House.HouseGuid = housing->GetHouseGuid();
@@ -1265,12 +1304,17 @@ void WorldSession::HandleNeighborhoodMoveHouse(WorldPackets::Neighborhood::Neigh
             response.House.PlotId = housing->GetPlotIndex();
             response.House.AccessFlags = 32;
         }
+
+        // Broadcast roster update to other members
+        WorldPackets::Neighborhood::NeighborhoodRosterResidentUpdate rosterUpdate;
+        rosterUpdate.Residents.push_back({ player->GetGUID(), 1 /*RoleChanged*/, NEIGHBORHOOD_ROLE_RESIDENT });
+        neighborhood->BroadcastPacket(rosterUpdate.Write(), player->GetGUID());
     }
     response.MoveTransactionGuid = ObjectGuid::Empty;
     SendPacket(response.Write());
 
-    TC_LOG_DEBUG("housing", "MoveHouse result: {} to plot {} in neighborhood {}",
-        uint32(result), neighborhoodMoveHouse.PlotGuid.ToString(),
+    TC_LOG_DEBUG("housing", "MoveHouse result: {} from plot {} to plot {} in neighborhood {}",
+        uint32(result), oldPlotIndex, targetPlotIndex,
         neighborhoodMoveHouse.NeighborhoodGuid.ToString());
 }
 
@@ -1477,13 +1521,14 @@ void WorldSession::HandleNeighborhoodOfferOwnership(WorldPackets::Neighborhood::
         return;
     }
 
-    HousingResult result = neighborhood->TransferOwnership(neighborhoodOfferOwnership.NewOwnerGuid);
+    // Create a pending ownership transfer instead of instant transfer
+    HousingResult result = neighborhood->OfferOwnership(neighborhoodOfferOwnership.NewOwnerGuid);
 
     WorldPackets::Neighborhood::NeighborhoodOfferOwnershipResponse response;
     response.Result = static_cast<uint8>(result);
     SendPacket(response.Write());
 
-    // Notify the new owner and broadcast to all members
+    // Notify the target player about the offer
     if (result == HOUSING_RESULT_SUCCESS)
     {
         if (Player* newOwner = ObjectAccessor::FindPlayer(neighborhoodOfferOwnership.NewOwnerGuid))
@@ -1493,22 +1538,9 @@ void WorldSession::HandleNeighborhoodOfferOwnership(WorldPackets::Neighborhood::
             transferNotification.NewOwnerGuid = neighborhoodOfferOwnership.NewOwnerGuid;
             newOwner->SendDirectMessage(transferNotification.Write());
         }
-
-        // Broadcast roster update to all members (role changes)
-        for (auto const& member : neighborhood->GetMembers())
-        {
-            if (member.PlayerGuid == player->GetGUID())
-                continue;
-            if (Player* memberPlayer = ObjectAccessor::FindPlayer(member.PlayerGuid))
-            {
-                WorldPackets::Neighborhood::NeighborhoodRosterResidentUpdate rosterUpdate;
-                rosterUpdate.Residents.push_back({ neighborhoodOfferOwnership.NewOwnerGuid, uint16(member.PlotIndex) });
-                memberPlayer->SendDirectMessage(rosterUpdate.Write());
-            }
-        }
     }
 
-    TC_LOG_DEBUG("housing", "TransferOwnership result: {} to player {} for neighborhood {}",
+    TC_LOG_DEBUG("housing", "OfferOwnership result: {} to player {} for neighborhood {}",
         uint32(result), neighborhoodOfferOwnership.NewOwnerGuid.ToString(),
         neighborhoodGuid.ToString());
 }
@@ -1561,6 +1593,7 @@ void WorldSession::HandleNeighborhoodGetRoster(WorldPackets::Neighborhood::Neigh
         data.PlayerGuid = member.PlayerGuid;
         data.PlotIndex = member.PlotIndex;
         data.JoinTime = member.JoinTime;
+        data.ResidentType = member.Role;
         data.IsOnline = ObjectAccessor::FindPlayer(member.PlayerGuid) != nullptr;
         if (member.PlotIndex != INVALID_PLOT_INDEX)
             if (Neighborhood::PlotInfo const* plotInfo = neighborhood->GetPlotInfo(member.PlotIndex))
@@ -1652,38 +1685,45 @@ void WorldSession::HandleNeighborhoodEvictPlot(WorldPackets::Neighborhood::Neigh
     // Send eviction notice to the evicted player and broadcast roster update
     if (result == HOUSING_RESULT_SUCCESS)
     {
-        // Mark the plot Cornerstone as unowned/for-sale (GOState 0 = ACTIVE)
+        uint8 plotIdx = static_cast<uint8>(plotIndex);
+
+        // Despawn all entities on the plot
         if (HousingMap* housingMap = dynamic_cast<HousingMap*>(player->GetMap()))
         {
-            housingMap->SetPlotOwnershipState(static_cast<uint8>(plotIndex), false);
-            housingMap->DespawnHouseForPlot(static_cast<uint8>(plotIndex));
-            housingMap->DespawnAllDecorForPlot(static_cast<uint8>(plotIndex));
+            housingMap->DespawnAllDecorForPlot(plotIdx);
+            housingMap->DespawnAllMeshObjectsForPlot(plotIdx);
+            housingMap->DespawnRoomForPlot(plotIdx);
+            housingMap->DespawnHouseForPlot(plotIdx);
+            housingMap->SetPlotOwnershipState(plotIdx, false);
         }
 
+        // Handle evicted player housing cleanup
         if (!evictedPlayerGuid.IsEmpty())
         {
             if (Player* evictedPlayer = ObjectAccessor::FindPlayer(evictedPlayerGuid))
             {
+                // Online: send eviction notice and delete housing object
                 WorldPackets::Neighborhood::NeighborhoodEvictPlotNotice notice;
                 notice.PlotId = plotIndex;
                 notice.NeighborhoodGuid = neighborhoodEvictPlot.NeighborhoodGuid;
                 notice.PlotGuid = plotGuid;
                 evictedPlayer->SendDirectMessage(notice.Write());
+
+                evictedPlayer->DeleteHousing(neighborhoodEvictPlot.NeighborhoodGuid);
+            }
+            else
+            {
+                // Offline: delete housing directly from DB
+                CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_DEL_CHARACTER_HOUSING);
+                stmt->setUInt64(0, evictedPlayerGuid.GetCounter());
+                CharacterDatabase.Execute(stmt);
             }
         }
 
-        // Broadcast roster update to remaining members
-        for (auto const& member : neighborhood->GetMembers())
-        {
-            if (member.PlayerGuid == player->GetGUID())
-                continue;
-            if (Player* memberPlayer = ObjectAccessor::FindPlayer(member.PlayerGuid))
-            {
-                WorldPackets::Neighborhood::NeighborhoodRosterResidentUpdate rosterUpdate;
-                rosterUpdate.Residents.push_back({ evictedPlayerGuid, uint16(0) }); // evicted player no longer has a plot
-                memberPlayer->SendDirectMessage(rosterUpdate.Write());
-            }
-        }
+        // Broadcast roster update to remaining members using helper
+        WorldPackets::Neighborhood::NeighborhoodRosterResidentUpdate rosterUpdate;
+        rosterUpdate.Residents.push_back({ evictedPlayerGuid, 2 /*Removed*/, 0 });
+        neighborhood->BroadcastPacket(rosterUpdate.Write(), player->GetGUID());
     }
 
     TC_LOG_DEBUG("housing", "EvictPlayer result: {} for plot index {} in neighborhood {}",
@@ -1716,7 +1756,7 @@ void WorldSession::HandleGetAvailableInitiativeRequest(WorldPackets::Neighborhoo
     if (!neighborhood)
     {
         WorldPackets::Housing::GetPlayerInitiativeInfoResult response;
-        response.Result = static_cast<uint32>(HOUSING_RESULT_NEIGHBORHOOD_NOT_FOUND);
+        response.Result = static_cast<uint8>(HOUSING_RESULT_NEIGHBORHOOD_NOT_FOUND);
         SendPacket(response.Write());
         return;
     }
@@ -1738,7 +1778,7 @@ void WorldSession::HandleGetInitiativeActivityLogRequest(WorldPackets::Neighborh
     if (!neighborhood)
     {
         WorldPackets::Housing::GetInitiativeActivityLogResult response;
-        response.Result = static_cast<uint32>(HOUSING_RESULT_NEIGHBORHOOD_NOT_FOUND);
+        response.Result = static_cast<uint8>(HOUSING_RESULT_NEIGHBORHOOD_NOT_FOUND);
         SendPacket(response.Write());
         return;
     }
@@ -1777,4 +1817,107 @@ void WorldSession::HandleInitiativeUpdateActiveNeighborhood(WorldPackets::Neighb
 
     TC_LOG_DEBUG("housing", "SMSG_INITIATIVE_SERVICE_STATUS + SMSG_GET_PLAYER_INITIATIVE_INFO_RESULT sent for NeighborhoodGuid: {}",
         initiativeUpdateActiveNeighborhood.NeighborhoodGuid.ToString());
+}
+
+// ============================================================
+// Phase 7 — Charter Handlers
+// ============================================================
+
+void WorldSession::HandleNeighborhoodCharterSignResponse(WorldPackets::Neighborhood::NeighborhoodCharterSignResponsePacket const& neighborhoodCharterSignResponse)
+{
+    Player* player = GetPlayer();
+    if (!player)
+        return;
+
+    TC_LOG_DEBUG("housing", "CMSG_NEIGHBORHOOD_CHARTER_SIGN_RESPONSE Player: {} CharterGuid: {}",
+        player->GetGUID().ToString(), neighborhoodCharterSignResponse.CharterGuid.ToString());
+
+    // Process the sign response — the player is accepting/declining a charter sign request
+    // Send the sign request notification back to the charter owner
+    WorldPackets::Neighborhood::NeighborhoodCharterSignRequest response;
+    response.CharterGuid = neighborhoodCharterSignResponse.CharterGuid;
+    response.RequesterGuid = player->GetGUID();
+    SendPacket(response.Write());
+}
+
+void WorldSession::HandleNeighborhoodCharterRemoveSignature(WorldPackets::Neighborhood::NeighborhoodCharterRemoveSignature const& neighborhoodCharterRemoveSignature)
+{
+    Player* player = GetPlayer();
+    if (!player)
+        return;
+
+    TC_LOG_DEBUG("housing", "CMSG_NEIGHBORHOOD_CHARTER_REMOVE_SIGNATURE Player: {} CharterGuid: {} SignerGuid: {}",
+        player->GetGUID().ToString(), neighborhoodCharterRemoveSignature.CharterGuid.ToString(),
+        neighborhoodCharterRemoveSignature.SignerGuid.ToString());
+
+    WorldPackets::Neighborhood::NeighborhoodCharterSignatureRemovedNotification response;
+    response.CharterGuid = neighborhoodCharterRemoveSignature.CharterGuid;
+    response.SignerGuid = neighborhoodCharterRemoveSignature.SignerGuid;
+    SendPacket(response.Write());
+}
+
+// ============================================================
+// Phase 7 — Neighborhood Handlers
+// ============================================================
+
+void WorldSession::HandleNeighborhoodCancelInvitationAlt(WorldPackets::Neighborhood::NeighborhoodCancelInvitationAlt const& neighborhoodCancelInvitationAlt)
+{
+    Player* player = GetPlayer();
+    if (!player)
+        return;
+
+    TC_LOG_DEBUG("housing", "CMSG_NEIGHBORHOOD_CANCEL_INVITATION_ALT Player: {} InviteeGuid: {}",
+        player->GetGUID().ToString(), neighborhoodCancelInvitationAlt.InviteeGuid.ToString());
+
+    WorldPackets::Neighborhood::NeighborhoodCancelInvitationResponse response;
+    response.Result = static_cast<uint8>(HOUSING_RESULT_SUCCESS);
+    response.InviteeGuid = neighborhoodCancelInvitationAlt.InviteeGuid;
+    SendPacket(response.Write());
+}
+
+void WorldSession::HandleNeighborhoodInviteNotificationAck(WorldPackets::Neighborhood::NeighborhoodInviteNotificationAck const& neighborhoodInviteNotificationAck)
+{
+    Player* player = GetPlayer();
+    if (!player)
+        return;
+
+    TC_LOG_DEBUG("housing", "CMSG_NEIGHBORHOOD_INVITE_NOTIFICATION_ACK Player: {} NeighborhoodGuid: {}",
+        player->GetGUID().ToString(), neighborhoodInviteNotificationAck.NeighborhoodGuid.ToString());
+
+    // Acknowledgment only — no response needed
+    // The client is confirming it received the invite notification
+}
+
+void WorldSession::HandleNeighborhoodOfferOwnershipResponse(WorldPackets::Neighborhood::NeighborhoodOfferOwnershipResponsePacket const& neighborhoodOfferOwnershipResponse)
+{
+    Player* player = GetPlayer();
+    if (!player)
+        return;
+
+    TC_LOG_DEBUG("housing", "CMSG_NEIGHBORHOOD_OFFER_OWNERSHIP_RESPONSE Player: {} NeighborhoodGuid: {} Accept: {}",
+        player->GetGUID().ToString(), neighborhoodOfferOwnershipResponse.NeighborhoodGuid.ToString(),
+        neighborhoodOfferOwnershipResponse.Accept);
+
+    WorldPackets::Neighborhood::NeighborhoodOfferOwnershipResponse response;
+
+    if (neighborhoodOfferOwnershipResponse.Accept)
+    {
+        Neighborhood* neighborhood = sNeighborhoodMgr.ResolveNeighborhood(
+            neighborhoodOfferOwnershipResponse.NeighborhoodGuid, player);
+        if (neighborhood)
+        {
+            response.Result = static_cast<uint8>(HOUSING_RESULT_SUCCESS);
+        }
+        else
+        {
+            response.Result = static_cast<uint8>(HOUSING_RESULT_NEIGHBORHOOD_NOT_FOUND);
+        }
+    }
+    else
+    {
+        // Player declined the ownership transfer
+        response.Result = static_cast<uint8>(HOUSING_RESULT_SUCCESS);
+    }
+
+    SendPacket(response.Write());
 }

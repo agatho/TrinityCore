@@ -21,7 +21,7 @@
 #include "Define.h"
 
 // HousingResult enum - 90 values (0-89), verified against client binary
-enum HousingResult : uint32
+enum HousingResult : uint8
 {
     HOUSING_RESULT_SUCCESS                                  = 0,
     HOUSING_RESULT_ACTION_LOCKED_BY_COMBAT                  = 1,
@@ -269,7 +269,7 @@ enum HousingLayoutRestriction : uint8
 };
 
 // NeighborhoodInviteResult enum - 11 values (0-10), verified against client binary
-enum NeighborhoodInviteResult : uint32
+enum NeighborhoodInviteResult : uint8
 {
     NEIGHBORHOOD_INVITE_SUCCESS                 = 0,
     NEIGHBORHOOD_INVITE_DB_ERROR                = 1,
@@ -626,6 +626,7 @@ static constexpr uint32 MAX_HOUSING_FIXTURES_PER_HOUSE  = 10;
 static constexpr uint32 MAX_HOUSING_DYE_SLOTS           = 3;
 static constexpr uint32 MAX_NEIGHBORHOOD_PLOTS          = 55;
 static constexpr uint32 MAX_NEIGHBORHOOD_MANAGERS       = 5;
+static constexpr uint32 MAX_PENDING_INVITES             = 20;
 static constexpr uint32 MIN_CHARTER_SIGNATURES          = 4;
 static constexpr uint8  INVALID_PLOT_INDEX              = 255;
 static constexpr uint32 HOUSING_MAX_NAME_LENGTH         = 64;

@@ -152,14 +152,14 @@ void WorldSession::SendFeatureSystemStatusGlueScreen()
         { "recentAlliesEnabledClient"sv, "0"sv },
         { "browserEnabled"sv, "0"sv },
         // Housing game rules — ALL values verified against 12.0.1.65940 sniff packet data (Feb 2026)
-        // Service & feature flags
+        // Service & feature flags (read from config, default true)
         { "performHousingExpansionCheckClient"sv, "1"sv },
         { "housingServiceEnabled"sv, "1"sv },
-        { "housingEnableBuyHouse"sv, "1"sv },
-        { "housingEnableDeleteHouse"sv, "1"sv },
-        { "housingEnableMoveHouse"sv, "1"sv },
-        { "housingEnableCreateCharterNeighborhood"sv, "1"sv },
-        { "housingEnableCreateGuildNeighborhood"sv, "1"sv },
+        { "housingEnableBuyHouse"sv, sWorld->getBoolConfig(CONFIG_HOUSING_ENABLE_BUY_HOUSE) ? "1"sv : "0"sv },
+        { "housingEnableDeleteHouse"sv, sWorld->getBoolConfig(CONFIG_HOUSING_ENABLE_DELETE_HOUSE) ? "1"sv : "0"sv },
+        { "housingEnableMoveHouse"sv, sWorld->getBoolConfig(CONFIG_HOUSING_ENABLE_MOVE_HOUSE) ? "1"sv : "0"sv },
+        { "housingEnableCreateCharterNeighborhood"sv, sWorld->getBoolConfig(CONFIG_HOUSING_ENABLE_CREATE_CHARTER_NEIGHBORHOOD) ? "1"sv : "0"sv },
+        { "housingEnableCreateGuildNeighborhood"sv, sWorld->getBoolConfig(CONFIG_HOUSING_ENABLE_CREATE_GUILD_NEIGHBORHOOD) ? "1"sv : "0"sv },
         // Market
         { "housingMarketEnabled"sv, "1"sv },
         { "housingMarketShopEnabled"sv, "1"sv },

@@ -1714,13 +1714,13 @@ void Housing::AddLevel(uint32 amount)
     }
 }
 
-void Housing::AddFavor(uint64 amount)
+void Housing::AddFavor(uint64 amount, HousingFavorUpdateSource source /*= HOUSING_FAVOR_SOURCE_UNKNOWN*/)
 {
     _favor64 += amount;
     _favor = static_cast<uint32>(std::min<uint64>(_favor64, std::numeric_limits<uint32>::max()));
 
-    TC_LOG_DEBUG("housing", "Housing::AddFavor: Player {} favor now {} in house {}",
-        _owner->GetName(), _favor64, _houseGuid.ToString());
+    TC_LOG_DEBUG("housing", "Housing::AddFavor: Player {} favor now {} (source {}) in house {}",
+        _owner->GetName(), _favor64, uint8(source), _houseGuid.ToString());
 
     SyncUpdateFields();
 
@@ -1728,7 +1728,7 @@ void Housing::AddFavor(uint64 amount)
     if (_owner && _owner->GetSession())
     {
         WorldPackets::Housing::HousingSvcsUpdateHousesLevelFavor favorUpdate;
-        favorUpdate.Type = 0;
+        favorUpdate.Type = static_cast<uint8>(source);
         favorUpdate.PreviousFavor = static_cast<int32>(_favor);
         favorUpdate.PreviousLevel = static_cast<int32>(_level);
         favorUpdate.NewLevel = static_cast<int32>(_level);

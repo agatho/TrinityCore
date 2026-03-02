@@ -156,7 +156,7 @@ public:
 
     // House level and favor
     void AddLevel(uint32 amount);
-    void AddFavor(uint64 amount);
+    void AddFavor(uint64 amount, HousingFavorUpdateSource source = HOUSING_FAVOR_SOURCE_UNKNOWN);
     uint64 GetFavor64() const { return _favor64; }
     uint32 GetMaxDecorCount() const;
 

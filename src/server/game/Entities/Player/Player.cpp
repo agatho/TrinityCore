@@ -15228,6 +15228,9 @@ void Player::RewardQuest(Quest const* quest, LootItemType rewardType, uint32 rew
     sScriptMgr->OnQuestStatusChange(this, quest_id);
     sScriptMgr->OnQuestStatusChange(this, quest, oldStatus, QUEST_STATUS_REWARDED);
 
+    // Housing initiative: exploration task (TaskType=4)
+    sInitiativeManager.OnPlayerAction(this, 4, 1);
+
     if (updateVisibility)
         UpdateObjectVisibility();
 }
@@ -16574,6 +16577,9 @@ void Player::KilledMonsterCredit(uint32 entry, ObjectGuid guid /*= ObjectGuid::E
     UpdateCriteria(CriteriaType::KillCreature, real_entry, addKillCount, 0, killed);
 
     UpdateQuestObjectiveProgress(QUEST_OBJECTIVE_MONSTER, entry, 1, guid);
+
+    // Housing initiative: combat task (TaskType=3)
+    sInitiativeManager.OnPlayerAction(this, 3, addKillCount);
 }
 
 void Player::KilledPlayerCredit(ObjectGuid victimGuid)
