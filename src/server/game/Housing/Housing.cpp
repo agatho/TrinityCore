@@ -1943,6 +1943,9 @@ void Housing::PopulateCatalogStorageEntries()
     if (!_owner || !_owner->GetSession())
         return;
 
+    if (_storagePopulated)
+        return;
+
     Battlenet::Account& account = _owner->GetSession()->GetBattlenetAccount();
 
     // 1. Placed decor → HouseGUID=_houseGuid, SourceType=0

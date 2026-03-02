@@ -465,7 +465,13 @@ void WorldSession::HandleHousingDecorSetEditMode(WorldPackets::Housing::HousingD
         // Previously we set these flags which caused the client to suppress left-click
         // input entirely (NO_ACTIONS blocks all player actions including decor selection).
 
-        // 4. Send BNetAccount entity update with FHousingStorage_C fragment.
+        // 4. Populate FHousingStorage_C on the Account entity if not done yet.
+        // The client correlates MeshObject FHousingDecor_C.DecorGUID with entries in
+        // FHousingStorage_C to build its placed decor list for the targeting system.
+        // Without this, the client has no decor to target and selection is impossible.
+        housing->PopulateCatalogStorageEntries();
+
+        // 5. Send BNetAccount entity update with FHousingStorage_C fragment.
         // Sniff: BNetAccount CreateObject1 only sent on FIRST enter; SendUpdateToPlayer
         // handles this automatically via HaveAtClient check.
         GetBattlenetAccount().SendUpdateToPlayer(player);
