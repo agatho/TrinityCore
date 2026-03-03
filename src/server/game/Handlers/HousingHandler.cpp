@@ -472,8 +472,6 @@ void WorldSession::HandleHousingDecorSetEditMode(WorldPackets::Housing::HousingD
         housing->PopulateCatalogStorageEntries();
 
         // 5. Send BNetAccount entity update with FHousingStorage_C fragment.
-        // Sniff: BNetAccount CreateObject1 only sent on FIRST enter; SendUpdateToPlayer
-        // handles this automatically via HaveAtClient check.
         GetBattlenetAccount().SendUpdateToPlayer(player);
 
         TC_LOG_DEBUG("housing", "  EditMode ENTER: PlayerGUID={} BNetAccountGuid={}",
