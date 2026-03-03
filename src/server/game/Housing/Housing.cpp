@@ -510,13 +510,13 @@ void Housing::SetEditorMode(HousingEditorMode mode)
 {
     _editorMode = mode;
 
-    // NOTE: Retail does NOT set EditorMode UpdateField during active decoration.
-    // Sniff analysis (horde_housing) shows EditorMode=0 in ALL PlayerHouseInfoComponentData
-    // snapshots, even during active decor placement. The client-side editor mode
-    // (ClientHousingDecorSystem offset+329) is set entirely by the
-    // SMSG_HOUSING_DECOR_SET_EDIT_MODE_RESPONSE handler, not by this UpdateField.
-    // Previously we called _owner->SetHousingEditorModeUpdateField() here which
-    // may have interfered with the client's internal editor state management.
+    // Sniff-verified: retail sends EditorMode via UPDATE_OBJECT alongside
+    // UNIT_FLAG_PACIFIED, UNIT_FLAG2_NO_ACTIONS and SilencedSchoolMask=127.
+    // The client reads EditorMode from PlayerHouseInfoComponentData to set
+    // the internal editor state (ClientHousingDecorSystem +329) which gates
+    // ClickTarget (flag 16) for decor selection.
+    if (_owner)
+        _owner->SetHousingEditorModeUpdateField(static_cast<uint8>(mode));
 }
 
 HousingResult Housing::Create(ObjectGuid neighborhoodGuid, uint8 plotIndex)
