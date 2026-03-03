@@ -5747,7 +5747,7 @@ void Player::InitializeSkillFields()
         {
             SetSkillLineId(i, skillLine->ID);
             SetSkillStartingRank(i, 1);
-            mSkillStatus.insert(SkillStatusMap::value_type(skillLine->ID, SkillStatusData(i, SKILL_UNCHANGED)));
+            mSkillStatus.try_emplace(skillLine->ID, i, SKILL_UNCHANGED);
             if (++i >= PLAYER_MAX_SKILLS)
                 break;
         }
@@ -5902,7 +5902,7 @@ void Player::SetSkill(uint32 id, uint16 step, uint16 newVal, uint16 maxVal)
     else
     {
         // We are about to learn a skill that has been added outside of normal circumstances (Game Master command, scripts etc.)
-        uint8 skillSlot = 0;
+        uint32 skillSlot = 0;
 
         // Find a free skill slot
         for (uint32 i = 0; i < PLAYER_MAX_SKILLS; ++i)
@@ -5961,7 +5961,7 @@ void Player::SetSkill(uint32 id, uint16 step, uint16 newVal, uint16 maxVal)
 
         UpdateSkillEnchantments(id, 0, newVal);
 
-        mSkillStatus.insert(SkillStatusMap::value_type(id, SkillStatusData(skillSlot, SKILL_NEW)));
+        mSkillStatus.try_emplace(id, skillSlot, SKILL_NEW);
 
         if (newVal)
         {
@@ -7466,6 +7466,21 @@ bool Player::HasCurrency(uint32 id, uint32 amount) const
 {
     PlayerCurrenciesMap::const_iterator itr = _currencyStorage.find(id);
     return itr != _currencyStorage.end() && itr->second.Quantity >= amount;
+}
+
+void Player::SetCurrencyFlagsFromClient(uint32 id, CurrencyDbFlags flags)
+{
+    PlayerCurrenciesMap::iterator itr = _currencyStorage.find(id);
+    if (itr == _currencyStorage.end())
+        return;
+
+    CurrencyDbFlags newValue = (flags & CurrencyDbFlags::ClientFlags) | (itr->second.Flags & ~CurrencyDbFlags::ClientFlags);
+    if (itr->second.Flags == newValue)
+        return;
+
+    itr->second.Flags = newValue;
+    if (itr->second.state != PLAYERCURRENCY_NEW)
+        itr->second.state = PLAYERCURRENCY_CHANGED;
 }
 
 void Player::SetInGuild(ObjectGuid::LowType guildId)
@@ -9500,7 +9515,7 @@ uint32 Player::GetFreeInventorySlotCount(EnumFlag<ItemSearchLocation> location /
     if (location.HasFlag(ItemSearchLocation::Inventory))
     {
         uint8 inventoryEnd = INVENTORY_SLOT_ITEM_START + GetInventorySlotCount();
-        for (uint8 i = INVENTORY_SLOT_BAG_START; i < inventoryEnd; ++i)
+        for (uint8 i = INVENTORY_SLOT_ITEM_START; i < inventoryEnd; ++i)
             if (!GetItemByPos(INVENTORY_SLOT_BAG_0, i))
                 ++freeSlotCount;
 
@@ -11105,7 +11120,7 @@ InventoryResult Player::CanBankItem(uint8 bag, uint8 slot, ItemPosCountVec& dest
     // in specific slot
     if (bag != NULL_BAG && slot != NULL_SLOT)
     {
-        if (slot >= BANK_SLOT_BAG_START && slot < BANK_SLOT_BAG_END)
+        if (bag == INVENTORY_SLOT_BAG_0 && slot >= BANK_SLOT_BAG_START && slot < BANK_SLOT_BAG_END)
         {
             if (!pItem->IsBag())
                 return EQUIP_ERR_WRONG_SLOT;
@@ -23757,6 +23772,77 @@ bool Player::BuyItemFromVendorSlot(ObjectGuid vendorguid, uint32 vendorslot, uin
     return crItem->maxcount != 0;
 }
 
+Optional<SellResult> Player::CanSellItemToVendor(Item const* item, uint32 amount) const
+{
+    // prevent sell not owner item
+    if (GetGUID() != item->GetOwnerGUID())
+        return SELL_ERR_CANT_SELL_ITEM;
+
+    // prevent sell non empty bag by drag-and-drop at vendor's item list
+    if (item->IsNotEmptyBag())
+        return SELL_ERR_CANT_SELL_ITEM;
+
+    // prevent sell currently looted item
+    if (GetLootGUID() == item->GetGUID())
+        return SELL_ERR_CANT_SELL_ITEM;
+
+    // prevent sell more items that exist in stack (possible only not from client)
+    if (amount > item->GetCount())
+        return SELL_ERR_CANT_SELL_ITEM;
+
+    uint32 sellPrice = item->GetSellPrice(this);
+    if (sellPrice <= 0)
+        return SELL_ERR_CANT_SELL_ITEM;
+
+    uint64 money = uint64(sellPrice) * amount;
+
+    using BuybackStorageType = std::remove_cvref_t<decltype(m_activePlayerData->BuybackPrice[0])>;
+    if (money > std::numeric_limits<BuybackStorageType>::max()) // ensure sell price * amount doesn't overflow buyback price
+        return SELL_ERR_CANT_SELL_ITEM;
+
+    return { };
+}
+
+Optional<SellResult> Player::SellItemToVendor(Item* item, uint32 amount)
+{
+    uint64 money = uint64(item->GetSellPrice(this)) * amount;
+
+    if (!ModifyMoney(money)) // ensure player doesn't exceed gold limit
+        return SELL_ERR_CANT_SELL_ITEM;
+
+    UpdateCriteria(CriteriaType::MoneyEarnedFromSales, money);
+    UpdateCriteria(CriteriaType::SellItemsToVendors, 1);
+
+    if (amount < item->GetCount()) // need split items
+    {
+        Item* pNewItem = item->CloneItem(amount, this);
+        if (!pNewItem)
+        {
+            TC_LOG_ERROR("network", "Player::SellItemToVendor - could not create clone of item {}; count = {}", item->GetEntry(), amount);
+            return SELL_ERR_CANT_SELL_ITEM;
+        }
+
+        item->SetCount(item->GetCount() - amount);
+        ItemRemovedQuestCheck(item->GetEntry(), amount);
+        if (IsInWorld())
+            item->SendUpdateToPlayer(this);
+        item->SetState(ITEM_CHANGED, this);
+
+        AddItemToBuyBackSlot(pNewItem);
+        if (IsInWorld())
+            pNewItem->SendUpdateToPlayer(this);
+    }
+    else
+    {
+        RemoveItem(item->GetBagSlot(), item->GetSlot(), true);
+        ItemRemovedQuestCheck(item->GetEntry(), item->GetCount());
+        RemoveItemFromUpdateQueueOf(item, this);
+        AddItemToBuyBackSlot(item);
+    }
+
+    return { };
+}
+
 uint32 Player::GetMaxPersonalArenaRatingRequirement(uint32 minarenaslot) const
 {
     // returns the maximal personal arena rating that can be used to purchase items requiring this condition
@@ -27196,9 +27282,11 @@ void Player::_LoadSkills(PreparedQueryResult result)
                 TC_LOG_ERROR("entities.player", "Player::_LoadSkills: Player '{}' ({}, Race: {}, Class: {}) has forbidden skill {} for his race/class combination",
                     GetName(), GetGUID().ToString(), uint32(race), uint32(GetClass()), skill);
 
-                mSkillStatus.insert(SkillStatusMap::value_type(skill, SkillStatusData(mSkillStatus.size(), SKILL_DELETED)));
+                mSkillStatus.try_emplace(skill, mSkillStatus.size(), SKILL_DELETED);
                 continue;
             }
+
+            uint16 step = 0;
 
             // set fixed skill ranges
             switch (GetSkillRangeType(rcEntry))
@@ -27212,24 +27300,31 @@ void Player::_LoadSkills(PreparedQueryResult result)
                 case SKILL_RANGE_LEVEL:
                     max = GetMaxSkillValueForLevel();
                     break;
+                case SKILL_RANGE_RANK:
+                {
+                    SkillTiersEntry const* tier = sObjectMgr->GetSkillTier(rcEntry->SkillTierID);
+                    auto tierItr = std::ranges::find(tier->Value, max);
+                    if (tierItr != std::ranges::end(tier->Value))
+                        step = std::ranges::distance(std::ranges::begin(tier->Value), tierItr) + 1;
+                    break;
+                }
                 default:
                     break;
             }
 
             auto skillItr = mSkillStatus.find(skill);
             if (skillItr == mSkillStatus.end())
-                skillItr = mSkillStatus.insert(SkillStatusMap::value_type(skill, SkillStatusData(mSkillStatus.size(), SKILL_UNCHANGED))).first;
-
-            uint16 step = 0;
+                skillItr = mSkillStatus.try_emplace(skill, mSkillStatus.size(), SKILL_UNCHANGED).first;
 
             if (SkillLineEntry const* skillLine = sSkillLineStore.LookupEntry(rcEntry->SkillID))
             {
-                if (skillLine->CategoryID == SKILL_CATEGORY_SECONDARY)
+                if (!step && skillLine->CategoryID == SKILL_CATEGORY_SECONDARY)
                     step = max / 75;
 
                 if (skillLine->CategoryID == SKILL_CATEGORY_PROFESSION)
                 {
-                    step = max / 75;
+                    if (!step)
+                        step = max / 75;
 
                     if (!skillLine->ParentSkillLineID)
                     {
@@ -27242,6 +27337,13 @@ void Player::_LoadSkills(PreparedQueryResult result)
             }
 
             SetSkillLineId(skillItr->second.pos, skill);
+
+            if (!value)
+            {
+                skillItr->second.uState = SKILL_DELETED;
+                continue;
+            }
+
             SetSkillStep(skillItr->second.pos, step);
             SetSkillRank(skillItr->second.pos, value);
             SetSkillStartingRank(skillItr->second.pos, 1);
@@ -27261,7 +27363,7 @@ void Player::_LoadSkills(PreparedQueryResult result)
 
         // enable parent skill line if missing
         SkillLineEntry const* skillEntry = sSkillLineStore.LookupEntry(skillId);
-        if (skillEntry->ParentSkillLineID && skillEntry->ParentTierIndex > 0 && GetSkillStep(skillEntry->ParentSkillLineID) < skillEntry->ParentTierIndex)
+        if (skillEntry->ParentSkillLineID && skillEntry->ParentTierIndex > 0 && int32(GetSkillStep(skillEntry->ParentSkillLineID)) < skillEntry->ParentTierIndex)
             if (SkillRaceClassInfoEntry const* rcEntry = sDB2Manager.GetSkillRaceClassInfo(skillEntry->ParentSkillLineID, GetRace(), GetClass()))
                 if (SkillTiersEntry const* tier = sObjectMgr->GetSkillTier(rcEntry->SkillTierID))
                     SetSkill(skillEntry->ParentSkillLineID, skillEntry->ParentTierIndex, std::max<uint16>(GetPureSkillValue(skillEntry->ParentSkillLineID), 1), tier->GetValueForTierIndex(skillEntry->ParentTierIndex - 1));
@@ -27270,12 +27372,12 @@ void Player::_LoadSkills(PreparedQueryResult result)
         {
             for (auto childItr = childSkillLines->begin(); childItr != childSkillLines->end() && mSkillStatus.size() < PLAYER_MAX_SKILLS; ++childItr)
             {
-                if (mSkillStatus.find((*childItr)->ID) == mSkillStatus.end())
+                if (!mSkillStatus.contains((*childItr)->ID))
                 {
                     uint32 pos = mSkillStatus.size();
                     SetSkillLineId(pos, (*childItr)->ID);
                     SetSkillStartingRank(pos, 1);
-                    mSkillStatus.insert(SkillStatusMap::value_type((*childItr)->ID, SkillStatusData(pos, SKILL_UNCHANGED)));
+                    mSkillStatus.try_emplace((*childItr)->ID, pos, SKILL_UNCHANGED);
                 }
             }
         }
