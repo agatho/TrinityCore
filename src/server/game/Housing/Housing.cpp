@@ -91,6 +91,8 @@ bool Housing::LoadFromDB(PreparedQueryResult housing, PreparedQueryResult decor,
     _housePosZ = fields[12].GetFloat();
     _houseFacing = fields[13].GetFloat();
     _hasCustomPosition = (_housePosX != 0.0f || _housePosY != 0.0f || _housePosZ != 0.0f);
+    _houseName = fields[14].GetString();
+    _houseDescription = fields[15].GetString();
 
     // Load placed decor
     //           0        1             2     3     4     5          6          7          8          9       10       11       12        13     14
@@ -413,6 +415,8 @@ void Housing::SaveToDB(CharacterDatabaseTransaction trans)
     stmt->setFloat(11, _housePosY);
     stmt->setFloat(12, _housePosZ);
     stmt->setFloat(13, _houseFacing);
+    stmt->setString(14, _houseName);
+    stmt->setString(15, _houseDescription);
     trans->Append(stmt);
 
     // Save placed decor
@@ -1785,6 +1789,13 @@ void Housing::AddLevel(uint32 amount)
     TC_LOG_DEBUG("housing", "Housing::AddLevel: Player {} house leveled up to {} (added {}) in house {}",
         _owner->GetName(), _level, amount, _houseGuid.ToString());
 
+    // Persist level/favor to DB immediately
+    CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_UPD_CHARACTER_HOUSING_LEVEL_FAVOR);
+    stmt->setUInt32(0, _level);
+    stmt->setUInt32(1, _favor);
+    stmt->setUInt64(2, _owner->GetGUID().GetCounter());
+    CharacterDatabase.Execute(stmt);
+
     RecalculateBudgets();
     SyncUpdateFields();
 
@@ -1812,6 +1823,13 @@ void Housing::AddFavor(uint64 amount, HousingFavorUpdateSource source /*= HOUSIN
 
     TC_LOG_DEBUG("housing", "Housing::AddFavor: Player {} favor now {} (source {}) in house {}",
         _owner->GetName(), _favor64, uint8(source), _houseGuid.ToString());
+
+    // Persist level/favor to DB immediately
+    CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_UPD_CHARACTER_HOUSING_LEVEL_FAVOR);
+    stmt->setUInt32(0, _level);
+    stmt->setUInt32(1, _favor);
+    stmt->setUInt64(2, _owner->GetGUID().GetCounter());
+    CharacterDatabase.Execute(stmt);
 
     SyncUpdateFields();
 
@@ -1844,6 +1862,14 @@ void Housing::OnQuestCompleted(uint32 questId)
         TC_LOG_DEBUG("housing", "Housing::OnQuestCompleted: Player {} house leveled up to {} (quest {}) in house {}",
             _owner->GetName(), _level, questId, _houseGuid.ToString());
 
+        // Persist level change and recalculate budgets
+        CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_UPD_CHARACTER_HOUSING_LEVEL_FAVOR);
+        stmt->setUInt32(0, _level);
+        stmt->setUInt32(1, _favor);
+        stmt->setUInt64(2, _owner->GetGUID().GetCounter());
+        CharacterDatabase.Execute(stmt);
+
+        RecalculateBudgets();
         SyncUpdateFields();
 
         // Broadcast level/favor update to the owner
@@ -2002,6 +2028,21 @@ void Housing::SaveSettings(uint32 settingsFlags)
 
     TC_LOG_DEBUG("housing", "Housing::SaveSettings: Player {} updated house settings to {} in house {}",
         _owner->GetName(), settingsFlags, _houseGuid.ToString());
+}
+
+void Housing::SetHouseNameDescription(std::string const& name, std::string const& desc)
+{
+    _houseName = name.substr(0, HOUSING_MAX_NAME_LENGTH);
+    _houseDescription = desc.substr(0, 256);
+
+    CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_UPD_CHARACTER_HOUSING_NAME_DESC);
+    stmt->setString(0, _houseName);
+    stmt->setString(1, _houseDescription);
+    stmt->setUInt64(2, _owner->GetGUID().GetCounter());
+    CharacterDatabase.Execute(stmt);
+
+    TC_LOG_DEBUG("housing", "Housing::SetHouseNameDescription: Player {} set house name='{}' desc='{}' in house {}",
+        _owner->GetName(), _houseName, _houseDescription, _houseGuid.ToString());
 }
 
 void Housing::SetExteriorLocked(bool locked)
