@@ -28,9 +28,10 @@ Account::Account(WorldSession* session, ObjectGuid guid, std::string&& name) : m
 {
     _Create(guid);
 
-    m_entityFragments.Add(WowCS::EntityFragment::FHousingStorage_C, false, WowCS::GetRawFragmentData(m_housingStorageData));
+    // All three housing fragments belong on the BNetAccount entity (analysis doc verified).
     m_entityFragments.Add(WowCS::EntityFragment::FHousingPlayerHouse_C, false, WowCS::GetRawFragmentData(m_housingPlayerHouseData));
     m_entityFragments.Add(WowCS::EntityFragment::FNeighborhoodMirrorData_C, false, WowCS::GetRawFragmentData(m_neighborhoodMirrorData));
+    m_entityFragments.Add(WowCS::EntityFragment::FHousingStorage_C, false, WowCS::GetRawFragmentData(m_housingStorageData));
 
     // Default value
     SetUpdateFieldValue(m_values.ModifyValue(&Account::m_housingStorageData).ModifyValue(&UF::HousingStorageData::DecorMaxOwnedCount), 5000);
@@ -38,9 +39,9 @@ Account::Account(WorldSession* session, ObjectGuid guid, std::string&& name) : m
 
 void Account::ClearUpdateMask(bool remove)
 {
-    m_values.ClearChangesMask(&Account::m_housingStorageData);
     m_values.ClearChangesMask(&Account::m_housingPlayerHouseData);
     m_values.ClearChangesMask(&Account::m_neighborhoodMirrorData);
+    m_values.ClearChangesMask(&Account::m_housingStorageData);
     BaseEntity::ClearUpdateMask(remove);
 }
 
@@ -101,45 +102,12 @@ void Account::SendUpdateToPlayer(Player* player)
     ClearUpdateMask(false);
 }
 
-void Account::SetHousingPlotIndex(int32 plotIndex)
-{
-    SetUpdateFieldValue(m_values.ModifyValue(&Account::m_housingPlayerHouseData).ModifyValue(&UF::HousingPlayerHouseData::PlotIndex), plotIndex);
-}
-
-void Account::SetHousingLevel(uint32 level)
-{
-    SetUpdateFieldValue(m_values.ModifyValue(&Account::m_housingPlayerHouseData).ModifyValue(&UF::HousingPlayerHouseData::Level), level);
-}
-
-void Account::SetHousingFavor(uint64 favor)
-{
-    SetUpdateFieldValue(m_values.ModifyValue(&Account::m_housingPlayerHouseData).ModifyValue(&UF::HousingPlayerHouseData::Favor), favor);
-}
-
-void Account::SetHousingBudgets(uint32 interiorDecor, uint32 exteriorDecor, uint32 room, uint32 fixture)
-{
-    SetUpdateFieldValue(m_values.ModifyValue(&Account::m_housingPlayerHouseData).ModifyValue(&UF::HousingPlayerHouseData::InteriorDecorPlacementBudget), interiorDecor);
-    SetUpdateFieldValue(m_values.ModifyValue(&Account::m_housingPlayerHouseData).ModifyValue(&UF::HousingPlayerHouseData::ExteriorDecorPlacementBudget), exteriorDecor);
-    SetUpdateFieldValue(m_values.ModifyValue(&Account::m_housingPlayerHouseData).ModifyValue(&UF::HousingPlayerHouseData::RoomPlacementBudget), room);
-    SetUpdateFieldValue(m_values.ModifyValue(&Account::m_housingPlayerHouseData).ModifyValue(&UF::HousingPlayerHouseData::ExteriorFixtureBudget), fixture);
-}
-
-void Account::SetHousingBnetAccount(ObjectGuid bnetAccountGuid)
-{
-    SetUpdateFieldValue(m_values.ModifyValue(&Account::m_housingPlayerHouseData).ModifyValue(&UF::HousingPlayerHouseData::BnetAccount), bnetAccountGuid);
-}
-
-void Account::SetHousingEntityGUID(ObjectGuid entityGuid)
-{
-    SetUpdateFieldValue(m_values.ModifyValue(&Account::m_housingPlayerHouseData).ModifyValue(&UF::HousingPlayerHouseData::EntityGUID), entityGuid);
-}
-
-void Account::SetHousingDecorStorageEntry(ObjectGuid decorGuid, ObjectGuid houseGuid, uint8 sourceType)
+void Account::SetHousingDecorStorageEntry(ObjectGuid decorGuid, ObjectGuid houseGuid, uint8 sourceType, std::string sourceValue)
 {
     auto ref = m_values.ModifyValue(&Account::m_housingStorageData).ModifyValue(&UF::HousingStorageData::Decor, decorGuid);
     SetUpdateFieldValue(ref.ModifyValue(&UF::DecorStoragePersistedData::HouseGUID), houseGuid);
     SetUpdateFieldValue(ref.ModifyValue(&UF::DecorStoragePersistedData::SourceType), sourceType);
-    SetUpdateFieldValue(ref.ModifyValue(&UF::DecorStoragePersistedData::SourceValue), std::string());
+    SetUpdateFieldValue(ref.ModifyValue(&UF::DecorStoragePersistedData::SourceValue), std::move(sourceValue));
 }
 
 void Account::RemoveHousingDecorStorageEntry(ObjectGuid decorGuid)
@@ -148,12 +116,57 @@ void Account::RemoveHousingDecorStorageEntry(ObjectGuid decorGuid)
     RemoveMapUpdateFieldValue(setter, decorGuid);
 }
 
+// FHousingPlayerHouse_C setters
+void Account::SetHouseType(uint32 houseType)
+{
+    SetUpdateFieldValue(m_values.ModifyValue(&Account::m_housingPlayerHouseData).ModifyValue(&UF::HousingPlayerHouseData::HouseType), houseType);
+}
+
+void Account::SetHouseSize(uint32 houseSize)
+{
+    SetUpdateFieldValue(m_values.ModifyValue(&Account::m_housingPlayerHouseData).ModifyValue(&UF::HousingPlayerHouseData::HouseSize), houseSize);
+}
+
+void Account::SetHousePlotIndex(int32 plotIndex)
+{
+    SetUpdateFieldValue(m_values.ModifyValue(&Account::m_housingPlayerHouseData).ModifyValue(&UF::HousingPlayerHouseData::PlotIndex), plotIndex);
+}
+
+void Account::SetHouseLevel(uint32 level)
+{
+    SetUpdateFieldValue(m_values.ModifyValue(&Account::m_housingPlayerHouseData).ModifyValue(&UF::HousingPlayerHouseData::Level), level);
+}
+
+void Account::SetHouseFavor(uint64 favor)
+{
+    SetUpdateFieldValue(m_values.ModifyValue(&Account::m_housingPlayerHouseData).ModifyValue(&UF::HousingPlayerHouseData::Favor), favor);
+}
+
+void Account::SetHouseBudgets(uint32 interiorDecor, uint32 exteriorDecor, uint32 room, uint32 fixture)
+{
+    SetUpdateFieldValue(m_values.ModifyValue(&Account::m_housingPlayerHouseData).ModifyValue(&UF::HousingPlayerHouseData::InteriorDecorPlacementBudget), interiorDecor);
+    SetUpdateFieldValue(m_values.ModifyValue(&Account::m_housingPlayerHouseData).ModifyValue(&UF::HousingPlayerHouseData::ExteriorDecorPlacementBudget), exteriorDecor);
+    SetUpdateFieldValue(m_values.ModifyValue(&Account::m_housingPlayerHouseData).ModifyValue(&UF::HousingPlayerHouseData::RoomPlacementBudget), room);
+    SetUpdateFieldValue(m_values.ModifyValue(&Account::m_housingPlayerHouseData).ModifyValue(&UF::HousingPlayerHouseData::ExteriorFixtureBudget), fixture);
+}
+
+void Account::SetHouseBnetAccount(ObjectGuid bnetAccountGuid)
+{
+    SetUpdateFieldValue(m_values.ModifyValue(&Account::m_housingPlayerHouseData).ModifyValue(&UF::HousingPlayerHouseData::BnetAccount), bnetAccountGuid);
+}
+
+void Account::SetHouseEntityGUID(ObjectGuid entityGuid)
+{
+    SetUpdateFieldValue(m_values.ModifyValue(&Account::m_housingPlayerHouseData).ModifyValue(&UF::HousingPlayerHouseData::EntityGUID), entityGuid);
+}
+
+// FNeighborhoodMirrorData_C setters
 void Account::SetNeighborhoodMirrorName(std::string const& name)
 {
     SetUpdateFieldValue(m_values.ModifyValue(&Account::m_neighborhoodMirrorData).ModifyValue(&UF::NeighborhoodMirrorData::Name), name);
 }
 
-void Account::SetNeighborhoodMirrorOwner(ObjectGuid ownerGuid)
+void Account::SetNeighborhoodMirrorOwnerGUID(ObjectGuid ownerGuid)
 {
     SetUpdateFieldValue(m_values.ModifyValue(&Account::m_neighborhoodMirrorData).ModifyValue(&UF::NeighborhoodMirrorData::OwnerGUID), ownerGuid);
 }
@@ -181,4 +194,5 @@ void Account::ClearNeighborhoodMirrorManagers()
 {
     ClearDynamicUpdateFieldValues(m_values.ModifyValue(&Account::m_neighborhoodMirrorData).ModifyValue(&UF::NeighborhoodMirrorData::Managers));
 }
+
 }

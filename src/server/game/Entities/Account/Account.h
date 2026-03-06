@@ -43,29 +43,31 @@ public:
     // This override ensures fragment changes are detected before the send.
     void SendUpdateToPlayer(Player* player);
 
-    // Housing UpdateField setters
-    void SetHousingPlotIndex(int32 plotIndex);
-    void SetHousingLevel(uint32 level);
-    void SetHousingFavor(uint64 favor);
-    void SetHousingBudgets(uint32 interiorDecor, uint32 exteriorDecor, uint32 room, uint32 fixture);
-    void SetHousingBnetAccount(ObjectGuid bnetAccountGuid);
-    void SetHousingEntityGUID(ObjectGuid entityGuid);
-
-    // Housing storage data (decor catalog on Account entity)
-    void SetHousingDecorStorageEntry(ObjectGuid decorGuid, ObjectGuid houseGuid, uint8 sourceType);
+    // Housing storage data (decor catalog)
+    void SetHousingDecorStorageEntry(ObjectGuid decorGuid, ObjectGuid houseGuid, uint8 sourceType, std::string sourceValue = {});
     void RemoveHousingDecorStorageEntry(ObjectGuid decorGuid);
 
-    // Neighborhood mirror data
+    // FHousingPlayerHouse_C setters
+    void SetHouseType(uint32 houseType);
+    void SetHouseSize(uint32 houseSize);
+    void SetHousePlotIndex(int32 plotIndex);
+    void SetHouseLevel(uint32 level);
+    void SetHouseFavor(uint64 favor);
+    void SetHouseBudgets(uint32 interiorDecor, uint32 exteriorDecor, uint32 room, uint32 fixture);
+    void SetHouseBnetAccount(ObjectGuid bnetAccountGuid);
+    void SetHouseEntityGUID(ObjectGuid entityGuid);
+
+    // FNeighborhoodMirrorData_C setters
     void SetNeighborhoodMirrorName(std::string const& name);
-    void SetNeighborhoodMirrorOwner(ObjectGuid ownerGuid);
+    void SetNeighborhoodMirrorOwnerGUID(ObjectGuid ownerGuid);
     void AddNeighborhoodMirrorHouse(ObjectGuid houseGuid, ObjectGuid ownerGuid);
     void ClearNeighborhoodMirrorHouses();
     void AddNeighborhoodMirrorManager(ObjectGuid bnetAccountGuid, ObjectGuid playerGuid);
     void ClearNeighborhoodMirrorManagers();
 
-    UF::UpdateField<UF::HousingStorageData, int32(WowCS::EntityFragment::FHousingStorage_C), 0> m_housingStorageData;
     UF::UpdateField<UF::HousingPlayerHouseData, int32(WowCS::EntityFragment::FHousingPlayerHouse_C), 0> m_housingPlayerHouseData;
     UF::UpdateField<UF::NeighborhoodMirrorData, int32(WowCS::EntityFragment::FNeighborhoodMirrorData_C), 0> m_neighborhoodMirrorData;
+    UF::UpdateField<UF::HousingStorageData, int32(WowCS::EntityFragment::FHousingStorage_C), 0> m_housingStorageData;
 
 protected:
     UF::UpdateFieldFlag GetUpdateFieldFlagsFor(Player const* target) const override;

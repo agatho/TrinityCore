@@ -437,11 +437,17 @@ void BaseEntity::BuildMovementUpdate(ByteBuffer& data, CreateObjectBits flags, P
         data << uint64(gameObject->GetPackedLocalRotation());          // Rotation
     }
 
-    //if (flags.Room)
-    //    data << ObjectGuid(HouseGUID);
+    if (flags.Room)
+    {
+        MeshObject const* meshObj = static_cast<MeshObject const*>(this);
+        data << meshObj->GetRoomHouseGUID();
+    }
 
-    //if (flags.Decor)
-    //    data << ObjectGuid(RoomGUID);
+    if (flags.Decor)
+    {
+        MeshObject const* meshObj = static_cast<MeshObject const*>(this);
+        data << meshObj->GetDecorRoomEntityGUID();
+    }
 
     if (flags.MeshObject)
     {

@@ -18,6 +18,8 @@
 #include "Player.h"
 #include "AreaTrigger.h"
 #include "Account.h"
+#include "HousingNeighborhoodMirrorEntity.h"
+#include "HousingPlayerHouseEntity.h"
 #include "AccountMgr.h"
 #include "AchievementMgr.h"
 #include "ArenaTeam.h"
@@ -18655,11 +18657,19 @@ bool Player::LoadFromDB(ObjectGuid guid, CharacterDatabaseQueryHolder const& hol
         mirrorHouse.NeighborhoodGUID = h->GetNeighborhoodGuid();
         mirrorHouse.Level = h->GetLevel();
         mirrorHouse.Favor = static_cast<uint32>(std::min<uint64>(h->GetFavor64(), std::numeric_limits<uint32>::max()));
-        mirrorHouse.MapID = 0; // Will be resolved when entering neighborhood
         mirrorHouse.PlotID = h->GetPlotIndex();
 
-        TC_LOG_ERROR("housing", "Player::LoadFromDB: PlayerMirrorHouse: HouseGuid={} NeighborhoodGuid={} PlotID={} Level={} MapID={}",
-            h->GetHouseGuid().ToString(), h->GetNeighborhoodGuid().ToString(), mirrorHouse.PlotID, mirrorHouse.Level, mirrorHouse.MapID);
+        // Resolve MapID from the neighborhood's DB2 data so the dashboard works before
+        // the player enters the neighborhood map.
+        mirrorHouse.MapID = 0;
+        if (Neighborhood const* nh = sNeighborhoodMgr.GetNeighborhood(h->GetNeighborhoodGuid()))
+        {
+            if (NeighborhoodMapData const* nmData = sHousingMgr.GetNeighborhoodMapData(nh->GetNeighborhoodMapID()))
+                mirrorHouse.MapID = nmData->MapID;
+        }
+
+        TC_LOG_ERROR("network", "Player::LoadFromDB: PlayerMirrorHouse: HouseGuid={} NeighborhoodGuid={} PlotID={} Level={} MapID={} Favor={}",
+            h->GetHouseGuid().ToString(), h->GetNeighborhoodGuid().ToString(), mirrorHouse.PlotID, mirrorHouse.Level, mirrorHouse.MapID, mirrorHouse.Favor);
 
         // Initiative mirror fields — client reads InitiativeCycleID to display initiative UI
         uint64 nhGuid = h->GetNeighborhoodGuid().GetCounter();
@@ -25063,19 +25073,18 @@ void Player::SendInitialPacketsAfterAddToMap()
             if (housing)
             {
                 statusResponse.HouseGuid = housing->GetHouseGuid();
-                // Sniff byte-level: second field has hi byte7=0x78 = BNetAccount, NOT Housing/Neighborhood
-                statusResponse.NeighborhoodGuid = GetSession()->GetBattlenetAccountGUID();
-                statusResponse.OwnerPlayerGuid = GetGUID(); // Owner's Player GUID
+                statusResponse.AccountGuid = GetSession()->GetBattlenetAccountGUID();
+                statusResponse.OwnerPlayerGuid = GetGUID();
+                statusResponse.NeighborhoodGuid = housing->GetNeighborhoodGuid();
                 statusResponse.Status = 0;
             }
             // No house: all fields stay at defaults (empty GUIDs, Status=0).
             SendDirectMessage(statusResponse.Write());
 
-            // Populate NeighborhoodMirrorData on the Account entity so the
-            // client gets neighborhood info through the UpdateField system.
+            // All three housing fragments belong on the BNetAccount entity (analysis doc verified).
             Battlenet::Account& account = GetSession()->GetBattlenetAccount();
             account.SetNeighborhoodMirrorName(neighborhood->GetName());
-            account.SetNeighborhoodMirrorOwner(neighborhood->GetOwnerGuid());
+            account.SetNeighborhoodMirrorOwnerGUID(neighborhood->GetOwnerGuid());
 
             // Add all plots with houses so the client knows which plots are occupied
             account.ClearNeighborhoodMirrorHouses();
@@ -25100,10 +25109,8 @@ void Player::SendInitialPacketsAfterAddToMap()
                 }
             }
 
-            // Flush the Account entity update to the client so it receives the
+            // Flush the entity update to the client so it receives the
             // NeighborhoodMirrorData (houses, managers, owner, name).
-            // Without this, the client never gets the ownership data and
-            // cannot display the player as house owner in the settings panel.
             account.SendUpdateToPlayer(this);
 
             // Proactively send the neighborhood name response BEFORE the roster.

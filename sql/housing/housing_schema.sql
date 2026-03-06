@@ -99,6 +99,8 @@ CREATE TABLE `character_housing_decor` (
     `roomGuid` BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'FK to character_housing_rooms.id (0 = outdoor/unassigned)',
     `locked` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Whether the decor item is locked in place (1=locked, 0=unlocked)',
     `placementTime` BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Unix timestamp when decor was placed (for refund window)',
+    `sourceType` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'DecorSourceType: 0=Standard, 3=Deferred, 5=Spell, 6=Item',
+    `sourceValue` VARCHAR(128) NOT NULL DEFAULT '' COMMENT 'Source context (spell ID, item GUID, etc.)',
     PRIMARY KEY (`ownerGuid`, `id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -158,6 +160,8 @@ CREATE TABLE `character_housing_catalog` (
     `houseDecorId` INT UNSIGNED NOT NULL COMMENT 'HouseDecor DB2 entry ID',
     `quantity` INT UNSIGNED NOT NULL DEFAULT 1 COMMENT 'Number of this decor owned/available',
     `acquiredTime` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Unix timestamp when first acquired',
+    `sourceType` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'DecorSourceType: 0=Standard, 3=Deferred, 5=Spell, 6=Item',
+    `sourceValue` VARCHAR(128) NOT NULL DEFAULT '' COMMENT 'Source context (spell ID, item GUID, etc.)',
     PRIMARY KEY (`ownerGuid`, `houseDecorId`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 

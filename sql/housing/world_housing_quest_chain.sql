@@ -58,6 +58,10 @@ INSERT IGNORE INTO creature_queststarter (id, quest) VALUES (233063, 91968);
 -- Also available from Lyssabel as fallback
 INSERT IGNORE INTO creature_queststarter (id, quest) VALUES (233063, 91969);
 
+-- 94210 "Feathering the Nest": Alliance offered by Lyssabel, Horde offered by Tocho
+INSERT IGNORE INTO creature_queststarter (id, quest) VALUES (233063, 94210);
+INSERT IGNORE INTO creature_queststarter (id, quest) VALUES (233708, 94210);
+
 -- ============================================================================
 -- 4. Quest enders (who accepts the turn-in)
 -- ============================================================================
@@ -72,3 +76,7 @@ INSERT IGNORE INTO creature_questender (id, quest) VALUES (233063, 91968);
 
 -- 91969 "Time to Decorate": Turn in to Neighborhood Lyssabel
 INSERT IGNORE INTO creature_questender (id, quest) VALUES (233063, 91969);
+
+-- 94210 "Feathering the Nest": Alliance ended by Lyssabel, Horde ended by Tocho
+INSERT IGNORE INTO creature_questender (id, quest) VALUES (233063, 94210);
+INSERT IGNORE INTO creature_questender (id, quest) VALUES (233708, 94210);
