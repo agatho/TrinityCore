@@ -46,6 +46,7 @@
 #include "ObjectAccessor.h"
 #include "ObjectMgr.h"
 #include "OutdoorPvP.h"
+#include "PhasingHandler.h"
 #include "Player.h"
 #include "RestMgr.h"
 #include "ScriptMgr.h"
@@ -1243,25 +1244,7 @@ void WorldSession::HandleChromieTimeSelectExpansion(WorldPackets::Misc::ChromieT
     if (player->GetLevel() < 10 || player->IsMaxLevel())
         return;
 
-    // Set the UiChromieTimeExpansionID update field on ActivePlayerData
-    player->SetUpdateFieldValue(player->m_values.ModifyValue(&Player::m_activePlayerData)
-        .ModifyValue(&UF::ActivePlayerData::UiChromieTimeExpansionID), expansionId);
-
-    // Set CtrOptions fields
-    uint32 expansionMask = expansionId > 0 ? (1u << expansionId) : 0;
-    player->SetUpdateFieldValue(player->m_values.ModifyValue(&Player::m_playerData)
-        .ModifyValue(&UF::PlayerData::CtrOptions)
-        .ModifyValue(&UF::CTROptions::ChromieTimeExpansionMask), expansionMask);
-
-    // ConditionalFlags[0] bit 0 = "in Chromie Time for scaling"
-    // Activates content tuning redirection via ConditionalContentTuning DB2
-    player->SetChromieTimeConditionalFlags(expansionId > 0);
-
-    // FactionGroup for content tuning faction-group checks
-    player->SetUpdateFieldValue(player->m_values.ModifyValue(&Player::m_playerData)
-        .ModifyValue(&UF::PlayerData::CtrOptions)
-        .ModifyValue(&UF::CTROptions::FactionGroup),
-        Player::GetFactionGroupForRace(player->GetRace()));
+    player->SetChromieTime(expansionId);
 
     // Send success response
     player->SendDirectMessage(WorldPackets::Misc::ChromieTimeSelectExpansionSuccess().Write());

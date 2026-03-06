@@ -2354,15 +2354,7 @@ void Player::GiveLevel(uint8 level)
 
         // Blizzlike: clear Chromie Time when reaching max level
         if (m_activePlayerData->UiChromieTimeExpansionID != 0)
-        {
-            SetUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData)
-                .ModifyValue(&UF::ActivePlayerData::UiChromieTimeExpansionID), 0);
-            SetUpdateFieldValue(m_values.ModifyValue(&Player::m_playerData)
-                .ModifyValue(&UF::PlayerData::CtrOptions)
-                .ModifyValue(&UF::CTROptions::ChromieTimeExpansionMask), uint32(0));
-            SetChromieTimeConditionalFlags(false);
-            SendCtrOptions();
-        }
+            SetChromieTime(0);
     }
 
     PushQuests();
@@ -6503,18 +6495,44 @@ uint8 Player::GetFactionGroupForRace(uint8 race)
     return 1;
 }
 
+void Player::SetChromieTime(int32 expansionId)
+{
+    SetUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData)
+        .ModifyValue(&UF::ActivePlayerData::UiChromieTimeExpansionID), expansionId);
+
+    uint32 expansionMask = expansionId > 0 ? (1u << expansionId) : 0;
+    SetUpdateFieldValue(m_values.ModifyValue(&Player::m_playerData)
+        .ModifyValue(&UF::PlayerData::CtrOptions)
+        .ModifyValue(&UF::CTROptions::ChromieTimeExpansionMask), expansionMask);
+
+    SetChromieTimeConditionalFlags(expansionId > 0);
+
+    SetUpdateFieldValue(m_values.ModifyValue(&Player::m_playerData)
+        .ModifyValue(&UF::PlayerData::CtrOptions)
+        .ModifyValue(&UF::CTROptions::FactionGroup),
+        GetFactionGroupForRace(GetRace()));
+
+    SendCtrOptions();
+    PhasingHandler::OnConditionChange(this);
+}
+
 void Player::SetChromieTimeConditionalFlags(bool enabled)
 {
-    auto ctrOptions = m_values.ModifyValue(&Player::m_playerData)
-        .ModifyValue(&UF::PlayerData::CtrOptions);
+    // Read current flags, modify, and write back as a whole
+    std::vector<uint32> conditionalFlags(m_playerData->CtrOptions->ConditionalFlags.begin(),
+        m_playerData->CtrOptions->ConditionalFlags.end());
 
-    if (ctrOptions->ConditionalFlags.empty())
-        ctrOptions->ConditionalFlags.push_back(0);
+    if (conditionalFlags.empty())
+        conditionalFlags.push_back(0);
 
     if (enabled)
-        ctrOptions->ConditionalFlags[0] |= 1;
+        conditionalFlags[0] |= 1;
     else
-        ctrOptions->ConditionalFlags[0] &= ~1u;
+        conditionalFlags[0] &= ~1u;
+
+    SetUpdateFieldValue(m_values.ModifyValue(&Player::m_playerData)
+        .ModifyValue(&UF::PlayerData::CtrOptions)
+        .ModifyValue(&UF::CTROptions::ConditionalFlags), std::move(conditionalFlags));
 }
 
 void Player::SendCtrOptions() const
@@ -24868,6 +24886,10 @@ void Player::SendInitialPacketsBeforeAddToMap()
     WorldPackets::Character::InitialSetup initialSetup;
     initialSetup.ServerExpansionLevel = sWorld->getIntConfig(CONFIG_EXPANSION);
     SendDirectMessage(initialSetup.Write());
+
+    // Send Chromie Time state to client on login
+    if (m_activePlayerData->UiChromieTimeExpansionID != 0)
+        SendCtrOptions();
 
     SetMovedUnit(this);
 }
