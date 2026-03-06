@@ -9048,6 +9048,48 @@ void Unit::SetFlightCapabilityID(int32 flightCapabilityId, bool clientUpdate)
     UpdateAdvFlyingSpeed(ADV_FLYING_LAUNCH_SPEED_COEFFICIENT, clientUpdate);
 }
 
+void Unit::SetDriveCapabilityID(int32 driveCapabilityId, bool clientUpdate)
+{
+    if (driveCapabilityId && !sDriveCapabilityStore.HasRecord(driveCapabilityId))
+        return;
+
+    if (GetDriveCapabilityID() == driveCapabilityId)
+        return;
+
+    SetUpdateFieldValue(m_values.ModifyValue(&Unit::m_unitData).ModifyValue(&UF::UnitData::DriveCapabilityID), driveCapabilityId);
+
+    if (driveCapabilityId)
+        AddExtraUnitMovementFlag2(MOVEMENTFLAG3_CAN_DRIVE);
+    else
+        RemoveExtraUnitMovementFlag2(MOVEMENTFLAG3_CAN_DRIVE | MOVEMENTFLAG3_DRIVING_FORWARD);
+
+    if (!clientUpdate)
+        return;
+
+    if (Player* playerMover = GetPlayerMovingMe())
+    {
+        if (driveCapabilityId)
+        {
+            WorldPackets::Movement::MoveSetCanDrive packet;
+            packet.MoverGUID = GetGUID();
+            packet.SequenceIndex = m_movementCounter++;
+            packet.DriveCapabilityRecID = driveCapabilityId;
+            playerMover->SendDirectMessage(packet.Write());
+        }
+        else
+        {
+            WorldPackets::Movement::MoveUnsetCanDrive packet;
+            packet.MoverGUID = GetGUID();
+            packet.SequenceIndex = m_movementCounter++;
+            playerMover->SendDirectMessage(packet.Write());
+        }
+
+        WorldPackets::Movement::MoveUpdate moveUpdate;
+        moveUpdate.Status = &m_movementInfo;
+        SendMessageToSet(moveUpdate.Write(), playerMover);
+    }
+}
+
 void Unit::UpdateAdvFlyingSpeed(AdvFlyingRateTypeSingle speedType, bool clientUpdate)
 {
     FlightCapabilityEntry const* flightCapabilityEntry = sFlightCapabilityStore.LookupEntry(GetFlightCapabilityID());
@@ -12509,6 +12551,44 @@ void Unit::SendMoveKnockBack(Player* player, float speedXY, float speedZ, float 
     moveKnockBack.Speeds.VertSpeed = speedZ;
     moveKnockBack.Direction = Position(vcos, vsin);
     player->GetSession()->SendPacket(moveKnockBack.Write());
+}
+
+void Unit::SendApplyInertia(int32 movementInertiaID, Position const& force, uint32 lifetimeMs)
+{
+    if (Player* playerMover = GetPlayerMovingMe())
+    {
+        WorldPackets::Movement::MoveApplyInertia applyInertia;
+        applyInertia.MoverGUID = GetGUID();
+        applyInertia.SequenceIndex = m_movementCounter++;
+        applyInertia.MovementInertiaID = movementInertiaID;
+        applyInertia.Force = force;
+        applyInertia.LifetimeMs = lifetimeMs;
+        playerMover->SendDirectMessage(applyInertia.Write());
+    }
+}
+
+void Unit::SendRemoveInertia(int32 movementInertiaID)
+{
+    if (Player* playerMover = GetPlayerMovingMe())
+    {
+        WorldPackets::Movement::MoveRemoveInertia removeInertia;
+        removeInertia.MoverGUID = GetGUID();
+        removeInertia.SequenceIndex = m_movementCounter++;
+        removeInertia.MovementInertiaID = movementInertiaID;
+        playerMover->SendDirectMessage(removeInertia.Write());
+    }
+}
+
+void Unit::SendAddImpulse(Position const& direction)
+{
+    if (Player* playerMover = GetPlayerMovingMe())
+    {
+        WorldPackets::Movement::MoveAddImpulse addImpulse;
+        addImpulse.MoverGUID = GetGUID();
+        addImpulse.SequenceIndex = m_movementCounter++;
+        addImpulse.Direction = direction;
+        playerMover->SendDirectMessage(addImpulse.Write());
+    }
 }
 
 void Unit::KnockbackFrom(Position const& origin, float speedXY, float speedZ, float angle /*= M_PI*/, Movement::SpellEffectExtraData const* spellEffectExtraData /*= nullptr*/)
