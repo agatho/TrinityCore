@@ -54,3 +54,21 @@ DELETE FROM `conditions` WHERE `SourceTypeOrReferenceId`=25 AND `SourceEntry`=71
 INSERT INTO `conditions` (`SourceTypeOrReferenceId`,`SourceGroup`,`SourceEntry`,`SourceId`,`ElseGroup`,`ConditionTypeOrReference`,`ConditionTarget`,`ConditionValue1`,`ConditionValue2`,`ConditionValue3`,`NegativeCondition`,`ErrorType`,`ErrorTextId`,`ScriptName`,`Comment`) VALUES
 (25,0,719,0,0,60,0,1,0,0,1,0,0,'','Hyjal terrain: not active in TBC CT'),
 (25,0,719,0,0,60,0,2,0,0,1,0,0,'','Hyjal terrain: not active in WotLK CT');
+
+-- ============================================================================
+-- Chromie NPC (167032) gossip option: open Chromie Time UI
+-- OptionNpc=40 (ChromieTimeNpc) triggers NPCInteractionOpenResult with
+-- PlayerInteractionType::ChromieTime, which opens the client's CT expansion picker
+-- ============================================================================
+DELETE FROM `gossip_menu_option` WHERE `MenuID`=25426;
+INSERT INTO `gossip_menu_option` (`MenuID`,`GossipOptionID`,`OptionID`,`OptionNpc`,`OptionText`,`OptionBroadcastTextID`,`Language`,`Flags`,`ActionMenuID`,`ActionPoiID`,`GossipNpcOptionID`,`BoxCoded`,`BoxMoney`,`BoxText`,`BoxBroadcastTextID`,`SpellID`,`OverrideIconID`,`VerifiedBuild`) VALUES
+(25426,-250000,0,40,'I want to select a different timeline.',0,0,0,0,0,NULL,0,0,NULL,0,NULL,NULL,0);
+
+-- ============================================================================
+-- Chromie NPC (167032) Orgrimmar spawn
+-- Retail has Chromie in both Stormwind and Orgrimmar Embassy areas
+-- Stormwind spawn already exists (guid 8000063, map 0, zone 1519)
+-- ============================================================================
+DELETE FROM `creature` WHERE `guid`=8003441 AND `id`=167032;
+INSERT INTO `creature` (`guid`,`id`,`map`,`zoneId`,`areaId`,`spawnDifficulties`,`phaseUseFlags`,`PhaseId`,`PhaseGroup`,`terrainSwapMap`,`modelid`,`equipment_id`,`position_x`,`position_y`,`position_z`,`orientation`,`spawntimesecs`,`wander_distance`,`currentwaypoint`,`curHealthPct`,`MovementType`,`npcflag`,`unit_flags`,`unit_flags2`,`unit_flags3`,`ScriptName`,`StringId`,`VerifiedBuild`) VALUES
+(8003441,167032,1,1637,8618,'0',0,0,0,-1,0,0,1606.17,-4389.46,19.47,2.33,120,0,0,100,0,NULL,NULL,NULL,NULL,'',NULL,0);
