@@ -1134,7 +1134,7 @@ class TC_GAME_API Unit : public WorldObject
         void UpdateHeight(float newZ);
 
         void SendMoveKnockBack(Player* player, float speedXY, float speedZ, float vcos, float vsin);
-        void SendApplyInertia(int32 movementInertiaID, Position const& force, uint32 lifetimeMs);
+        void SendApplyInertia(int32 movementInertiaID, uint32 lifetimeMs);
         void SendRemoveInertia(int32 movementInertiaID);
         void SendAddImpulse(Position const& direction);
         void KnockbackFrom(Position const& origin, float speedXY, float speedZ, float angle = M_PI, Movement::SpellEffectExtraData const* spellEffectExtraData = nullptr);

@@ -906,7 +906,6 @@ void WorldSession::HandleMoveApplyInertiaAck(WorldPackets::Movement::MoveApplyIn
     WorldPackets::Movement::MoveUpdateApplyInertia updateApplyInertia;
     updateApplyInertia.Status = &moveApplyInertiaAck.Ack.Status;
     updateApplyInertia.MovementInertiaID = moveApplyInertiaAck.MovementInertiaID;
-    updateApplyInertia.Force = moveApplyInertiaAck.Force;
     updateApplyInertia.LifetimeMs = moveApplyInertiaAck.LifetimeMs;
     mover->SendMessageToSet(updateApplyInertia.Write(), false);
 }

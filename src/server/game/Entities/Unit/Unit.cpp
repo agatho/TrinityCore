@@ -12553,7 +12553,7 @@ void Unit::SendMoveKnockBack(Player* player, float speedXY, float speedZ, float 
     player->GetSession()->SendPacket(moveKnockBack.Write());
 }
 
-void Unit::SendApplyInertia(int32 movementInertiaID, Position const& force, uint32 lifetimeMs)
+void Unit::SendApplyInertia(int32 movementInertiaID, uint32 lifetimeMs)
 {
     if (Player* playerMover = GetPlayerMovingMe())
     {
@@ -12561,7 +12561,6 @@ void Unit::SendApplyInertia(int32 movementInertiaID, Position const& force, uint
         applyInertia.MoverGUID = GetGUID();
         applyInertia.SequenceIndex = m_movementCounter++;
         applyInertia.MovementInertiaID = movementInertiaID;
-        applyInertia.Force = force;
         applyInertia.LifetimeMs = lifetimeMs;
         playerMover->SendDirectMessage(applyInertia.Write());
     }

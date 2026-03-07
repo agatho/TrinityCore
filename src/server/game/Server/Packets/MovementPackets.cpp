@@ -1216,7 +1216,6 @@ WorldPacket const* MoveApplyInertia::Write()
     _worldPacket << MoverGUID;
     _worldPacket << SequenceIndex;
     _worldPacket << int32(MovementInertiaID);
-    _worldPacket << Force;
     _worldPacket << LifetimeMs;
 
     return &_worldPacket;
@@ -1235,7 +1234,6 @@ void MoveApplyInertiaAck::Read()
 {
     _worldPacket >> Ack;
     _worldPacket >> MovementInertiaID;
-    _worldPacket >> Force;
     _worldPacket >> LifetimeMs;
 }
 
@@ -1249,7 +1247,6 @@ WorldPacket const* MoveUpdateApplyInertia::Write()
 {
     _worldPacket << *Status;
     _worldPacket << int32(MovementInertiaID);
-    _worldPacket << Force;
     _worldPacket << LifetimeMs;
 
     return &_worldPacket;

@@ -763,14 +763,13 @@ namespace WorldPackets
         class MoveApplyInertia final : public ServerPacket
         {
         public:
-            explicit MoveApplyInertia() : ServerPacket(SMSG_MOVE_APPLY_INERTIA, 16 + 4 + 4 + 12 + 4) { }
+            explicit MoveApplyInertia() : ServerPacket(SMSG_MOVE_APPLY_INERTIA, 16 + 4 + 4 + 4) { }
 
             WorldPacket const* Write() override;
 
             ObjectGuid MoverGUID;
             uint32 SequenceIndex = 0;
             int32 MovementInertiaID = 0;
-            TaggedPosition<Position::XYZ> Force;
             uint32 LifetimeMs = 0;
         };
 
@@ -795,7 +794,6 @@ namespace WorldPackets
 
             MovementAck Ack;
             int32 MovementInertiaID = 0;
-            TaggedPosition<Position::XYZ> Force;
             uint32 LifetimeMs = 0;
         };
 
@@ -819,7 +817,6 @@ namespace WorldPackets
 
             MovementInfo* Status = nullptr;
             int32 MovementInertiaID = 0;
-            TaggedPosition<Position::XYZ> Force;
             uint32 LifetimeMs = 0;
         };
 
