@@ -2033,18 +2033,18 @@ void Housing::SyncUpdateFields()
     if (!_owner || !_owner->GetSession())
         return;
 
-    // All three housing fragments belong on the BNetAccount entity (analysis doc verified).
-    Battlenet::Account& account = _owner->GetSession()->GetBattlenetAccount();
-    account.SetHouseBnetAccount(_owner->GetSession()->GetBattlenetAccountGUID());
-    account.SetHouseEntityGUID(_houseGuid);
-    account.SetHouseType(_houseType);
-    account.SetHouseSize(static_cast<uint32>(_houseSize));
-    account.SetHousePlotIndex(static_cast<int32>(_plotIndex));
-    account.SetHouseLevel(_level);
-    account.SetHouseFavor(_favor64);
+    // FHousingPlayerHouse_C belongs on the Housing/3 entity, NOT the BNetAccount entity.
+    HousingPlayerHouseEntity& houseEntity = _owner->GetSession()->GetHousingPlayerHouseEntity();
+    houseEntity.SetBnetAccount(_owner->GetSession()->GetBattlenetAccountGUID());
+    houseEntity.SetEntityGUID(_houseGuid);
+    houseEntity.SetHouseType(_houseType);
+    houseEntity.SetHouseSize(static_cast<uint32>(_houseSize));
+    houseEntity.SetPlotIndex(static_cast<int32>(_plotIndex));
+    houseEntity.SetLevel(_level);
+    houseEntity.SetFavor(_favor64);
     // Send MAX budgets — the client computes remaining locally by summing placed decor weight
     // from FHousingStorage_C entries. Sending (max - used) would cause double-subtraction.
-    account.SetHouseBudgets(
+    houseEntity.SetBudgets(
         GetMaxInteriorDecorBudget(),
         GetMaxExteriorDecorBudget(),
         GetMaxRoomBudget(),

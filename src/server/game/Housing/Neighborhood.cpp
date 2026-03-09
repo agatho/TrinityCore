@@ -16,7 +16,6 @@
  */
 
 #include "Neighborhood.h"
-#include "Account.h"
 #include "HousingNeighborhoodMirrorEntity.h"
 #include "BattlenetAccountMgr.h"
 #include "DatabaseEnv.h"
@@ -1055,23 +1054,23 @@ void Neighborhood::RefreshMirrorDataForOnlineMembers() const
         if (!player || !player->GetSession())
             continue;
 
-        // All three housing fragments belong on the BNetAccount entity (analysis doc verified).
-        Battlenet::Account& account = player->GetSession()->GetBattlenetAccount();
+        // FNeighborhoodMirrorData_C belongs on the Housing/4 entity, NOT the BNetAccount entity.
+        HousingNeighborhoodMirrorEntity& mirrorEntity = player->GetSession()->GetHousingNeighborhoodMirrorEntity();
 
         // Name + Owner
-        account.SetNeighborhoodMirrorName(_name);
-        account.SetNeighborhoodMirrorOwnerGUID(_ownerGuid);
+        mirrorEntity.SetName(_name);
+        mirrorEntity.SetOwnerGUID(_ownerGuid);
 
         // Houses — rebuild from plots
-        account.ClearNeighborhoodMirrorHouses();
+        mirrorEntity.ClearHouses();
         for (auto const& plot : _plots)
         {
             if (plot.IsOccupied() && !plot.HouseGuid.IsEmpty())
-                account.AddNeighborhoodMirrorHouse(plot.HouseGuid, plot.OwnerGuid);
+                mirrorEntity.AddHouse(plot.HouseGuid, plot.OwnerGuid);
         }
 
         // Managers
-        account.ClearNeighborhoodMirrorManagers();
+        mirrorEntity.ClearManagers();
         for (auto const& m : _members)
         {
             if (m.Role == NEIGHBORHOOD_ROLE_MANAGER || m.Role == NEIGHBORHOOD_ROLE_OWNER)
@@ -1079,7 +1078,7 @@ void Neighborhood::RefreshMirrorDataForOnlineMembers() const
                 ObjectGuid bnetGuid;
                 if (Player* mgr = ObjectAccessor::FindPlayer(m.PlayerGuid))
                     bnetGuid = mgr->GetSession()->GetBattlenetAccountGUID();
-                account.AddNeighborhoodMirrorManager(bnetGuid, m.PlayerGuid);
+                mirrorEntity.AddManager(bnetGuid, m.PlayerGuid);
             }
         }
     }

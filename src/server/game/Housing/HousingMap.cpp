@@ -1418,12 +1418,27 @@ GameObject* HousingMap::SpawnHouseForPlot(uint8 plotIndex, Position const* custo
 
     LoadGrid(x, y);
 
-    // Do NOT ground-clamp the house Z. The DB2 HousePosition already places the house
-    // on top of the platform WMO (GO entry 574432, loaded from gameobject table). Clamping
-    // to terrain height pushes the house (and door GO) DOWN below the platform surface,
-    // making the door unclickable. The DB2 Z is the authoritative house elevation.
-    TC_LOG_DEBUG("housing", "HousingMap::SpawnHouseForPlot: plot {} using DB2 Z={:.2f} (no ground-clamp)",
-        plotIndex, z);
+    // Ground-clamp the house Z to the platform surface. The static platform WMO spawns
+    // (GO entry 574432) are loaded from the gameobject table by LoadGrid and registered
+    // in the DynamicMapTree. GetGameObjectFloor finds the platform top surface, which is
+    // the correct elevation for the house. DB2 HousePosition.Z alone places the house
+    // slightly below the platform surface.
+    {
+        PhaseShift tempPhase;
+        PhasingHandler::InitDbPhaseShift(tempPhase, PHASE_USE_FLAGS_ALWAYS_VISIBLE, 0, 0);
+        float groundZ = GetHeight(tempPhase, x, y, z + 50.0f, true, 100.0f);
+        if (groundZ > INVALID_HEIGHT && groundZ > z - 5.0f)
+        {
+            TC_LOG_DEBUG("housing", "HousingMap::SpawnHouseForPlot: plot {} ground-clamped Z from {:.2f} to {:.2f}",
+                plotIndex, z, groundZ);
+            z = groundZ;
+        }
+        else
+        {
+            TC_LOG_DEBUG("housing", "HousingMap::SpawnHouseForPlot: plot {} using DB2 Z={:.2f} (no ground-clamp, height={:.2f})",
+                plotIndex, z, groundZ);
+        }
+    }
 
     // Build rotation quaternion from the facing angle (yaw only for housing plots,
     // since DB2 HouseRotation X/Y are always 0 and the computed facing is a pure yaw).
@@ -1431,8 +1446,8 @@ GameObject* HousingMap::SpawnHouseForPlot(uint8 plotIndex, Position const* custo
 
     // Spawn the platform WMO (GO entry 574432, GAMEOBJECT_TYPE_PHASEABLE_MO, displayId 113521).
     // Retail sniff: each plot has a platform WMO that raises the house above terrain level.
-    // The static DB spawns from the sniff have incorrect Z values (underground), so we
-    // dynamically spawn the platform at the DB2 HousePosition with the house rotation.
+    // Some neighborhood maps have static platform spawns in the gameobject table (from sniffs);
+    // for maps without them, this dynamic spawn ensures a platform is always present.
     {
         constexpr uint32 PLATFORM_ENTRY = 574432;
         Position platformPos(x, y, z, facing);
@@ -2341,14 +2356,21 @@ MeshObject* HousingMap::SpawnDecorItem(uint8 plotIndex, Housing::PlacedDecor con
 
     QuaternionData rot(decor.RotationX, decor.RotationY, decor.RotationZ, decor.RotationW);
 
-    // Convert world position to room-local position if we have a room entity
+    // Convert world position to room-local position if we have a room entity.
+    // The client applies the parent's rotation to PositionLocalSpace, so we must
+    // apply the INVERSE rotation when converting world → local.
     float localX = worldX;
     float localY = worldY;
     float localZ = worldZ;
     if (!roomEntityGuid.IsEmpty())
     {
-        localX = worldX - roomWorldPos.GetPositionX();
-        localY = worldY - roomWorldPos.GetPositionY();
+        float dx = worldX - roomWorldPos.GetPositionX();
+        float dy = worldY - roomWorldPos.GetPositionY();
+        float roomFacing = roomWorldPos.GetOrientation();
+        float cosF = std::cos(roomFacing);
+        float sinF = std::sin(roomFacing);
+        localX =  cosF * dx + sinF * dy;
+        localY = -sinF * dx + cosF * dy;
         localZ = worldZ - roomWorldPos.GetPositionZ();
     }
 

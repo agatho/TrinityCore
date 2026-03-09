@@ -593,11 +593,17 @@ void HouseInteriorMap::SpawnSingleInteriorDecor(Housing::PlacedDecor const& deco
 
     QuaternionData rot(decor.RotationX, decor.RotationY, decor.RotationZ, decor.RotationW);
 
+    // Convert world → local with inverse rotation of the room entity's facing.
     float localX = worldX, localY = worldY, localZ = worldZ;
     if (!roomEntityGuid.IsEmpty())
     {
-        localX = worldX - roomWorldPos.GetPositionX();
-        localY = worldY - roomWorldPos.GetPositionY();
+        float dx = worldX - roomWorldPos.GetPositionX();
+        float dy = worldY - roomWorldPos.GetPositionY();
+        float roomFacing = roomWorldPos.GetOrientation();
+        float cosF = std::cos(roomFacing);
+        float sinF = std::sin(roomFacing);
+        localX =  cosF * dx + sinF * dy;
+        localY = -sinF * dx + cosF * dy;
         localZ = worldZ - roomWorldPos.GetPositionZ();
     }
 

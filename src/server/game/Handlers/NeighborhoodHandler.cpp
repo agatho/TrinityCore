@@ -17,6 +17,7 @@
 
 #include "WorldSession.h"
 #include "Account.h"
+#include "HousingNeighborhoodMirrorEntity.h"
 #include "DatabaseEnv.h"
 #include "GameObject.h"
 #include "Guild.h"
@@ -1664,6 +1665,32 @@ void WorldSession::HandleNeighborhoodGetRoster(WorldPackets::Neighborhood::Neigh
 
     WorldPacket const* rosterPkt = response.Write();
     SendPacket(rosterPkt);
+
+    // Populate the Housing/4 entity with this neighborhood's mirror data so the
+    // client's internal house list stays in sync for plot resolution.
+    HousingNeighborhoodMirrorEntity& mirrorEntity = GetHousingNeighborhoodMirrorEntity();
+    mirrorEntity.SetName(neighborhood->GetName());
+    mirrorEntity.SetOwnerGUID(neighborhood->GetOwnerGuid());
+
+    mirrorEntity.ClearHouses();
+    for (auto const& plot : neighborhood->GetPlots())
+    {
+        if (plot.IsOccupied() && !plot.HouseGuid.IsEmpty())
+            mirrorEntity.AddHouse(plot.HouseGuid, plot.OwnerGuid);
+    }
+
+    mirrorEntity.ClearManagers();
+    for (auto const& member : neighborhood->GetMembers())
+    {
+        if (member.Role == NEIGHBORHOOD_ROLE_MANAGER || member.Role == NEIGHBORHOOD_ROLE_OWNER)
+        {
+            ObjectGuid bnetGuid;
+            if (Player* mgr = ObjectAccessor::FindPlayer(member.PlayerGuid))
+                bnetGuid = mgr->GetSession()->GetBattlenetAccountGUID();
+            mirrorEntity.AddManager(bnetGuid, member.PlayerGuid);
+        }
+    }
+    mirrorEntity.SendUpdateToPlayer(player);
 
     TC_LOG_ERROR("housing", "=== SMSG_NEIGHBORHOOD_GET_ROSTER_RESPONSE (0x5C0012) [handler] ===\n"
         "  Result={}, Members={}, NeighborhoodName='{}'\n"

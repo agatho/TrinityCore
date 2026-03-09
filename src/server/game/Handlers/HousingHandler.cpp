@@ -17,6 +17,7 @@
 
 #include "WorldSession.h"
 #include "Account.h"
+#include "HousingNeighborhoodMirrorEntity.h"
 #include "HousingPlayerHouseEntity.h"
 #include <cmath>
 #include "DatabaseEnv.h"
@@ -2913,6 +2914,32 @@ void WorldSession::HandleHousingSvcsGetHouseFinderNeighborhood(WorldPackets::Hou
         response.Neighborhood.Houses.push_back(std::move(house));
     }
     SendPacket(response.Write());
+
+    // Populate the Housing/4 entity with this neighborhood's mirror data so the
+    // client's internal house list stays in sync for plot resolution.
+    HousingNeighborhoodMirrorEntity& mirrorEntity = GetHousingNeighborhoodMirrorEntity();
+    mirrorEntity.SetName(neighborhood->GetName());
+    mirrorEntity.SetOwnerGUID(neighborhood->GetOwnerGuid());
+
+    mirrorEntity.ClearHouses();
+    for (auto const& plot : neighborhood->GetPlots())
+    {
+        if (plot.IsOccupied() && !plot.HouseGuid.IsEmpty())
+            mirrorEntity.AddHouse(plot.HouseGuid, plot.OwnerGuid);
+    }
+
+    mirrorEntity.ClearManagers();
+    for (auto const& member : neighborhood->GetMembers())
+    {
+        if (member.Role == NEIGHBORHOOD_ROLE_MANAGER || member.Role == NEIGHBORHOOD_ROLE_OWNER)
+        {
+            ObjectGuid bnetGuid;
+            if (Player* mgr = ObjectAccessor::FindPlayer(member.PlayerGuid))
+                bnetGuid = mgr->GetSession()->GetBattlenetAccountGUID();
+            mirrorEntity.AddManager(bnetGuid, member.PlayerGuid);
+        }
+    }
+    mirrorEntity.SendUpdateToPlayer(player);
 }
 
 void WorldSession::HandleHousingSvcsGetBnetFriendNeighborhoods(WorldPackets::Housing::HousingSvcsGetBnetFriendNeighborhoods const& housingSvcsGetBnetFriendNeighborhoods)
@@ -3973,6 +4000,32 @@ void WorldSession::HandleHousingSvcsGetRosterData(WorldPackets::Housing::Housing
             house.PlotIndex = plotInfo.PlotIndex;
             response.Houses.push_back(house);
         }
+
+        // Populate the Housing/4 entity with this neighborhood's mirror data so the
+        // client's internal house list stays in sync for plot resolution.
+        HousingNeighborhoodMirrorEntity& mirrorEntity = GetHousingNeighborhoodMirrorEntity();
+        mirrorEntity.SetName(neighborhood->GetName());
+        mirrorEntity.SetOwnerGUID(neighborhood->GetOwnerGuid());
+
+        mirrorEntity.ClearHouses();
+        for (auto const& plot : neighborhood->GetPlots())
+        {
+            if (plot.IsOccupied() && !plot.HouseGuid.IsEmpty())
+                mirrorEntity.AddHouse(plot.HouseGuid, plot.OwnerGuid);
+        }
+
+        mirrorEntity.ClearManagers();
+        for (auto const& member : neighborhood->GetMembers())
+        {
+            if (member.Role == NEIGHBORHOOD_ROLE_MANAGER || member.Role == NEIGHBORHOOD_ROLE_OWNER)
+            {
+                ObjectGuid bnetGuid;
+                if (Player* mgr = ObjectAccessor::FindPlayer(member.PlayerGuid))
+                    bnetGuid = mgr->GetSession()->GetBattlenetAccountGUID();
+                mirrorEntity.AddManager(bnetGuid, member.PlayerGuid);
+            }
+        }
+        mirrorEntity.SendUpdateToPlayer(player);
     }
 
     SendPacket(response.Write());

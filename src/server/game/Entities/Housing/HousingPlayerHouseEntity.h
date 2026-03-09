@@ -37,6 +37,8 @@ public:
     void SendUpdateToPlayer(Player* player);
 
     // Housing UpdateField setters
+    void SetHouseType(uint32 houseType);
+    void SetHouseSize(uint32 houseSize);
     void SetPlotIndex(int32 plotIndex);
     void SetLevel(uint32 level);
     void SetFavor(uint64 favor);
