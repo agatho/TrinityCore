@@ -19,6 +19,7 @@
 #define TRINITYCORE_INITIATIVE_MANAGER_H
 
 #include "Define.h"
+#include "HousingDefines.h"
 #include "ObjectGuid.h"
 #include <memory>
 #include <set>
@@ -145,6 +146,11 @@ public:
     // Auto-start initiatives for neighborhoods that don't have one
     void CheckAndStartInitiatives();
 
+    // Send IDA-verified status/points update packets
+    void SendInitiativeUpdateStatus(Neighborhood* neighborhood, NeighborhoodInitiativeUpdateStatus status) const;
+    void SendInitiativePointsUpdate(Neighborhood* neighborhood, uint32 currentPoints, uint32 maxPoints) const;
+    void SendInitiativeMilestoneUpdate(Neighborhood* neighborhood, uint8 milestoneIndex, bool reached, uint8 flags) const;
+
 private:
     InitiativeManager() = default;
 
@@ -156,6 +162,8 @@ private:
     void PersistContribution(uint64 initiativeDbId, uint64 playerGuid, uint32 taskId, uint32 amount);
     void CheckMilestones(ActiveInitiative& initiative, Neighborhood* neighborhood);
     void GrantMilestoneRewards(Player* player, uint32 milestoneID);
+    uint32 SelectWeightedCycle(uint32 initiativeID) const;
+    uint32 CalculateMaxPoints(uint32 initiativeID) const;
 
     // Active initiatives: neighborhoodGuid -> list of active initiatives
     std::unordered_map<uint64, std::vector<std::unique_ptr<ActiveInitiative>>> _activeInitiatives;
@@ -167,6 +175,8 @@ private:
     std::unordered_map<uint32, std::vector<InitiativeMilestoneData>> _cycleMilestones;
     // InitiativeID -> active cycle ID
     std::unordered_map<uint32, uint32> _initiativeActiveCycle;
+    // CycleID -> list of priority entries (for weighted selection)
+    std::unordered_map<uint32, std::vector<std::pair<uint32, int32>>> _cyclePriorities; // cycleID -> [(initiativeID, weight)]
 
     // Update timer
     uint32 _updateTimer = 0;

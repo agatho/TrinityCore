@@ -30,6 +30,7 @@
 #include "NeighborhoodMgr.h"
 #include "ObjectAccessor.h"
 #include "Player.h"
+#include "Random.h"
 #include "WorldSession.h"
 
 InitiativeManager& InitiativeManager::Instance()
@@ -130,8 +131,17 @@ void InitiativeManager::BuildDB2IndexMaps()
         }
     }
 
-    TC_LOG_DEBUG("housing", "InitiativeManager::BuildDB2IndexMaps: {} initiatives with tasks, {} cycles with milestones, {} initiative->cycle mappings",
-        uint32(_initiativeTasks.size()), uint32(_cycleMilestones.size()), uint32(_initiativeActiveCycle.size()));
+    // Build CycleID -> priority weights map for weighted selection
+    _cyclePriorities.clear();
+    for (InitiativeCyclePriorityEntry const* priority : sInitiativeCyclePriorityStore)
+    {
+        if (!priority)
+            continue;
+        _cyclePriorities[priority->InitiativeCycleID].emplace_back(priority->ID, priority->Weight);
+    }
+
+    TC_LOG_DEBUG("housing", "InitiativeManager::BuildDB2IndexMaps: {} initiatives with tasks, {} cycles with milestones, {} initiative->cycle mappings, {} cycle priorities",
+        uint32(_initiativeTasks.size()), uint32(_cycleMilestones.size()), uint32(_initiativeActiveCycle.size()), uint32(_cyclePriorities.size()));
 }
 
 void InitiativeManager::LoadFromDB()
@@ -296,6 +306,12 @@ void InitiativeManager::Update(uint32 diff)
                     initiative->InitiativeID, initiative->NeighborhoodGuid);
                 initiative->Completed = true;
                 PersistInitiative(*initiative);
+
+                // Broadcast failed status (expired without completion)
+                ObjectGuid nhObjGuid = ObjectGuid::Create<HighGuid::Housing>(4, 0, 0, initiative->NeighborhoodGuid);
+                Neighborhood* neighborhood = sNeighborhoodMgr.GetNeighborhood(nhObjGuid);
+                if (neighborhood)
+                    SendInitiativeUpdateStatus(neighborhood, NI_UPDATE_STATUS_FAILED);
             }
         }
     }
@@ -389,6 +405,17 @@ ActiveInitiative* InitiativeManager::StartInitiative(uint64 neighborhoodGuid, ui
 
     ActiveInitiative* ptr = initiative.get();
     _activeInitiatives[neighborhoodGuid].push_back(std::move(initiative));
+
+    // Broadcast initiative started status to neighborhood members
+    ObjectGuid nhObjGuid = ObjectGuid::Create<HighGuid::Housing>(4, 0, 0, neighborhoodGuid);
+    Neighborhood* neighborhood = sNeighborhoodMgr.GetNeighborhood(nhObjGuid);
+    if (neighborhood)
+    {
+        SendInitiativeUpdateStatus(neighborhood, NI_UPDATE_STATUS_STARTED);
+        uint32 maxPoints = CalculateMaxPoints(initiativeID);
+        SendInitiativePointsUpdate(neighborhood, 0, maxPoints);
+    }
+
     return ptr;
 }
 
@@ -443,7 +470,12 @@ void InitiativeManager::CompleteInitiative(uint64 neighborhoodGuid, uint32 initi
             ObjectGuid nhObjGuid = ObjectGuid::Create<HighGuid::Housing>(4, 0, 0, neighborhoodGuid);
             Neighborhood* neighborhood = sNeighborhoodMgr.GetNeighborhood(nhObjGuid);
             if (neighborhood)
+            {
                 BroadcastInitiativeComplete(neighborhood, initiativeID);
+                SendInitiativeUpdateStatus(neighborhood, NI_UPDATE_STATUS_COMPLETED);
+                uint32 maxPoints = CalculateMaxPoints(initiativeID);
+                SendInitiativePointsUpdate(neighborhood, maxPoints, maxPoints);
+            }
 
             TC_LOG_INFO("housing", "InitiativeManager::CompleteInitiative: Initiative {} completed in neighborhood {}",
                 initiativeID, neighborhoodGuid);
@@ -542,9 +574,19 @@ void InitiativeManager::UpdateTaskProgress(uint64 neighborhoodGuid, uint32 initi
         initiative->Progress = static_cast<float>(completedTasks) / static_cast<float>(allTasks.size());
     }
 
-    // Check milestones
+    // Send points update to neighborhood
     ObjectGuid nhObjGuid = ObjectGuid::Create<HighGuid::Housing>(4, 0, 0, neighborhoodGuid);
     Neighborhood* neighborhood = sNeighborhoodMgr.GetNeighborhood(nhObjGuid);
+
+    // Calculate current aggregate points: sum of all task progress values
+    uint32 currentPoints = 0;
+    for (auto const& [tid, tp] : initiative->TaskProgress)
+        currentPoints += tp.Progress;
+    uint32 maxPoints = CalculateMaxPoints(initiativeID);
+    if (neighborhood)
+        SendInitiativePointsUpdate(neighborhood, currentPoints, maxPoints);
+
+    // Check milestones
     CheckMilestones(*initiative, neighborhood);
 
     // Check if all tasks completed -> initiative complete
@@ -909,14 +951,16 @@ void InitiativeManager::CheckAndStartInitiatives()
         if (active)
             continue; // Already has an active initiative
 
-        // Pick the first available initiative from DB2
-        // In a full implementation, this would use InitiativeCycle and priority weighting
+        // Select initiative using weighted cycle priority (IDA-verified: server uses
+        // InitiativeCyclePriority.Weight for weighted random selection).
+        // Build candidate list excluding recently completed initiatives.
+        std::vector<std::pair<uint32, int32>> candidates; // initiativeID, weight
         for (NeighborhoodInitiativeEntry const* entry : sNeighborhoodInitiativeStore)
         {
             if (!entry)
                 continue;
 
-            // Check if this initiative was already completed recently
+            // Skip if this initiative was already completed recently
             bool recentlyCompleted = false;
             auto itr = _activeInitiatives.find(nhGuid);
             if (itr != _activeInitiatives.end())
@@ -933,9 +977,42 @@ void InitiativeManager::CheckAndStartInitiatives()
 
             if (!recentlyCompleted)
             {
-                StartInitiative(nhGuid, entry->ID);
-                break;
+                // Look up cycle priority weight for this initiative's active cycle
+                uint32 cycleID = SelectWeightedCycle(entry->ID);
+                int32 weight = 1; // default equal weight
+                auto prioItr = _cyclePriorities.find(cycleID);
+                if (prioItr != _cyclePriorities.end() && !prioItr->second.empty())
+                    weight = std::max<int32>(1, prioItr->second[0].second);
+
+                candidates.emplace_back(entry->ID, weight);
             }
+        }
+
+        if (!candidates.empty())
+        {
+            uint32 selectedID = candidates[0].first;
+
+            if (candidates.size() > 1)
+            {
+                // Weighted random selection
+                int32 totalWeight = 0;
+                for (auto const& [id, w] : candidates)
+                    totalWeight += w;
+
+                int32 roll = irand(1, totalWeight);
+                int32 cumulative = 0;
+                for (auto const& [id, w] : candidates)
+                {
+                    cumulative += w;
+                    if (roll <= cumulative)
+                    {
+                        selectedID = id;
+                        break;
+                    }
+                }
+            }
+
+            StartInitiative(nhGuid, selectedID);
         }
     }
 }
@@ -1173,10 +1250,134 @@ void InitiativeManager::CheckMilestones(ActiveInitiative& initiative, Neighborho
             PersistMilestoneReached(initiative.DbId, milestone.MilestoneIndex, static_cast<uint32>(GameTime::GetGameTime()));
 
             if (neighborhood)
+            {
                 BroadcastRewardAvailable(neighborhood, initiative.InitiativeID, milestone.MilestoneIndex);
+                SendInitiativeUpdateStatus(neighborhood, NI_UPDATE_STATUS_MILESTONE_COMPLETED);
+                SendInitiativeMilestoneUpdate(neighborhood, static_cast<uint8>(milestone.MilestoneIndex), true,
+                    static_cast<uint8>(milestone.Flags));
+            }
 
             TC_LOG_INFO("housing", "InitiativeManager: Milestone {} reached for initiative {} (progress={:.2f}, required={:.2f})",
                 milestone.MilestoneIndex, initiative.InitiativeID, initiative.Progress, milestone.ProgressRequired);
+        }
+    }
+}
+
+// ============================================================
+// Weighted cycle selection (IDA-verified: server uses InitiativeCyclePriority.Weight)
+// ============================================================
+
+uint32 InitiativeManager::SelectWeightedCycle(uint32 initiativeID) const
+{
+    // Collect all cycles for this initiative
+    std::vector<std::pair<uint32, int32>> candidateCycles; // cycleID, weight
+    for (InitiativeCycleEntry const* cycle : sInitiativeCycleStore)
+    {
+        if (!cycle || cycle->InitiativeID != static_cast<int32>(initiativeID))
+            continue;
+
+        // Look up priority weight for this cycle
+        int32 weight = 1; // default weight
+        auto prioItr = _cyclePriorities.find(cycle->ID);
+        if (prioItr != _cyclePriorities.end() && !prioItr->second.empty())
+            weight = std::max<int32>(1, prioItr->second[0].second);
+
+        candidateCycles.emplace_back(cycle->ID, weight);
+    }
+
+    if (candidateCycles.empty())
+        return GetActiveCycleForInitiative(initiativeID); // fallback to lowest CycleIndex
+
+    if (candidateCycles.size() == 1)
+        return candidateCycles[0].first;
+
+    // Weighted random selection
+    int32 totalWeight = 0;
+    for (auto const& [cid, w] : candidateCycles)
+        totalWeight += w;
+
+    int32 roll = irand(1, totalWeight);
+    int32 cumulative = 0;
+    for (auto const& [cid, w] : candidateCycles)
+    {
+        cumulative += w;
+        if (roll <= cumulative)
+            return cid;
+    }
+
+    return candidateCycles.back().first;
+}
+
+uint32 InitiativeManager::CalculateMaxPoints(uint32 initiativeID) const
+{
+    // Max points = sum of all task TargetCounts (sniff-verified: ProgressRequired=1000.0f scale)
+    uint32 maxPoints = 0;
+    auto const& tasks = GetTasksForInitiative(initiativeID);
+    for (auto const& task : tasks)
+        maxPoints += static_cast<uint32>(std::max<int32>(1, task.TargetCount));
+    return maxPoints;
+}
+
+// ============================================================
+// IDA-verified status/points update packet sending
+// ============================================================
+
+void InitiativeManager::SendInitiativeUpdateStatus(Neighborhood* neighborhood, NeighborhoodInitiativeUpdateStatus status) const
+{
+    if (!neighborhood)
+        return;
+
+    WorldPackets::Housing::InitiativeUpdateStatus packet;
+    packet.Status = static_cast<uint8>(status);
+    WorldPacket const* data = packet.Write();
+
+    for (auto const& member : neighborhood->GetMembers())
+    {
+        if (Player* player = ObjectAccessor::FindPlayer(member.PlayerGuid))
+        {
+            if (player->GetSession())
+                player->GetSession()->SendPacket(data);
+        }
+    }
+}
+
+void InitiativeManager::SendInitiativePointsUpdate(Neighborhood* neighborhood, uint32 currentPoints, uint32 maxPoints) const
+{
+    if (!neighborhood)
+        return;
+
+    WorldPackets::Housing::InitiativePointsUpdate packet;
+    packet.CurrentPoints = currentPoints;
+    packet.MaxPoints = maxPoints;
+    WorldPacket const* data = packet.Write();
+
+    for (auto const& member : neighborhood->GetMembers())
+    {
+        if (Player* player = ObjectAccessor::FindPlayer(member.PlayerGuid))
+        {
+            if (player->GetSession())
+                player->GetSession()->SendPacket(data);
+        }
+    }
+}
+
+void InitiativeManager::SendInitiativeMilestoneUpdate(Neighborhood* neighborhood, uint8 milestoneIndex, bool reached, uint8 flags) const
+{
+    if (!neighborhood)
+        return;
+
+    WorldPackets::Housing::InitiativeMilestoneUpdate packet;
+    packet.MilestoneIndex = milestoneIndex;
+    packet.Reached = reached ? 1 : 0;
+    packet.Flags = flags;
+    WorldPacket const* data = packet.Write();
+
+    for (auto const& member : neighborhood->GetMembers())
+    {
+        if (Player* player = ObjectAccessor::FindPlayer(member.PlayerGuid))
+        {
+            if (player->GetSession())
+                player->GetSession()->SendPacket(data);
         }
     }
 }

@@ -2082,6 +2082,39 @@ WorldPacket const* InitiativeRewardAvailable::Write()
     return &_worldPacket;
 }
 
+WorldPacket const* InitiativeUpdateStatus::Write()
+{
+    _worldPacket << uint8(Status);
+    return &_worldPacket;
+}
+
+WorldPacket const* InitiativePointsUpdate::Write()
+{
+    _worldPacket << uint32(CurrentPoints);
+    _worldPacket << uint32(MaxPoints);
+    return &_worldPacket;
+}
+
+WorldPacket const* InitiativeMilestoneUpdate::Write()
+{
+    _worldPacket << uint8(MilestoneIndex);
+    _worldPacket << uint8(Reached);
+    _worldPacket << uint8(Flags);
+    return &_worldPacket;
+}
+
+WorldPacket const* InitiativeChestResult::Write()
+{
+    _worldPacket << uint32(Result);
+    return &_worldPacket;
+}
+
+WorldPacket const* InitiativeTrackedUpdated::Write()
+{
+    _worldPacket << NeighborhoodGUID;
+    return &_worldPacket;
+}
+
 WorldPacket const* HousingPhotoSharingAuthorizationResult::Write()
 {
     _worldPacket << uint8(Result);

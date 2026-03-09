@@ -35,7 +35,7 @@ CREATE TABLE IF NOT EXISTS `initiative_milestone` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `initiative_reward` (
-  `RewardData` text,
+  `RewardData` bigint signed NOT NULL DEFAULT '0',
   `Name` text,
   `Description` text,
   `ID` int unsigned NOT NULL DEFAULT '0',

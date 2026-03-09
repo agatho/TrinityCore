@@ -81,22 +81,23 @@ INSERT INTO `initiative_milestone` (`ID`, `MilestoneIndex`, `ProgressRequired`, 
 -- ============================================================
 DELETE FROM `initiative_reward` WHERE `ID` IN (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12);
 INSERT INTO `initiative_reward` (`RewardData`, `Name`, `Description`, `ID`, `RewardType`, `RewardAmount`, `CurrencyID`, `ItemID`, `Flags`, `VerifiedBuild`) VALUES
--- Gathering rewards (favor-based)
-('', 'Gathering Milestone 1', 'Reward for reaching 33% of the Gathering Initiative.', 1, 0, 100, 0, 0, 0, 65940),
-('', 'Gathering Milestone 2', 'Reward for reaching 66% of the Gathering Initiative.', 2, 0, 200, 0, 0, 0, 65940),
-('', 'Gathering Milestone 3', 'Reward for completing the Gathering Initiative.',      3, 0, 500, 0, 0, 0, 65940),
+-- Gathering rewards (favor-based, RewardType=0 with RewardAmount as favor points)
+-- IDA-verified: HouseInitiativeFavor is AccountTransType 66, granted via Housing::AddFavor
+(0, 'Gathering Milestone 1', 'Reward for reaching 33% of the Gathering Initiative.', 1, 0, 100, 0, 0, 0, 65940),
+(0, 'Gathering Milestone 2', 'Reward for reaching 66% of the Gathering Initiative.', 2, 0, 200, 0, 0, 0, 65940),
+(0, 'Gathering Milestone 3', 'Reward for completing the Gathering Initiative.',      3, 0, 500, 0, 0, 0, 65940),
 -- Crafting rewards
-('', 'Crafting Milestone 1', 'Reward for reaching 33% of the Crafting Initiative.', 4, 0, 100, 0, 0, 0, 65940),
-('', 'Crafting Milestone 2', 'Reward for reaching 66% of the Crafting Initiative.', 5, 0, 200, 0, 0, 0, 65940),
-('', 'Crafting Milestone 3', 'Reward for completing the Crafting Initiative.',      6, 0, 500, 0, 0, 0, 65940),
+(0, 'Crafting Milestone 1', 'Reward for reaching 33% of the Crafting Initiative.', 4, 0, 100, 0, 0, 0, 65940),
+(0, 'Crafting Milestone 2', 'Reward for reaching 66% of the Crafting Initiative.', 5, 0, 200, 0, 0, 0, 65940),
+(0, 'Crafting Milestone 3', 'Reward for completing the Crafting Initiative.',      6, 0, 500, 0, 0, 0, 65940),
 -- Combat rewards
-('', 'Combat Milestone 1', 'Reward for reaching 33% of the Combat Initiative.', 7, 0, 100, 0, 0, 0, 65940),
-('', 'Combat Milestone 2', 'Reward for reaching 66% of the Combat Initiative.', 8, 0, 200, 0, 0, 0, 65940),
-('', 'Combat Milestone 3', 'Reward for completing the Combat Initiative.',      9, 0, 500, 0, 0, 0, 65940),
+(0, 'Combat Milestone 1', 'Reward for reaching 33% of the Combat Initiative.', 7, 0, 100, 0, 0, 0, 65940),
+(0, 'Combat Milestone 2', 'Reward for reaching 66% of the Combat Initiative.', 8, 0, 200, 0, 0, 0, 65940),
+(0, 'Combat Milestone 3', 'Reward for completing the Combat Initiative.',      9, 0, 500, 0, 0, 0, 65940),
 -- Exploration rewards
-('', 'Exploration Milestone 1', 'Reward for reaching 33% of the Exploration Initiative.', 10, 0, 100, 0, 0, 0, 65940),
-('', 'Exploration Milestone 2', 'Reward for reaching 66% of the Exploration Initiative.', 11, 0, 200, 0, 0, 0, 65940),
-('', 'Exploration Milestone 3', 'Reward for completing the Exploration Initiative.',      12, 0, 500, 0, 0, 0, 65940);
+(0, 'Exploration Milestone 1', 'Reward for reaching 33% of the Exploration Initiative.', 10, 0, 100, 0, 0, 0, 65940),
+(0, 'Exploration Milestone 2', 'Reward for reaching 66% of the Exploration Initiative.', 11, 0, 200, 0, 0, 0, 65940),
+(0, 'Exploration Milestone 3', 'Reward for completing the Exploration Initiative.',      12, 0, 500, 0, 0, 0, 65940);
 
 -- ============================================================
 -- 7. InitiativeRewardXMilestone — Link rewards to milestones
