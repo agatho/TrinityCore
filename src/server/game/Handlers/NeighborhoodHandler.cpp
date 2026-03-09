@@ -1085,11 +1085,61 @@ void WorldSession::HandleNeighborhoodBuyHouse(WorldPackets::Neighborhood::Neighb
         static constexpr uint32 NPC_KILL_CREDIT_BUY_HOME = 248858;
         player->KilledMonsterCredit(NPC_KILL_CREDIT_BUY_HOME);
 
-        // Mark all tutorials as seen (retail sniff: all 256 bits = 0xFF).
-        // Without this, the client gates cleanup/expert modes behind FrameTutorialAccount bits.
+        // TODO: Replace with quest-driven tutorial progression when the housing tutorial
+        // questline is implemented. See Player.cpp LoadFromDB for full explanation.
+        // Mark all server tutorial flags as seen (retail sniff: all 256 bits = 0xFF).
         for (uint8 i = 0; i < MAX_ACCOUNT_TUTORIAL_VALUES; ++i)
             SetTutorialInt(i, 0xFFFFFFFF);
         SendTutorialsData();
+
+        // Also inject FrameTutorialAccount CVars into GLOBAL_CONFIG_CACHE.
+        // The client's housing UI checks closedInfoFramesAccountWide bit 38
+        // (HousingModesUnlocked) separately from the 256-bit server tutorial flags.
+        {
+            AccountData const* configCache = GetAccountData(GLOBAL_CONFIG_CACHE);
+            std::string configData = configCache ? configCache->Data : "";
+            bool modified = false;
+
+            auto ensureCVar = [&](std::string_view cvarName, std::string_view value)
+            {
+                std::string setPrefix = std::string("SET ") + std::string(cvarName) + " \"";
+                size_t pos = configData.find(setPrefix);
+                if (pos != std::string::npos)
+                {
+                    size_t valStart = pos + setPrefix.size();
+                    size_t valEnd = configData.find('"', valStart);
+                    if (valEnd != std::string::npos)
+                    {
+                        std::string oldVal = configData.substr(valStart, valEnd - valStart);
+                        if (oldVal != value)
+                        {
+                            configData.replace(valStart, valEnd - valStart, value);
+                            modified = true;
+                        }
+                    }
+                }
+                else
+                {
+                    if (!configData.empty() && configData.back() != '\n')
+                        configData += '\n';
+                    configData += "SET ";
+                    configData += cvarName;
+                    configData += " \"";
+                    configData += value;
+                    configData += "\"\n";
+                    modified = true;
+                }
+            };
+
+            ensureCVar("closedInfoFramesAccountWide", "4294967295 4294967295");
+            ensureCVar("housingTutorialsEnabled", "0");
+
+            if (modified)
+            {
+                SetAccountData(GLOBAL_CONFIG_CACHE, GameTime::GetGameTime(), configData);
+                SendAccountDataTimes(player->GetGUID(), GLOBAL_CACHE_MASK);
+            }
+        }
 
         // Retail sequence: FirstTimeDecorAcquisition → BuyHouseResponse → LevelFavor updates
 

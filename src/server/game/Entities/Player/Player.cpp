@@ -18620,9 +18620,14 @@ bool Player::LoadFromDB(ObjectGuid guid, CharacterDatabaseQueryHolder const& hol
         holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_HOUSING_CATALOG)))
         _housings.push_back(std::move(housing));
 
+    // TODO: When the housing tutorial questline is implemented, this brute-force approach
+    // (setting all tutorial bits + injecting closedInfoFramesAccountWide / housingTutorialsEnabled
+    // CVars) must be replaced with proper quest-driven tutorial progression. The client Lua UI
+    // sets FrameTutorialAccount bits (e.g. HousingModesUnlocked=38) individually as the player
+    // completes each tutorial step. At that point, remove the blanket CVar injection below and
+    // let the questline handlers set the appropriate closedInfoFramesAccountWide bits on completion.
+    //
     // Mark all tutorials as seen. Retail sniff shows all 256 tutorial bits set to 1 (0xFF bytes).
-    // Without this, the client blocks housing cleanup/expert modes with "Mode not available
-    // while in the tutorial" (FrameTutorialAccount.HousingModesUnlocked = bit 38).
     if (GetSession())
     {
         bool needsUpdate = false;
@@ -18636,6 +18641,62 @@ bool Player::LoadFromDB(ObjectGuid guid, CharacterDatabaseQueryHolder const& hol
         }
         if (needsUpdate)
             GetSession()->SendTutorialsData();
+
+        // The 256-bit server tutorial flags (above) are separate from the client's
+        // FrameTutorialAccount UI flags. The client stores those in the CVar bitfield
+        // "closedInfoFramesAccountWide" within the GLOBAL_CONFIG_CACHE account data.
+        // Without setting bit 38 (HousingModesUnlocked), the housing editor UI keeps
+        // expert/cleanup/layout modes locked with "Tutorial Mode" error.
+        // Also disable housing tutorials entirely via housingTutorialsEnabled=0.
+        AccountData const* configCache = GetSession()->GetAccountData(GLOBAL_CONFIG_CACHE);
+        std::string configData = configCache ? configCache->Data : "";
+        bool configModified = false;
+
+        // Helper lambda: set or replace a CVar value in the config string
+        auto ensureCVar = [&](std::string_view cvarName, std::string_view value)
+        {
+            std::string setPrefix = std::string("SET ") + std::string(cvarName) + " \"";
+            size_t pos = configData.find(setPrefix);
+            if (pos != std::string::npos)
+            {
+                // Replace existing value
+                size_t valStart = pos + setPrefix.size();
+                size_t valEnd = configData.find('"', valStart);
+                if (valEnd != std::string::npos)
+                {
+                    std::string oldVal = configData.substr(valStart, valEnd - valStart);
+                    if (oldVal != value)
+                    {
+                        configData.replace(valStart, valEnd - valStart, value);
+                        configModified = true;
+                    }
+                }
+            }
+            else
+            {
+                // Append new CVar
+                if (!configData.empty() && configData.back() != '\n')
+                    configData += '\n';
+                configData += "SET ";
+                configData += cvarName;
+                configData += " \"";
+                configData += value;
+                configData += "\"\n";
+                configModified = true;
+            }
+        };
+
+        // Mark ALL FrameTutorialAccount bits as seen (48 bits = 2 uint32 words, all 1s)
+        ensureCVar("closedInfoFramesAccountWide", "4294967295 4294967295");
+        // Disable housing tutorial gates entirely
+        ensureCVar("housingTutorialsEnabled", "0");
+
+        if (configModified)
+        {
+            GetSession()->SetAccountData(GLOBAL_CONFIG_CACHE, GameTime::GetGameTime(), configData);
+            TC_LOG_DEBUG("housing", "Player::LoadFromDB: Injected housing tutorial CVars into GLOBAL_CONFIG_CACHE for account {}",
+                GetSession()->GetAccountId());
+        }
     }
 
     // Always register PlayerHouseInfoComponent_C fragment on the Player entity.
