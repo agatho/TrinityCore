@@ -25094,14 +25094,16 @@ void Player::SendInitialPacketsAfterAddToMap()
             mirrorEntity.SetName(neighborhood->GetName());
             mirrorEntity.SetOwnerGUID(neighborhood->GetOwnerGuid());
 
-            // Add all plots with houses so the client knows which plots are occupied
+            // Add ALL 55 plot entries so Houses[i] = PlotIndex i. The client uses
+            // the array index as the plot identifier; skipping empty slots causes
+            // the client to show the wrong plots as occupied.
             mirrorEntity.ClearHouses();
             for (auto const& plot : neighborhood->GetPlots())
             {
-                if (!plot.IsOccupied())
-                    continue;
-                if (!plot.HouseGuid.IsEmpty())
+                if (plot.IsOccupied() && !plot.HouseGuid.IsEmpty())
                     mirrorEntity.AddHouse(plot.HouseGuid, plot.OwnerGuid);
+                else
+                    mirrorEntity.AddHouse(ObjectGuid::Empty, ObjectGuid::Empty);
             }
 
             // Add managers to mirror data

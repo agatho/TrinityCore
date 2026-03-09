@@ -1490,16 +1490,17 @@ GameObject* HousingMap::SpawnHouseForPlot(uint8 plotIndex, Position const* custo
     }
 
     // Spawn the front door GO (entry 586576, type Goober, displayId 116973)
-    // Retail sniff: the interactive door GO is at the door mesh position.
-    // Door mesh local offset from base: (9.2805, -3.4555, -0.5611)
-    // Transform to world space using house facing angle.
+    // The interactive door GO must be at the actual doorway (top of stairs), NOT at
+    // the door mesh origin (which sits at stair base level, ~0.56 below house floor).
+    // Door mesh local offset from base: (9.2805, -3.4555, -0.5611) — mesh origin at stair foot
+    // Adjusted offset: raised Z to door frame level, pulled X back toward actual door threshold.
     GameObject* doorGo = nullptr;
     uint32 doorEntry = 586576; // retail "Founder's Point Front Door"
 
-    // Door mesh local-space offset (from retail sniff door MeshObject attached to base)
-    float doorLocalX = 9.2805f;
+    // Door interaction GO local-space offset (adjusted from mesh origin to doorway threshold)
+    float doorLocalX = 8.0f;
     float doorLocalY = -3.4555f;
-    float doorLocalZ = -0.5611f;
+    float doorLocalZ = 1.5f;
 
     // Try to get the offset from DB2 ExteriorComponentExitPoint if available
     int32 groupID = sHousingMgr.GetGroupForComponent(static_cast<uint32>(exteriorComponentID));

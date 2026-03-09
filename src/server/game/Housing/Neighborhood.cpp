@@ -1061,12 +1061,16 @@ void Neighborhood::RefreshMirrorDataForOnlineMembers() const
         mirrorEntity.SetName(_name);
         mirrorEntity.SetOwnerGUID(_ownerGuid);
 
-        // Houses — rebuild from plots
+        // Houses — rebuild from plots. Add ALL 55 entries so Houses[i] = PlotIndex i.
+        // The client uses the array index as the plot identifier; skipping empty slots
+        // causes the client to show the wrong plots as occupied.
         mirrorEntity.ClearHouses();
         for (auto const& plot : _plots)
         {
             if (plot.IsOccupied() && !plot.HouseGuid.IsEmpty())
                 mirrorEntity.AddHouse(plot.HouseGuid, plot.OwnerGuid);
+            else
+                mirrorEntity.AddHouse(ObjectGuid::Empty, ObjectGuid::Empty);
         }
 
         // Managers

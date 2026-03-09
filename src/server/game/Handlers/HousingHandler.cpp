@@ -2926,6 +2926,8 @@ void WorldSession::HandleHousingSvcsGetHouseFinderNeighborhood(WorldPackets::Hou
     {
         if (plot.IsOccupied() && !plot.HouseGuid.IsEmpty())
             mirrorEntity.AddHouse(plot.HouseGuid, plot.OwnerGuid);
+        else
+            mirrorEntity.AddHouse(ObjectGuid::Empty, ObjectGuid::Empty);
     }
 
     mirrorEntity.ClearManagers();
@@ -4012,6 +4014,8 @@ void WorldSession::HandleHousingSvcsGetRosterData(WorldPackets::Housing::Housing
         {
             if (plot.IsOccupied() && !plot.HouseGuid.IsEmpty())
                 mirrorEntity.AddHouse(plot.HouseGuid, plot.OwnerGuid);
+            else
+                mirrorEntity.AddHouse(ObjectGuid::Empty, ObjectGuid::Empty);
         }
 
         mirrorEntity.ClearManagers();
