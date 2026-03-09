@@ -1444,35 +1444,9 @@ GameObject* HousingMap::SpawnHouseForPlot(uint8 plotIndex, Position const* custo
     // since DB2 HouseRotation X/Y are always 0 and the computed facing is a pure yaw).
     QuaternionData rot = QuaternionData::fromEulerAnglesZYX(facing, 0.0f, 0.0f);
 
-    // Spawn the platform WMO (GO entry 574432, GAMEOBJECT_TYPE_PHASEABLE_MO, displayId 113521).
-    // Retail sniff: each plot has a platform WMO that raises the house above terrain level.
-    // Some neighborhood maps have static platform spawns in the gameobject table (from sniffs);
-    // for maps without them, this dynamic spawn ensures a platform is always present.
-    {
-        constexpr uint32 PLATFORM_ENTRY = 574432;
-        Position platformPos(x, y, z, facing);
-        GameObject* platform = GameObject::CreateGameObject(PLATFORM_ENTRY, this, platformPos, rot, 255, GO_STATE_READY);
-        if (platform)
-        {
-            platform->SetFlag(GO_FLAG_NODESPAWN);
-            PhasingHandler::InitDbPhaseShift(platform->GetPhaseShift(), PHASE_USE_FLAGS_ALWAYS_VISIBLE, 0, 0);
-            if (!AddToMap(platform))
-            {
-                TC_LOG_ERROR("housing", "HousingMap::SpawnHouseForPlot: Failed to add platform GO 574432 to map for plot {}", plotIndex);
-                delete platform;
-            }
-            else
-            {
-                TC_LOG_DEBUG("housing", "HousingMap::SpawnHouseForPlot: Spawned platform GO 574432 guid={} at ({:.2f},{:.2f},{:.2f}) facing={:.3f} for plot {}",
-                    platform->GetGUID().ToString(), x, y, z, facing, plotIndex);
-            }
-        }
-        else
-        {
-            TC_LOG_ERROR("housing", "HousingMap::SpawnHouseForPlot: Failed to create platform GO 574432 for plot {} at ({:.2f},{:.2f},{:.2f})",
-                plotIndex, x, y, z);
-        }
-    }
+    // Platform WMO (GO entry 574432) is loaded from the static gameobject table (sniff data).
+    // Do NOT dynamically spawn a second platform — it renders visibly on top of the static
+    // one and the static spawn already provides DynamicMapTree collision for ground-clamping.
 
     Position pos(x, y, z, facing);
     Neighborhood::PlotInfo const* plotInfo = _neighborhood->GetPlotInfo(plotIndex);
