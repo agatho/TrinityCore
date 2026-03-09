@@ -1566,6 +1566,10 @@ void WorldSession::HandleNeighborhoodOpenCornerstoneUI(WorldPackets::Neighborhoo
     response.CanPurchase = !isOwned;
     response.NeighborhoodName = neighborhood->GetName();
 
+    // Set IsInitiative when the neighborhood has an active initiative/endeavor
+    uint64 nhLowGuid = neighborhood->GetGuid().GetCounter();
+    response.IsInitiative = (sInitiativeManager.GetActiveInitiative(nhLowGuid) != nullptr);
+
     if (isOwned)
     {
         // Owned plot: show owner info, no purchase available
