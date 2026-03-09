@@ -18,6 +18,7 @@
 #include "WorldSession.h"
 #include "Account.h"
 #include "HousingNeighborhoodMirrorEntity.h"
+#include "HousingPlayerHouseEntity.h"
 #include "DatabaseEnv.h"
 #include "GameObject.h"
 #include "Guild.h"
@@ -1233,13 +1234,30 @@ void WorldSession::HandleNeighborhoodBuyHouse(WorldPackets::Neighborhood::Neighb
         if (Housing* h = player->GetHousing())
         {
             h->PopulateCatalogStorageEntries();
+            h->SyncUpdateFields();
 
             WorldPackets::Housing::HousingDecorRequestStorageResponse storageResp;
             storageResp.ResultCode = static_cast<uint8>(HOUSING_RESULT_SUCCESS);
             SendPacket(storageResp.Write());
-            GetBattlenetAccount().SendUpdateToPlayer(player);
 
-            TC_LOG_ERROR("housing", "HandleNeighborhoodBuyHouse: Sent proactive STORAGE_RSP + Account update (CatalogEntries={})",
+            // Send Account + HousingPlayerHouseEntity together so budget data
+            // accompanies storage data for the client's decor count display.
+            {
+                GetBattlenetAccount().BuildUpdateChangesMask();
+                GetHousingPlayerHouseEntity().BuildUpdateChangesMask();
+
+                UpdateData updateData(player->GetMapId());
+                WorldPacket updatePacket;
+                GetBattlenetAccount().BuildValuesUpdateBlockForPlayer(&updateData, player);
+                GetHousingPlayerHouseEntity().BuildValuesUpdateBlockForPlayer(&updateData, player);
+                updateData.BuildPacket(&updatePacket);
+                player->SendDirectMessage(&updatePacket);
+
+                GetBattlenetAccount().ClearUpdateMask(false);
+                GetHousingPlayerHouseEntity().ClearUpdateMask(false);
+            }
+
+            TC_LOG_ERROR("housing", "HandleNeighborhoodBuyHouse: Sent proactive STORAGE_RSP + Account + HouseEntity update (CatalogEntries={})",
                 uint32(h->GetCatalogEntries().size()));
         }
 
