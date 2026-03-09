@@ -1298,8 +1298,23 @@ void WorldSession::HandleNeighborhoodBuyHouse(WorldPackets::Neighborhood::Neighb
 
                 UpdateData updateData(player->GetMapId());
                 WorldPacket updatePacket;
-                GetBattlenetAccount().BuildValuesUpdateBlockForPlayer(&updateData, player);
-                GetHousingPlayerHouseEntity().BuildValuesUpdateBlockForPlayer(&updateData, player);
+
+                if (player->HaveAtClient(&GetBattlenetAccount()))
+                    GetBattlenetAccount().BuildValuesUpdateBlockForPlayer(&updateData, player);
+                else
+                {
+                    GetBattlenetAccount().BuildCreateUpdateBlockForPlayer(&updateData, player);
+                    player->m_clientGUIDs.insert(GetBattlenetAccount().GetGUID());
+                }
+
+                if (player->HaveAtClient(&GetHousingPlayerHouseEntity()))
+                    GetHousingPlayerHouseEntity().BuildValuesUpdateBlockForPlayer(&updateData, player);
+                else
+                {
+                    GetHousingPlayerHouseEntity().BuildCreateUpdateBlockForPlayer(&updateData, player);
+                    player->m_clientGUIDs.insert(GetHousingPlayerHouseEntity().GetGUID());
+                }
+
                 updateData.BuildPacket(&updatePacket);
                 player->SendDirectMessage(&updatePacket);
 

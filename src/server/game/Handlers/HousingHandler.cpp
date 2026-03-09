@@ -528,10 +528,25 @@ void WorldSession::HandleHousingDecorSetEditMode(WorldPackets::Housing::HousingD
 
             // Player VALUES_UPDATE (EditorMode=1 + UNIT_FLAG_PACIFIED + UNIT_FLAG2_NO_ACTIONS)
             player->BuildValuesUpdateBlockForPlayer(&updateData, player);
-            // Account VALUES_UPDATE (FHousingStorage_C)
-            GetBattlenetAccount().BuildValuesUpdateBlockForPlayer(&updateData, player);
-            // HousingPlayerHouseEntity VALUES_UPDATE (budgets, level, favor, etc.)
-            GetHousingPlayerHouseEntity().BuildValuesUpdateBlockForPlayer(&updateData, player);
+
+            // Account + HousingPlayerHouseEntity: send CREATE if the client doesn't
+            // have them (they get destroyed during map transfers to the housing map),
+            // otherwise send VALUES_UPDATE.
+            if (player->HaveAtClient(&GetBattlenetAccount()))
+                GetBattlenetAccount().BuildValuesUpdateBlockForPlayer(&updateData, player);
+            else
+            {
+                GetBattlenetAccount().BuildCreateUpdateBlockForPlayer(&updateData, player);
+                player->m_clientGUIDs.insert(GetBattlenetAccount().GetGUID());
+            }
+
+            if (player->HaveAtClient(&GetHousingPlayerHouseEntity()))
+                GetHousingPlayerHouseEntity().BuildValuesUpdateBlockForPlayer(&updateData, player);
+            else
+            {
+                GetHousingPlayerHouseEntity().BuildCreateUpdateBlockForPlayer(&updateData, player);
+                player->m_clientGUIDs.insert(GetHousingPlayerHouseEntity().GetGUID());
+            }
 
             updateData.BuildPacket(&updatePacket);
             player->SendDirectMessage(&updatePacket);
