@@ -2016,8 +2016,8 @@ void WorldSession::HandleInitiativeReportProgress(WorldPackets::Neighborhood::In
     if (!player)
         return;
 
-    TC_LOG_DEBUG("housing", "CMSG_INITIATIVE_REPORT_PROGRESS NeighborhoodGuid: {} InitiativeID: {} TaskID: {} Delta: {} Player: {}",
-        packet.NeighborhoodGuid.ToString(), packet.InitiativeID, packet.TaskID, packet.ProgressDelta, player->GetGUID().ToString());
+    TC_LOG_DEBUG("housing", "CMSG_INITIATIVE_REPORT_PROGRESS NeighborhoodGuid: {} Player: {}",
+        packet.NeighborhoodGuid.ToString(), player->GetGUID().ToString());
 
     Neighborhood* neighborhood = sNeighborhoodMgr.ResolveNeighborhood(packet.NeighborhoodGuid, player);
     if (!neighborhood)
@@ -2030,20 +2030,7 @@ void WorldSession::HandleInitiativeReportProgress(WorldPackets::Neighborhood::In
 
     uint64 nhGuid = neighborhood->GetGuid().GetCounter();
 
-    // Validate that the initiative and task exist
-    ActiveInitiative* active = sInitiativeManager.GetActiveInitiative(nhGuid);
-    if (!active || active->InitiativeID != packet.InitiativeID)
-    {
-        WorldPackets::Housing::GetPlayerInitiativeInfoResult response;
-        response.Result = static_cast<uint8>(HOUSING_RESULT_GENERIC_FAILURE);
-        SendPacket(response.Write());
-        return;
-    }
-
-    // Apply progress and send updated task info
-    if (packet.ProgressDelta > 0)
-        sInitiativeManager.UpdateTaskProgress(nhGuid, packet.InitiativeID, packet.TaskID, packet.ProgressDelta, player);
-
+    // Client is requesting initiative info for this neighborhood — send current state
     sInitiativeManager.SendPlayerInitiativeInfo(this, nhGuid);
 }
 

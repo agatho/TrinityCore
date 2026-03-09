@@ -2781,12 +2781,9 @@ void InitiativeAcceptMilestoneRequest::Read()
 void InitiativeReportProgress::Read()
 {
     _worldPacket >> NeighborhoodGuid;
-    _worldPacket >> InitiativeID;
-    _worldPacket >> TaskID;
-    _worldPacket >> ProgressDelta;
 
-    TC_LOG_DEBUG("network.opcode", "CMSG_INITIATIVE_REPORT_PROGRESS NeighborhoodGuid: {} InitiativeID: {} TaskID: {} ProgressDelta: {}",
-        NeighborhoodGuid.ToString(), InitiativeID, TaskID, ProgressDelta);
+    TC_LOG_DEBUG("network.opcode", "CMSG_INITIATIVE_REPORT_PROGRESS NeighborhoodGuid: {}",
+        NeighborhoodGuid.ToString());
 }
 
 void GetInitiativeClaimRewardRequest::Read()

@@ -496,10 +496,14 @@ void WorldSession::HandleHousingDecorSetEditMode(WorldPackets::Housing::HousingD
         player->SetUnitFlag2(UNIT_FLAG2_NO_ACTIONS);
         player->ReplaceAllSilencedSchoolMask(SPELL_SCHOOL_MASK_ALL);
 
-        // 4. Populate FHousingStorage_C on the Account entity if not done yet.
+        // 4. Populate FHousingStorage_C on the Account entity.
         // The client correlates MeshObject FHousingDecor_C.DecorGUID with entries in
         // FHousingStorage_C to build its placed decor list for the targeting system.
         // Without this, the client has no decor to target and selection is impossible.
+        // Reset the populated flag so storage entries are re-pushed on every edit mode
+        // entry — the client may clear its decor list when exiting editor mode, so we
+        // must ensure the Account VALUES_UPDATE always carries the full storage map.
+        housing->ResetStoragePopulated();
         housing->PopulateCatalogStorageEntries();
 
         // 4b. Refresh budget values on the HousingPlayerHouseEntity so the client

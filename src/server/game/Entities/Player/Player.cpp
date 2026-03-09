@@ -18695,6 +18695,10 @@ bool Player::LoadFromDB(ObjectGuid guid, CharacterDatabaseQueryHolder const& hol
         if (configModified)
         {
             GetSession()->SetAccountData(GLOBAL_CONFIG_CACHE, GameTime::GetGameTime(), configData);
+            // Re-send account data timestamps so the client detects the newer timestamp
+            // and re-fetches GLOBAL_CONFIG_CACHE. Without this, the client uses the stale
+            // data it fetched during auth (before LoadFromDB modified it).
+            GetSession()->SendAccountDataTimes(GetGUID(), GLOBAL_CACHE_MASK);
             TC_LOG_DEBUG("housing", "Player::LoadFromDB: Injected housing tutorial CVars into GLOBAL_CONFIG_CACHE for account {}",
                 GetSession()->GetAccountId());
         }

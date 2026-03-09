@@ -2864,9 +2864,6 @@ namespace WorldPackets::Neighborhood
         InitiativeReportProgress(WorldPacket&& packet) : ClientPacket(CMSG_INITIATIVE_REPORT_PROGRESS, std::move(packet)) { }
         void Read() override;
         ObjectGuid NeighborhoodGuid;
-        uint32 InitiativeID = 0;
-        uint32 TaskID = 0;
-        uint32 ProgressDelta = 0;
     };
 
     class GetInitiativeClaimRewardRequest final : public ClientPacket
