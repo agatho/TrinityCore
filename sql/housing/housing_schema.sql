@@ -282,7 +282,54 @@ CREATE TABLE `neighborhood_initiatives` (
 -- neighborhood initiative. One row per (initiative, player, task) triple.
 -- The UNIQUE index allows INSERT ... ON DUPLICATE KEY UPDATE for upserts.
 -- ---------------------------------------------------------------------------
-DROP TABLE IF EXISTS `neighborhood_initiative_contributions`;
+DROP TABLE IF EXISTS `neighborhood_initiative_task_progress`;
+CREATE TABLE `neighborhood_initiative_task_progress` (
+    `initiativeDbId` BIGINT UNSIGNED NOT NULL COMMENT 'FK to neighborhood_initiatives.id',
+    `taskId` INT UNSIGNED NOT NULL COMMENT 'InitiativeTask DB2 entry ID',
+    `progress` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Current progress count towards TargetCount',
+    `status` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '0=NOT_STARTED, 1=IN_PROGRESS, 2=COMPLETE',
+    PRIMARY KEY (`initiativeDbId`, `taskId`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---------------------------------------------------------------------------
+-- 13. neighborhood_initiative_milestones - Milestone reached/claimed tracking
+--
+-- Tracks which milestones have been reached for each initiative instance,
+-- and whether individual players have claimed their rewards.
+-- ---------------------------------------------------------------------------
+DROP TABLE IF EXISTS `neighborhood_initiative_milestones`;
+CREATE TABLE `neighborhood_initiative_milestones` (
+    `initiativeDbId` BIGINT UNSIGNED NOT NULL COMMENT 'FK to neighborhood_initiatives.id',
+    `milestoneIndex` INT UNSIGNED NOT NULL COMMENT 'Milestone index (0, 1, 2)',
+    `reached` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '1 = milestone has been reached',
+    `reachedTime` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Unix timestamp when milestone was reached',
+    PRIMARY KEY (`initiativeDbId`, `milestoneIndex`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---------------------------------------------------------------------------
+-- 14. neighborhood_initiative_reward_claims - Per-player reward claim tracking
+--
+-- Tracks which players have claimed rewards for which milestones.
+-- Prevents double-claiming.
+-- ---------------------------------------------------------------------------
+DROP TABLE IF EXISTS `neighborhood_initiative_reward_claims`;
+CREATE TABLE `neighborhood_initiative_reward_claims` (
+    `initiativeDbId` BIGINT UNSIGNED NOT NULL COMMENT 'FK to neighborhood_initiatives.id',
+    `milestoneIndex` INT UNSIGNED NOT NULL COMMENT 'Milestone index (0, 1, 2)',
+    `playerGuid` BIGINT UNSIGNED NOT NULL COMMENT 'Player character GUID',
+    `claimTime` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Unix timestamp when reward was claimed',
+    PRIMARY KEY (`initiativeDbId`, `milestoneIndex`, `playerGuid`),
+    INDEX `idx_player` (`playerGuid`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---------------------------------------------------------------------------
+-- 15. neighborhood_initiative_contributions - Per-player contribution tracking
+--
+-- Tracks how much each player has contributed to each task within a
+-- neighborhood initiative. One row per (initiative, player, task) triple.
+-- The UNIQUE index allows INSERT ... ON DUPLICATE KEY UPDATE for upserts.
+-- ---------------------------------------------------------------------------
+Drop TABLE IF EXISTS `neighborhood_initiative_contributions`;
 CREATE TABLE `neighborhood_initiative_contributions` (
     `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
     `initiativeDbId` BIGINT UNSIGNED NOT NULL COMMENT 'FK to neighborhood_initiatives.id',

@@ -2065,14 +2065,22 @@ void WorldSession::HandleGetInitiativeClaimRewardRequest(WorldPackets::Neighborh
 
     uint64 nhGuid = neighborhood->GetGuid().GetCounter();
 
-    if (!sInitiativeManager.HasUnclaimedRewards(nhGuid, packet.InitiativeID))
+    uint64 playerLowGuid = player->GetGUID().GetCounter();
+
+    if (!sInitiativeManager.HasUnclaimedRewards(nhGuid, packet.InitiativeID, playerLowGuid))
     {
         sInitiativeManager.SendInitiativeRewardsResult(this, static_cast<uint32>(HOUSING_RESULT_GENERIC_FAILURE));
         return;
     }
 
-    // Reward claiming acknowledged — actual item/currency rewards would be granted via
-    // InitiativeMilestone DB2 RewardID → reward table. For now, acknowledge success.
+    // Claim the milestone reward — grants items/currency via DB2 reward chain and
+    // persists the claim so it can't be double-claimed
+    if (!sInitiativeManager.ClaimMilestoneReward(nhGuid, packet.InitiativeID, packet.MilestoneIndex, player))
+    {
+        sInitiativeManager.SendInitiativeRewardsResult(this, static_cast<uint32>(HOUSING_RESULT_GENERIC_FAILURE));
+        return;
+    }
+
     sInitiativeManager.SendInitiativeRewardsResult(this, static_cast<uint32>(HOUSING_RESULT_SUCCESS));
 
     // Update favor for the contributing player
@@ -2122,14 +2130,36 @@ void WorldSession::HandleGetInitiativeOpenChestRequest(WorldPackets::Neighborhoo
 
     uint64 nhGuid = neighborhood->GetGuid().GetCounter();
 
-    // Chest opening is a variant of reward claiming tied to milestone completion
-    if (!sInitiativeManager.HasUnclaimedRewards(nhGuid, packet.InitiativeID))
+    // Chest opening is a variant of reward claiming tied to milestone completion.
+    // Find the first unclaimed milestone for this player and claim it.
+    uint64 playerLowGuid = player->GetGUID().GetCounter();
+
+    if (!sInitiativeManager.HasUnclaimedRewards(nhGuid, packet.InitiativeID, playerLowGuid))
     {
         sInitiativeManager.SendInitiativeRewardsResult(this, static_cast<uint32>(HOUSING_RESULT_GENERIC_FAILURE));
         return;
     }
 
-    sInitiativeManager.SendInitiativeRewardsResult(this, static_cast<uint32>(HOUSING_RESULT_SUCCESS));
+    // Find the first unclaimed reached milestone and claim it
+    ActiveInitiative* active = sInitiativeManager.GetActiveInitiative(nhGuid);
+    bool claimed = false;
+    if (active)
+    {
+        for (auto const& [msIndex, reached] : active->MilestonesReached)
+        {
+            if (!reached)
+                continue;
+            auto claimItr = active->RewardClaims.find(msIndex);
+            if (claimItr == active->RewardClaims.end() || claimItr->second.find(playerLowGuid) == claimItr->second.end())
+            {
+                claimed = sInitiativeManager.ClaimMilestoneReward(nhGuid, packet.InitiativeID, msIndex, player);
+                break;
+            }
+        }
+    }
+
+    sInitiativeManager.SendInitiativeRewardsResult(this, static_cast<uint32>(
+        claimed ? HOUSING_RESULT_SUCCESS : HOUSING_RESULT_GENERIC_FAILURE));
 }
 
 void WorldSession::HandleGetInitiativeTaskAcceptRequest(WorldPackets::Neighborhood::GetInitiativeTaskAcceptRequest const& packet)
