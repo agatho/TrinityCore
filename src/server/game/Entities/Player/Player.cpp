@@ -3626,6 +3626,8 @@ void Player::BuildCreateUpdateBlockForPlayer(UpdateData* data, Player* target) c
                 item->BuildCreateUpdateBlockForPlayer(data, target);
 
         GetSession()->GetBattlenetAccount().BuildCreateUpdateBlockForPlayer(data, target);
+        GetSession()->GetHousingPlayerHouseEntity().BuildCreateUpdateBlockForPlayer(data, target);
+        GetSession()->GetHousingNeighborhoodMirrorEntity().BuildCreateUpdateBlockForPlayer(data, target);
     }
 
     Unit::BuildCreateUpdateBlockForPlayer(data, target);
@@ -24969,6 +24971,8 @@ void Player::SendInitialPacketsAfterAddToMap()
     // (Player::BuildCreateUpdateBlockForPlayer), which was just sent by
     // UpdateVisibilityForPlayer() above.
     m_clientGUIDs.insert(GetSession()->GetBattlenetAccount().GetGUID());
+    m_clientGUIDs.insert(GetSession()->GetHousingPlayerHouseEntity().GetGUID());
+    m_clientGUIDs.insert(GetSession()->GetHousingNeighborhoodMirrorEntity().GetGUID());
 
     // Send map wide vignettes before UpdateZone, that will send zone wide vignettes
     // But first send on new map will wipe all vignettes on client
