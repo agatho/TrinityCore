@@ -2439,11 +2439,11 @@ struct ImportPriceWeaponEntry
 struct InitiativeCycleEntry
 {
     uint32 ID;
-    int32 InitiativeID;
+    int32 RewardGroupID;            // Unknown FK (values 600-2607), not NeighborhoodInitiative
     int32 CycleIndex;
     int32 StartDay;
     int32 Duration;
-    int32 Flags;
+    int32 InitiativeID;             // FK -> NeighborhoodInitiative.ID (was mislabeled "Flags")
 };
 
 struct InitiativeCyclePriorityEntry

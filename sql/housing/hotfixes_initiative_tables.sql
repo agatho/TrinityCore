@@ -9,11 +9,11 @@
 DROP TABLE IF EXISTS `initiative_cycle`;
 CREATE TABLE `initiative_cycle` (
   `ID` int unsigned NOT NULL DEFAULT '0',
-  `InitiativeID` int NOT NULL DEFAULT '0',
+  `RewardGroupID` int NOT NULL DEFAULT '0',
   `CycleIndex` int NOT NULL DEFAULT '0',
   `StartDay` int NOT NULL DEFAULT '0',
   `Duration` int NOT NULL DEFAULT '0',
-  `Flags` int NOT NULL DEFAULT '0',
+  `InitiativeID` int NOT NULL DEFAULT '0',
   `VerifiedBuild` int NOT NULL DEFAULT '0',
   PRIMARY KEY (`ID`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
