@@ -1248,16 +1248,31 @@ void WorldSession::HandleHousingFixtureSetEditMode(WorldPackets::Housing::Housin
         return;
     }
 
-    housing->SetEditorMode(housingFixtureSetEditMode.Active ? HOUSING_EDITOR_MODE_CUSTOMIZE : HOUSING_EDITOR_MODE_NONE);
+    // Client enum HouseEditorMode: 4=Customize (interior), 6=ExteriorCustomization (fixture).
+    // The "Edit House Exterior" button sends this opcode — must use mode 6 so the client's
+    // C_HouseEditor.IsHouseEditorModeActive(Enum.HouseEditorMode.ExteriorCustomization) returns true.
+    housing->SetEditorMode(housingFixtureSetEditMode.Active ? HOUSING_EDITOR_MODE_EXTERIOR_CUSTOMIZATION : HOUSING_EDITOR_MODE_NONE);
+
+    // The response FixtureGuid must be the root fixture MeshObject GUID for the player's plot.
+    // The client compares this GUID against its stored "current exterior root" to determine
+    // enter vs exit state. An empty GUID causes the client to never enter fixture edit mode.
+    ObjectGuid fixtureGuid;
+    if (HousingMap* housingMap = dynamic_cast<HousingMap*>(player->GetMap()))
+    {
+        uint8 plotIndex = housing->GetPlotIndex();
+        auto const& meshMap = housingMap->GetPlotMeshObjects();
+        auto meshItr = meshMap.find(plotIndex);
+        if (meshItr != meshMap.end() && !meshItr->second.empty())
+            fixtureGuid = meshItr->second.front(); // First MeshObject = root fixture (componentType=9)
+    }
 
     WorldPackets::Housing::HousingFixtureSetEditModeResponse response;
     response.HouseGuid = housing->GetHouseGuid();
+    response.FixtureGuid = fixtureGuid;
     response.Result = static_cast<uint8>(HOUSING_RESULT_SUCCESS);
     SendPacket(response.Write());
 
-    // Sync entity data so the client receives budget values when switching to customize mode.
-    // Without this, the client sees 0/0 budgets because the Player entity's EditorMode changed
-    // but the HousingPlayerHouseEntity/Account entity data was never flushed.
+    // Sync entity data so the client receives budget/storage values when switching to fixture mode.
     if (housingFixtureSetEditMode.Active)
     {
         housing->ResetStoragePopulated();
@@ -1272,13 +1287,9 @@ void WorldSession::HandleHousingFixtureSetEditMode(WorldPackets::Housing::Housin
         WorldPacket updatePacket;
         player->BuildValuesUpdateBlockForPlayer(&updateData, player);
 
-        if (player->HaveAtClient(&GetBattlenetAccount()))
-            GetBattlenetAccount().BuildValuesUpdateBlockForPlayer(&updateData, player);
-        else
-        {
-            GetBattlenetAccount().BuildCreateUpdateBlockForPlayer(&updateData, player);
-            player->m_clientGUIDs.insert(GetBattlenetAccount().GetGUID());
-        }
+        // Always CREATE Account entity (same reasoning as decor edit mode)
+        GetBattlenetAccount().BuildCreateUpdateBlockForPlayer(&updateData, player);
+        player->m_clientGUIDs.insert(GetBattlenetAccount().GetGUID());
 
         if (player->HaveAtClient(&GetHousingPlayerHouseEntity()))
             GetHousingPlayerHouseEntity().BuildValuesUpdateBlockForPlayer(&updateData, player);
@@ -1286,6 +1297,25 @@ void WorldSession::HandleHousingFixtureSetEditMode(WorldPackets::Housing::Housin
         {
             GetHousingPlayerHouseEntity().BuildCreateUpdateBlockForPlayer(&updateData, player);
             player->m_clientGUIDs.insert(GetHousingPlayerHouseEntity().GetGUID());
+        }
+
+        // Include CREATE for all fixture MeshObjects in same packet (same pattern as decor edit)
+        if (HousingMap* housingMap = dynamic_cast<HousingMap*>(player->GetMap()))
+        {
+            uint8 plotIndex = housing->GetPlotIndex();
+            auto const& meshMap = housingMap->GetPlotMeshObjects();
+            auto meshItr = meshMap.find(plotIndex);
+            if (meshItr != meshMap.end())
+            {
+                for (ObjectGuid const& meshGuid : meshItr->second)
+                {
+                    MeshObject* meshObj = housingMap->GetMeshObject(meshGuid);
+                    if (!meshObj || !meshObj->IsInWorld())
+                        continue;
+                    meshObj->BuildCreateUpdateBlockForPlayer(&updateData, player);
+                    player->m_clientGUIDs.insert(meshGuid);
+                }
+            }
         }
 
         updateData.BuildPacket(&updatePacket);
@@ -1296,7 +1326,9 @@ void WorldSession::HandleHousingFixtureSetEditMode(WorldPackets::Housing::Housin
         GetHousingPlayerHouseEntity().ClearUpdateMask(true);
     }
 
-    TC_LOG_INFO("housing", "CMSG_HOUSING_FIXTURE_SET_EDITOR_MODE_ACTIVE Active: {}", housingFixtureSetEditMode.Active);
+    TC_LOG_ERROR("housing", "CMSG_HOUSING_FIXTURE_SET_EDITOR_MODE_ACTIVE Active: {} FixtureGuid: {} EditorMode: {}",
+        housingFixtureSetEditMode.Active, fixtureGuid.ToString(),
+        housingFixtureSetEditMode.Active ? 6 : 0);
 }
 
 void WorldSession::HandleHousingFixtureSetCoreFixture(WorldPackets::Housing::HousingFixtureSetCoreFixture const& housingFixtureSetCoreFixture)
