@@ -16,6 +16,8 @@
  */
 
 #include "HousingMap.h"
+#include "Account.h"
+#include "HousingPlayerHouseEntity.h"
 #include <algorithm>
 #include <cmath>
 #include <set>
@@ -379,15 +381,21 @@ void HousingMap::SpawnPlotGameObjects()
                 plotIdx, exteriorComponentID, houseExteriorWmoDataID);
         }
 
+        // Build fixture override map from player's saved fixture selections
+        FixtureOverrideMap fixtureOverrides;
+        if (housing)
+            fixtureOverrides = housing->GetFixtureOverrideMap();
+        FixtureOverrideMap const* overridesPtr = fixtureOverrides.empty() ? nullptr : &fixtureOverrides;
+
         GameObject* houseGo = nullptr;
         if (housing && housing->HasCustomPosition())
         {
             Position customPos = housing->GetHousePosition();
-            houseGo = SpawnHouseForPlot(plotIdx, &customPos, exteriorComponentID, houseExteriorWmoDataID);
+            houseGo = SpawnHouseForPlot(plotIdx, &customPos, exteriorComponentID, houseExteriorWmoDataID, overridesPtr);
         }
         else
         {
-            houseGo = SpawnHouseForPlot(plotIdx, nullptr, exteriorComponentID, houseExteriorWmoDataID);
+            houseGo = SpawnHouseForPlot(plotIdx, nullptr, exteriorComponentID, houseExteriorWmoDataID, overridesPtr);
         }
         ++houseCount;
         if (houseGo)
@@ -662,14 +670,17 @@ bool HousingMap::AddPlayerToMap(Player* player, bool initPlayer /*= true*/)
             TC_LOG_DEBUG("housing", "HousingMap::AddPlayerToMap: Plot {} spawning house with ExteriorComponentID={}, WmoDataID={}",
                 plotIdx, exteriorComponentID, houseExteriorWmoDataID);
 
+            auto fixtureOverrides = housing->GetFixtureOverrideMap();
+            FixtureOverrideMap const* overridesPtr = fixtureOverrides.empty() ? nullptr : &fixtureOverrides;
+
             GameObject* go = nullptr;
             if (housing->HasCustomPosition())
             {
                 Position customPos = housing->GetHousePosition();
-                go = SpawnHouseForPlot(plotIdx, &customPos, exteriorComponentID, houseExteriorWmoDataID);
+                go = SpawnHouseForPlot(plotIdx, &customPos, exteriorComponentID, houseExteriorWmoDataID, overridesPtr);
             }
             else
-                go = SpawnHouseForPlot(plotIdx, nullptr, exteriorComponentID, houseExteriorWmoDataID);
+                go = SpawnHouseForPlot(plotIdx, nullptr, exteriorComponentID, houseExteriorWmoDataID, overridesPtr);
 
             TC_LOG_DEBUG("housing", "HousingMap::AddPlayerToMap: SpawnHouseForPlot result for plot {}: {}",
                 plotIdx, go ? go->GetGUID().ToString() : "FAILED");
@@ -813,8 +824,10 @@ bool HousingMap::AddPlayerToMap(Player* player, bool initPlayer /*= true*/)
         SetPlayerCurrentPlot(player->GetGUID(), plotIndex);
 
         ObjectGuid playerGuid = player->GetGUID();
+        ObjectGuid houseGuid = housing->GetHouseGuid();
+        ObjectGuid neighborhoodGuid = housing->GetNeighborhoodGuid();
         uint8 deferredPlotIndex = plotIndex;
-        player->m_Events.AddEventAtOffset([playerGuid, deferredPlotIndex]()
+        player->m_Events.AddEventAtOffset([playerGuid, deferredPlotIndex, houseGuid, neighborhoodGuid]()
         {
             Player* p = ObjectAccessor::FindPlayer(playerGuid);
             if (!p || !p->IsInWorld())
@@ -835,6 +848,123 @@ bool HousingMap::AddPlayerToMap(Player* player, bool initPlayer /*= true*/)
             WorldPackets::Neighborhood::NeighborhoodPlayerEnterPlot enterPlot;
             enterPlot.PlotAreaTriggerGuid = plotAt->GetGUID();
             p->SendDirectMessage(enterPlot.Write());
+
+            // Re-send HouseStatusResponse + GetPlayerPermissionsResponse after ENTER_PLOT.
+            // ENTER_PLOT's client handler (vtable[22]) resets the editor state including the
+            // stored HouseGuid; we must re-establish it via HouseStatusResponse (vtable[25])
+            // then arm the editor gate check via GetPlayerPermissionsResponse (vtable[24]).
+            {
+                WorldPackets::Housing::HousingHouseStatusResponse statusResponse;
+                statusResponse.HouseGuid = houseGuid;
+                statusResponse.AccountGuid = p->GetSession()->GetBattlenetAccountGUID();
+                statusResponse.OwnerPlayerGuid = playerGuid;
+                statusResponse.NeighborhoodGuid = neighborhoodGuid;
+                statusResponse.Status = 0;
+                statusResponse.FlagByte = 0xE0; // bit7=houseEditing, bit6=plotEntry, bit5=houseEntry
+                p->SendDirectMessage(statusResponse.Write());
+
+                WorldPackets::Housing::HousingGetPlayerPermissionsResponse permResponse;
+                permResponse.HouseGuid = houseGuid;
+                permResponse.ResultCode = 0;
+                permResponse.PermissionFlags = 0xE0; // owner: all permissions
+                p->SendDirectMessage(permResponse.Write());
+
+                TC_LOG_DEBUG("housing", "HousingMap deferred ENTER_PLOT: Sent HouseStatus+Permissions for owner {}",
+                    playerGuid.ToString());
+            }
+
+            // Re-CREATE the player's exterior root MeshObject so the client's
+            // Tag_HouseExteriorRoot singleton (qword_7FF72A4CC368) points to THIS
+            // plot's root rather than whichever plot happened to be created last
+            // during SpawnPlotGameObjects(). The client's fragment 225 create
+            // handler overwrites the singleton on each CREATE — we exploit this
+            // to guarantee our root is the active one before any fixture edits.
+            {
+                auto const& meshMap = hMap->GetPlotMeshObjects();
+                auto meshItr = meshMap.find(deferredPlotIndex);
+                if (meshItr != meshMap.end())
+                {
+                    for (ObjectGuid const& meshGuid : meshItr->second)
+                    {
+                        MeshObject* meshObj = hMap->GetMeshObject(meshGuid);
+                        if (meshObj && meshObj->IsExteriorRoot() && meshObj->IsInWorld())
+                        {
+                            UpdateData updateData(p->GetMapId());
+                            meshObj->BuildCreateUpdateBlockForPlayer(&updateData, p);
+                            p->m_clientGUIDs.insert(meshGuid);
+                            WorldPacket updatePacket;
+                            updateData.BuildPacket(&updatePacket);
+                            p->SendDirectMessage(&updatePacket);
+
+                            TC_LOG_DEBUG("housing", "HousingMap deferred ENTER_PLOT: Re-CREATE root MeshObject {} for plot {} (singleton refresh)",
+                                meshGuid.ToString(), deferredPlotIndex);
+                            break;
+                        }
+                    }
+                }
+            }
+
+            // Proactively populate FHousingStorage_C (decor list) and budget fields.
+            // At login, PopulateCatalogStorageEntries() is NOT called to avoid crashes when
+            // storage data appears in the initial Account entity CREATE.
+            //
+            // CRITICAL: Must send Account as CREATE (not VALUES_UPDATE). The initial login
+            // Account CREATE had an empty FHousingStorage_C.Decor MapUpdateField.
+            // A VALUES_UPDATE for a MapUpdateField that was empty at CREATE time does NOT
+            // properly convey new entries to the client — the client never processes them.
+            // Sending a second CREATE with all current data works because the client handles
+            // re-CREATE for an existing entity gracefully (replaces the old data).
+            //
+            // Also bundle ALL decor MeshObject CREATEs in the SAME UPDATE_OBJECT packet.
+            // The client correlates MeshObject FHousingDecor_C.DecorGUID with Account
+            // FHousingStorage_C entries to build the Placed Decor list. If they arrive in
+            // separate packets, the client may not retroactively associate them.
+            if (Housing* housing = p->GetHousing())
+            {
+                housing->PopulateCatalogStorageEntries();
+                housing->SyncUpdateFields();
+
+                WorldSession* session = p->GetSession();
+
+                UpdateData storageUpdate(p->GetMapId());
+                WorldPacket storagePacket;
+
+                // Account entity as CREATE (includes full FHousingStorage_C with Decor map)
+                session->GetBattlenetAccount().BuildCreateUpdateBlockForPlayer(&storageUpdate, p);
+                p->m_clientGUIDs.insert(session->GetBattlenetAccount().GetGUID());
+
+                // HousingPlayerHouseEntity (budgets)
+                if (p->HaveAtClient(&session->GetHousingPlayerHouseEntity()))
+                    session->GetHousingPlayerHouseEntity().BuildValuesUpdateBlockForPlayer(&storageUpdate, p);
+                else
+                {
+                    session->GetHousingPlayerHouseEntity().BuildCreateUpdateBlockForPlayer(&storageUpdate, p);
+                    p->m_clientGUIDs.insert(session->GetHousingPlayerHouseEntity().GetGUID());
+                }
+
+                // Bundle ALL decor MeshObject CREATEs so the client can correlate
+                // FHousingDecor_C.DecorGUID with FHousingStorage_C entries in one pass.
+                uint32 meshCreateCount = 0;
+                for (auto const& [decorGuid, meshObjGuid] : hMap->GetDecorGuidMap())
+                {
+                    MeshObject* meshObj = hMap->GetMeshObject(meshObjGuid);
+                    if (!meshObj || !meshObj->IsInWorld())
+                        continue;
+
+                    meshObj->BuildCreateUpdateBlockForPlayer(&storageUpdate, p);
+                    p->m_clientGUIDs.insert(meshObjGuid);
+                    ++meshCreateCount;
+                }
+
+                storageUpdate.BuildPacket(&storagePacket);
+                p->SendDirectMessage(&storagePacket);
+
+                session->GetBattlenetAccount().ClearUpdateMask(true);
+                session->GetHousingPlayerHouseEntity().ClearUpdateMask(true);
+
+                TC_LOG_DEBUG("housing", "HousingMap deferred ENTER_PLOT: Sent Account CREATE + {} decor MeshObject CREATEs + budget for player {}",
+                    meshCreateCount, playerGuid.ToString());
+            }
 
             // Post-tutorial auras first (slots 8,9,50), then plot enter auras (slots 50,56,9).
             // Retail applies tutorial-done auras once (at quest reward) but we re-send each
@@ -1378,7 +1508,8 @@ void HousingMap::RemovePlayerHousing(ObjectGuid playerGuid)
 // ============================================================
 
 GameObject* HousingMap::SpawnHouseForPlot(uint8 plotIndex, Position const* customPos /*= nullptr*/,
-    int32 exteriorComponentID /*= 141*/, int32 houseExteriorWmoDataID /*= 9*/)
+    int32 exteriorComponentID /*= 141*/, int32 houseExteriorWmoDataID /*= 9*/,
+    FixtureOverrideMap const* fixtureOverrides /*= nullptr*/)
 {
     if (!_neighborhood)
         return nullptr;
@@ -1498,7 +1629,7 @@ GameObject* HousingMap::SpawnHouseForPlot(uint8 plotIndex, Position const* custo
             faction == NEIGHBORHOOD_FACTION_ALLIANCE ? "Alliance" : "Horde");
 
         SpawnFullHouseMeshObjects(plotIndex, pos, rot, plotInfo->HouseGuid,
-            exteriorComponentID, houseExteriorWmoDataID, faction);
+            exteriorComponentID, houseExteriorWmoDataID, faction, fixtureOverrides);
 
         // Spawn room entity + component mesh with Geobox for this plot.
         // The client uses the MeshObject Geobox to validate decor placement bounds.
@@ -1802,8 +1933,12 @@ MeshObject* HousingMap::SpawnHouseMeshObject(uint8 plotIndex, int32 fileDataID, 
     }
 
     // Set up all entity fragments BEFORE AddToMap (create packet is sent during AddToMap)
+    // The base piece (componentType=9, no parent) gets Tag_HouseExteriorRoot (225).
+    // All other pieces (roof, door, chimney, windows) get Tag_HouseExteriorPiece (224).
+    // The client uses Tag_HouseExteriorRoot to identify the fixture GUID for edit mode.
+    bool isRoot = (exteriorComponentType == 9) && attachParent.IsEmpty();
     mesh->InitHousingFixtureData(houseGuid, exteriorComponentID, houseExteriorWmoDataID,
-        exteriorComponentType, houseSize, exteriorComponentHookID);
+        exteriorComponentType, houseSize, exteriorComponentHookID, isRoot);
 
     // Now add to map — this triggers the create packet with all fragments included
     if (!AddToMap(mesh))
@@ -1829,7 +1964,8 @@ MeshObject* HousingMap::SpawnHouseMeshObject(uint8 plotIndex, int32 fileDataID, 
 void HousingMap::SpawnFullHouseMeshObjects(uint8 plotIndex, Position const& housePos,
     QuaternionData const& houseRot, ObjectGuid houseGuid,
     int32 exteriorComponentID, int32 houseExteriorWmoDataID,
-    int32 factionRestriction /*= NEIGHBORHOOD_FACTION_ALLIANCE*/)
+    int32 factionRestriction /*= NEIGHBORHOOD_FACTION_ALLIANCE*/,
+    FixtureOverrideMap const* fixtureOverrides /*= nullptr*/)
 {
     // === DATA-DRIVEN EXTERIOR SPAWNING ===
     // Try to build the house from DB2 ExteriorComponent tree first.
@@ -1848,13 +1984,26 @@ void HousingMap::SpawnFullHouseMeshObjects(uint8 plotIndex, Position const& hous
             for (uint32 compID : *groupComps)
             {
                 ExteriorComponentEntry const* comp = sExteriorComponentStore.LookupEntry(compID);
-                if (!comp || comp->HookID > 0) // skip children — they'll be spawned recursively
+                if (!comp || comp->ParentComponentID > 0) // skip children — they'll be spawned recursively
                     continue;
 
-                totalSpawned += SpawnExtCompTree(plotIndex, compID,
+                // Check if this root component has been overridden (e.g., roof 1503 → 1497)
+                uint32 spawnCompID = compID;
+                if (fixtureOverrides)
+                {
+                    auto overrideItr = fixtureOverrides->find(compID);
+                    if (overrideItr != fixtureOverrides->end())
+                    {
+                        TC_LOG_DEBUG("housing", "HousingMap::SpawnFullHouseMeshObjects: Root override for plot {} — "
+                            "default {} → override {}", plotIndex, compID, overrideItr->second);
+                        spawnCompID = overrideItr->second;
+                    }
+                }
+
+                totalSpawned += SpawnExtCompTree(plotIndex, spawnCompID,
                     housePos, houseRot,
                     houseGuid, houseExteriorWmoDataID,
-                    ObjectGuid::Empty, nullptr);
+                    ObjectGuid::Empty, nullptr, 0, fixtureOverrides);
             }
 
             if (totalSpawned > 0)
@@ -2146,7 +2295,9 @@ void HousingMap::SpawnHordeHouseMeshObjects(uint8 plotIndex, Position const& hou
 uint32 HousingMap::SpawnExtCompTree(uint8 plotIndex, uint32 extCompID,
     Position const& pos, QuaternionData const& rot,
     ObjectGuid houseGuid, int32 houseExteriorWmoDataID,
-    ObjectGuid parentGuid, Position const* worldPos, int32 depth /*= 0*/)
+    ObjectGuid parentGuid, Position const* worldPos, int32 depth /*= 0*/,
+    FixtureOverrideMap const* fixtureOverrides /*= nullptr*/,
+    int32 hookIDOverride /*= -1*/)
 {
     if (depth > 10) // safety limit against infinite recursion
         return 0;
@@ -2158,26 +2309,31 @@ uint32 HousingMap::SpawnExtCompTree(uint8 plotIndex, uint32 extCompID,
         return 0;
     }
 
-    if (comp->FileDataID <= 0)
+    if (comp->ModelFileDataID <= 0)
     {
-        TC_LOG_WARN("housing", "HousingMap::SpawnExtCompTree: ExteriorComponent {} has no FileDataID", extCompID);
+        TC_LOG_WARN("housing", "HousingMap::SpawnExtCompTree: ExteriorComponent {} has no ModelFileDataID", extCompID);
         return 0;
     }
 
     // Determine attach flags: root pieces (no parent) use 0, children use 3
     uint8 attachFlags = parentGuid.IsEmpty() ? 0 : 3;
 
-    MeshObject* mesh = SpawnHouseMeshObject(plotIndex, comp->FileDataID, /*isWMO*/ true,
+    // For CreateFixture: at depth=0, the hookIDOverride tells the client which hook point
+    // this component occupies. The ExteriorComponent has no hook ID field — hook relationships
+    // come from ExteriorComponentHook and ExteriorComponentGroupXHook tables.
+    int32 effectiveHookID = (depth == 0 && hookIDOverride > 0) ? hookIDOverride : -1;
+
+    MeshObject* mesh = SpawnHouseMeshObject(plotIndex, comp->ModelFileDataID, /*isWMO*/ true,
         pos, rot, 1.0f,
         houseGuid, static_cast<int32>(extCompID), houseExteriorWmoDataID,
-        comp->Type, /*houseSize*/ 2, comp->HookID,
+        comp->Type, /*houseSize*/ 2, effectiveHookID,
         parentGuid, attachFlags, worldPos);
 
     if (!mesh)
     {
         TC_LOG_ERROR("housing", "HousingMap::SpawnExtCompTree: Failed to spawn mesh for comp {} "
-            "(fileDataID={}) at depth {}",
-            extCompID, comp->FileDataID, depth);
+            "(ModelFileDataID={}) at depth {}",
+            extCompID, comp->ModelFileDataID, depth);
         return 0;
     }
 
@@ -2196,8 +2352,16 @@ uint32 HousingMap::SpawnExtCompTree(uint8 plotIndex, uint32 extCompID,
             if (!hook)
                 continue;
 
-            // Find what component attaches at this hook
-            ExteriorComponentEntry const* childComp = sHousingMgr.GetComponentAtHook(static_cast<int32>(hook->ID));
+            // Find what component attaches at this hook — check player fixture overrides first
+            ExteriorComponentEntry const* childComp = nullptr;
+            if (fixtureOverrides)
+            {
+                auto overrideItr = fixtureOverrides->find(hook->ID);
+                if (overrideItr != fixtureOverrides->end())
+                    childComp = sExteriorComponentStore.LookupEntry(overrideItr->second);
+            }
+            if (!childComp)
+                childComp = sHousingMgr.GetComponentAtHook(static_cast<int32>(hook->ID));
             if (!childComp)
                 continue;
 
@@ -2220,7 +2384,8 @@ uint32 HousingMap::SpawnExtCompTree(uint8 plotIndex, uint32 extCompID,
             count += SpawnExtCompTree(plotIndex, childComp->ID,
                 hookPos, hookRot,
                 houseGuid, houseExteriorWmoDataID,
-                meshGuid, childWorldPos, depth + 1);
+                meshGuid, childWorldPos, depth + 1, fixtureOverrides,
+                static_cast<int32>(hook->ID));
         }
     }
 
@@ -2242,6 +2407,146 @@ void HousingMap::DespawnAllMeshObjectsForPlot(uint8 plotIndex)
     TC_LOG_DEBUG("housing", "HousingMap::DespawnAllMeshObjectsForPlot: Despawned {} MeshObject(s) for plot {}",
         itr->second.size(), plotIndex);
     _meshObjects.erase(itr);
+}
+
+MeshObject* HousingMap::FindMeshObjectByHookID(uint8 plotIndex, int32 hookID)
+{
+    auto itr = _meshObjects.find(plotIndex);
+    if (itr == _meshObjects.end())
+        return nullptr;
+
+    for (ObjectGuid const& guid : itr->second)
+    {
+        if (MeshObject* mesh = GetMeshObject(guid))
+        {
+            if (mesh->GetExteriorComponentHookID() == hookID)
+                return mesh;
+        }
+    }
+    return nullptr;
+}
+
+void HousingMap::DespawnSingleMeshObject(uint8 plotIndex, ObjectGuid meshGuid)
+{
+    auto itr = _meshObjects.find(plotIndex);
+    if (itr == _meshObjects.end())
+        return;
+
+    // Also remove any children attached to this mesh (recursive)
+    std::vector<ObjectGuid> toRemove;
+    toRemove.push_back(meshGuid);
+
+    // Find children (meshes whose AttachParentGUID == meshGuid)
+    for (ObjectGuid const& guid : itr->second)
+    {
+        if (MeshObject* mesh = GetMeshObject(guid))
+        {
+            if (mesh->GetAttachParentGUID() == meshGuid)
+                toRemove.push_back(guid);
+        }
+    }
+
+    for (ObjectGuid const& guid : toRemove)
+    {
+        if (MeshObject* mesh = GetMeshObject(guid))
+            mesh->AddObjectToRemoveList();
+
+        auto& vec = itr->second;
+        vec.erase(std::remove(vec.begin(), vec.end(), guid), vec.end());
+    }
+
+    TC_LOG_DEBUG("housing", "HousingMap::DespawnSingleMeshObject: Removed {} mesh(es) for plot {} (root {})",
+        toRemove.size(), plotIndex, meshGuid.ToString());
+}
+
+MeshObject* HousingMap::SpawnFixtureAtHook(uint8 plotIndex, uint32 hookID, uint32 componentID,
+    ObjectGuid houseGuid, int32 houseExteriorWmoDataID, Player* target)
+{
+    ExteriorComponentHookEntry const* hookEntry = sExteriorComponentHookStore.LookupEntry(hookID);
+    if (!hookEntry)
+    {
+        TC_LOG_ERROR("housing", "HousingMap::SpawnFixtureAtHook: Hook {} not found in DB2", hookID);
+        return nullptr;
+    }
+
+    // Find the parent mesh that owns this hook (the hook's ExteriorComponentID is the parent)
+    MeshObject* parentMesh = nullptr;
+    auto meshItr = _meshObjects.find(plotIndex);
+    if (meshItr != _meshObjects.end())
+    {
+        for (ObjectGuid const& guid : meshItr->second)
+        {
+            if (MeshObject* mesh = GetMeshObject(guid))
+            {
+                if (mesh->GetExteriorComponentID() == static_cast<int32>(hookEntry->ExteriorComponentID))
+                {
+                    parentMesh = mesh;
+                    break;
+                }
+            }
+        }
+    }
+
+    if (!parentMesh)
+    {
+        TC_LOG_ERROR("housing", "HousingMap::SpawnFixtureAtHook: Parent mesh for hook {} (parent comp {}) not found on plot {}",
+            hookID, hookEntry->ExteriorComponentID, plotIndex);
+        return nullptr;
+    }
+
+    // Hook position/rotation are local-space offsets relative to the parent
+    Position hookPos(hookEntry->Position[0], hookEntry->Position[1], hookEntry->Position[2], 0.0f);
+    QuaternionData hookRot;
+    static constexpr float DEG_TO_RAD = static_cast<float>(M_PI / 180.0);
+    float rx = hookEntry->Rotation[0] * DEG_TO_RAD;
+    float ry = hookEntry->Rotation[1] * DEG_TO_RAD;
+    float rz = hookEntry->Rotation[2] * DEG_TO_RAD;
+    float cx = std::cos(rx / 2.0f), sx = std::sin(rx / 2.0f);
+    float cy = std::cos(ry / 2.0f), sy = std::sin(ry / 2.0f);
+    float cz = std::cos(rz / 2.0f), sz = std::sin(rz / 2.0f);
+    hookRot.x = sx * cy * cz - cx * sy * sz;
+    hookRot.y = cx * sy * cz + sx * cy * sz;
+    hookRot.z = cx * cy * sz - sx * sy * cz;
+    hookRot.w = cx * cy * cz + sx * sy * sz;
+
+    // Use the parent's world position for grid placement
+    Position parentWorldPos(parentMesh->GetPositionX(), parentMesh->GetPositionY(),
+        parentMesh->GetPositionZ(), parentMesh->GetOrientation());
+
+    // Spawn the component tree at this hook (may have sub-hooks/children).
+    // Pass hookID as the override so the top-level mesh gets ExteriorComponentHookID = hookID
+    // (the actual hook point where we're installing it, not the component's native HookID from DB2).
+    uint32 spawned = SpawnExtCompTree(plotIndex, componentID,
+        hookPos, hookRot,
+        houseGuid, houseExteriorWmoDataID,
+        parentMesh->GetGUID(), &parentWorldPos, 0, nullptr,
+        static_cast<int32>(hookID));
+
+    TC_LOG_DEBUG("housing", "HousingMap::SpawnFixtureAtHook: Spawned {} mesh(es) for hook {} component {} on plot {}",
+        spawned, hookID, componentID, plotIndex);
+
+    // Send CREATE to the requesting player for the newly spawned meshes
+    if (target && spawned > 0 && meshItr != _meshObjects.end())
+    {
+        UpdateData updateData(GetId());
+        // The new meshes are at the end of the vector
+        size_t totalMeshes = meshItr->second.size();
+        for (size_t i = totalMeshes - spawned; i < totalMeshes; ++i)
+        {
+            ObjectGuid const& guid = meshItr->second[i];
+            if (MeshObject* mesh = GetMeshObject(guid))
+            {
+                mesh->BuildCreateUpdateBlockForPlayer(&updateData, target);
+                target->m_clientGUIDs.insert(guid);
+            }
+        }
+        WorldPacket updatePacket;
+        updateData.BuildPacket(&updatePacket);
+        target->SendDirectMessage(&updatePacket);
+    }
+
+    // Return the first (root) mesh at the hook
+    return FindMeshObjectByHookID(plotIndex, static_cast<int32>(hookID));
 }
 
 void HousingMap::DespawnHouseForPlot(uint8 plotIndex)

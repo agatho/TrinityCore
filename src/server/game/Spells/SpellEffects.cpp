@@ -49,7 +49,6 @@
 #include "Guild.h"
 #include "Housing.h"
 #include "HousingMgr.h"
-#include "InitiativeManager.h"
 #include "HousingPackets.h"
 #include "InstanceScript.h"
 #include "Item.h"
@@ -1505,10 +1504,6 @@ void Spell::EffectCreateItem2()
     }
 
     /// @todo ExecuteLogEffectCreateItem(i, m_spellInfo->Effects[i].ItemType);
-
-    // Housing initiative: crafting task (TaskType=2)
-    if (m_spellInfo->HasAttribute(SPELL_ATTR0_IS_TRADESKILL))
-        sInitiativeManager.OnPlayerAction(player, 2, 1);
 }
 
 void Spell::EffectCreateRandomItem()
@@ -1741,10 +1736,6 @@ void Spell::EffectOpenLock()
         }
     }
     ExecuteLogEffectOpenLock(SpellEffectName(effectInfo->Effect), gameObjTarget ? (Object*)gameObjTarget : (Object*)itemTarget);
-
-    // Housing initiative: gathering task (TaskType=1)
-    if (Player* player = m_caster->ToPlayer())
-        sInitiativeManager.OnPlayerAction(player, 1, 1);
 }
 
 void Spell::EffectSummonChangeItem()

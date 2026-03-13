@@ -1709,14 +1709,33 @@ HousingResult Housing::SelectFixtureOption(uint32 fixturePointId, uint32 optionI
     return HOUSING_RESULT_SUCCESS;
 }
 
-HousingResult Housing::RemoveFixture(uint32 fixturePointId)
+HousingResult Housing::RemoveFixture(uint32 componentID, uint32* outHookID /*= nullptr*/)
 {
     if (_houseGuid.IsEmpty())
         return HOUSING_RESULT_HOUSE_NOT_FOUND;
 
-    auto itr = _fixtures.find(fixturePointId);
+    // Try direct key lookup first (covers core fixtures where key == componentID)
+    auto itr = _fixtures.find(componentID);
+
+    // If not found by key, search by OptionId (for hook-based fixtures, key=hookID, OptionId=componentID)
+    if (itr == _fixtures.end())
+    {
+        for (auto it = _fixtures.begin(); it != _fixtures.end(); ++it)
+        {
+            if (it->second.OptionId == componentID)
+            {
+                itr = it;
+                break;
+            }
+        }
+    }
+
     if (itr == _fixtures.end())
         return HOUSING_RESULT_FIXTURE_NOT_FOUND;
+
+    uint32 hookID = itr->first; // the key is either hookID or componentID for core fixtures
+    if (outHookID)
+        *outHookID = hookID;
 
     _fixtures.erase(itr);
 
@@ -1724,7 +1743,7 @@ HousingResult Housing::RemoveFixture(uint32 fixturePointId)
     {
         CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_DEL_CHARACTER_HOUSING_FIXTURE_SINGLE);
         stmt->setUInt64(0, _owner->GetGUID().GetCounter());
-        stmt->setUInt32(1, fixturePointId);
+        stmt->setUInt32(1, hookID);
         CharacterDatabase.Execute(stmt);
     }
 
@@ -1733,8 +1752,8 @@ HousingResult Housing::RemoveFixture(uint32 fixturePointId)
     if (_fixtureWeightUsed >= fixtureWeightCost)
         _fixtureWeightUsed -= fixtureWeightCost;
 
-    TC_LOG_DEBUG("housing", "Housing::RemoveFixture: Player {} removed fixture at point {} in house {} (budget: {}/{})",
-        _owner->GetName(), fixturePointId, _houseGuid.ToString(),
+    TC_LOG_DEBUG("housing", "Housing::RemoveFixture: Player {} removed fixture {} (hook {}) in house {} (budget: {}/{})",
+        _owner->GetName(), componentID, hookID, _houseGuid.ToString(),
         _fixtureWeightUsed, GetMaxFixtureBudget());
 
     SyncUpdateFields();
@@ -1750,16 +1769,73 @@ std::vector<Housing::Fixture const*> Housing::GetFixtures() const
     return result;
 }
 
+std::unordered_map<uint32, uint32> Housing::GetFixtureOverrideMap() const
+{
+    // Build override map from player's fixture selections.
+    // Two kinds of overrides:
+    //   1. Hook-based (CreateFixture): OptionId != 0 → hookID → componentID
+    //   2. Root-based (SetCoreFixture non-base): OptionId == 0, Type != 9 (Base)
+    //      → maps defaultRootComponentID → newComponentID by matching Slot in the group
+    std::unordered_map<uint32, uint32> result;
+
+    uint32 baseCompID = GetCoreExteriorComponentID();
+    int32 groupID = sHousingMgr.GetGroupForComponent(baseCompID);
+
+    for (auto const& [pointId, fixture] : _fixtures)
+    {
+        if (fixture.OptionId != 0)
+        {
+            // Hook-based override (CreateFixture): hookID → componentID
+            result[fixture.FixturePointId] = fixture.OptionId;
+        }
+        else
+        {
+            // Core fixture (SetCoreFixture): OptionId == 0
+            ExteriorComponentEntry const* newComp = sExteriorComponentStore.LookupEntry(fixture.FixturePointId);
+            if (!newComp || newComp->Type == 9) // Base handled by GetCoreExteriorComponentID()
+                continue;
+
+            // Non-base core fixture (roof, door, etc.): find the DEFAULT root component
+            // of the same Slot in the group and override it.
+            if (groupID != 0)
+            {
+                std::vector<uint32> const* groupComps = sHousingMgr.GetComponentsInGroup(groupID);
+                if (groupComps)
+                {
+                    for (uint32 defaultCompID : *groupComps)
+                    {
+                        if (defaultCompID == fixture.FixturePointId)
+                            continue;
+                        ExteriorComponentEntry const* defaultComp = sExteriorComponentStore.LookupEntry(defaultCompID);
+                        if (defaultComp && defaultComp->Type == newComp->Type && defaultComp->ParentComponentID <= 0)
+                        {
+                            result[defaultCompID] = fixture.FixturePointId;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return result;
+}
+
 uint32 Housing::GetCoreExteriorComponentID() const
 {
-    // The core fixture is the one set via SetCoreFixture (OptionId == 0).
-    // Its FixturePointId IS the ExteriorComponentID.
+    // The core fixture is a BASE component set via SetCoreFixture (OptionId == 0).
+    // Only Type=9 (Base) components count — roof/door/window core changes are
+    // handled as root overrides in GetFixtureOverrideMap() instead.
     for (auto const& [pointId, fixture] : _fixtures)
     {
         if (fixture.OptionId == 0)
-            return fixture.FixturePointId;
+        {
+            ExteriorComponentEntry const* comp = sExteriorComponentStore.LookupEntry(fixture.FixturePointId);
+            if (comp && comp->Type == 9) // Type 9 = Base
+                return fixture.FixturePointId;
+        }
     }
-    return 0; // No core fixture set
+    // No explicit base fixture set — return faction-appropriate default.
+    return (_houseType == 87) ? 3805 : 141;
 }
 
 HousingResult Housing::AddToCatalog(uint32 decorEntryId, uint8 sourceType, std::string sourceValue)

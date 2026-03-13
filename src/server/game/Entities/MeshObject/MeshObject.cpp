@@ -198,7 +198,7 @@ void MeshObject::InitHousingDecorData(ObjectGuid decorGuid, ObjectGuid houseGuid
 
 void MeshObject::InitHousingFixtureData(ObjectGuid houseGuid, int32 exteriorComponentID,
     int32 houseExteriorWmoDataID, uint8 exteriorComponentType /*= 9*/,
-    uint8 houseSize /*= 2*/, int32 exteriorComponentHookID /*= -1*/)
+    uint8 houseSize /*= 2*/, int32 exteriorComponentHookID /*= -1*/, bool isRoot /*= false*/)
 {
     if (m_housingFixtureData.has_value())
         return;
@@ -227,14 +227,33 @@ void MeshObject::InitHousingFixtureData(ObjectGuid houseGuid, int32 exteriorComp
     m_entityFragments.Add(WowCS::EntityFragment::FHousingFixture_C, IsInWorld(),
         WowCS::GetRawFragmentData(m_housingFixtureData));
 
-    // Also add the Tag_HouseExteriorPiece tag fragment (sniff-verified on retail MeshObjects)
-    m_entityFragments.Add(WowCS::EntityFragment::Tag_HouseExteriorPiece, IsInWorld());
+    // Cache for targeted fixture lookup
+    _exteriorComponentHookID = exteriorComponentHookID;
+    _exteriorComponentID = exteriorComponentID;
 
-    TC_LOG_DEBUG("housing", "MeshObject::InitHousingFixtureData: guid={} houseGuid={} "
-        "exteriorComponentID={} wmoDataID={} hookID={} componentType={} size={}",
+    // Root pieces get Tag_HouseExteriorRoot (225), child pieces get Tag_HouseExteriorPiece (224).
+    // The client uses Tag_HouseExteriorRoot to identify the fixture GUID for edit mode enter/exit.
+    _isExteriorRoot = isRoot;
+    if (isRoot)
+        m_entityFragments.Add(WowCS::EntityFragment::Tag_HouseExteriorRoot, IsInWorld());
+    else
+        m_entityFragments.Add(WowCS::EntityFragment::Tag_HouseExteriorPiece, IsInWorld());
+
+    TC_LOG_ERROR("housing", "MeshObject::InitHousingFixtureData: guid={} houseGuid={} "
+        "exteriorComponentID={} wmoDataID={} hookID={} componentType={} size={} isRoot={}",
         GetGUID().ToString(), houseGuid.ToString(),
         exteriorComponentID, houseExteriorWmoDataID, exteriorComponentHookID,
-        exteriorComponentType, houseSize);
+        exteriorComponentType, houseSize, isRoot);
+}
+
+void MeshObject::UpdateExteriorComponentID(int32 id)
+{
+    if (!m_housingFixtureData.has_value())
+        return;
+
+    SetUpdateFieldValue(m_values.ModifyValue(&Object::m_housingFixtureData, 0)
+        .ModifyValue(&UF::HousingFixtureData::ExteriorComponentID), id);
+    _exteriorComponentID = id;
 }
 
 void MeshObject::InitHousingRoomData(ObjectGuid houseGuid, int32 houseRoomID,

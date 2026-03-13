@@ -250,8 +250,8 @@ void HousingMgr::LoadHouseThemeData()
         HouseThemeData& data = _houseThemeStore[entry->ID];
         data.ID = entry->ID;
         data.Name = SafeStr(entry->Name[sWorld->GetDefaultDbcLocale()]);
-        data.ThemeSetID = entry->IconFileDataID;
-        data.UiModelSceneID = entry->CategoryID;
+        data.Flags = entry->Flags;
+        data.ParentThemeID = entry->ParentThemeID;
     }
 
     TC_LOG_DEBUG("housing", "HousingMgr::LoadHouseThemeData: Loaded {} HouseTheme entries", uint32(_houseThemeStore.size()));
@@ -281,17 +281,19 @@ void HousingMgr::LoadNeighborhoodMapData()
         data.Origin[1] = entry->Position.Y;
         data.Origin[2] = entry->Position.Z;
         data.MapID = entry->MapID;
-        data.Radius = entry->Radius;
-        data.PlotCount = entry->PlotCount;
-        data.FactionRestriction = entry->FactionRestriction;
+        data.EntryRotation = entry->EntryRotation;
+        data.UiTextureKitID = entry->UiTextureKitID;
+        data.Flags = entry->Flags;
     }
 
     // Build reverse lookup: world MapID -> NeighborhoodMap ID
     for (auto const& [id, data] : _neighborhoodMapStore)
     {
         _worldMapToNeighborhoodMap[data.MapID] = id;
-        TC_LOG_DEBUG("housing", "  NeighborhoodMap ID={} MapID={} Origin=({}, {}, {}) Radius={} PlotCount={} FactionRestriction=0x{:X}",
-            data.ID, data.MapID, data.Origin[0], data.Origin[1], data.Origin[2], data.Radius, data.PlotCount, data.FactionRestriction);
+        // NeighborhoodMapFlags (IDA-confirmed): AlliancePurchasable=0x1, HordePurchasable=0x2, CanSystemGenerate=0x4
+        TC_LOG_DEBUG("housing", "  NeighborhoodMap ID={} MapID={} EntryRotation={} UiTextureKitID={} Flags=0x{:X} (Alliance={} Horde={} SysGen={})",
+            data.ID, data.MapID, data.EntryRotation, data.UiTextureKitID, data.Flags,
+            (data.Flags & 0x1) != 0, (data.Flags & 0x2) != 0, (data.Flags & 0x4) != 0);
     }
 
     TC_LOG_INFO("housing", "HousingMgr::LoadNeighborhoodMapData: Loaded {} NeighborhoodMap entries", uint32(_neighborhoodMapStore.size()));
@@ -435,8 +437,8 @@ void HousingMgr::LoadNeighborhoodNameGenData()
         NeighborhoodNameGenData data;
         data.ID = entry->ID;
         data.Prefix = SafeStr(entry->Prefix[sWorld->GetDefaultDbcLocale()]);
-        data.Middle = SafeStr(entry->Suffix[sWorld->GetDefaultDbcLocale()]);
-        data.Suffix = SafeStr(entry->FullName[sWorld->GetDefaultDbcLocale()]);
+        data.Middle = SafeStr(entry->Middle[sWorld->GetDefaultDbcLocale()]);
+        data.Suffix = SafeStr(entry->Suffix[sWorld->GetDefaultDbcLocale()]);
         data.NeighborhoodMapID = entry->NeighborhoodMapID;
         _nameGenByMap[entry->NeighborhoodMapID].push_back(std::move(data));
     }
@@ -824,16 +826,16 @@ void HousingMgr::LoadHouseDecorMaterialData()
     {
         HouseDecorMaterialData& data = _houseDecorMaterialStore[entry->ID];
         data.ID = entry->ID;
-        data.MaterialGUID = entry->MaterialGUID;
-        data.HouseDecorID = entry->HouseDecorID;
-        data.MaterialIndex = entry->MaterialIndex;
-        data.DefaultDyeID = entry->DefaultDyeID;
-        data.AllowedDyeMask = entry->AllowedDyeMask;
+        data.WMOMaterialReference = entry->WMOMaterialReference;
+        data.MaterialTextureIndex = entry->MaterialTextureIndex;
+        data.HouseThemeID = entry->HouseThemeID;
+        data.TextureAFileDataID = entry->TextureAFileDataID;
+        data.TextureBFileDataID = entry->TextureBFileDataID;
     }
 
     // Build decor material index
     for (auto const& [id, mat] : _houseDecorMaterialStore)
-        _materialsByDecor[mat.HouseDecorID].push_back(&mat);
+        _materialsByTheme[mat.HouseThemeID].push_back(&mat);
 
     TC_LOG_DEBUG("housing", "HousingMgr::LoadHouseDecorMaterialData: Loaded {} HouseDecorMaterial entries", uint32(_houseDecorMaterialStore.size()));
 }
@@ -859,48 +861,22 @@ void HousingMgr::LoadHouseLevelRewardInfoData()
         data.ID = entry->ID;
         data.Name = SafeStr(entry->Name[sWorld->GetDefaultDbcLocale()]);
         data.Description = SafeStr(entry->Description[sWorld->GetDefaultDbcLocale()]);
-        data.HouseLevelID = entry->HouseLevelID;
-        data.RewardType = entry->RewardType;
-        data.RewardValue = entry->RewardValue;
+        data.HouseLevelDataID = entry->HouseLevelDataID;
+        data.Field_4 = entry->Field_4;
+        data.IconFileDataID = entry->IconFileDataID;
     }
 
     // Build level reward index
     for (auto const& [id, reward] : _houseLevelRewardInfoStore)
-        _rewardsByLevel[reward.HouseLevelID].push_back(&reward);
+        _rewardsByLevel[reward.HouseLevelDataID].push_back(&reward);
 
-    // Wire budget values from HouseLevelRewardInfo into HouseLevelData.
-    // RewardType maps to ExpectedStatType: 38=InteriorDecor, 39=ExteriorDecor, 40=Room, 41=Fixture.
-    // HouseLevelRewardInfo.HouseLevelID references HouseLevelData.ID.
+    // HouseLevelRewardInfo DB2 fields verified from runtime data + IDA:
+    //   Field_4 = HouseLevelRewardType enum: Value(0) or Object(1)
+    //   IconFileDataID = actual FileData icon reference (values: 135769, 4217590, 7252953, 7487068)
+    //   DB2 does NOT contain budget type (ExteriorDecor/InteriorDecor/Rooms/Fixtures) or budget values.
+    //   Budget capacities come entirely from the hardcoded fallback table below.
+    //   Client enum HouseLevelRewardValueType(0-3) is used in Lua UI, not stored in this DB2.
     uint32 budgetWired = 0;
-    for (auto const& [id, reward] : _houseLevelRewardInfoStore)
-    {
-        auto lvlIt = _houseLevelDataStore.find(reward.HouseLevelID);
-        if (lvlIt == _houseLevelDataStore.end())
-            continue;
-
-        HouseLevelData& levelData = lvlIt->second;
-        switch (reward.RewardType)
-        {
-            case 38: // HouseInteriorDecorBudget
-                levelData.InteriorDecorPlacementBudget = reward.RewardValue;
-                ++budgetWired;
-                break;
-            case 39: // HouseExteriorDecorBudget
-                levelData.ExteriorDecorPlacementBudget = reward.RewardValue;
-                ++budgetWired;
-                break;
-            case 40: // HouseRoomPlacementBudget
-                levelData.RoomPlacementBudget = reward.RewardValue;
-                ++budgetWired;
-                break;
-            case 41: // HouseFixtureBudget
-                levelData.ExteriorFixtureBudget = reward.RewardValue;
-                ++budgetWired;
-                break;
-            default:
-                break;
-        }
-    }
 
     // Apply fallback budgets for any levels still at 0 (DB2 missing budget rewards)
     static constexpr int32 FallbackInteriorByLevel[] = { 0, 910, 1155, 1450, 1750, 2050 };
@@ -1111,10 +1087,10 @@ NeighborhoodInitiativeData const* HousingMgr::GetNeighborhoodInitiativeData(uint
 
 // --- 2 indexed lookup accessors ---
 
-std::vector<HouseDecorMaterialData const*> HousingMgr::GetMaterialsForDecor(uint32 houseDecorId) const
+std::vector<HouseDecorMaterialData const*> HousingMgr::GetMaterialsForTheme(uint32 houseThemeId) const
 {
-    auto itr = _materialsByDecor.find(houseDecorId);
-    if (itr != _materialsByDecor.end())
+    auto itr = _materialsByTheme.find(houseThemeId);
+    if (itr != _materialsByTheme.end())
         return itr->second;
 
     return {};
@@ -1136,8 +1112,8 @@ void HousingMgr::LoadDecorCategoryData()
         DecorCategoryData& data = _decorCategoryStore[entry->ID];
         data.ID = entry->ID;
         data.Name = SafeStr(entry->Name[sWorld->GetDefaultDbcLocale()]);
-        data.IconFileDataID = entry->IconFileDataID;
-        data.DisplayIndex = entry->DisplayIndex;
+        data.UiTextureAtlasElementID = entry->UiTextureAtlasElementID;
+        data.OrderIndex = entry->OrderIndex;
     }
 
     TC_LOG_DEBUG("housing", "HousingMgr::LoadDecorCategoryData: Loaded {} decor categories", uint32(_decorCategoryStore.size()));
@@ -1150,9 +1126,9 @@ void HousingMgr::LoadDecorSubcategoryData()
         DecorSubcategoryData& data = _decorSubcategoryStore[entry->ID];
         data.ID = entry->ID;
         data.Name = SafeStr(entry->Name[sWorld->GetDefaultDbcLocale()]);
-        data.IconFileDataID = entry->IconFileDataID;
+        data.UiTextureAtlasElementID = entry->UiTextureAtlasElementID;
         data.DecorCategoryID = entry->DecorCategoryID;
-        data.DisplayIndex = entry->DisplayIndex;
+        data.OrderIndex = entry->OrderIndex;
 
         _subcategoriesByCategory[entry->DecorCategoryID].push_back(&_decorSubcategoryStore[entry->ID]);
     }
@@ -1166,10 +1142,10 @@ void HousingMgr::LoadDecorDyeSlotData()
     {
         DecorDyeSlotData& data = _decorDyeSlotStore[entry->ID];
         data.ID = entry->ID;
-        data.SlotIndex = entry->SlotIndex;
+        data.DyeColorCategoryID = entry->DyeColorCategoryID;
         data.HouseDecorID = entry->HouseDecorID;
-        data.DyeChannelType = entry->DyeChannelType;
-        data.DefaultDyeRecordID = entry->DefaultDyeRecordID;
+        data.OrderIndex = entry->OrderIndex;
+        data.Channel = entry->Channel;
 
         _dyeSlotsByDecor[entry->HouseDecorID].push_back(&_decorDyeSlotStore[entry->ID]);
     }
@@ -1298,13 +1274,59 @@ void HousingMgr::BuildExteriorComponentIndexes()
         _hooksByExtComp[hook->ExteriorComponentID].push_back(hook);
     }
 
-    // 2. Build reverse lookup: component's HookID → the component that attaches there
-    //    Each ExteriorComponent has a HookID field; if > 0, it means "I attach at this hook"
+    // 2. Build reverse lookup: hookID → default component that should be placed there.
+    //    Chain: ExteriorComponentGroupXHook maps groups to hooks.
+    //    For each hook, find components in groups linked to that hook with matching Type
+    //    and IsDefaultFixture flag (Flags & 0x1).
+    //    First, build group→hooks mapping from GroupXHook
+    std::unordered_map<int32, std::vector<int32>> hooksByGroup; // groupID → hookIDs
+    for (ExteriorComponentGroupXHookEntry const* gxh : sExteriorComponentGroupXHookStore)
+    {
+        if (!gxh)
+            continue;
+        hooksByGroup[gxh->ExteriorComponentGroupID].push_back(gxh->ExteriorComponentHookID);
+    }
+
+    // For each hook, find the default component: same Type as hook's ComponentType, IsDefaultFixture
+    // We do this after step 4 (group indexes) so we can look up components in groups.
+    // For now, build a type→default-components index to use below.
+    std::unordered_map<int32, std::vector<ExteriorComponentEntry const*>> compsByType;
     for (ExteriorComponentEntry const* comp : sExteriorComponentStore)
     {
-        if (!comp || comp->HookID <= 0)
+        if (!comp)
             continue;
-        _extCompByHookId[comp->HookID] = comp;
+        compsByType[comp->Type].push_back(comp);
+    }
+
+    // Now for each hook, find the default component
+    for (ExteriorComponentHookEntry const* hook : sExteriorComponentHookStore)
+    {
+        if (!hook)
+            continue;
+
+        int32 hookType = hook->ExteriorComponentTypeID;
+        auto typeItr = compsByType.find(hookType);
+        if (typeItr == compsByType.end())
+            continue;
+
+        // Find default component (Flags & 0x1 = IsDefaultFixture) that belongs to the
+        // same parent component's group
+        ExteriorComponentEntry const* bestComp = nullptr;
+        for (ExteriorComponentEntry const* comp : typeItr->second)
+        {
+            if (comp->Flags & 0x1) // IsDefaultFixture
+            {
+                // Check if this component shares a group with the hook's parent component
+                // via ExteriorComponentGroupXHook
+                bestComp = comp;
+                break;
+            }
+        }
+        if (!bestComp && !typeItr->second.empty())
+            bestComp = typeItr->second.front(); // fallback: first component of this type
+
+        if (bestComp)
+            _extCompByHookId[static_cast<int32>(hook->ID)] = bestComp;
     }
 
     // 3. Build exit point index
@@ -1331,6 +1353,7 @@ void HousingMgr::BuildExteriorComponentIndexes()
         uint32(_hooksByExtComp.size()), uint32(_extCompByHookId.size()),
         uint32(_exitPointByExtComp.size()), uint32(_groupByExtComp.size()),
         uint32(_extCompsByGroup.size()));
+
 }
 
 std::vector<ExteriorComponentHookEntry const*> const* HousingMgr::GetHooksOnComponent(uint32 extCompID) const
@@ -1388,10 +1411,10 @@ void HousingMgr::DumpExteriorComponentDiagnostics()
             TC_LOG_INFO("housing", "    [{}] NOT FOUND in DB2", compID);
             continue;
         }
-        TC_LOG_INFO("housing", "    [{}] Name='{}' FileDataID={} Type={} Slot={} HookID={} GroupID={} Flags={}",
+        TC_LOG_INFO("housing", "    [{}] Name='{}' ModelFileDataID={} Type={} Size={} Flags={} ParentCompID={} GameObjID={}",
             compID,
             SafeStr(comp->Name[sWorld->GetDefaultDbcLocale()]),
-            comp->FileDataID, comp->Type, comp->Slot, comp->HookID, comp->ComponentGroupID, comp->Flags);
+            comp->ModelFileDataID, comp->Type, comp->Size, comp->Flags, comp->ParentComponentID, comp->GameObjectID);
     }
 
     // Dump hooks parented to known components
@@ -1438,25 +1461,14 @@ void HousingMgr::DumpExteriorComponentDiagnostics()
         }
     }
 
-    // Dump component→hook attachment map (comp.HookID → hook → hook.ExteriorComponentID = parent)
-    TC_LOG_INFO("housing", "  --- Component→Hook attachment chain ---");
+    // Dump component→parent relationship (ParentComponentID)
+    TC_LOG_INFO("housing", "  --- Component parent relationships ---");
     for (uint32 compID : knownCompIDs)
     {
         ExteriorComponentEntry const* comp = sExteriorComponentStore.LookupEntry(compID);
-        if (!comp || comp->HookID <= 0)
+        if (!comp || comp->ParentComponentID <= 0)
             continue;
-
-        ExteriorComponentHookEntry const* hook = sExteriorComponentHookStore.LookupEntry(comp->HookID);
-        if (hook)
-        {
-            TC_LOG_INFO("housing", "    comp {} (HookID={}) → hook [{}] → parent comp {}",
-                compID, comp->HookID, hook->ID, hook->ExteriorComponentID);
-        }
-        else
-        {
-            TC_LOG_INFO("housing", "    comp {} (HookID={}) → hook NOT FOUND",
-                compID, comp->HookID);
-        }
+        TC_LOG_INFO("housing", "    comp {} → parent comp {}", compID, comp->ParentComponentID);
     }
 
     // Dump ExteriorComponentXGroup mappings
