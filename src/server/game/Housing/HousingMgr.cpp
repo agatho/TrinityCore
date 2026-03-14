@@ -26,7 +26,9 @@
 #include "Neighborhood.h"
 #include "ObjectMgr.h"
 #include "Player.h"
+#include "RaceMask.h"
 #include "Random.h"
+#include "SharedDefines.h"
 #include "SocialMgr.h"
 #include "StringFormat.h"
 #include "Timer.h"
@@ -1402,6 +1404,17 @@ uint32 HousingMgr::GetDefaultFixtureForType(uint8 componentType, uint32 wmoDataI
     uint64 key = (uint64(componentType) << 32) | wmoDataID;
     auto itr = _defaultFixtureByTypeWmo.find(key);
     return itr != _defaultFixtureByTypeWmo.end() ? itr->second : 0;
+}
+
+uint32 HousingMgr::GetRacialWmoDataID(uint8 race, uint32 teamId)
+{
+    switch (race)
+    {
+        case RACE_NIGHTELF: return 55;  // Woodland
+        case RACE_BLOODELF: return 56;  // Engraved
+        default:
+            return (teamId == HORDE) ? 87 : 9; // Orc / Human
+    }
 }
 
 ExteriorComponentExitPointEntry const* HousingMgr::GetExitPoint(uint32 extCompID) const

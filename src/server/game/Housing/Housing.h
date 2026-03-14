@@ -242,6 +242,9 @@ private:
     void PersistRoomToDB(ObjectGuid roomGuid, Room const& room);
     void PersistFixtureToDB(uint32 fixturePointId, uint32 optionId);
 
+    // Populate starter fixtures (Base + Roof) on house creation
+    void PopulateStarterFixtures();
+
     Player* _owner;
     ObjectGuid _houseGuid;
     ObjectGuid _neighborhoodGuid;

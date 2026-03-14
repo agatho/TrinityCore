@@ -555,12 +555,8 @@ HousingResult Housing::Create(ObjectGuid neighborhoodGuid, uint8 plotIndex)
     _editorMode = HOUSING_EDITOR_MODE_NONE;
     _exteriorLocked = false;
     _houseSize = HOUSING_FIXTURE_SIZE_SMALL;
-    // Sniff-verified WmoDataIDs: 9=Alliance, 87=Horde
-    Neighborhood* neighborhood = sNeighborhoodMgr.GetNeighborhood(neighborhoodGuid);
-    if (neighborhood && neighborhood->GetFactionRestriction() == NEIGHBORHOOD_FACTION_HORDE)
-        _houseType = 87;
-    else
-        _houseType = 9;
+    // Racial house style: Night Elf → 55, Blood Elf → 56, other Alliance → 9, other Horde → 87
+    _houseType = HousingMgr::GetRacialWmoDataID(_owner->GetRace(), _owner->GetTeam());
     _createTime = static_cast<uint32>(GameTime::GetGameTime());
     _hasCustomPosition = false;
     _housePosX = _housePosY = _housePosZ = _houseFacing = 0.0f;
@@ -611,6 +607,10 @@ HousingResult Housing::Create(ObjectGuid neighborhoodGuid, uint8 plotIndex)
         TC_LOG_ERROR("housing", "Housing::Create: No visual room entry found — interior will be empty for player {}",
             _owner->GetName());
     }
+
+    // Populate starter fixtures: Base + Roof for the racial WMO style.
+    // These are persisted to DB so spawning only reads what's stored.
+    PopulateStarterFixtures();
 
     return HOUSING_RESULT_SUCCESS;
 }
@@ -2338,3 +2338,41 @@ void Housing::PersistFixtureToDB(uint32 fixturePointId, uint32 optionId)
     stmt->setUInt32(2, fixturePointId);
     CharacterDatabase.Execute(stmt);
 }
+
+void Housing::PopulateStarterFixtures()
+{
+    // Starter house = Base(9) + Roof(10) as root components.
+    // Door(11) auto-resolves from hook system via GetDefaultFixtureForType.
+    // Root components are stored as { FixturePointId = componentID, OptionId = 0 }.
+    static constexpr uint8 starterTypes[] = { HOUSING_FIXTURE_TYPE_BASE, HOUSING_FIXTURE_TYPE_ROOF };
+
+    uint64 ownerGuid = _owner->GetGUID().GetCounter();
+
+    for (uint8 fixtureType : starterTypes)
+    {
+        uint32 compID = sHousingMgr.GetDefaultFixtureForType(fixtureType, _houseType);
+        if (!compID)
+        {
+            TC_LOG_ERROR("housing", "Housing::PopulateStarterFixtures: No default component for type={} wmo={} — skipping",
+                fixtureType, _houseType);
+            continue;
+        }
+
+        // Insert into in-memory map
+        Fixture& fixture = _fixtures[compID];
+        fixture.FixturePointId = compID;
+        fixture.OptionId = 0;
+
+        // Persist to DB
+        CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_INS_CHARACTER_HOUSING_FIXTURES);
+        uint8 index = 0;
+        stmt->setUInt64(index++, ownerGuid);
+        stmt->setUInt32(index++, compID);
+        stmt->setUInt32(index++, 0); // OptionId = 0 (default)
+        CharacterDatabase.Execute(stmt);
+
+        TC_LOG_INFO("housing", "Housing::PopulateStarterFixtures: Added type={} compID={} wmo={} for player {}",
+            fixtureType, compID, _houseType, _owner->GetName());
+    }
+}
+

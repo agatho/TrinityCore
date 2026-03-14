@@ -340,6 +340,10 @@ public:
     // returns the default fixture component ID (Flags & 0x1, ParentComponentID == 0).
     uint32 GetDefaultFixtureForType(uint8 componentType, uint32 wmoDataID) const;
 
+    // Racial house style: maps player race to the appropriate HouseExteriorWmoDataID.
+    // Night Elf → 55, Blood Elf → 56, other Alliance → 9 (Human), other Horde → 87 (Orc).
+    static uint32 GetRacialWmoDataID(uint8 race, uint32 teamId);
+
     // Find the first HouseRoom entry with visual components (not the base room 18)
     uint32 GetDefaultVisualRoomEntry() const;
 
