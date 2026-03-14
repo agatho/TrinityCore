@@ -1822,42 +1822,41 @@ std::unordered_map<uint32, uint32> Housing::GetFixtureOverrideMap() const
 
 uint32 Housing::GetCoreExteriorComponentID() const
 {
-    // The core fixture is a BASE component set via SetCoreFixture (OptionId == 0).
-    // Only Type=9 (Base) components count — roof/door/window core changes are
-    // handled as root overrides in GetFixtureOverrideMap() instead.
+    // The core fixture is the primary component set via SetCoreFixture (OptionId == 0).
+    // It can be any root type — Base (9) for Alliance, or different types for Horde.
     for (auto const& [pointId, fixture] : _fixtures)
     {
         if (fixture.OptionId == 0)
         {
             ExteriorComponentEntry const* comp = sExteriorComponentStore.LookupEntry(fixture.FixturePointId);
-            // Only return this fixture if it's a Base (type 9) AND matches the current house type.
-            // When the player switches house type (e.g. Human→NightElf), old fixtures from the
-            // previous type must not override the new type's default base component.
-            if (comp && comp->Type == 9 && (_houseType == 0 || comp->HouseExteriorWmoDataID == _houseType))
+            // Only return this fixture if it matches the current house type's WMO data.
+            // When the player switches house type, old fixtures from the previous type
+            // must not override the new type's default component.
+            if (comp && comp->ParentComponentID == 0 && (_houseType == 0 || comp->HouseExteriorWmoDataID == _houseType))
                 return fixture.FixturePointId;
         }
     }
-    // No explicit base fixture set — find default base component for this house's WMO data ID.
+    // No explicit core fixture set — find first default root component for this house's WMO data ID.
     if (_houseType > 0)
     {
         auto const* roots = sHousingMgr.GetRootComponentsForWmoData(static_cast<uint32>(_houseType));
         if (roots)
         {
-            uint32 fallbackBase = 0;
+            uint32 fallbackComp = 0;
             for (uint32 compID : *roots)
             {
                 ExteriorComponentEntry const* comp = sExteriorComponentStore.LookupEntry(compID);
-                if (!comp || comp->Type != 9) // Type 9 = Base
+                if (!comp)
                     continue;
-                if (!fallbackBase)
-                    fallbackBase = compID;
+                if (!fallbackComp)
+                    fallbackComp = compID;
                 if (comp->Flags & 0x1) // IsDefault
                     return compID;
             }
-            if (fallbackBase)
-                return fallbackBase;
+            if (fallbackComp)
+                return fallbackComp;
         }
-        TC_LOG_ERROR("housing", "Housing::GetCoreExteriorComponentID: No base component found for houseType={}", _houseType);
+        TC_LOG_ERROR("housing", "Housing::GetCoreExteriorComponentID: No root component found for houseType={}", _houseType);
     }
     else
     {
