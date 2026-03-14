@@ -365,21 +365,24 @@ void HousingMap::SpawnPlotGameObjects()
             plotIdx, plotInfo->OwnerGuid.ToString(),
             plot->HousePosition[0], plot->HousePosition[1], plot->HousePosition[2]);
 
-        // Try to get persisted position and fixture data from the player's Housing object (if online)
+        // Get exterior component and WMO data from the player's Housing object
         Housing* housing = GetHousingForPlayer(plotInfo->OwnerGuid);
-        int32 exteriorComponentID = 141; // Default: Stucco Base
-        int32 houseExteriorWmoDataID = 9; // Default: Human theme
-        if (housing)
+        if (!housing)
         {
-            uint32 coreComponent = housing->GetCoreExteriorComponentID();
-            if (coreComponent)
-                exteriorComponentID = static_cast<int32>(coreComponent);
-            uint32 houseType = housing->GetHouseType();
-            if (houseType)
-                houseExteriorWmoDataID = static_cast<int32>(houseType);
-            TC_LOG_DEBUG("housing", "HousingMap::SpawnPlotGameObjects: Plot {} using persisted fixture data: ExteriorComponentID={}, WmoDataID={}",
-                plotIdx, exteriorComponentID, houseExteriorWmoDataID);
+            TC_LOG_ERROR("housing", "HousingMap::SpawnPlotGameObjects: Plot {} owned by {} but Housing object not found — cannot spawn house",
+                plotIdx, plotInfo->OwnerGuid.ToString());
+            continue;
         }
+        int32 exteriorComponentID = static_cast<int32>(housing->GetCoreExteriorComponentID());
+        int32 houseExteriorWmoDataID = static_cast<int32>(housing->GetHouseType());
+        if (!exteriorComponentID || !houseExteriorWmoDataID)
+        {
+            TC_LOG_ERROR("housing", "HousingMap::SpawnPlotGameObjects: Plot {} has invalid data: ExteriorComponentID={}, WmoDataID={}",
+                plotIdx, exteriorComponentID, houseExteriorWmoDataID);
+            continue;
+        }
+        TC_LOG_DEBUG("housing", "HousingMap::SpawnPlotGameObjects: Plot {} using ExteriorComponentID={}, WmoDataID={}",
+            plotIdx, exteriorComponentID, houseExteriorWmoDataID);
 
         // Build fixture override map from player's saved fixture selections
         FixtureOverrideMap fixtureOverrides;
@@ -657,16 +660,16 @@ bool HousingMap::AddPlayerToMap(Player* player, bool initPlayer /*= true*/)
 
         if (!alreadySpawned)
         {
-            // Read persisted fixture data from Housing
-            int32 exteriorComponentID = 141; // Default: Stucco Base
-            int32 houseExteriorWmoDataID = 9; // Default: Human theme
-            uint32 coreComponent = housing->GetCoreExteriorComponentID();
-            if (coreComponent)
-                exteriorComponentID = static_cast<int32>(coreComponent);
-            uint32 houseType = housing->GetHouseType();
-            if (houseType)
-                houseExteriorWmoDataID = static_cast<int32>(houseType);
-
+            // Read exterior data from Housing — no hardcoded fallbacks
+            int32 exteriorComponentID = static_cast<int32>(housing->GetCoreExteriorComponentID());
+            int32 houseExteriorWmoDataID = static_cast<int32>(housing->GetHouseType());
+            if (!exteriorComponentID || !houseExteriorWmoDataID)
+            {
+                TC_LOG_ERROR("housing", "HousingMap::AddPlayerToMap: Plot {} has invalid data: ExteriorComponentID={}, WmoDataID={} — skipping spawn",
+                    plotIdx, exteriorComponentID, houseExteriorWmoDataID);
+            }
+            else
+            {
             TC_LOG_DEBUG("housing", "HousingMap::AddPlayerToMap: Plot {} spawning house with ExteriorComponentID={}, WmoDataID={}",
                 plotIdx, exteriorComponentID, houseExteriorWmoDataID);
 
@@ -684,6 +687,7 @@ bool HousingMap::AddPlayerToMap(Player* player, bool initPlayer /*= true*/)
 
             TC_LOG_DEBUG("housing", "HousingMap::AddPlayerToMap: SpawnHouseForPlot result for plot {}: {}",
                 plotIdx, go ? go->GetGUID().ToString() : "FAILED");
+            } // else (valid exteriorComponentID && houseExteriorWmoDataID)
         }
         else
         {
@@ -705,15 +709,8 @@ bool HousingMap::AddPlayerToMap(Player* player, bool initPlayer /*= true*/)
                     int32 faction = _neighborhood ? _neighborhood->GetFactionRestriction()
                         : NEIGHBORHOOD_FACTION_ALLIANCE;
 
-                    // Use actual housing data, not hardcoded defaults
-                    int32 lateExtCompID = 141;
-                    int32 lateWmoDataID = 9;
-                    uint32 lateCoreComp = housing->GetCoreExteriorComponentID();
-                    if (lateCoreComp)
-                        lateExtCompID = static_cast<int32>(lateCoreComp);
-                    uint32 lateHouseType = housing->GetHouseType();
-                    if (lateHouseType)
-                        lateWmoDataID = static_cast<int32>(lateHouseType);
+                    int32 lateExtCompID = static_cast<int32>(housing->GetCoreExteriorComponentID());
+                    int32 lateWmoDataID = static_cast<int32>(housing->GetHouseType());
 
                     SpawnFullHouseMeshObjects(plotIdx, pos, rot,
                         housing->GetHouseGuid(), lateExtCompID, lateWmoDataID, faction);
@@ -1507,8 +1504,8 @@ void HousingMap::RemovePlayerHousing(ObjectGuid playerGuid)
 // House Structure GO Management
 // ============================================================
 
-GameObject* HousingMap::SpawnHouseForPlot(uint8 plotIndex, Position const* customPos /*= nullptr*/,
-    int32 exteriorComponentID /*= 141*/, int32 houseExteriorWmoDataID /*= 9*/,
+GameObject* HousingMap::SpawnHouseForPlot(uint8 plotIndex, Position const* customPos,
+    int32 exteriorComponentID, int32 houseExteriorWmoDataID,
     FixtureOverrideMap const* fixtureOverrides /*= nullptr*/)
 {
     if (!_neighborhood)

@@ -2546,14 +2546,16 @@ void WorldSession::HandleHousingSvcsNeighborhoodReservePlot(WorldPackets::Housin
                     neighborhood->UpdatePlotHouseInfo(plotIndex, housing->GetHouseGuid(), GetBattlenetAccountGUID());
 
                 // Spawn house GO and MeshObjects
+                int32 extCompID = static_cast<int32>(housing->GetCoreExteriorComponentID());
+                int32 wmoDataID = static_cast<int32>(housing->GetHouseType());
                 GameObject* houseGo = nullptr;
                 if (housing->HasCustomPosition())
                 {
                     Position customPos = housing->GetHousePosition();
-                    houseGo = housingMap->SpawnHouseForPlot(plotIndex, &customPos);
+                    houseGo = housingMap->SpawnHouseForPlot(plotIndex, &customPos, extCompID, wmoDataID);
                 }
                 else
-                    houseGo = housingMap->SpawnHouseForPlot(plotIndex);
+                    houseGo = housingMap->SpawnHouseForPlot(plotIndex, nullptr, extCompID, wmoDataID);
 
                 TC_LOG_ERROR("housing", "HandleHousingSvcsNeighborhoodReservePlot: SpawnHouseForPlot for plot {}: {}",
                     plotIndex, houseGo ? houseGo->GetGUID().ToString() : "FAILED");

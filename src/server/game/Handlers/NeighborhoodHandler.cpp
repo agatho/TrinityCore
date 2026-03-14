@@ -1255,10 +1255,13 @@ void WorldSession::HandleNeighborhoodBuyHouse(WorldPackets::Neighborhood::Neighb
         {
             housingMap->SetPlotOwnershipState(resolvedPlotIndex, true);
 
-            // Spawn the house structure GO at DB2 default position
-            // Uses sniff-verified defaults: ExteriorComponentID=141, WmoDataID=9
-            TC_LOG_ERROR("housing", "HandleNeighborhoodBuyHouse: Calling SpawnHouseForPlot for plot {}", resolvedPlotIndex);
-            GameObject* houseGo = housingMap->SpawnHouseForPlot(resolvedPlotIndex);
+            // Spawn the house using the player's Housing data
+            Housing const* buyHousing = player->GetHousing();
+            int32 buyExtCompID = buyHousing ? static_cast<int32>(buyHousing->GetCoreExteriorComponentID()) : 0;
+            int32 buyWmoDataID = buyHousing ? static_cast<int32>(buyHousing->GetHouseType()) : 0;
+            TC_LOG_ERROR("housing", "HandleNeighborhoodBuyHouse: Calling SpawnHouseForPlot for plot {} (extComp={}, wmoData={})",
+                resolvedPlotIndex, buyExtCompID, buyWmoDataID);
+            GameObject* houseGo = housingMap->SpawnHouseForPlot(resolvedPlotIndex, nullptr, buyExtCompID, buyWmoDataID);
             TC_LOG_ERROR("housing", "HandleNeighborhoodBuyHouse: SpawnHouseForPlot result: {}",
                 houseGo ? houseGo->GetGUID().ToString() : "FAILED/NULL");
         }
@@ -1435,7 +1438,9 @@ void WorldSession::HandleNeighborhoodMoveHouse(WorldPackets::Neighborhood::Neigh
                     fixtureOverrides.empty() ? nullptr : &fixtureOverrides);
             }
             else
-                housingMap->SpawnHouseForPlot(targetPlotIndex);
+            {
+                TC_LOG_ERROR("housing", "HandleNeighborhoodMoveHouse: No Housing object for player — cannot spawn house at plot {}", targetPlotIndex);
+            }
         }
 
         if (Housing const* housing = player->GetHousing())

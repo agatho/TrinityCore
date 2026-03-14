@@ -1834,8 +1834,33 @@ uint32 Housing::GetCoreExteriorComponentID() const
                 return fixture.FixturePointId;
         }
     }
-    // No explicit base fixture set — return faction-appropriate default.
-    return (_houseType == 87) ? 3805 : 141;
+    // No explicit base fixture set — find default base component for this house's WMO data ID.
+    if (_houseType > 0)
+    {
+        auto const* roots = sHousingMgr.GetRootComponentsForWmoData(static_cast<uint32>(_houseType));
+        if (roots)
+        {
+            uint32 fallbackBase = 0;
+            for (uint32 compID : *roots)
+            {
+                ExteriorComponentEntry const* comp = sExteriorComponentStore.LookupEntry(compID);
+                if (!comp || comp->Type != 9) // Type 9 = Base
+                    continue;
+                if (!fallbackBase)
+                    fallbackBase = compID;
+                if (comp->Flags & 0x1) // IsDefault
+                    return compID;
+            }
+            if (fallbackBase)
+                return fallbackBase;
+        }
+        TC_LOG_ERROR("housing", "Housing::GetCoreExteriorComponentID: No base component found for houseType={}", _houseType);
+    }
+    else
+    {
+        TC_LOG_ERROR("housing", "Housing::GetCoreExteriorComponentID: No fixtures and houseType=0 — cannot determine base component");
+    }
+    return 0;
 }
 
 HousingResult Housing::AddToCatalog(uint32 decorEntryId, uint8 sourceType, std::string sourceValue)

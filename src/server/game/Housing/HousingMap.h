@@ -62,8 +62,8 @@ public:
 
     // House structure GO management
     // Sniff-verified defaults: ExteriorComponentID=141 (Stucco Base), HouseExteriorWmoDataID=9 (Human theme)
-    GameObject* SpawnHouseForPlot(uint8 plotIndex, Position const* customPos = nullptr,
-        int32 exteriorComponentID = 141, int32 houseExteriorWmoDataID = 9,
+    GameObject* SpawnHouseForPlot(uint8 plotIndex, Position const* customPos,
+        int32 exteriorComponentID, int32 houseExteriorWmoDataID,
         FixtureOverrideMap const* fixtureOverrides = nullptr);
     void DespawnHouseForPlot(uint8 plotIndex);
     GameObject* GetHouseGameObject(uint8 plotIndex);
