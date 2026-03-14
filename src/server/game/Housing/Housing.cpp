@@ -1830,7 +1830,10 @@ uint32 Housing::GetCoreExteriorComponentID() const
         if (fixture.OptionId == 0)
         {
             ExteriorComponentEntry const* comp = sExteriorComponentStore.LookupEntry(fixture.FixturePointId);
-            if (comp && comp->Type == 9) // Type 9 = Base
+            // Only return this fixture if it's a Base (type 9) AND matches the current house type.
+            // When the player switches house type (e.g. Human→NightElf), old fixtures from the
+            // previous type must not override the new type's default base component.
+            if (comp && comp->Type == 9 && (_houseType == 0 || comp->HouseExteriorWmoDataID == _houseType))
                 return fixture.FixturePointId;
         }
     }
