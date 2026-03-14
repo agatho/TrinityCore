@@ -330,12 +330,15 @@ public:
 
     // ExteriorComponent indexed lookups
     std::vector<ExteriorComponentHookEntry const*> const* GetHooksOnComponent(uint32 extCompID) const;
-    ExteriorComponentEntry const* GetComponentAtHook(int32 hookID, uint32 parentCompID) const;
     ExteriorComponentExitPointEntry const* GetExitPoint(uint32 extCompID) const;
     int32 GetGroupForComponent(uint32 extCompID) const;
     std::vector<uint32> const* GetChildComponents(uint32 parentCompID) const;
     std::vector<uint32> const* GetRootComponentsForWmoData(uint32 wmoDataID) const;
     std::vector<uint32> const* GetComponentsInGroup(int32 groupID) const;
+
+    // Fixture resolution: given a hook's component type and the house's WmoDataID,
+    // returns the default fixture component ID (Flags & 0x1, ParentComponentID == 0).
+    uint32 GetDefaultFixtureForType(uint8 componentType, uint32 wmoDataID) const;
 
     // Find the first HouseRoom entry with visual components (not the base room 18)
     uint32 GetDefaultVisualRoomEntry() const;
@@ -434,12 +437,15 @@ private:
 
     // ExteriorComponent indexes
     std::unordered_map<uint32 /*extCompID*/, std::vector<ExteriorComponentHookEntry const*>> _hooksByExtComp;
-    std::unordered_map<int64 /*(hookID<<32)|parentCompID*/, ExteriorComponentEntry const*> _extCompByHookId;
     std::unordered_map<uint32 /*extCompID*/, ExteriorComponentExitPointEntry const*> _exitPointByExtComp;
     std::unordered_map<uint32 /*extCompID*/, int32 /*groupID*/> _groupByExtComp;
     std::unordered_map<int32 /*groupID*/, std::vector<uint32 /*extCompID*/>> _extCompsByGroup;
     std::unordered_map<uint32 /*parentCompID*/, std::vector<uint32 /*childCompID*/>> _childrenByExtComp;
     std::unordered_map<uint32 /*wmoDataID*/, std::vector<uint32 /*compID*/>> _rootCompsByWmoDataId;
+
+    // Fixture resolution: (componentType, wmoDataID) → default component ID
+    // Key = (uint64(componentType) << 32) | wmoDataID
+    std::unordered_map<uint64, uint32> _defaultFixtureByTypeWmo;
 };
 
 #define sHousingMgr HousingMgr::Instance()

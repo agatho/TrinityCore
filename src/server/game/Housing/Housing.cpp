@@ -1771,51 +1771,38 @@ std::vector<Housing::Fixture const*> Housing::GetFixtures() const
 
 std::unordered_map<uint32, uint32> Housing::GetFixtureOverrideMap() const
 {
-    // Build override map from player's fixture selections.
-    // Two kinds of overrides:
-    //   1. Hook-based (CreateFixture): OptionId != 0 → hookID → componentID
-    //   2. Root-based (SetCoreFixture non-base): OptionId == 0, Type != 9 (Base)
-    //      → maps defaultRootComponentID → newComponentID by matching Slot in the group
+    // Build override map from player's hook-based fixture selections.
+    // These are fixtures at hooks (doors, windows, etc.) where OptionId != 0.
+    // Root overrides (base, roof variants) are handled separately via GetRootComponentOverrides().
     std::unordered_map<uint32, uint32> result;
-
-    uint32 baseCompID = GetCoreExteriorComponentID();
-    int32 groupID = sHousingMgr.GetGroupForComponent(baseCompID);
 
     for (auto const& [pointId, fixture] : _fixtures)
     {
         if (fixture.OptionId != 0)
-        {
-            // Hook-based override (CreateFixture): hookID → componentID
             result[fixture.FixturePointId] = fixture.OptionId;
-        }
-        else
-        {
-            // Core fixture (SetCoreFixture): OptionId == 0
-            ExteriorComponentEntry const* newComp = sExteriorComponentStore.LookupEntry(fixture.FixturePointId);
-            if (!newComp || newComp->Type == 9) // Base handled by GetCoreExteriorComponentID()
-                continue;
+    }
+    return result;
+}
 
-            // Non-base core fixture (roof, door, etc.): find the DEFAULT root component
-            // of the same Slot in the group and override it.
-            if (groupID != 0)
-            {
-                std::vector<uint32> const* groupComps = sHousingMgr.GetComponentsInGroup(groupID);
-                if (groupComps)
-                {
-                    for (uint32 defaultCompID : *groupComps)
-                    {
-                        if (defaultCompID == fixture.FixturePointId)
-                            continue;
-                        ExteriorComponentEntry const* defaultComp = sExteriorComponentStore.LookupEntry(defaultCompID);
-                        if (defaultComp && defaultComp->Type == newComp->Type && defaultComp->ParentComponentID <= 0)
-                        {
-                            result[defaultCompID] = fixture.FixturePointId;
-                            break;
-                        }
-                    }
-                }
-            }
-        }
+std::unordered_map<uint8, uint32> Housing::GetRootComponentOverrides() const
+{
+    // Build override map for player-selected root components per type.
+    // Core fixtures (OptionId == 0) where the component is a root (ParentComponentID == 0)
+    // represent the player's choice for that component type (base, roof, etc.).
+    std::unordered_map<uint8, uint32> result;
+
+    for (auto const& [pointId, fixture] : _fixtures)
+    {
+        if (fixture.OptionId != 0)
+            continue;
+
+        ExteriorComponentEntry const* comp = sExteriorComponentStore.LookupEntry(fixture.FixturePointId);
+        if (!comp || comp->ParentComponentID != 0)
+            continue;
+        if (_houseType != 0 && comp->HouseExteriorWmoDataID != static_cast<uint32>(_houseType))
+            continue;
+
+        result[comp->Type] = fixture.FixturePointId;
     }
     return result;
 }
