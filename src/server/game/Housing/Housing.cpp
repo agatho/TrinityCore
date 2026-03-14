@@ -317,6 +317,14 @@ bool Housing::LoadFromDB(PreparedQueryResult housing, PreparedQueryResult decor,
         } while (fixtures->NextRow());
     }
 
+    // Migration: populate starter fixtures for houses created before persistence was added
+    if (_fixtures.empty() && _houseType != 0)
+    {
+        TC_LOG_INFO("housing", "Housing::LoadFromDB: No fixtures found for house {} — populating starter fixtures (migration)",
+            _houseGuid.ToString());
+        PopulateStarterFixtures();
+    }
+
     // Load catalog
     //           0             1        2           3
     // SELECT houseDecorId, quantity, sourceType, sourceValue
