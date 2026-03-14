@@ -1265,79 +1265,40 @@ void HousingMgr::BuildExteriorComponentIndexes()
     _exitPointByExtComp.clear();
     _groupByExtComp.clear();
     _extCompsByGroup.clear();
+    _childrenByExtComp.clear();
+    _rootCompsByWmoDataId.clear();
 
     // 1. Build hook index: which hooks are parented to each component
-    for (ExteriorComponentHookEntry const* hook : sExteriorComponentHookStore)
+    //    Note: store iteration only yields a subset of entries due to DB2 ParentIndexField
+    //    sparse indexing. Use LookupEntry(i) over GetNumRows() to reach all entries.
+    for (uint32 i = 0; i < sExteriorComponentHookStore.GetNumRows(); ++i)
     {
+        ExteriorComponentHookEntry const* hook = sExteriorComponentHookStore.LookupEntry(i);
         if (!hook)
             continue;
         _hooksByExtComp[hook->ExteriorComponentID].push_back(hook);
     }
 
-    // 2. Build reverse lookup: hookID → default component that should be placed there.
-    //    Chain: ExteriorComponentGroupXHook maps groups to hooks.
-    //    For each hook, find components in groups linked to that hook with matching Type
-    //    and IsDefaultFixture flag (Flags & 0x1).
-    //    First, build group→hooks mapping from GroupXHook
-    std::unordered_map<int32, std::vector<int32>> hooksByGroup; // groupID → hookIDs
-    for (ExteriorComponentGroupXHookEntry const* gxh : sExteriorComponentGroupXHookStore)
+    // 1a. Build child index and root-by-WMO index from ExteriorComponent.
+    //     ParentComponentID > 0 → child of that component.
+    //     ParentComponentID == 0 → root component, indexed by HouseExteriorWmoDataID.
+    //     ExteriorComponent uses ParentIndexField (HouseExteriorWmoDataID), so use
+    //     LookupEntry over GetNumRows() to reach all entries.
+    for (uint32 i = 0; i < sExteriorComponentStore.GetNumRows(); ++i)
     {
-        if (!gxh)
-            continue;
-        hooksByGroup[gxh->ExteriorComponentGroupID].push_back(gxh->ExteriorComponentHookID);
-    }
-
-    // For each hook, find the default component: same Type as hook's ComponentType, IsDefaultFixture
-    // We do this after step 4 (group indexes) so we can look up components in groups.
-    // For now, build a type→default-components index to use below.
-    std::unordered_map<int32, std::vector<ExteriorComponentEntry const*>> compsByType;
-    for (ExteriorComponentEntry const* comp : sExteriorComponentStore)
-    {
+        ExteriorComponentEntry const* comp = sExteriorComponentStore.LookupEntry(i);
         if (!comp)
             continue;
-        compsByType[comp->Type].push_back(comp);
+
+        if (comp->ParentComponentID > 0)
+            _childrenByExtComp[static_cast<uint32>(comp->ParentComponentID)].push_back(comp->ID);
+
+        // Root components (ParentComponentID=0) with a model, indexed by WMO data ID
+        if (comp->ParentComponentID == 0 && comp->ModelFileDataID > 0 && comp->HouseExteriorWmoDataID > 0)
+            _rootCompsByWmoDataId[comp->HouseExteriorWmoDataID].push_back(comp->ID);
     }
 
-    // Now for each hook, find the default component
-    for (ExteriorComponentHookEntry const* hook : sExteriorComponentHookStore)
-    {
-        if (!hook)
-            continue;
-
-        int32 hookType = hook->ExteriorComponentTypeID;
-        auto typeItr = compsByType.find(hookType);
-        if (typeItr == compsByType.end())
-            continue;
-
-        // Find default component (Flags & 0x1 = IsDefaultFixture) that belongs to the
-        // same parent component's group
-        ExteriorComponentEntry const* bestComp = nullptr;
-        for (ExteriorComponentEntry const* comp : typeItr->second)
-        {
-            if (comp->Flags & 0x1) // IsDefaultFixture
-            {
-                // Check if this component shares a group with the hook's parent component
-                // via ExteriorComponentGroupXHook
-                bestComp = comp;
-                break;
-            }
-        }
-        if (!bestComp && !typeItr->second.empty())
-            bestComp = typeItr->second.front(); // fallback: first component of this type
-
-        if (bestComp)
-            _extCompByHookId[static_cast<int32>(hook->ID)] = bestComp;
-    }
-
-    // 3. Build exit point index
-    for (ExteriorComponentExitPointEntry const* exitPt : sExteriorComponentExitPointStore)
-    {
-        if (!exitPt)
-            continue;
-        _exitPointByExtComp[exitPt->ExteriorComponentID] = exitPt;
-    }
-
-    // 4. Build group indexes from ExteriorComponentXGroup
+    // 1b. Build group indexes from ExteriorComponentXGroup (needed by step 2)
     for (ExteriorComponentXGroupEntry const* xg : sExteriorComponentXGroupStore)
     {
         if (!xg)
@@ -1348,11 +1309,93 @@ void HousingMgr::BuildExteriorComponentIndexes()
         _extCompsByGroup[groupID].push_back(compID);
     }
 
+    // 2. Build reverse lookup: hookID → default component that should be placed there.
+    //    Chain: ExteriorComponentGroupXHook maps (GroupID → HookID), meaning
+    //    "this group of components can be installed at this hook."
+    //    For each hook, we find which groups link to it, then pick the IsDefault
+    //    component from those groups with matching ExteriorComponentTypeID.
+    //
+    //    NOTE: Hook IDs are NOT globally unique — the ExteriorComponentHook DB2
+    //    uses ExteriorComponentID as a ParentIndexField, so multiple parent
+    //    components can share the same hook ID. The _extCompByHookId map uses
+    //    a composite key (hookID, parentCompID) to disambiguate.
+
+    // Step 2a: Build reverse index from GroupXHook: hookID → list of groupIDs
+    std::unordered_map<int32, std::vector<int32>> groupsByHookId; // hookID → [groupID, ...]
+    for (ExteriorComponentGroupXHookEntry const* gxh : sExteriorComponentGroupXHookStore)
+    {
+        if (!gxh)
+            continue;
+        groupsByHookId[gxh->ExteriorComponentHookID].push_back(gxh->ExteriorComponentGroupID);
+    }
+
+    // Step 2b: For each hookID in GroupXHook, look up the hook entry via LookupEntry
+    //          (store iteration only yields a subset; LookupEntry reaches all 23k+ entries)
+    for (auto const& [hookId, groupList] : groupsByHookId)
+    {
+        ExteriorComponentHookEntry const* hook = sExteriorComponentHookStore.LookupEntry(hookId);
+        if (!hook)
+            continue;
+
+        int32 hookType = hook->ExteriorComponentTypeID;
+        int32 parentCompID = hook->ExteriorComponentID;
+        int64 compositeKey = (int64(hookId) << 32) | uint32(parentCompID);
+        ExteriorComponentEntry const* bestComp = nullptr;
+        ExteriorComponentEntry const* fallbackComp = nullptr;
+
+        // Find default component from linked groups
+        for (int32 groupID : groupList)
+        {
+            auto compItr = _extCompsByGroup.find(groupID);
+            if (compItr == _extCompsByGroup.end())
+                continue;
+
+            for (uint32 compID : compItr->second)
+            {
+                ExteriorComponentEntry const* comp = sExteriorComponentStore.LookupEntry(compID);
+                if (!comp || comp->Type != hookType)
+                    continue;
+
+                if (!fallbackComp)
+                    fallbackComp = comp;
+
+                if (comp->Flags & 0x1) // IsDefaultFixture
+                {
+                    bestComp = comp;
+                    break;
+                }
+            }
+            if (bestComp)
+                break;
+        }
+
+        if (!bestComp)
+            bestComp = fallbackComp;
+
+        if (bestComp)
+        {
+            _extCompByHookId[compositeKey] = bestComp;
+            TC_LOG_DEBUG("housing", "HookID {} (parent={}, type={}) → comp {} '{}' (Flags=0x{:X}, group-resolved)",
+                hook->ID, parentCompID, hookType, bestComp->ID,
+                bestComp->Name[DEFAULT_LOCALE] ? bestComp->Name[DEFAULT_LOCALE] : "",
+                bestComp->ParentComponentID, bestComp->Flags);
+        }
+    }
+
+    // 3. Build exit point index
+    for (ExteriorComponentExitPointEntry const* exitPt : sExteriorComponentExitPointStore)
+    {
+        if (!exitPt)
+            continue;
+        _exitPointByExtComp[exitPt->ExteriorComponentID] = exitPt;
+    }
+
     TC_LOG_INFO("housing", "HousingMgr::BuildExteriorComponentIndexes: "
-        "hooks={} compByHook={} exitPoints={} groups={} compsInGroups={}",
+        "hooks={} compByHook={} exitPoints={} groups={} compsInGroups={} parentChildren={} wmoRoots={}",
         uint32(_hooksByExtComp.size()), uint32(_extCompByHookId.size()),
         uint32(_exitPointByExtComp.size()), uint32(_groupByExtComp.size()),
-        uint32(_extCompsByGroup.size()));
+        uint32(_extCompsByGroup.size()), uint32(_childrenByExtComp.size()),
+        uint32(_rootCompsByWmoDataId.size()));
 
 }
 
@@ -1362,9 +1405,10 @@ std::vector<ExteriorComponentHookEntry const*> const* HousingMgr::GetHooksOnComp
     return itr != _hooksByExtComp.end() ? &itr->second : nullptr;
 }
 
-ExteriorComponentEntry const* HousingMgr::GetComponentAtHook(int32 hookID) const
+ExteriorComponentEntry const* HousingMgr::GetComponentAtHook(int32 hookID, uint32 parentCompID) const
 {
-    auto itr = _extCompByHookId.find(hookID);
+    int64 compositeKey = (int64(hookID) << 32) | uint32(parentCompID);
+    auto itr = _extCompByHookId.find(compositeKey);
     return itr != _extCompByHookId.end() ? itr->second : nullptr;
 }
 
@@ -1378,6 +1422,18 @@ int32 HousingMgr::GetGroupForComponent(uint32 extCompID) const
 {
     auto itr = _groupByExtComp.find(extCompID);
     return itr != _groupByExtComp.end() ? itr->second : 0;
+}
+
+std::vector<uint32> const* HousingMgr::GetChildComponents(uint32 parentCompID) const
+{
+    auto itr = _childrenByExtComp.find(parentCompID);
+    return itr != _childrenByExtComp.end() ? &itr->second : nullptr;
+}
+
+std::vector<uint32> const* HousingMgr::GetRootComponentsForWmoData(uint32 wmoDataID) const
+{
+    auto itr = _rootCompsByWmoDataId.find(wmoDataID);
+    return itr != _rootCompsByWmoDataId.end() ? &itr->second : nullptr;
 }
 
 std::vector<uint32> const* HousingMgr::GetComponentsInGroup(int32 groupID) const

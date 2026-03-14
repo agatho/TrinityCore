@@ -66,9 +66,11 @@ public:
     // Housing fixture
     // isRoot: true for root pieces (no parent attachment), false for child pieces.
     // Root pieces get Tag_HouseExteriorRoot (225), children get Tag_HouseExteriorPiece (224).
-    void InitHousingFixtureData(ObjectGuid houseGuid, int32 exteriorComponentID,
+    void InitHousingFixtureData(ObjectGuid houseGuid, ObjectGuid fixtureGuid,
+        ObjectGuid parentFixtureGuid, int32 exteriorComponentID,
         int32 houseExteriorWmoDataID, uint8 exteriorComponentType = 9,
         uint8 houseSize = 2, int32 exteriorComponentHookID = -1, bool isRoot = false);
+    ObjectGuid const& GetFixtureGuid() const { return _fixtureGuid; }
 
     // Housing decor (adds FHousingDecor_C entity fragment for placed decor items)
     // Sniff-verified: retail decor is ALWAYS MeshObject (never GO). TargetGameObjectGUID=empty.
@@ -123,6 +125,7 @@ private:
     bool _isExteriorRoot = false;
     int32 _exteriorComponentHookID = -1;
     int32 _exteriorComponentID = 0;
+    ObjectGuid _fixtureGuid;
 };
 
 #endif // TRINITYCORE_MESHOBJECT_H

@@ -229,10 +229,20 @@ void HousingFixtureSetEditMode::Read()
 
 void HousingFixtureSetCoreFixture::Read()
 {
+    // Diagnostic: log raw packet bytes before parsing
+    TC_LOG_INFO("housing", "CMSG_HOUSING_FIXTURE_SET_CORE_FIXTURE raw packet: size={} rpos={}", _worldPacket.size(), _worldPacket.rpos());
+    {
+        std::string hexDump;
+        for (std::size_t i = _worldPacket.rpos(); i < _worldPacket.size() && i < _worldPacket.rpos() + 40; ++i)
+            hexDump += fmt::format("{:02X} ", _worldPacket[i]);
+        TC_LOG_INFO("housing", "  raw bytes: {}", hexDump);
+    }
+
     _worldPacket >> FixtureGuid;
     _worldPacket >> ExteriorComponentID;
 
-    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_FIXTURE_SET_CORE_FIXTURE FixtureGuid: {} ExteriorComponentID: {}", FixtureGuid.ToString(), ExteriorComponentID);
+    TC_LOG_INFO("housing", "CMSG_HOUSING_FIXTURE_SET_CORE_FIXTURE parsed: FixtureGuid={} ExteriorComponentID={} (rpos after={})",
+        FixtureGuid.ToString(), ExteriorComponentID, _worldPacket.rpos());
 }
 
 void HousingFixtureCreateFixture::Read()

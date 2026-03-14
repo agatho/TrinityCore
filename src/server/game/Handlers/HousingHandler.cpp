@@ -753,6 +753,13 @@ void WorldSession::HandleHousingDecorSetEditMode(WorldPackets::Housing::HousingD
             player->ClearUpdateMask(false);
         }
 
+        // Clear Account entity dirty state on EXIT. During edit mode, decor operations
+        // (place/move/remove) modify FHousingStorage_C which marks the Account dirty.
+        // Without this, Map::SendObjectUpdates() sends a stale VALUES_UPDATE on the
+        // next tick, which the client rejects ("Object update failed for BNetAccount").
+        GetBattlenetAccount().ClearUpdateMask(true);
+        GetHousingPlayerHouseEntity().ClearUpdateMask(true);
+
         TC_LOG_DEBUG("housing", "  EditMode EXIT: BNetAccountGuid={}",
             response.BNetAccountGuid.ToString());
     }
@@ -1466,6 +1473,15 @@ void WorldSession::HandleHousingFixtureSetEditMode(WorldPackets::Housing::Housin
         housing->SyncUpdateFields();
     }
 
+    // CRITICAL: Clear Account entity dirty state BEFORE sending any packets.
+    // PopulateCatalogStorageEntries() modifies FHousingStorage_C which marks the
+    // Account entity dirty. Unlike decor edit mode, fixture edit mode doesn't send
+    // the Account entity as CREATE here. If we leave it dirty, Map::SendObjectUpdates()
+    // will send a VALUES_UPDATE on the next tick, which the client rejects because
+    // MapUpdateField entries can't be added via VALUES_UPDATE when initially empty.
+    // Also clear on EXIT to prevent any lingering dirty state from decor operations.
+    GetBattlenetAccount().ClearUpdateMask(true);
+
     // ======================================================================
     // Sniff-verified retail packet sequence (build 66337):
     //   #10161 S->C SMSG_UPDATE_OBJECT (56B)                — editor mode field change
@@ -1581,18 +1597,22 @@ void WorldSession::HandleHousingFixtureSetCoreFixture(WorldPackets::Housing::Hou
 
     // Validate ExteriorComponentID against DB2 store
     uint32 componentID = housingFixtureSetCoreFixture.ExteriorComponentID;
+
+    TC_LOG_INFO("housing", "CMSG_HOUSING_FIXTURE_SET_CORE_FIXTURE: FixtureGuid={} ExteriorComponentID={} (store has {} entries)",
+        housingFixtureSetCoreFixture.FixtureGuid.ToString(), componentID, sExteriorComponentStore.GetNumRows());
+
     ExteriorComponentEntry const* componentEntry = sExteriorComponentStore.LookupEntry(componentID);
     if (!componentEntry)
     {
-        TC_LOG_DEBUG("housing", "CMSG_HOUSING_FIXTURE_SET_CORE_FIXTURE ExteriorComponentID {} not found in DB2",
-            componentID);
+        TC_LOG_INFO("housing", "CMSG_HOUSING_FIXTURE_SET_CORE_FIXTURE ExteriorComponentID {} not found in DB2 (store has {} entries)",
+            componentID, sExteriorComponentStore.GetNumRows());
         WorldPackets::Housing::HousingFixtureSetCoreFixtureResponse response;
         response.Result = static_cast<uint8>(HOUSING_RESULT_FIXTURE_NOT_FOUND);
         SendPacket(response.Write());
         return;
     }
 
-    TC_LOG_DEBUG("housing", "CMSG_HOUSING_FIXTURE_SET_CORE_FIXTURE DB2 lookup: ExteriorComponentID={}, Name='{}', Type={}, Size={}, Flags={}, ParentCompID={}, WmoDataID={}",
+    TC_LOG_INFO("housing", "CMSG_HOUSING_FIXTURE_SET_CORE_FIXTURE DB2 lookup OK: ExteriorComponentID={}, Name='{}', Type={}, Size={}, Flags={}, ParentCompID={}, WmoDataID={}",
         componentID, componentEntry->Name[DEFAULT_LOCALE] ? componentEntry->Name[DEFAULT_LOCALE] : "",
         componentEntry->Type, componentEntry->Size, componentEntry->Flags,
         componentEntry->ParentComponentID, componentEntry->HouseExteriorWmoDataID);
@@ -1773,7 +1793,7 @@ void WorldSession::HandleHousingFixtureDeleteFixture(WorldPackets::Housing::Hous
             }
 
             // Spawn default component back at this hook (DB2 default)
-            ExteriorComponentEntry const* defaultComp = sHousingMgr.GetComponentAtHook(static_cast<int32>(removedHookID));
+            ExteriorComponentEntry const* defaultComp = sHousingMgr.GetComponentAtHook(static_cast<int32>(removedHookID), housing->GetCoreExteriorComponentID());
             if (defaultComp)
             {
                 housingMap->SpawnFixtureAtHook(plotIndex, removedHookID, defaultComp->ID,

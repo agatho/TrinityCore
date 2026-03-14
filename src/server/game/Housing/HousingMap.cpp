@@ -1937,7 +1937,30 @@ MeshObject* HousingMap::SpawnHouseMeshObject(uint8 plotIndex, int32 fileDataID, 
     // All other pieces (roof, door, chimney, windows) get Tag_HouseExteriorPiece (224).
     // The client uses Tag_HouseExteriorRoot to identify the fixture GUID for edit mode.
     bool isRoot = (exteriorComponentType == 9) && attachParent.IsEmpty();
-    mesh->InitHousingFixtureData(houseGuid, exteriorComponentID, houseExteriorWmoDataID,
+
+    // Generate a unique fixture GUID per fixture. The client uses FHousingFixture_C::Guid
+    // to identify individual fixtures — if all fixtures share the same GUID (houseGuid),
+    // the client can't distinguish them and reports "Fixture not found".
+    // Use subType=5 (fixture), realm, hookID-or-componentID, houseGuid counter.
+    uint32 fixtureArg2 = (exteriorComponentHookID > 0)
+        ? static_cast<uint32>(exteriorComponentHookID)
+        : static_cast<uint32>(exteriorComponentID);
+    ObjectGuid fixtureGuid = ObjectGuid::Create<HighGuid::Housing>(
+        /*subType*/ 5, /*arg1*/ sRealmList->GetCurrentRealmId().Realm,
+        /*arg2*/ fixtureArg2, houseGuid.GetCounter());
+
+    // Look up the parent fixture's unique GUID for AttachParentGUID field.
+    // The client uses this to build the fixture hierarchy tree — without it,
+    // the client can't determine which hook points have fixtures installed.
+    ObjectGuid parentFixtureGuid;
+    if (!attachParent.IsEmpty())
+    {
+        if (MeshObject* parentMesh = GetMeshObject(attachParent))
+            parentFixtureGuid = parentMesh->GetFixtureGuid();
+    }
+
+    mesh->InitHousingFixtureData(houseGuid, fixtureGuid, parentFixtureGuid,
+        exteriorComponentID, houseExteriorWmoDataID,
         exteriorComponentType, houseSize, exteriorComponentHookID, isRoot);
 
     // Now add to map — this triggers the create packet with all fragments included
@@ -1974,137 +1997,94 @@ void HousingMap::SpawnFullHouseMeshObjects(uint8 plotIndex, Position const& hous
     uint32 coreExtCompID = static_cast<uint32>(exteriorComponentID);
     int32 groupID = sHousingMgr.GetGroupForComponent(coreExtCompID);
 
-    if (groupID != 0)
+    ExteriorComponentEntry const* coreComp = sExteriorComponentStore.LookupEntry(coreExtCompID);
+    if (coreComp && coreComp->ModelFileDataID > 0 && coreComp->HouseExteriorWmoDataID > 0)
     {
-        // Find all root components in this group (those with HookID <= 0 are roots)
-        std::vector<uint32> const* groupComps = sHousingMgr.GetComponentsInGroup(groupID);
-        if (groupComps && !groupComps->empty())
+        // A house consists of multiple independent root components (Base type=9, Roof type=10, etc.)
+        // all sharing the same HouseExteriorWmoDataID. Each root is spawned independently at the
+        // house position, and each has its own hook children (doors on base, chimney/windows on roof).
+        //
+        // Among roots of the same type, there may be variants (e.g. multiple roof styles). The
+        // coreExtCompID tells us which base variant is selected; for other types we pick the
+        // default (Flags & 0x1 IsDefault) or first available.
+
+        uint32 wmoDataID = coreComp->HouseExteriorWmoDataID;
+        auto const* rootComps = sHousingMgr.GetRootComponentsForWmoData(wmoDataID);
+        uint32 totalSpawned = 0;
+
+        if (rootComps)
         {
-            uint32 totalSpawned = 0;
-            for (uint32 compID : *groupComps)
+            // Group roots by type, filtering to match the house's Size
+            uint8 houseSize = coreComp->Size;
+            std::unordered_map<uint8 /*type*/, std::vector<uint32>> rootsByType;
+            for (uint32 rootID : *rootComps)
             {
-                ExteriorComponentEntry const* comp = sExteriorComponentStore.LookupEntry(compID);
-                if (!comp || comp->ParentComponentID > 0) // skip children — they'll be spawned recursively
-                    continue;
-
-                // Check if this root component has been overridden (e.g., roof 1503 → 1497)
-                uint32 spawnCompID = compID;
-                if (fixtureOverrides)
-                {
-                    auto overrideItr = fixtureOverrides->find(compID);
-                    if (overrideItr != fixtureOverrides->end())
-                    {
-                        TC_LOG_DEBUG("housing", "HousingMap::SpawnFullHouseMeshObjects: Root override for plot {} — "
-                            "default {} → override {}", plotIndex, compID, overrideItr->second);
-                        spawnCompID = overrideItr->second;
-                    }
-                }
-
-                totalSpawned += SpawnExtCompTree(plotIndex, spawnCompID,
-                    housePos, houseRot,
-                    houseGuid, houseExteriorWmoDataID,
-                    ObjectGuid::Empty, nullptr, 0, fixtureOverrides);
+                ExteriorComponentEntry const* rc = sExteriorComponentStore.LookupEntry(rootID);
+                if (rc && rc->ModelFileDataID > 0 && rc->Size == houseSize)
+                    rootsByType[rc->Type].push_back(rootID);
             }
 
-            if (totalSpawned > 0)
+            for (auto const& [type, compIDs] : rootsByType)
             {
-                // Check which components were included in the data-driven group.
-                // If missing, spawn them from hardcoded data.
-                bool roofFound = false;
-                bool doorFound = false;
-                bool chimneyFound = false;
-                MeshObject* basePieceDd = nullptr;
-                MeshObject* roofPieceDd = nullptr;
-                auto meshItr = _meshObjects.find(plotIndex);
-                if (meshItr != _meshObjects.end())
+                uint32 selectedCompID = 0;
+
+                if (type == coreComp->Type)
                 {
-                    for (ObjectGuid const& guid : meshItr->second)
+                    // For the base type, use the player's selected coreExtCompID
+                    selectedCompID = coreExtCompID;
+                }
+                else
+                {
+                    // For other types (roof, etc.), pick IsDefault or first available
+                    // TODO: check fixture overrides for player-selected roof variant
+                    for (uint32 id : compIDs)
                     {
-                        if (MeshObject* mesh = GetMeshObject(guid))
+                        ExteriorComponentEntry const* rc = sExteriorComponentStore.LookupEntry(id);
+                        if (!rc) continue;
+                        if (!selectedCompID)
+                            selectedCompID = id; // fallback: first available
+                        if (rc->Flags & 0x1)
                         {
-                            if (mesh->GetFileDataID() == 7420602)
-                            { roofFound = true; roofPieceDd = mesh; }
-                            else if (mesh->GetFileDataID() == 7450804)
-                                doorFound = true;
-                            else if (mesh->GetFileDataID() == 6648736)
-                                basePieceDd = mesh;
-                            else if (mesh->GetFileDataID() == 7118952)
-                                chimneyFound = true;
+                            selectedCompID = id; // prefer IsDefault
+                            break;
                         }
                     }
                 }
 
-                if (factionRestriction == NEIGHBORHOOD_FACTION_ALLIANCE)
+                if (selectedCompID)
                 {
-                    if (!roofFound)
-                    {
-                        roofPieceDd = SpawnHouseMeshObject(plotIndex, 7420602, /*isWMO*/ true,
-                            housePos, houseRot, 1.0f,
-                            houseGuid, 1503, houseExteriorWmoDataID,
-                            /*exteriorComponentType*/ 10, /*houseSize*/ 2, /*hookID*/ -1,
-                            ObjectGuid::Empty, /*attachFlags*/ 0);
-                        totalSpawned++;
-                    }
+                    ExteriorComponentEntry const* selComp = sExteriorComponentStore.LookupEntry(selectedCompID);
+                    TC_LOG_INFO("housing", "SpawnFullHouseMeshObjects: Spawning root type={} comp={} '{}' "
+                        "(wmoDataID={}, size={}, ModelFDID={})",
+                        type, selectedCompID,
+                        selComp && selComp->Name[DEFAULT_LOCALE] ? selComp->Name[DEFAULT_LOCALE] : "",
+                        wmoDataID, houseSize, selComp ? selComp->ModelFileDataID : 0);
 
-                    if (!doorFound && basePieceDd)
-                    {
-                        SpawnHouseMeshObject(plotIndex, 7450804, /*isWMO*/ true,
-                            Position(9.2805f, -3.4555f, -0.5611f, 0.0f),
-                            QuaternionData(0.0f, 0.0f, 0.0f, 1.0f), 1.0f,
-                            houseGuid, 1380, houseExteriorWmoDataID,
-                            /*exteriorComponentType*/ 11, /*houseSize*/ 1, /*hookID*/ 2505,
-                            basePieceDd->GetGUID(), /*attachFlags*/ 3, &housePos);
-                        totalSpawned++;
-                    }
-
-                    // Chimney + windows as children of roof
-                    if (!chimneyFound && roofPieceDd)
-                    {
-                        ObjectGuid roofGuid = roofPieceDd->GetGUID();
-
-                        SpawnHouseMeshObject(plotIndex, 7118952, /*isWMO*/ true,
-                            Position(-3.6472f, -5.6444f, 12.3556f, 0.0f),
-                            QuaternionData(0.0f, 0.0f, -0.7071066f, 0.70710695f), 1.0f,
-                            houseGuid, 1452, houseExteriorWmoDataID,
-                            /*exteriorComponentType*/ 16, /*houseSize*/ 2, /*hookID*/ 14931,
-                            roofGuid, /*attachFlags*/ 3, &housePos);
-
-                        SpawnHouseMeshObject(plotIndex, 7450830, /*isWMO*/ true,
-                            Position(-3.025f, -0.0222f, 11.35f, 0.0f),
-                            QuaternionData(0.0f, 0.0f, -1.0f, 0.0f), 1.0f,
-                            houseGuid, 1448, houseExteriorWmoDataID,
-                            /*exteriorComponentType*/ 14, /*houseSize*/ 2, /*hookID*/ 17202,
-                            roofGuid, /*attachFlags*/ 3, &housePos);
-
-                        SpawnHouseMeshObject(plotIndex, 7450830, /*isWMO*/ true,
-                            Position(3.0305f, -0.0222f, 11.35f, 0.0f),
-                            QuaternionData(0.0f, 0.0f, 0.0f, 1.0f), 1.0f,
-                            houseGuid, 1448, houseExteriorWmoDataID,
-                            /*exteriorComponentType*/ 14, /*houseSize*/ 2, /*hookID*/ 14929,
-                            roofGuid, /*attachFlags*/ 3, &housePos);
-
-                        totalSpawned += 3;
-                    }
+                    totalSpawned += SpawnExtCompTree(plotIndex, selectedCompID,
+                        housePos, houseRot,
+                        houseGuid, houseExteriorWmoDataID,
+                        ObjectGuid::Empty, nullptr, 0, fixtureOverrides);
                 }
-
-                TC_LOG_INFO("housing", "HousingMap::SpawnFullHouseMeshObjects: Data-driven spawn "
-                    "for plot {} group {} — {} total MeshObjects (faction={}, door={})",
-                    plotIndex, groupID, totalSpawned,
-                    factionRestriction == NEIGHBORHOOD_FACTION_ALLIANCE ? "Alliance" : "Horde",
-                    doorFound ? "data-driven" : (factionRestriction == NEIGHBORHOOD_FACTION_ALLIANCE ? "hardcoded" : "N/A"));
-                return;
             }
-
-            TC_LOG_WARN("housing", "HousingMap::SpawnFullHouseMeshObjects: Data-driven spawn "
-                "yielded 0 meshes for plot {} group {} — falling back to hardcoded",
-                plotIndex, groupID);
         }
+
+        if (totalSpawned > 0)
+        {
+            TC_LOG_INFO("housing", "HousingMap::SpawnFullHouseMeshObjects: Data-driven spawn "
+                "for plot {} wmoDataID {} coreComp {} — {} total MeshObjects (faction={})",
+                plotIndex, wmoDataID, coreExtCompID, totalSpawned,
+                factionRestriction == NEIGHBORHOOD_FACTION_ALLIANCE ? "Alliance" : "Horde");
+            return;
+        }
+
+        TC_LOG_WARN("housing", "HousingMap::SpawnFullHouseMeshObjects: Data-driven spawn "
+            "yielded 0 meshes for plot {} wmoDataID {} — falling back to hardcoded",
+            plotIndex, wmoDataID);
     }
-    else
+    else if (!coreComp)
     {
-        TC_LOG_DEBUG("housing", "HousingMap::SpawnFullHouseMeshObjects: No group found for "
-            "exteriorComponentID {} — using hardcoded spawn for plot {}",
-            exteriorComponentID, plotIndex);
+        TC_LOG_DEBUG("housing", "HousingMap::SpawnFullHouseMeshObjects: ExteriorComponent {} not found "
+            "— using hardcoded spawn for plot {}", exteriorComponentID, plotIndex);
     }
 
     // === HARDCODED FALLBACK ===
@@ -2318,10 +2298,10 @@ uint32 HousingMap::SpawnExtCompTree(uint8 plotIndex, uint32 extCompID,
     // Determine attach flags: root pieces (no parent) use 0, children use 3
     uint8 attachFlags = parentGuid.IsEmpty() ? 0 : 3;
 
-    // For CreateFixture: at depth=0, the hookIDOverride tells the client which hook point
-    // this component occupies. The ExteriorComponent has no hook ID field — hook relationships
-    // come from ExteriorComponentHook and ExteriorComponentGroupXHook tables.
-    int32 effectiveHookID = (depth == 0 && hookIDOverride > 0) ? hookIDOverride : -1;
+    // The hookIDOverride tells the client which hook point this component occupies.
+    // This must propagate at ALL depths (not just depth=0) because during initial house spawn
+    // via SpawnFullHouseMeshObjects, hooks are iterated at depth >= 1 with valid hookIDOverride.
+    int32 effectiveHookID = (hookIDOverride > 0) ? hookIDOverride : -1;
 
     MeshObject* mesh = SpawnHouseMeshObject(plotIndex, comp->ModelFileDataID, /*isWMO*/ true,
         pos, rot, 1.0f,
@@ -2343,6 +2323,8 @@ uint32 HousingMap::SpawnExtCompTree(uint8 plotIndex, uint32 extCompID,
     // Use worldPos for children: root's worldPos is itself, child's is the root's position
     Position const* childWorldPos = worldPos ? worldPos : &pos;
 
+    std::set<uint32> spawnedChildComps; // track to avoid double-spawning
+
     // Recurse into hooks on this component
     auto const* hooks = sHousingMgr.GetHooksOnComponent(extCompID);
     if (hooks)
@@ -2361,9 +2343,16 @@ uint32 HousingMap::SpawnExtCompTree(uint8 plotIndex, uint32 extCompID,
                     childComp = sExteriorComponentStore.LookupEntry(overrideItr->second);
             }
             if (!childComp)
-                childComp = sHousingMgr.GetComponentAtHook(static_cast<int32>(hook->ID));
+                childComp = sHousingMgr.GetComponentAtHook(static_cast<int32>(hook->ID), extCompID);
             if (!childComp)
                 continue;
+
+            spawnedChildComps.insert(childComp->ID);
+
+            TC_LOG_DEBUG("housing", "SpawnExtCompTree: parent={} hook={} (type={}) → child comp {} '{}' (ParentComp={}, ModelFDID={})",
+                extCompID, hook->ID, hook->ExteriorComponentTypeID, childComp->ID,
+                childComp->Name[DEFAULT_LOCALE] ? childComp->Name[DEFAULT_LOCALE] : "",
+                childComp->ParentComponentID, childComp->ModelFileDataID);
 
             // Hook position/rotation are local-space offsets relative to the parent
             Position hookPos(hook->Position[0], hook->Position[1], hook->Position[2], 0.0f);
@@ -2386,6 +2375,48 @@ uint32 HousingMap::SpawnExtCompTree(uint8 plotIndex, uint32 extCompID,
                 houseGuid, houseExteriorWmoDataID,
                 meshGuid, childWorldPos, depth + 1, fixtureOverrides,
                 static_cast<int32>(hook->ID));
+        }
+    }
+
+    // Also walk children linked via ExteriorComponent.ParentComponentID.
+    // These are components (e.g. roofs) where ParentComponentID references this component.
+    // They may not have hooks defining their position — use the child's Position field as offset.
+    auto const* children = sHousingMgr.GetChildComponents(extCompID);
+    if (children)
+    {
+        for (uint32 childCompID : *children)
+        {
+            if (spawnedChildComps.count(childCompID))
+                continue; // already spawned via hook
+
+            ExteriorComponentEntry const* childComp = sExteriorComponentStore.LookupEntry(childCompID);
+            if (!childComp || childComp->ModelFileDataID <= 0)
+                continue;
+
+            // Only spawn if this is a default component (or if there's no default, take first)
+            // Skip non-default variants — fixture overrides handle those
+            if (!(childComp->Flags & 0x1))
+                continue;
+
+            TC_LOG_INFO("housing", "SpawnExtCompTree: parent={} → ParentComponentID child comp {} '{}' "
+                "(type={}, ModelFDID={}, Pos=({:.1f},{:.1f},{:.1f}))",
+                extCompID, childComp->ID,
+                childComp->Name[DEFAULT_LOCALE] ? childComp->Name[DEFAULT_LOCALE] : "",
+                childComp->Type, childComp->ModelFileDataID,
+                childComp->Position[0], childComp->Position[1], childComp->Position[2]);
+
+            // Child's Position field is local-space offset from parent
+            Position childPos(childComp->Position[0], childComp->Position[1], childComp->Position[2], 0.0f);
+            QuaternionData childRot; // identity rotation
+            childRot.x = 0.0f;
+            childRot.y = 0.0f;
+            childRot.z = 0.0f;
+            childRot.w = 1.0f;
+
+            count += SpawnExtCompTree(plotIndex, childCompID,
+                childPos, childRot,
+                houseGuid, houseExteriorWmoDataID,
+                meshGuid, childWorldPos, depth + 1, fixtureOverrides);
         }
     }
 
