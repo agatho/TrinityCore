@@ -384,11 +384,14 @@ void HousingMap::SpawnPlotGameObjects()
         TC_LOG_DEBUG("housing", "HousingMap::SpawnPlotGameObjects: Plot {} using ExteriorComponentID={}, WmoDataID={}",
             plotIdx, exteriorComponentID, houseExteriorWmoDataID);
 
-        // Build fixture + root override maps from player's saved fixture selections
+        // Build fixture + root override maps from player's saved fixture selections.
+        // Always pass rootOverrides when housing exists — the map controls which root types spawn.
+        // nullptr = no housing data (unowned plot), spawn all roots.
+        // Non-null = only spawn types present in the map.
         FixtureOverrideMap fixtureOverrides = housing->GetFixtureOverrideMap();
         FixtureOverrideMap const* overridesPtr = fixtureOverrides.empty() ? nullptr : &fixtureOverrides;
         RootOverrideMap rootOverrides = housing->GetRootComponentOverrides();
-        RootOverrideMap const* rootOvrPtr = rootOverrides.empty() ? nullptr : &rootOverrides;
+        RootOverrideMap const* rootOvrPtr = &rootOverrides;
 
         GameObject* houseGo = nullptr;
         if (housing->HasCustomPosition())
@@ -676,7 +679,7 @@ bool HousingMap::AddPlayerToMap(Player* player, bool initPlayer /*= true*/)
             auto fixtureOverrides = housing->GetFixtureOverrideMap();
             FixtureOverrideMap const* overridesPtr = fixtureOverrides.empty() ? nullptr : &fixtureOverrides;
             auto rootOverrides = housing->GetRootComponentOverrides();
-            RootOverrideMap const* rootOvrPtr = rootOverrides.empty() ? nullptr : &rootOverrides;
+            RootOverrideMap const* rootOvrPtr = &rootOverrides;
 
             GameObject* go = nullptr;
             if (housing->HasCustomPosition())
@@ -717,7 +720,7 @@ bool HousingMap::AddPlayerToMap(Player* player, bool initPlayer /*= true*/)
                     auto lateFixtureOvr = housing->GetFixtureOverrideMap();
                     FixtureOverrideMap const* lateFixturePtr = lateFixtureOvr.empty() ? nullptr : &lateFixtureOvr;
                     auto lateRootOvr = housing->GetRootComponentOverrides();
-                    RootOverrideMap const* lateRootPtr = lateRootOvr.empty() ? nullptr : &lateRootOvr;
+                    RootOverrideMap const* lateRootPtr = &lateRootOvr;
 
                     SpawnFullHouseMeshObjects(plotIdx, pos, rot,
                         housing->GetHouseGuid(), lateExtCompID, lateWmoDataID, faction,
@@ -2096,6 +2099,13 @@ void HousingMap::SpawnFullHouseMeshObjects(uint8 plotIndex, Position const& hous
                     auto ovrItr = rootOverrides->find(type);
                     if (ovrItr != rootOverrides->end())
                         selectedCompID = ovrItr->second;
+                    else
+                    {
+                        // Type not in fixtures DB → not unlocked yet, skip it
+                        TC_LOG_DEBUG("housing", "SpawnFullHouseMeshObjects: Skipping root type={} — not in fixtures",
+                            type);
+                        continue;
+                    }
                 }
 
                 // 2. For the core type, use the player's selected coreExtCompID
