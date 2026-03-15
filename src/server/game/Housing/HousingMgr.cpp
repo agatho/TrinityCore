@@ -1271,17 +1271,15 @@ void HousingMgr::BuildExteriorComponentIndexes()
     _rootCompsByWmoDataId.clear();
     _defaultFixtureByTypeWmo.clear();
 
-    // 1. Build hook index: which hooks are parented to each component
-    //    Note: store iteration only yields a subset of entries due to DB2 ParentIndexField
-    //    sparse indexing. Use LookupEntry(i) over GetNumRows() to reach all entries.
-    for (uint32 i = 0; i < sExteriorComponentHookStore.GetNumRows(); ++i)
+    // 1. Build hook index: which hooks are parented to each component.
+    //    ExteriorComponentHook has IndexField=2 (ID in data) and ParentIndexField=4.
+    //    Use the store's range-based iterator which correctly iterates unique entries.
+    for (ExteriorComponentHookEntry const* hook : sExteriorComponentHookStore)
     {
-        ExteriorComponentHookEntry const* hook = sExteriorComponentHookStore.LookupEntry(i);
         if (!hook)
             continue;
         _hooksByExtComp[hook->ExteriorComponentID].push_back(hook);
     }
-
     // 1a. Build child index and root-by-WMO index from ExteriorComponent.
     //     ParentComponentID > 0 → color/dye variant of that component.
     //     ParentComponentID == 0 → base variant, and if the Type is a structural root,
@@ -1292,12 +1290,11 @@ void HousingMgr::BuildExteriorComponentIndexes()
     //     Types like Door(11), Window(12), Chimney(16) have ParentComponentType > 0
     //     and are spawned as hook children, NOT as independent roots.
     //
-    //     ExteriorComponent uses ParentIndexField (HouseExteriorWmoDataID), so use
-    //     LookupEntry over GetNumRows() to reach all entries.
+    //     ExteriorComponent uses ParentIndexField (HouseExteriorWmoDataID).
+    //     Use range-based iterator, NOT LookupEntry(i), which maps by parent ID.
     std::unordered_set<uint8> structuralRootTypes;
-    for (uint32 i = 0; i < sExteriorComponentStore.GetNumRows(); ++i)
+    for (ExteriorComponentEntry const* comp : sExteriorComponentStore)
     {
-        ExteriorComponentEntry const* comp = sExteriorComponentStore.LookupEntry(i);
         if (!comp)
             continue;
 
@@ -1352,19 +1349,19 @@ void HousingMgr::BuildExteriorComponentIndexes()
     //
     //    This replaces the old GroupXHook→Group→XGroup chain which was incorrect —
     //    groups are for UI organization, not fixture resolution.
-    for (uint32 i = 0; i < sExteriorComponentStore.GetNumRows(); ++i)
+    for (ExteriorComponentEntry const* comp : sExteriorComponentStore)
     {
-        ExteriorComponentEntry const* comp = sExteriorComponentStore.LookupEntry(i);
         if (!comp || comp->ParentComponentID != 0 || comp->HouseExteriorWmoDataID == 0)
             continue;
 
-        uint64 key = (uint64(comp->Type) << 32) | comp->HouseExteriorWmoDataID;
+        // Key includes size so different house sizes get the right defaults
+        uint64 key = (uint64(comp->Type) << 40) | (uint64(comp->HouseExteriorWmoDataID) << 8) | comp->Size;
         bool isDefault = (comp->Flags & 0x1) != 0;
 
         auto existing = _defaultFixtureByTypeWmo.find(key);
         if (existing == _defaultFixtureByTypeWmo.end())
         {
-            // First component for this (type, wmo) — insert it
+            // First component for this (type, wmo, size) — insert it
             _defaultFixtureByTypeWmo[key] = comp->ID;
         }
         else if (isDefault)
@@ -1399,9 +1396,30 @@ std::vector<ExteriorComponentHookEntry const*> const* HousingMgr::GetHooksOnComp
     return itr != _hooksByExtComp.end() ? &itr->second : nullptr;
 }
 
-uint32 HousingMgr::GetDefaultFixtureForType(uint8 componentType, uint32 wmoDataID) const
+uint32 HousingMgr::GetDefaultFixtureForType(uint8 componentType, uint32 wmoDataID, uint8 houseSize /*= 0*/) const
 {
-    uint64 key = (uint64(componentType) << 32) | wmoDataID;
+    // Try exact size match first
+    if (houseSize > 0)
+    {
+        uint64 key = (uint64(componentType) << 40) | (uint64(wmoDataID) << 8) | houseSize;
+        auto itr = _defaultFixtureByTypeWmo.find(key);
+        if (itr != _defaultFixtureByTypeWmo.end())
+            return itr->second;
+    }
+
+    // Fallback: scan all sizes for this (type, wmo) — useful when caller doesn't know the size
+    for (uint8 sz = 1; sz <= 4; ++sz)
+    {
+        if (sz == houseSize)
+            continue; // already tried
+        uint64 key = (uint64(componentType) << 40) | (uint64(wmoDataID) << 8) | sz;
+        auto itr = _defaultFixtureByTypeWmo.find(key);
+        if (itr != _defaultFixtureByTypeWmo.end())
+            return itr->second;
+    }
+
+    // Also try size=0 in case any components have Size=0
+    uint64 key = (uint64(componentType) << 40) | (uint64(wmoDataID) << 8);
     auto itr = _defaultFixtureByTypeWmo.find(key);
     return itr != _defaultFixtureByTypeWmo.end() ? itr->second : 0;
 }

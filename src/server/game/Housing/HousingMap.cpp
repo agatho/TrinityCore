@@ -19,7 +19,9 @@
 #include "Account.h"
 #include "HousingPlayerHouseEntity.h"
 #include <algorithm>
+#include <atomic>
 #include <cmath>
+#include <limits>
 #include <set>
 #include "AreaTrigger.h"
 #include "EventProcessor.h"
@@ -1659,22 +1661,58 @@ GameObject* HousingMap::SpawnHouseForPlot(uint8 plotIndex, Position const* custo
     float doorLocalY = 0.0f;
     float doorLocalZ = 0.0f;
 
-    // Resolve door component from DB2
-    uint32 doorCompID = 0;
-    if (fixtureOverrides)
+    // Resolve door component from DB2.
+    // Use the actually-spawned base component (from rootOverrides) for hook lookups,
+    // not the raw coreExtCompID which may differ after migration/override.
+    uint32 actualBaseCompID = static_cast<uint32>(exteriorComponentID);
+    if (rootOverrides)
     {
-        // Check if player has a custom door at a hook — scan hooks for Type=11
-        auto const* baseHooks = sHousingMgr.GetHooksOnComponent(static_cast<uint32>(exteriorComponentID));
+        auto baseOvr = rootOverrides->find(HOUSING_FIXTURE_TYPE_BASE);
+        if (baseOvr != rootOverrides->end())
+            actualBaseCompID = baseOvr->second;
+    }
+
+    uint32 doorCompID = 0;
+    uint32 doorHookID = 0;  // Track which hook the door is at (for position)
+    {
+        // Find the door hook that has the main entrance.
+        // Priority: 1) player's fixture override on any door hook
+        //           2) best front-center door hook (smallest |X|, most negative Y)
+        auto const* baseHooks = sHousingMgr.GetHooksOnComponent(actualBaseCompID);
         if (baseHooks)
         {
-            for (ExteriorComponentHookEntry const* hook : *baseHooks)
+            // First: check for player fixture override on any door hook
+            if (fixtureOverrides)
             {
-                if (hook && hook->ExteriorComponentTypeID == 11)
+                for (ExteriorComponentHookEntry const* hook : *baseHooks)
                 {
-                    auto ovrItr = fixtureOverrides->find(hook->ID);
-                    if (ovrItr != fixtureOverrides->end())
-                        doorCompID = ovrItr->second;
-                    break;
+                    if (hook && hook->ExteriorComponentTypeID == 11)
+                    {
+                        auto ovrItr = fixtureOverrides->find(hook->ID);
+                        if (ovrItr != fixtureOverrides->end())
+                        {
+                            doorCompID = ovrItr->second;
+                            doorHookID = hook->ID;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            // Second: find the best front-center door hook (same heuristic as SpawnExtCompTree)
+            if (!doorHookID)
+            {
+                float bestScore = std::numeric_limits<float>::max();
+                for (ExteriorComponentHookEntry const* hook : *baseHooks)
+                {
+                    if (!hook || hook->ExteriorComponentTypeID != 11)
+                        continue;
+                    float score = std::abs(hook->Position[0]) * 2.0f + hook->Position[1];
+                    if (score < bestScore)
+                    {
+                        bestScore = score;
+                        doorHookID = hook->ID;
+                    }
                 }
             }
         }
@@ -1692,13 +1730,13 @@ GameObject* HousingMap::SpawnHouseForPlot(uint8 plotIndex, Position const* custo
         doorLocalY = doorComp->Position[1];
         doorLocalZ = doorComp->Position[2];
 
-        // Also look for a hook offset on the base component (Type=11 hook)
-        auto const* baseHooks = sHousingMgr.GetHooksOnComponent(static_cast<uint32>(exteriorComponentID));
-        if (baseHooks)
+        // Use the selected door hook's position for door GO placement
+        auto const* baseHooks = sHousingMgr.GetHooksOnComponent(actualBaseCompID);
+        if (baseHooks && doorHookID)
         {
             for (ExteriorComponentHookEntry const* hook : *baseHooks)
             {
-                if (hook && hook->ExteriorComponentTypeID == 11)
+                if (hook && hook->ID == doorHookID)
                 {
                     // Hook position provides the attachment point on the base
                     doorLocalX = hook->Position[0];
@@ -2007,13 +2045,13 @@ MeshObject* HousingMap::SpawnHouseMeshObject(uint8 plotIndex, int32 fileDataID, 
     // Generate a unique fixture GUID per fixture. The client uses FHousingFixture_C::Guid
     // to identify individual fixtures — if all fixtures share the same GUID (houseGuid),
     // the client can't distinguish them and reports "Fixture not found".
-    // Use subType=5 (fixture), realm, hookID-or-componentID, houseGuid counter.
-    uint32 fixtureArg2 = (exteriorComponentHookID > 0)
-        ? static_cast<uint32>(exteriorComponentHookID)
-        : static_cast<uint32>(exteriorComponentID);
+    // Use subType=5 (fixture), realm, sequential counter, houseGuid counter.
+    // Generate a unique fixture GUID using a monotonic counter.
+    static std::atomic<uint32> s_fixtureCounter{1};
+    uint32 fixtureSeq = s_fixtureCounter.fetch_add(1, std::memory_order_relaxed);
     ObjectGuid fixtureGuid = ObjectGuid::Create<HighGuid::Housing>(
         /*subType*/ 5, /*arg1*/ sRealmList->GetCurrentRealmId().Realm,
-        /*arg2*/ fixtureArg2, houseGuid.GetCounter());
+        /*arg2*/ fixtureSeq, houseGuid.GetCounter());
 
     // Look up the parent fixture's unique GUID for AttachParentGUID field.
     // The client uses this to build the fixture hierarchy tree — without it,
@@ -2399,6 +2437,34 @@ uint32 HousingMap::SpawnExtCompTree(uint8 plotIndex, uint32 extCompID,
 
     // Recurse into hooks on this component
     auto const* hooks = sHousingMgr.GetHooksOnComponent(extCompID);
+    TC_LOG_INFO("housing", "SpawnExtCompTree: comp={} has {} hooks, fixtureOverrides={}",
+        extCompID, hooks ? uint32(hooks->size()) : 0, fixtureOverrides != nullptr);
+
+    // Pre-scan: find the best door hook for auto-resolution (center-front entrance).
+    // The front entrance is the door hook closest to center X with the most negative Y.
+    // This ensures the main entrance is selected, not a side/back door.
+    uint32 bestDoorHookID = 0;
+    if (hooks)
+    {
+        float bestScore = std::numeric_limits<float>::max();
+        for (ExteriorComponentHookEntry const* hook : *hooks)
+        {
+            if (!hook || hook->ExteriorComponentTypeID != HOUSING_FIXTURE_TYPE_DOOR)
+                continue;
+            // Skip hooks that already have a player fixture override
+            if (fixtureOverrides && fixtureOverrides->count(hook->ID))
+                continue;
+            // Score: prefer center X (small |X|) and front-facing (negative Y).
+            // Weight X more heavily to prefer center entrance over side entrances.
+            float score = std::abs(hook->Position[0]) * 2.0f + hook->Position[1];
+            if (score < bestScore)
+            {
+                bestScore = score;
+                bestDoorHookID = hook->ID;
+            }
+        }
+    }
+
     if (hooks)
     {
         for (ExteriorComponentHookEntry const* hook : *hooks)
@@ -2408,7 +2474,7 @@ uint32 HousingMap::SpawnExtCompTree(uint8 plotIndex, uint32 extCompID,
 
             // Find what component attaches at this hook:
             //   1. Check player's fixture overrides (hookID → componentID)
-            //   2. Fall back to DB2 default: look up by hook's ComponentType + house's WmoDataID
+            //   2. Fall back to DB2 default for Door — only at the best front-center hook
             ExteriorComponentEntry const* childComp = nullptr;
             if (fixtureOverrides)
             {
@@ -2418,21 +2484,29 @@ uint32 HousingMap::SpawnExtCompTree(uint8 plotIndex, uint32 extCompID,
             }
             if (!childComp)
             {
-                uint32 defaultCompID = sHousingMgr.GetDefaultFixtureForType(
-                    static_cast<uint8>(hook->ExteriorComponentTypeID),
-                    static_cast<uint32>(houseExteriorWmoDataID));
-                if (defaultCompID)
-                    childComp = sExteriorComponentStore.LookupEntry(defaultCompID);
+                // Only auto-resolve the ONE best door hook (front-center entrance).
+                // All other hook types (Window, Chimney, Dormer, etc.) require explicit
+                // fixture overrides and are unlocked via house level progression.
+                if (hook->ID == bestDoorHookID && bestDoorHookID != 0)
+                {
+                    uint32 defaultCompID = sHousingMgr.GetDefaultFixtureForType(
+                        static_cast<uint8>(hook->ExteriorComponentTypeID),
+                        static_cast<uint32>(houseExteriorWmoDataID));
+                    if (defaultCompID)
+                        childComp = sExteriorComponentStore.LookupEntry(defaultCompID);
+                }
             }
             if (!childComp)
                 continue;
 
-            TC_LOG_DEBUG("housing", "SpawnExtCompTree: parent={} hook={} (type={}) → child comp {} '{}' (ParentComp={}, ModelFDID={})",
+            TC_LOG_INFO("housing", "SpawnExtCompTree: parent={} hook={} (type={}) → child comp {} '{}' (ParentComp={}, ModelFDID={})",
                 extCompID, hook->ID, hook->ExteriorComponentTypeID, childComp->ID,
                 childComp->Name[DEFAULT_LOCALE] ? childComp->Name[DEFAULT_LOCALE] : "",
                 childComp->ParentComponentID, childComp->ModelFileDataID);
 
-            // Hook position/rotation are local-space offsets relative to the parent
+            // Hook position/rotation are the local-space coordinates where the child
+            // mesh attaches on the parent. Use hook position directly as the child's
+            // PositionLocalSpace — the client handles the attachment via AttachParentGUID.
             Position hookPos(hook->Position[0], hook->Position[1], hook->Position[2], 0.0f);
             QuaternionData hookRot;
             // Hook rotation is in degrees — convert to quaternion (XYZ extrinsic Euler)

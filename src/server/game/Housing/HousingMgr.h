@@ -336,9 +336,11 @@ public:
     std::vector<uint32> const* GetRootComponentsForWmoData(uint32 wmoDataID) const;
     std::vector<uint32> const* GetComponentsInGroup(int32 groupID) const;
 
-    // Fixture resolution: given a hook's component type and the house's WmoDataID,
-    // returns the default fixture component ID (Flags & 0x1, ParentComponentID == 0).
-    uint32 GetDefaultFixtureForType(uint8 componentType, uint32 wmoDataID) const;
+    // Fixture resolution: given a hook's component type, the house's WmoDataID, and
+    // optionally the house size, returns the default fixture component ID
+    // (Flags & 0x1, ParentComponentID == 0).
+    // If houseSize is 0, returns any size match; otherwise filters to exact size.
+    uint32 GetDefaultFixtureForType(uint8 componentType, uint32 wmoDataID, uint8 houseSize = 0) const;
 
     // Racial house style: maps player race to the appropriate HouseExteriorWmoDataID.
     // Night Elf → 55, Blood Elf → 56, other Alliance → 9 (Human), other Horde → 87 (Orc).
@@ -447,8 +449,8 @@ private:
     std::unordered_map<uint32 /*parentCompID*/, std::vector<uint32 /*childCompID*/>> _childrenByExtComp;
     std::unordered_map<uint32 /*wmoDataID*/, std::vector<uint32 /*compID*/>> _rootCompsByWmoDataId;
 
-    // Fixture resolution: (componentType, wmoDataID) → default component ID
-    // Key = (uint64(componentType) << 32) | wmoDataID
+    // Fixture resolution: (componentType, wmoDataID, size) → default component ID
+    // Key = (uint64(componentType) << 40) | (uint64(wmoDataID) << 8) | size
     std::unordered_map<uint64, uint32> _defaultFixtureByTypeWmo;
 };
 

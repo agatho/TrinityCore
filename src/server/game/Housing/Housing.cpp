@@ -315,13 +315,34 @@ bool Housing::LoadFromDB(PreparedQueryResult housing, PreparedQueryResult decor,
             fixture.OptionId = fields[1].GetUInt32();
 
         } while (fixtures->NextRow());
+
+        // Log all loaded fixtures for debugging
+        for (auto const& [pointId, fix] : _fixtures)
+        {
+            TC_LOG_INFO("housing", "Housing::LoadFromDB: Fixture pointId={} optionId={}", fix.FixturePointId, fix.OptionId);
+        }
     }
 
-    // Migration: populate starter fixtures for houses created before persistence was added
-    if (_fixtures.empty() && _houseType != 0)
+    // Migration: populate starter fixtures for houses created before persistence was added.
+    // Also handles existing houses that have fixtures but are missing starter roots (Base/Roof).
+    bool hasBaseRoot = false, hasRoofRoot = false;
+    for (auto const& [pointId, fix] : _fixtures)
     {
-        TC_LOG_INFO("housing", "Housing::LoadFromDB: No fixtures found for house {} — populating starter fixtures (migration)",
-            _houseGuid.ToString());
+        if (fix.OptionId != 0)
+            continue;
+        ExteriorComponentEntry const* comp = sExteriorComponentStore.LookupEntry(fix.FixturePointId);
+        if (!comp || comp->ParentComponentID != 0)
+            continue;
+        if (_houseType != 0 && comp->HouseExteriorWmoDataID != static_cast<uint32>(_houseType))
+            continue;
+        if (comp->Type == HOUSING_FIXTURE_TYPE_BASE) hasBaseRoot = true;
+        if (comp->Type == HOUSING_FIXTURE_TYPE_ROOF) hasRoofRoot = true;
+    }
+
+    if ((!hasBaseRoot || !hasRoofRoot) && _houseType != 0)
+    {
+        TC_LOG_INFO("housing", "Housing::LoadFromDB: Missing starter roots (base={}, roof={}) for house {} — populating (migration)",
+            hasBaseRoot, hasRoofRoot, _houseGuid.ToString());
         PopulateStarterFixtures();
     }
 
@@ -1671,6 +1692,51 @@ HousingResult Housing::SelectFixtureOption(uint32 fixturePointId, uint32 optionI
     if (_houseGuid.IsEmpty())
         return HOUSING_RESULT_HOUSE_NOT_FOUND;
 
+    // Root fixture selections (optionId == 0) use componentID as fixturePointId — skip hook validation
+    if (optionId != 0)
+    {
+        // Validate hook exists in DB2
+        ExteriorComponentHookEntry const* hookEntry = sExteriorComponentHookStore.LookupEntry(fixturePointId);
+        if (!hookEntry)
+        {
+            TC_LOG_DEBUG("housing", "SelectFixtureOption: hookID {} not found in DB2", fixturePointId);
+            return HOUSING_RESULT_FIXTURE_NOT_FOUND;
+        }
+
+        // Validate component exists in DB2
+        ExteriorComponentEntry const* compEntry = sExteriorComponentStore.LookupEntry(optionId);
+        if (!compEntry)
+        {
+            TC_LOG_DEBUG("housing", "SelectFixtureOption: componentID {} not found in DB2", optionId);
+            return HOUSING_RESULT_FIXTURE_NOT_FOUND;
+        }
+
+        // Validate component type matches hook's expected type
+        if (compEntry->Type != hookEntry->ExteriorComponentTypeID)
+        {
+            TC_LOG_DEBUG("housing", "SelectFixtureOption: type mismatch — component {} type {} vs hook {} expected type {}",
+                optionId, compEntry->Type, fixturePointId, hookEntry->ExteriorComponentTypeID);
+            return HOUSING_RESULT_GENERIC_FAILURE;
+        }
+
+        // Enforce one door per base component: if placing a door, check no other hook already has one
+        if (compEntry->Type == HOUSING_FIXTURE_TYPE_DOOR)
+        {
+            for (auto const& [pointId, fixture] : _fixtures)
+            {
+                if (pointId == fixturePointId || fixture.OptionId == 0)
+                    continue;
+                ExteriorComponentEntry const* existingComp = sExteriorComponentStore.LookupEntry(fixture.OptionId);
+                if (existingComp && existingComp->Type == HOUSING_FIXTURE_TYPE_DOOR)
+                {
+                    TC_LOG_DEBUG("housing", "SelectFixtureOption: door already exists at hook {} (comp {}), rejecting new door at hook {}",
+                        pointId, fixture.OptionId, fixturePointId);
+                    return HOUSING_RESULT_GENERIC_FAILURE;
+                }
+            }
+        }
+    }
+
     bool isNew = _fixtures.find(fixturePointId) == _fixtures.end();
     if (isNew && _fixtures.size() >= MAX_HOUSING_FIXTURES_PER_HOUSE)
         return HOUSING_RESULT_FIXTURE_NOT_FOUND;
@@ -1805,13 +1871,31 @@ std::unordered_map<uint8, uint32> Housing::GetRootComponentOverrides() const
             continue;
 
         ExteriorComponentEntry const* comp = sExteriorComponentStore.LookupEntry(fixture.FixturePointId);
-        if (!comp || comp->ParentComponentID != 0)
+        if (!comp)
+        {
+            TC_LOG_DEBUG("housing", "GetRootComponentOverrides: fixturePointId={} — DB2 lookup failed", fixture.FixturePointId);
             continue;
+        }
+        if (comp->ParentComponentID != 0)
+        {
+            TC_LOG_DEBUG("housing", "GetRootComponentOverrides: comp={} type={} — ParentComponentID={} (not root)",
+                comp->ID, comp->Type, comp->ParentComponentID);
+            continue;
+        }
         if (_houseType != 0 && comp->HouseExteriorWmoDataID != static_cast<uint32>(_houseType))
+        {
+            TC_LOG_DEBUG("housing", "GetRootComponentOverrides: comp={} type={} — wmo={} != houseType={} (wrong style)",
+                comp->ID, comp->Type, comp->HouseExteriorWmoDataID, _houseType);
             continue;
+        }
 
         result[comp->Type] = fixture.FixturePointId;
+        TC_LOG_DEBUG("housing", "GetRootComponentOverrides: type={} → comp={} (wmo={})",
+            comp->Type, fixture.FixturePointId, comp->HouseExteriorWmoDataID);
     }
+
+    TC_LOG_INFO("housing", "GetRootComponentOverrides: {} types resolved from {} fixtures (houseType={})",
+        uint32(result.size()), uint32(_fixtures.size()), _houseType);
     return result;
 }
 
@@ -2352,17 +2436,39 @@ void Housing::PopulateStarterFixtures()
     // Starter house = Base(9) + Roof(10) as root components.
     // Door(11) auto-resolves from hook system via GetDefaultFixtureForType.
     // Root components are stored as { FixturePointId = componentID, OptionId = 0 }.
+    // Only add types that don't already have a valid root in _fixtures.
     static constexpr uint8 starterTypes[] = { HOUSING_FIXTURE_TYPE_BASE, HOUSING_FIXTURE_TYPE_ROOF };
+
+    // Determine which root types already exist
+    std::unordered_set<uint8> existingRootTypes;
+    for (auto const& [pointId, fix] : _fixtures)
+    {
+        if (fix.OptionId != 0)
+            continue;
+        ExteriorComponentEntry const* comp = sExteriorComponentStore.LookupEntry(fix.FixturePointId);
+        if (!comp || comp->ParentComponentID != 0)
+            continue;
+        if (_houseType != 0 && comp->HouseExteriorWmoDataID != static_cast<uint32>(_houseType))
+            continue;
+        existingRootTypes.insert(comp->Type);
+    }
 
     uint64 ownerGuid = _owner->GetGUID().GetCounter();
 
     for (uint8 fixtureType : starterTypes)
     {
-        uint32 compID = sHousingMgr.GetDefaultFixtureForType(fixtureType, _houseType);
+        if (existingRootTypes.count(fixtureType))
+        {
+            TC_LOG_INFO("housing", "Housing::PopulateStarterFixtures: type={} already has a root — skipping",
+                fixtureType);
+            continue;
+        }
+
+        uint32 compID = sHousingMgr.GetDefaultFixtureForType(fixtureType, _houseType, _houseSize);
         if (!compID)
         {
-            TC_LOG_ERROR("housing", "Housing::PopulateStarterFixtures: No default component for type={} wmo={} — skipping",
-                fixtureType, _houseType);
+            TC_LOG_ERROR("housing", "Housing::PopulateStarterFixtures: No default component for type={} wmo={} size={} — skipping",
+                fixtureType, _houseType, _houseSize);
             continue;
         }
 
