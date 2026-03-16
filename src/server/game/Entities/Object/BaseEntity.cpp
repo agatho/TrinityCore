@@ -453,7 +453,11 @@ void BaseEntity::BuildMovementUpdate(ByteBuffer& data, CreateObjectBits flags, P
     {
         MeshObject const* meshObj = static_cast<MeshObject const*>(this);
         data << meshObj->GetAttachParentGUID();
-        data << TaggedPosition<Position::XYZ>(meshObj->GetPositionX(), meshObj->GetPositionY(), meshObj->GetPositionZ());
+        // Use the stored local-space position (offset from parent), NOT GetPositionX/Y/Z()
+        // which returns the parent's world position (set by Relocate for grid placement).
+        // The client uses this to position the child mesh relative to its parent entity.
+        Position const& localPos = meshObj->GetLocalPosition();
+        data << TaggedPosition<Position::XYZ>(localPos.GetPositionX(), localPos.GetPositionY(), localPos.GetPositionZ());
         QuaternionData const& rot = meshObj->GetLocalRotation();
         data << rot.x << rot.y << rot.z << rot.w;
         data << meshObj->GetLocalScale();

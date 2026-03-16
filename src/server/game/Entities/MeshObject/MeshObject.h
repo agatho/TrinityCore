@@ -52,6 +52,7 @@ public:
     int32 GetFileDataID() const { return m_meshObjectData->FileDataID; }
     ObjectGuid const& GetAttachParentGUID() const { return _attachParentGUID; }
     QuaternionData const& GetLocalRotation() const { return _rotationLocalSpace; }
+    Position const& GetLocalPosition() const { return _positionLocalSpace; }
     float GetLocalScale() const { return _scaleLocalSpace; }
     uint8 GetAttachmentFlags() const { return _attachmentFlags; }
     bool IsExteriorRoot() const { return _isExteriorRoot; }
@@ -113,6 +114,7 @@ private:
 
     // Movement block data (serialized in BaseEntity::BuildCreateUpdateBlockMovement)
     ObjectGuid _attachParentGUID;
+    Position _positionLocalSpace;   // local-space offset from parent (for movement block MeshObject section)
     QuaternionData _rotationLocalSpace;
     float _scaleLocalSpace = 1.0f;
     uint8 _attachmentFlags = 0;

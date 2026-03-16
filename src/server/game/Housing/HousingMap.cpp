@@ -870,7 +870,7 @@ bool HousingMap::AddPlayerToMap(Player* player, bool initPlayer /*= true*/)
                 statusResponse.OwnerPlayerGuid = playerGuid;
                 statusResponse.NeighborhoodGuid = neighborhoodGuid;
                 statusResponse.Status = 0;
-                statusResponse.FlagByte = 0xE0; // bit7=houseEditing, bit6=plotEntry, bit5=houseEntry
+                statusResponse.FlagByte = 0x20; // bit5=houseEntry only — cascade requires single active flag
                 p->SendDirectMessage(statusResponse.Write());
 
                 WorldPackets::Housing::HousingGetPlayerPermissionsResponse permResponse;
@@ -912,6 +912,20 @@ bool HousingMap::AddPlayerToMap(Player* player, bool initPlayer /*= true*/)
                         }
                     }
                 }
+            }
+
+            // Send SMSG_HOUSING_FIXTURE_CREATE_BASIC_HOUSE_RESPONSE with Result=0.
+            // This triggers the client's fixture frame initialization: the handler at case 5373953
+            // calls sub_7FF726977CE0 (teardown) + sub_7FF726976D60 (rebuild), which scans all
+            // MeshObject entities with FHousingFixture_C to populate hook occupancy state.
+            // Without this, the client's fixture editor shows all hooks as "empty" because the
+            // fixture point frames are never built from entity data.
+            {
+                WorldPackets::Housing::HousingFixtureCreateBasicHouseResponse fixtureInit;
+                fixtureInit.Result = static_cast<uint8>(HOUSING_RESULT_SUCCESS);
+                p->SendDirectMessage(fixtureInit.Write());
+                TC_LOG_DEBUG("housing", "HousingMap deferred ENTER_PLOT: Sent CREATE_BASIC_HOUSE_RESPONSE (fixture init) for plot {}",
+                    deferredPlotIndex);
             }
 
             // Proactively populate FHousingStorage_C (decor list) and budget fields.
@@ -1675,50 +1689,27 @@ GameObject* HousingMap::SpawnHouseForPlot(uint8 plotIndex, Position const* custo
     uint32 doorCompID = 0;
     uint32 doorHookID = 0;  // Track which hook the door is at (for position)
     {
-        // Find the door hook that has the main entrance.
-        // Priority: 1) player's fixture override on any door hook
-        //           2) best front-center door hook (smallest |X|, most negative Y)
+        // Find the door from the player's explicit fixture override.
+        // No auto-resolve: the player selects their door via the fixture editor.
+        // The door GO is only spawned when a door fixture exists.
         auto const* baseHooks = sHousingMgr.GetHooksOnComponent(actualBaseCompID);
-        if (baseHooks)
+        if (baseHooks && fixtureOverrides)
         {
-            // First: check for player fixture override on any door hook
-            if (fixtureOverrides)
+            for (ExteriorComponentHookEntry const* hook : *baseHooks)
             {
-                for (ExteriorComponentHookEntry const* hook : *baseHooks)
+                if (hook && hook->ExteriorComponentTypeID == 11)
                 {
-                    if (hook && hook->ExteriorComponentTypeID == 11)
+                    auto ovrItr = fixtureOverrides->find(hook->ID);
+                    if (ovrItr != fixtureOverrides->end())
                     {
-                        auto ovrItr = fixtureOverrides->find(hook->ID);
-                        if (ovrItr != fixtureOverrides->end())
-                        {
-                            doorCompID = ovrItr->second;
-                            doorHookID = hook->ID;
-                            break;
-                        }
-                    }
-                }
-            }
-
-            // Second: find the best front-center door hook (same heuristic as SpawnExtCompTree)
-            if (!doorHookID)
-            {
-                float bestScore = std::numeric_limits<float>::max();
-                for (ExteriorComponentHookEntry const* hook : *baseHooks)
-                {
-                    if (!hook || hook->ExteriorComponentTypeID != 11)
-                        continue;
-                    float score = std::abs(hook->Position[0]) * 2.0f + hook->Position[1];
-                    if (score < bestScore)
-                    {
-                        bestScore = score;
+                        doorCompID = ovrItr->second;
                         doorHookID = hook->ID;
+                        break;
                     }
                 }
             }
         }
     }
-    if (!doorCompID && houseExteriorWmoDataID > 0)
-        doorCompID = sHousingMgr.GetDefaultFixtureForType(11 /*Door*/, static_cast<uint32>(houseExteriorWmoDataID));
 
     ExteriorComponentEntry const* doorComp = doorCompID ? sExteriorComponentStore.LookupEntry(doorCompID) : nullptr;
     if (doorComp)
@@ -2440,31 +2431,11 @@ uint32 HousingMap::SpawnExtCompTree(uint8 plotIndex, uint32 extCompID,
     TC_LOG_INFO("housing", "SpawnExtCompTree: comp={} has {} hooks, fixtureOverrides={}",
         extCompID, hooks ? uint32(hooks->size()) : 0, fixtureOverrides != nullptr);
 
-    // Pre-scan: find the best door hook for auto-resolution (center-front entrance).
-    // The front entrance is the door hook closest to center X with the most negative Y.
-    // This ensures the main entrance is selected, not a side/back door.
-    uint32 bestDoorHookID = 0;
-    if (hooks)
-    {
-        float bestScore = std::numeric_limits<float>::max();
-        for (ExteriorComponentHookEntry const* hook : *hooks)
-        {
-            if (!hook || hook->ExteriorComponentTypeID != HOUSING_FIXTURE_TYPE_DOOR)
-                continue;
-            // Skip hooks that already have a player fixture override
-            if (fixtureOverrides && fixtureOverrides->count(hook->ID))
-                continue;
-            // Score: prefer center X (small |X|) and front-facing (negative Y).
-            // Weight X more heavily to prefer center entrance over side entrances.
-            float score = std::abs(hook->Position[0]) * 2.0f + hook->Position[1];
-            if (score < bestScore)
-            {
-                bestScore = score;
-                bestDoorHookID = hook->ID;
-            }
-        }
-    }
-
+    // Spawn child components at hooks from player fixture overrides only.
+    // No auto-resolve: doors, windows, chimneys etc. are all player-selected via the
+    // fixture editor. The door GO for house entry is positioned independently and doesn't
+    // require a door mesh to exist. This avoids the "wrong side" problem where a heuristic
+    // can't reliably determine the model's front face across different plot rotations.
     if (hooks)
     {
         for (ExteriorComponentHookEntry const* hook : *hooks)
@@ -2472,29 +2443,13 @@ uint32 HousingMap::SpawnExtCompTree(uint8 plotIndex, uint32 extCompID,
             if (!hook)
                 continue;
 
-            // Find what component attaches at this hook:
-            //   1. Check player's fixture overrides (hookID → componentID)
-            //   2. Fall back to DB2 default for Door — only at the best front-center hook
+            // Only spawn hook children that the player has explicitly selected
             ExteriorComponentEntry const* childComp = nullptr;
             if (fixtureOverrides)
             {
                 auto overrideItr = fixtureOverrides->find(hook->ID);
                 if (overrideItr != fixtureOverrides->end())
                     childComp = sExteriorComponentStore.LookupEntry(overrideItr->second);
-            }
-            if (!childComp)
-            {
-                // Only auto-resolve the ONE best door hook (front-center entrance).
-                // All other hook types (Window, Chimney, Dormer, etc.) require explicit
-                // fixture overrides and are unlocked via house level progression.
-                if (hook->ID == bestDoorHookID && bestDoorHookID != 0)
-                {
-                    uint32 defaultCompID = sHousingMgr.GetDefaultFixtureForType(
-                        static_cast<uint8>(hook->ExteriorComponentTypeID),
-                        static_cast<uint32>(houseExteriorWmoDataID));
-                    if (defaultCompID)
-                        childComp = sExteriorComponentStore.LookupEntry(defaultCompID);
-                }
             }
             if (!childComp)
                 continue;

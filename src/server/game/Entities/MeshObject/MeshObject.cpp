@@ -122,6 +122,7 @@ bool MeshObject::Create(Map* map, Position const& pos, QuaternionData const& rot
 
     // Store movement block data (used by BaseEntity::BuildCreateUpdateBlockMovement)
     _attachParentGUID = attachParent;
+    _positionLocalSpace = pos;  // local-space offset (for movement block MeshObject section)
     _rotationLocalSpace = rotation;
     _scaleLocalSpace = scale;
     _attachmentFlags = attachFlags;

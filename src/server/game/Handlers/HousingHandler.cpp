@@ -266,10 +266,12 @@ void WorldSession::HandleHouseExteriorSetHousePosition(WorldPackets::Housing::Ho
         // Respawn at new position with current exterior component, house type, and fixture selections
         Position newPos(posX, posY, posZ, facing);
         auto fixtureOverrides = housing->GetFixtureOverrideMap();
+        auto rootOverrides = housing->GetRootComponentOverrides();
         housingMap->SpawnHouseForPlot(plotIndex, &newPos,
             static_cast<int32>(housing->GetCoreExteriorComponentID()),
             static_cast<int32>(housing->GetHouseType()),
-            fixtureOverrides.empty() ? nullptr : &fixtureOverrides);
+            fixtureOverrides.empty() ? nullptr : &fixtureOverrides,
+            rootOverrides.empty() ? nullptr : &rootOverrides);
         housingMap->SpawnAllDecorForPlot(plotIndex, housing);
     }
 
@@ -1636,12 +1638,14 @@ void WorldSession::HandleHousingFixtureSetCoreFixture(WorldPackets::Housing::Hou
         {
             uint8 plotIndex = housing->GetPlotIndex();
             auto fixtureOverrides = housing->GetFixtureOverrideMap();
+            auto rootOverrides = housing->GetRootComponentOverrides();
             housingMap->DespawnAllDecorForPlot(plotIndex);
             housingMap->DespawnHouseForPlot(plotIndex);
             housingMap->SpawnHouseForPlot(plotIndex, nullptr,
                 static_cast<int32>(housing->GetCoreExteriorComponentID()),
                 static_cast<int32>(housing->GetHouseType()),
-                fixtureOverrides.empty() ? nullptr : &fixtureOverrides);
+                fixtureOverrides.empty() ? nullptr : &fixtureOverrides,
+                rootOverrides.empty() ? nullptr : &rootOverrides);
             housingMap->SpawnAllDecorForPlot(plotIndex, housing);
         }
 
@@ -1703,10 +1707,9 @@ void WorldSession::HandleHousingFixtureCreateFixture(WorldPackets::Housing::Hous
 
     HousingResult result = housing->SelectFixtureOption(hookID, componentID);
 
-    WorldPackets::Housing::HousingFixtureCreateFixtureResponse response;
-    response.Result = static_cast<uint8>(result);
-    SendPacket(response.Write());
-
+    // Spawn the fixture BEFORE sending the response so we can populate FixtureGuid.
+    // The client's CREATE_FIXTURE_RESPONSE handler uses this GUID to identify the new entity.
+    ObjectGuid newFixtureGuid;
     if (result == HOUSING_RESULT_SUCCESS)
     {
         WorldPackets::Housing::AccountExteriorFixtureCollectionUpdate collectionUpdate;
@@ -1725,10 +1728,21 @@ void WorldSession::HandleHousingFixtureCreateFixture(WorldPackets::Housing::Hous
                 housingMap->DespawnSingleMeshObject(plotIndex, oldMesh->GetGUID());
             }
 
-            housingMap->SpawnFixtureAtHook(plotIndex, hookID, componentID,
+            MeshObject* newMesh = housingMap->SpawnFixtureAtHook(plotIndex, hookID, componentID,
                 housing->GetHouseGuid(), static_cast<int32>(housing->GetHouseType()), player);
+            if (newMesh)
+                newFixtureGuid = newMesh->GetFixtureGuid();
         }
+    }
 
+    // Send response with the fixture's Housing GUID (empty on failure)
+    WorldPackets::Housing::HousingFixtureCreateFixtureResponse response;
+    response.Result = static_cast<uint8>(result);
+    response.FixtureGuid = newFixtureGuid;
+    SendPacket(response.Write());
+
+    if (result == HOUSING_RESULT_SUCCESS)
+    {
         // Sniff-verified: UPDATE_OBJECT (~279B) follows the response
         SendFixtureUpdateObject(player, housing);
     }
@@ -1863,12 +1877,14 @@ void WorldSession::HandleHousingFixtureSetHouseSize(WorldPackets::Housing::Housi
     {
         uint8 plotIndex = housing->GetPlotIndex();
         auto fixtureOverrides = housing->GetFixtureOverrideMap();
+        auto rootOverrides = housing->GetRootComponentOverrides();
         housingMap->DespawnAllDecorForPlot(plotIndex);
         housingMap->DespawnHouseForPlot(plotIndex);
         housingMap->SpawnHouseForPlot(plotIndex, nullptr,
             static_cast<int32>(housing->GetCoreExteriorComponentID()),
             static_cast<int32>(housing->GetHouseType()),
-            fixtureOverrides.empty() ? nullptr : &fixtureOverrides);
+            fixtureOverrides.empty() ? nullptr : &fixtureOverrides,
+            rootOverrides.empty() ? nullptr : &rootOverrides);
         housingMap->SpawnAllDecorForPlot(plotIndex, housing);
     }
 
@@ -1934,12 +1950,14 @@ void WorldSession::HandleHousingFixtureSetHouseType(WorldPackets::Housing::Housi
     {
         uint8 plotIndex = housing->GetPlotIndex();
         auto fixtureOverrides = housing->GetFixtureOverrideMap();
+        auto rootOverrides = housing->GetRootComponentOverrides();
         housingMap->DespawnAllDecorForPlot(plotIndex);
         housingMap->DespawnHouseForPlot(plotIndex);
         housingMap->SpawnHouseForPlot(plotIndex, nullptr,
             static_cast<int32>(housing->GetCoreExteriorComponentID()),
             static_cast<int32>(wmoDataID),
-            fixtureOverrides.empty() ? nullptr : &fixtureOverrides);
+            fixtureOverrides.empty() ? nullptr : &fixtureOverrides,
+            rootOverrides.empty() ? nullptr : &rootOverrides);
         housingMap->SpawnAllDecorForPlot(plotIndex, housing);
     }
 
@@ -3662,7 +3680,7 @@ void WorldSession::HandleHousingHouseStatus(WorldPackets::Housing::HousingHouseS
             response.OwnerPlayerGuid = player->GetGUID();
             response.NeighborhoodGuid = ownHousing->GetNeighborhoodGuid();
             response.Status = ownHousing->IsInInterior() ? 1 : 0;
-            response.FlagByte = 0xE0; // bit7=houseEditing, bit6=plotEntry, bit5=houseEntry (sniff-verified)
+            response.FlagByte = 0x20; // bit5=houseEntry only — cascade requires single active flag
         }
     }
     else if (ownHousing)
@@ -3673,7 +3691,7 @@ void WorldSession::HandleHousingHouseStatus(WorldPackets::Housing::HousingHouseS
         response.OwnerPlayerGuid = player->GetGUID();
         response.NeighborhoodGuid = ownHousing->GetNeighborhoodGuid();
         response.Status = ownHousing->IsInInterior() ? 1 : 0;
-        response.FlagByte = 0xE0; // bit7=houseEditing, bit6=plotEntry, bit5=houseEntry (sniff-verified)
+        response.FlagByte = 0x20; // bit5=houseEntry only — cascade requires single active flag
     }
     // No house and not on a plot: all fields stay at defaults (empty GUIDs, Status=0).
     WorldPacket const* statusPkt = response.Write();
@@ -4437,12 +4455,14 @@ void WorldSession::HandleHousingFixtureCreateBasicHouse(WorldPackets::Housing::H
                 {
                     uint8 plotIndex = housing->GetPlotIndex();
                     auto fixtureOverrides = housing->GetFixtureOverrideMap();
+                    auto rootOverrides = housing->GetRootComponentOverrides();
                     housingMap->DespawnAllDecorForPlot(plotIndex);
                     housingMap->DespawnHouseForPlot(plotIndex);
                     housingMap->SpawnHouseForPlot(plotIndex, nullptr,
                         static_cast<int32>(housing->GetCoreExteriorComponentID()),
                         static_cast<int32>(styleID),
-                        fixtureOverrides.empty() ? nullptr : &fixtureOverrides);
+                        fixtureOverrides.empty() ? nullptr : &fixtureOverrides,
+                        rootOverrides.empty() ? nullptr : &rootOverrides);
                     housingMap->SpawnAllDecorForPlot(plotIndex, housing);
                 }
             }

@@ -324,25 +324,32 @@ bool Housing::LoadFromDB(PreparedQueryResult housing, PreparedQueryResult decor,
     }
 
     // Migration: populate starter fixtures for houses created before persistence was added.
-    // Also handles existing houses that have fixtures but are missing starter roots (Base/Roof).
-    bool hasBaseRoot = false, hasRoofRoot = false;
+    // Also handles existing houses that have fixtures but are missing starter roots (Base/Roof) or door.
+    bool hasBaseRoot = false, hasRoofRoot = false, hasDoor = false;
     for (auto const& [pointId, fix] : _fixtures)
     {
-        if (fix.OptionId != 0)
-            continue;
-        ExteriorComponentEntry const* comp = sExteriorComponentStore.LookupEntry(fix.FixturePointId);
-        if (!comp || comp->ParentComponentID != 0)
-            continue;
-        if (_houseType != 0 && comp->HouseExteriorWmoDataID != static_cast<uint32>(_houseType))
-            continue;
-        if (comp->Type == HOUSING_FIXTURE_TYPE_BASE) hasBaseRoot = true;
-        if (comp->Type == HOUSING_FIXTURE_TYPE_ROOF) hasRoofRoot = true;
+        if (fix.OptionId == 0)
+        {
+            ExteriorComponentEntry const* comp = sExteriorComponentStore.LookupEntry(fix.FixturePointId);
+            if (!comp)
+                continue;
+            if (_houseType != 0 && comp->HouseExteriorWmoDataID != static_cast<uint32>(_houseType))
+                continue;
+            if (comp->Type == HOUSING_FIXTURE_TYPE_BASE) hasBaseRoot = true;
+            if (comp->Type == HOUSING_FIXTURE_TYPE_ROOF) hasRoofRoot = true;
+        }
+        else
+        {
+            ExteriorComponentEntry const* comp = sExteriorComponentStore.LookupEntry(fix.OptionId);
+            if (comp && comp->Type == HOUSING_FIXTURE_TYPE_DOOR)
+                hasDoor = true;
+        }
     }
 
-    if ((!hasBaseRoot || !hasRoofRoot) && _houseType != 0)
+    if ((!hasBaseRoot || !hasRoofRoot || !hasDoor) && _houseType != 0)
     {
-        TC_LOG_INFO("housing", "Housing::LoadFromDB: Missing starter roots (base={}, roof={}) for house {} — populating (migration)",
-            hasBaseRoot, hasRoofRoot, _houseGuid.ToString());
+        TC_LOG_INFO("housing", "Housing::LoadFromDB: Missing starter fixtures (base={}, roof={}, door={}) for house {} — populating (migration)",
+            hasBaseRoot, hasRoofRoot, hasDoor, _houseGuid.ToString());
         PopulateStarterFixtures();
     }
 
@@ -1356,11 +1363,11 @@ HousingResult Housing::PlaceRoom(uint32 roomEntryId, uint32 slotIndex, uint32 or
         _owner->GetName(), roomEntryId, slotIndex, _houseGuid.ToString(),
         _roomWeightUsed, GetMaxRoomBudget());
 
-    // Account-level notification: room instance added
+    // Account-level notification: room collection update
     if (_owner->GetSession())
     {
-        WorldPackets::Housing::AccountHousingRoomAdded notif;
-        notif.RoomGuid = roomGuid;
+        WorldPackets::Housing::AccountRoomCollectionUpdate notif;
+        notif.RoomID = roomEntryId;
         _owner->GetSession()->SendPacket(notif.Write());
     }
 
@@ -1584,11 +1591,11 @@ HousingResult Housing::ApplyRoomTheme(ObjectGuid roomGuid, uint32 themeSetId, st
     TC_LOG_DEBUG("housing", "Housing::ApplyRoomTheme: Player {} applied theme {} to room {} ({} components) in house {}",
         _owner->GetName(), themeSetId, roomGuid.ToString(), componentIds.size(), _houseGuid.ToString());
 
-    // Account-level notification: theme applied
+    // Account-level notification: theme collection update
     if (_owner->GetSession())
     {
-        WorldPackets::Housing::AccountHousingThemeAdded notif;
-        notif.ThemeGuid = roomGuid;
+        WorldPackets::Housing::AccountRoomThemeCollectionUpdate notif;
+        notif.ThemeID = themeSetId;
         _owner->GetSession()->SendPacket(notif.Write());
     }
 
@@ -1624,11 +1631,11 @@ HousingResult Housing::ApplyRoomWallpaper(ObjectGuid roomGuid, uint32 wallpaperI
     TC_LOG_DEBUG("housing", "Housing::ApplyRoomWallpaper: Player {} applied wallpaper {} (material {}) to room {} ({} components) in house {}",
         _owner->GetName(), wallpaperId, materialId, roomGuid.ToString(), componentIds.size(), _houseGuid.ToString());
 
-    // Account-level notification: wallpaper/material texture changed
+    // Account-level notification: material collection update
     if (_owner->GetSession())
     {
-        WorldPackets::Housing::AccountHousingRoomComponentTextureAdded notif;
-        notif.TextureGuid = roomGuid;
+        WorldPackets::Housing::AccountRoomMaterialCollectionUpdate notif;
+        notif.MaterialID = materialId;
         _owner->GetSession()->SendPacket(notif.Write());
     }
 
@@ -1736,6 +1743,41 @@ HousingResult Housing::SelectFixtureOption(uint32 fixturePointId, uint32 optionI
             }
         }
     }
+    else
+    {
+        // Root fixture (optionId == 0): fixturePointId is a componentID.
+        // Remove any existing root fixture of the SAME type to prevent accumulation.
+        // E.g., switching Base from Stucco(142) to Cottage(3797) must remove the old 142 entry.
+        ExteriorComponentEntry const* newComp = sExteriorComponentStore.LookupEntry(fixturePointId);
+        if (newComp)
+        {
+            uint8 newType = newComp->Type;
+            std::vector<uint32> toRemove;
+            for (auto const& [pointId, fixture] : _fixtures)
+            {
+                if (fixture.OptionId != 0 || pointId == fixturePointId)
+                    continue;
+                ExteriorComponentEntry const* oldComp = sExteriorComponentStore.LookupEntry(fixture.FixturePointId);
+                if (oldComp && oldComp->Type == newType)
+                {
+                    TC_LOG_INFO("housing", "SelectFixtureOption: replacing root type {} — removing old comp {} in favor of new comp {}",
+                        newType, pointId, fixturePointId);
+                    toRemove.push_back(pointId);
+                }
+            }
+            for (uint32 oldKey : toRemove)
+            {
+                _fixtures.erase(oldKey);
+                // Delete old entry from DB
+                CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_DEL_CHARACTER_HOUSING_FIXTURE_SINGLE);
+                stmt->setUInt64(0, _owner->GetGUID().GetCounter());
+                stmt->setUInt32(1, oldKey);
+                CharacterDatabase.Execute(stmt);
+                if (_fixtureWeightUsed > 0)
+                    --_fixtureWeightUsed;
+            }
+        }
+    }
 
     bool isNew = _fixtures.find(fixturePointId) == _fixtures.end();
     if (isNew && _fixtures.size() >= MAX_HOUSING_FIXTURES_PER_HOUSE)
@@ -1771,11 +1813,11 @@ HousingResult Housing::SelectFixtureOption(uint32 fixturePointId, uint32 optionI
         _owner->GetName(), fixturePointId, optionId, _houseGuid.ToString(),
         _fixtureWeightUsed, GetMaxFixtureBudget());
 
-    // Account-level notification: new fixture added
+    // Account-level notification: fixture collection update
     if (isNew && _owner->GetSession())
     {
-        WorldPackets::Housing::AccountHousingFixtureAdded notif;
-        notif.FixtureGuid = _houseGuid;
+        WorldPackets::Housing::AccountExteriorFixtureCollectionUpdate notif;
+        notif.FixtureID = optionId;
         _owner->GetSession()->SendPacket(notif.Write());
     }
 
@@ -1861,8 +1903,9 @@ std::unordered_map<uint32, uint32> Housing::GetFixtureOverrideMap() const
 std::unordered_map<uint8, uint32> Housing::GetRootComponentOverrides() const
 {
     // Build override map for player-selected root components per type.
-    // Core fixtures (OptionId == 0) where the component is a root (ParentComponentID == 0)
-    // represent the player's choice for that component type (base, roof, etc.).
+    // Core fixtures (OptionId == 0) represent the player's choice for a structural root type.
+    // These include both base variants (ParentComponentID == 0) and color/style variants
+    // (ParentComponentID != 0) — color variants are valid selections via SetCoreFixture.
     std::unordered_map<uint8, uint32> result;
 
     for (auto const& [pointId, fixture] : _fixtures)
@@ -1876,10 +1919,12 @@ std::unordered_map<uint8, uint32> Housing::GetRootComponentOverrides() const
             TC_LOG_DEBUG("housing", "GetRootComponentOverrides: fixturePointId={} — DB2 lookup failed", fixture.FixturePointId);
             continue;
         }
-        if (comp->ParentComponentID != 0)
+        // Only structural root types (Base=9, Roof=10) are valid here.
+        // Fixture types (Door=11, Window=12, etc.) stored with OptionId=0 would be invalid.
+        if (comp->Type != HOUSING_FIXTURE_TYPE_BASE && comp->Type != HOUSING_FIXTURE_TYPE_ROOF)
         {
-            TC_LOG_DEBUG("housing", "GetRootComponentOverrides: comp={} type={} — ParentComponentID={} (not root)",
-                comp->ID, comp->Type, comp->ParentComponentID);
+            TC_LOG_DEBUG("housing", "GetRootComponentOverrides: comp={} type={} — not a structural root type, skipping",
+                comp->ID, comp->Type);
             continue;
         }
         if (_houseType != 0 && comp->HouseExteriorWmoDataID != static_cast<uint32>(_houseType))
@@ -1890,8 +1935,8 @@ std::unordered_map<uint8, uint32> Housing::GetRootComponentOverrides() const
         }
 
         result[comp->Type] = fixture.FixturePointId;
-        TC_LOG_DEBUG("housing", "GetRootComponentOverrides: type={} → comp={} (wmo={})",
-            comp->Type, fixture.FixturePointId, comp->HouseExteriorWmoDataID);
+        TC_LOG_DEBUG("housing", "GetRootComponentOverrides: type={} → comp={} (wmo={}, parentComp={})",
+            comp->Type, fixture.FixturePointId, comp->HouseExteriorWmoDataID, comp->ParentComponentID);
     }
 
     TC_LOG_INFO("housing", "GetRootComponentOverrides: {} types resolved from {} fixtures (houseType={})",
@@ -2446,7 +2491,7 @@ void Housing::PopulateStarterFixtures()
         if (fix.OptionId != 0)
             continue;
         ExteriorComponentEntry const* comp = sExteriorComponentStore.LookupEntry(fix.FixturePointId);
-        if (!comp || comp->ParentComponentID != 0)
+        if (!comp)
             continue;
         if (_houseType != 0 && comp->HouseExteriorWmoDataID != static_cast<uint32>(_houseType))
             continue;
@@ -2487,6 +2532,86 @@ void Housing::PopulateStarterFixtures()
 
         TC_LOG_INFO("housing", "Housing::PopulateStarterFixtures: Added type={} compID={} wmo={} for player {}",
             fixtureType, compID, _houseType, _owner->GetName());
+    }
+
+    // --- Starter door ---
+    // Every new house starts with a door at the first door hook on the base component.
+    // Check if a door fixture already exists (any hook-based fixture with a door component).
+    bool hasDoor = false;
+    for (auto const& [pointId, fix] : _fixtures)
+    {
+        if (fix.OptionId == 0)
+            continue;
+        ExteriorComponentEntry const* comp = sExteriorComponentStore.LookupEntry(fix.OptionId);
+        if (comp && comp->Type == HOUSING_FIXTURE_TYPE_DOOR)
+        {
+            hasDoor = true;
+            break;
+        }
+    }
+
+    if (!hasDoor)
+    {
+        // Find the base component to get its door hooks
+        uint32 baseCompID = 0;
+        for (auto const& [pointId, fix] : _fixtures)
+        {
+            if (fix.OptionId != 0)
+                continue;
+            ExteriorComponentEntry const* comp = sExteriorComponentStore.LookupEntry(fix.FixturePointId);
+            if (comp && comp->Type == HOUSING_FIXTURE_TYPE_BASE)
+            {
+                baseCompID = fix.FixturePointId;
+                break;
+            }
+        }
+
+        if (baseCompID)
+        {
+            auto const* hooks = sHousingMgr.GetHooksOnComponent(baseCompID);
+            if (hooks)
+            {
+                // Find the first door hook (ExteriorComponentTypeID == 11)
+                uint32 doorHookID = 0;
+                for (ExteriorComponentHookEntry const* hook : *hooks)
+                {
+                    if (hook && hook->ExteriorComponentTypeID == HOUSING_FIXTURE_TYPE_DOOR)
+                    {
+                        doorHookID = hook->ID;
+                        break;
+                    }
+                }
+
+                if (doorHookID)
+                {
+                    uint32 doorCompID = sHousingMgr.GetDefaultFixtureForType(HOUSING_FIXTURE_TYPE_DOOR, _houseType, _houseSize);
+                    if (doorCompID)
+                    {
+                        Fixture& doorFixture = _fixtures[doorHookID];
+                        doorFixture.FixturePointId = doorHookID;
+                        doorFixture.OptionId = doorCompID;
+
+                        CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_INS_CHARACTER_HOUSING_FIXTURES);
+                        uint8 index = 0;
+                        stmt->setUInt64(index++, ownerGuid);
+                        stmt->setUInt32(index++, doorHookID);
+                        stmt->setUInt32(index++, doorCompID);
+                        CharacterDatabase.Execute(stmt);
+
+                        TC_LOG_INFO("housing", "Housing::PopulateStarterFixtures: Added starter door compID={} at hookID={} for player {}",
+                            doorCompID, doorHookID, _owner->GetName());
+                    }
+                    else
+                    {
+                        TC_LOG_ERROR("housing", "Housing::PopulateStarterFixtures: No default door component for wmo={} size={}", _houseType, _houseSize);
+                    }
+                }
+                else
+                {
+                    TC_LOG_ERROR("housing", "Housing::PopulateStarterFixtures: No door hooks found on base component {}", baseCompID);
+                }
+            }
+        }
     }
 }
 
