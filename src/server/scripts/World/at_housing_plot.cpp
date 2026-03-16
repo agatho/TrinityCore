@@ -113,7 +113,7 @@ struct at_housing_plot : AreaTriggerAI
                 statusResponse.OwnerPlayerGuid = ownerGuid;
                 statusResponse.NeighborhoodGuid = ownerHousing->GetNeighborhoodGuid();
                 statusResponse.Status = 0;
-                statusResponse.FlagByte = 0xE0; // bit7=houseEditing, bit6=plotEntry, bit5=houseEntry
+                statusResponse.FlagByte = 0x20; // bit5=houseEntry only — cascade requires single active flag
                 player->SendDirectMessage(statusResponse.Write());
 
                 // GetPlayerPermissionsResponse: arms the editor gate (vtable[24] sets a1[72..76])
@@ -124,7 +124,7 @@ struct at_housing_plot : AreaTriggerAI
                 player->SendDirectMessage(permResponse.Write());
 
                 TC_LOG_DEBUG("housing", "at_housing_plot: Sent HouseStatus+Permissions for player {} (own={}, flags=0x{:X})",
-                    player->GetGUID().ToString(), isOwnPlot, isOwnPlot ? 0xE0 : 0x40);
+                    player->GetGUID().ToString(), isOwnPlot, isOwnPlot ? 0x20 : 0x40);
             }
         }
 
