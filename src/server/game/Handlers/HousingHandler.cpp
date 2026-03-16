@@ -3680,7 +3680,7 @@ void WorldSession::HandleHousingHouseStatus(WorldPackets::Housing::HousingHouseS
             response.OwnerPlayerGuid = player->GetGUID();
             response.NeighborhoodGuid = ownHousing->GetNeighborhoodGuid();
             response.Status = ownHousing->IsInInterior() ? 1 : 0;
-            response.FlagByte = 0x20; // bit5=houseEntry only — cascade requires single active flag
+            response.FlagByte = 0xE0; // bit7=houseEditing, bit6=plotEntry, bit5=houseEntry
         }
     }
     else if (ownHousing)
@@ -3691,7 +3691,7 @@ void WorldSession::HandleHousingHouseStatus(WorldPackets::Housing::HousingHouseS
         response.OwnerPlayerGuid = player->GetGUID();
         response.NeighborhoodGuid = ownHousing->GetNeighborhoodGuid();
         response.Status = ownHousing->IsInInterior() ? 1 : 0;
-        response.FlagByte = 0x20; // bit5=houseEntry only — cascade requires single active flag
+        response.FlagByte = 0xE0; // bit7=houseEditing, bit6=plotEntry, bit5=houseEntry
     }
     // No house and not on a plot: all fields stay at defaults (empty GUIDs, Status=0).
     WorldPacket const* statusPkt = response.Write();

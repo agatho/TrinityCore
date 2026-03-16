@@ -870,7 +870,7 @@ bool HousingMap::AddPlayerToMap(Player* player, bool initPlayer /*= true*/)
                 statusResponse.OwnerPlayerGuid = playerGuid;
                 statusResponse.NeighborhoodGuid = neighborhoodGuid;
                 statusResponse.Status = 0;
-                statusResponse.FlagByte = 0x20; // bit5=houseEntry only — cascade requires single active flag
+                statusResponse.FlagByte = 0xE0; // bit7=houseEditing, bit6=plotEntry, bit5=houseEntry
                 p->SendDirectMessage(statusResponse.Write());
 
                 WorldPackets::Housing::HousingGetPlayerPermissionsResponse permResponse;
@@ -883,49 +883,57 @@ bool HousingMap::AddPlayerToMap(Player* player, bool initPlayer /*= true*/)
                     playerGuid.ToString());
             }
 
-            // Re-CREATE the player's exterior root MeshObject so the client's
-            // Tag_HouseExteriorRoot singleton (qword_7FF72A4CC368) points to THIS
-            // plot's root rather than whichever plot happened to be created last
-            // during SpawnPlotGameObjects(). The client's fragment 225 create
-            // handler overwrites the singleton on each CREATE — we exploit this
-            // to guarantee our root is the active one before any fixture edits.
-            {
-                auto const& meshMap = hMap->GetPlotMeshObjects();
-                auto meshItr = meshMap.find(deferredPlotIndex);
-                if (meshItr != meshMap.end())
-                {
-                    for (ObjectGuid const& meshGuid : meshItr->second)
-                    {
-                        MeshObject* meshObj = hMap->GetMeshObject(meshGuid);
-                        if (meshObj && meshObj->IsExteriorRoot() && meshObj->IsInWorld())
-                        {
-                            UpdateData updateData(p->GetMapId());
-                            meshObj->BuildCreateUpdateBlockForPlayer(&updateData, p);
-                            p->m_clientGUIDs.insert(meshGuid);
-                            WorldPacket updatePacket;
-                            updateData.BuildPacket(&updatePacket);
-                            p->SendDirectMessage(&updatePacket);
-
-                            TC_LOG_DEBUG("housing", "HousingMap deferred ENTER_PLOT: Re-CREATE root MeshObject {} for plot {} (singleton refresh)",
-                                meshGuid.ToString(), deferredPlotIndex);
-                            break;
-                        }
-                    }
-                }
-            }
-
             // Send SMSG_HOUSING_FIXTURE_CREATE_BASIC_HOUSE_RESPONSE with Result=0.
-            // This triggers the client's fixture frame initialization: the handler at case 5373953
-            // calls sub_7FF726977CE0 (teardown) + sub_7FF726976D60 (rebuild), which scans all
-            // MeshObject entities with FHousingFixture_C to populate hook occupancy state.
-            // Without this, the client's fixture editor shows all hooks as "empty" because the
-            // fixture point frames are never built from entity data.
+            // This triggers the client's fixture frame initialization: the handler
+            // calls teardown + rebuild, which sets the fixture manager's house GUID
+            // (state+96/+104) from the NeighborhoodSystem. This MUST come BEFORE any
+            // fixture entity CREATEs, because the CREATE callback compares each
+            // entity's FHousingFixture_C::HouseGUID against state+96/+104 — if they
+            // don't match, the entity is silently skipped and the hook shows "None".
             {
                 WorldPackets::Housing::HousingFixtureCreateBasicHouseResponse fixtureInit;
                 fixtureInit.Result = static_cast<uint8>(HOUSING_RESULT_SUCCESS);
                 p->SendDirectMessage(fixtureInit.Write());
                 TC_LOG_DEBUG("housing", "HousingMap deferred ENTER_PLOT: Sent CREATE_BASIC_HOUSE_RESPONSE (fixture init) for plot {}",
                     deferredPlotIndex);
+            }
+
+            // Re-CREATE ALL fixture MeshObjects for this plot AFTER the rebuild.
+            // The rebuild (triggered by CREATE_BASIC_HOUSE_RESPONSE above) sets the
+            // fixture manager's house GUID. The CREATE callback then compares each
+            // entity's HouseGUID against it — if they match, it registers the entity
+            // at its hook point. Without this re-CREATE, entities that were already
+            // sent during the initial map load are never re-processed.
+            // (Same pattern as the decor fix: re-CREATE after the system is ready.)
+            {
+                auto const& meshMap = hMap->GetPlotMeshObjects();
+                auto meshItr = meshMap.find(deferredPlotIndex);
+                if (meshItr != meshMap.end())
+                {
+                    UpdateData fixtureUpdate(p->GetMapId());
+                    uint32 fixtureCreateCount = 0;
+
+                    for (ObjectGuid const& meshGuid : meshItr->second)
+                    {
+                        MeshObject* meshObj = hMap->GetMeshObject(meshGuid);
+                        if (meshObj && meshObj->IsInWorld() && meshObj->m_housingFixtureData.has_value())
+                        {
+                            meshObj->BuildCreateUpdateBlockForPlayer(&fixtureUpdate, p);
+                            p->m_clientGUIDs.insert(meshGuid);
+                            ++fixtureCreateCount;
+                        }
+                    }
+
+                    if (fixtureCreateCount > 0)
+                    {
+                        WorldPacket fixturePacket;
+                        fixtureUpdate.BuildPacket(&fixturePacket);
+                        p->SendDirectMessage(&fixturePacket);
+                    }
+
+                    TC_LOG_DEBUG("housing", "HousingMap deferred ENTER_PLOT: Re-CREATE {} fixture MeshObjects for plot {} (post-rebuild)",
+                        fixtureCreateCount, deferredPlotIndex);
+                }
             }
 
             // Proactively populate FHousingStorage_C (decor list) and budget fields.

@@ -25331,7 +25331,7 @@ void Player::SendInitialPacketsAfterAddToMap()
                 statusResponse.OwnerPlayerGuid = GetGUID();
                 statusResponse.NeighborhoodGuid = housing->GetNeighborhoodGuid();
                 statusResponse.Status = 0;
-                statusResponse.FlagByte = 0x20; // bit5=houseEntry only — cascade requires single active flag
+                statusResponse.FlagByte = 0xE0; // bit7=houseEditing, bit6=plotEntry, bit5=houseEntry
             }
             // No house: all fields stay at defaults (empty GUIDs, Status=0, FlagByte=0).
             SendDirectMessage(statusResponse.Write());

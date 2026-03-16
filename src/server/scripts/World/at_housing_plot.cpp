@@ -113,7 +113,7 @@ struct at_housing_plot : AreaTriggerAI
                 statusResponse.OwnerPlayerGuid = ownerGuid;
                 statusResponse.NeighborhoodGuid = ownerHousing->GetNeighborhoodGuid();
                 statusResponse.Status = 0;
-                statusResponse.FlagByte = 0x20; // bit5=houseEntry only — cascade requires single active flag
+                statusResponse.FlagByte = 0xE0; // bit7=houseEditing, bit6=plotEntry, bit5=houseEntry
                 player->SendDirectMessage(statusResponse.Write());
 
                 // GetPlayerPermissionsResponse: arms the editor gate (vtable[24] sets a1[72..76])
@@ -124,39 +124,46 @@ struct at_housing_plot : AreaTriggerAI
                 player->SendDirectMessage(permResponse.Write());
 
                 TC_LOG_DEBUG("housing", "at_housing_plot: Sent HouseStatus+Permissions for player {} (own={}, flags=0x{:X})",
-                    player->GetGUID().ToString(), isOwnPlot, isOwnPlot ? 0x20 : 0x40);
+                    player->GetGUID().ToString(), isOwnPlot, isOwnPlot ? 0xE0 : 0x40);
             }
         }
 
-        // Re-CREATE the player's exterior root MeshObject so the client's
-        // Tag_HouseExteriorRoot singleton points to THIS plot's root.
-        // With multiple occupied plots, the singleton retains whichever root
-        // was created last during SpawnPlotGameObjects(). Re-sending CREATE
-        // for our root forces the client's fragment 225 handler to overwrite
-        // the singleton, guaranteeing GUID match in the fixture response handler.
+        // Send CREATE_BASIC_HOUSE_RESPONSE to trigger the fixture manager rebuild,
+        // then re-CREATE ALL fixture MeshObjects so the CREATE callback can match
+        // their HouseGUID against the fixture manager's now-populated state+96/+104.
         if (isOwnPlot)
         {
+            WorldPackets::Housing::HousingFixtureCreateBasicHouseResponse fixtureInit;
+            fixtureInit.Result = static_cast<uint8>(HOUSING_RESULT_SUCCESS);
+            player->SendDirectMessage(fixtureInit.Write());
+
             auto const& meshMap = housingMap->GetPlotMeshObjects();
             auto meshItr = meshMap.find(static_cast<uint8>(plotId));
             if (meshItr != meshMap.end())
             {
+                UpdateData fixtureUpdate(player->GetMapId());
+                uint32 fixtureCreateCount = 0;
+
                 for (ObjectGuid const& meshGuid : meshItr->second)
                 {
                     MeshObject* meshObj = housingMap->GetMeshObject(meshGuid);
-                    if (meshObj && meshObj->IsExteriorRoot() && meshObj->IsInWorld())
+                    if (meshObj && meshObj->IsInWorld() && meshObj->m_housingFixtureData.has_value())
                     {
-                        UpdateData updateData(player->GetMapId());
-                        meshObj->BuildCreateUpdateBlockForPlayer(&updateData, player);
+                        meshObj->BuildCreateUpdateBlockForPlayer(&fixtureUpdate, player);
                         player->m_clientGUIDs.insert(meshGuid);
-                        WorldPacket updatePacket;
-                        updateData.BuildPacket(&updatePacket);
-                        player->SendDirectMessage(&updatePacket);
-
-                        TC_LOG_DEBUG("housing", "at_housing_plot: Re-CREATE root MeshObject {} for plot {} (singleton refresh)",
-                            meshGuid.ToString(), plotId);
-                        break;
+                        ++fixtureCreateCount;
                     }
                 }
+
+                if (fixtureCreateCount > 0)
+                {
+                    WorldPacket fixturePacket;
+                    fixtureUpdate.BuildPacket(&fixturePacket);
+                    player->SendDirectMessage(&fixturePacket);
+                }
+
+                TC_LOG_DEBUG("housing", "at_housing_plot: Re-CREATE {} fixture MeshObjects for plot {} (post-rebuild)",
+                    fixtureCreateCount, plotId);
             }
         }
 
