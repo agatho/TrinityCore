@@ -680,20 +680,11 @@ void BotAI::UpdateAI(uint32 diff)
     if (_currentBudgetTier == AIBudgetTier::MINIMAL)
         goto throttled_update_complete;
 
-    // ========================================================================
-    // ST-1: ADAPTIVE AI UPDATE THROTTLING - CPU optimization for far bots
-    // ========================================================================
-    // Check if this update should be processed based on:
-    // - Proximity to human players (near = full rate, far = reduced)
-    // - Combat state (in combat = full rate always)
-    // - Bot activity level (idle = minimal updates)
-    // This optimization can reduce CPU usage by 10-15% for bots far from players
-    if (_aiUpdateThrottler && !_aiUpdateThrottler->ShouldUpdate(diff))
-    {
-        // Throttled - skip this update cycle
-        // Note: Essential systems (death recovery, stall detection) already ran above
-        goto throttled_update_complete;
-    }
+    // ST-1: ADAPTIVE AI UPDATE THROTTLING - DISABLED
+    // The throttler was preventing ALL strategy execution (UpdateStrategies never reached).
+    // Bots need strategies to run to quest, grind, and move. Re-enable throttling only
+    // after verifying it doesn't block essential AI phases.
+    // TODO: Re-enable with proper bypass for strategy execution phase
 
     // ========================================================================
     // BATTLEGROUND AI CONTEXT - Priority handler for BG situations
@@ -1044,6 +1035,13 @@ void BotAI::UpdateStrategies(uint32 diff)
         selectedStrategy = _priorityManager->SelectActiveBehavior(activeStrategies);
     }
 
+    // DIAGNOSTIC: Log strategy selection result every call (temporary)
+    TC_LOG_INFO("module.playerbot",
+        "STRAT-SELECT: Bot {} activeCount={} selected={}",
+        _bot->GetName(),
+        activeStrategies.size(),
+        selectedStrategy ? selectedStrategy->GetName() : "NONE");
+
     // ========================================================================
     // PHASE 4: Execute the selected strategy
     // ========================================================================
@@ -1346,7 +1344,7 @@ void BotAI::UpdateSoloBehaviors(uint32 diff)
 
                                 float distance = std::sqrt(_bot->GetExactDistSq(snapshot.position)); // Calculate once from squared distance
                                 if (!snapshot.isDead &&
-                                    snapshot.isHostile &&
+                                    (snapshot.isHostile || snapshot.isAttackable) &&
                                     distance <= 60.0f)
                                 {
                                     // Target is valid based on snapshot data
@@ -1794,6 +1792,7 @@ void BotAI::AddStrategy(std::unique_ptr<Strategy> strategy)
         {
             // Loot strategy gets FOLLOW priority (50) - HIGHER than quest
             // Ensures bots loot corpses immediately after combat before wandering
+            // IsActive() gates this to only activate when lootable corpses exist
             priority = BehaviorPriority::FOLLOW;
         }
         else if (name == "rest")
