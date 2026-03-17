@@ -356,10 +356,16 @@ namespace Playerbot
             m_bot->GetName(), nearbyCreatures.size(), range);
         // Process snapshots - validation done WITHOUT ObjectAccessor/Map calls!
         // Hostility check deferred to main thread (requires Map access)
-    for (DoubleBufferedSpatialGrid::CreatureSnapshot const& creature : nearbyCreatures)
+        for (DoubleBufferedSpatialGrid::CreatureSnapshot const& creature : nearbyCreatures)
         {
+            TC_LOG_INFO("playerbot.scanner",
+                "Bot {} evaluating creature entry={} guid={}: IsValid={}, isDead={}, health={}/{}, level={}, blacklisted={}, botLevel={}",
+                m_bot->GetName(), creature.entry, creature.guid.ToString(),
+                creature.IsValid(), creature.isDead, creature.health, creature.maxHealth,
+                creature.level, IsBlacklisted(creature.guid), m_bot->GetLevel());
+
             // Validate using snapshot data only (distance, level, alive, blacklist, combat state)
-    if (!IsValidTargetSnapshot(creature))
+            if (!IsValidTargetSnapshot(creature))
                 continue;
             // Store GUID - main thread will validate hostility and queue attack action
             // NO ObjectAccessor::GetUnit() call → THREAD-SAFE!
@@ -382,7 +388,13 @@ namespace Playerbot
     {
         // Basic validation
     if (!creature.IsValid() || creature.isDead || creature.health == 0)
+        {
+            TC_LOG_INFO("playerbot.scanner",
+                "Bot {} REJECTED creature entry {} (guid {}): IsValid={}, isDead={}, health={}, maxHealth={}, level={}, botLevel={}",
+                m_bot->GetName(), creature.entry, creature.guid.ToString(),
+                creature.IsValid(), creature.isDead, creature.health, creature.maxHealth, creature.level, m_bot->GetLevel());
             return false;
+        }
 
         // Check if blacklisted (uses thread-safe GUID check)
     if (this->IsBlacklisted(creature.guid))
@@ -406,9 +418,9 @@ namespace Playerbot
         // if (creature.isInCombat && creature.victim != m_bot->GetGUID() && !m_bot->GetGroup())
         //     return false;
 
-        // Level check - don't attack creatures too high level (10+ levels above)
-    if (creature.level > m_bot->GetLevel() + 10)
-            return false;
+        // Level check removed: In WoW 12.0+ all open-world content scales to player
+        // level. Creature snapshots store unscaled base levels (e.g. 90) which are
+        // meaningless for filtering. The creature will scale to the bot's level in combat.
 
         // DESIGN: LOS check skipped during snapshot validation because snapshots
         // contain only position data, not live Unit pointers. LOS is verified
