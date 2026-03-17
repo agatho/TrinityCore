@@ -78,6 +78,9 @@ bool RestStrategy::IsActive(BotAI* ai) const
     if (!ai || !ai->GetBot())
         return false;
 
+    if (!_active)
+        return false;
+
     Player* bot = ai->GetBot();
 
     // CRITICAL FIX: Safety check for worker thread access during bot destruction
@@ -88,8 +91,31 @@ bool RestStrategy::IsActive(BotAI* ai) const
     if (bot->IsInCombat())
         return false;
 
-    // Active if explicitly activated and not in a group
-    return _active && !bot->GetGroup();
+    // NOT active in a group
+    if (bot->GetGroup())
+        return false;
+
+    // Only active when bot actually needs rest
+    bool needsFood = NeedsFood(ai);
+    bool needsDrink = NeedsDrink(ai);
+
+    if (!needsFood && !needsDrink)
+        return false;
+
+    // If we have consumables, always rest (most efficient)
+    bool hasConsumables = (needsFood && FindFood(ai) != nullptr) ||
+                          (needsDrink && FindDrink(ai) != nullptr);
+    if (hasConsumables)
+        return true;
+
+    // No consumables: only rest if critically low — must wait for passive regen
+    // At moderate health let other strategies run while bot regens passively
+    // Randomize threshold per bot (20-40%) for more human-like behavior
+    float threshold = 30.0f + frand(0.0f, 20.0f);
+    float healthPct = bot->GetHealthPct();
+    float manaPct = bot->GetPowerType() == POWER_MANA ? bot->GetPowerPct(POWER_MANA) : 100.0f;
+
+    return (needsFood && healthPct < threshold) || (needsDrink && manaPct < threshold);
 }
 
 float RestStrategy::GetRelevance(BotAI* ai) const

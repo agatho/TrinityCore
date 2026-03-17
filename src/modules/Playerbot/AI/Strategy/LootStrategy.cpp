@@ -88,13 +88,27 @@ bool LootStrategy::IsActive(BotAI* ai) const
     if (!ai || !ai->GetBot())
         return false;
 
+    if (!_active)
+        return false;
+
     Player* bot = ai->GetBot();
+
     // NOT active during combat
     if (bot->IsInCombat())
         return false;
 
-    // Active if explicitly activated and not in a group
-    return _active && !bot->GetGroup();
+    // NOT active in a group (group has own loot rules)
+    if (bot->GetGroup())
+        return false;
+
+    // Only active when there are actually lootable corpses or objects nearby
+    // This prevents loot strategy from blocking quest/grind when nothing to loot
+    ::std::vector<ObjectGuid> corpses = FindLootableCorpses(ai);
+    if (!corpses.empty())
+        return true;
+
+    ::std::vector<ObjectGuid> objects = FindLootableObjects(ai);
+    return !objects.empty();
 }
 
 float LootStrategy::GetRelevance(BotAI* ai) const
