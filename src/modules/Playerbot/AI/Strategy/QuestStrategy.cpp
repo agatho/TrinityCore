@@ -23,6 +23,7 @@
 #include "Creature.h"
 #include "DatabaseEnv.h"
 #include "GameObject.h"
+#include "SpellHistory.h"
 #include "Item.h"
 #include "SpellInfo.h"
 #include "SpellMgr.h"
@@ -3173,58 +3174,112 @@ void QuestStrategy::SearchForQuestGivers(BotAI* ai)
         auto& hubDb = QuestHubDatabase::Instance();
         if (!hubDb.IsInitialized())
         {
-            TC_LOG_ERROR("module.playerbot.quest",
-                "⚠️ SearchForQuestGivers: QuestHubDatabase not initialized, cannot navigate to quest hubs");
+            TC_LOG_WARN("module.playerbot.quest",
+                "SearchForQuestGivers: Bot {} - QuestHubDatabase not initialized — trying hearthstone",
+                bot->GetName());
+
+            static constexpr uint32 HEARTHSTONE_SPELL_ID = 8690;
+            SpellHistory* spellHistory = bot->GetSpellHistory();
+            if (spellHistory && !spellHistory->HasCooldown(HEARTHSTONE_SPELL_ID))
+                bot->CastSpell(bot, HEARTHSTONE_SPELL_ID, false);
             return;
         }
 
         auto questHubs = hubDb.GetQuestHubsForPlayer(bot, 3); // Get top 3 suitable hubs
         if (questHubs.empty())
         {
-            TC_LOG_ERROR("module.playerbot.quest",
-                "⚠️ SearchForQuestGivers: Bot {} - No appropriate quest hubs found for level {} (zone {}, faction {})",
+            TC_LOG_WARN("module.playerbot.quest",
+                "SearchForQuestGivers: Bot {} - No quest hubs found for level {} (zone {}, faction {}) — trying hearthstone",
                 bot->GetName(), bot->GetLevel(), bot->GetZoneId(), bot->GetTeamId());
+
+            // Use hearthstone to return to bind point (typically a city with quest givers)
+            static constexpr uint32 HEARTHSTONE_SPELL_ID = 8690;
+            SpellHistory* spellHistory = bot->GetSpellHistory();
+            if (spellHistory && !spellHistory->HasCooldown(HEARTHSTONE_SPELL_ID))
+            {
+                bot->CastSpell(bot, HEARTHSTONE_SPELL_ID, false);
+                TC_LOG_INFO("module.playerbot.quest",
+                    "SearchForQuestGivers: Bot {} casting hearthstone to return to bind point",
+                    bot->GetName());
+            }
+            else
+            {
+                TC_LOG_INFO("module.playerbot.quest",
+                    "SearchForQuestGivers: Bot {} hearthstone on cooldown — waiting",
+                    bot->GetName());
+            }
             return;
         }
-        // Get nearest quest hub
-        QuestHub const* nearestHub = questHubs[0]; // Already sorted by suitability (includes distance)
+        // Get best quest hub (sorted by suitability — level match, distance, quest count)
+        QuestHub const* nearestHub = questHubs[0];
 
-        TC_LOG_ERROR("module.playerbot.quest",
-            "✅ SearchForQuestGivers: Bot {} found quest hub '{}' at distance {:.1f} yards (Level range: {}-{}, {} quests available)",
-            bot->GetName(), nearestHub->name, nearestHub->GetDistanceFrom(bot),
-            nearestHub->minLevel, nearestHub->maxLevel, nearestHub->questIds.size());
-        // Check if hub is already within range
+        TC_LOG_INFO("module.playerbot.quest",
+            "SearchForQuestGivers: Bot {} found quest hub '{}' (map {}, level {}-{}, {} quests, dist={:.0f}yd)",
+            bot->GetName(), nearestHub->name, nearestHub->mapId,
+            nearestHub->minLevel, nearestHub->maxLevel,
+            nearestHub->questIds.size(), nearestHub->GetDistanceFrom(bot));
+
+        // Already at hub?
         float hubDistance = nearestHub->GetDistanceFrom(bot);
         if (hubDistance < 10.0f)
         {
-            TC_LOG_ERROR("module.playerbot.quest",
-                "⚠️ SearchForQuestGivers: Bot {} already at quest hub '{}' but no quest givers found - may be phasing issue",
+            TC_LOG_WARN("module.playerbot.quest",
+                "SearchForQuestGivers: Bot {} at hub '{}' but no quest givers found — phasing issue",
                 bot->GetName(), nearestHub->name);
             return;
         }
 
-        // Navigate to quest hub using existing PathfindingAdapter
-        TC_LOG_ERROR("module.playerbot.quest",
-            "🚶 SearchForQuestGivers: Bot {} navigating to quest hub '{}' at ({:.1f}, {:.1f}, {:.1f}), distance={:.1f} yards",
-            bot->GetName(), nearestHub->name,
-            nearestHub->location.GetPositionX(), nearestHub->location.GetPositionY(), nearestHub->location.GetPositionZ(),
-            hubDistance);
-
-        // Use BotMovementUtil for navigation (integrates with existing pathfinding)
-        bool moveResult = BotMovementUtil::MoveToPosition(bot, nearestHub->location);
-        if (moveResult)
+        // Cross-map travel: use hearthstone if bind point is on the hub's map
+        if (nearestHub->mapId != bot->GetMapId())
         {
-            TC_LOG_ERROR("module.playerbot.quest",
-                "✅ SearchForQuestGivers: Bot {} successfully started pathfinding to quest hub '{}' ({} quest givers expected)",
-                bot->GetName(), nearestHub->name, nearestHub->creatureIds.size());
-        }
-        else
-        {
-            TC_LOG_ERROR("module.playerbot.quest",
-                "❌ SearchForQuestGivers: Bot {} failed to start pathfinding to quest hub '{}'",
-                bot->GetName(), nearestHub->name);
+            WorldLocation const& homebind = bot->m_homebind;
+            static constexpr uint32 HEARTHSTONE_SPELL_ID = 8690;
+
+            if (homebind.GetMapId() == nearestHub->mapId)
+            {
+                // Hearthstone goes to the right map
+                SpellHistory* spellHistory = bot->GetSpellHistory();
+                if (spellHistory && !spellHistory->HasCooldown(HEARTHSTONE_SPELL_ID))
+                {
+                    bot->CastSpell(bot, HEARTHSTONE_SPELL_ID, false);
+                    TC_LOG_INFO("module.playerbot.quest",
+                        "SearchForQuestGivers: Bot {} using hearthstone to reach map {} for hub '{}'",
+                        bot->GetName(), nearestHub->mapId, nearestHub->name);
+                }
+                else
+                {
+                    TC_LOG_INFO("module.playerbot.quest",
+                        "SearchForQuestGivers: Bot {} hearthstone on cooldown — waiting to travel to hub '{}'",
+                        bot->GetName(), nearestHub->name);
+                }
+            }
+            else
+            {
+                // Need multi-leg travel (ship/zeppelin/portal)
+                TC_LOG_INFO("module.playerbot.quest",
+                    "SearchForQuestGivers: Bot {} needs cross-map travel to hub '{}' (map {} -> {})",
+                    bot->GetName(), nearestHub->name, bot->GetMapId(), nearestHub->mapId);
+
+                if (!_travelManager)
+                    _travelManager = std::make_unique<TravelRouteManager>(bot);
+
+                TravelRoute route = _travelManager->PlanRoute(nearestHub->mapId, nearestHub->location);
+                if (!route.legs.empty())
+                {
+                    TC_LOG_INFO("module.playerbot.quest",
+                        "SearchForQuestGivers: Bot {} started travel to hub '{}'",
+                        bot->GetName(), nearestHub->name);
+                }
+            }
+            return;
         }
 
+        // Same map — walk directly
+        TC_LOG_INFO("module.playerbot.quest",
+            "SearchForQuestGivers: Bot {} navigating to hub '{}' ({:.0f}yd away)",
+            bot->GetName(), nearestHub->name, hubDistance);
+
+        BotMovementUtil::MoveToPosition(bot, nearestHub->location);
         return;
     }
 

@@ -39,10 +39,9 @@ namespace Playerbot
         if (!player)
             return false;
 
-        // CRITICAL: Check if player is on the same map as this quest hub
-        // Without this check, hubs on different continents would be considered!
-        if (player->GetMapId() != mapId)
-            return false;
+        // Cross-map hubs ARE allowed — the travel system handles ship/zeppelin/hearthstone
+        // transport. Restricting to same map caused bots to find zero hubs when stranded
+        // on a continent with no level-appropriate content.
 
         // Check level range
         uint32 playerLevel = player->GetLevel();
@@ -122,6 +121,10 @@ namespace Playerbot
         float distance = GetDistanceFrom(player);
         float distanceScore = 1.0f / (1.0f + distance / 1000.0f); // Normalize to 0-1 range
         score *= distanceScore;
+
+        // Cross-map penalty — prefer same map, but don't exclude other maps
+        if (player->GetMapId() != mapId)
+            score *= 0.5f;
 
         // Quest availability bonus
         float questBonus = 1.0f + (questIds.size() * 0.1f); // 10% bonus per quest
