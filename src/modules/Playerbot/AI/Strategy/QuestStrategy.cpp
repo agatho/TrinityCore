@@ -3134,22 +3134,38 @@ void QuestStrategy::SearchForQuestGivers(BotAI* ai)
         }
         questGiverCount++;
 
-        // Use TrinityCore's PrepareQuestMenu to check quest availability — this is
-        // the same system the client uses to show quest exclamation marks. It properly
-        // handles ContentTuning, phase visibility, conditions, and all edge cases.
+        // Check quest availability using two methods:
+        // 1. PrepareQuestMenu — normal quests shown in gossip dialog
+        // 2. Auto-accept quests — bypass gossip, need separate check via quest relations
         bot->PrepareQuestMenu(creature->GetGUID());
         QuestMenu& qm = bot->PlayerTalkClass->GetQuestMenu();
         uint32 menuQuestCount = qm.GetMenuItemCount();
 
-        if (menuQuestCount == 0)
+        // Also check for auto-accept quests (QUEST_FLAGS_AUTO_ACCEPT = 0x80000)
+        // These don't appear in PrepareQuestMenu but are valid starting zone quests
+        uint32 autoAcceptCount = 0;
+        QuestRelationResult questRelations = sObjectMgr->GetCreatureQuestRelations(creature->GetEntry());
+        for (uint32 questId : questRelations)
+        {
+            Quest const* quest = sObjectMgr->GetQuestTemplate(questId);
+            if (!quest || !quest->IsAutoAccept())
+                continue;
+            if (bot->GetQuestStatus(questId) != QUEST_STATUS_NONE)
+                continue;
+            if (bot->CanTakeQuest(quest, false) && bot->CanAddQuest(quest, false))
+                autoAcceptCount++;
+        }
+
+        uint32 totalQuests = menuQuestCount + autoAcceptCount;
+        if (totalQuests == 0)
         {
             TC_LOG_ERROR("module.playerbot.quest", "⚠️ Quest giver {} (Entry: {}) has NO eligible quests for bot {}, skipping",
                          creature->GetName(), creature->GetEntry(), bot->GetName());
             continue;
         }
 
-        TC_LOG_ERROR("module.playerbot.quest", "✅ Quest giver {} (Entry: {}) has {} quests available for bot {}",
-                     creature->GetName(), creature->GetEntry(), menuQuestCount, bot->GetName());
+        TC_LOG_ERROR("module.playerbot.quest", "✅ Quest giver {} (Entry: {}) has {} quests ({} menu + {} auto-accept) for bot {}",
+                     creature->GetName(), creature->GetEntry(), totalQuests, menuQuestCount, autoAcceptCount, bot->GetName());
 
         questGiversWithEligibleQuests++;
 

@@ -43,8 +43,35 @@ void QuestAcceptanceManager::ProcessQuestGiver(Creature* questGiver)
     TC_LOG_DEBUG("module.playerbot.quest", "Bot {} processing quest giver {} (Entry: {})",
         _bot->GetName(), questGiver->GetName(), questGiver->GetEntry());
 
-    // Use TrinityCore's PrepareQuestMenu — the authoritative check for quest availability.
-    // This handles ContentTuning, phase visibility, conditions, prerequisites, etc.
+    // ========================================================================
+    // PHASE 1: Auto-accept quests — these bypass the gossip menu entirely
+    // ========================================================================
+    QuestRelationResult questRelations = sObjectMgr->GetCreatureQuestRelations(questGiver->GetEntry());
+    for (uint32 questId : questRelations)
+    {
+        Quest const* quest = sObjectMgr->GetQuestTemplate(questId);
+        if (!quest || !quest->IsAutoAccept())
+            continue;
+
+        if (_bot->GetQuestStatus(questId) != QUEST_STATUS_NONE)
+            continue;
+        if (IsBlacklisted(questId))
+            continue;
+
+        if (_bot->CanTakeQuest(quest, false) && _bot->CanAddQuest(quest, true))
+        {
+            _bot->AddQuestAndCheckCompletion(quest, questGiver);
+            _questsAccepted++;
+
+            TC_LOG_INFO("module.playerbot.quest",
+                "Bot {} AUTO-ACCEPTED quest {} '{}' from {}",
+                _bot->GetName(), questId, quest->GetLogTitle(), questGiver->GetName());
+        }
+    }
+
+    // ========================================================================
+    // PHASE 2: Normal quests via PrepareQuestMenu (gossip dialog)
+    // ========================================================================
     _bot->PrepareQuestMenu(questGiver->GetGUID());
     QuestMenu& qm = _bot->PlayerTalkClass->GetQuestMenu();
 
@@ -56,7 +83,7 @@ void QuestAcceptanceManager::ProcessQuestGiver(Creature* questGiver)
         if (!questTemplate)
             continue;
 
-        // Skip quests the bot already has or that are blacklisted
+        // Skip quests the bot already has (including just auto-accepted ones)
         if (_bot->GetQuestStatus(menuItem.QuestId) != QUEST_STATUS_NONE)
             continue;
         if (IsBlacklisted(menuItem.QuestId))
@@ -69,7 +96,7 @@ void QuestAcceptanceManager::ProcessQuestGiver(Creature* questGiver)
 
     if (eligibleQuests.empty())
     {
-        TC_LOG_DEBUG("module.playerbot.quest", "Bot {} found no eligible quests from {} (gossip menu had {} items)",
+        TC_LOG_DEBUG("module.playerbot.quest", "Bot {} found no additional quests from {} (gossip menu had {} items)",
             _bot->GetName(), questGiver->GetName(), qm.GetMenuItemCount());
         return;
     }
