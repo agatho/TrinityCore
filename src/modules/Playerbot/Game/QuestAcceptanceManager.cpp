@@ -9,6 +9,7 @@
 
 #include "QuestAcceptanceManager.h"
 #include "ObjectMgr.h"
+#include "GossipDef.h"
 #include "Log.h"
 #include "World.h"
 #include "ItemTemplate.h"
@@ -42,32 +43,34 @@ void QuestAcceptanceManager::ProcessQuestGiver(Creature* questGiver)
     TC_LOG_DEBUG("module.playerbot.quest", "Bot {} processing quest giver {} (Entry: {})",
         _bot->GetName(), questGiver->GetName(), questGiver->GetEntry());
 
-    // Get all available quests from this NPC
-    QuestRelationResult objectQR = sObjectMgr->GetCreatureQuestRelations(questGiver->GetEntry());
-    ::std::vector<::std::pair<Quest const*, float>> eligibleQuests;
+    // Use TrinityCore's PrepareQuestMenu — the authoritative check for quest availability.
+    // This handles ContentTuning, phase visibility, conditions, prerequisites, etc.
+    _bot->PrepareQuestMenu(questGiver->GetGUID());
+    QuestMenu& qm = _bot->PlayerTalkClass->GetQuestMenu();
 
-    // Filter and score quests
-    for (uint32 questId : objectQR)
+    ::std::vector<::std::pair<Quest const*, float>> eligibleQuests;
+    for (uint32 i = 0; i < qm.GetMenuItemCount(); ++i)
     {
-        Quest const* questTemplate = sObjectMgr->GetQuestTemplate(questId);
+        QuestMenuItem const& menuItem = qm.GetItem(i);
+        Quest const* questTemplate = sObjectMgr->GetQuestTemplate(menuItem.QuestId);
         if (!questTemplate)
             continue;
 
-        // Check if quest is eligible
-    if (!IsQuestEligible(questTemplate))
+        // Skip quests the bot already has or that are blacklisted
+        if (_bot->GetQuestStatus(menuItem.QuestId) != QUEST_STATUS_NONE)
             continue;
-        // Calculate priority score
+        if (IsBlacklisted(menuItem.QuestId))
+            continue;
+
         float priority = CalculateQuestPriority(questTemplate);
         if (priority >= MIN_QUEST_PRIORITY)
-        {
             eligibleQuests.emplace_back(questTemplate, priority);
-        }
     }
 
     if (eligibleQuests.empty())
     {
-        TC_LOG_DEBUG("module.playerbot.quest", "Bot {} found no eligible quests from {}",
-            _bot->GetName(), questGiver->GetName());
+        TC_LOG_DEBUG("module.playerbot.quest", "Bot {} found no eligible quests from {} (gossip menu had {} items)",
+            _bot->GetName(), questGiver->GetName(), qm.GetMenuItemCount());
         return;
     }
 

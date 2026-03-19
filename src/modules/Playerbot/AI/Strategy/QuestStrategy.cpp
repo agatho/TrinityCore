@@ -14,6 +14,7 @@
 #include "../../Session/BotSession.h"  // For IsInstanceBot check
 #include "Group.h"
 #include "QuestDef.h"
+#include "GossipDef.h"
 #include "ObjectAccessor.h"
 #include "MotionMaster.h"
 #include "Log.h"
@@ -3117,33 +3118,22 @@ void QuestStrategy::SearchForQuestGivers(BotAI* ai)
         }
         questGiverCount++;
 
-        // CRITICAL FIX: Check if this quest giver has any eligible quests for the bot
-        // Don't waste time moving to NPCs that have no quests we can accept!
-        QuestRelationResult objectQR = sObjectMgr->GetCreatureQuestRelations(creature->GetEntry());
-        bool hasEligibleQuests = false;
+        // Use TrinityCore's PrepareQuestMenu to check quest availability — this is
+        // the same system the client uses to show quest exclamation marks. It properly
+        // handles ContentTuning, phase visibility, conditions, and all edge cases.
+        bot->PrepareQuestMenu(creature->GetGUID());
+        QuestMenu& qm = bot->PlayerTalkClass->GetQuestMenu();
+        uint32 menuQuestCount = qm.GetMenuItemCount();
 
-        for (uint32 questId : objectQR)
-        {
-            Quest const* questTemplate = sObjectMgr->GetQuestTemplate(questId);
-            if (!questTemplate)
-                continue;
-
-            // Check if quest is eligible using QuestAcceptanceManager
-            if (_acceptanceManager->IsQuestEligible(questTemplate))
-            {
-                hasEligibleQuests = true;
-                TC_LOG_ERROR("module.playerbot.quest", "✅ Quest giver {} (Entry: {}) has eligible quest {} ({})",
-                             creature->GetName(), creature->GetEntry(), questId, questTemplate->GetLogTitle());
-                break; // Found at least one eligible quest, this NPC is valid
-            }
-        }
-
-        if (!hasEligibleQuests)
+        if (menuQuestCount == 0)
         {
             TC_LOG_ERROR("module.playerbot.quest", "⚠️ Quest giver {} (Entry: {}) has NO eligible quests for bot {}, skipping",
                          creature->GetName(), creature->GetEntry(), bot->GetName());
             continue;
         }
+
+        TC_LOG_ERROR("module.playerbot.quest", "✅ Quest giver {} (Entry: {}) has {} quests available for bot {}",
+                     creature->GetName(), creature->GetEntry(), menuQuestCount, bot->GetName());
 
         questGiversWithEligibleQuests++;
 
