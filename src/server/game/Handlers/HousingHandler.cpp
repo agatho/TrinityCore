@@ -393,30 +393,82 @@ void WorldSession::HandleHouseInteriorLeaveHouse(WorldPackets::Housing::HouseInt
     if (neighborhoodMapId == 0)
         neighborhoodMapId = sHousingMgr.GetNeighborhoodMapIdByWorldMap(worldMapId);
 
-    // Get the plot's visitor landing position (TeleportPosition) for the exit point
+    // Compute exit position: house center + door hook offset + exit point offset.
+    // This places the player in front of the door they entered through.
     float exitX = 0.0f, exitY = 0.0f, exitZ = 0.0f, exitO = 0.0f;
-    bool foundPlot = false;
+    bool foundExitPoint = false;
 
     if (neighborhoodMapId != 0)
     {
         std::vector<NeighborhoodPlotData const*> plots = sHousingMgr.GetPlotsForMap(neighborhoodMapId);
         for (NeighborhoodPlotData const* plot : plots)
         {
-            if (plot->PlotIndex == static_cast<int32>(plotIndex))
+            if (plot->PlotIndex != static_cast<int32>(plotIndex))
+                continue;
+
+            float hx = plot->HousePosition[0];
+            float hy = plot->HousePosition[1];
+            float hz = plot->HousePosition[2];
+
+            // Compute house facing (same as SpawnHouseForPlot / RespawnDoorGOAtHook)
+            float hFacing = plot->HouseRotation[2];
+            if (plot->HouseRotation[0] == 0.0f && plot->HouseRotation[1] == 0.0f && plot->HouseRotation[2] == 0.0f)
+                hFacing = std::atan2(plot->CornerstonePosition[1] - hy, plot->CornerstonePosition[0] - hx);
+
+            // Find the door hook + exit point from the player's fixture overrides
+            auto fixtureOverrides = housing->GetFixtureOverrideMap();
+            uint32 baseCompID = static_cast<uint32>(housing->GetCoreExteriorComponentID());
+            auto const* baseHooks = sHousingMgr.GetHooksOnComponent(baseCompID);
+            if (baseHooks)
+            {
+                for (ExteriorComponentHookEntry const* hook : *baseHooks)
+                {
+                    if (!hook || hook->ExteriorComponentTypeID != HOUSING_FIXTURE_TYPE_DOOR)
+                        continue;
+                    auto ovrItr = fixtureOverrides.find(hook->ID);
+                    if (ovrItr == fixtureOverrides.end())
+                        continue;
+
+                    // Door hook found — use hook position + exit point offset
+                    float localX = hook->Position[0];
+                    float localY = hook->Position[1];
+                    float localZ = hook->Position[2];
+
+                    ExteriorComponentExitPointEntry const* exitPt = sHousingMgr.GetExitPoint(ovrItr->second);
+                    if (exitPt)
+                    {
+                        localX += exitPt->Position[0];
+                        localY += exitPt->Position[1];
+                        localZ += exitPt->Position[2];
+                    }
+
+                    float cosFacing = std::cos(hFacing);
+                    float sinFacing = std::sin(hFacing);
+                    exitX = hx + localX * cosFacing - localY * sinFacing;
+                    exitY = hy + localX * sinFacing + localY * cosFacing;
+                    exitZ = hz + localZ;
+                    exitO = hFacing;
+                    foundExitPoint = true;
+                    break;
+                }
+            }
+
+            // Fallback: use plot's TeleportPosition if no door exit point found
+            if (!foundExitPoint)
             {
                 exitX = plot->TeleportPosition[0];
                 exitY = plot->TeleportPosition[1];
                 exitZ = plot->TeleportPosition[2];
                 exitO = plot->TeleportFacing;
-                foundPlot = true;
-                break;
+                foundExitPoint = true;
             }
+            break;
         }
     }
 
-    if (!foundPlot)
+    if (!foundExitPoint)
     {
-        // Fallback: use neighborhood center
+        // Last resort: use neighborhood center
         NeighborhoodMapData const* mapData = sHousingMgr.GetNeighborhoodMapData(neighborhoodMapId);
         if (mapData)
         {
@@ -424,7 +476,7 @@ void WorldSession::HandleHouseInteriorLeaveHouse(WorldPackets::Housing::HouseInt
             exitY = mapData->Origin[1];
             exitZ = mapData->Origin[2];
         }
-        TC_LOG_WARN("housing", "CMSG_HOUSE_INTERIOR_LEAVE_HOUSE: No plot data for plotIndex {}, "
+        TC_LOG_WARN("housing", "CMSG_HOUSE_INTERIOR_LEAVE_HOUSE: No exit point for plotIndex {}, "
             "using neighborhood center", plotIndex);
     }
 
@@ -1580,6 +1632,64 @@ void WorldSession::HandleHousingFixtureSetEditMode(WorldPackets::Housing::Housin
         player->SendDirectMessage(&updatePacket);
         player->ClearUpdateMask(false);
     }
+
+    // 6) Re-CREATE fixture entities now that the client's fixture manager is active.
+    //
+    // At plot entry, FlagByte=0xE0 sets multiple HouseStatus bits → the cascade function
+    // defaults to state=0 → vf5(0) → state+1048=0. CREATE_BASIC_HOUSE_RESPONSE is gated
+    // on state+1048!=0, so the rebuild never runs and state+96/+104 (house GUID) stays empty.
+    // Fixture entity CREATEs from plot entry fire the CREATE callback, but it compares the
+    // entity's FHousingFixture_C::HouseGUID against the empty state+96/+104 → mismatch → skip.
+    //
+    // Now the client has processed EDIT_MODE_RESPONSE: state+1048=6, rebuild has run,
+    // state+96/+104 is populated. Send CREATE_BASIC_HOUSE_RESPONSE (teardown+rebuild for
+    // a clean slate) then re-CREATE all fixture MeshObjects. The CREATE callback will
+    // match house GUIDs → create HousingFixturePointFrame objects → fire
+    // HOUSING_FIXTURE_POINT_FRAME_ADDED Lua events → UI populates hook points.
+    if (entering)
+    {
+        // CREATE_BASIC_HOUSE_RESPONSE — now that state+1048=6, the handler passes
+        // the gate check and runs teardown+rebuild for a clean fixture manager state.
+        {
+            WorldPackets::Housing::HousingFixtureCreateBasicHouseResponse fixtureInit;
+            fixtureInit.Result = static_cast<uint8>(HOUSING_RESULT_SUCCESS);
+            SendPacket(fixtureInit.Write());
+        }
+
+        // Re-CREATE all fixture MeshObjects for the player's plot.
+        if (HousingMap* housingMap = dynamic_cast<HousingMap*>(player->GetMap()))
+        {
+            uint8 plotIndex = housing->GetPlotIndex();
+            auto const& meshMap = housingMap->GetPlotMeshObjects();
+            auto meshItr = meshMap.find(plotIndex);
+            if (meshItr != meshMap.end())
+            {
+                UpdateData fixtureUpdate(player->GetMapId());
+                uint32 fixtureCreateCount = 0;
+
+                for (ObjectGuid const& meshGuid : meshItr->second)
+                {
+                    MeshObject* meshObj = housingMap->GetMeshObject(meshGuid);
+                    if (meshObj && meshObj->IsInWorld() && meshObj->m_housingFixtureData.has_value())
+                    {
+                        meshObj->BuildCreateUpdateBlockForPlayer(&fixtureUpdate, player);
+                        player->m_clientGUIDs.insert(meshGuid);
+                        ++fixtureCreateCount;
+                    }
+                }
+
+                if (fixtureCreateCount > 0)
+                {
+                    WorldPacket fixturePacket;
+                    fixtureUpdate.BuildPacket(&fixturePacket);
+                    player->SendDirectMessage(&fixturePacket);
+                }
+
+                TC_LOG_DEBUG("housing", "HandleHousingFixtureSetEditMode: Re-CREATE {} fixture MeshObjects for plot {}",
+                    fixtureCreateCount, plotIndex);
+            }
+        }
+    }
 }
 
 void WorldSession::HandleHousingFixtureSetCoreFixture(WorldPackets::Housing::HousingFixtureSetCoreFixture const& housingFixtureSetCoreFixture)
@@ -1619,7 +1729,8 @@ void WorldSession::HandleHousingFixtureSetCoreFixture(WorldPackets::Housing::Hou
         componentEntry->Type, componentEntry->Size, componentEntry->Flags,
         componentEntry->ParentComponentID, componentEntry->HouseExteriorWmoDataID);
 
-    HousingResult result = housing->SelectFixtureOption(componentID, 0);
+    std::vector<uint32> removedHookIDs;
+    HousingResult result = housing->SelectFixtureOption(componentID, 0, &removedHookIDs);
 
     WorldPackets::Housing::HousingFixtureSetCoreFixtureResponse response;
     response.Result = static_cast<uint8>(result);
@@ -1705,7 +1816,8 @@ void WorldSession::HandleHousingFixtureCreateFixture(WorldPackets::Housing::Hous
         compEntry->ID, compEntry->Name[DEFAULT_LOCALE] ? compEntry->Name[DEFAULT_LOCALE] : "", compEntry->Type, compEntry->Size,
         compEntry->Flags, compEntry->ParentComponentID, compEntry->ModelFileDataID);
 
-    HousingResult result = housing->SelectFixtureOption(hookID, componentID);
+    std::vector<uint32> removedHookIDs;
+    HousingResult result = housing->SelectFixtureOption(hookID, componentID, &removedHookIDs);
 
     // Spawn the fixture BEFORE sending the response so we can populate FixtureGuid.
     // The client's CREATE_FIXTURE_RESPONSE handler uses this GUID to identify the new entity.
@@ -1716,11 +1828,22 @@ void WorldSession::HandleHousingFixtureCreateFixture(WorldPackets::Housing::Hous
         collectionUpdate.FixtureID = componentID;
         SendPacket(collectionUpdate.Write());
 
-        // Despawn old mesh at hook point and spawn the new fixture component
         if (HousingMap* housingMap = dynamic_cast<HousingMap*>(player->GetMap()))
         {
             uint8 plotIndex = housing->GetPlotIndex();
 
+            // Despawn meshes at ALL conflict hooks (old door at different hook, or old fixture at same hook)
+            for (uint32 removedHook : removedHookIDs)
+            {
+                if (MeshObject* conflictMesh = housingMap->FindMeshObjectByHookID(plotIndex, static_cast<int32>(removedHook)))
+                {
+                    TC_LOG_DEBUG("housing", "CMSG_HOUSING_FIXTURE_CREATE_FIXTURE: Despawning conflict mesh {} at hook {}",
+                        conflictMesh->GetGUID().ToString(), removedHook);
+                    housingMap->DespawnSingleMeshObject(plotIndex, conflictMesh->GetGUID());
+                }
+            }
+
+            // Despawn any mesh at the target hook
             if (MeshObject* oldMesh = housingMap->FindMeshObjectByHookID(plotIndex, static_cast<int32>(hookID)))
             {
                 TC_LOG_DEBUG("housing", "CMSG_HOUSING_FIXTURE_CREATE_FIXTURE: Despawning old mesh {} at hook {}",
@@ -1728,10 +1851,34 @@ void WorldSession::HandleHousingFixtureCreateFixture(WorldPackets::Housing::Hous
                 housingMap->DespawnSingleMeshObject(plotIndex, oldMesh->GetGUID());
             }
 
+            // Spawn new fixture mesh
             MeshObject* newMesh = housingMap->SpawnFixtureAtHook(plotIndex, hookID, componentID,
                 housing->GetHouseGuid(), static_cast<int32>(housing->GetHouseType()), player);
             if (newMesh)
                 newFixtureGuid = newMesh->GetFixtureGuid();
+
+            // If this is a door (type=11), respawn the clickable door GO at the hook position.
+            // Also respawn if a door was displaced from a different hook.
+            TC_LOG_DEBUG("housing", "CMSG_HOUSING_FIXTURE_CREATE_FIXTURE: compType={} hookID={} componentID={} removedHooks={}",
+                compEntry->Type, hookID, componentID, uint32(removedHookIDs.size()));
+            if (compEntry->Type == HOUSING_FIXTURE_TYPE_DOOR)
+            {
+                housingMap->RespawnDoorGOAtHook(plotIndex, hookID, componentID, housing, player);
+            }
+            else
+            {
+                // Check if we displaced a door — if so, the door GO needs to be removed
+                for (uint32 removedHook : removedHookIDs)
+                {
+                    ExteriorComponentHookEntry const* removedHookEntry = sExteriorComponentHookStore.LookupEntry(removedHook);
+                    if (removedHookEntry && removedHookEntry->ExteriorComponentTypeID == HOUSING_FIXTURE_TYPE_DOOR)
+                    {
+                        // Door was removed — despawn the door GO (no new door to spawn)
+                        housingMap->DespawnDoorGO(plotIndex);
+                        break;
+                    }
+                }
+            }
         }
     }
 
@@ -1767,12 +1914,32 @@ void WorldSession::HandleHousingFixtureDeleteFixture(WorldPackets::Housing::Hous
     }
 
     uint32 componentID = housingFixtureDeleteFixture.ExteriorComponentID;
+    uint32 originalID = componentID; // preserve original for RemoveFixture key lookup
 
-    // Validate ExteriorComponentID against DB2 store
+    // The client may send either an ExteriorComponentID or an ExteriorComponentHookID
+    // depending on the fixture type. Try the ExteriorComponent store first, then fall back
+    // to resolving via ExteriorComponentHook → ExteriorComponent for DB2 validation.
     ExteriorComponentEntry const* componentEntry = sExteriorComponentStore.LookupEntry(componentID);
     if (!componentEntry)
     {
-        TC_LOG_DEBUG("housing", "CMSG_HOUSING_FIXTURE_DELETE_FIXTURE ExteriorComponentID {} not found in DB2", componentID);
+        // Try as a HookID — resolve to the parent ExteriorComponentID for validation only.
+        // Keep originalID as the hookID for RemoveFixture (fixtures are keyed by hookID).
+        ExteriorComponentHookEntry const* hookEntry = sExteriorComponentHookStore.LookupEntry(componentID);
+        if (hookEntry)
+        {
+            componentEntry = sExteriorComponentStore.LookupEntry(hookEntry->ExteriorComponentID);
+            if (componentEntry)
+            {
+                TC_LOG_DEBUG("housing", "CMSG_HOUSING_FIXTURE_DELETE_FIXTURE: Resolved hookID {} → ExteriorComponentID {} (using hookID as key)",
+                    componentID, hookEntry->ExteriorComponentID);
+                // DON'T overwrite componentID — keep the hookID for RemoveFixture
+            }
+        }
+    }
+
+    if (!componentEntry)
+    {
+        TC_LOG_DEBUG("housing", "CMSG_HOUSING_FIXTURE_DELETE_FIXTURE ExteriorComponentID/HookID {} not found in DB2", componentID);
         WorldPackets::Housing::HousingFixtureDeleteFixtureResponse response;
         response.Result = static_cast<uint8>(HOUSING_RESULT_FIXTURE_NOT_FOUND);
         SendPacket(response.Write());
@@ -1782,8 +1949,10 @@ void WorldSession::HandleHousingFixtureDeleteFixture(WorldPackets::Housing::Hous
     TC_LOG_DEBUG("housing", "CMSG_HOUSING_FIXTURE_DELETE_FIXTURE DB2 lookup: ExteriorComponentID={}, Name='{}', Type={}, Flags={}",
         componentID, componentEntry->Name[DEFAULT_LOCALE] ? componentEntry->Name[DEFAULT_LOCALE] : "", componentEntry->Type, componentEntry->Flags);
 
+    // Use originalID (hookID when client sent a hook, componentID otherwise) for fixture lookup.
+    // RemoveFixture searches by key first (hookID), then by OptionId (componentID).
     uint32 removedHookID = 0;
-    HousingResult result = housing->RemoveFixture(componentID, &removedHookID);
+    HousingResult result = housing->RemoveFixture(originalID, &removedHookID);
 
     WorldPackets::Housing::HousingFixtureDeleteFixtureResponse response;
     response.Result = static_cast<uint8>(result);
@@ -1806,19 +1975,11 @@ void WorldSession::HandleHousingFixtureDeleteFixture(WorldPackets::Housing::Hous
                 housingMap->DespawnSingleMeshObject(plotIndex, oldMesh->GetGUID());
             }
 
-            // Spawn default component back at this hook (DB2 default by type + wmoDataID)
-            ExteriorComponentHookEntry const* hookEntry = sExteriorComponentHookStore.LookupEntry(removedHookID);
-            if (hookEntry)
-            {
-                uint32 defaultCompID = sHousingMgr.GetDefaultFixtureForType(
-                    static_cast<uint8>(hookEntry->ExteriorComponentTypeID),
-                    static_cast<uint32>(housing->GetHouseType()));
-                if (defaultCompID)
-                {
-                    housingMap->SpawnFixtureAtHook(plotIndex, removedHookID, defaultCompID,
-                        housing->GetHouseGuid(), static_cast<int32>(housing->GetHouseType()), player);
-                }
-            }
+            // Do NOT spawn a default fixture back — the user selected "None" to remove it.
+            // The hook point should remain empty so the client shows the fixture point UI again.
+            // If this was a door, also remove the door GO.
+            if (componentEntry && componentEntry->Type == HOUSING_FIXTURE_TYPE_DOOR)
+                housingMap->DespawnDoorGO(plotIndex);
         }
 
         // Sniff-verified: UPDATE_OBJECT follows the response
