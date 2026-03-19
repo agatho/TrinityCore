@@ -197,11 +197,22 @@ void QuestStrategy::UpdateBehavior(BotAI* ai, uint32 diff)
         // If we arrived on the destination map (e.g. via hearthstone), the travel
         // route is obsolete — clear it so we can proceed with quest processing
         TravelRoute const* route = _travelManager->GetCurrentRoute();
-        if (route && bot->GetMapId() != route->originMapId)
+
+        TC_LOG_INFO("module.playerbot.quest",
+            "UpdateBehavior: Bot {} travel check — route={}, botMap={}, originMap={}, destMap={}",
+            bot->GetName(), route ? "valid" : "NULL", bot->GetMapId(),
+            route ? route->originMapId : 0, route ? route->destinationMapId : 0);
+
+        // Clear stale route if:
+        // 1. Bot's map changed from route origin (hearthstone/teleport)
+        // 2. Bot is already on the destination map (no cross-map travel needed)
+        bool routeStale = route && (bot->GetMapId() != route->originMapId ||
+                                     bot->GetMapId() == route->destinationMapId);
+        if (routeStale)
         {
             TC_LOG_INFO("module.playerbot.quest",
-                "UpdateBehavior: Bot {} map changed ({} -> {}) — clearing stale travel route for quest {}",
-                bot->GetName(), route->originMapId, bot->GetMapId(), _lastTravelQuestId);
+                "UpdateBehavior: Bot {} route stale (botMap={}, origin={}, dest={}) — clearing for quest {}",
+                bot->GetName(), bot->GetMapId(), route->originMapId, route->destinationMapId, _lastTravelQuestId);
             _travelManager.reset();
             _lastTravelQuestId = 0;
         }
