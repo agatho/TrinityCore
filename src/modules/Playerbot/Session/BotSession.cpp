@@ -2869,6 +2869,11 @@ bool BotSession::ProcessPendingLoot()
         TC_LOG_INFO("module.playerbot.strategy",
                      "ProcessPendingLoot: Bot {} LOOTED {} items from corpse {} (entry {})",
                      bot->GetName(), itemsLooted, targetGuid.ToString(), creature->GetEntry());
+
+        // CRITICAL: Release loot after picking up items — marks corpse as fully looted
+        // Without this, the corpse stays "lootable" and FindLootableCorpses keeps returning it.
+        // This mirrors what happens when a real player closes the loot window (CMSG_LOOT_RELEASE).
+        bot->SendLootRelease(targetGuid);
     }
 
     return lootedAny;
