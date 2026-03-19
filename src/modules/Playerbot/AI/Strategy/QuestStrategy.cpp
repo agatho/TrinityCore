@@ -260,20 +260,21 @@ void QuestStrategy::UpdateBehavior(BotAI* ai, uint32 diff)
     // ========================================================================
     if (!_pendingQuestGiverGuid.IsEmpty())
     {
+        // Try to resolve creature — may fail for phased/special NPCs
         Creature* pendingNPC = ObjectAccessor::GetCreature(*bot, _pendingQuestGiverGuid);
-        if (!pendingNPC || !pendingNPC->IsAlive() || !pendingNPC->IsInWorld())
-        {
-            TC_LOG_INFO("module.playerbot.quest",
-                "QuestStrategy: Bot {} pending quest giver gone, clearing",
-                bot->GetName());
-            _pendingQuestGiverGuid.Clear();
-        }
+
+        // Use live position if available, otherwise stored position
+        float dist;
+        if (pendingNPC && pendingNPC->IsAlive() && pendingNPC->IsInWorld())
+            dist = bot->GetExactDist(pendingNPC);
         else
+            dist = bot->GetExactDist(_pendingQuestGiverPos);
+
+        if (dist <= INTERACTION_DISTANCE)
         {
-            float dist = bot->GetExactDist(pendingNPC);
-            if (dist <= INTERACTION_DISTANCE)
+            // Arrived — try to interact
+            if (pendingNPC && pendingNPC->IsAlive() && pendingNPC->IsInWorld())
             {
-                // Arrived — interact and accept quests
                 TC_LOG_INFO("module.playerbot.quest",
                     "QuestStrategy: Bot {} arrived at quest giver {} (dist={:.1f}) — accepting quests",
                     bot->GetName(), pendingNPC->GetName(), dist);
@@ -282,7 +283,6 @@ void QuestStrategy::UpdateBehavior(BotAI* ai, uint32 diff)
                     _acceptanceManager = std::make_unique<QuestAcceptanceManager>(bot);
 
                 _acceptanceManager->ProcessQuestGiver(pendingNPC);
-                _pendingQuestGiverGuid.Clear();
 
                 TC_LOG_INFO("module.playerbot.quest",
                     "QuestStrategy: Bot {} quest acceptance done (accepted: {}, dropped: {})",
@@ -292,15 +292,21 @@ void QuestStrategy::UpdateBehavior(BotAI* ai, uint32 diff)
             }
             else
             {
-                // Still walking — re-issue move in case it was interrupted
-                TC_LOG_DEBUG("module.playerbot.quest",
-                    "QuestStrategy: Bot {} still walking to quest giver {} (dist={:.1f})",
-                    bot->GetName(), pendingNPC->GetName(), dist);
-
-                Position npcPos;
-                npcPos.Relocate(pendingNPC->GetPositionX(), pendingNPC->GetPositionY(), pendingNPC->GetPositionZ());
-                BotMovementUtil::MoveToPosition(bot, npcPos);
+                // At position but can't resolve NPC — try grid scan for any quest giver nearby
+                TC_LOG_INFO("module.playerbot.quest",
+                    "QuestStrategy: Bot {} at pending position but NPC not found — scanning nearby quest givers",
+                    bot->GetName());
             }
+            _pendingQuestGiverGuid.Clear();
+        }
+        else
+        {
+            // Still walking — re-issue move using stored position
+            TC_LOG_INFO("module.playerbot.quest",
+                "QuestStrategy: Bot {} walking to quest giver (dist={:.1f})",
+                bot->GetName(), dist);
+
+            BotMovementUtil::MoveToPosition(bot, _pendingQuestGiverPos);
             return; // Don't process other quest logic while heading to quest giver
         }
     }
@@ -3259,6 +3265,9 @@ void QuestStrategy::SearchForQuestGivers(BotAI* ai)
 
         // Remember this quest giver so we complete the interaction on future ticks
         _pendingQuestGiverGuid = closestQuestGiver->GetGUID();
+        _pendingQuestGiverPos.Relocate(closestQuestGiver->GetPositionX(),
+                                       closestQuestGiver->GetPositionY(),
+                                       closestQuestGiver->GetPositionZ());
         return;
     }
 

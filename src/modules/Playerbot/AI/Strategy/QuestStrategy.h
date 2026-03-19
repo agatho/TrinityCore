@@ -174,6 +174,7 @@ private:
     // finishes walking to and interacting with the NPC even if other quests
     // are active in the log.
     ObjectGuid _pendingQuestGiverGuid;
+    Position _pendingQuestGiverPos;
 
     // Quest area wandering (for respawn waiting)
     uint32 _lastWanderTime;
