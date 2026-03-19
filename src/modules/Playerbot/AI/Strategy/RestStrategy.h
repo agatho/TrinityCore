@@ -131,6 +131,10 @@ private:
     uint32 _restStartTime = 0;
     uint32 _maxRestTime = 30000; // Max 30 seconds of resting
 
+    // Per-bot randomized critical rest threshold (30-50%)
+    // Assigned once at construction so each bot behaves consistently
+    float _criticalRestThreshold = 0.0f;
+
     // Performance tracking
     uint32 _foodConsumed = 0;
     uint32 _drinkConsumed = 0;

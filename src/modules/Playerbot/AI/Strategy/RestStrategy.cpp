@@ -24,8 +24,9 @@ namespace Playerbot
 
 RestStrategy::RestStrategy()
     : Strategy("rest")
+    , _criticalRestThreshold(30.0f + frand(0.0f, 20.0f))
 {
-    TC_LOG_DEBUG("module.playerbot.strategy", "RestStrategy: Initialized");
+    TC_LOG_DEBUG("module.playerbot.strategy", "RestStrategy: Initialized (critical threshold={:.0f}%)", _criticalRestThreshold);
 }
 
 void RestStrategy::InitializeActions()
@@ -110,12 +111,11 @@ bool RestStrategy::IsActive(BotAI* ai) const
 
     // No consumables: only rest if critically low — must wait for passive regen
     // At moderate health let other strategies run while bot regens passively
-    // Randomize threshold per bot (20-40%) for more human-like behavior
-    float threshold = 30.0f + frand(0.0f, 20.0f);
+    // Threshold is randomized per bot at construction (30-50%) for human-like variation
     float healthPct = bot->GetHealthPct();
     float manaPct = bot->GetPowerType() == POWER_MANA ? bot->GetPowerPct(POWER_MANA) : 100.0f;
 
-    return (needsFood && healthPct < threshold) || (needsDrink && manaPct < threshold);
+    return (needsFood && healthPct < _criticalRestThreshold) || (needsDrink && manaPct < _criticalRestThreshold);
 }
 
 float RestStrategy::GetRelevance(BotAI* ai) const
