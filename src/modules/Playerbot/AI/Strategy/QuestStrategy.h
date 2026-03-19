@@ -170,6 +170,11 @@ private:
     uint32 _lastQuestGiverSearchTime;
     uint32 _questGiverSearchFailures;
 
+    // Pending quest giver interaction — persists across ticks so the bot
+    // finishes walking to and interacting with the NPC even if other quests
+    // are active in the log.
+    ObjectGuid _pendingQuestGiverGuid;
+
     // Quest area wandering (for respawn waiting)
     uint32 _lastWanderTime;
     uint32 _currentWanderPointIndex;

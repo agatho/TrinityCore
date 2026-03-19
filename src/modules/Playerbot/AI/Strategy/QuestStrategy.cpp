@@ -255,6 +255,56 @@ void QuestStrategy::UpdateBehavior(BotAI* ai, uint32 diff)
         _dynamicSpawnHandler->Update(diff);
     }
 
+    // ========================================================================
+    // PENDING QUEST GIVER INTERACTION — complete walk-to + accept across ticks
+    // ========================================================================
+    if (!_pendingQuestGiverGuid.IsEmpty())
+    {
+        Creature* pendingNPC = ObjectAccessor::GetCreature(*bot, _pendingQuestGiverGuid);
+        if (!pendingNPC || !pendingNPC->IsAlive() || !pendingNPC->IsInWorld())
+        {
+            TC_LOG_INFO("module.playerbot.quest",
+                "QuestStrategy: Bot {} pending quest giver gone, clearing",
+                bot->GetName());
+            _pendingQuestGiverGuid.Clear();
+        }
+        else
+        {
+            float dist = bot->GetExactDist(pendingNPC);
+            if (dist <= INTERACTION_DISTANCE)
+            {
+                // Arrived — interact and accept quests
+                TC_LOG_INFO("module.playerbot.quest",
+                    "QuestStrategy: Bot {} arrived at quest giver {} (dist={:.1f}) — accepting quests",
+                    bot->GetName(), pendingNPC->GetName(), dist);
+
+                if (!_acceptanceManager)
+                    _acceptanceManager = std::make_unique<QuestAcceptanceManager>(bot);
+
+                _acceptanceManager->ProcessQuestGiver(pendingNPC);
+                _pendingQuestGiverGuid.Clear();
+
+                TC_LOG_INFO("module.playerbot.quest",
+                    "QuestStrategy: Bot {} quest acceptance done (accepted: {}, dropped: {})",
+                    bot->GetName(),
+                    _acceptanceManager->GetQuestsAccepted(),
+                    _acceptanceManager->GetQuestsDropped());
+            }
+            else
+            {
+                // Still walking — re-issue move in case it was interrupted
+                TC_LOG_DEBUG("module.playerbot.quest",
+                    "QuestStrategy: Bot {} still walking to quest giver {} (dist={:.1f})",
+                    bot->GetName(), pendingNPC->GetName(), dist);
+
+                Position npcPos;
+                npcPos.Relocate(pendingNPC->GetPositionX(), pendingNPC->GetPositionY(), pendingNPC->GetPositionZ());
+                BotMovementUtil::MoveToPosition(bot, npcPos);
+            }
+            return; // Don't process other quest logic while heading to quest giver
+        }
+    }
+
     // Check if bot has active quests
     bool hasActiveQuests = false;
     for (uint8 slot = 0; slot < MAX_QUEST_LOG_SIZE; ++slot)
@@ -1999,8 +2049,25 @@ void QuestStrategy::TurnInQuest(BotAI* ai, uint32 questId)
     QuestEnderLocation location;
     if (!FindQuestEnderLocation(ai, questId, location))
     {
-        TC_LOG_ERROR("module.playerbot.quest", "❌ TurnInQuest: Bot {} failed to find quest ender location for quest {}",
-                     bot->GetName(), questId);
+        // Track failures to prevent infinite loop on quests with no reachable ender
+        _questTurnInFailures[questId]++;
+        uint32 failureCount = _questTurnInFailures[questId];
+
+        TC_LOG_ERROR("module.playerbot.quest", "❌ TurnInQuest: Bot {} failed to find quest ender location for quest {} (failure {}/{})",
+                     bot->GetName(), questId, failureCount, MAX_QUEST_TURNIN_FAILURES);
+
+        if (failureCount >= MAX_QUEST_TURNIN_FAILURES)
+        {
+            TC_LOG_WARN("module.playerbot.quest",
+                "TurnInQuest: Bot {} abandoning quest {} after {} failed ender location searches",
+                bot->GetName(), questId, failureCount);
+
+            bot->AbandonQuest(questId);
+            _questTurnInFailures.erase(questId);
+
+            if (_acceptanceManager)
+                _acceptanceManager->BlacklistQuest(questId);
+        }
         return;
     }
 
@@ -3189,6 +3256,9 @@ void QuestStrategy::SearchForQuestGivers(BotAI* ai)
         TC_LOG_ERROR("module.playerbot.quest",
             "🚶 SearchForQuestGivers: Bot {} MoveToPosition result: {}",
             bot->GetName(), moveResult ? "SUCCESS" : "FAILED");
+
+        // Remember this quest giver so we complete the interaction on future ticks
+        _pendingQuestGiverGuid = closestQuestGiver->GetGUID();
         return;
     }
 
