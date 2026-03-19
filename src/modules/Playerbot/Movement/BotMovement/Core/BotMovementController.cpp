@@ -192,8 +192,9 @@ bool BotMovementController::MoveToPosition(Position const& dest, bool forceDest)
 
     if (!path.IsValid())
     {
-        TC_LOG_DEBUG("movement.bot", "BotMovementController: Path validation failed for {}: {}",
-            _owner->GetName(), path.validationResult.errorMessage);
+        TC_LOG_INFO("movement.bot", "BotMovementController: Path validation failed for {} to ({:.1f},{:.1f},{:.1f}): {}",
+            _owner->GetName(), dest.GetPositionX(), dest.GetPositionY(), dest.GetPositionZ(),
+            path.validationResult.errorMessage);
 
         if (_stuckDetector)
             _stuckDetector->RecordPathFailure();

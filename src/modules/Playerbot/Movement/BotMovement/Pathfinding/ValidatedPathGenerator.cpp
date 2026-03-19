@@ -68,7 +68,32 @@ ValidatedPath ValidatedPathGenerator::CalculateValidatedPath(float destX, float 
     }
 
     // Stage 2: Generate path using underlying PathGenerator
-    bool pathResult = _pathGenerator.CalculatePath(destX, destY, destZ, forceDest);
+    // For long distances, PathGenerator may fail because the navmesh query has range
+    // limits. In that case, generate a path toward the destination using an intermediate
+    // waypoint within navmesh range, so the bot makes incremental progress.
+    static constexpr float MAX_SINGLE_PATH_DISTANCE = 200.0f;
+
+    float dx = destX - _owner->GetPositionX();
+    float dy = destY - _owner->GetPositionY();
+    float dz = destZ - _owner->GetPositionZ();
+    float totalDist = std::sqrt(dx * dx + dy * dy + dz * dz);
+
+    float pathDestX = destX, pathDestY = destY, pathDestZ = destZ;
+
+    if (totalDist > MAX_SINGLE_PATH_DISTANCE)
+    {
+        // Clamp to intermediate waypoint along the direction vector
+        float ratio = MAX_SINGLE_PATH_DISTANCE / totalDist;
+        pathDestX = _owner->GetPositionX() + dx * ratio;
+        pathDestY = _owner->GetPositionY() + dy * ratio;
+        pathDestZ = _owner->GetPositionZ() + dz * ratio;
+
+        TC_LOG_DEBUG("movement.bot",
+            "ValidatedPathGenerator: Long distance {:.0f}yd for {} — using intermediate waypoint at ({:.1f},{:.1f},{:.1f})",
+            totalDist, _owner->GetName(), pathDestX, pathDestY, pathDestZ);
+    }
+
+    bool pathResult = _pathGenerator.CalculatePath(pathDestX, pathDestY, pathDestZ, forceDest);
 
     result.pathType = _pathGenerator.GetPathType();
     result.points = _pathGenerator.GetPath();
@@ -77,7 +102,8 @@ ValidatedPath ValidatedPathGenerator::CalculateValidatedPath(float destX, float 
     {
         result.validationResult = ValidationResult::Failure(
             ValidationFailureReason::DestinationUnreachable,
-            "PathGenerator failed to find path");
+            fmt::format("PathGenerator failed to find path (dist={:.0f}, intermediate={})",
+                totalDist, totalDist > MAX_SINGLE_PATH_DISTANCE));
         return result;
     }
 
