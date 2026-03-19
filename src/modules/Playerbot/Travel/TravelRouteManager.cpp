@@ -2344,7 +2344,10 @@ void TravelRouteManager::HandleOnTransport(TravelLeg& leg)
 
             if (distToDeparture > 15.0f)
             {
-                // Not at dock yet - walk there
+                TC_LOG_INFO("module.playerbot.travel",
+                    "HandleOnTransport: Bot {} walking to {} departure ({:.0f}yd away)",
+                    m_bot->GetName(), leg.connection ? leg.connection->name : "unknown", distToDeparture);
+
                 if (leg.currentState != TravelState::WALKING_TO_TRANSPORT)
                 {
                     TC_LOG_DEBUG("module.playerbot.travel",

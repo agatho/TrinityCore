@@ -194,18 +194,27 @@ void QuestStrategy::UpdateBehavior(BotAI* ai, uint32 diff)
 
     if (_travelManager && _travelManager->IsTraveling())
     {
-        TC_LOG_DEBUG("module.playerbot.quest",
-            "🚢 UpdateBehavior: Bot {} updating active travel route (quest {})",
-            bot->GetName(), _lastTravelQuestId);
-
-        // Update() returns true while route is still active, false when done
-        bool stillTraveling = _travelManager->Update(diff);
-
-        if (stillTraveling)
+        // If we arrived on the destination map (e.g. via hearthstone), the travel
+        // route is obsolete — clear it so we can proceed with quest processing
+        TravelRoute const* route = _travelManager->GetCurrentRoute();
+        if (route && bot->GetMapId() != route->originMapId)
         {
-            // Route still in progress - don't do normal quest processing
-            // Let the travel system handle movement
-            return;
+            TC_LOG_INFO("module.playerbot.quest",
+                "UpdateBehavior: Bot {} map changed ({} -> {}) — clearing stale travel route for quest {}",
+                bot->GetName(), route->originMapId, bot->GetMapId(), _lastTravelQuestId);
+            _travelManager.reset();
+            _lastTravelQuestId = 0;
+        }
+        else
+        {
+            TC_LOG_DEBUG("module.playerbot.quest",
+                "🚢 UpdateBehavior: Bot {} updating active travel route (quest {})",
+                bot->GetName(), _lastTravelQuestId);
+
+            bool stillTraveling = _travelManager->Update(diff);
+
+            if (stillTraveling)
+                return;
         }
 
         // Route finished - check if completed or failed
