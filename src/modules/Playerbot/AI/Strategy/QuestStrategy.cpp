@@ -3253,13 +3253,10 @@ void QuestStrategy::SearchForQuestGivers(BotAI* ai)
         if (!hubDb.IsInitialized())
         {
             TC_LOG_WARN("module.playerbot.quest",
-                "SearchForQuestGivers: Bot {} - QuestHubDatabase not initialized — trying hearthstone",
+                "SearchForQuestGivers: Bot {} - QuestHubDatabase not initialized — teleporting to homebind",
                 bot->GetName());
 
-            static constexpr uint32 HEARTHSTONE_SPELL_ID = 8690;
-            SpellHistory* spellHistory = bot->GetSpellHistory();
-            if (spellHistory && !spellHistory->HasCooldown(HEARTHSTONE_SPELL_ID))
-                bot->CastSpell(bot, HEARTHSTONE_SPELL_ID, false);
+            bot->TeleportTo(bot->m_homebind);
             return;
         }
 
@@ -3267,25 +3264,10 @@ void QuestStrategy::SearchForQuestGivers(BotAI* ai)
         if (questHubs.empty())
         {
             TC_LOG_WARN("module.playerbot.quest",
-                "SearchForQuestGivers: Bot {} - No quest hubs found for level {} (zone {}, faction {}) — trying hearthstone",
+                "SearchForQuestGivers: Bot {} - No quest hubs found for level {} (zone {}, faction {}) — teleporting to homebind",
                 bot->GetName(), bot->GetLevel(), bot->GetZoneId(), bot->GetTeamId());
 
-            // Use hearthstone to return to bind point (typically a city with quest givers)
-            static constexpr uint32 HEARTHSTONE_SPELL_ID = 8690;
-            SpellHistory* spellHistory = bot->GetSpellHistory();
-            if (spellHistory && !spellHistory->HasCooldown(HEARTHSTONE_SPELL_ID))
-            {
-                bot->CastSpell(bot, HEARTHSTONE_SPELL_ID, false);
-                TC_LOG_INFO("module.playerbot.quest",
-                    "SearchForQuestGivers: Bot {} casting hearthstone to return to bind point",
-                    bot->GetName());
-            }
-            else
-            {
-                TC_LOG_INFO("module.playerbot.quest",
-                    "SearchForQuestGivers: Bot {} hearthstone on cooldown — waiting",
-                    bot->GetName());
-            }
+            bot->TeleportTo(bot->m_homebind);
             return;
         }
         // Get best quest hub (sorted by suitability — level match, distance, quest count)
@@ -3311,25 +3293,14 @@ void QuestStrategy::SearchForQuestGivers(BotAI* ai)
         if (nearestHub->mapId != bot->GetMapId())
         {
             WorldLocation const& homebind = bot->m_homebind;
-            static constexpr uint32 HEARTHSTONE_SPELL_ID = 8690;
 
             if (homebind.GetMapId() == nearestHub->mapId)
             {
-                // Hearthstone goes to the right map
-                SpellHistory* spellHistory = bot->GetSpellHistory();
-                if (spellHistory && !spellHistory->HasCooldown(HEARTHSTONE_SPELL_ID))
-                {
-                    bot->CastSpell(bot, HEARTHSTONE_SPELL_ID, false);
-                    TC_LOG_INFO("module.playerbot.quest",
-                        "SearchForQuestGivers: Bot {} using hearthstone to reach map {} for hub '{}'",
-                        bot->GetName(), nearestHub->mapId, nearestHub->name);
-                }
-                else
-                {
-                    TC_LOG_INFO("module.playerbot.quest",
-                        "SearchForQuestGivers: Bot {} hearthstone on cooldown — waiting to travel to hub '{}'",
-                        bot->GetName(), nearestHub->name);
-                }
+                // Homebind is on the target map — teleport there directly
+                bot->TeleportTo(homebind);
+                TC_LOG_INFO("module.playerbot.quest",
+                    "SearchForQuestGivers: Bot {} teleporting to homebind on map {} for hub '{}'",
+                    bot->GetName(), nearestHub->mapId, nearestHub->name);
             }
             else
             {
