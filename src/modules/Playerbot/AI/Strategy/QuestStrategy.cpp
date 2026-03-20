@@ -206,8 +206,21 @@ void QuestStrategy::UpdateBehavior(BotAI* ai, uint32 diff)
         // Clear stale route if:
         // 1. Bot's map changed from route origin (hearthstone/teleport)
         // 2. Bot is already on the destination map (no cross-map travel needed)
-        bool routeStale = route && (bot->GetMapId() != route->originMapId ||
-                                     bot->GetMapId() == route->destinationMapId);
+        // 3. Route has been active for > 2 minutes without completing first leg
+        //    (handles worker thread GetMapId() stale data after teleport)
+        bool routeStale = false;
+        if (route)
+        {
+            routeStale = bot->GetMapId() != route->originMapId ||
+                         bot->GetMapId() == route->destinationMapId;
+
+            if (!routeStale && route->routeStartTime > 0)
+            {
+                uint32 elapsed = GameTime::GetGameTimeMS() - route->routeStartTime;
+                if (elapsed > 120000 && route->currentLegIndex == 0)
+                    routeStale = true;
+            }
+        }
         if (routeStale)
         {
             TC_LOG_INFO("module.playerbot.quest",
