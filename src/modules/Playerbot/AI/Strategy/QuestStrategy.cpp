@@ -214,11 +214,20 @@ void QuestStrategy::UpdateBehavior(BotAI* ai, uint32 diff)
             routeStale = bot->GetMapId() != route->originMapId ||
                          bot->GetMapId() == route->destinationMapId;
 
-            if (!routeStale && route->routeStartTime > 0)
+            // Timeout only when stuck walking to the FIRST transport dock
+            // (not waiting for ship, not on transport, not on later legs)
+            if (!routeStale && route->routeStartTime > 0 && route->currentLegIndex == 0)
             {
-                uint32 elapsed = GameTime::GetGameTimeMS() - route->routeStartTime;
-                if (elapsed > 120000 && route->currentLegIndex == 0)
-                    routeStale = true;
+                TravelLeg const* firstLeg = !route->legs.empty() ? &route->legs[0] : nullptr;
+                bool stuckWalkingToFirstDock = firstLeg &&
+                    firstLeg->currentState == TravelState::WALKING_TO_TRANSPORT;
+
+                if (stuckWalkingToFirstDock)
+                {
+                    uint32 elapsed = GameTime::GetGameTimeMS() - route->routeStartTime;
+                    if (elapsed > 120000)
+                        routeStale = true;
+                }
             }
         }
         if (routeStale)
