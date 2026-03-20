@@ -24,6 +24,7 @@
 #include "DatabaseEnv.h"
 #include "GameObject.h"
 #include "SpellHistory.h"
+#include "PathGenerator.h"
 #include "Item.h"
 #include "SpellInfo.h"
 #include "SpellMgr.h"
@@ -337,13 +338,18 @@ void QuestStrategy::UpdateBehavior(BotAI* ai, uint32 diff)
         float dist = pendingNPC ? bot->GetExactDist2d(pendingNPC)
                                 : bot->GetExactDist2d(_pendingQuestGiverPos);
 
-        if (dist <= INTERACTION_DISTANCE)
+        // Interact if within range, OR if grid scan found the NPC nearby
+        // (stored position may be unreachable due to navmesh/terrain but NPC is close)
+        bool withinInteraction = dist <= INTERACTION_DISTANCE;
+        bool npcFoundNearby = pendingNPC && bot->GetExactDist2d(pendingNPC) <= 50.0f;
+
+        if (withinInteraction || npcFoundNearby)
         {
             if (pendingNPC)
             {
                 TC_LOG_INFO("module.playerbot.quest",
-                    "QuestStrategy: Bot {} arrived at quest giver {} (dist={:.1f}) — accepting quests",
-                    bot->GetName(), pendingNPC->GetName(), dist);
+                    "QuestStrategy: Bot {} interacting with quest giver {} (posDist={:.1f}, npcDist={:.1f})",
+                    bot->GetName(), pendingNPC->GetName(), dist, bot->GetExactDist2d(pendingNPC));
 
                 if (!_acceptanceManager)
                     _acceptanceManager = std::make_unique<QuestAcceptanceManager>(bot);
@@ -3216,9 +3222,22 @@ void QuestStrategy::SearchForQuestGivers(BotAI* ai)
 
         questGiversWithEligibleQuests++;
 
-        // Find the closest quest giver WITH ELIGIBLE QUESTS
-        float distance = std::sqrt(bot->GetExactDistSq(creature)); // Calculate once from squared distance
-        TC_LOG_ERROR("module.playerbot.quest", "✅ Found quest giver WITH ELIGIBLE QUESTS: {} (Entry: {}) at distance {:.1f}",
+        // Check navmesh reachability — don't walk to NPCs on unreachable terrain
+        float distance = bot->GetExactDist2d(creature);
+        ::PathGenerator path(bot);
+        bool pathResult = path.CalculatePath(
+            creature->GetPositionX(), creature->GetPositionY(), creature->GetPositionZ(), false);
+        ::PathType pathType = path.GetPathType();
+
+        if (!pathResult || (pathType & ::PATHFIND_NOPATH))
+        {
+            TC_LOG_INFO("module.playerbot.quest",
+                "Quest giver {} (Entry: {}) at {:.1f}yd is not reachable via navmesh, skipping",
+                creature->GetName(), creature->GetEntry(), distance);
+            continue;
+        }
+
+        TC_LOG_ERROR("module.playerbot.quest", "✅ Found REACHABLE quest giver: {} (Entry: {}) at distance {:.1f}",
                      creature->GetName(), creature->GetEntry(), distance);
 
         if (distance < closestDistance)
