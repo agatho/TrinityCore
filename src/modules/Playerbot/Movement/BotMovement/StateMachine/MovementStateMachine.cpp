@@ -155,10 +155,12 @@ bool MovementStateMachine::IsOnGround() const
     if (IsInWater() || IsFlying())
         return false;
 
-    // Check ground height
+    // Check ground height — if unavailable, assume on ground (safe default)
+    // INVALID_HEIGHT means map data isn't loaded for this position. Treating
+    // this as "falling" blocks all bot movement permanently.
     float groundHeight = GroundValidator::GetGroundHeight(owner);
     if (groundHeight == INVALID_HEIGHT)
-        return false;
+        return true;
 
     float heightDiff = owner->GetPositionZ() - groundHeight;
     return heightDiff < 2.0f && heightDiff > -1.0f;
