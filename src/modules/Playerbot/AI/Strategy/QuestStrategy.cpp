@@ -282,18 +282,20 @@ void QuestStrategy::UpdateBehavior(BotAI* ai, uint32 diff)
     // ========================================================================
     if (!_pendingQuestGiverGuid.IsEmpty())
     {
-        // Try to resolve creature via ObjectAccessor first
+        // Try to resolve creature — ObjectAccessor first, then grid scan with
+        // wide radius. The stored position may not match the NPC's actual position
+        // due to Z-height differences or navmesh pathing stopping early.
         Creature* pendingNPC = ObjectAccessor::GetCreature(*bot, _pendingQuestGiverGuid);
 
-        // If ObjectAccessor fails, try grid scan — the creature exists but may not
-        // be findable via GUID lookup due to phasing/visibility
         if (!pendingNPC || !pendingNPC->IsAlive() || !pendingNPC->IsInWorld())
         {
             uint32 creatureEntry = _pendingQuestGiverGuid.GetEntry();
             if (creatureEntry)
             {
+                // Wide scan — bot may have stopped pathing far from stored position
+                // but close to the actual NPC
                 std::list<Creature*> nearby;
-                if (SafeGridOperations::GetCreatureListSafe(bot, nearby, creatureEntry, INTERACTION_DISTANCE + 5.0f))
+                if (SafeGridOperations::GetCreatureListSafe(bot, nearby, creatureEntry, 50.0f))
                 {
                     for (Creature* c : nearby)
                     {
@@ -307,7 +309,10 @@ void QuestStrategy::UpdateBehavior(BotAI* ai, uint32 diff)
             }
         }
 
-        float dist = pendingNPC ? bot->GetExactDist(pendingNPC)
+        // Use 2D distance for arrival check — NPC may be on a different Z level
+        // (platform, stairs, ramp) but still interactable. WoW's gossip interaction
+        // uses 2D proximity, not 3D.
+        float dist = pendingNPC ? bot->GetExactDist2d(pendingNPC)
                                 : bot->GetExactDist2d(_pendingQuestGiverPos);
 
         if (dist <= INTERACTION_DISTANCE)
