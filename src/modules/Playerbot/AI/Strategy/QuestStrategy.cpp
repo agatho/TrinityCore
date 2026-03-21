@@ -172,30 +172,6 @@ void QuestStrategy::UpdateBehavior(BotAI* ai, uint32 diff)
     if (bot->IsInCombat())
         return;
 
-    // One-time cleanup: abandon all pre-loaded quests from bot creation
-    // These break quest chains (e.g. having step 3 without completing step 1)
-    // and block the bot from accepting any quests from NPCs.
-    if (!_questLogCleaned)
-    {
-        _questLogCleaned = true;
-        uint32 abandoned = 0;
-        for (uint8 slot = 0; slot < MAX_QUEST_LOG_SIZE; ++slot)
-        {
-            uint32 questId = bot->GetQuestSlotQuestId(slot);
-            if (questId != 0)
-            {
-                bot->AbandonQuest(questId);
-                abandoned++;
-            }
-        }
-        if (abandoned > 0)
-        {
-            TC_LOG_INFO("module.playerbot.quest",
-                "QuestStrategy: Bot {} cleaned quest log — abandoned {} pre-loaded quests",
-                bot->GetName(), abandoned);
-        }
-    }
-
     // Skip processing after teleport — worker thread has stale map/grid data
     // until the main thread completes the map change
     uint32 now = GameTime::GetGameTimeMS();
