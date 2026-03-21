@@ -3138,137 +3138,85 @@ void QuestStrategy::SearchForQuestGivers(BotAI* ai)
     // Update last search time
     _lastQuestGiverSearchTime = currentTime;
 
-    TC_LOG_ERROR("module.playerbot.quest", "🔎 SearchForQuestGivers: Bot {} starting quest giver scan (300 yard radius)",
-                 bot->GetName());
-
-    TC_LOG_DEBUG("module.playerbot.strategy",
-        "QuestStrategy: Bot {} (Level {}) searching for quest givers (no active quests)",
+    TC_LOG_INFO("module.playerbot.quest",
+        "SearchForQuestGivers: Bot {} (Level {}) scanning via spatial grid",
         bot->GetName(), bot->GetLevel());
 
-    // Search for nearby creatures that might offer quests
-    // Extended to 300 yards to catch quest givers in nearby areas and reduce grinding fallback triggers
+    // ========================================================================
+    // SPATIAL GRID SCAN — lock-free, thread-safe, always uses current map data
+    // ========================================================================
+    // The DoubleBufferedSpatialGrid provides atomic snapshots updated by the main
+    // thread. Worker threads read the inactive buffer with zero contention.
+    // This replaces SafeGridOperations::GetCreatureListSafe which accessed live
+    // grid data and returned stale creatures from the old map after teleports.
 
-    // THREAD-SAFE: Use SafeGridOperations with SEH protection to catch access violations
-    // Grid operations from worker threads can cause ACCESS_VIOLATION when map is modified
-    std::list<Creature*> nearbyCreatures;
-    if (!SafeGridOperations::GetCreatureListSafe(bot, nearbyCreatures, 0, 300.0f)) // 300 yard radius
+    DoubleBufferedSpatialGrid* spatialGrid = sSpatialGridManager.GetGrid(bot->GetMapId());
+    if (!spatialGrid)
     {
-        TC_LOG_TRACE("module.playerbot.quest", "SearchForQuestGivers: Grid search failed for bot {}", bot->GetName());
-        return;
+        TC_LOG_DEBUG("module.playerbot.quest",
+            "SearchForQuestGivers: No spatial grid for map {}", bot->GetMapId());
+        // Fall through to hub search below
     }
 
-    TC_LOG_ERROR("module.playerbot.quest", "🔬 SearchForQuestGivers: Bot {} found {} nearby creatures",
-                 bot->GetName(), nearbyCreatures.size());
-
-    Creature* closestQuestGiver = nullptr;
+    ObjectGuid bestQuestGiverGuid;
+    Position bestQuestGiverPos;
     float closestDistance = 999999.0f;
     uint32 questGiverCount = 0;
-    uint32 questGiversWithEligibleQuests = 0;
 
-    for (Creature* creature : nearbyCreatures)
+    if (spatialGrid)
     {
-        // CRITICAL: Full validity check before accessing creature methods
-        // With 300-yard range, creatures may despawn/become invalid during iteration
-        if (!creature || !creature->IsAlive() || !creature->IsInWorld())
-            continue;
+        auto creatureSnapshots = spatialGrid->QueryNearbyCreatures(bot->GetPosition(), 300.0f);
 
-        // CRITICAL: Double-check bot is still in world
-        // Race condition: bot may be removed from world during iteration
-        if (!bot->IsInWorld())
-            return;
+        TC_LOG_INFO("module.playerbot.quest",
+            "SearchForQuestGivers: Bot {} spatial grid returned {} creatures within 300yd",
+            bot->GetName(), creatureSnapshots.size());
 
-        // CRITICAL: Re-verify creature validity
-        // TOCTOU race: creature may have despawned between the check above and now
-        // NOTE: Use FindMap() instead of GetMap() - GetMap() has ASSERT(m_currMap) which crashes
-        // if map is null, even after IsInWorld() check passes (race condition)
-        if (!creature->IsInWorld() || !creature->FindMap())
-            continue;
-
-        // NOTE: CanSeeOrDetect() is NOT SAFE to call from worker thread!
-        // It accesses Map data which can cause ASSERTION FAILED: !IsInWorld() in ResetMap
-        // Phase visibility will be validated when bot actually interacts with the NPC.
-        // For now, we rely on same-map check which covers most cases.
-        if (creature->GetMapId() != bot->GetMapId())
-            continue;
-
-        TC_LOG_ERROR("module.playerbot.quest", "🔬 Checking creature: {} (Entry: {}), IsQuestGiver={}",
-                     creature->GetName(), creature->GetEntry(), creature->IsQuestGiver());
-
-        // Check if creature is a quest giver
-        if (!creature->IsQuestGiver())
+        for (auto const& snapshot : creatureSnapshots)
         {
-            TC_LOG_ERROR("module.playerbot.quest", "⚠️ Creature {} (Entry: {}) is NOT a quest giver, skipping",
-                         creature->GetName(), creature->GetEntry());
-            continue;
-        }
-        questGiverCount++;
-
-        // Check quest availability using two methods:
-        // 1. PrepareQuestMenu — normal quests shown in gossip dialog
-        // 2. Auto-accept quests — bypass gossip, need separate check via quest relations
-        bot->PrepareQuestMenu(creature->GetGUID());
-        QuestMenu& qm = bot->PlayerTalkClass->GetQuestMenu();
-        uint32 menuQuestCount = qm.GetMenuItemCount();
-
-        // Also check for auto-accept quests (QUEST_FLAGS_AUTO_ACCEPT = 0x80000)
-        // These don't appear in PrepareQuestMenu but are valid starting zone quests
-        uint32 autoAcceptCount = 0;
-        QuestRelationResult questRelations = sObjectMgr->GetCreatureQuestRelations(creature->GetEntry());
-        for (uint32 questId : questRelations)
-        {
-            Quest const* quest = sObjectMgr->GetQuestTemplate(questId);
-            if (!quest || !quest->IsAutoAccept())
+            if (!snapshot.IsValid() || snapshot.isDead)
                 continue;
-            if (bot->GetQuestStatus(questId) != QUEST_STATUS_NONE)
+
+            // Filter to quest givers only
+            if (!snapshot.hasQuestGiver)
                 continue;
-            if (bot->CanTakeQuest(quest, false) && bot->CanAddQuest(quest, false))
-                autoAcceptCount++;
-        }
 
-        uint32 totalQuests = menuQuestCount + autoAcceptCount;
-        if (totalQuests == 0)
-        {
-            TC_LOG_ERROR("module.playerbot.quest", "⚠️ Quest giver {} (Entry: {}) has NO eligible quests for bot {}, skipping",
-                         creature->GetName(), creature->GetEntry(), bot->GetName());
-            continue;
-        }
+            questGiverCount++;
 
-        TC_LOG_ERROR("module.playerbot.quest", "✅ Quest giver {} (Entry: {}) has {} quests ({} menu + {} auto-accept) for bot {}",
-                     creature->GetName(), creature->GetEntry(), totalQuests, menuQuestCount, autoAcceptCount, bot->GetName());
+            // Check if this NPC has any quests for the bot via quest relations
+            // (uses static DB data, thread-safe)
+            QuestRelationResult questRelations = sObjectMgr->GetCreatureQuestRelations(snapshot.entry);
+            bool hasAnyQuest = false;
+            for (uint32 questId : questRelations)
+            {
+                Quest const* quest = sObjectMgr->GetQuestTemplate(questId);
+                if (!quest)
+                    continue;
+                // Skip quests the bot already has or has completed
+                if (bot->GetQuestStatus(questId) != QUEST_STATUS_NONE)
+                    continue;
+                hasAnyQuest = true;
+                break;
+            }
 
-        questGiversWithEligibleQuests++;
+            if (!hasAnyQuest)
+                continue;
 
-        // Check navmesh reachability — don't walk to NPCs on unreachable terrain
-        float distance = bot->GetExactDist2d(creature);
-        ::PathGenerator path(bot);
-        bool pathResult = path.CalculatePath(
-            creature->GetPositionX(), creature->GetPositionY(), creature->GetPositionZ(), false);
-        ::PathType pathType = path.GetPathType();
-
-        if (!pathResult || (pathType & ::PATHFIND_NOPATH))
-        {
-            TC_LOG_INFO("module.playerbot.quest",
-                "Quest giver {} (Entry: {}) at {:.1f}yd is not reachable via navmesh, skipping",
-                creature->GetName(), creature->GetEntry(), distance);
-            continue;
-        }
-
-        TC_LOG_ERROR("module.playerbot.quest", "✅ Found REACHABLE quest giver: {} (Entry: {}) at distance {:.1f}",
-                     creature->GetName(), creature->GetEntry(), distance);
-
-        if (distance < closestDistance)
-        {
-            closestDistance = distance;
-            closestQuestGiver = creature;
+            float dist = bot->GetExactDist2d(snapshot.position);
+            if (dist < closestDistance)
+            {
+                closestDistance = dist;
+                bestQuestGiverGuid = snapshot.guid;
+                bestQuestGiverPos.Relocate(snapshot.position);
+            }
         }
     }
 
-    TC_LOG_ERROR("module.playerbot.quest", "📊 SearchForQuestGivers: Bot {} found {} quest givers ({} with eligible quests) - closest with eligible quests: {} at {:.1f} yards",
-                 bot->GetName(), questGiverCount, questGiversWithEligibleQuests,
-                 closestQuestGiver ? closestQuestGiver->GetName() : "NONE",
-                 closestQuestGiver ? closestDistance : 0.0f);
+    TC_LOG_INFO("module.playerbot.quest",
+        "SearchForQuestGivers: Bot {} found {} quest givers, closest at {:.1f}yd (guid={})",
+        bot->GetName(), questGiverCount, closestDistance,
+        bestQuestGiverGuid.IsEmpty() ? "NONE" : bestQuestGiverGuid.ToString());
 
-    if (!closestQuestGiver)
+    if (bestQuestGiverGuid.IsEmpty())
     {
         // Increment failure counter for exponential backoff
         _questGiverSearchFailures++;
@@ -3370,52 +3318,30 @@ void QuestStrategy::SearchForQuestGivers(BotAI* ai)
         return;
     }
 
-    // SUCCESS: Found a quest giver - reset failure counter
+    // SUCCESS: Found a quest giver via spatial grid snapshot
     _questGiverSearchFailures = 0;
 
-    TC_LOG_ERROR("module.playerbot.quest",
-        "✅ SearchForQuestGivers: Bot {} found quest giver {} at distance {:.1f}",
-        bot->GetName(), closestQuestGiver->GetName(), closestDistance);
+    // Set pending quest giver — the existing pending system handles walking + arrival
+    _pendingQuestGiverGuid = bestQuestGiverGuid;
+    _pendingQuestGiverPos = bestQuestGiverPos;
 
-    // Move to quest giver
     if (closestDistance > INTERACTION_DISTANCE)
     {
-        Position questGiverPos;
-        questGiverPos.Relocate(closestQuestGiver->GetPositionX(),
-                              closestQuestGiver->GetPositionY(),
-                              closestQuestGiver->GetPositionZ());
+        TC_LOG_INFO("module.playerbot.quest",
+            "SearchForQuestGivers: Bot {} moving to quest giver at ({:.1f},{:.1f},{:.1f}), {:.1f}yd away",
+            bot->GetName(),
+            bestQuestGiverPos.GetPositionX(), bestQuestGiverPos.GetPositionY(), bestQuestGiverPos.GetPositionZ(),
+            closestDistance);
 
-        TC_LOG_ERROR("module.playerbot.quest",
-            "🚶 SearchForQuestGivers: Bot {} moving to quest giver {} (distance: {:.1f}, pos: {:.1f}, {:.1f}, {:.1f})",
-            bot->GetName(), closestQuestGiver->GetName(), closestDistance,
-            questGiverPos.GetPositionX(), questGiverPos.GetPositionY(), questGiverPos.GetPositionZ());
-
-        bool moveResult = BotMovementUtil::MoveToPosition(bot, questGiverPos);
-        TC_LOG_ERROR("module.playerbot.quest",
-            "🚶 SearchForQuestGivers: Bot {} MoveToPosition result: {}",
-            bot->GetName(), moveResult ? "SUCCESS" : "FAILED");
-
-        // Remember this quest giver so we complete the interaction on future ticks
-        _pendingQuestGiverGuid = closestQuestGiver->GetGUID();
-        _pendingQuestGiverPos.Relocate(closestQuestGiver->GetPositionX(),
-                                       closestQuestGiver->GetPositionY(),
-                                       closestQuestGiver->GetPositionZ());
-        return;
+        BotMovementUtil::MoveToPosition(bot, bestQuestGiverPos);
     }
-
-    // Bot is close enough - use ENTERPRISE-GRADE quest acceptance system
-    TC_LOG_ERROR("module.playerbot.quest",
-        "🎯 SearchForQuestGivers: Bot {} at quest giver {} (distance {:.1f} <= INTERACTION_DISTANCE) - Processing with QuestAcceptanceManager",
-        bot->GetName(), closestQuestGiver->GetName(), closestDistance);
-
-    // Let the enterprise-grade manager handle eligibility, scoring, and acceptance
-    _acceptanceManager->ProcessQuestGiver(closestQuestGiver);
-
-    TC_LOG_ERROR("module.playerbot.quest",
-        "🏆 SearchForQuestGivers: Bot {} quest acceptance complete (Total accepted: {}, Dropped: {})",
-        bot->GetName(),
-        _acceptanceManager->GetQuestsAccepted(),
-        _acceptanceManager->GetQuestsDropped());
+    else
+    {
+        TC_LOG_INFO("module.playerbot.quest",
+            "SearchForQuestGivers: Bot {} already at quest giver ({:.1f}yd) — pending system will handle acceptance",
+            bot->GetName(), closestDistance);
+    }
+    // The pending quest giver check in UpdateBehavior handles arrival and acceptance
 }
 
 // ========================================================================
