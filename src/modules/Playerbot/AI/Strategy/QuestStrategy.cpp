@@ -172,6 +172,13 @@ void QuestStrategy::UpdateBehavior(BotAI* ai, uint32 diff)
     if (bot->IsInCombat())
         return;
 
+    // Skip processing after teleport — worker thread has stale map/grid data
+    // until the main thread completes the map change
+    uint32 now = GameTime::GetGameTimeMS();
+    if (_teleportCooldownUntil > 0 && now < _teleportCooldownUntil)
+        return;
+    _teleportCooldownUntil = 0;
+
     // ========================================================================
     // PERSISTENT TRAVEL MANAGER UPDATE
     // ========================================================================
@@ -332,11 +339,20 @@ void QuestStrategy::UpdateBehavior(BotAI* ai, uint32 diff)
             }
         }
 
-        // Use 2D distance for arrival check — NPC may be on a different Z level
-        // (platform, stairs, ramp) but still interactable. WoW's gossip interaction
-        // uses 2D proximity, not 3D.
+        // Use 2D distance for arrival check
         float dist = pendingNPC ? bot->GetExactDist2d(pendingNPC)
                                 : bot->GetExactDist2d(_pendingQuestGiverPos);
+
+        TC_LOG_INFO("module.playerbot.quest",
+            "QuestStrategy PENDING: Bot {} at ({:.1f},{:.1f},{:.1f}) storedPos=({:.1f},{:.1f},{:.1f}) npc={} npcPos=({:.1f},{:.1f},{:.1f}) dist2d={:.1f}",
+            bot->GetName(),
+            bot->GetPositionX(), bot->GetPositionY(), bot->GetPositionZ(),
+            _pendingQuestGiverPos.GetPositionX(), _pendingQuestGiverPos.GetPositionY(), _pendingQuestGiverPos.GetPositionZ(),
+            pendingNPC ? pendingNPC->GetName() : "NULL",
+            pendingNPC ? pendingNPC->GetPositionX() : 0.0f,
+            pendingNPC ? pendingNPC->GetPositionY() : 0.0f,
+            pendingNPC ? pendingNPC->GetPositionZ() : 0.0f,
+            dist);
 
         // Interact if within range, OR if grid scan found the NPC nearby
         // (stored position may be unreachable due to navmesh/terrain but NPC is close)
@@ -3276,6 +3292,7 @@ void QuestStrategy::SearchForQuestGivers(BotAI* ai)
                 bot->GetName());
 
             bot->TeleportTo(bot->m_homebind);
+            _teleportCooldownUntil = GameTime::GetGameTimeMS() + 5000;
             return;
         }
 
@@ -3287,6 +3304,7 @@ void QuestStrategy::SearchForQuestGivers(BotAI* ai)
                 bot->GetName(), bot->GetLevel(), bot->GetZoneId(), bot->GetTeamId());
 
             bot->TeleportTo(bot->m_homebind);
+            _teleportCooldownUntil = GameTime::GetGameTimeMS() + 5000;
             return;
         }
         // Get best quest hub (sorted by suitability — level match, distance, quest count)
@@ -3317,6 +3335,7 @@ void QuestStrategy::SearchForQuestGivers(BotAI* ai)
             {
                 // Homebind is on the target map — teleport there directly
                 bot->TeleportTo(homebind);
+                _teleportCooldownUntil = GameTime::GetGameTimeMS() + 5000;
                 TC_LOG_INFO("module.playerbot.quest",
                     "SearchForQuestGivers: Bot {} teleporting to homebind on map {} for hub '{}'",
                     bot->GetName(), nearestHub->mapId, nearestHub->name);

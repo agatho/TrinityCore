@@ -53,12 +53,19 @@ void QuestAcceptanceManager::ProcessQuestGiver(Creature* questGiver)
         if (!quest || !quest->IsAutoAccept())
             continue;
 
-        if (_bot->GetQuestStatus(questId) != QUEST_STATUS_NONE)
-            continue;
-        if (IsBlacklisted(questId))
+        bool alreadyHas = _bot->GetQuestStatus(questId) != QUEST_STATUS_NONE;
+        bool blacklisted = IsBlacklisted(questId);
+        bool canTake = _bot->CanTakeQuest(quest, false);
+        bool canAdd = _bot->CanAddQuest(quest, true);
+
+        TC_LOG_INFO("module.playerbot.quest",
+            "ProcessQuestGiver AUTO-ACCEPT check: Bot {} quest {} '{}' — alreadyHas={}, blacklisted={}, canTake={}, canAdd={}",
+            _bot->GetName(), questId, quest->GetLogTitle(), alreadyHas, blacklisted, canTake, canAdd);
+
+        if (alreadyHas || blacklisted)
             continue;
 
-        if (_bot->CanTakeQuest(quest, false) && _bot->CanAddQuest(quest, true))
+        if (canTake && canAdd)
         {
             _bot->AddQuestAndCheckCompletion(quest, questGiver);
             _questsAccepted++;

@@ -170,6 +170,10 @@ private:
     uint32 _lastQuestGiverSearchTime;
     uint32 _questGiverSearchFailures;
 
+    // Teleport cooldown — after TeleportTo, skip processing for a few seconds
+    // so the main thread can complete the map change before worker thread queries
+    uint32 _teleportCooldownUntil = 0;
+
     // Pending quest giver interaction — persists across ticks so the bot
     // finishes walking to and interacting with the NPC even if other quests
     // are active in the log.
