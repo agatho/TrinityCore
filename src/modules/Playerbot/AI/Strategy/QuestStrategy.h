@@ -157,6 +157,9 @@ private:
     bool CompleteQuestTurnIn(BotAI* ai, uint32 questId, ::Unit* questEnder);
     bool CompleteQuestTurnInAtGameObject(BotAI* ai, uint32 questId, GameObject* questEnder);
 
+    // One-time quest log cleanup — clear pre-loaded quests that break chains
+    bool _questLogCleaned = false;
+
     // State management
     QuestPhase _currentPhase;
     uint32 _phaseTimer;
