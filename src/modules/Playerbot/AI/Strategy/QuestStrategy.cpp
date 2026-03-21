@@ -25,6 +25,7 @@
 #include "GameObject.h"
 #include "SpellHistory.h"
 #include "PathGenerator.h"
+#include "MoveSpline.h"
 #include "Item.h"
 #include "SpellInfo.h"
 #include "SpellMgr.h"
@@ -339,27 +340,24 @@ void QuestStrategy::UpdateBehavior(BotAI* ai, uint32 diff)
             }
         }
 
-        // Use 2D distance for arrival check
-        float dist = pendingNPC ? bot->GetExactDist2d(pendingNPC)
-                                : bot->GetExactDist2d(_pendingQuestGiverPos);
+        // Distance check: use spline destination if bot is mid-spline, since
+        // GetPositionX/Y() returns the server-side position which lags behind
+        // the client's interpolated position during active movement.
+        Position botEffectivePos;
+        if (bot->movespline && !bot->movespline->Finalized())
+        {
+            G3D::Vector3 const& splineDest = bot->movespline->FinalDestination();
+            botEffectivePos.Relocate(splineDest.x, splineDest.y, splineDest.z);
+        }
+        else
+        {
+            botEffectivePos.Relocate(bot->GetPositionX(), bot->GetPositionY(), bot->GetPositionZ());
+        }
 
-        TC_LOG_INFO("module.playerbot.quest",
-            "QuestStrategy PENDING: Bot {} at ({:.1f},{:.1f},{:.1f}) storedPos=({:.1f},{:.1f},{:.1f}) npc={} npcPos=({:.1f},{:.1f},{:.1f}) dist2d={:.1f}",
-            bot->GetName(),
-            bot->GetPositionX(), bot->GetPositionY(), bot->GetPositionZ(),
-            _pendingQuestGiverPos.GetPositionX(), _pendingQuestGiverPos.GetPositionY(), _pendingQuestGiverPos.GetPositionZ(),
-            pendingNPC ? pendingNPC->GetName() : "NULL",
-            pendingNPC ? pendingNPC->GetPositionX() : 0.0f,
-            pendingNPC ? pendingNPC->GetPositionY() : 0.0f,
-            pendingNPC ? pendingNPC->GetPositionZ() : 0.0f,
-            dist);
+        float dist = pendingNPC ? botEffectivePos.GetExactDist2d(pendingNPC->GetPosition())
+                                : botEffectivePos.GetExactDist2d(_pendingQuestGiverPos);
 
-        // Interact if within range, OR if grid scan found the NPC nearby
-        // (stored position may be unreachable due to navmesh/terrain but NPC is close)
-        bool withinInteraction = dist <= INTERACTION_DISTANCE;
-        bool npcFoundNearby = pendingNPC && bot->GetExactDist2d(pendingNPC) <= 50.0f;
-
-        if (withinInteraction || npcFoundNearby)
+        if (dist <= INTERACTION_DISTANCE)
         {
             if (pendingNPC)
             {
@@ -3199,6 +3197,14 @@ void QuestStrategy::SearchForQuestGivers(BotAI* ai)
             }
 
             if (!hasAnyQuest)
+                continue;
+
+            // Verify navmesh reachability — skip NPCs on unreachable terrain (towers, cliffs)
+            ::PathGenerator path(bot);
+            bool pathResult = path.CalculatePath(
+                snapshot.position.GetPositionX(), snapshot.position.GetPositionY(),
+                snapshot.position.GetPositionZ(), false);
+            if (!pathResult || (path.GetPathType() & ::PATHFIND_NOPATH))
                 continue;
 
             float dist = bot->GetExactDist2d(snapshot.position);
