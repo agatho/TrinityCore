@@ -25,7 +25,6 @@
 #include "GameObject.h"
 #include "SpellHistory.h"
 #include "PathGenerator.h"
-#include "MoveSpline.h"
 #include "Item.h"
 #include "SpellInfo.h"
 #include "SpellMgr.h"
@@ -340,22 +339,11 @@ void QuestStrategy::UpdateBehavior(BotAI* ai, uint32 diff)
             }
         }
 
-        // Distance check: use spline destination if bot is mid-spline, since
-        // GetPositionX/Y() returns the server-side position which lags behind
-        // the client's interpolated position during active movement.
-        Position botEffectivePos;
-        if (bot->movespline && !bot->movespline->Finalized())
-        {
-            G3D::Vector3 const& splineDest = bot->movespline->FinalDestination();
-            botEffectivePos.Relocate(splineDest.x, splineDest.y, splineDest.z);
-        }
-        else
-        {
-            botEffectivePos.Relocate(bot->GetPositionX(), bot->GetPositionY(), bot->GetPositionZ());
-        }
-
-        float dist = pendingNPC ? botEffectivePos.GetExactDist2d(pendingNPC->GetPosition())
-                                : botEffectivePos.GetExactDist2d(_pendingQuestGiverPos);
+        // Use BotAI's cached position — interpolated from movespline, accurate on
+        // worker threads unlike bot->GetPositionX/Y/Z() which is main-thread-only.
+        Position const& botPos = ai->GetCurrentPosition();
+        float dist = pendingNPC ? botPos.GetExactDist2d(pendingNPC->GetPosition())
+                                : botPos.GetExactDist2d(_pendingQuestGiverPos);
 
         if (dist <= INTERACTION_DISTANCE)
         {

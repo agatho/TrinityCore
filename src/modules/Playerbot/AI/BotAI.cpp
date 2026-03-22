@@ -11,6 +11,7 @@
  */
 
 #include "BotAI.h"
+#include "MoveSpline.h"
 #include "AdaptiveAIUpdateThrottler.h"
 #include "Humanization/Activities/RPGDailyRoutineManager.h"
 #include "GameTime.h"
@@ -406,6 +407,26 @@ void BotAI::UpdateAI(uint32 diff)
     // Now safe to access _bot
     if (!_bot->IsInWorld())
         return;
+
+    // ========================================================================
+    // POSITION CACHE: Interpolate current position from active movespline
+    // ========================================================================
+    // Worker threads read _bot->GetPositionX/Y/Z() which is only updated on the
+    // main thread during Player::Update(). This causes stale position data that
+    // affects distance calculations, quest giver arrival, combat positioning, etc.
+    //
+    // Fix: read the movespline's current interpolated position if a spline is active,
+    // otherwise fall back to the last known server position.
+    if (_bot->movespline && !_bot->movespline->Finalized())
+    {
+        G3D::Vector3 const& dest = _bot->movespline->FinalDestination();
+        _cachedPosition.Relocate(dest.x, dest.y, dest.z, _bot->GetOrientation());
+    }
+    else
+    {
+        _cachedPosition.Relocate(_bot->GetPositionX(), _bot->GetPositionY(),
+                                 _bot->GetPositionZ(), _bot->GetOrientation());
+    }
 
     // ========================================================================
     // BOT-SPECIFIC LOGIN SPELL CLEANUP: Clear events on first update to prevent LOGINEFFECT crash

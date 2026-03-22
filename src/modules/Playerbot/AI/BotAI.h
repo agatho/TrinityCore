@@ -329,6 +329,10 @@ public:
     ObjectGuid GetBotGuid() const { return _bot ? _bot->GetGUID() : ObjectGuid::Empty; }
     ObjectGuid GetCachedBotGuid() const { return _cachedBotGuid; }  // Safe during destructor
 
+    // Current interpolated position — accurate on worker threads unlike GetPositionX/Y/Z()
+    // Updated at the start of each UpdateAI from the active movespline
+    Position const& GetCurrentPosition() const { return _cachedPosition; }
+
     // ========================================================================
     // LIFECYCLE MANAGEMENT - Two-Phase AddToWorld Pattern
     // ========================================================================
@@ -1093,6 +1097,10 @@ protected:
 
     // Solo strategy activation tracking
     bool _soloStrategiesActivated = false;
+
+    // Thread-safe position cache — updated at start of UpdateAI from movespline
+    // Use GetCurrentPosition() instead of _bot->GetPositionX/Y/Z() in worker threads
+    Position _cachedPosition;
 
     // Login spell event cleanup tracking (prevents LOGINEFFECT crash)
     bool _firstUpdateComplete = false;
