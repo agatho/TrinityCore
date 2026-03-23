@@ -3352,11 +3352,46 @@ void QuestStrategy::SearchForQuestGivers(BotAI* ai)
     }
     else
     {
-        TC_LOG_INFO("module.playerbot.quest",
-            "SearchForQuestGivers: Bot {} already at quest giver ({:.1f}yd) — pending system will handle acceptance",
-            bot->GetName(), closestDistance);
+        // Already within interaction range — resolve creature and accept quests now
+        Creature* npc = ObjectAccessor::GetCreature(*bot, bestQuestGiverGuid);
+        if (!npc)
+        {
+            // Try grid scan fallback
+            uint32 entry = bestQuestGiverGuid.GetEntry();
+            if (entry)
+            {
+                std::list<Creature*> nearby;
+                if (SafeGridOperations::GetCreatureListSafe(bot, nearby, entry, 50.0f))
+                    for (Creature* c : nearby)
+                        if (c && c->IsAlive() && c->IsQuestGiver()) { npc = c; break; }
+            }
+        }
+
+        if (npc)
+        {
+            TC_LOG_INFO("module.playerbot.quest",
+                "SearchForQuestGivers: Bot {} at quest giver {} ({:.1f}yd) — accepting quests",
+                bot->GetName(), npc->GetName(), closestDistance);
+
+            if (!_acceptanceManager)
+                _acceptanceManager = std::make_unique<QuestAcceptanceManager>(bot);
+
+            _acceptanceManager->ProcessQuestGiver(npc);
+
+            TC_LOG_INFO("module.playerbot.quest",
+                "SearchForQuestGivers: Bot {} quest acceptance done (accepted: {}, dropped: {})",
+                bot->GetName(),
+                _acceptanceManager->GetQuestsAccepted(),
+                _acceptanceManager->GetQuestsDropped());
+        }
+        else
+        {
+            TC_LOG_DEBUG("module.playerbot.quest",
+                "SearchForQuestGivers: Bot {} at quest giver position but creature not found",
+                bot->GetName());
+        }
+        _pendingQuestGiverGuid.Clear();
     }
-    // The pending quest giver check in UpdateBehavior handles arrival and acceptance
 }
 
 // ========================================================================
