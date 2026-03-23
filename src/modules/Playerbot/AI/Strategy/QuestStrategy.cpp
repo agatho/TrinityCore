@@ -746,8 +746,9 @@ void QuestStrategy::ProcessQuestObjectives(BotAI* ai)
 
         if (allBlacklisted && quest->Objectives.size() > 0)
         {
-            TC_LOG_DEBUG("module.playerbot.quest", "🗑️ ProcessQuestObjectives: Bot {} - ALL objectives for quest {} ({}) are blacklisted - ABANDONING quest",
+            TC_LOG_DEBUG("module.playerbot.quest", "ProcessQuestObjectives: Bot {} abandoning quest {} ({})",
                          bot->GetName(), objective.questId, quest->GetLogTitle());
+            bot->RemoveActiveQuest(objective.questId);
             bot->AbandonQuest(objective.questId);
 
             // Blacklist this quest to prevent re-accepting
@@ -2135,6 +2136,7 @@ void QuestStrategy::TurnInQuest(BotAI* ai, uint32 questId)
         TC_LOG_WARN("module.playerbot.quest",
             "TurnInQuest: Bot {} abandoning quest {} '{}' — no quest ender exists in DB",
             bot->GetName(), questId, quest->GetLogTitle());
+        bot->RemoveActiveQuest(questId);
         bot->AbandonQuest(questId);
         if (_acceptanceManager)
             _acceptanceManager->BlacklistQuest(questId);
@@ -2158,6 +2160,7 @@ void QuestStrategy::TurnInQuest(BotAI* ai, uint32 questId)
                 "TurnInQuest: Bot {} abandoning quest {} after {} failed ender location searches",
                 bot->GetName(), questId, failureCount);
 
+            bot->RemoveActiveQuest(questId);
             bot->AbandonQuest(questId);
             _questTurnInFailures.erase(questId);
 
@@ -4421,9 +4424,10 @@ bool QuestStrategy::CompleteQuestTurnInAtGameObject(BotAI* ai, uint32 questId, G
         // After MAX_QUEST_TURNIN_FAILURES consecutive failures, abandon the quest
         if (failureCount >= MAX_QUEST_TURNIN_FAILURES)
         {
-            TC_LOG_DEBUG("module.playerbot.quest", "🗑️ CompleteQuestTurnInAtGameObject: Bot {} ABANDONING quest {} ({}) after {} consecutive turn-in failures",
-                         bot->GetName(), questId, quest->GetLogTitle(), failureCount);
+            TC_LOG_DEBUG("module.playerbot.quest", "CompleteQuestTurnInAtGameObject: Bot {} abandoning quest {} after {} failures",
+                         bot->GetName(), questId, failureCount);
 
+            bot->RemoveActiveQuest(questId);
             bot->AbandonQuest(questId);
             _questTurnInFailures.erase(questId);
 
@@ -4599,10 +4603,10 @@ bool QuestStrategy::CompleteQuestTurnIn(BotAI* ai, uint32 questId, ::Unit* quest
         // This prevents infinite loops on quests with missing required items (e.g., delivery quests where item was lost)
         if (failureCount >= MAX_QUEST_TURNIN_FAILURES)
         {
-            TC_LOG_DEBUG("module.playerbot.quest", "🗑️ CompleteQuestTurnIn: Bot {} ABANDONING quest {} ({}) after {} consecutive turn-in failures - likely missing required item",
-                         bot->GetName(), questId, quest->GetLogTitle(), failureCount);
+            TC_LOG_DEBUG("module.playerbot.quest", "CompleteQuestTurnIn: Bot {} abandoning quest {} after {} failures",
+                         bot->GetName(), questId, failureCount);
 
-            // Abandon the quest
+            bot->RemoveActiveQuest(questId);
             bot->AbandonQuest(questId);
             _questTurnInFailures.erase(questId);
 
