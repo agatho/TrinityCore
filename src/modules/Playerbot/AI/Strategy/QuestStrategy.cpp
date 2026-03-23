@@ -391,13 +391,13 @@ void QuestStrategy::UpdateBehavior(BotAI* ai, uint32 diff)
         if (questId != 0)
         {
             hasActiveQuests = true;
-            TC_LOG_ERROR("module.playerbot.quest", "📋 UpdateBehavior: Bot {} has active quest {} in slot {}",
+            TC_LOG_DEBUG("module.playerbot.quest", "📋 UpdateBehavior: Bot {} has active quest {} in slot {}",
                          bot->GetName(), questId, slot);
             break;
         }
     }
 
-    TC_LOG_ERROR("module.playerbot.quest", "📊 UpdateBehavior: Bot {} hasActiveQuests={}",
+    TC_LOG_DEBUG("module.playerbot.quest", "📊 UpdateBehavior: Bot {} hasActiveQuests={}",
                  bot->GetName(), hasActiveQuests);
 
     if (hasActiveQuests)
@@ -416,17 +416,17 @@ void QuestStrategy::UpdateBehavior(BotAI* ai, uint32 diff)
             SearchForQuestGivers(ai);
         }
 
-        TC_LOG_ERROR("module.playerbot.quest", "🎯 UpdateBehavior: Bot {} processing quest objectives", bot->GetName());
+        TC_LOG_DEBUG("module.playerbot.quest", "🎯 UpdateBehavior: Bot {} processing quest objectives", bot->GetName());
         // Process quest objectives
         ProcessQuestObjectives(ai);
     }
     else
     {
-        TC_LOG_ERROR("module.playerbot.quest", "🔍 UpdateBehavior: Bot {} has NO active quests - calling SearchForQuestGivers", bot->GetName());
+        TC_LOG_DEBUG("module.playerbot.quest", "🔍 UpdateBehavior: Bot {} has NO active quests - calling SearchForQuestGivers", bot->GetName());
         // No active quests - search for quest givers to accept new quests
         SearchForQuestGivers(ai);
     }
-    TC_LOG_ERROR("module.playerbot.quest", "✅ UpdateBehavior: Bot {} quest behavior update complete", bot->GetName());
+    TC_LOG_DEBUG("module.playerbot.quest", "✅ UpdateBehavior: Bot {} quest behavior update complete", bot->GetName());
 }
 
 void QuestStrategy::ProcessQuestObjectives(BotAI* ai)
@@ -439,7 +439,7 @@ void QuestStrategy::ProcessQuestObjectives(BotAI* ai)
     if (!bot->IsInWorld())
         return;
 
-    TC_LOG_ERROR("module.playerbot.quest", "ProcessQuestObjectives: Bot {} starting objective processing", bot->GetName());
+    TC_LOG_DEBUG("module.playerbot.quest", "ProcessQuestObjectives: Bot {} starting objective processing", bot->GetName());
 
     // CRITICAL FIX: FIRST check for any COMPLETE quests that need to be turned in
     // This MUST happen BEFORE processing objectives, otherwise bots will work on
@@ -453,7 +453,7 @@ void QuestStrategy::ProcessQuestObjectives(BotAI* ai)
         QuestStatus status = bot->GetQuestStatus(questId);
         if (status == QUEST_STATUS_COMPLETE)
         {
-            TC_LOG_ERROR("module.playerbot.quest", "✅ ProcessQuestObjectives: Bot {} found COMPLETE quest {} in slot {} - turning it in FIRST!",
+            TC_LOG_DEBUG("module.playerbot.quest", "✅ ProcessQuestObjectives: Bot {} found COMPLETE quest {} in slot {} - turning it in FIRST!",
                          bot->GetName(), questId, slot);
             TurnInQuest(ai, questId);
             return;  // Return after initiating turn-in, will process objectives next update
@@ -474,13 +474,13 @@ void QuestStrategy::ProcessQuestObjectives(BotAI* ai)
             priority = tracker->GetHighestPriorityObjective(bot);
     }
 
-    TC_LOG_ERROR("module.playerbot.quest", "🎯 ProcessQuestObjectives: Bot {} - priority.questId={}, priority.objectiveIndex={}",
+    TC_LOG_DEBUG("module.playerbot.quest", "🎯 ProcessQuestObjectives: Bot {} - priority.questId={}, priority.objectiveIndex={}",
                  bot->GetName(), priority.questId, priority.objectiveIndex);
 
     if (priority.questId == 0)
     {
         // ObjectiveTracker doesn't know about bot's quests - initialize it
-        TC_LOG_ERROR("module.playerbot.quest", "⚠️ ProcessQuestObjectives: Bot {} ObjectiveTracker returned questId=0, initializing from quest log",
+        TC_LOG_DEBUG("module.playerbot.quest", "⚠️ ProcessQuestObjectives: Bot {} ObjectiveTracker returned questId=0, initializing from quest log",
                      bot->GetName());
 
         // Scan quest log and register all active quests with ObjectiveTracker
@@ -504,13 +504,13 @@ void QuestStrategy::ProcessQuestObjectives(BotAI* ai)
                 continue;
             }
 
-            TC_LOG_ERROR("module.playerbot.quest", "🔄 ProcessQuestObjectives: Bot {} registering quest {} with ObjectiveTracker (Quest has {} objectives)",
+            TC_LOG_DEBUG("module.playerbot.quest", "🔄 ProcessQuestObjectives: Bot {} registering quest {} with ObjectiveTracker (Quest has {} objectives)",
                          bot->GetName(), questId, quest->Objectives.size());
 
             // Skip quests with no objectives (autocomplete/scripted quests)
             if (quest->Objectives.empty())
             {
-                TC_LOG_ERROR("module.playerbot.quest", "⚠️ Quest {} has NO objectives - skipping registration (likely autocomplete/scripted quest)",
+                TC_LOG_DEBUG("module.playerbot.quest", "⚠️ Quest {} has NO objectives - skipping registration (likely autocomplete/scripted quest)",
                             questId);
                 continue;
             }
@@ -529,13 +529,13 @@ void QuestStrategy::ProcessQuestObjectives(BotAI* ai)
                 IGameSystemsManager* gameSystems = ai->GetGameSystems();
                 if (gameSystems && gameSystems->GetObjectiveTracker())
                 {
-                    TC_LOG_ERROR("module.playerbot.quest", "📝 ProcessQuestObjectives: Bot {} registering objective {} for quest {} (type={}, targetId={}, amount={})",
+                    TC_LOG_DEBUG("module.playerbot.quest", "📝 ProcessQuestObjectives: Bot {} registering objective {} for quest {} (type={}, targetId={}, amount={})",
                                  bot->GetName(), i, questId, static_cast<int>(objType), objective.ObjectID, objective.Amount);
                     gameSystems->GetObjectiveTracker()->StartTrackingObjective(bot, objData);
                 }
                 else
                 {
-                    TC_LOG_ERROR("module.playerbot.quest", "❌ ProcessQuestObjectives: Bot {} - GetGameSystems() or GetObjectiveTracker() returned nullptr! Cannot register objective.",
+                    TC_LOG_DEBUG("module.playerbot.quest", "❌ ProcessQuestObjectives: Bot {} - GetGameSystems() or GetObjectiveTracker() returned nullptr! Cannot register objective.",
                                  bot->GetName());
                 }
             }
@@ -548,13 +548,13 @@ void QuestStrategy::ProcessQuestObjectives(BotAI* ai)
             if (tracker)
                 priority = tracker->GetHighestPriorityObjective(bot);
         }
-        TC_LOG_ERROR("module.playerbot.quest", "🔄 ProcessQuestObjectives: Bot {} after initialization - priority.questId={}, priority.objectiveIndex={}",
+        TC_LOG_DEBUG("module.playerbot.quest", "🔄 ProcessQuestObjectives: Bot {} after initialization - priority.questId={}, priority.objectiveIndex={}",
                      bot->GetName(), priority.questId, priority.objectiveIndex);
 
         if (priority.questId == 0)
         {
             // Still no objectives - bot has only autocomplete/scripted quests with no trackable objectives
-            TC_LOG_ERROR("module.playerbot.quest", "⚠️ ProcessQuestObjectives: Bot {} has NO trackable objectives (checking for talk-to/turn-in quests)",
+            TC_LOG_DEBUG("module.playerbot.quest", "⚠️ ProcessQuestObjectives: Bot {} has NO trackable objectives (checking for talk-to/turn-in quests)",
                          bot->GetName());
 
             // CRITICAL FIX: Handle quests with no objectives
@@ -577,7 +577,7 @@ void QuestStrategy::ProcessQuestObjectives(BotAI* ai)
                 // Check if quest is complete - turn it in
                 if (status == QUEST_STATUS_COMPLETE)
                 {
-                    TC_LOG_ERROR("module.playerbot.quest", "✅ ProcessQuestObjectives: Bot {} has COMPLETE quest {} - turning it in!",
+                    TC_LOG_DEBUG("module.playerbot.quest", "✅ ProcessQuestObjectives: Bot {} has COMPLETE quest {} - turning it in!",
                                  bot->GetName(), questId);
                     TurnInQuest(ai, questId);
                     return;
@@ -602,7 +602,7 @@ void QuestStrategy::ProcessQuestObjectives(BotAI* ai)
 
                     if (allObjectivesComplete)
                     {
-                        TC_LOG_ERROR("module.playerbot.quest", "✅ ProcessQuestObjectives: Bot {} quest {} has ALL objectives COMPLETE but status is still INCOMPLETE - treating as COMPLETE for turn-in!",
+                        TC_LOG_DEBUG("module.playerbot.quest", "✅ ProcessQuestObjectives: Bot {} quest {} has ALL objectives COMPLETE but status is still INCOMPLETE - treating as COMPLETE for turn-in!",
                                      bot->GetName(), questId);
                         TurnInQuest(ai, questId);
                         return;
@@ -627,7 +627,7 @@ void QuestStrategy::ProcessQuestObjectives(BotAI* ai)
                                 uint32 itemCount = bot->GetItemCount(startItemId);
                                 if (itemCount >= static_cast<uint32>(objective.Amount))
                                 {
-                                    TC_LOG_ERROR("module.playerbot.quest", "📬 ProcessQuestObjectives: Bot {} has DELIVERY quest {} (StartItem={}, count={}), turning in!",
+                                    TC_LOG_DEBUG("module.playerbot.quest", "📬 ProcessQuestObjectives: Bot {} has DELIVERY quest {} (StartItem={}, count={}), turning in!",
                                                  bot->GetName(), questId, startItemId, itemCount);
                                     TurnInQuest(ai, questId);
                                     return;
@@ -643,7 +643,7 @@ void QuestStrategy::ProcessQuestObjectives(BotAI* ai)
                 if (status == QUEST_STATUS_INCOMPLETE && quest->Objectives.empty())
                 {
                     // This is a "talk-to" quest - navigate to quest ender and turn in
-                    TC_LOG_ERROR("module.playerbot.quest", "🗣️ ProcessQuestObjectives: Bot {} has TALK-TO quest {} (no objectives, incomplete) - navigating to quest ender",
+                    TC_LOG_DEBUG("module.playerbot.quest", "🗣️ ProcessQuestObjectives: Bot {} has TALK-TO quest {} (no objectives, incomplete) - navigating to quest ender",
                                  bot->GetName(), questId);
                     TurnInQuest(ai, questId);
                     return;
@@ -652,7 +652,7 @@ void QuestStrategy::ProcessQuestObjectives(BotAI* ai)
                 // Check for IsTurnIn() quests (QUEST_TYPE_TURNIN)
                 if (quest->IsTurnIn())
                 {
-                    TC_LOG_ERROR("module.playerbot.quest", "📜 ProcessQuestObjectives: Bot {} has TURN-IN type quest {} - navigating to quest ender",
+                    TC_LOG_DEBUG("module.playerbot.quest", "📜 ProcessQuestObjectives: Bot {} has TURN-IN type quest {} - navigating to quest ender",
                                  bot->GetName(), questId);
                     TurnInQuest(ai, questId);
                     return;
@@ -660,7 +660,7 @@ void QuestStrategy::ProcessQuestObjectives(BotAI* ai)
             }
 
             // No actionable quests - fall back to searching for new quests
-            TC_LOG_ERROR("module.playerbot.quest", "📍 ProcessQuestObjectives: Bot {} has no actionable quests, searching for new quests",
+            TC_LOG_DEBUG("module.playerbot.quest", "📍 ProcessQuestObjectives: Bot {} has no actionable quests, searching for new quests",
                          bot->GetName());
             SearchForQuestGivers(ai);
             return;
@@ -746,7 +746,7 @@ void QuestStrategy::ProcessQuestObjectives(BotAI* ai)
 
         if (allBlacklisted && quest->Objectives.size() > 0)
         {
-            TC_LOG_ERROR("module.playerbot.quest", "🗑️ ProcessQuestObjectives: Bot {} - ALL objectives for quest {} ({}) are blacklisted - ABANDONING quest",
+            TC_LOG_DEBUG("module.playerbot.quest", "🗑️ ProcessQuestObjectives: Bot {} - ALL objectives for quest {} ({}) are blacklisted - ABANDONING quest",
                          bot->GetName(), objective.questId, quest->GetLogTitle());
             bot->AbandonQuest(objective.questId);
 
@@ -769,7 +769,7 @@ void QuestStrategy::ProcessQuestObjectives(BotAI* ai)
         return;
 
     // Route to appropriate handler based on objective type
-    TC_LOG_ERROR("module.playerbot.quest", "🔀 ProcessQuestObjectives: Bot {} - Routing objective type {} for quest {}",
+    TC_LOG_DEBUG("module.playerbot.quest", "🔀 ProcessQuestObjectives: Bot {} - Routing objective type {} for quest {}",
                  bot->GetName(), questObjective->Type, objective.questId);
 
     switch (questObjective->Type)
@@ -784,13 +784,13 @@ void QuestStrategy::ProcessQuestObjectives(BotAI* ai)
             // (item given when quest is accepted and required for objective)
             if (quest->GetSrcItemId() != 0)
             {
-                TC_LOG_ERROR("module.playerbot.quest", "🎯 ProcessQuestObjectives: Bot {} - Quest {} is USE ITEM quest (StartItem={}), calling UseQuestItemOnTarget",
+                TC_LOG_DEBUG("module.playerbot.quest", "🎯 ProcessQuestObjectives: Bot {} - Quest {} is USE ITEM quest (StartItem={}), calling UseQuestItemOnTarget",
                              bot->GetName(), objective.questId, quest->GetSrcItemId());
                 UseQuestItemOnTarget(ai, objective);
             }
             else
             {
-                TC_LOG_ERROR("module.playerbot.quest", "⚔️ ProcessQuestObjectives: Bot {} - Quest {} is KILL TARGET quest, calling EngageQuestTargets",
+                TC_LOG_DEBUG("module.playerbot.quest", "⚔️ ProcessQuestObjectives: Bot {} - Quest {} is KILL TARGET quest, calling EngageQuestTargets",
                              bot->GetName(), objective.questId);
                 EngageQuestTargets(ai, objective);
             }
@@ -814,7 +814,7 @@ void QuestStrategy::ProcessQuestObjectives(BotAI* ai)
                 uint32 itemCount = bot->GetItemCount(startItemId);
                 if (itemCount >= static_cast<uint32>(questObjective->Amount))
                 {
-                    TC_LOG_ERROR("module.playerbot.quest", "📬 ProcessQuestObjectives: Bot {} - Quest {} is DELIVERY quest (StartItem={}, has {}), routing to TurnInQuest!",
+                    TC_LOG_DEBUG("module.playerbot.quest", "📬 ProcessQuestObjectives: Bot {} - Quest {} is DELIVERY quest (StartItem={}, has {}), routing to TurnInQuest!",
                                  bot->GetName(), objective.questId, startItemId, itemCount);
                     TurnInQuest(ai, objective.questId);
                     return;
@@ -823,7 +823,7 @@ void QuestStrategy::ProcessQuestObjectives(BotAI* ai)
                 {
                     // Bot doesn't have the item - this shouldn't happen for delivery quests
                     // The item should have been given on quest acceptance
-                    TC_LOG_ERROR("module.playerbot.quest", "❌ ProcessQuestObjectives: Bot {} - DELIVERY quest {} but MISSING StartItem {} (has {} need {})! Quest may be broken.",
+                    TC_LOG_DEBUG("module.playerbot.quest", "❌ ProcessQuestObjectives: Bot {} - DELIVERY quest {} but MISSING StartItem {} (has {} need {})! Quest may be broken.",
                                  bot->GetName(), objective.questId, startItemId, itemCount, questObjective->Amount);
                     // Fall through to try normal item collection as a fallback
                 }
@@ -834,7 +834,7 @@ void QuestStrategy::ProcessQuestObjectives(BotAI* ai)
 
             if (isLootFromCreature)
             {
-                TC_LOG_ERROR("module.playerbot.quest", "⚔️ ProcessQuestObjectives: Bot {} - Item {} comes from CREATURE LOOT, calling EngageQuestTargets for quest {}",
+                TC_LOG_DEBUG("module.playerbot.quest", "⚔️ ProcessQuestObjectives: Bot {} - Item {} comes from CREATURE LOOT, calling EngageQuestTargets for quest {}",
                              bot->GetName(), questObjective->ObjectID, objective.questId);
 
                 // Route to EngageQuestTargets to kill the creature that drops this item
@@ -842,7 +842,7 @@ void QuestStrategy::ProcessQuestObjectives(BotAI* ai)
             }
             else
             {
-                TC_LOG_ERROR("module.playerbot.quest", "📦 ProcessQuestObjectives: Bot {} - Item {} comes from GAMEOBJECT or ground loot, calling CollectQuestItems for quest {}",
+                TC_LOG_DEBUG("module.playerbot.quest", "📦 ProcessQuestObjectives: Bot {} - Item {} comes from GAMEOBJECT or ground loot, calling CollectQuestItems for quest {}",
                              bot->GetName(), questObjective->ObjectID, objective.questId);
                 // Route to CollectQuestItems for GameObject interaction
                 CollectQuestItems(ai, objective);
@@ -851,7 +851,7 @@ void QuestStrategy::ProcessQuestObjectives(BotAI* ai)
         }
 
         case QUEST_OBJECTIVE_GAMEOBJECT:
-            TC_LOG_ERROR("module.playerbot.quest", "📦 ProcessQuestObjectives: Bot {} - Calling CollectQuestItems for quest {}",
+            TC_LOG_DEBUG("module.playerbot.quest", "📦 ProcessQuestObjectives: Bot {} - Calling CollectQuestItems for quest {}",
                          bot->GetName(), objective.questId);
             CollectQuestItems(ai, objective);
             break;
@@ -859,7 +859,7 @@ void QuestStrategy::ProcessQuestObjectives(BotAI* ai)
         case QUEST_OBJECTIVE_AREATRIGGER:
         case QUEST_OBJECTIVE_AREA_TRIGGER_ENTER:
         case QUEST_OBJECTIVE_AREA_TRIGGER_EXIT:
-            TC_LOG_ERROR("module.playerbot.quest", "🗺️ ProcessQuestObjectives: Bot {} - Calling ExploreQuestArea for quest {}",
+            TC_LOG_DEBUG("module.playerbot.quest", "🗺️ ProcessQuestObjectives: Bot {} - Calling ExploreQuestArea for quest {}",
                          bot->GetName(), objective.questId);
             ExploreQuestArea(ai, objective);
             break;
@@ -867,7 +867,7 @@ void QuestStrategy::ProcessQuestObjectives(BotAI* ai)
         // ========== TALKTO OBJECTIVES ==========
         // Bot needs to interact with an NPC (gossip/dialog)
         case QUEST_OBJECTIVE_TALKTO:
-            TC_LOG_ERROR("module.playerbot.quest", "🗣️ ProcessQuestObjectives: Bot {} - TALKTO objective for quest {}, calling TalkToNpc",
+            TC_LOG_DEBUG("module.playerbot.quest", "🗣️ ProcessQuestObjectives: Bot {} - TALKTO objective for quest {}, calling TalkToNpc",
                          bot->GetName(), objective.questId);
             TalkToNpc(ai, objective);
             break;
@@ -875,7 +875,7 @@ void QuestStrategy::ProcessQuestObjectives(BotAI* ai)
         // ========== KILL WITH LABEL ==========
         // Same as MONSTER but with special kill label requirement
         case QUEST_OBJECTIVE_KILL_WITH_LABEL:
-            TC_LOG_ERROR("module.playerbot.quest", "🏷️ ProcessQuestObjectives: Bot {} - KILL_WITH_LABEL objective for quest {}, calling EngageQuestTargets",
+            TC_LOG_DEBUG("module.playerbot.quest", "🏷️ ProcessQuestObjectives: Bot {} - KILL_WITH_LABEL objective for quest {}, calling EngageQuestTargets",
                          bot->GetName(), objective.questId);
             EngageQuestTargets(ai, objective);
             break;
@@ -883,7 +883,7 @@ void QuestStrategy::ProcessQuestObjectives(BotAI* ai)
         // ========== CURRENCY OBJECTIVES ==========
         // These track currency spending/obtaining - bot handles currency passively
         case QUEST_OBJECTIVE_CURRENCY:
-            TC_LOG_ERROR("module.playerbot.quest", "💰 ProcessQuestObjectives: Bot {} - CURRENCY objective for quest {} (ObjectID={}, Amount={}) - handled passively via currency spending",
+            TC_LOG_DEBUG("module.playerbot.quest", "💰 ProcessQuestObjectives: Bot {} - CURRENCY objective for quest {} (ObjectID={}, Amount={}) - handled passively via currency spending",
                          bot->GetName(), objective.questId, questObjective->ObjectID, questObjective->Amount);
             // Currency objectives are completed when bot spends currency
             // Bot may need to visit vendors - navigate to quest area
@@ -891,14 +891,14 @@ void QuestStrategy::ProcessQuestObjectives(BotAI* ai)
             break;
 
         case QUEST_OBJECTIVE_HAVE_CURRENCY:
-            TC_LOG_ERROR("module.playerbot.quest", "💰 ProcessQuestObjectives: Bot {} - HAVE_CURRENCY objective for quest {} (ObjectID={}, Amount={}) - checking if bot has required currency",
+            TC_LOG_DEBUG("module.playerbot.quest", "💰 ProcessQuestObjectives: Bot {} - HAVE_CURRENCY objective for quest {} (ObjectID={}, Amount={}) - checking if bot has required currency",
                          bot->GetName(), objective.questId, questObjective->ObjectID, questObjective->Amount);
             // Bot needs to have currency when turning in - check and navigate to turn-in if ready
             HandleCurrencyObjective(ai, objective);
             break;
 
         case QUEST_OBJECTIVE_OBTAIN_CURRENCY:
-            TC_LOG_ERROR("module.playerbot.quest", "💰 ProcessQuestObjectives: Bot {} - OBTAIN_CURRENCY objective for quest {} (ObjectID={}, Amount={}) - currency gained passively",
+            TC_LOG_DEBUG("module.playerbot.quest", "💰 ProcessQuestObjectives: Bot {} - OBTAIN_CURRENCY objective for quest {} (ObjectID={}, Amount={}) - currency gained passively",
                          bot->GetName(), objective.questId, questObjective->ObjectID, questObjective->Amount);
             // Currency is obtained through gameplay - navigate to quest area
             NavigateToObjective(ai, objective);
@@ -907,20 +907,20 @@ void QuestStrategy::ProcessQuestObjectives(BotAI* ai)
         // ========== REPUTATION OBJECTIVES ==========
         // These track reputation gains/levels - completed through gameplay
         case QUEST_OBJECTIVE_MIN_REPUTATION:
-            TC_LOG_ERROR("module.playerbot.quest", "⭐ ProcessQuestObjectives: Bot {} - MIN_REPUTATION objective for quest {} (FactionID={}, Required={}) - reputation gained passively",
+            TC_LOG_DEBUG("module.playerbot.quest", "⭐ ProcessQuestObjectives: Bot {} - MIN_REPUTATION objective for quest {} (FactionID={}, Required={}) - reputation gained passively",
                          bot->GetName(), objective.questId, questObjective->ObjectID, questObjective->Amount);
             // Reputation is gained through quests/kills - navigate to quest area
             NavigateToObjective(ai, objective);
             break;
 
         case QUEST_OBJECTIVE_MAX_REPUTATION:
-            TC_LOG_ERROR("module.playerbot.quest", "⭐ ProcessQuestObjectives: Bot {} - MAX_REPUTATION objective for quest {} (FactionID={}, MaxAllowed={}) - waiting for conditions",
+            TC_LOG_DEBUG("module.playerbot.quest", "⭐ ProcessQuestObjectives: Bot {} - MAX_REPUTATION objective for quest {} (FactionID={}, MaxAllowed={}) - waiting for conditions",
                          bot->GetName(), objective.questId, questObjective->ObjectID, questObjective->Amount);
             // This is a "don't exceed" reputation check - usually just waiting
             break;
 
         case QUEST_OBJECTIVE_INCREASE_REPUTATION:
-            TC_LOG_ERROR("module.playerbot.quest", "⭐ ProcessQuestObjectives: Bot {} - INCREASE_REPUTATION objective for quest {} (FactionID={}, Amount={}) - reputation gained passively",
+            TC_LOG_DEBUG("module.playerbot.quest", "⭐ ProcessQuestObjectives: Bot {} - INCREASE_REPUTATION objective for quest {} (FactionID={}, Amount={}) - reputation gained passively",
                          bot->GetName(), objective.questId, questObjective->ObjectID, questObjective->Amount);
             // Reputation is gained through quests/kills - navigate to quest area
             NavigateToObjective(ai, objective);
@@ -928,14 +928,14 @@ void QuestStrategy::ProcessQuestObjectives(BotAI* ai)
 
         // ========== SPELL/MONEY OBJECTIVES ==========
         case QUEST_OBJECTIVE_LEARNSPELL:
-            TC_LOG_ERROR("module.playerbot.quest", "📖 ProcessQuestObjectives: Bot {} - LEARNSPELL objective for quest {} (SpellID={}) - spell learned via trainer/reward",
+            TC_LOG_DEBUG("module.playerbot.quest", "📖 ProcessQuestObjectives: Bot {} - LEARNSPELL objective for quest {} (SpellID={}) - spell learned via trainer/reward",
                          bot->GetName(), objective.questId, questObjective->ObjectID);
             // Bot may need to visit a trainer - navigate to quest area or seek trainer
             NavigateToObjective(ai, objective);
             break;
 
         case QUEST_OBJECTIVE_MONEY:
-            TC_LOG_ERROR("module.playerbot.quest", "💵 ProcessQuestObjectives: Bot {} - MONEY objective for quest {} (Amount={} copper) - checking if bot has required gold",
+            TC_LOG_DEBUG("module.playerbot.quest", "💵 ProcessQuestObjectives: Bot {} - MONEY objective for quest {} (Amount={} copper) - checking if bot has required gold",
                          bot->GetName(), objective.questId, questObjective->Amount);
             // Check if bot has required money - usually just a check at turn-in
             HandleMoneyObjective(ai, objective);
@@ -944,14 +944,14 @@ void QuestStrategy::ProcessQuestObjectives(BotAI* ai)
         // ========== PROGRESS BAR / CRITERIA OBJECTIVES ==========
         // These are completed through various gameplay actions
         case QUEST_OBJECTIVE_CRITERIA_TREE:
-            TC_LOG_ERROR("module.playerbot.quest", "🎯 ProcessQuestObjectives: Bot {} - CRITERIA_TREE objective for quest {} (CriteriaID={}) - progress tracked automatically",
+            TC_LOG_DEBUG("module.playerbot.quest", "🎯 ProcessQuestObjectives: Bot {} - CRITERIA_TREE objective for quest {} (CriteriaID={}) - progress tracked automatically",
                          bot->GetName(), objective.questId, questObjective->ObjectID);
             // Criteria tree objectives track achievement-like progress
             NavigateToObjective(ai, objective);
             break;
 
         case QUEST_OBJECTIVE_PROGRESS_BAR:
-            TC_LOG_ERROR("module.playerbot.quest", "📊 ProcessQuestObjectives: Bot {} - PROGRESS_BAR objective for quest {} - progress tracked automatically",
+            TC_LOG_DEBUG("module.playerbot.quest", "📊 ProcessQuestObjectives: Bot {} - PROGRESS_BAR objective for quest {} - progress tracked automatically",
                          bot->GetName(), objective.questId);
             // Progress bar objectives are completed through various actions in quest area
             NavigateToObjective(ai, objective);
@@ -978,7 +978,7 @@ void QuestStrategy::ProcessQuestObjectives(BotAI* ai)
             break;
 
         default:
-            TC_LOG_ERROR("module.playerbot.quest", "❓ ProcessQuestObjectives: Bot {} - Unknown objective type {}, calling NavigateToObjective for quest {}",
+            TC_LOG_DEBUG("module.playerbot.quest", "❓ ProcessQuestObjectives: Bot {} - Unknown objective type {}, calling NavigateToObjective for quest {}",
                          bot->GetName(), questObjective->Type, objective.questId);
             // Unknown objective type - try to navigate to objective location
             NavigateToObjective(ai, objective);
@@ -990,7 +990,7 @@ void QuestStrategy::NavigateToObjective(BotAI* ai, ObjectiveState const& objecti
 {
     if (!ai || !ai->GetBot())
     {
-        TC_LOG_ERROR("module.playerbot.quest", "❌ NavigateToObjective: NULL ai or bot");
+        TC_LOG_DEBUG("module.playerbot.quest", "❌ NavigateToObjective: NULL ai or bot");
         return;
     }
 
@@ -999,37 +999,37 @@ void QuestStrategy::NavigateToObjective(BotAI* ai, ObjectiveState const& objecti
     // CRITICAL: Must be in world before any grid/map operations
     if (!bot->IsInWorld())
     {
-        TC_LOG_ERROR("module.playerbot.quest", "❌ NavigateToObjective: Bot not in world, aborting");
+        TC_LOG_DEBUG("module.playerbot.quest", "❌ NavigateToObjective: Bot not in world, aborting");
         return;
     }
 
     // CRITICAL FIX: Check for combat FIRST - combat always takes priority over navigation!
     if (bot->IsInCombat())
     {
-        TC_LOG_ERROR("module.playerbot.quest", "⚔️ NavigateToObjective: Bot {} IN COMBAT - aborting navigation, combat takes priority!",
+        TC_LOG_DEBUG("module.playerbot.quest", "⚔️ NavigateToObjective: Bot {} IN COMBAT - aborting navigation, combat takes priority!",
                      bot->GetName());
         return;
     }
 
-    TC_LOG_ERROR("module.playerbot.quest", "🗺️ NavigateToObjective: Bot {} navigating to quest {} objective {}",
+    TC_LOG_DEBUG("module.playerbot.quest", "🗺️ NavigateToObjective: Bot {} navigating to quest {} objective {}",
                  bot->GetName(), objective.questId, objective.objectiveIndex);
 
     // Get objective position from tracker
     Position objectivePos = GetObjectivePosition(ai, objective);
 
-    TC_LOG_ERROR("module.playerbot.quest", "📍 NavigateToObjective: Bot {} - Objective position: ({:.1f}, {:.1f}, {:.1f})",
+    TC_LOG_DEBUG("module.playerbot.quest", "📍 NavigateToObjective: Bot {} - Objective position: ({:.1f}, {:.1f}, {:.1f})",
                  bot->GetName(),
                  objectivePos.GetPositionX(), objectivePos.GetPositionY(), objectivePos.GetPositionZ());
 
     if (objectivePos.GetExactDist2d(0.0f, 0.0f) < 0.1f)
     {
-        TC_LOG_ERROR("module.playerbot.quest", "❌ NavigateToObjective: Bot {} - NO VALID position for objective {} of quest {} (position is at origin)",
+        TC_LOG_DEBUG("module.playerbot.quest", "❌ NavigateToObjective: Bot {} - NO VALID position for objective {} of quest {} (position is at origin)",
                      bot->GetName(), objective.objectiveIndex, objective.questId);
         return;
     }
 
     float distance = bot->GetExactDist2d(objectivePos.GetPositionX(), objectivePos.GetPositionY());
-    TC_LOG_ERROR("module.playerbot.quest", "🚶 NavigateToObjective: Bot {} moving to objective (distance: {:.1f})",
+    TC_LOG_DEBUG("module.playerbot.quest", "🚶 NavigateToObjective: Bot {} moving to objective (distance: {:.1f})",
                  bot->GetName(), distance);
 
     // CRITICAL FIX: Add randomness to prevent all bots standing at exact same spot
@@ -1049,13 +1049,13 @@ void QuestStrategy::NavigateToObjective(BotAI* ai, ObjectiveState const& objecti
         objectivePos.GetPositionZ()
     );
 
-    TC_LOG_ERROR("module.playerbot.quest", "🎲 NavigateToObjective: Bot {} - Randomized position offset: angle={:.1f}°, distance={:.1f}yd → ({:.1f}, {:.1f}, {:.1f})",
+    TC_LOG_DEBUG("module.playerbot.quest", "🎲 NavigateToObjective: Bot {} - Randomized position offset: angle={:.1f}°, distance={:.1f}yd → ({:.1f}, {:.1f}, {:.1f})",
                  bot->GetName(), randomAngle * (180.0f / static_cast<float>(M_PI)), randomDistance,
                  randomizedPos.GetPositionX(), randomizedPos.GetPositionY(), randomizedPos.GetPositionZ());
 
     // Move to randomized objective location
     bool moveResult = MoveToObjectiveLocation(ai, randomizedPos);
-    TC_LOG_ERROR("module.playerbot.quest", "🚶 NavigateToObjective: Bot {} MoveToObjectiveLocation result: {}",
+    TC_LOG_DEBUG("module.playerbot.quest", "🚶 NavigateToObjective: Bot {} MoveToObjectiveLocation result: {}",
                  bot->GetName(), moveResult ? "SUCCESS" : "FAILED");
 }
 
@@ -1063,7 +1063,7 @@ void QuestStrategy::EngageQuestTargets(BotAI* ai, ObjectiveState const& objectiv
 {
     if (!ai || !ai->GetBot())
     {
-        TC_LOG_ERROR("module.playerbot.quest", "❌ EngageQuestTargets: NULL ai or bot");
+        TC_LOG_DEBUG("module.playerbot.quest", "❌ EngageQuestTargets: NULL ai or bot");
         return;
     }
 
@@ -1073,7 +1073,7 @@ void QuestStrategy::EngageQuestTargets(BotAI* ai, ObjectiveState const& objectiv
     if (!bot->IsInWorld())
         return;
 
-    TC_LOG_ERROR("module.playerbot.quest", "🎯 EngageQuestTargets: Bot {} searching for quest targets for quest {} objective {}",
+    TC_LOG_DEBUG("module.playerbot.quest", "🎯 EngageQuestTargets: Bot {} searching for quest targets for quest {} objective {}",
                  bot->GetName(), objective.questId, objective.objectiveIndex);
 
     // Find quest target near bot
@@ -1081,7 +1081,7 @@ void QuestStrategy::EngageQuestTargets(BotAI* ai, ObjectiveState const& objectiv
 
     if (!target)
     {
-        TC_LOG_ERROR("module.playerbot.quest", "⚠️ EngageQuestTargets: Bot {} - NO hostile target found",
+        TC_LOG_DEBUG("module.playerbot.quest", "⚠️ EngageQuestTargets: Bot {} - NO hostile target found",
                      bot->GetName());
 
         // CRITICAL FIX: Check if this is a FRIENDLY NPC interaction quest (like Quest 28809)
@@ -1114,13 +1114,13 @@ void QuestStrategy::EngageQuestTargets(BotAI* ai, ObjectiveState const& objectiv
                     // Neutral mobs WITHOUT spell click should be attacked, not interacted with!
                     if (!RequiresSpellClickInteraction(questObjective.ObjectID))
                     {
-                        TC_LOG_ERROR("module.playerbot.quest", "⚠️ EngageQuestTargets: Mob {} (Entry: {}) is neutral but has NO spell click - should be ATTACKED, not interacted with!",
+                        TC_LOG_DEBUG("module.playerbot.quest", "⚠️ EngageQuestTargets: Mob {} (Entry: {}) is neutral but has NO spell click - should be ATTACKED, not interacted with!",
                                      creature->GetName(), questObjective.ObjectID);
                         continue;  // Skip this creature - it should be attacked via FindQuestTarget(), not interacted with
                     }
 
                     float distance = std::sqrt(bot->GetExactDistSq(creature)); // Calculate once from squared distance
-                    TC_LOG_ERROR("module.playerbot.quest", "✅ EngageQuestTargets: Bot {} found FRIENDLY quest NPC {} (Entry: {}) with spell click at distance {:.1f}",
+                    TC_LOG_DEBUG("module.playerbot.quest", "✅ EngageQuestTargets: Bot {} found FRIENDLY quest NPC {} (Entry: {}) with spell click at distance {:.1f}",
                                  bot->GetName(), creature->GetName(), questObjective.ObjectID, distance);
 
                     // CRITICAL: Check if objective is already complete BEFORE interacting
@@ -1130,32 +1130,32 @@ void QuestStrategy::EngageQuestTargets(BotAI* ai, ObjectiveState const& objectiv
 
                     if (currentProgress >= requiredAmount)
                     {
-                        TC_LOG_ERROR("module.playerbot.quest", "✅ EngageQuestTargets: Bot {} OBJECTIVE COMPLETE ({} / {}) - skipping interaction with {}",
+                        TC_LOG_DEBUG("module.playerbot.quest", "✅ EngageQuestTargets: Bot {} OBJECTIVE COMPLETE ({} / {}) - skipping interaction with {}",
                                      bot->GetName(), currentProgress, requiredAmount, creature->GetName());
                         return;  // Objective complete - stop interacting
                     }
 
-                    TC_LOG_ERROR("module.playerbot.quest", "📊 EngageQuestTargets: Bot {} objective progress: {} / {} - interaction needed",
+                    TC_LOG_DEBUG("module.playerbot.quest", "📊 EngageQuestTargets: Bot {} objective progress: {} / {} - interaction needed",
                                  bot->GetName(), currentProgress, requiredAmount);
 
                     // Check if in interaction range
                     if (distance <= INTERACTION_DISTANCE)
                     {
                         // INTERACT with the friendly NPC using spell click (right-click interaction)
-                        TC_LOG_ERROR("module.playerbot.quest", "🤝 EngageQuestTargets: Bot {} INTERACTING with friendly NPC {} for quest {} (using HandleSpellClick)",
+                        TC_LOG_DEBUG("module.playerbot.quest", "🤝 EngageQuestTargets: Bot {} INTERACTING with friendly NPC {} for quest {} (using HandleSpellClick)",
                                      bot->GetName(), creature->GetName(), objective.questId);
 
                         // Right-click on the NPC triggers HandleSpellClick
                         // This is used for quest NPCs like "Injured Stormwind Infantry" that have npc_spellclick_spells
                         creature->HandleSpellClick(bot);
-                        TC_LOG_ERROR("module.playerbot.quest", "✅ EngageQuestTargets: Bot {} sent spell click interaction to {} - quest objective should progress",
+                        TC_LOG_DEBUG("module.playerbot.quest", "✅ EngageQuestTargets: Bot {} sent spell click interaction to {} - quest objective should progress",
                                      bot->GetName(), creature->GetName());
                         return;
                     }
                     else
                     {
                         // Move closer to the friendly NPC
-                        TC_LOG_ERROR("module.playerbot.quest", "🚶 EngageQuestTargets: Bot {} moving to friendly NPC {} (distance: {:.1f} > INTERACTION_DISTANCE)",
+                        TC_LOG_DEBUG("module.playerbot.quest", "🚶 EngageQuestTargets: Bot {} moving to friendly NPC {} (distance: {:.1f} > INTERACTION_DISTANCE)",
                                      bot->GetName(), creature->GetName(), distance);
 
                         Position npcPos;
@@ -1183,12 +1183,12 @@ void QuestStrategy::EngageQuestTargets(BotAI* ai, ObjectiveState const& objectiv
 
         if (failures >= MAX_QUEST_OBJECTIVE_FAILURES)
         {
-            TC_LOG_ERROR("module.playerbot.quest", "🚫 EngageQuestTargets: Bot {} - Quest {} objective {} BLACKLISTED after {} failures (target unreachable/doesn't exist)",
+            TC_LOG_DEBUG("module.playerbot.quest", "🚫 EngageQuestTargets: Bot {} - Quest {} objective {} BLACKLISTED after {} failures (target unreachable/doesn't exist)",
                          bot->GetName(), objective.questId, objective.objectiveIndex, failures);
             return; // Stop trying this objective, let priority system pick next one
         }
 
-        TC_LOG_ERROR("module.playerbot.quest", "⚠️ EngageQuestTargets: Bot {} - NO target found (failure {}/{}, waiting for respawns)",
+        TC_LOG_DEBUG("module.playerbot.quest", "⚠️ EngageQuestTargets: Bot {} - NO target found (failure {}/{}, waiting for respawns)",
                      bot->GetName(), failures, MAX_QUEST_OBJECTIVE_FAILURES);
 
         // CRITICAL FIX: Check if quest has an area to wander in
@@ -1231,7 +1231,7 @@ void QuestStrategy::EngageQuestTargets(BotAI* ai, ObjectiveState const& objectiv
         return;
     }
 
-    TC_LOG_ERROR("module.playerbot.quest", "✅ EngageQuestTargets: Bot {} found target {} (Entry: {}) at distance {:.1f}",
+    TC_LOG_DEBUG("module.playerbot.quest", "✅ EngageQuestTargets: Bot {} found target {} (Entry: {}) at distance {:.1f}",
                  bot->GetName(), target->GetName(), target->GetEntry(), std::sqrt(bot->GetExactDistSq(target)));
 
     // Target found - reset objective failure counter
@@ -1240,11 +1240,11 @@ void QuestStrategy::EngageQuestTargets(BotAI* ai, ObjectiveState const& objectiv
     // Check if we should engage this target
     if (!ShouldEngageTarget(ai, target, objective))
     {
-        TC_LOG_ERROR("module.playerbot.quest", "⚠️ EngageQuestTargets: Bot {} - Should NOT engage target {} (already at max kills or wrong target)",
+        TC_LOG_DEBUG("module.playerbot.quest", "⚠️ EngageQuestTargets: Bot {} - Should NOT engage target {} (already at max kills or wrong target)",
                      bot->GetName(), target->GetName());
         return;
     }
-    TC_LOG_ERROR("module.playerbot.quest", "⚔️ EngageQuestTargets: Bot {} setting combat target to {} (Entry: {})",
+    TC_LOG_DEBUG("module.playerbot.quest", "⚔️ EngageQuestTargets: Bot {} setting combat target to {} (Entry: {})",
                  bot->GetName(), target->GetName(), target->GetEntry());
 
     // Set as combat target
@@ -1256,7 +1256,7 @@ void QuestStrategy::EngageQuestTargets(BotAI* ai, ObjectiveState const& objectiv
     // start casting spells, which will damage the neutral mob and make it hostile.
     if (!bot->IsInCombat())
     {
-        TC_LOG_ERROR("module.playerbot.quest", "⚡ EngageQuestTargets: Bot {} not in combat - initiating attack on {} to start combat",
+        TC_LOG_DEBUG("module.playerbot.quest", "⚡ EngageQuestTargets: Bot {} not in combat - initiating attack on {} to start combat",
                      bot->GetName(), target->GetName());
 
         // CRITICAL: Set bot to COMBAT state BEFORE calling Attack()
@@ -1296,16 +1296,16 @@ void QuestStrategy::EngageQuestTargets(BotAI* ai, ObjectiveState const& objectiv
             "EngageQuestTargets: Bot {} (class {}) - SoloCombatStrategy will handle ALL combat positioning",
             bot->GetName(), bot->GetClass());
 
-        TC_LOG_ERROR("module.playerbot.quest", "✅ EngageQuestTargets: Bot {} set to combat state and initiated attack on {} - ClassAI will handle rotation",
+        TC_LOG_DEBUG("module.playerbot.quest", "✅ EngageQuestTargets: Bot {} set to combat state and initiated attack on {} - ClassAI will handle rotation",
                      bot->GetName(), target->GetName());
     }
     else
     {
-        TC_LOG_ERROR("module.playerbot.quest", "ℹ️ EngageQuestTargets: Bot {} already in combat, letting combat AI handle target {}",
+        TC_LOG_DEBUG("module.playerbot.quest", "ℹ️ EngageQuestTargets: Bot {} already in combat, letting combat AI handle target {}",
                      bot->GetName(), target->GetName());
     }
 
-    TC_LOG_ERROR("module.playerbot.quest", "✅ EngageQuestTargets: Bot {} successfully engaged quest mob {} for quest {}",
+    TC_LOG_DEBUG("module.playerbot.quest", "✅ EngageQuestTargets: Bot {} successfully engaged quest mob {} for quest {}",
                  bot->GetName(), target->GetName(), objective.questId);
 }
 
@@ -1313,7 +1313,7 @@ void QuestStrategy::CollectQuestItems(BotAI* ai, ObjectiveState const& objective
 {
     if (!ai || !ai->GetBot())
     {
-        TC_LOG_ERROR("module.playerbot.quest", "❌ CollectQuestItems: NULL ai or bot");
+        TC_LOG_DEBUG("module.playerbot.quest", "❌ CollectQuestItems: NULL ai or bot");
         return;
     }
 
@@ -1322,26 +1322,26 @@ void QuestStrategy::CollectQuestItems(BotAI* ai, ObjectiveState const& objective
     // CRITICAL: Must be in world before any grid/map operations
     if (!bot->IsInWorld())
     {
-        TC_LOG_ERROR("module.playerbot.quest", "❌ CollectQuestItems: Bot not in world, aborting");
+        TC_LOG_DEBUG("module.playerbot.quest", "❌ CollectQuestItems: Bot not in world, aborting");
         return;
     }
 
     // CRITICAL FIX: Check for combat FIRST - combat always takes priority!
     if (bot->IsInCombat())
     {
-        TC_LOG_ERROR("module.playerbot.quest", "⚔️ CollectQuestItems: Bot {} IN COMBAT - aborting item collection, combat takes priority!",
+        TC_LOG_DEBUG("module.playerbot.quest", "⚔️ CollectQuestItems: Bot {} IN COMBAT - aborting item collection, combat takes priority!",
                      bot->GetName());
         return;
     }
 
-    TC_LOG_ERROR("module.playerbot.quest", "📦 CollectQuestItems: Bot {} starting item collection for quest {} objective {}",
+    TC_LOG_DEBUG("module.playerbot.quest", "📦 CollectQuestItems: Bot {} starting item collection for quest {} objective {}",
                  bot->GetName(), objective.questId, objective.objectiveIndex);
 
     // Check if bot already has required items
     Quest const* quest = sObjectMgr->GetQuestTemplate(objective.questId);
     if (!quest || objective.objectiveIndex >= quest->Objectives.size())
     {
-        TC_LOG_ERROR("module.playerbot.quest", "❌ CollectQuestItems: Bot {} - Invalid quest {} or objective index {}",
+        TC_LOG_DEBUG("module.playerbot.quest", "❌ CollectQuestItems: Bot {} - Invalid quest {} or objective index {}",
                      bot->GetName(), objective.questId, objective.objectiveIndex);
         return;
     }
@@ -1418,7 +1418,7 @@ void QuestStrategy::ExploreQuestArea(BotAI* ai, ObjectiveState const& objective)
 
     if (objectivePos.GetExactDist2d(0.0f, 0.0f) < 0.1f)
     {
-        TC_LOG_ERROR("module.playerbot.quest", "❌ ExploreQuestArea: Bot {} - NO VALID position for exploration quest {} objective {}",
+        TC_LOG_DEBUG("module.playerbot.quest", "❌ ExploreQuestArea: Bot {} - NO VALID position for exploration quest {} objective {}",
                      bot->GetName(), objective.questId, objective.objectiveIndex);
         return;
     }
@@ -1428,7 +1428,7 @@ void QuestStrategy::ExploreQuestArea(BotAI* ai, ObjectiveState const& objective)
     float distance2D = bot->GetExactDist2d(objectivePos.GetPositionX(), objectivePos.GetPositionY());
     float zDiff = std::abs(bot->GetPositionZ() - objectivePos.GetPositionZ());
 
-    TC_LOG_ERROR("module.playerbot.quest", "🗺️ ExploreQuestArea: Bot {} - Quest {} - Distance to area trigger: 2D={:.1f}, 3D={:.1f}, zDiff={:.1f} at ({:.1f}, {:.1f}, {:.1f})",
+    TC_LOG_DEBUG("module.playerbot.quest", "🗺️ ExploreQuestArea: Bot {} - Quest {} - Distance to area trigger: 2D={:.1f}, 3D={:.1f}, zDiff={:.1f} at ({:.1f}, {:.1f}, {:.1f})",
                  bot->GetName(), objective.questId, distance2D, distance3D, zDiff,
                  objectivePos.GetPositionX(), objectivePos.GetPositionY(), objectivePos.GetPositionZ());
 
@@ -1439,7 +1439,7 @@ void QuestStrategy::ExploreQuestArea(BotAI* ai, ObjectiveState const& objective)
     {
         // Bot is very close in 3D - the area trigger should fire automatically
         // when the bot enters the trigger zone
-        TC_LOG_ERROR("module.playerbot.quest", "✅ ExploreQuestArea: Bot {} is AT exploration area (3D dist {:.1f} < 5yd) - waiting for trigger",
+        TC_LOG_DEBUG("module.playerbot.quest", "✅ ExploreQuestArea: Bot {} is AT exploration area (3D dist {:.1f} < 5yd) - waiting for trigger",
                      bot->GetName(), distance3D);
         return;
     }
@@ -1447,7 +1447,7 @@ void QuestStrategy::ExploreQuestArea(BotAI* ai, ObjectiveState const& objective)
     // MINE/CAVE FIX: If we're close horizontally but far vertically, we need to go DOWN
     if (distance2D < 15.0f && zDiff > 10.0f)
     {
-        TC_LOG_ERROR("module.playerbot.quest", "🏔️ ExploreQuestArea: Bot {} is ABOVE/BELOW exploration area (2D={:.1f} < 15, zDiff={:.1f} > 10) - navigating to correct Z level",
+        TC_LOG_DEBUG("module.playerbot.quest", "🏔️ ExploreQuestArea: Bot {} is ABOVE/BELOW exploration area (2D={:.1f} < 15, zDiff={:.1f} > 10) - navigating to correct Z level",
                      bot->GetName(), distance2D, zDiff);
     }
 
@@ -1459,7 +1459,7 @@ void QuestStrategy::UseQuestItemOnTarget(BotAI* ai, ObjectiveState const& object
 {
     if (!ai || !ai->GetBot())
     {
-        TC_LOG_ERROR("module.playerbot.quest", "❌ UseQuestItemOnTarget: NULL ai or bot");
+        TC_LOG_DEBUG("module.playerbot.quest", "❌ UseQuestItemOnTarget: NULL ai or bot");
         return;
     }
 
@@ -1470,7 +1470,7 @@ void QuestStrategy::UseQuestItemOnTarget(BotAI* ai, ObjectiveState const& object
     // in WorldObject::GetMap() calls
     if (!bot->IsInWorld())
     {
-        TC_LOG_ERROR("module.playerbot.quest", "❌ UseQuestItemOnTarget: Bot not in world, aborting");
+        TC_LOG_DEBUG("module.playerbot.quest", "❌ UseQuestItemOnTarget: Bot not in world, aborting");
         return;
     }
 
@@ -1516,13 +1516,13 @@ void QuestStrategy::UseQuestItemOnTarget(BotAI* ai, ObjectiveState const& object
     Quest const* quest = sObjectMgr->GetQuestTemplate(objective.questId);
     if (!quest || quest->GetSrcItemId() == 0)
     {
-        TC_LOG_ERROR("module.playerbot.quest", "❌ UseQuestItemOnTarget: Quest {} has NO source item!",
+        TC_LOG_DEBUG("module.playerbot.quest", "❌ UseQuestItemOnTarget: Quest {} has NO source item!",
                      objective.questId);
         return;
     }
 
     uint32 questItemId = quest->GetSrcItemId();
-    TC_LOG_ERROR("module.playerbot.quest", "📦 UseQuestItemOnTarget: Quest {} requires item {} to complete objective",
+    TC_LOG_DEBUG("module.playerbot.quest", "📦 UseQuestItemOnTarget: Quest {} requires item {} to complete objective",
                  objective.questId, questItemId);
 
     // Check if bot has the quest item
@@ -1551,7 +1551,7 @@ void QuestStrategy::UseQuestItemOnTarget(BotAI* ai, ObjectiveState const& object
     // Get objective details
     if (objective.objectiveIndex >= quest->Objectives.size())
     {
-        TC_LOG_ERROR("module.playerbot.quest", "❌ UseQuestItemOnTarget: Invalid objective index {}",
+        TC_LOG_DEBUG("module.playerbot.quest", "❌ UseQuestItemOnTarget: Invalid objective index {}",
                      objective.objectiveIndex);
         return;
     }
@@ -1564,12 +1564,12 @@ void QuestStrategy::UseQuestItemOnTarget(BotAI* ai, ObjectiveState const& object
 
     if (currentProgress >= requiredAmount)
     {
-        TC_LOG_ERROR("module.playerbot.quest", "✅ UseQuestItemOnTarget: Objective COMPLETE ({} / {}), nothing to do",
+        TC_LOG_DEBUG("module.playerbot.quest", "✅ UseQuestItemOnTarget: Objective COMPLETE ({} / {}), nothing to do",
                      currentProgress, requiredAmount);
         return;
     }
 
-    TC_LOG_ERROR("module.playerbot.quest", "📊 UseQuestItemOnTarget: Progress: {} / {} - need to use item {} more times",
+    TC_LOG_DEBUG("module.playerbot.quest", "📊 UseQuestItemOnTarget: Progress: {} / {} - need to use item {} more times",
                  currentProgress, requiredAmount, requiredAmount - currentProgress);
 
     // CRITICAL: ObjectID can be either a GameObject entry OR a Creature entry!
@@ -1577,7 +1577,7 @@ void QuestStrategy::UseQuestItemOnTarget(BotAI* ai, ObjectiveState const& object
     // We need to try BOTH types.
     uint32 targetObjectId = questObjective.ObjectID;
 
-    TC_LOG_ERROR("module.playerbot.quest", "🔍 UseQuestItemOnTarget: Looking for target with ObjectID {} (could be GameObject OR Creature)",
+    TC_LOG_DEBUG("module.playerbot.quest", "🔍 UseQuestItemOnTarget: Looking for target with ObjectID {} (could be GameObject OR Creature)",
                  targetObjectId);
 
     // ============================================================
@@ -1634,7 +1634,7 @@ void QuestStrategy::UseQuestItemOnTarget(BotAI* ai, ObjectiveState const& object
             targetCreature = ObjectAccessor::GetCreature(*bot, nearestCreatureGuid);
             if (targetCreature)
             {
-                TC_LOG_ERROR("module.playerbot.quest", "✅ UseQuestItemOnTarget: Using CREATURE {} (entry {}) at {:.1f}yd",
+                TC_LOG_DEBUG("module.playerbot.quest", "✅ UseQuestItemOnTarget: Using CREATURE {} (entry {}) at {:.1f}yd",
                              targetCreature->GetName(), targetCreature->GetEntry(), nearestCreatureDistance);
             }
         }
@@ -1687,7 +1687,7 @@ void QuestStrategy::UseQuestItemOnTarget(BotAI* ai, ObjectiveState const& object
             targetObject = ObjectAccessor::GetGameObject(*bot, nearestObjectGuid);
             if (targetObject)
             {
-                TC_LOG_ERROR("module.playerbot.quest", "✅ UseQuestItemOnTarget: Using GAMEOBJECT {} (entry {}) at {:.1f}yd",
+                TC_LOG_DEBUG("module.playerbot.quest", "✅ UseQuestItemOnTarget: Using GAMEOBJECT {} (entry {}) at {:.1f}yd",
                              targetObject->GetName(), targetObject->GetEntry(), nearestObjectDistance);
             }
         }
@@ -1698,7 +1698,7 @@ void QuestStrategy::UseQuestItemOnTarget(BotAI* ai, ObjectiveState const& object
     // ============================================================
     if (!targetCreature && !targetObject)
     {
-        TC_LOG_ERROR("module.playerbot.quest", "❌ UseQuestItemOnTarget: No target found for ObjectID {} (checked both Creatures and GameObjects)",
+        TC_LOG_DEBUG("module.playerbot.quest", "❌ UseQuestItemOnTarget: No target found for ObjectID {} (checked both Creatures and GameObjects)",
                      targetObjectId);
         NavigateToObjective(ai, objective);
         return;
@@ -1709,7 +1709,7 @@ void QuestStrategy::UseQuestItemOnTarget(BotAI* ai, ObjectiveState const& object
     float currentDistance = targetCreature ? nearestCreatureDistance : nearestObjectDistance;
     bool isCreatureTarget = (targetCreature != nullptr);
 
-    TC_LOG_ERROR("module.playerbot.quest", "🎯 UseQuestItemOnTarget: Target is {} (entry {}), distance {:.1f}yd",
+    TC_LOG_DEBUG("module.playerbot.quest", "🎯 UseQuestItemOnTarget: Target is {} (entry {}), distance {:.1f}yd",
                  isCreatureTarget ? "CREATURE" : "GAMEOBJECT",
                  isCreatureTarget ? targetCreature->GetEntry() : targetObject->GetEntry(),
                  currentDistance);
@@ -1725,7 +1725,7 @@ void QuestStrategy::UseQuestItemOnTarget(BotAI* ai, ObjectiveState const& object
     if (currentDistance > maxUseDistance)
     {
         // TOO FAR - move closer to the target
-        TC_LOG_ERROR("module.playerbot.quest", "⚠️ UseQuestItemOnTarget: Bot {} TOO FAR ({:.1f}yd > {:.1f}yd) - MOVING CLOSER",
+        TC_LOG_DEBUG("module.playerbot.quest", "⚠️ UseQuestItemOnTarget: Bot {} TOO FAR ({:.1f}yd > {:.1f}yd) - MOVING CLOSER",
                      bot->GetName(), currentDistance, maxUseDistance);
 
         // Move to a position near the target (5 yards away)
@@ -1738,7 +1738,7 @@ void QuestStrategy::UseQuestItemOnTarget(BotAI* ai, ObjectiveState const& object
             targetWorldObject->GetPositionZ()
         );
 
-        TC_LOG_ERROR("module.playerbot.quest", "🚶 UseQuestItemOnTarget: Bot {} moving to ({:.1f}, {:.1f}, {:.1f}) - {:.1f}yd from target",
+        TC_LOG_DEBUG("module.playerbot.quest", "🚶 UseQuestItemOnTarget: Bot {} moving to ({:.1f}, {:.1f}, {:.1f}) - {:.1f}yd from target",
                      bot->GetName(), closePos.GetPositionX(), closePos.GetPositionY(), closePos.GetPositionZ(), targetDistance);
 
         BotMovementUtil::MoveToPosition(bot, closePos);
@@ -1746,7 +1746,7 @@ void QuestStrategy::UseQuestItemOnTarget(BotAI* ai, ObjectiveState const& object
     }
 
     // Bot is in range - stop, face target, and use item
-    TC_LOG_ERROR("module.playerbot.quest", "✅ UseQuestItemOnTarget: Bot {} IN RANGE ({:.1f}yd <= {:.1f}yd), preparing to use item {}",
+    TC_LOG_DEBUG("module.playerbot.quest", "✅ UseQuestItemOnTarget: Bot {} IN RANGE ({:.1f}yd <= {:.1f}yd), preparing to use item {}",
                  bot->GetName(), currentDistance, maxUseDistance, questItemId);
 
     // CRITICAL: Stop all movement before using the item (required for spell casting)
@@ -1757,7 +1757,7 @@ void QuestStrategy::UseQuestItemOnTarget(BotAI* ai, ObjectiveState const& object
     // Face the target
     bot->SetFacingToObject(targetWorldObject);
 
-    TC_LOG_ERROR("module.playerbot.quest", "👁️ UseQuestItemOnTarget: Bot {} now facing target {} (entry {})",
+    TC_LOG_DEBUG("module.playerbot.quest", "👁️ UseQuestItemOnTarget: Bot {} now facing target {} (entry {})",
                  bot->GetName(),
                  isCreatureTarget ? "Creature" : "GameObject",
                  isCreatureTarget ? targetCreature->GetEntry() : targetObject->GetEntry());
@@ -1792,7 +1792,7 @@ void QuestStrategy::UseQuestItemOnTarget(BotAI* ai, ObjectiveState const& object
                 if (!spellClickInfo.IsFitToRequirements(bot, targetCreature))
                     continue;
 
-                TC_LOG_ERROR("module.playerbot.quest",
+                TC_LOG_DEBUG("module.playerbot.quest",
                     "🔧 UseQuestItemOnTarget: Item {} has no spell, using SPELLCLICK fallback - creature {} has spellclick spell {}",
                     questItemId, creatureEntry, spellClickInfo.spellId);
 
@@ -1803,31 +1803,31 @@ void QuestStrategy::UseQuestItemOnTarget(BotAI* ai, ObjectiveState const& object
                 _usedQuestItemTargets[objective.questId].insert(targetCreature->GetGUID());
                 _lastQuestItemCastTime = GameTime::GetGameTimeMS();
 
-                TC_LOG_ERROR("module.playerbot.quest",
+                TC_LOG_DEBUG("module.playerbot.quest",
                     "✅ UseQuestItemOnTarget: Bot {} triggered SPELLCLICK on creature {} (GUID: {}) - objective should progress",
                     bot->GetName(), creatureEntry, targetCreature->GetGUID().ToString());
                 return;
             }
 
-            TC_LOG_ERROR("module.playerbot.quest",
+            TC_LOG_DEBUG("module.playerbot.quest",
                 "❌ UseQuestItemOnTarget: Quest item {} has no ON_USE spell AND creature {} has no valid spellclick!",
                 questItemId, creatureEntry);
         }
         else
         {
-            TC_LOG_ERROR("module.playerbot.quest", "❌ UseQuestItemOnTarget: Quest item {} has no ON_USE spell!",
+            TC_LOG_DEBUG("module.playerbot.quest", "❌ UseQuestItemOnTarget: Quest item {} has no ON_USE spell!",
                          questItemId);
         }
         return;
     }
-    TC_LOG_ERROR("module.playerbot.quest", "🎯 UseQuestItemOnTarget: Quest item {} triggers spell {}",
+    TC_LOG_DEBUG("module.playerbot.quest", "🎯 UseQuestItemOnTarget: Quest item {} triggers spell {}",
                  questItemId, spellId);
 
     // Get spell info for validation
     SpellInfo const* spellInfo = sSpellMgr->GetSpellInfo(spellId, DIFFICULTY_NONE);
     (void)spellInfo; // Suppress unused warning
 
-    TC_LOG_ERROR("module.playerbot.quest", "🎯 UseQuestItemOnTarget: Casting spell {} on {} (entry {})",
+    TC_LOG_DEBUG("module.playerbot.quest", "🎯 UseQuestItemOnTarget: Casting spell {} on {} (entry {})",
                  spellId,
                  isCreatureTarget ? "Creature" : "GameObject",
                  isCreatureTarget ? targetCreature->GetEntry() : targetObject->GetEntry());
@@ -1847,7 +1847,7 @@ void QuestStrategy::UseQuestItemOnTarget(BotAI* ai, ObjectiveState const& object
         _usedQuestItemTargets[objective.questId].insert(targetCreature->GetGUID());
         _lastQuestItemCastTime = GameTime::GetGameTimeMS();
 
-        TC_LOG_ERROR("module.playerbot.quest", "✅ UseQuestItemOnTarget: Bot {} cast spell {} from item {} on CREATURE {} (GUID tracked: {}) - objective should progress",
+        TC_LOG_DEBUG("module.playerbot.quest", "✅ UseQuestItemOnTarget: Bot {} cast spell {} from item {} on CREATURE {} (GUID tracked: {}) - objective should progress",
                      bot->GetName(), spellId, questItemId, targetCreature->GetEntry(), targetCreature->GetGUID().ToString());
     }
     else
@@ -1858,7 +1858,7 @@ void QuestStrategy::UseQuestItemOnTarget(BotAI* ai, ObjectiveState const& object
         _usedQuestItemTargets[objective.questId].insert(targetObject->GetGUID());
         _lastQuestItemCastTime = GameTime::GetGameTimeMS();
 
-        TC_LOG_ERROR("module.playerbot.quest", "✅ UseQuestItemOnTarget: Bot {} cast spell {} from item {} on GAMEOBJECT {} (GUID tracked: {}) - objective should progress",
+        TC_LOG_DEBUG("module.playerbot.quest", "✅ UseQuestItemOnTarget: Bot {} cast spell {} from item {} on GAMEOBJECT {} (GUID tracked: {}) - objective should progress",
                      bot->GetName(), spellId, questItemId, targetObject->GetEntry(), targetObject->GetGUID().ToString());
     }
 }
@@ -1871,7 +1871,7 @@ void QuestStrategy::TalkToNpc(BotAI* ai, ObjectiveState const& objective)
 {
     if (!ai || !ai->GetBot())
     {
-        TC_LOG_ERROR("module.playerbot.quest", "❌ TalkToNpc: NULL ai or bot");
+        TC_LOG_DEBUG("module.playerbot.quest", "❌ TalkToNpc: NULL ai or bot");
         return;
     }
 
@@ -1880,7 +1880,7 @@ void QuestStrategy::TalkToNpc(BotAI* ai, ObjectiveState const& objective)
     // CRITICAL: Must be in world before any grid/map operations
     if (!bot->IsInWorld())
     {
-        TC_LOG_ERROR("module.playerbot.quest", "❌ TalkToNpc: Bot not in world, aborting");
+        TC_LOG_DEBUG("module.playerbot.quest", "❌ TalkToNpc: Bot not in world, aborting");
         return;
     }
 
@@ -1896,7 +1896,7 @@ void QuestStrategy::TalkToNpc(BotAI* ai, ObjectiveState const& objective)
     Quest const* quest = sObjectMgr->GetQuestTemplate(objective.questId);
     if (!quest || objective.objectiveIndex >= quest->Objectives.size())
     {
-        TC_LOG_ERROR("module.playerbot.quest", "❌ TalkToNpc: Invalid quest {} or objective index {}",
+        TC_LOG_DEBUG("module.playerbot.quest", "❌ TalkToNpc: Invalid quest {} or objective index {}",
                      objective.questId, objective.objectiveIndex);
         return;
     }
@@ -1904,7 +1904,7 @@ void QuestStrategy::TalkToNpc(BotAI* ai, ObjectiveState const& objective)
     QuestObjective const& questObjective = quest->Objectives[objective.objectiveIndex];
     uint32 npcEntry = static_cast<uint32>(questObjective.ObjectID);
 
-    TC_LOG_ERROR("module.playerbot.quest", "🗣️ TalkToNpc: Bot {} looking for NPC entry {} for quest {} objective {}",
+    TC_LOG_DEBUG("module.playerbot.quest", "🗣️ TalkToNpc: Bot {} looking for NPC entry {} for quest {} objective {}",
                  bot->GetName(), npcEntry, objective.questId, objective.objectiveIndex);
 
     // Check if we're already near the NPC
@@ -1913,13 +1913,13 @@ void QuestStrategy::TalkToNpc(BotAI* ai, ObjectiveState const& objective)
     if (targetNpc)
     {
         float distance = bot->GetExactDist(targetNpc);
-        TC_LOG_ERROR("module.playerbot.quest", "✅ TalkToNpc: Found NPC {} (entry {}) at distance {:.1f}yd",
+        TC_LOG_DEBUG("module.playerbot.quest", "✅ TalkToNpc: Found NPC {} (entry {}) at distance {:.1f}yd",
                      targetNpc->GetName(), npcEntry, distance);
 
         if (distance < 5.0f)
         {
             // We're close enough - interact with the NPC via gossip
-            TC_LOG_ERROR("module.playerbot.quest", "🗣️ TalkToNpc: Bot {} interacting with NPC {} for TALKTO objective",
+            TC_LOG_DEBUG("module.playerbot.quest", "🗣️ TalkToNpc: Bot {} interacting with NPC {} for TALKTO objective",
                          bot->GetName(), targetNpc->GetName());
 
             // Send gossip hello to trigger the quest objective
@@ -1932,13 +1932,13 @@ void QuestStrategy::TalkToNpc(BotAI* ai, ObjectiveState const& objective)
 
             // For some TALKTO objectives, simply being near the NPC completes it
             // The objective tracking will update automatically via the server
-            TC_LOG_ERROR("module.playerbot.quest", "✅ TalkToNpc: Bot {} sent gossip hello to {} - objective should progress",
+            TC_LOG_DEBUG("module.playerbot.quest", "✅ TalkToNpc: Bot {} sent gossip hello to {} - objective should progress",
                          bot->GetName(), targetNpc->GetName());
         }
         else
         {
             // Move closer to the NPC
-            TC_LOG_ERROR("module.playerbot.quest", "🚶 TalkToNpc: Bot {} moving to NPC {} ({:.1f}yd away)",
+            TC_LOG_DEBUG("module.playerbot.quest", "🚶 TalkToNpc: Bot {} moving to NPC {} ({:.1f}yd away)",
                          bot->GetName(), targetNpc->GetName(), distance);
             BotMovementUtil::MoveToUnit(bot, targetNpc, 3.0f);
         }
@@ -1946,7 +1946,7 @@ void QuestStrategy::TalkToNpc(BotAI* ai, ObjectiveState const& objective)
     else
     {
         // NPC not nearby - navigate to objective location
-        TC_LOG_ERROR("module.playerbot.quest", "🗺️ TalkToNpc: NPC entry {} not nearby, navigating to objective location",
+        TC_LOG_DEBUG("module.playerbot.quest", "🗺️ TalkToNpc: NPC entry {} not nearby, navigating to objective location",
                      npcEntry);
         NavigateToObjective(ai, objective);
     }
@@ -1960,7 +1960,7 @@ void QuestStrategy::HandleCurrencyObjective(BotAI* ai, ObjectiveState const& obj
 {
     if (!ai || !ai->GetBot())
     {
-        TC_LOG_ERROR("module.playerbot.quest", "❌ HandleCurrencyObjective: NULL ai or bot");
+        TC_LOG_DEBUG("module.playerbot.quest", "❌ HandleCurrencyObjective: NULL ai or bot");
         return;
     }
 
@@ -1968,7 +1968,7 @@ void QuestStrategy::HandleCurrencyObjective(BotAI* ai, ObjectiveState const& obj
 
     if (!bot->IsInWorld())
     {
-        TC_LOG_ERROR("module.playerbot.quest", "❌ HandleCurrencyObjective: Bot not in world, aborting");
+        TC_LOG_DEBUG("module.playerbot.quest", "❌ HandleCurrencyObjective: Bot not in world, aborting");
         return;
     }
 
@@ -1976,7 +1976,7 @@ void QuestStrategy::HandleCurrencyObjective(BotAI* ai, ObjectiveState const& obj
     Quest const* quest = sObjectMgr->GetQuestTemplate(objective.questId);
     if (!quest || objective.objectiveIndex >= quest->Objectives.size())
     {
-        TC_LOG_ERROR("module.playerbot.quest", "❌ HandleCurrencyObjective: Invalid quest {} or objective index {}",
+        TC_LOG_DEBUG("module.playerbot.quest", "❌ HandleCurrencyObjective: Invalid quest {} or objective index {}",
                      objective.questId, objective.objectiveIndex);
         return;
     }
@@ -1988,14 +1988,14 @@ void QuestStrategy::HandleCurrencyObjective(BotAI* ai, ObjectiveState const& obj
     // Check bot's current currency amount
     uint32 currentAmount = bot->GetCurrencyQuantity(currencyId);
 
-    TC_LOG_ERROR("module.playerbot.quest", "💰 HandleCurrencyObjective: Bot {} checking currency {} - has {} need {}",
+    TC_LOG_DEBUG("module.playerbot.quest", "💰 HandleCurrencyObjective: Bot {} checking currency {} - has {} need {}",
                  bot->GetName(), currencyId, currentAmount, requiredAmount);
 
     if (currentAmount >= requiredAmount)
     {
         // Bot has enough currency - quest should be completable
         // The objective is satisfied, so the quest can be turned in
-        TC_LOG_ERROR("module.playerbot.quest", "✅ HandleCurrencyObjective: Bot {} has sufficient currency {} ({}/{})",
+        TC_LOG_DEBUG("module.playerbot.quest", "✅ HandleCurrencyObjective: Bot {} has sufficient currency {} ({}/{})",
                      bot->GetName(), currencyId, currentAmount, requiredAmount);
 
         // Check if quest is ready to turn in
@@ -2014,7 +2014,7 @@ void QuestStrategy::HandleCurrencyObjective(BotAI* ai, ObjectiveState const& obj
     {
         // Bot doesn't have enough currency yet
         // Currency is typically gained through gameplay (dungeons, world quests, etc.)
-        TC_LOG_ERROR("module.playerbot.quest", "⏳ HandleCurrencyObjective: Bot {} needs more currency {} ({}/{}) - continuing gameplay",
+        TC_LOG_DEBUG("module.playerbot.quest", "⏳ HandleCurrencyObjective: Bot {} needs more currency {} ({}/{}) - continuing gameplay",
                      bot->GetName(), currencyId, currentAmount, requiredAmount);
 
         // Navigate to quest area to earn currency
@@ -2030,7 +2030,7 @@ void QuestStrategy::HandleMoneyObjective(BotAI* ai, ObjectiveState const& object
 {
     if (!ai || !ai->GetBot())
     {
-        TC_LOG_ERROR("module.playerbot.quest", "❌ HandleMoneyObjective: NULL ai or bot");
+        TC_LOG_DEBUG("module.playerbot.quest", "❌ HandleMoneyObjective: NULL ai or bot");
         return;
     }
 
@@ -2038,7 +2038,7 @@ void QuestStrategy::HandleMoneyObjective(BotAI* ai, ObjectiveState const& object
 
     if (!bot->IsInWorld())
     {
-        TC_LOG_ERROR("module.playerbot.quest", "❌ HandleMoneyObjective: Bot not in world, aborting");
+        TC_LOG_DEBUG("module.playerbot.quest", "❌ HandleMoneyObjective: Bot not in world, aborting");
         return;
     }
 
@@ -2046,7 +2046,7 @@ void QuestStrategy::HandleMoneyObjective(BotAI* ai, ObjectiveState const& object
     Quest const* quest = sObjectMgr->GetQuestTemplate(objective.questId);
     if (!quest || objective.objectiveIndex >= quest->Objectives.size())
     {
-        TC_LOG_ERROR("module.playerbot.quest", "❌ HandleMoneyObjective: Invalid quest {} or objective index {}",
+        TC_LOG_DEBUG("module.playerbot.quest", "❌ HandleMoneyObjective: Invalid quest {} or objective index {}",
                      objective.questId, objective.objectiveIndex);
         return;
     }
@@ -2066,13 +2066,13 @@ void QuestStrategy::HandleMoneyObjective(BotAI* ai, ObjectiveState const& object
     uint32 curSilver = (currentMoney % 10000) / 100;
     uint32 curCopper = currentMoney % 100;
 
-    TC_LOG_ERROR("module.playerbot.quest", "💵 HandleMoneyObjective: Bot {} checking money - has {}g{}s{}c need {}g{}s{}c",
+    TC_LOG_DEBUG("module.playerbot.quest", "💵 HandleMoneyObjective: Bot {} checking money - has {}g{}s{}c need {}g{}s{}c",
                  bot->GetName(), curGold, curSilver, curCopper, reqGold, reqSilver, reqCopper);
 
     if (currentMoney >= requiredMoney)
     {
         // Bot has enough money - quest should be completable
-        TC_LOG_ERROR("module.playerbot.quest", "✅ HandleMoneyObjective: Bot {} has sufficient money",
+        TC_LOG_DEBUG("module.playerbot.quest", "✅ HandleMoneyObjective: Bot {} has sufficient money",
                      bot->GetName());
 
         // Check if quest is ready to turn in
@@ -2091,7 +2091,7 @@ void QuestStrategy::HandleMoneyObjective(BotAI* ai, ObjectiveState const& object
     {
         // Bot doesn't have enough money yet
         // Money is gained through gameplay (loot, quest rewards, selling items)
-        TC_LOG_ERROR("module.playerbot.quest", "⏳ HandleMoneyObjective: Bot {} needs more money ({} copper short) - continuing gameplay",
+        TC_LOG_DEBUG("module.playerbot.quest", "⏳ HandleMoneyObjective: Bot {} needs more money ({} copper short) - continuing gameplay",
                      bot->GetName(), requiredMoney - currentMoney);
 
         // Navigate to quest area or continue normal gameplay to earn money
@@ -2113,15 +2113,33 @@ void QuestStrategy::TurnInQuest(BotAI* ai, uint32 questId)
     // CRITICAL FIX: Check for combat FIRST - combat always takes priority!
     if (bot->IsInCombat())
     {
-        TC_LOG_ERROR("module.playerbot.quest", "⚔️ TurnInQuest: Bot {} IN COMBAT - aborting turn-in, combat takes priority!",
+        TC_LOG_DEBUG("module.playerbot.quest", "⚔️ TurnInQuest: Bot {} IN COMBAT - aborting turn-in, combat takes priority!",
                      bot->GetName());
         return;
     }
 
     Quest const* quest = sObjectMgr->GetQuestTemplate(questId);
 
-    TC_LOG_ERROR("module.playerbot.quest", "🎯 TurnInQuest: Bot {} attempting to turn in quest {} ({})",
+    TC_LOG_DEBUG("module.playerbot.quest", "TurnInQuest: Bot {} attempting to turn in quest {} ({})",
                  bot->GetName(), questId, quest->GetLogTitle());
+
+    // Pre-check: does a quest ender exist in the DB at all?
+    // If no creature or gameobject is registered as quest ender, abandon immediately.
+    QuestRelationResult creatureEnders = sObjectMgr->GetCreatureQuestInvolvedRelations(questId);
+    QuestRelationResult goEnders = sObjectMgr->GetGOQuestInvolvedRelations(questId);
+    bool hasAnyEnder = creatureEnders.begin() != creatureEnders.end() ||
+                       goEnders.begin() != goEnders.end();
+
+    if (!hasAnyEnder)
+    {
+        TC_LOG_WARN("module.playerbot.quest",
+            "TurnInQuest: Bot {} abandoning quest {} '{}' — no quest ender exists in DB",
+            bot->GetName(), questId, quest->GetLogTitle());
+        bot->AbandonQuest(questId);
+        if (_acceptanceManager)
+            _acceptanceManager->BlacklistQuest(questId);
+        return;
+    }
 
     // Step 1: Find quest ender location (multi-tier fallback)
     QuestEnderLocation location;
@@ -2131,7 +2149,7 @@ void QuestStrategy::TurnInQuest(BotAI* ai, uint32 questId)
         _questTurnInFailures[questId]++;
         uint32 failureCount = _questTurnInFailures[questId];
 
-        TC_LOG_ERROR("module.playerbot.quest", "❌ TurnInQuest: Bot {} failed to find quest ender location for quest {} (failure {}/{})",
+        TC_LOG_DEBUG("module.playerbot.quest", "❌ TurnInQuest: Bot {} failed to find quest ender location for quest {} (failure {}/{})",
                      bot->GetName(), questId, failureCount, MAX_QUEST_TURNIN_FAILURES);
 
         if (failureCount >= MAX_QUEST_TURNIN_FAILURES)
@@ -2149,7 +2167,7 @@ void QuestStrategy::TurnInQuest(BotAI* ai, uint32 questId)
         return;
     }
 
-    TC_LOG_ERROR("module.playerbot.quest", "✅ TurnInQuest: Bot {} found quest ender {} {} at ({:.1f}, {:.1f}, {:.1f}) - foundViaSpawn={}, foundViaPOI={}, requiresSearch={}, isOnDifferentMap={}, targetMapId={}",
+    TC_LOG_DEBUG("module.playerbot.quest", "✅ TurnInQuest: Bot {} found quest ender {} {} at ({:.1f}, {:.1f}, {:.1f}) - foundViaSpawn={}, foundViaPOI={}, requiresSearch={}, isOnDifferentMap={}, targetMapId={}",
                  bot->GetName(),
                  location.IsGameObject() ? "GameObject" : "NPC",
                  location.objectEntry,
@@ -2160,7 +2178,7 @@ void QuestStrategy::TurnInQuest(BotAI* ai, uint32 questId)
     // Step 1B: Handle cross-map quest enders (quest ender on different map than bot)
     if (location.RequiresMapTravel())
     {
-        TC_LOG_ERROR("module.playerbot.quest", "🗺️ TurnInQuest: Bot {} needs to travel to MAP {} to turn in quest {} (currently on map {}) - quest ender {} {} at ({:.1f}, {:.1f}, {:.1f})",
+        TC_LOG_DEBUG("module.playerbot.quest", "🗺️ TurnInQuest: Bot {} needs to travel to MAP {} to turn in quest {} (currently on map {}) - quest ender {} {} at ({:.1f}, {:.1f}, {:.1f})",
                      bot->GetName(),
                      location.targetMapId,
                      questId,
@@ -2190,7 +2208,7 @@ void QuestStrategy::TurnInQuest(BotAI* ai, uint32 questId)
 
         if (homebindValid && homebindMapId == location.targetMapId)
         {
-            TC_LOG_ERROR("module.playerbot.quest", "🏠 TurnInQuest: Bot {} hearthstone is bound to MAP {} (target map) - checking if hearthstone is ready",
+            TC_LOG_DEBUG("module.playerbot.quest", "🏠 TurnInQuest: Bot {} hearthstone is bound to MAP {} (target map) - checking if hearthstone is ready",
                          bot->GetName(), homebindMapId);
 
             // Check if hearthstone is on cooldown
@@ -2199,7 +2217,7 @@ void QuestStrategy::TurnInQuest(BotAI* ai, uint32 questId)
 
             if (hearthstoneReady)
             {
-                TC_LOG_ERROR("module.playerbot.quest", "✨ TurnInQuest: Bot {} using HEARTHSTONE to travel to MAP {} for quest {} turn-in",
+                TC_LOG_DEBUG("module.playerbot.quest", "✨ TurnInQuest: Bot {} using HEARTHSTONE to travel to MAP {} for quest {} turn-in",
                              bot->GetName(), location.targetMapId, questId);
 
                 // Cast hearthstone spell
@@ -2213,13 +2231,13 @@ void QuestStrategy::TurnInQuest(BotAI* ai, uint32 questId)
                     SpellCastResult result = spell->prepare(targets);
                     if (result == SPELL_CAST_OK)
                     {
-                        TC_LOG_ERROR("module.playerbot.quest", "✅ TurnInQuest: Bot {} hearthstone activated - will complete quest {} turn-in after arrival on MAP {}",
+                        TC_LOG_DEBUG("module.playerbot.quest", "✅ TurnInQuest: Bot {} hearthstone activated - will complete quest {} turn-in after arrival on MAP {}",
                                      bot->GetName(), questId, location.targetMapId);
                         travelInitiated = true;
                     }
                     else
                     {
-                        TC_LOG_ERROR("module.playerbot.quest", "❌ TurnInQuest: Bot {} hearthstone cast failed with result {}",
+                        TC_LOG_DEBUG("module.playerbot.quest", "❌ TurnInQuest: Bot {} hearthstone cast failed with result {}",
                                      bot->GetName(), static_cast<uint32>(result));
                     }
                 }
@@ -2237,13 +2255,13 @@ void QuestStrategy::TurnInQuest(BotAI* ai, uint32 questId)
                         cooldownMs = static_cast<uint32>(remaining.count());
                     }
                 }
-                TC_LOG_ERROR("module.playerbot.quest", "⏳ TurnInQuest: Bot {} hearthstone on cooldown ({} seconds remaining) - deferring quest {} turn-in",
+                TC_LOG_DEBUG("module.playerbot.quest", "⏳ TurnInQuest: Bot {} hearthstone on cooldown ({} seconds remaining) - deferring quest {} turn-in",
                              bot->GetName(), cooldownMs / 1000, questId);
             }
         }
         else
         {
-            TC_LOG_ERROR("module.playerbot.quest", "🏠 TurnInQuest: Bot {} hearthstone bound to MAP {} (not target MAP {}) - cannot use hearthstone for travel",
+            TC_LOG_DEBUG("module.playerbot.quest", "🏠 TurnInQuest: Bot {} hearthstone bound to MAP {} (not target MAP {}) - cannot use hearthstone for travel",
                          bot->GetName(), homebindMapId, location.targetMapId);
         }
 
@@ -2259,7 +2277,7 @@ void QuestStrategy::TurnInQuest(BotAI* ai, uint32 questId)
 
             if (destinationTaxiNode != 0)
             {
-                TC_LOG_ERROR("module.playerbot.quest", "✈️ TurnInQuest: Bot {} found taxi node {} near quest ender on MAP {} - checking for transport route",
+                TC_LOG_DEBUG("module.playerbot.quest", "✈️ TurnInQuest: Bot {} found taxi node {} near quest ender on MAP {} - checking for transport route",
                              bot->GetName(), destinationTaxiNode, location.targetMapId);
 
                 // Find nearest flight master to bot on current map
@@ -2269,7 +2287,7 @@ void QuestStrategy::TurnInQuest(BotAI* ai, uint32 questId)
                 {
                     FlightMasterLocation const& fm = flightMasterOpt.value();
 
-                    TC_LOG_ERROR("module.playerbot.quest", "✈️ TurnInQuest: Bot {} found flight master '{}' (node {}) at {:.1f} yards - checking path to node {}",
+                    TC_LOG_DEBUG("module.playerbot.quest", "✈️ TurnInQuest: Bot {} found flight master '{}' (node {}) at {:.1f} yards - checking path to node {}",
                                  bot->GetName(), fm.name, fm.taxiNode, fm.distanceFromPlayer, destinationTaxiNode);
 
                     // CRITICAL FIX: Check if player has discovered the destination taxi node BEFORE
@@ -2283,7 +2301,7 @@ void QuestStrategy::TurnInQuest(BotAI* ai, uint32 questId)
 
                     if (!destinationNodeDiscovered)
                     {
-                        TC_LOG_ERROR("module.playerbot.quest", "⚠️ TurnInQuest: Bot {} has NOT discovered destination taxi node {} - skipping direct flight, will use multi-station travel (portal/ship/etc)",
+                        TC_LOG_DEBUG("module.playerbot.quest", "⚠️ TurnInQuest: Bot {} has NOT discovered destination taxi node {} - skipping direct flight, will use multi-station travel (portal/ship/etc)",
                                      bot->GetName(), destinationTaxiNode);
                         // Don't set travelInitiated - fall through to multi-station travel below
                     }
@@ -2296,7 +2314,7 @@ void QuestStrategy::TurnInQuest(BotAI* ai, uint32 questId)
                         {
                             FlightPathInfo const& path = pathOpt.value();
 
-                            TC_LOG_ERROR("module.playerbot.quest", "✈️ TurnInQuest: Bot {} found transport route with {} stops, cost {} copper, ~{} seconds",
+                            TC_LOG_DEBUG("module.playerbot.quest", "✈️ TurnInQuest: Bot {} found transport route with {} stops, cost {} copper, ~{} seconds",
                                          bot->GetName(), path.stopCount, path.goldCost, path.flightTime);
 
                             // Check if bot is close enough to interact with flight master
@@ -2307,26 +2325,26 @@ void QuestStrategy::TurnInQuest(BotAI* ai, uint32 questId)
                                 FlightResult result = flightMgr.FlyToTaxiNode(bot, destinationTaxiNode, FlightPathStrategy::SHORTEST_DISTANCE);
                                 if (result == FlightResult::SUCCESS)
                                 {
-                                    TC_LOG_ERROR("module.playerbot.quest", "✅ TurnInQuest: Bot {} initiated transport to MAP {} via taxi node {}",
+                                    TC_LOG_DEBUG("module.playerbot.quest", "✅ TurnInQuest: Bot {} initiated transport to MAP {} via taxi node {}",
                                                  bot->GetName(), location.targetMapId, destinationTaxiNode);
                                     travelInitiated = true;
                                 }
                                 else
                                 {
-                                    TC_LOG_ERROR("module.playerbot.quest", "❌ TurnInQuest: Bot {} failed to initiate flight: {}",
+                                    TC_LOG_DEBUG("module.playerbot.quest", "❌ TurnInQuest: Bot {} failed to initiate flight: {}",
                                                  bot->GetName(), FlightMasterManager::GetResultString(result));
                                 }
                             }
                             else
                             {
                                 // Navigate to flight master first
-                                TC_LOG_ERROR("module.playerbot.quest", "🚶 TurnInQuest: Bot {} navigating to flight master '{}' at ({:.1f}, {:.1f}, {:.1f})",
+                                TC_LOG_DEBUG("module.playerbot.quest", "🚶 TurnInQuest: Bot {} navigating to flight master '{}' at ({:.1f}, {:.1f}, {:.1f})",
                                              bot->GetName(), fm.name,
                                              fm.position.GetPositionX(), fm.position.GetPositionY(), fm.position.GetPositionZ());
 
                                 if (BotMovementUtil::MoveToPosition(bot, fm.position))
                                 {
-                                    TC_LOG_ERROR("module.playerbot.quest", "✅ TurnInQuest: Bot {} moving to flight master - will take transport to MAP {} after arrival",
+                                    TC_LOG_DEBUG("module.playerbot.quest", "✅ TurnInQuest: Bot {} moving to flight master - will take transport to MAP {} after arrival",
                                                  bot->GetName(), location.targetMapId);
                                     travelInitiated = true;
                                 }
@@ -2334,20 +2352,20 @@ void QuestStrategy::TurnInQuest(BotAI* ai, uint32 questId)
                         }
                         else
                         {
-                            TC_LOG_ERROR("module.playerbot.quest", "❌ TurnInQuest: Bot {} no transport route found from node {} to node {} (may need to discover nodes or use portal)",
+                            TC_LOG_DEBUG("module.playerbot.quest", "❌ TurnInQuest: Bot {} no transport route found from node {} to node {} (may need to discover nodes or use portal)",
                                          bot->GetName(), fm.taxiNode, destinationTaxiNode);
                         }
                     }
                 }
                 else
                 {
-                    TC_LOG_ERROR("module.playerbot.quest", "❌ TurnInQuest: Bot {} no flight master found on current map {} - searching for transport NPCs",
+                    TC_LOG_DEBUG("module.playerbot.quest", "❌ TurnInQuest: Bot {} no flight master found on current map {} - searching for transport NPCs",
                                  bot->GetName(), bot->GetMapId());
                 }
             }
             else
             {
-                TC_LOG_ERROR("module.playerbot.quest", "❌ TurnInQuest: Bot {} no taxi node found near quest ender position on MAP {}",
+                TC_LOG_DEBUG("module.playerbot.quest", "❌ TurnInQuest: Bot {} no taxi node found near quest ender position on MAP {}",
                              bot->GetName(), location.targetMapId);
             }
         }
@@ -2388,7 +2406,7 @@ void QuestStrategy::TurnInQuest(BotAI* ai, uint32 questId)
                 }
             }
 
-            TC_LOG_ERROR("module.playerbot.quest", "🚢 TurnInQuest: Bot {} attempting multi-station travel planning to MAP {}",
+            TC_LOG_DEBUG("module.playerbot.quest", "🚢 TurnInQuest: Bot {} attempting multi-station travel planning to MAP {}",
                          bot->GetName(), location.targetMapId);
 
             // Create persistent TravelRouteManager if needed
@@ -2403,9 +2421,9 @@ void QuestStrategy::TurnInQuest(BotAI* ai, uint32 questId)
 
                 if (!route.legs.empty() && route.overallState != TravelState::FAILED)
                 {
-                    TC_LOG_ERROR("module.playerbot.quest", "✈️ TurnInQuest: Bot {} planned {}-leg multi-station route: {}",
+                    TC_LOG_DEBUG("module.playerbot.quest", "✈️ TurnInQuest: Bot {} planned {}-leg multi-station route: {}",
                                  bot->GetName(), route.totalLegs, route.description);
-                    TC_LOG_ERROR("module.playerbot.quest", "   📊 Estimated: {} seconds, {} copper",
+                    TC_LOG_DEBUG("module.playerbot.quest", "   📊 Estimated: {} seconds, {} copper",
                                  route.totalEstimatedTimeSeconds, route.totalEstimatedCostCopper);
 
                     // Log each leg
@@ -2451,13 +2469,13 @@ void QuestStrategy::TurnInQuest(BotAI* ai, uint32 questId)
                 }
                 else
                 {
-                    TC_LOG_ERROR("module.playerbot.quest", "❌ TurnInQuest: Bot {} failed to plan multi-station route to MAP {}",
+                    TC_LOG_DEBUG("module.playerbot.quest", "❌ TurnInQuest: Bot {} failed to plan multi-station route to MAP {}",
                                  bot->GetName(), location.targetMapId);
                 }
             }
             else
             {
-                TC_LOG_ERROR("module.playerbot.quest", "❌ TurnInQuest: Bot {} cannot reach MAP {} from MAP {} via transport network",
+                TC_LOG_DEBUG("module.playerbot.quest", "❌ TurnInQuest: Bot {} cannot reach MAP {} from MAP {} via transport network",
                              bot->GetName(), location.targetMapId, bot->GetMapId());
             }
         }
@@ -2468,18 +2486,18 @@ void QuestStrategy::TurnInQuest(BotAI* ai, uint32 questId)
         if (!travelInitiated)
         {
             // Log comprehensive diagnostic information for cross-map quest
-            TC_LOG_ERROR("module.playerbot.quest", "⏸️ TurnInQuest: Bot {} DEFERRING quest {} turn-in - all travel methods exhausted",
+            TC_LOG_DEBUG("module.playerbot.quest", "⏸️ TurnInQuest: Bot {} DEFERRING quest {} turn-in - all travel methods exhausted",
                          bot->GetName(), questId);
-            TC_LOG_ERROR("module.playerbot.quest", "   📍 Current: MAP {} at ({:.1f}, {:.1f}, {:.1f})",
+            TC_LOG_DEBUG("module.playerbot.quest", "   📍 Current: MAP {} at ({:.1f}, {:.1f}, {:.1f})",
                          bot->GetMapId(), bot->GetPositionX(), bot->GetPositionY(), bot->GetPositionZ());
-            TC_LOG_ERROR("module.playerbot.quest", "   🎯 Target:  MAP {} at ({:.1f}, {:.1f}, {:.1f}) - {} {}",
+            TC_LOG_DEBUG("module.playerbot.quest", "   🎯 Target:  MAP {} at ({:.1f}, {:.1f}, {:.1f}) - {} {}",
                          location.targetMapId,
                          location.position.GetPositionX(), location.position.GetPositionY(), location.position.GetPositionZ(),
                          location.IsGameObject() ? "GameObject" : "NPC", location.objectEntry);
-            TC_LOG_ERROR("module.playerbot.quest", "   🏠 Hearthstone: MAP {} ({})",
+            TC_LOG_DEBUG("module.playerbot.quest", "   🏠 Hearthstone: MAP {} ({})",
                          homebindMapId, homebindValid ? (homebindMapId == location.targetMapId ? "TARGET MAP - but on cooldown" : "different map") : "invalid");
-            TC_LOG_ERROR("module.playerbot.quest", "   🚢 Multi-station: No viable route found");
-            TC_LOG_ERROR("module.playerbot.quest", "   💡 Recommendation: Bot should acquire quests on current map or wait for travel opportunity");
+            TC_LOG_DEBUG("module.playerbot.quest", "   🚢 Multi-station: No viable route found");
+            TC_LOG_DEBUG("module.playerbot.quest", "   💡 Recommendation: Bot should acquire quests on current map or wait for travel opportunity");
         }
 
         // Return regardless - either travel was initiated or deferred
@@ -2490,7 +2508,7 @@ void QuestStrategy::TurnInQuest(BotAI* ai, uint32 questId)
     if (CheckForQuestEnderInRange(ai, location))
     {
         // Quest ender is in range - complete turn-in immediately
-        TC_LOG_ERROR("module.playerbot.quest", "✅ TurnInQuest: Bot {} found quest ender {} {} in range, completing turn-in immediately",
+        TC_LOG_DEBUG("module.playerbot.quest", "✅ TurnInQuest: Bot {} found quest ender {} {} in range, completing turn-in immediately",
                      bot->GetName(),
                      location.IsGameObject() ? "GameObject" : "NPC",
                      location.objectEntry);
@@ -2500,14 +2518,14 @@ void QuestStrategy::TurnInQuest(BotAI* ai, uint32 questId)
     // Step 3: Navigate to quest ender location
     if (!NavigateToQuestEnder(ai, location))
     {
-        TC_LOG_ERROR("module.playerbot.quest", "❌ TurnInQuest: Bot {} failed to navigate to quest ender {} {}",
+        TC_LOG_DEBUG("module.playerbot.quest", "❌ TurnInQuest: Bot {} failed to navigate to quest ender {} {}",
                      bot->GetName(),
                      location.IsGameObject() ? "GameObject" : "NPC",
                      location.objectEntry);
         return;
     }
 
-    TC_LOG_ERROR("module.playerbot.quest", "🚶 TurnInQuest: Bot {} navigating to quest ender {} {} at ({:.1f}, {:.1f}, {:.1f})",
+    TC_LOG_DEBUG("module.playerbot.quest", "🚶 TurnInQuest: Bot {} navigating to quest ender {} {} at ({:.1f}, {:.1f}, {:.1f})",
                  bot->GetName(),
                  location.IsGameObject() ? "GameObject" : "NPC",
                  location.objectEntry,
@@ -2716,7 +2734,7 @@ Position QuestStrategy::GetObjectivePosition(BotAI* ai, ObjectiveState const& ob
 
     if (!isValidSpawnPosition)
     {
-        TC_LOG_ERROR("module.playerbot.quest", "⚠️ GetObjectivePosition: Bot {} - Cached position ({:.1f}, {:.1f}, {:.1f}) is INVALID (at origin or bot position)",
+        TC_LOG_DEBUG("module.playerbot.quest", "⚠️ GetObjectivePosition: Bot {} - Cached position ({:.1f}, {:.1f}, {:.1f}) is INVALID (at origin or bot position)",
                      bot->GetName(),
                      cachedPos.GetPositionX(), cachedPos.GetPositionY(), cachedPos.GetPositionZ());
 
@@ -2726,7 +2744,7 @@ Position QuestStrategy::GetObjectivePosition(BotAI* ai, ObjectiveState const& ob
         {
             QuestObjective const& questObjective = quest->Objectives[objective.objectiveIndex];
 
-            TC_LOG_ERROR("module.playerbot.quest", "🔄 GetObjectivePosition: Re-querying objective location with QuestPOI fallback...");
+            TC_LOG_DEBUG("module.playerbot.quest", "🔄 GetObjectivePosition: Re-querying objective location with QuestPOI fallback...");
 
             QuestObjectiveData objData(objective.questId, objective.objectiveIndex,
                                       static_cast<QuestObjectiveType>(questObjective.Type),
@@ -2743,19 +2761,19 @@ Position QuestStrategy::GetObjectivePosition(BotAI* ai, ObjectiveState const& ob
             // Check if we got a valid position
             if (newPos.GetExactDist2d(0.0f, 0.0f) > 0.1f)
             {
-                TC_LOG_ERROR("module.playerbot.quest", "✅ GetObjectivePosition: Found NEW position ({:.1f}, {:.1f}, {:.1f}) via re-query",
+                TC_LOG_DEBUG("module.playerbot.quest", "✅ GetObjectivePosition: Found NEW position ({:.1f}, {:.1f}, {:.1f}) via re-query",
                              newPos.GetPositionX(), newPos.GetPositionY(), newPos.GetPositionZ());
                 return newPos;
             }
             else
             {
-                TC_LOG_ERROR("module.playerbot.quest", "❌ GetObjectivePosition: Re-query FAILED, returning cached position anyway");
+                TC_LOG_DEBUG("module.playerbot.quest", "❌ GetObjectivePosition: Re-query FAILED, returning cached position anyway");
             }
         }
     }
 
     // Cached position is valid - return it
-    TC_LOG_ERROR("module.playerbot.quest", "✅ GetObjectivePosition: Bot {} using cached spawn position ({:.1f}, {:.1f}, {:.1f})",
+    TC_LOG_DEBUG("module.playerbot.quest", "✅ GetObjectivePosition: Bot {} using cached spawn position ({:.1f}, {:.1f}, {:.1f})",
                  bot->GetName(),
                  cachedPos.GetPositionX(), cachedPos.GetPositionY(), cachedPos.GetPositionZ());
 
@@ -2849,14 +2867,14 @@ Position QuestStrategy::GetObjectivePosition(BotAI* ai, ObjectiveState const& ob
     Map* map = bot->GetMap();
     if (!map)
     {
-        TC_LOG_ERROR("module.playerbot.quest", "❌ FindQuestTarget: Bot {} - GetMap() returned nullptr!", bot->GetName());
+        TC_LOG_DEBUG("module.playerbot.quest", "❌ FindQuestTarget: Bot {} - GetMap() returned nullptr!", bot->GetName());
         return nullptr;
     }
 
     DoubleBufferedSpatialGrid* spatialGrid = sSpatialGridManager.GetGrid(map);
     if (!spatialGrid)
     {
-        TC_LOG_ERROR("module.playerbot.quest", "❌ FindQuestTarget: Bot {} - No spatial grid for map!", bot->GetName());
+        TC_LOG_DEBUG("module.playerbot.quest", "❌ FindQuestTarget: Bot {} - No spatial grid for map!", bot->GetName());
         return nullptr;
     }
 
@@ -2864,7 +2882,7 @@ Position QuestStrategy::GetObjectivePosition(BotAI* ai, ObjectiveState const& ob
     std::vector<DoubleBufferedSpatialGrid::CreatureSnapshot> nearbyCreatures =
         spatialGrid->QueryNearbyCreatures(bot->GetPosition(), 300.0f);
 
-    TC_LOG_ERROR("module.playerbot.quest", "🔍 FindQuestTarget: Bot {} at ({:.1f}, {:.1f}) - spatial query returned {} creatures, looking for entry {}",
+    TC_LOG_DEBUG("module.playerbot.quest", "🔍 FindQuestTarget: Bot {} at ({:.1f}, {:.1f}) - spatial query returned {} creatures, looking for entry {}",
                  bot->GetName(), bot->GetPositionX(), bot->GetPositionY(), nearbyCreatures.size(), targetCreatureEntry);
 
     // Find first matching creature by entry
@@ -2882,7 +2900,7 @@ Position QuestStrategy::GetObjectivePosition(BotAI* ai, ObjectiveState const& ob
                 continue;
             }
             targetGuid = snapshot.guid;
-            TC_LOG_ERROR("module.playerbot.quest", "✅ FindQuestTarget: Found creature entry {} at ({:.1f}, {:.1f}, {:.1f})",
+            TC_LOG_DEBUG("module.playerbot.quest", "✅ FindQuestTarget: Found creature entry {} at ({:.1f}, {:.1f}, {:.1f})",
                          snapshot.entry, snapshot.position.GetPositionX(),
                          snapshot.position.GetPositionY(), snapshot.position.GetPositionZ());
             break;
@@ -2891,7 +2909,7 @@ Position QuestStrategy::GetObjectivePosition(BotAI* ai, ObjectiveState const& ob
 
     if (targetGuid.IsEmpty())
     {
-        TC_LOG_ERROR("module.playerbot.quest", "⚠️ FindQuestTarget: Bot {} - NO ALIVE targets for entry {} (total={}, dead={}, checked {} creatures)",
+        TC_LOG_DEBUG("module.playerbot.quest", "⚠️ FindQuestTarget: Bot {} - NO ALIVE targets for entry {} (total={}, dead={}, checked {} creatures)",
                      bot->GetName(), targetCreatureEntry, matchingEntryCount, matchingEntryDeadCount, nearbyCreatures.size());
 
         // FALLBACK: Bot should move closer to spawn locations from FindObjectiveTargetLocation
@@ -2912,7 +2930,7 @@ Position QuestStrategy::GetObjectivePosition(BotAI* ai, ObjectiveState const& ob
         target = ObjectAccessor::GetCreature(*bot, targetGuid);
         if (!target)
         {
-            TC_LOG_ERROR("module.playerbot.quest", "⚠️ FindQuestTarget: Snapshot found creature {} but ObjectAccessor::GetCreature returned nullptr",
+            TC_LOG_DEBUG("module.playerbot.quest", "⚠️ FindQuestTarget: Snapshot found creature {} but ObjectAccessor::GetCreature returned nullptr",
                          targetGuid.GetCounter());
         }
     }
@@ -2942,13 +2960,13 @@ Position QuestStrategy::GetObjectivePosition(BotAI* ai, ObjectiveState const& ob
             // Check if this NPC has spell click data
             if (RequiresSpellClickInteraction(entry))
             {
-                TC_LOG_ERROR("module.playerbot.quest", "⚠️ FindQuestTarget: NPC {} (Entry: {}) requires SPELL CLICK interaction, not attack! Returning nullptr for TALKTO logic.",
+                TC_LOG_DEBUG("module.playerbot.quest", "⚠️ FindQuestTarget: NPC {} (Entry: {}) requires SPELL CLICK interaction, not attack! Returning nullptr for TALKTO logic.",
                              creature->GetName(), entry);
                 return nullptr;  // Return nullptr so bot uses TALKTO logic in EngageQuestTargets()
             }
             else
             {
-                TC_LOG_ERROR("module.playerbot.quest", "✅ FindQuestTarget: Mob {} (Entry: {}) is NEUTRAL but ATTACKABLE (no spell click data), will be attacked!",
+                TC_LOG_DEBUG("module.playerbot.quest", "✅ FindQuestTarget: Mob {} (Entry: {}) is NEUTRAL but ATTACKABLE (no spell click data), will be attacked!",
                              creature->GetName(), entry);
                 // Fall through - return this target for attack even though it's neutral
             }
@@ -2986,7 +3004,7 @@ GameObject* QuestStrategy::FindQuestObject(BotAI* ai, ObjectiveState const& obje
     std::vector<DoubleBufferedSpatialGrid::GameObjectSnapshot> nearbyObjects =
         spatialGrid->QueryNearbyGameObjects(bot->GetPosition(), 200.0f);
 
-    TC_LOG_ERROR("module.playerbot.quest", "🔍 FindQuestObject: Bot {} scanning for GameObject entry {} within 200 yards - found {} nearby objects",
+    TC_LOG_DEBUG("module.playerbot.quest", "🔍 FindQuestObject: Bot {} scanning for GameObject entry {} within 200 yards - found {} nearby objects",
                  bot->GetName(), questObjective.ObjectID, nearbyObjects.size());
 
     // Find first matching GameObject by entry
@@ -2996,7 +3014,7 @@ GameObject* QuestStrategy::FindQuestObject(BotAI* ai, ObjectiveState const& obje
         if (snapshot.entry == questObjective.ObjectID && snapshot.isSpawned)
         {
             objectGuid = snapshot.guid;
-            TC_LOG_ERROR("module.playerbot.quest", "✅ FindQuestObject: Found GameObject entry {} at ({:.1f}, {:.1f}, {:.1f})",
+            TC_LOG_DEBUG("module.playerbot.quest", "✅ FindQuestObject: Found GameObject entry {} at ({:.1f}, {:.1f}, {:.1f})",
                          snapshot.entry, snapshot.position.GetPositionX(),
                          snapshot.position.GetPositionY(), snapshot.position.GetPositionZ());
             break;
@@ -3004,7 +3022,7 @@ GameObject* QuestStrategy::FindQuestObject(BotAI* ai, ObjectiveState const& obje
     }
     if (objectGuid.IsEmpty())
     {
-        TC_LOG_ERROR("module.playerbot.quest", "⚠️ FindQuestObject: Bot {} - NO GameObjects found in 200-yard scan for entry {}",
+        TC_LOG_DEBUG("module.playerbot.quest", "⚠️ FindQuestObject: Bot {} - NO GameObjects found in 200-yard scan for entry {}",
                      bot->GetName(), questObjective.ObjectID);
         return nullptr;
     }
@@ -3019,19 +3037,19 @@ GameObject* QuestStrategy::FindQuestObject(BotAI* ai, ObjectiveState const& obje
         gameObject = ObjectAccessor::GetGameObject(*bot, objectGuid);
         if (!gameObject)
         {
-            TC_LOG_ERROR("module.playerbot.quest", "⚠️ FindQuestObject: Snapshot found GameObject {} but ObjectAccessor::GetGameObject returned nullptr",
+            TC_LOG_DEBUG("module.playerbot.quest", "⚠️ FindQuestObject: Snapshot found GameObject {} but ObjectAccessor::GetGameObject returned nullptr",
                          objectGuid.GetCounter());
             return nullptr;
         }
     }
     else
     {
-        TC_LOG_ERROR("module.playerbot.quest", "⚠️ FindQuestObject: Bot {} - Snapshot validation failed for GameObject {}",
+        TC_LOG_DEBUG("module.playerbot.quest", "⚠️ FindQuestObject: Bot {} - Snapshot validation failed for GameObject {}",
                      bot->GetName(), objectGuid.GetCounter());
         return nullptr;
     }
 
-    TC_LOG_ERROR("module.playerbot.quest", "✅ FindQuestObject: Bot {} found GameObject {} (Entry: {}) at ({:.1f}, {:.1f}, {:.1f}), distance={:.1f}",
+    TC_LOG_DEBUG("module.playerbot.quest", "✅ FindQuestObject: Bot {} found GameObject {} (Entry: {}) at ({:.1f}, {:.1f}, {:.1f}), distance={:.1f}",
                  bot->GetName(), gameObject->GetName(), questObjective.ObjectID,
                  gameObject->GetPositionX(), gameObject->GetPositionY(), gameObject->GetPositionZ(),
                  std::sqrt(bot->GetExactDistSq(gameObject)));
@@ -3063,7 +3081,7 @@ void QuestStrategy::SearchForQuestGivers(BotAI* ai)
 {
     if (!ai || !ai->GetBot())
     {
-        TC_LOG_ERROR("module.playerbot.quest", "❌ SearchForQuestGivers: NULL ai or bot");
+        TC_LOG_DEBUG("module.playerbot.quest", "❌ SearchForQuestGivers: NULL ai or bot");
         return;
     }
 
@@ -3078,18 +3096,18 @@ void QuestStrategy::SearchForQuestGivers(BotAI* ai)
     // CRITICAL FIX: Check for combat FIRST - combat always takes priority!
     if (bot->IsInCombat())
     {
-        TC_LOG_ERROR("module.playerbot.quest", "⚔️ SearchForQuestGivers: Bot {} IN COMBAT - aborting search, combat takes priority!",
+        TC_LOG_DEBUG("module.playerbot.quest", "⚔️ SearchForQuestGivers: Bot {} IN COMBAT - aborting search, combat takes priority!",
                      bot->GetName());
         return;
     }
 
-    TC_LOG_ERROR("module.playerbot.quest", "🔍 SearchForQuestGivers: ENTRY for bot {}", bot->GetName());
+    TC_LOG_DEBUG("module.playerbot.quest", "🔍 SearchForQuestGivers: ENTRY for bot {}", bot->GetName());
 
     // Initialize QuestAcceptanceManager if not already done
     if (!_acceptanceManager)
     {
         _acceptanceManager = std::make_unique<QuestAcceptanceManager>(bot);
-        TC_LOG_ERROR("module.playerbot.quest",
+        TC_LOG_DEBUG("module.playerbot.quest",
             "🎬 SearchForQuestGivers: Initialized QuestAcceptanceManager for bot {}",
             bot->GetName());
     }
@@ -3109,13 +3127,13 @@ void QuestStrategy::SearchForQuestGivers(BotAI* ai)
         backoffDelay = std::min(30000u, 5000u * (1u << (_questGiverSearchFailures - 1)));
     }
 
-    TC_LOG_ERROR("module.playerbot.quest", "⏰ SearchForQuestGivers: Bot {} - failures={}, backoffDelay={}ms, timeSinceLastSearch={}ms",
+    TC_LOG_DEBUG("module.playerbot.quest", "⏰ SearchForQuestGivers: Bot {} - failures={}, backoffDelay={}ms, timeSinceLastSearch={}ms",
                  bot->GetName(), _questGiverSearchFailures, backoffDelay, currentTime - _lastQuestGiverSearchTime);
 
     // Check if we're still in cooldown period
     if (currentTime - _lastQuestGiverSearchTime < backoffDelay)
     {
-        TC_LOG_ERROR("module.playerbot.quest", "⏸️ SearchForQuestGivers: Bot {} still in cooldown ({} ms remaining), skipping search",
+        TC_LOG_DEBUG("module.playerbot.quest", "⏸️ SearchForQuestGivers: Bot {} still in cooldown ({} ms remaining), skipping search",
                      bot->GetName(), backoffDelay - (currentTime - _lastQuestGiverSearchTime));
         // Still in cooldown - don't search yet (prevents log spam)
         return;
@@ -3215,13 +3233,13 @@ void QuestStrategy::SearchForQuestGivers(BotAI* ai)
         // Increment failure counter for exponential backoff
         _questGiverSearchFailures++;
 
-        TC_LOG_ERROR("module.playerbot.quest",
+        TC_LOG_DEBUG("module.playerbot.quest",
             "❌ SearchForQuestGivers: Bot {} found no quest givers within 300 yards (failures: {}, next search in {}s)",
             bot->GetName(), _questGiverSearchFailures,
             std::min(30u, 5u * (1u << (_questGiverSearchFailures - 1))));
 
         // PATHFINDING TO QUEST HUBS: Navigate to appropriate quest hub for bot's level
-        TC_LOG_ERROR("module.playerbot.quest",
+        TC_LOG_DEBUG("module.playerbot.quest",
             "🗺️ SearchForQuestGivers: Bot {} has no nearby quest givers - searching quest hub database for appropriate quest hubs",
             bot->GetName());
 
@@ -3350,7 +3368,7 @@ bool QuestStrategy::FindQuestEnderLocation(BotAI* ai, uint32 questId, QuestEnder
     Player* bot = ai->GetBot();
 
     // DIAGNOSTIC: Log bot's actual position and map to debug map mismatch issues
-    TC_LOG_ERROR("module.playerbot.quest", "🔍 FindQuestEnderLocation: Bot {} (Level {}) on MAP {} at ({:.1f}, {:.1f}, {:.1f}) searching for quest ender for quest {}",
+    TC_LOG_DEBUG("module.playerbot.quest", "🔍 FindQuestEnderLocation: Bot {} (Level {}) on MAP {} at ({:.1f}, {:.1f}, {:.1f}) searching for quest ender for quest {}",
                  bot->GetName(), bot->GetLevel(), bot->GetMapId(),
                  bot->GetPositionX(), bot->GetPositionY(), bot->GetPositionZ(),
                  questId);
@@ -3369,7 +3387,7 @@ bool QuestStrategy::FindQuestEnderLocation(BotAI* ai, uint32 questId, QuestEnder
 
     if (!hasCreatureEnder && !hasGameObjectEnder)
     {
-        TC_LOG_ERROR("module.playerbot.quest", "❌ FindQuestEnderLocation: No quest ender found in creature_questender OR gameobject_questender for quest {}",
+        TC_LOG_DEBUG("module.playerbot.quest", "❌ FindQuestEnderLocation: No quest ender found in creature_questender OR gameobject_questender for quest {}",
                      questId);
         return false;
     }
@@ -3378,13 +3396,13 @@ bool QuestStrategy::FindQuestEnderLocation(BotAI* ai, uint32 questId, QuestEnder
     if (hasCreatureEnder)
     {
         uint32 creatureEntry = creatureQuestEnders.begin()->second;
-        TC_LOG_ERROR("module.playerbot.quest", "📋 FindQuestEnderLocation: Quest {} has CREATURE quest ender (entry {})",
+        TC_LOG_DEBUG("module.playerbot.quest", "📋 FindQuestEnderLocation: Quest {} has CREATURE quest ender (entry {})",
                      questId, creatureEntry);
     }
     if (hasGameObjectEnder)
     {
         uint32 goEntry = gameobjectQuestEnders.begin()->second;
-        TC_LOG_ERROR("module.playerbot.quest", "📋 FindQuestEnderLocation: Quest {} has GAMEOBJECT quest ender (entry {})",
+        TC_LOG_DEBUG("module.playerbot.quest", "📋 FindQuestEnderLocation: Quest {} has GAMEOBJECT quest ender (entry {})",
                      questId, goEntry);
     }
 
@@ -3397,7 +3415,7 @@ bool QuestStrategy::FindQuestEnderLocation(BotAI* ai, uint32 questId, QuestEnder
         location.objectEntry = questEnderEntry;
         location.isGameObject = false;
 
-        TC_LOG_ERROR("module.playerbot.quest", "🔬 FindQuestEnderLocation: TIER 1A - Searching CREATURE spawn data for entry {}",
+        TC_LOG_DEBUG("module.playerbot.quest", "🔬 FindQuestEnderLocation: TIER 1A - Searching CREATURE spawn data for entry {}",
                      questEnderEntry);
 
         // Get all spawn data for this creature
@@ -3416,7 +3434,7 @@ bool QuestStrategy::FindQuestEnderLocation(BotAI* ai, uint32 questId, QuestEnder
         float closestCrossMapDistance = 999999.0f;
         uint32 crossMapId = 0;
 
-        TC_LOG_ERROR("module.playerbot.quest", "🔬 TIER 1A DIAGNOSTIC: Bot {} on map {} searching for creature entry {} (total spawns in DB: {})",
+        TC_LOG_DEBUG("module.playerbot.quest", "🔬 TIER 1A DIAGNOSTIC: Bot {} on map {} searching for creature entry {} (total spawns in DB: {})",
                      bot->GetName(), botMapId, questEnderEntry, creatureSpawnData.size());
 
         for (auto const& pair : creatureSpawnData)
@@ -3444,7 +3462,7 @@ bool QuestStrategy::FindQuestEnderLocation(BotAI* ai, uint32 questId, QuestEnder
                 // DIAGNOSTIC: Log spawn found but wrong map
                 if (matchingEntryCount <= 5) // Limit logging
                 {
-                    TC_LOG_ERROR("module.playerbot.quest", "🔬 TIER 1A: Found creature {} spawn on MAP {} (bot on map {}) at ({:.1f}, {:.1f}, {:.1f}) - DIFFERENT MAP",
+                    TC_LOG_DEBUG("module.playerbot.quest", "🔬 TIER 1A: Found creature {} spawn on MAP {} (bot on map {}) at ({:.1f}, {:.1f}, {:.1f}) - DIFFERENT MAP",
                                  questEnderEntry, data.mapId, botMapId,
                                  data.spawnPoint.GetPositionX(), data.spawnPoint.GetPositionY(), data.spawnPoint.GetPositionZ());
                 }
@@ -3455,7 +3473,7 @@ bool QuestStrategy::FindQuestEnderLocation(BotAI* ai, uint32 questId, QuestEnder
             matchingMapCount++;
             float distance = bot->GetExactDist2d(data.spawnPoint.GetPositionX(), data.spawnPoint.GetPositionY());
 
-            TC_LOG_ERROR("module.playerbot.quest", "🔬 TIER 1A: Found creature {} spawn on SAME MAP {} at ({:.1f}, {:.1f}, {:.1f}), distance={:.1f}",
+            TC_LOG_DEBUG("module.playerbot.quest", "🔬 TIER 1A: Found creature {} spawn on SAME MAP {} at ({:.1f}, {:.1f}, {:.1f}), distance={:.1f}",
                          questEnderEntry, data.mapId,
                          data.spawnPoint.GetPositionX(), data.spawnPoint.GetPositionY(), data.spawnPoint.GetPositionZ(),
                          distance);
@@ -3467,7 +3485,7 @@ bool QuestStrategy::FindQuestEnderLocation(BotAI* ai, uint32 questId, QuestEnder
             }
         }
 
-        TC_LOG_ERROR("module.playerbot.quest", "🔬 TIER 1A SUMMARY: Found {} spawns with entry {}, {} on same map as bot (map {})",
+        TC_LOG_DEBUG("module.playerbot.quest", "🔬 TIER 1A SUMMARY: Found {} spawns with entry {}, {} on same map as bot (map {})",
                      matchingEntryCount, questEnderEntry, matchingMapCount, botMapId);
 
         if (closestSpawn)
@@ -3480,7 +3498,7 @@ bool QuestStrategy::FindQuestEnderLocation(BotAI* ai, uint32 questId, QuestEnder
             location.targetMapId = botMapId;
             location.foundViaSpawn = true;
 
-            TC_LOG_ERROR("module.playerbot.quest", "✅ TIER 1A SUCCESS: Found CREATURE quest ender {} via spawn data at ({:.1f}, {:.1f}, {:.1f}), distance={:.1f}",
+            TC_LOG_DEBUG("module.playerbot.quest", "✅ TIER 1A SUCCESS: Found CREATURE quest ender {} via spawn data at ({:.1f}, {:.1f}, {:.1f}), distance={:.1f}",
                          questEnderEntry,
                          location.position.GetPositionX(), location.position.GetPositionY(), location.position.GetPositionZ(),
                          closestDistance);
@@ -3500,14 +3518,14 @@ bool QuestStrategy::FindQuestEnderLocation(BotAI* ai, uint32 questId, QuestEnder
             location.isOnDifferentMap = true;
             location.foundViaSpawn = true;
 
-            TC_LOG_ERROR("module.playerbot.quest", "🗺️ TIER 1A: CREATURE quest ender {} exists on MAP {} (bot on map {}) - REQUIRES MAP TRAVEL to ({:.1f}, {:.1f}, {:.1f})",
+            TC_LOG_DEBUG("module.playerbot.quest", "🗺️ TIER 1A: CREATURE quest ender {} exists on MAP {} (bot on map {}) - REQUIRES MAP TRAVEL to ({:.1f}, {:.1f}, {:.1f})",
                          questEnderEntry, crossMapId, botMapId,
                          location.position.GetPositionX(), location.position.GetPositionY(), location.position.GetPositionZ());
             // Don't return true yet - let caller decide how to handle cross-map
         }
         else
         {
-            TC_LOG_ERROR("module.playerbot.quest", "⚠️ TIER 1A FAILED: No spawn data found for CREATURE {} on map {} (found {} total spawns, 0 on same map)",
+            TC_LOG_DEBUG("module.playerbot.quest", "⚠️ TIER 1A FAILED: No spawn data found for CREATURE {} on map {} (found {} total spawns, 0 on same map)",
                          questEnderEntry, botMapId, matchingEntryCount);
         }
     }
@@ -3521,7 +3539,7 @@ bool QuestStrategy::FindQuestEnderLocation(BotAI* ai, uint32 questId, QuestEnder
         location.objectEntry = questEnderEntry;
         location.isGameObject = true;
 
-        TC_LOG_ERROR("module.playerbot.quest", "🔬 FindQuestEnderLocation: TIER 1B - Searching GAMEOBJECT spawn data for entry {}",
+        TC_LOG_DEBUG("module.playerbot.quest", "🔬 FindQuestEnderLocation: TIER 1B - Searching GAMEOBJECT spawn data for entry {}",
                      questEnderEntry);
 
         // Get all spawn data for gameobjects
@@ -3577,7 +3595,7 @@ bool QuestStrategy::FindQuestEnderLocation(BotAI* ai, uint32 questId, QuestEnder
             location.targetMapId = botMapId;
             location.foundViaSpawn = true;
 
-            TC_LOG_ERROR("module.playerbot.quest", "✅ TIER 1B SUCCESS: Found GAMEOBJECT quest ender {} via spawn data at ({:.1f}, {:.1f}, {:.1f}), distance={:.1f}",
+            TC_LOG_DEBUG("module.playerbot.quest", "✅ TIER 1B SUCCESS: Found GAMEOBJECT quest ender {} via spawn data at ({:.1f}, {:.1f}, {:.1f}), distance={:.1f}",
                          questEnderEntry,
                          location.position.GetPositionX(), location.position.GetPositionY(), location.position.GetPositionZ(),
                          closestDistance);
@@ -3596,12 +3614,12 @@ bool QuestStrategy::FindQuestEnderLocation(BotAI* ai, uint32 questId, QuestEnder
             location.isOnDifferentMap = true;
             location.foundViaSpawn = true;
 
-            TC_LOG_ERROR("module.playerbot.quest", "🗺️ TIER 1B: GAMEOBJECT quest ender {} exists on MAP {} (bot on map {}) - REQUIRES MAP TRAVEL",
+            TC_LOG_DEBUG("module.playerbot.quest", "🗺️ TIER 1B: GAMEOBJECT quest ender {} exists on MAP {} (bot on map {}) - REQUIRES MAP TRAVEL",
                          questEnderEntry, crossMapId, botMapId);
         }
         else
         {
-            TC_LOG_ERROR("module.playerbot.quest", "⚠️ TIER 1B FAILED: No spawn data found for GAMEOBJECT {} (found {} spawns, {} on same map)",
+            TC_LOG_DEBUG("module.playerbot.quest", "⚠️ TIER 1B FAILED: No spawn data found for GAMEOBJECT {} (found {} spawns, {} on same map)",
                          questEnderEntry, matchingEntryCount, matchingMapCount);
         }
     }
@@ -3609,7 +3627,7 @@ bool QuestStrategy::FindQuestEnderLocation(BotAI* ai, uint32 questId, QuestEnder
     // ========================================================================
     // TIER 2: Quest POI Data (FALLBACK - Scripted/Event objects)
     // ========================================================================
-    TC_LOG_ERROR("module.playerbot.quest", "🔬 FindQuestEnderLocation: TIER 2 - Searching Quest POI data for quest {}",
+    TC_LOG_DEBUG("module.playerbot.quest", "🔬 FindQuestEnderLocation: TIER 2 - Searching Quest POI data for quest {}",
                  questId);
 
     QuestPOIData const* poiData = sObjectMgr->GetQuestPOIData(questId);
@@ -3619,26 +3637,26 @@ bool QuestStrategy::FindQuestEnderLocation(BotAI* ai, uint32 questId, QuestEnder
         // Check if we found a cross-map location earlier
         if (location.isOnDifferentMap && location.HasValidPosition())
         {
-            TC_LOG_ERROR("module.playerbot.quest", "🗺️ FindQuestEnderLocation: Quest ender for quest {} is on MAP {} (bot on map {}) - returning cross-map location",
+            TC_LOG_DEBUG("module.playerbot.quest", "🗺️ FindQuestEnderLocation: Quest ender for quest {} is on MAP {} (bot on map {}) - returning cross-map location",
                          questId, location.targetMapId, bot->GetMapId());
             // Return true with cross-map info - caller must handle map travel
             return true;
         }
 
-        TC_LOG_ERROR("module.playerbot.quest", "⚠️ TIER 2 FAILED: No Quest POI data found for quest {}",
+        TC_LOG_DEBUG("module.playerbot.quest", "⚠️ TIER 2 FAILED: No Quest POI data found for quest {}",
                      questId);
 
         // Only set requiresSearch if we have a valid entry to search for on THIS map
         if (location.objectEntry != 0 && !location.isOnDifferentMap)
         {
             location.requiresSearch = true;
-            TC_LOG_ERROR("module.playerbot.quest", "⚠️ FindQuestEnderLocation: All automated methods failed - bot will need to search 50-yard radius for {} {}",
+            TC_LOG_DEBUG("module.playerbot.quest", "⚠️ FindQuestEnderLocation: All automated methods failed - bot will need to search 50-yard radius for {} {}",
                          location.isGameObject ? "GAMEOBJECT" : "CREATURE", location.objectEntry);
             return true;
         }
 
         // No valid location found at all
-        TC_LOG_ERROR("module.playerbot.quest", "❌ FindQuestEnderLocation: FAILED - No quest ender location found for quest {} (entry={}, isOnDifferentMap={})",
+        TC_LOG_DEBUG("module.playerbot.quest", "❌ FindQuestEnderLocation: FAILED - No quest ender location found for quest {} (entry={}, isOnDifferentMap={})",
                      questId, location.objectEntry, location.isOnDifferentMap);
         return false;
     }
@@ -3677,14 +3695,14 @@ bool QuestStrategy::FindQuestEnderLocation(BotAI* ai, uint32 questId, QuestEnder
             location.isOnDifferentMap = true;
             location.foundViaPOI = true;
 
-            TC_LOG_ERROR("module.playerbot.quest", "🗺️ TIER 2 CROSS-MAP: Quest ender for quest {} is on MAP {} at ({:.1f}, {:.1f}, {:.1f}) - bot on map {}",
+            TC_LOG_DEBUG("module.playerbot.quest", "🗺️ TIER 2 CROSS-MAP: Quest ender for quest {} is on MAP {} at ({:.1f}, {:.1f}, {:.1f}) - bot on map {}",
                          questId, location.targetMapId,
                          location.position.GetPositionX(), location.position.GetPositionY(), location.position.GetPositionZ(),
                          bot->GetMapId());
             return true;
         }
 
-        TC_LOG_ERROR("module.playerbot.quest", "⚠️ TIER 2 FAILED: Quest POI data exists but no valid points on map {} or any other map, falling back to TIER 3",
+        TC_LOG_DEBUG("module.playerbot.quest", "⚠️ TIER 2 FAILED: Quest POI data exists but no valid points on map {} or any other map, falling back to TIER 3",
                      bot->GetMapId());
 
         location.requiresSearch = true;
@@ -3701,7 +3719,7 @@ bool QuestStrategy::FindQuestEnderLocation(BotAI* ai, uint32 questId, QuestEnder
     );
     location.foundViaPOI = true;
 
-    TC_LOG_ERROR("module.playerbot.quest", "✅ TIER 2 SUCCESS: Found quest POI coordinates at ({:.1f}, {:.1f}, {:.1f}) for quest {} (%s ender)",
+    TC_LOG_DEBUG("module.playerbot.quest", "✅ TIER 2 SUCCESS: Found quest POI coordinates at ({:.1f}, {:.1f}, {:.1f}) for quest {} (%s ender)",
                  location.position.GetPositionX(), location.position.GetPositionY(), location.position.GetPositionZ(),
                  questId, location.isGameObject ? "GAMEOBJECT" : "CREATURE");
 
@@ -3719,7 +3737,7 @@ bool QuestStrategy::NavigateToQuestEnder(BotAI* ai, QuestEnderLocation const& lo
     // This should never happen as TurnInQuest handles cross-map travel, but guard against edge cases
     if (location.isOnDifferentMap)
     {
-        TC_LOG_ERROR("module.playerbot.quest", "⚠️ NavigateToQuestEnder: SAFETY CHECK - Bot {} attempted navigation to cross-map destination (MAP {} vs current MAP {}) - this should be handled by TurnInQuest cross-map travel system",
+        TC_LOG_DEBUG("module.playerbot.quest", "⚠️ NavigateToQuestEnder: SAFETY CHECK - Bot {} attempted navigation to cross-map destination (MAP {} vs current MAP {}) - this should be handled by TurnInQuest cross-map travel system",
                      bot->GetName(), location.targetMapId, bot->GetMapId());
         return false;
     }
@@ -3731,7 +3749,7 @@ bool QuestStrategy::NavigateToQuestEnder(BotAI* ai, QuestEnderLocation const& lo
         if (location.requiresSearch && location.objectEntry != 0)
         {
             // No valid position but we have an entry to search for - perform local search
-            TC_LOG_ERROR("module.playerbot.quest", "🔍 NavigateToQuestEnder: Bot {} performing LOCAL SEARCH (150yd radius) for {} {} - no spawn/POI data available",
+            TC_LOG_DEBUG("module.playerbot.quest", "🔍 NavigateToQuestEnder: Bot {} performing LOCAL SEARCH (150yd radius) for {} {} - no spawn/POI data available",
                          bot->GetName(),
                          location.IsGameObject() ? "GameObject" : "NPC",
                          location.objectEntry);
@@ -3740,7 +3758,7 @@ bool QuestStrategy::NavigateToQuestEnder(BotAI* ai, QuestEnderLocation const& lo
             return CheckForQuestEnderInRange(ai, location);
         }
 
-        TC_LOG_ERROR("module.playerbot.quest", "⚠️ NavigateToQuestEnder: SAFETY CHECK - Bot {} attempted navigation to invalid position (0,0,0) for {} {} - aborting",
+        TC_LOG_DEBUG("module.playerbot.quest", "⚠️ NavigateToQuestEnder: SAFETY CHECK - Bot {} attempted navigation to invalid position (0,0,0) for {} {} - aborting",
                      bot->GetName(),
                      location.IsGameObject() ? "GameObject" : "NPC",
                      location.objectEntry);
@@ -3750,7 +3768,7 @@ bool QuestStrategy::NavigateToQuestEnder(BotAI* ai, QuestEnderLocation const& lo
     // Calculate distance to destination
     float distance = bot->GetExactDist2d(location.position.GetPositionX(), location.position.GetPositionY());
 
-    TC_LOG_ERROR("module.playerbot.quest", "🚶 NavigateToQuestEnder: Bot {} navigating to {} {} at ({:.1f}, {:.1f}, {:.1f}), distance={:.1f}",
+    TC_LOG_DEBUG("module.playerbot.quest", "🚶 NavigateToQuestEnder: Bot {} navigating to {} {} at ({:.1f}, {:.1f}, {:.1f}), distance={:.1f}",
                  bot->GetName(),
                  location.IsGameObject() ? "GameObject" : "NPC",
                  location.objectEntry,
@@ -3760,7 +3778,7 @@ bool QuestStrategy::NavigateToQuestEnder(BotAI* ai, QuestEnderLocation const& lo
     // Check if already at destination
     if (distance < 10.0f)
     {
-        TC_LOG_ERROR("module.playerbot.quest", "✅ NavigateToQuestEnder: Bot {} already at destination (distance={:.1f} < 10.0), checking for quest ender in range",
+        TC_LOG_DEBUG("module.playerbot.quest", "✅ NavigateToQuestEnder: Bot {} already at destination (distance={:.1f} < 10.0), checking for quest ender in range",
                      bot->GetName(), distance);
 
         // Check for quest ender (NPC or GameObject) in range
@@ -3771,13 +3789,13 @@ bool QuestStrategy::NavigateToQuestEnder(BotAI* ai, QuestEnderLocation const& lo
     bool moveResult = BotMovementUtil::MoveToPosition(bot, location.position);
     if (!moveResult)
     {
-        TC_LOG_ERROR("module.playerbot.quest", "❌ NavigateToQuestEnder: Bot {} failed to start pathfinding to ({:.1f}, {:.1f}, {:.1f})",
+        TC_LOG_DEBUG("module.playerbot.quest", "❌ NavigateToQuestEnder: Bot {} failed to start pathfinding to ({:.1f}, {:.1f}, {:.1f})",
                      bot->GetName(),
                      location.position.GetPositionX(), location.position.GetPositionY(), location.position.GetPositionZ());
         return false;
     }
 
-    TC_LOG_ERROR("module.playerbot.quest", "✅ NavigateToQuestEnder: Bot {} pathfinding started to {} {} (distance={:.1f})",
+    TC_LOG_DEBUG("module.playerbot.quest", "✅ NavigateToQuestEnder: Bot {} pathfinding started to {} {} (distance={:.1f})",
                  bot->GetName(),
                  location.IsGameObject() ? "GameObject" : "NPC",
                  location.objectEntry,
@@ -3818,7 +3836,7 @@ bool QuestStrategy::CheckForCreatureQuestEnderInRange(BotAI* ai, uint32 creature
     float posY = bot->GetPositionY();
     if (std::isnan(posX) || std::isnan(posY) || std::isinf(posX) || std::isinf(posY))
     {
-        TC_LOG_ERROR("module.playerbot.quest", "CheckForCreatureQuestEnderInRange: Bot {} has invalid position ({}, {})",
+        TC_LOG_DEBUG("module.playerbot.quest", "CheckForCreatureQuestEnderInRange: Bot {} has invalid position ({}, {})",
                      bot->GetName(), posX, posY);
         return false;
     }
@@ -3841,7 +3859,7 @@ bool QuestStrategy::CheckForCreatureQuestEnderInRange(BotAI* ai, uint32 creature
 
     if (nearbyCreatures.empty())
     {
-        TC_LOG_ERROR("module.playerbot.quest", "❌ CheckForCreatureQuestEnderInRange: Bot {} found NO quest ender NPC {} in range",
+        TC_LOG_DEBUG("module.playerbot.quest", "❌ CheckForCreatureQuestEnderInRange: Bot {} found NO quest ender NPC {} in range",
                      bot->GetName(), creatureEntry);
         return false;
     }
@@ -3874,13 +3892,13 @@ bool QuestStrategy::CheckForCreatureQuestEnderInRange(BotAI* ai, uint32 creature
         // Verify it's a quest giver (quest enders are also quest givers)
         if (!creature->IsQuestGiver())
         {
-            TC_LOG_ERROR("module.playerbot.quest", "⚠️ CheckForCreatureQuestEnderInRange: NPC {} (Entry: {}) is NOT a quest giver, skipping",
+            TC_LOG_DEBUG("module.playerbot.quest", "⚠️ CheckForCreatureQuestEnderInRange: NPC {} (Entry: {}) is NOT a quest giver, skipping",
                          creature->GetName(), creature->GetEntry());
             continue;
         }
 
         float distance = std::sqrt(bot->GetExactDistSq(creature)); // Calculate once from squared distance
-        TC_LOG_ERROR("module.playerbot.quest", "✅ CheckForCreatureQuestEnderInRange: Found valid quest ender {} (Entry: {}) at distance {:.1f}",
+        TC_LOG_DEBUG("module.playerbot.quest", "✅ CheckForCreatureQuestEnderInRange: Found valid quest ender {} (Entry: {}) at distance {:.1f}",
                      creature->GetName(), creature->GetEntry(), distance);
 
         if (distance < closestDistance)
@@ -3892,18 +3910,18 @@ bool QuestStrategy::CheckForCreatureQuestEnderInRange(BotAI* ai, uint32 creature
 
     if (!closestQuestEnder)
     {
-        TC_LOG_ERROR("module.playerbot.quest", "❌ CheckForCreatureQuestEnderInRange: Bot {} found creatures with entry {} but none are valid quest enders (phase mismatch or not alive)",
+        TC_LOG_DEBUG("module.playerbot.quest", "❌ CheckForCreatureQuestEnderInRange: Bot {} found creatures with entry {} but none are valid quest enders (phase mismatch or not alive)",
                      bot->GetName(), creatureEntry);
         return false;
     }
 
-    TC_LOG_ERROR("module.playerbot.quest", "✅ CheckForCreatureQuestEnderInRange: Bot {} found quest ender {} at distance {:.1f}",
+    TC_LOG_DEBUG("module.playerbot.quest", "✅ CheckForCreatureQuestEnderInRange: Bot {} found quest ender {} at distance {:.1f}",
                  bot->GetName(), closestQuestEnder->GetName(), closestDistance);
 
     // Check if in interaction range
     if (closestDistance > INTERACTION_DISTANCE)
     {
-        TC_LOG_ERROR("module.playerbot.quest", "🚶 CheckForCreatureQuestEnderInRange: Bot {} quest ender {} too far ({:.1f} > INTERACTION_DISTANCE), moving closer",
+        TC_LOG_DEBUG("module.playerbot.quest", "🚶 CheckForCreatureQuestEnderInRange: Bot {} quest ender {} too far ({:.1f} > INTERACTION_DISTANCE), moving closer",
                      bot->GetName(), closestQuestEnder->GetName(), closestDistance);
 
         // Move to NPC
@@ -3914,7 +3932,7 @@ bool QuestStrategy::CheckForCreatureQuestEnderInRange(BotAI* ai, uint32 creature
     }
 
     // NPC is in interaction range - get all completed quests and turn them in
-    TC_LOG_ERROR("module.playerbot.quest", "🎯 CheckForCreatureQuestEnderInRange: Bot {} at quest ender {} (distance {:.1f} <= INTERACTION_DISTANCE), processing quest turn-ins",
+    TC_LOG_DEBUG("module.playerbot.quest", "🎯 CheckForCreatureQuestEnderInRange: Bot {} at quest ender {} (distance {:.1f} <= INTERACTION_DISTANCE), processing quest turn-ins",
                  bot->GetName(), closestQuestEnder->GetName(), closestDistance);
 
     // Scan ALL active quests and turn in any that are complete OR talk-to quests with this NPC
@@ -3947,7 +3965,7 @@ bool QuestStrategy::CheckForCreatureQuestEnderInRange(BotAI* ai, uint32 creature
             if (itemCount > 0)
             {
                 isDeliveryQuest = true;
-                TC_LOG_ERROR("module.playerbot.quest", "📬 CheckForCreatureQuestEnderInRange: Bot {} has DELIVERY quest {} ({}) with item {} (count: {})",
+                TC_LOG_DEBUG("module.playerbot.quest", "📬 CheckForCreatureQuestEnderInRange: Bot {} has DELIVERY quest {} ({}) with item {} (count: {})",
                              bot->GetName(), questId, quest->GetLogTitle(), srcItemId, itemCount);
             }
         }
@@ -3978,24 +3996,24 @@ bool QuestStrategy::CheckForCreatureQuestEnderInRange(BotAI* ai, uint32 creature
         // Turn in the quest
         if (isTalkToQuest)
         {
-            TC_LOG_ERROR("module.playerbot.quest", "🗣️ CheckForCreatureQuestEnderInRange: Bot {} turning in TALK-TO quest {} ({}) to NPC {}",
+            TC_LOG_DEBUG("module.playerbot.quest", "🗣️ CheckForCreatureQuestEnderInRange: Bot {} turning in TALK-TO quest {} ({}) to NPC {}",
                          bot->GetName(), questId, quest->GetLogTitle(), closestQuestEnder->GetName());
         }
         else if (isDeliveryQuest)
         {
-            TC_LOG_ERROR("module.playerbot.quest", "📬 CheckForCreatureQuestEnderInRange: Bot {} turning in DELIVERY quest {} ({}) to NPC {}",
+            TC_LOG_DEBUG("module.playerbot.quest", "📬 CheckForCreatureQuestEnderInRange: Bot {} turning in DELIVERY quest {} ({}) to NPC {}",
                          bot->GetName(), questId, quest->GetLogTitle(), closestQuestEnder->GetName());
         }
         else
         {
-            TC_LOG_ERROR("module.playerbot.quest", "🎯 CheckForCreatureQuestEnderInRange: Bot {} turning in COMPLETE quest {} ({}) to NPC {}",
+            TC_LOG_DEBUG("module.playerbot.quest", "🎯 CheckForCreatureQuestEnderInRange: Bot {} turning in COMPLETE quest {} ({}) to NPC {}",
                          bot->GetName(), questId, quest->GetLogTitle(), closestQuestEnder->GetName());
         }
 
         if (CompleteQuestTurnIn(ai, questId, closestQuestEnder))
         {
             anyQuestTurnedIn = true;
-            TC_LOG_ERROR("module.playerbot.quest", "✅ CheckForCreatureQuestEnderInRange: Bot {} successfully turned in quest {} ({})",
+            TC_LOG_DEBUG("module.playerbot.quest", "✅ CheckForCreatureQuestEnderInRange: Bot {} successfully turned in quest {} ({})",
                          bot->GetName(), questId, quest->GetLogTitle());
         }
     }
@@ -4014,20 +4032,20 @@ bool QuestStrategy::CheckForQuestEnderInRange(BotAI* ai, QuestEnderLocation cons
 
     if (!location.IsValid())
     {
-        TC_LOG_ERROR("module.playerbot.quest", "❌ CheckForQuestEnderInRange: Invalid location (no objectEntry)");
+        TC_LOG_DEBUG("module.playerbot.quest", "❌ CheckForQuestEnderInRange: Invalid location (no objectEntry)");
         return false;
     }
 
     // Route to appropriate handler based on quest ender type
     if (location.IsGameObject())
     {
-        TC_LOG_ERROR("module.playerbot.quest", "🎯 CheckForQuestEnderInRange: Routing to GameObject handler for entry {}",
+        TC_LOG_DEBUG("module.playerbot.quest", "🎯 CheckForQuestEnderInRange: Routing to GameObject handler for entry {}",
                      location.objectEntry);
         return CheckForGameObjectQuestEnderInRange(ai, location.objectEntry);
     }
     else
     {
-        TC_LOG_ERROR("module.playerbot.quest", "🎯 CheckForQuestEnderInRange: Routing to Creature handler for entry {}",
+        TC_LOG_DEBUG("module.playerbot.quest", "🎯 CheckForQuestEnderInRange: Routing to Creature handler for entry {}",
                      location.objectEntry);
         return CheckForCreatureQuestEnderInRange(ai, location.objectEntry);
     }
@@ -4047,7 +4065,7 @@ bool QuestStrategy::CheckForGameObjectQuestEnderInRange(BotAI* ai, uint32 gameob
     // CRITICAL: Must be in world before any grid/map operations
     if (!bot->IsInWorld())
     {
-        TC_LOG_ERROR("module.playerbot.quest", "⚠️ CheckForGameObjectQuestEnderInRange: Bot {} is not in world, skipping grid search",
+        TC_LOG_DEBUG("module.playerbot.quest", "⚠️ CheckForGameObjectQuestEnderInRange: Bot {} is not in world, skipping grid search",
                      bot->GetName());
         return false;
     }
@@ -4073,12 +4091,12 @@ bool QuestStrategy::CheckForGameObjectQuestEnderInRange(BotAI* ai, uint32 gameob
         return false;
     }
 
-    TC_LOG_ERROR("module.playerbot.quest", "📊 CheckForGameObjectQuestEnderInRange: Bot {} found {} gameobjects with entry {} in 150-yard radius",
+    TC_LOG_DEBUG("module.playerbot.quest", "📊 CheckForGameObjectQuestEnderInRange: Bot {} found {} gameobjects with entry {} in 150-yard radius",
                  bot->GetName(), nearbyGameObjects.size(), gameobjectEntry);
 
     if (nearbyGameObjects.empty())
     {
-        TC_LOG_ERROR("module.playerbot.quest", "❌ CheckForGameObjectQuestEnderInRange: Bot {} found NO quest ender GameObject {} in range",
+        TC_LOG_DEBUG("module.playerbot.quest", "❌ CheckForGameObjectQuestEnderInRange: Bot {} found NO quest ender GameObject {} in range",
                      bot->GetName(), gameobjectEntry);
         return false;
     }
@@ -4114,7 +4132,7 @@ bool QuestStrategy::CheckForGameObjectQuestEnderInRange(BotAI* ai, uint32 gameob
         }
 
         float distance = std::sqrt(bot->GetExactDistSq(gameObject));
-        TC_LOG_ERROR("module.playerbot.quest", "✅ CheckForGameObjectQuestEnderInRange: Found valid quest ender {} (Entry: {}) at distance {:.1f}",
+        TC_LOG_DEBUG("module.playerbot.quest", "✅ CheckForGameObjectQuestEnderInRange: Found valid quest ender {} (Entry: {}) at distance {:.1f}",
                      gameObject->GetName(), gameObject->GetEntry(), distance);
 
         if (distance < closestDistance)
@@ -4126,18 +4144,18 @@ bool QuestStrategy::CheckForGameObjectQuestEnderInRange(BotAI* ai, uint32 gameob
 
     if (!closestQuestEnder)
     {
-        TC_LOG_ERROR("module.playerbot.quest", "❌ CheckForGameObjectQuestEnderInRange: Bot {} found gameobjects with entry {} but none are valid quest enders (phase mismatch or not ready)",
+        TC_LOG_DEBUG("module.playerbot.quest", "❌ CheckForGameObjectQuestEnderInRange: Bot {} found gameobjects with entry {} but none are valid quest enders (phase mismatch or not ready)",
                      bot->GetName(), gameobjectEntry);
         return false;
     }
 
-    TC_LOG_ERROR("module.playerbot.quest", "✅ CheckForGameObjectQuestEnderInRange: Bot {} found quest ender {} at distance {:.1f}",
+    TC_LOG_DEBUG("module.playerbot.quest", "✅ CheckForGameObjectQuestEnderInRange: Bot {} found quest ender {} at distance {:.1f}",
                  bot->GetName(), closestQuestEnder->GetName(), closestDistance);
 
     // Check if in interaction range
     if (closestDistance > INTERACTION_DISTANCE)
     {
-        TC_LOG_ERROR("module.playerbot.quest", "🚶 CheckForGameObjectQuestEnderInRange: Bot {} quest ender {} too far ({:.1f} > INTERACTION_DISTANCE), moving closer",
+        TC_LOG_DEBUG("module.playerbot.quest", "🚶 CheckForGameObjectQuestEnderInRange: Bot {} quest ender {} too far ({:.1f} > INTERACTION_DISTANCE), moving closer",
                      bot->GetName(), closestQuestEnder->GetName(), closestDistance);
 
         // Move to GameObject
@@ -4148,7 +4166,7 @@ bool QuestStrategy::CheckForGameObjectQuestEnderInRange(BotAI* ai, uint32 gameob
     }
 
     // GameObject is in interaction range - process quest turn-ins
-    TC_LOG_ERROR("module.playerbot.quest", "🎯 CheckForGameObjectQuestEnderInRange: Bot {} at quest ender {} (distance {:.1f} <= INTERACTION_DISTANCE), processing quest turn-ins",
+    TC_LOG_DEBUG("module.playerbot.quest", "🎯 CheckForGameObjectQuestEnderInRange: Bot {} at quest ender {} (distance {:.1f} <= INTERACTION_DISTANCE), processing quest turn-ins",
                  bot->GetName(), closestQuestEnder->GetName(), closestDistance);
 
     // Scan ALL active quests and turn in any that are complete with this GameObject as quest ender
@@ -4180,7 +4198,7 @@ bool QuestStrategy::CheckForGameObjectQuestEnderInRange(BotAI* ai, uint32 gameob
             if (itemCount > 0)
             {
                 isDeliveryQuest = true;
-                TC_LOG_ERROR("module.playerbot.quest", "📬 CheckForGameObjectQuestEnderInRange: Bot {} has DELIVERY quest {} ({}) with item {} (count: {})",
+                TC_LOG_DEBUG("module.playerbot.quest", "📬 CheckForGameObjectQuestEnderInRange: Bot {} has DELIVERY quest {} ({}) with item {} (count: {})",
                              bot->GetName(), questId, quest->GetLogTitle(), srcItemId, itemCount);
             }
         }
@@ -4211,24 +4229,24 @@ bool QuestStrategy::CheckForGameObjectQuestEnderInRange(BotAI* ai, uint32 gameob
         // Turn in the quest
         if (isTalkToQuest)
         {
-            TC_LOG_ERROR("module.playerbot.quest", "🗣️ CheckForGameObjectQuestEnderInRange: Bot {} turning in TALK-TO quest {} ({}) to GameObject {}",
+            TC_LOG_DEBUG("module.playerbot.quest", "🗣️ CheckForGameObjectQuestEnderInRange: Bot {} turning in TALK-TO quest {} ({}) to GameObject {}",
                          bot->GetName(), questId, quest->GetLogTitle(), closestQuestEnder->GetName());
         }
         else if (isDeliveryQuest)
         {
-            TC_LOG_ERROR("module.playerbot.quest", "📬 CheckForGameObjectQuestEnderInRange: Bot {} turning in DELIVERY quest {} ({}) to GameObject {}",
+            TC_LOG_DEBUG("module.playerbot.quest", "📬 CheckForGameObjectQuestEnderInRange: Bot {} turning in DELIVERY quest {} ({}) to GameObject {}",
                          bot->GetName(), questId, quest->GetLogTitle(), closestQuestEnder->GetName());
         }
         else
         {
-            TC_LOG_ERROR("module.playerbot.quest", "🎯 CheckForGameObjectQuestEnderInRange: Bot {} turning in COMPLETE quest {} ({}) to GameObject {}",
+            TC_LOG_DEBUG("module.playerbot.quest", "🎯 CheckForGameObjectQuestEnderInRange: Bot {} turning in COMPLETE quest {} ({}) to GameObject {}",
                          bot->GetName(), questId, quest->GetLogTitle(), closestQuestEnder->GetName());
         }
 
         if (CompleteQuestTurnInAtGameObject(ai, questId, closestQuestEnder))
         {
             anyQuestTurnedIn = true;
-            TC_LOG_ERROR("module.playerbot.quest", "✅ CheckForGameObjectQuestEnderInRange: Bot {} successfully turned in quest {} ({})",
+            TC_LOG_DEBUG("module.playerbot.quest", "✅ CheckForGameObjectQuestEnderInRange: Bot {} successfully turned in quest {} ({})",
                          bot->GetName(), questId, quest->GetLogTitle());
         }
     }
@@ -4248,7 +4266,7 @@ bool QuestStrategy::CompleteQuestTurnInAtGameObject(BotAI* ai, uint32 questId, G
     Player* bot = ai->GetBot();
     Quest const* quest = sObjectMgr->GetQuestTemplate(questId);
 
-    TC_LOG_ERROR("module.playerbot.quest", "🏆 CompleteQuestTurnInAtGameObject: Bot {} completing quest {} ({}) at GameObject {}",
+    TC_LOG_DEBUG("module.playerbot.quest", "🏆 CompleteQuestTurnInAtGameObject: Bot {} completing quest {} ({}) at GameObject {}",
                  bot->GetName(), questId, quest->GetLogTitle(), questEnder->GetName());
 
     // ========================================================================
@@ -4277,7 +4295,7 @@ bool QuestStrategy::CompleteQuestTurnInAtGameObject(BotAI* ai, uint32 questId, G
         Playerbot::EquipmentManager* equipMgr = ai->GetGameSystems()->GetEquipmentManager();
         if (!equipMgr)
         {
-            TC_LOG_ERROR("module.playerbot.quest", "⚠️ EquipmentManager not available for quest reward selection");
+            TC_LOG_DEBUG("module.playerbot.quest", "⚠️ EquipmentManager not available for quest reward selection");
             selectedRewardIndex = 0;
         }
         else
@@ -4286,7 +4304,7 @@ bool QuestStrategy::CompleteQuestTurnInAtGameObject(BotAI* ai, uint32 questId, G
             uint32 bestChoice = 0;
             bool foundUsableReward = false;
 
-            TC_LOG_ERROR("module.playerbot.quest", "🎁 Evaluating {} reward choices for quest {}",
+            TC_LOG_DEBUG("module.playerbot.quest", "🎁 Evaluating {} reward choices for quest {}",
                          QUEST_REWARD_CHOICES_COUNT, questId);
 
             for (uint32 i = 0; i < QUEST_REWARD_CHOICES_COUNT; ++i)
@@ -4314,7 +4332,7 @@ bool QuestStrategy::CompleteQuestTurnInAtGameObject(BotAI* ai, uint32 questId, G
                 // Calculate comprehensive item score using EquipmentManager's stat priority system
                 float itemScore = equipMgr->CalculateItemTemplateScore(itemTemplate);
 
-                TC_LOG_ERROR("module.playerbot.quest", "   Choice {}: {} - Score: {:.2f} (ilvl {}, quality {})",
+                TC_LOG_DEBUG("module.playerbot.quest", "   Choice {}: {} - Score: {:.2f} (ilvl {}, quality {})",
                              i,
                              itemTemplate->GetName(LOCALE_enUS),
                              itemScore,
@@ -4334,7 +4352,7 @@ bool QuestStrategy::CompleteQuestTurnInAtGameObject(BotAI* ai, uint32 questId, G
                 selectedRewardIndex = bestChoice;
                 ItemTemplate const* selectedItem = sObjectMgr->GetItemTemplate(quest->RewardChoiceItemId[bestChoice]);
 
-                TC_LOG_ERROR("module.playerbot.quest", "✅ Selected reward choice {}: {} (score: {:.2f})",
+                TC_LOG_DEBUG("module.playerbot.quest", "✅ Selected reward choice {}: {} (score: {:.2f})",
                              bestChoice,
                              selectedItem ? selectedItem->GetName(LOCALE_enUS) : "UNKNOWN",
                              bestScore);
@@ -4380,7 +4398,7 @@ bool QuestStrategy::CompleteQuestTurnInAtGameObject(BotAI* ai, uint32 questId, G
         // We pass nullptr as questGiver since the rewards are processed independently of the quest giver
         bot->RewardQuest(quest, LootItemType::Item, selectedItemId, nullptr, false);
 
-        TC_LOG_ERROR("module.playerbot.quest", "✅ CompleteQuestTurnInAtGameObject: Bot {} successfully completed quest {} with reward choice {} (itemId: {})",
+        TC_LOG_DEBUG("module.playerbot.quest", "✅ CompleteQuestTurnInAtGameObject: Bot {} successfully completed quest {} with reward choice {} (itemId: {})",
                      bot->GetName(), questId, selectedRewardIndex, selectedItemId);
 
         // Clear failure count on success
@@ -4397,13 +4415,13 @@ bool QuestStrategy::CompleteQuestTurnInAtGameObject(BotAI* ai, uint32 questId, G
         _questTurnInFailures[questId]++;
         uint32 failureCount = _questTurnInFailures[questId];
 
-        TC_LOG_ERROR("module.playerbot.quest", "❌ CompleteQuestTurnInAtGameObject: Bot {} failed CanRewardQuest check for quest {} (failure #{}, missing requirements?)",
+        TC_LOG_DEBUG("module.playerbot.quest", "❌ CompleteQuestTurnInAtGameObject: Bot {} failed CanRewardQuest check for quest {} (failure #{}, missing requirements?)",
                      bot->GetName(), questId, failureCount);
 
         // After MAX_QUEST_TURNIN_FAILURES consecutive failures, abandon the quest
         if (failureCount >= MAX_QUEST_TURNIN_FAILURES)
         {
-            TC_LOG_ERROR("module.playerbot.quest", "🗑️ CompleteQuestTurnInAtGameObject: Bot {} ABANDONING quest {} ({}) after {} consecutive turn-in failures",
+            TC_LOG_DEBUG("module.playerbot.quest", "🗑️ CompleteQuestTurnInAtGameObject: Bot {} ABANDONING quest {} ({}) after {} consecutive turn-in failures",
                          bot->GetName(), questId, quest->GetLogTitle(), failureCount);
 
             bot->AbandonQuest(questId);
@@ -4429,7 +4447,7 @@ bool QuestStrategy::CompleteQuestTurnIn(BotAI* ai, uint32 questId, ::Unit* quest
     Player* bot = ai->GetBot();
     Quest const* quest = sObjectMgr->GetQuestTemplate(questId);
 
-    TC_LOG_ERROR("module.playerbot.quest", "🏆 CompleteQuestTurnIn: Bot {} completing quest {} ({}) with NPC {}",
+    TC_LOG_DEBUG("module.playerbot.quest", "🏆 CompleteQuestTurnIn: Bot {} completing quest {} ({}) with NPC {}",
                  bot->GetName(), questId, quest->GetLogTitle(), questEnder->GetName());
 
     // ========================================================================
@@ -4458,7 +4476,7 @@ bool QuestStrategy::CompleteQuestTurnIn(BotAI* ai, uint32 questId, ::Unit* quest
         Playerbot::EquipmentManager* equipMgr = ai->GetGameSystems()->GetEquipmentManager();
         if (!equipMgr)
         {
-            TC_LOG_ERROR("module.playerbot.quest", "⚠️ EquipmentManager not available for quest reward selection");
+            TC_LOG_DEBUG("module.playerbot.quest", "⚠️ EquipmentManager not available for quest reward selection");
             // Fall back to first choice
             selectedRewardIndex = 0;
         }
@@ -4468,7 +4486,7 @@ bool QuestStrategy::CompleteQuestTurnIn(BotAI* ai, uint32 questId, ::Unit* quest
             uint32 bestChoice = 0;
             bool foundUsableReward = false;
 
-            TC_LOG_ERROR("module.playerbot.quest", "🎁 Evaluating {} reward choices for quest {}",
+            TC_LOG_DEBUG("module.playerbot.quest", "🎁 Evaluating {} reward choices for quest {}",
                          QUEST_REWARD_CHOICES_COUNT, questId);
 
             for (uint32 i = 0; i < QUEST_REWARD_CHOICES_COUNT; ++i)
@@ -4496,7 +4514,7 @@ bool QuestStrategy::CompleteQuestTurnIn(BotAI* ai, uint32 questId, ::Unit* quest
                 // Calculate comprehensive item score using EquipmentManager's stat priority system
                 float itemScore = equipMgr->CalculateItemTemplateScore(itemTemplate);
 
-            TC_LOG_ERROR("module.playerbot.quest", "   Choice {}: {} - Score: {:.2f} (ilvl {}, quality {})",
+            TC_LOG_DEBUG("module.playerbot.quest", "   Choice {}: {} - Score: {:.2f} (ilvl {}, quality {})",
                          i,
                          itemTemplate->GetName(LOCALE_enUS),
                          itemScore,
@@ -4516,7 +4534,7 @@ bool QuestStrategy::CompleteQuestTurnIn(BotAI* ai, uint32 questId, ::Unit* quest
             selectedRewardIndex = bestChoice;
             ItemTemplate const* selectedItem = sObjectMgr->GetItemTemplate(quest->RewardChoiceItemId[bestChoice]);
 
-            TC_LOG_ERROR("module.playerbot.quest", "✅ Selected reward choice {}: {} (score: {:.2f})",
+            TC_LOG_DEBUG("module.playerbot.quest", "✅ Selected reward choice {}: {} (score: {:.2f})",
                          bestChoice,
                          selectedItem ? selectedItem->GetName(LOCALE_enUS) : "UNKNOWN",
                          bestScore);
@@ -4557,7 +4575,7 @@ bool QuestStrategy::CompleteQuestTurnIn(BotAI* ai, uint32 questId, ::Unit* quest
     {
         bot->RewardQuest(quest, LootItemType::Item, selectedItemId, questEnder, false);
 
-        TC_LOG_ERROR("module.playerbot.quest", "✅ CompleteQuestTurnIn: Bot {} successfully completed quest {} with reward choice {} (itemId: {})",
+        TC_LOG_DEBUG("module.playerbot.quest", "✅ CompleteQuestTurnIn: Bot {} successfully completed quest {} with reward choice {} (itemId: {})",
                      bot->GetName(), questId, selectedRewardIndex, selectedItemId);
 
         // Clear failure count on success
@@ -4574,14 +4592,14 @@ bool QuestStrategy::CompleteQuestTurnIn(BotAI* ai, uint32 questId, ::Unit* quest
         _questTurnInFailures[questId]++;
         uint32 failureCount = _questTurnInFailures[questId];
 
-        TC_LOG_ERROR("module.playerbot.quest", "❌ CompleteQuestTurnIn: Bot {} failed CanRewardQuest check for quest {} (failure #{}, missing requirements?)",
+        TC_LOG_DEBUG("module.playerbot.quest", "❌ CompleteQuestTurnIn: Bot {} failed CanRewardQuest check for quest {} (failure #{}, missing requirements?)",
                      bot->GetName(), questId, failureCount);
 
         // After MAX_QUEST_TURNIN_FAILURES consecutive failures, abandon the quest
         // This prevents infinite loops on quests with missing required items (e.g., delivery quests where item was lost)
         if (failureCount >= MAX_QUEST_TURNIN_FAILURES)
         {
-            TC_LOG_ERROR("module.playerbot.quest", "🗑️ CompleteQuestTurnIn: Bot {} ABANDONING quest {} ({}) after {} consecutive turn-in failures - likely missing required item",
+            TC_LOG_DEBUG("module.playerbot.quest", "🗑️ CompleteQuestTurnIn: Bot {} ABANDONING quest {} ({}) after {} consecutive turn-in failures - likely missing required item",
                          bot->GetName(), questId, quest->GetLogTitle(), failureCount);
 
             // Abandon the quest
@@ -4624,7 +4642,7 @@ bool QuestStrategy::ShouldWanderInQuestArea(BotAI* ai, ObjectiveState const& obj
     // ========================================================================
     if (questObjective.Type == QUEST_OBJECTIVE_MONSTER || questObjective.Type == QUEST_OBJECTIVE_ITEM)
     {
-        TC_LOG_ERROR("module.playerbot.quest", "✅ ShouldWanderInQuestArea: Quest {} objective {} is MONSTER/ITEM type - wandering enabled (mine/cave fix)",
+        TC_LOG_DEBUG("module.playerbot.quest", "✅ ShouldWanderInQuestArea: Quest {} objective {} is MONSTER/ITEM type - wandering enabled (mine/cave fix)",
                      objective.questId, objective.objectiveIndex);
         return true;
     }
@@ -4644,7 +4662,7 @@ bool QuestStrategy::ShouldWanderInQuestArea(BotAI* ai, ObjectiveState const& obj
             // Area wandering is only useful if there are multiple points defining a region
             if (blob.Points.size() >= 2)
             {
-                TC_LOG_ERROR("module.playerbot.quest", "✅ ShouldWanderInQuestArea: Quest {} objective {} has {} POI points - wandering enabled",
+                TC_LOG_DEBUG("module.playerbot.quest", "✅ ShouldWanderInQuestArea: Quest {} objective {} has {} POI points - wandering enabled",
                              objective.questId, objective.objectiveIndex, blob.Points.size());
                 return true;
             }
@@ -4699,7 +4717,7 @@ void QuestStrategy::InitializeQuestAreaWandering(BotAI* ai, ObjectiveState const
 
         if (creatureEntry != 0)
         {
-            TC_LOG_ERROR("module.playerbot.quest", "🗺️ InitializeQuestAreaWandering: Bot {} - Using CREATURE SPAWN locations for entry {} (mine/cave fix)",
+            TC_LOG_DEBUG("module.playerbot.quest", "🗺️ InitializeQuestAreaWandering: Bot {} - Using CREATURE SPAWN locations for entry {} (mine/cave fix)",
                          bot->GetName(), creatureEntry);
 
             // Query all spawn locations for this creature on bot's map
@@ -4726,7 +4744,7 @@ void QuestStrategy::InitializeQuestAreaWandering(BotAI* ai, ObjectiveState const
                 _questAreaWanderPoints.push_back(pos);
                 spawnsOnMap++;
 
-                TC_LOG_ERROR("module.playerbot.quest", "📍 Spawn point {}: ({:.1f}, {:.1f}, {:.1f}) - distance={:.1f}",
+                TC_LOG_DEBUG("module.playerbot.quest", "📍 Spawn point {}: ({:.1f}, {:.1f}, {:.1f}) - distance={:.1f}",
                              spawnsOnMap, pos.GetPositionX(), pos.GetPositionY(), pos.GetPositionZ(), distance);
 
                 // Limit to 20 spawn points to avoid excessive wandering
@@ -4745,7 +4763,7 @@ void QuestStrategy::InitializeQuestAreaWandering(BotAI* ai, ObjectiveState const
                     });
 
                 _currentWanderPointIndex = 0; // Start with nearest spawn
-                TC_LOG_ERROR("module.playerbot.quest", "✅ Bot {} initialized {} SPAWN wander points (mine/cave interior)",
+                TC_LOG_DEBUG("module.playerbot.quest", "✅ Bot {} initialized {} SPAWN wander points (mine/cave interior)",
                              bot->GetName(), _questAreaWanderPoints.size());
                 return; // Successfully initialized with spawn data
             }
@@ -4769,7 +4787,7 @@ void QuestStrategy::InitializeQuestAreaWandering(BotAI* ai, ObjectiveState const
         if (blob.MapID == static_cast<int32>(bot->GetMapId()) &&
             blob.ObjectiveIndex == static_cast<int32>(objective.objectiveIndex))
         {
-            TC_LOG_ERROR("module.playerbot.quest", "🗺️ InitializeQuestAreaWandering: Bot {} - Found quest area with {} POI points (fallback)",
+            TC_LOG_DEBUG("module.playerbot.quest", "🗺️ InitializeQuestAreaWandering: Bot {} - Found quest area with {} POI points (fallback)",
                          bot->GetName(), blob.Points.size());
 
             // Convert POI points to wander positions
@@ -4779,7 +4797,7 @@ void QuestStrategy::InitializeQuestAreaWandering(BotAI* ai, ObjectiveState const
                 pos.Relocate(static_cast<float>(point.X), static_cast<float>(point.Y), static_cast<float>(point.Z));
                 _questAreaWanderPoints.push_back(pos);
 
-                TC_LOG_ERROR("module.playerbot.quest", "📍 POI wander point {}: ({:.1f}, {:.1f}, {:.1f})",
+                TC_LOG_DEBUG("module.playerbot.quest", "📍 POI wander point {}: ({:.1f}, {:.1f}, {:.1f})",
                              _questAreaWanderPoints.size(), pos.GetPositionX(), pos.GetPositionY(), pos.GetPositionZ());
             }
 
@@ -4787,7 +4805,7 @@ void QuestStrategy::InitializeQuestAreaWandering(BotAI* ai, ObjectiveState const
             if (!_questAreaWanderPoints.empty())
             {
                 _currentWanderPointIndex = bot->GetGUID().GetCounter() % _questAreaWanderPoints.size();
-                TC_LOG_ERROR("module.playerbot.quest", "🎲 Bot {} starting wander at POI point {} of {}",
+                TC_LOG_DEBUG("module.playerbot.quest", "🎲 Bot {} starting wander at POI point {} of {}",
                              bot->GetName(), _currentWanderPointIndex, _questAreaWanderPoints.size());
             }
 
@@ -4805,7 +4823,7 @@ void QuestStrategy::WanderInQuestArea(BotAI* ai)
     // Check if wandering is initialized
     if (_questAreaWanderPoints.empty())
     {
-        TC_LOG_ERROR("module.playerbot.quest", "⚠️ WanderInQuestArea: Bot {} - No wander points initialized",
+        TC_LOG_DEBUG("module.playerbot.quest", "⚠️ WanderInQuestArea: Bot {} - No wander points initialized",
                      bot->GetName());
         return;
     }
@@ -4832,14 +4850,14 @@ void QuestStrategy::WanderInQuestArea(BotAI* ai)
         // Reached current point - move to next point
         _currentWanderPointIndex = (_currentWanderPointIndex + 1) % _questAreaWanderPoints.size();
 
-        TC_LOG_ERROR("module.playerbot.quest", "✅ WanderInQuestArea: Bot {} reached wander point (3D dist {:.1f}), moving to next point {} of {}",
+        TC_LOG_DEBUG("module.playerbot.quest", "✅ WanderInQuestArea: Bot {} reached wander point (3D dist {:.1f}), moving to next point {} of {}",
                      bot->GetName(), distance3D, _currentWanderPointIndex, _questAreaWanderPoints.size());
     }
 
     // Move to current wander point
     Position const& targetPoint = _questAreaWanderPoints[_currentWanderPointIndex];
 
-    TC_LOG_ERROR("module.playerbot.quest", "🚶 WanderInQuestArea: Bot {} wandering to point {} at ({:.1f}, {:.1f}, {:.1f}), dist3D={:.1f}",
+    TC_LOG_DEBUG("module.playerbot.quest", "🚶 WanderInQuestArea: Bot {} wandering to point {} at ({:.1f}, {:.1f}, {:.1f}), dist3D={:.1f}",
                  bot->GetName(), _currentWanderPointIndex,
                  targetPoint.GetPositionX(), targetPoint.GetPositionY(), targetPoint.GetPositionZ(),
                  bot->GetExactDist(targetPoint));

@@ -24,7 +24,7 @@ namespace Playerbot
 
 RestStrategy::RestStrategy()
     : Strategy("rest")
-    , _criticalRestThreshold(30.0f + frand(0.0f, 20.0f))
+    , _criticalRestThreshold(15.0f + frand(0.0f, 10.0f))
 {
     TC_LOG_DEBUG("module.playerbot.strategy", "RestStrategy: Initialized (critical threshold={:.0f}%)", _criticalRestThreshold);
 }

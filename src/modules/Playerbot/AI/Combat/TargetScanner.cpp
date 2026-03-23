@@ -358,7 +358,7 @@ namespace Playerbot
         // Hostility check deferred to main thread (requires Map access)
         for (DoubleBufferedSpatialGrid::CreatureSnapshot const& creature : nearbyCreatures)
         {
-            TC_LOG_INFO("playerbot.scanner",
+            TC_LOG_TRACE("playerbot.scanner",
                 "Bot {} evaluating creature entry={} guid={}: IsValid={}, isDead={}, health={}/{}, level={}, blacklisted={}, botLevel={}",
                 m_bot->GetName(), creature.entry, creature.guid.ToString(),
                 creature.IsValid(), creature.isDead, creature.health, creature.maxHealth,

@@ -58,7 +58,7 @@ void QuestAcceptanceManager::ProcessQuestGiver(Creature* questGiver)
         bool canTake = _bot->CanTakeQuest(quest, false);
         bool canAdd = _bot->CanAddQuest(quest, true);
 
-        TC_LOG_INFO("module.playerbot.quest",
+        TC_LOG_DEBUG("module.playerbot.quest",
             "ProcessQuestGiver AUTO-ACCEPT check: Bot {} quest {} '{}' — alreadyHas={}, blacklisted={}, canTake={}, canAdd={}",
             _bot->GetName(), questId, quest->GetLogTitle(), alreadyHas, blacklisted, canTake, canAdd);
 

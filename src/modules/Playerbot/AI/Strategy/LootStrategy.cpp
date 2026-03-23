@@ -101,13 +101,14 @@ bool LootStrategy::IsActive(BotAI* ai) const
     if (bot->GetGroup())
         return false;
 
-    // Only active when there are actually lootable corpses or objects nearby
-    // This prevents loot strategy from blocking quest/grind when nothing to loot
+    // Only active when there are lootable corpses nearby (from kills).
+    // Game objects (chests, herbs) use INTERACTION_DISTANCE — only activate
+    // if the bot is already standing right next to one.
     ::std::vector<ObjectGuid> corpses = FindLootableCorpses(ai);
     if (!corpses.empty())
         return true;
 
-    ::std::vector<ObjectGuid> objects = FindLootableObjects(ai);
+    ::std::vector<ObjectGuid> objects = FindLootableObjects(ai, INTERACTION_DISTANCE);
     return !objects.empty();
 }
 
@@ -134,7 +135,7 @@ float LootStrategy::GetRelevance(BotAI* ai) const
     // in UpdateBehavior, and the actual loot operations are infrequent, so this
     // is acceptable overhead for correct behavior selection.
     ::std::vector<ObjectGuid> corpses = FindLootableCorpses(ai);
-    ::std::vector<ObjectGuid> objects = FindLootableObjects(ai);
+    ::std::vector<ObjectGuid> objects = FindLootableObjects(ai, INTERACTION_DISTANCE);
 
     // Medium-high relevance if loot available (lower than quest=70, higher than solo=10)
     // Returns 0.0f if no loot → allows QuestStrategy (50.0f) to run for quest seeking

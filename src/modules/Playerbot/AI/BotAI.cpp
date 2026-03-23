@@ -1056,8 +1056,7 @@ void BotAI::UpdateStrategies(uint32 diff)
         selectedStrategy = _priorityManager->SelectActiveBehavior(activeStrategies);
     }
 
-    // DIAGNOSTIC: Log strategy selection result every call (temporary)
-    TC_LOG_INFO("module.playerbot",
+    TC_LOG_TRACE("module.playerbot",
         "STRAT-SELECT: Bot {} activeCount={} selected={}",
         _bot->GetName(),
         activeStrategies.size(),
