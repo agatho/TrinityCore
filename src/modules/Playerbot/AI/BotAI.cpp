@@ -409,14 +409,12 @@ void BotAI::UpdateAI(uint32 diff)
         return;
 
     // ========================================================================
-    // POSITION CACHE: Interpolate current position from active movespline
+    // WORKER THREAD CACHE: Snapshot bot state at the start of each AI tick
     // ========================================================================
-    // Worker threads read _bot->GetPositionX/Y/Z() which is only updated on the
-    // main thread during Player::Update(). This causes stale position data that
-    // affects distance calculations, quest giver arrival, combat positioning, etc.
-    //
-    // Fix: read the movespline's current interpolated position if a spline is active,
-    // otherwise fall back to the last known server position.
+    // Bot stats (health, mana, position, map, combat state) are only updated on
+    // the main thread during Player::Update(). Worker threads reading them directly
+    // get stale data — health shows 53% when it's actually 100%, position lags
+    // behind the client, etc. All strategy code must use these cached values.
     if (_bot->movespline && !_bot->movespline->Finalized())
     {
         G3D::Vector3 const& dest = _bot->movespline->FinalDestination();
@@ -427,6 +425,10 @@ void BotAI::UpdateAI(uint32 diff)
         _cachedPosition.Relocate(_bot->GetPositionX(), _bot->GetPositionY(),
                                  _bot->GetPositionZ(), _bot->GetOrientation());
     }
+    _cachedHealthPct = _bot->GetHealthPct();
+    _cachedManaPct = _bot->GetPowerType() == POWER_MANA ? _bot->GetPowerPct(POWER_MANA) : 100.0f;
+    _cachedMapId = _bot->GetMapId();
+    _cachedIsInCombat = _bot->IsInCombat();
 
     // ========================================================================
     // BOT-SPECIFIC LOGIN SPELL CLEANUP: Clear events on first update to prevent LOGINEFFECT crash

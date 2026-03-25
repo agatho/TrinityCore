@@ -329,9 +329,13 @@ public:
     ObjectGuid GetBotGuid() const { return _bot ? _bot->GetGUID() : ObjectGuid::Empty; }
     ObjectGuid GetCachedBotGuid() const { return _cachedBotGuid; }  // Safe during destructor
 
-    // Current interpolated position — accurate on worker threads unlike GetPositionX/Y/Z()
-    // Updated at the start of each UpdateAI from the active movespline
+    // Worker-thread-safe cached values — updated at start of each UpdateAI
+    // Use these instead of bot->GetHealthPct(), GetPositionX(), etc.
     Position const& GetCurrentPosition() const { return _cachedPosition; }
+    float GetCachedHealthPct() const { return _cachedHealthPct; }
+    float GetCachedManaPct() const { return _cachedManaPct; }
+    uint32 GetCachedMapId() const { return _cachedMapId; }
+    bool GetCachedIsInCombat() const { return _cachedIsInCombat; }
 
     // ========================================================================
     // LIFECYCLE MANAGEMENT - Two-Phase AddToWorld Pattern
@@ -1098,9 +1102,13 @@ protected:
     // Solo strategy activation tracking
     bool _soloStrategiesActivated = false;
 
-    // Thread-safe position cache — updated at start of UpdateAI from movespline
-    // Use GetCurrentPosition() instead of _bot->GetPositionX/Y/Z() in worker threads
+    // Thread-safe caches — updated at start of UpdateAI from main thread data
+    // Worker threads MUST use these instead of reading bot stats directly
     Position _cachedPosition;
+    float _cachedHealthPct = 100.0f;
+    float _cachedManaPct = 100.0f;
+    uint32 _cachedMapId = 0;
+    bool _cachedIsInCombat = false;
 
     // Login spell event cleanup tracking (prevents LOGINEFFECT crash)
     bool _firstUpdateComplete = false;

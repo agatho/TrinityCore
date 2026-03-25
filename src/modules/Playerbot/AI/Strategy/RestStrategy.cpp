@@ -9,6 +9,7 @@
 
 #include "RestStrategy.h"
 #include "../BotAI.h"
+#include "Core/PlayerBotHelpers.h"
 #include "Player.h"
 #include "Item.h"
 #include "Bag.h"
@@ -110,10 +111,14 @@ bool RestStrategy::IsActive(BotAI* ai) const
         return true;
 
     // No consumables: only rest if critically low — must wait for passive regen
-    // At moderate health let other strategies run while bot regens passively
-    // Threshold is randomized per bot at construction (30-50%) for human-like variation
+    // Use cached values from BotAI (worker-thread-safe)
     float healthPct = bot->GetHealthPct();
     float manaPct = bot->GetPowerType() == POWER_MANA ? bot->GetPowerPct(POWER_MANA) : 100.0f;
+    if (BotAI* botAI = GetBotAI(bot))
+    {
+        healthPct = botAI->GetCachedHealthPct();
+        manaPct = botAI->GetCachedManaPct();
+    }
 
     return (needsFood && healthPct < _criticalRestThreshold) || (needsDrink && manaPct < _criticalRestThreshold);
 }
@@ -339,6 +344,9 @@ bool RestStrategy::NeedsFood(BotAI* ai) const
     if (!bot->IsInWorld())
         return false;
 
+    // Use cached health from BotAI — bot->GetHealthPct() is stale on worker threads
+    if (BotAI* botAI = GetBotAI(bot))
+        return botAI->GetCachedHealthPct() < _eatHealthThreshold;
     return bot->GetHealthPct() < _eatHealthThreshold;
 }
 
@@ -359,7 +367,12 @@ bool RestStrategy::NeedsDrink(BotAI* ai) const
     if (bot->GetMaxPower(POWER_MANA) == 0)
         return false;
 
-    float manaPct = (bot->GetPower(POWER_MANA) * 100.0f) / bot->GetMaxPower(POWER_MANA);
+    // Use cached mana from BotAI — bot->GetPower() is stale on worker threads
+    float manaPct;
+    if (BotAI* botAI = GetBotAI(bot))
+        manaPct = botAI->GetCachedManaPct();
+    else
+        manaPct = (bot->GetPower(POWER_MANA) * 100.0f) / bot->GetMaxPower(POWER_MANA);
     return manaPct < _drinkManaThreshold;
 }
 
