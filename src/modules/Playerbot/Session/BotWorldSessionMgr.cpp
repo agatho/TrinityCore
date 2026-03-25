@@ -1500,6 +1500,11 @@ uint32 BotWorldSessionMgr::ProcessAllDeferredPackets()
         // Process pending LFG proposal accepts (re-entrant crash fix)
         // UpdateProposal() must not be called from within LFGMgr iteration
         session->ProcessPendingLfgProposalAccepts();
+
+        // Snapshot bot state for worker thread consumption
+        // Captures health, mana, position, map, combat state from main thread
+        // where Player::Update() has already run and values are current.
+        session->SnapshotBotState();
     }
 
     // Log statistics if significant activity

@@ -3,6 +3,7 @@
  */
 
 #include "BotSession.h"
+#include "MoveSpline.h"
 #include "DatabaseEnv.h"
 #include "CharacterDatabase.h"
 #include "BotPacketRelay.h"
@@ -2715,6 +2716,42 @@ bool BotSession::ProcessPendingSafeResurrection()
 // because it modifies _updateObjects which must only be touched on main thread.
 //
 // Solution: Queue loot targets from worker threads, process on main thread.
+// ============================================================================
+
+// ============================================================================
+// MAIN THREAD STATE SNAPSHOT
+// ============================================================================
+
+void BotSession::SnapshotBotState()
+{
+    Player* bot = GetPlayer();
+    if (!bot || !bot->IsInWorld())
+        return;
+
+    BotAI* ai = _ai.get();
+    if (!ai)
+        return;
+
+    // Capture position from movespline or current position
+    if (bot->movespline && !bot->movespline->Finalized())
+    {
+        Movement::Location loc = bot->movespline->ComputePosition();
+        ai->_cachedPosition.Relocate(loc.x, loc.y, loc.z, loc.orientation);
+    }
+    else
+    {
+        ai->_cachedPosition.Relocate(bot->GetPositionX(), bot->GetPositionY(),
+                                     bot->GetPositionZ(), bot->GetOrientation());
+    }
+
+    ai->_cachedHealthPct = bot->GetHealthPct();
+    ai->_cachedManaPct = bot->GetPowerType() == POWER_MANA ? bot->GetPowerPct(POWER_MANA) : 100.0f;
+    ai->_cachedMapId = bot->GetMapId();
+    ai->_cachedIsInCombat = bot->IsInCombat();
+}
+
+// ============================================================================
+// THREAD-SAFE LOOT QUEUE
 // ============================================================================
 
 void BotSession::QueueLootTarget(ObjectGuid creatureGuid)

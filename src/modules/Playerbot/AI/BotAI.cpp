@@ -408,27 +408,10 @@ void BotAI::UpdateAI(uint32 diff)
     if (!_bot->IsInWorld())
         return;
 
-    // ========================================================================
-    // WORKER THREAD CACHE: Snapshot bot state at the start of each AI tick
-    // ========================================================================
-    // Bot stats (health, mana, position, map, combat state) are only updated on
-    // the main thread during Player::Update(). Worker threads reading them directly
-    // get stale data — health shows 53% when it's actually 100%, position lags
-    // behind the client, etc. All strategy code must use these cached values.
-    if (_bot->movespline && !_bot->movespline->Finalized())
-    {
-        G3D::Vector3 const& dest = _bot->movespline->FinalDestination();
-        _cachedPosition.Relocate(dest.x, dest.y, dest.z, _bot->GetOrientation());
-    }
-    else
-    {
-        _cachedPosition.Relocate(_bot->GetPositionX(), _bot->GetPositionY(),
-                                 _bot->GetPositionZ(), _bot->GetOrientation());
-    }
-    _cachedHealthPct = _bot->GetHealthPct();
-    _cachedManaPct = _bot->GetPowerType() == POWER_MANA ? _bot->GetPowerPct(POWER_MANA) : 100.0f;
-    _cachedMapId = _bot->GetMapId();
-    _cachedIsInCombat = _bot->IsInCombat();
+    // Bot state cache (health, mana, position, map, combat) is populated on the
+    // MAIN THREAD by BotSession::SnapshotBotState(), called from
+    // BotWorldSessionMgr::ProcessAllDeferredPackets(). Worker threads read the
+    // cached values via GetCachedHealthPct(), GetCurrentPosition(), etc.
 
     // ========================================================================
     // BOT-SPECIFIC LOGIN SPELL CLEANUP: Clear events on first update to prevent LOGINEFFECT crash

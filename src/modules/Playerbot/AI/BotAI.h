@@ -151,6 +151,7 @@ class TC_GAME_API BotAI : public IEventHandler<LootEvent>,
                            public IEventHandler<GroupEvent>,
                            public IEventHandler<ProfessionEvent>
 {
+    friend class BotSession; // Needs access to cached state for main-thread snapshots
 public:
     /**
      * @brief Construct BotAI for a player bot

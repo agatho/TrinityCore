@@ -418,6 +418,13 @@ public:
      */
     bool HasPendingLfgProposalAccepts() const;
 
+    // ========================================================================
+    // MAIN THREAD STATE SNAPSHOT
+    // ========================================================================
+    // Called from BotWorldSessionMgr on the main thread to capture bot stats
+    // that worker threads need but can't read directly (stale data).
+    void SnapshotBotState();
+
 private:
     // Helper methods for safe database access
     CharacterDatabasePreparedStatement* GetSafePreparedStatement(CharacterDatabaseStatements statementId, const char* statementName);
