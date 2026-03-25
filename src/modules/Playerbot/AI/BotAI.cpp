@@ -136,6 +136,18 @@ BotAI::BotAI(Player* bot, bool instanceOnlyMode)
     // Initialize performance tracking
     _performanceMetrics.lastUpdate = std::chrono::steady_clock::now();
 
+    // Initialize cached state from bot's current values so worker threads
+    // have valid data before the first main-thread SnapshotBotState() runs
+    if (_bot && _bot->IsInWorld())
+    {
+        _cachedPosition.Relocate(_bot->GetPositionX(), _bot->GetPositionY(),
+                                 _bot->GetPositionZ(), _bot->GetOrientation());
+        _cachedHealthPct = _bot->GetHealthPct();
+        _cachedManaPct = _bot->GetPowerType() == POWER_MANA ? _bot->GetPowerPct(POWER_MANA) : 100.0f;
+        _cachedMapId = _bot->GetMapId();
+        _cachedIsInCombat = _bot->IsInCombat();
+    }
+
     // ========================================================================
     // INSTANCE-ONLY MODE - For JIT bots created for BG/LFG queues
     // ========================================================================
