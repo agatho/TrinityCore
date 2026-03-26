@@ -656,6 +656,7 @@ void BotAI::UpdateAI(uint32 diff)
     auto deathRecovery = GetDeathRecoveryManager();
     bool isInDeathRecovery = deathRecovery && deathRecovery->IsInDeathRecovery();
 
+
     // Performance tracking - declare BEFORE the if block so it's accessible after
     auto startTime = std::chrono::high_resolution_clock::now();
     _performanceMetrics.totalUpdates++;
@@ -692,11 +693,10 @@ void BotAI::UpdateAI(uint32 diff)
     // Only run normal AI if NOT in death recovery
     if (!isInDeathRecovery)
     {
-    // ========================================================================
-    // BUDGET TIER: MINIMAL skips everything below (safety systems already ran)
-    // ========================================================================
-    if (_currentBudgetTier == AIBudgetTier::MINIMAL)
-        goto throttled_update_complete;
+    // NOTE: MINIMAL budget tier no longer skips strategies. Strategies are what
+    // drive the bot out of idle state (find quests, start grinding, move to hubs).
+    // Without them, MINIMAL bots sit idle forever. Budget gating is handled by
+    // individual strategy throttles and the PHASE gates below.
 
     // ST-1: ADAPTIVE AI UPDATE THROTTLING - DISABLED
     // The throttler was preventing ALL strategy execution (UpdateStrategies never reached).
