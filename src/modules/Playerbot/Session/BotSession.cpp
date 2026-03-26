@@ -2745,7 +2745,11 @@ void BotSession::SnapshotBotState()
     }
 
     ai->_cachedHealthPct = bot->GetHealthPct();
-    ai->_cachedManaPct = bot->GetPowerType() == POWER_MANA ? bot->GetPowerPct(POWER_MANA) : 100.0f;
+    // Always capture mana for classes that have a mana pool, regardless of primary power type
+    // (Warlocks have mana + soul shards, paladins have mana + holy power, etc.)
+    ai->_cachedManaPct = bot->GetMaxPower(POWER_MANA) > 0
+        ? (bot->GetPower(POWER_MANA) * 100.0f / bot->GetMaxPower(POWER_MANA))
+        : 100.0f;
     ai->_cachedMapId = bot->GetMapId();
     ai->_cachedIsInCombat = bot->IsInCombat();
 }

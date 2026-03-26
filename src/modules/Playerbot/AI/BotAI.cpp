@@ -143,7 +143,9 @@ BotAI::BotAI(Player* bot, bool instanceOnlyMode)
         _cachedPosition.Relocate(_bot->GetPositionX(), _bot->GetPositionY(),
                                  _bot->GetPositionZ(), _bot->GetOrientation());
         _cachedHealthPct = _bot->GetHealthPct();
-        _cachedManaPct = _bot->GetPowerType() == POWER_MANA ? _bot->GetPowerPct(POWER_MANA) : 100.0f;
+        _cachedManaPct = _bot->GetMaxPower(POWER_MANA) > 0
+            ? (_bot->GetPower(POWER_MANA) * 100.0f / _bot->GetMaxPower(POWER_MANA))
+            : 100.0f;
         _cachedMapId = _bot->GetMapId();
         _cachedIsInCombat = _bot->IsInCombat();
     }
@@ -1053,11 +1055,6 @@ void BotAI::UpdateStrategies(uint32 diff)
         selectedStrategy = _priorityManager->SelectActiveBehavior(activeStrategies);
     }
 
-    TC_LOG_TRACE("module.playerbot",
-        "STRAT-SELECT: Bot {} activeCount={} selected={}",
-        _bot->GetName(),
-        activeStrategies.size(),
-        selectedStrategy ? selectedStrategy->GetName() : "NONE");
 
     // ========================================================================
     // PHASE 4: Execute the selected strategy

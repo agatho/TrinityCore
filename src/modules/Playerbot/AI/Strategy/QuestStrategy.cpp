@@ -374,9 +374,36 @@ void QuestStrategy::UpdateBehavior(BotAI* ai, uint32 diff)
         }
         else
         {
-            TC_LOG_INFO("module.playerbot.quest",
-                "QuestStrategy: Bot {} walking to quest giver (dist={:.1f})",
-                bot->GetName(), dist);
+            // Detect stuck — if distance hasn't decreased in 30 seconds, give up
+            static std::unordered_map<ObjectGuid, std::pair<float, uint32>> walkProgress;
+            ObjectGuid botGuid = bot->GetGUID();
+            uint32 now = GameTime::GetGameTimeMS();
+
+            auto& [lastDist, lastProgressTime] = walkProgress[botGuid];
+            if (lastDist == 0.0f || dist < lastDist - 1.0f) // At least 1yd progress
+            {
+                lastDist = dist;
+                lastProgressTime = now;
+            }
+            else if (now - lastProgressTime > 30000)
+            {
+                TC_LOG_WARN("module.playerbot.quest",
+                    "QuestStrategy: Bot {} gave up walking to quest giver (stuck at {:.1f}yd for 30s)",
+                    bot->GetName(), dist);
+                _pendingQuestGiverGuid.Clear();
+                walkProgress.erase(botGuid);
+                return;
+            }
+
+            // Throttle log to once per 5 seconds
+            static std::unordered_map<ObjectGuid, uint32> lastWalkLog;
+            if (now - lastWalkLog[botGuid] > 5000)
+            {
+                TC_LOG_INFO("module.playerbot.quest",
+                    "QuestStrategy: Bot {} walking to quest giver (dist={:.1f})",
+                    bot->GetName(), dist);
+                lastWalkLog[botGuid] = now;
+            }
 
             BotMovementUtil::MoveToPosition(bot, _pendingQuestGiverPos);
             return;

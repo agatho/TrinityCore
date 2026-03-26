@@ -554,7 +554,7 @@ std::vector<ObjectivePriority> ObjectiveTracker::CalculateObjectivePriorities(Pl
         return priorities;
 
     std::vector<ObjectiveState> activeObjectives = GetActiveObjectives(bot);
-    TC_LOG_ERROR("module.playerbot.quest", "🔢 CalculateObjectivePriorities: Bot {} has {} active objectives",
+    TC_LOG_TRACE("module.playerbot.quest", "CalculateObjectivePriorities: Bot {} has {} active objectives",
                 bot->GetName(), activeObjectives.size());
 
     for (const auto& state : activeObjectives)
