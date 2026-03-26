@@ -2171,7 +2171,7 @@ void HotfixDatabaseConnection::DoPrepareStatements()
 
     // WarbandSceneAnimation.db2
     PrepareStatement(HOTFIX_SEL_WARBAND_SCENE_ANIMATION, "SELECT ID, SpellVisualKitID, Event, AnimKitID, Field_11_0_0_54210_003, TimeIsh, "
-        "Field_11_0_0_54935_005, Field_11_0_0_55000_006, Field_11_1_0_58221_008, Field_11_0_0_54210_005_0, Field_11_0_0_54210_005_1"
+        "StandState, SheatheState, Field_11_1_0_58221_008, Field_11_0_0_54210_005_0, Field_11_0_0_54210_005_1"
         " FROM warband_scene_animation WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
     PREPARE_MAX_ID_STMT(HOTFIX_SEL_WARBAND_SCENE_ANIMATION, "SELECT MAX(ID) + 1 FROM warband_scene_animation", CONNECTION_SYNCH);
 

@@ -5156,8 +5156,8 @@ struct WarbandSceneAnimationEntry
     int32 AnimKitID;
     int32 Field_11_0_0_54210_003;
     float TimeIsh;
-    uint8 Field_11_0_0_54935_005;
-    uint8 Field_11_0_0_55000_006;
+    uint8 StandState;
+    uint8 SheatheState;
     int8 Field_11_1_0_58221_008;
     std::array<int32, 2> Field_11_0_0_54210_005;
 };
