@@ -339,7 +339,15 @@ bool RestStrategy::NeedsFood(BotAI* ai) const
         return false;
 
     // Use cached health from BotAI — bot->GetHealthPct() is stale on worker threads
-    return ai->GetCachedHealthPct() < _eatHealthThreshold;
+    float cachedHp = ai->GetCachedHealthPct();
+    bool result = cachedHp < _eatHealthThreshold;
+    if (result)
+    {
+        TC_LOG_INFO("module.playerbot.strategy",
+            "NeedsFood: Bot {} cachedHp={:.1f} threshold={:.1f} -> TRUE",
+            bot->GetName(), cachedHp, _eatHealthThreshold);
+    }
+    return result;
 }
 
 bool RestStrategy::NeedsDrink(BotAI* ai) const
