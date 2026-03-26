@@ -54,6 +54,7 @@ public:
     bool IsActive(BotAI* ai) const;
     float GetRelevance(BotAI* ai) const;
     void UpdateBehavior(BotAI* ai, uint32 diff);
+    bool NeedsEveryFrameUpdate() const override { return !_pendingQuestGiverGuid.IsEmpty(); }
 
     // ========================================================================
     // GRIND FALLBACK INTEGRATION
