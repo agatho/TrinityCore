@@ -178,6 +178,7 @@ void QuestStrategy::UpdateBehavior(BotAI* ai, uint32 diff)
     if (_teleportCooldownUntil > 0 && now < _teleportCooldownUntil)
         return;
     _teleportCooldownUntil = 0;
+    _failedQuestGiverGuids.clear(); // Reset after teleport — new zone, new NPCs
 
     // ========================================================================
     // PERSISTENT TRAVEL MANAGER UPDATE
@@ -3214,6 +3215,10 @@ void QuestStrategy::SearchForQuestGivers(BotAI* ai)
             if (!snapshot.hasQuestGiver)
                 continue;
 
+            // Skip NPCs that previously returned 0 quests
+            if (_failedQuestGiverGuids.count(snapshot.guid))
+                continue;
+
             questGiverCount++;
 
             // Check if this NPC has any quests for the bot via quest relations
@@ -3403,13 +3408,24 @@ void QuestStrategy::SearchForQuestGivers(BotAI* ai)
             if (!_acceptanceManager)
                 _acceptanceManager = std::make_unique<QuestAcceptanceManager>(bot);
 
+            uint32 acceptedBefore = _acceptanceManager->GetQuestsAccepted();
             _acceptanceManager->ProcessQuestGiver(npc);
+            uint32 acceptedNow = _acceptanceManager->GetQuestsAccepted();
 
             TC_LOG_INFO("module.playerbot.quest",
                 "SearchForQuestGivers: Bot {} quest acceptance done (accepted: {}, dropped: {})",
                 bot->GetName(),
                 _acceptanceManager->GetQuestsAccepted(),
                 _acceptanceManager->GetQuestsDropped());
+
+            // If NPC had no quests for us, blacklist it temporarily so we try other NPCs
+            if (acceptedNow == acceptedBefore)
+            {
+                _failedQuestGiverGuids.insert(npc->GetGUID());
+                TC_LOG_DEBUG("module.playerbot.quest",
+                    "SearchForQuestGivers: Bot {} blacklisted NPC {} (no quests accepted)",
+                    bot->GetName(), npc->GetName());
+            }
         }
         else
         {

@@ -184,6 +184,9 @@ private:
     ObjectGuid _pendingQuestGiverGuid;
     Position _pendingQuestGiverPos;
 
+    // Quest givers that returned 0 quests — skip in future scans
+    ::std::set<ObjectGuid> _failedQuestGiverGuids;
+
     // Quest area wandering (for respawn waiting)
     uint32 _lastWanderTime;
     uint32 _currentWanderPointIndex;
