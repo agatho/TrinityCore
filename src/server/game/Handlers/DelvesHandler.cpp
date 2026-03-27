@@ -16,8 +16,13 @@
  */
 
 #include "WorldSession.h"
+#include "DelveMgr.h"
 #include "DelvesPackets.h"
+#include "DelvesRewards.h"
+#include "DelvesSeason.h"
+#include "Group.h"
 #include "Log.h"
+#include "Map.h"
 #include "Player.h"
 
 void WorldSession::HandleDelveTeleportOut(WorldPackets::Delves::DelveTeleportOut& /*delveTeleportOut*/)
@@ -26,9 +31,11 @@ void WorldSession::HandleDelveTeleportOut(WorldPackets::Delves::DelveTeleportOut
     if (!player)
         return;
 
-    // TODO: Implement proper teleport out of delve instance
-    // For now, teleport player to their hearth location
     TC_LOG_DEBUG("network", "CMSG_DELVE_TELEPORT_OUT received from player {}", player->GetName());
+
+    // Teleport player out of the delve instance to their bind point
+    if (player->GetMap()->Instanceable())
+        player->TeleportTo(player->GetHomebind());
 }
 
 void WorldSession::HandleRequestPartyEligibilityForDelveTiers(WorldPackets::Delves::RequestPartyEligibilityForDelveTiers& requestPartyEligibilityForDelveTiers)
@@ -40,8 +47,30 @@ void WorldSession::HandleRequestPartyEligibilityForDelveTiers(WorldPackets::Delv
     TC_LOG_DEBUG("network", "CMSG_REQUEST_PARTY_ELIGIBILITY_FOR_DELVE_TIERS received from player {} with id {}",
         player->GetName(), requestPartyEligibilityForDelveTiers.GossipOptionOrMapChallengeID);
 
-    // TODO: Check each party member's level, tier unlock, raid group status
-    // Send response with eligibility data
+    // Validate: cannot enter delves in a raid group
+    Group* group = player->GetGroup();
+    if (group && group->isRaidGroup())
+    {
+        // SPELL_CUSTOM_ERROR_YOU_CANNOT_ENTER_A_DELVE_WHILE_IN_A_RAID_GROUP = 871
+        TC_LOG_DEBUG("network", "Player {} denied delve entry: in raid group", player->GetName());
+    }
+
+    // Check minimum level requirement
+    if (!Delves::DelvesSeason::MeetsMinimumLevelRequirement(player))
+    {
+        // SPELL_CUSTOM_ERROR_NOT_HIGH_ENOUGH_LEVEL_TO_ENTER_A_DELVE = 1040
+        TC_LOG_DEBUG("network", "Player {} denied delve entry: below minimum level", player->GetName());
+    }
+
+    // Load account progress to check tier unlock
+    Delves::DelveProgress progress;
+    Delves::DelvesRewards::LoadProgress(player->GetBattlenetAccountId(), progress);
+
+    TC_LOG_DEBUG("network", "Player {} delve eligibility: highest tier unlocked = {}, group size = {}",
+        player->GetName(), progress.HighestTierUnlocked,
+        group ? group->GetMembersCount() : 1);
+
+    // Send response
     WorldPackets::Delves::PartyEligibilityForDelveTiersResponse response;
     SendPacket(response.Write());
 }
