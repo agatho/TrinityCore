@@ -807,6 +807,10 @@ void CharacterDatabaseConnection::DoPrepareStatements()
     // Delves companion
     PrepareStatement(CHAR_SEL_DELVE_COMPANION, "SELECT companionId, level, xp, selectedRole, combatCurioNodeId, utilityCurioNodeId FROM delve_companion WHERE battlenetAccountId = ? LIMIT 1", CONNECTION_SYNCH);
     PrepareStatement(CHAR_REP_DELVE_COMPANION, "REPLACE INTO delve_companion (battlenetAccountId, companionId, level, xp, selectedRole, combatCurioNodeId, utilityCurioNodeId) VALUES (?, ?, ?, ?, ?, ?, ?)", CONNECTION_ASYNC);
+
+    // Delves progress
+    PrepareStatement(CHAR_SEL_DELVE_PROGRESS, "SELECT highestTierUnlocked, weeklyCompletions, highestTierThisWeek, weeklyBountifulCount, weeklyCofferShards FROM delve_progress WHERE battlenetAccountId = ?", CONNECTION_SYNCH);
+    PrepareStatement(CHAR_REP_DELVE_PROGRESS, "REPLACE INTO delve_progress (battlenetAccountId, highestTierUnlocked, weeklyCompletions, highestTierThisWeek, weeklyBountifulCount, weeklyCofferShards) VALUES (?, ?, ?, ?, ?, ?)", CONNECTION_ASYNC);
 }
 
 CharacterDatabaseConnection::CharacterDatabaseConnection(MySQLConnectionInfo& connInfo, ConnectionFlags connectionFlags) : MySQLConnection(connInfo, connectionFlags)

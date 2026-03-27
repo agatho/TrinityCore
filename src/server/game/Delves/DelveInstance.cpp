@@ -18,6 +18,7 @@
 #include "DelveInstance.h"
 #include "DelvesCompanion.h"
 #include "DelveMgr.h"
+#include "DelvesRewards.h"
 #include "Group.h"
 #include "Log.h"
 #include "Map.h"
@@ -124,8 +125,13 @@ void DelveInstance::OnScenarioComplete()
             _map->GetId(), _tier, _remainingRevives);
     }
 
-    // TODO Phase 4: Award rewards via DelvesRewards
-    // TODO Phase 3: Award companion XP
+    // Award rewards to all owners still in the instance
+    bool hasRevives = HasRevivesRemaining();
+    _map->DoOnPlayers([this, hasRevives](Player* player)
+    {
+        if (IsOwner(player->GetGUID()))
+            DelvesRewards::AwardDelveCompletion(player, _tier, _bountiful, hasRevives);
+    });
 }
 
 void DelveInstance::Update(uint32 /*diff*/)
