@@ -202,10 +202,9 @@ bool BotMovementController::MoveToPosition(Position const& dest, bool forceDest)
         return false;
     }
 
-    // Clear current movement
-    _owner->GetMotionMaster()->Clear();
-
-    // Start new movement
+    // Start new movement — do NOT call Clear() as it races with Player::Update()
+    // on the main thread and corrupts the motion type. MovePoint() handles the
+    // active motion internally.
     _owner->GetMotionMaster()->MovePoint(0,
         dest.GetPositionX(),
         dest.GetPositionY(),
