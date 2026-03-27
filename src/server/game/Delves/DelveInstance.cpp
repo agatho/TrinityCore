@@ -16,7 +16,9 @@
  */
 
 #include "DelveInstance.h"
+#include "DelvesCompanion.h"
 #include "DelveMgr.h"
+#include "Group.h"
 #include "Log.h"
 #include "Map.h"
 #include "Player.h"
@@ -46,8 +48,30 @@ void DelveInstance::OnPlayerEnter(Player* player)
         _owners.insert(player->GetGUID());
         PopulateDelveData(player);
 
+        // Spawn companion for the first player if group size <= MAX_COMPANION_GROUP_SIZE (4)
         if (_state == DelveState::Entering)
+        {
             _state = DelveState::InProgress;
+
+            uint32 groupSize = 1;
+            if (Group const* group = player->GetGroup())
+                groupSize = group->GetMembersCount();
+
+            if (groupSize <= MAX_COMPANION_GROUP_SIZE && _template)
+            {
+                CompanionState companionState;
+                DelvesCompanion::LoadFromDB(player->GetBattlenetAccountId(), companionState);
+
+                Position spawnPos(_template->CompanionSpawnX, _template->CompanionSpawnY,
+                    _template->CompanionSpawnZ, _template->CompanionSpawnO);
+
+                if (Creature* companion = DelvesCompanion::SpawnCompanion(_map, player, companionState, spawnPos))
+                {
+                    _companionGuid = companion->GetGUID();
+                    companion->AI()->SetData(0, static_cast<uint32>(companionState.SelectedRole));
+                }
+            }
+        }
 
         TC_LOG_DEBUG("scripts.delves", "Player {} entered delve (map {}, tier {}, revives: {}, owners: {})",
             player->GetName(), _map->GetId(), _tier, _remainingRevives, _owners.size());

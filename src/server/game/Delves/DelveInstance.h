@@ -73,6 +73,7 @@ private:
     bool _bountiful;
 
     GuidUnorderedSet _owners;
+    ObjectGuid _companionGuid;
 
     Position _checkpointPos;
     bool _hasCheckpoint = false;

@@ -41,6 +41,7 @@ void AddSC_boss_orator_krix_vizk();
 
 // Delves
 void AddSC_instance_earthcrawl_mines();
+void AddSC_npc_brann_bronzebeard_delves();
 
 // The name of this function should match:
 // void Add${NameOfDirectory}Scripts()
@@ -70,4 +71,5 @@ void AddKhazAlgarScripts()
 
     // Delves
     AddSC_instance_earthcrawl_mines();
+    AddSC_npc_brann_bronzebeard_delves();
 }
