@@ -29,6 +29,7 @@
 #include "AuthenticationPackets.h"
 #include "BattlePetMgr.h"
 #include "BattlefieldMgr.h"
+#include "DelveMgr.h"
 #include "BattlegroundMgr.h"
 #include "BattlenetRpcErrorCodes.h"
 #include "BlackMarketMgr.h"
@@ -2053,6 +2054,9 @@ bool World::SetInitialWorldSettings()
 
     TC_LOG_INFO("server.loading", "Loading battle pets info...");
     BattlePets::BattlePetMgr::Initialize();
+
+    TC_LOG_INFO("server.loading", "Loading delve data...");
+    sDelveMgr->Initialize();
 
     TC_LOG_INFO("server.loading", "Loading scenarios");
     sScenarioMgr->LoadDB2Data();
