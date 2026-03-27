@@ -35,7 +35,7 @@ enum DataTypes
 class instance_the_sinkhole : public InstanceMapScript
 {
 public:
-    instance_the_sinkhole() : InstanceMapScript(ScriptName, 2687) { }
+    instance_the_sinkhole() : InstanceMapScript(ScriptName, 2767) { }
 
     struct instance_the_sinkhole_InstanceScript : public Delves::DelveInstanceScript
     {

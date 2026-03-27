@@ -26,6 +26,13 @@ namespace Delves
 {
 
 // ---------------------------------------------------------------------------
+// Difficulty & Scenario Type (from DB2 data)
+// ---------------------------------------------------------------------------
+
+static constexpr uint32 DELVE_DIFFICULTY_ID = 208;              // DifficultyID for "Delves" (1-5 players)
+static constexpr uint8  DELVE_SCENARIO_TYPE = 8;                // ScenarioType for delves (not Solo=2)
+
+// ---------------------------------------------------------------------------
 // Tier System
 // ---------------------------------------------------------------------------
 
