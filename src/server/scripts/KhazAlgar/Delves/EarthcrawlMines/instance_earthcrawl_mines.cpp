@@ -42,7 +42,7 @@ enum EarthcrawlMinesData
 class instance_earthcrawl_mines : public InstanceMapScript
 {
 public:
-    instance_earthcrawl_mines() : InstanceMapScript(EarthcrawlMinesScriptName, 0 /* TODO: real mapId */) { }
+    instance_earthcrawl_mines() : InstanceMapScript(EarthcrawlMinesScriptName, 2680) { }
 
     struct instance_earthcrawl_mines_InstanceScript : public Delves::DelveInstanceScript
     {
