@@ -31262,3 +31262,21 @@ bool Player::CanExecutePendingSpellCastRequest()
 
     return true;
 }
+
+void Player::SetDelveData(int32 spellId, bool started)
+{
+    SetUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData)
+        .ModifyValue(&UF::ActivePlayerData::DelveData, 0)
+        .ModifyValue(&UF::DelveData::SpellID), spellId);
+
+    SetUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData)
+        .ModifyValue(&UF::ActivePlayerData::DelveData, 0)
+        .ModifyValue(&UF::DelveData::Started), started ? 1u : 0u);
+}
+
+void Player::ClearDelveData()
+{
+    if (m_activePlayerData->DelveData.has_value())
+        RemoveOptionalUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData)
+            .ModifyValue(&UF::ActivePlayerData::DelveData));
+}

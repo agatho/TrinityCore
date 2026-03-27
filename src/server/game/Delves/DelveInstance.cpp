@@ -23,7 +23,6 @@
 #include "Log.h"
 #include "Map.h"
 #include "Player.h"
-#include "UpdateFields.h"
 
 namespace Delves
 {
@@ -141,37 +140,23 @@ void DelveInstance::Update(uint32 /*diff*/)
 
 void DelveInstance::PopulateDelveData(Player* player)
 {
-    // Set the DelveData optional update field on the player's ActivePlayerData
-    auto& delveData = player->m_values.ModifyValue(&Player::m_activePlayerData, 0)
-        .ModifyValue(&UF::ActivePlayerData::DelveData, 0);
+    int32 spellId = 0;
 
-    // Set SpellID (season spell if available)
+    // Get the season spell if available
     DelvesSeasonEntry const* season = sDelveMgr->GetActiveSeason();
     if (season)
     {
         if (DB2Manager::DelvesSeasonXSpellContainer const* spells = sDB2Manager.GetDelvesSeasonSpells(season->ID))
-        {
             if (!spells->empty())
-                delveData.ModifyValue(&UF::DelveData::SpellID) = (*spells)[0]->SpellID;
-        }
+                spellId = (*spells)[0]->SpellID;
     }
 
-    // Add this player as an owner
-    // Note: the Owners vector in DelveData tracks who started the delve for reward eligibility
-    // The Started flag restricts rewards to only these players
-
-    player->SetUpdateFieldValue(
-        player->m_values.ModifyValue(&Player::m_activePlayerData, 0)
-            .ModifyValue(&UF::ActivePlayerData::DelveData, 0)
-            .ModifyValue(&UF::DelveData::Started),
-        1u);
+    player->SetDelveData(spellId, true);
 }
 
 void DelveInstance::ClearDelveData(Player* player)
 {
-    player->RemoveOptionalUpdateFieldValue(
-        player->m_values.ModifyValue(&Player::m_activePlayerData)
-            .ModifyValue(&UF::ActivePlayerData::DelveData));
+    player->ClearDelveData();
 }
 
 } // namespace Delves

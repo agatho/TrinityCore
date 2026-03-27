@@ -2211,6 +2211,10 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
 
         WorldSession* GetSession() const { return m_session; }
 
+        // Delves update field management
+        void SetDelveData(int32 spellId, bool started);
+        void ClearDelveData();
+
     protected:
         UF::UpdateFieldFlag GetUpdateFieldFlagsFor(Player const* target) const override;
         void BuildValuesCreate(UF::UpdateFieldFlag flags, ByteBuffer& data, Player const* target) const override;
