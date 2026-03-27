@@ -18,7 +18,6 @@
 // Kobold theme - The Ringing Deeps
 
 #include "delves_common.h"
-#include "InstanceMapScript.h"
 #include "ScriptMgr.h"
 
 namespace

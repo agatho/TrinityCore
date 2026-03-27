@@ -27,7 +27,7 @@ namespace Delves
 
 void DelvesRewards::AwardDelveCompletion(Player* player, uint8 tier, bool bountiful, bool hasRevivesRemaining)
 {
-    uint32 accountId = player->GetBattlenetAccountId();
+    uint32 accountId = player->GetSession()->GetBattlenetAccountId();
 
     // Load current progress
     DelveProgress progress;
@@ -95,8 +95,8 @@ void DelvesRewards::AwardCompanionXP(Player* player, uint8 tier)
     uint32 xpAmount = 1000 + (tier * 500);
 
     CompanionState state;
-    DelvesCompanion::LoadFromDB(player->GetBattlenetAccountId(), state);
-    DelvesCompanion::AwardCompanionXP(player->GetBattlenetAccountId(), state, xpAmount);
+    DelvesCompanion::LoadFromDB(player->GetSession()->GetBattlenetAccountId(), state);
+    DelvesCompanion::AwardCompanionXP(player->GetSession()->GetBattlenetAccountId(), state, xpAmount);
 
     TC_LOG_DEBUG("scripts.delves", "Awarded {} companion XP to {} (level {} -> {})",
         xpAmount, player->GetName(), state.Level, state.Level);
@@ -116,7 +116,7 @@ void DelvesRewards::ConsumeCofferKey(Player* player)
 
 void DelvesRewards::AwardCofferKeyShards(Player* player, uint32 amount)
 {
-    uint32 accountId = player->GetBattlenetAccountId();
+    uint32 accountId = player->GetSession()->GetBattlenetAccountId();
 
     DelveProgress progress;
     LoadProgress(accountId, progress);

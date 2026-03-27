@@ -67,7 +67,7 @@ struct npc_brann_bronzebeard_delvesAI : public ScriptedAI
     void InitializeAI() override
     {
         ScriptedAI::InitializeAI();
-        me->SetReactState(REACT_HELPER);
+        me->SetReactState(REACT_ASSIST);
     }
 
     void SetData(uint32 type, uint32 data) override
@@ -150,7 +150,7 @@ struct npc_brann_bronzebeard_delvesAI : public ScriptedAI
 
         // Standard melee attack for DPS and Tank roles
         if (_role != CompanionRole::Healer && UpdateVictim())
-            DoMeleeAttackIfReady();
+            me->DoMeleeAttackIfReady();
     }
 
 private:
@@ -200,9 +200,9 @@ private:
                 _events.ScheduleEvent(EVENT_ABILITY_USE, Milliseconds(ABILITY_COOLDOWN_DPS));
                 break;
             case CompanionRole::Healer:
-                // Healer's offensive ability
-                if (Unit* target = me->GetVictim())
-                    DoSpellAttackIfReady();
+                // Healer's offensive ability - basic melee when no spells configured
+                if (me->GetVictim())
+                    me->DoMeleeAttackIfReady();
                 _events.ScheduleEvent(EVENT_ABILITY_USE, Milliseconds(ABILITY_COOLDOWN_HEAL));
                 break;
             case CompanionRole::Tank:

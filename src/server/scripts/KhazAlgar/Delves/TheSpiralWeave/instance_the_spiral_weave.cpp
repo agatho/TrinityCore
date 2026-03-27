@@ -18,7 +18,6 @@
 // Nerubian fortress - Azj-Kahet
 
 #include "delves_common.h"
-#include "InstanceMapScript.h"
 #include "ScriptMgr.h"
 
 namespace

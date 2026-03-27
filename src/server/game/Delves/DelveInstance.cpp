@@ -60,7 +60,7 @@ void DelveInstance::OnPlayerEnter(Player* player)
             if (groupSize <= MAX_COMPANION_GROUP_SIZE && _template)
             {
                 CompanionState companionState;
-                DelvesCompanion::LoadFromDB(player->GetBattlenetAccountId(), companionState);
+                DelvesCompanion::LoadFromDB(player->GetSession()->GetBattlenetAccountId(), companionState);
 
                 Position spawnPos(_template->CompanionSpawnX, _template->CompanionSpawnY,
                     _template->CompanionSpawnZ, _template->CompanionSpawnO);

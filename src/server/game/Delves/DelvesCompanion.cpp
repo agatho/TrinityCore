@@ -99,7 +99,7 @@ Creature* DelvesCompanion::SpawnCompanion(InstanceMap* map, Player* owner, Compa
 
     // Configure the companion
     companion->SetFaction(owner->GetFaction());
-    companion->SetReactState(REACT_HELPER);
+    companion->SetReactState(REACT_ASSIST);
 
     // Scale stats based on companion level
     // TODO Phase 3+: Apply level-based stat scaling, role-specific auras

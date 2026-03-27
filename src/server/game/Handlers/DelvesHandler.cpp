@@ -35,7 +35,7 @@ void WorldSession::HandleDelveTeleportOut(WorldPackets::Delves::DelveTeleportOut
 
     // Teleport player out of the delve instance to their bind point
     if (player->GetMap()->Instanceable())
-        player->TeleportTo(player->GetHomebind());
+        player->TeleportTo(player->m_homebind);
 }
 
 void WorldSession::HandleRequestPartyEligibilityForDelveTiers(WorldPackets::Delves::RequestPartyEligibilityForDelveTiers& requestPartyEligibilityForDelveTiers)
@@ -64,7 +64,7 @@ void WorldSession::HandleRequestPartyEligibilityForDelveTiers(WorldPackets::Delv
 
     // Load account progress to check tier unlock
     Delves::DelveProgress progress;
-    Delves::DelvesRewards::LoadProgress(player->GetBattlenetAccountId(), progress);
+    Delves::DelvesRewards::LoadProgress(player->GetSession()->GetBattlenetAccountId(), progress);
 
     TC_LOG_DEBUG("network", "Player {} delve eligibility: highest tier unlocked = {}, group size = {}",
         player->GetName(), progress.HighestTierUnlocked,
