@@ -53,6 +53,7 @@
 #include "CreatureAI.h"
 #include "DB2Stores.h"
 #include "DatabaseEnv.h"
+#include "delves_common.h"
 #include "DisableMgr.h"
 #include "DuelPackets.h"
 #include "EquipmentSetPackets.h"
@@ -4452,6 +4453,12 @@ void Player::KillPlayer()
 
     setDeathState(CORPSE);
     //SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NOT_IN_PVP);
+
+    // Notify delve instance of player death for revive tracking
+    if (InstanceMap* instanceMap = GetMap()->ToInstanceMap())
+        if (InstanceScript* script = instanceMap->GetInstanceScript())
+            if (auto* delveScript = dynamic_cast<Delves::DelveInstanceScript*>(script))
+                delveScript->OnPlayerDeath(this);
 
     ReplaceAllDynamicFlags(UNIT_DYNFLAG_NONE);
     if (!sMapStore.LookupEntry(GetMapId())->Instanceable() && !HasAuraType(SPELL_AURA_PREVENT_RESURRECTION))

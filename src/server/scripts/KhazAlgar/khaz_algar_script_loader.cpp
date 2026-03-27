@@ -39,6 +39,9 @@ void AddSC_boss_ulgrax_the_devourer();
 void AddSC_instance_city_of_threads();
 void AddSC_boss_orator_krix_vizk();
 
+// Delves
+void AddSC_instance_earthcrawl_mines();
+
 // The name of this function should match:
 // void Add${NameOfDirectory}Scripts()
 void AddKhazAlgarScripts()
@@ -64,4 +67,7 @@ void AddKhazAlgarScripts()
     // City of Threads
     AddSC_instance_city_of_threads();
     AddSC_boss_orator_krix_vizk();
+
+    // Delves
+    AddSC_instance_earthcrawl_mines();
 }
