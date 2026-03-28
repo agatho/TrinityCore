@@ -34,4 +34,10 @@ INSERT INTO `room_component_option` (`ID`, `Type`, `SubType`, `ModelFileDataID`,
 (1002, 1, 2, 6426665, 29,  0, 8, 0, 65940), -- Same model as 267, for comp 29
 (1003, 1, 2, 6426613, 32,  0, 8, 0, 65940), -- Same model as 309, for comp 32
 (1004, 1, 2, 6426613, 33,  0, 8, 0, 65940), -- Same model as 309, for comp 33
-(1005, 1, 2, 6426641, 204, 0, 8, 0, 65940); -- Same model as 298, for comp 204
+(1005, 1, 2, 6426641, 204, 0, 8, 0, 65940), -- Same model as 298, for comp 204
+
+-- Previously missing entries (caused visual gaps on 2 sides):
+-- Component 30 = first corner of Square Room, siblings 31/32/33 use 6426613
+-- Component 206 = front wall of Entry room, siblings 203/204 use 6426641
+(1006, 1, 2, 6426613, 30,  0, 8, 0, 65940), -- Corner piece, same model as 309/1003/1004
+(1007, 1, 2, 6426641, 206, 0, 8, 0, 65940); -- Entry room front wall, same model as 298/1005
