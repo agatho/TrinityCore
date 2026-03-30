@@ -857,41 +857,12 @@ bool HouseInteriorMap::AddPlayerToMap(Player* player, bool initPlayer /*= true*/
                     // loads Blizzard_HousingControls. The handler resets editor state, so
                     // Status+Perms are re-sent afterward to re-establish context.
 
-                    // 1) CURRENT_HOUSE_INFO
-                    {
-                        WorldPackets::Housing::HousingGetCurrentHouseInfoResponse houseInfo;
-                        houseInfo.House.HouseGuid = houseGuid;
-                        houseInfo.House.OwnerGuid = playerGuid;
-                        houseInfo.House.NeighborhoodGuid = neighborhoodGuid;
-                        houseInfo.House.PlotId = plotIndex;
-                        houseInfo.House.AccessFlags = settingsFlags;
-                        houseInfo.House.HasMoveOutTime = false;
-                        houseInfo.Result = 0;
-                        p->SendDirectMessage(houseInfo.Write());
-                    }
+                    // Steps 1-3 (HouseInfo, Status, Permissions) moved to AFTER
+                    // ENTER_PLOT below. ENTER_PLOT resets editor state, so sending
+                    // Status+Permissions before it is wasteful. The exterior AT handler
+                    // (at_housing_plot.cpp) also sends Status+Permissions AFTER ENTER_PLOT.
 
-                    // 2) HouseStatusResponse
-                    {
-                        WorldPackets::Housing::HousingHouseStatusResponse statusResponse;
-                        statusResponse.HouseGuid = houseGuid;
-                        statusResponse.AccountGuid = accountGuid;
-                        statusResponse.OwnerPlayerGuid = playerGuid;
-                        statusResponse.NeighborhoodGuid = neighborhoodGuid;
-                        statusResponse.Status = 1; // Interior
-                        statusResponse.FlagByte = 0xE0;
-                        p->SendDirectMessage(statusResponse.Write());
-                    }
-
-                    // 3) GetPlayerPermissionsResponse
-                    {
-                        WorldPackets::Housing::HousingGetPlayerPermissionsResponse permResponse;
-                        permResponse.HouseGuid = houseGuid;
-                        permResponse.ResultCode = 0;
-                        permResponse.PermissionFlags = 0xE0;
-                        p->SendDirectMessage(permResponse.Write());
-                    }
-
-                    // 4) PostTutorialAuras
+                    // 1) PostTutorialAuras (slots 8, 9, 50)
                     SendPostTutorialAuras(p);
 
                     // 5) Account CREATE + HousingPlayerHouseEntity + decor
@@ -993,7 +964,58 @@ bool HouseInteriorMap::AddPlayerToMap(Player* player, bool initPlayer /*= true*/
                                     plotAt->GetGUID().ToString(), atX, atY, atZ,
                                     housing->GetPlotIndex(), playerGuid.ToString());
 
-                                // 8) ENTER_PLOT — fires HOUSE_PLOT_ENTERED on the client.
+                                // 8) Plot enter spell packets — same as exterior AT overlap.
+                                // Sniff-verified: exterior sends 3 spell+aura sequences
+                                // (1239847@slot50, 469226@slot56, 1266699@slot9) before
+                                // ENTER_PLOT. These trigger editor availability on the client.
+                                {
+                                    plotAt->SetAreaTriggerFlag(AreaTriggerFieldFlags::HasPlayers);
+
+                                    // Spell 1239847 at slot 50 (plot enter tracking)
+                                    {
+                                        ObjectGuid castId = ObjectGuid::Create<HighGuid::Cast>(
+                                            SPELL_CAST_SOURCE_NORMAL, p->GetMapId(), SPELL_HOUSING_PLOT_ENTER,
+                                            GenerateLowGuid<HighGuid::Cast>());
+                                        WorldPackets::Spells::AuraUpdate au;
+                                        au.UpdateAll = false;
+                                        au.UnitGUID = p->GetGUID();
+                                        WorldPackets::Spells::AuraInfo ai;
+                                        ai.Slot = 50;
+                                        ai.AuraData.emplace();
+                                        ai.AuraData->CastID = castId;
+                                        ai.AuraData->SpellID = SPELL_HOUSING_PLOT_ENTER;
+                                        ai.AuraData->Flags = AFLAG_NOCASTER;
+                                        ai.AuraData->ActiveFlags = 2;
+                                        ai.AuraData->CastLevel = 36;
+                                        au.Auras.push_back(std::move(ai));
+                                        p->SendDirectMessage(au.Write());
+                                    }
+
+                                    // Spell 469226 at slot 56 (plot context)
+                                    {
+                                        ObjectGuid castId = ObjectGuid::Create<HighGuid::Cast>(
+                                            SPELL_CAST_SOURCE_NORMAL, p->GetMapId(), SPELL_HOUSING_PLOT_PRESENCE,
+                                            GenerateLowGuid<HighGuid::Cast>());
+                                        WorldPackets::Spells::AuraUpdate au;
+                                        au.UpdateAll = false;
+                                        au.UnitGUID = p->GetGUID();
+                                        WorldPackets::Spells::AuraInfo ai;
+                                        ai.Slot = 56;
+                                        ai.AuraData.emplace();
+                                        ai.AuraData->CastID = castId;
+                                        ai.AuraData->SpellID = SPELL_HOUSING_PLOT_PRESENCE;
+                                        ai.AuraData->Flags = AFLAG_NOCASTER;
+                                        ai.AuraData->ActiveFlags = 1;
+                                        ai.AuraData->CastLevel = 36;
+                                        au.Auras.push_back(std::move(ai));
+                                        p->SendDirectMessage(au.Write());
+                                    }
+
+                                    TC_LOG_ERROR("housing", "HouseInteriorMap deferred: Sent plot enter spells (slots 50+56) for {}",
+                                        playerGuid.ToString());
+                                }
+
+                                // 9) ENTER_PLOT — fires HOUSE_PLOT_ENTERED on the client.
                                 // The client handler (NeighborhoodSystem vtable[22]) signals
                                 // FrameScript event 1073, which dispatches to all UI frames
                                 // with OnEvent handlers, triggering the HOUSE_PLOT_ENTERED
@@ -1016,7 +1038,7 @@ bool HouseInteriorMap::AddPlayerToMap(Player* player, bool initPlayer /*= true*/
                                     statusResponse2.AccountGuid = accountGuid;
                                     statusResponse2.OwnerPlayerGuid = playerGuid;
                                     statusResponse2.NeighborhoodGuid = neighborhoodGuid;
-                                    statusResponse2.Status = 1; // Interior
+                                    statusResponse2.Status = 0; // Must be 0 to enable editor (same as exterior)
                                     statusResponse2.FlagByte = 0xE0;
                                     p->SendDirectMessage(statusResponse2.Write());
 
