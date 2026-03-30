@@ -14148,6 +14148,21 @@ void Player::OnGossipSelect(WorldObject* source, int32 gossipOptionId, uint32 me
         }
     }
 
+    // Cast associated spell if gossip option has one (used by delve entrances, scenario triggers, etc.)
+    if (item->SpellID)
+    {
+        if (SpellInfo const* spellInfo = sSpellMgr->GetSpellInfo(*item->SpellID, GetMap()->GetDifficultyID()))
+        {
+            if (source->GetTypeId() == TYPEID_GAMEOBJECT)
+                source->ToGameObject()->CastSpell(this, *item->SpellID);
+            else if (source->GetTypeId() == TYPEID_UNIT)
+                source->ToCreature()->CastSpell(this, *item->SpellID);
+            else
+                CastSpell(this, *item->SpellID, true);
+        }
+        PlayerTalkClass->SendCloseGossip();
+    }
+
     ModifyMoney(-cost);
 }
 

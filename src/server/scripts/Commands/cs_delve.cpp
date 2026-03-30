@@ -56,6 +56,7 @@ public:
         static ChatCommandTable delveCommandTable =
         {
             { "info",       HandleDelveInfoCommand,          rbac::RBAC_PERM_COMMAND_DEBUG, Console::No },
+            { "enter",      HandleDelveEnterCommand,         rbac::RBAC_PERM_COMMAND_DEBUG, Console::No },
             { "season",     HandleDelveSeasonCommand,        rbac::RBAC_PERM_COMMAND_DEBUG, Console::No },
             { "bountiful",  HandleDelveBountifulCommand,     rbac::RBAC_PERM_COMMAND_DEBUG, Console::No },
             { "progress",   HandleDelveProgressCommand,      rbac::RBAC_PERM_COMMAND_DEBUG, Console::No },
@@ -69,6 +70,39 @@ public:
         };
 
         return commandTable;
+    }
+
+    // .delve enter <mapId> - teleport directly into a delve instance
+    static bool HandleDelveEnterCommand(ChatHandler* handler, uint32 mapId)
+    {
+        Player* player = handler->GetSession()->GetPlayer();
+
+        Delves::DelveTemplate const* tmpl = sDelveMgr->GetDelveTemplate(mapId);
+        if (!tmpl)
+        {
+            handler->PSendSysMessage("No delve template found for mapId {}. Available delves:", mapId);
+            for (auto const& t : sDelveMgr->GetAllDelveTemplates())
+                handler->PSendSysMessage("  mapId={} (id={})", t.MapId, t.Id);
+            return false;
+        }
+
+        handler->PSendSysMessage("Teleporting to delve mapId={} ...", mapId);
+
+        float x = tmpl->CompanionSpawnX;
+        float y = tmpl->CompanionSpawnY;
+        float z = tmpl->CompanionSpawnZ;
+        float o = tmpl->CompanionSpawnO;
+
+        // Use a default position if companion spawn isn't set
+        if (x == 0.0f && y == 0.0f && z == 0.0f)
+        {
+            handler->PSendSysMessage("Warning: No spawn position configured for this delve. Using map origin.");
+            // For testing, try a reasonable default
+            x = 0.0f; y = 0.0f; z = 100.0f; o = 0.0f;
+        }
+
+        player->TeleportTo(mapId, x, y, z, o);
+        return true;
     }
 
     static bool HandleDelveInfoCommand(ChatHandler* handler)
