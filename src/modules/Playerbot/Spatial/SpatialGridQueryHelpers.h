@@ -132,6 +132,37 @@ namespace Playerbot
         FindPlayerByGuid(Player* bot, ObjectGuid guid, float searchRadius = 100.0f);
 
         /**
+         * @brief Get the bot's own snapshot from the spatial grid (thread-safe)
+         *
+         * @param bot The bot player
+         * @return Const pointer to bot's PlayerSnapshot, nullptr if not found
+         *
+         * Use this when you have Player* but no BotAI* reference.
+         * Combat managers, movement code, etc. can call this to get
+         * accurate health/position/mana from the spatial grid.
+         */
+        static DoubleBufferedSpatialGrid::PlayerSnapshot const*
+        GetBotSnapshot(Player* bot);
+
+        /**
+         * @brief Get bot's health percentage from spatial grid (thread-safe)
+         * @return Health percent 0-100, or bot->GetHealthPct() as fallback
+         */
+        static float GetBotHealthPct(Player* bot);
+
+        /**
+         * @brief Get bot's current health from spatial grid (thread-safe)
+         * @return Current health, or bot->GetHealth() as fallback
+         */
+        static uint64 GetBotHealth(Player* bot);
+
+        /**
+         * @brief Get bot's max health from spatial grid (thread-safe)
+         * @return Max health, or bot->GetMaxHealth() as fallback
+         */
+        static uint64 GetBotMaxHealth(Player* bot);
+
+        /**
          * @brief Find all group members near bot (thread-safe)
          *
          * @param bot The bot performing the query

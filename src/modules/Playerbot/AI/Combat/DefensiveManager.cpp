@@ -5,6 +5,7 @@
  */
 
 #include "DefensiveManager.h"
+#include "Spatial/SpatialGridQueryHelpers.h"
 #include "Player.h"
 #include "SpellAuras.h"
 #include "SpellAuraEffects.h"
@@ -53,7 +54,7 @@ bool DefensiveManager::NeedsDefensive()
     if (!_bot)
         return false;
 
-    float healthPct = _bot->GetHealthPct();
+    float healthPct = SpatialGridQueryHelpers::GetBotHealthPct(_bot);
     float incomingDamage = EstimateIncomingDamage();
 
     return ShouldUseDefensive(healthPct, incomingDamage);
@@ -64,7 +65,7 @@ bool DefensiveManager::NeedsEmergencyDefensive()
     if (!_bot)
         return false;
 
-    float healthPct = _bot->GetHealthPct();
+    float healthPct = SpatialGridQueryHelpers::GetBotHealthPct(_bot);
 
     // Emergency threshold: < 20% HP
     return healthPct < 20.0f;
@@ -75,7 +76,7 @@ uint32 DefensiveManager::GetRecommendedDefensive()
     if (!_bot)
         return 0;
 
-    float healthPct = _bot->GetHealthPct();
+    float healthPct = SpatialGridQueryHelpers::GetBotHealthPct(_bot);
     float incomingDamage = EstimateIncomingDamage();
 
     return GetBestDefensive(healthPct, incomingDamage);
@@ -175,7 +176,7 @@ bool DefensiveManager::ShouldUseDefensive(float healthPercent, float incomingDam
     }
 
     // Need defensive if below threshold or high incoming damage
-    return (healthPercent < threshold) || (incomingDamage > (_bot->GetMaxHealth() * 0.3f));
+    return (healthPercent < threshold) || (incomingDamage > (SpatialGridQueryHelpers::GetBotMaxHealth(_bot) * 0.3f));
 }
 
 uint32 DefensiveManager::GetBestDefensive(float healthPercent, float incomingDamage)
@@ -376,7 +377,7 @@ float DefensiveManager::GetHealthDeficit() const
     if (!_bot)
         return 0.0f;
 
-    return 100.0f - _bot->GetHealthPct();
+    return 100.0f - SpatialGridQueryHelpers::GetBotHealthPct(_bot);
 }
 
 void DefensiveManager::UpdateDamageTracking(const CombatMetrics& metrics)
@@ -389,13 +390,13 @@ void DefensiveManager::UpdateDamageTracking(const CombatMetrics& metrics)
 
     // Calculate recent damage using health delta tracking
     static float lastHealthPct = 100.0f;
-    float currentHealthPct = _bot->GetHealthPct();
+    float currentHealthPct = SpatialGridQueryHelpers::GetBotHealthPct(_bot);
 
     // If health decreased, record damage
     if (currentHealthPct < lastHealthPct)
     {
         float healthLost = lastHealthPct - currentHealthPct;
-        float maxHealth = static_cast<float>(_bot->GetMaxHealth());
+        float maxHealth = static_cast<float>(SpatialGridQueryHelpers::GetBotMaxHealth(_bot));
         _recentDamage = (healthLost / 100.0f) * maxHealth;
     }
     else
@@ -407,7 +408,7 @@ void DefensiveManager::UpdateDamageTracking(const CombatMetrics& metrics)
     lastHealthPct = currentHealthPct;
 
     // Clamp to reasonable bounds
-    _recentDamage = std::clamp(_recentDamage, 0.0f, static_cast<float>(_bot->GetMaxHealth()));
+    _recentDamage = std::clamp(_recentDamage, 0.0f, static_cast<float>(SpatialGridQueryHelpers::GetBotMaxHealth(_bot)));
 }
 
 } // namespace Playerbot

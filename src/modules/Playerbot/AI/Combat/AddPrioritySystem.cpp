@@ -413,7 +413,7 @@ AddType AddPrioritySystem::DetermineCreatureType(Creature* creature, CreatureTem
     if (unitClass == UNIT_CLASS_WARRIOR)
     {
         // High health mobs are tank-type
-        if (creature->GetMaxHealth() > _bot->GetMaxHealth() * 3)
+        if (creature->GetMaxHealth() > SpatialGridQueryHelpers::GetBotMaxHealth(_bot) * 3)
             return AddType::TANK_MOB;
         return AddType::MELEE_DPS;
     }
@@ -595,7 +595,7 @@ bool AddPrioritySystem::IsExplosiveAdd(Creature* creature, CreatureTemplate cons
 
     // Heuristic: Very low max health relative to content level suggests explosive-type
     uint32 maxHealth = creature->GetMaxHealth();
-    if (maxHealth > 0 && maxHealth < (_bot->GetMaxHealth() / 10))
+    if (maxHealth > 0 && maxHealth < (SpatialGridQueryHelpers::GetBotMaxHealth(_bot) / 10))
     {
         // Extremely low HP creature in combat = likely explosive orb or similar
         // Additional check: not a critter or totem

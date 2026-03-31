@@ -9,6 +9,7 @@
 #include "IncomingDamagePredictor.h"
 #include "InterruptAwareness.h"
 #include "Player.h"
+#include "Spatial/SpatialGridQueryHelpers.h"
 #include "Unit.h"
 #include "Creature.h"
 #include "SpellInfo.h"
@@ -103,7 +104,7 @@ void IncomingDamagePredictor::Update(uint32 diff, InterruptAwareness const* inte
         });
 
     // Compute time-bucketed totals
-    uint32 maxHealth = _bot->GetMaxHealth();
+    uint32 maxHealth = SpatialGridQueryHelpers::GetBotMaxHealth(_bot);
     for (auto const& event : _forecast.events)
     {
         if (event.timeToImpactMs <= 1000)
@@ -135,7 +136,7 @@ void IncomingDamagePredictor::Update(uint32 diff, InterruptAwareness const* inte
     }
 
     // Check for boss-level and lethal casts
-    uint32 currentHealth = _bot->GetHealth();
+    uint32 currentHealth = SpatialGridQueryHelpers::GetBotHealth(_bot);
     for (auto const& event : _forecast.events)
     {
         if (event.estimatedDamage >= currentHealth)
@@ -456,7 +457,7 @@ DamageSeverity IncomingDamagePredictor::ClassifySeverity() const
     if (!_bot)
         return DamageSeverity::NONE;
 
-    uint32 maxHealth = _bot->GetMaxHealth();
+    uint32 maxHealth = SpatialGridQueryHelpers::GetBotMaxHealth(_bot);
 
     // Check if any single hit would kill us
     if (_forecast.hasLethalCast)
@@ -538,7 +539,7 @@ DefensiveRecommendation IncomingDamagePredictor::GetDefensiveRecommendation() co
     // Find earliest dangerous event for timing
     for (auto const& event : _forecast.events)
     {
-        if (event.estimatedDamage > _bot->GetMaxHealth() * 0.15f)
+        if (event.estimatedDamage > SpatialGridQueryHelpers::GetBotMaxHealth(_bot) * 0.15f)
         {
             rec.timeWindowMs = event.timeToImpactMs;
             break;
@@ -561,7 +562,7 @@ DefensiveRecommendation IncomingDamagePredictor::GetDefensiveRecommendation() co
 
         case DamageSeverity::HIGH:
         {
-            float currentHp = _bot->GetHealthPct();
+            float currentHp = SpatialGridQueryHelpers::GetBotHealthPct(_bot);
             // Use defensive if already low or if predicted to go low
             if (currentHp < 60.0f || GetPredictedHealthPercent(3000) < 30.0f)
             {
@@ -579,12 +580,12 @@ DefensiveRecommendation IncomingDamagePredictor::GetDefensiveRecommendation() co
         case DamageSeverity::MODERATE:
         {
             // Only recommend for tanks or if already low health
-            if (_isTank && _bot->GetHealthPct() < 50.0f)
+            if (_isTank && SpatialGridQueryHelpers::GetBotHealthPct(_bot) < 50.0f)
             {
                 rec.shouldUseDefensive = true;
                 rec.reason = "Tank taking sustained damage";
             }
-            else if (_bot->GetHealthPct() < 40.0f)
+            else if (SpatialGridQueryHelpers::GetBotHealthPct(_bot) < 40.0f)
             {
                 rec.shouldUseDefensive = true;
                 rec.reason = "Low health with moderate incoming damage";
@@ -619,12 +620,12 @@ PredictedDamageEvent const* IncomingDamagePredictor::GetMostDangerousEvent() con
 
 float IncomingDamagePredictor::GetPredictedHealthPercent(uint32 windowMs) const
 {
-    if (!_bot || _bot->GetMaxHealth() == 0)
+    if (!_bot || SpatialGridQueryHelpers::GetBotMaxHealth(_bot) == 0)
         return 100.0f;
 
     uint32 predictedDamage = GetPredictedDamage(windowMs);
-    float currentHealth = static_cast<float>(_bot->GetHealth());
-    float maxHealth = static_cast<float>(_bot->GetMaxHealth());
+    float currentHealth = static_cast<float>(SpatialGridQueryHelpers::GetBotHealth(_bot));
+    float maxHealth = static_cast<float>(SpatialGridQueryHelpers::GetBotMaxHealth(_bot));
 
     float healthAfterDamage = currentHealth - static_cast<float>(predictedDamage);
     if (healthAfterDamage < 0.0f)
@@ -770,7 +771,7 @@ float IncomingDamagePredictor::GetEffectiveHealth(uint32 schoolMask) const
     if (!_bot)
         return 0.0f;
 
-    float health = static_cast<float>(_bot->GetHealth());
+    float health = static_cast<float>(SpatialGridQueryHelpers::GetBotHealth(_bot));
 
     // Rough mitigation estimate
     if (schoolMask == SPELL_SCHOOL_MASK_NORMAL || schoolMask == 0)

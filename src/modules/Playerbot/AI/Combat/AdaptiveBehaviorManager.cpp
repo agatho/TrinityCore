@@ -14,6 +14,7 @@
 #include "../Decision/DecisionFusionSystem.h"
 #include "../Common/ActionScoringEngine.h"
 #include "Player.h"
+#include "Spatial/SpatialGridQueryHelpers.h"
 #include "Group.h"
 #include "SpellInfo.h"
 #include "SpellMgr.h"
@@ -1238,7 +1239,7 @@ Playerbot::bot::ai::DecisionVote AdaptiveBehaviorManager::GetRecommendedAction(U
     vote.confidence = 0.5f;  // Moderate baseline confidence
 
     // Evaluate urgency based on combat context
-    float healthPct = _bot->GetHealthPct();
+    float healthPct = SpatialGridQueryHelpers::GetBotHealthPct(_bot);
     if (healthPct < 20.0f)
     {
         vote.urgency = 0.95f;

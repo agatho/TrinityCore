@@ -796,7 +796,7 @@ void BotThreatManager::ClassifyThreatPriority(ThreatTarget& threatTarget)
     if (threatTarget.info.threatPercent > EMERGENCY_THREAT_THRESHOLD)
         priority = ThreatPriority::CRITICAL_PRIORITY;
 
-    if (_bot->GetHealthPct() < 30.0f && target->GetVictim() == _bot)
+    if (SpatialGridQueryHelpers::GetBotHealthPct(_bot) < 30.0f && target->GetVictim() == _bot)
         priority = ThreatPriority::CRITICAL_PRIORITY;
 
     threatTarget.info.priority = priority;

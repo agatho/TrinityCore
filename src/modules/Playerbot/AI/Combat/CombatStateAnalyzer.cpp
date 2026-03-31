@@ -9,6 +9,7 @@
 
 #include "CombatStateAnalyzer.h"
 #include "Player.h"
+#include "Spatial/SpatialGridQueryHelpers.h"
 #include "Group.h"
 #include "Spell.h"
 #include "SpellInfo.h"
@@ -126,7 +127,7 @@ void CombatStateAnalyzer::UpdateMetrics(uint32 diff)
     _currentMetrics.combatDuration += diff;
 
     // Update personal metrics
-    _currentMetrics.personalHealthPercent = _bot->GetHealthPct();
+    _currentMetrics.personalHealthPercent = SpatialGridQueryHelpers::GetBotHealthPct(_bot);
     _currentMetrics.manaPercent = _bot->GetPowerPct(POWER_MANA);
 
     Powers powerType = _bot->GetPowerType();
@@ -153,7 +154,7 @@ void CombatStateAnalyzer::UpdateMetrics(uint32 diff)
     uint32 now = GameTime::GetGameTimeMS();
 
     // Track damage taken based on health changes
-    uint32 currentHealth = _bot->GetHealth();
+    uint32 currentHealth = SpatialGridQueryHelpers::GetBotHealth(_bot);
     if (_lastHealthValue > 0 && currentHealth < _lastHealthValue)
     {
         uint32 damageTaken = _lastHealthValue - currentHealth;
@@ -1054,7 +1055,7 @@ bool CombatStateAnalyzer::ShouldFocusAdd() const
 Player* CombatStateAnalyzer::GetLowestHealthAlly() const
 {
     Player* lowest = _bot;
-    float lowestHealth = _bot->GetHealthPct();
+    float lowestHealth = SpatialGridQueryHelpers::GetBotHealthPct(_bot);
 
     if (Group* group = _bot->GetGroup())
         {
@@ -1469,7 +1470,7 @@ bool CombatStateAnalyzer::IsInVoidZone() const
     if (_currentMetrics.incomingDPS > 0 && !_bot->isMoving())
     {
         // If taking significant damage while standing still, probably in bad
-        float healthLossRate = _currentMetrics.incomingDPS / static_cast<float>(_bot->GetMaxHealth());
+        float healthLossRate = _currentMetrics.incomingDPS / static_cast<float>(SpatialGridQueryHelpers::GetBotMaxHealth(_bot));
         if (healthLossRate > 0.05f)  // Losing more than 5% health per second
         {
             return true;

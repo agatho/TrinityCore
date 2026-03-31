@@ -115,6 +115,43 @@ SpatialGridQueryHelpers::FindPlayerByGuid(Player* bot, ObjectGuid guid, float se
     return nullptr;
 }
 
+DoubleBufferedSpatialGrid::PlayerSnapshot const*
+SpatialGridQueryHelpers::GetBotSnapshot(Player* bot)
+{
+    if (!bot)
+        return nullptr;
+
+    return FindPlayerByGuid(bot, bot->GetGUID(), 5.0f);
+}
+
+float SpatialGridQueryHelpers::GetBotHealthPct(Player* bot)
+{
+    auto const* snapshot = GetBotSnapshot(bot);
+    if (snapshot)
+        return snapshot->GetHealthPercent();
+
+    // Fallback to direct read if not in spatial grid yet
+    return bot ? bot->GetHealthPct() : 100.0f;
+}
+
+uint64 SpatialGridQueryHelpers::GetBotHealth(Player* bot)
+{
+    auto const* snapshot = GetBotSnapshot(bot);
+    if (snapshot)
+        return snapshot->health;
+
+    return bot ? bot->GetHealth() : 1;
+}
+
+uint64 SpatialGridQueryHelpers::GetBotMaxHealth(Player* bot)
+{
+    auto const* snapshot = GetBotSnapshot(bot);
+    if (snapshot)
+        return snapshot->maxHealth;
+
+    return bot ? bot->GetMaxHealth() : 1;
+}
+
 ::std::vector<DoubleBufferedSpatialGrid::PlayerSnapshot>
 SpatialGridQueryHelpers::FindGroupMembersInRange(Player* bot, float range)
 {
