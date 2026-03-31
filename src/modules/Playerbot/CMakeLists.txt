@@ -1022,6 +1022,8 @@ set(PLAYERBOT_GAMEPLAY_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/Movement/BotMovement/Generators/BotPointMovementGenerator.h
     ${CMAKE_CURRENT_SOURCE_DIR}/Movement/BotMovement/Pathfinding/PathCache.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Movement/BotMovement/Pathfinding/PathCache.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/Movement/BotMovement/Pathfinding/ThreadSafePathfinder.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Movement/BotMovement/Pathfinding/ThreadSafePathfinder.h
     ${CMAKE_CURRENT_SOURCE_DIR}/Movement/BotMovement/Pathfinding/ValidatedPathGenerator.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Movement/BotMovement/Pathfinding/ValidatedPathGenerator.h
     ${CMAKE_CURRENT_SOURCE_DIR}/Movement/BotMovement/StateMachine/FallingMovementState.cpp

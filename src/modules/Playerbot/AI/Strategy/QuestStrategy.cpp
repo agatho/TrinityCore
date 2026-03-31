@@ -10,6 +10,7 @@
 #include "QuestStrategy.h"
 #include "Core/PlayerBotHelpers.h"  // GetBotAI, GetGameSystems
 #include "../BotAI.h"
+#include "ThreadSafePathfinder.h"
 #include "Player.h"
 #include "../../Session/BotSession.h"  // For IsInstanceBot check
 #include "Group.h"
@@ -3239,9 +3240,11 @@ void QuestStrategy::SearchForQuestGivers(BotAI* ai)
             if (!hasAnyQuest)
                 continue;
 
-            // NOTE: PathGenerator is NOT thread-safe (accesses shared navmesh data).
-            // Cannot verify navmesh reachability from the worker thread.
-            // Unreachable NPCs are handled by the stuck walk detection (30s timeout).
+            // Verify navmesh reachability using thread-safe pathfinder
+            // (per-thread dtNavMeshQuery instances, shared read-only dtNavMesh)
+            if (!ThreadSafePathfinder::IsReachable(ai->GetCachedMapId(),
+                    ai->GetCurrentPosition(), snapshot.position))
+                continue;
 
             float dist = ai->Distance2dTo(snapshot.position);
             if (dist < closestDistance)
