@@ -23,6 +23,7 @@
 #include "LiquidValidator.h"
 #include "GroundValidator.h"
 #include "Unit.h"
+#include "Player.h"
 #include "Position.h"
 #include "MotionMaster.h"
 #include "Log.h"
@@ -202,9 +203,8 @@ bool BotMovementController::MoveToPosition(Position const& dest, bool forceDest)
         return false;
     }
 
-    // Start new movement — do NOT call Clear() as it races with Player::Update()
-    // on the main thread and corrupts the motion type. MovePoint() handles the
-    // active motion internally.
+    // Use MotionMaster directly — BotMovementController is called infrequently
+    // and the main movement path goes through BotMovementUtil which queues to main thread.
     _owner->GetMotionMaster()->MovePoint(0,
         dest.GetPositionX(),
         dest.GetPositionY(),

@@ -2719,6 +2719,36 @@ bool BotSession::ProcessPendingSafeResurrection()
 // ============================================================================
 
 // ============================================================================
+// THREAD-SAFE MOVEMENT QUEUE
+// ============================================================================
+
+void BotSession::QueueMovePoint(uint32 pointId, float x, float y, float z)
+{
+    std::lock_guard<std::mutex> lock(_pendingMoveMutex);
+    _pendingMoves.push_back({x, y, z, pointId});
+}
+
+void BotSession::ProcessPendingMoves()
+{
+    std::vector<PendingMove> moves;
+    {
+        std::lock_guard<std::mutex> lock(_pendingMoveMutex);
+        if (_pendingMoves.empty())
+            return;
+        moves = std::move(_pendingMoves);
+        _pendingMoves.clear();
+    }
+
+    Player* bot = GetPlayer();
+    if (!bot || !bot->IsInWorld() || !bot->IsAlive())
+        return;
+
+    // Only process the LAST move — earlier ones are obsolete
+    PendingMove const& move = moves.back();
+    bot->GetMotionMaster()->MovePoint(move.pointId, move.x, move.y, move.z);
+}
+
+// ============================================================================
 // MAIN THREAD STATE SNAPSHOT
 // ============================================================================
 

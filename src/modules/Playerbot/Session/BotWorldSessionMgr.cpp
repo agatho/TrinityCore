@@ -1501,9 +1501,10 @@ uint32 BotWorldSessionMgr::ProcessAllDeferredPackets()
         // UpdateProposal() must not be called from within LFGMgr iteration
         session->ProcessPendingLfgProposalAccepts();
 
+        // Process pending movement commands (MovePoint from worker threads)
+        session->ProcessPendingMoves();
+
         // Snapshot bot state for worker thread consumption
-        // Captures health, mana, position, map, combat state from main thread
-        // where Player::Update() has already run and values are current.
         session->SnapshotBotState();
     }
 

@@ -329,8 +329,6 @@ bool BotMovementUtil::MoveToPosition(Player* bot, Position const& destination, u
                  bot->GetName(), destination.GetPositionX(), destination.GetPositionY(), destination.GetPositionZ(),
                  distToDestination3D);
 
-    // Use MotionMaster for thread-safe movement initiation
-    // The deduplication check above prevents the "60+ MovePoint calls/second" bug
     mm->MovePoint(pointId, destination.GetPositionX(), destination.GetPositionY(), destination.GetPositionZ());
 
     return true;

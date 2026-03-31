@@ -419,6 +419,14 @@ public:
     bool HasPendingLfgProposalAccepts() const;
 
     // ========================================================================
+    // THREAD-SAFE MOVEMENT QUEUE
+    // ========================================================================
+    // Worker threads queue movement, main thread executes via MotionMaster.
+    // MotionMaster::MovePoint() is NOT thread-safe.
+    void QueueMovePoint(uint32 pointId, float x, float y, float z);
+    void ProcessPendingMoves();
+
+    // ========================================================================
     // MAIN THREAD STATE SNAPSHOT
     // ========================================================================
     // Called from BotWorldSessionMgr on the main thread to capture bot stats
@@ -485,6 +493,12 @@ private:
     // Thread-safe pending stop movement flag
     // Worker threads set this, main thread processes it
     std::atomic<bool> _pendingStopMovement{false};
+
+    // Thread-safe pending movement queue — worker threads queue, main thread executes
+    // MotionMaster::MovePoint() is NOT thread-safe (modifies motion generators)
+    mutable std::mutex _pendingMoveMutex;
+    struct PendingMove { float x, y, z; uint32 pointId; };
+    std::vector<PendingMove> _pendingMoves;
 
     // Thread-safe pending safe resurrection flag (SpawnCorpseBones crash fix)
     // Worker threads set this, main thread processes it
