@@ -24,7 +24,6 @@
 #include "DatabaseEnv.h"
 #include "GameObject.h"
 #include "SpellHistory.h"
-#include "PathGenerator.h"
 #include "Item.h"
 #include "SpellInfo.h"
 #include "SpellMgr.h"
@@ -3240,15 +3239,11 @@ void QuestStrategy::SearchForQuestGivers(BotAI* ai)
             if (!hasAnyQuest)
                 continue;
 
-            // Verify navmesh reachability — skip NPCs on unreachable terrain (towers, cliffs)
-            ::PathGenerator path(bot);
-            bool pathResult = path.CalculatePath(
-                snapshot.position.GetPositionX(), snapshot.position.GetPositionY(),
-                snapshot.position.GetPositionZ(), false);
-            if (!pathResult || (path.GetPathType() & ::PATHFIND_NOPATH))
-                continue;
+            // NOTE: PathGenerator is NOT thread-safe (accesses shared navmesh data).
+            // Cannot verify navmesh reachability from the worker thread.
+            // Unreachable NPCs are handled by the stuck walk detection (30s timeout).
 
-            float dist = bot->GetExactDist2d(snapshot.position);
+            float dist = ai->Distance2dTo(snapshot.position);
             if (dist < closestDistance)
             {
                 closestDistance = dist;
