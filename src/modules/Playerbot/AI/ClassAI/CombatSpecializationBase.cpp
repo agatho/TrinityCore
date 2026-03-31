@@ -581,7 +581,7 @@ void CombatSpecializationBase::HandleEmergencySituation()
     _lastEmergencyCheck = currentTime;
     _metrics.emergencyActions++;
 
-    float healthPct = _bot->GetHealthPct();
+    float healthPct = SpatialGridQueryHelpers::GetBotHealthPct(_bot);
 
     // Critical health - use all defensive cooldowns
     if (healthPct < EMERGENCY_HEALTH_PCT)
@@ -1244,7 +1244,7 @@ void CombatSpecializationBase::UseOffensiveCooldowns()
 
 bool CombatSpecializationBase::ShouldUsePotions() const
 {
-    return _bot->GetHealthPct() < 40.0f || GetResourcePercent() < 20.0f;
+    return SpatialGridQueryHelpers::GetBotHealthPct(_bot) < 40.0f || GetResourcePercent() < 20.0f;
 }
 
 void CombatSpecializationBase::UsePotions()
@@ -1255,7 +1255,7 @@ void CombatSpecializationBase::UsePotions()
 
 bool CombatSpecializationBase::IsInEmergencyState() const
 {
-    return _bot->GetHealthPct() < EMERGENCY_HEALTH_PCT;
+    return SpatialGridQueryHelpers::GetBotHealthPct(_bot) < EMERGENCY_HEALTH_PCT;
 }
 
 bool CombatSpecializationBase::HasGlobalCooldown() const

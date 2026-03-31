@@ -198,7 +198,7 @@ void DemonHunterAI::HandleDefensives()
     if (!_bot)
         return;
 
-    float healthPct = _bot->GetHealthPct();
+    float healthPct = SpatialGridQueryHelpers::GetBotHealthPct(_bot);
     uint32 currentTime = GameTime::GetGameTimeMS();
 
     // Netherwalk - Emergency immunity
@@ -701,7 +701,7 @@ void DemonHunterAI::UpdateBuffs()
         // Maintain Demon Spikes uptime when tanking
     if (!_bot->HasAura(DEMON_SPIKES) && CanUseAbility(DEMON_SPIKES))
         {
-            if (_bot->GetHealthPct() < 90.0f || _bot->IsInCombat())
+            if (SpatialGridQueryHelpers::GetBotHealthPct(_bot) < 90.0f || _bot->IsInCombat())
             {
                 if (CastSpell(DEMON_SPIKES))
                 {
@@ -714,7 +714,7 @@ void DemonHunterAI::UpdateBuffs()
 
         // Apply Fiery Brand on primary target for damage reduction
         Unit* target = _bot->GetVictim();
-        if (target && !target->HasAura(FIERY_BRAND) && _bot->GetHealthPct() < 80.0f && CanUseAbility(FIERY_BRAND))
+        if (target && !target->HasAura(FIERY_BRAND) && SpatialGridQueryHelpers::GetBotHealthPct(_bot) < 80.0f && CanUseAbility(FIERY_BRAND))
         {
             if (CastSpell(FIERY_BRAND, target))
             {
@@ -829,7 +829,7 @@ bool DemonHunterAI::ShouldUseMetamorphosis()
         return false;
 
     // Use for survival at low health
-    if (_bot->GetHealthPct() < METAMORPHOSIS_HEALTH_THRESHOLD)
+    if (SpatialGridQueryHelpers::GetBotHealthPct(_bot) < METAMORPHOSIS_HEALTH_THRESHOLD)
         return true;
 
     // Use for burst damage on high-health targets
@@ -997,7 +997,7 @@ void DemonHunterAI::UpdateVengeanceRotation(::Unit* target)
     }
 
     // Soul Cleave for healing and damage
-    if (pain >= 30 && (_bot->GetHealthPct() < 70.0f || pain >= 60))
+    if (pain >= 30 && (SpatialGridQueryHelpers::GetBotHealthPct(_bot) < 70.0f || pain >= 60))
     {
         CastSoulCleave(target);
         return;

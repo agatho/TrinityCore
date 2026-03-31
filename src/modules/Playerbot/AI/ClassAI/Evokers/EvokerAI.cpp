@@ -132,7 +132,7 @@ void EvokerAI::UpdateRotation(::Unit* target)
     // Priority 2: Defensives - Obsidian Scales, Renewing Blaze
     if (behaviors && behaviors->NeedsDefensive())
     {
-        float healthPct = _bot->GetHealthPct();
+        float healthPct = SpatialGridQueryHelpers::GetBotHealthPct(_bot);
         if (healthPct < 30.0f && CanUseAbility(OBSIDIAN_SCALES))
         {
             if (CastSpell(OBSIDIAN_SCALES, _bot))
@@ -848,10 +848,10 @@ bool EvokerAI::CanShiftAspect()
     float lowestHealth = 100.0f;
 
     // Check self
-    if (_bot->GetHealthPct() < lowestHealth)
+    if (SpatialGridQueryHelpers::GetBotHealthPct(_bot) < lowestHealth)
     {
         lowestTarget = _bot;
-        lowestHealth = _bot->GetHealthPct();
+        lowestHealth = SpatialGridQueryHelpers::GetBotHealthPct(_bot);
     }
 
     // Check group members
@@ -1149,7 +1149,7 @@ void EvokerAI::CastHover()
 bool EvokerAI::ShouldUseHover()
 {
     // Use hover for mobility when repositioning or under threat
-    return !_isHovering && (_bot->IsInCombat() && _bot->GetHealthPct() < 50.0f);
+    return !_isHovering && (_bot->IsInCombat() && SpatialGridQueryHelpers::GetBotHealthPct(_bot) < 50.0f);
 }
 
 void EvokerAI::ManageBuffs()

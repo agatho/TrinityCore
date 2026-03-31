@@ -7,6 +7,7 @@
  * option) any later version.
  */
 
+#include "Spatial/SpatialGridQueryHelpers.h"
 #include "RacialAbilityManager.h"
 #include "Log.h"
 #include "Player.h"
@@ -357,7 +358,7 @@ uint32 RacialAbilityManager::GetDefensiveRacial() const
     if (!_bot)
         return 0;
 
-    float healthPct = _bot->GetHealthPct() / 100.0f;
+    float healthPct = SpatialGridQueryHelpers::GetBotHealthPct(_bot) / 100.0f;
 
     for (auto const& racial : _racials)
     {

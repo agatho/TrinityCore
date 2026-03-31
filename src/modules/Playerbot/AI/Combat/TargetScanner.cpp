@@ -7,6 +7,7 @@
  * option) any later version.
  */
 
+#include "Spatial/SpatialGridQueryHelpers.h"
 #include "TargetScanner.h"
 #include "Player.h"
 #include "Pet.h"
@@ -548,7 +549,7 @@ namespace Playerbot
         }
 
         // Don't engage if bot is low health
-        float healthPct = m_bot->GetHealthPct();
+        float healthPct = SpatialGridQueryHelpers::GetBotHealthPct(m_bot);
         if (healthPct < 30.0f)
             return false;
 

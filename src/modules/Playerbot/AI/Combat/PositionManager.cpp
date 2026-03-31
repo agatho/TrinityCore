@@ -1576,7 +1576,7 @@ bool PositionManager::IsInEmergencyPosition()
     if (!_bot) return false;
     std::lock_guard<Playerbot::OrderedRecursiveMutex<Playerbot::LockOrder::BOT_AI_STATE>> lock(_mutex);
     if (IsInDangerZone(_bot->GetPosition())) return true;
-    if (_bot->GetHealthPct() < 20.0f) return true;
+    if (SpatialGridQueryHelpers::GetBotHealthPct(_bot) < 20.0f) return true;
     return false;
 }
 

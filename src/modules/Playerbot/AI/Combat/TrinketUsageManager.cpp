@@ -7,6 +7,7 @@
  * option) any later version.
  */
 
+#include "Spatial/SpatialGridQueryHelpers.h"
 #include "TrinketUsageManager.h"
 #include "CombatPhaseDetector.h"
 #include "Item.h"
@@ -467,7 +468,7 @@ bool TrinketUsageManager::ShouldUseDefensiveTrinket() const
         return false;
 
     // Use defensive trinket when health drops below threshold
-    float healthPct = _bot->GetHealthPct();
+    float healthPct = SpatialGridQueryHelpers::GetBotHealthPct(_bot);
     return healthPct < _defensiveHealthThreshold;
 }
 

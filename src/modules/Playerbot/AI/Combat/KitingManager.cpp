@@ -7,6 +7,7 @@
  * option) any later version.
  */
 
+#include "Spatial/SpatialGridQueryHelpers.h"
 #include "KitingManager.h"
 #include "GameTime.h"
 #include "Player.h"
@@ -62,7 +63,7 @@ void KitingManager::UpdateKiting(uint32 /*diff*/)
             KitingContext context;
             context.bot = _bot;
             context.currentPosition = _bot->GetPosition();
-            context.currentHealth = _bot->GetHealthPct();
+            context.currentHealth = SpatialGridQueryHelpers::GetBotHealthPct(_bot);
             context.currentMana = _bot->GetPowerPct(POWER_MANA);
             context.inCombat = _bot->IsInCombat();
             context.isMoving = _bot->isMoving();

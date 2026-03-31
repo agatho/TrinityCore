@@ -1539,7 +1539,7 @@ uint32 HunterAI::GetOptimalAspect() const
 bool HunterAI::ShouldFeignDeath() const
 {
     // Feign death to drop aggro or escape
-    return _bot->GetHealthPct() < FEIGN_DEATH_THRESHOLD || _bot->GetThreatManager().GetThreatListSize() > 3;
+    return SpatialGridQueryHelpers::GetBotHealthPct(_bot) < FEIGN_DEATH_THRESHOLD || _bot->GetThreatManager().GetThreatListSize() > 3;
 }
 
 bool HunterAI::CanInterruptTarget(::Unit* target) const
@@ -1766,7 +1766,7 @@ bool HunterAI::IsTargetDangerous(::Unit* target) const
     if (target->GetCreatureType() == CREATURE_TYPE_BEAST && target->GetLevel() > _bot->GetLevel() + 2)        return true;
 
     // Check if target has high damage output
-    return target->GetTotalAttackPowerValue(BASE_ATTACK) > _bot->GetMaxHealth() * 0.3f;
+    return target->GetTotalAttackPowerValue(BASE_ATTACK) > SpatialGridQueryHelpers::GetBotMaxHealth(_bot) * 0.3f;
 }
 
 bool HunterAI::ShouldSaveDefensives() const

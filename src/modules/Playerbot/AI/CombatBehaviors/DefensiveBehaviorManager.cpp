@@ -251,7 +251,7 @@ void DefensiveBehaviorManager::UpdateState()
         return;
 
     // Update health status
-    _currentState.healthPercent = _bot->GetHealthPct();
+    _currentState.healthPercent = SpatialGridQueryHelpers::GetBotHealthPct(_bot);
     _currentState.incomingDPS = GetIncomingDPS();
     _currentState.predictedHealth = PredictHealth(2.0f);
 
@@ -334,7 +334,7 @@ bool DefensiveBehaviorManager::NeedsDefensive() const
         return true;
 
     // High incoming damage
-    float maxHPPerSec = _bot->GetMaxHealth() * _thresholds.incomingDPSThreshold;
+    float maxHPPerSec = SpatialGridQueryHelpers::GetBotMaxHealth(_bot) * _thresholds.incomingDPSThreshold;
     if (_currentState.incomingDPS > maxHPPerSec)
         return true;
 
@@ -500,7 +500,7 @@ void DefensiveBehaviorManager::PrepareForIncoming(uint32 spellId)
                 estimatedDamage *= defensiveModifier;
             }
 
-            if (estimatedDamage > _bot->GetMaxHealth() * 0.3f)
+            if (estimatedDamage > SpatialGridQueryHelpers::GetBotMaxHealth(_bot) * 0.3f)
                 isMajorThreat = true;
         }
     }
@@ -568,11 +568,11 @@ float DefensiveBehaviorManager::PredictHealth(float secondsAhead) const
     if (!_bot)
         return 0.0f;
 
-    float currentHP = _bot->GetHealth();
+    float currentHP = SpatialGridQueryHelpers::GetBotHealth(_bot);
     float dps = GetIncomingDPS();
     float predictedHP = LinearPredict(currentHP, -dps, secondsAhead);
 
-    return (predictedHP / _bot->GetMaxHealth()) * 100.0f;
+    return (predictedHP / SpatialGridQueryHelpers::GetBotMaxHealth(_bot)) * 100.0f;
 }
 
 // Register a defensive cooldown
