@@ -128,8 +128,8 @@ bool CombatStrategy::ShouldFlee(BotAI* ai) const
     if (!bot)
         return false;
 
-    // Flee if health is critically low
-    if (bot->GetHealthPct() < 15.0f)
+    // Flee if health is critically low (from spatial grid snapshot)
+    if (ai->GetCachedHealthPct() < 15.0f)
         return true;
 
     // Flee if outnumbered significantly

@@ -427,9 +427,8 @@ void GrindStrategy::UpdateBehavior(BotAI* ai, uint32 diff)
         {
             // RestStrategy handles recovery
             // Check if ready to resume
-            float healthPct = bot->GetHealthPct() / 100.0f;
-            float manaPct = bot->GetPowerType() == POWER_MANA ?
-                (bot->GetPower(POWER_MANA) / static_cast<float>(bot->GetMaxPower(POWER_MANA))) : 1.0f;
+            float healthPct = ai->GetCachedHealthPct() / 100.0f;
+            float manaPct = ai->GetCachedManaPct() / 100.0f;
 
             if (healthPct >= 0.8f && manaPct >= 0.6f)
             {

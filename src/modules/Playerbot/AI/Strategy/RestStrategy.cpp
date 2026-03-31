@@ -180,11 +180,9 @@ void RestStrategy::UpdateBehavior(BotAI* ai, uint32 diff)
         return;
     }
 
-    // Log current status
-    float healthPct = bot->GetHealthPct();
-    float manaPct = bot->GetMaxPower(POWER_MANA) > 0
-        ? (bot->GetPower(POWER_MANA) * 100.0f / bot->GetMaxPower(POWER_MANA))
-        : 100.0f;
+    // Read current health/mana from spatial grid snapshot
+    float healthPct = ai->GetCachedHealthPct();
+    float manaPct = ai->GetCachedManaPct();
 
     TC_LOG_TRACE("module.playerbot.strategy", "RestStrategy::UpdateBehavior: Bot {} health={:.1f}%, mana={:.1f}%, needsFood={}, needsDrink={}",
                  bot->GetName(), healthPct, manaPct, NeedsFood(ai), NeedsDrink(ai));

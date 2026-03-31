@@ -350,6 +350,12 @@ public:
     uint32 GetCachedZoneId() const { return _snapshot.zoneId; }
     DoubleBufferedSpatialGrid::PlayerSnapshot const& GetSnapshot() const { return _snapshot; }
 
+    // Distance helpers using snapshot position (accurate on worker threads)
+    float DistanceTo(Position const& pos) const { return _snapshot.position.GetExactDist(pos); }
+    float Distance2dTo(Position const& pos) const { return _snapshot.position.GetExactDist2d(pos); }
+    float DistanceTo(WorldObject const* obj) const { return obj ? _snapshot.position.GetExactDist(obj) : 999999.0f; }
+    float Distance2dTo(WorldObject const* obj) const { return obj ? _snapshot.position.GetExactDist2d(obj) : 999999.0f; }
+
     // ========================================================================
     // LIFECYCLE MANAGEMENT - Two-Phase AddToWorld Pattern
     // ========================================================================

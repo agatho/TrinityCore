@@ -280,10 +280,9 @@ public:
         if (!ai || !ai->GetBot())
             return false;
 
-        Player* bot = ai->GetBot();
-        float healthPct = bot->GetHealthPct();
-        float manaPct = bot->GetMaxPower(POWER_MANA) > 0 ?
-            (float)bot->GetPower(POWER_MANA) / bot->GetMaxPower(POWER_MANA) * 100.0f : 100.0f;
+        // Use spatial grid snapshot for accurate health/mana on worker threads
+        float healthPct = ai->GetCachedHealthPct();
+        float manaPct = ai->GetCachedManaPct();
 
         // Need rest if health < 50% or mana < 30%
         return healthPct < 50.0f || manaPct < 30.0f;
@@ -304,10 +303,9 @@ public:
                 bot->GetName());
         }
 
-        // Check if fully recovered
-        float healthPct = bot->GetHealthPct();
-        float manaPct = bot->GetMaxPower(POWER_MANA) > 0 ?
-            (float)bot->GetPower(POWER_MANA) / bot->GetMaxPower(POWER_MANA) * 100.0f : 100.0f;
+        // Check if fully recovered (from spatial grid snapshot)
+        float healthPct = ai->GetCachedHealthPct();
+        float manaPct = ai->GetCachedManaPct();
 
         if (healthPct >= 95.0f && manaPct >= 90.0f)
         {
@@ -416,8 +414,7 @@ public:
         if (!ai || !ai->GetBot())
             return false;
 
-        Player* bot = ai->GetBot();
-        return !bot->IsInCombat() && bot->GetHealthPct() < _threshold * 100.0f;
+        return !ai->GetCachedIsInCombat() && ai->GetCachedHealthPct() < _threshold * 100.0f;
     }
 
     float CalculateUrgency(BotAI* ai) const override
@@ -446,11 +443,10 @@ public:
             return false;
 
         Player* bot = ai->GetBot();
-        if (bot->IsInCombat() || bot->GetMaxPower(POWER_MANA) == 0)
+        if (ai->GetCachedIsInCombat() || ai->GetSnapshot().maxPower == 0)
             return false;
 
-        float manaPct = (float)bot->GetPower(POWER_MANA) / bot->GetMaxPower(POWER_MANA);
-        return manaPct < _threshold;
+        return (ai->GetCachedManaPct() / 100.0f) < _threshold;
     }
 
     float CalculateUrgency(BotAI* ai) const override
