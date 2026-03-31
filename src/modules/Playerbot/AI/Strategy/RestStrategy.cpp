@@ -110,10 +110,8 @@ bool RestStrategy::IsActive(BotAI* ai) const
         return true;
 
     // No consumables: only rest if critically low — must wait for passive regen
-    float healthPct = bot->GetHealthPct();
-    float manaPct = bot->GetMaxPower(POWER_MANA) > 0
-        ? (bot->GetPower(POWER_MANA) * 100.0f / bot->GetMaxPower(POWER_MANA))
-        : 100.0f;
+    float healthPct = ai->GetCachedHealthPct();
+    float manaPct = ai->GetCachedManaPct();
 
     return (needsFood && healthPct < _criticalRestThreshold) || (needsDrink && manaPct < _criticalRestThreshold);
 }
@@ -328,39 +326,23 @@ void RestStrategy::UpdateBehavior(BotAI* ai, uint32 diff)
 
 bool RestStrategy::NeedsFood(BotAI* ai) const
 {
-    if (!ai || !ai->GetBot())
+    if (!ai)
         return false;
 
-    Player* bot = ai->GetBot();
-
-    // CRITICAL FIX: Safety check for worker thread access during bot destruction
-    // Bot may be destroyed/logging out between null check and GetHealthPct() call
-    // IsInWorld() returns false during destruction, preventing ACCESS_VIOLATION crash
-    if (!bot->IsInWorld())
-        return false;
-
-    return bot->GetHealthPct() < _eatHealthThreshold;
+    return ai->GetCachedHealthPct() < _eatHealthThreshold;
 }
 
 bool RestStrategy::NeedsDrink(BotAI* ai) const
 {
-    if (!ai || !ai->GetBot())
+    if (!ai)
         return false;
 
-    Player* bot = ai->GetBot();
-
-    // CRITICAL FIX: Safety check for worker thread access during bot destruction
-    // Bot may be destroyed/logging out between null check and GetMaxPower() call
-    // IsInWorld() returns false during destruction, preventing ACCESS_VIOLATION crash
-    if (!bot->IsInWorld())
+    // Snapshot has power/maxPower — 0 maxPower means non-mana user
+    auto const& snapshot = ai->GetSnapshot();
+    if (snapshot.maxPower <= 0)
         return false;
 
-    // Only mana users need to drink
-    if (bot->GetMaxPower(POWER_MANA) == 0)
-        return false;
-
-    float manaPct = (bot->GetPower(POWER_MANA) * 100.0f) / bot->GetMaxPower(POWER_MANA);
-    return manaPct < _drinkManaThreshold;
+    return ai->GetCachedManaPct() < _drinkManaThreshold;
 }
 
 Item* RestStrategy::FindFood(BotAI* ai) const

@@ -1504,8 +1504,7 @@ uint32 BotWorldSessionMgr::ProcessAllDeferredPackets()
         // Process pending movement commands (MovePoint from worker threads)
         session->ProcessPendingMoves();
 
-        // Snapshot bot state for worker thread consumption
-        session->SnapshotBotState();
+        // Bot state is now read from the spatial grid by BotAI::RefreshFromSpatialGrid()
     }
 
     // Log statistics if significant activity

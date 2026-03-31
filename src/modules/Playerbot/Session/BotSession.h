@@ -426,12 +426,6 @@ public:
     void QueueMovePoint(uint32 pointId, float x, float y, float z);
     void ProcessPendingMoves();
 
-    // ========================================================================
-    // MAIN THREAD STATE SNAPSHOT
-    // ========================================================================
-    // Called from BotWorldSessionMgr on the main thread to capture bot stats
-    // that worker threads need but can't read directly (stale data).
-    void SnapshotBotState();
 
 private:
     // Helper methods for safe database access

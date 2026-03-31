@@ -3,7 +3,6 @@
  */
 
 #include "BotSession.h"
-#include "MoveSpline.h"
 #include "DatabaseEnv.h"
 #include "CharacterDatabase.h"
 #include "BotPacketRelay.h"
@@ -2746,42 +2745,6 @@ void BotSession::ProcessPendingMoves()
     // Only process the LAST move — earlier ones are obsolete
     PendingMove const& move = moves.back();
     bot->GetMotionMaster()->MovePoint(move.pointId, move.x, move.y, move.z);
-}
-
-// ============================================================================
-// MAIN THREAD STATE SNAPSHOT
-// ============================================================================
-
-void BotSession::SnapshotBotState()
-{
-    Player* bot = GetPlayer();
-    if (!bot || !bot->IsInWorld())
-        return;
-
-    BotAI* ai = _ai.get();
-    if (!ai)
-        return;
-
-    // Capture position from movespline or current position
-    if (bot->movespline && !bot->movespline->Finalized())
-    {
-        Movement::Location loc = bot->movespline->ComputePosition();
-        ai->_cachedPosition.Relocate(loc.x, loc.y, loc.z, loc.orientation);
-    }
-    else
-    {
-        ai->_cachedPosition.Relocate(bot->GetPositionX(), bot->GetPositionY(),
-                                     bot->GetPositionZ(), bot->GetOrientation());
-    }
-
-    ai->_cachedHealthPct = bot->GetHealthPct();
-    // Always capture mana for classes that have a mana pool, regardless of primary power type
-    // (Warlocks have mana + soul shards, paladins have mana + holy power, etc.)
-    ai->_cachedManaPct = bot->GetMaxPower(POWER_MANA) > 0
-        ? (bot->GetPower(POWER_MANA) * 100.0f / bot->GetMaxPower(POWER_MANA))
-        : 100.0f;
-    ai->_cachedMapId = bot->GetMapId();
-    ai->_cachedIsInCombat = bot->IsInCombat();
 }
 
 // ============================================================================

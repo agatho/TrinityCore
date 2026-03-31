@@ -11,7 +11,7 @@
  */
 
 #include "BotAI.h"
-#include "MoveSpline.h"
+#include "Spatial/SpatialGridManager.h"
 #include "AdaptiveAIUpdateThrottler.h"
 #include "Humanization/Activities/RPGDailyRoutineManager.h"
 #include "GameTime.h"
@@ -136,18 +136,20 @@ BotAI::BotAI(Player* bot, bool instanceOnlyMode)
     // Initialize performance tracking
     _performanceMetrics.lastUpdate = std::chrono::steady_clock::now();
 
-    // Initialize cached state from bot's current values so worker threads
-    // have valid data before the first main-thread SnapshotBotState() runs
+    // Initialize snapshot with basic bot data — spatial grid may not have
+    // populated yet. RefreshFromSpatialGrid() in UpdateAI will overwrite this.
     if (_bot && _bot->IsInWorld())
     {
-        _cachedPosition.Relocate(_bot->GetPositionX(), _bot->GetPositionY(),
-                                 _bot->GetPositionZ(), _bot->GetOrientation());
-        _cachedHealthPct = _bot->GetHealthPct();
-        _cachedManaPct = _bot->GetMaxPower(POWER_MANA) > 0
-            ? (_bot->GetPower(POWER_MANA) * 100.0f / _bot->GetMaxPower(POWER_MANA))
-            : 100.0f;
-        _cachedMapId = _bot->GetMapId();
-        _cachedIsInCombat = _bot->IsInCombat();
+        _snapshot.guid = _bot->GetGUID();
+        _snapshot.position.Relocate(_bot->GetPositionX(), _bot->GetPositionY(),
+                                    _bot->GetPositionZ(), _bot->GetOrientation());
+        _snapshot.health = _bot->GetHealth();
+        _snapshot.maxHealth = _bot->GetMaxHealth();
+        _snapshot.mapId = _bot->GetMapId();
+        _snapshot.level = static_cast<uint8>(_bot->GetLevel());
+        _snapshot.isAlive = _bot->IsAlive();
+        _snapshot.race = _bot->GetRace();
+        _snapshot.classId = _bot->GetClass();
     }
 
     // ========================================================================
@@ -422,10 +424,8 @@ void BotAI::UpdateAI(uint32 diff)
     if (!_bot->IsInWorld())
         return;
 
-    // Bot state cache (health, mana, position, map, combat) is populated on the
-    // MAIN THREAD by BotSession::SnapshotBotState(), called from
-    // BotWorldSessionMgr::ProcessAllDeferredPackets(). Worker threads read the
-    // cached values via GetCachedHealthPct(), GetCurrentPosition(), etc.
+    // Refresh bot state from spatial grid — single source of truth for worker threads
+    RefreshFromSpatialGrid();
 
     // ========================================================================
     // BOT-SPECIFIC LOGIN SPELL CLEANUP: Clear events on first update to prevent LOGINEFFECT crash
@@ -1510,6 +1510,42 @@ void BotAI::OnDeath()
 
     TC_LOG_DEBUG("playerbots.ai", "Bot {} died, AI state reset, death recovery initiated", _bot->GetName());
 }
+
+// ============================================================================
+// SPATIAL GRID SNAPSHOT — single source of truth for worker threads
+// ============================================================================
+
+void BotAI::RefreshFromSpatialGrid()
+{
+    if (!_bot)
+        return;
+
+    // Get the spatial grid for the bot's map
+    DoubleBufferedSpatialGrid* grid = sSpatialGridManager.GetGrid(_bot->GetMapId());
+    if (!grid)
+        return;
+
+    // Query nearby players to find our own snapshot
+    // Use small radius — we're looking for ourselves, not others
+    auto playerSnapshots = grid->QueryNearbyPlayers(_bot->GetPosition(), 5.0f);
+
+    ObjectGuid botGuid = _bot->GetGUID();
+    for (auto const& snapshot : playerSnapshots)
+    {
+        if (snapshot.guid == botGuid)
+        {
+            _snapshot = snapshot;
+            return;
+        }
+    }
+
+    // Bot not found in spatial grid yet (just spawned, or grid not updated)
+    // Keep existing snapshot data — it was initialized in constructor
+}
+
+// ============================================================================
+// RESPAWN / RESET
+// ============================================================================
 
 void BotAI::OnRespawn()
 {

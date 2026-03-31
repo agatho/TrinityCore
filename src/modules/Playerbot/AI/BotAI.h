@@ -14,6 +14,7 @@
 
 #include "Define.h"
 #include "AIBudgetTier.h"
+#include "Spatial/DoubleBufferedSpatialGrid.h"
 #include "Threading/LockHierarchy.h"
 #include "ObjectGuid.h"
 #include "Player.h"
@@ -151,7 +152,6 @@ class TC_GAME_API BotAI : public IEventHandler<LootEvent>,
                            public IEventHandler<GroupEvent>,
                            public IEventHandler<ProfessionEvent>
 {
-    friend class BotSession; // Needs access to cached state for main-thread snapshots
 public:
     /**
      * @brief Construct BotAI for a player bot
@@ -330,13 +330,25 @@ public:
     ObjectGuid GetBotGuid() const { return _bot ? _bot->GetGUID() : ObjectGuid::Empty; }
     ObjectGuid GetCachedBotGuid() const { return _cachedBotGuid; }  // Safe during destructor
 
-    // Worker-thread-safe cached values — updated at start of each UpdateAI
-    // Use these instead of bot->GetHealthPct(), GetPositionX(), etc.
-    Position const& GetCurrentPosition() const { return _cachedPosition; }
-    float GetCachedHealthPct() const { return _cachedHealthPct; }
-    float GetCachedManaPct() const { return _cachedManaPct; }
-    uint32 GetCachedMapId() const { return _cachedMapId; }
-    bool GetCachedIsInCombat() const { return _cachedIsInCombat; }
+    // ========================================================================
+    // SPATIAL GRID SNAPSHOT — single source of truth for worker threads
+    // ========================================================================
+    // Updated at the start of every UpdateAI from the DoubleBufferedSpatialGrid.
+    // The spatial grid is populated on the MAIN THREAD every 100ms with current
+    // player data. Worker threads read this snapshot instead of bot->GetXxx()
+    // which returns stale data.
+    void RefreshFromSpatialGrid();
+
+    Position const& GetCurrentPosition() const { return _snapshot.position; }
+    float GetCachedHealthPct() const { return _snapshot.GetHealthPercent(); }
+    float GetCachedManaPct() const { return _snapshot.maxPower > 0 ? (static_cast<float>(_snapshot.power) / _snapshot.maxPower) * 100.0f : 100.0f; }
+    uint32 GetCachedMapId() const { return _snapshot.mapId; }
+    bool GetCachedIsInCombat() const { return _snapshot.isInCombat; }
+    bool GetCachedIsAlive() const { return _snapshot.isAlive; }
+    bool GetCachedIsGhost() const { return _snapshot.isGhost; }
+    uint8 GetCachedLevel() const { return _snapshot.level; }
+    uint32 GetCachedZoneId() const { return _snapshot.zoneId; }
+    DoubleBufferedSpatialGrid::PlayerSnapshot const& GetSnapshot() const { return _snapshot; }
 
     // ========================================================================
     // LIFECYCLE MANAGEMENT - Two-Phase AddToWorld Pattern
@@ -1103,13 +1115,9 @@ protected:
     // Solo strategy activation tracking
     bool _soloStrategiesActivated = false;
 
-    // Thread-safe caches — updated at start of UpdateAI from main thread data
-    // Worker threads MUST use these instead of reading bot stats directly
-    Position _cachedPosition;
-    float _cachedHealthPct = 100.0f;
-    float _cachedManaPct = 100.0f;
-    uint32 _cachedMapId = 0;
-    bool _cachedIsInCombat = false;
+    // Spatial grid snapshot — single source of truth for worker threads
+    // Populated at start of each UpdateAI from DoubleBufferedSpatialGrid
+    DoubleBufferedSpatialGrid::PlayerSnapshot _snapshot;
 
     // Login spell event cleanup tracking (prevents LOGINEFFECT crash)
     bool _firstUpdateComplete = false;
