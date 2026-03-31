@@ -163,6 +163,22 @@ namespace Playerbot
         static uint64 GetBotMaxHealth(Player* bot);
 
         /**
+         * @brief Get bot's position from spatial grid (thread-safe)
+         * @return Position from snapshot, or bot's direct position as fallback
+         */
+        static Position GetBotPosition(Player* bot);
+
+        /**
+         * @brief Get distance from bot to a world object using grid position (thread-safe)
+         */
+        static float GetBotDistanceTo(Player* bot, WorldObject const* target);
+
+        /**
+         * @brief Get 2D distance from bot to a world object using grid position (thread-safe)
+         */
+        static float GetBotDistance2dTo(Player* bot, WorldObject const* target);
+
+        /**
          * @brief Find all group members near bot (thread-safe)
          *
          * @param bot The bot performing the query

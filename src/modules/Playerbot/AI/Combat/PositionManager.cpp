@@ -152,7 +152,7 @@ PositionMovementResult PositionManager::FindOptimalPosition(const MovementContex
     result.targetPosition = bestPosition.position;
     result.priority = bestPosition.priority;
     result.estimatedTime = EstimateMovementTime(_bot->GetPosition(), bestPosition.position);
-    result.pathDistance = _bot->GetExactDist(&bestPosition.position);
+    result.pathDistance = SpatialGridQueryHelpers::GetBotPosition(_bot).GetExactDist(&bestPosition.position);
     TC_LOG_DEBUG("playerbot.position", "Found optimal position for bot {} at ({:.2f}, {:.2f}, {:.2f}) with score {:.2f}",
                _bot->GetName(), bestPosition.position.GetPositionX(), bestPosition.position.GetPositionY(),
                bestPosition.position.GetPositionZ(), bestPosition.score);
@@ -1547,7 +1547,7 @@ bool PositionManager::ShouldCircleStrafe(Unit* target)
     if (!_bot || !target) return false;
     std::lock_guard<Playerbot::OrderedRecursiveMutex<Playerbot::LockOrder::BOT_AI_STATE>> lock(_mutex);
     if (!target->IsNonMeleeSpellCast(false)) return false;
-    float distance = _bot->GetExactDist(target);
+    float distance = SpatialGridQueryHelpers::GetBotPosition(_bot).GetExactDist(target);
     return distance < 8.0f;
 }
 
@@ -1560,7 +1560,7 @@ Position PositionManager::CalculateStrafePosition(Unit* target, bool strafeLeft)
 
     float currentAngle = _bot->GetAbsoluteAngle(target);
     float strafeAngle = strafeLeft ? (currentAngle + static_cast<float>(M_PI) / 4.0f) : (currentAngle - static_cast<float>(M_PI) / 4.0f);
-    float distance = _bot->GetExactDist(target);
+    float distance = SpatialGridQueryHelpers::GetBotPosition(_bot).GetExactDist(target);
 
     Position strafePos;
     strafePos.Relocate(target->GetPositionX() + std::cos(strafeAngle) * distance,

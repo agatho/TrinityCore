@@ -883,7 +883,7 @@ Position CombatStateAnalyzer::GetSafePosition() const
 {
     // Calculate safe position based on situation
     Position pos;
-    pos.Relocate(_bot->GetPositionX(), _bot->GetPositionY(), _bot->GetPositionZ(), _bot->GetOrientation());
+    pos.Relocate(SpatialGridQueryHelpers::GetBotPosition(_bot).GetPositionX(), SpatialGridQueryHelpers::GetBotPosition(_bot).GetPositionY(), SpatialGridQueryHelpers::GetBotPosition(_bot).GetPositionZ(), _bot->GetOrientation());
 
     if (NeedsToSpread())
     {
@@ -916,9 +916,9 @@ Position CombatStateAnalyzer::GetSafePosition() const
 
                 // Move away from center
                 float angle = _bot->GetRelativeAngle(centerX, centerY);
-                float newX = _bot->GetPositionX() + cos(angle + static_cast<float>(M_PI)) * 10.0f;
-                                float newY = _bot->GetPositionY() + sin(angle + static_cast<float>(M_PI)) * 10.0f;
-                                                            pos.Relocate(newX, newY, _bot->GetPositionZ());
+                float newX = SpatialGridQueryHelpers::GetBotPosition(_bot).GetPositionX() + cos(angle + static_cast<float>(M_PI)) * 10.0f;
+                                float newY = SpatialGridQueryHelpers::GetBotPosition(_bot).GetPositionY() + sin(angle + static_cast<float>(M_PI)) * 10.0f;
+                                                            pos.Relocate(newX, newY, SpatialGridQueryHelpers::GetBotPosition(_bot).GetPositionZ());
             }
         }
     }

@@ -152,6 +152,33 @@ uint64 SpatialGridQueryHelpers::GetBotMaxHealth(Player* bot)
     return bot ? bot->GetMaxHealth() : 1;
 }
 
+float SpatialGridQueryHelpers::GetBotDistanceTo(Player* bot, WorldObject const* target)
+{
+    if (!bot || !target)
+        return 999999.0f;
+
+    Position pos = GetBotPosition(bot);
+    return pos.GetExactDist(target);
+}
+
+float SpatialGridQueryHelpers::GetBotDistance2dTo(Player* bot, WorldObject const* target)
+{
+    if (!bot || !target)
+        return 999999.0f;
+
+    Position pos = GetBotPosition(bot);
+    return pos.GetExactDist2d(target);
+}
+
+Position SpatialGridQueryHelpers::GetBotPosition(Player* bot)
+{
+    auto const* snapshot = GetBotSnapshot(bot);
+    if (snapshot)
+        return snapshot->position;
+
+    return bot ? bot->GetPosition() : Position();
+}
+
 ::std::vector<DoubleBufferedSpatialGrid::PlayerSnapshot>
 SpatialGridQueryHelpers::FindGroupMembersInRange(Player* bot, float range)
 {
