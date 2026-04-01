@@ -3414,10 +3414,9 @@ void QuestStrategy::SearchForQuestGivers(BotAI* ai)
                 _acceptanceManager->GetQuestsAccepted(),
                 _acceptanceManager->GetQuestsDropped());
 
-            // Blacklist this NPC to prevent re-visiting on the next tick.
-            // For NPCs with no quests: prevents infinite loop.
-            // For NPCs with repeatable quests: prevents accepting the same quest every tick.
-            // Blacklist clears on teleport (new zone) so the bot can revisit later.
+            // Only blacklist if NPC had nothing for us. If quests were accepted,
+            // the bot should revisit for additional quests the NPC may offer.
+            if (acceptedNow == acceptedBefore)
             {
                 _failedQuestGiverGuids.insert(npc->GetGUID());
                 TC_LOG_DEBUG("module.playerbot.quest",
