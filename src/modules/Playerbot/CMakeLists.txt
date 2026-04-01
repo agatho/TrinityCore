@@ -55,6 +55,8 @@ set(PLAYERBOT_CORE_SOURCES
     # Session management
     ${CMAKE_CURRENT_SOURCE_DIR}/Session/BotSession.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Session/BotSession.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/Movement/DeferredMovement.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Movement/DeferredMovement.h
     ${CMAKE_CURRENT_SOURCE_DIR}/Session/BotPacketSimulator.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Session/BotPacketSimulator.h
     ${CMAKE_CURRENT_SOURCE_DIR}/Session/PacketDeferralClassifier.cpp

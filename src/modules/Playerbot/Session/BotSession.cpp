@@ -417,6 +417,11 @@ bool BotSession::PlayerDisconnected() const
     return false;
 }
 
+void BotSession::SetAI(::std::unique_ptr<BotAI> ai)
+{
+    _ai = ::std::move(ai);
+}
+
 BotSession::~BotSession()
 {
     uint32 accountId = 0;

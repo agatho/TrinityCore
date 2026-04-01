@@ -24,6 +24,7 @@
 #include "GroundValidator.h"
 #include "Unit.h"
 #include "Player.h"
+#include "../../DeferredMovement.h"
 #include "Position.h"
 #include "MotionMaster.h"
 #include "Log.h"
@@ -203,12 +204,12 @@ bool BotMovementController::MoveToPosition(Position const& dest, bool forceDest)
         return false;
     }
 
-    // Use MotionMaster directly — BotMovementController is called infrequently
-    // and the main movement path goes through BotMovementUtil which queues to main thread.
-    _owner->GetMotionMaster()->MovePoint(0,
-        dest.GetPositionX(),
-        dest.GetPositionY(),
-        dest.GetPositionZ());
+    // Queue to main thread — MotionMaster is NOT thread-safe
+    if (Player* player = _owner->ToPlayer())
+    {
+        if (!Playerbot::QueueDeferredMovePoint(player, 0, dest.GetPositionX(), dest.GetPositionY(), dest.GetPositionZ()))
+            _owner->GetMotionMaster()->MovePoint(0, dest.GetPositionX(), dest.GetPositionY(), dest.GetPositionZ());
+    }
 
     // Transition to appropriate state based on path
     if (_stateMachine)

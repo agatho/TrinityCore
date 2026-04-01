@@ -10,6 +10,7 @@
  */
 
 #include "BotMovementUtil.h"
+#include "DeferredMovement.h"
 #include "Battleground.h"
 #include "Log.h"
 #include "Map.h"
@@ -329,7 +330,11 @@ bool BotMovementUtil::MoveToPosition(Player* bot, Position const& destination, u
                  bot->GetName(), destination.GetPositionX(), destination.GetPositionY(), destination.GetPositionZ(),
                  distToDestination3D);
 
-    mm->MovePoint(pointId, destination.GetPositionX(), destination.GetPositionY(), destination.GetPositionZ());
+    // Queue movement to main thread — MotionMaster::MovePoint() is NOT thread-safe.
+    // Calling it from worker threads corrupts the motion generator (type 19) causing
+    // bots to stand idle or walk through air.
+    if (!QueueDeferredMovePoint(bot, pointId, destination.GetPositionX(), destination.GetPositionY(), destination.GetPositionZ()))
+        mm->MovePoint(pointId, destination.GetPositionX(), destination.GetPositionY(), destination.GetPositionZ());
 
     return true;
 }

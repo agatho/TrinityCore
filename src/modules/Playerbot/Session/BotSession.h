@@ -227,7 +227,7 @@ public:
 
     // AI Integration (public access for GroupInvitationHandler)
     // P1 FIX: Use unique_ptr for automatic memory management (no manual delete needed)
-    void SetAI(::std::unique_ptr<BotAI> ai) { _ai = ::std::move(ai); }
+    void SetAI(::std::unique_ptr<BotAI> ai);
     BotAI* GetAI() const { return _ai.get(); }  // Return raw pointer for compatibility
 
     // ========================================================================
