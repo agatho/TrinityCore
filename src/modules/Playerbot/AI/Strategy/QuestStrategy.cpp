@@ -3161,14 +3161,12 @@ void QuestStrategy::SearchForQuestGivers(BotAI* ai)
     TC_LOG_DEBUG("module.playerbot.quest", "⏰ SearchForQuestGivers: Bot {} - failures={}, backoffDelay={}ms, timeSinceLastSearch={}ms",
                  bot->GetName(), _questGiverSearchFailures, backoffDelay, currentTime - _lastQuestGiverSearchTime);
 
-    // Check if we're still in cooldown period
-    if (currentTime - _lastQuestGiverSearchTime < backoffDelay)
-    {
-        TC_LOG_DEBUG("module.playerbot.quest", "⏸️ SearchForQuestGivers: Bot {} still in cooldown ({} ms remaining), skipping search",
-                     bot->GetName(), backoffDelay - (currentTime - _lastQuestGiverSearchTime));
-        // Still in cooldown - don't search yet (prevents log spam)
+    // Minimum 10 second cooldown between searches, plus exponential backoff on failures
+    static constexpr uint32 MIN_SEARCH_COOLDOWN_MS = 10000;
+    uint32 cooldown = std::max(MIN_SEARCH_COOLDOWN_MS, backoffDelay);
+
+    if (currentTime - _lastQuestGiverSearchTime < cooldown)
         return;
-    }
 
     // Update last search time
     _lastQuestGiverSearchTime = currentTime;
@@ -3410,14 +3408,16 @@ void QuestStrategy::SearchForQuestGivers(BotAI* ai)
             _acceptanceManager->ProcessQuestGiver(npc);
             uint32 acceptedNow = _acceptanceManager->GetQuestsAccepted();
 
-            TC_LOG_INFO("module.playerbot.quest",
+            TC_LOG_DEBUG("module.playerbot.quest",
                 "SearchForQuestGivers: Bot {} quest acceptance done (accepted: {}, dropped: {})",
                 bot->GetName(),
                 _acceptanceManager->GetQuestsAccepted(),
                 _acceptanceManager->GetQuestsDropped());
 
-            // If NPC had no quests for us, blacklist it temporarily so we try other NPCs
-            if (acceptedNow == acceptedBefore)
+            // Blacklist this NPC to prevent re-visiting on the next tick.
+            // For NPCs with no quests: prevents infinite loop.
+            // For NPCs with repeatable quests: prevents accepting the same quest every tick.
+            // Blacklist clears on teleport (new zone) so the bot can revisit later.
             {
                 _failedQuestGiverGuids.insert(npc->GetGUID());
                 TC_LOG_DEBUG("module.playerbot.quest",
@@ -3433,6 +3433,9 @@ void QuestStrategy::SearchForQuestGivers(BotAI* ai)
         }
         _pendingQuestGiverGuid.Clear();
     }
+
+    // Throttle: don't search again for at least 10 seconds after any interaction
+    _lastQuestGiverSearchTime = GameTime::GetGameTimeMS();
 }
 
 // ========================================================================
