@@ -53,6 +53,10 @@ void QuestAcceptanceManager::ProcessQuestGiver(Creature* questGiver)
         if (!quest || !quest->IsAutoAccept())
             continue;
 
+        // Skip repeatable quests — they cause infinite accept/complete loops
+        if (quest->IsRepeatable())
+            continue;
+
         bool alreadyHas = _bot->GetQuestStatus(questId) != QUEST_STATUS_NONE;
         bool blacklisted = IsBlacklisted(questId);
         bool canTake = _bot->CanTakeQuest(quest, false);
@@ -94,6 +98,9 @@ void QuestAcceptanceManager::ProcessQuestGiver(Creature* questGiver)
         if (_bot->GetQuestStatus(menuItem.QuestId) != QUEST_STATUS_NONE)
             continue;
         if (IsBlacklisted(menuItem.QuestId))
+            continue;
+        // Skip repeatable quests — they cause infinite accept/complete loops
+        if (questTemplate->IsRepeatable())
             continue;
 
         float priority = CalculateQuestPriority(questTemplate);
