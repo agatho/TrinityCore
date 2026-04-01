@@ -53,8 +53,9 @@ void QuestAcceptanceManager::ProcessQuestGiver(Creature* questGiver)
         if (!quest || !quest->IsAutoAccept())
             continue;
 
-        // Skip repeatable quests — they cause infinite accept/complete loops
-        if (quest->IsRepeatable())
+        // Repeatable quests: accept once, then skip until cooldown
+        // (daily/weekly reset handles re-availability at endgame)
+        if (quest->IsRepeatable() && _bot->IsQuestRewarded(questId))
             continue;
 
         bool alreadyHas = _bot->GetQuestStatus(questId) != QUEST_STATUS_NONE;
@@ -99,8 +100,8 @@ void QuestAcceptanceManager::ProcessQuestGiver(Creature* questGiver)
             continue;
         if (IsBlacklisted(menuItem.QuestId))
             continue;
-        // Skip repeatable quests — they cause infinite accept/complete loops
-        if (questTemplate->IsRepeatable())
+        // Repeatable quests: accept once, then skip until daily/weekly reset
+        if (questTemplate->IsRepeatable() && _bot->IsQuestRewarded(menuItem.QuestId))
             continue;
 
         float priority = CalculateQuestPriority(questTemplate);
