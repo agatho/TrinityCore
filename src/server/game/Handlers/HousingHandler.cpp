@@ -880,8 +880,24 @@ void WorldSession::HandleHousingDecorPlace(WorldPackets::Housing::HousingDecorPl
     float posY = housingDecorPlace.Position.Pos.GetPositionY();
     float posZ = housingDecorPlace.Position.Pos.GetPositionZ();
 
+    // On the interior map, if the client sends empty RoomGuid, assign to the first
+    // visual room so the decor is tracked as interior and SpawnSingleInteriorDecor works.
+    ObjectGuid roomGuid = housingDecorPlace.RoomGuid;
+    if (roomGuid.IsEmpty() && dynamic_cast<HouseInteriorMap*>(player->GetMap()))
+    {
+        for (Housing::Room const* room : housing->GetRooms())
+        {
+            HouseRoomData const* rd = sHousingMgr.GetHouseRoomData(room->RoomEntryId);
+            if (rd && !rd->IsBaseRoom())
+            {
+                roomGuid = room->Guid;
+                break;
+            }
+        }
+    }
+
     HousingResult result = housing->PlaceDecorWithGuid(housingDecorPlace.DecorGuid, decorEntryId,
-        posX, posY, posZ, rotX, rotY, rotZ, rotW, housingDecorPlace.RoomGuid);
+        posX, posY, posZ, rotX, rotY, rotZ, rotW, roomGuid);
 
     // Spawn decor MeshObject on the map if placement succeeded.
     // Sniff-verified: ALL retail decor is MeshObject (never GO). The server sends an UPDATE_OBJECT

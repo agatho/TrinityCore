@@ -24,6 +24,7 @@
 #include "GameObjectData.h"
 #include "Housing.h"
 #include "HousingDefines.h"
+#include "HousingRoomEntity.h"
 #include "HousingMgr.h"
 #include "Neighborhood.h"
 #include "NeighborhoodMgr.h"
@@ -384,6 +385,52 @@ void HouseInteriorMap::SpawnRoomMeshObjects(Housing* housing, int32 factionRestr
             }
         }
 
+        // --- Phase 5: Create a HousingRoomEntity (objectType=18, Housing/2 GUID) ---
+        // The client's layout pin system keys rooms by HousingGUID (HighGuid::Housing subType=2).
+        // MeshObject GUIDs (type 56) don't work as HousingGUID keys → GetRoomGUID() returns nil.
+        // Retail sends separate HousingRoomEntity (objectType=18, fragments [21,31,220]) for each room.
+        {
+            ObjectGuid roomHousingGuid = room->Guid; // Already Housing/2 subType=2
+
+            HousingRoomEntity* housingRoom = new HousingRoomEntity(this, roomHousingGuid, roomPos);
+            housingRoom->SetHouseGUID(housing->GetHouseGuid());
+            housingRoom->SetHouseRoomID(room->RoomEntryId);
+            housingRoom->SetFlags(roomFlags);
+            housingRoom->SetFloorIndex(floorIndex);
+            housingRoom->SetMirroredPosition(roomPos, roomRot, 1.0f);
+
+            // Add all MeshObject GUIDs to the room entity's MeshObjects array
+            housingRoom->AddMeshObject(roomEntity->GetGUID());
+            for (MeshObject* comp : componentMeshes)
+            {
+                if (comp->IsInWorld())
+                    housingRoom->AddMeshObject(comp->GetGUID());
+            }
+
+            // Add door data from doorway components (Type=4).
+            // Sniff-verified: each room has 1-4 doors that define connection topology.
+            // The layout editor uses doors to determine room connections and allow drag/drop.
+            uint32 doorCount = 0;
+            for (RoomComponentData const& comp : *components)
+            {
+                if (comp.Type == 4) // doorway
+                {
+                    Position doorOffset(comp.OffsetPos[0], comp.OffsetPos[1], comp.OffsetPos[2]);
+                    // ConnectionType: 1=horizontal, 2=stairwell vertical, 3=stairwell upper
+                    uint8 connType = comp.ConnectionType > 0 ? comp.ConnectionType : 1;
+                    housingRoom->AddDoor(static_cast<int32>(comp.ID), doorOffset, connType);
+                    ++doorCount;
+                }
+            }
+
+            _roomEntities.push_back(housingRoom);
+
+            TC_LOG_ERROR("housing", "HouseInteriorMap::SpawnRoomMeshObjects: Created HousingRoomEntity "
+                "guid={} roomEntry={} slot={} meshObjects={} doors={}",
+                roomHousingGuid.ToString(), room->RoomEntryId, room->SlotIndex,
+                1 + uint32(componentMeshes.size()), doorCount);
+        }
+
         TC_LOG_ERROR("housing", "HouseInteriorMap::SpawnRoomMeshObjects: Room '{}' (entry={}, slot={}) "
             "spawned {} component MeshObjects (themeID={}) at ({:.1f},{:.1f},{:.1f})",
             roomData->Name, room->RoomEntryId, room->SlotIndex,
@@ -561,8 +608,15 @@ void HouseInteriorMap::SpawnInteriorDecor(Housing* housing)
 
 void HouseInteriorMap::SpawnSingleInteriorDecor(Housing::PlacedDecor const& decor, ObjectGuid houseGuid)
 {
+    // If RoomGuid is empty, the decor was placed without room association.
+    // This can happen when placed via the interior editor before room entities existed.
+    // Skip truly exterior decor, but allow interior-placed decor through.
     if (decor.RoomGuid.IsEmpty())
-        return; // exterior decor, not for interior map
+    {
+        TC_LOG_DEBUG("housing", "HouseInteriorMap::SpawnSingleInteriorDecor: Decor {} has empty RoomGuid, skipping",
+            decor.Guid.ToString());
+        return;
+    }
 
     // Already spawned?
     if (_decorGuidToObjGuid.count(decor.Guid))
@@ -896,14 +950,26 @@ bool HouseInteriorMap::AddPlayerToMap(Player* player, bool initPlayer /*= true*/
                             ++meshCreateCount;
                         }
 
+                        // HousingRoomEntity CREATEs — in the same UPDATE_OBJECT as
+                        // Account+decor. The room MeshObjects were already sent in the
+                        // initial UPDATE_OBJECT (via map visibility), so the client has
+                        // them when it processes these room entities.
+                        for (HousingRoomEntity* roomEnt : _roomEntities)
+                        {
+                            roomEnt->BuildCreateUpdateBlockForPlayer(&storageUpdate, p);
+                            p->m_clientGUIDs.insert(roomEnt->GetGUID());
+                        }
+
                         storageUpdate.BuildPacket(&storagePacket);
                         p->SendDirectMessage(&storagePacket);
 
                         session->GetBattlenetAccount().ClearUpdateMask(true);
                         session->GetHousingPlayerHouseEntity().ClearUpdateMask(true);
+                        for (HousingRoomEntity* roomEnt : _roomEntities)
+                            roomEnt->ClearUpdateMask(true);
 
-                        TC_LOG_ERROR("housing", "HouseInteriorMap deferred: Sent Account+budget+{} decor for {}",
-                            meshCreateCount, playerGuid.ToString());
+                        TC_LOG_ERROR("housing", "HouseInteriorMap deferred: Sent Account+budget+{} decor+{} roomEntities for {}",
+                            meshCreateCount, uint32(_roomEntities.size()), playerGuid.ToString());
                     }
 
                     // Map-level Housing/3 entity (objectType=18) is now included in

@@ -44,6 +44,7 @@ public:
     void SetFlags(int32 flags);
     void SetFloorIndex(int32 floorIndex);
     void AddMeshObject(ObjectGuid meshObjectGuid);
+    void AddDoor(int32 roomComponentID, Position const& offset, uint8 connectionType, ObjectGuid attachedRoomGuid = ObjectGuid::Empty);
 
     // Mirrored position data setters
     void SetMirroredPosition(Position const& pos, QuaternionData const& rot, float scale,

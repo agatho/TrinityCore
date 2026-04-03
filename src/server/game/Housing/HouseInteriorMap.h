@@ -23,6 +23,7 @@
 #include "ObjectGuid.h"
 #include <vector>
 
+class HousingRoomEntity;
 class Player;
 
 /// Map instance for a player's house interior (MAP_HOUSE_INTERIOR = 7, MapID 2783).
@@ -78,6 +79,9 @@ public:
     /// Get the room GUID → room MeshObject GUID vectors (for entity set synchronization).
     std::unordered_map<ObjectGuid, std::vector<ObjectGuid>> const& GetRoomMeshObjects() const { return _roomMeshObjects; }
 
+    /// Get HousingRoomEntity instances for inclusion in initial UPDATE_OBJECT
+    std::vector<HousingRoomEntity*> const& GetRoomEntities() const { return _roomEntities; }
+
     /// Send post-tutorial aura packets so the client knows the tutorial is complete
     /// and unlocks all editor modes (expert, cleanup, layout, customize).
     void SendPostTutorialAuras(Player* player);
@@ -99,6 +103,9 @@ private:
 
     /// Decor GUID → visual object GUID (for despawning individual decor items)
     std::unordered_map<ObjectGuid, ObjectGuid> _decorGuidToObjGuid;
+
+    /// HousingRoomEntity instances (objectType=18, Housing/2 GUIDs) for the layout editor
+    std::vector<HousingRoomEntity*> _roomEntities;
 
     /// GUID of the interior plot AreaTrigger (entry 37358, FHousingPlotAreaTrigger_C).
     /// The client fires HOUSE_PLOT_ENTERED when it sees this AT, enabling housing CMSGs.

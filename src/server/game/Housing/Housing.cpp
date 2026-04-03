@@ -100,59 +100,7 @@ bool Housing::LoadFromDB(PreparedQueryResult housing, PreparedQueryResult decor,
     _houseName = fields[14].GetString();
     _houseDescription = fields[15].GetString();
 
-    // Load placed decor
-    //           0        1             2     3     4     5          6          7          8          9       10       11       12        13     14              15          16
-    // SELECT decorGuid, decorEntryId, posX, posY, posZ, rotationX, rotationY, rotationZ, rotationW, dyeSlot0, dyeSlot1, dyeSlot2, roomGuid, locked, placementTime, sourceType, sourceValue
-    // FROM character_housing_decor WHERE ownerGuid = ?
-    if (decor)
-    {
-        do
-        {
-            fields = decor->Fetch();
-
-            uint64 decorDbId = fields[0].GetUInt64();
-            uint32 decorEntryId = fields[1].GetUInt32();
-            // Reconstruct the full Housing GUID with subType=1 + decorEntryId.
-            // The client uses subType=1 GUIDs (Housing-1-realmId-entryId-counter) for decor;
-            // storing only the counter and recreating with subType=0 produces a GUID mismatch
-            // that makes the Account entity storage stale after relog.
-            ObjectGuid decorGuid = ObjectGuid::Create<HighGuid::Housing>(
-                /*subType*/ 1,
-                /*arg1*/ sRealmList->GetCurrentRealmId().Realm,
-                /*arg2*/ decorEntryId,
-                decorDbId);
-
-            PlacedDecor& placed = _placedDecor[decorGuid];
-            placed.Guid = decorGuid;
-            placed.DecorEntryId = decorEntryId;
-            placed.PosX = fields[2].GetFloat();
-            placed.PosY = fields[3].GetFloat();
-            placed.PosZ = fields[4].GetFloat();
-            placed.RotationX = fields[5].GetFloat();
-            placed.RotationY = fields[6].GetFloat();
-            placed.RotationZ = fields[7].GetFloat();
-            placed.RotationW = fields[8].GetFloat();
-            placed.DyeSlots[0] = fields[9].GetUInt32();
-            placed.DyeSlots[1] = fields[10].GetUInt32();
-            placed.DyeSlots[2] = fields[11].GetUInt32();
-            uint64 roomDbId = fields[12].GetUInt64();
-            if (roomDbId)
-                placed.RoomGuid = ObjectGuid::Create<HighGuid::Housing>(/*subType*/ 2, 0, 0, roomDbId);
-            placed.Locked = fields[13].GetUInt8() != 0;
-            placed.PlacementTime = static_cast<time_t>(fields[14].GetUInt64());
-            placed.SourceType = fields[15].GetUInt8();
-            placed.SourceValue = fields[16].GetString();
-
-            // Advance global generator if this loaded ID is at or above current value
-            // (safety net in case InitializeDbIdGenerators ran before data was loaded)
-            uint64 expected = s_nextDecorDbId.load();
-            while (decorDbId >= expected && !s_nextDecorDbId.compare_exchange_weak(expected, decorDbId + 1))
-                ;
-
-        } while (decor->NextRow());
-    }
-
-    // Load rooms
+    // Load rooms FIRST so decor can look up roomEntryId for GUID arg2
     //           0         1            2           3            4         5        6             7           8           9         10              11
     // SELECT roomGuid, roomEntryId, slotIndex, orientation, mirrored, themeId, wallpaperId, materialId, doorTypeId, doorSlot, ceilingTypeId, ceilingSlot
     // FROM character_housing_rooms WHERE ownerGuid = ?
@@ -170,7 +118,8 @@ bool Housing::LoadFromDB(PreparedQueryResult housing, PreparedQueryResult decor,
             if (roomDbId == 0)
                 roomDbId = GenerateRoomDbId();
 
-            ObjectGuid roomGuid = ObjectGuid::Create<HighGuid::Housing>(/*subType*/ 2, 0, 0, roomDbId);
+            // arg2=roomEntryId matches retail GUID format (sniff-verified: arg2=HouseRoomID)
+            ObjectGuid roomGuid = ObjectGuid::Create<HighGuid::Housing>(/*subType*/ 2, 0, roomEntryId, roomDbId);
 
             Room& room = _rooms[roomGuid];
             room.Guid = roomGuid;
@@ -297,6 +246,58 @@ bool Housing::LoadFromDB(PreparedQueryResult housing, PreparedQueryResult decor,
                 "for house {} (migration fixup, result={})",
                 correctVisualRoom, nextSlot, _houseGuid.ToString(), placeResult);
         }
+    }
+
+    // Load placed decor (after rooms so RoomGuid can use correct arg2=roomEntryId)
+    //           0        1             2     3     4     5          6          7          8          9       10       11       12        13     14              15          16
+    // SELECT decorGuid, decorEntryId, posX, posY, posZ, rotationX, rotationY, rotationZ, rotationW, dyeSlot0, dyeSlot1, dyeSlot2, roomGuid, locked, placementTime, sourceType, sourceValue
+    // FROM character_housing_decor WHERE ownerGuid = ?
+    if (decor)
+    {
+        do
+        {
+            fields = decor->Fetch();
+
+            uint64 decorDbId = fields[0].GetUInt64();
+            uint32 decorEntryId = fields[1].GetUInt32();
+            ObjectGuid decorGuid = ObjectGuid::Create<HighGuid::Housing>(
+                /*subType*/ 1,
+                /*arg1*/ sRealmList->GetCurrentRealmId().Realm,
+                /*arg2*/ decorEntryId,
+                decorDbId);
+
+            PlacedDecor& placed = _placedDecor[decorGuid];
+            placed.Guid = decorGuid;
+            placed.DecorEntryId = decorEntryId;
+            placed.PosX = fields[2].GetFloat();
+            placed.PosY = fields[3].GetFloat();
+            placed.PosZ = fields[4].GetFloat();
+            placed.RotationX = fields[5].GetFloat();
+            placed.RotationY = fields[6].GetFloat();
+            placed.RotationZ = fields[7].GetFloat();
+            placed.RotationW = fields[8].GetFloat();
+            placed.DyeSlots[0] = fields[9].GetUInt32();
+            placed.DyeSlots[1] = fields[10].GetUInt32();
+            placed.DyeSlots[2] = fields[11].GetUInt32();
+            uint64 roomDbId = fields[12].GetUInt64();
+            if (roomDbId)
+            {
+                // Look up roomEntryId from loaded rooms to build matching GUID (arg2=HouseRoomID)
+                uint32 roomEntryId = 0;
+                for (auto const& [rGuid, r] : _rooms)
+                    if (rGuid.GetCounter() == roomDbId) { roomEntryId = r.RoomEntryId; break; }
+                placed.RoomGuid = ObjectGuid::Create<HighGuid::Housing>(/*subType*/ 2, 0, roomEntryId, roomDbId);
+            }
+            placed.Locked = fields[13].GetUInt8() != 0;
+            placed.PlacementTime = static_cast<time_t>(fields[14].GetUInt64());
+            placed.SourceType = fields[15].GetUInt8();
+            placed.SourceValue = fields[16].GetString();
+
+            uint64 expected = s_nextDecorDbId.load();
+            while (decorDbId >= expected && !s_nextDecorDbId.compare_exchange_weak(expected, decorDbId + 1))
+                ;
+
+        } while (decor->NextRow());
     }
 
     // Load fixtures
@@ -1346,7 +1347,8 @@ HousingResult Housing::PlaceRoom(uint32 roomEntryId, uint32 slotIndex, uint32 or
 
     // Generate a new room guid
     uint64 newDbId = GenerateRoomDbId();
-    ObjectGuid roomGuid = ObjectGuid::Create<HighGuid::Housing>(/*subType*/ 2, 0, 0, newDbId);
+    // arg2=roomEntryId matches retail GUID format (sniff-verified: arg2=HouseRoomID)
+    ObjectGuid roomGuid = ObjectGuid::Create<HighGuid::Housing>(/*subType*/ 2, 0, roomEntryId, newDbId);
 
     Room& room = _rooms[roomGuid];
     room.Guid = roomGuid;

@@ -66,8 +66,10 @@
 #include "Garrison.h"
 #include "GarrisonMgr.h"
 #include "GitRevision.h"
+#include "HouseInteriorMap.h"
 #include "Housing.h"
 #include "HousingMap.h"
+#include "HousingRoomEntity.h"
 #include "HousingMgr.h"
 #include "HousingPackets.h"
 #include "InitiativeManager.h"
@@ -3663,6 +3665,11 @@ void Player::BuildCreateUpdateBlockForPlayer(UpdateData* data, Player* target) c
 
                 mapHouseEntity.BuildCreateUpdateBlockForPlayer(data, target);
             }
+
+            // Room entities (objectType=18, Housing/2 GUIDs) are sent in the deferred
+            // callback — NOT here. Sending type-18 room entities in the initial UPDATE_OBJECT
+            // crashes the client because the housing UI context isn't established yet.
+            // The deferred callback sends them after ENTER_PLOT establishes context.
         }
     }
 
@@ -25254,6 +25261,8 @@ void Player::SendInitialPacketsAfterAddToMap()
     m_clientGUIDs.insert(GetSession()->GetBattlenetAccount().GetGUID());
     m_clientGUIDs.insert(GetSession()->GetHousingPlayerHouseEntity().GetGUID());
     m_clientGUIDs.insert(GetSession()->GetHousingNeighborhoodMirrorEntity().GetGUID());
+
+    // HousingRoomEntity GUIDs tracked in deferred callback (not initial UPDATE_OBJECT)
 
     // Send map wide vignettes before UpdateZone, that will send zone wide vignettes
     // But first send on new map will wipe all vignettes on client

@@ -27,7 +27,7 @@ HousingRoomEntity::HousingRoomEntity(Map* map, ObjectGuid guid, Position const& 
 {
     _Create(guid);
 
-    // Retail room entities have HasPositionFragment: True + Stationary: True
+    // Retail room entities have HasEntityPosition + Stationary in COB.
     m_updateFlag.HasEntityPosition = true;
     m_updateFlag.Stationary = true;
 
@@ -54,8 +54,9 @@ void HousingRoomEntity::BuildUpdate(UpdateDataMapType& data_map)
 
     // Send to all players on this map
     Map::PlayerList const& players = _map->GetPlayers();
-    for (auto const& [_, player] : players)
-        BuildFieldsUpdate(player, data_map);
+    for (MapReference const& ref : players)
+        if (Player* player = ref.GetSource())
+            BuildFieldsUpdate(player, data_map);
 
     ClearUpdateMask(false);
 }
@@ -70,17 +71,17 @@ void HousingRoomEntity::BuildCreateUpdateBlockForPlayer(UpdateData* data, Player
     buf << GetGUID();
     buf << uint8(m_objectTypeId); // NUM_CLIENT_OBJECT_TYPES (18)
 
-    // Movement block: HasEntityPosition + Stationary, all other flags false
-    // This is custom because BaseEntity::BuildMovementUpdate casts to WorldObject
-    // for Stationary, but HousingRoomEntity is not a WorldObject.
-    buf.WriteBit(m_updateFlag.HasEntityPosition);  // HasEntityPosition: True
+    // Custom movement block: HasEntityPosition + Stationary.
+    // Can't use BaseEntity::BuildMovementUpdate because it casts to WorldObject
+    // for Stationary position, but HousingRoomEntity is not a WorldObject.
+    buf.WriteBit(m_updateFlag.HasEntityPosition);
     buf.WriteBit(false);  // NoBirthAnim
     buf.WriteBit(false);  // EnablePortals
     buf.WriteBit(false);  // PlayHoverAnim
     buf.WriteBit(false);  // ThisIsYou
     buf.WriteBit(false);  // HasMovementUpdate
     buf.WriteBit(false);  // HasMovementTransport
-    buf.WriteBit(m_updateFlag.Stationary);  // Stationary: True
+    buf.WriteBit(m_updateFlag.Stationary);
     buf.WriteBit(false);  // CombatVictim
     buf.WriteBit(false);  // ServerTime
     buf.WriteBit(false);  // Vehicle
@@ -91,14 +92,14 @@ void HousingRoomEntity::BuildCreateUpdateBlockForPlayer(UpdateData* data, Player
     buf.WriteBit(false);  // SceneObject
     buf.WriteBit(false);  // ActivePlayer
     buf.WriteBit(false);  // Conversation
-    buf.WriteBit(false);  // Room (retail: always False)
+    buf.WriteBit(false);  // Room
     buf.WriteBit(false);  // Decor
     buf.WriteBit(false);  // MeshObject
     buf.FlushBits();
 
     buf << uint32(0); // PauseTimesCount
 
-    // Stationary position
+    // Stationary position (sniff-verified: 4 floats XYZО)
     buf << _stationaryPosition.PositionXYZOStream();
 
     // FieldFlags + entity fragments + values data (standard BaseEntity logic)
@@ -120,6 +121,27 @@ void HousingRoomEntity::BuildCreateUpdateBlockForPlayer(UpdateData* data, Player
 
     buf.put<uint32>(sizePos, buf.wpos() - sizePos - 4);
     data->AddUpdateBlock();
+
+    // Diagnostic: dump the CREATE block for debugging
+    std::size_t blockEnd = buf.wpos();
+    std::size_t blockStart = sizePos - 1; // uff byte before sizePos
+    // Actually dump from the GUID position backwards
+    // Dump first 40 bytes of this entity's CREATE block for wire format debugging
+    std::size_t entityStart = blockEnd - (blockEnd - sizePos + 4 + 1 + 9 + 1 + 3 + 4); // approximate
+    std::string hexDump;
+    // Dump from sizePos-30 to sizePos+10 to capture GUID+objectType+COB+PauseTime+fieldBlockSize
+    std::size_t dumpStart = (sizePos > 30) ? sizePos - 30 : 0;
+    std::size_t dumpEnd = std::min(sizePos + 20, blockEnd);
+    for (std::size_t i = dumpStart; i < dumpEnd; ++i)
+        hexDump += Trinity::StringFormat("{:02x} ", buf[i]);
+    TC_LOG_ERROR("housing", "HousingRoomEntity::BuildCreate: guid={} objectType={} "
+        "fieldBlockSize={} fragments=[{}] stationaryPos=({:.1f},{:.1f},{:.1f}) "
+        "rawBytes(around fieldBlockSize): {}",
+        GetGUID().ToString(), uint32(m_objectTypeId),
+        buf.wpos() - sizePos - 4,
+        m_entityFragments.Count,
+        _stationaryPosition.GetPositionX(), _stationaryPosition.GetPositionY(), _stationaryPosition.GetPositionZ(),
+        hexDump);
 }
 
 std::string HousingRoomEntity::GetDebugInfo() const
@@ -170,6 +192,20 @@ void HousingRoomEntity::AddMeshObject(ObjectGuid meshObjectGuid)
 {
     AddDynamicUpdateFieldValue(m_values.ModifyValue(&HousingRoomEntity::m_housingRoomData)
         .ModifyValue(&UF::HousingRoomData::MeshObjects)) = meshObjectGuid;
+}
+
+void HousingRoomEntity::AddDoor(int32 roomComponentID, Position const& offset, uint8 connectionType, ObjectGuid attachedRoomGuid)
+{
+    // HousingDoorData has HasChangesMask<5> so AddDynamicUpdateFieldValue returns
+    // MutableFieldReferenceWithChangesMask. Use ModifyValue() to set sub-fields.
+    auto doorRef = AddDynamicUpdateFieldValue(
+        m_values.ModifyValue(&HousingRoomEntity::m_housingRoomData)
+            .ModifyValue(&UF::HousingRoomData::Doors));
+    doorRef.ModifyValue(&UF::HousingDoorData::RoomComponentID).SetValue(roomComponentID);
+    doorRef.ModifyValue(&UF::HousingDoorData::RoomComponentOffset).SetValue(
+        TaggedPosition<Position::XYZ>(offset.GetPositionX(), offset.GetPositionY(), offset.GetPositionZ()));
+    doorRef.ModifyValue(&UF::HousingDoorData::RoomComponentType).SetValue(connectionType);
+    doorRef.ModifyValue(&UF::HousingDoorData::AttachedRoomGUID).SetValue(attachedRoomGuid);
 }
 
 void HousingRoomEntity::SetMirroredPosition(Position const& pos, QuaternionData const& rot,
