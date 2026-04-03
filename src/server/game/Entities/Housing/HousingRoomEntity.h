@@ -42,6 +42,9 @@ public:
     ObjectGuid GetOwnerGUID() const override { return ObjectGuid::Empty; }
     uint32 GetFaction() const override { return 0; }
 
+    // Override to use entity fragment serialization (like BaseEntity) instead of
+    // Object's BuildValuesCreate path which expects CGObject fields.
+    void BuildCreateUpdateBlockForPlayer(UpdateData* data, Player* target) const override;
     void BuildValuesCreate(UF::UpdateFieldFlag flags, ByteBuffer& data, Player const* target) const override;
     void BuildValuesUpdate(UF::UpdateFieldFlag flags, ByteBuffer& data, Player const* target) const override;
     std::string GetNameForLocaleIdx(LocaleConstant locale) const override;

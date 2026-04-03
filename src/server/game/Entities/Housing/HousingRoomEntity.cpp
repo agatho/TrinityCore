@@ -67,11 +67,49 @@ void HousingRoomEntity::RemoveFromWorld()
     }
 }
 
-void HousingRoomEntity::BuildValuesCreate(UF::UpdateFieldFlag flags, ByteBuffer& data, Player const* target) const
+void HousingRoomEntity::BuildCreateUpdateBlockForPlayer(UpdateData* data, Player* target) const
 {
-    // objectType=18 entities use entity fragments only — no CGObject/UnitData/etc.
-    // The fragment data is serialized by the standard BaseEntity fragment loop
-    // in Object::BuildCreateUpdateBlockForPlayer.
+    if (!target)
+        return;
+
+    // HousingRoomEntity uses entity fragments (like BaseEntity) but is a WorldObject
+    // for grid/visibility. Object::BuildCreateUpdateBlockForPlayer uses BuildValuesCreate
+    // which expects CGObject fields. We override to use the entity fragment path instead.
+
+    uint8 updateType = UPDATETYPE_CREATE_OBJECT;
+    uint8 objectType = m_objectTypeId;
+    CreateObjectBits flags = m_updateFlag;
+
+    ByteBuffer& buf = data->GetBuffer();
+    buf << uint8(updateType);
+    buf << GetGUID();
+    buf << uint8(objectType);
+
+    BuildMovementUpdate(buf, flags, target);
+
+    UF::UpdateFieldFlag fieldFlags = GetUpdateFieldFlagsFor(target);
+    std::size_t sizePos = buf.wpos();
+    buf << uint32(0);
+    buf << uint8(fieldFlags);
+    BuildEntityFragments(buf, m_entityFragments.GetIds());
+
+    for (std::size_t i = 0; i < m_entityFragments.UpdateableCount; ++i)
+    {
+        WowCS::EntityFragment fragmentId = m_entityFragments.Updateable.Ids[i];
+        if (WowCS::IsIndirectFragment(fragmentId))
+            buf << uint8(1);
+
+        WowCS::EntityFragmentInfo->SerializeCreate[static_cast<std::size_t>(m_entityFragments.Updateable.Ids[i])](
+            m_entityFragments.Updateable.Data[i], fieldFlags, buf, target, this);
+    }
+
+    buf.put<uint32>(sizePos, buf.wpos() - sizePos - 4);
+    data->AddUpdateBlock();
+}
+
+void HousingRoomEntity::BuildValuesCreate(UF::UpdateFieldFlag /*flags*/, ByteBuffer& /*data*/, Player const* /*target*/) const
+{
+    // Not used — BuildCreateUpdateBlockForPlayer handles everything via entity fragments.
 }
 
 void HousingRoomEntity::BuildValuesUpdate(UF::UpdateFieldFlag flags, ByteBuffer& data, Player const* target) const
