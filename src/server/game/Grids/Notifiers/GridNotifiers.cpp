@@ -324,3 +324,4 @@ template void ObjectUpdater::Visit<AreaTrigger>(AreaTriggerMapType &);
 template void ObjectUpdater::Visit<SceneObject>(SceneObjectMapType &);
 template void ObjectUpdater::Visit<Conversation>(ConversationMapType &);
 template void ObjectUpdater::Visit<MeshObject>(MeshObjectMapType &);
+template void ObjectUpdater::Visit<HousingRoomEntity>(HousingRoomEntityMapType &);

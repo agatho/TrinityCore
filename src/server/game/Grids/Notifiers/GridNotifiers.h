@@ -24,6 +24,7 @@
 #include "Conversation.h"
 #include "DynamicObject.h"
 #include "GameObject.h"
+#include "HousingRoomEntity.h"
 #include "MeshObject.h"
 #include "Player.h"
 #include "SceneObject.h"
@@ -46,6 +47,7 @@ namespace Trinity
     template<> struct GridMapTypeMaskForType<SceneObject> : std::integral_constant<GridMapTypeMask, GRID_MAP_TYPE_MASK_SCENEOBJECT> { };
     template<> struct GridMapTypeMaskForType<Conversation> : std::integral_constant<GridMapTypeMask, GRID_MAP_TYPE_MASK_CONVERSATION> { };
     template<> struct GridMapTypeMaskForType<MeshObject> : std::integral_constant<GridMapTypeMask, GRID_MAP_TYPE_MASK_MESHOBJECT> { };
+    template<> struct GridMapTypeMaskForType<HousingRoomEntity> : std::integral_constant<GridMapTypeMask, GRID_MAP_TYPE_MASK_HOUSINGROMENTITY> { };
 
     struct TC_GAME_API VisibleNotifier
     {
@@ -146,6 +148,7 @@ namespace Trinity
         void Visit(SceneObjectMapType &m) { updateObjects<SceneObject>(m); }
         void Visit(ConversationMapType &m) { updateObjects<Conversation>(m); }
         void Visit(MeshObjectMapType &m) { updateObjects<MeshObject>(m); }
+        void Visit(HousingRoomEntityMapType &m) { updateObjects<HousingRoomEntity>(m); }
     };
 
     struct PacketSenderRef

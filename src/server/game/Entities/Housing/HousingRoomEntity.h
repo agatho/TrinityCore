@@ -18,24 +18,33 @@
 #ifndef TRINITYCORE_HOUSING_ROOM_ENTITY_H
 #define TRINITYCORE_HOUSING_ROOM_ENTITY_H
 
-#include "BaseEntity.h"
-#include "Position.h"
+#include "Object.h"
+#include "GridObject.h"
+#include "MapObject.h"
 
-class Map;
-
-// Room entity matching retail Housing/18 GUID (subType=2, arg2=18).
-// ObjectType 18. Fragments: FHousingRoom_C + FMirroredPositionData_C + Tag_HousingRoom.
-// NOT a MeshObject — no CGObject, no FMeshObjectData_C, no Tag_MeshObject.
-// Has stationary position in the movement block.
-class TC_GAME_API HousingRoomEntity final : public BaseEntity
+// Room entity matching retail Housing/2 GUID (subType=2, arg2=HouseRoomID).
+// objectType=18. Fragments: FHousingRoom_C + FMirroredPositionData_C + Tag_HousingRoom.
+// Inherits from WorldObject so it can be AddToMap'd and sent via the visibility
+// system in the SAME UPDATE_OBJECT as room MeshObjects — matching retail behavior.
+// Has Stationary position in the movement block (sniff-verified: COB 0x81 0x00 0x00).
+class TC_GAME_API HousingRoomEntity final : public WorldObject, public GridObject<HousingRoomEntity>, public MapObject
 {
 public:
-    explicit HousingRoomEntity(Map* map, ObjectGuid guid, Position const& pos);
+    explicit HousingRoomEntity();
 
-    void ClearUpdateMask(bool remove) override;
+    void AddToWorld() override;
+    void RemoveFromWorld() override;
+
+    bool Create(ObjectGuid guid, Map* map, Position const& pos);
+
+    // Pure virtual overrides from WorldObject
+    ObjectGuid GetCreatorGUID() const override { return ObjectGuid::Empty; }
+    ObjectGuid GetOwnerGUID() const override { return ObjectGuid::Empty; }
+    uint32 GetFaction() const override { return 0; }
+
+    void BuildValuesCreate(UF::UpdateFieldFlag flags, ByteBuffer& data, Player const* target) const override;
+    void BuildValuesUpdate(UF::UpdateFieldFlag flags, ByteBuffer& data, Player const* target) const override;
     std::string GetNameForLocaleIdx(LocaleConstant locale) const override;
-    void BuildUpdate(UpdateDataMapType& data_map) override;
-    void BuildCreateUpdateBlockForPlayer(UpdateData* data, Player* target) const override;
     std::string GetDebugInfo() const override;
 
     // Room data setters
@@ -50,23 +59,14 @@ public:
     void SetMirroredPosition(Position const& pos, QuaternionData const& rot, float scale,
         ObjectGuid attachParent = ObjectGuid::Empty, uint8 attachFlags = 3);
 
-    Position const& GetStationaryPosition() const { return _stationaryPosition; }
-    ObjectGuid const& GetHouseGUID() const { return _houseGuid; }
-
-    Map* GetMap() const { return _map; }
-
     UF::UpdateField<UF::HousingRoomData, int32(WowCS::EntityFragment::FHousingRoom_C), 0> m_housingRoomData;
     UF::UpdateField<UF::MirroredPositionData, int32(WowCS::EntityFragment::FMirroredPositionData_C), 0> m_mirroredPositionData;
 
 protected:
     UF::UpdateFieldFlag GetUpdateFieldFlagsFor(Player const* target) const override;
+    void ClearValuesChangesMask() override;
     bool AddToObjectUpdate() override;
     void RemoveFromObjectUpdate() override;
-
-private:
-    Map* _map;
-    Position _stationaryPosition;
-    ObjectGuid _houseGuid;
 };
 
 #endif // TRINITYCORE_HOUSING_ROOM_ENTITY_H

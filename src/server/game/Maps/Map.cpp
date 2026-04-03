@@ -23,6 +23,7 @@
 #include "CharacterPackets.h"
 #include "Conversation.h"
 #include "DB2Stores.h"
+#include "HousingRoomEntity.h"
 #include "DatabaseEnv.h"
 #include "DynamicTree.h"
 #include "DynamicMMapTileBuilder.h"
@@ -2825,6 +2826,7 @@ template TC_GAME_API bool Map::AddToMap(AreaTrigger*);
 template TC_GAME_API bool Map::AddToMap(SceneObject*);
 template TC_GAME_API bool Map::AddToMap(Conversation*);
 template TC_GAME_API bool Map::AddToMap(MeshObject*);
+template TC_GAME_API bool Map::AddToMap(HousingRoomEntity*);
 
 template TC_GAME_API void Map::RemoveFromMap(Corpse*, bool);
 template TC_GAME_API void Map::RemoveFromMap(Creature*, bool);
@@ -3542,6 +3544,11 @@ MeshObject* Map::GetMeshObject(ObjectGuid const& guid)
     return _objectsStore.Find<MeshObject>(guid);
 }
 
+HousingRoomEntity* Map::GetHousingRoomEntity(ObjectGuid const& guid)
+{
+    return _objectsStore.Find<HousingRoomEntity>(guid);
+}
+
 Player* Map::GetPlayer(ObjectGuid const& guid)
 {
     return ObjectAccessor::GetPlayer(this, guid);
@@ -4122,4 +4129,4 @@ std::string InstanceMap::GetDebugInfo() const
     return sstr.str();
 }
 
-template struct TC_GAME_API TypeListContainer<MapStoredObjectsUnorderedMap, Creature, GameObject, DynamicObject, Pet, Corpse, AreaTrigger, SceneObject, Conversation, MeshObject>;
+template struct TC_GAME_API TypeListContainer<MapStoredObjectsUnorderedMap, Creature, GameObject, DynamicObject, Pet, Corpse, AreaTrigger, SceneObject, Conversation, MeshObject, HousingRoomEntity>;
