@@ -1046,12 +1046,12 @@ bool HouseInteriorMap::AddPlayerToMap(Player* player, bool initPlayer /*= true*/
                                         au.UpdateAll = false;
                                         au.UnitGUID = p->GetGUID();
                                         WorldPackets::Spells::AuraInfo ai;
-                                        ai.Slot = 50;
+                                        ai.Slot = 55; // sniff-verified: retail uses slot 55
                                         ai.AuraData.emplace();
                                         ai.AuraData->CastID = castId;
                                         ai.AuraData->SpellID = SPELL_HOUSING_PLOT_ENTER;
                                         ai.AuraData->Flags = AFLAG_NOCASTER;
-                                        ai.AuraData->ActiveFlags = 2;
+                                        ai.AuraData->ActiveFlags = 1; // sniff-verified: retail uses 1
                                         ai.AuraData->CastLevel = 36;
                                         au.Auras.push_back(std::move(ai));
                                         p->SendDirectMessage(au.Write());
@@ -1094,28 +1094,12 @@ bool HouseInteriorMap::AddPlayerToMap(Player* player, bool initPlayer /*= true*/
                                     p->SendDirectMessage(enterPlot.Write());
                                 }
 
-                                // 9) Re-send HouseStatusResponse + PermissionsResponse.
-                                // The ENTER_PLOT handler (vtable[22]) RESETS the editor state,
-                                // so we must re-establish context. This is the same pattern
-                                // used by at_housing_plot.cpp (lines 131-146) on the exterior.
-                                {
-                                    WorldPackets::Housing::HousingHouseStatusResponse statusResponse2;
-                                    statusResponse2.HouseGuid = houseGuid;
-                                    statusResponse2.AccountGuid = accountGuid;
-                                    statusResponse2.OwnerPlayerGuid = playerGuid;
-                                    statusResponse2.NeighborhoodGuid = neighborhoodGuid;
-                                    statusResponse2.Status = 0; // Must be 0 to enable editor (same as exterior)
-                                    statusResponse2.FlagByte = 0xE0;
-                                    p->SendDirectMessage(statusResponse2.Write());
+                                // Sniff-verified: retail does NOT proactively send Status+Perms.
+                                // The client polls via CMSGs after receiving ENTER_PLOT, and
+                                // our CMSG handlers (HandleHousingHouseStatus, HandleHousingGetPlayerPermissions)
+                                // respond correctly with FlagByte=0xE0 and PermissionFlags=0xE0.
 
-                                    WorldPackets::Housing::HousingGetPlayerPermissionsResponse permResponse2;
-                                    permResponse2.HouseGuid = houseGuid;
-                                    permResponse2.ResultCode = 0;
-                                    permResponse2.PermissionFlags = 0xE0;
-                                    p->SendDirectMessage(permResponse2.Write());
-                                }
-
-                                TC_LOG_ERROR("housing", "HouseInteriorMap deferred: Sent ENTER_PLOT + re-sent Status+Perms for {}",
+                                TC_LOG_ERROR("housing", "HouseInteriorMap deferred: Sent ENTER_PLOT for {} (Status+Perms reactive via CMSG handlers)",
                                     playerGuid.ToString());
                             }
                             else

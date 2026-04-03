@@ -1273,8 +1273,8 @@ void HousingMap::SendPlotEnterSpellPackets(Player* player, uint8 plotIndex)
     TC_LOG_DEBUG("housing", "SendPlotEnterSpellPackets: BEGIN for player {} plot {} map {}",
         player->GetGUID().ToString(), plotIndex, GetId());
 
-    // 1. Spell 1239847 — plot enter tracking aura (slot 50)
-    // SPELL_START CastFlags=524302, SPELL_GO CastFlags=525068
+    // 1. Spell 1239847 — plot enter tracking aura (slot 55)
+    // Sniff-verified: retail sends to slot 55, ActiveFlags=1 (NOT slot 50 which is tutorial aura)
     {
         ObjectGuid castId = ObjectGuid::Create<HighGuid::Cast>(
             SPELL_CAST_SOURCE_NORMAL, player->GetMapId(), SPELL_HOUSING_PLOT_ENTER,
@@ -1285,12 +1285,12 @@ void HousingMap::SendPlotEnterSpellPackets(Player* player, uint8 plotIndex)
         auraUpdate.UnitGUID = player->GetGUID();
 
         WorldPackets::Spells::AuraInfo auraInfo;
-        auraInfo.Slot = 50;
+        auraInfo.Slot = 55;
         auraInfo.AuraData.emplace();
         auraInfo.AuraData->CastID = castId;
         auraInfo.AuraData->SpellID = SPELL_HOUSING_PLOT_ENTER;
         auraInfo.AuraData->Flags = AFLAG_NOCASTER;
-        auraInfo.AuraData->ActiveFlags = 2;
+        auraInfo.AuraData->ActiveFlags = 1;
         auraInfo.AuraData->CastLevel = 36;
         auraInfo.AuraData->Applications = 0;
         auraUpdate.Auras.push_back(std::move(auraInfo));

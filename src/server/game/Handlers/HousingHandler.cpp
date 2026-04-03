@@ -3870,7 +3870,7 @@ void WorldSession::HandleHousingHouseStatus(WorldPackets::Housing::HousingHouseS
             response.AccountGuid = GetBattlenetAccountGUID();
             response.OwnerPlayerGuid = player->GetGUID();
             response.NeighborhoodGuid = ownHousing->GetNeighborhoodGuid();
-            response.Status = ownHousing->IsInInterior() ? 1 : 0;
+            response.Status = 0; // Sniff-verified: always 0 to enable editor
             response.FlagByte = 0xE0; // bit7=houseEditing, bit6=plotEntry, bit5=houseEntry
         }
     }
@@ -3881,7 +3881,7 @@ void WorldSession::HandleHousingHouseStatus(WorldPackets::Housing::HousingHouseS
         response.AccountGuid = GetBattlenetAccountGUID();
         response.OwnerPlayerGuid = player->GetGUID();
         response.NeighborhoodGuid = ownHousing->GetNeighborhoodGuid();
-        response.Status = ownHousing->IsInInterior() ? 1 : 0;
+        response.Status = 0; // Sniff-verified: always 0 to enable editor
         response.FlagByte = 0xE0; // bit7=houseEditing, bit6=plotEntry, bit5=houseEntry
     }
     // No house and not on a plot: all fields stay at defaults (empty GUIDs, Status=0).
