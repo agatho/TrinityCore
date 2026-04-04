@@ -2836,6 +2836,7 @@ template TC_GAME_API void Map::RemoveFromMap(AreaTrigger*, bool);
 template TC_GAME_API void Map::RemoveFromMap(SceneObject*, bool);
 template TC_GAME_API void Map::RemoveFromMap(Conversation*, bool);
 template TC_GAME_API void Map::RemoveFromMap(MeshObject*, bool);
+template TC_GAME_API void Map::RemoveFromMap(HousingRoomEntity*, bool);
 
 /* ******* Dungeon Instance Maps ******* */
 

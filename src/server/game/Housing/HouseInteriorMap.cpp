@@ -483,13 +483,16 @@ void HouseInteriorMap::DespawnAllRoomMeshObjects()
 {
     uint32 despawnCount = 0;
 
+    // Use immediate removal (RemoveFromMap) instead of deferred (AddObjectToRemoveList).
+    // Deferred removal causes client crashes when new entities are created in the same
+    // update cycle — the client sees overlapping CREATE/DESTROY for the same GUIDs.
     for (auto& [roomGuid, meshGuids] : _roomMeshObjects)
     {
         for (ObjectGuid const& meshGuid : meshGuids)
         {
             if (MeshObject* mesh = GetMeshObject(meshGuid))
             {
-                mesh->AddObjectToRemoveList();
+                RemoveFromMap(mesh, true);
                 ++despawnCount;
             }
         }
@@ -501,7 +504,7 @@ void HouseInteriorMap::DespawnAllRoomMeshObjects()
     {
         if (roomEntity && roomEntity->IsInWorld())
         {
-            roomEntity->AddObjectToRemoveList();
+            RemoveFromMap(roomEntity, true);
             ++despawnCount;
         }
     }
