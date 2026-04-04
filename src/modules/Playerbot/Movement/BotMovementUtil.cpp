@@ -11,6 +11,7 @@
 
 #include "BotMovementUtil.h"
 #include "DeferredMovement.h"
+#include "../Spatial/SpatialGridQueryHelpers.h"
 #include "Battleground.h"
 #include "Log.h"
 #include "Map.h"
@@ -178,12 +179,12 @@ bool BotMovementUtil::MoveToPosition(Player* bot, Position const& destination, u
         return false;
     }
 
-    // MINE/CAVE FIX: Use 3D distance to properly detect vertical distance
-    // Previously used 2D distance which caused bots to think they were "at destination"
-    // when standing at mine entrance but spawn is directly below at different Z
-    float distToDestination2D = bot->GetExactDist2d(destination.GetPositionX(), destination.GetPositionY());
-    float distToDestination3D = bot->GetExactDist(destination);
-    float zDifference = std::abs(bot->GetPositionZ() - destination.GetPositionZ());
+    // Use spatial grid position (updated every 100ms on main thread) instead of
+    // bot->GetPosition() which is stale on worker threads
+    Position botPos = Playerbot::SpatialGridQueryHelpers::GetBotPosition(bot);
+    float distToDestination2D = botPos.GetExactDist2d(destination);
+    float distToDestination3D = botPos.GetExactDist(destination);
+    float zDifference = std::abs(botPos.GetPositionZ() - destination.GetPositionZ());
 
     // DIAGNOSTIC: Log movement attempts (DEBUG level to avoid spam)
     TC_LOG_DEBUG("module.playerbot.movement", "🔍 MoveToPosition: Bot {} dist2D={:.1f} dist3D={:.1f} zDiff={:.1f} minDist={:.1f} dest=({:.1f},{:.1f},{:.1f})",
