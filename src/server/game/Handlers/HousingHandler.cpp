@@ -2413,17 +2413,12 @@ void WorldSession::HandleHousingRoomSetComponentTheme(WorldPackets::Housing::Hou
     response.Result = static_cast<uint8>(result);
     response.RoomGuid = housingRoomSetComponentTheme.RoomGuid;
     response.ThemeSetID = housingRoomSetComponentTheme.HouseThemeID;
-    response.ComponentIDs.push_back(housingRoomSetComponentTheme.HouseThemeID);
+    response.ComponentIDs = housingRoomSetComponentTheme.RoomComponentIDs;
     SendPacket(response.Write());
 
+    // ApplyRoomTheme already sends AccountRoomThemeCollectionUpdate
     if (result == HOUSING_RESULT_SUCCESS)
-    {
         RefreshInteriorRoomVisuals(player, housing);
-
-        WorldPackets::Housing::AccountRoomThemeCollectionUpdate themeUpdate;
-        themeUpdate.ThemeID = housingRoomSetComponentTheme.HouseThemeID;
-        SendPacket(themeUpdate.Write());
-    }
 
     TC_LOG_INFO("housing", "CMSG_HOUSING_ROOM_SET_COMPONENT_THEME RoomGuid: {}, HouseThemeID: {}, Result: {}",
         housingRoomSetComponentTheme.RoomGuid.ToString(), housingRoomSetComponentTheme.HouseThemeID, uint32(result));
@@ -2452,17 +2447,12 @@ void WorldSession::HandleHousingRoomApplyComponentMaterials(WorldPackets::Housin
     response.Result = static_cast<uint8>(result);
     response.RoomGuid = housingRoomApplyComponentMaterials.RoomGuid;
     response.RoomComponentTextureRecordID = housingRoomApplyComponentMaterials.RoomComponentTextureID;
-    response.ComponentIDs.push_back(housingRoomApplyComponentMaterials.RoomComponentTypeParam);
+    response.ComponentIDs = housingRoomApplyComponentMaterials.RoomComponentIDs;
     SendPacket(response.Write());
 
+    // ApplyRoomWallpaper already sends AccountRoomMaterialCollectionUpdate
     if (result == HOUSING_RESULT_SUCCESS)
-    {
         RefreshInteriorRoomVisuals(player, housing);
-
-        WorldPackets::Housing::AccountRoomMaterialCollectionUpdate materialUpdate;
-        materialUpdate.MaterialID = housingRoomApplyComponentMaterials.RoomComponentTextureID;
-        SendPacket(materialUpdate.Write());
-    }
 
     TC_LOG_INFO("housing", "CMSG_HOUSING_ROOM_APPLY_COMPONENT_MATERIALS RoomGuid: {}, TextureID: {}, Result: {}",
         housingRoomApplyComponentMaterials.RoomGuid.ToString(), housingRoomApplyComponentMaterials.RoomComponentTextureID, uint32(result));
