@@ -2749,6 +2749,11 @@ void BotSession::ProcessPendingMoves()
 
     // Only process the LAST move — earlier ones are obsolete
     PendingMove const& move = moves.back();
+
+    TC_LOG_INFO("module.playerbot.movement",
+        "ProcessPendingMoves: Bot {} executing deferred MovePoint to ({:.1f},{:.1f},{:.1f}) — {} moves queued",
+        bot->GetName(), move.x, move.y, move.z, moves.size());
+
     bot->GetMotionMaster()->MovePoint(move.pointId, move.x, move.y, move.z);
 }
 
