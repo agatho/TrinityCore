@@ -108,6 +108,11 @@ void HouseInteriorMap::SpawnRoomMeshObjects(Housing* housing, int32 factionRestr
     if (!housing)
         return;
 
+    // Clean up any existing room entities from a previous spawn (e.g., relog into interior,
+    // RefreshInteriorRoomVisuals). Prevents "Object with certain key already in" assertion.
+    if (!_roomEntities.empty() || !_roomMeshObjects.empty())
+        DespawnAllRoomMeshObjects();
+
     std::vector<Housing::Room const*> rooms = housing->GetRooms();
     if (rooms.empty())
     {
@@ -507,6 +512,51 @@ void HouseInteriorMap::DespawnAllRoomMeshObjects()
 
     TC_LOG_DEBUG("housing", "HouseInteriorMap::DespawnAllRoomMeshObjects: Despawned {} objects (owner={})",
         despawnCount, _owner.ToString());
+}
+
+void HouseInteriorMap::UpdateRoomComponentVisuals(ObjectGuid roomGuid, int32 factionRestriction, Housing::Room const& room)
+{
+    auto itr = _roomMeshObjects.find(roomGuid);
+    if (itr == _roomMeshObjects.end())
+        return;
+
+    int32 factionThemeID = sHousingMgr.GetFactionDefaultThemeID(factionRestriction);
+    int32 effectiveThemeID = (room.ThemeId != 0) ? static_cast<int32>(room.ThemeId) : factionThemeID;
+
+    for (ObjectGuid const& meshGuid : itr->second)
+    {
+        MeshObject* mesh = GetMeshObject(meshGuid);
+        if (!mesh)
+            continue;
+
+        int32 compID = mesh->GetRoomComponentID();
+        if (compID == 0)
+            continue;
+
+        // Look up the option for this component with the effective theme
+        RoomComponentOptionEntry const* optEntry = sHousingMgr.FindRoomComponentOption(compID, effectiveThemeID);
+        if (!optEntry && effectiveThemeID != factionThemeID)
+            optEntry = sHousingMgr.FindRoomComponentOption(compID, factionThemeID);
+        if (!optEntry && factionThemeID != 8)
+            optEntry = sHousingMgr.FindRoomComponentOption(compID, 8);
+        if (!optEntry && factionThemeID != 6)
+            optEntry = sHousingMgr.FindRoomComponentOption(compID, 6);
+
+        if (!optEntry)
+            continue;
+
+        int32 textureID = (room.WallpaperId != 0)
+            ? static_cast<int32>(room.WallpaperId)
+            : sHousingMgr.GetTextureIdForComponentOption(static_cast<int32>(optEntry->ID));
+
+        mesh->UpdateRoomComponentVisuals(
+            static_cast<int32>(optEntry->ID),
+            optEntry->HouseThemeID,
+            textureID);
+    }
+
+    TC_LOG_DEBUG("housing", "HouseInteriorMap::UpdateRoomComponentVisuals: room={} themeID={} wallpaperID={}",
+        roomGuid.ToString(), effectiveThemeID, room.WallpaperId);
 }
 
 void HouseInteriorMap::SpawnInteriorDecor(Housing* housing)

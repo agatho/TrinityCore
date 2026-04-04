@@ -153,6 +153,7 @@ public:
     HousingResult SetDoorType(ObjectGuid roomGuid, uint32 doorTypeId, uint8 doorSlot);
     HousingResult SetCeilingType(ObjectGuid roomGuid, uint32 ceilingTypeId, uint8 ceilingSlot);
     std::vector<Room const*> GetRooms() const;
+    std::unordered_map<ObjectGuid, Room> const& GetRoomsMap() const { return _rooms; }
 
     // Fixture operations
     HousingResult SelectFixtureOption(uint32 fixturePointId, uint32 optionId, std::vector<uint32>* removedHookIDs = nullptr);

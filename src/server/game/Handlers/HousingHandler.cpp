@@ -31,6 +31,7 @@
 #include "HouseInteriorMap.h"
 #include "Housing.h"
 #include "HousingDefines.h"
+#include "HouseInteriorMap.h"
 #include "HousingMap.h"
 #include "HousingMgr.h"
 #include "MeshObject.h"
@@ -2416,9 +2417,20 @@ void WorldSession::HandleHousingRoomSetComponentTheme(WorldPackets::Housing::Hou
     response.ComponentIDs = housingRoomSetComponentTheme.RoomComponentIDs;
     SendPacket(response.Write());
 
-    // ApplyRoomTheme already sends AccountRoomThemeCollectionUpdate
+    // Update component MeshObject fields in-place (no destroy+create).
+    // The client expects UPDATE_OBJECT with changed FHousingRoomComponentMesh_C fields.
     if (result == HOUSING_RESULT_SUCCESS)
-        RefreshInteriorRoomVisuals(player, housing);
+    {
+        if (HouseInteriorMap* interiorMap = dynamic_cast<HouseInteriorMap*>(player->GetMap()))
+        {
+            int32 faction = (player->GetTeamId() == TEAM_ALLIANCE)
+                ? NEIGHBORHOOD_FACTION_ALLIANCE : NEIGHBORHOOD_FACTION_HORDE;
+            auto const& rooms = housing->GetRoomsMap();
+            auto roomItr = rooms.find(housingRoomSetComponentTheme.RoomGuid);
+            if (roomItr != rooms.end())
+                interiorMap->UpdateRoomComponentVisuals(housingRoomSetComponentTheme.RoomGuid, faction, roomItr->second);
+        }
+    }
 
     TC_LOG_INFO("housing", "CMSG_HOUSING_ROOM_SET_COMPONENT_THEME RoomGuid: {}, HouseThemeID: {}, Result: {}",
         housingRoomSetComponentTheme.RoomGuid.ToString(), housingRoomSetComponentTheme.HouseThemeID, uint32(result));
@@ -2450,9 +2462,19 @@ void WorldSession::HandleHousingRoomApplyComponentMaterials(WorldPackets::Housin
     response.ComponentIDs = housingRoomApplyComponentMaterials.RoomComponentIDs;
     SendPacket(response.Write());
 
-    // ApplyRoomWallpaper already sends AccountRoomMaterialCollectionUpdate
+    // Update component MeshObject fields in-place (no destroy+create).
     if (result == HOUSING_RESULT_SUCCESS)
-        RefreshInteriorRoomVisuals(player, housing);
+    {
+        if (HouseInteriorMap* interiorMap = dynamic_cast<HouseInteriorMap*>(player->GetMap()))
+        {
+            int32 faction = (player->GetTeamId() == TEAM_ALLIANCE)
+                ? NEIGHBORHOOD_FACTION_ALLIANCE : NEIGHBORHOOD_FACTION_HORDE;
+            auto const& rooms = housing->GetRoomsMap();
+            auto roomItr = rooms.find(housingRoomApplyComponentMaterials.RoomGuid);
+            if (roomItr != rooms.end())
+                interiorMap->UpdateRoomComponentVisuals(housingRoomApplyComponentMaterials.RoomGuid, faction, roomItr->second);
+        }
+    }
 
     TC_LOG_INFO("housing", "CMSG_HOUSING_ROOM_APPLY_COMPONENT_MATERIALS RoomGuid: {}, TextureID: {}, Result: {}",
         housingRoomApplyComponentMaterials.RoomGuid.ToString(), housingRoomApplyComponentMaterials.RoomComponentTextureID, uint32(result));

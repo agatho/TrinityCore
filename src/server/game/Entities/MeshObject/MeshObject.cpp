@@ -393,6 +393,28 @@ void MeshObject::InitHousingRoomComponentData(ObjectGuid roomGuid,
         geoboxMinX, geoboxMinY, geoboxMinZ, geoboxMaxX, geoboxMaxY, geoboxMaxZ);
 }
 
+void MeshObject::UpdateRoomComponentVisuals(int32 roomComponentOptionID, int32 houseThemeID,
+    int32 roomComponentTextureID)
+{
+    if (!m_housingRoomComponentMeshData.has_value())
+        return;
+
+    auto compData = m_values.ModifyValue(&Object::m_housingRoomComponentMeshData, 0);
+    SetUpdateFieldValue(compData.ModifyValue(&UF::HousingRoomComponentMeshData::RoomComponentOptionID), roomComponentOptionID);
+    SetUpdateFieldValue(compData.ModifyValue(&UF::HousingRoomComponentMeshData::HouseThemeID), houseThemeID);
+    SetUpdateFieldValue(compData.ModifyValue(&UF::HousingRoomComponentMeshData::RoomComponentTextureID), roomComponentTextureID);
+
+    TC_LOG_DEBUG("housing", "MeshObject::UpdateRoomComponentVisuals: guid={} optionID={} themeID={} textureID={}",
+        GetGUID().ToString(), roomComponentOptionID, houseThemeID, roomComponentTextureID);
+}
+
+int32 MeshObject::GetRoomComponentID() const
+{
+    if (!m_housingRoomComponentMeshData.has_value())
+        return 0;
+    return m_housingRoomComponentMeshData->RoomComponentID;
+}
+
 void MeshObject::BuildValuesCreate(UF::UpdateFieldFlag flags, ByteBuffer& data, Player const* target) const
 {
     // Only ObjectData belongs to the CGObject fragment for MeshObjects.
