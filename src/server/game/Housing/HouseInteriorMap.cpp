@@ -490,10 +490,22 @@ void HouseInteriorMap::DespawnAllRoomMeshObjects()
         }
     }
 
+    // Also despawn HousingRoomEntities — they must be removed before
+    // SpawnRoomMeshObjects recreates them with the same GUIDs.
+    for (HousingRoomEntity* roomEntity : _roomEntities)
+    {
+        if (roomEntity && roomEntity->IsInWorld())
+        {
+            roomEntity->AddObjectToRemoveList();
+            ++despawnCount;
+        }
+    }
+    _roomEntities.clear();
+
     _roomMeshObjects.clear();
     _roomsSpawned = false;
 
-    TC_LOG_DEBUG("housing", "HouseInteriorMap::DespawnAllRoomMeshObjects: Despawned {} MeshObjects (owner={})",
+    TC_LOG_DEBUG("housing", "HouseInteriorMap::DespawnAllRoomMeshObjects: Despawned {} objects (owner={})",
         despawnCount, _owner.ToString());
 }
 
