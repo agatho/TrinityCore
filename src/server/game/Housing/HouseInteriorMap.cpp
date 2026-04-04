@@ -400,24 +400,49 @@ void HouseInteriorMap::SpawnRoomMeshObjects(Housing* housing, int32 factionRestr
             housingRoom->SetFloorIndex(floorIndex);
             housingRoom->SetMirroredPosition(roomPos, roomRot, 1.0f);
 
-            // Add all MeshObject GUIDs to the room entity's MeshObjects array
-            housingRoom->AddMeshObject(roomEntity->GetGUID());
+            // Add component MeshObject GUIDs to the room entity's MeshObjects array.
+            // Only component MeshObjects (with FHousingRoomComponentMesh_C) belong here —
+            // the root room MeshObject has FHousingRoom_C instead, and the client crashes
+            // if it encounters a child without FHousingRoomComponentMesh_C (NULL+0x21).
             for (MeshObject* comp : componentMeshes)
             {
                 if (comp->IsInWorld())
                     housingRoom->AddMeshObject(comp->GetGUID());
             }
 
-            // Add door data from doorway components (Type=4).
+            // Add door data from doorway components (Type=4) or wall components
+            // that serve as doorway connection points. Retail rooms always have 1-4 doors
+            // (sniff-verified). DB2 may not have explicit Type=4 doorway entries, so we
+            // also derive doors from wall components at room boundaries.
             uint32 doorCount = 0;
             for (RoomComponentData const& comp : *components)
             {
-                if (comp.Type == 4) // doorway
+                if (comp.Type == 4) // explicit doorway
                 {
                     Position doorOffset(comp.OffsetPos[0], comp.OffsetPos[1], comp.OffsetPos[2]);
                     uint8 connType = comp.ConnectionType > 0 ? comp.ConnectionType : 1;
                     housingRoom->AddDoor(static_cast<int32>(comp.ID), doorOffset, connType);
                     ++doorCount;
+                }
+            }
+
+            // If no explicit doorways found, add doors from wall components (Type=1)
+            // at the room's boundary positions. The layout editor requires at least 1 door.
+            if (doorCount == 0)
+            {
+                for (RoomComponentData const& comp : *components)
+                {
+                    if (comp.Type == 1) // wall
+                    {
+                        // Walls at boundary positions (offset > 0) are potential doorway slots
+                        float dist = std::abs(comp.OffsetPos[0]) + std::abs(comp.OffsetPos[1]);
+                        if (dist > 1.0f) // non-center wall = boundary
+                        {
+                            Position doorOffset(comp.OffsetPos[0], comp.OffsetPos[1], comp.OffsetPos[2]);
+                            housingRoom->AddDoor(static_cast<int32>(comp.ID), doorOffset, 1);
+                            ++doorCount;
+                        }
+                    }
                 }
             }
 
@@ -437,7 +462,7 @@ void HouseInteriorMap::SpawnRoomMeshObjects(Housing* housing, int32 factionRestr
             TC_LOG_ERROR("housing", "HouseInteriorMap::SpawnRoomMeshObjects: Created HousingRoomEntity "
                 "guid={} roomEntry={} slot={} meshObjects={} doors={}",
                 roomHousingGuid.ToString(), room->RoomEntryId, room->SlotIndex,
-                1 + uint32(componentMeshes.size()), doorCount);
+                uint32(componentMeshes.size()), doorCount);
         }
 
         TC_LOG_ERROR("housing", "HouseInteriorMap::SpawnRoomMeshObjects: Room '{}' (entry={}, slot={}) "

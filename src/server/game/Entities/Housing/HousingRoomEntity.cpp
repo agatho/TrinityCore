@@ -31,6 +31,11 @@ HousingRoomEntity::HousingRoomEntity()
     m_updateFlag.HasEntityPosition = true;
     m_updateFlag.Stationary = true;
 
+    // Object constructor adds CGObject (fragment 2) automatically. Retail room entities
+    // do NOT have CGObject — sniff-verified fragment list is [21, 31, 220] only.
+    // Remove it before adding our housing fragments.
+    m_entityFragments.Remove(WowCS::EntityFragment::CGObject);
+
     m_entityFragments.Add(WowCS::EntityFragment::FHousingRoom_C, false, WowCS::GetRawFragmentData(m_housingRoomData));
     m_entityFragments.Add(WowCS::EntityFragment::FMirroredPositionData_C, false, WowCS::GetRawFragmentData(m_mirroredPositionData));
     m_entityFragments.Add(WowCS::EntityFragment::Tag_HousingRoom, false);
@@ -105,6 +110,21 @@ void HousingRoomEntity::BuildCreateUpdateBlockForPlayer(UpdateData* data, Player
 
     buf.put<uint32>(sizePos, buf.wpos() - sizePos - 4);
     data->AddUpdateBlock();
+
+    // Hex dump of the complete CREATE block for byte-level debugging
+    {
+        // Dump from start of this entity (approximate: back up from sizePos)
+        std::size_t blockEnd = buf.wpos();
+        std::size_t dumpStart = (sizePos > 40) ? sizePos - 40 : 0;
+        std::string hex;
+        for (std::size_t i = dumpStart; i < std::min(blockEnd, dumpStart + 80); ++i)
+            hex += Trinity::StringFormat("{:02x} ", buf[i]);
+        TC_LOG_ERROR("housing", "HousingRoomEntity::BuildCreate guid={} objectType={} "
+            "fieldBlockSize={} pos=({:.1f},{:.1f},{:.1f}) HEX: {}",
+            GetGUID().ToString(), uint32(m_objectTypeId),
+            buf.wpos() - sizePos - 4,
+            GetPositionX(), GetPositionY(), GetPositionZ(), hex);
+    }
 }
 
 void HousingRoomEntity::BuildValuesCreate(UF::UpdateFieldFlag /*flags*/, ByteBuffer& /*data*/, Player const* /*target*/) const
