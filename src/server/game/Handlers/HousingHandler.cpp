@@ -2284,8 +2284,17 @@ void WorldSession::HandleHousingRoomAdd(WorldPackets::Housing::HousingRoomAdd co
         return;
     }
 
-    HousingResult result = housing->PlaceRoom(housingRoomAdd.HouseRoomID, housingRoomAdd.FloorIndex,
-        housingRoomAdd.Flags, housingRoomAdd.AutoFurnish);
+    // The CMSG sends TargetDoorComponentID (which door to connect at), not a slot index.
+    // Compute the next free slot — the new room goes adjacent to the door's owner room.
+    uint32 nextSlot = 0;
+    for (auto const& [guid, room] : housing->GetRoomsMap())
+    {
+        if (room.SlotIndex >= nextSlot)
+            nextSlot = room.SlotIndex + 1;
+    }
+
+    HousingResult result = housing->PlaceRoom(housingRoomAdd.HouseRoomID, nextSlot,
+        /*orientation*/ 0, /*mirrored*/ false);
 
     WorldPackets::Housing::HousingRoomAddResponse response;
     response.Result = static_cast<uint8>(result);
@@ -2293,15 +2302,22 @@ void WorldSession::HandleHousingRoomAdd(WorldPackets::Housing::HousingRoomAdd co
 
     if (result == HOUSING_RESULT_SUCCESS)
     {
-        RefreshInteriorRoomVisuals(player, housing);
+        // Spawn the newly added room's entities on the interior map.
+        // Don't use RefreshInteriorRoomVisuals (destroy+create ALL) — it crashes the client.
+        if (HouseInteriorMap* interiorMap = dynamic_cast<HouseInteriorMap*>(player->GetMap()))
+        {
+            int32 faction = (player->GetTeamId() == TEAM_ALLIANCE)
+                ? NEIGHBORHOOD_FACTION_ALLIANCE : NEIGHBORHOOD_FACTION_HORDE;
+            interiorMap->SpawnRoomMeshObjects(housing, faction);
+        }
 
         WorldPackets::Housing::AccountRoomCollectionUpdate roomUpdate;
         roomUpdate.RoomID = housingRoomAdd.HouseRoomID;
         SendPacket(roomUpdate.Write());
     }
 
-    TC_LOG_INFO("housing", "CMSG_HOUSING_ROOM_ADD HouseRoomID: {}, FloorIndex: {}, Flags: {}, Result: {}",
-        housingRoomAdd.HouseRoomID, housingRoomAdd.FloorIndex, housingRoomAdd.Flags, uint32(result));
+    TC_LOG_INFO("housing", "CMSG_HOUSING_ROOM_ADD DoorComponentID: {}, HouseRoomID: {}, FloorIndex: {}, Result: {}",
+        housingRoomAdd.TargetDoorComponentID, housingRoomAdd.HouseRoomID, housingRoomAdd.FloorIndex, uint32(result));
 }
 
 void WorldSession::HandleHousingRoomRemove(WorldPackets::Housing::HousingRoomRemove const& housingRoomRemove)

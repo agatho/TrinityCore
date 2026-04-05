@@ -320,13 +320,13 @@ void HousingRoomSetLayoutEditMode::Read()
 void HousingRoomAdd::Read()
 {
     _worldPacket >> HouseGuid;
+    _worldPacket >> TargetDoorComponentID;
     _worldPacket >> HouseRoomID;
-    _worldPacket >> Flags;
     _worldPacket >> FloorIndex;
     _worldPacket >> Bits<1>(AutoFurnish);
 
-    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_ROOM_ADD HouseGuid: {} HouseRoomID: {} Flags: {} FloorIndex: {} AutoFurnish: {}",
-        HouseGuid.ToString(), HouseRoomID, Flags, FloorIndex, AutoFurnish);
+    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_ROOM_ADD HouseGuid: {} DoorComponentID: {} HouseRoomID: {} FloorIndex: {} AutoFurnish: {}",
+        HouseGuid.ToString(), TargetDoorComponentID, HouseRoomID, FloorIndex, AutoFurnish);
 }
 
 void HousingRoomRemove::Read()

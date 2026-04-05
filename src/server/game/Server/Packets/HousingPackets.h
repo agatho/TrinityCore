@@ -492,8 +492,8 @@ namespace WorldPackets::Housing
         void Read() override;
 
         ObjectGuid HouseGuid;
-        uint32 HouseRoomID = 0;
-        uint32 Flags = 0;
+        uint32 TargetDoorComponentID = 0;   // RoomComponent.ID of the door being connected to
+        uint32 HouseRoomID = 0;             // HouseRoom.ID of the room template to add
         uint32 FloorIndex = 0;
         bool AutoFurnish = false;
     };
