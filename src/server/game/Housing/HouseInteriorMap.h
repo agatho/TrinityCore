@@ -65,6 +65,9 @@ public:
     /// Avoids destroy+create cycle — sends UPDATE_OBJECT with changed fields.
     void UpdateRoomComponentVisuals(ObjectGuid roomGuid, int32 factionRestriction, Housing::Room const& room);
 
+    /// Despawn a single room's entities (MeshObjects + HousingRoomEntity).
+    void DespawnRoomEntities(ObjectGuid roomGuid);
+
     /// Spawn all placed decor for the owner's house on the interior map.
     void SpawnInteriorDecor(Housing* housing);
 

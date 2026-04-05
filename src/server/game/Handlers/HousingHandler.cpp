@@ -2326,8 +2326,12 @@ void WorldSession::HandleHousingRoomRemove(WorldPackets::Housing::HousingRoomRem
     response.RoomGuid = housingRoomRemove.RoomGuid;
     SendPacket(response.Write());
 
+    // Only despawn the removed room's entities — don't destroy+recreate all rooms.
     if (result == HOUSING_RESULT_SUCCESS)
-        RefreshInteriorRoomVisuals(player, housing);
+    {
+        if (HouseInteriorMap* interiorMap = dynamic_cast<HouseInteriorMap*>(player->GetMap()))
+            interiorMap->DespawnRoomEntities(housingRoomRemove.RoomGuid);
+    }
 
     TC_LOG_INFO("housing", "CMSG_HOUSING_ROOM_REMOVE_ROOM RoomGuid: {}, Result: {}",
         housingRoomRemove.RoomGuid.ToString(), uint32(result));

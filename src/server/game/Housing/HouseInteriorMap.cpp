@@ -517,6 +517,42 @@ void HouseInteriorMap::DespawnAllRoomMeshObjects()
         despawnCount, _owner.ToString());
 }
 
+void HouseInteriorMap::DespawnRoomEntities(ObjectGuid roomGuid)
+{
+    uint32 despawnCount = 0;
+
+    // Remove this room's MeshObjects
+    auto itr = _roomMeshObjects.find(roomGuid);
+    if (itr != _roomMeshObjects.end())
+    {
+        for (ObjectGuid const& meshGuid : itr->second)
+        {
+            if (MeshObject* mesh = GetMeshObject(meshGuid))
+            {
+                RemoveFromMap(mesh, true);
+                ++despawnCount;
+            }
+        }
+        _roomMeshObjects.erase(itr);
+    }
+
+    // Remove this room's HousingRoomEntity
+    for (auto it = _roomEntities.begin(); it != _roomEntities.end(); ++it)
+    {
+        HousingRoomEntity* entity = *it;
+        if (entity && entity->IsInWorld() && entity->GetGUID() == roomGuid)
+        {
+            RemoveFromMap(entity, true);
+            _roomEntities.erase(it);
+            ++despawnCount;
+            break;
+        }
+    }
+
+    TC_LOG_DEBUG("housing", "HouseInteriorMap::DespawnRoomEntities: Removed {} entities for room {} (owner={})",
+        despawnCount, roomGuid.ToString(), _owner.ToString());
+}
+
 void HouseInteriorMap::UpdateRoomComponentVisuals(ObjectGuid roomGuid, int32 factionRestriction, Housing::Room const& room)
 {
     auto itr = _roomMeshObjects.find(roomGuid);
