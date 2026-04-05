@@ -957,11 +957,17 @@ bool HouseInteriorMap::AddPlayerToMap(Player* player, bool initPlayer /*= true*/
             housing->SetInInterior(true);
 
             // Spawn room meshes on first entry
-            if (!_roomsSpawned && player->GetGUID() == _owner)
+            if (player->GetGUID() == _owner)
             {
+                // Always force a fresh spawn on login — old entities from a previous binary/session
+                // may have stale fragment formats (e.g., root MeshObjects with FHousingRoom_C that
+                // no longer exist in the current code). DespawnAll is safe here because the player
+                // hasn't received any entities yet (no DESTROY goes to the client).
+                if (_roomsSpawned)
+                    DespawnAllRoomMeshObjects();
+
                 TC_LOG_ERROR("housing", "HouseInteriorMap::AddPlayerToMap: === SPAWNING ROOMS ===");
 
-                // Log each room for debugging
                 for (Housing::Room const* room : housing->GetRooms())
                 {
                     TC_LOG_ERROR("housing", "  Room: guid={} entryId={} slot={} orientation={} mirrored={}",
@@ -973,12 +979,6 @@ bool HouseInteriorMap::AddPlayerToMap(Player* player, bool initPlayer /*= true*/
                     ? NEIGHBORHOOD_FACTION_ALLIANCE : NEIGHBORHOOD_FACTION_HORDE;
                 SpawnRoomMeshObjects(housing, faction);
                 _roomsSpawned = true;
-            }
-            else
-            {
-                TC_LOG_ERROR("housing", "HouseInteriorMap::AddPlayerToMap: Rooms already spawned "
-                    "(_roomsSpawned={}, isOwner={})",
-                    _roomsSpawned, player->GetGUID() == _owner);
             }
 
             // Always spawn interior decor (handles both first entry and re-entry).
