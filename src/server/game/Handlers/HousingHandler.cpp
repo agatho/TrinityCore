@@ -2302,12 +2302,16 @@ void WorldSession::HandleHousingRoomAdd(WorldPackets::Housing::HousingRoomAdd co
 
     if (result == HOUSING_RESULT_SUCCESS)
     {
-        // Spawn the newly added room's entities on the interior map.
-        // Don't use RefreshInteriorRoomVisuals (destroy+create ALL) — it crashes the client.
+        // Spawn ONLY the newly added room — don't destroy+recreate existing rooms.
+        // SpawnRoomMeshObjects would despawn everything first, causing same-GUID
+        // DESTROY+CREATE overlap that crashes the client (NULL+0x20).
         if (HouseInteriorMap* interiorMap = dynamic_cast<HouseInteriorMap*>(player->GetMap()))
         {
             int32 faction = (player->GetTeamId() == TEAM_ALLIANCE)
                 ? NEIGHBORHOOD_FACTION_ALLIANCE : NEIGHBORHOOD_FACTION_HORDE;
+            // SpawnRoomMeshObjects skips rooms whose GUIDs are already in _roomMeshObjects,
+            // so only the new room (just added to _rooms) gets spawned.
+            // Remove the cleanup guard check by ensuring _roomMeshObjects has entries.
             interiorMap->SpawnRoomMeshObjects(housing, faction);
         }
 

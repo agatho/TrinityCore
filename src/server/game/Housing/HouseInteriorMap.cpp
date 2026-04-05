@@ -108,11 +108,6 @@ void HouseInteriorMap::SpawnRoomMeshObjects(Housing* housing, int32 factionRestr
     if (!housing)
         return;
 
-    // Clean up any existing room entities from a previous spawn (e.g., relog into interior,
-    // RefreshInteriorRoomVisuals). Prevents "Object with certain key already in" assertion.
-    if (!_roomEntities.empty() || !_roomMeshObjects.empty())
-        DespawnAllRoomMeshObjects();
-
     std::vector<Housing::Room const*> rooms = housing->GetRooms();
     if (rooms.empty())
     {
@@ -137,6 +132,10 @@ void HouseInteriorMap::SpawnRoomMeshObjects(Housing* housing, int32 factionRestr
 
     for (Housing::Room const* room : rooms)
     {
+        // Skip rooms that already have entities on the map (incremental spawn for room add).
+        if (_roomMeshObjects.count(room->Guid) > 0)
+            continue;
+
         HouseRoomData const* roomData = sHousingMgr.GetHouseRoomData(room->RoomEntryId);
         if (!roomData)
         {
