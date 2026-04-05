@@ -144,7 +144,7 @@ public:
     uint32 PlaceStarterDecor();
 
     // Room operations
-    HousingResult PlaceRoom(uint32 roomEntryId, uint32 slotIndex, uint32 orientation, bool mirrored);
+    HousingResult PlaceRoom(uint32 roomEntryId, uint32 slotIndex, uint32 orientation, bool mirrored, ObjectGuid* outRoomGuid = nullptr);
     HousingResult RemoveRoom(ObjectGuid roomGuid);
     HousingResult RotateRoom(ObjectGuid roomGuid, bool clockwise);
     HousingResult MoveRoom(ObjectGuid roomGuid, uint32 newSlotIndex, ObjectGuid swapRoomGuid, uint32 swapSlotIndex);

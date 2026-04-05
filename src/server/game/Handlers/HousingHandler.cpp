@@ -2293,11 +2293,13 @@ void WorldSession::HandleHousingRoomAdd(WorldPackets::Housing::HousingRoomAdd co
             nextSlot = room.SlotIndex + 1;
     }
 
+    ObjectGuid newRoomGuid;
     HousingResult result = housing->PlaceRoom(housingRoomAdd.HouseRoomID, nextSlot,
-        /*orientation*/ 0, /*mirrored*/ false);
+        /*orientation*/ 0, /*mirrored*/ false, &newRoomGuid);
 
     WorldPackets::Housing::HousingRoomAddResponse response;
     response.Result = static_cast<uint8>(result);
+    response.RoomGuid = newRoomGuid;
     SendPacket(response.Write());
 
     if (result == HOUSING_RESULT_SUCCESS)

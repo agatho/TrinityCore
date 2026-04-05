@@ -1291,7 +1291,7 @@ std::vector<Housing::PlacedDecor const*> Housing::GetAllPlacedDecor() const
     return result;
 }
 
-HousingResult Housing::PlaceRoom(uint32 roomEntryId, uint32 slotIndex, uint32 orientation, bool mirrored)
+HousingResult Housing::PlaceRoom(uint32 roomEntryId, uint32 slotIndex, uint32 orientation, bool mirrored, ObjectGuid* outRoomGuid)
 {
     if (_houseGuid.IsEmpty())
         return HOUSING_RESULT_HOUSE_NOT_FOUND;
@@ -1357,6 +1357,9 @@ HousingResult Housing::PlaceRoom(uint32 roomEntryId, uint32 slotIndex, uint32 or
     room.Orientation = orientation;
     room.Mirrored = mirrored;
     room.ThemeId = 0;
+
+    if (outRoomGuid)
+        *outRoomGuid = roomGuid;
 
     // Update room budget tracking
     _roomWeightUsed += roomWeightCost;
