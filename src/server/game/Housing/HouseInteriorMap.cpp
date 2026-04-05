@@ -230,17 +230,17 @@ void HouseInteriorMap::SpawnRoomMeshObjects(Housing* housing, int32 factionRestr
             if (comp.ModelFileDataID <= 0)
                 continue;
 
-            // Look up RoomComponentOption for this component.
+            // Look up RoomComponentOption for this component via MeshStyleFilterID.
             // If the room has a player-applied theme (ThemeId != 0), use it first.
-            // Otherwise fall back to: faction theme → neutral (8) → generic (6).
+            // Otherwise fall back to: faction theme → Generic (3) → Folk (1).
             int32 effectiveThemeID = (room->ThemeId != 0) ? static_cast<int32>(room->ThemeId) : factionThemeID;
-            RoomComponentOptionEntry const* optEntry = sHousingMgr.FindRoomComponentOption(comp.ID, effectiveThemeID);
+            RoomComponentOptionEntry const* optEntry = sHousingMgr.FindRoomComponentOption(comp.MeshStyleFilterID, effectiveThemeID);
             if (!optEntry && effectiveThemeID != factionThemeID)
-                optEntry = sHousingMgr.FindRoomComponentOption(comp.ID, factionThemeID);
-            if (!optEntry && factionThemeID != 8)
-                optEntry = sHousingMgr.FindRoomComponentOption(comp.ID, 8);
-            if (!optEntry && factionThemeID != 6)
-                optEntry = sHousingMgr.FindRoomComponentOption(comp.ID, 6);
+                optEntry = sHousingMgr.FindRoomComponentOption(comp.MeshStyleFilterID, factionThemeID);
+            if (!optEntry && factionThemeID != 3)
+                optEntry = sHousingMgr.FindRoomComponentOption(comp.MeshStyleFilterID, 3);
+            if (!optEntry && factionThemeID != 1)
+                optEntry = sHousingMgr.FindRoomComponentOption(comp.MeshStyleFilterID, 1);
 
             int32 compFileDataID = comp.ModelFileDataID;
             int32 roomComponentOptionID = 0;
@@ -343,7 +343,7 @@ void HouseInteriorMap::SpawnRoomMeshObjects(Housing* housing, int32 factionRestr
                 compRot.x, compRot.y, compRot.z, compRot.w,
                 comp.ConnectionType, comp.Flags,
                 optEntry ? (optEntry->HouseThemeID == factionThemeID ? "faction" :
-                    (optEntry->HouseThemeID == 8 ? "neutral" : "generic")) : "none");
+                    (optEntry->HouseThemeID == 3 ? "generic" : "other")) : "none");
         }
 
         TC_LOG_ERROR("housing", "  Room '{}' component summary: walls={} floors={} ceilings={} "
@@ -571,14 +571,19 @@ void HouseInteriorMap::UpdateRoomComponentVisuals(ObjectGuid roomGuid, int32 fac
         if (compID == 0)
             continue;
 
-        // Look up the option for this component with the effective theme
-        RoomComponentOptionEntry const* optEntry = sHousingMgr.FindRoomComponentOption(compID, effectiveThemeID);
+        // Look up the RoomComponent to get its MeshStyleFilterID for the option lookup
+        RoomComponentEntry const* compEntry = sRoomComponentStore.LookupEntry(compID);
+        if (!compEntry)
+            continue;
+
+        // Look up the option for this component's MeshStyleFilterID with the effective theme
+        RoomComponentOptionEntry const* optEntry = sHousingMgr.FindRoomComponentOption(compEntry->MeshStyleFilterID, effectiveThemeID);
         if (!optEntry && effectiveThemeID != factionThemeID)
-            optEntry = sHousingMgr.FindRoomComponentOption(compID, factionThemeID);
-        if (!optEntry && factionThemeID != 8)
-            optEntry = sHousingMgr.FindRoomComponentOption(compID, 8);
-        if (!optEntry && factionThemeID != 6)
-            optEntry = sHousingMgr.FindRoomComponentOption(compID, 6);
+            optEntry = sHousingMgr.FindRoomComponentOption(compEntry->MeshStyleFilterID, factionThemeID);
+        if (!optEntry && factionThemeID != 3)
+            optEntry = sHousingMgr.FindRoomComponentOption(compEntry->MeshStyleFilterID, 3);
+        if (!optEntry && factionThemeID != 1)
+            optEntry = sHousingMgr.FindRoomComponentOption(compEntry->MeshStyleFilterID, 1);
 
         if (!optEntry)
             continue;

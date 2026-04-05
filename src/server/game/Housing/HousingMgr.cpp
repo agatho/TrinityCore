@@ -1177,8 +1177,14 @@ void HousingMgr::BuildRoomComponentOptionIndex()
     {
         if (!entry)
             continue;
-        uint64 key = (uint64(entry->RoomComponentID) << 32) | uint32(entry->HouseThemeID);
-        _roomCompOptionIndex[key] = entry;
+        // Index by (MeshStyleFilterID, HouseThemeID) — this is the retail DB2 linkage.
+        // RoomComponent.MeshStyleFilterID matches RoomComponentOption.MeshStyleFilterID.
+        // For Type=0 (Cosmetic), keep the first entry per key (base mesh).
+        // For Type=1/2 (DoorwayWall/Doorway), these are alternative variants per MSFID+theme.
+        uint64 key = (uint64(uint32(entry->MeshStyleFilterID)) << 32) | uint32(entry->HouseThemeID);
+        // Only insert if not already present (first match wins — Type=0 cosmetic entries are preferred)
+        if (_roomCompOptionIndex.find(key) == _roomCompOptionIndex.end())
+            _roomCompOptionIndex[key] = entry;
         ++count;
     }
     TC_LOG_INFO("housing", "HousingMgr::BuildRoomComponentOptionIndex: Indexed {} RoomComponentOption entries", count);
@@ -1658,17 +1664,21 @@ std::vector<DecorDyeSlotData const*> HousingMgr::GetDyeSlotsForDecor(uint32 hous
 
 int32 HousingMgr::GetFactionDefaultThemeID(int32 factionRestriction) const
 {
-    // Sniff-verified: Alliance theme=6, Horde theme=2
+    // Retail DB2 uses base theme IDs: 1=Folk (Alliance), 2=Rugged (Horde)
+    // Sub-themes (6="Folk Medium", 8="Rugged Medium", etc.) are texture/dye variants
+    // and do NOT have RoomComponentOption entries in retail data.
     if (factionRestriction == NEIGHBORHOOD_FACTION_ALLIANCE)
-        return 6;
+        return 1; // Folk
     if (factionRestriction == NEIGHBORHOOD_FACTION_HORDE)
-        return 2;
-    return 6; // fallback to alliance
+        return 2; // Rugged
+    return 1; // fallback to Folk (Alliance default)
 }
 
-RoomComponentOptionEntry const* HousingMgr::FindRoomComponentOption(uint32 roomComponentID, int32 houseThemeID) const
+RoomComponentOptionEntry const* HousingMgr::FindRoomComponentOption(int32 meshStyleFilterID, int32 houseThemeID) const
 {
-    uint64 key = (uint64(roomComponentID) << 32) | uint32(houseThemeID);
+    // Retail RoomComponentOption links to RoomComponent via MeshStyleFilterID, not component ID.
+    // Multiple components sharing the same MeshStyleFilterID use the same option entry.
+    uint64 key = (uint64(uint32(meshStyleFilterID)) << 32) | uint32(houseThemeID);
     auto itr = _roomCompOptionIndex.find(key);
     return itr != _roomCompOptionIndex.end() ? itr->second : nullptr;
 }
@@ -1676,7 +1686,7 @@ RoomComponentOptionEntry const* HousingMgr::FindRoomComponentOption(uint32 roomC
 uint32 HousingMgr::GetDefaultVisualRoomEntry() const
 {
     // Sniff-verified: both alliance and horde use HouseRoomID=1 ("Square Room Small")
-    // as the primary interior room. The faction theme (themeID 6=Alliance, 2=Horde)
+    // as the primary interior room. The faction theme (themeID 1=Folk/Alliance, 2=Rugged/Horde)
     // controls wall/floor textures via RoomComponentOption, not the room shape.
     // Pick the lowest-ID non-base room with UNLOCKED_BY_DEFAULT + visual components.
     uint32 bestId = 0;

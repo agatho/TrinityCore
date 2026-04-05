@@ -307,9 +307,10 @@ public:
     // Faction-to-theme mapping (sniff-verified: Alliance=6, Horde=2)
     int32 GetFactionDefaultThemeID(int32 factionRestriction) const;
 
-    // Find a RoomComponentOption matching a specific component + theme
+    // Find a RoomComponentOption matching a specific MeshStyleFilterID + theme
+    // The retail DB2 links RoomComponent to RoomComponentOption via MeshStyleFilterID.
     // Returns nullptr if no match found
-    RoomComponentOptionEntry const* FindRoomComponentOption(uint32 roomComponentID, int32 houseThemeID) const;
+    RoomComponentOptionEntry const* FindRoomComponentOption(int32 meshStyleFilterID, int32 houseThemeID) const;
 
     // Get the base room entry ID (exterior geobox room, from DB2 IsBaseRoom flag, fallback 18)
     uint32 GetBaseRoomEntryId() const { return _baseRoomEntryId; }
@@ -417,7 +418,7 @@ private:
     // All room components indexed by RoomWmoDataID (walls, floors, ceilings, stairs, doorways)
     std::unordered_map<uint32 /*roomWmoDataId*/, std::vector<RoomComponentData>> _roomComponentsByWmoData;
 
-    // O(1) RoomComponentOption lookup: key = (uint64(RoomComponentID) << 32) | uint32(HouseThemeID)
+    // O(1) RoomComponentOption lookup: key = (uint64(MeshStyleFilterID) << 32) | uint32(HouseThemeID)
     std::unordered_map<uint64, RoomComponentOptionEntry const*> _roomCompOptionIndex;
     void BuildRoomComponentOptionIndex();
     void BuildExteriorComponentIndexes();

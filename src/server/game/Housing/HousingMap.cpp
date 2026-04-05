@@ -1908,19 +1908,20 @@ void HousingMap::SpawnRoomForPlot(uint8 plotIndex, Position const& housePos,
     }
 
     // 4. RoomComponentOption → theme-specific cosmetic data (varies by faction/house style)
-    //    Alliance sniff: optionID=874, themeID=6, field24=1, textureID=3
-    //    Horde sniff:    optionID=420, themeID=2, field24=2, textureID=40
+    //    Alliance sniff: optionID=874, themeID=1 (Folk), field24=0, textureID=3
+    //    Horde sniff:    optionID=420, themeID=2 (Rugged), field24=0, textureID=40
     //    These are cosmetic only (don't affect Geobox/bounds check).
     int32 roomComponentOptionID = 0;
     int32 houseThemeID = 0;
     int32 roomComponentTextureID = 0;
     int32 field24 = 0;
 
-    // Use faction-aware theme lookup
+    // Use faction-aware theme lookup via MeshStyleFilterID
     int32 factionThemeID = _neighborhood
         ? sHousingMgr.GetFactionDefaultThemeID(_neighborhood->GetFactionRestriction())
-        : 6;
-    RoomComponentOptionEntry const* optEntry = sHousingMgr.FindRoomComponentOption(ROOM_COMPONENT_ID, factionThemeID);
+        : 1; // Folk (Alliance default)
+    int32 compMeshStyleFilterID = compEntry ? compEntry->MeshStyleFilterID : 48;
+    RoomComponentOptionEntry const* optEntry = sHousingMgr.FindRoomComponentOption(compMeshStyleFilterID, factionThemeID);
     if (optEntry)
     {
         roomComponentOptionID = static_cast<int32>(optEntry->ID);
@@ -1931,8 +1932,8 @@ void HousingMap::SpawnRoomForPlot(uint8 plotIndex, Position const& housePos,
     if (roomComponentOptionID == 0)
     {
         roomComponentOptionID = 874;
-        houseThemeID = 6;
-        field24 = 1;
+        houseThemeID = 1;
+        field24 = 0;
         roomComponentTextureID = 3;
     }
 
