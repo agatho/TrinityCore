@@ -281,9 +281,14 @@ void MeshObject::InitHousingRoomData(ObjectGuid houseGuid, int32 houseRoomID,
     if (m_housingRoomData.has_value())
         return;
 
+    // Set IsRoom=true — this MeshObject has FHousingRoom_C, so the client's
+    // MeshObjectSystem can safely read FHousingRoom_C.Flags from it.
+    {
+        auto meshData = m_values.ModifyValue(&MeshObject::m_meshObjectData);
+        SetUpdateFieldValue(meshData.ModifyValue(&UF::MeshObjectData::IsRoom), true);
+    }
+
     // Populate HousingRoomData (FHousingRoom_C fragment data).
-    // Sniff-verified: Room entities carry HouseGUID, HouseRoomID, Flags, FloorIndex,
-    // and a MeshObjects array referencing attached room component MeshObjects.
     auto roomData = m_values.ModifyValue(&Object::m_housingRoomData, 0);
     SetUpdateFieldValue(roomData.ModifyValue(&UF::HousingRoomData::HouseGUID), houseGuid);
     SetUpdateFieldValue(roomData.ModifyValue(&UF::HousingRoomData::HouseRoomID), houseRoomID);
@@ -352,11 +357,11 @@ void MeshObject::InitHousingRoomComponentData(ObjectGuid roomGuid,
     if (m_housingRoomComponentMeshData.has_value())
         return;
 
-    // Set IsRoom = true on MeshObjectData so the client treats this as a room mesh
-    {
-        auto meshData = m_values.ModifyValue(&MeshObject::m_meshObjectData);
-        SetUpdateFieldValue(meshData.ModifyValue(&UF::MeshObjectData::IsRoom), true);
-    }
+    // IsRoom flag: only set on the EXTERIOR geobox MeshObject that also has FHousingRoom_C.
+    // The client's MeshObjectSystem iterates MeshObjects with IsRoom=true and reads
+    // FHousingRoom_C.Flags (offset 0x20). Interior component MeshObjects do NOT have
+    // FHousingRoom_C → setting IsRoom=true crashes (NULL+0x20).
+    // Interior components use FHousingRoomComponentMesh_C instead — IsRoom must be false.
 
     // Set Geobox (axis-aligned bounding box) on MeshObjectData.
     // Sniff-verified: ALL retail room component meshes have Geobox (-35,-30,-1.01)→(35,30,125.01).
