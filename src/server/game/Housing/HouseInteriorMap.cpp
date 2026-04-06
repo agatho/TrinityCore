@@ -206,20 +206,33 @@ void HouseInteriorMap::SpawnRoomMeshObjects(Housing* housing, int32 factionRestr
         GridCoord roomGrid = Trinity::ComputeGridCoord(roomX, roomY);
         GridMarkNoUnload(roomGrid.x_coord, roomGrid.y_coord);
 
-        // --- Phase 1: Create component MeshObjects ---
-        // Retail has TWO entity types per room:
-        //   1. Component MeshObjects (objectType=56, FHousingRoomComponentMesh_C) — visual meshes
-        //   2. HousingRoomEntity (objectType=18, Housing/2 GUID, FHousingRoom_C) — room data + doors
-        // The MeshObjects attach to the HousingRoomEntity via AttachParentGUID = room->Guid.
-        // We do NOT create a separate "root" MeshObject with FHousingRoom_C — that causes
-        // duplicate FHousingRoom_C in the client's archetype query, and the MeshObject GUID
-        // (not Housing type) makes GetRoomGUID() return nil in the layout editor.
-
         int32 roomFlags = roomData->IsBaseRoom() ? 1 : 0;
         int32 floorIndex = 0;
         ObjectGuid roomHousingGuid = room->Guid; // Housing/2 GUID for attach parent
 
-        // --- Phase 1b: Create all component MeshObjects ---
+        // --- Phase 1: Create HousingRoomEntity FIRST ---
+        // Must exist on the map BEFORE component MeshObjects because components use
+        // AttachParentGUID = roomHousingGuid. The client resolves this GUID during
+        // entity creation — if the parent doesn't exist, it crashes (NULL+0x20).
+        // Door data is added after components are created (Phase 3).
+        HousingRoomEntity* housingRoom = new HousingRoomEntity();
+        PhasingHandler::InitDbPhaseShift(housingRoom->GetPhaseShift(), PHASE_USE_FLAGS_ALWAYS_VISIBLE, 0, 0);
+        housingRoom->SetHouseGUID(housing->GetHouseGuid());
+        housingRoom->SetHouseRoomID(room->RoomEntryId);
+        housingRoom->SetFlags(roomFlags);
+        housingRoom->SetFloorIndex(floorIndex);
+        housingRoom->SetMirroredPosition(roomPos, roomRot, 1.0f);
+
+        if (!housingRoom->Create(roomHousingGuid, this, roomPos))
+        {
+            TC_LOG_ERROR("housing", "HouseInteriorMap: Failed to add HousingRoomEntity to map (roomEntry={})",
+                room->RoomEntryId);
+            delete housingRoom;
+            continue;
+        }
+        _roomEntities.push_back(housingRoom);
+
+        // --- Phase 2: Create all component MeshObjects ---
 
         std::vector<MeshObject*> componentMeshes;
         uint32 wallCount = 0, floorCount = 0, ceilingCount = 0, doorwayCount = 0;
@@ -369,36 +382,17 @@ void HouseInteriorMap::SpawnRoomMeshObjects(Housing* housing, int32 factionRestr
             }
         }
 
-        // --- Phase 3: Create HousingRoomEntity (objectType=18, Housing/2 GUID) ---
-        // This is the ONLY entity with FHousingRoom_C — the client's archetype query uses it
-        // to create layout editor pins. GetRoomGUID() validates the Housing GUID type.
+        // --- Phase 4: Populate HousingRoomEntity with component GUIDs + door data ---
+        // The entity was created in Phase 1 (before components) so it exists when
+        // components reference it via AttachParentGUID. Now add the child list + doors.
         {
-            HousingRoomEntity* housingRoom = new HousingRoomEntity();
-            PhasingHandler::InitDbPhaseShift(housingRoom->GetPhaseShift(), PHASE_USE_FLAGS_ALWAYS_VISIBLE, 0, 0);
-            housingRoom->SetHouseGUID(housing->GetHouseGuid());
-            housingRoom->SetHouseRoomID(room->RoomEntryId);
-            housingRoom->SetFlags(roomFlags);
-            housingRoom->SetFloorIndex(floorIndex);
-            housingRoom->SetMirroredPosition(roomPos, roomRot, 1.0f);
-
-            // Add component MeshObject GUIDs to the room entity's MeshObjects array.
-            // Only component MeshObjects (with FHousingRoomComponentMesh_C) belong here —
-            // the root room MeshObject has FHousingRoom_C instead, and the client crashes
-            // if it encounters a child without FHousingRoomComponentMesh_C (NULL+0x21).
             for (MeshObject* comp : componentMeshes)
             {
                 if (comp->IsInWorld())
                     housingRoom->AddMeshObject(comp->GetGUID());
             }
 
-            // Add door data from components that serve as connection points.
-            // DB2 RoomComponent.ConnectionType=1 (All) marks door-capable components.
-            // For walls, also require axis-aligned position (one of X,Y non-zero) to
-            // exclude corner pieces — Room 1 has CT=1 on ALL walls but corners (30-33)
-            // at diagonal positions are NOT doors in the sniff.
-            // Sniff-verified: Room 46 has 1 door (comp 206 CT=1), Room 1 has 4 doors
-            // (comp 26-29 CT=1, axis-aligned). Corner pieces 30-33 have CT=1 but are
-            // filtered out by the axis-aligned check.
+            // Add door data from door-capable wall components
             uint32 doorCount = 0;
             for (RoomComponentData const& comp : *components)
             {
@@ -406,15 +400,9 @@ void HouseInteriorMap::SpawnRoomMeshObjects(Housing* housing, int32 factionRestr
 
                 if (comp.Type == HOUSING_ROOM_COMPONENT_DOORWAY ||
                     comp.Type == HOUSING_ROOM_COMPONENT_DOORWAY_WALL)
-                {
-                    // Explicit doorway component (Type=6/7) — custom geometry rooms
                     isDoor = true;
-                }
                 else if (comp.Type == HOUSING_ROOM_COMPONENT_WALL && comp.ConnectionType != 0)
                 {
-                    // Wall with ConnectionType=1 (All) — potential door connection point.
-                    // Additional filter: must be axis-aligned (flat wall, not corner piece).
-                    // Flat walls have only one of X,Y non-zero; corners have both.
                     bool hasX = std::abs(comp.OffsetPos[0]) > 0.5f;
                     bool hasY = std::abs(comp.OffsetPos[1]) > 0.5f;
                     if (hasX != hasY)
@@ -424,40 +412,25 @@ void HouseInteriorMap::SpawnRoomMeshObjects(Housing* housing, int32 factionRestr
                 if (!isDoor)
                     continue;
 
-                // Determine which adjacent room this door faces (for AttachedRoomGUID)
                 ObjectGuid attachedRoomGuid;
-                if (comp.OffsetPos[0] > 0.5f) // positive X → faces next slot
+                if (comp.OffsetPos[0] > 0.5f)
                 {
                     auto itr = slotToRoomGuid.find(room->SlotIndex + 1);
                     if (itr != slotToRoomGuid.end())
                         attachedRoomGuid = itr->second;
                 }
-                else if (comp.OffsetPos[0] < -0.5f) // negative X → faces previous slot
+                else if (comp.OffsetPos[0] < -0.5f)
                 {
                     auto itr = slotToRoomGuid.find(room->SlotIndex - 1);
                     if (itr != slotToRoomGuid.end())
                         attachedRoomGuid = itr->second;
                 }
-                // Y-axis doors are potential future connection points (AttachedRoomGUID stays empty)
 
                 Position doorOffset(comp.OffsetPos[0], comp.OffsetPos[1], comp.OffsetPos[2]);
                 uint8 connType = comp.ConnectionType > 0 ? comp.ConnectionType : 1;
                 housingRoom->AddDoor(static_cast<int32>(comp.ID), doorOffset, connType, attachedRoomGuid);
                 ++doorCount;
             }
-
-            // WorldObject: AddToMap makes it visible through the visibility system,
-            // sent in the SAME UPDATE_OBJECT as room MeshObjects — matching retail.
-            if (!housingRoom->Create(roomHousingGuid, this, roomPos))
-            {
-                TC_LOG_ERROR("housing", "HouseInteriorMap: Failed to add HousingRoomEntity to map (roomEntry={})",
-                    room->RoomEntryId);
-                delete housingRoom;
-                housingRoom = nullptr;
-            }
-
-            if (housingRoom)
-                _roomEntities.push_back(housingRoom);
 
             TC_LOG_ERROR("housing", "HouseInteriorMap::SpawnRoomMeshObjects: Created HousingRoomEntity "
                 "guid={} roomEntry={} slot={} meshObjects={} doors={}",
