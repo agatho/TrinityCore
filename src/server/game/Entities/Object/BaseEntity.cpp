@@ -188,7 +188,7 @@ void BaseEntity::BuildValuesUpdateBlockForPlayer(UpdateData* data, Player const*
     data->AddUpdateBlock();
 }
 
-inline void BaseEntity::BuildEntityFragments(ByteBuffer& data, std::span<WowCS::EntityFragment const> fragments)
+void BaseEntity::BuildEntityFragments(ByteBuffer& data, std::span<WowCS::EntityFragment const> fragments)
 {
     data.append(fragments.data(), fragments.size());
     data << uint8(WowCS::EntityFragment::End);
