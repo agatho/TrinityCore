@@ -25,7 +25,10 @@ MeshObject::MeshObject() : WorldObject(false), MapObject()
 {
     m_objectTypeId = TYPEID_MESH_OBJECT;
 
-    m_updateFlag.Stationary = true;
+    // Retail MeshObjects: HasPositionFragment=true (from Object), Stationary=false,
+    // HasMeshObject=true. The MeshObject block writes AttachParentGUID + local pos/rot.
+    // Stationary MUST be false — it writes extra position data that shifts parsing.
+    m_updateFlag.Stationary = false;
     m_updateFlag.MeshObject = true;
 
     m_entityFragments.Add(WowCS::EntityFragment::Tag_MeshObject, false);
@@ -357,11 +360,11 @@ void MeshObject::InitHousingRoomComponentData(ObjectGuid roomGuid,
     if (m_housingRoomComponentMeshData.has_value())
         return;
 
-    // IsRoom flag: only set on the EXTERIOR geobox MeshObject that also has FHousingRoom_C.
-    // The client's MeshObjectSystem iterates MeshObjects with IsRoom=true and reads
-    // FHousingRoom_C.Flags (offset 0x20). Interior component MeshObjects do NOT have
-    // FHousingRoom_C → setting IsRoom=true crashes (NULL+0x20).
-    // Interior components use FHousingRoomComponentMesh_C instead — IsRoom must be false.
+    // Sniff-verified: ALL retail room component MeshObjects have IsRoom=true.
+    {
+        auto meshData = m_values.ModifyValue(&MeshObject::m_meshObjectData);
+        SetUpdateFieldValue(meshData.ModifyValue(&UF::MeshObjectData::IsRoom), true);
+    }
 
     // Set Geobox (axis-aligned bounding box) on MeshObjectData.
     // Sniff-verified: ALL retail room component meshes have Geobox (-35,-30,-1.01)→(35,30,125.01).
