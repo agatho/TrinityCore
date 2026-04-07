@@ -24777,6 +24777,9 @@ void Player::UpdateVisibilityOf(Trinity::IteratorPair<WorldObject**> targets)
             case TYPEID_MESH_OBJECT:
                 UpdateVisibilityOf(target->ToMeshObject(), udata, newVisibleObjects);
                 break;
+            case TYPEID_HOUSING_ENTITY:
+                UpdateVisibilityOf(static_cast<HousingRoomEntity*>(target), udata, newVisibleObjects);
+                break;
             default:
                 break;
         }
