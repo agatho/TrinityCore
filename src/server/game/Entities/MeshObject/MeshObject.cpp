@@ -372,8 +372,6 @@ void MeshObject::InitHousingRoomComponentData(ObjectGuid roomGuid,
     }
 
     // Set Geobox (axis-aligned bounding box) on MeshObjectData.
-    // Sniff-verified: ALL retail room component meshes have Geobox (-35,-30,-1.01)→(35,30,125.01).
-    // The client uses this box for its OutsidePlotBounds collision check.
     {
         auto meshData = m_values.ModifyValue(&MeshObject::m_meshObjectData);
         UF::AaBox geobox;
@@ -426,6 +424,60 @@ int32 MeshObject::GetRoomComponentID() const
     if (!m_housingRoomComponentMeshData.has_value())
         return 0;
     return m_housingRoomComponentMeshData->RoomComponentID;
+}
+
+void MeshObject::BuildCreateUpdateBlockForPlayer(UpdateData* data, Player* target) const
+{
+    if (!target)
+        return;
+
+    // Write CREATE block manually with UpdateType=1 (UPDATETYPE_CREATE_OBJECT).
+    // Retail MeshObjects always use CreateObject1. BaseEntity uses m_isNewObject
+    // which produces UpdateType=2 for newly spawned entities, but the client may
+    // not handle type 2 for entity-fragment types (objectType 14/18).
+    uint8 updateType = UPDATETYPE_CREATE_OBJECT; // Always 1, like HousingRoomEntity
+    CreateObjectBits flags = m_updateFlag;
+
+    ByteBuffer& buf = data->GetBuffer();
+    std::size_t startPos = buf.wpos();
+    buf << uint8(updateType);
+    buf << GetGUID();
+    buf << uint8(m_objectTypeId);
+
+    BuildMovementUpdate(buf, flags, target);
+
+    UF::UpdateFieldFlag fieldFlags = GetUpdateFieldFlagsFor(target);
+    std::size_t sizePos = buf.wpos();
+    buf << uint32(0);
+    buf << uint8(fieldFlags);
+    BuildEntityFragments(buf, m_entityFragments.GetIds());
+
+    for (std::size_t i = 0; i < m_entityFragments.UpdateableCount; ++i)
+    {
+        WowCS::EntityFragment fragmentId = m_entityFragments.Updateable.Ids[i];
+        if (WowCS::IsIndirectFragment(fragmentId))
+            buf << uint8(1);
+
+        WowCS::EntityFragmentInfo->SerializeCreate[static_cast<std::size_t>(m_entityFragments.Updateable.Ids[i])](
+            m_entityFragments.Updateable.Data[i], fieldFlags, buf, target, this);
+    }
+
+    buf.put<uint32>(sizePos, buf.wpos() - sizePos - 4);
+    data->AddUpdateBlock();
+    std::size_t endPos = buf.wpos();
+
+    // Hex dump the FULL CREATE block for the first few interior MeshObjects
+    if (m_housingRoomComponentMeshData.has_value() && (endPos - startPos) > 0)
+    {
+        ByteBuffer const& buf = data->GetBuffer();
+        std::string hex;
+        std::size_t dumpLen = std::min(endPos - startPos, std::size_t(200));
+        for (std::size_t i = startPos; i < startPos + dumpLen; ++i)
+            hex += Trinity::StringFormat("{:02x} ", buf[i]);
+        TC_LOG_ERROR("housing", "MeshObject::BuildCreate guid={} compID={} FULL_HEX[{} bytes]: {}",
+            GetGUID().ToString(), int32(m_housingRoomComponentMeshData->RoomComponentID),
+            endPos - startPos, hex);
+    }
 }
 
 void MeshObject::BuildValuesCreate(UF::UpdateFieldFlag flags, ByteBuffer& data, Player const* target) const
