@@ -244,16 +244,25 @@ void HouseInteriorMap::SpawnRoomMeshObjects(Housing* housing, int32 factionRestr
                 continue;
 
             // Look up RoomComponentOption for this component via MeshStyleFilterID.
-            // If the room has a player-applied theme (ThemeId != 0), use it first.
-            // Otherwise fall back to: faction theme → Generic (3) → Folk (1).
-            int32 effectiveThemeID = (room->ThemeId != 0) ? static_cast<int32>(room->ThemeId) : factionThemeID;
-            RoomComponentOptionEntry const* optEntry = sHousingMgr.FindRoomComponentOption(comp.MeshStyleFilterID, effectiveThemeID);
-            if (!optEntry && effectiveThemeID != factionThemeID)
+            // Sniff-verified: walls (Type=1) ALWAYS use base theme 2 (Rugged → sub-theme 8)
+            // regardless of faction. The Rugged wall WMOs are the neutral interior models
+            // designed to match the DB2 rotation values. Folk wall models face the wrong
+            // direction. Floors/ceilings use the faction theme (1=Folk for Alliance).
+            int32 lookupTheme;
+            if (comp.Type == HOUSING_ROOM_COMPONENT_WALL)
+                lookupTheme = 2; // Always Rugged for walls (sniff-verified)
+            else if (room->ThemeId != 0)
+                lookupTheme = static_cast<int32>(room->ThemeId);
+            else
+                lookupTheme = factionThemeID;
+
+            RoomComponentOptionEntry const* optEntry = sHousingMgr.FindRoomComponentOption(comp.MeshStyleFilterID, lookupTheme);
+            if (!optEntry && lookupTheme != factionThemeID)
                 optEntry = sHousingMgr.FindRoomComponentOption(comp.MeshStyleFilterID, factionThemeID);
-            if (!optEntry && factionThemeID != 8)
-                optEntry = sHousingMgr.FindRoomComponentOption(comp.MeshStyleFilterID, 8);
-            if (!optEntry && factionThemeID != 6)
-                optEntry = sHousingMgr.FindRoomComponentOption(comp.MeshStyleFilterID, 6);
+            if (!optEntry && factionThemeID != 2)
+                optEntry = sHousingMgr.FindRoomComponentOption(comp.MeshStyleFilterID, 2);
+            if (!optEntry && factionThemeID != 1)
+                optEntry = sHousingMgr.FindRoomComponentOption(comp.MeshStyleFilterID, 1);
 
             int32 compFileDataID = comp.ModelFileDataID;
             int32 roomComponentOptionID = 0;
