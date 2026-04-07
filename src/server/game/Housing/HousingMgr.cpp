@@ -1177,14 +1177,19 @@ void HousingMgr::BuildRoomComponentOptionIndex()
     {
         if (!entry)
             continue;
-        // Index by (MeshStyleFilterID, HouseThemeID) — this is the retail DB2 linkage.
-        // RoomComponent.MeshStyleFilterID matches RoomComponentOption.MeshStyleFilterID.
-        // For Type=0 (Cosmetic), keep the first entry per key (base mesh).
-        // For Type=1/2 (DoorwayWall/Doorway), these are alternative variants per MSFID+theme.
+        // Index by (MeshStyleFilterID, HouseThemeID).
+        // Multiple options exist per key with different Types:
+        //   Type=0 (Cosmetic) = normal solid wall (DEFAULT)
+        //   Type=1 (DoorwayWall) = wall with sealed doorway frame
+        //   Type=2 (Doorway) = open doorway passage
+        // Prefer Type=0 (Cosmetic) as the default wall model. Type 1/2 are
+        // used for doorway-capable walls based on connection state.
         uint64 key = (uint64(uint32(entry->MeshStyleFilterID)) << 32) | uint32(entry->HouseThemeID);
-        // Only insert if not already present (first match wins — Type=0 cosmetic entries are preferred)
-        if (_roomCompOptionIndex.find(key) == _roomCompOptionIndex.end())
+        auto existing = _roomCompOptionIndex.find(key);
+        if (existing == _roomCompOptionIndex.end())
             _roomCompOptionIndex[key] = entry;
+        else if (entry->Type == 0 && existing->second->Type != 0)
+            _roomCompOptionIndex[key] = entry; // Replace non-Cosmetic with Cosmetic
         ++count;
     }
     TC_LOG_INFO("housing", "HousingMgr::BuildRoomComponentOptionIndex: Indexed {} RoomComponentOption entries", count);
