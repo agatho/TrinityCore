@@ -1664,14 +1664,33 @@ std::vector<DecorDyeSlotData const*> HousingMgr::GetDyeSlotsForDecor(uint32 hous
 
 int32 HousingMgr::GetFactionDefaultThemeID(int32 factionRestriction) const
 {
-    // Retail DB2 uses base theme IDs: 1=Folk (Alliance), 2=Rugged (Horde)
-    // Sub-themes (6="Folk Medium", 8="Rugged Medium", etc.) are texture/dye variants
-    // and do NOT have RoomComponentOption entries in retail data.
+    // Returns the BASE theme for DB2 RoomComponentOption lookups.
+    // Folk=1 (Alliance), Rugged=2 (Horde). These are the root themes in HouseTheme
+    // with ParentThemeID=0. The DB2 option entries are keyed by base theme.
     if (factionRestriction == NEIGHBORHOOD_FACTION_ALLIANCE)
         return 1; // Folk
     if (factionRestriction == NEIGHBORHOOD_FACTION_HORDE)
         return 2; // Rugged
-    return 1; // fallback to Folk (Alliance default)
+    return 1;
+}
+
+int32 HousingMgr::GetDefaultSubThemeID(int32 baseThemeID) const
+{
+    // Converts a base theme (1=Folk, 2=Rugged) to the default sub-theme (6=Folk Medium,
+    // 8=Rugged Medium) for writing to FHousingRoomComponentMesh_C.HouseThemeID.
+    // Sniff-verified: new houses use "Medium" sub-theme by default.
+    // Base themes with ParentThemeID=0 have child sub-themes:
+    //   Folk(1) → Folk Medium(6), Folk Dark(7), Folk Light(20)
+    //   Rugged(2) → Rugged Medium(8), Rugged Dark(9), Rugged Light(26)
+    switch (baseThemeID)
+    {
+        case 1: return 6;  // Folk → Folk Medium
+        case 2: return 8;  // Rugged → Rugged Medium
+        case 3: return 3;  // Generic (no sub-themes)
+        case 4: return 4;  // Bel'ameth (no sub-themes)
+        case 5: return 5;  // Silvermoon (no sub-themes)
+        default: return baseThemeID;
+    }
 }
 
 RoomComponentOptionEntry const* HousingMgr::FindRoomComponentOption(int32 meshStyleFilterID, int32 houseThemeID) const

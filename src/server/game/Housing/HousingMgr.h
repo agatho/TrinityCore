@@ -306,6 +306,7 @@ public:
 
     // Faction-to-theme mapping (sniff-verified: Alliance=6, Horde=2)
     int32 GetFactionDefaultThemeID(int32 factionRestriction) const;
+    int32 GetDefaultSubThemeID(int32 baseThemeID) const;
 
     // Find a RoomComponentOption matching a specific MeshStyleFilterID + theme
     // The retail DB2 links RoomComponent to RoomComponentOption via MeshStyleFilterID.

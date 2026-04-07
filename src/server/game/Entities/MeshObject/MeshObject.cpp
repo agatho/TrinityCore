@@ -125,7 +125,12 @@ bool MeshObject::Create(Map* map, Position const& pos, QuaternionData const& rot
 
     // Store movement block data (used by BaseEntity::BuildCreateUpdateBlockMovement)
     _attachParentGUID = attachParent;
-    _positionLocalSpace = pos;  // local-space offset (for movement block MeshObject section)
+    _positionLocalSpace = pos;
+
+    TC_LOG_ERROR("housing", "MeshObject::Create: guid={} fileDataID={} COB: HasEntityPos={} Stationary={} MeshObj={} attachParent={}",
+        GetGUID().ToString(), fileDataID,
+        bool(m_updateFlag.HasEntityPosition), bool(m_updateFlag.Stationary), bool(m_updateFlag.MeshObject),
+        attachParent.ToString());
     _rotationLocalSpace = rotation;
     _scaleLocalSpace = scale;
     _attachmentFlags = attachFlags;

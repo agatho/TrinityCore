@@ -250,10 +250,10 @@ void HouseInteriorMap::SpawnRoomMeshObjects(Housing* housing, int32 factionRestr
             RoomComponentOptionEntry const* optEntry = sHousingMgr.FindRoomComponentOption(comp.MeshStyleFilterID, effectiveThemeID);
             if (!optEntry && effectiveThemeID != factionThemeID)
                 optEntry = sHousingMgr.FindRoomComponentOption(comp.MeshStyleFilterID, factionThemeID);
-            if (!optEntry && factionThemeID != 3)
-                optEntry = sHousingMgr.FindRoomComponentOption(comp.MeshStyleFilterID, 3);
-            if (!optEntry && factionThemeID != 1)
-                optEntry = sHousingMgr.FindRoomComponentOption(comp.MeshStyleFilterID, 1);
+            if (!optEntry && factionThemeID != 8)
+                optEntry = sHousingMgr.FindRoomComponentOption(comp.MeshStyleFilterID, 8);
+            if (!optEntry && factionThemeID != 6)
+                optEntry = sHousingMgr.FindRoomComponentOption(comp.MeshStyleFilterID, 6);
 
             int32 compFileDataID = comp.ModelFileDataID;
             int32 roomComponentOptionID = 0;
@@ -266,7 +266,9 @@ void HouseInteriorMap::SpawnRoomMeshObjects(Housing* housing, int32 factionRestr
                 if (optEntry->ModelFileDataID > 0)
                     compFileDataID = optEntry->ModelFileDataID;
                 roomComponentOptionID = static_cast<int32>(optEntry->ID);
-                houseThemeID = optEntry->HouseThemeID;
+                // optEntry->HouseThemeID is the BASE theme (1=Folk, 2=Rugged) from the DB2.
+                // The entity field needs the SUB-theme (6=Folk Medium, 8=Rugged Medium).
+                houseThemeID = sHousingMgr.GetDefaultSubThemeID(optEntry->HouseThemeID);
                 field24 = static_cast<int32>(optEntry->SubType);
                 // TextureID: use player-applied wallpaper if set, otherwise look up from DB2
                 if (room->WallpaperId != 0)
@@ -308,9 +310,6 @@ void HouseInteriorMap::SpawnRoomMeshObjects(Housing* housing, int32 factionRestr
             compRot.z = cx * cy * sz - sx * sy * cz;
             compRot.w = cx * cy * cz + sx * sy * sz;
 
-            // Retail: components attach to the HousingRoomEntity (Housing/2 GUID),
-            // NOT to a root MeshObject. The Housing GUID is the entity that the
-            // layout editor uses for room pins (GetRoomGUID() validation).
             MeshObject* componentMesh = MeshObject::CreateMeshObject(this, compPos, compRot, 1.0f,
                 compFileDataID, /*isWMO*/ true,
                 roomHousingGuid, /*attachFlags*/ 3, &roomPos);
@@ -553,10 +552,10 @@ void HouseInteriorMap::UpdateRoomComponentVisuals(ObjectGuid roomGuid, int32 fac
         RoomComponentOptionEntry const* optEntry = sHousingMgr.FindRoomComponentOption(compEntry->MeshStyleFilterID, effectiveThemeID);
         if (!optEntry && effectiveThemeID != factionThemeID)
             optEntry = sHousingMgr.FindRoomComponentOption(compEntry->MeshStyleFilterID, factionThemeID);
-        if (!optEntry && factionThemeID != 3)
-            optEntry = sHousingMgr.FindRoomComponentOption(compEntry->MeshStyleFilterID, 3);
-        if (!optEntry && factionThemeID != 1)
-            optEntry = sHousingMgr.FindRoomComponentOption(compEntry->MeshStyleFilterID, 1);
+        if (!optEntry && factionThemeID != 8)
+            optEntry = sHousingMgr.FindRoomComponentOption(compEntry->MeshStyleFilterID, 8);
+        if (!optEntry && factionThemeID != 6)
+            optEntry = sHousingMgr.FindRoomComponentOption(compEntry->MeshStyleFilterID, 6);
 
         if (!optEntry)
             continue;
