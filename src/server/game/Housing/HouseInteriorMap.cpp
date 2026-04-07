@@ -244,18 +244,9 @@ void HouseInteriorMap::SpawnRoomMeshObjects(Housing* housing, int32 factionRestr
                 continue;
 
             // Look up RoomComponentOption for this component via MeshStyleFilterID.
-            // Sniff-verified: walls (Type=1) ALWAYS use base theme 2 (Rugged → sub-theme 8)
-            // regardless of faction. The Rugged wall WMOs are the neutral interior models
-            // designed to match the DB2 rotation values. Folk wall models face the wrong
-            // direction. Floors/ceilings use the faction theme (1=Folk for Alliance).
-            int32 lookupTheme;
-            if (comp.Type == HOUSING_ROOM_COMPONENT_WALL)
-                lookupTheme = 2; // Always Rugged for walls (sniff-verified)
-            else if (room->ThemeId != 0)
-                lookupTheme = static_cast<int32>(room->ThemeId);
-            else
-                lookupTheme = factionThemeID;
-
+            // Alliance sniff-verified: ALL components use faction theme (1=Folk → sub-theme 6).
+            // Horde uses theme 2 (Rugged → sub-theme 8). Each faction uses its OWN wall models.
+            int32 lookupTheme = (room->ThemeId != 0) ? static_cast<int32>(room->ThemeId) : factionThemeID;
             RoomComponentOptionEntry const* optEntry = sHousingMgr.FindRoomComponentOption(comp.MeshStyleFilterID, lookupTheme);
             if (!optEntry && lookupTheme != factionThemeID)
                 optEntry = sHousingMgr.FindRoomComponentOption(comp.MeshStyleFilterID, factionThemeID);
