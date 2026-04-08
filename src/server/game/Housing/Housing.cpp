@@ -125,6 +125,9 @@ bool Housing::LoadFromDB(PreparedQueryResult housing, PreparedQueryResult decor,
             room.Guid = roomGuid;
             room.RoomEntryId = roomEntryId;
             room.SlotIndex = fields[2].GetUInt32();
+            // GridX/GridY: backward compat — old rooms use linear layout (GridX=SlotIndex)
+            room.GridX = static_cast<int32>(room.SlotIndex);
+            room.GridY = 0;
             room.Orientation = fields[3].GetUInt32();
             room.Mirrored = fields[4].GetBool();
             room.ThemeId = fields[5].GetUInt32();
