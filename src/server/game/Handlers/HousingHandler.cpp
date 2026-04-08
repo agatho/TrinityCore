@@ -2314,48 +2314,52 @@ void WorldSession::HandleHousingRoomAdd(WorldPackets::Housing::HousingRoomAdd co
                     float sourceDoorOffset = 0.0f;
                     float newDoorOffset = 0.0f;
 
-                    // Find the new room's connecting door (opposite direction)
+                    // Find the new room's wall in the opposite direction.
+                    // Don't filter by ConnectionType — stairwell walls have CT=0.
+                    // Use the LARGEST offset wall (furthest boundary) for spacing.
                     HouseRoomData const* newRd = sHousingMgr.GetHouseRoomData(housingRoomAdd.HouseRoomID);
                     std::vector<RoomComponentData> const* newComps = newRd ? sHousingMgr.GetRoomComponents(newRd->RoomWmoDataID) : nullptr;
+
+                    // Helper: find the most extreme wall offset in a direction
+                    auto findMaxWallOffset = [&](std::vector<RoomComponentData> const* cs, int axis, bool negative) -> float
+                    {
+                        float best = 0.0f;
+                        if (!cs) return best;
+                        for (auto const& nc : *cs)
+                        {
+                            if (nc.Type != 1) continue; // walls only
+                            float v = (axis == 0) ? nc.OffsetPos[0] : nc.OffsetPos[1];
+                            if (negative && v < -0.5f && v < best) best = v;
+                            if (!negative && v > 0.5f && v > best) best = v;
+                        }
+                        return best;
+                    };
 
                     if (comp.OffsetPos[0] > 0.5f) // source door faces +X
                     {
                         sourceDoorOffset = comp.OffsetPos[0];
-                        // Find new room's -X door
-                        if (newComps)
-                            for (auto const& nc : *newComps)
-                                if (nc.Type == 1 && nc.ConnectionType != 0 && nc.OffsetPos[0] < -0.5f)
-                                    { newDoorOffset = nc.OffsetPos[0]; break; }
+                        newDoorOffset = findMaxWallOffset(newComps, 0, true); // -X wall
                         newGridX = room.GridX + static_cast<int32>(sourceDoorOffset - newDoorOffset);
                         newGridY = room.GridY;
                     }
                     else if (comp.OffsetPos[0] < -0.5f) // source door faces -X
                     {
                         sourceDoorOffset = comp.OffsetPos[0];
-                        if (newComps)
-                            for (auto const& nc : *newComps)
-                                if (nc.Type == 1 && nc.ConnectionType != 0 && nc.OffsetPos[0] > 0.5f)
-                                    { newDoorOffset = nc.OffsetPos[0]; break; }
+                        newDoorOffset = findMaxWallOffset(newComps, 0, false); // +X wall
                         newGridX = room.GridX + static_cast<int32>(sourceDoorOffset - newDoorOffset);
                         newGridY = room.GridY;
                     }
                     else if (comp.OffsetPos[1] > 0.5f) // source door faces +Y
                     {
                         sourceDoorOffset = comp.OffsetPos[1];
-                        if (newComps)
-                            for (auto const& nc : *newComps)
-                                if (nc.Type == 1 && nc.ConnectionType != 0 && nc.OffsetPos[1] < -0.5f)
-                                    { newDoorOffset = nc.OffsetPos[1]; break; }
+                        newDoorOffset = findMaxWallOffset(newComps, 1, true); // -Y wall
                         newGridX = room.GridX;
                         newGridY = room.GridY + static_cast<int32>(sourceDoorOffset - newDoorOffset);
                     }
                     else if (comp.OffsetPos[1] < -0.5f) // source door faces -Y
                     {
                         sourceDoorOffset = comp.OffsetPos[1];
-                        if (newComps)
-                            for (auto const& nc : *newComps)
-                                if (nc.Type == 1 && nc.ConnectionType != 0 && nc.OffsetPos[1] > 0.5f)
-                                    { newDoorOffset = nc.OffsetPos[1]; break; }
+                        newDoorOffset = findMaxWallOffset(newComps, 1, false); // +Y wall
                         newGridX = room.GridX;
                         newGridY = room.GridY + static_cast<int32>(sourceDoorOffset - newDoorOffset);
                     }
