@@ -132,10 +132,10 @@ bool Housing::LoadFromDB(PreparedQueryResult housing, PreparedQueryResult decor,
             room.ThemeId = fields[7].GetUInt32();
             room.WallpaperId = fields[8].GetUInt32();
             room.MaterialId = fields[9].GetUInt32();
-            room.DoorTypeId = fields[8].GetUInt32();
-            room.DoorSlot = fields[9].GetUInt8();
-            room.CeilingTypeId = fields[10].GetUInt32();
-            room.CeilingSlot = fields[11].GetUInt8();
+            room.DoorTypeId = fields[10].GetUInt32();
+            room.DoorSlot = fields[11].GetUInt8();
+            room.CeilingTypeId = fields[12].GetUInt32();
+            room.CeilingSlot = fields[13].GetUInt8();
 
             // Advance global generator if needed (safety net)
             uint64 expected = s_nextRoomDbId.load();

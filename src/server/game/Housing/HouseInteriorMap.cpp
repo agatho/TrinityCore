@@ -971,9 +971,9 @@ bool HouseInteriorMap::AddPlayerToMap(Player* player, bool initPlayer /*= true*/
 
                 for (Housing::Room const* room : housing->GetRooms())
                 {
-                    TC_LOG_ERROR("housing", "  Room: guid={} entryId={} slot={} orientation={} mirrored={}",
+                    TC_LOG_ERROR("housing", "  Room: guid={} entryId={} slot={} grid=({},{}) orientation={} mirrored={}",
                         room->Guid.ToString(), room->RoomEntryId, room->SlotIndex,
-                        room->Orientation, room->Mirrored);
+                        room->GridX, room->GridY, room->Orientation, room->Mirrored);
                 }
 
                 int32 faction = (player->GetTeamId() == TEAM_ALLIANCE)
