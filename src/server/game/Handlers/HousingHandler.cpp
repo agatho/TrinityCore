@@ -2492,9 +2492,34 @@ void WorldSession::HandleHousingRoomRotate(WorldPackets::Housing::HousingRoomRot
     SendPacket(response.Write());
 
     if (result == HOUSING_RESULT_SUCCESS)
-        // NOTE: RefreshInteriorRoomVisuals crashes (same-GUID DESTROY+CREATE).
-        // The client handles visual updates from the response packet.
-        // Full visual refresh happens on relog.
+    {
+        // Update the HousingRoomEntity's orientation in-place via UPDATE_OBJECT.
+        if (HouseInteriorMap* interiorMap = dynamic_cast<HouseInteriorMap*>(player->GetMap()))
+        {
+            auto const& rooms = housing->GetRoomsMap();
+            auto roomItr = rooms.find(housingRoomRotate.RoomGuid);
+            if (roomItr != rooms.end())
+            {
+                float newFacing = static_cast<float>(roomItr->second.Orientation) * (M_PI / 2.0f);
+                QuaternionData newRot;
+                newRot.x = 0.0f; newRot.y = 0.0f;
+                newRot.z = std::sin(newFacing / 2.0f);
+                newRot.w = std::cos(newFacing / 2.0f);
+
+                for (HousingRoomEntity* re : interiorMap->GetRoomEntities())
+                {
+                    if (re && re->IsInWorld() && re->GetGUID() == housingRoomRotate.RoomGuid)
+                    {
+                        float roomX = interiorMap->GetOriginX() + static_cast<float>(roomItr->second.GridX);
+                        float roomY = interiorMap->GetOriginY() + static_cast<float>(roomItr->second.GridY);
+                        Position roomPos(roomX, roomY, interiorMap->GetOriginZ(), newFacing);
+                        re->SetMirroredPosition(roomPos, newRot, 1.0f);
+                        break;
+                    }
+                }
+            }
+        }
+    }
 
     TC_LOG_INFO("housing", "CMSG_HOUSING_ROOM_ROTATE_ROOM RoomGuid: {}, Clockwise: {}, Result: {}",
         housingRoomRotate.RoomGuid.ToString(), housingRoomRotate.Clockwise, uint32(result));

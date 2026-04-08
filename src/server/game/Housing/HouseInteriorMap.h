@@ -41,6 +41,9 @@ public:
     void RemovePlayerFromMap(Player* player, bool remove) override;
 
     ObjectGuid GetOwnerGuid() const { return _owner; }
+    float GetOriginX() const { return _originX; }
+    float GetOriginY() const { return _originY; }
+    float GetOriginZ() const { return _originZ; }
 
     /// Get the Housing data for the owner (needed for room/decor state).
     Housing* GetOwnerHousing();
