@@ -1147,6 +1147,8 @@ class TC_GAME_API WorldSession
         uint32 GetBattlenetAccountId() const;
         ObjectGuid GetBattlenetAccountGUID() const;
         Battlenet::Account& GetBattlenetAccount() const { return *_battlenetAccount; }
+        bool HasHousingPlayerHouseEntity() const { return _housingPlayerHouseEntity != nullptr; }
+        bool HasHousingNeighborhoodMirrorEntity() const { return _housingNeighborhoodMirrorEntity != nullptr; }
         HousingPlayerHouseEntity& GetHousingPlayerHouseEntity() const { return *_housingPlayerHouseEntity; }
         HousingNeighborhoodMirrorEntity& GetHousingNeighborhoodMirrorEntity() const { return *_housingNeighborhoodMirrorEntity; }
         Player* GetPlayer() const { return _player; }

@@ -1556,8 +1556,10 @@ void Player::AddToWorld()
             m_items[i]->AddToWorld();
 
     GetSession()->GetBattlenetAccount().AddToWorld();
-    GetSession()->GetHousingPlayerHouseEntity().AddToWorld();
-    GetSession()->GetHousingNeighborhoodMirrorEntity().AddToWorld();
+    if (GetSession()->HasHousingPlayerHouseEntity())
+        GetSession()->GetHousingPlayerHouseEntity().AddToWorld();
+    if (GetSession()->HasHousingNeighborhoodMirrorEntity())
+        GetSession()->GetHousingNeighborhoodMirrorEntity().AddToWorld();
 }
 
 void Player::RemoveFromWorld()
@@ -1577,8 +1579,10 @@ void Player::RemoveFromWorld()
         sBattlefieldMgr->HandlePlayerLeaveZone(this, m_zoneUpdateId);
     }
 
-    GetSession()->GetHousingNeighborhoodMirrorEntity().RemoveFromWorld();
-    GetSession()->GetHousingPlayerHouseEntity().RemoveFromWorld();
+    if (GetSession()->HasHousingNeighborhoodMirrorEntity())
+        GetSession()->GetHousingNeighborhoodMirrorEntity().RemoveFromWorld();
+    if (GetSession()->HasHousingPlayerHouseEntity())
+        GetSession()->GetHousingPlayerHouseEntity().RemoveFromWorld();
     GetSession()->GetBattlenetAccount().RemoveFromWorld();
 
     // Remove items from world before self - player must be found in Item::RemoveFromObjectUpdate
