@@ -127,6 +127,9 @@ bool Housing::LoadFromDB(PreparedQueryResult housing, PreparedQueryResult decor,
             room.SlotIndex = fields[2].GetUInt32();
             room.GridX = fields[3].GetInt32();
             room.GridY = fields[4].GetInt32();
+            // Backward compat: if gridX looks like old grid index (0-20), convert to yards
+            if (room.GridX >= 0 && room.GridX <= 20 && room.GridX == static_cast<int32>(room.SlotIndex) && room.SlotIndex > 0)
+                room.GridX = static_cast<int32>(room.SlotIndex) * 15; // old linear: slot*15 yards
             room.Orientation = fields[5].GetUInt32();
             room.Mirrored = fields[6].GetBool();
             room.ThemeId = fields[7].GetUInt32();
@@ -630,7 +633,8 @@ HousingResult Housing::Create(ObjectGuid neighborhoodGuid, uint8 plotIndex)
     uint32 visualRoom = sHousingMgr.GetDefaultVisualRoomEntry();
     if (visualRoom)
     {
-        HousingResult visualResult = PlaceRoom(visualRoom, /*slotIndex*/ 1, /*orientation*/ 0, /*mirrored*/ false, nullptr, /*gridX*/ 1, /*gridY*/ 0);
+        // Entry door at +3, Room1 door at -12 → spacing = 3-(-12) = 15 yards
+        HousingResult visualResult = PlaceRoom(visualRoom, /*slotIndex*/ 1, /*orientation*/ 0, /*mirrored*/ false, nullptr, /*gridX*/ 15, /*gridY*/ 0);
         if (visualResult == HOUSING_RESULT_SUCCESS)
         {
             TC_LOG_ERROR("housing", "Housing::Create: Auto-placed visual room entry {} in slot 1 for player {}",

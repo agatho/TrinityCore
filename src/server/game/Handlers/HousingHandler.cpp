@@ -2306,17 +2306,59 @@ void WorldSession::HandleHousingRoomAdd(WorldPackets::Housing::HousingRoomAdd co
             {
                 if (comp.ID == doorCompId)
                 {
-                    // Found the door — determine direction from offset
-                    if (comp.OffsetPos[0] > 0.5f)
-                        { newGridX = room.GridX + 1; newGridY = room.GridY; }
-                    else if (comp.OffsetPos[0] < -0.5f)
-                        { newGridX = room.GridX - 1; newGridY = room.GridY; }
-                    else if (comp.OffsetPos[1] > 0.5f)
-                        { newGridX = room.GridX; newGridY = room.GridY + 1; }
-                    else if (comp.OffsetPos[1] < -0.5f)
-                        { newGridX = room.GridX; newGridY = room.GridY - 1; }
-                    else
-                        { newGridX = room.GridX + 1; newGridY = room.GridY; } // fallback
+                    // Compute new room position from door offsets.
+                    // newCenter = sourceCenter + sourceDoorOffset - newDoorOffset
+                    // where newDoorOffset is the OPPOSITE door of the new room.
+                    // Source door at +12 → new room's left door at -12 → spacing = 24.
+                    // Source door at +3 → new room's left door at -12 → spacing = 15.
+                    float sourceDoorOffset = 0.0f;
+                    float newDoorOffset = 0.0f;
+
+                    // Find the new room's connecting door (opposite direction)
+                    HouseRoomData const* newRd = sHousingMgr.GetHouseRoomData(housingRoomAdd.HouseRoomID);
+                    std::vector<RoomComponentData> const* newComps = newRd ? sHousingMgr.GetRoomComponents(newRd->RoomWmoDataID) : nullptr;
+
+                    if (comp.OffsetPos[0] > 0.5f) // source door faces +X
+                    {
+                        sourceDoorOffset = comp.OffsetPos[0];
+                        // Find new room's -X door
+                        if (newComps)
+                            for (auto const& nc : *newComps)
+                                if (nc.Type == 1 && nc.ConnectionType != 0 && nc.OffsetPos[0] < -0.5f)
+                                    { newDoorOffset = nc.OffsetPos[0]; break; }
+                        newGridX = room.GridX + static_cast<int32>(sourceDoorOffset - newDoorOffset);
+                        newGridY = room.GridY;
+                    }
+                    else if (comp.OffsetPos[0] < -0.5f) // source door faces -X
+                    {
+                        sourceDoorOffset = comp.OffsetPos[0];
+                        if (newComps)
+                            for (auto const& nc : *newComps)
+                                if (nc.Type == 1 && nc.ConnectionType != 0 && nc.OffsetPos[0] > 0.5f)
+                                    { newDoorOffset = nc.OffsetPos[0]; break; }
+                        newGridX = room.GridX + static_cast<int32>(sourceDoorOffset - newDoorOffset);
+                        newGridY = room.GridY;
+                    }
+                    else if (comp.OffsetPos[1] > 0.5f) // source door faces +Y
+                    {
+                        sourceDoorOffset = comp.OffsetPos[1];
+                        if (newComps)
+                            for (auto const& nc : *newComps)
+                                if (nc.Type == 1 && nc.ConnectionType != 0 && nc.OffsetPos[1] < -0.5f)
+                                    { newDoorOffset = nc.OffsetPos[1]; break; }
+                        newGridX = room.GridX;
+                        newGridY = room.GridY + static_cast<int32>(sourceDoorOffset - newDoorOffset);
+                    }
+                    else if (comp.OffsetPos[1] < -0.5f) // source door faces -Y
+                    {
+                        sourceDoorOffset = comp.OffsetPos[1];
+                        if (newComps)
+                            for (auto const& nc : *newComps)
+                                if (nc.Type == 1 && nc.ConnectionType != 0 && nc.OffsetPos[1] > 0.5f)
+                                    { newDoorOffset = nc.OffsetPos[1]; break; }
+                        newGridX = room.GridX;
+                        newGridY = room.GridY + static_cast<int32>(sourceDoorOffset - newDoorOffset);
+                    }
                     goto foundDoor;
                 }
             }

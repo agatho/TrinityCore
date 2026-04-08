@@ -187,12 +187,11 @@ void HouseInteriorMap::SpawnRoomMeshObjects(Housing* housing, int32 factionRestr
             roomWmoDataID, uint32(components->size()),
             geoMinX, geoMinY, geoMinZ, geoMaxX, geoMaxY, geoMaxZ);
 
-        // --- Calculate room world position from 2D grid ---
-        // Rooms are placed on a 2D grid. Entry is at (0,0). New rooms connect
-        // via doors at adjacent grid cells. Grid spacing = 15 yards (sniff-verified).
-        float spacing = sHousingMgr.GetRoomGridSpacing();
-        float roomX = _originX + static_cast<float>(room->GridX) * spacing;
-        float roomY = _originY + static_cast<float>(room->GridY) * spacing;
+        // --- Calculate room world position ---
+        // GridX/GridY store yard offsets from origin. Entry at (0,0), Room1 at (15,0).
+        // New rooms are positioned based on connecting door offsets (not fixed spacing).
+        float roomX = _originX + static_cast<float>(room->GridX);
+        float roomY = _originY + static_cast<float>(room->GridY);
         float roomZ = _originZ;
         float roomFacing = static_cast<float>(room->Orientation) * (M_PI / 2.0f);
 
@@ -915,7 +914,7 @@ bool HouseInteriorMap::AddPlayerToMap(Player* player, bool initPlayer /*= true*/
             HouseRoomData const* rd = sHousingMgr.GetHouseRoomData(room->RoomEntryId);
             if (rd && !rd->IsBaseRoom())
             {
-                float targetX = _originX + static_cast<float>(room->SlotIndex) * sHousingMgr.GetRoomGridSpacing();
+                float targetX = _originX + static_cast<float>(room->GridX);
                 player->Relocate(targetX, _originY, _originZ, player->GetOrientation());
                 break;
             }
@@ -997,7 +996,7 @@ bool HouseInteriorMap::AddPlayerToMap(Player* player, bool initPlayer /*= true*/
                 HouseRoomData const* roomData2 = sHousingMgr.GetHouseRoomData(room->RoomEntryId);
                 if (roomData2 && !roomData2->IsBaseRoom())
                 {
-                    float targetX = _originX + static_cast<float>(room->SlotIndex) * sHousingMgr.GetRoomGridSpacing();
+                    float targetX = _originX + static_cast<float>(room->GridX);
                     float targetY = _originY;
                     float targetZ = _originZ;
                     TC_LOG_ERROR("housing", "HouseInteriorMap::AddPlayerToMap: Teleporting player to visual room "
