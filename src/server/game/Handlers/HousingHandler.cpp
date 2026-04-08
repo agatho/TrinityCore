@@ -2346,6 +2346,21 @@ void WorldSession::HandleHousingRoomAdd(WorldPackets::Housing::HousingRoomAdd co
             // Spawn only the NEW room's entities (incremental).
             // SpawnRoomMeshObjects skips rooms with existing MeshObjects/RoomEntities.
             interiorMap->SpawnRoomMeshObjects(housing, faction);
+
+            // Update adjacent rooms' door connections in-place (UPDATE_OBJECT, no destroy+create).
+            // The new room's doors already reference existing rooms. But existing rooms' doors
+            // need their AttachedRoomGUID updated to point to the new room.
+            if (!newRoomGuid.IsEmpty())
+            {
+                // Find which door component was clicked and update the source room's entity
+                for (HousingRoomEntity* re : interiorMap->GetRoomEntities())
+                {
+                    if (!re || !re->IsInWorld())
+                        continue;
+                    if (re->UpdateDoorConnection(housingRoomAdd.TargetDoorComponentID, newRoomGuid))
+                        break;
+                }
+            }
         }
 
         WorldPackets::Housing::AccountRoomCollectionUpdate roomUpdate;

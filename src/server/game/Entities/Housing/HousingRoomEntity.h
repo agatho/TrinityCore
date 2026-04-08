@@ -57,6 +57,7 @@ public:
     void SetFloorIndex(int32 floorIndex);
     void AddMeshObject(ObjectGuid meshObjectGuid);
     void AddDoor(int32 roomComponentID, Position const& offset, uint8 connectionType, ObjectGuid attachedRoomGuid = ObjectGuid::Empty);
+    bool UpdateDoorConnection(int32 roomComponentID, ObjectGuid attachedRoomGuid);
 
     // Mirrored position data setters
     void SetMirroredPosition(Position const& pos, QuaternionData const& rot, float scale,

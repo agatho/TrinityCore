@@ -210,6 +210,26 @@ void HousingRoomEntity::AddDoor(int32 roomComponentID, Position const& offset, u
     doorRef.ModifyValue(&UF::HousingDoorData::AttachedRoomGUID).SetValue(attachedRoomGuid);
 }
 
+bool HousingRoomEntity::UpdateDoorConnection(int32 roomComponentID, ObjectGuid attachedRoomGuid)
+{
+    // Find the door with the matching component ID and update its AttachedRoomGUID.
+    // Read from the const view, then modify the matching entry.
+    UF::HousingRoomData const& roomData = *m_housingRoomData;
+    for (uint32 i = 0; i < roomData.Doors.size(); ++i)
+    {
+        if (roomData.Doors[i].RoomComponentID == roomComponentID)
+        {
+            SetUpdateFieldValue(
+                m_values.ModifyValue(&HousingRoomEntity::m_housingRoomData)
+                    .ModifyValue(&UF::HousingRoomData::Doors, i)
+                    .ModifyValue(&UF::HousingDoorData::AttachedRoomGUID),
+                attachedRoomGuid);
+            return true;
+        }
+    }
+    return false;
+}
+
 void HousingRoomEntity::SetMirroredPosition(Position const& pos, QuaternionData const& rot,
     float scale, ObjectGuid attachParent, uint8 attachFlags)
 {
