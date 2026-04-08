@@ -1216,8 +1216,29 @@ bool HouseInteriorMap::AddPlayerToMap(Player* player, bool initPlayer /*= true*/
                         }
                     }
 
+                    // 10) Spawn the interior exit door GO.
+                    // Sniff-verified: Alliance entry=575017, Horde entry=587318 at Entry room position.
+                    // These entries don't exist in our GO template DB — use 586576 (generic "Front Door")
+                    // which has type=10 (TRANSPORT) and displayId=116973. Position matches sniff.
+                    {
+                        static constexpr uint32 INTERIOR_DOOR_ENTRY = 586576;
+                        float doorX = _originX - 2.52f; // sniff: -1002.52 = -1000 - 2.52
+                        float doorY = _originY;
+                        float doorZ = _originZ + 0.02f;
+
+                        if (GameObject* doorGo = p->SummonGameObject(INTERIOR_DOOR_ENTRY,
+                            Position(doorX, doorY, doorZ, 0.0f), QuaternionData(0, 0, 0, 1), 0s))
+                        {
+                            doorGo->SetFlag(GO_FLAG_NODESPAWN);
+                            TC_LOG_ERROR("housing", "HouseInteriorMap deferred: Spawned interior exit door "
+                                "guid={} entry={} at ({:.1f},{:.1f},{:.1f}) for {}",
+                                doorGo->GetGUID().ToString(), INTERIOR_DOOR_ENTRY,
+                                doorX, doorY, doorZ, playerGuid.ToString());
+                        }
+                    }
+
                     TC_LOG_ERROR("housing", "HouseInteriorMap deferred: Complete — "
-                        "HouseInfo+Status+Perms+Auras+Account+Initiative+PlotAT+ENTER_PLOT for {}",
+                        "HouseInfo+Status+Perms+Auras+Account+Initiative+PlotAT+ENTER_PLOT+Door for {}",
                         playerGuid.ToString());
                 }, Milliseconds(500));
             }
