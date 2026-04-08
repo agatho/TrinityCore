@@ -626,7 +626,7 @@ HousingResult Housing::Create(ObjectGuid neighborhoodGuid, uint8 plotIndex)
     uint32 visualRoom = sHousingMgr.GetDefaultVisualRoomEntry();
     if (visualRoom)
     {
-        HousingResult visualResult = PlaceRoom(visualRoom, /*slotIndex*/ 1, /*orientation*/ 0, /*mirrored*/ false);
+        HousingResult visualResult = PlaceRoom(visualRoom, /*slotIndex*/ 1, /*orientation*/ 0, /*mirrored*/ false, nullptr, /*gridX*/ 1, /*gridY*/ 0);
         if (visualResult == HOUSING_RESULT_SUCCESS)
         {
             TC_LOG_ERROR("housing", "Housing::Create: Auto-placed visual room entry {} in slot 1 for player {}",
@@ -1291,7 +1291,7 @@ std::vector<Housing::PlacedDecor const*> Housing::GetAllPlacedDecor() const
     return result;
 }
 
-HousingResult Housing::PlaceRoom(uint32 roomEntryId, uint32 slotIndex, uint32 orientation, bool mirrored, ObjectGuid* outRoomGuid)
+HousingResult Housing::PlaceRoom(uint32 roomEntryId, uint32 slotIndex, uint32 orientation, bool mirrored, ObjectGuid* outRoomGuid, int32 gridX, int32 gridY)
 {
     if (_houseGuid.IsEmpty())
         return HOUSING_RESULT_HOUSE_NOT_FOUND;
@@ -1354,6 +1354,8 @@ HousingResult Housing::PlaceRoom(uint32 roomEntryId, uint32 slotIndex, uint32 or
     room.Guid = roomGuid;
     room.RoomEntryId = roomEntryId;
     room.SlotIndex = slotIndex;
+    room.GridX = gridX;
+    room.GridY = gridY;
     room.Orientation = orientation;
     room.Mirrored = mirrored;
     room.ThemeId = 0;

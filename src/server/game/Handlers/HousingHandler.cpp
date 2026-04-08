@@ -2284,18 +2284,52 @@ void WorldSession::HandleHousingRoomAdd(WorldPackets::Housing::HousingRoomAdd co
         return;
     }
 
-    // The CMSG sends TargetDoorComponentID (which door to connect at), not a slot index.
-    // Compute the next free slot — the new room goes adjacent to the door's owner room.
+    // The CMSG sends TargetDoorComponentID — find which room owns this door,
+    // determine the door's direction, and compute the 2D grid position for the new room.
+    int32 newGridX = 0, newGridY = 0;
     uint32 nextSlot = 0;
-    for (auto const& [guid, room] : housing->GetRoomsMap())
     {
-        if (room.SlotIndex >= nextSlot)
-            nextSlot = room.SlotIndex + 1;
+        // Find the source room that owns the target door component
+        uint32 doorCompId = housingRoomAdd.TargetDoorComponentID;
+        for (auto const& [guid, room] : housing->GetRoomsMap())
+        {
+            if (room.SlotIndex >= nextSlot)
+                nextSlot = room.SlotIndex + 1;
+
+            // Check if this room contains the target door component
+            HouseRoomData const* rd = sHousingMgr.GetHouseRoomData(room.RoomEntryId);
+            if (!rd) continue;
+            std::vector<RoomComponentData> const* comps = sHousingMgr.GetRoomComponents(rd->RoomWmoDataID);
+            if (!comps) continue;
+
+            for (auto const& comp : *comps)
+            {
+                if (comp.ID == doorCompId)
+                {
+                    // Found the door — determine direction from offset
+                    if (comp.OffsetPos[0] > 0.5f)
+                        { newGridX = room.GridX + 1; newGridY = room.GridY; }
+                    else if (comp.OffsetPos[0] < -0.5f)
+                        { newGridX = room.GridX - 1; newGridY = room.GridY; }
+                    else if (comp.OffsetPos[1] > 0.5f)
+                        { newGridX = room.GridX; newGridY = room.GridY + 1; }
+                    else if (comp.OffsetPos[1] < -0.5f)
+                        { newGridX = room.GridX; newGridY = room.GridY - 1; }
+                    else
+                        { newGridX = room.GridX + 1; newGridY = room.GridY; } // fallback
+                    goto foundDoor;
+                }
+            }
+        }
+        // Fallback: stack linearly if door not found
+        newGridX = static_cast<int32>(nextSlot);
+        newGridY = 0;
+        foundDoor:;
     }
 
     ObjectGuid newRoomGuid;
     HousingResult result = housing->PlaceRoom(housingRoomAdd.HouseRoomID, nextSlot,
-        /*orientation*/ 0, /*mirrored*/ false, &newRoomGuid);
+        /*orientation*/ 0, /*mirrored*/ false, &newRoomGuid, newGridX, newGridY);
 
     WorldPackets::Housing::HousingRoomAddResponse response;
     response.Result = static_cast<uint8>(result);

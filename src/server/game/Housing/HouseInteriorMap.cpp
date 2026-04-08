@@ -120,11 +120,12 @@ void HouseInteriorMap::SpawnRoomMeshObjects(Housing* housing, int32 factionRestr
     int32 factionThemeID = sHousingMgr.GetFactionDefaultThemeID(factionRestriction);
     uint32 totalMeshes = 0;
 
-    // Build slot→GUID mapping so we can resolve AttachedRoomGUID for door connections.
-    // Retail sniff shows adjacent rooms reference each other (e.g. Room 1 door[0] → Room 46 GUID).
-    std::unordered_map<uint32 /*slotIndex*/, ObjectGuid /*roomHousingGuid*/> slotToRoomGuid;
+    // Build grid→GUID mapping so we can resolve AttachedRoomGUID for door connections.
+    // Key encodes 2D grid pos: (gridX+100)*1000 + (gridY+100) to avoid negative key issues.
+    auto gridKey = [](int32 gx, int32 gy) -> uint64 { return uint64(gx + 1000) * 10000 + uint64(gy + 1000); };
+    std::unordered_map<uint64, ObjectGuid> gridToRoomGuid;
     for (Housing::Room const* r : rooms)
-        slotToRoomGuid[r->SlotIndex] = r->Guid;
+        gridToRoomGuid[gridKey(r->GridX, r->GridY)] = r->Guid;
 
     TC_LOG_ERROR("housing", "HouseInteriorMap::SpawnRoomMeshObjects: Starting spawn for {} rooms "
         "(owner={}, factionThemeID={}, houseGuid={})",
@@ -186,10 +187,12 @@ void HouseInteriorMap::SpawnRoomMeshObjects(Housing* housing, int32 factionRestr
             roomWmoDataID, uint32(components->size()),
             geoMinX, geoMinY, geoMinZ, geoMaxX, geoMaxY, geoMaxZ);
 
-        // --- Calculate room world position ---
-
-        float roomX = _originX + static_cast<float>(room->SlotIndex) * sHousingMgr.GetRoomGridSpacing();
-        float roomY = _originY;
+        // --- Calculate room world position from 2D grid ---
+        // Rooms are placed on a 2D grid. Entry is at (0,0). New rooms connect
+        // via doors at adjacent grid cells. Grid spacing = 15 yards (sniff-verified).
+        float spacing = sHousingMgr.GetRoomGridSpacing();
+        float roomX = _originX + static_cast<float>(room->GridX) * spacing;
+        float roomY = _originY + static_cast<float>(room->GridY) * spacing;
         float roomZ = _originZ;
         float roomFacing = static_cast<float>(room->Orientation) * (M_PI / 2.0f);
 
@@ -282,9 +285,9 @@ void HouseInteriorMap::SpawnRoomMeshObjects(Housing* housing, int32 factionRestr
             if (isDoorComponent)
             {
                 // Check if this door faces an adjacent room
-                if (comp.OffsetPos[0] > 0.5f && slotToRoomGuid.count(room->SlotIndex + 1))
+                if (comp.OffsetPos[0] > 0.5f && gridToRoomGuid.count(gridKey(room->GridX + 1, room->GridY)))
                     hasConnectedRoom = true;
-                else if (comp.OffsetPos[0] < -0.5f && slotToRoomGuid.count(room->SlotIndex - 1))
+                else if (comp.OffsetPos[0] < -0.5f && gridToRoomGuid.count(gridKey(room->GridX - 1, room->GridY)))
                     hasConnectedRoom = true;
             }
 
@@ -419,17 +422,30 @@ void HouseInteriorMap::SpawnRoomMeshObjects(Housing* housing, int32 factionRestr
                 if (!isDoor)
                     continue;
 
+                // Determine which adjacent grid cell this door faces
                 ObjectGuid attachedRoomGuid;
-                if (comp.OffsetPos[0] > 0.5f)
+                if (comp.OffsetPos[0] > 0.5f) // +X door
                 {
-                    auto itr = slotToRoomGuid.find(room->SlotIndex + 1);
-                    if (itr != slotToRoomGuid.end())
+                    auto itr = gridToRoomGuid.find(gridKey(room->GridX + 1, room->GridY));
+                    if (itr != gridToRoomGuid.end())
                         attachedRoomGuid = itr->second;
                 }
-                else if (comp.OffsetPos[0] < -0.5f)
+                else if (comp.OffsetPos[0] < -0.5f) // -X door
                 {
-                    auto itr = slotToRoomGuid.find(room->SlotIndex - 1);
-                    if (itr != slotToRoomGuid.end())
+                    auto itr = gridToRoomGuid.find(gridKey(room->GridX - 1, room->GridY));
+                    if (itr != gridToRoomGuid.end())
+                        attachedRoomGuid = itr->second;
+                }
+                else if (comp.OffsetPos[1] > 0.5f) // +Y door
+                {
+                    auto itr = gridToRoomGuid.find(gridKey(room->GridX, room->GridY + 1));
+                    if (itr != gridToRoomGuid.end())
+                        attachedRoomGuid = itr->second;
+                }
+                else if (comp.OffsetPos[1] < -0.5f) // -Y door
+                {
+                    auto itr = gridToRoomGuid.find(gridKey(room->GridX, room->GridY - 1));
+                    if (itr != gridToRoomGuid.end())
                         attachedRoomGuid = itr->second;
                 }
 
