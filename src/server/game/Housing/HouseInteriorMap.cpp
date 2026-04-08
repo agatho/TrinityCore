@@ -1361,7 +1361,6 @@ bool HouseInteriorMap::AddPlayerToMap(Player* player, bool initPlayer /*= true*/
                             Position(doorX, doorY, doorZ, 0.0f), QuaternionData(0, 0, 0, 1), 0s))
                         {
                             doorGo->ReplaceAllFlags(GameObjectFlags(0x40000));
-                            doorGo->SetOwnerGUID(houseGuid);
                             TC_LOG_ERROR("housing", "HouseInteriorMap deferred: Spawned interior exit door "
                                 "guid={} entry={} at ({:.1f},{:.1f},{:.1f}) for {}",
                                 doorGo->GetGUID().ToString(), INTERIOR_DOOR_ENTRY,
