@@ -2470,7 +2470,9 @@ void WorldSession::HandleHousingRoomRotate(WorldPackets::Housing::HousingRoomRot
     SendPacket(response.Write());
 
     if (result == HOUSING_RESULT_SUCCESS)
-        RefreshInteriorRoomVisuals(player, housing);
+        // NOTE: RefreshInteriorRoomVisuals crashes (same-GUID DESTROY+CREATE).
+        // The client handles visual updates from the response packet.
+        // Full visual refresh happens on relog.
 
     TC_LOG_INFO("housing", "CMSG_HOUSING_ROOM_ROTATE_ROOM RoomGuid: {}, Clockwise: {}, Result: {}",
         housingRoomRotate.RoomGuid.ToString(), housingRoomRotate.Clockwise, uint32(result));
@@ -2500,7 +2502,9 @@ void WorldSession::HandleHousingRoomMoveRoom(WorldPackets::Housing::HousingRoomM
     SendPacket(response.Write());
 
     if (result == HOUSING_RESULT_SUCCESS)
-        RefreshInteriorRoomVisuals(player, housing);
+        // NOTE: RefreshInteriorRoomVisuals crashes (same-GUID DESTROY+CREATE).
+        // The client handles visual updates from the response packet.
+        // Full visual refresh happens on relog.
 
     TC_LOG_INFO("housing", "CMSG_HOUSING_ROOM_MOVE RoomGuid: {}, TargetSlotIndex: {}, Result: {}",
         housingRoomMoveRoom.RoomGuid.ToString(), housingRoomMoveRoom.TargetSlotIndex, uint32(result));
@@ -2620,7 +2624,9 @@ void WorldSession::HandleHousingRoomSetDoorType(WorldPackets::Housing::HousingRo
     SendPacket(response.Write());
 
     if (result == HOUSING_RESULT_SUCCESS)
-        RefreshInteriorRoomVisuals(player, housing);
+        // NOTE: RefreshInteriorRoomVisuals crashes (same-GUID DESTROY+CREATE).
+        // The client handles visual updates from the response packet.
+        // Full visual refresh happens on relog.
 
     TC_LOG_INFO("housing", "CMSG_HOUSING_ROOM_SET_DOOR_TYPE RoomGuid: {}, RoomComponentID: {}, Result: {}",
         housingRoomSetDoorType.RoomGuid.ToString(), housingRoomSetDoorType.RoomComponentID, uint32(result));
@@ -2652,7 +2658,9 @@ void WorldSession::HandleHousingRoomSetCeilingType(WorldPackets::Housing::Housin
     SendPacket(response.Write());
 
     if (result == HOUSING_RESULT_SUCCESS)
-        RefreshInteriorRoomVisuals(player, housing);
+        // NOTE: RefreshInteriorRoomVisuals crashes (same-GUID DESTROY+CREATE).
+        // The client handles visual updates from the response packet.
+        // Full visual refresh happens on relog.
 
     TC_LOG_INFO("housing", "CMSG_HOUSING_ROOM_SET_CEILING_TYPE RoomGuid: {}, RoomComponentID: {}, Result: {}",
         housingRoomSetCeilingType.RoomGuid.ToString(), housingRoomSetCeilingType.RoomComponentID, uint32(result));
