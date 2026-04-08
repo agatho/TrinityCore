@@ -2343,19 +2343,8 @@ void WorldSession::HandleHousingRoomAdd(WorldPackets::Housing::HousingRoomAdd co
             int32 faction = (player->GetTeamId() == TEAM_ALLIANCE)
                 ? NEIGHBORHOOD_FACTION_ALLIANCE : NEIGHBORHOOD_FACTION_HORDE;
 
-            // Despawn ALL HousingRoomEntities so door connections get recalculated.
-            // Adjacent rooms need updated AttachedRoomGUID on their connecting doors.
-            // Without this, the client's CanRemove() sees stale connections and blocks
-            // removal of newly added rooms ("more than one connected door").
-            for (HousingRoomEntity* re : interiorMap->GetRoomEntities())
-            {
-                if (re && re->IsInWorld())
-                    interiorMap->RemoveFromMap(re, true);
-            }
-            const_cast<std::vector<HousingRoomEntity*>&>(interiorMap->GetRoomEntities()).clear();
-
-            // SpawnRoomMeshObjects: skips rooms with existing MeshObjects (components stay),
-            // but creates fresh HousingRoomEntities for ALL rooms with updated door data.
+            // Spawn only the NEW room's entities (incremental).
+            // SpawnRoomMeshObjects skips rooms with existing MeshObjects/RoomEntities.
             interiorMap->SpawnRoomMeshObjects(housing, faction);
         }
 
