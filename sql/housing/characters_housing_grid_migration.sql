@@ -5,5 +5,6 @@ ALTER TABLE `character_housing_rooms`
   ADD COLUMN IF NOT EXISTS `gridX` INT NOT NULL DEFAULT 0 AFTER `slotIndex`,
   ADD COLUMN IF NOT EXISTS `gridY` INT NOT NULL DEFAULT 0 AFTER `gridX`;
 
--- Migrate existing rooms: linear layout → gridX = slotIndex, gridY = 0
-UPDATE `character_housing_rooms` SET `gridX` = `slotIndex`, `gridY` = 0 WHERE `gridX` = 0 AND `gridY` = 0;
+-- Migrate ALL existing rooms: linear layout → gridX = slotIndex, gridY = 0
+-- This is safe to run multiple times (idempotent for linear layouts)
+UPDATE `character_housing_rooms` SET `gridX` = CAST(`slotIndex` AS SIGNED), `gridY` = 0;
