@@ -2281,7 +2281,7 @@ void WorldSession::HandleHousingRoomAdd(WorldPackets::Housing::HousingRoomAdd co
 
     // The CMSG sends TargetDoorComponentID — find which room owns this door,
     // determine the door's direction, and compute the 2D grid position for the new room.
-    int32 newGridX = 0, newGridY = 0;
+    int32 newGridX = 0, newGridY = 0, newFloorIndex = 0;
     uint32 nextSlot = 0;
     {
         // Find the source room that owns the target door component
@@ -2358,6 +2358,19 @@ void WorldSession::HandleHousingRoomAdd(WorldPackets::Housing::HousingRoomAdd co
                         newGridX = room.GridX;
                         newGridY = room.GridY + static_cast<int32>(sourceDoorOffset - newDoorOffset);
                     }
+                    // Check if the new room is a stairwell — place on a different floor
+                    HouseRoomData const* newRoomData = sHousingMgr.GetHouseRoomData(housingRoomAdd.HouseRoomID);
+                    if (newRoomData && newRoomData->HasStairs())
+                    {
+                        // Stairwell: same grid position as source, but FloorIndex+1
+                        newGridX = room.GridX;
+                        newGridY = room.GridY;
+                        newFloorIndex = room.FloorIndex + 1;
+                    }
+                    else
+                    {
+                        newFloorIndex = room.FloorIndex; // same floor as source
+                    }
                     goto foundDoor;
                 }
             }
@@ -2370,7 +2383,7 @@ void WorldSession::HandleHousingRoomAdd(WorldPackets::Housing::HousingRoomAdd co
 
     ObjectGuid newRoomGuid;
     HousingResult result = housing->PlaceRoom(housingRoomAdd.HouseRoomID, nextSlot,
-        /*orientation*/ 0, /*mirrored*/ false, &newRoomGuid, newGridX, newGridY);
+        /*orientation*/ 0, /*mirrored*/ false, &newRoomGuid, newGridX, newGridY, newFloorIndex);
 
     WorldPackets::Housing::HousingRoomAddResponse response;
     response.Result = static_cast<uint8>(result);

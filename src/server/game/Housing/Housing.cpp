@@ -101,8 +101,8 @@ bool Housing::LoadFromDB(PreparedQueryResult housing, PreparedQueryResult decor,
     _houseDescription = fields[15].GetString();
 
     // Load rooms FIRST so decor can look up roomEntryId for GUID arg2
-    //           0         1            2           3       4       5            6         7        8             9          10          11        12              13
-    // SELECT roomGuid, roomEntryId, slotIndex, gridX, gridY, orientation, mirrored, themeId, wallpaperId, materialId, doorTypeId, doorSlot, ceilingTypeId, ceilingSlot
+    //           0         1            2           3       4       5           6            7         8        9             10         11          12        13              14
+    // SELECT roomGuid, roomEntryId, slotIndex, gridX, gridY, floorIndex, orientation, mirrored, themeId, wallpaperId, materialId, doorTypeId, doorSlot, ceilingTypeId, ceilingSlot
     // FROM character_housing_rooms WHERE ownerGuid = ?
     if (rooms)
     {
@@ -127,18 +127,19 @@ bool Housing::LoadFromDB(PreparedQueryResult housing, PreparedQueryResult decor,
             room.SlotIndex = fields[2].GetUInt32();
             room.GridX = fields[3].GetInt32();
             room.GridY = fields[4].GetInt32();
+            room.FloorIndex = fields[5].GetInt32();
             // Backward compat: if gridX looks like old grid index (0-20), convert to yards
             if (room.GridX >= 0 && room.GridX <= 20 && room.GridX == static_cast<int32>(room.SlotIndex) && room.SlotIndex > 0)
-                room.GridX = static_cast<int32>(room.SlotIndex) * 15; // old linear: slot*15 yards
-            room.Orientation = fields[5].GetUInt32();
-            room.Mirrored = fields[6].GetBool();
-            room.ThemeId = fields[7].GetUInt32();
-            room.WallpaperId = fields[8].GetUInt32();
-            room.MaterialId = fields[9].GetUInt32();
-            room.DoorTypeId = fields[10].GetUInt32();
-            room.DoorSlot = fields[11].GetUInt8();
-            room.CeilingTypeId = fields[12].GetUInt32();
-            room.CeilingSlot = fields[13].GetUInt8();
+                room.GridX = static_cast<int32>(room.SlotIndex) * 15;
+            room.Orientation = fields[6].GetUInt32();
+            room.Mirrored = fields[7].GetBool();
+            room.ThemeId = fields[8].GetUInt32();
+            room.WallpaperId = fields[9].GetUInt32();
+            room.MaterialId = fields[10].GetUInt32();
+            room.DoorTypeId = fields[11].GetUInt32();
+            room.DoorSlot = fields[12].GetUInt8();
+            room.CeilingTypeId = fields[13].GetUInt32();
+            room.CeilingSlot = fields[14].GetUInt8();
 
             // Advance global generator if needed (safety net)
             uint64 expected = s_nextRoomDbId.load();
@@ -495,6 +496,7 @@ void Housing::SaveToDB(CharacterDatabaseTransaction trans)
         stmt->setUInt32(index++, room.SlotIndex);
         stmt->setInt32(index++, room.GridX);
         stmt->setInt32(index++, room.GridY);
+        stmt->setInt32(index++, room.FloorIndex);
         stmt->setUInt32(index++, room.Orientation);
         stmt->setBool(index++, room.Mirrored);
         stmt->setUInt32(index++, room.ThemeId);
@@ -1284,7 +1286,7 @@ std::vector<Housing::PlacedDecor const*> Housing::GetAllPlacedDecor() const
     return result;
 }
 
-HousingResult Housing::PlaceRoom(uint32 roomEntryId, uint32 slotIndex, uint32 orientation, bool mirrored, ObjectGuid* outRoomGuid, int32 gridX, int32 gridY)
+HousingResult Housing::PlaceRoom(uint32 roomEntryId, uint32 slotIndex, uint32 orientation, bool mirrored, ObjectGuid* outRoomGuid, int32 gridX, int32 gridY, int32 floorIndex)
 {
     if (_houseGuid.IsEmpty())
         return HOUSING_RESULT_HOUSE_NOT_FOUND;
@@ -1349,6 +1351,7 @@ HousingResult Housing::PlaceRoom(uint32 roomEntryId, uint32 slotIndex, uint32 or
     room.SlotIndex = slotIndex;
     room.GridX = gridX;
     room.GridY = gridY;
+    room.FloorIndex = floorIndex;
     room.Orientation = orientation;
     room.Mirrored = mirrored;
     room.ThemeId = 0;

@@ -208,11 +208,12 @@ void HouseInteriorMap::SpawnRoomMeshObjects(Housing* housing, int32 factionRestr
             geoMinX, geoMinY, geoMinZ, geoMaxX, geoMaxY, geoMaxZ);
 
         // --- Calculate room world position ---
-        // GridX/GridY store yard offsets from origin. Entry at (0,0), Room1 at (15,0).
-        // New rooms are positioned based on connecting door offsets (not fixed spacing).
+        // GridX/GridY = yard offsets. FloorIndex = vertical floor (0=ground, 1+=upper).
+        // Floor height from RoomWmoData.Height (typically 7.0 yards per floor).
+        float ceilingHeight = wmoData ? wmoData->Height : 7.0f;
         float roomX = _originX + static_cast<float>(room->GridX);
         float roomY = _originY + static_cast<float>(room->GridY);
-        float roomZ = _originZ;
+        float roomZ = _originZ + static_cast<float>(room->FloorIndex) * ceilingHeight;
         float roomFacing = static_cast<float>(room->Orientation) * (M_PI / 2.0f);
 
         Position roomPos(roomX, roomY, roomZ, roomFacing);
@@ -229,7 +230,7 @@ void HouseInteriorMap::SpawnRoomMeshObjects(Housing* housing, int32 factionRestr
         GridMarkNoUnload(roomGrid.x_coord, roomGrid.y_coord);
 
         int32 roomFlags = roomData->IsBaseRoom() ? 1 : 0;
-        int32 floorIndex = 0;
+        int32 floorIndex = room->FloorIndex;
         ObjectGuid roomHousingGuid = room->Guid; // Housing/2 GUID for attach parent
 
         // --- Phase 1: Create HousingRoomEntity FIRST ---

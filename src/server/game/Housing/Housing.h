@@ -60,8 +60,9 @@ public:
         ObjectGuid Guid;
         uint32 RoomEntryId = 0;
         uint32 SlotIndex = 0;
-        int32 GridX = 0;        // 2D grid position (rooms connect via doors)
+        int32 GridX = 0;        // 2D grid position (yard offsets from origin)
         int32 GridY = 0;
+        int32 FloorIndex = 0;  // 0=ground, 1+=upper floors
         uint32 Orientation = 0;
         bool Mirrored = false;
         uint32 ThemeId = 0;
@@ -146,7 +147,7 @@ public:
     uint32 PlaceStarterDecor();
 
     // Room operations
-    HousingResult PlaceRoom(uint32 roomEntryId, uint32 slotIndex, uint32 orientation, bool mirrored, ObjectGuid* outRoomGuid = nullptr, int32 gridX = 0, int32 gridY = 0);
+    HousingResult PlaceRoom(uint32 roomEntryId, uint32 slotIndex, uint32 orientation, bool mirrored, ObjectGuid* outRoomGuid = nullptr, int32 gridX = 0, int32 gridY = 0, int32 floorIndex = 0);
     HousingResult RemoveRoom(ObjectGuid roomGuid);
     HousingResult RotateRoom(ObjectGuid roomGuid, bool clockwise);
     HousingResult MoveRoom(ObjectGuid roomGuid, uint32 newSlotIndex, ObjectGuid swapRoomGuid, uint32 swapSlotIndex);
