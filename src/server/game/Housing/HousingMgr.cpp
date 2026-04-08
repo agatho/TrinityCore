@@ -1698,6 +1698,16 @@ int32 HousingMgr::GetDefaultSubThemeID(int32 baseThemeID) const
     }
 }
 
+int32 HousingMgr::GetBaseThemeID(int32 themeID) const
+{
+    // Convert a sub-theme (e.g., 20=Folk Light) to its base theme (1=Folk).
+    // Sub-themes have ParentThemeID != 0. Base themes have ParentThemeID = 0.
+    auto itr = _houseThemeStore.find(themeID);
+    if (itr != _houseThemeStore.end() && itr->second.ParentThemeID != 0)
+        return itr->second.ParentThemeID;
+    return themeID; // already a base theme or not found
+}
+
 RoomComponentOptionEntry const* HousingMgr::FindRoomComponentOption(int32 meshStyleFilterID, int32 houseThemeID) const
 {
     // Returns the Type=0 (Cosmetic) option for the given (MSFID, theme).

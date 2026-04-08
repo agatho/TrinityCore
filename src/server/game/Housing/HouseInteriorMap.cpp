@@ -667,7 +667,10 @@ void HouseInteriorMap::UpdateRoomComponentVisuals(ObjectGuid roomGuid, int32 fac
         return;
 
     int32 factionThemeID = sHousingMgr.GetFactionDefaultThemeID(factionRestriction);
-    int32 effectiveThemeID = (room.ThemeId != 0) ? static_cast<int32>(room.ThemeId) : factionThemeID;
+    // Convert sub-theme (e.g., 20=Folk Light) to base theme (1=Folk) for option lookup.
+    // The entity field gets the actual sub-theme, but DB2 options are keyed by base theme.
+    int32 selectedTheme = (room.ThemeId != 0) ? static_cast<int32>(room.ThemeId) : factionThemeID;
+    int32 effectiveThemeID = sHousingMgr.GetBaseThemeID(selectedTheme);
 
     for (ObjectGuid const& meshGuid : itr->second)
     {
@@ -700,9 +703,10 @@ void HouseInteriorMap::UpdateRoomComponentVisuals(ObjectGuid roomGuid, int32 fac
             ? static_cast<int32>(room.WallpaperId)
             : sHousingMgr.GetTextureIdForComponentOption(static_cast<int32>(optEntry->ID));
 
+        // Entity gets the SELECTED sub-theme (e.g., 20=Folk Light), not the base
         mesh->UpdateRoomComponentVisuals(
             static_cast<int32>(optEntry->ID),
-            sHousingMgr.GetDefaultSubThemeID(optEntry->HouseThemeID),
+            (room.ThemeId != 0) ? static_cast<int32>(room.ThemeId) : sHousingMgr.GetDefaultSubThemeID(optEntry->HouseThemeID),
             textureID);
     }
 

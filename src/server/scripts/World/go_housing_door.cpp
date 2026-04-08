@@ -25,6 +25,7 @@
 #include "HousingMgr.h"
 #include "HousingPackets.h"
 #include "Neighborhood.h"
+#include "NeighborhoodMgr.h"
 #include "ObjectAccessor.h"
 #include "Player.h"
 #include "SocialMgr.h"
@@ -63,18 +64,23 @@ public:
             HouseInteriorMap* interiorMap = dynamic_cast<HouseInteriorMap*>(me->GetMap());
             if (interiorMap)
             {
-                // Teleport player back to the neighborhood map (exterior)
-                uint32 destMapId = interiorMap->GetSourceNeighborhoodMapId();
-                if (destMapId == 0)
-                    destMapId = 2735; // fallback: Alliance neighborhood
+                Housing* housing = player->GetHousing();
+                if (!housing)
+                    return true;
 
-                // Use the plot's house position for the exit point
-                uint8 plotIndex = interiorMap->GetSourcePlotIndex();
-                std::vector<NeighborhoodPlotData const*> plots = sHousingMgr.GetPlotsForMap(destMapId);
+                // Get neighborhood map from the player's housing data
+                Neighborhood* nbh = sNeighborhoodMgr.GetNeighborhood(housing->GetNeighborhoodGuid());
+                uint32 destMapId = nbh ? sHousingMgr.GetWorldMapIdByNeighborhoodMapId(nbh->GetNeighborhoodMapID()) : 2735;
+                if (destMapId == 0)
+                    destMapId = 2735;
+
+                // Find the player's plot position on the exterior map
+                uint32 nbhMapId = nbh ? nbh->GetNeighborhoodMapID() : 2;
+                std::vector<NeighborhoodPlotData const*> plots = sHousingMgr.GetPlotsForMap(nbhMapId);
                 float exitX = 0, exitY = 0, exitZ = 0;
                 for (NeighborhoodPlotData const* plot : plots)
                 {
-                    if (plot->PlotIndex == plotIndex)
+                    if (plot->PlotIndex == housing->GetPlotIndex())
                     {
                         exitX = plot->HousePosition[0];
                         exitY = plot->HousePosition[1];
@@ -83,8 +89,8 @@ public:
                     }
                 }
 
-                TC_LOG_DEBUG("housing", "go_housing_door: Teleporting {} from interior to map {} at ({:.1f},{:.1f},{:.1f})",
-                    player->GetGUID().ToString(), destMapId, exitX, exitY, exitZ);
+                TC_LOG_DEBUG("housing", "go_housing_door: Teleporting {} from interior to map {} plot {} at ({:.1f},{:.1f},{:.1f})",
+                    player->GetGUID().ToString(), destMapId, housing->GetPlotIndex(), exitX, exitY, exitZ);
                 player->TeleportTo(destMapId, exitX, exitY, exitZ, player->GetOrientation());
                 return true;
             }
