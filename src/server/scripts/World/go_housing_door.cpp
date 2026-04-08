@@ -19,6 +19,7 @@
 #include "GameObjectAI.h"
 #include "Group.h"
 #include "Guild.h"
+#include "HouseInteriorMap.h"
 #include "Housing.h"
 #include "HousingMap.h"
 #include "HousingMgr.h"
@@ -58,10 +59,40 @@ public:
             if (!player || !player->IsInWorld())
                 return true;
 
+            // Check if we're on the INTERIOR map — teleport back to exterior
+            HouseInteriorMap* interiorMap = dynamic_cast<HouseInteriorMap*>(me->GetMap());
+            if (interiorMap)
+            {
+                // Teleport player back to the neighborhood map (exterior)
+                uint32 destMapId = interiorMap->GetSourceNeighborhoodMapId();
+                if (destMapId == 0)
+                    destMapId = 2735; // fallback: Alliance neighborhood
+
+                // Use the plot's house position for the exit point
+                uint8 plotIndex = interiorMap->GetSourcePlotIndex();
+                std::vector<NeighborhoodPlotData const*> plots = sHousingMgr.GetPlotsForMap(destMapId);
+                float exitX = 0, exitY = 0, exitZ = 0;
+                for (NeighborhoodPlotData const* plot : plots)
+                {
+                    if (plot->PlotIndex == plotIndex)
+                    {
+                        exitX = plot->HousePosition[0];
+                        exitY = plot->HousePosition[1];
+                        exitZ = plot->HousePosition[2];
+                        break;
+                    }
+                }
+
+                TC_LOG_DEBUG("housing", "go_housing_door: Teleporting {} from interior to map {} at ({:.1f},{:.1f},{:.1f})",
+                    player->GetGUID().ToString(), destMapId, exitX, exitY, exitZ);
+                player->TeleportTo(destMapId, exitX, exitY, exitZ, player->GetOrientation());
+                return true;
+            }
+
             HousingMap* housingMap = dynamic_cast<HousingMap*>(me->GetMap());
             if (!housingMap)
             {
-                TC_LOG_ERROR("housing", "go_housing_door: Map {} is NOT a HousingMap", me->GetMapId());
+                TC_LOG_ERROR("housing", "go_housing_door: Map {} is NOT a HousingMap or HouseInteriorMap", me->GetMapId());
                 return true;
             }
 
