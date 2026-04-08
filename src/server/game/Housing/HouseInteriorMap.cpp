@@ -120,12 +120,32 @@ void HouseInteriorMap::SpawnRoomMeshObjects(Housing* housing, int32 factionRestr
     int32 factionThemeID = sHousingMgr.GetFactionDefaultThemeID(factionRestriction);
     uint32 totalMeshes = 0;
 
-    // Build grid→GUID mapping so we can resolve AttachedRoomGUID for door connections.
-    // Key encodes 2D grid pos: (gridX+100)*1000 + (gridY+100) to avoid negative key issues.
-    auto gridKey = [](int32 gx, int32 gy) -> uint64 { return uint64(gx + 1000) * 10000 + uint64(gy + 1000); };
-    std::unordered_map<uint64, ObjectGuid> gridToRoomGuid;
+    // Build position→GUID mapping for door connection resolution.
+    // Key encodes yard position: (gridX+10000)*100000 + (gridY+10000)
+    auto posKey = [](int32 gx, int32 gy) -> uint64 { return uint64(gx + 10000) * 100000ULL + uint64(gy + 10000); };
+    std::unordered_map<uint64, ObjectGuid> posToRoomGuid;
     for (Housing::Room const* r : rooms)
-        gridToRoomGuid[gridKey(r->GridX, r->GridY)] = r->Guid;
+        posToRoomGuid[posKey(r->GridX, r->GridY)] = r->Guid;
+
+    // Helper: find room at a given yard offset from a door
+    // sourceDoorOffset is the door's local offset (e.g. +12 for right wall)
+    // We search for any room whose position matches the expected neighbor
+    auto findNeighborAtDoor = [&](Housing::Room const* srcRoom, float doorOffX, float doorOffY) -> ObjectGuid
+    {
+        for (Housing::Room const* other : rooms)
+        {
+            if (other->Guid == srcRoom->Guid)
+                continue;
+            int32 dx = other->GridX - srcRoom->GridX;
+            int32 dy = other->GridY - srcRoom->GridY;
+            // The neighbor is in the direction the door faces
+            if (doorOffX > 0.5f && dx > 0) return other->Guid;
+            if (doorOffX < -0.5f && dx < 0) return other->Guid;
+            if (doorOffY > 0.5f && dy > 0) return other->Guid;
+            if (doorOffY < -0.5f && dy < 0) return other->Guid;
+        }
+        return ObjectGuid::Empty;
+    };
 
     TC_LOG_ERROR("housing", "HouseInteriorMap::SpawnRoomMeshObjects: Starting spawn for {} rooms "
         "(owner={}, factionThemeID={}, houseGuid={})",
@@ -284,9 +304,8 @@ void HouseInteriorMap::SpawnRoomMeshObjects(Housing* housing, int32 factionRestr
             if (isDoorComponent)
             {
                 // Check if this door faces an adjacent room
-                if (comp.OffsetPos[0] > 0.5f && gridToRoomGuid.count(gridKey(room->GridX + 1, room->GridY)))
-                    hasConnectedRoom = true;
-                else if (comp.OffsetPos[0] < -0.5f && gridToRoomGuid.count(gridKey(room->GridX - 1, room->GridY)))
+                ObjectGuid neighborGuid = findNeighborAtDoor(room, comp.OffsetPos[0], comp.OffsetPos[1]);
+                if (!neighborGuid.IsEmpty())
                     hasConnectedRoom = true;
             }
 
@@ -421,32 +440,8 @@ void HouseInteriorMap::SpawnRoomMeshObjects(Housing* housing, int32 factionRestr
                 if (!isDoor)
                     continue;
 
-                // Determine which adjacent grid cell this door faces
-                ObjectGuid attachedRoomGuid;
-                if (comp.OffsetPos[0] > 0.5f) // +X door
-                {
-                    auto itr = gridToRoomGuid.find(gridKey(room->GridX + 1, room->GridY));
-                    if (itr != gridToRoomGuid.end())
-                        attachedRoomGuid = itr->second;
-                }
-                else if (comp.OffsetPos[0] < -0.5f) // -X door
-                {
-                    auto itr = gridToRoomGuid.find(gridKey(room->GridX - 1, room->GridY));
-                    if (itr != gridToRoomGuid.end())
-                        attachedRoomGuid = itr->second;
-                }
-                else if (comp.OffsetPos[1] > 0.5f) // +Y door
-                {
-                    auto itr = gridToRoomGuid.find(gridKey(room->GridX, room->GridY + 1));
-                    if (itr != gridToRoomGuid.end())
-                        attachedRoomGuid = itr->second;
-                }
-                else if (comp.OffsetPos[1] < -0.5f) // -Y door
-                {
-                    auto itr = gridToRoomGuid.find(gridKey(room->GridX, room->GridY - 1));
-                    if (itr != gridToRoomGuid.end())
-                        attachedRoomGuid = itr->second;
-                }
+                // Find the adjacent room in the direction this door faces
+                ObjectGuid attachedRoomGuid = findNeighborAtDoor(room, comp.OffsetPos[0], comp.OffsetPos[1]);
 
                 Position doorOffset(comp.OffsetPos[0], comp.OffsetPos[1], comp.OffsetPos[2]);
                 uint8 connType = comp.ConnectionType > 0 ? comp.ConnectionType : 1;
