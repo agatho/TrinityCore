@@ -215,25 +215,10 @@ bool Housing::LoadFromDB(PreparedQueryResult housing, PreparedQueryResult decor,
                 hasVisualRoom = true; // Multiple visual rooms — don't mess with them
         }
 
-        // Replace wrong room with correct one
-        if (!hasVisualRoom && !wrongRoomGuid.IsEmpty() && correctVisualRoom)
-        {
-            auto wrongItr = _rooms.find(wrongRoomGuid);
-            if (wrongItr != _rooms.end())
-            {
-                uint32 oldEntry = wrongItr->second.RoomEntryId;
-                uint32 oldSlot = wrongItr->second.SlotIndex;
-
-                // Erase from map — SaveToDB will persist the change on next save
-                _rooms.erase(wrongItr);
-
-                // Place new room in same slot
-                HousingResult placeResult = PlaceRoom(correctVisualRoom, oldSlot, 0, false);
-                TC_LOG_ERROR("housing", "Housing::LoadFromDB: Replaced visual room {} with {} in slot {} "
-                    "for house {} (migration fixup, result={})",
-                    oldEntry, correctVisualRoom, oldSlot, _houseGuid.ToString(), placeResult);
-            }
-        }
+        // NOTE: Previously replaced non-Room-1 rooms with Room 1. This was too aggressive —
+        // it replaced valid user placements (e.g., Stairwell) and lost gridX/gridY coordinates.
+        // Rooms placed by the user are valid regardless of entry type. Only add a default
+        // visual room if there are NO non-base rooms at all (empty house).
 
         // No visual room at all — add one
         if (!hasVisualRoom && wrongRoomGuid.IsEmpty() && correctVisualRoom)
