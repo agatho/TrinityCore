@@ -886,15 +886,19 @@ void HouseInteriorMap::SpawnSingleInteriorDecor(Housing::PlacedDecor const& deco
     if (fileDataID <= 0)
         return;
 
-    // Find the room entity for this decor
-    ObjectGuid roomEntityGuid = ObjectGuid::Empty;
+    // Decor attaches to the HousingRoomEntity (Housing/2 GUID), not a MeshObject.
+    // Sniff-verified: retail decor AttachParentGUID = Housing/1 (room entity GUID).
+    ObjectGuid roomEntityGuid = decor.RoomGuid; // Housing/2 GUID
     Position roomWorldPos;
-    auto roomItr = _roomMeshObjects.find(decor.RoomGuid);
-    if (roomItr != _roomMeshObjects.end() && !roomItr->second.empty())
+    // Find the room's world position from its grid coordinates
+    for (Housing::Room const* rm : GetOwnerHousing() ? GetOwnerHousing()->GetRooms() : std::vector<Housing::Room const*>{})
     {
-        roomEntityGuid = roomItr->second[0];
-        if (MeshObject* roomEntity = GetMeshObject(roomEntityGuid))
-            roomWorldPos = roomEntity->GetPosition();
+        if (rm->Guid == decor.RoomGuid)
+        {
+            roomWorldPos = Position(_originX + static_cast<float>(rm->GridX),
+                                    _originY + static_cast<float>(rm->GridY), _originZ, 0.0f);
+            break;
+        }
     }
 
     float worldX = decor.PosX, worldY = decor.PosY, worldZ = decor.PosZ;
