@@ -2338,16 +2338,24 @@ void WorldSession::HandleHousingRoomAdd(WorldPackets::Housing::HousingRoomAdd co
 
     if (result == HOUSING_RESULT_SUCCESS)
     {
-        // Spawn ONLY the newly added room — don't destroy+recreate existing rooms.
-        // SpawnRoomMeshObjects would despawn everything first, causing same-GUID
-        // DESTROY+CREATE overlap that crashes the client (NULL+0x20).
         if (HouseInteriorMap* interiorMap = dynamic_cast<HouseInteriorMap*>(player->GetMap()))
         {
             int32 faction = (player->GetTeamId() == TEAM_ALLIANCE)
                 ? NEIGHBORHOOD_FACTION_ALLIANCE : NEIGHBORHOOD_FACTION_HORDE;
-            // SpawnRoomMeshObjects skips rooms whose GUIDs are already in _roomMeshObjects,
-            // so only the new room (just added to _rooms) gets spawned.
-            // Remove the cleanup guard check by ensuring _roomMeshObjects has entries.
+
+            // Despawn ALL HousingRoomEntities so door connections get recalculated.
+            // Adjacent rooms need updated AttachedRoomGUID on their connecting doors.
+            // Without this, the client's CanRemove() sees stale connections and blocks
+            // removal of newly added rooms ("more than one connected door").
+            for (HousingRoomEntity* re : interiorMap->GetRoomEntities())
+            {
+                if (re && re->IsInWorld())
+                    interiorMap->RemoveFromMap(re, true);
+            }
+            const_cast<std::vector<HousingRoomEntity*>&>(interiorMap->GetRoomEntities()).clear();
+
+            // SpawnRoomMeshObjects: skips rooms with existing MeshObjects (components stay),
+            // but creates fresh HousingRoomEntities for ALL rooms with updated door data.
             interiorMap->SpawnRoomMeshObjects(housing, faction);
         }
 
