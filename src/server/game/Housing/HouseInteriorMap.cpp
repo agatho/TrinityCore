@@ -542,6 +542,124 @@ void HouseInteriorMap::DespawnRoomEntities(ObjectGuid roomGuid)
         despawnCount, roomGuid.ToString(), _owner.ToString());
 }
 
+void HouseInteriorMap::ReplaceWallWithDoorway(ObjectGuid roomGuid, uint32 doorComponentID,
+    int32 factionRestriction, Housing::Room const& room, ObjectGuid newRoomGuid)
+{
+    // Find and destroy the Cosmetic wall MeshObject for the door component.
+    // Then spawn DoorwayWall + Doorway MeshObjects in its place.
+    auto meshItr = _roomMeshObjects.find(roomGuid);
+    if (meshItr == _roomMeshObjects.end())
+        return;
+
+    // Find the MeshObject with matching RoomComponentID
+    ObjectGuid wallMeshGuid;
+    for (ObjectGuid const& meshGuid : meshItr->second)
+    {
+        if (MeshObject* mesh = GetMeshObject(meshGuid))
+        {
+            if (mesh->GetRoomComponentID() == static_cast<int32>(doorComponentID))
+            {
+                wallMeshGuid = meshGuid;
+                break;
+            }
+        }
+    }
+
+    if (wallMeshGuid.IsEmpty())
+        return;
+
+    // Get the wall's position/rotation before destroying
+    MeshObject* wallMesh = GetMeshObject(wallMeshGuid);
+    if (!wallMesh)
+        return;
+
+    Position wallPos = wallMesh->GetLocalPosition();
+    QuaternionData wallRot = wallMesh->GetLocalRotation();
+
+    // Destroy the old Cosmetic wall
+    meshItr->second.erase(
+        std::remove(meshItr->second.begin(), meshItr->second.end(), wallMeshGuid),
+        meshItr->second.end());
+    RemoveFromMap(wallMesh, true);
+
+    // Get the component data
+    HouseRoomData const* roomData = sHousingMgr.GetHouseRoomData(room.RoomEntryId);
+    if (!roomData) return;
+    std::vector<RoomComponentData> const* components = sHousingMgr.GetRoomComponents(roomData->RoomWmoDataID);
+    if (!components) return;
+
+    RoomComponentData const* doorComp = nullptr;
+    for (auto const& c : *components)
+        if (c.ID == doorComponentID) { doorComp = &c; break; }
+    if (!doorComp) return;
+
+    // Get geobox from RoomWmoData
+    float geoMinX = -11.5f, geoMinY = -11.5f, geoMinZ = 0.0f;
+    float geoMaxX = 11.5f, geoMaxY = 11.5f, geoMaxZ = 11.0f;
+    RoomWmoDataEntry const* wmoData = sRoomWmoDataStore.LookupEntry(roomData->RoomWmoDataID);
+    if (wmoData)
+    {
+        geoMinX = wmoData->BoundingBoxMinX; geoMinY = wmoData->BoundingBoxMinY; geoMinZ = wmoData->BoundingBoxMinZ;
+        geoMaxX = wmoData->BoundingBoxMaxX; geoMaxY = wmoData->BoundingBoxMaxY; geoMaxZ = wmoData->BoundingBoxMaxZ;
+    }
+
+    // Spawn DoorwayWall + Doorway options
+    int32 lookupTheme = (room.ThemeId != 0) ? static_cast<int32>(room.ThemeId) : sHousingMgr.GetFactionDefaultThemeID(factionRestriction);
+    std::vector<RoomComponentOptionEntry const*> allOptions = sHousingMgr.FindAllRoomComponentOptions(doorComp->MeshStyleFilterID, lookupTheme);
+
+    float spacing = sHousingMgr.GetRoomGridSpacing();
+    float roomX = _originX + static_cast<float>(room.GridX);
+    float roomY = _originY + static_cast<float>(room.GridY);
+    Position roomPos(roomX, roomY, _originZ, 0.0f);
+    ObjectGuid roomHousingGuid = roomGuid;
+
+    for (RoomComponentOptionEntry const* optEntry : allOptions)
+    {
+        // Only DoorwayWall (Type=1) and Doorway (Type=2) for connected doors
+        if (optEntry->Type != 1 && optEntry->Type != 2)
+            continue;
+
+        int32 compFileDataID = optEntry->ModelFileDataID > 0 ? optEntry->ModelFileDataID : doorComp->ModelFileDataID;
+        uint8 field20 = static_cast<uint8>(optEntry->Type);
+        int32 houseThemeID = sHousingMgr.GetDefaultSubThemeID(optEntry->HouseThemeID);
+
+        MeshObject* doorMesh = MeshObject::CreateMeshObject(this, wallPos, wallRot, 1.0f,
+            compFileDataID, true, roomHousingGuid, 3, &roomPos);
+        if (!doorMesh) continue;
+
+        PhasingHandler::InitDbPhaseShift(doorMesh->GetPhaseShift(), PHASE_USE_FLAGS_ALWAYS_VISIBLE, 0, 0);
+        doorMesh->InitHousingRoomComponentData(roomHousingGuid,
+            static_cast<int32>(optEntry->ID), static_cast<int32>(doorComp->ID),
+            doorComp->Type, static_cast<int32>(optEntry->SubType), field20,
+            houseThemeID, 24, 0,
+            geoMinX, geoMinY, geoMinZ, geoMaxX, geoMaxY, geoMaxZ);
+
+        if (AddToMap(doorMesh))
+            meshItr->second.push_back(doorMesh->GetGUID());
+        else
+            delete doorMesh;
+    }
+
+    // Also update the HousingRoomEntity's MeshObjects array
+    for (HousingRoomEntity* re : _roomEntities)
+    {
+        if (re && re->IsInWorld() && re->GetGUID() == roomGuid)
+        {
+            // Add new MeshObject GUIDs
+            for (ObjectGuid const& meshGuid : meshItr->second)
+            {
+                MeshObject* mesh = GetMeshObject(meshGuid);
+                if (mesh && mesh->GetRoomComponentID() == static_cast<int32>(doorComponentID))
+                    re->AddMeshObject(meshGuid);
+            }
+            break;
+        }
+    }
+
+    TC_LOG_DEBUG("housing", "HouseInteriorMap::ReplaceWallWithDoorway: Replaced wall comp {} on room {} with doorway",
+        doorComponentID, roomGuid.ToString());
+}
+
 void HouseInteriorMap::UpdateRoomComponentVisuals(ObjectGuid roomGuid, int32 factionRestriction, Housing::Room const& room)
 {
     auto itr = _roomMeshObjects.find(roomGuid);

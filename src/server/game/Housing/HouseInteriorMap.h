@@ -68,6 +68,10 @@ public:
     /// Despawn a single room's entities (MeshObjects + HousingRoomEntity).
     void DespawnRoomEntities(ObjectGuid roomGuid);
 
+    /// Replace a wall MeshObject with DoorwayWall+Doorway pair for an active connection.
+    void ReplaceWallWithDoorway(ObjectGuid roomGuid, uint32 doorComponentID,
+        int32 factionRestriction, Housing::Room const& room, ObjectGuid newRoomGuid);
+
     /// Spawn all placed decor for the owner's house on the interior map.
     void SpawnInteriorDecor(Housing* housing);
 

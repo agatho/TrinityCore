@@ -2393,19 +2393,37 @@ void WorldSession::HandleHousingRoomAdd(WorldPackets::Housing::HousingRoomAdd co
             // SpawnRoomMeshObjects skips rooms with existing MeshObjects/RoomEntities.
             interiorMap->SpawnRoomMeshObjects(housing, faction);
 
-            // Update adjacent rooms' door connections in-place (UPDATE_OBJECT, no destroy+create).
-            // The new room's doors already reference existing rooms. But existing rooms' doors
-            // need their AttachedRoomGUID updated to point to the new room.
+            // Update the source room's wall at the connecting door:
+            // 1. Replace the Cosmetic wall MeshObject with DoorwayWall+Doorway pair
+            // 2. Update the HousingRoomEntity's door AttachedRoomGUID
             if (!newRoomGuid.IsEmpty())
             {
-                // Find which door component was clicked and update the source room's entity
-                for (HousingRoomEntity* re : interiorMap->GetRoomEntities())
+                // Find the source room that owns the door component
+                for (auto const& [guid, rm] : housing->GetRoomsMap())
                 {
-                    if (!re || !re->IsInWorld())
-                        continue;
-                    if (re->UpdateDoorConnection(housingRoomAdd.TargetDoorComponentID, newRoomGuid))
-                        break;
+                    if (guid == newRoomGuid) continue;
+                    HouseRoomData const* rd = sHousingMgr.GetHouseRoomData(rm.RoomEntryId);
+                    if (!rd) continue;
+                    std::vector<RoomComponentData> const* cs = sHousingMgr.GetRoomComponents(rd->RoomWmoDataID);
+                    if (!cs) continue;
+                    for (auto const& c : *cs)
+                    {
+                        if (c.ID == housingRoomAdd.TargetDoorComponentID)
+                        {
+                            // Replace wall → doorway visuals
+                            interiorMap->ReplaceWallWithDoorway(guid, housingRoomAdd.TargetDoorComponentID,
+                                faction, rm, newRoomGuid);
+                            // Update door connection data
+                            for (HousingRoomEntity* re : interiorMap->GetRoomEntities())
+                            {
+                                if (re && re->IsInWorld())
+                                    re->UpdateDoorConnection(housingRoomAdd.TargetDoorComponentID, newRoomGuid);
+                            }
+                            goto doneUpdate;
+                        }
+                    }
                 }
+                doneUpdate:;
             }
         }
 
