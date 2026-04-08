@@ -262,8 +262,6 @@ void HouseInteriorMap::SpawnRoomMeshObjects(Housing* housing, int32 factionRestr
 
         for (RoomComponentData const& comp : *components)
         {
-            if (comp.ModelFileDataID <= 0)
-                continue;
 
             // Look up RoomComponentOption for this component via MeshStyleFilterID.
             // Alliance sniff-verified: ALL components use faction theme (1=Folk → sub-theme 6).
@@ -323,6 +321,8 @@ void HouseInteriorMap::SpawnRoomMeshObjects(Housing* housing, int32 factionRestr
                     continue; // connected doors use Type=1+2, not Type=0
 
                 int32 compFileDataID = optEntry->ModelFileDataID > 0 ? optEntry->ModelFileDataID : comp.ModelFileDataID;
+                if (compFileDataID <= 0)
+                    continue; // No model for this option
                 int32 roomComponentOptionID = static_cast<int32>(optEntry->ID);
                 int32 houseThemeID = sHousingMgr.GetDefaultSubThemeID(optEntry->HouseThemeID);
                 int32 field24 = static_cast<int32>(optEntry->SubType);
@@ -688,10 +688,10 @@ void HouseInteriorMap::UpdateRoomComponentVisuals(ObjectGuid roomGuid, int32 fac
         RoomComponentOptionEntry const* optEntry = sHousingMgr.FindRoomComponentOption(compEntry->MeshStyleFilterID, effectiveThemeID);
         if (!optEntry && effectiveThemeID != factionThemeID)
             optEntry = sHousingMgr.FindRoomComponentOption(compEntry->MeshStyleFilterID, factionThemeID);
-        if (!optEntry && factionThemeID != 8)
-            optEntry = sHousingMgr.FindRoomComponentOption(compEntry->MeshStyleFilterID, 8);
-        if (!optEntry && factionThemeID != 6)
-            optEntry = sHousingMgr.FindRoomComponentOption(compEntry->MeshStyleFilterID, 6);
+        if (!optEntry && factionThemeID != 2)
+            optEntry = sHousingMgr.FindRoomComponentOption(compEntry->MeshStyleFilterID, 2);
+        if (!optEntry && factionThemeID != 1)
+            optEntry = sHousingMgr.FindRoomComponentOption(compEntry->MeshStyleFilterID, 1);
 
         if (!optEntry)
             continue;
@@ -702,7 +702,7 @@ void HouseInteriorMap::UpdateRoomComponentVisuals(ObjectGuid roomGuid, int32 fac
 
         mesh->UpdateRoomComponentVisuals(
             static_cast<int32>(optEntry->ID),
-            optEntry->HouseThemeID,
+            sHousingMgr.GetDefaultSubThemeID(optEntry->HouseThemeID),
             textureID);
     }
 
