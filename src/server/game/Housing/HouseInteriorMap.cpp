@@ -297,11 +297,14 @@ void HouseInteriorMap::SpawnRoomMeshObjects(Housing* housing, int32 factionRestr
             // Component position/rotation: local to room entity
             Position compPos(comp.OffsetPos[0], comp.OffsetPos[1], comp.OffsetPos[2], 0.0f);
             QuaternionData compRot;
-            // DB2 OffsetRot is in DEGREES — convert to radians for quaternion math
+            // DB2 OffsetRot is in DEGREES — convert to radians for quaternion math.
+            // Alliance sniff-verified: the Z rotation from DB2 must be NEGATED.
+            // DB2 comp 27 has RotZ=+90° but sniff shows quat Z=-0.7071 (=-90°).
+            // DB2 comp 28 has RotZ=-90° but sniff shows quat Z=+0.7071 (=+90°).
             static constexpr float DEG_TO_RAD = static_cast<float>(M_PI / 180.0);
             float rx = comp.OffsetRot[0] * DEG_TO_RAD;
             float ry = comp.OffsetRot[1] * DEG_TO_RAD;
-            float rz = comp.OffsetRot[2] * DEG_TO_RAD;
+            float rz = -comp.OffsetRot[2] * DEG_TO_RAD; // negated (sniff-verified)
             float cx = std::cos(rx / 2.0f), sx = std::sin(rx / 2.0f);
             float cy = std::cos(ry / 2.0f), sy = std::sin(ry / 2.0f);
             float cz = std::cos(rz / 2.0f), sz = std::sin(rz / 2.0f);
