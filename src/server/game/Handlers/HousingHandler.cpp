@@ -900,9 +900,21 @@ void WorldSession::HandleHousingDecorPlace(WorldPackets::Housing::HousingDecorPl
     HousingResult result = housing->PlaceDecorWithGuid(housingDecorPlace.DecorGuid, decorEntryId,
         posX, posY, posZ, rotX, rotY, rotZ, rotW, roomGuid);
 
-    // Spawn decor MeshObject on the map if placement succeeded.
-    // Sniff-verified: ALL retail decor is MeshObject (never GO). The server sends an UPDATE_OBJECT
-    // CREATE for the MeshObject + FHousingDecor_C immediately after placement.
+    // CRITICAL: Send PLACE_RESPONSE BEFORE spawning the MeshObject.
+    // The client's placement state machine needs the response to finalize the current
+    // placement before receiving the MeshObject CREATE. Wrong order causes the preview
+    // to snap to camera on subsequent placements ("flies to camera" bug).
+    WorldPackets::Housing::HousingDecorPlaceResponse response;
+    response.PlayerGuid = player->GetGUID();
+    response.Field_09 = 0;
+    response.DecorGuid = housingDecorPlace.DecorGuid;
+    response.Result = static_cast<uint8>(result);
+    SendPacket(response.Write());
+
+    TC_LOG_DEBUG("housing", "CMSG_HOUSING_DECOR_PLACE DecorGuid={} EntryId={} Result={}",
+        housingDecorPlace.DecorGuid.ToString(), decorEntryId, uint32(result));
+
+    // THEN spawn the MeshObject + update Account entity
     if (result == HOUSING_RESULT_SUCCESS)
     {
         if (Housing::PlacedDecor const* newDecor = housing->GetPlacedDecor(housingDecorPlace.DecorGuid))
@@ -913,25 +925,8 @@ void WorldSession::HandleHousingDecorPlace(WorldPackets::Housing::HousingDecorPl
                 interiorMap->SpawnSingleInteriorDecor(*newDecor, housing->GetHouseGuid());
         }
 
-        // Sniff: UPDATE_OBJECT (BNetAccount with ChangeType=3, HouseGUID=set) arrives BEFORE response.
         GetBattlenetAccount().SendUpdateToPlayer(player);
     }
-
-    WorldPackets::Housing::HousingDecorPlaceResponse response;
-    response.PlayerGuid = player->GetGUID();
-    response.Field_09 = 0;
-    response.DecorGuid = housingDecorPlace.DecorGuid;
-    response.Result = static_cast<uint8>(result);
-    WorldPacket const* placePkt = response.Write();
-    TC_LOG_ERROR("housing", ">>> CMSG_HOUSING_DECOR_PLACE DecorGuid={} EntryId={} Pos=({:.3f},{:.3f},{:.3f}) Rot=({:.3f},{:.3f},{:.3f}) Scale={:.2f} RoomGuid={} AttachParent={}",
-        housingDecorPlace.DecorGuid.ToString(), decorEntryId,
-        posX, posY, posZ,
-        housingDecorPlace.Rotation.Pos.GetPositionX(), housingDecorPlace.Rotation.Pos.GetPositionY(), housingDecorPlace.Rotation.Pos.GetPositionZ(),
-        housingDecorPlace.Scale, housingDecorPlace.RoomGuid.ToString(), housingDecorPlace.AttachParentGuid.ToString());
-    TC_LOG_ERROR("housing", "<<< SMSG_HOUSING_DECOR_PLACE_RESPONSE ({} bytes): {}",
-        placePkt->size(), HexDumpPacket(placePkt));
-    TC_LOG_ERROR("housing", "    PlayerGuid={} DecorGuid={} Result={}", response.PlayerGuid.ToString(), response.DecorGuid.ToString(), response.Result);
-    SendPacket(placePkt);
 }
 
 void WorldSession::HandleHousingDecorMove(WorldPackets::Housing::HousingDecorMove const& housingDecorMove)
