@@ -2601,7 +2601,8 @@ void WorldSession::HandleHousingRoomSetComponentTheme(WorldPackets::Housing::Hou
             auto const& rooms = housing->GetRoomsMap();
             auto roomItr = rooms.find(housingRoomSetComponentTheme.RoomGuid);
             if (roomItr != rooms.end())
-                interiorMap->UpdateRoomComponentVisuals(housingRoomSetComponentTheme.RoomGuid, faction, roomItr->second);
+                interiorMap->UpdateRoomComponentVisuals(housingRoomSetComponentTheme.RoomGuid, faction, roomItr->second,
+                    &housingRoomSetComponentTheme.RoomComponentIDs, housingRoomSetComponentTheme.HouseThemeID);
         }
     }
 

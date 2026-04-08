@@ -209,11 +209,12 @@ void HouseInteriorMap::SpawnRoomMeshObjects(Housing* housing, int32 factionRestr
 
         // --- Calculate room world position ---
         // GridX/GridY = yard offsets. FloorIndex = vertical floor (0=ground, 1+=upper).
-        // Floor height from RoomWmoData.Height (typically 7.0 yards per floor).
-        float ceilingHeight = wmoData ? wmoData->Height : 7.0f;
+        // Use a FIXED floor height (7.0 yards) for consistent multi-floor spacing,
+        // not the individual room's Height (stairwells are 14.0 which would double-space).
+        static constexpr float FLOOR_HEIGHT = 7.0f;
         float roomX = _originX + static_cast<float>(room->GridX);
         float roomY = _originY + static_cast<float>(room->GridY);
-        float roomZ = _originZ + static_cast<float>(room->FloorIndex) * ceilingHeight;
+        float roomZ = _originZ + static_cast<float>(room->FloorIndex) * FLOOR_HEIGHT;
         float roomFacing = static_cast<float>(room->Orientation) * (M_PI / 2.0f);
 
         Position roomPos(roomX, roomY, roomZ, roomFacing);
@@ -661,16 +662,17 @@ void HouseInteriorMap::ReplaceWallWithDoorway(ObjectGuid roomGuid, uint32 doorCo
         doorComponentID, roomGuid.ToString());
 }
 
-void HouseInteriorMap::UpdateRoomComponentVisuals(ObjectGuid roomGuid, int32 factionRestriction, Housing::Room const& room)
+void HouseInteriorMap::UpdateRoomComponentVisuals(ObjectGuid roomGuid, int32 factionRestriction, Housing::Room const& room,
+    std::vector<uint32> const* componentIDs, int32 overrideThemeID)
 {
     auto itr = _roomMeshObjects.find(roomGuid);
     if (itr == _roomMeshObjects.end())
         return;
 
     int32 factionThemeID = sHousingMgr.GetFactionDefaultThemeID(factionRestriction);
-    // Convert sub-theme (e.g., 20=Folk Light) to base theme (1=Folk) for option lookup.
-    // The entity field gets the actual sub-theme, but DB2 options are keyed by base theme.
-    int32 selectedTheme = (room.ThemeId != 0) ? static_cast<int32>(room.ThemeId) : factionThemeID;
+    // Use override theme if provided (from CMSG), otherwise room's stored theme
+    int32 selectedTheme = (overrideThemeID != 0) ? overrideThemeID :
+        ((room.ThemeId != 0) ? static_cast<int32>(room.ThemeId) : factionThemeID);
     int32 effectiveThemeID = sHousingMgr.GetBaseThemeID(selectedTheme);
 
     for (ObjectGuid const& meshGuid : itr->second)
@@ -682,6 +684,16 @@ void HouseInteriorMap::UpdateRoomComponentVisuals(ObjectGuid roomGuid, int32 fac
         int32 compID = mesh->GetRoomComponentID();
         if (compID == 0)
             continue;
+
+        // If specific component IDs were requested, only update those
+        if (componentIDs && !componentIDs->empty())
+        {
+            bool found = false;
+            for (uint32 cid : *componentIDs)
+                if (static_cast<int32>(cid) == compID) { found = true; break; }
+            if (!found)
+                continue;
+        }
 
         // Look up the RoomComponent to get its MeshStyleFilterID for the option lookup
         RoomComponentEntry const* compEntry = sRoomComponentStore.LookupEntry(compID);

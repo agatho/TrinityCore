@@ -66,7 +66,8 @@ public:
 
     /// Update room component visuals in-place (theme/wallpaper change).
     /// Avoids destroy+create cycle — sends UPDATE_OBJECT with changed fields.
-    void UpdateRoomComponentVisuals(ObjectGuid roomGuid, int32 factionRestriction, Housing::Room const& room);
+    void UpdateRoomComponentVisuals(ObjectGuid roomGuid, int32 factionRestriction, Housing::Room const& room,
+        std::vector<uint32> const* componentIDs = nullptr, int32 overrideThemeID = 0);
 
     /// Despawn a single room's entities (MeshObjects + HousingRoomEntity).
     void DespawnRoomEntities(ObjectGuid roomGuid);
