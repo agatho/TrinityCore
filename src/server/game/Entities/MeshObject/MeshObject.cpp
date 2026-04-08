@@ -356,7 +356,7 @@ void MeshObject::AddRoomDoor(int32 roomComponentID, Position const& offset, uint
 
 void MeshObject::InitHousingRoomComponentData(ObjectGuid roomGuid,
     int32 roomComponentOptionID, int32 roomComponentID,
-    uint8 roomComponentType, int32 field24,
+    uint8 roomComponentType, int32 field24, uint8 field20,
     int32 houseThemeID, int32 roomComponentTextureID,
     int32 roomComponentTypeParam,
     float geoboxMinX, float geoboxMinY, float geoboxMinZ,
@@ -385,7 +385,7 @@ void MeshObject::InitHousingRoomComponentData(ObjectGuid roomGuid,
     SetUpdateFieldValue(compData.ModifyValue(&UF::HousingRoomComponentMeshData::RoomGUID), roomGuid);
     SetUpdateFieldValue(compData.ModifyValue(&UF::HousingRoomComponentMeshData::RoomComponentOptionID), roomComponentOptionID);
     SetUpdateFieldValue(compData.ModifyValue(&UF::HousingRoomComponentMeshData::RoomComponentID), roomComponentID);
-    SetUpdateFieldValue(compData.ModifyValue(&UF::HousingRoomComponentMeshData::Field_20), uint8(0));
+    SetUpdateFieldValue(compData.ModifyValue(&UF::HousingRoomComponentMeshData::Field_20), field20);
     SetUpdateFieldValue(compData.ModifyValue(&UF::HousingRoomComponentMeshData::RoomComponentType), roomComponentType);
     SetUpdateFieldValue(compData.ModifyValue(&UF::HousingRoomComponentMeshData::Field_24), field24);
     SetUpdateFieldValue(compData.ModifyValue(&UF::HousingRoomComponentMeshData::HouseThemeID), houseThemeID);

@@ -246,61 +246,10 @@ void HouseInteriorMap::SpawnRoomMeshObjects(Housing* housing, int32 factionRestr
             // Look up RoomComponentOption for this component via MeshStyleFilterID.
             // Alliance sniff-verified: ALL components use faction theme (1=Folk → sub-theme 6).
             // Horde uses theme 2 (Rugged → sub-theme 8). Each faction uses its OWN wall models.
-            int32 lookupTheme = (room->ThemeId != 0) ? static_cast<int32>(room->ThemeId) : factionThemeID;
-            RoomComponentOptionEntry const* optEntry = sHousingMgr.FindRoomComponentOption(comp.MeshStyleFilterID, lookupTheme);
-            if (!optEntry && lookupTheme != factionThemeID)
-                optEntry = sHousingMgr.FindRoomComponentOption(comp.MeshStyleFilterID, factionThemeID);
-            if (!optEntry && factionThemeID != 2)
-                optEntry = sHousingMgr.FindRoomComponentOption(comp.MeshStyleFilterID, 2);
-            if (!optEntry && factionThemeID != 1)
-                optEntry = sHousingMgr.FindRoomComponentOption(comp.MeshStyleFilterID, 1);
-
-            int32 compFileDataID = comp.ModelFileDataID;
-            int32 roomComponentOptionID = 0;
-            int32 houseThemeID = 0;
-            int32 field24 = 0;
-            int32 roomComponentTextureID = 0;
-
-            if (optEntry)
-            {
-                if (optEntry->ModelFileDataID > 0)
-                    compFileDataID = optEntry->ModelFileDataID;
-                roomComponentOptionID = static_cast<int32>(optEntry->ID);
-                // optEntry->HouseThemeID is the BASE theme (1=Folk, 2=Rugged) from the DB2.
-                // The entity field needs the SUB-theme (6=Folk Medium, 8=Rugged Medium).
-                houseThemeID = sHousingMgr.GetDefaultSubThemeID(optEntry->HouseThemeID);
-                field24 = static_cast<int32>(optEntry->SubType);
-                // TextureID: use player-applied wallpaper if set, otherwise look up from DB2
-                if (room->WallpaperId != 0)
-                {
-                    roomComponentTextureID = static_cast<int32>(room->WallpaperId);
-                }
-                else
-                {
-                    roomComponentTextureID = sHousingMgr.GetTextureIdForComponentOption(roomComponentOptionID);
-                    if (roomComponentTextureID == 0)
-                        roomComponentTextureID = sHousingMgr.GetTextureIdForComponentType(comp.Type);
-                    if (roomComponentTextureID == 0)
-                    {
-                        // Hardcoded fallback (sniff-verified: walls=24, floors=40, ceilings=54)
-                        switch (comp.Type)
-                        {
-                            case 1: roomComponentTextureID = 24; break;
-                            case 2: roomComponentTextureID = 40; break;
-                            case 3: roomComponentTextureID = 54; break;
-                            default: break;
-                        }
-                    }
-                }
-            }
-
             // Component position/rotation: local to room entity
             Position compPos(comp.OffsetPos[0], comp.OffsetPos[1], comp.OffsetPos[2], 0.0f);
             QuaternionData compRot;
-            // DB2 OffsetRot is in DEGREES — convert to radians for quaternion math.
-            // Alliance sniff-verified: the Z rotation from DB2 must be NEGATED.
-            // DB2 comp 27 has RotZ=+90° but sniff shows quat Z=-0.7071 (=-90°).
-            // DB2 comp 28 has RotZ=-90° but sniff shows quat Z=+0.7071 (=+90°).
+            // DB2 OffsetRot is in DEGREES — convert to radians. Z is negated (sniff-verified).
             static constexpr float DEG_TO_RAD = static_cast<float>(M_PI / 180.0);
             float rx = comp.OffsetRot[0] * DEG_TO_RAD;
             float ry = comp.OffsetRot[1] * DEG_TO_RAD;
@@ -312,6 +261,71 @@ void HouseInteriorMap::SpawnRoomMeshObjects(Housing* housing, int32 factionRestr
             compRot.y = cx * sy * cz + sx * cy * sz;
             compRot.z = cx * cy * sz - sx * sy * cz;
             compRot.w = cx * cy * cz + sx * sy * sz;
+
+            // Look up ALL options for this component. Alliance sniff shows:
+            // - Corner walls (MSFID=46): TWO MeshObjects (SubType=0 + SubType=1)
+            // - Doorway walls: TWO MeshObjects (DoorwayWall Field_20=1 + Doorway Field_20=2)
+            // - Flat walls/floors/ceilings: ONE MeshObject (Cosmetic SubType=0)
+            int32 lookupTheme = (room->ThemeId != 0) ? static_cast<int32>(room->ThemeId) : factionThemeID;
+            std::vector<RoomComponentOptionEntry const*> allOptions = sHousingMgr.FindAllRoomComponentOptions(comp.MeshStyleFilterID, lookupTheme);
+            if (allOptions.empty())
+                allOptions = sHousingMgr.FindAllRoomComponentOptions(comp.MeshStyleFilterID, factionThemeID);
+            if (allOptions.empty() && factionThemeID != 2)
+                allOptions = sHousingMgr.FindAllRoomComponentOptions(comp.MeshStyleFilterID, 2);
+            if (allOptions.empty() && factionThemeID != 1)
+                allOptions = sHousingMgr.FindAllRoomComponentOptions(comp.MeshStyleFilterID, 1);
+
+            // Determine which options to spawn based on component's door connectivity
+            bool isDoorComponent = (comp.ConnectionType != 0) &&
+                (std::abs(comp.OffsetPos[0]) > 0.5f) != (std::abs(comp.OffsetPos[1]) > 0.5f);
+            bool hasConnectedRoom = false;
+            if (isDoorComponent)
+            {
+                // Check if this door faces an adjacent room
+                if (comp.OffsetPos[0] > 0.5f && slotToRoomGuid.count(room->SlotIndex + 1))
+                    hasConnectedRoom = true;
+                else if (comp.OffsetPos[0] < -0.5f && slotToRoomGuid.count(room->SlotIndex - 1))
+                    hasConnectedRoom = true;
+            }
+
+            // Filter options: spawn each relevant one as a separate MeshObject
+            for (RoomComponentOptionEntry const* optEntry : allOptions)
+            {
+                // For non-door walls: only spawn Type=0 (Cosmetic) options
+                // For door walls with connection: spawn DoorwayWall (Type=1) + Doorway (Type=2)
+                // For door walls without connection: spawn only Type=0 (Cosmetic)
+                if (!isDoorComponent && optEntry->Type != 0)
+                    continue;
+                if (isDoorComponent && !hasConnectedRoom && optEntry->Type != 0)
+                    continue;
+                if (isDoorComponent && hasConnectedRoom && optEntry->Type == 0)
+                    continue; // connected doors use Type=1+2, not Type=0
+
+                int32 compFileDataID = optEntry->ModelFileDataID > 0 ? optEntry->ModelFileDataID : comp.ModelFileDataID;
+                int32 roomComponentOptionID = static_cast<int32>(optEntry->ID);
+                int32 houseThemeID = sHousingMgr.GetDefaultSubThemeID(optEntry->HouseThemeID);
+                int32 field24 = static_cast<int32>(optEntry->SubType);
+                uint8 field20 = static_cast<uint8>(optEntry->Type); // 0=Cosmetic, 1=DoorwayWall, 2=Doorway
+
+                int32 roomComponentTextureID = 0;
+                if (room->WallpaperId != 0)
+                    roomComponentTextureID = static_cast<int32>(room->WallpaperId);
+                else
+                {
+                    roomComponentTextureID = sHousingMgr.GetTextureIdForComponentOption(roomComponentOptionID);
+                    if (roomComponentTextureID == 0)
+                        roomComponentTextureID = sHousingMgr.GetTextureIdForComponentType(comp.Type);
+                    if (roomComponentTextureID == 0)
+                    {
+                        switch (comp.Type)
+                        {
+                            case 1: roomComponentTextureID = 24; break;
+                            case 2: roomComponentTextureID = 40; break;
+                            case 3: roomComponentTextureID = 54; break;
+                            default: break;
+                        }
+                    }
+                }
 
             MeshObject* componentMesh = MeshObject::CreateMeshObject(this, compPos, compRot, 1.0f,
                 compFileDataID, /*isWMO*/ true,
@@ -328,13 +342,15 @@ void HouseInteriorMap::SpawnRoomMeshObjects(Housing* housing, int32 factionRestr
             PhasingHandler::InitDbPhaseShift(componentMesh->GetPhaseShift(), PHASE_USE_FLAGS_ALWAYS_VISIBLE, 0, 0);
             componentMesh->InitHousingRoomComponentData(roomHousingGuid,
                 roomComponentOptionID, static_cast<int32>(comp.ID),
-                comp.Type, field24,
+                comp.Type, field24, field20,
                 houseThemeID, roomComponentTextureID,
                 /*roomComponentTypeParam*/ 0,
                 geoMinX, geoMinY, geoMinZ,
                 geoMaxX, geoMaxY, geoMaxZ);
 
             componentMeshes.push_back(componentMesh);
+
+            } // end for (allOptions)
 
             // Count by component type for diagnostic summary
             switch (comp.Type)
@@ -348,17 +364,6 @@ void HouseInteriorMap::SpawnRoomMeshObjects(Housing* housing, int32 factionRestr
                 case HOUSING_ROOM_COMPONENT_DOORWAY: ++doorwayCount; break;
                 default: ++otherCount; break;
             }
-
-            TC_LOG_ERROR("housing", "  Component: compID={} type={} fileDataID={} optionID={} themeID={} "
-                "pos=({:.2f},{:.2f},{:.2f}) rot=({:.4f},{:.4f},{:.4f}) quat=({:.4f},{:.4f},{:.4f},{:.4f})"
-                " connType={} flags={} themeFallback={}",
-                comp.ID, comp.Type, compFileDataID, roomComponentOptionID, houseThemeID,
-                comp.OffsetPos[0], comp.OffsetPos[1], comp.OffsetPos[2],
-                comp.OffsetRot[0], comp.OffsetRot[1], comp.OffsetRot[2],
-                compRot.x, compRot.y, compRot.z, compRot.w,
-                comp.ConnectionType, comp.Flags,
-                optEntry ? (optEntry->HouseThemeID == factionThemeID ? "faction" :
-                    (optEntry->HouseThemeID == 3 ? "generic" : "other")) : "none");
         }
 
         TC_LOG_ERROR("housing", "  Room '{}' component summary: walls={} floors={} ceilings={} "

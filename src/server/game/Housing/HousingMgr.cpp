@@ -1700,11 +1700,26 @@ int32 HousingMgr::GetDefaultSubThemeID(int32 baseThemeID) const
 
 RoomComponentOptionEntry const* HousingMgr::FindRoomComponentOption(int32 meshStyleFilterID, int32 houseThemeID) const
 {
-    // Retail RoomComponentOption links to RoomComponent via MeshStyleFilterID, not component ID.
-    // Multiple components sharing the same MeshStyleFilterID use the same option entry.
+    // Returns the Type=0 (Cosmetic) option for the given (MSFID, theme).
     uint64 key = (uint64(uint32(meshStyleFilterID)) << 32) | uint32(houseThemeID);
     auto itr = _roomCompOptionIndex.find(key);
     return itr != _roomCompOptionIndex.end() ? itr->second : nullptr;
+}
+
+std::vector<RoomComponentOptionEntry const*> HousingMgr::FindAllRoomComponentOptions(int32 meshStyleFilterID, int32 houseThemeID) const
+{
+    // Returns ALL options for the given (MSFID, theme): Cosmetic, DoorwayWall, Doorway.
+    // Alliance sniff shows corners have 2 Cosmetic options (SubType 0+1) and
+    // doorway walls have DoorwayWall (Type=1) + Doorway (Type=2) options.
+    std::vector<RoomComponentOptionEntry const*> results;
+    for (RoomComponentOptionEntry const* entry : sRoomComponentOptionStore)
+    {
+        if (!entry)
+            continue;
+        if (entry->MeshStyleFilterID == meshStyleFilterID && entry->HouseThemeID == houseThemeID)
+            results.push_back(entry);
+    }
+    return results;
 }
 
 uint32 HousingMgr::GetDefaultVisualRoomEntry() const

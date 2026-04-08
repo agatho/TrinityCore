@@ -96,7 +96,7 @@ public:
     // The client uses the Geobox for its OutsidePlotBounds collision check.
     void InitHousingRoomComponentData(ObjectGuid roomGuid,
         int32 roomComponentOptionID, int32 roomComponentID,
-        uint8 roomComponentType, int32 field24,
+        uint8 roomComponentType, int32 field24, uint8 field20,
         int32 houseThemeID, int32 roomComponentTextureID,
         int32 roomComponentTypeParam,
         float geoboxMinX, float geoboxMinY, float geoboxMinZ,

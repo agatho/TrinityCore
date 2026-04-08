@@ -2003,7 +2003,7 @@ void HousingMap::SpawnRoomForPlot(uint8 plotIndex, Position const& housePos,
     PhasingHandler::InitDbPhaseShift(componentMesh->GetPhaseShift(), PHASE_USE_FLAGS_ALWAYS_VISIBLE, 0, 0);
     componentMesh->InitHousingRoomComponentData(roomEntity->GetGUID(),
         roomComponentOptionID, ROOM_COMPONENT_ID,
-        roomComponentType, field24,
+        roomComponentType, field24, /*field20*/ 0,
         houseThemeID, roomComponentTextureID,
         /*roomComponentTypeParam*/ 0,
         geoMinX, geoMinY, geoMinZ,

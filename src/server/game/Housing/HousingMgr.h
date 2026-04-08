@@ -312,6 +312,7 @@ public:
     // The retail DB2 links RoomComponent to RoomComponentOption via MeshStyleFilterID.
     // Returns nullptr if no match found
     RoomComponentOptionEntry const* FindRoomComponentOption(int32 meshStyleFilterID, int32 houseThemeID) const;
+    std::vector<RoomComponentOptionEntry const*> FindAllRoomComponentOptions(int32 meshStyleFilterID, int32 houseThemeID) const;
 
     // Get the base room entry ID (exterior geobox room, from DB2 IsBaseRoom flag, fallback 18)
     uint32 GetBaseRoomEntryId() const { return _baseRoomEntryId; }
