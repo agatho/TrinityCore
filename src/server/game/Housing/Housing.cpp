@@ -101,8 +101,8 @@ bool Housing::LoadFromDB(PreparedQueryResult housing, PreparedQueryResult decor,
     _houseDescription = fields[15].GetString();
 
     // Load rooms FIRST so decor can look up roomEntryId for GUID arg2
-    //           0         1            2           3            4         5        6             7           8           9         10              11
-    // SELECT roomGuid, roomEntryId, slotIndex, orientation, mirrored, themeId, wallpaperId, materialId, doorTypeId, doorSlot, ceilingTypeId, ceilingSlot
+    //           0         1            2           3       4       5            6         7        8             9          10          11        12              13
+    // SELECT roomGuid, roomEntryId, slotIndex, gridX, gridY, orientation, mirrored, themeId, wallpaperId, materialId, doorTypeId, doorSlot, ceilingTypeId, ceilingSlot
     // FROM character_housing_rooms WHERE ownerGuid = ?
     if (rooms)
     {
@@ -125,14 +125,13 @@ bool Housing::LoadFromDB(PreparedQueryResult housing, PreparedQueryResult decor,
             room.Guid = roomGuid;
             room.RoomEntryId = roomEntryId;
             room.SlotIndex = fields[2].GetUInt32();
-            // GridX/GridY: backward compat — old rooms use linear layout (GridX=SlotIndex)
-            room.GridX = static_cast<int32>(room.SlotIndex);
-            room.GridY = 0;
-            room.Orientation = fields[3].GetUInt32();
-            room.Mirrored = fields[4].GetBool();
-            room.ThemeId = fields[5].GetUInt32();
-            room.WallpaperId = fields[6].GetUInt32();
-            room.MaterialId = fields[7].GetUInt32();
+            room.GridX = fields[3].GetInt32();
+            room.GridY = fields[4].GetInt32();
+            room.Orientation = fields[5].GetUInt32();
+            room.Mirrored = fields[6].GetBool();
+            room.ThemeId = fields[7].GetUInt32();
+            room.WallpaperId = fields[8].GetUInt32();
+            room.MaterialId = fields[9].GetUInt32();
             room.DoorTypeId = fields[8].GetUInt32();
             room.DoorSlot = fields[9].GetUInt8();
             room.CeilingTypeId = fields[10].GetUInt32();
@@ -506,6 +505,8 @@ void Housing::SaveToDB(CharacterDatabaseTransaction trans)
         stmt->setUInt64(index++, guid.GetCounter());
         stmt->setUInt32(index++, room.RoomEntryId);
         stmt->setUInt32(index++, room.SlotIndex);
+        stmt->setInt32(index++, room.GridX);
+        stmt->setInt32(index++, room.GridY);
         stmt->setUInt32(index++, room.Orientation);
         stmt->setBool(index++, room.Mirrored);
         stmt->setUInt32(index++, room.ThemeId);
@@ -2492,6 +2493,8 @@ void Housing::PersistRoomToDB(ObjectGuid roomGuid, Room const& room)
     CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_UPD_CHARACTER_HOUSING_ROOM);
     uint8 index = 0;
     stmt->setUInt32(index++, room.SlotIndex);
+    stmt->setInt32(index++, room.GridX);
+    stmt->setInt32(index++, room.GridY);
     stmt->setUInt32(index++, room.Orientation);
     stmt->setUInt8(index++, room.Mirrored ? 1 : 0);
     stmt->setUInt32(index++, room.ThemeId);
