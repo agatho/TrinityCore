@@ -331,7 +331,7 @@ void HouseInteriorMap::SpawnRoomMeshObjects(Housing* housing, int32 factionRestr
                 uint8 field20 = static_cast<uint8>(optEntry->Type); // 0=Cosmetic, 1=DoorwayWall, 2=Doorway
 
                 int32 roomComponentTextureID = 0;
-                if (room->WallpaperId != 0)
+                if (room->WallpaperId != 0 && room->WallpaperId != 0xFFFFFFFF)
                     roomComponentTextureID = static_cast<int32>(room->WallpaperId);
                 else
                 {
@@ -712,7 +712,7 @@ void HouseInteriorMap::UpdateRoomComponentVisuals(ObjectGuid roomGuid, int32 fac
         if (!optEntry)
             continue;
 
-        int32 textureID = (room.WallpaperId != 0)
+        int32 textureID = (room.WallpaperId != 0 && room.WallpaperId != 0xFFFFFFFF)
             ? static_cast<int32>(room.WallpaperId)
             : sHousingMgr.GetTextureIdForComponentOption(static_cast<int32>(optEntry->ID));
 

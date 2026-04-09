@@ -1626,7 +1626,8 @@ HousingResult Housing::ApplyRoomWallpaper(ObjectGuid roomGuid, uint32 wallpaperI
         }
     }
 
-    itr->second.WallpaperId = wallpaperId;
+    // 0xFFFFFFFF means "reset to default" — store as 0 (no override)
+    itr->second.WallpaperId = (wallpaperId == 0xFFFFFFFF) ? 0 : wallpaperId;
     itr->second.MaterialId = materialId;
 
     PersistRoomToDB(roomGuid, itr->second);
