@@ -1234,19 +1234,10 @@ bool HouseInteriorMap::AddPlayerToMap(Player* player, bool initPlayer /*= true*/
                             p->m_clientGUIDs.insert(session->GetHousingPlayerHouseEntity().GetGUID());
                         }
 
-                        uint32 meshCreateCount = 0;
-                        for (auto const& [decorGuid, meshObjGuid] : _decorGuidToObjGuid)
-                        {
-                            MeshObject* meshObj = GetMeshObject(meshObjGuid);
-                            if (!meshObj || !meshObj->IsInWorld())
-                                continue;
-                            meshObj->BuildCreateUpdateBlockForPlayer(&storageUpdate, p);
-                            p->m_clientGUIDs.insert(meshObjGuid);
-                            ++meshCreateCount;
-                        }
-
-                        // HousingRoomEntity CREATEs are now sent via the map visibility
-                        // system (AddToMap in SpawnRoomMeshObjects). No manual send needed.
+                        // Decor and HousingRoomEntity CREATEs are sent by the map visibility
+                        // system (AddToMap in SpawnRoomMeshObjects/SpawnInteriorDecor).
+                        // Do NOT send manual CREATEs here — double-sending corrupts the
+                        // client's entity state and makes decor unselectable after relog.
 
                         storageUpdate.BuildPacket(&storagePacket);
                         p->SendDirectMessage(&storagePacket);
@@ -1254,8 +1245,8 @@ bool HouseInteriorMap::AddPlayerToMap(Player* player, bool initPlayer /*= true*/
                         session->GetBattlenetAccount().ClearUpdateMask(true);
                         session->GetHousingPlayerHouseEntity().ClearUpdateMask(true);
 
-                        TC_LOG_ERROR("housing", "HouseInteriorMap deferred: Sent Account+budget+{} decor for {}",
-                            meshCreateCount, playerGuid.ToString());
+                        TC_LOG_ERROR("housing", "HouseInteriorMap deferred: Sent Account+budget for {}",
+                            playerGuid.ToString());
                     }
 
                     // Map-level Housing/3 entity (objectType=18) is now included in
