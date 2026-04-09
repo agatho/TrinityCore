@@ -905,16 +905,47 @@ void HouseInteriorMap::SpawnSingleInteriorDecor(Housing::PlacedDecor const& deco
 
     // Decor attaches to the HousingRoomEntity (Housing/2 GUID), not a MeshObject.
     // Sniff-verified: retail decor AttachParentGUID = Housing/1 (room entity GUID).
-    ObjectGuid roomEntityGuid = decor.RoomGuid; // Housing/2 GUID
+    ObjectGuid roomEntityGuid = decor.RoomGuid;
     Position roomWorldPos;
-    // Find the room's world position from its grid coordinates
-    for (Housing::Room const* rm : GetOwnerHousing() ? GetOwnerHousing()->GetRooms() : std::vector<Housing::Room const*>{})
+
+    // If decor has no RoomGuid (placed before room entity system), auto-assign
+    // to the first non-base room. Without a valid parent, decor is not selectable.
+    Housing* ownerHousing = GetOwnerHousing();
+    if (roomEntityGuid.IsEmpty() && ownerHousing)
     {
-        if (rm->Guid == decor.RoomGuid)
+        for (Housing::Room const* rm : ownerHousing->GetRooms())
         {
-            roomWorldPos = Position(_originX + static_cast<float>(rm->GridX),
-                                    _originY + static_cast<float>(rm->GridY), _originZ, 0.0f);
-            break;
+            HouseRoomData const* rd = sHousingMgr.GetHouseRoomData(rm->RoomEntryId);
+            if (rd && !rd->IsBaseRoom())
+            {
+                roomEntityGuid = rm->Guid;
+                break;
+            }
+        }
+        // Last resort: use the base room
+        if (roomEntityGuid.IsEmpty())
+        {
+            for (Housing::Room const* rm : ownerHousing->GetRooms())
+            {
+                roomEntityGuid = rm->Guid;
+                break;
+            }
+        }
+    }
+
+    // Find the room's world position from its grid coordinates
+    if (ownerHousing)
+    {
+        for (Housing::Room const* rm : ownerHousing->GetRooms())
+        {
+            if (rm->Guid == roomEntityGuid)
+            {
+                static constexpr float FLOOR_HEIGHT = 7.0f;
+                roomWorldPos = Position(_originX + static_cast<float>(rm->GridX),
+                                        _originY + static_cast<float>(rm->GridY),
+                                        _originZ + static_cast<float>(rm->FloorIndex) * FLOOR_HEIGHT, 0.0f);
+                break;
+            }
         }
     }
 
