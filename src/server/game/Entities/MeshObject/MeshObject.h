@@ -108,6 +108,8 @@ public:
         int32 roomComponentTextureID);
 
     int32 GetRoomComponentID() const;
+    int32 GetRoomComponentOptionID() const;
+    int32 GetHouseThemeID() const;
 
     // Update fields
     UF::UpdateField<UF::MeshObjectData, int32(WowCS::EntityFragment::FMeshObjectData_C), TYPEID_MESH_OBJECT> m_meshObjectData;

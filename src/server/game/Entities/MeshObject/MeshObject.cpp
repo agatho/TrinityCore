@@ -426,6 +426,20 @@ int32 MeshObject::GetRoomComponentID() const
     return m_housingRoomComponentMeshData->RoomComponentID;
 }
 
+int32 MeshObject::GetRoomComponentOptionID() const
+{
+    if (!m_housingRoomComponentMeshData.has_value())
+        return 0;
+    return m_housingRoomComponentMeshData->RoomComponentOptionID;
+}
+
+int32 MeshObject::GetHouseThemeID() const
+{
+    if (!m_housingRoomComponentMeshData.has_value())
+        return 0;
+    return m_housingRoomComponentMeshData->HouseThemeID;
+}
+
 void MeshObject::BuildCreateUpdateBlockForPlayer(UpdateData* data, Player* target) const
 {
     if (!target)

@@ -2409,14 +2409,10 @@ void WorldSession::HandleHousingRoomAdd(WorldPackets::Housing::HousingRoomAdd co
                     {
                         if (c.ID == housingRoomAdd.TargetDoorComponentID)
                         {
-                            // Only replace wall→doorway for HORIZONTAL connections (same floor).
-                            // Stairwell rooms go to a different floor — don't destroy the wall.
-                            HouseRoomData const* newRoomData2 = sHousingMgr.GetHouseRoomData(housingRoomAdd.HouseRoomID);
-                            if (!newRoomData2 || !newRoomData2->HasStairs())
-                            {
-                                interiorMap->ReplaceWallWithDoorway(guid, housingRoomAdd.TargetDoorComponentID,
-                                    faction, rm, newRoomGuid);
-                            }
+                            // Replace wall with doorway — stairwell rooms connect
+                            // HORIZONTALLY through walls, same as any other room.
+                            interiorMap->ReplaceWallWithDoorway(guid, housingRoomAdd.TargetDoorComponentID,
+                                faction, rm, newRoomGuid);
                             // Update door connection data
                             for (HousingRoomEntity* re : interiorMap->GetRoomEntities())
                             {
@@ -2639,11 +2635,28 @@ void WorldSession::HandleHousingRoomApplyComponentMaterials(WorldPackets::Housin
         {
             int32 faction = (player->GetTeamId() == TEAM_ALLIANCE)
                 ? NEIGHBORHOOD_FACTION_ALLIANCE : NEIGHBORHOOD_FACTION_HORDE;
-            auto const& rooms = housing->GetRoomsMap();
-            auto roomItr = rooms.find(housingRoomApplyComponentMaterials.RoomGuid);
-            if (roomItr != rooms.end())
-                interiorMap->UpdateRoomComponentVisuals(housingRoomApplyComponentMaterials.RoomGuid, faction, roomItr->second,
-                    &housingRoomApplyComponentMaterials.RoomComponentIDs);
+            // Directly update the specific component MeshObjects' textureID.
+            // Don't use UpdateRoomComponentVisuals (which reads room.WallpaperId).
+            int32 textureID = (housingRoomApplyComponentMaterials.RoomComponentTextureID == 0xFFFFFFFF)
+                ? 0 : static_cast<int32>(housingRoomApplyComponentMaterials.RoomComponentTextureID);
+            auto meshItr = interiorMap->GetRoomMeshObjects().find(housingRoomApplyComponentMaterials.RoomGuid);
+            if (meshItr != interiorMap->GetRoomMeshObjects().end())
+            {
+                for (ObjectGuid const& meshGuid : meshItr->second)
+                {
+                    MeshObject* mesh = interiorMap->GetMeshObject(meshGuid);
+                    if (!mesh) continue;
+                    int32 compID = mesh->GetRoomComponentID();
+                    bool match = housingRoomApplyComponentMaterials.RoomComponentIDs.empty();
+                    for (uint32 cid : housingRoomApplyComponentMaterials.RoomComponentIDs)
+                        if (static_cast<int32>(cid) == compID) { match = true; break; }
+                    if (match && compID != 0)
+                        mesh->UpdateRoomComponentVisuals(
+                            mesh->GetRoomComponentOptionID(),
+                            mesh->GetHouseThemeID(),
+                            textureID);
+                }
+            }
         }
     }
 
