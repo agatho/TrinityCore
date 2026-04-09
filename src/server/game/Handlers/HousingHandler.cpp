@@ -2418,9 +2418,14 @@ void WorldSession::HandleHousingRoomAdd(WorldPackets::Housing::HousingRoomAdd co
                     {
                         if (c.ID == housingRoomAdd.TargetDoorComponentID)
                         {
-                            // Replace wall → doorway visuals
-                            interiorMap->ReplaceWallWithDoorway(guid, housingRoomAdd.TargetDoorComponentID,
-                                faction, rm, newRoomGuid);
+                            // Only replace wall→doorway for HORIZONTAL connections (same floor).
+                            // Stairwell rooms go to a different floor — don't destroy the wall.
+                            HouseRoomData const* newRoomData2 = sHousingMgr.GetHouseRoomData(housingRoomAdd.HouseRoomID);
+                            if (!newRoomData2 || !newRoomData2->HasStairs())
+                            {
+                                interiorMap->ReplaceWallWithDoorway(guid, housingRoomAdd.TargetDoorComponentID,
+                                    faction, rm, newRoomGuid);
+                            }
                             // Update door connection data
                             for (HousingRoomEntity* re : interiorMap->GetRoomEntities())
                             {
@@ -2646,7 +2651,8 @@ void WorldSession::HandleHousingRoomApplyComponentMaterials(WorldPackets::Housin
             auto const& rooms = housing->GetRoomsMap();
             auto roomItr = rooms.find(housingRoomApplyComponentMaterials.RoomGuid);
             if (roomItr != rooms.end())
-                interiorMap->UpdateRoomComponentVisuals(housingRoomApplyComponentMaterials.RoomGuid, faction, roomItr->second);
+                interiorMap->UpdateRoomComponentVisuals(housingRoomApplyComponentMaterials.RoomGuid, faction, roomItr->second,
+                    &housingRoomApplyComponentMaterials.RoomComponentIDs);
         }
     }
 
