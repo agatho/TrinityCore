@@ -2358,19 +2358,10 @@ void WorldSession::HandleHousingRoomAdd(WorldPackets::Housing::HousingRoomAdd co
                         newGridX = room.GridX;
                         newGridY = room.GridY + static_cast<int32>(sourceDoorOffset - newDoorOffset);
                     }
-                    // Check if the new room is a stairwell — place on a different floor
-                    HouseRoomData const* newRoomData = sHousingMgr.GetHouseRoomData(housingRoomAdd.HouseRoomID);
-                    if (newRoomData && newRoomData->HasStairs())
-                    {
-                        // Stairwell: same grid position as source, but FloorIndex+1
-                        newGridX = room.GridX;
-                        newGridY = room.GridY;
-                        newFloorIndex = room.FloorIndex + 1;
-                    }
-                    else
-                    {
-                        newFloorIndex = room.FloorIndex; // same floor as source
-                    }
+                    // Stairwell rooms are placed ADJACENT on the SAME floor like any
+                    // other room. The stairwell extends vertically (geobox Z=-1 to 14).
+                    // Only rooms placed at the stairwell's CEILING door go to floor+1.
+                    newFloorIndex = room.FloorIndex;
                     goto foundDoor;
                 }
             }
