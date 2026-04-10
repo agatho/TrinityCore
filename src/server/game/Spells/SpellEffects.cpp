@@ -6392,7 +6392,7 @@ void Spell::EffectGiveHouseLevel()
     if (!housing)
         return;
 
-    uint32 levelsToAdd = std::max(damage, 1);
+    uint32 levelsToAdd = std::max(GetEffectValueAsInt(), 1);
 
     TC_LOG_DEBUG("spells", "Spell::EffectGiveHouseLevel: Adding {} level(s) to house for player {} (house {}, current level {})",
         levelsToAdd, player->GetName(), housing->GetHouseGuid().ToString(), housing->GetLevel());
