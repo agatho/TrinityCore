@@ -855,7 +855,7 @@ enum SpellAttr11 : uint32
     SPELL_ATTR11_NOT_USABLE_IN_INSTANCES         = 0x00000800, // TITLE Not in Instances
     SPELL_ATTR11_UNK12                           = 0x00001000, // TITLE Unknown attribute 12@Attr11
     SPELL_ATTR11_UNK13                           = 0x00002000, // TITLE Unknown attribute 13@Attr11
-    SPELL_ATTR11_UNK14                           = 0x00004000, // TITLE Unknown attribute 14@Attr11
+    SPELL_ATTR11_CAN_ASSIST_UNINTERACTIBLE                          = 0x00004000, // TITLE Can Assist Uninteractible
     SPELL_ATTR11_UNK15                           = 0x00008000, // TITLE Unknown attribute 15@Attr11
     SPELL_ATTR11_NOT_USABLE_IN_CHALLENGE_MODE    = 0x00010000, // TITLE Not in Mythic+ Mode (Challenge Mode)
     SPELL_ATTR11_UNK17                           = 0x00020000, // TITLE Unknown attribute 17@Attr11
@@ -899,7 +899,7 @@ enum SpellAttr12 : uint32
     SPELL_ATTR12_UNK18                           = 0x00040000, // TITLE Unknown attribute 18@Attr12
     SPELL_ATTR12_UNK19                           = 0x00080000, // TITLE Unknown attribute 19@Attr12
     SPELL_ATTR12_UNK20                           = 0x00100000, // TITLE Unknown attribute 20@Attr12
-    SPELL_ATTR12_UNK21                           = 0x00200000, // TITLE Unknown attribute 21@Attr12
+    SPELL_ATTR12_USE_FLOAT_VALUES_FOR_SCALING_AMOUNTS               = 0x00200000, // TITLE Use float values for scaling amounts
     SPELL_ATTR12_UNK22                           = 0x00400000, // TITLE Unknown attribute 22@Attr12
     SPELL_ATTR12_START_COOLDOWN_ON_CAST_START    = 0x00800000, // TITLE Trigger Cooldown On Spell Start
     SPELL_ATTR12_IS_GARRISON_BUFF                = 0x01000000, // TITLE Never Learn
@@ -1217,6 +1217,10 @@ enum CharacterFlags4 : int32
     CHARACTER_FLAG_4_NO_NEIGHBORHOOD_INVITES                    = 0x00000080, // Character does not accept neighborhood invites
     CHARACTER_FLAG_4_CHECKED_FOR_2ND_WAVE_ACCOUNT_WIDE_FACTIONS = 0x00000100, // Character has been checked for 2nd wave of account wide factions
     CHARACTER_FLAG_4_WILL_BE_RESURRECTED_IN_HARDCORE            = 0x00000200, // Character will be resurrected overriding hardcore game rule
+    CHARACTER_FLAG_4_USED_MAX_LEVEL_BOOST                       = 0x00000400, // Character used a max level boost and cannot use it again
+    CHARACTER_FLAG_4_DISALLOW_RECENT_ALLIES_TO_SEE_LOCATION     = 0x00000800, // Other players cannot see your character's location if you are in their Recent Allies list
+    CHARACTER_FLAG_4_HAS_ARATHI_RPE                             = 0x00001000, // Character is granted the Arathi teleport option at selection (removed after entering world)
+    CHARACTER_FLAG_4_FREE_TRANSMOG_CLAIMED                      = 0x00002000, // Character has used their first discounted transmog transaction
 };
 
 enum CharacterRestrictionFlags : uint32
@@ -1650,7 +1654,7 @@ enum SpellEffectName
     SPELL_EFFECT_CANCEL_PRELOAD_WORLD               = 308,
     SPELL_EFFECT_PRELOAD_WORLD                      = 309,
     SPELL_EFFECT_310                                = 310,
-    SPELL_EFFECT_ENSURE_WORLD_LOADED                = 311,
+    SPELL_EFFECT_SKIP_QUESTLINE                     = 311,
     SPELL_EFFECT_312                                = 312,
     SPELL_EFFECT_CHANGE_ITEM_BONUSES_2              = 313, // MiscValue[0] = ItemBonusTreeID to preserve
     SPELL_EFFECT_ADD_SOCKET_BONUS                   = 314, // MiscValue[0] = required ItemBonusTreeID
@@ -6420,6 +6424,8 @@ enum ChatMsg : int32
     CHAT_MSG_GUILD_ITEM_LOOTED                  = 0x40,
     CHAT_MSG_COMMUNITIES_CHANNEL                = 0x41,
     CHAT_MSG_VOICE_TEXT                         = 0x42,
+    CHAT_MSG_PING                               = 0x43,
+    CHAT_MSG_ENCOUNTER_EVENT                    = 0x44,
 
     MAX_CHAT_MSG_TYPE
 };

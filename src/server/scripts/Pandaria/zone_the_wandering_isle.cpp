@@ -639,7 +639,7 @@ class spell_force_summoner_to_ride_vehicle : public SpellScript
 {
     void HandleScript(SpellEffIndex /*effIndex*/) const
     {
-        GetHitUnit()->CastSpell(GetCaster(), GetEffectValue(), TRIGGERED_FULL_MASK);
+        GetHitUnit()->CastSpell(GetCaster(), GetEffectValueAsInt(), TRIGGERED_FULL_MASK);
     }
 
     void Register() override
@@ -1492,7 +1492,7 @@ class spell_flying_shadow_kick : public SpellScript
         OnEffectHitTarget += SpellEffectFn(spell_flying_shadow_kick::HandleHitTarget, EFFECT_1, SPELL_EFFECT_SCRIPT_EFFECT);
     }
 };
-};
+}
 
 void AddSC_zone_the_wandering_isle()
 {
