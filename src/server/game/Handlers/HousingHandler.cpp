@@ -2201,11 +2201,11 @@ void WorldSession::HandleHousingRoomSetLayoutEditMode(WorldPackets::Housing::Hou
         }
     }
 
-    // Sniff-verified wire format (10B both enter and exit):
-    //   Enter: [8-byte OwnerGuid] 00 80
-    //   Exit:  [8-byte OwnerGuid] 00 00
+    // Sniff-verified (build 66838) wire format (10B both enter and exit):
+    //   Enter: [PackedGUID PlayerGuid] 00 80
+    //   Exit:  [PackedGUID PlayerGuid] 00 00
     WorldPackets::Housing::HousingRoomSetLayoutEditModeResponse response;
-    response.RoomGuid = housing->GetHouseGuid(); // context GUID (sniff: "OwnerGuid")
+    response.PlayerGuid = player->GetGUID(); // Sniff-verified: retail sends Player GUID
     response.Result = static_cast<uint8>(HOUSING_RESULT_SUCCESS);
     response.Active = housingRoomSetLayoutEditMode.Active;
     SendPacket(response.Write());
@@ -2378,7 +2378,7 @@ void WorldSession::HandleHousingRoomAdd(WorldPackets::Housing::HousingRoomAdd co
 
     WorldPackets::Housing::HousingRoomAddResponse response;
     response.Result = static_cast<uint8>(result);
-    response.RoomGuid = newRoomGuid;
+    response.PlayerGuid = player->GetGUID(); // Sniff-verified: retail sends Player GUID, not room GUID
     SendPacket(response.Write());
 
     if (result == HOUSING_RESULT_SUCCESS)
@@ -2493,35 +2493,20 @@ void WorldSession::HandleHousingRoomRotate(WorldPackets::Housing::HousingRoomRot
 
     if (result == HOUSING_RESULT_SUCCESS)
     {
-        // Update the HousingRoomEntity's orientation in-place via UPDATE_OBJECT.
+        // Sniff-verified (build 66838): retail UPDATE_OBJECT after rotation contains CREATE/UPDATE
+        // blocks for ALL child mesh objects (walls, floor, ceiling), not just the parent room entity.
+        // Despawn the rotated room's entities then re-spawn them with the new orientation.
         if (HouseInteriorMap* interiorMap = dynamic_cast<HouseInteriorMap*>(player->GetMap()))
         {
-            auto const& rooms = housing->GetRoomsMap();
-            auto roomItr = rooms.find(housingRoomRotate.RoomGuid);
-            if (roomItr != rooms.end())
-            {
-                float newFacing = static_cast<float>(roomItr->second.Orientation) * (M_PI / 2.0f);
-                QuaternionData newRot;
-                newRot.x = 0.0f; newRot.y = 0.0f;
-                newRot.z = std::sin(newFacing / 2.0f);
-                newRot.w = std::cos(newFacing / 2.0f);
+            interiorMap->DespawnRoomEntities(housingRoomRotate.RoomGuid);
 
-                for (HousingRoomEntity* re : interiorMap->GetRoomEntities())
-                {
-                    if (re && re->IsInWorld() && re->GetGUID() == housingRoomRotate.RoomGuid)
-                    {
-                        float roomX = interiorMap->GetOriginX() + static_cast<float>(roomItr->second.GridX);
-                        float roomY = interiorMap->GetOriginY() + static_cast<float>(roomItr->second.GridY);
-                        Position roomPos(roomX, roomY, interiorMap->GetOriginZ(), newFacing);
-                        re->SetMirroredPosition(roomPos, newRot, 1.0f);
-                        break;
-                    }
-                }
-            }
+            int32 faction = (player->GetTeamId() == TEAM_ALLIANCE)
+                ? NEIGHBORHOOD_FACTION_ALLIANCE : NEIGHBORHOOD_FACTION_HORDE;
+            interiorMap->SpawnRoomMeshObjects(housing, faction);
         }
     }
 
-    TC_LOG_INFO("housing", "CMSG_HOUSING_ROOM_ROTATE_ROOM RoomGuid: {}, Clockwise: {}, Result: {}",
+    TC_LOG_INFO("housing", "CMSG_HOUSING_ROOM_ROTATE RoomGuid: {}, Clockwise: {}, Result: {}",
         housingRoomRotate.RoomGuid.ToString(), housingRoomRotate.Clockwise, uint32(result));
 }
 
@@ -4518,6 +4503,109 @@ void WorldSession::HandleGetDecorRefundList(WorldPackets::Housing::GetDecorRefun
 
     TC_LOG_DEBUG("housing", "SMSG_GET_DECOR_REFUND_LIST_RESPONSE sent to Player: {} with {} decors",
         player->GetGUID().ToString(), response.Decors.size());
+}
+
+void WorldSession::HandleBulkRefund(WorldPackets::Housing::BulkRefund const& bulkRefund)
+{
+    Player* player = GetPlayer();
+    if (!player)
+        return;
+
+    TC_LOG_INFO("housing", "CMSG_BULK_REFUND Player: {} DecorGUIDs: {}",
+        player->GetGUID().ToString(), bulkRefund.DecorGUIDs.size());
+
+    Housing* housing = player->GetHousing();
+    if (!housing)
+    {
+        WorldPackets::Housing::BulkRefundResponse response;
+        response.Result = static_cast<uint8>(BULK_REFUND_RESULT_INVALID_REQUEST);
+        SendPacket(response.Write());
+        return;
+    }
+
+    if (bulkRefund.DecorGUIDs.empty())
+    {
+        WorldPackets::Housing::BulkRefundResponse response;
+        response.Result = static_cast<uint8>(BULK_REFUND_RESULT_INVALID_REQUEST);
+        SendPacket(response.Write());
+        return;
+    }
+
+    // Validate all GUIDs exist and are within the refund window before refunding any.
+    // This is atomic: if any GUID fails validation, the entire batch fails.
+    time_t now = GameTime::GetGameTime();
+    constexpr time_t REFUND_WINDOW = 2 * HOUR;
+
+    for (ObjectGuid const& decorGuid : bulkRefund.DecorGUIDs)
+    {
+        Housing::PlacedDecor const* placedDecor = housing->GetPlacedDecor(decorGuid);
+        if (!placedDecor)
+        {
+            TC_LOG_DEBUG("housing", "CMSG_BULK_REFUND: DecorGUID {} not found in placed decor", decorGuid.ToString());
+            WorldPackets::Housing::BulkRefundResponse response;
+            response.Result = static_cast<uint8>(BULK_REFUND_RESULT_INVALID_REQUEST);
+            SendPacket(response.Write());
+            return;
+        }
+
+        if (placedDecor->PlacementTime == 0 || (now - placedDecor->PlacementTime) >= REFUND_WINDOW)
+        {
+            TC_LOG_DEBUG("housing", "CMSG_BULK_REFUND: DecorGUID {} outside refund window (placed {}s ago)",
+                decorGuid.ToString(), placedDecor->PlacementTime > 0 ? (now - placedDecor->PlacementTime) : -1);
+            WorldPackets::Housing::BulkRefundResponse response;
+            response.Result = static_cast<uint8>(BULK_REFUND_RESULT_REFUND_WINDOW_EXPIRED);
+            SendPacket(response.Write());
+            return;
+        }
+    }
+
+    // All GUIDs validated — proceed with refund.
+    // Each decor is removed and returned to catalog (same as individual RemoveDecor).
+    uint8 plotIndex = housing->GetPlotIndex();
+    uint32 refundedCount = 0;
+
+    for (ObjectGuid const& decorGuid : bulkRefund.DecorGUIDs)
+    {
+        // Capture source info before removal
+        uint8 removedSourceType = DECOR_SOURCE_STANDARD;
+        std::string removedSourceValue;
+        if (Housing::PlacedDecor const* placedDecor = housing->GetPlacedDecor(decorGuid))
+        {
+            removedSourceType = placedDecor->SourceType;
+            removedSourceValue = placedDecor->SourceValue;
+        }
+
+        HousingResult result = housing->RemoveDecor(decorGuid);
+        if (result != HOUSING_RESULT_SUCCESS)
+        {
+            TC_LOG_WARN("housing", "CMSG_BULK_REFUND: RemoveDecor failed for {} with result {} (after validation passed)",
+                decorGuid.ToString(), uint32(result));
+            continue;
+        }
+
+        // Despawn the decor entity from the map
+        if (HousingMap* housingMap = dynamic_cast<HousingMap*>(player->GetMap()))
+            housingMap->DespawnDecorItem(plotIndex, decorGuid);
+        else if (HouseInteriorMap* interiorMap = dynamic_cast<HouseInteriorMap*>(player->GetMap()))
+            interiorMap->DespawnDecorItem(decorGuid);
+
+        // Return to storage in Account entity (same as individual remove)
+        Battlenet::Account& account = GetBattlenetAccount();
+        account.SetHousingDecorStorageEntry(decorGuid, ObjectGuid::Empty, removedSourceType, removedSourceValue);
+
+        ++refundedCount;
+    }
+
+    // Send single batch update to client after all removals
+    if (refundedCount > 0)
+        GetBattlenetAccount().SendUpdateToPlayer(player);
+
+    WorldPackets::Housing::BulkRefundResponse response;
+    response.Result = static_cast<uint8>(BULK_REFUND_RESULT_SUCCESS);
+    SendPacket(response.Write());
+
+    TC_LOG_INFO("housing", "CMSG_BULK_REFUND: Player {} refunded {}/{} decors",
+        player->GetName(), refundedCount, bulkRefund.DecorGUIDs.size());
 }
 
 void WorldSession::HandleHousingDecorStartPlacingNewDecor(WorldPackets::Housing::HousingDecorStartPlacingNewDecor const& housingDecorStartPlacingNewDecor)

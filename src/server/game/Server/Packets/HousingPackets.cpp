@@ -319,14 +319,14 @@ void HousingRoomSetLayoutEditMode::Read()
 
 void HousingRoomAdd::Read()
 {
-    _worldPacket >> HouseGuid;
+    _worldPacket >> SourceRoomGuid;
     _worldPacket >> TargetDoorComponentID;
     _worldPacket >> HouseRoomID;
     _worldPacket >> FloorIndex;
     _worldPacket >> Bits<1>(AutoFurnish);
 
-    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_ROOM_ADD HouseGuid: {} DoorComponentID: {} HouseRoomID: {} FloorIndex: {} AutoFurnish: {}",
-        HouseGuid.ToString(), TargetDoorComponentID, HouseRoomID, FloorIndex, AutoFurnish);
+    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_ROOM_ADD SourceRoomGuid: {} DoorComponentID: {} HouseRoomID: {} FloorIndex: {} AutoFurnish: {}",
+        SourceRoomGuid.ToString(), TargetDoorComponentID, HouseRoomID, FloorIndex, AutoFurnish);
 }
 
 void HousingRoomRemove::Read()
@@ -1063,24 +1063,24 @@ WorldPacket const* HousingFixtureDeleteFixtureResponse::Write()
 
 WorldPacket const* HousingRoomSetLayoutEditModeResponse::Write()
 {
-    // IDA case 5439488: PackedGUID + uint8(Result) + uint8(bit7=Active)
-    _worldPacket << RoomGuid;
+    // Sniff-verified (build 66838): PackedGUID(PlayerGuid) + uint8(Result) + uint8(bit7=Active)
+    _worldPacket << PlayerGuid;
     _worldPacket << uint8(Result);
     _worldPacket << uint8(Active ? 0x80 : 0x00);
 
-    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_ROOM_SET_LAYOUT_EDIT_MODE_RESPONSE RoomGuid: {} Result: {} Active: {}",
-        RoomGuid.ToString(), Result, Active);
+    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_ROOM_SET_LAYOUT_EDIT_MODE_RESPONSE PlayerGuid: {} Result: {} Active: {}",
+        PlayerGuid.ToString(), Result, Active);
 
     return &_worldPacket;
 }
 
 WorldPacket const* HousingRoomAddResponse::Write()
 {
-    // IDA case 5439489: PackedGUID + uint8(Result)
-    _worldPacket << RoomGuid;
+    // Sniff-verified (build 66838): PackedGUID(PlayerGuid) + uint8(Result)
+    _worldPacket << PlayerGuid;
     _worldPacket << uint8(Result);
 
-    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_ROOM_ADD_RESPONSE RoomGuid: {} Result: {}", RoomGuid.ToString(), Result);
+    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_ROOM_ADD_RESPONSE PlayerGuid: {} Result: {}", PlayerGuid.ToString(), Result);
 
     return &_worldPacket;
 }
@@ -1990,6 +1990,31 @@ WorldPacket const* GetDecorRefundListResponse::Write()
     for (size_t i = 0; i < Decors.size(); ++i)
         TC_LOG_DEBUG("network.opcode", "  Decor[{}]: ID={} RefundPrice={} ExpiryTime={} Flags={}",
             i, Decors[i].DecorID, Decors[i].RefundPrice, Decors[i].ExpiryTime, Decors[i].Flags);
+
+    return &_worldPacket;
+}
+
+void BulkRefund::Read()
+{
+    uint32 count = 0;
+    _worldPacket >> count;
+
+    // Sane limit — retail client UI limits to the refund window (2h) worth of decor
+    if (count > 500)
+        count = 500;
+
+    DecorGUIDs.resize(count);
+    for (uint32 i = 0; i < count; ++i)
+        _worldPacket >> DecorGUIDs[i];
+
+    TC_LOG_DEBUG("network.opcode", "CMSG_BULK_REFUND Count: {}", count);
+}
+
+WorldPacket const* BulkRefundResponse::Write()
+{
+    _worldPacket << uint8(Result);
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_BULK_REFUND_RESPONSE Result: {}", Result);
 
     return &_worldPacket;
 }

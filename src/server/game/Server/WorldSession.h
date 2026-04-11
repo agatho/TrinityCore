@@ -488,6 +488,7 @@ namespace WorldPackets
         class HousingFixtureSetHouseType;
         class GetAllLicensedDecorQuantities;
         class GetDecorRefundList;
+        class BulkRefund;
         class HousingRequestEditorAvailability;
         class HousingDecorUpdateDyeSlot;
         class HousingDecorStartPlacingFromSource;
@@ -1663,6 +1664,7 @@ class TC_GAME_API WorldSession
         // Housing - Decor Licensing / Refund
         void HandleGetAllLicensedDecorQuantities(WorldPackets::Housing::GetAllLicensedDecorQuantities const& getAllLicensedDecorQuantities);
         void HandleGetDecorRefundList(WorldPackets::Housing::GetDecorRefundList const& getDecorRefundList);
+        void HandleBulkRefund(WorldPackets::Housing::BulkRefund const& bulkRefund);
 
         // Housing - Photo Sharing
         void HandleHousingPhotoSharingCompleteAuthorization(WorldPackets::Housing::HousingPhotoSharingCompleteAuthorization const& packet);

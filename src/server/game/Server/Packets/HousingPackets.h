@@ -491,7 +491,9 @@ namespace WorldPackets::Housing
 
         void Read() override;
 
-        ObjectGuid HouseGuid;
+        // Sniff-verified (build 66838): this is a Housing subType=2 room GUID — the existing
+        // room whose door is being connected to, not a house GUID
+        ObjectGuid SourceRoomGuid;
         uint32 TargetDoorComponentID = 0;   // RoomComponent.ID of the door being connected to
         uint32 HouseRoomID = 0;             // HouseRoom.ID of the room template to add
         uint32 FloorIndex = 0;
@@ -1009,6 +1011,17 @@ namespace WorldPackets::Housing
         void Read() override { }
     };
 
+    // CMSG_BULK_REFUND (0x290033) — bulk-refund placed decor within the refund window
+    class BulkRefund final : public ClientPacket
+    {
+    public:
+        explicit BulkRefund(WorldPacket&& packet) : ClientPacket(CMSG_BULK_REFUND, std::move(packet)) { }
+
+        void Read() override;
+
+        std::vector<ObjectGuid> DecorGUIDs;
+    };
+
     // ============================================================
     // Other Housing CMSG
     // ============================================================
@@ -1367,8 +1380,8 @@ namespace WorldPackets::Housing
     public:
         HousingRoomSetLayoutEditModeResponse() : ServerPacket(SMSG_HOUSING_ROOM_SET_LAYOUT_EDIT_MODE_RESPONSE) { }
         WorldPacket const* Write() override;
-        // IDA case 5439488: PackedGUID + uint8(Result) + uint8(bit7=Active)
-        ObjectGuid RoomGuid;
+        // Sniff-verified (build 66838): PackedGUID(PlayerGuid) + uint8(Result) + uint8(bit7=Active)
+        ObjectGuid PlayerGuid;
         uint8 Result = 0;
         bool Active = false;
     };
@@ -1378,8 +1391,9 @@ namespace WorldPackets::Housing
     public:
         HousingRoomAddResponse() : ServerPacket(SMSG_HOUSING_ROOM_ADD_RESPONSE) { }
         WorldPacket const* Write() override;
+        // Sniff-verified (build 66838): retail sends Player GUID as context, not the new room GUID
+        ObjectGuid PlayerGuid;
         uint8 Result = 0;
-        ObjectGuid RoomGuid;
     };
 
     class HousingRoomRemoveResponse final : public ServerPacket
@@ -2092,6 +2106,15 @@ namespace WorldPackets::Housing
         GetDecorRefundListResponse() : ServerPacket(SMSG_GET_DECOR_REFUND_LIST_RESPONSE) { }
         WorldPacket const* Write() override;
         std::vector<JamClientRefundableDecor> Decors;
+    };
+
+    // SMSG_BULK_REFUND_RESPONSE (0x420375) — result of BulkRefundDecors operation
+    class BulkRefundResponse final : public ServerPacket
+    {
+    public:
+        BulkRefundResponse() : ServerPacket(SMSG_BULK_REFUND_RESPONSE) { }
+        WorldPacket const* Write() override;
+        uint8 Result = 0; // BulkRefundResult enum
     };
 
     class GetAllLicensedDecorQuantitiesResponse final : public ServerPacket

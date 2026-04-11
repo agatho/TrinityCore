@@ -297,6 +297,15 @@ enum NeighborhoodInviteResult : uint8
     NEIGHBORHOOD_INVITE_TOO_MANY_REQUESTS       = 10
 };
 
+// BulkRefundResult enum - 4 values (from client string xrefs, build 66838)
+enum BulkRefundResult : uint8
+{
+    BULK_REFUND_RESULT_SUCCESS                  = 0,
+    BULK_REFUND_RESULT_INVALID_REQUEST          = 1,
+    BULK_REFUND_RESULT_REFUND_WINDOW_EXPIRED    = 2,
+    BULK_REFUND_RESULT_TIMEOUT                  = 3
+};
+
 // HouseOwnerError enum - 4 values
 enum HouseOwnerError : uint8
 {
