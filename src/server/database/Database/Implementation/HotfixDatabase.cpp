@@ -961,7 +961,7 @@ void HotfixDatabaseConnection::DoPrepareStatements()
     PREPARE_LOCALE_STMT(HOTFIX_SEL_HOUSE_ROOM, "SELECT ID, Name_lang FROM house_room_locale WHERE (`VerifiedBuild` > 0) = ? AND locale = ?", CONNECTION_SYNCH);
 
     // HouseTheme.db2
-    PrepareStatement(HOTFIX_SEL_HOUSE_THEME, "SELECT Name, ID, IconFileDataID, CategoryID FROM house_theme"
+    PrepareStatement(HOTFIX_SEL_HOUSE_THEME, "SELECT Name, ID, Flags, ParentThemeID FROM house_theme"
         " WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
     PREPARE_MAX_ID_STMT(HOTFIX_SEL_HOUSE_THEME, "SELECT MAX(ID) + 1 FROM house_theme", CONNECTION_SYNCH);
     PREPARE_LOCALE_STMT(HOTFIX_SEL_HOUSE_THEME, "SELECT ID, Name_lang FROM house_theme_locale WHERE (`VerifiedBuild` > 0) = ? AND locale = ?", CONNECTION_SYNCH);

@@ -258,6 +258,12 @@ void HousingMgr::LoadHouseThemeData()
         data.ParentThemeID = entry->ParentThemeID;
     }
 
+    // Log the theme hierarchy for diagnostic purposes
+    for (auto const& [id, data] : _houseThemeStore)
+    {
+        if (data.ParentThemeID != 0)
+            TC_LOG_DEBUG("housing", "  HouseTheme ID={} Name='{}' -> base={}", id, data.Name, data.ParentThemeID);
+    }
     TC_LOG_DEBUG("housing", "HousingMgr::LoadHouseThemeData: Loaded {} HouseTheme entries", uint32(_houseThemeStore.size()));
 }
 
@@ -1701,11 +1707,39 @@ int32 HousingMgr::GetDefaultSubThemeID(int32 baseThemeID) const
 int32 HousingMgr::GetBaseThemeID(int32 themeID) const
 {
     // Convert a sub-theme (e.g., 20=Folk Light) to its base theme (1=Folk).
-    // Sub-themes have ParentThemeID != 0. Base themes have ParentThemeID = 0.
+    // Sub-themes have ParentThemeID != 0 in HouseTheme DB2.
+    // RoomComponentOption entries only exist for base themes (1-5).
+
+    // 1) Try DB2 data (ParentThemeID field from CASC)
     auto itr = _houseThemeStore.find(themeID);
     if (itr != _houseThemeStore.end() && itr->second.ParentThemeID != 0)
         return itr->second.ParentThemeID;
-    return themeID; // already a base theme or not found
+
+    // Already a base theme (1-5)
+    if (themeID >= 1 && themeID <= 5)
+        return themeID;
+
+    // 2) Hardcoded fallback: sub-theme → base theme mapping from DB2 build 66838.
+    // This covers the case where ParentThemeID is not properly loaded from DB2
+    // (e.g., hotfix table schema mismatch). Only needed for sub-themes (6-28).
+    // Base themes: 1=Folk, 2=Rugged, 3=Generic, 4=Bel'ameth, 5=Silvermoon
+    switch (themeID)
+    {
+        // Folk (1) sub-themes
+        case 6:  case 7:  case 20: return 1;
+        // Rugged (2) sub-themes
+        case 8:  case 9:  case 26: return 2;
+        // Generic (3) sub-themes
+        case 10: case 27: return 3;
+        // Bel'ameth (4) sub-themes
+        case 11: case 12: case 28: return 4;
+        // Silvermoon (5) sub-themes
+        case 13: return 5;
+        default: break;
+    }
+
+    TC_LOG_DEBUG("housing", "HousingMgr::GetBaseThemeID: Unknown themeID {} (no ParentThemeID, not in fallback)", themeID);
+    return themeID;
 }
 
 RoomComponentOptionEntry const* HousingMgr::FindRoomComponentOption(int32 meshStyleFilterID, int32 houseThemeID) const
