@@ -2660,6 +2660,24 @@ void WorldSession::HandleHousingRoomSetDoorType(WorldPackets::Housing::HousingRo
     response.DoorType = housingRoomSetDoorType.DoorType;
     SendPacket(response.Write());
 
+    // Door type changes swap 3D models — respawn the affected component meshes
+    if (result == HOUSING_RESULT_SUCCESS)
+    {
+        if (HouseInteriorMap* interiorMap = dynamic_cast<HouseInteriorMap*>(player->GetMap()))
+        {
+            int32 faction = (player->GetTeamId() == TEAM_ALLIANCE)
+                ? NEIGHBORHOOD_FACTION_ALLIANCE : NEIGHBORHOOD_FACTION_HORDE;
+            auto const& rooms = housing->GetRoomsMap();
+            auto roomItr = rooms.find(housingRoomSetDoorType.RoomGuid);
+            if (roomItr != rooms.end())
+            {
+                std::vector<uint32> compIDs = { housingRoomSetDoorType.ThemeOptionID };
+                interiorMap->RespawnRoomComponentsForTheme(housingRoomSetDoorType.RoomGuid, faction,
+                    roomItr->second, &compIDs, static_cast<int32>(roomItr->second.ThemeId));
+            }
+        }
+    }
+
     TC_LOG_INFO("housing", "CMSG_HOUSING_ROOM_SET_DOOR_TYPE RoomGuid: {}, ThemeOptionID: {}, DoorType: {}, Result: {}",
         housingRoomSetDoorType.RoomGuid.ToString(), housingRoomSetDoorType.ThemeOptionID, housingRoomSetDoorType.DoorType, uint32(result));
 }
@@ -2688,6 +2706,24 @@ void WorldSession::HandleHousingRoomSetCeilingType(WorldPackets::Housing::Housin
     response.ComponentID = housingRoomSetCeilingType.ThemeOptionID;
     response.CeilingType = housingRoomSetCeilingType.CeilingType;
     SendPacket(response.Write());
+
+    // Ceiling type changes swap 3D models — respawn the affected component meshes
+    if (result == HOUSING_RESULT_SUCCESS)
+    {
+        if (HouseInteriorMap* interiorMap = dynamic_cast<HouseInteriorMap*>(player->GetMap()))
+        {
+            int32 faction = (player->GetTeamId() == TEAM_ALLIANCE)
+                ? NEIGHBORHOOD_FACTION_ALLIANCE : NEIGHBORHOOD_FACTION_HORDE;
+            auto const& rooms = housing->GetRoomsMap();
+            auto roomItr = rooms.find(housingRoomSetCeilingType.RoomGuid);
+            if (roomItr != rooms.end())
+            {
+                std::vector<uint32> compIDs = { housingRoomSetCeilingType.ThemeOptionID };
+                interiorMap->RespawnRoomComponentsForTheme(housingRoomSetCeilingType.RoomGuid, faction,
+                    roomItr->second, &compIDs, static_cast<int32>(roomItr->second.ThemeId));
+            }
+        }
+    }
 
     TC_LOG_INFO("housing", "CMSG_HOUSING_ROOM_SET_CEILING_TYPE RoomGuid: {}, ThemeOptionID: {}, CeilingType: {}, Result: {}",
         housingRoomSetCeilingType.RoomGuid.ToString(), housingRoomSetCeilingType.ThemeOptionID, housingRoomSetCeilingType.CeilingType, uint32(result));
