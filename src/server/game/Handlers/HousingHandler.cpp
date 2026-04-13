@@ -2660,7 +2660,7 @@ void WorldSession::HandleHousingRoomSetDoorType(WorldPackets::Housing::HousingRo
     response.DoorType = housingRoomSetDoorType.DoorType;
     SendPacket(response.Write());
 
-    // Door type changes swap 3D models — respawn the affected component meshes
+    // Door type changes swap 3D models — respawn with the new DoorType as SubType
     if (result == HOUSING_RESULT_SUCCESS)
     {
         if (HouseInteriorMap* interiorMap = dynamic_cast<HouseInteriorMap*>(player->GetMap()))
@@ -2673,7 +2673,8 @@ void WorldSession::HandleHousingRoomSetDoorType(WorldPackets::Housing::HousingRo
             {
                 std::vector<uint32> compIDs = { housingRoomSetDoorType.ThemeOptionID };
                 interiorMap->RespawnRoomComponentsForTheme(housingRoomSetDoorType.RoomGuid, faction,
-                    roomItr->second, &compIDs, static_cast<int32>(roomItr->second.ThemeId));
+                    roomItr->second, &compIDs, static_cast<int32>(roomItr->second.ThemeId),
+                    housingRoomSetDoorType.DoorType);
             }
         }
     }
@@ -2707,7 +2708,7 @@ void WorldSession::HandleHousingRoomSetCeilingType(WorldPackets::Housing::Housin
     response.CeilingType = housingRoomSetCeilingType.CeilingType;
     SendPacket(response.Write());
 
-    // Ceiling type changes swap 3D models — respawn the affected component meshes
+    // Ceiling type changes swap 3D models — respawn with the new CeilingType as SubType
     if (result == HOUSING_RESULT_SUCCESS)
     {
         if (HouseInteriorMap* interiorMap = dynamic_cast<HouseInteriorMap*>(player->GetMap()))
@@ -2720,7 +2721,8 @@ void WorldSession::HandleHousingRoomSetCeilingType(WorldPackets::Housing::Housin
             {
                 std::vector<uint32> compIDs = { housingRoomSetCeilingType.ThemeOptionID };
                 interiorMap->RespawnRoomComponentsForTheme(housingRoomSetCeilingType.RoomGuid, faction,
-                    roomItr->second, &compIDs, static_cast<int32>(roomItr->second.ThemeId));
+                    roomItr->second, &compIDs, static_cast<int32>(roomItr->second.ThemeId),
+                    housingRoomSetCeilingType.CeilingType);
             }
         }
     }

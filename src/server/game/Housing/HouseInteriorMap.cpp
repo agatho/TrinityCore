@@ -712,7 +712,8 @@ void HouseInteriorMap::UpdateRoomComponentTextures(ObjectGuid roomGuid, Housing:
 }
 
 void HouseInteriorMap::RespawnRoomComponentsForTheme(ObjectGuid roomGuid, int32 factionRestriction,
-    Housing::Room const& room, std::vector<uint32> const* componentIDs, int32 newThemeID)
+    Housing::Room const& room, std::vector<uint32> const* componentIDs, int32 newThemeID,
+    int32 overrideSubType /*= -1*/)
 {
     // Theme changes require different models (FileDataIDs), so we DESTROY old meshes
     // and CREATE new ones with new GUIDs. The client shows walls disappearing/reappearing.
@@ -741,8 +742,12 @@ void HouseInteriorMap::RespawnRoomComponentsForTheme(ObjectGuid roomGuid, int32 
         return;
     }
 
-    // Collect meshes to destroy (filtered by componentIDs)
-    std::vector<std::pair<ObjectGuid, int32>> toDestroy; // meshGuid, compID
+    // Phase 1: Record existing mesh option Types before destroying.
+    // This preserves door vs plain wall state — we only spawn options whose Type
+    // matches what was there before (prevents doors appearing on every wall).
+    struct OldMeshInfo { ObjectGuid guid; int32 compID; uint8 optType; uint8 optSubType; };
+    std::vector<OldMeshInfo> toDestroy;
+
     for (ObjectGuid const& meshGuid : meshItr->second)
     {
         MeshObject* mesh = GetMeshObject(meshGuid);
@@ -754,29 +759,36 @@ void HouseInteriorMap::RespawnRoomComponentsForTheme(ObjectGuid roomGuid, int32 
         if (!match)
             for (uint32 cid : *componentIDs)
                 if (static_cast<int32>(cid) == compID) { match = true; break; }
-        if (match)
-            toDestroy.emplace_back(meshGuid, compID);
+        if (!match) continue;
+
+        // Record the option Type+SubType from the current mesh
+        uint8 optType = 0, optSubType = 0;
+        int32 optionID = mesh->GetRoomComponentOptionID();
+        if (RoomComponentOptionEntry const* opt = sRoomComponentOptionStore.LookupEntry(static_cast<uint32>(optionID)))
+        {
+            optType = opt->Type;
+            optSubType = opt->SubType;
+        }
+        toDestroy.push_back({ meshGuid, compID, optType, optSubType });
     }
 
-    // Phase 1: Destroy old meshes
-    for (auto const& [meshGuid, compID] : toDestroy)
+    // Destroy old meshes
+    for (auto const& info : toDestroy)
     {
-        MeshObject* mesh = GetMeshObject(meshGuid);
+        MeshObject* mesh = GetMeshObject(info.guid);
         if (!mesh) continue;
-
-        // Send DESTROY to all players on map
         mesh->DestroyForNearbyPlayers();
         RemoveFromMap(mesh, true);
-        // Remove from tracking
         auto& guids = meshItr->second;
-        guids.erase(std::remove(guids.begin(), guids.end(), meshGuid), guids.end());
+        guids.erase(std::remove(guids.begin(), guids.end(), info.guid), guids.end());
     }
 
-    // Phase 2: Create new meshes for the affected components with the new theme
-    // Collect unique compIDs that need respawning
-    std::set<int32> affectedCompIDs;
-    for (auto const& [meshGuid, compID] : toDestroy)
-        affectedCompIDs.insert(compID);
+    // Phase 2: Create new meshes for each destroyed mesh, matching by (compID, Type, SubType)
+    // Build a per-compID list of Types that need respawning
+    // key: compID, value: list of (Type, SubType) pairs
+    std::unordered_map<int32, std::vector<std::pair<uint8, uint8>>> compTypeMap;
+    for (auto const& info : toDestroy)
+        compTypeMap[info.compID].emplace_back(info.optType, info.optSubType);
 
     // Look up the room's components from DB2
     HouseRoomData const* roomData = sHousingMgr.GetHouseRoomData(room.RoomEntryId);
@@ -789,7 +801,8 @@ void HouseInteriorMap::RespawnRoomComponentsForTheme(ObjectGuid roomGuid, int32 
     uint32 spawnedCount = 0;
     for (RoomComponentData const& comp : *components)
     {
-        if (affectedCompIDs.find(static_cast<int32>(comp.ID)) == affectedCompIDs.end())
+        auto typeItr = compTypeMap.find(static_cast<int32>(comp.ID));
+        if (typeItr == compTypeMap.end())
             continue;
 
         Position compPos(comp.OffsetPos[0], comp.OffsetPos[1], comp.OffsetPos[2], 0.0f);
@@ -815,48 +828,34 @@ void HouseInteriorMap::RespawnRoomComponentsForTheme(ObjectGuid roomGuid, int32 
         if (allOptions.empty() && factionThemeID != 1)
             allOptions = sHousingMgr.FindAllRoomComponentOptions(comp.MeshStyleFilterID, 1);
 
-        // Determine door connectivity (same logic as SpawnRoomMeshObjects)
-        bool isDoorComponent = (comp.ConnectionType != 0) &&
-            (std::abs(comp.OffsetPos[0]) > 0.5f) != (std::abs(comp.OffsetPos[1]) > 0.5f);
-        bool hasConnectedRoom = false;
-        if (isDoorComponent)
+        // For each old mesh's (Type, SubType), find the equivalent in new theme.
+        // If overrideSubType >= 0, use that instead of the old SubType (for ceiling/door type changes).
+        for (auto const& [oldType, oldSubType] : typeItr->second)
         {
-            // Check all rooms for adjacency via slot/grid position
-            Housing* housing = GetOwnerHousing();
-            if (housing)
+            uint8 targetSubType = (overrideSubType >= 0) ? static_cast<uint8>(overrideSubType) : oldSubType;
+
+            RoomComponentOptionEntry const* bestOpt = nullptr;
+            for (auto const* opt : allOptions)
             {
-                for (auto const& [rGuid, r] : housing->GetRoomsMap())
-                {
-                    if (rGuid == roomGuid) continue;
-                    // Simple adjacency: rooms share a grid boundary
-                    int32 dx = r.GridX - room.GridX;
-                    int32 dy = r.GridY - room.GridY;
-                    if ((std::abs(dx) == 15 && dy == 0) || (dx == 0 && std::abs(dy) == 15))
-                    {
-                        hasConnectedRoom = true;
-                        break;
-                    }
-                }
+                if (opt->Type == oldType && opt->SubType == targetSubType)
+                { bestOpt = opt; break; }
             }
-        }
+            // Fallback: match Type only
+            if (!bestOpt)
+                for (auto const* opt : allOptions)
+                    if (opt->Type == oldType) { bestOpt = opt; break; }
+            // Last resort: any option
+            if (!bestOpt && !allOptions.empty())
+                bestOpt = allOptions[0];
+            if (!bestOpt)
+                continue;
 
-        for (RoomComponentOptionEntry const* optEntry : allOptions)
-        {
-            if (!isDoorComponent && optEntry->Type != 0)
-                continue;
-            if (isDoorComponent && !hasConnectedRoom && optEntry->Type != 0)
-                continue;
-            if (isDoorComponent && hasConnectedRoom && optEntry->Type == 0)
-                continue;
-
-            int32 compFileDataID = optEntry->ModelFileDataID > 0 ? optEntry->ModelFileDataID : comp.ModelFileDataID;
+            int32 compFileDataID = bestOpt->ModelFileDataID > 0 ? bestOpt->ModelFileDataID : comp.ModelFileDataID;
             if (compFileDataID <= 0)
                 continue;
 
-            int32 roomComponentOptionID = static_cast<int32>(optEntry->ID);
-            int32 houseThemeID = (newThemeID != 0) ? newThemeID : sHousingMgr.GetDefaultSubThemeID(optEntry->HouseThemeID);
-            int32 field24 = static_cast<int32>(optEntry->SubType);
-            uint8 field20 = static_cast<uint8>(optEntry->Type);
+            int32 roomComponentOptionID = static_cast<int32>(bestOpt->ID);
+            int32 houseThemeID = (newThemeID != 0) ? newThemeID : sHousingMgr.GetDefaultSubThemeID(bestOpt->HouseThemeID);
 
             // Per-component-type texture
             int32 roomComponentTextureID = 0;
@@ -881,10 +880,6 @@ void HouseInteriorMap::RespawnRoomComponentsForTheme(ObjectGuid roomGuid, int32 
                     roomComponentTextureID = sHousingMgr.GetTextureIdForComponentType(comp.Type);
             }
 
-            // Geobox (use defaults for non-geobox components)
-            float geoMinX = 0, geoMinY = 0, geoMinZ = 0;
-            float geoMaxX = 0, geoMaxY = 0, geoMaxZ = 0;
-
             MeshObject* newMesh = MeshObject::CreateMeshObject(this, compPos, compRot, 1.0f,
                 compFileDataID, /*isWMO*/ true, roomHousingGuid, /*attachFlags*/ 3, &roomPos);
             if (!newMesh) continue;
@@ -892,9 +887,9 @@ void HouseInteriorMap::RespawnRoomComponentsForTheme(ObjectGuid roomGuid, int32 
             PhasingHandler::InitDbPhaseShift(newMesh->GetPhaseShift(), PHASE_USE_FLAGS_ALWAYS_VISIBLE, 0, 0);
             newMesh->InitHousingRoomComponentData(roomHousingGuid,
                 roomComponentOptionID, static_cast<int32>(comp.ID),
-                comp.Type, field24, field20,
+                comp.Type, static_cast<int32>(bestOpt->SubType), static_cast<uint8>(bestOpt->Type),
                 houseThemeID, roomComponentTextureID, 0,
-                geoMinX, geoMinY, geoMinZ, geoMaxX, geoMaxY, geoMaxZ);
+                0, 0, 0, 0, 0, 0);
 
             if (AddToMap(newMesh))
             {
@@ -906,8 +901,8 @@ void HouseInteriorMap::RespawnRoomComponentsForTheme(ObjectGuid roomGuid, int32 
         }
     }
 
-    TC_LOG_INFO("housing", "RespawnRoomComponentsForTheme: room={} theme={} destroyed={} spawned={} compIDs={}",
-        roomGuid.ToString(), newThemeID, toDestroy.size(), spawnedCount, affectedCompIDs.size());
+    TC_LOG_INFO("housing", "RespawnRoomComponentsForTheme: room={} theme={} destroyed={} spawned={}",
+        roomGuid.ToString(), newThemeID, toDestroy.size(), spawnedCount);
 }
 
 void HouseInteriorMap::SpawnInteriorDecor(Housing* housing)

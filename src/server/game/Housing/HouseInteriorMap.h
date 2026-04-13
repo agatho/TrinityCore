@@ -73,8 +73,12 @@ public:
     /// Theme changes require new models (different FileDataIDs), so we DESTROY old
     /// meshes and CREATE new ones with new GUIDs. The client expects this pattern
     /// (sniff shows walls disappearing and reappearing during theme changes).
+    /// @param overrideSubType  If >= 0, forces new meshes to use this SubType instead
+    ///                         of preserving the old mesh's SubType. Used by SET_CEILING_TYPE
+    ///                         and SET_DOOR_TYPE to select the correct variant.
     void RespawnRoomComponentsForTheme(ObjectGuid roomGuid, int32 factionRestriction,
-        Housing::Room const& room, std::vector<uint32> const* componentIDs, int32 newThemeID);
+        Housing::Room const& room, std::vector<uint32> const* componentIDs, int32 newThemeID,
+        int32 overrideSubType = -1);
 
     /// Despawn a single room's entities (MeshObjects + HousingRoomEntity).
     void DespawnRoomEntities(ObjectGuid roomGuid);
