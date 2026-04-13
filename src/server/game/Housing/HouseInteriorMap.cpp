@@ -797,17 +797,28 @@ void HouseInteriorMap::SpawnInteriorDecor(Housing* housing)
             continue;
         }
 
-        // Find the room entity that this decor is attached to (by RoomGuid).
-        // Sniff-verified: decor attaches to room entity with attachFlags=3.
-        ObjectGuid roomEntityGuid = ObjectGuid::Empty;
+        // Use decor.RoomGuid directly as AttachParentGUID — this is the HousingRoomEntity's
+        // Housing GUID, NOT a component MeshObject GUID. _roomMeshObjects stores component
+        // MeshObject GUIDs which are the wrong entity type for parent attachment.
+        // Sniff-verified: decor attaches to room entity (Housing/2 GUID) with attachFlags=3.
+        ObjectGuid roomEntityGuid = decor.RoomGuid;
         Position roomWorldPos;
-        auto roomItr = _roomMeshObjects.find(decor.RoomGuid);
-        if (roomItr != _roomMeshObjects.end() && !roomItr->second.empty())
+
+        // Look up room world position from Housing room data (grid coords)
+        Housing* ownerHousing = GetOwnerHousing();
+        if (ownerHousing && !roomEntityGuid.IsEmpty())
         {
-            // First entry in the room's mesh list is the room entity itself
-            roomEntityGuid = roomItr->second[0];
-            if (MeshObject* roomEntity = GetMeshObject(roomEntityGuid))
-                roomWorldPos = roomEntity->GetPosition();
+            for (Housing::Room const* rm : ownerHousing->GetRooms())
+            {
+                if (rm->Guid == roomEntityGuid)
+                {
+                    static constexpr float FLOOR_HEIGHT = 7.0f;
+                    roomWorldPos = Position(_originX + static_cast<float>(rm->GridX),
+                                            _originY + static_cast<float>(rm->GridY),
+                                            _originZ + static_cast<float>(rm->FloorIndex) * FLOOR_HEIGHT, 0.0f);
+                    break;
+                }
+            }
         }
 
         float worldX = decor.PosX;
@@ -817,14 +828,19 @@ void HouseInteriorMap::SpawnInteriorDecor(Housing* housing)
 
         QuaternionData rot(decor.RotationX, decor.RotationY, decor.RotationZ, decor.RotationW);
 
-        // Convert world position to room-local position
+        // Convert world → room-local with inverse rotation (matches SpawnSingleInteriorDecor)
         float localX = worldX;
         float localY = worldY;
         float localZ = worldZ;
         if (!roomEntityGuid.IsEmpty())
         {
-            localX = worldX - roomWorldPos.GetPositionX();
-            localY = worldY - roomWorldPos.GetPositionY();
+            float dx = worldX - roomWorldPos.GetPositionX();
+            float dy = worldY - roomWorldPos.GetPositionY();
+            float roomFacing = roomWorldPos.GetOrientation();
+            float cosF = std::cos(roomFacing);
+            float sinF = std::sin(roomFacing);
+            localX =  cosF * dx + sinF * dy;
+            localY = -sinF * dx + cosF * dy;
             localZ = worldZ - roomWorldPos.GetPositionZ();
         }
 

@@ -3245,7 +3245,7 @@ struct MapEntry
 
     bool IsDungeon() const { return (InstanceType == MAP_INSTANCE || InstanceType == MAP_RAID || InstanceType == MAP_SCENARIO) && !IsGarrison(); }
     bool IsNonRaidDungeon() const { return InstanceType == MAP_INSTANCE; }
-    bool Instanceable() const { return InstanceType == MAP_INSTANCE || InstanceType == MAP_RAID || InstanceType == MAP_BATTLEGROUND || InstanceType == MAP_ARENA || InstanceType == MAP_SCENARIO || InstanceType == MAP_HOUSE_INTERIOR; }
+    bool Instanceable() const { return InstanceType == MAP_INSTANCE || InstanceType == MAP_RAID || InstanceType == MAP_BATTLEGROUND || InstanceType == MAP_ARENA || InstanceType == MAP_SCENARIO || InstanceType == MAP_HOUSE_INTERIOR || InstanceType == MAP_HOUSE_NEIGHBORHOOD; }
     bool IsRaid() const { return InstanceType == MAP_RAID; }
     bool IsBattleground() const { return InstanceType == MAP_BATTLEGROUND; }
     bool IsBattleArena() const { return InstanceType == MAP_ARENA; }

@@ -1414,6 +1414,14 @@ void WorldSession::HandleNeighborhoodMoveHouse(WorldPackets::Neighborhood::Neigh
     response.Result = static_cast<uint8>(result);
     if (result == HOUSING_RESULT_SUCCESS)
     {
+        // Update Housing::_plotIndex so all subsequent responses (HouseStatus,
+        // HouseInfo, SyncUpdateFields, etc.) use the correct DB2 PlotIndex.
+        if (Housing* housing = player->GetHousing())
+        {
+            housing->SetPlotIndex(targetPlotIndex);
+            housing->SyncUpdateFields();
+        }
+
         player->ModifyMoney(-static_cast<int64>(HOUSE_MOVE_COST_COPPER));
 
         // Despawn entities at old plot, respawn at new plot

@@ -3301,39 +3301,15 @@ void WorldSession::HandleHousingSvcsTeleportToPlot(WorldPackets::Housing::Housin
         }
     }
 
-    // The client's PlotIndex is a roster/array index, NOT the DB2 NeighborhoodPlot PlotIndex.
-    // We must resolve the actual DB2 PlotIndex from server-side data.
-    uint32 clientPlotIndex = housingSvcsTeleportToPlot.PlotIndex;
-    uint32 resolvedPlotIndex = clientPlotIndex; // will be overwritten below
+    // The client sends the DB2 NeighborhoodPlot.PlotIndex directly (0-54 per map).
+    // Confirmed via IDA decompilation: C_Housing.TeleportHome() passes plotID from
+    // PushHouseFinderPlotInfo which reads the DB2 PlotIndex field. Sniff-verified:
+    // PlotIndex=41 in CMSG matches DB2 entry for NeighborhoodMapID=1.
+    uint32 plotIndex = housingSvcsTeleportToPlot.PlotIndex;
 
-    // Strategy 1: If the player owns a house in this neighborhood, use their server-side PlotIndex
-    Housing* playerHousing = player->GetHousing();
-    bool isSelfTeleport = false;
-    if (playerHousing && playerHousing->GetNeighborhoodGuid() == neighborhood->GetGuid())
-    {
-        resolvedPlotIndex = playerHousing->GetPlotIndex();
-        isSelfTeleport = true;
-    }
-    else
-    {
-        // Strategy 2: Find the plot by matching OwnerGuid against neighborhood plots
-        ObjectGuid const& ownerGuid = housingSvcsTeleportToPlot.OwnerGuid;
-        for (auto const& plotInfo : neighborhood->GetPlots())
-        {
-            if (!plotInfo.IsOccupied())
-                continue;
-            // Match against HouseGuid or OwnerGuid (client may send either)
-            if (plotInfo.HouseGuid == ownerGuid || plotInfo.OwnerGuid == ownerGuid)
-            {
-                resolvedPlotIndex = plotInfo.PlotIndex;
-                break;
-            }
-        }
-    }
-
-    TC_LOG_INFO("housing", "HandleHousingSvcsTeleportToPlot: ClientPlotIndex={} ResolvedPlotIndex={} OwnerGuid={} TeleportType={} IsSelf={} NeighborhoodGUID={}",
-        clientPlotIndex, resolvedPlotIndex, housingSvcsTeleportToPlot.OwnerGuid.ToString(), housingSvcsTeleportToPlot.TeleportType,
-        isSelfTeleport, housingSvcsTeleportToPlot.NeighborhoodGuid.ToString());
+    TC_LOG_INFO("housing", "HandleHousingSvcsTeleportToPlot: PlotIndex={} OwnerGuid={} TeleportType={} NeighborhoodGUID={}",
+        plotIndex, housingSvcsTeleportToPlot.OwnerGuid.ToString(), housingSvcsTeleportToPlot.TeleportType,
+        housingSvcsTeleportToPlot.NeighborhoodGuid.ToString());
 
     // Look up the neighborhood map data for map ID and plot positions
     NeighborhoodMapData const* mapData = sHousingMgr.GetNeighborhoodMapData(neighborhood->GetNeighborhoodMapID());
@@ -3345,38 +3321,24 @@ void WorldSession::HandleHousingSvcsTeleportToPlot(WorldPackets::Housing::Housin
         return;
     }
 
-    // Find the DB2 plot matching our resolved PlotIndex
+    // Find the DB2 plot matching the client's PlotIndex
     std::vector<NeighborhoodPlotData const*> plots = sHousingMgr.GetPlotsForMap(neighborhood->GetNeighborhoodMapID());
     NeighborhoodPlotData const* targetPlot = nullptr;
     for (NeighborhoodPlotData const* plot : plots)
     {
-        if (plot->PlotIndex == static_cast<int32>(resolvedPlotIndex))
+        if (plot->PlotIndex == static_cast<int32>(plotIndex))
         {
             targetPlot = plot;
             break;
-        }
-    }
-    // Fallback: try client's raw PlotIndex in case it actually matches a DB2 plot
-    if (!targetPlot && resolvedPlotIndex != clientPlotIndex)
-    {
-        for (NeighborhoodPlotData const* plot : plots)
-        {
-            if (plot->PlotIndex == static_cast<int32>(clientPlotIndex))
-            {
-                targetPlot = plot;
-                break;
-            }
         }
     }
 
     if (targetPlot)
     {
         // Per-house access check: verify visitor has permission to access this plot
-        // Owner and same-neighborhood members skip this check
         if (!neighborhood->IsMember(player->GetGUID()))
         {
-            uint8 targetIdx = static_cast<uint8>(resolvedPlotIndex);
-            Neighborhood::PlotInfo const* plotInfo = neighborhood->GetPlotInfo(targetIdx);
+            Neighborhood::PlotInfo const* plotInfo = neighborhood->GetPlotInfo(static_cast<uint8>(plotIndex));
             if (plotInfo && plotInfo->IsOccupied())
             {
                 Player* ownerPlayer = ObjectAccessor::FindPlayer(plotInfo->OwnerGuid);
@@ -3390,7 +3352,7 @@ void WorldSession::HandleHousingSvcsTeleportToPlot(WorldPackets::Housing::Housin
                     denied.FailureType = static_cast<uint8>(HOUSING_RESULT_PERMISSION_DENIED);
                     SendPacket(denied.Write());
                     TC_LOG_DEBUG("housing", "HandleHousingSvcsTeleportToPlot: Player {} denied access to plot {} (settingsFlags=0x{:X})",
-                        player->GetGUID().ToString(), resolvedPlotIndex, settingsFlags);
+                        player->GetGUID().ToString(), plotIndex, settingsFlags);
                     return;
                 }
             }
@@ -3399,16 +3361,16 @@ void WorldSession::HandleHousingSvcsTeleportToPlot(WorldPackets::Housing::Housin
         player->TeleportTo(mapData->MapID, targetPlot->TeleportPosition[0], targetPlot->TeleportPosition[1],
             targetPlot->TeleportPosition[2], 0.0f);
 
-        TC_LOG_INFO("housing", "CMSG_HOUSING_SVCS_TELEPORT_TO_PLOT: Teleporting player {} to plot {} (clientIdx={}) on map {}",
-            player->GetGUID().ToString(), resolvedPlotIndex, clientPlotIndex, mapData->MapID);
+        TC_LOG_INFO("housing", "CMSG_HOUSING_SVCS_TELEPORT_TO_PLOT: Teleporting player {} to plot {} on map {}",
+            player->GetGUID().ToString(), plotIndex, mapData->MapID);
     }
     else
     {
         player->TeleportTo(mapData->MapID, mapData->Origin[0], mapData->Origin[1],
             mapData->Origin[2], 0.0f);
 
-        TC_LOG_INFO("housing", "CMSG_HOUSING_SVCS_TELEPORT_TO_PLOT: Plot {} (clientIdx={}) not found, teleporting to neighborhood origin on map {}",
-            resolvedPlotIndex, clientPlotIndex, mapData->MapID);
+        TC_LOG_INFO("housing", "CMSG_HOUSING_SVCS_TELEPORT_TO_PLOT: Plot {} not found in DB2, teleporting to neighborhood origin on map {}",
+            plotIndex, mapData->MapID);
     }
 }
 

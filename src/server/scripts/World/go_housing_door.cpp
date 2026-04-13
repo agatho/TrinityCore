@@ -91,6 +91,7 @@ public:
 
                 TC_LOG_DEBUG("housing", "go_housing_door: Teleporting {} from interior to map {} plot {} at ({:.1f},{:.1f},{:.1f})",
                     player->GetGUID().ToString(), destMapId, housing->GetPlotIndex(), exitX, exitY, exitZ);
+
                 player->TeleportTo(destMapId, exitX, exitY, exitZ, player->GetOrientation());
                 return true;
             }

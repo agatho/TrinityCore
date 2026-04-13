@@ -273,11 +273,18 @@ bool Housing::LoadFromDB(PreparedQueryResult housing, PreparedQueryResult decor,
             uint64 roomDbId = fields[12].GetUInt64();
             if (roomDbId)
             {
-                // Look up roomEntryId from loaded rooms to build matching GUID (arg2=HouseRoomID)
-                uint32 roomEntryId = 0;
+                // Use the room's actual GUID key from _rooms, not a reconstructed one.
+                // Room migration (e.g. entry 18→46) changes RoomEntryId but not the GUID
+                // key's arg2 field. Reconstructing with the migrated RoomEntryId would
+                // produce a GUID that doesn't match the room's key, breaking AttachParentGUID.
                 for (auto const& [rGuid, r] : _rooms)
-                    if (rGuid.GetCounter() == roomDbId) { roomEntryId = r.RoomEntryId; break; }
-                placed.RoomGuid = ObjectGuid::Create<HighGuid::Housing>(/*subType*/ 2, 0, roomEntryId, roomDbId);
+                {
+                    if (rGuid.GetCounter() == roomDbId)
+                    {
+                        placed.RoomGuid = rGuid;
+                        break;
+                    }
+                }
             }
             placed.Locked = fields[13].GetUInt8() != 0;
             placed.PlacementTime = static_cast<time_t>(fields[14].GetUInt64());

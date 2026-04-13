@@ -109,6 +109,7 @@ public:
     void SetNeighborhoodGuid(ObjectGuid guid) { _neighborhoodGuid = guid; }
     ObjectGuid GetPlotGuid() const;
     uint8 GetPlotIndex() const { return _plotIndex; }
+    void SetPlotIndex(uint8 plotIndex) { _plotIndex = plotIndex; }
     uint32 GetCreateTime() const { return _createTime; }
     uint32 GetLevel() const { return _level; }
     uint32 GetFavor() const { return _favor; }
