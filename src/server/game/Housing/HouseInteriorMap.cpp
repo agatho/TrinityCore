@@ -712,21 +712,68 @@ void HouseInteriorMap::UpdateRoomComponentVisuals(ObjectGuid roomGuid, int32 fac
                 continue;
         }
 
-        // Look up the RoomComponent to get its MeshStyleFilterID for the option lookup
+        // Look up the RoomComponent to get its MeshStyleFilterID
         RoomComponentEntry const* compEntry = sRoomComponentStore.LookupEntry(compID);
         if (!compEntry)
             continue;
 
-        // Look up the option for this component's MeshStyleFilterID with the effective theme
-        RoomComponentOptionEntry const* optEntry = sHousingMgr.FindRoomComponentOption(compEntry->MeshStyleFilterID, effectiveThemeID);
-        if (!optEntry && effectiveThemeID != factionThemeID)
-            optEntry = sHousingMgr.FindRoomComponentOption(compEntry->MeshStyleFilterID, factionThemeID);
-        if (!optEntry && factionThemeID != 2)
-            optEntry = sHousingMgr.FindRoomComponentOption(compEntry->MeshStyleFilterID, 2);
-        if (!optEntry && factionThemeID != 1)
-            optEntry = sHousingMgr.FindRoomComponentOption(compEntry->MeshStyleFilterID, 1);
+        // Each mesh has a current option (e.g., cosmetic wall, doorway wall, doorway).
+        // When the theme changes, we need to find the EQUIVALENT option in the new theme
+        // that matches the mesh's current option Type+SubType. Using FindRoomComponentOption
+        // alone would collapse all variants to a single option (breaking doors/doorways).
+        int32 currentOptionID = mesh->GetRoomComponentOptionID();
+        RoomComponentOptionEntry const* currentOpt = sRoomComponentOptionStore.LookupEntry(static_cast<uint32>(currentOptionID));
 
-        if (!optEntry)
+        RoomComponentOptionEntry const* newOpt = nullptr;
+
+        if (currentOpt)
+        {
+            // Find equivalent option in new theme: same MeshStyleFilterID + Type + SubType
+            auto allNewOptions = sHousingMgr.FindAllRoomComponentOptions(compEntry->MeshStyleFilterID, effectiveThemeID);
+            for (auto const* opt : allNewOptions)
+            {
+                if (opt->Type == currentOpt->Type && opt->SubType == currentOpt->SubType)
+                {
+                    newOpt = opt;
+                    break;
+                }
+            }
+            // Fallback: match by Type only
+            if (!newOpt)
+            {
+                for (auto const* opt : allNewOptions)
+                {
+                    if (opt->Type == currentOpt->Type) { newOpt = opt; break; }
+                }
+            }
+            // Theme fallback chain if no options found
+            if (!newOpt && effectiveThemeID != factionThemeID)
+            {
+                allNewOptions = sHousingMgr.FindAllRoomComponentOptions(compEntry->MeshStyleFilterID, factionThemeID);
+                for (auto const* opt : allNewOptions)
+                {
+                    if (opt->Type == currentOpt->Type && opt->SubType == currentOpt->SubType)
+                    { newOpt = opt; break; }
+                }
+                if (!newOpt)
+                    for (auto const* opt : allNewOptions)
+                        if (opt->Type == currentOpt->Type) { newOpt = opt; break; }
+            }
+        }
+
+        // Last resort: use the single-option lookup
+        if (!newOpt)
+        {
+            newOpt = sHousingMgr.FindRoomComponentOption(compEntry->MeshStyleFilterID, effectiveThemeID);
+            if (!newOpt && effectiveThemeID != factionThemeID)
+                newOpt = sHousingMgr.FindRoomComponentOption(compEntry->MeshStyleFilterID, factionThemeID);
+            if (!newOpt && factionThemeID != 2)
+                newOpt = sHousingMgr.FindRoomComponentOption(compEntry->MeshStyleFilterID, 2);
+            if (!newOpt && factionThemeID != 1)
+                newOpt = sHousingMgr.FindRoomComponentOption(compEntry->MeshStyleFilterID, 1);
+        }
+
+        if (!newOpt)
             continue;
 
         // Per-component-type texture resolution (sniff-verified: independent wall/floor/ceiling textures)
@@ -747,12 +794,12 @@ void HouseInteriorMap::UpdateRoomComponentVisuals(ObjectGuid roomGuid, int32 fac
                 break;
         }
         if (textureID == 0)
-            textureID = sHousingMgr.GetTextureIdForComponentOption(static_cast<int32>(optEntry->ID));
+            textureID = sHousingMgr.GetTextureIdForComponentOption(static_cast<int32>(newOpt->ID));
 
         // Entity gets the SELECTED sub-theme (e.g., 20=Folk Light), not the base
         mesh->UpdateRoomComponentVisuals(
-            static_cast<int32>(optEntry->ID),
-            (room.ThemeId != 0) ? static_cast<int32>(room.ThemeId) : sHousingMgr.GetDefaultSubThemeID(optEntry->HouseThemeID),
+            static_cast<int32>(newOpt->ID),
+            (room.ThemeId != 0) ? static_cast<int32>(room.ThemeId) : sHousingMgr.GetDefaultSubThemeID(newOpt->HouseThemeID),
             textureID);
     }
 
