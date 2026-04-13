@@ -506,7 +506,7 @@ void MeshObject::BuildValuesCreate(UF::UpdateFieldFlag flags, ByteBuffer& data, 
 void MeshObject::BuildValuesUpdate(UF::UpdateFieldFlag flags, ByteBuffer& data, Player const* target) const
 {
     // GetChangedObjectTypeMask() only contains CGObject-owned fields (TYPEID_OBJECT).
-    // m_meshObjectData (FMeshObjectData_C) changes are handled by its own fragment's SerializeUpdate.
+    // Entity fragment data is handled by BuildValuesUpdateBlockForPlayer using SerializeUpdate.
     data << uint32(m_values.GetChangedObjectTypeMask());
 
     if (m_values.HasChanged(TYPEID_OBJECT))
@@ -517,5 +517,8 @@ void MeshObject::ClearValuesChangesMask()
 {
     m_values.ClearChangesMask(&MeshObject::m_meshObjectData);
     m_values.ClearChangesMask(&MeshObject::m_mirroredPositionData);
+    m_values.ClearChangesMask(&Object::m_housingRoomComponentMeshData);
+    m_values.ClearChangesMask(&Object::m_housingDecorData);
+    m_values.ClearChangesMask(&Object::m_housingFixtureData);
     WorldObject::ClearValuesChangesMask();
 }
