@@ -358,44 +358,45 @@ void HousingRoomMoveRoom::Read()
 void HousingRoomSetComponentTheme::Read()
 {
     _worldPacket >> RoomGuid;
-    _worldPacket >> Size<uint32>(RoomComponentIDs);
+    _worldPacket >> Size<uint32>(OptionIDs);
     _worldPacket >> HouseThemeID;
-    for (uint32& componentID : RoomComponentIDs)
-        _worldPacket >> componentID;
+    for (uint32& optionID : OptionIDs)
+        _worldPacket >> optionID;
 
-    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_ROOM_SET_COMPONENT_THEME RoomGuid: {} HouseThemeID: {} ComponentCount: {}",
-        RoomGuid.ToString(), HouseThemeID, RoomComponentIDs.size());
+    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_ROOM_SET_COMPONENT_THEME RoomGuid: {} HouseThemeID: {} OptionCount: {}",
+        RoomGuid.ToString(), HouseThemeID, OptionIDs.size());
 }
 
 void HousingRoomApplyComponentMaterials::Read()
 {
+    // Sniff-verified wire order: GUID, Count, ColorOverride(int32), TextureID(uint32), OptionIDs[]
     _worldPacket >> RoomGuid;
-    _worldPacket >> Size<uint32>(RoomComponentIDs);
+    _worldPacket >> Size<uint32>(OptionIDs);
+    _worldPacket >> ColorOverride;
     _worldPacket >> RoomComponentTextureID;
-    _worldPacket >> RoomComponentTypeParam;
-    for (uint32& componentID : RoomComponentIDs)
-        _worldPacket >> componentID;
+    for (uint32& optionID : OptionIDs)
+        _worldPacket >> optionID;
 
-    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_ROOM_APPLY_COMPONENT_MATERIALS RoomGuid: {} TextureID: {} TypeParam: {} ComponentCount: {}",
-        RoomGuid.ToString(), RoomComponentTextureID, RoomComponentTypeParam, RoomComponentIDs.size());
+    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_ROOM_APPLY_COMPONENT_MATERIALS RoomGuid: {} ColorOverride: {} TextureID: {} OptionCount: {}",
+        RoomGuid.ToString(), ColorOverride, RoomComponentTextureID, OptionIDs.size());
 }
 
 void HousingRoomSetDoorType::Read()
 {
     _worldPacket >> RoomGuid;
-    _worldPacket >> RoomComponentID;
-    _worldPacket >> RoomComponentType;
+    _worldPacket >> ThemeOptionID;
+    _worldPacket >> DoorType;
 
-    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_ROOM_SET_DOOR_TYPE RoomGuid: {} ComponentID: {} Type: {}", RoomGuid.ToString(), RoomComponentID, RoomComponentType);
+    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_ROOM_SET_DOOR_TYPE RoomGuid: {} ThemeOptionID: {} DoorType: {}", RoomGuid.ToString(), ThemeOptionID, DoorType);
 }
 
 void HousingRoomSetCeilingType::Read()
 {
     _worldPacket >> RoomGuid;
-    _worldPacket >> RoomComponentID;
-    _worldPacket >> RoomComponentType;
+    _worldPacket >> ThemeOptionID;
+    _worldPacket >> CeilingType;
 
-    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_ROOM_SET_CEILING_TYPE RoomGuid: {} ComponentID: {} Type: {}", RoomGuid.ToString(), RoomComponentID, RoomComponentType);
+    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_ROOM_SET_CEILING_TYPE RoomGuid: {} ThemeOptionID: {} CeilingType: {}", RoomGuid.ToString(), ThemeOptionID, CeilingType);
 }
 
 // --- Housing Services System ---
@@ -1111,32 +1112,33 @@ WorldPacket const* HousingRoomUpdateResponse::Write()
 
 WorldPacket const* HousingRoomSetComponentThemeResponse::Write()
 {
-    // IDA case 5439492: PackedGUID + uint32(arrayCount) + uint32(ThemeSetID) + uint8(Result) + uint32[arrayCount]
+    // Sniff-verified: PackedGUID + uint32(arrayCount) + uint32(ThemeSetID) + uint8(Result) + uint32[arrayCount]
     _worldPacket << RoomGuid;
-    _worldPacket << uint32(ComponentIDs.size());
+    _worldPacket << uint32(OptionIDs.size());
     _worldPacket << uint32(ThemeSetID);
     _worldPacket << uint8(Result);
-    for (uint32 compId : ComponentIDs)
-        _worldPacket << uint32(compId);
+    for (uint32 optId : OptionIDs)
+        _worldPacket << uint32(optId);
 
-    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_ROOM_SET_COMPONENT_THEME_RESPONSE RoomGuid: {} ThemeSetID: {} Result: {} ComponentCount: {}",
-        RoomGuid.ToString(), ThemeSetID, Result, uint32(ComponentIDs.size()));
+    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_ROOM_SET_COMPONENT_THEME_RESPONSE RoomGuid: {} ThemeSetID: {} Result: {} OptionCount: {}",
+        RoomGuid.ToString(), ThemeSetID, Result, uint32(OptionIDs.size()));
 
     return &_worldPacket;
 }
 
 WorldPacket const* HousingRoomApplyComponentMaterialsResponse::Write()
 {
-    // IDA case 5439493: PackedGUID + uint32(arrayCount) + uint32(TextureRecordID) + uint8(Result) + uint32[arrayCount]
+    // Sniff-verified: PackedGUID + uint32(arrayCount) + uint32(TextureID) + uint8(Result) + uint32[arrayCount]
+    // NOTE: ColorOverride is NOT echoed in response — only TextureID
     _worldPacket << RoomGuid;
-    _worldPacket << uint32(ComponentIDs.size());
-    _worldPacket << uint32(RoomComponentTextureRecordID);
+    _worldPacket << uint32(OptionIDs.size());
+    _worldPacket << uint32(RoomComponentTextureID);
     _worldPacket << uint8(Result);
-    for (uint32 compId : ComponentIDs)
-        _worldPacket << uint32(compId);
+    for (uint32 optId : OptionIDs)
+        _worldPacket << uint32(optId);
 
-    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_ROOM_APPLY_COMPONENT_MATERIALS_RESPONSE RoomGuid: {} TextureRecordID: {} Result: {} ComponentCount: {}",
-        RoomGuid.ToString(), RoomComponentTextureRecordID, Result, uint32(ComponentIDs.size()));
+    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_ROOM_APPLY_COMPONENT_MATERIALS_RESPONSE RoomGuid: {} TextureID: {} Result: {} OptionCount: {}",
+        RoomGuid.ToString(), RoomComponentTextureID, Result, uint32(OptionIDs.size()));
 
     return &_worldPacket;
 }

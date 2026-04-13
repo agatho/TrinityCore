@@ -2558,13 +2558,13 @@ void WorldSession::HandleHousingRoomSetComponentTheme(WorldPackets::Housing::Hou
     }
 
     HousingResult result = housing->ApplyRoomTheme(housingRoomSetComponentTheme.RoomGuid,
-        housingRoomSetComponentTheme.HouseThemeID, housingRoomSetComponentTheme.RoomComponentIDs);
+        housingRoomSetComponentTheme.HouseThemeID, housingRoomSetComponentTheme.OptionIDs);
 
     WorldPackets::Housing::HousingRoomSetComponentThemeResponse response;
     response.Result = static_cast<uint8>(result);
     response.RoomGuid = housingRoomSetComponentTheme.RoomGuid;
     response.ThemeSetID = housingRoomSetComponentTheme.HouseThemeID;
-    response.ComponentIDs = housingRoomSetComponentTheme.RoomComponentIDs;
+    response.OptionIDs = housingRoomSetComponentTheme.OptionIDs;
     SendPacket(response.Write());
 
     // Update component MeshObject fields in-place (no destroy+create).
@@ -2579,12 +2579,13 @@ void WorldSession::HandleHousingRoomSetComponentTheme(WorldPackets::Housing::Hou
             auto roomItr = rooms.find(housingRoomSetComponentTheme.RoomGuid);
             if (roomItr != rooms.end())
                 interiorMap->UpdateRoomComponentVisuals(housingRoomSetComponentTheme.RoomGuid, faction, roomItr->second,
-                    &housingRoomSetComponentTheme.RoomComponentIDs, housingRoomSetComponentTheme.HouseThemeID);
+                    &housingRoomSetComponentTheme.OptionIDs, housingRoomSetComponentTheme.HouseThemeID);
         }
     }
 
-    TC_LOG_INFO("housing", "CMSG_HOUSING_ROOM_SET_COMPONENT_THEME RoomGuid: {}, HouseThemeID: {}, Result: {}",
-        housingRoomSetComponentTheme.RoomGuid.ToString(), housingRoomSetComponentTheme.HouseThemeID, uint32(result));
+    TC_LOG_INFO("housing", "CMSG_HOUSING_ROOM_SET_COMPONENT_THEME RoomGuid: {}, HouseThemeID: {}, OptionCount: {}, Result: {}",
+        housingRoomSetComponentTheme.RoomGuid.ToString(), housingRoomSetComponentTheme.HouseThemeID,
+        housingRoomSetComponentTheme.OptionIDs.size(), uint32(result));
 }
 
 void WorldSession::HandleHousingRoomApplyComponentMaterials(WorldPackets::Housing::HousingRoomApplyComponentMaterials const& housingRoomApplyComponentMaterials)
@@ -2602,15 +2603,16 @@ void WorldSession::HandleHousingRoomApplyComponentMaterials(WorldPackets::Housin
         return;
     }
 
-    HousingResult result = housing->ApplyRoomWallpaper(housingRoomApplyComponentMaterials.RoomGuid,
-        housingRoomApplyComponentMaterials.RoomComponentTextureID, housingRoomApplyComponentMaterials.RoomComponentTypeParam,
-        housingRoomApplyComponentMaterials.RoomComponentIDs);
+    HousingResult result = housing->ApplyRoomMaterial(housingRoomApplyComponentMaterials.RoomGuid,
+        housingRoomApplyComponentMaterials.RoomComponentTextureID,
+        housingRoomApplyComponentMaterials.ColorOverride,
+        housingRoomApplyComponentMaterials.OptionIDs);
 
     WorldPackets::Housing::HousingRoomApplyComponentMaterialsResponse response;
     response.Result = static_cast<uint8>(result);
     response.RoomGuid = housingRoomApplyComponentMaterials.RoomGuid;
-    response.RoomComponentTextureRecordID = housingRoomApplyComponentMaterials.RoomComponentTextureID;
-    response.ComponentIDs = housingRoomApplyComponentMaterials.RoomComponentIDs;
+    response.RoomComponentTextureID = housingRoomApplyComponentMaterials.RoomComponentTextureID;
+    response.OptionIDs = housingRoomApplyComponentMaterials.OptionIDs;
     SendPacket(response.Write());
 
     // Update component MeshObject fields in-place (no destroy+create).
@@ -2618,12 +2620,7 @@ void WorldSession::HandleHousingRoomApplyComponentMaterials(WorldPackets::Housin
     {
         if (HouseInteriorMap* interiorMap = dynamic_cast<HouseInteriorMap*>(player->GetMap()))
         {
-            int32 faction = (player->GetTeamId() == TEAM_ALLIANCE)
-                ? NEIGHBORHOOD_FACTION_ALLIANCE : NEIGHBORHOOD_FACTION_HORDE;
-            // Directly update the specific component MeshObjects' textureID.
-            // Don't use UpdateRoomComponentVisuals (which reads room.WallpaperId).
-            int32 textureID = (housingRoomApplyComponentMaterials.RoomComponentTextureID == 0xFFFFFFFF)
-                ? 0 : static_cast<int32>(housingRoomApplyComponentMaterials.RoomComponentTextureID);
+            int32 textureID = static_cast<int32>(housingRoomApplyComponentMaterials.RoomComponentTextureID);
             auto meshItr = interiorMap->GetRoomMeshObjects().find(housingRoomApplyComponentMaterials.RoomGuid);
             if (meshItr != interiorMap->GetRoomMeshObjects().end())
             {
@@ -2631,13 +2628,17 @@ void WorldSession::HandleHousingRoomApplyComponentMaterials(WorldPackets::Housin
                 {
                     MeshObject* mesh = interiorMap->GetMeshObject(meshGuid);
                     if (!mesh) continue;
-                    int32 compID = mesh->GetRoomComponentID();
-                    bool match = housingRoomApplyComponentMaterials.RoomComponentIDs.empty();
-                    for (uint32 cid : housingRoomApplyComponentMaterials.RoomComponentIDs)
-                        if (static_cast<int32>(cid) == compID) { match = true; break; }
-                    if (match && compID != 0)
+                    int32 meshOptionID = mesh->GetRoomComponentOptionID();
+                    if (meshOptionID == 0) continue;
+                    bool match = housingRoomApplyComponentMaterials.OptionIDs.empty();
+                    if (!match)
+                    {
+                        for (uint32 optId : housingRoomApplyComponentMaterials.OptionIDs)
+                            if (static_cast<int32>(optId) == meshOptionID) { match = true; break; }
+                    }
+                    if (match)
                         mesh->UpdateRoomComponentVisuals(
-                            mesh->GetRoomComponentOptionID(),
+                            meshOptionID,
                             mesh->GetHouseThemeID(),
                             textureID);
                 }
@@ -2645,8 +2646,9 @@ void WorldSession::HandleHousingRoomApplyComponentMaterials(WorldPackets::Housin
         }
     }
 
-    TC_LOG_INFO("housing", "CMSG_HOUSING_ROOM_APPLY_COMPONENT_MATERIALS RoomGuid: {}, TextureID: {}, Result: {}",
-        housingRoomApplyComponentMaterials.RoomGuid.ToString(), housingRoomApplyComponentMaterials.RoomComponentTextureID, uint32(result));
+    TC_LOG_INFO("housing", "CMSG_HOUSING_ROOM_APPLY_COMPONENT_MATERIALS RoomGuid: {}, TextureID: {}, ColorOverride: {}, OptionCount: {}, Result: {}",
+        housingRoomApplyComponentMaterials.RoomGuid.ToString(), housingRoomApplyComponentMaterials.RoomComponentTextureID,
+        housingRoomApplyComponentMaterials.ColorOverride, housingRoomApplyComponentMaterials.OptionIDs.size(), uint32(result));
 }
 
 void WorldSession::HandleHousingRoomSetDoorType(WorldPackets::Housing::HousingRoomSetDoorType const& housingRoomSetDoorType)
@@ -2665,22 +2667,17 @@ void WorldSession::HandleHousingRoomSetDoorType(WorldPackets::Housing::HousingRo
     }
 
     HousingResult result = housing->SetDoorType(housingRoomSetDoorType.RoomGuid,
-        housingRoomSetDoorType.RoomComponentID, housingRoomSetDoorType.RoomComponentType);
+        housingRoomSetDoorType.ThemeOptionID, housingRoomSetDoorType.DoorType);
 
     WorldPackets::Housing::HousingRoomSetDoorTypeResponse response;
     response.Result = static_cast<uint8>(result);
     response.RoomGuid = housingRoomSetDoorType.RoomGuid;
-    response.ComponentID = housingRoomSetDoorType.RoomComponentID;
-    response.DoorType = housingRoomSetDoorType.RoomComponentType;
+    response.ComponentID = housingRoomSetDoorType.ThemeOptionID;
+    response.DoorType = housingRoomSetDoorType.DoorType;
     SendPacket(response.Write());
 
-    if (result == HOUSING_RESULT_SUCCESS)
-        // NOTE: RefreshInteriorRoomVisuals crashes (same-GUID DESTROY+CREATE).
-        // The client handles visual updates from the response packet.
-        // Full visual refresh happens on relog.
-
-    TC_LOG_INFO("housing", "CMSG_HOUSING_ROOM_SET_DOOR_TYPE RoomGuid: {}, RoomComponentID: {}, Result: {}",
-        housingRoomSetDoorType.RoomGuid.ToString(), housingRoomSetDoorType.RoomComponentID, uint32(result));
+    TC_LOG_INFO("housing", "CMSG_HOUSING_ROOM_SET_DOOR_TYPE RoomGuid: {}, ThemeOptionID: {}, DoorType: {}, Result: {}",
+        housingRoomSetDoorType.RoomGuid.ToString(), housingRoomSetDoorType.ThemeOptionID, housingRoomSetDoorType.DoorType, uint32(result));
 }
 
 void WorldSession::HandleHousingRoomSetCeilingType(WorldPackets::Housing::HousingRoomSetCeilingType const& housingRoomSetCeilingType)
@@ -2699,22 +2696,17 @@ void WorldSession::HandleHousingRoomSetCeilingType(WorldPackets::Housing::Housin
     }
 
     HousingResult result = housing->SetCeilingType(housingRoomSetCeilingType.RoomGuid,
-        housingRoomSetCeilingType.RoomComponentID, housingRoomSetCeilingType.RoomComponentType);
+        housingRoomSetCeilingType.ThemeOptionID, housingRoomSetCeilingType.CeilingType);
 
     WorldPackets::Housing::HousingRoomSetCeilingTypeResponse response;
     response.Result = static_cast<uint8>(result);
     response.RoomGuid = housingRoomSetCeilingType.RoomGuid;
-    response.ComponentID = housingRoomSetCeilingType.RoomComponentID;
-    response.CeilingType = housingRoomSetCeilingType.RoomComponentType;
+    response.ComponentID = housingRoomSetCeilingType.ThemeOptionID;
+    response.CeilingType = housingRoomSetCeilingType.CeilingType;
     SendPacket(response.Write());
 
-    if (result == HOUSING_RESULT_SUCCESS)
-        // NOTE: RefreshInteriorRoomVisuals crashes (same-GUID DESTROY+CREATE).
-        // The client handles visual updates from the response packet.
-        // Full visual refresh happens on relog.
-
-    TC_LOG_INFO("housing", "CMSG_HOUSING_ROOM_SET_CEILING_TYPE RoomGuid: {}, RoomComponentID: {}, Result: {}",
-        housingRoomSetCeilingType.RoomGuid.ToString(), housingRoomSetCeilingType.RoomComponentID, uint32(result));
+    TC_LOG_INFO("housing", "CMSG_HOUSING_ROOM_SET_CEILING_TYPE RoomGuid: {}, ThemeOptionID: {}, CeilingType: {}, Result: {}",
+        housingRoomSetCeilingType.RoomGuid.ToString(), housingRoomSetCeilingType.ThemeOptionID, housingRoomSetCeilingType.CeilingType, uint32(result));
 }
 
 // ============================================================
@@ -5611,8 +5603,9 @@ void WorldSession::HandleHousingSystemExportHouse(WorldPackets::Housing::Housing
         json += ",\"orientation\":" + std::to_string(rooms[i]->Orientation);
         json += ",\"mirrored\":" + std::string(rooms[i]->Mirrored ? "true" : "false");
         json += ",\"themeId\":" + std::to_string(rooms[i]->ThemeId);
-        json += ",\"wallpaperId\":" + std::to_string(rooms[i]->WallpaperId);
-        json += ",\"materialId\":" + std::to_string(rooms[i]->MaterialId) + "}";
+        json += ",\"wallTextureId\":" + std::to_string(rooms[i]->WallTextureId);
+        json += ",\"floorTextureId\":" + std::to_string(rooms[i]->FloorTextureId);
+        json += ",\"ceilingTextureId\":" + std::to_string(rooms[i]->CeilingTextureId) + "}";
     }
     json += "]";
 

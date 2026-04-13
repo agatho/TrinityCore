@@ -543,7 +543,7 @@ namespace WorldPackets::Housing
 
         ObjectGuid RoomGuid;
         uint32 HouseThemeID = 0;
-        std::vector<uint32> RoomComponentIDs;
+        std::vector<uint32> OptionIDs; // RoomComponentOption IDs (not RoomComponent IDs)
     };
 
     class HousingRoomApplyComponentMaterials final : public ClientPacket
@@ -553,10 +553,11 @@ namespace WorldPackets::Housing
 
         void Read() override;
 
+        // Sniff-verified wire order: GUID, Count, ColorOverride, TextureID, OptionIDs[]
         ObjectGuid RoomGuid;
-        uint32 RoomComponentTextureID = 0;
-        uint32 RoomComponentTypeParam = 0;
-        std::vector<uint32> RoomComponentIDs;
+        int32 ColorOverride = -1;               // -1 = default/no override
+        uint32 RoomComponentTextureID = 0;       // RoomComponentTexture DB2 ID
+        std::vector<uint32> OptionIDs;           // RoomComponentOption IDs
     };
 
     class HousingRoomSetDoorType final : public ClientPacket
@@ -567,8 +568,8 @@ namespace WorldPackets::Housing
         void Read() override;
 
         ObjectGuid RoomGuid;
-        uint32 RoomComponentID = 0;
-        uint8 RoomComponentType = 0;
+        uint32 ThemeOptionID = 0; // RoomComponentOption ID
+        uint8 DoorType = 0;
     };
 
     class HousingRoomSetCeilingType final : public ClientPacket
@@ -579,8 +580,8 @@ namespace WorldPackets::Housing
         void Read() override;
 
         ObjectGuid RoomGuid;
-        uint32 RoomComponentID = 0;
-        uint8 RoomComponentType = 0;
+        uint32 ThemeOptionID = 0; // RoomComponentOption ID
+        uint8 CeilingType = 0;
     };
 
     // ============================================================
@@ -1421,11 +1422,11 @@ namespace WorldPackets::Housing
     public:
         HousingRoomSetComponentThemeResponse() : ServerPacket(SMSG_HOUSING_ROOM_SET_COMPONENT_THEME_RESPONSE) { }
         WorldPacket const* Write() override;
-        // IDA case 5439492: PackedGUID + uint32(arrayCount) + uint32(ThemeSetID) + uint8(Result) + uint32[arrayCount]
+        // Sniff-verified: PackedGUID + uint32(arrayCount) + uint32(ThemeSetID) + uint8(Result) + uint32[arrayCount]
         ObjectGuid RoomGuid;
         uint32 ThemeSetID = 0;
         uint8 Result = 0;
-        std::vector<uint32> ComponentIDs;
+        std::vector<uint32> OptionIDs;
     };
 
     class HousingRoomApplyComponentMaterialsResponse final : public ServerPacket
@@ -1433,11 +1434,12 @@ namespace WorldPackets::Housing
     public:
         HousingRoomApplyComponentMaterialsResponse() : ServerPacket(SMSG_HOUSING_ROOM_APPLY_COMPONENT_MATERIALS_RESPONSE) { }
         WorldPacket const* Write() override;
-        // IDA case 5439493: PackedGUID + uint32(arrayCount) + uint32(TextureRecordID) + uint8(Result) + uint32[arrayCount]
+        // Sniff-verified: PackedGUID + uint32(arrayCount) + uint32(TextureID) + uint8(Result) + uint32[arrayCount]
+        // NOTE: ColorOverride is NOT echoed in response — only TextureID
         ObjectGuid RoomGuid;
-        uint32 RoomComponentTextureRecordID = 0;
+        uint32 RoomComponentTextureID = 0;
         uint8 Result = 0;
-        std::vector<uint32> ComponentIDs;
+        std::vector<uint32> OptionIDs;
     };
 
     class HousingRoomSetDoorTypeResponse final : public ServerPacket

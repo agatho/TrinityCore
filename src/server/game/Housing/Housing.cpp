@@ -101,8 +101,8 @@ bool Housing::LoadFromDB(PreparedQueryResult housing, PreparedQueryResult decor,
     _houseDescription = fields[15].GetString();
 
     // Load rooms FIRST so decor can look up roomEntryId for GUID arg2
-    //           0         1            2           3       4       5           6            7         8        9             10         11          12        13              14
-    // SELECT roomGuid, roomEntryId, slotIndex, gridX, gridY, floorIndex, orientation, mirrored, themeId, wallpaperId, materialId, doorTypeId, doorSlot, ceilingTypeId, ceilingSlot
+    //           0         1            2           3       4       5           6            7         8        9              10              11               12             13          14        15              16
+    // SELECT roomGuid, roomEntryId, slotIndex, gridX, gridY, floorIndex, orientation, mirrored, themeId, wallTextureId, floorTextureId, ceilingTextureId, colorOverride, doorTypeId, doorSlot, ceilingTypeId, ceilingSlot
     // FROM character_housing_rooms WHERE ownerGuid = ?
     if (rooms)
     {
@@ -134,12 +134,14 @@ bool Housing::LoadFromDB(PreparedQueryResult housing, PreparedQueryResult decor,
             room.Orientation = fields[6].GetUInt32();
             room.Mirrored = fields[7].GetBool();
             room.ThemeId = fields[8].GetUInt32();
-            room.WallpaperId = fields[9].GetUInt32();
-            room.MaterialId = fields[10].GetUInt32();
-            room.DoorTypeId = fields[11].GetUInt32();
-            room.DoorSlot = fields[12].GetUInt8();
-            room.CeilingTypeId = fields[13].GetUInt32();
-            room.CeilingSlot = fields[14].GetUInt8();
+            room.WallTextureId = fields[9].GetUInt32();
+            room.FloorTextureId = fields[10].GetUInt32();
+            room.CeilingTextureId = fields[11].GetUInt32();
+            room.ColorOverride = fields[12].GetInt32();
+            room.DoorTypeId = fields[13].GetUInt32();
+            room.DoorSlot = fields[14].GetUInt8();
+            room.CeilingTypeId = fields[15].GetUInt32();
+            room.CeilingSlot = fields[16].GetUInt8();
 
             // Advance global generator if needed (safety net)
             uint64 expected = s_nextRoomDbId.load();
@@ -507,8 +509,10 @@ void Housing::SaveToDB(CharacterDatabaseTransaction trans)
         stmt->setUInt32(index++, room.Orientation);
         stmt->setBool(index++, room.Mirrored);
         stmt->setUInt32(index++, room.ThemeId);
-        stmt->setUInt32(index++, room.WallpaperId);
-        stmt->setUInt32(index++, room.MaterialId);
+        stmt->setUInt32(index++, room.WallTextureId);
+        stmt->setUInt32(index++, room.FloorTextureId);
+        stmt->setUInt32(index++, room.CeilingTextureId);
+        stmt->setInt32(index++, room.ColorOverride);
         stmt->setUInt32(index++, room.DoorTypeId);
         stmt->setUInt8(index++, room.DoorSlot);
         stmt->setUInt32(index++, room.CeilingTypeId);
@@ -1574,7 +1578,7 @@ bool Housing::IsRoomGraphConnectedWithout(ObjectGuid excludeRoomGuid) const
     return visited.size() == slotToRoom.size();
 }
 
-HousingResult Housing::ApplyRoomTheme(ObjectGuid roomGuid, uint32 themeSetId, std::vector<uint32> const& componentIds)
+HousingResult Housing::ApplyRoomTheme(ObjectGuid roomGuid, uint32 themeSetId, std::vector<uint32> const& optionIds)
 {
     if (_houseGuid.IsEmpty())
         return HOUSING_RESULT_HOUSE_NOT_FOUND;
@@ -1583,23 +1587,12 @@ HousingResult Housing::ApplyRoomTheme(ObjectGuid roomGuid, uint32 themeSetId, st
     if (itr == _rooms.end())
         return HOUSING_RESULT_ROOM_NOT_FOUND;
 
-    // Validate componentIds if provided
-    for (uint32 componentId : componentIds)
-    {
-        if (!sRoomComponentStore.LookupEntry(componentId))
-        {
-            TC_LOG_DEBUG("housing", "Housing::ApplyRoomTheme: Invalid RoomComponent ID {} for room {}",
-                componentId, roomGuid.ToString());
-            return HOUSING_RESULT_ROOM_NOT_FOUND;
-        }
-    }
-
     itr->second.ThemeId = themeSetId;
 
     PersistRoomToDB(roomGuid, itr->second);
 
-    TC_LOG_DEBUG("housing", "Housing::ApplyRoomTheme: Player {} applied theme {} to room {} ({} components) in house {}",
-        _owner->GetName(), themeSetId, roomGuid.ToString(), componentIds.size(), _houseGuid.ToString());
+    TC_LOG_DEBUG("housing", "Housing::ApplyRoomTheme: Player {} applied theme {} to room {} ({} options) in house {}",
+        _owner->GetName(), themeSetId, roomGuid.ToString(), optionIds.size(), _houseGuid.ToString());
 
     // Account-level notification: theme collection update
     if (_owner->GetSession())
@@ -1613,7 +1606,7 @@ HousingResult Housing::ApplyRoomTheme(ObjectGuid roomGuid, uint32 themeSetId, st
     return HOUSING_RESULT_SUCCESS;
 }
 
-HousingResult Housing::ApplyRoomWallpaper(ObjectGuid roomGuid, uint32 wallpaperId, uint32 materialId, std::vector<uint32> const& componentIds)
+HousingResult Housing::ApplyRoomMaterial(ObjectGuid roomGuid, uint32 textureId, int32 colorOverride, std::vector<uint32> const& optionIds)
 {
     if (_houseGuid.IsEmpty())
         return HOUSING_RESULT_HOUSE_NOT_FOUND;
@@ -1622,31 +1615,72 @@ HousingResult Housing::ApplyRoomWallpaper(ObjectGuid roomGuid, uint32 wallpaperI
     if (itr == _rooms.end())
         return HOUSING_RESULT_ROOM_NOT_FOUND;
 
-    // Validate componentIds if provided
-    for (uint32 componentId : componentIds)
+    // Determine which surface type(s) the optionIDs target and store per-type.
+    // The client UI applies textures per surface type (wall/floor/ceiling independently).
+    // We classify by looking up the RoomComponentOption → RoomComponent → Type.
+    bool anyWall = false, anyFloor = false, anyCeiling = false;
+    for (uint32 optId : optionIds)
     {
-        if (!sRoomComponentStore.LookupEntry(componentId))
+        RoomComponentOptionEntry const* optEntry = sRoomComponentOptionStore.LookupEntry(optId);
+        if (!optEntry)
+            continue;
+
+        // Look up the RoomComponent via MeshStyleFilterID to get the component type
+        RoomComponentEntry const* compEntry = nullptr;
+        for (RoomComponentEntry const* entry : sRoomComponentStore)
         {
-            TC_LOG_DEBUG("housing", "Housing::ApplyRoomWallpaper: Invalid RoomComponent ID {} for room {}",
-                componentId, roomGuid.ToString());
-            return HOUSING_RESULT_ROOM_NOT_FOUND;
+            if (entry && entry->MeshStyleFilterID == optEntry->MeshStyleFilterID)
+            {
+                compEntry = entry;
+                break;
+            }
+        }
+        if (!compEntry)
+            continue;
+
+        switch (compEntry->Type)
+        {
+            case HOUSING_ROOM_COMPONENT_WALL:
+            case HOUSING_ROOM_COMPONENT_DOORWAY_WALL:
+                anyWall = true;
+                break;
+            case HOUSING_ROOM_COMPONENT_FLOOR:
+                anyFloor = true;
+                break;
+            case HOUSING_ROOM_COMPONENT_CEILING:
+                anyCeiling = true;
+                break;
+            default:
+                break;
         }
     }
 
-    // 0xFFFFFFFF means "reset to default" — store as 0 (no override)
-    itr->second.WallpaperId = (wallpaperId == 0xFFFFFFFF) ? 0 : wallpaperId;
-    itr->second.MaterialId = materialId;
+    // Store texture in the appropriate per-type field
+    if (anyWall)
+        itr->second.WallTextureId = textureId;
+    if (anyFloor)
+        itr->second.FloorTextureId = textureId;
+    if (anyCeiling)
+        itr->second.CeilingTextureId = textureId;
+
+    // If we couldn't classify any options (e.g., missing DB2 data), still apply as wall default
+    if (!anyWall && !anyFloor && !anyCeiling)
+        itr->second.WallTextureId = textureId;
+
+    itr->second.ColorOverride = colorOverride;
 
     PersistRoomToDB(roomGuid, itr->second);
 
-    TC_LOG_DEBUG("housing", "Housing::ApplyRoomWallpaper: Player {} applied wallpaper {} (material {}) to room {} ({} components) in house {}",
-        _owner->GetName(), wallpaperId, materialId, roomGuid.ToString(), componentIds.size(), _houseGuid.ToString());
+    TC_LOG_DEBUG("housing", "Housing::ApplyRoomMaterial: Player {} applied texture {} (color {}) to room {} "
+        "({} options, wall={} floor={} ceiling={}) in house {}",
+        _owner->GetName(), textureId, colorOverride, roomGuid.ToString(),
+        optionIds.size(), anyWall, anyFloor, anyCeiling, _houseGuid.ToString());
 
     // Account-level notification: material collection update
     if (_owner->GetSession())
     {
         WorldPackets::Housing::AccountRoomMaterialCollectionUpdate notif;
-        notif.MaterialID = materialId;
+        notif.MaterialID = textureId;
         _owner->GetSession()->SendPacket(notif.Write());
     }
 
@@ -2495,11 +2529,14 @@ void Housing::PersistRoomToDB(ObjectGuid roomGuid, Room const& room)
     stmt->setUInt32(index++, room.SlotIndex);
     stmt->setInt32(index++, room.GridX);
     stmt->setInt32(index++, room.GridY);
+    stmt->setInt32(index++, room.FloorIndex);
     stmt->setUInt32(index++, room.Orientation);
     stmt->setUInt8(index++, room.Mirrored ? 1 : 0);
     stmt->setUInt32(index++, room.ThemeId);
-    stmt->setUInt32(index++, room.WallpaperId);
-    stmt->setUInt32(index++, room.MaterialId);
+    stmt->setUInt32(index++, room.WallTextureId);
+    stmt->setUInt32(index++, room.FloorTextureId);
+    stmt->setUInt32(index++, room.CeilingTextureId);
+    stmt->setInt32(index++, room.ColorOverride);
     stmt->setUInt32(index++, room.DoorTypeId);
     stmt->setUInt8(index++, room.DoorSlot);
     stmt->setUInt32(index++, room.CeilingTypeId);

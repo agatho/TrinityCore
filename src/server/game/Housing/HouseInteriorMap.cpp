@@ -330,9 +330,26 @@ void HouseInteriorMap::SpawnRoomMeshObjects(Housing* housing, int32 factionRestr
                 int32 field24 = static_cast<int32>(optEntry->SubType);
                 uint8 field20 = static_cast<uint8>(optEntry->Type); // 0=Cosmetic, 1=DoorwayWall, 2=Doorway
 
+                // Per-component-type texture resolution (sniff-verified: wall/floor/ceiling store independently)
                 int32 roomComponentTextureID = 0;
-                if (room->WallpaperId != 0 && room->WallpaperId != 0xFFFFFFFF)
-                    roomComponentTextureID = static_cast<int32>(room->WallpaperId);
+                uint32 storedTexture = 0;
+                switch (comp.Type)
+                {
+                    case HOUSING_ROOM_COMPONENT_WALL:
+                    case HOUSING_ROOM_COMPONENT_DOORWAY_WALL:
+                        storedTexture = room->WallTextureId;
+                        break;
+                    case HOUSING_ROOM_COMPONENT_FLOOR:
+                        storedTexture = room->FloorTextureId;
+                        break;
+                    case HOUSING_ROOM_COMPONENT_CEILING:
+                        storedTexture = room->CeilingTextureId;
+                        break;
+                    default:
+                        break;
+                }
+                if (storedTexture != 0)
+                    roomComponentTextureID = static_cast<int32>(storedTexture);
                 else
                 {
                     roomComponentTextureID = sHousingMgr.GetTextureIdForComponentOption(roomComponentOptionID);
@@ -663,7 +680,7 @@ void HouseInteriorMap::ReplaceWallWithDoorway(ObjectGuid roomGuid, uint32 doorCo
 }
 
 void HouseInteriorMap::UpdateRoomComponentVisuals(ObjectGuid roomGuid, int32 factionRestriction, Housing::Room const& room,
-    std::vector<uint32> const* componentIDs, int32 overrideThemeID)
+    std::vector<uint32> const* optionIDs, int32 overrideThemeID)
 {
     auto itr = _roomMeshObjects.find(roomGuid);
     if (itr == _roomMeshObjects.end())
@@ -685,12 +702,13 @@ void HouseInteriorMap::UpdateRoomComponentVisuals(ObjectGuid roomGuid, int32 fac
         if (compID == 0)
             continue;
 
-        // If specific component IDs were requested, only update those
-        if (componentIDs && !componentIDs->empty())
+        // If specific optionIDs were requested, filter by mesh's current OptionID
+        if (optionIDs && !optionIDs->empty())
         {
+            int32 meshOptionID = mesh->GetRoomComponentOptionID();
             bool found = false;
-            for (uint32 cid : *componentIDs)
-                if (static_cast<int32>(cid) == compID) { found = true; break; }
+            for (uint32 optId : *optionIDs)
+                if (static_cast<int32>(optId) == meshOptionID) { found = true; break; }
             if (!found)
                 continue;
         }
@@ -712,9 +730,25 @@ void HouseInteriorMap::UpdateRoomComponentVisuals(ObjectGuid roomGuid, int32 fac
         if (!optEntry)
             continue;
 
-        int32 textureID = (room.WallpaperId != 0 && room.WallpaperId != 0xFFFFFFFF)
-            ? static_cast<int32>(room.WallpaperId)
-            : sHousingMgr.GetTextureIdForComponentOption(static_cast<int32>(optEntry->ID));
+        // Per-component-type texture resolution (sniff-verified: independent wall/floor/ceiling textures)
+        int32 textureID = 0;
+        switch (compEntry->Type)
+        {
+            case HOUSING_ROOM_COMPONENT_WALL:
+            case HOUSING_ROOM_COMPONENT_DOORWAY_WALL:
+                textureID = (room.WallTextureId != 0) ? static_cast<int32>(room.WallTextureId) : 0;
+                break;
+            case HOUSING_ROOM_COMPONENT_FLOOR:
+                textureID = (room.FloorTextureId != 0) ? static_cast<int32>(room.FloorTextureId) : 0;
+                break;
+            case HOUSING_ROOM_COMPONENT_CEILING:
+                textureID = (room.CeilingTextureId != 0) ? static_cast<int32>(room.CeilingTextureId) : 0;
+                break;
+            default:
+                break;
+        }
+        if (textureID == 0)
+            textureID = sHousingMgr.GetTextureIdForComponentOption(static_cast<int32>(optEntry->ID));
 
         // Entity gets the SELECTED sub-theme (e.g., 20=Folk Light), not the base
         mesh->UpdateRoomComponentVisuals(
@@ -723,8 +757,8 @@ void HouseInteriorMap::UpdateRoomComponentVisuals(ObjectGuid roomGuid, int32 fac
             textureID);
     }
 
-    TC_LOG_DEBUG("housing", "HouseInteriorMap::UpdateRoomComponentVisuals: room={} themeID={} wallpaperID={}",
-        roomGuid.ToString(), effectiveThemeID, room.WallpaperId);
+    TC_LOG_DEBUG("housing", "HouseInteriorMap::UpdateRoomComponentVisuals: room={} themeID={} wallTex={} floorTex={} ceilTex={}",
+        roomGuid.ToString(), effectiveThemeID, room.WallTextureId, room.FloorTextureId, room.CeilingTextureId);
 }
 
 void HouseInteriorMap::SpawnInteriorDecor(Housing* housing)

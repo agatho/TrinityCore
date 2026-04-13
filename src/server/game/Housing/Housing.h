@@ -66,8 +66,10 @@ public:
         uint32 Orientation = 0;
         bool Mirrored = false;
         uint32 ThemeId = 0;
-        uint32 WallpaperId = 0;
-        uint32 MaterialId = 0;
+        uint32 WallTextureId = 0;     // RoomComponentTexture ID for walls
+        uint32 FloorTextureId = 0;    // RoomComponentTexture ID for floors
+        uint32 CeilingTextureId = 0;  // RoomComponentTexture ID for ceilings
+        int32 ColorOverride = -1;     // Shared color override (-1 = default)
         uint32 DoorTypeId = 0;
         uint8 DoorSlot = 0;
         uint32 CeilingTypeId = 0;
@@ -152,8 +154,8 @@ public:
     HousingResult RemoveRoom(ObjectGuid roomGuid);
     HousingResult RotateRoom(ObjectGuid roomGuid, bool clockwise);
     HousingResult MoveRoom(ObjectGuid roomGuid, uint32 newSlotIndex, ObjectGuid swapRoomGuid, uint32 swapSlotIndex);
-    HousingResult ApplyRoomTheme(ObjectGuid roomGuid, uint32 themeSetId, std::vector<uint32> const& componentIds);
-    HousingResult ApplyRoomWallpaper(ObjectGuid roomGuid, uint32 wallpaperId, uint32 materialId, std::vector<uint32> const& componentIds);
+    HousingResult ApplyRoomTheme(ObjectGuid roomGuid, uint32 themeSetId, std::vector<uint32> const& optionIds);
+    HousingResult ApplyRoomMaterial(ObjectGuid roomGuid, uint32 textureId, int32 colorOverride, std::vector<uint32> const& optionIds);
     HousingResult SetDoorType(ObjectGuid roomGuid, uint32 doorTypeId, uint8 doorSlot);
     HousingResult SetCeilingType(ObjectGuid roomGuid, uint32 ceilingTypeId, uint8 ceilingSlot);
     std::vector<Room const*> GetRooms() const;
