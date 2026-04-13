@@ -64,10 +64,17 @@ public:
     /// Despawn all room meshes (e.g., when the interior is rebuilt).
     void DespawnAllRoomMeshObjects();
 
-    /// Update room component visuals in-place (theme/wallpaper change).
-    /// Avoids destroy+create cycle — sends UPDATE_OBJECT with changed fields.
-    void UpdateRoomComponentVisuals(ObjectGuid roomGuid, int32 factionRestriction, Housing::Room const& room,
-        std::vector<uint32> const* componentIDs = nullptr, int32 overrideThemeID = 0);
+    /// Update room component textures in-place (material/wallpaper change).
+    /// Sends UPDATE_OBJECT with changed texture fields — no model change.
+    void UpdateRoomComponentTextures(ObjectGuid roomGuid, Housing::Room const& room,
+        std::vector<uint32> const* componentIDs, int32 textureID);
+
+    /// Respawn room component MeshObjects for a theme change.
+    /// Theme changes require new models (different FileDataIDs), so we DESTROY old
+    /// meshes and CREATE new ones with new GUIDs. The client expects this pattern
+    /// (sniff shows walls disappearing and reappearing during theme changes).
+    void RespawnRoomComponentsForTheme(ObjectGuid roomGuid, int32 factionRestriction,
+        Housing::Room const& room, std::vector<uint32> const* componentIDs, int32 newThemeID);
 
     /// Despawn a single room's entities (MeshObjects + HousingRoomEntity).
     void DespawnRoomEntities(ObjectGuid roomGuid);
