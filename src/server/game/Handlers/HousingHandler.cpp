@@ -2571,13 +2571,20 @@ void WorldSession::HandleHousingRoomSetComponentTheme(WorldPackets::Housing::Hou
     // The client expects UPDATE_OBJECT with changed FHousingRoomComponentMesh_C fields.
     if (result == HOUSING_RESULT_SUCCESS)
     {
-        if (HouseInteriorMap* interiorMap = dynamic_cast<HouseInteriorMap*>(player->GetMap()))
+        HouseInteriorMap* interiorMap = dynamic_cast<HouseInteriorMap*>(player->GetMap());
+        if (!interiorMap)
+        {
+            TC_LOG_ERROR("housing", "SET_COMPONENT_THEME: NOT on HouseInteriorMap! mapId={}", player->GetMapId());
+        }
+        else
         {
             int32 faction = (player->GetTeamId() == TEAM_ALLIANCE)
                 ? NEIGHBORHOOD_FACTION_ALLIANCE : NEIGHBORHOOD_FACTION_HORDE;
             auto const& rooms = housing->GetRoomsMap();
             auto roomItr = rooms.find(housingRoomSetComponentTheme.RoomGuid);
-            if (roomItr != rooms.end())
+            if (roomItr == rooms.end())
+                TC_LOG_ERROR("housing", "SET_COMPONENT_THEME: Room {} not found in housing rooms map!", housingRoomSetComponentTheme.RoomGuid.ToString());
+            else
                 interiorMap->UpdateRoomComponentVisuals(housingRoomSetComponentTheme.RoomGuid, faction, roomItr->second,
                     &housingRoomSetComponentTheme.OptionIDs, housingRoomSetComponentTheme.HouseThemeID);
         }
@@ -2618,30 +2625,56 @@ void WorldSession::HandleHousingRoomApplyComponentMaterials(WorldPackets::Housin
     // Update component MeshObject fields in-place (no destroy+create).
     if (result == HOUSING_RESULT_SUCCESS)
     {
-        if (HouseInteriorMap* interiorMap = dynamic_cast<HouseInteriorMap*>(player->GetMap()))
+        HouseInteriorMap* interiorMap = dynamic_cast<HouseInteriorMap*>(player->GetMap());
+        if (!interiorMap)
+        {
+            TC_LOG_ERROR("housing", "APPLY_MATERIALS: NOT on HouseInteriorMap! mapId={}", player->GetMapId());
+        }
+        else
         {
             int32 textureID = static_cast<int32>(housingRoomApplyComponentMaterials.RoomComponentTextureID);
             auto meshItr = interiorMap->GetRoomMeshObjects().find(housingRoomApplyComponentMaterials.RoomGuid);
-            if (meshItr != interiorMap->GetRoomMeshObjects().end())
+            if (meshItr == interiorMap->GetRoomMeshObjects().end())
             {
+                TC_LOG_ERROR("housing", "APPLY_MATERIALS: Room {} NOT in _roomMeshObjects!", housingRoomApplyComponentMaterials.RoomGuid.ToString());
+            }
+            else
+            {
+                uint32 totalMeshes = 0, matchedMeshes = 0;
+                std::string clientOpts;
+                for (uint32 o : housingRoomApplyComponentMaterials.OptionIDs)
+                    clientOpts += std::to_string(o) + ",";
+
                 for (ObjectGuid const& meshGuid : meshItr->second)
                 {
                     MeshObject* mesh = interiorMap->GetMeshObject(meshGuid);
                     if (!mesh) continue;
-                    int32 meshOptionID = mesh->GetRoomComponentOptionID();
-                    if (meshOptionID == 0) continue;
+                    int32 compID = mesh->GetRoomComponentID();
+                    ++totalMeshes;
+                    if (compID == 0) continue;
+                    // Client sends RoomComponent DB2 IDs (not RoomComponentOption IDs)
                     bool match = housingRoomApplyComponentMaterials.OptionIDs.empty();
                     if (!match)
                     {
-                        for (uint32 optId : housingRoomApplyComponentMaterials.OptionIDs)
-                            if (static_cast<int32>(optId) == meshOptionID) { match = true; break; }
+                        for (uint32 cid : housingRoomApplyComponentMaterials.OptionIDs)
+                            if (static_cast<int32>(cid) == compID) { match = true; break; }
                     }
                     if (match)
+                    {
+                        ++matchedMeshes;
                         mesh->UpdateRoomComponentVisuals(
-                            meshOptionID,
+                            mesh->GetRoomComponentOptionID(),
                             mesh->GetHouseThemeID(),
                             textureID);
+                    }
+                    else
+                    {
+                        TC_LOG_DEBUG("housing", "APPLY_MATERIALS: mesh {} compID={} optionID={} NO MATCH vs client=[{}]",
+                            meshGuid.ToString(), compID, mesh->GetRoomComponentOptionID(), clientOpts);
+                    }
                 }
+                TC_LOG_ERROR("housing", "APPLY_MATERIALS: room={} totalMeshes={} matched={} textureID={} clientOpts=[{}]",
+                    housingRoomApplyComponentMaterials.RoomGuid.ToString(), totalMeshes, matchedMeshes, textureID, clientOpts);
             }
         }
     }

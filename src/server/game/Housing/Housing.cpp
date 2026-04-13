@@ -1615,26 +1615,12 @@ HousingResult Housing::ApplyRoomMaterial(ObjectGuid roomGuid, uint32 textureId, 
     if (itr == _rooms.end())
         return HOUSING_RESULT_ROOM_NOT_FOUND;
 
-    // Determine which surface type(s) the optionIDs target and store per-type.
-    // The client UI applies textures per surface type (wall/floor/ceiling independently).
-    // We classify by looking up the RoomComponentOption → RoomComponent → Type.
+    // Determine which surface type(s) the component IDs target and store per-type.
+    // The client sends RoomComponent DB2 IDs (not RoomComponentOption IDs).
     bool anyWall = false, anyFloor = false, anyCeiling = false;
-    for (uint32 optId : optionIds)
+    for (uint32 compId : optionIds)
     {
-        RoomComponentOptionEntry const* optEntry = sRoomComponentOptionStore.LookupEntry(optId);
-        if (!optEntry)
-            continue;
-
-        // Look up the RoomComponent via MeshStyleFilterID to get the component type
-        RoomComponentEntry const* compEntry = nullptr;
-        for (RoomComponentEntry const* entry : sRoomComponentStore)
-        {
-            if (entry && entry->MeshStyleFilterID == optEntry->MeshStyleFilterID)
-            {
-                compEntry = entry;
-                break;
-            }
-        }
+        RoomComponentEntry const* compEntry = sRoomComponentStore.LookupEntry(compId);
         if (!compEntry)
             continue;
 

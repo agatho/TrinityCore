@@ -702,13 +702,12 @@ void HouseInteriorMap::UpdateRoomComponentVisuals(ObjectGuid roomGuid, int32 fac
         if (compID == 0)
             continue;
 
-        // If specific optionIDs were requested, filter by mesh's current OptionID
+        // Client sends RoomComponent DB2 IDs (not RoomComponentOption IDs)
         if (optionIDs && !optionIDs->empty())
         {
-            int32 meshOptionID = mesh->GetRoomComponentOptionID();
             bool found = false;
-            for (uint32 optId : *optionIDs)
-                if (static_cast<int32>(optId) == meshOptionID) { found = true; break; }
+            for (uint32 cid : *optionIDs)
+                if (static_cast<int32>(cid) == compID) { found = true; break; }
             if (!found)
                 continue;
         }
