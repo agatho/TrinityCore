@@ -901,6 +901,17 @@ void HouseInteriorMap::RespawnRoomComponentsForTheme(ObjectGuid roomGuid, int32 
         }
     }
 
+    // Update the HousingRoomEntity's MeshObjects dynamic array so the client
+    // references the new GUIDs instead of the stale destroyed ones (prevents crash).
+    for (HousingRoomEntity* re : _roomEntities)
+    {
+        if (re && re->GetGUID() == roomGuid)
+        {
+            re->ReplaceMeshObjects(meshItr->second);
+            break;
+        }
+    }
+
     TC_LOG_INFO("housing", "RespawnRoomComponentsForTheme: room={} theme={} destroyed={} spawned={}",
         roomGuid.ToString(), newThemeID, toDestroy.size(), spawnedCount);
 }

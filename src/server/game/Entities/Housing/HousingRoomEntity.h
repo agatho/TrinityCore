@@ -56,6 +56,7 @@ public:
     void SetFlags(int32 flags);
     void SetFloorIndex(int32 floorIndex);
     void AddMeshObject(ObjectGuid meshObjectGuid);
+    void ReplaceMeshObjects(std::vector<ObjectGuid> const& newGuids);
     void AddDoor(int32 roomComponentID, Position const& offset, uint8 connectionType, ObjectGuid attachedRoomGuid = ObjectGuid::Empty);
     bool UpdateDoorConnection(int32 roomComponentID, ObjectGuid attachedRoomGuid);
 

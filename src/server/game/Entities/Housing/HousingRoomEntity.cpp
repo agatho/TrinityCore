@@ -198,6 +198,19 @@ void HousingRoomEntity::AddMeshObject(ObjectGuid meshObjectGuid)
         .ModifyValue(&UF::HousingRoomData::MeshObjects)) = meshObjectGuid;
 }
 
+void HousingRoomEntity::ReplaceMeshObjects(std::vector<ObjectGuid> const& newGuids)
+{
+    // Clear existing MeshObjects dynamic array and repopulate with new GUIDs.
+    // Called after theme respawn to update the room entity's mesh list so the
+    // client doesn't reference stale/destroyed mesh GUIDs (causes null deref crash).
+    ClearDynamicUpdateFieldValues(m_values.ModifyValue(&HousingRoomEntity::m_housingRoomData)
+        .ModifyValue(&UF::HousingRoomData::MeshObjects));
+
+    for (ObjectGuid const& guid : newGuids)
+        AddDynamicUpdateFieldValue(m_values.ModifyValue(&HousingRoomEntity::m_housingRoomData)
+            .ModifyValue(&UF::HousingRoomData::MeshObjects)) = guid;
+}
+
 void HousingRoomEntity::AddDoor(int32 roomComponentID, Position const& offset, uint8 connectionType, ObjectGuid attachedRoomGuid)
 {
     auto doorRef = AddDynamicUpdateFieldValue(
