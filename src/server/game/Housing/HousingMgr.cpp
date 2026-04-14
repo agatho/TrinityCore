@@ -120,8 +120,8 @@ void HousingMgr::Initialize()
             "falling back to base room entry {}", _baseRoomEntryId);
     }
 
-    // Room grid spacing (sniff-verified: 15.0f). Log diagnostic with base room WMO bounding box.
-    _roomGridSpacing = 15.0f;
+    // Room grid spacing (sniff-verified: ~24 yards between room centers, matching WMO bounding boxes)
+    _roomGridSpacing = HOUSING_ROOM_GRID_SPACING;
     if (_baseRoomEntryId)
     {
         HouseRoomData const* baseRoom = GetHouseRoomData(_baseRoomEntryId);

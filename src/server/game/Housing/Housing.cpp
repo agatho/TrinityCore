@@ -130,7 +130,7 @@ bool Housing::LoadFromDB(PreparedQueryResult housing, PreparedQueryResult decor,
             room.FloorIndex = fields[5].GetInt32();
             // Backward compat: if gridX looks like old grid index (0-20), convert to yards
             if (room.GridX >= 0 && room.GridX <= 20 && room.GridX == static_cast<int32>(room.SlotIndex) && room.SlotIndex > 0)
-                room.GridX = static_cast<int32>(room.SlotIndex) * 15;
+                room.GridX = static_cast<int32>(room.SlotIndex) * static_cast<int32>(HOUSING_ROOM_GRID_SPACING);
             room.Orientation = fields[6].GetUInt32();
             room.Mirrored = fields[7].GetBool();
             room.ThemeId = fields[8].GetUInt32();

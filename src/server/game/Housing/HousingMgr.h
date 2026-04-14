@@ -322,7 +322,7 @@ public:
     // Room 18 = exterior plot geobox (SpawnRoomForPlot), Room 46 = interior entry hall
     uint32 GetEntryHallRoomEntryId() const { return _entryHallRoomEntryId; }
 
-    // Room grid spacing for interior layout (sniff-verified: 15.0f)
+    // Room grid spacing for interior layout (~24 yards between room centers)
     float GetRoomGridSpacing() const { return _roomGridSpacing; }
 
     // RoomComponentTexture lookup: given a RoomComponentOption ID, find the texture ID
@@ -437,8 +437,8 @@ private:
     // Sniff-verified: Room 46 is the entry corridor with door connecting to the visual room
     uint32 _entryHallRoomEntryId = 0;
 
-    // Room grid spacing (sniff-verified: 15.0f)
-    float _roomGridSpacing = 15.0f;
+    // Room grid spacing (~24 yards between room centers)
+    float _roomGridSpacing = HOUSING_ROOM_GRID_SPACING;
 
     // RoomComponentTexture indexes
     // RoomComponentOptionID → RoomComponentTextureID (from RoomComponentOptionTexture join)
