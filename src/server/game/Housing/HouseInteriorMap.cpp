@@ -713,7 +713,7 @@ void HouseInteriorMap::UpdateRoomComponentTextures(ObjectGuid roomGuid, Housing:
 
 void HouseInteriorMap::RespawnRoomComponentsForTheme(ObjectGuid roomGuid, int32 factionRestriction,
     Housing::Room const& room, std::vector<uint32> const* componentIDs, int32 newThemeID,
-    int32 overrideSubType /*= -1*/)
+    int32 overrideSubType /*= -1*/, int32 overrideRoomCompID /*= -1*/)
 {
     // Theme changes require different models (FileDataIDs), so we DESTROY old meshes
     // and CREATE new ones with new GUIDs. The client shows walls disappearing/reappearing.
@@ -745,7 +745,7 @@ void HouseInteriorMap::RespawnRoomComponentsForTheme(ObjectGuid roomGuid, int32 
     // Phase 1: Record existing mesh option Types before destroying.
     // This preserves door vs plain wall state — we only spawn options whose Type
     // matches what was there before (prevents doors appearing on every wall).
-    struct OldMeshInfo { ObjectGuid guid; int32 compID; uint8 optType; uint8 optSubType; };
+    struct OldMeshInfo { ObjectGuid guid; int32 compID; uint8 optType; uint8 optSubType; int32 textureID; };
     std::vector<OldMeshInfo> toDestroy;
 
     for (ObjectGuid const& meshGuid : meshItr->second)
@@ -761,7 +761,7 @@ void HouseInteriorMap::RespawnRoomComponentsForTheme(ObjectGuid roomGuid, int32 
                 if (static_cast<int32>(cid) == compID) { match = true; break; }
         if (!match) continue;
 
-        // Record the option Type+SubType from the current mesh
+        // Record option Type+SubType+TextureID from the current mesh to preserve during respawn
         uint8 optType = 0, optSubType = 0;
         int32 optionID = mesh->GetRoomComponentOptionID();
         if (RoomComponentOptionEntry const* opt = sRoomComponentOptionStore.LookupEntry(static_cast<uint32>(optionID)))
@@ -769,7 +769,7 @@ void HouseInteriorMap::RespawnRoomComponentsForTheme(ObjectGuid roomGuid, int32 
             optType = opt->Type;
             optSubType = opt->SubType;
         }
-        toDestroy.push_back({ meshGuid, compID, optType, optSubType });
+        toDestroy.push_back({ meshGuid, compID, optType, optSubType, mesh->GetRoomComponentTextureID() });
     }
 
     // Destroy old meshes
@@ -784,11 +784,11 @@ void HouseInteriorMap::RespawnRoomComponentsForTheme(ObjectGuid roomGuid, int32 
     }
 
     // Phase 2: Create new meshes for each destroyed mesh, matching by (compID, Type, SubType)
-    // Build a per-compID list of Types that need respawning
-    // key: compID, value: list of (Type, SubType) pairs
-    std::unordered_map<int32, std::vector<std::pair<uint8, uint8>>> compTypeMap;
+    // Build a per-compID list of (Type, SubType, TextureID) that need respawning
+    struct RespawnSlot { uint8 optType; uint8 optSubType; int32 textureID; };
+    std::unordered_map<int32, std::vector<RespawnSlot>> compTypeMap;
     for (auto const& info : toDestroy)
-        compTypeMap[info.compID].emplace_back(info.optType, info.optSubType);
+        compTypeMap[info.compID].push_back({ info.optType, info.optSubType, info.textureID });
 
     // Look up the room's components from DB2
     HouseRoomData const* roomData = sHousingMgr.GetHouseRoomData(room.RoomEntryId);
@@ -829,24 +829,36 @@ void HouseInteriorMap::RespawnRoomComponentsForTheme(ObjectGuid roomGuid, int32 
             allOptions = sHousingMgr.FindAllRoomComponentOptions(comp.MeshStyleFilterID, 1);
 
         // For each old mesh's (Type, SubType), find the equivalent in new theme.
-        // If overrideSubType >= 0, use that instead of the old SubType (for ceiling/door type changes).
-        for (auto const& [oldType, oldSubType] : typeItr->second)
+        for (auto const& slot : typeItr->second)
         {
-            uint8 targetSubType = (overrideSubType >= 0) ? static_cast<uint8>(overrideSubType) : oldSubType;
+            uint8 targetSubType = (overrideSubType >= 0) ? static_cast<uint8>(overrideSubType) : slot.optSubType;
 
             RoomComponentOptionEntry const* bestOpt = nullptr;
             for (auto const* opt : allOptions)
             {
-                if (opt->Type == oldType && opt->SubType == targetSubType)
+                // If overrideRoomCompID is set, only match options with that RoomCompID
+                // (used for ceiling/door type selection: normal=0, vaulted=1, etc.)
+                if (overrideRoomCompID >= 0 && opt->RoomComponentID != overrideRoomCompID)
+                    continue;
+                if (opt->Type == slot.optType && opt->SubType == targetSubType)
                 { bestOpt = opt; break; }
             }
-            // Fallback: match Type only
+            // Fallback: match Type only (still respecting RoomCompID filter)
             if (!bestOpt)
                 for (auto const* opt : allOptions)
-                    if (opt->Type == oldType) { bestOpt = opt; break; }
-            // Last resort: any option
-            if (!bestOpt && !allOptions.empty())
-                bestOpt = allOptions[0];
+                {
+                    if (overrideRoomCompID >= 0 && opt->RoomComponentID != overrideRoomCompID)
+                        continue;
+                    if (opt->Type == slot.optType) { bestOpt = opt; break; }
+                }
+            // Last resort: any option matching RoomCompID
+            if (!bestOpt)
+                for (auto const* opt : allOptions)
+                {
+                    if (overrideRoomCompID >= 0 && opt->RoomComponentID != overrideRoomCompID)
+                        continue;
+                    bestOpt = opt; break;
+                }
             if (!bestOpt)
                 continue;
 
@@ -857,23 +869,10 @@ void HouseInteriorMap::RespawnRoomComponentsForTheme(ObjectGuid roomGuid, int32 
             int32 roomComponentOptionID = static_cast<int32>(bestOpt->ID);
             int32 houseThemeID = (newThemeID != 0) ? newThemeID : sHousingMgr.GetDefaultSubThemeID(bestOpt->HouseThemeID);
 
-            // Per-component-type texture
-            int32 roomComponentTextureID = 0;
-            uint32 storedTexture = 0;
-            switch (comp.Type)
-            {
-                case HOUSING_ROOM_COMPONENT_WALL:
-                case HOUSING_ROOM_COMPONENT_DOORWAY_WALL:
-                    storedTexture = room.WallTextureId; break;
-                case HOUSING_ROOM_COMPONENT_FLOOR:
-                    storedTexture = room.FloorTextureId; break;
-                case HOUSING_ROOM_COMPONENT_CEILING:
-                    storedTexture = room.CeilingTextureId; break;
-                default: break;
-            }
-            if (storedTexture != 0)
-                roomComponentTextureID = static_cast<int32>(storedTexture);
-            else
+            // Preserve the old mesh's texture during theme respawn (don't reset material).
+            // Only fall back to defaults if the old texture was 0.
+            int32 roomComponentTextureID = slot.textureID;
+            if (roomComponentTextureID == 0)
             {
                 roomComponentTextureID = sHousingMgr.GetTextureIdForComponentOption(roomComponentOptionID);
                 if (roomComponentTextureID == 0)
