@@ -1407,11 +1407,18 @@ HousingResult Housing::RemoveRoom(ObjectGuid roomGuid)
     if (_rooms.size() <= 1)
         return HOUSING_RESULT_ROOM_UPDATE_FAILED;
 
-    // Check if any placed decor references this room
+    // Auto-remove any placed decor in this room (return to catalog)
+    std::vector<ObjectGuid> decorToRemove;
     for (auto const& [guid, decor] : _placedDecor)
     {
         if (decor.RoomGuid == roomGuid)
-            return HOUSING_RESULT_ROOM_UPDATE_FAILED;
+            decorToRemove.push_back(guid);
+    }
+    for (ObjectGuid const& decorGuid : decorToRemove)
+    {
+        TC_LOG_DEBUG("housing", "Housing::RemoveRoom: Auto-removing decor {} from room {} before deletion",
+            decorGuid.ToString(), roomGuid.ToString());
+        RemoveDecor(decorGuid);
     }
 
     // Verify remaining rooms stay connected after removal (BFS from base room)
