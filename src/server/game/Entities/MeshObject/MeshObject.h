@@ -105,11 +105,12 @@ public:
     // Update room component theme/texture in-place (no destroy+create).
     // The client expects UPDATE_OBJECT with changed FHousingRoomComponentMesh_C fields.
     void UpdateRoomComponentVisuals(int32 roomComponentOptionID, int32 houseThemeID,
-        int32 roomComponentTextureID);
+        int32 roomComponentTextureID, int32 roomComponentTypeParam = -1);
 
     int32 GetRoomComponentID() const;
     int32 GetRoomComponentOptionID() const;
     int32 GetHouseThemeID() const;
+    int32 GetRoomComponentTextureID() const;
 
     // Update fields
     UF::UpdateField<UF::MeshObjectData, int32(WowCS::EntityFragment::FMeshObjectData_C), TYPEID_MESH_OBJECT> m_meshObjectData;

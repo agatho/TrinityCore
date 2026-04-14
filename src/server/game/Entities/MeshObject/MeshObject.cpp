@@ -405,7 +405,7 @@ void MeshObject::InitHousingRoomComponentData(ObjectGuid roomGuid,
 }
 
 void MeshObject::UpdateRoomComponentVisuals(int32 roomComponentOptionID, int32 houseThemeID,
-    int32 roomComponentTextureID)
+    int32 roomComponentTextureID, int32 roomComponentTypeParam /*= -1*/)
 {
     if (!m_housingRoomComponentMeshData.has_value())
         return;
@@ -414,9 +414,11 @@ void MeshObject::UpdateRoomComponentVisuals(int32 roomComponentOptionID, int32 h
     SetUpdateFieldValue(compData.ModifyValue(&UF::HousingRoomComponentMeshData::RoomComponentOptionID), roomComponentOptionID);
     SetUpdateFieldValue(compData.ModifyValue(&UF::HousingRoomComponentMeshData::HouseThemeID), houseThemeID);
     SetUpdateFieldValue(compData.ModifyValue(&UF::HousingRoomComponentMeshData::RoomComponentTextureID), roomComponentTextureID);
+    if (roomComponentTypeParam >= 0)
+        SetUpdateFieldValue(compData.ModifyValue(&UF::HousingRoomComponentMeshData::RoomComponentTypeParam), roomComponentTypeParam);
 
-    TC_LOG_DEBUG("housing", "MeshObject::UpdateRoomComponentVisuals: guid={} optionID={} themeID={} textureID={}",
-        GetGUID().ToString(), roomComponentOptionID, houseThemeID, roomComponentTextureID);
+    TC_LOG_DEBUG("housing", "MeshObject::UpdateRoomComponentVisuals: guid={} optionID={} themeID={} textureID={} typeParam={}",
+        GetGUID().ToString(), roomComponentOptionID, houseThemeID, roomComponentTextureID, roomComponentTypeParam);
 }
 
 int32 MeshObject::GetRoomComponentID() const
@@ -438,6 +440,13 @@ int32 MeshObject::GetHouseThemeID() const
     if (!m_housingRoomComponentMeshData.has_value())
         return 0;
     return m_housingRoomComponentMeshData->HouseThemeID;
+}
+
+int32 MeshObject::GetRoomComponentTextureID() const
+{
+    if (!m_housingRoomComponentMeshData.has_value())
+        return 0;
+    return m_housingRoomComponentMeshData->RoomComponentTextureID;
 }
 
 void MeshObject::BuildCreateUpdateBlockForPlayer(UpdateData* data, Player* target) const

@@ -2660,21 +2660,26 @@ void WorldSession::HandleHousingRoomSetDoorType(WorldPackets::Housing::HousingRo
     response.DoorType = housingRoomSetDoorType.DoorType;
     SendPacket(response.Write());
 
-    // Door type changes swap 3D models — respawn with the new DoorType as SubType
+    // Door type selects between door variants via RoomComponentTypeParam update.
     if (result == HOUSING_RESULT_SUCCESS)
     {
         if (HouseInteriorMap* interiorMap = dynamic_cast<HouseInteriorMap*>(player->GetMap()))
         {
-            int32 faction = (player->GetTeamId() == TEAM_ALLIANCE)
-                ? NEIGHBORHOOD_FACTION_ALLIANCE : NEIGHBORHOOD_FACTION_HORDE;
-            auto const& rooms = housing->GetRoomsMap();
-            auto roomItr = rooms.find(housingRoomSetDoorType.RoomGuid);
-            if (roomItr != rooms.end())
+            auto meshItr = interiorMap->GetRoomMeshObjects().find(housingRoomSetDoorType.RoomGuid);
+            if (meshItr != interiorMap->GetRoomMeshObjects().end())
             {
-                std::vector<uint32> compIDs = { housingRoomSetDoorType.ThemeOptionID };
-                interiorMap->RespawnRoomComponentsForTheme(housingRoomSetDoorType.RoomGuid, faction,
-                    roomItr->second, &compIDs, static_cast<int32>(roomItr->second.ThemeId),
-                    housingRoomSetDoorType.DoorType);
+                for (ObjectGuid const& meshGuid : meshItr->second)
+                {
+                    MeshObject* mesh = interiorMap->GetMeshObject(meshGuid);
+                    if (!mesh) continue;
+                    if (mesh->GetRoomComponentID() != static_cast<int32>(housingRoomSetDoorType.ThemeOptionID))
+                        continue;
+                    mesh->UpdateRoomComponentVisuals(
+                        mesh->GetRoomComponentOptionID(),
+                        mesh->GetHouseThemeID(),
+                        mesh->GetRoomComponentTextureID(),
+                        housingRoomSetDoorType.DoorType);
+                }
             }
         }
     }
@@ -2708,21 +2713,28 @@ void WorldSession::HandleHousingRoomSetCeilingType(WorldPackets::Housing::Housin
     response.CeilingType = housingRoomSetCeilingType.CeilingType;
     SendPacket(response.Write());
 
-    // Ceiling type changes swap 3D models — respawn with the new CeilingType as SubType
+    // Ceiling type selects between variants (normal vs vaulted) via RoomComponentTypeParam update.
+    // Both ceiling meshes (RoomCompID=0 and RoomCompID=1) are always spawned — the client uses
+    // the RoomComponentTypeParam field to decide which one to render visually.
     if (result == HOUSING_RESULT_SUCCESS)
     {
         if (HouseInteriorMap* interiorMap = dynamic_cast<HouseInteriorMap*>(player->GetMap()))
         {
-            int32 faction = (player->GetTeamId() == TEAM_ALLIANCE)
-                ? NEIGHBORHOOD_FACTION_ALLIANCE : NEIGHBORHOOD_FACTION_HORDE;
-            auto const& rooms = housing->GetRoomsMap();
-            auto roomItr = rooms.find(housingRoomSetCeilingType.RoomGuid);
-            if (roomItr != rooms.end())
+            auto meshItr = interiorMap->GetRoomMeshObjects().find(housingRoomSetCeilingType.RoomGuid);
+            if (meshItr != interiorMap->GetRoomMeshObjects().end())
             {
-                std::vector<uint32> compIDs = { housingRoomSetCeilingType.ThemeOptionID };
-                interiorMap->RespawnRoomComponentsForTheme(housingRoomSetCeilingType.RoomGuid, faction,
-                    roomItr->second, &compIDs, static_cast<int32>(roomItr->second.ThemeId),
-                    housingRoomSetCeilingType.CeilingType);
+                for (ObjectGuid const& meshGuid : meshItr->second)
+                {
+                    MeshObject* mesh = interiorMap->GetMeshObject(meshGuid);
+                    if (!mesh) continue;
+                    if (mesh->GetRoomComponentID() != static_cast<int32>(housingRoomSetCeilingType.ThemeOptionID))
+                        continue;
+                    mesh->UpdateRoomComponentVisuals(
+                        mesh->GetRoomComponentOptionID(),
+                        mesh->GetHouseThemeID(),
+                        mesh->GetRoomComponentTextureID(),
+                        housingRoomSetCeilingType.CeilingType);
+                }
             }
         }
     }
