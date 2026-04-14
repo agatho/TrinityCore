@@ -208,13 +208,12 @@ void HouseInteriorMap::SpawnRoomMeshObjects(Housing* housing, int32 factionRestr
             geoMinX, geoMinY, geoMinZ, geoMaxX, geoMaxY, geoMaxZ);
 
         // --- Calculate room world position ---
-        // GridX/GridY = yard offsets. FloorIndex = vertical floor (0=ground, 1+=upper).
-        // Use a FIXED floor height (7.0 yards) for consistent multi-floor spacing,
-        // not the individual room's Height (stairwells are 14.0 which would double-space).
-        static constexpr float FLOOR_HEIGHT = 7.0f;
+        // GridX/GridY/FloorIndex = yard offsets from origin (direct, not multiplied).
+        // Sniff-verified: stairwell room entity at Z=12.1 (ground=0.1, delta=12.0 yards).
+        // FloorIndex stores the absolute Z yard offset, same convention as GridX/GridY.
         float roomX = _originX + static_cast<float>(room->GridX);
         float roomY = _originY + static_cast<float>(room->GridY);
-        float roomZ = _originZ + static_cast<float>(room->FloorIndex) * FLOOR_HEIGHT;
+        float roomZ = _originZ + static_cast<float>(room->FloorIndex);
         float roomFacing = static_cast<float>(room->Orientation) * (M_PI / 2.0f);
 
         Position roomPos(roomX, roomY, roomZ, roomFacing);
@@ -262,8 +261,14 @@ void HouseInteriorMap::SpawnRoomMeshObjects(Housing* housing, int32 factionRestr
         uint32 wallCount = 0, floorCount = 0, ceilingCount = 0, doorwayCount = 0;
         uint32 stairsCount = 0, pillarCount = 0, doorwayWallCount = 0, otherCount = 0;
 
+        bool isStairwell = roomData->HasStairs();
+
         for (RoomComponentData const& comp : *components)
         {
+            // Log stairwell component positions to diagnose ceiling height
+            if (isStairwell)
+                TC_LOG_ERROR("housing", "  STAIRWELL comp ID={} Type={} ConnType={} Pos=({:.1f},{:.1f},{:.1f}) MSFID={}",
+                    comp.ID, comp.Type, comp.ConnectionType, comp.OffsetPos[0], comp.OffsetPos[1], comp.OffsetPos[2], comp.MeshStyleFilterID);
 
             // Look up RoomComponentOption for this component via MeshStyleFilterID.
             // Alliance sniff-verified: ALL components use faction theme (1=Folk → sub-theme 6).

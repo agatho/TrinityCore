@@ -2359,12 +2359,18 @@ void WorldSession::HandleHousingRoomAdd(WorldPackets::Housing::HousingRoomAdd co
                         newGridY = room.GridY + static_cast<int32>(sourceDoorOffset - newDoorOffset);
                     }
 
-                    TC_LOG_INFO("housing", "ROOM_ADD: sourceDoor={:.1f} newDoor={:.1f} -> gridX={} gridY={}",
-                        sourceDoorOffset, newDoorOffset, newGridX, newGridY);
-                    // Stairwell rooms are placed ADJACENT on the SAME floor like any
-                    // other room. The stairwell extends vertically (geobox Z=-1 to 14).
-                    // Only rooms placed at the stairwell's CEILING door go to floor+1.
-                    newFloorIndex = room.FloorIndex;
+                    // FloorIndex = Z yard offset (same convention as GridX/GridY).
+                    // Stairwell ceiling doors have Z > 1 — the new room goes up by one
+                    // standard floor height (7 yards), not by the raw door Z offset.
+                    // Room at Z=7, ceiling component at local Z=12 → world Z=19.
+                    static constexpr float STANDARD_FLOOR_HEIGHT = 7.0f;
+                    if (std::abs(comp.OffsetPos[2]) > 1.0f)
+                        newFloorIndex = room.FloorIndex + static_cast<int32>(STANDARD_FLOOR_HEIGHT);
+                    else
+                        newFloorIndex = room.FloorIndex;
+
+                    TC_LOG_INFO("housing", "ROOM_ADD: sourceDoor={:.1f} newDoor={:.1f} doorZ={:.1f} -> gridX={} gridY={} floorZ={}",
+                        sourceDoorOffset, newDoorOffset, comp.OffsetPos[2], newGridX, newGridY, newFloorIndex);
                     goto foundDoor;
                 }
             }
