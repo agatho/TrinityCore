@@ -884,10 +884,14 @@ void HouseInteriorMap::RespawnRoomComponentsForTheme(ObjectGuid roomGuid, int32 
             if (!newMesh) continue;
 
             PhasingHandler::InitDbPhaseShift(newMesh->GetPhaseShift(), PHASE_USE_FLAGS_ALWAYS_VISIBLE, 0, 0);
+            // Set RoomComponentTypeParam to overrideRoomCompID for ceiling/door type changes
+            // so the client's menu reflects the current type (normal=0, vaulted=1, etc.)
+            int32 typeParam = (overrideRoomCompID >= 0) ? overrideRoomCompID : 0;
+
             newMesh->InitHousingRoomComponentData(roomHousingGuid,
                 roomComponentOptionID, static_cast<int32>(comp.ID),
                 comp.Type, static_cast<int32>(bestOpt->SubType), static_cast<uint8>(bestOpt->Type),
-                houseThemeID, roomComponentTextureID, 0,
+                houseThemeID, roomComponentTextureID, typeParam,
                 0, 0, 0, 0, 0, 0);
 
             if (AddToMap(newMesh))
