@@ -298,43 +298,40 @@ void HouseInteriorMap::SpawnRoomMeshObjects(Housing* housing, int32 factionRestr
                 allOptions = sHousingMgr.FindAllRoomComponentOptions(comp.MeshStyleFilterID, 1);
 
             // Determine door connectivity and which side spawns the door meshes.
-            // Sniff-verified: only ONE room spawns DoorwayWall+Doorway at a connection.
-            // The room with the HIGHER slotIndex spawns the door meshes.
-            // The room with the LOWER slotIndex skips the connecting component entirely
-            // (no mesh at all — not even a plain wall).
+            // Sniff-verified: only the child room (higher slotIndex) spawns DoorwayWall+Doorway.
+            // The parent room (lower slotIndex) keeps its Cosmetic wall (Type=0) to fill the
+            // full wall width — needed when the child room is narrower than the parent.
             bool isDoorComponent = (comp.ConnectionType != 0) &&
                 (std::abs(comp.OffsetPos[0]) > 0.5f) != (std::abs(comp.OffsetPos[1]) > 0.5f);
             bool hasConnectedRoom = false;
-            bool skipComponentEntirely = false;
+            bool isParentSide = false; // true = keep as Cosmetic wall only (no door meshes)
             if (isDoorComponent)
             {
                 ObjectGuid neighborGuid = findNeighborAtDoor(room, comp.OffsetPos[0], comp.OffsetPos[1]);
                 if (!neighborGuid.IsEmpty())
                 {
                     hasConnectedRoom = true;
-                    // Check if the connected room has a higher slotIndex — if so, SKIP this
-                    // component (the other room will spawn the door meshes from its side)
                     auto nItr = housing->GetRoomsMap().find(neighborGuid);
                     if (nItr != housing->GetRoomsMap().end() && nItr->second.SlotIndex > room->SlotIndex)
-                        skipComponentEntirely = true;
+                        isParentSide = true; // child room handles the DoorwayWall+Doorway
                 }
             }
-
-            if (skipComponentEntirely)
-                continue; // other room handles the door visual
 
             // Filter options: spawn each relevant one as a separate MeshObject
             for (RoomComponentOptionEntry const* optEntry : allOptions)
             {
+                // Parent side of a connection: only spawn Cosmetic (Type=0) to fill the wall
+                if (isParentSide && optEntry->Type != 0)
+                    continue;
                 // For non-door walls: only spawn Type=0 (Cosmetic) options
-                // For door walls with connection: spawn DoorwayWall (Type=1) + Doorway (Type=2)
-                // For door walls without connection: spawn only Type=0 (Cosmetic)
                 if (!isDoorComponent && optEntry->Type != 0)
                     continue;
+                // Child side with connection: spawn DoorwayWall (Type=1) + Doorway (Type=2)
+                if (isDoorComponent && hasConnectedRoom && !isParentSide && optEntry->Type == 0)
+                    continue; // child side uses Type=1+2, not Type=0
+                // Unconnected door walls: only Cosmetic
                 if (isDoorComponent && !hasConnectedRoom && optEntry->Type != 0)
                     continue;
-                if (isDoorComponent && hasConnectedRoom && optEntry->Type == 0)
-                    continue; // connected doors use Type=1+2, not Type=0
 
                 int32 compFileDataID = optEntry->ModelFileDataID > 0 ? optEntry->ModelFileDataID : comp.ModelFileDataID;
                 if (compFileDataID <= 0)
@@ -578,48 +575,15 @@ void HouseInteriorMap::DespawnRoomEntities(ObjectGuid roomGuid)
 void HouseInteriorMap::ReplaceWallWithDoorway(ObjectGuid roomGuid, uint32 doorComponentID,
     int32 factionRestriction, Housing::Room const& room, ObjectGuid newRoomGuid)
 {
-    // Sniff-verified: Only the CHILD room (higher slotIndex) spawns DoorwayWall+Doorway.
-    // The PARENT room (lower slotIndex) just removes its wall mesh entirely — no replacement.
-    // This function removes the parent's wall so it doesn't overlap with the child's door.
-    auto meshItr = _roomMeshObjects.find(roomGuid);
-    if (meshItr == _roomMeshObjects.end())
-        return;
-
-    // Find and destroy ALL MeshObjects with matching RoomComponentID
-    std::vector<ObjectGuid> toRemove;
-    for (ObjectGuid const& meshGuid : meshItr->second)
-    {
-        if (MeshObject* mesh = GetMeshObject(meshGuid))
-        {
-            if (mesh->GetRoomComponentID() == static_cast<int32>(doorComponentID))
-                toRemove.push_back(meshGuid);
-        }
-    }
-
-    for (ObjectGuid const& meshGuid : toRemove)
-    {
-        if (MeshObject* mesh = GetMeshObject(meshGuid))
-        {
-            mesh->DestroyForNearbyPlayers();
-            RemoveFromMap(mesh, true);
-        }
-        meshItr->second.erase(
-            std::remove(meshItr->second.begin(), meshItr->second.end(), meshGuid),
-            meshItr->second.end());
-    }
-
-    // Update the HousingRoomEntity's MeshObjects array (remove destroyed GUIDs)
-    for (HousingRoomEntity* re : _roomEntities)
-    {
-        if (re && re->IsInWorld() && re->GetGUID() == roomGuid)
-        {
-            re->ReplaceMeshObjects(meshItr->second);
-            break;
-        }
-    }
-
-    TC_LOG_DEBUG("housing", "HouseInteriorMap::ReplaceWallWithDoorway: Replaced wall comp {} on room {} with doorway",
-        doorComponentID, roomGuid.ToString());
+    // The parent room keeps its Cosmetic wall (Type=0) to fill the full wall width.
+    // The child room's DoorwayWall+Doorway renders over it to create the door opening.
+    // This function is now a no-op — the parent's wall stays as-is.
+    // Parent room keeps its Cosmetic wall at the connection. The child room's
+    // DoorwayWall+Doorway renders over it to create the door opening.
+    // No wall removal needed — keeping the parent's wall ensures full coverage
+    // even when the child room is narrower (e.g., hallway attached to large room).
+    TC_LOG_DEBUG("housing", "ReplaceWallWithDoorway: room={} compID={} — parent keeps Cosmetic wall",
+        roomGuid.ToString(), doorComponentID);
 }
 
 void HouseInteriorMap::UpdateRoomComponentTextures(ObjectGuid roomGuid, Housing::Room const& room,
