@@ -2330,23 +2330,18 @@ void WorldSession::HandleHousingRoomAdd(WorldPackets::Housing::HousingRoomAdd co
                         return best;
                     };
 
-                    // Add a wall-thickness buffer so rooms don't overlap at their shared boundary.
-                    // Room WMO models extend slightly beyond the wall center positions, causing
-                    // z-fighting and bleed-through without this gap.
-                    static constexpr float ROOM_WALL_BUFFER = 3.0f;
-
                     if (comp.OffsetPos[0] > 0.5f) // source door faces +X
                     {
                         sourceDoorOffset = comp.OffsetPos[0];
                         newDoorOffset = findMaxWallOffset(newComps, 0, true); // -X wall
-                        newGridX = room.GridX + static_cast<int32>(sourceDoorOffset - newDoorOffset + ROOM_WALL_BUFFER);
+                        newGridX = room.GridX + static_cast<int32>(sourceDoorOffset - newDoorOffset);
                         newGridY = room.GridY;
                     }
                     else if (comp.OffsetPos[0] < -0.5f) // source door faces -X
                     {
                         sourceDoorOffset = comp.OffsetPos[0];
                         newDoorOffset = findMaxWallOffset(newComps, 0, false); // +X wall
-                        newGridX = room.GridX + static_cast<int32>(sourceDoorOffset - newDoorOffset - ROOM_WALL_BUFFER);
+                        newGridX = room.GridX + static_cast<int32>(sourceDoorOffset - newDoorOffset);
                         newGridY = room.GridY;
                     }
                     else if (comp.OffsetPos[1] > 0.5f) // source door faces +Y
@@ -2354,18 +2349,18 @@ void WorldSession::HandleHousingRoomAdd(WorldPackets::Housing::HousingRoomAdd co
                         sourceDoorOffset = comp.OffsetPos[1];
                         newDoorOffset = findMaxWallOffset(newComps, 1, true); // -Y wall
                         newGridX = room.GridX;
-                        newGridY = room.GridY + static_cast<int32>(sourceDoorOffset - newDoorOffset + ROOM_WALL_BUFFER);
+                        newGridY = room.GridY + static_cast<int32>(sourceDoorOffset - newDoorOffset);
                     }
                     else if (comp.OffsetPos[1] < -0.5f) // source door faces -Y
                     {
                         sourceDoorOffset = comp.OffsetPos[1];
                         newDoorOffset = findMaxWallOffset(newComps, 1, false); // +Y wall
                         newGridX = room.GridX;
-                        newGridY = room.GridY + static_cast<int32>(sourceDoorOffset - newDoorOffset - ROOM_WALL_BUFFER);
+                        newGridY = room.GridY + static_cast<int32>(sourceDoorOffset - newDoorOffset);
                     }
 
-                    TC_LOG_INFO("housing", "ROOM_ADD: sourceDoor={:.1f} newDoor={:.1f} buffer={:.1f} -> gridX={} gridY={}",
-                        sourceDoorOffset, newDoorOffset, ROOM_WALL_BUFFER, newGridX, newGridY);
+                    TC_LOG_INFO("housing", "ROOM_ADD: sourceDoor={:.1f} newDoor={:.1f} -> gridX={} gridY={}",
+                        sourceDoorOffset, newDoorOffset, newGridX, newGridY);
                     // Stairwell rooms are placed ADJACENT on the SAME floor like any
                     // other room. The stairwell extends vertically (geobox Z=-1 to 14).
                     // Only rooms placed at the stairwell's CEILING door go to floor+1.
