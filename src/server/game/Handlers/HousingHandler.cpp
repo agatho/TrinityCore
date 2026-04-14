@@ -2451,6 +2451,14 @@ void WorldSession::HandleHousingRoomRemove(WorldPackets::Housing::HousingRoomRem
         return;
     }
 
+    // Collect decor GUIDs in this room BEFORE RemoveRoom auto-removes them from data
+    std::vector<ObjectGuid> roomDecorGuids;
+    for (auto const* decor : housing->GetAllPlacedDecor())
+    {
+        if (decor && decor->RoomGuid == housingRoomRemove.RoomGuid)
+            roomDecorGuids.push_back(decor->Guid);
+    }
+
     HousingResult result = housing->RemoveRoom(housingRoomRemove.RoomGuid);
 
     WorldPackets::Housing::HousingRoomRemoveResponse response;
@@ -2458,11 +2466,16 @@ void WorldSession::HandleHousingRoomRemove(WorldPackets::Housing::HousingRoomRem
     response.RoomGuid = housingRoomRemove.RoomGuid;
     SendPacket(response.Write());
 
-    // Only despawn the removed room's entities — don't destroy+recreate all rooms.
+    // Despawn decor visuals and room entities for the removed room.
     if (result == HOUSING_RESULT_SUCCESS)
     {
         if (HouseInteriorMap* interiorMap = dynamic_cast<HouseInteriorMap*>(player->GetMap()))
+        {
+            for (ObjectGuid const& decorGuid : roomDecorGuids)
+                interiorMap->DespawnDecorItem(decorGuid);
+
             interiorMap->DespawnRoomEntities(housingRoomRemove.RoomGuid);
+        }
     }
 
     TC_LOG_INFO("housing", "CMSG_HOUSING_ROOM_REMOVE_ROOM RoomGuid: {}, Result: {}",
