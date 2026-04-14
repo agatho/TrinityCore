@@ -320,15 +320,17 @@ void HouseInteriorMap::SpawnRoomMeshObjects(Housing* housing, int32 factionRestr
             // Filter options: spawn each relevant one as a separate MeshObject
             for (RoomComponentOptionEntry const* optEntry : allOptions)
             {
-                // Parent side of a connection: only spawn Cosmetic (Type=0) to fill the wall
-                if (isParentSide && optEntry->Type != 0)
+                // Parent side of a connection: spawn only DoorwayWall (Type=1).
+                // Type=1 is a wall with a door opening + side fillers.
+                // NOT Type=0 (solid wall, blocks door) and NOT Type=2 (door frame, child handles that).
+                if (isParentSide && optEntry->Type != 1)
+                    continue;
+                // Child side with connection: spawn DoorwayWall (Type=1) + Doorway (Type=2)
+                if (isDoorComponent && hasConnectedRoom && !isParentSide && optEntry->Type == 0)
                     continue;
                 // For non-door walls: only spawn Type=0 (Cosmetic) options
                 if (!isDoorComponent && optEntry->Type != 0)
                     continue;
-                // Child side with connection: spawn DoorwayWall (Type=1) + Doorway (Type=2)
-                if (isDoorComponent && hasConnectedRoom && !isParentSide && optEntry->Type == 0)
-                    continue; // child side uses Type=1+2, not Type=0
                 // Unconnected door walls: only Cosmetic
                 if (isDoorComponent && !hasConnectedRoom && optEntry->Type != 0)
                     continue;
@@ -578,11 +580,96 @@ void HouseInteriorMap::ReplaceWallWithDoorway(ObjectGuid roomGuid, uint32 doorCo
     // The parent room keeps its Cosmetic wall (Type=0) to fill the full wall width.
     // The child room's DoorwayWall+Doorway renders over it to create the door opening.
     // This function is now a no-op — the parent's wall stays as-is.
-    // Parent room keeps its Cosmetic wall at the connection. The child room's
-    // DoorwayWall+Doorway renders over it to create the door opening.
-    // No wall removal needed — keeping the parent's wall ensures full coverage
-    // even when the child room is narrower (e.g., hallway attached to large room).
-    TC_LOG_DEBUG("housing", "ReplaceWallWithDoorway: room={} compID={} — parent keeps Cosmetic wall",
+    // Replace the parent's Cosmetic wall (Type=0) with DoorwayWall (Type=1) only.
+    // Type=1 has the door opening + side fillers. The child room handles the Doorway (Type=2).
+    auto meshItr = _roomMeshObjects.find(roomGuid);
+    if (meshItr == _roomMeshObjects.end())
+        return;
+
+    // Destroy existing Cosmetic wall for this component
+    ObjectGuid wallMeshGuid;
+    Position wallPos;
+    QuaternionData wallRot;
+    for (ObjectGuid const& meshGuid : meshItr->second)
+    {
+        if (MeshObject* mesh = GetMeshObject(meshGuid))
+        {
+            if (mesh->GetRoomComponentID() == static_cast<int32>(doorComponentID))
+            {
+                wallMeshGuid = meshGuid;
+                wallPos = mesh->GetLocalPosition();
+                wallRot = mesh->GetLocalRotation();
+                break;
+            }
+        }
+    }
+
+    if (wallMeshGuid.IsEmpty())
+        return;
+
+    MeshObject* wallMesh = GetMeshObject(wallMeshGuid);
+    if (!wallMesh) return;
+
+    wallMesh->DestroyForNearbyPlayers();
+    RemoveFromMap(wallMesh, true);
+    meshItr->second.erase(
+        std::remove(meshItr->second.begin(), meshItr->second.end(), wallMeshGuid),
+        meshItr->second.end());
+
+    // Spawn DoorwayWall (Type=1) only — the child room handles Doorway (Type=2)
+    HouseRoomData const* roomData = sHousingMgr.GetHouseRoomData(room.RoomEntryId);
+    if (!roomData) return;
+    std::vector<RoomComponentData> const* components = sHousingMgr.GetRoomComponents(roomData->RoomWmoDataID);
+    if (!components) return;
+
+    RoomComponentData const* doorComp = nullptr;
+    for (auto const& c : *components)
+        if (c.ID == doorComponentID) { doorComp = &c; break; }
+    if (!doorComp) return;
+
+    int32 lookupTheme = (room.ThemeId != 0) ? static_cast<int32>(room.ThemeId) : sHousingMgr.GetFactionDefaultThemeID(factionRestriction);
+    auto allOptions = sHousingMgr.FindAllRoomComponentOptions(doorComp->MeshStyleFilterID, lookupTheme);
+
+    float roomX = _originX + static_cast<float>(room.GridX);
+    float roomY = _originY + static_cast<float>(room.GridY);
+    Position roomPos(roomX, roomY, _originZ, 0.0f);
+
+    for (RoomComponentOptionEntry const* optEntry : allOptions)
+    {
+        if (optEntry->Type != 1) // Only DoorwayWall
+            continue;
+
+        int32 compFileDataID = optEntry->ModelFileDataID > 0 ? optEntry->ModelFileDataID : doorComp->ModelFileDataID;
+        int32 houseThemeID = sHousingMgr.GetDefaultSubThemeID(optEntry->HouseThemeID);
+
+        MeshObject* doorMesh = MeshObject::CreateMeshObject(this, wallPos, wallRot, 1.0f,
+            compFileDataID, true, roomGuid, 3, &roomPos);
+        if (!doorMesh) continue;
+
+        PhasingHandler::InitDbPhaseShift(doorMesh->GetPhaseShift(), PHASE_USE_FLAGS_ALWAYS_VISIBLE, 0, 0);
+        doorMesh->InitHousingRoomComponentData(roomGuid,
+            static_cast<int32>(optEntry->ID), static_cast<int32>(doorComp->ID),
+            doorComp->Type, static_cast<int32>(optEntry->SubType), static_cast<uint8>(optEntry->Type),
+            houseThemeID, 24, 0,
+            0, 0, 0, 0, 0, 0);
+
+        if (AddToMap(doorMesh))
+            meshItr->second.push_back(doorMesh->GetGUID());
+        else
+            delete doorMesh;
+    }
+
+    // Update room entity's MeshObjects list
+    for (HousingRoomEntity* re : _roomEntities)
+    {
+        if (re && re->IsInWorld() && re->GetGUID() == roomGuid)
+        {
+            re->ReplaceMeshObjects(meshItr->second);
+            break;
+        }
+    }
+
+    TC_LOG_DEBUG("housing", "ReplaceWallWithDoorway: room={} compID={} — replaced Cosmetic with DoorwayWall(Type=1)",
         roomGuid.ToString(), doorComponentID);
 }
 
