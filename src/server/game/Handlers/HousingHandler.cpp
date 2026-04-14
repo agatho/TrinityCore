@@ -2454,12 +2454,59 @@ void WorldSession::HandleHousingRoomRemove(WorldPackets::Housing::HousingRoomRem
         return;
     }
 
-    // Collect decor GUIDs in this room BEFORE RemoveRoom auto-removes them from data
+    // Collect info BEFORE RemoveRoom erases data
     std::vector<ObjectGuid> roomDecorGuids;
     for (auto const* decor : housing->GetAllPlacedDecor())
     {
         if (decor && decor->RoomGuid == housingRoomRemove.RoomGuid)
             roomDecorGuids.push_back(decor->Guid);
+    }
+
+    // Find adjacent rooms that had their connecting wall skipped because this room existed.
+    // Those walls need to be restored after this room is removed.
+    // Rule: parent rooms (lower slotIndex) skip their wall when a child (higher slot) exists.
+    // So we look for neighbors with LOWER slotIndex — they need wall restoration.
+    struct WallRestore { ObjectGuid roomGuid; uint32 doorCompID; };
+    std::vector<WallRestore> wallsToRestore;
+    {
+        auto removedItr = housing->GetRoomsMap().find(housingRoomRemove.RoomGuid);
+        if (removedItr != housing->GetRoomsMap().end())
+        {
+            Housing::Room const& removedRoom = removedItr->second;
+            HouseRoomData const* removedRd = sHousingMgr.GetHouseRoomData(removedRoom.RoomEntryId);
+            if (removedRd)
+            {
+                // For each neighbor with lower slot, find which of THEIR door components
+                // was skipped because this room was connected
+                for (auto const& [nGuid, nRoom] : housing->GetRoomsMap())
+                {
+                    if (nGuid == housingRoomRemove.RoomGuid)
+                        continue;
+                    if (nRoom.SlotIndex >= removedRoom.SlotIndex)
+                        continue; // only restore walls on rooms with LOWER slot
+
+                    HouseRoomData const* nRd = sHousingMgr.GetHouseRoomData(nRoom.RoomEntryId);
+                    if (!nRd) continue;
+                    std::vector<RoomComponentData> const* nComps = sHousingMgr.GetRoomComponents(nRd->RoomWmoDataID);
+                    if (!nComps) continue;
+
+                    for (auto const& nc : *nComps)
+                    {
+                        if (nc.ConnectionType == 0) continue;
+                        // Check if this door faces the removed room's position
+                        float doorWorldX = nRoom.GridX + nc.OffsetPos[0];
+                        float doorWorldY = nRoom.GridY + nc.OffsetPos[1];
+                        float dx = static_cast<float>(removedRoom.GridX) - doorWorldX;
+                        float dy = static_cast<float>(removedRoom.GridY) - doorWorldY;
+                        if (std::abs(dx) < 15.0f && std::abs(dy) < 15.0f)
+                        {
+                            wallsToRestore.push_back({ nGuid, nc.ID });
+                            break;
+                        }
+                    }
+                }
+            }
+        }
     }
 
     HousingResult result = housing->RemoveRoom(housingRoomRemove.RoomGuid);
@@ -2469,15 +2516,33 @@ void WorldSession::HandleHousingRoomRemove(WorldPackets::Housing::HousingRoomRem
     response.RoomGuid = housingRoomRemove.RoomGuid;
     SendPacket(response.Write());
 
-    // Despawn decor visuals and room entities for the removed room.
     if (result == HOUSING_RESULT_SUCCESS)
     {
         if (HouseInteriorMap* interiorMap = dynamic_cast<HouseInteriorMap*>(player->GetMap()))
         {
+            // Despawn decor visuals
             for (ObjectGuid const& decorGuid : roomDecorGuids)
                 interiorMap->DespawnDecorItem(decorGuid);
 
+            // Despawn room entities
             interiorMap->DespawnRoomEntities(housingRoomRemove.RoomGuid);
+
+            // Restore walls on adjacent rooms that were skipped
+            int32 faction = (player->GetTeamId() == TEAM_ALLIANCE)
+                ? NEIGHBORHOOD_FACTION_ALLIANCE : NEIGHBORHOOD_FACTION_HORDE;
+            for (auto const& restore : wallsToRestore)
+            {
+                auto roomItr = housing->GetRoomsMap().find(restore.roomGuid);
+                if (roomItr == housing->GetRoomsMap().end())
+                    continue;
+                // Respawn just the wall component that was skipped
+                std::vector<uint32> compIDs = { restore.doorCompID };
+                interiorMap->RespawnRoomComponentsForTheme(restore.roomGuid, faction,
+                    roomItr->second, &compIDs, static_cast<int32>(roomItr->second.ThemeId));
+
+                TC_LOG_INFO("housing", "ROOM_REMOVE: Restored wall compID={} on room {} (was skipped for removed room)",
+                    restore.doorCompID, restore.roomGuid.ToString());
+            }
         }
     }
 
