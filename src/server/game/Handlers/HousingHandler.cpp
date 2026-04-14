@@ -2650,6 +2650,9 @@ void WorldSession::HandleHousingRoomSetComponentTheme(WorldPackets::Housing::Hou
 
     // Theme changes require different 3D models (FileDataIDs), so DESTROY old meshes
     // and CREATE new ones with new GUIDs. Sniff shows walls disappearing/reappearing.
+    // Filter compIDs by type: only respawn components that match the dominant type in the
+    // request. "Apply wall style to all" sends all compIDs including floor/ceiling, but
+    // only wall components should change. We detect this by checking component types.
     if (result == HOUSING_RESULT_SUCCESS)
     {
         if (HouseInteriorMap* interiorMap = dynamic_cast<HouseInteriorMap*>(player->GetMap()))
@@ -2659,9 +2662,24 @@ void WorldSession::HandleHousingRoomSetComponentTheme(WorldPackets::Housing::Hou
             auto const& rooms = housing->GetRoomsMap();
             auto roomItr = rooms.find(housingRoomSetComponentTheme.RoomGuid);
             if (roomItr != rooms.end())
+            {
+                // Filter: only respawn wall-type components from the list.
+                // The client's "apply to all walls" sends ALL compIDs including
+                // floor/ceiling, but those should keep their current theme.
+                std::vector<uint32> wallOnlyCompIDs;
+                for (uint32 cid : housingRoomSetComponentTheme.OptionIDs)
+                {
+                    RoomComponentEntry const* compEntry = sRoomComponentStore.LookupEntry(cid);
+                    if (compEntry && (compEntry->Type == HOUSING_ROOM_COMPONENT_WALL
+                        || compEntry->Type == HOUSING_ROOM_COMPONENT_DOORWAY_WALL
+                        || compEntry->Type == HOUSING_ROOM_COMPONENT_DOORWAY))
+                        wallOnlyCompIDs.push_back(cid);
+                }
+
                 interiorMap->RespawnRoomComponentsForTheme(housingRoomSetComponentTheme.RoomGuid, faction,
-                    roomItr->second, &housingRoomSetComponentTheme.OptionIDs,
+                    roomItr->second, wallOnlyCompIDs.empty() ? &housingRoomSetComponentTheme.OptionIDs : &wallOnlyCompIDs,
                     housingRoomSetComponentTheme.HouseThemeID);
+            }
         }
     }
 
