@@ -297,6 +297,14 @@ void MeshObject::InitHousingFixtureData(ObjectGuid houseGuid, ObjectGuid fixture
         exteriorComponentHookID, exteriorComponentType, houseSize, isRoot);
 }
 
+void MeshObject::UpdateLocalScale(float scale)
+{
+    _scaleLocalSpace = scale;
+    auto posData = m_values.ModifyValue(&MeshObject::m_mirroredPositionData)
+        .ModifyValue(&UF::MirroredPositionData::PositionData);
+    SetUpdateFieldValue(posData.ModifyValue(&UF::MirroredMeshObjectData::ScaleLocalSpace), scale);
+}
+
 void MeshObject::UpdateExteriorComponentID(int32 id)
 {
     if (!m_housingFixtureData.has_value())

@@ -2897,7 +2897,9 @@ MeshObject* HousingMap::SpawnDecorItem(uint8 plotIndex, Housing::PlacedDecor con
     Position localPos(localX, localY, localZ);
     Position worldPos(worldX, worldY, worldZ);
 
-    MeshObject* mesh = MeshObject::CreateMeshObject(this, localPos, rot, 1.0f,
+    float decorScale = decor.Scale > 0.01f ? decor.Scale : 1.0f;
+
+    MeshObject* mesh = MeshObject::CreateMeshObject(this, localPos, rot, decorScale,
         fileDataID, /*isWMO*/ false,
         roomEntityGuid, /*attachFlags*/ roomEntityGuid.IsEmpty() ? uint8(0) : uint8(3),
         &worldPos);
@@ -2924,9 +2926,9 @@ MeshObject* HousingMap::SpawnDecorItem(uint8 plotIndex, Housing::PlacedDecor con
     _decorGuidToPlotIndex[decor.Guid] = plotIndex;
 
     TC_LOG_INFO("housing", "HousingMap::SpawnDecorItem: Spawned decor MeshObject fileDataID={} meshGuid={} decorGuid={} "
-        "at world({:.1f},{:.1f},{:.1f}) local({:.1f},{:.1f},{:.1f}) room={} plot={}",
+        "at world({:.1f},{:.1f},{:.1f}) local({:.1f},{:.1f},{:.1f}) scale={:.2f} room={} plot={}",
         fileDataID, mesh->GetGUID().ToString(), decor.Guid.ToString(),
-        worldX, worldY, worldZ, localX, localY, localZ,
+        worldX, worldY, worldZ, localX, localY, localZ, decorScale,
         roomEntityGuid.ToString(), plotIndex);
     return mesh;
 }
@@ -3021,17 +3023,18 @@ void HousingMap::SpawnAllDecorForPlot(uint8 plotIndex, Housing const* housing)
         _neighborhood ? _neighborhood->GetName() : "?");
 }
 
-void HousingMap::UpdateDecorPosition(uint8 plotIndex, ObjectGuid decorGuid, Position const& pos, QuaternionData const& /*rot*/)
+void HousingMap::UpdateDecorPosition(uint8 plotIndex, ObjectGuid decorGuid, Position const& pos, QuaternionData const& /*rot*/, float scale /*= 1.0f*/)
 {
     auto itr = _decorGuidToGoGuid.find(decorGuid);
     if (itr == _decorGuidToGoGuid.end())
         return;
 
-    // All decor is MeshObject now
     if (MeshObject* mesh = GetMeshObject(itr->second))
     {
         mesh->Relocate(pos);
-        TC_LOG_DEBUG("housing", "HousingMap::UpdateDecorPosition: Moved decor MeshObject {} to ({:.1f}, {:.1f}, {:.1f}) for plot {}",
-            decorGuid.ToString(), pos.GetPositionX(), pos.GetPositionY(), pos.GetPositionZ(), plotIndex);
+        if (std::abs(mesh->GetLocalScale() - scale) > 0.001f)
+            mesh->UpdateLocalScale(scale);
+        TC_LOG_DEBUG("housing", "HousingMap::UpdateDecorPosition: Moved decor MeshObject {} to ({:.1f}, {:.1f}, {:.1f}) scale={:.2f} for plot {}",
+            decorGuid.ToString(), pos.GetPositionX(), pos.GetPositionY(), pos.GetPositionZ(), scale, plotIndex);
     }
 }

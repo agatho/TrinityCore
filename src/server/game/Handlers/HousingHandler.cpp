@@ -962,18 +962,20 @@ void WorldSession::HandleHousingDecorMove(WorldPackets::Housing::HousingDecorMov
     float posY = housingDecorMove.Position.Pos.GetPositionY();
     float posZ = housingDecorMove.Position.Pos.GetPositionZ();
 
-    HousingResult result = housing->MoveDecor(housingDecorMove.DecorGuid,
-        posX, posY, posZ, rotX, rotY, rotZ, rotW);
+    float scale = housingDecorMove.Scale;
 
-    // Update decor GO position on the map
+    HousingResult result = housing->MoveDecor(housingDecorMove.DecorGuid,
+        posX, posY, posZ, rotX, rotY, rotZ, rotW, scale);
+
+    // Update decor MeshObject position + scale on the map
     if (result == HOUSING_RESULT_SUCCESS)
     {
         Position newPos(posX, posY, posZ);
         QuaternionData newRot(rotX, rotY, rotZ, rotW);
         if (HousingMap* housingMap = dynamic_cast<HousingMap*>(player->GetMap()))
-            housingMap->UpdateDecorPosition(housing->GetPlotIndex(), housingDecorMove.DecorGuid, newPos, newRot);
+            housingMap->UpdateDecorPosition(housing->GetPlotIndex(), housingDecorMove.DecorGuid, newPos, newRot, scale);
         else if (HouseInteriorMap* interiorMap = dynamic_cast<HouseInteriorMap*>(player->GetMap()))
-            interiorMap->UpdateDecorPosition(housingDecorMove.DecorGuid, newPos, newRot);
+            interiorMap->UpdateDecorPosition(housingDecorMove.DecorGuid, newPos, newRot, scale);
     }
 
     WorldPackets::Housing::HousingDecorMoveResponse response;
@@ -2670,20 +2672,24 @@ void WorldSession::HandleHousingRoomSetComponentTheme(WorldPackets::Housing::Hou
             if (roomItr != rooms.end())
             {
                 // Filter: only respawn wall-type components from the list.
-                // The client's "apply to all walls" sends ALL compIDs including
+                // The client's "apply to all walls" sends ALL OptionIDs including
                 // floor/ceiling, but those should keep their current theme.
-                std::vector<uint32> wallOnlyCompIDs;
-                for (uint32 cid : housingRoomSetComponentTheme.OptionIDs)
+                // OptionIDs are RoomComponentOption IDs — resolve to RoomComponent to check type.
+                std::vector<uint32> wallOnlyOptionIDs;
+                for (uint32 optId : housingRoomSetComponentTheme.OptionIDs)
                 {
-                    RoomComponentEntry const* compEntry = sRoomComponentStore.LookupEntry(cid);
+                    RoomComponentOptionEntry const* optEntry = sRoomComponentOptionStore.LookupEntry(optId);
+                    if (!optEntry) continue;
+                    RoomComponentEntry const* compEntry = sRoomComponentStore.LookupEntry(
+                        static_cast<uint32>(optEntry->RoomComponentID));
                     if (compEntry && (compEntry->Type == HOUSING_ROOM_COMPONENT_WALL
                         || compEntry->Type == HOUSING_ROOM_COMPONENT_DOORWAY_WALL
                         || compEntry->Type == HOUSING_ROOM_COMPONENT_DOORWAY))
-                        wallOnlyCompIDs.push_back(cid);
+                        wallOnlyOptionIDs.push_back(optId);
                 }
 
                 interiorMap->RespawnRoomComponentsForTheme(housingRoomSetComponentTheme.RoomGuid, faction,
-                    roomItr->second, wallOnlyCompIDs.empty() ? &housingRoomSetComponentTheme.OptionIDs : &wallOnlyCompIDs,
+                    roomItr->second, wallOnlyOptionIDs.empty() ? &housingRoomSetComponentTheme.OptionIDs : &wallOnlyOptionIDs,
                     housingRoomSetComponentTheme.HouseThemeID);
             }
         }

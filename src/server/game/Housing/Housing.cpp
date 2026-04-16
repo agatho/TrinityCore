@@ -269,10 +269,12 @@ bool Housing::LoadFromDB(PreparedQueryResult housing, PreparedQueryResult decor,
             placed.RotationY = fields[6].GetFloat();
             placed.RotationZ = fields[7].GetFloat();
             placed.RotationW = fields[8].GetFloat();
-            placed.DyeSlots[0] = fields[9].GetUInt32();
-            placed.DyeSlots[1] = fields[10].GetUInt32();
-            placed.DyeSlots[2] = fields[11].GetUInt32();
-            uint64 roomDbId = fields[12].GetUInt64();
+            placed.Scale = fields[9].GetFloat();
+            if (placed.Scale < 0.01f) placed.Scale = 1.0f;
+            placed.DyeSlots[0] = fields[10].GetUInt32();
+            placed.DyeSlots[1] = fields[11].GetUInt32();
+            placed.DyeSlots[2] = fields[12].GetUInt32();
+            uint64 roomDbId = fields[13].GetUInt64();
             if (roomDbId)
             {
                 // Use the room's actual GUID key from _rooms, not a reconstructed one.
@@ -288,10 +290,10 @@ bool Housing::LoadFromDB(PreparedQueryResult housing, PreparedQueryResult decor,
                     }
                 }
             }
-            placed.Locked = fields[13].GetUInt8() != 0;
-            placed.PlacementTime = static_cast<time_t>(fields[14].GetUInt64());
-            placed.SourceType = fields[15].GetUInt8();
-            placed.SourceValue = fields[16].GetString();
+            placed.Locked = fields[14].GetUInt8() != 0;
+            placed.PlacementTime = static_cast<time_t>(fields[15].GetUInt64());
+            placed.SourceType = fields[16].GetUInt8();
+            placed.SourceValue = fields[17].GetString();
 
             uint64 expected = s_nextDecorDbId.load();
             while (decorDbId >= expected && !s_nextDecorDbId.compare_exchange_weak(expected, decorDbId + 1))
@@ -483,6 +485,7 @@ void Housing::SaveToDB(CharacterDatabaseTransaction trans)
         stmt->setFloat(index++, decor.RotationY);
         stmt->setFloat(index++, decor.RotationZ);
         stmt->setFloat(index++, decor.RotationW);
+        stmt->setFloat(index++, decor.Scale);
         stmt->setUInt32(index++, decor.DyeSlots[0]);
         stmt->setUInt32(index++, decor.DyeSlots[1]);
         stmt->setUInt32(index++, decor.DyeSlots[2]);
@@ -845,6 +848,7 @@ HousingResult Housing::PlaceDecorWithGuid(ObjectGuid decorGuid, uint32 decorEntr
         stmt->setFloat(index++, rotY);
         stmt->setFloat(index++, rotZ);
         stmt->setFloat(index++, rotW);
+        stmt->setFloat(index++, decor.Scale);
         stmt->setUInt32(index++, 0);
         stmt->setUInt32(index++, 0);
         stmt->setUInt32(index++, 0);
@@ -983,6 +987,7 @@ HousingResult Housing::PlaceDecor(uint32 decorEntryId, float x, float y, float z
         stmt->setFloat(index++, rotY);
         stmt->setFloat(index++, rotZ);
         stmt->setFloat(index++, rotW);
+        stmt->setFloat(index++, decor.Scale);
         stmt->setUInt32(index++, 0); // dyeSlot0
         stmt->setUInt32(index++, 0); // dyeSlot1
         stmt->setUInt32(index++, 0); // dyeSlot2
@@ -1109,7 +1114,7 @@ uint32 Housing::PlaceStarterDecor()
 }
 
 HousingResult Housing::MoveDecor(ObjectGuid decorGuid, float x, float y, float z,
-    float rotX, float rotY, float rotZ, float rotW)
+    float rotX, float rotY, float rotZ, float rotW, float scale /*= 1.0f*/)
 {
     if (_houseGuid.IsEmpty())
         return HOUSING_RESULT_HOUSE_NOT_FOUND;
@@ -1119,13 +1124,15 @@ HousingResult Housing::MoveDecor(ObjectGuid decorGuid, float x, float y, float z
         !std::isfinite(rotX) || !std::isfinite(rotY) || !std::isfinite(rotZ) || !std::isfinite(rotW))
         return HOUSING_RESULT_BOUNDS_FAILURE_ROOM;
 
+    // Clamp scale to reasonable range (sniff shows values like 0.45 to 1.62)
+    if (!std::isfinite(scale) || scale < 0.01f)
+        scale = 1.0f;
+    if (scale > 5.0f)
+        scale = 5.0f;
+
     auto itr = _placedDecor.find(decorGuid);
     if (itr == _placedDecor.end())
         return HOUSING_RESULT_DECOR_NOT_FOUND;
-
-    // Sniff-verified: Lock→Move is valid (the locker is the one moving).
-    // Lock only prevents OTHER editors from modifying — not the owner.
-    // TODO: When multi-editor support is added, track LockedByGuid and check here.
 
     PlacedDecor& decor = itr->second;
     decor.PosX = x;
@@ -1135,6 +1142,7 @@ HousingResult Housing::MoveDecor(ObjectGuid decorGuid, float x, float y, float z
     decor.RotationY = rotY;
     decor.RotationZ = rotZ;
     decor.RotationW = rotW;
+    decor.Scale = scale;
 
     // Immediate persist for crash safety
     CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_UPD_CHARACTER_HOUSING_DECOR_POSITION);
@@ -1145,12 +1153,13 @@ HousingResult Housing::MoveDecor(ObjectGuid decorGuid, float x, float y, float z
     stmt->setFloat(4, rotY);
     stmt->setFloat(5, rotZ);
     stmt->setFloat(6, rotW);
-    stmt->setUInt64(7, _owner->GetGUID().GetCounter());
-    stmt->setUInt64(8, decorGuid.GetCounter());
+    stmt->setFloat(7, scale);
+    stmt->setUInt64(8, _owner->GetGUID().GetCounter());
+    stmt->setUInt64(9, decorGuid.GetCounter());
     CharacterDatabase.Execute(stmt);
 
-    TC_LOG_DEBUG("housing", "Housing::MoveDecor: Player {} moved decor {} to ({}, {}, {}) in house {}",
-        _owner->GetName(), decorGuid.ToString(), x, y, z, _houseGuid.ToString());
+    TC_LOG_DEBUG("housing", "Housing::MoveDecor: Player {} moved decor {} to ({}, {}, {}) scale={:.2f} in house {}",
+        _owner->GetName(), decorGuid.ToString(), x, y, z, scale, _houseGuid.ToString());
 
     SyncUpdateFields();
     return HOUSING_RESULT_SUCCESS;
@@ -1622,12 +1631,17 @@ HousingResult Housing::ApplyRoomMaterial(ObjectGuid roomGuid, uint32 textureId, 
     if (itr == _rooms.end())
         return HOUSING_RESULT_ROOM_NOT_FOUND;
 
-    // Determine which surface type(s) the component IDs target and store per-type.
-    // The client sends RoomComponent DB2 IDs (not RoomComponentOption IDs).
+    // Determine which surface type(s) the option IDs target and store per-type.
+    // The client sends RoomComponentOption IDs. We resolve to RoomComponent → Type.
     bool anyWall = false, anyFloor = false, anyCeiling = false;
-    for (uint32 compId : optionIds)
+    for (uint32 optId : optionIds)
     {
-        RoomComponentEntry const* compEntry = sRoomComponentStore.LookupEntry(compId);
+        RoomComponentOptionEntry const* optEntry = sRoomComponentOptionStore.LookupEntry(optId);
+        if (!optEntry)
+            continue;
+
+        RoomComponentEntry const* compEntry = sRoomComponentStore.LookupEntry(
+            static_cast<uint32>(optEntry->RoomComponentID));
         if (!compEntry)
             continue;
 

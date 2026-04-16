@@ -95,7 +95,7 @@ public:
     void SpawnSingleInteriorDecor(Housing::PlacedDecor const& decor, ObjectGuid houseGuid);
 
     /// Update position/rotation of a single interior decor item.
-    void UpdateDecorPosition(ObjectGuid decorGuid, Position const& pos, QuaternionData const& rot);
+    void UpdateDecorPosition(ObjectGuid decorGuid, Position const& pos, QuaternionData const& rot, float scale = 1.0f);
 
     /// Despawn a single decor item by its Housing decor GUID.
     void DespawnDecorItem(ObjectGuid decorGuid);

@@ -693,13 +693,14 @@ void HouseInteriorMap::UpdateRoomComponentTextures(ObjectGuid roomGuid, Housing:
     {
         MeshObject* mesh = GetMeshObject(meshGuid);
         if (!mesh) continue;
-        int32 compID = mesh->GetRoomComponentID();
-        if (compID == 0) continue;
+        int32 optionID = mesh->GetRoomComponentOptionID();
+        if (optionID == 0) continue;
 
+        // Client sends RoomComponentOption IDs — match against the mesh's stored option ID
         bool match = !componentIDs || componentIDs->empty();
         if (!match)
             for (uint32 cid : *componentIDs)
-                if (static_cast<int32>(cid) == compID) { match = true; break; }
+                if (static_cast<int32>(cid) == optionID) { match = true; break; }
         if (!match) continue;
 
         mesh->UpdateRoomComponentVisuals(
@@ -755,15 +756,18 @@ void HouseInteriorMap::RespawnRoomComponentsForTheme(ObjectGuid roomGuid, int32 
         int32 compID = mesh->GetRoomComponentID();
         if (compID == 0) continue;
 
+        // componentIDs contains RoomComponentOption IDs from the CMSG.
+        // Match against the mesh's stored OptionID, not its ComponentID.
+        int32 meshOptionID = mesh->GetRoomComponentOptionID();
         bool match = !componentIDs || componentIDs->empty();
         if (!match)
             for (uint32 cid : *componentIDs)
-                if (static_cast<int32>(cid) == compID) { match = true; break; }
+                if (static_cast<int32>(cid) == meshOptionID) { match = true; break; }
         if (!match) continue;
 
         // Record option Type+SubType+TextureID from the current mesh to preserve during respawn
         uint8 optType = 0, optSubType = 0;
-        int32 optionID = mesh->GetRoomComponentOptionID();
+        int32 optionID = meshOptionID;
         if (RoomComponentOptionEntry const* opt = sRoomComponentOptionStore.LookupEntry(static_cast<uint32>(optionID)))
         {
             optType = opt->Type;
@@ -1038,8 +1042,9 @@ void HouseInteriorMap::SpawnInteriorDecor(Housing* housing)
 
         Position localPos(localX, localY, localZ);
         Position worldPos(worldX, worldY, worldZ);
+        float decorScale = decor.Scale > 0.01f ? decor.Scale : 1.0f;
 
-        MeshObject* mesh = MeshObject::CreateMeshObject(this, localPos, rot, 1.0f,
+        MeshObject* mesh = MeshObject::CreateMeshObject(this, localPos, rot, decorScale,
             fileDataID, /*isWMO*/ false,
             roomEntityGuid, /*attachFlags*/ roomEntityGuid.IsEmpty() ? uint8(0) : uint8(3),
             &worldPos);
@@ -1178,8 +1183,9 @@ void HouseInteriorMap::SpawnSingleInteriorDecor(Housing::PlacedDecor const& deco
 
     Position localPos(localX, localY, localZ);
     Position worldPos(worldX, worldY, worldZ);
+    float decorScale = decor.Scale > 0.01f ? decor.Scale : 1.0f;
 
-    MeshObject* mesh = MeshObject::CreateMeshObject(this, localPos, rot, 1.0f,
+    MeshObject* mesh = MeshObject::CreateMeshObject(this, localPos, rot, decorScale,
         fileDataID, /*isWMO*/ false,
         roomEntityGuid, /*attachFlags*/ roomEntityGuid.IsEmpty() ? uint8(0) : uint8(3),
         &worldPos);
@@ -1203,7 +1209,7 @@ void HouseInteriorMap::SpawnSingleInteriorDecor(Housing::PlacedDecor const& deco
     }
 }
 
-void HouseInteriorMap::UpdateDecorPosition(ObjectGuid decorGuid, Position const& pos, QuaternionData const& /*rot*/)
+void HouseInteriorMap::UpdateDecorPosition(ObjectGuid decorGuid, Position const& pos, QuaternionData const& /*rot*/, float scale /*= 1.0f*/)
 {
     auto itr = _decorGuidToObjGuid.find(decorGuid);
     if (itr == _decorGuidToObjGuid.end())
@@ -1212,8 +1218,10 @@ void HouseInteriorMap::UpdateDecorPosition(ObjectGuid decorGuid, Position const&
     if (MeshObject* mesh = GetMeshObject(itr->second))
     {
         mesh->Relocate(pos);
-        TC_LOG_DEBUG("housing", "HouseInteriorMap::UpdateDecorPosition: Moved decor {} to ({:.1f},{:.1f},{:.1f})",
-            decorGuid.ToString(), pos.GetPositionX(), pos.GetPositionY(), pos.GetPositionZ());
+        if (std::abs(mesh->GetLocalScale() - scale) > 0.001f)
+            mesh->UpdateLocalScale(scale);
+        TC_LOG_DEBUG("housing", "HouseInteriorMap::UpdateDecorPosition: Moved decor {} to ({:.1f},{:.1f},{:.1f}) scale={:.2f}",
+            decorGuid.ToString(), pos.GetPositionX(), pos.GetPositionY(), pos.GetPositionZ(), scale);
     }
 }
 

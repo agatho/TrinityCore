@@ -47,6 +47,7 @@ public:
         float RotationY = 0.0f;
         float RotationZ = 0.0f;
         float RotationW = 1.0f;
+        float Scale = 1.0f;
         std::array<uint32, MAX_HOUSING_DYE_SLOTS> DyeSlots = {};
         ObjectGuid RoomGuid;
         bool Locked = false;
@@ -136,7 +137,7 @@ public:
     HousingResult PlaceDecor(uint32 decorEntryId, float x, float y, float z,
         float rotX, float rotY, float rotZ, float rotW, ObjectGuid roomGuid);
     HousingResult MoveDecor(ObjectGuid decorGuid, float x, float y, float z,
-        float rotX, float rotY, float rotZ, float rotW);
+        float rotX, float rotY, float rotZ, float rotW, float scale = 1.0f);
     HousingResult RemoveDecor(ObjectGuid decorGuid);
     HousingResult CommitDecorDyes(ObjectGuid decorGuid, std::array<uint32, MAX_HOUSING_DYE_SLOTS> const& dyeSlots);
     HousingResult SetDecorLocked(ObjectGuid decorGuid, bool locked);

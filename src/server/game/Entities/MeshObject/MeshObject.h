@@ -54,6 +54,7 @@ public:
     QuaternionData const& GetLocalRotation() const { return _rotationLocalSpace; }
     Position const& GetLocalPosition() const { return _positionLocalSpace; }
     float GetLocalScale() const { return _scaleLocalSpace; }
+    void UpdateLocalScale(float scale);
     uint8 GetAttachmentFlags() const { return _attachmentFlags; }
     bool IsExteriorRoot() const { return _isExteriorRoot; }
     int32 GetExteriorComponentHookID() const { return _exteriorComponentHookID; }
