@@ -16,8 +16,10 @@
  */
 
 #include "MeshObject.h"
+#include "DB2Stores.h"
 #include "Log.h"
 #include "Map.h"
+#include "ObjectGuid.h"
 #include "PhasingHandler.h"
 #include "UpdateData.h"
 
@@ -242,7 +244,29 @@ void MeshObject::InitHousingFixtureData(ObjectGuid houseGuid, ObjectGuid fixture
     // Must be a Housing-type GUID (client crashes with non-Housing GUIDs here).
     SetUpdateFieldValue(m_values.ModifyValue(&Object::m_housingFixtureData, 0)
         .ModifyValue(&UF::HousingFixtureData::Guid), fixtureGuid);
-    // GameObjectGUID: sniff confirms empty for all fixture pieces
+    // GameObjectGUID: retail sniff shows door components (Type=11) have the GO entry GUID here.
+    // Other fixture types (base, roof, window, etc.) have empty GUID.
+    // Look up the ExteriorComponent DB2 entry for GameObjectID.
+    {
+        ObjectGuid goGuid = ObjectGuid::Empty;
+        if (exteriorComponentID > 0)
+        {
+            ExteriorComponentEntry const* extComp = sExteriorComponentStore.LookupEntry(
+                static_cast<uint32>(exteriorComponentID));
+            if (extComp && extComp->GameObjectID > 0)
+            {
+                // Build a GameObject-type GUID referencing the GO entry.
+                // Retail sniff: the GUID uses the same Low value as the MeshObject's Low.
+                goGuid = ObjectGuid::Create<HighGuid::GameObject>(GetMap()->GetId(),
+                    static_cast<uint32>(extComp->GameObjectID), GetGUID().GetCounter());
+            }
+        }
+        if (!goGuid.IsEmpty())
+        {
+            SetUpdateFieldValue(m_values.ModifyValue(&Object::m_housingFixtureData, 0)
+                .ModifyValue(&UF::HousingFixtureData::GameObjectGUID), goGuid);
+        }
+    }
     SetUpdateFieldValue(m_values.ModifyValue(&Object::m_housingFixtureData, 0)
         .ModifyValue(&UF::HousingFixtureData::ExteriorComponentType), exteriorComponentType);
     SetUpdateFieldValue(m_values.ModifyValue(&Object::m_housingFixtureData, 0)

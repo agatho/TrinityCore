@@ -56,6 +56,7 @@ class InstanceLock;
 class InstanceMap;
 class InstanceScript;
 class InstanceScenario;
+class HousingDecorEntity;
 class HousingRoomEntity;
 class MeshObject;
 class Object;
@@ -221,8 +222,8 @@ struct MapStoredObjectsUnorderedMap
     }
 };
 
-extern template struct TypeListContainer<MapStoredObjectsUnorderedMap, Creature, GameObject, DynamicObject, Pet, Corpse, AreaTrigger, SceneObject, Conversation, MeshObject, HousingRoomEntity>;
-typedef TypeListContainer<MapStoredObjectsUnorderedMap, Creature, GameObject, DynamicObject, Pet, Corpse, AreaTrigger, SceneObject, Conversation, MeshObject, HousingRoomEntity> MapStoredObjectTypesContainer;
+extern template struct TypeListContainer<MapStoredObjectsUnorderedMap, Creature, GameObject, DynamicObject, Pet, Corpse, AreaTrigger, SceneObject, Conversation, MeshObject, HousingRoomEntity, HousingDecorEntity>;
+typedef TypeListContainer<MapStoredObjectsUnorderedMap, Creature, GameObject, DynamicObject, Pet, Corpse, AreaTrigger, SceneObject, Conversation, MeshObject, HousingRoomEntity, HousingDecorEntity> MapStoredObjectTypesContainer;
 
 class TC_GAME_API Map : public GridRefManager<NGridType>
 {

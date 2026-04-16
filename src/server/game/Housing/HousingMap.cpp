@@ -1695,154 +1695,16 @@ GameObject* HousingMap::SpawnHouseForPlot(uint8 plotIndex, Position const* custo
         SpawnRoomForPlot(plotIndex, pos, rot, plotInfo->HouseGuid);
     }
 
-    // Spawn the front door interactive GO.
-    // The door's GO entry and position come from DB2:
-    //   1. Resolve the default door component (Type=11) for this house's WMO data
-    //   2. Get the door component's GameObjectID for the GO entry
-    //   3. Find the door hook on the base component for the hook offset
-    //   4. Get the ExitPoint on the door component for the interaction offset
-    //   5. World position = house pos + hook offset + exit point offset
-    GameObject* doorGo = nullptr;
-    uint32 doorEntry = 0;
-    float doorLocalX = 0.0f;
-    float doorLocalY = 0.0f;
-    float doorLocalZ = 0.0f;
-
-    // Resolve door component from DB2.
-    // Use the actually-spawned base component (from rootOverrides) for hook lookups,
-    // not the raw coreExtCompID which may differ after migration/override.
-    uint32 actualBaseCompID = static_cast<uint32>(exteriorComponentID);
-    if (rootOverrides)
-    {
-        auto baseOvr = rootOverrides->find(HOUSING_FIXTURE_TYPE_BASE);
-        if (baseOvr != rootOverrides->end())
-            actualBaseCompID = baseOvr->second;
-    }
-
-    uint32 doorCompID = 0;
-    uint32 doorHookID = 0;  // Track which hook the door is at (for position)
-    {
-        // Find the door from the player's explicit fixture override.
-        // No auto-resolve: the player selects their door via the fixture editor.
-        // The door GO is only spawned when a door fixture exists.
-        auto const* baseHooks = sHousingMgr.GetHooksOnComponent(actualBaseCompID);
-        if (baseHooks && fixtureOverrides)
-        {
-            for (ExteriorComponentHookEntry const* hook : *baseHooks)
-            {
-                if (hook && hook->ExteriorComponentTypeID == 11)
-                {
-                    auto ovrItr = fixtureOverrides->find(hook->ID);
-                    if (ovrItr != fixtureOverrides->end())
-                    {
-                        doorCompID = ovrItr->second;
-                        doorHookID = hook->ID;
-                        break;
-                    }
-                }
-            }
-        }
-    }
-
-    ExteriorComponentEntry const* doorComp = doorCompID ? sExteriorComponentStore.LookupEntry(doorCompID) : nullptr;
-    if (doorComp)
-    {
-        doorEntry = doorComp->GameObjectID > 0 ? static_cast<uint32>(doorComp->GameObjectID) : 0;
-
-        // Door position: start from the door component's Position (local-space offset from base)
-        doorLocalX = doorComp->Position[0];
-        doorLocalY = doorComp->Position[1];
-        doorLocalZ = doorComp->Position[2];
-
-        // Use the selected door hook's position for door GO placement
-        auto const* baseHooks = sHousingMgr.GetHooksOnComponent(actualBaseCompID);
-        if (baseHooks && doorHookID)
-        {
-            for (ExteriorComponentHookEntry const* hook : *baseHooks)
-            {
-                if (hook && hook->ID == doorHookID)
-                {
-                    // Hook position provides the attachment point on the base
-                    doorLocalX = hook->Position[0];
-                    doorLocalY = hook->Position[1];
-                    doorLocalZ = hook->Position[2];
-
-                    // Add ExitPoint offset (interaction point relative to door)
-                    ExteriorComponentExitPointEntry const* exitPt = sHousingMgr.GetExitPoint(doorCompID);
-                    if (exitPt)
-                    {
-                        doorLocalX += exitPt->Position[0];
-                        doorLocalY += exitPt->Position[1];
-                        doorLocalZ += exitPt->Position[2];
-                    }
-
-                    TC_LOG_DEBUG("housing", "HousingMap::SpawnHouseForPlot: Door comp={} entry={} "
-                        "hook=({:.2f},{:.2f},{:.2f}) exitPt=({:.2f},{:.2f},{:.2f}) "
-                        "final=({:.2f},{:.2f},{:.2f})",
-                        doorCompID, doorEntry,
-                        hook->Position[0], hook->Position[1], hook->Position[2],
-                        exitPt ? exitPt->Position[0] : 0.0f,
-                        exitPt ? exitPt->Position[1] : 0.0f,
-                        exitPt ? exitPt->Position[2] : 0.0f,
-                        doorLocalX, doorLocalY, doorLocalZ);
-                    break;
-                }
-            }
-        }
-    }
-
-    if (!doorEntry)
-    {
-        TC_LOG_ERROR("housing", "HousingMap::SpawnHouseForPlot: No door component found "
-            "for plot {} (extComp={}, wmoData={}) — door GO will not spawn",
-            plotIndex, exteriorComponentID, houseExteriorWmoDataID);
-    }
-
-    // Transform local-space door offset to world space
-    float cosFacing = std::cos(facing);
-    float sinFacing = std::sin(facing);
-    float doorX = x + doorLocalX * cosFacing - doorLocalY * sinFacing;
-    float doorY = y + doorLocalX * sinFacing + doorLocalY * cosFacing;
-    float doorZ = z + doorLocalZ;
-    Position doorPos(doorX, doorY, doorZ, facing);
-
-    if (doorEntry)
-    {
-        GameObjectTemplate const* doorTemplate = sObjectMgr->GetGameObjectTemplate(doorEntry);
-        if (doorTemplate)
-        {
-            doorGo = GameObject::CreateGameObject(doorEntry, this, doorPos, rot, 255, GO_STATE_READY);
-            if (doorGo)
-            {
-                doorGo->SetFlag(GO_FLAG_NODESPAWN);
-                PhasingHandler::InitDbPhaseShift(doorGo->GetPhaseShift(), PHASE_USE_FLAGS_ALWAYS_VISIBLE, 0, 0);
-
-                if (AddToMap(doorGo))
-                {
-                    _houseGameObjects[plotIndex] = doorGo->GetGUID();
-                    TC_LOG_DEBUG("housing", "HousingMap::SpawnHouseForPlot: Door GO spawned - entry={} guid={} "
-                        "at ({:.1f}, {:.1f}, {:.1f}) (house center: {:.1f}, {:.1f}, {:.1f}) for plot {}",
-                        doorEntry, doorGo->GetGUID().ToString(), doorX, doorY, doorZ, x, y, z, plotIndex);
-                }
-                else
-                {
-                    TC_LOG_ERROR("housing", "HousingMap::SpawnHouseForPlot: Door GO AddToMap FAILED for plot {}", plotIndex);
-                    delete doorGo;
-                    doorGo = nullptr;
-                }
-            }
-            else
-            {
-                TC_LOG_ERROR("housing", "HousingMap::SpawnHouseForPlot: CreateGameObject FAILED for door entry {} at plot {}", doorEntry, plotIndex);
-            }
-        }
-        else
-        {
-            TC_LOG_ERROR("housing", "HousingMap::SpawnHouseForPlot: Door GO template {} NOT FOUND for plot {}", doorEntry, plotIndex);
-        }
-    }
-
-    return doorGo;
+    // Door GO spawning is now handled blizzlike inside SpawnExtCompTree:
+    // When a door-type MeshObject (ExteriorComponentType=11) with GameObjectID > 0 is
+    // spawned as part of the fixture tree, SpawnExtCompTree automatically creates the
+    // interactive GO at the door mesh's world position. This removes the dependency on
+    // fixtureOverrides for door spawning — the door GO spawns whenever its MeshObject
+    // spawns, regardless of whether the player has used the fixture editor.
+    //
+    // The door GO is stored in _houseGameObjects[plotIndex] by SpawnExtCompTree.
+    // Return it here for callers that need the pointer.
+    GameObject* doorGo = GetHouseGameObject(plotIndex);
 }
 
 void HousingMap::SpawnRoomForPlot(uint8 plotIndex, Position const& housePos,
@@ -2472,6 +2334,78 @@ uint32 HousingMap::SpawnExtCompTree(uint8 plotIndex, uint32 extCompID,
     uint32 count = 1;
     ObjectGuid meshGuid = mesh->GetGUID();
 
+    // --- Blizzlike: If this is a door component (Type=11), spawn the interactive GO ---
+    // Retail sniff: door MeshObjects have FHousingFixture_C.GameObjectGUID set to the
+    // door GO entry. A separate GameObject (type GOOBER) is spawned at the door mesh's
+    // world position for player click interaction. The GO's PositionLocalSpace=(0,0,0)
+    // relative to a parent entity at the door's world position.
+    if (comp->Type == 11 && comp->GameObjectID > 0)
+    {
+        uint32 doorGoEntry = static_cast<uint32>(comp->GameObjectID);
+        GameObjectTemplate const* doorTemplate = sObjectMgr->GetGameObjectTemplate(doorGoEntry);
+        if (doorTemplate)
+        {
+            // Compute the door mesh's world position from house position + hook local offset.
+            // worldPos is the root house position; pos is the hook's local-space offset.
+            Position const& houseWorldPos = worldPos ? *worldPos : pos;
+            float houseFacing = houseWorldPos.GetOrientation();
+            float cosFacing = std::cos(houseFacing);
+            float sinFacing = std::sin(houseFacing);
+
+            // Transform hook local offset to world space
+            float doorWorldX = houseWorldPos.GetPositionX() + pos.GetPositionX() * cosFacing - pos.GetPositionY() * sinFacing;
+            float doorWorldY = houseWorldPos.GetPositionY() + pos.GetPositionX() * sinFacing + pos.GetPositionY() * cosFacing;
+            float doorWorldZ = houseWorldPos.GetPositionZ() + pos.GetPositionZ();
+
+            // Add ExitPoint offset if available (interaction point relative to door mesh)
+            ExteriorComponentExitPointEntry const* exitPt = sHousingMgr.GetExitPoint(extCompID);
+            if (exitPt)
+            {
+                doorWorldX += exitPt->Position[0] * cosFacing - exitPt->Position[1] * sinFacing;
+                doorWorldY += exitPt->Position[0] * sinFacing + exitPt->Position[1] * cosFacing;
+                doorWorldZ += exitPt->Position[2];
+            }
+
+            Position doorPos(doorWorldX, doorWorldY, doorWorldZ, houseFacing);
+            QuaternionData doorRot(0, 0, 0, 1);
+
+            GameObject* doorGo = GameObject::CreateGameObject(doorGoEntry, this, doorPos, doorRot, 255, GO_STATE_READY);
+            if (doorGo)
+            {
+                doorGo->SetFlag(GO_FLAG_NODESPAWN);
+                PhasingHandler::InitDbPhaseShift(doorGo->GetPhaseShift(), PHASE_USE_FLAGS_ALWAYS_VISIBLE, 0, 0);
+
+                if (AddToMap(doorGo))
+                {
+                    _houseGameObjects[plotIndex] = doorGo->GetGUID();
+                    TC_LOG_INFO("housing", "SpawnExtCompTree: Door GO spawned blizzlike — entry={} guid={} "
+                        "at ({:.1f},{:.1f},{:.1f}) for comp={} (hook local: {:.1f},{:.1f},{:.1f}) exitPt=({:.1f},{:.1f},{:.1f}) plot={}",
+                        doorGoEntry, doorGo->GetGUID().ToString(),
+                        doorWorldX, doorWorldY, doorWorldZ,
+                        extCompID,
+                        pos.GetPositionX(), pos.GetPositionY(), pos.GetPositionZ(),
+                        exitPt ? exitPt->Position[0] : 0.0f,
+                        exitPt ? exitPt->Position[1] : 0.0f,
+                        exitPt ? exitPt->Position[2] : 0.0f,
+                        plotIndex);
+                }
+                else
+                {
+                    TC_LOG_ERROR("housing", "SpawnExtCompTree: Door GO AddToMap FAILED for comp={} plot={}", extCompID, plotIndex);
+                    delete doorGo;
+                }
+            }
+            else
+            {
+                TC_LOG_ERROR("housing", "SpawnExtCompTree: CreateGameObject FAILED for door entry={} comp={}", doorGoEntry, extCompID);
+            }
+        }
+        else
+        {
+            TC_LOG_ERROR("housing", "SpawnExtCompTree: Door GO template {} NOT FOUND for comp={}", doorGoEntry, extCompID);
+        }
+    }
+
     // Use worldPos for children: root's worldPos is itself, child's is the root's position
     Position const* childWorldPos = worldPos ? worldPos : &pos;
 
@@ -2480,11 +2414,8 @@ uint32 HousingMap::SpawnExtCompTree(uint8 plotIndex, uint32 extCompID,
     TC_LOG_INFO("housing", "SpawnExtCompTree: comp={} has {} hooks, fixtureOverrides={}",
         extCompID, hooks ? uint32(hooks->size()) : 0, fixtureOverrides != nullptr);
 
-    // Spawn child components at hooks from player fixture overrides only.
-    // No auto-resolve: doors, windows, chimneys etc. are all player-selected via the
-    // fixture editor. The door GO for house entry is positioned independently and doesn't
-    // require a door mesh to exist. This avoids the "wrong side" problem where a heuristic
-    // can't reliably determine the model's front face across different plot rotations.
+    // Spawn child components at hooks from player fixture overrides.
+    // Door meshes with GameObjectID > 0 automatically spawn their interactive GO above.
     if (hooks)
     {
         for (ExteriorComponentHookEntry const* hook : *hooks)
