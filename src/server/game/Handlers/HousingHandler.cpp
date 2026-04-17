@@ -2394,6 +2394,24 @@ void WorldSession::HandleHousingRoomAdd(WorldPackets::Housing::HousingRoomAdd co
 
     if (result == HOUSING_RESULT_SUCCESS)
     {
+        // Blizzlike: a stairwell is one physical unit split across TWO room entities
+        // at the same XY — the stairwell room at current floor + an "Empty Stairwell
+        // Room" (ID=48) 12 yards above. Each has its own geobox so decor can be
+        // placed on BOTH floors independently, and the upper room's ceiling sits
+        // at world Z=24 (2×floor height), matching sniff observations.
+        HouseRoomData const* addedRoom = sHousingMgr.GetHouseRoomData(housingRoomAdd.HouseRoomID);
+        if (addedRoom && addedRoom->HasStairs())
+        {
+            constexpr uint32 STAIRWELL_EMPTY_ROOM_ID = 48;
+            constexpr int32  UPPER_FLOOR_Z         = 12;
+            ObjectGuid upperRoomGuid;
+            HousingResult upperRes = housing->PlaceRoom(STAIRWELL_EMPTY_ROOM_ID, nextSlot + 1,
+                /*orientation*/ 0, /*mirrored*/ false, &upperRoomGuid,
+                newGridX, newGridY, newFloorIndex + UPPER_FLOOR_Z);
+            TC_LOG_INFO("housing", "ROOM_ADD: stairwell partner (ID={}) placed at (gridX={}, gridY={}, floorZ={}) result={}",
+                STAIRWELL_EMPTY_ROOM_ID, newGridX, newGridY, newFloorIndex + UPPER_FLOOR_Z, uint32(upperRes));
+        }
+
         if (HouseInteriorMap* interiorMap = dynamic_cast<HouseInteriorMap*>(player->GetMap()))
         {
             int32 faction = (player->GetTeamId() == TEAM_ALLIANCE)
