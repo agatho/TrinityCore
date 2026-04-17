@@ -1346,12 +1346,20 @@ HousingResult Housing::PlaceRoom(uint32 roomEntryId, uint32 slotIndex, uint32 or
 
     // Check room count limit
     if (_rooms.size() >= MAX_HOUSING_ROOMS_PER_HOUSE)
+    {
+        TC_LOG_ERROR("housing", "PlaceRoom: rejected entry {} - count limit ({}/{})",
+            roomEntryId, uint32(_rooms.size()), MAX_HOUSING_ROOMS_PER_HOUSE);
         return HOUSING_RESULT_GENERIC_FAILURE;
+    }
 
     // Check WeightCost-based room budget
     uint32 roomWeightCost = sHousingMgr.GetRoomWeightCost(roomEntryId);
     if (_roomWeightUsed + roomWeightCost > GetMaxRoomBudget())
+    {
+        TC_LOG_ERROR("housing", "PlaceRoom: rejected entry {} - weight budget exceeded (used={} + cost={} > max={})",
+            roomEntryId, _roomWeightUsed, roomWeightCost, GetMaxRoomBudget());
         return HOUSING_RESULT_GENERIC_FAILURE;
+    }
 
     // Check for slot collision
     for (auto const& [guid, room] : _rooms)
