@@ -702,9 +702,11 @@ uint32 HousingMgr::GetDecorWeightCost(uint32 decorEntryId) const
 uint32 HousingMgr::GetRoomWeightCost(uint32 roomEntryId) const
 {
     // Stairwell Room (Empty) is auto-spawned as the upper partner of a
-    // Stairwell (Left/Right) placement. It's a server-managed sibling, not a
-    // room the player chose, so it must not eat into the room budget — the
-    // player already paid the stairwell's 7 weight once.
+    // Stairwell (Left/Right) placement. The player already paid the
+    // stairwell's 7 weight once; charging another 5-7 for the sibling
+    // would eat over half the 19-point budget on a single visible
+    // stairwell. The budget is cumulative across all floors — we just
+    // don't double-charge for the server-managed upper half.
     constexpr uint32 STAIRWELL_EMPTY_ROOM_ID = 48;
     if (roomEntryId == STAIRWELL_EMPTY_ROOM_ID)
         return 0;
