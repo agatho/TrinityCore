@@ -295,27 +295,30 @@ void HouseInteriorMap::SpawnRoomMeshObjects(Housing* housing, int32 factionRestr
 
         bool isStairwell = roomData->HasStairs();
 
-        // A stairwell partner is the non-stairs upper room sitting 12 yards above
-        // a stairs-bearing room at the same XY. Its floor at local Z=0 (world
-        // Z=12) coincides with the stairs' landing surface and would z-fight/seal
-        // it. The stairs mesh already provides the landing surface the player
-        // walks on.
-        bool isStairwellPartner = false;
-        if (!isStairwell)
+        // Stairwells come in stacked pairs at the same XY — the stairs-bearing
+        // room and its upper partner (12 yards above). HAS_STAIRS flag is set
+        // on BOTH rooms in the pair (incl. "Stairwell Room (Empty)"), so we
+        // classify by checking for a partner at Z±12 at the same XY.
+        //   Base   = has another stairwell 12 yards ABOVE  → skip ceiling
+        //            (partner above provides it at world Z=24)
+        //   Partner = has another stairwell 12 yards BELOW → skip floor
+        //            (stairs mesh below already fills the landing at Z=12)
+        bool hasPartnerAbove = false;
+        bool hasPartnerBelow = false;
+        if (isStairwell)
         {
             for (Housing::Room const* other : rooms)
             {
                 if (other == room) continue;
                 if (other->GridX != room->GridX || other->GridY != room->GridY) continue;
-                if (other->FloorIndex + 12 != room->FloorIndex) continue;
                 HouseRoomData const* od = sHousingMgr.GetHouseRoomData(other->RoomEntryId);
-                if (od && od->HasStairs())
-                {
-                    isStairwellPartner = true;
-                    break;
-                }
+                if (!od || !od->HasStairs()) continue;
+                if (other->FloorIndex == room->FloorIndex + 12) hasPartnerAbove = true;
+                if (other->FloorIndex == room->FloorIndex - 12) hasPartnerBelow = true;
             }
         }
+        bool isStairwellBase    = isStairwell && hasPartnerAbove;
+        bool isStairwellPartner = isStairwell && hasPartnerBelow;
 
         if (isStairwell)
             TC_LOG_ERROR("housing", "  STAIRWELL ROOM entry={} roomWorldPos=({:.1f},{:.1f},{:.1f}) facing={:.2f} "
@@ -326,17 +329,15 @@ void HouseInteriorMap::SpawnRoomMeshObjects(Housing* housing, int32 factionRestr
 
         for (RoomComponentData const& comp : *components)
         {
-            // The lower stairwell room (with stairs) is paired with a Stairwell Empty
-            // Room above it at Z+12. Its ceiling at local Z=12 would coincide with the
-            // upper room's floor, sealing the view upward like a wall. Skip the ceiling
-            // component on the stairs-bearing room; the upper room has its own ceiling.
-            if (isStairwell && comp.Type == HOUSING_ROOM_COMPONENT_CEILING)
+            // Base stairwell (has a partner above): skip its ceiling so the
+            // upper floor is visible through the stairwell opening.
+            if (isStairwellBase && comp.Type == HOUSING_ROOM_COMPONENT_CEILING)
                 continue;
 
-            // The upper partner room: skip the floor. At world Z=12 it coincides
-            // with the stairs' landing surface — rendering both causes z-fighting
-            // and blocks the visual gap between the two floors. Keep the ceiling
-            // (world Z=24) and the walls.
+            // Partner stairwell (upper, has a stairs-bearing room below): skip
+            // its floor so the stairs mesh from below visually reaches the
+            // landing without z-fighting, and the gap between floors stays
+            // open. Keep the ceiling (at world Z=24) and the walls.
             if (isStairwellPartner && comp.Type == HOUSING_ROOM_COMPONENT_FLOOR)
                 continue;
 
