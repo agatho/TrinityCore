@@ -1793,6 +1793,16 @@ bool HouseInteriorMap::AddPlayerToMap(Player* player, bool initPlayer /*= true*/
 
                         TC_LOG_INFO("housing", "InteriorDoor: generated decorGuid={}", decorGuid.ToString());
 
+                        // Guard against re-entering the same interior instance. The GUID is
+                        // deterministic (instanceId+entry) — if a previous spawn is still on
+                        // the map, re-inserting hits MapStoredObjectsUnorderedMap's duplicate
+                        // assertion. Skip re-creation in that case.
+                        if (GetObjectsStore().Find<HousingDecorEntity>(decorGuid))
+                        {
+                            TC_LOG_INFO("housing", "InteriorDoor: decor entity already present on map — skipping respawn");
+                            return;
+                        }
+
                         HousingDecorEntity* decorEntity = new HousingDecorEntity();
                         Position doorWorldPos(doorWorldX, doorWorldY, doorWorldZ, 0.0f);
 
