@@ -2638,6 +2638,36 @@ void WorldSession::HandleHousingRoomRotate(WorldPackets::Housing::HousingRoomRot
 
     HousingResult result = housing->RotateRoom(housingRoomRotate.RoomGuid, housingRoomRotate.Clockwise);
 
+    // Stairwell pair: if the rotated room is part of a stairwell stack, rotate
+    // its partner too so both rooms stay aligned (same orientation, same XY).
+    ObjectGuid pairedRoomGuid;
+    if (result == HOUSING_RESULT_SUCCESS)
+    {
+        auto itr = housing->GetRoomsMap().find(housingRoomRotate.RoomGuid);
+        if (itr != housing->GetRoomsMap().end())
+        {
+            Housing::Room const& rm = itr->second;
+            HouseRoomData const* rd = sHousingMgr.GetHouseRoomData(rm.RoomEntryId);
+            if (rd && rd->HasStairs())
+            {
+                for (auto const& [gGuid, gRm] : housing->GetRoomsMap())
+                {
+                    if (gGuid == housingRoomRotate.RoomGuid) continue;
+                    if (gRm.GridX != rm.GridX || gRm.GridY != rm.GridY) continue;
+                    if (std::abs(gRm.FloorIndex - rm.FloorIndex) != 1) continue;
+                    HouseRoomData const* gRd = sHousingMgr.GetHouseRoomData(gRm.RoomEntryId);
+                    if (gRd && gRd->HasStairs())
+                    {
+                        pairedRoomGuid = gGuid;
+                        break;
+                    }
+                }
+            }
+        }
+        if (!pairedRoomGuid.IsEmpty())
+            housing->RotateRoom(pairedRoomGuid, housingRoomRotate.Clockwise);
+    }
+
     WorldPackets::Housing::HousingRoomUpdateResponse response;
     response.Result = static_cast<uint8>(result);
     response.RoomGuid = housingRoomRotate.RoomGuid;
@@ -2651,6 +2681,8 @@ void WorldSession::HandleHousingRoomRotate(WorldPackets::Housing::HousingRoomRot
         if (HouseInteriorMap* interiorMap = dynamic_cast<HouseInteriorMap*>(player->GetMap()))
         {
             interiorMap->DespawnRoomEntities(housingRoomRotate.RoomGuid);
+            if (!pairedRoomGuid.IsEmpty())
+                interiorMap->DespawnRoomEntities(pairedRoomGuid);
 
             int32 faction = (player->GetTeamId() == TEAM_ALLIANCE)
                 ? NEIGHBORHOOD_FACTION_ALLIANCE : NEIGHBORHOOD_FACTION_HORDE;
