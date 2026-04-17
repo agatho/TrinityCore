@@ -2362,12 +2362,17 @@ void WorldSession::HandleHousingRoomAdd(WorldPackets::Housing::HousingRoomAdd co
                     }
 
                     // FloorIndex = Z yard offset (same convention as GridX/GridY).
-                    // Stairwell ceiling doors have Z > 1 — the new room goes up by one
-                    // standard floor height (7 yards), not by the raw door Z offset.
-                    // Room at Z=7, ceiling component at local Z=12 → world Z=19.
-                    static constexpr float STANDARD_FLOOR_HEIGHT = 7.0f;
-                    if (std::abs(comp.OffsetPos[2]) > 1.0f)
-                        newFloorIndex = room.FloorIndex + static_cast<int32>(STANDARD_FLOOR_HEIGHT);
+                    // Sniff-verified: stairwell room entity sits at Z=12.1 (upper floor level),
+                    // not on the ground floor. The stairs visible inside the stairwell come
+                    // DOWN through its floor to the ground-floor room below. Two cases:
+                    //   1. Adding a stairwell room via a ground-floor door → place at Z=12
+                    //   2. Adding a normal room via a stairwell's ceiling door (Z>1) → Z=12
+                    static constexpr int32 UPPER_FLOOR_Z = 12;
+                    HouseRoomData const* addedRoomData = sHousingMgr.GetHouseRoomData(housingRoomAdd.HouseRoomID);
+                    bool addingStairwell = addedRoomData && addedRoomData->HasStairs();
+                    bool throughCeilingDoor = std::abs(comp.OffsetPos[2]) > 1.0f;
+                    if (addingStairwell || throughCeilingDoor)
+                        newFloorIndex = room.FloorIndex + UPPER_FLOOR_Z;
                     else
                         newFloorIndex = room.FloorIndex;
 
@@ -2672,24 +2677,20 @@ void WorldSession::HandleHousingRoomSetComponentTheme(WorldPackets::Housing::Hou
             if (roomItr != rooms.end())
             {
                 // Filter: only respawn wall-type components from the list.
-                // The client's "apply to all walls" sends ALL OptionIDs including
+                // The client's "apply to all walls" sends ALL compIDs including
                 // floor/ceiling, but those should keep their current theme.
-                // OptionIDs are RoomComponentOption IDs — resolve to RoomComponent to check type.
-                std::vector<uint32> wallOnlyOptionIDs;
-                for (uint32 optId : housingRoomSetComponentTheme.OptionIDs)
+                std::vector<uint32> wallOnlyCompIDs;
+                for (uint32 cid : housingRoomSetComponentTheme.OptionIDs)
                 {
-                    RoomComponentOptionEntry const* optEntry = sRoomComponentOptionStore.LookupEntry(optId);
-                    if (!optEntry) continue;
-                    RoomComponentEntry const* compEntry = sRoomComponentStore.LookupEntry(
-                        static_cast<uint32>(optEntry->RoomComponentID));
+                    RoomComponentEntry const* compEntry = sRoomComponentStore.LookupEntry(cid);
                     if (compEntry && (compEntry->Type == HOUSING_ROOM_COMPONENT_WALL
                         || compEntry->Type == HOUSING_ROOM_COMPONENT_DOORWAY_WALL
                         || compEntry->Type == HOUSING_ROOM_COMPONENT_DOORWAY))
-                        wallOnlyOptionIDs.push_back(optId);
+                        wallOnlyCompIDs.push_back(cid);
                 }
 
                 interiorMap->RespawnRoomComponentsForTheme(housingRoomSetComponentTheme.RoomGuid, faction,
-                    roomItr->second, wallOnlyOptionIDs.empty() ? &housingRoomSetComponentTheme.OptionIDs : &wallOnlyOptionIDs,
+                    roomItr->second, wallOnlyCompIDs.empty() ? &housingRoomSetComponentTheme.OptionIDs : &wallOnlyCompIDs,
                     housingRoomSetComponentTheme.HouseThemeID);
             }
         }
