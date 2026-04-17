@@ -360,13 +360,11 @@ void HouseInteriorMap::SpawnRoomMeshObjects(Housing* housing, int32 factionRestr
             // Filter options: spawn each relevant one as a separate MeshObject
             for (RoomComponentOptionEntry const* optEntry : allOptions)
             {
-                // Parent side of a connection: spawn both Type=0 (Cosmetic full-width
-                // solid wall) AND Type=1 (DoorwayWall with opening). This way the
-                // Type=1 provides the door opening where the child's doorway aligns,
-                // while the Type=0 fills the side-filler areas when the child is
-                // narrower than the parent (e.g., T-shape attached to Square Room).
-                // Skip Type=2 (Doorway frame) — the child spawns that from its side.
-                if (isParentSide && optEntry->Type == 2)
+                // Parent side of a connection: spawn DoorwayWall (Type=1) ONLY.
+                // Type=1 is a single mesh containing both the door opening AND
+                // the side fillers — no Type=0 solid wall needed (that would seal
+                // the door), and no Type=2 door frame (child handles that).
+                if (isParentSide && optEntry->Type != 1)
                     continue;
                 // Child side with connection: spawn DoorwayWall (Type=1) + Doorway (Type=2)
                 if (isDoorComponent && hasConnectedRoom && !isParentSide && optEntry->Type == 0)
