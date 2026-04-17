@@ -547,7 +547,10 @@ void HouseInteriorMap::SpawnRoomMeshObjects(Housing* housing, int32 factionRestr
                     housingRoom->AddMeshObject(comp->GetGUID());
             }
 
-            // Add door data from door-capable wall components
+            // Add door data from door-capable wall/ceiling components. Every door
+            // entry is advertised so the editor can render attachment points on
+            // unconnected doors (AttachedRoomGUID empty). Walls with attached
+            // neighbors get the neighbor GUID so the client knows they're taken.
             uint32 doorCount = 0;
             for (RoomComponentData const& comp : *components)
             {
@@ -556,25 +559,43 @@ void HouseInteriorMap::SpawnRoomMeshObjects(Housing* housing, int32 factionRestr
                 if (comp.Type == HOUSING_ROOM_COMPONENT_DOORWAY ||
                     comp.Type == HOUSING_ROOM_COMPONENT_DOORWAY_WALL)
                     isDoor = true;
-                else if (comp.Type == HOUSING_ROOM_COMPONENT_WALL && comp.ConnectionType != 0)
+                else if (comp.ConnectionType != 0)
                 {
+                    // Any DB2 component with ConnectionType>0 is a door-capable
+                    // slot. Walls have X XOR Y nonzero; ceiling/floor doors
+                    // (stairwell vertical link) have only Z nonzero.
                     bool hasX = std::abs(comp.OffsetPos[0]) > 0.5f;
                     bool hasY = std::abs(comp.OffsetPos[1]) > 0.5f;
-                    if (hasX != hasY)
+                    bool hasZ = std::abs(comp.OffsetPos[2]) > 0.5f;
+                    if ((hasX != hasY) || (hasZ && !hasX && !hasY))
                         isDoor = true;
                 }
 
                 if (!isDoor)
                     continue;
 
-                // Find the adjacent room in the direction this door faces.
-                // Only add a door entry if there is actually a connected neighbor.
-                // The client counts entries in FHousingRoom_C.Doors to decide whether
-                // the room can be removed — extra entries for unconnected door-capable
-                // walls cause "cannot remove a room with more than one connected doors".
-                ObjectGuid attachedRoomGuid = findNeighborAtDoor(room, comp.OffsetPos[0], comp.OffsetPos[1]);
-                if (attachedRoomGuid.IsEmpty())
-                    continue;
+                // Horizontal doors: match XY-adjacent same-floor rooms.
+                // Vertical doors (ceiling): match same-XY room one floor up.
+                ObjectGuid attachedRoomGuid;
+                bool isVertical = std::abs(comp.OffsetPos[2]) > 0.5f;
+                if (isVertical)
+                {
+                    int32 targetFloor = comp.OffsetPos[2] > 0 ? room->FloorIndex + 1 : room->FloorIndex - 1;
+                    for (Housing::Room const* other : rooms)
+                    {
+                        if (other == room) continue;
+                        if (other->GridX == room->GridX && other->GridY == room->GridY
+                            && other->FloorIndex == targetFloor)
+                        {
+                            attachedRoomGuid = other->Guid;
+                            break;
+                        }
+                    }
+                }
+                else
+                {
+                    attachedRoomGuid = findNeighborAtDoor(room, comp.OffsetPos[0], comp.OffsetPos[1]);
+                }
 
                 Position doorOffset(comp.OffsetPos[0], comp.OffsetPos[1], comp.OffsetPos[2]);
                 uint8 connType = comp.ConnectionType > 0 ? comp.ConnectionType : 1;

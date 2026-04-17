@@ -699,7 +699,7 @@ bool HousingMap::AddPlayerToMap(Player* player, bool initPlayer /*= true*/)
                 go = SpawnHouseForPlot(plotIdx, nullptr, exteriorComponentID, houseExteriorWmoDataID, overridesPtr, rootOvrPtr);
 
             TC_LOG_DEBUG("housing", "HousingMap::AddPlayerToMap: SpawnHouseForPlot result for plot {}: {}",
-                plotIdx, go ? go->GetGUID().ToString() : "FAILED");
+                plotIdx, go ? "spawned" : "FAILED");
             } // else (valid exteriorComponentID && houseExteriorWmoDataID)
         }
         else

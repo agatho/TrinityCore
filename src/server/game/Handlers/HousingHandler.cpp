@@ -2535,6 +2535,47 @@ void WorldSession::HandleHousingRoomRemove(WorldPackets::Housing::HousingRoomRem
         }
     }
 
+    // Stairwells are stacked pairs — if removing a base stairwell, also remove
+    // the partner room directly above (same XY, FloorIndex+1). Vice versa for
+    // partner removal. Without this, whichever one stays behind is orphaned and
+    // the graph-connectivity check blocks future removals.
+    ObjectGuid pairedRoomGuid;
+    {
+        auto itr = housing->GetRoomsMap().find(housingRoomRemove.RoomGuid);
+        if (itr != housing->GetRoomsMap().end())
+        {
+            Housing::Room const& rm = itr->second;
+            HouseRoomData const* rd = sHousingMgr.GetHouseRoomData(rm.RoomEntryId);
+            if (rd && rd->HasStairs())
+            {
+                for (auto const& [gGuid, gRm] : housing->GetRoomsMap())
+                {
+                    if (gGuid == housingRoomRemove.RoomGuid) continue;
+                    if (gRm.GridX != rm.GridX || gRm.GridY != rm.GridY) continue;
+                    if (std::abs(gRm.FloorIndex - rm.FloorIndex) != 1) continue;
+                    HouseRoomData const* gRd = sHousingMgr.GetHouseRoomData(gRm.RoomEntryId);
+                    if (gRd && gRd->HasStairs())
+                    {
+                        pairedRoomGuid = gGuid;
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    // Collect decor and despawn info for the paired room BEFORE removal
+    std::vector<ObjectGuid> pairedDecorGuids;
+    if (!pairedRoomGuid.IsEmpty())
+    {
+        for (auto const* decor : housing->GetAllPlacedDecor())
+            if (decor && decor->RoomGuid == pairedRoomGuid)
+                pairedDecorGuids.push_back(decor->Guid);
+        // Remove the partner first so the main removal's graph-connectivity
+        // check doesn't flag the leftover as unreachable.
+        housing->RemoveRoom(pairedRoomGuid);
+    }
+
     HousingResult result = housing->RemoveRoom(housingRoomRemove.RoomGuid);
 
     WorldPackets::Housing::HousingRoomRemoveResponse response;
@@ -2549,9 +2590,13 @@ void WorldSession::HandleHousingRoomRemove(WorldPackets::Housing::HousingRoomRem
             // Despawn decor visuals
             for (ObjectGuid const& decorGuid : roomDecorGuids)
                 interiorMap->DespawnDecorItem(decorGuid);
+            for (ObjectGuid const& decorGuid : pairedDecorGuids)
+                interiorMap->DespawnDecorItem(decorGuid);
 
-            // Despawn room entities
+            // Despawn room entities (including paired stairwell partner, if any)
             interiorMap->DespawnRoomEntities(housingRoomRemove.RoomGuid);
+            if (!pairedRoomGuid.IsEmpty())
+                interiorMap->DespawnRoomEntities(pairedRoomGuid);
 
             // Restore walls on adjacent rooms that were skipped
             int32 faction = (player->GetTeamId() == TEAM_ALLIANCE)
