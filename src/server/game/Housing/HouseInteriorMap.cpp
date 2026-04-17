@@ -139,6 +139,7 @@ void HouseInteriorMap::SpawnRoomMeshObjects(Housing* housing, int32 factionRestr
         // Alignment tolerance (yards). Rooms are on a ~15yd grid, so same-axis
         // rooms should share GridX or GridY within a small epsilon.
         constexpr int32 ALIGN_TOLERANCE = 8; // half of minimum room width
+        constexpr int32 FLOOR_TOLERANCE = 6; // rooms on different floors don't share doors
 
         ObjectGuid bestGuid;
         int32 bestDistance = std::numeric_limits<int32>::max();
@@ -146,6 +147,12 @@ void HouseInteriorMap::SpawnRoomMeshObjects(Housing* housing, int32 factionRestr
         for (Housing::Room const* other : rooms)
         {
             if (other->Guid == srcRoom->Guid)
+                continue;
+            // Skip rooms on different floors — stacked stairwell partners sit at
+            // the same XY but different Z, and horizontal door-matching must stay
+            // per-floor so upper walls aren't replaced with doorways pointing at
+            // lower-floor neighbors.
+            if (std::abs(other->FloorIndex - srcRoom->FloorIndex) > FLOOR_TOLERANCE)
                 continue;
             int32 dx = other->GridX - srcRoom->GridX;
             int32 dy = other->GridY - srcRoom->GridY;
