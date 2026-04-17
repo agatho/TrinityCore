@@ -2362,16 +2362,11 @@ void WorldSession::HandleHousingRoomAdd(WorldPackets::Housing::HousingRoomAdd co
                     }
 
                     // FloorIndex = Z yard offset (same convention as GridX/GridY).
-                    // Sniff-verified: stairwell room entity sits at Z=12.1 (upper floor level),
-                    // not on the ground floor. The stairs visible inside the stairwell come
-                    // DOWN through its floor to the ground-floor room below. Two cases:
-                    //   1. Adding a stairwell room via a ground-floor door → place at Z=12
-                    //   2. Adding a normal room via a stairwell's ceiling door (Z>1) → Z=12
+                    // Stairwell room sits on the CURRENT floor but is 14 yards tall
+                    // (spans two floor levels). Only when attaching a NEW room via the
+                    // stairwell's CEILING door (Z>1) does that new room go up one level.
                     static constexpr int32 UPPER_FLOOR_Z = 12;
-                    HouseRoomData const* addedRoomData = sHousingMgr.GetHouseRoomData(housingRoomAdd.HouseRoomID);
-                    bool addingStairwell = addedRoomData && addedRoomData->HasStairs();
-                    bool throughCeilingDoor = std::abs(comp.OffsetPos[2]) > 1.0f;
-                    if (addingStairwell || throughCeilingDoor)
+                    if (std::abs(comp.OffsetPos[2]) > 1.0f)
                         newFloorIndex = room.FloorIndex + UPPER_FLOOR_Z;
                     else
                         newFloorIndex = room.FloorIndex;
