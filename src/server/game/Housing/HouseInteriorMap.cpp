@@ -297,6 +297,13 @@ void HouseInteriorMap::SpawnRoomMeshObjects(Housing* housing, int32 factionRestr
 
         for (RoomComponentData const& comp : *components)
         {
+            // The lower stairwell room (with stairs) is paired with a Stairwell Empty
+            // Room above it at Z+12. Its ceiling at local Z=12 would coincide with the
+            // upper room's floor, sealing the view upward like a wall. Skip the ceiling
+            // component on the stairs-bearing room; the upper room has its own ceiling.
+            if (isStairwell && comp.Type == HOUSING_ROOM_COMPONENT_CEILING)
+                continue;
+
             // Log stairwell component positions to diagnose ceiling height
             if (isStairwell)
                 TC_LOG_ERROR("housing", "  STAIRWELL comp ID={} Type={} ConnType={} LocalPos=({:.1f},{:.1f},{:.1f}) "
