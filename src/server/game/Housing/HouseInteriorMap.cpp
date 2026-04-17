@@ -547,39 +547,27 @@ void HouseInteriorMap::SpawnRoomMeshObjects(Housing* housing, int32 factionRestr
                     housingRoom->AddMeshObject(comp->GetGUID());
             }
 
-            // Add door data from horizontal door-capable wall components. Only
-            // walls with ConnectionType>0 and exactly one of X/Y nonzero qualify
-            // (ceiling/floor vertical connections are intentionally omitted —
-            // they're handled by the stairwell partner stacking, and including
-            // them trips the client's "more than one connected door" check).
-            // Each door is advertised regardless of whether a neighbor exists;
-            // the client renders fixture points on doors with empty
-            // AttachedRoomGUID and hides them on connected doors.
+            // Add one door entry per door-capable WALL slot. A door-capable slot
+            // is a WALL (not Doorway/DoorwayWall — those are visual overlays of a
+            // connected wall) with ConnectionType>0 and exactly one of X/Y
+            // nonzero (skip vertical ceiling/floor doors — those go through the
+            // stairwell partner stack and would trip the client's connected-door
+            // count). Advertise both connected and unconnected slots: the client
+            // renders a fixture handle on doors with empty AttachedRoomGUID and
+            // hides it on connected doors.
             uint32 doorCount = 0;
             for (RoomComponentData const& comp : *components)
             {
-                bool isDoor = false;
-
-                if (comp.Type == HOUSING_ROOM_COMPONENT_DOORWAY ||
-                    comp.Type == HOUSING_ROOM_COMPONENT_DOORWAY_WALL)
-                    isDoor = true;
-                else if (comp.Type == HOUSING_ROOM_COMPONENT_WALL && comp.ConnectionType != 0)
-                {
-                    bool hasX = std::abs(comp.OffsetPos[0]) > 0.5f;
-                    bool hasY = std::abs(comp.OffsetPos[1]) > 0.5f;
-                    if (hasX != hasY)
-                        isDoor = true;
-                }
-
-                if (!isDoor)
-                    continue;
+                if (comp.Type != HOUSING_ROOM_COMPONENT_WALL) continue;
+                if (comp.ConnectionType == 0) continue;
+                bool hasX = std::abs(comp.OffsetPos[0]) > 0.5f;
+                bool hasY = std::abs(comp.OffsetPos[1]) > 0.5f;
+                if (hasX == hasY) continue;
 
                 ObjectGuid attachedRoomGuid = findNeighborAtDoor(room, comp.OffsetPos[0], comp.OffsetPos[1]);
-                if (attachedRoomGuid.IsEmpty())
-                    continue;
 
                 Position doorOffset(comp.OffsetPos[0], comp.OffsetPos[1], comp.OffsetPos[2]);
-                uint8 connType = comp.ConnectionType > 0 ? comp.ConnectionType : 1;
+                uint8 connType = comp.ConnectionType;
                 housingRoom->AddDoor(static_cast<int32>(comp.ID), doorOffset, connType, attachedRoomGuid);
                 ++doorCount;
             }
