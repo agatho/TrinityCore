@@ -131,6 +131,11 @@ bool Housing::LoadFromDB(PreparedQueryResult housing, PreparedQueryResult decor,
             // Backward compat: if gridX looks like old grid index (0-20), convert to yards
             if (room.GridX >= 0 && room.GridX <= 20 && room.GridX == static_cast<int32>(room.SlotIndex) && room.SlotIndex > 0)
                 room.GridX = static_cast<int32>(room.SlotIndex) * static_cast<int32>(HOUSING_ROOM_GRID_SPACING);
+            // Backward compat: previously FloorIndex was stored as a yard offset (e.g. 12
+            // for upper stairwell partner). Retail treats it as a floor NUMBER (0, 1, 2…)
+            // multiplied by 12 yards at spawn time. Convert legacy multiples-of-12 values.
+            if (room.FloorIndex >= 12 && (room.FloorIndex % 12) == 0)
+                room.FloorIndex /= 12;
             room.Orientation = fields[6].GetUInt32();
             room.Mirrored = fields[7].GetBool();
             room.ThemeId = fields[8].GetUInt32();
@@ -1631,17 +1636,12 @@ HousingResult Housing::ApplyRoomMaterial(ObjectGuid roomGuid, uint32 textureId, 
     if (itr == _rooms.end())
         return HOUSING_RESULT_ROOM_NOT_FOUND;
 
-    // Determine which surface type(s) the option IDs target and store per-type.
-    // The client sends RoomComponentOption IDs. We resolve to RoomComponent → Type.
+    // Determine which surface type(s) the component IDs target and store per-type.
+    // The client sends RoomComponent DB2 IDs (not RoomComponentOption IDs).
     bool anyWall = false, anyFloor = false, anyCeiling = false;
-    for (uint32 optId : optionIds)
+    for (uint32 compId : optionIds)
     {
-        RoomComponentOptionEntry const* optEntry = sRoomComponentOptionStore.LookupEntry(optId);
-        if (!optEntry)
-            continue;
-
-        RoomComponentEntry const* compEntry = sRoomComponentStore.LookupEntry(
-            static_cast<uint32>(optEntry->RoomComponentID));
+        RoomComponentEntry const* compEntry = sRoomComponentStore.LookupEntry(compId);
         if (!compEntry)
             continue;
 

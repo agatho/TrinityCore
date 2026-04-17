@@ -139,7 +139,7 @@ void HouseInteriorMap::SpawnRoomMeshObjects(Housing* housing, int32 factionRestr
         // Alignment tolerance (yards). Rooms are on a ~15yd grid, so same-axis
         // rooms should share GridX or GridY within a small epsilon.
         constexpr int32 ALIGN_TOLERANCE = 8; // half of minimum room width
-        constexpr int32 FLOOR_TOLERANCE = 6; // rooms on different floors don't share doors
+        constexpr int32 FLOOR_TOLERANCE = 0; // rooms on different floors don't share doors
 
         ObjectGuid bestGuid;
         int32 bestDistance = std::numeric_limits<int32>::max();
@@ -240,12 +240,14 @@ void HouseInteriorMap::SpawnRoomMeshObjects(Housing* housing, int32 factionRestr
             geoMinX, geoMinY, geoMinZ, geoMaxX, geoMaxY, geoMaxZ);
 
         // --- Calculate room world position ---
-        // GridX/GridY/FloorIndex = yard offsets from origin (direct, not multiplied).
-        // Sniff-verified: stairwell room entity at Z=12.1 (ground=0.1, delta=12.0 yards).
-        // FloorIndex stores the absolute Z yard offset, same convention as GridX/GridY.
+        // GridX/GridY = yard offsets. FloorIndex = floor NUMBER (0=ground, 1=floor2, …).
+        // Sniff-verified: retail HousingRoomEntity.FloorIndex is a small integer
+        // used by the client's floor selector UI, while world Z is computed as
+        // FloorIndex × 12 yards (confirmed by positions at Z=0.1, 12.1, 24.1).
+        static constexpr float FLOOR_HEIGHT_Y = 12.0f;
         float roomX = _originX + static_cast<float>(room->GridX);
         float roomY = _originY + static_cast<float>(room->GridY);
-        float roomZ = _originZ + static_cast<float>(room->FloorIndex);
+        float roomZ = _originZ + static_cast<float>(room->FloorIndex) * FLOOR_HEIGHT_Y;
         float roomFacing = static_cast<float>(room->Orientation) * (M_PI / 2.0f);
 
         Position roomPos(roomX, roomY, roomZ, roomFacing);
@@ -313,8 +315,8 @@ void HouseInteriorMap::SpawnRoomMeshObjects(Housing* housing, int32 factionRestr
                 if (other->GridX != room->GridX || other->GridY != room->GridY) continue;
                 HouseRoomData const* od = sHousingMgr.GetHouseRoomData(other->RoomEntryId);
                 if (!od || !od->HasStairs()) continue;
-                if (other->FloorIndex == room->FloorIndex + 12) hasPartnerAbove = true;
-                if (other->FloorIndex == room->FloorIndex - 12) hasPartnerBelow = true;
+                if (other->FloorIndex == room->FloorIndex + 1) hasPartnerAbove = true;
+                if (other->FloorIndex == room->FloorIndex - 1) hasPartnerBelow = true;
             }
         }
         bool isStairwellBase    = isStairwell && hasPartnerAbove;
@@ -1097,7 +1099,7 @@ void HouseInteriorMap::SpawnInteriorDecor(Housing* housing)
             {
                 if (rm->Guid == roomEntityGuid)
                 {
-                    static constexpr float FLOOR_HEIGHT = 7.0f;
+                    static constexpr float FLOOR_HEIGHT = 12.0f;
                     roomWorldPos = Position(_originX + static_cast<float>(rm->GridX),
                                             _originY + static_cast<float>(rm->GridY),
                                             _originZ + static_cast<float>(rm->FloorIndex) * FLOOR_HEIGHT, 0.0f);

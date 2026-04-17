@@ -2361,13 +2361,14 @@ void WorldSession::HandleHousingRoomAdd(WorldPackets::Housing::HousingRoomAdd co
                         newGridY = room.GridY + static_cast<int32>(sourceDoorOffset - newDoorOffset);
                     }
 
-                    // FloorIndex = Z yard offset (same convention as GridX/GridY).
-                    // Stairwell room sits on the CURRENT floor but is 14 yards tall
-                    // (spans two floor levels). Only when attaching a NEW room via the
-                    // stairwell's CEILING door (Z>1) does that new room go up one level.
-                    static constexpr int32 UPPER_FLOOR_Z = 12;
+                    // FloorIndex = floor NUMBER (0=ground, 1=floor2, ...).
+                    // Sniff-verified: the client's editor uses FloorIndex as a small
+                    // integer for its floor selector UI; world Z is computed as
+                    // FloorIndex × FLOOR_HEIGHT_Y (12 yards) during room spawn.
+                    // Stairwell room sits on the CURRENT floor; a room attached via a
+                    // stairwell's CEILING door (Z>1) goes one floor up.
                     if (std::abs(comp.OffsetPos[2]) > 1.0f)
-                        newFloorIndex = room.FloorIndex + UPPER_FLOOR_Z;
+                        newFloorIndex = room.FloorIndex + 1;
                     else
                         newFloorIndex = room.FloorIndex;
 
@@ -2403,13 +2404,12 @@ void WorldSession::HandleHousingRoomAdd(WorldPackets::Housing::HousingRoomAdd co
         if (addedRoom && addedRoom->HasStairs())
         {
             constexpr uint32 STAIRWELL_EMPTY_ROOM_ID = 48;
-            constexpr int32  UPPER_FLOOR_Z         = 12;
             ObjectGuid upperRoomGuid;
             HousingResult upperRes = housing->PlaceRoom(STAIRWELL_EMPTY_ROOM_ID, nextSlot + 1,
                 /*orientation*/ 0, /*mirrored*/ false, &upperRoomGuid,
-                newGridX, newGridY, newFloorIndex + UPPER_FLOOR_Z);
-            TC_LOG_INFO("housing", "ROOM_ADD: stairwell partner (ID={}) placed at (gridX={}, gridY={}, floorZ={}) result={}",
-                STAIRWELL_EMPTY_ROOM_ID, newGridX, newGridY, newFloorIndex + UPPER_FLOOR_Z, uint32(upperRes));
+                newGridX, newGridY, newFloorIndex + 1);
+            TC_LOG_INFO("housing", "ROOM_ADD: stairwell partner (ID={}) placed at (gridX={}, gridY={}, floor={}) result={}",
+                STAIRWELL_EMPTY_ROOM_ID, newGridX, newGridY, newFloorIndex + 1, uint32(upperRes));
         }
 
         if (HouseInteriorMap* interiorMap = dynamic_cast<HouseInteriorMap*>(player->GetMap()))
