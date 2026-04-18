@@ -899,7 +899,12 @@ void HousingMgr::LoadHouseLevelRewardInfoData()
     uint32 budgetWired = 0;
 
     // Apply fallback budgets for any levels still at 0 (DB2 missing budget rewards)
+    // Values hardcoded in the retail client (not stored in any DB2). User-reported:
+    //   Level 1: interior 910, rooms 19
+    //   Level 2: interior 1155, rooms 24
+    // Higher levels extrapolated linearly (interior +300/level, rooms +5/level).
     static constexpr int32 FallbackInteriorByLevel[] = { 0, 910, 1155, 1450, 1750, 2050 };
+    static constexpr int32 FallbackRoomsByLevel[]    = { 0,  19,   24,   29,   34,   39 };
     for (auto& [id, levelData] : _houseLevelDataStore)
     {
         uint32 lvl = static_cast<uint32>(std::max<int32>(levelData.Level, 1));
@@ -913,7 +918,12 @@ void HousingMgr::LoadHouseLevelRewardInfoData()
         if (levelData.ExteriorDecorPlacementBudget <= 0)
             levelData.ExteriorDecorPlacementBudget = 200;
         if (levelData.RoomPlacementBudget <= 0)
-            levelData.RoomPlacementBudget = 19;
+        {
+            if (lvl <= 5)
+                levelData.RoomPlacementBudget = FallbackRoomsByLevel[lvl];
+            else
+                levelData.RoomPlacementBudget = 39 + static_cast<int32>((lvl - 5) * 5);
+        }
         if (levelData.ExteriorFixtureBudget <= 0)
             levelData.ExteriorFixtureBudget = 1000;
     }
