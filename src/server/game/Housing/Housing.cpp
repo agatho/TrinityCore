@@ -147,6 +147,17 @@ bool Housing::LoadFromDB(PreparedQueryResult housing, PreparedQueryResult decor,
             room.DoorSlot = fields[14].GetUInt8();
             room.CeilingTypeId = fields[15].GetUInt32();
             room.CeilingSlot = fields[16].GetUInt8();
+            room.WallThemeId = fields[17].GetUInt32();
+            room.FloorThemeId = fields[18].GetUInt32();
+            room.CeilingThemeId = fields[19].GetUInt32();
+            // Legacy rows (pre-per-surface-theme migration) have all three = 0:
+            // seed them from the single ThemeId so old houses keep their look.
+            if (!room.WallThemeId && !room.FloorThemeId && !room.CeilingThemeId && room.ThemeId)
+            {
+                room.WallThemeId = room.ThemeId;
+                room.FloorThemeId = room.ThemeId;
+                room.CeilingThemeId = room.ThemeId;
+            }
 
             // Advance global generator if needed (safety net)
             uint64 expected = s_nextRoomDbId.load();
@@ -525,6 +536,9 @@ void Housing::SaveToDB(CharacterDatabaseTransaction trans)
         stmt->setUInt8(index++, room.DoorSlot);
         stmt->setUInt32(index++, room.CeilingTypeId);
         stmt->setUInt8(index++, room.CeilingSlot);
+        stmt->setUInt32(index++, room.WallThemeId);
+        stmt->setUInt32(index++, room.FloorThemeId);
+        stmt->setUInt32(index++, room.CeilingThemeId);
         trans->Append(stmt);
     }
 
@@ -1616,6 +1630,38 @@ HousingResult Housing::ApplyRoomTheme(ObjectGuid roomGuid, uint32 themeSetId, st
     if (itr == _rooms.end())
         return HOUSING_RESULT_ROOM_NOT_FOUND;
 
+    // Classify component IDs by surface type so walls/floors/ceilings can
+    // carry independent themes — otherwise dyeing the ceiling overwrites the
+    // wall theme (single-ThemeId field) and wall style appears to "not save".
+    bool anyWall = false, anyFloor = false, anyCeiling = false;
+    for (uint32 compId : optionIds)
+    {
+        RoomComponentEntry const* compEntry = sRoomComponentStore.LookupEntry(compId);
+        if (!compEntry)
+            continue;
+        switch (compEntry->Type)
+        {
+            case HOUSING_ROOM_COMPONENT_WALL:
+            case HOUSING_ROOM_COMPONENT_DOORWAY_WALL:
+                anyWall = true; break;
+            case HOUSING_ROOM_COMPONENT_FLOOR:
+                anyFloor = true; break;
+            case HOUSING_ROOM_COMPONENT_CEILING:
+                anyCeiling = true; break;
+            default: break;
+        }
+    }
+
+    if (anyWall)
+        itr->second.WallThemeId = themeSetId;
+    if (anyFloor)
+        itr->second.FloorThemeId = themeSetId;
+    if (anyCeiling)
+        itr->second.CeilingThemeId = themeSetId;
+    if (!anyWall && !anyFloor && !anyCeiling)
+        itr->second.WallThemeId = themeSetId;  // unclassified → wall default
+
+    // Keep the legacy single ThemeId in sync for callers that still read it.
     itr->second.ThemeId = themeSetId;
 
     PersistRoomToDB(roomGuid, itr->second);
@@ -2556,6 +2602,9 @@ void Housing::PersistRoomToDB(ObjectGuid roomGuid, Room const& room)
     stmt->setUInt8(index++, room.DoorSlot);
     stmt->setUInt32(index++, room.CeilingTypeId);
     stmt->setUInt8(index++, room.CeilingSlot);
+    stmt->setUInt32(index++, room.WallThemeId);
+    stmt->setUInt32(index++, room.FloorThemeId);
+    stmt->setUInt32(index++, room.CeilingThemeId);
     stmt->setUInt64(index++, _owner->GetGUID().GetCounter());
     stmt->setUInt64(index++, roomGuid.GetCounter());
     CharacterDatabase.Execute(stmt);

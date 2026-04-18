@@ -374,7 +374,26 @@ void HouseInteriorMap::SpawnRoomMeshObjects(Housing* housing, int32 factionRestr
             // - Corner walls (MSFID=46): TWO MeshObjects (SubType=0 + SubType=1)
             // - Doorway walls: TWO MeshObjects (DoorwayWall Field_20=1 + Doorway Field_20=2)
             // - Flat walls/floors/ceilings: ONE MeshObject (Cosmetic SubType=0)
-            int32 lookupTheme = (room->ThemeId != 0) ? static_cast<int32>(room->ThemeId) : factionThemeID;
+            // Per-surface theme: walls / floors / ceilings can carry independent
+            // theme IDs. Fall back to the legacy single ThemeId then faction.
+            uint32 perSurfaceTheme = 0;
+            switch (comp.Type)
+            {
+                case HOUSING_ROOM_COMPONENT_WALL:
+                case HOUSING_ROOM_COMPONENT_DOORWAY_WALL:
+                    perSurfaceTheme = room->WallThemeId;
+                    break;
+                case HOUSING_ROOM_COMPONENT_FLOOR:
+                    perSurfaceTheme = room->FloorThemeId;
+                    break;
+                case HOUSING_ROOM_COMPONENT_CEILING:
+                    perSurfaceTheme = room->CeilingThemeId;
+                    break;
+                default:
+                    break;
+            }
+            int32 lookupTheme = perSurfaceTheme ? static_cast<int32>(perSurfaceTheme)
+                : (room->ThemeId != 0 ? static_cast<int32>(room->ThemeId) : factionThemeID);
             std::vector<RoomComponentOptionEntry const*> allOptions = sHousingMgr.FindAllRoomComponentOptions(comp.MeshStyleFilterID, lookupTheme);
             if (allOptions.empty())
                 allOptions = sHousingMgr.FindAllRoomComponentOptions(comp.MeshStyleFilterID, factionThemeID);

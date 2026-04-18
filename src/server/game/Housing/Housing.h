@@ -66,7 +66,10 @@ public:
         int32 FloorIndex = 0;  // 0=ground, 1+=upper floors
         uint32 Orientation = 0;
         bool Mirrored = false;
-        uint32 ThemeId = 0;
+        uint32 ThemeId = 0;           // Legacy single-theme; kept for back-compat
+        uint32 WallThemeId = 0;       // Per-surface theme (HouseTheme ID)
+        uint32 FloorThemeId = 0;
+        uint32 CeilingThemeId = 0;
         uint32 WallTextureId = 0;     // RoomComponentTexture ID for walls
         uint32 FloorTextureId = 0;    // RoomComponentTexture ID for floors
         uint32 CeilingTextureId = 0;  // RoomComponentTexture ID for ceilings
