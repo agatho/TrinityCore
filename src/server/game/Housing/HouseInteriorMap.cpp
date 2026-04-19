@@ -392,8 +392,15 @@ void HouseInteriorMap::SpawnRoomMeshObjects(Housing* housing, int32 factionRestr
                 default:
                     break;
             }
-            int32 lookupTheme = perSurfaceTheme ? static_cast<int32>(perSurfaceTheme)
+            int32 rawTheme = perSurfaceTheme ? static_cast<int32>(perSurfaceTheme)
                 : (room->ThemeId != 0 ? static_cast<int32>(room->ThemeId) : factionThemeID);
+            // RoomComponentOption rows only exist for base themes (1-5). The stored
+            // per-surface themes are usually sub-themes (e.g. 11=Bel'ameth Folk,
+            // 20=Folk Light) — resolve them to the parent base theme or the lookup
+            // falls through to the faction default and the user's style is lost.
+            int32 lookupTheme = sHousingMgr.GetBaseThemeID(rawTheme);
+            if (lookupTheme <= 0)
+                lookupTheme = rawTheme;
             std::vector<RoomComponentOptionEntry const*> allOptions = sHousingMgr.FindAllRoomComponentOptions(comp.MeshStyleFilterID, lookupTheme);
             if (allOptions.empty())
                 allOptions = sHousingMgr.FindAllRoomComponentOptions(comp.MeshStyleFilterID, factionThemeID);
