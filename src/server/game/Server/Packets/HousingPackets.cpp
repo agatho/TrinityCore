@@ -462,36 +462,13 @@ void HousingSvcsPlayerViewHousesByBnetAccount::Read()
 
 void HousingSvcsTeleportToPlot::Read()
 {
-    // Dump raw bytes BEFORE parsing so we can verify the field layout.
-    {
-        std::string hex;
-        size_t dumpBytes = std::min<size_t>(_worldPacket.size(), size_t(64));
-        for (size_t i = 0; i < dumpBytes; ++i)
-        {
-            char buf[4];
-            snprintf(buf, sizeof(buf), "%02X ", static_cast<unsigned>(_worldPacket[i]));
-            hex += buf;
-        }
-        TC_LOG_ERROR("network.opcode", "CMSG_HOUSING_SVCS_TELEPORT_TO_PLOT RAW ({} bytes): {}",
-            _worldPacket.size(), hex);
-    }
-
     _worldPacket >> NeighborhoodGuid;
-    size_t afterNbh = _worldPacket.rpos();
     _worldPacket >> OwnerGuid;
-    size_t afterOwner = _worldPacket.rpos();
     _worldPacket >> PlotIndex;
-    size_t afterPlot = _worldPacket.rpos();
     _worldPacket >> TeleportType;
-    size_t afterType = _worldPacket.rpos();
 
-    TC_LOG_ERROR("network.opcode",
-        "CMSG_HOUSING_SVCS_TELEPORT_TO_PLOT parsed: NeighborhoodGuid={} (bytes 0..{}) OwnerGuid={} (..{}) PlotIndex={} (..{}) TeleportType={} (..{}) totalConsumed={} size={}",
-        NeighborhoodGuid.ToString(), afterNbh,
-        OwnerGuid.ToString(), afterOwner,
-        PlotIndex, afterPlot,
-        TeleportType, afterType,
-        afterType, _worldPacket.size());
+    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_SVCS_TELEPORT_TO_PLOT NeighborhoodGuid: {} OwnerGuid: {} PlotIndex: {} TeleportType: {}",
+        NeighborhoodGuid.ToString(), OwnerGuid.ToString(), PlotIndex, TeleportType);
 }
 
 void HousingSvcsSetTutorialState::Read()
@@ -1420,9 +1397,11 @@ ByteBuffer& operator<<(ByteBuffer& data, HouseInfo const& houseInfo)
 // Retail sniff confirms: GUID#1=HouseGUID, GUID#2=OwnerGUID (used for name lookup), GUID#3=NeighborhoodGUID.
 static void WriteJamCliHouse(WorldPacket& packet, JamCliHouse const& house)
 {
-    // Hypothesis test: client was reading PlotIndex (uint32) BEFORE HouseLevel
-    // (uint8) and treating our HouseLevel(=1) as the plotID. Swap the two
-    // and see if the dashboard + teleport now picks up the real plot.
+    // Confirmed in-game (2026-04): wire order is PlotIndex (uint32) BEFORE
+    // HouseLevel (uint8). The earlier order (HouseLevel then PlotIndex) made
+    // the client read our HouseLevel=1 byte into its plotID slot, which is
+    // why the dashboard showed "plotID=1" regardless of the real plot and
+    // the homestone button echoed back PlotIndex=1 in the teleport CMSG.
     packet << house.HouseGUID;
     packet << house.OwnerGUID;
     packet << house.NeighborhoodGUID;
