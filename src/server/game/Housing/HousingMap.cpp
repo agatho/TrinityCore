@@ -2352,19 +2352,16 @@ uint32 HousingMap::SpawnExtCompTree(uint8 plotIndex, uint32 extCompID,
             float cosFacing = std::cos(houseFacing);
             float sinFacing = std::sin(houseFacing);
 
-            // Transform hook local offset to world space
+            // Transform hook local offset to world space. The ExteriorComponentExitPoint
+            // row on the component is retail's "player stands here to use it" marker
+            // (used for teleport-out spawn point), NOT where the clickable GO box lives.
+            // Adding it shifts the click volume off the door mesh — leave the GO on the
+            // mesh hook so its box lines up with the visible door.
             float doorWorldX = houseWorldPos.GetPositionX() + pos.GetPositionX() * cosFacing - pos.GetPositionY() * sinFacing;
             float doorWorldY = houseWorldPos.GetPositionY() + pos.GetPositionX() * sinFacing + pos.GetPositionY() * cosFacing;
             float doorWorldZ = houseWorldPos.GetPositionZ() + pos.GetPositionZ();
 
-            // Add ExitPoint offset if available (interaction point relative to door mesh)
             ExteriorComponentExitPointEntry const* exitPt = sHousingMgr.GetExitPoint(extCompID);
-            if (exitPt)
-            {
-                doorWorldX += exitPt->Position[0] * cosFacing - exitPt->Position[1] * sinFacing;
-                doorWorldY += exitPt->Position[0] * sinFacing + exitPt->Position[1] * cosFacing;
-                doorWorldZ += exitPt->Position[2];
-            }
 
             Position doorPos(doorWorldX, doorWorldY, doorWorldZ, houseFacing);
             QuaternionData doorRot(0, 0, 0, 1);
