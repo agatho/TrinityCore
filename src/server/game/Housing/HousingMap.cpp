@@ -2352,19 +2352,33 @@ uint32 HousingMap::SpawnExtCompTree(uint8 plotIndex, uint32 extCompID,
             float cosFacing = std::cos(houseFacing);
             float sinFacing = std::sin(houseFacing);
 
-            // Transform hook local offset to world space. The ExteriorComponentExitPoint
-            // row on the component is retail's "player stands here to use it" marker
-            // (used for teleport-out spawn point), NOT where the clickable GO box lives.
-            // Adding it shifts the click volume off the door mesh — leave the GO on the
-            // mesh hook so its box lines up with the visible door.
+            // Transform hook local offset to world space. Keep only the Z offset
+            // from ExteriorComponentExitPoint — that raises the GO above the door
+            // mesh base so it sits on top of the terrain/porch instead of
+            // sinking below. Discard the X/Y components: they describe retail's
+            // "player stands here" marker, which is a step in front of the door
+            // (shifts the clickable box off the mesh laterally).
             float doorWorldX = houseWorldPos.GetPositionX() + pos.GetPositionX() * cosFacing - pos.GetPositionY() * sinFacing;
             float doorWorldY = houseWorldPos.GetPositionY() + pos.GetPositionX() * sinFacing + pos.GetPositionY() * cosFacing;
             float doorWorldZ = houseWorldPos.GetPositionZ() + pos.GetPositionZ();
 
             ExteriorComponentExitPointEntry const* exitPt = sHousingMgr.GetExitPoint(extCompID);
+            if (exitPt)
+                doorWorldZ += exitPt->Position[2];
 
             Position doorPos(doorWorldX, doorWorldY, doorWorldZ, houseFacing);
             QuaternionData doorRot(0, 0, 0, 1);
+
+            // Remove any previously-tracked door GO for this plot before we store a
+            // new one — otherwise the old GUID reference is lost and the game object
+            // leaks on the map (visible as a phantom clickable box at the old door
+            // location after the entrance is moved).
+            if (auto existingItr = _houseGameObjects.find(plotIndex); existingItr != _houseGameObjects.end())
+            {
+                if (GameObject* oldGo = GetGameObject(existingItr->second))
+                    oldGo->AddObjectToRemoveList();
+                _houseGameObjects.erase(existingItr);
+            }
 
             GameObject* doorGo = GameObject::CreateGameObject(doorGoEntry, this, doorPos, doorRot, 255, GO_STATE_READY);
             if (doorGo)
