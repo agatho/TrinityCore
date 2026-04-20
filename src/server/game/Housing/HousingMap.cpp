@@ -2761,6 +2761,12 @@ void HousingMap::RespawnDoorGOAtHook(uint8 plotIndex, uint32 hookID, uint32 door
             housePos.GetOrientation());
     }
 
+    // Apply the ExteriorComponentExitPoint Z offset to match SpawnExtCompTree —
+    // without it the final GO after a fixture move lands ~2 yards below the
+    // initial spawn and sinks into the ground / out of the player's view.
+    if (ExteriorComponentExitPointEntry const* exitPt = sHousingMgr.GetExitPoint(doorComponentID))
+        doorPos.m_positionZ += exitPt->Position[2];
+
     QuaternionData rot = QuaternionData::fromEulerAnglesZYX(doorPos.GetOrientation(), 0.0f, 0.0f);
     GameObject* doorGo = GameObject::CreateGameObject(doorEntry, this, doorPos, rot, 255, GO_STATE_READY);
     if (!doorGo)
