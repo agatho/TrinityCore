@@ -1420,23 +1420,17 @@ ByteBuffer& operator<<(ByteBuffer& data, HouseInfo const& houseInfo)
 // Retail sniff confirms: GUID#1=HouseGUID, GUID#2=OwnerGUID (used for name lookup), GUID#3=NeighborhoodGUID.
 static void WriteJamCliHouse(WorldPacket& packet, JamCliHouse const& house)
 {
-    // IDA-verified client memory layout for JamCliHouse (80-byte stride):
-    //   +0  HouseGUID (16B)        +16 OwnerGUID (16B)         +32 NeighborhoodGUID (16B)
-    //   +48 HouseLevel (u8)        +56 OptionalValue (u64)     +64 flag (u8)
-    //   +72 PlotIndex (u32)
-    // The client reads the wire fields sequentially into those offsets, so the
-    // wire order must match the memory order: OptionalValue + flag come BEFORE
-    // PlotIndex. Previously we wrote PlotIndex before flag/optional, which made
-    // the client read PlotIndex into the wrong memory slot — the UI's
-    // `houseInfo.plotID` (driving both the dashboard's "N Free" label and the
-    // C_Housing.TeleportHome(... plotID) call) ended up as 1 instead of 47.
+    // Hypothesis test: client was reading PlotIndex (uint32) BEFORE HouseLevel
+    // (uint8) and treating our HouseLevel(=1) as the plotID. Swap the two
+    // and see if the dashboard + teleport now picks up the real plot.
     packet << house.HouseGUID;
     packet << house.OwnerGUID;
     packet << house.NeighborhoodGUID;
+    packet << uint32(house.PlotIndex);
     packet << uint8(house.HouseLevel);
-    packet << uint64(house.OptionalValue);                          // +56
-    packet << uint8(house.HasOptionalField ? 0x80 : 0x00);          // +64
-    packet << uint32(house.PlotIndex);                              // +72
+    packet << uint8(house.HasOptionalField ? 0x80 : 0x00);
+    if (house.HasOptionalField)
+        packet << uint64(house.OptionalValue);
 }
 
 // Helper: Write JamCliHouseFinderNeighborhood BASE format (IDA: sub_7FF724C3F040, stride 120).
