@@ -1991,9 +1991,25 @@ void WorldSession::HandleHousingFixtureDeleteFixture(WorldPackets::Housing::Hous
 
             // Do NOT spawn a default fixture back — the user selected "None" to remove it.
             // The hook point should remain empty so the client shows the fixture point UI again.
-            // If this was a door, also remove the door GO.
+            // If this was a door, remove the door GO — but only if no other door
+            // override remains. When the client MOVES a door (CREATE-at-new-hook
+            // immediately followed by DELETE-at-old-hook), the new GO is already
+            // on the map; blindly despawning here would wipe it.
             if (componentEntry && componentEntry->Type == HOUSING_FIXTURE_TYPE_DOOR)
-                housingMap->DespawnDoorGO(plotIndex);
+            {
+                bool anotherDoorExists = false;
+                for (auto const& [hookID, compID] : housing->GetFixtureOverrideMap())
+                {
+                    ExteriorComponentEntry const* otherComp = sExteriorComponentStore.LookupEntry(compID);
+                    if (otherComp && otherComp->Type == HOUSING_FIXTURE_TYPE_DOOR)
+                    {
+                        anotherDoorExists = true;
+                        break;
+                    }
+                }
+                if (!anotherDoorExists)
+                    housingMap->DespawnDoorGO(plotIndex);
+            }
         }
 
         // Sniff-verified: UPDATE_OBJECT follows the response
