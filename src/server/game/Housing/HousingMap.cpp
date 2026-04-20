@@ -1022,40 +1022,51 @@ bool HousingMap::AddPlayerToMap(Player* player, bool initPlayer /*= true*/)
                 TC_LOG_DEBUG("housing", "HousingMap deferred ENTER_PLOT: Sent Account CREATE + {} decor MeshObject CREATEs + budget for player {}",
                     meshCreateCount, playerGuid.ToString());
 
-                // Replicate the "edit mode EXIT" cleanup at plot-enter: send an
-                // empty AURA_UPDATE for the edit-mode aura (1263303) and push a
-                // Player VALUES_UPDATE with cleared housing-restriction flags.
-                // Symptom otherwise: cornerstone / door cursors stay greyed out
-                // at login until the user manually toggles edit mode on + off,
-                // which is exactly the packet sequence this block now emits.
+                // Simulate the edit-mode ON → OFF transition on the Player
+                // entity (without actually entering edit mode). The user's
+                // manual toggle is the only known way to unblock cornerstone
+                // and door interactivity at login, and the single observable
+                // effect of that toggle on the Player is:
+                //   ON:  set UNIT_FLAG_PACIFIED / UNIT_FLAG2_NO_ACTIONS /
+                //        silenced-school → push VALUES_UPDATE
+                //   OFF: clear all three → push VALUES_UPDATE
+                // Replicating the pair at plot-enter pushes the same flag
+                // transition the client apparently needs to wire up housing
+                // GO clicks.
                 {
-                    // Empty AURA_UPDATE for slot 51 tells the client "edit-mode
-                    // aura is not active". Fresh client state might have it
-                    // cached from a previous session.
-                    WorldPackets::Spells::AuraUpdate auraUpdate;
-                    auraUpdate.UpdateAll = false;
-                    auraUpdate.UnitGUID = p->GetGUID();
-                    WorldPackets::Spells::AuraInfo auraInfo;
-                    auraInfo.Slot = 51;
-                    auraUpdate.Auras.push_back(std::move(auraInfo));
-                    p->SendDirectMessage(auraUpdate.Write());
+                    // "ON" push: set the edit-mode-ish flags and flush.
+                    p->SetUnitFlag(UNIT_FLAG_PACIFIED);
+                    p->SetUnitFlag2(UNIT_FLAG2_NO_ACTIONS);
+                    p->ReplaceAllSilencedSchoolMask(SPELL_SCHOOL_MASK_ALL);
+                    p->BuildUpdateChangesMask();
+                    {
+                        UpdateData onUpdate(p->GetMapId());
+                        WorldPacket onPacket;
+                        p->BuildValuesUpdateBlockForPlayer(&onUpdate, p);
+                        if (onUpdate.HasData())
+                        {
+                            onUpdate.BuildPacket(&onPacket);
+                            p->SendDirectMessage(&onPacket);
+                        }
+                        p->ClearUpdateMask(false);
+                    }
 
-                    // Force-clear pacify/no-action flags (idempotent if already 0)
-                    // and push the Player VALUES_UPDATE that edit-mode-exit pushes.
+                    // "OFF" push: clear them and flush again.
                     p->RemoveUnitFlag(UNIT_FLAG_PACIFIED);
                     p->RemoveUnitFlag2(UNIT_FLAG2_NO_ACTIONS);
                     p->ReplaceAllSilencedSchoolMask(SpellSchoolMask(0));
-
                     p->BuildUpdateChangesMask();
-                    UpdateData playerUpdate(p->GetMapId());
-                    WorldPacket playerPacket;
-                    p->BuildValuesUpdateBlockForPlayer(&playerUpdate, p);
-                    if (playerUpdate.HasData())
                     {
-                        playerUpdate.BuildPacket(&playerPacket);
-                        p->SendDirectMessage(&playerPacket);
+                        UpdateData offUpdate(p->GetMapId());
+                        WorldPacket offPacket;
+                        p->BuildValuesUpdateBlockForPlayer(&offUpdate, p);
+                        if (offUpdate.HasData())
+                        {
+                            offUpdate.BuildPacket(&offPacket);
+                            p->SendDirectMessage(&offPacket);
+                        }
+                        p->ClearUpdateMask(false);
                     }
-                    p->ClearUpdateMask(false);
                 }
             }
 
