@@ -74,7 +74,12 @@ public:
                 if (destMapId == 0)
                     destMapId = 2735;
 
-                // Find the player's plot position on the exterior map
+                // Find the player's plot position on the exterior map.
+                // Use TeleportPosition (the safe player spawn point above ground),
+                // NOT HousePosition — HousePosition is where the house WMO root
+                // sits, which is often at ground level or below, so teleporting
+                // there drops the player under the map. The dashboard teleport
+                // uses TeleportPosition and lands the player correctly.
                 uint32 nbhMapId = nbh ? nbh->GetNeighborhoodMapID() : 2;
                 std::vector<NeighborhoodPlotData const*> plots = sHousingMgr.GetPlotsForMap(nbhMapId);
                 float exitX = 0, exitY = 0, exitZ = 0;
@@ -82,9 +87,9 @@ public:
                 {
                     if (plot->PlotIndex == housing->GetPlotIndex())
                     {
-                        exitX = plot->HousePosition[0];
-                        exitY = plot->HousePosition[1];
-                        exitZ = plot->HousePosition[2];
+                        exitX = plot->TeleportPosition[0];
+                        exitY = plot->TeleportPosition[1];
+                        exitZ = plot->TeleportPosition[2];
                         break;
                     }
                 }
