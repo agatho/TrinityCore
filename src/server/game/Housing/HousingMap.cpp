@@ -2388,23 +2388,30 @@ uint32 HousingMap::SpawnExtCompTree(uint8 plotIndex, uint32 extCompID,
             float cosFacing = std::cos(houseFacing);
             float sinFacing = std::sin(houseFacing);
 
-            // Use the spawned door MeshObject's own world position — the WMO
-            // attachment system already resolved the full hook transform (house
-            // position + parent attachments + hook local + any overrides) so it
-            // is guaranteed to match the door mesh you see in-game. Computing
-            // a separate transform here from raw hook local offsets drifted
-            // off the mesh laterally. Interior doors use this same pattern
-            // (`doorMesh->GetPosition()`) and line up correctly.
-            float doorWorldX = mesh->GetPositionX();
-            float doorWorldY = mesh->GetPositionY();
-            float doorWorldZ = mesh->GetPositionZ();
+            // Transform the door hook's local offset into world space relative
+            // to the house root. The client renders the door mesh at the same
+            // transform chain, so the GO's click box lands on the door.
+            //
+            // NOTE on mesh->GetPosition(): child MeshObjects are relocated to
+            // their PARENT's world position (Relocate(*worldPos) in
+            // MeshObject::Create) so the child's own hook offset is lost
+            // server-side — using mesh->GetPositionX()/Y leaves the GO at the
+            // house root coordinates instead of at the door.
+            float doorWorldX = houseWorldPos.GetPositionX() + pos.GetPositionX() * cosFacing - pos.GetPositionY() * sinFacing;
+            float doorWorldY = houseWorldPos.GetPositionY() + pos.GetPositionX() * sinFacing + pos.GetPositionY() * cosFacing;
+            float doorWorldZ = houseWorldPos.GetPositionZ() + pos.GetPositionZ();
 
-            // Keep the ExteriorComponentExitPoint Z lift so the GO sits on top
-            // of the porch/terrain instead of the mesh base (identical to
-            // RespawnDoorGOAtHook).
+            // Apply the ExteriorComponentExitPoint offset in house-local space:
+            // X/Y are part of the exit point's planar offset from the hook (e.g.
+            // "step in front of the door"), Z is the vertical lift that puts
+            // the clickable box on top of the porch instead of the mesh base.
             ExteriorComponentExitPointEntry const* exitPt = sHousingMgr.GetExitPoint(extCompID);
             if (exitPt)
+            {
+                doorWorldX += exitPt->Position[0] * cosFacing - exitPt->Position[1] * sinFacing;
+                doorWorldY += exitPt->Position[0] * sinFacing + exitPt->Position[1] * cosFacing;
                 doorWorldZ += exitPt->Position[2];
+            }
 
             Position doorPos(doorWorldX, doorWorldY, doorWorldZ, houseFacing);
             QuaternionData doorRot(0, 0, 0, 1);
