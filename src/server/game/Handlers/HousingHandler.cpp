@@ -3542,8 +3542,26 @@ void WorldSession::HandleHousingSvcsTeleportToPlot(WorldPackets::Housing::Housin
     // PlotIndex=41 in CMSG matches DB2 entry for NeighborhoodMapID=1.
     uint32 plotIndex = housingSvcsTeleportToPlot.PlotIndex;
 
-    TC_LOG_INFO("housing", "HandleHousingSvcsTeleportToPlot: PlotIndex={} OwnerGuid={} TeleportType={} NeighborhoodGUID={}",
-        plotIndex, housingSvcsTeleportToPlot.OwnerGuid.ToString(), housingSvcsTeleportToPlot.TeleportType,
+    // Homestone teleport (type 4) and other "teleport to a specific house" flows
+    // send OwnerGuid = the house GUID the dashboard displays; the PlotIndex is
+    // often just a placeholder (e.g. 1). Resolve the authoritative plot from the
+    // Neighborhood's PlotInfo using that house GUID so the player actually lands
+    // at their own plot instead of plot 1.
+    if (!housingSvcsTeleportToPlot.OwnerGuid.IsEmpty())
+    {
+        for (Neighborhood::PlotInfo const& pi : neighborhood->GetPlots())
+        {
+            if (pi.IsOccupied() && pi.HouseGuid == housingSvcsTeleportToPlot.OwnerGuid)
+            {
+                plotIndex = pi.PlotIndex;
+                break;
+            }
+        }
+    }
+
+    TC_LOG_INFO("housing", "HandleHousingSvcsTeleportToPlot: PlotIndex={} (client sent {}) OwnerGuid={} TeleportType={} NeighborhoodGUID={}",
+        plotIndex, housingSvcsTeleportToPlot.PlotIndex,
+        housingSvcsTeleportToPlot.OwnerGuid.ToString(), housingSvcsTeleportToPlot.TeleportType,
         housingSvcsTeleportToPlot.NeighborhoodGuid.ToString());
 
     // Look up the neighborhood map data for map ID and plot positions
