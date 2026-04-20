@@ -462,13 +462,36 @@ void HousingSvcsPlayerViewHousesByBnetAccount::Read()
 
 void HousingSvcsTeleportToPlot::Read()
 {
-    _worldPacket >> NeighborhoodGuid;
-    _worldPacket >> OwnerGuid;
-    _worldPacket >> PlotIndex;
-    _worldPacket >> TeleportType;
+    // Dump raw bytes BEFORE parsing so we can verify the field layout.
+    {
+        std::string hex;
+        size_t dumpBytes = std::min<size_t>(_worldPacket.size(), size_t(64));
+        for (size_t i = 0; i < dumpBytes; ++i)
+        {
+            char buf[4];
+            snprintf(buf, sizeof(buf), "%02X ", static_cast<unsigned>(_worldPacket[i]));
+            hex += buf;
+        }
+        TC_LOG_ERROR("network.opcode", "CMSG_HOUSING_SVCS_TELEPORT_TO_PLOT RAW ({} bytes): {}",
+            _worldPacket.size(), hex);
+    }
 
-    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_SVCS_TELEPORT_TO_PLOT NeighborhoodGuid: {} OwnerGuid: {} PlotIndex: {} TeleportType: {}",
-        NeighborhoodGuid.ToString(), OwnerGuid.ToString(), PlotIndex, TeleportType);
+    _worldPacket >> NeighborhoodGuid;
+    size_t afterNbh = _worldPacket.rpos();
+    _worldPacket >> OwnerGuid;
+    size_t afterOwner = _worldPacket.rpos();
+    _worldPacket >> PlotIndex;
+    size_t afterPlot = _worldPacket.rpos();
+    _worldPacket >> TeleportType;
+    size_t afterType = _worldPacket.rpos();
+
+    TC_LOG_ERROR("network.opcode",
+        "CMSG_HOUSING_SVCS_TELEPORT_TO_PLOT parsed: NeighborhoodGuid={} (bytes 0..{}) OwnerGuid={} (..{}) PlotIndex={} (..{}) TeleportType={} (..{}) totalConsumed={} size={}",
+        NeighborhoodGuid.ToString(), afterNbh,
+        OwnerGuid.ToString(), afterOwner,
+        PlotIndex, afterPlot,
+        TeleportType, afterType,
+        afterType, _worldPacket.size());
 }
 
 void HousingSvcsSetTutorialState::Read()
