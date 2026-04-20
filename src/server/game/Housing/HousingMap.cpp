@@ -1021,6 +1021,27 @@ bool HousingMap::AddPlayerToMap(Player* player, bool initPlayer /*= true*/)
 
                 TC_LOG_DEBUG("housing", "HousingMap deferred ENTER_PLOT: Sent Account CREATE + {} decor MeshObject CREATEs + budget for player {}",
                     meshCreateCount, playerGuid.ToString());
+
+                // Force-push a Player VALUES_UPDATE so the client receives the
+                // current PlayerHouseInfoComponentData (including EditorMode=0
+                // and Houses[] with PlotID) in a UPDATE_OBJECT that lands AFTER
+                // the cornerstone/door GOs have been created on the client side.
+                // Without this, the client's cornerstone/door interactability
+                // stays "greyed out" until the user manually toggles edit mode
+                // on+off — which is just what triggers a Player VALUES_UPDATE
+                // via the same SetEditorMode path.
+                {
+                    p->BuildUpdateChangesMask();
+                    UpdateData playerUpdate(p->GetMapId());
+                    WorldPacket playerPacket;
+                    p->BuildValuesUpdateBlockForPlayer(&playerUpdate, p);
+                    if (playerUpdate.HasData())
+                    {
+                        playerUpdate.BuildPacket(&playerPacket);
+                        p->SendDirectMessage(&playerPacket);
+                    }
+                    p->ClearUpdateMask(false);
+                }
             }
 
             // Post-tutorial auras first (slots 8,9,50), then plot enter auras (slots 50,56,9).
