@@ -1022,15 +1022,30 @@ bool HousingMap::AddPlayerToMap(Player* player, bool initPlayer /*= true*/)
                 TC_LOG_DEBUG("housing", "HousingMap deferred ENTER_PLOT: Sent Account CREATE + {} decor MeshObject CREATEs + budget for player {}",
                     meshCreateCount, playerGuid.ToString());
 
-                // Force-push a Player VALUES_UPDATE so the client receives the
-                // current PlayerHouseInfoComponentData (including EditorMode=0
-                // and Houses[] with PlotID) in a UPDATE_OBJECT that lands AFTER
-                // the cornerstone/door GOs have been created on the client side.
-                // Without this, the client's cornerstone/door interactability
-                // stays "greyed out" until the user manually toggles edit mode
-                // on+off — which is just what triggers a Player VALUES_UPDATE
-                // via the same SetEditorMode path.
+                // Replicate the "edit mode EXIT" cleanup at plot-enter: send an
+                // empty AURA_UPDATE for the edit-mode aura (1263303) and push a
+                // Player VALUES_UPDATE with cleared housing-restriction flags.
+                // Symptom otherwise: cornerstone / door cursors stay greyed out
+                // at login until the user manually toggles edit mode on + off,
+                // which is exactly the packet sequence this block now emits.
                 {
+                    // Empty AURA_UPDATE for slot 51 tells the client "edit-mode
+                    // aura is not active". Fresh client state might have it
+                    // cached from a previous session.
+                    WorldPackets::Spells::AuraUpdate auraUpdate;
+                    auraUpdate.UpdateAll = false;
+                    auraUpdate.UnitGUID = p->GetGUID();
+                    WorldPackets::Spells::AuraInfo auraInfo;
+                    auraInfo.Slot = 51;
+                    auraUpdate.Auras.push_back(std::move(auraInfo));
+                    p->SendDirectMessage(auraUpdate.Write());
+
+                    // Force-clear pacify/no-action flags (idempotent if already 0)
+                    // and push the Player VALUES_UPDATE that edit-mode-exit pushes.
+                    p->RemoveUnitFlag(UNIT_FLAG_PACIFIED);
+                    p->RemoveUnitFlag2(UNIT_FLAG2_NO_ACTIONS);
+                    p->ReplaceAllSilencedSchoolMask(SpellSchoolMask(0));
+
                     p->BuildUpdateChangesMask();
                     UpdateData playerUpdate(p->GetMapId());
                     WorldPacket playerPacket;
@@ -2373,16 +2388,20 @@ uint32 HousingMap::SpawnExtCompTree(uint8 plotIndex, uint32 extCompID,
             float cosFacing = std::cos(houseFacing);
             float sinFacing = std::sin(houseFacing);
 
-            // Transform hook local offset to world space. Keep only the Z offset
-            // from ExteriorComponentExitPoint — that raises the GO above the door
-            // mesh base so it sits on top of the terrain/porch instead of
-            // sinking below. Discard the X/Y components: they describe retail's
-            // "player stands here" marker, which is a step in front of the door
-            // (shifts the clickable box off the mesh laterally).
-            float doorWorldX = houseWorldPos.GetPositionX() + pos.GetPositionX() * cosFacing - pos.GetPositionY() * sinFacing;
-            float doorWorldY = houseWorldPos.GetPositionY() + pos.GetPositionX() * sinFacing + pos.GetPositionY() * cosFacing;
-            float doorWorldZ = houseWorldPos.GetPositionZ() + pos.GetPositionZ();
+            // Use the spawned door MeshObject's own world position — the WMO
+            // attachment system already resolved the full hook transform (house
+            // position + parent attachments + hook local + any overrides) so it
+            // is guaranteed to match the door mesh you see in-game. Computing
+            // a separate transform here from raw hook local offsets drifted
+            // off the mesh laterally. Interior doors use this same pattern
+            // (`doorMesh->GetPosition()`) and line up correctly.
+            float doorWorldX = mesh->GetPositionX();
+            float doorWorldY = mesh->GetPositionY();
+            float doorWorldZ = mesh->GetPositionZ();
 
+            // Keep the ExteriorComponentExitPoint Z lift so the GO sits on top
+            // of the porch/terrain instead of the mesh base (identical to
+            // RespawnDoorGOAtHook).
             ExteriorComponentExitPointEntry const* exitPt = sHousingMgr.GetExitPoint(extCompID);
             if (exitPt)
                 doorWorldZ += exitPt->Position[2];
