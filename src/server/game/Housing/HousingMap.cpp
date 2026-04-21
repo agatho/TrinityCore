@@ -1656,11 +1656,27 @@ void HousingMap::SendPlotHouseProxyEntities(Player* player)
 
     WorldPacket packet;
     updateData.BuildPacket(&packet);
+
+    // Hex dump of the packet so we can diff byte-for-byte against a retail
+    // Housing/3 CREATE captured in dump_12.0.1.66838_2026-04-15.
+    std::string hex;
+    hex.reserve(packet.size() * 3);
+    uint8 const* data_ptr = packet.data();
+    for (size_t i = 0; i < packet.size() && i < 512; ++i)
+    {
+        uint8 b = data_ptr[i];
+        constexpr char HEX[] = "0123456789abcdef";
+        hex.push_back(HEX[b >> 4]);
+        hex.push_back(HEX[b & 0xF]);
+        if ((i & 0xF) == 0xF) hex.push_back('\n');
+        else hex.push_back(' ');
+    }
+
     player->SendDirectMessage(&packet);
 
     TC_LOG_INFO("housing", "SendPlotHouseProxyEntities: player={} sent={} proxy HousingPlayerHouse CREATEs "
-        "(packet size {} bytes)",
-        player->GetGUID().ToString(), proxyCount, packet.size());
+        "(packet size {} bytes) hex:\n{}",
+        player->GetGUID().ToString(), proxyCount, packet.size(), hex);
 }
 
 void HousingMap::AddPlayerHousing(ObjectGuid playerGuid, Housing* housing)
