@@ -1626,6 +1626,10 @@ void HousingMap::SendPlotHouseProxyEntities(Player* player)
             continue;
 
         auto proxy = std::make_unique<HousingPlayerHouseEntity>(player->GetSession(), plot.HouseGuid);
+        // Housing entities use TYPEID_HOUSING_ENTITY (18) — the CREATE byte the
+        // client's entity dispatcher checks. Without this, m_objectTypeId defaults
+        // to NUM_CLIENT_OBJECT_TYPES and the client silently discards the block.
+        proxy->SetObjectType(TYPEID_HOUSING_ENTITY);
         proxy->SetEntityGUID(plot.HouseGuid);
         proxy->SetBnetAccount(plot.OwnerBnetGuid);
         proxy->SetPlotIndex(static_cast<int32>(plot.PlotIndex));
