@@ -3678,6 +3678,42 @@ void Player::BuildCreateUpdateBlockForPlayer(UpdateData* data, Player* target) c
                 mapHouseEntity.BuildCreateUpdateBlockForPlayer(data, target);
             }
 
+            // Bundle HousingPlayerHouse proxy entities for all OTHER occupied plots in
+            // the same UPDATE_OBJECT. Retail sniff dump_12.0.1.66838_2026-04-15_09-35-59
+            // idx 9984 contains 46 Housing/3 CREATE blocks (one per occupied neighborhood
+            // plot). The world-map icon picker (client sub_7FF624BB1880) iterates these to
+            // resolve each plot's HouseGUID -> entity -> BnetAccount mapping for the
+            // "owned / friend / stranger" icon choice and tooltip. Without them every
+            // neighbour plot renders as "unowned".
+            uint8 ownPlotIndex = INVALID_PLOT_INDEX;
+            if (Housing const* ownHousing = GetHousing())
+                ownPlotIndex = ownHousing->GetPlotIndex();
+
+            if (HousingMap* hmap = dynamic_cast<HousingMap*>(GetMap()))
+            {
+                if (Neighborhood const* nbh = hmap->GetNeighborhood())
+                {
+                    for (Neighborhood::PlotInfo const& plot : nbh->GetPlots())
+                    {
+                        if (!plot.IsOccupied())
+                            continue;
+                        if (plot.PlotIndex == ownPlotIndex)
+                            continue;
+                        if (plot.HouseGuid.IsEmpty())
+                            continue;
+
+                        HousingPlayerHouseEntity proxy(GetSession(), plot.HouseGuid);
+                        proxy.SetObjectType(TYPEID_HOUSING_ENTITY);
+                        proxy.SetBnetAccount(plot.OwnerBnetGuid);
+                        proxy.SetPlotIndex(static_cast<int32>(plot.PlotIndex));
+                        proxy.SetLevel(plot.HouseLevel);
+                        proxy.SetFavor(plot.HouseFavor);
+                        proxy.SetEntityGUID(plot.HouseGuid);
+                        proxy.BuildCreateUpdateBlockForPlayer(data, target);
+                    }
+                }
+            }
+
             // Room entities (objectType=18, Housing/2 GUIDs) are sent in the deferred
             // callback — NOT here. Sending type-18 room entities in the initial UPDATE_OBJECT
             // crashes the client because the housing UI context isn't established yet.
