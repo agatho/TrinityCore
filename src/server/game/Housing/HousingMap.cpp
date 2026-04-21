@@ -1555,42 +1555,46 @@ HousingPlotOwnerType HousingMap::GetPlotOwnerTypeForPlayer(Player const* player,
 
 void HousingMap::SendPerPlayerPlotWorldStates(Player* player)
 {
-    // Sniff-verified wire encoding (dump_12.0.1.66838_2026-04-15 captured at the
-    // owner's own house): the plot WorldState value is BINARY OCCUPANCY only —
-    // 0 = empty, 1 = a house exists at this plot. Every single plot worldstate
-    // in the sniff is 0 or 1, including the sniffer's own plot. Values 2 (FRIEND)
-    // and 3 (SELF) are NOT understood by the client: when we sent enum value 3
-    // for the player's own plot, the regular map rendered it as UNOWNED because
-    // the icon logic reads `value == 1 ? owned : unowned`.
+    // Session-4 approach (partially-working empirical result): per-plot
+    // SMSG_UPDATE_WORLD_STATE carrying HousingPlotOwnerType enum value
+    // (0=None, 1=Stranger, 2=Friend, 3=Self). Client's regular world-map
+    // icon picker reads this exact worldstate to choose which icon to draw —
+    // unowned / grey-figure / blue / yellow-spiral. User empirically confirmed
+    // on first try: own house rendered as Self, owner names shown; the only
+    // issue was a visible delay before the correct icons appeared.
     //
-    // Self / friend / stranger visual differentiation (highlight on own plot,
-    // friend-coloured icon, etc.) happens CLIENT-SIDE by looking up the OwnerGUID
-    // from NeighborhoodMirrorData.Houses[plotIdx] and comparing it to the player's
-    // own GUID + friend list. Server just sends the binary occupancy flag; the
-    // identity data rides on a separate channel.
+    // The map baseline written in SpawnPlotGameObjects is still binary 0/1
+    // (matches the retail sniff for map-level state), but here we override
+    // it per-player with the full enum so the icon differentiation works.
     if (!_neighborhood || !player)
         return;
 
     uint32 neighborhoodMapId = _neighborhood->GetNeighborhoodMapID();
     std::vector<NeighborhoodPlotData const*> plots = sHousingMgr.GetPlotsForMap(neighborhoodMapId);
 
-    uint32 sent = 0, occupied = 0, empty = 0;
+    uint32 sent = 0;
+    uint32 selfCount = 0, friendCount = 0, strangerCount = 0, noneCount = 0;
     for (NeighborhoodPlotData const* plot : plots)
     {
         if (plot->WorldState == 0)
             continue;
 
         uint8 plotIdx = static_cast<uint8>(plot->PlotIndex);
-        Neighborhood::PlotInfo const* pi = _neighborhood->GetPlotInfo(plotIdx);
-        bool isOccupied = pi && pi->IsOccupied() && !pi->HouseGuid.IsEmpty();
-        player->SendUpdateWorldState(plot->WorldState, isOccupied ? 1u : 0u, false);
+        HousingPlotOwnerType type = GetPlotOwnerTypeForPlayer(player, plotIdx);
+        player->SendUpdateWorldState(plot->WorldState, static_cast<uint32>(type), false);
         ++sent;
-        if (isOccupied) ++occupied; else ++empty;
+        switch (type)
+        {
+            case HOUSING_PLOT_OWNER_SELF:     ++selfCount;     break;
+            case HOUSING_PLOT_OWNER_FRIEND:   ++friendCount;   break;
+            case HOUSING_PLOT_OWNER_STRANGER: ++strangerCount; break;
+            default:                          ++noneCount;     break;
+        }
     }
 
-    TC_LOG_INFO("housing", "SendPerPlayerPlotWorldStates (deferred binary): player={} — sent {} "
-        "(occupied={} empty={})",
-        player->GetGUID().ToString(), sent, occupied, empty);
+    TC_LOG_INFO("housing", "SendPerPlayerPlotWorldStates: player={} sent={} "
+        "self={} friend={} stranger={} none={}",
+        player->GetGUID().ToString(), sent, selfCount, friendCount, strangerCount, noneCount);
 }
 
 void HousingMap::AddPlayerHousing(ObjectGuid playerGuid, Housing* housing)

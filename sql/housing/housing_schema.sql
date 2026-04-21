@@ -69,6 +69,8 @@ CREATE TABLE `character_housing` (
     `posY` FLOAT NOT NULL DEFAULT 0 COMMENT 'House Y position on plot',
     `posZ` FLOAT NOT NULL DEFAULT 0 COMMENT 'House Z position on plot',
     `facing` FLOAT NOT NULL DEFAULT 0 COMMENT 'House facing angle on plot',
+    `houseName` VARCHAR(64) NOT NULL DEFAULT '' COMMENT 'Player-set house display name',
+    `houseDescription` VARCHAR(256) NOT NULL DEFAULT '' COMMENT 'Player-set house description',
     PRIMARY KEY (`guid`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
