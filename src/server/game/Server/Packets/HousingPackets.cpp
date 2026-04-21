@@ -1416,34 +1416,21 @@ ByteBuffer& operator<<(ByteBuffer& data, HouseInfo const& houseInfo)
 // Retail sniff confirms: GUID#1=HouseGUID, GUID#2=OwnerGUID (used for name lookup), GUID#3=NeighborhoodGUID.
 static void WriteJamCliHouse(WorldPacket& packet, JamCliHouse const& house)
 {
-    // IDA-verified wire format for build 12.0.1.66838 (sub_7FF624FCFE00):
-    //   1. GUID HouseGUID         -> struct +0
-    //   2. GUID OwnerGUID         -> struct +16
-    //   3. GUID NeighborhoodGUID  -> struct +32
-    //   4. uint8                  -> struct +48    (per-plot HASH KEY - the client
-    //                                               uses this byte as the identifier
-    //                                               when looking up a house on the
-    //                                               map, so it MUST be unique per plot
-    //                                               within a neighborhood. PlotIndex
-    //                                               fits in a byte because 55 plots.)
-    //   5. uint32                 -> struct +72    (real HouseLevel for display)
-    //   6. uint8 bit7 flag        -> struct +64    (HasOptionalField)
-    //   7. uint64 (if flag set)   -> struct +56    (Favor64 or similar tail payload)
+    // Wire: PackedGUID(House) + PackedGUID(Owner) + PackedGUID(Neighborhood)
+    //     + uint32(PlotIndex) + uint8(HouseLevel)
+    //     + uint8(bit7 = HasOptionalField) [+ uint64(OptionalValue) if flag set]
     //
-    // The function `ai_Read_CompressedUInt32FromPacket` is misleadingly named in the
-    // client — it actually reads a plain little-endian uint32 (no VLQ encoding).
-    //
-    // Earlier revisions wrote uint32(PlotIndex) followed by uint8(HouseLevel), which
-    // put PlotIndex's low byte into the +48 slot by accident. That accidentally
-    // produced a unique hash key per plot but scrambled the +72 slot with garbage
-    // (the upper 3 bytes of PlotIndex concatenated with HouseLevel). Level/favor
-    // tooltips never worked correctly before this fix.
+    // Confirmed in-game on 2026-04-20 13:15-13:30: wire order is uint32 BEFORE
+    // uint8. The "IDA-verified" swap (uint8 PlotIndex at +48 / uint32 HouseLevel
+    // at +72) looks right on paper but empirically breaks the regular neighborhood
+    // map — icons stop differentiating and the hover tooltip falls back to raw
+    // plot index. Order below is what the client actually accepts.
     size_t beforeWpos = packet.wpos();
     packet << house.HouseGUID;
     packet << house.OwnerGUID;
     packet << house.NeighborhoodGUID;
-    packet << uint8(house.PlotIndex);        // hash key at struct +48
-    packet << uint32(house.HouseLevel);      // real level at struct +72
+    packet << uint32(house.PlotIndex);
+    packet << uint8(house.HouseLevel);
     packet << uint8(house.HasOptionalField ? 0x80 : 0x00);
     if (house.HasOptionalField)
         packet << uint64(house.OptionalValue);
