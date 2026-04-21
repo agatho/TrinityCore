@@ -1555,46 +1555,16 @@ HousingPlotOwnerType HousingMap::GetPlotOwnerTypeForPlayer(Player const* player,
 
 void HousingMap::SendPerPlayerPlotWorldStates(Player* player)
 {
-    // Session-4 approach (partially-working empirical result): per-plot
-    // SMSG_UPDATE_WORLD_STATE carrying HousingPlotOwnerType enum value
-    // (0=None, 1=Stranger, 2=Friend, 3=Self). Client's regular world-map
-    // icon picker reads this exact worldstate to choose which icon to draw —
-    // unowned / grey-figure / blue / yellow-spiral. User empirically confirmed
-    // on first try: own house rendered as Self, owner names shown; the only
-    // issue was a visible delay before the correct icons appeared.
+    // Blizzlike no-op: the per-plot occupancy worldstate is carried inside
+    // SMSG_INIT_WORLD_STATES (set by SpawnPlotGameObjects via SetWorldStateValue),
+    // and the regular-map icon + hover info come from the JamCliHouse[] array
+    // in SMSG_HOUSING_SVCS_GET_HOUSE_FINDER_NEIGHBORHOOD_RESPONSE plus the
+    // Housing/4 NeighborhoodMirrorData.Houses entries. No per-player
+    // SMSG_UPDATE_WORLD_STATE spam — retail doesn't do it, and sending enum
+    // values here was the regression that broke the icons.
     //
-    // The map baseline written in SpawnPlotGameObjects is still binary 0/1
-    // (matches the retail sniff for map-level state), but here we override
-    // it per-player with the full enum so the icon differentiation works.
-    if (!_neighborhood || !player)
-        return;
-
-    uint32 neighborhoodMapId = _neighborhood->GetNeighborhoodMapID();
-    std::vector<NeighborhoodPlotData const*> plots = sHousingMgr.GetPlotsForMap(neighborhoodMapId);
-
-    uint32 sent = 0;
-    uint32 selfCount = 0, friendCount = 0, strangerCount = 0, noneCount = 0;
-    for (NeighborhoodPlotData const* plot : plots)
-    {
-        if (plot->WorldState == 0)
-            continue;
-
-        uint8 plotIdx = static_cast<uint8>(plot->PlotIndex);
-        HousingPlotOwnerType type = GetPlotOwnerTypeForPlayer(player, plotIdx);
-        player->SendUpdateWorldState(plot->WorldState, static_cast<uint32>(type), false);
-        ++sent;
-        switch (type)
-        {
-            case HOUSING_PLOT_OWNER_SELF:     ++selfCount;     break;
-            case HOUSING_PLOT_OWNER_FRIEND:   ++friendCount;   break;
-            case HOUSING_PLOT_OWNER_STRANGER: ++strangerCount; break;
-            default:                          ++noneCount;     break;
-        }
-    }
-
-    TC_LOG_INFO("housing", "SendPerPlayerPlotWorldStates: player={} sent={} "
-        "self={} friend={} stranger={} none={}",
-        player->GetGUID().ToString(), sent, selfCount, friendCount, strangerCount, noneCount);
+    // Retained as an extension hook for genuine per-player overrides.
+    (void)player;
 }
 
 void HousingMap::AddPlayerHousing(ObjectGuid playerGuid, Housing* housing)

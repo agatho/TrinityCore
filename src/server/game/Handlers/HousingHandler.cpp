@@ -4057,19 +4057,20 @@ void WorldSession::HandleHousingSvcsGetHouseFinderNeighborhood(WorldPackets::Hou
         house.HouseGUID = plot.HouseGuid;
         house.OwnerGUID = plot.OwnerGuid;
         house.NeighborhoodGUID = neighborhood->GetGuid();
-        // Wire layout verified via IDA sub_7FF624FCFE00 (build 12.0.1.66838):
-        //   PlotIndex is written as uint8 into struct +48 (the hash key the client
-        //   uses to look up a plot on the neighborhood map — must be unique per plot).
-        //   HouseLevel is written as uint32 into struct +72 (displayed on hover).
-        //   OptionalValue (favor, 8 bytes) rides the bit-7 optional tail.
+        // The client uses the HouseLevel field (struct +48, uint8 on the wire for
+        // this path) as the per-plot hash key when it populates its internal
+        // JamCliHouse table on the regular neighborhood map. Each entry MUST carry
+        // a unique value or the client's hash collides and only one plot icon
+        // renders — verified empirically: setting this to the real HouseLevel
+        // (which is typically 1 for every plot) made every other plot vanish
+        // from the map. PlotIndex (0..54, unique per neighborhood) is the safe
+        // choice and is what the pre-regression working state shipped.
+        house.HouseLevel = static_cast<uint8>(plot.PlotIndex);
         house.PlotIndex = plot.PlotIndex;
-        house.HouseLevel = plot.HouseLevel;
-        house.HasOptionalField = plot.HouseFavor != 0;
-        house.OptionalValue = plot.HouseFavor;
         response.Neighborhood.Houses.push_back(std::move(house));
 
-        TC_LOG_INFO("housing", "  DETAIL_HOUSE: plotIndex={} realLevel={} favor={} houseGuid={} ownerGuid={}",
-            plot.PlotIndex, plot.HouseLevel, plot.HouseFavor,
+        TC_LOG_INFO("housing", "  DETAIL_HOUSE: plotIndex={} houseLevel={} houseGuid={} ownerGuid={}",
+            plot.PlotIndex, static_cast<uint8>(plot.PlotIndex),
             plot.HouseGuid.ToString(), plot.OwnerGuid.ToString());
     }
 
