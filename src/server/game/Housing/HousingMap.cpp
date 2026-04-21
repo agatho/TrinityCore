@@ -1084,15 +1084,21 @@ bool HousingMap::AddPlayerToMap(Player* player, bool initPlayer /*= true*/)
                 }
             }
 
-            // Post-tutorial auras first (slots 8,9,50), then plot enter auras (slots 50,56,9).
-            // Retail applies tutorial-done auras once (at quest reward) but we re-send each
-            // map entry since they don't exist in DB2 and can't persist as real auras.
+            // Post-tutorial auras first (slots 8,9,50), then neighborhood-map-entry
+            // auras. Retail applies tutorial-done auras once (at quest reward) but we
+            // re-send each map entry since they don't exist in DB2 and can't persist
+            // as real auras.
             hMap->SendPostTutorialAuras(p);
-            // Blizzlike neighborhood-map-entry aura burst — must fire on every
-            // housing-map entry, not only on plot AT overlap. See comment on
-            // SendNeighborhoodMapEntryAuras for the 4-aura spec.
+            // Blizzlike neighborhood-map-entry aura burst — fires on every
+            // housing-map entry. See comment on SendNeighborhoodMapEntryAuras.
             hMap->SendNeighborhoodMapEntryAuras(p);
-            hMap->SendPlotEnterSpellPackets(p, deferredPlotIndex);
+            // NOTE: SendPlotEnterSpellPackets is emitted by the plot AT's OnUnitEnter
+            // hook (at_housing_plot.cpp) when the player physically overlaps the plot
+            // AreaTrigger — the correct blizzlike trigger per the sniff (spells
+            // "In Plot"/1239847 and "Visiting Neighbor"/469226 are plot-overlap, not
+            // map-entry auras). The previous deferred emission here fired it on map
+            // entry regardless of whether the player's spawn position was inside a
+            // plot AT, which is wrong. Removed; AT hook remains the sole caller.
 
             // Diagnostic: print AT position vs player position for OutsidePlotBounds debugging
             float dist2d = p->GetExactDist2d(plotAt);
@@ -1420,12 +1426,21 @@ void HousingMap::SendNeighborhoodMapEntryAuras(Player* player)
 
 void HousingMap::SendPlotEnterSpellPackets(Player* player, uint8 plotIndex)
 {
-    // Sniff-verified plot enter spell sequence (packets 26530-26541):
-    //   AURA_UPDATE+SPELL_START+SPELL_GO (1239847, slot 50)
-    //   → HasPlayers flag on AT (Flags=1024)
-    //   → AURA_UPDATE+SPELL_START+SPELL_GO (469226, slot 56)
-    //   → AURA_UPDATE removal (slot 9) → AURA_UPDATE+SPELL_START+SPELL_GO (1266699, slot 9)
-    // These spells don't exist in DB2, so CastSpell() fails silently. Manual packets required.
+    // PLOT AT OVERLAP event — NOT map-entry. Wowhead:
+    //   1239847 = "[DNT] In Plot"           → applied when the player's unit
+    //                                         is inside a plot's AreaTrigger box
+    //   469226  = "[DNT] Visiting Neighbor" → applied when that plot is owned
+    //                                         by someone else
+    //   1266699 = "[DNT] Sound Squisher"    → audio mixer aura
+    //
+    // Invoked only from at_housing_plot.cpp's OnUnitEnter hook. The earlier
+    // 500 ms-deferred invocation inside HousingMap::AddPlayerToMap was moved
+    // out because it fired unconditionally on map entry regardless of whether
+    // the player was actually inside a plot AT — the retail triggers are
+    // strictly AT overlap, not map transition.
+    //
+    // Manual packets are required because these spell IDs don't exist in DB2
+    // (CastSpell() fails silently for DNT spells).
 
     TC_LOG_DEBUG("housing", "SendPlotEnterSpellPackets: BEGIN for player {} plot {} map {}",
         player->GetGUID().ToString(), plotIndex, GetId());
