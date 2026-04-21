@@ -25528,23 +25528,6 @@ void Player::SendInitialPacketsAfterAddToMap()
     GetZoneAndAreaId(newzone, newarea);
     UpdateZone(newzone, newarea);                            // also call SendInitWorldStates();
 
-    // Blizzlike: right after SMSG_INIT_WORLD_STATES on any housing-capable map, push
-    // the character's HousingCatalog ownership snapshot via SMSG_HOUSING_CATALOG_STATE_SYNC
-    // (ClientMirrorSystem opcode 0x56000E). This is what populates the catalog/market
-    // UI browsing state outside of edit mode — without it the client has no owned-decor
-    // list until the player enters edit mode (which only then receives FHousingStorage_C
-    // via the Account entity UPDATE).
-    if (MapEntry const* mapEntry = GetMap() ? GetMap()->GetEntry() : nullptr)
-    {
-        if (mapEntry->InstanceType == MAP_HOUSE_INTERIOR || mapEntry->InstanceType == MAP_HOUSE_NEIGHBORHOOD)
-        {
-            WorldPackets::Housing::HousingCatalogStateSync catalogSync;
-            if (Housing* housing = GetHousing())
-                housing->BuildCatalogStateSync(catalogSync);
-            SendDirectMessage(catalogSync.Write());
-        }
-    }
-
     GetSession()->SendLoadCUFProfiles();
 
     CastSpell(this, 836, true);                             // LOGINEFFECT
@@ -25652,26 +25635,13 @@ void Player::SendInitialPacketsAfterAddToMap()
             // the array index as the plot identifier; skipping empty slots causes
             // the client to show the wrong plots as occupied.
             mirrorEntity.ClearHouses();
-            uint32 dbgOcc = 0, dbgEmp = 0;
             for (auto const& plot : neighborhood->GetPlots())
             {
                 if (plot.IsOccupied() && !plot.HouseGuid.IsEmpty())
-                {
                     mirrorEntity.AddHouse(plot.HouseGuid, plot.OwnerGuid);
-                    TC_LOG_INFO("housing", "  MirrorHouses[{}] occupied: house={} owner={} (lvl={} favor={})",
-                        plot.PlotIndex, plot.HouseGuid.ToString(), plot.OwnerGuid.ToString(),
-                        plot.HouseLevel, plot.HouseFavor);
-                    ++dbgOcc;
-                }
                 else
-                {
                     mirrorEntity.AddHouse(ObjectGuid::Empty, ObjectGuid::Empty);
-                    ++dbgEmp;
-                }
             }
-            TC_LOG_INFO("housing", "Player::SendInitialPacketsAfterAddToMap: Pushed NeighborhoodMirror "
-                "'{}' for player={} — {} occupied + {} empty plots",
-                neighborhood->GetName(), GetGUID().ToString(), dbgOcc, dbgEmp);
 
             // Add managers to mirror data
             mirrorEntity.ClearManagers();
@@ -25686,22 +25656,9 @@ void Player::SendInitialPacketsAfterAddToMap()
                 }
             }
 
-            // Force a CREATE packet instead of a VALUES diff. At login time,
-            // WorldSession constructs the mirror entity with empty Houses and sends
-            // it to the client as a CREATE. When the player later enters a neighborhood
-            // map, our ClearHouses()+AddHouse(...)*55 sequence above mutates the
-            // dynamic array in-place; sending a VALUES update only diffs the changes,
-            // and the client's dynamic-field machinery for NeighborhoodMirrorData.Houses
-            // does NOT properly apply a clear+re-add pass via VALUES (observed: every
-            // plot on the regular world map stays as "unowned" icon).
-            //
-            // Removing the entity from m_clientGUIDs forces the next SendUpdateToPlayer
-            // to build a full CREATE block with the populated Houses[], which the
-            // client accepts cleanly. Then we re-track the entity so subsequent
-            // VALUES diffs still work (e.g. when a plot is bought mid-session).
-            m_clientGUIDs.erase(mirrorEntity.GetGUID());
+            // Flush the Housing/4 entity update to the client so it receives the
+            // NeighborhoodMirrorData (houses, managers, owner, name).
             mirrorEntity.SendUpdateToPlayer(this);
-            m_clientGUIDs.insert(mirrorEntity.GetGUID());
 
             // FHousingPlayerHouse_C belongs on the Housing/3 entity.
             // Populate it with the player's house data for this neighborhood.

@@ -16,12 +16,10 @@
 */
 
 #include "HousingNeighborhoodMirrorEntity.h"
-#include "ByteBuffer.h"
 #include "Map.h"
 #include "Player.h"
 #include "StringFormat.h"
 #include "UpdateData.h"
-#include "WorldPacket.h"
 #include "WorldSession.h"
 
 HousingNeighborhoodMirrorEntity::HousingNeighborhoodMirrorEntity(WorldSession* session, ObjectGuid guid) : _session(session)
@@ -82,26 +80,7 @@ void HousingNeighborhoodMirrorEntity::RemoveFromObjectUpdate()
 void HousingNeighborhoodMirrorEntity::SendUpdateToPlayer(Player* player)
 {
     BuildUpdateChangesMask();
-    bool hadAtClient = player->HaveAtClient(this);
-
-    UpdateData upd(player->GetMapId());
-    if (hadAtClient)
-        BuildValuesUpdateBlockForPlayer(&upd, player);
-    else
-        BuildCreateUpdateBlockForPlayer(&upd, player);
-
-    WorldPacket packet;
-    upd.BuildPacket(&packet);
-
-    TC_LOG_INFO("housing", "HousingNeighborhoodMirrorEntity::SendUpdateToPlayer: guid={} "
-        "HaveAtClient={} (sending {}) packetBytes={} houses={} managers={} for player={}",
-        GetGUID().ToString(), hadAtClient, hadAtClient ? "VALUES" : "CREATE",
-        packet.size(),
-        m_neighborhoodMirrorData->Houses.size(),
-        m_neighborhoodMirrorData->Managers.size(),
-        player->GetGUID().ToString());
-
-    player->SendDirectMessage(&packet);
+    BaseEntity::SendUpdateToPlayer(player);
     ClearUpdateMask(true);
 }
 
