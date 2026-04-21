@@ -3644,40 +3644,20 @@ void Player::BuildCreateUpdateBlockForPlayer(UpdateData* data, Player* target) c
         GetSession()->GetHousingPlayerHouseEntity().BuildCreateUpdateBlockForPlayer(data, target);
         GetSession()->GetHousingNeighborhoodMirrorEntity().BuildCreateUpdateBlockForPlayer(data, target);
 
-        // On housing maps, include a map-level Housing entity with objectType=18.
-        // Sniff-verified: retail sends this in the initial UPDATE_OBJECT (packet #11405).
-        // GUID: subType=3, arg2=neighborhoodMapID, counter=bnetAccountId.
-        // TYPEID_HOUSING_ENTITY is placed after NUM_CLIENT_OBJECT_TYPES in the enum
-        // so it does NOT change the sentinel value that BaseEntity defaults to.
+        // The own HousingPlayerHouseEntity is sent via the session entity above.
+        // That entity's GUID is constructed by Housing::Create as
+        //   subType=3, arg1=realmId, arg2=7 (hardcoded), counter=bnetAccountId
+        // and is the canonical HouseGuid advertised by the AT, CURRENT_HOUSE_INFO
+        // and CMSG/SMSG_HOUSING_* packets. A previous implementation here emitted a
+        // second "mapHouseEntity" with arg2=neighborhoodMapID, producing a ghost
+        // GUID (Housing-3-<mapID>-<bnet>-1) that the client's world-map icon
+        // picker could never resolve against the AT's HouseGUID field. Retail
+        // sniff dump_12.0.1.66838_2026-04-15_09-35-59 idx 9984 confirms every
+        // Housing/3 CREATE has arg2=7 - no map-ID-keyed variant is ever sent.
+        // The duplicate has been removed; proxy entities for neighbour plots
+        // are bundled below using each plot's real HouseGuid.
         if (GetMap() && (GetMap()->IsHouseInterior() || (GetMap()->GetEntry() && GetMap()->GetEntry()->IsNeighborhood())))
         {
-            if (Housing const* housing = GetHousing())
-            {
-                uint32 neighborhoodMapID = 0;
-                if (Neighborhood const* nh = sNeighborhoodMgr.GetNeighborhood(housing->GetNeighborhoodGuid()))
-                    neighborhoodMapID = nh->GetNeighborhoodMapID();
-
-                ObjectGuid mapHouseGuid = ObjectGuid::Create<HighGuid::Housing>(
-                    /*subType*/ 3,
-                    /*arg1*/ sRealmList->GetCurrentRealmId().Realm,
-                    /*arg2*/ neighborhoodMapID,
-                    GetSession()->GetBattlenetAccountId());
-
-                HousingPlayerHouseEntity mapHouseEntity(GetSession(), mapHouseGuid);
-                mapHouseEntity.SetObjectType(TYPEID_HOUSING_ENTITY);
-                mapHouseEntity.SetBnetAccount(GetSession()->GetBattlenetAccountGUID());
-                mapHouseEntity.SetPlotIndex(static_cast<int32>(housing->GetPlotIndex()));
-                mapHouseEntity.SetLevel(housing->GetLevel());
-                mapHouseEntity.SetFavor(housing->GetFavor64());
-                mapHouseEntity.SetBudgets(
-                    housing->GetMaxInteriorDecorBudget(),
-                    housing->GetMaxExteriorDecorBudget(),
-                    housing->GetMaxRoomBudget(),
-                    housing->GetMaxFixtureBudget());
-
-                mapHouseEntity.BuildCreateUpdateBlockForPlayer(data, target);
-            }
-
             // Bundle HousingPlayerHouse proxy entities for all OTHER occupied plots in
             // the same UPDATE_OBJECT. Retail sniff dump_12.0.1.66838_2026-04-15_09-35-59
             // idx 9984 contains 46 Housing/3 CREATE blocks (one per occupied neighborhood
@@ -3689,30 +3669,35 @@ void Player::BuildCreateUpdateBlockForPlayer(UpdateData* data, Player* target) c
             if (Housing const* ownHousing = GetHousing())
                 ownPlotIndex = ownHousing->GetPlotIndex();
 
-            if (HousingMap* hmap = dynamic_cast<HousingMap*>(GetMap()))
+            uint32 proxyCount = 0;
+            uint32 skipOwn = 0, skipEmpty = 0, skipUnoccupied = 0;
+            HousingMap* hmap = dynamic_cast<HousingMap*>(GetMap());
+            Neighborhood const* nbh = hmap ? hmap->GetNeighborhood() : nullptr;
+            if (nbh)
             {
-                if (Neighborhood const* nbh = hmap->GetNeighborhood())
+                for (Neighborhood::PlotInfo const& plot : nbh->GetPlots())
                 {
-                    for (Neighborhood::PlotInfo const& plot : nbh->GetPlots())
-                    {
-                        if (!plot.IsOccupied())
-                            continue;
-                        if (plot.PlotIndex == ownPlotIndex)
-                            continue;
-                        if (plot.HouseGuid.IsEmpty())
-                            continue;
+                    if (!plot.IsOccupied()) { ++skipUnoccupied; continue; }
+                    if (plot.PlotIndex == ownPlotIndex) { ++skipOwn; continue; }
+                    if (plot.HouseGuid.IsEmpty()) { ++skipEmpty; continue; }
 
-                        HousingPlayerHouseEntity proxy(GetSession(), plot.HouseGuid);
-                        proxy.SetObjectType(TYPEID_HOUSING_ENTITY);
-                        proxy.SetBnetAccount(plot.OwnerBnetGuid);
-                        proxy.SetPlotIndex(static_cast<int32>(plot.PlotIndex));
-                        proxy.SetLevel(plot.HouseLevel);
-                        proxy.SetFavor(plot.HouseFavor);
-                        proxy.SetEntityGUID(plot.HouseGuid);
-                        proxy.BuildCreateUpdateBlockForPlayer(data, target);
-                    }
+                    HousingPlayerHouseEntity proxy(GetSession(), plot.HouseGuid);
+                    proxy.SetObjectType(TYPEID_HOUSING_ENTITY);
+                    proxy.SetBnetAccount(plot.OwnerBnetGuid);
+                    proxy.SetPlotIndex(static_cast<int32>(plot.PlotIndex));
+                    proxy.SetLevel(plot.HouseLevel);
+                    proxy.SetFavor(plot.HouseFavor);
+                    proxy.SetEntityGUID(plot.HouseGuid);
+                    proxy.BuildCreateUpdateBlockForPlayer(data, target);
+                    ++proxyCount;
                 }
             }
+            TC_LOG_DEBUG("housing", "Player::BuildCreateUpdateBlockForPlayer: housing-map proxies for {} — "
+                "hmap={} nbh={} emitted={} skipOwn={} skipEmpty={} skipUnocc={} ownPlotIdx={}",
+                target->GetGUID().ToString(),
+                hmap ? "yes" : "no",
+                nbh ? "yes" : "no",
+                proxyCount, skipOwn, skipEmpty, skipUnoccupied, uint32(ownPlotIndex));
 
             // Room entities (objectType=18, Housing/2 GUIDs) are sent in the deferred
             // callback — NOT here. Sending type-18 room entities in the initial UPDATE_OBJECT
