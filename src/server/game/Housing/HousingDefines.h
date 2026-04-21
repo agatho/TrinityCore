@@ -746,6 +746,18 @@ static constexpr uint32 SPELL_HOUSING_PLOT_PRESENCE     = 469226;
 // Sniff: aura slot 9, Flags=NoCaster|Scalable(9), ActiveFlags=1, CastLevel=36, has PointsCount
 static constexpr uint32 SPELL_HOUSING_PLOT_ENTER_2      = 1266699;
 
+// Neighborhood map-entry auras — 4 housing-specific auras applied immediately
+// after the big SMSG_UPDATE_OBJECT batch at neighborhood-map entry. Decoded
+// from dump_12.0.1.66838_2026-04-15_09-35-59.pkt idx 9985-10000 (and
+// cross-checked against the 2026-04-10 capture at idx 15673-15690).
+// Slot/Flags/ActiveFlags/Applications/SpellVisual each sniff-verified.
+static constexpr uint32 SPELL_HOUSING_MAP_ENTRY_FIXUP      = 1272741;  // "Housing Fixup Aura"
+static constexpr uint32 SPELL_HOUSING_MAP_ENTRY_REACT      = 1263578;  // "Player Action React (DNT)"
+static constexpr uint32 SPELL_HOUSING_MAP_ENTRY_ENDEAVOR   = 1276064;  // "[DNT] Endeavor Cover Aura"
+static constexpr uint32 SPELL_HOUSING_MAP_ENTRY_NEIGHBOR   = 1227147;  // "In Your Neighborhood"
+// SpellXSpellVisualID baked into spell 1227147's AuraDataInfo.Visual on retail.
+static constexpr uint32 VISUAL_HOUSING_MAP_ENTRY_NEIGHBOR  = 503683;
+
 // Post-tutorial auras — applied when quest 94455 "Home at Last" is completed.
 // Sniff-verified: quest reward removes old tutorial auras (slots 8,9,50) and replaces them
 // with these three new ones. These don't exist in DB2, so we send manual SMSG_AURA_UPDATE.

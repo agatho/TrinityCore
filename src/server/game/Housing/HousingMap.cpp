@@ -1088,6 +1088,10 @@ bool HousingMap::AddPlayerToMap(Player* player, bool initPlayer /*= true*/)
             // Retail applies tutorial-done auras once (at quest reward) but we re-send each
             // map entry since they don't exist in DB2 and can't persist as real auras.
             hMap->SendPostTutorialAuras(p);
+            // Blizzlike neighborhood-map-entry aura burst — must fire on every
+            // housing-map entry, not only on plot AT overlap. See comment on
+            // SendNeighborhoodMapEntryAuras for the 4-aura spec.
+            hMap->SendNeighborhoodMapEntryAuras(p);
             hMap->SendPlotEnterSpellPackets(p, deferredPlotIndex);
 
             // Diagnostic: print AT position vs player position for OutsidePlotBounds debugging
@@ -1320,6 +1324,98 @@ void HousingMap::SendPostTutorialAuras(Player* player)
     TC_LOG_DEBUG("housing", "SendPostTutorialAuras: Sent 3 post-tutorial aura sequences "
         "(1285428@s8, 1285424@s9, 1266699@s50) for player {}",
         player->GetGUID().ToString());
+}
+
+void HousingMap::SendNeighborhoodMapEntryAuras(Player* player)
+{
+    // Blizzlike map-entry aura burst — decoded from
+    // dump_12.0.1.66838_2026-04-15_09-35-59.pkt idx 9988/9994/9997/10000
+    // and cross-checked against dump_12.0.1.66838_2026-04-10_08-45-23.pkt
+    // idx 15676/15682/15685/15688. Each entry is one AURA_UPDATE +
+    // SPELL_START + SPELL_GO triple. All four fields (Slot, Flags,
+    // ActiveFlags, Visual.SpellXSpellVisualID) are taken straight from the
+    // sniff. CastLevel 84 on retail; we use player->getLevel() as a bonus
+    // since the decoded value reflects whatever char captured the sniff.
+    //
+    // 431539 (Morning Star) and 1266699 (Sound Squisher) appeared in the
+    // same retail burst but are character/ambient auras pre-existing before
+    // map entry (first seen at idx 5762/5786, 127× + 8× before map entry).
+    // Core TC aura re-sync on map change already handles those; we emit
+    // only the four truly-new housing-specific auras here.
+
+    if (!player)
+        return;
+
+    struct MapEntryAura
+    {
+        uint32 SpellID;
+        uint16 Slot;
+        uint16 Flags;
+        uint32 ActiveFlags;
+        uint32 VisualSpellXSpellVisualID;
+    };
+    constexpr std::array<MapEntryAura, 4> kAuras = {{
+        { SPELL_HOUSING_MAP_ENTRY_FIXUP,    20,  AFLAG_NOCASTER,                1, 0                                        },
+        { SPELL_HOUSING_MAP_ENTRY_REACT,    22,  AFLAG_NOCASTER,                1, 0                                        },
+        { SPELL_HOUSING_MAP_ENTRY_ENDEAVOR, 53,  AFLAG_NOCASTER,                1, 0                                        },
+        { SPELL_HOUSING_MAP_ENTRY_NEIGHBOR, 121, uint16(AFLAG_NOCASTER | AFLAG_POSITIVE), 3, VISUAL_HOUSING_MAP_ENTRY_NEIGHBOR },
+    }};
+
+    uint16 const castLevel = static_cast<uint16>(player->GetLevel());
+
+    for (MapEntryAura const& a : kAuras)
+    {
+        ObjectGuid castId = ObjectGuid::Create<HighGuid::Cast>(
+            SPELL_CAST_SOURCE_NORMAL, player->GetMapId(), a.SpellID,
+            player->GetMap()->GenerateLowGuid<HighGuid::Cast>());
+
+        WorldPackets::Spells::AuraUpdate auraUpdate;
+        auraUpdate.UpdateAll = false;
+        auraUpdate.UnitGUID = player->GetGUID();
+
+        WorldPackets::Spells::AuraInfo auraInfo;
+        auraInfo.Slot = a.Slot;
+        auraInfo.AuraData.emplace();
+        auraInfo.AuraData->CastID = castId;
+        auraInfo.AuraData->SpellID = a.SpellID;
+        auraInfo.AuraData->Visual.SpellXSpellVisualID = a.VisualSpellXSpellVisualID;
+        auraInfo.AuraData->Flags = a.Flags;
+        auraInfo.AuraData->ActiveFlags = a.ActiveFlags;
+        auraInfo.AuraData->CastLevel = castLevel;
+        auraInfo.AuraData->Applications = 0;
+        auraUpdate.Auras.push_back(std::move(auraInfo));
+        player->SendDirectMessage(auraUpdate.Write());
+
+        WorldPackets::Spells::SpellStart spellStart;
+        spellStart.Cast.CasterGUID = player->GetGUID();
+        spellStart.Cast.CasterUnit = player->GetGUID();
+        spellStart.Cast.CastID = castId;
+        spellStart.Cast.SpellID = a.SpellID;
+        spellStart.Cast.Visual.SpellXSpellVisualID = a.VisualSpellXSpellVisualID;
+        spellStart.Cast.CastFlags = CAST_FLAG_HAS_TRAJECTORY | CAST_FLAG_UNKNOWN_3 | CAST_FLAG_UNKNOWN_4 | CAST_FLAG_VISUAL_CHAIN;
+        spellStart.Cast.CastTime = 0;
+        player->SendDirectMessage(spellStart.Write());
+
+        WorldPackets::Spells::SpellGo spellGo;
+        spellGo.Cast.CasterGUID = player->GetGUID();
+        spellGo.Cast.CasterUnit = player->GetGUID();
+        spellGo.Cast.CastID = castId;
+        spellGo.Cast.SpellID = a.SpellID;
+        spellGo.Cast.Visual.SpellXSpellVisualID = a.VisualSpellXSpellVisualID;
+        spellGo.Cast.CastFlags = CAST_FLAG_UNKNOWN_3 | CAST_FLAG_UNKNOWN_4 | CAST_FLAG_UNKNOWN_9 | CAST_FLAG_UNKNOWN_10 | CAST_FLAG_VISUAL_CHAIN;
+        spellGo.Cast.CastFlagsEx = 16;
+        spellGo.Cast.CastFlagsEx2 = 4;
+        spellGo.Cast.CastTime = getMSTime();
+        spellGo.Cast.Target.Flags = TARGET_FLAG_UNIT;
+        spellGo.Cast.HitTargets.push_back(player->GetGUID());
+        spellGo.Cast.HitStatus.emplace_back(uint8(0));
+        spellGo.LogData.Initialize(player);
+        player->SendDirectMessage(spellGo.Write());
+    }
+
+    TC_LOG_DEBUG("housing", "SendNeighborhoodMapEntryAuras: Sent 4 map-entry aura triples "
+        "(1272741@s20, 1263578@s22, 1276064@s53, 1227147@s121 vis={}) for player {}",
+        VISUAL_HOUSING_MAP_ENTRY_NEIGHBOR, player->GetGUID().ToString());
 }
 
 void HousingMap::SendPlotEnterSpellPackets(Player* player, uint8 plotIndex)

@@ -144,6 +144,19 @@ public:
     void SendPlotEnterSpellPackets(Player* player, uint8 plotIndex);
     void SendPlotLeaveAuraRemoval(Player* player);
 
+    // Blizzlike neighborhood-map-entry aura burst. Sniff-decoded from
+    // dump_12.0.1.66838_2026-04-15_09-35-59.pkt at idx 9985-10000 (and
+    // cross-checked against the 2026-04-10 capture). Emits the four
+    // housing-specific AURA_UPDATE+SPELL_START+SPELL_GO triples that retail
+    // sends immediately after the big UPDATE_OBJECT batch: Housing Fixup
+    // (1272741 slot 20), Player Action React (1263578 slot 22), Endeavor
+    // Cover (1276064 slot 53), In Your Neighborhood (1227147 slot 121 with
+    // SpellXSpellVisualID 503683). Each aura has ActiveFlags and Flags
+    // sniff-verified per slot. Non-housing pre-existing character auras
+    // (e.g. class talents) are intentionally excluded — core TC aura
+    // resync handles those.
+    void SendNeighborhoodMapEntryAuras(Player* player);
+
 private:
     uint32 _neighborhoodId;
     Neighborhood* _neighborhood;
