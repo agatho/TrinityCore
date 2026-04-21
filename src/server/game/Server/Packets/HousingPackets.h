@@ -60,13 +60,19 @@ namespace WorldPackets::Housing
     // IDA proof: offset-0 GUID compared vs house records; offset-16 GUID passed to ai_Process_PlayerContextUpdate (name lookup).
     struct JamCliHouse
     {
-        ObjectGuid HouseGUID;            // wire pos 1, client offset 0: house entity GUID (compared vs HouseInfo records)
-        ObjectGuid OwnerGUID;            // wire pos 2, client offset 16: owner player GUID (used for name lookup)
-        ObjectGuid NeighborhoodGUID;     // wire pos 3, client offset 32: neighborhood GUID
-        uint8 HouseLevel = 0;           // client offset 48
-        uint32 PlotIndex = 0;           // client offset 72
-        bool HasOptionalField = false;   // client offset 64: derived from bit 7 of wire uint8
-        uint64 OptionalValue = 0;        // client offset 56: only present if HasOptionalField
+        // IDA sub_7FF624FCFE00 deserialises the wire into a 80-byte client struct.
+        // Wire order (after the three GUIDs):
+        //   uint8 PlotIndex      -> struct +48   (hash key; must be unique per plot)
+        //   uint32 HouseLevel    -> struct +72   (real level for display/tooltip)
+        //   uint8 HasOpt flag    -> struct +64   (bit 7 = OptionalValue follows)
+        //   uint64 OptionalValue -> struct +56   (favor/secondary field)
+        ObjectGuid HouseGUID;            // wire pos 1, struct +0
+        ObjectGuid OwnerGUID;            // wire pos 2, struct +16
+        ObjectGuid NeighborhoodGUID;     // wire pos 3, struct +32
+        uint32 PlotIndex = 0;            // written as uint8 at struct +48 (per-plot hash key)
+        uint32 HouseLevel = 0;           // written as uint32 at struct +72 (display level)
+        bool HasOptionalField = false;   // struct +64 bit 7
+        uint64 OptionalValue = 0;        // struct +56 (Favor, only if HasOptionalField)
     };
 
     // IDA-verified wire format for neighborhood entries in house finder responses.
@@ -1092,6 +1098,33 @@ namespace WorldPackets::Housing
         WorldPacket const* Write() override;
 
         ObjectGuid NeighborhoodGuid;
+    };
+
+    // ============================================================
+    // Housing Catalog State Sync (ClientMirrorSystem 0x56000E)
+    // ============================================================
+
+    // Sent on every map entry to a housing-capable map (after SMSG_INIT_WORLD_STATES)
+    // as the character's HousingCatalog ownership snapshot. Body:
+    //   uint32 count
+    //   count * { uint32 CatalogEntryID; uint32 PackedState; }
+    // PackedState layout (decoded from sniff dump_12.0.1.66838_2026-04-15):
+    //   bits 0-1 : HousingCatalogEntrySubtype (1=Unowned, 2=OwnedModifiedStack, 3=OwnedUnmodifiedStack)
+    //   bit  3   : 1 = Room entry, 0 = Decor entry (HousingCatalogEntryType marker)
+    //   bit  4   : 1 = "catalog-visible" flag (set on ~87% of live entries)
+    class HousingCatalogStateSync final : public ServerPacket
+    {
+    public:
+        HousingCatalogStateSync() : ServerPacket(SMSG_HOUSING_CATALOG_STATE_SYNC) { }
+        WorldPacket const* Write() override;
+
+        struct Entry
+        {
+            uint32 CatalogEntryID = 0;
+            uint32 PackedState = 0;
+        };
+
+        std::vector<Entry> Entries;
     };
 
     // ============================================================

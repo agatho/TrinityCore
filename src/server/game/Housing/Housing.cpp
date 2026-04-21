@@ -2471,6 +2471,73 @@ void Housing::PopulateCatalogStorageEntries()
         uint32(_placedDecor.size()), totalStorageItems, uint32(_catalog.size()), _owner->GetGUID().ToString());
 }
 
+void Housing::BuildCatalogStateSync(WorldPackets::Housing::HousingCatalogStateSync& packet) const
+{
+    // Encoding reference (sniff-verified on dump_12.0.1.66838_2026-04-15):
+    //   bits 0-1 : HousingCatalogEntrySubtype
+    //              1 = Unowned, 2 = OwnedModifiedStack, 3 = OwnedUnmodifiedStack
+    //   bit  3   : 1 = Room, 0 = Decor
+    //   bit  4   : "catalog-visible" flag set on every live row in the sniff
+    // Observed packed values: 0x02, 0x03, 0x0A (room), 0x12, 0x13.
+    constexpr uint32 FLAG16 = 0x10;
+    constexpr uint32 KIND_ROOM = 0x08;
+
+    packet.Entries.clear();
+
+    // Placed decor rolls up into per-entry OwnedModifiedStack rows (an instance of the
+    // catalog item is placed in the world — the stack is in a "modified" state on the
+    // client because the player has positioned/customized it).
+    std::unordered_set<uint32> placedDecorEntries;
+    for (auto const& [decorGuid, decor] : _placedDecor)
+    {
+        if (!decor.DecorEntryId)
+            continue;
+        if (!placedDecorEntries.insert(decor.DecorEntryId).second)
+            continue;
+        WorldPackets::Housing::HousingCatalogStateSync::Entry e;
+        e.CatalogEntryID = decor.DecorEntryId;
+        e.PackedState = 2u | FLAG16; // OwnedModifiedStack + flag16
+        packet.Entries.push_back(e);
+    }
+
+    // Remaining catalog stacks (owned count beyond what is placed) are
+    // OwnedUnmodifiedStack — the storage pile the player hasn't touched.
+    for (auto const& [entryId, entry] : _catalog)
+    {
+        if (!entry.Count)
+            continue;
+
+        uint32 placedOfType = 0;
+        for (auto const& [decorGuid, decor] : _placedDecor)
+            if (decor.DecorEntryId == entryId)
+                ++placedOfType;
+
+        if (entry.Count > placedOfType)
+        {
+            WorldPackets::Housing::HousingCatalogStateSync::Entry e;
+            e.CatalogEntryID = entryId;
+            e.PackedState = 3u | FLAG16; // OwnedUnmodifiedStack + flag16
+            packet.Entries.push_back(e);
+        }
+    }
+
+    // Placed rooms map one-to-one to RoomEntryId rows with isRoom=1 / OwnedModifiedStack.
+    // The flag16 bit is clear on Room rows in the sniff (distribution 12/12), so we
+    // mirror that exactly.
+    std::unordered_set<uint32> roomEntries;
+    for (auto const& [roomGuid, room] : _rooms)
+    {
+        if (!room.RoomEntryId)
+            continue;
+        if (!roomEntries.insert(room.RoomEntryId).second)
+            continue;
+        WorldPackets::Housing::HousingCatalogStateSync::Entry e;
+        e.CatalogEntryID = room.RoomEntryId;
+        e.PackedState = 2u | KIND_ROOM; // OwnedModifiedStack + isRoom, no flag16
+        packet.Entries.push_back(e);
+    }
+}
+
 void Housing::SaveSettings(uint32 settingsFlags)
 {
     _settingsFlags = settingsFlags;

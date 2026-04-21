@@ -709,6 +709,25 @@ WorldPacket const* InvalidateNeighborhoodName::Write()
 }
 
 // ============================================================
+// Housing Catalog State Sync (ClientMirrorSystem 0x56000E)
+// ============================================================
+
+WorldPacket const* HousingCatalogStateSync::Write()
+{
+    _worldPacket << uint32(Entries.size());
+    for (Entry const& entry : Entries)
+    {
+        _worldPacket << uint32(entry.CatalogEntryID);
+        _worldPacket << uint32(entry.PackedState);
+    }
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_CATALOG_STATE_SYNC Entries: {}",
+        static_cast<uint32>(Entries.size()));
+
+    return &_worldPacket;
+}
+
+// ============================================================
 // House Exterior SMSG Responses (0x50xxxx)
 // ============================================================
 
@@ -1397,19 +1416,43 @@ ByteBuffer& operator<<(ByteBuffer& data, HouseInfo const& houseInfo)
 // Retail sniff confirms: GUID#1=HouseGUID, GUID#2=OwnerGUID (used for name lookup), GUID#3=NeighborhoodGUID.
 static void WriteJamCliHouse(WorldPacket& packet, JamCliHouse const& house)
 {
-    // Confirmed in-game (2026-04): wire order is PlotIndex (uint32) BEFORE
-    // HouseLevel (uint8). The earlier order (HouseLevel then PlotIndex) made
-    // the client read our HouseLevel=1 byte into its plotID slot, which is
-    // why the dashboard showed "plotID=1" regardless of the real plot and
-    // the homestone button echoed back PlotIndex=1 in the teleport CMSG.
+    // IDA-verified wire format for build 12.0.1.66838 (sub_7FF624FCFE00):
+    //   1. GUID HouseGUID         -> struct +0
+    //   2. GUID OwnerGUID         -> struct +16
+    //   3. GUID NeighborhoodGUID  -> struct +32
+    //   4. uint8                  -> struct +48    (per-plot HASH KEY - the client
+    //                                               uses this byte as the identifier
+    //                                               when looking up a house on the
+    //                                               map, so it MUST be unique per plot
+    //                                               within a neighborhood. PlotIndex
+    //                                               fits in a byte because 55 plots.)
+    //   5. uint32                 -> struct +72    (real HouseLevel for display)
+    //   6. uint8 bit7 flag        -> struct +64    (HasOptionalField)
+    //   7. uint64 (if flag set)   -> struct +56    (Favor64 or similar tail payload)
+    //
+    // The function `ai_Read_CompressedUInt32FromPacket` is misleadingly named in the
+    // client — it actually reads a plain little-endian uint32 (no VLQ encoding).
+    //
+    // Earlier revisions wrote uint32(PlotIndex) followed by uint8(HouseLevel), which
+    // put PlotIndex's low byte into the +48 slot by accident. That accidentally
+    // produced a unique hash key per plot but scrambled the +72 slot with garbage
+    // (the upper 3 bytes of PlotIndex concatenated with HouseLevel). Level/favor
+    // tooltips never worked correctly before this fix.
+    size_t beforeWpos = packet.wpos();
     packet << house.HouseGUID;
     packet << house.OwnerGUID;
     packet << house.NeighborhoodGUID;
-    packet << uint32(house.PlotIndex);
-    packet << uint8(house.HouseLevel);
+    packet << uint8(house.PlotIndex);        // hash key at struct +48
+    packet << uint32(house.HouseLevel);      // real level at struct +72
     packet << uint8(house.HasOptionalField ? 0x80 : 0x00);
     if (house.HasOptionalField)
         packet << uint64(house.OptionalValue);
+
+    TC_LOG_INFO("housing", "WriteJamCliHouse: plotIdx={} lvl={} favor={} hasOpt={} "
+        "HouseGUID={} OwnerGUID={} NeighborhoodGUID={} bytes={}",
+        house.PlotIndex, house.HouseLevel, house.OptionalValue, house.HasOptionalField,
+        house.HouseGUID.ToString(), house.OwnerGUID.ToString(), house.NeighborhoodGUID.ToString(),
+        packet.wpos() - beforeWpos);
 }
 
 // Helper: Write JamCliHouseFinderNeighborhood BASE format (IDA: sub_7FF724C3F040, stride 120).

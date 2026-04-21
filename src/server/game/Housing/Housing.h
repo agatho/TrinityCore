@@ -33,6 +33,14 @@
 class Map;
 class Player;
 
+namespace WorldPackets
+{
+    namespace Housing
+    {
+        class HousingCatalogStateSync;
+    }
+}
+
 class TC_GAME_API Housing
 {
 public:
@@ -240,6 +248,15 @@ public:
     // Called on-demand by REQUEST_STORAGE handler. Retail does NOT populate storage at login —
     // FHousingStorage_C is only sent when the player enters edit mode or requests storage.
     void PopulateCatalogStorageEntries();
+
+    // Build the per-character HousingCatalog ownership snapshot broadcast via
+    // SMSG_HOUSING_CATALOG_STATE_SYNC on every housing-map entry. Aggregates across:
+    //   - Placed decor instances -> OwnedModifiedStack entries keyed by DecorEntryId
+    //   - Storage-only stacks (catalog.Count minus placed count) -> OwnedUnmodifiedStack
+    //   - Placed rooms                                           -> Room entries (isRoom=1)
+    // PackedState bit layout matches the IDA-decoded format for ClientMirrorSystem 0x56000E:
+    //   bits 0-1 subtype | bit 3 isRoom | bit 4 catalog-visible flag (always set)
+    void BuildCatalogStateSync(WorldPackets::Housing::HousingCatalogStateSync& packet) const;
 
 private:
     uint64 GenerateDecorDbId();

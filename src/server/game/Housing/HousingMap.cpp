@@ -315,6 +315,12 @@ void HousingMap::SpawnPlotGameObjects()
                 ObjectGuid houseGuid = plotInfo ? plotInfo->HouseGuid : ObjectGuid::Empty;
                 ObjectGuid ownerBnetGuid = plotInfo ? plotInfo->OwnerBnetGuid : ObjectGuid::Empty;
 
+                TC_LOG_INFO("housing", "  PlotAT[{}] init: ownerGuid={} houseGuid={} bnetGuid={} "
+                    "(plotInfo={} hasOwner={})",
+                    plot->PlotIndex, ownerGuid.ToString(), houseGuid.ToString(), ownerBnetGuid.ToString(),
+                    plotInfo ? "present" : "null",
+                    plotInfo ? !plotInfo->OwnerGuid.IsEmpty() : false);
+
                 // Set housing data BEFORE AddToMap so the initial CREATE_OBJECT includes
                 // the FHousingPlotAreaTrigger_C entity fragment, SpellForVisuals=1282351,
                 // and SpellXSpellVisualID=510142.
@@ -345,19 +351,45 @@ void HousingMap::SpawnPlotGameObjects()
         }
     }
 
-    // Sniff-verified: SMSG_INIT_WORLD_STATES for housing maps (2735/2736) has Field Count = 0.
-    // Per-plot ownership worldstates are sent as individual SMSG_UPDATE_WORLD_STATE packets
-    // in SendPerPlayerPlotWorldStates() after the player joins — NOT in the init packet.
-    // Do NOT use Map::SetWorldStateValue() here as it pollutes INIT_WORLD_STATES.
-    uint32 wsCount = 0;
+    // Blizzlike: the per-plot WorldState from NeighborhoodPlot.db2 is a BINARY occupancy flag
+    // that retail ships inside SMSG_INIT_WORLD_STATES (confirmed via sniff dump_12.0.1.66838_2026-04-15:
+    //   - interior map 2783: all 55 plot worldstates = 0 (nothing yet visible)
+    //   - exterior map 2735: occupied plots = 1, empty plots = 0
+    // The VALUE is not the owner-type enum — it's purely "is a house here?". Owner identity is
+    // carried in the plot AT (FHousingPlotAreaTrigger_C) and NeighborhoodMirrorData.Houses,
+    // both of which are populated elsewhere; the client correlates plot icon -> AT -> owner
+    // when you hover on the map.
+    //
+    // Setting the values through Map::SetWorldStateValue() at spawn time lands them in
+    // _worldStateValues, so the next SMSG_INIT_WORLD_STATES already carries them. This
+    // replaces the per-player SMSG_UPDATE_WORLD_STATE spam in SendPerPlayerPlotWorldStates()
+    // with the correct channel.
+    uint32 occupiedWs = 0;
+    uint32 emptyWs = 0;
+    uint32 noDb2Ws = 0;
     for (NeighborhoodPlotData const* plot : plots)
     {
-        if (plot->WorldState != 0)
-            ++wsCount;
+        if (plot->WorldState == 0)
+        {
+            ++noDb2Ws;
+            TC_LOG_INFO("housing", "  PlotWS[{}] WorldState=0 in DB2 (skipped)", plot->PlotIndex);
+            continue;
+        }
+
+        uint8 plotIdx = static_cast<uint8>(plot->PlotIndex);
+        Neighborhood::PlotInfo const* pi = _neighborhood->GetPlotInfo(plotIdx);
+        bool occupied = pi && pi->IsOccupied() && !pi->HouseGuid.IsEmpty();
+        SetWorldStateValue(plot->WorldState, occupied ? 1 : 0, /*hidden*/ false);
+        TC_LOG_INFO("housing", "  PlotWS[{}] WorldState={} value={} (owner={} house={})",
+            plot->PlotIndex, plot->WorldState, occupied ? 1 : 0,
+            pi ? pi->OwnerGuid.ToString() : "n/a",
+            pi ? pi->HouseGuid.ToString() : "n/a");
+        if (occupied) ++occupiedWs; else ++emptyWs;
     }
 
-    TC_LOG_INFO("housing", "HousingMap::SpawnPlotGameObjects: Spawned {} GOs, {} plots have WorldState IDs for {} plots in neighborhood '{}' (noEntry={})",
-        goCount, wsCount, uint32(plots.size()), _neighborhood->GetName(), noEntryCount);
+    TC_LOG_INFO("housing", "HousingMap::SpawnPlotGameObjects: Spawned {} GOs, {} plots occupied / {} empty "
+        "(worldstate binary) for {} plots in neighborhood '{}' (noEntry={})",
+        goCount, occupiedWs, emptyWs, uint32(plots.size()), _neighborhood->GetName(), noEntryCount);
 
     // Spawn house structure GOs for owned plots
     uint32 houseCount = 0;
@@ -512,51 +544,33 @@ void HousingMap::SetPlotOwnershipState(uint8 plotIndex, bool owned)
             plotAt->UpdateHousingPlotOwnerData(ObjectGuid::Empty, ObjectGuid::Empty, ObjectGuid::Empty);
     }
 
-    // Send per-plot WorldState update to all players on the map.
-    // Sniff-verified: housing maps use individual SMSG_UPDATE_WORLD_STATE packets
-    // (NOT map-scoped SetWorldStateValue, which pollutes INIT_WORLD_STATES).
+    // Blizzlike: the worldstate value is a per-player OWNER TYPE enum, not a binary
+    // flag. Update the map-scoped default (0/1) so late joiners see reasonable INIT
+    // state, then send a personalized UPDATE to every player already on the map so
+    // the CURRENT state (owner relationship) renders the right icon.
     uint32 neighborhoodMapId = _neighborhood->GetNeighborhoodMapID();
     std::vector<NeighborhoodPlotData const*> plots = sHousingMgr.GetPlotsForMap(neighborhoodMapId);
 
-    TC_LOG_DEBUG("housing", "SetPlotOwnershipState: Broadcasting WorldState for plot {} "
-        "(neighborhoodMapId={}, owned={}, numPlots={})",
-        plotIndex, neighborhoodMapId, owned, plots.size());
-
     for (NeighborhoodPlotData const* plotData : plots)
     {
-        if (plotData->PlotIndex == static_cast<int32>(plotIndex))
+        if (plotData->PlotIndex != static_cast<int32>(plotIndex))
+            continue;
+        if (plotData->WorldState == 0)
         {
-            if (plotData->WorldState != 0)
-            {
-                TC_LOG_DEBUG("housing", "SetPlotOwnershipState: Found plot {} with WorldState={}, "
-                    "broadcasting to {} players",
-                    plotIndex, plotData->WorldState,
-                    std::distance(GetPlayers().begin(), GetPlayers().end()));
-
-                // Send personalized value to each player on the map
-                for (MapReference const& ref : GetPlayers())
-                {
-                    if (Player* mapPlayer = ref.GetSource())
-                    {
-                        HousingPlotOwnerType ownerType = GetPlotOwnerTypeForPlayer(mapPlayer, plotIndex);
-                        mapPlayer->SendUpdateWorldState(plotData->WorldState, static_cast<uint32>(ownerType), false);
-
-                        TC_LOG_DEBUG("housing", "SetPlotOwnershipState: Sent WorldState {} = {} ({}) to player {}",
-                            plotData->WorldState, uint32(ownerType),
-                            ownerType == HOUSING_PLOT_OWNER_SELF ? "SELF" :
-                            ownerType == HOUSING_PLOT_OWNER_FRIEND ? "FRIEND" :
-                            ownerType == HOUSING_PLOT_OWNER_STRANGER ? "STRANGER" : "NONE",
-                            mapPlayer->GetGUID().ToString());
-                    }
-                }
-            }
-            else
-            {
-                TC_LOG_DEBUG("housing", "SetPlotOwnershipState: Plot {} matched but WorldState=0, skipping broadcast",
-                    plotIndex);
-            }
+            TC_LOG_DEBUG("housing", "SetPlotOwnershipState: Plot {} has no WorldState ID in DB2, nothing to broadcast",
+                plotIndex);
             break;
         }
+
+        // Blizzlike: the per-plot WorldState is a BINARY occupancy flag — 0 empty,
+        // 1 occupied. `Map::SetWorldStateValue` stores the value (so future joins
+        // get it in INIT_WORLD_STATES) AND broadcasts `SMSG_UPDATE_WORLD_STATE` to
+        // every player currently on the map. No per-player enum override.
+        SetWorldStateValue(plotData->WorldState, owned ? 1 : 0, /*hidden*/ false);
+
+        TC_LOG_DEBUG("housing", "SetPlotOwnershipState: ws={} value={} plot={} {} neighborhoodMap={}",
+            plotData->WorldState, owned ? 1 : 0, plotIndex, owned ? "occupied" : "empty", neighborhoodMapId);
+        break;
     }
 }
 
@@ -1541,38 +1555,42 @@ HousingPlotOwnerType HousingMap::GetPlotOwnerTypeForPlayer(Player const* player,
 
 void HousingMap::SendPerPlayerPlotWorldStates(Player* player)
 {
+    // Sniff-verified wire encoding (dump_12.0.1.66838_2026-04-15 captured at the
+    // owner's own house): the plot WorldState value is BINARY OCCUPANCY only —
+    // 0 = empty, 1 = a house exists at this plot. Every single plot worldstate
+    // in the sniff is 0 or 1, including the sniffer's own plot. Values 2 (FRIEND)
+    // and 3 (SELF) are NOT understood by the client: when we sent enum value 3
+    // for the player's own plot, the regular map rendered it as UNOWNED because
+    // the icon logic reads `value == 1 ? owned : unowned`.
+    //
+    // Self / friend / stranger visual differentiation (highlight on own plot,
+    // friend-coloured icon, etc.) happens CLIENT-SIDE by looking up the OwnerGUID
+    // from NeighborhoodMirrorData.Houses[plotIdx] and comparing it to the player's
+    // own GUID + friend list. Server just sends the binary occupancy flag; the
+    // identity data rides on a separate channel.
     if (!_neighborhood || !player)
         return;
 
     uint32 neighborhoodMapId = _neighborhood->GetNeighborhoodMapID();
     std::vector<NeighborhoodPlotData const*> plots = sHousingMgr.GetPlotsForMap(neighborhoodMapId);
 
-    uint32 sentCount = 0;
-    uint32 noWsCount = 0;
-    uint32 selfCount = 0;
-    uint32 friendCount = 0;
+    uint32 sent = 0, occupied = 0, empty = 0;
     for (NeighborhoodPlotData const* plot : plots)
     {
         if (plot->WorldState == 0)
-        {
-            ++noWsCount;
             continue;
-        }
 
         uint8 plotIdx = static_cast<uint8>(plot->PlotIndex);
-        HousingPlotOwnerType ownerType = GetPlotOwnerTypeForPlayer(player, plotIdx);
-        player->SendUpdateWorldState(plot->WorldState, static_cast<uint32>(ownerType), false);
-        ++sentCount;
-
-        if (ownerType == HOUSING_PLOT_OWNER_SELF)
-            ++selfCount;
-        else if (ownerType == HOUSING_PLOT_OWNER_FRIEND)
-            ++friendCount;
+        Neighborhood::PlotInfo const* pi = _neighborhood->GetPlotInfo(plotIdx);
+        bool isOccupied = pi && pi->IsOccupied() && !pi->HouseGuid.IsEmpty();
+        player->SendUpdateWorldState(plot->WorldState, isOccupied ? 1u : 0u, false);
+        ++sent;
+        if (isOccupied) ++occupied; else ++empty;
     }
 
-    TC_LOG_DEBUG("housing", "HousingMap::SendPerPlayerPlotWorldStates: Player {} — sent {} WorldState updates "
-        "(self={}, friend={}, {} plots had no WorldState ID in DB2)",
-        player->GetGUID().ToString(), sentCount, selfCount, friendCount, noWsCount);
+    TC_LOG_INFO("housing", "SendPerPlayerPlotWorldStates (deferred binary): player={} — sent {} "
+        "(occupied={} empty={})",
+        player->GetGUID().ToString(), sent, occupied, empty);
 }
 
 void HousingMap::AddPlayerHousing(ObjectGuid playerGuid, Housing* housing)
@@ -2381,6 +2399,37 @@ uint32 HousingMap::SpawnExtCompTree(uint8 plotIndex, uint32 extCompID,
     uint32 count = 1;
     ObjectGuid meshGuid = mesh->GetGUID();
 
+    // Compute THIS mesh's cumulative world position by composing the immediate
+    // parent's world position with our local-space hook offset, rotated by the
+    // parent's cumulative orientation. At depth 0 we are the root: our local
+    // pos IS the world position (passed by SpawnFullHouseMeshObjects).
+    //
+    // This cumulative position is required so that a grand-child's door GO
+    // (e.g. house-root → DoorwayWall → door) lands on the visible mesh rather
+    // than offset by the wall's distance from the root.
+    Position thisMeshWorldPos;
+    if (depth == 0 || !worldPos)
+    {
+        thisMeshWorldPos = pos;
+    }
+    else
+    {
+        Position const& parentWorldPos = *worldPos;
+        float parentFacing = parentWorldPos.GetOrientation();
+        float cf = std::cos(parentFacing);
+        float sf = std::sin(parentFacing);
+        float wx = parentWorldPos.GetPositionX() + pos.GetPositionX() * cf - pos.GetPositionY() * sf;
+        float wy = parentWorldPos.GetPositionY() + pos.GetPositionX() * sf + pos.GetPositionY() * cf;
+        float wz = parentWorldPos.GetPositionZ() + pos.GetPositionZ();
+        // Extract the Z-axis rotation contribution of the hook quaternion so
+        // that grand-children of this mesh apply the correct cumulative yaw.
+        // yaw = atan2(2*(w*z + x*y), 1 - 2*(y² + z²))
+        float thisZRot = std::atan2(
+            2.0f * (rot.w * rot.z + rot.x * rot.y),
+            1.0f - 2.0f * (rot.y * rot.y + rot.z * rot.z));
+        thisMeshWorldPos.Relocate(wx, wy, wz, parentFacing + thisZRot);
+    }
+
     // --- Blizzlike: If this is a door component (Type=11), spawn the interactive GO ---
     // Retail sniff: door MeshObjects have FHousingFixture_C.GameObjectGUID set to the
     // door GO entry. A separate GameObject (type GOOBER) is spawned at the door mesh's
@@ -2392,30 +2441,22 @@ uint32 HousingMap::SpawnExtCompTree(uint8 plotIndex, uint32 extCompID,
         GameObjectTemplate const* doorTemplate = sObjectMgr->GetGameObjectTemplate(doorGoEntry);
         if (doorTemplate)
         {
-            // Compute the door mesh's world position from house position + hook local offset.
-            // worldPos is the root house position; pos is the hook's local-space offset.
-            Position const& houseWorldPos = worldPos ? *worldPos : pos;
-            float houseFacing = houseWorldPos.GetOrientation();
-            float cosFacing = std::cos(houseFacing);
-            float sinFacing = std::sin(houseFacing);
+            // thisMeshWorldPos already carries the door mesh's cumulative world
+            // position through every parent hook transform. Earlier revisions
+            // computed this as `houseRoot + localPos`, which lost the offset of
+            // any intermediate parent (e.g. a DoorwayWall hosting the door) and
+            // left the clickable GO a few yards away from the visible mesh.
+            float doorWorldX = thisMeshWorldPos.GetPositionX();
+            float doorWorldY = thisMeshWorldPos.GetPositionY();
+            float doorWorldZ = thisMeshWorldPos.GetPositionZ();
+            float doorFacing = thisMeshWorldPos.GetOrientation();
+            float cosFacing = std::cos(doorFacing);
+            float sinFacing = std::sin(doorFacing);
 
-            // Transform the door hook's local offset into world space relative
-            // to the house root. The client renders the door mesh at the same
-            // transform chain, so the GO's click box lands on the door.
-            //
-            // NOTE on mesh->GetPosition(): child MeshObjects are relocated to
-            // their PARENT's world position (Relocate(*worldPos) in
-            // MeshObject::Create) so the child's own hook offset is lost
-            // server-side — using mesh->GetPositionX()/Y leaves the GO at the
-            // house root coordinates instead of at the door.
-            float doorWorldX = houseWorldPos.GetPositionX() + pos.GetPositionX() * cosFacing - pos.GetPositionY() * sinFacing;
-            float doorWorldY = houseWorldPos.GetPositionY() + pos.GetPositionX() * sinFacing + pos.GetPositionY() * cosFacing;
-            float doorWorldZ = houseWorldPos.GetPositionZ() + pos.GetPositionZ();
-
-            // Apply the ExteriorComponentExitPoint offset in house-local space:
-            // X/Y are part of the exit point's planar offset from the hook (e.g.
-            // "step in front of the door"), Z is the vertical lift that puts
-            // the clickable box on top of the porch instead of the mesh base.
+            // Apply the ExteriorComponentExitPoint offset in DOOR-local space
+            // (rotated by the cumulative facing): X/Y push the clickable box in
+            // front of the mesh (e.g. "step in front of the door"), Z lifts it
+            // onto the porch instead of the mesh base.
             ExteriorComponentExitPointEntry const* exitPt = sHousingMgr.GetExitPoint(extCompID);
             if (exitPt)
             {
@@ -2424,7 +2465,7 @@ uint32 HousingMap::SpawnExtCompTree(uint8 plotIndex, uint32 extCompID,
                 doorWorldZ += exitPt->Position[2];
             }
 
-            Position doorPos(doorWorldX, doorWorldY, doorWorldZ, houseFacing);
+            Position doorPos(doorWorldX, doorWorldY, doorWorldZ, doorFacing);
             QuaternionData doorRot(0, 0, 0, 1);
 
             // Remove any previously-tracked door GO for this plot before we store a
@@ -2475,8 +2516,11 @@ uint32 HousingMap::SpawnExtCompTree(uint8 plotIndex, uint32 extCompID,
         }
     }
 
-    // Use worldPos for children: root's worldPos is itself, child's is the root's position
-    Position const* childWorldPos = worldPos ? worldPos : &pos;
+    // Children receive THIS mesh's cumulative world position as their parent
+    // transform so their local hook offsets compose correctly (was previously
+    // always the root's position, which broke grand-children like doors hosted
+    // by DoorwayWalls).
+    Position const* childWorldPos = &thisMeshWorldPos;
 
     // Recurse into hooks on this component
     auto const* hooks = sHousingMgr.GetHooksOnComponent(extCompID);

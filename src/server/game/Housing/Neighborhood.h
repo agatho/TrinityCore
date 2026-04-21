@@ -50,6 +50,13 @@ public:
         ObjectGuid HouseGuid;
         ObjectGuid OwnerBnetGuid;
 
+        // Mirrored from character_housing for tooltip display of OTHER players' houses
+        // on the neighborhood map (hover info). Set by Neighborhood::LoadFromDB; refreshed
+        // on ownership / level / favor changes.
+        uint8 HouseLevel = 1;
+        uint64 HouseFavor = 0;
+        std::string HouseName;
+
         bool IsOccupied() const { return PlotIndex != INVALID_PLOT_INDEX; }
     };
 

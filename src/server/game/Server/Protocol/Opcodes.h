@@ -1858,7 +1858,16 @@ enum OpcodeServer : uint32
     SMSG_LFG_LIST_SEARCH_RESULTS                                    = 0x560002,
     SMSG_LFG_LIST_SEARCH_RESULTS_UPDATE                             = 0x560010,
     SMSG_LFG_LIST_SEARCH_STATUS                                     = 0x560003,
-    SMSG_LFG_LIST_UPDATE_BLACKLIST                                  = 0x56000E,
+    // Group 0x56 = ClientMirrorSystem. Sub-opcode 0x0E is the per-character HousingCatalog
+    // ownership snapshot broadcast on every map entry. Each row is
+    //   (uint32 HousingCatalogEntryID, uint32 packedState)
+    // where packedState = (HousingCatalogEntrySubtype & 0x3) | (isRoom << 3) | (flag16 << 4).
+    // Verified by IDA on build 12.0.1.66838: vtable off_7FF6280C8020 slot 3 -> sub_7FF624BB0430
+    // -> sub_7FF624BAEC40 dispatches to housing-catalog Lua callback via sub_7FF626D30CF0
+    // (IDA auto-label: [SYSTEM: HOUSING] [HOUSING: catalog]). Replaces the build-pre-66838
+    // SMSG_LFG_LIST_UPDATE_BLACKLIST at the same opcode ID (that handler is STATUS_UNHANDLED
+    // upstream, so there is no collision).
+    SMSG_HOUSING_CATALOG_STATE_SYNC                                 = 0x56000E,
     SMSG_LFG_LIST_UPDATE_EXPIRATION                                 = 0x56000B,
     SMSG_LFG_LIST_UPDATE_STATUS                                     = 0x56000A,
     SMSG_LFG_OFFER_CONTINUE                                         = 0x560018,

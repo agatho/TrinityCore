@@ -65,8 +65,8 @@ bool Neighborhood::LoadFromDB(PreparedQueryResult neighborhood, PreparedQueryRes
         {
             Field* memberFields = members->Fetch();
 
-            //          0              1     2          3          4           5
-            // SELECT nm.playerGuid, nm.role, nm.joinTime, nm.plotIndex, ch.houseId, c.account
+            //          0              1     2          3          4           5          6              7         8
+            // SELECT nm.playerGuid, nm.role, nm.joinTime, nm.plotIndex, ch.houseId, c.account, ch.houseLevel, ch.favor, ch.houseName
             // FROM neighborhood_members nm LEFT JOIN character_housing ch ON nm.playerGuid = ch.guid
             //   LEFT JOIN characters c ON nm.playerGuid = c.guid
             // WHERE nm.neighborhoodGuid = ?
@@ -101,6 +101,25 @@ bool Neighborhood::LoadFromDB(PreparedQueryResult neighborhood, PreparedQueryRes
                             /*subType*/ 3, /*arg1*/ sRealmList->GetCurrentRealmId().Realm, /*arg2*/ 7, uint64(bnetAccountId));
                     }
                 }
+
+                // Mirror ch.houseLevel / ch.favor / ch.houseName so the neighborhood-map
+                // hover tooltip can show real level + favor without a per-plot DB fetch.
+                // ch.* columns are NULL when the member has no character_housing row yet,
+                // in which case GetUInt*/GetString return 0/"" and we keep the defaults.
+                if (!memberFields[6].IsNull())
+                    _plots[member.PlotIndex].HouseLevel = std::max<uint8>(1, memberFields[6].GetUInt8());
+                if (!memberFields[7].IsNull())
+                    _plots[member.PlotIndex].HouseFavor = memberFields[7].GetUInt64();
+                if (!memberFields[8].IsNull())
+                    _plots[member.PlotIndex].HouseName  = memberFields[8].GetString();
+
+                TC_LOG_INFO("housing", "Neighborhood::LoadFromDB plot[{}] owner={} lvl={} favor={} name='{}' "
+                    "(ch.houseLevel.IsNull={} ch.favor.IsNull={} ch.houseName.IsNull={})",
+                    member.PlotIndex, member.PlayerGuid.ToString(),
+                    _plots[member.PlotIndex].HouseLevel,
+                    _plots[member.PlotIndex].HouseFavor,
+                    _plots[member.PlotIndex].HouseName,
+                    memberFields[6].IsNull(), memberFields[7].IsNull(), memberFields[8].IsNull());
             }
         } while (members->NextRow());
     }

@@ -4020,8 +4020,9 @@ void WorldSession::HandleHousingSvcsGetHouseFinderNeighborhood(WorldPackets::Hou
         auto const& plot = neighborhood->GetPlots()[i];
         if (plot.IsOccupied())
         {
-            TC_LOG_INFO("housing", "  PLOT[{}]: occupied owner={} house={} bnet={}",
-                i, plot.OwnerGuid.ToString(), plot.HouseGuid.ToString(), plot.OwnerBnetGuid.ToString());
+            TC_LOG_INFO("housing", "  PLOT[{}]: occupied owner={} house={} bnet={} level={} favor={} name='{}'",
+                i, plot.OwnerGuid.ToString(), plot.HouseGuid.ToString(), plot.OwnerBnetGuid.ToString(),
+                plot.HouseLevel, plot.HouseFavor, plot.HouseName);
         }
     }
 
@@ -4056,12 +4057,20 @@ void WorldSession::HandleHousingSvcsGetHouseFinderNeighborhood(WorldPackets::Hou
         house.HouseGUID = plot.HouseGuid;
         house.OwnerGUID = plot.OwnerGuid;
         house.NeighborhoodGUID = neighborhood->GetGuid();
-        house.HouseLevel = static_cast<uint8>(plot.PlotIndex); // Client uses HouseLevel (offset 48) as hash key for plot lookup
+        // Wire layout verified via IDA sub_7FF624FCFE00 (build 12.0.1.66838):
+        //   PlotIndex is written as uint8 into struct +48 (the hash key the client
+        //   uses to look up a plot on the neighborhood map — must be unique per plot).
+        //   HouseLevel is written as uint32 into struct +72 (displayed on hover).
+        //   OptionalValue (favor, 8 bytes) rides the bit-7 optional tail.
         house.PlotIndex = plot.PlotIndex;
+        house.HouseLevel = plot.HouseLevel;
+        house.HasOptionalField = plot.HouseFavor != 0;
+        house.OptionalValue = plot.HouseFavor;
         response.Neighborhood.Houses.push_back(std::move(house));
 
-        TC_LOG_INFO("housing", "  DETAIL_HOUSE: plotIndex={} houseLevel={} houseGuid={} ownerGuid={}",
-            plot.PlotIndex, static_cast<uint8>(plot.PlotIndex), plot.HouseGuid.ToString(), plot.OwnerGuid.ToString());
+        TC_LOG_INFO("housing", "  DETAIL_HOUSE: plotIndex={} realLevel={} favor={} houseGuid={} ownerGuid={}",
+            plot.PlotIndex, plot.HouseLevel, plot.HouseFavor,
+            plot.HouseGuid.ToString(), plot.OwnerGuid.ToString());
     }
 
     TC_LOG_INFO("housing", "  DETAIL: sending {} houses in Houses[] array", uint32(response.Neighborhood.Houses.size()));
