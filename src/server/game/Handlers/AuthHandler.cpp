@@ -178,6 +178,29 @@ void WorldSession::SendFeatureSystemStatusGlueScreen()
         // Screenshot report thresholds
         { "housingDecorReportScreenshotFacingDotThreshold"sv, "0.500000"sv },
         { "housingDecorReportScreenshotDistanceThreshold"sv, "150.000000"sv },
+        // Market telemetry throttles — sniff-verified against build 12.0.1.66838,
+        // SMSG_MIRROR_VARS at packet idx 9976 (dump_12.0.1.66838_2026-04-15_09-35-59).
+        // The client reads these before it will send any SMSG_HOUSING_MARKET_*
+        // telemetry CMSGs; without them the market UI may throttle-fail silently.
+        { "housingMarketViewInStoreTelemThrottle"sv, "5"sv },
+        { "housingMarketViewBundleTelemThrottle"sv, "10"sv },
+        { "housingMarketAddToCartTelemThrottle"sv, "15"sv },
+        { "housingMarketClearCartTelemThrottle"sv, "5"sv },
+        { "housingMarketRemoveFromCartTelemThrottle"sv, "20"sv },
+        { "housingMarketThrottleTimePeriodMs"sv, "10000"sv },
+        // Situation flags — driver context for the client's "situation" state
+        // machine (automatic/manual triggered events). Retail sends all three
+        // set on login; we were sending none. Same sniff reference.
+        { "enableAutomaticSituations"sv, "1"sv },
+        { "enableManualSituations"sv, "1"sv },
+        { "enableTransmogUpdateSituation"sv, "1"sv },
+        // Transmog system flags — the client gates parts of the transmog UI
+        // on these being present. Retail sends them at this stage of login.
+        { "transmogEnableSystem"sv, "1"sv },
+        { "transmogAllowArtifactOverride"sv, "1"sv },
+        { "transmogAllowCanUseEverChanges"sv, "0"sv },
+        { "transmogEnableOutfitPurchases"sv, "1"sv },
+        { "transmogEnableOutfitSlotChanges"sv, "1"sv },
     };
 
     WorldPackets::System::MirrorVars variables;
