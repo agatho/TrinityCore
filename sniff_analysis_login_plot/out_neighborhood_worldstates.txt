@@ -1,0 +1,124 @@
+=== SMSG_INIT_WORLD_STATES + SMSG_UPDATE_WORLD_STATE on neighborhood map entry ===
+
+[idx 483] SMSG_INIT_WORLD_STATES size=64028 bodyLen=64024
+  mapID=0x0ADF  areaID=16300  subAreaID=16300  count=8001
+  First 40 worldstate entries:
+    id=2260       value=0            (0x00000000)
+    id=3801       value=0            (0x00000000)
+    id=3826       value=1            (0x00000001)
+    id=3901       value=3            (0x00000003)
+    id=2139       value=0            (0x00000000)
+    id=521        value=1            (0x00000001)
+    id=2565       value=142          (0x0000008E)
+    id=2261       value=0            (0x00000000)
+    id=2263       value=0            (0x00000000)
+    id=2264       value=0            (0x00000000)
+    id=1350       value=0            (0x00000000)
+    id=1665       value=0            (0x00000000)
+    id=1723       value=0            (0x00000000)
+    id=1724       value=0            (0x00000000)
+    id=3601       value=0            (0x00000000)
+    id=3602       value=0            (0x00000000)
+    id=3136       value=700          (0x000002BC)
+    id=4020       value=0            (0x00000000)
+    id=4022       value=0            (0x00000000)
+    id=4023       value=0            (0x00000000)
+    id=4025       value=0            (0x00000000)
+    id=1942       value=0            (0x00000000)
+    id=1943       value=0            (0x00000000)
+    id=1945       value=0            (0x00000000)
+    id=523        value=0            (0x00000000)
+    id=841        value=0            (0x00000000)
+    id=3454       value=0            (0x00000000)
+    id=3456       value=0            (0x00000000)
+    id=3458       value=0            (0x00000000)
+    id=3460       value=0            (0x00000000)
+    id=3462       value=0            (0x00000000)
+    id=3464       value=0            (0x00000000)
+    id=3085       value=379          (0x0000017B)
+    id=3067       value=1            (0x00000001)
+    id=5065       value=0            (0x00000000)
+    id=5071       value=6            (0x00000006)
+    id=3695       value=0            (0x00000000)
+    id=4435       value=0            (0x00000000)
+    id=4488       value=0            (0x00000000)
+    id=3493       value=0            (0x00000000)
+
+[idx 9983] SMSG_INIT_WORLD_STATES size=64004 bodyLen=64000
+  mapID=0x0AAF  areaID=16105  subAreaID=16376  count=7998
+  First 40 worldstate entries:
+    id=2260       value=0            (0x00000000)
+    id=3801       value=0            (0x00000000)
+    id=3826       value=1            (0x00000001)
+    id=3901       value=3            (0x00000003)
+    id=2139       value=0            (0x00000000)
+    id=521        value=1            (0x00000001)
+    id=2565       value=142          (0x0000008E)
+    id=2261       value=0            (0x00000000)
+    id=2263       value=0            (0x00000000)
+    id=2264       value=0            (0x00000000)
+    id=1350       value=0            (0x00000000)
+    id=1665       value=0            (0x00000000)
+    id=1723       value=0            (0x00000000)
+    id=1724       value=0            (0x00000000)
+    id=3601       value=0            (0x00000000)
+    id=3602       value=0            (0x00000000)
+    id=3136       value=700          (0x000002BC)
+    id=4020       value=0            (0x00000000)
+    id=4022       value=0            (0x00000000)
+    id=4023       value=0            (0x00000000)
+    id=4025       value=0            (0x00000000)
+    id=1942       value=0            (0x00000000)
+    id=1943       value=0            (0x00000000)
+    id=1945       value=0            (0x00000000)
+    id=523        value=0            (0x00000000)
+    id=841        value=0            (0x00000000)
+    id=3454       value=0            (0x00000000)
+    id=3456       value=0            (0x00000000)
+    id=3458       value=0            (0x00000000)
+    id=3460       value=0            (0x00000000)
+    id=3462       value=0            (0x00000000)
+    id=3464       value=0            (0x00000000)
+    id=3085       value=379          (0x0000017B)
+    id=3067       value=1            (0x00000001)
+    id=5065       value=0            (0x00000000)
+    id=5071       value=6            (0x00000006)
+    id=3695       value=0            (0x00000000)
+    id=4435       value=0            (0x00000000)
+    id=4488       value=0            (0x00000000)
+    id=3493       value=0            (0x00000000)
+
+
+=== SMSG_UPDATE_WORLD_STATE packets idx 9964..10700 ===
+Count: 25
+
+[10016] id=6267       value=25           (0x00000019) hidden=False
+[10017] id=6164       value=35           (0x00000023) hidden=False
+[10018] id=7242       value=2056         (0x00000808) hidden=False
+[10019] id=7243       value=1            (0x00000001) hidden=False
+[10020] id=7244       value=2057         (0x00000809) hidden=False
+[10021] id=7245       value=1            (0x00000001) hidden=False
+[10022] id=8969       value=0            (0x00000000) hidden=False
+[10023] id=10332      value=0            (0x00000000) hidden=False
+[10024] id=10294      value=0            (0x00000000) hidden=False
+[10025] id=10815      value=0            (0x00000000) hidden=False
+[10026] id=10825      value=0            (0x00000000) hidden=False
+[10027] id=10828      value=0            (0x00000000) hidden=False
+[10028] id=10836      value=0            (0x00000000) hidden=False
+[10029] id=10839      value=0            (0x00000000) hidden=False
+[10030] id=10844      value=0            (0x00000000) hidden=False
+[10031] id=10845      value=0            (0x00000000) hidden=False
+[10032] id=10846      value=0            (0x00000000) hidden=False
+[10033] id=10847      value=0            (0x00000000) hidden=False
+[10034] id=10848      value=0            (0x00000000) hidden=False
+[10035] id=10850      value=0            (0x00000000) hidden=False
+[10036] id=10853      value=0            (0x00000000) hidden=False
+[10037] id=12039      value=0            (0x00000000) hidden=False
+[10038] id=13962      value=0            (0x00000000) hidden=False
+[10039] id=12229      value=0            (0x00000000) hidden=False
+[10040] id=14018      value=0            (0x00000000) hidden=False
+
+=== SMSG 0x5C group (NeighborhoodSystem) around exterior entry ===
+[10672] 0x005C0000 size=21 body[:64]=ef ff af a3 5f 11 aa a7 02 80 7b 24 e0 55 ad 3c 34
+
+=== SMSG 0x50 group (HouseExterior) around exterior entry ===

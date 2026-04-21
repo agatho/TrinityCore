@@ -201,6 +201,49 @@ void WorldSession::SendFeatureSystemStatusGlueScreen()
         { "transmogAllowCanUseEverChanges"sv, "0"sv },
         { "transmogEnableOutfitPurchases"sv, "1"sv },
         { "transmogEnableOutfitSlotChanges"sv, "1"sv },
+        // --- Additional vars from retail MIRROR_VARS audit (2026-04-21) ---
+        // Retail sends 116 MIRROR_VARS entries, we were sending 41. These 40
+        // below are the subset that drive client behaviour without requiring
+        // Blizzard-specific service URLs (shop2 / Pinterest skipped).
+        // Damage meter — gates the in-game damage meter addon feature
+        { "damageMeterCacheEnabled"sv, "1"sv },
+        { "damageMeterProcessingEnabled"sv, "1"sv },
+        // Addon chat restrictions — affects WHISPER/GROUP addon message routing
+        { "addonChatRestrictionsEnabled"sv, "1"sv },
+        { "addonChatRestrictionsEnabledForOutgoingAddonMessages"sv, "1"sv },
+        // Lua resource caps — the client throttles AddOn resources when these
+        // are present. Retail's caps, keep identical to not break addons.
+        { "limitedLuaResourcesEnabled"sv, "0"sv },
+        { "limitedLuaResourcesAddonCapacityAnim"sv, "5000"sv },
+        { "limitedLuaResourcesAddonCapacityAnimGroup"sv, "2000"sv },
+        { "limitedLuaResourcesAddonCapacityFont"sv, "300"sv },
+        { "limitedLuaResourcesAddonCapacityFontString"sv, "5000"sv },
+        { "limitedLuaResourcesAddonCapacityFrame"sv, "10000"sv },
+        { "limitedLuaResourcesAddonCapacityTexture"sv, "40000"sv },
+        { "limitedLuaResourcesAddonCapacityTimer"sv, "500"sv },
+        { "limitedLuaResourcesGlobalCapacityAnim"sv, "50000"sv },
+        { "limitedLuaResourcesGlobalCapacityAnimGroup"sv, "20000"sv },
+        { "limitedLuaResourcesGlobalCapacityFont"sv, "3000"sv },
+        { "limitedLuaResourcesGlobalCapacityFontString"sv, "50000"sv },
+        { "limitedLuaResourcesGlobalCapacityFrame"sv, "100000"sv },
+        { "limitedLuaResourcesGlobalCapacityTexture"sv, "400000"sv },
+        { "limitedLuaResourcesGlobalCapacityTimer"sv, "500"sv },
+        // Lua script throttling — bucket limits per second / burst
+        { "luaScriptBucketThrottleEnabled"sv, "1"sv },
+        { "luaScriptBucketThrottleMaxMsBurstNormal"sv, "20000"sv },
+        { "luaScriptBucketThrottleMaxMsBurstRestricted"sv, "1000"sv },
+        { "luaScriptBucketThrottleMaxMsPerSecondNormal"sv, "2000"sv },
+        { "luaScriptBucketThrottleMaxMsPerSecondRestricted"sv, "500"sv },
+        // Hardcore mode throttling — not used but sent for parity
+        { "hardcoreScriptThrottlingEnabled"sv, "0"sv },
+        // PvP training grounds — the PvP duel area feature
+        { "pvpTrainingGroundsEnabledClient"sv, "0"sv },
+        // Recent allies request throttle
+        { "recentAlliesRequestDataThrottle"sv, "5000"sv },
+        // LFG text filters
+        { "enableEndgameEditRestrictionsForLFGText"sv, "1"sv },
+        // Disabled game modes (retail passes an empty string; keep empty)
+        { "disabledGamemodes"sv, ""sv },
     };
 
     WorldPackets::System::MirrorVars variables;

@@ -842,6 +842,20 @@ bool HousingMap::AddPlayerToMap(Player* player, bool initPlayer /*= true*/)
         houseInfo.House.AccessFlags, housing ? "yes" : "no");
     player->SendDirectMessage(houseInfoPkt);
 
+    // Send SMSG_HOUSING_CATALOG_STATE_SYNC. Retail sends this twice per session
+    // (once during login query phase, once after map entry). The client's catalog
+    // state machine needs this for Catalog UI and placed-decor / Room-placement
+    // sync. Our Housing::BuildCatalogStateSync existed but had zero call sites
+    // prior to this commit (sniff audit 2026-04-21 finding #2.1).
+    if (housing)
+    {
+        WorldPackets::Housing::HousingCatalogStateSync catalogSync;
+        housing->BuildCatalogStateSync(catalogSync);
+        player->SendDirectMessage(catalogSync.Write());
+        TC_LOG_DEBUG("housing", "HousingMap::AddPlayerToMap: sent SMSG_HOUSING_CATALOG_STATE_SYNC with {} entries",
+            uint32(catalogSync.Entries.size()));
+    }
+
     // Send SMSG_INITIATIVE_SERVICE_STATUS proactively so IsInitiativeEnabled() returns
     // true immediately. Without this, the client waits for a poll response before showing
     // initiative/endeavor UI elements. Sniff-verified: server responds with 0x80 (enabled).
