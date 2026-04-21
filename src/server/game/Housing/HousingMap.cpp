@@ -17,6 +17,7 @@
 
 #include "HousingMap.h"
 #include "Account.h"
+#include "HousingMirrorEntity.h"
 #include "HousingNeighborhoodMirrorEntity.h"
 #include "HousingPlayerHouseEntity.h"
 #include <algorithm>
@@ -760,6 +761,18 @@ bool HousingMap::AddPlayerToMap(Player* player, bool initPlayer /*= true*/)
 
         // Spawn decor GOs if not already spawned for this plot
         SpawnAllDecorForPlot(plotIdx, housing);
+
+        // Now that the house (and its paired Entity mirror) is spawned on this
+        // map instance, refresh the session HousingPlayerHouseEntity's
+        // FHousingPlayerHouse_C.EntityGUID to point at the mirror. The session
+        // entity was pre-populated in Player::LoadFromDB with EntityGUID=Empty
+        // because the map-scoped mirror GUID isn't known before map entry.
+        if (ObjectGuid ownMirrorGuid = GetHouseMirrorGuid(plotIdx); !ownMirrorGuid.IsEmpty())
+        {
+            player->GetSession()->GetHousingPlayerHouseEntity().SetEntityGUID(ownMirrorGuid);
+            TC_LOG_DEBUG("housing", "HousingMap::AddPlayerToMap: session HousingPlayerHouseEntity.EntityGUID set to mirror {} for plot {}",
+                ownMirrorGuid.ToString(), plotIdx);
+        }
     }
     else
     {
@@ -1851,6 +1864,36 @@ GameObject* HousingMap::SpawnHouseForPlot(uint8 plotIndex, Position const* custo
         // The client uses the MeshObject Geobox to validate decor placement bounds.
         // Without this, ALL placement attempts fail with OutsidePlotBounds.
         SpawnRoomForPlot(plotIndex, pos, rot, plotInfo->HouseGuid);
+
+        // Spawn house-exterior root Entity mirror.
+        // Retail pairs the exterior root MeshObject with a HighGuid::Entity
+        // (57, objectType=18) carrying a single FMirroredPositionData_C fragment
+        // plus Tag_HouseExteriorRoot / Tag_HouseExteriorPiece. The mirror
+        // attaches to the HousingPlayerHouse entity and holds the plot's
+        // world position in local-space terms. FHousingPlayerHouse_C.EntityGUID
+        // points at this mirror so the world-map icon picker can resolve the
+        // icon render position. Sniff-verified at idx 9984 of
+        // dump_12.0.1.66838_2026-04-15_09-35-59 (Group A, 4 entities).
+        {
+            uint32 bnetId = static_cast<uint32>(plotInfo->OwnerBnetGuid.GetCounter());
+            ObjectGuid mirrorGuid = MakeHouseMirrorGuid(plotIndex, bnetId);
+            auto mirror = std::make_unique<HousingMirrorEntity>(this, mirrorGuid);
+            // AttachParent = HousingPlayerHouse; local position is world pos of
+            // the plot (identity rotation — the house has no local rotation
+            // relative to itself). Retail Group A entries use a zeroed pos/rot
+            // for the root and non-zero for pieces; we only emit the root here.
+            QuaternionData const identity = QuaternionData();
+            mirror->InitPositionData(plotInfo->HouseGuid,
+                pos, rot, /*scale*/ 1.0f, /*attachmentFlags*/ 3,
+                /*isExteriorRoot*/ true);
+            TC_LOG_DEBUG("housing", "HousingMap::SpawnHouseForPlot: spawned exterior mirror {} for plot {} "
+                "(attach={}, pos=({:.2f},{:.2f},{:.2f}))",
+                mirrorGuid.ToString(), plotIndex,
+                plotInfo->HouseGuid.ToString(),
+                pos.GetPositionX(), pos.GetPositionY(), pos.GetPositionZ());
+            _houseMirrorEntities[plotIndex] = std::move(mirror);
+            (void)identity;
+        }
     }
 
     // Door GO spawning is now handled blizzlike inside SpawnExtCompTree:
@@ -2842,6 +2885,9 @@ void HousingMap::DespawnHouseForPlot(uint8 plotIndex)
     DespawnRoomForPlot(plotIndex);
     DespawnAllMeshObjectsForPlot(plotIndex);
 
+    // Despawn the Entity mirror paired with the exterior root.
+    _houseMirrorEntities.erase(plotIndex);
+
     auto itr = _houseGameObjects.find(plotIndex);
     if (itr == _houseGameObjects.end())
         return;
@@ -2851,6 +2897,33 @@ void HousingMap::DespawnHouseForPlot(uint8 plotIndex)
 
     TC_LOG_DEBUG("housing", "HousingMap::DespawnHouseForPlot: Despawned house GO for plot {}", plotIndex);
     _houseGameObjects.erase(itr);
+}
+
+HousingMirrorEntity* HousingMap::GetHouseMirror(uint8 plotIndex) const
+{
+    auto itr = _houseMirrorEntities.find(plotIndex);
+    return itr != _houseMirrorEntities.end() ? itr->second.get() : nullptr;
+}
+
+ObjectGuid HousingMap::GetHouseMirrorGuid(uint8 plotIndex) const
+{
+    if (HousingMirrorEntity* m = GetHouseMirror(plotIndex))
+        return m->GetGUID();
+    return ObjectGuid::Empty;
+}
+
+ObjectGuid HousingMap::MakeHouseMirrorGuid(uint8 plotIndex, uint32 bnetAccountId) const
+{
+    // Deterministic convention: HighGuid::Entity, mapId=GetId() (neighborhood
+    // world map), entry=37361 (synthetic entry for housing mirrors — picked
+    // outside the range of creature/gameobject entries in use), counter packs
+    // plotIndex into the low byte and bnetAccountId into the upper bits so it
+    // stays unique per (plot, owner). realmId/serverId from the current realm
+    // and map context. Same derivation can be used by proxy emission without
+    // needing the mirror object to exist.
+    constexpr uint32 HOUSING_MIRROR_ENTRY = 37361;
+    uint64 counter = (static_cast<uint64>(bnetAccountId) << 8) | static_cast<uint64>(plotIndex);
+    return ObjectGuid::Create<HighGuid::Entity>(GetId(), HOUSING_MIRROR_ENTRY, counter);
 }
 
 void HousingMap::DespawnDoorGO(uint8 plotIndex)

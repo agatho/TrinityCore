@@ -19,6 +19,7 @@
 #include "AreaTrigger.h"
 #include "Account.h"
 #include "QueryPackets.h"
+#include "HousingMirrorEntity.h"
 #include "HousingNeighborhoodMirrorEntity.h"
 #include "HousingPlayerHouseEntity.h"
 #include "AccountMgr.h"
@@ -3670,6 +3671,7 @@ void Player::BuildCreateUpdateBlockForPlayer(UpdateData* data, Player* target) c
                 ownPlotIndex = ownHousing->GetPlotIndex();
 
             uint32 proxyCount = 0;
+            uint32 mirrorCount = 0;
             uint32 skipOwn = 0, skipEmpty = 0, skipUnoccupied = 0;
             HousingMap* hmap = dynamic_cast<HousingMap*>(GetMap());
             Neighborhood const* nbh = hmap ? hmap->GetNeighborhood() : nullptr;
@@ -3681,23 +3683,50 @@ void Player::BuildCreateUpdateBlockForPlayer(UpdateData* data, Player* target) c
                     if (plot.PlotIndex == ownPlotIndex) { ++skipOwn; continue; }
                     if (plot.HouseGuid.IsEmpty()) { ++skipEmpty; continue; }
 
+                    uint32 bnetId = static_cast<uint32>(plot.OwnerBnetGuid.GetCounter());
+                    ObjectGuid mirrorGuid = hmap->GetHouseMirrorGuid(plot.PlotIndex);
+                    if (mirrorGuid.IsEmpty())
+                        mirrorGuid = hmap->MakeHouseMirrorGuid(plot.PlotIndex, bnetId);
+
                     HousingPlayerHouseEntity proxy(GetSession(), plot.HouseGuid);
                     proxy.SetObjectType(TYPEID_HOUSING_ENTITY);
                     proxy.SetBnetAccount(plot.OwnerBnetGuid);
                     proxy.SetPlotIndex(static_cast<int32>(plot.PlotIndex));
                     proxy.SetLevel(plot.HouseLevel);
                     proxy.SetFavor(plot.HouseFavor);
-                    proxy.SetEntityGUID(plot.HouseGuid);
+                    // Point EntityGUID at the paired HighGuid::Entity mirror so the
+                    // client's icon picker can chase EntityGUID -> position data.
+                    proxy.SetEntityGUID(mirrorGuid);
                     proxy.BuildCreateUpdateBlockForPlayer(data, target);
                     ++proxyCount;
+
+                    // Bundle the mirror's CREATE into the same UPDATE_OBJECT.
+                    if (HousingMirrorEntity* m = hmap->GetHouseMirror(plot.PlotIndex))
+                    {
+                        m->BuildCreateUpdateBlockForPlayer(data, target);
+                        ++mirrorCount;
+                    }
                 }
             }
             TC_LOG_DEBUG("housing", "Player::BuildCreateUpdateBlockForPlayer: housing-map proxies for {} — "
-                "hmap={} nbh={} emitted={} skipOwn={} skipEmpty={} skipUnocc={} ownPlotIdx={}",
+                "hmap={} nbh={} proxies={} mirrors={} skipOwn={} skipEmpty={} skipUnocc={} ownPlotIdx={}",
                 target->GetGUID().ToString(),
                 hmap ? "yes" : "no",
                 nbh ? "yes" : "no",
-                proxyCount, skipOwn, skipEmpty, skipUnoccupied, uint32(ownPlotIndex));
+                proxyCount, mirrorCount, skipOwn, skipEmpty, skipUnoccupied, uint32(ownPlotIndex));
+
+            // Also emit the own-plot mirror alongside the session HousingPlayerHouse
+            // entity (the session entity was bundled a few lines above via
+            // GetSession()->GetHousingPlayerHouseEntity().BuildCreateUpdateBlockForPlayer).
+            // The session entity's EntityGUID is refreshed to the own mirror in
+            // HousingMap::AddPlayerToMap, but the mirror itself needs to ride
+            // the initial UPDATE_OBJECT so the client registry has it when it
+            // resolves EntityGUID.
+            if (hmap && ownPlotIndex != INVALID_PLOT_INDEX)
+            {
+                if (HousingMirrorEntity* ownMirror = hmap->GetHouseMirror(ownPlotIndex))
+                    ownMirror->BuildCreateUpdateBlockForPlayer(data, target);
+            }
 
             // Room entities (objectType=18, Housing/2 GUIDs) are sent in the deferred
             // callback — NOT here. Sending type-18 room entities in the initial UPDATE_OBJECT
@@ -19258,7 +19287,13 @@ bool Player::LoadFromDB(ObjectGuid guid, CharacterDatabaseQueryHolder const& hol
             {
                 HousingPlayerHouseEntity& houseEntity = GetSession()->GetHousingPlayerHouseEntity();
                 houseEntity.SetBnetAccount(GetSession()->GetBattlenetAccountGUID());
-                houseEntity.SetEntityGUID(housing->GetHouseGuid());
+                // EntityGUID is refreshed in HousingMap::AddPlayerToMap to the
+                // paired mirror GUID. Leaving it empty here is safer than the
+                // previous self-reference to HouseGuid, which produced a broken
+                // lookup in the client's world-map icon picker (it chased
+                // EntityGUID back to the identity entity, which has no position
+                // fragment and so no icon place to render).
+                houseEntity.SetEntityGUID(ObjectGuid::Empty);
                 houseEntity.SetPlotIndex(static_cast<int32>(housing->GetPlotIndex()));
                 houseEntity.SetLevel(housing->GetLevel());
                 houseEntity.SetFavor(housing->GetFavor64());
@@ -25687,7 +25722,13 @@ void Player::SendInitialPacketsAfterAddToMap()
             {
                 HousingPlayerHouseEntity& houseEntity = GetSession()->GetHousingPlayerHouseEntity();
                 houseEntity.SetBnetAccount(GetSession()->GetBattlenetAccountGUID());
-                houseEntity.SetEntityGUID(housing->GetHouseGuid());
+                // EntityGUID is refreshed in HousingMap::AddPlayerToMap to the
+                // paired mirror GUID. Leaving it empty here is safer than the
+                // previous self-reference to HouseGuid, which produced a broken
+                // lookup in the client's world-map icon picker (it chased
+                // EntityGUID back to the identity entity, which has no position
+                // fragment and so no icon place to render).
+                houseEntity.SetEntityGUID(ObjectGuid::Empty);
                 houseEntity.SetPlotIndex(static_cast<int32>(housing->GetPlotIndex()));
                 houseEntity.SetLevel(housing->GetLevel());
                 houseEntity.SetFavor(housing->GetFavor64());

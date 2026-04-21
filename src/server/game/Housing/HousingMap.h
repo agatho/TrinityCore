@@ -20,10 +20,12 @@
 
 #include "Housing.h"
 #include "Map.h"
+#include <memory>
 #include <unordered_set>
 
 class AreaTrigger;
 class Housing;
+class HousingMirrorEntity;
 class MeshObject;
 class Neighborhood;
 class Player;
@@ -76,6 +78,19 @@ public:
     GameObject* GetHouseGameObject(uint8 plotIndex);
     int8 GetPlotIndexForHouseGO(ObjectGuid goGuid) const;
     uint32 GetHouseGameObjectCount() const { return static_cast<uint32>(_houseGameObjects.size()); }
+
+    // House-exterior root mirror (HighGuid::Entity, objectType=18). Carries the
+    // plot's world position in a single FMirroredPositionData_C fragment, used
+    // by the client's world-map icon picker as the target of
+    // FHousingPlayerHouse_C.EntityGUID (struct offset +56). Spawned 1:1 with
+    // the exterior root MeshObject at SpawnHouseForPlot time. See
+    // docs/HOUSING_ENTITY_MIRROR.md (pending) / memory/housing_entity_mirror_architecture.md.
+    HousingMirrorEntity* GetHouseMirror(uint8 plotIndex) const;
+    ObjectGuid GetHouseMirrorGuid(uint8 plotIndex) const;
+    // Deterministic mirror-GUID derivation that does not require the mirror to
+    // exist yet — used by proxy emission for neighbour plots whose plot index
+    // and bnet owner are known from NeighborhoodMirror data.
+    ObjectGuid MakeHouseMirrorGuid(uint8 plotIndex, uint32 bnetAccountId) const;
 
     // MeshObject management (housing fixture rendering)
     // pos: local-space position for child pieces (or world position for root pieces)
@@ -166,6 +181,11 @@ private:
 
     // House structure GO tracking (plotIndex -> house GO GUID)
     std::unordered_map<uint8, ObjectGuid> _houseGameObjects;
+
+    // House-exterior root Entity mirror (HighGuid::Entity, objectType=18)
+    // tracking (plotIndex -> mirror entity). Owned by the map; lifecycle
+    // 1:1 with the exterior root MeshObject.
+    std::unordered_map<uint8, std::unique_ptr<HousingMirrorEntity>> _houseMirrorEntities;
 
     // MeshObject tracking (plotIndex -> vector of MeshObject GUIDs)
     std::unordered_map<uint8, std::vector<ObjectGuid>> _meshObjects;
