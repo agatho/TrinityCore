@@ -25706,11 +25706,7 @@ void Player::SendInitialPacketsAfterAddToMap()
             rosterResponse.Result = 0; // Success
             rosterResponse.GroupNeighborhoodGuid = neighborhood->GetGuid();
             rosterResponse.GroupOwnerGuid = neighborhood->GetOwnerGuid();
-            // Retail's Blizzard_NeighborhoodRoster UI displays rosterResponse.NeighborhoodName
-            // verbatim (unlike C_HousingNeighborhood.GetNeighborhoodName() used by the dashboard
-            // which does its own DB2 resolve), so resolve the "prefixID-middleID-suffixID"
-            // triplet server-side here. Falls back to the stored name if the format doesn't match.
-            rosterResponse.NeighborhoodName = sHousingMgr.ResolveNeighborhoodName(neighborhood->GetName());
+            rosterResponse.NeighborhoodName = neighborhood->GetName();
             auto const& members = neighborhood->GetMembers();
             rosterResponse.Members.reserve(members.size());
             for (auto const& member : members)

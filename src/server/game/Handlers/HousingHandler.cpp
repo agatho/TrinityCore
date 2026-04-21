@@ -3960,7 +3960,7 @@ void WorldSession::HandleHousingSvcsGetHouseFinderInfo(WorldPackets::Housing::Ho
         WorldPackets::Housing::JamCliHouseFinderNeighborhood entry;
         entry.NeighborhoodGUID = neighborhood->GetGuid();
         entry.OwnerGUID = neighborhood->GetOwnerGuid();
-        entry.Name = sHousingMgr.ResolveNeighborhoodName(neighborhood->GetName());
+        entry.Name = neighborhood->GetName();
         // Field1 | Field2 is a BITMASK of occupied plot indices (IDA: client ORs them at offset 520,
         // then checks (1LL << plotIndex) & bitmask to determine if plot is occupied on the finder map).
         uint64 occupiedBitmask = 0;
@@ -4031,7 +4031,7 @@ void WorldSession::HandleHousingSvcsGetHouseFinderNeighborhood(WorldPackets::Hou
     response.Result = static_cast<uint8>(HOUSING_RESULT_SUCCESS);
     response.Neighborhood.NeighborhoodGUID = neighborhood->GetGuid();
     response.Neighborhood.OwnerGUID = neighborhood->GetOwnerGuid();
-    response.Neighborhood.Name = sHousingMgr.ResolveNeighborhoodName(neighborhood->GetName());
+    response.Neighborhood.Name = neighborhood->GetName();
 
     // Field1 | Field2 is a BITMASK of occupied plot indices (IDA: client ORs them at offset 520,
     // then checks (1LL << plotIndex) & bitmask to determine if plot is occupied on the finder map).
@@ -4163,7 +4163,7 @@ void WorldSession::HandleHousingSvcsGetBnetFriendNeighborhoods(WorldPackets::Hou
         WorldPackets::Housing::JamCliHouseFinderNeighborhood entry;
         entry.NeighborhoodGUID = neighborhood->GetGuid();
         entry.OwnerGUID = neighborhood->GetOwnerGuid();
-        entry.Name = sHousingMgr.ResolveNeighborhoodName(neighborhood->GetName());
+        entry.Name = neighborhood->GetName();
         auto plotsForMap = sHousingMgr.GetPlotsForMap(neighborhood->GetNeighborhoodMapID());
         uint32 totalPlots = !plotsForMap.empty() ? static_cast<uint32>(plotsForMap.size()) : MAX_NEIGHBORHOOD_PLOTS;
         uint32 availPlots = totalPlots - neighborhood->GetOccupiedPlotCount();
@@ -4472,7 +4472,7 @@ void WorldSession::HandleQueryNeighborhoodInfo(WorldPackets::Housing::QueryNeigh
         // Use the canonical neighborhood GUID, not the client's (which may be a GO GUID or empty)
         response.NeighborhoodGuid = neighborhood->GetGuid();
         response.Result = true;
-        response.NeighborhoodName = sHousingMgr.ResolveNeighborhoodName(neighborhood->GetName());
+        response.NeighborhoodName = neighborhood->GetName();
     }
     else
     {
@@ -4547,7 +4547,7 @@ void WorldSession::HandleGuildGetOthersOwnedHouses(WorldPackets::Housing::GuildG
         WorldPackets::Housing::JamCliHouseFinderNeighborhood entry;
         entry.NeighborhoodGUID = neighborhood->GetGuid();
         entry.OwnerGUID = neighborhood->GetOwnerGuid();
-        entry.Name = sHousingMgr.ResolveNeighborhoodName(neighborhood->GetName());
+        entry.Name = neighborhood->GetName();
         for (auto const& plot : neighborhood->GetPlots())
         {
             if (!plot.IsOccupied())
@@ -5592,7 +5592,7 @@ void WorldSession::HandleHousingSvcsGuildAppendNeighborhood(WorldPackets::Housin
     if (neighborhood)
     {
         response.Neighborhood.OwnerGUID = neighborhood->GetOwnerGuid();
-        response.Neighborhood.Name = sHousingMgr.ResolveNeighborhoodName(neighborhood->GetName());
+        response.Neighborhood.Name = neighborhood->GetName();
     }
     SendPacket(response.Write());
 
@@ -5689,7 +5689,7 @@ void WorldSession::HandleHousingSvcsGuildGetHousingInfo(WorldPackets::Housing::H
             WorldPackets::Housing::JamCliHouseFinderNeighborhood entry;
             entry.NeighborhoodGUID = guildNeighborhood->GetGuid();
             entry.OwnerGUID = guildNeighborhood->GetOwnerGuid();
-            entry.Name = sHousingMgr.ResolveNeighborhoodName(guildNeighborhood->GetName());
+            entry.Name = guildNeighborhood->GetName();
 
             // Add all houses in this neighborhood
             for (auto const& plot : guildNeighborhood->GetPlots())

@@ -630,50 +630,6 @@ std::string HousingMgr::GenerateNeighborhoodName(uint32 neighborhoodMapId) const
     return Trinity::StringFormat("{}-{}-{}", id1, id2, id3);
 }
 
-std::string HousingMgr::ResolveNeighborhoodName(std::string const& storedName) const
-{
-    // Expected shape: three unsigned decimal numbers separated by '-'.
-    // Each number is an ID into NeighborhoodNameGen.db2 (Prefix/Middle/Suffix cols).
-    // Example input: "91-6-4" → "Free Flame Hill".
-    uint32 ids[3] = { 0, 0, 0 };
-    std::size_t cursor = 0;
-    for (int i = 0; i < 3; ++i)
-    {
-        std::size_t const dash = (i < 2) ? storedName.find('-', cursor) : storedName.size();
-        if (dash == std::string::npos || dash == cursor)
-            return storedName;
-
-        std::string_view piece(storedName.data() + cursor, dash - cursor);
-        for (char c : piece)
-            if (c < '0' || c > '9')
-                return storedName;
-
-        uint32 parsed = 0;
-        for (char c : piece)
-            parsed = parsed * 10 + uint32(c - '0');
-        ids[i] = parsed;
-        cursor = dash + 1;
-    }
-
-    NeighborhoodNameGenEntry const* prefix = sNeighborhoodNameGenStore.LookupEntry(ids[0]);
-    NeighborhoodNameGenEntry const* middle = sNeighborhoodNameGenStore.LookupEntry(ids[1]);
-    NeighborhoodNameGenEntry const* suffix = sNeighborhoodNameGenStore.LookupEntry(ids[2]);
-    if (!prefix || !middle || !suffix)
-        return storedName;
-
-    // The DB2 schema has Prefix + Middle + Suffix columns per row; each of the
-    // three IDs references a row and we pull the matching column for its slot.
-    // Column values are LocalizedString — getting the default locale string is
-    // what the client displays.
-    std::string_view prefixText = prefix->Prefix[DEFAULT_LOCALE];
-    std::string_view middleText = middle->Middle[DEFAULT_LOCALE];
-    std::string_view suffixText = suffix->Suffix[DEFAULT_LOCALE];
-    if (prefixText.empty() || middleText.empty() || suffixText.empty())
-        return storedName;
-
-    return Trinity::StringFormat("{} {} {}", prefixText, middleText, suffixText);
-}
-
 uint32 HousingMgr::GetMaxDecorForLevel(uint32 level) const
 {
     // MaxDecorCount not in HouseLevelData DB2; use fallback formula
