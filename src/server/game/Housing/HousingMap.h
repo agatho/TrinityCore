@@ -144,6 +144,15 @@ public:
     void SendPlotEnterSpellPackets(Player* player, uint8 plotIndex);
     void SendPlotLeaveAuraRemoval(Player* player);
 
+    // Per-plot HousingPlayerHouse entity CREATE batch. Retail sniff (build 12.0.1.66838,
+    // packet idx 9984) sends one HousingPlayerHouse CREATE per occupied plot at
+    // neighborhood-map entry so the client's icon-chooser (sub_7FF624BB1880) can
+    // resolve each plot's HouseGUID to an entity in its registry and compare its
+    // BnetAccount field against the viewer's own BNet to pick Self/Friend/Stranger.
+    // Without these proxy entities, non-own plots fall through to ownerType=None
+    // and render with the UnoccupiedPlotPinTemplate regardless of actual ownership.
+    void SendPlotHouseProxyEntities(Player* player);
+
 private:
     uint32 _neighborhoodId;
     Neighborhood* _neighborhood;
