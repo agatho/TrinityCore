@@ -925,29 +925,16 @@ bool HousingMap::AddPlayerToMap(Player* player, bool initPlayer /*= true*/)
             enterPlot.NeighborhoodEntityGuid = plotAt->GetGUID();
             p->SendDirectMessage(enterPlot.Write());
 
-            // Re-send HouseStatusResponse + GetPlayerPermissionsResponse after ENTER_PLOT.
-            // ENTER_PLOT's client handler (vtable[22]) resets the editor state including the
-            // stored HouseGuid; we must re-establish it via HouseStatusResponse (vtable[25])
-            // then arm the editor gate check via GetPlayerPermissionsResponse (vtable[24]).
-            {
-                WorldPackets::Housing::HousingHouseStatusResponse statusResponse;
-                statusResponse.HouseGuid = houseGuid;
-                statusResponse.AccountGuid = p->GetSession()->GetBattlenetAccountGUID();
-                statusResponse.OwnerPlayerGuid = playerGuid;
-                statusResponse.NeighborhoodGuid = neighborhoodGuid;
-                statusResponse.Status = 0;
-                statusResponse.FlagByte = 0xE0; // bit7=houseEditing, bit6=plotEntry, bit5=houseEntry
-                p->SendDirectMessage(statusResponse.Write());
-
-                WorldPackets::Housing::HousingGetPlayerPermissionsResponse permResponse;
-                permResponse.HouseGuid = houseGuid;
-                permResponse.ResultCode = 0;
-                permResponse.PermissionFlags = 0xE0; // owner: all permissions
-                p->SendDirectMessage(permResponse.Write());
-
-                TC_LOG_DEBUG("housing", "HousingMap deferred ENTER_PLOT: Sent HouseStatus+Permissions for owner {}",
-                    playerGuid.ToString());
-            }
+            // HOUSE_STATUS_RESPONSE and GET_PLAYER_PERMISSIONS_RESPONSE emissions
+            // previously lived here. They are now sent by the at_housing_plot AT
+            // script on plot-overlap entry (at_housing_plot.cpp:132), which fires
+            // once the player physically enters the plot's AT — matching retail's
+            // emission pattern (2 per session vs our previous 5). Removing the
+            // duplicate emission here avoids the client-side editor-mode flapping
+            // observed when two HouseStatus arrive within a few ms of each other
+            // with identical flag bytes. Sniff audit 2026-04-21 finding #2.2/2.3.
+            TC_LOG_DEBUG("housing", "HousingMap deferred ENTER_PLOT: skipping HouseStatus+Permissions — AT overlap already sends them for owner {}",
+                playerGuid.ToString());
 
             // Send SMSG_HOUSING_FIXTURE_CREATE_BASIC_HOUSE_RESPONSE with Result=0.
             // This triggers the client's fixture frame initialization: the handler
