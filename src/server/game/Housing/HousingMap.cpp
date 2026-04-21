@@ -1084,14 +1084,12 @@ bool HousingMap::AddPlayerToMap(Player* player, bool initPlayer /*= true*/)
                 }
             }
 
-            // Post-tutorial auras first (slots 8,9,50), then neighborhood-map-entry
-            // auras. Retail applies tutorial-done auras once (at quest reward) but we
-            // re-send each map entry since they don't exist in DB2 and can't persist
-            // as real auras.
-            hMap->SendPostTutorialAuras(p);
-            // Blizzlike neighborhood-map-entry aura burst — fires on every
-            // housing-map entry. See comment on SendNeighborhoodMapEntryAuras.
-            hMap->SendNeighborhoodMapEntryAuras(p);
+            // Post-tutorial + neighborhood-map-entry auras are now emitted
+            // synchronously at the end of AddPlayerToMap (see below), immediately
+            // after the initial UPDATE_OBJECT bundle flushes. They must not ride
+            // on the 500 ms defer, which caused the 2 min "update gap" observed
+            // by the user where the map/icons settled only after the delayed
+            // burst.
             // NOTE: SendPlotEnterSpellPackets is emitted by the plot AT's OnUnitEnter
             // hook (at_housing_plot.cpp) when the player physically overlaps the plot
             // AreaTrigger — the correct blizzlike trigger per the sniff (spells
@@ -1116,6 +1114,16 @@ bool HousingMap::AddPlayerToMap(Player* player, bool initPlayer /*= true*/)
                 plotAt->HasAreaTriggerFlag(AreaTriggerFieldFlags::HasPlayers));
         }, Milliseconds(500));
     }
+
+    // Retail sniff dump_12.0.1.66838_2026-04-15_09-35-59 emits the post-tutorial
+    // aura trio and the 4-aura neighborhood-map-entry burst immediately after
+    // the big UPDATE_OBJECT at map entry, not after a multi-second delay.
+    // Emitting them synchronously here (instead of from the 500 ms deferred
+    // ENTER_PLOT callback) removes the ~2 min settle the user was seeing and
+    // fires the spell triples for visitors too (the deferred block was gated
+    // on the player having a house).
+    SendPostTutorialAuras(player);
+    SendNeighborhoodMapEntryAuras(player);
 
     // Start the periodic housing WorldState counter timer.
     // Sniff-verified: 5 counters sent as individual SMSG_UPDATE_WORLD_STATE packets.
