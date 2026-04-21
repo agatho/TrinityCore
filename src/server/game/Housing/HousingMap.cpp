@@ -50,8 +50,6 @@
 #include "SpellAuraDefines.h"
 #include "SpellPackets.h"
 #include "UpdateData.h"
-#include "WorldPacket.h"
-#include <memory>
 #include "World.h"
 #include "WorldSession.h"
 #include "WorldStateMgr.h"
@@ -1131,12 +1129,6 @@ bool HousingMap::AddPlayerToMap(Player* player, bool initPlayer /*= true*/)
     // based on the player's relationship to each plot owner.
     SendPerPlayerPlotWorldStates(player);
 
-    // Blizzlike: send one HousingPlayerHouse (Housing/3) CREATE per occupied plot
-    // so the client can resolve Houses[plotIdx].HouseGUID → entity → BnetAccount
-    // for its Self/Friend/Stranger icon picker. Without this batch, neighbour plot
-    // icons always fall through to None/Unoccupied regardless of the mirror data.
-    SendPlotHouseProxyEntities(player);
-
     // Comprehensive summary of all packets sent during map entry (for sniff comparison)
     TC_LOG_DEBUG("housing", "=== AddPlayerToMap COMPLETE for player {} ===\n"
         "  Map: {} InstanceType={} NeighborhoodId={}\n"
@@ -1573,90 +1565,6 @@ void HousingMap::SendPerPlayerPlotWorldStates(Player* player)
     //
     // Retained as an extension hook for genuine per-player overrides.
     (void)player;
-}
-
-void HousingMap::SendPlotHouseProxyEntities(Player* player)
-{
-    // Sniff-verified (build 12.0.1.66838, exterior map-entry packet idx 9984):
-    // retail sends ONE HousingPlayerHouse (Housing/3) CREATE per occupied plot
-    // in the neighborhood — 46 in the captured sniff's full neighborhood. That
-    // populates the client's entity registry with one entity per HouseGUID the
-    // NeighborhoodMirror references, which the client's icon picker
-    // (sub_7FF624BB1880) looks up to pick Self/Friend/Stranger per plot.
-    //
-    // We build the player's own HousingPlayerHouse separately at login (owned
-    // by WorldSession) — so skip plots where the owner IS the viewer. For the
-    // rest we construct short-lived proxies, populate their BnetAccount and
-    // PlotIndex (these are the fields the icon chooser / name cache read),
-    // bundle every CREATE into a single SMSG_UPDATE_OBJECT, and release the
-    // entities as soon as UpdateData::BuildPacket has serialized them. The
-    // client keeps the entities in its own cache until the session ends or
-    // we send a DESTROY.
-    if (!_neighborhood || !player)
-        return;
-
-    ObjectGuid viewerGuid = player->GetGUID();
-    ObjectGuid ownHouseGuid;
-    if (WorldSession const* session = player->GetSession())
-        if (session->HasHousingPlayerHouseEntity())
-            ownHouseGuid = session->GetHousingPlayerHouseEntity().GetGUID();
-
-    std::vector<std::unique_ptr<HousingPlayerHouseEntity>> proxies;
-    proxies.reserve(MAX_NEIGHBORHOOD_PLOTS);
-
-    UpdateData updateData(player->GetMapId());
-
-    uint32 proxyCount = 0;
-    for (auto const& plot : _neighborhood->GetPlots())
-    {
-        if (!plot.IsOccupied() || plot.HouseGuid.IsEmpty())
-            continue;
-
-        // Skip the viewer's own house — WorldSession already owns the real
-        // HousingPlayerHouseEntity for it, which has been (or will be) sent
-        // alongside the Player CREATE via Player::BuildCreateUpdateBlockForPlayer.
-        if (plot.OwnerGuid == viewerGuid)
-            continue;
-        if (!ownHouseGuid.IsEmpty() && plot.HouseGuid == ownHouseGuid)
-            continue;
-
-        // Don't re-CREATE if the client already knows the proxy from an earlier
-        // map entry on the same session.
-        if (player->m_clientGUIDs.find(plot.HouseGuid) != player->m_clientGUIDs.end())
-            continue;
-
-        auto proxy = std::make_unique<HousingPlayerHouseEntity>(player->GetSession(), plot.HouseGuid);
-        proxy->SetEntityGUID(plot.HouseGuid);
-        proxy->SetBnetAccount(plot.OwnerBnetGuid);
-        proxy->SetPlotIndex(static_cast<int32>(plot.PlotIndex));
-        proxy->SetLevel(std::max<uint8>(1, plot.HouseLevel));
-        proxy->SetFavor(plot.HouseFavor);
-
-        // BuildCreateUpdateBlockForPlayer serializes the entity's full CREATE
-        // frame (movement header + fragments) into updateData. The entity
-        // object only needs to outlive this call — which it does via the
-        // proxies vector holding the unique_ptr until the function returns.
-        proxy->BuildCreateUpdateBlockForPlayer(&updateData, player);
-
-        player->m_clientGUIDs.insert(plot.HouseGuid);
-        proxies.push_back(std::move(proxy));
-        ++proxyCount;
-    }
-
-    if (proxyCount == 0)
-    {
-        TC_LOG_DEBUG("housing", "SendPlotHouseProxyEntities: player={} no proxies to send",
-            player->GetGUID().ToString());
-        return;
-    }
-
-    WorldPacket packet;
-    updateData.BuildPacket(&packet);
-    player->SendDirectMessage(&packet);
-
-    TC_LOG_INFO("housing", "SendPlotHouseProxyEntities: player={} sent={} proxy HousingPlayerHouse CREATEs "
-        "(packet size {} bytes)",
-        player->GetGUID().ToString(), proxyCount, packet.size());
 }
 
 void HousingMap::AddPlayerHousing(ObjectGuid playerGuid, Housing* housing)
