@@ -1813,16 +1813,30 @@ static void WriteJamNeighborhoodRosterEntry(WorldPacket& packet, JamNeighborhood
 
 WorldPacket const* HousingHouseStatusResponse::Write()
 {
-    // IDA 0x550000: PackedGUID×4 + uint8(Status) + uint8(FlagByte: bit7/bit6/bit5)
+    // Sniff-verified wire format (retail build 66838, idx 9984 of
+    // dump_12.0.1.66838_2026-04-15_09-35-59):
+    //   PackedGuid HouseGuid
+    //   PackedGuid AccountGuid     (BnetAccount)
+    //   PackedGuid OwnerPlayerGuid (may be empty ObjectGuid::Empty → 2-byte zero mask)
+    //   uint32     Status
+    //
+    // Two canonical retail samples:
+    //   21 B: HouseGuid(9) + AccountGuid(6) + 00 00 (empty Owner) + 00 00 00 00 (Status=0)
+    //   27 B: HouseGuid(9) + AccountGuid(6) + OwnerPlayerGuid(8) + 00 00 00 00 (Status=0)
+    //
+    // Previously we wrote four PackedGuids (adding NeighborhoodGuid) plus
+    // two uint8 fields (Status + FlagByte). That extra data was being read
+    // by the client at the wrong offsets, corrupting Status (interpreted
+    // as 4 bytes of PackedGuid mask) and causing editor-state flapping.
+    // NeighborhoodGuid + FlagByte have been dropped; Status widened to
+    // uint32 to match retail.
     _worldPacket << HouseGuid;
     _worldPacket << AccountGuid;
     _worldPacket << OwnerPlayerGuid;
-    _worldPacket << NeighborhoodGuid;
-    _worldPacket << uint8(Status);
-    _worldPacket << uint8(FlagByte);
+    _worldPacket << uint32(Status);
 
-    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_HOUSE_STATUS_RESPONSE HouseGuid: {} AccountGuid: {} OwnerPlayerGuid: {} NeighborhoodGuid: {} Status: {} FlagByte: 0x{:02X}",
-        HouseGuid.ToString(), AccountGuid.ToString(), OwnerPlayerGuid.ToString(), NeighborhoodGuid.ToString(), Status, FlagByte);
+    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_HOUSE_STATUS_RESPONSE HouseGuid: {} AccountGuid: {} OwnerPlayerGuid: {} Status: {}",
+        HouseGuid.ToString(), AccountGuid.ToString(), OwnerPlayerGuid.ToString(), Status);
 
     return &_worldPacket;
 }

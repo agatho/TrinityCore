@@ -1936,14 +1936,21 @@ namespace WorldPackets::Housing
         HousingHouseStatusResponse() : ServerPacket(SMSG_HOUSING_HOUSE_STATUS_RESPONSE) { }
         WorldPacket const* Write() override;
 
-        // IDA 0x550000: PackedGUID×4 + uint8(Status) + uint8(FlagByte: bit7/bit6/bit5)
-        // Position 2 is BNetAccount GUID per sniff byte analysis (hi byte7=0x78)
+        // Sniff-verified wire format (retail build 66838, audit 2026-04-22):
+        //   PackedGuid HouseGuid
+        //   PackedGuid AccountGuid      (BnetAccount)
+        //   PackedGuid OwnerPlayerGuid  (may be ObjectGuid::Empty)
+        //   uint32     Status
+        // NeighborhoodGuid + FlagByte fields are NOT on the wire. They are
+        // kept here as non-serialised members so existing call sites that
+        // assign them still compile without behaviour change; remove in a
+        // cleanup pass after confirming no downstream reads.
         ObjectGuid HouseGuid;
-        ObjectGuid AccountGuid;         // BNetAccount GUID (sniff-verified at position 2)
+        ObjectGuid AccountGuid;
         ObjectGuid OwnerPlayerGuid;
-        ObjectGuid NeighborhoodGuid;    // Actual neighborhood/housing GUID
-        uint8 Status = 0;
-        uint8 FlagByte = 0;     // bit7=flag1, bit6=flag2, bit5=flag3
+        uint32 Status = 0;
+        ObjectGuid NeighborhoodGuid;    // NOT written to wire (kept for source compat)
+        uint8 FlagByte = 0;             // NOT written to wire (kept for source compat)
     };
 
     class HousingGetCurrentHouseInfoResponse final : public ServerPacket
