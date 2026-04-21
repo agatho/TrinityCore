@@ -1567,7 +1567,7 @@ void WorldSession::HandleNeighborhoodOpenCornerstoneUI(WorldPackets::Neighborhoo
             plotIndex, neighborhoodMapId);
         WorldPackets::Neighborhood::NeighborhoodOpenCornerstoneUIResponse response;
         response.PlotIndex = plotIndex;
-        response.NeighborhoodName = neighborhood->GetName();
+        response.NeighborhoodName = sHousingMgr.ResolveNeighborhoodName(neighborhood->GetName());
         SendPacket(response.Write());
         return;
     }
@@ -1602,7 +1602,7 @@ void WorldSession::HandleNeighborhoodOpenCornerstoneUI(WorldPackets::Neighborhoo
     response.CornerstoneGuid = neighborhoodOpenCornerstoneUI.NeighborhoodGuid; // GO GUID from CMSG
     response.IsPlotOwned = isOwned;
     response.CanPurchase = !isOwned;
-    response.NeighborhoodName = neighborhood->GetName();
+    response.NeighborhoodName = sHousingMgr.ResolveNeighborhoodName(neighborhood->GetName());
 
     // Set IsInitiative when the neighborhood has an active initiative/endeavor
     uint64 nhLowGuid = neighborhood->GetGuid().GetCounter();
@@ -1747,7 +1747,7 @@ void WorldSession::HandleNeighborhoodGetRoster(WorldPackets::Neighborhood::Neigh
     response.Result = static_cast<uint8>(HOUSING_RESULT_SUCCESS);
     response.GroupNeighborhoodGuid = neighborhood->GetGuid();
     response.GroupOwnerGuid = neighborhood->GetOwnerGuid();
-    response.NeighborhoodName = neighborhood->GetName();
+    response.NeighborhoodName = sHousingMgr.ResolveNeighborhoodName(neighborhood->GetName());
     response.Members.reserve(members.size());
     for (auto const& member : members)
     {

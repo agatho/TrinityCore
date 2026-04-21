@@ -284,6 +284,17 @@ public:
     // Name generation
     std::string GenerateNeighborhoodName(uint32 neighborhoodMapId) const;
 
+    // Resolve a stored "<prefixID>-<middleID>-<suffixID>" triplet (as produced by
+    // GenerateNeighborhoodName and persisted to neighborhoods.name) into the
+    // localized display string "Prefix Middle Suffix" via the NeighborhoodNameGen
+    // DB2. Required for responses the client displays verbatim without going
+    // through C_HousingNeighborhood.GetNeighborhoodName() (e.g. the HouseFinder
+    // and Roster UIs — see Blizzard_HousingHouseFinder.lua:541).
+    // Returns the input string unchanged if it doesn't match the triplet shape
+    // or any ID lookup fails, so existing manually-named neighborhoods still
+    // display correctly.
+    std::string ResolveNeighborhoodName(std::string const& storedName) const;
+
     // Level-based limits
     uint32 GetMaxDecorForLevel(uint32 level) const;
 
