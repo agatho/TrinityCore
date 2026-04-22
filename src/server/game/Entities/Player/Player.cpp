@@ -25698,6 +25698,31 @@ void Player::SendInitialPacketsAfterAddToMap()
             // No house: all fields stay at defaults (empty GUIDs, Status=0, FlagByte=0).
             SendDirectMessage(statusResponse.Write());
 
+            // Populate FHousingStorage_C.Decor on the Account entity at login.
+            // Sniff analysis of user-reported bug (dump_12.0.1.66838_2026-04
+            // -22_22-21-30): our login BNetAccount CREATE carries an empty
+            // FHousingStorage_C fragment (fbs=11, 8 bytes payload, zero Decor
+            // entries). The dashboard click populates it via CMSG_HOUSING_
+            // DECOR_REQUEST_STORAGE -> PopulateCatalogStorageEntries() ->
+            // Decor map with N entries, each with a HouseGUID field. User
+            // reports dashboard click is what makes the own-plot map icon
+            // appear.
+            //
+            // Hypothesis: the client uses FHousingStorage_C.Decor[i].HouseGUID
+            // as the 'own house anchor' for the world-map icon picker. With
+            // no populated Storage, client has no anchor -> own plot shows
+            // as unowned. By populating at login we provide the anchor
+            // immediately.
+            //
+            // Earlier memory note recorded a BLZ_ALLOC 41GB crash when
+            // populating at login, but that was a prior broken implementation
+            // generating unbounded catalog GUIDs. Current code
+            // (Housing::PopulateCatalogStorageEntries) produces a bounded
+            // number of entries per player (placed decor + per-catalog-type
+            // storage count).
+            if (housing)
+                housing->PopulateCatalogStorageEntries();
+
             // Proactively send SMSG_HOUSING_GET_PLAYER_PERMISSIONS_RESPONSE.
             // Retail sniff (dump_12.0.1.66838_2026-04-15_09-35-59 idx 6916)
             // shows this SMSG fired at login with NO preceding CMSG — it is
