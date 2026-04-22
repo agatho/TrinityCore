@@ -40,6 +40,10 @@ public:
     // on wholesale re-pushes (sniff-verified against retail dumps).
     void SendCreateToPlayer(Player* player);
 
+    // Diagnostic: log every emitted CREATE's field contents so we can verify
+    // fixes from sniff comparisons without needing to decode hex by hand.
+    void BuildCreateUpdateBlockForPlayer(UpdateData* data, Player* target) const override;
+
     // Housing UpdateField setters (IDA-verified: HouseType/HouseSize not in this fragment)
     void SetPlotIndex(int32 plotIndex);
     void SetLevel(uint32 level);
