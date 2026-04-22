@@ -4117,7 +4117,8 @@ void WorldSession::HandleHousingSvcsGetHouseFinderNeighborhood(WorldPackets::Hou
             mirrorEntity.AddManager(bnetGuid, member.PlayerGuid);
         }
     }
-    mirrorEntity.SendUpdateToPlayer(player);
+    // Wholesale re-push; retail uses CREATE for this (sniff-verified).
+    mirrorEntity.SendCreateToPlayer(player);
 
     TC_LOG_INFO("housing", "  MIRROR: update sent to player {}", player->GetName());
 }
@@ -5392,7 +5393,8 @@ void WorldSession::HandleHousingSvcsGetRosterData(WorldPackets::Housing::Housing
                 mirrorEntity.AddManager(bnetGuid, member.PlayerGuid);
             }
         }
-        mirrorEntity.SendUpdateToPlayer(player);
+        // Wholesale re-push; retail uses CREATE for this (sniff-verified).
+        mirrorEntity.SendCreateToPlayer(player);
     }
 
     SendPacket(response.Write());

@@ -35,6 +35,12 @@ public:
     std::string GetDebugInfo() const override;
 
     void SendUpdateToPlayer(Player* player);
+    // Force-emit a CREATE_OBJECT block (bypasses HaveAtClient). Use this for
+    // wholesale re-pushes (ClearHouses + re-populate) — retail-sniff-verified
+    // to be >=80% of Housing/4 updates. The client's map-icon refresh path
+    // only fires on CREATE; VALUES_UPDATE applies the field changes silently.
+    // See 63_values_update_changemask.py for the rule.
+    void SendCreateToPlayer(Player* player);
 
     // Reset the entity GUID (must be called before AddToWorld)
     void ResetGuid(ObjectGuid newGuid) { _Create(newGuid); }

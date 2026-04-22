@@ -25726,7 +25726,14 @@ void Player::SendInitialPacketsAfterAddToMap()
 
             // Flush the Housing/4 entity update to the client so it receives the
             // NeighborhoodMirrorData (houses, managers, owner, name).
-            mirrorEntity.SendUpdateToPlayer(this);
+            // Retail pattern (sniff-verified across 3 login dumps, 100+ updates):
+            // wholesale re-pushes (ClearHouses + re-populate all 55 slots) are
+            // emitted as CREATE_OBJECT, not VALUES_UPDATE. The client's map-icon
+            // refresh path only fires on CREATE — VALUES_UPDATE applies field
+            // changes silently and the map stays stale until something else
+            // triggers a re-render (empirically the roster click did it because
+            // HaveAtClient happened to return FALSE there, producing CREATE).
+            mirrorEntity.SendCreateToPlayer(this);
 
             // FHousingPlayerHouse_C belongs on the Housing/3 entity.
             // Populate it with the player's house data for this neighborhood.
@@ -25750,7 +25757,10 @@ void Player::SendInitialPacketsAfterAddToMap()
                     housing->GetMaxRoomBudget(),
                     housing->GetMaxFixtureBudget()
                 );
-                houseEntity.SendUpdateToPlayer(this);
+                // Wholesale field re-push at login — use CREATE to trigger the
+                // own-plot icon refresh (sniff-verified: dashboard click works
+                // because it re-pushes Housing/3 as CREATE in a later packet).
+                houseEntity.SendCreateToPlayer(this);
             }
 
             // Proactively send the neighborhood name response BEFORE the roster.

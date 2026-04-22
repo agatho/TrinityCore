@@ -1802,7 +1802,10 @@ void WorldSession::HandleNeighborhoodGetRoster(WorldPackets::Neighborhood::Neigh
             mirrorEntity.AddManager(bnetGuid, member.PlayerGuid);
         }
     }
-    mirrorEntity.SendUpdateToPlayer(player);
+    // Wholesale re-push (ClearHouses + 55 AddHouse + ClearManagers + AddManagers).
+    // Retail emits CREATE_OBJECT here (sniff-verified). The client's map-icon
+    // refresh path only fires on CREATE.
+    mirrorEntity.SendCreateToPlayer(player);
 
     // Pre-push player names for all plot owners so the client can format
     // plot names via HOUSING_HOUSE_NAME_FORMAT without waiting for async name queries.

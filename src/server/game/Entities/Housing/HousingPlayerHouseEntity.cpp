@@ -93,6 +93,17 @@ void HousingPlayerHouseEntity::SendUpdateToPlayer(Player* player)
     ClearUpdateMask(true);
 }
 
+void HousingPlayerHouseEntity::SendCreateToPlayer(Player* player)
+{
+    BuildUpdateChangesMask();
+    UpdateData upd(player->GetMapId());
+    WorldPacket packet;
+    BuildCreateUpdateBlockForPlayer(&upd, player);
+    upd.BuildPacket(&packet);
+    player->SendDirectMessage(&packet);
+    ClearUpdateMask(true);
+}
+
 void HousingPlayerHouseEntity::SetPlotIndex(int32 plotIndex)
 {
     SetUpdateFieldValue(m_values.ModifyValue(&HousingPlayerHouseEntity::m_housingPlayerHouseData).ModifyValue(&UF::HousingPlayerHouseData::PlotIndex), plotIndex);

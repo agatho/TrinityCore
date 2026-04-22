@@ -35,6 +35,10 @@ public:
     std::string GetDebugInfo() const override;
 
     void SendUpdateToPlayer(Player* player);
+    // Force-emit CREATE_OBJECT (bypasses HaveAtClient). See Housing/4 twin
+    // for rationale — the world-map / plot icon refresh path needs CREATE
+    // on wholesale re-pushes (sniff-verified against retail dumps).
+    void SendCreateToPlayer(Player* player);
 
     // Housing UpdateField setters (IDA-verified: HouseType/HouseSize not in this fragment)
     void SetPlotIndex(int32 plotIndex);

@@ -92,6 +92,17 @@ void HousingNeighborhoodMirrorEntity::SendUpdateToPlayer(Player* player)
     ClearUpdateMask(true);
 }
 
+void HousingNeighborhoodMirrorEntity::SendCreateToPlayer(Player* player)
+{
+    BuildUpdateChangesMask();
+    UpdateData upd(player->GetMapId());
+    WorldPacket packet;
+    BuildCreateUpdateBlockForPlayer(&upd, player);
+    upd.BuildPacket(&packet);
+    player->SendDirectMessage(&packet);
+    ClearUpdateMask(true);
+}
+
 void HousingNeighborhoodMirrorEntity::SetName(std::string const& name)
 {
     SetUpdateFieldValue(m_values.ModifyValue(&HousingNeighborhoodMirrorEntity::m_neighborhoodMirrorData).ModifyValue(&UF::NeighborhoodMirrorData::Name), name);
