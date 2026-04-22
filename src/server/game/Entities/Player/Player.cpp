@@ -25777,6 +25777,16 @@ void Player::SendInitialPacketsAfterAddToMap()
                 data.PlayerGuid = member.PlayerGuid;
                 data.PlotIndex = member.PlotIndex;
                 data.JoinTime = member.JoinTime;
+                // ResidentType + IsOnline MUST be populated for the login-proactive
+                // roster to match the reactive-CMSG roster byte-for-byte. Without
+                // IsOnline, the trailing Array-A online-flag byte is 0x00 instead
+                // of 0x80, and the client's map-icon-refresh predicate (sniff-diff
+                // of the 2026-04-22 05:38 capture, packet idx 315 vs 775: single
+                // bit flip at offset 157) skips processing the payload entirely.
+                // Result: map shows all plots as unowned until the user manually
+                // triggers a roster fetch via the neighborhood board.
+                data.ResidentType = member.Role;
+                data.IsOnline = ObjectAccessor::FindPlayer(member.PlayerGuid) != nullptr;
                 if (member.PlotIndex != INVALID_PLOT_INDEX)
                     if (Neighborhood::PlotInfo const* plotInfo = neighborhood->GetPlotInfo(member.PlotIndex))
                         data.HouseGuid = plotInfo->HouseGuid;
@@ -25795,6 +25805,33 @@ void Player::SendInitialPacketsAfterAddToMap()
                 rosterResponse.GroupOwnerGuid.ToString(),
                 rosterResponse.GroupOwnerGuid.GetRawValue(0), rosterResponse.GroupOwnerGuid.GetRawValue(1),
                 rosterResponse.NeighborhoodName, rosterResponse.Members.size(), loginRosterPkt->size());
+
+            // Proactively send SMSG_HOUSING_SVCS_GET_PLAYER_HOUSES_INFO_RESPONSE.
+            // Sniff audit 2026-04-22 capture 05:38 showed the own-plot icon on
+            // the world map only renders with "Your House" tooltip AFTER the
+            // client sends CMSG_HOUSING_SVCS_GET_PLAYER_HOUSES_INFO (triggered
+            // by opening the housing dashboard) and we respond with this
+            // packet. Sending the same response proactively at login primes
+            // the client's "my houses" state so the map renders correctly
+            // from the first frame, without user dashboard interaction.
+            // JamCliHouse struct mirrors HandleHousingSvcsGetPlayerHousesInfo.
+            if (housing)
+            {
+                WorldPackets::Housing::HousingSvcsGetPlayerHousesInfoResponse housesResp;
+                for (Housing const* h : GetAllHousings())
+                {
+                    WorldPackets::Housing::JamCliHouse jam;
+                    jam.OwnerGUID = GetGUID();
+                    jam.HouseGUID = h->GetHouseGuid();
+                    jam.NeighborhoodGUID = h->GetNeighborhoodGuid();
+                    jam.HouseLevel = static_cast<uint8>(h->GetLevel());
+                    jam.PlotIndex = h->GetPlotIndex();
+                    housesResp.Houses.push_back(jam);
+                }
+                SendDirectMessage(housesResp.Write());
+                TC_LOG_DEBUG("housing", "Player {} housing map enter: pre-sent PlayerHousesInfoResponse with {} house(s)",
+                    GetGUID().ToString(), uint32(housesResp.Houses.size()));
+            }
 
             // Proactively send player name responses for ALL occupied plot owners.
             // The client's GetNeighborhoodPlotName() reads OwnerGUID from the mirror
