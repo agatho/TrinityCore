@@ -25792,49 +25792,18 @@ void Player::SendInitialPacketsAfterAddToMap()
                     nameResponse.NeighborhoodGuid.GetRawValue(0), nameResponse.NeighborhoodGuid.GetRawValue(1));
             }
 
-            // Proactively send the roster so the client has plot occupancy data
-            // for the map without needing to request it.
-            WorldPackets::Neighborhood::NeighborhoodGetRosterResponse rosterResponse;
-            rosterResponse.Result = 0; // Success
-            rosterResponse.GroupNeighborhoodGuid = neighborhood->GetGuid();
-            rosterResponse.GroupOwnerGuid = neighborhood->GetOwnerGuid();
-            rosterResponse.NeighborhoodName = neighborhood->GetName();
-            auto const& members = neighborhood->GetMembers();
-            rosterResponse.Members.reserve(members.size());
-            for (auto const& member : members)
-            {
-                WorldPackets::Neighborhood::NeighborhoodGetRosterResponse::RosterMemberData data;
-                data.PlayerGuid = member.PlayerGuid;
-                data.PlotIndex = member.PlotIndex;
-                data.JoinTime = member.JoinTime;
-                // ResidentType + IsOnline MUST be populated for the login-proactive
-                // roster to match the reactive-CMSG roster byte-for-byte. Without
-                // IsOnline, the trailing Array-A online-flag byte is 0x00 instead
-                // of 0x80, and the client's map-icon-refresh predicate (sniff-diff
-                // of the 2026-04-22 05:38 capture, packet idx 315 vs 775: single
-                // bit flip at offset 157) skips processing the payload entirely.
-                // Result: map shows all plots as unowned until the user manually
-                // triggers a roster fetch via the neighborhood board.
-                data.ResidentType = member.Role;
-                data.IsOnline = ObjectAccessor::FindPlayer(member.PlayerGuid) != nullptr;
-                if (member.PlotIndex != INVALID_PLOT_INDEX)
-                    if (Neighborhood::PlotInfo const* plotInfo = neighborhood->GetPlotInfo(member.PlotIndex))
-                        data.HouseGuid = plotInfo->HouseGuid;
-                rosterResponse.Members.push_back(data);
-            }
-            WorldPacket const* loginRosterPkt = rosterResponse.Write();
-            SendDirectMessage(loginRosterPkt);
-
-            // Debug: log raw GUID bytes to verify roster packet populates handler context correctly
-            TC_LOG_ERROR("housing", "=== SMSG_NEIGHBORHOOD_GET_ROSTER_RESPONSE (0x5C0012) [login] ===\n"
-                "  GroupNeighborhoodGuid: {} (lo={:016X} hi={:016X})\n"
-                "  GroupOwnerGuid: {} (lo={:016X} hi={:016X})\n"
-                "  NeighborhoodName='{}', Members={}, Packet size={} bytes",
-                rosterResponse.GroupNeighborhoodGuid.ToString(),
-                rosterResponse.GroupNeighborhoodGuid.GetRawValue(0), rosterResponse.GroupNeighborhoodGuid.GetRawValue(1),
-                rosterResponse.GroupOwnerGuid.ToString(),
-                rosterResponse.GroupOwnerGuid.GetRawValue(0), rosterResponse.GroupOwnerGuid.GetRawValue(1),
-                rosterResponse.NeighborhoodName, rosterResponse.Members.size(), loginRosterPkt->size());
+            // REMOVED proactive SMSG_NEIGHBORHOOD_GET_ROSTER_RESPONSE (0x5C0012).
+            // Sniff set-diff of 3 retail login captures (alliance 65940, horde
+            // 65940, advanced 66838) against our login shows retail NEVER emits
+            // this opcode at login — it is strictly a reactive response to
+            // CMSG_NEIGHBORHOOD_GET_ROSTER (0x39000E), which the client issues
+            // only when the user interacts with the neighborhood board / roster
+            // UI. Hypothesis under test: the client's map-icon state machine
+            // enters an 'already-processed' state when it receives this
+            // unsolicited response at login, suppressing the refresh that
+            // would otherwise fire on the reactive CMSG round-trip. User
+            // reports icons DO refresh after clicking the roster board, which
+            // is consistent with this hypothesis.
 
             // NOTE: proactive PlayerHousesInfoResponse previously emitted here
             // did not fix the own-plot icon. Hypothesis: it arrived BEFORE the
@@ -25870,9 +25839,9 @@ void Player::SendInitialPacketsAfterAddToMap()
                 }
             }
 
-            TC_LOG_INFO("housing", "Player {} entered neighborhood map {} - sent HouseStatus + roster + names + NeighborhoodMirrorData (Neighborhood: '{}' {}, Members: {}, Plots: {}, HasHouse: {})",
+            TC_LOG_INFO("housing", "Player {} entered neighborhood map {} - sent HouseStatus + names + NeighborhoodMirrorData (Neighborhood: '{}' {}, Members: {}, Plots: {}, HasHouse: {})",
                 GetGUID().ToString(), GetMapId(), neighborhood->GetName(), neighborhood->GetGuid().ToString(),
-                members.size(), neighborhood->GetOccupiedPlotCount(), housing ? "yes" : "no");
+                neighborhood->GetMembers().size(), neighborhood->GetOccupiedPlotCount(), housing ? "yes" : "no");
         }
     }
 
