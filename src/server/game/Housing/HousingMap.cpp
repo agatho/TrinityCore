@@ -854,6 +854,35 @@ bool HousingMap::AddPlayerToMap(Player* player, bool initPlayer /*= true*/)
         player->SendDirectMessage(catalogSync.Write());
         TC_LOG_DEBUG("housing", "HousingMap::AddPlayerToMap: sent SMSG_HOUSING_CATALOG_STATE_SYNC with {} entries",
             uint32(catalogSync.Entries.size()));
+
+        // Send SMSG_HOUSING_SVCS_GET_PLAYER_HOUSES_INFO_RESPONSE proactively.
+        // User report 2026-04-22: the own-plot world-map icon only renders as
+        // "Your House" AFTER the user manually opens the housing dashboard,
+        // which sends CMSG_HOUSING_SVCS_GET_PLAYER_HOUSES_INFO and we respond
+        // with this packet. Emitting it proactively primes the client's "my
+        // houses" state so the map renders correctly from the first frame.
+        //
+        // Emitted HERE (after Map::AddPlayerToMap has flushed the big
+        // UPDATE_OBJECT containing the Player + HousingPlayerHouse entities)
+        // so the client has the entities to correlate against. Previous
+        // attempt in Player::LoadFromDB fired too early — before those
+        // entities existed in the client's registry — and was ignored.
+        {
+            WorldPackets::Housing::HousingSvcsGetPlayerHousesInfoResponse housesResp;
+            for (Housing const* h : player->GetAllHousings())
+            {
+                WorldPackets::Housing::JamCliHouse jam;
+                jam.OwnerGUID = player->GetGUID();
+                jam.HouseGUID = h->GetHouseGuid();
+                jam.NeighborhoodGUID = h->GetNeighborhoodGuid();
+                jam.HouseLevel = static_cast<uint8>(h->GetLevel());
+                jam.PlotIndex = h->GetPlotIndex();
+                housesResp.Houses.push_back(jam);
+            }
+            player->SendDirectMessage(housesResp.Write());
+            TC_LOG_DEBUG("housing", "HousingMap::AddPlayerToMap: sent proactive PlayerHousesInfoResponse with {} house(s) (post-bundle ordering)",
+                uint32(housesResp.Houses.size()));
+        }
     }
 
     // Send SMSG_INITIATIVE_SERVICE_STATUS proactively so IsInitiativeEnabled() returns

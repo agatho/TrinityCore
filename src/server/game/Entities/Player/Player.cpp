@@ -25806,32 +25806,15 @@ void Player::SendInitialPacketsAfterAddToMap()
                 rosterResponse.GroupOwnerGuid.GetRawValue(0), rosterResponse.GroupOwnerGuid.GetRawValue(1),
                 rosterResponse.NeighborhoodName, rosterResponse.Members.size(), loginRosterPkt->size());
 
-            // Proactively send SMSG_HOUSING_SVCS_GET_PLAYER_HOUSES_INFO_RESPONSE.
-            // Sniff audit 2026-04-22 capture 05:38 showed the own-plot icon on
-            // the world map only renders with "Your House" tooltip AFTER the
-            // client sends CMSG_HOUSING_SVCS_GET_PLAYER_HOUSES_INFO (triggered
-            // by opening the housing dashboard) and we respond with this
-            // packet. Sending the same response proactively at login primes
-            // the client's "my houses" state so the map renders correctly
-            // from the first frame, without user dashboard interaction.
-            // JamCliHouse struct mirrors HandleHousingSvcsGetPlayerHousesInfo.
-            if (housing)
-            {
-                WorldPackets::Housing::HousingSvcsGetPlayerHousesInfoResponse housesResp;
-                for (Housing const* h : GetAllHousings())
-                {
-                    WorldPackets::Housing::JamCliHouse jam;
-                    jam.OwnerGUID = GetGUID();
-                    jam.HouseGUID = h->GetHouseGuid();
-                    jam.NeighborhoodGUID = h->GetNeighborhoodGuid();
-                    jam.HouseLevel = static_cast<uint8>(h->GetLevel());
-                    jam.PlotIndex = h->GetPlotIndex();
-                    housesResp.Houses.push_back(jam);
-                }
-                SendDirectMessage(housesResp.Write());
-                TC_LOG_DEBUG("housing", "Player {} housing map enter: pre-sent PlayerHousesInfoResponse with {} house(s)",
-                    GetGUID().ToString(), uint32(housesResp.Houses.size()));
-            }
+            // NOTE: proactive PlayerHousesInfoResponse previously emitted here
+            // did not fix the own-plot icon. Hypothesis: it arrived BEFORE the
+            // Player and HousingPlayerHouse entities were CREATE'd (both are
+            // emitted inside the subsequent HousingMap::AddPlayerToMap big
+            // UPDATE_OBJECT bundle), so the client had nothing to correlate
+            // the response against. The emission has been moved to
+            // HousingMap::AddPlayerToMap, AFTER CATALOG_STATE_SYNC and the
+            // big UPDATE_OBJECT, so all entities exist in the client registry
+            // before the response arrives.
 
             // Proactively send player name responses for ALL occupied plot owners.
             // The client's GetNeighborhoodPlotName() reads OwnerGUID from the mirror
