@@ -1959,31 +1959,20 @@ void WorldSession::HandleNeighborhoodInitiativeServiceStatusCheck(WorldPackets::
     TC_LOG_DEBUG("housing", "CMSG_NEIGHBORHOOD_INITIATIVE_SERVICE_STATUS_CHECK for player {}",
         player->GetGUID().ToString());
 
-    // Send initiative service status
+    // Send initiative service status (retail-observed: this CMSG's only response)
     sInitiativeManager.SendInitiativeServiceStatus(this, true);
 
-    // Proactively send initiative data — the client's C_NeighborhoodInitiative singleton
-    // requires SMSG_GET_PLAYER_INITIATIVE_INFO_RESULT to set its isLoaded flag.
-    // Without this, GetNeighborhoodInitiativeInfo() returns nil and the endeavor UI is empty.
-    // Sniff-verified: the live server sends this SMSG proactively (not only in response to
-    // CMSG_INITIATIVE_UPDATE_ACTIVE_NEIGHBORHOOD which the client rarely/never sends).
-    ObjectGuid nhObjGuid;
-    if (Housing* housing = player->GetHousing())
-        nhObjGuid = housing->GetNeighborhoodGuid();
-
-    // Fallback: if player has no house, find their neighborhood via membership
-    if (nhObjGuid.IsEmpty())
-    {
-        auto neighborhoods = sNeighborhoodMgr.GetNeighborhoodsForPlayer(player->GetGUID());
-        if (!neighborhoods.empty())
-            nhObjGuid = neighborhoods[0]->GetGuid();
-    }
-
-    if (!nhObjGuid.IsEmpty())
-    {
-        uint64 nhGuid = nhObjGuid.GetCounter();
-        sInitiativeManager.SendPlayerInitiativeInfo(this, nhObjGuid, nhGuid);
-    }
+    // REMOVED proactive SMSG_GET_PLAYER_INITIATIVE_INFO_RESULT (0x420365).
+    // Sniff set-diff of 3 retail login captures shows retail never emits
+    // this SMSG at login. The earlier comment claimed it was needed for
+    // the client's C_NeighborhoodInitiative.isLoaded flag, but that claim
+    // was not actually sniff-verified. The client sends
+    // CMSG_GET_AVAILABLE_INITIATIVE_REQUEST when it needs the data; the
+    // reactive handler at HandleGetAvailableInitiativeRequest delivers
+    // SendPlayerInitiativeInfo on demand. Hypothesis: the proactive
+    // unsolicited INITIATIVE_INFO_RESULT at login suppresses the client's
+    // map-icon refresh (same pattern as the previously-removed proactive
+    // roster response).
 }
 
 void WorldSession::HandleGetAvailableInitiativeRequest(WorldPackets::Neighborhood::GetAvailableInitiativeRequest const& getAvailableInitiativeRequest)

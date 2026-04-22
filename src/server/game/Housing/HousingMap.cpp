@@ -949,35 +949,19 @@ bool HousingMap::AddPlayerToMap(Player* player, bool initPlayer /*= true*/)
                 }
             }
 
-            WorldPackets::Neighborhood::NeighborhoodPlayerEnterPlot enterPlot;
-            enterPlot.NeighborhoodEntityGuid = plotAt->GetGUID();
-            p->SendDirectMessage(enterPlot.Write());
-
-            // HOUSE_STATUS_RESPONSE and GET_PLAYER_PERMISSIONS_RESPONSE emissions
-            // previously lived here. They are now sent by the at_housing_plot AT
-            // script on plot-overlap entry (at_housing_plot.cpp:132), which fires
-            // once the player physically enters the plot's AT — matching retail's
-            // emission pattern (2 per session vs our previous 5). Removing the
-            // duplicate emission here avoids the client-side editor-mode flapping
-            // observed when two HouseStatus arrive within a few ms of each other
-            // with identical flag bytes. Sniff audit 2026-04-21 finding #2.2/2.3.
-            TC_LOG_DEBUG("housing", "HousingMap deferred ENTER_PLOT: skipping HouseStatus+Permissions — AT overlap already sends them for owner {}",
+            // REMOVED proactive SMSG_NEIGHBORHOOD_PLAYER_ENTER_PLOT (0x5C0000)
+            // and SMSG_HOUSING_FIXTURE_CREATE_BASIC_HOUSE_RESPONSE (0x520001).
+            // Sniff set-diff of 3 retail login captures shows retail never
+            // emits either opcode at login / during the deferred-map-entry
+            // window; both are strictly reactive to specific user actions
+            // (AT overlap entry, fixture-editor click). Keeping the
+            // proactive sends here put the client's housing-state machine
+            // into pre-initialised state that suppressed the world-map
+            // icon-picker refresh. The at_housing_plot AT script still
+            // emits PLAYER_ENTER_PLOT (and HouseStatus+Permissions) on
+            // actual plot overlap, which matches retail.
+            TC_LOG_DEBUG("housing", "HousingMap deferred ENTER_PLOT: proactive PLAYER_ENTER_PLOT + FIXTURE_CREATE_BASIC_HOUSE suppressed for player {}",
                 playerGuid.ToString());
-
-            // Send SMSG_HOUSING_FIXTURE_CREATE_BASIC_HOUSE_RESPONSE with Result=0.
-            // This triggers the client's fixture frame initialization: the handler
-            // calls teardown + rebuild, which sets the fixture manager's house GUID
-            // (state+96/+104) from the NeighborhoodSystem. This MUST come BEFORE any
-            // fixture entity CREATEs, because the CREATE callback compares each
-            // entity's FHousingFixture_C::HouseGUID against state+96/+104 — if they
-            // don't match, the entity is silently skipped and the hook shows "None".
-            {
-                WorldPackets::Housing::HousingFixtureCreateBasicHouseResponse fixtureInit;
-                fixtureInit.Result = static_cast<uint8>(HOUSING_RESULT_SUCCESS);
-                p->SendDirectMessage(fixtureInit.Write());
-                TC_LOG_DEBUG("housing", "HousingMap deferred ENTER_PLOT: Sent CREATE_BASIC_HOUSE_RESPONSE (fixture init) for plot {}",
-                    deferredPlotIndex);
-            }
 
             // Re-CREATE ALL fixture MeshObjects for this plot AFTER the rebuild.
             // The rebuild (triggered by CREATE_BASIC_HOUSE_RESPONSE above) sets the
