@@ -25698,6 +25698,24 @@ void Player::SendInitialPacketsAfterAddToMap()
             // No house: all fields stay at defaults (empty GUIDs, Status=0, FlagByte=0).
             SendDirectMessage(statusResponse.Write());
 
+            // Proactively send SMSG_HOUSING_GET_PLAYER_PERMISSIONS_RESPONSE.
+            // Retail sniff (dump_12.0.1.66838_2026-04-15_09-35-59 idx 6916)
+            // shows this SMSG fired at login with NO preceding CMSG — it is
+            // a server-initiated push, not a reactive response. Hypothesis
+            // under test: this packet sets client-side HousingSystem TLS
+            // state (offset +272+32) to 2, which is the gate the world-map
+            // icon-picker caller (sub_7FF6269B1240) checks before calling
+            // sub_7FF624BB1880. Without state==2 the caller returns 4701
+            // (default / unowned icon) regardless of Housing/3 entity data.
+            if (housing)
+            {
+                WorldPackets::Housing::HousingGetPlayerPermissionsResponse permResponse;
+                permResponse.HouseGuid = housing->GetHouseGuid();
+                permResponse.ResultCode = 0;
+                permResponse.PermissionFlags = 0xE0; // sniff-verified owner perms (bits 5,6,7)
+                SendDirectMessage(permResponse.Write());
+            }
+
             // FNeighborhoodMirrorData_C belongs on the Housing/4 entity (separate from BNetAccount).
             HousingNeighborhoodMirrorEntity& mirrorEntity = GetSession()->GetHousingNeighborhoodMirrorEntity();
             mirrorEntity.SetName(neighborhood->GetName());
