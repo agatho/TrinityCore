@@ -19299,13 +19299,17 @@ bool Player::LoadFromDB(ObjectGuid guid, CharacterDatabaseQueryHolder const& hol
             {
                 HousingPlayerHouseEntity& houseEntity = GetSession()->GetHousingPlayerHouseEntity();
                 houseEntity.SetBnetAccount(GetSession()->GetBattlenetAccountGUID());
-                // EntityGUID is refreshed in HousingMap::AddPlayerToMap to the
-                // paired mirror GUID. Leaving it empty here is safer than the
-                // previous self-reference to HouseGuid, which produced a broken
-                // lookup in the client's world-map icon picker (it chased
-                // EntityGUID back to the identity entity, which has no position
-                // fragment and so no icon place to render).
-                houseEntity.SetEntityGUID(ObjectGuid::Empty);
+                // EntityGUID = HouseGuid (self-reference). Matches what
+                // Housing::SyncUpdateFields does on every post-login re-push
+                // (Housing.cpp:2419). Sniff-verified against our own server:
+                // when the user opens the housing dashboard, the handler
+                // CMSG_HOUSING_DECOR_REQUEST_STORAGE emits a Housing/3 CREATE
+                // whose EntityGUID is the self-reference (HouseGuid), and
+                // THIS is what makes the client's own-plot map icon render.
+                // Setting Empty at login (commit a06defed4b) left the
+                // initial CREATE with EntityGUID=00 00 and the icon stayed
+                // broken until the dashboard click forced a re-push.
+                houseEntity.SetEntityGUID(housing->GetHouseGuid());
                 houseEntity.SetPlotIndex(static_cast<int32>(housing->GetPlotIndex()));
                 houseEntity.SetLevel(housing->GetLevel());
                 houseEntity.SetFavor(housing->GetFavor64());
@@ -25741,13 +25745,17 @@ void Player::SendInitialPacketsAfterAddToMap()
             {
                 HousingPlayerHouseEntity& houseEntity = GetSession()->GetHousingPlayerHouseEntity();
                 houseEntity.SetBnetAccount(GetSession()->GetBattlenetAccountGUID());
-                // EntityGUID is refreshed in HousingMap::AddPlayerToMap to the
-                // paired mirror GUID. Leaving it empty here is safer than the
-                // previous self-reference to HouseGuid, which produced a broken
-                // lookup in the client's world-map icon picker (it chased
-                // EntityGUID back to the identity entity, which has no position
-                // fragment and so no icon place to render).
-                houseEntity.SetEntityGUID(ObjectGuid::Empty);
+                // EntityGUID = HouseGuid (self-reference). Matches what
+                // Housing::SyncUpdateFields does on every post-login re-push
+                // (Housing.cpp:2419). Sniff-verified against our own server:
+                // when the user opens the housing dashboard, the handler
+                // CMSG_HOUSING_DECOR_REQUEST_STORAGE emits a Housing/3 CREATE
+                // whose EntityGUID is the self-reference (HouseGuid), and
+                // THIS is what makes the client's own-plot map icon render.
+                // Setting Empty at login (commit a06defed4b) left the
+                // initial CREATE with EntityGUID=00 00 and the icon stayed
+                // broken until the dashboard click forced a re-push.
+                houseEntity.SetEntityGUID(housing->GetHouseGuid());
                 houseEntity.SetPlotIndex(static_cast<int32>(housing->GetPlotIndex()));
                 houseEntity.SetLevel(housing->GetLevel());
                 houseEntity.SetFavor(housing->GetFavor64());
