@@ -645,19 +645,50 @@ uint32 HousingMgr::GetQuestForLevel(uint32 level) const
     return 0;
 }
 
+// Retail-verified budget tables for levels 1..7, decoded from every Housing/3
+// CREATE block in dump_12.0.1.66838_2026-04-15_09-35-59 idx 9984 (n=47).
+// Every block at a given level has the same 4 values — zero variance.
+//   L1: Interior=910   Exterior=200  Room=1000  Fixture=19
+//   L2: Interior=1155  Exterior=200  Room=2000  Fixture=24
+//   L3: Interior=1450  Exterior=250  Room=3000  Fixture=30
+//   L4: Interior=1745  Exterior=250  Room=4000  Fixture=36
+//   L5: Interior=2050  Exterior=250  Room=5000  Fixture=43
+//   L6: Interior=2360  Exterior=250  Room=5000  Fixture=50
+//   L7: Interior=3180  Exterior=250  Room=5000  Fixture=68
+// Levels above 7 extrapolated linearly until a sniff covers higher tiers.
+// The HouseLevelData DB2 (hotfixes.house_level_data) only carries
+// ID/Level/QuestID — no budget columns — so this fallback is the hot path.
+namespace {
+    struct RetailBudget { uint32 interior, exterior, room, fixture; };
+    static constexpr RetailBudget RetailBudgetByLevel[] = {
+        /* 0 */ {   0,   0,    0,  0 },  // unused
+        /* 1 */ { 910, 200, 1000, 19 },
+        /* 2 */ {1155, 200, 2000, 24 },
+        /* 3 */ {1450, 250, 3000, 30 },
+        /* 4 */ {1745, 250, 4000, 36 },
+        /* 5 */ {2050, 250, 5000, 43 },
+        /* 6 */ {2360, 250, 5000, 50 },
+        /* 7 */ {3180, 250, 5000, 68 },
+    };
+    constexpr uint32 MAX_VERIFIED_LEVEL = 7;
+
+    RetailBudget RetailBudgetFor(uint32 level)
+    {
+        if (level >= 1 && level <= MAX_VERIFIED_LEVEL)
+            return RetailBudgetByLevel[level];
+        if (level == 0)
+            return RetailBudgetByLevel[1];
+        // Above verified tier: hold at L7 values (conservative — bump once sniffed)
+        return RetailBudgetByLevel[MAX_VERIFIED_LEVEL];
+    }
+}
+
 uint32 HousingMgr::GetInteriorDecorBudgetForLevel(uint32 level) const
 {
     HouseLevelData const* levelData = GetLevelData(level);
     if (levelData && levelData->InteriorDecorPlacementBudget > 0)
         return static_cast<uint32>(levelData->InteriorDecorPlacementBudget);
-
-    // Fallback: sniff-confirmed interior budgets
-    static constexpr uint32 InteriorBudgetByLevel[] = { 0, 910, 1155, 1450, 1750, 2050 };
-    if (level >= 1 && level <= 5)
-        return InteriorBudgetByLevel[level];
-    if (level > 5)
-        return 2050 + (level - 5) * 300;
-    return 910;
+    return RetailBudgetFor(level).interior;
 }
 
 uint32 HousingMgr::GetExteriorDecorBudgetForLevel(uint32 level) const
@@ -665,9 +696,7 @@ uint32 HousingMgr::GetExteriorDecorBudgetForLevel(uint32 level) const
     HouseLevelData const* levelData = GetLevelData(level);
     if (levelData && levelData->ExteriorDecorPlacementBudget > 0)
         return static_cast<uint32>(levelData->ExteriorDecorPlacementBudget);
-
-    // Fallback: sniff-confirmed exterior budget (constant across levels)
-    return 200;
+    return RetailBudgetFor(level).exterior;
 }
 
 uint32 HousingMgr::GetRoomBudgetForLevel(uint32 level) const
@@ -675,9 +704,7 @@ uint32 HousingMgr::GetRoomBudgetForLevel(uint32 level) const
     HouseLevelData const* levelData = GetLevelData(level);
     if (levelData && levelData->RoomPlacementBudget > 0)
         return static_cast<uint32>(levelData->RoomPlacementBudget);
-
-    // Fallback: sniff-confirmed room budget (constant across levels)
-    return 19;
+    return RetailBudgetFor(level).room;
 }
 
 uint32 HousingMgr::GetFixtureBudgetForLevel(uint32 level) const
@@ -685,9 +712,7 @@ uint32 HousingMgr::GetFixtureBudgetForLevel(uint32 level) const
     HouseLevelData const* levelData = GetLevelData(level);
     if (levelData && levelData->ExteriorFixtureBudget > 0)
         return static_cast<uint32>(levelData->ExteriorFixtureBudget);
-
-    // Fallback: sniff-confirmed fixture budget (constant across levels)
-    return 1000;
+    return RetailBudgetFor(level).fixture;
 }
 
 uint32 HousingMgr::GetDecorWeightCost(uint32 decorEntryId) const

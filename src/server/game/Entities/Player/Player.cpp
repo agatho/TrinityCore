@@ -3694,6 +3694,18 @@ void Player::BuildCreateUpdateBlockForPlayer(UpdateData* data, Player* target) c
                     proxy.SetPlotIndex(static_cast<int32>(plot.PlotIndex));
                     proxy.SetLevel(plot.HouseLevel);
                     proxy.SetFavor(plot.HouseFavor);
+                    // Retail-verified (idx 9984, n=47): every Housing/3 block sets
+                    // all 4 budgets matching the plot's HouseLevel — proxies are
+                    // not a reduced form. Without budgets, the client still has
+                    // PlotIndex/Level to render the plot, but Lua queries like
+                    // GetCurrentHouseLevelFavor / GetPlayerOwnedHouses read
+                    // budget fields as part of the house summary and return
+                    // default/zero for uninitialised fields.
+                    proxy.SetBudgets(
+                        sHousingMgr.GetInteriorDecorBudgetForLevel(plot.HouseLevel),
+                        sHousingMgr.GetExteriorDecorBudgetForLevel(plot.HouseLevel),
+                        sHousingMgr.GetRoomBudgetForLevel(plot.HouseLevel),
+                        sHousingMgr.GetFixtureBudgetForLevel(plot.HouseLevel));
                     // Point EntityGUID at the paired HighGuid::Entity mirror so the
                     // client's icon picker can chase EntityGUID -> position data.
                     proxy.SetEntityGUID(mirrorGuid);
