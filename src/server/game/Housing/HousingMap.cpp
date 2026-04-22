@@ -20,6 +20,7 @@
 #include "HousingMirrorEntity.h"
 #include "HousingNeighborhoodMirrorEntity.h"
 #include "HousingPlayerHouseEntity.h"
+#include "HousingRoomEntity.h"
 #include <algorithm>
 #include <atomic>
 #include <cmath>
@@ -1914,14 +1915,19 @@ GameObject* HousingMap::SpawnHouseForPlot(uint8 plotIndex, Position const* custo
         // SpawnRoomForPlot was just called above and registered a room entity
         // in _roomEntities[plotIndex]. Use that GUID.
         {
-            ObjectGuid roomParentGuid;
-            if (auto roomItr = _roomEntities.find(plotIndex); roomItr != _roomEntities.end())
-                roomParentGuid = roomItr->second;
+            // Prefer the lightweight Housing/2 identity room entity — retail
+            // Group A mirrors (with exterior tags) AttachParent specifically
+            // to Housing/2 with arg2=18. Fall back to the MeshObject-based
+            // room if identity spawn failed, then to HouseGuid as last resort.
+            ObjectGuid roomParentGuid = GetRoomIdentityGuid(plotIndex);
+            if (roomParentGuid.IsEmpty())
+            {
+                if (auto roomItr = _roomEntities.find(plotIndex); roomItr != _roomEntities.end())
+                    roomParentGuid = roomItr->second;
+            }
 
             if (roomParentGuid.IsEmpty())
             {
-                // Fallback to HousingPlayerHouse if room wasn't created — better than
-                // nothing but the client likely can't resolve the world position.
                 roomParentGuid = plotInfo->HouseGuid;
                 TC_LOG_ERROR("housing", "HousingMap::SpawnHouseForPlot: no room entity for plot {}; "
                     "mirror AttachParent falls back to HouseGuid (icon may not render)", plotIndex);
@@ -2064,6 +2070,46 @@ void HousingMap::SpawnRoomForPlot(uint8 plotIndex, Position const& housePos,
 
     // --- Create entities ---
 
+    // 0. Create lightweight Housing/2 identity room (retail-matching type).
+    // Retail Group A Entity mirrors AttachParent to Housing/2 with arg2=18
+    // (HouseRoomID). Without this entity the mirror's AttachParent cannot
+    // resolve to a Housing-typed GUID, and the client's icon-placement logic
+    // may reject the chain (audit 2026-04-22).
+    //
+    // GUID convention for Housing/2:
+    //   ObjectGuidFactory::CreateHousing(2, 0, arg2=HOUSE_ROOM_ID, counter)
+    // where counter is per-plot unique. Using plotIndex as counter keeps it
+    // collision-free per map instance.
+    ObjectGuid roomIdentityGuid = ObjectGuid::Create<HighGuid::Housing>(
+        /*subType*/ 2,
+        /*arg1*/ 0,
+        /*arg2*/ static_cast<uint32>(HOUSE_ROOM_ID),
+        /*counter*/ static_cast<ObjectGuid::LowType>(plotIndex + 1));
+
+    HousingRoomEntity* roomIdentity = new HousingRoomEntity();
+    if (!roomIdentity->Create(roomIdentityGuid, this, housePos))
+    {
+        TC_LOG_ERROR("housing", "HousingMap::SpawnRoomForPlot: Failed to create Housing/2 identity room for plot {}", plotIndex);
+        delete roomIdentity;
+    }
+    else
+    {
+        roomIdentity->SetHouseGUID(houseGuid);
+        roomIdentity->SetHouseRoomID(HOUSE_ROOM_ID);
+        roomIdentity->SetFlags(ROOM_FLAGS);
+        roomIdentity->SetFloorIndex(0);
+        // Local mirror position = zero (room IS at plot centre via WorldObject position)
+        QuaternionData identRot;
+        identRot.x = identRot.y = identRot.z = 0.0f;
+        identRot.w = 1.0f;
+        roomIdentity->SetMirroredPosition(Position(0.0f, 0.0f, 0.0f, 0.0f), identRot,
+            /*scale*/ 1.0f, ObjectGuid::Empty, /*attachFlags*/ 3);
+        _roomIdentityGuids[plotIndex] = roomIdentityGuid;
+        TC_LOG_DEBUG("housing", "HousingMap::SpawnRoomForPlot: spawned Housing/2 identity room {} for plot {} at ({:.2f},{:.2f},{:.2f})",
+            roomIdentityGuid.ToString(), plotIndex,
+            housePos.GetPositionX(), housePos.GetPositionY(), housePos.GetPositionZ());
+    }
+
     // 1. Create room entity (MeshObject with FHousingRoom_C + Tag_HousingRoom fragments)
     MeshObject* roomEntity = MeshObject::CreateMeshObject(this, housePos, houseRot, 1.0f,
         fileDataID, /*isWMO*/ true,
@@ -2158,6 +2204,16 @@ void HousingMap::SpawnRoomForPlot(uint8 plotIndex, Position const& housePos,
 
 void HousingMap::DespawnRoomForPlot(uint8 plotIndex)
 {
+    // Despawn the lightweight Housing/2 identity room first so the mirror's
+    // AttachParent chain tears down cleanly.
+    auto identItr = _roomIdentityGuids.find(plotIndex);
+    if (identItr != _roomIdentityGuids.end())
+    {
+        if (HousingRoomEntity* room = GetObjectsStore().Find<HousingRoomEntity>(identItr->second))
+            room->AddObjectToRemoveList();
+        _roomIdentityGuids.erase(identItr);
+    }
+
     auto roomItr = _roomEntities.find(plotIndex);
     if (roomItr != _roomEntities.end())
     {
@@ -2978,6 +3034,20 @@ ObjectGuid HousingMap::MakeHouseMirrorGuid(uint8 plotIndex, uint32 bnetAccountId
     constexpr uint32 HOUSING_MIRROR_ENTRY = 37361;
     uint64 counter = (static_cast<uint64>(bnetAccountId) << 8) | static_cast<uint64>(plotIndex);
     return ObjectGuid::Create<HighGuid::Entity>(GetId(), HOUSING_MIRROR_ENTRY, counter);
+}
+
+HousingRoomEntity* HousingMap::GetRoomIdentityEntity(uint8 plotIndex) const
+{
+    auto itr = _roomIdentityGuids.find(plotIndex);
+    if (itr == _roomIdentityGuids.end())
+        return nullptr;
+    return const_cast<HousingMap*>(this)->GetObjectsStore().Find<HousingRoomEntity>(itr->second);
+}
+
+ObjectGuid HousingMap::GetRoomIdentityGuid(uint8 plotIndex) const
+{
+    auto itr = _roomIdentityGuids.find(plotIndex);
+    return itr != _roomIdentityGuids.end() ? itr->second : ObjectGuid::Empty;
 }
 
 void HousingMap::DespawnDoorGO(uint8 plotIndex)
