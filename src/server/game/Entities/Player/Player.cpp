@@ -3722,11 +3722,28 @@ void Player::BuildCreateUpdateBlockForPlayer(UpdateData* data, Player* target) c
             // HousingMap::AddPlayerToMap, but the mirror itself needs to ride
             // the initial UPDATE_OBJECT so the client registry has it when it
             // resolves EntityGUID.
+            uint32 ownGroupAEmitted = 0;
+            uint32 ownGroupBEmitted = 0;
             if (hmap && ownPlotIndex != INVALID_PLOT_INDEX)
             {
                 if (HousingMirrorEntity* ownMirror = hmap->GetHouseMirror(ownPlotIndex))
+                {
                     ownMirror->BuildCreateUpdateBlockForPlayer(data, target);
+                    ++ownGroupAEmitted;
+                }
+                // Group-B per-mesh mirrors for the own plot's exterior pieces.
+                if (auto meshMirrorItr = hmap->GetMeshMirrors().find(ownPlotIndex);
+                    meshMirrorItr != hmap->GetMeshMirrors().end())
+                {
+                    for (auto const& meshMirror : meshMirrorItr->second)
+                    {
+                        meshMirror->BuildCreateUpdateBlockForPlayer(data, target);
+                        ++ownGroupBEmitted;
+                    }
+                }
             }
+            TC_LOG_DEBUG("housing", "Player::BuildCreateUpdateBlockForPlayer: own-plot mirrors emitted — groupA={} groupB={}",
+                ownGroupAEmitted, ownGroupBEmitted);
 
             // Room entities (objectType=18, Housing/2 GUIDs) are sent in the deferred
             // callback — NOT here. Sending type-18 room entities in the initial UPDATE_OBJECT

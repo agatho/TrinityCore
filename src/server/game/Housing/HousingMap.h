@@ -102,6 +102,9 @@ public:
     HousingRoomEntity* GetRoomIdentityEntity(uint8 plotIndex) const;
     ObjectGuid GetRoomIdentityGuid(uint8 plotIndex) const;
 
+    // Accessor for per-mesh Group-B mirror vector.
+    std::unordered_map<uint8, std::vector<std::unique_ptr<HousingMirrorEntity>>> const& GetMeshMirrors() const { return _meshMirrorEntities; }
+
     // MeshObject management (housing fixture rendering)
     // pos: local-space position for child pieces (or world position for root pieces)
     // worldPos: if non-null, used for server-side grid placement (child pieces must be in parent's grid cell)
@@ -196,6 +199,13 @@ private:
     // tracking (plotIndex -> mirror entity). Owned by the map; lifecycle
     // 1:1 with the exterior root MeshObject.
     std::unordered_map<uint8, std::unique_ptr<HousingMirrorEntity>> _houseMirrorEntities;
+
+    // Per-MeshObject Group-B mirrors: lightweight HighGuid::Entity proxies
+    // attached to individual exterior mesh pieces (retail-matching Group B
+    // pattern at idx 9984, 4 mirrors with single FMirroredPositionData_C
+    // fragment and AttachParent pointing at HighGuid::MeshObject GUIDs).
+    // plotIndex -> vector (one mirror per exterior mesh piece).
+    std::unordered_map<uint8, std::vector<std::unique_ptr<HousingMirrorEntity>>> _meshMirrorEntities;
 
     // Lightweight Housing/2 identity room entity (plotIndex -> GUID).
     // The entity itself is a WorldObject AddToMap'd and owned by the map's

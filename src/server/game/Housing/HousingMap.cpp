@@ -2291,8 +2291,36 @@ MeshObject* HousingMap::SpawnHouseMeshObject(uint8 plotIndex, int32 fileDataID, 
 
     _meshObjects[plotIndex].push_back(mesh->GetGUID());
 
+    // Spawn a Group-B Entity mirror paired with this mesh piece.
+    // Retail sniff dump_12.0.1.66838_2026-04-15_09-35-59 idx 9984 contains 4
+    // Group-B mirrors (HighGuid::Entity (57) objType=18, single
+    // FMirroredPositionData_C fragment, NO exterior tags) attached to
+    // HighGuid::MeshObject (56) parents. These give the client per-piece
+    // spatial indexing for fixture clicks / placement previews.
+    //
+    // GUID convention: HighGuid::Entity, mapId=GetId(), entry=37362 (distinct
+    // from the exterior-root mirror entry 37361), counter packs (plotIndex<<32
+    // | meshCounter) to stay unique per (plot, mesh).
+    {
+        constexpr uint32 HOUSING_MESH_MIRROR_ENTRY = 37362;
+        uint32 meshCounterLo = static_cast<uint32>(mesh->GetGUID().GetCounter() & 0xFFFFFFFFu);
+        uint64 mirrorCounter = (static_cast<uint64>(plotIndex) << 32) | static_cast<uint64>(meshCounterLo);
+        ObjectGuid meshMirrorGuid = ObjectGuid::Create<HighGuid::Entity>(GetId(), HOUSING_MESH_MIRROR_ENTRY, mirrorCounter);
+
+        auto meshMirror = std::make_unique<HousingMirrorEntity>(this, meshMirrorGuid);
+        Position const localPos(0.0f, 0.0f, 0.0f, 0.0f);
+        QuaternionData identRot;
+        identRot.x = identRot.y = identRot.z = 0.0f;
+        identRot.w = 1.0f;
+        // Group-B: isExteriorRoot=false → no Tag_HouseExterior fragments added.
+        meshMirror->InitPositionData(mesh->GetGUID(),
+            localPos, identRot, /*scale*/ 1.0f, /*attachmentFlags*/ 3,
+            /*isExteriorRoot*/ false);
+        _meshMirrorEntities[plotIndex].push_back(std::move(meshMirror));
+    }
+
     TC_LOG_DEBUG("housing", "HousingMap::SpawnHouseMeshObject: plot={} guid={} fileDataID={} isWMO={} "
-        "localPos=({:.1f}, {:.1f}, {:.1f}) gridPos=({:.1f}, {:.1f}, {:.1f}) exteriorComponentID={} wmoDataID={}",
+        "localPos=({:.1f}, {:.1f}, {:.1f}) gridPos=({:.1f}, {:.1f}, {:.1f}) exteriorComponentID={} wmoDataID={} + Group-B mirror",
         plotIndex, mesh->GetGUID().ToString(), fileDataID, isWMO,
         pos.GetPositionX(), pos.GetPositionY(), pos.GetPositionZ(),
         mesh->GetPositionX(), mesh->GetPositionY(), mesh->GetPositionZ(),
@@ -2847,6 +2875,9 @@ void HousingMap::DespawnAllMeshObjectsForPlot(uint8 plotIndex)
     TC_LOG_DEBUG("housing", "HousingMap::DespawnAllMeshObjectsForPlot: Despawned {} MeshObject(s) for plot {}",
         itr->second.size(), plotIndex);
     _meshObjects.erase(itr);
+
+    // Also drop the paired Group-B mesh mirrors (lifecycle is 1:1 with pieces).
+    _meshMirrorEntities.erase(plotIndex);
 }
 
 MeshObject* HousingMap::FindMeshObjectByHookID(uint8 plotIndex, int32 hookID)
