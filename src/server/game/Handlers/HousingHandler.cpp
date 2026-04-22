@@ -897,32 +897,6 @@ void WorldSession::HandleHousingDecorPlace(WorldPackets::Housing::HousingDecorPl
         }
     }
 
-    // Exterior placement: the client sends the plot's Housing/2 exterior room
-    // identity GUID (arg2 = GetBaseRoomEntryId(), e.g. 18) as RoomGuid. That
-    // GUID is spawned by HousingMap::SpawnRoomForPlot for client-side plot
-    // bounds + attach chain — it is NOT stored in Housing::_rooms (which only
-    // tracks persisted interior rooms). Without this clear, PlaceDecorWithGuid
-    // fails the _rooms.find() check and returns HOUSING_RESULT_ROOM_NOT_FOUND
-    // (74), which the client surfaces as "out of plot bounds" on commit even
-    // though the hover preview passed the client-side Geobox check.
-    // Exterior decor is tracked via HousingMap's plot-local attach chain in
-    // SpawnDecorItem (GetRoomIdentityEntity), so clearing RoomGuid here is safe.
-    if (!roomGuid.IsEmpty() && dynamic_cast<HousingMap*>(player->GetMap()))
-    {
-        // Housing/2 encoding (ObjectGuidFactory::CreateHousing case 2):
-        //   hi = (Housing<<58) | (subType<<53) | arg2   — arg2 is the low 32 bits of hi.
-        // The plot exterior room identity always has subType=2, arg2 = base-room entry id.
-        uint64 hi = roomGuid.GetRawValue(1);
-        uint32 housingSubType = uint32((hi >> 53) & 0x1F);
-        uint32 arg2 = uint32(hi & 0xFFFFFFFFULL);
-        if (roomGuid.GetHigh() == HighGuid::Housing && housingSubType == 2
-            && arg2 == sHousingMgr.GetBaseRoomEntryId())
-        {
-            TC_LOG_DEBUG("housing", "CMSG_HOUSING_DECOR_PLACE: clearing exterior plot room GUID {} for exterior placement",
-                roomGuid.ToString());
-            roomGuid = ObjectGuid::Empty;
-        }
-    }
 
     HousingResult result = housing->PlaceDecorWithGuid(housingDecorPlace.DecorGuid, decorEntryId,
         posX, posY, posZ, rotX, rotY, rotZ, rotW, roomGuid);

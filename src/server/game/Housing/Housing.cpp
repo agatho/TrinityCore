@@ -793,8 +793,23 @@ HousingResult Housing::PlaceDecorWithGuid(ObjectGuid decorGuid, uint32 decorEntr
     if (GetDecorCount() >= maxDecor)
         return HOUSING_RESULT_MAX_DECOR_REACHED;
 
+    // Retail semantics (verified via sniff build 66263, both alliance + horde):
+    // the client ALWAYS sends a non-Empty RoomGuid in CMSG_HOUSING_DECOR_PLACE.
+    // Exterior placements use Housing-2-arg2=<base-room-entry-id>-counter=X
+    // (arg2=18 on 66263). Interior placements use Housing-2-arg2=<visual-room
+    // -entry-id>-counter=Y (arg2=1 etc.). AttachParent is always Empty.
+    //
+    // Detect the plot exterior room identity and route it to the exterior
+    // budget/skip the interior _rooms lookup, while preserving the RoomGuid
+    // as-sent so downstream consumers (DB row, move/remove round-trips) still
+    // see what retail sends.
+    bool const isExteriorPlotRoom = !roomGuid.IsEmpty()
+        && roomGuid.GetHigh() == HighGuid::Housing
+        && uint32((roomGuid.GetRawValue(1) >> 53) & 0x1F) == 2
+        && uint32(roomGuid.GetRawValue(1) & 0xFFFFFFFFULL) == sHousingMgr.GetBaseRoomEntryId();
+
     uint32 weightCost = sHousingMgr.GetDecorWeightCost(decorEntryId);
-    if (roomGuid.IsEmpty())
+    if (roomGuid.IsEmpty() || isExteriorPlotRoom)
     {
         if (_exteriorDecorWeightUsed + weightCost > GetMaxExteriorDecorBudget())
             return HOUSING_RESULT_MAX_DECOR_REACHED;
@@ -805,7 +820,7 @@ HousingResult Housing::PlaceDecorWithGuid(ObjectGuid decorGuid, uint32 decorEntr
             return HOUSING_RESULT_MAX_DECOR_REACHED;
     }
 
-    if (!roomGuid.IsEmpty())
+    if (!roomGuid.IsEmpty() && !isExteriorPlotRoom)
     {
         auto roomItr = _rooms.find(roomGuid);
         if (roomItr == _rooms.end())
