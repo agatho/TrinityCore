@@ -763,17 +763,15 @@ bool HousingMap::AddPlayerToMap(Player* player, bool initPlayer /*= true*/)
         // Spawn decor GOs if not already spawned for this plot
         SpawnAllDecorForPlot(plotIdx, housing);
 
-        // Now that the house (and its paired Entity mirror) is spawned on this
-        // map instance, refresh the session HousingPlayerHouseEntity's
-        // FHousingPlayerHouse_C.EntityGUID to point at the mirror. The session
-        // entity was pre-populated in Player::LoadFromDB with EntityGUID=Empty
-        // because the map-scoped mirror GUID isn't known before map entry.
-        if (ObjectGuid ownMirrorGuid = GetHouseMirrorGuid(plotIdx); !ownMirrorGuid.IsEmpty())
-        {
-            player->GetSession()->GetHousingPlayerHouseEntity().SetEntityGUID(ownMirrorGuid);
-            TC_LOG_DEBUG("housing", "HousingMap::AddPlayerToMap: session HousingPlayerHouseEntity.EntityGUID set to mirror {} for plot {}",
-                ownMirrorGuid.ToString(), plotIdx);
-        }
+        // The session HousingPlayerHouseEntity keeps EntityGUID=Empty as set
+        // in Player::LoadFromDB. Sniff-verified (dump_12.0.1.66838_2026-04-15
+        // _09-35-59 idx 9984): among 47 retail Housing/3 CREATE blocks, the
+        // one with EntityGUID=Empty is the owner's own-plot block. Proxy
+        // Housing/3 blocks for other plots use non-empty mirror-pattern GUIDs
+        // (most of which dangle — the client doesn't need them to resolve).
+        // The icon picker at sub_7FF624BB1880 classifies own vs friend vs
+        // stranger by comparing FHousingPlayerHouse_C.BnetAccount against the
+        // player's local BnetGuid, not via EntityGUID resolution.
     }
     else
     {
