@@ -20,7 +20,6 @@
 #include "HousingMirrorEntity.h"
 #include "HousingNeighborhoodMirrorEntity.h"
 #include "HousingPlayerHouseEntity.h"
-#include "HousingRoomEntity.h"
 #include <algorithm>
 #include <atomic>
 #include <cmath>
@@ -1915,13 +1914,16 @@ GameObject* HousingMap::SpawnHouseForPlot(uint8 plotIndex, Position const* custo
         // SpawnRoomForPlot was just called above and registered a room entity
         // in _roomEntities[plotIndex]. Use that GUID.
         {
-            // Prefer Housing/2 identity — retail-matching AttachParent for
-            // Group A Entity mirrors (with exterior tags).
-            ObjectGuid roomParentGuid = GetRoomIdentityGuid(plotIndex);
+            ObjectGuid roomParentGuid;
+            if (auto roomItr = _roomEntities.find(plotIndex); roomItr != _roomEntities.end())
+                roomParentGuid = roomItr->second;
+
             if (roomParentGuid.IsEmpty())
             {
+                // Fallback to HousingPlayerHouse if room wasn't created — better than
+                // nothing but the client likely can't resolve the world position.
                 roomParentGuid = plotInfo->HouseGuid;
-                TC_LOG_ERROR("housing", "HousingMap::SpawnHouseForPlot: no Housing/2 identity for plot {}; "
+                TC_LOG_ERROR("housing", "HousingMap::SpawnHouseForPlot: no room entity for plot {}; "
                     "mirror AttachParent falls back to HouseGuid (icon may not render)", plotIndex);
             }
 
@@ -2060,62 +2062,34 @@ void HousingMap::SpawnRoomForPlot(uint8 plotIndex, Position const& housePos,
         fileDataID, roomComponentType,
         roomComponentOptionID, houseThemeID, field24, roomComponentTextureID);
 
-    // --- Create entities (retail-matching blizzlike architecture) ---
-    //
-    // Retail idx 9984 (dump_12.0.1.66838_2026-04-15_09-35-59) architecture:
-    //   - Housing/2 identity entity (HighGuid::Housing subType=2, objType=18)
-    //     fragments: [FHousingRoom_C, FMirroredPositionData_C, Tag_HousingRoom]
-    //     carries HouseGUID, HouseRoomID=18, Flags, FloorIndex, Doors, MeshObjects
-    //   - Component MeshObject (HighGuid::MeshObject, objType=14)
-    //     fragments: [CGObject, FMeshObjectData_C, FHousingRoomComponentMesh_C,
-    //                 FMirroredPositionData_C, Tag_MeshObject]
-    //     MovementUpdate.TransportGuid = Housing/2 identity GUID
-    //     carries the Geobox (used by client for OutsidePlotBounds check)
-    //
-    // The previous dual-MeshObject architecture (a roomEntity MeshObject with
-    // FHousingRoom_C AND a componentMesh with FHousingRoomComponentMesh_C) put
-    // two entities at the plot position both claiming HouseRoomID=18. Client
-    // room registry accepted only the first, dropping the other's Geobox chain
-    // → OutsidePlotBounds + ownership categorization breakage (audit 2026-04-22).
+    // --- Create entities ---
 
-    // 1. Housing/2 identity entity — the single authoritative room for this plot.
-    ObjectGuid roomIdentityGuid = ObjectGuid::Create<HighGuid::Housing>(
-        /*subType*/ 2,
-        /*arg1*/ 0,
-        /*arg2*/ static_cast<uint32>(HOUSE_ROOM_ID),
-        /*counter*/ static_cast<ObjectGuid::LowType>(plotIndex + 1));
+    // 1. Create room entity (MeshObject with FHousingRoom_C + Tag_HousingRoom fragments)
+    MeshObject* roomEntity = MeshObject::CreateMeshObject(this, housePos, houseRot, 1.0f,
+        fileDataID, /*isWMO*/ true,
+        ObjectGuid::Empty, /*attachFlags*/ 3, nullptr);
 
-    HousingRoomEntity* roomIdentity = new HousingRoomEntity();
-    if (!roomIdentity->Create(roomIdentityGuid, this, housePos))
+    if (!roomEntity)
     {
-        TC_LOG_ERROR("housing", "HousingMap::SpawnRoomForPlot: Failed to create Housing/2 identity room for plot {}", plotIndex);
-        delete roomIdentity;
+        TC_LOG_ERROR("housing", "HousingMap::SpawnRoomForPlot: Failed to create room entity for plot {}", plotIndex);
         return;
     }
 
-    roomIdentity->SetHouseGUID(houseGuid);
-    roomIdentity->SetHouseRoomID(HOUSE_ROOM_ID);
-    roomIdentity->SetFlags(ROOM_FLAGS);
-    roomIdentity->SetFloorIndex(0);
+    PhasingHandler::InitDbPhaseShift(roomEntity->GetPhaseShift(), PHASE_USE_FLAGS_ALWAYS_VISIBLE, 0, 0);
+    roomEntity->InitHousingRoomData(houseGuid, HOUSE_ROOM_ID, ROOM_FLAGS, /*floorIndex*/ 0);
 
-    QuaternionData identityRot;
-    identityRot.x = identityRot.y = identityRot.z = 0.0f;
-    identityRot.w = 1.0f;
-    roomIdentity->SetMirroredPosition(Position(0.0f, 0.0f, 0.0f, 0.0f), identityRot,
-        /*scale*/ 1.0f, ObjectGuid::Empty, /*attachFlags*/ 3);
-
-    // 1b. Doors on the identity entity (not on the component mesh).
-    // Client's HousingRoomSystem DoorConnection handler reads this array.
+    // 1b. Populate Doors array on the room entity.
+    // The client's HousingRoomSystem DoorConnection handler reads this array to create
+    // fixture-hookpoint links. Without these entries, all fixture points show "None".
     if (std::vector<RoomDoorInfo> const* doors = sHousingMgr.GetRoomDoors(roomWmoDataID))
     {
         for (RoomDoorInfo const& door : *doors)
         {
             Position doorOffset(door.OffsetPos[0], door.OffsetPos[1], door.OffsetPos[2], 0.0f);
-            roomIdentity->AddDoor(static_cast<int32>(door.RoomComponentID), doorOffset,
-                /*connectionType*/ static_cast<uint8>(7) /*HOUSING_ROOM_COMPONENT_DOORWAY*/,
-                /*attachedRoomGuid*/ ObjectGuid::Empty);
+            roomEntity->AddRoomDoor(static_cast<int32>(door.RoomComponentID), doorOffset,
+                static_cast<uint8>(7) /*HOUSING_ROOM_COMPONENT_DOORWAY*/, roomEntity->GetGUID());
         }
-        TC_LOG_DEBUG("housing", "HousingMap::SpawnRoomForPlot: plot={} added {} door entries to Housing/2 identity from roomWmoDataID={}",
+        TC_LOG_ERROR("housing", "HousingMap::SpawnRoomForPlot: plot={} added {} door entries to room entity from roomWmoDataID={}",
             plotIndex, uint32(doors->size()), roomWmoDataID);
     }
     else
@@ -2124,11 +2098,7 @@ void HousingMap::SpawnRoomForPlot(uint8 plotIndex, Position const& housePos,
             plotIndex, roomWmoDataID);
     }
 
-    // 2. Component MeshObject — attaches to Housing/2 identity. Carries the
-    // Geobox via FHousingRoomComponentMesh_C. Does NOT carry FHousingRoom_C
-    // (that's the identity's job). Retail-verified: component mesh fragment
-    // list is [CGObject, FMeshObjectData_C, FHousingRoomComponentMesh_C,
-    // FMirroredPositionData_C, Tag_MeshObject] — no FHousingRoom_C.
+    // 2. Create room component MeshObject (with Geobox for OutsidePlotBounds check)
     Position componentPos(0.0f, 0.0f, 0.0f, 0.0f);
     QuaternionData componentRot;
     componentRot.x = 0.0f;
@@ -2138,17 +2108,17 @@ void HousingMap::SpawnRoomForPlot(uint8 plotIndex, Position const& housePos,
 
     MeshObject* componentMesh = MeshObject::CreateMeshObject(this, componentPos, componentRot, 1.0f,
         fileDataID, /*isWMO*/ true,
-        /*attachParent*/ roomIdentityGuid, /*attachFlags*/ 3, &housePos);
+        roomEntity->GetGUID(), /*attachFlags*/ 3, &housePos);
 
     if (!componentMesh)
     {
         TC_LOG_ERROR("housing", "HousingMap::SpawnRoomForPlot: Failed to create room component mesh for plot {}", plotIndex);
-        roomIdentity->AddObjectToRemoveList();
+        delete roomEntity;
         return;
     }
 
     PhasingHandler::InitDbPhaseShift(componentMesh->GetPhaseShift(), PHASE_USE_FLAGS_ALWAYS_VISIBLE, 0, 0);
-    componentMesh->InitHousingRoomComponentData(roomIdentityGuid,
+    componentMesh->InitHousingRoomComponentData(roomEntity->GetGUID(),
         roomComponentOptionID, ROOM_COMPONENT_ID,
         roomComponentType, field24, /*field20*/ 0,
         houseThemeID, roomComponentTextureID,
@@ -2156,35 +2126,46 @@ void HousingMap::SpawnRoomForPlot(uint8 plotIndex, Position const& housePos,
         geoMinX, geoMinY, geoMinZ,
         geoMaxX, geoMaxY, geoMaxZ);
 
-    // 3. Link: add component GUID to identity's MeshObjects array.
-    roomIdentity->AddMeshObject(componentMesh->GetGUID());
+    // 3. Link: add component GUID to room entity's MeshObjects array
+    roomEntity->AddRoomMeshObject(componentMesh->GetGUID());
 
-    // 4. Add component to map. Identity was already AddToMap'd via its Create().
-    if (!AddToMap(componentMesh))
+    // 4. Add both to map (room entity first since component references it)
+    if (!AddToMap(roomEntity))
     {
-        TC_LOG_ERROR("housing", "HousingMap::SpawnRoomForPlot: Failed to add room component mesh to map for plot {}", plotIndex);
-        roomIdentity->AddObjectToRemoveList();
+        TC_LOG_ERROR("housing", "HousingMap::SpawnRoomForPlot: Failed to add room entity to map for plot {}", plotIndex);
+        delete roomEntity;
         delete componentMesh;
         return;
     }
 
-    _roomIdentityGuids[plotIndex] = roomIdentityGuid;
-    _roomComponentMeshes[plotIndex] = componentMesh->GetGUID();
-    // _roomEntities[plotIndex] is intentionally NOT populated — the MeshObject
-    // "room entity" no longer exists in the unified architecture. Callers that
-    // used _roomEntities should now prefer _roomIdentityGuids.
-    _roomEntities[plotIndex] = roomIdentityGuid; // keep the map populated with the identity so legacy callers still see something sensible
+    if (!AddToMap(componentMesh))
+    {
+        TC_LOG_ERROR("housing", "HousingMap::SpawnRoomForPlot: Failed to add room component mesh to map for plot {}", plotIndex);
+        roomEntity->AddObjectToRemoveList();
+        delete componentMesh;
+        return;
+    }
 
-    TC_LOG_ERROR("housing", "HousingMap::SpawnRoomForPlot: plot={} identity={} component={} "
-        "at ({:.1f},{:.1f},{:.1f}) geobox=({:.2f},{:.2f},{:.2f})->({:.2f},{:.2f},{:.2f})",
-        plotIndex, roomIdentityGuid.ToString(), componentMesh->GetGUID().ToString(),
+    _roomEntities[plotIndex] = roomEntity->GetGUID();
+    _roomComponentMeshes[plotIndex] = componentMesh->GetGUID();
+
+    TC_LOG_ERROR("housing", "HousingMap::SpawnRoomForPlot: plot={} room={} component={} "
+        "at ({:.1f},{:.1f},{:.1f}) geobox=({:.2f},{:.2f},{:.2f})→({:.2f},{:.2f},{:.2f})",
+        plotIndex, roomEntity->GetGUID().ToString(), componentMesh->GetGUID().ToString(),
         housePos.GetPositionX(), housePos.GetPositionY(), housePos.GetPositionZ(),
         geoMinX, geoMinY, geoMinZ, geoMaxX, geoMaxY, geoMaxZ);
 }
 
 void HousingMap::DespawnRoomForPlot(uint8 plotIndex)
 {
-    // Component mesh first (it attaches to the identity).
+    auto roomItr = _roomEntities.find(plotIndex);
+    if (roomItr != _roomEntities.end())
+    {
+        if (MeshObject* mesh = GetMeshObject(roomItr->second))
+            mesh->AddObjectToRemoveList();
+        _roomEntities.erase(roomItr);
+    }
+
     auto compItr = _roomComponentMeshes.find(plotIndex);
     if (compItr != _roomComponentMeshes.end())
     {
@@ -2192,19 +2173,6 @@ void HousingMap::DespawnRoomForPlot(uint8 plotIndex)
             mesh->AddObjectToRemoveList();
         _roomComponentMeshes.erase(compItr);
     }
-
-    // Housing/2 identity entity.
-    auto identItr = _roomIdentityGuids.find(plotIndex);
-    if (identItr != _roomIdentityGuids.end())
-    {
-        if (HousingRoomEntity* room = GetObjectsStore().Find<HousingRoomEntity>(identItr->second))
-            room->AddObjectToRemoveList();
-        _roomIdentityGuids.erase(identItr);
-    }
-
-    // Legacy _roomEntities tracking — now points at the same identity GUID,
-    // entity already removed above; just clear the map.
-    _roomEntities.erase(plotIndex);
 }
 
 MeshObject* HousingMap::SpawnHouseMeshObject(uint8 plotIndex, int32 fileDataID, bool isWMO,
@@ -3012,20 +2980,6 @@ ObjectGuid HousingMap::MakeHouseMirrorGuid(uint8 plotIndex, uint32 bnetAccountId
     return ObjectGuid::Create<HighGuid::Entity>(GetId(), HOUSING_MIRROR_ENTRY, counter);
 }
 
-HousingRoomEntity* HousingMap::GetRoomIdentityEntity(uint8 plotIndex) const
-{
-    auto itr = _roomIdentityGuids.find(plotIndex);
-    if (itr == _roomIdentityGuids.end())
-        return nullptr;
-    return const_cast<HousingMap*>(this)->GetObjectsStore().Find<HousingRoomEntity>(itr->second);
-}
-
-ObjectGuid HousingMap::GetRoomIdentityGuid(uint8 plotIndex) const
-{
-    auto itr = _roomIdentityGuids.find(plotIndex);
-    return itr != _roomIdentityGuids.end() ? itr->second : ObjectGuid::Empty;
-}
-
 void HousingMap::DespawnDoorGO(uint8 plotIndex)
 {
     auto itr = _houseGameObjects.find(plotIndex);
@@ -3079,9 +3033,13 @@ void HousingMap::RespawnDoorGOAtHook(uint8 plotIndex, uint32 hookID, uint32 door
     }
     else
     {
-        // Try the Housing/2 identity room first — it's spawned at the correct house position.
-        if (HousingRoomEntity* roomId = GetRoomIdentityEntity(plotIndex))
-            housePos = roomId->GetPosition();
+        // Try the room entity first — it's spawned at the correct house position
+        auto roomItr = _roomEntities.find(plotIndex);
+        if (roomItr != _roomEntities.end())
+        {
+            if (MeshObject* roomEntity = GetMeshObject(roomItr->second))
+                housePos = roomEntity->GetPosition();
+        }
 
         // Fallback: resolve facing from DB2 (needed for the rotation transform)
         if (housePos.GetOrientation() == 0.0f && _neighborhood)
@@ -3242,10 +3200,12 @@ MeshObject* HousingMap::SpawnDecorItem(uint8 plotIndex, Housing::PlacedDecor con
     // Get the room entity for this plot (spawned by SpawnRoomForPlot).
     ObjectGuid roomEntityGuid = ObjectGuid::Empty;
     Position roomWorldPos;
-    if (HousingRoomEntity* roomId = GetRoomIdentityEntity(plotIndex))
+    auto roomItr = _roomEntities.find(plotIndex);
+    if (roomItr != _roomEntities.end())
     {
-        roomEntityGuid = roomId->GetGUID();
-        roomWorldPos = roomId->GetPosition();
+        roomEntityGuid = roomItr->second;
+        if (MeshObject* roomEntity = GetMeshObject(roomEntityGuid))
+            roomWorldPos = roomEntity->GetPosition();
     }
 
     float worldX = decor.PosX;

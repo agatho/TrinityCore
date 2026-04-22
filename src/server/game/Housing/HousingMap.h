@@ -26,7 +26,6 @@
 class AreaTrigger;
 class Housing;
 class HousingMirrorEntity;
-class HousingRoomEntity;
 class MeshObject;
 class Neighborhood;
 class Player;
@@ -92,14 +91,6 @@ public:
     // exist yet — used by proxy emission for neighbour plots whose plot index
     // and bnet owner are known from NeighborhoodMirror data.
     ObjectGuid MakeHouseMirrorGuid(uint8 plotIndex, uint32 bnetAccountId) const;
-
-    // Lightweight Housing/2 identity room entity (HighGuid::Housing subType=2,
-    // objectType=18) — the authoritative room. Retail-verified architecture:
-    // one Housing/2 identity per plot + one component MeshObject attached to
-    // it (carries the Geobox). The unified model replaces the old dual-
-    // MeshObject pattern. Group A Entity mirrors attach here.
-    HousingRoomEntity* GetRoomIdentityEntity(uint8 plotIndex) const;
-    ObjectGuid GetRoomIdentityGuid(uint8 plotIndex) const;
 
     // MeshObject management (housing fixture rendering)
     // pos: local-space position for child pieces (or world position for root pieces)
@@ -195,10 +186,6 @@ private:
     // tracking (plotIndex -> mirror entity). Owned by the map; lifecycle
     // 1:1 with the exterior root MeshObject.
     std::unordered_map<uint8, std::unique_ptr<HousingMirrorEntity>> _houseMirrorEntities;
-
-    // Lightweight Housing/2 identity room GUID per plot. The entity itself is
-    // a WorldObject owned by the map's object store; we only track its GUID.
-    std::unordered_map<uint8, ObjectGuid> _roomIdentityGuids;
 
     // MeshObject tracking (plotIndex -> vector of MeshObject GUIDs)
     std::unordered_map<uint8, std::vector<ObjectGuid>> _meshObjects;
