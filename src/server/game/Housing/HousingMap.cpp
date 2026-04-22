@@ -2098,10 +2098,17 @@ void HousingMap::SpawnRoomForPlot(uint8 plotIndex, Position const& housePos,
     roomIdentity->SetFlags(ROOM_FLAGS);
     roomIdentity->SetFloorIndex(0);
 
-    QuaternionData identityRot;
-    identityRot.x = identityRot.y = identityRot.z = 0.0f;
-    identityRot.w = 1.0f;
-    roomIdentity->SetMirroredPosition(Position(0.0f, 0.0f, 0.0f, 0.0f), identityRot,
+    // CRITICAL (audit 2026-04-22 byte-for-byte retail comparison, idx 9984):
+    // When AttachParent is Empty, retail sets PositionLocalSpace = the room's
+    // WORLD position (not zero) and RotationLocalSpace = the house's facing
+    // quaternion. The client uses this as the root of the attach chain — any
+    // child entity (decor, mirrors) resolves its world pos as
+    //   worldPos = room.PositionLocalSpace + rotate(child.localPos, room.rot)
+    // If we set room.PositionLocalSpace=(0,0,0), every attached decor ends up
+    // near world origin (invisible) and the client's OutsidePlotBounds check
+    // fails for every placement because the player's world position is far
+    // from the "plot center" the client derives from the room chain.
+    roomIdentity->SetMirroredPosition(housePos, houseRot,
         /*scale*/ 1.0f, ObjectGuid::Empty, /*attachFlags*/ 3);
 
     // 1b. Doors on the identity entity (not on the component mesh).
