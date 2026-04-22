@@ -1867,33 +1867,57 @@ GameObject* HousingMap::SpawnHouseForPlot(uint8 plotIndex, Position const* custo
         SpawnRoomForPlot(plotIndex, pos, rot, plotInfo->HouseGuid);
 
         // Spawn house-exterior root Entity mirror.
-        // Retail pairs the exterior root MeshObject with a HighGuid::Entity
-        // (57, objectType=18) carrying a single FMirroredPositionData_C fragment
-        // plus Tag_HouseExteriorRoot / Tag_HouseExteriorPiece. The mirror
-        // attaches to the HousingPlayerHouse entity and holds the plot's
-        // world position in local-space terms. FHousingPlayerHouse_C.EntityGUID
-        // points at this mirror so the world-map icon picker can resolve the
-        // icon render position. Sniff-verified at idx 9984 of
-        // dump_12.0.1.66838_2026-04-15_09-35-59 (Group A, 4 entities).
+        // Retail pairs each house with a HighGuid::Entity (57, objectType=18)
+        // carrying FMirroredPositionData_C + Tag_HouseExteriorPiece +
+        // Tag_HouseExteriorRoot. Sniff-verified at idx 9984 of
+        // dump_12.0.1.66838_2026-04-15_09-35-59 (4 Group A mirrors).
+        //
+        // CRITICAL: AttachParentGUID must be the ROOM entity, NOT the
+        // HousingPlayerHouse. Audit 2026-04-22 decoded retail Group A mirrors'
+        // AttachParent as `01 c1 XX 12 40 dc` — subType=2 (HousingRoom),
+        // arg2=18 (HouseRoomID). The HousingPlayerHouse has no position;
+        // attaching to it left the client unable to compute a world position
+        // for the mirror, so the world-map icon picker had nowhere to place
+        // the own-plot icon. The room entity carries the plot's world
+        // position in its TransportPosition, so chaining via AttachParent
+        // resolves to real coordinates.
+        //
+        // SpawnRoomForPlot was just called above and registered a room entity
+        // in _roomEntities[plotIndex]. Use that GUID.
         {
+            ObjectGuid roomParentGuid;
+            if (auto roomItr = _roomEntities.find(plotIndex); roomItr != _roomEntities.end())
+                roomParentGuid = roomItr->second;
+
+            if (roomParentGuid.IsEmpty())
+            {
+                // Fallback to HousingPlayerHouse if room wasn't created — better than
+                // nothing but the client likely can't resolve the world position.
+                roomParentGuid = plotInfo->HouseGuid;
+                TC_LOG_ERROR("housing", "HousingMap::SpawnHouseForPlot: no room entity for plot {}; "
+                    "mirror AttachParent falls back to HouseGuid (icon may not render)", plotIndex);
+            }
+
             uint32 bnetId = static_cast<uint32>(plotInfo->OwnerBnetGuid.GetCounter());
             ObjectGuid mirrorGuid = MakeHouseMirrorGuid(plotIndex, bnetId);
             auto mirror = std::make_unique<HousingMirrorEntity>(this, mirrorGuid);
-            // AttachParent = HousingPlayerHouse; local position is world pos of
-            // the plot (identity rotation — the house has no local rotation
-            // relative to itself). Retail Group A entries use a zeroed pos/rot
-            // for the root and non-zero for pieces; we only emit the root here.
-            QuaternionData const identity = QuaternionData();
-            mirror->InitPositionData(plotInfo->HouseGuid,
-                pos, rot, /*scale*/ 1.0f, /*attachmentFlags*/ 3,
+            // Local pos / rot relative to the room parent. Retail's Group A
+            // mirrors use small offsets (a few yards) and the root one uses
+            // zero pos + identity rot. We use zero pos + identity rot since
+            // our room entity is positioned at the plot centre.
+            Position const localPos(0.0f, 0.0f, 0.0f, 0.0f);
+            QuaternionData identity;
+            identity.x = identity.y = identity.z = 0.0f;
+            identity.w = 1.0f;
+            mirror->InitPositionData(roomParentGuid,
+                localPos, identity, /*scale*/ 1.0f, /*attachmentFlags*/ 3,
                 /*isExteriorRoot*/ true);
             TC_LOG_DEBUG("housing", "HousingMap::SpawnHouseForPlot: spawned exterior mirror {} for plot {} "
-                "(attach={}, pos=({:.2f},{:.2f},{:.2f}))",
+                "(attach={} [room], localPos=(0,0,0), plotWorldPos=({:.2f},{:.2f},{:.2f}))",
                 mirrorGuid.ToString(), plotIndex,
-                plotInfo->HouseGuid.ToString(),
+                roomParentGuid.ToString(),
                 pos.GetPositionX(), pos.GetPositionY(), pos.GetPositionZ());
             _houseMirrorEntities[plotIndex] = std::move(mirror);
-            (void)identity;
         }
     }
 
