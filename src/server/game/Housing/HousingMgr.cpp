@@ -645,6 +645,45 @@ uint32 HousingMgr::GetQuestForLevel(uint32 level) const
     return 0;
 }
 
+// Retail-verified cumulative favor thresholds to REACH each level.
+// Captured by running /script print(C_Housing.GetHouseLevelFavorForLevel(N))
+// for N=2..9 on a live retail 12.0.1.66838 client. These values are NOT in
+// any DB2 and NOT sent over the wire — the client keeps them in a C++
+// binary-search table initialized at startup.
+//
+// Lua UI semantics (verified from Blizzard_HousingDashboardHouseUpgrade.lua):
+//   - houseFavor stored on the Housing/3 entity is CUMULATIVE lifetime favor
+//   - GetHouseLevelFavorForLevel(N) = cumulative favor needed to UNLOCK level N
+//   - Progress bar = (currentFavor - threshold[level]) / (threshold[level+1] - threshold[level])
+//   - CanUpgrade(level) = currentFavor >= threshold[level]
+//
+// Level-up gating is server-side and not client-callable — there is no
+// C_Housing.UpgradeHouse API. For levels 2..6 the HouseLevelData DB2 has a
+// QuestID, so the NPC most likely offers that quest once favor crosses the
+// threshold (not yet verified from sniff). Levels 7..9 have QuestID=0 —
+// gate unknown. Store-only for now; do NOT use to trigger level-up until
+// the NPC/auto-level mechanism is sniff-verified.
+uint32 HousingMgr::GetFavorThresholdForLevel(uint32 level) const
+{
+    //               L1  L2     L3     L4     L5     L6     L7      L8       L9
+    static constexpr uint32 Thresholds[] = {
+        /* L1 */ 0,     // starter — no favor needed
+        /* L2 */ 10,
+        /* L3 */ 1200,
+        /* L4 */ 2400,
+        /* L5 */ 3700,
+        /* L6 */ 5700,
+        /* L7 */ 7900,
+        /* L8 */ 10300,
+        /* L9 */ 12900,
+    };
+    constexpr uint32 MaxLevel = sizeof(Thresholds) / sizeof(Thresholds[0]) - 1;  // 9
+    if (level <= MaxLevel)
+        return Thresholds[level];
+    // Above the verified range, hold at L9 — extrapolation would be a guess.
+    return Thresholds[MaxLevel];
+}
+
 // Retail-verified budget tables for levels 1..7, decoded from every Housing/3
 // CREATE block in dump_12.0.1.66838_2026-04-15_09-35-59 idx 9984 (n=47).
 // Every block at a given level has the same 4 values — zero variance.

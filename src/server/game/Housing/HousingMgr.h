@@ -289,6 +289,12 @@ public:
 
     // Budget accessors (WeightCost-based)
     uint32 GetQuestForLevel(uint32 level) const;
+    // Cumulative lifetime Favor needed to unlock `level`. Values extracted
+    // from the retail client via C_Housing.GetHouseLevelFavorForLevel on
+    // build 12.0.1.66838. See implementation for the full table and
+    // semantics. Does not currently gate level-up (needs NPC/auto mechanism
+    // verified first).
+    uint32 GetFavorThresholdForLevel(uint32 level) const;
     uint32 GetInteriorDecorBudgetForLevel(uint32 level) const;
     uint32 GetExteriorDecorBudgetForLevel(uint32 level) const;
     uint32 GetRoomBudgetForLevel(uint32 level) const;
