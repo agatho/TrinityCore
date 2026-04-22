@@ -26,7 +26,6 @@
 class AreaTrigger;
 class Housing;
 class HousingMirrorEntity;
-class HousingRoomEntity;
 class MeshObject;
 class Neighborhood;
 class Player;
@@ -92,18 +91,6 @@ public:
     // exist yet — used by proxy emission for neighbour plots whose plot index
     // and bnet owner are known from NeighborhoodMirror data.
     ObjectGuid MakeHouseMirrorGuid(uint8 plotIndex, uint32 bnetAccountId) const;
-
-    // Lightweight Housing/2 identity room entity (HighGuid::Housing subType=2,
-    // objectType=18). Retail's Group A Entity mirrors (with exterior tags)
-    // attach to Housing/2 parents with arg2=18 (HouseRoomID). Our existing
-    // MeshObject-based room provides the Geobox for OutsidePlotBounds; this
-    // lightweight Housing/2 identity room coexists with it and provides the
-    // correct retail-matching AttachParent type for exterior mirrors.
-    HousingRoomEntity* GetRoomIdentityEntity(uint8 plotIndex) const;
-    ObjectGuid GetRoomIdentityGuid(uint8 plotIndex) const;
-
-    // Accessor for per-mesh Group-B mirror vector.
-    std::unordered_map<uint8, std::vector<std::unique_ptr<HousingMirrorEntity>>> const& GetMeshMirrors() const { return _meshMirrorEntities; }
 
     // MeshObject management (housing fixture rendering)
     // pos: local-space position for child pieces (or world position for root pieces)
@@ -199,18 +186,6 @@ private:
     // tracking (plotIndex -> mirror entity). Owned by the map; lifecycle
     // 1:1 with the exterior root MeshObject.
     std::unordered_map<uint8, std::unique_ptr<HousingMirrorEntity>> _houseMirrorEntities;
-
-    // Per-MeshObject Group-B mirrors: lightweight HighGuid::Entity proxies
-    // attached to individual exterior mesh pieces (retail-matching Group B
-    // pattern at idx 9984, 4 mirrors with single FMirroredPositionData_C
-    // fragment and AttachParent pointing at HighGuid::MeshObject GUIDs).
-    // plotIndex -> vector (one mirror per exterior mesh piece).
-    std::unordered_map<uint8, std::vector<std::unique_ptr<HousingMirrorEntity>>> _meshMirrorEntities;
-
-    // Lightweight Housing/2 identity room entity (plotIndex -> GUID).
-    // The entity itself is a WorldObject AddToMap'd and owned by the map's
-    // object store. We only track its GUID for quick lookup.
-    std::unordered_map<uint8, ObjectGuid> _roomIdentityGuids;
 
     // MeshObject tracking (plotIndex -> vector of MeshObject GUIDs)
     std::unordered_map<uint8, std::vector<ObjectGuid>> _meshObjects;
