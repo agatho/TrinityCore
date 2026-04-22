@@ -962,47 +962,39 @@ void HousingMgr::LoadHouseLevelRewardInfoData()
     //   Client enum HouseLevelRewardValueType(0-3) is used in Lua UI, not stored in this DB2.
     uint32 budgetWired = 0;
 
-    // Apply fallback budgets for any levels still at 0 (DB2 missing budget rewards)
-    // Values hardcoded in the retail client (not stored in any DB2). User-reported:
-    //   Level 1: interior 910, rooms 19
-    //   Level 2: interior 1155, rooms 24
-    // Higher levels extrapolated linearly (interior +300/level, rooms +5/level).
-    static constexpr int32 FallbackInteriorByLevel[] = { 0, 910, 1155, 1450, 1750, 2050 };
-    static constexpr int32 FallbackRoomsByLevel[]    = { 0,  19,   24,   29,   34,   39 };
-    for (auto& [id, levelData] : _houseLevelDataStore)
-    {
-        uint32 lvl = static_cast<uint32>(std::max<int32>(levelData.Level, 1));
-        if (levelData.InteriorDecorPlacementBudget <= 0)
-        {
-            if (lvl <= 5)
-                levelData.InteriorDecorPlacementBudget = FallbackInteriorByLevel[lvl];
-            else
-                levelData.InteriorDecorPlacementBudget = 2050 + static_cast<int32>((lvl - 5) * 300);
-        }
-        if (levelData.ExteriorDecorPlacementBudget <= 0)
-            levelData.ExteriorDecorPlacementBudget = 200;
-        if (levelData.RoomPlacementBudget <= 0)
-        {
-            if (lvl <= 5)
-                levelData.RoomPlacementBudget = FallbackRoomsByLevel[lvl];
-            else
-                levelData.RoomPlacementBudget = 39 + static_cast<int32>((lvl - 5) * 5);
-        }
-        if (levelData.ExteriorFixtureBudget <= 0)
-            levelData.ExteriorFixtureBudget = 1000;
-    }
+    // Historical note: a load-time fallback here used to pre-fill every
+    // HouseLevelData.{Interior,Exterior,Room,Fixture}Budget field with
+    // hardcoded values when DB2 had 0. Those values had Room/Fixture
+    // swapped (Room=19, Fixture=1000 for L1 — retail is Room=1000,
+    // Fixture=19) and Interior L4 off-by-5 (1750 vs retail 1745).
+    //
+    // Because GetXxxBudgetForLevel() checks `levelData->XxxBudget > 0`
+    // FIRST, the load-time fallback masked the per-call RetailBudgetFor()
+    // table. Sniff-verified against dump_12.0.1.66838_2026-04-22_21-23-22
+    // idx 298: server emitted Room=19, Fixture=1000 despite
+    // commit 352ec7e3df fixing the per-call fallback.
+    //
+    // Removed: the per-call fallback in GetInteriorDecorBudgetForLevel /
+    // GetExteriorDecorBudgetForLevel / GetRoomBudgetForLevel /
+    // GetFixtureBudgetForLevel already handles zero/missing DB2 values
+    // with the retail-verified RetailBudgetByLevel table.
 
     TC_LOG_INFO("housing", "HousingMgr::LoadHouseLevelRewardInfoData: Loaded {} HouseLevelRewardInfo entries, wired {} budget values from DB2",
         uint32(_houseLevelRewardInfoStore.size()), budgetWired);
 
-    // Log final budget values per level for verification
+    // Log final budget values per level for verification. When DB2 has no
+    // budget rows, the fields here are 0 and the per-call GetXxxBudgetForLevel
+    // fallback supplies the retail-verified values.
     for (auto const& [id, levelData] : _houseLevelDataStore)
     {
-        TC_LOG_INFO("housing", "  Level {} (ID {}): Interior={} Exterior={} Room={} Fixture={}{}",
+        TC_LOG_INFO("housing", "  Level {} (ID {}): DB2 Interior={} Exterior={} Room={} Fixture={} (resolved via GetXxxBudgetForLevel: {} {} {} {})",
             levelData.Level, id,
             levelData.InteriorDecorPlacementBudget, levelData.ExteriorDecorPlacementBudget,
             levelData.RoomPlacementBudget, levelData.ExteriorFixtureBudget,
-            budgetWired > 0 ? " (from DB2)" : " (fallback)");
+            GetInteriorDecorBudgetForLevel(levelData.Level),
+            GetExteriorDecorBudgetForLevel(levelData.Level),
+            GetRoomBudgetForLevel(levelData.Level),
+            GetFixtureBudgetForLevel(levelData.Level));
     }
 }
 
