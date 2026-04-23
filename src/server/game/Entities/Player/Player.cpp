@@ -19101,43 +19101,29 @@ bool Player::LoadFromDB(ObjectGuid guid, CharacterDatabaseQueryHolder const& hol
             WowCS::GetRawFragmentData(m_playerHouseInfoComponentData));
     }
 
-    // Populate PlayerHouseInfoComponentData::Houses with all the player's house data
-    // so the client knows about houses through the UpdateField system
-    for (auto const& h : _housings)
-    {
-        if (!h || h->GetHouseGuid().IsEmpty())
-            continue;
-
-        UF::PlayerMirrorHouse& mirrorHouse = AddDynamicUpdateFieldValue(
-            m_values.ModifyValue(&Player::m_playerHouseInfoComponentData, 0)
-                .ModifyValue(&UF::PlayerHouseInfoComponentData::Houses));
-        mirrorHouse.Guid = h->GetHouseGuid();
-        mirrorHouse.NeighborhoodGUID = h->GetNeighborhoodGuid();
-        mirrorHouse.Level = h->GetLevel();
-        mirrorHouse.Favor = static_cast<uint32>(std::min<uint64>(h->GetFavor64(), std::numeric_limits<uint32>::max()));
-        mirrorHouse.PlotID = h->GetPlotIndex();
-
-        // Resolve MapID from the neighborhood's DB2 data so the dashboard works before
-        // the player enters the neighborhood map.
-        mirrorHouse.MapID = 0;
-        if (Neighborhood const* nh = sNeighborhoodMgr.GetNeighborhood(h->GetNeighborhoodGuid()))
-        {
-            if (NeighborhoodMapData const* nmData = sHousingMgr.GetNeighborhoodMapData(nh->GetNeighborhoodMapID()))
-                mirrorHouse.MapID = nmData->MapID;
-        }
-
-        TC_LOG_ERROR("network", "Player::LoadFromDB: PlayerMirrorHouse: HouseGuid={} NeighborhoodGuid={} PlotID={} Level={} MapID={} Favor={}",
-            h->GetHouseGuid().ToString(), h->GetNeighborhoodGuid().ToString(), mirrorHouse.PlotID, mirrorHouse.Level, mirrorHouse.MapID, mirrorHouse.Favor);
-
-        // Initiative mirror fields — client reads InitiativeCycleID to display initiative UI
-        uint64 nhGuid = h->GetNeighborhoodGuid().GetCounter();
-        ActiveInitiative* activeInit = sInitiativeManager.GetActiveInitiative(nhGuid);
-        if (activeInit)
-        {
-            mirrorHouse.InitiativeCycleID = static_cast<int32>(sInitiativeManager.GetActiveCycleForInitiative(activeInit->InitiativeID));
-            mirrorHouse.InitiativeFavor = sInitiativeManager.GetPlayerContribution(nhGuid, activeInit->InitiativeID, GetGUID().GetCounter());
-        }
-    }
+    // PlayerHouseInfoComponentData::Houses is deliberately left EMPTY at login.
+    //
+    // Client's map-pin renderer (NeighborhoodMapDataProvider.lua) reacts only
+    // to NEIGHBORHOOD_MAP_DATA_UPDATED (Gethe verified). Sniff analysis +
+    // user AutoDumpState log 2026-04-23 confirm: that event fires 0 times
+    // on mirror-entity (Housing/4) CREATE or VALUES_UPDATE paths, even with
+    // forced empty→populated Houses deltas on FNeighborhoodMirrorData_C.
+    // UPDATE_BULLETIN_BOARD_ROSTER and NEIGHBORHOOD_NAME_UPDATED do fire from
+    // that entity's field-change dispatcher, so the dispatcher works — the
+    // trigger for MAP_DATA_UPDATED must be a different field on a different
+    // entity.
+    //
+    // Candidate: PlayerHouseInfoComponent_C.Houses (this field) on the Player
+    // entity. Player is visibility-grid-registered, so VALUES_UPDATE routes
+    // through the standard UpdateFields dispatcher. For the client to treat
+    // the change as a delta the initial CREATE must ship with empty Houses;
+    // the deferred 500ms event in HousingMap::AddPlayerToMap populates the
+    // real entries and calls Player::SendUpdateToPlayer.
+    //
+    // EditorMode and the fragment registration above remain at LoadFromDB
+    // time — only the per-house DynamicUpdateField entries are deferred.
+    TC_LOG_DEBUG("housing", "Player::LoadFromDB: Skipping PlayerHouseInfoComponent.Houses population "
+        "(deferred to HousingMap 500ms event for empty→populated delta, testing MAP_DATA_UPDATED fire)");
 
     // Register PlayerInitiativeComponent_C fragment (FragmentID 37) on the Player entity.
     // The client's C_NeighborhoodInitiative Lua API reads initiative state from this fragment.
@@ -30983,6 +30969,50 @@ void Player::SetHousingEditorModeUpdateField(uint8 mode)
     {
         SetUpdateFieldValue(m_values.ModifyValue(&Player::m_playerHouseInfoComponentData, 0)
             .ModifyValue(&UF::PlayerHouseInfoComponentData::EditorMode), mode);
+    }
+}
+
+void Player::PopulatePlayerHouseInfoHouses()
+{
+    if (!m_playerHouseInfoComponentData.has_value())
+        return;
+
+    // Clear then re-add every owned house. ClearDynamicUpdateFieldValues marks
+    // the DynamicUpdateField as dirty; subsequent AddDynamicUpdateFieldValue
+    // calls add entries that also mark the field dirty. The resulting changes
+    // mask causes the next BuildUpdateChangesMask + BuildValuesUpdateBlock to
+    // serialize a Houses delta the client treats as a field change event.
+    ClearDynamicUpdateFieldValues(m_values.ModifyValue(&Player::m_playerHouseInfoComponentData, 0)
+        .ModifyValue(&UF::PlayerHouseInfoComponentData::Houses));
+
+    for (auto const& h : _housings)
+    {
+        if (!h || h->GetHouseGuid().IsEmpty())
+            continue;
+
+        UF::PlayerMirrorHouse& mirrorHouse = AddDynamicUpdateFieldValue(
+            m_values.ModifyValue(&Player::m_playerHouseInfoComponentData, 0)
+                .ModifyValue(&UF::PlayerHouseInfoComponentData::Houses));
+        mirrorHouse.Guid = h->GetHouseGuid();
+        mirrorHouse.NeighborhoodGUID = h->GetNeighborhoodGuid();
+        mirrorHouse.Level = h->GetLevel();
+        mirrorHouse.Favor = static_cast<uint32>(std::min<uint64>(h->GetFavor64(), std::numeric_limits<uint32>::max()));
+        mirrorHouse.PlotID = h->GetPlotIndex();
+
+        mirrorHouse.MapID = 0;
+        if (Neighborhood const* nh = sNeighborhoodMgr.GetNeighborhood(h->GetNeighborhoodGuid()))
+            if (NeighborhoodMapData const* nmData = sHousingMgr.GetNeighborhoodMapData(nh->GetNeighborhoodMapID()))
+                mirrorHouse.MapID = nmData->MapID;
+
+        uint64 nhGuid = h->GetNeighborhoodGuid().GetCounter();
+        if (ActiveInitiative* activeInit = sInitiativeManager.GetActiveInitiative(nhGuid))
+        {
+            mirrorHouse.InitiativeCycleID = static_cast<int32>(sInitiativeManager.GetActiveCycleForInitiative(activeInit->InitiativeID));
+            mirrorHouse.InitiativeFavor = sInitiativeManager.GetPlayerContribution(nhGuid, activeInit->InitiativeID, GetGUID().GetCounter());
+        }
+
+        TC_LOG_DEBUG("housing", "Player::PopulatePlayerHouseInfoHouses: HouseGuid={} PlotID={} Level={} MapID={} Favor={}",
+            h->GetHouseGuid().ToString(), mirrorHouse.PlotID, mirrorHouse.Level, mirrorHouse.MapID, mirrorHouse.Favor);
     }
 }
 

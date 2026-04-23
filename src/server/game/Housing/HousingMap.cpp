@@ -1247,6 +1247,15 @@ bool HousingMap::AddPlayerToMap(Player* player, bool initPlayer /*= true*/)
                     }
                     mirror.SendUpdateToPlayer(p);
 
+                    // 3b. PlayerHouseInfoComponent_C.Houses: populate + push
+                    //     VALUES_UPDATE on the Player entity. LoadFromDB left
+                    //     this DynamicUpdateField empty to set up an
+                    //     empty→populated delta here — the candidate trigger
+                    //     for the Lua NEIGHBORHOOD_MAP_DATA_UPDATED event that
+                    //     drives world-map pin repaint.
+                    p->PopulatePlayerHouseInfoHouses();
+                    p->SendUpdateToPlayer(p);
+
                     // 4. QueryPlayerNamesResponse — pre-cache plot owner names
                     {
                         WorldPackets::Query::QueryPlayerNamesResponse nameResponse;
