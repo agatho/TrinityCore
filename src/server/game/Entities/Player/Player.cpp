@@ -19275,21 +19275,27 @@ bool Player::LoadFromDB(ObjectGuid guid, CharacterDatabaseQueryHolder const& hol
             mirrorEntity.SetName(neighborhood->GetName());
             mirrorEntity.SetOwnerGUID(neighborhood->GetOwnerGuid());
 
-            // IMPORTANT: At LOGIN time we populate the mirror with 55 empty
-            // slots. The POPULATED Houses data is sent later by the 500ms
-            // deferred event in HousingMap::AddPlayerToMap, which emits a
-            // VALUES_UPDATE carrying the real delta empty→populated. That
-            // delta is what drives the client's per-field dispatcher at
-            // RVA 0x1150320 → Lua event NEIGHBORHOOD_MAP_DATA_UPDATED →
-            // NeighborhoodMapDataProvider:RefreshAllData → world-map pins
-            // paint. If we populate the real data here, the subsequent
-            // UPDATE has an identity delta (population→population) which
-            // the UpdateField system may short-circuit, leaving the icons
-            // stuck at ownerType=None until a user-initiated CMSG forces
-            // the client to re-evaluate via a different path.
+            // Populate all 55 plot slots SYNCHRONOUSLY with real data at login.
             //
-            // Diagnostic log kept for per-occupied-plot visibility before
-            // the HouseGuid gets hidden behind the empty-slot path.
+            // Analysis agent 2026-04-23T07:30Z finding: the neighborhood map
+            // provider is pull-based, not push-based — Blizzard's
+            // NeighborhoodMapDataProviderMixin calls GetNeighborhoodMapData()
+            // every time the map is toggled open (verified via hooksecurefunc).
+            // There is no server-side event we need to fire; the map refreshes
+            // itself on show. So the blocker is simply that our mirror's Houses
+            // array must be populated BEFORE the player opens the map.
+            //
+            // Earlier experiment (commit 36b9052423) shipped Houses empty at
+            // login + populated via a 500ms deferred SendUpdateToPlayer. That
+            // created a race: if the user opened the map during the 500ms
+            // window, GetNeighborhoodMapData() returned all-unoccupied plots
+            // and the pins stayed wrong even after the defer completed (the
+            // provider doesn't re-poll without explicit refresh triggers).
+            //
+            // Synchronous population here ensures the Player CREATE bundle
+            // ships with real Houses data in the FNeighborhoodMirrorData_C
+            // fragment on the first frame — correct pins paint on first map
+            // open, no interaction required.
             ObjectGuid const sessionHouse3 = GetSession()->GetHousingPlayerHouseEntity().GetGUID();
             mirrorEntity.ClearHouses();
             uint8 plotIdx = 0;
@@ -19302,16 +19308,15 @@ bool Player::LoadFromDB(ObjectGuid guid, CharacterDatabaseQueryHolder const& hol
                     bool matchesSession = ownPlot && !emptyHouse && plot.HouseGuid == sessionHouse3;
                     TC_LOG_INFO("housing",
                         "Player::LoadFromDB mirror[{}]: OWN={} HouseGuid={} OwnerGuid={} OwnerBnetGuid={} "
-                        "SessionH3={} matchesSessionH3={} emptyHouseGuid={} (login-CREATE sends empty; "
-                        "deferred UPDATE will send populated to force field delta)",
+                        "SessionH3={} matchesSessionH3={} emptyHouseGuid={}",
                         plotIdx, ownPlot,
                         plot.HouseGuid.ToString(), plot.OwnerGuid.ToString(), plot.OwnerBnetGuid.ToString(),
                         sessionHouse3.ToString(), matchesSession, emptyHouse);
                 }
-                // Always add an Empty-GUID slot at login. Defer populates real data
-                // in HousingMap::AddPlayerToMap's 500ms event, producing the
-                // empty→populated delta the client's field dispatcher needs.
-                mirrorEntity.AddHouse(ObjectGuid::Empty, ObjectGuid::Empty);
+                if (plot.IsOccupied() && !plot.HouseGuid.IsEmpty())
+                    mirrorEntity.AddHouse(plot.HouseGuid, plot.OwnerGuid);
+                else
+                    mirrorEntity.AddHouse(ObjectGuid::Empty, ObjectGuid::Empty);
                 ++plotIdx;
             }
 

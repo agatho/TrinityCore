@@ -1247,22 +1247,6 @@ bool HousingMap::AddPlayerToMap(Player* player, bool initPlayer /*= true*/)
                     }
                     mirror.SendUpdateToPlayer(p);
 
-                    // EXPERIMENTAL: emit SMSG_INVALIDATE_NEIGHBORHOOD as the
-                    // candidate notify opcode that drives NEIGHBORHOOD_MAP_DATA_UPDATED.
-                    // Analysis agent 2026-04-23 confirmed the client's map data
-                    // cache is correct at login (ownerType=3 for plot 47) but the
-                    // repaint-trigger event never fires. SMSG_INVALIDATE_NEIGHBORHOOD
-                    // (0x5F0008) has a minimal wire (just NeighborhoodGuid) — exactly
-                    // what a pure-notify "neighborhood data changed, refresh" opcode
-                    // looks like. If this fires NEIGHBORHOOD_MAP_DATA_UPDATED, it's
-                    // the trigger; if not, the dispatcher handler at RVA 0x1150320
-                    // is bound to a different opcode we need to find.
-                    {
-                        WorldPackets::Housing::InvalidateNeighborhood inv;
-                        inv.NeighborhoodGuid = nbh->GetGuid();
-                        p->SendDirectMessage(inv.Write());
-                    }
-
                     // 4. QueryPlayerNamesResponse — pre-cache plot owner names
                     {
                         WorldPackets::Query::QueryPlayerNamesResponse nameResponse;
