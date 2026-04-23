@@ -2885,14 +2885,6 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         void SetHousingEditorModeUpdateField(uint8 mode);
         void UpdateHousingMapId(ObjectGuid houseGuid, int32 mapId);
         void UpdateInitiativeFavor(uint32 favor);
-        // Populate PlayerHouseInfoComponent_C.Houses DynamicUpdateField with
-        // one PlayerMirrorHouse entry per owned house. Called after LoadFromDB
-        // leaves the field empty, so the resulting VALUES_UPDATE carries a
-        // genuine empty→populated delta the client's field-change dispatcher
-        // treats as a field change (vs CREATE which ships the full state with
-        // no "change" signal the dispatcher routes). Intent: trigger the
-        // NEIGHBORHOOD_MAP_DATA_UPDATED Lua event which paints world-map pins.
-        void PopulatePlayerHouseInfoHouses();
 
         bool IsAdvancedCombatLoggingEnabled() const { return _advancedCombatLoggingEnabled; }
         void SetAdvancedCombatLogging(bool enabled) { _advancedCombatLoggingEnabled = enabled; }
