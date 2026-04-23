@@ -25769,6 +25769,25 @@ void Player::SendInitialPacketsAfterAddToMap()
         {
             Housing* housing = GetHousingForNeighborhood(neighborhood->GetGuid());
 
+            // User-observed: at login the neighborhood map shows all plots as
+            // unowned, but an interior-visit-and-exit-via-door round trip fixes
+            // it. The door-exit path emits HOUSE_STATUS with FlagByte=0xC0 before
+            // teleport, then the neighborhood re-entry emits 0xE0 (bit 5 houseEntry
+            // transitions OFF→ON). That transition is absent at login (no prior
+            // 0xC0 emission). Emit a 0xC0 primer here so the client sees the same
+            // bit-5 transition when it receives the 0xE0 below.
+            if (housing)
+            {
+                WorldPackets::Housing::HousingHouseStatusResponse primer;
+                primer.HouseGuid = housing->GetHouseGuid();
+                primer.AccountGuid = GetSession()->GetBattlenetAccountGUID();
+                primer.OwnerPlayerGuid = GetGUID();
+                primer.NeighborhoodGuid = housing->GetNeighborhoodGuid();
+                primer.Status = 0;
+                primer.FlagByte = 0xC0; // bit7=houseEditing, bit6=plotEntry, bit5 CLEAR
+                SendDirectMessage(primer.Write());
+            }
+
             // Send proactive HouseStatus so client knows about house ownership
             WorldPackets::Housing::HousingHouseStatusResponse statusResponse;
             if (housing)

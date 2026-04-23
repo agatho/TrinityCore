@@ -3512,6 +3512,36 @@ void WorldSession::HandleHousingSvcsTeleportToPlot(WorldPackets::Housing::Housin
     if (!player)
         return;
 
+    // If the player is currently inside a house interior, this dashboard teleport
+    // is an alternative exit path. The interior-door exit handler (HandleHouseInterior
+    // LeaveHouse) emits SMSG_HOUSE_INTERIOR_LEAVE_HOUSE_RESPONSE + a 0xC0 HOUSE_STATUS
+    // before teleporting, which flips client-side UI state out of "inside" context.
+    // User-observed: exit via door keeps the neighborhood map pins correct; exit via
+    // this dashboard handler (without those packets) leaves the map showing wrong
+    // ownership. Match the protocol so every interior-exit path looks identical on
+    // the wire.
+    if (dynamic_cast<HouseInteriorMap*>(player->GetMap()))
+    {
+        if (Housing* interiorHousing = player->GetHousing())
+        {
+            interiorHousing->SetEditorMode(HOUSING_EDITOR_MODE_NONE);
+            interiorHousing->SetInInterior(false);
+
+            WorldPackets::Housing::HouseInteriorLeaveHouseResponse leaveResponse;
+            leaveResponse.TeleportReason = 9; // HousingTeleportReason::ExitingHouse
+            SendPacket(leaveResponse.Write());
+
+            WorldPackets::Housing::HousingHouseStatusResponse statusResponse;
+            statusResponse.HouseGuid = interiorHousing->GetHouseGuid();
+            statusResponse.AccountGuid = GetBattlenetAccountGUID();
+            statusResponse.OwnerPlayerGuid = player->GetGUID();
+            statusResponse.NeighborhoodGuid = interiorHousing->GetNeighborhoodGuid();
+            statusResponse.Status = 0;
+            statusResponse.FlagByte = 0xC0;
+            SendPacket(statusResponse.Write());
+        }
+    }
+
     Neighborhood* neighborhood = sNeighborhoodMgr.ResolveNeighborhood(housingSvcsTeleportToPlot.NeighborhoodGuid, player);
     if (!neighborhood)
     {
