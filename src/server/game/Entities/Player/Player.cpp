@@ -19101,17 +19101,38 @@ bool Player::LoadFromDB(ObjectGuid guid, CharacterDatabaseQueryHolder const& hol
             WowCS::GetRawFragmentData(m_playerHouseInfoComponentData));
     }
 
-    // Populate PlayerHouseInfoComponentData::Houses with all the player's house data
-    // so the client knows about houses through the UpdateField system
+    // Populate PlayerHouseInfoComponentData::Houses with the player's owned houses.
+    //
+    // IMPORTANT (analysis-agent narrow-fix 2026-04-23T09:30Z): use the
+    // Neighborhood's plot.HouseGuid rather than h->GetHouseGuid() so the
+    // HouseGuid in PlayerHouseInfoComponent.Houses is BIT-IDENTICAL to the
+    // HouseGuid in mirror.Houses (FNeighborhoodMirrorData_C). Client Self-
+    // check compares Houses[].Guid entries in the two fragments; any drift
+    // (e.g. session->GetBattlenetAccountId() vs AccountMgr::GetIdByGameAccount
+    // producing different bnetAccountId at different times) would cause the
+    // lookup to miss and self's plot renders as ownerType=0 None.
+    //
+    // Iterate through the player's Housing objects. For each, find the
+    // matching plot in the neighborhood (by PlotIndex) and copy plot.HouseGuid
+    // verbatim. Supplemental fields (Level, Favor, MapID) still come from h.
     for (auto const& h : _housings)
     {
         if (!h || h->GetHouseGuid().IsEmpty())
             continue;
 
+        Neighborhood const* nh = sNeighborhoodMgr.GetNeighborhood(h->GetNeighborhoodGuid());
+        ObjectGuid entryHouseGuid = h->GetHouseGuid();  // fallback when neighborhood lookup fails
+        if (nh)
+        {
+            if (Neighborhood::PlotInfo const* pi = nh->GetPlotInfo(h->GetPlotIndex()))
+                if (!pi->HouseGuid.IsEmpty())
+                    entryHouseGuid = pi->HouseGuid;
+        }
+
         UF::PlayerMirrorHouse& mirrorHouse = AddDynamicUpdateFieldValue(
             m_values.ModifyValue(&Player::m_playerHouseInfoComponentData, 0)
                 .ModifyValue(&UF::PlayerHouseInfoComponentData::Houses));
-        mirrorHouse.Guid = h->GetHouseGuid();
+        mirrorHouse.Guid = entryHouseGuid;
         mirrorHouse.NeighborhoodGUID = h->GetNeighborhoodGuid();
         mirrorHouse.Level = h->GetLevel();
         mirrorHouse.Favor = static_cast<uint32>(std::min<uint64>(h->GetFavor64(), std::numeric_limits<uint32>::max()));
@@ -19120,14 +19141,12 @@ bool Player::LoadFromDB(ObjectGuid guid, CharacterDatabaseQueryHolder const& hol
         // Resolve MapID from the neighborhood's DB2 data so the dashboard works before
         // the player enters the neighborhood map.
         mirrorHouse.MapID = 0;
-        if (Neighborhood const* nh = sNeighborhoodMgr.GetNeighborhood(h->GetNeighborhoodGuid()))
-        {
+        if (nh)
             if (NeighborhoodMapData const* nmData = sHousingMgr.GetNeighborhoodMapData(nh->GetNeighborhoodMapID()))
                 mirrorHouse.MapID = nmData->MapID;
-        }
 
-        TC_LOG_ERROR("network", "Player::LoadFromDB: PlayerMirrorHouse: HouseGuid={} NeighborhoodGuid={} PlotID={} Level={} MapID={} Favor={}",
-            h->GetHouseGuid().ToString(), h->GetNeighborhoodGuid().ToString(), mirrorHouse.PlotID, mirrorHouse.Level, mirrorHouse.MapID, mirrorHouse.Favor);
+        TC_LOG_ERROR("network", "Player::LoadFromDB: PlayerMirrorHouse: HouseGuid={} (h->GetHouseGuid={}) NeighborhoodGuid={} PlotID={} Level={} MapID={} Favor={}",
+            entryHouseGuid.ToString(), h->GetHouseGuid().ToString(), h->GetNeighborhoodGuid().ToString(), mirrorHouse.PlotID, mirrorHouse.Level, mirrorHouse.MapID, mirrorHouse.Favor);
 
         // Initiative mirror fields — client reads InitiativeCycleID to display initiative UI
         uint64 nhGuid = h->GetNeighborhoodGuid().GetCounter();
