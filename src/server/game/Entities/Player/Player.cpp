@@ -19282,6 +19282,29 @@ bool Player::LoadFromDB(ObjectGuid guid, CharacterDatabaseQueryHolder const& hol
     // houses to indices 0,1,2 instead of their real PlotIndex values (e.g. 7,9,47,51).
     if (GetSession() && !_housings.empty() && _housings[0] && !_housings[0]->GetNeighborhoodGuid().IsEmpty())
     {
+        // Priming step (analysis-agent diagnosis 2026-04-23T09:50Z):
+        // HousingMap::AddPlayerToMap line ~671 already calls UpdatePlotHouseInfo
+        // to patch the shared Neighborhood's plot data with the current session's
+        // resolved HouseGuid/BnetGuid. But that runs AFTER Player::LoadFromDB
+        // has already read plot.HouseGuid for mirror population — so a
+        // fresh-server first-login-after-startup sees plot.HouseGuid=Empty
+        // (if Neighborhood::LoadFromDB's bnet resolution failed) and ships
+        // Empty-Empty to the client. Subsequent logins see the primed value.
+        // That's the observed non-determinism.
+        //
+        // Fix: call UpdatePlotHouseInfo up front, before the mirror reads
+        // plot.HouseGuid. Non-shared-state safe because it only writes to
+        // OUR plot, and the write is idempotent (same value on repeat).
+        if (Neighborhood* nh = sNeighborhoodMgr.GetNeighborhood(_housings[0]->GetNeighborhoodGuid()))
+        {
+            ObjectGuid bnetGuid = GetSession() ? GetSession()->GetBattlenetAccountGUID() : ObjectGuid::Empty;
+            nh->UpdatePlotHouseInfo(_housings[0]->GetPlotIndex(),
+                                    _housings[0]->GetHouseGuid(),
+                                    bnetGuid);
+            TC_LOG_INFO("housing", "Player::LoadFromDB PRIMING: UpdatePlotHouseInfo plot={} HouseGuid={} BnetGuid={} (before mirror read)",
+                _housings[0]->GetPlotIndex(), _housings[0]->GetHouseGuid().ToString(), bnetGuid.ToString());
+        }
+
         Neighborhood const* neighborhood = sNeighborhoodMgr.GetNeighborhood(_housings[0]->GetNeighborhoodGuid());
         if (neighborhood)
         {
