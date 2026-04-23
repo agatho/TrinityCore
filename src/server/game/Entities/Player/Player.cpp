@@ -3718,6 +3718,12 @@ void Player::BuildCreateUpdateBlockForPlayer(UpdateData* data, Player* target) c
                         m->BuildCreateUpdateBlockForPlayer(data, target);
                         ++mirrorCount;
                     }
+                    // Group B mesh mirror (untagged, AttachParent=MeshObject).
+                    if (HousingMirrorEntity* bm = hmap->GetHouseMeshMirror(plot.PlotIndex))
+                    {
+                        bm->BuildCreateUpdateBlockForPlayer(data, target);
+                        ++mirrorCount;
+                    }
                 }
             }
             TC_LOG_DEBUG("housing", "Player::BuildCreateUpdateBlockForPlayer: housing-map proxies for {} — "
@@ -3738,6 +3744,8 @@ void Player::BuildCreateUpdateBlockForPlayer(UpdateData* data, Player* target) c
             {
                 if (HousingMirrorEntity* ownMirror = hmap->GetHouseMirror(ownPlotIndex))
                     ownMirror->BuildCreateUpdateBlockForPlayer(data, target);
+                if (HousingMirrorEntity* ownMeshMirror = hmap->GetHouseMeshMirror(ownPlotIndex))
+                    ownMeshMirror->BuildCreateUpdateBlockForPlayer(data, target);
             }
 
             // Room entities (objectType=18, Housing/2 GUIDs) are sent in the deferred
@@ -19268,13 +19276,40 @@ bool Player::LoadFromDB(ObjectGuid guid, CharacterDatabaseQueryHolder const& hol
             mirrorEntity.SetOwnerGUID(neighborhood->GetOwnerGuid());
 
             // Add ALL 55 plot entries so Houses[i] = PlotIndex i
+            //
+            // Diagnostic: log every occupied plot's HouseGuid/OwnerGuid and flag
+            // the Empty-HouseGuid case. Client ownerType derivation (memory note
+            // regular_map_plot_icons.md): entityRegistry[Houses[i].HouseGUID]
+            // → Housing/3 entity → BnetAccount compare. Empty HouseGUID → no
+            // registry hit → ownerType=None(0). Root-cause of user report
+            // 2026-04-23 "ownerType=0 at login, flips to 3 after roster click"
+            // if any occupied plot has Empty HouseGuid, this log will show it.
+            //
+            // Expected session Housing/3 GUID for own plot:
+            //   HighGuid::Housing subType=3, arg1=realmId, arg2=7, counter=bnetAccountId
+            // If plot.HouseGuid doesn't match, client registry lookup misses.
+            ObjectGuid const sessionHouse3 = GetSession()->GetHousingPlayerHouseEntity().GetGUID();
             mirrorEntity.ClearHouses();
+            uint8 plotIdx = 0;
             for (auto const& plot : neighborhood->GetPlots())
             {
+                if (plot.IsOccupied())
+                {
+                    bool ownPlot = (plot.OwnerGuid == GetGUID());
+                    bool emptyHouse = plot.HouseGuid.IsEmpty();
+                    bool matchesSession = ownPlot && !emptyHouse && plot.HouseGuid == sessionHouse3;
+                    TC_LOG_INFO("housing",
+                        "Player::LoadFromDB mirror[{}]: OWN={} HouseGuid={} OwnerGuid={} OwnerBnetGuid={} "
+                        "SessionH3={} matchesSessionH3={} emptyHouseGuid={}",
+                        plotIdx, ownPlot,
+                        plot.HouseGuid.ToString(), plot.OwnerGuid.ToString(), plot.OwnerBnetGuid.ToString(),
+                        sessionHouse3.ToString(), matchesSession, emptyHouse);
+                }
                 if (plot.IsOccupied() && !plot.HouseGuid.IsEmpty())
                     mirrorEntity.AddHouse(plot.HouseGuid, plot.OwnerGuid);
                 else
                     mirrorEntity.AddHouse(ObjectGuid::Empty, ObjectGuid::Empty);
+                ++plotIdx;
             }
 
             // Add managers
@@ -25771,16 +25806,15 @@ void Player::SendInitialPacketsAfterAddToMap()
                 }
             }
 
-            // Flush the Housing/4 entity update to the client so it receives the
-            // NeighborhoodMirrorData (houses, managers, owner, name).
-            // Retail pattern (sniff-verified across 3 login dumps, 100+ updates):
-            // wholesale re-pushes (ClearHouses + re-populate all 55 slots) are
-            // emitted as CREATE_OBJECT, not VALUES_UPDATE. The client's map-icon
-            // refresh path only fires on CREATE — VALUES_UPDATE applies field
-            // changes silently and the map stays stale until something else
-            // triggers a re-render (empirically the roster click did it because
-            // HaveAtClient happened to return FALSE there, producing CREATE).
-            mirrorEntity.SendCreateToPlayer(this);
+            // NOTE: do NOT SendCreateToPlayer here. The Housing/4 mirror already
+            // rides the Player CREATE bundle (Player::BuildCreateUpdateBlockForPlayer
+            // line 3646) and is also re-CREATEd from the 500ms deferred event
+            // in HousingMap::AddPlayerToMap. Emitting a third time in the same
+            // tick as the Player CREATE produced a duplicate NEIGHBORHOOD_INFO_UPDATED
+            // Lua event (user report 2026-04-23: "2× NEIGHBORHOOD_INFO_UPDATED,
+            // identical payload, 0ms apart, causes UI flicker"). The SetX calls
+            // above are kept as idempotent insurance in case LoadFromDB skipped
+            // this state; they mark no UpdateField dirty when values match.
 
             // FHousingPlayerHouse_C belongs on the Housing/3 entity.
             // Populate it with the player's house data for this neighborhood.

@@ -46,6 +46,7 @@
 #include "ObjectMgr.h"
 #include "PhasingHandler.h"
 #include "Player.h"
+#include "QueryPackets.h"
 #include "RealmList.h"
 #include "SocialMgr.h"
 #include "Spell.h"
@@ -824,12 +825,21 @@ bool HousingMap::AddPlayerToMap(Player* player, bool initPlayer /*= true*/)
         houseInfo.House.PlotId = housing->GetPlotIndex();
         houseInfo.House.AccessFlags = housing->GetSettingsFlags();
         houseInfo.House.HasMoveOutTime = false;
+        // Populate names in the FIRST emission so the client doesn't build a
+        // placeholder ("47 " from PlotIndex+" "+empty NeighborhoodName) and
+        // later rebuild it after SMSG_QUERY_NEIGHBORHOOD_NAME_RESPONSE arrives.
+        // Two-phase CURRENT_HOUSE_INFO_RECIEVED → _UPDATED was causing UI flicker.
+        if (!housing->GetHouseName().empty())
+            houseInfo.House.HouseName = housing->GetHouseName();
+        if (_neighborhood)
+            houseInfo.House.NeighborhoodName = _neighborhood->GetName();
     }
     else if (_neighborhood)
     {
         // No house — send player's GUID (client expects HighGuid::Player type)
         houseInfo.House.OwnerGuid = player->GetGUID();
         houseInfo.House.NeighborhoodGuid = _neighborhood->GetGuid();
+        houseInfo.House.NeighborhoodName = _neighborhood->GetName();
     }
     houseInfo.Result = 0;
     WorldPacket const* houseInfoPkt = houseInfo.Write();
@@ -876,11 +886,42 @@ bool HousingMap::AddPlayerToMap(Player* player, bool initPlayer /*= true*/)
                 jam.NeighborhoodGUID = h->GetNeighborhoodGuid();
                 jam.HouseLevel = static_cast<uint8>(h->GetLevel());
                 jam.PlotIndex = h->GetPlotIndex();
+                // OptionalValue = Favor (struct +56, IDA sub_7FF624FCFE00).
+                // Required for Lua C_Housing.GetCurrentHouseLevelFavor / fully
+                // populated HouseInfo entries in GetPlayerOwnedHouses.
+                jam.HasOptionalField = true;
+                jam.OptionalValue = h->GetFavor64();
                 housesResp.Houses.push_back(jam);
             }
             player->SendDirectMessage(housesResp.Write());
             TC_LOG_DEBUG("housing", "HousingMap::AddPlayerToMap: sent proactive PlayerHousesInfoResponse with {} house(s) (post-bundle ordering)",
                 uint32(housesResp.Houses.size()));
+        }
+
+        // Proactively fire HOUSE_LEVEL_FAVOR_UPDATED (populates
+        // C_Housing.GetCurrentHouseLevelFavor). Reactive emission is already in
+        // HandleHousingSvcsQueryHouseLevelFavor; without a login-time push the
+        // Lua cache stays empty until the dashboard queries. Wire format matches
+        // HandleNeighborhoodBuyHouse's second packet (sniff-verified two-packet
+        // sequence after plot purchase).
+        {
+            WorldPackets::Housing::HousingSvcsUpdateHousesLevelFavor levelFavor;
+            levelFavor.Type = 0;
+            levelFavor.Field1 = 0;
+            levelFavor.Field2 = 0;
+            for (Housing const* h : player->GetAllHousings())
+            {
+                WorldPackets::Housing::HousingSvcsUpdateHousesLevelFavor::LevelFavorEntry entry;
+                entry.OwnerGUID = player->GetGUID();
+                entry.HouseGUID = h->GetHouseGuid();
+                entry.NeighborhoodGUID = h->GetNeighborhoodGuid();
+                entry.FavorAmount = static_cast<uint32>(h->GetFavor());
+                entry.Level = h->GetLevel();
+                levelFavor.Entries.push_back(std::move(entry));
+            }
+            player->SendDirectMessage(levelFavor.Write());
+            TC_LOG_DEBUG("housing", "HousingMap::AddPlayerToMap: sent proactive UpdateHousesLevelFavor with {} entries",
+                uint32(levelFavor.Entries.size()));
         }
     }
 
@@ -1023,6 +1064,22 @@ bool HousingMap::AddPlayerToMap(Player* player, bool initPlayer /*= true*/)
 
                 WorldSession* session = p->GetSession();
 
+                // Mimic the retail client's auto-sent CMSG_HOUSING_DECOR_REQUEST_STORAGE
+                // response sequence. Horde sniff (dump_12.0.1.65940_2026-02-19_10-51-32,
+                // pkt 8942 @ 17:53:30.294): client auto-emits the CMSG ~9s after login
+                // once it has processed the housing UPDATE_OBJECT bundle. Retail server
+                // responds with (1) 4-byte STORAGE_RSP ack, (2) Account + Housing/3 +
+                // decor meshes in ONE UPDATE_OBJECT, (3) PLAYER_HOUSES_INFO_RESPONSE.
+                //
+                // Empirically on our server the client does NOT auto-send the CMSG
+                // (the user's "click dashboard" workaround is what triggers this path
+                // via HandleHousingDecorRequestStorage). Emitting the full sequence
+                // server-side at the 500ms defer replays the same transport the client
+                // expects, without requiring the CMSG round-trip.
+                WorldPackets::Housing::HousingDecorRequestStorageResponse storageAck;
+                storageAck.ResultCode = static_cast<uint8>(HOUSING_RESULT_SUCCESS);
+                p->SendDirectMessage(storageAck.Write());
+
                 UpdateData storageUpdate(p->GetMapId());
                 WorldPacket storagePacket;
 
@@ -1059,8 +1116,137 @@ bool HousingMap::AddPlayerToMap(Player* player, bool initPlayer /*= true*/)
                 session->GetBattlenetAccount().ClearUpdateMask(true);
                 session->GetHousingPlayerHouseEntity().ClearUpdateMask(true);
 
-                TC_LOG_DEBUG("housing", "HousingMap deferred ENTER_PLOT: Sent Account CREATE + {} decor MeshObject CREATEs + budget for player {}",
+                // Matching retail step (3): re-emit PLAYER_HOUSES_INFO_RESPONSE
+                // as the third packet in the CMSG_HOUSING_DECOR_REQUEST_STORAGE
+                // sequence. An earlier copy already fired in AddPlayerToMap:870
+                // (covering retail's FIRST auto-sent CMSG_HOUSING_SVCS_GET_PLAYER_HOUSES_INFO);
+                // this second copy covers the SECOND auto-send at sniff pkt 8941.
+                // Favor + HasOptionalField populated so GetCurrentHouseLevelFavor
+                // has the tail byte it needs.
+                {
+                    WorldPackets::Housing::HousingSvcsGetPlayerHousesInfoResponse housesResp;
+                    for (Housing const* h : p->GetAllHousings())
+                    {
+                        WorldPackets::Housing::JamCliHouse jam;
+                        jam.OwnerGUID = p->GetGUID();
+                        jam.HouseGUID = h->GetHouseGuid();
+                        jam.NeighborhoodGUID = h->GetNeighborhoodGuid();
+                        jam.HouseLevel = static_cast<uint8>(h->GetLevel());
+                        jam.PlotIndex = h->GetPlotIndex();
+                        jam.HasOptionalField = true;
+                        jam.OptionalValue = h->GetFavor64();
+                        housesResp.Houses.push_back(std::move(jam));
+                    }
+                    p->SendDirectMessage(housesResp.Write());
+                }
+
+                TC_LOG_DEBUG("housing", "HousingMap deferred ENTER_PLOT: Sent STORAGE_RSP ack + Account CREATE + {} decor MeshObject CREATEs + PlayerHousesInfoResponse for player {}",
                     meshCreateCount, playerGuid.ToString());
+
+                // Re-CREATE Housing/4 (NeighborhoodMirror) and Housing/3
+                // (HousingPlayerHouse) as a deferred second push. This is what
+                // the user's manual roster→dashboard cycle does: it re-emits
+                // these entities AFTER login with the client's housing state
+                // machine fully initialised, which reliably triggers the
+                // world-map icon refresh. The initial login CREATE for these
+                // entities fires inside the map-entry UPDATE_OBJECT bundle —
+                // apparently too early for the icon picker to consume.
+                //
+                // Re-populate the mirror data before the re-send so it stays
+                // in sync with any roster changes that occurred between login
+                // and this defer window.
+                if (session->HasHousingNeighborhoodMirrorEntity() && hMap->GetNeighborhood())
+                {
+                    // Byte-identical replay of HandleNeighborhoodGetRoster
+                    // (NeighborhoodHandler.cpp:1710). That handler is empirically
+                    // proven to paint map-icons correctly when triggered by a
+                    // bulletin-board click. Replay the exact 4-packet sequence,
+                    // in the exact same order, with the same method calls.
+                    // Only difference: fires from the 500ms defer instead of a
+                    // CMSG handler. Any deviation from the known-working path
+                    // risks silently missing the event chain that drives
+                    // NEIGHBORHOOD_MAP_DATA_UPDATED.
+                    Neighborhood* nbh = hMap->GetNeighborhood();
+                    std::vector<Neighborhood::Member> const& members = nbh->GetMembers();
+
+                    // 1. QueryNeighborhoodNameResponse — pre-cache NeighborhoodGuid→Name
+                    {
+                        WorldPackets::Housing::QueryNeighborhoodNameResponse nameResp;
+                        nameResp.NeighborhoodGuid = nbh->GetGuid();
+                        nameResp.Result = true;
+                        nameResp.NeighborhoodName = nbh->GetName();
+                        p->SendDirectMessage(nameResp.Write());
+                    }
+
+                    // 2. NeighborhoodGetRosterResponse — roster member list
+                    {
+                        WorldPackets::Neighborhood::NeighborhoodGetRosterResponse response;
+                        response.Result = static_cast<uint8>(HOUSING_RESULT_SUCCESS);
+                        response.GroupNeighborhoodGuid = nbh->GetGuid();
+                        response.GroupOwnerGuid = nbh->GetOwnerGuid();
+                        response.NeighborhoodName = nbh->GetName();
+                        response.Members.reserve(members.size());
+                        for (auto const& member : members)
+                        {
+                            WorldPackets::Neighborhood::NeighborhoodGetRosterResponse::RosterMemberData data;
+                            data.PlayerGuid = member.PlayerGuid;
+                            data.PlotIndex = member.PlotIndex;
+                            data.JoinTime = member.JoinTime;
+                            data.ResidentType = member.Role;
+                            data.IsOnline = ObjectAccessor::FindPlayer(member.PlayerGuid) != nullptr;
+                            if (member.PlotIndex != INVALID_PLOT_INDEX)
+                                if (Neighborhood::PlotInfo const* pi = nbh->GetPlotInfo(member.PlotIndex))
+                                    data.HouseGuid = pi->HouseGuid;
+                            response.Members.push_back(data);
+                        }
+                        p->SendDirectMessage(response.Write());
+                    }
+
+                    // 3. Mirror re-populate + SendCreateToPlayer
+                    //    Matches NeighborhoodHandler.cpp:1781-1808. SendCreate (not
+                    //    Update) because the working roster-click path uses it.
+                    HousingNeighborhoodMirrorEntity& mirror = session->GetHousingNeighborhoodMirrorEntity();
+                    mirror.SetName(nbh->GetName());
+                    mirror.SetOwnerGUID(nbh->GetOwnerGuid());
+                    mirror.ClearHouses();
+                    for (auto const& plot : nbh->GetPlots())
+                    {
+                        if (plot.IsOccupied() && !plot.HouseGuid.IsEmpty())
+                            mirror.AddHouse(plot.HouseGuid, plot.OwnerGuid);
+                        else
+                            mirror.AddHouse(ObjectGuid::Empty, ObjectGuid::Empty);
+                    }
+                    mirror.ClearManagers();
+                    for (auto const& member : members)
+                    {
+                        if (member.Role == NEIGHBORHOOD_ROLE_MANAGER || member.Role == NEIGHBORHOOD_ROLE_OWNER)
+                        {
+                            ObjectGuid bnetGuid;
+                            if (Player* mgr = ObjectAccessor::FindPlayer(member.PlayerGuid))
+                                bnetGuid = mgr->GetSession()->GetBattlenetAccountGUID();
+                            mirror.AddManager(bnetGuid, member.PlayerGuid);
+                        }
+                    }
+                    mirror.SendCreateToPlayer(p);
+
+                    // 4. QueryPlayerNamesResponse — pre-cache plot owner names
+                    {
+                        WorldPackets::Query::QueryPlayerNamesResponse nameResponse;
+                        for (auto const& plot : nbh->GetPlots())
+                        {
+                            if (!plot.IsOccupied() || plot.OwnerGuid.IsEmpty())
+                                continue;
+                            WorldPackets::Query::NameCacheLookupResult& entry = nameResponse.Players.emplace_back();
+                            session->BuildNameQueryData(plot.OwnerGuid, entry);
+                        }
+                        if (!nameResponse.Players.empty())
+                            p->SendDirectMessage(nameResponse.Write());
+
+                        TC_LOG_DEBUG("housing", "HousingMap deferred ENTER_PLOT: roster-replay sent — "
+                            "{} members, {} name-cache entries, 1 Housing/4 CREATE for player {}",
+                            members.size(), nameResponse.Players.size(), playerGuid.ToString());
+                    }
+                }
 
                 // Simulate the edit-mode ON → OFF transition on the Player
                 // entity (without actually entering edit mode). The user's
@@ -1927,6 +2113,55 @@ GameObject* HousingMap::SpawnHouseForPlot(uint8 plotIndex, Position const* custo
                 roomParentGuid.ToString(),
                 pos.GetPositionX(), pos.GetPositionY(), pos.GetPositionZ());
             _houseMirrorEntities[plotIndex] = std::move(mirror);
+        }
+
+        // Group B Entity mirror — FMirroredPositionData_C only (no tags),
+        // AttachParent = exterior-root MeshObject (not the room). Sniff
+        // idx 9984 shows 4 Group B mirrors alongside the 4 Group A ones.
+        // Purpose: pure spatial anchor off the house's visible mesh.
+        // Lookup: first MeshObject in this plot's list whose FHousingFixture_C
+        // ExteriorComponentType==9 (Base) and no AttachParent (i.e. a root).
+        {
+            ObjectGuid exteriorRootGuid;
+            auto meshItr = _meshObjects.find(plotIndex);
+            if (meshItr != _meshObjects.end())
+            {
+                for (ObjectGuid const& meshGuid : meshItr->second)
+                {
+                    MeshObject* mesh = GetMeshObject(meshGuid);
+                    if (!mesh || !mesh->m_housingFixtureData.has_value())
+                        continue;
+                    UF::HousingFixtureData const& fd = *mesh->m_housingFixtureData;
+                    if (uint8(fd.ExteriorComponentType) == 9 && fd.AttachParentGUID->IsEmpty())
+                    {
+                        exteriorRootGuid = meshGuid;
+                        break;
+                    }
+                }
+            }
+
+            if (!exteriorRootGuid.IsEmpty())
+            {
+                uint32 bnetId = static_cast<uint32>(plotInfo->OwnerBnetGuid.GetCounter());
+                ObjectGuid meshMirrorGuid = MakeHouseMeshMirrorGuid(plotIndex, bnetId);
+                auto meshMirror = std::make_unique<HousingMirrorEntity>(this, meshMirrorGuid);
+                Position const localPos(0.0f, 0.0f, 0.0f, 0.0f);
+                QuaternionData identity;
+                identity.x = identity.y = identity.z = 0.0f;
+                identity.w = 1.0f;
+                meshMirror->InitPositionData(exteriorRootGuid,
+                    localPos, identity, /*scale*/ 1.0f, /*attachmentFlags*/ 3,
+                    /*isExteriorRoot*/ false);
+                TC_LOG_DEBUG("housing", "HousingMap::SpawnHouseForPlot: spawned Group B mesh mirror {} for plot {} "
+                    "(attach={} [mesh root])",
+                    meshMirrorGuid.ToString(), plotIndex, exteriorRootGuid.ToString());
+                _houseMeshMirrorEntities[plotIndex] = std::move(meshMirror);
+            }
+            else
+            {
+                TC_LOG_WARN("housing", "HousingMap::SpawnHouseForPlot: no exterior-root MeshObject found for plot {}; "
+                    "Group B mirror skipped (client spatial anchor off house mesh will be missing)", plotIndex);
+            }
         }
     }
 
@@ -2960,8 +3195,9 @@ void HousingMap::DespawnHouseForPlot(uint8 plotIndex)
     DespawnRoomForPlot(plotIndex);
     DespawnAllMeshObjectsForPlot(plotIndex);
 
-    // Despawn the Entity mirror paired with the exterior root.
+    // Despawn the Entity mirrors paired with the exterior root.
     _houseMirrorEntities.erase(plotIndex);
+    _houseMeshMirrorEntities.erase(plotIndex);
 
     auto itr = _houseGameObjects.find(plotIndex);
     if (itr == _houseGameObjects.end())
@@ -2999,6 +3235,28 @@ ObjectGuid HousingMap::MakeHouseMirrorGuid(uint8 plotIndex, uint32 bnetAccountId
     constexpr uint32 HOUSING_MIRROR_ENTRY = 37361;
     uint64 counter = (static_cast<uint64>(bnetAccountId) << 8) | static_cast<uint64>(plotIndex);
     return ObjectGuid::Create<HighGuid::Entity>(GetId(), HOUSING_MIRROR_ENTRY, counter);
+}
+
+HousingMirrorEntity* HousingMap::GetHouseMeshMirror(uint8 plotIndex) const
+{
+    auto itr = _houseMeshMirrorEntities.find(plotIndex);
+    return itr != _houseMeshMirrorEntities.end() ? itr->second.get() : nullptr;
+}
+
+ObjectGuid HousingMap::GetHouseMeshMirrorGuid(uint8 plotIndex) const
+{
+    if (HousingMirrorEntity* m = GetHouseMeshMirror(plotIndex))
+        return m->GetGUID();
+    return ObjectGuid::Empty;
+}
+
+ObjectGuid HousingMap::MakeHouseMeshMirrorGuid(uint8 plotIndex, uint32 bnetAccountId) const
+{
+    // Distinct synthetic entry from Group A (37361) so Group A/B guids never collide.
+    // Same counter packing: (bnetId << 8) | plotIndex.
+    constexpr uint32 HOUSING_MESH_MIRROR_ENTRY = 37362;
+    uint64 counter = (static_cast<uint64>(bnetAccountId) << 8) | static_cast<uint64>(plotIndex);
+    return ObjectGuid::Create<HighGuid::Entity>(GetId(), HOUSING_MESH_MIRROR_ENTRY, counter);
 }
 
 HousingRoomEntity* HousingMap::GetRoomIdentityEntity(uint8 plotIndex) const

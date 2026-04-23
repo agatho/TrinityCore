@@ -1399,15 +1399,51 @@ WorldPacket const* HousingSvcsSwapPlotsResponse::Write()
 ByteBuffer& operator<<(ByteBuffer& data, HouseInfo const& houseInfo)
 {
     // IDA (0x5C0008/0x5C0009): PackedGUID + PackedGUID + PackedGUID + uint8 + uint32
-    //   + uint8(bit7=HasMoveOutTime) [+ uint64(MoveOutTime)]
+    //   + uint8(flags) [+ optional payloads in bit-7→bit-4 order]
+    //
+    // Flags byte bit layout (see HousingPackets.h struct comment):
+    //   bit 7 HasMoveOutTime      → uint64 MoveOutTime
+    //   bit 6 HasHouseName        → CString HouseName
+    //   bit 5 HasNeighborhoodName → CString NeighborhoodName
+    //   bit 4 PlotReserved        → no payload (single-bit bool)
+    //
+    // Back-compat: when all four bits are zero, flags=0x00 and no payload
+    // follows — wire is byte-identical to the pre-widening format that's
+    // IDA-verified for 0x5C0008/0x5C0009.
     data << houseInfo.HouseGuid;
     data << houseInfo.OwnerGuid;
     data << houseInfo.NeighborhoodGuid;
     data << houseInfo.PlotId;
     data << houseInfo.AccessFlags;
-    data << uint8(houseInfo.HasMoveOutTime ? 0x80 : 0x00);
+
+    uint8 flags = 0;
+    if (houseInfo.HasMoveOutTime)                flags |= 0x80;
+    if (houseInfo.HouseName.has_value())         flags |= 0x40;
+    if (houseInfo.NeighborhoodName.has_value())  flags |= 0x20;
+    if (houseInfo.PlotReserved)                  flags |= 0x10;
+    data << uint8(flags);
+
     if (houseInfo.HasMoveOutTime)
         data << uint64(houseInfo.MoveOutTime);
+
+    if (houseInfo.HouseName.has_value())
+    {
+        std::string const& name = *houseInfo.HouseName;
+        uint8 nameLen = static_cast<uint8>(std::min<size_t>(name.size() + 1, 255));
+        data << uint8(nameLen);
+        if (nameLen > 0)
+            data.append(name.c_str(), nameLen);
+    }
+
+    if (houseInfo.NeighborhoodName.has_value())
+    {
+        std::string const& name = *houseInfo.NeighborhoodName;
+        uint8 nameLen = static_cast<uint8>(std::min<size_t>(name.size() + 1, 255));
+        data << uint8(nameLen);
+        if (nameLen > 0)
+            data.append(name.c_str(), nameLen);
+    }
+
     return data;
 }
 

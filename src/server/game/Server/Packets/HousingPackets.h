@@ -32,7 +32,32 @@ namespace WorldPackets::Housing
     // ============================================================
 
     // HouseInfo — IDA: PackedGUID + PackedGUID + PackedGUID + uint8 + uint32
-    //   + uint8(bit7=HasMoveOutTime) [+ uint64(MoveOutTime)]
+    //   + uint8(flag bitfield) [+ optional payloads in flag-bit order]
+    //
+    // Lua C_Housing.GetCurrentHouseInfo surfaces a 9-field table:
+    //   plotID, houseName, ownerName (via OwnerGuid→NameCache),
+    //   plotCost (from cornerstone UI, not HouseInfo), neighborhoodName,
+    //   moveOutTime, plotReserved, neighborhoodGUID, houseGUID.
+    //
+    // Three nilable-on-wire fields extend the base struct: HouseName,
+    // NeighborhoodName, PlotReserved. Each is gated by a flag bit in the
+    // trailing flag byte. When all three are unset and HasMoveOutTime=false,
+    // the wire is byte-identical to the pre-widening format (flag byte=0x00).
+    //
+    // Flag-bit layout (packed into the single post-AccessFlags uint8):
+    //   bit 7 = HasMoveOutTime      (existing, IDA-verified)
+    //   bit 6 = HasHouseName        (new, speculative placement)
+    //   bit 5 = HasNeighborhoodName (new, speculative placement)
+    //   bit 4 = PlotReserved        (new, single-bit bool, no payload)
+    //
+    // Payloads, written only when the gating bit is set, in bit-7→bit-4 order:
+    //   uint64 MoveOutTime
+    //   CString HouseName          (uint8 NameLen incl. NUL + bytes)
+    //   CString NeighborhoodName   (uint8 NameLen incl. NUL + bytes)
+    //
+    // Until IDA-verified, callers that don't set these fields produce the
+    // exact pre-existing wire. Emitters that do set them should match retail
+    // bit positions — adjust here if sniff diffs show a different layout.
     struct HouseInfo
     {
         ObjectGuid HouseGuid;
@@ -42,6 +67,9 @@ namespace WorldPackets::Housing
         uint32 AccessFlags = 0;
         bool HasMoveOutTime = false;
         uint64 MoveOutTime = 0;
+        Optional<std::string> HouseName;
+        Optional<std::string> NeighborhoodName;
+        bool PlotReserved = false;
     };
 
     // JamNeighborhoodRosterEntry — sub_7FF6F6E0A460 (48 bytes, used by 0x5C000E, 0x5C000F)
