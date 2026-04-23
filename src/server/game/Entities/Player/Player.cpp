@@ -19275,19 +19275,21 @@ bool Player::LoadFromDB(ObjectGuid guid, CharacterDatabaseQueryHolder const& hol
             mirrorEntity.SetName(neighborhood->GetName());
             mirrorEntity.SetOwnerGUID(neighborhood->GetOwnerGuid());
 
-            // Add ALL 55 plot entries so Houses[i] = PlotIndex i
+            // IMPORTANT: At LOGIN time we populate the mirror with 55 empty
+            // slots. The POPULATED Houses data is sent later by the 500ms
+            // deferred event in HousingMap::AddPlayerToMap, which emits a
+            // VALUES_UPDATE carrying the real delta empty→populated. That
+            // delta is what drives the client's per-field dispatcher at
+            // RVA 0x1150320 → Lua event NEIGHBORHOOD_MAP_DATA_UPDATED →
+            // NeighborhoodMapDataProvider:RefreshAllData → world-map pins
+            // paint. If we populate the real data here, the subsequent
+            // UPDATE has an identity delta (population→population) which
+            // the UpdateField system may short-circuit, leaving the icons
+            // stuck at ownerType=None until a user-initiated CMSG forces
+            // the client to re-evaluate via a different path.
             //
-            // Diagnostic: log every occupied plot's HouseGuid/OwnerGuid and flag
-            // the Empty-HouseGuid case. Client ownerType derivation (memory note
-            // regular_map_plot_icons.md): entityRegistry[Houses[i].HouseGUID]
-            // → Housing/3 entity → BnetAccount compare. Empty HouseGUID → no
-            // registry hit → ownerType=None(0). Root-cause of user report
-            // 2026-04-23 "ownerType=0 at login, flips to 3 after roster click"
-            // if any occupied plot has Empty HouseGuid, this log will show it.
-            //
-            // Expected session Housing/3 GUID for own plot:
-            //   HighGuid::Housing subType=3, arg1=realmId, arg2=7, counter=bnetAccountId
-            // If plot.HouseGuid doesn't match, client registry lookup misses.
+            // Diagnostic log kept for per-occupied-plot visibility before
+            // the HouseGuid gets hidden behind the empty-slot path.
             ObjectGuid const sessionHouse3 = GetSession()->GetHousingPlayerHouseEntity().GetGUID();
             mirrorEntity.ClearHouses();
             uint8 plotIdx = 0;
@@ -19300,15 +19302,16 @@ bool Player::LoadFromDB(ObjectGuid guid, CharacterDatabaseQueryHolder const& hol
                     bool matchesSession = ownPlot && !emptyHouse && plot.HouseGuid == sessionHouse3;
                     TC_LOG_INFO("housing",
                         "Player::LoadFromDB mirror[{}]: OWN={} HouseGuid={} OwnerGuid={} OwnerBnetGuid={} "
-                        "SessionH3={} matchesSessionH3={} emptyHouseGuid={}",
+                        "SessionH3={} matchesSessionH3={} emptyHouseGuid={} (login-CREATE sends empty; "
+                        "deferred UPDATE will send populated to force field delta)",
                         plotIdx, ownPlot,
                         plot.HouseGuid.ToString(), plot.OwnerGuid.ToString(), plot.OwnerBnetGuid.ToString(),
                         sessionHouse3.ToString(), matchesSession, emptyHouse);
                 }
-                if (plot.IsOccupied() && !plot.HouseGuid.IsEmpty())
-                    mirrorEntity.AddHouse(plot.HouseGuid, plot.OwnerGuid);
-                else
-                    mirrorEntity.AddHouse(ObjectGuid::Empty, ObjectGuid::Empty);
+                // Always add an Empty-GUID slot at login. Defer populates real data
+                // in HousingMap::AddPlayerToMap's 500ms event, producing the
+                // empty→populated delta the client's field dispatcher needs.
+                mirrorEntity.AddHouse(ObjectGuid::Empty, ObjectGuid::Empty);
                 ++plotIdx;
             }
 
