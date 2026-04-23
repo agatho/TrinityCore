@@ -1202,9 +1202,27 @@ bool HousingMap::AddPlayerToMap(Player* player, bool initPlayer /*= true*/)
                         p->SendDirectMessage(response.Write());
                     }
 
-                    // 3. Mirror re-populate + SendCreateToPlayer
-                    //    Matches NeighborhoodHandler.cpp:1781-1808. SendCreate (not
-                    //    Update) because the working roster-click path uses it.
+                    // 3. Mirror re-populate + SendUpdateToPlayer (VALUES_UPDATE).
+                    //
+                    // Client IDA (2026-04-23 decomp): the handlers at RVA 0x1150XXX
+                    // are per-field change dispatchers bound to FNeighborhoodMirrorData_C
+                    // fields. Each fires a different Lua event:
+                    //   0x11501A0 → NEIGHBORHOOD_INFO_UPDATED  (generic create)
+                    //   0x1150320 → NEIGHBORHOOD_MAP_DATA_UPDATED (Houses change)
+                    //   0x11503C0 → NEIGHBORHOOD_NAME_UPDATED    (Name change)
+                    //   0x1150800 → UPDATE_BULLETIN_BOARD_ROSTER (Managers change)
+                    //
+                    // CREATE (SendCreateToPlayer) fires only NEIGHBORHOOD_INFO_UPDATED.
+                    // The world-map pin renderer in NeighborhoodMapDataProvider.lua
+                    // listens for NEIGHBORHOOD_MAP_DATA_UPDATED — which only fires on
+                    // VALUES_UPDATE with the Houses field marked dirty.
+                    //
+                    // The mirror was already CREATE'd in the Player CREATE bundle at
+                    // login (Player.cpp:3646); the entity exists in the client's
+                    // registry. ClearHouses + 55× AddHouse below marks the Houses
+                    // dynamic field dirty. SendUpdateToPlayer serializes that delta
+                    // as a VALUES_UPDATE the client's dispatcher routes to 0x1150320
+                    // → NEIGHBORHOOD_MAP_DATA_UPDATED → world-map pin refresh.
                     HousingNeighborhoodMirrorEntity& mirror = session->GetHousingNeighborhoodMirrorEntity();
                     mirror.SetName(nbh->GetName());
                     mirror.SetOwnerGUID(nbh->GetOwnerGuid());
@@ -1227,7 +1245,7 @@ bool HousingMap::AddPlayerToMap(Player* player, bool initPlayer /*= true*/)
                             mirror.AddManager(bnetGuid, member.PlayerGuid);
                         }
                     }
-                    mirror.SendCreateToPlayer(p);
+                    mirror.SendUpdateToPlayer(p);
 
                     // 4. QueryPlayerNamesResponse — pre-cache plot owner names
                     {
