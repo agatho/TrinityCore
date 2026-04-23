@@ -19301,20 +19301,42 @@ bool Player::LoadFromDB(ObjectGuid guid, CharacterDatabaseQueryHolder const& hol
             uint8 plotIdx = 0;
             for (auto const& plot : neighborhood->GetPlots())
             {
+                // Own-plot self-check fix (analysis-agent diagnosis 2026-04-23T08:15Z):
+                // client's ownerType derivation compares mirror.Houses[i].HouseGuid
+                // against PlayerHouseInfoComponent_C.Houses[].Guid. Both MUST be bit-
+                // identical for plot to classify as Self. Neighborhood::LoadFromDB
+                // builds plot.HouseGuid from characters.account JOIN → AccountMgr::
+                // GetIdByGameAccount(). Housing::LoadFromDB (per-session) uses
+                // session->GetBattlenetAccountId() directly. Those two paths SHOULD
+                // produce identical bnetAccountId, but observed data shows plot 47
+                // (self) renders as ownerType=None while other plots resolve as
+                // Stranger correctly — the only way that happens is if the HouseGuid
+                // values diverge for self's plot.
+                //
+                // Force consistency: for the current player's own plot, override
+                // plot.HouseGuid with the session's HousingPlayerHouseEntity GUID
+                // (which is what PlayerHouseInfoComponent.Houses[0].Guid also uses
+                // via h->GetHouseGuid()). Guaranteed match; client's self-check
+                // passes regardless of any startup-time bnet-resolution drift.
+                ObjectGuid plotHouseGuid = plot.HouseGuid;
+                ObjectGuid plotOwnerGuid = plot.OwnerGuid;
+                bool const ownPlot = plot.IsOccupied() && plot.OwnerGuid == GetGUID();
+                if (ownPlot)
+                    plotHouseGuid = sessionHouse3;
+
                 if (plot.IsOccupied())
                 {
-                    bool ownPlot = (plot.OwnerGuid == GetGUID());
-                    bool emptyHouse = plot.HouseGuid.IsEmpty();
-                    bool matchesSession = ownPlot && !emptyHouse && plot.HouseGuid == sessionHouse3;
+                    bool const emptyHouse = plot.HouseGuid.IsEmpty();
+                    bool const matchesSession = plot.HouseGuid == sessionHouse3;
                     TC_LOG_INFO("housing",
-                        "Player::LoadFromDB mirror[{}]: OWN={} HouseGuid={} OwnerGuid={} OwnerBnetGuid={} "
-                        "SessionH3={} matchesSessionH3={} emptyHouseGuid={}",
+                        "Player::LoadFromDB mirror[{}]: OWN={} plot.HouseGuid={} OwnerGuid={} OwnerBnetGuid={} "
+                        "SessionH3={} matchesSessionH3={} emptyHouseGuid={} finalHouseGuid={}",
                         plotIdx, ownPlot,
                         plot.HouseGuid.ToString(), plot.OwnerGuid.ToString(), plot.OwnerBnetGuid.ToString(),
-                        sessionHouse3.ToString(), matchesSession, emptyHouse);
+                        sessionHouse3.ToString(), matchesSession, emptyHouse, plotHouseGuid.ToString());
                 }
-                if (plot.IsOccupied() && !plot.HouseGuid.IsEmpty())
-                    mirrorEntity.AddHouse(plot.HouseGuid, plot.OwnerGuid);
+                if (plot.IsOccupied() && !plotHouseGuid.IsEmpty())
+                    mirrorEntity.AddHouse(plotHouseGuid, plotOwnerGuid);
                 else
                     mirrorEntity.AddHouse(ObjectGuid::Empty, ObjectGuid::Empty);
                 ++plotIdx;
