@@ -2426,13 +2426,17 @@ void NeighborhoodPlayerDeclineInvite::Read()
 
 void NeighborhoodBuyHouse::Read()
 {
-    // Sniff 12.0.1 (23 bytes): uint32(HouseStyleID) + PackedGUID(CornerstoneGuid) + uint16(Padding)
+    // Sniff 12.0.1 (enUS, 23 bytes): uint32(HouseStyleID) + PackedGUID(CornerstoneGuid) + uint16(Padding)
+    // Other client locales (zhCN reported) send 17-byte packets without the trailing Padding.
+    // Tolerate the missing tail — the Padding field is unused server-side and we don't
+    // want a ByteBufferException to drop the purchase for those clients.
     _worldPacket >> HouseStyleID;
     _worldPacket >> CornerstoneGuid;
-    _worldPacket >> Padding;
+    if (_worldPacket.rpos() + sizeof(uint16) <= _worldPacket.size())
+        _worldPacket >> Padding;
 
-    TC_LOG_DEBUG("network.opcode", "CMSG_NEIGHBORHOOD_BUY_HOUSE HouseStyleID: {} CornerstoneGuid: {} Padding: {}",
-        HouseStyleID, CornerstoneGuid.ToString(), Padding);
+    TC_LOG_DEBUG("network.opcode", "CMSG_NEIGHBORHOOD_BUY_HOUSE HouseStyleID: {} CornerstoneGuid: {} Padding: {} (packetSize={} rpos={})",
+        HouseStyleID, CornerstoneGuid.ToString(), Padding, _worldPacket.size(), _worldPacket.rpos());
 }
 
 void NeighborhoodMoveHouse::Read()
