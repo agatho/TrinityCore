@@ -2192,7 +2192,13 @@ GameObject* HousingMap::SpawnHouseForPlot(uint8 plotIndex, Position const* custo
     //
     // The door GO is stored in _houseGameObjects[plotIndex] by SpawnExtCompTree.
     // Return it here for callers that need the pointer.
-    GameObject* doorGo = GetHouseGameObject(plotIndex);
+    //
+    // The missing `return` here was causing C4715 warnings at every build AND a
+    // crash in HandleNeighborhoodBuyHouse (2026-04-23 14:23:30) — callers got
+    // whatever garbage sat in RAX, which sometimes looked like a non-null GameObject*
+    // pointer. `houseGo->GetGUID().ToString()` then dereferenced bad memory and
+    // SIGSEGV'd inside ObjectGuid::GetHigh via the fmt formatter.
+    return GetHouseGameObject(plotIndex);
 }
 
 void HousingMap::SpawnRoomForPlot(uint8 plotIndex, Position const& housePos,
