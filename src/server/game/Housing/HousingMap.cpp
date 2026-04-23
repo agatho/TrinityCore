@@ -369,22 +369,19 @@ void HousingMap::SpawnPlotGameObjects()
     // with the correct channel.
     uint32 occupiedWs = 0;
     uint32 emptyWs = 0;
-    uint32 noDb2Ws = 0;
     for (NeighborhoodPlotData const* plot : plots)
     {
-        if (plot->WorldState == 0)
-        {
-            ++noDb2Ws;
-            TC_LOG_INFO("housing", "  PlotWS[{}] WorldState=0 in DB2 (skipped)", plot->PlotIndex);
-            continue;
-        }
-
         uint8 plotIdx = static_cast<uint8>(plot->PlotIndex);
+        // Prefer the DB2 WorldState ID when present; otherwise synthesise one
+        // (DB2 extraction currently has this column zero for all plots).
+        uint32 wsId = plot->WorldState != 0 ? plot->WorldState
+                        : MakeHousingPlotWorldStateId(neighborhoodMapId, plotIdx);
         Neighborhood::PlotInfo const* pi = _neighborhood->GetPlotInfo(plotIdx);
         bool occupied = pi && pi->IsOccupied() && !pi->HouseGuid.IsEmpty();
-        SetWorldStateValue(plot->WorldState, occupied ? 1 : 0, /*hidden*/ false);
-        TC_LOG_INFO("housing", "  PlotWS[{}] WorldState={} value={} (owner={} house={})",
-            plot->PlotIndex, plot->WorldState, occupied ? 1 : 0,
+        SetWorldStateValue(wsId, occupied ? 1 : 0, /*hidden*/ false);
+        TC_LOG_INFO("housing", "  PlotWS[{}] WorldState={}{} value={} (owner={} house={})",
+            plot->PlotIndex, wsId, plot->WorldState == 0 ? " [synth]" : "",
+            occupied ? 1 : 0,
             pi ? pi->OwnerGuid.ToString() : "n/a",
             pi ? pi->HouseGuid.ToString() : "n/a");
         if (occupied) ++occupiedWs; else ++emptyWs;
@@ -558,21 +555,20 @@ void HousingMap::SetPlotOwnershipState(uint8 plotIndex, bool owned)
     {
         if (plotData->PlotIndex != static_cast<int32>(plotIndex))
             continue;
-        if (plotData->WorldState == 0)
-        {
-            TC_LOG_DEBUG("housing", "SetPlotOwnershipState: Plot {} has no WorldState ID in DB2, nothing to broadcast",
-                plotIndex);
-            break;
-        }
+
+        // Prefer the DB2 WorldState ID; synthesise one when the extraction has it zero.
+        uint32 wsId = plotData->WorldState != 0 ? plotData->WorldState
+                        : MakeHousingPlotWorldStateId(neighborhoodMapId, plotIndex);
 
         // Blizzlike: the per-plot WorldState is a BINARY occupancy flag — 0 empty,
         // 1 occupied. `Map::SetWorldStateValue` stores the value (so future joins
         // get it in INIT_WORLD_STATES) AND broadcasts `SMSG_UPDATE_WORLD_STATE` to
         // every player currently on the map. No per-player enum override.
-        SetWorldStateValue(plotData->WorldState, owned ? 1 : 0, /*hidden*/ false);
+        SetWorldStateValue(wsId, owned ? 1 : 0, /*hidden*/ false);
 
-        TC_LOG_DEBUG("housing", "SetPlotOwnershipState: ws={} value={} plot={} {} neighborhoodMap={}",
-            plotData->WorldState, owned ? 1 : 0, plotIndex, owned ? "occupied" : "empty", neighborhoodMapId);
+        TC_LOG_DEBUG("housing", "SetPlotOwnershipState: ws={}{} value={} plot={} {} neighborhoodMap={}",
+            wsId, plotData->WorldState == 0 ? " [synth]" : "",
+            owned ? 1 : 0, plotIndex, owned ? "occupied" : "empty", neighborhoodMapId);
         break;
     }
 }
@@ -1202,27 +1198,29 @@ bool HousingMap::AddPlayerToMap(Player* player, bool initPlayer /*= true*/)
                         p->SendDirectMessage(response.Write());
                     }
 
-                    // 3. Mirror re-populate + SendUpdateToPlayer (VALUES_UPDATE).
+                    // 3. Mirror re-populate + SendCreateToPlayer (wholesale CREATE).
                     //
-                    // Client IDA (2026-04-23 decomp): the handlers at RVA 0x1150XXX
-                    // are per-field change dispatchers bound to FNeighborhoodMirrorData_C
-                    // fields. Each fires a different Lua event:
-                    //   0x11501A0 → NEIGHBORHOOD_INFO_UPDATED  (generic create)
-                    //   0x1150320 → NEIGHBORHOOD_MAP_DATA_UPDATED (Houses change)
-                    //   0x11503C0 → NEIGHBORHOOD_NAME_UPDATED    (Name change)
-                    //   0x1150800 → UPDATE_BULLETIN_BOARD_ROSTER (Managers change)
+                    // Empirical evidence: the working roster-click path in
+                    // HandleHousingSvcsGetRoster (HousingHandler.cpp:4151) does
+                    // ClearHouses + AddHouse × 55 followed by SendCreateToPlayer,
+                    // and the user-observed map-refresh on roster click is exactly
+                    // that path firing. The in-header contract for this entity
+                    // (HousingNeighborhoodMirrorEntity.h:38-42) also states map-icon
+                    // refresh only fires on CREATE — wholesale re-pushes are
+                    // sniff-verified at >=80% of Housing/4 updates in retail.
                     //
-                    // CREATE (SendCreateToPlayer) fires only NEIGHBORHOOD_INFO_UPDATED.
-                    // The world-map pin renderer in NeighborhoodMapDataProvider.lua
-                    // listens for NEIGHBORHOOD_MAP_DATA_UPDATED — which only fires on
-                    // VALUES_UPDATE with the Houses field marked dirty.
+                    // Previous defer used SendUpdateToPlayer (VALUES_UPDATE) on the
+                    // hypothesis that MAP_DATA_UPDATED routed off a Houses-field
+                    // dirty bit. That didn't hold: VALUES_UPDATE may be suppressed
+                    // as a no-op delta when the values in the CREATE bundle already
+                    // match what we re-populate here (which is exactly the case for
+                    // a relog — Player::LoadFromDB synchronously populated Houses
+                    // with final data before CREATE shipped). The client then never
+                    // perceives a field change and the map stays at the initial read.
                     //
-                    // The mirror was already CREATE'd in the Player CREATE bundle at
-                    // login (Player.cpp:3646); the entity exists in the client's
-                    // registry. ClearHouses + 55× AddHouse below marks the Houses
-                    // dynamic field dirty. SendUpdateToPlayer serializes that delta
-                    // as a VALUES_UPDATE the client's dispatcher routes to 0x1150320
-                    // → NEIGHBORHOOD_MAP_DATA_UPDATED → world-map pin refresh.
+                    // Using SendCreateToPlayer forces a fresh CREATE block that the
+                    // client always processes, producing the same wake-up behaviour
+                    // as the roster click path.
                     HousingNeighborhoodMirrorEntity& mirror = session->GetHousingNeighborhoodMirrorEntity();
                     mirror.SetName(nbh->GetName());
                     mirror.SetOwnerGUID(nbh->GetOwnerGuid());
@@ -1245,7 +1243,7 @@ bool HousingMap::AddPlayerToMap(Player* player, bool initPlayer /*= true*/)
                             mirror.AddManager(bnetGuid, member.PlayerGuid);
                         }
                     }
-                    mirror.SendUpdateToPlayer(p);
+                    mirror.SendCreateToPlayer(p);
 
                     // 4. QueryPlayerNamesResponse — pre-cache plot owner names
                     {

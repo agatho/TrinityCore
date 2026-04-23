@@ -782,6 +782,22 @@ static constexpr uint32 WORLDSTATE_HOUSING_COUNTER_5    = 16711;
 // WS[30906]: Toggled 1 when inside a house interior (MapID=2783), 0 when leaving.
 static constexpr uint32 WORLDSTATE_HOUSING_INTERIOR     = 30906;
 
+// Synthetic per-plot binary occupancy WorldState base. Retail's NeighborhoodPlot
+// DB2 carries a `WorldState` column that is sent through SMSG_INIT_WORLD_STATES
+// (and broadcast via SMSG_UPDATE_WORLD_STATE when a plot changes owned/empty).
+// Our DB2 extraction has this column zero for every plot, so no worldstate is
+// set or broadcast — the "is a house here?" signal never reaches the client.
+// Fall back to a synthetic ID keyed on NeighborhoodMapID + PlotIndex so the
+// binary occupancy channel works even without the DB2 data. Range chosen to
+// avoid collision with live retail worldstates (< 40000 in our current world_state
+// table) and is unique per (NeighborhoodMapID, PlotIndex) pair up to map 99.
+static constexpr uint32 WORLDSTATE_HOUSING_PLOT_BASE = 40000;
+
+inline uint32 MakeHousingPlotWorldStateId(uint32 neighborhoodMapId, uint32 plotIndex)
+{
+    return WORLDSTATE_HOUSING_PLOT_BASE + (neighborhoodMapId * 100u) + plotIndex;
+}
+
 // Interval and increment for housing WorldState counter updates
 static constexpr uint32 HOUSING_WORLDSTATE_INTERVAL_MS  = 300;
 static constexpr uint32 HOUSING_WORLDSTATE_INCREMENT    = 1333;
