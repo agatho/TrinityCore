@@ -104,6 +104,16 @@ void NeighborhoodMgr::LoadFromDB()
         inviteStmt->setUInt64(0, guidLow);
         PreparedQueryResult inviteResult = CharacterDatabase.Query(inviteStmt);
 
+        // Load per-member exterior/interior state needed to render every
+        // occupied plot's house without requiring the owner to be online.
+        CharacterDatabasePreparedStatement* fixStmt = CharacterDatabase.GetPreparedStatement(CHAR_SEL_NEIGHBORHOOD_MEMBER_FIXTURES);
+        fixStmt->setUInt64(0, guidLow);
+        PreparedQueryResult fixtureResult = CharacterDatabase.Query(fixStmt);
+
+        CharacterDatabasePreparedStatement* decorStmt = CharacterDatabase.GetPreparedStatement(CHAR_SEL_NEIGHBORHOOD_MEMBER_DECOR);
+        decorStmt->setUInt64(0, guidLow);
+        PreparedQueryResult decorResult = CharacterDatabase.Query(decorStmt);
+
         // Wrap the neighborhood row as a PreparedQueryResult by passing the raw result
         // LoadFromDB expects PreparedQueryResult for the first param but we have the raw fields;
         // so we call LoadFromDB with the data directly already parsed from fields above.
@@ -112,7 +122,7 @@ void NeighborhoodMgr::LoadFromDB()
         neighborhoodStmt->setUInt64(0, guidLow);
         PreparedQueryResult neighborhoodResult = CharacterDatabase.Query(neighborhoodStmt);
 
-        if (!neighborhood->LoadFromDB(neighborhoodResult, memberResult, inviteResult))
+        if (!neighborhood->LoadFromDB(neighborhoodResult, memberResult, inviteResult, fixtureResult, decorResult))
         {
             TC_LOG_ERROR("housing", "NeighborhoodMgr::LoadFromDB: Failed to load neighborhood guid {}. Skipping.", guidLow);
             continue;

@@ -20,11 +20,13 @@
 
 #include "Define.h"
 #include "DatabaseEnvFwd.h"
+#include "Housing.h"
 #include "HousingDefines.h"
 #include "ObjectGuid.h"
 #include "Optional.h"
 #include <array>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 class WorldPacket;
@@ -58,12 +60,24 @@ public:
         std::string HouseName;
 
         // Mirrored from character_housing so the neighborhood map can spawn the
-        // correct WMO geometry for EVERY occupied plot at preload — even for
-        // owners who are currently offline. Without this, only the logged-in
-        // player's own house visibly spawns; neighbours' plots look empty
-        // because HousingMap::GetHousingForPlayer returns null for offline
-        // owners.
+        // correct WMO geometry for EVERY occupied plot at preload. The data is
+        // always in the DB regardless of whether the owner is currently online —
+        // PlotInfo carries enough of it to build the exterior visual for every
+        // plot at map init without needing a live Housing object.
         uint32 HouseType = 0;
+
+        // Mirrored from character_housing_fixtures. Key = FixturePointId (DB2
+        // ExteriorComponentHook slot), value = FixtureOptionId (DB2
+        // ExteriorComponent override). Drives the correct roof/doors/windows
+        // on every plot's exterior, not just the logged-in owner's.
+        std::unordered_map<uint32, uint32> Fixtures;
+
+        // Mirrored from character_housing_decor. Every placed decor item
+        // (exterior AND interior) for this plot's owner. HousingMap uses the
+        // exterior entries (RoomGuid.IsEmpty()) at preload so visitors see
+        // neighbours' placed decor even when the owner is offline. Interior
+        // entries are reused when a visitor opens the owner's interior map.
+        std::vector<Housing::PlacedDecor> Decor;
 
         bool IsOccupied() const { return PlotIndex != INVALID_PLOT_INDEX; }
     };
@@ -84,7 +98,8 @@ public:
     explicit Neighborhood(ObjectGuid guid);
 
     // DB persistence
-    bool LoadFromDB(PreparedQueryResult neighborhood, PreparedQueryResult members, PreparedQueryResult invites);
+    bool LoadFromDB(PreparedQueryResult neighborhood, PreparedQueryResult members, PreparedQueryResult invites,
+        PreparedQueryResult memberFixtures = nullptr, PreparedQueryResult memberDecor = nullptr);
     void SaveToDB(CharacterDatabaseTransaction trans);
     static void DeleteFromDB(ObjectGuid::LowType guid, CharacterDatabaseTransaction trans);
 

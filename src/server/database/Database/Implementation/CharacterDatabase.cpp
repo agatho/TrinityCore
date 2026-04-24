@@ -859,6 +859,14 @@ void CharacterDatabaseConnection::DoPrepareStatements()
     PrepareStatement(CHAR_UPD_NEIGHBORHOOD_NAME, "UPDATE neighborhoods SET name = ? WHERE guid = ?", CONNECTION_ASYNC);
     PrepareStatement(CHAR_DEL_NEIGHBORHOOD, "DELETE FROM neighborhoods WHERE guid = ?", CONNECTION_ASYNC);
     PrepareStatement(CHAR_SEL_NEIGHBORHOOD_MEMBERS, "SELECT nm.playerGuid, nm.role, nm.joinTime, nm.plotIndex, ch.houseId, c.account, ch.houseLevel, ch.favor, ch.houseName, ch.houseType FROM neighborhood_members nm LEFT JOIN character_housing ch ON nm.playerGuid = ch.guid LEFT JOIN characters c ON nm.playerGuid = c.guid WHERE nm.neighborhoodGuid = ?", CONNECTION_SYNCH);
+    // Owner-keyed batch fetches used to preload all occupied-plot exterior and
+    // interior spawn data at neighborhood init, so houses render for every plot
+    // regardless of whether the owner is online. Filtered by the neighborhood's
+    // member guids via JOIN on neighborhood_members so only the members we care
+    // about come back.
+    PrepareStatement(CHAR_SEL_NEIGHBORHOOD_MEMBER_FIXTURES, "SELECT f.ownerGuid, f.fixturePointId, f.fixtureOptionId FROM character_housing_fixtures f INNER JOIN neighborhood_members nm ON nm.playerGuid = f.ownerGuid WHERE nm.neighborhoodGuid = ?", CONNECTION_SYNCH);
+    PrepareStatement(CHAR_SEL_NEIGHBORHOOD_MEMBER_DECOR, "SELECT d.id, d.ownerGuid, d.houseDecorId, d.posX, d.posY, d.posZ, d.rotX, d.rotY, d.rotZ, d.rotW, d.scale, d.dyeSlot0, d.dyeSlot1, d.dyeSlot2, d.roomGuid, d.locked, d.placementTime, d.sourceType, d.sourceValue FROM character_housing_decor d INNER JOIN neighborhood_members nm ON nm.playerGuid = d.ownerGuid WHERE nm.neighborhoodGuid = ?", CONNECTION_SYNCH);
+    PrepareStatement(CHAR_SEL_NEIGHBORHOOD_MEMBER_ROOMS, "SELECT r.ownerGuid, r.id, r.houseRoomId, r.slotIndex, r.gridX, r.gridY, r.floorIndex, r.orientation, r.mirrored, r.themeId, r.wallTextureId, r.floorTextureId, r.ceilingTextureId, r.colorOverride, r.doorTypeId, r.doorSlot, r.ceilingTypeId, r.ceilingSlot, r.wallThemeId, r.floorThemeId, r.ceilingThemeId FROM character_housing_rooms r INNER JOIN neighborhood_members nm ON nm.playerGuid = r.ownerGuid WHERE nm.neighborhoodGuid = ?", CONNECTION_SYNCH);
     PrepareStatement(CHAR_INS_NEIGHBORHOOD_MEMBER, "INSERT INTO neighborhood_members (neighborhoodGuid, playerGuid, role, joinTime, plotIndex) VALUES (?, ?, ?, ?, ?)", CONNECTION_BOTH);
     PrepareStatement(CHAR_DEL_NEIGHBORHOOD_MEMBERS, "DELETE FROM neighborhood_members WHERE neighborhoodGuid = ?", CONNECTION_ASYNC);
     PrepareStatement(CHAR_DEL_NEIGHBORHOOD_MEMBER, "DELETE FROM neighborhood_members WHERE neighborhoodGuid = ? AND playerGuid = ?", CONNECTION_BOTH);

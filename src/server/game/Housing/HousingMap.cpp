@@ -405,11 +405,11 @@ void HousingMap::SpawnPlotGameObjects()
             plotIdx, plotInfo->OwnerGuid.ToString(),
             plot->HousePosition[0], plot->HousePosition[1], plot->HousePosition[2]);
 
-        // Try the live Housing object first (owner online). When the owner is
-        // offline, fall back to PlotInfo.HouseType mirrored from character_housing
-        // at Neighborhood::LoadFromDB. Without this fallback, offline-owner plots
-        // rendered as empty at map preload and only the logged-in player's own
-        // house was visible.
+        // Spawn data comes from the DB via Neighborhood::LoadFromDB regardless of
+        // whether the plot's owner is currently online. The live `Housing*` is
+        // only used for fields that Housing computes at runtime (custom position,
+        // root-type overrides derived from fixture selection). When null, we fall
+        // back to PlotInfo fields mirrored from the DB.
         Housing* housing = GetHousingForPlayer(plotInfo->OwnerGuid);
 
         int32 exteriorComponentID = 0;
@@ -426,37 +426,59 @@ void HousingMap::SpawnPlotGameObjects()
         }
         else if (plotInfo->HouseType != 0)
         {
-            // Owner offline — use the mirrored houseType to pick the default core
-            // fixture. No fixture overrides or custom position available; visitors
-            // see the default WMO for the type. When the owner logs in, their
-            // full Housing object replaces this spawn through the AddPlayerToMap
-            // path.
             houseExteriorWmoDataID = static_cast<int32>(plotInfo->HouseType);
-            auto const* roots = sHousingMgr.GetRootComponentsForWmoData(plotInfo->HouseType);
-            if (roots)
+
+            // Apply the mirrored fixture overrides from PlotInfo.Fixtures. This
+            // mirrors character_housing_fixtures at Neighborhood::LoadFromDB so
+            // visitors see each neighbour's customised roof/doors/windows, not
+            // the raw default.
+            for (auto const& [pointId, optionId] : plotInfo->Fixtures)
+                fixtureOverrides[pointId] = optionId;
+
+            // Pick the core fixture for the house. Prefer an override with OptionId==0
+            // (player-selected base, same rule Housing::GetCoreExteriorComponentID uses);
+            // fall back to DB2 IsDefault, then the first root entry.
+            for (auto const& [pointId, optionId] : plotInfo->Fixtures)
             {
-                uint32 fallbackComp = 0;
-                for (uint32 compID : *roots)
+                if (optionId != 0)
+                    continue;
+                ExteriorComponentEntry const* comp = sExteriorComponentStore.LookupEntry(pointId);
+                if (comp && comp->ParentComponentID == 0 && comp->HouseExteriorWmoDataID == static_cast<int32>(plotInfo->HouseType))
                 {
-                    ExteriorComponentEntry const* comp = sExteriorComponentStore.LookupEntry(compID);
-                    if (!comp)
-                        continue;
-                    if (!fallbackComp)
-                        fallbackComp = compID;
-                    if (comp->Flags & 0x1) // IsDefault
-                    {
-                        fallbackComp = compID;
-                        break;
-                    }
+                    exteriorComponentID = static_cast<int32>(pointId);
+                    break;
                 }
-                exteriorComponentID = static_cast<int32>(fallbackComp);
             }
-            TC_LOG_INFO("housing", "HousingMap::SpawnPlotGameObjects: Plot {} owner {} offline — using mirrored HouseType={} ExtComp={} from PlotInfo",
-                plotIdx, plotInfo->OwnerGuid.ToString(), houseExteriorWmoDataID, exteriorComponentID);
+            if (!exteriorComponentID)
+            {
+                auto const* roots = sHousingMgr.GetRootComponentsForWmoData(plotInfo->HouseType);
+                if (roots)
+                {
+                    uint32 fallbackComp = 0;
+                    for (uint32 compID : *roots)
+                    {
+                        ExteriorComponentEntry const* comp = sExteriorComponentStore.LookupEntry(compID);
+                        if (!comp)
+                            continue;
+                        if (!fallbackComp)
+                            fallbackComp = compID;
+                        if (comp->Flags & 0x1) // IsDefault
+                        {
+                            fallbackComp = compID;
+                            break;
+                        }
+                    }
+                    exteriorComponentID = static_cast<int32>(fallbackComp);
+                }
+            }
+
+            TC_LOG_INFO("housing", "HousingMap::SpawnPlotGameObjects: Plot {} owner {} (offline) — using mirrored HouseType={} ExtComp={} fixtures={} decor={} from PlotInfo",
+                plotIdx, plotInfo->OwnerGuid.ToString(), houseExteriorWmoDataID, exteriorComponentID,
+                uint32(plotInfo->Fixtures.size()), uint32(plotInfo->Decor.size()));
         }
         else
         {
-            TC_LOG_ERROR("housing", "HousingMap::SpawnPlotGameObjects: Plot {} owned by {} but Housing object not found and PlotInfo.HouseType=0 — cannot spawn house",
+            TC_LOG_ERROR("housing", "HousingMap::SpawnPlotGameObjects: Plot {} owned by {} but PlotInfo.HouseType=0 — cannot spawn house",
                 plotIdx, plotInfo->OwnerGuid.ToString());
             continue;
         }
@@ -490,11 +512,27 @@ void HousingMap::SpawnPlotGameObjects()
             TC_LOG_ERROR("housing", "HousingMap::SpawnPlotGameObjects: FAILED to spawn house for plot {} owned by {}",
                 plotIdx, plotInfo->OwnerGuid.ToString());
 
-        // Decor requires full Housing data (placed items with positions) — only
-        // spawnable when the owner is online. Offline-owner plots show the house
-        // shell without decor; full decor paints when the owner logs in.
+        // Spawn placed decor — live Housing path preferred (may include items
+        // placed but not yet saved). Otherwise iterate PlotInfo.Decor from DB.
         if (housing)
+        {
             SpawnAllDecorForPlot(plotIdx, housing);
+        }
+        else
+        {
+            uint32 spawnedDecor = 0;
+            for (Housing::PlacedDecor const& decor : plotInfo->Decor)
+            {
+                if (!decor.RoomGuid.IsEmpty())
+                    continue; // exterior-only at preload
+                if (SpawnDecorItem(plotIdx, decor, plotInfo->HouseGuid))
+                    ++spawnedDecor;
+            }
+            _decorSpawnedPlots.insert(plotIdx);
+            if (spawnedDecor || !plotInfo->Decor.empty())
+                TC_LOG_INFO("housing", "HousingMap::SpawnPlotGameObjects: Plot {} (offline owner) — spawned {} exterior decor from PlotInfo ({} total decor entries cached)",
+                    plotIdx, spawnedDecor, uint32(plotInfo->Decor.size()));
+        }
     }
 
     TC_LOG_DEBUG("housing", "HousingMap::SpawnPlotGameObjects: House spawn results: {}/{} successful for neighborhood '{}'",

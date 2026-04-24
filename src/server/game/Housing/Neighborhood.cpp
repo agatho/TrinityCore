@@ -32,7 +32,8 @@ Neighborhood::Neighborhood(ObjectGuid guid) : _guid(guid)
 {
 }
 
-bool Neighborhood::LoadFromDB(PreparedQueryResult neighborhood, PreparedQueryResult members, PreparedQueryResult invites)
+bool Neighborhood::LoadFromDB(PreparedQueryResult neighborhood, PreparedQueryResult members, PreparedQueryResult invites,
+    PreparedQueryResult memberFixtures /*= nullptr*/, PreparedQueryResult memberDecor /*= nullptr*/)
 {
     if (!neighborhood)
         return false;
@@ -151,6 +152,83 @@ bool Neighborhood::LoadFromDB(PreparedQueryResult neighborhood, PreparedQueryRes
 
     TC_LOG_DEBUG("housing", "Neighborhood::LoadFromDB: Loaded {} pending invites for neighborhood '{}'",
         _pendingInvites.size(), _name);
+
+    // Resolve an owner's GUID to the matching plot index (for the JOIN-by-ownerGuid
+    // fixture/decor result sets below). Linear scan over _members — tiny constant
+    // given the plot cap per neighborhood, amortised by cache locality.
+    auto findPlotByOwner = [this](ObjectGuid ownerGuid) -> PlotInfo*
+    {
+        for (PlotInfo& p : _plots)
+            if (p.OwnerGuid == ownerGuid)
+                return &p;
+        return nullptr;
+    };
+
+    // Load fixture overrides for every occupied plot's owner. Drives exterior
+    // customisation (roof / doors / windows) in HousingMap::SpawnPlotGameObjects
+    // for plots whose owners aren't currently online.
+    uint32 fixtureCount = 0;
+    if (memberFixtures)
+    {
+        do
+        {
+            Field* f = memberFixtures->Fetch();
+            //   0           1                 2
+            // ownerGuid, fixturePointId, fixtureOptionId
+            ObjectGuid ownerGuid = ObjectGuid::Create<HighGuid::Player>(f[0].GetUInt64());
+            PlotInfo* plot = findPlotByOwner(ownerGuid);
+            if (!plot)
+                continue;
+            plot->Fixtures[f[1].GetUInt32()] = f[2].GetUInt32();
+            ++fixtureCount;
+        } while (memberFixtures->NextRow());
+    }
+    TC_LOG_DEBUG("housing", "Neighborhood::LoadFromDB: Loaded {} fixture overrides across neighborhood '{}'",
+        fixtureCount, _name);
+
+    // Load placed decor for every occupied plot's owner. SpawnPlotGameObjects
+    // only spawns exterior entries (RoomGuid.IsEmpty()); interior entries are
+    // also kept so visitors can see a neighbour's interior layout when they
+    // enter the owner's interior map.
+    uint32 decorCount = 0;
+    if (memberDecor)
+    {
+        do
+        {
+            Field* d = memberDecor->Fetch();
+            //   0      1            2            3     4     5     6     7     8     9       10     11        12        13       14        15      16            17           18
+            // id, ownerGuid, houseDecorId, posX, posY, posZ, rotX, rotY, rotZ, rotW, scale, dyeSlot0, dyeSlot1, dyeSlot2, roomGuid, locked, placementTime, sourceType, sourceValue
+            ObjectGuid ownerGuid = ObjectGuid::Create<HighGuid::Player>(d[1].GetUInt64());
+            PlotInfo* plot = findPlotByOwner(ownerGuid);
+            if (!plot)
+                continue;
+
+            Housing::PlacedDecor decor;
+            decor.Guid          = ObjectGuidFactory::CreateHousing(/*subType*/ 1, /*realmId*/ 0, d[2].GetUInt32(), d[0].GetUInt64());
+            decor.DecorEntryId  = d[2].GetUInt32();
+            decor.PosX          = d[3].GetFloat();
+            decor.PosY          = d[4].GetFloat();
+            decor.PosZ          = d[5].GetFloat();
+            decor.RotationX     = d[6].GetFloat();
+            decor.RotationY     = d[7].GetFloat();
+            decor.RotationZ     = d[8].GetFloat();
+            decor.RotationW     = d[9].GetFloat();
+            decor.Scale         = d[10].GetFloat();
+            decor.DyeSlots[0]   = d[11].GetUInt32();
+            decor.DyeSlots[1]   = d[12].GetUInt32();
+            decor.DyeSlots[2]   = d[13].GetUInt32();
+            if (uint64 roomCounter = d[14].GetUInt64())
+                decor.RoomGuid  = ObjectGuidFactory::CreateHousing(/*subType*/ 2, /*realmId*/ 0, /*arg2*/ 0, roomCounter);
+            decor.Locked        = d[15].GetUInt8() != 0;
+            decor.PlacementTime = static_cast<time_t>(d[16].GetUInt64());
+            decor.SourceType    = d[17].GetUInt8();
+            decor.SourceValue   = d[18].GetString();
+            plot->Decor.push_back(std::move(decor));
+            ++decorCount;
+        } while (memberDecor->NextRow());
+    }
+    TC_LOG_DEBUG("housing", "Neighborhood::LoadFromDB: Loaded {} placed decor items across neighborhood '{}'",
+        decorCount, _name);
 
     return true;
 }
