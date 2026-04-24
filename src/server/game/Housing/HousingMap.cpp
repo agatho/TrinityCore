@@ -3312,56 +3312,29 @@ int8 HousingMap::GetPlotIndexForHouseGO(ObjectGuid goGuid) const
 }
 
 // ============================================================
-// Decor Management (all decor is MeshObject — sniff-verified)
+// Decor Management
 // ============================================================
+// Functional decor (HouseDecorData.GameObjectID > 0 AND gameobject_template
+// exists) spawns as a real interactive GameObject with FHousingDecor_C +
+// FMirroredPositionData_C fragments, retaining normal GO behavior (sit on
+// chairs, open chests, mail UI on mailboxes, etc.). Retail sniff-verified
+// fragment set: [CGObject, FHousingDecor_C, FMirroredPositionData_C, Tag_GameObject].
+//
+// Visual-only decor (ModelFileDataID-only) spawns as a MeshObject with
+// fragments [CGObject, FMeshObjectData_C, FHousingDecor_C, FMirroredPositionData_C,
+// Tag_MeshObject] — also retail-verified.
 
-MeshObject* HousingMap::SpawnDecorItem(uint8 plotIndex, Housing::PlacedDecor const& decor, ObjectGuid houseGuid)
+bool HousingMap::SpawnDecorItem(uint8 plotIndex, Housing::PlacedDecor const& decor, ObjectGuid houseGuid)
 {
     HouseDecorData const* decorData = sHousingMgr.GetHouseDecorData(decor.DecorEntryId);
     if (!decorData)
     {
         TC_LOG_ERROR("housing", "HousingMap::SpawnDecorItem: No HouseDecorData for entry {} (decorGuid={})",
             decor.DecorEntryId, decor.Guid.ToString());
-        return nullptr;
+        return false;
     }
 
-    // Sniff-verified: ALL retail placed decor is MeshObject (never GO).
-    // FHousingDecor_C on a GameObject crashes the client (same issue as FHousingFixture_C on GOs).
-    // Determine FileDataID: prefer ModelFileDataID, fall back to GO template displayInfo.
-    int32 fileDataID = decorData->ModelFileDataID;
-    if (fileDataID <= 0 && decorData->GameObjectID > 0)
-    {
-        GameObjectTemplate const* goTemplate = sObjectMgr->GetGameObjectTemplate(
-            static_cast<uint32>(decorData->GameObjectID));
-        if (goTemplate)
-        {
-            GameObjectDisplayInfoEntry const* displayInfo =
-                sGameObjectDisplayInfoStore.LookupEntry(goTemplate->displayId);
-            if (displayInfo && displayInfo->FileDataID > 0)
-                fileDataID = displayInfo->FileDataID;
-        }
-
-        if (fileDataID <= 0)
-        {
-            TC_LOG_ERROR("housing", "HousingMap::SpawnDecorItem: Cannot derive FileDataID for decor entry {} "
-                "(GameObjectID={}, ModelFileDataID={}), skipping",
-                decor.DecorEntryId, decorData->GameObjectID, decorData->ModelFileDataID);
-            return nullptr;
-        }
-
-        TC_LOG_DEBUG("housing", "HousingMap::SpawnDecorItem: Derived FileDataID={} from GameObjectID={} displayId for entry {}",
-            fileDataID, decorData->GameObjectID, decor.DecorEntryId);
-    }
-    else if (fileDataID <= 0)
-    {
-        TC_LOG_ERROR("housing", "HousingMap::SpawnDecorItem: Decor entry {} has no ModelFileDataID and no GameObjectID, skipping",
-            decor.DecorEntryId);
-        return nullptr;
-    }
-
-    // Sniff-verified: Decor MeshObjects are attached to the plot's base room entity
-    // (Housing/18) with attachFlags=3. Position is room-local space.
-    // Get the room entity for this plot (spawned by SpawnRoomForPlot).
+    // Look up the room entity we attach to (the Housing/sub2 plot room).
     ObjectGuid roomEntityGuid = ObjectGuid::Empty;
     Position roomWorldPos;
     if (HousingRoomEntity* roomId = GetRoomIdentityEntity(plotIndex))
@@ -3377,9 +3350,7 @@ MeshObject* HousingMap::SpawnDecorItem(uint8 plotIndex, Housing::PlacedDecor con
 
     QuaternionData rot(decor.RotationX, decor.RotationY, decor.RotationZ, decor.RotationW);
 
-    // Convert world position to room-local position if we have a room entity.
-    // The client applies the parent's rotation to PositionLocalSpace, so we must
-    // apply the INVERSE rotation when converting world → local.
+    // World → room-local (inverse room rotation). Matches MeshObject decor path.
     float localX = worldX;
     float localY = worldY;
     float localZ = worldZ;
@@ -3397,19 +3368,114 @@ MeshObject* HousingMap::SpawnDecorItem(uint8 plotIndex, Housing::PlacedDecor con
 
     Position localPos(localX, localY, localZ);
     Position worldPos(worldX, worldY, worldZ);
-
     float decorScale = decor.Scale > 0.01f ? decor.Scale : 1.0f;
+    uint8 attachFlags = roomEntityGuid.IsEmpty() ? uint8(0) : uint8(3);
+
+    // ---------- Functional decor branch (real GameObject) ----------
+    // Retail: chairs, chests, mailboxes, chandeliers, fireplaces, etc. spawn as
+    // real GameObjects so the client treats them as interactive (sittable/
+    // openable/usable). We require both GameObjectID in DB2 AND a matching
+    // gameobject_template to fall into this path; missing templates fall back
+    // to visual-only MeshObject.
+    if (decorData->GameObjectID > 0)
+    {
+        uint32 goEntry = static_cast<uint32>(decorData->GameObjectID);
+        if (GameObjectTemplate const* goTemplate = sObjectMgr->GetGameObjectTemplate(goEntry))
+        {
+            // Derive orientation from the quaternion for GO world rotation.
+            // GameObject::SetLocalRotation uses the packed quat for rendering;
+            // the orientation-from-quat is used for stationary direction.
+            float orientation = 2.0f * std::atan2(rot.z, rot.w);
+            Position goWorldPos(worldX, worldY, worldZ, orientation);
+
+            GameObject* go = GameObject::CreateGameObject(goEntry, this, goWorldPos, rot,
+                255 /*animProgress*/, GO_STATE_READY, 0 /*artKit*/);
+            if (!go)
+            {
+                TC_LOG_ERROR("housing", "HousingMap::SpawnDecorItem: CreateGameObject failed for decor entry={} "
+                    "goEntry={} at ({:.1f},{:.1f},{:.1f}) — falling back to MeshObject",
+                    decor.DecorEntryId, goEntry, worldX, worldY, worldZ);
+            }
+            else
+            {
+                PhasingHandler::InitDbPhaseShift(go->GetPhaseShift(), PHASE_USE_FLAGS_ALWAYS_VISIBLE, 0, 0);
+                go->SetObjectScale(decorScale);
+
+                // Keep template default flags — chairs need CHAIR type behavior, chests need
+                // CHEST interaction, mailboxes need MAILBOX UI. Don't override with door-style
+                // flags; the GO's normal on-use handler is what we want.
+
+                // Retail wire fragments: FHousingDecor_C + FMirroredPositionData_C.
+                // Order matches the sniff-verified fragment list.
+                go->InitHousingDecorData(decor.Guid, houseGuid, decor.Locked ? 1 : 0,
+                    roomEntityGuid, decor.SourceType, decor.SourceValue);
+                go->InitHousingDecorMirroredPosition(localPos, rot, decorScale, roomEntityGuid, attachFlags);
+
+                if (!AddToMap(go))
+                {
+                    TC_LOG_ERROR("housing", "HousingMap::SpawnDecorItem: AddToMap failed for GO decor "
+                        "entry={} goEntry={} decorGuid={}",
+                        decor.DecorEntryId, goEntry, decor.Guid.ToString());
+                    delete go;
+                    return false;
+                }
+
+                _decorGameObjects[plotIndex].push_back(go->GetGUID());
+                _decorGuidToGoGuid[decor.Guid] = go->GetGUID();
+                _decorGuidToPlotIndex[decor.Guid] = plotIndex;
+
+                TC_LOG_INFO("housing", "HousingMap::SpawnDecorItem: Spawned functional-decor GameObject "
+                    "entry={} goEntry={} goType={} goGuid={} decorGuid={} "
+                    "at world({:.1f},{:.1f},{:.1f}) local({:.1f},{:.1f},{:.1f}) scale={:.2f} "
+                    "room={} plot={}",
+                    decor.DecorEntryId, goEntry, uint32(goTemplate->type), go->GetGUID().ToString(),
+                    decor.Guid.ToString(), worldX, worldY, worldZ, localX, localY, localZ,
+                    decorScale, roomEntityGuid.ToString(), plotIndex);
+                return true;
+            }
+        }
+        else
+        {
+            TC_LOG_DEBUG("housing", "HousingMap::SpawnDecorItem: GameObjectID={} referenced by decor entry={} "
+                "is not in gameobject_template — falling back to MeshObject (visual-only)",
+                goEntry, decor.DecorEntryId);
+        }
+    }
+
+    // ---------- Visual-only branch (MeshObject) ----------
+    int32 fileDataID = decorData->ModelFileDataID;
+    if (fileDataID <= 0 && decorData->GameObjectID > 0)
+    {
+        // Fallback: derive FileDataID from the GO template displayInfo when the
+        // DB2 entry's ModelFileDataID is 0 but GameObjectID points at a valid template.
+        if (GameObjectTemplate const* goTemplate = sObjectMgr->GetGameObjectTemplate(
+                static_cast<uint32>(decorData->GameObjectID)))
+        {
+            if (GameObjectDisplayInfoEntry const* displayInfo =
+                    sGameObjectDisplayInfoStore.LookupEntry(goTemplate->displayId))
+            {
+                if (displayInfo->FileDataID > 0)
+                    fileDataID = displayInfo->FileDataID;
+            }
+        }
+    }
+
+    if (fileDataID <= 0)
+    {
+        TC_LOG_ERROR("housing", "HousingMap::SpawnDecorItem: Cannot derive FileDataID for decor entry {} "
+            "(GameObjectID={}, ModelFileDataID={}), skipping",
+            decor.DecorEntryId, decorData->GameObjectID, decorData->ModelFileDataID);
+        return false;
+    }
 
     MeshObject* mesh = MeshObject::CreateMeshObject(this, localPos, rot, decorScale,
-        fileDataID, /*isWMO*/ false,
-        roomEntityGuid, /*attachFlags*/ roomEntityGuid.IsEmpty() ? uint8(0) : uint8(3),
-        &worldPos);
+        fileDataID, /*isWMO*/ false, roomEntityGuid, attachFlags, &worldPos);
 
     if (!mesh)
     {
         TC_LOG_ERROR("housing", "HousingMap::SpawnDecorItem: Failed to create decor MeshObject fileDataID={} for decor {}",
             fileDataID, decor.Guid.ToString());
-        return nullptr;
+        return false;
     }
 
     PhasingHandler::InitDbPhaseShift(mesh->GetPhaseShift(), PHASE_USE_FLAGS_ALWAYS_VISIBLE, 0, 0);
@@ -3419,7 +3485,7 @@ MeshObject* HousingMap::SpawnDecorItem(uint8 plotIndex, Housing::PlacedDecor con
     {
         TC_LOG_ERROR("housing", "HousingMap::SpawnDecorItem: Failed to add decor MeshObject to map for decor {}", decor.Guid.ToString());
         delete mesh;
-        return nullptr;
+        return false;
     }
 
     _decorGameObjects[plotIndex].push_back(mesh->GetGUID());
@@ -3431,7 +3497,7 @@ MeshObject* HousingMap::SpawnDecorItem(uint8 plotIndex, Housing::PlacedDecor con
         fileDataID, mesh->GetGUID().ToString(), decor.Guid.ToString(),
         worldX, worldY, worldZ, localX, localY, localZ, decorScale,
         roomEntityGuid.ToString(), plotIndex);
-    return mesh;
+    return true;
 }
 
 void HousingMap::DespawnDecorItem(uint8 plotIndex, ObjectGuid decorGuid)
@@ -3441,16 +3507,22 @@ void HousingMap::DespawnDecorItem(uint8 plotIndex, ObjectGuid decorGuid)
         return;
 
     ObjectGuid objGuid = itr->second;
-    if (MeshObject* mesh = GetMeshObject(objGuid))
+    // Decor may be either a functional-decor GameObject or a visual-only MeshObject.
+    if (objGuid.IsGameObject())
+    {
+        if (GameObject* go = GetGameObject(objGuid))
+            go->AddObjectToRemoveList();
+    }
+    else if (MeshObject* mesh = GetMeshObject(objGuid))
         mesh->AddObjectToRemoveList();
 
-    // Remove from tracking
     auto& plotDecor = _decorGameObjects[plotIndex];
     plotDecor.erase(std::remove(plotDecor.begin(), plotDecor.end(), objGuid), plotDecor.end());
     _decorGuidToGoGuid.erase(itr);
     _decorGuidToPlotIndex.erase(decorGuid);
 
-    TC_LOG_DEBUG("housing", "HousingMap::DespawnDecorItem: Despawned decor MeshObject for decorGuid={} plot={}", decorGuid.ToString(), plotIndex);
+    TC_LOG_DEBUG("housing", "HousingMap::DespawnDecorItem: Despawned decor {} for decorGuid={} plot={}",
+        objGuid.ToString(), decorGuid.ToString(), plotIndex);
 }
 
 void HousingMap::DespawnAllDecorForPlot(uint8 plotIndex)
@@ -3461,7 +3533,12 @@ void HousingMap::DespawnAllDecorForPlot(uint8 plotIndex)
 
     for (ObjectGuid const& objGuid : itr->second)
     {
-        if (MeshObject* mesh = GetMeshObject(objGuid))
+        if (objGuid.IsGameObject())
+        {
+            if (GameObject* go = GetGameObject(objGuid))
+                go->AddObjectToRemoveList();
+        }
+        else if (MeshObject* mesh = GetMeshObject(objGuid))
             mesh->AddObjectToRemoveList();
     }
 
@@ -3509,8 +3586,7 @@ void HousingMap::SpawnAllDecorForPlot(uint8 plotIndex, Housing const* housing)
             continue;
 
         ++exteriorCount;
-        MeshObject* mesh = SpawnDecorItem(plotIndex, decor, houseGuid);
-        if (mesh)
+        if (SpawnDecorItem(plotIndex, decor, houseGuid))
             ++spawnCount;
         else
             ++failCount;
@@ -3524,13 +3600,26 @@ void HousingMap::SpawnAllDecorForPlot(uint8 plotIndex, Housing const* housing)
         _neighborhood ? _neighborhood->GetName() : "?");
 }
 
-void HousingMap::UpdateDecorPosition(uint8 plotIndex, ObjectGuid decorGuid, Position const& pos, QuaternionData const& /*rot*/, float scale /*= 1.0f*/)
+void HousingMap::UpdateDecorPosition(uint8 plotIndex, ObjectGuid decorGuid, Position const& pos, QuaternionData const& rot, float scale /*= 1.0f*/)
 {
     auto itr = _decorGuidToGoGuid.find(decorGuid);
     if (itr == _decorGuidToGoGuid.end())
         return;
 
-    if (MeshObject* mesh = GetMeshObject(itr->second))
+    ObjectGuid objGuid = itr->second;
+    if (objGuid.IsGameObject())
+    {
+        if (GameObject* go = GetGameObject(objGuid))
+        {
+            go->Relocate(pos);
+            go->SetLocalRotation(rot.x, rot.y, rot.z, rot.w);
+            if (std::abs(go->GetObjectScale() - scale) > 0.001f)
+                go->SetObjectScale(scale);
+            TC_LOG_DEBUG("housing", "HousingMap::UpdateDecorPosition: Moved decor GameObject {} to ({:.1f}, {:.1f}, {:.1f}) scale={:.2f} for plot {}",
+                decorGuid.ToString(), pos.GetPositionX(), pos.GetPositionY(), pos.GetPositionZ(), scale, plotIndex);
+        }
+    }
+    else if (MeshObject* mesh = GetMeshObject(objGuid))
     {
         mesh->Relocate(pos);
         if (std::abs(mesh->GetLocalScale() - scale) > 0.001f)

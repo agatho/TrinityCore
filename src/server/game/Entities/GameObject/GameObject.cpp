@@ -4186,6 +4186,7 @@ void GameObject::ClearValuesChangesMask()
 {
     m_values.ClearChangesMask(&GameObject::m_gameObjectData);
     m_values.ClearChangesMask(&GameObject::m_housingCornerstoneData);
+    m_values.ClearChangesMask(&GameObject::m_mirroredPositionData);
     WorldObject::ClearValuesChangesMask();
 }
 
@@ -4239,6 +4240,30 @@ void GameObject::InitHousingDecorData(ObjectGuid decorGuid, ObjectGuid houseGuid
         "isInWorld={} fragmentCount={}",
         GetEntry(), GetGUID().ToString(), decorGuid.ToString(), houseGuid.ToString(), flags,
         IsInWorld(), m_entityFragments.Count);
+}
+
+void GameObject::InitHousingDecorMirroredPosition(Position const& localPos, QuaternionData const& localRot,
+    float localScale, ObjectGuid attachParent, uint8 attachFlags /*= 3*/)
+{
+    // Retail sniff-verified: GameObject decor carries FMirroredPositionData_C fragment
+    // with AttachParent=room entity and local-space position.
+    auto posData = m_values.ModifyValue(&GameObject::m_mirroredPositionData)
+        .ModifyValue(&UF::MirroredPositionData::PositionData);
+    SetUpdateFieldValue(posData.ModifyValue(&UF::MirroredMeshObjectData::AttachParentGUID), attachParent);
+    SetUpdateFieldValue(posData.ModifyValue(&UF::MirroredMeshObjectData::PositionLocalSpace),
+        TaggedPosition<Position::XYZ>(localPos.GetPositionX(), localPos.GetPositionY(), localPos.GetPositionZ()));
+    SetUpdateFieldValue(posData.ModifyValue(&UF::MirroredMeshObjectData::RotationLocalSpace), localRot);
+    SetUpdateFieldValue(posData.ModifyValue(&UF::MirroredMeshObjectData::ScaleLocalSpace), localScale);
+    SetUpdateFieldValue(posData.ModifyValue(&UF::MirroredMeshObjectData::AttachmentFlags), attachFlags);
+
+    m_entityFragments.Add(WowCS::EntityFragment::FMirroredPositionData_C, IsInWorld(),
+        WowCS::GetRawFragmentData(m_mirroredPositionData));
+
+    TC_LOG_DEBUG("housing", "GameObject::InitHousingDecorMirroredPosition: entry={} goGuid={} "
+        "localPos=({:.2f},{:.2f},{:.2f}) attachParent={} attachFlags={}",
+        GetEntry(), GetGUID().ToString(),
+        localPos.GetPositionX(), localPos.GetPositionY(), localPos.GetPositionZ(),
+        attachParent.ToString(), attachFlags);
 }
 
 void GameObject::InitHousingFixtureData(ObjectGuid houseGuid, int32 exteriorComponentID, int32 houseExteriorWmoDataID,

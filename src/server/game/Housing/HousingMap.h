@@ -151,8 +151,11 @@ public:
         QuaternionData const& houseRot, ObjectGuid houseGuid);
     void DespawnRoomForPlot(uint8 plotIndex);
 
-    // Decor management (all decor is MeshObject — sniff-verified, never GO)
-    MeshObject* SpawnDecorItem(uint8 plotIndex, Housing::PlacedDecor const& decor, ObjectGuid houseGuid);
+    // Decor management. Functional decor (HouseDecorData.GameObjectID > 0) spawns
+    // as an interactive GameObject with FHousingDecor_C + FMirroredPositionData_C
+    // fragments — retains sit/open/use behavior. Visual-only decor spawns as a
+    // MeshObject. Returns true on success.
+    bool SpawnDecorItem(uint8 plotIndex, Housing::PlacedDecor const& decor, ObjectGuid houseGuid);
     void DespawnDecorItem(uint8 plotIndex, ObjectGuid decorGuid);
     void DespawnAllDecorForPlot(uint8 plotIndex);
     void SpawnAllDecorForPlot(uint8 plotIndex, Housing const* housing);

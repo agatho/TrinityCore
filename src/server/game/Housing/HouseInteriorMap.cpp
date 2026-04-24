@@ -1093,38 +1093,9 @@ void HouseInteriorMap::SpawnInteriorDecorFromList(std::vector<Housing::PlacedDec
         TC_LOG_ERROR("housing", "  SpawnInteriorDecor: decor entry={} roomGuid={} pos=({:.1f},{:.1f},{:.1f})",
             decor.DecorEntryId, decor.RoomGuid.ToString(), decor.PosX, decor.PosY, decor.PosZ);
 
-        // Sniff-verified: ALL retail decor is MeshObject (never GO).
-        // Determine FileDataID: prefer ModelFileDataID, fall back to GO template displayInfo.
-        int32 fileDataID = decorData->ModelFileDataID;
-        if (fileDataID <= 0 && decorData->GameObjectID > 0)
-        {
-            GameObjectTemplate const* goTemplate = sObjectMgr->GetGameObjectTemplate(
-                static_cast<uint32>(decorData->GameObjectID));
-            if (goTemplate)
-            {
-                GameObjectDisplayInfoEntry const* displayInfo =
-                    sGameObjectDisplayInfoStore.LookupEntry(goTemplate->displayId);
-                if (displayInfo && displayInfo->FileDataID > 0)
-                    fileDataID = displayInfo->FileDataID;
-            }
-        }
-
-        if (fileDataID <= 0)
-        {
-            TC_LOG_DEBUG("housing", "HouseInteriorMap::SpawnInteriorDecor: Cannot derive FileDataID for decor entry {} "
-                "(GameObjectID={}, ModelFileDataID={}), skipping",
-                decor.DecorEntryId, decorData->GameObjectID, decorData->ModelFileDataID);
-            continue;
-        }
-
-        // Use decor.RoomGuid directly as AttachParentGUID — this is the HousingRoomEntity's
-        // Housing GUID, NOT a component MeshObject GUID. _roomMeshObjects stores component
-        // MeshObject GUIDs which are the wrong entity type for parent attachment.
-        // Sniff-verified: decor attaches to room entity (Housing/2 GUID) with attachFlags=3.
         ObjectGuid roomEntityGuid = decor.RoomGuid;
         Position roomWorldPos;
 
-        // Look up room world position from Housing room data (grid coords)
         Housing* ownerHousing = GetOwnerHousing();
         if (ownerHousing && !roomEntityGuid.IsEmpty())
         {
@@ -1148,10 +1119,7 @@ void HouseInteriorMap::SpawnInteriorDecorFromList(std::vector<Housing::PlacedDec
 
         QuaternionData rot(decor.RotationX, decor.RotationY, decor.RotationZ, decor.RotationW);
 
-        // Convert world → room-local with inverse rotation (matches SpawnSingleInteriorDecor)
-        float localX = worldX;
-        float localY = worldY;
-        float localZ = worldZ;
+        float localX = worldX, localY = worldY, localZ = worldZ;
         if (!roomEntityGuid.IsEmpty())
         {
             float dx = worldX - roomWorldPos.GetPositionX();
@@ -1167,11 +1135,76 @@ void HouseInteriorMap::SpawnInteriorDecorFromList(std::vector<Housing::PlacedDec
         Position localPos(localX, localY, localZ);
         Position worldPos(worldX, worldY, worldZ);
         float decorScale = decor.Scale > 0.01f ? decor.Scale : 1.0f;
+        uint8 attachFlags = roomEntityGuid.IsEmpty() ? uint8(0) : uint8(3);
+
+        // Functional decor branch (real GameObject — chair, chest, mailbox, etc.)
+        bool spawnedAsGo = false;
+        if (decorData->GameObjectID > 0)
+        {
+            uint32 goEntry = static_cast<uint32>(decorData->GameObjectID);
+            if (GameObjectTemplate const* goTemplate = sObjectMgr->GetGameObjectTemplate(goEntry))
+            {
+                float orientation = 2.0f * std::atan2(rot.z, rot.w);
+                Position goWorldPos(worldX, worldY, worldZ, orientation);
+
+                GameObject* go = GameObject::CreateGameObject(goEntry, this, goWorldPos, rot,
+                    255, GO_STATE_READY, 0);
+                if (go)
+                {
+                    PhasingHandler::InitDbPhaseShift(go->GetPhaseShift(), PHASE_USE_FLAGS_ALWAYS_VISIBLE, 0, 0);
+                    go->SetObjectScale(decorScale);
+                    // Template default flags — keep CHAIR/CHEST/MAILBOX interactive behavior.
+                    go->InitHousingDecorData(decor.Guid, houseGuid, decor.Locked ? 1 : 0,
+                        roomEntityGuid, decor.SourceType, decor.SourceValue);
+                    go->InitHousingDecorMirroredPosition(localPos, rot, decorScale, roomEntityGuid, attachFlags);
+
+                    if (AddToMap(go))
+                    {
+                        _decorGuidToObjGuid[decor.Guid] = go->GetGUID();
+                        ++spawnCount;
+                        spawnedAsGo = true;
+                        TC_LOG_INFO("housing", "HouseInteriorMap::SpawnInteriorDecor: Spawned functional-decor "
+                            "GameObject entry={} goEntry={} goType={} goGuid={} at world({:.1f},{:.1f},{:.1f}) room={}",
+                            decor.DecorEntryId, goEntry, uint32(goTemplate->type), go->GetGUID().ToString(),
+                            worldX, worldY, worldZ, roomEntityGuid.ToString());
+                    }
+                    else
+                    {
+                        delete go;
+                    }
+                }
+            }
+        }
+
+        if (spawnedAsGo)
+            continue;
+
+        // Visual-only branch (MeshObject)
+        int32 fileDataID = decorData->ModelFileDataID;
+        if (fileDataID <= 0 && decorData->GameObjectID > 0)
+        {
+            if (GameObjectTemplate const* goTemplate = sObjectMgr->GetGameObjectTemplate(
+                    static_cast<uint32>(decorData->GameObjectID)))
+            {
+                if (GameObjectDisplayInfoEntry const* displayInfo =
+                        sGameObjectDisplayInfoStore.LookupEntry(goTemplate->displayId))
+                {
+                    if (displayInfo->FileDataID > 0)
+                        fileDataID = displayInfo->FileDataID;
+                }
+            }
+        }
+
+        if (fileDataID <= 0)
+        {
+            TC_LOG_DEBUG("housing", "HouseInteriorMap::SpawnInteriorDecor: Cannot derive FileDataID for decor entry {} "
+                "(GameObjectID={}, ModelFileDataID={}), skipping",
+                decor.DecorEntryId, decorData->GameObjectID, decorData->ModelFileDataID);
+            continue;
+        }
 
         MeshObject* mesh = MeshObject::CreateMeshObject(this, localPos, rot, decorScale,
-            fileDataID, /*isWMO*/ false,
-            roomEntityGuid, /*attachFlags*/ roomEntityGuid.IsEmpty() ? uint8(0) : uint8(3),
-            &worldPos);
+            fileDataID, /*isWMO*/ false, roomEntityGuid, attachFlags, &worldPos);
 
         if (!mesh)
         {
@@ -1223,25 +1256,7 @@ void HouseInteriorMap::SpawnSingleInteriorDecor(Housing::PlacedDecor const& deco
     if (!decorData)
         return;
 
-    int32 fileDataID = decorData->ModelFileDataID;
-    if (fileDataID <= 0 && decorData->GameObjectID > 0)
-    {
-        GameObjectTemplate const* goTemplate = sObjectMgr->GetGameObjectTemplate(
-            static_cast<uint32>(decorData->GameObjectID));
-        if (goTemplate)
-        {
-            GameObjectDisplayInfoEntry const* displayInfo =
-                sGameObjectDisplayInfoStore.LookupEntry(goTemplate->displayId);
-            if (displayInfo && displayInfo->FileDataID > 0)
-                fileDataID = displayInfo->FileDataID;
-        }
-    }
-
-    if (fileDataID <= 0)
-        return;
-
     // Decor attaches to the HousingRoomEntity (Housing/2 GUID), not a MeshObject.
-    // Sniff-verified: retail decor AttachParentGUID = Housing/1 (room entity GUID).
     ObjectGuid roomEntityGuid = decor.RoomGuid;
     Position roomWorldPos;
 
@@ -1259,7 +1274,6 @@ void HouseInteriorMap::SpawnSingleInteriorDecor(Housing::PlacedDecor const& deco
                 break;
             }
         }
-        // Last resort: use the base room
         if (roomEntityGuid.IsEmpty())
         {
             for (Housing::Room const* rm : ownerHousing->GetRooms())
@@ -1291,7 +1305,6 @@ void HouseInteriorMap::SpawnSingleInteriorDecor(Housing::PlacedDecor const& deco
 
     QuaternionData rot(decor.RotationX, decor.RotationY, decor.RotationZ, decor.RotationW);
 
-    // Convert world → local with inverse rotation of the room entity's facing.
     float localX = worldX, localY = worldY, localZ = worldZ;
     if (!roomEntityGuid.IsEmpty())
     {
@@ -1308,11 +1321,63 @@ void HouseInteriorMap::SpawnSingleInteriorDecor(Housing::PlacedDecor const& deco
     Position localPos(localX, localY, localZ);
     Position worldPos(worldX, worldY, worldZ);
     float decorScale = decor.Scale > 0.01f ? decor.Scale : 1.0f;
+    uint8 attachFlags = roomEntityGuid.IsEmpty() ? uint8(0) : uint8(3);
+
+    // Functional decor (chair, chest, mailbox, etc.): spawn real GameObject so it stays interactive.
+    if (decorData->GameObjectID > 0)
+    {
+        uint32 goEntry = static_cast<uint32>(decorData->GameObjectID);
+        if (GameObjectTemplate const* goTemplate = sObjectMgr->GetGameObjectTemplate(goEntry))
+        {
+            float orientation = 2.0f * std::atan2(rot.z, rot.w);
+            Position goWorldPos(worldX, worldY, worldZ, orientation);
+
+            GameObject* go = GameObject::CreateGameObject(goEntry, this, goWorldPos, rot,
+                255, GO_STATE_READY, 0);
+            if (go)
+            {
+                PhasingHandler::InitDbPhaseShift(go->GetPhaseShift(), PHASE_USE_FLAGS_ALWAYS_VISIBLE, 0, 0);
+                go->SetObjectScale(decorScale);
+                go->ReplaceAllFlags(GameObjectFlags(0x40000));
+                go->InitHousingDecorData(decor.Guid, houseGuid, decor.Locked ? 1 : 0,
+                    roomEntityGuid, decor.SourceType, decor.SourceValue);
+                go->InitHousingDecorMirroredPosition(localPos, rot, decorScale, roomEntityGuid, attachFlags);
+
+                if (AddToMap(go))
+                {
+                    _decorGuidToObjGuid[decor.Guid] = go->GetGUID();
+                    TC_LOG_INFO("housing", "HouseInteriorMap::SpawnSingleInteriorDecor: Spawned functional-decor "
+                        "GameObject entry={} goEntry={} goType={} goGuid={} at world({:.1f},{:.1f},{:.1f}) room={}",
+                        decor.DecorEntryId, goEntry, uint32(goTemplate->type), go->GetGUID().ToString(),
+                        worldX, worldY, worldZ, roomEntityGuid.ToString());
+                    return;
+                }
+                delete go;
+            }
+        }
+    }
+
+    // Visual-only (MeshObject) path.
+    int32 fileDataID = decorData->ModelFileDataID;
+    if (fileDataID <= 0 && decorData->GameObjectID > 0)
+    {
+        if (GameObjectTemplate const* goTemplate = sObjectMgr->GetGameObjectTemplate(
+                static_cast<uint32>(decorData->GameObjectID)))
+        {
+            if (GameObjectDisplayInfoEntry const* displayInfo =
+                    sGameObjectDisplayInfoStore.LookupEntry(goTemplate->displayId))
+            {
+                if (displayInfo->FileDataID > 0)
+                    fileDataID = displayInfo->FileDataID;
+            }
+        }
+    }
+
+    if (fileDataID <= 0)
+        return;
 
     MeshObject* mesh = MeshObject::CreateMeshObject(this, localPos, rot, decorScale,
-        fileDataID, /*isWMO*/ false,
-        roomEntityGuid, /*attachFlags*/ roomEntityGuid.IsEmpty() ? uint8(0) : uint8(3),
-        &worldPos);
+        fileDataID, /*isWMO*/ false, roomEntityGuid, attachFlags, &worldPos);
 
     if (!mesh)
         return;
@@ -1323,7 +1388,7 @@ void HouseInteriorMap::SpawnSingleInteriorDecor(Housing::PlacedDecor const& deco
     if (AddToMap(mesh))
     {
         _decorGuidToObjGuid[decor.Guid] = mesh->GetGUID();
-        TC_LOG_INFO("housing", "HouseInteriorMap::SpawnSingleInteriorDecor: Spawned decor fileDataID={} "
+        TC_LOG_INFO("housing", "HouseInteriorMap::SpawnSingleInteriorDecor: Spawned decor MeshObject fileDataID={} "
             "at world({:.1f},{:.1f},{:.1f}) room={}",
             fileDataID, worldX, worldY, worldZ, roomEntityGuid.ToString());
     }
@@ -1333,18 +1398,31 @@ void HouseInteriorMap::SpawnSingleInteriorDecor(Housing::PlacedDecor const& deco
     }
 }
 
-void HouseInteriorMap::UpdateDecorPosition(ObjectGuid decorGuid, Position const& pos, QuaternionData const& /*rot*/, float scale /*= 1.0f*/)
+void HouseInteriorMap::UpdateDecorPosition(ObjectGuid decorGuid, Position const& pos, QuaternionData const& rot, float scale /*= 1.0f*/)
 {
     auto itr = _decorGuidToObjGuid.find(decorGuid);
     if (itr == _decorGuidToObjGuid.end())
         return;
 
-    if (MeshObject* mesh = GetMeshObject(itr->second))
+    ObjectGuid objGuid = itr->second;
+    if (objGuid.IsGameObject())
+    {
+        if (GameObject* go = GetGameObject(objGuid))
+        {
+            go->Relocate(pos);
+            go->SetLocalRotation(rot.x, rot.y, rot.z, rot.w);
+            if (std::abs(go->GetObjectScale() - scale) > 0.001f)
+                go->SetObjectScale(scale);
+            TC_LOG_DEBUG("housing", "HouseInteriorMap::UpdateDecorPosition: Moved decor GameObject {} to ({:.1f},{:.1f},{:.1f}) scale={:.2f}",
+                decorGuid.ToString(), pos.GetPositionX(), pos.GetPositionY(), pos.GetPositionZ(), scale);
+        }
+    }
+    else if (MeshObject* mesh = GetMeshObject(objGuid))
     {
         mesh->Relocate(pos);
         if (std::abs(mesh->GetLocalScale() - scale) > 0.001f)
             mesh->UpdateLocalScale(scale);
-        TC_LOG_DEBUG("housing", "HouseInteriorMap::UpdateDecorPosition: Moved decor {} to ({:.1f},{:.1f},{:.1f}) scale={:.2f}",
+        TC_LOG_DEBUG("housing", "HouseInteriorMap::UpdateDecorPosition: Moved decor MeshObject {} to ({:.1f},{:.1f},{:.1f}) scale={:.2f}",
             decorGuid.ToString(), pos.GetPositionX(), pos.GetPositionY(), pos.GetPositionZ(), scale);
     }
 }
@@ -1359,7 +1437,12 @@ void HouseInteriorMap::DespawnDecorItem(ObjectGuid decorGuid)
     }
 
     ObjectGuid objGuid = itr->second;
-    if (MeshObject* mesh = GetMeshObject(objGuid))
+    if (objGuid.IsGameObject())
+    {
+        if (GameObject* go = GetGameObject(objGuid))
+            go->AddObjectToRemoveList();
+    }
+    else if (MeshObject* mesh = GetMeshObject(objGuid))
         mesh->AddObjectToRemoveList();
 
     _decorGuidToObjGuid.erase(itr);
