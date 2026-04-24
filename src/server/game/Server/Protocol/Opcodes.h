@@ -386,6 +386,7 @@ enum OpcodeClient : uint32
     CMSG_GET_DECOR_REFUND_LIST                                      = 0x290031,
     CMSG_GET_GARRISON_INFO                                          = 0x3A01A8,
     CMSG_GET_INITIATIVE_ACTIVITY_LOG_REQUEST                        = 0x380004,
+    CMSG_GET_NEIGHBORHOOD_INITIATIVE_INFO_REQUEST                   = 0x380003, // 12.0.5 — Lua C_NeighborhoodInitiative.RequestNeighborhoodInitiativeInfo
     CMSG_GET_ITEM_PURCHASE_DATA                                     = 0x3B00CF,
     CMSG_GET_LANDING_PAGE_SHIPMENTS                                 = 0x3A01E4,
     CMSG_GET_LAST_CATALOG_FETCH                                     = 0x290036,

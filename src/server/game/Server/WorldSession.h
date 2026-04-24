@@ -541,6 +541,7 @@ namespace WorldPackets
         class NeighborhoodInitiativeServiceStatusCheck;
         class GetAvailableInitiativeRequest;
         class GetInitiativeActivityLogRequest;
+        class GetNeighborhoodInitiativeInfoRequest;
         class InitiativeUpdateActiveNeighborhood;
         class NeighborhoodCharterSignResponsePacket;
         class NeighborhoodCharterRemoveSignature;
@@ -1749,6 +1750,7 @@ class TC_GAME_API WorldSession
         void HandleNeighborhoodInitiativeServiceStatusCheck(WorldPackets::Neighborhood::NeighborhoodInitiativeServiceStatusCheck const& packet);
         void HandleGetAvailableInitiativeRequest(WorldPackets::Neighborhood::GetAvailableInitiativeRequest const& getAvailableInitiativeRequest);
         void HandleGetInitiativeActivityLogRequest(WorldPackets::Neighborhood::GetInitiativeActivityLogRequest const& getInitiativeActivityLogRequest);
+        void HandleGetNeighborhoodInitiativeInfoRequest(WorldPackets::Neighborhood::GetNeighborhoodInitiativeInfoRequest const& getNeighborhoodInitiativeInfoRequest);
         void HandleInitiativeUpdateActiveNeighborhood(WorldPackets::Neighborhood::InitiativeUpdateActiveNeighborhood const& initiativeUpdateActiveNeighborhood);
         void HandleInitiativeAcceptMilestoneRequest(WorldPackets::Neighborhood::InitiativeAcceptMilestoneRequest const& packet);
         void HandleInitiativeReportProgress(WorldPackets::Neighborhood::InitiativeReportProgress const& packet);

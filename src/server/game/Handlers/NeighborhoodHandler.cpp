@@ -2022,6 +2022,37 @@ void WorldSession::HandleGetInitiativeActivityLogRequest(WorldPackets::Neighborh
         getInitiativeActivityLogRequest.NeighborhoodGuid.ToString(), player->GetGUID().ToString());
 }
 
+void WorldSession::HandleGetNeighborhoodInitiativeInfoRequest(WorldPackets::Neighborhood::GetNeighborhoodInitiativeInfoRequest const& getNeighborhoodInitiativeInfoRequest)
+{
+    // 12.0.5 sniff-verified opcode 0x380003. Lua entry point:
+    // C_NeighborhoodInitiative.RequestNeighborhoodInitiativeInfo(neighborhoodGUID).
+    // Always paired with CMSG_GET_INITIATIVE_ACTIVITY_LOG_REQUEST in the captured
+    // traffic — both fired when the player opens the neighborhood initiative panel.
+    // The 0x380002 request also returns initiative info but for the `Available`
+    // panel; this 0x380003 path corresponds to the active/current initiative view.
+    // Reuse SendPlayerInitiativeInfo, which serialises the current cycle, milestone,
+    // remaining duration and player tasks via SMSG_GET_PLAYER_INITIATIVE_INFO_RESULT
+    // (0x420368) — that same SMSG is consumed by the client for both panels.
+    Player* player = GetPlayer();
+    if (!player)
+        return;
+
+    Neighborhood* neighborhood = sNeighborhoodMgr.ResolveNeighborhood(getNeighborhoodInitiativeInfoRequest.NeighborhoodGuid, player);
+    if (!neighborhood)
+    {
+        TC_LOG_DEBUG("housing", "CMSG_GET_NEIGHBORHOOD_INITIATIVE_INFO_REQUEST NeighborhoodGuid {} not resolvable for Player: {}",
+            getNeighborhoodInitiativeInfoRequest.NeighborhoodGuid.ToString(), player->GetGUID().ToString());
+        return;
+    }
+
+    ObjectGuid nhObjGuid = neighborhood->GetGuid();
+    uint64 nhGuid = nhObjGuid.GetCounter();
+    sInitiativeManager.SendPlayerInitiativeInfo(this, nhObjGuid, nhGuid);
+
+    TC_LOG_DEBUG("housing", "CMSG_GET_NEIGHBORHOOD_INITIATIVE_INFO_REQUEST NeighborhoodGuid: {}, Player: {}",
+        getNeighborhoodInitiativeInfoRequest.NeighborhoodGuid.ToString(), player->GetGUID().ToString());
+}
+
 void WorldSession::HandleInitiativeUpdateActiveNeighborhood(WorldPackets::Neighborhood::InitiativeUpdateActiveNeighborhood const& initiativeUpdateActiveNeighborhood)
 {
     Player* player = GetPlayer();

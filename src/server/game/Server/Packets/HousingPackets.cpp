@@ -69,10 +69,24 @@ void HousingDecorPlace::Read()
     _worldPacket >> Field_62;
     _worldPacket >> Field_63;
 
-    TC_LOG_INFO("network.opcode", "CMSG_HOUSING_DECOR_PLACE DecorGuid: {} Pos: ({}, {}, {}) Rot: ({}, {}, {}) Scale: {} AttachParent: {} RoomGuid: {} Field_61: {} Field_62: {} Field_63: {}",
+    // 12.0.5 — optional 14-byte trailing block (PackedGUID + uint8 + int32).
+    // Present only on placements with a complex source reference (e.g. redeemed
+    // deferred decor with parent metadata). Sniff observed in 1 of 3 samples
+    // (53/54/68-byte bodies). Detect by remaining bytes — the standard storage→plot
+    // path stops at 53/54 bytes, the source-extended path adds the tail.
+    HasSourceTail = _worldPacket.rpos() < _worldPacket.size();
+    if (HasSourceTail)
+    {
+        _worldPacket >> SourceGuid;
+        _worldPacket >> SourceFlags;
+        _worldPacket >> SourceField;
+    }
+
+    TC_LOG_INFO("network.opcode", "CMSG_HOUSING_DECOR_PLACE DecorGuid: {} Pos: ({}, {}, {}) Rot: ({}, {}, {}) Scale: {} AttachParent: {} RoomGuid: {} Field_61: {} Field_62: {} Field_63: {} HasSourceTail: {} SourceGuid: {} SourceFlags: {} SourceField: {}",
         DecorGuid.ToString(), Position.Pos.GetPositionX(), Position.Pos.GetPositionY(), Position.Pos.GetPositionZ(),
         Rotation.Pos.GetPositionX(), Rotation.Pos.GetPositionY(), Rotation.Pos.GetPositionZ(), Scale,
-        AttachParentGuid.ToString(), RoomGuid.ToString(), Field_61, Field_62, Field_63);
+        AttachParentGuid.ToString(), RoomGuid.ToString(), Field_61, Field_62, Field_63,
+        HasSourceTail, SourceGuid.ToString(), SourceFlags, SourceField);
 }
 
 void HousingDecorMove::Read()
@@ -240,9 +254,12 @@ void HousingFixtureSetCoreFixture::Read()
 
     _worldPacket >> FixtureGuid;
     _worldPacket >> ExteriorComponentID;
+    // 12.0.5 — sniff-verified trailing 1-bit flag (sample observed 0x00, all 4 captures).
+    // Always present, byte-aligned by the bit reader.
+    _worldPacket >> Bits<1>(ApplyImmediate);
 
-    TC_LOG_INFO("housing", "CMSG_HOUSING_FIXTURE_SET_CORE_FIXTURE parsed: FixtureGuid={} ExteriorComponentID={} (rpos after={})",
-        FixtureGuid.ToString(), ExteriorComponentID, _worldPacket.rpos());
+    TC_LOG_INFO("housing", "CMSG_HOUSING_FIXTURE_SET_CORE_FIXTURE parsed: FixtureGuid={} ExteriorComponentID={} ApplyImmediate={} (rpos after={})",
+        FixtureGuid.ToString(), ExteriorComponentID, ApplyImmediate, _worldPacket.rpos());
 }
 
 void HousingFixtureCreateFixture::Read()
@@ -277,8 +294,10 @@ void HousingFixtureSetHouseType::Read()
 {
     _worldPacket >> HouseGuid;
     _worldPacket >> HouseExteriorWmoDataID;
+    // 12.0.5 — sniff-verified trailing 1-bit flag (always 0 in observed sample).
+    _worldPacket >> Bits<1>(ApplyImmediate);
 
-    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_FIXTURE_SET_HOUSE_TYPE HouseGuid: {} HouseExteriorWmoDataID: {}", HouseGuid.ToString(), HouseExteriorWmoDataID);
+    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_FIXTURE_SET_HOUSE_TYPE HouseGuid: {} HouseExteriorWmoDataID: {} ApplyImmediate: {}", HouseGuid.ToString(), HouseExteriorWmoDataID, ApplyImmediate);
 }
 
 void HousingFixtureCreateBasicHouse::Read()
@@ -369,16 +388,18 @@ void HousingRoomSetComponentTheme::Read()
 
 void HousingRoomApplyComponentMaterials::Read()
 {
-    // Sniff-verified wire order: GUID, Count, ColorOverride(int32), TextureID(uint32), OptionIDs[]
+    // Sniff-verified wire order: GUID, Count, ColorOverride(int32), TextureID(uint32), OptionIDs[], Bits<1>
     _worldPacket >> RoomGuid;
     _worldPacket >> Size<uint32>(OptionIDs);
     _worldPacket >> ColorOverride;
     _worldPacket >> RoomComponentTextureID;
     for (uint32& optionID : OptionIDs)
         _worldPacket >> optionID;
+    // 12.0.5 — sniff-verified trailing 1-bit flag (always 0 in observed sample).
+    _worldPacket >> Bits<1>(ApplyImmediate);
 
-    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_ROOM_APPLY_COMPONENT_MATERIALS RoomGuid: {} ColorOverride: {} TextureID: {} OptionCount: {}",
-        RoomGuid.ToString(), ColorOverride, RoomComponentTextureID, OptionIDs.size());
+    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_ROOM_APPLY_COMPONENT_MATERIALS RoomGuid: {} ColorOverride: {} TextureID: {} OptionCount: {} ApplyImmediate: {}",
+        RoomGuid.ToString(), ColorOverride, RoomComponentTextureID, OptionIDs.size(), ApplyImmediate);
 }
 
 void HousingRoomSetDoorType::Read()
@@ -2892,6 +2913,13 @@ void GetInitiativeActivityLogRequest::Read()
     _worldPacket >> NeighborhoodGuid;
 
     TC_LOG_DEBUG("network.opcode", "CMSG_GET_INITIATIVE_ACTIVITY_LOG_REQUEST NeighborhoodGuid: {}", NeighborhoodGuid.ToString());
+}
+
+void GetNeighborhoodInitiativeInfoRequest::Read()
+{
+    _worldPacket >> NeighborhoodGuid;
+
+    TC_LOG_DEBUG("network.opcode", "CMSG_GET_NEIGHBORHOOD_INITIATIVE_INFO_REQUEST NeighborhoodGuid: {}", NeighborhoodGuid.ToString());
 }
 
 void InitiativeUpdateActiveNeighborhood::Read()

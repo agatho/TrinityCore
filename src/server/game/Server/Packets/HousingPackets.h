@@ -213,6 +213,16 @@ namespace WorldPackets::Housing
         uint8 Field_61 = 0;
         uint8 Field_62 = 0;
         int32 Field_63 = -1;
+        // 12.0.5 added an optional trailing block (sniff: 14-byte tail in 1 of 3 samples).
+        // Wire layout when present: PackedGUID + uint8 + int32. Source field is sent
+        // when the placement has a complex source (e.g. redeemed deferred decor with
+        // a parent reference). Absent for the common storage→plot path. We detect the
+        // tail by checking remaining bytes — cleanest match against retail's variable
+        // body lengths (53 / 54 / 68 bytes observed).
+        ObjectGuid SourceGuid;
+        uint8 SourceFlags = 0;
+        int32 SourceField = -1;
+        bool HasSourceTail = false;
     };
 
     class HousingDecorMove final : public ClientPacket
@@ -422,6 +432,9 @@ namespace WorldPackets::Housing
 
         ObjectGuid FixtureGuid;
         uint32 ExteriorComponentID = 0;
+        // 12.0.5 — sniff shows a trailing byte (always 0x00 in 4 observed samples).
+        // Reads as Bits<1>, byte-aligned by the next op or end of buffer.
+        bool ApplyImmediate = false;
     };
 
     class HousingFixtureCreateFixture final : public ClientPacket
@@ -469,6 +482,9 @@ namespace WorldPackets::Housing
 
         ObjectGuid HouseGuid;
         uint32 HouseExteriorWmoDataID = 0;
+        // 12.0.5 — sniff shows trailing byte 0x00 (Bits<1> false). Likely a
+        // confirm/preview flag matching the SetCoreFixture pattern.
+        bool ApplyImmediate = false;
     };
 
     class HousingFixtureCreateBasicHouse final : public ClientPacket
@@ -571,11 +587,14 @@ namespace WorldPackets::Housing
 
         void Read() override;
 
-        // Sniff-verified wire order: GUID, Count, ColorOverride, TextureID, OptionIDs[]
+        // Sniff-verified wire order: GUID, Count, ColorOverride, TextureID, OptionIDs[], Bits<1>
         ObjectGuid RoomGuid;
         int32 ColorOverride = -1;               // -1 = default/no override
         uint32 RoomComponentTextureID = 0;       // RoomComponentTexture DB2 ID
         std::vector<uint32> OptionIDs;           // RoomComponentOption IDs
+        // 12.0.5 — sniff shows trailing 1-bit flag (always 0 in observed sample).
+        // Likely a "preview vs commit" indicator matching the SetCoreFixture/SetHouseType pattern.
+        bool ApplyImmediate = false;
     };
 
     class HousingRoomSetDoorType final : public ClientPacket
@@ -2910,6 +2929,20 @@ namespace WorldPackets::Neighborhood
     {
     public:
         GetInitiativeActivityLogRequest(WorldPacket&& packet) : ClientPacket(CMSG_GET_INITIATIVE_ACTIVITY_LOG_REQUEST, std::move(packet)) { }
+        void Read() override;
+        ObjectGuid NeighborhoodGuid;
+    };
+
+    // 12.0.5 sniff-verified opcode 0x380003. Sent by C_NeighborhoodInitiative.RequestNeighborhoodInitiativeInfo
+    // Lua API. Body = packed NeighborhoodGuid only (7 bytes). Always paired with
+    // ACTIVITY_LOG_REQUEST in observed traffic — same NeighborhoodGuid, fired together when
+    // the player opens the neighborhood initiative panel. Server should respond with current
+    // initiative state (use existing FNeighborhoodMirrorData_C update on Account entity, or
+    // an explicit JamCliInitiativeInfo SMSG once that response opcode is identified).
+    class GetNeighborhoodInitiativeInfoRequest final : public ClientPacket
+    {
+    public:
+        GetNeighborhoodInitiativeInfoRequest(WorldPacket&& packet) : ClientPacket(CMSG_GET_NEIGHBORHOOD_INITIATIVE_INFO_REQUEST, std::move(packet)) { }
         void Read() override;
         ObjectGuid NeighborhoodGuid;
     };
