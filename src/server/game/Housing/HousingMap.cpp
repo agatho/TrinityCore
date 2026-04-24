@@ -890,125 +890,27 @@ bool HousingMap::AddPlayerToMap(Player* player, bool initPlayer /*= true*/)
         TC_LOG_DEBUG("housing", "=== END HOUSING DIAGNOSTIC ===");
     }
 
-    // Send neighborhood context so the client can call SetViewingNeighborhood()
-    // and enable Cornerstone purchase UI interaction
-    WorldPackets::Housing::HousingGetCurrentHouseInfoResponse houseInfo;
-    if (housing)
-    {
-        houseInfo.House.HouseGuid = housing->GetHouseGuid();
-        houseInfo.House.OwnerGuid = player->GetGUID();
-        houseInfo.House.NeighborhoodGuid = housing->GetNeighborhoodGuid();
-        houseInfo.House.PlotId = housing->GetPlotIndex();
-        houseInfo.House.AccessFlags = housing->GetSettingsFlags();
-        houseInfo.House.HasMoveOutTime = false;
-        // Populate names in the FIRST emission so the client doesn't build a
-        // placeholder ("47 " from PlotIndex+" "+empty NeighborhoodName) and
-        // later rebuild it after SMSG_QUERY_NEIGHBORHOOD_NAME_RESPONSE arrives.
-        // Two-phase CURRENT_HOUSE_INFO_RECIEVED → _UPDATED was causing UI flicker.
-        if (!housing->GetHouseName().empty())
-            houseInfo.House.HouseName = housing->GetHouseName();
-        if (_neighborhood)
-            houseInfo.House.NeighborhoodName = _neighborhood->GetName();
-    }
-    else if (_neighborhood)
-    {
-        // No house — send player's GUID (client expects HighGuid::Player type)
-        houseInfo.House.OwnerGuid = player->GetGUID();
-        houseInfo.House.NeighborhoodGuid = _neighborhood->GetGuid();
-        houseInfo.House.NeighborhoodName = _neighborhood->GetName();
-    }
-    houseInfo.Result = 0;
-    WorldPacket const* houseInfoPkt = houseInfo.Write();
-    TC_LOG_DEBUG("housing", "HousingMap::AddPlayerToMap CURRENT_HOUSE_INFO ({} bytes): {}",
-        houseInfoPkt->size(), HexDumpPacket(houseInfoPkt));
-    TC_LOG_DEBUG("housing", "  PlotId={}, HouseGuid={}, OwnerGuid={}, NeighborhoodGuid={}, AccessFlags={}, hasHouse={}",
-        houseInfo.House.PlotId, houseInfo.House.HouseGuid.ToString(),
-        houseInfo.House.OwnerGuid.ToString(), houseInfo.House.NeighborhoodGuid.ToString(),
-        houseInfo.House.AccessFlags, housing ? "yes" : "no");
-    player->SendDirectMessage(houseInfoPkt);
-
-    // Send SMSG_HOUSING_CATALOG_STATE_SYNC. Retail sends this twice per session
-    // (once during login query phase, once after map entry). The client's catalog
-    // state machine needs this for Catalog UI and placed-decor / Room-placement
-    // sync. Our Housing::BuildCatalogStateSync existed but had zero call sites
-    // prior to this commit (sniff audit 2026-04-21 finding #2.1).
-    if (housing)
-    {
-        WorldPackets::Housing::HousingCatalogStateSync catalogSync;
-        housing->BuildCatalogStateSync(catalogSync);
-        player->SendDirectMessage(catalogSync.Write());
-        TC_LOG_DEBUG("housing", "HousingMap::AddPlayerToMap: sent SMSG_HOUSING_CATALOG_STATE_SYNC with {} entries",
-            uint32(catalogSync.Entries.size()));
-
-        // Send SMSG_HOUSING_SVCS_GET_PLAYER_HOUSES_INFO_RESPONSE proactively.
-        // User report 2026-04-22: the own-plot world-map icon only renders as
-        // "Your House" AFTER the user manually opens the housing dashboard,
-        // which sends CMSG_HOUSING_SVCS_GET_PLAYER_HOUSES_INFO and we respond
-        // with this packet. Emitting it proactively primes the client's "my
-        // houses" state so the map renders correctly from the first frame.
-        //
-        // Emitted HERE (after Map::AddPlayerToMap has flushed the big
-        // UPDATE_OBJECT containing the Player + HousingPlayerHouse entities)
-        // so the client has the entities to correlate against. Previous
-        // attempt in Player::LoadFromDB fired too early — before those
-        // entities existed in the client's registry — and was ignored.
-        {
-            WorldPackets::Housing::HousingSvcsGetPlayerHousesInfoResponse housesResp;
-            for (Housing const* h : player->GetAllHousings())
-            {
-                WorldPackets::Housing::JamCliHouse jam;
-                jam.OwnerGUID = player->GetGUID();
-                jam.HouseGUID = h->GetHouseGuid();
-                jam.NeighborhoodGUID = h->GetNeighborhoodGuid();
-                jam.HouseLevel = static_cast<uint8>(h->GetLevel());
-                jam.PlotIndex = h->GetPlotIndex();
-                // OptionalValue = Favor (struct +56, IDA sub_7FF624FCFE00).
-                // Required for Lua C_Housing.GetCurrentHouseLevelFavor / fully
-                // populated HouseInfo entries in GetPlayerOwnedHouses.
-                jam.HasOptionalField = true;
-                jam.OptionalValue = h->GetFavor64();
-                housesResp.Houses.push_back(jam);
-            }
-            player->SendDirectMessage(housesResp.Write());
-            TC_LOG_DEBUG("housing", "HousingMap::AddPlayerToMap: sent proactive PlayerHousesInfoResponse with {} house(s) (post-bundle ordering)",
-                uint32(housesResp.Houses.size()));
-        }
-
-        // Proactively fire HOUSE_LEVEL_FAVOR_UPDATED (populates
-        // C_Housing.GetCurrentHouseLevelFavor). Reactive emission is already in
-        // HandleHousingSvcsQueryHouseLevelFavor; without a login-time push the
-        // Lua cache stays empty until the dashboard queries. Wire format matches
-        // HandleNeighborhoodBuyHouse's second packet (sniff-verified two-packet
-        // sequence after plot purchase).
-        {
-            WorldPackets::Housing::HousingSvcsUpdateHousesLevelFavor levelFavor;
-            levelFavor.Type = 0;
-            levelFavor.Field1 = 0;
-            levelFavor.Field2 = 0;
-            for (Housing const* h : player->GetAllHousings())
-            {
-                WorldPackets::Housing::HousingSvcsUpdateHousesLevelFavor::LevelFavorEntry entry;
-                entry.OwnerGUID = player->GetGUID();
-                entry.HouseGUID = h->GetHouseGuid();
-                entry.NeighborhoodGUID = h->GetNeighborhoodGuid();
-                entry.FavorAmount = static_cast<uint32>(h->GetFavor());
-                entry.Level = h->GetLevel();
-                levelFavor.Entries.push_back(std::move(entry));
-            }
-            player->SendDirectMessage(levelFavor.Write());
-            TC_LOG_DEBUG("housing", "HousingMap::AddPlayerToMap: sent proactive UpdateHousesLevelFavor with {} entries",
-                uint32(levelFavor.Entries.size()));
-        }
-    }
-
-    // Send SMSG_INITIATIVE_SERVICE_STATUS proactively so IsInitiativeEnabled() returns
-    // true immediately. Without this, the client waits for a poll response before showing
-    // initiative/endeavor UI elements. Sniff-verified: server responds with 0x80 (enabled).
-    {
-        WorldPackets::Housing::InitiativeServiceStatus initStatus;
-        initStatus.ServiceEnabled = true;
-        player->SendDirectMessage(initStatus.Write());
-    }
+    // BLIZZLIKE: no unprompted housing SMSG emissions at login.
+    //
+    // Previously we emitted SMSG_HOUSING_GET_CURRENT_HOUSE_INFO_RESPONSE,
+    // SMSG_HOUSING_CATALOG_STATE_SYNC, SMSG_HOUSING_SVCS_GET_PLAYER_HOUSES_INFO_
+    // RESPONSE, SMSG_HOUSING_SVCS_UPDATE_HOUSES_LEVEL_FAVOR, and
+    // SMSG_INITIATIVE_SERVICE_STATUS here as "wake-ups" to prime the client.
+    // Retail 66838 sniff analysis across 3 independent captures
+    // (floorplan_editor_rotation 2026-04-10, wall_floor_ceiling_customize
+    // 2026-04-12, interrior_exterrior_advanced_editor 2026-04-15) shows
+    // ZERO unprompted housing-specific SMSGs in the post-LVW window. The
+    // client receives all housing state via the Player CREATE bundle's
+    // UpdateField data and asks for anything else via CMSGs. The existing
+    // reactive handlers (HandleHousingGetCurrentHouseInfo, HandleHousingSvcs
+    // GetPlayerHousesInfo, HandleHousingHouseStatus, etc.) will respond
+    // when queried.
+    //
+    // CATALOG_STATE_SYNC at login has been removed too — retail emits it at
+    // ~LVW+988 in the advanced_editor sniff, well after login, as a
+    // time-delayed server push. Not at map-entry time. If the client
+    // actively needs it before the delayed push, CMSG_HOUSING_DECOR_REQUEST_
+    // STORAGE also triggers catalog dispatch via HandleHousingDecorRequestStorage.
 
     // ENTER_PLOT must be sent AFTER SMSG_UPDATE_OBJECT creates the AT on the client.
     // UPDATE_OBJECT is flushed after AddPlayerToMap returns, so sending ENTER_PLOT
@@ -1219,114 +1121,17 @@ bool HousingMap::AddPlayerToMap(Player* player, bool initPlayer /*= true*/)
                 TC_LOG_DEBUG("housing", "HousingMap deferred ENTER_PLOT: Sent STORAGE_RSP ack + Account CREATE + {} decor MeshObject CREATEs + PlayerHousesInfoResponse for player {}",
                     meshCreateCount, playerGuid.ToString());
 
-                // Re-CREATE Housing/4 (NeighborhoodMirror) and Housing/3
-                // (HousingPlayerHouse) as a deferred second push. This is what
-                // the user's manual roster→dashboard cycle does: it re-emits
-                // these entities AFTER login with the client's housing state
-                // machine fully initialised, which reliably triggers the
-                // world-map icon refresh. The initial login CREATE for these
-                // entities fires inside the map-entry UPDATE_OBJECT bundle —
-                // apparently too early for the icon picker to consume.
-                //
-                // Re-populate the mirror data before the re-send so it stays
-                // in sync with any roster changes that occurred between login
-                // and this defer window.
-                if (session->HasHousingNeighborhoodMirrorEntity() && hMap->GetNeighborhood())
-                {
-                    // Byte-identical replay of HandleNeighborhoodGetRoster
-                    // (NeighborhoodHandler.cpp:1710). That handler is empirically
-                    // proven to paint map-icons correctly when triggered by a
-                    // bulletin-board click. Replay the exact 4-packet sequence,
-                    // in the exact same order, with the same method calls.
-                    // Only difference: fires from the 500ms defer instead of a
-                    // CMSG handler. Any deviation from the known-working path
-                    // risks silently missing the event chain that drives
-                    // NEIGHBORHOOD_MAP_DATA_UPDATED.
-                    Neighborhood* nbh = hMap->GetNeighborhood();
-                    std::vector<Neighborhood::Member> const& members = nbh->GetMembers();
-
-                    // 1. QueryNeighborhoodNameResponse — pre-cache NeighborhoodGuid→Name
-                    {
-                        WorldPackets::Housing::QueryNeighborhoodNameResponse nameResp;
-                        nameResp.NeighborhoodGuid = nbh->GetGuid();
-                        nameResp.Result = true;
-                        nameResp.NeighborhoodName = nbh->GetName();
-                        p->SendDirectMessage(nameResp.Write());
-                    }
-
-                    // Step 2 (NeighborhoodGetRosterResponse) REMOVED — the
-                    // retail 66838 pristine login sniff
-                    // (sniff_analysis_login_plot/84_retail_post_login_smsg_sequence.py)
-                    // shows ZERO unprompted emissions of this SMSG in the entire
-                    // post-LVW window. The earlier "roster-replay" rationale was
-                    // speculative, built on the observation that a user-initiated
-                    // bulletin-board roster click paints map icons. Per the user's
-                    // blizzlike guardrail we do not emit packets retail doesn't.
-                    // (members variable unused below once step 2 is gone.)
-                    (void)members;
-
-                    // 3. Mirror re-populate + SendUpdateToPlayer (VALUES_UPDATE).
-                    //
-                    // Pristine-login sniff analysis (sniff_analysis_login_plot/
-                    // 83_pristine_login_mirror_defer.py against retail
-                    // dump_12.0.1.66838_2026-04-23_05-56-30.pkt):
-                    //
-                    //   LOGIN_VERIFY_WORLD idx=196, first housing CMSG idx=300.
-                    //   Unprompted window (LVW+1 .. first-housing-CMSG-1):
-                    //     Housing/4 mirror CREATEs: 0
-                    //     Housing/4 mirror VALUES:  1  (at LVW+101 packets)
-                    //
-                    // Retail emits ZERO standalone Housing/4 CREATE post-LVW. The
-                    // initial mirror state ships as a session fragment in the
-                    // Player CREATE bundle; the server's only post-login mirror
-                    // emission is a single VALUES_UPDATE to refresh any delta.
-                    //
-                    // Previous iteration used SendCreateToPlayer (32efa22454) on
-                    // the theory that CREATE is required to wake the client.
-                    // Sniff refutes that — the user's blizzlike guardrail says
-                    // match retail. SendUpdateToPlayer is the blizzlike call.
-                    HousingNeighborhoodMirrorEntity& mirror = session->GetHousingNeighborhoodMirrorEntity();
-                    mirror.SetName(nbh->GetName());
-                    mirror.SetOwnerGUID(nbh->GetOwnerGuid());
-                    mirror.ClearHouses();
-                    for (auto const& plot : nbh->GetPlots())
-                    {
-                        if (plot.IsOccupied() && !plot.HouseGuid.IsEmpty())
-                            mirror.AddHouse(plot.HouseGuid, plot.OwnerGuid);
-                        else
-                            mirror.AddHouse(ObjectGuid::Empty, ObjectGuid::Empty);
-                    }
-                    mirror.ClearManagers();
-                    for (auto const& member : members)
-                    {
-                        if (member.Role == NEIGHBORHOOD_ROLE_MANAGER || member.Role == NEIGHBORHOOD_ROLE_OWNER)
-                        {
-                            ObjectGuid bnetGuid;
-                            if (Player* mgr = ObjectAccessor::FindPlayer(member.PlayerGuid))
-                                bnetGuid = mgr->GetSession()->GetBattlenetAccountGUID();
-                            mirror.AddManager(bnetGuid, member.PlayerGuid);
-                        }
-                    }
-                    mirror.SendUpdateToPlayer(p);
-
-                    // 4. QueryPlayerNamesResponse — pre-cache plot owner names
-                    {
-                        WorldPackets::Query::QueryPlayerNamesResponse nameResponse;
-                        for (auto const& plot : nbh->GetPlots())
-                        {
-                            if (!plot.IsOccupied() || plot.OwnerGuid.IsEmpty())
-                                continue;
-                            WorldPackets::Query::NameCacheLookupResult& entry = nameResponse.Players.emplace_back();
-                            session->BuildNameQueryData(plot.OwnerGuid, entry);
-                        }
-                        if (!nameResponse.Players.empty())
-                            p->SendDirectMessage(nameResponse.Write());
-
-                        TC_LOG_DEBUG("housing", "HousingMap deferred ENTER_PLOT: roster-replay sent — "
-                            "{} members, {} name-cache entries, 1 Housing/4 CREATE for player {}",
-                            members.size(), nameResponse.Players.size(), playerGuid.ToString());
-                    }
-                }
+                // BLIZZLIKE: the 500 ms defer no longer emits housing
+                // response SMSGs. Retail 66838 sniff analysis across 3
+                // independent login captures shows ZERO unprompted housing
+                // emissions in the post-LVW window. Previous iterations
+                // emitted QueryNeighborhoodNameResponse + mirror VALUES_UPDATE
+                // + QueryPlayerNamesResponse as a speculative "roster-replay
+                // wake-up". All removed per user's blizzlike guardrail. The
+                // CMSG handlers emit the correct reactive responses when the
+                // client queries. The mirror state was populated synchronously
+                // in Player::LoadFromDB and rides in the Player CREATE bundle.
+                (void)session;
 
                 // Simulate the edit-mode ON → OFF transition on the Player
                 // entity (without actually entering edit mode). The user's

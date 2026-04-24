@@ -25759,9 +25759,32 @@ void Player::SendInitialPacketsAfterAddToMap()
     if (_garrison)
         _garrison->SendRemoteInfo();
 
-    // Send housing neighborhood notifications when entering a neighborhood map.
-    // The client needs NeighborhoodMirrorData populated on the Account entity
-    // for the map to render plot markers and roster data.
+    // Housing state setup at neighborhood map entry.
+    //
+    // PROVEN RETAIL BEHAVIOUR (sniff analysis across 3 retail 66838 captures:
+    // floorplan_editor_rotation, wall_floor_ceiling_customize,
+    // interrior_exterrior_advanced_editor):
+    //
+    //   Post-LVW unprompted window: ZERO housing-specific SMSGs.
+    //   Housing state ships ENTIRELY inside the single Player CREATE bundle
+    //   (UPDATE_OBJECT) as entity UpdateField data on Housing/4 (mirror),
+    //   Housing/3 (PlayerHouseEntity), HighGuid::Entity mirrors, etc.
+    //   No HouseStatus, Permissions, CurrentHouseInfo, PlayerHousesInfo,
+    //   UpdateHousesLevelFavor, QueryNeighborhoodName, QueryPlayerNames,
+    //   or NeighborhoodGetRoster is emitted unprompted.
+    //
+    // Previous iterations emitted all of those at login as speculative
+    // "wake-ups" for client-side state machines. Per user's blizzlike
+    // guardrail ("system works on retail, we have to fully align with the
+    // Blizzard flow") all unprompted emissions have been removed. The CMSG
+    // handlers (HandleHousingHouseStatus, HandleHousingGetPlayerPermissions,
+    // HandleHousingGetCurrentHouseInfo, HandleHousingSvcsGetPlayerHousesInfo,
+    // HandleNeighborhoodGetRoster, HandleQueryPlayerNames) already exist and
+    // emit the correct reactive responses when the client sends the CMSGs.
+    //
+    // Remaining work: keep the session-entity state populated so the Player
+    // CREATE bundle serialises correct UpdateField values. Set fields only;
+    // no SendDirectMessage/SendCreateToPlayer calls in this block.
     if (HousingMap* housingMap = dynamic_cast<HousingMap*>(GetMap()))
     {
         Neighborhood* neighborhood = housingMap->GetNeighborhood();
@@ -25769,81 +25792,12 @@ void Player::SendInitialPacketsAfterAddToMap()
         {
             Housing* housing = GetHousingForNeighborhood(neighborhood->GetGuid());
 
-            // NOTE on a reverted experiment: `06582a1988` added a pre-emission
-            // of SMSG_HOUSING_HOUSE_STATUS_RESPONSE with FlagByte=0xC0 before
-            // the 0xE0 below, speculating that a bit-5 transition would wake
-            // the client's map pin refresh. User-mandated blizzlike guardrail
-            // plus the pristine login sniff
-            // (sniff_analysis_login_plot/83_pristine_login_mirror_defer.py
-            // against dump_12.0.1.66838_2026-04-23_05-56-30.pkt) ruled that
-            // out. Retail does not emit a 0xC0 primer at login, so neither
-            // should we.
-
-            // Send proactive HouseStatus so client knows about house ownership
-            WorldPackets::Housing::HousingHouseStatusResponse statusResponse;
-            if (housing)
-            {
-                statusResponse.HouseGuid = housing->GetHouseGuid();
-                statusResponse.AccountGuid = GetSession()->GetBattlenetAccountGUID();
-                statusResponse.OwnerPlayerGuid = GetGUID();
-                statusResponse.NeighborhoodGuid = housing->GetNeighborhoodGuid();
-                statusResponse.Status = 0;
-                statusResponse.FlagByte = 0xE0; // bit7=houseEditing, bit6=plotEntry, bit5=houseEntry
-            }
-            // No house: all fields stay at defaults (empty GUIDs, Status=0, FlagByte=0).
-            SendDirectMessage(statusResponse.Write());
-
-            // Populate FHousingStorage_C.Decor on the Account entity at login.
-            // Sniff analysis of user-reported bug (dump_12.0.1.66838_2026-04
-            // -22_22-21-30): our login BNetAccount CREATE carries an empty
-            // FHousingStorage_C fragment (fbs=11, 8 bytes payload, zero Decor
-            // entries). The dashboard click populates it via CMSG_HOUSING_
-            // DECOR_REQUEST_STORAGE -> PopulateCatalogStorageEntries() ->
-            // Decor map with N entries, each with a HouseGUID field. User
-            // reports dashboard click is what makes the own-plot map icon
-            // appear.
-            //
-            // Hypothesis: the client uses FHousingStorage_C.Decor[i].HouseGUID
-            // as the 'own house anchor' for the world-map icon picker. With
-            // no populated Storage, client has no anchor -> own plot shows
-            // as unowned. By populating at login we provide the anchor
-            // immediately.
-            //
-            // Earlier memory note recorded a BLZ_ALLOC 41GB crash when
-            // populating at login, but that was a prior broken implementation
-            // generating unbounded catalog GUIDs. Current code
-            // (Housing::PopulateCatalogStorageEntries) produces a bounded
-            // number of entries per player (placed decor + per-catalog-type
-            // storage count).
-            if (housing)
-                housing->PopulateCatalogStorageEntries();
-
-            // Proactively send SMSG_HOUSING_GET_PLAYER_PERMISSIONS_RESPONSE.
-            // Retail sniff (dump_12.0.1.66838_2026-04-15_09-35-59 idx 6916)
-            // shows this SMSG fired at login with NO preceding CMSG — it is
-            // a server-initiated push, not a reactive response. Hypothesis
-            // under test: this packet sets client-side HousingSystem TLS
-            // state (offset +272+32) to 2, which is the gate the world-map
-            // icon-picker caller (sub_7FF6269B1240) checks before calling
-            // sub_7FF624BB1880. Without state==2 the caller returns 4701
-            // (default / unowned icon) regardless of Housing/3 entity data.
-            if (housing)
-            {
-                WorldPackets::Housing::HousingGetPlayerPermissionsResponse permResponse;
-                permResponse.HouseGuid = housing->GetHouseGuid();
-                permResponse.ResultCode = 0;
-                permResponse.PermissionFlags = 0xE0; // sniff-verified owner perms (bits 5,6,7)
-                SendDirectMessage(permResponse.Write());
-            }
-
-            // FNeighborhoodMirrorData_C belongs on the Housing/4 entity (separate from BNetAccount).
+            // FNeighborhoodMirrorData_C on the Housing/4 session entity.
+            // Idempotent when LoadFromDB already populated — matches no dirty
+            // bits, no wire change.
             HousingNeighborhoodMirrorEntity& mirrorEntity = GetSession()->GetHousingNeighborhoodMirrorEntity();
             mirrorEntity.SetName(neighborhood->GetName());
             mirrorEntity.SetOwnerGUID(neighborhood->GetOwnerGuid());
-
-            // Add ALL 55 plot entries so Houses[i] = PlotIndex i. The client uses
-            // the array index as the plot identifier; skipping empty slots causes
-            // the client to show the wrong plots as occupied.
             mirrorEntity.ClearHouses();
             for (auto const& plot : neighborhood->GetPlots())
             {
@@ -25852,8 +25806,6 @@ void Player::SendInitialPacketsAfterAddToMap()
                 else
                     mirrorEntity.AddHouse(ObjectGuid::Empty, ObjectGuid::Empty);
             }
-
-            // Add managers to mirror data
             mirrorEntity.ClearManagers();
             for (auto const& member : neighborhood->GetMembers())
             {
@@ -25866,32 +25818,11 @@ void Player::SendInitialPacketsAfterAddToMap()
                 }
             }
 
-            // NOTE: do NOT SendCreateToPlayer here. The Housing/4 mirror already
-            // rides the Player CREATE bundle (Player::BuildCreateUpdateBlockForPlayer
-            // line 3646) and is also re-CREATEd from the 500ms deferred event
-            // in HousingMap::AddPlayerToMap. Emitting a third time in the same
-            // tick as the Player CREATE produced a duplicate NEIGHBORHOOD_INFO_UPDATED
-            // Lua event (user report 2026-04-23: "2× NEIGHBORHOOD_INFO_UPDATED,
-            // identical payload, 0ms apart, causes UI flicker"). The SetX calls
-            // above are kept as idempotent insurance in case LoadFromDB skipped
-            // this state; they mark no UpdateField dirty when values match.
-
-            // FHousingPlayerHouse_C belongs on the Housing/3 entity.
-            // Populate it with the player's house data for this neighborhood.
+            // FHousingPlayerHouse_C on the Housing/3 session entity.
             if (housing)
             {
                 HousingPlayerHouseEntity& houseEntity = GetSession()->GetHousingPlayerHouseEntity();
                 houseEntity.SetBnetAccount(GetSession()->GetBattlenetAccountGUID());
-                // EntityGUID = HouseGuid (self-reference). Matches what
-                // Housing::SyncUpdateFields does on every post-login re-push
-                // (Housing.cpp:2419). Sniff-verified against our own server:
-                // when the user opens the housing dashboard, the handler
-                // CMSG_HOUSING_DECOR_REQUEST_STORAGE emits a Housing/3 CREATE
-                // whose EntityGUID is the self-reference (HouseGuid), and
-                // THIS is what makes the client's own-plot map icon render.
-                // Setting Empty at login (commit a06defed4b) left the
-                // initial CREATE with EntityGUID=00 00 and the icon stayed
-                // broken until the dashboard click forced a re-push.
                 houseEntity.SetEntityGUID(housing->GetHouseGuid());
                 houseEntity.SetPlotIndex(static_cast<int32>(housing->GetPlotIndex()));
                 houseEntity.SetLevel(housing->GetLevel());
@@ -25902,81 +25833,15 @@ void Player::SendInitialPacketsAfterAddToMap()
                     housing->GetMaxRoomBudget(),
                     housing->GetMaxFixtureBudget()
                 );
-                // Wholesale field re-push at login — use CREATE to trigger the
-                // own-plot icon refresh (sniff-verified: dashboard click works
-                // because it re-pushes Housing/3 as CREATE in a later packet).
-                houseEntity.SendCreateToPlayer(this);
+
+                // Populate FHousingStorage_C state so the BNetAccount CREATE
+                // bundle serialises the Decor map. This is a setter-only op
+                // on the session entity; the wire emission happens inside the
+                // Player CREATE bundle via BNetAccount BuildCreateUpdateBlock.
+                housing->PopulateCatalogStorageEntries();
             }
 
-            // Proactively send the neighborhood name response BEFORE the roster.
-            // The client's NeighborhoodState singleton initializes all four display
-            // flags (+572..+575) to 1. Flag +574 is only cleared when the
-            // JamCliNeighborhoodName DataCache already contains the neighborhood
-            // name. By sending this packet first, we pre-populate that cache so
-            // the roster response's display function finds the name resolved.
-            {
-                WorldPackets::Housing::QueryNeighborhoodNameResponse nameResponse;
-                nameResponse.NeighborhoodGuid = neighborhood->GetGuid();
-                nameResponse.Result = true;
-                nameResponse.NeighborhoodName = neighborhood->GetName();
-                SendDirectMessage(nameResponse.Write());
-
-                TC_LOG_ERROR("housing", "=== SMSG_QUERY_NEIGHBORHOOD_NAME_RESPONSE (0x460012) [login-preload] ===\n"
-                    "  Result={}, NeighborhoodName='{}' (len={})\n"
-                    "  NeighborhoodGuid: {} (lo={:016X} hi={:016X})",
-                    nameResponse.Result, nameResponse.NeighborhoodName, nameResponse.NeighborhoodName.size(),
-                    nameResponse.NeighborhoodGuid.ToString(),
-                    nameResponse.NeighborhoodGuid.GetRawValue(0), nameResponse.NeighborhoodGuid.GetRawValue(1));
-            }
-
-            // REMOVED proactive SMSG_NEIGHBORHOOD_GET_ROSTER_RESPONSE (0x5C0012).
-            // Sniff set-diff of 3 retail login captures (alliance 65940, horde
-            // 65940, advanced 66838) against our login shows retail NEVER emits
-            // this opcode at login — it is strictly a reactive response to
-            // CMSG_NEIGHBORHOOD_GET_ROSTER (0x39000E), which the client issues
-            // only when the user interacts with the neighborhood board / roster
-            // UI. Hypothesis under test: the client's map-icon state machine
-            // enters an 'already-processed' state when it receives this
-            // unsolicited response at login, suppressing the refresh that
-            // would otherwise fire on the reactive CMSG round-trip. User
-            // reports icons DO refresh after clicking the roster board, which
-            // is consistent with this hypothesis.
-
-            // NOTE: proactive PlayerHousesInfoResponse previously emitted here
-            // did not fix the own-plot icon. Hypothesis: it arrived BEFORE the
-            // Player and HousingPlayerHouse entities were CREATE'd (both are
-            // emitted inside the subsequent HousingMap::AddPlayerToMap big
-            // UPDATE_OBJECT bundle), so the client had nothing to correlate
-            // the response against. The emission has been moved to
-            // HousingMap::AddPlayerToMap, AFTER CATALOG_STATE_SYNC and the
-            // big UPDATE_OBJECT, so all entities exist in the client registry
-            // before the response arrives.
-
-            // Proactively send player name responses for ALL occupied plot owners.
-            // The client's GetNeighborhoodPlotName() reads OwnerGUID from the mirror
-            // entity's Houses[] array, then looks up the player name from the NameCache.
-            // If the name isn't cached (e.g. plot owner is offline), the function falls
-            // back to showing just the plot number. By pushing names here, we ensure
-            // the NameCache is populated before the world map is opened.
-            {
-                WorldPackets::Query::QueryPlayerNamesResponse nameResponse;
-                for (auto const& plot : neighborhood->GetPlots())
-                {
-                    if (!plot.IsOccupied() || plot.OwnerGuid.IsEmpty())
-                        continue;
-
-                    WorldPackets::Query::NameCacheLookupResult& entry = nameResponse.Players.emplace_back();
-                    GetSession()->BuildNameQueryData(plot.OwnerGuid, entry);
-                }
-                if (!nameResponse.Players.empty())
-                {
-                    SendDirectMessage(nameResponse.Write());
-                    TC_LOG_DEBUG("housing", "Player {} housing map enter: pre-pushed {} plot owner names to NameCache",
-                        GetGUID().ToString(), nameResponse.Players.size());
-                }
-            }
-
-            TC_LOG_INFO("housing", "Player {} entered neighborhood map {} - sent HouseStatus + names + NeighborhoodMirrorData (Neighborhood: '{}' {}, Members: {}, Plots: {}, HasHouse: {})",
+            TC_LOG_INFO("housing", "Player {} entered neighborhood map {} - state set on session entities (blizzlike: no unprompted SMSGs emitted). Neighborhood='{}' {}, Members={}, Plots={}, HasHouse={}",
                 GetGUID().ToString(), GetMapId(), neighborhood->GetName(), neighborhood->GetGuid().ToString(),
                 neighborhood->GetMembers().size(), neighborhood->GetOccupiedPlotCount(), housing ? "yes" : "no");
         }
