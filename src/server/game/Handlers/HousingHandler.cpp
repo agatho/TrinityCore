@@ -334,34 +334,67 @@ void WorldSession::HandleHouseInteriorLeaveHouse(WorldPackets::Housing::HouseInt
     if (!player)
         return;
 
+    // A visitor may not own a house of their own — this handler still needs
+    // to work so they can leave. Own-interior housing is used only for the
+    // HouseStatus emission (which we tailor to the visited house below);
+    // positional data comes from the HouseInteriorMap's stored source fields.
     Housing* housing = player->GetHousing();
-    if (!housing)
-        return;
+    HouseInteriorMap* interiorMap = dynamic_cast<HouseInteriorMap*>(player->GetMap());
+    bool isVisit = interiorMap && interiorMap->GetOwnerGuid() != player->GetGUID();
 
-    // Clear editing mode and interior state when leaving
-    housing->SetEditorMode(HOUSING_EDITOR_MODE_NONE);
-    housing->SetInInterior(false);
+    // Clear editing mode and interior state — only own housing carries that
+    // state (visitors can't be in edit mode in someone else's house anyway).
+    if (housing)
+    {
+        housing->SetEditorMode(HOUSING_EDITOR_MODE_NONE);
+        housing->SetInInterior(false);
+    }
 
     // Send SMSG_HOUSE_INTERIOR_LEAVE_HOUSE_RESPONSE with ExitingHouse reason
     WorldPackets::Housing::HouseInteriorLeaveHouseResponse leaveResponse;
     leaveResponse.TeleportReason = 9; // HousingTeleportReason::ExitingHouse
     SendPacket(leaveResponse.Write());
 
-    // Send updated house status with Status=0 (exterior)
+    // HouseStatus targets the HOUSE the player was in — for visitors, Bob's
+    // house, not their own. Resolve the visited house's GUIDs via the
+    // interior map's owner lookup. Own-interior uses own housing as before.
     WorldPackets::Housing::HousingHouseStatusResponse statusResponse;
-    statusResponse.HouseGuid = housing->GetHouseGuid();
-    statusResponse.AccountGuid = GetBattlenetAccountGUID();
-    statusResponse.OwnerPlayerGuid = player->GetGUID();
-    statusResponse.NeighborhoodGuid = housing->GetNeighborhoodGuid();
     statusResponse.Status = 0;
-    statusResponse.FlagByte = 0xC0; // bit7=Decor, bit6=Room only — Fixture context managed by dedicated ENTER/EXIT response
+    statusResponse.FlagByte = 0xC0; // bit7=Decor, bit6=Room only
+    if (isVisit)
+    {
+        ObjectGuid ownerGuid = interiorMap->GetOwnerGuid();
+        for (Neighborhood* nbh : sNeighborhoodMgr.GetNeighborhoodsForPlayer(ownerGuid))
+        {
+            for (Neighborhood::PlotInfo const& plot : nbh->GetPlots())
+            {
+                if (plot.OwnerGuid == ownerGuid && plot.IsOccupied())
+                {
+                    statusResponse.HouseGuid = plot.HouseGuid;
+                    statusResponse.AccountGuid = plot.OwnerBnetGuid;
+                    statusResponse.OwnerPlayerGuid = plot.OwnerGuid;
+                    statusResponse.NeighborhoodGuid = nbh->GetGuid();
+                    break;
+                }
+            }
+            if (!statusResponse.HouseGuid.IsEmpty())
+                break;
+        }
+    }
+    else if (housing)
+    {
+        statusResponse.HouseGuid = housing->GetHouseGuid();
+        statusResponse.AccountGuid = GetBattlenetAccountGUID();
+        statusResponse.OwnerPlayerGuid = player->GetGUID();
+        statusResponse.NeighborhoodGuid = housing->GetNeighborhoodGuid();
+    }
     SendPacket(statusResponse.Write());
 
     // Teleport player back to the neighborhood map at the plot's visitor landing point.
     // Try to use the HouseInteriorMap's stored source info first (most reliable),
     // then fall back to resolving from the Housing object's neighborhood.
     uint32 worldMapId = 0;
-    uint8 plotIndex = housing->GetPlotIndex();
+    uint8 plotIndex = housing ? housing->GetPlotIndex() : INVALID_PLOT_INDEX;
     uint32 neighborhoodMapId = 0;
 
     // Preferred path: get the source neighborhood from the HouseInteriorMap itself

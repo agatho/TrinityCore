@@ -64,28 +64,54 @@ public:
             HouseInteriorMap* interiorMap = dynamic_cast<HouseInteriorMap*>(me->GetMap());
             if (interiorMap)
             {
-                Housing* housing = player->GetHousing();
-                if (!housing)
-                    return true;
+                // Resolve the exit based on the HOUSE this interior belongs to,
+                // not on the player's own housing. When a visitor exits a
+                // neighbour's house the destination plot is the house owner's
+                // plot, not the visitor's.
+                ObjectGuid houseOwner = interiorMap->GetOwnerGuid();
+                Neighborhood* nbh = nullptr;
+                uint8 ownerPlotIndex = INVALID_PLOT_INDEX;
+                for (Neighborhood* cand : sNeighborhoodMgr.GetNeighborhoodsForPlayer(houseOwner))
+                {
+                    for (Neighborhood::PlotInfo const& plot : cand->GetPlots())
+                    {
+                        if (plot.OwnerGuid == houseOwner && plot.IsOccupied())
+                        {
+                            nbh = cand;
+                            ownerPlotIndex = plot.PlotIndex;
+                            break;
+                        }
+                    }
+                    if (nbh)
+                        break;
+                }
 
-                // Get neighborhood map from the player's housing data
-                Neighborhood* nbh = sNeighborhoodMgr.GetNeighborhood(housing->GetNeighborhoodGuid());
+                // Fall back to the visitor's own housing when the owner lookup
+                // fails (shouldn't happen — the owner exists by construction
+                // since the interior map was created for them).
+                if (!nbh)
+                {
+                    if (Housing* own = player->GetHousing())
+                    {
+                        nbh = sNeighborhoodMgr.GetNeighborhood(own->GetNeighborhoodGuid());
+                        ownerPlotIndex = own->GetPlotIndex();
+                    }
+                }
+
                 uint32 destMapId = nbh ? sHousingMgr.GetWorldMapIdByNeighborhoodMapId(nbh->GetNeighborhoodMapID()) : 2735;
                 if (destMapId == 0)
                     destMapId = 2735;
 
-                // Find the player's plot position on the exterior map.
                 // Use TeleportPosition (the safe player spawn point above ground),
                 // NOT HousePosition — HousePosition is where the house WMO root
                 // sits, which is often at ground level or below, so teleporting
-                // there drops the player under the map. The dashboard teleport
-                // uses TeleportPosition and lands the player correctly.
+                // there drops the player under the map.
                 uint32 nbhMapId = nbh ? nbh->GetNeighborhoodMapID() : 2;
                 std::vector<NeighborhoodPlotData const*> plots = sHousingMgr.GetPlotsForMap(nbhMapId);
                 float exitX = 0, exitY = 0, exitZ = 0;
                 for (NeighborhoodPlotData const* plot : plots)
                 {
-                    if (plot->PlotIndex == housing->GetPlotIndex())
+                    if (plot->PlotIndex == static_cast<int32>(ownerPlotIndex))
                     {
                         exitX = plot->TeleportPosition[0];
                         exitY = plot->TeleportPosition[1];
@@ -94,8 +120,8 @@ public:
                     }
                 }
 
-                TC_LOG_DEBUG("housing", "go_housing_door: Teleporting {} from interior to map {} plot {} at ({:.1f},{:.1f},{:.1f})",
-                    player->GetGUID().ToString(), destMapId, housing->GetPlotIndex(), exitX, exitY, exitZ);
+                TC_LOG_DEBUG("housing", "go_housing_door: Teleporting {} from interior (owner {}) to map {} plot {} at ({:.1f},{:.1f},{:.1f})",
+                    player->GetGUID().ToString(), houseOwner.ToString(), destMapId, ownerPlotIndex, exitX, exitY, exitZ);
 
                 player->TeleportTo(destMapId, exitX, exitY, exitZ, player->GetOrientation());
                 return true;
