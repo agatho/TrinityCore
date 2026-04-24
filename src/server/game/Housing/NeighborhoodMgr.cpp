@@ -114,6 +114,10 @@ void NeighborhoodMgr::LoadFromDB()
         decorStmt->setUInt64(0, guidLow);
         PreparedQueryResult decorResult = CharacterDatabase.Query(decorStmt);
 
+        CharacterDatabasePreparedStatement* roomStmt = CharacterDatabase.GetPreparedStatement(CHAR_SEL_NEIGHBORHOOD_MEMBER_ROOMS);
+        roomStmt->setUInt64(0, guidLow);
+        PreparedQueryResult roomResult = CharacterDatabase.Query(roomStmt);
+
         // Wrap the neighborhood row as a PreparedQueryResult by passing the raw result
         // LoadFromDB expects PreparedQueryResult for the first param but we have the raw fields;
         // so we call LoadFromDB with the data directly already parsed from fields above.
@@ -122,7 +126,7 @@ void NeighborhoodMgr::LoadFromDB()
         neighborhoodStmt->setUInt64(0, guidLow);
         PreparedQueryResult neighborhoodResult = CharacterDatabase.Query(neighborhoodStmt);
 
-        if (!neighborhood->LoadFromDB(neighborhoodResult, memberResult, inviteResult, fixtureResult, decorResult))
+        if (!neighborhood->LoadFromDB(neighborhoodResult, memberResult, inviteResult, fixtureResult, decorResult, roomResult))
         {
             TC_LOG_ERROR("housing", "NeighborhoodMgr::LoadFromDB: Failed to load neighborhood guid {}. Skipping.", guidLow);
             continue;

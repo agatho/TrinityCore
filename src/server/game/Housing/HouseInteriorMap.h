@@ -61,6 +61,13 @@ public:
     /// @param factionRestriction  NEIGHBORHOOD_FACTION_ALLIANCE or NEIGHBORHOOD_FACTION_HORDE
     void SpawnRoomMeshObjects(Housing* housing, int32 factionRestriction);
 
+    /// Overload that takes raw rooms — used when visiting an offline owner's
+    /// house where no live Housing object exists; data comes from
+    /// Neighborhood::PlotInfo.Rooms (which mirrors character_housing_rooms).
+    /// @param houseGuid  owner's HousingPlayerHouse GUID, set as the parent on
+    ///                   every HousingRoomEntity we spawn.
+    void SpawnRoomMeshObjectsFromList(std::vector<Housing::Room const*> const& rooms, int32 factionRestriction, ObjectGuid houseGuid);
+
     /// Despawn all room meshes (e.g., when the interior is rebuilt).
     void DespawnAllRoomMeshObjects();
 
@@ -90,6 +97,11 @@ public:
 
     /// Spawn all placed decor for the owner's house on the interior map.
     void SpawnInteriorDecor(Housing* housing);
+
+    /// Overload for visits to offline owners — iterates a raw decor vector
+    /// sourced from Neighborhood::PlotInfo.Decor (mirror of character_housing_decor)
+    /// with the owner's HouseGuid passed explicitly.
+    void SpawnInteriorDecorFromList(std::vector<Housing::PlacedDecor> const& decor, ObjectGuid houseGuid);
 
     /// Spawn a single placed decor item immediately (called from PLACE handler).
     void SpawnSingleInteriorDecor(Housing::PlacedDecor const& decor, ObjectGuid houseGuid);

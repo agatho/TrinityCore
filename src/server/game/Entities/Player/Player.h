@@ -2886,6 +2886,14 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         void UpdateHousingMapId(ObjectGuid houseGuid, int32 mapId);
         void UpdateInitiativeFavor(uint32 favor);
 
+        // Transient — set by the door GO script before a visit teleport so
+        // MapManager routes the visitor to the owner's HouseInteriorMap
+        // instance (instanceId = owner's GUID counter). Empty means "enter my
+        // own interior" (the default case). Cleared by MapManager once read.
+        void SetHouseVisitTarget(ObjectGuid ownerGuid) { _houseVisitTargetOwner = ownerGuid; }
+        ObjectGuid GetHouseVisitTarget() const { return _houseVisitTargetOwner; }
+        void ClearHouseVisitTarget() { _houseVisitTargetOwner = ObjectGuid::Empty; }
+
         bool IsAdvancedCombatLoggingEnabled() const { return _advancedCombatLoggingEnabled; }
         void SetAdvancedCombatLogging(bool enabled) { _advancedCombatLoggingEnabled = enabled; }
 
@@ -3411,6 +3419,12 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         InstanceTimeMap _instanceResetTimes;
         uint32 _pendingBindId;
         uint32 _pendingBindTimer;
+
+        // Owner of the house this player is currently teleporting to visit.
+        // Empty for "enter my own interior". Set by the door GO script and
+        // consumed by MapManager when it creates/finds the HouseInteriorMap
+        // instance. Not persisted.
+        ObjectGuid _houseVisitTargetOwner;
 
         uint32 _activeCheats;
 

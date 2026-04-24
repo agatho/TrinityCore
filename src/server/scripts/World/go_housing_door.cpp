@@ -163,21 +163,30 @@ public:
 
             // Check visitor access permissions if this isn't the player's own plot
             Neighborhood::PlotInfo const* plotInfo = neighborhood->GetPlotInfo(static_cast<uint8>(plotIndex));
-            if (plotInfo && plotInfo->OwnerGuid != player->GetGUID())
+            bool isVisit = plotInfo && plotInfo->OwnerGuid != player->GetGUID();
+            if (isVisit)
             {
+                // Permissions check. Prefer the live Housing object when the owner
+                // is online (the settingsFlags may have changed since the last DB
+                // write); fall back to any mirrored value we track.
+                uint32 settingsFlags = HOUSE_SETTING_DEFAULT;
                 Player* owner = ObjectAccessor::FindPlayer(plotInfo->OwnerGuid);
                 if (owner)
+                    if (Housing const* oh = owner->GetHousing())
+                        settingsFlags = oh->GetSettingsFlags();
+
+                if (!sHousingMgr.CanVisitorAccess(player, owner, settingsFlags, true))
                 {
-                    Housing const* ownerHousing = owner->GetHousing();
-                    if (ownerHousing && !sHousingMgr.CanVisitorAccess(player, owner, ownerHousing->GetSettingsFlags(), true))
-                    {
-                        TC_LOG_DEBUG("housing", "go_housing_door: Player {} denied interior access to plot {} "
-                            "(owner {} flags 0x{:X})",
-                            player->GetGUID().ToString(), plotIndex, plotInfo->OwnerGuid.ToString(),
-                            ownerHousing->GetSettingsFlags());
-                        return true;
-                    }
+                    TC_LOG_DEBUG("housing", "go_housing_door: Player {} denied interior access to plot {} "
+                        "(owner {} flags 0x{:X})",
+                        player->GetGUID().ToString(), plotIndex, plotInfo->OwnerGuid.ToString(),
+                        settingsFlags);
+                    return true;
                 }
+
+                // Route the teleport to the OWNER's interior instance (MapManager
+                // reads this before selecting the HouseInteriorMap instance id).
+                player->SetHouseVisitTarget(plotInfo->OwnerGuid);
             }
 
             // Animate the door

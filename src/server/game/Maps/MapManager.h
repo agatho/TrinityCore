@@ -148,7 +148,7 @@ class TC_GAME_API MapManager
         BattlegroundMap* CreateBattleground(uint32 mapId, uint32 instanceId, Battleground* bg);
         GarrisonMap* CreateGarrison(uint32 mapId, uint32 instanceId, Player* owner);
         HousingMap* CreateHousing(uint32 mapId, uint32 instanceId, uint32 neighborhoodId);
-        HouseInteriorMap* CreateHouseInterior(uint32 mapId, uint32 instanceId, Player* owner);
+        HouseInteriorMap* CreateHouseInterior(uint32 mapId, uint32 instanceId, Player* creator, ObjectGuid houseOwner = ObjectGuid::Empty);
 
         bool DestroyMap(Map* map);
 

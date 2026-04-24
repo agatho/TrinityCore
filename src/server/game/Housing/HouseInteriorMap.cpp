@@ -108,8 +108,11 @@ void HouseInteriorMap::SpawnRoomMeshObjects(Housing* housing, int32 factionRestr
 {
     if (!housing)
         return;
+    SpawnRoomMeshObjectsFromList(housing->GetRooms(), factionRestriction, housing->GetHouseGuid());
+}
 
-    std::vector<Housing::Room const*> rooms = housing->GetRooms();
+void HouseInteriorMap::SpawnRoomMeshObjectsFromList(std::vector<Housing::Room const*> const& rooms, int32 factionRestriction, ObjectGuid houseGuid)
+{
     if (rooms.empty())
     {
         TC_LOG_ERROR("housing", "HouseInteriorMap::SpawnRoomMeshObjects: No rooms to spawn for owner {} "
@@ -127,6 +130,13 @@ void HouseInteriorMap::SpawnRoomMeshObjects(Housing* housing, int32 factionRestr
     std::unordered_map<uint64, ObjectGuid> posToRoomGuid;
     for (Housing::Room const* r : rooms)
         posToRoomGuid[posKey(r->GridX, r->GridY)] = r->Guid;
+
+    // Local GUID→room map used by the parent-side-of-a-door check below. Built
+    // from the passed-in rooms vector so this function no longer depends on a
+    // live `Housing` object (it's also called from the offline-owner visit path).
+    std::unordered_map<ObjectGuid, Housing::Room const*> roomByGuid;
+    for (Housing::Room const* r : rooms)
+        roomByGuid[r->Guid] = r;
 
     // Helper: find the room DIRECTLY adjacent across this door's wall.
     // A neighbor qualifies only if it's aligned on the perpendicular axis AND
@@ -181,7 +191,7 @@ void HouseInteriorMap::SpawnRoomMeshObjects(Housing* housing, int32 factionRestr
 
     TC_LOG_ERROR("housing", "HouseInteriorMap::SpawnRoomMeshObjects: Starting spawn for {} rooms "
         "(owner={}, factionThemeID={}, houseGuid={})",
-        uint32(rooms.size()), _owner.ToString(), factionThemeID, housing->GetHouseGuid().ToString());
+        uint32(rooms.size()), _owner.ToString(), factionThemeID, houseGuid.ToString());
 
     for (Housing::Room const* room : rooms)
     {
@@ -274,7 +284,7 @@ void HouseInteriorMap::SpawnRoomMeshObjects(Housing* housing, int32 factionRestr
         // Door data is added after components are created (Phase 3).
         HousingRoomEntity* housingRoom = new HousingRoomEntity();
         PhasingHandler::InitDbPhaseShift(housingRoom->GetPhaseShift(), PHASE_USE_FLAGS_ALWAYS_VISIBLE, 0, 0);
-        housingRoom->SetHouseGUID(housing->GetHouseGuid());
+        housingRoom->SetHouseGUID(houseGuid);
         housingRoom->SetHouseRoomID(room->RoomEntryId);
         housingRoom->SetFlags(roomFlags);
         housingRoom->SetFloorIndex(floorIndex);
@@ -423,8 +433,8 @@ void HouseInteriorMap::SpawnRoomMeshObjects(Housing* housing, int32 factionRestr
                 if (!neighborGuid.IsEmpty())
                 {
                     hasConnectedRoom = true;
-                    auto nItr = housing->GetRoomsMap().find(neighborGuid);
-                    if (nItr != housing->GetRoomsMap().end() && nItr->second.SlotIndex > room->SlotIndex)
+                    auto nItr = roomByGuid.find(neighborGuid);
+                    if (nItr != roomByGuid.end() && nItr->second->SlotIndex > room->SlotIndex)
                         isParentSide = true; // child room handles the DoorwayWall+Doorway
                 }
             }
@@ -1034,11 +1044,18 @@ void HouseInteriorMap::SpawnInteriorDecor(Housing* housing)
 {
     if (!housing)
         return;
+    std::vector<Housing::PlacedDecor> tmp;
+    tmp.reserve(housing->GetPlacedDecorMap().size());
+    for (auto const& [_, decor] : housing->GetPlacedDecorMap())
+        tmp.push_back(decor);
+    SpawnInteriorDecorFromList(tmp, housing->GetHouseGuid());
+}
 
-    ObjectGuid houseGuid = housing->GetHouseGuid();
+void HouseInteriorMap::SpawnInteriorDecorFromList(std::vector<Housing::PlacedDecor> const& placedDecor, ObjectGuid houseGuid)
+{
     uint32 spawnCount = 0;
     uint32 exteriorSkipped = 0;
-    uint32 totalDecor = uint32(housing->GetPlacedDecorMap().size());
+    uint32 totalDecor = uint32(placedDecor.size());
 
     TC_LOG_ERROR("housing", "HouseInteriorMap::SpawnInteriorDecor: Starting — totalDecor={} "
         "_roomMeshObjects entries={} owner={}",
@@ -1052,7 +1069,7 @@ void HouseInteriorMap::SpawnInteriorDecor(Housing* housing)
             meshGuids.empty() ? "EMPTY" : meshGuids[0].ToString());
     }
 
-    for (auto const& [decorGuid, decor] : housing->GetPlacedDecorMap())
+    for (Housing::PlacedDecor const& decor : placedDecor)
     {
         HouseDecorData const* decorData = sHousingMgr.GetHouseDecorData(decor.DecorEntryId);
         if (!decorData)
@@ -1366,7 +1383,57 @@ bool HouseInteriorMap::AddPlayerToMap(Player* player, bool initPlayer /*= true*/
     // account storage, budgets) on interior map transfer. If we spawn after
     // AddPlayerToMap, the initial UPDATE_OBJECT has empty housing data and the
     // client never gets proper housing context for the editor UI.
+    //
+    // Visiting an offline-owner house: `preloadHousing` is null and the player
+    // isn't the map's owner. Spawn rooms/decor from PlotInfo (mirrored from
+    // the DB) so visitors see the owner's actual layout without needing the
+    // owner online.
     Housing* preloadHousing = player->GetHousing();
+    bool visitingOfflineOwner = !_roomsSpawned && player->GetGUID() != _owner;
+    if (visitingOfflineOwner)
+    {
+        for (Neighborhood* nbh : sNeighborhoodMgr.GetNeighborhoodsForPlayer(_owner))
+        {
+            Neighborhood::PlotInfo const* ownerPlot = nullptr;
+            for (Neighborhood::PlotInfo const& plot : nbh->GetPlots())
+            {
+                if (plot.OwnerGuid == _owner && plot.IsOccupied())
+                {
+                    ownerPlot = &plot;
+                    break;
+                }
+            }
+            if (!ownerPlot)
+                continue;
+
+            int32 faction = nbh->GetFactionRestriction();
+            std::vector<Housing::Room const*> roomPtrs;
+            roomPtrs.reserve(ownerPlot->Rooms.size());
+            for (Housing::Room const& room : ownerPlot->Rooms)
+                roomPtrs.push_back(&room);
+            SpawnRoomMeshObjectsFromList(roomPtrs, faction, ownerPlot->HouseGuid);
+            SpawnInteriorDecorFromList(ownerPlot->Decor, ownerPlot->HouseGuid);
+            _roomsSpawned = true;
+
+            // Place the visitor at the first visual (non-base) room so they
+            // don't spawn inside geometry.
+            for (Housing::Room const& room : ownerPlot->Rooms)
+            {
+                HouseRoomData const* rd = sHousingMgr.GetHouseRoomData(room.RoomEntryId);
+                if (rd && !rd->IsBaseRoom())
+                {
+                    float targetX = _originX + static_cast<float>(room.GridX);
+                    player->Relocate(targetX, _originY, _originZ, player->GetOrientation());
+                    break;
+                }
+            }
+
+            TC_LOG_INFO("housing", "HouseInteriorMap::AddPlayerToMap: VISITOR pre-spawn for offline owner {} — {} rooms, {} decor",
+                _owner.ToString(), uint32(ownerPlot->Rooms.size()), uint32(ownerPlot->Decor.size()));
+            break;
+        }
+    }
+
     if (preloadHousing && player->GetGUID() == _owner)
     {
         // Clear exterior fixture edit mode that persists across map transfer

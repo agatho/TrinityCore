@@ -79,6 +79,12 @@ public:
         // entries are reused when a visitor opens the owner's interior map.
         std::vector<Housing::PlacedDecor> Decor;
 
+        // Mirrored from character_housing_rooms. Interior-room layout for the
+        // plot owner. Used by HouseInteriorMap to spawn the owner's actual
+        // rooms when a visitor enters their house — independent of whether
+        // the owner is currently online.
+        std::vector<Housing::Room> Rooms;
+
         bool IsOccupied() const { return PlotIndex != INVALID_PLOT_INDEX; }
     };
 
@@ -99,7 +105,8 @@ public:
 
     // DB persistence
     bool LoadFromDB(PreparedQueryResult neighborhood, PreparedQueryResult members, PreparedQueryResult invites,
-        PreparedQueryResult memberFixtures = nullptr, PreparedQueryResult memberDecor = nullptr);
+        PreparedQueryResult memberFixtures = nullptr, PreparedQueryResult memberDecor = nullptr,
+        PreparedQueryResult memberRooms = nullptr);
     void SaveToDB(CharacterDatabaseTransaction trans);
     static void DeleteFromDB(ObjectGuid::LowType guid, CharacterDatabaseTransaction trans);
 

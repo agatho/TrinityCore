@@ -33,7 +33,8 @@ Neighborhood::Neighborhood(ObjectGuid guid) : _guid(guid)
 }
 
 bool Neighborhood::LoadFromDB(PreparedQueryResult neighborhood, PreparedQueryResult members, PreparedQueryResult invites,
-    PreparedQueryResult memberFixtures /*= nullptr*/, PreparedQueryResult memberDecor /*= nullptr*/)
+    PreparedQueryResult memberFixtures /*= nullptr*/, PreparedQueryResult memberDecor /*= nullptr*/,
+    PreparedQueryResult memberRooms /*= nullptr*/)
 {
     if (!neighborhood)
         return false;
@@ -229,6 +230,50 @@ bool Neighborhood::LoadFromDB(PreparedQueryResult neighborhood, PreparedQueryRes
     }
     TC_LOG_DEBUG("housing", "Neighborhood::LoadFromDB: Loaded {} placed decor items across neighborhood '{}'",
         decorCount, _name);
+
+    // Load interior room layout per owner so HouseInteriorMap can spawn
+    // neighbours' actual rooms (not the default base layout) when a visitor
+    // enters their house, regardless of the owner being online.
+    uint32 roomCount = 0;
+    if (memberRooms)
+    {
+        do
+        {
+            Field* r = memberRooms->Fetch();
+            //   0         1       2              3           4      5      6             7            8         9          10             11              12               13              14          15        16             17           18            19             20
+            // ownerGuid, id, houseRoomId, slotIndex, gridX, gridY, floorIndex, orientation, mirrored, themeId, wallTextureId, floorTextureId, ceilingTextureId, colorOverride, doorTypeId, doorSlot, ceilingTypeId, ceilingSlot, wallThemeId, floorThemeId, ceilingThemeId
+            ObjectGuid ownerGuid = ObjectGuid::Create<HighGuid::Player>(r[0].GetUInt64());
+            PlotInfo* plot = findPlotByOwner(ownerGuid);
+            if (!plot)
+                continue;
+
+            Housing::Room room;
+            room.Guid             = ObjectGuidFactory::CreateHousing(/*subType*/ 2, /*realmId*/ 0, /*arg2*/ 0, r[1].GetUInt64());
+            room.RoomEntryId      = r[2].GetUInt32();
+            room.SlotIndex        = r[3].GetUInt32();
+            room.GridX            = r[4].GetInt32();
+            room.GridY            = r[5].GetInt32();
+            room.FloorIndex       = r[6].GetInt32();
+            room.Orientation      = r[7].GetUInt8();
+            room.Mirrored         = r[8].GetUInt8() != 0;
+            room.ThemeId          = r[9].GetUInt32();
+            room.WallTextureId    = r[10].GetUInt32();
+            room.FloorTextureId   = r[11].GetUInt32();
+            room.CeilingTextureId = r[12].GetUInt32();
+            room.ColorOverride    = r[13].GetInt32();
+            room.DoorTypeId       = r[14].GetUInt32();
+            room.DoorSlot         = r[15].GetUInt8();
+            room.CeilingTypeId    = r[16].GetUInt32();
+            room.CeilingSlot      = r[17].GetUInt8();
+            room.WallThemeId      = r[18].GetUInt32();
+            room.FloorThemeId     = r[19].GetUInt32();
+            room.CeilingThemeId   = r[20].GetUInt32();
+            plot->Rooms.push_back(std::move(room));
+            ++roomCount;
+        } while (memberRooms->NextRow());
+    }
+    TC_LOG_DEBUG("housing", "Neighborhood::LoadFromDB: Loaded {} placed rooms across neighborhood '{}'",
+        roomCount, _name);
 
     return true;
 }
