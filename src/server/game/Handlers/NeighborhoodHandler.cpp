@@ -1193,20 +1193,20 @@ void WorldSession::HandleNeighborhoodBuyHouse(WorldPackets::Neighborhood::Neighb
             uint32(response.Result), response.House.PlotId,
             response.House.HouseGuid.ToString(), response.House.OwnerGuid.ToString());
 
-        // 3. Send level/favor updates (sniff: always 2 packets after buy response)
+        // 3. Send level/favor updates (sniff: always 2 packets after buy response).
+        // Wire format: header (Type, ChangeAmount, Reason, Count) + per-entry
+        // (EntryFlags, EntryTimestamp, HouseGUID, NewFavorTotal, Reserved, Terminator).
         if (Housing const* h = player->GetHousing())
         {
             // Packet 1: Initial level assignment
             {
                 WorldPackets::Housing::HousingSvcsUpdateHousesLevelFavor levelFavor;
                 levelFavor.Type = 0;
-                levelFavor.Field1 = 0;
-                levelFavor.Field2 = 1;
+                levelFavor.ChangeAmount = 0;
+                levelFavor.Reason = 1;
                 WorldPackets::Housing::HousingSvcsUpdateHousesLevelFavor::LevelFavorEntry entry;
-                entry.OwnerGUID = player->GetGUID();
                 entry.HouseGUID = h->GetHouseGuid();
-                entry.FavorAmount = 910;
-                entry.Level = 1;
+                entry.NewFavorTotal = 910;
                 levelFavor.Entries.push_back(std::move(entry));
                 SendPacket(levelFavor.Write());
             }
@@ -1214,13 +1214,11 @@ void WorldSession::HandleNeighborhoodBuyHouse(WorldPackets::Neighborhood::Neighb
             {
                 WorldPackets::Housing::HousingSvcsUpdateHousesLevelFavor levelFavor;
                 levelFavor.Type = 0;
-                levelFavor.Field1 = 910;
-                levelFavor.Field2 = 1;
+                levelFavor.ChangeAmount = 910;
+                levelFavor.Reason = 1;
                 WorldPackets::Housing::HousingSvcsUpdateHousesLevelFavor::LevelFavorEntry entry;
-                entry.OwnerGUID = player->GetGUID();
                 entry.HouseGUID = h->GetHouseGuid();
-                entry.FavorAmount = 910;
-                entry.Level = 1;
+                entry.NewFavorTotal = 910;
                 levelFavor.Entries.push_back(std::move(entry));
                 SendPacket(levelFavor.Write());
             }

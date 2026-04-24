@@ -1726,21 +1726,34 @@ namespace WorldPackets::Housing
         HousingSvcsUpdateHousesLevelFavor() : ServerPacket(SMSG_HOUSING_SVCS_UPDATE_HOUSES_LEVEL_FAVOR) { }
         WorldPacket const* Write() override;
 
-        // IDA case 5505041 (sub_7FF724C7D8D0):
-        // uint8 + uint32 + uint32 + uint32(count) + Entry[count]{3×PackedGUID + uint32 + uint32 + uint8 + uint8(bit7)}
+        // 12.0.5 sniff-verified wire format (40 bytes for count=1):
+        //   uint8  Type        (=0 = "favor changed")
+        //   uint32 ChangeAmount (=1260, the level/favor delta)
+        //   uint32 Reason       (=1, source enum)
+        //   uint32 Count
+        //   Per entry (27 bytes):
+        //     uint8       EntryFlags         (=0)
+        //     uint32      EntryTimestamp     (=0 in sniff, server time of change)
+        //     PackedGUID  HouseGUID
+        //     int64       NewFavorTotal      (=-1 sentinel = "max" / unbounded)
+        //     uint32      Reserved           (=0)
+        //     uint8       Terminator         (=0x80, bit7 marker — likely "has next")
+        //
+        // The previous 3-PackedGUID entry layout was incorrect — sniff only carries
+        // a single HouseGUID per entry. OwnerGUID/NeighborhoodGUID lookups are done
+        // client-side via the cached HousingPlayerHouse → owner map.
         uint8 Type = 0;
-        uint32 Field1 = 0;
-        uint32 Field2 = 0;
+        uint32 ChangeAmount = 0;
+        uint32 Reason = 0;
 
         struct LevelFavorEntry
         {
-            ObjectGuid OwnerGUID;
+            uint8 EntryFlags = 0;
+            uint32 EntryTimestamp = 0;
             ObjectGuid HouseGUID;
-            ObjectGuid NeighborhoodGUID;
-            uint32 FavorAmount = 0;
-            uint32 Level = 0;
-            uint8 Flags = 0;
-            bool HasOptional = false;
+            int64 NewFavorTotal = -1;
+            uint32 Reserved = 0;
+            uint8 Terminator = 0x80;
         };
         std::vector<LevelFavorEntry> Entries;
     };

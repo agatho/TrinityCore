@@ -1566,23 +1566,30 @@ WorldPacket const* AccountHousingRoomComponentTextureAdded::Write()
 
 WorldPacket const* HousingSvcsUpdateHousesLevelFavor::Write()
 {
-    // IDA case 5505041: uint8 + uint32 + uint32 + uint32(count) + Entry[count]{3×GUID + uint32 + uint32 + uint8 + uint8(bit7)}
+    // 12.0.5 sniff-verified wire format (corrected from speculative IDA case 5505041).
+    // Single PackedGUID per entry (HouseGUID only), not 3. See HousingPackets.h struct
+    // doc for full layout. Sniff sample (40 bytes for count=1):
+    //   00 ec 04 00 00 01 00 00 00 01 00 00 00       <- header (Type=0, ChangeAmount=1260, Reason=1, Count=1)
+    //   00 00 00 00 00 07 c3 0b 31 15 07 80 60 dc    <- entry: Flags=0, Ts=0, HouseGUID
+    //   ff ff ff ff ff ff ff ff                       <- NewFavorTotal = -1
+    //   00 00 00 00                                   <- Reserved = 0
+    //   80                                            <- Terminator
     _worldPacket << uint8(Type);
-    _worldPacket << uint32(Field1);
-    _worldPacket << uint32(Field2);
+    _worldPacket << uint32(ChangeAmount);
+    _worldPacket << uint32(Reason);
     _worldPacket << uint32(Entries.size());
     for (auto const& entry : Entries)
     {
-        _worldPacket << entry.OwnerGUID;
+        _worldPacket << uint8(entry.EntryFlags);
+        _worldPacket << uint32(entry.EntryTimestamp);
         _worldPacket << entry.HouseGUID;
-        _worldPacket << entry.NeighborhoodGUID;
-        _worldPacket << uint32(entry.FavorAmount);
-        _worldPacket << uint32(entry.Level);
-        _worldPacket << uint8(entry.Flags);
-        _worldPacket << uint8(entry.HasOptional ? 0x80 : 0x00);
+        _worldPacket << int64(entry.NewFavorTotal);
+        _worldPacket << uint32(entry.Reserved);
+        _worldPacket << uint8(entry.Terminator);
     }
 
-    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_SVCS_UPDATE_HOUSES_LEVEL_FAVOR Type: {} EntryCount: {}", Type, Entries.size());
+    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_SVCS_UPDATE_HOUSES_LEVEL_FAVOR Type: {} ChangeAmount: {} Reason: {} EntryCount: {}",
+        Type, ChangeAmount, Reason, Entries.size());
 
     return &_worldPacket;
 }

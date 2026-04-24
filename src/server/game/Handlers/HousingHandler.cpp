@@ -5422,15 +5422,12 @@ void WorldSession::HandleHousingSvcsQueryHouseLevelFavor(WorldPackets::Housing::
 
     if (housing && housing->GetHouseGuid() == housingSvcsQueryHouseLevelFavor.HouseGuid)
     {
-        response.Field1 = static_cast<uint32>(housing->GetFavor());
-        response.Field2 = static_cast<uint32>(housing->GetLevel());
+        response.ChangeAmount = static_cast<uint32>(housing->GetFavor());
+        response.Reason = static_cast<uint32>(housing->GetLevel()); // surfaces level via Reason field — clients display both
 
         WorldPackets::Housing::HousingSvcsUpdateHousesLevelFavor::LevelFavorEntry entry;
-        entry.OwnerGUID = player->GetGUID();
         entry.HouseGUID = housing->GetHouseGuid();
-        entry.NeighborhoodGUID = housing->GetNeighborhoodGuid();
-        entry.FavorAmount = static_cast<uint32>(housing->GetFavor());
-        entry.Level = static_cast<uint32>(housing->GetLevel());
+        entry.NewFavorTotal = static_cast<int64>(housing->GetFavor());
         response.Entries.push_back(std::move(entry));
     }
 

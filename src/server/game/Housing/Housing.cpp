@@ -2262,18 +2262,18 @@ void Housing::AddLevel(uint32 amount)
     RecalculateBudgets();
     SyncUpdateFields();
 
-    // Broadcast level/favor update to the owner
+    // Broadcast level/favor update to the owner.
+    // Wire format: header (Type, ChangeAmount, Reason, Count) + per-entry
+    // (EntryFlags, EntryTimestamp, HouseGUID, NewFavorTotal, Reserved, Terminator).
     if (_owner && _owner->GetSession())
     {
         WorldPackets::Housing::HousingSvcsUpdateHousesLevelFavor levelUpdate;
         levelUpdate.Type = 0;
-        levelUpdate.Field1 = _favor;
-        levelUpdate.Field2 = _level;
+        levelUpdate.ChangeAmount = _favor;
+        levelUpdate.Reason = _level;
         WorldPackets::Housing::HousingSvcsUpdateHousesLevelFavor::LevelFavorEntry entry;
-        entry.OwnerGUID = _owner->GetGUID();
         entry.HouseGUID = _houseGuid;
-        entry.FavorAmount = _favor;
-        entry.Level = _level;
+        entry.NewFavorTotal = static_cast<int64>(_favor);
         levelUpdate.Entries.push_back(std::move(entry));
         _owner->SendDirectMessage(levelUpdate.Write());
     }
@@ -2296,18 +2296,17 @@ void Housing::AddFavor(uint64 amount, HousingFavorUpdateSource source /*= HOUSIN
 
     SyncUpdateFields();
 
-    // Broadcast level/favor update to the owner
+    // Broadcast level/favor update to the owner.
+    // Type field carries the favor source enum (matches retail's "change reason" semantic).
     if (_owner && _owner->GetSession())
     {
         WorldPackets::Housing::HousingSvcsUpdateHousesLevelFavor favorUpdate;
         favorUpdate.Type = static_cast<uint8>(source);
-        favorUpdate.Field1 = _favor;
-        favorUpdate.Field2 = _level;
+        favorUpdate.ChangeAmount = _favor;
+        favorUpdate.Reason = _level;
         WorldPackets::Housing::HousingSvcsUpdateHousesLevelFavor::LevelFavorEntry entry;
-        entry.OwnerGUID = _owner->GetGUID();
         entry.HouseGUID = _houseGuid;
-        entry.FavorAmount = _favor;
-        entry.Level = _level;
+        entry.NewFavorTotal = static_cast<int64>(_favor);
         favorUpdate.Entries.push_back(std::move(entry));
         _owner->SendDirectMessage(favorUpdate.Write());
     }
