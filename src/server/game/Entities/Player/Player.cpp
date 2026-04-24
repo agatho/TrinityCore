@@ -3748,10 +3748,29 @@ void Player::BuildCreateUpdateBlockForPlayer(UpdateData* data, Player* target) c
                     ownMeshMirror->BuildCreateUpdateBlockForPlayer(data, target);
             }
 
-            // Room entities (objectType=18, Housing/2 GUIDs) are sent in the deferred
-            // callback — NOT here. Sending type-18 room entities in the initial UPDATE_OBJECT
-            // crashes the client because the housing UI context isn't established yet.
-            // The deferred callback sends them after ENTER_PLOT establishes context.
+            // Retail 66838 sniff analysis shows Housing/sub2 Room entities embedded
+            // in the initial Player CREATE bundle (interrior_exterrior_advanced_editor,
+            // LVW+262, position 226311+ with typeByte=18). The previous April-3rd
+            // comment "crashes the client because the housing UI context isn't
+            // established yet" predates ~3 weeks of housing rework — the specific
+            // crash conditions may no longer apply. Re-enabling per user's blizzlike
+            // guardrail: "we want to fully align with the Blizzard flow".
+            //
+            // Emit 1 HousingRoomEntity per occupied plot that has one registered
+            // (offline-owner plots spawned their room identity via SpawnRoomForPlot
+            // at map preload). If this reintroduces the crash, revert this block
+            // and document the exact crash stack so we can fix the root cause
+            // rather than skipping the entity.
+            if (hmap && nbh)
+            {
+                for (Neighborhood::PlotInfo const& plot : nbh->GetPlots())
+                {
+                    if (!plot.IsOccupied() || plot.HouseGuid.IsEmpty())
+                        continue;
+                    if (HousingRoomEntity* roomId = hmap->GetRoomIdentityEntity(plot.PlotIndex))
+                        roomId->BuildCreateUpdateBlockForPlayer(data, target);
+                }
+            }
         }
     }
 
