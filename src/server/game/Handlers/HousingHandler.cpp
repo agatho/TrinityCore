@@ -350,10 +350,11 @@ void WorldSession::HandleHouseInteriorLeaveHouse(WorldPackets::Housing::HouseInt
         housing->SetInInterior(false);
     }
 
-    // Send SMSG_HOUSE_INTERIOR_LEAVE_HOUSE_RESPONSE with ExitingHouse reason
-    WorldPackets::Housing::HouseInteriorLeaveHouseResponse leaveResponse;
-    leaveResponse.TeleportReason = 9; // HousingTeleportReason::ExitingHouse
-    SendPacket(leaveResponse.Write());
+    // 12.0.5: SMSG_HOUSE_INTERIOR_LEAVE_HOUSE_RESPONSE no longer exists.
+    // The client reacts to the PlayerHouseInfoComponent.CurrentHouse field being
+    // cleared via UPDATE_OBJECT on the player (SetCurrentHouse(Empty) elsewhere).
+    if (Player* p = GetPlayer())
+        p->SetCurrentHouse(ObjectGuid::Empty);
 
     // HouseStatus targets the HOUSE the player was in — for visitors, Bob's
     // house, not their own. Resolve the visited house's GUIDs via the
@@ -3560,9 +3561,10 @@ void WorldSession::HandleHousingSvcsTeleportToPlot(WorldPackets::Housing::Housin
             interiorHousing->SetEditorMode(HOUSING_EDITOR_MODE_NONE);
             interiorHousing->SetInInterior(false);
 
-            WorldPackets::Housing::HouseInteriorLeaveHouseResponse leaveResponse;
-            leaveResponse.TeleportReason = 9; // HousingTeleportReason::ExitingHouse
-            SendPacket(leaveResponse.Write());
+            // 12.0.5: SMSG_HOUSE_INTERIOR_LEAVE_HOUSE_RESPONSE gone. Clear
+            // PlayerHouseInfoComponent.CurrentHouse so the client fires its
+            // house-exit callback via the UpdateField-change mechanism.
+            player->SetCurrentHouse(ObjectGuid::Empty);
 
             WorldPackets::Housing::HousingHouseStatusResponse statusResponse;
             statusResponse.HouseGuid = interiorHousing->GetHouseGuid();
@@ -3779,78 +3781,10 @@ void WorldSession::HandleHousingSvcsStartTutorial(WorldPackets::Housing::Housing
         player->GetGUID().ToString(), player->GetTeam() == HORDE ? "Horde" : "Alliance", spellId);
 }
 
-void WorldSession::HandleHousingSvcsSetTutorialState(WorldPackets::Housing::HousingSvcsSetTutorialState const& housingSvcsSetTutorialState)
-{
-    Player* player = GetPlayer();
-    if (!player)
-        return;
-
-    TC_LOG_DEBUG("housing", "CMSG_HOUSING_SVCS_SET_TUTORIAL_STATE Player: {} TutorialFlags: {}",
-        player->GetGUID().ToString(), housingSvcsSetTutorialState.TutorialFlags);
-
-    // Tutorial state is volatile per-session — the client tracks tutorial progress
-    // and sends state updates. No server-side persistence required; the tutorial
-    // quest (91863) completion is the authoritative progression marker.
-}
-
-void WorldSession::HandleHousingSvcsCompleteTutorialStep(WorldPackets::Housing::HousingSvcsCompleteTutorialStep const& housingSvcsCompleteTutorialStep)
-{
-    Player* player = GetPlayer();
-    if (!player)
-        return;
-
-    TC_LOG_DEBUG("housing", "CMSG_HOUSING_SVCS_COMPLETE_TUTORIAL_STEP Player: {} StepIndex: {}",
-        player->GetGUID().ToString(), housingSvcsCompleteTutorialStep.StepIndex);
-
-    // Tutorial step completion is informational — the actual progression is
-    // driven by quest objectives (91863). The client advances its own tutorial
-    // state machine; we just acknowledge receipt.
-}
-
-void WorldSession::HandleHousingSvcsSkipTutorial(WorldPackets::Housing::HousingSvcsSkipTutorial const& /*housingSvcsSkipTutorial*/)
-{
-    Player* player = GetPlayer();
-    if (!player)
-        return;
-
-    TC_LOG_DEBUG("housing", "CMSG_HOUSING_SVCS_SKIP_TUTORIAL Player: {}", player->GetGUID().ToString());
-
-    // Mark tutorial as complete by auto-completing the tutorial quest
-    static constexpr uint32 QUEST_MY_FIRST_HOME = 91863;
-    if (Quest const* quest = sObjectMgr->GetQuestTemplate(QUEST_MY_FIRST_HOME))
-    {
-        QuestStatus status = player->GetQuestStatus(QUEST_MY_FIRST_HOME);
-        if (status == QUEST_STATUS_INCOMPLETE || status == QUEST_STATUS_COMPLETE)
-        {
-            player->CompleteQuest(QUEST_MY_FIRST_HOME);
-            TC_LOG_INFO("housing", "CMSG_HOUSING_SVCS_SKIP_TUTORIAL: Auto-completed quest {} for player {}",
-                QUEST_MY_FIRST_HOME, player->GetGUID().ToString());
-        }
-    }
-}
-
-void WorldSession::HandleHousingSvcsQueryPendingInvites(WorldPackets::Housing::HousingSvcsQueryPendingInvites const& /*housingSvcsQueryPendingInvites*/)
-{
-    Player* player = GetPlayer();
-    if (!player)
-        return;
-
-    TC_LOG_DEBUG("housing", "CMSG_HOUSING_SVCS_QUERY_PENDING_INVITES Player: {}", player->GetGUID().ToString());
-
-    // Find any neighborhood that has a pending invite for this player
-    Neighborhood* neighborhood = sNeighborhoodMgr.FindNeighborhoodWithPendingInvite(player->GetGUID());
-
-    WorldPackets::Neighborhood::NeighborhoodGetInvitesResponse response;
-    if (neighborhood)
-    {
-        WorldPackets::Housing::JamNeighborhoodRosterEntry invite;
-        invite.PlayerGuid = neighborhood->GetOwnerGuid();
-        invite.HouseGuid = neighborhood->GetGuid();
-        invite.Timestamp = static_cast<uint64>(GameTime::GetGameTime());
-        response.Invites.push_back(invite);
-    }
-    SendPacket(response.Write());
-}
+// Removed 2026-04-24: HandleHousingSvcsSetTutorialState / CompleteTutorialStep /
+// SkipTutorial / QueryPendingInvites — no matching C_Housing Lua API in 12.0.5
+// (IDA-verified: only StartTutorial is real). The tutorial quest 91863 completion
+// is handled by the normal quest reward path when the player finishes the quest.
 
 void WorldSession::HandleHousingDecorConfirmPreviewPlacement(WorldPackets::Housing::HousingDecorConfirmPreviewPlacement const& housingDecorConfirmPreviewPlacement)
 {
@@ -5370,37 +5304,8 @@ void WorldSession::HandleHousingSvcsClearPlotReservation(WorldPackets::Housing::
     SendPacket(response.Write());
 }
 
-void WorldSession::HandleHousingSvcsGetPlayerHousesInfoAlt(WorldPackets::Housing::HousingSvcsGetPlayerHousesInfoAlt const& housingSvcsGetPlayerHousesInfoAlt)
-{
-    Player* player = GetPlayer();
-    if (!player)
-        return;
-
-    TC_LOG_DEBUG("housing", "CMSG_HOUSING_SVCS_GET_PLAYER_HOUSES_INFO_ALT Player: {} TargetPlayerGuid: {}",
-        player->GetGUID().ToString(), housingSvcsGetPlayerHousesInfoAlt.PlayerGuid.ToString());
-
-    WorldPackets::Housing::HousingSvcsGetPlayerHousesInfoResponse response;
-    response.Result = static_cast<uint8>(HOUSING_RESULT_SUCCESS);
-
-    // Look up the target player's housing (may be self or another online player)
-    Player* targetPlayer = ObjectAccessor::FindPlayer(housingSvcsGetPlayerHousesInfoAlt.PlayerGuid);
-    if (!targetPlayer)
-        targetPlayer = player; // Fall back to self if target not online
-
-    Housing* housing = targetPlayer->GetHousing();
-    if (housing && !housing->GetHouseGuid().IsEmpty())
-    {
-        WorldPackets::Housing::JamCliHouse house;
-        house.OwnerGUID = targetPlayer->GetGUID();
-        house.HouseGUID = housing->GetHouseGuid();
-        house.NeighborhoodGUID = housing->GetNeighborhoodGuid();
-        house.HouseLevel = static_cast<uint8>(housing->GetLevel());
-        house.PlotIndex = housing->GetPlotIndex();
-        response.Houses.push_back(house);
-    }
-
-    SendPacket(response.Write());
-}
+// Removed 2026-04-24: HandleHousingSvcsGetPlayerHousesInfoAlt — duplicate of the real
+// CMSG_HOUSING_SVCS_GET_PLAYER_HOUSES_INFO (0x330013, see master). Use that handler.
 
 void WorldSession::HandleHousingSvcsGetRosterData(WorldPackets::Housing::HousingSvcsGetRosterData const& housingSvcsGetRosterData)
 {
@@ -5494,49 +5399,12 @@ void WorldSession::HandleHousingSvcsRosterUpdateSubscribe(WorldPackets::Housing:
     SendPacket(update.Write());
 }
 
-void WorldSession::HandleHousingSvcsChangeHouseCosmeticOwner(WorldPackets::Housing::HousingSvcsChangeHouseCosmeticOwnerRequest const& housingSvcsChangeHouseCosmeticOwner)
-{
-    Player* player = GetPlayer();
-    if (!player)
-        return;
-
-    TC_LOG_DEBUG("housing", "CMSG_HOUSING_SVCS_CHANGE_HOUSE_COSMETIC_OWNER Player: {} HouseGuid: {} NewOwnerGuid: {}",
-        player->GetGUID().ToString(), housingSvcsChangeHouseCosmeticOwner.HouseGuid.ToString(),
-        housingSvcsChangeHouseCosmeticOwner.NewOwnerGuid.ToString());
-
-    Housing* housing = player->GetHousing();
-
-    // Only the house owner can change the cosmetic owner
-    if (!housing || housing->GetHouseGuid() != housingSvcsChangeHouseCosmeticOwner.HouseGuid)
-    {
-        TC_LOG_DEBUG("housing", "CMSG_HOUSING_SVCS_CHANGE_HOUSE_COSMETIC_OWNER: Permission denied — not house owner");
-        return;
-    }
-
-    // Verify target player exists (can be self to reclaim cosmetic ownership)
-    ObjectGuid newOwnerGuid = housingSvcsChangeHouseCosmeticOwner.NewOwnerGuid;
-    if (!newOwnerGuid.IsEmpty() && newOwnerGuid != player->GetGUID())
-    {
-        Player* targetPlayer = ObjectAccessor::FindPlayer(newOwnerGuid);
-        if (!targetPlayer)
-        {
-            TC_LOG_DEBUG("housing", "CMSG_HOUSING_SVCS_CHANGE_HOUSE_COSMETIC_OWNER: Target player {} not found",
-                newOwnerGuid.ToString());
-            return;
-        }
-    }
-
-    // Persist the cosmetic owner change
-    housing->SetCosmeticOwnerGuid(newOwnerGuid);
-
-    WorldPackets::Housing::HousingSvcsChangeHouseCosmeticOwner response;
-    response.HouseGuid = housingSvcsChangeHouseCosmeticOwner.HouseGuid;
-    response.NewOwnerGuid = newOwnerGuid;
-    SendPacket(response.Write());
-
-    TC_LOG_INFO("housing", "CMSG_HOUSING_SVCS_CHANGE_HOUSE_COSMETIC_OWNER: Player {} changed cosmetic owner of house {} to {}",
-        player->GetName(), housing->GetHouseGuid().ToString(), newOwnerGuid.ToString());
-}
+// Removed 2026-04-24: HandleHousingSvcsChangeHouseCosmeticOwner — IDA 12.0.5 shows
+// C_Housing.SaveHouseSettings (matching CMSG_HOUSING_SVCS_UPDATE_HOUSE_SETTINGS at
+// 0x33000B) is the opcode that saves the cosmetic owner. The cosmetic owner change
+// logic (ownership validation + persistence + SMSG response) belongs in the
+// UPDATE_HOUSE_SETTINGS handler when/if we extend it. The response SMSG
+// SMSG_HOUSING_SVCS_CHANGE_HOUSE_COSMETIC_OWNER (0x540010) is still a real opcode.
 
 void WorldSession::HandleHousingSvcsQueryHouseLevelFavor(WorldPackets::Housing::HousingSvcsQueryHouseLevelFavor const& housingSvcsQueryHouseLevelFavor)
 {
@@ -5569,57 +5437,10 @@ void WorldSession::HandleHousingSvcsQueryHouseLevelFavor(WorldPackets::Housing::
     SendPacket(response.Write());
 }
 
-void WorldSession::HandleHousingSvcsGuildAddHouse(WorldPackets::Housing::HousingSvcsGuildAddHouse const& housingSvcsGuildAddHouse)
-{
-    Player* player = GetPlayer();
-    if (!player)
-        return;
-
-    TC_LOG_DEBUG("housing", "CMSG_HOUSING_SVCS_GUILD_ADD_HOUSE Player: {} HouseGuid: {}",
-        player->GetGUID().ToString(), housingSvcsGuildAddHouse.HouseGuid.ToString());
-
-    Housing* housing = player->GetHousing();
-    if (!housing || housing->GetHouseGuid() != housingSvcsGuildAddHouse.HouseGuid)
-    {
-        TC_LOG_DEBUG("housing", "CMSG_HOUSING_SVCS_GUILD_ADD_HOUSE: House not found or mismatch");
-        return;
-    }
-
-    Guild* guild = player->GetGuild();
-    if (!guild)
-    {
-        TC_LOG_DEBUG("housing", "CMSG_HOUSING_SVCS_GUILD_ADD_HOUSE: Player not in guild");
-        return;
-    }
-
-    // Associate the player's neighborhood with the guild
-    Neighborhood* neighborhood = sNeighborhoodMgr.GetNeighborhood(housing->GetNeighborhoodGuid());
-    if (neighborhood)
-    {
-        // Only the neighborhood owner can link it to a guild
-        if (neighborhood->IsOwner(player->GetGUID()))
-            neighborhood->SetGuildId(guild->GetId());
-        else
-        {
-            TC_LOG_DEBUG("housing", "CMSG_HOUSING_SVCS_GUILD_ADD_HOUSE: Player {} is not neighborhood owner", player->GetName());
-            return;
-        }
-    }
-
-    WorldPackets::Housing::HousingSvcsGuildAddHouseNotification response;
-    response.House.HouseGUID = housingSvcsGuildAddHouse.HouseGuid;
-    response.House.OwnerGUID = player->GetGUID();
-    if (housing)
-    {
-        response.House.NeighborhoodGUID = housing->GetNeighborhoodGuid();
-        response.House.HouseLevel = static_cast<uint8>(housing->GetLevel());
-    }
-    SendPacket(response.Write());
-
-    TC_LOG_INFO("housing", "CMSG_HOUSING_SVCS_GUILD_ADD_HOUSE: Player {} added house {} to guild {} (neighborhood {})",
-        player->GetName(), housing->GetHouseGuid().ToString(), guild->GetName(),
-        housing->GetNeighborhoodGuid().ToString());
-}
+// Removed 2026-04-24: HandleHousingSvcsGuildAddHouse — no matching 12.0.5 Lua API.
+// The notification SMSG (SMSG_HOUSING_SVCS_GUILD_ADD_HOUSE_NOTIFICATION = 0x540012)
+// is still a real opcode and can be fired from other contexts (e.g. when a guild
+// member's house is auto-linked via neighborhood guild-settings).
 
 void WorldSession::HandleHousingSvcsGuildAppendNeighborhood(WorldPackets::Housing::HousingSvcsGuildAppendNeighborhood const& housingSvcsGuildAppendNeighborhood)
 {

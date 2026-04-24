@@ -1064,21 +1064,23 @@ enum OpcodeClient : uint32
     CMSG_HOUSING_FIXTURE_CREATE_BASIC_HOUSE                         = 0x310001, // TC-CUSTOM
     CMSG_HOUSING_FIXTURE_DELETE_HOUSE                               = 0x310002, // TC-CUSTOM
     CMSG_HOUSING_REQUEST_EDITOR_AVAILABILITY                        = 0x350009, // TC-CUSTOM
-    CMSG_HOUSING_SVCS_CHANGE_HOUSE_COSMETIC_OWNER                   = 0xF0000000, // TC-CUSTOM speculative (12.0.5 value collision)
+    // Removed 2026-04-24 after IDA 12.0.5 verification:
+    //   CMSG_HOUSING_SVCS_CHANGE_HOUSE_COSMETIC_OWNER — cosmetic owner is saved
+    //     via CMSG_HOUSING_SVCS_UPDATE_HOUSE_SETTINGS (0x33000B), no separate opcode.
+    //   CMSG_HOUSING_SVCS_COMPLETE_TUTORIAL_STEP, SET_TUTORIAL_STATE, SKIP_TUTORIAL —
+    //     no matching C_Housing Lua API exists; only StartTutorial is real.
+    //   CMSG_HOUSING_SVCS_GET_PLAYER_HOUSES_INFO_ALT — duplicate of
+    //     CMSG_HOUSING_SVCS_GET_PLAYER_HOUSES_INFO (0x330013).
+    //   CMSG_HOUSING_SVCS_QUERY_PENDING_INVITES — not in C_Housing API.
+    //   CMSG_HOUSING_SVCS_GUILD_ADD_HOUSE — not in C_Housing API.
     CMSG_HOUSING_SVCS_CLEAR_PLOT_RESERVATION                        = 0x330005, // TC-CUSTOM
-    CMSG_HOUSING_SVCS_COMPLETE_TUTORIAL_STEP                        = 0xF0000001, // TC-CUSTOM speculative
-    CMSG_HOUSING_SVCS_GET_PLAYER_HOUSES_INFO_ALT                    = 0xF0000002, // TC-CUSTOM speculative
     CMSG_HOUSING_SVCS_GET_ROSTER_DATA                               = 0x33000C, // TC-CUSTOM
-    CMSG_HOUSING_SVCS_GUILD_ADD_HOUSE                               = 0xF0000003, // TC-CUSTOM speculative
     CMSG_HOUSING_SVCS_GUILD_APPEND_NEIGHBORHOOD                     = 0x330014, // TC-CUSTOM
     CMSG_HOUSING_SVCS_GUILD_GET_HOUSING_INFO                        = 0x330016, // TC-CUSTOM
     CMSG_HOUSING_SVCS_GUILD_RENAME_NEIGHBORHOOD                     = 0x330015, // TC-CUSTOM
     CMSG_HOUSING_SVCS_QUERY_HOUSE_LEVEL_FAVOR                       = 0x330012, // TC-CUSTOM
-    CMSG_HOUSING_SVCS_QUERY_PENDING_INVITES                         = 0xF0000004, // TC-CUSTOM speculative
     CMSG_HOUSING_SVCS_REQUEST_PERMISSIONS_CHECK                     = 0x330000, // TC-CUSTOM
     CMSG_HOUSING_SVCS_ROSTER_UPDATE_SUBSCRIBE                       = 0x33000D, // TC-CUSTOM
-    CMSG_HOUSING_SVCS_SET_TUTORIAL_STATE                            = 0xF0000005, // TC-CUSTOM speculative
-    CMSG_HOUSING_SVCS_SKIP_TUTORIAL                                 = 0x33001B, // TC-CUSTOM
     CMSG_HOUSING_SYSTEM_EXPORT_HOUSE                                = 0x350003, // TC-CUSTOM
     CMSG_HOUSING_SYSTEM_GET_HOUSE_INFO_ALT                          = 0x350001, // TC-CUSTOM
     CMSG_HOUSING_SYSTEM_HOUSE_SNAPSHOT                              = 0x350002, // TC-CUSTOM
@@ -2538,8 +2540,12 @@ enum OpcodeServer : uint32
     // all collided with master's 12.0.5 opcode regeneration, so the classes compile but
     // Writes will not reach the client until each opcode is remapped to a verified
     // 12.0.5 value (preferably from a sniff).
-    SMSG_HOUSE_INTERIOR_ENTER_HOUSE                                 = 0xF1000000, // TC-CUSTOM speculative (needs 12.0.5 verification)
-    SMSG_HOUSE_INTERIOR_LEAVE_HOUSE_RESPONSE                        = 0xF1000001, // TC-CUSTOM speculative
+    // Removed 2026-04-24 after IDA 12.0.5 verification:
+    //   SMSG_HOUSE_INTERIOR_ENTER_HOUSE / SMSG_HOUSE_INTERIOR_LEAVE_HOUSE_RESPONSE —
+    //     both are replaced by the PlayerHouseInfoComponentData.CurrentHouse
+    //     UpdateField mechanism. Client fires HOUSE_PLOT_ENTERED via field-change
+    //     callback when CurrentHouse changes (verified via IDA xref trace of
+    //     sub_7FF75CC8BAA0 registered in the field-change callback table).
     SMSG_HOUSING_CATALOG_STATE_SYNC                                 = 0xF1000002, // TC-CUSTOM speculative
     SMSG_HOUSING_DECOR_BATCH_OPERATION_RESPONSE                     = 0xF1000003, // TC-CUSTOM speculative
     SMSG_HOUSING_DECOR_CATALOG_CREATE_SEARCHER_RESPONSE             = 0xF1000004, // TC-CUSTOM speculative
@@ -2557,7 +2563,8 @@ enum OpcodeServer : uint32
     SMSG_HOUSING_SVCS_SWAP_PLOTS_RESPONSE                           = 0xF1000010, // TC-CUSTOM speculative
     SMSG_HOUSING_SYSTEM_HOUSE_SNAPSHOT_RESPONSE                     = 0xF1000011, // TC-CUSTOM speculative
     SMSG_HOUSING_UPDATE_HOUSE_INFO                                  = 0xF1000012, // TC-CUSTOM speculative
-    SMSG_NEIGHBORHOOD_UPDATE_NAME_NOTIFICATION                      = 0xF1000013, // TC-CUSTOM speculative (superseded by SMSG_HOUSING_SVCS_NEIGHBORHOOD_UPDATE_NAME_NOTIFICATION = 0x540023)
+    // Removed 2026-04-24: SMSG_NEIGHBORHOOD_UPDATE_NAME_NOTIFICATION superseded by
+    // master's SMSG_HOUSING_SVCS_NEIGHBORHOOD_UPDATE_NAME_NOTIFICATION = 0x540023.
 
     // TC-CUSTOM account-housing / initiative SMSG opcodes
     SMSG_ACCOUNT_HOUSING_FIXTURE_ADDED                              = 0xF1000014, // TC-CUSTOM speculative

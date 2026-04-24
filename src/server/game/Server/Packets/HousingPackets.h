@@ -168,15 +168,12 @@ namespace WorldPackets::Housing
     // House Interior System (0x2Fxxxx)
     // ============================================================
 
-    class HouseInteriorEnterHouse final : public ServerPacket
-    {
-    public:
-        HouseInteriorEnterHouse() : ServerPacket(SMSG_HOUSE_INTERIOR_ENTER_HOUSE) { }
-        WorldPacket const* Write() override;
-        // IDA: CliHouseInteriorSystem sub 0 (0x2F0000)
-        // Wire format TBD (needs sniff verification) — sending HouseGuid for now
-        ObjectGuid HouseGuid;
-    };
+    // Removed 2026-04-24 after IDA 12.0.5 verification:
+    //   HouseInteriorEnterHouse / HouseInteriorLeaveHouseResponse — both SMSGs no
+    //   longer exist in 12.0.5. House entry/leave is communicated via the
+    //   PlayerHouseInfoComponentData.CurrentHouse UpdateField change; client fires
+    //   HOUSE_PLOT_ENTERED via field-change callback (verified via IDA xref trace).
+    //   HouseInteriorLeaveHouse CMSG (0x2F0001) still exists — keep it.
 
     class HouseInteriorLeaveHouse final : public ClientPacket
     {
@@ -184,19 +181,6 @@ namespace WorldPackets::Housing
         explicit HouseInteriorLeaveHouse(WorldPacket&& packet) : ClientPacket(CMSG_HOUSE_INTERIOR_LEAVE_HOUSE, std::move(packet)) { }
 
         void Read() override { }
-    };
-
-    class HouseInteriorLeaveHouseResponse final : public ServerPacket
-    {
-    public:
-        HouseInteriorLeaveHouseResponse() : ServerPacket(SMSG_HOUSE_INTERIOR_LEAVE_HOUSE_RESPONSE) { }
-        WorldPacket const* Write() override;
-
-        // IDA: CliHouseInteriorSystem sub 1 (0x2F0001)
-        // HousingTeleportReason: None(0), Cheat(1), UnspecifiedSpellcast(2), Booted(3),
-        //   Homestone(4), Visit(5), Friend(6), GuildMember(7), PartyMember(8),
-        //   ExitingHouse(9), Portal(10), Tutorial(11)
-        uint8 TeleportReason = 9; // Default: ExitingHouse
     };
 
     // ============================================================
@@ -717,39 +701,9 @@ namespace WorldPackets::Housing
         void Read() override { }
     };
 
-    class HousingSvcsSetTutorialState final : public ClientPacket
-    {
-    public:
-        explicit HousingSvcsSetTutorialState(WorldPacket&& packet) : ClientPacket(CMSG_HOUSING_SVCS_SET_TUTORIAL_STATE, std::move(packet)) { }
-
-        void Read() override;
-        uint32 TutorialFlags = 0;
-    };
-
-    class HousingSvcsCompleteTutorialStep final : public ClientPacket
-    {
-    public:
-        explicit HousingSvcsCompleteTutorialStep(WorldPacket&& packet) : ClientPacket(CMSG_HOUSING_SVCS_COMPLETE_TUTORIAL_STEP, std::move(packet)) { }
-
-        void Read() override;
-        uint32 StepIndex = 0;
-    };
-
-    class HousingSvcsSkipTutorial final : public ClientPacket
-    {
-    public:
-        explicit HousingSvcsSkipTutorial(WorldPacket&& packet) : ClientPacket(CMSG_HOUSING_SVCS_SKIP_TUTORIAL, std::move(packet)) { }
-
-        void Read() override { }
-    };
-
-    class HousingSvcsQueryPendingInvites final : public ClientPacket
-    {
-    public:
-        explicit HousingSvcsQueryPendingInvites(WorldPacket&& packet) : ClientPacket(CMSG_HOUSING_SVCS_QUERY_PENDING_INVITES, std::move(packet)) { }
-
-        void Read() override { }
-    };
+    // Removed 2026-04-24: tutorial CMSGs (SetTutorialState, CompleteTutorialStep,
+    // SkipTutorial) and QueryPendingInvites — no matching C_Housing Lua API exists
+    // in 12.0.5. Only StartTutorial (0x33001A) is real.
 
     class HousingDecorConfirmPreviewPlacement final : public ClientPacket
     {
@@ -841,13 +795,8 @@ namespace WorldPackets::Housing
         ObjectGuid NeighborhoodGuid;
     };
 
-    class HousingSvcsGetPlayerHousesInfoAlt final : public ClientPacket
-    {
-    public:
-        explicit HousingSvcsGetPlayerHousesInfoAlt(WorldPacket&& packet) : ClientPacket(CMSG_HOUSING_SVCS_GET_PLAYER_HOUSES_INFO_ALT, std::move(packet)) { }
-        void Read() override;
-        ObjectGuid PlayerGuid;
-    };
+    // Removed 2026-04-24: GetPlayerHousesInfoAlt — duplicate of the real
+    // CMSG_HOUSING_SVCS_GET_PLAYER_HOUSES_INFO = 0x330013 (see master).
 
     class HousingSvcsGetRosterData final : public ClientPacket
     {
@@ -864,14 +813,11 @@ namespace WorldPackets::Housing
         void Read() override { }
     };
 
-    class HousingSvcsChangeHouseCosmeticOwnerRequest final : public ClientPacket
-    {
-    public:
-        explicit HousingSvcsChangeHouseCosmeticOwnerRequest(WorldPacket&& packet) : ClientPacket(CMSG_HOUSING_SVCS_CHANGE_HOUSE_COSMETIC_OWNER, std::move(packet)) { }
-        void Read() override;
-        ObjectGuid HouseGuid;
-        ObjectGuid NewOwnerGuid;
-    };
+    // Removed 2026-04-24: HousingSvcsChangeHouseCosmeticOwnerRequest — IDA 12.0.5
+    // verification shows the client sends cosmetic-owner changes via
+    // C_Housing.SaveHouseSettings → CMSG_HOUSING_SVCS_UPDATE_HOUSE_SETTINGS (0x33000B),
+    // not a dedicated CMSG. The SMSG response SMSG_HOUSING_SVCS_CHANGE_HOUSE_COSMETIC_OWNER
+    // (0x540010) still exists — keep its sender class below.
 
     class HousingSvcsQueryHouseLevelFavor final : public ClientPacket
     {
@@ -881,13 +827,8 @@ namespace WorldPackets::Housing
         ObjectGuid HouseGuid;
     };
 
-    class HousingSvcsGuildAddHouse final : public ClientPacket
-    {
-    public:
-        explicit HousingSvcsGuildAddHouse(WorldPacket&& packet) : ClientPacket(CMSG_HOUSING_SVCS_GUILD_ADD_HOUSE, std::move(packet)) { }
-        void Read() override;
-        ObjectGuid HouseGuid;
-    };
+    // Removed 2026-04-24: HousingSvcsGuildAddHouse — no matching C_Housing Lua API
+    // entry in 12.0.5 (confirmed via IDA scan of C_Housing.* strings).
 
     class HousingSvcsGuildAppendNeighborhood final : public ClientPacket
     {
@@ -2359,6 +2300,19 @@ namespace WorldPackets::Housing
         WorldPacket const* Write() override;
         uint8 Result = 0;
     };
+
+    // Replaces the old NeighborhoodUpdateNameNotification (the 0x5C0004 slot is now
+    // SMSG_NEIGHBORHOOD_REMOVE_SECONDARY_OWNER_RESPONSE in 12.0.5). Real opcode:
+    // SMSG_HOUSING_SVCS_NEIGHBORHOOD_UPDATE_NAME_NOTIFICATION (0x540023). Wire format
+    // preserved from the old packet — needs 12.0.5 sniff verification.
+    class HousingSvcsNeighborhoodUpdateNameNotification final : public ServerPacket
+    {
+    public:
+        HousingSvcsNeighborhoodUpdateNameNotification()
+            : ServerPacket(SMSG_HOUSING_SVCS_NEIGHBORHOOD_UPDATE_NAME_NOTIFICATION) { }
+        WorldPacket const* Write() override;
+        std::string NewName;
+    };
 }
 
 namespace WorldPackets::Neighborhood
@@ -2728,14 +2682,9 @@ namespace WorldPackets::Neighborhood
         uint8 Result = 0;  // IDA 12.0 verified (0x5C0003): single uint8
     };
 
-    class NeighborhoodUpdateNameNotification final : public ServerPacket
-    {
-    public:
-        NeighborhoodUpdateNameNotification() : ServerPacket(SMSG_NEIGHBORHOOD_UPDATE_NAME_NOTIFICATION) { }
-        WorldPacket const* Write() override;
-        // IDA 12.0 verified (0x5C0004): uint8(nameLen) + bytes[nameLen]
-        std::string NewName;
-    };
+    // Old NeighborhoodUpdateNameNotification (0x5C0004) removed in 12.0.5 —
+    // moved to SMSG_HOUSING_SVCS_NEIGHBORHOOD_UPDATE_NAME_NOTIFICATION (0x540023).
+    // The replacement class lives in the Housing namespace (this file, earlier).
 
     class NeighborhoodAddSecondaryOwnerResponse final : public ServerPacket
     {

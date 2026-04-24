@@ -1645,10 +1645,8 @@ class TC_GAME_API WorldSession
         void HandleHousingSvcsGetPlayerHousesInfo(WorldPackets::Housing::HousingSvcsGetPlayerHousesInfo const& housingSvcsGetPlayerHousesInfo);
         void HandleHousingSvcsTeleportToPlot(WorldPackets::Housing::HousingSvcsTeleportToPlot const& housingSvcsTeleportToPlot);
         void HandleHousingSvcsStartTutorial(WorldPackets::Housing::HousingSvcsStartTutorial const& housingSvcsStartTutorial);
-        void HandleHousingSvcsSetTutorialState(WorldPackets::Housing::HousingSvcsSetTutorialState const& housingSvcsSetTutorialState);
-        void HandleHousingSvcsCompleteTutorialStep(WorldPackets::Housing::HousingSvcsCompleteTutorialStep const& housingSvcsCompleteTutorialStep);
-        void HandleHousingSvcsSkipTutorial(WorldPackets::Housing::HousingSvcsSkipTutorial const& housingSvcsSkipTutorial);
-        void HandleHousingSvcsQueryPendingInvites(WorldPackets::Housing::HousingSvcsQueryPendingInvites const& housingSvcsQueryPendingInvites);
+        // Removed 2026-04-24: HandleHousingSvcsSetTutorialState / CompleteTutorialStep /
+        // SkipTutorial / QueryPendingInvites — no matching 12.0.5 Lua API exists.
         void HandleHousingDecorConfirmPreviewPlacement(WorldPackets::Housing::HousingDecorConfirmPreviewPlacement const& housingDecorConfirmPreviewPlacement);
         void HandleHousingSvcsAcceptNeighborhoodOwnership(WorldPackets::Housing::HousingSvcsAcceptNeighborhoodOwnership const& housingSvcsAcceptNeighborhoodOwnership);
         void HandleHousingSvcsRejectNeighborhoodOwnership(WorldPackets::Housing::HousingSvcsRejectNeighborhoodOwnership const& housingSvcsRejectNeighborhoodOwnership);
@@ -1690,12 +1688,14 @@ class TC_GAME_API WorldSession
         // Phase 7 Housing Services handlers
         void HandleHousingSvcsRequestPermissionsCheck(WorldPackets::Housing::HousingSvcsRequestPermissionsCheck const& housingSvcsRequestPermissionsCheck);
         void HandleHousingSvcsClearPlotReservation(WorldPackets::Housing::HousingSvcsClearPlotReservation const& housingSvcsClearPlotReservation);
-        void HandleHousingSvcsGetPlayerHousesInfoAlt(WorldPackets::Housing::HousingSvcsGetPlayerHousesInfoAlt const& housingSvcsGetPlayerHousesInfoAlt);
+        // Removed 2026-04-24: HandleHousingSvcsGetPlayerHousesInfoAlt — duplicate of
+        // the real CMSG_HOUSING_SVCS_GET_PLAYER_HOUSES_INFO (0x330013).
         void HandleHousingSvcsGetRosterData(WorldPackets::Housing::HousingSvcsGetRosterData const& housingSvcsGetRosterData);
         void HandleHousingSvcsRosterUpdateSubscribe(WorldPackets::Housing::HousingSvcsRosterUpdateSubscribe const& housingSvcsRosterUpdateSubscribe);
-        void HandleHousingSvcsChangeHouseCosmeticOwner(WorldPackets::Housing::HousingSvcsChangeHouseCosmeticOwnerRequest const& housingSvcsChangeHouseCosmeticOwner);
+        // Removed 2026-04-24: HandleHousingSvcsChangeHouseCosmeticOwner — the client
+        // sends cosmetic-owner changes via CMSG_HOUSING_SVCS_UPDATE_HOUSE_SETTINGS (0x33000B).
         void HandleHousingSvcsQueryHouseLevelFavor(WorldPackets::Housing::HousingSvcsQueryHouseLevelFavor const& housingSvcsQueryHouseLevelFavor);
-        void HandleHousingSvcsGuildAddHouse(WorldPackets::Housing::HousingSvcsGuildAddHouse const& housingSvcsGuildAddHouse);
+        // Removed 2026-04-24: HandleHousingSvcsGuildAddHouse — no matching Lua API.
         void HandleHousingSvcsGuildAppendNeighborhood(WorldPackets::Housing::HousingSvcsGuildAppendNeighborhood const& housingSvcsGuildAppendNeighborhood);
         void HandleHousingSvcsGuildRenameNeighborhood(WorldPackets::Housing::HousingSvcsGuildRenameNeighborhood const& housingSvcsGuildRenameNeighborhood);
         void HandleHousingSvcsGuildGetHousingInfo(WorldPackets::Housing::HousingSvcsGuildGetHousingInfo const& housingSvcsGuildGetHousingInfo);

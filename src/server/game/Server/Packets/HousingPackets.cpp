@@ -471,17 +471,8 @@ void HousingSvcsTeleportToPlot::Read()
         NeighborhoodGuid.ToString(), OwnerGuid.ToString(), PlotIndex, TeleportType);
 }
 
-void HousingSvcsSetTutorialState::Read()
-{
-    _worldPacket >> TutorialFlags;
-    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_SVCS_SET_TUTORIAL_STATE TutorialFlags: {}", TutorialFlags);
-}
-
-void HousingSvcsCompleteTutorialStep::Read()
-{
-    _worldPacket >> StepIndex;
-    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_SVCS_COMPLETE_TUTORIAL_STEP StepIndex: {}", StepIndex);
-}
+// Removed 2026-04-24: HousingSvcsSetTutorialState / HousingSvcsCompleteTutorialStep
+// Read() — no matching C_Housing Lua API in 12.0.5.
 
 void HousingDecorConfirmPreviewPlacement::Read()
 {
@@ -524,12 +515,8 @@ void HousingSvcsClearPlotReservation::Read()
     TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_SVCS_CLEAR_PLOT_RESERVATION NeighborhoodGuid: {}", NeighborhoodGuid.ToString());
 }
 
-void HousingSvcsGetPlayerHousesInfoAlt::Read()
-{
-    _worldPacket >> PlayerGuid;
-
-    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_SVCS_GET_PLAYER_HOUSES_INFO_ALT PlayerGuid: {}", PlayerGuid.ToString());
-}
+// Removed 2026-04-24: HousingSvcsGetPlayerHousesInfoAlt — duplicate of
+// CMSG_HOUSING_SVCS_GET_PLAYER_HOUSES_INFO (0x330013 in master).
 
 void HousingSvcsGetRosterData::Read()
 {
@@ -538,14 +525,8 @@ void HousingSvcsGetRosterData::Read()
     TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_SVCS_GET_ROSTER_DATA NeighborhoodGuid: {}", NeighborhoodGuid.ToString());
 }
 
-void HousingSvcsChangeHouseCosmeticOwnerRequest::Read()
-{
-    _worldPacket >> HouseGuid;
-    _worldPacket >> NewOwnerGuid;
-
-    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_SVCS_CHANGE_HOUSE_COSMETIC_OWNER HouseGuid: {} NewOwnerGuid: {}",
-        HouseGuid.ToString(), NewOwnerGuid.ToString());
-}
+// Removed 2026-04-24: HousingSvcsChangeHouseCosmeticOwnerRequest — cosmetic owner
+// is saved via CMSG_HOUSING_SVCS_UPDATE_HOUSE_SETTINGS (IDA-verified SaveHouseSettings).
 
 void HousingSvcsQueryHouseLevelFavor::Read()
 {
@@ -554,12 +535,7 @@ void HousingSvcsQueryHouseLevelFavor::Read()
     TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_SVCS_QUERY_HOUSE_LEVEL_FAVOR HouseGuid: {}", HouseGuid.ToString());
 }
 
-void HousingSvcsGuildAddHouse::Read()
-{
-    _worldPacket >> HouseGuid;
-
-    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_SVCS_GUILD_ADD_HOUSE HouseGuid: {}", HouseGuid.ToString());
-}
+// Removed 2026-04-24: HousingSvcsGuildAddHouse — no matching C_Housing Lua API.
 
 void HousingSvcsGuildAppendNeighborhood::Read()
 {
@@ -759,23 +735,9 @@ WorldPacket const* HouseExteriorSetHousePositionResponse::Write()
 // House Interior SMSG (0x2Fxxxx)
 // ============================================================
 
-WorldPacket const* HouseInteriorEnterHouse::Write()
-{
-    _worldPacket << HouseGuid;
-
-    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSE_INTERIOR_ENTER_HOUSE HouseGuid: {}", HouseGuid.ToString());
-
-    return &_worldPacket;
-}
-
-WorldPacket const* HouseInteriorLeaveHouseResponse::Write()
-{
-    _worldPacket << uint8(TeleportReason);
-
-    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSE_INTERIOR_LEAVE_HOUSE_RESPONSE TeleportReason: {}", TeleportReason);
-
-    return &_worldPacket;
-}
+// Removed 2026-04-24: HouseInteriorEnterHouse / HouseInteriorLeaveHouseResponse —
+// these SMSGs no longer exist in 12.0.5. House entry/leave is communicated via the
+// PlayerHouseInfoComponentData.CurrentHouse UpdateField (IDA-verified).
 
 // ============================================================
 // Housing Decor SMSG Responses (0x51xxxx)
@@ -2308,6 +2270,23 @@ WorldPacket const* HousingPhotoSharingAuthorizationClearedResult::Write()
     return &_worldPacket;
 }
 
+WorldPacket const* HousingSvcsNeighborhoodUpdateNameNotification::Write()
+{
+    // Wire format inherited from the pre-12.0.5 NeighborhoodUpdateNameNotification
+    // (uint8(nameLen) + bytes[nameLen]). Needs 12.0.5 sniff verification — the
+    // client moved the opcode but may also have changed the format.
+    uint8 nameLen = NewName.empty() ? 0 : static_cast<uint8>(NewName.size() + 1);
+    _worldPacket << uint8(nameLen);
+    if (nameLen > 0)
+        _worldPacket.append(reinterpret_cast<uint8 const*>(NewName.c_str()), nameLen);
+
+    TC_LOG_DEBUG("network.opcode",
+        "SMSG_HOUSING_SVCS_NEIGHBORHOOD_UPDATE_NAME_NOTIFICATION NewName: '{}' NameLen: {}",
+        NewName, nameLen);
+
+    return &_worldPacket;
+}
+
 } // namespace WorldPackets::Housing
 
 // ============================================================
@@ -2619,18 +2598,6 @@ WorldPacket const* NeighborhoodUpdateNameResponse::Write()
     _worldPacket << uint8(Result);
 
     TC_LOG_DEBUG("network.opcode", "SMSG_NEIGHBORHOOD_UPDATE_NAME_RESPONSE Result: {}", Result);
-
-    return &_worldPacket;
-}
-
-WorldPacket const* NeighborhoodUpdateNameNotification::Write()
-{
-    uint8 nameLen = NewName.empty() ? 0 : static_cast<uint8>(NewName.size() + 1);
-    _worldPacket << uint8(nameLen);
-    if (nameLen > 0)
-        _worldPacket.append(reinterpret_cast<uint8 const*>(NewName.c_str()), nameLen);
-
-    TC_LOG_DEBUG("network.opcode", "SMSG_NEIGHBORHOOD_UPDATE_NAME_NOTIFICATION NewName: '{}' NameLen: {}", NewName, nameLen);
 
     return &_worldPacket;
 }

@@ -518,7 +518,9 @@ void WorldSession::HandleNeighborhoodUpdateName(WorldPackets::Neighborhood::Neig
             invalidate.NeighborhoodGuid = neighborhoodGuid;
             memberPlayer->SendDirectMessage(invalidate.Write());
 
-            WorldPackets::Neighborhood::NeighborhoodUpdateNameNotification nameNotification;
+            // 12.0.5: moved from SMSG_NEIGHBORHOOD_UPDATE_NAME_NOTIFICATION (0x5C0004)
+            // to SMSG_HOUSING_SVCS_NEIGHBORHOOD_UPDATE_NAME_NOTIFICATION (0x540023).
+            WorldPackets::Housing::HousingSvcsNeighborhoodUpdateNameNotification nameNotification;
             nameNotification.NewName = neighborhoodUpdateName.NewName;
             memberPlayer->SendDirectMessage(nameNotification.Write());
         }
