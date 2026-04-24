@@ -57,6 +57,14 @@ public:
         uint64 HouseFavor = 0;
         std::string HouseName;
 
+        // Mirrored from character_housing so the neighborhood map can spawn the
+        // correct WMO geometry for EVERY occupied plot at preload — even for
+        // owners who are currently offline. Without this, only the logged-in
+        // player's own house visibly spawns; neighbours' plots look empty
+        // because HousingMap::GetHousingForPlayer returns null for offline
+        // owners.
+        uint32 HouseType = 0;
+
         bool IsOccupied() const { return PlotIndex != INVALID_PLOT_INDEX; }
     };
 

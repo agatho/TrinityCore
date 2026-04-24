@@ -65,8 +65,8 @@ bool Neighborhood::LoadFromDB(PreparedQueryResult neighborhood, PreparedQueryRes
         {
             Field* memberFields = members->Fetch();
 
-            //          0              1     2          3          4           5          6              7         8
-            // SELECT nm.playerGuid, nm.role, nm.joinTime, nm.plotIndex, ch.houseId, c.account, ch.houseLevel, ch.favor, ch.houseName
+            //          0              1     2          3          4           5          6              7         8           9
+            // SELECT nm.playerGuid, nm.role, nm.joinTime, nm.plotIndex, ch.houseId, c.account, ch.houseLevel, ch.favor, ch.houseName, ch.houseType
             // FROM neighborhood_members nm LEFT JOIN character_housing ch ON nm.playerGuid = ch.guid
             //   LEFT JOIN characters c ON nm.playerGuid = c.guid
             // WHERE nm.neighborhoodGuid = ?
@@ -112,6 +112,8 @@ bool Neighborhood::LoadFromDB(PreparedQueryResult neighborhood, PreparedQueryRes
                     _plots[member.PlotIndex].HouseFavor = memberFields[7].GetUInt64();
                 if (!memberFields[8].IsNull())
                     _plots[member.PlotIndex].HouseName  = memberFields[8].GetString();
+                if (!memberFields[9].IsNull())
+                    _plots[member.PlotIndex].HouseType  = memberFields[9].GetUInt32();
 
                 TC_LOG_INFO("housing", "Neighborhood::LoadFromDB plot[{}] owner={} lvl={} favor={} name='{}' "
                     "(ch.houseLevel.IsNull={} ch.favor.IsNull={} ch.houseName.IsNull={})",
