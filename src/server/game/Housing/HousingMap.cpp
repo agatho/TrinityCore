@@ -1094,31 +1094,15 @@ bool HousingMap::AddPlayerToMap(Player* player, bool initPlayer /*= true*/)
                 session->GetBattlenetAccount().ClearUpdateMask(true);
                 session->GetHousingPlayerHouseEntity().ClearUpdateMask(true);
 
-                // Matching retail step (3): re-emit PLAYER_HOUSES_INFO_RESPONSE
-                // as the third packet in the CMSG_HOUSING_DECOR_REQUEST_STORAGE
-                // sequence. An earlier copy already fired in AddPlayerToMap:870
-                // (covering retail's FIRST auto-sent CMSG_HOUSING_SVCS_GET_PLAYER_HOUSES_INFO);
-                // this second copy covers the SECOND auto-send at sniff pkt 8941.
-                // Favor + HasOptionalField populated so GetCurrentHouseLevelFavor
-                // has the tail byte it needs.
-                {
-                    WorldPackets::Housing::HousingSvcsGetPlayerHousesInfoResponse housesResp;
-                    for (Housing const* h : p->GetAllHousings())
-                    {
-                        WorldPackets::Housing::JamCliHouse jam;
-                        jam.OwnerGUID = p->GetGUID();
-                        jam.HouseGUID = h->GetHouseGuid();
-                        jam.NeighborhoodGUID = h->GetNeighborhoodGuid();
-                        jam.HouseLevel = static_cast<uint8>(h->GetLevel());
-                        jam.PlotIndex = h->GetPlotIndex();
-                        jam.HasOptionalField = true;
-                        jam.OptionalValue = h->GetFavor64();
-                        housesResp.Houses.push_back(std::move(jam));
-                    }
-                    p->SendDirectMessage(housesResp.Write());
-                }
+                // Removed second PlayerHousesInfoResponse emission. The original
+                // rationale ("matching retail step 3 of CMSG_HOUSING_DECOR_REQUEST_STORAGE
+                // sequence") turns out to have been based on sniff analysis of our own
+                // TC server output, not real retail. Retail's pristine 66838 login
+                // sniffs (verified across 3 independent captures) show zero unprompted
+                // PlayerHousesInfo emissions. Per user's blizzlike guardrail this
+                // speculative re-emission is dropped.
 
-                TC_LOG_DEBUG("housing", "HousingMap deferred ENTER_PLOT: Sent STORAGE_RSP ack + Account CREATE + {} decor MeshObject CREATEs + PlayerHousesInfoResponse for player {}",
+                TC_LOG_DEBUG("housing", "HousingMap deferred ENTER_PLOT: Sent STORAGE_RSP ack + Account CREATE + {} decor MeshObject CREATEs for player {}",
                     meshCreateCount, playerGuid.ToString());
 
                 // BLIZZLIKE: the 500 ms defer no longer emits housing
