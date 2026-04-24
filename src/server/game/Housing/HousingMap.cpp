@@ -1254,29 +1254,16 @@ bool HousingMap::AddPlayerToMap(Player* player, bool initPlayer /*= true*/)
                         p->SendDirectMessage(nameResp.Write());
                     }
 
-                    // 2. NeighborhoodGetRosterResponse — roster member list
-                    {
-                        WorldPackets::Neighborhood::NeighborhoodGetRosterResponse response;
-                        response.Result = static_cast<uint8>(HOUSING_RESULT_SUCCESS);
-                        response.GroupNeighborhoodGuid = nbh->GetGuid();
-                        response.GroupOwnerGuid = nbh->GetOwnerGuid();
-                        response.NeighborhoodName = nbh->GetName();
-                        response.Members.reserve(members.size());
-                        for (auto const& member : members)
-                        {
-                            WorldPackets::Neighborhood::NeighborhoodGetRosterResponse::RosterMemberData data;
-                            data.PlayerGuid = member.PlayerGuid;
-                            data.PlotIndex = member.PlotIndex;
-                            data.JoinTime = member.JoinTime;
-                            data.ResidentType = member.Role;
-                            data.IsOnline = ObjectAccessor::FindPlayer(member.PlayerGuid) != nullptr;
-                            if (member.PlotIndex != INVALID_PLOT_INDEX)
-                                if (Neighborhood::PlotInfo const* pi = nbh->GetPlotInfo(member.PlotIndex))
-                                    data.HouseGuid = pi->HouseGuid;
-                            response.Members.push_back(data);
-                        }
-                        p->SendDirectMessage(response.Write());
-                    }
+                    // Step 2 (NeighborhoodGetRosterResponse) REMOVED — the
+                    // retail 66838 pristine login sniff
+                    // (sniff_analysis_login_plot/84_retail_post_login_smsg_sequence.py)
+                    // shows ZERO unprompted emissions of this SMSG in the entire
+                    // post-LVW window. The earlier "roster-replay" rationale was
+                    // speculative, built on the observation that a user-initiated
+                    // bulletin-board roster click paints map icons. Per the user's
+                    // blizzlike guardrail we do not emit packets retail doesn't.
+                    // (members variable unused below once step 2 is gone.)
+                    (void)members;
 
                     // 3. Mirror re-populate + SendUpdateToPlayer (VALUES_UPDATE).
                     //
