@@ -2351,6 +2351,8 @@ struct HouseExteriorWmoDataEntry
     LocalizedString Name;                    // Meta field 0: FT_STRING
     uint32 ID;                               // Meta field 1: IndexField
     int32 Flags;
+    int32 Field_003;                         // Meta field 3: NEW in 12.0.5.66330 (per WoWDBDefs 0x95E7A088)
+    int32 Field_004;                         // Meta field 4: NEW in 12.0.5.66330
 };
 
 struct HouseLevelDataEntry
@@ -2380,6 +2382,7 @@ struct HouseRoomEntry
     int32 RoomWmoDataID;
     int32 UiTextureAtlasElementID;
     int32 WeightCost;
+    int32 Field_007;                         // NEW in 12.0.5.66330 (per WoWDBDefs layout 0xFC6C2118)
 };
 
 struct HouseThemeEntry

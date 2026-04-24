@@ -2943,14 +2943,18 @@ struct HouseDecorThemeSetLoadInfo
 
 struct HouseExteriorWmoDataLoadInfo
 {
-    static constexpr DB2FieldMeta Fields[3] =
+    // 12.0.5.66330 added Field_003 + Field_004 (both int32). WoWDBDefs layout 0x95E7A088
+    // shows them as Field_12_0_5_66330_003 / _004 with no confirmed semantic name yet.
+    static constexpr DB2FieldMeta Fields[5] =
     {
         { .IsSigned = false, .Type = FT_STRING, .Name = "Name" },
         { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
         { .IsSigned = true, .Type = FT_INT, .Name = "Flags" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "Field_003" },  // NEW in 12.0.5.66330
+        { .IsSigned = true, .Type = FT_INT, .Name = "Field_004" },  // NEW in 12.0.5.66330
     };
 
-    static constexpr DB2LoadInfo Instance{ Fields, 3, &HouseExteriorWmoDataMeta::Instance, HOTFIX_SEL_HOUSE_EXTERIOR_WMO_DATA };
+    static constexpr DB2LoadInfo Instance{ Fields, 5, &HouseExteriorWmoDataMeta::Instance, HOTFIX_SEL_HOUSE_EXTERIOR_WMO_DATA };
 };
 
 struct HouseLevelDataLoadInfo
@@ -2982,7 +2986,9 @@ struct HouseLevelRewardInfoLoadInfo
 
 struct HouseRoomLoadInfo
 {
-    static constexpr DB2FieldMeta Fields[8] =
+    // 12.0.5.66330 added Field_007 (int32). WoWDBDefs layout 0xFC6C2118 shows it as
+    // Field_12_0_5_66330_007 with no confirmed semantic name yet.
+    static constexpr DB2FieldMeta Fields[9] =
     {
         { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
         { .IsSigned = false, .Type = FT_STRING, .Name = "Name" },
@@ -2992,9 +2998,10 @@ struct HouseRoomLoadInfo
         { .IsSigned = true, .Type = FT_INT, .Name = "RoomWmoDataID" },
         { .IsSigned = true, .Type = FT_INT, .Name = "UiTextureAtlasElementID" },
         { .IsSigned = true, .Type = FT_INT, .Name = "WeightCost" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "Field_007" },  // NEW in 12.0.5.66330
     };
 
-    static constexpr DB2LoadInfo Instance{ Fields, 8, &HouseRoomMeta::Instance, HOTFIX_SEL_HOUSE_ROOM };
+    static constexpr DB2LoadInfo Instance{ Fields, 9, &HouseRoomMeta::Instance, HOTFIX_SEL_HOUSE_ROOM };
 };
 
 struct HouseThemeLoadInfo
