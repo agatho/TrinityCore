@@ -147,32 +147,37 @@ def parse_block(r, log_func):
         if obj_type > 20:
             return False
 
-    # Rest is UpdateField data — variable length. We can't fully parse without
-    # knowing the field definitions. Skip heuristically: look for the next
-    # plausible block start. Scan forward for a byte sequence that looks like
-    # a valid block boundary.
+    # Skip heuristically past variable-length data (movement update +
+    # fieldsSize + fields) to find the next block. Use the known-good TC
+    # pattern: next block starts with updateType 0/1/2/3 and has a valid
+    # PackedGUID + valid objectType + (for CREATE) looks plausible.
     data_start = r.pos
     remaining_body = r.buf[r.pos:]
 
-    # Heuristic: find the next valid updateType byte followed by valid-looking
-    # PackedGUID128 masks (2 bytes that could be masks — anything 0x00..0xFF)
-    # AND the resulting GUID decodes to a valid HighGuid.
+    # Full-range scan (no arbitrary upper bound like before). For a 230KB
+    # bundle with ~378 blocks, average block is ~600 bytes — mostly small.
+    # A few big ones (Player CREATE) may be much larger.
     best_skip = len(remaining_body)  # default: consume everything (last block)
-    for i in range(1, min(len(remaining_body) - 20, 65536)):
+
+    # Required validity: GUID high in {2, 3, 4, 5, 6, 7, 8, 9, 11, 12, 13,
+    # 15, 16, 17, 30, 55, 56, 57, 58, 59, 60} (known entity types). Reject
+    # other highs as likely data-byte noise.
+    VALID_HIGHS = {2, 3, 4, 5, 6, 7, 8, 9, 11, 12, 13, 15, 16, 17, 30,
+                   55, 56, 57, 58, 59, 60}
+
+    for i in range(1, len(remaining_body) - 20):
         next_ut = remaining_body[i]
         if next_ut > 3:
             continue
-        # Peek the next GUID to see if it's valid
-        if i + 3 > len(remaining_body):
-            continue
+        # Peek GUID validity
         try:
             test_r = Reader(remaining_body[i:])
-            test_r.skip(1)  # skip ut
+            test_r.skip(1)
             tlo, thi = test_r.read_packed_guid128()
             if tlo is None or (tlo == 0 and thi == 0):
                 continue
             thigh, tsub = guid_info(tlo, thi)
-            if thigh == 0 or thigh > 60:
+            if thigh not in VALID_HIGHS:
                 continue
             if next_ut in (1, 2):
                 if test_r.remaining() < 1:
@@ -180,7 +185,6 @@ def parse_block(r, log_func):
                 tobj = test_r.buf[test_r.pos]
                 if tobj > 20:
                     continue
-            # Good candidate
             best_skip = i
             break
         except Exception:
