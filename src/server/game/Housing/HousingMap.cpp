@@ -1278,29 +1278,26 @@ bool HousingMap::AddPlayerToMap(Player* player, bool initPlayer /*= true*/)
                         p->SendDirectMessage(response.Write());
                     }
 
-                    // 3. Mirror re-populate + SendCreateToPlayer (wholesale CREATE).
+                    // 3. Mirror re-populate + SendUpdateToPlayer (VALUES_UPDATE).
                     //
-                    // Empirical evidence: the working roster-click path in
-                    // HandleHousingSvcsGetRoster (HousingHandler.cpp:4151) does
-                    // ClearHouses + AddHouse × 55 followed by SendCreateToPlayer,
-                    // and the user-observed map-refresh on roster click is exactly
-                    // that path firing. The in-header contract for this entity
-                    // (HousingNeighborhoodMirrorEntity.h:38-42) also states map-icon
-                    // refresh only fires on CREATE — wholesale re-pushes are
-                    // sniff-verified at >=80% of Housing/4 updates in retail.
+                    // Pristine-login sniff analysis (sniff_analysis_login_plot/
+                    // 83_pristine_login_mirror_defer.py against retail
+                    // dump_12.0.1.66838_2026-04-23_05-56-30.pkt):
                     //
-                    // Previous defer used SendUpdateToPlayer (VALUES_UPDATE) on the
-                    // hypothesis that MAP_DATA_UPDATED routed off a Houses-field
-                    // dirty bit. That didn't hold: VALUES_UPDATE may be suppressed
-                    // as a no-op delta when the values in the CREATE bundle already
-                    // match what we re-populate here (which is exactly the case for
-                    // a relog — Player::LoadFromDB synchronously populated Houses
-                    // with final data before CREATE shipped). The client then never
-                    // perceives a field change and the map stays at the initial read.
+                    //   LOGIN_VERIFY_WORLD idx=196, first housing CMSG idx=300.
+                    //   Unprompted window (LVW+1 .. first-housing-CMSG-1):
+                    //     Housing/4 mirror CREATEs: 0
+                    //     Housing/4 mirror VALUES:  1  (at LVW+101 packets)
                     //
-                    // Using SendCreateToPlayer forces a fresh CREATE block that the
-                    // client always processes, producing the same wake-up behaviour
-                    // as the roster click path.
+                    // Retail emits ZERO standalone Housing/4 CREATE post-LVW. The
+                    // initial mirror state ships as a session fragment in the
+                    // Player CREATE bundle; the server's only post-login mirror
+                    // emission is a single VALUES_UPDATE to refresh any delta.
+                    //
+                    // Previous iteration used SendCreateToPlayer (32efa22454) on
+                    // the theory that CREATE is required to wake the client.
+                    // Sniff refutes that — the user's blizzlike guardrail says
+                    // match retail. SendUpdateToPlayer is the blizzlike call.
                     HousingNeighborhoodMirrorEntity& mirror = session->GetHousingNeighborhoodMirrorEntity();
                     mirror.SetName(nbh->GetName());
                     mirror.SetOwnerGUID(nbh->GetOwnerGuid());
@@ -1323,7 +1320,7 @@ bool HousingMap::AddPlayerToMap(Player* player, bool initPlayer /*= true*/)
                             mirror.AddManager(bnetGuid, member.PlayerGuid);
                         }
                     }
-                    mirror.SendCreateToPlayer(p);
+                    mirror.SendUpdateToPlayer(p);
 
                     // 4. QueryPlayerNamesResponse — pre-cache plot owner names
                     {

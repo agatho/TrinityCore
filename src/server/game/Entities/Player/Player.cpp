@@ -25769,24 +25769,15 @@ void Player::SendInitialPacketsAfterAddToMap()
         {
             Housing* housing = GetHousingForNeighborhood(neighborhood->GetGuid());
 
-            // User-observed: at login the neighborhood map shows all plots as
-            // unowned, but an interior-visit-and-exit-via-door round trip fixes
-            // it. The door-exit path emits HOUSE_STATUS with FlagByte=0xC0 before
-            // teleport, then the neighborhood re-entry emits 0xE0 (bit 5 houseEntry
-            // transitions OFF→ON). That transition is absent at login (no prior
-            // 0xC0 emission). Emit a 0xC0 primer here so the client sees the same
-            // bit-5 transition when it receives the 0xE0 below.
-            if (housing)
-            {
-                WorldPackets::Housing::HousingHouseStatusResponse primer;
-                primer.HouseGuid = housing->GetHouseGuid();
-                primer.AccountGuid = GetSession()->GetBattlenetAccountGUID();
-                primer.OwnerPlayerGuid = GetGUID();
-                primer.NeighborhoodGuid = housing->GetNeighborhoodGuid();
-                primer.Status = 0;
-                primer.FlagByte = 0xC0; // bit7=houseEditing, bit6=plotEntry, bit5 CLEAR
-                SendDirectMessage(primer.Write());
-            }
+            // NOTE on a reverted experiment: `06582a1988` added a pre-emission
+            // of SMSG_HOUSING_HOUSE_STATUS_RESPONSE with FlagByte=0xC0 before
+            // the 0xE0 below, speculating that a bit-5 transition would wake
+            // the client's map pin refresh. User-mandated blizzlike guardrail
+            // plus the pristine login sniff
+            // (sniff_analysis_login_plot/83_pristine_login_mirror_defer.py
+            // against dump_12.0.1.66838_2026-04-23_05-56-30.pkt) ruled that
+            // out. Retail does not emit a 0xC0 primer at login, so neither
+            // should we.
 
             // Send proactive HouseStatus so client knows about house ownership
             WorldPackets::Housing::HousingHouseStatusResponse statusResponse;
