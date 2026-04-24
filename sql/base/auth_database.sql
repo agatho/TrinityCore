@@ -1589,7 +1589,17 @@ INSERT INTO `build_auth_key` VALUES
 (67114,'Mac','x64','WoWC',0x02E25F13D33F7486F2267D23D527D0FE),
 (67114,'Win','A64','WoW',0x275017EC612F2E13305A0FA0C16A5FA8),
 (67114,'Win','x64','WoW',0x43F598C4E67C9D2F644A560369C0DF41),
-(67114,'Win','x64','WoWC',0x1F88AE965BD17EE37189BD736C5F7D7B);
+(67114,'Win','x64','WoWC',0x1F88AE965BD17EE37189BD736C5F7D7B),
+-- 67186: housing branch addition. Keys are placeholders (copied from 67114)
+-- pending real-key extraction from the 67186 client binary — see the note
+-- in sql/updates/auth/master/2026_04_24_00_auth.sql for extraction guidance.
+(67186,'Mac','A64','WoW',0x1A1662F9D15F926D6A85DF91BCE79DF1),
+(67186,'Mac','A64','WoWC',0xD28D8D2C35FA6FE4C3C0D76894431F46),
+(67186,'Mac','x64','WoW',0x59407231B082F7587562AC40C6992613),
+(67186,'Mac','x64','WoWC',0x02E25F13D33F7486F2267D23D527D0FE),
+(67186,'Win','A64','WoW',0x275017EC612F2E13305A0FA0C16A5FA8),
+(67186,'Win','x64','WoW',0x43F598C4E67C9D2F644A560369C0DF41),
+(67186,'Win','x64','WoWC',0x1F88AE965BD17EE37189BD736C5F7D7B);
 /*!40000 ALTER TABLE `build_auth_key` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -2036,7 +2046,8 @@ INSERT INTO `build_info` VALUES
 (66709,12,0,1,NULL),
 (66838,12,0,1,NULL),
 (67088,12,0,5,NULL),
-(67114,12,0,5,NULL);
+(67114,12,0,5,NULL),
+(67186,12,0,5,NULL);
 /*!40000 ALTER TABLE `build_info` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -3649,7 +3660,7 @@ CREATE TABLE `realmlist` (
   `timezone` tinyint unsigned NOT NULL DEFAULT '0',
   `allowedSecurityLevel` tinyint unsigned NOT NULL DEFAULT '0',
   `population` float NOT NULL DEFAULT '0',
-  `gamebuild` int unsigned NOT NULL DEFAULT '67114',
+  `gamebuild` int unsigned NOT NULL DEFAULT '67186',
   `Region` tinyint unsigned NOT NULL DEFAULT '1',
   `Battlegroup` tinyint unsigned NOT NULL DEFAULT '1',
   PRIMARY KEY (`id`),
@@ -3664,7 +3675,7 @@ CREATE TABLE `realmlist` (
 LOCK TABLES `realmlist` WRITE;
 /*!40000 ALTER TABLE `realmlist` DISABLE KEYS */;
 INSERT INTO `realmlist` VALUES
-(1,'Trinity','127.0.0.1','127.0.0.1',NULL,NULL,'255.255.255.0',8085,0,0,1,0,0,67114,1,1);
+(1,'Trinity','127.0.0.1','127.0.0.1',NULL,NULL,'255.255.255.0',8085,0,0,1,0,0,67186,1,1);
 /*!40000 ALTER TABLE `realmlist` ENABLE KEYS */;
 UNLOCK TABLES;
 
