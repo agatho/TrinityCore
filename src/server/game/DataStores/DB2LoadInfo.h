@@ -2008,8 +2008,10 @@ struct ExpectedStatModLoadInfo
 
 struct ExteriorComponentLoadInfo
 {
-    // Field order must match metadata (IndexField=2, ID is 3rd meta field)
-    static constexpr DB2FieldMeta Fields[15] =
+    // Field order must match metadata (IndexField=2, ID is 3rd meta field).
+    // 12.0.5 added Field_12 (signed INT) — Meta grew from 13 to 14 entries,
+    // FileFieldCount 12→13, ParentIndexField 12→13, LayoutHash 0x027A2F44→0x53EA0925.
+    static constexpr DB2FieldMeta Fields[16] =
     {
         { .IsSigned = false, .Type = FT_STRING, .Name = "Name" },
         { .IsSigned = false, .Type = FT_FLOAT, .Name = "PositionX" },
@@ -2025,10 +2027,11 @@ struct ExteriorComponentLoadInfo
         { .IsSigned = true, .Type = FT_INT, .Name = "Field_9" },
         { .IsSigned = true, .Type = FT_INT, .Name = "GameObjectID" },
         { .IsSigned = true, .Type = FT_INT, .Name = "Field_11" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "ItemID" },                   // NEW in 12.0.5 — per WoWDBDefs: references Item.ID
         { .IsSigned = false, .Type = FT_INT, .Name = "HouseExteriorWmoDataID" },  // ParentIndexField - must be unsigned
     };
 
-    static constexpr DB2LoadInfo Instance{ Fields, 15, &ExteriorComponentMeta::Instance, HOTFIX_SEL_EXTERIOR_COMPONENT };
+    static constexpr DB2LoadInfo Instance{ Fields, 16, &ExteriorComponentMeta::Instance, HOTFIX_SEL_EXTERIOR_COMPONENT };
 };
 
 struct ExteriorComponentExitPointLoadInfo

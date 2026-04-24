@@ -1726,7 +1726,8 @@ struct ExteriorComponentEntry
     uint8 Type;                             // Meta[8] BYTE: references ExteriorComponentType
     int32 Field_9;                          // Meta[9] INT: unknown
     int32 GameObjectID;                     // Meta[10] INT: references GameObjects
-    int32 Field_11;                         // Meta[11] INT: unknown
+    int32 Field_11;                         // Meta[11] INT: unknown (WoWDBDefs name: Field_11_2_7_64044_011)
+    int32 ItemID;                           // Meta[12] INT: NEW in 12.0.5 — references Item.ID (allows the exterior component to be sold/earned as an item, like HouseDecor.ItemID)
     uint32 HouseExteriorWmoDataID;          // ParentIndexField - must be unsigned
 };
 
