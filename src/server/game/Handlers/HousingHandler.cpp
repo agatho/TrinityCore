@@ -3918,6 +3918,15 @@ void WorldSession::HandleHousingSvcsGetPotentialHouseOwners(WorldPackets::Housin
     TC_LOG_INFO("housing", "CMSG_HOUSING_SVCS_GET_POTENTIAL_HOUSE_OWNERS: Neighborhood has {} members",
         uint32(members.size()));
 
+    // Sniff-verified format: PlayerName is "<CharacterName>-<RealmNormalizedName>"
+    // (cross-realm display name format). Examples from retail sniff:
+    //   "Anondk-AltarofStorms", "Dahuntermon-AltarofStorms", "Insanedk-Trollbane",
+    //   "Pewpewer-Khadgar", "Insanee-Gul'dan".
+    // Falls back to bare character name if the realm record is unavailable.
+    std::string realmSuffix;
+    if (std::shared_ptr<Realm const> currentRealm = sRealmList->GetCurrentRealm())
+        realmSuffix = "-" + currentRealm->NormalizedName;
+
     WorldPackets::Housing::HousingSvcsGetPotentialHouseOwnersResponse response;
     response.PotentialOwners.reserve(members.size());
     for (auto const& member : members)
@@ -3925,7 +3934,7 @@ void WorldSession::HandleHousingSvcsGetPotentialHouseOwners(WorldPackets::Housin
         WorldPackets::Housing::HousingSvcsGetPotentialHouseOwnersResponse::PotentialOwnerData ownerData;
         ownerData.PlayerGuid = member.PlayerGuid;
         if (Player* memberPlayer = ObjectAccessor::FindPlayer(member.PlayerGuid))
-            ownerData.PlayerName = memberPlayer->GetName();
+            ownerData.PlayerName = memberPlayer->GetName() + realmSuffix;
         response.PotentialOwners.push_back(std::move(ownerData));
     }
     SendPacket(response.Write());
