@@ -660,6 +660,7 @@ struct CharacterLoadoutEntry
     int8 ChrClassID;
     int32 Purpose;
     uint8 ItemContext;
+    Trinity::RaceMask<std::array<int32, 2>> RaceMask_;
 
     bool IsForNewCharacter() const { return Purpose == 9; }
 };
@@ -818,6 +819,7 @@ struct ChrCustomizationReqEntry
     int32 QuestID;
     int32 OverrideArchive;                                          // -1: allow any, otherwise must match OverrideArchive cvar
     int32 ItemModifiedAppearanceID;
+    Trinity::RaceMask<std::array<int32, 2>> RaceMask_;
 
     EnumFlag<ChrCustomizationReqFlag> GetFlags() const { return static_cast<ChrCustomizationReqFlag>(Flags); }
 };
@@ -1660,6 +1662,7 @@ struct EmotesEntry
     uint32 EventSoundID;
     uint32 SpellVisualKitID;
     int32 ClassMask;
+    Trinity::RaceMask<std::array<int32, 2>> RaceMask_;
 };
 
 struct EmotesTextEntry
@@ -1793,6 +1796,10 @@ struct FactionEntry
     std::array<int32, 4> ReputationMax;
     std::array<float, 2> ParentFactionMod;            // Faction outputs rep * ParentFactionModOut as spillover reputation
     std::array<uint8, 2> ParentFactionCap;            // The highest rank the faction will profit from incoming spillover
+    Trinity::RaceMask<std::array<int32, 2>> ReputationRaceMask1_;
+    Trinity::RaceMask<std::array<int32, 2>> ReputationRaceMask2_;
+    Trinity::RaceMask<std::array<int32, 2>> ReputationRaceMask3_;
+    Trinity::RaceMask<std::array<int32, 2>> ReputationRaceMask4_;
 
     // helpers
     bool CanHaveReputation() const
@@ -2761,6 +2768,7 @@ struct ItemEffectEntry
 struct ItemExtendedCostEntry
 {
     uint32 ID;
+    uint64 Money;
     uint16 RequiredArenaRating;
     int8 ArenaBracket;                                             // arena slot restrictions (min slot value)
     int32 Flags;
@@ -2881,6 +2889,7 @@ struct ItemSearchNameEntry
     uint32 RequiredAbility;
     uint16 ItemLevel;
     std::array<int32, 5> Flags;
+    Trinity::RaceMask<std::array<int32, 2>> AllowableRace_;
 };
 
 #define MAX_ITEM_SET_ITEMS 17
@@ -2930,6 +2939,7 @@ struct ItemSparseEntry
     int32 MaxCount;
     int32 MinReputation;
     uint32 RequiredAbility;
+    Trinity::RaceMask<std::array<int32, 2>> AllowableRace_;
     uint32 SellPrice;
     uint32 BuyPrice;
     uint32 VendorStackCount;
@@ -3449,6 +3459,7 @@ struct MountXDisplayEntry
 struct MovieEntry
 {
     uint32 ID;
+    LocalizedString Summary;
     uint8 Volume;
     uint8 KeyID;
     uint32 AudioFileDataID;
@@ -3585,7 +3596,7 @@ struct PathEntry
 struct PathNodeEntry
 {
     uint32 ID;
-    uint16 PathID;
+    int32 PathID;
     int16 Sequence;
     int32 LocationID;
 };
@@ -3593,7 +3604,7 @@ struct PathNodeEntry
 struct PathPropertyEntry
 {
     uint32 ID;
-    uint16 PathID;
+    int32 PathID;
     uint8 PropertyIndex;
     int32 Value;
 
@@ -3712,6 +3723,7 @@ struct PlayerConditionEntry
     std::array<uint32, 4> CurrencyCount;
     std::array<uint32, 6> QuestKillMonster;
     std::array<int32, 2> MovementFlags;
+    Trinity::RaceMask<std::array<int32, 2>> RaceMask_;
     std::array<int32, 4> TraitNodeEntryID;
     std::array<uint16, 4> TraitNodeEntryMinRank;
     std::array<uint16, 4> TraitNodeEntryMaxRank;
@@ -3978,6 +3990,7 @@ struct ScenarioEntry
     int32 Type;
     int32 Flags;
     uint32 UiTextureKitID;
+    uint32 UiScenarioDisplayInfoID;
 };
 
 struct ScenarioStepEntry
@@ -4078,6 +4091,7 @@ struct SkillLineAbilityEntry
     int16 UniqueBit;
     int16 TradeSkillCategoryID;
     int16 SkillupSkillLineID;
+    Trinity::RaceMask<std::array<int32, 2>> RaceMask_;
 
     SkillLineAbilityAcquireMethod GetAcquireMethod() const { return static_cast<SkillLineAbilityAcquireMethod>(AcquireMethod); }
     EnumFlag<SkillLineAbilityFlags> GetFlags() const { return static_cast<SkillLineAbilityFlags>(Flags); }
@@ -4101,6 +4115,7 @@ struct SkillRaceClassInfoEntry
     int32 Availability;
     int8 MinLevel;
     int16 SkillTierID;
+    Trinity::RaceMask<std::array<int32, 2>> RaceMask_;
 };
 
 struct SoulbindConduitRankEntry
@@ -4767,7 +4782,7 @@ struct TaxiPathNodeEntry
 {
     DBCPosition3D Loc;
     uint32 ID;
-    uint16 PathID;
+    uint32 PathID;
     int32 NodeIndex;
     uint16 ContinentID;
     int32 Flags;
@@ -5079,6 +5094,7 @@ struct TransmogOutfitEntryEntry
     int32 Flags;
     uint8 SetType;
     float OverrideCostModifier;
+    int32 OutfitIndex;
 
     TransmogOutfitEntrySource GetSource() const { return static_cast<TransmogOutfitEntrySource>(Source); }
     bool HasFlag(TransmogOutfitEntryFlags flag) const { return EnumFlag(static_cast<TransmogOutfitEntryFlags>(Flags)).HasFlag(flag); }
@@ -5405,6 +5421,7 @@ struct VehicleSeatEntry
 
     inline bool HasFlag(VehicleSeatFlags flag) const { return !!(Flags & flag); }
     inline bool HasFlag(VehicleSeatFlagsB flag) const { return !!(FlagsB & flag); }
+    inline bool HasFlag(VehicleSeatFlagsC flag) const { return EnumFlag(static_cast<VehicleSeatFlagsC>(FlagsC)).HasFlag(flag); }
 
     inline bool CanEnterOrExit() const { return HasFlag(VehicleSeatFlags(VEHICLE_SEAT_FLAG_CAN_ENTER_OR_EXIT | VEHICLE_SEAT_FLAG_CAN_CONTROL | VEHICLE_SEAT_FLAG_SHOULD_USE_VEH_SEAT_EXIT_ANIM_ON_VOLUNTARY_EXIT)); }
     inline bool CanSwitchFromSeat() const { return HasFlag(VEHICLE_SEAT_FLAG_CAN_SWITCH); }
@@ -5472,6 +5489,8 @@ struct WMOAreaTableEntry
     uint16 UwIntroSound;
     uint16 AreaTableID;
     int32 Flags;
+
+    bool HasFlag(WMOAreaTableFlags flag) const { return EnumFlag(static_cast<WMOAreaTableFlags>(Flags)).HasFlag(flag); }
 };
 
 struct WorldEffectEntry
