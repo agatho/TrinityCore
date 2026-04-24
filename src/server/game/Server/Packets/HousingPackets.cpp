@@ -1696,22 +1696,37 @@ WorldPacket const* HousingSvcsNeighborhoodOwnershipTransferredResponse::Write()
 
 WorldPacket const* HousingSvcsGetPotentialHouseOwnersResponse::Write()
 {
-    // IDA case 5505050 (sub_7FF724C7DA70): NO Result byte
-    // uint32(count) + Entry[count]{PackedGUID + uint32 + uint8 + uint8 + uint8(bit7→nameLen) + String(nameLen)}
-    // Name length encoding: nameLen = 2 * second_uint8 | (third_uint8 >> 7)
-    // So we encode: second_uint8 = nameLen >> 1, third_uint8 = (nameLen & 1) << 7
+    // 12.0.5 sniff-verified (1451-byte packet, 41 entries):
+    //   uint32      Count
+    //   Per entry:
+    //     PackedGUID PlayerGuid
+    //     uint32     Field1
+    //     uint8      AccessLevel
+    //     uint8      lenByte1   = nameLen >> 1   (high 7 bits of length)
+    //     uint8      lenByte2   = (nameLen & 1) << 7   (low bit at bit 7, rest unused)
+    //     char[nameLen] name    (NO null terminator on the wire)
+    //
+    // Verified against sniff entries:
+    //   "Anondk-AltarofStorms"     (20 chars) → lenByte1=0x0A, lenByte2=0x00
+    //   "Dahuntermon-AltarofStorms" (25 chars) → lenByte1=0x0C, lenByte2=0x80
+    //
+    // The previous +1 (include NUL) shifted the encoding: for a 20-char name we
+    // emitted lenByte1=0x0A, lenByte2=0x80 (encoding 21) and appended a trailing
+    // zero byte. The client then read 21 chars but the next entry's GUID mask
+    // landed inside the name buffer — corrupted ownership/access display.
     _worldPacket << uint32(PotentialOwners.size());
     for (auto const& owner : PotentialOwners)
     {
         _worldPacket << owner.PlayerGuid;
         _worldPacket << uint32(owner.Field1);
         _worldPacket << uint8(owner.AccessLevel);
-        uint32 nameLen = static_cast<uint32>(owner.PlayerName.size() + 1); // include null terminator
+        uint32 nameLen = static_cast<uint32>(owner.PlayerName.size());
         uint8 lenByte1 = static_cast<uint8>(nameLen >> 1);
         uint8 lenByte2 = static_cast<uint8>((nameLen & 1) << 7);
         _worldPacket << uint8(lenByte1);
         _worldPacket << uint8(lenByte2);
-        _worldPacket.append(owner.PlayerName.c_str(), nameLen);
+        if (nameLen > 0)
+            _worldPacket.append(owner.PlayerName.c_str(), nameLen);
     }
 
     TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_SVCS_GET_POTENTIAL_HOUSE_OWNERS_RESPONSE OwnerCount: {}", PotentialOwners.size());
