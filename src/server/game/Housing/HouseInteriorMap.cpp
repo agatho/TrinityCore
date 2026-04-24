@@ -1755,11 +1755,10 @@ bool HouseInteriorMap::AddPlayerToMap(Player* player, bool initPlayer /*= true*/
                         if (plotAt)
                         {
                             PhasingHandler::InitDbPhaseShift(plotAt->GetPhaseShift(), PHASE_USE_FLAGS_ALWAYS_VISIBLE, 0, 0);
-                            plotAt->InitHousingPlotData(
-                                housing->GetPlotIndex(),
-                                playerGuid,
-                                houseGuid,
-                                accountGuid);
+                            // 12.0.5: FHousingPlotAreaTrigger_C fragment removed. Plot ownership
+                            // propagates via PlayerHouseInfoComponentData.CurrentHouse; AT only
+                            // carries its own visual fields.
+                            plotAt->InitHousingPlotVisuals();
 
                             if (AddToMap(plotAt))
                             {
@@ -1831,25 +1830,14 @@ bool HouseInteriorMap::AddPlayerToMap(Player* player, bool initPlayer /*= true*/
                                         playerGuid.ToString());
                                 }
 
-                                // 9) ENTER_PLOT — fires HOUSE_PLOT_ENTERED on the client.
-                                // The client handler (NeighborhoodSystem vtable[22]) signals
-                                // FrameScript event 1073, which dispatches to all UI frames
-                                // with OnEvent handlers, triggering the HOUSE_PLOT_ENTERED
-                                // Lua event that loads Blizzard_HousingControls.
-                                // MUST come AFTER the AT CREATE so the client can look up
-                                // the AT GUID in its entity table.
-                                {
-                                    WorldPackets::Neighborhood::NeighborhoodPlayerEnterPlot enterPlot;
-                                    enterPlot.NeighborhoodEntityGuid = plotAt->GetGUID();
-                                    p->SendDirectMessage(enterPlot.Write());
-                                }
+                                // 12.0.5: SMSG_NEIGHBORHOOD_PLAYER_ENTER_PLOT is gone. The
+                                // HOUSE_PLOT_ENTERED client event is now triggered by the
+                                // UPDATE_OBJECT carrying PlayerHouseInfoComponent.CurrentHouse.
+                                // Set CurrentHouse to the house GUID for the interior plot.
+                                if (Housing const* ownerHousingForCurrent = GetOwnerHousing())
+                                    p->SetCurrentHouse(ownerHousingForCurrent->GetHouseGuid());
 
-                                // Sniff-verified: retail does NOT proactively send Status+Perms.
-                                // The client polls via CMSGs after receiving ENTER_PLOT, and
-                                // our CMSG handlers (HandleHousingHouseStatus, HandleHousingGetPlayerPermissions)
-                                // respond correctly with FlagByte=0xE0 and PermissionFlags=0xE0.
-
-                                TC_LOG_ERROR("housing", "HouseInteriorMap deferred: Sent ENTER_PLOT for {} (Status+Perms reactive via CMSG handlers)",
+                                TC_LOG_ERROR("housing", "HouseInteriorMap deferred: Set CurrentHouse for {} (Status+Perms reactive via CMSG handlers)",
                                     playerGuid.ToString());
                             }
                             else

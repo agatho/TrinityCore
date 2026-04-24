@@ -314,20 +314,15 @@ void HousingMap::SpawnPlotGameObjects()
             {
                 PhasingHandler::InitDbPhaseShift(plotAt->GetPhaseShift(), PHASE_USE_FLAGS_ALWAYS_VISIBLE, 0, 0);
 
-                ObjectGuid ownerGuid = plotInfo ? plotInfo->OwnerGuid : ObjectGuid::Empty;
-                ObjectGuid houseGuid = plotInfo ? plotInfo->HouseGuid : ObjectGuid::Empty;
-                ObjectGuid ownerBnetGuid = plotInfo ? plotInfo->OwnerBnetGuid : ObjectGuid::Empty;
-
-                TC_LOG_INFO("housing", "  PlotAT[{}] init: ownerGuid={} houseGuid={} bnetGuid={} "
-                    "(plotInfo={} hasOwner={})",
-                    plot->PlotIndex, ownerGuid.ToString(), houseGuid.ToString(), ownerBnetGuid.ToString(),
+                TC_LOG_INFO("housing", "  PlotAT[{}] spawn (plotInfo={} hasOwner={})",
+                    plot->PlotIndex,
                     plotInfo ? "present" : "null",
                     plotInfo ? !plotInfo->OwnerGuid.IsEmpty() : false);
 
-                // Set housing data BEFORE AddToMap so the initial CREATE_OBJECT includes
-                // the FHousingPlotAreaTrigger_C entity fragment, SpellForVisuals=1282351,
-                // and SpellXSpellVisualID=510142.
-                plotAt->InitHousingPlotData(static_cast<uint32>(plot->PlotIndex), ownerGuid, houseGuid, ownerBnetGuid);
+                // 12.0.5: no per-AT housing fragment. Only set the AT's own visual fields
+                // (SpellForVisuals, PeriodModifier, ExtraScaleCurve). Plot ownership is
+                // now propagated via PlayerHouseInfoComponentData.CurrentHouse on the Player.
+                plotAt->InitHousingPlotVisuals();
 
                 if (!AddToMap(plotAt))
                 {
@@ -341,9 +336,10 @@ void HousingMap::SpawnPlotGameObjects()
                 {
                     _plotAreaTriggers[static_cast<uint8>(plot->PlotIndex)] = plotAt->GetGUID();
 
+                    std::string ownerDesc = (plotInfo && !plotInfo->OwnerGuid.IsEmpty())
+                        ? plotInfo->OwnerGuid.ToString() : std::string("none");
                     TC_LOG_DEBUG("housing", "HousingMap::SpawnPlotGameObjects: Plot {} AT entry=37358 guid={} at ({:.1f},{:.1f},{:.1f}) owner={} DecalPropertiesID=621",
-                        plot->PlotIndex, plotAt->GetGUID().ToString(), hx, hy, hz,
-                        ownerGuid.IsEmpty() ? "none" : ownerGuid.ToString());
+                        plot->PlotIndex, plotAt->GetGUID().ToString(), hx, hy, hz, ownerDesc);
                 }
             }
             else
@@ -574,6 +570,14 @@ AreaTrigger* HousingMap::GetPlotAreaTrigger(uint8 plotIndex)
     return GetAreaTrigger(itr->second);
 }
 
+int8 HousingMap::GetPlotIndexForAreaTrigger(ObjectGuid atGuid) const
+{
+    for (auto const& [plotIdx, guid] : _plotAreaTriggers)
+        if (guid == atGuid)
+            return static_cast<int8>(plotIdx);
+    return -1;
+}
+
 GameObject* HousingMap::GetPlotGameObject(uint8 plotIndex)
 {
     auto itr = _plotGameObjects.find(plotIndex);
@@ -614,15 +618,9 @@ void HousingMap::SetPlotOwnershipState(uint8 plotIndex, bool owned)
             plotIndex, _neighborhood->GetName());
     }
 
-    // Update the plot AT's owner data so the client sees current ownership
-    if (AreaTrigger* plotAt = GetPlotAreaTrigger(plotIndex))
-    {
-        Neighborhood::PlotInfo const* plotInfo = _neighborhood->GetPlotInfo(plotIndex);
-        if (owned && plotInfo)
-            plotAt->UpdateHousingPlotOwnerData(plotInfo->OwnerGuid, plotInfo->HouseGuid, plotInfo->OwnerBnetGuid);
-        else
-            plotAt->UpdateHousingPlotOwnerData(ObjectGuid::Empty, ObjectGuid::Empty, ObjectGuid::Empty);
-    }
+    // 12.0.5: per-AT ownership fragment removed. Plot ownership is communicated
+    // via PlayerHouseInfoComponentData.CurrentHouse on each Player — updated by
+    // the enter/leave-plot code paths (see HousingMap::OnPlayerEnterPlotArea).
 
     // Blizzlike: the worldstate value is a per-player OWNER TYPE enum, not a binary
     // flag. Update the map-scoped default (0/1) so late joiners see reasonable INIT
@@ -746,10 +744,8 @@ bool HousingMap::AddPlayerToMap(Player* player, bool initPlayer /*= true*/)
         {
             _neighborhood->UpdatePlotHouseInfo(plotIdx, housing->GetHouseGuid(), ownerBnetGuid);
 
-            // Update the plot AT's owner data (may have been spawned with empty GUIDs
-            // if the player was offline during SpawnPlotGameObjects)
-            if (AreaTrigger* plotAt = GetPlotAreaTrigger(plotIdx))
-                plotAt->UpdateHousingPlotOwnerData(player->GetGUID(), housing->GetHouseGuid(), ownerBnetGuid);
+            // 12.0.5: per-AT ownership fragment removed. Ownership is propagated via
+            // PlayerHouseInfoComponentData.CurrentHouse on the Player at plot entry.
         }
 
         // Update PlayerMirrorHouse.MapID so the client knows this house is on the current map.

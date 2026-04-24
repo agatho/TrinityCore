@@ -1394,7 +1394,9 @@ bool Player::TeleportTo(TeleportLocation const& teleportLocation, TeleportToOpti
             m_teleportSpellId = teleportSpellId;
             return true;
         }
-        SetSemaphoreTeleportFar(true);
+        // 12.0.5: state transitions from Initiated → WaitingForSuspendTokenResponse
+        // later in this function (when the suspend-token request is sent). The old
+        // SetSemaphoreTeleportFar(true) marker is no longer needed.
 
         SetSelection(ObjectGuid::Empty);
 
@@ -19161,7 +19163,7 @@ bool Player::LoadFromDB(ObjectGuid guid, CharacterDatabaseQueryHolder const& hol
         UF::PlayerMirrorHouse& mirrorHouse = AddDynamicUpdateFieldValue(
             m_values.ModifyValue(&Player::m_playerHouseInfoComponentData, 0)
                 .ModifyValue(&UF::PlayerHouseInfoComponentData::Houses));
-        mirrorHouse.Guid = entryHouseGuid;
+        mirrorHouse.HouseGUID = entryHouseGuid;
         mirrorHouse.NeighborhoodGUID = h->GetNeighborhoodGuid();
         mirrorHouse.Level = h->GetLevel();
         mirrorHouse.Favor = static_cast<uint32>(std::min<uint64>(h->GetFavor64(), std::numeric_limits<uint32>::max()));
@@ -19177,14 +19179,11 @@ bool Player::LoadFromDB(ObjectGuid guid, CharacterDatabaseQueryHolder const& hol
         TC_LOG_ERROR("network", "Player::LoadFromDB: PlayerMirrorHouse: HouseGuid={} (h->GetHouseGuid={}) NeighborhoodGuid={} PlotID={} Level={} MapID={} Favor={}",
             entryHouseGuid.ToString(), h->GetHouseGuid().ToString(), h->GetNeighborhoodGuid().ToString(), mirrorHouse.PlotID, mirrorHouse.Level, mirrorHouse.MapID, mirrorHouse.Favor);
 
-        // Initiative mirror fields — client reads InitiativeCycleID to display initiative UI
+        // Initiative mirror field (12.0.5: InitiativeCycleID removed from PlayerMirrorHouse;
+        // only InitiativeFavor remains).
         uint64 nhGuid = h->GetNeighborhoodGuid().GetCounter();
-        ActiveInitiative* activeInit = sInitiativeManager.GetActiveInitiative(nhGuid);
-        if (activeInit)
-        {
-            mirrorHouse.InitiativeCycleID = static_cast<int32>(sInitiativeManager.GetActiveCycleForInitiative(activeInit->InitiativeID));
+        if (ActiveInitiative* activeInit = sInitiativeManager.GetActiveInitiative(nhGuid))
             mirrorHouse.InitiativeFavor = sInitiativeManager.GetPlayerContribution(nhGuid, activeInit->InitiativeID, GetGUID().GetCounter());
-        }
     }
 
     // Register PlayerInitiativeComponent_C fragment (FragmentID 37) on the Player entity.
@@ -30907,7 +30906,7 @@ void Player::CreateHousing(ObjectGuid neighborhoodGuid, uint8 plotIndex)
         UF::PlayerMirrorHouse& mirrorHouse = AddDynamicUpdateFieldValue(
             m_values.ModifyValue(&Player::m_playerHouseInfoComponentData, 0)
                 .ModifyValue(&UF::PlayerHouseInfoComponentData::Houses));
-        mirrorHouse.Guid = housing->GetHouseGuid();
+        mirrorHouse.HouseGUID = housing->GetHouseGuid();
         mirrorHouse.NeighborhoodGUID = housing->GetNeighborhoodGuid();
         mirrorHouse.Level = housing->GetLevel();
         mirrorHouse.Favor = 0;
@@ -30988,17 +30987,15 @@ void Player::UpdateHousingMapId(ObjectGuid houseGuid, int32 mapId)
     if (!m_playerHouseInfoComponentData.has_value())
         return;
 
-    // The DynamicUpdateField system enforces PublicSet=false on nested struct fields
-    // so we cannot modify individual fields in-place. Instead, collect current data,
-    // clear the array, and re-add entries with the updated MapID.
+    // DynamicUpdateField nested fields are PublicSet=false, so we snapshot, clear,
+    // and re-add entries with the updated MapID.
     struct HouseSnapshot
     {
-        ObjectGuid Guid;
+        ObjectGuid HouseGUID;
         ObjectGuid NeighborhoodGUID;
         uint32 Level;
         uint32 Favor;
         uint32 InitiativeFavor;
-        int32 InitiativeCycleID;
         int32 MapID;
         int32 PlotID;
     };
@@ -31011,15 +31008,14 @@ void Player::UpdateHousingMapId(ObjectGuid houseGuid, int32 mapId)
     for (uint32 i = 0; i < data.Houses.size(); ++i)
     {
         HouseSnapshot s;
-        s.Guid = data.Houses[i].Guid;
+        s.HouseGUID = data.Houses[i].HouseGUID;
         s.NeighborhoodGUID = data.Houses[i].NeighborhoodGUID;
         s.Level = data.Houses[i].Level;
         s.Favor = data.Houses[i].Favor;
         s.InitiativeFavor = data.Houses[i].InitiativeFavor;
-        s.InitiativeCycleID = data.Houses[i].InitiativeCycleID;
         s.PlotID = data.Houses[i].PlotID;
 
-        if (data.Houses[i].Guid == houseGuid)
+        if (data.Houses[i].HouseGUID == houseGuid)
         {
             s.MapID = mapId;
             found = true;
@@ -31038,7 +31034,6 @@ void Player::UpdateHousingMapId(ObjectGuid houseGuid, int32 mapId)
         return;
     }
 
-    // Clear and rebuild the Houses array
     ClearDynamicUpdateFieldValues(m_values.ModifyValue(&Player::m_playerHouseInfoComponentData, 0)
         .ModifyValue(&UF::PlayerHouseInfoComponentData::Houses));
 
@@ -31047,18 +31042,32 @@ void Player::UpdateHousingMapId(ObjectGuid houseGuid, int32 mapId)
         UF::PlayerMirrorHouse& h = AddDynamicUpdateFieldValue(
             m_values.ModifyValue(&Player::m_playerHouseInfoComponentData, 0)
                 .ModifyValue(&UF::PlayerHouseInfoComponentData::Houses));
-        h.Guid = s.Guid;
+        h.HouseGUID = s.HouseGUID;
         h.NeighborhoodGUID = s.NeighborhoodGUID;
         h.Level = s.Level;
         h.Favor = s.Favor;
         h.InitiativeFavor = s.InitiativeFavor;
-        h.InitiativeCycleID = s.InitiativeCycleID;
         h.MapID = s.MapID;
         h.PlotID = s.PlotID;
     }
 
     TC_LOG_ERROR("housing", "Player::UpdateHousingMapId: Updated house {} MapID to {} for player {}",
         houseGuid.ToString(), mapId, GetGUID().ToString());
+}
+
+void Player::SetCurrentHouse(ObjectGuid houseGuid)
+{
+    if (!m_playerHouseInfoComponentData.has_value())
+        return;
+
+    if (*m_playerHouseInfoComponentData->CurrentHouse == houseGuid)
+        return;
+
+    SetUpdateFieldValue(m_values.ModifyValue(&Player::m_playerHouseInfoComponentData, 0)
+        .ModifyValue(&UF::PlayerHouseInfoComponentData::CurrentHouse), houseGuid);
+
+    TC_LOG_DEBUG("housing", "Player::SetCurrentHouse: player={} currentHouse={}",
+        GetGUID().ToString(), houseGuid.IsEmpty() ? "<empty>" : houseGuid.ToString());
 }
 
 void Player::UpdateInitiativeFavor(uint32 favor)
@@ -31070,12 +31079,11 @@ void Player::UpdateInitiativeFavor(uint32 favor)
 
     struct HouseSnapshot
     {
-        ObjectGuid Guid;
+        ObjectGuid HouseGUID;
         ObjectGuid NeighborhoodGUID;
         uint32 Level;
         uint32 Favor;
         uint32 InitiativeFavor;
-        int32 InitiativeCycleID;
         int32 MapID;
         int32 PlotID;
     };
@@ -31086,18 +31094,16 @@ void Player::UpdateInitiativeFavor(uint32 favor)
     for (uint32 i = 0; i < data.Houses.size(); ++i)
     {
         HouseSnapshot s;
-        s.Guid = data.Houses[i].Guid;
+        s.HouseGUID = data.Houses[i].HouseGUID;
         s.NeighborhoodGUID = data.Houses[i].NeighborhoodGUID;
         s.Level = data.Houses[i].Level;
         s.Favor = data.Houses[i].Favor;
         s.InitiativeFavor = favor;
-        s.InitiativeCycleID = data.Houses[i].InitiativeCycleID;
         s.MapID = data.Houses[i].MapID;
         s.PlotID = data.Houses[i].PlotID;
         snapshots.push_back(s);
     }
 
-    // Clear and rebuild the Houses array
     ClearDynamicUpdateFieldValues(m_values.ModifyValue(&Player::m_playerHouseInfoComponentData, 0)
         .ModifyValue(&UF::PlayerHouseInfoComponentData::Houses));
 
@@ -31106,12 +31112,11 @@ void Player::UpdateInitiativeFavor(uint32 favor)
         UF::PlayerMirrorHouse& h = AddDynamicUpdateFieldValue(
             m_values.ModifyValue(&Player::m_playerHouseInfoComponentData, 0)
                 .ModifyValue(&UF::PlayerHouseInfoComponentData::Houses));
-        h.Guid = s.Guid;
+        h.HouseGUID = s.HouseGUID;
         h.NeighborhoodGUID = s.NeighborhoodGUID;
         h.Level = s.Level;
         h.Favor = s.Favor;
         h.InitiativeFavor = s.InitiativeFavor;
-        h.InitiativeCycleID = s.InitiativeCycleID;
         h.MapID = s.MapID;
         h.PlotID = s.PlotID;
     }

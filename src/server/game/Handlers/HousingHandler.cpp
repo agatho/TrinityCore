@@ -566,8 +566,8 @@ void WorldSession::HandleHousingDecorSetEditMode(WorldPackets::Housing::HousingD
             uint32(*phData.EditorMode), phData.Houses.size());
         for (uint32 i = 0; i < phData.Houses.size(); ++i)
         {
-            TC_LOG_DEBUG("housing", "    Houses[{}]: Guid={} MapID={} PlotID={} Level={} NeighborhoodGUID={}",
-                i, phData.Houses[i].Guid.ToString(), phData.Houses[i].MapID,
+            TC_LOG_DEBUG("housing", "    Houses[{}]: HouseGUID={} MapID={} PlotID={} Level={} NeighborhoodGUID={}",
+                i, phData.Houses[i].HouseGUID.ToString(), phData.Houses[i].MapID,
                 phData.Houses[i].PlotID, phData.Houses[i].Level,
                 phData.Houses[i].NeighborhoodGUID.ToString());
         }

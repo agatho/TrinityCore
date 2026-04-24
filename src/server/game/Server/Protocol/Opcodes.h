@@ -1047,6 +1047,58 @@ enum OpcodeClient : uint32
 
     // Deleted opcodes, here only to allow compile
     CMSG_TRANSMOGRIFY_ITEMS                                         = CMSG_REQUEST_SCHEDULED_PVP_INFO + 1,
+
+    // TC-CUSTOM housing opcodes — added by the housing-system branch from client research
+    // (IDA + pre-12.0.5 sniffs). Not in upstream TC's extracted opcode list. Values
+    // marked `0xF*******` collided with master's 12.0.5 values and were reassigned to
+    // the 0xF0000000+ range as unreachable placeholders pending 12.0.5 sniff verification.
+    CMSG_HOUSING_DECOR_BATCH_OPERATION                              = 0x30000D, // TC-CUSTOM
+    CMSG_HOUSING_DECOR_CATALOG_CREATE_SEARCHER                      = 0x300007, // TC-CUSTOM
+    CMSG_HOUSING_DECOR_CLEANUP_MODE_TOGGLE                          = 0x30000C, // TC-CUSTOM
+    CMSG_HOUSING_DECOR_CONFIRM_PREVIEW_PLACEMENT                    = 0x300011, // TC-CUSTOM
+    CMSG_HOUSING_DECOR_DELETE_FROM_STORAGE_BY_ID                    = 0x30000A, // TC-CUSTOM
+    CMSG_HOUSING_DECOR_PLACEMENT_PREVIEW                            = 0x30000F, // TC-CUSTOM
+    CMSG_HOUSING_DECOR_START_PLACING_FROM_SOURCE                    = 0x30000B, // TC-CUSTOM
+    CMSG_HOUSING_DECOR_START_PLACING_NEW_DECOR                      = 0x300005, // TC-CUSTOM
+    CMSG_HOUSING_DECOR_UPDATE_DYE_SLOT                              = 0x300008, // TC-CUSTOM
+    CMSG_HOUSING_FIXTURE_CREATE_BASIC_HOUSE                         = 0x310001, // TC-CUSTOM
+    CMSG_HOUSING_FIXTURE_DELETE_HOUSE                               = 0x310002, // TC-CUSTOM
+    CMSG_HOUSING_REQUEST_EDITOR_AVAILABILITY                        = 0x350009, // TC-CUSTOM
+    CMSG_HOUSING_SVCS_CHANGE_HOUSE_COSMETIC_OWNER                   = 0xF0000000, // TC-CUSTOM speculative (12.0.5 value collision)
+    CMSG_HOUSING_SVCS_CLEAR_PLOT_RESERVATION                        = 0x330005, // TC-CUSTOM
+    CMSG_HOUSING_SVCS_COMPLETE_TUTORIAL_STEP                        = 0xF0000001, // TC-CUSTOM speculative
+    CMSG_HOUSING_SVCS_GET_PLAYER_HOUSES_INFO_ALT                    = 0xF0000002, // TC-CUSTOM speculative
+    CMSG_HOUSING_SVCS_GET_ROSTER_DATA                               = 0x33000C, // TC-CUSTOM
+    CMSG_HOUSING_SVCS_GUILD_ADD_HOUSE                               = 0xF0000003, // TC-CUSTOM speculative
+    CMSG_HOUSING_SVCS_GUILD_APPEND_NEIGHBORHOOD                     = 0x330014, // TC-CUSTOM
+    CMSG_HOUSING_SVCS_GUILD_GET_HOUSING_INFO                        = 0x330016, // TC-CUSTOM
+    CMSG_HOUSING_SVCS_GUILD_RENAME_NEIGHBORHOOD                     = 0x330015, // TC-CUSTOM
+    CMSG_HOUSING_SVCS_QUERY_HOUSE_LEVEL_FAVOR                       = 0x330012, // TC-CUSTOM
+    CMSG_HOUSING_SVCS_QUERY_PENDING_INVITES                         = 0xF0000004, // TC-CUSTOM speculative
+    CMSG_HOUSING_SVCS_REQUEST_PERMISSIONS_CHECK                     = 0x330000, // TC-CUSTOM
+    CMSG_HOUSING_SVCS_ROSTER_UPDATE_SUBSCRIBE                       = 0x33000D, // TC-CUSTOM
+    CMSG_HOUSING_SVCS_SET_TUTORIAL_STATE                            = 0xF0000005, // TC-CUSTOM speculative
+    CMSG_HOUSING_SVCS_SKIP_TUTORIAL                                 = 0x33001B, // TC-CUSTOM
+    CMSG_HOUSING_SYSTEM_EXPORT_HOUSE                                = 0x350003, // TC-CUSTOM
+    CMSG_HOUSING_SYSTEM_GET_HOUSE_INFO_ALT                          = 0x350001, // TC-CUSTOM
+    CMSG_HOUSING_SYSTEM_HOUSE_SNAPSHOT                              = 0x350002, // TC-CUSTOM
+    CMSG_HOUSING_SYSTEM_HOUSE_STATUS_QUERY                          = 0x350000, // TC-CUSTOM
+    CMSG_HOUSING_SYSTEM_UPDATE_HOUSE_INFO                           = 0x350004, // TC-CUSTOM
+    CMSG_NEIGHBORHOOD_CANCEL_INVITATION_ALT                         = 0x39000C, // TC-CUSTOM
+    CMSG_NEIGHBORHOOD_CHARTER_REMOVE_SIGNATURE                      = 0x370005, // TC-CUSTOM
+    CMSG_NEIGHBORHOOD_CHARTER_SIGN_RESPONSE                         = 0x370002, // TC-CUSTOM
+    CMSG_NEIGHBORHOOD_INVITE_NOTIFICATION_ACK                       = 0x390010, // TC-CUSTOM
+    CMSG_NEIGHBORHOOD_OFFER_OWNERSHIP_RESPONSE                      = 0x390011, // TC-CUSTOM
+
+    // TC-CUSTOM initiative opcodes (housing initiative system extensions)
+    CMSG_GET_INITIATIVE_CLAIM_REWARD_REQUEST                        = 0xF0000006, // TC-CUSTOM speculative
+    CMSG_GET_INITIATIVE_LEADERBOARD_REQUEST                         = 0xF0000007, // TC-CUSTOM speculative
+    CMSG_GET_INITIATIVE_OPEN_CHEST_REQUEST                          = 0xF0000008, // TC-CUSTOM speculative
+    CMSG_GET_INITIATIVE_TASK_ABANDON_REQUEST                        = 0xF0000009, // TC-CUSTOM speculative
+    CMSG_GET_INITIATIVE_TASK_ACCEPT_REQUEST                         = 0xF000000A, // TC-CUSTOM speculative
+    CMSG_GET_INITIATIVE_TASK_PROGRESS_REQUEST                       = 0xF000000B, // TC-CUSTOM speculative
+    CMSG_INITIATIVE_ACCEPT_MILESTONE_REQUEST                        = 0xF000000C, // TC-CUSTOM speculative
+    CMSG_INITIATIVE_REPORT_PROGRESS                                 = 0xF000000D, // TC-CUSTOM speculative
 };
 
 inline constexpr std::size_t NUM_CMSG_OPCODES = 1948;
@@ -2480,6 +2532,43 @@ enum OpcodeServer : uint32
 
     // Deleted opcodes, here only to allow compile
     SMSG_ARENA_TEAM_STATS                                           = UNKNOWN_OPCODE,
+
+    // TC-CUSTOM housing SMSG opcodes — see corresponding block in OpcodeClient above.
+    // All values here are PLACEHOLDERS in the 0xF1000000+ range. Our pre-12.0.5 guesses
+    // all collided with master's 12.0.5 opcode regeneration, so the classes compile but
+    // Writes will not reach the client until each opcode is remapped to a verified
+    // 12.0.5 value (preferably from a sniff).
+    SMSG_HOUSE_INTERIOR_ENTER_HOUSE                                 = 0xF1000000, // TC-CUSTOM speculative (needs 12.0.5 verification)
+    SMSG_HOUSE_INTERIOR_LEAVE_HOUSE_RESPONSE                        = 0xF1000001, // TC-CUSTOM speculative
+    SMSG_HOUSING_CATALOG_STATE_SYNC                                 = 0xF1000002, // TC-CUSTOM speculative
+    SMSG_HOUSING_DECOR_BATCH_OPERATION_RESPONSE                     = 0xF1000003, // TC-CUSTOM speculative
+    SMSG_HOUSING_DECOR_CATALOG_CREATE_SEARCHER_RESPONSE             = 0xF1000004, // TC-CUSTOM speculative
+    SMSG_HOUSING_DECOR_PLACEMENT_PREVIEW_RESPONSE                   = 0xF1000005, // TC-CUSTOM speculative
+    SMSG_HOUSING_DECOR_START_PLACING_NEW_DECOR_RESPONSE             = 0xF1000006, // TC-CUSTOM speculative
+    SMSG_HOUSING_EDITOR_AVAILABILITY_RESPONSE                       = 0xF1000007, // TC-CUSTOM speculative
+    SMSG_HOUSING_SET_HOUSE_NAME_RESPONSE                            = 0xF1000008, // TC-CUSTOM speculative
+    SMSG_HOUSING_SVCS_CREATE_NEIGHBORHOOD_RESPONSE                  = 0xF1000009, // TC-CUSTOM speculative
+    SMSG_HOUSING_SVCS_GET_NEIGHBORHOOD_DETAILS_RESPONSE             = 0xF100000A, // TC-CUSTOM speculative
+    SMSG_HOUSING_SVCS_GET_NEIGHBORHOOD_HOUSES_RESPONSE              = 0xF100000B, // TC-CUSTOM speculative
+    SMSG_HOUSING_SVCS_HOUSE_EXPIRATION_NOTIFICATION                 = 0xF100000C, // TC-CUSTOM speculative
+    SMSG_HOUSING_SVCS_MOVE_HOUSE_RESPONSE                           = 0xF100000D, // TC-CUSTOM speculative
+    SMSG_HOUSING_SVCS_SEARCH_NEIGHBORHOODS_RESPONSE                 = 0xF100000E, // TC-CUSTOM speculative
+    SMSG_HOUSING_SVCS_SET_NEIGHBORHOOD_SETTINGS_RESPONSE            = 0xF100000F, // TC-CUSTOM speculative
+    SMSG_HOUSING_SVCS_SWAP_PLOTS_RESPONSE                           = 0xF1000010, // TC-CUSTOM speculative
+    SMSG_HOUSING_SYSTEM_HOUSE_SNAPSHOT_RESPONSE                     = 0xF1000011, // TC-CUSTOM speculative
+    SMSG_HOUSING_UPDATE_HOUSE_INFO                                  = 0xF1000012, // TC-CUSTOM speculative
+    SMSG_NEIGHBORHOOD_UPDATE_NAME_NOTIFICATION                      = 0xF1000013, // TC-CUSTOM speculative (superseded by SMSG_HOUSING_SVCS_NEIGHBORHOOD_UPDATE_NAME_NOTIFICATION = 0x540023)
+
+    // TC-CUSTOM account-housing / initiative SMSG opcodes
+    SMSG_ACCOUNT_HOUSING_FIXTURE_ADDED                              = 0xF1000014, // TC-CUSTOM speculative
+    SMSG_ACCOUNT_HOUSING_ROOM_ADDED                                 = 0xF1000015, // TC-CUSTOM speculative
+    SMSG_ACCOUNT_HOUSING_ROOM_COMPONENT_TEXTURE_ADDED               = 0xF1000016, // TC-CUSTOM speculative
+    SMSG_ACCOUNT_HOUSING_THEME_ADDED                                = 0xF1000017, // TC-CUSTOM speculative
+    SMSG_INITIATIVE_CHEST_RESULT                                    = 0xF1000018, // TC-CUSTOM speculative
+    SMSG_INITIATIVE_MILESTONE_UPDATE                                = 0xF1000019, // TC-CUSTOM speculative
+    SMSG_INITIATIVE_POINTS_UPDATE                                   = 0xF100001A, // TC-CUSTOM speculative
+    SMSG_INITIATIVE_TRACKED_UPDATED                                 = 0xF100001B, // TC-CUSTOM speculative
+    SMSG_INITIATIVE_UPDATE_STATUS                                   = 0xF100001C, // TC-CUSTOM speculative
 };
 
 inline constexpr std::size_t NUM_SMSG_OPCODES = 1650;

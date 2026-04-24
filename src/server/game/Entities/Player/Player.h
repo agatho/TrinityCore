@@ -2902,6 +2902,13 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         void UpdateHousingMapId(ObjectGuid houseGuid, int32 mapId);
         void UpdateInitiativeFavor(uint32 favor);
 
+        // 12.0.5 plot-entry mechanism: writes PlayerHouseInfoComponentData.CurrentHouse to
+        // the given house GUID (or ObjectGuid::Empty on plot-leave). Client tracks plot
+        // occupancy by observing this field's UPDATE_OBJECT changes — it replaces the
+        // removed SMSG_NEIGHBORHOOD_PLAYER_ENTER_PLOT / LEAVE_PLOT opcodes and the
+        // per-AT FHousingPlotAreaTrigger_C fragment that were deleted in 12.0.5.
+        void SetCurrentHouse(ObjectGuid houseGuid);
+
         // Transient — set by the door GO script before a visit teleport so
         // MapManager routes the visitor to the owner's HouseInteriorMap
         // instance (instanceId = owner's GUID counter). Empty means "enter my

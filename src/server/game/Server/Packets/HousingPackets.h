@@ -2709,20 +2709,8 @@ namespace WorldPackets::Neighborhood
     // Neighborhood Management SMSG Responses (0x5Cxxxx)
     // ============================================================
 
-    class NeighborhoodPlayerEnterPlot final : public ServerPacket
-    {
-    public:
-        NeighborhoodPlayerEnterPlot() : ServerPacket(SMSG_NEIGHBORHOOD_PLAYER_ENTER_PLOT) { }
-        WorldPacket const* Write() override;
-        ObjectGuid NeighborhoodEntityGuid; // Housing entity GUID for client entity table tracking (populates NeighborhoodSystem+24)
-    };
-
-    class NeighborhoodPlayerLeavePlot final : public ServerPacket
-    {
-    public:
-        NeighborhoodPlayerLeavePlot() : ServerPacket(SMSG_NEIGHBORHOOD_PLAYER_LEAVE_PLOT) { }
-        WorldPacket const* Write() override;
-    };
+    // NeighborhoodPlayerEnterPlot / NeighborhoodPlayerLeavePlot removed in 12.0.5.
+    // Plot occupancy is now communicated via PlayerHouseInfoComponentData.CurrentHouse.
 
     class NeighborhoodEvictPlayerResponse final : public ServerPacket
     {

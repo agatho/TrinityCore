@@ -44,6 +44,8 @@ public:
 
     Housing* GetHousingForPlayer(ObjectGuid playerGuid) const;
     AreaTrigger* GetPlotAreaTrigger(uint8 plotIndex);
+    // Returns the plot index whose plot-bounds AT equals `atGuid`, or -1 when none.
+    int8 GetPlotIndexForAreaTrigger(ObjectGuid atGuid) const;
     GameObject* GetPlotGameObject(uint8 plotIndex);
     void SetPlotOwnershipState(uint8 plotIndex, bool owned);
     HousingPlotOwnerType GetPlotOwnerTypeForPlayer(Player const* player, uint8 plotIndex) const;

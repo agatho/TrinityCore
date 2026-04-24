@@ -2602,21 +2602,8 @@ WorldPacket const* NeighborhoodCharterSignatureRemovedNotification::Write()
 // Neighborhood Management SMSG Responses (0x5Cxxxx)
 // ============================================================
 
-WorldPacket const* NeighborhoodPlayerEnterPlot::Write()
-{
-    _worldPacket << NeighborhoodEntityGuid;
-
-    TC_LOG_DEBUG("network.opcode", "SMSG_NEIGHBORHOOD_PLAYER_ENTER_PLOT NeighborhoodEntityGuid: {}", NeighborhoodEntityGuid.ToString());
-
-    return &_worldPacket;
-}
-
-WorldPacket const* NeighborhoodPlayerLeavePlot::Write()
-{
-    TC_LOG_DEBUG("network.opcode", "SMSG_NEIGHBORHOOD_PLAYER_LEAVE_PLOT (no data)");
-
-    return &_worldPacket;
-}
+// NeighborhoodPlayerEnterPlot / NeighborhoodPlayerLeavePlot Write() removed in 12.0.5.
+// Plot occupancy is now communicated via PlayerHouseInfoComponentData.CurrentHouse.
 
 WorldPacket const* NeighborhoodEvictPlayerResponse::Write()
 {

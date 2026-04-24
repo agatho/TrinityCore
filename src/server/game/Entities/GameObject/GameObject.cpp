@@ -4236,6 +4236,12 @@ void GameObject::InitHousingDecorData(ObjectGuid decorGuid, ObjectGuid houseGuid
     m_entityFragments.Add(WowCS::EntityFragment::FHousingDecor_C, IsInWorld(),
         WowCS::GetRawFragmentData(m_housingDecorData));
 
+    // 12.0.5 added Tag_HousingDecorProxyGameObject (=226) to mark a GameObject that is
+    // serving as a housing-decor proxy (chair/chest/mailbox/etc. placed as decor).
+    // Attach it alongside FHousingDecor_C so the client treats this entity as housing
+    // decor in addition to its normal GO behavior.
+    m_entityFragments.Add(WowCS::EntityFragment::Tag_HousingDecorProxyGameObject, IsInWorld());
+
     TC_LOG_DEBUG("housing", "GameObject::InitHousingDecorData: entry={} goGuid={} decorGuid={} houseGuid={} flags={} "
         "isInWorld={} fragmentCount={}",
         GetEntry(), GetGUID().ToString(), decorGuid.ToString(), houseGuid.ToString(), flags,

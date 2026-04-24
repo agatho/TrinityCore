@@ -25,12 +25,20 @@
 #include "HousingMgr.h"
 #include "HousingPackets.h"
 #include "Log.h"
+#include "Neighborhood.h"
+#include "NeighborhoodMgr.h"
 #include "ObjectAccessor.h"
 #include "PhasingHandler.h"
 #include "Player.h"
-#include "UpdateData.h"
-#include "WorldSession.h"
 
+// 12.0.5 plot-entry mechanism:
+//   - No more SMSG_NEIGHBORHOOD_PLAYER_ENTER_PLOT / LEAVE_PLOT opcodes (removed in
+//     TC commit 4c14988 / WoW build 12.0.5.67114).
+//   - No more FHousingPlotAreaTrigger_C entity fragment on the plot AT.
+//   - Plot ownership / "am I on a plot" is communicated via the
+//     PlayerHouseInfoComponentData.CurrentHouse UpdateField on the Player entity.
+//     Server writes the plot's HouseGuid to CurrentHouse on enter and clears it
+//     on exit; the client observes the UPDATE_OBJECT change to track occupancy.
 struct at_housing_plot : AreaTriggerAI
 {
     using AreaTriggerAI::AreaTriggerAI;
@@ -45,17 +53,24 @@ struct at_housing_plot : AreaTriggerAI
         if (!housingMap)
             return;
 
-        ObjectGuid ownerGuid;
-        uint32 plotId = 0;
-        if (at->m_housingPlotAreaTriggerData.has_value())
+        // Resolve which plot this AT represents from the HousingMap's AT registry.
+        int8 plotIdx = housingMap->GetPlotIndexForAreaTrigger(at->GetGUID());
+        if (plotIdx < 0)
         {
-            ownerGuid = at->m_housingPlotAreaTriggerData->HouseOwnerGUID;
-            plotId = at->m_housingPlotAreaTriggerData->PlotID;
+            TC_LOG_DEBUG("housing", "at_housing_plot: AT {} not registered as a plot AT — ignoring enter",
+                at->GetGUID().ToString());
+            return;
         }
+
+        Neighborhood const* nbh = housingMap->GetNeighborhood();
+        Neighborhood::PlotInfo const* plotInfo = nbh ? nbh->GetPlotInfo(static_cast<uint8>(plotIdx)) : nullptr;
+
+        ObjectGuid ownerGuid = plotInfo ? plotInfo->OwnerGuid : ObjectGuid::Empty;
+        ObjectGuid houseGuid = plotInfo ? plotInfo->HouseGuid : ObjectGuid::Empty;
 
         bool isOwnPlot = !ownerGuid.IsEmpty() && player->GetGUID() == ownerGuid;
 
-        // Check visitor access permissions for exterior (plot) access
+        // Visitor access permission check — only matters for plots with an owner.
         if (!isOwnPlot && !ownerGuid.IsEmpty())
         {
             if (Player* owner = ObjectAccessor::FindPlayer(ownerGuid))
@@ -72,63 +87,36 @@ struct at_housing_plot : AreaTriggerAI
             }
         }
 
-        // Check if this player was already placed on this plot by
-        // HousingMap::AddPlayerToMap's deferred ENTER_PLOT event.
-        // If so, skip duplicate ENTER_PLOT and spell packets but still do cosmetic phases.
+        // De-dup: HousingMap::AddPlayerToMap may have already pushed the CurrentHouse
+        // update during the initial entity flush for players who logged out on a plot.
         int8 currentPlot = housingMap->GetPlayerCurrentPlot(player->GetGUID());
-        bool alreadyOnPlot = (currentPlot == static_cast<int8>(plotId));
+        bool alreadyOnPlot = (currentPlot == plotIdx);
 
         if (!alreadyOnPlot)
         {
-            // Track which plot the player is on
-            housingMap->SetPlayerCurrentPlot(player->GetGUID(), static_cast<uint8>(plotId));
+            housingMap->SetPlayerCurrentPlot(player->GetGUID(), static_cast<uint8>(plotIdx));
 
-            // Retail pattern: UPDATE_OBJECT (VALUES on AT) at same timestamp as ENTER_PLOT.
-            // The client's ENTER_PLOT handler looks up the AT GUID in the entity table and
-            // stores the entity handle at NeighborhoodSystem+24. The fixture manager then
-            // reads HouseGUID from the AT's FHousingPlotAreaTrigger_C fragment (at offset +24).
-            //
-            // Ensure the AT entity + its FHousingPlotAreaTrigger_C data is on the client
-            // BEFORE sending ENTER_PLOT, otherwise the entity table lookup fails.
-            {
-                UpdateData atUpdate(player->GetMapId());
-                if (player->HaveAtClient(at))
-                    at->BuildValuesUpdateBlockForPlayer(&atUpdate, player);
-                else
-                {
-                    at->BuildCreateUpdateBlockForPlayer(&atUpdate, player);
-                    player->m_clientGUIDs.insert(at->GetGUID());
-                }
-                if (atUpdate.HasData())
-                {
-                    WorldPacket atPacket;
-                    atUpdate.BuildPacket(&atPacket);
-                    player->SendDirectMessage(&atPacket);
-                }
-            }
+            // 12.0.5 plot-entry: write the plot's HouseGuid to PlayerHouseInfoComponent.CurrentHouse.
+            // The UPDATE_OBJECT carrying this change replaces the removed
+            // SMSG_NEIGHBORHOOD_PLAYER_ENTER_PLOT opcode; the client reads CurrentHouse to
+            // populate its NeighborhoodSystem TLS (+280) "am I on a plot" state.
+            player->SetCurrentHouse(houseGuid);
 
-            WorldPackets::Neighborhood::NeighborhoodPlayerEnterPlot enterPlot;
-            enterPlot.NeighborhoodEntityGuid = at->GetGUID();
-            player->SendDirectMessage(enterPlot.Write());
-
-            // Send manual spell packets (spells 1239847, 469226, 1266699 don't exist in DB2)
-            housingMap->SendPlotEnterSpellPackets(player, static_cast<uint8>(plotId));
+            // Plot-enter spell packets (1239847, 469226, 1266699) still apply — those
+            // spells don't exist in DB2 so we send them via manual packets.
+            housingMap->SendPlotEnterSpellPackets(player, static_cast<uint8>(plotIdx));
         }
 
-        // Re-send HouseStatusResponse + GetPlayerPermissionsResponse after ENTER_PLOT.
-        // The client's ENTER_PLOT handler (vtable[22]) resets the editor state including
-        // the stored HouseGuid, so we must re-establish it via HouseStatusResponse (vtable[25])
-        // then arm the editor gate check via GetPlayerPermissionsResponse (vtable[24]).
-        // Without this sequence, the editor gate check (a1[76] && a1[72]) is always false
-        // and no editor mode (Decor, Room, Fixture) can be activated.
+        // HouseStatusResponse + Permissions keep the editor-mode gate armed on the client.
+        // These opcodes were NOT touched by 12.0.5 — still required after plot entry so the
+        // editor-gate check (a1[76] && a1[72]) evaluates true.
         if (!ownerGuid.IsEmpty())
         {
-            Player* plotOwner = (isOwnPlot) ? player : ObjectAccessor::FindPlayer(ownerGuid);
+            Player* plotOwner = isOwnPlot ? player : ObjectAccessor::FindPlayer(ownerGuid);
             Housing const* ownerHousing = plotOwner ? plotOwner->GetHousing() : nullptr;
 
             if (ownerHousing)
             {
-                // HouseStatusResponse: restores HouseGuid on client after vtable[22] cleared it
                 WorldPackets::Housing::HousingHouseStatusResponse statusResponse;
                 statusResponse.HouseGuid = ownerHousing->GetHouseGuid();
                 statusResponse.AccountGuid = player->GetSession()->GetBattlenetAccountGUID();
@@ -138,11 +126,10 @@ struct at_housing_plot : AreaTriggerAI
                 statusResponse.FlagByte = 0xE0; // bit7=houseEditing, bit6=plotEntry, bit5=houseEntry
                 player->SendDirectMessage(statusResponse.Write());
 
-                // GetPlayerPermissionsResponse: arms the editor gate (vtable[24] sets a1[72..76])
                 WorldPackets::Housing::HousingGetPlayerPermissionsResponse permResponse;
                 permResponse.HouseGuid = ownerHousing->GetHouseGuid();
                 permResponse.ResultCode = 0;
-                permResponse.PermissionFlags = isOwnPlot ? 0xE0 : 0x40; // owner=all, visitor=plotEntry only
+                permResponse.PermissionFlags = isOwnPlot ? 0xE0 : 0x40;
                 player->SendDirectMessage(permResponse.Write());
 
                 TC_LOG_DEBUG("housing", "at_housing_plot: Sent HouseStatus+Permissions for player {} (own={}, flags=0x{:X})",
@@ -150,10 +137,8 @@ struct at_housing_plot : AreaTriggerAI
             }
         }
 
-        // Cosmetic phase shift: when entering own plot, remove 16 cosmetic phases
+        // Cosmetic phase shift: owner entering own plot removes 16 cosmetic phases
         // after a ~10 second delay (sniff-verified retail behavior).
-        // Only applies to the plot owner, not visitors.
-        // Always schedule even if alreadyOnPlot (AddPlayerToMap doesn't handle phases).
         if (isOwnPlot)
         {
             ObjectGuid playerGuid = player->GetGUID();
@@ -173,8 +158,8 @@ struct at_housing_plot : AreaTriggerAI
             }, Milliseconds(HOUSING_COSMETIC_PHASE_DELAY_MS));
         }
 
-        TC_LOG_DEBUG("housing", "at_housing_plot: Player {} entered plot {} AT {} (own: {}, owner: {}, proactive: {})",
-            player->GetGUID().ToString(), plotId, at->GetGUID().ToString(), isOwnPlot,
+        TC_LOG_DEBUG("housing", "at_housing_plot: Player {} entered plot {} AT {} (own={}, owner={}, dedup={})",
+            player->GetGUID().ToString(), plotIdx, at->GetGUID().ToString(), isOwnPlot,
             ownerGuid.IsEmpty() ? "none" : ownerGuid.ToString(), alreadyOnPlot);
     }
 
@@ -188,29 +173,29 @@ struct at_housing_plot : AreaTriggerAI
             return;
 
         HousingMap* housingMap = dynamic_cast<HousingMap*>(player->GetMap());
+        if (!housingMap)
+            return;
 
-        ObjectGuid ownerGuid;
-        if (at->m_housingPlotAreaTriggerData.has_value())
-            ownerGuid = at->m_housingPlotAreaTriggerData->HouseOwnerGUID;
+        int8 plotIdx = housingMap->GetPlotIndexForAreaTrigger(at->GetGUID());
+        Neighborhood const* nbh = housingMap->GetNeighborhood();
+        Neighborhood::PlotInfo const* plotInfo = (nbh && plotIdx >= 0)
+            ? nbh->GetPlotInfo(static_cast<uint8>(plotIdx)) : nullptr;
+        ObjectGuid ownerGuid = plotInfo ? plotInfo->OwnerGuid : ObjectGuid::Empty;
 
         bool isOwnPlot = !ownerGuid.IsEmpty() && player->GetGUID() == ownerGuid;
 
-        // Remove plot auras via manual packets (spells don't exist in DB2)
-        if (housingMap)
-            housingMap->SendPlotLeaveAuraRemoval(player);
+        // Remove plot-auras (manual packets, spells aren't in DB2).
+        housingMap->SendPlotLeaveAuraRemoval(player);
 
-        // Clear plot tracking
-        if (housingMap)
-            housingMap->ClearPlayerCurrentPlot(player->GetGUID());
+        housingMap->ClearPlayerCurrentPlot(player->GetGUID());
 
-        // Notify the client that the player has left the plot
-        WorldPackets::Neighborhood::NeighborhoodPlayerLeavePlot leavePlot;
-        player->SendDirectMessage(leavePlot.Write());
+        // 12.0.5 plot-leave: clear PlayerHouseInfoComponent.CurrentHouse so the client's
+        // NeighborhoodSystem TLS drops its "on plot" flag.
+        player->SetCurrentHouse(ObjectGuid::Empty);
 
-        // Send HouseStatusResponse with FlagByte=0x00 to clear all editing contexts (Decor, Room, Fixture).
-        // Without this, the editor buttons remain visible after leaving the plot.
-        // BUT skip this when the player is entering the interior — the AT leave fires
-        // during the map transfer and would erase the interior's editor state.
+        // Clear editor contexts (Decor, Room, Fixture) by sending FlagByte=0x00
+        // HouseStatusResponse. Skip when leaving the plot is the result of entering
+        // the interior — the map transfer would erase interior editor state otherwise.
         if (isOwnPlot)
         {
             if (Housing const* housing = player->GetHousing())
@@ -223,22 +208,16 @@ struct at_housing_plot : AreaTriggerAI
                     statusResponse.OwnerPlayerGuid = player->GetGUID();
                     statusResponse.NeighborhoodGuid = housing->GetNeighborhoodGuid();
                     statusResponse.Status = 0;
-                    statusResponse.FlagByte = 0x00; // Clear all editing contexts
+                    statusResponse.FlagByte = 0x00;
                     player->SendDirectMessage(statusResponse.Write());
 
                     TC_LOG_DEBUG("housing", "at_housing_plot: Sent FlagByte=0x00 HouseStatusResponse for plot owner {} leaving plot",
                         player->GetGUID().ToString());
                 }
-                else
-                {
-                    TC_LOG_DEBUG("housing", "at_housing_plot: Skipped FlagByte=0x00 for plot owner {} (entering interior)",
-                        player->GetGUID().ToString());
-                }
             }
         }
 
-        // Cosmetic phase shift: when leaving own plot, restore 16 cosmetic phases
-        // after a ~10 second delay (sniff-verified retail behavior).
+        // Restore cosmetic phases when owner leaves.
         if (isOwnPlot)
         {
             ObjectGuid playerGuid = player->GetGUID();
@@ -258,7 +237,7 @@ struct at_housing_plot : AreaTriggerAI
             }, Milliseconds(HOUSING_COSMETIC_PHASE_DELAY_MS));
         }
 
-        TC_LOG_DEBUG("housing", "at_housing_plot: Player {} left plot AT {} (own: {})",
+        TC_LOG_DEBUG("housing", "at_housing_plot: Player {} left plot AT {} (own={})",
             player->GetGUID().ToString(), at->GetGUID().ToString(), isOwnPlot);
     }
 };
