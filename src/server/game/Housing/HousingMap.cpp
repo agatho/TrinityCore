@@ -3500,8 +3500,23 @@ void HousingMap::DespawnDecorItem(uint8 plotIndex, ObjectGuid decorGuid)
 {
     auto itr = _decorGuidToGoGuid.find(decorGuid);
     if (itr == _decorGuidToGoGuid.end())
-        return;
+    {
+        // Counter-only fallback (mirrors Housing::FindPlacedDecorIter): the
+        // client may send a GUID with arg1=0 even though the spawn entry was
+        // recorded with arg1=current_realmId.
+        uint64 const counter = decorGuid.GetCounter();
+        if (counter)
+            for (auto it = _decorGuidToGoGuid.begin(); it != _decorGuidToGoGuid.end(); ++it)
+                if (it->first.GetCounter() == counter)
+                {
+                    itr = it;
+                    break;
+                }
+        if (itr == _decorGuidToGoGuid.end())
+            return;
+    }
 
+    decorGuid = itr->first; // canonical key (server-stored arg1) for clean erase below
     ObjectGuid objGuid = itr->second;
     // Decor may be either a functional-decor GameObject or a visual-only MeshObject.
     if (objGuid.IsGameObject())
@@ -3600,7 +3615,18 @@ void HousingMap::UpdateDecorPosition(uint8 plotIndex, ObjectGuid decorGuid, Posi
 {
     auto itr = _decorGuidToGoGuid.find(decorGuid);
     if (itr == _decorGuidToGoGuid.end())
-        return;
+    {
+        uint64 const counter = decorGuid.GetCounter();
+        if (counter)
+            for (auto it = _decorGuidToGoGuid.begin(); it != _decorGuidToGoGuid.end(); ++it)
+                if (it->first.GetCounter() == counter)
+                {
+                    itr = it;
+                    break;
+                }
+        if (itr == _decorGuidToGoGuid.end())
+            return;
+    }
 
     ObjectGuid objGuid = itr->second;
     if (objGuid.IsGameObject())
