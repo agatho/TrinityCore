@@ -1402,19 +1402,7 @@ void HouseInteriorMap::UpdateDecorPosition(ObjectGuid decorGuid, Position const&
 {
     auto itr = _decorGuidToObjGuid.find(decorGuid);
     if (itr == _decorGuidToObjGuid.end())
-    {
-        // Counter-only fallback for client GUIDs that arrive with arg1=0.
-        uint64 const counter = decorGuid.GetCounter();
-        if (counter)
-            for (auto it = _decorGuidToObjGuid.begin(); it != _decorGuidToObjGuid.end(); ++it)
-                if (it->first.GetCounter() == counter)
-                {
-                    itr = it;
-                    break;
-                }
-        if (itr == _decorGuidToObjGuid.end())
-            return;
-    }
+        return;
 
     ObjectGuid objGuid = itr->second;
     if (objGuid.IsGameObject())
@@ -1444,19 +1432,8 @@ void HouseInteriorMap::DespawnDecorItem(ObjectGuid decorGuid)
     auto itr = _decorGuidToObjGuid.find(decorGuid);
     if (itr == _decorGuidToObjGuid.end())
     {
-        uint64 const counter = decorGuid.GetCounter();
-        if (counter)
-            for (auto it = _decorGuidToObjGuid.begin(); it != _decorGuidToObjGuid.end(); ++it)
-                if (it->first.GetCounter() == counter)
-                {
-                    itr = it;
-                    break;
-                }
-        if (itr == _decorGuidToObjGuid.end())
-        {
-            TC_LOG_DEBUG("housing", "HouseInteriorMap::DespawnDecorItem: No tracked visual for decorGuid={}", decorGuid.ToString());
-            return;
-        }
+        TC_LOG_DEBUG("housing", "HouseInteriorMap::DespawnDecorItem: No tracked visual for decorGuid={}", decorGuid.ToString());
+        return;
     }
 
     ObjectGuid objGuid = itr->second;

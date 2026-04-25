@@ -262,16 +262,6 @@ private:
     uint64 GenerateDecorDbId();
     uint64 GenerateRoomDbId();
 
-    // Tolerant lookup for placed decor: client packets sometimes carry the
-    // decor GUID with realmId/arg1=0 because the FHousingStorage_C key is
-    // serialized as a PackedGUID and the client deserialiser zero-fills any
-    // bytes that weren't sent over the wire — even though the server stores
-    // arg1=current_realmId. Counter values are unique per Housing instance, so
-    // falling back to a counter-only match is safe and lets MOVE/REMOVE/LOCK/DYE
-    // round-trip work regardless of which realm-id flavour the client cached.
-    std::unordered_map<ObjectGuid, PlacedDecor>::iterator FindPlacedDecorIter(ObjectGuid const& decorGuid);
-    std::unordered_map<ObjectGuid, PlacedDecor>::const_iterator FindPlacedDecorIter(ObjectGuid const& decorGuid) const;
-
     // Room connectivity helpers
     ObjectGuid FindBaseRoomGuid() const;
     bool IsRoomGraphConnectedWithout(ObjectGuid excludeRoomGuid) const;

@@ -1147,40 +1147,6 @@ uint32 Housing::PlaceStarterDecor()
     return placedCount;
 }
 
-std::unordered_map<ObjectGuid, Housing::PlacedDecor>::iterator Housing::FindPlacedDecorIter(ObjectGuid const& decorGuid)
-{
-    auto itr = _placedDecor.find(decorGuid);
-    if (itr != _placedDecor.end())
-        return itr;
-
-    // Counter-only fallback: tolerate a client that sent the GUID with arg1=0
-    // (PackedGUID truncation in the FHousingStorage_C path zero-fills bytes the
-    // server emitted for arg1=current_realmId). Counter is unique per Housing
-    // instance so a counter match is unambiguous within this player's house.
-    uint64 const counter = decorGuid.GetCounter();
-    if (!counter)
-        return _placedDecor.end();
-    for (auto it = _placedDecor.begin(); it != _placedDecor.end(); ++it)
-        if (it->first.GetCounter() == counter)
-            return it;
-    return _placedDecor.end();
-}
-
-std::unordered_map<ObjectGuid, Housing::PlacedDecor>::const_iterator Housing::FindPlacedDecorIter(ObjectGuid const& decorGuid) const
-{
-    auto itr = _placedDecor.find(decorGuid);
-    if (itr != _placedDecor.end())
-        return itr;
-
-    uint64 const counter = decorGuid.GetCounter();
-    if (!counter)
-        return _placedDecor.cend();
-    for (auto it = _placedDecor.cbegin(); it != _placedDecor.cend(); ++it)
-        if (it->first.GetCounter() == counter)
-            return it;
-    return _placedDecor.cend();
-}
-
 HousingResult Housing::MoveDecor(ObjectGuid decorGuid, float x, float y, float z,
     float rotX, float rotY, float rotZ, float rotW, float scale /*= 1.0f*/)
 {
@@ -1198,7 +1164,7 @@ HousingResult Housing::MoveDecor(ObjectGuid decorGuid, float x, float y, float z
     if (scale > 5.0f)
         scale = 5.0f;
 
-    auto itr = FindPlacedDecorIter(decorGuid);
+    auto itr = _placedDecor.find(decorGuid);
     if (itr == _placedDecor.end())
         return HOUSING_RESULT_DECOR_NOT_FOUND;
 
@@ -1238,7 +1204,7 @@ HousingResult Housing::RemoveDecor(ObjectGuid decorGuid)
     if (_houseGuid.IsEmpty())
         return HOUSING_RESULT_HOUSE_NOT_FOUND;
 
-    auto itr = FindPlacedDecorIter(decorGuid);
+    auto itr = _placedDecor.find(decorGuid);
     if (itr == _placedDecor.end())
         return HOUSING_RESULT_DECOR_NOT_FOUND;
 
@@ -1309,7 +1275,7 @@ HousingResult Housing::CommitDecorDyes(ObjectGuid decorGuid, std::array<uint32, 
     if (_houseGuid.IsEmpty())
         return HOUSING_RESULT_HOUSE_NOT_FOUND;
 
-    auto itr = FindPlacedDecorIter(decorGuid);
+    auto itr = _placedDecor.find(decorGuid);
     if (itr == _placedDecor.end())
         return HOUSING_RESULT_DECOR_NOT_FOUND;
 
@@ -1336,7 +1302,7 @@ HousingResult Housing::SetDecorLocked(ObjectGuid decorGuid, bool locked)
     if (_houseGuid.IsEmpty())
         return HOUSING_RESULT_HOUSE_NOT_FOUND;
 
-    auto itr = FindPlacedDecorIter(decorGuid);
+    auto itr = _placedDecor.find(decorGuid);
     if (itr == _placedDecor.end())
         return HOUSING_RESULT_DECOR_NOT_FOUND;
 
@@ -1358,8 +1324,8 @@ HousingResult Housing::SetDecorLocked(ObjectGuid decorGuid, bool locked)
 
 Housing::PlacedDecor const* Housing::GetPlacedDecor(ObjectGuid decorGuid) const
 {
-    auto itr = FindPlacedDecorIter(decorGuid);
-    if (itr != _placedDecor.cend())
+    auto itr = _placedDecor.find(decorGuid);
+    if (itr != _placedDecor.end())
         return &itr->second;
 
     return nullptr;
