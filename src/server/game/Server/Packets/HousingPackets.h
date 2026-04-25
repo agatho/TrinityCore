@@ -2541,8 +2541,15 @@ namespace WorldPackets::Neighborhood
 
         void Read() override;
 
+        // 12.0.5 sniff-verified wire (26 bytes) = NeighborhoodGuid + HouseGuid.
+        // Sample: NeighborhoodGuid (mask ef ff + 15 data bytes = 17 bytes) followed
+        // by HouseGuid (mask 07 c3 + 7 data = 9 bytes, HighGuid::Housing/3).
+        // The destination plot is NOT carried in this CMSG — the client implicitly
+        // moves to the plot whose cornerstone UI was last opened. Server tracks
+        // that via _lastClientPlotIndex / _lastCornerstoneGuid cached during the
+        // preceding CMSG_NEIGHBORHOOD_OPEN_CORNERSTONE_UI handler.
         ObjectGuid NeighborhoodGuid;
-        ObjectGuid PlotGuid;
+        ObjectGuid HouseGuid;
     };
 
     class NeighborhoodOpenCornerstoneUI final : public ClientPacket

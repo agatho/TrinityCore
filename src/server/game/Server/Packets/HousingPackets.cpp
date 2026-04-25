@@ -2464,9 +2464,9 @@ void NeighborhoodBuyHouse::Read()
 void NeighborhoodMoveHouse::Read()
 {
     _worldPacket >> NeighborhoodGuid;
-    _worldPacket >> PlotGuid;
+    _worldPacket >> HouseGuid;
 
-    TC_LOG_DEBUG("network.opcode", "CMSG_NEIGHBORHOOD_MOVE_HOUSE NeighborhoodGuid: {} PlotGuid: {}", NeighborhoodGuid.ToString(), PlotGuid.ToString());
+    TC_LOG_DEBUG("network.opcode", "CMSG_NEIGHBORHOOD_MOVE_HOUSE NeighborhoodGuid: {} HouseGuid: {}", NeighborhoodGuid.ToString(), HouseGuid.ToString());
 }
 
 void NeighborhoodOpenCornerstoneUI::Read()

@@ -1362,8 +1362,8 @@ void WorldSession::HandleNeighborhoodMoveHouse(WorldPackets::Neighborhood::Neigh
         return;
     }
 
-    TC_LOG_INFO("housing", "CMSG_NEIGHBORHOOD_MOVE_HOUSE NeighborhoodGuid: {}, PlotGuid: {}",
-        neighborhoodMoveHouse.NeighborhoodGuid.ToString(), neighborhoodMoveHouse.PlotGuid.ToString());
+    TC_LOG_INFO("housing", "CMSG_NEIGHBORHOOD_MOVE_HOUSE NeighborhoodGuid: {}, HouseGuid: {}",
+        neighborhoodMoveHouse.NeighborhoodGuid.ToString(), neighborhoodMoveHouse.HouseGuid.ToString());
 
     Neighborhood* neighborhood = sNeighborhoodMgr.ResolveNeighborhood(neighborhoodMoveHouse.NeighborhoodGuid, player);
     if (!neighborhood)
@@ -1377,24 +1377,70 @@ void WorldSession::HandleNeighborhoodMoveHouse(WorldPackets::Neighborhood::Neigh
         return;
     }
 
-    // Resolve the target plot index from the PlotGuid (cornerstone GO GUID)
-    // Target is a VACANT plot, so we resolve via DB2 cornerstone entry
-    int32 resolvedTarget = sHousingMgr.ResolvePlotIndex(neighborhoodMoveHouse.PlotGuid, neighborhood);
-    uint8 targetPlotIndex = (resolvedTarget >= 0) ? static_cast<uint8>(resolvedTarget) : INVALID_PLOT_INDEX;
+    // Validate that the HouseGuid in the CMSG matches the player's owned house —
+    // anti-spoof: a malicious client could try to relocate someone else's house.
+    Housing* housing = player->GetHousing();
+    if (!housing || housing->GetHouseGuid() != neighborhoodMoveHouse.HouseGuid)
+    {
+        WorldPackets::Neighborhood::NeighborhoodMoveHouseResponse response;
+        response.Result = static_cast<uint8>(HOUSING_RESULT_HOUSE_NOT_FOUND);
+        SendPacket(response.Write());
 
+        TC_LOG_DEBUG("housing", "HandleNeighborhoodMoveHouse: Player {} HouseGuid mismatch — owns {}, CMSG sent {}",
+            player->GetGUID().ToString(),
+            housing ? housing->GetHouseGuid().ToString() : "<no house>",
+            neighborhoodMoveHouse.HouseGuid.ToString());
+        return;
+    }
+
+    // Destination plot is NOT carried in MOVE_HOUSE. Sniff-verified flow (12.0.5):
+    //   1. Client sends OPEN_CORNERSTONE_UI(plotIndex, NeighborhoodGuid) when the
+    //      player walks up to a cornerstone GO.
+    //   2. HandleNeighborhoodOpenCornerstoneUI caches plotIndex into
+    //      _lastClientPlotIndex and the neighborhood guid into _lastCornerstoneGuid.
+    //   3. Player clicks "Move House Here" → client sends
+    //      CMSG_NEIGHBORHOOD_MOVE_HOUSE with NeighborhoodGuid + HouseGuid only.
+    //   4. Server reuses _lastClientPlotIndex as the destination plot.
+    //
+    // Sniff cross-check (packet #13126 OPEN_CORNERSTONE_UI plotIndex=0x12=18 +
+    // packet #13364 MOVE_HOUSE same neighborhood + packet #13402 SMSG response
+    // with response.House.PlotIndex=0x12=18) confirms the cached plot index is
+    // the destination.
+    if (_lastCornerstoneGuid != neighborhoodMoveHouse.NeighborhoodGuid)
+    {
+        WorldPackets::Neighborhood::NeighborhoodMoveHouseResponse response;
+        response.Result = static_cast<uint8>(HOUSING_RESULT_PLOT_NOT_FOUND);
+        SendPacket(response.Write());
+
+        TC_LOG_DEBUG("housing", "HandleNeighborhoodMoveHouse: No prior CornerstoneUI session for this neighborhood — cached={}, request={}",
+            _lastCornerstoneGuid.ToString(), neighborhoodMoveHouse.NeighborhoodGuid.ToString());
+        return;
+    }
+
+    uint8 targetPlotIndex = static_cast<uint8>(_lastClientPlotIndex);
     if (targetPlotIndex == INVALID_PLOT_INDEX)
     {
         WorldPackets::Neighborhood::NeighborhoodMoveHouseResponse response;
         response.Result = static_cast<uint8>(HOUSING_RESULT_PLOT_NOT_FOUND);
         SendPacket(response.Write());
-        TC_LOG_DEBUG("housing", "HandleNeighborhoodMoveHouse: Could not resolve target plot from GUID {}",
-            neighborhoodMoveHouse.PlotGuid.ToString());
+
+        TC_LOG_DEBUG("housing", "HandleNeighborhoodMoveHouse: cached plot index is invalid");
         return;
     }
 
-    // Capture old plot index before move for entity cleanup
+    // Reject moving to the same plot the player already occupies (no-op).
     Neighborhood::Member const* memberInfo = neighborhood->GetMember(player->GetGUID());
     uint8 oldPlotIndex = memberInfo ? memberInfo->PlotIndex : INVALID_PLOT_INDEX;
+    if (oldPlotIndex == targetPlotIndex)
+    {
+        WorldPackets::Neighborhood::NeighborhoodMoveHouseResponse response;
+        response.Result = static_cast<uint8>(HOUSING_RESULT_PLOT_NOT_VACANT);
+        SendPacket(response.Write());
+
+        TC_LOG_DEBUG("housing", "HandleNeighborhoodMoveHouse: target plot {} is the player's current plot",
+            targetPlotIndex);
+        return;
+    }
 
     // Deduct gold cost for house move
     if (!player->HasEnoughMoney(HOUSE_MOVE_COST_COPPER))
@@ -1468,7 +1514,11 @@ void WorldSession::HandleNeighborhoodMoveHouse(WorldPackets::Neighborhood::Neigh
         // Refresh NeighborhoodMirrorData (Houses[] changed — plot moved)
         neighborhood->RefreshMirrorDataForOnlineMembers();
     }
-    response.MoveTransactionGuid = ObjectGuid::Empty;
+    // Sniff-verified (12.0.5 packet #13402, 40-byte SMSG_NEIGHBORHOOD_MOVE_HOUSE_RESPONSE):
+    // the trailing PackedGUID is a copy of the moved house's HouseGuid, not an empty
+    // transaction GUID. Re-emitting the same HouseGuid lets the client correlate the
+    // response with its locally-tracked move-in-progress entry.
+    response.MoveTransactionGuid = housing->GetHouseGuid();
     SendPacket(response.Write());
 
     TC_LOG_DEBUG("housing", "MoveHouse result: {} from plot {} to plot {} in neighborhood {}",
