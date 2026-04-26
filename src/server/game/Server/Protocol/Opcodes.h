@@ -387,6 +387,22 @@ enum OpcodeClient : uint32
     CMSG_GET_GARRISON_INFO                                          = 0x3A01A8,
     CMSG_GET_INITIATIVE_ACTIVITY_LOG_REQUEST                        = 0x380004,
     CMSG_GET_NEIGHBORHOOD_INITIATIVE_INFO_REQUEST                   = 0x380003, // 12.0.5 — Lua C_NeighborhoodInitiative.RequestNeighborhoodInitiativeInfo
+    // 12.0.5 — IDA-catalogued NeighborhoodInitiative opcodes (sub_7FF75C176*).
+    // Wire format known from senders, semantic still pending Lua-handler binding.
+    // Names use NEIGHBORHOOD_INITIATIVE_<index> to keep the wire-format catalogue
+    // stable while we bind handlers; rename when retail Lua API map is confirmed.
+    CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_01                          = 0x380001, // PackedGUID
+    CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_05                          = 0x380005, // uint32 + PackedGUID
+    CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_06                          = 0x380006, // empty
+    CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_07                          = 0x380007, // uint32
+    CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_08                          = 0x380008, // empty
+    CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_09                          = 0x380009, // float
+    CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_0A                          = 0x38000A, // uint32
+    CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_0B                          = 0x38000B, // uint32
+    CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_0C                          = 0x38000C, // PackedGUID
+    CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_0D                          = 0x38000D, // uint32 + uint32 + (uint32,uint32)[N] + Bits<1>
+    CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_0E                          = 0x38000E, // uint32 + uint32[N]
+    CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_0F                          = 0x38000F, // uint32 + (uint32×4)[N]
     CMSG_GET_ITEM_PURCHASE_DATA                                     = 0x3B00CF,
     CMSG_GET_LANDING_PAGE_SHIPMENTS                                 = 0x3A01E4,
     CMSG_GET_LAST_CATALOG_FETCH                                     = 0x290036,
