@@ -1043,6 +1043,31 @@ bool HousingMap::AddPlayerToMap(Player* player, bool initPlayer /*= true*/)
                 // doesn't trigger; the editor menu then never arms.
                 p->SetCurrentHouse(housing->GetHouseGuid());
 
+                // Push HouseStatus + Permissions so the client's permissions cache is populated
+                // for the player's own plot. Same reason as SetCurrentHouse above — at login
+                // OnUnitEnter doesn't fire, so the AT script's proactive push at
+                // at_housing_plot.cpp never runs and the permissions window won't open until
+                // the player walks out of the AT and back in.
+                {
+                    WorldPackets::Housing::HousingHouseStatusResponse statusResponse;
+                    statusResponse.HouseGuid = housing->GetHouseGuid();
+                    statusResponse.AccountGuid = p->GetSession()->GetBattlenetAccountGUID();
+                    statusResponse.OwnerPlayerGuid = p->GetGUID();
+                    statusResponse.NeighborhoodGuid = housing->GetNeighborhoodGuid();
+                    statusResponse.Status = 0;
+                    statusResponse.FlagByte = 0xE0;
+                    p->SendDirectMessage(statusResponse.Write());
+
+                    WorldPackets::Housing::HousingGetPlayerPermissionsResponse permResponse;
+                    permResponse.HouseGuid = housing->GetHouseGuid();
+                    permResponse.ResultCode = 0;
+                    permResponse.PermissionFlags = 0xE0;
+                    p->SendDirectMessage(permResponse.Write());
+
+                    TC_LOG_DEBUG("housing", "HousingMap deferred ENTER_PLOT: pushed HouseStatus+Permissions for owner {} flags=0xE0",
+                        p->GetGUID().ToString());
+                }
+
                 WorldSession* session = p->GetSession();
 
                 // Mimic the retail client's auto-sent CMSG_HOUSING_DECOR_REQUEST_STORAGE
