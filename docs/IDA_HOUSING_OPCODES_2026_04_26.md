@@ -70,3 +70,21 @@ The remaining (0x380005, 6, 8, 9, B, D, E, F) need additional Lua-handler decomp
 | Opcode | Sender RVA | Wire fields | Mapping |
 |---|---|---|---|
 | 0x3C0000 | sub_7FF75C1A6810 | PackedGUID at +32 | CMSG_INITIATIVE_UPDATE_ACTIVE_NEIGHBORHOOD |
+
+## 0x55 — HousingSystem (SMSG, server-sent)
+
+Decompiled from sub_7FF75C1D1020 (the SMSG dispatcher for group 0x55). Each
+case parses one server-to-client response packet.
+
+| SMSG Opcode | CMSG Match | Wire fields |
+|---|---|---|
+| 0x550000 HOUSE_STATUS_RESPONSE | 0x350005 HOUSE_STATUS | PackedGUID HouseGuid + PackedGUID AccountGuid + PackedGUID OwnerPlayerGuid + PackedGUID **NeighborhoodGuid** + uint8 Status + uint8 PermissionFlags (bit7=houseEditing, bit6=plotEntry, bit5=houseEntry) |
+| 0x550006 GET_PLAYER_PERMISSIONS_RESPONSE | 0x350007 GET_PLAYER_PERMISSIONS | PackedGUID HouseGuid + uint8 ResultCode + uint8 PermissionFlags (same bit layout as 0x550000) |
+
+**Note (commit `ae3bd58f577`)**: HOUSE_STATUS_RESPONSE was previously written
+as `3 GUIDs + uint32 Status` based on a 66838 sniff. IDA shows the 12.0.5.67186
+client actually expects 4 GUIDs + 2 uint8s. The `NeighborhoodGuid` slot was
+missing entirely — the client read it as raw bytes that bled into Status,
+causing editor-state flapping. Restored to the IDA-verified format with
+PermissionFlags = 0xE0 for owner, 0x40 for visitor, 0xC0 for interior visit,
+0x00 when leaving plot.
