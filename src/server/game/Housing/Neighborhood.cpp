@@ -205,7 +205,15 @@ bool Neighborhood::LoadFromDB(PreparedQueryResult neighborhood, PreparedQueryRes
                 continue;
 
             Housing::PlacedDecor decor;
-            decor.Guid          = ObjectGuidFactory::CreateHousing(/*subType*/ 1, /*realmId*/ 0, d[2].GetUInt32(), d[0].GetUInt64());
+            // Bug repro 2026-04-26: previously hardcoded realmId=0 here while
+            // Housing::LoadFromDB (the per-player path) used the running realmId.
+            // The spawn flow consumes Neighborhood plot decor (this list), so
+            // every spawned decor MeshObject ended up with arg1=0; the client
+            // cached that flavour and bounced every subsequent CMSG_HOUSING_DECOR_MOVE
+            // with HOUSING_RESULT_DECOR_NOT_FOUND because Housing::_placedDecor
+            // keyed those GUIDs with arg1=current_realmId. Use the realmId here
+            // so both load paths produce identical keys.
+            decor.Guid          = ObjectGuidFactory::CreateHousing(/*subType*/ 1, /*realmId*/ sRealmList->GetCurrentRealmId().Realm, d[2].GetUInt32(), d[0].GetUInt64());
             decor.DecorEntryId  = d[2].GetUInt32();
             decor.PosX          = d[3].GetFloat();
             decor.PosY          = d[4].GetFloat();
