@@ -204,25 +204,34 @@ namespace WorldPackets::Housing
 
         void Read() override;
 
+        // 12.0.5 wire-format IDA-verified against client serializer
+        // sub_7FF75C19DCE0 (opcode 0x300001):
+        //   PackedGUID DecorGuid           (struct +32)
+        //   float      Position.X          (struct +48)
+        //   float      Position.Y          (struct +52)
+        //   float      Position.Z          (struct +56)
+        //   float      Rotation.X          (struct +60)
+        //   float      Rotation.Y          (struct +64)
+        //   float      Rotation.Z          (struct +68)
+        //   float      Scale               (struct +72)
+        //   PackedGUID AttachParentGuid    (struct +80)
+        //   PackedGUID RoomGuid            (struct +96)
+        //   PackedGUID AnchorMeshObjectGuid(struct +112)
+        //   uint32     AttachPoint         (struct +128)
+        //
+        // Sample 1 (68B) anchor is a real MeshObject (HighGuid 56), AttachPoint=-1.
+        // Samples 2/3 (53/54B) anchor is empty PackedGUID, AttachPoint a small int.
+        // Previous Read() misparsed the anchor PackedGUID as 3 separate fields
+        // (Field_61 u8 + Field_62 u8 + Field_63 s32 + speculative tail) — bytes
+        // happened to total correctly only for the empty-anchor case.
         ObjectGuid DecorGuid;
         TaggedPosition<Position::XYZ> Position;
         TaggedPosition<Position::XYZ> Rotation;
         float Scale = 1.0f;
         ObjectGuid AttachParentGuid;
         ObjectGuid RoomGuid;
-        uint8 Field_61 = 0;
-        uint8 Field_62 = 0;
-        int32 Field_63 = -1;
-        // 12.0.5 added an optional trailing block (sniff: 14-byte tail in 1 of 3 samples).
-        // Wire layout when present: PackedGUID + uint8 + int32. Source field is sent
-        // when the placement has a complex source (e.g. redeemed deferred decor with
-        // a parent reference). Absent for the common storage→plot path. We detect the
-        // tail by checking remaining bytes — cleanest match against retail's variable
-        // body lengths (53 / 54 / 68 bytes observed).
-        ObjectGuid SourceGuid;
-        uint8 SourceFlags = 0;
-        int32 SourceField = -1;
-        bool HasSourceTail = false;
+        ObjectGuid AnchorMeshObjectGuid;
+        uint32 AttachPoint = 0;
     };
 
     class HousingDecorMove final : public ClientPacket
@@ -430,11 +439,16 @@ namespace WorldPackets::Housing
 
         void Read() override;
 
+        // Wire (IDA sub_7FF75C19E520, opcode 0x310005):
+        //   PackedGUID FixtureGuid (struct +32)
+        //   uint32     ExteriorComponentID (struct +48)
+        //   uint8      Flags (struct +52)
+        // The trailing byte was previously parsed as Bits<1> ApplyImmediate; IDA
+        // confirms it's a regular uint8 (sub_7FF75EE9FDD0 = byte writer). All
+        // observed retail samples have value 0; semantic still unconfirmed.
         ObjectGuid FixtureGuid;
         uint32 ExteriorComponentID = 0;
-        // 12.0.5 — sniff shows a trailing byte (always 0x00 in 4 observed samples).
-        // Reads as Bits<1>, byte-aligned by the next op or end of buffer.
-        bool ApplyImmediate = false;
+        uint8 Flags = 0;
     };
 
     class HousingFixtureCreateFixture final : public ClientPacket
@@ -480,11 +494,13 @@ namespace WorldPackets::Housing
 
         void Read() override;
 
+        // Wire (IDA sub_7FF75C19E4D0, opcode 0x310004):
+        //   PackedGUID HouseGuid (struct +32)
+        //   uint32     HouseExteriorWmoDataID (struct +48)
+        //   uint8      Flags (struct +52)
         ObjectGuid HouseGuid;
         uint32 HouseExteriorWmoDataID = 0;
-        // 12.0.5 — sniff shows trailing byte 0x00 (Bits<1> false). Likely a
-        // confirm/preview flag matching the SetCoreFixture pattern.
-        bool ApplyImmediate = false;
+        uint8 Flags = 0;
     };
 
     class HousingFixtureCreateBasicHouse final : public ClientPacket
@@ -587,14 +603,21 @@ namespace WorldPackets::Housing
 
         void Read() override;
 
-        // Sniff-verified wire order: GUID, Count, ColorOverride, TextureID, OptionIDs[], Bits<1>
+        // Wire (IDA sub_7FF75C1AC240, opcode 0x320006):
+        //   PackedGUID RoomGuid (struct +32)
+        //   uint32     OptionIDs.size() (struct +56) - array length
+        //   uint32     ColorOverride (struct +72)
+        //   uint32     RoomComponentTextureID (struct +76)
+        //   uint8      ComponentSlot (struct +80) - which wall/face the materials apply to
+        //   uint32[]   OptionIDs (from struct +48 dynamic array)
+        // Previous Read() reordered to (count, ColorOverride, TextureID, OptionIDs[],
+        // Bits<1>) — the trailing bit was actually the ComponentSlot byte that
+        // sits BEFORE the OptionIDs array, so OptionIDs[0] was misaligned.
         ObjectGuid RoomGuid;
-        int32 ColorOverride = -1;               // -1 = default/no override
-        uint32 RoomComponentTextureID = 0;       // RoomComponentTexture DB2 ID
-        std::vector<uint32> OptionIDs;           // RoomComponentOption IDs
-        // 12.0.5 — sniff shows trailing 1-bit flag (always 0 in observed sample).
-        // Likely a "preview vs commit" indicator matching the SetCoreFixture/SetHouseType pattern.
-        bool ApplyImmediate = false;
+        int32 ColorOverride = -1;
+        uint32 RoomComponentTextureID = 0;
+        uint8 ComponentSlot = 0;
+        std::vector<uint32> OptionIDs;
     };
 
     class HousingRoomSetDoorType final : public ClientPacket
@@ -2541,14 +2564,15 @@ namespace WorldPackets::Neighborhood
 
         void Read() override;
 
-        // 12.0.5 sniff-verified wire (26 bytes) = NeighborhoodGuid + HouseGuid.
-        // Sample: NeighborhoodGuid (mask ef ff + 15 data bytes = 17 bytes) followed
-        // by HouseGuid (mask 07 c3 + 7 data = 9 bytes, HighGuid::Housing/3).
-        // The destination plot is NOT carried in this CMSG — the client implicitly
-        // moves to the plot whose cornerstone UI was last opened. Server tracks
-        // that via _lastClientPlotIndex / _lastCornerstoneGuid cached during the
-        // preceding CMSG_NEIGHBORHOOD_OPEN_CORNERSTONE_UI handler.
-        ObjectGuid NeighborhoodGuid;
+        // 12.0.5 wire (26 bytes) = CornerstoneGuid + HouseGuid. IDA-verified
+        // against client TryMoveHouse Lua handler at 0x7FF75CC59CA1: the client
+        // explicitly checks `(firstGuid.HiPart >> 58) == 11` (HighGuid::GameObject)
+        // and resets to Empty if not — so the first GUID is a destination plot
+        // cornerstone GO GUID. The CMSG serializer (sub_7FF75C177680) writes the
+        // opcode (0x39000A) followed by the two PackedGUIDs. Sample bytes:
+        //   ef ff 69 93 6b 09 72 a4 01 80 6d be e1 55 2d 2f 2c   <- 17B GameObject GUID
+        //   07 c3 0b 31 15 07 80 60 dc                          <- 9B Housing/3 HouseGuid
+        ObjectGuid CornerstoneGuid;
         ObjectGuid HouseGuid;
     };
 

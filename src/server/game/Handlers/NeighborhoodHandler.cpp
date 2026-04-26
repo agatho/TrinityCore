@@ -1362,18 +1362,21 @@ void WorldSession::HandleNeighborhoodMoveHouse(WorldPackets::Neighborhood::Neigh
         return;
     }
 
-    TC_LOG_INFO("housing", "CMSG_NEIGHBORHOOD_MOVE_HOUSE NeighborhoodGuid: {}, HouseGuid: {}",
-        neighborhoodMoveHouse.NeighborhoodGuid.ToString(), neighborhoodMoveHouse.HouseGuid.ToString());
+    TC_LOG_INFO("housing", "CMSG_NEIGHBORHOOD_MOVE_HOUSE CornerstoneGuid: {}, HouseGuid: {}",
+        neighborhoodMoveHouse.CornerstoneGuid.ToString(), neighborhoodMoveHouse.HouseGuid.ToString());
 
-    Neighborhood* neighborhood = sNeighborhoodMgr.ResolveNeighborhood(neighborhoodMoveHouse.NeighborhoodGuid, player);
+    // Use cornerstone GO GUID to find the neighborhood and destination plot.
+    // Per IDA TryMoveHouse (0x7FF75CC59CA1), the first PackedGUID is validated
+    // to be HighGuid::GameObject — i.e., a cornerstone GO at the destination plot.
+    Neighborhood* neighborhood = sNeighborhoodMgr.ResolveNeighborhood(neighborhoodMoveHouse.CornerstoneGuid, player);
     if (!neighborhood)
     {
         WorldPackets::Neighborhood::NeighborhoodMoveHouseResponse response;
         response.Result = static_cast<uint8>(HOUSING_RESULT_NEIGHBORHOOD_NOT_FOUND);
         SendPacket(response.Write());
 
-        TC_LOG_DEBUG("housing", "HandleNeighborhoodMoveHouse: Neighborhood {} not found",
-            neighborhoodMoveHouse.NeighborhoodGuid.ToString());
+        TC_LOG_DEBUG("housing", "HandleNeighborhoodMoveHouse: Neighborhood not found via cornerstone {}",
+            neighborhoodMoveHouse.CornerstoneGuid.ToString());
         return;
     }
 
@@ -1393,38 +1396,23 @@ void WorldSession::HandleNeighborhoodMoveHouse(WorldPackets::Neighborhood::Neigh
         return;
     }
 
-    // Destination plot is NOT carried in MOVE_HOUSE. Sniff-verified flow (12.0.5):
-    //   1. Client sends OPEN_CORNERSTONE_UI(plotIndex, NeighborhoodGuid) when the
-    //      player walks up to a cornerstone GO.
-    //   2. HandleNeighborhoodOpenCornerstoneUI caches plotIndex into
-    //      _lastClientPlotIndex and the neighborhood guid into _lastCornerstoneGuid.
-    //   3. Player clicks "Move House Here" → client sends
-    //      CMSG_NEIGHBORHOOD_MOVE_HOUSE with NeighborhoodGuid + HouseGuid only.
-    //   4. Server reuses _lastClientPlotIndex as the destination plot.
-    //
-    // Sniff cross-check (packet #13126 OPEN_CORNERSTONE_UI plotIndex=0x12=18 +
-    // packet #13364 MOVE_HOUSE same neighborhood + packet #13402 SMSG response
-    // with response.House.PlotIndex=0x12=18) confirms the cached plot index is
-    // the destination.
-    if (_lastCornerstoneGuid != neighborhoodMoveHouse.NeighborhoodGuid)
-    {
-        WorldPackets::Neighborhood::NeighborhoodMoveHouseResponse response;
-        response.Result = static_cast<uint8>(HOUSING_RESULT_PLOT_NOT_FOUND);
-        SendPacket(response.Write());
+    // Resolve destination plot index from the cornerstone GO GUID. Falls back to
+    // the cached _lastClientPlotIndex if the cornerstone resolve misses (covers
+    // the OPEN_CORNERSTONE_UI → MOVE_HOUSE flow where the GO no longer exists
+    // on the destination plot, e.g. just-bought plots).
+    int32 resolvedTarget = sHousingMgr.ResolvePlotIndex(neighborhoodMoveHouse.CornerstoneGuid, neighborhood);
+    uint8 targetPlotIndex = (resolvedTarget >= 0)
+        ? static_cast<uint8>(resolvedTarget)
+        : static_cast<uint8>(_lastClientPlotIndex);
 
-        TC_LOG_DEBUG("housing", "HandleNeighborhoodMoveHouse: No prior CornerstoneUI session for this neighborhood — cached={}, request={}",
-            _lastCornerstoneGuid.ToString(), neighborhoodMoveHouse.NeighborhoodGuid.ToString());
-        return;
-    }
-
-    uint8 targetPlotIndex = static_cast<uint8>(_lastClientPlotIndex);
     if (targetPlotIndex == INVALID_PLOT_INDEX)
     {
         WorldPackets::Neighborhood::NeighborhoodMoveHouseResponse response;
         response.Result = static_cast<uint8>(HOUSING_RESULT_PLOT_NOT_FOUND);
         SendPacket(response.Write());
 
-        TC_LOG_DEBUG("housing", "HandleNeighborhoodMoveHouse: cached plot index is invalid");
+        TC_LOG_DEBUG("housing", "HandleNeighborhoodMoveHouse: Could not resolve destination plot from cornerstone {} (fallback _lastClientPlotIndex={})",
+            neighborhoodMoveHouse.CornerstoneGuid.ToString(), _lastClientPlotIndex);
         return;
     }
 
