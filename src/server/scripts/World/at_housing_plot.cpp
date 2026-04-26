@@ -92,15 +92,18 @@ struct at_housing_plot : AreaTriggerAI
         int8 currentPlot = housingMap->GetPlayerCurrentPlot(player->GetGUID());
         bool alreadyOnPlot = (currentPlot == plotIdx);
 
+        // 12.0.5 plot-entry: write the plot's HouseGuid to PlayerHouseInfoComponent.CurrentHouse.
+        // The UPDATE_OBJECT carrying this change replaces the removed
+        // SMSG_NEIGHBORHOOD_PLAYER_ENTER_PLOT opcode; the client reads CurrentHouse to
+        // populate its NeighborhoodSystem TLS (+280) "am I on a plot" state.
+        // Always invoked — SetCurrentHouse short-circuits when the value is unchanged, so
+        // logged-in-on-plot players (alreadyOnPlot=true via HousingMap::SetPlayerCurrentPlot
+        // at AddPlayerToMap) still get the field-change callback wired correctly.
+        player->SetCurrentHouse(houseGuid);
+
         if (!alreadyOnPlot)
         {
             housingMap->SetPlayerCurrentPlot(player->GetGUID(), static_cast<uint8>(plotIdx));
-
-            // 12.0.5 plot-entry: write the plot's HouseGuid to PlayerHouseInfoComponent.CurrentHouse.
-            // The UPDATE_OBJECT carrying this change replaces the removed
-            // SMSG_NEIGHBORHOOD_PLAYER_ENTER_PLOT opcode; the client reads CurrentHouse to
-            // populate its NeighborhoodSystem TLS (+280) "am I on a plot" state.
-            player->SetCurrentHouse(houseGuid);
 
             // Plot-enter spell packets (1239847, 469226, 1266699) still apply — those
             // spells don't exist in DB2 so we send them via manual packets.

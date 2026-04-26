@@ -1036,6 +1036,13 @@ bool HousingMap::AddPlayerToMap(Player* player, bool initPlayer /*= true*/)
                 housing->PopulateCatalogStorageEntries();
                 housing->SyncUpdateFields();
 
+                // 12.0.5: write the player's own HouseGuid to PlayerHouseInfoComponent.CurrentHouse
+                // so the client's HOUSE_PLOT_ENTERED field-change callback fires from the same
+                // UPDATE_OBJECT bundle. Without this the AT enter event is the only path that
+                // sets it, but at login the player is already inside the AT box so OnUnitEnter
+                // doesn't trigger; the editor menu then never arms.
+                p->SetCurrentHouse(housing->GetHouseGuid());
+
                 WorldSession* session = p->GetSession();
 
                 // Mimic the retail client's auto-sent CMSG_HOUSING_DECOR_REQUEST_STORAGE
