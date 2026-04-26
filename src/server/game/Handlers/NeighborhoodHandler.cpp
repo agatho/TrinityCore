@@ -1509,9 +1509,9 @@ void WorldSession::HandleNeighborhoodMoveHouse(WorldPackets::Neighborhood::Neigh
     response.MoveTransactionGuid = housing->GetHouseGuid();
     SendPacket(response.Write());
 
-    TC_LOG_DEBUG("housing", "MoveHouse result: {} from plot {} to plot {} in neighborhood {}",
+    TC_LOG_DEBUG("housing", "MoveHouse result: {} from plot {} to plot {} via cornerstone {}",
         uint32(result), oldPlotIndex, targetPlotIndex,
-        neighborhoodMoveHouse.NeighborhoodGuid.ToString());
+        neighborhoodMoveHouse.CornerstoneGuid.ToString());
 }
 
 void WorldSession::HandleNeighborhoodOpenCornerstoneUI(WorldPackets::Neighborhood::NeighborhoodOpenCornerstoneUI const& neighborhoodOpenCornerstoneUI)
