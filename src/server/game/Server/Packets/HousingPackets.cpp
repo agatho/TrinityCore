@@ -1831,30 +1831,22 @@ static void WriteJamNeighborhoodRosterEntry(WorldPacket& packet, JamNeighborhood
 
 WorldPacket const* HousingHouseStatusResponse::Write()
 {
-    // Sniff-verified wire format (retail build 66838, idx 9984 of
-    // dump_12.0.1.66838_2026-04-15_09-35-59):
-    //   PackedGuid HouseGuid
-    //   PackedGuid AccountGuid     (BnetAccount)
-    //   PackedGuid OwnerPlayerGuid (may be empty ObjectGuid::Empty → 2-byte zero mask)
-    //   uint32     Status
-    //
-    // Two canonical retail samples:
-    //   21 B: HouseGuid(9) + AccountGuid(6) + 00 00 (empty Owner) + 00 00 00 00 (Status=0)
-    //   27 B: HouseGuid(9) + AccountGuid(6) + OwnerPlayerGuid(8) + 00 00 00 00 (Status=0)
-    //
-    // Previously we wrote four PackedGuids (adding NeighborhoodGuid) plus
-    // two uint8 fields (Status + FlagByte). That extra data was being read
-    // by the client at the wrong offsets, corrupting Status (interpreted
-    // as 4 bytes of PackedGuid mask) and causing editor-state flapping.
-    // NeighborhoodGuid + FlagByte have been dropped; Status widened to
-    // uint32 to match retail.
+    // IDA-verified wire format (12.0.5.67186, sub_7FF75C1D1020 case 0x550000):
+    //   PackedGUID HouseGuid
+    //   PackedGUID AccountGuid
+    //   PackedGUID OwnerPlayerGuid
+    //   PackedGUID NeighborhoodGuid
+    //   uint8 Status
+    //   uint8 PermissionFlags  (bit 7=houseEditing, bit 6=plotEntry, bit 5=houseEntry)
     _worldPacket << HouseGuid;
     _worldPacket << AccountGuid;
     _worldPacket << OwnerPlayerGuid;
-    _worldPacket << uint32(Status);
+    _worldPacket << NeighborhoodGuid;
+    _worldPacket << uint8(Status);
+    _worldPacket << uint8(PermissionFlags);
 
-    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_HOUSE_STATUS_RESPONSE HouseGuid: {} AccountGuid: {} OwnerPlayerGuid: {} Status: {}",
-        HouseGuid.ToString(), AccountGuid.ToString(), OwnerPlayerGuid.ToString(), Status);
+    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_HOUSE_STATUS_RESPONSE HouseGuid: {} AccountGuid: {} OwnerPlayerGuid: {} NeighborhoodGuid: {} Status: {} PermissionFlags: 0x{:02X}",
+        HouseGuid.ToString(), AccountGuid.ToString(), OwnerPlayerGuid.ToString(), NeighborhoodGuid.ToString(), Status, PermissionFlags);
 
     return &_worldPacket;
 }
@@ -2926,79 +2918,6 @@ void InitiativeUpdateActiveNeighborhood::Read()
     _worldPacket >> NeighborhoodGuid;
 
     TC_LOG_DEBUG("network.opcode", "CMSG_INITIATIVE_UPDATE_ACTIVE_NEIGHBORHOOD NeighborhoodGuid: {}", NeighborhoodGuid.ToString());
-}
-
-void InitiativeAcceptMilestoneRequest::Read()
-{
-    _worldPacket >> NeighborhoodGuid;
-    _worldPacket >> InitiativeID;
-    _worldPacket >> MilestoneIndex;
-
-    TC_LOG_DEBUG("network.opcode", "CMSG_INITIATIVE_ACCEPT_MILESTONE_REQUEST NeighborhoodGuid: {} InitiativeID: {} MilestoneIndex: {}",
-        NeighborhoodGuid.ToString(), InitiativeID, MilestoneIndex);
-}
-
-void InitiativeReportProgress::Read()
-{
-    _worldPacket >> NeighborhoodGuid;
-
-    TC_LOG_DEBUG("network.opcode", "CMSG_INITIATIVE_REPORT_PROGRESS NeighborhoodGuid: {}",
-        NeighborhoodGuid.ToString());
-}
-
-void GetInitiativeClaimRewardRequest::Read()
-{
-    _worldPacket >> NeighborhoodGuid;
-    _worldPacket >> InitiativeID;
-    _worldPacket >> MilestoneIndex;
-
-    TC_LOG_DEBUG("network.opcode", "CMSG_GET_INITIATIVE_CLAIM_REWARD_REQUEST NeighborhoodGuid: {} InitiativeID: {} MilestoneIndex: {}",
-        NeighborhoodGuid.ToString(), InitiativeID, MilestoneIndex);
-}
-
-void GetInitiativeLeaderboardRequest::Read()
-{
-    _worldPacket >> NeighborhoodGuid;
-    _worldPacket >> InitiativeID;
-
-    TC_LOG_DEBUG("network.opcode", "CMSG_GET_INITIATIVE_LEADERBOARD_REQUEST NeighborhoodGuid: {} InitiativeID: {}",
-        NeighborhoodGuid.ToString(), InitiativeID);
-}
-
-void GetInitiativeOpenChestRequest::Read()
-{
-    _worldPacket >> NeighborhoodGuid;
-    _worldPacket >> InitiativeID;
-
-    TC_LOG_DEBUG("network.opcode", "CMSG_GET_INITIATIVE_OPEN_CHEST_REQUEST NeighborhoodGuid: {} InitiativeID: {}",
-        NeighborhoodGuid.ToString(), InitiativeID);
-}
-
-void GetInitiativeTaskAcceptRequest::Read()
-{
-    _worldPacket >> NeighborhoodGuid;
-    _worldPacket >> TaskID;
-
-    TC_LOG_DEBUG("network.opcode", "CMSG_GET_INITIATIVE_TASK_ACCEPT_REQUEST NeighborhoodGuid: {} TaskID: {}",
-        NeighborhoodGuid.ToString(), TaskID);
-}
-
-void GetInitiativeTaskAbandonRequest::Read()
-{
-    _worldPacket >> NeighborhoodGuid;
-    _worldPacket >> TaskID;
-
-    TC_LOG_DEBUG("network.opcode", "CMSG_GET_INITIATIVE_TASK_ABANDON_REQUEST NeighborhoodGuid: {} TaskID: {}",
-        NeighborhoodGuid.ToString(), TaskID);
-}
-
-void GetInitiativeTaskProgressRequest::Read()
-{
-    _worldPacket >> NeighborhoodGuid;
-    _worldPacket >> TaskID;
-
-    TC_LOG_DEBUG("network.opcode", "CMSG_GET_INITIATIVE_TASK_PROGRESS_REQUEST NeighborhoodGuid: {} TaskID: {}",
-        NeighborhoodGuid.ToString(), TaskID);
 }
 
 } // namespace WorldPackets::Neighborhood

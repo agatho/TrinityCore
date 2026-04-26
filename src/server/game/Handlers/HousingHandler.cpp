@@ -373,18 +373,22 @@ void WorldSession::HandleHouseInteriorLeaveHouse(WorldPackets::Housing::HouseInt
                     statusResponse.HouseGuid = plot.HouseGuid;
                     statusResponse.AccountGuid = plot.OwnerBnetGuid;
                     statusResponse.OwnerPlayerGuid = plot.OwnerGuid;
+                    statusResponse.NeighborhoodGuid = nbh->GetGuid();
                     break;
                 }
             }
             if (!statusResponse.HouseGuid.IsEmpty())
                 break;
         }
+        statusResponse.PermissionFlags = 0xC0; // bit7=Decor, bit6=Room only on interior visit
     }
     else if (housing)
     {
         statusResponse.HouseGuid = housing->GetHouseGuid();
         statusResponse.AccountGuid = GetBattlenetAccountGUID();
         statusResponse.OwnerPlayerGuid = player->GetGUID();
+        statusResponse.NeighborhoodGuid = housing->GetNeighborhoodGuid();
+        statusResponse.PermissionFlags = 0xC0;
     }
     SendPacket(statusResponse.Write());
 
@@ -3565,7 +3569,9 @@ void WorldSession::HandleHousingSvcsTeleportToPlot(WorldPackets::Housing::Housin
             statusResponse.HouseGuid = interiorHousing->GetHouseGuid();
             statusResponse.AccountGuid = GetBattlenetAccountGUID();
             statusResponse.OwnerPlayerGuid = player->GetGUID();
+            statusResponse.NeighborhoodGuid = interiorHousing->GetNeighborhoodGuid();
             statusResponse.Status = 0;
+            statusResponse.PermissionFlags = 0xC0;
             SendPacket(statusResponse.Write());
         }
     }
@@ -4251,41 +4257,39 @@ void WorldSession::HandleHousingHouseStatus(WorldPackets::Housing::HousingHouseS
         {
             // Visiting someone else's plot — return that plot's house data
             response.HouseGuid = plotInfo->HouseGuid;
-            response.AccountGuid = plotInfo->OwnerBnetGuid; // BNetAccount GUID of plot owner
-            response.OwnerPlayerGuid = plotInfo->OwnerGuid; // Plot owner's Player GUID
-            response.Status = 0; // Visitor is outside (exterior)
-            // Visitors get no editing permissions (FlagByte stays 0)
+            response.AccountGuid = plotInfo->OwnerBnetGuid;
+            response.OwnerPlayerGuid = plotInfo->OwnerGuid;
+            response.NeighborhoodGuid = neighborhood->GetGuid();
+            response.Status = 0;
+            response.PermissionFlags = 0x40; // visitor: plot-entry only
         }
         else if (ownHousing)
         {
-            // On own plot
             response.HouseGuid = ownHousing->GetHouseGuid();
             response.AccountGuid = GetBattlenetAccountGUID();
             response.OwnerPlayerGuid = player->GetGUID();
             response.NeighborhoodGuid = ownHousing->GetNeighborhoodGuid();
-            response.Status = 0; // Sniff-verified: always 0 to enable editor
-            response.FlagByte = 0xE0; // bit7=houseEditing, bit6=plotEntry, bit5=houseEntry
+            response.Status = 0;
+            response.PermissionFlags = 0xE0;
         }
     }
     else if (ownHousing)
     {
-        // Not on any tracked plot, fall back to own housing data
         response.HouseGuid = ownHousing->GetHouseGuid();
         response.AccountGuid = GetBattlenetAccountGUID();
         response.OwnerPlayerGuid = player->GetGUID();
         response.NeighborhoodGuid = ownHousing->GetNeighborhoodGuid();
-        response.Status = 0; // Sniff-verified: always 0 to enable editor
-        response.FlagByte = 0xE0; // bit7=houseEditing, bit6=plotEntry, bit5=houseEntry
+        response.Status = 0;
+        response.PermissionFlags = 0xE0;
     }
-    // No house and not on a plot: all fields stay at defaults (empty GUIDs, Status=0).
     WorldPacket const* statusPkt = response.Write();
     TC_LOG_ERROR("housing", ">>> CMSG_HOUSING_HOUSE_STATUS (visitedPlot: {})", visitedPlot);
     TC_LOG_ERROR("housing", "<<< SMSG_HOUSING_HOUSE_STATUS_RESPONSE ({} bytes): {}",
         statusPkt->size(), HexDumpPacket(statusPkt));
-    TC_LOG_ERROR("housing", "    HouseGuid={} AccountGuid={} OwnerPlayerGuid={} NeighborhoodGuid={} Status={} FlagByte=0x{:02X}",
+    TC_LOG_ERROR("housing", "    HouseGuid={} AccountGuid={} OwnerPlayerGuid={} NeighborhoodGuid={} Status={} Permissions=0x{:02X}",
         response.HouseGuid.ToString(), response.AccountGuid.ToString(),
         response.OwnerPlayerGuid.ToString(), response.NeighborhoodGuid.ToString(),
-        response.Status, response.FlagByte);
+        response.Status, response.PermissionFlags);
     SendPacket(statusPkt);
 }
 
@@ -5642,7 +5646,9 @@ void WorldSession::HandleHousingSystemHouseStatusQuery(WorldPackets::Housing::Ho
     if (housing && !housing->GetHouseGuid().IsEmpty())
     {
         response.HouseGuid = housing->GetHouseGuid();
+        response.NeighborhoodGuid = housing->GetNeighborhoodGuid();
         response.Status = 1;
+        response.PermissionFlags = 0xE0; // owner: all three permissions
     }
     SendPacket(response.Write());
 }

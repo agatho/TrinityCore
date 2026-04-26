@@ -548,14 +548,6 @@ namespace WorldPackets
         class NeighborhoodCancelInvitationAlt;
         class NeighborhoodInviteNotificationAck;
         class NeighborhoodOfferOwnershipResponsePacket;
-        class InitiativeAcceptMilestoneRequest;
-        class InitiativeReportProgress;
-        class GetInitiativeClaimRewardRequest;
-        class GetInitiativeLeaderboardRequest;
-        class GetInitiativeOpenChestRequest;
-        class GetInitiativeTaskAcceptRequest;
-        class GetInitiativeTaskAbandonRequest;
-        class GetInitiativeTaskProgressRequest;
     }
 
     namespace Inspect
@@ -1752,15 +1744,6 @@ class TC_GAME_API WorldSession
         void HandleGetInitiativeActivityLogRequest(WorldPackets::Neighborhood::GetInitiativeActivityLogRequest const& getInitiativeActivityLogRequest);
         void HandleGetNeighborhoodInitiativeInfoRequest(WorldPackets::Neighborhood::GetNeighborhoodInitiativeInfoRequest const& getNeighborhoodInitiativeInfoRequest);
         void HandleInitiativeUpdateActiveNeighborhood(WorldPackets::Neighborhood::InitiativeUpdateActiveNeighborhood const& initiativeUpdateActiveNeighborhood);
-        void HandleInitiativeAcceptMilestoneRequest(WorldPackets::Neighborhood::InitiativeAcceptMilestoneRequest const& packet);
-        void HandleInitiativeReportProgress(WorldPackets::Neighborhood::InitiativeReportProgress const& packet);
-        void HandleGetInitiativeClaimRewardRequest(WorldPackets::Neighborhood::GetInitiativeClaimRewardRequest const& packet);
-        void HandleGetInitiativeLeaderboardRequest(WorldPackets::Neighborhood::GetInitiativeLeaderboardRequest const& packet);
-        void HandleGetInitiativeOpenChestRequest(WorldPackets::Neighborhood::GetInitiativeOpenChestRequest const& packet);
-        void HandleGetInitiativeTaskAcceptRequest(WorldPackets::Neighborhood::GetInitiativeTaskAcceptRequest const& packet);
-        void HandleGetInitiativeTaskAbandonRequest(WorldPackets::Neighborhood::GetInitiativeTaskAbandonRequest const& packet);
-        void HandleGetInitiativeTaskProgressRequest(WorldPackets::Neighborhood::GetInitiativeTaskProgressRequest const& packet);
-
         void HandleEnableTaxiNodeOpcode(WorldPackets::Taxi::EnableTaxiNode& enableTaxiNode);
         void HandleTaxiNodeStatusQueryOpcode(WorldPackets::Taxi::TaxiNodeStatusQuery& taxiNodeStatusQuery);
         void HandleTaxiQueryAvailableNodesOpcode(WorldPackets::Taxi::TaxiQueryAvailableNodes& taxiQueryAvailableNodes);

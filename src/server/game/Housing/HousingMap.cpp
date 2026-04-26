@@ -1053,7 +1053,9 @@ bool HousingMap::AddPlayerToMap(Player* player, bool initPlayer /*= true*/)
                     statusResponse.HouseGuid = housing->GetHouseGuid();
                     statusResponse.AccountGuid = p->GetSession()->GetBattlenetAccountGUID();
                     statusResponse.OwnerPlayerGuid = p->GetGUID();
+                    statusResponse.NeighborhoodGuid = housing->GetNeighborhoodGuid();
                     statusResponse.Status = 0;
+                    statusResponse.PermissionFlags = 0xE0;
                     p->SendDirectMessage(statusResponse.Write());
 
                     WorldPackets::Housing::HousingGetPlayerPermissionsResponse permResponse;

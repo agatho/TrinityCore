@@ -1960,15 +1960,19 @@ namespace WorldPackets::Housing
         HousingHouseStatusResponse() : ServerPacket(SMSG_HOUSING_HOUSE_STATUS_RESPONSE) { }
         WorldPacket const* Write() override;
 
-        // Sniff-verified wire format (retail build 66838, audit 2026-04-22):
-        //   PackedGuid HouseGuid
-        //   PackedGuid AccountGuid      (BnetAccount)
-        //   PackedGuid OwnerPlayerGuid  (may be ObjectGuid::Empty)
-        //   uint32     Status
+        // IDA-verified wire format (12.0.5.67186, sub_7FF75C1D1020 case 0x550000):
+        //   PackedGUID HouseGuid
+        //   PackedGUID AccountGuid          (BnetAccount)
+        //   PackedGUID OwnerPlayerGuid
+        //   PackedGUID NeighborhoodGuid
+        //   uint8 Status
+        //   uint8 PermissionFlags  (bit 7=houseEditing, bit 6=plotEntry, bit 5=houseEntry)
         ObjectGuid HouseGuid;
         ObjectGuid AccountGuid;
         ObjectGuid OwnerPlayerGuid;
-        uint32 Status = 0;
+        ObjectGuid NeighborhoodGuid;
+        uint8 Status = 0;
+        uint8 PermissionFlags = 0;
     };
 
     class HousingGetCurrentHouseInfoResponse final : public ServerPacket
@@ -2993,78 +2997,6 @@ namespace WorldPackets::Neighborhood
         ObjectGuid NeighborhoodGuid;
     };
 
-    class InitiativeAcceptMilestoneRequest final : public ClientPacket
-    {
-    public:
-        InitiativeAcceptMilestoneRequest(WorldPacket&& packet) : ClientPacket(CMSG_INITIATIVE_ACCEPT_MILESTONE_REQUEST, std::move(packet)) { }
-        void Read() override;
-        ObjectGuid NeighborhoodGuid;
-        uint32 InitiativeID = 0;
-        uint32 MilestoneIndex = 0;
-    };
-
-    class InitiativeReportProgress final : public ClientPacket
-    {
-    public:
-        InitiativeReportProgress(WorldPacket&& packet) : ClientPacket(CMSG_INITIATIVE_REPORT_PROGRESS, std::move(packet)) { }
-        void Read() override;
-        ObjectGuid NeighborhoodGuid;
-    };
-
-    class GetInitiativeClaimRewardRequest final : public ClientPacket
-    {
-    public:
-        GetInitiativeClaimRewardRequest(WorldPacket&& packet) : ClientPacket(CMSG_GET_INITIATIVE_CLAIM_REWARD_REQUEST, std::move(packet)) { }
-        void Read() override;
-        ObjectGuid NeighborhoodGuid;
-        uint32 InitiativeID = 0;
-        uint32 MilestoneIndex = 0;
-    };
-
-    class GetInitiativeLeaderboardRequest final : public ClientPacket
-    {
-    public:
-        GetInitiativeLeaderboardRequest(WorldPacket&& packet) : ClientPacket(CMSG_GET_INITIATIVE_LEADERBOARD_REQUEST, std::move(packet)) { }
-        void Read() override;
-        ObjectGuid NeighborhoodGuid;
-        uint32 InitiativeID = 0;
-    };
-
-    class GetInitiativeOpenChestRequest final : public ClientPacket
-    {
-    public:
-        GetInitiativeOpenChestRequest(WorldPacket&& packet) : ClientPacket(CMSG_GET_INITIATIVE_OPEN_CHEST_REQUEST, std::move(packet)) { }
-        void Read() override;
-        ObjectGuid NeighborhoodGuid;
-        uint32 InitiativeID = 0;
-    };
-
-    class GetInitiativeTaskAcceptRequest final : public ClientPacket
-    {
-    public:
-        GetInitiativeTaskAcceptRequest(WorldPacket&& packet) : ClientPacket(CMSG_GET_INITIATIVE_TASK_ACCEPT_REQUEST, std::move(packet)) { }
-        void Read() override;
-        ObjectGuid NeighborhoodGuid;
-        uint32 TaskID = 0;
-    };
-
-    class GetInitiativeTaskAbandonRequest final : public ClientPacket
-    {
-    public:
-        GetInitiativeTaskAbandonRequest(WorldPacket&& packet) : ClientPacket(CMSG_GET_INITIATIVE_TASK_ABANDON_REQUEST, std::move(packet)) { }
-        void Read() override;
-        ObjectGuid NeighborhoodGuid;
-        uint32 TaskID = 0;
-    };
-
-    class GetInitiativeTaskProgressRequest final : public ClientPacket
-    {
-    public:
-        GetInitiativeTaskProgressRequest(WorldPacket&& packet) : ClientPacket(CMSG_GET_INITIATIVE_TASK_PROGRESS_REQUEST, std::move(packet)) { }
-        void Read() override;
-        ObjectGuid NeighborhoodGuid;
-        uint32 TaskID = 0;
-    };
 }
 
 #endif // TRINITYCORE_HOUSING_PACKETS_H

@@ -1108,16 +1108,6 @@ enum OpcodeClient : uint32
     CMSG_NEIGHBORHOOD_CHARTER_SIGN_RESPONSE                         = 0x370002, // TC-CUSTOM
     CMSG_NEIGHBORHOOD_INVITE_NOTIFICATION_ACK                       = 0x390010, // TC-CUSTOM
     CMSG_NEIGHBORHOOD_OFFER_OWNERSHIP_RESPONSE                      = 0x390011, // TC-CUSTOM
-
-    // TC-CUSTOM initiative opcodes (housing initiative system extensions)
-    CMSG_GET_INITIATIVE_CLAIM_REWARD_REQUEST                        = 0xF0000006, // TC-CUSTOM speculative
-    CMSG_GET_INITIATIVE_LEADERBOARD_REQUEST                         = 0xF0000007, // TC-CUSTOM speculative
-    CMSG_GET_INITIATIVE_OPEN_CHEST_REQUEST                          = 0xF0000008, // TC-CUSTOM speculative
-    CMSG_GET_INITIATIVE_TASK_ABANDON_REQUEST                        = 0xF0000009, // TC-CUSTOM speculative
-    CMSG_GET_INITIATIVE_TASK_ACCEPT_REQUEST                         = 0xF000000A, // TC-CUSTOM speculative
-    CMSG_GET_INITIATIVE_TASK_PROGRESS_REQUEST                       = 0xF000000B, // TC-CUSTOM speculative
-    CMSG_INITIATIVE_ACCEPT_MILESTONE_REQUEST                        = 0xF000000C, // TC-CUSTOM speculative
-    CMSG_INITIATIVE_REPORT_PROGRESS                                 = 0xF000000D, // TC-CUSTOM speculative
 };
 
 inline constexpr std::size_t NUM_CMSG_OPCODES = 1948;
