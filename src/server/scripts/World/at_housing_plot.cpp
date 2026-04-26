@@ -124,9 +124,7 @@ struct at_housing_plot : AreaTriggerAI
                 statusResponse.HouseGuid = ownerHousing->GetHouseGuid();
                 statusResponse.AccountGuid = player->GetSession()->GetBattlenetAccountGUID();
                 statusResponse.OwnerPlayerGuid = ownerGuid;
-                statusResponse.NeighborhoodGuid = ownerHousing->GetNeighborhoodGuid();
                 statusResponse.Status = 0;
-                statusResponse.FlagByte = 0xE0; // bit7=houseEditing, bit6=plotEntry, bit5=houseEntry
                 player->SendDirectMessage(statusResponse.Write());
 
                 WorldPackets::Housing::HousingGetPlayerPermissionsResponse permResponse;
@@ -209,12 +207,10 @@ struct at_housing_plot : AreaTriggerAI
                     statusResponse.HouseGuid = housing->GetHouseGuid();
                     statusResponse.AccountGuid = player->GetSession()->GetBattlenetAccountGUID();
                     statusResponse.OwnerPlayerGuid = player->GetGUID();
-                    statusResponse.NeighborhoodGuid = housing->GetNeighborhoodGuid();
                     statusResponse.Status = 0;
-                    statusResponse.FlagByte = 0x00;
                     player->SendDirectMessage(statusResponse.Write());
 
-                    TC_LOG_DEBUG("housing", "at_housing_plot: Sent FlagByte=0x00 HouseStatusResponse for plot owner {} leaving plot",
+                    TC_LOG_DEBUG("housing", "at_housing_plot: Sent HouseStatusResponse for plot owner {} leaving plot",
                         player->GetGUID().ToString());
                 }
             }

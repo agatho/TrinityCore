@@ -361,7 +361,6 @@ void WorldSession::HandleHouseInteriorLeaveHouse(WorldPackets::Housing::HouseInt
     // interior map's owner lookup. Own-interior uses own housing as before.
     WorldPackets::Housing::HousingHouseStatusResponse statusResponse;
     statusResponse.Status = 0;
-    statusResponse.FlagByte = 0xC0; // bit7=Decor, bit6=Room only
     if (isVisit)
     {
         ObjectGuid ownerGuid = interiorMap->GetOwnerGuid();
@@ -374,7 +373,6 @@ void WorldSession::HandleHouseInteriorLeaveHouse(WorldPackets::Housing::HouseInt
                     statusResponse.HouseGuid = plot.HouseGuid;
                     statusResponse.AccountGuid = plot.OwnerBnetGuid;
                     statusResponse.OwnerPlayerGuid = plot.OwnerGuid;
-                    statusResponse.NeighborhoodGuid = nbh->GetGuid();
                     break;
                 }
             }
@@ -387,7 +385,6 @@ void WorldSession::HandleHouseInteriorLeaveHouse(WorldPackets::Housing::HouseInt
         statusResponse.HouseGuid = housing->GetHouseGuid();
         statusResponse.AccountGuid = GetBattlenetAccountGUID();
         statusResponse.OwnerPlayerGuid = player->GetGUID();
-        statusResponse.NeighborhoodGuid = housing->GetNeighborhoodGuid();
     }
     SendPacket(statusResponse.Write());
 
@@ -2768,11 +2765,9 @@ void WorldSession::HandleHousingRoomMoveRoom(WorldPackets::Housing::HousingRoomM
     response.RoomGuid = housingRoomMoveRoom.RoomGuid;
     SendPacket(response.Write());
 
-    if (result == HOUSING_RESULT_SUCCESS)
-        // NOTE: RefreshInteriorRoomVisuals crashes (same-GUID DESTROY+CREATE).
-        // The client handles visual updates from the response packet.
-        // Full visual refresh happens on relog.
-
+    // RefreshInteriorRoomVisuals crashes on same-GUID DESTROY+CREATE; the response
+    // packet alone is enough for the client to update its layout, full visual refresh
+    // happens on relog.
     TC_LOG_INFO("housing", "CMSG_HOUSING_ROOM_MOVE RoomGuid: {}, TargetSlotIndex: {}, Result: {}",
         housingRoomMoveRoom.RoomGuid.ToString(), housingRoomMoveRoom.TargetSlotIndex, uint32(result));
 }
@@ -3570,9 +3565,7 @@ void WorldSession::HandleHousingSvcsTeleportToPlot(WorldPackets::Housing::Housin
             statusResponse.HouseGuid = interiorHousing->GetHouseGuid();
             statusResponse.AccountGuid = GetBattlenetAccountGUID();
             statusResponse.OwnerPlayerGuid = player->GetGUID();
-            statusResponse.NeighborhoodGuid = interiorHousing->GetNeighborhoodGuid();
             statusResponse.Status = 0;
-            statusResponse.FlagByte = 0xC0;
             SendPacket(statusResponse.Write());
         }
     }
@@ -5644,22 +5637,12 @@ void WorldSession::HandleHousingSystemHouseStatusQuery(WorldPackets::Housing::Ho
 
     Housing* housing = player->GetHousing();
     WorldPackets::Housing::HousingHouseStatusResponse response;
+    response.AccountGuid = GetBattlenetAccountGUID();
+    response.OwnerPlayerGuid = player->GetGUID();
     if (housing && !housing->GetHouseGuid().IsEmpty())
     {
         response.HouseGuid = housing->GetHouseGuid();
-        response.AccountGuid = GetBattlenetAccountGUID();
-        response.OwnerPlayerGuid = player->GetGUID();
-        response.NeighborhoodGuid = housing->GetNeighborhoodGuid();
-        response.Status = 1; // Active
-        response.FlagByte = 0xC0; // bit7=Decor, bit6=Room only — Fixture context managed by dedicated ENTER/EXIT response
-    }
-    else
-    {
-        response.HouseGuid = ObjectGuid::Empty;
-        response.AccountGuid = GetBattlenetAccountGUID();
-        response.OwnerPlayerGuid = player->GetGUID();
-        response.NeighborhoodGuid = ObjectGuid::Empty;
-        response.Status = 0; // No house
+        response.Status = 1;
     }
     SendPacket(response.Write());
 }

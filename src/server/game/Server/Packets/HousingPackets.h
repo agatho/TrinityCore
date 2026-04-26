@@ -1965,16 +1965,10 @@ namespace WorldPackets::Housing
         //   PackedGuid AccountGuid      (BnetAccount)
         //   PackedGuid OwnerPlayerGuid  (may be ObjectGuid::Empty)
         //   uint32     Status
-        // NeighborhoodGuid + FlagByte fields are NOT on the wire. They are
-        // kept here as non-serialised members so existing call sites that
-        // assign them still compile without behaviour change; remove in a
-        // cleanup pass after confirming no downstream reads.
         ObjectGuid HouseGuid;
         ObjectGuid AccountGuid;
         ObjectGuid OwnerPlayerGuid;
         uint32 Status = 0;
-        ObjectGuid NeighborhoodGuid;    // NOT written to wire (kept for source compat)
-        uint8 FlagByte = 0;             // NOT written to wire (kept for source compat)
     };
 
     class HousingGetCurrentHouseInfoResponse final : public ServerPacket
