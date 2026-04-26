@@ -1166,21 +1166,7 @@ HousingResult Housing::MoveDecor(ObjectGuid decorGuid, float x, float y, float z
 
     auto itr = _placedDecor.find(decorGuid);
     if (itr == _placedDecor.end())
-    {
-        // Diagnostic: print every server-stored decor key alongside the client's
-        // requested GUID. Lets us prove whether the mismatch is in arg1, counter,
-        // or some other field of the GUID.
-        TC_LOG_ERROR("housing", "Housing::MoveDecor MISS: client={} raw=[Lo=0x{:016X} Hi=0x{:016X}] _placedDecor.size={}",
-            decorGuid.ToString(), decorGuid.GetRawValue(0), decorGuid.GetRawValue(1), uint32(_placedDecor.size()));
-        for (auto const& [key, val] : _placedDecor)
-        {
-            TC_LOG_ERROR("housing", "  stored: {} raw=[Lo=0x{:016X} Hi=0x{:016X}] same_counter={} ==={}",
-                key.ToString(), key.GetRawValue(0), key.GetRawValue(1),
-                key.GetCounter() == decorGuid.GetCounter() ? "Y" : "N",
-                (key == decorGuid) ? "Y" : "N");
-        }
         return HOUSING_RESULT_DECOR_NOT_FOUND;
-    }
 
     PlacedDecor& decor = itr->second;
     decor.PosX = x;
