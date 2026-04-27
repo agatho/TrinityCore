@@ -1742,8 +1742,11 @@ WorldPacket const* HousingSvcsUpdateHouseSettingsResponse::Write()
 WorldPacket const* HousingSvcsGetHouseFinderInfoResponse::Write()
 {
     // IDA-verified wire (build 67186, sub_7FF75C1EA710 case 0x54001C):
-    //   ai_Read_CompressedUInt32FromPacket (uint32 count) + JamCliHouseFinderNeighborhood[count]
-    // No leading uint8 Result. Failure routed via NOTIFY_PERMISSIONS_FAILURE (0x540000).
+    //   Bits<1>(Result) + FlushBits + uint32(count) + ParseHouseFinderNeighborhood[count]
+    // The leading bit is the success/failure flag; old TC missed it entirely. The
+    // count is a raw uint32 (helper is misnamed CompressedUInt32 but reads 4 bytes).
+    _worldPacket.WriteBit(Result != 0);
+    _worldPacket.FlushBits();
     _worldPacket << uint32(Entries.size());
     for (auto const& entry : Entries)
         WriteJamCliHouseFinderNeighborhood(_worldPacket, entry);
@@ -1762,8 +1765,12 @@ WorldPacket const* HousingSvcsGetHouseFinderInfoResponse::Write()
 
 WorldPacket const* HousingSvcsGetHouseFinderNeighborhoodResponse::Write()
 {
-    // IDA case 5505053: uint8(Result) + ONE JamCliHouseFinderNeighborhood
-    _worldPacket << uint8(Result);
+    // IDA-verified wire (case 5505053): Bits<1>(Result) + FlushBits + ParseHouseFinderNeighborhood (single, 136 bytes)
+    // Old TC wrote uint8(Result); the leading byte is actually a single bit. Sending
+    // Result=non-zero as 0x01 left bit 7 = 0, so the client always read "no error"
+    // regardless of actual Result. Same fix pattern as the charter responses.
+    _worldPacket.WriteBit(Result != 0);
+    _worldPacket.FlushBits();
     WriteJamCliHouseFinderNeighborhood(_worldPacket, Neighborhood);
 
     TC_LOG_INFO("housing", "SMSG_HOUSING_SVCS_GET_HOUSE_FINDER_NEIGHBORHOOD_RESPONSE Result: {} Houses: {} PacketSize: {}",
@@ -1887,19 +1894,25 @@ WorldPacket const* HousingExportHouseResponse::Write()
     //   uint8 Result
     //   uint8 HasExportString-byte (top bit only)
     //   if HasExportString:
-    //     uint64 strLen          (read via ai_Process_GarrisonDataPacket — 8 bytes)
+    //     24-bit BE length      (read via ai_Process_GarrisonDataPacket — 3 bytes:
+    //                            three sequential ai_Read_UInt8 calls combined as
+    //                            (b0<<16)|(b1<<8)|b2). Bit-aligned at byte boundary
+    //                            here so writing 3 raw bytes is wire-equivalent.
     //     char[strLen] ExportString
     //   uint32 blobSize
     //   uint8[blobSize] ExportBlob
     //
-    // Old TC implementation wrote a 3-byte big-endian strLen, which left the
-    // client desynced by 5 bytes inside the optional string branch.
+    // (My earlier "uint64" fix was a misread — the helper reads exactly 3 bytes,
+    // not 8.)
     _worldPacket << HouseGuid;
     _worldPacket << uint8(Result);
     _worldPacket << uint8(HasExportString ? 0x80 : 0x00);
     if (HasExportString)
     {
-        _worldPacket << uint64(ExportString.size());
+        uint32 strLen = static_cast<uint32>(ExportString.size());
+        _worldPacket << uint8((strLen >> 16) & 0xFF);
+        _worldPacket << uint8((strLen >> 8) & 0xFF);
+        _worldPacket << uint8(strLen & 0xFF);
         if (!ExportString.empty())
             _worldPacket.append(ExportString.data(), ExportString.size());
     }
@@ -2381,12 +2394,10 @@ WorldPacket const* GuildOthersOwnedHousesResult::Write()
 WorldPacket const* HousingSvcsNeighborhoodUpdateNameNotification::Write()
 {
     // IDA-verified wire (build 67186, sub_7FF75C1EA710 case 0x540023):
-    //   ClientOpcode_helper_31E0120 (PackedGUID NeighborhoodGuid)
-    //   + ai_Parse_ClientStringData (length-prefixed string NewName)
-    // The string length is read via sub_7FF75C0A9650 (compressed-style size byte
-    // packed in the bit stream); use SizedString-style write so it matches.
+    //   PackedGUID NeighborhoodGuid + Bits<8>(nameLen) + char[nameLen] NewName
+    // The size prefix is read by sub_7FF75C0A9650 as 8 packed bits, not 7.
     _worldPacket << NeighborhoodGuid;
-    _worldPacket << SizedString::BitsSize<7>(NewName);
+    _worldPacket << SizedString::BitsSize<8>(NewName);
     _worldPacket.FlushBits();
     _worldPacket << SizedString::Data(NewName);
 

@@ -2053,7 +2053,7 @@ namespace WorldPackets::Housing
 
         // IDA-verified wire (build 67186, sub_7FF75C1EC3F0):
         //   PackedGUID HouseGuid + uint8 Result + uint8(bit7=HasExportString)
-        //     [+ uint64(strLen) + char[strLen] ExportString]
+        //     [+ 24-bit-BE strLen (3 bytes, b0<<16|b1<<8|b2) + char[strLen]]
         //     + uint32(blobSize) + uint8[blobSize] ExportBlob
         ObjectGuid HouseGuid;
         uint8 Result = 0;
