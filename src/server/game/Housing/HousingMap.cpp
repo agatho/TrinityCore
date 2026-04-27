@@ -1985,27 +1985,22 @@ GameObject* HousingMap::SpawnHouseForPlot(uint8 plotIndex, Position const* custo
         // Without this, ALL placement attempts fail with OutsidePlotBounds.
         SpawnRoomForPlot(plotIndex, pos, rot, plotInfo->HouseGuid);
 
-        // Spawn house-exterior root Entity mirror.
-        // Retail pairs each house with a HighGuid::Entity (57, objectType=18)
-        // carrying FMirroredPositionData_C + Tag_HouseExteriorPiece +
-        // Tag_HouseExteriorRoot. Sniff-verified at idx 9984 of
-        // dump_12.0.1.66838_2026-04-15_09-35-59 (4 Group A mirrors).
+        // Group A house-exterior Entity mirrors — one per visible exterior
+        // fixture MeshObject (Base/Roof/Door/Window — ExteriorComponent Type
+        // 9/10/11/12). All four share AttachParent = Housing/2 room identity
+        // (sniff idx 9984 in dump_12.0.1.66838_2026-04-15_09-35-59 decoded
+        // every Group A mirror's AttachParent as `01 c1 XX 12 40 dc` —
+        // subType=2 HousingRoom, arg2=18 HouseRoomID). The Type-9 root piece
+        // (pieceIndex 0) carries Tag_HouseExteriorPiece + Tag_HouseExteriorRoot
+        // and its GUID is the canonical "house mirror GUID" referenced by
+        // FHousingPlayerHouse_C.EntityGUID; the others carry Piece only.
         //
-        // CRITICAL: AttachParentGUID must be the ROOM entity, NOT the
-        // HousingPlayerHouse. Audit 2026-04-22 decoded retail Group A mirrors'
-        // AttachParent as `01 c1 XX 12 40 dc` — subType=2 (HousingRoom),
-        // arg2=18 (HouseRoomID). The HousingPlayerHouse has no position;
-        // attaching to it left the client unable to compute a world position
-        // for the mirror, so the world-map icon picker had nowhere to place
-        // the own-plot icon. The room entity carries the plot's world
-        // position in its TransportPosition, so chaining via AttachParent
-        // resolves to real coordinates.
-        //
-        // SpawnRoomForPlot was just called above and registered a room entity
-        // in _roomEntities[plotIndex]. Use that GUID.
+        // The HousingPlayerHouse has no position itself; the room entity
+        // carries the plot's world position so chaining via AttachParent
+        // resolves to real coordinates for the world-map icon picker.
+        // SpawnRoomForPlot was just called above and registered the room
+        // identity in _roomIdentityGuids[plotIndex].
         {
-            // Prefer Housing/2 identity — retail-matching AttachParent for
-            // Group A Entity mirrors (with exterior tags).
             ObjectGuid roomParentGuid = GetRoomIdentityGuid(plotIndex);
             if (roomParentGuid.IsEmpty())
             {
@@ -2014,26 +2009,65 @@ GameObject* HousingMap::SpawnHouseForPlot(uint8 plotIndex, Position const* custo
                     "mirror AttachParent falls back to HouseGuid (icon may not render)", plotIndex);
             }
 
-            uint32 bnetId = static_cast<uint32>(plotInfo->OwnerBnetGuid.GetCounter());
-            ObjectGuid mirrorGuid = MakeHouseMirrorGuid(plotIndex, bnetId);
-            auto mirror = std::make_unique<HousingMirrorEntity>(this, mirrorGuid);
-            // Local pos / rot relative to the room parent. Retail's Group A
-            // mirrors use small offsets (a few yards) and the root one uses
-            // zero pos + identity rot. We use zero pos + identity rot since
-            // our room entity is positioned at the plot centre.
-            Position const localPos(0.0f, 0.0f, 0.0f, 0.0f);
+            std::vector<std::unique_ptr<HousingMirrorEntity>>& mirrors = _houseMirrorEntities[plotIndex];
+            mirrors.clear();
+            uint32 const bnetId = static_cast<uint32>(plotInfo->OwnerBnetGuid.GetCounter());
+            uint8 pieceIndex = 0;
             QuaternionData identity;
             identity.x = identity.y = identity.z = 0.0f;
             identity.w = 1.0f;
-            mirror->InitPositionData(roomParentGuid,
-                localPos, identity, /*scale*/ 1.0f, /*attachmentFlags*/ 3,
-                /*isExteriorRoot*/ true);
-            TC_LOG_DEBUG("housing", "HousingMap::SpawnHouseForPlot: spawned exterior mirror {} for plot {} "
-                "(attach={} [room], localPos=(0,0,0), plotWorldPos=({:.2f},{:.2f},{:.2f}))",
-                mirrorGuid.ToString(), plotIndex,
-                roomParentGuid.ToString(),
-                pos.GetPositionX(), pos.GetPositionY(), pos.GetPositionZ());
-            _houseMirrorEntities[plotIndex] = std::move(mirror);
+            // All Group A mirrors share the room identity as AttachParent and
+            // use (0,0,0) local pos — the room is positioned at the plot
+            // centre, so the chain resolves there for every piece. Without a
+            // fresh sniff parse showing exact non-root offsets, sharing the
+            // root's pos preserves the icon-resolution behaviour we already
+            // have for index 0; the additional pieces are pure registry
+            // entries used by the client for spatial categorisation.
+            Position const localPos(0.0f, 0.0f, 0.0f, 0.0f);
+
+            auto meshItr = _meshObjects.find(plotIndex);
+            if (meshItr != _meshObjects.end())
+            {
+                for (ObjectGuid const& meshGuid : meshItr->second)
+                {
+                    MeshObject* mesh = GetMeshObject(meshGuid);
+                    if (!mesh || !mesh->m_housingFixtureData.has_value())
+                        continue;
+                    UF::HousingFixtureData const& fd = *mesh->m_housingFixtureData;
+                    uint8 const compType = uint8(fd.ExteriorComponentType);
+                    if (compType < 9 || compType > 12)
+                        continue;
+
+                    ObjectGuid mirrorGuid = MakeHouseMirrorGuid(plotIndex, bnetId, pieceIndex);
+                    auto mirror = std::make_unique<HousingMirrorEntity>(this, mirrorGuid);
+                    HousingMirrorEntity::Tagging const tagging = (compType == 9)
+                        ? HousingMirrorEntity::Tagging::PieceAndRoot
+                        : HousingMirrorEntity::Tagging::Piece;
+                    mirror->InitPositionData(roomParentGuid,
+                        localPos, identity, /*scale*/ 1.0f, /*attachmentFlags*/ 3,
+                        tagging);
+                    TC_LOG_DEBUG("housing", "HousingMap::SpawnHouseForPlot: spawned Group A mirror[{}] {} "
+                        "for plot {} (attach={} [room], type={}, tag={})",
+                        pieceIndex, mirrorGuid.ToString(), plotIndex, roomParentGuid.ToString(),
+                        compType, compType == 9 ? "PieceAndRoot" : "Piece");
+                    mirrors.push_back(std::move(mirror));
+                    ++pieceIndex;
+                }
+            }
+
+            if (mirrors.empty())
+            {
+                TC_LOG_ERROR("housing", "HousingMap::SpawnHouseForPlot: no fixture MeshObjects found for plot {}; "
+                    "Group A mirrors skipped — FHousingPlayerHouse_C.EntityGUID will dangle and the "
+                    "world-map icon will not resolve", plotIndex);
+            }
+            else
+            {
+                TC_LOG_DEBUG("housing", "HousingMap::SpawnHouseForPlot: emitted {} Group A mirrors for plot {} "
+                    "(plotWorldPos=({:.2f},{:.2f},{:.2f}))",
+                    mirrors.size(), plotIndex,
+                    pos.GetPositionX(), pos.GetPositionY(), pos.GetPositionZ());
+            }
         }
 
         // Group B Entity mirrors — FMirroredPositionData_C only (no tags),
@@ -2073,7 +2107,7 @@ GameObject* HousingMap::SpawnHouseForPlot(uint8 plotIndex, Position const* custo
                     auto mirror = std::make_unique<HousingMirrorEntity>(this, mirrorGuid);
                     mirror->InitPositionData(meshGuid,
                         localPos, identity, /*scale*/ 1.0f, /*attachmentFlags*/ 3,
-                        /*isExteriorRoot*/ false);
+                        HousingMirrorEntity::Tagging::None);
                     TC_LOG_DEBUG("housing", "HousingMap::SpawnHouseForPlot: spawned Group B mirror[{}] {} "
                         "for plot {} (attach={} [mesh type={}])",
                         pieceIndex, mirrorGuid.ToString(), plotIndex, meshGuid.ToString(), compType);
@@ -3149,7 +3183,11 @@ void HousingMap::DespawnHouseForPlot(uint8 plotIndex)
 HousingMirrorEntity* HousingMap::GetHouseMirror(uint8 plotIndex) const
 {
     auto itr = _houseMirrorEntities.find(plotIndex);
-    return itr != _houseMirrorEntities.end() ? itr->second.get() : nullptr;
+    if (itr == _houseMirrorEntities.end() || itr->second.empty())
+        return nullptr;
+    // Returns the Type-9 (Base) root mirror — the canonical mirror referenced
+    // by FHousingPlayerHouse_C.EntityGUID. Per-piece access via GetHouseMirrors.
+    return itr->second.front().get();
 }
 
 ObjectGuid HousingMap::GetHouseMirrorGuid(uint8 plotIndex) const
@@ -3159,17 +3197,33 @@ ObjectGuid HousingMap::GetHouseMirrorGuid(uint8 plotIndex) const
     return ObjectGuid::Empty;
 }
 
-ObjectGuid HousingMap::MakeHouseMirrorGuid(uint8 plotIndex, uint32 bnetAccountId) const
+std::vector<HousingMirrorEntity*> HousingMap::GetHouseMirrors(uint8 plotIndex) const
+{
+    std::vector<HousingMirrorEntity*> result;
+    auto itr = _houseMirrorEntities.find(plotIndex);
+    if (itr == _houseMirrorEntities.end())
+        return result;
+    result.reserve(itr->second.size());
+    for (auto const& mirror : itr->second)
+        result.push_back(mirror.get());
+    return result;
+}
+
+ObjectGuid HousingMap::MakeHouseMirrorGuid(uint8 plotIndex, uint32 bnetAccountId, uint8 pieceIndex /*= 0*/) const
 {
     // Deterministic convention: HighGuid::Entity, mapId=GetId() (neighborhood
     // world map), entry=37361 (synthetic entry for housing mirrors — picked
-    // outside the range of creature/gameobject entries in use), counter packs
-    // plotIndex into the low byte and bnetAccountId into the upper bits so it
-    // stays unique per (plot, owner). realmId/serverId from the current realm
-    // and map context. Same derivation can be used by proxy emission without
-    // needing the mirror object to exist.
+    // outside the range of creature/gameobject entries in use). Counter packs
+    // (bnetAccountId, plotIndex, pieceIndex) so each per-piece Group A mirror
+    // has a unique GUID and the mapping stays deterministic across runs.
+    // pieceIndex 0 is the Type-9 root mirror (canonical "house mirror GUID"
+    // referenced by FHousingPlayerHouse_C.EntityGUID); 1+ are Roof/Door/Window
+    // pieces. Same derivation is used by proxy emission for neighbour plots
+    // without needing the mirror object to exist.
     constexpr uint32 HOUSING_MIRROR_ENTRY = 37361;
-    uint64 counter = (static_cast<uint64>(bnetAccountId) << 8) | static_cast<uint64>(plotIndex);
+    uint64 counter = (static_cast<uint64>(bnetAccountId) << 16)
+                   | (static_cast<uint64>(plotIndex)     << 8)
+                   |  static_cast<uint64>(pieceIndex);
     return ObjectGuid::Create<HighGuid::Entity>(GetId(), HOUSING_MIRROR_ENTRY, counter);
 }
 

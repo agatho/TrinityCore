@@ -35,7 +35,7 @@ HousingMirrorEntity::~HousingMirrorEntity() = default;
 
 void HousingMirrorEntity::InitPositionData(ObjectGuid attachParent,
     Position const& position, QuaternionData const& rotation,
-    float scale, uint8 attachmentFlags, bool isExteriorRoot)
+    float scale, uint8 attachmentFlags, Tagging tagging)
 {
     auto posData = m_values.ModifyValue(&HousingMirrorEntity::m_mirroredPositionData)
         .ModifyValue(&UF::MirroredPositionData::PositionData);
@@ -46,14 +46,22 @@ void HousingMirrorEntity::InitPositionData(ObjectGuid attachParent,
     SetUpdateFieldValue(posData.ModifyValue(&UF::MirroredMeshObjectData::ScaleLocalSpace), scale);
     SetUpdateFieldValue(posData.ModifyValue(&UF::MirroredMeshObjectData::AttachmentFlags), attachmentFlags);
 
-    // Retail house-exterior root mirrors carry BOTH tags (Group A at idx 9984
-    // in dump_12.0.1.66838_2026-04-15_09-35-59). Mesh-level mirrors (Group B)
-    // carry neither. We expose isExteriorRoot for the house-exterior case;
-    // callers default it false for mesh-level mirrors.
-    if (isExteriorRoot)
+    // Retail (idx 9984 in dump_12.0.1.66838_2026-04-15_09-35-59) emits 4
+    // Group A mirrors per plot. The Type-9 (Base) root mirror carries both
+    // Tag_HouseExteriorPiece and Tag_HouseExteriorRoot; the other three
+    // (Roof / Door / Window) carry Tag_HouseExteriorPiece only. Group B
+    // per-piece mesh mirrors carry neither tag.
+    switch (tagging)
     {
-        m_entityFragments.Add(WowCS::EntityFragment::Tag_HouseExteriorPiece, false);
-        m_entityFragments.Add(WowCS::EntityFragment::Tag_HouseExteriorRoot, false);
+        case Tagging::PieceAndRoot:
+            m_entityFragments.Add(WowCS::EntityFragment::Tag_HouseExteriorPiece, false);
+            m_entityFragments.Add(WowCS::EntityFragment::Tag_HouseExteriorRoot, false);
+            break;
+        case Tagging::Piece:
+            m_entityFragments.Add(WowCS::EntityFragment::Tag_HouseExteriorPiece, false);
+            break;
+        case Tagging::None:
+            break;
     }
 }
 

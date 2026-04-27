@@ -3707,8 +3707,11 @@ void Player::BuildCreateUpdateBlockForPlayer(UpdateData* data, Player* target) c
                     proxy.BuildCreateUpdateBlockForPlayer(data, target);
                     ++proxyCount;
 
-                    // Bundle the mirror's CREATE into the same UPDATE_OBJECT.
-                    if (HousingMirrorEntity* m = hmap->GetHouseMirror(plot.PlotIndex))
+                    // Bundle every Group A per-piece mirror's CREATE into the same
+                    // UPDATE_OBJECT. Retail emits 4 (one per visible exterior fixture
+                    // — Base/Roof/Door/Window). Index 0 is the Type-9 root mirror
+                    // referenced by FHousingPlayerHouse_C.EntityGUID.
+                    for (HousingMirrorEntity* m : hmap->GetHouseMirrors(plot.PlotIndex))
                     {
                         m->BuildCreateUpdateBlockForPlayer(data, target);
                         ++mirrorCount;
@@ -3739,7 +3742,7 @@ void Player::BuildCreateUpdateBlockForPlayer(UpdateData* data, Player* target) c
             // resolves EntityGUID.
             if (hmap && ownPlotIndex != INVALID_PLOT_INDEX)
             {
-                if (HousingMirrorEntity* ownMirror = hmap->GetHouseMirror(ownPlotIndex))
+                for (HousingMirrorEntity* ownMirror : hmap->GetHouseMirrors(ownPlotIndex))
                     ownMirror->BuildCreateUpdateBlockForPlayer(data, target);
                 for (HousingMirrorEntity* ownMeshMirror : hmap->GetHouseMeshMirrors(ownPlotIndex))
                     ownMeshMirror->BuildCreateUpdateBlockForPlayer(data, target);

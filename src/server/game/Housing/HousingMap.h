@@ -90,10 +90,20 @@ public:
     // docs/HOUSING_ENTITY_MIRROR.md (pending) / memory/housing_entity_mirror_architecture.md.
     HousingMirrorEntity* GetHouseMirror(uint8 plotIndex) const;
     ObjectGuid GetHouseMirrorGuid(uint8 plotIndex) const;
+    // Full list of per-piece Group A mirrors for this plot (one per visible
+    // exterior fixture MeshObject, Type 9/10/11/12). Returns empty if no
+    // house spawned. Index 0 is the Type-9 root (PieceAndRoot tags); the
+    // others (Piece tag only) come from Roof/Door/Window pieces in spawn
+    // order. The root mirror's GUID is the canonical "house mirror GUID"
+    // referenced by FHousingPlayerHouse_C.EntityGUID.
+    std::vector<HousingMirrorEntity*> GetHouseMirrors(uint8 plotIndex) const;
     // Deterministic mirror-GUID derivation that does not require the mirror to
     // exist yet — used by proxy emission for neighbour plots whose plot index
-    // and bnet owner are known from NeighborhoodMirror data.
-    ObjectGuid MakeHouseMirrorGuid(uint8 plotIndex, uint32 bnetAccountId) const;
+    // and bnet owner are known from NeighborhoodMirror data. pieceIndex defaults
+    // to 0 (the Type-9 root mirror) which is the canonical GUID referenced by
+    // FHousingPlayerHouse_C.EntityGUID; pieceIndex 1+ identify the non-root
+    // Group A mirrors (Roof/Door/Window).
+    ObjectGuid MakeHouseMirrorGuid(uint8 plotIndex, uint32 bnetAccountId, uint8 pieceIndex = 0) const;
 
     // "Group B" per-piece mesh-level mirrors. Retail pairs EACH visible
     // exterior fixture MeshObject (Base/Roof/Door/Window — ExteriorComponent
@@ -211,10 +221,15 @@ private:
     // House structure GO tracking (plotIndex -> house GO GUID)
     std::unordered_map<uint8, ObjectGuid> _houseGameObjects;
 
-    // House-exterior root Entity mirror (HighGuid::Entity, objectType=18)
-    // tracking (plotIndex -> mirror entity). Owned by the map; lifecycle
-    // 1:1 with the exterior root MeshObject.
-    std::unordered_map<uint8, std::unique_ptr<HousingMirrorEntity>> _houseMirrorEntities;
+    // Group A house-exterior Entity mirrors (HighGuid::Entity, objectType=18)
+    // — one per visible exterior fixture MeshObject (Type 9/10/11/12). The
+    // Type-9 (Base) entry at index 0 carries both Tag_HouseExteriorPiece +
+    // Tag_HouseExteriorRoot and is the GUID referenced by every external
+    // proxy (FHousingPlayerHouse_C.EntityGUID). The other three carry
+    // Tag_HouseExteriorPiece only. Co-spawned with the house and despawned
+    // together. Vector since retail emits 4 of these per plot (sniff idx
+    // 9984 in dump_12.0.1.66838_2026-04-15_09-35-59).
+    std::unordered_map<uint8, std::vector<std::unique_ptr<HousingMirrorEntity>>> _houseMirrorEntities;
 
     // "Group B" per-piece mesh-level Entity mirrors, one per visible exterior
     // fixture MeshObject (Type 9/10/11/12). Co-spawned with the house and

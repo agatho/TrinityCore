@@ -41,19 +41,28 @@ public:
     HousingMirrorEntity(Map* map, ObjectGuid guid);
     ~HousingMirrorEntity();
 
+    // Tag set this mirror carries — controls which entity-fragment Tag_*
+    // entries are added when InitPositionData is called.
+    //   None         — Group B per-piece mesh anchor (no tags)
+    //   Piece        — Group A non-root piece (Tag_HouseExteriorPiece only)
+    //   PieceAndRoot — Group A root piece (Tag_HouseExteriorPiece +
+    //                  Tag_HouseExteriorRoot)
+    enum class Tagging : uint8
+    {
+        None,
+        Piece,
+        PieceAndRoot,
+    };
+
     // Populate the mirror's position fragment.
     //   attachParent: the housing entity this mirror is attached to
-    //                 (HousingPlayerHouse for exterior root; MeshObject
-    //                 for per-piece mirrors)
-    //   position/rotation/scale: local-space to attachParent (use (0,0,0)
-    //                 + identity + 1.0 when the mirror represents the
-    //                 house root itself)
+    //                 (room identity for Group A, MeshObject for Group B)
+    //   position/rotation/scale: local-space to attachParent
     //   attachmentFlags: usually 3 (sniff-typical)
-    //   isExteriorRoot: if true, tags with Tag_HouseExteriorRoot AND
-    //                 Tag_HouseExteriorPiece to match retail Group A
+    //   tagging: which Tag_HouseExterior* fragments to attach (see enum above)
     void InitPositionData(ObjectGuid attachParent,
         Position const& position, QuaternionData const& rotation,
-        float scale, uint8 attachmentFlags, bool isExteriorRoot);
+        float scale, uint8 attachmentFlags, Tagging tagging);
 
     void ClearUpdateMask(bool remove) override;
     std::string GetNameForLocaleIdx(LocaleConstant locale) const override;
