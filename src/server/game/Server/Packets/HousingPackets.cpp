@@ -2722,11 +2722,14 @@ WorldPacket const* NeighborhoodCancelInvitationResponse::Write()
 
 WorldPacket const* NeighborhoodDeclineInvitationResponse::Write()
 {
-    _worldPacket << uint8(Result);
+    // IDA-verified wire (build 67186, sub_7FF75C1E0050 case 0x5C000A → LABEL_46):
+    // ClientOpcode_helper_31E0120(packet, &guid) — single PackedGUID, no leading byte.
+    // Failure result is communicated via SMSG_HOUSING_SVCS_NOTIFY_PERMISSIONS_FAILURE
+    // (0x540000), not via a per-response leading uint8.
     _worldPacket << NeighborhoodGuid;
 
-    TC_LOG_DEBUG("network.opcode", "SMSG_NEIGHBORHOOD_DECLINE_INVITATION_RESPONSE Result: {} NeighborhoodGuid: {}",
-        Result, NeighborhoodGuid.ToString());
+    TC_LOG_DEBUG("network.opcode", "SMSG_NEIGHBORHOOD_DECLINE_INVITATION_RESPONSE NeighborhoodGuid: {} (Result {} dropped — not on wire)",
+        NeighborhoodGuid.ToString(), Result);
 
     return &_worldPacket;
 }
@@ -2862,20 +2865,24 @@ WorldPacket const* NeighborhoodRosterResidentUpdate::Write()
 
 WorldPacket const* NeighborhoodInviteNameLookupResult::Write()
 {
-    _worldPacket << uint8(Result);
+    // IDA-verified wire (build 67186, sub_7FF75C1E0050 case 0x5C0011): single
+    // PackedGUID via ClientOpcode_helper_31E0120 — no leading uint8 Result.
     _worldPacket << PlayerGuid;
 
-    TC_LOG_DEBUG("network.opcode", "SMSG_NEIGHBORHOOD_INVITE_NAME_LOOKUP_RESULT Result: {} PlayerGuid: {}", Result, PlayerGuid.ToString());
+    TC_LOG_DEBUG("network.opcode", "SMSG_NEIGHBORHOOD_INVITE_NAME_LOOKUP_RESULT PlayerGuid: {} (Result {} dropped — not on wire)",
+        PlayerGuid.ToString(), Result);
 
     return &_worldPacket;
 }
 
 WorldPacket const* NeighborhoodEvictPlotResponse::Write()
 {
-    _worldPacket << uint8(Result);
+    // IDA-verified wire (build 67186, sub_7FF75C1E0050 case 0x5C0012 → LABEL_46):
+    // single PackedGUID via ClientOpcode_helper_31E0120 — no leading uint8 Result.
     _worldPacket << NeighborhoodGuid;
 
-    TC_LOG_DEBUG("network.opcode", "SMSG_NEIGHBORHOOD_EVICT_PLOT_RESPONSE Result: {} NeighborhoodGuid: {}", Result, NeighborhoodGuid.ToString());
+    TC_LOG_DEBUG("network.opcode", "SMSG_NEIGHBORHOOD_EVICT_PLOT_RESPONSE NeighborhoodGuid: {} (Result {} dropped — not on wire)",
+        NeighborhoodGuid.ToString(), Result);
 
     return &_worldPacket;
 }
