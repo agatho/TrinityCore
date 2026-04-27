@@ -243,9 +243,10 @@ void HousingFixtureCreateFixture::Read()
     _worldPacket >> HookEntityGuid;
     _worldPacket >> ExteriorComponentHookID;
     _worldPacket >> ExteriorComponentID;
+    _worldPacket >> Flags;
 
-    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_FIXTURE_CREATE AttachParentGuid: {} HookEntity: {} HookID: {} ComponentID: {}",
-        AttachParentGuid.ToString(), HookEntityGuid.ToString(), ExteriorComponentHookID, ExteriorComponentID);
+    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_FIXTURE_CREATE AttachParentGuid: {} HookEntity: {} HookID: {} ComponentID: {} Flags: {}",
+        AttachParentGuid.ToString(), HookEntityGuid.ToString(), ExteriorComponentHookID, ExteriorComponentID, Flags);
 }
 
 void HousingFixtureDeleteFixture::Read()
@@ -253,16 +254,19 @@ void HousingFixtureDeleteFixture::Read()
     _worldPacket >> FixtureGuid;
     _worldPacket >> RoomGuid;
     _worldPacket >> ExteriorComponentID;
+    _worldPacket >> Flags;
 
-    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_FIXTURE_DELETE FixtureGuid: {} RoomGuid: {} ExteriorComponentID: {}", FixtureGuid.ToString(), RoomGuid.ToString(), ExteriorComponentID);
+    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_FIXTURE_DELETE FixtureGuid: {} RoomGuid: {} ExteriorComponentID: {} Flags: {}",
+        FixtureGuid.ToString(), RoomGuid.ToString(), ExteriorComponentID, Flags);
 }
 
 void HousingFixtureSetHouseSize::Read()
 {
     _worldPacket >> HouseGuid;
     _worldPacket >> Size;
+    _worldPacket >> Flags;
 
-    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_FIXTURE_SET_HOUSE_SIZE HouseGuid: {} Size: {}", HouseGuid.ToString(), Size);
+    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_FIXTURE_SET_HOUSE_SIZE HouseGuid: {} Size: {} Flags: {}", HouseGuid.ToString(), Size, Flags);
 }
 
 void HousingFixtureSetHouseType::Read()
@@ -355,9 +359,10 @@ void HousingRoomSetComponentTheme::Read()
     _worldPacket >> HouseThemeID;
     for (uint32& optionID : OptionIDs)
         _worldPacket >> optionID;
+    _worldPacket >> TrailingField;
 
-    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_ROOM_SET_COMPONENT_THEME RoomGuid: {} HouseThemeID: {} OptionCount: {}",
-        RoomGuid.ToString(), HouseThemeID, OptionIDs.size());
+    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_ROOM_SET_COMPONENT_THEME RoomGuid: {} HouseThemeID: {} OptionCount: {} TrailingField: {}",
+        RoomGuid.ToString(), HouseThemeID, OptionIDs.size(), TrailingField);
 }
 
 void HousingRoomApplyComponentMaterials::Read()
@@ -2918,6 +2923,93 @@ void InitiativeUpdateActiveNeighborhood::Read()
     _worldPacket >> NeighborhoodGuid;
 
     TC_LOG_DEBUG("network.opcode", "CMSG_INITIATIVE_UPDATE_ACTIVE_NEIGHBORHOOD NeighborhoodGuid: {}", NeighborhoodGuid.ToString());
+}
+
+// ============================================================================
+// 0x38xxxx NeighborhoodInitiative — generic Op-XX read implementations
+// ============================================================================
+
+void NeighborhoodInitiativeOp01::Read()
+{
+    _worldPacket >> NeighborhoodGuid;
+    TC_LOG_DEBUG("network.opcode", "CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_01 NeighborhoodGuid: {}", NeighborhoodGuid.ToString());
+}
+
+void NeighborhoodInitiativeOp05::Read()
+{
+    _worldPacket >> Field1;
+    _worldPacket >> NeighborhoodGuid;
+    TC_LOG_DEBUG("network.opcode", "CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_05 Field1: {} NeighborhoodGuid: {}", Field1, NeighborhoodGuid.ToString());
+}
+
+void NeighborhoodInitiativeOp07::Read()
+{
+    _worldPacket >> Value;
+    TC_LOG_DEBUG("network.opcode", "CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_07 Value: {}", Value);
+}
+
+void NeighborhoodInitiativeOp09::Read()
+{
+    _worldPacket >> Value;
+    TC_LOG_DEBUG("network.opcode", "CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_09 Value: {}", Value);
+}
+
+void NeighborhoodInitiativeOp0A::Read()
+{
+    _worldPacket >> Value;
+    TC_LOG_DEBUG("network.opcode", "CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_0A Value: {}", Value);
+}
+
+void NeighborhoodInitiativeOp0B::Read()
+{
+    _worldPacket >> Value;
+    TC_LOG_DEBUG("network.opcode", "CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_0B Value: {}", Value);
+}
+
+void NeighborhoodInitiativeOp0C::Read()
+{
+    _worldPacket >> NeighborhoodGuid;
+    TC_LOG_DEBUG("network.opcode", "CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_0C NeighborhoodGuid: {}", NeighborhoodGuid.ToString());
+}
+
+void NeighborhoodInitiativeOp0D::Read()
+{
+    _worldPacket >> Header;
+    uint32 count = 0;
+    _worldPacket >> count;
+    Pairs.resize(count);
+    for (uint32 i = 0; i < count; ++i)
+    {
+        _worldPacket >> Pairs[i].First;
+        _worldPacket >> Pairs[i].Second;
+    }
+    _worldPacket >> Bits<1>(Flag);
+    TC_LOG_DEBUG("network.opcode", "CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_0D Header: {} Pairs: {} Flag: {}", Header, count, Flag);
+}
+
+void NeighborhoodInitiativeOp0E::Read()
+{
+    uint32 count = 0;
+    _worldPacket >> count;
+    TaskIDs.resize(count);
+    for (uint32 i = 0; i < count; ++i)
+        _worldPacket >> TaskIDs[i];
+    TC_LOG_DEBUG("network.opcode", "CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_0E count: {}", count);
+}
+
+void NeighborhoodInitiativeOp0F::Read()
+{
+    uint32 count = 0;
+    _worldPacket >> count;
+    Records.resize(count);
+    for (uint32 i = 0; i < count; ++i)
+    {
+        _worldPacket >> Records[i].A;
+        _worldPacket >> Records[i].B;
+        _worldPacket >> Records[i].C;
+        _worldPacket >> Records[i].D;
+    }
+    TC_LOG_DEBUG("network.opcode", "CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_0F count: {}", count);
 }
 
 } // namespace WorldPackets::Neighborhood

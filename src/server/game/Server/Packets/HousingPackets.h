@@ -458,10 +458,14 @@ namespace WorldPackets::Housing
 
         void Read() override;
 
+        // IDA-verified wire (build 67186, sub_7FF75C19E5E0):
+        //   ObjectGuid AttachParent + ObjectGuid HookEntity + uint32 ExteriorComponentHookID
+        //   + uint32 ExteriorComponentID + uint8 Flags
         ObjectGuid AttachParentGuid;         // Housing/3 exterior root entity
         ObjectGuid HookEntityGuid;            // Housing/4 hook point entity on the house
         uint32 ExteriorComponentHookID = 0;   // DB2 ExteriorComponentHook row ID (which hook point)
         uint32 ExteriorComponentID = 0;       // DB2 ExteriorComponent row ID (which component to install)
+        uint8 Flags = 0;
     };
 
     class HousingFixtureDeleteFixture final : public ClientPacket
@@ -471,9 +475,12 @@ namespace WorldPackets::Housing
 
         void Read() override;
 
+        // IDA-verified wire (build 67186, sub_7FF75C19E6B0):
+        //   ObjectGuid FixtureGuid + ObjectGuid RoomGuid + uint32 ExteriorComponentID + uint8 Flags
         ObjectGuid FixtureGuid;
         ObjectGuid RoomGuid;
         uint32 ExteriorComponentID = 0;
+        uint8 Flags = 0;
     };
 
     class HousingFixtureSetHouseSize final : public ClientPacket
@@ -483,8 +490,11 @@ namespace WorldPackets::Housing
 
         void Read() override;
 
+        // IDA-verified wire (build 67186, sub_7FF75C19E440):
+        //   ObjectGuid HouseGuid + uint8 Size + uint8 Flags
         ObjectGuid HouseGuid;
         uint8 Size = 0;
+        uint8 Flags = 0;
     };
 
     class HousingFixtureSetHouseType final : public ClientPacket
@@ -591,9 +601,12 @@ namespace WorldPackets::Housing
 
         void Read() override;
 
+        // IDA-verified wire (build 67186, sub_7FF75C1AC120):
+        //   ObjectGuid RoomGuid + uint32 OptionCount + uint32 HouseThemeID + uint32[OptionCount] + uint32 TrailingField
         ObjectGuid RoomGuid;
         uint32 HouseThemeID = 0;
         std::vector<uint32> OptionIDs; // RoomComponentOption IDs (not RoomComponent IDs)
+        uint32 TrailingField = 0;
     };
 
     class HousingRoomApplyComponentMaterials final : public ClientPacket
@@ -2995,6 +3008,116 @@ namespace WorldPackets::Neighborhood
         InitiativeUpdateActiveNeighborhood(WorldPacket&& packet) : ClientPacket(CMSG_INITIATIVE_UPDATE_ACTIVE_NEIGHBORHOOD, std::move(packet)) { }
         void Read() override;
         ObjectGuid NeighborhoodGuid;
+    };
+
+    // ============================================================================
+    // 0x38xxxx NeighborhoodInitiative — IDA-decoded wire formats from build 67186
+    // (INITIATIVE_WIRE_FORMAT_AUTHORITATIVE_67186.md). The named opcodes 0x380000,
+    // 0x380002-0x380004 are above. The remaining 12 are below — semantic naming
+    // requires runtime sniff to bind 1:1 to Lua APIs (see methodology doc).
+    // ============================================================================
+
+    class NeighborhoodInitiativeOp01 final : public ClientPacket
+    {
+    public:
+        NeighborhoodInitiativeOp01(WorldPacket&& packet) : ClientPacket(CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_01, std::move(packet)) { }
+        void Read() override;
+        ObjectGuid NeighborhoodGuid;
+    };
+
+    class NeighborhoodInitiativeOp05 final : public ClientPacket
+    {
+    public:
+        NeighborhoodInitiativeOp05(WorldPacket&& packet) : ClientPacket(CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_05, std::move(packet)) { }
+        void Read() override;
+        uint32 Field1 = 0;
+        ObjectGuid NeighborhoodGuid;
+    };
+
+    class NeighborhoodInitiativeOp06 final : public ClientPacket
+    {
+    public:
+        NeighborhoodInitiativeOp06(WorldPacket&& packet) : ClientPacket(CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_06, std::move(packet)) { }
+        void Read() override { }
+    };
+
+    class NeighborhoodInitiativeOp07 final : public ClientPacket
+    {
+    public:
+        NeighborhoodInitiativeOp07(WorldPacket&& packet) : ClientPacket(CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_07, std::move(packet)) { }
+        void Read() override;
+        uint32 Value = 0;
+    };
+
+    class NeighborhoodInitiativeOp08 final : public ClientPacket
+    {
+    public:
+        NeighborhoodInitiativeOp08(WorldPacket&& packet) : ClientPacket(CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_08, std::move(packet)) { }
+        void Read() override { }
+    };
+
+    class NeighborhoodInitiativeOp09 final : public ClientPacket
+    {
+    public:
+        NeighborhoodInitiativeOp09(WorldPacket&& packet) : ClientPacket(CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_09, std::move(packet)) { }
+        void Read() override;
+        float Value = 0.0f;
+    };
+
+    class NeighborhoodInitiativeOp0A final : public ClientPacket
+    {
+    public:
+        NeighborhoodInitiativeOp0A(WorldPacket&& packet) : ClientPacket(CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_0A, std::move(packet)) { }
+        void Read() override;
+        uint32 Value = 0;
+    };
+
+    class NeighborhoodInitiativeOp0B final : public ClientPacket
+    {
+    public:
+        NeighborhoodInitiativeOp0B(WorldPacket&& packet) : ClientPacket(CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_0B, std::move(packet)) { }
+        void Read() override;
+        uint32 Value = 0;
+    };
+
+    class NeighborhoodInitiativeOp0C final : public ClientPacket
+    {
+    public:
+        NeighborhoodInitiativeOp0C(WorldPacket&& packet) : ClientPacket(CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_0C, std::move(packet)) { }
+        void Read() override;
+        ObjectGuid NeighborhoodGuid;
+    };
+
+    // 0x38000D — uint32 + uint32 + (uint32,uint32)[N] + Bits<1>
+    class NeighborhoodInitiativeOp0D final : public ClientPacket
+    {
+    public:
+        NeighborhoodInitiativeOp0D(WorldPacket&& packet) : ClientPacket(CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_0D, std::move(packet)) { }
+        void Read() override;
+        struct Pair { uint32 First = 0; uint32 Second = 0; };
+        uint32 Header = 0;
+        std::vector<Pair> Pairs;
+        bool Flag = false;
+    };
+
+    // 0x38000E — uint32 count + uint32[count]. Per IDA & memory the batch flush
+    // path for AddTrackedInitiativeTask / RemoveTrackedInitiativeTask.
+    class NeighborhoodInitiativeOp0E final : public ClientPacket
+    {
+    public:
+        NeighborhoodInitiativeOp0E(WorldPacket&& packet) : ClientPacket(CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_0E, std::move(packet)) { }
+        void Read() override;
+        std::vector<uint32> TaskIDs;
+    };
+
+    // 0x38000F — uint32 count + (uint32×4)[count]
+    class NeighborhoodInitiativeOp0F final : public ClientPacket
+    {
+    public:
+        NeighborhoodInitiativeOp0F(WorldPacket&& packet) : ClientPacket(CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_0F, std::move(packet)) { }
+        void Read() override;
+        struct Quad { uint32 A = 0, B = 0, C = 0, D = 0; };
+        std::vector<Quad> Records;
     };
 
 }

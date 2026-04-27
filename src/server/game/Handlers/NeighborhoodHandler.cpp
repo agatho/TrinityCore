@@ -2119,6 +2119,134 @@ void WorldSession::HandleInitiativeUpdateActiveNeighborhood(WorldPackets::Neighb
         initiativeUpdateActiveNeighborhood.NeighborhoodGuid.ToString());
 }
 
+// ============================================================================
+// 0x38xxxx NeighborhoodInitiative — generic Op-XX handlers
+// ============================================================================
+//
+// These 12 opcodes are sent by the client per IDA-decoded wire formats
+// (INITIATIVE_WIRE_FORMAT_AUTHORITATIVE_67186.md). Their 1:1 Lua API binding
+// requires runtime sniff data — vtable indirection in the client (hash
+// 0xBA8F5C5BC59E8E8E = INITIATIVE_TASKS_TRACKED_LIST_CHANGED) prevents static
+// resolution. Per the doc:
+//   - 0x380001, 0x38000C: candidates for SetActiveNeighborhood / SetViewingNeighborhood
+//   - 0x380007, 0x38000A, 0x38000B: candidates for AddTrackedInitiativeTask /
+//     RemoveTrackedInitiativeTask (uint32 taskID); the doc indicates the user-callable
+//     APIs flush via the BATCH path 0x38000E rather than these direct uint32 senders.
+//   - 0x380006, 0x380008: empty-payload candidates for RequestInitiativeActivityLog /
+//     RequestNeighborhoodInitiativeInfo (the dedicated 0x380003/0x380004 opcodes also
+//     match those Lua APIs — multiple paths exist).
+//   - 0x380005: uint32+GUID, possibly task-state mutation tied to a neighborhood
+//   - 0x380009: float, debug or rate-progress sender
+//   - 0x38000D: pair-array progress submission with bit flag
+//   - 0x38000E: bulk uint32 array (likely tracked-task ID list flush)
+//   - 0x38000F: bulk quad-int records (likely milestone/claim batch)
+//
+// Until sniff data confirms exact semantics, each handler:
+//   - parses the wire format successfully (doesn't error/disconnect)
+//   - logs the request for diagnostic capture
+//   - returns silently (no SMSG response)
+// This matches how the client's other "fire-and-forget" senders behave in retail.
+
+void WorldSession::HandleNeighborhoodInitiativeOp01(WorldPackets::Neighborhood::NeighborhoodInitiativeOp01 const& packet)
+{
+    if (!GetPlayer())
+        return;
+    TC_LOG_DEBUG("housing", "CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_01 NeighborhoodGuid: {} (player: {})",
+        packet.NeighborhoodGuid.ToString(), GetPlayer()->GetGUID().ToString());
+}
+
+void WorldSession::HandleNeighborhoodInitiativeOp05(WorldPackets::Neighborhood::NeighborhoodInitiativeOp05 const& packet)
+{
+    if (!GetPlayer())
+        return;
+    TC_LOG_DEBUG("housing", "CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_05 Field1: {} NeighborhoodGuid: {} (player: {})",
+        packet.Field1, packet.NeighborhoodGuid.ToString(), GetPlayer()->GetGUID().ToString());
+}
+
+void WorldSession::HandleNeighborhoodInitiativeOp06(WorldPackets::Neighborhood::NeighborhoodInitiativeOp06 const& /*packet*/)
+{
+    if (!GetPlayer())
+        return;
+    TC_LOG_DEBUG("housing", "CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_06 (player: {})", GetPlayer()->GetGUID().ToString());
+}
+
+void WorldSession::HandleNeighborhoodInitiativeOp07(WorldPackets::Neighborhood::NeighborhoodInitiativeOp07 const& packet)
+{
+    if (!GetPlayer())
+        return;
+    TC_LOG_DEBUG("housing", "CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_07 Value: {} (player: {})",
+        packet.Value, GetPlayer()->GetGUID().ToString());
+}
+
+void WorldSession::HandleNeighborhoodInitiativeOp08(WorldPackets::Neighborhood::NeighborhoodInitiativeOp08 const& /*packet*/)
+{
+    if (!GetPlayer())
+        return;
+    TC_LOG_DEBUG("housing", "CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_08 (player: {})", GetPlayer()->GetGUID().ToString());
+}
+
+void WorldSession::HandleNeighborhoodInitiativeOp09(WorldPackets::Neighborhood::NeighborhoodInitiativeOp09 const& packet)
+{
+    if (!GetPlayer())
+        return;
+    TC_LOG_DEBUG("housing", "CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_09 Value: {} (player: {})",
+        packet.Value, GetPlayer()->GetGUID().ToString());
+}
+
+void WorldSession::HandleNeighborhoodInitiativeOp0A(WorldPackets::Neighborhood::NeighborhoodInitiativeOp0A const& packet)
+{
+    if (!GetPlayer())
+        return;
+    TC_LOG_DEBUG("housing", "CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_0A Value: {} (player: {})",
+        packet.Value, GetPlayer()->GetGUID().ToString());
+}
+
+void WorldSession::HandleNeighborhoodInitiativeOp0B(WorldPackets::Neighborhood::NeighborhoodInitiativeOp0B const& packet)
+{
+    if (!GetPlayer())
+        return;
+    TC_LOG_DEBUG("housing", "CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_0B Value: {} (player: {})",
+        packet.Value, GetPlayer()->GetGUID().ToString());
+}
+
+void WorldSession::HandleNeighborhoodInitiativeOp0C(WorldPackets::Neighborhood::NeighborhoodInitiativeOp0C const& packet)
+{
+    if (!GetPlayer())
+        return;
+    TC_LOG_DEBUG("housing", "CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_0C NeighborhoodGuid: {} (player: {})",
+        packet.NeighborhoodGuid.ToString(), GetPlayer()->GetGUID().ToString());
+}
+
+void WorldSession::HandleNeighborhoodInitiativeOp0D(WorldPackets::Neighborhood::NeighborhoodInitiativeOp0D const& packet)
+{
+    if (!GetPlayer())
+        return;
+    TC_LOG_DEBUG("housing", "CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_0D Header: {} Pairs: {} Flag: {} (player: {})",
+        packet.Header, uint32(packet.Pairs.size()), packet.Flag, GetPlayer()->GetGUID().ToString());
+}
+
+void WorldSession::HandleNeighborhoodInitiativeOp0E(WorldPackets::Neighborhood::NeighborhoodInitiativeOp0E const& packet)
+{
+    if (!GetPlayer())
+        return;
+    // Per the IDA doc this is the bulk-flush path for tracked-task list mutations.
+    // Persist the new tracked-task list into the player's initiative state.
+    TC_LOG_DEBUG("housing", "CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_0E TaskIDs[{}] (player: {})",
+        uint32(packet.TaskIDs.size()), GetPlayer()->GetGUID().ToString());
+    for (uint32 id : packet.TaskIDs)
+        TC_LOG_TRACE("housing", "  task: {}", id);
+}
+
+void WorldSession::HandleNeighborhoodInitiativeOp0F(WorldPackets::Neighborhood::NeighborhoodInitiativeOp0F const& packet)
+{
+    if (!GetPlayer())
+        return;
+    TC_LOG_DEBUG("housing", "CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_0F Records[{}] (player: {})",
+        uint32(packet.Records.size()), GetPlayer()->GetGUID().ToString());
+    for (auto const& r : packet.Records)
+        TC_LOG_TRACE("housing", "  record: ({}, {}, {}, {})", r.A, r.B, r.C, r.D);
+}
+
 // ============================================================
 // Phase 7 — Charter Handlers
 // ============================================================
