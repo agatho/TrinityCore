@@ -1432,7 +1432,7 @@ HousingResult Housing::PlaceRoom(uint32 roomEntryId, uint32 slotIndex, uint32 or
     if (_owner->GetSession())
     {
         WorldPackets::Housing::AccountRoomCollectionUpdate notif;
-        notif.RoomID = roomEntryId;
+        notif.AddSingle(roomEntryId);
         _owner->GetSession()->SendPacket(notif.Write());
     }
 
@@ -1688,7 +1688,7 @@ HousingResult Housing::ApplyRoomTheme(ObjectGuid roomGuid, uint32 themeSetId, st
     if (_owner->GetSession())
     {
         WorldPackets::Housing::AccountRoomThemeCollectionUpdate notif;
-        notif.ThemeID = themeSetId;
+        notif.AddSingle(themeSetId);
         _owner->GetSession()->SendPacket(notif.Write());
     }
 
@@ -1756,7 +1756,7 @@ HousingResult Housing::ApplyRoomMaterial(ObjectGuid roomGuid, uint32 textureId, 
     if (_owner->GetSession())
     {
         WorldPackets::Housing::AccountRoomMaterialCollectionUpdate notif;
-        notif.MaterialID = textureId;
+        notif.AddSingle(textureId);
         _owner->GetSession()->SendPacket(notif.Write());
     }
 
@@ -1967,7 +1967,7 @@ HousingResult Housing::SelectFixtureOption(uint32 fixturePointId, uint32 optionI
     if (isNew && _owner->GetSession())
     {
         WorldPackets::Housing::AccountExteriorFixtureCollectionUpdate notif;
-        notif.FixtureID = optionId;
+        notif.AddSingle(optionId);
         _owner->GetSession()->SendPacket(notif.Write());
     }
 

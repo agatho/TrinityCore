@@ -1986,47 +1986,68 @@ WorldPacket const* HousingSetHouseNameResponse::Write()
 // Account/Licensing SMSG (0x42xxxx / 0x5Fxxxx)
 // ============================================================
 
+// Shared writer for all five SMSG_ACCOUNT_*_COLLECTION_UPDATE opcodes.
+// IDA-verified wire (build 67186, sub_7FF75C0C76F0):
+//   uint8  byte                        (top bit = IsIncrementalUpdate)
+//   uint32 IDs.size()
+//   uint32 StateFlags.size()
+//   uint32 IDs[IDs.size()]
+//   Bits<1> StateFlags[StateFlags.size()]   (8 per byte, bit 7 first)
+//
+// Bit and byte streams are byte-aligned in this opcode — no FlushBits
+// is needed because the integer reads happen before the bit loop.
+void AccountCollectionUpdateBase::WriteCollection()
+{
+    _worldPacket << uint8(IsIncrementalUpdate ? 0x80 : 0x00);
+    _worldPacket << uint32(IDs.size());
+    _worldPacket << uint32(StateFlags.size());
+
+    for (uint32 id : IDs)
+        _worldPacket << uint32(id);
+
+    for (bool flag : StateFlags)
+        _worldPacket.WriteBit(flag);
+    if (!StateFlags.empty())
+        _worldPacket.FlushBits();
+}
+
 WorldPacket const* AccountExteriorFixtureCollectionUpdate::Write()
 {
-    _worldPacket << uint32(FixtureID);
-
-    TC_LOG_DEBUG("network.opcode", "SMSG_ACCOUNT_EXTERIOR_FIXTURE_COLLECTION_UPDATE FixtureID: {}", FixtureID);
-
+    WriteCollection();
+    TC_LOG_DEBUG("network.opcode", "SMSG_ACCOUNT_EXTERIOR_FIXTURE_COLLECTION_UPDATE incremental={} ids={} flags={}",
+        IsIncrementalUpdate, IDs.size(), StateFlags.size());
     return &_worldPacket;
 }
 
 WorldPacket const* AccountHouseTypeCollectionUpdate::Write()
 {
-    _worldPacket << uint32(HouseTypeID);
-
-    TC_LOG_DEBUG("network.opcode", "SMSG_ACCOUNT_HOUSE_TYPE_COLLECTION_UPDATE HouseTypeID: {}", HouseTypeID);
-
+    WriteCollection();
+    TC_LOG_DEBUG("network.opcode", "SMSG_ACCOUNT_HOUSE_TYPE_COLLECTION_UPDATE incremental={} ids={} flags={}",
+        IsIncrementalUpdate, IDs.size(), StateFlags.size());
     return &_worldPacket;
 }
 
 WorldPacket const* AccountRoomCollectionUpdate::Write()
 {
-    _worldPacket << uint32(RoomID);
-
-    TC_LOG_DEBUG("network.opcode", "SMSG_ACCOUNT_ROOM_COLLECTION_UPDATE RoomID: {}", RoomID);
-
+    WriteCollection();
+    TC_LOG_DEBUG("network.opcode", "SMSG_ACCOUNT_ROOM_COLLECTION_UPDATE incremental={} ids={} flags={}",
+        IsIncrementalUpdate, IDs.size(), StateFlags.size());
     return &_worldPacket;
 }
 
 WorldPacket const* AccountRoomThemeCollectionUpdate::Write()
 {
-    _worldPacket << uint32(ThemeID);
-
-    TC_LOG_DEBUG("network.opcode", "SMSG_ACCOUNT_ROOM_THEME_COLLECTION_UPDATE ThemeID: {}", ThemeID);
-
+    WriteCollection();
+    TC_LOG_DEBUG("network.opcode", "SMSG_ACCOUNT_ROOM_THEME_COLLECTION_UPDATE incremental={} ids={} flags={}",
+        IsIncrementalUpdate, IDs.size(), StateFlags.size());
     return &_worldPacket;
 }
 
 WorldPacket const* AccountRoomMaterialCollectionUpdate::Write()
 {
-    _worldPacket << uint32(MaterialID);
-
-    TC_LOG_DEBUG("network.opcode", "SMSG_ACCOUNT_ROOM_MATERIAL_COLLECTION_UPDATE MaterialID: {}", MaterialID);
+    WriteCollection();
+    TC_LOG_DEBUG("network.opcode", "SMSG_ACCOUNT_ROOM_MATERIAL_COLLECTION_UPDATE incremental={} ids={} flags={}",
+        IsIncrementalUpdate, IDs.size(), StateFlags.size());
 
     return &_worldPacket;
 }

@@ -1789,7 +1789,7 @@ void WorldSession::HandleHousingFixtureSetCoreFixture(WorldPackets::Housing::Hou
     if (result == HOUSING_RESULT_SUCCESS)
     {
         WorldPackets::Housing::AccountExteriorFixtureCollectionUpdate collectionUpdate;
-        collectionUpdate.FixtureID = componentID;
+        collectionUpdate.AddSingle(componentID);
         SendPacket(collectionUpdate.Write());
 
         // Respawn house visuals so the new fixture is visible immediately.
@@ -1875,7 +1875,7 @@ void WorldSession::HandleHousingFixtureCreateFixture(WorldPackets::Housing::Hous
     if (result == HOUSING_RESULT_SUCCESS)
     {
         WorldPackets::Housing::AccountExteriorFixtureCollectionUpdate collectionUpdate;
-        collectionUpdate.FixtureID = componentID;
+        collectionUpdate.AddSingle(componentID);
         SendPacket(collectionUpdate.Write());
 
         if (HousingMap* housingMap = dynamic_cast<HousingMap*>(player->GetMap()))
@@ -2196,7 +2196,7 @@ void WorldSession::HandleHousingFixtureSetHouseType(WorldPackets::Housing::Housi
 
     // Notify account of house type collection update
     WorldPackets::Housing::AccountHouseTypeCollectionUpdate collectionUpdate;
-    collectionUpdate.HouseTypeID = wmoDataID;
+    collectionUpdate.AddSingle(wmoDataID);
     SendPacket(collectionUpdate.Write());
 
     // Sniff-verified: UPDATE_OBJECT follows the response, carrying updated MeshObject
@@ -2509,7 +2509,7 @@ void WorldSession::HandleHousingRoomAdd(WorldPackets::Housing::HousingRoomAdd co
         }
 
         WorldPackets::Housing::AccountRoomCollectionUpdate roomUpdate;
-        roomUpdate.RoomID = housingRoomAdd.HouseRoomID;
+        roomUpdate.AddSingle(housingRoomAdd.HouseRoomID);
         SendPacket(roomUpdate.Write());
     }
 

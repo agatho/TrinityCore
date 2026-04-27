@@ -2087,44 +2087,76 @@ namespace WorldPackets::Housing
     // Account/Licensing SMSG (0x42xxxx / 0x5Fxxxx)
     // ============================================================
 
-    class AccountExteriorFixtureCollectionUpdate final : public ServerPacket
+    // ============================================================
+    // Account-wide collection-update SMSGs (0x420053..0x420057)
+    //
+    // IDA-verified (build 67186, sub_7FF75C0C76F0): five opcodes share the
+    // same constructor and therefore one wire format:
+    //
+    //   uint8   FlagsByte           (only top bit is read -> IsIncrementalUpdate)
+    //   uint32  IDs.size()
+    //   uint32  StateFlags.size()
+    //   uint32  IDs[IDs.size()]
+    //   Bits<1> StateFlags[StateFlags.size()]   (8 per byte, bit 7 first)
+    //
+    // Old TC implementation only emitted a single uint32 ID; the new layout
+    // supports both bulk-sync (incremental=false) and single-item delta
+    // (incremental=true with one ID + one matching state flag).
+    // AddSingle() preserves the legacy single-item ergonomics.
+    // ============================================================
+
+    class AccountCollectionUpdateBase : public ServerPacket
     {
     public:
-        AccountExteriorFixtureCollectionUpdate() : ServerPacket(SMSG_ACCOUNT_EXTERIOR_FIXTURE_COLLECTION_UPDATE) { }
-        WorldPacket const* Write() override;
-        uint32 FixtureID = 0;
+        AccountCollectionUpdateBase(OpcodeServer opcode) : ServerPacket(opcode) { }
+
+        bool IsIncrementalUpdate = true; // top bit of the leading byte
+        std::vector<uint32> IDs;
+        std::vector<bool> StateFlags;
+
+        void AddSingle(uint32 id, bool state = true)
+        {
+            IDs.push_back(id);
+            StateFlags.push_back(state);
+        }
+
+    protected:
+        void WriteCollection();
     };
 
-    class AccountHouseTypeCollectionUpdate final : public ServerPacket
+    class AccountExteriorFixtureCollectionUpdate final : public AccountCollectionUpdateBase
     {
     public:
-        AccountHouseTypeCollectionUpdate() : ServerPacket(SMSG_ACCOUNT_HOUSE_TYPE_COLLECTION_UPDATE) { }
+        AccountExteriorFixtureCollectionUpdate() : AccountCollectionUpdateBase(SMSG_ACCOUNT_EXTERIOR_FIXTURE_COLLECTION_UPDATE) { }
         WorldPacket const* Write() override;
-        uint32 HouseTypeID = 0;
     };
 
-    class AccountRoomCollectionUpdate final : public ServerPacket
+    class AccountHouseTypeCollectionUpdate final : public AccountCollectionUpdateBase
     {
     public:
-        AccountRoomCollectionUpdate() : ServerPacket(SMSG_ACCOUNT_ROOM_COLLECTION_UPDATE) { }
+        AccountHouseTypeCollectionUpdate() : AccountCollectionUpdateBase(SMSG_ACCOUNT_HOUSE_TYPE_COLLECTION_UPDATE) { }
         WorldPacket const* Write() override;
-        uint32 RoomID = 0;
     };
 
-    class AccountRoomThemeCollectionUpdate final : public ServerPacket
+    class AccountRoomCollectionUpdate final : public AccountCollectionUpdateBase
     {
     public:
-        AccountRoomThemeCollectionUpdate() : ServerPacket(SMSG_ACCOUNT_ROOM_THEME_COLLECTION_UPDATE) { }
+        AccountRoomCollectionUpdate() : AccountCollectionUpdateBase(SMSG_ACCOUNT_ROOM_COLLECTION_UPDATE) { }
         WorldPacket const* Write() override;
-        uint32 ThemeID = 0;
     };
 
-    class AccountRoomMaterialCollectionUpdate final : public ServerPacket
+    class AccountRoomThemeCollectionUpdate final : public AccountCollectionUpdateBase
     {
     public:
-        AccountRoomMaterialCollectionUpdate() : ServerPacket(SMSG_ACCOUNT_ROOM_MATERIAL_COLLECTION_UPDATE) { }
+        AccountRoomThemeCollectionUpdate() : AccountCollectionUpdateBase(SMSG_ACCOUNT_ROOM_THEME_COLLECTION_UPDATE) { }
         WorldPacket const* Write() override;
-        uint32 MaterialID = 0;
+    };
+
+    class AccountRoomMaterialCollectionUpdate final : public AccountCollectionUpdateBase
+    {
+    public:
+        AccountRoomMaterialCollectionUpdate() : AccountCollectionUpdateBase(SMSG_ACCOUNT_ROOM_MATERIAL_COLLECTION_UPDATE) { }
+        WorldPacket const* Write() override;
     };
 
     class InvalidateNeighborhood final : public ServerPacket

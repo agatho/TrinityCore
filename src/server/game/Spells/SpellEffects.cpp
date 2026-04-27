@@ -6507,7 +6507,7 @@ void Spell::EffectLearnHouseRoom()
 
     // Send collection update to the client
     WorldPackets::Housing::AccountRoomCollectionUpdate collectionUpdate;
-    collectionUpdate.RoomID = houseRoomId;
+    collectionUpdate.AddSingle(houseRoomId);
     player->SendDirectMessage(collectionUpdate.Write());
 }
 
@@ -6533,7 +6533,7 @@ void Spell::EffectLearnHouseExteriorComponent()
 
     // Send collection update to the client
     WorldPackets::Housing::AccountExteriorFixtureCollectionUpdate collectionUpdate;
-    collectionUpdate.FixtureID = exteriorComponentId;
+    collectionUpdate.AddSingle(exteriorComponentId);
     player->SendDirectMessage(collectionUpdate.Write());
 }
 
@@ -6567,7 +6567,7 @@ void Spell::EffectLearnHouseTheme()
 
     // Send collection update to the client
     WorldPackets::Housing::AccountRoomThemeCollectionUpdate collectionUpdate;
-    collectionUpdate.ThemeID = houseThemeId;
+    collectionUpdate.AddSingle(houseThemeId);
     player->SendDirectMessage(collectionUpdate.Write());
 }
 
@@ -6593,7 +6593,7 @@ void Spell::EffectLearnHouseRoomComponentTexture()
 
     // Send collection update to the client (texture = material in the collection system)
     WorldPackets::Housing::AccountRoomMaterialCollectionUpdate collectionUpdate;
-    collectionUpdate.MaterialID = textureId;
+    collectionUpdate.AddSingle(textureId);
     player->SendDirectMessage(collectionUpdate.Write());
 }
 
