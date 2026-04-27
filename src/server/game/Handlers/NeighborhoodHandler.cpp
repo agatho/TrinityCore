@@ -1074,6 +1074,8 @@ void WorldSession::HandleNeighborhoodBuyHouse(WorldPackets::Neighborhood::Neighb
     HousingResult result = neighborhood->PurchasePlot(player->GetGUID(), resolvedPlotIndex);
     if (result == HOUSING_RESULT_SUCCESS)
     {
+        // Consume any 5-minute reservation hold the player placed via the House Finder.
+        neighborhood->ClearReservation(player->GetGUID());
         player->ModifyMoney(-static_cast<int64>(HOUSE_PURCHASE_COST_COPPER));
         // Use the server's canonical neighborhood GUID, NOT the client-supplied GUID.
         // Client may send DB2 NeighborhoodID as counter while server uses internal counter.
@@ -1446,6 +1448,10 @@ void WorldSession::HandleNeighborhoodMoveHouse(WorldPackets::Neighborhood::Neigh
     response.Result = static_cast<uint8>(result);
     if (result == HOUSING_RESULT_SUCCESS)
     {
+        // The 5-minute hold the player may have placed via the House Finder is
+        // consumed by the actual move; clear it so the lock is released early.
+        neighborhood->ClearReservation(player->GetGUID());
+
         // Update Housing::_plotIndex so all subsequent responses (HouseStatus,
         // HouseInfo, SyncUpdateFields, etc.) use the correct DB2 PlotIndex.
         if (Housing* housing = player->GetHousing())

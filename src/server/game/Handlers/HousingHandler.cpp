@@ -3086,6 +3086,19 @@ void WorldSession::HandleHousingSvcsNeighborhoodReservePlot(WorldPackets::Housin
     if (!player)
         return;
 
+    // Reservation = a 5-minute hold on a plot. Per retail behavior:
+    //   - any player can reserve a plot (even if they already own a house elsewhere)
+    //   - reservation just blocks OTHER players from buying/reserving for 5 minutes
+    //   - the actual purchase/move is a separate action via the cornerstone UI
+    //     (CMSG_NEIGHBORHOOD_BUY_HOUSE / CMSG_NEIGHBORHOOD_MOVE_HOUSE)
+    //
+    // Earlier TC implementation called Neighborhood::PurchasePlot here, which
+    // permanently assigned the plot AND created a Housing object — the wrong
+    // semantics for a reservation. The whole buy-side flow (Housing creation,
+    // starter-decor placement, plot spawn, guild notification, kill credit,
+    // CURRENT_HOUSE_INFO refresh, spell cast) belongs in HandleNeighborhoodBuyHouse,
+    // not here.
+
     if (!sWorld->getBoolConfig(CONFIG_HOUSING_ENABLE_BUY_HOUSE))
     {
         WorldPackets::Housing::HousingSvcsNeighborhoodReservePlotResponse response;
@@ -3094,7 +3107,6 @@ void WorldSession::HandleHousingSvcsNeighborhoodReservePlot(WorldPackets::Housin
         return;
     }
 
-    // Housing warning gate — check expansion access, level requirements
     uint32 housingWarnings = ShouldShowHousingWarning(player);
     if (housingWarnings != HOUSING_WARNING_NONE)
     {
@@ -3117,153 +3129,29 @@ void WorldSession::HandleHousingSvcsNeighborhoodReservePlot(WorldPackets::Housin
         return;
     }
 
-    // Use the client's PlotIndex directly — the client sends its internal plot ID
-    // which may differ from our DB2 PlotIndex values (sequential 0-54 in our SQL
-    // vs the actual retail DB2 PlotIndex values the client uses).
     uint8 plotIndex = housingSvcsNeighborhoodReservePlot.PlotIndex;
 
-    TC_LOG_INFO("housing", "HandleHousingSvcsNeighborhoodReservePlot: Using client PlotIndex {} (GUID: {})",
+    TC_LOG_INFO("housing", "CMSG_HOUSING_SVCS_NEIGHBORHOOD_RESERVE_PLOT PlotIndex={} NeighborhoodGuid={}",
         plotIndex, housingSvcsNeighborhoodReservePlot.NeighborhoodGuid.ToString());
 
-    HousingResult result = neighborhood->PurchasePlot(player->GetGUID(), plotIndex);
-    if (result == HOUSING_RESULT_SUCCESS)
-    {
-        // Use the server's canonical neighborhood GUID, NOT the client-supplied GUID.
-        player->CreateHousing(neighborhood->GetGuid(), plotIndex);
-
-        Housing* housing = player->GetHousing();
-        HousingMap* housingMap = dynamic_cast<HousingMap*>(player->GetMap());
-
-        // Update the PlotInfo with the newly created HouseGuid and Battle.net account GUID
-        if (housing)
-        {
-            neighborhood->UpdatePlotHouseInfo(plotIndex,
-                housing->GetHouseGuid(), GetBattlenetAccountGUID());
-
-            // Send guild notification for house addition
-            if (Guild* guild = sGuildMgr->GetGuildById(player->GetGuildId()))
-            {
-                WorldPackets::Housing::HousingSvcsGuildAddHouseNotification notification;
-                notification.House.HouseGUID = housing->GetHouseGuid();
-                notification.House.OwnerGUID = player->GetGUID();
-                notification.House.NeighborhoodGUID = housing->GetNeighborhoodGuid();
-                notification.House.HouseLevel = static_cast<uint8>(housing->GetLevel());
-                guild->BroadcastPacket(notification.Write());
-            }
-        }
-
-        // Populate starter decor catalog and send notifications
-        if (housing)
-        {
-            auto starterDecorWithQty = sHousingMgr.GetStarterDecorWithQuantities(player->GetTeam());
-            for (auto const& [decorId, qty] : starterDecorWithQty)
-            {
-                for (int32 i = 0; i < qty; ++i)
-                    housing->AddToCatalog(decorId);
-            }
-
-            // Send FirstTimeDecorAcquisition for unique decor IDs
-            std::vector<uint32> starterDecorIds = sHousingMgr.GetStarterDecorIds(player->GetTeam());
-            for (uint32 decorId : starterDecorIds)
-            {
-                WorldPackets::Housing::HousingFirstTimeDecorAcquisition decorAcq;
-                decorAcq.DecorEntryID = decorId;
-                SendPacket(decorAcq.Write());
-            }
-
-            // Proactive storage response + Account entity update (retail-verified flow)
-            WorldPackets::Housing::HousingDecorRequestStorageResponse storageResp;
-            storageResp.ResultCode = static_cast<uint8>(HOUSING_RESULT_SUCCESS);
-            SendPacket(storageResp.Write());
-            GetBattlenetAccount().SendUpdateToPlayer(player);
-
-            TC_LOG_ERROR("housing", "HandleHousingSvcsNeighborhoodReservePlot: Populated catalog with {} decor types, sent {} FirstTimeDecorAcquisition + storage + Account update",
-                uint32(starterDecorWithQty.size()), uint32(starterDecorIds.size()));
-
-            // Auto-place starter decor in the visual room (retail pre-places items).
-            // The "Welcome Home" quest requires the player to remove 3 of these items.
-            housing->PlaceStarterDecor();
-        }
-
-        // Grant "Acquire a house" kill credit for quest 91863 (objective 17)
-        static constexpr uint32 NPC_KILL_CREDIT_BUY_HOME = 248858;
-        player->KilledMonsterCredit(NPC_KILL_CREDIT_BUY_HOME);
-
-        if (housingMap)
-        {
-            // Mark the plot Cornerstone as owned (GOState ACTIVE)
-            housingMap->SetPlotOwnershipState(plotIndex, true);
-
-            if (housing)
-            {
-                // Track the housing on the HousingMap (missed at AddPlayerToMap since house didn't exist yet)
-                housingMap->AddPlayerHousing(player->GetGUID(), housing);
-
-                // Update neighborhood PlotInfo with HouseGuid for MeshObject spawning
-                if (!housing->GetHouseGuid().IsEmpty())
-                    neighborhood->UpdatePlotHouseInfo(plotIndex, housing->GetHouseGuid(), GetBattlenetAccountGUID());
-
-                // Spawn house GO and MeshObjects
-                int32 extCompID = static_cast<int32>(housing->GetCoreExteriorComponentID());
-                int32 wmoDataID = static_cast<int32>(housing->GetHouseType());
-                GameObject* houseGo = nullptr;
-                if (housing->HasCustomPosition())
-                {
-                    Position customPos = housing->GetHousePosition();
-                    houseGo = housingMap->SpawnHouseForPlot(plotIndex, &customPos, extCompID, wmoDataID);
-                }
-                else
-                    houseGo = housingMap->SpawnHouseForPlot(plotIndex, nullptr, extCompID, wmoDataID);
-
-                TC_LOG_ERROR("housing", "HandleHousingSvcsNeighborhoodReservePlot: SpawnHouseForPlot for plot {}: {}",
-                    plotIndex, houseGo ? houseGo->GetGUID().ToString() : "FAILED");
-
-                // Update PlayerMirrorHouse.MapID so the client knows this house is on the current map.
-                // Without this, MapID stays at 0 and the client rejects edit mode.
-                player->UpdateHousingMapId(housing->GetHouseGuid(), static_cast<int32>(player->GetMapId()));
-
-                // Mark the player as on their newly purchased plot and send enter spells
-                housingMap->SetPlayerCurrentPlot(player->GetGUID(), plotIndex);
-                housingMap->SendPlotEnterSpellPackets(player, plotIndex);
-
-                TC_LOG_DEBUG("housing", "HandleHousingSvcsNeighborhoodReservePlot: Sent plot enter spells for plot {} to player {}",
-                    plotIndex, player->GetGUID().ToString());
-
-                // Re-send HousingGetCurrentHouseInfoResponse with actual house data.
-                // The initial send (during AddPlayerToMap) had no house info since the player hadn't purchased yet.
-                WorldPackets::Housing::HousingGetCurrentHouseInfoResponse houseInfo;
-                houseInfo.House.HouseGuid = housing->GetHouseGuid();
-                houseInfo.House.OwnerGuid = player->GetGUID();
-                houseInfo.House.NeighborhoodGuid = housing->GetNeighborhoodGuid();
-                houseInfo.House.PlotId = housing->GetPlotIndex();
-                houseInfo.House.AccessFlags = housing->GetSettingsFlags();
-                houseInfo.House.HasMoveOutTime = false;
-                houseInfo.Result = 0;
-                SendPacket(houseInfo.Write());
-
-                TC_LOG_ERROR("housing", "HandleHousingSvcsNeighborhoodReservePlot: Re-sent CURRENT_HOUSE_INFO: PlotId={}, HouseGuid={}, NeighborhoodGuid={}",
-                    houseInfo.House.PlotId, houseInfo.House.HouseGuid.ToString(), houseInfo.House.NeighborhoodGuid.ToString());
-            }
-        }
-    }
+    // ReservePlot returns false when the plot is already permanently occupied
+    // OR currently reserved by someone else. Map both to clear error codes.
+    HousingResult result;
+    if (plotIndex >= MAX_NEIGHBORHOOD_PLOTS)
+        result = HOUSING_RESULT_PLOT_NOT_FOUND;
+    else if (neighborhood->GetPlots()[plotIndex].IsOccupied())
+        result = HOUSING_RESULT_PLOT_NOT_VACANT;
+    else if (!neighborhood->ReservePlot(player->GetGUID(), plotIndex))
+        result = HOUSING_RESULT_PLOT_RESERVATION_COOLDOWN;
+    else
+        result = HOUSING_RESULT_SUCCESS;
 
     WorldPackets::Housing::HousingSvcsNeighborhoodReservePlotResponse response;
     response.Result = static_cast<uint8>(result);
     SendPacket(response.Write());
 
-    // Sniff 12.0.1: After successful reserve, server casts "Visit House" spell (ID 1265142)
-    // with CastTime=10000ms, targeting the neighborhood GUID + destination position.
-    if (result == HOUSING_RESULT_SUCCESS)
-    {
-        static constexpr uint32 SPELL_VISIT_HOUSE = 1265142;
-        player->CastSpell(player, SPELL_VISIT_HOUSE, true);
-
-        // Refresh mirror data for all online neighborhood members so Houses[] array is updated
-        neighborhood->RefreshMirrorDataForOnlineMembers();
-    }
-
-    TC_LOG_INFO("housing", "CMSG_HOUSING_SVCS_NEIGHBORHOOD_RESERVE_PLOT PlotIndex: {} (client sent {}), Result: {}",
-        plotIndex, housingSvcsNeighborhoodReservePlot.PlotIndex, uint32(result));
+    TC_LOG_INFO("housing", "CMSG_HOUSING_SVCS_NEIGHBORHOOD_RESERVE_PLOT PlotIndex: {}, Result: {}",
+        plotIndex, uint32(result));
 }
 
 void WorldSession::HandleHousingSvcsRelinquishHouse(WorldPackets::Housing::HousingSvcsRelinquishHouse const& /*housingSvcsRelinquishHouse*/)

@@ -1258,6 +1258,24 @@ bool Neighborhood::ReservePlot(ObjectGuid playerGuid, uint8 plotIndex)
     if (_plots[plotIndex].IsOccupied())
         return false;
 
+    // Reservations expire after 5 minutes (retail behavior). Sweep stale entries
+    // before checking, so an old reservation never blocks a new player forever.
+    constexpr uint32 RESERVATION_EXPIRY_SECONDS = 5 * MINUTE;
+    uint32 now = static_cast<uint32>(GameTime::GetGameTime());
+    for (auto it = _plotReservations.begin(); it != _plotReservations.end(); )
+    {
+        if (now >= it->second.ReserveTime + RESERVATION_EXPIRY_SECONDS)
+        {
+            TC_LOG_INFO("housing", "Neighborhood::ReservePlot: expired reservation by {} on plot {} cleared",
+                it->first.ToString(), it->second.PlotIndex);
+            it = _plotReservations.erase(it);
+        }
+        else
+        {
+            ++it;
+        }
+    }
+
     // Check if someone else already reserved this plot
     for (auto const& [guid, res] : _plotReservations)
     {
@@ -1267,10 +1285,11 @@ bool Neighborhood::ReservePlot(ObjectGuid playerGuid, uint8 plotIndex)
 
     PlotReservation& reservation = _plotReservations[playerGuid];
     reservation.PlotIndex = plotIndex;
-    reservation.ReserveTime = static_cast<uint32>(GameTime::GetGameTime());
+    reservation.ReserveTime = now;
 
-    TC_LOG_DEBUG("housing", "Neighborhood::ReservePlot: Player {} reserved plot {} in neighborhood {}",
-        playerGuid.ToString(), plotIndex, _guid.ToString());
+    TC_LOG_INFO("housing",
+        "Neighborhood::ReservePlot: Player {} reserved plot {} in neighborhood '{}' (guid {}, expires in {}s)",
+        playerGuid.ToString(), plotIndex, _name, _guid.ToString(), RESERVATION_EXPIRY_SECONDS);
     return true;
 }
 
