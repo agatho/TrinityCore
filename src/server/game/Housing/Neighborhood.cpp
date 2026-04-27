@@ -1020,31 +1020,24 @@ HousingResult Neighborhood::PurchasePlot(ObjectGuid playerGuid, uint8 plotIndex)
 
     if (!buyer)
     {
-        TC_LOG_INFO("housing", "Neighborhood::PurchasePlot REJECT: Player {} is not a member of neighborhood '{}' (guid {})",
-            playerGuid.ToString(), _name, _guid.ToString());
+        TC_LOG_DEBUG("housing", "Neighborhood::PurchasePlot: Player {} is not a member of neighborhood '{}'",
+            playerGuid.ToString(), _name);
         return HOUSING_RESULT_NEIGHBORHOOD_NOT_FOUND;
     }
 
     // Check if player already has a plot
     if (buyer->PlotIndex != INVALID_PLOT_INDEX)
     {
-        TC_LOG_INFO("housing",
-            "Neighborhood::PurchasePlot REJECT (PLOT_NOT_VACANT, path 1/2): Player {} already owns plot {} "
-            "in neighborhood '{}' (guid {}); requested plot {}. _plots[{}].HouseGuid={}",
-            playerGuid.ToString(), buyer->PlotIndex, _name, _guid.ToString(), plotIndex,
-            buyer->PlotIndex, _plots[buyer->PlotIndex].HouseGuid.ToString());
+        TC_LOG_DEBUG("housing", "Neighborhood::PurchasePlot: Player {} already owns plot {} in neighborhood '{}'",
+            playerGuid.ToString(), buyer->PlotIndex, _name);
         return HOUSING_RESULT_PLOT_NOT_VACANT;
     }
 
     // Check if plot is already occupied
     if (_plots[plotIndex].IsOccupied())
     {
-        TC_LOG_INFO("housing",
-            "Neighborhood::PurchasePlot REJECT (PLOT_NOT_VACANT, path 2/2): Plot {} is already occupied "
-            "in neighborhood '{}' (guid {}). Owner={}, HouseGuid={}",
-            plotIndex, _name, _guid.ToString(),
-            _plots[plotIndex].OwnerGuid.ToString(),
-            _plots[plotIndex].HouseGuid.ToString());
+        TC_LOG_DEBUG("housing", "Neighborhood::PurchasePlot: Plot {} is already occupied in neighborhood '{}'",
+            plotIndex, _name);
         return HOUSING_RESULT_PLOT_NOT_VACANT;
     }
 
