@@ -1,5 +1,24 @@
 # IDA-Decoded Housing Opcode Catalog — 12.0.5.67186
 
+**Update 2026-04-27**: Cross-referenced against `c:/dumps/HOUSING_ALL_CMSG_WIRE_67186.md`
+(authoritative scan of all 85 housing CMSG serializers). Fixed 4 missing trailing fields
+in our Read() implementations (commit `2da58b3b332`):
+
+| Opcode | Was | Now |
+|---|---|---|
+| `0x310003 SET_HOUSE_SIZE` | ObjectGuid + uint8 | + uint8 Flags |
+| `0x310006 CREATE_FIXTURE` | ObjectGuid + ObjectGuid + uint32 + uint32 | + uint8 Flags |
+| `0x310007 DELETE_FIXTURE` | ObjectGuid + ObjectGuid + uint32 | + uint8 Flags |
+| `0x320005 SET_COMPONENT_THEME` | ObjectGuid + uint32 + uint32 + uint32[] | + uint32 TrailingField |
+
+Also wired the 12 unwired NeighborhoodInitiative opcodes (0x380001/05/06/07/08/09/0A/0B/0C/0D/0E/0F)
+with real handlers replacing prior STATUS_UNHANDLED stubs. Each handler parses the
+IDA-verified wire format and logs the request. Lua-API ↔ opcode 1:1 binding still
+requires sniff (vtable indirection at hash `0xBA8F5C5BC59E8E8E` =
+`INITIATIVE_TASKS_TRACKED_LIST_CHANGED`).
+
+
+
 Source: Live IDA database. Each entry shows the client-side serializer (`sub_*`) decompiled and the wire-format fields it writes.
 
 The serializer pattern is:
