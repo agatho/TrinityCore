@@ -1872,18 +1872,26 @@ WorldPacket const* HousingGetCurrentHouseInfoResponse::Write()
 
 WorldPacket const* HousingExportHouseResponse::Write()
 {
-    // IDA 0x550003: PackedGUID + uint8(Result) + uint8(bit7=HasExportString)
-    //   [+ 24bit-BE(strLen) + string(strLen)] + uint32(blobSize) + blob(blobSize)
+    // IDA-verified wire (build 67186, sub_7FF75C1EC3F0):
+    //   PackedGUID HouseGuid
+    //   uint8 Result
+    //   uint8 HasExportString-byte (top bit only)
+    //   if HasExportString:
+    //     uint64 strLen          (read via ai_Process_GarrisonDataPacket — 8 bytes)
+    //     char[strLen] ExportString
+    //   uint32 blobSize
+    //   uint8[blobSize] ExportBlob
+    //
+    // Old TC implementation wrote a 3-byte big-endian strLen, which left the
+    // client desynced by 5 bytes inside the optional string branch.
     _worldPacket << HouseGuid;
     _worldPacket << uint8(Result);
     _worldPacket << uint8(HasExportString ? 0x80 : 0x00);
     if (HasExportString)
     {
-        uint32 strLen = static_cast<uint32>(ExportString.size());
-        _worldPacket << uint8((strLen >> 16) & 0xFF);
-        _worldPacket << uint8((strLen >> 8) & 0xFF);
-        _worldPacket << uint8(strLen & 0xFF);
-        _worldPacket.append(ExportString.data(), ExportString.size());
+        _worldPacket << uint64(ExportString.size());
+        if (!ExportString.empty())
+            _worldPacket.append(ExportString.data(), ExportString.size());
     }
     _worldPacket << uint32(ExportBlob.size());
     if (!ExportBlob.empty())

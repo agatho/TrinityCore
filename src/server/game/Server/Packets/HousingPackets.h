@@ -2008,8 +2008,10 @@ namespace WorldPackets::Housing
         HousingExportHouseResponse() : ServerPacket(SMSG_HOUSING_EXPORT_HOUSE_RESPONSE) { }
         WorldPacket const* Write() override;
 
-        // IDA 0x550003: PackedGUID + uint8(Result) + uint8(bit7=HasExportString)
-        //   [+ 24bit-BE(strLen) + string(strLen)] + uint32(blobSize) + blob(blobSize)
+        // IDA-verified wire (build 67186, sub_7FF75C1EC3F0):
+        //   PackedGUID HouseGuid + uint8 Result + uint8(bit7=HasExportString)
+        //     [+ uint64(strLen) + char[strLen] ExportString]
+        //     + uint32(blobSize) + uint8[blobSize] ExportBlob
         ObjectGuid HouseGuid;
         uint8 Result = 0;
         bool HasExportString = false;
