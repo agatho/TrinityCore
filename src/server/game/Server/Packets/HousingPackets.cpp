@@ -2136,12 +2136,12 @@ WorldPacket const* InitiativeServiceStatus::Write()
 
 WorldPacket const* GetPlayerInitiativeInfoResult::Write()
 {
+    // IDA-verified wire (build 67186, sub_7FF75C0EEE00 + sub_7FF75C198A60).
+    // The data block is only emitted when (Flags >> 6) == 1.
     _worldPacket << NeighborhoodGUID;
-    _worldPacket.WriteBit(HasError);
-    _worldPacket.WriteBit(HasInitiativeData);
-    _worldPacket.FlushBits();
+    _worldPacket << uint8(Flags);
 
-    if (HasInitiativeData)
+    if ((Flags >> 6) == 1)
     {
         _worldPacket << int64(RemainingDuration);
         _worldPacket << int32(CurrentInitiativeID);
@@ -2150,19 +2150,18 @@ WorldPacket const* GetPlayerInitiativeInfoResult::Write()
         _worldPacket << float(ProgressRequired);
         _worldPacket << float(CurrentProgress);
         _worldPacket << float(PlayerTotalContribution);
+
+        _worldPacket << uint32(Tasks.size());
+        for (auto const& task : Tasks)
+        {
+            _worldPacket << uint32(task.TaskID);
+            _worldPacket << uint32(task.Progress);
+        }
     }
 
-    _worldPacket << uint32(Tasks.size());
-    for (auto const& task : Tasks)
-    {
-        _worldPacket << uint32(task.TaskID);
-        _worldPacket << uint32(task.Progress);
-        _worldPacket << uint32(task.Status);
-    }
-
-    TC_LOG_DEBUG("network.opcode", "SMSG_GET_PLAYER_INITIATIVE_INFO_RESULT NH={} Error={} HasData={} InitID={} CycleID={} Progress={:.1f}/{:.0f} Tasks={}",
-        NeighborhoodGUID.ToString(), HasError, HasInitiativeData,
-        CurrentInitiativeID, CurrentCycleID, CurrentProgress, ProgressRequired, Tasks.size());
+    TC_LOG_DEBUG("network.opcode", "SMSG_GET_PLAYER_INITIATIVE_INFO_RESULT NH={} Flags=0x{:02X} InitID={} CycleID={} Progress={:.1f}/{:.0f} Tasks={}",
+        NeighborhoodGUID.ToString(), Flags, CurrentInitiativeID, CurrentCycleID,
+        CurrentProgress, ProgressRequired, Tasks.size());
 
     return &_worldPacket;
 }

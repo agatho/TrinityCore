@@ -2024,8 +2024,11 @@ void WorldSession::HandleGetAvailableInitiativeRequest(WorldPackets::Neighborhoo
     Neighborhood* neighborhood = sNeighborhoodMgr.ResolveNeighborhood(getAvailableInitiativeRequest.NeighborhoodGuid, player);
     if (!neighborhood)
     {
+        // No neighborhood: emit empty response. Wire is just GUID + uint8(0)
+        // — Flags top-2-bits == 0 makes the client skip the data block entirely,
+        // which is the no-data path. Real failures route via SMSG_HOUSING_SVCS_NOTIFY_PERMISSIONS_FAILURE.
         WorldPackets::Housing::GetPlayerInitiativeInfoResult response;
-        response.HasError = true;
+        response.NeighborhoodGUID = getAvailableInitiativeRequest.NeighborhoodGuid;
         SendPacket(response.Write());
         return;
     }

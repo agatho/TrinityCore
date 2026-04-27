@@ -853,7 +853,9 @@ void InitiativeManager::SendPlayerInitiativeInfo(WorldSession* session, ObjectGu
     ActiveInitiative* active = GetActiveInitiative(neighborhoodLowGuid);
     if (active)
     {
-        result.HasInitiativeData = true;
+        // IDA-verified (sub_7FF75C0EEE00): client only reads the InitiativeInfo block
+        // when the top 2 bits of Flags equal 1 — i.e. Flags >= 0x40 && Flags < 0x80.
+        result.Flags = 0x40;
 
         uint32 cycleID = GetActiveCycleForInitiative(active->InitiativeID);
 
@@ -915,20 +917,19 @@ void InitiativeManager::SendPlayerInitiativeInfo(WorldSession* session, ObjectGu
         result.CurrentProgress = currentProgress;
         result.PlayerTotalContribution = playerContribution;
 
-        // Populate task progress
+        // Populate task progress (wire is just TaskID + Progress per task — no Status field)
         for (auto const& [taskId, taskProgress] : active->TaskProgress)
         {
             WorldPackets::Housing::JamPlayerInitiativeTaskInfo taskInfo;
             taskInfo.TaskID = taskProgress.TaskID;
             taskInfo.Progress = taskProgress.Progress;
-            taskInfo.Status = static_cast<uint32>(taskProgress.Status);
             result.Tasks.push_back(taskInfo);
         }
     }
 
     session->SendPacket(result.Write());
-    TC_LOG_DEBUG("housing", "InitiativeManager: Sent GetPlayerInitiativeInfoResult HasData={} InitID={} Tasks={} for neighborhood {}",
-        result.HasInitiativeData, result.CurrentInitiativeID, uint32(result.Tasks.size()), neighborhoodLowGuid);
+    TC_LOG_DEBUG("housing", "InitiativeManager: Sent GetPlayerInitiativeInfoResult Flags=0x{:02X} InitID={} Tasks={} for neighborhood {}",
+        result.Flags, result.CurrentInitiativeID, uint32(result.Tasks.size()), neighborhoodLowGuid);
 }
 
 void InitiativeManager::SendActivityLog(WorldSession* session, uint64 neighborhoodGuid) const

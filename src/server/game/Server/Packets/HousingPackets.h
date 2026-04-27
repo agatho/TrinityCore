@@ -2159,9 +2159,11 @@ namespace WorldPackets::Housing
 
     struct JamPlayerInitiativeTaskInfo
     {
+        // IDA-verified wire (build 67186, sub_7FF75C0EEE00 inner loop):
+        // each task entry is exactly 2x uint32 — TC previously had a third Status field
+        // that the client never reads.
         uint32 TaskID = 0;
         uint32 Progress = 0;
-        uint32 Status = 0;
     };
 
     struct NICompletedTasksEntry
@@ -2231,11 +2233,31 @@ namespace WorldPackets::Housing
         GetPlayerInitiativeInfoResult() : ServerPacket(SMSG_GET_PLAYER_INITIATIVE_INFO_RESULT) { }
         WorldPacket const* Write() override;
 
-        ObjectGuid NeighborhoodGUID;
-        bool HasError = false;
-        bool HasInitiativeData = false;
+        // IDA-verified wire (build 67186, sub_7FF75C0EEE00):
+        //   ObjectGuid NeighborhoodGUID                   (PackedGUID via helper_31E0120)
+        //   uint8 Flags                                    (raw byte via helper_318EF90)
+        //   if ((Flags >> 6) != 1)  -> END
+        //   else continue with InitiativeInfo block (sub_7FF75C198A60):
+        //     uint64 hash                                  (8-byte read, ai_Process_HousingDataPacket)
+        //     uint32 x6                                    (raw uint32 reads)
+        //     uint32 TaskCount
+        //     (uint32 TaskID + uint32 Progress) x TaskCount
+        //
+        // Top 2 bits of Flags act as a state discriminator. Only value 1 indicates
+        // "InitiativeInfo block follows"; any other value means the rest is omitted.
 
-        // InitiativeInfo block (only written when HasInitiativeData = true)
+        ObjectGuid NeighborhoodGUID;
+        uint8 Flags = 0; // top-2-bits == 1 means data block follows; 0 = no data
+
+        // InitiativeInfo block (only written when (Flags >> 6) == 1).
+        // Sub-struct layout (32 bytes) per sub_7FF75C198A60:
+        //   +0  uint64    (8 bytes)            -> RemainingDuration (seconds)
+        //   +8  uint32                          -> CurrentInitiativeID
+        //   +12 uint32                          -> CurrentMilestoneID
+        //   +16 uint32                          -> CurrentCycleID
+        //   +20 uint32 (re-interpretable)       -> ProgressRequired (float)
+        //   +24 uint32 (re-interpretable)       -> CurrentProgress  (float)
+        //   +28 uint32 (re-interpretable)       -> PlayerTotalContribution (float)
         int64 RemainingDuration = 0;
         int32 CurrentInitiativeID = 0;
         int32 CurrentMilestoneID = -1;
