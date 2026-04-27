@@ -2327,6 +2327,39 @@ WorldPacket const* HousingPhotoSharingAuthorizationClearedResult::Write()
     return &_worldPacket;
 }
 
+WorldPacket const* CraftingHouseHelloResponse::Write()
+{
+    // IDA-verified wire (build 67186, sub_7FF75C0ED150):
+    //   PackedGUID HouseGuid
+    //   uint8 Flags  — bit 7 = Field0, bit 6 = Field1
+    _worldPacket << HouseGuid;
+    uint8 flags = 0;
+    if (Field0) flags |= 0x80;
+    if (Field1) flags |= 0x40;
+    _worldPacket << uint8(flags);
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_CRAFTING_HOUSE_HELLO_RESPONSE HouseGuid: {} Field0: {} Field1: {}",
+        HouseGuid.ToString(), Field0, Field1);
+
+    return &_worldPacket;
+}
+
+WorldPacket const* GuildOthersOwnedHousesResult::Write()
+{
+    // IDA-verified wire (build 67186, dispatcher case 5111879):
+    //   uint8 Result + PackedGUID GuildGuid + uint32 count + HouseInfoStruct[count]
+    _worldPacket << uint8(Result);
+    _worldPacket << GuildGuid;
+    _worldPacket << uint32(Houses.size());
+    for (auto const& house : Houses)
+        WriteJamCliHouse(_worldPacket, house);
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_GUILD_OTHERS_OWNED_HOUSES_RESULT Result: {} GuildGuid: {} HouseCount: {}",
+        Result, GuildGuid.ToString(), Houses.size());
+
+    return &_worldPacket;
+}
+
 WorldPacket const* HousingSvcsNeighborhoodUpdateNameNotification::Write()
 {
     // IDA-verified wire (build 67186, sub_7FF75C1EA710 case 0x540023):

@@ -2459,6 +2459,40 @@ namespace WorldPackets::Housing
         uint8 Result = 0;
     };
 
+    // SMSG_CRAFTING_HOUSE_HELLO_RESPONSE (0x42033C)
+    // IDA-verified wire (build 67186, sub_7FF75C0ED150):
+    //   PackedGUID HouseGuid
+    //   uint8 Flags     (bit 7 -> Field0, bit 6 -> Field1)
+    class CraftingHouseHelloResponse final : public ServerPacket
+    {
+    public:
+        CraftingHouseHelloResponse() : ServerPacket(SMSG_CRAFTING_HOUSE_HELLO_RESPONSE) { }
+        WorldPacket const* Write() override;
+
+        ObjectGuid HouseGuid;
+        bool Field0 = false; // bit 7 of Flags byte
+        bool Field1 = false; // bit 6 of Flags byte
+    };
+
+    // SMSG_GUILD_OTHERS_OWNED_HOUSES_RESULT (0x4E0047)
+    // IDA-verified wire (build 67186, dispatcher case 5111879):
+    //   uint8 Result
+    //   PackedGUID GuildGuid
+    //   uint32 Count
+    //   HouseInfoStruct[Count]    (80 bytes/entry — same shape as 0x540012)
+    //
+    // The shared WriteJamCliHouse helper emits HouseInfoStruct payloads.
+    class GuildOthersOwnedHousesResult final : public ServerPacket
+    {
+    public:
+        GuildOthersOwnedHousesResult() : ServerPacket(SMSG_GUILD_OTHERS_OWNED_HOUSES_RESULT) { }
+        WorldPacket const* Write() override;
+
+        uint8 Result = 0;
+        ObjectGuid GuildGuid;
+        std::vector<JamCliHouse> Houses;
+    };
+
     // Replaces the old NeighborhoodUpdateNameNotification (the 0x5C0004 slot is now
     // SMSG_NEIGHBORHOOD_REMOVE_SECONDARY_OWNER_RESPONSE in 12.0.5). Real opcode:
     // SMSG_HOUSING_SVCS_NEIGHBORHOOD_UPDATE_NAME_NOTIFICATION (0x540023). Wire format
