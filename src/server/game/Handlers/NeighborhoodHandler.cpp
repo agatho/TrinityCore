@@ -1458,6 +1458,14 @@ void WorldSession::HandleNeighborhoodMoveHouse(WorldPackets::Neighborhood::Neigh
         {
             housing->SetPlotIndex(targetPlotIndex);
             housing->SyncUpdateFields();
+            // Push the Housing/3 entity (HousingPlayerHouseEntity) to the client
+            // as CREATE — the regular world-map plot icon resolves via entity
+            // registry lookup of HouseGUID and the icon "self/friend/stranger"
+            // chooser only re-evaluates when CREATE_OBJECT arrives. Without an
+            // explicit re-push here, SyncUpdateFields just flips dirty bits and
+            // the client's local entity copy stays at the old PlotIndex —
+            // the new plot's icon stays "unowned" until the player re-logs.
+            GetHousingPlayerHouseEntity().SendCreateToPlayer(player);
         }
 
         player->ModifyMoney(-static_cast<int64>(HOUSE_MOVE_COST_COPPER));
