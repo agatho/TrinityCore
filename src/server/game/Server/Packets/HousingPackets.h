@@ -2287,7 +2287,13 @@ namespace WorldPackets::Housing
     public:
         GetInitiativeRewardsResult() : ServerPacket(SMSG_GET_INITIATIVE_REWARDS_RESULT) { }
         WorldPacket const* Write() override;
-        uint8 Result = 0;
+        // IDA-verified wire (build 67186, sub_7FF75C0EF0C0 fields a1+32/+40/+56):
+        //   uint32 + ObjectGuid + ObjectGuid
+        // Field semantics need sniff verification; using Result+SourceGuid+TargetGuid.
+        // Old code wrote only uint8(Result) — desynced the bit stream.
+        uint32 Result = 0;
+        ObjectGuid SourceGuid;
+        ObjectGuid TargetGuid;
     };
 
     class InitiativeRewardAvailable final : public ServerPacket
@@ -2295,8 +2301,14 @@ namespace WorldPackets::Housing
     public:
         InitiativeRewardAvailable() : ServerPacket(SMSG_INITIATIVE_REWARD_AVAILABLE) { }
         WorldPacket const* Write() override;
+        // IDA-verified wire (build 67186, sub_7FF75C0EF180):
+        //   uint32(count) + ObjectGuid[count]
+        // Old code wrote uint32(InitiativeID) + uint32(MilestoneIndex) — wrong shape.
+        // Existing semantic fields kept for caller compat; serialized as 0-count
+        // until reward-GUID semantics are sniffed.
         uint32 InitiativeID = 0;
         uint32 MilestoneIndex = 0;
+        std::vector<ObjectGuid> RewardGuids;
     };
 
     // IDA-verified: SMSG_INITIATIVE_UPDATE_STATUS carries 1 byte (NeighborhoodInitiativeUpdateStatus)

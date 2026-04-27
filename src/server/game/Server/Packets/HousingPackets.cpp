@@ -2222,19 +2222,26 @@ WorldPacket const* ClearInitiativeTaskCriteriaProgress::Write()
 
 WorldPacket const* GetInitiativeRewardsResult::Write()
 {
-    _worldPacket << uint8(Result);
+    // IDA-verified wire (build 67186, sub_7FF75C0EF0C0): uint32 + ObjectGuid + ObjectGuid.
+    _worldPacket << uint32(Result);
+    _worldPacket << SourceGuid;
+    _worldPacket << TargetGuid;
 
-    TC_LOG_DEBUG("network.opcode", "SMSG_GET_INITIATIVE_REWARDS_RESULT Result: {}", Result);
+    TC_LOG_DEBUG("network.opcode", "SMSG_GET_INITIATIVE_REWARDS_RESULT Result: {} SourceGuid: {} TargetGuid: {}",
+        Result, SourceGuid.ToString(), TargetGuid.ToString());
 
     return &_worldPacket;
 }
 
 WorldPacket const* InitiativeRewardAvailable::Write()
 {
-    _worldPacket << uint32(InitiativeID);
-    _worldPacket << uint32(MilestoneIndex);
+    // IDA-verified wire (build 67186, sub_7FF75C0EF180): uint32(count) + ObjectGuid[count].
+    _worldPacket << uint32(RewardGuids.size());
+    for (ObjectGuid const& guid : RewardGuids)
+        _worldPacket << guid;
 
-    TC_LOG_DEBUG("network.opcode", "SMSG_INITIATIVE_REWARD_AVAILABLE InitiativeID: {} MilestoneIndex: {}", InitiativeID, MilestoneIndex);
+    TC_LOG_DEBUG("network.opcode", "SMSG_INITIATIVE_REWARD_AVAILABLE RewardGuids[{}] (legacy InitiativeID: {} MilestoneIndex: {} not on wire)",
+        RewardGuids.size(), InitiativeID, MilestoneIndex);
 
     return &_worldPacket;
 }
