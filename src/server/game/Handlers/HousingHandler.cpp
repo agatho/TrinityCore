@@ -3046,10 +3046,13 @@ void WorldSession::HandleHousingSvcsGuildCreateNeighborhood(WorldPackets::Housin
         return;
     }
 
+    // Per binary RE (see HousingPackets.h), the second numeric field on the wire is
+    // SecondaryID (likely HouseStyle/Theme ID) and not a faction ID. Derive the
+    // faction restriction from the player's team instead.
     Neighborhood* neighborhood = sNeighborhoodMgr.CreateGuildNeighborhood(
         player->GetGUID(), housingSvcsGuildCreateNeighborhood.NeighborhoodName,
         housingSvcsGuildCreateNeighborhood.NeighborhoodTypeID,
-        housingSvcsGuildCreateNeighborhood.Flags);
+        player->GetTeam());
 
     WorldPackets::Housing::HousingSvcsCreateCharterNeighborhoodResponse response;
     response.TrailingResult = static_cast<uint8>(neighborhood ? HOUSING_RESULT_SUCCESS : HOUSING_RESULT_GENERIC_FAILURE);
