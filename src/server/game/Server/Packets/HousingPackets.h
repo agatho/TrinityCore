@@ -2168,14 +2168,21 @@ namespace WorldPackets::Housing
 
     struct NICompletedTasksEntry
     {
-        uint32 InitiativeID = 0;
-        uint32 TaskID = 0;
-        uint32 CycleID = 0;
-        uint64 CompletionTime = 0;
+        // IDA-verified wire (build 67186, sub_7FF75C0EEF70 inner loop):
+        //   PackedGUID g1
+        //   PackedGUID g2
+        //   uint32     a32
+        //   uint64     a40 (CompletionTime — 8 bytes)
+        //   uint32     a48
+        //
+        // Semantic mapping (best-guess until sniff confirms):
+        //   g1  = PlayerGuid      g2 = TargetGuid     a32 = ContributionAmount
+        //   a40 = CompletionTime  a48 = TaskID
         ObjectGuid PlayerGuid;
+        ObjectGuid TargetGuid;
         uint32 ContributionAmount = 0;
-        uint32 Unknown1 = 0;
-        uint64 ExtraData = 0;
+        uint64 CompletionTime = 0;
+        uint32 TaskID = 0;
     };
 
     // ============================================================
@@ -2274,7 +2281,13 @@ namespace WorldPackets::Housing
     public:
         GetInitiativeActivityLogResult() : ServerPacket(SMSG_GET_INITIATIVE_ACTIVITY_LOG_RESULT) { }
         WorldPacket const* Write() override;
-        uint8 Result = 0;
+
+        // IDA-verified wire (build 67186, sub_7FF75C0EEF70):
+        //   PackedGUID NeighborhoodGuid
+        //   uint32     Count
+        //   NICompletedTasksEntry[Count]
+        // No leading Result byte — failure routing is via SMSG_HOUSING_SVCS_NOTIFY_PERMISSIONS_FAILURE.
+        ObjectGuid NeighborhoodGuid;
         std::vector<NICompletedTasksEntry> CompletedTasks;
     };
 

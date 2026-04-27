@@ -932,13 +932,17 @@ void InitiativeManager::SendPlayerInitiativeInfo(WorldSession* session, ObjectGu
         result.Flags, result.CurrentInitiativeID, uint32(result.Tasks.size()), neighborhoodLowGuid);
 }
 
-void InitiativeManager::SendActivityLog(WorldSession* session, uint64 neighborhoodGuid) const
+void InitiativeManager::SendActivityLog(WorldSession* session, ObjectGuid const& neighborhoodGuid, uint64 neighborhoodLowGuid) const
 {
+    // IDA-verified wire (sub_7FF75C0EEF70):
+    //   PackedGUID NeighborhoodGuid + uint32(count)
+    //   per entry: PackedGUID PlayerGuid, PackedGUID TargetGuid, uint32 Contribution,
+    //              uint64 CompletionTime, uint32 TaskID
     WorldPackets::Housing::GetInitiativeActivityLogResult result;
-    result.Result = static_cast<uint32>(HOUSING_RESULT_SUCCESS);
+    result.NeighborhoodGuid = neighborhoodGuid;
 
     // Populate with completed initiatives as log entries
-    auto itr = _activeInitiatives.find(neighborhoodGuid);
+    auto itr = _activeInitiatives.find(neighborhoodLowGuid);
     if (itr != _activeInitiatives.end())
     {
         for (auto const& initiative : itr->second)
@@ -956,26 +960,25 @@ void InitiativeManager::SendActivityLog(WorldSession* session, uint64 neighborho
                     if (taskContribItr != taskContribs.end() && taskContribItr->second > 0)
                     {
                         WorldPackets::Housing::NICompletedTasksEntry entry;
-                        entry.InitiativeID = initiative->InitiativeID;
-                        entry.TaskID = taskId;
-                        entry.CycleID = GetActiveCycleForInitiative(initiative->InitiativeID);
-                        entry.CompletionTime = initiative->StartTime;
                         entry.PlayerGuid = ObjectGuid::Create<HighGuid::Player>(playerGuid);
+                        entry.TargetGuid = neighborhoodGuid;
                         entry.ContributionAmount = taskContribItr->second;
+                        entry.CompletionTime = initiative->StartTime;
+                        entry.TaskID = taskId;
                         result.CompletedTasks.push_back(entry);
                         hasContributors = true;
                     }
                 }
 
-                // Fallback: if no per-player data, emit aggregate entry
+                // Fallback: if no per-player data, emit aggregate entry with empty PlayerGuid
                 if (!hasContributors)
                 {
                     WorldPackets::Housing::NICompletedTasksEntry entry;
-                    entry.InitiativeID = initiative->InitiativeID;
-                    entry.TaskID = taskId;
-                    entry.CycleID = GetActiveCycleForInitiative(initiative->InitiativeID);
-                    entry.CompletionTime = initiative->StartTime;
+                    entry.PlayerGuid = ObjectGuid::Empty;
+                    entry.TargetGuid = neighborhoodGuid;
                     entry.ContributionAmount = taskProgress.Progress;
+                    entry.CompletionTime = initiative->StartTime;
+                    entry.TaskID = taskId;
                     result.CompletedTasks.push_back(entry);
                 }
             }
@@ -984,7 +987,7 @@ void InitiativeManager::SendActivityLog(WorldSession* session, uint64 neighborho
 
     session->SendPacket(result.Write());
     TC_LOG_DEBUG("housing", "InitiativeManager: Sent GetInitiativeActivityLogResult with {} entries for neighborhood {}",
-        uint32(result.CompletedTasks.size()), neighborhoodGuid);
+        uint32(result.CompletedTasks.size()), neighborhoodLowGuid);
 }
 
 void InitiativeManager::SendInitiativeRewardsResult(WorldSession* session, uint32 resultCode) const

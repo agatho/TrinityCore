@@ -2050,14 +2050,17 @@ void WorldSession::HandleGetInitiativeActivityLogRequest(WorldPackets::Neighborh
     Neighborhood* neighborhood = sNeighborhoodMgr.ResolveNeighborhood(getInitiativeActivityLogRequest.NeighborhoodGuid, player);
     if (!neighborhood)
     {
+        // No neighborhood: emit empty log. Wire is just GUID + uint32(0).
+        // Real failures route via SMSG_HOUSING_SVCS_NOTIFY_PERMISSIONS_FAILURE.
         WorldPackets::Housing::GetInitiativeActivityLogResult response;
-        response.Result = static_cast<uint8>(HOUSING_RESULT_NEIGHBORHOOD_NOT_FOUND);
+        response.NeighborhoodGuid = getInitiativeActivityLogRequest.NeighborhoodGuid;
         SendPacket(response.Write());
         return;
     }
 
-    uint64 nhGuid = neighborhood->GetGuid().GetCounter();
-    sInitiativeManager.SendActivityLog(this, nhGuid);
+    ObjectGuid nhObjGuid = neighborhood->GetGuid();
+    uint64 nhGuid = nhObjGuid.GetCounter();
+    sInitiativeManager.SendActivityLog(this, nhObjGuid, nhGuid);
 
     TC_LOG_DEBUG("housing", "CMSG_GET_INITIATIVE_ACTIVITY_LOG_REQUEST NeighborhoodGuid: {}, Player: {}",
         getInitiativeActivityLogRequest.NeighborhoodGuid.ToString(), player->GetGUID().ToString());

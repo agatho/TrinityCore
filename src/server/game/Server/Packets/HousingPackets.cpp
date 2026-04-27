@@ -2168,24 +2168,24 @@ WorldPacket const* GetPlayerInitiativeInfoResult::Write()
 
 WorldPacket const* GetInitiativeActivityLogResult::Write()
 {
-    _worldPacket << uint8(Result);
+    // IDA-verified wire (build 67186, sub_7FF75C0EEF70). NO leading Result byte.
+    _worldPacket << NeighborhoodGuid;
     _worldPacket << uint32(CompletedTasks.size());
     for (auto const& entry : CompletedTasks)
     {
-        _worldPacket << uint32(entry.InitiativeID);
-        _worldPacket << uint32(entry.TaskID);
-        _worldPacket << uint32(entry.CycleID);
-        _worldPacket << uint64(entry.CompletionTime);
         _worldPacket << entry.PlayerGuid;
+        _worldPacket << entry.TargetGuid;
         _worldPacket << uint32(entry.ContributionAmount);
-        _worldPacket << uint32(entry.Unknown1);
-        _worldPacket << uint64(entry.ExtraData);
+        _worldPacket << uint64(entry.CompletionTime);
+        _worldPacket << uint32(entry.TaskID);
     }
 
-    TC_LOG_DEBUG("network.opcode", "SMSG_GET_INITIATIVE_ACTIVITY_LOG_RESULT Result: {} CompletedTaskCount: {}", Result, CompletedTasks.size());
+    TC_LOG_DEBUG("network.opcode", "SMSG_GET_INITIATIVE_ACTIVITY_LOG_RESULT NH={} CompletedTaskCount: {}",
+        NeighborhoodGuid.ToString(), CompletedTasks.size());
     for (size_t i = 0; i < CompletedTasks.size(); ++i)
-        TC_LOG_DEBUG("network.opcode", "  CompletedTask[{}]: InitiativeID={} TaskID={} CycleID={} Player={}",
-            i, CompletedTasks[i].InitiativeID, CompletedTasks[i].TaskID, CompletedTasks[i].CycleID, CompletedTasks[i].PlayerGuid.ToString());
+        TC_LOG_DEBUG("network.opcode", "  CompletedTask[{}]: Player={} Target={} TaskID={} Contribution={} Time={}",
+            i, CompletedTasks[i].PlayerGuid.ToString(), CompletedTasks[i].TargetGuid.ToString(),
+            CompletedTasks[i].TaskID, CompletedTasks[i].ContributionAmount, CompletedTasks[i].CompletionTime);
 
     return &_worldPacket;
 }
