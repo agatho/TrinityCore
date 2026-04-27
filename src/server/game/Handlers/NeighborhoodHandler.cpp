@@ -520,7 +520,9 @@ void WorldSession::HandleNeighborhoodUpdateName(WorldPackets::Neighborhood::Neig
 
             // 12.0.5: moved from SMSG_NEIGHBORHOOD_UPDATE_NAME_NOTIFICATION (0x5C0004)
             // to SMSG_HOUSING_SVCS_NEIGHBORHOOD_UPDATE_NAME_NOTIFICATION (0x540023).
+            // IDA-verified wire (sub_7FF75C1EA710 case 0x540023): ObjectGuid + string.
             WorldPackets::Housing::HousingSvcsNeighborhoodUpdateNameNotification nameNotification;
+            nameNotification.NeighborhoodGuid = neighborhoodGuid;
             nameNotification.NewName = neighborhoodUpdateName.NewName;
             memberPlayer->SendDirectMessage(nameNotification.Write());
         }

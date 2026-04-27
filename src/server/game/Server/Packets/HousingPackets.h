@@ -2380,6 +2380,10 @@ namespace WorldPackets::Housing
         HousingSvcsNeighborhoodUpdateNameNotification()
             : ServerPacket(SMSG_HOUSING_SVCS_NEIGHBORHOOD_UPDATE_NAME_NOTIFICATION) { }
         WorldPacket const* Write() override;
+        // IDA-verified wire (build 67186, sub_7FF75C1EA710 case 0x540023):
+        //   ClientOpcode_helper_31E0120 (PackedGUID NeighborhoodGuid) +
+        //   ai_Parse_ClientStringData (string NewName).
+        ObjectGuid NeighborhoodGuid;
         std::string NewName;
     };
 }

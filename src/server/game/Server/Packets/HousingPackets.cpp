@@ -1732,14 +1732,15 @@ WorldPacket const* HousingSvcsUpdateHouseSettingsResponse::Write()
 
 WorldPacket const* HousingSvcsGetHouseFinderInfoResponse::Write()
 {
-    // IDA case 5505052: uint8(Result) + uint32(count) + JamCliHouseFinderNeighborhood[count]
-    _worldPacket << uint8(Result);
+    // IDA-verified wire (build 67186, sub_7FF75C1EA710 case 0x54001C):
+    //   ai_Read_CompressedUInt32FromPacket (uint32 count) + JamCliHouseFinderNeighborhood[count]
+    // No leading uint8 Result. Failure routed via NOTIFY_PERMISSIONS_FAILURE (0x540000).
     _worldPacket << uint32(Entries.size());
     for (auto const& entry : Entries)
         WriteJamCliHouseFinderNeighborhood(_worldPacket, entry);
 
-    TC_LOG_INFO("housing", "SMSG_HOUSING_SVCS_GET_HOUSE_FINDER_INFO_RESPONSE Result: {} EntryCount: {} PacketSize: {}",
-        Result, Entries.size(), _worldPacket.size());
+    TC_LOG_INFO("housing", "SMSG_HOUSING_SVCS_GET_HOUSE_FINDER_INFO_RESPONSE EntryCount: {} PacketSize: {} (Result {} dropped — not on wire)",
+        Entries.size(), _worldPacket.size(), Result);
     for (size_t i = 0; i < Entries.size(); ++i)
     {
         auto const& e = Entries[i];
@@ -2291,17 +2292,19 @@ WorldPacket const* HousingPhotoSharingAuthorizationClearedResult::Write()
 
 WorldPacket const* HousingSvcsNeighborhoodUpdateNameNotification::Write()
 {
-    // Wire format inherited from the pre-12.0.5 NeighborhoodUpdateNameNotification
-    // (uint8(nameLen) + bytes[nameLen]). Needs 12.0.5 sniff verification — the
-    // client moved the opcode but may also have changed the format.
-    uint8 nameLen = NewName.empty() ? 0 : static_cast<uint8>(NewName.size() + 1);
-    _worldPacket << uint8(nameLen);
-    if (nameLen > 0)
-        _worldPacket.append(reinterpret_cast<uint8 const*>(NewName.c_str()), nameLen);
+    // IDA-verified wire (build 67186, sub_7FF75C1EA710 case 0x540023):
+    //   ClientOpcode_helper_31E0120 (PackedGUID NeighborhoodGuid)
+    //   + ai_Parse_ClientStringData (length-prefixed string NewName)
+    // The string length is read via sub_7FF75C0A9650 (compressed-style size byte
+    // packed in the bit stream); use SizedString-style write so it matches.
+    _worldPacket << NeighborhoodGuid;
+    _worldPacket << SizedString::BitsSize<7>(NewName);
+    _worldPacket.FlushBits();
+    _worldPacket << SizedString::Data(NewName);
 
     TC_LOG_DEBUG("network.opcode",
-        "SMSG_HOUSING_SVCS_NEIGHBORHOOD_UPDATE_NAME_NOTIFICATION NewName: '{}' NameLen: {}",
-        NewName, nameLen);
+        "SMSG_HOUSING_SVCS_NEIGHBORHOOD_UPDATE_NAME_NOTIFICATION NeighborhoodGuid: {} NewName: '{}'",
+        NeighborhoodGuid.ToString(), NewName);
 
     return &_worldPacket;
 }
