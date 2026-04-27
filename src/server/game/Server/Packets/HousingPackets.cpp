@@ -124,7 +124,7 @@ void HousingDecorSetDyeSlots::Read()
 void HousingDecorDeleteFromStorage::Read()
 {
     uint32 count = 0;
-    _worldPacket >> Bits<32>(count);
+    _worldPacket >> Bits<5>(count);
     DecorGuids.resize(count);
     for (ObjectGuid& guid : DecorGuids)
         _worldPacket >> guid;
@@ -409,13 +409,12 @@ void HousingRoomSetCeilingType::Read()
 void HousingSvcsGuildCreateNeighborhood::Read()
 {
     _worldPacket >> NeighborhoodTypeID;
-    _worldPacket >> SizedString::BitsSize<7>(NeighborhoodName);
+    _worldPacket >> SecondaryID;
+    _worldPacket >> SizedCString::BitsSize<8>(NeighborhoodName);
+    _worldPacket >> SizedCString::Data(NeighborhoodName);
 
-    _worldPacket >> Flags;
-    _worldPacket >> SizedString::Data(NeighborhoodName);
-
-    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_SVCS_GUILD_CREATE_NEIGHBORHOOD TypeID: {} Flags: {} Name: '{}'",
-        NeighborhoodTypeID, Flags, NeighborhoodName);
+    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_SVCS_GUILD_CREATE_NEIGHBORHOOD TypeID: {} SecondaryID: {} Name: '{}'",
+        NeighborhoodTypeID, SecondaryID, NeighborhoodName);
 }
 
 void HousingSvcsNeighborhoodReservePlot::Read()
@@ -2137,7 +2136,7 @@ void BulkRefund::Read()
 
 WorldPacket const* BulkRefundResponse::Write()
 {
-    _worldPacket << uint8(Result);
+    _worldPacket << uint32(Result);
 
     TC_LOG_DEBUG("network.opcode", "SMSG_BULK_REFUND_RESPONSE Result: {}", Result);
 
@@ -2151,11 +2150,13 @@ WorldPacket const* GetAllLicensedDecorQuantitiesResponse::Write()
     {
         _worldPacket << uint32(qty.DecorID);
         _worldPacket << uint32(qty.Quantity);
+        _worldPacket << uint32(qty.MaxQuantity);
     }
 
     TC_LOG_DEBUG("network.opcode", "SMSG_GET_ALL_LICENSED_DECOR_QUANTITIES_RESPONSE QuantityCount: {}", Quantities.size());
     for (size_t i = 0; i < Quantities.size(); ++i)
-        TC_LOG_DEBUG("network.opcode", "  Quantity[{}]: DecorID={} Quantity={}", i, Quantities[i].DecorID, Quantities[i].Quantity);
+        TC_LOG_DEBUG("network.opcode", "  Quantity[{}]: DecorID={} Quantity={} MaxQuantity={}",
+            i, Quantities[i].DecorID, Quantities[i].Quantity, Quantities[i].MaxQuantity);
 
     return &_worldPacket;
 }
@@ -2167,11 +2168,13 @@ WorldPacket const* LicensedDecorQuantitiesUpdate::Write()
     {
         _worldPacket << uint32(qty.DecorID);
         _worldPacket << uint32(qty.Quantity);
+        _worldPacket << uint32(qty.MaxQuantity);
     }
 
     TC_LOG_DEBUG("network.opcode", "SMSG_LICENSED_DECOR_QUANTITIES_UPDATE QuantityCount: {}", Quantities.size());
     for (size_t i = 0; i < Quantities.size(); ++i)
-        TC_LOG_DEBUG("network.opcode", "  Quantity[{}]: DecorID={} Quantity={}", i, Quantities[i].DecorID, Quantities[i].Quantity);
+        TC_LOG_DEBUG("network.opcode", "  Quantity[{}]: DecorID={} Quantity={} MaxQuantity={}",
+            i, Quantities[i].DecorID, Quantities[i].Quantity, Quantities[i].MaxQuantity);
 
     return &_worldPacket;
 }
@@ -2267,10 +2270,11 @@ WorldPacket const* InitiativeComplete::Write()
 
 WorldPacket const* ClearInitiativeTaskCriteriaProgress::Write()
 {
-    _worldPacket << uint32(InitiativeID);
-    _worldPacket << uint32(TaskID);
+    _worldPacket << uint32(CriteriaIDs.size());
+    for (uint64 id : CriteriaIDs)
+        _worldPacket << uint64(id);
 
-    TC_LOG_DEBUG("network.opcode", "SMSG_CLEAR_INITIATIVE_TASK_CRITERIA_PROGRESS InitiativeID: {} TaskID: {}", InitiativeID, TaskID);
+    TC_LOG_DEBUG("network.opcode", "SMSG_CLEAR_INITIATIVE_TASK_CRITERIA_PROGRESS CriteriaCount: {}", CriteriaIDs.size());
 
     return &_worldPacket;
 }
@@ -2783,20 +2787,27 @@ WorldPacket const* NeighborhoodOpenCornerstoneUIResponse::Write()
     _worldPacket << uint8(PurchaseStatus);      // →+80: 73=purchasable, 0=not. Client checks ==73
     _worldPacket << CornerstoneGuid;            // →+128: Cornerstone game object
 
-    // Bit-packed section: 1 bool + 8-bit nameLen + 6 bools = 15 bits = 2 bytes
-    // Retail uses NUL-terminated CString: NameLen includes the NUL byte
+    // Bit-packed section: 1 bool + 8-bit nameLen + 6 bools = 15 bits = 2 bytes.
+    // Per IDA Housing_ParseCornerstoneHouseInfo, bit B.bit4 gates an embedded
+    // Housing_ParseHouseInfoStruct that the cornerstone Lua reads as "the player
+    // already has a current house" — used to flip the cornerstone button from Buy
+    // to Move.
+    bool const hasExistingHouse = ExistingHouse.has_value();
     _worldPacket << Bits<1>(IsPlotOwned);
     _worldPacket << SizedCString::BitsSize<8>(NeighborhoodName);
     _worldPacket << OptionalInit(AlternatePrice);
     _worldPacket << Bits<1>(CanPurchase);
-    _worldPacket.WriteBit(false);               // HasOptionalStruct — not yet implemented
+    _worldPacket.WriteBit(hasExistingHouse);    // B.bit4 — HasOptionalStruct
     _worldPacket << Bits<1>(HasResidents);
     _worldPacket << OptionalInit(StatusValue);
     _worldPacket << Bits<1>(IsInitiative);
     _worldPacket.FlushBits();
 
-    // Variable-length data (order matches client deserialization)
-    // Optional struct data would go here if HasOptionalStruct was set
+    // Variable-length data: per the IDA-verified decode order in
+    // Housing_ParseCornerstoneHouseInfo, the optional embedded HouseInfo comes
+    // BEFORE the neighborhood name string.
+    if (hasExistingHouse)
+        WriteJamCliHouse(_worldPacket, *ExistingHouse);
     _worldPacket << SizedCString::Data(NeighborhoodName);
 
     if (AlternatePrice)
@@ -2805,8 +2816,9 @@ WorldPacket const* NeighborhoodOpenCornerstoneUIResponse::Write()
     if (StatusValue)
         _worldPacket << uint32(*StatusValue);
 
-    TC_LOG_DEBUG("network.opcode", "SMSG_NEIGHBORHOOD_OPEN_CORNERSTONE_UI_RESPONSE PlotIndex: {} Cost: {} PurchaseStatus: {} IsPlotOwned: {} CanPurchase: {} Name: '{}'",
-        PlotIndex, Cost, PurchaseStatus, IsPlotOwned, CanPurchase, NeighborhoodName);
+    TC_LOG_DEBUG("network.opcode",
+        "SMSG_NEIGHBORHOOD_OPEN_CORNERSTONE_UI_RESPONSE PlotIndex: {} Cost: {} PurchaseStatus: {} IsPlotOwned: {} CanPurchase: {} HasExistingHouse: {} Name: '{}'",
+        PlotIndex, Cost, PurchaseStatus, IsPlotOwned, CanPurchase, hasExistingHouse, NeighborhoodName);
 
     return &_worldPacket;
 }

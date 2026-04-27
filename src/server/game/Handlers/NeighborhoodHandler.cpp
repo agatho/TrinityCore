@@ -1663,6 +1663,26 @@ void WorldSession::HandleNeighborhoodOpenCornerstoneUI(WorldPackets::Neighborhoo
         response.Cost = plotCost;
         response.AlternatePrice = static_cast<uint64>(GameTime::GetGameTime()) + 7 * DAY;
     }
+
+    // If the player already owns a house in this neighborhood, embed it in the
+    // response. The cornerstone Lua reads this as "you have a house here" and
+    // flips the action button from Buy to Move. Without this the button stays
+    // on Buy, which then routes to BUY_HOUSE and gets rejected by HandleNeighborhoodBuyHouse
+    // (HOUSING_RESULT_INVALID_HOUSE — "player already has a house in neighborhood").
+    if (!isOwned)
+    {
+        if (Housing const* myHousing = player->GetHousingForNeighborhood(neighborhood->GetGuid()))
+        {
+            WorldPackets::Housing::JamCliHouse existingHouse;
+            existingHouse.HouseGUID = myHousing->GetHouseGuid();
+            existingHouse.OwnerGUID = player->GetGUID();
+            existingHouse.NeighborhoodGUID = myHousing->GetNeighborhoodGuid();
+            existingHouse.PlotIndex = myHousing->GetPlotIndex();
+            existingHouse.HouseLevel = static_cast<uint8>(myHousing->GetLevel());
+            existingHouse.HasOptionalField = false;
+            response.ExistingHouse = std::move(existingHouse);
+        }
+    }
     WorldPacket const* pkt = response.Write();
     SendPacket(pkt);
 

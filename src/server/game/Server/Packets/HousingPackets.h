@@ -695,9 +695,13 @@ namespace WorldPackets::Housing
 
         void Read() override;
 
+        // Wire (verified vs binary serializer 0x7FF75C1AC390 in 67186):
+        //   uint32 NeighborhoodTypeID
+        //   uint32 SecondaryID (purpose unconfirmed; likely HouseStyle/Theme ID — read from struct offset 80)
+        //   uint8(strlen) + string Name (length-prefixed, no bit accumulator)
         uint32 NeighborhoodTypeID = 0;
+        uint32 SecondaryID = 0;
         std::string NeighborhoodName;
-        uint8 Flags = 0;
     };
 
     class HousingSvcsNeighborhoodReservePlot final : public ClientPacket
@@ -2227,8 +2231,10 @@ namespace WorldPackets::Housing
 
     struct JamLicensedDecorQuantity
     {
+        // IDA-verified wire (build 67186, sub_7FF75C0EFBA0): 3 uint32 fields per entry (12 bytes)
         uint32 DecorID = 0;
         uint32 Quantity = 0;
+        uint32 MaxQuantity = 0; // semantic name not yet verified
     };
 
     // ============================================================
@@ -2275,13 +2281,14 @@ namespace WorldPackets::Housing
         std::vector<JamClientRefundableDecor> Decors;
     };
 
-    // SMSG_BULK_REFUND_RESPONSE (0x420375) — result of BulkRefundDecors operation
+    // SMSG_BULK_REFUND_RESPONSE (0x420378) — result of BulkRefundDecors operation
+    // IDA-verified wire (build 67186, sub_7FF75C0C23B0): single uint32 result code
     class BulkRefundResponse final : public ServerPacket
     {
     public:
         BulkRefundResponse() : ServerPacket(SMSG_BULK_REFUND_RESPONSE) { }
         WorldPacket const* Write() override;
-        uint8 Result = 0; // BulkRefundResult enum
+        uint32 Result = 0; // BulkRefundResult enum
     };
 
     class GetAllLicensedDecorQuantitiesResponse final : public ServerPacket
@@ -2391,8 +2398,8 @@ namespace WorldPackets::Housing
     public:
         ClearInitiativeTaskCriteriaProgress() : ServerPacket(SMSG_CLEAR_INITIATIVE_TASK_CRITERIA_PROGRESS) { }
         WorldPacket const* Write() override;
-        uint32 InitiativeID = 0;
-        uint32 TaskID = 0;
+        // IDA-verified wire (build 67186, sub_7FF75C0EED30): uint32(count) + count×uint64(criteriaID)
+        std::vector<uint64> CriteriaIDs;
     };
 
     class GetInitiativeRewardsResult final : public ServerPacket
@@ -2999,6 +3006,13 @@ namespace WorldPackets::Neighborhood
         Optional<uint64> AlternatePrice;    // Alternate/discounted price
         Optional<uint32> StatusValue;       // Additional status value
         std::string NeighborhoodName;       // NUL-terminated CString in wire format
+
+        // Embedded HouseInfo for the player's CURRENT house, included when the
+        // server wants the cornerstone UI to offer "Move" instead of "Buy".
+        // IDA Housing_ParseCornerstoneHouseInfo gates a nested Housing_ParseHouseInfoStruct
+        // read on bit B.bit4 (Buffer[248]); without this populated the client's
+        // cornerstone Lua treats the plot as a fresh-buy target.
+        Optional<Housing::JamCliHouse> ExistingHouse;
     };
 
     class NeighborhoodInviteResidentResponse final : public ServerPacket
