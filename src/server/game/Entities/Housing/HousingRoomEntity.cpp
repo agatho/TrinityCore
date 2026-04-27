@@ -51,6 +51,15 @@ bool HousingRoomEntity::Create(ObjectGuid guid, Map* map, Position const& pos)
     if (!GetMap()->AddToMap(this))
         return false;
 
+    // The Housing/2 identity carries the per-plot Geobox via its attached
+    // component MeshObject. The client's OutsidePlotBounds and IsInsidePlot
+    // checks both walk the room registry — if the identity is not in the
+    // client's entity table, every decor placement attempt fails. Mark it
+    // active + far-visible so it streams to every player on the map even
+    // after we drop HousingMap::m_VisibleDistance below MAX.
+    setActive(true);
+    SetFarVisible(true);
+
     return true;
 }
 

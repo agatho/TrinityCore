@@ -166,13 +166,19 @@ HousingMap::~HousingMap()
 
 void HousingMap::InitVisibilityDistance()
 {
-    // Housing neighborhoods are small, self-contained maps where ALL entities are
-    // relevant to every player. Use maximum visibility so all objects (plot ATs,
-    // house GOs, MeshObjects, decor) are CREATEd for the player on map entry.
-    // This eliminates timing issues where entity table lookups fail because
-    // the entity hasn't been streamed to the client yet (e.g. ENTER_PLOT needing
-    // the plot AT's FHousingPlotAreaTrigger_C fragment in the entity table).
-    m_VisibleDistance = MAX_VISIBILITY_DISTANCE;
+    // Audit 2026-04-21 measured ~20× over-emission vs retail when this map used
+    // MAX_VISIBILITY_DISTANCE (533y) — every player received CREATE_OBJECT for
+    // every decor / mesh / fixture on the map regardless of where they stood.
+    // Retail uses a bounded distance and relies on the client's entity registry
+    // already holding the persistent infra entities (plot ATs, cornerstone GOs,
+    // room identities) at any distance. We mirror that: the persistent ones are
+    // marked setActive(true) + SetFarVisible(true) at spawn time (see
+    // SpawnPlotGameObjects + HousingRoomEntity::Create), so their CREATEs always
+    // reach the player; everything else (decor, fixtures, component meshes)
+    // streams via grid visibility once the player is within 200y. 200y is wide
+    // enough that adjacent plots remain visible while keeping per-player update
+    // traffic bounded.
+    m_VisibleDistance = 200.0f;
     m_VisibilityNotifyPeriod = sWorld->getIntConfig(CONFIG_VISIBILITY_NOTIFY_PERIOD_INSTANCE);
 }
 
@@ -279,6 +285,14 @@ void HousingMap::SpawnPlotGameObjects()
             continue;
         }
 
+        // Always keep cornerstone GOs streamed to every player on the map regardless of
+        // distance — the house finder UI, OPEN_CORNERSTONE_UI, and the world-map icon
+        // resolver all rely on the GO being in the entity registry. Without this, dropping
+        // the map's visibility distance below MAX would hide cornerstones at far plots
+        // and break the finder/buy flow when players are anywhere except next to the GO.
+        go->setActive(true);
+        go->SetFarVisible(true);
+
         // Track the plot GO for later swap (purchase/eviction)
         _plotGameObjects[static_cast<uint8>(plot->PlotIndex)] = go->GetGUID();
 
@@ -334,6 +348,16 @@ void HousingMap::SpawnPlotGameObjects()
 
                 if (plotAt)
                 {
+                    // Always keep plot ATs streamed regardless of player distance. The
+                    // ENTER_PLOT / IsInsidePlot path looks up the AT in the client's
+                    // entity registry; if the AT is not streamed, IsInsidePlot returns
+                    // false and decor placement / plot ownership UI breaks. With the
+                    // active flag + far visibility, the AT is in the registry for every
+                    // player on the map, so we can safely drop the map's visibility
+                    // distance below MAX without re-introducing the lookup-fail bug.
+                    plotAt->setActive(true);
+                    plotAt->SetFarVisible(true);
+
                     _plotAreaTriggers[static_cast<uint8>(plot->PlotIndex)] = plotAt->GetGUID();
 
                     std::string ownerDesc = (plotInfo && !plotInfo->OwnerGuid.IsEmpty())
