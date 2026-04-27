@@ -271,8 +271,11 @@ namespace WorldPackets::Housing
 
         void Read() override;
 
+        // IDA-verified wire (build 67186, sub_7FF75C19E0B0): ObjectGuid + Bits<1> + Bits<1>.
+        // Two booleans packed into a single byte (struct +48 = Locked, struct +49 = Field_49).
         ObjectGuid DecorGuid;
         bool Locked = false;
+        bool Field_49 = false;
     };
 
     class HousingDecorSetDyeSlots final : public ClientPacket
@@ -2562,10 +2565,12 @@ namespace WorldPackets::Neighborhood
 
         void Read() override;
 
-        // Sniff 12.0.1: uint32(HouseStyleID) + PackedGUID(CornerstoneGuid) + uint16(Padding)
+        // IDA-verified wire (build 67186, sub_7FF75C177630): 2 PackedGUIDs only.
+        // Earlier 12.0.1 "uint32 + PackedGUID + uint16" parse was a sniff misread —
+        // the leading 4 bytes are actually the first GUID's mask + low bytes, and
+        // the trailing 2 bytes are the second GUID's mask. No HouseStyleID on wire.
         ObjectGuid CornerstoneGuid;
-        uint32 HouseStyleID = 0;
-        uint16 Padding = 0;
+        ObjectGuid HouseGuid;
     };
 
     class NeighborhoodMoveHouse final : public ClientPacket

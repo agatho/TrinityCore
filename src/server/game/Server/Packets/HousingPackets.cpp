@@ -105,8 +105,10 @@ void HousingDecorLock::Read()
 {
     _worldPacket >> DecorGuid;
     _worldPacket >> Bits<1>(Locked);
+    _worldPacket >> Bits<1>(Field_49);
 
-    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_DECOR_LOCK DecorGuid: {} Locked: {}", DecorGuid.ToString(), Locked);
+    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_DECOR_LOCK DecorGuid: {} Locked: {} Field_49: {}",
+        DecorGuid.ToString(), Locked, Field_49);
 }
 
 void HousingDecorSetDyeSlots::Read()
@@ -2422,17 +2424,12 @@ void NeighborhoodPlayerDeclineInvite::Read()
 
 void NeighborhoodBuyHouse::Read()
 {
-    // Sniff 12.0.1 (enUS, 23 bytes): uint32(HouseStyleID) + PackedGUID(CornerstoneGuid) + uint16(Padding)
-    // Other client locales (zhCN reported) send 17-byte packets without the trailing Padding.
-    // Tolerate the missing tail — the Padding field is unused server-side and we don't
-    // want a ByteBufferException to drop the purchase for those clients.
-    _worldPacket >> HouseStyleID;
+    // IDA-verified wire (build 67186, sub_7FF75C177630): 2 PackedGUIDs.
     _worldPacket >> CornerstoneGuid;
-    if (_worldPacket.rpos() + sizeof(uint16) <= _worldPacket.size())
-        _worldPacket >> Padding;
+    _worldPacket >> HouseGuid;
 
-    TC_LOG_DEBUG("network.opcode", "CMSG_NEIGHBORHOOD_BUY_HOUSE HouseStyleID: {} CornerstoneGuid: {} Padding: {} (packetSize={} rpos={})",
-        HouseStyleID, CornerstoneGuid.ToString(), Padding, _worldPacket.size(), _worldPacket.rpos());
+    TC_LOG_DEBUG("network.opcode", "CMSG_NEIGHBORHOOD_BUY_HOUSE CornerstoneGuid: {} HouseGuid: {} (packetSize={})",
+        CornerstoneGuid.ToString(), HouseGuid.ToString(), _worldPacket.size());
 }
 
 void NeighborhoodMoveHouse::Read()
