@@ -1482,6 +1482,13 @@ void WorldSession::HandleNeighborhoodMoveHouse(WorldPackets::Neighborhood::Neigh
                     static_cast<int32>(h->GetCoreExteriorComponentID()),
                     static_cast<int32>(h->GetHouseType()),
                     fixtureOverrides.empty() ? nullptr : &fixtureOverrides);
+
+                // Re-spawn the player's exterior decor at the new plot. DespawnAllDecorForPlot
+                // (called above for the old plot) only removes the in-world entities — the
+                // PlacedDecor records in the Housing object are preserved. Without this
+                // matching SpawnAllDecorForPlot the decor stays gone after a move.
+                // Decor is NOT returned to the chest; it follows the house.
+                housingMap->SpawnAllDecorForPlot(targetPlotIndex, h);
             }
             else
             {

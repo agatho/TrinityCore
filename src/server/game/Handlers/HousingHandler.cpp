@@ -3844,7 +3844,7 @@ void WorldSession::HandleHousingSvcsGetHouseFinderInfo(WorldPackets::Housing::Ho
     WorldPackets::Housing::HousingSvcsGetHouseFinderInfoResponse response;
     response.Result = static_cast<uint8>(HOUSING_RESULT_SUCCESS);
     response.Entries.reserve(publicNeighborhoods.size());
-    for (Neighborhood const* neighborhood : publicNeighborhoods)
+    for (Neighborhood* neighborhood : publicNeighborhoods)
     {
         // Faction filter: skip neighborhoods that don't match the player's faction
         int32 factionRestriction = neighborhood->GetFactionRestriction();
@@ -3859,13 +3859,24 @@ void WorldSession::HandleHousingSvcsGetHouseFinderInfo(WorldPackets::Housing::Ho
         entry.NeighborhoodGUID = neighborhood->GetGuid();
         entry.OwnerGUID = neighborhood->GetOwnerGuid();
         entry.Name = neighborhood->GetName();
-        // Field1 | Field2 is a BITMASK of occupied plot indices (IDA: client ORs them at offset 520,
+        // Field1 | Field2 is a BITMASK of "unavailable" plots (IDA: client ORs them at offset 520,
         // then checks (1LL << plotIndex) & bitmask to determine if plot is occupied on the finder map).
+        // Include both permanently-occupied plots AND plots currently held by ANOTHER player's
+        // 5-minute reservation, so the user can't keep clicking Reserve on the same plot
+        // when someone else has already locked it. The viewer's own reservation stays
+        // marked-available so they can still act on it via the cornerstone.
         uint64 occupiedBitmask = 0;
         for (auto const& plot : neighborhood->GetPlots())
         {
             if (plot.IsOccupied() && plot.PlotIndex < 64)
                 occupiedBitmask |= (uint64(1) << plot.PlotIndex);
+        }
+        for (uint8 plotIdx = 0; plotIdx < 64; ++plotIdx)
+        {
+            if (occupiedBitmask & (uint64(1) << plotIdx))
+                continue; // already counted as permanently occupied
+            if (!neighborhood->GetPlotReserverOther(plotIdx, player->GetGUID()).IsEmpty())
+                occupiedBitmask |= (uint64(1) << plotIdx);
         }
         entry.Field1 = occupiedBitmask;
         entry.Field2 = 0;
