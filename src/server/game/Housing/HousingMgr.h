@@ -370,6 +370,11 @@ public:
     // accessMask = HOUSE_SETTING_HOUSE_ACCESS_* for interior, HOUSE_SETTING_PLOT_ACCESS_* for exterior
     bool CanVisitorAccess(Player const* visitor, Player const* owner, uint32 settingsFlags, bool isInterior) const;
 
+    // Same as CanVisitorAccess but works when owner is offline — uses CharacterCache + the
+    // visitor's own social/group/guild/neighborhood data to resolve friend/party/guild/neighbor
+    // relationships symmetrically. Settings come from the persisted plotInfo->HouseSettingsFlags.
+    bool CanVisitorAccessPlot(Player const* visitor, ObjectGuid ownerGuid, uint32 settingsFlags, bool isInterior) const;
+
     // Validation
     HousingResult ValidateDecorPlacement(uint32 decorId, Position const& pos, uint32 houseLevel) const;
 

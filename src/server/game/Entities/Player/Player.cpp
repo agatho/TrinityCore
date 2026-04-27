@@ -3713,8 +3713,10 @@ void Player::BuildCreateUpdateBlockForPlayer(UpdateData* data, Player* target) c
                         m->BuildCreateUpdateBlockForPlayer(data, target);
                         ++mirrorCount;
                     }
-                    // Group B mesh mirror (untagged, AttachParent=MeshObject).
-                    if (HousingMirrorEntity* bm = hmap->GetHouseMeshMirror(plot.PlotIndex))
+                    // Group B per-piece mirrors (untagged, AttachParent=fixture
+                    // MeshObject). Retail emits one per visible exterior fixture
+                    // (Base/Roof/Door/Window — typically 4 per plot).
+                    for (HousingMirrorEntity* bm : hmap->GetHouseMeshMirrors(plot.PlotIndex))
                     {
                         bm->BuildCreateUpdateBlockForPlayer(data, target);
                         ++mirrorCount;
@@ -3739,7 +3741,7 @@ void Player::BuildCreateUpdateBlockForPlayer(UpdateData* data, Player* target) c
             {
                 if (HousingMirrorEntity* ownMirror = hmap->GetHouseMirror(ownPlotIndex))
                     ownMirror->BuildCreateUpdateBlockForPlayer(data, target);
-                if (HousingMirrorEntity* ownMeshMirror = hmap->GetHouseMeshMirror(ownPlotIndex))
+                for (HousingMirrorEntity* ownMeshMirror : hmap->GetHouseMeshMirrors(ownPlotIndex))
                     ownMeshMirror->BuildCreateUpdateBlockForPlayer(data, target);
             }
 

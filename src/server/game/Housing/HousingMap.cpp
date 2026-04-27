@@ -2012,14 +2012,23 @@ GameObject* HousingMap::SpawnHouseForPlot(uint8 plotIndex, Position const* custo
             _houseMirrorEntities[plotIndex] = std::move(mirror);
         }
 
-        // Group B Entity mirror — FMirroredPositionData_C only (no tags),
-        // AttachParent = exterior-root MeshObject (not the room). Sniff
-        // idx 9984 shows 4 Group B mirrors alongside the 4 Group A ones.
-        // Purpose: pure spatial anchor off the house's visible mesh.
-        // Lookup: first MeshObject in this plot's list whose FHousingFixture_C
-        // ExteriorComponentType==9 (Base) and no AttachParent (i.e. a root).
+        // Group B Entity mirrors — FMirroredPositionData_C only (no tags),
+        // one per visible exterior fixture MeshObject (Base/Roof/Door/Window —
+        // ExteriorComponent Type 9/10/11/12). AttachParent = the piece's own
+        // MeshObject. Sniff idx 9984 shows 4 Group B mirrors per plot, one
+        // anchored to each fixture mesh. Without these per-piece anchors the
+        // client lacks spatial hooks for door-hover detection and expert-mode
+        // placement preview off non-root meshes.
         {
-            ObjectGuid exteriorRootGuid;
+            std::vector<std::unique_ptr<HousingMirrorEntity>>& mirrors = _houseMeshMirrorEntities[plotIndex];
+            mirrors.clear();
+            uint32 const bnetId = static_cast<uint32>(plotInfo->OwnerBnetGuid.GetCounter());
+            uint8 pieceIndex = 0;
+            QuaternionData identity;
+            identity.x = identity.y = identity.z = 0.0f;
+            identity.w = 1.0f;
+            Position const localPos(0.0f, 0.0f, 0.0f, 0.0f);
+
             auto meshItr = _meshObjects.find(plotIndex);
             if (meshItr != _meshObjects.end())
             {
@@ -2029,35 +2038,35 @@ GameObject* HousingMap::SpawnHouseForPlot(uint8 plotIndex, Position const* custo
                     if (!mesh || !mesh->m_housingFixtureData.has_value())
                         continue;
                     UF::HousingFixtureData const& fd = *mesh->m_housingFixtureData;
-                    if (uint8(fd.ExteriorComponentType) == 9 && fd.AttachParentGUID->IsEmpty())
-                    {
-                        exteriorRootGuid = meshGuid;
-                        break;
-                    }
+                    uint8 const compType = uint8(fd.ExteriorComponentType);
+                    // Pair Group B mirrors with the visible fixture types only:
+                    // 9=Base, 10=Roof, 11=Door, 12=Window. Other component types
+                    // (decorative subpieces, hooks) don't get retail-side mirrors.
+                    if (compType < 9 || compType > 12)
+                        continue;
+
+                    ObjectGuid mirrorGuid = MakeHouseMeshMirrorGuid(plotIndex, bnetId, pieceIndex);
+                    auto mirror = std::make_unique<HousingMirrorEntity>(this, mirrorGuid);
+                    mirror->InitPositionData(meshGuid,
+                        localPos, identity, /*scale*/ 1.0f, /*attachmentFlags*/ 3,
+                        /*isExteriorRoot*/ false);
+                    TC_LOG_DEBUG("housing", "HousingMap::SpawnHouseForPlot: spawned Group B mirror[{}] {} "
+                        "for plot {} (attach={} [mesh type={}])",
+                        pieceIndex, mirrorGuid.ToString(), plotIndex, meshGuid.ToString(), compType);
+                    mirrors.push_back(std::move(mirror));
+                    ++pieceIndex;
                 }
             }
 
-            if (!exteriorRootGuid.IsEmpty())
+            if (mirrors.empty())
             {
-                uint32 bnetId = static_cast<uint32>(plotInfo->OwnerBnetGuid.GetCounter());
-                ObjectGuid meshMirrorGuid = MakeHouseMeshMirrorGuid(plotIndex, bnetId);
-                auto meshMirror = std::make_unique<HousingMirrorEntity>(this, meshMirrorGuid);
-                Position const localPos(0.0f, 0.0f, 0.0f, 0.0f);
-                QuaternionData identity;
-                identity.x = identity.y = identity.z = 0.0f;
-                identity.w = 1.0f;
-                meshMirror->InitPositionData(exteriorRootGuid,
-                    localPos, identity, /*scale*/ 1.0f, /*attachmentFlags*/ 3,
-                    /*isExteriorRoot*/ false);
-                TC_LOG_DEBUG("housing", "HousingMap::SpawnHouseForPlot: spawned Group B mesh mirror {} for plot {} "
-                    "(attach={} [mesh root])",
-                    meshMirrorGuid.ToString(), plotIndex, exteriorRootGuid.ToString());
-                _houseMeshMirrorEntities[plotIndex] = std::move(meshMirror);
+                TC_LOG_WARN("housing", "HousingMap::SpawnHouseForPlot: no fixture MeshObjects found for plot {}; "
+                    "Group B mirrors skipped (client spatial anchors off house meshes will be missing)", plotIndex);
             }
             else
             {
-                TC_LOG_WARN("housing", "HousingMap::SpawnHouseForPlot: no exterior-root MeshObject found for plot {}; "
-                    "Group B mirror skipped (client spatial anchor off house mesh will be missing)", plotIndex);
+                TC_LOG_DEBUG("housing", "HousingMap::SpawnHouseForPlot: emitted {} Group B mirrors for plot {}",
+                    mirrors.size(), plotIndex);
             }
         }
     }
@@ -3143,7 +3152,11 @@ ObjectGuid HousingMap::MakeHouseMirrorGuid(uint8 plotIndex, uint32 bnetAccountId
 HousingMirrorEntity* HousingMap::GetHouseMeshMirror(uint8 plotIndex) const
 {
     auto itr = _houseMeshMirrorEntities.find(plotIndex);
-    return itr != _houseMeshMirrorEntities.end() ? itr->second.get() : nullptr;
+    if (itr == _houseMeshMirrorEntities.end() || itr->second.empty())
+        return nullptr;
+    // Returns the first (root-piece) Group B mirror for legacy callers that
+    // only need any anchor; per-piece access goes via _houseMeshMirrorEntities.
+    return itr->second.front().get();
 }
 
 ObjectGuid HousingMap::GetHouseMeshMirrorGuid(uint8 plotIndex) const
@@ -3153,12 +3166,27 @@ ObjectGuid HousingMap::GetHouseMeshMirrorGuid(uint8 plotIndex) const
     return ObjectGuid::Empty;
 }
 
-ObjectGuid HousingMap::MakeHouseMeshMirrorGuid(uint8 plotIndex, uint32 bnetAccountId) const
+std::vector<HousingMirrorEntity*> HousingMap::GetHouseMeshMirrors(uint8 plotIndex) const
+{
+    std::vector<HousingMirrorEntity*> result;
+    auto itr = _houseMeshMirrorEntities.find(plotIndex);
+    if (itr == _houseMeshMirrorEntities.end())
+        return result;
+    result.reserve(itr->second.size());
+    for (auto const& mirror : itr->second)
+        result.push_back(mirror.get());
+    return result;
+}
+
+ObjectGuid HousingMap::MakeHouseMeshMirrorGuid(uint8 plotIndex, uint32 bnetAccountId, uint8 pieceIndex /*= 0*/) const
 {
     // Distinct synthetic entry from Group A (37361) so Group A/B guids never collide.
-    // Same counter packing: (bnetId << 8) | plotIndex.
+    // Counter packs the (bnet, plot, piece) triple so each per-piece Group B
+    // mirror has a unique GUID across the realm: (bnetId << 16) | (plot << 8) | piece.
     constexpr uint32 HOUSING_MESH_MIRROR_ENTRY = 37362;
-    uint64 counter = (static_cast<uint64>(bnetAccountId) << 8) | static_cast<uint64>(plotIndex);
+    uint64 counter = (static_cast<uint64>(bnetAccountId) << 16)
+                   | (static_cast<uint64>(plotIndex)     << 8)
+                   |  static_cast<uint64>(pieceIndex);
     return ObjectGuid::Create<HighGuid::Entity>(GetId(), HOUSING_MESH_MIRROR_ENTRY, counter);
 }
 

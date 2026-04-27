@@ -85,6 +85,11 @@ public:
         // the owner is currently online.
         std::vector<Housing::Room> Rooms;
 
+        // Mirrored from character_housing.settingsFlags so visitor permission
+        // checks (CanVisitorAccess) work when the plot owner is offline.
+        // Refreshed when an online owner mutates their Housing settings.
+        uint32 HouseSettingsFlags = 0;
+
         bool IsOccupied() const { return PlotIndex != INVALID_PLOT_INDEX; }
     };
 
@@ -154,6 +159,7 @@ public:
     // Plot management
     HousingResult PurchasePlot(ObjectGuid playerGuid, uint8 plotIndex);
     void UpdatePlotHouseInfo(uint8 plotIndex, ObjectGuid houseGuid, ObjectGuid ownerBnetGuid);
+    void UpdatePlotSettingsFlags(ObjectGuid ownerGuid, uint32 settingsFlags);
     HousingResult MoveHouse(ObjectGuid sourcePlotOwner, uint8 newPlotIndex);
     void SetPlotAreaTriggerGuid(uint8 plotIndex, ObjectGuid atGuid);
 

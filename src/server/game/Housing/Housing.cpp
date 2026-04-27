@@ -2556,6 +2556,11 @@ void Housing::SaveSettings(uint32 settingsFlags)
     stmt->setUInt64(1, _owner->GetGUID().GetCounter());
     CharacterDatabase.Execute(stmt);
 
+    // Mirror onto the in-memory neighborhood plot so visitor permission checks
+    // (CanVisitorAccessPlot) work correctly when the owner is offline.
+    if (Neighborhood* nbh = sNeighborhoodMgr.GetNeighborhood(_neighborhoodGuid))
+        nbh->UpdatePlotSettingsFlags(_owner->GetGUID(), _settingsFlags);
+
     SyncUpdateFields();
 
     TC_LOG_DEBUG("housing", "Housing::SaveSettings: Player {} updated house settings to {} in house {}",

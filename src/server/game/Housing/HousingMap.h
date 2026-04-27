@@ -95,16 +95,20 @@ public:
     // and bnet owner are known from NeighborhoodMirror data.
     ObjectGuid MakeHouseMirrorGuid(uint8 plotIndex, uint32 bnetAccountId) const;
 
-    // "Group B" mesh-level mirror. Retail pairs each Group A (house-exterior
-    // root) Entity mirror with a SECOND untagged FMirroredPositionData_C
-    // Entity mirror whose AttachParent is the exterior root MeshObject (not
-    // the room / Housing/2). Sniff idx 9984: 4 Group A (44-byte values) +
-    // 4 Group B (52-byte values, AttachParent=MeshObject serialises longer).
-    // Without Group B the client's spatial index for the house-exterior mesh
-    // is missing, which breaks AoE/icon resolution off the MeshObject root.
+    // "Group B" per-piece mesh-level mirrors. Retail pairs EACH visible
+    // exterior fixture MeshObject (Base/Roof/Door/Window — ExteriorComponent
+    // Type 9/10/11/12) with one untagged FMirroredPositionData_C Entity
+    // mirror whose AttachParent is the piece's MeshObject. Sniff idx 9984:
+    // 4 Group A (44-byte values) + 4 Group B (52-byte values, AttachParent=
+    // MeshObject serialises longer). Without these per-piece anchors the
+    // client's spatial index is missing finer-grained hooks (door-hover
+    // detection, expert-mode placement preview off non-root meshes).
     HousingMirrorEntity* GetHouseMeshMirror(uint8 plotIndex) const;
     ObjectGuid GetHouseMeshMirrorGuid(uint8 plotIndex) const;
-    ObjectGuid MakeHouseMeshMirrorGuid(uint8 plotIndex, uint32 bnetAccountId) const;
+    ObjectGuid MakeHouseMeshMirrorGuid(uint8 plotIndex, uint32 bnetAccountId, uint8 pieceIndex = 0) const;
+    // Full list of per-piece Group B mirrors for this plot (one per fixture
+    // MeshObject of Type 9/10/11/12). Returns empty if no house spawned.
+    std::vector<HousingMirrorEntity*> GetHouseMeshMirrors(uint8 plotIndex) const;
 
     // Lightweight Housing/2 identity room entity (HighGuid::Housing subType=2,
     // objectType=18) — the authoritative room. Retail-verified architecture:
@@ -212,9 +216,10 @@ private:
     // 1:1 with the exterior root MeshObject.
     std::unordered_map<uint8, std::unique_ptr<HousingMirrorEntity>> _houseMirrorEntities;
 
-    // "Group B" mesh-level Entity mirror, attached to the exterior root
-    // MeshObject (Type=9). 1:1 with the house root mesh; co-spawned/despawned.
-    std::unordered_map<uint8, std::unique_ptr<HousingMirrorEntity>> _houseMeshMirrorEntities;
+    // "Group B" per-piece mesh-level Entity mirrors, one per visible exterior
+    // fixture MeshObject (Type 9/10/11/12). Co-spawned with the house and
+    // despawned together. Vector since retail emits 4 of these per plot.
+    std::unordered_map<uint8, std::vector<std::unique_ptr<HousingMirrorEntity>>> _houseMeshMirrorEntities;
 
     // Lightweight Housing/2 identity room GUID per plot. The entity itself is
     // a WorldObject owned by the map's object store; we only track its GUID.

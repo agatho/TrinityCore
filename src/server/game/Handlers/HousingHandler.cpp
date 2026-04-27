@@ -3527,18 +3527,20 @@ void WorldSession::HandleHousingSvcsTeleportToPlot(WorldPackets::Housing::Housin
 
     if (targetPlot)
     {
-        // Per-house access check: verify visitor has permission to access this plot
+        // Per-house access check: verify visitor has permission to access this plot.
+        // Owner can be offline — fall back to the persisted plotInfo->HouseSettingsFlags
+        // (mirrored from character_housing.settingsFlags at neighborhood preload).
         if (!neighborhood->IsMember(player->GetGUID()))
         {
             Neighborhood::PlotInfo const* plotInfo = neighborhood->GetPlotInfo(static_cast<uint8>(plotIndex));
             if (plotInfo && plotInfo->IsOccupied())
             {
                 Player* ownerPlayer = ObjectAccessor::FindPlayer(plotInfo->OwnerGuid);
-                uint32 settingsFlags = HOUSE_SETTING_DEFAULT;
-                if (ownerPlayer && ownerPlayer->GetHousing())
-                    settingsFlags = ownerPlayer->GetHousing()->GetSettingsFlags();
+                uint32 settingsFlags = (ownerPlayer && ownerPlayer->GetHousing())
+                    ? ownerPlayer->GetHousing()->GetSettingsFlags()
+                    : plotInfo->HouseSettingsFlags;
 
-                if (!sHousingMgr.CanVisitorAccess(player, ownerPlayer, settingsFlags, false))
+                if (!sHousingMgr.CanVisitorAccessPlot(player, plotInfo->OwnerGuid, settingsFlags, false))
                 {
                     WorldPackets::Housing::HousingSvcsNotifyPermissionsFailure denied;
                     denied.FailureType = static_cast<uint8>(HOUSING_RESULT_PERMISSION_DENIED);

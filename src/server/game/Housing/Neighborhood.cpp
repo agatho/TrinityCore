@@ -67,8 +67,8 @@ bool Neighborhood::LoadFromDB(PreparedQueryResult neighborhood, PreparedQueryRes
         {
             Field* memberFields = members->Fetch();
 
-            //          0              1     2          3          4           5          6              7         8           9
-            // SELECT nm.playerGuid, nm.role, nm.joinTime, nm.plotIndex, ch.houseId, c.account, ch.houseLevel, ch.favor, ch.houseName, ch.houseType
+            //          0              1     2          3          4           5          6              7         8           9            10
+            // SELECT nm.playerGuid, nm.role, nm.joinTime, nm.plotIndex, ch.houseId, c.account, ch.houseLevel, ch.favor, ch.houseName, ch.houseType, ch.settingsFlags
             // FROM neighborhood_members nm LEFT JOIN character_housing ch ON nm.playerGuid = ch.guid
             //   LEFT JOIN characters c ON nm.playerGuid = c.guid
             // WHERE nm.neighborhoodGuid = ?
@@ -116,6 +116,8 @@ bool Neighborhood::LoadFromDB(PreparedQueryResult neighborhood, PreparedQueryRes
                     _plots[member.PlotIndex].HouseName  = memberFields[8].GetString();
                 if (!memberFields[9].IsNull())
                     _plots[member.PlotIndex].HouseType  = memberFields[9].GetUInt32();
+                if (!memberFields[10].IsNull())
+                    _plots[member.PlotIndex].HouseSettingsFlags = memberFields[10].GetUInt32();
 
                 TC_LOG_INFO("housing", "Neighborhood::LoadFromDB plot[{}] owner={} lvl={} favor={} name='{}' "
                     "(ch.houseLevel.IsNull={} ch.favor.IsNull={} ch.houseName.IsNull={})",
@@ -1081,6 +1083,20 @@ void Neighborhood::UpdatePlotHouseInfo(uint8 plotIndex, ObjectGuid houseGuid, Ob
 
     TC_LOG_DEBUG("housing", "Neighborhood::UpdatePlotHouseInfo: Plot {} updated with HouseGuid {} and BnetGuid {} in neighborhood '{}'",
         plotIndex, houseGuid.ToString(), ownerBnetGuid.ToString(), _name);
+}
+
+void Neighborhood::UpdatePlotSettingsFlags(ObjectGuid ownerGuid, uint32 settingsFlags)
+{
+    for (PlotInfo& plot : _plots)
+    {
+        if (plot.IsOccupied() && plot.OwnerGuid == ownerGuid)
+        {
+            plot.HouseSettingsFlags = settingsFlags;
+            TC_LOG_DEBUG("housing", "Neighborhood::UpdatePlotSettingsFlags: plot {} owner {} settings=0x{:X} in '{}'",
+                plot.PlotIndex, ownerGuid.ToString(), settingsFlags, _name);
+            return;
+        }
+    }
 }
 
 HousingResult Neighborhood::MoveHouse(ObjectGuid sourcePlotOwner, uint8 newPlotIndex)

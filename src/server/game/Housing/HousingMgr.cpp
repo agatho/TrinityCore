@@ -16,6 +16,7 @@
  */
 
 #include "HousingMgr.h"
+#include "CharacterCache.h"
 #include "DB2Stores.h"
 #include "DB2Structure.h"
 #include "GameObjectData.h"
@@ -24,6 +25,8 @@
 #include "Housing.h"
 #include "Log.h"
 #include "Neighborhood.h"
+#include "NeighborhoodMgr.h"
+#include "ObjectAccessor.h"
 #include "ObjectMgr.h"
 #include "Player.h"
 #include "RaceMask.h"
@@ -832,6 +835,69 @@ std::vector<std::pair<uint32, int32>> HousingMgr::GetStarterDecorWithQuantities(
             result.push_back({ id, decor.StartingQuantity });
     }
     return result;
+}
+
+bool HousingMgr::CanVisitorAccessPlot(Player const* visitor, ObjectGuid ownerGuid, uint32 settingsFlags, bool isInterior) const
+{
+    if (!visitor || ownerGuid.IsEmpty())
+        return false;
+
+    if (visitor->GetGUID() == ownerGuid)
+        return true;
+
+    uint32 anyoneFlag    = isInterior ? HOUSE_SETTING_HOUSE_ACCESS_ANYONE    : HOUSE_SETTING_PLOT_ACCESS_ANYONE;
+    uint32 neighborsFlag = isInterior ? HOUSE_SETTING_HOUSE_ACCESS_NEIGHBORS : HOUSE_SETTING_PLOT_ACCESS_NEIGHBORS;
+    uint32 guildFlag     = isInterior ? HOUSE_SETTING_HOUSE_ACCESS_GUILD     : HOUSE_SETTING_PLOT_ACCESS_GUILD;
+    uint32 friendsFlag   = isInterior ? HOUSE_SETTING_HOUSE_ACCESS_FRIENDS   : HOUSE_SETTING_PLOT_ACCESS_FRIENDS;
+    uint32 partyFlag     = isInterior ? HOUSE_SETTING_HOUSE_ACCESS_PARTY     : HOUSE_SETTING_PLOT_ACCESS_PARTY;
+
+    uint32 accessMask = isInterior
+        ? (HOUSE_SETTING_HOUSE_ACCESS_ANYONE | HOUSE_SETTING_HOUSE_ACCESS_NEIGHBORS |
+           HOUSE_SETTING_HOUSE_ACCESS_GUILD | HOUSE_SETTING_HOUSE_ACCESS_FRIENDS | HOUSE_SETTING_HOUSE_ACCESS_PARTY)
+        : (HOUSE_SETTING_PLOT_ACCESS_ANYONE | HOUSE_SETTING_PLOT_ACCESS_NEIGHBORS |
+           HOUSE_SETTING_PLOT_ACCESS_GUILD | HOUSE_SETTING_PLOT_ACCESS_FRIENDS | HOUSE_SETTING_PLOT_ACCESS_PARTY);
+
+    if ((settingsFlags & accessMask) == 0)
+        return true; // No restrictions configured — open to all
+
+    if (settingsFlags & anyoneFlag)
+        return true;
+
+    Player* ownerPlayer = ObjectAccessor::FindPlayer(ownerGuid);
+
+    if (settingsFlags & partyFlag)
+    {
+        // Party requires both online — same Group instance.
+        if (ownerPlayer && visitor->GetGroup() && visitor->GetGroup() == ownerPlayer->GetGroup())
+            return true;
+    }
+
+    if (settingsFlags & guildFlag)
+    {
+        ObjectGuid::LowType ownerGuildId = ownerPlayer
+            ? ownerPlayer->GetGuildId()
+            : sCharacterCache->GetCharacterGuildIdByGuid(ownerGuid);
+        if (ownerGuildId != 0 && visitor->GetGuildId() == ownerGuildId)
+            return true;
+    }
+
+    if (settingsFlags & friendsFlag)
+    {
+        // Friends are mutual on retail — visitor's social manager has the same record.
+        if (visitor->GetSocial() && visitor->GetSocial()->HasFriend(ownerGuid))
+            return true;
+    }
+
+    if (settingsFlags & neighborsFlag)
+    {
+        // Both are residents of the same neighborhood. Works offline because
+        // neighborhood membership is stored on Neighborhood objects, not Player.
+        for (Neighborhood const* nbh : sNeighborhoodMgr.GetNeighborhoodsForPlayer(ownerGuid))
+            if (nbh->IsMember(visitor->GetGUID()))
+                return true;
+    }
+
+    return false;
 }
 
 bool HousingMgr::CanVisitorAccess(Player const* visitor, Player const* owner, uint32 settingsFlags, bool isInterior) const
