@@ -1244,6 +1244,15 @@ void Neighborhood::RefreshMirrorDataForOnlineMembers() const
                 mirrorEntity.AddManager(bnetGuid, m.PlayerGuid);
             }
         }
+
+        // Push the rebuilt fields to the client. Set/Add methods only flip dirty
+        // bits on the in-memory entity; without an explicit Send the client keeps
+        // the previous state and the in-world neighborhood map stays stale until
+        // an unrelated update arrives (e.g. opening the roster UI). Re-sending as
+        // CREATE matches retail behaviour for a wholesale Houses/Managers replace
+        // — incremental UPDATE_OBJECT also works but the client's map-icon refresh
+        // path only re-runs on CREATE.
+        mirrorEntity.SendCreateToPlayer(player);
     }
 }
 
