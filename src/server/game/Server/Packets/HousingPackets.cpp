@@ -1967,14 +1967,18 @@ WorldPacket const* HousingUpdateHouseInfo::Write()
 
 WorldPacket const* HousingSetHouseNameResponse::Write()
 {
-    // IDA 0x550005: uint8(Result) + 24bit-BE(nameLen) + string(Name)
+    // IDA-verified wire (build 67186, sub_7FF75C1D1020 case 0x550005):
+    //   uint8 Result
+    //   uint64 NameLen        (read via ai_Process_HousingDataPacket; 8 bytes)
+    //   char[NameLen] Name    (no null terminator)
+    //
+    // Old TC implementation wrote a 3-byte big-endian length, which left the
+    // client desynced by 5 bytes — the parser would treat the 4th-9th bytes
+    // of the response as the string length rather than reading the string.
     _worldPacket << uint8(Result);
-
-    uint32 nameLen = static_cast<uint32>(Name.size());
-    _worldPacket << uint8((nameLen >> 16) & 0xFF);
-    _worldPacket << uint8((nameLen >> 8) & 0xFF);
-    _worldPacket << uint8(nameLen & 0xFF);
-    _worldPacket.append(Name.data(), Name.size());
+    _worldPacket << uint64(Name.size());
+    if (!Name.empty())
+        _worldPacket.append(Name.data(), Name.size());
 
     TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_SET_HOUSE_NAME_RESPONSE Result: {} Name: '{}'",
         Result, Name);

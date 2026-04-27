@@ -2031,7 +2031,8 @@ namespace WorldPackets::Housing
         HousingSetHouseNameResponse() : ServerPacket(SMSG_HOUSING_SET_HOUSE_NAME_RESPONSE) { }
         WorldPacket const* Write() override;
 
-        // IDA 0x550005: uint8(Result) + 24bit-BE(nameLen) + string(Name)
+        // IDA-verified wire (build 67186, sub_7FF75C1D1020 case 0x550005):
+        //   uint8 Result + uint64 Name.size() + char[Name.size()]
         uint8 Result = 0;
         std::string Name;
     };
