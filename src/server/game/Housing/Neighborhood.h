@@ -129,6 +129,10 @@ public:
     bool ClearReservation(ObjectGuid playerGuid);
     bool HasReservation(ObjectGuid playerGuid) const;
     uint8 GetReservedPlot(ObjectGuid playerGuid) const;
+    // Returns the reserver's GUID if `plotIndex` is currently locked by another
+    // player, or ObjectGuid::Empty when the plot is free / locked by `viewerGuid`.
+    // Sweeps expired reservations as a side-effect (same 5-minute window as ReservePlot).
+    ObjectGuid GetPlotReserverOther(uint8 plotIndex, ObjectGuid viewerGuid);
 
     // Management
     void SetName(std::string const& name);

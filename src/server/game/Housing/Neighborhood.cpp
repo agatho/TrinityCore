@@ -1326,3 +1326,28 @@ uint8 Neighborhood::GetReservedPlot(ObjectGuid playerGuid) const
         return it->second.PlotIndex;
     return INVALID_PLOT_INDEX;
 }
+
+ObjectGuid Neighborhood::GetPlotReserverOther(uint8 plotIndex, ObjectGuid viewerGuid)
+{
+    if (plotIndex >= MAX_NEIGHBORHOOD_PLOTS)
+        return ObjectGuid::Empty;
+
+    constexpr uint32 RESERVATION_EXPIRY_SECONDS = 5 * MINUTE;
+    uint32 now = static_cast<uint32>(GameTime::GetGameTime());
+
+    // Sweep stale entries first so a long-expired reservation doesn't paint
+    // a plot as "reserved" forever in the cornerstone UI.
+    for (auto it = _plotReservations.begin(); it != _plotReservations.end(); )
+    {
+        if (now >= it->second.ReserveTime + RESERVATION_EXPIRY_SECONDS)
+            it = _plotReservations.erase(it);
+        else
+            ++it;
+    }
+
+    for (auto const& [guid, res] : _plotReservations)
+        if (res.PlotIndex == plotIndex && guid != viewerGuid)
+            return guid;
+
+    return ObjectGuid::Empty;
+}

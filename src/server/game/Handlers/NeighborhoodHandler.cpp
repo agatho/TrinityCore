@@ -1662,6 +1662,20 @@ void WorldSession::HandleNeighborhoodOpenCornerstoneUI(WorldPackets::Neighborhoo
         response.PlotOwnerGuid = ObjectGuid::Empty;
         response.Cost = plotCost;
         response.AlternatePrice = static_cast<uint64>(GameTime::GetGameTime()) + 7 * DAY;
+
+        // If another player currently holds the 5-min reservation, retail
+        // marks the plot with PurchaseStatus = HOUSING_RESULT_PLOT_RESERVED (73).
+        // The client renders this as "Reserved" and disables the action button.
+        // The reserving player themselves still gets PurchaseStatus=0 so they
+        // can act on their own hold.
+        ObjectGuid otherReserver = neighborhood->GetPlotReserverOther(plotIdx, player->GetGUID());
+        if (!otherReserver.IsEmpty())
+        {
+            response.PurchaseStatus = static_cast<uint8>(HOUSING_RESULT_PLOT_RESERVED);
+            TC_LOG_INFO("housing",
+                "OpenCornerstoneUI: plot {} is reserved by {}; marking PurchaseStatus=PLOT_RESERVED for viewer {}",
+                plotIdx, otherReserver.ToString(), player->GetGUID().ToString());
+        }
     }
 
     // If the player already owns a house in this neighborhood, embed it in the
@@ -1669,7 +1683,9 @@ void WorldSession::HandleNeighborhoodOpenCornerstoneUI(WorldPackets::Neighborhoo
     // flips the action button from Buy to Move. Without this the button stays
     // on Buy, which then routes to BUY_HOUSE and gets rejected by HandleNeighborhoodBuyHouse
     // (HOUSING_RESULT_INVALID_HOUSE — "player already has a house in neighborhood").
-    if (!isOwned)
+    // Only embed when the plot is actually actionable for this player (not owned
+    // by anyone else and not reserved by anyone else).
+    if (!isOwned && response.PurchaseStatus == 0)
     {
         if (Housing const* myHousing = player->GetHousingForNeighborhood(neighborhood->GetGuid()))
         {
