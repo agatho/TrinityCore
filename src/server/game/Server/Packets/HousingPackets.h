@@ -2438,7 +2438,16 @@ namespace WorldPackets::Housing
     public:
         HousingPhotoSharingAuthorizationResult() : ServerPacket(SMSG_HOUSING_PHOTO_SHARING_AUTHORIZATION_RESULT) { }
         WorldPacket const* Write() override;
+
+        // IDA-verified wire (build 67186, sub_7FF75C0F0160):
+        //   uint8 Result
+        //   uint8 (Length << 1)               // top 7 bits = string length, low bit reserved
+        //   char[Length] PartnerName          // not null-terminated on the wire
+        //
+        // Old TC implementation only emitted Result; the trailing partner name
+        // (likely the player whose photos were shared with) was missing.
         uint8 Result = 0;
+        std::string PartnerName;
     };
 
     class HousingPhotoSharingAuthorizationClearedResult final : public ServerPacket

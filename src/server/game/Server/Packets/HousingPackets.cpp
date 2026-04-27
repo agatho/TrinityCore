@@ -2301,9 +2301,15 @@ WorldPacket const* InitiativeTrackedUpdated::Write()
 
 WorldPacket const* HousingPhotoSharingAuthorizationResult::Write()
 {
+    // IDA-verified wire (build 67186, sub_7FF75C0F0160):
+    //   uint8 Result, uint8 (length << 1), char[length]
     _worldPacket << uint8(Result);
+    uint8 length = static_cast<uint8>(std::min<size_t>(PartnerName.size(), 0x7F));
+    _worldPacket << uint8(length << 1);
+    if (length > 0)
+        _worldPacket.append(reinterpret_cast<uint8 const*>(PartnerName.data()), length);
 
-    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_PHOTO_SHARING_AUTHORIZATION_RESULT Result: {}", Result);
+    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_PHOTO_SHARING_AUTHORIZATION_RESULT Result: {} Partner: '{}'", Result, PartnerName);
 
     return &_worldPacket;
 }
