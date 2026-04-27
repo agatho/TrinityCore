@@ -1550,30 +1550,26 @@ WorldPacket const* AccountHousingRoomComponentTextureAdded::Write()
 
 WorldPacket const* HousingSvcsUpdateHousesLevelFavor::Write()
 {
-    // 12.0.5 sniff-verified wire format (corrected from speculative IDA case 5505041).
-    // Single PackedGUID per entry (HouseGUID only), not 3. See HousingPackets.h struct
-    // doc for full layout. Sniff sample (40 bytes for count=1):
-    //   00 ec 04 00 00 01 00 00 00 01 00 00 00       <- header (Type=0, ChangeAmount=1260, Reason=1, Count=1)
-    //   00 00 00 00 00 07 c3 0b 31 15 07 80 60 dc    <- entry: Flags=0, Ts=0, HouseGUID
-    //   ff ff ff ff ff ff ff ff                       <- NewFavorTotal = -1
-    //   00 00 00 00                                   <- Reserved = 0
-    //   80                                            <- Terminator
-    _worldPacket << uint8(Type);
+    // 12.0.5 sniff-validated wire (SNIFF_VALIDATION_67186.md):
+    //   uint8(Result) + 3×uint32 + 3×PackedGUID + int64(NewFavorTotal) + uint8 + uint32 + uint8
+    // Sample sniff (40 bytes, OwnerGUID and NeighborhoodGUID empty):
+    //   00 ec 04 00 00 01 00 00 00 01 00 00 00 00 00 00 00 07 c3 0b 31 15 07 80 60 dc
+    //   ff ff ff ff ff ff ff ff 00 00 00 00 00 80
+    _worldPacket << uint8(Result);
     _worldPacket << uint32(ChangeAmount);
     _worldPacket << uint32(Reason);
-    _worldPacket << uint32(Entries.size());
-    for (auto const& entry : Entries)
-    {
-        _worldPacket << uint8(entry.EntryFlags);
-        _worldPacket << uint32(entry.EntryTimestamp);
-        _worldPacket << entry.HouseGUID;
-        _worldPacket << int64(entry.NewFavorTotal);
-        _worldPacket << uint32(entry.Reserved);
-        _worldPacket << uint8(entry.Terminator);
-    }
+    _worldPacket << uint32(Field2);
+    _worldPacket << OwnerGUID;
+    _worldPacket << NeighborhoodGUID;
+    _worldPacket << HouseGUID;
+    _worldPacket << int64(NewFavorTotal);
+    _worldPacket << uint8(Field3);
+    _worldPacket << uint32(Reserved);
+    _worldPacket << uint8(Terminator);
 
-    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_SVCS_UPDATE_HOUSES_LEVEL_FAVOR Type: {} ChangeAmount: {} Reason: {} EntryCount: {}",
-        Type, ChangeAmount, Reason, Entries.size());
+    TC_LOG_DEBUG("network.opcode",
+        "SMSG_HOUSING_SVCS_UPDATE_HOUSES_LEVEL_FAVOR Result: {} ChangeAmount: {} Reason: {} HouseGUID: {} NewFavorTotal: {}",
+        Result, ChangeAmount, Reason, HouseGUID.ToString(), NewFavorTotal);
 
     return &_worldPacket;
 }
@@ -1720,12 +1716,25 @@ WorldPacket const* HousingSvcsGetPotentialHouseOwnersResponse::Write()
 
 WorldPacket const* HousingSvcsUpdateHouseSettingsResponse::Write()
 {
-    // IDA case 5505051: uint8(Result) + JamCliHouse
+    // 12.0.5 sniff-validated wire (SNIFF_VALIDATION_67186.md):
+    //   uint8(Result) + 3×PackedGUID + uint8(HouseLevel) + uint8(PlotIndex) + uint32(SettingsFlags)
+    // Sample sniff (31 bytes):
+    //   00 07 c3 0b 31 15 07 80 60 dc 0f a0 17 05 61 0c d4 08 03 d0 f0 6c 01 80 dc 29 20 00 00 00 00
+    //
+    // NOT WriteJamCliHouse — that helper writes uint32(PlotIndex) BEFORE uint8(HouseLevel)
+    // for opcodes 0x540012/0x540013 (IDA-confirmed via in-game testing of the regular-map
+    // neighborhood UI). 0x54001B is a different opcode with a different field order.
     _worldPacket << uint8(Result);
-    WriteJamCliHouse(_worldPacket, House);
+    _worldPacket << House.HouseGUID;
+    _worldPacket << House.OwnerGUID;
+    _worldPacket << House.NeighborhoodGUID;
+    _worldPacket << uint8(House.HouseLevel);
+    _worldPacket << uint8(House.PlotIndex & 0xFF);
+    _worldPacket << uint32(SettingsFlags);
 
-    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_SVCS_UPDATE_HOUSE_SETTINGS_RESPONSE Result: {} HouseGuid: {}",
-        Result, House.HouseGUID.ToString());
+    TC_LOG_DEBUG("network.opcode",
+        "SMSG_HOUSING_SVCS_UPDATE_HOUSE_SETTINGS_RESPONSE Result: {} HouseGuid: {} Level: {} Plot: {} Settings: 0x{:08X}",
+        Result, House.HouseGUID.ToString(), House.HouseLevel, House.PlotIndex, SettingsFlags);
 
     return &_worldPacket;
 }

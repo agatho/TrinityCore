@@ -1789,36 +1789,39 @@ namespace WorldPackets::Housing
         HousingSvcsUpdateHousesLevelFavor() : ServerPacket(SMSG_HOUSING_SVCS_UPDATE_HOUSES_LEVEL_FAVOR) { }
         WorldPacket const* Write() override;
 
-        // 12.0.5 sniff-verified wire format (40 bytes for count=1):
-        //   uint8  Type        (=0 = "favor changed")
-        //   uint32 ChangeAmount (=1260, the level/favor delta)
-        //   uint32 Reason       (=1, source enum)
-        //   uint32 Count
-        //   Per entry (27 bytes):
-        //     uint8       EntryFlags         (=0)
-        //     uint32      EntryTimestamp     (=0 in sniff, server time of change)
-        //     PackedGUID  HouseGUID
-        //     int64       NewFavorTotal      (=-1 sentinel = "max" / unbounded)
-        //     uint32      Reserved           (=0)
-        //     uint8       Terminator         (=0x80, bit7 marker — likely "has next")
+        // 12.0.5 sniff-validated wire (40 bytes total in real capture).
+        // SNIFF_VALIDATION_67186.md authoritative layout:
         //
-        // The previous 3-PackedGUID entry layout was incorrect — sniff only carries
-        // a single HouseGUID per entry. OwnerGUID/NeighborhoodGUID lookups are done
-        // client-side via the cached HousingPlayerHouse → owner map.
-        uint8 Type = 0;
+        //   uint8       Result          (=0 in sniff)
+        //   uint32      ChangeAmount    (=1260, the level/favor delta)
+        //   uint32      Reason          (=1, source enum)
+        //   uint32      Field2          (=1 in sniff; semantics TBD)
+        //   PackedGUID  OwnerGUID       (empty in sniff — populated when known)
+        //   PackedGUID  NeighborhoodGUID (empty in sniff)
+        //   PackedGUID  HouseGUID       (the affected house)
+        //   uint32      NewFavorLow     ) two halves of int64 NewFavorTotal
+        //   uint32      NewFavorHigh    )  (=0xFFFFFFFF/0xFFFFFFFF = -1 sentinel "max")
+        //   uint8       Field3          (=0)
+        //   uint32      Reserved        (=0)
+        //   uint8       Terminator      (=0x80; bit7 marker)
+        //
+        // Earlier TC layout used a vector<LevelFavorEntry> with a per-entry uint8+uint32
+        // header that did NOT exist on the wire. The 13 byte difference between sniff (40)
+        // and the old encoding (40 only by coincidence when fields == 0) was masked when
+        // testing in-game with default values. Real packet captures pin the layout above.
+        uint8 Result = 0;
         uint32 ChangeAmount = 0;
         uint32 Reason = 0;
+        uint32 Field2 = 1;
 
-        struct LevelFavorEntry
-        {
-            uint8 EntryFlags = 0;
-            uint32 EntryTimestamp = 0;
-            ObjectGuid HouseGUID;
-            int64 NewFavorTotal = -1;
-            uint32 Reserved = 0;
-            uint8 Terminator = 0x80;
-        };
-        std::vector<LevelFavorEntry> Entries;
+        ObjectGuid OwnerGUID;
+        ObjectGuid NeighborhoodGUID;
+        ObjectGuid HouseGUID;
+
+        int64 NewFavorTotal = -1;
+        uint8 Field3 = 0;
+        uint32 Reserved = 0;
+        uint8 Terminator = 0x80;
     };
 
     class HousingSvcsGuildAddHouseNotification final : public ServerPacket
@@ -1923,9 +1926,25 @@ namespace WorldPackets::Housing
     public:
         HousingSvcsUpdateHouseSettingsResponse() : ServerPacket(SMSG_HOUSING_SVCS_UPDATE_HOUSE_SETTINGS_RESPONSE) { }
         WorldPacket const* Write() override;
-        // IDA case 5505051: uint8(Result) + JamCliHouse
+
+        // 12.0.5 sniff-validated wire (31 bytes total in real capture).
+        // SNIFF_VALIDATION_67186.md authoritative layout:
+        //
+        //   uint8        Result
+        //   PackedGUID   House.HouseGUID
+        //   PackedGUID   House.OwnerGUID
+        //   PackedGUID   House.NeighborhoodGUID
+        //   uint8        House.HouseLevel
+        //   uint8        PlotIndex8     (PlotIndex truncated to uint8 — sniff shows 0x20=32)
+        //   uint32       SettingsFlags  (HOUSE_SETTING_* mask; sniff shows 0)
+        //
+        // Earlier IDA case 5505051 read suggested `uint8 + uint32 + uint8 + optional uint64`
+        // for the trailing fields, but real packet capture confirms `uint8 + uint8 + uint32`
+        // (no optional uint64). The earlier form is wire-equivalent for all-zero values
+        // but mis-orders bytes when SettingsFlags != 0.
         uint8 Result = 0;
         JamCliHouse House;
+        uint32 SettingsFlags = 0;
     };
 
     class HousingSvcsGetHouseFinderInfoResponse final : public ServerPacket

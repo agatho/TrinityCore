@@ -2268,13 +2268,11 @@ void Housing::AddLevel(uint32 amount)
     if (_owner && _owner->GetSession())
     {
         WorldPackets::Housing::HousingSvcsUpdateHousesLevelFavor levelUpdate;
-        levelUpdate.Type = 0;
+        levelUpdate.Result = 0;
         levelUpdate.ChangeAmount = _favor;
         levelUpdate.Reason = _level;
-        WorldPackets::Housing::HousingSvcsUpdateHousesLevelFavor::LevelFavorEntry entry;
-        entry.HouseGUID = _houseGuid;
-        entry.NewFavorTotal = static_cast<int64>(_favor);
-        levelUpdate.Entries.push_back(std::move(entry));
+        levelUpdate.HouseGUID = _houseGuid;
+        levelUpdate.NewFavorTotal = static_cast<int64>(_favor);
         _owner->SendDirectMessage(levelUpdate.Write());
     }
 }
@@ -2301,13 +2299,11 @@ void Housing::AddFavor(uint64 amount, HousingFavorUpdateSource source /*= HOUSIN
     if (_owner && _owner->GetSession())
     {
         WorldPackets::Housing::HousingSvcsUpdateHousesLevelFavor favorUpdate;
-        favorUpdate.Type = static_cast<uint8>(source);
+        favorUpdate.Result = static_cast<uint8>(source);
         favorUpdate.ChangeAmount = _favor;
         favorUpdate.Reason = _level;
-        WorldPackets::Housing::HousingSvcsUpdateHousesLevelFavor::LevelFavorEntry entry;
-        entry.HouseGUID = _houseGuid;
-        entry.NewFavorTotal = static_cast<int64>(_favor);
-        favorUpdate.Entries.push_back(std::move(entry));
+        favorUpdate.HouseGUID = _houseGuid;
+        favorUpdate.NewFavorTotal = static_cast<int64>(_favor);
         _owner->SendDirectMessage(favorUpdate.Write());
     }
 }
@@ -2340,13 +2336,11 @@ void Housing::OnQuestCompleted(uint32 questId)
         if (_owner && _owner->GetSession())
         {
             WorldPackets::Housing::HousingSvcsUpdateHousesLevelFavor levelUpdate;
-            levelUpdate.Type = 0;
+            levelUpdate.Result = 0;
             levelUpdate.ChangeAmount = _favor;
             levelUpdate.Reason = _level;
-            WorldPackets::Housing::HousingSvcsUpdateHousesLevelFavor::LevelFavorEntry entry;
-            entry.HouseGUID = _houseGuid;
-            entry.NewFavorTotal = static_cast<int64>(_favor);
-            levelUpdate.Entries.push_back(std::move(entry));
+            levelUpdate.HouseGUID = _houseGuid;
+            levelUpdate.NewFavorTotal = static_cast<int64>(_favor);
             _owner->SendDirectMessage(levelUpdate.Write());
         }
     }

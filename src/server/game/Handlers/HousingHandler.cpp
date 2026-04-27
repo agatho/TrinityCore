@@ -3397,6 +3397,7 @@ void WorldSession::HandleHousingSvcsUpdateHouseSettings(WorldPackets::Housing::H
     response.House.NeighborhoodGUID = housing->GetNeighborhoodGuid();
     response.House.HouseLevel = static_cast<uint8>(housing->GetLevel());
     response.House.PlotIndex = housing->GetPlotIndex();
+    response.SettingsFlags = housing->GetSettingsFlags();
     SendPacket(response.Write());
 
     // Settings changes (visibility, permissions) require house finder data refresh
@@ -5424,17 +5425,14 @@ void WorldSession::HandleHousingSvcsQueryHouseLevelFavor(WorldPackets::Housing::
     Housing* housing = player->GetHousing();
 
     WorldPackets::Housing::HousingSvcsUpdateHousesLevelFavor response;
-    response.Type = 0; // Query response type
+    response.Result = 0; // Query response type
 
     if (housing && housing->GetHouseGuid() == housingSvcsQueryHouseLevelFavor.HouseGuid)
     {
         response.ChangeAmount = static_cast<uint32>(housing->GetFavor());
         response.Reason = static_cast<uint32>(housing->GetLevel()); // surfaces level via Reason field — clients display both
-
-        WorldPackets::Housing::HousingSvcsUpdateHousesLevelFavor::LevelFavorEntry entry;
-        entry.HouseGUID = housing->GetHouseGuid();
-        entry.NewFavorTotal = static_cast<int64>(housing->GetFavor());
-        response.Entries.push_back(std::move(entry));
+        response.HouseGUID = housing->GetHouseGuid();
+        response.NewFavorTotal = static_cast<int64>(housing->GetFavor());
     }
 
     SendPacket(response.Write());

@@ -1203,25 +1203,21 @@ void WorldSession::HandleNeighborhoodBuyHouse(WorldPackets::Neighborhood::Neighb
             // Packet 1: Initial level assignment
             {
                 WorldPackets::Housing::HousingSvcsUpdateHousesLevelFavor levelFavor;
-                levelFavor.Type = 0;
+                levelFavor.Result = 0;
                 levelFavor.ChangeAmount = 0;
                 levelFavor.Reason = 1;
-                WorldPackets::Housing::HousingSvcsUpdateHousesLevelFavor::LevelFavorEntry entry;
-                entry.HouseGUID = h->GetHouseGuid();
-                entry.NewFavorTotal = 910;
-                levelFavor.Entries.push_back(std::move(entry));
+                levelFavor.HouseGUID = h->GetHouseGuid();
+                levelFavor.NewFavorTotal = 910;
                 SendPacket(levelFavor.Write());
             }
             // Packet 2: Favor state
             {
                 WorldPackets::Housing::HousingSvcsUpdateHousesLevelFavor levelFavor;
-                levelFavor.Type = 0;
+                levelFavor.Result = 0;
                 levelFavor.ChangeAmount = 910;
                 levelFavor.Reason = 1;
-                WorldPackets::Housing::HousingSvcsUpdateHousesLevelFavor::LevelFavorEntry entry;
-                entry.HouseGUID = h->GetHouseGuid();
-                entry.NewFavorTotal = 910;
-                levelFavor.Entries.push_back(std::move(entry));
+                levelFavor.HouseGUID = h->GetHouseGuid();
+                levelFavor.NewFavorTotal = 910;
                 SendPacket(levelFavor.Write());
             }
         }
