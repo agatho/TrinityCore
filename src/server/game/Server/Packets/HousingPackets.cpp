@@ -1828,8 +1828,9 @@ WorldPacket const* HousingSvcsSetNeighborhoodSettingsResponse::Write()
 // Housing General SMSG Responses (0x55xxxx)
 // ============================================================
 
-// Helper: Write JamNeighborhoodRosterEntry struct to packet (IDA sub_7FF6F6E0A460)
-static void WriteJamNeighborhoodRosterEntry(WorldPacket& packet, JamNeighborhoodRosterEntry const& entry)
+// Helper: Write InviteEntry payload (IDA Housing_ParseInviteEntry, sub_7FF75C1ACB90).
+// Wire: uint64 + PackedGUID + PackedGUID + uint64.
+static void WriteInviteEntry(WorldPacket& packet, InviteEntry const& entry)
 {
     packet << uint64(entry.Timestamp);
     packet << entry.PlayerGuid;
@@ -2826,21 +2827,23 @@ WorldPacket const* NeighborhoodDeclineInvitationResponse::Write()
 
 WorldPacket const* NeighborhoodPlayerGetInviteResponse::Write()
 {
+    // IDA-verified wire (build 67186, 0x5C000B): uint8 Result + InviteEntry(48 bytes).
     _worldPacket << uint8(Result);
-    Housing::WriteJamNeighborhoodRosterEntry(_worldPacket, Entry);
+    Housing::WriteInviteEntry(_worldPacket, Entry);
 
-    TC_LOG_DEBUG("network.opcode", "SMSG_NEIGHBORHOOD_PLAYER_GET_INVITE_RESPONSE Result: {} PlayerGuid: {}",
-        Result, Entry.PlayerGuid.ToString());
+    TC_LOG_DEBUG("network.opcode", "SMSG_NEIGHBORHOOD_PLAYER_GET_INVITE_RESPONSE Result: {} PlayerGuid: {} HouseGuid: {} Timestamp: {}",
+        Result, Entry.PlayerGuid.ToString(), Entry.HouseGuid.ToString(), Entry.Timestamp);
 
     return &_worldPacket;
 }
 
 WorldPacket const* NeighborhoodGetInvitesResponse::Write()
 {
+    // IDA-verified wire (build 67186, 0x5C000C): uint8 Result + uint32 Count + InviteEntry[Count].
     _worldPacket << uint8(Result);
     _worldPacket << uint32(Invites.size());
     for (auto const& invite : Invites)
-        Housing::WriteJamNeighborhoodRosterEntry(_worldPacket, invite);
+        Housing::WriteInviteEntry(_worldPacket, invite);
 
     TC_LOG_DEBUG("network.opcode", "SMSG_NEIGHBORHOOD_GET_INVITES_RESPONSE Result: {} InviteCount: {}", Result, Invites.size());
 

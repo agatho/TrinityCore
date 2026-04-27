@@ -72,14 +72,38 @@ namespace WorldPackets::Housing
         bool PlotReserved = false;
     };
 
-    // JamNeighborhoodRosterEntry — sub_7FF6F6E0A460 (48 bytes, used by 0x5C000E, 0x5C000F)
-    // Wire order: uint64 + PackedGUID + PackedGUID + uint64
-    struct JamNeighborhoodRosterEntry
+    // InviteEntry — Housing_ParseInviteEntry (sub_7FF75C1ACB90), 48 bytes total.
+    // Used by 0x5C000B PlayerGetInviteResponse (single) and 0x5C000C GetInvitesResponse (vector).
+    // IDA-verified wire order:
+    //   uint64 Timestamp           (ai_Process_HousingDataPacket — 8 bytes)
+    //   PackedGUID PlayerGuid      (helper_31E0120)
+    //   PackedGUID HouseGuid       (helper_31E0120)
+    //   uint64 ExtraData           (ai_Process_HousingDataPacket — 8 bytes)
+    //
+    // Distinct from the 18-byte RosterEntry parsed by Housing_ParseRosterEntry
+    // (sub_7FF75C1ACC50, used by 0x5C0010 NeighborhoodRosterResidentUpdate).
+    // Earlier TC versions named this `JamNeighborhoodRosterEntry` and reused it
+    // for both the invite-list and roster paths — that was a mismap; only the
+    // invite path has this layout.
+    struct InviteEntry
     {
         uint64 Timestamp = 0;
         ObjectGuid PlayerGuid;
         ObjectGuid HouseGuid;
         uint64 ExtraData = 0;
+    };
+
+    // RosterEntry — Housing_ParseRosterEntry (sub_7FF75C1ACC50), 18 bytes wire.
+    // Used by 0x5C0010 NeighborhoodRosterResidentUpdate.
+    // IDA-verified wire order:
+    //   PackedGUID PlayerGuid
+    //   uint8 ResidentType  (full byte, e.g. NeighborhoodMemberRole)
+    //   uint8 (top bit only -> IsPrivileged)
+    struct RosterEntry
+    {
+        ObjectGuid PlayerGuid;
+        uint8 ResidentType = 0;
+        bool IsPrivileged = false;
     };
 
     // IDA-verified wire format for house/resident entries nested inside neighborhood data.
@@ -2993,9 +3017,10 @@ namespace WorldPackets::Neighborhood
     public:
         NeighborhoodPlayerGetInviteResponse() : ServerPacket(SMSG_NEIGHBORHOOD_PLAYER_GET_INVITE_RESPONSE) { }
         WorldPacket const* Write() override;
-        // IDA 12.0 verified (0x5C000E): uint8 Result + JamNeighborhoodRosterEntry(48 bytes)
+        // IDA-verified wire (build 67186, 0x5C000B): uint8 Result + InviteEntry(48 bytes)
+        // Per Housing_ParseInviteEntry (sub_7FF75C1ACB90): uint64 + 2×PackedGUID + uint64.
         uint8 Result = 0;
-        Housing::JamNeighborhoodRosterEntry Entry;
+        Housing::InviteEntry Entry;
     };
 
     class NeighborhoodGetInvitesResponse final : public ServerPacket
@@ -3003,9 +3028,9 @@ namespace WorldPackets::Neighborhood
     public:
         NeighborhoodGetInvitesResponse() : ServerPacket(SMSG_NEIGHBORHOOD_GET_INVITES_RESPONSE) { }
         WorldPacket const* Write() override;
-        // IDA 12.0 verified (0x5C000F): uint8 Result + uint32 Count + JamNeighborhoodRosterEntry[Count]
+        // IDA-verified wire (build 67186, 0x5C000C): uint8 Result + uint32 Count + InviteEntry[Count]
         uint8 Result = 0;
-        std::vector<Housing::JamNeighborhoodRosterEntry> Invites;
+        std::vector<Housing::InviteEntry> Invites;
     };
 
     class NeighborhoodInviteNotification final : public ServerPacket

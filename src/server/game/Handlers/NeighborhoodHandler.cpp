@@ -975,7 +975,7 @@ void WorldSession::HandleNeighborhoodGetInvites(WorldPackets::Neighborhood::Neig
     response.Invites.reserve(invites.size());
     for (auto const& invite : invites)
     {
-        WorldPackets::Housing::JamNeighborhoodRosterEntry entry;
+        WorldPackets::Housing::InviteEntry entry;
         entry.Timestamp = invite.InviteTime;
         entry.PlayerGuid = invite.InviteeGuid;
         entry.HouseGuid = ObjectGuid::Empty; // invitees don't have houses yet
