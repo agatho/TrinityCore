@@ -2502,8 +2502,15 @@ void NeighborhoodOfferOwnershipResponsePacket::Read()
 
 WorldPacket const* NeighborhoodCharterUpdateResponse::Write()
 {
-    // IDA 0x5B0000: uint8 + PackedGUID + uint32 + uint32 + uint32(arraySize) + uint32 + PackedGUID[arraySize] + uint8(nameLen) + string
-    _worldPacket << uint8(Result);
+    // IDA-verified wire (build 67186, sub_7FF75C1DF0B0 case 0x5B0000, EA 0x7FF75C1DF0FC):
+    //   Bits<1>(error) + ObjectGuid CharterGuid + uint32 MapID + uint32 SignatureCount
+    //   + uint32 SignersCount + uint32 Unknown + ObjectGuid[SignersCount]
+    //   + Bits<8>(NameLen) + StringData
+    // The leading bit is the error flag (bit 7 of first byte). Old uint8(Result)
+    // wrote the full Result byte — for all standard Result values (0..127) bit 7
+    // is 0, so client always saw "no error" even on failures.
+    _worldPacket.WriteBit(Result != 0);
+    _worldPacket.FlushBits();
     _worldPacket << CharterGuid;
     _worldPacket << uint32(MapID);
     _worldPacket << uint32(SignatureCount);
@@ -2514,16 +2521,18 @@ WorldPacket const* NeighborhoodCharterUpdateResponse::Write()
     _worldPacket << uint8(NeighborhoodName.size());
     _worldPacket.WriteString(NeighborhoodName);
 
-    TC_LOG_DEBUG("network.opcode", "SMSG_NEIGHBORHOOD_CHARTER_UPDATE_RESPONSE Result: {} CharterGuid: {} MapID: {} SigCount: {} Signers: {} Name: '{}'",
-        Result, CharterGuid.ToString(), MapID, SignatureCount, Signers.size(), NeighborhoodName);
+    TC_LOG_DEBUG("network.opcode", "SMSG_NEIGHBORHOOD_CHARTER_UPDATE_RESPONSE Result: {} (error_bit={}) CharterGuid: {} MapID: {} SigCount: {} Signers: {} Name: '{}'",
+        Result, Result != 0, CharterGuid.ToString(), MapID, SignatureCount, Signers.size(), NeighborhoodName);
 
     return &_worldPacket;
 }
 
 WorldPacket const* NeighborhoodCharterOpenUIResponse::Write()
 {
-    // IDA 0x5B0001: identical wire format to 0x5B0000
-    _worldPacket << uint8(Result);
+    // IDA-verified wire (build 67186, sub_7FF75C1DF0B0 case 0x5B0001, EA 0x7FF75C1DF350):
+    // Identical to 0x5B0000 (charter UI update + open both use the same shape).
+    _worldPacket.WriteBit(Result != 0);
+    _worldPacket.FlushBits();
     _worldPacket << CharterGuid;
     _worldPacket << uint32(MapID);
     _worldPacket << uint32(SignatureCount);
@@ -2534,8 +2543,8 @@ WorldPacket const* NeighborhoodCharterOpenUIResponse::Write()
     _worldPacket << uint8(NeighborhoodName.size());
     _worldPacket.WriteString(NeighborhoodName);
 
-    TC_LOG_DEBUG("network.opcode", "SMSG_NEIGHBORHOOD_CHARTER_OPEN_UI_RESPONSE Result: {} CharterGuid: {} MapID: {} SigCount: {} Signers: {} Name: '{}'",
-        Result, CharterGuid.ToString(), MapID, SignatureCount, Signers.size(), NeighborhoodName);
+    TC_LOG_DEBUG("network.opcode", "SMSG_NEIGHBORHOOD_CHARTER_OPEN_UI_RESPONSE Result: {} (error_bit={}) CharterGuid: {} MapID: {} SigCount: {} Signers: {} Name: '{}'",
+        Result, Result != 0, CharterGuid.ToString(), MapID, SignatureCount, Signers.size(), NeighborhoodName);
 
     return &_worldPacket;
 }
