@@ -31993,73 +31993,120 @@ void Player::ClearDelveData(int32 mapId)
 
 namespace
 {
-    // PlayerDataElementType: Int=0, Float=1 (verified IDA build 67186 — sub_7FF75CF73E50).
+    // PlayerDataElementType: Int=0 (int64), Float=1 (32-bit float). Verified
+    // against IDA build 67186 (sub_7FF75CF73E50) and PlayerDataElementAccount.dbd
+    // / PlayerDataElementCharacter.dbd LAYOUT AEC1DEF3 (build 12.0.5.67186).
     constexpr uint32 PDE_TYPE_INT = 0;
     constexpr uint32 PDE_TYPE_FLOAT = 1;
+
+    // Resolve a PDE record id (used by the C_DelvesUI Lua API and by the
+    // server-side PDE_* constants in DelvesDefines.h) into the corresponding
+    // ActivePlayerData::{Account,Character}DataElements array index.
+    // Returns std::nullopt if the record id is not in the DB2 store.
+    inline Optional<uint32> ResolveAccountPdeStorageIndex(uint32 recordId)
+    {
+        if (PlayerDataElementAccountEntry const* entry = sPlayerDataElementAccountStore.LookupEntry(recordId))
+            return uint32(entry->StorageIndex);
+        return std::nullopt;
+    }
+    inline Optional<uint32> ResolveCharacterPdeStorageIndex(uint32 recordId)
+    {
+        if (PlayerDataElementCharacterEntry const* entry = sPlayerDataElementCharacterStore.LookupEntry(recordId))
+            return uint32(entry->StorageIndex);
+        return std::nullopt;
+    }
 }
 
 void Player::SetAccountDataElementInt(uint32 id, int64 value)
 {
+    Optional<uint32> storageIdx = ResolveAccountPdeStorageIndex(id);
+    if (!storageIdx)
+    {
+        TC_LOG_DEBUG("entities.player", "SetAccountDataElementInt: PDE record {} not in PlayerDataElementAccount.db2", id);
+        return;
+    }
     // ModifyValue(field, index) auto-grows the dynamic field with zero-initialised
     // slots up to `index`, marks the slot dirty, and returns a mutable reference.
     auto slot = m_values.ModifyValue(&Player::m_activePlayerData)
-        .ModifyValue(&UF::ActivePlayerData::AccountDataElements, id);
+        .ModifyValue(&UF::ActivePlayerData::AccountDataElements, *storageIdx);
     SetUpdateFieldValue(slot.ModifyValue(&UF::PlayerDataElement::Type), PDE_TYPE_INT);
     SetUpdateFieldValue(slot.ModifyValue(&UF::PlayerDataElement::Int64Value), value);
 }
 
 void Player::SetAccountDataElementFloat(uint32 id, float value)
 {
+    Optional<uint32> storageIdx = ResolveAccountPdeStorageIndex(id);
+    if (!storageIdx)
+    {
+        TC_LOG_DEBUG("entities.player", "SetAccountDataElementFloat: PDE record {} not in PlayerDataElementAccount.db2", id);
+        return;
+    }
     auto slot = m_values.ModifyValue(&Player::m_activePlayerData)
-        .ModifyValue(&UF::ActivePlayerData::AccountDataElements, id);
+        .ModifyValue(&UF::ActivePlayerData::AccountDataElements, *storageIdx);
     SetUpdateFieldValue(slot.ModifyValue(&UF::PlayerDataElement::Type), PDE_TYPE_FLOAT);
     SetUpdateFieldValue(slot.ModifyValue(&UF::PlayerDataElement::FloatValue), value);
 }
 
 void Player::SetCharacterDataElementInt(uint32 id, int64 value)
 {
+    Optional<uint32> storageIdx = ResolveCharacterPdeStorageIndex(id);
+    if (!storageIdx)
+    {
+        TC_LOG_DEBUG("entities.player", "SetCharacterDataElementInt: PDE record {} not in PlayerDataElementCharacter.db2", id);
+        return;
+    }
     auto slot = m_values.ModifyValue(&Player::m_activePlayerData)
-        .ModifyValue(&UF::ActivePlayerData::CharacterDataElements, id);
+        .ModifyValue(&UF::ActivePlayerData::CharacterDataElements, *storageIdx);
     SetUpdateFieldValue(slot.ModifyValue(&UF::PlayerDataElement::Type), PDE_TYPE_INT);
     SetUpdateFieldValue(slot.ModifyValue(&UF::PlayerDataElement::Int64Value), value);
 }
 
 void Player::SetCharacterDataElementFloat(uint32 id, float value)
 {
+    Optional<uint32> storageIdx = ResolveCharacterPdeStorageIndex(id);
+    if (!storageIdx)
+    {
+        TC_LOG_DEBUG("entities.player", "SetCharacterDataElementFloat: PDE record {} not in PlayerDataElementCharacter.db2", id);
+        return;
+    }
     auto slot = m_values.ModifyValue(&Player::m_activePlayerData)
-        .ModifyValue(&UF::ActivePlayerData::CharacterDataElements, id);
+        .ModifyValue(&UF::ActivePlayerData::CharacterDataElements, *storageIdx);
     SetUpdateFieldValue(slot.ModifyValue(&UF::PlayerDataElement::Type), PDE_TYPE_FLOAT);
     SetUpdateFieldValue(slot.ModifyValue(&UF::PlayerDataElement::FloatValue), value);
 }
 
 UF::PlayerDataElement const* Player::GetAccountDataElement(uint32 id) const
 {
-    if (id >= m_activePlayerData->AccountDataElements.size())
+    Optional<uint32> storageIdx = ResolveAccountPdeStorageIndex(id);
+    if (!storageIdx || *storageIdx >= m_activePlayerData->AccountDataElements.size())
         return nullptr;
-    return &m_activePlayerData->AccountDataElements[id];
+    return &m_activePlayerData->AccountDataElements[*storageIdx];
 }
 
 UF::PlayerDataElement const* Player::GetCharacterDataElement(uint32 id) const
 {
-    if (id >= m_activePlayerData->CharacterDataElements.size())
+    Optional<uint32> storageIdx = ResolveCharacterPdeStorageIndex(id);
+    if (!storageIdx || *storageIdx >= m_activePlayerData->CharacterDataElements.size())
         return nullptr;
-    return &m_activePlayerData->CharacterDataElements[id];
+    return &m_activePlayerData->CharacterDataElements[*storageIdx];
 }
 
 void Player::RemoveAccountDataElement(uint32 id)
 {
-    if (id >= m_activePlayerData->AccountDataElements.size())
+    Optional<uint32> storageIdx = ResolveAccountPdeStorageIndex(id);
+    if (!storageIdx || *storageIdx >= m_activePlayerData->AccountDataElements.size())
         return;
     RemoveDynamicUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData)
-        .ModifyValue(&UF::ActivePlayerData::AccountDataElements), id);
+        .ModifyValue(&UF::ActivePlayerData::AccountDataElements), *storageIdx);
 }
 
 void Player::RemoveCharacterDataElement(uint32 id)
 {
-    if (id >= m_activePlayerData->CharacterDataElements.size())
+    Optional<uint32> storageIdx = ResolveCharacterPdeStorageIndex(id);
+    if (!storageIdx || *storageIdx >= m_activePlayerData->CharacterDataElements.size())
         return;
     RemoveDynamicUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData)
-        .ModifyValue(&UF::ActivePlayerData::CharacterDataElements), id);
+        .ModifyValue(&UF::ActivePlayerData::CharacterDataElements), *storageIdx);
 }
 
 bool Player::IsInDelveInstance() const
@@ -32067,7 +32114,7 @@ bool Player::IsInDelveInstance() const
     Map const* map = GetMap();
     if (!map || !map->Instanceable())
         return false;
-    return map->GetDifficultyID() == Delves::DELVE_DIFFICULTY_ID;
+    return map->GetDifficultyID() == Difficulty(Delves::DELVE_DIFFICULTY_ID);
 }
 
 void Player::LoadDelvePlayerDataElements()
