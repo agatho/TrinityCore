@@ -157,6 +157,37 @@ DelveTierReward const* DelveMgr::GetTierReward(uint8 tier) const
     return itr != _tierRewards.end() ? &itr->second : nullptr;
 }
 
+Optional<uint32> DelveMgr::GetTieredEntrancePDEID(uint32 tieredEntranceId)
+{
+    // Stubbed — see TieredEntranceCVarNames comment block in DelvesDefines.h.
+    // The retail client computes this via an anti-analysis-obfuscated Lua
+    // binding (IDA `0x7FF75C96A1EC`). Until a retail sniff captures
+    // SMSG_DELVES_ACCOUNT_DATA_ELEMENT_CHANGED for a tier completion, we
+    // cannot statically populate per-tier PDE records.
+    TC_LOG_TRACE("scripts.delves",
+        "DelveMgr::GetTieredEntrancePDEID({}) — encoding not yet decoded, returning nullopt",
+        tieredEntranceId);
+    return std::nullopt;
+}
+
+TieredEntranceType DelveMgr::GetTieredEntranceType(uint32 tieredEntranceId)
+{
+    // The Lua binding GetTieredEntranceType (IDA `0x7FF75C96A80C`) is also
+    // obfuscated. As a server-side fallback, callers should resolve the
+    // tieredEntranceID to a mapId via their own context (e.g. delve_template
+    // join) and return TIERED_ENTRANCE_TYPE_DELVE for any registered delve.
+    // This stub returns Invalid for now.
+    TC_LOG_TRACE("scripts.delves",
+        "DelveMgr::GetTieredEntranceType({}) — lookup not yet decoded, returning Invalid",
+        tieredEntranceId);
+    return TIERED_ENTRANCE_TYPE_INVALID;
+}
+
+bool DelveMgr::IsTieredEntranceScenarioMap(uint32 mapId) const
+{
+    return _delveTemplatesByMap.find(mapId) != _delveTemplatesByMap.end();
+}
+
 bool DelveMgr::IsDelveCurrentlyBountiful(uint32 mapChallengeModeId) const
 {
     std::vector<uint32> bountiful = GetTodaysBountifulDelves();

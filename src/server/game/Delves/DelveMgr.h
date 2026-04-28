@@ -20,6 +20,7 @@
 
 #include "Define.h"
 #include "DelvesDefines.h"
+#include "Optional.h"
 #include <unordered_map>
 #include <vector>
 
@@ -59,6 +60,23 @@ public:
     // Bountiful
     bool IsDelveCurrentlyBountiful(uint32 mapChallengeModeId) const;
     std::vector<uint32> GetTodaysBountifulDelves() const;
+
+    // Tiered-entrance pipeline (see TieredEntranceCVarNames documentation in
+    // DelvesDefines.h for the IDA findings + obfuscation barrier).
+    // Returns the PDE record id used by the client for a given tieredEntranceID.
+    // Stub: returns std::nullopt because the client-side encoding rule is
+    // anti-analysis-obfuscated. Will become a hardcoded (tieredEntranceID →
+    // pdeRecordId) lookup once a retail sniff observes the mapping.
+    static Optional<uint32> GetTieredEntrancePDEID(uint32 tieredEntranceId);
+
+    // Returns the entrance type for a tieredEntranceID. Without the obfuscated
+    // client lookup, the server falls back to inferring the type from the map:
+    // any mapId that resolves via GetDelveTemplate is TIERED_ENTRANCE_TYPE_DELVE.
+    static TieredEntranceType GetTieredEntranceType(uint32 tieredEntranceId);
+
+    // Returns true if a given map should be treated as a tiered-entrance scenario.
+    // Currently: true iff the map has a delve_template row.
+    bool IsTieredEntranceScenarioMap(uint32 mapId) const;
 
 private:
     void LoadDelveTemplates();

@@ -139,6 +139,46 @@ enum TieredEntranceType : int32
     TIERED_ENTRANCE_TYPE_RESERVED = 3,
 };
 
+// ---------------------------------------------------------------------------
+// Tiered-entrance client CVars (build 12.0.5.67186, IDA dump)
+// ---------------------------------------------------------------------------
+// Three Per-Character CVars drive the tiered-entrance UI on the client. They
+// are *client-local* state (saved to WTF) populated from PlayerDataElement
+// values pushed by the server.
+//
+//   lastSelectedTieredEntranceTier         (cvar_storage @ 0x7FF75FAA6410)
+//   highestUnlockedTieredEntranceTier      (cvar_storage @ 0x7FF75FAA64E0)
+//   lastLockedTieredEntranceCompanionAbilities (cvar_storage @ 0x7FF75FAA6340)
+//
+// The mapping (tieredEntranceID → PDE record id) is computed by the Lua
+// binding GetTieredEntrancePDEID at IDA `0x7FF75C96A1EC`. That function and
+// its siblings (GetTieredEntranceType, GetDelveEntranceMapID,
+// IsTieredEntranceScenario, GetTieredEntranceActiveSpells) are protected by
+// the WoW anti-analysis pass — control-flow flattening, runtime constant
+// decryption (xor-ror chains via `g_Data_414E700`), `secret`/`sub_7FF75BCF90*`
+// helpers, junk `rdtsc`/`xchg ch,ch` instructions — so neither IDA's
+// decompiler nor manual disasm yields the lookup formula. The function does
+// perform a `lower_bound` scan of a sorted `uint32[]` (see disasm at
+// 0x7FF75C96A3C0) keyed on a runtime-derived hash of the input arg, so the
+// encoding is almost certainly a static map present in the binary's data
+// segment, but its key derivation is unrecoverable without symbolic
+// execution or a runtime debugger.
+//
+// Practical consequences for the server:
+//   * We cannot statically populate per-tier PDE records during login.
+//   * The client falls back gracefully when a PDE record is missing — it
+//     reports the tier as "locked" / "not-yet-completed", which is the
+//     expected default state until the player actually clears a tier.
+//   * When a retail sniff captures SMSG_DELVES_ACCOUNT_DATA_ELEMENT_CHANGED
+//     for a tier completion, we can populate a hardcoded
+//     (mapId, tier) → PDE_record_id table in a future patch.
+struct TieredEntranceCVarNames
+{
+    static constexpr char const* LastSelectedTier              = "lastSelectedTieredEntranceTier";
+    static constexpr char const* HighestUnlockedTier           = "highestUnlockedTieredEntranceTier";
+    static constexpr char const* LastLockedCompanionAbilities  = "lastLockedTieredEntranceCompanionAbilities";
+};
+
 enum class DelveState : uint8
 {
     Inactive    = 0,
