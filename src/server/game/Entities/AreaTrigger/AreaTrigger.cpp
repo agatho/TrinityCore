@@ -169,7 +169,10 @@ bool AreaTrigger::Create(AreaTriggerCreatePropertiesId areaTriggerCreateProperti
 
     SetSpellVisual(spellVisual);
     if (!IsStaticSpawn())
+    {
         SetUpdateFieldValue(areaTriggerData.ModifyValue(&UF::AreaTriggerData::TimeToTargetScale), GetCreateProperties()->TimeToTargetScale != 0 ? GetCreateProperties()->TimeToTargetScale : *m_areaTriggerData->Duration);
+        SetUpdateFieldValue(areaTriggerData.ModifyValue(&UF::AreaTriggerData::TimeToTargetPos), *m_areaTriggerData->Duration);
+    }
     SetUpdateFieldValue(areaTriggerData.ModifyValue(&UF::AreaTriggerData::BoundsRadius2D), GetCreateProperties()->Shape.GetMaxSearchRadius());
     SetUpdateFieldValue(areaTriggerData.ModifyValue(&UF::AreaTriggerData::DecalPropertiesID), GetCreateProperties()->DecalPropertiesId);
     if (IsServerSide())
@@ -206,8 +209,6 @@ bool AreaTrigger::Create(AreaTriggerCreatePropertiesId areaTriggerCreateProperti
             fieldFlags |= AreaTriggerFieldFlags::AbsoluteOrientation;
         if (flags.HasFlag(AreaTriggerCreatePropertiesFlag::HasDynamicShape))
             fieldFlags |= AreaTriggerFieldFlags::DynamicShape;
-        if (flags.HasFlag(AreaTriggerCreatePropertiesFlag::HasAttached))
-            fieldFlags |= AreaTriggerFieldFlags::Attached;
         if (flags.HasFlag(AreaTriggerCreatePropertiesFlag::HasFaceMovementDir))
             fieldFlags |= AreaTriggerFieldFlags::FaceMovementDir;
         if (flags.HasFlag(AreaTriggerCreatePropertiesFlag::HasFollowsTerrain))
@@ -234,8 +235,9 @@ bool AreaTrigger::Create(AreaTriggerCreatePropertiesId areaTriggerCreateProperti
             PhasingHandler::InitDbPhaseShift(GetPhaseShift(), spawnData->phaseUseFlags, spawnData->phaseId, spawnData->phaseGroup);
     }
 
-    if (target && HasAreaTriggerFlag(AreaTriggerFieldFlags::Attached))
+    if (target && aurEff)
     {
+        SetAreaTriggerFlag(AreaTriggerFieldFlags::Attached);
         m_movementInfo.transport.guid = target->GetGUID();
         m_updateFlag.MovementTransport = true;
     }
@@ -893,8 +895,8 @@ void AreaTrigger::HandleUnitEnter(Unit* unit)
 
     _ai->OnUnitEnter(unit);
 
-    // OnUnitEnter script can despawn this areatrigger
-    if (!IsInWorld())
+    // OnUnitEnter script can despawn this areatrigger or teleport player to a different map
+    if (!IsInWorld() || !IsInMap(unit))
         return;
 
     // Register areatrigger in Unit after actions/scripts to allow them to determine
@@ -923,10 +925,11 @@ void AreaTrigger::HandleUnitExitInternal(Unit* unit, AreaTriggerExitReason exitM
 
     UndoActions(unit);
 
+    // OnUnitExit script can teleport player to another map, causing it to attempt to exit the areatrigger again (from Unit::ExitAllAreaTriggers)
+    unit->ExitAreaTrigger(this);
+
     if (canTriggerOnExit)
         _ai->OnUnitExit(unit, exitMode);
-
-    unit->ExitAreaTrigger(this);
 }
 
 void AreaTrigger::HandleUnitExit(Unit* unit)
@@ -1496,25 +1499,25 @@ bool AreaTrigger::IsNeverVisibleFor(WorldObject const* seer, bool allowServersid
     return false;
 }
 
-void AreaTrigger::BuildValuesCreate(ByteBuffer* data, UF::UpdateFieldFlag flags, Player const* target) const
+void AreaTrigger::BuildValuesCreate(UF::UpdateFieldFlag flags, ByteBuffer& data, Player const* target) const
 {
-    m_objectData->WriteCreate(*data, flags, this, target);
-    m_areaTriggerData->WriteCreate(*data, flags, this, target);
+    m_objectData->WriteCreate(flags, data, target, this);
+    m_areaTriggerData->WriteCreate(flags, data, target, this);
 }
 
-void AreaTrigger::BuildValuesUpdate(ByteBuffer* data, UF::UpdateFieldFlag flags, Player const* target) const
+void AreaTrigger::BuildValuesUpdate(UF::UpdateFieldFlag flags, ByteBuffer& data, Player const* target) const
 {
-    *data << uint32(m_values.GetChangedObjectTypeMask());
+    data << uint32(m_values.GetChangedObjectTypeMask());
 
     if (m_values.HasChanged(TYPEID_OBJECT))
-        m_objectData->WriteUpdate(*data, flags, this, target);
+        m_objectData->WriteUpdate(flags, data, target, this);
 
     if (m_values.HasChanged(TYPEID_AREATRIGGER))
-        m_areaTriggerData->WriteUpdate(*data, flags, this, target);
+        m_areaTriggerData->WriteUpdate(flags, data, target, this);
 }
 
 void AreaTrigger::BuildValuesUpdateForPlayerWithMask(UpdateData* data, UF::ObjectData::Mask const& requestedObjectMask,
-    UF::AreaTriggerData::Mask const& requestedAreaTriggerMask, Player const* target) const
+    UF::AreaTriggerData::Mask const& requestedAreaTriggerMask, Player const* target, bool ignoreNestedChangesMask) const
 {
     UF::UpdateFieldFlag flags = GetUpdateFieldFlagsFor(target);
     UpdateMask<NUM_CLIENT_OBJECT_TYPES> valuesMask;
@@ -1527,14 +1530,14 @@ void AreaTrigger::BuildValuesUpdateForPlayerWithMask(UpdateData* data, UF::Objec
     ByteBuffer& buffer = PrepareValuesUpdateBuffer(data);
     std::size_t sizePos = buffer.wpos();
     buffer << uint32(0);
-    BuildEntityFragmentsForValuesUpdateForPlayerWithMask(&buffer, flags);
+    BuildEntityFragmentsForValuesUpdateForPlayerWithMask(buffer, flags);
     buffer << uint32(valuesMask.GetBlock(0));
 
     if (valuesMask[TYPEID_OBJECT])
-        m_objectData->WriteUpdate(buffer, requestedObjectMask, true, this, target);
+        m_objectData->WriteUpdate(requestedObjectMask, buffer, target, this, ignoreNestedChangesMask);
 
     if (valuesMask[TYPEID_AREATRIGGER])
-        m_areaTriggerData->WriteUpdate(buffer, requestedAreaTriggerMask, true, this, target);
+        m_areaTriggerData->WriteUpdate(requestedAreaTriggerMask, buffer, target, this, ignoreNestedChangesMask);
 
     buffer.put<uint32>(sizePos, buffer.wpos() - sizePos - 4);
 
@@ -1546,14 +1549,14 @@ void AreaTrigger::ValuesUpdateForPlayerWithMaskSender::operator()(Player const* 
     UpdateData udata(Owner->GetMapId());
     WorldPacket packet;
 
-    Owner->BuildValuesUpdateForPlayerWithMask(&udata, ObjectMask.GetChangesMask(), AreaTriggerMask.GetChangesMask(), player);
+    Owner->BuildValuesUpdateForPlayerWithMask(&udata, ObjectMask.GetChangesMask(), AreaTriggerMask.GetChangesMask(), player, IgnoreNestedChangesMask);
 
     udata.BuildPacket(&packet);
     player->SendDirectMessage(&packet);
 }
 
-void AreaTrigger::ClearUpdateMask(bool remove)
+void AreaTrigger::ClearValuesChangesMask()
 {
     m_values.ClearChangesMask(&AreaTrigger::m_areaTriggerData);
-    Object::ClearUpdateMask(remove);
+    WorldObject::ClearValuesChangesMask();
 }
