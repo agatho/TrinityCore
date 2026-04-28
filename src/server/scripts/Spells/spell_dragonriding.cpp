@@ -59,10 +59,7 @@ static SpellCastResult CheckSkyriding(SpellScript* script)
 {
     Unit* caster = script->GetCaster();
     if (!caster->HasExtraUnitMovementFlag2(MOVEMENTFLAG3_CAN_ADV_FLY))
-    {
-        script->SetCustomCastResultMessage(SPELL_CUSTOM_ERROR_REQUIRES_SKYRIDING);
-        return SPELL_FAILED_CUSTOM_ERROR;
-    }
+        return SPELL_FAILED_DRAGONRIDING_RIDING_REQUIREMENT;
     return SPELL_CAST_OK;
 }
 
