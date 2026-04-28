@@ -8475,6 +8475,7 @@ void Unit::UpdateMountCapability()
         else if (MountCapabilityEntry const* capability = sMountCapabilityStore.LookupEntry(aurEff->GetAmountAsInt())) // aura may get removed by interrupt flag, reapply
         {
             SetFlightCapabilityID(capability->FlightCapabilityID, true);
+            SetDriveCapabilityID(capability->DriveCapabilityID, true);
 
             if (!HasAura(capability->ModSpellAuraID))
                 CastSpell(this, capability->ModSpellAuraID, aurEff);
@@ -9006,6 +9007,10 @@ void Unit::SetFlightCapabilityID(int32 flightCapabilityId, bool clientUpdate)
         return;
 
     SetUpdateFieldValue(m_values.ModifyValue(&Unit::m_unitData).ModifyValue(&UF::UnitData::FlightCapabilityID), flightCapabilityId);
+
+    // GlideEventSpeedDivisor scales movement speed when the client evaluates which GlideEvent to play.
+    // 1.0 is the neutral default; 0.0 would cause divide-by-zero on the client.
+    SetUpdateFieldValue(m_values.ModifyValue(&Unit::m_unitData).ModifyValue(&UF::UnitData::GlideEventSpeedDivisor), 1.0f);
 
     UpdateAdvFlyingSpeed(ADV_FLYING_AIR_FRICTION, clientUpdate);
     UpdateAdvFlyingSpeed(ADV_FLYING_MAX_VEL, clientUpdate);

@@ -5201,7 +5201,8 @@ void SpellMgr::LoadSpellInfoCorrections()
         spellInfo->AttributesEx4 |= SPELL_ATTR4_AURA_IS_BUFF;
     });
 
-    // TODO: temporary, remove with dragonriding
+    // 404468 - Disable Skyriding (used by SwapDynamicFlightMode to opt back into static flight)
+    // Don't persist across logins so players default to skyriding.
     ApplySpellFix({ 404468 }, [](SpellInfo* spellInfo)
     {
         spellInfo->AttributesCu |= SPELL_ATTR0_CU_AURA_CANNOT_BE_SAVED;
