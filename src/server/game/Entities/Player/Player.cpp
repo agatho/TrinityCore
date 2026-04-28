@@ -18787,6 +18787,7 @@ bool Player::LoadFromDB(ObjectGuid guid, CharacterDatabaseQueryHolder const& hol
 
     _LoadCharacterBankTabSettings(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_BANK_TAB_SETTINGS));
     _LoadAccountBankTabSettings(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_ACCOUNT_BANK_TAB_SETTINGS));
+    _LoadAccountBankCoinage(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_ACCOUNT_BANK_COINAGE));
 
     _LoadInventory(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_INVENTORY),
         holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_ARTIFACTS),
@@ -20543,6 +20544,25 @@ void Player::_LoadAccountBankTabSettings(PreparedQueryResult result)
         AddDynamicUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::AccountBankTabSettings));
 }
 
+void Player::_LoadAccountBankCoinage(PreparedQueryResult result)
+{
+    if (result)
+        SetAccountBankCoinage((*result)[0].GetUInt64());
+    else
+        SetAccountBankCoinage(0);
+}
+
+void Player::ModifyAccountBankCoinage(int64 delta)
+{
+    int64 current = int64(GetAccountBankCoinage());
+    int64 next = current + delta;
+    if (next < 0)
+        next = 0;
+    if (uint64(next) > MAX_MONEY_AMOUNT)
+        next = int64(MAX_MONEY_AMOUNT);
+    SetAccountBankCoinage(uint64(next));
+}
+
 void Player::_LoadAccountBankItems(PreparedQueryResult result, uint32 timeDiff)
 {
     //  Same field layout as character_inventory load, but with bag/slot from account_bank_item at the end
@@ -21001,6 +21021,7 @@ void Player::SaveToDB(LoginDatabaseTransaction loginTransaction, CharacterDataba
     _SaveCharacterBankTabSettings(trans);
     _SaveAccountBankTabSettings(trans);
     _SaveAccountBankItems(trans);
+    _SaveAccountBankCoinage(trans);
     if (_garrison)
         _garrison->SaveToDB(trans);
 
@@ -21977,6 +21998,18 @@ void Player::_SaveAccountBankTabSettings(CharacterDatabaseTransaction trans) con
         stmt->setInt32(5, *tabSetting.DepositFlags);
         trans->Append(stmt);
     }
+}
+
+void Player::_SaveAccountBankCoinage(CharacterDatabaseTransaction trans) const
+{
+    uint32 bnetAccountId = GetSession()->GetBattlenetAccountId();
+    if (!bnetAccountId)
+        return;
+
+    CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_REP_ACCOUNT_BANK_COINAGE);
+    stmt->setUInt32(0, bnetAccountId);
+    stmt->setUInt64(1, GetAccountBankCoinage());
+    trans->Append(stmt);
 }
 
 void Player::_SaveAccountBankItems(CharacterDatabaseTransaction trans)
