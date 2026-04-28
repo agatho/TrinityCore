@@ -19125,8 +19125,6 @@ void Player::_LoadAuras(PreparedQueryResult auraResult, PreparedQueryResult effe
         while (auraResult->NextRow());
     }
 
-    // TODO: finish dragonriding - this forces old flight mode
-    AddAura(404468, this);
 }
 
 void Player::_LoadGlyphAuras()
