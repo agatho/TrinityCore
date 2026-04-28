@@ -591,7 +591,7 @@ void HotfixDatabaseConnection::DoPrepareStatements()
     PREPARE_MAX_ID_STMT(HOTFIX_SEL_DESTRUCTIBLE_MODEL_DATA, "SELECT MAX(ID) + 1 FROM destructible_model_data", CONNECTION_SYNCH);
 
     // DelvesSeason.db2
-    PrepareStatement(HOTFIX_SEL_DELVES_SEASON, "SELECT ID, Field_11_0_7_57361_000 FROM delves_season"
+    PrepareStatement(HOTFIX_SEL_DELVES_SEASON, "SELECT ID, FactionID FROM delves_season"
         " WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
     PREPARE_MAX_ID_STMT(HOTFIX_SEL_DELVES_SEASON, "SELECT MAX(ID) + 1 FROM delves_season", CONNECTION_SYNCH);
 
@@ -1347,12 +1347,13 @@ void HotfixDatabaseConnection::DoPrepareStatements()
     PREPARE_MAX_ID_STMT(HOTFIX_SEL_PHASE_X_PHASE_GROUP, "SELECT MAX(ID) + 1 FROM phase_x_phase_group", CONNECTION_SYNCH);
 
     // PlayerCompanionInfo.db2
-    PrepareStatement(HOTFIX_SEL_PLAYER_COMPANION_INFO, "SELECT Name, ID, CreatureDisplayInfoID, TraitTreeID, TraitConfigType, TraitSystemID, "
-        "UiTextureAtlasMemberID, Field_11_0_0_55793_006, Field_11_0_0_55793_007, Field_11_0_0_55793_008, "
-        "Field_11_0_5_56647_009, Field_11_0_5_56647_010, Field_11_0_5_56647_011, Field_11_0_7_57361_012, ParentID"
+    PrepareStatement(HOTFIX_SEL_PLAYER_COMPANION_INFO, "SELECT UnlockDescription, ID, DelvesSeasonID, TraitTreeID, "
+        "TraitNodeID_DPS, TraitNodeID_Heal, TraitSubTreeID_DPS, TraitSubTreeID_Heal, TraitSubTreeID_Tank, "
+        "FactionID, CreatureDisplayInfoID, UiModelSceneID, "
+        "Field_12_0_0_64499_011, Field_12_0_0_64499_012, ParentID"
         " FROM player_companion_info WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
     PREPARE_MAX_ID_STMT(HOTFIX_SEL_PLAYER_COMPANION_INFO, "SELECT MAX(ID) + 1 FROM player_companion_info", CONNECTION_SYNCH);
-    PrepareStatement(HOTFIX_SEL_PLAYER_COMPANION_INFO_LOCALE, "SELECT ID, Name_lang FROM player_companion_info_locale"
+    PrepareStatement(HOTFIX_SEL_PLAYER_COMPANION_INFO_LOCALE, "SELECT ID, UnlockDescription_lang FROM player_companion_info_locale"
         " WHERE (`VerifiedBuild` > 0) = ? AND locale = ?", CONNECTION_SYNCH);
 
     // PlayerCondition.db2

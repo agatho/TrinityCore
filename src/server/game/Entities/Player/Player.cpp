@@ -31962,20 +31962,25 @@ bool Player::CanExecutePendingSpellCastRequest()
     return true;
 }
 
-void Player::SetDelveData(int32 spellId, bool started)
+void Player::SetDelveData(int32 mapId, int32 tier, uint64 instanceId, int32 entranceType,
+    std::vector<ObjectGuid> playersEligibleForRewards,
+    std::vector<int32> activeOptionalAffixIDs,
+    bool restrictRewardsToCurrentPlayers)
 {
-    SetUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData)
-        .ModifyValue(&UF::ActivePlayerData::DelveData, 0)
-        .ModifyValue(&UF::DelveData::SpellID), spellId);
+    auto delveData = m_values.ModifyValue(&Player::m_activePlayerData)
+        .ModifyValue(&UF::ActivePlayerData::DelveData, mapId);
 
-    SetUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData)
-        .ModifyValue(&UF::ActivePlayerData::DelveData, 0)
-        .ModifyValue(&UF::DelveData::Started), started ? 1u : 0u);
+    SetUpdateFieldValue(delveData.ModifyValue(&UF::DelveData::MapID), mapId);
+    SetUpdateFieldValue(delveData.ModifyValue(&UF::DelveData::Tier), tier);
+    SetUpdateFieldValue(delveData.ModifyValue(&UF::DelveData::InstanceID), instanceId);
+    SetUpdateFieldValue(delveData.ModifyValue(&UF::DelveData::EntranceType), entranceType);
+    SetUpdateFieldValue(delveData.ModifyValue(&UF::DelveData::RestrictingRewardPlayers), restrictRewardsToCurrentPlayers ? 1u : 0u);
+    SetUpdateFieldValue(delveData.ModifyValue(&UF::DelveData::PlayersEligibleForRewards), std::move(playersEligibleForRewards));
+    SetUpdateFieldValue(delveData.ModifyValue(&UF::DelveData::ActiveOptionalAffixIDs), std::move(activeOptionalAffixIDs));
 }
 
-void Player::ClearDelveData()
+void Player::ClearDelveData(int32 mapId)
 {
-    if (m_activePlayerData->DelveData.has_value())
-        RemoveOptionalUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData)
-            .ModifyValue(&UF::ActivePlayerData::DelveData));
+    RemoveMapUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData)
+        .ModifyValue(&UF::ActivePlayerData::DelveData), mapId);
 }

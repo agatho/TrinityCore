@@ -34,12 +34,11 @@ uint32 DelvesSeason::GetCurrentSeasonNumber()
 
 uint32 DelvesSeason::GetFactionIdForSeason(uint32 seasonId)
 {
-    // DelvesSeason.Field_11_0_7_57361_000 is actually FactionID (from WoWDBDefs research)
     DelvesSeasonEntry const* entry = sDelvesSeasonStore.LookupEntry(seasonId);
     if (!entry)
         return 0;
 
-    return static_cast<uint32>(entry->Field_11_0_7_57361_000);
+    return static_cast<uint32>(entry->FactionID);
 }
 
 std::vector<int32> DelvesSeason::GetSeasonSpellIds(uint32 seasonId)
@@ -87,7 +86,7 @@ void DelvesSeason::RemoveSeasonSpells(Player* player)
     }
 }
 
-bool DelvesSeason::MeetsMinimumLevelRequirement(Player* player)
+bool DelvesSeason::MeetsMinimumLevelRequirement(Player const* player)
 {
     // ContentTuning ID 2677 defines the min level for delves
     // In retail, this resolves to level 70 (TWW) via the ContentTuning system

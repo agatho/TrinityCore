@@ -130,6 +130,15 @@ enum class CompanionConfigSlotType : uint8
     Max
 };
 
+// TieredEntranceType from DelvesConstantsDocumentation.lua (TieredEntranceType enum)
+enum TieredEntranceType : int32
+{
+    TIERED_ENTRANCE_TYPE_INVALID  = 0,
+    TIERED_ENTRANCE_TYPE_DELVE    = 1,
+    TIERED_ENTRANCE_TYPE_SITES    = 2,
+    TIERED_ENTRANCE_TYPE_RESERVED = 3,
+};
+
 enum class DelveState : uint8
 {
     Inactive    = 0,

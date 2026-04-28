@@ -1760,10 +1760,11 @@ struct DestructibleModelDataLoadInfo
 
 struct DelvesSeasonLoadInfo
 {
+    // DelvesSeason.dbd LAYOUT D8CA312 (build 12.0.5.67186)
     static constexpr DB2FieldMeta Fields[2] =
     {
         { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
-        { .IsSigned = true, .Type = FT_INT, .Name = "Field_11_0_7_57361_000" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "FactionID" },
     };
     static constexpr DB2LoadInfo Instance{ Fields, 2, &DelvesSeasonMeta::Instance, HOTFIX_SEL_DELVES_SEASON };
 };
@@ -4393,22 +4394,23 @@ struct PhaseXPhaseGroupLoadInfo
 
 struct PlayerCompanionInfoLoadInfo
 {
+    // PlayerCompanionInfo.dbd LAYOUT F61B5AA1 (build 12.0.5.67186)
     static constexpr DB2FieldMeta Fields[15] =
     {
-        { .IsSigned = false, .Type = FT_STRING, .Name = "Name" },
+        { .IsSigned = false, .Type = FT_STRING, .Name = "UnlockDescription" },
         { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
-        { .IsSigned = true, .Type = FT_INT, .Name = "CreatureDisplayInfoID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "DelvesSeasonID" },
         { .IsSigned = true, .Type = FT_INT, .Name = "TraitTreeID" },
-        { .IsSigned = true, .Type = FT_INT, .Name = "TraitConfigType" },
-        { .IsSigned = true, .Type = FT_INT, .Name = "TraitSystemID" },
-        { .IsSigned = true, .Type = FT_INT, .Name = "UiTextureAtlasMemberID" },
-        { .IsSigned = true, .Type = FT_INT, .Name = "Field_11_0_0_55793_006" },
-        { .IsSigned = true, .Type = FT_INT, .Name = "Field_11_0_0_55793_007" },
-        { .IsSigned = true, .Type = FT_INT, .Name = "Field_11_0_0_55793_008" },
-        { .IsSigned = true, .Type = FT_INT, .Name = "Field_11_0_5_56647_009" },
-        { .IsSigned = true, .Type = FT_INT, .Name = "Field_11_0_5_56647_010" },
-        { .IsSigned = true, .Type = FT_INT, .Name = "Field_11_0_5_56647_011" },
-        { .IsSigned = true, .Type = FT_INT, .Name = "Field_11_0_7_57361_012" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "TraitNodeID_DPS" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "TraitNodeID_Heal" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "TraitSubTreeID_DPS" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "TraitSubTreeID_Heal" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "TraitSubTreeID_Tank" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "FactionID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "CreatureDisplayInfoID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "UiModelSceneID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "Field_12_0_0_64499_011" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "Field_12_0_0_64499_012" },
         { .IsSigned = true, .Type = FT_INT, .Name = "ParentID" },
     };
     static constexpr DB2LoadInfo Instance{ Fields, 15, &PlayerCompanionInfoMeta::Instance, HOTFIX_SEL_PLAYER_COMPANION_INFO };

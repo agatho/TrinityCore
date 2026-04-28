@@ -24,7 +24,13 @@ namespace Delves
 
 void RequestPartyEligibilityForDelveTiers::Read()
 {
-    _worldPacket >> GossipOptionOrMapChallengeID;
+    _worldPacket >> MapID;
+}
+
+void SelectDelveEntranceTier::Read()
+{
+    _worldPacket >> MapID;
+    _worldPacket >> Tier;
 }
 
 WorldPacket const* ShowDelvesDisplayUI::Write()
@@ -34,17 +40,23 @@ WorldPacket const* ShowDelvesDisplayUI::Write()
 
 WorldPacket const* DelvesAccountDataElementChanged::Write()
 {
+    _worldPacket << uint32(DataElementID);
+    _worldPacket << uint32(Value);
     return &_worldPacket;
 }
 
 WorldPacket const* ShowDelvesCompanionConfigurationUI::Write()
 {
-    _worldPacket << uint32(CreatureID);
+    _worldPacket << uint32(CreatureOrSpellID);
     return &_worldPacket;
 }
 
 WorldPacket const* PartyEligibilityForDelveTiersResponse::Write()
 {
+    _worldPacket.WriteBits(PlayerName.size(), 6);
+    _worldPacket.FlushBits();
+    _worldPacket.WriteString(PlayerName);
+    _worldPacket << uint8(MaxEligibleTier);
     return &_worldPacket;
 }
 

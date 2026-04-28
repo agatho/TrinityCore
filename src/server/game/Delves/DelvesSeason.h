@@ -39,7 +39,7 @@ public:
     static void RemoveSeasonSpells(Player* player);
 
     // Minimum level check (uses ContentTuning ID 2677)
-    static bool MeetsMinimumLevelRequirement(Player* player);
+    static bool MeetsMinimumLevelRequirement(Player const* player);
 };
 
 } // namespace Delves

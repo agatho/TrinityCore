@@ -34,7 +34,9 @@ public:
     void Read() override { }
 };
 
-// CMSG_REQUEST_PARTY_ELIGIBILITY_FOR_DELVE_TIERS (0x3A02F3)
+// CMSG_REQUEST_PARTY_ELIGIBILITY_FOR_DELVE_TIERS (build 67186 = 0x3A02F4)
+// Lua signature: C_DelvesUI.RequestPartyEligibilityForDelveTiers(mapID)
+// Sniff (build 66562) confirms 4-byte payload (uint32 MapID only).
 class RequestPartyEligibilityForDelveTiers final : public ClientPacket
 {
 public:
@@ -42,10 +44,23 @@ public:
 
     void Read() override;
 
-    uint32 GossipOptionOrMapChallengeID = 0;
+    uint32 MapID = 0;
 };
 
-// SMSG_SHOW_DELVES_DISPLAY_UI (0x420356)
+// CMSG_SELECT_DELVE_ENTRANCE_TIER (0x3B0134)
+// Lua: C_DelvesUI.SelectDelveEntranceTier(tier). Client wraps with active PDE MapID.
+class SelectDelveEntranceTier final : public ClientPacket
+{
+public:
+    explicit SelectDelveEntranceTier(WorldPacket&& packet) : ClientPacket(CMSG_SELECT_DELVE_ENTRANCE_TIER, std::move(packet)) { }
+
+    void Read() override;
+
+    uint32 MapID = 0;
+    uint8 Tier = 0;
+};
+
+// SMSG_SHOW_DELVES_DISPLAY_UI (build 67186 = 0x420359)
 class ShowDelvesDisplayUI final : public ServerPacket
 {
 public:
@@ -54,16 +69,22 @@ public:
     WorldPacket const* Write() override;
 };
 
-// SMSG_DELVES_ACCOUNT_DATA_ELEMENT_CHANGED (0x420357)
+// SMSG_DELVES_ACCOUNT_DATA_ELEMENT_CHANGED (build 67186 = 0x42035A)
+// Wire: uint32 DataElementID, uint32 Value (per IDA-decoded JamSMsgDelvesAccountDataElementChanged).
 class DelvesAccountDataElementChanged final : public ServerPacket
 {
 public:
-    explicit DelvesAccountDataElementChanged() : ServerPacket(SMSG_DELVES_ACCOUNT_DATA_ELEMENT_CHANGED, 0) { }
+    explicit DelvesAccountDataElementChanged() : ServerPacket(SMSG_DELVES_ACCOUNT_DATA_ELEMENT_CHANGED, 8) { }
 
     WorldPacket const* Write() override;
+
+    uint32 DataElementID = 0;
+    uint32 Value = 0;
 };
 
-// SMSG_SHOW_DELVES_COMPANION_CONFIGURATION_UI (0x420358)
+// SMSG_SHOW_DELVES_COMPANION_CONFIGURATION_UI (build 67186 = 0x42035B)
+// Sniff confirms 4-byte payload — value matches a creature/spell ID.
+// Lua doc: "Signaled when SpellScript indicates that a curio has been learned or upgraded."
 class ShowDelvesCompanionConfigurationUI final : public ServerPacket
 {
 public:
@@ -71,16 +92,21 @@ public:
 
     WorldPacket const* Write() override;
 
-    uint32 CreatureID = 0;
+    uint32 CreatureOrSpellID = 0;
 };
 
-// SMSG_PARTY_ELIGIBILITY_FOR_DELVE_TIERS_RESPONSE (0x42035A)
+// SMSG_PARTY_ELIGIBILITY_FOR_DELVE_TIERS_RESPONSE (build 67186 = 0x42035D)
+// Lua event payload: (playerName: string, maxEligibleLevel: number) — one event firing per packet.
+// Wire: TC strings use bit-length prefix, then bytes. Sent once per evaluated party member.
 class PartyEligibilityForDelveTiersResponse final : public ServerPacket
 {
 public:
-    explicit PartyEligibilityForDelveTiersResponse() : ServerPacket(SMSG_PARTY_ELIGIBILITY_FOR_DELVE_TIERS_RESPONSE, 0) { }
+    explicit PartyEligibilityForDelveTiersResponse() : ServerPacket(SMSG_PARTY_ELIGIBILITY_FOR_DELVE_TIERS_RESPONSE, 64) { }
 
     WorldPacket const* Write() override;
+
+    std::string PlayerName;
+    uint8 MaxEligibleTier = 0;
 };
 
 } // namespace Delves

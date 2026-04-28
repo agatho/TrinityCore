@@ -17,6 +17,7 @@
 
 #include "WorldSession.h"
 #include "DelveMgr.h"
+#include "DelvesDefines.h"
 #include "DelvesPackets.h"
 #include "DelvesRewards.h"
 #include "DelvesSeason.h"
@@ -38,39 +39,72 @@ void WorldSession::HandleDelveTeleportOut(WorldPackets::Delves::DelveTeleportOut
         player->TeleportTo(player->m_homebind);
 }
 
-void WorldSession::HandleRequestPartyEligibilityForDelveTiers(WorldPackets::Delves::RequestPartyEligibilityForDelveTiers& requestPartyEligibilityForDelveTiers)
+void WorldSession::HandleRequestPartyEligibilityForDelveTiers(WorldPackets::Delves::RequestPartyEligibilityForDelveTiers& packet)
 {
     Player* player = GetPlayer();
     if (!player)
         return;
 
-    TC_LOG_DEBUG("network", "CMSG_REQUEST_PARTY_ELIGIBILITY_FOR_DELVE_TIERS received from player {} with id {}",
-        player->GetName(), requestPartyEligibilityForDelveTiers.GossipOptionOrMapChallengeID);
+    TC_LOG_DEBUG("network", "CMSG_REQUEST_PARTY_ELIGIBILITY_FOR_DELVE_TIERS received from player {} for mapId {}",
+        player->GetName(), packet.MapID);
 
-    // Validate: cannot enter delves in a raid group
-    Group* group = player->GetGroup();
-    if (group && group->isRaidGroup())
+    auto computeMaxEligibleTier = [&](Player const* member) -> uint8
     {
-        // SPELL_CUSTOM_ERROR_YOU_CANNOT_ENTER_A_DELVE_WHILE_IN_A_RAID_GROUP = 871
-        TC_LOG_DEBUG("network", "Player {} denied delve entry: in raid group", player->GetName());
-    }
+        if (!Delves::DelvesSeason::MeetsMinimumLevelRequirement(member))
+            return 0;
+        Delves::DelveProgress progress;
+        Delves::DelvesRewards::LoadProgress(member->GetSession()->GetBattlenetAccountId(), progress);
+        return std::min<uint8>(progress.HighestTierUnlocked, Delves::MAX_DELVE_TIER);
+    };
 
-    // Check minimum level requirement
+    auto sendForMember = [&](Player const* member)
+    {
+        WorldPackets::Delves::PartyEligibilityForDelveTiersResponse response;
+        response.PlayerName = member->GetName();
+        response.MaxEligibleTier = computeMaxEligibleTier(member);
+        SendPacket(response.Write());
+    };
+
+    // Always emit at least the requesting player so the client populates its own row.
+    sendForMember(player);
+
+    if (Group const* group = player->GetGroup())
+    {
+        if (group->isRaidGroup())
+            return;
+
+        for (GroupReference const& itr : group->GetMembers())
+        {
+            Player const* member = itr.GetSource();
+            if (!member || member == player)
+                continue;
+            sendForMember(member);
+        }
+    }
+}
+
+void WorldSession::HandleSelectDelveEntranceTier(WorldPackets::Delves::SelectDelveEntranceTier& packet)
+{
+    Player* player = GetPlayer();
+    if (!player)
+        return;
+
+    TC_LOG_DEBUG("network", "CMSG_SELECT_DELVE_ENTRANCE_TIER received from player {} mapId {} tier {}",
+        player->GetName(), packet.MapID, packet.Tier);
+
+    if (packet.Tier == 0 || packet.Tier > Delves::MAX_DELVE_TIER)
+        return;
+
     if (!Delves::DelvesSeason::MeetsMinimumLevelRequirement(player))
-    {
-        // SPELL_CUSTOM_ERROR_NOT_HIGH_ENOUGH_LEVEL_TO_ENTER_A_DELVE = 1040
-        TC_LOG_DEBUG("network", "Player {} denied delve entry: below minimum level", player->GetName());
-    }
+        return;
 
-    // Load account progress to check tier unlock
     Delves::DelveProgress progress;
     Delves::DelvesRewards::LoadProgress(player->GetSession()->GetBattlenetAccountId(), progress);
+    if (packet.Tier > progress.HighestTierUnlocked)
+        return;
 
-    TC_LOG_DEBUG("network", "Player {} delve eligibility: highest tier unlocked = {}, group size = {}",
-        player->GetName(), progress.HighestTierUnlocked,
-        group ? group->GetMembersCount() : 1);
-
-    // Send response
-    WorldPackets::Delves::PartyEligibilityForDelveTiersResponse response;
-    SendPacket(response.Write());
+    // Selection is consumed by the subsequent CMSG_TIERED_ENTRANCE_OPEN flow; the client
+    // re-sends the tier on entrance. We accept and validate here so eligibility is logged.
+    player->m_delveSelectedTier = packet.Tier;
+    player->m_delveSelectedMapId = packet.MapID;
 }

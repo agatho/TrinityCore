@@ -140,23 +140,27 @@ void DelveInstance::Update(uint32 /*diff*/)
 
 void DelveInstance::PopulateDelveData(Player* player)
 {
-    int32 spellId = 0;
+    if (!_template || !_map)
+        return;
 
-    // Get the season spell if available
-    DelvesSeasonEntry const* season = sDelveMgr->GetActiveSeason();
-    if (season)
-    {
+    // Active optional affixes derive from the season-spell list (Bountiful/Underpin/Zekvir modifiers).
+    std::vector<int32> activeOptionalAffixIDs;
+    if (DelvesSeasonEntry const* season = sDelveMgr->GetActiveSeason())
         if (DB2Manager::DelvesSeasonXSpellContainer const* spells = sDB2Manager.GetDelvesSeasonSpells(season->ID))
-            if (!spells->empty())
-                spellId = (*spells)[0]->SpellID;
-    }
+            for (DelvesSeasonXSpellEntry const* spell : *spells)
+                activeOptionalAffixIDs.push_back(int32(spell->SpellID));
 
-    player->SetDelveData(spellId, true);
+    std::vector<ObjectGuid> eligible(_owners.begin(), _owners.end());
+
+    player->SetDelveData(int32(_template->MapId), int32(_tier), uint64(_map->GetInstanceId()),
+        int32(TIERED_ENTRANCE_TYPE_DELVE), std::move(eligible), std::move(activeOptionalAffixIDs),
+        /*restrictRewardsToCurrentPlayers*/ true);
 }
 
 void DelveInstance::ClearDelveData(Player* player)
 {
-    player->ClearDelveData();
+    if (_template)
+        player->ClearDelveData(int32(_template->MapId));
 }
 
 } // namespace Delves

@@ -44,7 +44,7 @@ class delve_commandscript : public CommandScript
 public:
     delve_commandscript() : CommandScript("delve_commandscript") { }
 
-    ChatCommandTable GetCommands() const override
+    std::span<ChatCommandBuilder const> GetCommands() const override
     {
         static ChatCommandTable delveCompanionTable =
         {

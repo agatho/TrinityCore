@@ -2271,9 +2271,17 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
 
         WorldSession* GetSession() const { return m_session; }
 
-        // Delves update field management
-        void SetDelveData(int32 spellId, bool started);
-        void ClearDelveData();
+        // Delves update field management (m_activePlayerData->DelveData is a map keyed by MapID)
+        void SetDelveData(int32 mapId, int32 tier, uint64 instanceId, int32 entranceType,
+            std::vector<ObjectGuid> playersEligibleForRewards = {},
+            std::vector<int32> activeOptionalAffixIDs = {},
+            bool restrictRewardsToCurrentPlayers = false);
+        void ClearDelveData(int32 mapId);
+        bool HasActiveDelve() const { return !m_activePlayerData->DelveData.empty(); }
+
+        // Transient per-session selection from CMSG_SELECT_DELVE_ENTRANCE_TIER (re-sent by client on TIERED_ENTRANCE_OPEN).
+        uint8 m_delveSelectedTier = 0;
+        uint32 m_delveSelectedMapId = 0;
 
     protected:
         UF::UpdateFieldFlag GetUpdateFieldFlagsFor(Player const* target) const override;

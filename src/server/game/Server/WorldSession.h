@@ -218,6 +218,7 @@ namespace WorldPackets
     {
         class DelveTeleportOut;
         class RequestPartyEligibilityForDelveTiers;
+        class SelectDelveEntranceTier;
     }
 
     namespace BlackMarket
@@ -1875,6 +1876,7 @@ class TC_GAME_API WorldSession
         // Delves
         void HandleDelveTeleportOut(WorldPackets::Delves::DelveTeleportOut& delveTeleportOut);
         void HandleRequestPartyEligibilityForDelveTiers(WorldPackets::Delves::RequestPartyEligibilityForDelveTiers& requestPartyEligibilityForDelveTiers);
+        void HandleSelectDelveEntranceTier(WorldPackets::Delves::SelectDelveEntranceTier& selectDelveEntranceTier);
 
         // Battlenet
         void HandleBattlenetChangeRealmTicket(WorldPackets::Battlenet::ChangeRealmTicket& changeRealmTicket);

@@ -1585,7 +1585,7 @@ struct DifficultyEntry
 struct DelvesSeasonEntry
 {
     uint32 ID;
-    int32 Field_11_0_7_57361_000;
+    int32 FactionID;                                                                  // Faction.ID FK
 };
 
 struct DelvesSeasonXSpellEntry
@@ -3279,21 +3279,21 @@ struct PhaseXPhaseGroupEntry
 
 struct PlayerCompanionInfoEntry
 {
-    LocalizedString Name;
+    LocalizedString UnlockDescription;
     uint32 ID;
-    int32 CreatureDisplayInfoID;
+    int32 DelvesSeasonID;
     int32 TraitTreeID;
-    int32 TraitConfigType;
-    int32 TraitSystemID;
-    int32 UiTextureAtlasMemberID;
-    int32 Field_11_0_0_55793_006;
-    int32 Field_11_0_0_55793_007;
-    int32 Field_11_0_0_55793_008;
-    int32 Field_11_0_5_56647_009;
-    int32 Field_11_0_5_56647_010;
-    int32 Field_11_0_5_56647_011;
-    int32 Field_11_0_7_57361_012;
-    int32 ParentID;
+    int32 TraitNodeID_DPS;
+    int32 TraitNodeID_Heal;
+    int32 TraitSubTreeID_DPS;
+    int32 TraitSubTreeID_Heal;
+    int32 TraitSubTreeID_Tank;
+    int32 FactionID;
+    int32 CreatureDisplayInfoID;
+    int32 UiModelSceneID;
+    int32 Field_12_0_0_64499_011;
+    int32 Field_12_0_0_64499_012;
+    int32 ParentID;                                                                   // Field_12_0_1_64889_014, parent relation
 };
 
 struct PlayerConditionEntry
