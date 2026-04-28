@@ -70,21 +70,25 @@ public:
 };
 
 // SMSG_DELVES_ACCOUNT_DATA_ELEMENT_CHANGED (build 67186 = 0x42035A)
-// Wire: uint32 DataElementID, uint32 Value (per IDA-decoded JamSMsgDelvesAccountDataElementChanged).
-class DelvesAccountDataElementChanged final : public ServerPacket
-{
-public:
-    explicit DelvesAccountDataElementChanged() : ServerPacket(SMSG_DELVES_ACCOUNT_DATA_ELEMENT_CHANGED, 8) { }
-
-    WorldPacket const* Write() override;
-
-    uint32 DataElementID = 0;
-    uint32 Value = 0;
-};
+//
+// Intentionally NO packet class. PlayerDataElement (PDE) state on the client is
+// stored on CGActivePlayer_C in two `(vector<PlayerDataElement>, vector<uint32>)`
+// fields (decompiled from `sub_7FF75C204150`, the CGActivePlayer destructor;
+// fields at qword offsets 651 and 658 — Account and Character respectively). The
+// Lua event `DELVES_ACCOUNT_DATA_ELEMENT_CHANGED` is broadcast by mirror handlers
+// registered against those vector fields with the signature
+//   void(CGActivePlayer_C&, PlayerDataElement const& oldElem,
+//        PlayerDataElement const& newElem, unsigned int idx)
+// (typename string at `0x7FF75F3A9AE0` in IDA build 66198). Mirror handlers fire
+// from UpdateField changes — the data is delivered inside SMSG_UPDATE_OBJECT, not
+// via a dedicated SMSG. Server-side, the corresponding work is to populate the
+// ActivePlayer UpdateField that holds the PDE list, which then drives the client
+// event automatically. The opcode value (0x42035A) is retained in Opcodes.h as a
+// known marker only.
 
 // SMSG_SHOW_DELVES_COMPANION_CONFIGURATION_UI (build 67186 = 0x42035B)
-// Sniff confirms 4-byte payload — value matches a creature/spell ID.
-// Lua doc: "Signaled when SpellScript indicates that a curio has been learned or upgraded."
+// Sniff (66709, op 0x420358) shows 4-byte payload, value 0x0003EEDB. Single uint32.
+// Field semantics not symbolicated in IDA 66198 — likely a creature/companion entry.
 class ShowDelvesCompanionConfigurationUI final : public ServerPacket
 {
 public:
@@ -96,17 +100,28 @@ public:
 };
 
 // SMSG_PARTY_ELIGIBILITY_FOR_DELVE_TIERS_RESPONSE (build 67186 = 0x42035D)
-// Lua event payload: (playerName: string, maxEligibleLevel: number) — one event firing per packet.
-// Wire: TC strings use bit-length prefix, then bytes. Sent once per evaluated party member.
+// Sniff (66709, op 0x42035D) shows a single 4-byte payload `00 00 00 00` for the
+// no-eligible-member case. The Lua event PARTY_ELIGIBILITY_FOR_DELVE_TIERS_CHANGED
+// fires with (playerName: string, maxEligibleLevel: number) per entry, suggesting
+// the wire format is `uint32 Count` followed by `Count` entries. The element layout
+// (bit-prefixed name + uint8 tier) is INFERRED from TrinityCore conventions and is
+// NOT confirmed by IDA (build-66198 db has no SMSG decoder symbols) or by a
+// populated-list sniff. The current Write() emits only `uint32 Count` to remain
+// byte-exact with the observed empty case.
 class PartyEligibilityForDelveTiersResponse final : public ServerPacket
 {
 public:
-    explicit PartyEligibilityForDelveTiersResponse() : ServerPacket(SMSG_PARTY_ELIGIBILITY_FOR_DELVE_TIERS_RESPONSE, 64) { }
+    explicit PartyEligibilityForDelveTiersResponse() : ServerPacket(SMSG_PARTY_ELIGIBILITY_FOR_DELVE_TIERS_RESPONSE, 4) { }
 
     WorldPacket const* Write() override;
 
-    std::string PlayerName;
-    uint8 MaxEligibleTier = 0;
+    struct EligibleMember
+    {
+        std::string PlayerName;
+        uint8 MaxEligibleTier = 0;
+    };
+
+    std::vector<EligibleMember> Members;
 };
 
 } // namespace Delves

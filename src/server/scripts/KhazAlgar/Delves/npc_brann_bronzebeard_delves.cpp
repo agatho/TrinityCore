@@ -17,11 +17,14 @@
 
 #include "DelvesCompanion.h"
 #include "DelvesDefines.h"
+#include "DelvesPackets.h"
 #include "MotionMaster.h"
 #include "Player.h"
+#include "ScriptedGossip.h"
 #include "ScriptMgr.h"
 #include "ScriptedCreature.h"
 #include "SpellInfo.h"
+#include "WorldSession.h"
 
 using namespace Delves;
 
@@ -68,6 +71,19 @@ struct npc_brann_bronzebeard_delvesAI : public ScriptedAI
     {
         ScriptedAI::InitializeAI();
         me->SetReactState(REACT_ASSIST);
+    }
+
+    bool OnGossipHello(Player* player) override
+    {
+        // Open the client's companion configuration frame (role/curio picker).
+        // The uint32 field carries an entity ID — sniff (12.0.1.66709) showed
+        // value 0x3EEDB; exact semantics (creature entry vs PlayerCompanionInfo
+        // record) are not symbolicated in the 67186 IDA db, so we send the
+        // creature entry as the most defensible interpretation.
+        WorldPackets::Delves::ShowDelvesCompanionConfigurationUI packet;
+        packet.CreatureOrSpellID = me->GetEntry();
+        player->SendDirectMessage(packet.Write());
+        return true;
     }
 
     void SetData(uint32 type, uint32 data) override

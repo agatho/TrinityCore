@@ -47,9 +47,14 @@ void DelveMgr::Initialize()
 
 void DelveMgr::DetermineActiveSeason()
 {
-    // Find the highest season ID from the DB2 store
-    // In retail, the active season is determined by the current patch/date
-    // For now, use the highest available season
+    // The DelvesSeason DB2 (LayoutHash 0xD8CA312, build 67186) only carries
+    // (ID, FactionID, VerifiedBuild) — no start/end date columns. Retail
+    // determines the active season from server-side configuration that isn't
+    // visible in the DB2 alone, so we fall back to "highest known ID" as a
+    // proxy. This matches the audit MED gap #5 limitation: time-driving the
+    // season selection isn't possible with the data the client ships in DB2.
+    // To override, set delves_season.VerifiedBuild filtering in a future tier
+    // or expose `DelveMgr.ActiveSeasonOverride` in worldserver.conf.
     uint32 highestSeasonId = 0;
     for (DelvesSeasonEntry const* entry : sDelvesSeasonStore)
     {

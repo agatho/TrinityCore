@@ -2278,6 +2278,7 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
             bool restrictRewardsToCurrentPlayers = false);
         void ClearDelveData(int32 mapId);
         bool HasActiveDelve() const { return !m_activePlayerData->DelveData.empty(); }
+        bool IsInDelveInstance() const;
 
         // Transient per-session selection from CMSG_SELECT_DELVE_ENTRANCE_TIER (re-sent by client on TIERED_ENTRANCE_OPEN).
         uint8 m_delveSelectedTier = 0;
@@ -2999,6 +3000,26 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
 
         void AddWarbandScenesBlock(uint32 blockValue) { AddDynamicUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::WarbandScenes)) = blockValue; }
         void AddWarbandScenesFlag(uint32 slot, uint32 flag) { SetUpdateFieldFlagValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::WarbandScenes, slot), flag); }
+
+        // PlayerDataElements (PDEs) — Account-scoped and Character-scoped key-value
+        // store backing C_DelvesUI / curio book / season state. The slot index in
+        // the dynamic field IS the PDE id (verified against IDA build 67186, where
+        // bit 0x20000000 of the account-data field-mask dispatches to a JamDelveData
+        // reader and the PlayerDataElementType enum has only Int=0 and Float=1).
+        // Helpers grow the array sparsely by inserting empty Int(0) padding when
+        // the requested id is past the current end.
+        void SetAccountDataElementInt(uint32 id, int64 value);
+        void SetAccountDataElementFloat(uint32 id, float value);
+        void SetCharacterDataElementInt(uint32 id, int64 value);
+        void SetCharacterDataElementFloat(uint32 id, float value);
+        UF::PlayerDataElement const* GetAccountDataElement(uint32 id) const;
+        UF::PlayerDataElement const* GetCharacterDataElement(uint32 id) const;
+        void RemoveAccountDataElement(uint32 id);
+        void RemoveCharacterDataElement(uint32 id);
+
+        // Delves: load persisted companion state from DB and project it into PDEs
+        // the client expects. Called from SendInitialPacketsBeforeAddToMap.
+        void LoadDelvePlayerDataElements();
 
         void AddSelfResSpell(int32 spellId) { AddDynamicUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::SelfResSpells)) = spellId; }
         void RemoveSelfResSpell(int32 spellId)

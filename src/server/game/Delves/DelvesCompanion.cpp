@@ -179,4 +179,23 @@ uint32 DelvesCompanion::GetMaxCompanionLevel()
     return MAX_COMPANION_LEVEL_S1; // 60 for Season 1
 }
 
+void NotifyDelveAssistAction(Creature* companion, AssistActionEvent const& event)
+{
+    // Stub. The retail wire path is an UpdateField (JamAssistActionState_C) on
+    // CGUnit_C — not implemented because the UnitData changes-mask bit isn't
+    // known from the available IDA data. See DelvesCompanion.h header comment
+    // for the full IDA reference and field layout. When the bit is identified,
+    // replace the body with a SetUpdateFieldValue chain on companion->m_unitData.
+    if (!companion)
+        return;
+
+    TC_LOG_TRACE("scripts.delves",
+        "NotifyDelveAssistAction(stub): companion={} action={} spellId={} creature={} map={}",
+        companion->GetGUID().ToString(),
+        int32(event.ActionType),
+        event.ReceivedSpellID,
+        event.CreatureName.has_value() ? event.CreatureName.value() : "<none>",
+        event.MapName.has_value() ? event.MapName.value() : "<none>");
+}
+
 } // namespace Delves

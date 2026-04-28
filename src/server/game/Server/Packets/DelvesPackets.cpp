@@ -38,12 +38,9 @@ WorldPacket const* ShowDelvesDisplayUI::Write()
     return &_worldPacket;
 }
 
-WorldPacket const* DelvesAccountDataElementChanged::Write()
-{
-    _worldPacket << uint32(DataElementID);
-    _worldPacket << uint32(Value);
-    return &_worldPacket;
-}
+// DelvesAccountDataElementChanged intentionally has no class — PDE state is
+// delivered to the client via ActivePlayer UpdateFields, not a dedicated SMSG.
+// See DelvesPackets.h for the IDA-traced reasoning.
 
 WorldPacket const* ShowDelvesCompanionConfigurationUI::Write()
 {
@@ -53,10 +50,15 @@ WorldPacket const* ShowDelvesCompanionConfigurationUI::Write()
 
 WorldPacket const* PartyEligibilityForDelveTiersResponse::Write()
 {
-    _worldPacket.WriteBits(PlayerName.size(), 6);
-    _worldPacket.FlushBits();
-    _worldPacket.WriteString(PlayerName);
-    _worldPacket << uint8(MaxEligibleTier);
+    // Sniff-confirmed for empty case. Per-entry layout is INFERRED — see header.
+    _worldPacket << uint32(Members.size());
+    for (EligibleMember const& member : Members)
+    {
+        _worldPacket.WriteBits(member.PlayerName.size(), 6);
+        _worldPacket.FlushBits();
+        _worldPacket.WriteString(member.PlayerName);
+        _worldPacket << uint8(member.MaxEligibleTier);
+    }
     return &_worldPacket;
 }
 

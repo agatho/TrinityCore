@@ -57,30 +57,33 @@ void WorldSession::HandleRequestPartyEligibilityForDelveTiers(WorldPackets::Delv
         return std::min<uint8>(progress.HighestTierUnlocked, Delves::MAX_DELVE_TIER);
     };
 
-    auto sendForMember = [&](Player const* member)
+    WorldPackets::Delves::PartyEligibilityForDelveTiersResponse response;
+    auto addMember = [&](Player const* member)
     {
-        WorldPackets::Delves::PartyEligibilityForDelveTiersResponse response;
-        response.PlayerName = member->GetName();
-        response.MaxEligibleTier = computeMaxEligibleTier(member);
-        SendPacket(response.Write());
+        WorldPackets::Delves::PartyEligibilityForDelveTiersResponse::EligibleMember entry;
+        entry.PlayerName = member->GetName();
+        entry.MaxEligibleTier = computeMaxEligibleTier(member);
+        response.Members.push_back(std::move(entry));
     };
 
     // Always emit at least the requesting player so the client populates its own row.
-    sendForMember(player);
+    addMember(player);
 
-    if (Group const* group = player->GetGroup())
+    if (Group const* group = player->GetGroup(); group && !group->isRaidGroup())
     {
-        if (group->isRaidGroup())
-            return;
-
         for (GroupReference const& itr : group->GetMembers())
         {
             Player const* member = itr.GetSource();
             if (!member || member == player)
                 continue;
-            sendForMember(member);
+            addMember(member);
         }
     }
+
+    // Per-entry wire layout is unverified — the Write() emits only the count
+    // for the empty case (sniff-confirmed) and uses an inferred (string + uint8)
+    // shape for entries. See DelvesPackets.h header comment.
+    SendPacket(response.Write());
 }
 
 void WorldSession::HandleSelectDelveEntranceTier(WorldPackets::Delves::SelectDelveEntranceTier& packet)

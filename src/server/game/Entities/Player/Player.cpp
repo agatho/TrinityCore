@@ -53,6 +53,8 @@
 #include "CreatureAI.h"
 #include "DB2Stores.h"
 #include "DatabaseEnv.h"
+#include "DelvesCompanion.h"
+#include "DelvesDefines.h"
 #include "DisableMgr.h"
 #include "DuelPackets.h"
 #include "EquipmentSetPackets.h"
@@ -25029,6 +25031,10 @@ void Player::SendInitialPacketsBeforeAddToMap()
     /// SMSG_EQUIPMENT_SET_LIST
     SendEquipmentSetList();
 
+    /// Project persisted delve state into PlayerDataElement UpdateField slots
+    /// (driven by the C_DelvesUI Lua API on the client).
+    LoadDelvePlayerDataElements();
+
     m_achievementMgr->SendAllData(this);
     m_questObjectiveCriteriaMgr->SendAllData(this);
 
@@ -31983,4 +31989,98 @@ void Player::ClearDelveData(int32 mapId)
 {
     RemoveMapUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData)
         .ModifyValue(&UF::ActivePlayerData::DelveData), mapId);
+}
+
+namespace
+{
+    // PlayerDataElementType: Int=0, Float=1 (verified IDA build 67186 — sub_7FF75CF73E50).
+    constexpr uint32 PDE_TYPE_INT = 0;
+    constexpr uint32 PDE_TYPE_FLOAT = 1;
+}
+
+void Player::SetAccountDataElementInt(uint32 id, int64 value)
+{
+    // ModifyValue(field, index) auto-grows the dynamic field with zero-initialised
+    // slots up to `index`, marks the slot dirty, and returns a mutable reference.
+    auto slot = m_values.ModifyValue(&Player::m_activePlayerData)
+        .ModifyValue(&UF::ActivePlayerData::AccountDataElements, id);
+    SetUpdateFieldValue(slot.ModifyValue(&UF::PlayerDataElement::Type), PDE_TYPE_INT);
+    SetUpdateFieldValue(slot.ModifyValue(&UF::PlayerDataElement::Int64Value), value);
+}
+
+void Player::SetAccountDataElementFloat(uint32 id, float value)
+{
+    auto slot = m_values.ModifyValue(&Player::m_activePlayerData)
+        .ModifyValue(&UF::ActivePlayerData::AccountDataElements, id);
+    SetUpdateFieldValue(slot.ModifyValue(&UF::PlayerDataElement::Type), PDE_TYPE_FLOAT);
+    SetUpdateFieldValue(slot.ModifyValue(&UF::PlayerDataElement::FloatValue), value);
+}
+
+void Player::SetCharacterDataElementInt(uint32 id, int64 value)
+{
+    auto slot = m_values.ModifyValue(&Player::m_activePlayerData)
+        .ModifyValue(&UF::ActivePlayerData::CharacterDataElements, id);
+    SetUpdateFieldValue(slot.ModifyValue(&UF::PlayerDataElement::Type), PDE_TYPE_INT);
+    SetUpdateFieldValue(slot.ModifyValue(&UF::PlayerDataElement::Int64Value), value);
+}
+
+void Player::SetCharacterDataElementFloat(uint32 id, float value)
+{
+    auto slot = m_values.ModifyValue(&Player::m_activePlayerData)
+        .ModifyValue(&UF::ActivePlayerData::CharacterDataElements, id);
+    SetUpdateFieldValue(slot.ModifyValue(&UF::PlayerDataElement::Type), PDE_TYPE_FLOAT);
+    SetUpdateFieldValue(slot.ModifyValue(&UF::PlayerDataElement::FloatValue), value);
+}
+
+UF::PlayerDataElement const* Player::GetAccountDataElement(uint32 id) const
+{
+    if (id >= m_activePlayerData->AccountDataElements.size())
+        return nullptr;
+    return &m_activePlayerData->AccountDataElements[id];
+}
+
+UF::PlayerDataElement const* Player::GetCharacterDataElement(uint32 id) const
+{
+    if (id >= m_activePlayerData->CharacterDataElements.size())
+        return nullptr;
+    return &m_activePlayerData->CharacterDataElements[id];
+}
+
+void Player::RemoveAccountDataElement(uint32 id)
+{
+    if (id >= m_activePlayerData->AccountDataElements.size())
+        return;
+    RemoveDynamicUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData)
+        .ModifyValue(&UF::ActivePlayerData::AccountDataElements), id);
+}
+
+void Player::RemoveCharacterDataElement(uint32 id)
+{
+    if (id >= m_activePlayerData->CharacterDataElements.size())
+        return;
+    RemoveDynamicUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData)
+        .ModifyValue(&UF::ActivePlayerData::CharacterDataElements), id);
+}
+
+bool Player::IsInDelveInstance() const
+{
+    Map const* map = GetMap();
+    if (!map || !map->Instanceable())
+        return false;
+    return map->GetDifficultyID() == Delves::DELVE_DIFFICULTY_ID;
+}
+
+void Player::LoadDelvePlayerDataElements()
+{
+    // Project persisted delve state (delve_companion DB row) into the
+    // PlayerDataElement UpdateField. The client surfaces these via the
+    // C_DelvesUI Lua API (e.g. GetPlayerCompanionPDEID, GetCurrentDelvesSeasonNumber).
+    Delves::CompanionState state;
+    Delves::DelvesCompanion::LoadFromDB(GetSession()->GetBattlenetAccountId(), state);
+
+    // PDE 13 = DELVES_COMPANION_INFO_SELECTION_CHARACTER_DATA_ELEMENT_ID — the
+    // currently-selected companion's PlayerCompanionInfo.ID (from
+    // DelvesDefines.h::PDE_COMPANION_INFO_SELECTION).
+    if (state.CompanionId != 0)
+        SetCharacterDataElementInt(Delves::PDE_COMPANION_INFO_SELECTION, int64(state.CompanionId));
 }
