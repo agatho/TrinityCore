@@ -47,8 +47,18 @@ public:
     uint32 MapID = 0;
 };
 
-// CMSG_SELECT_DELVE_ENTRANCE_TIER (0x3B0134)
-// Lua: C_DelvesUI.SelectDelveEntranceTier(tier). Client wraps with active PDE MapID.
+// CMSG_SELECT_DELVE_ENTRANCE_TIER (build 67186 = 0x3B0134)
+// Lua signature: C_DelvesUI.SelectDelveEntranceTier(tier) — single Lua arg.
+//
+// The client wrapper at IDA `0x7FF75C96F170` (Delve_Entrance_SelectDelveEntranceTier)
+// looks the tier up against a 40-entry table at g_Data_4198798, then dispatches
+// via ai_Handle_LuaNetworkMessage with a v-table-typed packet whose payload is
+// a uint32 plus a 16-byte struct copied from the matched entry's owner+0x10.
+// The exact serialized layout has NOT been observed in a sniff. Our (MapID,
+// Tier) read below is a best-effort placeholder — server-side validation in
+// HandleSelectDelveEntranceTier still gates on tier eligibility, so a wrong
+// MapID just falls through harmlessly. Replace with the verified shape once
+// alliance_deatholme_delve sniffs (or any later sniff) capture this opcode.
 class SelectDelveEntranceTier final : public ClientPacket
 {
 public:
