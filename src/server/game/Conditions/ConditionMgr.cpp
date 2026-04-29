@@ -2686,7 +2686,7 @@ bool ConditionMgr::isConditionTypeValid(Condition* cond) const
         {
             if (cond->ConditionValue1 > CURRENT_EXPANSION)
             {
-                TC_LOG_ERROR("sql.sql", "{} has invalid expansion in value1 ({}), skipped.", cond->ToString(true), cond->ConditionValue1);
+                TC_LOG_ERROR("sql.sql", "{} has invalid expansion in value1 ({}), skipped.", *cond, cond->ConditionValue1);
                 return false;
             }
             break;
