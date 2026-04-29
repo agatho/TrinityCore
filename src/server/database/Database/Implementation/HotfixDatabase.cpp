@@ -670,9 +670,15 @@ void HotfixDatabaseConnection::DoPrepareStatements()
         " WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
     PREPARE_MAX_ID_STMT(HOTFIX_SEL_EXPECTED_STAT_MOD, "SELECT MAX(ID) + 1 FROM expected_stat_mod", CONNECTION_SYNCH);
 
-    // ExteriorComponent.db2
-    PrepareStatement(HOTFIX_SEL_EXTERIOR_COMPONENT, "SELECT Name, PositionX, PositionY, PositionZ, ID, Type, FileDataID, ConditionID, HookID, "
-        "Flags, Slot, SortOrder, ComponentGroupID, UiTextureKitID, ExteriorComponentTypeID FROM exterior_component"
+    // ExteriorComponent.db2 — 12.0.5 layout (LayoutHash 0x53EA0925, 14 fields).
+    // Column order matches DB2LoadInfo::ExteriorComponentLoadInfo. The previous
+    // SELECT used the older WoW-build column set (FileDataID/ConditionID/HookID/
+    // Slot/SortOrder/ComponentGroupID/UiTextureKitID/ExteriorComponentTypeID),
+    // which mysql_stmt_prepare() rejected once the SQL schema was refreshed in
+    // 2026_04_29_00_hotfixes.sql ("Unknown column 'FileDataID' in 'field list'").
+    PrepareStatement(HOTFIX_SEL_EXTERIOR_COMPONENT, "SELECT Name, PositionX, PositionY, PositionZ, ID, Size, "
+        "ParentComponentID, ModelFileDataID, Flags, Field_7, Type, Field_9, GameObjectID, Field_11, ItemID, "
+        "HouseExteriorWmoDataID FROM exterior_component"
         " WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
     PREPARE_MAX_ID_STMT(HOTFIX_SEL_EXTERIOR_COMPONENT, "SELECT MAX(ID) + 1 FROM exterior_component", CONNECTION_SYNCH);
     PREPARE_LOCALE_STMT(HOTFIX_SEL_EXTERIOR_COMPONENT, "SELECT ID, Name_lang FROM exterior_component_locale WHERE (`VerifiedBuild` > 0) = ? AND locale = ?", CONNECTION_SYNCH);
