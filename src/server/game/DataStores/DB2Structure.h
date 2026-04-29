@@ -1604,13 +1604,20 @@ struct DurabilityCostsEntry
     std::array<uint16, 8> ArmorSubClassCost;
 };
 
+// DriveCapability is read client-side to drive ground-vehicle physics; the server only persists
+// the ID via Unit::SetDriveCapabilityID. Fields 1..4 were named by tracing client reads at
+// CGUnit_C drive-velocity update (sub_7FF75ED86CE0 in 12.0.5.67186): offsets 304/312/316/320
+// correspond to a deceleration term, BackwardMaxSpeed, BackwardAcceleration, IdleFriction.
+// Fields 5..16 are tier-physics knobs (banking, drift, lerp coefficients, jump tunings) that
+// only the client physics reads; naming them requires deep RE of MovementDriveAccelTier
+// integration and is intentionally deferred — the loader and consumers only see floats.
 struct DriveCapabilityEntry
 {
     uint32 ID;
     float ForwardAcceleration;              // DB2 field 1 → v28[0]
-    float BackwardMaxSpeed;                 // DB2 field 2 → v28[10], used at offset 312 (backward max speed)
-    float IdleFriction;                     // DB2 field 3 → v28[12], used at offset 320 (friction when not driving)
-    float BackwardAcceleration;             // DB2 field 4 → v28[11], used at offset 316 (backward accel)
+    float BackwardMaxSpeed;                 // DB2 field 2 → v28[10], offset 312 in client drive struct
+    float IdleFriction;                     // DB2 field 3 → v28[12], offset 320 (friction when not driving)
+    float BackwardAcceleration;             // DB2 field 4 → v28[11], offset 316 (backward accel)
     float Field_5;                          // DB2 field 5 → v28[13]
     float Field_6;                          // DB2 field 6 → v28[16]
     float Field_7;                          // DB2 field 7 → v28[14]

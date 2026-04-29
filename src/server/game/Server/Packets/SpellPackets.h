@@ -1161,10 +1161,12 @@ namespace WorldPackets
         class ApplyMountEquipmentResult final : public ServerPacket
         {
         public:
+            // Wire bit maps directly to the Lua MOUNT_EQUIPMENT_APPLY_RESULT event's `success: bool`
+            // payload (Blizzard_APIDocumentationGenerated/MountJournalDocumentation.lua), so 1 = success.
             enum ApplyResult : int32
             {
-                Success = 0,
-                Failure = 1
+                Failure = 0,
+                Success = 1
             };
 
             explicit ApplyMountEquipmentResult() : ServerPacket(SMSG_APPLY_MOUNT_EQUIPMENT_RESULT, 16 + 4 + 1) { }
