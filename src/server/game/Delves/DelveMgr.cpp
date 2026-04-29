@@ -72,8 +72,14 @@ void DelveMgr::DetermineActiveSeason()
 
 void DelveMgr::LoadDelveTemplates()
 {
-    QueryResult result = WorldDatabase.Query("SELECT id, mapId, scenarioId, mapChallengeModeId, zoneId, factionId, "
-        "companionSpawnX, companionSpawnY, companionSpawnZ, companionSpawnO FROM delve_template");
+    QueryResult result = WorldDatabase.Query(
+        "SELECT id, mapId, scenarioId, mapChallengeModeId, zoneId, factionId, "
+        "companionSpawnX, companionSpawnY, companionSpawnZ, companionSpawnO, "
+        "gossipMenuId, lfgDungeonsId, broadcastTextId, firstTierGossipOptionId, "
+        "entryX, entryY, entryZ, entryO, "
+        "exitX, exitY, exitZ, exitO, "
+        "activeScenarioId, rewardScenarioId, worldState26903 "
+        "FROM delve_template");
 
     if (!result)
     {
@@ -86,16 +92,31 @@ void DelveMgr::LoadDelveTemplates()
         Field* fields = result->Fetch();
 
         DelveTemplate tmpl;
-        tmpl.Id                   = fields[0].GetUInt32();
-        tmpl.MapId                = fields[1].GetUInt32();
-        tmpl.ScenarioId           = fields[2].GetUInt32();
-        tmpl.MapChallengeModeId   = fields[3].GetUInt32();
-        tmpl.ZoneId               = fields[4].GetUInt32();
-        tmpl.FactionId            = fields[5].GetUInt32();
-        tmpl.CompanionSpawnX      = fields[6].GetFloat();
-        tmpl.CompanionSpawnY      = fields[7].GetFloat();
-        tmpl.CompanionSpawnZ      = fields[8].GetFloat();
-        tmpl.CompanionSpawnO      = fields[9].GetFloat();
+        tmpl.Id                       = fields[0].GetUInt32();
+        tmpl.MapId                    = fields[1].GetUInt32();
+        tmpl.ScenarioId               = fields[2].GetUInt32();
+        tmpl.MapChallengeModeId       = fields[3].GetUInt32();
+        tmpl.ZoneId                   = fields[4].GetUInt32();
+        tmpl.FactionId                = fields[5].GetUInt32();
+        tmpl.CompanionSpawnX          = fields[6].GetFloat();
+        tmpl.CompanionSpawnY          = fields[7].GetFloat();
+        tmpl.CompanionSpawnZ          = fields[8].GetFloat();
+        tmpl.CompanionSpawnO          = fields[9].GetFloat();
+        tmpl.GossipMenuId             = fields[10].GetUInt32();
+        tmpl.LfgDungeonsId            = fields[11].GetUInt32();
+        tmpl.BroadcastTextId          = fields[12].GetUInt32();
+        tmpl.FirstTierGossipOptionId  = fields[13].GetUInt32();
+        tmpl.EntryX                   = fields[14].GetFloat();
+        tmpl.EntryY                   = fields[15].GetFloat();
+        tmpl.EntryZ                   = fields[16].GetFloat();
+        tmpl.EntryO                   = fields[17].GetFloat();
+        tmpl.ExitX                    = fields[18].GetFloat();
+        tmpl.ExitY                    = fields[19].GetFloat();
+        tmpl.ExitZ                    = fields[20].GetFloat();
+        tmpl.ExitO                    = fields[21].GetFloat();
+        tmpl.ActiveScenarioId         = fields[22].GetUInt32();
+        tmpl.RewardScenarioId         = fields[23].GetUInt32();
+        tmpl.WorldState26903          = fields[24].GetUInt32();
 
         _delveTemplatesByMap[tmpl.MapId] = tmpl;
         _delveTemplatesList.push_back(tmpl);

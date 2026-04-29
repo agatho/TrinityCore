@@ -57,6 +57,43 @@ inline uint8 GetMaxRevivesForTier(uint8 tier)
     return DELVE_REVIVES_TIER_10_11;
 }
 
+// 11 tier-scaling spells, captured from packet sniffs at build 12.0.1.66527 and
+// merged in from the DoomCore drop (`origin/master` of agatho/StefalWoW, file
+// `src/server/scripts/Custom/DoomcoreCustom/Delves/DelveData.h`).
+//
+// These spell IDs are **universal across all delves**: when a player picks tier
+// N from the gossip menu, the server casts TIER_SPELL_IDS[N-1] on them. The
+// spell carries the entry teleport effect plus the per-tier difficulty aura.
+// (Also stored in gossip_menu_option.SpellID per-tier, so Player::OnGossipSelect
+// fires them automatically; see commit 727dfb710b.)
+//
+// This is the data layer that previous research (project_tiered_entrance_obfuscation
+// memory) flagged as Unknown — DelvesSeasonXSpell.db2 ships empty in the live
+// client; the actual spell list arrives via packet sniff. Now captured.
+static constexpr uint32 TIER_SPELL_IDS[MAX_DELVE_TIER] =
+{
+    1260938,  // Tier 1
+    1260942,  // Tier 2
+    1260946,  // Tier 3
+    1260950,  // Tier 4
+    1260954,  // Tier 5
+    1260957,  // Tier 6
+    1260960,  // Tier 7
+    1260963,  // Tier 8
+    1260967,  // Tier 9
+    1260970,  // Tier 10
+    1260973,  // Tier 11
+};
+
+// Returns the universal tier-scaling spell ID for a 1-based tier (1..11).
+// Returns 0 for invalid tiers.
+inline uint32 GetTierSpellId(uint8 tier)
+{
+    if (tier == 0 || tier > MAX_DELVE_TIER)
+        return 0;
+    return TIER_SPELL_IDS[tier - 1];
+}
+
 // ---------------------------------------------------------------------------
 // Bountiful Delves
 // ---------------------------------------------------------------------------
@@ -205,6 +242,41 @@ struct DelveTemplate
     float CompanionSpawnY = 0.0f;
     float CompanionSpawnZ = 0.0f;
     float CompanionSpawnO = 0.0f;
+
+    // Gossip-based tier selection (sniff-derived 12.0.1.66527 via DoomCore). The
+    // retail client renders the Blizzard_DelvesDifficultyPicker UI when it
+    // receives a SMSG_GOSSIP_MESSAGE whose addon row carries a non-zero
+    // LfgDungeonsID. The 11 tier options each carry one of TIER_SPELL_IDS[] as
+    // their gossip_menu_option.SpellID; clicking a tier triggers
+    // CMSG_GOSSIP_SELECT_OPTION, and Player::OnGossipSelect casts the SpellID.
+    uint32 GossipMenuId = 0;
+    uint32 LfgDungeonsId = 0;
+    uint32 BroadcastTextId = 0;
+    uint32 FirstTierGossipOptionId = 0;
+
+    // Player teleport positions. Entry = inside-instance landing spot.
+    // Exit = overworld position the player is sent to on CMSG_DELVE_TELEPORT_OUT.
+    // (CompanionSpawn{X,Y,Z,O} above is independent — that's where Brann appears
+    // inside the instance, not where the player lands.)
+    float EntryX = 0.0f;
+    float EntryY = 0.0f;
+    float EntryZ = 0.0f;
+    float EntryO = 0.0f;
+    float ExitX = 0.0f;
+    float ExitY = 0.0f;
+    float ExitZ = 0.0f;
+    float ExitO = 0.0f;
+
+    // Per-delve scenario IDs. ActiveScenarioId is the in-progress scenario;
+    // RewardScenarioId is the completion scenario (often shared across delves —
+    // 3424 is reused by both Atal'Aman and Shadow Enclave in DoomCore data).
+    uint32 ActiveScenarioId = 0;
+    uint32 RewardScenarioId = 0;
+
+    // WorldState 26903 — controls the center spell display in the
+    // Blizzard_DelvesDifficultyPicker tier-selection UI. One value per delve
+    // (sniff-derived; e.g. 1278258 for Atal'Aman, 1265777 for Shadow Enclave).
+    uint32 WorldState26903 = 0;
 };
 
 struct DelveTierReward
