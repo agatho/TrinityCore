@@ -94,6 +94,30 @@ inline uint32 GetTierSpellId(uint8 tier)
     return TIER_SPELL_IDS[tier - 1];
 }
 
+// Display labels for the 11 tier gossip options. Plain strings — the retail
+// client uses these only for the fallback NPC-rendered menu; the native
+// Blizzard_DelvesDifficultyPicker UI uses its own localized strings keyed off
+// LfgDungeonsID and ignores these.
+static constexpr char const* TIER_NAMES[MAX_DELVE_TIER] =
+{
+    "Tier 1",  "Tier 2",  "Tier 3",  "Tier 4",  "Tier 5",  "Tier 6",
+    "Tier 7",  "Tier 8",  "Tier 9",  "Tier 10", "Tier 11",
+};
+
+// Delve-specific WorldState IDs (sniff-derived 12.0.1.66527 via DoomCore).
+// These are sent to the client around delve entry/exit to drive the
+// Blizzard_DelvesDifficultyPicker UI's active-tier display, the in-delve HUD
+// banner, and the "you're in a delve" persistent flag.
+enum DelveWorldStates : uint32
+{
+    WS_DELVE_TIER             = 24430,    // Selected tier (1..11)
+    WS_DELVE_IN_DELVE_FLAG    = 26345,    // 0 = outside, 2 = inside
+    WS_DELVE_MAP_ID           = 26423,    // Active delve MapID
+    WS_DELVE_TIER_SPELL       = 26931,    // The TIER_SPELL_IDS[] value cast for this run
+    WS_DELVE_UNKNOWN_26903    = 26903,    // Per-delve, controls center spell display in tier picker
+    WS_DELVE_LFG_DUNGEONS_ID  = 5029,     // Sent inside the instance (OnPlayerEnter)
+};
+
 // ---------------------------------------------------------------------------
 // Bountiful Delves
 // ---------------------------------------------------------------------------

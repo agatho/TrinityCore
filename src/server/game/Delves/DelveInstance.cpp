@@ -41,6 +41,15 @@ DelveInstance::DelveInstance(InstanceMap* map, uint8 tier, DelveTemplate const* 
 
 DelveInstance::~DelveInstance() = default;
 
+void DelveInstance::SetTier(uint8 tier)
+{
+    if (tier == 0 || tier > MAX_DELVE_TIER || _state != DelveState::Entering)
+        return;
+
+    _tier = tier;
+    _remainingRevives = GetMaxRevivesForTier(tier);
+}
+
 void DelveInstance::OnPlayerEnter(Player* player)
 {
     if (_state == DelveState::Entering || _state == DelveState::InProgress)

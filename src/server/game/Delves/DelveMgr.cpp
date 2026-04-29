@@ -127,6 +127,12 @@ void DelveMgr::LoadDelveTemplates()
     for (DelveTemplate const& tmpl : _delveTemplatesList)
         if (tmpl.MapChallengeModeId != 0)
             _delveTemplatesByChallengeModeId[tmpl.MapChallengeModeId] = &_delveTemplatesByMap[tmpl.MapId];
+
+    // Build tertiary index by GossipMenuId (used by the entrance NPC script
+    // to route gossip clicks to the correct delve template).
+    for (DelveTemplate const& tmpl : _delveTemplatesList)
+        if (tmpl.GossipMenuId != 0)
+            _delveTemplatesByGossipMenuId[tmpl.GossipMenuId] = &_delveTemplatesByMap[tmpl.MapId];
 }
 
 void DelveMgr::LoadTierRewards()
@@ -170,6 +176,12 @@ DelveTemplate const* DelveMgr::GetDelveTemplateByChallengeModeId(uint32 mapChall
 {
     auto itr = _delveTemplatesByChallengeModeId.find(mapChallengeModeId);
     return itr != _delveTemplatesByChallengeModeId.end() ? itr->second : nullptr;
+}
+
+DelveTemplate const* DelveMgr::GetDelveTemplateByGossipMenuId(uint32 gossipMenuId) const
+{
+    auto itr = _delveTemplatesByGossipMenuId.find(gossipMenuId);
+    return itr != _delveTemplatesByGossipMenuId.end() ? itr->second : nullptr;
 }
 
 DelveTierReward const* DelveMgr::GetTierReward(uint8 tier) const

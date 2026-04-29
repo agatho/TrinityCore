@@ -52,6 +52,7 @@ public:
     // Templates
     DelveTemplate const* GetDelveTemplate(uint32 mapId) const;
     DelveTemplate const* GetDelveTemplateByChallengeModeId(uint32 mapChallengeModeId) const;
+    DelveTemplate const* GetDelveTemplateByGossipMenuId(uint32 gossipMenuId) const;
     std::vector<DelveTemplate> const& GetAllDelveTemplates() const { return _delveTemplatesList; }
 
     // Tier rewards
@@ -87,6 +88,8 @@ private:
     std::unordered_map<uint32, DelveTemplate> _delveTemplatesByMap;
     // Templates indexed by MapChallengeModeId
     std::unordered_map<uint32, DelveTemplate const*> _delveTemplatesByChallengeModeId;
+    // Templates indexed by GossipMenuId (the entrance NPC's gossip menu)
+    std::unordered_map<uint32, DelveTemplate const*> _delveTemplatesByGossipMenuId;
     // Ordered list of all templates
     std::vector<DelveTemplate> _delveTemplatesList;
     // Tier rewards

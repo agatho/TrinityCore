@@ -45,6 +45,7 @@ public:
 
     // Accessors
     uint8 GetTier() const { return _tier; }
+    void SetTier(uint8 tier);
     uint8 GetRemainingRevives() const { return _remainingRevives; }
     bool HasRevivesRemaining() const { return _remainingRevives == DELVE_REVIVES_UNLIMITED || _remainingRevives > 0; }
     DelveState GetState() const { return _state; }

@@ -60,6 +60,9 @@ void AddSC_instance_the_spiral_weave();
 void AddSC_instance_tak_rethan_abyss();
 void AddSC_instance_the_underkeep();
 void AddSC_instance_zekvirs_lair();
+// Delves - Undermine / Khaz Algar (Season 2/3)
+void AddSC_instance_atal_aman_delve();
+void AddSC_instance_shadow_enclave_delve();
 // Delves - Common
 void AddSC_npc_delve_entrance();
 void AddSC_npc_brann_bronzebeard_delves();
@@ -111,6 +114,9 @@ void AddKhazAlgarScripts()
     AddSC_instance_tak_rethan_abyss();
     AddSC_instance_the_underkeep();
     AddSC_instance_zekvirs_lair();
+    // Delves - Undermine / Khaz Algar (Season 2/3)
+    AddSC_instance_atal_aman_delve();
+    AddSC_instance_shadow_enclave_delve();
     // Delves - Common
     AddSC_npc_delve_entrance();
     AddSC_npc_brann_bronzebeard_delves();

@@ -37,8 +37,45 @@ void DelveInstanceScript::OnPlayerEnter(Player* player)
 {
     InstanceScript::OnPlayerEnter(player);
 
-    if (_delveInstance)
-        _delveInstance->OnPlayerEnter(player);
+    if (!_delveInstance)
+        return;
+
+    // First entrant locks the run's tier from their gossip selection.
+    if (_delveInstance->GetState() == DelveState::Entering &&
+        player->m_delveSelectedTier > 0 && player->m_delveSelectedTier <= MAX_DELVE_TIER)
+    {
+        _delveInstance->SetTier(player->m_delveSelectedTier);
+    }
+
+    _delveInstance->OnPlayerEnter(player);
+
+    // Apply the tier scaling/affix aura. The TIER_SPELL_IDS auras are the
+    // retail mechanism that drives mob HP/damage scaling and tier-specific
+    // affixes inside the instance (verified via sniff 12.0.1.66527).
+    uint8 tier = _delveInstance->GetTier();
+    if (uint32 spellId = GetTierSpellId(tier))
+    {
+        // Refresh — strip any prior tier aura before applying the current one.
+        for (uint32 sid : TIER_SPELL_IDS)
+            if (sid && sid != spellId && player->HasAura(sid))
+                player->RemoveAurasDueToSpell(sid);
+
+        if (!player->HasAura(spellId))
+            player->CastSpell(player, spellId, true);
+    }
+
+    // Re-send the WorldStates so the in-delve HUD reflects the active tier.
+    player->SendUpdateWorldState(WS_DELVE_TIER, tier);
+    player->SendUpdateWorldState(WS_DELVE_IN_DELVE_FLAG, 2);
+    player->SendUpdateWorldState(WS_DELVE_MAP_ID, instance->GetId());
+    player->SendUpdateWorldState(WS_DELVE_TIER_SPELL, GetTierSpellId(tier));
+    if (DelveTemplate const* tmpl = _delveInstance->GetTemplate())
+    {
+        if (tmpl->WorldState26903)
+            player->SendUpdateWorldState(WS_DELVE_UNKNOWN_26903, tmpl->WorldState26903);
+        if (tmpl->LfgDungeonsId)
+            player->SendUpdateWorldState(WS_DELVE_LFG_DUNGEONS_ID, tmpl->LfgDungeonsId);
+    }
 }
 
 void DelveInstanceScript::OnPlayerLeave(Player* player)
