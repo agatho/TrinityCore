@@ -855,6 +855,13 @@ void ChromieTimeSelectExpansion::Read()
     _worldPacket >> ExpansionID;
 }
 
+WorldPacket const* TimerunningSeasonEnded::Write()
+{
+    _worldPacket << uint32(SeasonID);
+
+    return &_worldPacket;
+}
+
 WorldPacket const* SetCtrOptions::Write()
 {
     _worldPacket << uint32(ConditionalFlags.size());

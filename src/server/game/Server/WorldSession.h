@@ -275,6 +275,7 @@ namespace WorldPackets
         class SetWatchedFaction;
         class SetPlayerDeclinedNames;
         class SavePersonalEmblem;
+        class ConvertTimerunningCharacter;
 
         enum class LoginFailureReason : uint8;
     }
@@ -1819,6 +1820,7 @@ class TC_GAME_API WorldSession
         void HandleQueryCountdownTimer(WorldPackets::Misc::QueryCountdownTimer& queryCountdownTimer);
         void HandleSetCurrencyFlags(WorldPackets::Misc::SetCurrencyFlags const& setCurrenctFlags);
         void HandleChromieTimeSelectExpansion(WorldPackets::Misc::ChromieTimeSelectExpansion& chromieTimeSelectExpansion);
+        void HandleConvertTimerunningCharacter(WorldPackets::Character::ConvertTimerunningCharacter& convertTimerunningCharacter);
 
         // Adventure Journal
         void HandleAdventureJournalOpenQuest(WorldPackets::AdventureJournal::AdventureJournalOpenQuest& openQuest);

@@ -892,4 +892,10 @@ WorldPacket const* PlayerSavePersonalEmblem::Write()
 
     return &_worldPacket;
 }
+
+void ConvertTimerunningCharacter::Read()
+{
+    _worldPacket >> CharacterGuid;
+    _worldPacket >> RaceAndFaction;
+}
 }

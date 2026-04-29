@@ -18037,7 +18037,7 @@ bool Player::LoadFromDB(ObjectGuid guid, CharacterDatabaseQueryHolder const& hol
         // "health, power1, power2, power3, power4, power5, power6, power7, power8, power9, power10, instance_id, activeTalentGroup, lootSpecId, exploredZones, knownTitles, actionBars, "
         // "raidDifficulty, legacyRaidDifficulty, fishingSteps, honor, honorLevel, honorRestState, honorRestBonus, numRespecs, "
         // "personalTabardEmblemStyle, personalTabardEmblemColor, personalTabardBorderStyle, personalTabardBorderColor, personalTabardBackgroundColor, transmogOutfitEquippedId, transmogOutfitLocked, "
-        // "chromieTimeExpansionId "
+        // "chromieTimeExpansionId, timerunningSeasonId "
         // "FROM characters c LEFT JOIN character_fishingsteps cfs ON c.guid = cfs.guid WHERE c.guid = ?", CONNECTION_ASYNC);
 
         ObjectGuid::LowType guid;
@@ -18118,6 +18118,7 @@ bool Player::LoadFromDB(ObjectGuid guid, CharacterDatabaseQueryHolder const& hol
         int32 transmogOutfitEquippedId;
         bool transmogOutfitLocked;
         uint8 chromieTimeExpansionId;
+        uint32 timerunningSeasonId;
 
         explicit PlayerLoadData(Field const* fields)
         {
@@ -18202,6 +18203,7 @@ bool Player::LoadFromDB(ObjectGuid guid, CharacterDatabaseQueryHolder const& hol
             transmogOutfitEquippedId = fields[i++].GetInt32();
             transmogOutfitLocked = fields[i++].GetBool();
             chromieTimeExpansionId = fields[i++].GetUInt8();
+            timerunningSeasonId = fields[i++].GetUInt32();
         }
 
     } fields(result->Fetch());
@@ -18345,6 +18347,11 @@ bool Player::LoadFromDB(ObjectGuid guid, CharacterDatabaseQueryHolder const& hol
 
         SetChromieTimeConditionalFlags(true);
     }
+
+    if (fields.timerunningSeasonId)
+        SetUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData)
+            .ModifyValue(&UF::ActivePlayerData::TimerunningSeasonID),
+            int32(fields.timerunningSeasonId));
 
     // Always set FactionGroup on CtrOptions (needed for party sync and content tuning)
     SetUpdateFieldValue(m_values.ModifyValue(&Player::m_playerData)
@@ -20684,6 +20691,7 @@ void Player::SaveToDB(LoginDatabaseTransaction loginTransaction, CharacterDataba
         stmt->setInt32(index++, m_activePlayerData->TransmogMetadata->TransmogOutfitID);
         stmt->setBool(index++, m_activePlayerData->TransmogMetadata->Locked);
         stmt->setUInt8(index++, uint8(m_activePlayerData->UiChromieTimeExpansionID));
+        stmt->setUInt32(index++, uint32(m_activePlayerData->TimerunningSeasonID));
     }
     else
     {
@@ -20836,6 +20844,7 @@ void Player::SaveToDB(LoginDatabaseTransaction loginTransaction, CharacterDataba
         stmt->setInt32(index++, m_activePlayerData->TransmogMetadata->TransmogOutfitID);
         stmt->setBool(index++, m_activePlayerData->TransmogMetadata->Locked);
         stmt->setUInt8(index++, uint8(m_activePlayerData->UiChromieTimeExpansionID));
+        stmt->setUInt32(index++, uint32(m_activePlayerData->TimerunningSeasonID));
 
         // Index
         stmt->setUInt64(index, GetGUID().GetCounter());

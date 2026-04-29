@@ -1063,6 +1063,16 @@ namespace WorldPackets
             WorldPacket const* Write() override { return &_worldPacket; }
         };
 
+        class TimerunningSeasonEnded final : public ServerPacket
+        {
+        public:
+            TimerunningSeasonEnded() : ServerPacket(SMSG_TIMERUNNING_SEASON_ENDED, 4) { }
+
+            WorldPacket const* Write() override;
+
+            uint32 SeasonID = 0;
+        };
+
         class SetCtrOptions final : public ServerPacket
         {
         public:

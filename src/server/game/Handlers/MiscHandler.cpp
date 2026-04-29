@@ -26,6 +26,7 @@
 #include "CinematicMgr.h"
 #include "ClientConfigPackets.h"
 #include "Common.h"
+#include "ConditionMgr.h"
 #include "Conversation.h"
 #include "ConversationAI.h"
 #include "Corpse.h"
@@ -1237,8 +1238,28 @@ void WorldSession::HandleChromieTimeSelectExpansion(WorldPackets::Misc::ChromieT
 
     int32 expansionId = chromieTimeSelectExpansion.ExpansionID;
 
-    if (expansionId < 0 || expansionId > CURRENT_EXPANSION)
+    // 0 = clear / "return to present" (no DB2 record needed)
+    if (expansionId == CHROMIE_TIME_EXPANSION_NONE)
+    {
+        if (player->GetLevel() < 10 || player->IsMaxLevel())
+            return;
+
+        player->SetChromieTime(CHROMIE_TIME_EXPANSION_NONE);
+        player->SendDirectMessage(WorldPackets::Misc::ChromieTimeSelectExpansionSuccess().Write());
         return;
+    }
+
+    UIChromieTimeExpansionInfoEntry const* entry = sUIChromieTimeExpansionInfoStore.LookupEntry(uint32(expansionId));
+    if (!entry)
+    {
+        // Fallback when DB2 store isn't populated: accept the 6 retail-valid expansions.
+        if (expansionId < CHROMIE_TIME_EXPANSION_MIN || expansionId > CHROMIE_TIME_EXPANSION_MAX)
+            return;
+    }
+    else if (entry->ShowPlayerConditionID && !ConditionMgr::IsPlayerMeetingCondition(player, entry->ShowPlayerConditionID))
+    {
+        return;
+    }
 
     // Blizzlike: only available for levels 10-70 (below max level)
     if (player->GetLevel() < 10 || player->IsMaxLevel())
