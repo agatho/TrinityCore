@@ -36,11 +36,12 @@ enum DragonridingSpells
     SPELL_DRAGONRIDING_LIFT_OFF         = 374763,
 };
 
-// Blizzlike impulse values from sniff data:
-// Launch Boost:    (0, 0, 45.0)           — pure upward, magnitude 45.0, sent on spell hit (before periodic aura)
-// Whirling Surge:  magnitude 5.0 per tick  — facing+pitch oriented, 5-6 ticks, periodic aura (3s duration)
-// Skyward Ascent:  horizontal 12.25 + Z 49.0 — magnitude ~50.51, single impulse
-// Surge Forward:   magnitude 30.0          — facing+pitch oriented, single burst (estimated; not directly observable in sniff)
+// Blizzlike impulse values from sniff data (12.0.1.66709 dragonriding_midnight, 2026-03-31):
+// Launch Boost:    (0, 0, 45.0) on hit + 5.0 facing+pitch ticks @ 100ms over 2s aura — counter 29 base, 30..34 ticks
+// Whirling Surge:  magnitude 60.0 facing+pitch, SINGLE impulse on hit (NOT periodic) — counter 35
+// Skyward Ascent:  horizontal 12.25 + Z 49.0 — magnitude ~50.51 — counter 37 (12.185, 1.264, 49.000) ✓
+// Surge Forward:   magnitude 18.0 facing+pitch — counter 36 (-7.642, 16.243, 1.335) and counter 44 (14.779, 10.077, -2.010)
+//                  counter 43 observed at 36.0 magnitude — likely talent-buffed; 18.0 is the untalented base.
 
 static void SendFacingImpulse(Unit* caster, float speed)
 {
@@ -74,7 +75,7 @@ class spell_dragonriding_surge_forward : public SpellScript
     void HandleHit(SpellEffIndex /*effIndex*/)
     {
         if (Unit* caster = GetCaster())
-            SendFacingImpulse(caster, 30.0f);
+            SendFacingImpulse(caster, 18.0f);
     }
 
     void Register() override
@@ -114,7 +115,9 @@ class spell_dragonriding_skyward_ascent : public SpellScript
     }
 };
 
-// 361584 - Whirling Surge (SpellScript for cast validation)
+// 361584 - Whirling Surge
+// Sniff (counter 35, t=66762ms): single impulse vec=(-17.083, 57.364, -4.187) mag=60.0 — facing+pitch, NOT periodic.
+// The 3s SPELL_AURA_DUMMY remains client-side (visual/animation); the magnitude-60 push is delivered once on hit.
 class spell_dragonriding_whirling_surge : public SpellScript
 {
     SpellCastResult CheckCast()
@@ -122,25 +125,16 @@ class spell_dragonriding_whirling_surge : public SpellScript
         return CheckSkyriding(this);
     }
 
+    void HandleHit(SpellEffIndex /*effIndex*/)
+    {
+        if (Unit* caster = GetCaster())
+            SendFacingImpulse(caster, 60.0f);
+    }
+
     void Register() override
     {
         OnCheckCast += SpellCheckCastFn(spell_dragonriding_whirling_surge::CheckCast);
-    }
-};
-
-// 361584 - Whirling Surge (AuraScript for periodic impulse ticks)
-// Wowhead: Apply Aura: Dummy, 3s duration. Sniff: 5-6 impulse ticks at magnitude 5.0, facing+pitch oriented.
-class spell_dragonriding_whirling_surge_aura : public AuraScript
-{
-    void HandlePeriodicDummy(AuraEffect const* /*aurEff*/)
-    {
-        if (Unit* target = GetTarget())
-            SendFacingImpulse(target, 5.0f);
-    }
-
-    void Register() override
-    {
-        OnEffectPeriodic += AuraEffectPeriodicFn(spell_dragonriding_whirling_surge_aura::HandlePeriodicDummy, EFFECT_0, SPELL_AURA_DUMMY);
+        OnEffectHitTarget += SpellEffectFn(spell_dragonriding_whirling_surge::HandleHit, EFFECT_0, SPELL_EFFECT_DUMMY);
     }
 };
 
@@ -185,8 +179,8 @@ class spell_dragonriding_launch_boost_aura : public AuraScript
 
 void AddSC_dragonriding_spell_scripts()
 {
-    RegisterSpellAndAuraScriptPair(spell_dragonriding_whirling_surge, spell_dragonriding_whirling_surge_aura);
     RegisterSpellAndAuraScriptPair(spell_dragonriding_launch_boost, spell_dragonriding_launch_boost_aura);
+    RegisterSpellScript(spell_dragonriding_whirling_surge);
     RegisterSpellScript(spell_dragonriding_surge_forward);
     RegisterSpellScript(spell_dragonriding_skyward_ascent);
 }
