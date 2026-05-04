@@ -852,6 +852,7 @@ WorldPacket const* AccountWarbandSceneUpdate::Write()
 
 void ChromieTimeSelectExpansion::Read()
 {
+    _worldPacket >> Vendor;
     _worldPacket >> ExpansionID;
 }
 
@@ -864,11 +865,17 @@ WorldPacket const* TimerunningSeasonEnded::Write()
 
 WorldPacket const* SetCtrOptions::Write()
 {
-    _worldPacket << uint32(ConditionalFlags.size());
-    _worldPacket << uint8(FactionGroup);
-    _worldPacket << uint32(ChromieTimeExpansionMask);
-    for (uint32 flag : ConditionalFlags)
-        _worldPacket << uint32(flag);
+    auto writeBlock = [&](CTROptionsBlock const& block)
+    {
+        _worldPacket << uint32(block.ConditionalFlags.size());
+        _worldPacket << uint8(block.FactionGroup);
+        _worldPacket << uint32(block.ChromieTimeExpansionMask);
+        for (uint32 flag : block.ConditionalFlags)
+            _worldPacket << uint32(flag);
+    };
+
+    writeBlock(Previous);
+    writeBlock(Current);
 
     return &_worldPacket;
 }

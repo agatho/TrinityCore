@@ -106,19 +106,10 @@ enum Expansions
 
 #define CURRENT_EXPANSION EXPANSION_MIDNIGHT
 
-enum ChromieTimeExpansion : int32
-{
-    CHROMIE_TIME_EXPANSION_NONE              = 0,
-    CHROMIE_TIME_EXPANSION_BURNING_CRUSADE   = EXPANSION_THE_BURNING_CRUSADE,
-    CHROMIE_TIME_EXPANSION_WRATH             = EXPANSION_WRATH_OF_THE_LICH_KING,
-    CHROMIE_TIME_EXPANSION_CATACLYSM         = EXPANSION_CATACLYSM,
-    CHROMIE_TIME_EXPANSION_MISTS             = EXPANSION_MISTS_OF_PANDARIA,
-    CHROMIE_TIME_EXPANSION_WARLORDS          = EXPANSION_WARLORDS_OF_DRAENOR,
-    CHROMIE_TIME_EXPANSION_LEGION            = EXPANSION_LEGION
-};
-
-#define CHROMIE_TIME_EXPANSION_MIN CHROMIE_TIME_EXPANSION_BURNING_CRUSADE
-#define CHROMIE_TIME_EXPANSION_MAX CHROMIE_TIME_EXPANSION_LEGION
+// Chromie Time wire IDs are UIChromieTimeExpansionInfo.ID (DB2 record IDs), NOT the
+// Expansions enum above. Confirmed via 12.0.5 client sniff: Pandaria=8, Legion=10, etc.
+// Use sUIChromieTimeExpansionInfoStore.LookupEntry(id) to validate; the only special
+// value handled at code level is "clear / return to present" = 0.
 
 enum TimerunningSeasons : uint32
 {

@@ -1052,7 +1052,8 @@ namespace WorldPackets
 
             void Read() override;
 
-            int32 ExpansionID = 0;
+            ObjectGuid Vendor;     // packed GUID of the Chromie NPC the player is interacting with
+            int32 ExpansionID = 0; // UIChromieTimeExpansionInfo.ID (NOT the Expansions enum)
         };
 
         class ChromieTimeSelectExpansionSuccess final : public ServerPacket
@@ -1073,16 +1074,27 @@ namespace WorldPackets
             uint32 SeasonID = 0;
         };
 
-        class SetCtrOptions final : public ServerPacket
+        // Wire layout (12.0.5, confirmed via sniff):
+        //   block { uint32 ConditionalFlagsCount; uint8 FactionGroup; uint32 ChromieTimeExpansionMask;
+        //           uint32 ConditionalFlags[ConditionalFlagsCount]; }
+        //   Two consecutive blocks: [Previous, Current].
+        //   Login pulse sends [current, current] (no transition); state changes send [pre, post].
+        struct CTROptionsBlock
         {
-        public:
-            SetCtrOptions() : ServerPacket(SMSG_SET_CTR_OPTIONS, 4 + 1 + 4) { }
-
-            WorldPacket const* Write() override;
-
             std::vector<uint32> ConditionalFlags;
             uint8 FactionGroup = 0;
             uint32 ChromieTimeExpansionMask = 0;
+        };
+
+        class SetCtrOptions final : public ServerPacket
+        {
+        public:
+            SetCtrOptions() : ServerPacket(SMSG_SET_CTR_OPTIONS, 26) { }
+
+            WorldPacket const* Write() override;
+
+            CTROptionsBlock Previous;
+            CTROptionsBlock Current;
         };
     }
 }
