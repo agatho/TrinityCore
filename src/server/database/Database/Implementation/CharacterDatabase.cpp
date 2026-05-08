@@ -1042,10 +1042,10 @@ void CharacterDatabaseConnection::DoPrepareStatements()
     PrepareStatement(CHAR_SEL_ACCOUNT_REPUTATION, "SELECT faction, standing, renownLevel FROM warband_reputation WHERE battlenetAccountId = ?", CONNECTION_ASYNC);
     PrepareStatement(CHAR_REP_ACCOUNT_REPUTATION, "REPLACE INTO warband_reputation (battlenetAccountId, faction, standing, renownLevel) VALUES (?, ?, ?, ?)", CONNECTION_ASYNC);
 
-    PrepareStatement(CHAR_SEL_ACCOUNT_CHARACTER_CURRENCIES, "SELECT c.guid, c.name, c.class, c.level, pc.currency, pc.quantity FROM characters c INNER JOIN character_currency pc ON c.guid = pc.guid WHERE c.battlenetAccount = ? AND c.deleteDate IS NULL", CONNECTION_ASYNC);
+    PrepareStatement(CHAR_SEL_ACCOUNT_CHARACTER_CURRENCIES, "SELECT c.guid, c.name, c.class, c.level, pc.Currency, pc.Quantity FROM characters c INNER JOIN character_currency pc ON c.guid = pc.CharacterGuid WHERE c.battlenetAccount = ? AND c.deleteDate IS NULL", CONNECTION_ASYNC);
     PrepareStatement(CHAR_INS_WARBAND_CURRENCY_TRANSFER_LOG, "INSERT INTO warband_currency_transfer_log (battlenetAccountId, currencyTypeId, sourceCharacterGuid, destCharacterGuid, quantity, timestamp) VALUES (?, ?, ?, ?, ?, ?)", CONNECTION_ASYNC);
     PrepareStatement(CHAR_SEL_WARBAND_CURRENCY_TRANSFER_LOG, "SELECT currencyTypeId, sourceCharacterGuid, destCharacterGuid, quantity, timestamp FROM warband_currency_transfer_log WHERE battlenetAccountId = ? ORDER BY timestamp DESC LIMIT 50", CONNECTION_ASYNC);
-    PrepareStatement(CHAR_UPD_PLAYER_CURRENCY_QUANTITY, "UPDATE character_currency SET quantity = ? WHERE guid = ? AND currency = ?", CONNECTION_ASYNC);
+    PrepareStatement(CHAR_UPD_PLAYER_CURRENCY_QUANTITY, "UPDATE character_currency SET Quantity = ? WHERE CharacterGuid = ? AND Currency = ?", CONNECTION_ASYNC);
 }
 
 CharacterDatabaseConnection::CharacterDatabaseConnection(MySQLConnectionInfo& connInfo, ConnectionFlags connectionFlags) : MySQLConnection(connInfo, connectionFlags)
