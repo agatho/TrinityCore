@@ -1581,7 +1581,7 @@ struct DelvesSeasonXSpellEntry
 {
     uint32 ID;
     int32 SpellID;
-    int32 DelvesSeasonID;
+    uint32 DelvesSeasonID;
 };
 
 struct DifficultyEntry
@@ -3427,7 +3427,7 @@ struct PlayerCompanionInfoEntry
     int32 Field_11_0_5_56647_010;
     int32 Field_11_0_5_56647_011;
     int32 Field_11_0_7_57361_012;
-    int32 ParentID;
+    uint32 ParentID;
 };
 
 struct PowerDisplayEntry
