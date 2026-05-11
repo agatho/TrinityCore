@@ -568,14 +568,13 @@ void OpcodeTable::InitializeClientOpcodes()
     DEFINE_HANDLER(CMSG_HOUSE_INTERIOR_LEAVE_HOUSE,                         STATUS_LOGGEDIN, PROCESS_THREADUNSAFE, &WorldSession::HandleHouseInteriorLeaveHouse);
     DEFINE_HANDLER(CMSG_HOUSING_DECOR_CONFIRM_PREVIEW_PLACEMENT,                       STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleHousingDecorConfirmPreviewPlacement);
     DEFINE_HANDLER(CMSG_HOUSING_DECOR_CLEANUP_MODE_TOGGLE,                       STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleHousingDecorCleanupModeToggle);
-    DEFINE_HANDLER(CMSG_HOUSING_DECOR_CATALOG_CREATE_SEARCHER,                       STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleHousingDecorCatalogCreateSearcher);
-    DEFINE_HANDLER(CMSG_HOUSING_DECOR_BATCH_OPERATION,                       STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleHousingDecorBatchOperation);
+    // Retired 2026-05-11: CMSG_HOUSING_DECOR_CATALOG_CREATE_SEARCHER + BATCH_OPERATION handler registrations.
     DEFINE_HANDLER(CMSG_HOUSING_DECOR_DELETE_FROM_STORAGE,                  STATUS_LOGGEDIN, PROCESS_THREADUNSAFE, &WorldSession::HandleHousingDecorDeleteFromStorage);
     DEFINE_HANDLER(CMSG_HOUSING_DECOR_DELETE_FROM_STORAGE_BY_ID,                       STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleHousingDecorDeleteFromStorageById);
     DEFINE_HANDLER(CMSG_HOUSING_DECOR_LOCK,                                 STATUS_LOGGEDIN, PROCESS_THREADUNSAFE, &WorldSession::HandleHousingDecorLock);
     DEFINE_HANDLER(CMSG_HOUSING_DECOR_MOVE,                                 STATUS_LOGGEDIN, PROCESS_THREADUNSAFE, &WorldSession::HandleHousingDecorMove);
     DEFINE_HANDLER(CMSG_HOUSING_DECOR_PLACE,                                STATUS_LOGGEDIN, PROCESS_THREADUNSAFE, &WorldSession::HandleHousingDecorPlace);
-    DEFINE_HANDLER(CMSG_HOUSING_DECOR_PLACEMENT_PREVIEW,                       STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleHousingDecorPlacementPreview);
+    // Retired 2026-05-11: CMSG_HOUSING_DECOR_PLACEMENT_PREVIEW handler registration.
     DEFINE_HANDLER(CMSG_HOUSING_DECOR_REDEEM_DEFERRED_DECOR,                STATUS_LOGGEDIN, PROCESS_THREADUNSAFE, &WorldSession::HandleHousingDecorRedeemDeferredDecor);
     DEFINE_HANDLER(CMSG_HOUSING_DECOR_REMOVE,                               STATUS_LOGGEDIN, PROCESS_THREADUNSAFE, &WorldSession::HandleHousingDecorRemove);
     DEFINE_HANDLER(CMSG_HOUSING_DECOR_REQUEST_STORAGE,                      STATUS_LOGGEDIN, PROCESS_THREADUNSAFE, &WorldSession::HandleHousingDecorRequestStorage);
@@ -583,8 +582,7 @@ void OpcodeTable::InitializeClientOpcodes()
     DEFINE_HANDLER(CMSG_HOUSING_DECOR_SET_EDIT_MODE,                        STATUS_LOGGEDIN, PROCESS_THREADUNSAFE, &WorldSession::HandleHousingDecorSetEditMode);
     DEFINE_HANDLER(CMSG_HOUSING_FIXTURE_CREATE_BASIC_HOUSE,                       STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleHousingFixtureCreateBasicHouse);
     DEFINE_HANDLER(CMSG_HOUSING_DECOR_UPDATE_DYE_SLOT,                       STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleHousingDecorUpdateDyeSlot);
-    DEFINE_HANDLER(CMSG_HOUSING_DECOR_START_PLACING_NEW_DECOR,                       STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleHousingDecorStartPlacingNewDecor);
-    DEFINE_HANDLER(CMSG_HOUSING_DECOR_START_PLACING_FROM_SOURCE,                       STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleHousingDecorStartPlacingFromSource);
+    // Retired 2026-05-11: CMSG_HOUSING_DECOR_START_PLACING_NEW_DECOR + START_PLACING_FROM_SOURCE handler registrations.
     DEFINE_HANDLER(CMSG_HOUSING_FIXTURE_CREATE_FIXTURE,                     STATUS_LOGGEDIN, PROCESS_THREADUNSAFE, &WorldSession::HandleHousingFixtureCreateFixture);
     DEFINE_HANDLER(CMSG_HOUSING_FIXTURE_DELETE_FIXTURE,                     STATUS_LOGGEDIN, PROCESS_THREADUNSAFE, &WorldSession::HandleHousingFixtureDeleteFixture);
     DEFINE_HANDLER(CMSG_HOUSING_FIXTURE_DELETE_HOUSE,                       STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleHousingFixtureDeleteHouse);
@@ -597,7 +595,7 @@ void OpcodeTable::InitializeClientOpcodes()
     DEFINE_HANDLER(CMSG_HOUSING_HOUSE_STATUS,                               STATUS_LOGGEDIN, PROCESS_THREADUNSAFE, &WorldSession::HandleHousingHouseStatus);
     DEFINE_HANDLER(CMSG_HOUSING_PHOTO_SHARING_CLEAR_AUTHORIZATION,          STATUS_LOGGEDIN, PROCESS_THREADUNSAFE, &WorldSession::HandleHousingPhotoSharingClearAuthorization);
     DEFINE_HANDLER(CMSG_HOUSING_PHOTO_SHARING_COMPLETE_AUTHORIZATION,       STATUS_LOGGEDIN, PROCESS_THREADUNSAFE, &WorldSession::HandleHousingPhotoSharingCompleteAuthorization);
-    DEFINE_HANDLER(CMSG_HOUSING_REQUEST_EDITOR_AVAILABILITY,                       STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleHousingRequestEditorAvailability);
+    // Retired 2026-05-11: CMSG_HOUSING_REQUEST_EDITOR_AVAILABILITY handler registration.
     DEFINE_HANDLER(CMSG_HOUSING_RESET_KIOSK_MODE,                           STATUS_LOGGEDIN, PROCESS_THREADUNSAFE, &WorldSession::HandleHousingResetKioskMode);
     DEFINE_HANDLER(CMSG_HOUSING_ROOM_ADD,                                   STATUS_LOGGEDIN, PROCESS_THREADUNSAFE, &WorldSession::HandleHousingRoomAdd);
     DEFINE_HANDLER(CMSG_HOUSING_ROOM_APPLY_COMPONENT_MATERIALS,             STATUS_LOGGEDIN, PROCESS_THREADUNSAFE, &WorldSession::HandleHousingRoomApplyComponentMaterials);
@@ -634,7 +632,7 @@ void OpcodeTable::InitializeClientOpcodes()
     DEFINE_HANDLER(CMSG_HOUSING_SVCS_UPDATE_HOUSE_SETTINGS,                 STATUS_LOGGEDIN, PROCESS_THREADUNSAFE, &WorldSession::HandleHousingSvcsUpdateHouseSettings);
     DEFINE_HANDLER(CMSG_HOUSING_SYSTEM_UPDATE_HOUSE_INFO,                       STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleHousingSystemUpdateHouseInfo);
     DEFINE_HANDLER(CMSG_HOUSING_SYSTEM_HOUSE_STATUS_QUERY,                       STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleHousingSystemHouseStatusQuery);
-    DEFINE_HANDLER(CMSG_HOUSING_SYSTEM_HOUSE_SNAPSHOT,                       STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleHousingSystemHouseSnapshot);
+    // Retired 2026-05-11: CMSG_HOUSING_SYSTEM_HOUSE_SNAPSHOT handler registration.
     DEFINE_HANDLER(CMSG_HOUSING_SYSTEM_GET_HOUSE_INFO_ALT,                       STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleHousingSystemGetHouseInfoAlt);
     DEFINE_HANDLER(CMSG_HOUSING_SYSTEM_EXPORT_HOUSE,                       STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleHousingSystemExportHouse);
     DEFINE_HANDLER(CMSG_IGNORE_TRADE,                                       STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleIgnoreTradeOpcode);

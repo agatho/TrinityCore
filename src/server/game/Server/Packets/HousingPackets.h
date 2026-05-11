@@ -354,26 +354,9 @@ namespace WorldPackets::Housing
         uint32 RedemptionToken = 0;
     };
 
-    class HousingDecorStartPlacingNewDecor final : public ClientPacket
-    {
-    public:
-        explicit HousingDecorStartPlacingNewDecor(WorldPacket&& packet) : ClientPacket(CMSG_HOUSING_DECOR_START_PLACING_NEW_DECOR, std::move(packet)) { }
-
-        void Read() override;
-
-        uint32 CatalogEntryID = 0;
-        uint32 Field_4 = 0;
-    };
-
-    class HousingDecorCatalogCreateSearcher final : public ClientPacket
-    {
-    public:
-        explicit HousingDecorCatalogCreateSearcher(WorldPacket&& packet) : ClientPacket(CMSG_HOUSING_DECOR_CATALOG_CREATE_SEARCHER, std::move(packet)) { }
-
-        void Read() override;
-
-        ObjectGuid Owner;
-    };
+    // Retired 2026-05-11: HousingDecorStartPlacingNewDecor + HousingDecorCatalogCreateSearcher
+    // (TC-CUSTOM CMSGs 0x300005, 0x300007). C_HousingBasicMode.StartPlacingNewDecor is
+    // fire-and-forget client-side; HousingCatalogSearcherAPI is purely client-side filter/search.
 
     class GetLastCatalogFetch final : public ClientPacket
     {
@@ -408,14 +391,8 @@ namespace WorldPackets::Housing
         uint32 DyeColorID = 0;
     };
 
-    class HousingDecorStartPlacingFromSource final : public ClientPacket
-    {
-    public:
-        explicit HousingDecorStartPlacingFromSource(WorldPacket&& packet) : ClientPacket(CMSG_HOUSING_DECOR_START_PLACING_FROM_SOURCE, std::move(packet)) { }
-        void Read() override;
-        uint32 SourceType = 0;
-        uint32 SourceID = 0;
-    };
+    // Retired 2026-05-11: HousingDecorStartPlacingFromSource (TC-CUSTOM CMSG 0x30000B).
+    // Same fire-and-forget pattern as StartPlacingNewDecor; no retail counterpart.
 
     class HousingDecorCleanupModeToggle final : public ClientPacket
     {
@@ -425,25 +402,9 @@ namespace WorldPackets::Housing
         bool Enabled = false;
     };
 
-    class HousingDecorBatchOperation final : public ClientPacket
-    {
-    public:
-        explicit HousingDecorBatchOperation(WorldPacket&& packet) : ClientPacket(CMSG_HOUSING_DECOR_BATCH_OPERATION, std::move(packet)) { }
-        void Read() override;
-        uint8 OperationType = 0;
-        std::vector<ObjectGuid> DecorGuids;
-    };
-
-    class HousingDecorPlacementPreview final : public ClientPacket
-    {
-    public:
-        explicit HousingDecorPlacementPreview(WorldPacket&& packet) : ClientPacket(CMSG_HOUSING_DECOR_PLACEMENT_PREVIEW, std::move(packet)) { }
-        void Read() override;
-        ObjectGuid DecorGuid;
-        TaggedPosition<Position::XYZ> PreviewPosition;
-        TaggedPosition<Position::XYZ> PreviewRotation;
-        float Scale = 1.0f;
-    };
+    // Retired 2026-05-11: HousingDecorBatchOperation + HousingDecorPlacementPreview (TC-CUSTOM
+    // CMSGs 0x30000D, 0x30000F). No C_HousingDecor.BatchOperation or PlacementPreview Lua API
+    // exists in retail; batch operations route through per-item real CMSGs.
 
     // ============================================================
     // Fixture System (0x31xxxx)
@@ -969,16 +930,8 @@ namespace WorldPackets::Housing
         void Read() override { }
     };
 
-    class HousingRequestEditorAvailability final : public ClientPacket
-    {
-    public:
-        explicit HousingRequestEditorAvailability(WorldPacket&& packet) : ClientPacket(CMSG_HOUSING_REQUEST_EDITOR_AVAILABILITY, std::move(packet)) { }
-
-        void Read() override;
-
-        uint8 Field_0 = 0;
-        ObjectGuid HouseGuid;
-    };
+    // Retired 2026-05-11: HousingRequestEditorAvailability (TC-CUSTOM CMSG 0x350009).
+    // C_HouseEditor.GetHouseEditorAvailability returns synchronously — no server roundtrip.
 
     class HousingGetPlayerPermissions final : public ClientPacket
     {
@@ -1005,14 +958,8 @@ namespace WorldPackets::Housing
         ObjectGuid HouseGuid;
     };
 
-    class HousingSystemHouseSnapshot final : public ClientPacket
-    {
-    public:
-        explicit HousingSystemHouseSnapshot(WorldPacket&& packet) : ClientPacket(CMSG_HOUSING_SYSTEM_HOUSE_SNAPSHOT, std::move(packet)) { }
-        void Read() override;
-        ObjectGuid HouseGuid;
-        uint8 SnapshotType = 0;
-    };
+    // Retired 2026-05-11: HousingSystemHouseSnapshot (TC-CUSTOM CMSG 0x350002).
+    // No C_HouseSnapshot Lua namespace exists in retail 12.0.5; feature does not exist.
 
     class HousingSystemExportHouse final : public ClientPacket
     {

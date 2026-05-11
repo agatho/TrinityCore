@@ -154,20 +154,8 @@ void HousingDecorRedeemDeferredDecor::Read()
     TC_LOG_INFO("network.opcode", "CMSG_HOUSING_DECOR_REDEEM_DEFERRED DeferredDecorID: {} RedemptionToken: {} (pktSize={})", DeferredDecorID, RedemptionToken, _worldPacket.size());
 }
 
-void HousingDecorStartPlacingNewDecor::Read()
-{
-    _worldPacket >> CatalogEntryID;
-    _worldPacket >> Field_4;
-
-    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_DECOR_START_PLACING_NEW_DECOR CatalogEntryID: {} Field_4: {}", CatalogEntryID, Field_4);
-}
-
-void HousingDecorCatalogCreateSearcher::Read()
-{
-    _worldPacket >> Owner;
-
-    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_DECOR_CATALOG_CREATE_SEARCHER Owner: {}", Owner.ToString());
-}
+// Retired 2026-05-11: HousingDecorStartPlacingNewDecor + HousingDecorCatalogCreateSearcher
+// Read() bodies deleted (see HousingPackets.h retirement markers).
 
 void HousingDecorUpdateDyeSlot::Read()
 {
@@ -179,14 +167,7 @@ void HousingDecorUpdateDyeSlot::Read()
         DecorGuid.ToString(), SlotIndex, DyeColorID);
 }
 
-void HousingDecorStartPlacingFromSource::Read()
-{
-    _worldPacket >> SourceType;
-    _worldPacket >> SourceID;
-
-    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_DECOR_START_PLACING_FROM_SOURCE SourceType: {} SourceID: {}",
-        SourceType, SourceID);
-}
+// Retired 2026-05-11: HousingDecorStartPlacingFromSource Read() body deleted.
 
 void HousingDecorCleanupModeToggle::Read()
 {
@@ -195,30 +176,7 @@ void HousingDecorCleanupModeToggle::Read()
     TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_DECOR_CLEANUP_MODE_TOGGLE Enabled: {}", Enabled);
 }
 
-void HousingDecorBatchOperation::Read()
-{
-    _worldPacket >> OperationType;
-    uint32 count = 0;
-    _worldPacket >> Bits<32>(count);
-    DecorGuids.resize(count);
-    for (ObjectGuid& guid : DecorGuids)
-        _worldPacket >> guid;
-
-    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_DECOR_BATCH_OPERATION OperationType: {} Count: {}",
-        OperationType, count);
-}
-
-void HousingDecorPlacementPreview::Read()
-{
-    _worldPacket >> DecorGuid;
-    _worldPacket >> PreviewPosition;
-    _worldPacket >> PreviewRotation;
-    _worldPacket >> Scale;
-
-    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_DECOR_PLACEMENT_PREVIEW DecorGuid: {} Pos: ({}, {}, {}) Scale: {}",
-        DecorGuid.ToString(), PreviewPosition.Pos.GetPositionX(), PreviewPosition.Pos.GetPositionY(),
-        PreviewPosition.Pos.GetPositionZ(), Scale);
-}
+// Retired 2026-05-11: HousingDecorBatchOperation + HousingDecorPlacementPreview Read() bodies deleted.
 
 // --- Fixture System ---
 
@@ -568,13 +526,7 @@ void HousingSvcsGuildGetHousingInfo::Read()
 // --- Housing Misc ---
 // HousingGetCurrentHouseInfo::Read() and HousingHouseStatus::Read() are empty (inline in header)
 
-void HousingRequestEditorAvailability::Read()
-{
-    _worldPacket >> Field_0;
-    _worldPacket >> HouseGuid;
-
-    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_REQUEST_EDITOR_AVAILABILITY Field_0: {} HouseGuid: {}", Field_0, HouseGuid.ToString());
-}
+// Retired 2026-05-11: HousingRequestEditorAvailability Read() deleted (Lua API is sync).
 
 void HousingGetPlayerPermissions::Read()
 {
@@ -600,14 +552,7 @@ void HousingSystemGetHouseInfoAlt::Read()
     TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_SYSTEM_GET_HOUSE_INFO_ALT HouseGuid: {}", HouseGuid.ToString());
 }
 
-void HousingSystemHouseSnapshot::Read()
-{
-    _worldPacket >> HouseGuid;
-    _worldPacket >> SnapshotType;
-
-    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_SYSTEM_HOUSE_SNAPSHOT HouseGuid: {} SnapshotType: {}",
-        HouseGuid.ToString(), SnapshotType);
-}
+// Retired 2026-05-11: HousingSystemHouseSnapshot Read() deleted (no C_HouseSnapshot in retail).
 
 void HousingSystemExportHouse::Read()
 {

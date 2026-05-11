@@ -4725,32 +4725,8 @@ void WorldSession::HandleBulkRefund(WorldPackets::Housing::BulkRefund const& bul
         player->GetName(), refundedCount, bulkRefund.DecorGUIDs.size());
 }
 
-void WorldSession::HandleHousingDecorStartPlacingNewDecor(WorldPackets::Housing::HousingDecorStartPlacingNewDecor const& housingDecorStartPlacingNewDecor)
-{
-    Player* player = GetPlayer();
-    if (!player)
-        return;
-
-    // Speculative SMSG_HOUSING_DECOR_START_PLACING_NEW_DECOR_RESPONSE retired 2026-05-11 —
-    // `C_HousingBasicMode.StartPlacingNewDecor` is fire-and-forget client-side (no response, no event).
-    // Placement actually happens via the existing CMSG_HOUSING_DECOR_PLACE → SMSG_HOUSING_DECOR_PLACE_RESPONSE flow.
-    // CMSG itself is TC-CUSTOM 0x300005 with zero retail occurrences.
-    TC_LOG_DEBUG("housing", "CMSG_HOUSING_DECOR_START_PLACING_NEW_DECOR Player: {} CatalogEntryID: {} (retired no-op)",
-        player->GetGUID().ToString(), housingDecorStartPlacingNewDecor.CatalogEntryID);
-}
-
-void WorldSession::HandleHousingDecorCatalogCreateSearcher(WorldPackets::Housing::HousingDecorCatalogCreateSearcher const& housingDecorCatalogCreateSearcher)
-{
-    Player* player = GetPlayer();
-    if (!player)
-        return;
-
-    // Speculative SMSG_HOUSING_DECOR_CATALOG_CREATE_SEARCHER_RESPONSE retired 2026-05-11 —
-    // `HousingCatalogSearcherAPI` is entirely client-side (filters/sort/search local catalog data, no server roundtrip).
-    // CMSG itself is TC-CUSTOM 0x300007 with zero retail occurrences.
-    TC_LOG_DEBUG("housing", "CMSG_HOUSING_DECOR_CATALOG_CREATE_SEARCHER Player: {} (retired no-op)",
-        player->GetGUID().ToString());
-}
+// Retired 2026-05-11: HandleHousingDecorStartPlacingNewDecor + HandleHousingDecorCatalogCreateSearcher
+// deleted (TC-CUSTOM CMSGs with no retail Lua API; see HousingPackets.h retirement markers).
 
 void WorldSession::HandleGetLastCatalogFetch(WorldPackets::Housing::GetLastCatalogFetch const& /*getLastCatalogFetch*/)
 {
@@ -4777,20 +4753,7 @@ void WorldSession::HandleUpdateLastCatalogFetch(WorldPackets::Housing::UpdateLas
     SendPacket(response.Write());
 }
 
-void WorldSession::HandleHousingRequestEditorAvailability(WorldPackets::Housing::HousingRequestEditorAvailability const& housingRequestEditorAvailability)
-{
-    Player* player = GetPlayer();
-    if (!player)
-        return;
-
-    TC_LOG_DEBUG("housing", "CMSG_HOUSING_REQUEST_EDITOR_AVAILABILITY Player: {} HouseGuid: {} Field_0: {}",
-        player->GetGUID().ToString(), housingRequestEditorAvailability.HouseGuid.ToString(),
-        housingRequestEditorAvailability.Field_0);
-
-    // Speculative SMSG_HOUSING_EDITOR_AVAILABILITY_RESPONSE retired 2026-05-11 —
-    // `C_HouseEditor.GetHouseEditorAvailability` returns synchronously in retail (no server roundtrip).
-    // CMSG itself is TC-CUSTOM 0x350009 with zero retail occurrences.
-}
+// Retired 2026-05-11: HandleHousingRequestEditorAvailability deleted (sync Lua API, no roundtrip).
 
 // ============================================================
 // Phase 7 — Decor Handlers
@@ -4847,19 +4810,7 @@ void WorldSession::HandleHousingDecorUpdateDyeSlot(WorldPackets::Housing::Housin
     SendPacket(response.Write());
 }
 
-void WorldSession::HandleHousingDecorStartPlacingFromSource(WorldPackets::Housing::HousingDecorStartPlacingFromSource const& housingDecorStartPlacingFromSource)
-{
-    Player* player = GetPlayer();
-    if (!player)
-        return;
-
-    // Speculative SMSG_HOUSING_DECOR_START_PLACING_NEW_DECOR_RESPONSE retired 2026-05-11 —
-    // same rationale as HandleHousingDecorStartPlacingNewDecor: fire-and-forget client-side,
-    // no retail SMSG, actual placement comes via the existing CMSG_HOUSING_DECOR_PLACE flow.
-    // CMSG itself is TC-CUSTOM 0x30000B with zero retail occurrences.
-    TC_LOG_DEBUG("housing", "CMSG_HOUSING_DECOR_START_PLACING_FROM_SOURCE Player: {} SourceID: {} (retired no-op)",
-        player->GetGUID().ToString(), housingDecorStartPlacingFromSource.SourceID);
-}
+// Retired 2026-05-11: HandleHousingDecorStartPlacingFromSource deleted.
 
 void WorldSession::HandleHousingDecorCleanupModeToggle(WorldPackets::Housing::HousingDecorCleanupModeToggle const& housingDecorCleanupModeToggle)
 {
@@ -4875,41 +4826,7 @@ void WorldSession::HandleHousingDecorCleanupModeToggle(WorldPackets::Housing::Ho
         player->GetGUID().ToString(), housingDecorCleanupModeToggle.Enabled ? "enabled" : "disabled");
 }
 
-void WorldSession::HandleHousingDecorBatchOperation(WorldPackets::Housing::HousingDecorBatchOperation const& housingDecorBatchOperation)
-{
-    Player* player = GetPlayer();
-    if (!player)
-        return;
-
-    TC_LOG_DEBUG("housing", "CMSG_HOUSING_DECOR_BATCH_OPERATION Player: {} OperationType: {} Count: {}",
-        player->GetGUID().ToString(), housingDecorBatchOperation.OperationType,
-        uint32(housingDecorBatchOperation.DecorGuids.size()));
-
-    // Speculative SMSG_HOUSING_DECOR_BATCH_OPERATION_RESPONSE retired 2026-05-11 —
-    // no `C_HousingDecor.BatchOperation` Lua API exists in retail; per-decor responses use the
-    // existing real SMSG_HOUSING_DECOR_{REMOVE,LOCK}_RESPONSE opcodes individually.
-    // CMSG itself is TC-CUSTOM 0x30000D with zero retail occurrences.
-    (void)housingDecorBatchOperation;
-}
-
-void WorldSession::HandleHousingDecorPlacementPreview(WorldPackets::Housing::HousingDecorPlacementPreview const& housingDecorPlacementPreview)
-{
-    Player* player = GetPlayer();
-    if (!player)
-        return;
-
-    TC_LOG_DEBUG("housing", "CMSG_HOUSING_DECOR_PLACEMENT_PREVIEW Player: {} DecorGuid: {} Pos: ({}, {}, {})",
-        player->GetGUID().ToString(), housingDecorPlacementPreview.DecorGuid.ToString(),
-        housingDecorPlacementPreview.PreviewPosition.Pos.GetPositionX(),
-        housingDecorPlacementPreview.PreviewPosition.Pos.GetPositionY(),
-        housingDecorPlacementPreview.PreviewPosition.Pos.GetPositionZ());
-
-    // Speculative SMSG_HOUSING_DECOR_PLACEMENT_PREVIEW_RESPONSE retired 2026-05-11 —
-    // no `PlacementPreview` Lua API exists in retail; placement validation happens via
-    // existing real SMSG_HOUSING_DECOR_PLACE_RESPONSE when the actual placement attempt fires.
-    // CMSG itself is TC-CUSTOM 0x30000F with zero retail occurrences.
-    (void)housingDecorPlacementPreview;
-}
+// Retired 2026-05-11: HandleHousingDecorBatchOperation + HandleHousingDecorPlacementPreview deleted.
 
 // ============================================================
 // Phase 7 — Fixture Handlers
@@ -5479,20 +5396,7 @@ void WorldSession::HandleHousingSystemGetHouseInfoAlt(WorldPackets::Housing::Hou
     SendPacket(response.Write());
 }
 
-void WorldSession::HandleHousingSystemHouseSnapshot(WorldPackets::Housing::HousingSystemHouseSnapshot const& housingSystemHouseSnapshot)
-{
-    Player* player = GetPlayer();
-    if (!player)
-        return;
-
-    TC_LOG_DEBUG("housing", "CMSG_HOUSING_SYSTEM_HOUSE_SNAPSHOT Player: {} HouseGuid: {} SnapshotType: {}",
-        player->GetGUID().ToString(), housingSystemHouseSnapshot.HouseGuid.ToString(),
-        housingSystemHouseSnapshot.SnapshotType);
-
-    // Speculative SMSG_HOUSING_SYSTEM_HOUSE_SNAPSHOT_RESPONSE retired 2026-05-11 —
-    // no `C_HouseSnapshot` Lua namespace exists in retail 12.0.5; feature is server-side scaffolding.
-    // CMSG itself is TC-CUSTOM 0x350002 with zero retail occurrences, so this handler never runs.
-}
+// Retired 2026-05-11: HandleHousingSystemHouseSnapshot deleted (no C_HouseSnapshot Lua namespace in retail).
 
 void WorldSession::HandleHousingSystemExportHouse(WorldPackets::Housing::HousingSystemExportHouse const& housingSystemExportHouse)
 {

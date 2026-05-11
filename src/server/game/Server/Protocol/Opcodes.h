@@ -1069,18 +1069,20 @@ enum OpcodeClient : uint32
     // (IDA + pre-12.0.5 sniffs). Not in upstream TC's extracted opcode list. Values
     // marked `0xF*******` collided with master's 12.0.5 values and were reassigned to
     // the 0xF0000000+ range as unreachable placeholders pending 12.0.5 sniff verification.
-    CMSG_HOUSING_DECOR_BATCH_OPERATION                              = 0x30000D, // TC-CUSTOM
-    CMSG_HOUSING_DECOR_CATALOG_CREATE_SEARCHER                      = 0x300007, // TC-CUSTOM
+    // Retired 2026-05-11 (Lua-API verified — no retail counterpart):
+    //   CMSG_HOUSING_DECOR_BATCH_OPERATION             (was 0x30000D)
+    //   CMSG_HOUSING_DECOR_CATALOG_CREATE_SEARCHER     (was 0x300007 — Searcher API is client-side)
+    //   CMSG_HOUSING_DECOR_PLACEMENT_PREVIEW           (was 0x30000F)
+    //   CMSG_HOUSING_DECOR_START_PLACING_FROM_SOURCE   (was 0x30000B)
+    //   CMSG_HOUSING_DECOR_START_PLACING_NEW_DECOR     (was 0x300005 — fire-and-forget Lua)
     CMSG_HOUSING_DECOR_CLEANUP_MODE_TOGGLE                          = 0x30000C, // TC-CUSTOM
     CMSG_HOUSING_DECOR_CONFIRM_PREVIEW_PLACEMENT                    = 0x300011, // TC-CUSTOM
     CMSG_HOUSING_DECOR_DELETE_FROM_STORAGE_BY_ID                    = 0x30000A, // TC-CUSTOM
-    CMSG_HOUSING_DECOR_PLACEMENT_PREVIEW                            = 0x30000F, // TC-CUSTOM
-    CMSG_HOUSING_DECOR_START_PLACING_FROM_SOURCE                    = 0x30000B, // TC-CUSTOM
-    CMSG_HOUSING_DECOR_START_PLACING_NEW_DECOR                      = 0x300005, // TC-CUSTOM
     CMSG_HOUSING_DECOR_UPDATE_DYE_SLOT                              = 0x300008, // TC-CUSTOM
     CMSG_HOUSING_FIXTURE_CREATE_BASIC_HOUSE                         = 0x310001, // TC-CUSTOM
     CMSG_HOUSING_FIXTURE_DELETE_HOUSE                               = 0x310002, // TC-CUSTOM
-    CMSG_HOUSING_REQUEST_EDITOR_AVAILABILITY                        = 0x350009, // TC-CUSTOM
+    // Retired 2026-05-11: CMSG_HOUSING_REQUEST_EDITOR_AVAILABILITY (was 0x350009).
+    // C_HouseEditor.GetHouseEditorAvailability returns synchronously in retail — no server roundtrip.
     // Removed 2026-04-24 after IDA 12.0.5 verification:
     //   CMSG_HOUSING_SVCS_CHANGE_HOUSE_COSMETIC_OWNER — cosmetic owner is saved
     //     via CMSG_HOUSING_SVCS_UPDATE_HOUSE_SETTINGS (0x33000B), no separate opcode.
@@ -1100,7 +1102,8 @@ enum OpcodeClient : uint32
     CMSG_HOUSING_SVCS_ROSTER_UPDATE_SUBSCRIBE                       = 0x33000D, // TC-CUSTOM
     CMSG_HOUSING_SYSTEM_EXPORT_HOUSE                                = 0x350003, // TC-CUSTOM
     CMSG_HOUSING_SYSTEM_GET_HOUSE_INFO_ALT                          = 0x350001, // TC-CUSTOM
-    CMSG_HOUSING_SYSTEM_HOUSE_SNAPSHOT                              = 0x350002, // TC-CUSTOM
+    // Retired 2026-05-11: CMSG_HOUSING_SYSTEM_HOUSE_SNAPSHOT (was 0x350002).
+    // No C_HouseSnapshot Lua namespace exists in retail 12.0.5.
     CMSG_HOUSING_SYSTEM_HOUSE_STATUS_QUERY                          = 0x350000, // TC-CUSTOM
     CMSG_HOUSING_SYSTEM_UPDATE_HOUSE_INFO                           = 0x350004, // TC-CUSTOM
     CMSG_NEIGHBORHOOD_CANCEL_INVITATION_ALT                         = 0x39000C, // TC-CUSTOM
