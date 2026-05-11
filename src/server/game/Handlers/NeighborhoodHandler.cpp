@@ -2315,36 +2315,8 @@ void WorldSession::HandleNeighborhoodInitiativeOp0F(WorldPackets::Neighborhood::
 // Phase 7 — Charter Handlers
 // ============================================================
 
-void WorldSession::HandleNeighborhoodCharterSignResponse(WorldPackets::Neighborhood::NeighborhoodCharterSignResponsePacket const& neighborhoodCharterSignResponse)
-{
-    Player* player = GetPlayer();
-    if (!player)
-        return;
-
-    TC_LOG_DEBUG("housing", "CMSG_NEIGHBORHOOD_CHARTER_SIGN_RESPONSE Player: {} CharterGuid: {}",
-        player->GetGUID().ToString(), neighborhoodCharterSignResponse.CharterGuid.ToString());
-
-    // Process the sign response — the player is accepting/declining a charter sign request
-    // Send the sign request notification back to the charter owner
-    WorldPackets::Neighborhood::NeighborhoodCharterSignRequest response;
-    response.CharterGuid = neighborhoodCharterSignResponse.CharterGuid;
-    SendPacket(response.Write());
-}
-
-void WorldSession::HandleNeighborhoodCharterRemoveSignature(WorldPackets::Neighborhood::NeighborhoodCharterRemoveSignature const& neighborhoodCharterRemoveSignature)
-{
-    Player* player = GetPlayer();
-    if (!player)
-        return;
-
-    TC_LOG_DEBUG("housing", "CMSG_NEIGHBORHOOD_CHARTER_REMOVE_SIGNATURE Player: {} CharterGuid: {} SignerGuid: {}",
-        player->GetGUID().ToString(), neighborhoodCharterRemoveSignature.CharterGuid.ToString(),
-        neighborhoodCharterRemoveSignature.SignerGuid.ToString());
-
-    WorldPackets::Neighborhood::NeighborhoodCharterSignatureRemovedNotification response;
-    response.CharterGuid = neighborhoodCharterRemoveSignature.CharterGuid;
-    SendPacket(response.Write());
-}
+// Retired 2026-05-12: HandleNeighborhoodCharterSignResponse + HandleNeighborhoodCharterRemoveSignature
+// — fake CMSGs 0x370002 + 0x370005, no client senders in build 67186 (STUB-OK only).
 
 // ============================================================
 // Phase 7 — Neighborhood Handlers

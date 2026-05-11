@@ -132,12 +132,7 @@ void HousingDecorDeleteFromStorage::Read()
     TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_DECOR_DELETE_FROM_STORAGE Count: {}", count);
 }
 
-void HousingDecorDeleteFromStorageById::Read()
-{
-    _worldPacket >> DecorRecID;
-
-    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_DECOR_DELETE_FROM_STORAGE_BY_ID DecorRecID: {}", DecorRecID);
-}
+// Retired 2026-05-12: HousingDecorDeleteFromStorageById::Read (fake CMSG 0x30000A).
 
 void HousingDecorRequestStorage::Read()
 {
@@ -157,24 +152,9 @@ void HousingDecorRedeemDeferredDecor::Read()
 // Retired 2026-05-11: HousingDecorStartPlacingNewDecor + HousingDecorCatalogCreateSearcher
 // Read() bodies deleted (see HousingPackets.h retirement markers).
 
-void HousingDecorUpdateDyeSlot::Read()
-{
-    _worldPacket >> DecorGuid;
-    _worldPacket >> SlotIndex;
-    _worldPacket >> DyeColorID;
-
-    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_DECOR_UPDATE_DYE_SLOT DecorGuid: {} SlotIndex: {} DyeColorID: {}",
-        DecorGuid.ToString(), SlotIndex, DyeColorID);
-}
-
+// Retired 2026-05-12: HousingDecorUpdateDyeSlot::Read (fake CMSG 0x300008, dup of SET_DYE_SLOTS).
 // Retired 2026-05-11: HousingDecorStartPlacingFromSource Read() body deleted.
-
-void HousingDecorCleanupModeToggle::Read()
-{
-    _worldPacket >> Bits<1>(Enabled);
-
-    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_DECOR_CLEANUP_MODE_TOGGLE Enabled: {}", Enabled);
-}
+// Retired 2026-05-12: HousingDecorCleanupModeToggle::Read (fake CMSG 0x30000C).
 
 // Retired 2026-05-11: HousingDecorBatchOperation + HousingDecorPlacementPreview Read() bodies deleted.
 
@@ -238,21 +218,8 @@ void HousingFixtureSetHouseType::Read()
     TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_FIXTURE_SET_HOUSE_TYPE HouseGuid: {} HouseExteriorWmoDataID: {} Flags: {}", HouseGuid.ToString(), HouseExteriorWmoDataID, Flags);
 }
 
-void HousingFixtureCreateBasicHouse::Read()
-{
-    _worldPacket >> PlotGuid;
-    _worldPacket >> HouseStyleID;
-
-    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_FIXTURE_CREATE_BASIC_HOUSE PlotGuid: {} HouseStyleID: {}",
-        PlotGuid.ToString(), HouseStyleID);
-}
-
-void HousingFixtureDeleteHouse::Read()
-{
-    _worldPacket >> HouseGuid;
-
-    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_FIXTURE_DELETE_HOUSE HouseGuid: {}", HouseGuid.ToString());
-}
+// Retired 2026-05-12: HousingFixtureCreateBasicHouse::Read (fake CMSG 0x310001).
+// Retired 2026-05-12: HousingFixtureDeleteHouse::Read (fake CMSG 0x310002, use RELINQUISH_HOUSE).
 
 void HouseExteriorLock::Read()
 {
@@ -436,11 +403,7 @@ void HousingSvcsTeleportToPlot::Read()
 // Removed 2026-04-24: HousingSvcsSetTutorialState / HousingSvcsCompleteTutorialStep
 // Read() — no matching C_Housing Lua API in 12.0.5.
 
-void HousingDecorConfirmPreviewPlacement::Read()
-{
-    _worldPacket >> DecorGuid;
-    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_DECOR_CONFIRM_PREVIEW_PLACEMENT DecorGuid: {}", DecorGuid.ToString());
-}
+// Retired 2026-05-12: HousingDecorConfirmPreviewPlacement::Read (fake CMSG 0x300011).
 
 void HousingSvcsAcceptNeighborhoodOwnership::Read()
 {
@@ -545,34 +508,9 @@ void HousingSvcsGetPotentialHouseOwners::Read()
     TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_SVCS_GET_POTENTIAL_HOUSE_OWNERS NeighborhoodGuid: {}", NeighborhoodGuid.ToString());
 }
 
-void HousingSystemGetHouseInfoAlt::Read()
-{
-    _worldPacket >> HouseGuid;
-
-    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_SYSTEM_GET_HOUSE_INFO_ALT HouseGuid: {}", HouseGuid.ToString());
-}
-
-// Retired 2026-05-11: HousingSystemHouseSnapshot Read() deleted (no C_HouseSnapshot in retail).
-
-void HousingSystemExportHouse::Read()
-{
-    _worldPacket >> HouseGuid;
-
-    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_SYSTEM_EXPORT_HOUSE HouseGuid: {}", HouseGuid.ToString());
-}
-
-void HousingSystemUpdateHouseInfo::Read()
-{
-    _worldPacket >> HouseGuid;
-    _worldPacket >> InfoType;
-    _worldPacket >> SizedString::BitsSize<8>(HouseName);
-    _worldPacket >> SizedString::BitsSize<10>(HouseDescription);
-    _worldPacket >> SizedString::Data(HouseName);
-    _worldPacket >> SizedString::Data(HouseDescription);
-
-    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_SYSTEM_UPDATE_HOUSE_INFO HouseGuid: {} InfoType: {} Name: '{}' Desc: '{}'",
-        HouseGuid.ToString(), InfoType, HouseName, HouseDescription);
-}
+// Retired 2026-05-12: HousingSystemGetHouseInfoAlt / HousingSystemHouseSnapshot /
+// HousingSystemExportHouse / HousingSystemUpdateHouseInfo Read() bodies deleted —
+// IDA verification confirms no client senders in build 67186.
 
 // --- Other Housing CMSG ---
 
@@ -880,15 +818,7 @@ WorldPacket const* HousingFixtureCreateBasicHouseResponse::Write()
     return &_worldPacket;
 }
 
-WorldPacket const* HousingFixtureDeleteHouseResponse::Write()
-{
-    // IDA case 5373954: uint8(Result) only
-    _worldPacket << uint8(Result);
-
-    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_FIXTURE_DELETE_HOUSE_RESPONSE Result: {}", Result);
-
-    return &_worldPacket;
-}
+// Retired 2026-05-12: HousingFixtureDeleteHouseResponse::Write — orphaned after FIXTURE_DELETE_HOUSE CMSG retirement.
 
 WorldPacket const* HousingFixtureSetHouseSizeResponse::Write()
 {
@@ -1627,45 +1557,7 @@ WorldPacket const* HousingGetCurrentHouseInfoResponse::Write()
     return &_worldPacket;
 }
 
-WorldPacket const* HousingExportHouseResponse::Write()
-{
-    // IDA-verified wire (build 67186, sub_7FF75C1EC3F0):
-    //   PackedGUID HouseGuid
-    //   uint8 Result
-    //   uint8 HasExportString-byte (top bit only)
-    //   if HasExportString:
-    //     24-bit BE length      (read via ai_Process_GarrisonDataPacket — 3 bytes:
-    //                            three sequential ai_Read_UInt8 calls combined as
-    //                            (b0<<16)|(b1<<8)|b2). Bit-aligned at byte boundary
-    //                            here so writing 3 raw bytes is wire-equivalent.
-    //     char[strLen] ExportString
-    //   uint32 blobSize
-    //   uint8[blobSize] ExportBlob
-    //
-    // (My earlier "uint64" fix was a misread — the helper reads exactly 3 bytes,
-    // not 8.)
-    _worldPacket << HouseGuid;
-    _worldPacket << uint8(Result);
-    _worldPacket << uint8(HasExportString ? 0x80 : 0x00);
-    if (HasExportString)
-    {
-        uint32 strLen = static_cast<uint32>(ExportString.size());
-        _worldPacket << uint8((strLen >> 16) & 0xFF);
-        _worldPacket << uint8((strLen >> 8) & 0xFF);
-        _worldPacket << uint8(strLen & 0xFF);
-        if (!ExportString.empty())
-            _worldPacket.append(ExportString.data(), ExportString.size());
-    }
-    _worldPacket << uint32(ExportBlob.size());
-    if (!ExportBlob.empty())
-        _worldPacket.append(ExportBlob.data(), ExportBlob.size());
-
-    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_EXPORT_HOUSE_RESPONSE HouseGuid: {} Result: {} HasExportString: {} StringLen: {} BlobLen: {}",
-        HouseGuid.ToString(), Result, HasExportString, ExportString.size(), ExportBlob.size());
-
-    return &_worldPacket;
-}
-
+// Retired 2026-05-12: HousingExportHouseResponse::Write — orphaned after EXPORT_HOUSE CMSG retirement.
 // Retired 2026-05-11: HousingSystemHouseSnapshotResponse Write() deleted (no C_HouseSnapshot in retail).
 
 WorldPacket const* HousingGetPlayerPermissionsResponse::Write()
@@ -1691,33 +1583,8 @@ WorldPacket const* HousingResetKioskModeResponse::Write()
 
 // Retired 2026-05-11: HousingEditorAvailabilityResponse Write() deleted (Lua API is sync).
 
-WorldPacket const* HousingUpdateHouseInfo::Write()
-{
-    // IDA 0x550004: 3×24bit-BE(strLen) + 3×uint32 + uint8 + 3×string(strLen)
-    auto writeBE24 = [&](uint32 len) {
-        _worldPacket << uint8((len >> 16) & 0xFF);
-        _worldPacket << uint8((len >> 8) & 0xFF);
-        _worldPacket << uint8(len & 0xFF);
-    };
-
-    writeBE24(static_cast<uint32>(HouseName.size()));
-    writeBE24(static_cast<uint32>(HouseDescription.size()));
-    writeBE24(static_cast<uint32>(HouseExtra.size()));
-
-    _worldPacket << uint32(Field1);
-    _worldPacket << uint32(Field2);
-    _worldPacket << uint32(Field3);
-    _worldPacket << uint8(Result);
-
-    _worldPacket.append(HouseName.data(), HouseName.size());
-    _worldPacket.append(HouseDescription.data(), HouseDescription.size());
-    _worldPacket.append(HouseExtra.data(), HouseExtra.size());
-
-    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_UPDATE_HOUSE_INFO Result: {} Name: '{}' Desc: '{}' Extra: '{}' F1: {} F2: {} F3: {}",
-        Result, HouseName, HouseDescription, HouseExtra, Field1, Field2, Field3);
-
-    return &_worldPacket;
-}
+// Retired 2026-05-12: HousingUpdateHouseInfo::Write — orphaned after UPDATE_HOUSE_INFO CMSG retirement.
+// SMSG 0x550004 is real per IDA, but the only emit-site was a handler with no client sender.
 
 // Retired 2026-05-11: SMSG_HOUSING_SET_HOUSE_NAME_RESPONSE class deleted (was using fake
 // opcode 0xF1000008 + had 0 emit-sites). IDA-derived real opcode is 0x550005 with wire:
@@ -2137,21 +2004,8 @@ void NeighborhoodCharterSendSignatureRequest::Read()
     TC_LOG_DEBUG("network.opcode", "CMSG_NEIGHBORHOOD_CHARTER_SEND_SIGNATURE_REQUEST TargetPlayerGuid: {}", TargetPlayerGuid.ToString());
 }
 
-void NeighborhoodCharterSignResponsePacket::Read()
-{
-    _worldPacket >> CharterGuid;
-
-    TC_LOG_DEBUG("network.opcode", "CMSG_NEIGHBORHOOD_CHARTER_SIGN_RESPONSE CharterGuid: {}", CharterGuid.ToString());
-}
-
-void NeighborhoodCharterRemoveSignature::Read()
-{
-    _worldPacket >> CharterGuid;
-    _worldPacket >> SignerGuid;
-
-    TC_LOG_DEBUG("network.opcode", "CMSG_NEIGHBORHOOD_CHARTER_REMOVE_SIGNATURE CharterGuid: {} SignerGuid: {}",
-        CharterGuid.ToString(), SignerGuid.ToString());
-}
+// Retired 2026-05-12: NeighborhoodCharterSignResponsePacket::Read (fake CMSG 0x370002).
+// Retired 2026-05-12: NeighborhoodCharterRemoveSignature::Read (fake CMSG 0x370005).
 
 // --- Neighborhood Management System ---
 

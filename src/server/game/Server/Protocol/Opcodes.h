@@ -1075,12 +1075,14 @@ enum OpcodeClient : uint32
     //   CMSG_HOUSING_DECOR_PLACEMENT_PREVIEW           (was 0x30000F)
     //   CMSG_HOUSING_DECOR_START_PLACING_FROM_SOURCE   (was 0x30000B)
     //   CMSG_HOUSING_DECOR_START_PLACING_NEW_DECOR     (was 0x300005 — fire-and-forget Lua)
-    CMSG_HOUSING_DECOR_CLEANUP_MODE_TOGGLE                          = 0x30000C, // TC-CUSTOM
-    CMSG_HOUSING_DECOR_CONFIRM_PREVIEW_PLACEMENT                    = 0x300011, // TC-CUSTOM
-    CMSG_HOUSING_DECOR_DELETE_FROM_STORAGE_BY_ID                    = 0x30000A, // TC-CUSTOM
-    CMSG_HOUSING_DECOR_UPDATE_DYE_SLOT                              = 0x300008, // TC-CUSTOM
-    CMSG_HOUSING_FIXTURE_CREATE_BASIC_HOUSE                         = 0x310001, // TC-CUSTOM
-    CMSG_HOUSING_FIXTURE_DELETE_HOUSE                               = 0x310002, // TC-CUSTOM
+    // Retired 2026-05-12: 6 fake decor/fixture CMSGs — IDA verification (build 67186) confirms
+    // no client senders for any of these:
+    //   0x30000C DECOR_CLEANUP_MODE_TOGGLE     — activated via C_HouseEditor mode change
+    //   0x300011 DECOR_CONFIRM_PREVIEW_PLACEMENT — STUB-LOG only, no real protocol path
+    //   0x30000A DECOR_DELETE_FROM_STORAGE_BY_ID — no sender
+    //   0x300008 DECOR_UPDATE_DYE_SLOT         — duplicate of 0x300006 SET_DYE_SLOTS
+    //   0x310001 FIXTURE_CREATE_BASIC_HOUSE    — house creation goes through NEIGHBORHOOD_BUY_HOUSE
+    //   0x310002 FIXTURE_DELETE_HOUSE          — duplicate of real 0x33000A SVCS_RELINQUISH_HOUSE
     // Retired 2026-05-11: CMSG_HOUSING_REQUEST_EDITOR_AVAILABILITY (was 0x350009).
     // C_HouseEditor.GetHouseEditorAvailability returns synchronously in retail — no server roundtrip.
     // Removed 2026-04-24 after IDA 12.0.5 verification:
@@ -1100,15 +1102,17 @@ enum OpcodeClient : uint32
     CMSG_HOUSING_SVCS_QUERY_HOUSE_LEVEL_FAVOR                       = 0x330012, // TC-CUSTOM
     CMSG_HOUSING_SVCS_REQUEST_PERMISSIONS_CHECK                     = 0x330000, // TC-CUSTOM
     CMSG_HOUSING_SVCS_ROSTER_UPDATE_SUBSCRIBE                       = 0x33000D, // TC-CUSTOM
-    CMSG_HOUSING_SYSTEM_EXPORT_HOUSE                                = 0x350003, // TC-CUSTOM
-    CMSG_HOUSING_SYSTEM_GET_HOUSE_INFO_ALT                          = 0x350001, // TC-CUSTOM
-    // Retired 2026-05-11: CMSG_HOUSING_SYSTEM_HOUSE_SNAPSHOT (was 0x350002).
-    // No C_HouseSnapshot Lua namespace exists in retail 12.0.5.
-    CMSG_HOUSING_SYSTEM_HOUSE_STATUS_QUERY                          = 0x350000, // TC-CUSTOM
-    CMSG_HOUSING_SYSTEM_UPDATE_HOUSE_INFO                           = 0x350004, // TC-CUSTOM
+    // Retired 2026-05-12: entire group 0x35 CMSG block (0x350000-0x350004).
+    // IDA verification (build 67186): no client senders for any of these opcodes:
+    //   0x350000 SYSTEM_HOUSE_STATUS_QUERY       — duplicate of real 0x350005 HOUSE_STATUS
+    //   0x350001 SYSTEM_GET_HOUSE_INFO_ALT       — duplicate of real 0x350006 GET_CURRENT_HOUSE_INFO
+    //   0x350002 SYSTEM_HOUSE_SNAPSHOT (retired 2026-05-11) — no C_HouseSnapshot Lua API
+    //   0x350003 SYSTEM_EXPORT_HOUSE             — no C_HouseExport Lua API
+    //   0x350004 SYSTEM_UPDATE_HOUSE_INFO        — no client sender; house naming has no wire path
     CMSG_NEIGHBORHOOD_CANCEL_INVITATION_ALT                         = 0x39000C, // TC-CUSTOM
-    CMSG_NEIGHBORHOOD_CHARTER_REMOVE_SIGNATURE                      = 0x370005, // TC-CUSTOM
-    CMSG_NEIGHBORHOOD_CHARTER_SIGN_RESPONSE                         = 0x370002, // TC-CUSTOM
+    // Retired 2026-05-12: CMSG_NEIGHBORHOOD_CHARTER_REMOVE_SIGNATURE (was 0x370005)
+    // and CMSG_NEIGHBORHOOD_CHARTER_SIGN_RESPONSE (was 0x370002) — STUB-OK only;
+    // IDA verification (build 67186): no client senders.
     CMSG_NEIGHBORHOOD_INVITE_NOTIFICATION_ACK                       = 0x390010, // TC-CUSTOM
     CMSG_NEIGHBORHOOD_OFFER_OWNERSHIP_RESPONSE                      = 0x390011, // TC-CUSTOM
 };
@@ -1721,18 +1725,22 @@ enum OpcodeServer : uint32
     SMSG_HOUSING_DECOR_REQUEST_STORAGE_RESPONSE                     = 0x510006,
     SMSG_HOUSING_DECOR_SET_EDIT_MODE_RESPONSE                       = 0x510000,
     SMSG_HOUSING_DECOR_SYSTEM_SET_DYE_SLOTS_RESPONSE                = 0x510008,
-    SMSG_HOUSING_EXPORT_HOUSE_RESPONSE                              = 0x550003,
+    // Retired 2026-05-12: SMSG_HOUSING_EXPORT_HOUSE_RESPONSE (was 0x550003) — orphaned after
+    // CMSG_HOUSING_SYSTEM_EXPORT_HOUSE retirement (no client sender for 0x350003 in build 67186).
     SMSG_HOUSING_FIRST_TIME_DECOR_ACQUISITION                       = 0x51000A,
     SMSG_HOUSING_FIXTURE_CREATE_BASIC_HOUSE_RESPONSE                = 0x520001,
     SMSG_HOUSING_FIXTURE_CREATE_FIXTURE_RESPONSE                    = 0x520006,
     SMSG_HOUSING_FIXTURE_DELETE_FIXTURE_RESPONSE                    = 0x520007,
-    SMSG_HOUSING_FIXTURE_DELETE_HOUSE_RESPONSE                      = 0x520002,
+    // Retired 2026-05-12: SMSG_HOUSING_FIXTURE_DELETE_HOUSE_RESPONSE (was 0x520002) —
+    // orphaned after CMSG_HOUSING_FIXTURE_DELETE_HOUSE retirement.
     SMSG_HOUSING_FIXTURE_SET_CORE_FIXTURE_RESPONSE                  = 0x520005,
     SMSG_HOUSING_FIXTURE_SET_EDIT_MODE_RESPONSE                     = 0x520000,
     SMSG_HOUSING_FIXTURE_SET_HOUSE_SIZE_RESPONSE                    = 0x520003,
     SMSG_HOUSING_FIXTURE_SET_HOUSE_TYPE_RESPONSE                    = 0x520004,
     SMSG_HOUSING_GET_CURRENT_HOUSE_INFO_RESPONSE                    = 0x550001,
-    SMSG_HOUSING_UPDATE_HOUSE_INFO                                  = 0x550004, // IDA-verified (see HousingUpdateHouseInfo class comment)
+    // Retired 2026-05-12: SMSG_HOUSING_UPDATE_HOUSE_INFO (was 0x550004) — opcode is real per IDA
+    // (sub_7FF75C1D1020 case 0x550004) but the only emit-site was HandleHousingSystemUpdateHouseInfo,
+    // which never executes (no client sender for CMSG 0x350004 in build 67186).
     SMSG_HOUSING_GET_PLAYER_PERMISSIONS_RESPONSE                    = 0x550006,
     SMSG_HOUSING_HOUSE_STATUS_RESPONSE                              = 0x550000,
     SMSG_HOUSING_PHOTO_SHARING_AUTHORIZATION_CLEARED_RESULT         = 0x420380,

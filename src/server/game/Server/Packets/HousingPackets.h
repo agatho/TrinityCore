@@ -323,15 +323,7 @@ namespace WorldPackets::Housing
         std::vector<ObjectGuid> DecorGuids;
     };
 
-    class HousingDecorDeleteFromStorageById final : public ClientPacket
-    {
-    public:
-        explicit HousingDecorDeleteFromStorageById(WorldPacket&& packet) : ClientPacket(CMSG_HOUSING_DECOR_DELETE_FROM_STORAGE_BY_ID, std::move(packet)) { }
-
-        void Read() override;
-
-        uint32 DecorRecID = 0;
-    };
+    // Retired 2026-05-12: HousingDecorDeleteFromStorageById (TC-CUSTOM CMSG 0x30000A) — no client sender.
 
     class HousingDecorRequestStorage final : public ClientPacket
     {
@@ -381,26 +373,11 @@ namespace WorldPackets::Housing
         uint64 Timestamp = 0;
     };
 
-    class HousingDecorUpdateDyeSlot final : public ClientPacket
-    {
-    public:
-        explicit HousingDecorUpdateDyeSlot(WorldPacket&& packet) : ClientPacket(CMSG_HOUSING_DECOR_UPDATE_DYE_SLOT, std::move(packet)) { }
-        void Read() override;
-        ObjectGuid DecorGuid;
-        uint8 SlotIndex = 0;
-        uint32 DyeColorID = 0;
-    };
-
+    // Retired 2026-05-12: HousingDecorUpdateDyeSlot (TC-CUSTOM CMSG 0x300008) — duplicate of SET_DYE_SLOTS.
     // Retired 2026-05-11: HousingDecorStartPlacingFromSource (TC-CUSTOM CMSG 0x30000B).
     // Same fire-and-forget pattern as StartPlacingNewDecor; no retail counterpart.
 
-    class HousingDecorCleanupModeToggle final : public ClientPacket
-    {
-    public:
-        explicit HousingDecorCleanupModeToggle(WorldPacket&& packet) : ClientPacket(CMSG_HOUSING_DECOR_CLEANUP_MODE_TOGGLE, std::move(packet)) { }
-        void Read() override;
-        bool Enabled = false;
-    };
+    // Retired 2026-05-12: HousingDecorCleanupModeToggle (TC-CUSTOM CMSG 0x30000C) — no client sender.
 
     // Retired 2026-05-11: HousingDecorBatchOperation + HousingDecorPlacementPreview (TC-CUSTOM
     // CMSGs 0x30000D, 0x30000F). No C_HousingDecor.BatchOperation or PlacementPreview Lua API
@@ -501,22 +478,10 @@ namespace WorldPackets::Housing
         uint8 Flags = 0;
     };
 
-    class HousingFixtureCreateBasicHouse final : public ClientPacket
-    {
-    public:
-        explicit HousingFixtureCreateBasicHouse(WorldPacket&& packet) : ClientPacket(CMSG_HOUSING_FIXTURE_CREATE_BASIC_HOUSE, std::move(packet)) { }
-        void Read() override;
-        ObjectGuid PlotGuid;
-        uint32 HouseStyleID = 0;
-    };
-
-    class HousingFixtureDeleteHouse final : public ClientPacket
-    {
-    public:
-        explicit HousingFixtureDeleteHouse(WorldPacket&& packet) : ClientPacket(CMSG_HOUSING_FIXTURE_DELETE_HOUSE, std::move(packet)) { }
-        void Read() override;
-        ObjectGuid HouseGuid;
-    };
+    // Retired 2026-05-12: HousingFixtureCreateBasicHouse (TC-CUSTOM CMSG 0x310001) — house creation
+    // is via CMSG_NEIGHBORHOOD_BUY_HOUSE; no client sender for this opcode.
+    // Retired 2026-05-12: HousingFixtureDeleteHouse (TC-CUSTOM CMSG 0x310002) — duplicate of
+    // real CMSG_HOUSING_SVCS_RELINQUISH_HOUSE (0x33000A).
 
     // ============================================================
     // Room System (0x32xxxx)
@@ -752,14 +717,7 @@ namespace WorldPackets::Housing
     // SkipTutorial) and QueryPendingInvites — no matching C_Housing Lua API exists
     // in 12.0.5. Only StartTutorial (0x33001A) is real.
 
-    class HousingDecorConfirmPreviewPlacement final : public ClientPacket
-    {
-    public:
-        explicit HousingDecorConfirmPreviewPlacement(WorldPacket&& packet) : ClientPacket(CMSG_HOUSING_DECOR_CONFIRM_PREVIEW_PLACEMENT, std::move(packet)) { }
-
-        void Read() override;
-        ObjectGuid DecorGuid;
-    };
+    // Retired 2026-05-12: HousingDecorConfirmPreviewPlacement (TC-CUSTOM CMSG 0x300011) — no client sender.
 
     class HousingSvcsAcceptNeighborhoodOwnership final : public ClientPacket
     {
@@ -943,42 +901,10 @@ namespace WorldPackets::Housing
         Optional<ObjectGuid> HouseGuid;
     };
 
-    class HousingSystemHouseStatusQuery final : public ClientPacket
-    {
-    public:
-        explicit HousingSystemHouseStatusQuery(WorldPacket&& packet) : ClientPacket(CMSG_HOUSING_SYSTEM_HOUSE_STATUS_QUERY, std::move(packet)) { }
-        void Read() override { }
-    };
-
-    class HousingSystemGetHouseInfoAlt final : public ClientPacket
-    {
-    public:
-        explicit HousingSystemGetHouseInfoAlt(WorldPacket&& packet) : ClientPacket(CMSG_HOUSING_SYSTEM_GET_HOUSE_INFO_ALT, std::move(packet)) { }
-        void Read() override;
-        ObjectGuid HouseGuid;
-    };
-
-    // Retired 2026-05-11: HousingSystemHouseSnapshot (TC-CUSTOM CMSG 0x350002).
-    // No C_HouseSnapshot Lua namespace exists in retail 12.0.5; feature does not exist.
-
-    class HousingSystemExportHouse final : public ClientPacket
-    {
-    public:
-        explicit HousingSystemExportHouse(WorldPacket&& packet) : ClientPacket(CMSG_HOUSING_SYSTEM_EXPORT_HOUSE, std::move(packet)) { }
-        void Read() override;
-        ObjectGuid HouseGuid;
-    };
-
-    class HousingSystemUpdateHouseInfo final : public ClientPacket
-    {
-    public:
-        explicit HousingSystemUpdateHouseInfo(WorldPacket&& packet) : ClientPacket(CMSG_HOUSING_SYSTEM_UPDATE_HOUSE_INFO, std::move(packet)) { }
-        void Read() override;
-        ObjectGuid HouseGuid;
-        uint32 InfoType = 0;
-        std::string HouseName;
-        std::string HouseDescription;
-    };
+    // Retired 2026-05-12: HousingSystemHouseStatusQuery (0x350000), HousingSystemGetHouseInfoAlt (0x350001),
+    // HousingSystemHouseSnapshot (0x350002), HousingSystemExportHouse (0x350003), HousingSystemUpdateHouseInfo (0x350004).
+    // IDA verification (build 67186): no senders in client binary; entire group 0x35 dispatcher has no wire path.
+    // SMSG_HOUSING_UPDATE_HOUSE_INFO (0x550004) also orphaned — handler that emitted it never executed.
 
     // ============================================================
     // Photo Sharing Authorization (0x40019x)
@@ -1320,14 +1246,7 @@ namespace WorldPackets::Housing
         uint8 Result = 0;
     };
 
-    class HousingFixtureDeleteHouseResponse final : public ServerPacket
-    {
-    public:
-        HousingFixtureDeleteHouseResponse() : ServerPacket(SMSG_HOUSING_FIXTURE_DELETE_HOUSE_RESPONSE) { }
-        WorldPacket const* Write() override;
-        // IDA case 5373954: uint8(Result) only
-        uint8 Result = 0;
-    };
+    // Retired 2026-05-12: HousingFixtureDeleteHouseResponse — orphaned after FIXTURE_DELETE_HOUSE CMSG retirement.
 
     class HousingFixtureSetHouseSizeResponse final : public ServerPacket
     {
@@ -1866,22 +1785,9 @@ namespace WorldPackets::Housing
         uint8 Result = 0;
     };
 
-    class HousingExportHouseResponse final : public ServerPacket
-    {
-    public:
-        HousingExportHouseResponse() : ServerPacket(SMSG_HOUSING_EXPORT_HOUSE_RESPONSE) { }
-        WorldPacket const* Write() override;
-
-        // IDA-verified wire (build 67186, sub_7FF75C1EC3F0):
-        //   PackedGUID HouseGuid + uint8 Result + uint8(bit7=HasExportString)
-        //     [+ 24-bit-BE strLen (3 bytes, b0<<16|b1<<8|b2) + char[strLen]]
-        //     + uint32(blobSize) + uint8[blobSize] ExportBlob
-        ObjectGuid HouseGuid;
-        uint8 Result = 0;
-        bool HasExportString = false;
-        std::string ExportString;
-        std::vector<uint8> ExportBlob;
-    };
+    // Retired 2026-05-12: HousingExportHouseResponse — orphaned after EXPORT_HOUSE CMSG retirement.
+    // No client sender for CMSG_HOUSING_SYSTEM_EXPORT_HOUSE (0x350003) in build 67186, so the
+    // SMSG can never be emitted in practice.
 
     // Retired 2026-05-11: HousingSystemHouseSnapshotResponse deleted (fake opcode 0xF1000011).
     // No `C_HouseSnapshot` Lua namespace exists in retail 12.0.5; feature does not exist.
@@ -1915,21 +1821,9 @@ namespace WorldPackets::Housing
     // `C_HouseEditor.GetHouseEditorAvailability` and `GetHouseEditorModeAvailability` both
     // return synchronously in retail (no server roundtrip).
 
-    class HousingUpdateHouseInfo final : public ServerPacket
-    {
-    public:
-        HousingUpdateHouseInfo() : ServerPacket(SMSG_HOUSING_UPDATE_HOUSE_INFO) { }
-        WorldPacket const* Write() override;
-
-        // IDA 0x550004: 3×24bit-BE(strLen) + 3×uint32 + uint8 + 3×string(strLen)
-        std::string HouseName;
-        std::string HouseDescription;
-        std::string HouseExtra;         // third string (purpose TBD)
-        uint32 Field1 = 0;
-        uint32 Field2 = 0;
-        uint32 Field3 = 0;
-        uint8 Result = 0;
-    };
+    // Retired 2026-05-12: HousingUpdateHouseInfo — orphaned after UPDATE_HOUSE_INFO CMSG retirement.
+    // SMSG opcode 0x550004 is real per IDA (sub_7FF75C1D1020) but the only emit-site was the
+    // HandleHousingSystemUpdateHouseInfo handler, which never executes (no client sender).
 
     // ============================================================
     // Account/Licensing SMSG (0x42xxxx / 0x5Fxxxx)
@@ -2394,22 +2288,9 @@ namespace WorldPackets::Neighborhood
         ObjectGuid TargetPlayerGuid;
     };
 
-    class NeighborhoodCharterSignResponsePacket final : public ClientPacket
-    {
-    public:
-        explicit NeighborhoodCharterSignResponsePacket(WorldPacket&& packet) : ClientPacket(CMSG_NEIGHBORHOOD_CHARTER_SIGN_RESPONSE, std::move(packet)) { }
-        void Read() override;
-        ObjectGuid CharterGuid;
-    };
-
-    class NeighborhoodCharterRemoveSignature final : public ClientPacket
-    {
-    public:
-        explicit NeighborhoodCharterRemoveSignature(WorldPacket&& packet) : ClientPacket(CMSG_NEIGHBORHOOD_CHARTER_REMOVE_SIGNATURE, std::move(packet)) { }
-        void Read() override;
-        ObjectGuid CharterGuid;
-        ObjectGuid SignerGuid;
-    };
+    // Retired 2026-05-12: NeighborhoodCharterSignResponsePacket (TC-CUSTOM CMSG 0x370002)
+    // and NeighborhoodCharterRemoveSignature (TC-CUSTOM CMSG 0x370005) — STUB-OK only;
+    // IDA verification (build 67186): no client senders.
 
     // ============================================================
     // Neighborhood Management System (0x38xxxx)

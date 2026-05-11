@@ -1198,30 +1198,7 @@ void WorldSession::HandleHousingDecorDeleteFromStorage(WorldPackets::Housing::Ho
         uint32(housingDecorDeleteFromStorage.DecorGuids.size()), uint32(result));
 }
 
-void WorldSession::HandleHousingDecorDeleteFromStorageById(WorldPackets::Housing::HousingDecorDeleteFromStorageById const& housingDecorDeleteFromStorageById)
-{
-    Player* player = GetPlayer();
-    if (!player)
-        return;
-
-    Housing* housing = player->GetHousing();
-    if (!housing)
-    {
-        WorldPackets::Housing::HousingDecorDeleteFromStorageResponse response;
-        response.Result = static_cast<uint8>(HOUSING_RESULT_HOUSE_NOT_FOUND);
-        SendPacket(response.Write());
-        return;
-    }
-
-    HousingResult result = housing->DestroyAllCopies(housingDecorDeleteFromStorageById.DecorRecID);
-
-    WorldPackets::Housing::HousingDecorDeleteFromStorageResponse response;
-    response.Result = static_cast<uint8>(result);
-    SendPacket(response.Write());
-
-    TC_LOG_INFO("housing", "CMSG_HOUSING_DECOR_DELETE_FROM_STORAGE_BY_ID DecorRecID: {}, Result: {}",
-        housingDecorDeleteFromStorageById.DecorRecID, uint32(result));
-}
+// Retired 2026-05-12: HandleHousingDecorDeleteFromStorageById — fake CMSG 0x30000A, no client sender.
 
 void WorldSession::HandleHousingDecorRequestStorage(WorldPackets::Housing::HousingDecorRequestStorage const& housingDecorRequestStorage)
 {
@@ -3679,21 +3656,7 @@ void WorldSession::HandleHousingSvcsStartTutorial(WorldPackets::Housing::Housing
 // (IDA-verified: only StartTutorial is real). The tutorial quest 91863 completion
 // is handled by the normal quest reward path when the player finishes the quest.
 
-void WorldSession::HandleHousingDecorConfirmPreviewPlacement(WorldPackets::Housing::HousingDecorConfirmPreviewPlacement const& housingDecorConfirmPreviewPlacement)
-{
-    Player* player = GetPlayer();
-    if (!player)
-        return;
-
-    TC_LOG_DEBUG("housing", "CMSG_HOUSING_DECOR_CONFIRM_PREVIEW_PLACEMENT Player: {} DecorGuid: {}",
-        player->GetGUID().ToString(), housingDecorConfirmPreviewPlacement.DecorGuid.ToString());
-
-    // Preview placement confirmation is an ACK from the client after
-    // receiving HousingDecorPlacementPreviewResponse with no restrictions.
-    // The actual placement is committed via PlaceDecor/MoveDecor CMSGs —
-    // this opcode just signals the client is proceeding with the placement.
-    // No server-side action or response needed.
-}
+// Retired 2026-05-12: HandleHousingDecorConfirmPreviewPlacement — fake CMSG 0x300011, STUB-LOG only.
 
 void WorldSession::HandleHousingSvcsAcceptNeighborhoodOwnership(WorldPackets::Housing::HousingSvcsAcceptNeighborhoodOwnership const& housingSvcsAcceptNeighborhoodOwnership)
 {
@@ -4759,72 +4722,9 @@ void WorldSession::HandleUpdateLastCatalogFetch(WorldPackets::Housing::UpdateLas
 // Phase 7 — Decor Handlers
 // ============================================================
 
-void WorldSession::HandleHousingDecorUpdateDyeSlot(WorldPackets::Housing::HousingDecorUpdateDyeSlot const& housingDecorUpdateDyeSlot)
-{
-    Player* player = GetPlayer();
-    if (!player)
-        return;
-
-    TC_LOG_DEBUG("housing", "CMSG_HOUSING_DECOR_UPDATE_DYE_SLOT Player: {} DecorGuid: {} SlotIndex: {} DyeColorID: {}",
-        player->GetGUID().ToString(), housingDecorUpdateDyeSlot.DecorGuid.ToString(),
-        housingDecorUpdateDyeSlot.SlotIndex, housingDecorUpdateDyeSlot.DyeColorID);
-
-    Housing* housing = player->GetHousing();
-    if (!housing)
-    {
-        WorldPackets::Housing::HousingDecorSystemSetDyeSlotsResponse response;
-        response.DecorGuid = housingDecorUpdateDyeSlot.DecorGuid;
-        response.Result = static_cast<uint8>(HOUSING_RESULT_HOUSE_NOT_FOUND);
-        SendPacket(response.Write());
-        return;
-    }
-
-    if (housingDecorUpdateDyeSlot.SlotIndex >= MAX_HOUSING_DYE_SLOTS)
-    {
-        WorldPackets::Housing::HousingDecorSystemSetDyeSlotsResponse response;
-        response.DecorGuid = housingDecorUpdateDyeSlot.DecorGuid;
-        response.Result = static_cast<uint8>(HOUSING_RESULT_MISSING_DYE);
-        SendPacket(response.Write());
-        return;
-    }
-
-    Housing::PlacedDecor const* decor = housing->GetPlacedDecor(housingDecorUpdateDyeSlot.DecorGuid);
-    if (!decor)
-    {
-        WorldPackets::Housing::HousingDecorSystemSetDyeSlotsResponse response;
-        response.DecorGuid = housingDecorUpdateDyeSlot.DecorGuid;
-        response.Result = static_cast<uint8>(HOUSING_RESULT_DECOR_NOT_FOUND);
-        SendPacket(response.Write());
-        return;
-    }
-
-    // Update single slot, preserve the others
-    std::array<uint32, MAX_HOUSING_DYE_SLOTS> dyeSlots = decor->DyeSlots;
-    dyeSlots[housingDecorUpdateDyeSlot.SlotIndex] = housingDecorUpdateDyeSlot.DyeColorID;
-
-    HousingResult result = housing->CommitDecorDyes(housingDecorUpdateDyeSlot.DecorGuid, dyeSlots);
-
-    WorldPackets::Housing::HousingDecorSystemSetDyeSlotsResponse response;
-    response.DecorGuid = housingDecorUpdateDyeSlot.DecorGuid;
-    response.Result = static_cast<uint8>(result);
-    SendPacket(response.Write());
-}
-
+// Retired 2026-05-12: HandleHousingDecorUpdateDyeSlot — fake CMSG 0x300008, dup of SET_DYE_SLOTS.
 // Retired 2026-05-11: HandleHousingDecorStartPlacingFromSource deleted.
-
-void WorldSession::HandleHousingDecorCleanupModeToggle(WorldPackets::Housing::HousingDecorCleanupModeToggle const& housingDecorCleanupModeToggle)
-{
-    Player* player = GetPlayer();
-    if (!player)
-        return;
-
-    TC_LOG_DEBUG("housing", "CMSG_HOUSING_DECOR_CLEANUP_MODE_TOGGLE Player: {} Enabled: {}",
-        player->GetGUID().ToString(), housingDecorCleanupModeToggle.Enabled);
-
-    // Cleanup mode is a client-side UI state; server just acknowledges
-    TC_LOG_DEBUG("housing", "Player {} cleanup mode toggled to {}",
-        player->GetGUID().ToString(), housingDecorCleanupModeToggle.Enabled ? "enabled" : "disabled");
-}
+// Retired 2026-05-12: HandleHousingDecorCleanupModeToggle — fake CMSG 0x30000C, client-side state only.
 
 // Retired 2026-05-11: HandleHousingDecorBatchOperation + HandleHousingDecorPlacementPreview deleted.
 
@@ -4832,155 +4732,12 @@ void WorldSession::HandleHousingDecorCleanupModeToggle(WorldPackets::Housing::Ho
 // Phase 7 — Fixture Handlers
 // ============================================================
 
-void WorldSession::HandleHousingFixtureCreateBasicHouse(WorldPackets::Housing::HousingFixtureCreateBasicHouse const& housingFixtureCreateBasicHouse)
-{
-    Player* player = GetPlayer();
-    if (!player)
-        return;
+// Retired 2026-05-12: HandleHousingFixtureCreateBasicHouse — fake CMSG 0x310001, no client sender.
+// House creation goes through HandleNeighborhoodBuyHouse; the fixture edit UI does not actually
+// reach back to the server with this opcode in build 67186.
 
-    TC_LOG_DEBUG("housing", "CMSG_HOUSING_FIXTURE_CREATE_BASIC_HOUSE Player={} PlotGuid={} HouseStyleID={}",
-        player->GetGUID().ToString(), housingFixtureCreateBasicHouse.PlotGuid.ToString(),
-        housingFixtureCreateBasicHouse.HouseStyleID);
-
-    Housing* housing = player->GetHousing();
-    if (!housing)
-    {
-        WorldPackets::Housing::HousingFixtureCreateBasicHouseResponse response;
-        response.Result = static_cast<uint8>(HOUSING_RESULT_HOUSE_NOT_FOUND);
-        SendPacket(response.Write());
-        return;
-    }
-
-    // If player already has a house, apply the style and return success.
-    // This opcode is an alternative creation path from the fixture edit UI.
-    // The primary creation path is HandleNeighborhoodBuyHouse.
-    if (!housing->GetHouseGuid().IsEmpty())
-    {
-        // Apply house style if provided and different from current
-        uint32 styleID = housingFixtureCreateBasicHouse.HouseStyleID;
-        if (styleID != 0 && styleID != housing->GetHouseType())
-        {
-            HouseExteriorWmoData const* wmoData = sHousingMgr.GetHouseExteriorWmoData(styleID);
-            if (wmoData)
-            {
-                housing->SetHouseType(styleID);
-
-                // Respawn house visuals with new type (must also respawn decor since DespawnHouseForPlot removes all MeshObjects)
-                if (HousingMap* housingMap = dynamic_cast<HousingMap*>(player->GetMap()))
-                {
-                    uint8 plotIndex = housing->GetPlotIndex();
-                    auto fixtureOverrides = housing->GetFixtureOverrideMap();
-                    auto rootOverrides = housing->GetRootComponentOverrides();
-                    housingMap->DespawnAllDecorForPlot(plotIndex);
-                    housingMap->DespawnHouseForPlot(plotIndex);
-                    housingMap->SpawnHouseForPlot(plotIndex, nullptr,
-                        static_cast<int32>(housing->GetCoreExteriorComponentID()),
-                        static_cast<int32>(styleID),
-                        fixtureOverrides.empty() ? nullptr : &fixtureOverrides,
-                        rootOverrides.empty() ? nullptr : &rootOverrides);
-                    housingMap->SpawnAllDecorForPlot(plotIndex, housing);
-                }
-            }
-        }
-
-        WorldPackets::Housing::HousingFixtureCreateBasicHouseResponse response;
-        response.Result = static_cast<uint8>(HOUSING_RESULT_SUCCESS);
-        SendPacket(response.Write());
-
-        // Send inline UPDATE_OBJECT with updated house data
-        SendFixtureUpdateObject(player, housing);
-        return;
-    }
-
-    // Player has Housing object but no house GUID — shouldn't happen in normal flow.
-    // The house should have been created via HandleNeighborhoodBuyHouse.
-    WorldPackets::Housing::HousingFixtureCreateBasicHouseResponse response;
-    response.Result = static_cast<uint8>(HOUSING_RESULT_PLOT_NOT_FOUND);
-    SendPacket(response.Write());
-}
-
-void WorldSession::HandleHousingFixtureDeleteHouse(WorldPackets::Housing::HousingFixtureDeleteHouse const& housingFixtureDeleteHouse)
-{
-    Player* player = GetPlayer();
-    if (!player)
-        return;
-
-    if (!sWorld->getBoolConfig(CONFIG_HOUSING_ENABLE_DELETE_HOUSE))
-    {
-        WorldPackets::Housing::HousingFixtureDeleteHouseResponse response;
-        response.Result = static_cast<uint8>(HOUSING_RESULT_SERVICE_NOT_AVAILABLE);
-        SendPacket(response.Write());
-        return;
-    }
-
-    TC_LOG_DEBUG("housing", "CMSG_HOUSING_FIXTURE_DELETE_HOUSE Player: {} HouseGuid: {}",
-        player->GetGUID().ToString(), housingFixtureDeleteHouse.HouseGuid.ToString());
-
-    Housing* housing = player->GetHousing();
-    WorldPackets::Housing::HousingFixtureDeleteHouseResponse response;
-
-    if (!housing || housing->GetHouseGuid() != housingFixtureDeleteHouse.HouseGuid)
-    {
-        response.Result = static_cast<uint8>(HOUSING_RESULT_HOUSE_NOT_FOUND);
-        SendPacket(response.Write());
-        return;
-    }
-
-    // Exit edit mode if active
-    if (housing->GetEditorMode() != HOUSING_EDITOR_MODE_NONE)
-        housing->SetEditorMode(HOUSING_EDITOR_MODE_NONE);
-
-    // Exit interior if inside
-    if (housing->IsInInterior())
-        housing->SetInInterior(false);
-
-    ObjectGuid houseGuid = housing->GetHouseGuid();
-    ObjectGuid neighborhoodGuid = housing->GetNeighborhoodGuid();
-    uint8 plotIndex = housing->GetPlotIndex();
-
-    Neighborhood* neighborhood = sNeighborhoodMgr.GetNeighborhood(neighborhoodGuid);
-
-    // Step 1: Despawn all entities on the map BEFORE deleting housing data
-    if (plotIndex != INVALID_PLOT_INDEX)
-    {
-        if (HousingMap* housingMap = dynamic_cast<HousingMap*>(player->GetMap()))
-        {
-            housingMap->DespawnAllDecorForPlot(plotIndex);
-            housingMap->DespawnAllMeshObjectsForPlot(plotIndex);
-            housingMap->DespawnRoomForPlot(plotIndex);
-            housingMap->DespawnHouseForPlot(plotIndex);
-            housingMap->SetPlotOwnershipState(plotIndex, false);
-        }
-    }
-
-    // Step 2: Remove from neighborhood membership
-    if (neighborhood)
-        neighborhood->EvictPlayer(player->GetGUID());
-
-    // Step 3: Delete house data from DB and clear in-memory state
-    housing->Delete();
-
-    // Step 4: Send response
-    response.Result = static_cast<uint8>(HOUSING_RESULT_SUCCESS);
-    SendPacket(response.Write());
-
-    // Step 5: Request client to reload housing data
-    WorldPackets::Housing::HousingSvcRequestPlayerReloadData reloadData;
-    SendPacket(reloadData.Write());
-
-    // Step 6: Broadcast roster update to remaining members and refresh mirror data
-    if (neighborhood)
-    {
-        WorldPackets::Neighborhood::NeighborhoodRosterResidentUpdate rosterUpdate;
-        rosterUpdate.Residents.push_back({ player->GetGUID(), 2 /*Removed*/, false });
-        neighborhood->BroadcastPacket(rosterUpdate.Write(), player->GetGUID());
-
-        neighborhood->RefreshMirrorDataForOnlineMembers();
-    }
-
-    TC_LOG_INFO("housing", "CMSG_HOUSING_FIXTURE_DELETE_HOUSE: Player {} deleted house {} from plot {} in neighborhood {}",
-        player->GetName(), houseGuid.ToString(), plotIndex, neighborhoodGuid.ToString());
-}
+// Retired 2026-05-12: HandleHousingFixtureDeleteHouse — fake CMSG 0x310002, duplicate of real
+// CMSG_HOUSING_SVCS_RELINQUISH_HOUSE (0x33000A) which handles the actual house deletion flow.
 
 // ============================================================
 // Phase 7 — Housing Services Handlers
@@ -5343,181 +5100,15 @@ void WorldSession::HandleHousingSvcsGuildGetHousingInfo(WorldPackets::Housing::H
 // Phase 7 — Housing System Handlers
 // ============================================================
 
-void WorldSession::HandleHousingSystemHouseStatusQuery(WorldPackets::Housing::HousingSystemHouseStatusQuery const& /*housingSystemHouseStatusQuery*/)
-{
-    Player* player = GetPlayer();
-    if (!player)
-        return;
+// Retired 2026-05-12: HandleHousingSystemHouseStatusQuery + HandleHousingSystemGetHouseInfoAlt
+// + HandleHousingSystemHouseSnapshot deleted. IDA build-67186 sender extraction
+// (docs/housing/ida/CMSG_SENDERS_67186.md) confirms 0x350000, 0x350001, 0x350002 have NO
+// senders in the client binary. The "Query"/"Alt" variants were duplicates of real
+// CMSG_HOUSING_HOUSE_STATUS (0x350005) and CMSG_HOUSING_GET_CURRENT_HOUSE_INFO (0x350006)
+// which are real and already handled.
 
-    TC_LOG_DEBUG("housing", "CMSG_HOUSING_SYSTEM_HOUSE_STATUS_QUERY Player: {}",
-        player->GetGUID().ToString());
-
-    Housing* housing = player->GetHousing();
-    WorldPackets::Housing::HousingHouseStatusResponse response;
-    response.AccountGuid = GetBattlenetAccountGUID();
-    response.OwnerPlayerGuid = player->GetGUID();
-    if (housing && !housing->GetHouseGuid().IsEmpty())
-    {
-        response.HouseGuid = housing->GetHouseGuid();
-        response.NeighborhoodGuid = housing->GetNeighborhoodGuid();
-        response.Status = 1;
-        response.PermissionFlags = 0xE0; // owner: all three permissions
-    }
-    SendPacket(response.Write());
-}
-
-void WorldSession::HandleHousingSystemGetHouseInfoAlt(WorldPackets::Housing::HousingSystemGetHouseInfoAlt const& housingSystemGetHouseInfoAlt)
-{
-    Player* player = GetPlayer();
-    if (!player)
-        return;
-
-    TC_LOG_DEBUG("housing", "CMSG_HOUSING_SYSTEM_GET_HOUSE_INFO_ALT Player: {} HouseGuid: {}",
-        player->GetGUID().ToString(), housingSystemGetHouseInfoAlt.HouseGuid.ToString());
-
-    Housing* housing = player->GetHousing();
-    WorldPackets::Housing::HousingGetCurrentHouseInfoResponse response;
-
-    if (housing && !housing->GetHouseGuid().IsEmpty())
-    {
-        response.House.HouseGuid = housing->GetHouseGuid();
-        response.House.OwnerGuid = player->GetGUID();
-        response.House.NeighborhoodGuid = housing->GetNeighborhoodGuid();
-        response.House.PlotId = housing->GetPlotIndex();
-        response.House.AccessFlags = housing->GetSettingsFlags();
-        response.House.HasMoveOutTime = false;
-        response.Result = static_cast<uint8>(HOUSING_RESULT_SUCCESS);
-    }
-    else
-    {
-        response.Result = static_cast<uint8>(HOUSING_RESULT_HOUSE_NOT_FOUND);
-    }
-
-    SendPacket(response.Write());
-}
-
-// Retired 2026-05-11: HandleHousingSystemHouseSnapshot deleted (no C_HouseSnapshot Lua namespace in retail).
-
-void WorldSession::HandleHousingSystemExportHouse(WorldPackets::Housing::HousingSystemExportHouse const& housingSystemExportHouse)
-{
-    Player* player = GetPlayer();
-    if (!player)
-        return;
-
-    TC_LOG_DEBUG("housing", "CMSG_HOUSING_SYSTEM_EXPORT_HOUSE Player: {} HouseGuid: {}",
-        player->GetGUID().ToString(), housingSystemExportHouse.HouseGuid.ToString());
-
-    Housing* housing = player->GetHousing();
-    if (!housing || housing->GetHouseGuid() != housingSystemExportHouse.HouseGuid)
-    {
-        WorldPackets::Housing::HousingExportHouseResponse response;
-        response.Result = static_cast<uint8>(HOUSING_RESULT_PERMISSION_DENIED);
-        response.HouseGuid = housingSystemExportHouse.HouseGuid;
-        SendPacket(response.Write());
-        return;
-    }
-
-    // Serialize house layout as JSON
-    std::string json = "{";
-    json += "\"level\":" + std::to_string(housing->GetLevel());
-    json += ",\"houseType\":" + std::to_string(housing->GetHouseType());
-    json += ",\"houseSize\":" + std::to_string(housing->GetHouseSize());
-
-    // Export rooms
-    json += ",\"rooms\":[";
-    auto rooms = housing->GetRooms();
-    for (size_t i = 0; i < rooms.size(); ++i)
-    {
-        if (i > 0) json += ",";
-        json += "{\"entryId\":" + std::to_string(rooms[i]->RoomEntryId);
-        json += ",\"slotIndex\":" + std::to_string(rooms[i]->SlotIndex);
-        json += ",\"orientation\":" + std::to_string(rooms[i]->Orientation);
-        json += ",\"mirrored\":" + std::string(rooms[i]->Mirrored ? "true" : "false");
-        json += ",\"themeId\":" + std::to_string(rooms[i]->ThemeId);
-        json += ",\"wallTextureId\":" + std::to_string(rooms[i]->WallTextureId);
-        json += ",\"floorTextureId\":" + std::to_string(rooms[i]->FloorTextureId);
-        json += ",\"ceilingTextureId\":" + std::to_string(rooms[i]->CeilingTextureId) + "}";
-    }
-    json += "]";
-
-    // Export placed decor
-    json += ",\"decor\":[";
-    auto decor = housing->GetAllPlacedDecor();
-    for (size_t i = 0; i < decor.size(); ++i)
-    {
-        if (i > 0) json += ",";
-        json += "{\"entryId\":" + std::to_string(decor[i]->DecorEntryId);
-        json += ",\"x\":" + std::to_string(decor[i]->PosX);
-        json += ",\"y\":" + std::to_string(decor[i]->PosY);
-        json += ",\"z\":" + std::to_string(decor[i]->PosZ);
-        json += ",\"rotX\":" + std::to_string(decor[i]->RotationX);
-        json += ",\"rotY\":" + std::to_string(decor[i]->RotationY);
-        json += ",\"rotZ\":" + std::to_string(decor[i]->RotationZ);
-        json += ",\"rotW\":" + std::to_string(decor[i]->RotationW) + "}";
-    }
-    json += "]";
-
-    // Export fixtures
-    json += ",\"fixtures\":[";
-    auto fixtures = housing->GetFixtures();
-    for (size_t i = 0; i < fixtures.size(); ++i)
-    {
-        if (i > 0) json += ",";
-        json += "{\"pointId\":" + std::to_string(fixtures[i]->FixturePointId);
-        json += ",\"optionId\":" + std::to_string(fixtures[i]->OptionId) + "}";
-    }
-    json += "]}";
-
-    WorldPackets::Housing::HousingExportHouseResponse response;
-    response.Result = static_cast<uint8>(HOUSING_RESULT_SUCCESS);
-    response.HouseGuid = housingSystemExportHouse.HouseGuid;
-    response.HasExportString = true;
-    response.ExportString = json;
-    SendPacket(response.Write());
-}
-
-void WorldSession::HandleHousingSystemUpdateHouseInfo(WorldPackets::Housing::HousingSystemUpdateHouseInfo const& housingSystemUpdateHouseInfo)
-{
-    Player* player = GetPlayer();
-    if (!player)
-        return;
-
-    TC_LOG_DEBUG("housing", "CMSG_HOUSING_SYSTEM_UPDATE_HOUSE_INFO Player: {} HouseGuid: {} InfoType: {} Name: '{}' Desc: '{}'",
-        player->GetGUID().ToString(), housingSystemUpdateHouseInfo.HouseGuid.ToString(),
-        housingSystemUpdateHouseInfo.InfoType, housingSystemUpdateHouseInfo.HouseName,
-        housingSystemUpdateHouseInfo.HouseDescription);
-
-    Housing* housing = player->GetHousing();
-    if (!housing || housing->GetHouseGuid() != housingSystemUpdateHouseInfo.HouseGuid)
-    {
-        TC_LOG_DEBUG("housing", "CMSG_HOUSING_SYSTEM_UPDATE_HOUSE_INFO: House not found or ownership mismatch");
-        return;
-    }
-
-    // Validate name
-    if (housingSystemUpdateHouseInfo.HouseName.length() > HOUSING_MAX_NAME_LENGTH)
-    {
-        TC_LOG_DEBUG("housing", "CMSG_HOUSING_SYSTEM_UPDATE_HOUSE_INFO: Name too long ({})", housingSystemUpdateHouseInfo.HouseName.length());
-        return;
-    }
-
-    if (!housingSystemUpdateHouseInfo.HouseName.empty() &&
-        (!ObjectMgr::IsValidCharterName(housingSystemUpdateHouseInfo.HouseName) || sObjectMgr->IsReservedName(housingSystemUpdateHouseInfo.HouseName)))
-    {
-        TC_LOG_DEBUG("housing", "CMSG_HOUSING_SYSTEM_UPDATE_HOUSE_INFO: Name rejected by filter");
-        return;
-    }
-
-    // Persist name and description to DB
-    housing->SetHouseNameDescription(housingSystemUpdateHouseInfo.HouseName, housingSystemUpdateHouseInfo.HouseDescription);
-
-    WorldPackets::Housing::HousingUpdateHouseInfo response;
-    response.HouseName = housingSystemUpdateHouseInfo.HouseName;
-    response.HouseDescription = housingSystemUpdateHouseInfo.HouseDescription;
-    response.Result = 0;
-    SendPacket(response.Write());
-
-    TC_LOG_INFO("housing", "CMSG_HOUSING_SYSTEM_UPDATE_HOUSE_INFO: Player {} updated house {} name='{}' desc='{}'",
-        player->GetName(), housing->GetHouseGuid().ToString(),
-        housing->GetHouseName(), housing->GetHouseDescription());
-}
+// Retired 2026-05-12: HandleHousingSystemExportHouse + HandleHousingSystemUpdateHouseInfo deleted.
+// IDA build-67186 sender extraction confirms CMSG 0x350003 (EXPORT_HOUSE) and 0x350004
+// (UPDATE_HOUSE_INFO) have NO senders in the client binary. Lua API has no C_HouseExport
+// namespace; house naming/description is not a wired protocol feature in retail 12.0.5 —
+// Housing::SetHouseNameDescription server-side method exists with no CMSG path.

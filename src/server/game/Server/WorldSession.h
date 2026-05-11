@@ -432,7 +432,6 @@ namespace WorldPackets
         class HousingDecorLock;
         class HousingDecorSetDyeSlots;
         class HousingDecorDeleteFromStorage;
-        class HousingDecorDeleteFromStorageById;
         class HousingDecorRequestStorage;
         class HousingDecorRedeemDeferredDecor;
         class HousingDecorStartPlacingNewDecor;
@@ -465,7 +464,6 @@ namespace WorldPackets
         class HousingSvcsCompleteTutorialStep;
         class HousingSvcsSkipTutorial;
         class HousingSvcsQueryPendingInvites;
-        class HousingDecorConfirmPreviewPlacement;
         class HousingSvcsAcceptNeighborhoodOwnership;
         class HousingSvcsRejectNeighborhoodOwnership;
         class HousingSvcsGetPotentialHouseOwners;
@@ -490,13 +488,9 @@ namespace WorldPackets
         class GetDecorRefundList;
         class BulkRefund;
         class HousingRequestEditorAvailability;
-        class HousingDecorUpdateDyeSlot;
         class HousingDecorStartPlacingFromSource;
-        class HousingDecorCleanupModeToggle;
         class HousingDecorBatchOperation;
         class HousingDecorPlacementPreview;
-        class HousingFixtureCreateBasicHouse;
-        class HousingFixtureDeleteHouse;
         class HousingSvcsRequestPermissionsCheck;
         class HousingSvcsClearPlotReservation;
         class HousingSvcsGetPlayerHousesInfoAlt;
@@ -508,11 +502,8 @@ namespace WorldPackets
         class HousingSvcsGuildAppendNeighborhood;
         class HousingSvcsGuildRenameNeighborhood;
         class HousingSvcsGuildGetHousingInfo;
-        class HousingSystemHouseStatusQuery;
-        class HousingSystemGetHouseInfoAlt;
-        class HousingSystemHouseSnapshot;
-        class HousingSystemExportHouse;
-        class HousingSystemUpdateHouseInfo;
+        // Retired 2026-05-12: group 0x35 system CMSG classes (HouseStatusQuery, GetHouseInfoAlt,
+        // HouseSnapshot, ExportHouse, UpdateHouseInfo) — no client senders in build 67186.
     }
 
     namespace Neighborhood
@@ -555,8 +546,6 @@ namespace WorldPackets
         class NeighborhoodInitiativeOp0D;
         class NeighborhoodInitiativeOp0E;
         class NeighborhoodInitiativeOp0F;
-        class NeighborhoodCharterSignResponsePacket;
-        class NeighborhoodCharterRemoveSignature;
         class NeighborhoodCancelInvitationAlt;
         class NeighborhoodInviteNotificationAck;
         class NeighborhoodOfferOwnershipResponsePacket;
@@ -1612,7 +1601,7 @@ class TC_GAME_API WorldSession
         void HandleHousingDecorLock(WorldPackets::Housing::HousingDecorLock const& housingDecorLock);
         void HandleHousingDecorSetDyeSlots(WorldPackets::Housing::HousingDecorSetDyeSlots const& housingDecorSetDyeSlots);
         void HandleHousingDecorDeleteFromStorage(WorldPackets::Housing::HousingDecorDeleteFromStorage const& housingDecorDeleteFromStorage);
-        void HandleHousingDecorDeleteFromStorageById(WorldPackets::Housing::HousingDecorDeleteFromStorageById const& housingDecorDeleteFromStorageById);
+        // Retired 2026-05-12: HandleHousingDecorDeleteFromStorageById (fake CMSG 0x30000A).
         void HandleHousingDecorRequestStorage(WorldPackets::Housing::HousingDecorRequestStorage const& housingDecorRequestStorage);
         void HandleHousingDecorRedeemDeferredDecor(WorldPackets::Housing::HousingDecorRedeemDeferredDecor const& housingDecorRedeemDeferredDecor);
         // Retired 2026-05-11: HandleHousingDecorStartPlacingNewDecor + CatalogCreateSearcher (TC-CUSTOM CMSGs).
@@ -1651,7 +1640,7 @@ class TC_GAME_API WorldSession
         void HandleHousingSvcsStartTutorial(WorldPackets::Housing::HousingSvcsStartTutorial const& housingSvcsStartTutorial);
         // Removed 2026-04-24: HandleHousingSvcsSetTutorialState / CompleteTutorialStep /
         // SkipTutorial / QueryPendingInvites — no matching 12.0.5 Lua API exists.
-        void HandleHousingDecorConfirmPreviewPlacement(WorldPackets::Housing::HousingDecorConfirmPreviewPlacement const& housingDecorConfirmPreviewPlacement);
+        // Retired 2026-05-12: HandleHousingDecorConfirmPreviewPlacement (fake CMSG 0x300011).
         void HandleHousingSvcsAcceptNeighborhoodOwnership(WorldPackets::Housing::HousingSvcsAcceptNeighborhoodOwnership const& housingSvcsAcceptNeighborhoodOwnership);
         void HandleHousingSvcsRejectNeighborhoodOwnership(WorldPackets::Housing::HousingSvcsRejectNeighborhoodOwnership const& housingSvcsRejectNeighborhoodOwnership);
         void HandleHousingSvcsGetPotentialHouseOwners(WorldPackets::Housing::HousingSvcsGetPotentialHouseOwners const& housingSvcsGetPotentialHouseOwners);
@@ -1678,13 +1667,13 @@ class TC_GAME_API WorldSession
         void HandleHousingResetKioskMode(WorldPackets::Housing::HousingResetKioskMode const& housingResetKioskMode);
 
         // Phase 7 Housing Decor handlers
-        void HandleHousingDecorUpdateDyeSlot(WorldPackets::Housing::HousingDecorUpdateDyeSlot const& housingDecorUpdateDyeSlot);
+        // Retired 2026-05-12: HandleHousingDecorUpdateDyeSlot (fake CMSG 0x300008, dup of SET_DYE_SLOTS).
         // Retired 2026-05-11: HandleHousingDecorStartPlacingFromSource + BatchOperation + PlacementPreview.
-        void HandleHousingDecorCleanupModeToggle(WorldPackets::Housing::HousingDecorCleanupModeToggle const& housingDecorCleanupModeToggle);
+        // Retired 2026-05-12: HandleHousingDecorCleanupModeToggle (fake CMSG 0x30000C).
 
         // Phase 7 Housing Fixture handlers
-        void HandleHousingFixtureCreateBasicHouse(WorldPackets::Housing::HousingFixtureCreateBasicHouse const& housingFixtureCreateBasicHouse);
-        void HandleHousingFixtureDeleteHouse(WorldPackets::Housing::HousingFixtureDeleteHouse const& housingFixtureDeleteHouse);
+        // Retired 2026-05-12: HandleHousingFixtureCreateBasicHouse (fake CMSG 0x310001).
+        // Retired 2026-05-12: HandleHousingFixtureDeleteHouse (fake CMSG 0x310002, use SVCS_RELINQUISH_HOUSE).
 
         // Phase 7 Housing Services handlers
         void HandleHousingSvcsRequestPermissionsCheck(WorldPackets::Housing::HousingSvcsRequestPermissionsCheck const& housingSvcsRequestPermissionsCheck);
@@ -1702,11 +1691,8 @@ class TC_GAME_API WorldSession
         void HandleHousingSvcsGuildGetHousingInfo(WorldPackets::Housing::HousingSvcsGuildGetHousingInfo const& housingSvcsGuildGetHousingInfo);
 
         // Phase 7 Housing System handlers
-        void HandleHousingSystemHouseStatusQuery(WorldPackets::Housing::HousingSystemHouseStatusQuery const& housingSystemHouseStatusQuery);
-        void HandleHousingSystemGetHouseInfoAlt(WorldPackets::Housing::HousingSystemGetHouseInfoAlt const& housingSystemGetHouseInfoAlt);
-        // Retired 2026-05-11: HandleHousingSystemHouseSnapshot (no C_HouseSnapshot Lua namespace in retail).
-        void HandleHousingSystemExportHouse(WorldPackets::Housing::HousingSystemExportHouse const& housingSystemExportHouse);
-        void HandleHousingSystemUpdateHouseInfo(WorldPackets::Housing::HousingSystemUpdateHouseInfo const& housingSystemUpdateHouseInfo);
+        // Retired 2026-05-12: HandleHousingSystemHouseStatusQuery + GetHouseInfoAlt + HouseSnapshot
+        // + ExportHouse + UpdateHouseInfo deleted (TC-CUSTOM CMSGs 0x350000-0x350004, no senders in build 67186).
 
         void HandleDeclineNeighborhoodInvites(WorldPackets::Housing::DeclineNeighborhoodInvites const& declineNeighborhoodInvites);
         void HandleQueryNeighborhoodInfo(WorldPackets::Housing::QueryNeighborhoodInfo const& queryNeighborhoodInfo);
@@ -1739,8 +1725,8 @@ class TC_GAME_API WorldSession
         void HandleNeighborhoodEvictPlot(WorldPackets::Neighborhood::NeighborhoodEvictPlot const& neighborhoodEvictPlot);
 
         // Phase 7 Neighborhood Charter handlers
-        void HandleNeighborhoodCharterSignResponse(WorldPackets::Neighborhood::NeighborhoodCharterSignResponsePacket const& neighborhoodCharterSignResponse);
-        void HandleNeighborhoodCharterRemoveSignature(WorldPackets::Neighborhood::NeighborhoodCharterRemoveSignature const& neighborhoodCharterRemoveSignature);
+        // Retired 2026-05-12: HandleNeighborhoodCharterSignResponse + HandleNeighborhoodCharterRemoveSignature
+        // (fake CMSGs 0x370002 + 0x370005 — STUB-OK only, no client senders).
 
         // Phase 7 Neighborhood handlers
         void HandleNeighborhoodCancelInvitationAlt(WorldPackets::Neighborhood::NeighborhoodCancelInvitationAlt const& neighborhoodCancelInvitationAlt);
