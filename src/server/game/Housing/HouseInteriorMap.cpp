@@ -2079,16 +2079,15 @@ void HouseInteriorMap::RemovePlayerFromMap(Player* player, bool remove)
 
 void HouseInteriorMap::SendPostTutorialAuras(Player* player)
 {
-    // Sniff-verified: After quest 94455 "Home at Last" completion, three "post-tutorial" auras
+    // Sniff-verified: After QUEST_HOUSING_TUTORIAL_COMPLETE turn-in, three "post-tutorial" auras
     // are applied at slots 8, 9, 50. These signal "tutorial complete" to the client and unlock
     // all editor modes (expert, cleanup, layout, customize). Auras are lost on map transfer,
     // so they must be re-sent when entering both the exterior AND interior housing maps.
     // Slot 8: spell 1285428 (NoCaster, ActiveFlags=1)
     // Slot 9: spell 1285424 (NoCaster, ActiveFlags=1)
     // Slot 50: spell 1266699 (NoCaster|Scalable, ActiveFlags=1, Points=1)
-    //
-    // TODO: When the housing tutorial questline is implemented, these auras should only be
-    // sent for players who have actually completed the tutorial quest (94455 "Home at Last").
+    if (!player->GetQuestRewardStatus(QUEST_HOUSING_TUTORIAL_COMPLETE))
+        return;
 
     // Spell 1285428 at slot 8
     {

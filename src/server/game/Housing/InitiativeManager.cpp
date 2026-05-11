@@ -30,7 +30,9 @@
 #include "Neighborhood.h"
 #include "NeighborhoodMgr.h"
 #include "ObjectAccessor.h"
+#include "ObjectMgr.h"
 #include "Player.h"
+#include "QuestDef.h"
 #include "Random.h"
 #include "WorldSession.h"
 
@@ -314,12 +316,9 @@ void InitiativeManager::Update(uint32 diff)
                     initiative->InitiativeID, initiative->NeighborhoodGuid);
                 initiative->Completed = true;
                 PersistInitiative(*initiative);
-
-                // Broadcast failed status (expired without completion)
-                ObjectGuid nhObjGuid = ObjectGuid::Create<HighGuid::Housing>(4, 0, 0, initiative->NeighborhoodGuid);
-                Neighborhood* neighborhood = sNeighborhoodMgr.GetNeighborhood(nhObjGuid);
-                if (neighborhood)
-                    SendInitiativeUpdateStatus(neighborhood, NI_UPDATE_STATUS_FAILED);
+                // Speculative SendInitiativeUpdateStatus(FAILED) retired 2026-05-11 —
+                // failed-status notification reaches the client via Account/Player entity
+                // fragment updates, not a dedicated SMSG.
             }
         }
     }
@@ -416,16 +415,9 @@ ActiveInitiative* InitiativeManager::StartInitiative(uint64 neighborhoodGuid, ui
 
     // Rebuild criteria reverse index now that a new initiative is active
     BuildCriteriaIndex();
-
-    // Broadcast initiative started status to neighborhood members
-    ObjectGuid nhObjGuid = ObjectGuid::Create<HighGuid::Housing>(4, 0, 0, neighborhoodGuid);
-    Neighborhood* neighborhood = sNeighborhoodMgr.GetNeighborhood(nhObjGuid);
-    if (neighborhood)
-    {
-        SendInitiativeUpdateStatus(neighborhood, NI_UPDATE_STATUS_STARTED);
-        uint32 maxPoints = CalculateMaxPoints(initiativeID);
-        SendInitiativePointsUpdate(neighborhood, 0, maxPoints);
-    }
+    // Speculative SendInitiativeUpdateStatus(STARTED) + SendInitiativePointsUpdate(0,max)
+    // retired 2026-05-11 — started-state + initial points propagate via entity-fragment
+    // updates on the neighborhood entity.
 
     return ptr;
 }
@@ -477,16 +469,13 @@ void InitiativeManager::CompleteInitiative(uint64 neighborhoodGuid, uint32 initi
             PersistInitiative(*initiative);
             PersistTaskProgress(*initiative);
 
-            // Broadcast completion to neighborhood
+            // Broadcast completion to neighborhood via the real SMSG_INITIATIVE_COMPLETE.
+            // Speculative SendInitiativeUpdateStatus(COMPLETED) + SendInitiativePointsUpdate(max,max)
+            // retired 2026-05-11 — completion state propagates via entity-fragment updates.
             ObjectGuid nhObjGuid = ObjectGuid::Create<HighGuid::Housing>(4, 0, 0, neighborhoodGuid);
             Neighborhood* neighborhood = sNeighborhoodMgr.GetNeighborhood(nhObjGuid);
             if (neighborhood)
-            {
                 BroadcastInitiativeComplete(neighborhood, initiativeID);
-                SendInitiativeUpdateStatus(neighborhood, NI_UPDATE_STATUS_COMPLETED);
-                uint32 maxPoints = CalculateMaxPoints(initiativeID);
-                SendInitiativePointsUpdate(neighborhood, maxPoints, maxPoints);
-            }
 
             // Rebuild criteria index since this initiative's tasks are no longer active
             BuildCriteriaIndex();
@@ -593,12 +582,8 @@ void InitiativeManager::UpdateTaskProgress(uint64 neighborhoodGuid, uint32 initi
     Neighborhood* neighborhood = sNeighborhoodMgr.GetNeighborhood(nhObjGuid);
 
     // Calculate current aggregate points: sum of all task progress values
-    uint32 currentPoints = 0;
-    for (auto const& [tid, tp] : initiative->TaskProgress)
-        currentPoints += tp.Progress;
-    uint32 maxPoints = CalculateMaxPoints(initiativeID);
-    if (neighborhood)
-        SendInitiativePointsUpdate(neighborhood, currentPoints, maxPoints);
+    // Speculative SendInitiativePointsUpdate(currentPoints, maxPoints) retired 2026-05-11 —
+    // progress updates propagate via entity-fragment updates on the neighborhood entity.
 
     // Check milestones
     CheckMilestones(*initiative, neighborhood);
@@ -1279,16 +1264,20 @@ void InitiativeManager::GrantMilestoneRewards(Player* player, uint32 milestoneID
         // Grant decor items if DecorID is set
         if (reward->DecorID > 0 && reward->DecorQuantity > 0)
         {
-            // TODO: Grant housing decor when decor inventory system is implemented
-            TC_LOG_DEBUG("housing", "InitiativeManager::GrantMilestoneRewards: Would grant {}x decor {} to player {}",
-                reward->DecorQuantity, reward->DecorID, player->GetGUID().ToString());
+            if (Housing* housing = player->GetHousing())
+            {
+                for (int32 i = 0; i < reward->DecorQuantity; ++i)
+                    housing->AddToCatalog(static_cast<uint32>(reward->DecorID));
+
+                TC_LOG_DEBUG("housing", "InitiativeManager::GrantMilestoneRewards: Granted {}x decor {} to player {}",
+                    reward->DecorQuantity, reward->DecorID, player->GetGUID().ToString());
+            }
         }
 
         // Grant favor if set
         if (reward->Favor > 0)
         {
-            Housing* housing = player->GetHousing();
-            if (housing)
+            if (Housing* housing = player->GetHousing())
             {
                 housing->AddFavor(static_cast<uint64>(reward->Favor), HOUSING_FAVOR_SOURCE_INITIATIVE_CHEST);
                 TC_LOG_DEBUG("housing", "InitiativeManager::GrantMilestoneRewards: Granted {} favor to player {}",
@@ -1304,11 +1293,19 @@ void InitiativeManager::GrantMilestoneRewards(Player* player, uint32 milestoneID
                 reward->Money, player->GetGUID().ToString());
         }
 
-        // Complete reward quest if set
+        // Reward quest if set — turns it in (XP + item bundle) even if not in the player's log.
+        // Pattern mirrors Scenarios/Scenario.cpp and DungeonFinding/LFGMgr.cpp; nullptr questGiver is intentional.
         if (reward->RewardQuestID > 0)
         {
-            TC_LOG_DEBUG("housing", "InitiativeManager::GrantMilestoneRewards: Reward quest {} for player {}",
-                reward->RewardQuestID, player->GetGUID().ToString());
+            if (Quest const* quest = sObjectMgr->GetQuestTemplate(reward->RewardQuestID))
+            {
+                if (!player->GetQuestRewardStatus(reward->RewardQuestID))
+                {
+                    player->RewardQuest(quest, LootItemType::Item, 0, nullptr, false);
+                    TC_LOG_DEBUG("housing", "InitiativeManager::GrantMilestoneRewards: Rewarded quest {} for player {}",
+                        reward->RewardQuestID, player->GetGUID().ToString());
+                }
+            }
         }
     }
 }
@@ -1419,13 +1416,11 @@ void InitiativeManager::CheckMilestones(ActiveInitiative& initiative, Neighborho
             initiative.MilestonesReached[milestone.MilestoneOrderIndex] = true;
             PersistMilestoneReached(initiative.DbId, milestone.MilestoneOrderIndex, static_cast<uint32>(GameTime::GetGameTime()));
 
+            // Real SMSG_INITIATIVE_REWARD_AVAILABLE carries the milestone-reached signal.
+            // Speculative SendInitiativeUpdateStatus(MILESTONE_COMPLETED) + SendInitiativeMilestoneUpdate
+            // retired 2026-05-11 — milestone state propagates via entity-fragment updates.
             if (neighborhood)
-            {
                 BroadcastRewardAvailable(neighborhood, initiative.InitiativeID, milestone.MilestoneOrderIndex);
-                SendInitiativeUpdateStatus(neighborhood, NI_UPDATE_STATUS_MILESTONE_COMPLETED);
-                SendInitiativeMilestoneUpdate(neighborhood, static_cast<uint8>(milestone.MilestoneOrderIndex), true,
-                    static_cast<uint8>(milestone.Field_3));
-            }
 
             TC_LOG_INFO("housing", "InitiativeManager: Milestone {} reached for initiative {} (progress={:.2f}, required={:.2f})",
                 milestone.MilestoneOrderIndex, initiative.InitiativeID, initiative.Progress, milestone.RequiredContributionAmount);
@@ -1488,66 +1483,9 @@ uint32 InitiativeManager::CalculateMaxPoints(uint32 initiativeID) const
     return maxPoints;
 }
 
-// ============================================================
-// IDA-verified status/points update packet sending
-// ============================================================
-
-void InitiativeManager::SendInitiativeUpdateStatus(Neighborhood* neighborhood, NeighborhoodInitiativeUpdateStatus status) const
-{
-    if (!neighborhood)
-        return;
-
-    WorldPackets::Housing::InitiativeUpdateStatus packet;
-    packet.Status = static_cast<uint8>(status);
-    WorldPacket const* data = packet.Write();
-
-    for (auto const& member : neighborhood->GetMembers())
-    {
-        if (Player* player = ObjectAccessor::FindPlayer(member.PlayerGuid))
-        {
-            if (player->GetSession())
-                player->GetSession()->SendPacket(data);
-        }
-    }
-}
-
-void InitiativeManager::SendInitiativePointsUpdate(Neighborhood* neighborhood, uint32 currentPoints, uint32 maxPoints) const
-{
-    if (!neighborhood)
-        return;
-
-    WorldPackets::Housing::InitiativePointsUpdate packet;
-    packet.CurrentPoints = currentPoints;
-    packet.MaxPoints = maxPoints;
-    WorldPacket const* data = packet.Write();
-
-    for (auto const& member : neighborhood->GetMembers())
-    {
-        if (Player* player = ObjectAccessor::FindPlayer(member.PlayerGuid))
-        {
-            if (player->GetSession())
-                player->GetSession()->SendPacket(data);
-        }
-    }
-}
-
-void InitiativeManager::SendInitiativeMilestoneUpdate(Neighborhood* neighborhood, uint8 milestoneIndex, bool reached, uint8 flags) const
-{
-    if (!neighborhood)
-        return;
-
-    WorldPackets::Housing::InitiativeMilestoneUpdate packet;
-    packet.MilestoneIndex = milestoneIndex;
-    packet.Reached = reached ? 1 : 0;
-    packet.Flags = flags;
-    WorldPacket const* data = packet.Write();
-
-    for (auto const& member : neighborhood->GetMembers())
-    {
-        if (Player* player = ObjectAccessor::FindPlayer(member.PlayerGuid))
-        {
-            if (player->GetSession())
-                player->GetSession()->SendPacket(data);
-        }
-    }
-}
+// Retired 2026-05-11: SendInitiativeUpdateStatus, SendInitiativePointsUpdate,
+// SendInitiativeMilestoneUpdate — all bound to speculative 0xF1000018..0xF100001C
+// opcodes that the retail client silently drops. Per 2026-05-11 sniff verification
+// (verify_opcodes_out.md), the same state changes are conveyed by the real
+// SMSG_INITIATIVE_TASK_COMPLETE (0x420365), SMSG_INITIATIVE_COMPLETE (0x420366),
+// and SMSG_INITIATIVE_REWARD_AVAILABLE (0x42036B), plus entity-fragment updates.

@@ -1318,13 +1318,15 @@ void HousingMap::RemovePlayerFromMap(Player* player, bool remove)
 
 void HousingMap::SendPostTutorialAuras(Player* player)
 {
-    // Sniff-verified: After quest 94455 "Home at Last" completion, three "post-tutorial" auras
+    // Sniff-verified: After QUEST_HOUSING_TUTORIAL_COMPLETE turn-in, three "post-tutorial" auras
     // are applied at slots 8, 9, 50. These replace old tutorial-phase auras.
     // These persist for the rest of the session. Since they don't exist in DB2, we send
     // manual SMSG_AURA_UPDATE packets each time the player enters the housing map.
     // Slot 8: spell 1285428 (NoCaster, ActiveFlags=1)
     // Slot 9: spell 1285424 (NoCaster, ActiveFlags=1) — will be overwritten by plot enter aura
     // Slot 50: spell 1266699 (NoCaster|Scalable, ActiveFlags=1, Points=1) — overwritten by plot enter
+    if (!player->GetQuestRewardStatus(QUEST_HOUSING_TUTORIAL_COMPLETE))
+        return;
 
     // Spell 1285428 at slot 8
     {

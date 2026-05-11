@@ -730,6 +730,13 @@ static constexpr uint64 HOUSE_PURCHASE_COST_COPPER      = 1000ULL * 10000ULL;   
 static constexpr uint64 HOUSE_MOVE_COST_COPPER          = 500ULL * 10000ULL;       // 500g move cost
 static constexpr uint32 MAX_HOUSE_LEVEL                 = 20;
 
+// Starter favor granted on house purchase (sniff: ChangeAmount=910, NewFavorTotal=910 in the
+// post-purchase HousingSvcsUpdateHousesLevelFavor pair).
+static constexpr uint64 HOUSE_PURCHASE_STARTER_FAVOR    = 910;
+
+// Quest 91863 objective 17 ("Acquire a house") kill credit, granted on successful purchase.
+static constexpr uint32 NPC_KILL_CREDIT_BUY_HOME        = 248858;
+
 // Spell applied during housing decor edit mode (creates "phased-out" visual effect)
 // Sniff: aura slot 51, Flags=NoCaster, ActiveFlags=15, CastLevel=36
 static constexpr uint32 SPELL_HOUSING_EDIT_MODE_AURA    = 1263303;
@@ -758,7 +765,11 @@ static constexpr uint32 SPELL_HOUSING_MAP_ENTRY_NEIGHBOR   = 1227147;  // "In Yo
 // SpellXSpellVisualID baked into spell 1227147's AuraDataInfo.Visual on retail.
 static constexpr uint32 VISUAL_HOUSING_MAP_ENTRY_NEIGHBOR  = 503683;
 
-// Post-tutorial auras — applied when quest 94455 "Home at Last" is completed.
+// Quest that completes the housing tutorial. Once turned in, the player is granted the
+// post-tutorial aura set and all editor modes (expert/cleanup/layout/customize) unlock.
+static constexpr uint32 QUEST_HOUSING_TUTORIAL_COMPLETE = 94455; // "Home at Last"
+
+// Post-tutorial auras — applied when QUEST_HOUSING_TUTORIAL_COMPLETE is completed.
 // Sniff-verified: quest reward removes old tutorial auras (slots 8,9,50) and replaces them
 // with these three new ones. These don't exist in DB2, so we send manual SMSG_AURA_UPDATE.
 // Slot 8: Flags=NoCaster, ActiveFlags=1, CastLevel=36

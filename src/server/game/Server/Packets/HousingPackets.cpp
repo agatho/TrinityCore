@@ -906,50 +906,7 @@ WorldPacket const* HousingFirstTimeDecorAcquisition::Write()
     return &_worldPacket;
 }
 
-WorldPacket const* HousingDecorStartPlacingNewDecorResponse::Write()
-{
-    _worldPacket << DecorGuid;
-    _worldPacket << uint8(Result);
-    _worldPacket << Field_13;
-
-    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_DECOR_START_PLACING_NEW_DECOR_RESPONSE DecorGuid: {} Result: {} Field_13: {}",
-        DecorGuid.ToString(), Result, Field_13);
-
-    return &_worldPacket;
-}
-
-WorldPacket const* HousingDecorCatalogCreateSearcherResponse::Write()
-{
-    _worldPacket << Owner;
-    _worldPacket << uint8(Result);
-
-    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_DECOR_CATALOG_CREATE_SEARCHER_RESPONSE Owner: {} Result: {}",
-        Owner.ToString(), Result);
-
-    return &_worldPacket;
-}
-
-WorldPacket const* HousingDecorBatchOperationResponse::Write()
-{
-    _worldPacket << uint8(Result);
-    _worldPacket << uint32(ProcessedCount);
-
-    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_DECOR_BATCH_OPERATION_RESPONSE Result: {} ProcessedCount: {}",
-        Result, ProcessedCount);
-
-    return &_worldPacket;
-}
-
-WorldPacket const* HousingDecorPlacementPreviewResponse::Write()
-{
-    _worldPacket << uint8(Result);
-    _worldPacket << uint8(RestrictionFlags);
-
-    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_DECOR_PLACEMENT_PREVIEW_RESPONSE Result: {} RestrictionFlags: {}",
-        Result, RestrictionFlags);
-
-    return &_worldPacket;
-}
+// Retired 2026-05-11: 4 speculative Decor*Response Write() bodies deleted (see HousingPackets.h).
 
 // ============================================================
 // Housing Fixture SMSG Responses (0x52xxxx)
@@ -1191,18 +1148,6 @@ WorldPacket const* HousingSvcsGuildCreateNeighborhoodNotification::Write()
     return &_worldPacket;
 }
 
-WorldPacket const* HousingSvcsCreateNeighborhoodResponse::Write()
-{
-    // IDA case 5505026: JamCliHouseFinderNeighborhood_base + uint8(trailing)
-    WriteJamCliHouseFinderNeighborhoodBase(_worldPacket, Neighborhood);
-    _worldPacket << uint8(TrailingResult);
-
-    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_SVCS_CREATE_NEIGHBORHOOD_RESPONSE NeighborhoodGuid: {} TrailingResult: {}",
-        Neighborhood.NeighborhoodGUID.ToString(), TrailingResult);
-
-    return &_worldPacket;
-}
-
 WorldPacket const* HousingSvcsCreateCharterNeighborhoodResponse::Write()
 {
     // IDA case 5505027: JamCliHouseFinderNeighborhood_base + uint8(trailing)
@@ -1235,19 +1180,6 @@ WorldPacket const* HousingSvcsClearPlotReservationResponse::Write()
     return &_worldPacket;
 }
 
-WorldPacket const* HousingSvcsHouseExpirationNotification::Write()
-{
-    // IDA case 5505030: uint8 + uint64 + uint32
-    _worldPacket << uint8(Type);
-    _worldPacket << uint64(Timestamp);
-    _worldPacket << uint32(Duration);
-
-    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_SVCS_HOUSE_EXPIRATION_NOTIFICATION Type: {} Timestamp: {} Duration: {}",
-        Type, Timestamp, Duration);
-
-    return &_worldPacket;
-}
-
 WorldPacket const* HousingSvcsRelinquishHouseResponse::Write()
 {
     // IDA case 5505031: uint8(Result) + PackedGUID + PackedGUID
@@ -1270,94 +1202,6 @@ WorldPacket const* HousingSvcsCancelRelinquishHouseResponse::Write()
 
     TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_SVCS_CANCEL_RELINQUISH_HOUSE_RESPONSE Field1: {} HouseGuid: {} Result: {}",
         Field1, HouseGuid.ToString(), Result);
-
-    return &_worldPacket;
-}
-
-// Helper: Write a JamHousingSearchResult entry to the packet
-// IDA: Deserialize_JamHousingSearchResult (0x7FF724C7D4A0), stride 96
-// Wire: PackedGUID + uint64 + uint64 + uint8 + PackedGUID + uint8(nameLen) + String(nameLen)
-static void WriteJamHousingSearchResult(WorldPacket& packet, JamHousingSearchResult const& result)
-{
-    packet << result.PrimaryGUID;
-    packet << uint64(result.SortKey);
-    packet << uint64(result.SortData);
-    packet << uint8(result.StatusType);
-    packet << result.SecondaryGUID;
-    uint8 nameLen = static_cast<uint8>(std::min<size_t>(result.Name.size() + 1, 255));
-    packet << uint8(nameLen);
-    if (nameLen > 0)
-        packet.append(result.Name.c_str(), nameLen);
-}
-
-WorldPacket const* HousingSvcsSearchNeighborhoodsResponse::Write()
-{
-    // IDA case 5505033: uint32(count) + uint8(flags) + JamHousingSearchResult[count]
-    _worldPacket << uint32(Results.size());
-    _worldPacket << uint8(Flags);
-    for (auto const& result : Results)
-        WriteJamHousingSearchResult(_worldPacket, result);
-
-    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_SVCS_SEARCH_NEIGHBORHOODS_RESPONSE Count: {} Flags: {}",
-        Results.size(), Flags);
-
-    return &_worldPacket;
-}
-
-WorldPacket const* HousingSvcsGetNeighborhoodDetailsResponse::Write()
-{
-    // IDA case 5505034 (sub_7FF724C7D700):
-    // Counts/metadata first, then arrays:
-    // uint32(count1) + uint32(count2) + PackedGUID + uint64 + uint32(count3)
-    // + uint32[count3] + JamCliHouse[count1] + JamCliHouse[count2]
-    _worldPacket << uint32(PrimaryHouses.size());
-    _worldPacket << uint32(SecondaryHouses.size());
-    _worldPacket << NeighborhoodGUID;
-    _worldPacket << uint64(Field1);
-    _worldPacket << uint32(ExtraIds.size());
-    for (uint32 id : ExtraIds)
-        _worldPacket << uint32(id);
-    for (auto const& house : PrimaryHouses)
-        WriteJamCliHouse(_worldPacket, house);
-    for (auto const& house : SecondaryHouses)
-        WriteJamCliHouse(_worldPacket, house);
-
-    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_SVCS_GET_NEIGHBORHOOD_DETAILS_RESPONSE Primary: {} Secondary: {} ExtraIds: {} Neighborhood: {}",
-        PrimaryHouses.size(), SecondaryHouses.size(), ExtraIds.size(), NeighborhoodGUID.ToString());
-
-    return &_worldPacket;
-}
-
-WorldPacket const* HousingSvcsGetNeighborhoodHousesResponse::Write()
-{
-    // IDA case 5505037: uint32(count) + uint8(result) + JamCliHouse[count]
-    _worldPacket << uint32(Houses.size());
-    _worldPacket << uint8(Result);
-    for (auto const& house : Houses)
-        WriteJamCliHouse(_worldPacket, house);
-
-    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_SVCS_GET_NEIGHBORHOOD_HOUSES_RESPONSE Count: {} Result: {}",
-        Houses.size(), Result);
-
-    return &_worldPacket;
-}
-
-WorldPacket const* HousingSvcsMoveHouseResponse::Write()
-{
-    // IDA case 5505038: uint8 only (shared with 5505029/5505039)
-    _worldPacket << uint8(Result);
-
-    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_SVCS_MOVE_HOUSE_RESPONSE Result: {}", Result);
-
-    return &_worldPacket;
-}
-
-WorldPacket const* HousingSvcsSwapPlotsResponse::Write()
-{
-    // IDA case 5505039: uint8 only (shared with 5505029/5505038)
-    _worldPacket << uint8(Result);
-
-    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_SVCS_SWAP_PLOTS_RESPONSE Result: {}", Result);
 
     return &_worldPacket;
 }
@@ -1508,42 +1352,6 @@ WorldPacket const* HousingSvcsChangeHouseCosmeticOwner::Write()
     TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_SVCS_CHANGE_HOUSE_COSMETIC_OWNER Result: {} HouseGuid: {} NewOwnerGuid: {}",
         Result, HouseGuid.ToString(), NewOwnerGuid.ToString());
 
-    return &_worldPacket;
-}
-
-WorldPacket const* AccountHousingRoomAdded::Write()
-{
-    _worldPacket << RoomGuid;
-    return &_worldPacket;
-}
-
-WorldPacket const* AccountHousingFixtureAdded::Write()
-{
-    _worldPacket << FixtureGuid;
-    _worldPacket.WriteBits(Name.size(), 7);
-    _worldPacket.WriteBit(false); // HasTextureComposition
-    _worldPacket.FlushBits();
-    _worldPacket.WriteString(Name);
-    return &_worldPacket;
-}
-
-WorldPacket const* AccountHousingThemeAdded::Write()
-{
-    _worldPacket << ThemeGuid;
-    _worldPacket.WriteBits(Name.size(), 7);
-    _worldPacket.WriteBit(false); // HasTextureComposition
-    _worldPacket.FlushBits();
-    _worldPacket.WriteString(Name);
-    return &_worldPacket;
-}
-
-WorldPacket const* AccountHousingRoomComponentTextureAdded::Write()
-{
-    _worldPacket << TextureGuid;
-    _worldPacket.WriteBits(Name.size(), 7);
-    _worldPacket.WriteBit(false); // HasTextureComposition
-    _worldPacket.FlushBits();
-    _worldPacket.WriteString(Name);
     return &_worldPacket;
 }
 
@@ -1827,18 +1635,6 @@ WorldPacket const* HousingSvcsDeleteAllNeighborhoodInvitesResponse::Write()
     return &_worldPacket;
 }
 
-WorldPacket const* HousingSvcsSetNeighborhoodSettingsResponse::Write()
-{
-    // IDA case 5505058: PackedGUID + uint8
-    _worldPacket << NeighborhoodGuid;
-    _worldPacket << uint8(Result);
-
-    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_SVCS_SET_NEIGHBORHOOD_SETTINGS_RESPONSE Neighborhood: {} Result: {}",
-        NeighborhoodGuid.ToString(), Result);
-
-    return &_worldPacket;
-}
-
 // ============================================================
 // Housing General SMSG Responses (0x55xxxx)
 // ============================================================
@@ -1925,14 +1721,7 @@ WorldPacket const* HousingExportHouseResponse::Write()
     return &_worldPacket;
 }
 
-WorldPacket const* HousingSystemHouseSnapshotResponse::Write()
-{
-    _worldPacket << uint8(Result);
-
-    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_SYSTEM_HOUSE_SNAPSHOT_RESPONSE Result: {}", Result);
-
-    return &_worldPacket;
-}
+// Retired 2026-05-11: HousingSystemHouseSnapshotResponse Write() deleted (no C_HouseSnapshot in retail).
 
 WorldPacket const* HousingGetPlayerPermissionsResponse::Write()
 {
@@ -1955,17 +1744,7 @@ WorldPacket const* HousingResetKioskModeResponse::Write()
     return &_worldPacket;
 }
 
-WorldPacket const* HousingEditorAvailabilityResponse::Write()
-{
-    _worldPacket << HouseGuid;
-    _worldPacket << uint8(Result);
-    _worldPacket << Field_09;
-
-    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_EDITOR_AVAILABILITY_RESPONSE HouseGuid: {} Result: {} Field_09: {}",
-        HouseGuid.ToString(), Result, Field_09);
-
-    return &_worldPacket;
-}
+// Retired 2026-05-11: HousingEditorAvailabilityResponse Write() deleted (Lua API is sync).
 
 WorldPacket const* HousingUpdateHouseInfo::Write()
 {
@@ -1995,26 +1774,10 @@ WorldPacket const* HousingUpdateHouseInfo::Write()
     return &_worldPacket;
 }
 
-WorldPacket const* HousingSetHouseNameResponse::Write()
-{
-    // IDA-verified wire (build 67186, sub_7FF75C1D1020 case 0x550005):
-    //   uint8 Result
-    //   uint64 NameLen        (read via ai_Process_HousingDataPacket; 8 bytes)
-    //   char[NameLen] Name    (no null terminator)
-    //
-    // Old TC implementation wrote a 3-byte big-endian length, which left the
-    // client desynced by 5 bytes — the parser would treat the 4th-9th bytes
-    // of the response as the string length rather than reading the string.
-    _worldPacket << uint8(Result);
-    _worldPacket << uint64(Name.size());
-    if (!Name.empty())
-        _worldPacket.append(Name.data(), Name.size());
-
-    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_SET_HOUSE_NAME_RESPONSE Result: {} Name: '{}'",
-        Result, Name);
-
-    return &_worldPacket;
-}
+// Retired 2026-05-11: SMSG_HOUSING_SET_HOUSE_NAME_RESPONSE class deleted (was using fake
+// opcode 0xF1000008 + had 0 emit-sites). IDA-derived real opcode is 0x550005 with wire:
+//   uint8 Result + uint64 NameLen + char[NameLen] Name
+// Recreate if/when the set-house-name response gets wired into a handler.
 
 // ============================================================
 // Account/Licensing SMSG (0x42xxxx / 0x5Fxxxx)
@@ -2305,38 +2068,9 @@ WorldPacket const* InitiativeRewardAvailable::Write()
     return &_worldPacket;
 }
 
-WorldPacket const* InitiativeUpdateStatus::Write()
-{
-    _worldPacket << uint8(Status);
-    return &_worldPacket;
-}
-
-WorldPacket const* InitiativePointsUpdate::Write()
-{
-    _worldPacket << uint32(CurrentPoints);
-    _worldPacket << uint32(MaxPoints);
-    return &_worldPacket;
-}
-
-WorldPacket const* InitiativeMilestoneUpdate::Write()
-{
-    _worldPacket << uint8(MilestoneIndex);
-    _worldPacket << uint8(Reached);
-    _worldPacket << uint8(Flags);
-    return &_worldPacket;
-}
-
-WorldPacket const* InitiativeChestResult::Write()
-{
-    _worldPacket << uint32(Result);
-    return &_worldPacket;
-}
-
-WorldPacket const* InitiativeTrackedUpdated::Write()
-{
-    _worldPacket << NeighborhoodGUID;
-    return &_worldPacket;
-}
+// Retired 2026-05-11: InitiativeUpdateStatus / InitiativePointsUpdate / InitiativeMilestoneUpdate
+// / InitiativeChestResult Write() bodies deleted (speculative 0xF1000018..0xF100001C opcodes).
+// See HousingPackets.h for the wire shapes (preserved as comments for future restoration).
 
 WorldPacket const* HousingPhotoSharingAuthorizationResult::Write()
 {

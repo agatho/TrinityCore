@@ -146,11 +146,8 @@ public:
 
     // Auto-start initiatives for neighborhoods that don't have one
     void CheckAndStartInitiatives();
-
-    // Send IDA-verified status/points update packets
-    void SendInitiativeUpdateStatus(Neighborhood* neighborhood, NeighborhoodInitiativeUpdateStatus status) const;
-    void SendInitiativePointsUpdate(Neighborhood* neighborhood, uint32 currentPoints, uint32 maxPoints) const;
-    void SendInitiativeMilestoneUpdate(Neighborhood* neighborhood, uint8 milestoneIndex, bool reached, uint8 flags) const;
+    // Retired 2026-05-11: SendInitiativeUpdateStatus / SendInitiativePointsUpdate /
+    // SendInitiativeMilestoneUpdate (speculative SMSGs the retail client drops).
 
 private:
     InitiativeManager() = default;

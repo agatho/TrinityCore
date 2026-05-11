@@ -1334,42 +1334,11 @@ namespace WorldPackets::Housing
         uint32 SequenceIndex = 0;   // Sniff: uint32 — echoes CMSG RedemptionToken
     };
 
-    class HousingDecorStartPlacingNewDecorResponse final : public ServerPacket
-    {
-    public:
-        HousingDecorStartPlacingNewDecorResponse() : ServerPacket(SMSG_HOUSING_DECOR_START_PLACING_NEW_DECOR_RESPONSE) { }
-        WorldPacket const* Write() override;
-        ObjectGuid DecorGuid;
-        uint8 Result = 0;
-        uint32 Field_13 = 0;
-    };
-
-    class HousingDecorCatalogCreateSearcherResponse final : public ServerPacket
-    {
-    public:
-        HousingDecorCatalogCreateSearcherResponse() : ServerPacket(SMSG_HOUSING_DECOR_CATALOG_CREATE_SEARCHER_RESPONSE) { }
-        WorldPacket const* Write() override;
-        ObjectGuid Owner;
-        uint8 Result = 0;
-    };
-
-    class HousingDecorBatchOperationResponse final : public ServerPacket
-    {
-    public:
-        HousingDecorBatchOperationResponse() : ServerPacket(SMSG_HOUSING_DECOR_BATCH_OPERATION_RESPONSE) { }
-        WorldPacket const* Write() override;
-        uint8 Result = 0;
-        uint32 ProcessedCount = 0;
-    };
-
-    class HousingDecorPlacementPreviewResponse final : public ServerPacket
-    {
-    public:
-        HousingDecorPlacementPreviewResponse() : ServerPacket(SMSG_HOUSING_DECOR_PLACEMENT_PREVIEW_RESPONSE) { }
-        WorldPacket const* Write() override;
-        uint8 Result = 0;
-        uint8 RestrictionFlags = 0;
-    };
+    // Retired 2026-05-11: 4 speculative Decor* response classes deleted (fake opcodes
+    // 0xF1000003..0xF1000006). Lua API verification (HousingDecorUIDocumentation.lua,
+    // HousingCatalogSearcherAPIDocumentation.lua, HousingBasicModeUIDocumentation.lua) showed
+    // these features have NO retail Lua bindings — entirely server-side scaffolding for
+    // CMSGs (0x300005/7/D/F) that never appear in retail sniffs.
 
     class HousingFirstTimeDecorAcquisition final : public ServerPacket
     {
@@ -1578,15 +1547,9 @@ namespace WorldPackets::Housing
         std::string Name;
     };
 
-    class HousingSvcsCreateNeighborhoodResponse final : public ServerPacket
-    {
-    public:
-        HousingSvcsCreateNeighborhoodResponse() : ServerPacket(SMSG_HOUSING_SVCS_CREATE_NEIGHBORHOOD_RESPONSE) { }
-        WorldPacket const* Write() override;
-        // IDA case 5505026: JamCliHouseFinderNeighborhood_base + uint8(trailing)
-        JamCliHouseFinderNeighborhood Neighborhood;
-        uint8 TrailingResult = 0;
-    };
+    // Retired 2026-05-11: HousingSvcsCreateNeighborhoodResponse deleted (fake opcode 0xF1000009,
+    // 0 emit-sites). IDA-derived real opcode: 0x540002 (case 5505026). Wire:
+    //   JamCliHouseFinderNeighborhood_base + uint8 TrailingResult
 
     class HousingSvcsCreateCharterNeighborhoodResponse final : public ServerPacket
     {
@@ -1616,16 +1579,9 @@ namespace WorldPackets::Housing
         ObjectGuid NeighborhoodGuid;
     };
 
-    class HousingSvcsHouseExpirationNotification final : public ServerPacket
-    {
-    public:
-        HousingSvcsHouseExpirationNotification() : ServerPacket(SMSG_HOUSING_SVCS_HOUSE_EXPIRATION_NOTIFICATION) { }
-        WorldPacket const* Write() override;
-        // IDA case 5505030: uint8 + uint64 + uint32
-        uint8 Type = 0;
-        uint64 Timestamp = 0;
-        uint32 Duration = 0;
-    };
+    // Retired 2026-05-11: HousingSvcsHouseExpirationNotification deleted (fake opcode 0xF100000C,
+    // 0 emit-sites). IDA-derived real opcode: 0x540006 (case 5505030). Wire:
+    //   uint8 Type + uint64 Timestamp + uint32 Duration
 
     class HousingSvcsRelinquishHouseResponse final : public ServerPacket
     {
@@ -1661,30 +1617,11 @@ namespace WorldPackets::Housing
         std::string Name;            // +56: result name string (len at +64)
     };
 
-    class HousingSvcsSearchNeighborhoodsResponse final : public ServerPacket
-    {
-    public:
-        HousingSvcsSearchNeighborhoodsResponse() : ServerPacket(SMSG_HOUSING_SVCS_SEARCH_NEIGHBORHOODS_RESPONSE) { }
-        WorldPacket const* Write() override;
-        // IDA case 5505033: uint32(count) + uint8(flags) + JamHousingSearchResult[count]
-        std::vector<JamHousingSearchResult> Results;
-        uint8 Flags = 0;
-    };
-
-    class HousingSvcsGetNeighborhoodDetailsResponse final : public ServerPacket
-    {
-    public:
-        HousingSvcsGetNeighborhoodDetailsResponse() : ServerPacket(SMSG_HOUSING_SVCS_GET_NEIGHBORHOOD_DETAILS_RESPONSE) { }
-        WorldPacket const* Write() override;
-        // IDA case 5505034 (sub_7FF724C7D700):
-        // uint32(count1) + uint32(count2) + PackedGUID + uint64 + uint32(count3)
-        // + uint32[count3] + JamCliHouse[count1] + JamCliHouse[count2]
-        std::vector<JamCliHouse> PrimaryHouses;
-        std::vector<JamCliHouse> SecondaryHouses;
-        ObjectGuid NeighborhoodGUID;
-        uint64 Field1 = 0;
-        std::vector<uint32> ExtraIds;
-    };
+    // Retired 2026-05-11: HousingSvcsSearchNeighborhoodsResponse + HousingSvcsGetNeighborhoodDetailsResponse
+    // deleted (fake opcodes 0xF100000E + 0xF100000A, 0 emit-sites). IDA-derived real opcodes:
+    //   Search   = 0x540009 (case 5505033)  uint32(count) + uint8(flags) + JamHousingSearchResult[count]
+    //   Details  = 0x54000A (case 5505034)  uint32 + uint32 + PackedGUID + uint64 + uint32 + uint32[] + JamCliHouse[] + JamCliHouse[]
+    // (JamHousingSearchResult struct above retained — kept as future scaffolding.)
 
     class HousingSvcsGetPlayerHousesInfoResponse final : public ServerPacket
     {
@@ -1708,33 +1645,12 @@ namespace WorldPackets::Housing
         uint8 Result = 0;
     };
 
-    class HousingSvcsGetNeighborhoodHousesResponse final : public ServerPacket
-    {
-    public:
-        HousingSvcsGetNeighborhoodHousesResponse() : ServerPacket(SMSG_HOUSING_SVCS_GET_NEIGHBORHOOD_HOUSES_RESPONSE) { }
-        WorldPacket const* Write() override;
-        // IDA case 5505037: uint32(count) + uint8(result) + JamCliHouse[count]
-        std::vector<JamCliHouse> Houses;
-        uint8 Result = 0;
-    };
-
-    class HousingSvcsMoveHouseResponse final : public ServerPacket
-    {
-    public:
-        HousingSvcsMoveHouseResponse() : ServerPacket(SMSG_HOUSING_SVCS_MOVE_HOUSE_RESPONSE) { }
-        WorldPacket const* Write() override;
-        // IDA case 5505038: uint8 only (shared with 5505029/5505039)
-        uint8 Result = 0;
-    };
-
-    class HousingSvcsSwapPlotsResponse final : public ServerPacket
-    {
-    public:
-        HousingSvcsSwapPlotsResponse() : ServerPacket(SMSG_HOUSING_SVCS_SWAP_PLOTS_RESPONSE) { }
-        WorldPacket const* Write() override;
-        // IDA case 5505039: uint8 only (shared with 5505029/5505038)
-        uint8 Result = 0;
-    };
+    // Retired 2026-05-11: HousingSvcsGetNeighborhoodHousesResponse + MoveHouseResponse + SwapPlotsResponse
+    // deleted (fake opcodes 0xF100000B + 0xF100000D + 0xF1000010, 0 emit-sites). IDA-derived real:
+    //   GetNeighborhoodHouses = 0x54000D (case 5505037)  uint32 count + uint8 result + JamCliHouse[count]
+    //   MoveHouse             = 0x54000E (case 5505038)  uint8 Result only (also shared with 0x54000F)
+    //   SwapPlots             = 0x54000F (case 5505039)  uint8 Result only
+    // Note: SMSG_NEIGHBORHOOD_MOVE_HOUSE_RESPONSE = 0x5C0006 already exists and is the actual emit path.
 
     class HousingSvcsChangeHouseCosmeticOwner final : public ServerPacket
     {
@@ -1745,46 +1661,6 @@ namespace WorldPackets::Housing
         uint8 Result = 0;
         ObjectGuid HouseGuid;
         ObjectGuid NewOwnerGuid;
-    };
-
-    // Account-level housing collection notifications
-    class AccountHousingRoomAdded final : public ServerPacket
-    {
-    public:
-        AccountHousingRoomAdded() : ServerPacket(SMSG_ACCOUNT_HOUSING_ROOM_ADDED) { }
-        WorldPacket const* Write() override;
-
-        ObjectGuid RoomGuid;
-    };
-
-    class AccountHousingFixtureAdded final : public ServerPacket
-    {
-    public:
-        AccountHousingFixtureAdded() : ServerPacket(SMSG_ACCOUNT_HOUSING_FIXTURE_ADDED) { }
-        WorldPacket const* Write() override;
-
-        ObjectGuid FixtureGuid;
-        std::string Name;
-    };
-
-    class AccountHousingThemeAdded final : public ServerPacket
-    {
-    public:
-        AccountHousingThemeAdded() : ServerPacket(SMSG_ACCOUNT_HOUSING_THEME_ADDED) { }
-        WorldPacket const* Write() override;
-
-        ObjectGuid ThemeGuid;
-        std::string Name;
-    };
-
-    class AccountHousingRoomComponentTextureAdded final : public ServerPacket
-    {
-    public:
-        AccountHousingRoomComponentTextureAdded() : ServerPacket(SMSG_ACCOUNT_HOUSING_ROOM_COMPONENT_TEXTURE_ADDED) { }
-        WorldPacket const* Write() override;
-
-        ObjectGuid TextureGuid;
-        std::string Name;
     };
 
     class HousingSvcsUpdateHousesLevelFavor final : public ServerPacket
@@ -2003,15 +1879,9 @@ namespace WorldPackets::Housing
         ObjectGuid NeighborhoodGuid;
     };
 
-    class HousingSvcsSetNeighborhoodSettingsResponse final : public ServerPacket
-    {
-    public:
-        HousingSvcsSetNeighborhoodSettingsResponse() : ServerPacket(SMSG_HOUSING_SVCS_SET_NEIGHBORHOOD_SETTINGS_RESPONSE) { }
-        WorldPacket const* Write() override;
-        // IDA case 5505058: PackedGUID + uint8
-        ObjectGuid NeighborhoodGuid;
-        uint8 Result = 0;
-    };
+    // Retired 2026-05-11: HousingSvcsSetNeighborhoodSettingsResponse deleted (fake opcode
+    // 0xF100000F, 0 emit-sites). IDA-derived real opcode: 0x540022 (case 5505058). Wire:
+    //   PackedGUID NeighborhoodGuid + uint8 Result
 
     // ============================================================
     // Housing General SMSG Responses (0x55xxxx)
@@ -2066,25 +1936,12 @@ namespace WorldPackets::Housing
         std::vector<uint8> ExportBlob;
     };
 
-    class HousingSystemHouseSnapshotResponse final : public ServerPacket
-    {
-    public:
-        HousingSystemHouseSnapshotResponse() : ServerPacket(SMSG_HOUSING_SYSTEM_HOUSE_SNAPSHOT_RESPONSE) { }
-        WorldPacket const* Write() override;
-        uint8 Result = 0;
-    };
+    // Retired 2026-05-11: HousingSystemHouseSnapshotResponse deleted (fake opcode 0xF1000011).
+    // No `C_HouseSnapshot` Lua namespace exists in retail 12.0.5; feature does not exist.
 
-    class HousingSetHouseNameResponse final : public ServerPacket
-    {
-    public:
-        HousingSetHouseNameResponse() : ServerPacket(SMSG_HOUSING_SET_HOUSE_NAME_RESPONSE) { }
-        WorldPacket const* Write() override;
-
-        // IDA-verified wire (build 67186, sub_7FF75C1D1020 case 0x550005):
-        //   uint8 Result + uint64 Name.size() + char[Name.size()]
-        uint8 Result = 0;
-        std::string Name;
-    };
+    // Retired 2026-05-11: HousingSetHouseNameResponse deleted (fake opcode 0xF1000008, 0 emit-sites).
+    // IDA-verified real opcode: 0x550005 (build 67186, sub_7FF75C1D1020 case 0x550005). Wire:
+    //   uint8 Result + uint64 Name.size() + char[Name.size()] Name
 
     class HousingGetPlayerPermissionsResponse final : public ServerPacket
     {
@@ -2107,15 +1964,9 @@ namespace WorldPackets::Housing
         uint8 Result = 0;  // IDA 12.0 verified (0x550007): single uint8
     };
 
-    class HousingEditorAvailabilityResponse final : public ServerPacket
-    {
-    public:
-        HousingEditorAvailabilityResponse() : ServerPacket(SMSG_HOUSING_EDITOR_AVAILABILITY_RESPONSE) { }
-        WorldPacket const* Write() override;
-        ObjectGuid HouseGuid;
-        uint8 Result = 0;
-        uint8 Field_09 = 0;
-    };
+    // Retired 2026-05-11: HousingEditorAvailabilityResponse deleted (fake opcode 0xF1000007).
+    // `C_HouseEditor.GetHouseEditorAvailability` and `GetHouseEditorModeAvailability` both
+    // return synchronously in retail (no server roundtrip).
 
     class HousingUpdateHouseInfo final : public ServerPacket
     {
@@ -2431,56 +2282,23 @@ namespace WorldPackets::Housing
         std::vector<ObjectGuid> RewardGuids;
     };
 
-    // IDA-verified: SMSG_INITIATIVE_UPDATE_STATUS carries 1 byte (NeighborhoodInitiativeUpdateStatus)
-    // Sent when initiative state changes: Started, MilestoneCompleted, Completed, Failed
-    class InitiativeUpdateStatus final : public ServerPacket
-    {
-    public:
-        InitiativeUpdateStatus() : ServerPacket(SMSG_INITIATIVE_UPDATE_STATUS) { }
-        WorldPacket const* Write() override;
-        uint8 Status = 0; // NeighborhoodInitiativeUpdateStatus
-    };
+    // Retired 2026-05-11: InitiativeUpdateStatus + InitiativePointsUpdate + InitiativeMilestoneUpdate
+    // + InitiativeChestResult deleted (fake opcodes 0xF1000018..0xF100001C, retail client drops them).
+    // Same semantic ground is covered by the REAL opcodes already in this file:
+    //   SMSG_INITIATIVE_TASK_COMPLETE     = 0x420365
+    //   SMSG_INITIATIVE_COMPLETE          = 0x420366
+    //   SMSG_INITIATIVE_REWARD_AVAILABLE  = 0x42036B
+    // ...plus Account/Player entity-fragment updates for points/milestone/status state.
+    // Retired wire shapes (preserved for future restoration if real opcodes get IDA-confirmed):
+    //   UpdateStatus     uint8 Status (NeighborhoodInitiativeUpdateStatus enum)
+    //   PointsUpdate     uint32 CurrentPoints + uint32 MaxPoints
+    //   MilestoneUpdate  uint8 MilestoneIndex + uint8 Reached + uint8 Flags
+    //   ChestResult      uint32 Result (NeighborhoodInitiativeChestResult enum)
 
-    // IDA-verified: SMSG_INITIATIVE_POINTS_UPDATE carries 2 uint32 (current, max)
-    // Sent after progress changes to update the client's progress bar
-    class InitiativePointsUpdate final : public ServerPacket
-    {
-    public:
-        InitiativePointsUpdate() : ServerPacket(SMSG_INITIATIVE_POINTS_UPDATE) { }
-        WorldPacket const* Write() override;
-        uint32 CurrentPoints = 0;
-        uint32 MaxPoints = 0;
-    };
-
-    // IDA-verified: SMSG_INITIATIVE_MILESTONE_UPDATE carries 3 bytes
-    // Sent when milestone state changes (milestoneIndex, reached, flags)
-    class InitiativeMilestoneUpdate final : public ServerPacket
-    {
-    public:
-        InitiativeMilestoneUpdate() : ServerPacket(SMSG_INITIATIVE_MILESTONE_UPDATE) { }
-        WorldPacket const* Write() override;
-        uint8 MilestoneIndex = 0;
-        uint8 Reached = 0;
-        uint8 Flags = 0;
-    };
-
-    // IDA-verified: SMSG_INITIATIVE_CHEST_RESULT carries 1 uint32 (NeighborhoodInitiativeChestResult)
-    class InitiativeChestResult final : public ServerPacket
-    {
-    public:
-        InitiativeChestResult() : ServerPacket(SMSG_INITIATIVE_CHEST_RESULT) { }
-        WorldPacket const* Write() override;
-        uint32 Result = 0; // NeighborhoodInitiativeChestResult
-    };
-
-    // IDA-verified: SMSG_INITIATIVE_TRACKED_UPDATED carries a packed GUID (8 bytes)
-    class InitiativeTrackedUpdated final : public ServerPacket
-    {
-    public:
-        InitiativeTrackedUpdated() : ServerPacket(SMSG_INITIATIVE_TRACKED_UPDATED) { }
-        WorldPacket const* Write() override;
-        ObjectGuid NeighborhoodGUID;
-    };
+    // Retired 2026-05-11: InitiativeTrackedUpdated deleted (fake opcode 0xF100001B, 0 emit-sites).
+    // IDA-verified to carry a packed GUID (8 bytes) but real retail opcode unknown.
+    // The other 4 initiative SMSGs (CHEST_RESULT, MILESTONE_UPDATE, POINTS_UPDATE, UPDATE_STATUS)
+    // still use fake 0xF1000018..0xF100001C and need an initiative-claim sniff capture to identify.
 
     // ============================================================
     // Photo Sharing SMSG Responses (0x42037x)

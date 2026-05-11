@@ -2277,7 +2277,7 @@ void Housing::AddLevel(uint32 amount)
     }
 }
 
-void Housing::AddFavor(uint64 amount, HousingFavorUpdateSource source /*= HOUSING_FAVOR_SOURCE_UNKNOWN*/)
+void Housing::AddFavor(uint64 amount, HousingFavorUpdateSource source /*= HOUSING_FAVOR_SOURCE_UNKNOWN*/, bool emitUpdate /*= true*/)
 {
     _favor64 += amount;
     _favor = static_cast<uint32>(std::min<uint64>(_favor64, std::numeric_limits<uint32>::max()));
@@ -2296,7 +2296,8 @@ void Housing::AddFavor(uint64 amount, HousingFavorUpdateSource source /*= HOUSIN
 
     // Broadcast level/favor update to the owner.
     // Type field carries the favor source enum (matches retail's "change reason" semantic).
-    if (_owner && _owner->GetSession())
+    // Skipped when the caller emits its own (sniff-verified) packet sequence — e.g. BuyHouse.
+    if (emitUpdate && _owner && _owner->GetSession())
     {
         WorldPackets::Housing::HousingSvcsUpdateHousesLevelFavor favorUpdate;
         favorUpdate.Result = static_cast<uint8>(source);

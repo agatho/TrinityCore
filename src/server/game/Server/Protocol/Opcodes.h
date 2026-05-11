@@ -1729,6 +1729,7 @@ enum OpcodeServer : uint32
     SMSG_HOUSING_FIXTURE_SET_HOUSE_SIZE_RESPONSE                    = 0x520003,
     SMSG_HOUSING_FIXTURE_SET_HOUSE_TYPE_RESPONSE                    = 0x520004,
     SMSG_HOUSING_GET_CURRENT_HOUSE_INFO_RESPONSE                    = 0x550001,
+    SMSG_HOUSING_UPDATE_HOUSE_INFO                                  = 0x550004, // IDA-verified (see HousingUpdateHouseInfo class comment)
     SMSG_HOUSING_GET_PLAYER_PERMISSIONS_RESPONSE                    = 0x550006,
     SMSG_HOUSING_HOUSE_STATUS_RESPONSE                              = 0x550000,
     SMSG_HOUSING_PHOTO_SHARING_AUTHORIZATION_CLEARED_RESULT         = 0x420380,
@@ -1850,7 +1851,7 @@ enum OpcodeServer : uint32
     SMSG_LFG_LIST_SEARCH_RESULTS                                    = 0x560002,
     SMSG_LFG_LIST_SEARCH_RESULTS_UPDATE                             = 0x560010,
     SMSG_LFG_LIST_SEARCH_STATUS                                     = 0x560003,
-    SMSG_LFG_LIST_UPDATE_BLACKLIST                                  = 0x56000E,
+    SMSG_HOUSING_CATALOG_STATE_SYNC                                 = 0x56000E, // ClientMirrorSystem subgroup; sniff-verified wire = uint32 count + count*(uint32 ID, uint32 PackedState)
     SMSG_LFG_LIST_UPDATE_EXPIRATION                                 = 0x56000B,
     SMSG_LFG_LIST_UPDATE_STATUS                                     = 0x56000A,
     SMSG_LFG_OFFER_CONTINUE                                         = 0x560018,
@@ -2553,36 +2554,37 @@ enum OpcodeServer : uint32
     //     UpdateField mechanism. Client fires HOUSE_PLOT_ENTERED via field-change
     //     callback when CurrentHouse changes (verified via IDA xref trace of
     //     sub_7FF75CC8BAA0 registered in the field-change callback table).
-    SMSG_HOUSING_CATALOG_STATE_SYNC                                 = 0xF1000002, // TC-CUSTOM speculative
-    SMSG_HOUSING_DECOR_BATCH_OPERATION_RESPONSE                     = 0xF1000003, // TC-CUSTOM speculative
-    SMSG_HOUSING_DECOR_CATALOG_CREATE_SEARCHER_RESPONSE             = 0xF1000004, // TC-CUSTOM speculative
-    SMSG_HOUSING_DECOR_PLACEMENT_PREVIEW_RESPONSE                   = 0xF1000005, // TC-CUSTOM speculative
-    SMSG_HOUSING_DECOR_START_PLACING_NEW_DECOR_RESPONSE             = 0xF1000006, // TC-CUSTOM speculative
-    SMSG_HOUSING_EDITOR_AVAILABILITY_RESPONSE                       = 0xF1000007, // TC-CUSTOM speculative
-    SMSG_HOUSING_SET_HOUSE_NAME_RESPONSE                            = 0xF1000008, // TC-CUSTOM speculative
-    SMSG_HOUSING_SVCS_CREATE_NEIGHBORHOOD_RESPONSE                  = 0xF1000009, // TC-CUSTOM speculative
-    SMSG_HOUSING_SVCS_GET_NEIGHBORHOOD_DETAILS_RESPONSE             = 0xF100000A, // TC-CUSTOM speculative
-    SMSG_HOUSING_SVCS_GET_NEIGHBORHOOD_HOUSES_RESPONSE              = 0xF100000B, // TC-CUSTOM speculative
-    SMSG_HOUSING_SVCS_HOUSE_EXPIRATION_NOTIFICATION                 = 0xF100000C, // TC-CUSTOM speculative
-    SMSG_HOUSING_SVCS_MOVE_HOUSE_RESPONSE                           = 0xF100000D, // TC-CUSTOM speculative
-    SMSG_HOUSING_SVCS_SEARCH_NEIGHBORHOODS_RESPONSE                 = 0xF100000E, // TC-CUSTOM speculative
-    SMSG_HOUSING_SVCS_SET_NEIGHBORHOOD_SETTINGS_RESPONSE            = 0xF100000F, // TC-CUSTOM speculative
-    SMSG_HOUSING_SVCS_SWAP_PLOTS_RESPONSE                           = 0xF1000010, // TC-CUSTOM speculative
-    SMSG_HOUSING_SYSTEM_HOUSE_SNAPSHOT_RESPONSE                     = 0xF1000011, // TC-CUSTOM speculative
-    SMSG_HOUSING_UPDATE_HOUSE_INFO                                  = 0xF1000012, // TC-CUSTOM speculative
+    // SMSG_HOUSING_CATALOG_STATE_SYNC retired here 2026-05-11, real opcode 0x56000E reclaimed
+    // (previously mislabeled as SMSG_LFG_LIST_UPDATE_BLACKLIST per the LFG opcode block).
+    // Retired 2026-05-11: 5 speculative SMSGs (0xF1000003..0xF1000007) — Lua-API-confirmed dead.
+    // No C_HousingDecor.BatchOperation/PlacementPreview/CreateCatalogSearcher; StartPlacingNewDecor
+    // is fire-and-forget; GetHouseEditorAvailability returns sync. None correspond to a retail SMSG.
+    // Retired 2026-05-11: 9 speculative SMSG opcodes deleted (0xF1000008..0xF1000010).
+    // IDA-derived real values harvested in 2026-05-11 sniff verification log:
+    //   SET_HOUSE_NAME_RESPONSE                  -> 0x550005
+    //   SVCS_CREATE_NEIGHBORHOOD_RESPONSE        -> 0x540002
+    //   SVCS_GET_NEIGHBORHOOD_DETAILS_RESPONSE   -> 0x54000A
+    //   SVCS_GET_NEIGHBORHOOD_HOUSES_RESPONSE    -> 0x54000D
+    //   SVCS_HOUSE_EXPIRATION_NOTIFICATION       -> 0x540006
+    //   SVCS_MOVE_HOUSE_RESPONSE                 -> 0x54000E  (also SMSG_NEIGHBORHOOD_MOVE_HOUSE_RESPONSE = 0x5C0006 is the actual emit path)
+    //   SVCS_SEARCH_NEIGHBORHOODS_RESPONSE       -> 0x540009
+    //   SVCS_SET_NEIGHBORHOOD_SETTINGS_RESPONSE  -> 0x540022
+    //   SVCS_SWAP_PLOTS_RESPONSE                 -> 0x54000F
+    // Recreate with the real opcode when a handler needs to emit one.
+    // Retired 2026-05-11: SMSG_HOUSING_SYSTEM_HOUSE_SNAPSHOT_RESPONSE (0xF1000011) — no C_HouseSnapshot Lua namespace exists in retail.
+    // SMSG_HOUSING_UPDATE_HOUSE_INFO retired here 2026-05-11, real opcode 0x550004 added above.
     // Removed 2026-04-24: SMSG_NEIGHBORHOOD_UPDATE_NAME_NOTIFICATION superseded by
     // master's SMSG_HOUSING_SVCS_NEIGHBORHOOD_UPDATE_NAME_NOTIFICATION = 0x540023.
 
-    // TC-CUSTOM account-housing / initiative SMSG opcodes
-    SMSG_ACCOUNT_HOUSING_FIXTURE_ADDED                              = 0xF1000014, // TC-CUSTOM speculative
-    SMSG_ACCOUNT_HOUSING_ROOM_ADDED                                 = 0xF1000015, // TC-CUSTOM speculative
-    SMSG_ACCOUNT_HOUSING_ROOM_COMPONENT_TEXTURE_ADDED               = 0xF1000016, // TC-CUSTOM speculative
-    SMSG_ACCOUNT_HOUSING_THEME_ADDED                                = 0xF1000017, // TC-CUSTOM speculative
-    SMSG_INITIATIVE_CHEST_RESULT                                    = 0xF1000018, // TC-CUSTOM speculative
-    SMSG_INITIATIVE_MILESTONE_UPDATE                                = 0xF1000019, // TC-CUSTOM speculative
-    SMSG_INITIATIVE_POINTS_UPDATE                                   = 0xF100001A, // TC-CUSTOM speculative
-    SMSG_INITIATIVE_TRACKED_UPDATED                                 = 0xF100001B, // TC-CUSTOM speculative
-    SMSG_INITIATIVE_UPDATE_STATUS                                   = 0xF100001C, // TC-CUSTOM speculative
+    // TC-CUSTOM initiative SMSG opcodes
+    // Note: SMSG_ACCOUNT_HOUSING_{FIXTURE,ROOM,ROOM_COMPONENT_TEXTURE,THEME}_ADDED retired
+    // 2026-05-11. They were speculative pre-12.0.5 design; retail uses the real
+    // SMSG_ACCOUNT_{ROOM,ROOM_THEME,ROOM_MATERIAL,EXTERIOR_FIXTURE,HOUSE_TYPE}_COLLECTION_UPDATE
+    // family (0x420053-0x420057) for both bulk sync and single-item unlocks via AddSingle().
+    // Retired 2026-05-11: 4 speculative SMSG_INITIATIVE_* opcodes deleted (0xF1000018..0xF100001C).
+    // Sniff-verified zero retail occurrences; same state changes propagate via the real
+    // SMSG_INITIATIVE_TASK_COMPLETE (0x420365), SMSG_INITIATIVE_COMPLETE (0x420366),
+    // SMSG_INITIATIVE_REWARD_AVAILABLE (0x42036B), plus entity-fragment updates.
 };
 
 inline constexpr std::size_t NUM_SMSG_OPCODES = 1650;

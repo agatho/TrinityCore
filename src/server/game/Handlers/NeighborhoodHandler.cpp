@@ -1088,8 +1088,7 @@ void WorldSession::HandleNeighborhoodBuyHouse(WorldPackets::Neighborhood::Neighb
                 housing->GetHouseGuid(), GetBattlenetAccountGUID());
         }
 
-        // Grant "Acquire a house" kill credit for quest 91863 (objective 17)
-        static constexpr uint32 NPC_KILL_CREDIT_BUY_HOME = 248858;
+        // Grant the kill credit that satisfies quest 91863 objective 17 ("Acquire a house").
         player->KilledMonsterCredit(NPC_KILL_CREDIT_BUY_HOME);
 
         // TODO: Replace with quest-driven tutorial progression when the housing tutorial
@@ -1197,29 +1196,33 @@ void WorldSession::HandleNeighborhoodBuyHouse(WorldPackets::Neighborhood::Neighb
             uint32(response.Result), response.House.PlotId,
             response.House.HouseGuid.ToString(), response.House.OwnerGuid.ToString());
 
-        // 3. Send level/favor updates (sniff: always 2 packets after buy response).
-        // Wire format: header (Type, ChangeAmount, Reason, Count) + per-entry
-        // (EntryFlags, EntryTimestamp, HouseGUID, NewFavorTotal, Reserved, Terminator).
-        if (Housing const* h = player->GetHousing())
+        // 3. Persist the starter favor server-side, then send the sniff-verified 2-packet
+        // sequence (initial=0, then delta=starter). emitUpdate=false suppresses AddFavor's
+        // own packet so the wire stays at 2 packets.
+        if (Housing* h = player->GetHousing())
         {
-            // Packet 1: Initial level assignment
+            h->AddFavor(HOUSE_PURCHASE_STARTER_FAVOR, HOUSING_FAVOR_SOURCE_NEW_HOUSE_DECOR, /*emitUpdate=*/false);
+
+            int64 const newTotal = static_cast<int64>(h->GetFavor());
+
+            // Packet 1: Initial level assignment (ChangeAmount=0 → "set absolute").
             {
                 WorldPackets::Housing::HousingSvcsUpdateHousesLevelFavor levelFavor;
                 levelFavor.Result = 0;
                 levelFavor.ChangeAmount = 0;
                 levelFavor.Reason = 1;
                 levelFavor.HouseGUID = h->GetHouseGuid();
-                levelFavor.NewFavorTotal = 910;
+                levelFavor.NewFavorTotal = newTotal;
                 SendPacket(levelFavor.Write());
             }
-            // Packet 2: Favor state
+            // Packet 2: Favor delta (ChangeAmount=starter → "you gained N favor").
             {
                 WorldPackets::Housing::HousingSvcsUpdateHousesLevelFavor levelFavor;
                 levelFavor.Result = 0;
-                levelFavor.ChangeAmount = 910;
+                levelFavor.ChangeAmount = h->GetFavor();
                 levelFavor.Reason = 1;
                 levelFavor.HouseGUID = h->GetHouseGuid();
-                levelFavor.NewFavorTotal = 910;
+                levelFavor.NewFavorTotal = newTotal;
                 SendPacket(levelFavor.Write());
             }
         }
