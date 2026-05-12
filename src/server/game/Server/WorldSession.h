@@ -491,17 +491,7 @@ namespace WorldPackets
         class HousingDecorStartPlacingFromSource;
         class HousingDecorBatchOperation;
         class HousingDecorPlacementPreview;
-        class HousingSvcsRequestPermissionsCheck;
-        class HousingSvcsClearPlotReservation;
-        class HousingSvcsGetPlayerHousesInfoAlt;
-        class HousingSvcsGetRosterData;
-        class HousingSvcsRosterUpdateSubscribe;
-        class HousingSvcsChangeHouseCosmeticOwnerRequest;
-        class HousingSvcsQueryHouseLevelFavor;
-        class HousingSvcsGuildAddHouse;
-        class HousingSvcsGuildAppendNeighborhood;
-        class HousingSvcsGuildRenameNeighborhood;
-        class HousingSvcsGuildGetHousingInfo;
+        // Retired 2026-05-12 (batch 2): 8 fake SVCS CMSG class forward decls deleted.
         // Retired 2026-05-12: group 0x35 system CMSG classes (HouseStatusQuery, GetHouseInfoAlt,
         // HouseSnapshot, ExportHouse, UpdateHouseInfo) — no client senders in build 67186.
     }
@@ -1676,19 +1666,16 @@ class TC_GAME_API WorldSession
         // Retired 2026-05-12: HandleHousingFixtureDeleteHouse (fake CMSG 0x310002, use SVCS_RELINQUISH_HOUSE).
 
         // Phase 7 Housing Services handlers
-        void HandleHousingSvcsRequestPermissionsCheck(WorldPackets::Housing::HousingSvcsRequestPermissionsCheck const& housingSvcsRequestPermissionsCheck);
-        void HandleHousingSvcsClearPlotReservation(WorldPackets::Housing::HousingSvcsClearPlotReservation const& housingSvcsClearPlotReservation);
-        // Removed 2026-04-24: HandleHousingSvcsGetPlayerHousesInfoAlt — duplicate of
-        // the real CMSG_HOUSING_SVCS_GET_PLAYER_HOUSES_INFO (0x330013).
-        void HandleHousingSvcsGetRosterData(WorldPackets::Housing::HousingSvcsGetRosterData const& housingSvcsGetRosterData);
-        void HandleHousingSvcsRosterUpdateSubscribe(WorldPackets::Housing::HousingSvcsRosterUpdateSubscribe const& housingSvcsRosterUpdateSubscribe);
-        // Removed 2026-04-24: HandleHousingSvcsChangeHouseCosmeticOwner — the client
-        // sends cosmetic-owner changes via CMSG_HOUSING_SVCS_UPDATE_HOUSE_SETTINGS (0x33000B).
-        void HandleHousingSvcsQueryHouseLevelFavor(WorldPackets::Housing::HousingSvcsQueryHouseLevelFavor const& housingSvcsQueryHouseLevelFavor);
-        // Removed 2026-04-24: HandleHousingSvcsGuildAddHouse — no matching Lua API.
-        void HandleHousingSvcsGuildAppendNeighborhood(WorldPackets::Housing::HousingSvcsGuildAppendNeighborhood const& housingSvcsGuildAppendNeighborhood);
-        void HandleHousingSvcsGuildRenameNeighborhood(WorldPackets::Housing::HousingSvcsGuildRenameNeighborhood const& housingSvcsGuildRenameNeighborhood);
-        void HandleHousingSvcsGuildGetHousingInfo(WorldPackets::Housing::HousingSvcsGuildGetHousingInfo const& housingSvcsGuildGetHousingInfo);
+        // Retired 2026-05-12 (batch 2): 8 fake SVCS CMSG handlers
+        //   HandleHousingSvcsRequestPermissionsCheck (0x330000)
+        //   HandleHousingSvcsClearPlotReservation    (0x330005)
+        //   HandleHousingSvcsGetRosterData           (0x33000C)
+        //   HandleHousingSvcsRosterUpdateSubscribe   (0x33000D)
+        //   HandleHousingSvcsQueryHouseLevelFavor    (0x330012)
+        //   HandleHousingSvcsGuildAppendNeighborhood (0x330014)
+        //   HandleHousingSvcsGuildRenameNeighborhood (0x330015)
+        //   HandleHousingSvcsGuildGetHousingInfo     (0x330016)
+        // All verified fake via dual IDA + sniff cross-check (build 67186).
 
         // Phase 7 Housing System handlers
         // Retired 2026-05-12: HandleHousingSystemHouseStatusQuery + GetHouseInfoAlt + HouseSnapshot

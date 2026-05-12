@@ -433,58 +433,8 @@ void HousingSvcsGetBnetFriendNeighborhoods::Read()
     TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_SVCS_GET_BNET_FRIEND_NEIGHBORHOODS BnetAccountGuid: {}", BnetAccountGuid.ToString());
 }
 
-void HousingSvcsClearPlotReservation::Read()
-{
-    _worldPacket >> NeighborhoodGuid;
-
-    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_SVCS_CLEAR_PLOT_RESERVATION NeighborhoodGuid: {}", NeighborhoodGuid.ToString());
-}
-
-// Removed 2026-04-24: HousingSvcsGetPlayerHousesInfoAlt — duplicate of
-// CMSG_HOUSING_SVCS_GET_PLAYER_HOUSES_INFO (0x330013 in master).
-
-void HousingSvcsGetRosterData::Read()
-{
-    _worldPacket >> NeighborhoodGuid;
-
-    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_SVCS_GET_ROSTER_DATA NeighborhoodGuid: {}", NeighborhoodGuid.ToString());
-}
-
-// Removed 2026-04-24: HousingSvcsChangeHouseCosmeticOwnerRequest — cosmetic owner
-// is saved via CMSG_HOUSING_SVCS_UPDATE_HOUSE_SETTINGS (IDA-verified SaveHouseSettings).
-
-void HousingSvcsQueryHouseLevelFavor::Read()
-{
-    _worldPacket >> HouseGuid;
-
-    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_SVCS_QUERY_HOUSE_LEVEL_FAVOR HouseGuid: {}", HouseGuid.ToString());
-}
-
-// Removed 2026-04-24: HousingSvcsGuildAddHouse — no matching C_Housing Lua API.
-
-void HousingSvcsGuildAppendNeighborhood::Read()
-{
-    _worldPacket >> NeighborhoodGuid;
-
-    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_SVCS_GUILD_APPEND_NEIGHBORHOOD NeighborhoodGuid: {}", NeighborhoodGuid.ToString());
-}
-
-void HousingSvcsGuildRenameNeighborhood::Read()
-{
-    _worldPacket >> NeighborhoodGuid;
-    _worldPacket >> SizedString::BitsSize<7>(NewName);
-    _worldPacket >> SizedString::Data(NewName);
-
-    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_SVCS_GUILD_RENAME_NEIGHBORHOOD NeighborhoodGuid: {} NewName: '{}'",
-        NeighborhoodGuid.ToString(), NewName);
-}
-
-void HousingSvcsGuildGetHousingInfo::Read()
-{
-    _worldPacket >> GuildGuid;
-
-    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_SVCS_GUILD_GET_HOUSING_INFO GuildGuid: {}", GuildGuid.ToString());
-}
+// Retired 2026-05-12 (batch 2): Read() bodies for 8 fake SVCS CMSGs deleted —
+// dual IDA + sniff cross-check confirmed no client senders in build 67186.
 
 // --- Housing Misc ---
 // HousingGetCurrentHouseInfo::Read() and HousingHouseStatus::Read() are empty (inline in header)
@@ -1045,15 +995,7 @@ WorldPacket const* HousingSvcsNeighborhoodReservePlotResponse::Write()
     return &_worldPacket;
 }
 
-WorldPacket const* HousingSvcsClearPlotReservationResponse::Write()
-{
-    // IDA case 5505029: uint8 only (shared case with 0x54000E, 0x54000F)
-    _worldPacket << uint8(Result);
-
-    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_SVCS_CLEAR_PLOT_RESERVATION_RESPONSE Result: {}", Result);
-
-    return &_worldPacket;
-}
+// Retired 2026-05-12 (batch 2): HousingSvcsClearPlotReservationResponse::Write — orphaned.
 
 WorldPacket const* HousingSvcsRelinquishHouseResponse::Write()
 {
@@ -1276,15 +1218,7 @@ WorldPacket const* HousingSvcsGuildRemoveHouseNotification::Write()
     return &_worldPacket;
 }
 
-WorldPacket const* HousingSvcsGuildAppendNeighborhoodNotification::Write()
-{
-    // IDA case 5505044: JamCliHouseFinderNeighborhood_base
-    WriteJamCliHouseFinderNeighborhoodBase(_worldPacket, Neighborhood);
-
-    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_SVCS_GUILD_APPEND_NEIGHBORHOOD_NOTIFICATION NeighborhoodGuid: {}", Neighborhood.NeighborhoodGUID.ToString());
-
-    return &_worldPacket;
-}
+// Retired 2026-05-12 (batch 2): HousingSvcsGuildAppendNeighborhoodNotification::Write — orphaned.
 
 WorldPacket const* HousingSvcsGuildRenameNeighborhoodNotification::Write()
 {

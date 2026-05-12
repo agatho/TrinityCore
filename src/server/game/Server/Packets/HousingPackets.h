@@ -785,80 +785,16 @@ namespace WorldPackets::Housing
         void Read() override { }
     };
 
-    class HousingSvcsRequestPermissionsCheck final : public ClientPacket
-    {
-    public:
-        explicit HousingSvcsRequestPermissionsCheck(WorldPacket&& packet) : ClientPacket(CMSG_HOUSING_SVCS_REQUEST_PERMISSIONS_CHECK, std::move(packet)) { }
-        void Read() override { }
-    };
-
-    class HousingSvcsClearPlotReservation final : public ClientPacket
-    {
-    public:
-        explicit HousingSvcsClearPlotReservation(WorldPacket&& packet) : ClientPacket(CMSG_HOUSING_SVCS_CLEAR_PLOT_RESERVATION, std::move(packet)) { }
-        void Read() override;
-        ObjectGuid NeighborhoodGuid;
-    };
-
-    // Removed 2026-04-24: GetPlayerHousesInfoAlt — duplicate of the real
-    // CMSG_HOUSING_SVCS_GET_PLAYER_HOUSES_INFO = 0x330013 (see master).
-
-    class HousingSvcsGetRosterData final : public ClientPacket
-    {
-    public:
-        explicit HousingSvcsGetRosterData(WorldPacket&& packet) : ClientPacket(CMSG_HOUSING_SVCS_GET_ROSTER_DATA, std::move(packet)) { }
-        void Read() override;
-        ObjectGuid NeighborhoodGuid;
-    };
-
-    class HousingSvcsRosterUpdateSubscribe final : public ClientPacket
-    {
-    public:
-        explicit HousingSvcsRosterUpdateSubscribe(WorldPacket&& packet) : ClientPacket(CMSG_HOUSING_SVCS_ROSTER_UPDATE_SUBSCRIBE, std::move(packet)) { }
-        void Read() override { }
-    };
-
-    // Removed 2026-04-24: HousingSvcsChangeHouseCosmeticOwnerRequest — IDA 12.0.5
-    // verification shows the client sends cosmetic-owner changes via
-    // C_Housing.SaveHouseSettings → CMSG_HOUSING_SVCS_UPDATE_HOUSE_SETTINGS (0x33000B),
-    // not a dedicated CMSG. The SMSG response SMSG_HOUSING_SVCS_CHANGE_HOUSE_COSMETIC_OWNER
-    // (0x540010) still exists — keep its sender class below.
-
-    class HousingSvcsQueryHouseLevelFavor final : public ClientPacket
-    {
-    public:
-        explicit HousingSvcsQueryHouseLevelFavor(WorldPacket&& packet) : ClientPacket(CMSG_HOUSING_SVCS_QUERY_HOUSE_LEVEL_FAVOR, std::move(packet)) { }
-        void Read() override;
-        ObjectGuid HouseGuid;
-    };
-
-    // Removed 2026-04-24: HousingSvcsGuildAddHouse — no matching C_Housing Lua API
-    // entry in 12.0.5 (confirmed via IDA scan of C_Housing.* strings).
-
-    class HousingSvcsGuildAppendNeighborhood final : public ClientPacket
-    {
-    public:
-        explicit HousingSvcsGuildAppendNeighborhood(WorldPacket&& packet) : ClientPacket(CMSG_HOUSING_SVCS_GUILD_APPEND_NEIGHBORHOOD, std::move(packet)) { }
-        void Read() override;
-        ObjectGuid NeighborhoodGuid;
-    };
-
-    class HousingSvcsGuildRenameNeighborhood final : public ClientPacket
-    {
-    public:
-        explicit HousingSvcsGuildRenameNeighborhood(WorldPacket&& packet) : ClientPacket(CMSG_HOUSING_SVCS_GUILD_RENAME_NEIGHBORHOOD, std::move(packet)) { }
-        void Read() override;
-        ObjectGuid NeighborhoodGuid;
-        std::string NewName;
-    };
-
-    class HousingSvcsGuildGetHousingInfo final : public ClientPacket
-    {
-    public:
-        explicit HousingSvcsGuildGetHousingInfo(WorldPacket&& packet) : ClientPacket(CMSG_HOUSING_SVCS_GUILD_GET_HOUSING_INFO, std::move(packet)) { }
-        void Read() override;
-        ObjectGuid GuildGuid;
-    };
+    // Retired 2026-05-12 (batch 2): 8 TC-CUSTOM SVCS CMSGs verified fake via dual
+    // IDA + sniff cross-check (build 67186, 21 sessions, ~207k packets — 0 hits each).
+    //   0x330000 REQUEST_PERMISSIONS_CHECK
+    //   0x330005 CLEAR_PLOT_RESERVATION
+    //   0x33000C GET_ROSTER_DATA
+    //   0x33000D ROSTER_UPDATE_SUBSCRIBE
+    //   0x330012 QUERY_HOUSE_LEVEL_FAVOR
+    //   0x330014 GUILD_APPEND_NEIGHBORHOOD
+    //   0x330015 GUILD_RENAME_NEIGHBORHOOD
+    //   0x330016 GUILD_GET_HOUSING_INFO
 
     // ============================================================
     // Housing Misc (0x35xxxx)
@@ -1436,14 +1372,8 @@ namespace WorldPackets::Housing
         uint8 Result = 0;
     };
 
-    class HousingSvcsClearPlotReservationResponse final : public ServerPacket
-    {
-    public:
-        HousingSvcsClearPlotReservationResponse() : ServerPacket(SMSG_HOUSING_SVCS_CLEAR_PLOT_RESERVATION_RESPONSE) { }
-        WorldPacket const* Write() override;
-        uint8 Result = 0;
-        ObjectGuid NeighborhoodGuid;
-    };
+    // Retired 2026-05-12 (batch 2): HousingSvcsClearPlotReservationResponse — orphaned after
+    // CLEAR_PLOT_RESERVATION CMSG retirement (no other emit-site).
 
     // Retired 2026-05-11: HousingSvcsHouseExpirationNotification deleted (fake opcode 0xF100000C,
     // 0 emit-sites). IDA-derived real opcode: 0x540006 (case 5505030). Wire:
@@ -1588,14 +1518,8 @@ namespace WorldPackets::Housing
         JamCliHouse House;
     };
 
-    class HousingSvcsGuildAppendNeighborhoodNotification final : public ServerPacket
-    {
-    public:
-        HousingSvcsGuildAppendNeighborhoodNotification() : ServerPacket(SMSG_HOUSING_SVCS_GUILD_APPEND_NEIGHBORHOOD_NOTIFICATION) { }
-        WorldPacket const* Write() override;
-        // IDA case 5505044: JamCliHouseFinderNeighborhood_base (sub_7FF724C3F040)
-        JamCliHouseFinderNeighborhood Neighborhood;
-    };
+    // Retired 2026-05-12 (batch 2): HousingSvcsGuildAppendNeighborhoodNotification — orphaned after
+    // GUILD_APPEND_NEIGHBORHOOD CMSG retirement (no other emit-site).
 
     class HousingSvcsGuildRenameNeighborhoodNotification final : public ServerPacket
     {
