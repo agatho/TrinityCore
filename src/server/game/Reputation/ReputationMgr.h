@@ -25,6 +25,7 @@
 #include <set>
 #include <map>
 #include <unordered_map>
+#include <unordered_set>
 
 struct FactionEntry;
 struct FactionTemplateEntry;
@@ -83,6 +84,11 @@ class TC_GAME_API ReputationMgr
         void LoadFromDB(PreparedQueryResult result);
         void LoadAccountWideFromDB(PreparedQueryResult result);
         void SaveAccountWideToDB(CharacterDatabaseTransaction trans);
+
+        // -- Renown reward grant tracking (Phase 10C) ------------------------
+        void LoadRenownRewardsGrantedFromDB(PreparedQueryResult charResult, PreparedQueryResult accountResult);
+        bool IsRenownRewardGranted(uint32 renownRewardId, bool accountWide) const;
+        void MarkRenownRewardGranted(uint32 renownRewardId, bool accountWide);
     public:                                                 // statics
         static std::set<int32> const ReputationRankThresholds;
         static const int32 Reputation_Cap;
@@ -171,6 +177,8 @@ class TC_GAME_API ReputationMgr
         Player* _player;
         FactionStateList _factions;
         std::unordered_map<uint32 /*factionId*/, AccountReputationState> _accountReputation;
+        std::unordered_set<uint32> _grantedRenownRewardsChar;     // per-character renown reward grants (PK rewardId)
+        std::unordered_set<uint32> _grantedRenownRewardsAccount;  // per-bnet renown reward grants (loaded with account-wide rep)
         ForcedReactions _forcedReactions;
         uint8 _visibleFactionCount :8;
         uint8 _honoredFactionCount :8;

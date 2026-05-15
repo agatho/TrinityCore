@@ -21,6 +21,7 @@
 #include "DB2Stores.h"
 #include "Language.h"
 #include "Log.h"
+#include "MajorFactionMgr.h"
 #include "MapUtils.h"
 #include "ObjectMgr.h"
 #include "Player.h"
@@ -586,7 +587,13 @@ bool ReputationMgr::SetOneFactionReputation(FactionEntry const* factionEntry, in
 
                 // If the reputation is decreased by command, we will send CurrencyDestroyReason::Cheat
                 if (oldRenownLevel != newRenownLevel)
+                {
                     _player->ModifyCurrency(currency->ID, newRenownLevel - oldRenownLevel, CurrencyGainSource::RenownRepGain, CurrencyDestroyReason::Cheat);
+
+                    // Phase 10C: dispatch renown rewards for every level crossed (only on increase).
+                    if (newRenownLevel > oldRenownLevel && sMajorFactionMgr->IsMajorFaction(factionEntry))
+                        sMajorFactionMgr->GrantRenownLevelRewards(_player, factionEntry->ID, uint32(oldRenownLevel), uint32(newRenownLevel), false);
+                }
             }
         }
 
@@ -832,6 +839,12 @@ void ReputationMgr::LoadAccountWideFromDB(PreparedQueryResult result)
                 {
                     if (CurrencyTypesEntry const* currency = sCurrencyTypesStore.LookupEntry(factionEntry->RenownCurrencyID))
                         _player->ModifyCurrency(currency->ID, accountRenownLevel - charRenownLevel, CurrencyGainSource::RenownRepGain, CurrencyDestroyReason::Cheat);
+
+                    // Phase 10C: dispatch character-bound rewards for the inherited renown
+                    // span. accountSync=true skips account-wide rewards which were already
+                    // granted on the original toon and live in warband_renown_rewards_granted.
+                    if (sMajorFactionMgr->IsMajorFaction(factionEntry))
+                        sMajorFactionMgr->GrantRenownLevelRewards(_player, factionEntry->ID, uint32(charRenownLevel), uint32(accountRenownLevel), true);
                 }
 
                 state->Standing = accountStanding;
@@ -916,6 +929,61 @@ void ReputationMgr::SaveAccountWideToDB(CharacterDatabaseTransaction trans)
         // Update cache
         _accountReputation[state.ID] = { currentStanding, currentRenownLevel };
     }
+}
+
+void ReputationMgr::LoadRenownRewardsGrantedFromDB(PreparedQueryResult charResult, PreparedQueryResult accountResult)
+{
+    _grantedRenownRewardsChar.clear();
+    _grantedRenownRewardsAccount.clear();
+
+    if (charResult)
+    {
+        do
+        {
+            _grantedRenownRewardsChar.insert(charResult->Fetch()[0].GetUInt32());
+        } while (charResult->NextRow());
+    }
+
+    if (accountResult)
+    {
+        do
+        {
+            _grantedRenownRewardsAccount.insert(accountResult->Fetch()[0].GetUInt32());
+        } while (accountResult->NextRow());
+    }
+}
+
+bool ReputationMgr::IsRenownRewardGranted(uint32 renownRewardId, bool accountWide) const
+{
+    if (accountWide)
+        return _grantedRenownRewardsAccount.contains(renownRewardId);
+    return _grantedRenownRewardsChar.contains(renownRewardId);
+}
+
+void ReputationMgr::MarkRenownRewardGranted(uint32 renownRewardId, bool accountWide)
+{
+    CharacterDatabaseTransaction trans = CharacterDatabase.BeginTransaction();
+
+    if (accountWide)
+    {
+        _grantedRenownRewardsAccount.insert(renownRewardId);
+
+        CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_INS_WARBAND_RENOWN_REWARD_GRANTED);
+        stmt->setUInt32(0, _player->GetSession()->GetBattlenetAccountId());
+        stmt->setUInt32(1, renownRewardId);
+        trans->Append(stmt);
+    }
+    else
+    {
+        _grantedRenownRewardsChar.insert(renownRewardId);
+
+        CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_INS_CHAR_RENOWN_REWARD_GRANTED);
+        stmt->setUInt64(0, _player->GetGUID().GetCounter());
+        stmt->setUInt32(1, renownRewardId);
+        trans->Append(stmt);
+    }
+
+    CharacterDatabase.CommitTransaction(trans);
 }
 
 void ReputationMgr::SaveToDB(CharacterDatabaseTransaction trans)

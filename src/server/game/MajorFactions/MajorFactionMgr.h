@@ -177,6 +177,25 @@ class TC_GAME_API MajorFactionMgr
         // MajorFactionData.renownReputationEarned.
         uint32 GetPlayerReputationThisLevel(Player const* player, uint32 factionId) const;
 
+        // -- Reward dispatch (Phase 10C) -----------------------------------
+
+        // Iterate all RenownRewards rows with Level > fromLevel && Level <= toLevel
+        // for the given faction and dispatch each reward to the player.
+        // Handles multi-level jumps (e.g. catch-up). De-duplicates against
+        // ReputationMgr::IsRenownRewardGranted (character-scoped and
+        // account-scoped grant tables).
+        //
+        // If accountSync is true the call is the result of an alt logging
+        // in and inheriting renown from a higher-level toon: only
+        // character-bound rewards are granted (account-wide rewards were
+        // already granted on the original toon and live in
+        // warband_renown_rewards_granted).
+        void GrantRenownLevelRewards(Player* player, uint32 factionId, uint32 fromLevel, uint32 toLevel, bool accountSync = false) const;
+
+        // Dispatch a single RenownRewards row. Used both by
+        // GrantRenownLevelRewards and by admin/test command paths.
+        void GrantSingleRenownReward(Player* player, RenownRewardsEntry const* reward) const;
+
     private:
         void IndexFactions();
         void IndexCovenants();
