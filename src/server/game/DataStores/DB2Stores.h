@@ -97,6 +97,7 @@ TC_GAME_API extern DB2Storage<CreatureModelDataEntry>               sCreatureMod
 TC_GAME_API extern DB2Storage<CreatureTypeEntry>                    sCreatureTypeStore;
 TC_GAME_API extern DB2Storage<CriteriaEntry>                        sCriteriaStore;
 TC_GAME_API extern DB2Storage<CriteriaTreeEntry>                    sCriteriaTreeStore;
+TC_GAME_API extern DB2Storage<CurrencyCategoryEntry>                sCurrencyCategoryStore;
 TC_GAME_API extern DB2Storage<CurrencyTypesEntry>                   sCurrencyTypesStore;
 TC_GAME_API extern DB2Storage<CurveEntry>                           sCurveStore;
 TC_GAME_API extern DB2Storage<DestructibleModelDataEntry>           sDestructibleModelDataStore;
@@ -109,6 +110,7 @@ TC_GAME_API extern DB2Storage<DurabilityQualityEntry>               sDurabilityQ
 TC_GAME_API extern DB2Storage<EmotesEntry>                          sEmotesStore;
 TC_GAME_API extern DB2Storage<EmotesTextEntry>                      sEmotesTextStore;
 TC_GAME_API extern DB2Storage<FactionEntry>                         sFactionStore;
+TC_GAME_API extern DB2Storage<FactionGroupEntry>                    sFactionGroupStore;
 TC_GAME_API extern DB2Storage<FactionTemplateEntry>                 sFactionTemplateStore;
 TC_GAME_API extern DB2Storage<FlightCapabilityEntry>                sFlightCapabilityStore;
 TC_GAME_API extern DB2Storage<FriendshipRepReactionEntry>           sFriendshipRepReactionStore;

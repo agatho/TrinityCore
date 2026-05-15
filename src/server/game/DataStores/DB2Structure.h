@@ -1451,6 +1451,15 @@ struct CriteriaTreeEntry
     EnumFlag<CriteriaTreeFlags> GetFlags() const { return static_cast<CriteriaTreeFlags>(Flags); }
 };
 
+struct CurrencyCategoryEntry
+{
+    uint32 ID;
+    LocalizedString Name;
+    int32 Flags;
+    uint8 ExpansionID;
+    int32 ParentCategoryID;
+};
+
 struct CurrencyContainerEntry
 {
     uint32 ID;
@@ -1754,6 +1763,16 @@ struct FactionEntry
 };
 
 #define MAX_FACTION_RELATIONS 8
+
+struct FactionGroupEntry
+{
+    uint32 ID;
+    char const* InternalName;
+    LocalizedString Name;
+    uint8 MaskID;
+    int32 HonorCurrencyTextureFileID;
+    int32 ConquestCurrencyTextureFileID;
+};
 
 struct FactionTemplateEntry
 {

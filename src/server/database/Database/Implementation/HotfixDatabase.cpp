@@ -572,6 +572,13 @@ void HotfixDatabaseConnection::DoPrepareStatements()
     PREPARE_LOCALE_STMT(HOTFIX_SEL_CRITERIA_TREE, "SELECT ID, Description_lang FROM criteria_tree_locale WHERE (`VerifiedBuild` > 0) = ?"
         " AND locale = ?", CONNECTION_SYNCH);
 
+    // CurrencyCategory.db2
+    PrepareStatement(HOTFIX_SEL_CURRENCY_CATEGORY, "SELECT ID, Name, Flags, ExpansionID, ParentCategoryID FROM currency_category"
+        " WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_CURRENCY_CATEGORY, "SELECT MAX(ID) + 1 FROM currency_category", CONNECTION_SYNCH);
+    PREPARE_LOCALE_STMT(HOTFIX_SEL_CURRENCY_CATEGORY, "SELECT ID, Name_lang FROM currency_category_locale"
+        " WHERE (`VerifiedBuild` > 0) = ? AND locale = ?", CONNECTION_SYNCH);
+
     // CurrencyContainer.db2
     PrepareStatement(HOTFIX_SEL_CURRENCY_CONTAINER, "SELECT ID, ContainerName, ContainerDescription, MinAmount, MaxAmount, ContainerIconID, "
         "ContainerQuality, OnLootSpellVisualKitID, CurrencyTypesID FROM currency_container WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
@@ -678,6 +685,13 @@ void HotfixDatabaseConnection::DoPrepareStatements()
         "ReputationRaceMask4_2 FROM faction WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
     PREPARE_MAX_ID_STMT(HOTFIX_SEL_FACTION, "SELECT MAX(ID) + 1 FROM faction", CONNECTION_SYNCH);
     PREPARE_LOCALE_STMT(HOTFIX_SEL_FACTION, "SELECT ID, Name_lang, Description_lang FROM faction_locale WHERE (`VerifiedBuild` > 0) = ? AND locale = ?", CONNECTION_SYNCH);
+
+    // FactionGroup.db2
+    PrepareStatement(HOTFIX_SEL_FACTION_GROUP, "SELECT ID, InternalName, Name, MaskID, HonorCurrencyTextureFileID, ConquestCurrencyTextureFileID"
+        " FROM faction_group WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_FACTION_GROUP, "SELECT MAX(ID) + 1 FROM faction_group", CONNECTION_SYNCH);
+    PREPARE_LOCALE_STMT(HOTFIX_SEL_FACTION_GROUP, "SELECT ID, Name_lang FROM faction_group_locale"
+        " WHERE (`VerifiedBuild` > 0) = ? AND locale = ?", CONNECTION_SYNCH);
 
     // FactionTemplate.db2
     PrepareStatement(HOTFIX_SEL_FACTION_TEMPLATE, "SELECT ID, Faction, Flags, FactionGroup, FriendGroup, EnemyGroup, Enemies1, Enemies2, Enemies3, "

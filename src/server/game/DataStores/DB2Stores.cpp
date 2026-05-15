@@ -128,6 +128,7 @@ DB2Storage<CreatureModelDataEntry>              sCreatureModelDataStore("Creatur
 DB2Storage<CreatureTypeEntry>                   sCreatureTypeStore("CreatureType.db2", &CreatureTypeLoadInfo::Instance);
 DB2Storage<CriteriaEntry>                       sCriteriaStore("Criteria.db2", &CriteriaLoadInfo::Instance);
 DB2Storage<CriteriaTreeEntry>                   sCriteriaTreeStore("CriteriaTree.db2", &CriteriaTreeLoadInfo::Instance);
+DB2Storage<CurrencyCategoryEntry>               sCurrencyCategoryStore("CurrencyCategory.db2", &CurrencyCategoryLoadInfo::Instance);
 DB2Storage<CurrencyContainerEntry>              sCurrencyContainerStore("CurrencyContainer.db2", &CurrencyContainerLoadInfo::Instance);
 DB2Storage<CurrencyTypesEntry>                  sCurrencyTypesStore("CurrencyTypes.db2", &CurrencyTypesLoadInfo::Instance);
 DB2Storage<CurveEntry>                          sCurveStore("Curve.db2", &CurveLoadInfo::Instance);
@@ -145,6 +146,7 @@ DB2Storage<EmotesTextSoundEntry>                sEmotesTextSoundStore("EmotesTex
 DB2Storage<ExpectedStatEntry>                   sExpectedStatStore("ExpectedStat.db2", &ExpectedStatLoadInfo::Instance);
 DB2Storage<ExpectedStatModEntry>                sExpectedStatModStore("ExpectedStatMod.db2", &ExpectedStatModLoadInfo::Instance);
 DB2Storage<FactionEntry>                        sFactionStore("Faction.db2", &FactionLoadInfo::Instance);
+DB2Storage<FactionGroupEntry>                   sFactionGroupStore("FactionGroup.db2", &FactionGroupLoadInfo::Instance);
 DB2Storage<FactionTemplateEntry>                sFactionTemplateStore("FactionTemplate.db2", &FactionTemplateLoadInfo::Instance);
 DB2Storage<FlightCapabilityEntry>               sFlightCapabilityStore("FlightCapability.db2", &FlightCapabilityLoadInfo::Instance);
 DB2Storage<FriendshipRepReactionEntry>          sFriendshipRepReactionStore("FriendshipRepReaction.db2", &FriendshipRepReactionLoadInfo::Instance);
@@ -778,6 +780,7 @@ uint32 DB2Manager::LoadStores(std::string const& dataPath, LocaleConstant defaul
     LOAD_DB2(sCreatureTypeStore);
     LOAD_DB2(sCriteriaStore);
     LOAD_DB2(sCriteriaTreeStore);
+    LOAD_DB2(sCurrencyCategoryStore);
     LOAD_DB2(sCurrencyContainerStore);
     LOAD_DB2(sCurrencyTypesStore);
     LOAD_DB2(sCurveStore);
@@ -795,6 +798,7 @@ uint32 DB2Manager::LoadStores(std::string const& dataPath, LocaleConstant defaul
     LOAD_DB2(sExpectedStatStore);
     LOAD_DB2(sExpectedStatModStore);
     LOAD_DB2(sFactionStore);
+    LOAD_DB2(sFactionGroupStore);
     LOAD_DB2(sFactionTemplateStore);
     LOAD_DB2(sFlightCapabilityStore);
     LOAD_DB2(sFriendshipRepReactionStore);
