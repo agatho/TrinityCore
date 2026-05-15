@@ -78,6 +78,7 @@ TC_GAME_API extern DB2Storage<BountyEntry>                          sBountyStore
 TC_GAME_API extern DB2Storage<BountySetEntry>                       sBountySetStore;
 TC_GAME_API extern DB2Storage<BroadcastTextEntry>                   sBroadcastTextStore;
 TC_GAME_API extern DB2Storage<CampaignEntry>                        sCampaignStore;
+TC_GAME_API extern DB2Storage<CampaignXConditionEntry>              sCampaignXConditionStore;
 TC_GAME_API extern DB2Storage<CampaignXQuestLineEntry>              sCampaignXQuestLineStore;
 TC_GAME_API extern DB2Storage<Cfg_CategoriesEntry>                  sCfgCategoriesStore;
 TC_GAME_API extern DB2Storage<Cfg_RegionsEntry>                     sCfgRegionsStore;
@@ -333,6 +334,7 @@ TC_GAME_API extern DB2Storage<PvpTalentSlotUnlockEntry>             sPvpTalentSl
 TC_GAME_API extern DB2Storage<PvpTierEntry>                         sPvpTierStore;
 TC_GAME_API extern DB2Storage<QuestFactionRewardEntry>              sQuestFactionRewardStore;
 TC_GAME_API extern DB2Storage<QuestInfoEntry>                       sQuestInfoStore;
+TC_GAME_API extern DB2Storage<QuestLineEntry>                       sQuestLineStore;
 TC_GAME_API extern DB2Storage<QuestLineXQuestEntry>                 sQuestLineXQuestStore;
 TC_GAME_API extern DB2Storage<QuestMoneyRewardEntry>                sQuestMoneyRewardStore;
 TC_GAME_API extern DB2Storage<QuestSortEntry>                       sQuestSortStore;

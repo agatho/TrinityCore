@@ -359,6 +359,13 @@ void HotfixDatabaseConnection::DoPrepareStatements()
     PREPARE_LOCALE_STMT(HOTFIX_SEL_CAMPAIGN, "SELECT ID, Title_lang, Description_lang FROM campaign_locale WHERE (`VerifiedBuild` > 0) = ?"
         " AND locale = ?", CONNECTION_SYNCH);
 
+    // CampaignXCondition.db2
+    PrepareStatement(HOTFIX_SEL_CAMPAIGN_X_CONDITION, "SELECT ID, FailureReason, PlayerConditionID, OrderIndex, Flags, CampaignID"
+        " FROM campaign_x_condition WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_CAMPAIGN_X_CONDITION, "SELECT MAX(ID) + 1 FROM campaign_x_condition", CONNECTION_SYNCH);
+    PREPARE_LOCALE_STMT(HOTFIX_SEL_CAMPAIGN_X_CONDITION, "SELECT ID, FailureReason_lang FROM campaign_x_condition_locale"
+        " WHERE (`VerifiedBuild` > 0) = ? AND locale = ?", CONNECTION_SYNCH);
+
     // CampaignXQuestLine.db2
     PrepareStatement(HOTFIX_SEL_CAMPAIGN_X_QUEST_LINE, "SELECT ID, CampaignID, QuestLineID, OrderIndex FROM campaign_x_quest_line"
         " WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
@@ -2075,6 +2082,13 @@ void HotfixDatabaseConnection::DoPrepareStatements()
     PrepareStatement(HOTFIX_SEL_QUEST_INFO, "SELECT ID, InfoName, Type, Modifiers, Profession FROM quest_info WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
     PREPARE_MAX_ID_STMT(HOTFIX_SEL_QUEST_INFO, "SELECT MAX(ID) + 1 FROM quest_info", CONNECTION_SYNCH);
     PREPARE_LOCALE_STMT(HOTFIX_SEL_QUEST_INFO, "SELECT ID, InfoName_lang FROM quest_info_locale WHERE (`VerifiedBuild` > 0) = ? AND locale = ?", CONNECTION_SYNCH);
+
+    // QuestLine.db2
+    PrepareStatement(HOTFIX_SEL_QUEST_LINE, "SELECT ID, Name, Description, CompletionPlayerConditionID, Flags, QuestID, PlayerConditionID, "
+        "Unknown1027_5 FROM quest_line WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_QUEST_LINE, "SELECT MAX(ID) + 1 FROM quest_line", CONNECTION_SYNCH);
+    PREPARE_LOCALE_STMT(HOTFIX_SEL_QUEST_LINE, "SELECT ID, Name_lang, Description_lang FROM quest_line_locale"
+        " WHERE (`VerifiedBuild` > 0) = ? AND locale = ?", CONNECTION_SYNCH);
 
     // QuestLineXQuest.db2
     PrepareStatement(HOTFIX_SEL_QUEST_LINE_X_QUEST, "SELECT ID, QuestLineID, QuestID, OrderIndex, Flags, Unknown1110 FROM quest_line_x_quest"

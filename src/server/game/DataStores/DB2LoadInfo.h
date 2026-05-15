@@ -1002,6 +1002,21 @@ struct CampaignLoadInfo
     static constexpr DB2LoadInfo Instance{ Fields, 14, &CampaignMeta::Instance, HOTFIX_SEL_CAMPAIGN };
 };
 
+struct CampaignXConditionLoadInfo
+{
+    static constexpr DB2FieldMeta Fields[6] =
+    {
+        { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
+        { .IsSigned = false, .Type = FT_STRING, .Name = "FailureReason" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "PlayerConditionID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "OrderIndex" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "Flags" },
+        { .IsSigned = false, .Type = FT_INT, .Name = "CampaignID" },
+    };
+
+    static constexpr DB2LoadInfo Instance{ Fields, 6, &CampaignXConditionMeta::Instance, HOTFIX_SEL_CAMPAIGN_X_CONDITION };
+};
+
 struct CampaignXQuestLineLoadInfo
 {
     static constexpr DB2FieldMeta Fields[4] =
@@ -6602,6 +6617,23 @@ struct QuestInfoLoadInfo
     };
 
     static constexpr DB2LoadInfo Instance{ Fields, 5, &QuestInfoMeta::Instance, HOTFIX_SEL_QUEST_INFO };
+};
+
+struct QuestLineLoadInfo
+{
+    static constexpr DB2FieldMeta Fields[8] =
+    {
+        { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
+        { .IsSigned = false, .Type = FT_STRING, .Name = "Name" },
+        { .IsSigned = false, .Type = FT_STRING, .Name = "Description" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "CompletionPlayerConditionID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "Flags" },
+        { .IsSigned = false, .Type = FT_INT, .Name = "QuestID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "PlayerConditionID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "Unknown1027_5" },
+    };
+
+    static constexpr DB2LoadInfo Instance{ Fields, 8, &QuestLineMeta::Instance, HOTFIX_SEL_QUEST_LINE };
 };
 
 struct QuestLineXQuestLoadInfo
