@@ -4987,6 +4987,53 @@ struct RandPropPointsLoadInfo
     static constexpr DB2LoadInfo Instance{ Fields, 35, &RandPropPointsMeta::Instance, HOTFIX_SEL_RAND_PROP_POINTS };
 };
 
+struct RenownRewardsLoadInfo
+{
+    static constexpr DB2FieldMeta Fields[20] =
+    {
+        { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
+        { .IsSigned = false, .Type = FT_STRING, .Name = "Name" },
+        { .IsSigned = false, .Type = FT_STRING, .Name = "Description" },
+        { .IsSigned = false, .Type = FT_STRING, .Name = "ToastDescription" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "CovenantID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "Level" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "Icon" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "Flags" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "UiOrder" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "ItemID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "SpellID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "MountID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "TransmogID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "TransmogSetID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "CharTitlesID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "GarrFollowerID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "TransmogIllusionID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "RewardCategory" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "QuestID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "PlayerConditionID" },
+    };
+
+    static constexpr DB2LoadInfo Instance{ Fields, 20, &RenownRewardsMeta::Instance, HOTFIX_SEL_RENOWN_REWARDS };
+};
+
+struct RenownRewardsPlunderstormLoadInfo
+{
+    static constexpr DB2FieldMeta Fields[9] =
+    {
+        { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
+        { .IsSigned = false, .Type = FT_STRING, .Name = "Name" },
+        { .IsSigned = false, .Type = FT_STRING, .Name = "Description" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "CovenantID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "Level" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "Icon" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "RewardCategory" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "UiOrder" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "SpellID" },
+    };
+
+    static constexpr DB2LoadInfo Instance{ Fields, 9, &RenownRewardsPlunderstormMeta::Instance, HOTFIX_SEL_RENOWN_REWARDS_PLUNDERSTORM };
+};
+
 struct RewardPackLoadInfo
 {
     static constexpr DB2FieldMeta Fields[7] =

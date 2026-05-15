@@ -1505,6 +1505,21 @@ void HotfixDatabaseConnection::DoPrepareStatements()
         " WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
     PREPARE_MAX_ID_STMT(HOTFIX_SEL_RAND_PROP_POINTS, "SELECT MAX(ID) + 1 FROM rand_prop_points", CONNECTION_SYNCH);
 
+    // RenownRewards.db2
+    PrepareStatement(HOTFIX_SEL_RENOWN_REWARDS, "SELECT ID, Name, Description, ToastDescription, CovenantID, Level, Icon, Flags, UiOrder, "
+        "ItemID, SpellID, MountID, TransmogID, TransmogSetID, CharTitlesID, GarrFollowerID, TransmogIllusionID, "
+        "RewardCategory, QuestID, PlayerConditionID FROM renown_rewards WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_RENOWN_REWARDS, "SELECT MAX(ID) + 1 FROM renown_rewards", CONNECTION_SYNCH);
+    PREPARE_LOCALE_STMT(HOTFIX_SEL_RENOWN_REWARDS, "SELECT ID, Name_lang, Description_lang, ToastDescription_lang FROM renown_rewards_locale"
+        " WHERE (`VerifiedBuild` > 0) = ? AND locale = ?", CONNECTION_SYNCH);
+
+    // RenownRewardsPlunderstorm.db2
+    PrepareStatement(HOTFIX_SEL_RENOWN_REWARDS_PLUNDERSTORM, "SELECT ID, Name, Description, CovenantID, Level, Icon, RewardCategory, "
+        "UiOrder, SpellID FROM renown_rewards_plunderstorm WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_RENOWN_REWARDS_PLUNDERSTORM, "SELECT MAX(ID) + 1 FROM renown_rewards_plunderstorm", CONNECTION_SYNCH);
+    PREPARE_LOCALE_STMT(HOTFIX_SEL_RENOWN_REWARDS_PLUNDERSTORM, "SELECT ID, Name_lang, Description_lang FROM renown_rewards_plunderstorm_locale"
+        " WHERE (`VerifiedBuild` > 0) = ? AND locale = ?", CONNECTION_SYNCH);
+
     // RewardPack.db2
     PrepareStatement(HOTFIX_SEL_REWARD_PACK, "SELECT ID, CharTitleID, Money, ArtifactXPDifficulty, ArtifactXPMultiplier, ArtifactXPCategoryID, "
         "TreasurePickerID FROM reward_pack WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);

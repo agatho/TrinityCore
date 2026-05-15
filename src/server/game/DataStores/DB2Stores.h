@@ -228,6 +228,8 @@ TC_GAME_API extern DB2Storage<QuestMoneyRewardEntry>                sQuestMoneyR
 TC_GAME_API extern DB2Storage<QuestSortEntry>                       sQuestSortStore;
 TC_GAME_API extern DB2Storage<QuestXPEntry>                         sQuestXPStore;
 TC_GAME_API extern DB2Storage<RandPropPointsEntry>                  sRandPropPointsStore;
+TC_GAME_API extern DB2Storage<RenownRewardsEntry>                   sRenownRewardsStore;
+TC_GAME_API extern DB2Storage<RenownRewardsPlunderstormEntry>       sRenownRewardsPlunderstormStore;
 TC_GAME_API extern DB2Storage<RewardPackEntry>                      sRewardPackStore;
 TC_GAME_API extern DB2Storage<ScenarioEntry>                        sScenarioStore;
 TC_GAME_API extern DB2Storage<ScenarioStepEntry>                    sScenarioStepStore;
