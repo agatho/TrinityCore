@@ -1446,6 +1446,26 @@ struct CorruptionEffectsLoadInfo
     static constexpr DB2LoadInfo Instance{ Fields, 5, &CorruptionEffectsMeta::Instance, HOTFIX_SEL_CORRUPTION_EFFECTS };
 };
 
+struct CovenantLoadInfo
+{
+    static constexpr DB2FieldMeta Fields[11] =
+    {
+        { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
+        { .IsSigned = false, .Type = FT_STRING, .Name = "Name" },
+        { .IsSigned = false, .Type = FT_STRING, .Name = "Description" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "BountySetID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "SkillLineID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "DeathTeleportSpellID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "Unknown902_6" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "Unknown902_7" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "FactionID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "CurrencyTypesID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "RequiredPlayerConditionID" },
+    };
+
+    static constexpr DB2LoadInfo Instance{ Fields, 11, &CovenantMeta::Instance, HOTFIX_SEL_COVENANT };
+};
+
 struct CraftingQualityLoadInfo
 {
     static constexpr DB2FieldMeta Fields[3] =

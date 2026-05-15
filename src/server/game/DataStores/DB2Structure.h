@@ -1059,6 +1059,21 @@ struct CorruptionEffectsEntry
     int32 Flags;
 };
 
+struct CovenantEntry
+{
+    uint32 ID;
+    LocalizedString Name;
+    LocalizedString Description;
+    int32 BountySetID;
+    int32 SkillLineID;
+    int32 DeathTeleportSpellID;
+    int32 Unknown902_6;
+    int32 Unknown902_7;
+    int32 FactionID;
+    int32 CurrencyTypesID;
+    int32 RequiredPlayerConditionID;
+};
+
 struct CraftingQualityEntry
 {
     uint32 ID;
