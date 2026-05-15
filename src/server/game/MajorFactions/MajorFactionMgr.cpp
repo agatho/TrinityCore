@@ -16,14 +16,21 @@
  */
 
 #include "MajorFactionMgr.h"
+#include "CollectionMgr.h"
+#include "ConditionMgr.h"
 #include "DB2Stores.h"
 #include "DatabaseEnv.h"
 #include "DB2Structure.h"
+#include "Item.h"
 #include "Log.h"
+#include "Mail.h"
+#include "ObjectMgr.h"
 #include "Player.h"
+#include "QuestDef.h"
 #include "ReputationMgr.h"
 #include "Timer.h"
 #include "WorldDatabase.h"
+#include "WorldSession.h"
 #include <algorithm>
 
 MajorFactionMgr* MajorFactionMgr::instance()
@@ -424,4 +431,128 @@ uint32 MajorFactionMgr::GetPlayerReputationThisLevel(Player const* player, uint3
         return 0;
 
     return uint32(standing) % perLevel;
+}
+
+// ----- Reward dispatch -----------------------------------------------------
+
+void MajorFactionMgr::GrantRenownLevelRewards(Player* player, uint32 factionId, uint32 fromLevel, uint32 toLevel, bool accountSync) const
+{
+    if (!player || fromLevel >= toLevel)
+        return;
+
+    auto rewards = GetRenownRewardsBetween(factionId, fromLevel, toLevel);
+    if (rewards.empty())
+        return;
+
+    for (RenownRewardsEntry const* reward : rewards)
+    {
+        bool isAccountUnlock = (uint32(reward->Flags) & uint32(MajorFactions::RenownRewardFlags::AccountUnlock)) != 0;
+
+        // On account-sync (alt inherits renown from a higher toon), skip
+        // account-wide rewards that have already been granted on the
+        // original toon. Character-bound rewards still need to be granted
+        // because they're per-toon (e.g. Crafter's Knowledge).
+        if (accountSync && isAccountUnlock)
+            continue;
+
+        if (player->GetReputationMgr().IsRenownRewardGranted(reward->ID, isAccountUnlock))
+            continue;
+
+        GrantSingleRenownReward(player, reward);
+        player->GetReputationMgr().MarkRenownRewardGranted(reward->ID, isAccountUnlock);
+    }
+}
+
+void MajorFactionMgr::GrantSingleRenownReward(Player* player, RenownRewardsEntry const* reward) const
+{
+    if (!player || !reward)
+        return;
+
+    // PlayerConditionID gate: if set and not satisfied, skip silently. The
+    // client itself filters the reward row in this case so this is the
+    // server mirror.
+    if (reward->PlayerConditionID > 0)
+    {
+        PlayerConditionEntry const* condition = sPlayerConditionStore.LookupEntry(uint32(reward->PlayerConditionID));
+        if (condition && !ConditionMgr::IsPlayerMeetingCondition(player, condition))
+            return;
+    }
+
+    // Item grant.
+    if (reward->ItemID > 0)
+    {
+        if (!player->AddItem(uint32(reward->ItemID), 1))
+        {
+            TC_LOG_WARN("server.major-factions", "Player {} GUID {} inventory full for RenownReward {} ItemID {} - sending via mail",
+                player->GetName(), player->GetGUID().ToString(), reward->ID, reward->ItemID);
+            // Fallback: mail the item so the grant is not silently lost.
+            MailDraft draft("Renown Reward", "");
+            CharacterDatabaseTransaction trans = CharacterDatabase.BeginTransaction();
+            if (Item* item = Item::CreateItem(uint32(reward->ItemID), 1, ItemContext::NONE, player))
+            {
+                item->SaveToDB(trans);
+                draft.AddItem(item);
+            }
+            draft.SendMailTo(trans, MailReceiver(player), MailSender(MAIL_CREATURE, 0, MAIL_STATIONERY_DEFAULT));
+            CharacterDatabase.CommitTransaction(trans);
+        }
+    }
+
+    // Spell grant.
+    if (reward->SpellID > 0)
+        player->LearnSpell(uint32(reward->SpellID), false);
+
+    // Mount grant (account-wide via CollectionMgr - Mount.SourceSpellID).
+    if (reward->MountID > 0)
+    {
+        if (MountEntry const* mount = sMountStore.LookupEntry(uint32(reward->MountID)))
+            if (CollectionMgr* coll = player->GetSession()->GetCollectionMgr())
+                coll->AddMount(uint32(mount->SourceSpellID), MountStatusFlags::None, false, false);
+    }
+
+    // Transmog appearance grant (ItemModifiedAppearance.ID).
+    if (reward->TransmogID > 0)
+    {
+        if (ItemModifiedAppearanceEntry const* appearance = sItemModifiedAppearanceStore.LookupEntry(uint32(reward->TransmogID)))
+            if (CollectionMgr* coll = player->GetSession()->GetCollectionMgr())
+                coll->AddItemAppearance(appearance->ItemID, uint32(appearance->ItemAppearanceModifierID));
+    }
+
+    // Transmog set grant.
+    if (reward->TransmogSetID > 0)
+        if (CollectionMgr* coll = player->GetSession()->GetCollectionMgr())
+            coll->AddTransmogSet(uint32(reward->TransmogSetID));
+
+    // Transmog illusion grant.
+    if (reward->TransmogIllusionID > 0)
+        if (CollectionMgr* coll = player->GetSession()->GetCollectionMgr())
+            coll->AddTransmogIllusion(uint32(reward->TransmogIllusionID));
+
+    // Title grant.
+    if (reward->CharTitlesID > 0)
+        if (CharTitlesEntry const* title = sCharTitlesStore.LookupEntry(uint32(reward->CharTitlesID)))
+            player->SetTitle(title, false);
+
+    // GarrFollower grant - vestigial Shadowlands soulbind path (covenant.ID < 5).
+    // Only fire for SL-era covenants to avoid grant-storms on misdata; since
+    // Phase 10 targets WoW 12.0.5+ which does not run the SL covenant system,
+    // we log and skip rather than fabricate a Garrison instance.
+    if (reward->GarrFollowerID > 0 && uint32(reward->CovenantID) < 5)
+    {
+        TC_LOG_DEBUG("server.major-factions",
+            "Skipping vestigial SL covenant GarrFollower {} from RenownReward {} (CovenantID {}) - garrison subsystem inactive on Midnight 12.0.5",
+            reward->GarrFollowerID, reward->ID, reward->CovenantID);
+    }
+
+    // QuestID dispatch (Dream Wardens / 10.2 pattern: rewards may include
+    // a quest auto-granted on renown level-up to gate the next story chapter).
+    if (reward->QuestID > 0)
+    {
+        if (Quest const* quest = sObjectMgr->GetQuestTemplate(uint32(reward->QuestID)))
+            if (player->CanTakeQuest(quest, false))
+                player->AddQuestAndCheckCompletion(quest, nullptr);
+    }
+
+    TC_LOG_DEBUG("server.major-factions", "Granted RenownReward {} (Level {}, CovenantID {}) to player {} GUID {}",
+        reward->ID, reward->Level, reward->CovenantID, player->GetName(), player->GetGUID().ToString());
 }

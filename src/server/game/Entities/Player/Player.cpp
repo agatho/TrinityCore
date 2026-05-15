@@ -19524,6 +19524,9 @@ bool Player::LoadFromDB(ObjectGuid guid, CharacterDatabaseQueryHolder const& hol
     // must be before inventory (some items required reputation check)
     m_reputationMgr->LoadFromDB(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_REPUTATION));
     m_reputationMgr->LoadAccountWideFromDB(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_ACCOUNT_REPUTATION));
+    m_reputationMgr->LoadRenownRewardsGrantedFromDB(
+        holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_CHAR_RENOWN_REWARDS_GRANTED),
+        holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_WARBAND_RENOWN_REWARDS_GRANTED));
 
     if (PreparedQueryResult maxLevelResult = holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_WARBAND_MAX_LEVEL_COUNT))
         _warbandMaxLevelCharCount = std::min((*maxLevelResult)[0].GetUInt64(), uint64(5));
