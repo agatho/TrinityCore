@@ -591,6 +591,16 @@ struct CampaignEntry
     bool HasFlag(CampaignFlags flag) const { return EnumFlag(static_cast<CampaignFlags>(Flags)).HasFlag(flag); }
 };
 
+struct CampaignXConditionEntry
+{
+    uint32 ID;
+    LocalizedString FailureReason;
+    int32 PlayerConditionID;
+    int32 OrderIndex;
+    int32 Flags;
+    uint32 CampaignID;
+};
+
 struct CampaignXQuestLineEntry
 {
     uint32 ID;
@@ -3574,6 +3584,18 @@ struct QuestInfoEntry
     int8 Type;
     int32 Modifiers;
     uint16 Profession;
+};
+
+struct QuestLineEntry
+{
+    uint32 ID;
+    LocalizedString Name;
+    LocalizedString Description;
+    int32 CompletionPlayerConditionID;
+    int32 Flags;
+    uint32 QuestID;
+    int32 PlayerConditionID;
+    int32 Unknown1027_5;
 };
 
 struct QuestLineXQuestEntry
