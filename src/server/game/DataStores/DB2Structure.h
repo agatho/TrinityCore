@@ -5057,6 +5057,12 @@ struct UISplashScreenEntry
     int32 RequiredTimeEventPassed; // serverside TimeEvent table, see ModifierTreeType::HasTimeEventPassed
 };
 
+struct UiTextureKitEntry
+{
+    uint32 ID;
+    char const* KitPrefix;     // textureKit string (e.g. "MajorFaction-DragonscaleExpedition")
+};
+
 #define MAX_UNIT_CONDITION_VALUES 8
 
 struct UnitConditionEntry

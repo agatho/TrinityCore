@@ -167,7 +167,7 @@ void MajorFactionMgr::LoadWorldData()
     //                                                  0          1                          2                  3
     QueryResult result = WorldDatabase.Query("SELECT factionId, hiddenFromExpansionPage, displayAsJourney, useJourneyRewardTrack, "
         //  4                       5            6              7                    8
-        "useJourneyUnlockToast, uiPriority, introQuestId, playerCompanionId, textureKit "
+        "useJourneyUnlockToast, uiPriority, introQuestId, playerCompanionId, renownCampaignId "
         "FROM major_faction_config");
 
     uint32 count = 0;
@@ -192,7 +192,16 @@ void MajorFactionMgr::LoadWorldData()
             config.UiPriority              = fields[5].GetInt32();
             config.IntroQuestID            = fields[6].GetUInt32();
             config.PlayerCompanionID       = fields[7].GetUInt32();
-            config.TextureKit              = fields[8].GetString();
+            config.RenownCampaignID        = fields[8].GetUInt32();
+
+            // Validate Campaign FK if set.
+            if (config.RenownCampaignID && !sCampaignStore.LookupEntry(config.RenownCampaignID))
+            {
+                TC_LOG_ERROR("sql.sql", "Table `major_faction_config` row factionId {} references unknown renownCampaignId {}, clearing",
+                    factionId, config.RenownCampaignID);
+                config.RenownCampaignID = 0;
+            }
+
             ++count;
         } while (result->NextRow());
     }
@@ -374,6 +383,32 @@ uint32 MajorFactionMgr::GetIntroQuestID(uint32 factionId) const
 {
     MajorFactions::MajorFactionConfig const* config = GetConfig(factionId);
     return config ? config->IntroQuestID : 0u;
+}
+
+uint32 MajorFactionMgr::GetRenownCampaignID(uint32 factionId) const
+{
+    MajorFactions::MajorFactionConfig const* config = GetConfig(factionId);
+    return config ? config->RenownCampaignID : 0u;
+}
+
+std::string_view MajorFactionMgr::GetTextureKitPrefix(uint32 factionId) const
+{
+    // Resolution chain: faction -> renown campaign -> Campaign.UiTextureKitID
+    //                  -> UiTextureKit.KitPrefix (the string the client uses
+    //                     as atlas-name suffix, e.g. "MajorFaction-DragonscaleExpedition").
+    uint32 campaignId = GetRenownCampaignID(factionId);
+    if (!campaignId)
+        return {};
+
+    CampaignEntry const* campaign = sCampaignStore.LookupEntry(campaignId);
+    if (!campaign || campaign->UiTextureKitID <= 0)
+        return {};
+
+    UiTextureKitEntry const* kit = sUiTextureKitStore.LookupEntry(uint32(campaign->UiTextureKitID));
+    if (!kit || !kit->KitPrefix)
+        return {};
+
+    return kit->KitPrefix;
 }
 
 // ----- Player view ---------------------------------------------------------
