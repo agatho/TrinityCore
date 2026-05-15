@@ -20,6 +20,7 @@
 
 #include "Define.h"
 #include <span>
+#include <string>
 
 struct QuestLineXQuestEntry;
 class Player;
@@ -48,6 +49,20 @@ TC_GAME_API bool IsCampaignCompletedByPlayer(uint32 campaignId, Player const* pl
 TC_GAME_API bool IsCampaignQuestStatusVisibleForPlayer(uint32 questId, Player const* player);
 
 TC_GAME_API void SkipCampaignForPlayer(uint32 campaignId, Player* player);
+
+// Phase 10F - campaign reward / stall-tooltip helpers.
+
+// When a quest is completed: look up campaigns whose `Completed` quest field
+// matches questId and, for each, if the campaign carries a RewardQuestID,
+// auto-grant the reward quest to the player. Mirrors the retail behavior
+// where finishing the campaign's completion quest hands the reward quest.
+TC_GAME_API void OnQuestCompletedHandleCampaignReward(Player* player, uint32 completedQuestId);
+
+// Look up the localized failure-reason string for a stalled campaign. Walks
+// CampaignXCondition rows for the campaign in OrderIndex order and returns
+// the first row whose PlayerConditionID is NOT met. Returns an empty
+// string if the campaign is not stalled or no rows exist.
+TC_GAME_API std::string GetCampaignStallFailureReason(uint32 campaignId, Player const* player);
 }
 
 #endif // TRINITYCORE_CAMPAIGN_MGR_H

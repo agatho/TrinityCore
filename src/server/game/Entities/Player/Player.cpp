@@ -15763,6 +15763,10 @@ void Player::RewardQuest(Quest const* quest, LootItemType rewardType, uint32 rew
 
     SetQuestCompletedBit(quest_id, true);
 
+    // Phase 10F - if this quest is a Campaign.Completed marker, auto-grant the
+    // Campaign.RewardQuestID to the player (retail behavior).
+    QuestMgr::OnQuestCompletedHandleCampaignReward(this, quest_id);
+
     for (QuestObjective const& obj : quest->GetObjectives())
     {
         switch (obj.Type)
