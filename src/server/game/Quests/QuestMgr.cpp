@@ -16,11 +16,16 @@
 */
 
 #include "QuestMgr.h"
+#include "ConditionMgr.h"
 #include "DB2Stores.h"
+#include "DB2Structure.h"
 #include "MapUtils.h"
 #include "ObjectMgr.h"
 #include "Player.h"
+#include "QuestDef.h"
+#include "WorldSession.h"
 #include <algorithm>
+#include <unordered_map>
 
 namespace
 {
@@ -54,6 +59,11 @@ struct CampaignQuestLinesSentinel
     }
 };
 
+// Phase 10F - campaign completion-quest reverse index and per-campaign
+// CampaignXCondition list (sorted by OrderIndex). Populated in Load().
+std::unordered_map<uint32 /*completionQuestId*/, std::vector<CampaignEntry const*>> CampaignsByCompletionQuest;
+std::unordered_map<uint32 /*campaignId*/, std::vector<CampaignXConditionEntry const*>> CampaignXConditionsByCampaign;
+
 Trinity::IteratorPair<std::vector<CampaignQuestLine>::iterator, CampaignQuestLinesSentinel> GetQuestLinesForCampaign(uint32 campaignId)
 {
     return Trinity::Containers::MakeIteratorPair(
@@ -86,6 +96,24 @@ void QuestMgr::Load()
 
     for (auto& [_, questLineQuests] : QuestsByQuestLine)
         std::ranges::sort(questLineQuests, std::ranges::less(), &QuestLineXQuestEntry::OrderIndex);
+
+    // Phase 10F - reverse-index campaigns by their `Completed` quest, used to
+    // auto-grant the campaign reward quest when the player turns the completion
+    // quest in.
+    for (CampaignEntry const* campaign : sCampaignStore)
+    {
+        if (campaign->Completed > 0 && campaign->RewardQuestID > 0)
+            CampaignsByCompletionQuest[uint32(campaign->Completed)].push_back(campaign);
+    }
+
+    // Phase 10F - per-campaign CampaignXCondition bucket, sorted by OrderIndex
+    // ascending so the first failing condition we encounter is the canonical
+    // stall reason to surface in the UI tooltip.
+    for (CampaignXConditionEntry const* condition : sCampaignXConditionStore)
+        CampaignXConditionsByCampaign[condition->CampaignID].push_back(condition);
+
+    for (auto& [_, conditions] : CampaignXConditionsByCampaign)
+        std::ranges::sort(conditions, std::ranges::less(), &CampaignXConditionEntry::OrderIndex);
 }
 
 std::span<QuestLineXQuestEntry const* const> QuestMgr::GetQuestsForQuestLine(uint32 questLineId)
@@ -215,4 +243,59 @@ void QuestMgr::SkipCampaignForPlayer(uint32 campaignId, Player* player)
     }
 
     player->SkipQuests(questIds);
+}
+
+void QuestMgr::OnQuestCompletedHandleCampaignReward(Player* player, uint32 completedQuestId)
+{
+    if (!player)
+        return;
+
+    auto itr = CampaignsByCompletionQuest.find(completedQuestId);
+    if (itr == CampaignsByCompletionQuest.end())
+        return;
+
+    for (CampaignEntry const* campaign : itr->second)
+    {
+        if (!campaign || campaign->RewardQuestID <= 0)
+            continue;
+
+        // Only grant if the player has not already received the reward
+        // quest (either in progress or completed).
+        uint32 rewardQuestId = uint32(campaign->RewardQuestID);
+        if (player->IsActiveQuest(rewardQuestId) || player->GetQuestRewardStatus(rewardQuestId))
+            continue;
+
+        Quest const* rewardQuest = sObjectMgr->GetQuestTemplate(rewardQuestId);
+        if (!rewardQuest)
+            continue;
+
+        if (!player->CanTakeQuest(rewardQuest, false))
+            continue;
+
+        player->AddQuestAndCheckCompletion(rewardQuest, nullptr);
+    }
+}
+
+std::string QuestMgr::GetCampaignStallFailureReason(uint32 campaignId, Player const* player)
+{
+    if (!player)
+        return {};
+
+    auto itr = CampaignXConditionsByCampaign.find(campaignId);
+    if (itr == CampaignXConditionsByCampaign.end())
+        return {};
+
+    LocaleConstant locale = player->GetSession()->GetSessionDbLocaleIndex();
+    for (CampaignXConditionEntry const* condition : itr->second)
+    {
+        if (condition->PlayerConditionID <= 0)
+            continue;
+
+        // First condition the player does NOT satisfy is the canonical
+        // stall reason to surface.
+        if (!ConditionMgr::IsPlayerMeetingCondition(player, uint32(condition->PlayerConditionID)))
+            return condition->FailureReason[locale];
+    }
+
+    return {};
 }
