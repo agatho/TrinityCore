@@ -61,16 +61,21 @@ namespace MajorFactions
     // Per-faction server-side configuration loaded from world DB
     // `major_faction_config`. Drives the post-12.0 Journey UI fields the
     // client builds from DB2 metadata + this overlay.
+    //
+    // NOTE: textureKit is intentionally NOT stored here. It is resolved at
+    // read time from the faction's renown Campaign DB2 row via the chain
+    // Faction -> RenownCampaignID -> Campaign.UiTextureKitID -> UiTextureKit.KitPrefix.
+    // See MajorFactionMgr::GetTextureKitPrefix.
     struct MajorFactionConfig
     {
-        bool        HiddenFromExpansionPage   = false;
-        bool        DisplayAsJourney          = false;
-        bool        UseJourneyRewardTrack     = false;
-        bool        UseJourneyUnlockToast     = false;
-        int32       UiPriority                = 0;
-        uint32      IntroQuestID              = 0;
-        uint32      PlayerCompanionID         = 0;
-        std::string TextureKit;
+        bool   HiddenFromExpansionPage = false;
+        bool   DisplayAsJourney        = false;
+        bool   UseJourneyRewardTrack   = false;
+        bool   UseJourneyUnlockToast   = false;
+        int32  UiPriority              = 0;
+        uint32 IntroQuestID            = 0;
+        uint32 PlayerCompanionID       = 0;
+        uint32 RenownCampaignID        = 0;   // Campaign.db2 ID for the faction's main renown campaign
     };
 }
 
@@ -160,6 +165,13 @@ class TC_GAME_API MajorFactionMgr
         bool ShouldUseJourneyUnlockToast(uint32 factionId) const;
         uint32 GetPlayerCompanionID(uint32 factionId) const;
         uint32 GetIntroQuestID(uint32 factionId) const;
+        uint32 GetRenownCampaignID(uint32 factionId) const;
+
+        // Walks faction -> renown Campaign -> Campaign.UiTextureKitID ->
+        // UiTextureKit.KitPrefix and returns the resolved KitPrefix string
+        // (e.g. "MajorFaction-DragonscaleExpedition"). Empty string if any
+        // step in the chain fails to resolve.
+        std::string_view GetTextureKitPrefix(uint32 factionId) const;
 
         // -- Player view ----------------------------------------------------
 

@@ -6303,6 +6303,12 @@ struct UIChromieTimeExpansionInfoEntry
     int32 RecommendPlayerConditionID;
 };
 
+struct UiTextureKitEntry
+{
+    uint32 ID;
+    char const* KitPrefix;     // textureKit string (e.g. "MajorFaction-DragonscaleExpedition")
+};
+
 #define MAX_UNIT_CONDITION_VALUES 8
 
 struct UnitConditionEntry
