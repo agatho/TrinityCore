@@ -1824,7 +1824,7 @@ struct DelvesSeasonXSpellLoadInfo
     {
         { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
         { .IsSigned = true, .Type = FT_INT, .Name = "SpellID" },
-        { .IsSigned = true, .Type = FT_INT, .Name = "DelvesSeasonID" },
+        { .IsSigned = false, .Type = FT_INT, .Name = "DelvesSeasonID" },
     };
 
     static constexpr DB2LoadInfo Instance{ Fields, 3, &DelvesSeasonXSpellMeta::Instance, HOTFIX_SEL_DELVES_SEASON_X_SPELL };
@@ -4700,7 +4700,7 @@ struct PlayerCompanionInfoLoadInfo
         { .IsSigned = true, .Type = FT_INT, .Name = "Field_11_0_5_56647_010" },
         { .IsSigned = true, .Type = FT_INT, .Name = "Field_11_0_5_56647_011" },
         { .IsSigned = true, .Type = FT_INT, .Name = "Field_11_0_7_57361_012" },
-        { .IsSigned = true, .Type = FT_INT, .Name = "ParentID" },
+        { .IsSigned = false, .Type = FT_INT, .Name = "ParentID" },
     };
 
     static constexpr DB2LoadInfo Instance{ Fields, 15, &PlayerCompanionInfoMeta::Instance, HOTFIX_SEL_PLAYER_COMPANION_INFO };
@@ -5056,7 +5056,7 @@ struct RenownRewardsLoadInfo
         { .IsSigned = false, .Type = FT_STRING, .Name = "Name" },
         { .IsSigned = false, .Type = FT_STRING, .Name = "Description" },
         { .IsSigned = false, .Type = FT_STRING, .Name = "ToastDescription" },
-        { .IsSigned = true, .Type = FT_INT, .Name = "CovenantID" },
+        { .IsSigned = false, .Type = FT_INT, .Name = "CovenantID" },
         { .IsSigned = true, .Type = FT_INT, .Name = "Level" },
         { .IsSigned = true, .Type = FT_INT, .Name = "Icon" },
         { .IsSigned = true, .Type = FT_INT, .Name = "Flags" },
@@ -5084,7 +5084,7 @@ struct RenownRewardsPlunderstormLoadInfo
         { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
         { .IsSigned = false, .Type = FT_STRING, .Name = "Name" },
         { .IsSigned = false, .Type = FT_STRING, .Name = "Description" },
-        { .IsSigned = true, .Type = FT_INT, .Name = "CovenantID" },
+        { .IsSigned = false, .Type = FT_INT, .Name = "CovenantID" },
         { .IsSigned = true, .Type = FT_INT, .Name = "Level" },
         { .IsSigned = true, .Type = FT_INT, .Name = "Icon" },
         { .IsSigned = true, .Type = FT_INT, .Name = "RewardCategory" },
