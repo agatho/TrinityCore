@@ -37,7 +37,7 @@ namespace WorldPackets::MajorFactions
 
         uint8 header = uint8((payload.size() << 1) & 0xFE);
         _worldPacket << header;
-        _worldPacket.append(payload.contents(), payload.size());
+        _worldPacket.append(payload.data(), payload.size());
         return &_worldPacket;
     }
 }

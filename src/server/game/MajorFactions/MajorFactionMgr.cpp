@@ -542,7 +542,7 @@ void MajorFactionMgr::GrantSingleRenownReward(Player* player, RenownRewardsEntry
     {
         if (MountEntry const* mount = sMountStore.LookupEntry(uint32(reward->MountID)))
             if (CollectionMgr* coll = player->GetSession()->GetCollectionMgr())
-                coll->AddMount(uint32(mount->SourceSpellID), MountStatusFlags::None, false, false);
+                coll->AddMount(uint32(mount->SourceSpellID), MOUNT_STATUS_NONE, false, false);
     }
 
     // Transmog appearance grant (ItemModifiedAppearance.ID).
