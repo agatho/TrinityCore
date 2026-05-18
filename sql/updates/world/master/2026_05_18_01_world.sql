@@ -1,0 +1,102 @@
+--
+-- Phase 10H followup - Major Faction renown title quest rewards.
+--
+-- TrinityCore's world DB tarball seeds `quest_template` rows for the four
+-- Dragonflight Major Faction renown-title quests but ships them with
+-- `RewardTitle = 0`. On retail those quests award a CharTitles.db2 title at
+-- the moment of turn-in - this migration sets the missing `RewardTitle`
+-- column so the title is granted on quest-complete.
+--
+-- Without this fix, players who finish the Renown 25/30 title quest get the
+-- achievement and quest XP but no title. The renown level is unaffected
+-- because Phase 10B's MajorFactionMgr / ReputationMgr renown-currency loop
+-- doesn't depend on titles.
+--
+-- All four titles are account-wide (CharTitles.Flags & 0x01) and are
+-- inherited by alts once a single character on the warband earns them.
+-- The retroactive grant is handled by Phase 4's warband_reputation
+-- account-sync path + Phase 7's warband_achievement; this migration only
+-- supplies the world-data link that turns a quest turn-in into a title
+-- grant for the original character.
+--
+-- Sources (cross-verified 2026-05-18):
+--   * Maruuk Centaur (2503), Quest 71091 "The Highest Honor" -> Title 734
+--       "Khansguard" @ Renown 25
+--       https://www.wowhead.com/quest=71091/the-highest-honor
+--       https://www.wowhead.com/title/khansguard-734
+--   * Dragonscale Expedition (2507), Quest 70834 "Titled Story" -> Title 736
+--       "Intrepid Explorer" @ Renown 25
+--       https://www.wowhead.com/quest=70834
+--       https://www.wowhead.com/title/intrepid-explorer-736
+--       https://warcraft.wiki.gg/wiki/Titled_Story
+--   * Valdrakken Accord (2510), Quest 70916 "Beknownst and Glorious"
+--       -> Title 735 "Ally of Dragons" @ Renown 30
+--       https://www.wowhead.com/quest=70916/beknownst-and-glorious
+--       https://www.wowhead.com/title/ally-of-dragons-735
+--       https://warcraft.wiki.gg/wiki/Valdrakken_Accord
+--   * Iskaara Tuskarr (2511), Quest 70969 "Becoming One of Our Community"
+--       -> Title 737 "Of Iskaara" @ Renown 30
+--       https://warcraft.wiki.gg/wiki/Becoming_One_of_Our_Community
+--       https://www.wowhead.com/title/of-iskaara-737
+--
+-- OMITTED rows (intentionally not seeded - require further verification):
+--   * 2564 Loamm Niffen / "Smelly" title (CharTitle 768) @ Renown 20:
+--       Title VERIFIED: wowhead.com/title=768 returns "Smelly <Name>".
+--       Faction/level VERIFIED: announced as Loamm Niffen Renown 20 reward
+--       in Wowhead news 332072 (PTR 10.1 new titles).
+--       RenownRewards.db2 row 995 (CovenantID 20, Level 20) carries the
+--       in-UI advisory text "You may show off your relationship with the
+--       Loamm Niffen with the title 'Smelly'" but its CharTitlesID column
+--       is 0 - confirming the title is NOT granted by the RenownRewards
+--       dispatch path. This matches the DF pattern (rows 726/727/763/841
+--       for Intrepid Explorer/of Iskaara/Ally of Dragons/Khansguard are
+--       all CharTitlesID=0; the actual grant comes from a Renown-25/30
+--       follow-up quest's quest_template.RewardTitle column).
+--       NOT VERIFIED: the specific quest ID that grants title 768. The
+--       likely candidate is a milestone quest from Mimuup or Newsy in
+--       Loamm fired at Renown 20, but no public source we queried (wowhead
+--       quest pages, warcraft.wiki.gg, blizzard forums) exposes the quest
+--       ID in structured form. Pending: extract from a populated retail
+--       client (e.g. `/run print(GetQuestID())` while turning in the
+--       Renown 20 milestone) or from quest_template dump on a live shard.
+--       When verified, add: UPDATE quest_template SET RewardTitle = 768
+--       WHERE ID = <questId> AND RewardTitle = 0;
+--   * 2574 Dream Wardens @ Renown 20:
+--       Local C:\dumps\MAJORFACTIONS_DATA_2574_dream-wardens.json line
+--       19316 lists a putative "Friend of the Wardens" title achievement,
+--       but neither wowhead nor warcraft.wiki.gg confirms a renown-track
+--       title for this faction. The legacy title "the Dreamer" (id 484)
+--       is a Legion Emerald Nightmare raid reward, not a Dream Wardens
+--       reputation reward. Treat as no-title until evidence appears.
+--   * 2616 Keg Leg Thrasher (Plunderstorm) / "Plunderlord" (CharTitle 810):
+--       Granted via RenownRewards.db2 row 1265 (CovenantID 23, Level 40).
+--       Dispatched by Phase 10C MajorFactionMgr::GrantRenownLevelRewards
+--       at runtime - NO quest_template / achievement_reward row needed.
+--       Confirmed in C:\dumps\jsonexport\RenownRewards_67186.csv.
+--   * 2696 Amani Tribe / "Loa-Speaker" (CharTitle 935):
+--       Granted via RenownRewards.db2 row 1658 (CovenantID 37, Level 20).
+--       Same dispatch path as Plunderlord above - NO migration needed.
+--       Confirmed in C:\dumps\jsonexport\RenownRewards_67186.csv.
+--   * 2570 Hallowfall Arathi, 2590 Council of Dornogal, 2594 Assembly of
+--     the Deeps, 2600 Severed Threads (TWW 11.0 majors):
+--       Local JSON listings of "Champion of the Arathi", "Stalwart of the
+--       Council", "Cog-Reader of the Assembly", "Web-Weaver of Note" lack
+--       wowhead corroboration. Per the "no false data" rule, omitted
+--       pending verification against the live retail client.
+--   * 2653 Cartels of Undermine, 2658 K'aresh Trust, 2685 Gallagio Loyalty
+--     Rewards Club, 2688 Flame's Radiance (TWW 11.1/11.2 majors):
+--       Same status as above - awaiting verification.
+--   * 2699 Singularity, 2704 Hara'ti, 2710 Silvermoon Court, 2792 Ritual
+--     Sites (Midnight 12.0 majors other than Amani):
+--       Patch 12.0.1 datamining only; will be verifiable once 12.0.x
+--       retail data is captured. Omitted from this migration.
+--
+
+-- The UPDATEs are no-ops on a world DB that doesn't have these quest rows
+-- yet (e.g. fresh schema before TDB import). After a TDB import that
+-- populates these quest IDs, the UPDATEs set the title binding.
+
+UPDATE `quest_template` SET `RewardTitle` = 734 WHERE `ID` = 71091 AND `RewardTitle` = 0; -- Maruuk Centaur 2503: Khansguard
+UPDATE `quest_template` SET `RewardTitle` = 736 WHERE `ID` = 70834 AND `RewardTitle` = 0; -- Dragonscale Expedition 2507: Intrepid Explorer
+UPDATE `quest_template` SET `RewardTitle` = 735 WHERE `ID` = 70916 AND `RewardTitle` = 0; -- Valdrakken Accord 2510: Ally of Dragons
+UPDATE `quest_template` SET `RewardTitle` = 737 WHERE `ID` = 70969 AND `RewardTitle` = 0; -- Iskaara Tuskarr 2511: Of Iskaara
