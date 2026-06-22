@@ -641,9 +641,12 @@ bool MeetsTraitCondition(WorldPackets::Traits::TraitConfig const& traitConfig, P
         if (condition->TraitNodeGroupID || condition->TraitNodeID || condition->TraitNodeEntryID)
         {
             TraitNodeRankCounts ranks = CountTraitNodeRanks(traitConfig, condition->TraitNodeGroupID, condition->TraitNodeID, condition->TraitNodeEntryID);
-            if (ranks.Group != condition->SpentAmountRequired
-                && ranks.Node != condition->SpentAmountRequired
-                && ranks.Entry != condition->SpentAmountRequired)
+            if (condition->SpentAmountRequired
+                && ranks.Group < condition->SpentAmountRequired
+                && ranks.Node < condition->SpentAmountRequired
+                && ranks.Entry < condition->SpentAmountRequired)
+                return false;
+            if (!condition->SpentAmountRequired && ranks.Group != 0 && ranks.Node != 0 && ranks.Entry != 0)
                 return false;
         }
     }
