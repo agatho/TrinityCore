@@ -370,6 +370,24 @@ PlayerbotV2.WedgeWatchdog.NoProgressEnabled = 1
 PlayerbotV2.WedgeWatchdog.NoProgressMs = 900000
 PlayerbotV2.WedgeWatchdog.NoProgressRadiusYards = 150.0
 
+# Group-level no-progress watchdog (nav-robustness). The per-bot watchdog above
+# exempts in-instance bots, so a dungeon GROUP that stops progressing has no
+# safety net. This watchdog classifies a wedged dungeon group (stranded / split /
+# cohered-idle / false-combat) and logs a [group_wedge] line on the 'playerbot.v2'
+# channel. It is READ-ONLY (diagnostic) — it changes no behavior.
+PlayerbotV2.GroupWedge.Enabled = 1
+# Seconds-equivalent (ms) of no forward progress (group centroid moved less than
+# MoveYards) AND no real combat before the group is reported wedged.
+PlayerbotV2.GroupWedge.WindowMs = 20000
+# Group centroid must move more than this (yards) to count as forward progress.
+PlayerbotV2.GroupWedge.MoveYards = 12.0
+# Max member-to-centroid distance under which the group counts as "cohered".
+PlayerbotV2.GroupWedge.CohereYards = 30.0
+# Tank-to-body (or straggler) separation that classifies a "split".
+PlayerbotV2.GroupWedge.SplitYards = 45.0
+# A member beyond this from the body is probed for a path; NoPath => "stranded".
+PlayerbotV2.GroupWedge.FarYards = 45.0
+
 # Fleet-vitals alerting (#1C): a 60s vitals bucket that breaches one of these
 # thresholds fires a throttled [fleet_alert] TC_LOG_ERROR on the
 # 'playerbot.v2' channel naming the metric + value + threshold. Set any

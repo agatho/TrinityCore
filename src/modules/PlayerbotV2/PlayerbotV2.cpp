@@ -1650,6 +1650,13 @@ void Module::OnWorldUpdate(std::chrono::milliseconds diff)
         wedge_watchdog_.Tick(GameTime::GetGameTimeMS());
     }
 
+    // 3c. Group-level no-progress DIAGNOSE watchdog (nav-robustness program).
+    //     READ-ONLY: classifies a wedged dungeon group (stranded / split /
+    //     cohered-idle / false-combat) and emits one [group_wedge] line — the
+    //     "diagnose" stage the remediation pass is built on. Self-throttled, so
+    //     it's safe to call every world tick.
+    group_wedge_watchdog_.Update(GameTime::GetGameTimeMS());
+
     // 4. Periodic fleet-status log (overnight friendly). Walks the registry +
     //    snapshots once per kFleetLogIntervalMs and emits one INFO line so the
     //    operator can see fleet health by tailing worldserver.log without

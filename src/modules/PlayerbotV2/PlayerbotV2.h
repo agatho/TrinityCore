@@ -7,6 +7,7 @@
 #include "ObjectGuid.h"
 #include "Fleet/BotQueueFiller.h"
 #include "Diagnostics/WedgeWatchdog.h"
+#include "Bot/Dungeon/GroupWedgeWatchdog.h"
 #include <chrono>
 #include <memory>
 #include <mutex>
@@ -303,6 +304,12 @@ private:
     std::chrono::milliseconds  wedge_wd_total_{0};
     std::chrono::milliseconds  last_wedge_wd_at_{0};
     static constexpr std::chrono::milliseconds kWedgeWatchdogIntervalMs{7000};
+
+    // Nav-robustness program: group-level no-progress DIAGNOSE watchdog. Ticked
+    // from OnWorldUpdate in the same world-thread diagnostic slot; self-throttled.
+    // READ-ONLY (classify + [group_wedge] log) — remediation is a config-gated
+    // follow-up so the delicate advance/cohesion core is never touched blind.
+    GroupWedgeWatchdog group_wedge_watchdog_{};
 
     // Craft-order board maintenance cadence (#4B-2). Ages out stale Claimed
     // orders (timeout -> Fail + refund) and prunes finished rows. 60s is
