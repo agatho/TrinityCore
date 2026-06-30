@@ -408,15 +408,33 @@ int main(int argc, char** argv)
     std::printf("  path: polys=%d planar_dist_to_requested_dst=%.3fy 3d_dist=%.3fy reached_endRef=%d\n",
         polyCount, planarDist, dist3D, reachedDest ? 1 : 0);
 
-    std::printf("  last waypoints (TC coords):\n");
-    int firstShown = straightCount > 3 ? straightCount - 3 : 0;
-    for (int i = firstShown; i < straightCount; ++i)
+    // Full straight-path dump + degenerate-segment scan. _checkPathLengths()
+    // (MoveSpline) rejects the WHOLE spline if any interior segment has
+    // squaredLength < 0.01 (i.e. consecutive points < 0.1y apart). Off-mesh
+    // connection endpoints can land near an adjacent corner -> such a segment.
+    std::printf("  straight path (%d pts, TC coords; OFFMESH flag, seg-to-next):\n", straightCount);
+    int degenerate = 0;
+    for (int i = 0; i < straightCount; ++i)
     {
         float wx = straight[i * 3 + 2];
         float wy = straight[i * 3 + 0];
         float wz = straight[i * 3 + 1];
-        std::printf("    [%d] TC=(%.3f, %.3f, %.3f)\n", i, wx, wy, wz);
+        bool offmesh = (straightFlags[i] & DT_STRAIGHTPATH_OFFMESH_CONNECTION) != 0;
+        float seg = -1.0f;
+        if (i + 1 < straightCount)
+        {
+            float ndx = straight[(i+1)*3+0] - straight[i*3+0];
+            float ndy = straight[(i+1)*3+1] - straight[i*3+1];
+            float ndz = straight[(i+1)*3+2] - straight[i*3+2];
+            seg = std::sqrt(ndx*ndx + ndy*ndy + ndz*ndz);
+        }
+        bool bad = (seg >= 0.0f && seg < 0.1f);
+        if (bad) ++degenerate;
+        std::printf("    [%2d]%s TC=(%.3f, %.3f, %.3f) seg=%.4f%s\n",
+            i, offmesh ? " OFFMESH" : "       ", wx, wy, wz,
+            seg, bad ? "  <<< DEGENERATE (<0.1y) -> _checkPathLengths REJECT" : "");
     }
+    std::printf("  DEGENERATE_SEGMENTS=%d\n", degenerate);
 
     const char* label = DescribeStatus(s, partial, startFar, endFar,
         reachedDest, /*reached*/ planarDist <= 5.0f, polyCount);
