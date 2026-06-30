@@ -98,6 +98,7 @@ bool PathGenerator::CalculatePath(float srcX, float srcY, float srcZ, float dest
     SetStartPosition(start);
 
     _forceDestination = forceDest;
+    _pathTraversesOffMesh = false;  // recomputed per path by FindSmoothPath
 
     TC_LOG_DEBUG("maps.mmaps", "++ PathGenerator::CalculatePath() for {}", _source->GetGUID().ToString());
 
@@ -1147,6 +1148,16 @@ dtStatus PathGenerator::FindSmoothPath(float const* startPos, float const* endPo
             float connectionStartPos[VERTEX_SIZE], connectionEndPos[VERTEX_SIZE];
             if (dtStatusSucceed(_navMesh->getOffMeshConnectionPolyEndPoints(prevRef, polyRef, connectionStartPos, connectionEndPos)))
             {
+                // Record the FIRST off-mesh crossing's landing point so movement
+                // steppers can honor the hop regardless of its span (short bridges
+                // were missed by length heuristics). connectionEndPos is the
+                // authoritative far endpoint in Detour (y,z,x) order; store it in
+                // game (x,y,z). A world position, immune to later path dedupe.
+                if (!_pathTraversesOffMesh)
+                {
+                    _pathTraversesOffMesh = true;
+                    _firstOffMeshLanding = G3D::Vector3(connectionEndPos[2], connectionEndPos[0], connectionEndPos[1]);
+                }
                 if (nsmoothPath < maxSmoothPathSize)
                 {
                     dtVcopy(&smoothPath[nsmoothPath*VERTEX_SIZE], connectionStartPos);
@@ -1323,6 +1334,17 @@ void PathGenerator::ShortenPathUntilDist(G3D::Vector3 const& target, float dist)
     //   ... settle for a guesstimate since i'm not confident in doing trig on every chase motion tick...
     // (@todo review this)
     _pathPoints[i] += (_pathPoints[i - 1] - _pathPoints[i]).direction() * (dist - (_pathPoints[i] - target).length());
+    // The shortened endpoint can land within <0.1y of its predecessor when the
+    // "too far" vertex [i-1] sits right at the `dist` boundary (the move amount
+    // then ~= the entire last segment). A sub-0.1y final segment makes
+    // MoveSplineInitArgs::_checkPathLengths() reject the WHOLE spline, so the unit
+    // never moves -- root cause of bots/creatures/vehicles wedged mid-chase and
+    // during boss approach on 12.0.7 (a flood of "_checkPathLengths() failed").
+    // Drop the collapsed endpoint, keeping its predecessor as the path end (still
+    // >= 2 points). A 2-point path is never affected: _checkPathLengths only
+    // inspects paths with > 2 points.
+    if (i >= 2 && (_pathPoints[i] - _pathPoints[i - 1]).squaredLength() < 0.01f)
+        --i;
     _pathPoints.resize(i+1);
 }
 

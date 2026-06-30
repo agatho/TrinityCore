@@ -2673,6 +2673,12 @@ static bool DungeonTargetReachableAndStep(Player* self, float tx, float ty, floa
     if (pts.size() < 2) { step_out = e; gapLog("pts<2_end", e.x, e.y, e.z, false); return true; }
     float acc = 0.0f;
     step_out = G3D::Vector3(pts[0].x, pts[0].y, pts[0].z);
+    // Authoritative off-mesh landing (a world position from PathGenerator), so a SHORT
+    // off-mesh bridge is honored too — the segment-length heuristic below misses spans
+    // under 15y (the Deadmines foundry FoeReaper bridge is ~10.5y). Immune to path
+    // dedupe/NormalizePath: matched by XY against the path's far vertices in the loop.
+    const bool pathOffMesh = pg.PathTraversesOffMesh();
+    G3D::Vector3 const offLand = pathOffMesh ? pg.GetFirstOffMeshLanding() : G3D::Vector3();
     for (size_t i = 1; i < pts.size(); ++i)
     {
         const float segx = pts[i].x - pts[i-1].x;
@@ -2692,12 +2698,26 @@ static bool DungeonTargetReachableAndStep(Player* self, float tx, float ty, floa
         // jump and return its FAR vertex so the caller commits and the honor-check
         // makes the crossing uninterruptible. Benign false positive on a long open
         // corridor: the bot just commits to a valid waypoint, reaches it, and clears.
+        // Authoritative off-mesh detection: this segment's FAR vertex IS the path's
+        // off-mesh landing (matched on XY; NormalizePath only shifts Z). Catches SHORT
+        // bridges (< 15y) the length heuristic misses, so the caller commits the cross
+        // and DungeonHonorCross makes the hop uninterruptible (root cause of the
+        // ~10.5y FoeReaper-bridge mouth wedge — crossed only by luck before).
+        bool segOffMesh = false;
+        if (pathOffMesh)
+        {
+            const float lx = pts[i].x - offLand.x, ly = pts[i].y - offLand.y;
+            segOffMesh = (lx*lx + ly*ly) < 4.0f;  // far vertex == off-mesh landing (XY, < 2y)
+        }
+        // Legacy length heuristic kept so the long (27y) Gap-1 bridge behavior is
+        // unchanged: ANY > 15y smoothed segment is an off-mesh jump. Either signal
+        // flags the crossing and returns its far vertex.
         constexpr float kOffMeshJumpYards = 15.0f;
-        if (seg > kOffMeshJumpYards)
+        if (seg > kOffMeshJumpYards || segOffMesh)
         {
             if (step_is_offmesh) *step_is_offmesh = true;
             step_out = G3D::Vector3(pts[i].x, pts[i].y, pts[i].z);
-            gapLog("jump_farvtx", step_out.x, step_out.y, step_out.z, true);
+            gapLog(segOffMesh ? "offmesh_land" : "jump_farvtx", step_out.x, step_out.y, step_out.z, true);
             return true;
         }
         if (acc + seg >= maxStep)

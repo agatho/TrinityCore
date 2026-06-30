@@ -95,6 +95,17 @@ class TC_GAME_API PathGenerator
 
         PathType GetPathType() const { return _type; }
 
+        // Off-mesh crossing info. True when the smoothed path traverses at least one
+        // off-mesh connection (e.g. an offmesh.txt bridge). GetFirstOffMeshLanding()
+        // is the FAR (landing) endpoint, in game (x,y,z), of the FIRST off-mesh
+        // connection along the path. It is an authoritative WORLD POSITION (not a
+        // point index), so it survives path dedupe / NormalizePath mutations — used
+        // by movement steppers to honor a crossing regardless of its (possibly short)
+        // span, instead of guessing from segment length. Only populated by
+        // FindSmoothPath (the default path mode); false for raycast/straight paths.
+        bool PathTraversesOffMesh() const { return _pathTraversesOffMesh; }
+        G3D::Vector3 const& GetFirstOffMeshLanding() const { return _firstOffMeshLanding; }
+
         // shortens the path until the destination is the specified distance from the target point
         void ShortenPathUntilDist(G3D::Vector3 const& target, float dist);
 
@@ -105,6 +116,12 @@ class TC_GAME_API PathGenerator
 
         Movement::PointsArray _pathPoints;  // our actual (x,y,z) path to the target
         PathType _type;                     // tells what kind of path this is
+
+        // Off-mesh crossing info (see PathTraversesOffMesh()/GetFirstOffMeshLanding()).
+        // Reset at the start of each CalculatePath; set by FindSmoothPath when the
+        // smoothed path crosses an off-mesh connection.
+        bool _pathTraversesOffMesh = false;
+        G3D::Vector3 _firstOffMeshLanding;
 
         bool _useStraightPath;  // type of path will be generated
         bool _forceDestination; // when set, we will always arrive at given point
