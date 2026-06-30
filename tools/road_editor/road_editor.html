@@ -1,0 +1,900 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Playerbot V2 — Road / Metadata Editor</title>
+<style>
+  :root {
+    --bg: #1a1a1a;
+    --panel: #2a2a2a;
+    --border: #3a3a3a;
+    --text: #d4d4d4;
+    --accent: #4a9eff;
+    --road: #ffaa00;
+    --city: #ff5577;
+    --village: #ffaaee;
+    --hub: #55ddff;
+    --danger: #ff3333;
+    --vendor: #88ff88;
+    --mailbox: #aa88ff;
+    --innkeeper: #ffdd88;
+    --crossroad: #ffff66;
+    --other: #aaaaaa;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; height: 100%; background: var(--bg); color: var(--text); font: 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; }
+  body { display: flex; flex-direction: row; height: 100vh; overflow: hidden; }
+  #side { width: 320px; min-width: 320px; background: var(--panel); border-right: 1px solid var(--border); padding: 12px; overflow-y: auto; }
+  #side h2 { margin: 0 0 8px; font-size: 14px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--accent); }
+  #side h3 { margin: 16px 0 6px; font-size: 12px; letter-spacing: 0.04em; text-transform: uppercase; color: #888; border-bottom: 1px solid var(--border); padding-bottom: 4px; }
+  .row { display: flex; gap: 6px; align-items: center; margin: 4px 0; }
+  .row label { flex: 0 0 70px; font-size: 12px; color: #aaa; }
+  .row input[type=number], .row input[type=text] {
+    background: #111; color: var(--text); border: 1px solid var(--border);
+    border-radius: 3px; padding: 3px 6px; flex: 1; font: inherit; min-width: 0;
+  }
+  .row select { background: #111; color: var(--text); border: 1px solid var(--border); border-radius: 3px; padding: 3px 6px; font: inherit; flex: 1; }
+  button { background: #333; color: var(--text); border: 1px solid var(--border); border-radius: 3px; padding: 4px 10px; cursor: pointer; font: inherit; }
+  button:hover { background: #444; }
+  button.primary { background: var(--accent); color: #000; border-color: var(--accent); font-weight: 600; }
+  button.danger { background: #5a2a2a; border-color: #a55; }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  #drop { border: 2px dashed var(--border); border-radius: 4px; padding: 24px; text-align: center; color: #888; cursor: pointer; margin-bottom: 8px; }
+  #drop.hot { border-color: var(--accent); color: var(--accent); }
+  #status { font-size: 11px; color: #888; line-height: 1.6; margin-top: 8px; }
+  #status code { background: #111; padding: 1px 4px; border-radius: 2px; color: #ccc; }
+  #canvas-wrap { flex: 1; position: relative; overflow: hidden; background: #0a0a0a; cursor: crosshair; }
+  #canvas { position: absolute; top: 0; left: 0; image-rendering: pixelated; }
+  #overlay { position: absolute; top: 0; left: 0; pointer-events: none; }
+  #hud { position: absolute; top: 8px; left: 8px; background: rgba(0,0,0,0.7); padding: 6px 10px; border-radius: 3px; font-size: 11px; pointer-events: none; }
+  .kind-pill { display: inline-block; padding: 2px 8px; margin: 2px; border-radius: 12px; cursor: pointer; font-size: 11px; border: 2px solid transparent; user-select: none; }
+  .kind-pill.active { border-color: #fff; }
+  .kind-pill[data-k=road]      { background: var(--road); color: #000; }
+  .kind-pill[data-k=crossroad] { background: var(--crossroad); color: #000; }
+  .kind-pill[data-k=city]      { background: var(--city); color: #000; }
+  .kind-pill[data-k=village]   { background: var(--village); color: #000; }
+  .kind-pill[data-k=hub]       { background: var(--hub); color: #000; }
+  .kind-pill[data-k=danger]    { background: var(--danger); color: #fff; }
+  .kind-pill[data-k=vendor]    { background: var(--vendor); color: #000; }
+  .kind-pill[data-k=mailbox]   { background: var(--mailbox); color: #000; }
+  .kind-pill[data-k=innkeeper] { background: var(--innkeeper); color: #000; }
+  .kind-pill[data-k=other]     { background: var(--other); color: #000; }
+  details { margin: 8px 0; }
+  details summary { cursor: pointer; padding: 4px 0; font-size: 12px; color: #aaa; }
+  .calibration-step { background: #111; border: 1px solid var(--border); border-radius: 3px; padding: 6px 8px; margin: 4px 0; font-size: 11px; }
+  .calibration-step.done { background: #1a3a1a; border-color: #3a6a3a; }
+  textarea { width: 100%; height: 80px; background: #111; color: var(--text); border: 1px solid var(--border); border-radius: 3px; padding: 4px 6px; font-family: ui-monospace, "Cascadia Code", Menlo, Consolas, monospace; font-size: 11px; resize: vertical; }
+  #point-list { max-height: 240px; overflow-y: auto; border: 1px solid var(--border); border-radius: 3px; padding: 4px; font-size: 11px; background: #111; }
+  .point-row { display: flex; justify-content: space-between; padding: 2px 4px; border-bottom: 1px solid #222; cursor: pointer; }
+  .point-row:hover { background: #222; }
+  .point-row .x { color: #844; cursor: pointer; padding: 0 4px; }
+  .point-row .x:hover { color: #f44; }
+</style>
+</head>
+<body>
+
+<div id="side">
+  <h2>Road Editor</h2>
+
+  <h3>1. Background</h3>
+  <div id="drop">Drop a navmesh PNG + JSON pair (auto-calibrated)<br>
+    <small>or any zone screenshot for manual calibration</small><br>
+    <small>or click to browse (select PNG and JSON together)</small>
+    <input type="file" id="file" accept="image/*,application/json,.json" multiple style="display:none">
+  </div>
+  <div id="src-info" style="font-size:11px;color:#888;margin:4px 0;"></div>
+
+  <h3>2. Calibration <span id="cal-mode-tag" style="float:right;font-size:10px;color:#888"></span></h3>
+  <p style="font-size:11px;color:#888;margin:0 0 4px;">If you dropped a <code>mmap_world_dump</code> PNG + .json pair, calibration is automatic. The fields below are for manual override or a plain screenshot workflow.</p>
+  <p style="font-size:11px;color:#888;margin:0 0 4px;">Manual: click two known points on the image and enter their world coords.</p>
+  <div class="calibration-step" id="cal-step-1">
+    <strong>Anchor A:</strong> <span id="cal-a-status">click on map…</span><br>
+    <div class="row" style="margin-top:4px">
+      <label>World X</label>
+      <input type="number" id="cal-a-wx" step="0.1" placeholder="e.g. -8830">
+    </div>
+    <div class="row">
+      <label>World Y</label>
+      <input type="number" id="cal-a-wy" step="0.1" placeholder="e.g. 624">
+    </div>
+  </div>
+  <div class="calibration-step" id="cal-step-2">
+    <strong>Anchor B:</strong> <span id="cal-b-status">click on map…</span><br>
+    <div class="row" style="margin-top:4px">
+      <label>World X</label>
+      <input type="number" id="cal-b-wx" step="0.1" placeholder="e.g. -9460">
+    </div>
+    <div class="row">
+      <label>World Y</label>
+      <input type="number" id="cal-b-wy" step="0.1" placeholder="e.g. 55">
+    </div>
+  </div>
+  <button id="apply-cal">Apply calibration</button>
+  <div id="cal-info" style="font-size:11px;color:#888;margin-top:4px"></div>
+
+  <h3>3. Map / Annotation</h3>
+  <div class="row">
+    <label>Map ID</label>
+    <input type="number" id="map-id" value="0" step="1">
+  </div>
+  <div class="row">
+    <label>Kind</label>
+    <div style="flex:1;">
+      <span class="kind-pill active" data-k="road">road</span>
+      <span class="kind-pill" data-k="crossroad">cross</span>
+      <span class="kind-pill" data-k="city">city</span>
+      <span class="kind-pill" data-k="village">village</span>
+      <span class="kind-pill" data-k="hub">hub</span>
+      <span class="kind-pill" data-k="danger">danger</span>
+      <span class="kind-pill" data-k="vendor">vendor</span>
+      <span class="kind-pill" data-k="mailbox">mail</span>
+      <span class="kind-pill" data-k="innkeeper">inn</span>
+      <span class="kind-pill" data-k="other">other</span>
+    </div>
+  </div>
+  <div class="row">
+    <label>Radius (y)</label>
+    <input type="number" id="radius" value="12" step="1" min="1">
+  </div>
+  <div class="row">
+    <label>Step (y)</label>
+    <input type="number" id="step" value="15" step="1" min="1"
+       title="Polyline interpolation: distance between auto-placed points">
+  </div>
+  <div class="row">
+    <label>Z height</label>
+    <input type="number" id="zheight" value="0" step="0.1"
+       title="Default Z for new points. The world z; mmaps_generator only uses x/y for the radius gate.">
+  </div>
+  <div class="row">
+    <label>Label</label>
+    <input type="text" id="label" placeholder="optional">
+  </div>
+
+  <h3>4. Modes</h3>
+  <p style="font-size:11px;color:#888;margin:0 0 4px;">
+    <strong>Click</strong>: place a single point.<br>
+    <strong>Click + drag</strong> (or Shift-click multiple): polyline. Points auto-interpolated every <em>Step</em> yards.<br>
+    <strong>Right-click</strong> a placed point: delete.<br>
+    <strong>Z / Y</strong>: undo / redo.<br>
+    <strong>Mouse wheel</strong>: zoom. <strong>Drag-middle</strong>: pan.
+  </p>
+
+  <h3>5. Import / Export</h3>
+  <div class="row">
+    <button id="export">Export CSV</button>
+    <button id="copy">Copy to clipboard</button>
+  </div>
+  <details>
+    <summary>Import existing CSV</summary>
+    <textarea id="import-text" placeholder="paste world_metadata.csv contents here"></textarea>
+    <button id="import-btn">Import (append)</button>
+  </details>
+
+  <h3>6. Points (<span id="point-count">0</span>)</h3>
+  <div id="point-list"></div>
+  <div class="row" style="margin-top:6px">
+    <button class="danger" id="clear-all">Clear all</button>
+  </div>
+
+  <div id="status">
+    Output format matches <code>world_metadata.csv</code> consumed by
+    <code>mmaps_generator</code> (auto-loaded from
+    <code>&lt;DataDir&gt;/world_metadata.csv</code>) AND by the
+    worldserver's <code>WorldMetadataStore</code> at boot.
+  </div>
+</div>
+
+<div id="canvas-wrap">
+  <canvas id="canvas"></canvas>
+  <canvas id="overlay"></canvas>
+  <div id="hud">no image</div>
+</div>
+
+<script>
+'use strict';
+
+// ============================================================================
+// State
+// ============================================================================
+const state = {
+  img: null,
+  imgURL: null,
+  // View transform (image -> screen): screen = img * scale + offset
+  scale: 1,
+  offX: 0,
+  offY: 0,
+  // Pan
+  panning: false, panStartX: 0, panStartY: 0,
+  // Calibration: two pairs of (pixel x, pixel y) ↔ (world x, world y).
+  // Computed from 2 anchor points. With 2 anchors we can fit a uniform-
+  // scale rotation-free transform (assumes the screenshot's axes are
+  // aligned with world axes — true for the standard WoW world map
+  // projection). If skew is needed, we can extend to 3 anchors later.
+  calA: null,        // {px, py, wx, wy}
+  calB: null,        // {px, py, wx, wy}
+  // Affine transform pixel -> world. y'=ay + by*px + cy*py etc.
+  // After 2 anchors: solve linear system assuming uniform scale, no rotation.
+  pxToWorld: null,   // function(px, py) -> {wx, wy}
+  worldToPx: null,   // function(wx, wy) -> {px, py}
+  // Active drawing
+  kind: 'road',
+  radius: 12,
+  stepYards: 15,
+  zheight: 0,
+  label: '',
+  mapId: 0,
+  // Placed points (in WORLD coords)
+  // {id (local-only), map_id, kind, x, y, z, radius, label}
+  points: [],
+  nextLocalId: 1,
+  // Undo/redo
+  history: [],
+  redoStack: [],
+  // Polyline in progress (image pixel coords)
+  polyline: null,
+  // Drag detection
+  mouseDown: null,
+  dragStarted: false,
+};
+
+// ============================================================================
+// DOM
+// ============================================================================
+const canvas  = document.getElementById('canvas');
+const overlay = document.getElementById('overlay');
+const ctx     = canvas.getContext('2d');
+const oct     = overlay.getContext('2d');
+const wrap    = document.getElementById('canvas-wrap');
+const hud     = document.getElementById('hud');
+const drop    = document.getElementById('drop');
+const fileIn  = document.getElementById('file');
+
+// ============================================================================
+// Resize
+// ============================================================================
+function resize() {
+  const r = wrap.getBoundingClientRect();
+  canvas.width  = overlay.width  = r.width;
+  canvas.height = overlay.height = r.height;
+  redraw();
+}
+window.addEventListener('resize', resize);
+
+// ============================================================================
+// Image load
+// ============================================================================
+function loadImageFromFile(file) {
+  const url = URL.createObjectURL(file);
+  const img = new Image();
+  img.onload = () => {
+    if (state.imgURL) URL.revokeObjectURL(state.imgURL);
+    state.img    = img;
+    state.imgURL = url;
+    // Fit-to-view scale
+    const r = wrap.getBoundingClientRect();
+    const sx = r.width  / img.width;
+    const sy = r.height / img.height;
+    state.scale = Math.min(sx, sy) * 0.95;
+    state.offX  = (r.width  - img.width  * state.scale) / 2;
+    state.offY  = (r.height - img.height * state.scale) / 2;
+    redraw();
+    updateHud();
+  };
+  img.src = url;
+}
+drop.addEventListener('click', () => fileIn.click());
+fileIn.addEventListener('change', e => handleFiles(Array.from(e.target.files || [])));
+drop.addEventListener('dragover',  e => { e.preventDefault(); drop.classList.add('hot'); });
+drop.addEventListener('dragleave', e => drop.classList.remove('hot'));
+drop.addEventListener('drop',      e => {
+  e.preventDefault();
+  drop.classList.remove('hot');
+  handleFiles(Array.from(e.dataTransfer.files || []));
+});
+
+// Accepts any combination of one image + one .json sidecar. Pairs them by
+// matching basename when possible; otherwise the first PNG + first JSON are
+// taken regardless of name.
+function handleFiles(files) {
+  if (!files.length) return;
+  const imgs  = files.filter(f => /image\//.test(f.type) || /\.(png|jpe?g|bmp)$/i.test(f.name));
+  const jsons = files.filter(f => /\.json$/i.test(f.name) || f.type === 'application/json');
+  let pairImg = imgs[0] || null;
+  let pairJson = jsons[0] || null;
+  // Prefer same-basename match if both are present.
+  if (imgs.length && jsons.length) {
+    const stem = n => n.replace(/\.[^.]+$/, '');
+    for (const i of imgs) for (const j of jsons) if (stem(i.name) === stem(j.name)) {
+      pairImg = i; pairJson = j;
+    }
+  }
+  if (pairJson) {
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const meta = JSON.parse(reader.result);
+        applySidecar(meta);
+      } catch (err) {
+        alert('Failed to parse sidecar JSON: ' + err);
+      }
+      if (pairImg) loadImageFromFile(pairImg);
+    };
+    reader.readAsText(pairJson);
+  } else if (pairImg) {
+    loadImageFromFile(pairImg);
+  }
+}
+
+function applySidecar(meta) {
+  if (!meta || meta.schema !== 'mmap_world_dump_v1') {
+    alert('JSON sidecar schema unrecognised (expected "mmap_world_dump_v1").');
+    return;
+  }
+  // Sidecar convention:
+  //   wx = world_origin_x + px * world_x_per_pixel
+  //   wy = world_origin_y + py * world_y_per_pixel
+  // (where wx = TC X, wy = TC Y in the same axes the worldserver uses.)
+  const ox  = meta.world_origin_x;
+  const oy  = meta.world_origin_y;
+  const dxp = meta.world_x_per_pixel;
+  const dyp = meta.world_y_per_pixel;
+  if ([ox, oy, dxp, dyp].some(v => typeof v !== 'number')) {
+    alert('Sidecar missing transform fields.');
+    return;
+  }
+  state.pxToWorld = (px, py) => ({ wx: ox + px * dxp, wy: oy + py * dyp });
+  state.worldToPx = (wx, wy) => ({ px: (wx - ox) / dxp, py: (wy - oy) / dyp });
+  // Apply map_id if provided.
+  if (typeof meta.map_id === 'number') {
+    state.mapId = meta.map_id | 0;
+    document.getElementById('map-id').value = state.mapId;
+  }
+  // Mark calibration done in UI.
+  document.getElementById('cal-step-1').classList.add('done');
+  document.getElementById('cal-step-2').classList.add('done');
+  document.getElementById('cal-mode-tag').textContent = `auto (map ${meta.map_id})`;
+  document.getElementById('cal-info').textContent =
+    `Auto-calibrated from sidecar: ${meta.image_width}×${meta.image_height} px, ` +
+    `${(meta.yards_per_pixel ?? 0).toFixed(2)} y/px, ` +
+    `bbox X=[${(meta.world_x_min ?? 0).toFixed(0)}..${(meta.world_x_max ?? 0).toFixed(0)}] ` +
+    `Y=[${(meta.world_y_min ?? 0).toFixed(0)}..${(meta.world_y_max ?? 0).toFixed(0)}]`;
+  const info = document.getElementById('src-info');
+  info.textContent = `Sidecar v1 loaded. Click anywhere on the image to drop annotated points — coords are exact.`;
+  redraw();
+}
+
+// ============================================================================
+// Render
+// ============================================================================
+function redraw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  if (state.img) {
+    ctx.drawImage(state.img,
+      state.offX, state.offY,
+      state.img.width  * state.scale,
+      state.img.height * state.scale);
+  }
+  drawOverlay();
+}
+
+function drawOverlay() {
+  oct.clearRect(0, 0, overlay.width, overlay.height);
+  // Calibration anchors
+  if (state.calA) drawAnchor(state.calA, 'A');
+  if (state.calB) drawAnchor(state.calB, 'B');
+  // Polyline in progress
+  if (state.polyline && state.polyline.length > 0) {
+    oct.strokeStyle = '#ff0';
+    oct.lineWidth = 2;
+    oct.beginPath();
+    const a = imgToScreen(state.polyline[0].px, state.polyline[0].py);
+    oct.moveTo(a.x, a.y);
+    for (let i = 1; i < state.polyline.length; i++) {
+      const p = imgToScreen(state.polyline[i].px, state.polyline[i].py);
+      oct.lineTo(p.x, p.y);
+    }
+    oct.stroke();
+  }
+  // Placed points
+  for (const p of state.points) {
+    if (!state.worldToPx) continue;
+    const px = state.worldToPx(p.x, p.y);
+    if (!px) continue;
+    const s = imgToScreen(px.px, px.py);
+    if (s.x < -20 || s.y < -20 || s.x > overlay.width+20 || s.y > overlay.height+20) continue;
+    drawPoint(s.x, s.y, p);
+  }
+}
+function imgToScreen(px, py) {
+  return { x: state.offX + px * state.scale, y: state.offY + py * state.scale };
+}
+function screenToImg(sx, sy) {
+  return { px: (sx - state.offX) / state.scale, py: (sy - state.offY) / state.scale };
+}
+function drawAnchor(a, label) {
+  const s = imgToScreen(a.px, a.py);
+  oct.strokeStyle = '#0ff';
+  oct.fillStyle = '#0ff';
+  oct.lineWidth = 2;
+  oct.beginPath(); oct.arc(s.x, s.y, 8, 0, Math.PI*2); oct.stroke();
+  oct.beginPath(); oct.arc(s.x, s.y, 2, 0, Math.PI*2); oct.fill();
+  oct.font = '12px sans-serif';
+  oct.fillText(label, s.x + 12, s.y - 8);
+}
+const KIND_COLORS = {
+  road: '#ffaa00', crossroad: '#ffff66', city: '#ff5577',
+  village: '#ffaaee', hub: '#55ddff', danger: '#ff3333',
+  vendor: '#88ff88', mailbox: '#aa88ff', innkeeper: '#ffdd88',
+  other: '#aaaaaa'
+};
+function drawPoint(sx, sy, p) {
+  oct.strokeStyle = KIND_COLORS[p.kind] || '#fff';
+  oct.fillStyle = KIND_COLORS[p.kind] || '#fff';
+  oct.lineWidth = 1;
+  // Radius circle (scaled to map)
+  if (state.calA && state.calB) {
+    const yardsPerPixel = computeYardsPerPixel();
+    const rPx = p.radius / yardsPerPixel * state.scale;
+    oct.beginPath(); oct.arc(sx, sy, rPx, 0, Math.PI*2); oct.stroke();
+  }
+  // Center dot
+  oct.beginPath(); oct.arc(sx, sy, 3, 0, Math.PI*2); oct.fill();
+}
+function computeYardsPerPixel() {
+  if (!state.calA || !state.calB) return 1;
+  const dpx = state.calB.px - state.calA.px;
+  const dpy = state.calB.py - state.calA.py;
+  const dwx = state.calB.wx - state.calA.wx;
+  const dwy = state.calB.wy - state.calA.wy;
+  const px_dist = Math.hypot(dpx, dpy);
+  const w_dist  = Math.hypot(dwx, dwy);
+  return px_dist > 0 ? w_dist / px_dist : 1;
+}
+
+// ============================================================================
+// Calibration
+// ============================================================================
+function applyCalibration() {
+  const a = state.calA, b = state.calB;
+  if (!a || !b) { alert('Click two anchor points first.'); return; }
+  const wxA = parseFloat(document.getElementById('cal-a-wx').value);
+  const wyA = parseFloat(document.getElementById('cal-a-wy').value);
+  const wxB = parseFloat(document.getElementById('cal-b-wx').value);
+  const wyB = parseFloat(document.getElementById('cal-b-wy').value);
+  if ([wxA, wyA, wxB, wyB].some(v => isNaN(v))) {
+    alert('Enter all 4 world coords.');
+    return;
+  }
+  a.wx = wxA; a.wy = wyA;
+  b.wx = wxB; b.wy = wyB;
+  // Solve for affine transform: world = origin + s * pixel
+  // Two unknowns per axis: scale & origin. With 2 anchors we get exactly 2
+  // equations per axis. Solve directly.
+  //   wxA = ox + sx * pxA  ;  wxB = ox + sx * pxB
+  //   wyA = oy + sy * pyA  ;  wyB = oy + sy * pyB
+  // We assume axis-aligned (no rotation, no skew) — true for the
+  // standard WoW world map projection. The image's X axis maps to
+  // world Y (or -Y) and image's Y axis maps to world X (or -X).
+  // Detect orientation from the SIGNS of dwx/dpx, dwy/dpy etc.
+  // Easiest: just compute two independent scale+origin for the
+  // pair (px → wx) and (py → wy), then re-fit a robust 2D linear map.
+  // For a true map with 90° rotation, dwx changes with dpy (not dpx).
+  // We probe BOTH possibilities and pick the one with smaller residual.
+  //
+  // Option 1: wx = f(px),  wy = f(py)   (no rotation)
+  // Option 2: wx = f(py),  wy = f(px)   (90° rotation)
+  const fit = (pa, pb, wa, wb) => {
+    const dp = pb - pa, dw = wb - wa;
+    if (Math.abs(dp) < 1e-9) return null;
+    const s = dw / dp;
+    const o = wa - s * pa;
+    return { s, o };
+  };
+  // Compute both candidate fits.
+  const fx_noRot = fit(a.px, b.px, a.wx, b.wx);
+  const fy_noRot = fit(a.py, b.py, a.wy, b.wy);
+  const fx_rot   = fit(a.py, b.py, a.wx, b.wx);
+  const fy_rot   = fit(a.px, b.px, a.wy, b.wy);
+  // Residual: |aspect ratio of yards-per-pixel between the two axes - 1|
+  // Smaller residual = more isotropic = correct orientation.
+  function residual(fx, fy) {
+    if (!fx || !fy) return Infinity;
+    return Math.abs(Math.log(Math.abs(fx.s) / Math.abs(fy.s)));
+  }
+  const r1 = residual(fx_noRot, fy_noRot);
+  const r2 = residual(fx_rot,   fy_rot);
+  let fx, fy, rotated;
+  if (r1 <= r2) {
+    fx = fx_noRot; fy = fy_noRot; rotated = false;
+  } else {
+    fx = fx_rot;   fy = fy_rot;   rotated = true;
+  }
+  if (!fx || !fy) { alert('Calibration failed (degenerate anchors). Move anchors apart.'); return; }
+  state.pxToWorld = (px, py) => rotated
+    ? { wx: fx.o + fx.s * py, wy: fy.o + fy.s * px }
+    : { wx: fx.o + fx.s * px, wy: fy.o + fy.s * py };
+  state.worldToPx = (wx, wy) => rotated
+    ? { px: (wy - fy.o) / fy.s, py: (wx - fx.o) / fx.s }
+    : { px: (wx - fx.o) / fx.s, py: (wy - fy.o) / fy.s };
+  document.getElementById('cal-info').textContent =
+    `Calibrated (${rotated ? '90° rot' : 'axis-aligned'}). ` +
+    `Yards/px: ${computeYardsPerPixel().toFixed(2)}`;
+  document.getElementById('cal-step-1').classList.add('done');
+  document.getElementById('cal-step-2').classList.add('done');
+  redraw();
+}
+document.getElementById('apply-cal').addEventListener('click', applyCalibration);
+
+// ============================================================================
+// Mouse / interaction
+// ============================================================================
+let calClickCount = 0;
+canvas.addEventListener('mousedown', e => {
+  e.preventDefault();
+  const r = canvas.getBoundingClientRect();
+  const sx = e.clientX - r.left, sy = e.clientY - r.top;
+  if (e.button === 1) {
+    state.panning = true;
+    state.panStartX = e.clientX - state.offX;
+    state.panStartY = e.clientY - state.offY;
+    return;
+  }
+  if (e.button === 2) {
+    // Right-click: try to delete the closest placed point within 20px
+    if (state.worldToPx) {
+      let bestIdx = -1, bestD = 400;  // 20² px
+      state.points.forEach((p, i) => {
+        const pxw = state.worldToPx(p.x, p.y);
+        if (!pxw) return;
+        const ss = imgToScreen(pxw.px, pxw.py);
+        const d = (ss.x - sx)**2 + (ss.y - sy)**2;
+        if (d < bestD) { bestD = d; bestIdx = i; }
+      });
+      if (bestIdx >= 0) {
+        commit({ type: 'delete', point: state.points[bestIdx] });
+        state.points.splice(bestIdx, 1);
+        renderPointList();
+        redraw();
+      }
+    }
+    return;
+  }
+  // Left button
+  state.mouseDown = { sx, sy, time: Date.now() };
+  state.dragStarted = false;
+});
+canvas.addEventListener('mousemove', e => {
+  const r = canvas.getBoundingClientRect();
+  const sx = e.clientX - r.left, sy = e.clientY - r.top;
+  if (state.panning) {
+    state.offX = e.clientX - state.panStartX;
+    state.offY = e.clientY - state.panStartY;
+    redraw();
+    return;
+  }
+  if (state.mouseDown && !state.dragStarted) {
+    const dx = sx - state.mouseDown.sx, dy = sy - state.mouseDown.sy;
+    if (dx*dx + dy*dy > 25) {
+      // Threshold passed — start polyline
+      state.dragStarted = true;
+      const img0 = screenToImg(state.mouseDown.sx, state.mouseDown.sy);
+      state.polyline = [img0];
+    }
+  }
+  if (state.dragStarted) {
+    const img = screenToImg(sx, sy);
+    // Sample every ~3px to avoid pile-up
+    const last = state.polyline[state.polyline.length - 1];
+    if (Math.hypot(img.px - last.px, img.py - last.py) > 3) {
+      state.polyline.push(img);
+      drawOverlay();
+    }
+  }
+  // HUD update
+  if (state.pxToWorld) {
+    const img = screenToImg(sx, sy);
+    const w = state.pxToWorld(img.px, img.py);
+    hud.textContent = `screen=(${sx.toFixed(0)},${sy.toFixed(0)})  img=(${img.px.toFixed(0)},${img.py.toFixed(0)})  world=(${w.wx.toFixed(1)}, ${w.wy.toFixed(1)})  kind=${state.kind}`;
+  } else {
+    const img = state.img ? screenToImg(sx, sy) : null;
+    hud.textContent = img
+      ? `img=(${img.px.toFixed(0)},${img.py.toFixed(0)}) — calibrate to see world`
+      : 'no image';
+  }
+});
+canvas.addEventListener('mouseup', e => {
+  if (e.button === 1) { state.panning = false; return; }
+  if (e.button !== 0) return;
+  const r = canvas.getBoundingClientRect();
+  const sx = e.clientX - r.left, sy = e.clientY - r.top;
+  if (state.dragStarted) {
+    // Finish polyline
+    const img = screenToImg(sx, sy);
+    state.polyline.push(img);
+    commitPolyline();
+    state.polyline = null;
+    state.dragStarted = false;
+    state.mouseDown = null;
+    redraw();
+    return;
+  }
+  // Pure click (no drag)
+  state.mouseDown = null;
+  const img = screenToImg(sx, sy);
+  // If calibration is already established (e.g. from sidecar) skip the
+  // anchor-collection flow entirely and go straight to placing points.
+  if (!state.pxToWorld) {
+    if (!state.calA) {
+      state.calA = { px: img.px, py: img.py, wx: 0, wy: 0 };
+      document.getElementById('cal-a-status').textContent = `pixel ${img.px.toFixed(0)},${img.py.toFixed(0)} — enter coords ↓`;
+      redraw();
+      return;
+    }
+    if (!state.calB) {
+      state.calB = { px: img.px, py: img.py, wx: 0, wy: 0 };
+      document.getElementById('cal-b-status').textContent = `pixel ${img.px.toFixed(0)},${img.py.toFixed(0)} — enter coords ↓`;
+      redraw();
+      return;
+    }
+    alert('Click "Apply calibration" after entering world coords.');
+    return;
+  }
+  const w = state.pxToWorld(img.px, img.py);
+  const pt = {
+    id: state.nextLocalId++,
+    map_id: state.mapId,
+    kind: state.kind,
+    x: w.wx, y: w.wy, z: state.zheight,
+    radius: state.radius,
+    label: state.label
+  };
+  commit({ type: 'add', point: pt });
+  state.points.push(pt);
+  renderPointList();
+  redraw();
+});
+canvas.addEventListener('contextmenu', e => e.preventDefault());
+canvas.addEventListener('wheel', e => {
+  e.preventDefault();
+  const r = canvas.getBoundingClientRect();
+  const sx = e.clientX - r.left, sy = e.clientY - r.top;
+  const img = screenToImg(sx, sy);
+  const factor = e.deltaY < 0 ? 1.15 : 1 / 1.15;
+  state.scale *= factor;
+  // Keep the image point under the cursor fixed
+  state.offX = sx - img.px * state.scale;
+  state.offY = sy - img.py * state.scale;
+  redraw();
+});
+window.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+  if ((e.key === 'z' || e.key === 'Z') && !e.shiftKey) { undo(); }
+  else if ((e.key === 'y' || e.key === 'Y') || (e.shiftKey && (e.key === 'z' || e.key === 'Z'))) { redo(); }
+});
+
+function commitPolyline() {
+  // Interpolate polyline (in image pixel space) to evenly-spaced WORLD points.
+  // Walk the polyline as a continuous arc; emit a world point every Step yards.
+  if (!state.polyline || state.polyline.length < 2 || !state.pxToWorld) return;
+  const yardsPerPx = computeYardsPerPixel();
+  const stepPx = state.stepYards / yardsPerPx;
+  let nextEmitDistPx = 0;
+  let pxTotal = 0;
+  const points = [];
+  // Always emit the first point.
+  const w0 = state.pxToWorld(state.polyline[0].px, state.polyline[0].py);
+  points.push({ x: w0.wx, y: w0.wy });
+  for (let i = 1; i < state.polyline.length; i++) {
+    const a = state.polyline[i-1], b = state.polyline[i];
+    const segDx = b.px - a.px, segDy = b.py - a.py;
+    const segLen = Math.hypot(segDx, segDy);
+    if (segLen < 1e-6) continue;
+    let walked = 0;
+    while (pxTotal + (segLen - walked) >= nextEmitDistPx + stepPx) {
+      const need = (nextEmitDistPx + stepPx) - pxTotal;
+      const t = (walked + need) / segLen;
+      const px = a.px + segDx * t;
+      const py = a.py + segDy * t;
+      const w = state.pxToWorld(px, py);
+      points.push({ x: w.wx, y: w.wy });
+      nextEmitDistPx += stepPx;
+      walked = walked + need;
+    }
+    pxTotal += (segLen - walked);
+    walked = 0;
+    pxTotal += walked;   // no-op (kept for clarity)
+  }
+  // Add the polyline tail too.
+  const last = state.polyline[state.polyline.length-1];
+  const wL = state.pxToWorld(last.px, last.py);
+  // Skip the last add if it would duplicate the most-recent emit.
+  const tail = points[points.length-1];
+  if (Math.hypot(tail.x - wL.wx, tail.y - wL.wy) > state.stepYards * 0.5) {
+    points.push({ x: wL.wx, y: wL.wy });
+  }
+  const added = [];
+  for (const w of points) {
+    const pt = {
+      id: state.nextLocalId++,
+      map_id: state.mapId,
+      kind: state.kind,
+      x: w.x, y: w.y, z: state.zheight,
+      radius: state.radius,
+      label: state.label
+    };
+    state.points.push(pt);
+    added.push(pt);
+  }
+  commit({ type: 'addMany', points: added });
+  renderPointList();
+}
+
+// ============================================================================
+// Undo / redo
+// ============================================================================
+function commit(action) {
+  state.history.push(action);
+  state.redoStack = [];
+}
+function undo() {
+  const act = state.history.pop();
+  if (!act) return;
+  if (act.type === 'add') {
+    const idx = state.points.findIndex(p => p.id === act.point.id);
+    if (idx >= 0) state.points.splice(idx, 1);
+  } else if (act.type === 'addMany') {
+    const ids = new Set(act.points.map(p => p.id));
+    state.points = state.points.filter(p => !ids.has(p.id));
+  } else if (act.type === 'delete') {
+    state.points.push(act.point);
+  }
+  state.redoStack.push(act);
+  renderPointList();
+  redraw();
+}
+function redo() {
+  const act = state.redoStack.pop();
+  if (!act) return;
+  if (act.type === 'add') state.points.push(act.point);
+  else if (act.type === 'addMany') state.points = state.points.concat(act.points);
+  else if (act.type === 'delete') {
+    const idx = state.points.findIndex(p => p.id === act.point.id);
+    if (idx >= 0) state.points.splice(idx, 1);
+  }
+  state.history.push(act);
+  renderPointList();
+  redraw();
+}
+
+// ============================================================================
+// UI binding
+// ============================================================================
+document.querySelectorAll('.kind-pill').forEach(p => {
+  p.addEventListener('click', () => {
+    document.querySelectorAll('.kind-pill').forEach(x => x.classList.remove('active'));
+    p.classList.add('active');
+    state.kind = p.dataset.k;
+  });
+});
+document.getElementById('map-id').addEventListener('input', e => state.mapId = parseInt(e.target.value, 10) || 0);
+document.getElementById('radius').addEventListener('input', e => state.radius = parseFloat(e.target.value) || 12);
+document.getElementById('step').addEventListener('input', e => state.stepYards = parseFloat(e.target.value) || 15);
+document.getElementById('zheight').addEventListener('input', e => state.zheight = parseFloat(e.target.value) || 0);
+document.getElementById('label').addEventListener('input', e => state.label = e.target.value);
+
+document.getElementById('clear-all').addEventListener('click', () => {
+  if (!confirm('Delete ALL points?')) return;
+  state.points = [];
+  state.history = [];
+  state.redoStack = [];
+  renderPointList();
+  redraw();
+});
+
+function renderPointList() {
+  const c = document.getElementById('point-list');
+  document.getElementById('point-count').textContent = state.points.length;
+  c.innerHTML = '';
+  for (let i = state.points.length - 1; i >= 0 && i >= state.points.length - 50; i--) {
+    const p = state.points[i];
+    const row = document.createElement('div');
+    row.className = 'point-row';
+    row.innerHTML = `<span>#${i+1} ${p.kind} (${p.x.toFixed(0)},${p.y.toFixed(0)}) r=${p.radius}</span>
+                     <span class="x" data-i="${i}">×</span>`;
+    row.querySelector('.x').addEventListener('click', ev => {
+      ev.stopPropagation();
+      commit({ type: 'delete', point: state.points[i] });
+      state.points.splice(i, 1);
+      renderPointList(); redraw();
+    });
+    c.appendChild(row);
+  }
+}
+
+// ============================================================================
+// Export / Import
+// ============================================================================
+const KIND_TO_INT = {
+  unknown: 0, road: 1, crossroad: 2, city: 3, village: 4, hub: 5,
+  danger: 6, vendor: 7, mailbox: 8, innkeeper: 9, other: 10
+};
+const INT_TO_KIND = Object.fromEntries(Object.entries(KIND_TO_INT).map(([k,v]) => [v,k]));
+
+function buildCSV() {
+  const lines = [
+    '# playerbot_v2_world_metadata export from road_editor.html',
+    '# columns: id,map_id,zone_id,kind,kind_name,x,y,z,radius,label,notes'
+  ];
+  for (const p of state.points) {
+    const kindInt = KIND_TO_INT[p.kind] ?? 0;
+    const kindName = p.kind;
+    const id = 0;  // local-only; server assigns real id at insert
+    const zoneId = 0;
+    const label = (p.label || '').replace(/[\r\n,]/g, ' ');
+    const notes = '';
+    lines.push([id, p.map_id, zoneId, kindInt, kindName,
+                p.x.toFixed(3), p.y.toFixed(3), p.z.toFixed(3),
+                p.radius.toFixed(2), label, notes].join(','));
+  }
+  return lines.join('\n') + '\n';
+}
+
+document.getElementById('export').addEventListener('click', () => {
+  const csv = buildCSV();
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'world_metadata.csv';
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+});
+document.getElementById('copy').addEventListener('click', async () => {
+  const csv = buildCSV();
+  try {
+    await navigator.clipboard.writeText(csv);
+    document.getElementById('copy').textContent = 'Copied!';
+    setTimeout(() => document.getElementById('copy').textContent = 'Copy to clipboard', 1200);
+  } catch (e) {
+    alert('Clipboard write failed — use Export CSV instead.');
+  }
+});
+document.getElementById('import-btn').addEventListener('click', () => {
+  const text = document.getElementById('import-text').value;
+  let imported = 0;
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line || line.startsWith('#')) continue;
+    const f = line.split(',');
+    if (f.length < 9) continue;
+    const kindInt = parseInt(f[3], 10) || 0;
+    const pt = {
+      id: state.nextLocalId++,
+      map_id: parseInt(f[1], 10) || 0,
+      kind: INT_TO_KIND[kindInt] || 'other',
+      x: parseFloat(f[5]),
+      y: parseFloat(f[6]),
+      z: parseFloat(f[7]),
+      radius: parseFloat(f[8]) || 10,
+      label: (f[9] || '').trim()
+    };
+    if (isNaN(pt.x) || isNaN(pt.y) || isNaN(pt.z)) continue;
+    state.points.push(pt);
+    imported++;
+  }
+  if (imported > 0) commit({ type: 'addMany', points: state.points.slice(-imported) });
+  renderPointList();
+  redraw();
+  alert(`Imported ${imported} point(s).`);
+});
+
+function updateHud() {
+  hud.textContent = state.img
+    ? `loaded ${state.img.width}×${state.img.height} — drop anchors`
+    : 'no image';
+}
+resize();
+</script>
+</body>
+</html>

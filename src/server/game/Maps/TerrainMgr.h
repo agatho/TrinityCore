@@ -1,0 +1,204 @@
+/*
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+ *
+ * This program is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License as published by the
+ * Free Software Foundation; either version 2 of the License, or (at your
+ * option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
+ * more details.
+ *
+ * You should have received a copy of the GNU General Public License along
+ * with this program. If not, see <http://www.gnu.org/licenses/>.
+ */
+
+#ifndef TERRAIN_MGR_H
+#define TERRAIN_MGR_H
+
+#include "Define.h"
+#include "GridDefines.h"
+#include "MapDefines.h"
+#include "Position.h"
+#include "Timer.h"
+#include <array>
+#include <atomic>
+#include <bitset>
+#include <cstddef>
+#include <memory>
+#include <mutex>
+#include <unordered_map>
+#include <vector>
+
+class DynamicMapTree;
+class GridMap;
+class PhaseShift;
+
+class TC_GAME_API TerrainInfo
+{
+public:
+    explicit TerrainInfo(uint32 mapId);
+    TerrainInfo(TerrainInfo const&) = delete;
+    TerrainInfo(TerrainInfo&&) = delete;
+    TerrainInfo& operator=(TerrainInfo const&) = delete;
+    TerrainInfo& operator=(TerrainInfo&&) = delete;
+    ~TerrainInfo();
+
+    uint32 GetId() const { return _mapId; }
+    char const* GetMapName() const;
+
+    void DiscoverGridMapFiles();
+
+    static bool ExistMap(uint32 mapid, int32 gx, int32 gy, bool log = true);
+    static bool ExistVMap(uint32 mapid, int32 gx, int32 gy);
+
+    bool HasChildTerrainGridFile(uint32 mapId, int32 gx, int32 gy) const;
+    void AddChildTerrain(std::shared_ptr<TerrainInfo> childTerrain);
+
+    void LoadMapAndVMap(int32 gx, int32 gy);
+    void LoadMMapInstance(uint32 mapId, uint32 instanceId);
+    void LoadMMap(uint32 instanceId, int32 gx, int32 gy);
+
+private:
+    void LoadMapAndVMapImpl(int32 gx, int32 gy);
+    void LoadMMapInstanceImpl(uint32 mapId, uint32 instanceId);
+    void LoadMap(int32 gx, int32 gy);
+    void LoadVMap(int32 gx, int32 gy);
+    void LoadMMapImpl(uint32 instanceId, int32 gx, int32 gy);
+
+public:
+    void UnloadMap(int32 gx, int32 gy);
+    void UnloadMMapInstance(uint32 mapId, uint32 instanceId);
+
+private:
+    void UnloadMapImpl(int32 gx, int32 gy);
+    void UnloadMMapInstanceImpl(uint32 mapId, uint32 instanceId);
+
+    GridMap* GetGrid(uint32 mapId, float x, float y, bool loadIfMissing = true);
+
+public:
+    void CleanUpGrids(uint32 diff);
+
+    void GetFullTerrainStatusForPosition(PhaseShift const& phaseShift, uint32 mapId, float x, float y, float z, PositionFullTerrainStatus& data, Optional<map_liquidHeaderTypeFlags> reqLiquidType = {}, float collisionHeight = 2.03128f, DynamicMapTree const* dynamicMapTree = nullptr); // DEFAULT_COLLISION_HEIGHT in Object.h
+    ZLiquidStatus GetLiquidStatus(PhaseShift const& phaseShift, uint32 mapId, float x, float y, float z, Optional<map_liquidHeaderTypeFlags> ReqLiquidType = {}, LiquidData* data = nullptr, float collisionHeight = 2.03128f); // DEFAULT_COLLISION_HEIGHT in Object.h
+
+    bool GetAreaInfo(PhaseShift const& phaseShift, uint32 mapId, float x, float y, float z, uint32& mogpflags, int32& adtId, int32& rootId, int32& groupId, DynamicMapTree const* dynamicMapTree = nullptr);
+    uint32 GetAreaId(PhaseShift const& phaseShift, uint32 mapId, float x, float y, float z, DynamicMapTree const* dynamicMapTree = nullptr);
+    uint32 GetAreaId(PhaseShift const& phaseShift, uint32 mapId, Position const& pos, DynamicMapTree const* dynamicMapTree = nullptr) { return GetAreaId(phaseShift, mapId, pos.GetPositionX(), pos.GetPositionY(), pos.GetPositionZ(), dynamicMapTree); }
+    uint32 GetZoneId(PhaseShift const& phaseShift, uint32 mapId, float x, float y, float z, DynamicMapTree const* dynamicMapTree = nullptr);
+    uint32 GetZoneId(PhaseShift const& phaseShift, uint32 mapId, Position const& pos, DynamicMapTree const* dynamicMapTree = nullptr) { return GetZoneId(phaseShift, mapId, pos.GetPositionX(), pos.GetPositionY(), pos.GetPositionZ(), dynamicMapTree); }
+    void GetZoneAndAreaId(PhaseShift const& phaseShift, uint32 mapId, uint32& zoneid, uint32& areaid, float x, float y, float z, DynamicMapTree const* dynamicMapTree = nullptr);
+    void GetZoneAndAreaId(PhaseShift const& phaseShift, uint32 mapId, uint32& zoneid, uint32& areaid, Position const& pos, DynamicMapTree const* dynamicMapTree = nullptr) { GetZoneAndAreaId(phaseShift, mapId, zoneid, areaid, pos.GetPositionX(), pos.GetPositionY(), pos.GetPositionZ(), dynamicMapTree); }
+
+    float GetMinHeight(PhaseShift const& phaseShift, uint32 mapId, float x, float y);
+    float GetGridHeight(PhaseShift const& phaseShift, uint32 mapId, float x, float y);
+    float GetStaticHeight(PhaseShift const& phaseShift, uint32 mapId, float x, float y, float z, bool checkVMap = true, float maxSearchDist = DEFAULT_HEIGHT_SEARCH);
+    float GetStaticHeight(PhaseShift const& phaseShift, uint32 mapId, Position const& pos, bool checkVMap = true, float maxSearchDist = DEFAULT_HEIGHT_SEARCH) { return GetStaticHeight(phaseShift, mapId, pos.GetPositionX(), pos.GetPositionY(), pos.GetPositionZ(), checkVMap, maxSearchDist); }
+
+    float GetWaterLevel(PhaseShift const& phaseShift, uint32 mapId, float x, float y);
+    bool IsInWater(PhaseShift const& phaseShift, uint32 mapId, float x, float y, float z, LiquidData* data = nullptr);
+    bool IsUnderWater(PhaseShift const& phaseShift, uint32 mapId, float x, float y, float z);
+
+    float GetWaterOrGroundLevel(PhaseShift const& phaseShift, uint32 mapId, float x, float y, float z, float* ground = nullptr, bool swim = false, float collisionHeight = 2.03128f, DynamicMapTree const* dynamicMapTree = nullptr); // DEFAULT_COLLISION_HEIGHT in Object.h
+
+private:
+    static constexpr int32 GetBitsetIndex(int32 gx, int32 gy) { return gx * MAX_NUMBER_OF_GRIDS + gy; }
+
+    uint32 _mapId;
+
+    TerrainInfo* _parentTerrain;
+    std::vector<std::shared_ptr<TerrainInfo>> _childTerrain;
+
+    std::mutex _loadMutex;
+    std::unique_ptr<GridMap> _gridMap[MAX_NUMBER_OF_GRIDS][MAX_NUMBER_OF_GRIDS];
+    std::atomic<uint16> _referenceCountFromMap[MAX_NUMBER_OF_GRIDS][MAX_NUMBER_OF_GRIDS];
+    std::array<uint64, MAX_NUMBER_OF_GRIDS> _loadedGrids;
+    std::bitset<MAX_NUMBER_OF_GRIDS * MAX_NUMBER_OF_GRIDS> _gridFileExists; // cache what grids are available for this map (not including parent/child maps)
+    std::bitset<MAX_NUMBER_OF_GRIDS * MAX_NUMBER_OF_GRIDS> _vmapLoadFailed;  // PLAYERBOT FIX: cache failed VMAP loads to prevent repeated attempts
+    std::bitset<MAX_NUMBER_OF_GRIDS * MAX_NUMBER_OF_GRIDS> _mmapLoadFailed;  // PLAYERBOT FIX: cache failed MMAP loads to prevent repeated attempts
+
+    static constexpr Milliseconds CleanupInterval = 1min;
+
+    // global garbage collection timer
+    TimeTracker _cleanupTimer;
+};
+
+class TC_GAME_API TerrainMgr
+{
+    TerrainMgr();
+    ~TerrainMgr();
+public:
+    TerrainMgr(TerrainMgr const&) = delete;
+    TerrainMgr(TerrainMgr&&) = delete;
+    TerrainMgr& operator=(TerrainMgr const&) = delete;
+    TerrainMgr& operator=(TerrainMgr&&) = delete;
+
+    static TerrainMgr& Instance();
+
+    void InitializeParentMapData(std::unordered_map<uint32, std::vector<uint32>> const& mapData);
+
+    std::shared_ptr<TerrainInfo> LoadTerrain(uint32 mapId);
+    void UnloadAll();
+
+    void Update(uint32 diff);
+
+    uint32 GetAreaId(PhaseShift const& phaseShift, uint32 mapid, float x, float y, float z);
+    uint32 GetAreaId(PhaseShift const& phaseShift, uint32 mapid, Position const& pos) { return GetAreaId(phaseShift, mapid, pos.GetPositionX(), pos.GetPositionY(), pos.GetPositionZ()); }
+    uint32 GetAreaId(PhaseShift const& phaseShift, WorldLocation const& loc) { return GetAreaId(phaseShift, loc.GetMapId(), loc); }
+
+    uint32 GetZoneId(PhaseShift const& phaseShift, uint32 mapid, float x, float y, float z);
+    uint32 GetZoneId(PhaseShift const& phaseShift, uint32 mapid, Position const& pos) { return GetZoneId(phaseShift, mapid, pos.GetPositionX(), pos.GetPositionY(), pos.GetPositionZ()); }
+    uint32 GetZoneId(PhaseShift const& phaseShift, WorldLocation const& loc) { return GetZoneId(phaseShift, loc.GetMapId(), loc); }
+
+    void GetZoneAndAreaId(PhaseShift const& phaseShift, uint32& zoneid, uint32& areaid, uint32 mapid, float x, float y, float z);
+    void GetZoneAndAreaId(PhaseShift const& phaseShift, uint32& zoneid, uint32& areaid, uint32 mapid, Position const& pos) { GetZoneAndAreaId(phaseShift, zoneid, areaid, mapid, pos.GetPositionX(), pos.GetPositionY(), pos.GetPositionZ()); }
+    void GetZoneAndAreaId(PhaseShift const& phaseShift, uint32& zoneid, uint32& areaid, WorldLocation const& loc) { GetZoneAndAreaId(phaseShift, zoneid, areaid, loc.GetMapId(), loc); }
+
+    static bool ExistMapAndVMap(uint32 mapid, float x, float y);
+
+private:
+    std::shared_ptr<TerrainInfo> LoadTerrainImpl(uint32 mapId);
+
+    std::unordered_map<uint32, std::weak_ptr<TerrainInfo>> _terrainMaps;
+
+    // parent map links
+    std::unordered_map<uint32, std::vector<uint32>> _parentMapData;
+};
+
+#define sTerrainMgr TerrainMgr::Instance()
+
+namespace TerrainMgrDetail
+{
+    // Clears the "applied handcrafted roads" cache so the next first-
+    // tile-load on each map re-applies the (potentially refreshed)
+    // HandcraftedRoadStorage segments. Called by the
+    // `.reload handcrafted_road` command after LoadFromDB().
+    TC_GAME_API void ClearAppliedHandcraftedRoads();
+
+    // Force-applies handcrafted road segments to the currently-loaded
+    // navmesh for `mapId` (shared-mesh / instance 0 path). Used by
+    // `.reload handcrafted_road apply <mapId>`. Returns the number of
+    // polys whose area was newly flipped to NAV_AREA_ROAD. Does NOT
+    // untag previously tagged polys — only a full mmap reload
+    // (server restart or unload/reload of that map) can do that.
+    TC_GAME_API std::size_t ApplyHandcraftedRoadsToLiveMap(uint32 mapId);
+
+    // Diagnostics accessors for the `.handcrafted_road status` command.
+    // Both default to instanceId=0 (the shared-mesh path used by all
+    // non-instanced maps).
+    TC_GAME_API bool IsHandcraftedRoadsApplied(uint32 mapId, uint32 instanceId = 0);
+    TC_GAME_API std::size_t GetHandcraftedRoadTaggedCount(uint32 mapId, uint32 instanceId = 0);
+
+    // Iterates every currently-loaded Map and force-applies handcrafted
+    // road segments to its navmesh. Called immediately after
+    // HandcraftedRoadStorage::LoadFromDB so the case where mmaps were
+    // preloaded BEFORE the storage finished loading is caught without
+    // waiting for a tile-load event. Returns the number of maps that
+    // received a newly-tagged corridor (apply pass that produced
+    // tagged>0 OR was first-time-applied).
+    TC_GAME_API std::size_t ApplyHandcraftedRoadsToAllLoadedMaps();
+}
+
+#endif // TERRAIN_MGR_H

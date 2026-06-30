@@ -1,0 +1,52 @@
+--
+DROP PROCEDURE IF EXISTS `add_trait_tree_columns`;
+DELIMITER //
+CREATE PROCEDURE `add_trait_tree_columns`()
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'trait_tree' AND COLUMN_NAME = 'TitleText') THEN
+        ALTER TABLE `trait_tree` ADD COLUMN `TitleText` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL FIRST;
+    END IF;
+
+    IF EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'trait_tree' AND COLUMN_NAME = 'Unused1000_1') THEN
+        ALTER TABLE `trait_tree` CHANGE `Unused1000_1` `BaseNodeGroup` int NOT NULL DEFAULT 0 AFTER `TraitSystemID`;
+    END IF;
+
+    IF EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'trait_tree' AND COLUMN_NAME = 'Unused1000_2') THEN
+        ALTER TABLE `trait_tree` CHANGE `Unused1000_2` `MinZoom` float NOT NULL DEFAULT 0 AFTER `Flags`;
+    END IF;
+
+    IF EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'trait_tree' AND COLUMN_NAME = 'Unused1000_3') THEN
+        ALTER TABLE `trait_tree` CHANGE `Unused1000_3` `MaxZoom` float NOT NULL DEFAULT 0 AFTER `MinZoom`;
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'trait_tree' AND COLUMN_NAME = 'UiTextureKitID') THEN
+        ALTER TABLE `trait_tree` ADD COLUMN `UiTextureKitID` int NOT NULL DEFAULT 0 AFTER `MaxZoom`;
+    END IF;
+END //
+DELIMITER ;
+
+CALL `add_trait_tree_columns`();
+DROP PROCEDURE IF EXISTS `add_trait_tree_columns`;
+
+--
+-- Table structure for table `trait_tree_locale`
+--
+DROP TABLE IF EXISTS `trait_tree_locale`;
+CREATE TABLE `trait_tree_locale` (
+  `ID` int unsigned NOT NULL DEFAULT '0',
+  `locale` varchar(4) NOT NULL,
+  `TitleText_lang` text,
+  `VerifiedBuild` int NOT NULL DEFAULT '0',
+  PRIMARY KEY (`ID`,`locale`,`VerifiedBuild`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+PARTITION BY LIST  COLUMNS(locale)
+(PARTITION deDE VALUES IN ('deDE') ENGINE = InnoDB,
+ PARTITION esES VALUES IN ('esES') ENGINE = InnoDB,
+ PARTITION esMX VALUES IN ('esMX') ENGINE = InnoDB,
+ PARTITION frFR VALUES IN ('frFR') ENGINE = InnoDB,
+ PARTITION itIT VALUES IN ('itIT') ENGINE = InnoDB,
+ PARTITION koKR VALUES IN ('koKR') ENGINE = InnoDB,
+ PARTITION ptBR VALUES IN ('ptBR') ENGINE = InnoDB,
+ PARTITION ruRU VALUES IN ('ruRU') ENGINE = InnoDB,
+ PARTITION zhCN VALUES IN ('zhCN') ENGINE = InnoDB,
+ PARTITION zhTW VALUES IN ('zhTW') ENGINE = InnoDB);

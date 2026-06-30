@@ -1,0 +1,410 @@
+###############################################################################
+# Playerbot V2 — configuration
+#
+# Full schema documented in v2/CONFIG.md. Each key tagged HR-yes (hot-reload via
+# `.playerbot reload`) or HR-no (requires restart).
+#
+# Bootstrap: only the keys load-bearing for the bootstrap commit are listed
+# here. Additional keys land as their subsystems are implemented.
+###############################################################################
+
+# TrinityCore's ConfigMgr::LoadAdditionalFile iterates the first INI section,
+# so this file MUST start with a section header — without it, boost's parser
+# puts keys at the tree root and the merge loop iterates an empty children
+# list, silently dropping every value. The section name itself is not used.
+[playerbot]
+
+#-----------------------------------------------------------------------------
+# Database
+#-----------------------------------------------------------------------------
+
+# Name of the shared playerbot database schema. The module stores all of its
+# bot metadata (names pool, personalities, population targets, talent builds,
+# guild metadata, etc.) here, separate from TrinityCore's character database.
+# Create this schema and apply the SQL under sql/playerbot_v2/ before first
+# boot (see the module README / INSTALL.md). Must match the schema you created.
+Playerbot.SharedDatabase = "playerbot"
+
+#-----------------------------------------------------------------------------
+# Core / threading
+#-----------------------------------------------------------------------------
+
+# Number of AI worker threads. 0 = auto (min(8, hardware_concurrency)).
+# HR-no
+Playerbot.AiWorkerThreads = 0
+
+# Run a separate fleet thread (population, LFG mediator, BG filler, neighborhood
+# populator). When false, fleet logic runs on the world thread.
+# HR-no
+Playerbot.FleetThreadEnabled = 1
+
+# World tick budget for V2, in milliseconds. Bots skip ticks if exceeded.
+# HR-yes
+Playerbot.TickBudgetMs = 10
+
+# #5 Phase 4: parallelize BotSnapshotBuilder::Build across a fixed worker pool,
+# partitioned by Map* (each map's bots build on one worker; tier/group/publish
+# stay world-thread post-barrier). Cuts the snapshot-build wall-clock at scale
+# (skew-limited: a fleet clustered on one continent/BG sees less benefit). This
+# is the operator KILL-SWITCH — set to 0 to fall back to the exact serial path
+# instantly if anything looks wrong at scale. Read every tick (live-flippable
+# via config reload). HR-yes.
+# DEFAULT 1 (ENABLED). The earlier crashes were ABI skew (stale playerbot .obj
+# vs an uncommitted BotAI.h layout change), fixed by a clean recompile; the
+# genuine concurrent-Registry().ai() risk was fixed by pre-resolving the BotAI*.
+# On top of the Cruise tier (~135ms->~70ms), this parallelizes build across Map*.
+PlayerbotV2.ParallelSnapshotBuild = 1
+# Worker count for the snapshot-build pool. 0 = auto (cores-2, clamped [1,24]);
+# the world thread also participates, so effective parallelism is this + 1.
+# Pool is sized once at first use (not hot-reloadable). HR-no.
+PlayerbotV2.SnapshotBuildThreads = 0
+
+#-----------------------------------------------------------------------------
+# Population (defaults; override per realm)
+#-----------------------------------------------------------------------------
+
+# Target concurrent bot count.
+# HR-yes
+Playerbot.Population.TotalTarget = 2000
+
+# Always at least this many bots online.
+# HR-yes
+Playerbot.Population.Floor = 100
+
+# Hard upper limit.
+# HR-yes
+Playerbot.Population.Ceiling = 5000
+
+# Auto-scale to real-player count.
+# HR-yes
+Playerbot.Population.AutoScale = 1
+
+# Faction balance: percentage of bots that are Horde.
+# HR-yes
+Playerbot.Population.HordePct = 50
+
+# Distribution shape across level brackets. Drives BotPopulationManager:
+#   MaxHeavy - large fraction at level cap, pyramid below (default; retail-like)
+#   Pyramid  - heavy at low levels, fewer at cap (early-game heavy)
+#   Bell     - gaussian centred at mid-level
+#   Flat     - equal per bracket
+# HR-yes
+Playerbot.Population.Shape = MaxHeavy
+
+# For Shape=MaxHeavy: fraction of total bots that sit at level cap (0..1).
+# HR-yes
+Playerbot.Population.MaxHeavyFactor = 0.40
+
+#-----------------------------------------------------------------------------
+# Player interaction
+#-----------------------------------------------------------------------------
+
+# Auto-accept invites: none | friends_or_higher | guild_or_higher | anyone
+# HR-yes
+Playerbot.Interact.AutoAcceptInvites = friends_or_higher
+
+# Bot relinquishes leadership on player join.
+# HR-yes
+Playerbot.Interact.AutoLeaderHandover = 1
+
+# Whisper command prefix.
+# HR-yes
+Playerbot.Interact.CommandPrefix = !
+
+#-----------------------------------------------------------------------------
+# BG / Arena auto-seed and coordination
+#-----------------------------------------------------------------------------
+
+# Number of bot-only Battleground matches to keep seeded so queues pop without
+# real players. 0 disables autonomous BG seeding.
+Playerbot.Bg.AutoSeed.Matches = 1
+
+# Also auto-seed Arena matches (bot-only). 0 = off.
+Playerbot.Bg.AutoSeed.Arena = 0
+
+# Force a specific Arena bracket type for auto-seeding (0 = let the system
+# choose; otherwise an arena type id, e.g. 2 = 2v2, 3 = 3v3).
+Playerbot.Bg.AutoSeed.ForceType = 0
+
+# Enable the BG team coordinator (objective assignment: caps/defense/escort).
+Playerbot.Bg.Coordinator.Enable = 1
+
+# Enable the PvE group coordinator (tank/heal/kick/soak duty planning in
+# dungeons and raids).
+Playerbot.Pve.Coordinator.Enable = 1
+
+#-----------------------------------------------------------------------------
+# Housing
+#-----------------------------------------------------------------------------
+
+# Master switch for bot housing participation.
+# HR-yes
+Playerbot.Housing.Enabled = 1
+
+# Per-neighborhood bot residency target percent of capacity.
+# HR-yes
+Playerbot.Housing.NeighborhoodTargetOccupancy = 60
+
+# Plot purchase eligibility: strict | lenient (DEV ONLY).
+# Production must be `strict` per REQUIREMENTS.md §1.1 #7.
+# HR-no
+Playerbot.Housing.PlotPurchaseEligibilityCheck = strict
+
+#-----------------------------------------------------------------------------
+# Diagnostics
+#-----------------------------------------------------------------------------
+
+# TCP port for health endpoint. 0 = disabled.
+# HR-no
+Playerbot.Diag.HealthEndpointPort = 0
+
+# Logging level: error | warn | info | debug | trace
+# HR-yes
+Playerbot.Log.Level = info
+
+#-----------------------------------------------------------------------------
+# V2 lifecycle
+#-----------------------------------------------------------------------------
+
+# When enabled, on the first world tick after Module::Init the BotSessionMgr
+# submits a headless login for every marked-as-bot character not already
+# in-world. Default off so a shared dev server doesn't surprise-spawn N bots
+# on every restart. Useful for "headless test farm" setups.
+# HR-no
+Playerbot.V2.AutoResumeOnBoot = 0
+
+# Cap on the auto-resume batch (also the default cap used by `.playerbot
+# loginall` when no count argument is given). Bounds the in-flight login
+# query holders to avoid flooding the character DB async pool on boot.
+# HR-no
+Playerbot.V2.AutoResumeCap = 100
+
+# Auto-spawn-on-boot target. If the marked-bot count is below this number
+# after AutoResume runs, the module batch-creates the shortfall via
+# BotComposition (Blizzlike random race/class/gender/name) on a pool of
+# PBV2_NNNN bot accounts (10 chars/account, auto-created by BotAccountMgr).
+# Hard cap 200 per boot — to grow a bigger fleet, repeat `.playerbot spawn`.
+# Default 0 = disabled (the test workflow stays purely GM-driven).
+# HR-no
+Playerbot.V2.AutoSpawnOnBoot = 0
+
+# Per-bot personality variance. When 1, each bot's Aggression / RiskTolerance
+# / Verbosity / etc are picked deterministically from a per-bot seed
+# (RandomPersonality(SeedForBot(id))) so a fleet looks like a Blizzlike player
+# population — most Normal across the board, with a long tail of Passive /
+# Aggressive / Cautious / Reckless / Roleplay etc. Same bot ID always rolls
+# the same personality across server restarts.
+#
+# When 0, every bot uses DefaultPersonality (all Normal). Set to 0 for
+# predictable testing where personality variance would confound results
+# (e.g. when measuring engage / wander timing for a single bot).
+#
+# Per-bot inspection: /personality whisper to a bot dumps its current values.
+# HR-no
+Playerbot.V2.RandomPersonality = 1
+
+# Per-bot ARCHETYPE assignment (#4A). Personality is HOW a bot plays;
+# Archetype is WHAT it does + WHEN it intends to be online. When 1, each bot
+# is given a deterministic weighted-random play archetype on login —
+# CasualSolo / HardcoreRaider / SocialGuildie / GathererFlipper / PvPer /
+# AltoholicExplorer — drawn from a per-bot seed so it's stable across
+# restarts. The archetype_id persists to playerbot_v2_character, drives the
+# snapshot's archetype projection (so idle rules can bias by activity / econ
+# emphasis), and lets the population rebalancer prefer high-role-affinity
+# bots when respeccing into starved tank/healer slots. The result is a
+# heterogeneous, believable living server (economy + role variety).
+#
+# When 0, every bot reads as CasualSolo (id 0) for uniform, predictable
+# testing. Inspect a bot's archetype via `.playerbot inspect <name>`.
+# HR-no
+PlayerbotV2.Archetype.Enabled = 1
+
+#-----------------------------------------------------------------------------
+# Economy: auction-house buy side (#4B-1 Part 2)
+#-----------------------------------------------------------------------------
+
+# Master switch for the AH BUY-side rule (idle:ah_buy_reagents). When 1
+# (default), a bot parked at an auctioneer may buy out the cheapest current
+# listing for any profession reagent it is short on for its known, still-
+# skillable recipes — and, if its econ archetype is Reseller, also cheap
+# flippable trade goods to relist at a markup. The bot only buys what it can
+# afford while keeping a gold reserve for repairs/reagents (see the rule's
+# budget gate), and biases purchase aggressiveness by econ profile
+# (Hoarder = minimal, Balanced = needs only, Reseller = aggressive).
+#
+# GOLD-SINK NOTE: this does NOT inflate the economy. The buy moves gold from
+# the buyer to the seller (both bots), but every AH SALE pays a deposit on
+# listing plus an auction-house CUT on a successful sale — both destroyed by
+# the server. So the post -> buy -> repost loop is a net gold SINK over time;
+# the more the bots trade, the more gold leaves circulation through the cut.
+# The sell side (idle:ah_post_surplus + dynamic relist pricing) always runs;
+# this toggle only governs whether bots also consume from the AH.
+#
+# Set to 0 to make bots sellers-only (one-directional AH supply) — useful when
+# measuring listing/pricing behavior in isolation, or on a realm where you
+# don't want bot gold flowing into buyouts. HR-yes.
+PlayerbotV2.Economy.BuyEnabled = 1
+
+# PlayerbotV2.Economy.MaxReagentVendorMultiple
+#   #4B-1(b) reagent buy-side PRICE-PUMP guard. The snapshot builder computes a
+#   per-unit FAIR-VALUE CEILING for every buyable reagent =
+#       vendor SellPrice * MaxReagentVendorMultiple
+#   (or a quality-based flat ceiling when the item has no vendor SellPrice). The
+#   idle:ah_buy_reagents rule then REFUSES any listing or commodity whose
+#   per-unit price exceeds that ceiling. Without it, the buy loop bought the
+#   cheapest listing gated only by a gold reserve + per-buy budget fraction, so a
+#   human could post a single absurdly-priced reagent the bots "need" and bleed
+#   their gold one over-priced buyout at a time. A typical healthy AH price for
+#   trade goods sits a single-digit multiple over vendor sell; the default 15x
+#   leaves generous headroom for legitimately scarce reagents while still capping
+#   the obvious exploit. Lower it to tighten the cap (e.g. on a realm with stable
+#   prices), raise it to allow pricier reagent buys. Default 15.
+PlayerbotV2.Economy.MaxReagentVendorMultiple = 15
+
+#-----------------------------------------------------------------------------
+# Session rhythm: human-like login/logout churn (#5 living-server realism)
+#-----------------------------------------------------------------------------
+# Bots log off after their archetype's intended play-session length, so the
+# online roster CHURNS like a real playerbase instead of every bot staying
+# online forever (the single most visible non-human tell). The population
+# manager re-logs other offline bots to hold TotalTarget, so the headcount is
+# stable while WHO is online rotates over time. Bots in a group, dungeon/raid,
+# BG/arena, BG/LFG queue, or owned by a real player are never session-kicked
+# (a human finishes their activity first).
+#
+# PlayerbotV2.SessionRhythm.Enabled
+#   Master switch. 1 = on (default), 0 = bots never auto-logout on session length.
+PlayerbotV2.SessionRhythm.Enabled = 1
+
+# PlayerbotV2.SessionRhythm.Multiplier
+#   Global scale on every archetype's target_session_minutes. 1.0 = use the
+#   archetype value as-is. Set BELOW 1 to shorten sessions (e.g. 0.1 to watch a
+#   full churn cycle in minutes during a soak test), ABOVE 1 to lengthen.
+#   <= 0 disables the layer (same as Enabled = 0). Default 1.0.
+PlayerbotV2.SessionRhythm.Multiplier = 1.0
+
+# PlayerbotV2.SessionRhythm.MaxLogoutsPerCycle
+#   Cap on session-expiry logouts per 60s reconcile cycle, so the roster
+#   rotates smoothly instead of a mass exodus when a login cohort expires
+#   together. Roughly matches the login refill rate (25/min) so headcount stays
+#   near target. Default 25.
+PlayerbotV2.SessionRhythm.MaxLogoutsPerCycle = 25
+
+#-----------------------------------------------------------------------------
+# V2 account pool
+#-----------------------------------------------------------------------------
+
+# BotAccountMgr maintains a pool of dedicated accounts ("PBV2_NNNN") that
+# hold bot characters separately from the operator's own account. Each pool
+# account is capped at 10 chars (Trinity's char-select limit). New accounts
+# are auto-created via sAccountMgr->CreateAccount as the existing pool fills,
+# with throwaway 16-char alphanumeric passwords (bots never log in via
+# client; the password only satisfies SRP6 derivation).
+#
+# `.playerbot count` and `.playerbot status` show the current pool size,
+# total chars across the pool, and how many free slots remain before the
+# next auto-creation. There is no kill-switch: the pool is required to
+# avoid putting bot chars on the operator's GM account, where they'd
+# trigger the existing "one online char per account" assumption in the
+# Trinity character-select / online-status code paths.
+
+#-----------------------------------------------------------------------------
+# Player-facing alt summon (Wave E)
+#-----------------------------------------------------------------------------
+
+# `.playerbot summon <alt_name>` lets a normal player turn one of their OWN
+# characters (same account) into an AI-controlled bot that follows / fights
+# / quests alongside their main. Account-wide synergy: alts gain XP from
+# group-completed content while the player drives their main.
+#
+# This cap is per-account (NOT per-character), counting alts CURRENTLY
+# active as bots. Default 5 fills a regular 5-man dungeon group
+# (tank + healer + 3 dps); a player wanting more either logs an alt out
+# (`.playerbot self off` or `/w <alt> logout`) before summoning another,
+# or runs into the cap and gets a clean refusal message.
+#
+# 0 disables the player-facing summon entirely without removing the command
+# (useful for shared dev realms where you want only GM-driven bots).
+PlayerbotV2.MaxAltsAsBots = 5
+
+#-----------------------------------------------------------------------------
+# Fleet self-police: wedge watchdog (#1B) + vitals alerting (#1C)
+#-----------------------------------------------------------------------------
+
+# WedgeWatchdog (#1B): ms of sustained no-progress before a stuck ("wedged")
+# bot is classified + reported. The watchdog walks the registry on a 7s
+# cadence; any bot wedged longer than this threshold appears in
+# `.playerbot wedges`, emits exactly ONE structured [wedge] log line per
+# episode, and bumps the per-category PerfCounters tally. Lower for a chatty
+# wedge log on a test farm; raise to silence transient navmesh flukes.
+# Default 90s. HR-no.
+PlayerbotV2.WedgeWatchdog.ThresholdMs = 90000
+
+# WedgeWatchdog displacement gate (#1B calibration, 2026-06-15). A bot is only
+# reported wedged when it has stayed within MinDisplacementYards of its position
+# for >= the threshold AND its own stuck signal agrees — physical displacement
+# is the authoritative gate (a bot travelling a winding route moves hundreds of
+# yards while its straight-line goal distance barely changes; the old goal-
+# progress gate flagged ~28% of moving bots). CombatThresholdMs is a longer gate
+# for CombatLoop wedges because combat legitimately holds position. HR-no.
+PlayerbotV2.WedgeWatchdog.MinDisplacementYards = 20
+PlayerbotV2.WedgeWatchdog.CombatThresholdMs = 180000
+
+# Self-remediation (#7): when the watchdog has classified a bot as
+# GoalUnreachable or CombatLoop and it stays wedged for RemediationMs, the
+# watchdog ABANDONS the bot's stuck objective (blacklists it 5 min) so the
+# snapshot picker swaps to a reachable objective and, once same-map work is
+# exhausted, surfaces the cross-map travel breadcrumb — the player-like "give
+# up on a quest I can't reach" move. No teleport, no combat manipulation; just
+# a repick. RemediationMs is intentionally ABOVE ThresholdMs (90s) so the bot's
+# own Tier-3 stuck recovery gets first crack; default 180s. Set
+# RemediationEnabled = 0 to revert to report-only (classify but never act). HR-yes.
+PlayerbotV2.WedgeWatchdog.RemediationEnabled = 1
+PlayerbotV2.WedgeWatchdog.RemediationMs = 180000
+
+# Generic no-progress watchdog: independent of the wedge classifier above, a bot
+# that stays within NoProgressRadiusYards of where it was NoProgressMs ago (while
+# not in combat) is treated as making no progress and nudged into recovery.
+# NoProgressEnabled = 0 disables this generic check (the classifier still runs).
+PlayerbotV2.WedgeWatchdog.NoProgressEnabled = 1
+PlayerbotV2.WedgeWatchdog.NoProgressMs = 900000
+PlayerbotV2.WedgeWatchdog.NoProgressRadiusYards = 150.0
+
+# Fleet-vitals alerting (#1C): a 60s vitals bucket that breaches one of these
+# thresholds fires a throttled [fleet_alert] TC_LOG_ERROR on the
+# 'playerbot.v2' channel naming the metric + value + threshold. Set any
+# threshold to 0 to disable that specific alert without losing the others.
+#
+#   WedgedBots       max acceptable concurrently-wedged bot count.
+#   TickP99Us        max acceptable world-tick p99 latency (microseconds).
+#   IntentDropPerMin max acceptable IntentQueue drops per 60s window
+#                    (sustained drops = an AI worker outrunning the drain).
+#   PathFailPerMin   max acceptable path-validation failures per minute.
+#   ThrottleMs       per-metric re-emit suppression window (a sustained
+#                    breach logs once per window, not once per 60s sample).
+#
+# Defaults tuned for a ~2000-bot dev fleet. HR-yes (re-read on .reload config).
+PlayerbotV2.Alert.WedgedBots = 5
+PlayerbotV2.Alert.TickP99Us = 200000
+PlayerbotV2.Alert.IntentDropPerMin = 600
+PlayerbotV2.Alert.PathFailPerMin = 300
+PlayerbotV2.Alert.ThrottleMs = 300000
+
+#-----------------------------------------------------------------------------
+# Guilds (bot-founded guilds: charter FSM, recruitment, scheduled events)
+#-----------------------------------------------------------------------------
+
+# Master switch for the bot guild system (founding, recruiting, membership).
+PlayerbotV2.Guilds.Enabled = 1
+
+# Enable scheduled bot guild events (group activities, social cadence).
+PlayerbotV2.Guilds.EventsEnabled = 1
+
+# Enable the bot guild recruitment channel behavior.
+PlayerbotV2.Guilds.RecruitmentChannelEnabled = 1
+
+# Target number of bot-founded guilds to maintain per faction.
+PlayerbotV2.Guilds.TargetCountPerFaction = 6
+
+# Soft cap on members per bot-founded guild.
+PlayerbotV2.Guilds.MaxMembersPerGuild = 75
