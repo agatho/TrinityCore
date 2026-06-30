@@ -163,6 +163,11 @@ class TC_GAME_API PathGenerator
         void BuildPolyPath(G3D::Vector3 const& startPos, G3D::Vector3 const& endPos);
         void BuildPointPath(float const* startPoint, float const* endPoint);
         void BuildShortcut();
+        // Drop near-coincident consecutive path points (< 0.1y). A sub-0.1y
+        // INTERIOR segment makes MoveSplineInitArgs::_checkPathLengths() reject
+        // the ENTIRE spline (unit never moves). Applied to BOTH the complete and
+        // the INCOMPLETE (partial-corridor) path so a partial path stays walkable.
+        void RemoveNearCoincidentPathPoints();
 
         NavTerrainFlag GetNavTerrain(float x, float y, float z) const;
         void CreateFilter();

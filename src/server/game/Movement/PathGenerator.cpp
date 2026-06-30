@@ -586,6 +586,42 @@ void PathGenerator::BuildPolyPath(G3D::Vector3 const& startPos, G3D::Vector3 con
     BuildPointPath(startPoint, endPoint);
 }
 
+// Drop near-coincident consecutive points (< 0.1y). The smooth-path walker and
+// off-mesh-connection handling can emit two points within rounding distance of each
+// other (typically at an off-mesh entry, but also after Z-normalization snaps two
+// near points to the same height); a sub-0.1y INTERIOR segment makes
+// MoveSplineInitArgs::_checkPathLengths() reject the ENTIRE spline, so
+// MoveSplineInit::Launch() silently returns 0 and the unit never moves -- the root
+// cause of units (bots, creatures AND vehicles) wedged at off-mesh bridge mouths and
+// at the entrance of dungeons whose route comes back as a partial (INCOMPLETE)
+// corridor on freshly-regenerated mmaps. Endpoints are always preserved so the true
+// start/destination are never dropped, and a 2-point path is never collapsed.
+void PathGenerator::RemoveNearCoincidentPathPoints()
+{
+    if (_pathPoints.size() <= 2)
+        return;
+    // In-place compaction (no per-pathfind allocation -- this is a fleet-hot path).
+    // Keep point 0, skip interior points coincident with the last kept point, always
+    // keep the final point.
+    size_t w = 1;
+    for (size_t r = 1; r < _pathPoints.size(); ++r)
+    {
+        const bool isLast = (r + 1 == _pathPoints.size());
+        if (!isLast && (_pathPoints[r] - _pathPoints[w - 1]).squaredLength() < 0.01f)
+            continue;
+        _pathPoints[w++] = _pathPoints[r];
+    }
+    // If the kept endpoint collapsed onto its predecessor, drop the predecessor
+    // (preserve the true destination).
+    if (w >= 3 && (_pathPoints[w - 1] - _pathPoints[w - 2]).squaredLength() < 0.01f)
+    {
+        _pathPoints[w - 2] = _pathPoints[w - 1];
+        --w;
+    }
+    if (w >= 2 && w < _pathPoints.size())
+        _pathPoints.resize(w);
+}
+
 void PathGenerator::BuildPointPath(const float *startPoint, const float *endPoint)
 {
     float pathPoints[MAX_POINT_PATH_LENGTH*VERTEX_SIZE];
@@ -659,7 +695,12 @@ void PathGenerator::BuildPointPath(const float *startPoint, const float *endPoin
         for (uint32 i = 0; i < pointCount; ++i)
             _pathPoints[i] = G3D::Vector3(pathPoints[i*VERTEX_SIZE+2], pathPoints[i*VERTEX_SIZE], pathPoints[i*VERTEX_SIZE+1]);
         NormalizePath();
-        SetActualEndPosition(_pathPoints[pointCount-1]);
+        // Dedupe the partial corridor too — without this a sub-0.1y interior
+        // segment makes _checkPathLengths() reject the spline, so the unit can't
+        // even walk the partial path the caller intends to "advance and re-path"
+        // along (root cause of bots wedged at the dungeon entrance on 12.0.7).
+        RemoveNearCoincidentPathPoints();
+        SetActualEndPosition(_pathPoints.back());
         _type = PathType(_type | PATHFIND_INCOMPLETE);
         return;
     }
@@ -670,42 +711,11 @@ void PathGenerator::BuildPointPath(const float *startPoint, const float *endPoin
 
     NormalizePath();
 
-    // Drop near-coincident consecutive points (< 0.1y). The smooth-path walker and
-    // off-mesh-connection handling can emit two points within rounding distance of
-    // each other (typically at an off-mesh entry, but also after Z-normalization
-    // snaps two near points to the same height); a sub-0.1y INTERIOR segment makes
-    // MoveSplineInitArgs::_checkPathLengths() reject the ENTIRE spline, so
-    // MoveSplineInit::Launch() silently returns 0 and the unit never moves -- the
-    // root cause of units (bots, creatures AND vehicles) wedged at off-mesh bridge
-    // mouths (live: tens of "_checkPathLengths() failed" on the Deadmines foundry
-    // bridges; position-dependent, so ~half the crossings stalled). Endpoints are
-    // always preserved so the true start/destination are never dropped.
-    if (_pathPoints.size() > 2)
-    {
-        // In-place compaction (no per-pathfind allocation -- this is a fleet-hot
-        // path). Keep point 0, skip interior points coincident with the last kept
-        // point, always keep the final point.
-        size_t w = 1;
-        for (size_t r = 1; r < _pathPoints.size(); ++r)
-        {
-            const bool isLast = (r + 1 == _pathPoints.size());
-            if (!isLast && (_pathPoints[r] - _pathPoints[w - 1]).squaredLength() < 0.01f)
-                continue;
-            _pathPoints[w++] = _pathPoints[r];
-        }
-        // If the kept endpoint collapsed onto its predecessor, drop the predecessor
-        // (preserve the true destination) -- but never collapse a 2-point path.
-        if (w >= 3 && (_pathPoints[w - 1] - _pathPoints[w - 2]).squaredLength() < 0.01f)
-        {
-            _pathPoints[w - 2] = _pathPoints[w - 1];
-            --w;
-        }
-        if (w >= 2 && w < _pathPoints.size())
-        {
-            _pathPoints.resize(w);
-            pointCount = uint32(w);
-        }
-    }
+    // Drop near-coincident consecutive points so MoveSplineInitArgs::
+    // _checkPathLengths() accepts the spline (see RemoveNearCoincidentPathPoints;
+    // the same dedupe is applied to the INCOMPLETE partial-corridor branch above).
+    RemoveNearCoincidentPathPoints();
+    pointCount = uint32(_pathPoints.size());
 
     // first point is always our current location - we need the next one
     SetActualEndPosition(_pathPoints[pointCount-1]);
