@@ -176,12 +176,12 @@ void MovementInfo::OutDebug()
     TC_LOG_DEBUG("misc", "flags2 {} ({})", Movement::MovementFlags_ToString(MovementFlags2(flags2)), flags2);
     TC_LOG_DEBUG("misc", "flags3 {} ({})", Movement::MovementFlags_ToString(MovementFlags3(flags3)), flags3);
     TC_LOG_DEBUG("misc", "time {} current time {}", time, getMSTime());
-    TC_LOG_DEBUG("misc", "position: `{}`", pos.ToString());
+    TC_LOG_DEBUG("misc", "position: `{}`", pos);
     if (!transport.guid.IsEmpty())
     {
         TC_LOG_DEBUG("misc", "TRANSPORT:");
         TC_LOG_DEBUG("misc", "{}", transport.guid.ToString());
-        TC_LOG_DEBUG("misc", "position: `{}`", transport.pos.ToString());
+        TC_LOG_DEBUG("misc", "position: `{}`", transport.pos);
         TC_LOG_DEBUG("misc", "seat: {}", transport.seat);
         TC_LOG_DEBUG("misc", "time: {}", transport.time);
         if (transport.prevTime)
@@ -206,7 +206,7 @@ void MovementInfo::OutDebug()
     if (inertia)
     {
         TC_LOG_DEBUG("misc", "inertia->id: {}", inertia->id);
-        TC_LOG_DEBUG("misc", "inertia->force: {}", inertia->force.ToString());
+        TC_LOG_DEBUG("misc", "inertia->force: {}", inertia->force);
         TC_LOG_DEBUG("misc", "inertia->lifetime: {}", inertia->lifetime);
     }
 
@@ -421,7 +421,7 @@ bool WorldObject::_IsWithinDist(WorldObject const* obj, float dist2compare, bool
     Position const* thisOrTransport = this;
     Position const* objOrObjTransport = obj;
 
-    if (GetTransport() && obj->GetTransport() && obj->GetTransport()->GetTransportGUID() == GetTransport()->GetTransportGUID())
+    if (GetTransport() && GetTransport() == obj->GetTransport())
     {
         thisOrTransport = &m_movementInfo.transport.pos;
         objOrObjTransport = &obj->m_movementInfo.transport.pos;
@@ -618,11 +618,9 @@ bool WorldObject::IsInRange(WorldObject const* obj, float minRange, float maxRan
     return distsq < maxdist * maxdist;
 }
 
-bool WorldObject::IsInRange2d(float x, float y, float minRange, float maxRange) const
+bool WorldObject::IsInRange2d(Position const* pos, float minRange, float maxRange) const
 {
-    float dx = GetPositionX() - x;
-    float dy = GetPositionY() - y;
-    float distsq = dx*dx + dy*dy;
+    float distsq = GetExactDist2dSq(pos);
 
     float sizefactor = GetCombatReach();
 
@@ -638,12 +636,9 @@ bool WorldObject::IsInRange2d(float x, float y, float minRange, float maxRange) 
     return distsq < maxdist * maxdist;
 }
 
-bool WorldObject::IsInRange3d(float x, float y, float z, float minRange, float maxRange) const
+bool WorldObject::IsInRange3d(Position const* pos, float minRange, float maxRange) const
 {
-    float dx = GetPositionX() - x;
-    float dy = GetPositionY() - y;
-    float dz = GetPositionZ() - z;
-    float distsq = dx*dx + dy*dy + dz*dz;
+    float distsq = GetExactDistSq(pos);
 
     float sizefactor = GetCombatReach();
 
@@ -874,7 +869,7 @@ bool WorldObject::CanSeeOrDetect(WorldObject const* obj, CanSeeOrDetectExtraArgs
     if (obj->IsAlwaysVisibleFor(this) || CanAlwaysSee(obj))
         return true;
 
-    if (!args.IncludeAnyPrivateObject && !obj->CheckPrivateObjectOwnerVisibility(this))
+    if (!args.IncludeAnyPrivateObject && (!obj->CheckPrivateObjectOwnerVisibility(this) || !CheckPrivateObjectOwnerVisibility(obj)))
         return false;
 
     if (SmoothPhasing const* smoothPhasing = obj->GetSmoothPhasing())
@@ -1007,6 +1002,13 @@ bool WorldObject::CanDetectInvisibilityOf(WorldObject const* obj) const
     // Check for not detected types
     if (mask != obj->m_invisibility.GetFlags())
         return false;
+
+    // It isn't possible in invisibility to detect something that can't detect the invisible object
+    // (it's at least true for spell: 66)
+    // It seems like that only Units are affected by this check (couldn't see arena doors with preparation invisibility)
+    if (obj->IsUnit() && (!IsUnit() || !ToUnit()->HasAuraType(SPELL_AURA_DETECT_VISIBLE_WHILE_INVISIBLE)))
+        if ((m_invisibility.GetFlags() & obj->m_invisibilityDetect.GetFlags()) != m_invisibility.GetFlags())
+            return false;
 
     for (uint32 i = 0; i < TOTAL_INVISIBILITY_TYPES; ++i)
     {
@@ -1671,32 +1673,10 @@ Player* WorldObject::GetSpellModOwner() const
     return nullptr;
 }
 
-float WorldObject::GetSpellMaxRangeForTarget(Unit const* target, SpellInfo const* spellInfo) const
+SpellRange WorldObject::GetSpellMinMaxRangeForTarget(Unit const* target, SpellInfo const* spellInfo) const
 {
-    if (!spellInfo->RangeEntry)
-        return 0.f;
-
-    if (spellInfo->RangeEntry->RangeMax[0] == spellInfo->RangeEntry->RangeMax[1])
-        return spellInfo->GetMaxRange();
-
-    if (!target)
-        return spellInfo->GetMaxRange(true);
-
-    return spellInfo->GetMaxRange(!IsHostileTo(target));
-}
-
-float WorldObject::GetSpellMinRangeForTarget(Unit const* target, SpellInfo const* spellInfo) const
-{
-    if (!spellInfo->RangeEntry)
-        return 0.f;
-
-    if (spellInfo->RangeEntry->RangeMin[0] == spellInfo->RangeEntry->RangeMin[1])
-        return spellInfo->GetMinRange();
-
-    if (!target)
-        return spellInfo->GetMinRange(true);
-
-    return spellInfo->GetMinRange(!IsHostileTo(target));
+    bool positive = target ? !IsHostileTo(target) : true;
+    return spellInfo->GetMinMaxRange(positive);
 }
 
 SpellEffectValue WorldObject::ApplyEffectModifiers(SpellInfo const* spellInfo, uint8 effIndex, SpellEffectValue value) const

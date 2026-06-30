@@ -1252,10 +1252,6 @@ namespace UF
             return !!_value;
         }
 
-        operator bool() const
-        {
-            return has_value();
-        }
         T const* operator->() const
         {
             return &(*_value);
