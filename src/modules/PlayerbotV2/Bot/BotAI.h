@@ -842,6 +842,26 @@ public:
     void       note_engage(ObjectGuid g, uint32 ms, uint32 shield_ms = 8000)
     { last_engage_target_ = g; last_engage_at_ms_ = ms; last_engage_shield_ms_ = shield_ms; }
 
+    // ---- dungeon route-waypoint follow cursor ----
+    // The winding-corridor route follower (idle:dungeon_tank_advance_boss_route,
+    // pass 1) must COMMIT to one breadcrumb and walk to it, not re-pick the
+    // "best" waypoint every tick. A stateless per-tick pick OSCILLATES whenever
+    // the tank sits near a selection threshold: live WC 2026-07-01, the tank
+    // parked ~15y from route seq1 with the nearest-crumb distance straddling the
+    // old 15y re-converge cutoff, flip-flopping between "re-converge to the
+    // nearest crumb" (N) and "forward-scan to a far crumb" (S) — two targets
+    // 32y apart, opposite directions, ~0 net progress. The 32y target swing is
+    // far past the API::move_to dedup radius (3y), so every flip RESET the POINT
+    // spline and the tank jittered in place. Committing to a single crumb until
+    // it is reached, then advancing the cursor by one, gives the hysteresis that
+    // kills the oscillation and walks the ordered chain to the boss. Bound to the
+    // map so it self-invalidates across an LFG teleport / map change.
+    int32_t    dungeon_route_wp(uint32 map_id) const
+    { return (dungeon_route_wp_map_ == map_id) ? dungeon_route_wp_ : -1; }
+    void       set_dungeon_route_wp(int32_t idx, uint32 map_id)
+    { dungeon_route_wp_ = idx; dungeon_route_wp_map_ = map_id; }
+    void       clear_dungeon_route_wp() { dungeon_route_wp_ = -1; dungeon_route_wp_map_ = 0; }
+
     // ---- dungeon off-mesh crossing commitment ----
     // When a dungeon bot begins crossing an off-mesh bridge (a single stable
     // far-vertex step longer than the per-tick step cap), it MUST keep targeting
@@ -2669,6 +2689,10 @@ private:
     ObjectGuid     last_engage_target_;
     uint32         last_engage_at_ms_ = 0;
     uint32         last_engage_shield_ms_ = 8000;
+    // Committed route-waypoint cursor + the map it belongs to (self-invalidates
+    // on map change). See dungeon_route_wp() for the anti-oscillation rationale.
+    int32_t        dungeon_route_wp_ = -1;
+    uint32         dungeon_route_wp_map_ = 0;
     float          dungeon_cross_x_ = 0.f;
     float          dungeon_cross_y_ = 0.f;
     float          dungeon_cross_z_ = 0.f;

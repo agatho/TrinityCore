@@ -4748,17 +4748,38 @@ bool DungeonDispatch(BotSnapshotView const& s, BotAI& ai,
                                     tight_engage ? 10.0f : kMaxAdvanceStep;
                                 const float self_bd = std::sqrt(bd2);
                                 bool        wp_found = false;
+                                int         route_cur = -1;  // crumb committed this tick
                                 G3D::Vector3 best_wp_step;
+                                const int   route_n =
+                                    static_cast<int>(advice.route_waypoints.size());
+                                // Monotonic high-water floor: the chain progress already
+                                // committed (by either pass). It only ever RISES, and
+                                // BOTH passes are forbidden from selecting a crumb behind
+                                // it — so pass 0's "closest-to-boss" pick can never yank
+                                // the tank BACKWARD onto an earlier crumb that pass 1 has
+                                // advanced past. That backward yank was the pass0<->pass1
+                                // tug-of-war which deadlocked the WC tank at (-48,422):
+                                // pass 0 pulled SW to seq1 while pass 1 held seq2 NE, the
+                                // two targets 30y apart, POINT spline reset every tick
+                                // (live 07-01). Sharing one forward-only cursor dissolves
+                                // it. Deadmines' authored MONOTONIC chain is unaffected:
+                                // its closest-to-boss crumb is already the farthest
+                                // reachable, so pass 0's pick is always AT/ABOVE the floor
+                                // and the backward-skip guard below never trips.
+                                int route_lo = ai.dungeon_route_wp(s.map_id());
+                                if (route_lo < 0 || route_lo >= route_n) route_lo = 0;
                                 // PASS 0 (monotonic): the STRICTLY-reachable waypoint
-                                // CLOSEST to the boss that is ALSO nearer the boss than
-                                // we are. Original behaviour — byte-exact for a
-                                // hand-authored monotonic chain (Deadmines' harbor
-                                // descent always resolves here, so authored chains are
-                                // unchanged).
+                                // CLOSEST to the boss that is ALSO nearer the boss than we
+                                // are. Pick unrestricted (byte-exact for a monotonic
+                                // chain), then DISCARD it if it lands behind the high-water
+                                // floor — that discard is the pass0<->pass1 anti-tug guard
+                                // and only ever triggers on a self-crossing generated route.
                                 {
                                     float best_wp_bd = self_bd;
-                                    for (auto const& rw : advice.route_waypoints)
+                                    int   pass0_i = -1;
+                                    for (int i = 0; i < route_n; ++i)
                                     {
+                                        auto const& rw = advice.route_waypoints[i];
                                         const float wbx = btx - rw.x, wby = bty - rw.y, wbz = btz - rw.z;
                                         const float wp_bd = std::sqrt(wbx*wbx + wby*wby + wbz*wbz);
                                         if (wp_bd > self_bd - 8.0f) continue;   // forward only
@@ -4772,71 +4793,152 @@ bool DungeonDispatch(BotSnapshotView const& s, BotAI& ai,
                                             continue;
                                         best_wp_bd  = wp_bd;
                                         best_wp_step = wstep;
+                                        pass0_i     = i;
                                         wp_found    = true;
                                     }
+                                    // Backward-yank guard: a closest-to-boss crumb BEHIND
+                                    // the committed high-water is the winding-route tug —
+                                    // drop it and let pass 1's committed sequential follower
+                                    // drive forward instead. (Never trips for a monotonic
+                                    // authored chain, so Deadmines is byte-unchanged.)
+                                    if (wp_found && pass0_i < route_lo)
+                                        wp_found = false;
+                                    else if (wp_found)
+                                        route_cur = pass0_i;
                                 }
-                                // PASS 1 (winding chain-follow): pass 0 found nothing
-                                // because the reachable stretch of an AUTO-generated
-                                // corridor runs AWAY from the boss (Wailing Caverns winds
-                                // NE before doubling back W to Cobrahn), so NO reachable
-                                // waypoint is closer to the boss. A "closest-to-boss
-                                // reachable" fallback OSCILLATES on such a loop (from the
-                                // W leg the closest-reachable is E, and vice-versa — live
-                                // 07-01: tank ping-ponged y=404<->520). Follow the ORDERED
-                                // chain by INDEX instead: from our NEAREST chain point,
-                                // step toward the FARTHEST-INDEX forward waypoint that is
-                                // strictly reachable — the next breadcrumb chunk. Index-
-                                // monotonic, so a self-looping corridor can't ping-pong
-                                // us. The step (kMaxAdvanceStep along the validated <=74-
-                                // poly path) walks the corridor; the boss-nav's own engage
-                                // check fires as the corridor carries us through each room.
+                                // PASS 1 (committed breadcrumb chain-follow): pass 0
+                                // found nothing because the reachable stretch of an
+                                // AUTO-generated corridor runs AWAY from the boss
+                                // (Wailing Caverns winds before doubling back to
+                                // Cobrahn), so no reachable waypoint is closer to the
+                                // boss than we are. Follow the ORDERED chain one
+                                // breadcrumb at a time, COMMITTING to the chosen crumb
+                                // until it is reached, then advancing the cursor by one.
+                                //
+                                // A stateless "best crumb this tick" pick OSCILLATES near
+                                // ANY selection threshold. Live WC 2026-07-01: the tank
+                                // parked ~15y from route seq1 (Cobrahn = seq4), and its
+                                // own micro-motion made the nearest-crumb distance
+                                // straddle the old 15y re-converge cutoff — one tick
+                                // "re-converge N to seq1", next tick "forward-scan S to a
+                                // far crumb", two targets 32y apart. That 32y swing is far
+                                // past the move_to dedup radius (3y), so every flip reset
+                                // the POINT spline and the tank jittered in place at ~0
+                                // net progress. The committed cursor gives hysteresis:
+                                // pick nearest, walk all the way to it (no mid-approach
+                                // abandon), then step to the next crumb. Monotonic +1
+                                // advance, so a self-looping corridor cannot ping-pong us.
                                 if (!wp_found && advice.route_waypoints.size() >= 2)
                                 {
-                                    size_t near_i = 0;
-                                    float  near_d2 = 1.0e18f;
-                                    for (size_t i = 0; i < advice.route_waypoints.size(); ++i)
+                                    const int n = static_cast<int>(advice.route_waypoints.size());
+                                    auto crumb_d = [&](int i) -> float {
+                                        auto const& rw = advice.route_waypoints[i];
+                                        const float dx = rw.x - bx_adv, dy = rw.y - by_adv,
+                                                    dz = rw.z - bz_adv;
+                                        return std::sqrt(dx*dx + dy*dy + dz*dz);
+                                    };
+
+                                    // The route table is ONE flat chain threading the
+                                    // entrance through ALL bosses in order. Follow only
+                                    // the PREFIX up to the CURRENT boss's chain node, so
+                                    // the cursor can never over-run the boss onto a
+                                    // later-boss crumb and steer AWAY from it — live WC
+                                    // 07-01: a free cursor advanced to seq7 (post-Cobrahn)
+                                    // while Cobrahn = seq4, so pass 1 dragged the tank
+                                    // SOUTH while pass 0 pulled NORTH toward the boss; the
+                                    // two opposite targets deadlocked at (-72,348). Anchor
+                                    // the walk to boss_i = the crumb nearest the live boss.
+                                    int   boss_i = 0;
+                                    float boss_bd = 1.0e18f;
+                                    for (int i = 0; i < n; ++i)
                                     {
                                         auto const& rw = advice.route_waypoints[i];
-                                        const float dx = rw.x - bx_adv, dy = rw.y - by_adv, dz = rw.z - bz_adv;
-                                        const float d2 = dx*dx + dy*dy + dz*dz;
-                                        if (d2 < near_d2) { near_d2 = d2; near_i = i; }
+                                        const float dx = btx - rw.x, dy = bty - rw.y, dz = btz - rw.z;
+                                        const float d = std::sqrt(dx*dx + dy*dy + dz*dz);
+                                        if (d < boss_bd) { boss_bd = d; boss_i = i; }
                                     }
-                                    // If we've DRIFTED off the chain (nearest waypoint
-                                    // >15y away — a step that overshot a bend, or a
-                                    // combat shove), re-converge onto that nearest
-                                    // waypoint FIRST. Otherwise the forward scan targets
-                                    // a waypoint whose validated path begins by looping
-                                    // AWAY from us and the capped step nets ~0y, so the
-                                    // tank jitters in place off-corridor (live 07-01:
-                                    // WC tank parked 52y off-chain at -72,348).
-                                    const float near_d = std::sqrt(near_d2);
-                                    if (near_d > 15.0f)
+                                    // Nearest chain node to self within [lo, boss_i]:
+                                    // never consider post-boss crumbs, and never retreat
+                                    // below the committed high-water floor (route_lo) — a
+                                    // combat shove behind an already-passed crumb must not
+                                    // re-target it (that would reopen the backward tug).
+                                    const int lo = route_lo <= boss_i ? route_lo : boss_i;
+                                    int   near_i = lo;
+                                    float near_d = 1.0e18f;
+                                    for (int i = lo; i <= boss_i; ++i)
                                     {
-                                        auto const& rw = advice.route_waypoints[near_i];
+                                        const float d = crumb_d(i);
+                                        if (d < near_d) { near_d = d; near_i = i; }
+                                    }
+
+                                    constexpr float kRouteArrive    = 8.0f;   // "reached" a crumb
+                                    constexpr float kRouteReacquire = 30.0f;  // shoved off the chain
+
+                                    int cur = ai.dungeon_route_wp(s.map_id());
+                                    // Invalidate a cursor that is stale for THIS boss
+                                    // segment (past the boss node, or below the floor —
+                                    // e.g. the boss changed and the prefix moved).
+                                    if (cur < 0 || cur > boss_i || cur < lo) cur = -1;
+                                    if (cur < 0)
+                                        // (Re)establish: commit to the nearest pre-boss
+                                        // crumb and close the gap to it, or the next one
+                                        // if we are already standing on the nearest.
+                                        cur = (near_d <= kRouteArrive && near_i + 1 <= boss_i)
+                                                  ? near_i + 1 : near_i;
+                                    else if (crumb_d(cur) <= kRouteArrive)
+                                        // Reached the committed crumb -> advance one,
+                                        // never past the boss node.
+                                        cur = (cur + 1 <= boss_i) ? cur + 1 : cur;
+                                    else if (near_d > kRouteReacquire && near_i != cur)
+                                        // Combat shoved us far off the chain -> re-acquire
+                                        // the nearest pre-boss crumb.
+                                        cur = near_i;
+
+                                    // Steer to the committed crumb; if it is (now)
+                                    // unreachable, walk forward through the prefix to the
+                                    // first reachable crumb and re-commit there.
+                                    {
+                                        auto const& rw = advice.route_waypoints[cur];
                                         G3D::Vector3 wstep;
                                         if (DungeonTargetReachableAndStep(
                                                 self_be, rw.x, rw.y, rw.z, route_step, wstep))
                                         {
                                             best_wp_step = wstep;
+                                            route_cur    = cur;
                                             wp_found     = true;
                                         }
-                                    }
-                                    if (!wp_found)
-                                    for (size_t i = advice.route_waypoints.size(); i-- > near_i + 1; )
-                                    {
-                                        auto const& rw = advice.route_waypoints[i];
-                                        const float swx = rw.x - bx_adv, swy = rw.y - by_adv,
-                                                    swz = rw.z - bz_adv;
-                                        if (swx*swx + swy*swy + swz*swz < 6.0f * 6.0f) continue;
-                                        G3D::Vector3 wstep;
-                                        if (!DungeonTargetReachableAndStep(
-                                                self_be, rw.x, rw.y, rw.z, route_step, wstep))
-                                            continue;
-                                        best_wp_step = wstep;
-                                        wp_found     = true;
-                                        break;
+                                        else
+                                        {
+                                            for (int i = near_i; i <= boss_i && !wp_found; ++i)
+                                            {
+                                                // Skip a crumb we have effectively reached
+                                                // (same threshold as arrival) so the fallback
+                                                // leapfrogs FORWARD to the next reachable
+                                                // crumb instead of re-committing the one we
+                                                // stand on; if none ahead is reachable,
+                                                // wp_found stays false and control falls to
+                                                // the incremental boss step below.
+                                                if (crumb_d(i) <= kRouteArrive) continue;
+                                                auto const& rr = advice.route_waypoints[i];
+                                                if (!DungeonTargetReachableAndStep(
+                                                        self_be, rr.x, rr.y, rr.z, route_step, wstep))
+                                                    continue;
+                                                cur          = i;
+                                                best_wp_step = wstep;
+                                                route_cur    = cur;
+                                                wp_found     = true;
+                                            }
+                                        }
                                     }
                                 }
+                                // Unified monotonic commit (either pass): advance the
+                                // high-water cursor, never letting it retreat below the
+                                // floor this tick — this is what makes pass 0 and pass 1
+                                // share ONE forward-only progress marker.
+                                if (wp_found && route_cur >= 0)
+                                    ai.set_dungeon_route_wp(
+                                        route_cur < route_lo ? route_lo : route_cur,
+                                        s.map_id());
                                 if (wp_found)
                                 {
                                     static uint32 s_route_dbg_ms = 0;
@@ -4849,11 +4951,11 @@ bool DungeonDispatch(BotSnapshotView const& s, BotAI& ai,
                                             (best_wp_step.z - bz_adv) * (best_wp_step.z - bz_adv));
                                         TC_LOG_INFO("playerbot.v2",
                                             "[route_wp] {} boss={} self=({:.1f},{:.1f},{:.1f}) "
-                                            "step=({:.1f},{:.1f},{:.1f}) step_dist={:.1f} n_wp={}",
+                                            "step=({:.1f},{:.1f},{:.1f}) step_dist={:.1f} cur={} n_wp={}",
                                             s.name(), boss_target->GetEntry(),
                                             bx_adv, by_adv, bz_adv,
                                             best_wp_step.x, best_wp_step.y, best_wp_step.z, sd,
-                                            advice.route_waypoints.size());
+                                            route_cur, advice.route_waypoints.size());
                                     }
                                     emit.move_to(best_wp_step.x, best_wp_step.y,
                                                  best_wp_step.z, /*run=*/true);
