@@ -20,6 +20,7 @@
 
 #include "Define.h"
 #include <DetourNavMesh.h>
+#include <unordered_set>
 
 inline uint32 constexpr MMAP_MAGIC = 0x4d4d4150; // 'MMAP'
 inline uint32 constexpr MMAP_VERSION = 16;
@@ -136,6 +137,21 @@ struct MmapGenTuning
     float detailSampleDist       = -1.f; // <0 => keep cs*16
     float detailSampleMaxError   = -1.f; // <0 => keep ch*1
     bool  fineCells              = false; // true => halve cs/ch (4x voxels) — resolution probe
+    // Instance-map partition policy (2026-07-01). Instanced dungeon/raid maps
+    // default to Monotone: the Layers default islands winding WMO mine tunnels
+    // into disconnected navmesh regions (Deadmines foundry — root-caused +
+    // validated live). Monotone never produces holes so the tunnels mesh, and
+    // it does NOT regress multi-floor linkage (Aldrassil ground<->Tenaron
+    // verified identical). currentMapIsInstance is set per-map by the generator
+    // (MapBuilder::buildMap, which has sMapStore) before its tiles are built.
+    // partitionExplicit is set when --partition is passed on the CLI, so an
+    // explicit operator choice always overrides the instance default.
+    bool  partitionExplicit      = false; // true => --partition given; respect it as-is
+    // Map IDs whose InstanceType is dungeon/raid — filled ONCE by the generator
+    // (MapBuilder::buildMaps, which has sMapStore) before any tile is queued, so
+    // the concurrent tile workers only ever read it. buildMoveMapTile consults it
+    // to switch such maps from Layers to Monotone.
+    std::unordered_set<uint32> instanceMaps;
 };
 
 // Definition lives in TileBuilder.cpp (generator-only TU). Unreferenced in the

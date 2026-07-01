@@ -259,6 +259,25 @@ namespace MMAP
             m_tileBuilders[i].reset(new MapTileBuilder(this, m_maxWalkableAngle, m_maxWalkableAngleNotSteep,
                 m_skipLiquid, m_bigBaseUnit, m_debugOutput, &m_offMeshConnections));
 
+        // Instanced dungeon/raid maps default to the Monotone partition: the
+        // Layers default islands winding WMO mine tunnels into disconnected
+        // navmesh regions (root-caused on Deadmines 2026-07-01). Fill the set
+        // ONCE here — before any tile is queued to the concurrent workers, which
+        // only ever read it — so buildMoveMapTile can switch these maps to
+        // Monotone. An explicit --partition still overrides (partitionExplicit).
+        g_mmapGenTuning.instanceMaps.clear();
+        auto markInstanceMap = [](uint32 mid)
+        {
+            if (MapEntry const* me = Trinity::Containers::MapGetValuePtr(sMapStore, mid))
+                if (me->InstanceType == 1 || me->InstanceType == 2) // 1=party dungeon, 2=raid
+                    g_mmapGenTuning.instanceMaps.insert(mid);
+        };
+        if (mapID)
+            markInstanceMap(*mapID);
+        else
+            for (auto& [mapId, _] : m_tiles)
+                markInstanceMap(mapId);
+
         if (mapID)
         {
             buildMap(*mapID);

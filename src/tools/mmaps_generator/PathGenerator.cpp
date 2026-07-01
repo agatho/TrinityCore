@@ -206,6 +206,9 @@ bool handleArgs(int argc, char** argv,
             param = argv[++i];
             if (!param)
                 return false;
+            // Operator gave an explicit partition — it overrides the per-map
+            // instance default (dungeon/raid -> Monotone) in TileBuilder.
+            g_mmapGenTuning.partitionExplicit = true;
             if (strcmp(param, "watershed") == 0)
                 g_mmapGenTuning.partition = MmapPartitionMethod::Watershed;
             else if (strcmp(param, "monotone") == 0)

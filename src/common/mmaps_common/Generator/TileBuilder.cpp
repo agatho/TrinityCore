@@ -382,6 +382,16 @@ namespace MMAP
                 //   <0.005 -> Watershed  (flat/open: smoothest, most regular)
                 //   else   -> Monotone   (mixed: never holes, predictable)
                 MmapPartitionMethod method = g_mmapGenTuning.partition;
+                // Instanced dungeon/raid maps: the Layers default islands
+                // winding WMO mine tunnels into disconnected navmesh regions
+                // (Deadmines foundry — root-caused + live-validated 2026-07-01;
+                // Monotone meshes the tunnels and does NOT regress multi-floor
+                // linkage, Aldrassil verified). Switch such maps Layers->Monotone
+                // unless the operator gave an explicit --partition.
+                if (!g_mmapGenTuning.partitionExplicit
+                    && method == MmapPartitionMethod::Layers
+                    && g_mmapGenTuning.instanceMaps.count(mapID))
+                    method = MmapPartitionMethod::Monotone;
                 if (method == MmapPartitionMethod::Auto)
                 {
                     uint32 occupied = 0, layered = 0;
