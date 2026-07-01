@@ -8,6 +8,8 @@
 #include "BotTypes.h"
 #include "ObjectGuid.h"
 
+class Player;   // global TC core class (DungeonNudgeOntoMesh takes a live Player*)
+
 namespace Playerbot {
 
 class BotSnapshotView;
@@ -92,6 +94,19 @@ bool DungeonRecoverStrandedFollower(BotSnapshotView const& s, BotAI& ai,
 bool DungeonConvergeToFight(BotSnapshotView const& s, BotAI& ai,
                             GroupSnapshotView const& g,
                             BotIntentEmitter& emit, uint32 now_ms);
+
+// Off-mesh strand nudge (shared idle / InCombat / InGroup). Snaps a bot that is
+// genuinely OFF the navmesh — no poly beneath it (PathGenerator::StartsOffMesh,
+// i.e. srcpoly==0), e.g. a follower that stopped mid-jump in an off-mesh bridge
+// gap — onto its OWN nearest navmesh poly within a tight box, so the next tick
+// re-paths from solid ground. From such a spot EVERY move_to NoPaths, so the
+// per-state rejoin/assist can't recover it and (because srcpoly==0 is marked
+// NOPATH, not FARFROMPOLY, and is within kStrandFar of the medoid) neither the
+// FARFROMPOLY guard nor DungeonRecoverStrandedFollower fires — the FoeReaper
+// off-mesh bridge dead-band (live 2026-06-30: healer wedged mid-bridge 13+ min,
+// tank held at 53y). Returns true (caller consumes the tick) when it nudged.
+// No-op for any on-mesh bot. Definition in State_Idle.cpp.
+bool DungeonNudgeOntoMesh(Player* self, BotIntentEmitter& emit, BotAI& ai);
 
 // Shared BG carrier-homeward resolution (BUG BG-P0a). When the bot is
 // carrying the flag / an orb, resolve the capture destination (static own

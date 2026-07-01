@@ -1054,11 +1054,11 @@ static bool DungeonTargetReachableAndStep(Player* self, float tx, float ty,
                                           G3D::Vector3& step_out,
                                           bool* step_is_offmesh = nullptr,
                                           bool allow_incomplete_progress = false);
-// Forward declaration: rule (-1) at the top of DungeonCombatPositioning recovers
-// an off-mesh-stranded dungeon bot WHILE IN COMBAT (the idle DungeonDispatch nudge
-// can't run when the FSM has routed the bot to State_InCombat). Definition further
-// down with the other idle dungeon helpers.
-static bool DungeonNudgeOntoMesh(Player* self, BotIntentEmitter& emit, BotAI& ai);
+// DungeonNudgeOntoMesh — off-mesh strand nudge, used by DungeonCombatPositioning
+// (rule -1) and the InGroup/InCombat dungeon-rejoins. Now SHARED (declared in
+// MaintainHelpers.h) so State_InGroup can run it before its rejoin step, which
+// cannot path out of an off-mesh gap. Definition further down with the other idle
+// dungeon helpers.
 // Targeted Gap-1 bridge-strand recovery (Deadmines map 36): commits a south
 // far-vertex cross when a bot is parked on the off-mesh bridge span with no
 // active cross (post-death rejoin / cohesion retreat onto the bridge). Defined
@@ -2665,7 +2665,19 @@ static bool DungeonTargetReachableAndStep(Player* self, float tx, float ty, floa
             const float sdy = self->GetPositionY() - ty;
             const float sdz = self->GetPositionZ() - tz;
             const float self_d = std::sqrt(sdx*sdx + sdy*sdy + sdz*sdz);
-            if (std::sqrt(end2) > self_d - 12.0f)
+            // An OFF-MESH crossing is progress REGARDLESS of straight-line distance:
+            // the point is to get PAST a topological chokepoint, and the off-mesh
+            // connects the two islands, so it is by definition NOT the "true
+            // disconnect" this gate guards against. The FoeReaper bridge nets only
+            // ~10y toward Helix (its endpoints are ~10.5y apart) — UNDER this 12y gate
+            // — so the westward cross toward Helix was rejected and the cohered group
+            // wedged at the bridge-east with Helix reach=0 (borderline: a ~2y position
+            // delta flipped it above/below 12y, which drove the run-to-run variance).
+            // When the path traverses an off-mesh, skip the gate and let the loop below
+            // return the off-mesh landing; the caller commits the cross and re-paths
+            // from the far side (a genuinely-blocked far side re-tests as a disconnect
+            // on the next path, so the watchdog still protects the non-off-mesh case).
+            if (!pg.PathTraversesOffMesh() && std::sqrt(end2) > self_d - 12.0f)
                 return false;
         }
     }
@@ -2790,7 +2802,7 @@ static bool DungeonTargetReachableAndStep(Player* self, float tx, float ty, floa
 // carries the bot across the few yards of void to the solid poly even though no
 // ground spans the gap (a spline does not fall mid-flight) — the next tick then
 // re-paths from real mesh. No-op for any on-mesh bot (the FARFROMPOLY gate).
-static bool DungeonNudgeOntoMesh(Player* self, BotIntentEmitter& emit, BotAI& ai)
+bool DungeonNudgeOntoMesh(Player* self, BotIntentEmitter& emit, BotAI& ai)
 {
     if (!self) return false;
     if (!Playerbot::PathBudget::HasBudget(GameTime::GetGameTimeMS()))
@@ -2802,17 +2814,44 @@ static bool DungeonNudgeOntoMesh(Player* self, BotIntentEmitter& emit, BotAI& ai
         return false;   // no poly within reach
     if (std::fabs(on_mesh.GetPositionZ() - self->GetPositionZ()) >= 18.0f)
         return false;   // reject a cross-stratum snap (z51 ledge vs z19 floor)
-    // Act only when we are genuinely OFF-mesh — a path from our pose to the snapped
-    // poly resolves FARFROMPOLY_START only when no poly underlies us right now.
+    // Act only when we are genuinely OFF-mesh. A path from our pose to the snapped
+    // poly is off-mesh under EITHER signal:
+    //   * PATHFIND_FARFROMPOLY — a poly underlies us but is >7y away; or
+    //   * StartsOffMesh()      — NO poly underlies us at all (startPoly==0). The
+    //     core marks that case PATHFIND_NOPATH, NOT FARFROMPOLY, so a FARFROMPOLY-
+    //     only gate misses it. That is exactly the Deadmines FoeReaper off-mesh
+    //     bridge-gap strand: a follower stopped mid-jump at srcpoly=0, every path
+    //     NoPathed, the gap-1-specific recover does not cover that span, and the bot
+    //     stranded forever while the tank held for cohesion (live 2026-06-30: healer
+    //     wedged mid-FoeReaper-bridge at (-277,-565), 13+ min, group split=36).
+    // A path to our OWN <=16y nearest poly only fails (NOPATH/FARFROMPOLY) when we are
+    // off the mesh — an on-mesh bot resolves NORMAL to its own/adjacent poly — so this
+    // stays a no-op for the common case regardless of which signal we add.
+    bool off_poly = false;
     {
         PathGenerator pg(self);
         BotMovement::SehSafeCalculatePath(pg, on_mesh.GetPositionX(),
                                           on_mesh.GetPositionY(), on_mesh.GetPositionZ());
-        if (!(pg.GetPathType() & PATHFIND_FARFROMPOLY))
+        off_poly = pg.StartsOffMesh();
+        if (!(pg.GetPathType() & PATHFIND_FARFROMPOLY) && !off_poly)
             return false;   // on-mesh — nothing to recover
     }
-    emit.move_to(on_mesh.GetPositionX(), on_mesh.GetPositionY(),
-                 on_mesh.GetPositionZ(), /*run=*/true);
+    // Extraction primitive depends on WHY we are off-mesh:
+    //   * FARFROMPOLY — a poly DOES underlie us, just >7y away. A MovePoint spline
+    //     ORIGINATES fine and carries us in — keep the proven move_to.
+    //   * StartsOffMesh (srcpoly==0) — NO poly underlies us, so move_to NoPaths and
+    //     emits an EMPTY spline: the bot never leaves the void. Live 2026-07-01: a
+    //     tank that chased a mob onto the FoeReaper off-mesh bridge pinned at the span
+    //     midpoint (-277,-565) firing this rule 168x with ZERO movement. COMPLETE the
+    //     interrupted off-mesh hop with a near_teleport onto the snapped poly — the
+    //     SAME primitive DungeonHonorCross / DungeonRecoverStrandedFollower use to
+    //     finish an off-mesh jump (semantically instantaneous; not a routing rescue).
+    if (off_poly)
+        emit.near_teleport_to(on_mesh.GetPositionX(), on_mesh.GetPositionY(),
+                              on_mesh.GetPositionZ(), self->GetOrientation());
+    else
+        emit.move_to(on_mesh.GetPositionX(), on_mesh.GetPositionY(),
+                     on_mesh.GetPositionZ(), /*run=*/true);
     ai.set_last_rule_fired("idle:dungeon_offmesh_recover");
     return true;
 }
@@ -2852,6 +2891,24 @@ static bool DungeonGap1BridgeRecover(BotSnapshotView const& s, BotAI& ai,
     // (that churn defeated the strand-recovery progress clock — live 06-26).
     if (ddx*ddx + ddy*ddy + ddz*ddz <= 8.0f * 8.0f)
         return false;   // already at/near the south ledge — hand off to normal nav
+    // NORTH-vertex early-out, symmetric to the south one above (2026-06-30 root fix
+    // for the live -520<->-547.5 oscillation wedge). The Gap-1 NORTH endpoint
+    // (-213.3,-520.0,53.1) is the bridge's other LANDING — solid navmesh with a clean
+    // forward path off the span (probe: -520 -> Glubtok room is a 17-poly NORMAL path).
+    // The positional span gate above (y in [-549,-517]) includes this landing, so a bot
+    // that has SUCCESSFULLY crossed north (its live boss is north — Glubtok is the first
+    // encounter, NORTH of the gap) was given a BACKWARD south cross here, fighting
+    // advance_boss which pulls it north toward that boss. The two opposed commits made
+    // the tank bounce -520<->-547.5 forever (the flip-flop the DungeonHonorCross episode
+    // backstop only shuffles between the two committed exits, never escaping). The rule's
+    // "south is always correct" premise holds ONLY when a post-gap encounter is the goal;
+    // it must NOT drag a bot off the north landing when normal nav can already path it
+    // forward. A genuine MID-SPAN strand (the post-death revive at ~-537 this rule exists
+    // for) is >8y from BOTH endpoints, so it still recovers; only the valid landings yield.
+    constexpr float kNx = -213.3f, kNy = -520.0f, kNz = 53.1f;  // north far vertex (landing)
+    const float ndx = kNx - bx, ndy = kNy - by, ndz = kNz - bz;
+    if (ndx*ndx + ndy*ndy + ndz*ndz <= 8.0f * 8.0f)
+        return false;   // landed/landing on the north ledge — hand off to normal nav
     ai.set_dungeon_cross(kSx, kSy, kSz, now_ms + 12000);
     emit.move_to(kSx, kSy, kSz, /*run=*/true);
     ai.set_last_rule_fired("idle:dungeon_gap1_bridge_recover");

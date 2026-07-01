@@ -99,6 +99,7 @@ bool PathGenerator::CalculatePath(float srcX, float srcY, float srcZ, float dest
 
     _forceDestination = forceDest;
     _pathTraversesOffMesh = false;  // recomputed per path by FindSmoothPath
+    _startOffMesh = false;          // recomputed by BuildPolyPath (StartsOffMesh)
 
     TC_LOG_DEBUG("maps.mmaps", "++ PathGenerator::CalculatePath() for {}", _source->GetGUID().ToString());
 
@@ -227,6 +228,13 @@ void PathGenerator::BuildPolyPath(G3D::Vector3 const& startPos, G3D::Vector3 con
 
     dtPolyRef startPoly = GetPolyByLocation(startPoint, &distToStartPoly);
     dtPolyRef endPoly = GetPolyByLocation(endPoint, &distToEndPoly);
+
+    // Authoritative off-mesh-START signal: no poly underlies the source. When this
+    // is true the path below is marked PATHFIND_NOPATH (the hole-in-mesh branch),
+    // NOT PATHFIND_FARFROMPOLY (which means a poly WAS found but is far), so a
+    // recovery rule gating on FARFROMPOLY alone would miss a bot stranded in an
+    // off-mesh bridge gap (srcpoly=0). Exposed via StartsOffMesh().
+    _startOffMesh = (startPoly == INVALID_POLYREF);
 
     _type = PathType(PATHFIND_NORMAL);
 

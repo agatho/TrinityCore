@@ -14,6 +14,7 @@
 #include "Services.h"
 #include "Travel/UnifiedTravelGraph.h"
 #include "SharedDefines.h"
+#include "ObjectAccessor.h"   // off-mesh strand nudge needs the live Player*
 #include <cmath>
 #include <limits>
 
@@ -477,6 +478,26 @@ void DispatchInGroup(BotAI& ai,
                 tk->map_id == snapshot.map_id() &&
                 DistanceXY(bx, by, tk->x, tk->y) > 40.0f)
             {
+                // Off-mesh strand FIRST. A follower that stopped mid-jump in an
+                // off-mesh bridge gap (PathGenerator::StartsOffMesh — srcpoly==0, no
+                // poly beneath it) cannot be rejoined by ANY move toward the tank
+                // below: every path NoPaths from off-mesh, so the rejoin step just
+                // re-stalls in place and the bot strands while the tank holds for
+                // cohesion. It also sits within kStrandFar of the medoid, so the
+                // DungeonRecoverStrandedFollower above abstains, and srcpoly==0 is
+                // marked NOPATH (not FARFROMPOLY) so no FARFROMPOLY guard catches it
+                // either — the FoeReaper off-mesh bridge dead-band (live 2026-06-30:
+                // healer wedged mid-bridge 13+ min, tank held 53y, group split=36).
+                // Nudge onto our OWN nearest navmesh poly, then rejoin next tick from
+                // solid ground; consume the tick so the futile rejoin step below does
+                // not overwrite the nudge spline. No-op for any on-mesh follower.
+                if (Player* self_om =
+                        ObjectAccessor::FindConnectedPlayer(snapshot.raw().guid))
+                    if (DungeonNudgeOntoMesh(self_om, emit, ai))
+                    {
+                        ai.set_last_rule_fired("ingroup:dungeon_offmesh_recover");
+                        return;
+                    }
                 if (!snapshot.victim().IsEmpty())
                     emit.stop_attack();
                 // Emit the SAME off-mesh-aware far-vertex goal the idle
