@@ -2837,6 +2837,21 @@ std::shared_ptr<BotSnapshot const> BotSnapshotBuilder::Build(Player* p, BotAI* b
         for (auto const& it : snap->inventory.bag_items)
         {
             if (it.equip_slot == 0xFF) continue;
+            // Mirror the auto-equip rule's Prot-warrior/paladin weapon exclusion
+            // (State_Idle dungeon_auto_equip / MaintainAutoEquipUpgrades): for
+            // spec 73 (Prot Warrior) / 66 (Prot Paladin) the mainhand + offhand
+            // are owned EXCLUSIVELY by EnsureShieldTankWeapon (the 1H+shield
+            // backfill). The score-based rule NEVER swaps those two slots — a
+            // higher-score 2H would evict the shield and churn 2H<->1H+shield —
+            // so a bag weapon that out-scores the equipped 1H is a PERMANENT
+            // non-upgrade here. Counting it reported a "pending upgrade" that can
+            // never apply: the false 6-pending seen on Prot tanks (owner-flagged
+            // 2026-07-01, the classic offhand-vs-2H false alarm). Exclude them so
+            // this count and the rule agree, as this block's header promises.
+            if ((snap->identity.spec == 73 || snap->identity.spec == 66) &&
+                (it.equip_slot == EQUIPMENT_SLOT_MAINHAND ||
+                 it.equip_slot == EQUIPMENT_SLOT_OFFHAND))
+                continue;
             // Defense-in-depth: equip_slot is clamped to <19 at capture, but
             // an OOB read of equipped[19] here is UB — never index past it.
             if (it.equip_slot >= snap->inventory.equipped.size()) continue;
