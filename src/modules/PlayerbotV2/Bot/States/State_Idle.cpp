@@ -4768,16 +4768,34 @@ bool DungeonDispatch(BotSnapshotView const& s, BotAI& ai,
                                 // and the backward-skip guard below never trips.
                                 int route_lo = ai.dungeon_route_wp(s.map_id());
                                 if (route_lo < 0 || route_lo >= route_n) route_lo = 0;
-                                // PASS 0 (monotonic): the STRICTLY-reachable waypoint
-                                // CLOSEST to the boss that is ALSO nearer the boss than we
-                                // are. Pick unrestricted (byte-exact for a monotonic
-                                // chain), then DISCARD it if it lands behind the high-water
-                                // floor — that discard is the pass0<->pass1 anti-tug guard
-                                // and only ever triggers on a self-crossing generated route.
+                                // The crumb nearest the LIVE boss = the boss's position on
+                                // the flat all-bosses chain. BOTH passes follow only the
+                                // prefix [route_lo, boss_i]; without anchoring pass 0 here it
+                                // targeted a post-boss crumb merely straight-line-closest to
+                                // the boss and dragged the tank the wrong way (live WC 07-01:
+                                // pass 0 picked seq35 near Mutanus while Cobrahn = seq4,
+                                // walking the tank into the -53,320 dead-end pocket even
+                                // though seq0->seq1->..->seq4 is a fully pathable route).
+                                int   route_boss_i = 0;
+                                float route_boss_bd = 1.0e18f;
+                                for (int i = 0; i < route_n; ++i)
+                                {
+                                    auto const& rw = advice.route_waypoints[i];
+                                    const float dx = btx - rw.x, dy = bty - rw.y, dz = btz - rw.z;
+                                    const float d = std::sqrt(dx*dx + dy*dy + dz*dz);
+                                    if (d < route_boss_bd) { route_boss_bd = d; route_boss_i = i; }
+                                }
+                                // PASS 0 (monotonic): within the pre-boss prefix, the
+                                // STRICTLY-reachable waypoint CLOSEST to the boss that is
+                                // ALSO nearer the boss than we are. For a monotonic authored
+                                // chain the closest-to-boss crumb IS boss_i and every pick is
+                                // at/below it, so restricting to [route_lo, boss_i] leaves
+                                // Deadmines byte-unchanged; on a self-crossing generated
+                                // chain it stops pass 0 chasing a post-boss crumb.
                                 {
                                     float best_wp_bd = self_bd;
                                     int   pass0_i = -1;
-                                    for (int i = 0; i < route_n; ++i)
+                                    for (int i = route_lo; i <= route_boss_i; ++i)
                                     {
                                         auto const& rw = advice.route_waypoints[i];
                                         const float wbx = btx - rw.x, wby = bty - rw.y, wbz = btz - rw.z;
@@ -4796,14 +4814,7 @@ bool DungeonDispatch(BotSnapshotView const& s, BotAI& ai,
                                         pass0_i     = i;
                                         wp_found    = true;
                                     }
-                                    // Backward-yank guard: a closest-to-boss crumb BEHIND
-                                    // the committed high-water is the winding-route tug —
-                                    // drop it and let pass 1's committed sequential follower
-                                    // drive forward instead. (Never trips for a monotonic
-                                    // authored chain, so Deadmines is byte-unchanged.)
-                                    if (wp_found && pass0_i < route_lo)
-                                        wp_found = false;
-                                    else if (wp_found)
+                                    if (wp_found)
                                         route_cur = pass0_i;
                                 }
                                 // PASS 1 (committed breadcrumb chain-follow): pass 0
@@ -4847,16 +4858,9 @@ bool DungeonDispatch(BotSnapshotView const& s, BotAI& ai,
                                     // while Cobrahn = seq4, so pass 1 dragged the tank
                                     // SOUTH while pass 0 pulled NORTH toward the boss; the
                                     // two opposite targets deadlocked at (-72,348). Anchor
-                                    // the walk to boss_i = the crumb nearest the live boss.
-                                    int   boss_i = 0;
-                                    float boss_bd = 1.0e18f;
-                                    for (int i = 0; i < n; ++i)
-                                    {
-                                        auto const& rw = advice.route_waypoints[i];
-                                        const float dx = btx - rw.x, dy = bty - rw.y, dz = btz - rw.z;
-                                        const float d = std::sqrt(dx*dx + dy*dy + dz*dz);
-                                        if (d < boss_bd) { boss_bd = d; boss_i = i; }
-                                    }
+                                    // the walk to boss_i = the crumb nearest the live boss
+                                    // (hoisted above pass 0 so both passes share it).
+                                    const int boss_i = route_boss_i;
                                     // Nearest chain node to self within [lo, boss_i]:
                                     // never consider post-boss crumbs, and never retreat
                                     // below the committed high-water floor (route_lo) — a
