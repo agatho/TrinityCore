@@ -1,6 +1,7 @@
 #include "DungeonScript.h"
 #include "../BotSnapshotView.h"
 #include "../BotSnapshot.h"
+#include "DatabaseEnv.h"
 #include "Log.h"
 #include <algorithm>
 
@@ -129,7 +130,50 @@ DungeonAdvice DungeonScriptMgr::GetAdvice(BotSnapshotView const& s) const
     // changed correctness (matching the same ID twice is a no-op) but
     // they wasted compares and made the audit log noisier.
     DedupAdvice(merged);
+    // Inject auto-generated route_waypoints when the per-dungeon script authored
+    // NONE. These are the navmesh-chained corridor points (entrance->bosses) that
+    // let the far-boss advance route winding corridors past the 74-poly cap on
+    // dungeons that never got a hand-authored chain. A script that DID author its
+    // own (Deadmines' harbor descent) keeps it — the empty() guard makes authored
+    // waypoints authoritative. Difficulty-0 rows are the "any-difficulty" default.
+    if (merged.route_waypoints.empty() && !generated_routes_.empty())
+    {
+        const uint32_t diff = s.raw().instance_ctx.map_difficulty;
+        auto it = generated_routes_.find(MakeKey(s.map_id(), diff));
+        if (it == generated_routes_.end() && diff != 0)
+            it = generated_routes_.find(MakeKey(s.map_id(), 0));
+        if (it != generated_routes_.end())
+            merged.route_waypoints = it->second;
+    }
     return merged;
+}
+
+size_t DungeonScriptMgr::LoadGeneratedRoutes()
+{
+    generated_routes_.clear();
+    QueryResult result = WorldDatabase.Query(
+        "SELECT map_id, difficulty, position_x, position_y, position_z "
+        "FROM playerbot_dungeon_routes ORDER BY map_id, difficulty, seq");
+    if (!result)
+    {
+        TC_LOG_INFO("playerbot.v2",
+            "[DungeonRoutes] playerbot_dungeon_routes empty/absent — no generated waypoints.");
+        return 0;
+    }
+    size_t count = 0;
+    do
+    {
+        Field* f = result->Fetch();
+        const uint32_t map  = f[0].GetUInt16();
+        const uint32_t diff = f[1].GetUInt8();
+        generated_routes_[MakeKey(map, diff)].push_back(
+            DungeonAdvice::ProgressionPoint{ f[2].GetFloat(), f[3].GetFloat(), f[4].GetFloat() });
+        ++count;
+    } while (result->NextRow());
+    TC_LOG_INFO("playerbot.v2",
+        "[DungeonRoutes] loaded {} generated route waypoint(s) across {} dungeon(s).",
+        count, generated_routes_.size());
+    return count;
 }
 
 } // namespace Playerbot

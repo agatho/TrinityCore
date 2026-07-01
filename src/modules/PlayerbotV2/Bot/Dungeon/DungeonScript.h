@@ -214,6 +214,15 @@ public:
 
     size_t size() const { return scripts_.size(); }
 
+    // Load auto-generated route_waypoints from wc_world.playerbot_dungeon_routes
+    // (populated offline by gen_dungeon_routes.py: a navmesh-chain of on-mesh
+    // corridor points entrance->bosses). Keyed by (map_id<<8)|difficulty. These
+    // are INJECTED by GetAdvice ONLY for dungeons whose own script left
+    // route_waypoints empty — so a hand-authored chain (Deadmines) always wins.
+    // Call once at module init AFTER all scripts are registered. Returns the
+    // number of waypoints loaded.
+    size_t LoadGeneratedRoutes();
+
     // Iterate every registered per-dungeon script (excludes globals).
     // Used by the static `.playerbot smoketest dungeon` validator that
     // walks the registry to verify each script's bosses / interrupts /
@@ -233,6 +242,10 @@ private:
     // is preserved; advice is concatenated. Typical use: M+ affix
     // bundles, raid-wide pattern primitives.
     std::vector<std::unique_ptr<DungeonScript>> global_scripts_;
+    // Auto-generated route waypoints keyed by (map_id<<8)|difficulty. Filled
+    // once by LoadGeneratedRoutes(); read-only thereafter, so GetAdvice reads it
+    // lock-free from the AI worker threads.
+    std::unordered_map<uint64_t, std::vector<DungeonAdvice::ProgressionPoint>> generated_routes_;
 };
 
 } // namespace Playerbot

@@ -493,6 +493,10 @@ void Init()
     h->dungeons->Register(MakeFirelandsScript());
     h->dungeons->Register(MakeThroneOfFourWindsScript());
     h->dungeons->Register(MakeDragonSoulScript());
+    // Inject auto-generated route_waypoints (playerbot_dungeon_routes) into every
+    // dungeon whose script left route_waypoints empty. Must run AFTER all scripts
+    // are registered; read-only thereafter (GetAdvice reads it lock-free).
+    h->dungeons->LoadGeneratedRoutes();
     // BG script registry — mirrors dungeon registry; empty registry
     // is fine (script-less BGs fall back to generic combat).
     h->battlegrounds = std::make_unique<BattlegroundScriptMgr>();

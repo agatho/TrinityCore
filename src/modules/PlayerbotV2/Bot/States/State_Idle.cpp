@@ -4748,31 +4748,113 @@ bool DungeonDispatch(BotSnapshotView const& s, BotAI& ai,
                                     tight_engage ? 10.0f : kMaxAdvanceStep;
                                 const float self_bd = std::sqrt(bd2);
                                 bool        wp_found = false;
-                                float       best_wp_bd = self_bd;   // must beat our own boss-dist
                                 G3D::Vector3 best_wp_step;
-                                for (auto const& rw : advice.route_waypoints)
+                                // PASS 0 (monotonic): the STRICTLY-reachable waypoint
+                                // CLOSEST to the boss that is ALSO nearer the boss than
+                                // we are. Original behaviour — byte-exact for a
+                                // hand-authored monotonic chain (Deadmines' harbor
+                                // descent always resolves here, so authored chains are
+                                // unchanged).
                                 {
-                                    const float wbx = btx - rw.x, wby = bty - rw.y, wbz = btz - rw.z;
-                                    const float wp_bd = std::sqrt(wbx*wbx + wby*wby + wbz*wbz);
-                                    // Forward only: meaningfully closer to the boss.
-                                    if (wp_bd > self_bd - 8.0f) continue;
-                                    // Skip a point we're effectively standing on.
-                                    const float swx = rw.x - bx_adv, swy = rw.y - by_adv,
-                                                swz = rw.z - bz_adv;
-                                    if (swx*swx + swy*swy + swz*swz < 6.0f * 6.0f) continue;
-                                    // Prefer the point closest to the boss (farthest
-                                    // forward) that is STRICTLY reachable under the cap.
-                                    if (wp_bd >= best_wp_bd) continue;
-                                    G3D::Vector3 wstep;
-                                    if (!DungeonTargetReachableAndStep(
-                                            self_be, rw.x, rw.y, rw.z, route_step, wstep))
-                                        continue;
-                                    best_wp_bd  = wp_bd;
-                                    best_wp_step = wstep;
-                                    wp_found    = true;
+                                    float best_wp_bd = self_bd;
+                                    for (auto const& rw : advice.route_waypoints)
+                                    {
+                                        const float wbx = btx - rw.x, wby = bty - rw.y, wbz = btz - rw.z;
+                                        const float wp_bd = std::sqrt(wbx*wbx + wby*wby + wbz*wbz);
+                                        if (wp_bd > self_bd - 8.0f) continue;   // forward only
+                                        const float swx = rw.x - bx_adv, swy = rw.y - by_adv,
+                                                    swz = rw.z - bz_adv;
+                                        if (swx*swx + swy*swy + swz*swz < 6.0f * 6.0f) continue;
+                                        if (wp_bd >= best_wp_bd) continue;
+                                        G3D::Vector3 wstep;
+                                        if (!DungeonTargetReachableAndStep(
+                                                self_be, rw.x, rw.y, rw.z, route_step, wstep))
+                                            continue;
+                                        best_wp_bd  = wp_bd;
+                                        best_wp_step = wstep;
+                                        wp_found    = true;
+                                    }
+                                }
+                                // PASS 1 (winding chain-follow): pass 0 found nothing
+                                // because the reachable stretch of an AUTO-generated
+                                // corridor runs AWAY from the boss (Wailing Caverns winds
+                                // NE before doubling back W to Cobrahn), so NO reachable
+                                // waypoint is closer to the boss. A "closest-to-boss
+                                // reachable" fallback OSCILLATES on such a loop (from the
+                                // W leg the closest-reachable is E, and vice-versa — live
+                                // 07-01: tank ping-ponged y=404<->520). Follow the ORDERED
+                                // chain by INDEX instead: from our NEAREST chain point,
+                                // step toward the FARTHEST-INDEX forward waypoint that is
+                                // strictly reachable — the next breadcrumb chunk. Index-
+                                // monotonic, so a self-looping corridor can't ping-pong
+                                // us. The step (kMaxAdvanceStep along the validated <=74-
+                                // poly path) walks the corridor; the boss-nav's own engage
+                                // check fires as the corridor carries us through each room.
+                                if (!wp_found && advice.route_waypoints.size() >= 2)
+                                {
+                                    size_t near_i = 0;
+                                    float  near_d2 = 1.0e18f;
+                                    for (size_t i = 0; i < advice.route_waypoints.size(); ++i)
+                                    {
+                                        auto const& rw = advice.route_waypoints[i];
+                                        const float dx = rw.x - bx_adv, dy = rw.y - by_adv, dz = rw.z - bz_adv;
+                                        const float d2 = dx*dx + dy*dy + dz*dz;
+                                        if (d2 < near_d2) { near_d2 = d2; near_i = i; }
+                                    }
+                                    // If we've DRIFTED off the chain (nearest waypoint
+                                    // >15y away — a step that overshot a bend, or a
+                                    // combat shove), re-converge onto that nearest
+                                    // waypoint FIRST. Otherwise the forward scan targets
+                                    // a waypoint whose validated path begins by looping
+                                    // AWAY from us and the capped step nets ~0y, so the
+                                    // tank jitters in place off-corridor (live 07-01:
+                                    // WC tank parked 52y off-chain at -72,348).
+                                    const float near_d = std::sqrt(near_d2);
+                                    if (near_d > 15.0f)
+                                    {
+                                        auto const& rw = advice.route_waypoints[near_i];
+                                        G3D::Vector3 wstep;
+                                        if (DungeonTargetReachableAndStep(
+                                                self_be, rw.x, rw.y, rw.z, route_step, wstep))
+                                        {
+                                            best_wp_step = wstep;
+                                            wp_found     = true;
+                                        }
+                                    }
+                                    if (!wp_found)
+                                    for (size_t i = advice.route_waypoints.size(); i-- > near_i + 1; )
+                                    {
+                                        auto const& rw = advice.route_waypoints[i];
+                                        const float swx = rw.x - bx_adv, swy = rw.y - by_adv,
+                                                    swz = rw.z - bz_adv;
+                                        if (swx*swx + swy*swy + swz*swz < 6.0f * 6.0f) continue;
+                                        G3D::Vector3 wstep;
+                                        if (!DungeonTargetReachableAndStep(
+                                                self_be, rw.x, rw.y, rw.z, route_step, wstep))
+                                            continue;
+                                        best_wp_step = wstep;
+                                        wp_found     = true;
+                                        break;
+                                    }
                                 }
                                 if (wp_found)
                                 {
+                                    static uint32 s_route_dbg_ms = 0;
+                                    if (now_ms - s_route_dbg_ms > 1500u)
+                                    {
+                                        s_route_dbg_ms = now_ms;
+                                        const float sd = std::sqrt(
+                                            (best_wp_step.x - bx_adv) * (best_wp_step.x - bx_adv) +
+                                            (best_wp_step.y - by_adv) * (best_wp_step.y - by_adv) +
+                                            (best_wp_step.z - bz_adv) * (best_wp_step.z - bz_adv));
+                                        TC_LOG_INFO("playerbot.v2",
+                                            "[route_wp] {} boss={} self=({:.1f},{:.1f},{:.1f}) "
+                                            "step=({:.1f},{:.1f},{:.1f}) step_dist={:.1f} n_wp={}",
+                                            s.name(), boss_target->GetEntry(),
+                                            bx_adv, by_adv, bz_adv,
+                                            best_wp_step.x, best_wp_step.y, best_wp_step.z, sd,
+                                            advice.route_waypoints.size());
+                                    }
                                     emit.move_to(best_wp_step.x, best_wp_step.y,
                                                  best_wp_step.z, /*run=*/true);
                                     ai.set_last_rule_fired("idle:dungeon_tank_advance_boss_route");
