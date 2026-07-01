@@ -10,12 +10,16 @@ ordered chain to wc_world.playerbot_dungeon_routes for the runtime to follow.
 Reuses the built mmap_probe (full straight-path dump). Offline: zero
 world-thread pathfinding risk.
 """
-import subprocess, re, sys, math
+import subprocess, re, sys, math, os
 
 MMAP_DIR = "M:/WorldofWarcraft/mmaps"
 PROBE    = "M:/PlayerbotServer/mmap_probe.exe"
 MYSQL    = r"C:/Program Files/MySQL/MySQL Server 9.4/bin/mysql.exe"
-STEP     = 200.0     # conservative waypoint spacing (< 292y cap)
+# Waypoint spacing along the path. Must stay under the ~292y (74-poly) cap, but
+# for WINDING corridors a 200y straight leg can exceed the cap in PATH length,
+# so a bot that drifts off a crumb can't reach the next one (WC pocket, -57,322).
+# Denser crumbs keep every hop comfortably reachable. Override via GEN_STEP.
+STEP     = float(os.environ.get("GEN_STEP", "200"))
 MIN_SPACE= 25.0      # drop waypoints closer than this to the previous
 GUARD    = 30        # max hops per boss leg (anti-infinite-loop)
 
