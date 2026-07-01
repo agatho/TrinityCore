@@ -15,6 +15,7 @@
 #include "GroupMgr.h"
 #include "Map.h"                 // .playerbot bgzones — object store + player list
 #include "MapReference.h"
+#include "GridDefines.h"         // INVALID_HEIGHT — .playerbot terrainprofile void check
 #include "ObjectAccessor.h"
 #include "Player.h"
 #include "TypeContainerVisitor.h"
@@ -558,6 +559,7 @@ public:
             { "roadstats",     HandleRoadStats,     rbac::RBAC_PERM_COMMAND_GM, Console::Yes },
             { "roadreset",     HandleRoadReset,     rbac::RBAC_PERM_COMMAND_GM, Console::Yes },
             { "pathcompare",   HandlePathCompare,   rbac::RBAC_PERM_COMMAND_GM, Console::Yes },
+            { "terrainprofile",HandleTerrainProfile,rbac::RBAC_PERM_COMMAND_GM, Console::Yes },
             { "meta",          HandleMeta,          rbac::RBAC_PERM_COMMAND_GM, Console::No  },
             // Player-facing — gated to RBAC_PERM_JOIN_NORMAL_BG (the
             // "is a regular player" perm every account has by default)
@@ -594,6 +596,100 @@ public:
         const std::string report = Playerbot::Diagnostics::Inspect(id);
         for (auto const& line : Trinity::Tokenize(report, '\n', true))
             handler->SendSysMessage(std::string{line});
+        return true;
+    }
+
+    // .playerbot terrainprofile <x1> <y1> <z1> <x2> <y2> <z2> <botname>
+    // Samples the ACTUAL walkable collision/height surface (terrain .map + VMap
+    // .vmo, exactly what Map::GetHeight sees) every 0.5y along the A->B segment,
+    // to answer: is a navmesh GAP a walkable-but-unmeshed surface (VMap-walk can
+    // cross it) vs a genuine void (needs an off-mesh jump) vs a wall (needs
+    // routing)? The bot arg supplies the Map + PhaseShift (must be on the target
+    // map). Per sample: surface Z, step delta, slope, and a wall LoS-raycast
+    // between consecutive surface points. Verdict classifies the whole segment.
+    static bool HandleTerrainProfile(ChatHandler* handler,
+        float x1, float y1, float z1, float x2, float y2, float z2,
+        std::string const& botname)
+    {
+        Player* p = ObjectAccessor::FindConnectedPlayerByName(botname);
+        if (!p)
+        {
+            handler->PSendSysMessage("terrainprofile: bot '%s' not online (need a bot on the target map for its Map+phase).", botname.c_str());
+            return false;
+        }
+        Map* m = p->GetMap();
+        if (!m) { handler->SendSysMessage("terrainprofile: no map."); return false; }
+        PhaseShift const& ph = p->GetPhaseShift();
+
+        const float dx = x2 - x1, dy = y2 - y1, dz = z2 - z1;
+        const float hdist = std::sqrt(dx * dx + dy * dy);
+        if (hdist < 0.1f) { handler->SendSysMessage("terrainprofile: segment too short."); return false; }
+
+        // 0.5y sampling (capped so the SOAP reply stays bounded). Thresholds mirror
+        // API::TryTerrainWalkFallback so the verdict matches what the crawler would do.
+        constexpr float kSampleStep = 0.5f;
+        const int steps = std::min(160, std::max(2, int(hdist / kSampleStep)));
+        constexpr float kCliff = 3.0f;     // |dz| between 0.5y samples above this = cliff/drop (== kStepClimb)
+        constexpr float kSteepDeg = 50.0f; // slope above this = steep (Recast walkable ~50-60 deg)
+        constexpr float kEye = 2.0f;       // raycast height above surface for wall detection
+
+        handler->PSendSysMessage("=== terrainprofile map=%u (%.1f,%.1f,%.1f)->(%.1f,%.1f,%.1f) hdist=%.1fy steps=%d ===",
+            m->GetId(), x1, y1, z1, x2, y2, z2, hdist, steps);
+
+        float prevSurf = z1, prevX = x1, prevY = y1;
+        bool anyVoid = false, anyWall = false, anyCliff = false;
+        float maxStep = 0.f, maxSlope = 0.f, minSurf = 1e9f, maxSurf = -1e9f;
+        int firstVoid = -1, firstWall = -1, firstCliff = -1;
+
+        for (int i = 0; i <= steps; ++i)
+        {
+            const float t = float(i) / float(steps);
+            const float px = x1 + dx * t;
+            const float py = y1 + dy * t;
+            // Search from ~3y above the INTERPOLATED expected level (anchors to the
+            // A->B surface line; robust for near-level gaps, won't drift through a void).
+            const float refZ = (z1 + dz * t) + 3.0f;
+            const float surf = m->GetHeight(ph, px, py, refZ, /*vmap*/ true, 50.0f);
+
+            if (surf <= INVALID_HEIGHT)
+            {
+                anyVoid = true; if (firstVoid < 0) firstVoid = i;
+                handler->PSendSysMessage("[%2d] h=%4.1f (%.1f,%.1f) surf=VOID", i, t * hdist, px, py);
+                prevX = px; prevY = py; continue;
+            }
+            if (surf < minSurf) minSurf = surf;
+            if (surf > maxSurf) maxSurf = surf;
+
+            float dstep = 0.f, slopeDeg = 0.f;
+            char const* flag = "";
+            if (i > 0)
+            {
+                dstep = surf - prevSurf;
+                const float seg = std::sqrt((px - prevX) * (px - prevX) + (py - prevY) * (py - prevY));
+                slopeDeg = seg > 0.01f ? (std::atan2(std::fabs(dstep), seg) * 57.2958f) : 90.f;
+                if (std::fabs(dstep) > maxStep) maxStep = std::fabs(dstep);
+                if (slopeDeg > maxSlope) maxSlope = slopeDeg;
+                if (std::fabs(dstep) > kCliff) { anyCliff = true; if (firstCliff < 0) firstCliff = i; flag = "CLIFF"; }
+                else if (slopeDeg > kSteepDeg) flag = "steep";
+                // Wall: is the straight line between the two surface points blocked?
+                if (!m->isInLineOfSight(ph, prevX, prevY, prevSurf + kEye, px, py, surf + kEye,
+                        LINEOFSIGHT_ALL_CHECKS, VMAP::ModelIgnoreFlags::M2))
+                { anyWall = true; if (firstWall < 0) firstWall = i; flag = "WALL"; }
+            }
+            handler->PSendSysMessage("[%2d] h=%4.1f (%.1f,%.1f) surf=%.2f dz=%+.2f slope=%2.0f %s",
+                i, t * hdist, px, py, surf, dstep, slopeDeg, flag);
+            prevSurf = surf; prevX = px; prevY = py;
+        }
+
+        char const* verdict;
+        if (anyVoid)        verdict = "VOID (surface gap -> true void, needs off-mesh JUMP)";
+        else if (anyWall)   verdict = "WALL (collision blocks -> needs ROUTING, VMap-walk cannot cross)";
+        else if (anyCliff)  verdict = "CLIFF (>3y step -> drop/wall face, not a flat gap)";
+        else if (maxSlope > kSteepDeg) verdict = "STEEP (surface present but slope >50deg -> borderline)";
+        else                verdict = "CONTINUOUS WALKABLE (surface, no wall/void, gentle slope) -> VMap-walk VIABLE";
+        handler->PSendSysMessage("=== VERDICT: %s ===", verdict);
+        handler->PSendSysMessage("    surfZ=[%.2f..%.2f] maxStep=%.2f maxSlope=%.0f void@%d wall@%d cliff@%d",
+            minSurf, maxSurf, maxStep, maxSlope, firstVoid, firstWall, firstCliff);
         return true;
     }
 
