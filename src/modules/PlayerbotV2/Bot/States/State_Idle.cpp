@@ -1059,12 +1059,6 @@ static bool DungeonTargetReachableAndStep(Player* self, float tx, float ty,
 // can't run when the FSM has routed the bot to State_InCombat). Definition further
 // down with the other idle dungeon helpers.
 static bool DungeonNudgeOntoMesh(Player* self, BotIntentEmitter& emit, BotAI& ai);
-// Targeted Gap-1 bridge-strand recovery (Deadmines map 36): commits a south
-// far-vertex cross when a bot is parked on the off-mesh bridge span with no
-// active cross (post-death rejoin / cohesion retreat onto the bridge). Defined
-// with the other idle dungeon helpers; honored via DungeonHonorCross.
-static bool DungeonGap1BridgeRecover(BotSnapshotView const& s, BotAI& ai,
-                                     BotIntentEmitter& emit, uint32 now_ms);
 // Shared (declared in MaintainHelpers.h): GUID-keyed wrapper around
 // DungeonTargetReachableAndStep with FLOAT out-params, so other state files
 // (State_InGroup's dungeon-rejoin) can emit the SAME off-mesh far-vertex step
@@ -1325,13 +1319,6 @@ bool DungeonCombatPositioning(BotSnapshotView const& s, BotAI& ai,
         if (Player* self_recover = ObjectAccessor::FindConnectedPlayer(s.raw().guid))
             if (DungeonNudgeOntoMesh(self_recover, emit, ai))
                 return true;
-
-    // (-0.5) Gap-1 bridge-strand recovery — a bot parked ON the off-mesh bridge
-    // (valid poly, so the FARFROMPOLY nudge above skips it) with no active cross
-    // can path nowhere south. Commit the south-vertex cross so honor-cross drives
-    // it off the bridge. No-op off the bridge span.
-    if (s.is_in_dungeon() && DungeonGap1BridgeRecover(s, ai, emit, now_ms))
-        return true;
 
     // (-0.4) Dungeon FALSE-COMBAT escape — LAST-RESORT safety net. The whole COHERED
     // group can be held InCombat indefinitely by attackers with NO seedable victim
@@ -2817,47 +2804,6 @@ static bool DungeonNudgeOntoMesh(Player* self, BotIntentEmitter& emit, BotAI& ai
     return true;
 }
 
-// Targeted Gap-1 bridge-strand recovery (Deadmines, map 36). A dungeon bot can
-// come to rest ON the Gap-1 off-mesh bridge span OUTSIDE the normal crossing
-// flow — a post-death rejoin/revive that lands mid-span, or a cohesion retreat
-// that walks the tank back onto it — with NO active cross commit. From the
-// bridge poly every pathfind to a south-side goal (ALL Deadmines bosses are
-// south of the gap) returns NoPath/reach=0, so the boss/waypoint navigators
-// spin forever and the run deadlocks (observed live 2026-06-26: tank died at
-// Helix, rejoined onto the bridge at (-213,-537,z52), 8x NoPath). The FARFROMPOLY
-// nudge above can't help — the bot is on a VALID poly (the off-mesh connection),
-// not off-mesh. Recovery: when the bot is parked on the bridge span with no
-// active cross (DungeonHonorCross runs first and consumes the active-cross case),
-// commit a cross to the SOUTH far vertex and drive it via the shared
-// DungeonHonorCross machinery, finishing the crossing the bot was — or should
-// have been — mid-way through. South is always correct during an active run:
-// every post-gap encounter is south, and a completed run exits by teleporter/
-// hearth, never by walking back north across the gap (so gate on !complete).
-static bool DungeonGap1BridgeRecover(BotSnapshotView const& s, BotAI& ai,
-                                     BotIntentEmitter& emit, uint32 now_ms)
-{
-    if (s.map_id() != 36 || s.dungeon_complete()) return false;
-    float bx, by, bz; s.position(bx, by, bz);
-    // Gap-1 bridge span — offmesh.txt line 167:
-    //   (-213.3,-520.0,53.1) -> (-213.3,-547.5,51.3), width 12y.
-    if (bx < -219.0f || bx > -207.0f) return false;
-    if (by < -549.0f || by > -517.0f) return false;
-    if (bz <   48.0f || bz >   55.0f) return false;
-    constexpr float kSx = -213.3f, kSy = -547.5f, kSz = 51.3f;  // south far vertex
-    const float ddx = kSx - bx, ddy = kSy - by, ddz = kSz - bz;
-    // Early-out radius (8y) is wider than DungeonHonorCross's 6y landed-clear so the
-    // two rules can't ping-pong in a 4-6y dead-zone: once the bot is near the south
-    // vertex this yields entirely and the cross's own landing + normal nav finish it,
-    // instead of re-committing a fresh cross every tick and churning the bot in place
-    // (that churn defeated the strand-recovery progress clock — live 06-26).
-    if (ddx*ddx + ddy*ddy + ddz*ddz <= 8.0f * 8.0f)
-        return false;   // already at/near the south ledge — hand off to normal nav
-    ai.set_dungeon_cross(kSx, kSy, kSz, now_ms + 12000);
-    emit.move_to(kSx, kSy, kSz, /*run=*/true);
-    ai.set_last_rule_fired("idle:dungeon_gap1_bridge_recover");
-    return true;
-}
-
 // Stranded-follower recovery (map-agnostic). A dungeon follower can come to rest
 // where EVERY walkable path back to the tank NoPaths: it chased a mob onto a
 // navmesh-disconnected perch (the Deadmines FoeReaper-descent z59 ledge — task
@@ -3200,13 +3146,6 @@ bool DungeonDispatch(BotSnapshotView const& s, BotAI& ai,
     // helper refreshes the commit TTL so a slow combat-contested hop can't expire
     // mid-jump and strand the bot on the off-mesh poly (the recurring Gap-1 stall).
     if (DungeonHonorCross(s, ai, emit, now_ms))
-        return true;
-
-    // Gap-1 bridge-strand recovery — a bot resting ON the off-mesh bridge with
-    // no active cross (post-death rejoin / cohesion retreat) can't path to any
-    // south-side goal; commit the south-vertex cross and let DungeonHonorCross
-    // (above, next tick) drive it across. No-op off the bridge span.
-    if (DungeonGap1BridgeRecover(s, ai, emit, now_ms))
         return true;
 
     // Stranded-follower recovery — a follower wedged where it can't path back to
