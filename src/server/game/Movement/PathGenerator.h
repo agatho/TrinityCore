@@ -106,16 +106,6 @@ class TC_GAME_API PathGenerator
         bool PathTraversesOffMesh() const { return _pathTraversesOffMesh; }
         G3D::Vector3 const& GetFirstOffMeshLanding() const { return _firstOffMeshLanding; }
 
-        // True when the path's START position had NO navmesh poly beneath it
-        // (BuildPolyPath's GetPolyByLocation returned INVALID_POLYREF) — i.e. the
-        // source is genuinely OFF the navmesh (e.g. a bot stranded in an off-mesh
-        // bridge gap). DISTINCT from PATHFIND_FARFROMPOLY_START, which means a poly
-        // WAS found but is >7y away: a no-poly start is marked PATHFIND_NOPATH, not
-        // FARFROMPOLY, so off-mesh recovery that gates on FARFROMPOLY alone misses
-        // it. Lets a recovery rule detect the strand authoritatively, independent of
-        // the resulting path TYPE.
-        bool StartsOffMesh() const { return _startOffMesh; }
-
         // shortens the path until the destination is the specified distance from the target point
         void ShortenPathUntilDist(G3D::Vector3 const& target, float dist);
 
@@ -132,10 +122,6 @@ class TC_GAME_API PathGenerator
         // smoothed path crosses an off-mesh connection.
         bool _pathTraversesOffMesh = false;
         G3D::Vector3 _firstOffMeshLanding;
-
-        // True when BuildPolyPath found no poly under the START position
-        // (startPoly == INVALID_POLYREF). Reset per CalculatePath. See StartsOffMesh().
-        bool _startOffMesh = false;
 
         bool _useStraightPath;  // type of path will be generated
         bool _forceDestination; // when set, we will always arrive at given point
