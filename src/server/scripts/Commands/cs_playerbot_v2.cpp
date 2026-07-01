@@ -550,6 +550,7 @@ public:
             { "group",         HandleGroup,         rbac::RBAC_PERM_COMMAND_GM, Console::Yes },
             { "dungeontest",   HandleDungeonTest,   rbac::RBAC_PERM_COMMAND_GM, Console::Yes },
             { "dungeonreset",  HandleDungeonReset,  rbac::RBAC_PERM_COMMAND_GM, Console::Yes },
+            { "dungeondump",   HandleDungeonDump,   rbac::RBAC_PERM_COMMAND_GM, Console::Yes },
             { "bginfo",        HandleBgInfo,        rbac::RBAC_PERM_COMMAND_GM, Console::Yes },
             { "diag",          HandleDiag,          rbac::RBAC_PERM_COMMAND_GM, Console::Yes },
             { "wedges",        HandleWedges,        rbac::RBAC_PERM_COMMAND_GM, Console::Yes },
@@ -1997,6 +1998,47 @@ public:
     // position is inside the instance, but last_lfg_dungeon_id resets on
     // relogin so they can no longer auto-run), or simply to retry from
     // scratch. This is a deliberate test reset, NOT a stuck-bot rescue.
+    // Dump every registered DungeonScript as a machine-readable line for the
+    // offline route generator (tools/gen_dungeon_routes.py). One line per script:
+    //   DDUMP|<map_id>|<lfg_dungeonId>|<name>|<boss1,boss2,...>
+    // map_id + bosses come from the script (get_advice with an empty snapshot —
+    // the same safe static-extraction the dungeon smoketest uses); lfg_dungeonId
+    // is the first LFGDungeons.db2 row on that map (used to look up the LFG
+    // entrance in wc_world.lfg_dungeon_template). 0 => no LFG entry (generator
+    // falls back / skips). Read-only.
+    static bool HandleDungeonDump(ChatHandler* handler)
+    {
+        using namespace Playerbot;
+        if (!Services::Initialized())
+        { handler->SendSysMessage("PlayerbotV2 not initialized."); return false; }
+
+        auto& mgr = Services::Dungeons();
+        uint32 count = 0;
+        mgr.for_each_script([&](DungeonScript const& script)
+        {
+            BotSnapshot empty_snap{};
+            BotSnapshotView empty_view(empty_snap);
+            DungeonAdvice a = script.get_advice(empty_view);
+
+            uint32 lfg_id = 0;
+            for (LFGDungeonsEntry const* d : sLFGDungeonsStore)
+                if (d && uint32(d->MapID) == script.map_id())
+                { lfg_id = d->ID; break; }
+
+            std::string bosses;
+            for (uint32 b : a.bosses)
+            {
+                if (!bosses.empty()) bosses += ",";
+                bosses += std::to_string(b);
+            }
+            handler->PSendSysMessage("DDUMP|%u|%u|%s|%s",
+                script.map_id(), lfg_id, script.name(), bosses.c_str());
+            ++count;
+        });
+        handler->PSendSysMessage("DDUMP_END|%u scripts", count);
+        return true;
+    }
+
     static bool HandleDungeonReset(ChatHandler* handler)
     {
         using namespace Playerbot;

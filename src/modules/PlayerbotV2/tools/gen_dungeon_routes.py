@@ -29,10 +29,46 @@ DUNGEONS = [
     ("Gnomeregan",      90, 14, [7361,7079,6235,6000,6229,7800,6228]),
 ]
 
+DUMP_FILE = "M:/PlayerbotServer/dungeondump.txt"
+
 def sql(db, q):
     r = subprocess.run([MYSQL,"-uplayerbot","-pplayerbot",db,"-N","-e",q],
                        capture_output=True,text=True)
     return [ln.split("\t") for ln in r.stdout.strip().splitlines() if ln.strip()]
+
+def capture_dump():
+    """Run `.playerbot dungeondump` via SOAP, save the DDUMP lines to DUMP_FILE."""
+    r = subprocess.run(["python","soap_cmd.py",".playerbot dungeondump"],
+                       cwd="M:/PlayerbotServer",capture_output=True,text=True,timeout=60)
+    lines = [ln for ln in r.stdout.splitlines() if "DDUMP|" in ln]
+    with open(DUMP_FILE,"w") as f:
+        f.write("\n".join(lines)+"\n")
+    return lines
+
+def load_dungeons_from_dump(lines=None):
+    """Parse DDUMP|map|lfgId|name|bosses lines into the DUNGEONS tuple list.
+    Auto-generated bosses that aren't spawned in `creature` are dropped later
+    (boss_positions filters); a script with 0 spawned bosses yields no route."""
+    if lines is None:
+        try:
+            with open(DUMP_FILE) as f: lines = f.read().splitlines()
+        except FileNotFoundError:
+            return None
+    out = []
+    for ln in lines:
+        i = ln.find("DDUMP|")
+        if i < 0: continue
+        parts = ln[i:].strip().rstrip("&#xD;").split("|")
+        if len(parts) < 5: continue
+        try:
+            mapid = int(parts[1]); lfgid = int(parts[2])
+        except ValueError:
+            continue
+        name = parts[3]
+        bosses = [int(b) for b in parts[4].split(",") if b.strip().isdigit()]
+        if not bosses: continue
+        out.append((name, mapid, lfgid, bosses))
+    return out
 
 def boss_positions(mapid, bosses):
     """Return {entry:(x,y,z)} for spawned bosses on this map (nearest-to-origin spawn)."""
@@ -141,13 +177,39 @@ def write_db(mapid, chain):
     sql("wc_world", f"INSERT INTO playerbot_dungeon_routes (map_id,difficulty,seq,position_x,position_y,position_z) VALUES {vals}")
 
 def main():
-    only = set(int(x) for x in sys.argv[1:]) if len(sys.argv)>1 else None
-    print("=== generating dungeon route waypoints ===")
-    for name, mapid, did, bosses in DUNGEONS:
+    args = sys.argv[1:]
+    # Modes:
+    #   --all        : capture a fresh dungeondump from the live server (SOAP) and
+    #                  generate routes for EVERY registered DungeonScript.
+    #   --dump       : same but reuse an existing dungeondump.txt (no SOAP call).
+    #   <mapid ...>  : restrict to these maps (from the dump if present, else the
+    #                  built-in list).
+    #   (none)       : the built-in 6-dungeon list (back-compat).
+    use_all = "--all" in args
+    use_dump = use_all or "--dump" in args
+    only = set(int(x) for x in args if x.isdigit()) or None
+
+    dungeons = DUNGEONS
+    if use_all:
+        print("=== capturing dungeondump via SOAP ===")
+        lines = capture_dump()
+        print(f"  captured {len(lines)} DDUMP lines")
+        d = load_dungeons_from_dump(lines)
+        if d: dungeons = d
+    elif use_dump:
+        d = load_dungeons_from_dump()
+        if d: dungeons = d
+        print(f"  loaded {len(dungeons)} dungeons from {DUMP_FILE}")
+
+    print(f"=== generating dungeon route waypoints ({len(dungeons)} dungeons) ===")
+    ok = skip = 0
+    for name, mapid, did, bosses in dungeons:
         if only and mapid not in only: continue
         chain = gen_chain(name, mapid, did, bosses)
         write_db(mapid, chain)
-    print("=== done ===")
+        if chain: ok += 1
+        else: skip += 1
+    print(f"=== done: {ok} routed, {skip} empty/skipped ===")
     for r in sql("wc_world","SELECT map_id,COUNT(*) FROM playerbot_dungeon_routes GROUP BY map_id ORDER BY map_id"):
         print(f"  map {r[0]}: {r[1]} waypoints")
 
