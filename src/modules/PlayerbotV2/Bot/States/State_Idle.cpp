@@ -5713,28 +5713,68 @@ bool DungeonDispatch(BotSnapshotView const& s, BotAI& ai,
                         pick = u.guid; break;
                     }
                 }
-                // [detour] READ-ONLY stage (Task 1): measure, log, never block.
-                if (!pick.IsEmpty() && dtk->online && dtk->is_alive && dtk->map_id == s.map_id())
-                    if (Player* tkp = ObjectAccessor::FindConnectedPlayer(dtk->guid))
-                        for (auto const& u : s.raw().combat.nearby_enemies)
-                        {
-                            if (u.guid != pick) continue;
-                            DungeonDetourVerdict const dv =
-                                DungeonTankDetour(tkp, u.x, u.y, u.z);
-                            static uint32 s_detour_dbg_focus_ms = 0;
-                            uint32 const dnow = s.published_at_ms();
-                            if (dv.computed && dnow - s_detour_dbg_focus_ms > 1500u)
+                // Ranged-pull discipline (2026-07-02, SFK courtyard wedge):
+                // do NOT open fire on an enemy the TANK can only reach via a
+                // huge detour (or not at all) — one DPS shot locks the whole
+                // group into false combat the tank cannot resolve. Decline the
+                // pick (as if unresolved) so lower-priority rules can run, and
+                // shield the target briefly so the scan does not re-pick it
+                // every tick. The gate fails OPEN (uncomputed verdict never
+                // blocks a pull).
+                if (Services::Config().pull_gate_enabled())
+                {
+                    if (!pick.IsEmpty() && dtk->online && dtk->is_alive && dtk->map_id == s.map_id())
+                        if (Player* tkp = ObjectAccessor::FindConnectedPlayer(dtk->guid))
+                            for (auto const& u : s.raw().combat.nearby_enemies)
                             {
-                                s_detour_dbg_focus_ms = dnow;
-                                TC_LOG_INFO("playerbot.v2",
-                                    "[detour] rule=focus_assist bot={} target={} beeline={:.1f} "
-                                    "path={:.1f} ratio={:.2f} complete={} excessive={}",
-                                    s.name(), pick.ToString(), dv.beeline, dv.path_len,
-                                    dv.ratio, dv.complete ? 1 : 0,
-                                    DungeonDetourExcessive(dv) ? 1 : 0);
+                                if (u.guid != pick) continue;
+                                DungeonDetourVerdict const dv =
+                                    DungeonTankDetour(tkp, u.x, u.y, u.z);
+                                if (DungeonDetourExcessive(dv))
+                                {
+                                    ai.note_engage(pick, s.published_at_ms(), 15000u);
+                                    static uint32 s_pullgate_dbg_focus_ms = 0;
+                                    uint32 const dnow = s.published_at_ms();
+                                    if (dnow - s_pullgate_dbg_focus_ms > 1500u)
+                                    {
+                                        s_pullgate_dbg_focus_ms = dnow;
+                                        TC_LOG_INFO("playerbot.v2",
+                                            "[pull_gate] SKIP rule=focus_assist bot={} target={} "
+                                            "beeline={:.1f} path={:.1f} ratio={:.2f} complete={}",
+                                            s.bot_id(), pick.ToString(), dv.beeline,
+                                            dv.path_len, dv.ratio, dv.complete ? 1 : 0);
+                                    }
+                                    pick = ObjectGuid();   // decline: let lower-priority rules run
+                                }
+                                break;
                             }
-                            break;
-                        }
+                }
+                else
+                {
+                    // [detour] READ-ONLY stage (Task 1): measure, log, never block.
+                    // Kept alive so diagnosis survives the kill switch.
+                    if (!pick.IsEmpty() && dtk->online && dtk->is_alive && dtk->map_id == s.map_id())
+                        if (Player* tkp = ObjectAccessor::FindConnectedPlayer(dtk->guid))
+                            for (auto const& u : s.raw().combat.nearby_enemies)
+                            {
+                                if (u.guid != pick) continue;
+                                DungeonDetourVerdict const dv =
+                                    DungeonTankDetour(tkp, u.x, u.y, u.z);
+                                static uint32 s_detour_dbg_focus_ms = 0;
+                                uint32 const dnow = s.published_at_ms();
+                                if (dv.computed && dnow - s_detour_dbg_focus_ms > 1500u)
+                                {
+                                    s_detour_dbg_focus_ms = dnow;
+                                    TC_LOG_INFO("playerbot.v2",
+                                        "[detour] rule=focus_assist bot={} target={} beeline={:.1f} "
+                                        "path={:.1f} ratio={:.2f} complete={} excessive={}",
+                                        s.name(), pick.ToString(), dv.beeline, dv.path_len,
+                                        dv.ratio, dv.complete ? 1 : 0,
+                                        DungeonDetourExcessive(dv) ? 1 : 0);
+                                }
+                                break;
+                            }
+                }
                 if (!pick.IsEmpty() && emit.start_attack(pick))
                 {
                     ai.note_engage(pick, now_ms);
@@ -5777,26 +5817,64 @@ bool DungeonDispatch(BotSnapshotView const& s, BotAI& ai,
                                 if (ie == u.entry) { env_ignored = true; break; }
                             if (env_ignored) continue;
                         }
-                        // [detour] READ-ONLY stage (Task 1): measure, log, never block.
-                        if (GroupMemberSummary const* tk2 = g.tank())
-                            if (tk2->online && tk2->is_alive && tk2->map_id == s.map_id())
-                                if (Player* tkp = ObjectAccessor::FindConnectedPlayer(tk2->guid))
-                                {
-                                    DungeonDetourVerdict const dv =
-                                        DungeonTankDetour(tkp, u.x, u.y, u.z);
-                                    static uint32 s_detour_dbg_dps_ms = 0;
-                                    uint32 const dnow = s.published_at_ms();
-                                    if (dv.computed && dnow - s_detour_dbg_dps_ms > 1500u)
+                        // Ranged-pull discipline (2026-07-02, SFK courtyard wedge):
+                        // do NOT open fire on an enemy the TANK can only reach via a
+                        // huge detour (or not at all) — one DPS shot locks the whole
+                        // group into false combat the tank cannot resolve. Skip the
+                        // target and shield it briefly so the scan moves on; the gate
+                        // fails OPEN (uncomputed verdict never blocks a pull).
+                        if (Services::Config().pull_gate_enabled())
+                        {
+                            bool gated = false;
+                            if (GroupMemberSummary const* tk2 = g.tank())
+                                if (tk2->online && tk2->is_alive && tk2->map_id == s.map_id())
+                                    if (Player* tkp = ObjectAccessor::FindConnectedPlayer(tk2->guid))
                                     {
-                                        s_detour_dbg_dps_ms = dnow;
-                                        TC_LOG_INFO("playerbot.v2",
-                                            "[detour] rule=dps_assist bot={} target={} beeline={:.1f} "
-                                            "path={:.1f} ratio={:.2f} complete={} excessive={}",
-                                            s.name(), u.guid.ToString(), dv.beeline, dv.path_len,
-                                            dv.ratio, dv.complete ? 1 : 0,
-                                            DungeonDetourExcessive(dv) ? 1 : 0);
+                                        DungeonDetourVerdict const dv =
+                                            DungeonTankDetour(tkp, u.x, u.y, u.z);
+                                        if (DungeonDetourExcessive(dv))
+                                        {
+                                            ai.note_engage(u.guid, s.published_at_ms(), 15000u);
+                                            static uint32 s_pullgate_dbg_ms = 0;
+                                            uint32 const dnow = s.published_at_ms();
+                                            if (dnow - s_pullgate_dbg_ms > 1500u)
+                                            {
+                                                s_pullgate_dbg_ms = dnow;
+                                                TC_LOG_INFO("playerbot.v2",
+                                                    "[pull_gate] SKIP rule=dps_assist bot={} target={} "
+                                                    "beeline={:.1f} path={:.1f} ratio={:.2f} complete={}",
+                                                    s.bot_id(), u.guid.ToString(), dv.beeline,
+                                                    dv.path_len, dv.ratio, dv.complete ? 1 : 0);
+                                            }
+                                            gated = true;
+                                        }
                                     }
-                                }
+                            if (gated) continue;   // next candidate enemy
+                        }
+                        else
+                        {
+                            // [detour] READ-ONLY stage (Task 1): measure, log, never
+                            // block. Kept alive so diagnosis survives the kill switch.
+                            if (GroupMemberSummary const* tk2 = g.tank())
+                                if (tk2->online && tk2->is_alive && tk2->map_id == s.map_id())
+                                    if (Player* tkp = ObjectAccessor::FindConnectedPlayer(tk2->guid))
+                                    {
+                                        DungeonDetourVerdict const dv =
+                                            DungeonTankDetour(tkp, u.x, u.y, u.z);
+                                        static uint32 s_detour_dbg_dps_ms = 0;
+                                        uint32 const dnow = s.published_at_ms();
+                                        if (dv.computed && dnow - s_detour_dbg_dps_ms > 1500u)
+                                        {
+                                            s_detour_dbg_dps_ms = dnow;
+                                            TC_LOG_INFO("playerbot.v2",
+                                                "[detour] rule=dps_assist bot={} target={} beeline={:.1f} "
+                                                "path={:.1f} ratio={:.2f} complete={} excessive={}",
+                                                s.name(), u.guid.ToString(), dv.beeline, dv.path_len,
+                                                dv.ratio, dv.complete ? 1 : 0,
+                                                DungeonDetourExcessive(dv) ? 1 : 0);
+                                        }
+                                    }
+                        }
                         if (!emit.start_attack(u.guid)) return true;
                         ai.note_engage(u.guid, now_ms);
                         ai.set_last_rule_fired("idle:dungeon_dps_assist");
