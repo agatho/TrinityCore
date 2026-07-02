@@ -234,6 +234,15 @@ public:
     // enabled_ so an operator can keep the pre-combat gates but disable the
     // disengage (or vice versa) while diagnosing. (PlayerbotV2.PullGate.DisengageEnabled)
     bool  pull_gate_disengage_enabled() const { return pull_gate_disengage_enabled_; }
+    // Stage 4: tank long-detour CHASE COMMITMENT. Once a tank commits to a
+    // long-but-complete corridor toward its current victim, hold the
+    // commitment (re-plan only every few seconds, never re-pick) instead of
+    // oscillating; give up loudly after TankCommitMaxMs so a genuinely
+    // unreachable pull still resolves via the normal disengage/escape paths.
+    // Independent kill-switch from pull_gate_enabled_ so an operator can
+    // disable just the commitment behavior while diagnosing.
+    bool   tank_commit_enabled()  const { return tank_commit_enabled_; }
+    uint32 tank_commit_max_ms()   const { return tank_commit_max_ms_; }
 
 private:
     void apply_from_loaded_config();
@@ -301,6 +310,8 @@ private:
     float pull_gate_max_ratio_       = 3.0f;
     float pull_gate_min_extra_yards_ = 40.0f;
     bool  pull_gate_disengage_enabled_ = true;
+    bool   tank_commit_enabled_  = true;
+    uint32 tank_commit_max_ms_   = 45000;
 };
 
 } // namespace Playerbot

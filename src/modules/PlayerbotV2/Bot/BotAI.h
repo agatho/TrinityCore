@@ -883,6 +883,38 @@ public:
     { dungeon_cross_x_ = x; dungeon_cross_y_ = y; dungeon_cross_z_ = z;
       dungeon_cross_until_ms_ = until_ms; }
     void       clear_dungeon_cross() { dungeon_cross_until_ms_ = 0; cross_episode_since_ms_ = 0; }
+
+    // ── Tank chase-commit latch (2026-07-02, stage 4) ──────────────────────
+    // Once a tank in combat chooses to walk a genuinely LONG-but-complete
+    // corridor to its current victim (a taunt_peel target, a boss, or a
+    // Task-2/3 survivor), it must COMMIT and walk the whole thing instead of
+    // re-deciding every tick — the SFK wedge is oscillation, not the corridor
+    // itself. Mirrors dungeon_route_wp's map-bound commit idiom just above:
+    // the identity getters take the CALLER's current map_id and return the
+    // "no commitment" sentinel (empty guid / 0ms) on any mismatch, so an LFG
+    // teleport self-invalidates the latch instead of chasing a guid that
+    // belongs to a different instance.
+    ObjectGuid chase_commit_target(uint32 map_id) const
+    { return (chase_commit_map_ == map_id) ? chase_commit_target_ : ObjectGuid::Empty; }
+    uint32     chase_commit_since_ms(uint32 map_id) const
+    { return (chase_commit_map_ == map_id) ? chase_commit_since_ms_ : 0; }
+    uint32     chase_commit_last_plan_ms() const { return chase_commit_last_plan_ms_; }
+    void       set_chase_commit(ObjectGuid g, uint32 now_ms, uint32 map_id)
+    {
+        chase_commit_target_ = g;
+        chase_commit_since_ms_ = now_ms ? now_ms : 1u;
+        chase_commit_last_plan_ms_ = now_ms;
+        chase_commit_map_ = map_id;
+    }
+    void       touch_chase_commit_plan(uint32 now_ms) { chase_commit_last_plan_ms_ = now_ms; }
+    void       clear_chase_commit()
+    {
+        chase_commit_target_ = ObjectGuid::Empty;
+        chase_commit_since_ms_ = 0;
+        chase_commit_last_plan_ms_ = 0;
+        chase_commit_map_ = 0;
+    }
+
     // Cross EPISODE wall-clock. Unlike the three detectors below — all of which the
     // FLIP-FLOP defeats (the committed exit alternates between the two bridge
     // endpoints, so the target-relative best-distance and window clocks reset on
@@ -2729,6 +2761,11 @@ private:
     // on map change). See dungeon_route_wp() for the anti-oscillation rationale.
     int32_t        dungeon_route_wp_ = -1;
     uint32         dungeon_route_wp_map_ = 0;
+    // Tank chase-commit latch fields (see chase_commit_target() above).
+    ObjectGuid     chase_commit_target_;
+    uint32         chase_commit_since_ms_     = 0;
+    uint32         chase_commit_last_plan_ms_ = 0;
+    uint32         chase_commit_map_          = 0;
     float          dungeon_cross_x_ = 0.f;
     float          dungeon_cross_y_ = 0.f;
     float          dungeon_cross_z_ = 0.f;

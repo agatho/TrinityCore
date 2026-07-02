@@ -2020,6 +2020,131 @@ bool DungeonCombatPositioning(BotSnapshotView const& s, BotAI& ai,
         }
     }
 
+    // (0d) Tank long-detour CHASE COMMITMENT (config-gated, 2026-07-02, stage
+    // 4). Once we choose to walk a genuinely long-but-valid corridor to a
+    // locked combat victim (a taunt_peel target the tank got pulled onto, a
+    // boss, or a Task-2/3 survivor), KEEP WALKING it instead of re-deciding
+    // every tick — the SFK courtyard wedge is oscillation on a long-but-
+    // reachable path, not an unreachable one. Re-plan at most every 3s
+    // (kCommitReplanMs), never re-pick mid-corridor, and give up loudly after
+    // TankCommitMaxMs so the stage-3 dungeon:untankable_disengage / normal
+    // escape paths own a genuinely stuck pull instead of this latch holding
+    // it forever. Mirrors the route-follower's committed-cursor idiom
+    // (:4742-4968): the fix for oscillation is refusing to re-decide.
+    //
+    // Placement (deliberate): AFTER rule (0) and (0c) above, both of which
+    // are gated on the HEALER LEASH (healer_in_adv/healer_in_pull, "HEALER
+    // LEASH." comment; healer_ok_0c, "HEALER LEASH (mirror rule 0)" comment)
+    // — a committing tank must still respect that leash, so this only
+    // engages once neither boss-push rule claimed the tick (no reachable
+    // boss to push toward, or held for the leash/pull-size gates). It never
+    // bypasses the leash; the group still follows via regroup_follow_tank.
+    if (Services::Config().tank_commit_enabled() &&
+        ai.effective_role(s) == Role::Tank &&
+        s.is_in_dungeon() && ai.dungeon_active() &&
+        s.in_combat() && !s.victim().IsEmpty())
+    {
+        constexpr uint32 kCommitReplanMs = 3000;
+        NearbyUnit const* vu = nullptr;
+        for (auto const& u : s.raw().combat.nearby_enemies)
+            if (u.guid == s.victim()) { vu = &u; break; }
+        if (vu)
+        {
+            bool committed = (ai.chase_commit_target(s.map_id()) == s.victim() &&
+                              ai.chase_commit_since_ms(s.map_id()) != 0);
+            if (!committed)
+            {
+                // Commit only when the corridor is genuinely LONG (the
+                // short-path case stays the existing advance's job) and
+                // COMPLETE (NOPATH/INCOMPLETE stays with the escape/
+                // disengage paths, never this latch). DungeonDetourVerdict
+                // is an incomplete type this early in the translation unit
+                // (definition is after DungeonTargetReachableAndStep further
+                // down), so use the scalar-out wrapper — same reason
+                // dungeon:untankable_disengage above uses it.
+                if (Player* self_cc = ObjectAccessor::FindConnectedPlayer(s.raw().guid))
+                {
+                    float dv_beeline = 0.f, dv_path_len = 0.f, dv_ratio = 0.f;
+                    bool  dv_complete = false;
+                    DungeonTankDetourExcessiveVerbose(self_cc, vu->x, vu->y, vu->z,
+                                                      dv_beeline, dv_path_len,
+                                                      dv_ratio, dv_complete);
+                    if (dv_complete && dv_ratio > Services::Config().pull_gate_max_ratio())
+                    {
+                        ai.set_chase_commit(s.victim(), now_ms, s.map_id());
+                        TC_LOG_INFO("playerbot.v2",
+                            "[commit] START bot={} victim={} path={:.1f} beeline={:.1f} ratio={:.2f}",
+                            s.bot_id(), s.victim().ToString(), dv_path_len, dv_beeline, dv_ratio);
+                        committed = true;
+                    }
+                }
+            }
+            if (committed)
+            {
+                uint32 const commit_since_ms = ai.chase_commit_since_ms(s.map_id());
+                if (now_ms - commit_since_ms > Services::Config().tank_commit_max_ms())
+                {
+                    TC_LOG_INFO("playerbot.v2",
+                        "[commit] GIVE_UP bot={} victim={} after={}ms",
+                        s.bot_id(), s.victim().ToString(), now_ms - commit_since_ms);
+                    ai.clear_chase_commit();
+                    emit.stop_attack();
+                    ai.note_engage(s.victim(), now_ms, 60000u);
+                    ai.set_last_rule_fired("dungeon:tank_commit_give_up");
+                    return true;
+                }
+                // Arrived? Melee range of the victim -> normal combat owns
+                // it from here (do NOT return; fall through).
+                float ccx, ccy, ccz; s.position(ccx, ccy, ccz);
+                const float cdx = vu->x - ccx, cdy = vu->y - ccy, cdz = vu->z - ccz;
+                if (cdx * cdx + cdy * cdy + cdz * cdz < 8.0f * 8.0f)
+                {
+                    ai.clear_chase_commit();
+                }
+                else if (now_ms - ai.chase_commit_last_plan_ms() >= kCommitReplanMs)
+                {
+                    ai.touch_chase_commit_plan(now_ms);
+                    if (Player* self_cs = ObjectAccessor::FindConnectedPlayer(s.raw().guid))
+                    {
+                        G3D::Vector3 cstep;
+                        bool c_off = false;
+                        // Long stride along the corridor; INCOMPLETE progress
+                        // accepted mid-corridor (same flag the boss-wedge
+                        // advance :1978-1980 uses) — the give-up clock above
+                        // bounds the pathology if the corridor is a dead end.
+                        if (DungeonTargetReachableAndStep(self_cs, vu->x, vu->y, vu->z,
+                                /*maxStep*/ 30.0f, cstep, &c_off,
+                                /*allow_incomplete_progress=*/true))
+                        {
+                            if (c_off)
+                                ai.set_dungeon_cross(cstep.x, cstep.y, cstep.z,
+                                                     now_ms + 12000);
+                            if (emit.move_to(cstep.x, cstep.y, cstep.z, /*run=*/true))
+                            {
+                                ai.set_last_rule_fired("idle:dungeon_tank_commit_chase");
+                                return true;
+                            }
+                        }
+                    }
+                    // Step failed this tick (budget / transient no-path) —
+                    // hold instead of falling through to a re-pick; the
+                    // give-up clock still bounds a genuine dead end.
+                    ai.set_last_rule_fired("idle:dungeon_tank_commit_hold");
+                    return true;
+                }
+                else
+                {
+                    // Inside the re-plan window: let the previous stride
+                    // finish; claim the tick so nothing re-decides.
+                    ai.set_last_rule_fired("idle:dungeon_tank_commit_hold");
+                    return true;
+                }
+            }
+        }
+        else if (ai.chase_commit_since_ms(s.map_id()) != 0)
+            ai.clear_chase_commit();   // victim left the snapshot
+    }
+
     // (0b) FOLLOWER rejoin IN COMBAT (Deadmines Gap-1, 2026-06-26). The InGroup
     // dungeon-rejoin and the opener yield cover OOC / InGroup stragglers, but a
     // non-tank in the InCombat state (Engage on a stray NE trash mob) reaches
