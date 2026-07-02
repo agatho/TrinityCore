@@ -1061,6 +1061,16 @@ static bool DungeonTargetReachableAndStep(Player* self, float tx, float ty,
 struct DungeonDetourVerdict;
 static DungeonDetourVerdict DungeonTankDetour(Player* tank, float tx, float ty, float tz);
 static bool DungeonDetourExcessive(DungeonDetourVerdict const& v);
+// Forward declaration: scalar-out wrapper around DungeonTankDetour +
+// DungeonDetourExcessive (2026-07-02, Task 3) for callers positioned ahead
+// of DungeonDetourVerdict's definition (dungeon:untankable_disengage below,
+// in DungeonCombatPositioning) — an incomplete struct type cannot be held
+// by value this early in the translation unit, so the verdict fields the
+// caller needs for its diagnostic log are returned via out-params instead.
+// Definition lives right after DungeonDetourExcessive further down.
+static bool DungeonTankDetourExcessiveVerbose(Player* tank, float tx, float ty, float tz,
+                                              float& out_beeline, float& out_path_len,
+                                              float& out_ratio, bool& out_complete);
 // Forward declaration: rule (-1) at the top of DungeonCombatPositioning recovers
 // an off-mesh-stranded dungeon bot WHILE IN COMBAT (the idle DungeonDispatch nudge
 // can't run when the FSM has routed the bot to State_InCombat). Definition further
@@ -1433,6 +1443,68 @@ bool DungeonCombatPositioning(BotSnapshotView const& s, BotAI& ai,
                     return true;
                 }
             }
+        }
+    }
+
+    // dungeon:untankable_disengage (2026-07-02, stage 3): a NON-TANK in
+    // combat with a victim the tank can only reach via an excessive detour,
+    // while the tank has no fightable enemy of its own, is the mob-AGGRO
+    // variant of the SFK wedge — proximity aggro pulls a bot straight into
+    // combat, so neither pre-combat pull gate (idle:dungeon_focus_assist /
+    // idle:dungeon_dps_assist, both gated !s.in_combat()) ever evaluates
+    // this target. Drop it + shield 60s; combat then times out and the
+    // group advances via the normal route instead of false-locking the
+    // whole party on an unreachable pull. Sustained-only (>6s), latched on
+    // the CURRENT victim guid via combat_victim_since_ms (see BotAI.h) —
+    // NOT the opener's OOC latch, which never armed for a mob-initiated
+    // pull — so a fresh engage gets a moment before judgment and a target
+    // swap restarts the window; a tank mid-corridor toward a legitimate
+    // pull (Task 4 commitment) is not undercut the instant combat starts.
+    // The `!tk->in_combat` guard is the load-bearing one: it keeps this
+    // rule out of every REAL encounter, where the tank is always fighting
+    // something.
+    if (Services::Config().pull_gate_disengage_enabled() &&
+        s.is_in_dungeon() && s.in_combat() &&
+        ai.effective_role(s) != Role::Tank &&
+        !s.victim().IsEmpty() && g.exists())
+    {
+        uint32 const vsince_ms = ai.combat_victim_since_ms(s.victim(), now_ms);
+        if (vsince_ms > 6000u)
+        {
+            if (GroupMemberSummary const* tk = g.tank())
+                if (tk->online && tk->is_alive && tk->guid != s.guid() &&
+                    tk->map_id == s.map_id() && !tk->in_combat)
+                {
+                    // Find the victim's coords in the snapshot sweep.
+                    NearbyUnit const* vu = nullptr;
+                    for (auto const& u : s.raw().combat.nearby_enemies)
+                        if (u.guid == s.victim()) { vu = &u; break; }
+                    if (vu)
+                        if (Player* tkp = ObjectAccessor::FindConnectedPlayer(tk->guid))
+                        {
+                            float dv_beeline = 0.f, dv_path_len = 0.f, dv_ratio = 0.f;
+                            bool  dv_complete = false;
+                            if (DungeonTankDetourExcessiveVerbose(tkp, vu->x, vu->y, vu->z,
+                                                                  dv_beeline, dv_path_len,
+                                                                  dv_ratio, dv_complete))
+                            {
+                                emit.stop_attack();
+                                ai.note_engage(s.victim(), now_ms, 60000u);
+                                ai.set_last_rule_fired("dungeon:untankable_disengage");
+                                static uint32 s_pullgate_dbg_disengage_ms = 0;
+                                if (now_ms - s_pullgate_dbg_disengage_ms > 1500u)
+                                {
+                                    s_pullgate_dbg_disengage_ms = now_ms;
+                                    TC_LOG_INFO("playerbot.v2",
+                                        "[pull_gate] DISENGAGE bot={} victim={} path={:.1f} "
+                                        "beeline={:.1f} ratio={:.2f} complete={}",
+                                        s.bot_id(), s.victim().ToString(), dv_path_len,
+                                        dv_beeline, dv_ratio, dv_complete ? 1 : 0);
+                                }
+                                return true;
+                            }
+                        }
+                }
         }
     }
 
@@ -2828,6 +2900,23 @@ static bool DungeonDetourExcessive(DungeonDetourVerdict const& v)
         return true;               // tank literally cannot arrive
     return v.ratio    > cfg.pull_gate_max_ratio() &&
            v.path_len - v.beeline > cfg.pull_gate_min_extra_yards();
+}
+
+// Scalar-out wrapper (2026-07-02, Task 3) — see the forward declaration
+// above DungeonTargetReachableAndStep for why this exists (callers ahead of
+// DungeonDetourVerdict's definition need the verdict fields without holding
+// the struct by value). Thin passthrough to DungeonTankDetour +
+// DungeonDetourExcessive; no independent logic.
+static bool DungeonTankDetourExcessiveVerbose(Player* tank, float tx, float ty, float tz,
+                                              float& out_beeline, float& out_path_len,
+                                              float& out_ratio, bool& out_complete)
+{
+    DungeonDetourVerdict const v = DungeonTankDetour(tank, tx, ty, tz);
+    out_beeline  = v.beeline;
+    out_path_len = v.path_len;
+    out_ratio    = v.ratio;
+    out_complete = v.complete;
+    return DungeonDetourExcessive(v);
 }
 
 // ── Off-mesh recovery for a stranded dungeon bot ──────────────────────────────

@@ -991,6 +991,34 @@ public:
     }
     void       false_combat_reset() { false_combat_since_ms_ = 0; }
 
+    // ---- in-combat victim acquisition latch (untankable-disengage sustain) ----
+    // dungeon:untankable_disengage (stage 3, mob-INITIATED aggro variant of the
+    // SFK wedge) must not fire on the very first combat tick — a fresh pull needs
+    // a moment for the tank to respond before it is judged untankable. opener_
+    // victim_since_ms is the WRONG source for this: it is driven exclusively by
+    // the OOC PrologueRules approach loop (set_opener_victim), so it goes stale
+    // or reflects an unrelated target the instant proximity aggro pulls a bot
+    // straight into combat with no opener pass. This is a dedicated latch on the
+    // CURRENT in-combat victim guid, mirroring the false_combat_ms idiom: arms
+    // to 0 the tick a NEW victim guid is first seen, then returns elapsed ms for
+    // as long as the SAME guid persists. A target swap (old victim died / new
+    // aggro) restarts the window honestly instead of reusing a stale timestamp.
+    uint32     combat_victim_since_ms(ObjectGuid victim, uint32 now_ms)
+    {
+        if (victim.IsEmpty() || victim != combat_victim_latch_)
+        {
+            combat_victim_latch_ = victim;
+            combat_victim_latch_since_ms_ = 0;
+        }
+        if (victim.IsEmpty())
+            return 0;
+        if (combat_victim_latch_since_ms_ == 0)
+        { combat_victim_latch_since_ms_ = now_ms ? now_ms : 1u; return 0; }
+        return now_ms - combat_victim_latch_since_ms_;
+    }
+    void       combat_victim_latch_reset()
+    { combat_victim_latch_ = ObjectGuid::Empty; combat_victim_latch_since_ms_ = 0; }
+
     // ---- combat:opener stall tracking ----
     // The opener runs the APL on an out-of-combat victim. Two failure
     // modes need server-truth feedback rather than range guesses (the
@@ -2717,6 +2745,9 @@ private:
     float          cross_win_d_  = 0.f;
     // Dungeon false-combat lock dwell (see false_combat_ms).
     uint32         false_combat_since_ms_ = 0;
+    // In-combat victim acquisition latch (see combat_victim_since_ms).
+    ObjectGuid     combat_victim_latch_;
+    uint32         combat_victim_latch_since_ms_ = 0;
     ObjectGuid     opener_victim_;
     uint32         opener_victim_since_ms_ = 0;
     uint32         opener_last_seen_ms_ = 0;

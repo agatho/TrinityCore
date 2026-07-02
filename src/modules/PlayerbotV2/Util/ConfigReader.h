@@ -227,6 +227,13 @@ public:
     bool  pull_gate_enabled()          const { return pull_gate_enabled_; }
     float pull_gate_max_ratio()        const { return pull_gate_max_ratio_; }
     float pull_gate_min_extra_yards()  const { return pull_gate_min_extra_yards_; }
+    // Stage 3: mob-INITIATED combat variant (proximity aggro puts a non-tank
+    // bot in combat before either pre-combat pull gate above ever evaluates
+    // the target). When true, a sustained (>6s) untankable lock triggers
+    // dungeon:untankable_disengage. Separate kill-switch from pull_gate_
+    // enabled_ so an operator can keep the pre-combat gates but disable the
+    // disengage (or vice versa) while diagnosing. (PlayerbotV2.PullGate.DisengageEnabled)
+    bool  pull_gate_disengage_enabled() const { return pull_gate_disengage_enabled_; }
 
 private:
     void apply_from_loaded_config();
@@ -293,6 +300,7 @@ private:
     bool  pull_gate_enabled_         = true;
     float pull_gate_max_ratio_       = 3.0f;
     float pull_gate_min_extra_yards_ = 40.0f;
+    bool  pull_gate_disengage_enabled_ = true;
 };
 
 } // namespace Playerbot

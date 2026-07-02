@@ -129,6 +129,7 @@ void ConfigReader::apply_from_loaded_config()
     pull_gate_enabled_         = c.GetBoolDefault("PlayerbotV2.PullGate.Enabled",       true);
     pull_gate_max_ratio_       = float(c.GetFloatDefault("PlayerbotV2.PullGate.MaxDetourRatio", 3.0f));
     pull_gate_min_extra_yards_ = float(c.GetFloatDefault("PlayerbotV2.PullGate.MinExtraYards",  40.0f));
+    pull_gate_disengage_enabled_ = c.GetBoolDefault("PlayerbotV2.PullGate.DisengageEnabled", true);
 }
 
 } // namespace Playerbot
