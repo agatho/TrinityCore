@@ -898,7 +898,8 @@ public:
     { return (chase_commit_map_ == map_id) ? chase_commit_target_ : ObjectGuid::Empty; }
     uint32     chase_commit_since_ms(uint32 map_id) const
     { return (chase_commit_map_ == map_id) ? chase_commit_since_ms_ : 0; }
-    uint32     chase_commit_last_plan_ms() const { return chase_commit_last_plan_ms_; }
+    uint32     chase_commit_last_plan_ms(uint32 map_id) const
+    { return (chase_commit_map_ == map_id) ? chase_commit_last_plan_ms_ : 0; }
     void       set_chase_commit(ObjectGuid g, uint32 now_ms, uint32 map_id)
     {
         chase_commit_target_ = g;
@@ -906,7 +907,23 @@ public:
         chase_commit_last_plan_ms_ = now_ms;
         chase_commit_map_ = map_id;
     }
-    void       touch_chase_commit_plan(uint32 now_ms) { chase_commit_last_plan_ms_ = now_ms; }
+    // The plan timestamp doubles as the caller's PRE-COMMIT probe cadence
+    // (the detour probe is a full pathfind and must not run per-tick), so
+    // touch also runs while NO commitment is armed and must bind the map
+    // itself for the map-bound getter above to work. On a map change it
+    // drops any stale identity fields FIRST, so re-binding the timestamp on
+    // the new map can never resurrect a previous map's commitment through
+    // the map-bound identity getters.
+    void       touch_chase_commit_plan(uint32 now_ms, uint32 map_id)
+    {
+        if (chase_commit_map_ != map_id)
+        {
+            chase_commit_target_ = ObjectGuid::Empty;
+            chase_commit_since_ms_ = 0;
+        }
+        chase_commit_last_plan_ms_ = now_ms;
+        chase_commit_map_ = map_id;
+    }
     void       clear_chase_commit()
     {
         chase_commit_target_ = ObjectGuid::Empty;
