@@ -41,6 +41,9 @@ public:
 
     // True when the operator wants new clicks to place annotations.
     [[nodiscard]] bool isPlacing() const;
+    // Programmatic toggle (emits placeModeChanged like a user click);
+    // used by MainWindow's Escape-exits-placement path.
+    void setPlacing(bool on);
     [[nodiscard]] render::AnnotationKind currentKind() const;
     [[nodiscard]] float                  currentRadius() const;
     [[nodiscard]] QString                currentLabel() const;

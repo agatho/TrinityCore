@@ -139,6 +139,7 @@
 #include <QPlainTextEdit>
 #include <QProgressDialog>
 #include <QSettings>
+#include <QTextStream>
 #include <QShortcut>
 #include <QShowEvent>
 #include <QSize>
@@ -377,6 +378,32 @@ bool MainWindow::renderToPng(uint32_t mapId, float camX, float camY, float camZ,
         QApplication::processEvents();
     }
 
+    // Diagnostic: WE_NAVMESH=1 turns the navmesh polygon overlay ON for the
+    // shot (it is opt-in/off by default in 3D).  Lets a headless pair of
+    // renders compare walkable mesh vs real geometry at the same camera.
+    if (qEnvironmentVariableIsSet("WE_NAVMESH"))
+        m_viewer3d->setLayerVisible(render::Layer::NavMesh, true);
+
+    // Diagnostic: WE_PROBE="x1,y1,z1,x2,y2,z2" runs the bot-budget
+    // pathfinding probe (74 polys / 1024 nodes) A->B on the loaded mmap and
+    // bakes its overlay + HUD verdict into the shot.  TC world coords.
+    if (qEnvironmentVariableIsSet("WE_PROBE"))
+    {
+        QStringList const c = qEnvironmentVariable("WE_PROBE")
+                                  .split(',', Qt::SkipEmptyParts);
+        if (c.size() == 6)
+        {
+            m_viewer3d->runPathProbe(
+                QVector3D(c[0].toFloat(), c[1].toFloat(), c[2].toFloat()),
+                QVector3D(c[3].toFloat(), c[4].toFloat(), c[5].toFloat()));
+        }
+        else
+        {
+            qWarning("[screenshot] WE_PROBE needs 6 comma-separated floats "
+                     "(x1,y1,z1,x2,y2,z2); got %d", int(c.size()));
+        }
+    }
+
     m_viewer3d->setCamera(camX, camY, camZ, yaw, pitch);
 
     // Diagnostic: WE_CAMSPIN sweeps the camera (pan + yaw) across the wait loop
@@ -435,6 +462,26 @@ void MainWindow::buildCentralWidget()
             this, &MainWindow::onSpawnMoved3D);
     connect(m_viewer3d, &render::SceneView3D::pathClicked,
             this, &MainWindow::onPathClicked);
+    // 3D path-node editing (parity with the 2D view).  Both viewers receive
+    // the identical path vector from pushPathsToViewer, so the 3D indexes
+    // resolve through the same pathId mapping.  Move/segment carry Z
+    // (drag-plane / segment-lerped) so multi-floor dungeons don't snap
+    // edits onto the wrong storey.
+    connect(m_viewer3d, &render::SceneView3D::pathNodeClicked,
+            this, &MainWindow::onPathNodeClicked);
+    connect(m_viewer3d, &render::SceneView3D::pathNodeMoved,
+            this, &MainWindow::onPathNodeMoved3D);
+    connect(m_viewer3d, &render::SceneView3D::pathNodeContextMenuRequested,
+            this, &MainWindow::onPathNodeContextMenu);
+    connect(m_viewer3d, &render::SceneView3D::pathSegmentContextMenuRequested,
+            this, &MainWindow::onPathSegmentContextMenu3D);
+    // Bot dungeon-route chain: same node-editing surface, separate store.
+    connect(m_viewer3d, &render::SceneView3D::routeNodeMoved,
+            this, &MainWindow::onRouteNodeMoved3D);
+    connect(m_viewer3d, &render::SceneView3D::routeNodeContextMenuRequested,
+            this, &MainWindow::onRouteNodeContextMenu3D);
+    connect(m_viewer3d, &render::SceneView3D::routeSegmentContextMenuRequested,
+            this, &MainWindow::onRouteSegmentContextMenu3D);
     connect(m_viewer3d, &render::SceneView3D::annotationClicked,
             this, &MainWindow::onAnnotationClicked);
     connect(m_viewer3d, &render::SceneView3D::areatriggerClicked,
@@ -1262,11 +1309,28 @@ void MainWindow::buildMenus()
     auto* dbDisconnectAction = dbMenu->addAction(tr("&Disconnect"));
     connect(dbDisconnectAction, &QAction::triggered, this, &MainWindow::onDbDisconnect);
 
-    QMenu* spawnMenu = menuBar()->addMenu(tr("&Spawn"));
-    auto* newFromTemplateAction = spawnMenu->addAction(tr("&New from template..."));
+    // Create menu: every "place a new world object" verb in one predictable
+    // place.  These were previously scattered across four top-level menus
+    // (Spawn / Path / Areatrigger / Graveyard -- the latter two existing
+    // solely to hold one action each).  Each action arms the corresponding
+    // placement mode; the status-bar mode badge shows how to finish/exit.
+    QMenu* createMenu = menuBar()->addMenu(tr("&Create"));
+    auto* newFromTemplateAction = createMenu->addAction(tr("New &spawn from template..."));
     newFromTemplateAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_N));
     connect(newFromTemplateAction, &QAction::triggered,
             this, &MainWindow::onNewSpawnFromTemplate);
+    auto* newPathAction = createMenu->addAction(tr("New &path"));
+    newPathAction->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_N));
+    connect(newPathAction, &QAction::triggered, this, &MainWindow::onNewPath);
+    auto* newAtrAction = createMenu->addAction(tr("New &areatrigger from create-properties..."));
+    newAtrAction->setShortcut(QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_A));
+    connect(newAtrAction, &QAction::triggered,
+            this, &MainWindow::onNewAreatriggerFromCreateProps);
+    auto* newGyAction = createMenu->addAction(tr("New &graveyard..."));
+    newGyAction->setShortcut(QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_G));
+    connect(newGyAction, &QAction::triggered, this, &MainWindow::onNewGraveyard);
+
+    QMenu* spawnMenu = menuBar()->addMenu(tr("&Spawn"));
     auto* addToGroupAction = spawnMenu->addAction(tr("&Add selected creature to group..."));
     connect(addToGroupAction, &QAction::triggered,
             this, &MainWindow::onAddSelectedSpawnToGroup);
@@ -1957,10 +2021,9 @@ void MainWindow::buildMenus()
         dlg->show();
     });
 
+    // Path menu holds the IN-MODE verbs; starting a path lives under
+    // Create -> New path (Ctrl+Shift+N) with the other placement verbs.
     QMenu* pathMenu = menuBar()->addMenu(tr("&Path"));
-    auto* newPathAction    = pathMenu->addAction(tr("&New path"));
-    newPathAction->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_N));
-    connect(newPathAction, &QAction::triggered, this, &MainWindow::onNewPath);
     auto* finishPathAction = pathMenu->addAction(tr("&Finish path"));
     finishPathAction->setShortcut(Qt::Key_Return);
     connect(finishPathAction, &QAction::triggered, this, &MainWindow::onFinishPath);
@@ -1996,16 +2059,66 @@ void MainWindow::buildMenus()
     auto* finishRoadAction = pathMenu->addAction(tr("&Exit road draw mode"));
     connect(finishRoadAction, &QAction::triggered, this, &MainWindow::onFinishRoadDraw);
 
-    QMenu* atrMenu = menuBar()->addMenu(tr("&Areatrigger"));
-    auto* newAtrAction = atrMenu->addAction(tr("&New from create-properties..."));
-    newAtrAction->setShortcut(QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_A));
-    connect(newAtrAction, &QAction::triggered,
-            this, &MainWindow::onNewAreatriggerFromCreateProps);
+    // Bot dungeon-route chain (playerbot_dungeon_routes, shared schema):
+    // gold overlay in the 3D view, node-editable there, committed as a
+    // full-map rewrite.  Grouped here because routes are path-shaped data.
+    pathMenu->addSeparator();
+    auto* routeLayerAction = pathMenu->addAction(tr("Show bot &dungeon route (3D)"));
+    routeLayerAction->setCheckable(true);
+    routeLayerAction->setChecked(true);
+    connect(routeLayerAction, &QAction::toggled, this, [this](bool on)
+    {
+        if (m_viewer3d) m_viewer3d->setDungeonRoutesVisible(on);
+    });
+    auto* reloadRoutesAction = pathMenu->addAction(tr("Re&load dungeon route from DB"));
+    connect(reloadRoutesAction, &QAction::triggered,
+            this, &MainWindow::onReloadDungeonRoutes);
+    auto* newRouteAction = pathMenu->addAction(tr("Start new dungeon route at camera (3D)"));
+    connect(newRouteAction, &QAction::triggered,
+            this, &MainWindow::onNewDungeonRouteAtCamera);
+    auto* commitRoutesAction = pathMenu->addAction(tr("Commit dungeon route..."));
+    connect(commitRoutesAction, &QAction::triggered,
+            this, &MainWindow::onCommitDungeonRoutes);
 
-    QMenu* gyMenu = menuBar()->addMenu(tr("&Graveyard"));
-    auto* newGyAction = gyMenu->addAction(tr("&New graveyard..."));
-    newGyAction->setShortcut(QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_G));
-    connect(newGyAction, &QAction::triggered, this, &MainWindow::onNewGraveyard);
+    // Pathfinding probe: bot-budget A->B sandbox (74 polys / 1024 nodes,
+    // matching the worldserver PathGenerator) -- diagnoses INCOMPLETE /
+    // NOPATH spots without a live server run.
+    pathMenu->addSeparator();
+    auto* probeAction = pathMenu->addAction(tr("Path&finding probe (bot budget)"));
+    probeAction->setShortcut(QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_F));
+    probeAction->setToolTip(tr(
+        "Click a START point then a destination; Detour runs with the BOT'S "
+        "budget (74-poly corridor, 1024 query nodes) and the 3D view shows "
+        "the result: green = complete, orange = partial corridor, red dashed "
+        "= unreached remainder.  The HUD prints polys/points/length."));
+    connect(probeAction, &QAction::triggered, this, &MainWindow::onStartPathProbe);
+    auto* clearProbeAction = pathMenu->addAction(tr("Clear probe result"));
+    connect(clearProbeAction, &QAction::triggered, this, &MainWindow::onClearPathProbe);
+
+    // Off-mesh connection authoring: the bridges that fix cave/den/topology
+    // gaps.  Existing links render as violet arcs (straight from the loaded
+    // mmap); authored ones append to offmesh.txt and show magenta until the
+    // next regen bakes them.
+    pathMenu->addSeparator();
+    auto* offmeshLayerAction = pathMenu->addAction(tr("Show off-&mesh connections (3D)"));
+    offmeshLayerAction->setCheckable(true);
+    offmeshLayerAction->setChecked(true);
+    connect(offmeshLayerAction, &QAction::toggled, this, [this](bool on)
+    {
+        if (m_viewer3d) m_viewer3d->setOffmeshVisible(on);
+    });
+    auto* offmeshDrawAction = pathMenu->addAction(tr("Draw off-mesh connection (FROM -> TO)"));
+    offmeshDrawAction->setToolTip(tr(
+        "Click the FROM point then the TO point; a bidirectional off-mesh "
+        "connection line is appended to offmesh.txt in the exact format "
+        "mmaps_generator parses.  Run the regen to bake it, then reload the "
+        "map to see it as a violet arc."));
+    connect(offmeshDrawAction, &QAction::triggered, this, &MainWindow::onStartOffmeshDraw);
+    auto* offmeshFileAction = pathMenu->addAction(tr("Set offmesh.txt path..."));
+    connect(offmeshFileAction, &QAction::triggered, this, &MainWindow::onSetOffmeshFile);
+
+    // (The former single-action Areatrigger and Graveyard top-level menus
+    // moved into the Create menu above.)
 
     QMenu* viewMenu = menuBar()->addMenu(tr("&View"));
 
@@ -2735,7 +2848,9 @@ void MainWindow::buildMenus()
     auto* annotLayer = viewMenu->addAction(tr("&Annotation layer"));
     annotLayer->setCheckable(true);
     annotLayer->setChecked(true);
-    annotLayer->setShortcut(Qt::Key_3);
+    // Ctrl+3, NOT bare 3: the number row belongs to the primary layer
+    // toggles and 3 already means "minimap texture layer".
+    annotLayer->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_3));
     connect(annotLayer, &QAction::toggled, this, &MainWindow::onToggleAnnotationLayer);
     m_layerToggles.push_back({annotLayer, render::Layer::Annotations, true, nullptr});
 
@@ -2748,7 +2863,9 @@ void MainWindow::buildMenus()
     m_pathDebugAction = viewMenu->addAction(tr("&Path debug mode"));
     m_pathDebugAction->setCheckable(true);
     m_pathDebugAction->setChecked(false);
-    m_pathDebugAction->setShortcut(QKeySequence(tr("Ctrl+Shift+P")));
+    // Ctrl+Alt+P: Ctrl+Shift+P is the command palette (application-wide
+    // QShortcut) -- the old duplicate binding made both ambiguous.
+    m_pathDebugAction->setShortcut(QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_P));
     connect(m_pathDebugAction, &QAction::toggled, this, [this](bool on)
     {
         if (m_viewer)
@@ -2803,9 +2920,6 @@ void MainWindow::buildMenus()
     connect(m_bookmarksMenu, &QMenu::aboutToShow, this, &MainWindow::onRebuildBookmarksMenu);
     onRebuildBookmarksMenu();
 
-    auto* resetLayoutAction = viewMenu->addAction(tr("&Reset window layout"));
-    connect(resetLayoutAction, &QAction::triggered, this, &MainWindow::onResetWindowLayout);
-
     // View -> Theme: radio-style submenu (System / Light / Dark).  The
     // chosen theme is persisted under "ui/theme" and re-applied on every
     // editor start from restoreSettings().
@@ -2832,6 +2946,34 @@ void MainWindow::buildMenus()
         }
     }
 
+    // Window menu: one checkable toggle per dock.  QDockWidget::
+    // toggleViewAction() tracks the dock's visibility automatically, so the
+    // checkmarks never desync.  This is the canonical recovery path for a
+    // closed dock -- previously 6 of the 10 docks had no reopen affordance
+    // at all (the toolbar toggled only 3, and Reset window layout skipped
+    // the left annotation toolbox).
+    {
+        QMenu* windowMenu = menuBar()->addMenu(tr("&Window"));
+        for (char const* name : {
+                "spawn_dock",
+                "annot_dock",
+                "annot_toolbox",
+                "diag_dock",
+                "vendor_dock",
+                "conditions_dock",
+                "property_inspector_dock",
+                "info_inspector_dock",
+                "handcrafted_road_dock",
+                "log_tail_dock" })
+        {
+            if (auto* d = findChild<QDockWidget*>(QString::fromLatin1(name)))
+                windowMenu->addAction(d->toggleViewAction());
+        }
+        windowMenu->addSeparator();
+        auto* resetLayoutAction = windowMenu->addAction(tr("&Reset window layout"));
+        connect(resetLayoutAction, &QAction::triggered, this, &MainWindow::onResetWindowLayout);
+    }
+
     QMenu* helpMenu = menuBar()->addMenu(tr("&Help"));
     auto* shortcutsAction = helpMenu->addAction(tr("&Keyboard shortcuts..."));
     // F1 is the conventional "help index" key on Windows/Linux; Ctrl+? is
@@ -2852,6 +2994,13 @@ void MainWindow::buildMenus()
 
 void MainWindow::buildStatusBar()
 {
+    // Editing-mode badge: permanent (never hidden by transient showMessage
+    // text) and first in the permanent cluster.  Colour is always paired
+    // with the mode NAME + exit hint, so state is never colour-only.
+    m_modeBadge = new QLabel(this);
+    statusBar()->addPermanentWidget(m_modeBadge);
+    updateModeBadge();
+
     m_coordsLabel = new QLabel(tr("(no map loaded)"), this);
     m_coordsLabel->setMinimumWidth(220);
     statusBar()->addPermanentWidget(m_coordsLabel);
@@ -3918,6 +4067,7 @@ void MainWindow::loadAndDisplayMap(uint32_t mapId)
         reloadSpawnsForMap(mapId);
         reloadAnnotationsForMap(mapId);
         reloadPathsForMap(mapId);
+        reloadDungeonRoutesForMap(mapId);
         reloadAreatriggersForMap(mapId);
         reloadGraveyardsForMap(mapId);
     }
@@ -4613,7 +4763,7 @@ void MainWindow::onNewAreatriggerFromCreateProps()
     tpl->scriptName    = picked.scriptName;
     m_pickedAreatriggerProps = std::move(tpl);
 
-    m_placementKind = PlacementKind::Areatrigger;
+    setPlacementKind(PlacementKind::Areatrigger);
     if (m_viewer) m_viewer->setPlacementMode(true); if (m_viewer3d) m_viewer3d->setPlacementMode(true);
 
     statusBar()->showMessage(
@@ -4804,7 +4954,7 @@ void MainWindow::onNewGraveyard()
             tr("Could not reserve a graveyard ID - is the DB connected?"), 4000);
         return;
     }
-    m_placementKind = PlacementKind::Graveyard;
+    setPlacementKind(PlacementKind::Graveyard);
     if (m_viewer) m_viewer->setPlacementMode(true); if (m_viewer3d) m_viewer3d->setPlacementMode(true);
     statusBar()->showMessage(
         tr("Graveyard placement armed: next ID=%1 - click on the map to drop. Esc to exit.")
@@ -4982,7 +5132,7 @@ void MainWindow::onNewPath()
     m_drawingPathBuf.velocity = 0.0f;
     m_drawingPathBuf.comment  = tr("(new path)");
 
-    m_placementKind = PlacementKind::PathDraw;
+    setPlacementKind(PlacementKind::PathDraw);
     if (m_viewer)
         m_viewer->setPlacementMode(true); if (m_viewer3d) m_viewer3d->setPlacementMode(true);
     statusBar()->showMessage(
@@ -5005,7 +5155,7 @@ void MainWindow::onFinishPath()
     ++m_nextPathId;
     m_drawingPath = false;
     m_drawingPathBuf = render::Path{};
-    m_placementKind = PlacementKind::None;
+    setPlacementKind(PlacementKind::None);
     if (m_viewer) m_viewer->setPlacementMode(false); if (m_viewer3d) m_viewer3d->setPlacementMode(false);
     pushPathsToViewer();
     statusBar()->showMessage(tr("Path finished - pending commit"), 3000);
@@ -5013,10 +5163,18 @@ void MainWindow::onFinishPath()
 
 void MainWindow::onCancelPath()
 {
-    if (!m_drawingPath) return;
+    if (!m_drawingPath)
+    {
+        // Escape doubles as the exit for the one-shot placement modes
+        // (spawn / areatrigger / graveyard / annotation / road draw) --
+        // every arming message has always promised "Esc to exit", but only
+        // path drawing actually honoured it until now.
+        cancelActivePlacement();
+        return;
+    }
     m_drawingPath = false;
     m_drawingPathBuf = render::Path{};
-    m_placementKind = PlacementKind::None;
+    setPlacementKind(PlacementKind::None);
     m_autoRouteNextClick = false;
     if (m_viewer) m_viewer->setPlacementMode(false); if (m_viewer3d) m_viewer3d->setPlacementMode(false);
     pushPathsToViewer();
@@ -5070,7 +5228,7 @@ void MainWindow::onStartRoadDraw()
     m_drawingRoad        = true;
     m_hasRoadAnchor      = false;
     m_autoRouteNextClick = false;
-    m_placementKind      = PlacementKind::RoadDraw;
+    setPlacementKind(PlacementKind::RoadDraw);
     if (m_viewer) m_viewer->setPlacementMode(true); if (m_viewer3d) m_viewer3d->setPlacementMode(true);
     statusBar()->showMessage(
         tr("Road draw mode: each click drops a Road annotation (snap-to-"
@@ -5084,7 +5242,7 @@ void MainWindow::onFinishRoadDraw()
     m_drawingRoad        = false;
     m_hasRoadAnchor      = false;
     m_autoRouteNextClick = false;
-    m_placementKind      = PlacementKind::None;
+    setPlacementKind(PlacementKind::None);
     if (m_viewer) m_viewer->setPlacementMode(false); if (m_viewer3d) m_viewer3d->setPlacementMode(false);
     statusBar()->showMessage(
         tr("Road draw mode exited.  Don't forget to Commit annotations to "
@@ -5182,6 +5340,44 @@ void MainWindow::onPathNodeMoved(int viewerPathIdx, int nodeIndex,
         if (groundZ > -1.0e5f)
             proposed.nodes[nodeIndex].z = groundZ;
     }
+    bool const changed = m_undo->recordIf(m_waypointModel.get(),
+        tr("Move path node"), [&]() {
+        return m_waypointModel->replacePath(modelIdx, proposed);
+    });
+    if (changed)
+    {
+        pushPathsToViewer();
+        m_selectedPathIndex = modelIdx;
+        if (m_pathDock)
+        {
+            m_pathDock->setPath(modelIdx, proposed);
+            m_pathDock->setPendingCount(m_waypointModel->pendingCount());
+        }
+    }
+}
+
+void MainWindow::onPathNodeMoved3D(int viewerPathIdx, int nodeIndex,
+                                   float worldX, float worldY, float worldZ)
+{
+    int const modelIdx = resolveViewerPathToModel(m_viewer, m_waypointModel.get(),
+                                                  viewerPathIdx);
+    if (modelIdx < 0) return;
+    render::Path proposed = m_waypointModel->current()[modelIdx];
+    if (nodeIndex < 0 || nodeIndex >= int(proposed.nodes.size()))
+        return;
+    proposed.nodes[nodeIndex].x = worldX;
+    proposed.nodes[nodeIndex].y = worldY;
+    // Ground-snap ONLY when the .map ground is close to the drag plane.
+    // In multi-floor dungeons heightAt(x, y) can return a different storey
+    // (or garbage for WMO interiors); the drag-plane Z is then the truth.
+    float z = worldZ;
+    if (m_mapTileCache && m_currentMapId.has_value())
+    {
+        float const groundZ = m_mapTileCache->heightAt(*m_currentMapId, worldX, worldY);
+        if (groundZ > -1.0e5f && std::abs(groundZ - worldZ) < 10.0f)
+            z = groundZ;
+    }
+    proposed.nodes[nodeIndex].z = z;
     bool const changed = m_undo->recordIf(m_waypointModel.get(),
         tr("Move path node"), [&]() {
         return m_waypointModel->replacePath(modelIdx, proposed);
@@ -5352,6 +5548,463 @@ void MainWindow::onPathSegmentContextMenu(int viewerPathIdx, int afterNodeIndex,
             m_pathDock->setPendingCount(m_waypointModel->pendingCount());
         }
     }
+}
+
+void MainWindow::onPathSegmentContextMenu3D(int viewerPathIdx, int afterNodeIndex,
+                                            float worldX, float worldY, float worldZ,
+                                            QPoint globalPos)
+{
+    int const modelIdx = resolveViewerPathToModel(m_viewer, m_waypointModel.get(),
+                                                  viewerPathIdx);
+    if (modelIdx < 0) return;
+    render::Path const& path = m_waypointModel->current()[modelIdx];
+    if (afterNodeIndex < 0 || afterNodeIndex + 1 >= int(path.nodes.size()))
+        return;
+
+    QMenu menu(this);
+    QAction* const insertHere = menu.addAction(tr("Insert node here"));
+    QAction* const chosen = menu.exec(globalPos);
+    if (chosen != insertHere) return;
+
+    render::Path proposed = path;
+    render::PathNode neu = path.nodes[afterNodeIndex];
+    neu.x = worldX;
+    neu.y = worldY;
+    // Same multi-floor guard as onPathNodeMoved3D: the segment-lerped Z is
+    // authoritative unless the ground is genuinely nearby.
+    neu.z = worldZ;
+    if (m_mapTileCache && m_currentMapId.has_value())
+    {
+        float const groundZ = m_mapTileCache->heightAt(*m_currentMapId, worldX, worldY);
+        if (groundZ > -1.0e5f && std::abs(groundZ - worldZ) < 10.0f)
+            neu.z = groundZ;
+    }
+    proposed.nodes.insert(proposed.nodes.begin() + afterNodeIndex + 1, neu);
+    for (size_t i = 0; i < proposed.nodes.size(); ++i)
+        proposed.nodes[i].nodeId = static_cast<int>(i);
+
+    bool const changed = m_undo->recordIf(m_waypointModel.get(),
+        tr("Insert path node on segment"), [&]() {
+        return m_waypointModel->replacePath(modelIdx, proposed);
+    });
+    if (changed)
+    {
+        m_selectedPathIndex = modelIdx;
+        pushPathsToViewer();
+        if (m_pathDock)
+        {
+            m_pathDock->setPath(modelIdx, proposed);
+            m_pathDock->setPendingCount(m_waypointModel->pendingCount());
+        }
+    }
+}
+
+void MainWindow::onStartPathProbe()
+{
+    if (!m_currentMapId.has_value())
+    {
+        statusBar()->showMessage(tr("Open a map first."), 3000);
+        return;
+    }
+    m_probeHaveStart = false;
+    setPlacementKind(PlacementKind::PathProbe);
+    if (m_viewer)   m_viewer->setPlacementMode(true);
+    if (m_viewer3d) m_viewer3d->setPlacementMode(true);
+    statusBar()->showMessage(
+        tr("Path probe armed (bot budget: 74 polys / 1024 nodes) - click the "
+           "START point, then the destination. Esc exits."), 0);
+}
+
+void MainWindow::onClearPathProbe()
+{
+    if (m_viewer3d)
+        m_viewer3d->clearPathProbe();
+    m_probeHaveStart = false;
+    statusBar()->showMessage(tr("Path-probe overlay cleared."), 3000);
+}
+
+// ---------------------------------------------------------------------------
+// Off-mesh connection authoring: two clicks -> one line appended to the
+// offmesh.txt that mmaps_generator auto-loads from its input directory.
+// The magenta PENDING arc reminds the operator a regen is still needed.
+// ---------------------------------------------------------------------------
+
+QString MainWindow::offmeshFilePath() const
+{
+    QSettings s;
+    return s.value(QStringLiteral("paths/offmesh_txt"),
+                   QStringLiteral("M:/WorldofWarcraft/offmesh.txt")).toString();
+}
+
+void MainWindow::onSetOffmeshFile()
+{
+    QString const initial = offmeshFilePath();
+    QString const f = QFileDialog::getSaveFileName(this,
+        tr("Pick offmesh.txt (mmaps_generator input)"), initial,
+        tr("Text files (*.txt);;All files (*.*)"),
+        nullptr, QFileDialog::DontConfirmOverwrite);
+    if (f.isEmpty())
+        return;
+    QSettings s;
+    s.setValue(QStringLiteral("paths/offmesh_txt"), f);
+    statusBar()->showMessage(
+        tr("Off-mesh connections will be appended to %1").arg(f), 5000);
+}
+
+void MainWindow::onStartOffmeshDraw()
+{
+    if (!m_currentMapId.has_value())
+    {
+        statusBar()->showMessage(tr("Open a map first."), 3000);
+        return;
+    }
+    m_offmeshHaveStart = false;
+    setPlacementKind(PlacementKind::OffmeshDraw);
+    if (m_viewer)   m_viewer->setPlacementMode(true);
+    if (m_viewer3d) m_viewer3d->setPlacementMode(true);
+    statusBar()->showMessage(
+        tr("Off-mesh draw armed - click the FROM point, then the TO point. "
+           "The connection is appended to %1 (bidirectional, radius 12). "
+           "Esc exits.").arg(offmeshFilePath()), 0);
+}
+
+bool MainWindow::appendOffmeshConnection(float fx, float fy, float fz,
+                                         float tx, float ty, float tz)
+{
+    QString const path = offmeshFilePath();
+    QFile file(path);
+    bool const isNew = !file.exists();
+    if (!file.open(QIODevice::Append | QIODevice::Text))
+    {
+        QMessageBox::warning(this, tr("offmesh.txt append failed"),
+            tr("Could not open %1 for appending.").arg(path));
+        return false;
+    }
+    QTextStream out(&file);
+    if (isNew)
+        out << "# offmesh.txt -- manual off-mesh navmesh connections for mmaps_generator\n"
+               "# Format: MapId TileX,TileY (FromX FromY FromZ) (ToX ToY ToZ) Radius [AreaId] [Flags]\n"
+               "# Auto-loaded from <input>/offmesh.txt; connections are bidirectional.\n";
+    // Tile of the FROM point (TC grid convention: gx = 32 - x/533.33).
+    constexpr float kTile = 533.33333f;
+    int const gx = int(std::floor(32.0f - fx / kTile));
+    int const gy = int(std::floor(32.0f - fy / kTile));
+    QSettings s;
+    double const radius = s.value(QStringLiteral("editor/offmesh_radius"), 12.0).toDouble();
+    out << QStringLiteral("%1 %2,%3 (%4 %5 %6) (%7 %8 %9) %10\n")
+        .arg(*m_currentMapId).arg(gx).arg(gy)
+        .arg(double(fx), 0, 'f', 1).arg(double(fy), 0, 'f', 1).arg(double(fz), 0, 'f', 1)
+        .arg(double(tx), 0, 'f', 1).arg(double(ty), 0, 'f', 1).arg(double(tz), 0, 'f', 1)
+        .arg(radius, 0, 'f', 1);
+    return true;
+}
+
+// ---------------------------------------------------------------------------
+// Bot dungeon-route chain (shared-schema playerbot_dungeon_routes).
+// One render::Path per difficulty; Path::pathId carries the difficulty.
+// Edits mutate the in-memory working copy and stay pending until
+// "Commit dungeon route..." rewrites the map's rows in one transaction.
+// ---------------------------------------------------------------------------
+
+QString MainWindow::sharedDbSchema() const
+{
+    // Mirrors the server's Playerbot.SharedDatabase config; the editor keeps
+    // its own copy in QSettings so it works without reading worldserver.conf.
+    QSettings s;
+    return s.value(QStringLiteral("db/shared_schema"),
+                   QStringLiteral("wowc_playerbot")).toString();
+}
+
+void MainWindow::reloadDungeonRoutesForMap(uint32_t mapId)
+{
+    m_dungeonRoutes.clear();
+    m_dungeonRoutesDirty = false;
+    if (!m_worldDb || !m_worldDb->isConnected())
+    {
+        pushDungeonRoutesToViewer();
+        return;
+    }
+    char sql[512];
+    std::snprintf(sql, sizeof(sql),
+        "SELECT difficulty, seq, position_x, position_y, position_z "
+        "FROM %s.playerbot_dungeon_routes WHERE map_id = %u "
+        "ORDER BY difficulty, seq",
+        sharedDbSchema().toUtf8().constData(), mapId);
+    db::QueryResult res;
+    db::QueryError err = m_worldDb->query(sql, res);
+    if (!err.ok())
+    {
+        // Table/schema may simply not exist on a non-playerbot setup: keep
+        // this quiet-ish (status bar, no modal) and leave the layer empty.
+        statusBar()->showMessage(tr("dungeon-route query failed: %1")
+            .arg(QString::fromStdString(err.message)), 4000);
+        pushDungeonRoutesToViewer();
+        return;
+    }
+    render::Path* cur = nullptr;
+    for (size_t r = 0; r < res.rowCount(); ++r)
+    {
+        uint32_t const diff = uint32_t(res.asUInt64(r, 0).value_or(0));
+        if (!cur || cur->pathId != diff)
+        {
+            render::Path p;
+            p.pathId  = diff;   // pathId doubles as the difficulty key
+            p.comment = tr("bot route (difficulty %1)").arg(diff);
+            m_dungeonRoutes.push_back(std::move(p));
+            cur = &m_dungeonRoutes.back();
+        }
+        render::PathNode n;
+        n.nodeId = int(res.asUInt64(r, 1).value_or(0));
+        n.x = float(res.asDouble(r, 2).value_or(0.0));
+        n.y = float(res.asDouble(r, 3).value_or(0.0));
+        n.z = float(res.asDouble(r, 4).value_or(0.0));
+        cur->nodes.push_back(n);
+    }
+    pushDungeonRoutesToViewer();
+    if (!m_dungeonRoutes.empty())
+    {
+        size_t nodes = 0;
+        for (auto const& p : m_dungeonRoutes) nodes += p.nodes.size();
+        statusBar()->showMessage(tr("Loaded bot dungeon route: %1 chain(s), %2 waypoint(s)")
+            .arg(m_dungeonRoutes.size()).arg(nodes), 4000);
+    }
+}
+
+void MainWindow::pushDungeonRoutesToViewer()
+{
+    if (m_viewer3d)
+        m_viewer3d->setDungeonRoutes(m_dungeonRoutes);
+}
+
+void MainWindow::onRouteNodeMoved3D(int routeIndex, int nodeIndex,
+                                    float worldX, float worldY, float worldZ)
+{
+    if (routeIndex < 0 || routeIndex >= int(m_dungeonRoutes.size())) return;
+    auto& nodes = m_dungeonRoutes[size_t(routeIndex)].nodes;
+    if (nodeIndex < 0 || nodeIndex >= int(nodes.size())) return;
+    nodes[nodeIndex].x = worldX;
+    nodes[nodeIndex].y = worldY;
+    // Same multi-floor guard as waypoint 3D moves: trust the drag plane
+    // unless the .map ground is genuinely nearby.
+    float z = worldZ;
+    if (m_mapTileCache && m_currentMapId.has_value())
+    {
+        float const groundZ = m_mapTileCache->heightAt(*m_currentMapId, worldX, worldY);
+        if (groundZ > -1.0e5f && std::abs(groundZ - worldZ) < 10.0f)
+            z = groundZ;
+    }
+    nodes[nodeIndex].z = z;
+    m_dungeonRoutesDirty = true;
+    pushDungeonRoutesToViewer();
+    statusBar()->showMessage(
+        tr("Route waypoint %1 moved - PENDING until Path > Commit dungeon route")
+            .arg(nodeIndex), 4000);
+}
+
+void MainWindow::onRouteNodeContextMenu3D(int routeIndex, int nodeIndex, QPoint globalPos)
+{
+    if (routeIndex < 0 || routeIndex >= int(m_dungeonRoutes.size())) return;
+    auto& nodes = m_dungeonRoutes[size_t(routeIndex)].nodes;
+    if (nodeIndex < 0 || nodeIndex >= int(nodes.size())) return;
+
+    QMenu menu(this);
+    QAction* const insertBefore = menu.addAction(tr("Insert route waypoint BEFORE this"));
+    QAction* const insertAfter  = menu.addAction(tr("Insert route waypoint AFTER this"));
+    menu.addSeparator();
+    QAction* const deleteNode   = menu.addAction(tr("Delete this route waypoint"));
+    if (nodes.size() <= 2)
+        deleteNode->setEnabled(false);
+
+    QAction* const chosen = menu.exec(globalPos);
+    if (!chosen) return;
+
+    render::PathNode const ref = nodes[size_t(nodeIndex)];
+    if (chosen == insertBefore || chosen == insertAfter)
+    {
+        render::PathNode neu = ref;
+        int const at = (chosen == insertBefore) ? nodeIndex : nodeIndex + 1;
+        int const nb = (chosen == insertBefore) ? nodeIndex - 1 : nodeIndex + 1;
+        if (nb >= 0 && nb < int(nodes.size()))
+        {
+            neu.x = (nodes[size_t(nb)].x + ref.x) * 0.5f;
+            neu.y = (nodes[size_t(nb)].y + ref.y) * 0.5f;
+            neu.z = (nodes[size_t(nb)].z + ref.z) * 0.5f;
+        }
+        else
+        {
+            neu.x = ref.x + 5.0f;   // chain end: nudge so the marker is grabbable
+        }
+        nodes.insert(nodes.begin() + at, neu);
+    }
+    else if (chosen == deleteNode)
+    {
+        nodes.erase(nodes.begin() + nodeIndex);
+    }
+    for (size_t i = 0; i < nodes.size(); ++i)
+        nodes[i].nodeId = int(i);
+    m_dungeonRoutesDirty = true;
+    pushDungeonRoutesToViewer();
+    statusBar()->showMessage(
+        tr("Route edited - PENDING until Path > Commit dungeon route"), 4000);
+}
+
+void MainWindow::onRouteSegmentContextMenu3D(int routeIndex, int afterNodeIndex,
+                                             float worldX, float worldY, float worldZ,
+                                             QPoint globalPos)
+{
+    if (routeIndex < 0 || routeIndex >= int(m_dungeonRoutes.size())) return;
+    auto& nodes = m_dungeonRoutes[size_t(routeIndex)].nodes;
+    if (afterNodeIndex < 0 || afterNodeIndex + 1 >= int(nodes.size())) return;
+
+    QMenu menu(this);
+    QAction* const insertHere = menu.addAction(tr("Insert route waypoint here"));
+    QAction* const chosen = menu.exec(globalPos);
+    if (chosen != insertHere) return;
+
+    render::PathNode neu = nodes[size_t(afterNodeIndex)];
+    neu.x = worldX;
+    neu.y = worldY;
+    neu.z = worldZ;   // segment-lerped Z is floor-correct in dungeons
+    if (m_mapTileCache && m_currentMapId.has_value())
+    {
+        float const groundZ = m_mapTileCache->heightAt(*m_currentMapId, worldX, worldY);
+        if (groundZ > -1.0e5f && std::abs(groundZ - worldZ) < 10.0f)
+            neu.z = groundZ;
+    }
+    nodes.insert(nodes.begin() + afterNodeIndex + 1, neu);
+    for (size_t i = 0; i < nodes.size(); ++i)
+        nodes[i].nodeId = int(i);
+    m_dungeonRoutesDirty = true;
+    pushDungeonRoutesToViewer();
+    statusBar()->showMessage(
+        tr("Route waypoint inserted - PENDING until Path > Commit dungeon route"), 4000);
+}
+
+void MainWindow::onReloadDungeonRoutes()
+{
+    if (!m_currentMapId.has_value())
+    {
+        statusBar()->showMessage(tr("Open a map first."), 3000);
+        return;
+    }
+    if (m_dungeonRoutesDirty
+        && QMessageBox::question(this, tr("Discard route edits?"),
+               tr("The dungeon route has uncommitted edits. Discard them and reload from the DB?"))
+           != QMessageBox::Yes)
+        return;
+    reloadDungeonRoutesForMap(*m_currentMapId);
+}
+
+void MainWindow::onNewDungeonRouteAtCamera()
+{
+    if (!m_currentMapId.has_value() || !m_viewer3d)
+    {
+        statusBar()->showMessage(tr("Open a map (3D view) first."), 3000);
+        return;
+    }
+    if (!m_dungeonRoutes.empty())
+    {
+        statusBar()->showMessage(
+            tr("A route already exists for this map - edit its waypoints instead."), 4000);
+        return;
+    }
+    QVector3D const cam = m_viewer3d->cameraPosition();
+    render::Path p;
+    p.pathId  = 0;   // difficulty 0 = any
+    p.comment = tr("bot route (difficulty 0)");
+    render::PathNode a;
+    a.nodeId = 0; a.x = cam.x(); a.y = cam.y(); a.z = cam.z();
+    render::PathNode b = a;
+    b.nodeId = 1; b.x += 10.0f;
+    p.nodes = { a, b };
+    m_dungeonRoutes.push_back(std::move(p));
+    m_dungeonRoutesDirty = true;
+    pushDungeonRoutesToViewer();
+    statusBar()->showMessage(
+        tr("New 2-waypoint route seeded at the camera - drag the gold markers into "
+           "place, insert more via right-click, then Path > Commit dungeon route."), 8000);
+}
+
+void MainWindow::onCommitDungeonRoutes()
+{
+    if (!m_currentMapId.has_value())
+    {
+        statusBar()->showMessage(tr("Open a map first."), 3000);
+        return;
+    }
+    if (!m_worldDb || !m_worldDb->isConnected())
+    {
+        QMessageBox::warning(this, tr("Not connected"),
+            tr("Connect to the world DB first."));
+        return;
+    }
+    uint32_t const mapId = *m_currentMapId;
+    size_t totalNodes = 0;
+    for (auto const& p : m_dungeonRoutes) totalNodes += p.nodes.size();
+    QString const schema = sharedDbSchema();
+    if (QMessageBox::question(this, tr("Commit dungeon route"),
+            tr("Rewrite the bot dungeon route for map %1 in %2.playerbot_dungeon_routes?\n"
+               "%3 chain(s), %4 waypoint(s). Existing rows for this map are replaced.\n\n"
+               "Note: dungeons whose C++ script hand-authors route_waypoints "
+               "(currently Deadmines) ignore these DB rows until the authored "
+               "chain is removed.")
+              .arg(mapId).arg(schema)
+              .arg(m_dungeonRoutes.size()).arg(totalNodes))
+        != QMessageBox::Yes)
+        return;
+
+    QByteArray const schemaUtf8 = schema.toUtf8();
+    auto err = m_worldDb->exec("START TRANSACTION");
+    if (!err.ok())
+    {
+        QMessageBox::warning(this, tr("Commit failed"),
+            QString::fromStdString(err.message));
+        return;
+    }
+    char buf[512];
+    std::snprintf(buf, sizeof(buf),
+        "DELETE FROM %s.playerbot_dungeon_routes WHERE map_id = %u",
+        schemaUtf8.constData(), mapId);
+    err = m_worldDb->exec(buf);
+    if (!err.ok())
+    {
+        (void)m_worldDb->exec("ROLLBACK");
+        QMessageBox::warning(this, tr("Commit failed"),
+            QString::fromStdString(err.message));
+        return;
+    }
+    for (auto const& p : m_dungeonRoutes)
+    {
+        for (size_t i = 0; i < p.nodes.size(); ++i)
+        {
+            std::snprintf(buf, sizeof(buf),
+                "INSERT INTO %s.playerbot_dungeon_routes "
+                "(map_id, difficulty, seq, position_x, position_y, position_z) "
+                "VALUES (%u, %u, %zu, %.3f, %.3f, %.3f)",
+                schemaUtf8.constData(), mapId, p.pathId, i,
+                double(p.nodes[i].x), double(p.nodes[i].y), double(p.nodes[i].z));
+            err = m_worldDb->exec(buf);
+            if (!err.ok())
+            {
+                (void)m_worldDb->exec("ROLLBACK");
+                QMessageBox::warning(this, tr("Commit failed"),
+                    QString::fromStdString(err.message));
+                return;
+            }
+        }
+    }
+    err = m_worldDb->exec("COMMIT");
+    if (!err.ok())
+    {
+        (void)m_worldDb->exec("ROLLBACK");
+        QMessageBox::warning(this, tr("Commit failed"),
+            QString::fromStdString(err.message));
+        return;
+    }
+    m_dungeonRoutesDirty = false;
+    statusBar()->showMessage(
+        tr("Dungeon route committed: %1 waypoint(s) for map %2 (worldserver reloads on restart)")
+            .arg(totalNodes).arg(mapId), 6000);
 }
 
 void MainWindow::onSpawnContextMenu(int spawnIndex, QPoint globalPos)
@@ -5642,12 +6295,34 @@ void MainWindow::onResetWindowLayout()
             tabifyDockWidget(spawnDock, d);
         }
     }
-    // LogTailDock stays in the bottom dock area.
+    // The annotation toolbox is the lone LEFT-area dock; restore it too --
+    // it used to be the one dock Reset couldn't bring back.
+    if (auto* d = findChild<QDockWidget*>(QStringLiteral("annot_toolbox")))
+    {
+        d->setFloating(false);
+        addDockWidget(Qt::LeftDockWidgetArea, d);
+        d->show();
+    }
+    // LogTailDock stays in the bottom dock area (hidden by default; the
+    // Window menu / Tools -> Tail worldserver log reopen it on demand).
     if (auto* d = findChild<QDockWidget*>(QStringLiteral("log_tail_dock")))
     {
         d->setFloating(false);
         addDockWidget(Qt::BottomDockWidgetArea, d);
     }
+    // Handcrafted roads is opt-in (hidden by default) but must still land
+    // back in the right tab group when the operator had moved it.
+    if (auto* d = findChild<QDockWidget*>(QStringLiteral("handcrafted_road_dock")))
+    {
+        d->setFloating(false);
+        addDockWidget(Qt::RightDockWidgetArea, d);
+        if (spawnDock) tabifyDockWidget(spawnDock, d);
+        d->hide();
+    }
+    // Surface the spawn dock's tab group front-most so the reset visibly
+    // lands the user somewhere sensible.
+    spawnDock->show();
+    spawnDock->raise();
     statusBar()->showMessage(tr("Window layout reset."), 3000);
 }
 
@@ -8777,15 +9452,108 @@ void MainWindow::onPlaceModeChanged(bool placing)
         m_viewer->setPlacementMode(placing);
     if (placing)
     {
-        m_placementKind = PlacementKind::Annotation;
+        setPlacementKind(PlacementKind::Annotation);
     }
     else if (m_placementKind == PlacementKind::Annotation)
     {
-        m_placementKind = PlacementKind::None;
+        setPlacementKind(PlacementKind::None);
     }
     statusBar()->showMessage(placing
         ? tr("Placement mode ON - left-click drops an annotation")
         : tr("Placement mode off"), 3000);
+}
+
+void MainWindow::setPlacementKind(PlacementKind kind)
+{
+    m_placementKind = kind;
+    updateModeBadge();
+}
+
+void MainWindow::updateModeBadge()
+{
+    if (!m_modeBadge)
+        return;
+    QString text;
+    char const* bg = "#5a6472";   // neutral slate for Select
+    switch (m_placementKind)
+    {
+        case PlacementKind::None:
+            text = tr("SELECT");
+            break;
+        case PlacementKind::Annotation:
+            text = tr("ANNOTATE - click places | Esc exits");
+            bg = "#8e44ad";
+            break;
+        case PlacementKind::Spawn:
+            text = tr("PLACE SPAWN - click drops | Esc exits");
+            bg = "#27824c";
+            break;
+        case PlacementKind::PathDraw:
+            text = tr("DRAW PATH - click adds node | Return finishes | Esc cancels");
+            bg = "#2d6fb3";
+            break;
+        case PlacementKind::Areatrigger:
+            text = tr("PLACE AREATRIGGER - click drops | Esc exits");
+            bg = "#a03aa0";
+            break;
+        case PlacementKind::Graveyard:
+            text = tr("PLACE GRAVEYARD - click drops | Esc exits");
+            bg = "#1d8a8a";
+            break;
+        case PlacementKind::RoadDraw:
+            text = tr("ROAD DRAW - click drops waypoint | Esc exits");
+            bg = "#b3672d";
+            break;
+        case PlacementKind::PathProbe:
+            text = tr("PATH PROBE - click START then END (bot budget) | Esc exits");
+            bg = "#1f7a70";
+            break;
+        case PlacementKind::OffmeshDraw:
+            text = tr("OFF-MESH DRAW - click FROM then TO (appends to offmesh.txt) | Esc exits");
+            bg = "#a12a6e";
+            break;
+    }
+    m_modeBadge->setText(text);
+    m_modeBadge->setStyleSheet(QStringLiteral(
+        "QLabel { background: %1; color: white; font-weight: 600; "
+        "padding: 2px 8px; border-radius: 3px; }").arg(QLatin1String(bg)));
+}
+
+void MainWindow::cancelActivePlacement()
+{
+    switch (m_placementKind)
+    {
+        case PlacementKind::None:
+        case PlacementKind::PathDraw:   // onCancelPath owns this one.
+            return;
+        case PlacementKind::Annotation:
+            // Uncheck the toolbox "Place" box; its toggled signal funnels
+            // through onPlaceModeChanged which clears the mode + viewers.
+            if (m_annotationToolbox)
+                m_annotationToolbox->setPlacing(false);
+            else
+                setPlacementKind(PlacementKind::None);
+            break;
+        case PlacementKind::RoadDraw:
+            onFinishRoadDraw();
+            return;   // onFinishRoadDraw resets kind + viewers itself.
+        case PlacementKind::Spawn:
+        case PlacementKind::Areatrigger:
+        case PlacementKind::Graveyard:
+            setPlacementKind(PlacementKind::None);
+            break;
+        case PlacementKind::PathProbe:
+            m_probeHaveStart = false;
+            setPlacementKind(PlacementKind::None);
+            break;
+        case PlacementKind::OffmeshDraw:
+            m_offmeshHaveStart = false;
+            setPlacementKind(PlacementKind::None);
+            break;
+    }
+    if (m_viewer)   m_viewer->setPlacementMode(false);
+    if (m_viewer3d) m_viewer3d->setPlacementMode(false);
+    statusBar()->showMessage(tr("Placement mode exited."), 3000);
 }
 
 void MainWindow::onPlacementRay(float ox, float oy, float oz,
@@ -9250,6 +10018,74 @@ void MainWindow::onPlacementRequested(float worldX, float worldY)
                     .arg(g.id)
                     .arg(worldX, 0, 'f', 1).arg(worldY, 0, 'f', 1).arg(g.z, 0, 'f', 1),
                 3000);
+            return;
+        }
+
+        case PlacementKind::PathProbe:
+        {
+            // Two-click bot-budget pathfinding probe.  Z comes from the 3D
+            // pick when available (m_haveAuthoredZ), else ground snap --
+            // matching how a bot would stand at the clicked point.
+            float const z = m_haveAuthoredZ
+                ? m_authoredZ
+                : snapToGround(*m_currentMapId, worldX, worldY,
+                               /*probeZ*/ 10000.0f, /*fallback*/ 0.0f);
+            if (!m_probeHaveStart)
+            {
+                m_probeStartX = worldX;
+                m_probeStartY = worldY;
+                m_probeStartZ = z;
+                m_probeHaveStart = true;
+                statusBar()->showMessage(
+                    tr("Probe START (%1, %2, %3) - now click the destination.")
+                        .arg(worldX, 0, 'f', 1).arg(worldY, 0, 'f', 1).arg(z, 0, 'f', 1), 0);
+            }
+            else
+            {
+                if (m_viewer3d)
+                    m_viewer3d->runPathProbe(
+                        QVector3D(m_probeStartX, m_probeStartY, m_probeStartZ),
+                        QVector3D(worldX, worldY, z));
+                m_probeHaveStart = false;   // next click begins a fresh probe
+                statusBar()->showMessage(
+                    tr("Probe complete - see the HUD verdict. Click to start another; Esc exits."),
+                    6000);
+            }
+            return;
+        }
+
+        case PlacementKind::OffmeshDraw:
+        {
+            float const z = m_haveAuthoredZ
+                ? m_authoredZ
+                : snapToGround(*m_currentMapId, worldX, worldY,
+                               /*probeZ*/ 10000.0f, /*fallback*/ 0.0f);
+            if (!m_offmeshHaveStart)
+            {
+                m_offmeshStartX = worldX;
+                m_offmeshStartY = worldY;
+                m_offmeshStartZ = z;
+                m_offmeshHaveStart = true;
+                statusBar()->showMessage(
+                    tr("Off-mesh FROM (%1, %2, %3) - now click the TO point.")
+                        .arg(worldX, 0, 'f', 1).arg(worldY, 0, 'f', 1).arg(z, 0, 'f', 1), 0);
+            }
+            else
+            {
+                if (appendOffmeshConnection(m_offmeshStartX, m_offmeshStartY, m_offmeshStartZ,
+                                            worldX, worldY, z))
+                {
+                    if (m_viewer3d)
+                        m_viewer3d->addPendingOffmesh(
+                            QVector3D(m_offmeshStartX, m_offmeshStartY, m_offmeshStartZ),
+                            QVector3D(worldX, worldY, z));
+                    statusBar()->showMessage(
+                        tr("Off-mesh connection appended to %1 - PENDING until the "
+                           "next mmaps regen (magenta arc). Click FROM for another; Esc exits.")
+                            .arg(offmeshFilePath()), 8000);
+                }
+                m_offmeshHaveStart = false;
+            }
             return;
         }
 
@@ -9779,6 +10615,7 @@ bool MainWindow::finishWorldDbConnect(db::ConnectionParams const& params,
         reloadSpawnsForMap(*m_currentMapId);
         reloadAnnotationsForMap(*m_currentMapId);
         reloadPathsForMap(*m_currentMapId);
+        reloadDungeonRoutesForMap(*m_currentMapId);
         reloadAreatriggersForMap(*m_currentMapId);
         reloadGraveyardsForMap(*m_currentMapId);
     }
@@ -9885,7 +10722,7 @@ void MainWindow::onNewSpawnFromTemplate()
         return;
 
     m_pickedTemplate = std::make_unique<app::PickedTemplate>(picker.picked());
-    m_placementKind  = PlacementKind::Spawn;
+    setPlacementKind(PlacementKind::Spawn);
     m_viewer->setPlacementMode(true); if (m_viewer3d) m_viewer3d->setPlacementMode(true);
 
     statusBar()->showMessage(

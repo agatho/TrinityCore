@@ -21,7 +21,16 @@ GLuint TerrainTextureCache::uploadFromBlob(std::vector<uint8_t> const& blob,
                                            QOpenGLFunctions& gl)
 {
     io::BlpImage img;
-    if (!io::decodeBlp(blob, img) || img.width <= 0 || img.height <= 0)
+    if (!io::decodeBlp(blob, img))
+        return 0;
+    return uploadFromImage(img, gl);
+}
+
+GLuint TerrainTextureCache::uploadFromImage(io::BlpImage const& img,
+                                            QOpenGLFunctions& gl)
+{
+    if (img.width <= 0 || img.height <= 0
+        || img.rgba.size() < size_t(img.width) * size_t(img.height) * 4)
         return 0;
 
     GLuint tex = 0;
@@ -72,6 +81,50 @@ GLuint TerrainTextureCache::textureForPath(std::string const& vpath,
         tex = uploadFromBlob(blob, gl);
     m_byPath[vpath] = tex;
     return tex;
+}
+
+GLuint TerrainTextureCache::insertDecodedFdid(uint32_t fdid,
+                                              io::BlpImage const& img,
+                                              QOpenGLFunctions& gl)
+{
+    if (fdid == 0)
+        return 0;
+    if (auto it = m_byFdid.find(fdid); it != m_byFdid.end())
+        return it->second;
+    GLuint const tex = uploadFromImage(img, gl);
+    m_byFdid[fdid] = tex;  // cache zero too, so we don't retry
+    return tex;
+}
+
+GLuint TerrainTextureCache::insertDecodedPath(std::string const& vpath,
+                                              io::BlpImage const& img,
+                                              QOpenGLFunctions& gl)
+{
+    if (vpath.empty())
+        return 0;
+    if (auto it = m_byPath.find(vpath); it != m_byPath.end())
+        return it->second;
+    GLuint const tex = uploadFromImage(img, gl);
+    m_byPath[vpath] = tex;
+    return tex;
+}
+
+std::unordered_set<uint32_t> TerrainTextureCache::knownFdidKeys() const
+{
+    std::unordered_set<uint32_t> keys;
+    keys.reserve(m_byFdid.size());
+    for (auto const& [fdid, _] : m_byFdid)
+        keys.insert(fdid);
+    return keys;
+}
+
+std::unordered_set<std::string> TerrainTextureCache::knownPathKeys() const
+{
+    std::unordered_set<std::string> keys;
+    keys.reserve(m_byPath.size());
+    for (auto const& [path, _] : m_byPath)
+        keys.insert(path);
+    return keys;
 }
 
 void TerrainTextureCache::clear(QOpenGLFunctions& gl)

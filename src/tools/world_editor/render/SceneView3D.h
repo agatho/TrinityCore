@@ -24,6 +24,7 @@
 
 #pragma once
 
+#include "../io/BlpReader.h"
 #include "../io/MMapReader.h"
 #include "../io/VmapReader.h"
 #include "NavMeshView.h"  // shares Spawn struct
@@ -37,6 +38,7 @@
 #include <QOpenGLShaderProgram>
 #include <QOpenGLVertexArrayObject>
 #include <QOpenGLWidget>
+#include <QElapsedTimer>
 #include <QPoint>
 #include <QSet>
 #include <QString>
@@ -75,6 +77,37 @@ public:
     void setSpawns(std::vector<Spawn> spawns);
     void setAnnotations(std::vector<Annotation> annotations);
     void setPaths(std::vector<Path> paths);
+    // Bot dungeon-route chain (playerbot_dungeon_routes): rendered as a
+    // distinct gold polyline with node markers, node-editable like paths.
+    // One Path per difficulty; Path::pathId carries the difficulty.
+    void setDungeonRoutes(std::vector<Path> routes);
+    void setDungeonRoutesVisible(bool on);
+    [[nodiscard]] bool dungeonRoutesVisible() const noexcept { return m_routesVisible; }
+    // Camera world position (used to seed a new dungeon route at the operator's
+    // current vantage point).
+    [[nodiscard]] QVector3D cameraPosition() const { return { m_camX, m_camY, m_camZ }; }
+
+    // ---- Pathfinding probe (bot-budget sandbox) ----
+    // Runs Detour A->B on the loaded navmesh with the BOT'S constraints
+    // (1024 query nodes, 74-poly corridor cap -- the worldserver
+    // PathGenerator budget) and stores an overlay: green = complete,
+    // orange = partial/truncated corridor, red dashed = unreached remainder.
+    // The HUD prints the verdict + budget consumption.  This is a diagnosis
+    // tool: it shows what the BOT's pathfinder would do, unlike the 2D
+    // auto-route helper which uses a generous 4096-node authoring query.
+    void runPathProbe(QVector3D const& startTc, QVector3D const& endTc);
+    void clearPathProbe();
+    [[nodiscard]] bool hasPathProbeResult() const noexcept { return m_probeValid; }
+
+    // ---- Off-mesh connection overlay + authoring preview ----
+    // Existing connections are read straight from the loaded dtNavMesh
+    // tiles (violet arcs).  Newly authored ones (appended to offmesh.txt
+    // but not yet baked by a regen) are queued as PENDING and drawn
+    // brighter so the operator can tell live links from queued ones.
+    void setOffmeshVisible(bool on);
+    [[nodiscard]] bool offmeshVisible() const noexcept { return m_offmeshVisible; }
+    void addPendingOffmesh(QVector3D const& fromTc, QVector3D const& toTc);
+    void clearPendingOffmesh();
     void setAreatriggers(std::vector<Areatrigger> atrs);
     void setGraveyards(std::vector<Graveyard> gys);
     void setMapTileCache(io::MapTileCache* cache);
@@ -212,6 +245,13 @@ public:
         uint32_t                         layerFdid[8]    = { 0,0,0,0,0,0,0,0 };
         std::string                      layerPath[8];   // BLP-path fallback (legacy ADTs)
     };
+    // PERF: textures the worker already CASC-read + BLP-decoded because the
+    // shared cache didn't know the key at dispatch time.  The GL drain feeds
+    // these to TerrainTextureCache::insertDecoded* (upload-only) BEFORE
+    // resolving handles, so first-appearance textures no longer trigger a
+    // synchronous CASC read + DXT decode on the render thread.
+    using DecodedFdidTex = std::vector<std::pair<uint32_t, io::BlpImage>>;
+    using DecodedPathTex = std::vector<std::pair<std::string, io::BlpImage>>;
     struct AdtTilePending
     {
         int                              gx = 0;
@@ -222,6 +262,8 @@ public:
         // a re-decoded AdtTile around just for the bounding sphere.
         float                            tileMinZ = 0.0f;
         float                            tileMaxZ = 0.0f;
+        DecodedFdidTex                   decodedFdidTex;   // deduped across chunks
+        DecodedPathTex                   decodedPathTex;
     };
     // PERF: async water decode payload.  loadAdtLiquid (full ADT-root read +
     // MH2O parse, ~70ms/tile) used to run SYNCHRONOUSLY on the GL thread inside
@@ -286,6 +328,8 @@ public:
         float                       centerX = 0.0f, centerY = 0.0f, centerZ = 0.0f;
         float                       radius  = 0.0f;
         bool                        ok = false;
+        DecodedFdidTex              decodedFdidTex;   // worker-pre-decoded submesh textures
+        DecodedPathTex              decodedPathTex;
     };
     struct DoodadPending
     {
@@ -296,7 +340,40 @@ public:
         float                          centerX = 0.0f, centerY = 0.0f, centerZ = 0.0f;
         float                          radius  = 0.0f;
         bool                           ok = false;
+        DecodedFdidTex                 decodedFdidTex;   // worker-pre-decoded submesh textures
+        DecodedPathTex                 decodedPathTex;
     };
+    // PERF: async prop-placement enumeration.  loadAdtDoodads /
+    // loadAdtWmoPlacements / loadWmoDoodads are synchronous CASC reads that
+    // used to run on the GL thread inside paintGL at every camera tile-cross
+    // (rebuildDoodadInstances) -- a render hitch each time you fly across a
+    // tile boundary.  A PropPlacementTask now enumerates placements on a
+    // worker and posts back this payload; applyPropPlacements (GUI thread)
+    // appends the instances.  Jobs are prepared on the GL thread (WDT MAID
+    // lookups are cheap) so the worker never touches SceneView3D state.
+    struct PropPlacementJob { int gx = 0, gy = 0; uint32_t obj0Fdid = 0, rootFdid = 0; };
+    struct PropDoodadInstance
+    {
+        uint32_t modelFdid = 0;
+        float    x = 0.0f, y = 0.0f, z = 0.0f;
+        float    rotZ = 0.0f, rotY = 0.0f, rotX = 0.0f;
+        float    scale = 1.0f;
+    };
+    struct PropWmoInstance
+    {
+        uint32_t wmoRootFdid = 0;
+        float    x = 0.0f, y = 0.0f, z = 0.0f;
+        float    rotZ = 0.0f, rotY = 0.0f, rotX = 0.0f;
+        float    scale = 1.0f;
+    };
+    struct PropPlacementPending
+    {
+        std::vector<PropDoodadInstance> doodads;
+        std::vector<PropWmoInstance>    wmos;
+        std::vector<uint32_t>           wmoUids;     // MODF uniqueIds emitted here
+        uint32_t                        generation = 0;
+    };
+    void applyPropPlacements(PropPlacementPending pending);
     // Worker -> GL thread inbox.  Called from a queued lambda after the
     // QRunnable finishes; the GL drainer pulls + uploads inside paintGL.
     void enqueueAdtPending    (AdtTilePending  pending);
@@ -318,6 +395,25 @@ signals:
     // NavMeshView::pathClicked / annotationClicked.
     void pathClicked(int pathIndex);
     void annotationClicked(int annotationIndex);
+    // Node-level path editing in 3D (parity with NavMeshView).  Unlike the
+    // 2D signals these carry Z: the move Z is the drag-plane altitude and
+    // the segment Z is lerped between the segment's endpoints, so stacked
+    // dungeon floors don't snap edits onto the wrong storey.
+    void pathNodeClicked(int pathIndex, int nodeIndex);
+    void pathNodeMoved(int pathIndex, int nodeIndex,
+                       float worldX, float worldY, float worldZ);
+    void pathNodeContextMenuRequested(int pathIndex, int nodeIndex, QPoint globalPos);
+    void pathSegmentContextMenuRequested(int pathIndex, int afterNodeIndex,
+                                         float worldX, float worldY, float worldZ,
+                                         QPoint globalPos);
+    // Same node-editing surface for the bot dungeon-route chain.  routeIndex
+    // indexes the setDungeonRoutes vector (one entry per difficulty).
+    void routeNodeMoved(int routeIndex, int nodeIndex,
+                        float worldX, float worldY, float worldZ);
+    void routeNodeContextMenuRequested(int routeIndex, int nodeIndex, QPoint globalPos);
+    void routeSegmentContextMenuRequested(int routeIndex, int afterNodeIndex,
+                                          float worldX, float worldY, float worldZ,
+                                          QPoint globalPos);
     // Phase 7+ polish: ray-pick areatriggers + graveyards in 3D.
     void areatriggerClicked(int areatriggerIndex);
     void graveyardClicked(int graveyardIndex);
@@ -710,10 +806,14 @@ private:
         float    x = 0.0f, y = 0.0f, z = 0.0f;
         float    rotZ = 0.0f, rotY = 0.0f, rotX = 0.0f;
         float    scale = 1.0f;
+        // PERF: column-major world matrix (translate * Rz * Ry * Rx * scale),
+        // composed ONCE when the instance is created.  drawDoodads streams
+        // the visible subset into the shared instance VBO each frame instead
+        // of rebuilding a QMatrix4x4 + uploading a uniform per instance.
+        float    model[16] = { 1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1 };
     };
     QOpenGLShaderProgram*    m_doodadProgram = nullptr;
     int  m_doodadUMvp     = -1;
-    int  m_doodadUModel   = -1;
     int  m_doodadUSunDir  = -1;
     int  m_doodadUAmbient = -1;
     int  m_doodadUHasTex  = -1;
@@ -724,10 +824,18 @@ private:
     int  m_doodadUCombinerId = -1;   // STAGE A: M2Combiner switch selector.
     std::unordered_map<uint32_t, DoodadGpuMesh>  m_doodadMeshes;
     std::vector<DoodadInstanceGpu>               m_doodadInstances;
+    // PERF: instanced doodad rendering.  Per FDID run drawDoodads gathers the
+    // visible instances' cached matrices into the scratch, streams them into
+    // this shared VBO (attribute locations 4..7, divisor 1) and issues ONE
+    // glDrawElementsInstanced per submesh -- replacing a draw call + CPU
+    // matrix build + u_model upload PER INSTANCE per submesh.
+    QOpenGLBuffer                                m_doodadInstanceVbo{QOpenGLBuffer::VertexBuffer};
+    std::vector<float>                           m_doodadInstanceScratch;
     bool                                         m_doodadsBuilt   = false;
     bool                                         m_doodadsVisible = true;
     void destroyDoodadResources();
     void rebuildDoodadInstances();
+    static void composeDoodadModelMatrix(DoodadInstanceGpu& inst);
     bool ensureDoodadMeshLoaded(uint32_t fdid);
     void drawDoodads(QMatrix4x4 const& mvp);
     // STAGE B1: GL-thread upload of a worker-decoded M2 payload into a
@@ -806,6 +914,10 @@ private:
     // switches reset it via dropWdtCache().
     std::unique_ptr<io::Wdt> m_wdt;
     uint32_t                 m_wdtMapId = 0;
+    // Failure latch: true after a load failure for m_wdtMapId so callers
+    // don't re-probe CASC (sync I/O) + re-log on every frame.  Re-armed by
+    // dropWdtCache() / setCascClient() / map switch.
+    bool                     m_wdtLoadFailed = false;
     void dropWdtCache();
     [[nodiscard]] io::Wdt const* ensureWdt();
     QString           m_minimapDir;
@@ -878,6 +990,77 @@ private:
     // horizontal plane z == planeZ.  False when the ray is parallel to the
     // plane (grazing horizon) or the hit is behind the camera.
     [[nodiscard]] bool screenRayToPlaneZ(QPoint const& screen, float planeZ, QVector3D& out) const;
+
+    // ---- Path node editing (parity with NavMeshView) ----
+    // Screen-space picks: node = nearest projected node within tolerance;
+    // segment = nearest projected polyline segment, returning the world
+    // point lerped between its endpoints (so Z is floor-correct).  The *In
+    // cores are shared between waypoint paths and the dungeon-route chain.
+    [[nodiscard]] bool hitTestNodeIn(std::vector<Path> const& paths,
+                                     QPoint const& screen,
+                                     int& outPathIdx, int& outNodeIdx,
+                                     float pixelTolerance) const;
+    [[nodiscard]] bool hitTestSegmentIn(std::vector<Path> const& paths,
+                                        QPoint const& screen,
+                                        int& outPathIdx, int& outAfterNode,
+                                        QVector3D& outWorld,
+                                        float pixelTolerance) const;
+    [[nodiscard]] bool hitTestPathNode(QPoint const& screen,
+                                       int& outPathIdx, int& outNodeIdx,
+                                       float pixelTolerance = 12.0f) const;
+    [[nodiscard]] bool hitTestPathSegment(QPoint const& screen,
+                                          int& outPathIdx, int& outAfterNode,
+                                          QVector3D& outWorld,
+                                          float pixelTolerance = 8.0f) const;
+    // Node drag mirrors the spawn drag: horizontal plane at the node's
+    // start Z, live line preview, single edit emitted on release.
+    // m_dragIsRoute selects whether the drag edits m_paths or m_dungeonRoutes.
+    int    m_dragPathIndex  = -1;
+    int    m_dragNodeIndex  = -1;
+    float  m_dragNodePlaneZ = 0.0f;
+    bool   m_dragNodeMoved  = false;
+    bool   m_dragIsRoute    = false;
+    // ---- Pathfinding probe overlay state ----
+    bool                     m_probeValid = false;
+    QVector3D                m_probeStart;         // clicked TC world coords
+    QVector3D                m_probeEnd;
+    std::vector<PathNode>    m_probeStraight;      // straight-path polyline (TC)
+    bool                     m_probePartial  = false;  // DT_PARTIAL_RESULT / cap hit
+    bool                     m_probeNoPath   = false;  // no poly / findPath failed
+    int                      m_probePolys    = 0;      // corridor polys used (cap 74)
+    int                      m_probePoints   = 0;      // straight-path points
+    float                    m_probeLenYd    = 0.0f;   // polyline length
+    QString                  m_probeSummary;           // HUD one-liner
+    QOpenGLBuffer            m_probeVbo{ QOpenGLBuffer::VertexBuffer };
+    QOpenGLVertexArrayObject m_probeVao;
+    GLsizei                  m_probeVertexCount = 0;
+    bool                     m_probeDirty = false;
+    void rebuildProbeBuffer();
+    void uploadProbeGeometry();
+
+    // ---- Off-mesh connection overlay ----
+    bool                     m_offmeshVisible = true;
+    std::vector<std::pair<QVector3D, QVector3D>> m_pendingOffmesh;
+    QOpenGLBuffer            m_offmeshVbo{ QOpenGLBuffer::VertexBuffer };
+    QOpenGLVertexArrayObject m_offmeshVao;
+    GLsizei                  m_offmeshVertexCount = 0;
+    bool                     m_offmeshDirty = false;
+    void rebuildOffmeshBuffer();
+    void uploadOffmeshGeometry();
+
+    // ---- Bot dungeon-route chain (gold overlay + node editing) ----
+    std::vector<Path>        m_dungeonRoutes;
+    bool                     m_routesVisible = true;
+    QOpenGLBuffer            m_routeVbo{ QOpenGLBuffer::VertexBuffer };
+    QOpenGLVertexArrayObject m_routeVao;
+    GLsizei                  m_routeVertexCount = 0;
+    bool                     m_routeDirty = false;
+    void rebuildRouteBuffer();
+    void uploadRouteGeometry();
+    // RMB is camera-rotate when dragged; a click (no movement) opens the
+    // path node/segment context menu instead.
+    QPoint m_rmbPressPos;
+    bool   m_rmbDragged     = false;
 
     // Areatrigger / Graveyard markers (reuse spawn shader; smaller billboards).
     std::vector<Areatrigger> m_areatriggers;
@@ -1038,6 +1221,12 @@ private:
     std::mutex                       m_waterPendingMutex;
     std::vector<WaterTilePending>    m_waterPending;
     QSet<uint32_t>                   m_waterInFlight;
+    // Water wave animation gate: true while the last paint actually drew at
+    // least one water tile.  onTick turns this into a capped-cadence repaint
+    // instead of the water pass calling update() unconditionally (which
+    // forced a full-scene redraw at max framerate even with a still camera).
+    bool                             m_waterAnimActive = false;
+    QElapsedTimer                    m_waterAnimClock;
     void                             drainPendingWaterUploads(int maxThisFrame);
     void                             dispatchWaterLoad(int gx, int gy);
     std::atomic<bool>                m_adtScanDispatched{false};
@@ -1065,7 +1254,28 @@ private:
     // clear-and-rebuild-every-tile-cross churn).  Both cleared on map switch.
     std::unordered_set<uint64_t>     m_loadedPropTiles;
     std::unordered_set<uint32_t>     m_emittedWmoUids;
-    void drainPendingAdtUploads(int maxThisFrame);
+    // PERF: async prop-placement enumeration state.  One task in flight at a
+    // time; the generation counter invalidates payloads that cross a map
+    // switch (destroyDoodadResources / destroyTexturedWmoResources bump it).
+    bool                             m_propPlacementInFlight = false;
+    uint32_t                         m_propGeneration = 0;
+    void dispatchPropPlacementLoads();
+    void drainPendingAdtUploads(int maxChunksThisFrame);
+    // PERF: chunk-budgeted staging for the ADT drain.  One tile used to be
+    // uploaded whole (256 chunk VBOs + alpha arrays in a single frame -- a
+    // multi-hundred-ms stall every time a tile landed while flying); now a
+    // budget of chunks per frame trickles the active tile in.  The staged
+    // AdtTileRender only becomes visible (pushed to m_adtTerrainTiles) once
+    // every chunk is uploaded, so the lit fallback keeps covering the tile
+    // during the trickle and no half-textured tile is ever drawn.
+    bool                             m_adtUploadActive = false;
+    AdtTilePending                   m_adtUploadPending;
+    AdtTileRender                    m_adtUploadTile;
+    size_t                           m_adtUploadNextChunk = 0;
+    int                              m_adtUploadTexed = 0;
+    int                              m_adtUploadAlpha = 0;
+    int                              m_adtUploadGpuTex = 0;
+    int                              m_adtUploadFirstTexed = -1;
 
     std::mutex                       m_minimapPendingMutex;
     std::vector<MinimapPending>      m_minimapPending;

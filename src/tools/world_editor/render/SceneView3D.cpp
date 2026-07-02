@@ -15,6 +15,7 @@
 #include "TerrainTextureCache.h"
 
 #include <DetourNavMesh.h>
+#include <DetourNavMeshQuery.h>
 
 #include <QCoreApplication>
 #include <QDateTime>
@@ -402,32 +403,36 @@ void main()
 )";
 
 // Doodad (M2 prop) pass.  Per-vertex layout: float3 pos + float3 normal
-// + float2 uv (32 bytes / vertex).  Per-draw uniform `u_model` carries
-// the instance's translate * rotateZYX * scale; `u_mvp` is the
-// camera's projection * view; the vertex shader composes them so we
-// don't pay the cost of pre-baked world transforms in client memory.
-// When u_hasTexture == 0 (M2 had no resolvable texture for this batch)
-// the fragment shader paints a neutral grey -- better than discarding
-// the entire submesh because the lit silhouette still reads.
+// + float2 uv (32 bytes / vertex).  PERF: the world matrix is a PER-INSTANCE
+// attribute (locations 4..7, divisor 1, streamed from the shared instance
+// VBO) so a forest renders as one glDrawElementsInstanced per submesh
+// instead of a draw + uniform upload per tree.  `u_mvp` is the camera's
+// projection * view.  When u_hasTexture == 0 (M2 had no resolvable texture
+// for this batch) the fragment shader paints a neutral grey -- better than
+// discarding the entire submesh because the lit silhouette still reads.
 constexpr char const* DOODAD_VSHADER = R"(
 #version 330 core
 layout(location = 0) in vec3 in_pos;
 layout(location = 1) in vec3 in_normal;
 layout(location = 2) in vec2 in_uv;
 layout(location = 3) in vec2 in_uv2;   // STAGE A: T2 UV for the second texture.
+layout(location = 4) in vec4 in_model0;  // per-instance world matrix columns
+layout(location = 5) in vec4 in_model1;
+layout(location = 6) in vec4 in_model2;
+layout(location = 7) in vec4 in_model3;
 uniform mat4 u_mvp;
-uniform mat4 u_model;
 out vec3 v_normal;
 out vec2 v_uv;
 out vec2 v_uv2;
 out vec3 v_worldPos;
 void main()
 {
-    vec4 worldPos = u_model * vec4(in_pos, 1.0);
+    mat4 model = mat4(in_model0, in_model1, in_model2, in_model3);
+    vec4 worldPos = model * vec4(in_pos, 1.0);
     gl_Position = u_mvp * worldPos;
-    // u_model carries no non-uniform scale (we apply isotropic scale),
-    // so rotating the normal by the model matrix is sufficient.
-    v_normal   = mat3(u_model) * in_normal;
+    // The model matrix carries no non-uniform scale (isotropic instance
+    // scale), so rotating the normal by it is sufficient.
+    v_normal   = mat3(model) * in_normal;
     v_uv       = in_uv;
     v_uv2      = in_uv2;
     v_worldPos = worldPos.xyz;
@@ -793,6 +798,7 @@ SceneView3D::SceneView3D(QWidget* parent)
     // 60 Hz tick to apply WASD input.
     connect(&m_tickTimer, &QTimer::timeout, this, &SceneView3D::onTick);
     m_tickTimer.start(16);
+    m_waterAnimClock.start();
 }
 
 void SceneView3D::loadFlySpeed()
@@ -897,6 +903,13 @@ void SceneView3D::setNavMesh(io::LoadedMMap mesh)
     // WDT MAID was for the previous mapId -- drop so ensureWdt() picks up
     // the new map's WDT on the next ADT dispatch.
     dropWdtCache();
+    // Off-mesh overlay reads the navmesh tiles directly; pending (authored
+    // this session) links are dropped -- after a regen the reload turns them
+    // into baked violet links, and without one they still live in offmesh.txt.
+    m_pendingOffmesh.clear();
+    rebuildOffmeshBuffer();
+    // A probe result belongs to the previous mesh.
+    clearPathProbe();
     update();
 }
 
@@ -918,6 +931,368 @@ void SceneView3D::setPaths(std::vector<Path> paths)
 {
     m_paths = std::move(paths);
     rebuildPathBuffer();
+    update();
+}
+
+void SceneView3D::setDungeonRoutes(std::vector<Path> routes)
+{
+    m_dungeonRoutes = std::move(routes);
+    rebuildRouteBuffer();
+    update();
+}
+
+void SceneView3D::runPathProbe(QVector3D const& startTc, QVector3D const& endTc)
+{
+    // BOT-BUDGET constants: mirror the worldserver PathGenerator so the
+    // verdict matches what a bot would actually get, not what a generous
+    // authoring query could find.  (74-poly corridor + 1024 query nodes is
+    // the documented playerbot pathfinder budget.)
+    constexpr int kBotMaxNodes = 1024;
+    constexpr int kBotMaxPolys = 74;
+
+    m_probeValid    = true;
+    m_probeStart    = startTc;
+    m_probeEnd      = endTc;
+    m_probeStraight.clear();
+    m_probePartial  = false;
+    m_probeNoPath   = false;
+    m_probePolys    = 0;
+    m_probePoints   = 0;
+    m_probeLenYd    = 0.0f;
+    m_probeSummary.clear();
+
+    auto finish = [this]()
+    {
+        rebuildProbeBuffer();
+        update();
+        qInfo("[path-probe] %s", m_probeSummary.toUtf8().constData());
+    };
+
+    dtNavMesh const* nm = m_mesh.navmesh();
+    if (!nm)
+    {
+        m_probeNoPath  = true;
+        m_probeSummary = QStringLiteral("NO NAVMESH loaded");
+        finish();
+        return;
+    }
+
+    // TC world (X=north, Y=west, Z=up) -> Detour (x, y=up, z).
+    auto tcToDt = [](QVector3D const& p, float* out_)
+    {
+        out_[0] = p.y();
+        out_[1] = p.z();
+        out_[2] = p.x();
+    };
+
+    struct QueryDeleter { void operator()(dtNavMeshQuery* q) const { if (q) dtFreeNavMeshQuery(q); } };
+    std::unique_ptr<dtNavMeshQuery, QueryDeleter> query(dtAllocNavMeshQuery());
+    if (!query || dtStatusFailed(query->init(nm, kBotMaxNodes)))
+    {
+        m_probeNoPath  = true;
+        m_probeSummary = QStringLiteral("query init failed");
+        finish();
+        return;
+    }
+
+    float startDt[3], endDt[3];
+    tcToDt(startTc, startDt);
+    tcToDt(endTc,   endDt);
+
+    // Same nearest-poly extents the worldserver uses for its normal lookup
+    // (3y horizontal, 5y vertical) -- a probe that can't even snap tells us
+    // the click is OFF-MESH, which is itself diagnostic signal.
+    float const extents[3] = { 3.0f, 5.0f, 3.0f };
+    dtQueryFilter filter;
+    filter.setIncludeFlags(0xffff);
+    filter.setExcludeFlags(0);
+
+    dtPolyRef startRef = 0, endRef = 0;
+    float startNearest[3], endNearest[3];
+    query->findNearestPoly(startDt, extents, &filter, &startRef, startNearest);
+    query->findNearestPoly(endDt,   extents, &filter, &endRef,   endNearest);
+    if (startRef == 0 || endRef == 0)
+    {
+        m_probeNoPath  = true;
+        m_probeSummary = QStringLiteral("PROBE: %1 off-mesh (start=%2 end=%3, 3y/5y snap box)")
+            .arg(startRef == 0 && endRef == 0 ? QStringLiteral("both ends")
+                 : startRef == 0 ? QStringLiteral("START") : QStringLiteral("END"))
+            .arg(startRef ? QStringLiteral("ok") : QStringLiteral("MISS"))
+            .arg(endRef   ? QStringLiteral("ok") : QStringLiteral("MISS"));
+        finish();
+        return;
+    }
+
+    dtPolyRef polys[kBotMaxPolys];
+    int polyCount = 0;
+    dtStatus const st = query->findPath(startRef, endRef, startNearest, endNearest,
+                                        &filter, polys, &polyCount, kBotMaxPolys);
+    m_probePolys = polyCount;
+    if (dtStatusFailed(st) || polyCount <= 0)
+    {
+        m_probeNoPath  = true;
+        m_probeSummary = QStringLiteral("PROBE: NOPATH (findPath failed, status=0x%1)")
+            .arg(uint(st), 0, 16);
+        finish();
+        return;
+    }
+    // The two ways a bot path comes back incomplete: Detour says PARTIAL
+    // (node budget / no connection), or the corridor filled the 74-poly cap
+    // without reaching the end poly.
+    bool const partialFlag = (st & DT_PARTIAL_RESULT) != 0;
+    bool const capHit      = (polyCount >= kBotMaxPolys) && (polys[polyCount - 1] != endRef);
+    bool const endsShort   = polys[polyCount - 1] != endRef;
+    m_probePartial = partialFlag || capHit || endsShort;
+
+    float straight[kBotMaxPolys * 3];
+    unsigned char sFlags[kBotMaxPolys];
+    dtPolyRef sRefs[kBotMaxPolys];
+    int straightCount = 0;
+    if (dtStatusFailed(query->findStraightPath(startNearest, endNearest,
+            polys, polyCount, straight, sFlags, sRefs, &straightCount, kBotMaxPolys)))
+    {
+        m_probeNoPath  = true;
+        m_probeSummary = QStringLiteral("PROBE: corridor found (%1 polys) but straight-path failed")
+            .arg(polyCount);
+        finish();
+        return;
+    }
+    m_probePoints = straightCount;
+    m_probeStraight.reserve(size_t(straightCount));
+    for (int i = 0; i < straightCount; ++i)
+    {
+        PathNode n;
+        n.nodeId = i;
+        n.x = straight[i * 3 + 2];   // Detour -> TC
+        n.y = straight[i * 3 + 0];
+        n.z = straight[i * 3 + 1];
+        m_probeStraight.push_back(n);
+        if (i > 0)
+        {
+            float const dx = m_probeStraight[i].x - m_probeStraight[i-1].x;
+            float const dy = m_probeStraight[i].y - m_probeStraight[i-1].y;
+            float const dz = m_probeStraight[i].z - m_probeStraight[i-1].z;
+            m_probeLenYd += std::sqrt(dx*dx + dy*dy + dz*dz);
+        }
+    }
+    // Remaining beeline from where the corridor stops to the requested end.
+    float remainYd = 0.0f;
+    if (!m_probeStraight.empty())
+    {
+        PathNode const& last = m_probeStraight.back();
+        float const dx = endTc.x() - last.x, dy = endTc.y() - last.y, dz = endTc.z() - last.z;
+        remainYd = std::sqrt(dx*dx + dy*dy + dz*dz);
+    }
+    m_probeSummary = QStringLiteral("PROBE: %1 | polys %2/%3%4 | points %5 | len %6yd%7")
+        .arg(m_probePartial ? QStringLiteral("INCOMPLETE") : QStringLiteral("COMPLETE"))
+        .arg(polyCount).arg(kBotMaxPolys)
+        .arg(partialFlag ? QStringLiteral(" (DT_PARTIAL)")
+             : capHit    ? QStringLiteral(" (CAP HIT)") : QString())
+        .arg(straightCount)
+        .arg(double(m_probeLenYd), 0, 'f', 1)
+        .arg(m_probePartial && remainYd > 1.0f
+             ? QStringLiteral(" | %1yd UNREACHED").arg(double(remainYd), 0, 'f', 1)
+             : QString());
+    finish();
+}
+
+void SceneView3D::clearPathProbe()
+{
+    if (!m_probeValid) return;
+    m_probeValid = false;
+    m_probeStraight.clear();
+    m_probeSummary.clear();
+    rebuildProbeBuffer();
+    update();
+}
+
+void SceneView3D::setOffmeshVisible(bool on)
+{
+    if (m_offmeshVisible == on) return;
+    m_offmeshVisible = on;
+    update();
+}
+
+void SceneView3D::addPendingOffmesh(QVector3D const& fromTc, QVector3D const& toTc)
+{
+    m_pendingOffmesh.emplace_back(fromTc, toTc);
+    rebuildOffmeshBuffer();
+    update();
+}
+
+void SceneView3D::clearPendingOffmesh()
+{
+    if (m_pendingOffmesh.empty()) return;
+    m_pendingOffmesh.clear();
+    rebuildOffmeshBuffer();
+    update();
+}
+
+void SceneView3D::rebuildOffmeshBuffer()
+{
+    m_offmeshDirty = true;
+    if (m_buffersReady) { uploadOffmeshGeometry(); update(); }
+}
+
+void SceneView3D::uploadOffmeshGeometry()
+{
+    m_offmeshDirty = false;
+    std::vector<PathVertex> verts;
+
+    // A connection renders as a 3-segment arc (lifting toward the middle so
+    // it reads as a LINK, not walkable geometry) + endpoint ticks.
+    auto emitLink = [&verts](float ax, float ay, float az,
+                             float bx, float by, float bz,
+                             uint8_t r, uint8_t g, uint8_t b)
+    {
+        float const mx = 0.5f * (ax + bx);
+        float const my = 0.5f * (ay + by);
+        float const mz = 0.5f * (az + bz) + 3.0f;
+        float const q1x = 0.5f * (ax + mx), q1y = 0.5f * (ay + my), q1z = 0.5f * (az + mz) + 1.0f;
+        float const q2x = 0.5f * (mx + bx), q2y = 0.5f * (my + by), q2z = 0.5f * (mz + bz) + 1.0f;
+        float const pts[5][3] = {
+            { ax,  ay,  az + 0.4f }, { q1x, q1y, q1z }, { mx, my, mz },
+            { q2x, q2y, q2z }, { bx,  by,  bz + 0.4f } };
+        for (int i = 0; i + 1 < 5; ++i)
+        {
+            verts.push_back({ pts[i][0],   pts[i][1],   pts[i][2],   r, g, b, 255 });
+            verts.push_back({ pts[i+1][0], pts[i+1][1], pts[i+1][2], r, g, b, 255 });
+        }
+        for (int e = 0; e < 2; ++e)
+        {
+            float const x = e ? bx : ax, y = e ? by : ay, z = e ? bz : az;
+            verts.push_back({ x, y, z - 0.5f, r, g, b, 255 });
+            verts.push_back({ x, y, z + 2.5f, r, g, b, 255 });
+        }
+    };
+
+    // Existing connections straight out of the loaded navmesh tiles.
+    if (dtNavMesh const* nm = m_mesh.navmesh())
+    {
+        for (int ti = 0; ti < nm->getMaxTiles(); ++ti)
+        {
+            dtMeshTile const* t = nm->getTile(ti);
+            if (!t || !t->header || t->header->offMeshConCount <= 0) continue;
+            for (int i = 0; i < t->header->offMeshConCount; ++i)
+            {
+                dtOffMeshConnection const& c = t->offMeshCons[i];
+                // Detour (x, y=up, z) -> TC (X, Y, Z).
+                emitLink(c.pos[2], c.pos[0], c.pos[1],
+                         c.pos[5], c.pos[3], c.pos[4],
+                         170, 90, 255);           // violet: baked into the mmap
+            }
+        }
+    }
+    // Authored-this-session connections (in offmesh.txt, awaiting a regen).
+    for (auto const& [a, b] : m_pendingOffmesh)
+        emitLink(a.x(), a.y(), a.z(), b.x(), b.y(), b.z(),
+                 255, 120, 255);                  // bright magenta: PENDING regen
+
+    m_offmeshVertexCount = static_cast<GLsizei>(verts.size());
+    if (!m_offmeshVao.isCreated()) m_offmeshVao.create();
+    if (!m_offmeshVbo.isCreated()) m_offmeshVbo.create();
+    m_offmeshVao.bind();
+    m_offmeshVbo.bind();
+    if (!verts.empty())
+        m_offmeshVbo.allocate(verts.data(), int(verts.size() * sizeof(PathVertex)));
+    else
+        m_offmeshVbo.allocate(nullptr, 0);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(PathVertex),
+        reinterpret_cast<void*>(offsetof(PathVertex, x)));
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 4, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(PathVertex),
+        reinterpret_cast<void*>(offsetof(PathVertex, r)));
+    m_offmeshVbo.release();
+    m_offmeshVao.release();
+}
+
+void SceneView3D::rebuildProbeBuffer()
+{
+    m_probeDirty = true;
+    if (m_buffersReady) { uploadProbeGeometry(); update(); }
+}
+
+void SceneView3D::uploadProbeGeometry()
+{
+    m_probeDirty = false;
+    std::vector<PathVertex> verts;
+    if (m_probeValid)
+    {
+        // Path polyline: green when complete, orange when the corridor is
+        // partial/truncated.  Slight lift so it reads over navmesh polys.
+        uint8_t const r = m_probePartial || m_probeNoPath ? 255 : 40;
+        uint8_t const g = m_probeNoPath ? 60 : (m_probePartial ? 150 : 230);
+        uint8_t const b = 40;
+        for (size_t i = 0; i + 1 < m_probeStraight.size(); ++i)
+        {
+            verts.push_back({ m_probeStraight[i].x,   m_probeStraight[i].y,   m_probeStraight[i].z   + 0.7f, r, g, b, 255 });
+            verts.push_back({ m_probeStraight[i+1].x, m_probeStraight[i+1].y, m_probeStraight[i+1].z + 0.7f, r, g, b, 255 });
+        }
+        // Unreached remainder: red dashed beeline from corridor end (or the
+        // start click when NOPATH) to the requested destination.
+        if (m_probePartial || m_probeNoPath)
+        {
+            float sx = m_probeStart.x(), sy = m_probeStart.y(), sz = m_probeStart.z();
+            if (!m_probeStraight.empty())
+            {
+                sx = m_probeStraight.back().x;
+                sy = m_probeStraight.back().y;
+                sz = m_probeStraight.back().z;
+            }
+            float const ex = m_probeEnd.x(), ey = m_probeEnd.y(), ez = m_probeEnd.z();
+            float const dx = ex - sx, dy = ey - sy, dz = ez - sz;
+            float const len = std::sqrt(dx*dx + dy*dy + dz*dz);
+            int const dashes = std::max(1, int(len / 4.0f));
+            for (int d = 0; d < dashes; ++d)
+            {
+                float const t0 = (float(d) + 0.00f) / float(dashes);
+                float const t1 = (float(d) + 0.55f) / float(dashes);
+                verts.push_back({ sx + dx*t0, sy + dy*t0, sz + dz*t0 + 0.7f, 255, 40, 40, 255 });
+                verts.push_back({ sx + dx*t1, sy + dy*t1, sz + dz*t1 + 0.7f, 255, 40, 40, 255 });
+            }
+        }
+        // Start / end markers: vertical ticks + small diamonds.
+        auto marker = [&verts](float x, float y, float z, uint8_t mr, uint8_t mg, uint8_t mb)
+        {
+            constexpr float R = 1.2f;
+            float const px4[4] = { x + R, x,     x - R, x     };
+            float const py4[4] = { y,     y + R, y,     y - R };
+            for (int c = 0; c < 4; ++c)
+            {
+                int const d = (c + 1) & 3;
+                verts.push_back({ px4[c], py4[c], z + 0.7f, mr, mg, mb, 255 });
+                verts.push_back({ px4[d], py4[d], z + 0.7f, mr, mg, mb, 255 });
+            }
+            verts.push_back({ x, y, z - 0.5f, mr, mg, mb, 255 });
+            verts.push_back({ x, y, z + 3.5f, mr, mg, mb, 255 });
+        };
+        marker(m_probeStart.x(), m_probeStart.y(), m_probeStart.z(),  60, 255,  60);
+        marker(m_probeEnd.x(),   m_probeEnd.y(),   m_probeEnd.z(),   255,  60,  60);
+    }
+    m_probeVertexCount = static_cast<GLsizei>(verts.size());
+    if (!m_probeVao.isCreated()) m_probeVao.create();
+    if (!m_probeVbo.isCreated()) m_probeVbo.create();
+    m_probeVao.bind();
+    m_probeVbo.bind();
+    if (!verts.empty())
+        m_probeVbo.allocate(verts.data(), int(verts.size() * sizeof(PathVertex)));
+    else
+        m_probeVbo.allocate(nullptr, 0);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(PathVertex),
+        reinterpret_cast<void*>(offsetof(PathVertex, x)));
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 4, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(PathVertex),
+        reinterpret_cast<void*>(offsetof(PathVertex, r)));
+    m_probeVbo.release();
+    m_probeVao.release();
+}
+
+void SceneView3D::setDungeonRoutesVisible(bool on)
+{
+    if (m_routesVisible == on) return;
+    m_routesVisible = on;
     update();
 }
 
@@ -1201,7 +1576,6 @@ void SceneView3D::initializeGL()
     m_doodadProgram->bindAttributeLocation("in_uv2",    3);
     m_doodadProgram->link();
     m_doodadUMvp         = m_doodadProgram->uniformLocation("u_mvp");
-    m_doodadUModel       = m_doodadProgram->uniformLocation("u_model");
     m_doodadUSunDir      = m_doodadProgram->uniformLocation("u_sunDir");
     m_doodadUAmbient     = m_doodadProgram->uniformLocation("u_ambient");
     m_doodadUHasTex      = m_doodadProgram->uniformLocation("u_hasTexture");
@@ -1367,6 +1741,9 @@ void SceneView3D::initializeGL()
     if (m_navDirty)   uploadNavmeshGeometry();
     if (m_spawnDirty) uploadSpawnGeometry();
     if (m_pathDirty)  uploadPathGeometry();
+    if (m_routeDirty) uploadRouteGeometry();
+    if (m_probeDirty) uploadProbeGeometry();
+    if (m_offmeshDirty) uploadOffmeshGeometry();
     if (m_annotDirty) uploadAnnotGeometry();
     if (m_atrDirty)   uploadAreatriggerGeometry();
     if (m_gyDirty)    uploadGraveyardGeometry();
@@ -1483,12 +1860,12 @@ void SceneView3D::paintGL()
     // Drain any pending async tile uploads BEFORE the draw loops -- so a
     // tile that finished loading mid-frame is immediately drawable.
     qint64 __dA=0,__dM=0,__dW=0,__dD=0;
-    // PERF: ONE ADT tile of GL uploads per frame.  Each tile is 256 chunk VBOs
-    // + 256 R8 alpha texture-arrays; uploading 8/frame saturated GPU upload
-    // bandwidth and stalled the render thread for ~0.5-1s while flying.  At 1/
-    // frame the visible terrain fills in over a second but the framerate stays
-    // interactive.  (Budget is tiles, not chunks -- see drainPendingAdtUploads.)
-    drainPendingAdtUploads(1);                 if (kPerf) __dA = __pt.elapsed();
+    // PERF: budget is CHUNKS per frame (a tile is up to 256).  The old
+    // tile-granular budget still stalled a full tile's worth of uploads into
+    // one frame; 24 chunks/frame trickles a tile in over ~11 frames while the
+    // lit fallback covers it, keeping every frame interactive.  Worker-pre-
+    // decoded textures mean each chunk here is VBO + alpha-array upload only.
+    drainPendingAdtUploads(24);                if (kPerf) __dA = __pt.elapsed();
     drainPendingMinimapUploads(8);             if (kPerf) __dM = __pt.elapsed();
     // STAGE B1/B3: budgeted GL upload of worker-decoded WMO + M2 payloads.
     // Heavy assets stay low (1 WMO / 2 M2 per frame) so a city's worth of
@@ -1582,8 +1959,11 @@ void SceneView3D::paintGL()
         && m_cascClient && m_cascClient->isOpen()
         && m_mapDb2 && m_doodadProgram)
     {
+        // PERF: placement enumeration (loadAdtDoodads / loadAdtWmoPlacements /
+        // loadWmoDoodads = synchronous CASC reads) now runs on a worker; this
+        // only prepares the job list, so the old tile-cross render hitch is gone.
         qint64 const __rb = kPerf ? __pt.elapsed() : 0;
-        rebuildDoodadInstances();
+        dispatchPropPlacementLoads();
         if (kPerf) __tDoodadRebuild = __pt.elapsed() - __rb;
     }
     if (kPerf) __tStream = __pt.elapsed();
@@ -1674,11 +2054,13 @@ void SceneView3D::paintGL()
                     glDrawArrays(GL_TRIANGLES, 0, ch.vertexCount);
                 ch.vao->release();
                 ++adtChunksDrawnThisFrame;
-                if (adtFirstGlErr == GL_NO_ERROR)
-                    adtFirstGlErr = glGetError();
             }
             ++adtTilesDrawnThisFrame;
         }
+        // One glGetError per pass, not per chunk: each call is a driver
+        // round-trip that can force a pipeline sync, and the per-chunk
+        // variant fired on every chunk of every frame on the no-error path.
+        adtFirstGlErr = glGetError();
         // Unbind units 0..7 (2D) + unit 8 (2D_ARRAY).
         for (int i = 0; i < 8; ++i)
         {
@@ -1853,8 +2235,10 @@ void SceneView3D::paintGL()
         unloadFarWaterTiles();
     }
     qint64 const __tWaterStream = kPerf ? __pt.elapsed() : 0;
+    m_waterAnimActive = false;
     if (m_realistic && m_waterVisible && m_waterProgram && !m_waterTiles.empty())
     {
+        int drawnWaterTiles = 0;
         // Time-of-frame in seconds from the widget's first paint.  We
         // deliberately let it grow without bound -- sin() handles big
         // values cleanly and a 32-bit float keeps ~ms precision for
@@ -1914,6 +2298,7 @@ void SceneView3D::paintGL()
                 continue;
             }
             ++m_drawnTilesThisFrame;
+            ++drawnWaterTiles;
             for (WaterChunkGpu const& ch : tile.chunks)
             {
                 if (!ch.vao || ch.vertexCount <= 0) continue;
@@ -1924,9 +2309,11 @@ void SceneView3D::paintGL()
         }
         m_waterProgram->release();
         glDepthMask(prevDepthMask);
-        // Continuously repaint while water is visible so the wave
-        // animation keeps progressing even without user input.
-        update();
+        // Arm the capped-cadence wave animation only when water actually
+        // reached the screen this frame.  onTick owns the repaint; the old
+        // unconditional update() here redrew the whole scene at max
+        // framerate even when every tile was culled or the camera was still.
+        m_waterAnimActive = drawnWaterTiles > 0;
     }
     if (kPerf) __tWater = __pt.elapsed();
 
@@ -1955,6 +2342,49 @@ void SceneView3D::paintGL()
         glDrawArrays(GL_LINES, 0, m_pathVertexCount);
         m_pathVao.release();
         glLineWidth(1.0f);   // restore default; don't let width 2 leak to later GL_LINES passes
+        m_navProgram->release();
+    }
+
+    // Bot dungeon-route chain: gold polyline + node markers, same vertex
+    // layout as paths.  Own visibility toggle (Path menu), independent of
+    // the waypoint-path layer.
+    if (m_navProgram && m_routeVertexCount > 0 && m_routesVisible)
+    {
+        m_navProgram->bind();
+        m_navProgram->setUniformValue(m_navUMvp, mvp);
+        glLineWidth(3.0f);
+        m_routeVao.bind();
+        glDrawArrays(GL_LINES, 0, m_routeVertexCount);
+        m_routeVao.release();
+        glLineWidth(1.0f);
+        m_navProgram->release();
+    }
+
+    // Pathfinding-probe overlay: bot-budget A->B result (green complete /
+    // orange partial + red dashed unreached remainder + start/end markers).
+    if (m_navProgram && m_probeVertexCount > 0 && m_probeValid)
+    {
+        m_navProgram->bind();
+        m_navProgram->setUniformValue(m_navUMvp, mvp);
+        glLineWidth(3.0f);
+        m_probeVao.bind();
+        glDrawArrays(GL_LINES, 0, m_probeVertexCount);
+        m_probeVao.release();
+        glLineWidth(1.0f);
+        m_navProgram->release();
+    }
+
+    // Off-mesh connection arcs: violet = baked in the loaded mmap,
+    // magenta = authored this session (in offmesh.txt, awaiting regen).
+    if (m_navProgram && m_offmeshVertexCount > 0 && m_offmeshVisible)
+    {
+        m_navProgram->bind();
+        m_navProgram->setUniformValue(m_navUMvp, mvp);
+        glLineWidth(2.0f);
+        m_offmeshVao.bind();
+        glDrawArrays(GL_LINES, 0, m_offmeshVertexCount);
+        m_offmeshVao.release();
+        glLineWidth(1.0f);
         m_navProgram->release();
     }
 
@@ -2066,6 +2496,40 @@ void SceneView3D::paintGL()
 
     // QPainter overlay AFTER all GL draws (Qt rebinds its own program).
     paintOverlay();
+
+    // Qt coalesces update() posts: several worker completions can collapse
+    // into this single paint while the budgeted drains consumed only a few
+    // payloads.  Without the old free-running water repaint that backlog
+    // would stall until the next input event, so keep repainting while any
+    // pending queue still holds work -- and go quiet the moment it's empty.
+    bool streamBacklog = m_adtUploadActive;  // chunk-budgeted tile mid-upload
+    if (!streamBacklog)
+    {
+        std::lock_guard<std::mutex> g(m_adtPendingMutex);
+        streamBacklog = !m_adtPending.empty();
+    }
+    if (!streamBacklog)
+    {
+        std::lock_guard<std::mutex> g(m_waterPendingMutex);
+        streamBacklog = !m_waterPending.empty();
+    }
+    if (!streamBacklog)
+    {
+        std::lock_guard<std::mutex> g(m_wmoPendingMutex);
+        streamBacklog = !m_wmoPending.empty();
+    }
+    if (!streamBacklog)
+    {
+        std::lock_guard<std::mutex> g(m_doodadPendingMutex);
+        streamBacklog = !m_doodadPending.empty();
+    }
+    if (!streamBacklog)
+    {
+        std::lock_guard<std::mutex> g(m_minimapPendingMutex);
+        streamBacklog = !m_minimapPending.empty();
+    }
+    if (streamBacklog)
+        update();
 }
 
 void SceneView3D::rebuildNavmeshBuffer()
@@ -2305,6 +2769,106 @@ int SceneView3D::hitTestPath(QPoint const& screen, float pixelTolerance) const
     return best;
 }
 
+bool SceneView3D::hitTestNodeIn(std::vector<Path> const& paths,
+                                QPoint const& screen,
+                                int& outPathIdx, int& outNodeIdx,
+                                float pixelTolerance) const
+{
+    outPathIdx = -1;
+    outNodeIdx = -1;
+    if (paths.empty()) return false;
+    QMatrix4x4 const mvp = projectionMatrix() * viewMatrix();
+    float bestDSq = pixelTolerance * pixelTolerance;
+    float const px = float(screen.x()), py = float(screen.y());
+    for (size_t i = 0; i < paths.size(); ++i)
+    {
+        auto const& nodes = paths[i].nodes;
+        for (size_t j = 0; j < nodes.size(); ++j)
+        {
+            float sx, sy;
+            if (!projectToScreen(nodes[j].x, nodes[j].y, nodes[j].z, mvp, sx, sy))
+                continue;
+            float const dx = px - sx, dy = py - sy;
+            float const dsq = dx*dx + dy*dy;
+            if (dsq < bestDSq)
+            {
+                bestDSq    = dsq;
+                outPathIdx = int(i);
+                outNodeIdx = int(j);
+            }
+        }
+    }
+    return outPathIdx >= 0;
+}
+
+bool SceneView3D::hitTestSegmentIn(std::vector<Path> const& paths,
+                                   QPoint const& screen,
+                                   int& outPathIdx, int& outAfterNode,
+                                   QVector3D& outWorld,
+                                   float pixelTolerance) const
+{
+    outPathIdx   = -1;
+    outAfterNode = -1;
+    if (paths.empty()) return false;
+    QMatrix4x4 const mvp = projectionMatrix() * viewMatrix();
+    float bestDSq = pixelTolerance * pixelTolerance;
+    float bestT   = 0.0f;
+    float const px = float(screen.x()), py = float(screen.y());
+    for (size_t i = 0; i < paths.size(); ++i)
+    {
+        auto const& nodes = paths[i].nodes;
+        if (nodes.size() < 2) continue;
+        for (size_t j = 1; j < nodes.size(); ++j)
+        {
+            float ax, ay, bx, by;
+            if (!projectToScreen(nodes[j-1].x, nodes[j-1].y, nodes[j-1].z, mvp, ax, ay))
+                continue;
+            if (!projectToScreen(nodes[j  ].x, nodes[j  ].y, nodes[j  ].z, mvp, bx, by))
+                continue;
+            // Inline point-vs-segment with the interpolation parameter kept:
+            // t picks the WORLD point on the segment (floor-correct Z).
+            float const dx = bx - ax, dy = by - ay;
+            float const lenSq = dx*dx + dy*dy;
+            float t = 0.0f;
+            if (lenSq > 1e-6f)
+                t = std::clamp(((px - ax) * dx + (py - ay) * dy) / lenSq, 0.0f, 1.0f);
+            float const cx = ax + t * dx, cy = ay + t * dy;
+            float const ex = px - cx, ey = py - cy;
+            float const dsq = ex*ex + ey*ey;
+            if (dsq < bestDSq)
+            {
+                bestDSq      = dsq;
+                bestT        = t;
+                outPathIdx   = int(i);
+                outAfterNode = int(j) - 1;
+            }
+        }
+    }
+    if (outPathIdx < 0) return false;
+    auto const& a = paths[size_t(outPathIdx)].nodes[size_t(outAfterNode)];
+    auto const& b = paths[size_t(outPathIdx)].nodes[size_t(outAfterNode) + 1];
+    outWorld = QVector3D(a.x + bestT * (b.x - a.x),
+                         a.y + bestT * (b.y - a.y),
+                         a.z + bestT * (b.z - a.z));
+    return true;
+}
+
+bool SceneView3D::hitTestPathNode(QPoint const& screen,
+                                  int& outPathIdx, int& outNodeIdx,
+                                  float pixelTolerance) const
+{
+    return hitTestNodeIn(m_paths, screen, outPathIdx, outNodeIdx, pixelTolerance);
+}
+
+bool SceneView3D::hitTestPathSegment(QPoint const& screen,
+                                     int& outPathIdx, int& outAfterNode,
+                                     QVector3D& outWorld,
+                                     float pixelTolerance) const
+{
+    return hitTestSegmentIn(m_paths, screen, outPathIdx, outAfterNode,
+                            outWorld, pixelTolerance);
+}
+
 int SceneView3D::hitTestAnnotation(QPoint const& screen) const
 {
     if (m_annotations.empty()) return -1;
@@ -2376,6 +2940,36 @@ void SceneView3D::mousePressEvent(QMouseEvent* event)
             event->accept();
             return;
         }
+        // Path NODE before whole-path: the node is the smaller target and
+        // clicking it both selects the path and arms drag-to-move (same
+        // click-vs-drag semantics as the spawn drag above).
+        {
+            int npIdx = -1, nnIdx = -1;
+            if (hitTestPathNode(event->pos(), npIdx, nnIdx))
+            {
+                emit pathClicked(npIdx);
+                emit pathNodeClicked(npIdx, nnIdx);
+                m_dragPathIndex  = npIdx;
+                m_dragNodeIndex  = nnIdx;
+                m_dragNodePlaneZ = m_paths[size_t(npIdx)].nodes[size_t(nnIdx)].z;
+                m_dragNodeMoved  = false;
+                m_dragIsRoute    = false;
+                event->accept();
+                return;
+            }
+            // Dungeon-route node: same drag semantics, separate collection.
+            if (m_routesVisible
+                && hitTestNodeIn(m_dungeonRoutes, event->pos(), npIdx, nnIdx, 12.0f))
+            {
+                m_dragPathIndex  = npIdx;
+                m_dragNodeIndex  = nnIdx;
+                m_dragNodePlaneZ = m_dungeonRoutes[size_t(npIdx)].nodes[size_t(nnIdx)].z;
+                m_dragNodeMoved  = false;
+                m_dragIsRoute    = true;
+                event->accept();
+                return;
+            }
+        }
         int const pIdx = hitTestPath(event->pos());
         if (pIdx >= 0)
         {
@@ -2407,8 +3001,13 @@ void SceneView3D::mousePressEvent(QMouseEvent* event)
     }
     if (event->button() == Qt::RightButton)
     {
-        m_rotating = true;
-        m_lastMouse = event->pos();
+        // RMB is camera-rotate when DRAGGED; a plain right-click (no
+        // movement, resolved on release) opens the path node/segment
+        // context menu instead -- parity with the 2D view's node editing.
+        m_rotating   = true;
+        m_lastMouse  = event->pos();
+        m_rmbPressPos = event->pos();
+        m_rmbDragged  = false;
         setCursor(Qt::BlankCursor);
     }
     QOpenGLWidget::mousePressEvent(event);
@@ -2434,10 +3033,33 @@ void SceneView3D::mouseMoveEvent(QMouseEvent* event)
         event->accept();
         return;
     }
+    if (m_dragNodeIndex >= 0 && (event->buttons() & Qt::LeftButton))
+    {
+        // Path/route node drag: follow the cursor in the node's horizontal
+        // plane (same maths as the spawn drag) with a live line preview.
+        std::vector<Path>& coll = m_dragIsRoute ? m_dungeonRoutes : m_paths;
+        if (m_dragPathIndex >= 0 && m_dragPathIndex < int(coll.size())
+            && m_dragNodeIndex < int(coll[size_t(m_dragPathIndex)].nodes.size()))
+        {
+            QVector3D hit;
+            if (screenRayToPlaneZ(event->pos(), m_dragNodePlaneZ, hit))
+            {
+                PathNode& n = coll[size_t(m_dragPathIndex)].nodes[size_t(m_dragNodeIndex)];
+                n.x = hit.x();
+                n.y = hit.y();
+                m_dragNodeMoved = true;
+                if (m_dragIsRoute) rebuildRouteBuffer(); else rebuildPathBuffer();
+            }
+        }
+        event->accept();
+        return;
+    }
     if (m_rotating)
     {
         QPoint const d = event->pos() - m_lastMouse;
         m_lastMouse = event->pos();
+        if ((event->pos() - m_rmbPressPos).manhattanLength() > 3)
+            m_rmbDragged = true;
         m_yaw   -= d.x() * ROTATE_SENS;
         m_pitch -= d.y() * ROTATE_SENS;
         // Clamp pitch to avoid gimbal flip.
@@ -2465,10 +3087,75 @@ void SceneView3D::mouseReleaseEvent(QMouseEvent* event)
         event->accept();
         return;
     }
+    if (event->button() == Qt::LeftButton && m_dragNodeIndex >= 0)
+    {
+        int const pIdx  = m_dragPathIndex;
+        int const nIdx  = m_dragNodeIndex;
+        bool const moved = m_dragNodeMoved;
+        bool const isRoute = m_dragIsRoute;
+        m_dragPathIndex = -1;
+        m_dragNodeIndex = -1;
+        m_dragNodeMoved = false;
+        m_dragIsRoute   = false;
+        // Click without movement stays a selection (already emitted on press).
+        std::vector<Path> const& coll = isRoute ? m_dungeonRoutes : m_paths;
+        if (moved && pIdx >= 0 && pIdx < int(coll.size())
+            && nIdx < int(coll[size_t(pIdx)].nodes.size()))
+        {
+            PathNode const& n = coll[size_t(pIdx)].nodes[size_t(nIdx)];
+            if (isRoute)
+                emit routeNodeMoved(pIdx, nIdx, n.x, n.y, m_dragNodePlaneZ);
+            else
+                emit pathNodeMoved(pIdx, nIdx, n.x, n.y, m_dragNodePlaneZ);
+        }
+        event->accept();
+        return;
+    }
     if (event->button() == Qt::RightButton && m_rotating)
     {
         m_rotating = false;
         unsetCursor();
+        // Plain right-click (no rotate drag): open the node/segment menu.
+        // Waypoint paths take priority; the dungeon-route chain follows.
+        if (!m_rmbDragged)
+        {
+            int npIdx = -1, nnIdx = -1;
+            if (hitTestPathNode(event->pos(), npIdx, nnIdx))
+            {
+                emit pathNodeContextMenuRequested(npIdx, nnIdx,
+                    event->globalPosition().toPoint());
+                event->accept();
+                return;
+            }
+            if (m_routesVisible
+                && hitTestNodeIn(m_dungeonRoutes, event->pos(), npIdx, nnIdx, 12.0f))
+            {
+                emit routeNodeContextMenuRequested(npIdx, nnIdx,
+                    event->globalPosition().toPoint());
+                event->accept();
+                return;
+            }
+            int spIdx = -1, sAfter = -1;
+            QVector3D segWorld;
+            if (hitTestPathSegment(event->pos(), spIdx, sAfter, segWorld))
+            {
+                emit pathSegmentContextMenuRequested(spIdx, sAfter,
+                    segWorld.x(), segWorld.y(), segWorld.z(),
+                    event->globalPosition().toPoint());
+                event->accept();
+                return;
+            }
+            if (m_routesVisible
+                && hitTestSegmentIn(m_dungeonRoutes, event->pos(), spIdx, sAfter,
+                                    segWorld, 8.0f))
+            {
+                emit routeSegmentContextMenuRequested(spIdx, sAfter,
+                    segWorld.x(), segWorld.y(), segWorld.z(),
+                    event->globalPosition().toPoint());
+                event->accept();
+                return;
+            }
+        }
     }
     QOpenGLWidget::mouseReleaseEvent(event);
 }
@@ -2599,6 +3286,27 @@ void SceneView3D::uploadPathGeometry()
             verts.push_back({ p.nodes[i].x,   p.nodes[i].y,   p.nodes[i].z + 0.5f,   r, g, b, 230 });
             verts.push_back({ p.nodes[i+1].x, p.nodes[i+1].y, p.nodes[i+1].z + 0.5f, r, g, b, 230 });
         }
+        // Node markers: a small XY diamond + vertical tick per node so the
+        // nodes are visible (and thus clickable/draggable) in 3D.  Brightened
+        // toward white so they read against the path line's own colour.
+        uint8_t const nr = uint8_t(std::min(255, int(r) + 90));
+        uint8_t const ng = uint8_t(std::min(255, int(g) + 90));
+        uint8_t const nb = uint8_t(std::min(255, int(b) + 90));
+        constexpr float kNodeR = 0.9f;
+        for (PathNode const& n : p.nodes)
+        {
+            float const z = n.z + 0.5f;
+            float const px4[4] = { n.x + kNodeR, n.x,          n.x - kNodeR, n.x          };
+            float const py4[4] = { n.y,          n.y + kNodeR, n.y,          n.y - kNodeR };
+            for (int c = 0; c < 4; ++c)
+            {
+                int const d = (c + 1) & 3;
+                verts.push_back({ px4[c], py4[c], z, nr, ng, nb, 255 });
+                verts.push_back({ px4[d], py4[d], z, nr, ng, nb, 255 });
+            }
+            verts.push_back({ n.x, n.y, z - 1.0f, nr, ng, nb, 255 });
+            verts.push_back({ n.x, n.y, z + 1.2f, nr, ng, nb, 255 });
+        }
     }
     m_pathVertexCount = static_cast<GLsizei>(verts.size());
     m_pathVao.bind();
@@ -2615,6 +3323,65 @@ void SceneView3D::uploadPathGeometry()
         reinterpret_cast<void*>(offsetof(PathVertex, r)));
     m_pathVbo.release();
     m_pathVao.release();
+}
+
+void SceneView3D::rebuildRouteBuffer()
+{
+    m_routeDirty = true;
+    if (m_buffersReady) { uploadRouteGeometry(); update(); }
+}
+
+void SceneView3D::uploadRouteGeometry()
+{
+    m_routeDirty = false;
+    std::vector<PathVertex> verts;
+    for (Path const& p : m_dungeonRoutes)
+    {
+        // Route chains are gold; higher difficulties shift toward red so
+        // normal/heroic chains stay distinguishable.  pathId == difficulty.
+        uint8_t const r = 255;
+        uint8_t const g = uint8_t(std::max(60, 190 - int(p.pathId) * 60));
+        uint8_t const b = 30;
+        for (size_t i = 0; i + 1 < p.nodes.size(); ++i)
+        {
+            verts.push_back({ p.nodes[i].x,   p.nodes[i].y,   p.nodes[i].z + 0.6f,   r, g, b, 255 });
+            verts.push_back({ p.nodes[i+1].x, p.nodes[i+1].y, p.nodes[i+1].z + 0.6f, r, g, b, 255 });
+        }
+        // Node markers: larger diamonds than waypoint paths so the two
+        // overlays read differently at a glance, plus the vertical tick.
+        constexpr float kNodeR = 1.4f;
+        for (PathNode const& n : p.nodes)
+        {
+            float const z = n.z + 0.6f;
+            float const px4[4] = { n.x + kNodeR, n.x,          n.x - kNodeR, n.x          };
+            float const py4[4] = { n.y,          n.y + kNodeR, n.y,          n.y - kNodeR };
+            for (int c = 0; c < 4; ++c)
+            {
+                int const d = (c + 1) & 3;
+                verts.push_back({ px4[c], py4[c], z, 255, 235, 130, 255 });
+                verts.push_back({ px4[d], py4[d], z, 255, 235, 130, 255 });
+            }
+            verts.push_back({ n.x, n.y, z - 1.0f, 255, 235, 130, 255 });
+            verts.push_back({ n.x, n.y, z + 2.0f, 255, 235, 130, 255 });
+        }
+    }
+    m_routeVertexCount = static_cast<GLsizei>(verts.size());
+    if (!m_routeVao.isCreated()) m_routeVao.create();
+    if (!m_routeVbo.isCreated()) m_routeVbo.create();
+    m_routeVao.bind();
+    m_routeVbo.bind();
+    if (!verts.empty())
+        m_routeVbo.allocate(verts.data(), int(verts.size() * sizeof(PathVertex)));
+    else
+        m_routeVbo.allocate(nullptr, 0);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(PathVertex),
+        reinterpret_cast<void*>(offsetof(PathVertex, x)));
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 4, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(PathVertex),
+        reinterpret_cast<void*>(offsetof(PathVertex, r)));
+    m_routeVbo.release();
+    m_routeVao.release();
 }
 
 void SceneView3D::rebuildAnnotBuffer()
@@ -2905,7 +3672,17 @@ void SceneView3D::onTick()
     }
 
     if (m_keys.isEmpty())
+    {
+        // Water wave animation: capped ~25 Hz repaint while the last paint
+        // actually drew water.  Movement below already repaints every tick,
+        // so this only matters for a stationary camera.
+        if (m_waterAnimActive && m_waterAnimClock.elapsed() >= 40)
+        {
+            m_waterAnimClock.restart();
+            update();
+        }
         return;
+    }
     constexpr float DT = 0.016f;
     float speed = m_flySpeed * DT;
     if (m_keys.contains(Qt::Key_Shift)) speed *= 5.0f;
@@ -3122,6 +3899,7 @@ void SceneView3D::setCascClient(io::CascClient* casc, io::MapDb2Lookup* mapDb2)
 {
     m_cascClient = casc;
     m_mapDb2     = mapDb2;
+    dropWdtCache();   // re-arm the WDT failure latch for the new CASC state
     // Drop cached textures + tile VAOs; the next realistic-pass paint
     // will re-resolve every tile through CASC.
     destroyMinimapTextures();
@@ -3170,7 +3948,8 @@ void SceneView3D::destroyMinimapTextures()
 
 void SceneView3D::destroyAdtTerrainTiles()
 {
-    if (m_adtTerrainTiles.empty()) return;
+    if (m_adtTerrainTiles.empty() && !m_adtUploadActive && m_adtInFlight.isEmpty())
+        return;
     bool const haveContext = (QOpenGLContext::currentContext() == context());
     bool const widgetContext = context() != nullptr;
     if (!haveContext && widgetContext) makeCurrent();
@@ -3203,6 +3982,29 @@ void SceneView3D::destroyAdtTerrainTiles()
     {
         std::lock_guard<std::mutex> g(m_adtPendingMutex);
         m_adtPending.clear();
+    }
+    // Drop the chunk-budgeted staging tile too -- it belongs to the map being
+    // torn down.  Its partially-created GL objects free with the context;
+    // explicitly destroy what exists while a context can still be current.
+    if (m_adtUploadActive)
+    {
+        bool const haveCtx = (QOpenGLContext::currentContext() == context());
+        bool const widgetCtx = context() != nullptr;
+        if (!haveCtx && widgetCtx) makeCurrent();
+        for (AdtChunkRender& ch : m_adtUploadTile.chunks)
+        {
+            if (ch.vbo && ch.vbo->isCreated()) ch.vbo->destroy();
+            if (ch.ebo && ch.ebo->isCreated()) ch.ebo->destroy();
+            if (ch.vao && ch.vao->isCreated()) ch.vao->destroy();
+            if (ch.alphaArray  != 0) glDeleteTextures(1, &ch.alphaArray);
+            if (ch.heightArray != 0) glDeleteTextures(1, &ch.heightArray);
+            ch.alphaArray = 0;
+            ch.heightArray = 0;
+        }
+        if (!haveCtx && widgetCtx) doneCurrent();
+        m_adtUploadActive  = false;
+        m_adtUploadPending = AdtTilePending{};
+        m_adtUploadTile    = AdtTileRender{};
     }
 }
 
@@ -4041,6 +4843,9 @@ void SceneView3D::destroyDoodadResources()
     m_emittedWmoUids.clear();
     m_doodadStreamCamGx = -100000;
     m_doodadStreamCamGy = -100000;
+    // Invalidate any in-flight PropPlacementTask: its payload belongs to the
+    // residency sets just cleared (applyPropPlacements checks the generation).
+    ++m_propGeneration;
 
     if (m_doodadMeshes.empty() && m_doodadInstances.empty())
     {
@@ -4058,6 +4863,7 @@ void SceneView3D::destroyDoodadResources()
         // Textures live in m_terrainTextureCache (shared with ADT layer
         // textures); don't double-free here.
     }
+    if (m_doodadInstanceVbo.isCreated()) m_doodadInstanceVbo.destroy();
     if (!haveContext && widgetContext) doneCurrent();
     m_doodadMeshes.clear();
     m_doodadInstances.clear();
@@ -4072,8 +4878,28 @@ void SceneView3D::destroyDoodadResources()
     }
 }
 
+// Compose the doodad world matrix (translate * Rz * Ry * Rx * scale) once at
+// instance-creation time; drawDoodads streams the cached columns straight
+// into the instance VBO.  Column-major, matching QMatrix4x4::constData().
+void SceneView3D::composeDoodadModelMatrix(DoodadInstanceGpu& inst)
+{
+    constexpr float kRadToDeg = 180.0f / 3.14159265f;
+    QMatrix4x4 m;
+    m.translate(inst.x, inst.y, inst.z);
+    m.rotate(QQuaternion::fromAxisAndAngle(0.0f, 0.0f, 1.0f, inst.rotZ * kRadToDeg));
+    m.rotate(QQuaternion::fromAxisAndAngle(0.0f, 1.0f, 0.0f, inst.rotY * kRadToDeg));
+    m.rotate(QQuaternion::fromAxisAndAngle(1.0f, 0.0f, 0.0f, inst.rotX * kRadToDeg));
+    m.scale(inst.scale);
+    std::memcpy(inst.model, m.constData(), sizeof(inst.model));
+}
+
 void SceneView3D::rebuildDoodadInstances()
 {
+    // PERF: paintGL no longer calls this -- dispatchPropPlacementLoads streams
+    // the same enumeration through a PropPlacementTask worker.  Retained as
+    // the synchronous reference so the placement logic has a single readable
+    // definition (mirrors ensureDoodadMeshLoaded / ensureWmoModelLoaded).
+    //
     // ADDITIVE (Phase 1): do NOT clear -- appending only un-loaded near tiles
     // keeps already-materialised props resident, so flying past a tile doesn't
     // re-load + flicker it (the clear-and-rebuild-every-cross churn).  Cleared
@@ -4165,6 +4991,7 @@ void SceneView3D::rebuildDoodadInstances()
             gpu.x = d.x;  gpu.y = d.y;  gpu.z = d.z;
             gpu.rotZ = d.rotZ;  gpu.rotY = d.rotY;  gpu.rotX = d.rotX;
             gpu.scale = d.scale;
+            composeDoodadModelMatrix(gpu);
             m_doodadInstances.push_back(gpu);
         }
 
@@ -4224,10 +5051,21 @@ void SceneView3D::rebuildDoodadInstances()
                 gpu.x = d.x;  gpu.y = d.y;  gpu.z = d.z;
                 gpu.rotZ = d.rotZ;  gpu.rotY = d.rotY;  gpu.rotX = d.rotX;
                 gpu.scale = d.scale;
+                composeDoodadModelMatrix(gpu);
                 m_doodadInstances.push_back(gpu);
             }
         }
     }
+
+    // Group instances by mesh FDID once at rebuild time.  drawDoodads relies
+    // on contiguous per-FDID runs for its bind-once loop; sorting here (the
+    // list only changes on tile-cross rebuilds) replaces the old per-paint
+    // std::stable_sort of the whole instance vector.
+    std::stable_sort(m_doodadInstances.begin(), m_doodadInstances.end(),
+        [](DoodadInstanceGpu const& a, DoodadInstanceGpu const& b)
+        {
+            return a.modelFdid < b.modelFdid;
+        });
 }
 
 // STAGE B1: the draw path no longer calls this -- M2 meshes stream in via
@@ -4326,58 +5164,16 @@ void SceneView3D::drawDoodads(QMatrix4x4 const& mvp)
     if (!m_doodadProgram || m_doodadInstances.empty())
         return;
 
-    // Extract 6 frustum planes from MVP (row * sign convention).  Used
-    // to bounding-sphere reject instances cheaply before any GL state
-    // change.  Planes stored as (a, b, c, d) with the convention that
-    // a point (x,y,z) is inside when a*x + b*y + c*z + d >= 0.
-    struct Plane { float a, b, c, d; };
-    Plane planes[6];
-    auto m = mvp;
-    float const* p = m.constData(); // column-major, m[col*4 + row].
-    auto get = [&](int row, int col) { return p[col * 4 + row]; };
-    auto setPlane = [&](Plane& pl, int row, float sign)
-    {
-        pl.a = get(3, 0) + sign * get(row, 0);
-        pl.b = get(3, 1) + sign * get(row, 1);
-        pl.c = get(3, 2) + sign * get(row, 2);
-        pl.d = get(3, 3) + sign * get(row, 3);
-        float len = std::sqrt(pl.a * pl.a + pl.b * pl.b + pl.c * pl.c);
-        if (len > 1e-6f) { pl.a /= len; pl.b /= len; pl.c /= len; pl.d /= len; }
-    };
-    setPlane(planes[0], 0,  1.0f); // left
-    setPlane(planes[1], 0, -1.0f); // right
-    setPlane(planes[2], 1,  1.0f); // bottom
-    setPlane(planes[3], 1, -1.0f); // top
-    setPlane(planes[4], 2,  1.0f); // near
-    setPlane(planes[5], 2, -1.0f); // far
-
-    auto sphereInFrustum = [&](float sx, float sy, float sz, float sr) -> bool
-    {
-        for (int i = 0; i < 6; ++i)
-        {
-            float const dist = planes[i].a * sx + planes[i].b * sy + planes[i].c * sz + planes[i].d;
-            if (dist < -sr)
-                return false;
-        }
-        return true;
-    };
+    // Frustum planes are already extracted once per paint (extractFrustumPlanes
+    // at the top of paintGL); the member sphereInFrustum reads them, so this
+    // pass no longer re-derives its own local copy every frame.  Instances are
+    // grouped by FDID at rebuild time (rebuildDoodadInstances), not per paint.
 
     m_doodadProgram->bind();
     m_doodadProgram->setUniformValue(m_doodadUMvp, mvp);
     applyFogAndSunUniforms(*m_doodadProgram);
     m_doodadProgram->setUniformValue(m_doodadUTexture, 0);
     m_doodadProgram->setUniformValue(m_doodadUTexture2, 1);  // STAGE A: second sampler -> unit 1.
-
-    // Sort instances by mesh FDID so the GL bind churn drops to once
-    // per unique model rather than once per instance.  std::stable_sort
-    // keeps the per-tile order intact within each group -- helpful for
-    // debugging overlapping placements.  Sorting also groups each FDID's
-    // instances into a contiguous run for the conservative-visibility scan.
-    std::stable_sort(m_doodadInstances.begin(), m_doodadInstances.end(),
-        [](DoodadInstanceGpu const& a, DoodadInstanceGpu const& b)
-        {
-            return a.modelFdid < b.modelFdid;
-        });
 
     // STAGE B1/C1: M2 meshes load asynchronously now.  Conservative per-instance
     // gate (world position + generous radius) decides whether to QUEUE the FDID;
@@ -4430,8 +5226,11 @@ void SceneView3D::drawDoodads(QMatrix4x4 const& mvp)
         }
         ++dbgLoadOk;
         boundMesh = &it->second;
-        boundMesh->vao->bind();
 
+        // Gather the visible instances' cached world matrices for this FDID
+        // run (distance ring + frustum, unchanged tests) into the scratch.
+        m_doodadInstanceScratch.clear();
+        GLsizei visible = 0;
         for (std::size_t k = i; k < runEnd; ++k)
         {
             DoodadInstanceGpu const& inst = m_doodadInstances[k];
@@ -4454,47 +5253,71 @@ void SceneView3D::drawDoodads(QMatrix4x4 const& mvp)
                 ++dbgInstCulled;
                 continue;
             }
-            ++dbgInstDrawn;
+            m_doodadInstanceScratch.insert(m_doodadInstanceScratch.end(),
+                                           inst.model, inst.model + 16);
+            ++visible;
+        }
+        dbgInstDrawn += int(visible);
+        if (visible == 0)
+        {
+            boundMesh = nullptr;
+            i = runEnd;
+            continue;
+        }
 
-            // World matrix: translate * Rz * Ry * Rx * scale.
-            QMatrix4x4 model;
-            model.translate(inst.x, inst.y, inst.z);
-            model.rotate(QQuaternion::fromAxisAndAngle(0.0f, 0.0f, 1.0f, inst.rotZ * 180.0f / 3.14159265f));
-            model.rotate(QQuaternion::fromAxisAndAngle(0.0f, 1.0f, 0.0f, inst.rotY * 180.0f / 3.14159265f));
-            model.rotate(QQuaternion::fromAxisAndAngle(1.0f, 0.0f, 0.0f, inst.rotX * 180.0f / 3.14159265f));
-            model.scale(inst.scale);
-            m_doodadProgram->setUniformValue(m_doodadUModel, model);
+        // PERF: stream the visible matrices into the shared instance VBO and
+        // point per-instance attributes 4..7 (divisor 1) at it, then ONE
+        // glDrawElementsInstanced per submesh covers the whole run -- the old
+        // path was a CPU matrix build + u_model upload + draw PER INSTANCE.
+        boundMesh->vao->bind();
+        if (!m_doodadInstanceVbo.isCreated())
+        {
+            m_doodadInstanceVbo.create();
+            m_doodadInstanceVbo.setUsagePattern(QOpenGLBuffer::StreamDraw);
+        }
+        m_doodadInstanceVbo.bind();
+        m_doodadInstanceVbo.allocate(m_doodadInstanceScratch.data(),
+            int(m_doodadInstanceScratch.size() * sizeof(float)));
+        for (int c = 0; c < 4; ++c)
+        {
+            glEnableVertexAttribArray(GLuint(4 + c));
+            glVertexAttribPointer(GLuint(4 + c), 4, GL_FLOAT, GL_FALSE,
+                GLsizei(16 * sizeof(float)),
+                reinterpret_cast<void*>(uintptr_t(c) * 4 * sizeof(float)));
+            glVertexAttribDivisor(GLuint(4 + c), 1);
+        }
+        m_doodadInstanceVbo.release();
 
-            for (DoodadGpuSubMesh const& sm : boundMesh->subMeshes)
+        for (DoodadGpuSubMesh const& sm : boundMesh->subMeshes)
+        {
+            if (sm.indexCount == 0) continue;
+            m_doodadProgram->setUniformValue(m_doodadUHasTex,  sm.texture  != 0 ? 1 : 0);
+            m_doodadProgram->setUniformValue(m_doodadUHasTex2, sm.texture2 != 0 ? 1 : 0);
+            m_doodadProgram->setUniformValue(m_doodadUCombinerId, int(sm.combinerId));
+            float const alphaCutoff = (sm.blendMode == 1) ? 0.5f : 0.0f;
+            m_doodadProgram->setUniformValue(m_doodadUAlphaCutoff, alphaCutoff);
+            // Bind a real handle to unit 1 only when this submesh has a
+            // second texture; otherwise u_hasTexture2 == 0 neutralizes any
+            // stale unit-1 state (the shader's white default), so the
+            // sampler is never read.  Leave unit 0 active to match the
+            // existing teardown.
+            if (sm.texture2 != 0)
             {
-                if (sm.indexCount == 0) continue;
-                m_doodadProgram->setUniformValue(m_doodadUHasTex,  sm.texture  != 0 ? 1 : 0);
-                m_doodadProgram->setUniformValue(m_doodadUHasTex2, sm.texture2 != 0 ? 1 : 0);
-                m_doodadProgram->setUniformValue(m_doodadUCombinerId, int(sm.combinerId));
-                float const alphaCutoff = (sm.blendMode == 1) ? 0.5f : 0.0f;
-                m_doodadProgram->setUniformValue(m_doodadUAlphaCutoff, alphaCutoff);
-                // Bind a real handle to unit 1 only when this submesh has a
-                // second texture; otherwise u_hasTexture2 == 0 neutralizes any
-                // stale unit-1 state (the shader's white default), so the
-                // sampler is never read.  Leave unit 0 active to match the
-                // existing per-instance teardown.
-                if (sm.texture2 != 0)
-                {
-                    glActiveTexture(GL_TEXTURE1);
-                    glBindTexture(GL_TEXTURE_2D, sm.texture2);
-                }
-                if (sm.texture != 0)
-                {
-                    glActiveTexture(GL_TEXTURE0);
-                    glBindTexture(GL_TEXTURE_2D, sm.texture);
-                }
-                glActiveTexture(GL_TEXTURE0);
-                glDrawElements(GL_TRIANGLES,
-                               GLsizei(sm.indexCount),
-                               GL_UNSIGNED_INT,
-                               reinterpret_cast<void*>(uintptr_t(sm.indexStart) * sizeof(uint32_t)));
-                ++dbgSubMeshDraws;
+                glActiveTexture(GL_TEXTURE1);
+                glBindTexture(GL_TEXTURE_2D, sm.texture2);
             }
+            if (sm.texture != 0)
+            {
+                glActiveTexture(GL_TEXTURE0);
+                glBindTexture(GL_TEXTURE_2D, sm.texture);
+            }
+            glActiveTexture(GL_TEXTURE0);
+            glDrawElementsInstanced(GL_TRIANGLES,
+                           GLsizei(sm.indexCount),
+                           GL_UNSIGNED_INT,
+                           reinterpret_cast<void*>(uintptr_t(sm.indexStart) * sizeof(uint32_t)),
+                           visible);
+            ++dbgSubMeshDraws;
         }
         if (boundMesh->vao && boundMesh->vao->isCreated())
             boundMesh->vao->release();
@@ -4554,6 +5377,8 @@ void SceneView3D::destroyTexturedWmoResources()
     m_wmoModels.clear();
     m_wmoInstances.clear();
     m_texturedWmosBuilt = false;
+    // Invalidate any in-flight PropPlacementTask (it feeds m_wmoInstances too).
+    ++m_propGeneration;
     // STAGE B1: drop in-flight / pending async loads (see destroyDoodadResources).
     m_wmoInFlight.clear();
     {
@@ -5638,6 +6463,11 @@ struct AdtLoadTask : public QRunnable
     uint32_t                           rootFdid = 0;
     uint32_t                           tex0Fdid = 0;
     bool                               verbose   = false; // settings-gated diag
+    // Snapshot of the texture keys the GL-side cache already holds, copied at
+    // dispatch time.  The worker pre-decodes only unknown textures; staleness
+    // costs a duplicate decode (discarded on insert), never correctness.
+    std::unordered_set<uint32_t>       knownTexFdids;
+    std::unordered_set<std::string>    knownTexPaths;
 
     void run() override;
 };
@@ -5666,6 +6496,8 @@ struct WmoLoadTask : public QRunnable
     QPointer<world_editor::render::SceneView3D> view;
     world_editor::io::CascClient* casc = nullptr;
     uint32_t                      fdid = 0;
+    std::unordered_set<uint32_t>    knownTexFdids;   // see AdtLoadTask
+    std::unordered_set<std::string> knownTexPaths;
     void run() override;
 };
 
@@ -5676,8 +6508,65 @@ struct DoodadLoadTask : public QRunnable
     QPointer<world_editor::render::SceneView3D> view;
     world_editor::io::CascClient* casc = nullptr;
     uint32_t                      fdid = 0;
+    std::unordered_set<uint32_t>    knownTexFdids;   // see AdtLoadTask
+    std::unordered_set<std::string> knownTexPaths;
     void run() override;
 };
+
+// PERF: off-thread prop-placement enumeration (loadAdtDoodads +
+// loadAdtWmoPlacements + loadWmoDoodads).  These used to run synchronously on
+// the GL thread inside paintGL at every camera tile-cross.  The job list
+// (tile grid coords + WDT MAID FDIDs) is prepared on the GL thread so run()
+// never touches SceneView3D state.
+struct PropPlacementTask : public QRunnable
+{
+    PropPlacementTask() { setAutoDelete(true); }
+    QPointer<world_editor::render::SceneView3D> view;
+    world_editor::io::CascClient* casc  = nullptr;
+    std::string                   mapDir;
+    uint32_t                      mapId = 0;
+    uint32_t                      generation = 0;
+    std::vector<world_editor::render::SceneView3D::PropPlacementJob> jobs;
+    // Straddler dedup snapshot: a WMO spanning tiles recurs in each
+    // neighbour's obj0; skip uniqueIds the view already emitted.  Only one
+    // placement task is in flight at a time, so the snapshot can't miss a
+    // concurrent insert.
+    std::unordered_set<uint32_t>  emittedWmoUids;
+    void run() override;
+};
+
+// Shared helper: worker-side pre-decode of the textures a payload's submeshes
+// reference and the GL-side cache does not yet hold.  Appends (key, RGBA)
+// pairs the drain later feeds to TerrainTextureCache::insertDecoded*.
+void predecodeTextureRef(world_editor::io::CascClient& casc,
+                         uint32_t fdid, std::string const& path,
+                         std::unordered_set<uint32_t> const& knownFdids,
+                         std::unordered_set<std::string> const& knownPaths,
+                         std::unordered_set<uint32_t>& doneFdids,
+                         std::unordered_set<std::string>& donePaths,
+                         world_editor::render::SceneView3D::DecodedFdidTex& outFdid,
+                         world_editor::render::SceneView3D::DecodedPathTex& outPath)
+{
+    namespace io = world_editor::io;
+    if (fdid != 0)
+    {
+        if (knownFdids.count(fdid) || !doneFdids.insert(fdid).second)
+            return;
+        std::vector<uint8_t> blob;
+        io::BlpImage img;
+        if (casc.readByFileDataId(fdid, blob) && !blob.empty() && io::decodeBlp(blob, img))
+            outFdid.emplace_back(fdid, std::move(img));
+        // Decode failures still land in doneFdids so we don't retry per chunk;
+        // the GL-side sync fallback records the miss authoritatively.
+        return;
+    }
+    if (path.empty() || knownPaths.count(path) || !donePaths.insert(path).second)
+        return;
+    std::vector<uint8_t> blob;
+    io::BlpImage img;
+    if (casc.readByPath(path, blob) && !blob.empty() && io::decodeBlp(blob, img))
+        outPath.emplace_back(path, std::move(img));
+}
 
 } // namespace
 
@@ -5687,19 +6576,32 @@ io::Wdt const* SceneView3D::ensureWdt()
         return nullptr;
     if (m_wdt && m_wdtMapId == m_heightmapMapId)
         return m_wdt.get();
+    // Failure latch: a WDT that failed to load once will keep failing until
+    // the CASC/listfile state changes -- without this every caller retried
+    // the CASC probe (synchronous I/O!) and logged the failure line again on
+    // EVERY frame.  Re-armed on map switch (below), dropWdtCache() and
+    // setCascClient().
+    if (m_wdtLoadFailed && m_wdtMapId == m_heightmapMapId)
+        return nullptr;
     // Different map (or first load) -- drop stale cache.
     m_wdt.reset();
     m_wdtMapId = m_heightmapMapId;
+    m_wdtLoadFailed = false;
 
     auto dirOpt = m_mapDb2->directoryFor(m_heightmapMapId);
     if (!dirOpt)
+    {
+        m_wdtLoadFailed = true;
         return nullptr;
+    }
 
     auto fresh = std::make_unique<io::Wdt>();
     if (!io::loadWdt(*m_cascClient, *dirOpt, *fresh))
     {
+        m_wdtLoadFailed = true;
         qInfo("[scene3d-adt] WDT load FAILED for mapId=%u dir='%s' -- "
-              "will fall back to path resolution",
+              "will fall back to path resolution (no retry until CASC/"
+              "listfile state changes)",
               m_heightmapMapId, dirOpt->c_str());
         return nullptr;
     }
@@ -5720,6 +6622,7 @@ void SceneView3D::dropWdtCache()
 {
     m_wdt.reset();
     m_wdtMapId = 0;
+    m_wdtLoadFailed = false;
 }
 
 void SceneView3D::dispatchAdtTileLoads()
@@ -5781,6 +6684,11 @@ void SceneView3D::dispatchAdtTileLoads()
             task->gx     = gx;
             task->gy     = gy;
             task->verbose = m_verboseLogging;
+            if (m_terrainTextureCache)
+            {
+                task->knownTexFdids = m_terrainTextureCache->knownFdidKeys();
+                task->knownTexPaths = m_terrainTextureCache->knownPathKeys();
+            }
             if (wdt)
             {
                 io::WdtMaidEntry const& e = wdt->entryFor(gx, gy);
@@ -6135,6 +7043,22 @@ void AdtLoadTask::run()
         }
     }
 
+    // PERF: pre-decode the diffuse textures this tile references that the
+    // GL-side cache didn't know at dispatch time (deduped across the tile's
+    // chunks).  CASC read + BLP/DXT decode happen HERE on the worker; the GL
+    // drain only uploads the RGBA bytes.
+    if (pending.ok)
+    {
+        std::unordered_set<uint32_t>    doneFdids;
+        std::unordered_set<std::string> donePaths;
+        for (SceneView3D::AdtChunkCpuPayload const& cpu : pending.chunks)
+            for (int i = 0; i < cpu.layerCount; ++i)
+                predecodeTextureRef(*casc, cpu.layerFdid[i], cpu.layerPath[i],
+                                    knownTexFdids, knownTexPaths,
+                                    doneFdids, donePaths,
+                                    pending.decodedFdidTex, pending.decodedPathTex);
+    }
+
     // Post back to the GL thread via a queued lambda.  Capturing a
     // QPointer<> means a SceneView3D destroyed mid-flight resolves to null
     // when the GUI thread dispatches the slot, and we silently drop the
@@ -6162,54 +7086,68 @@ void SceneView3D::enqueueMinimapPending(MinimapPending pending)
     m_minimapPending.push_back(std::move(pending));
 }
 
-void SceneView3D::drainPendingAdtUploads(int maxThisFrame)
+void SceneView3D::drainPendingAdtUploads(int maxChunksThisFrame)
 {
-    std::vector<AdtTilePending> batch;
+    // PERF: the budget is CHUNKS, not tiles.  A tile is up to 256 chunks of
+    // VBO + R8 alpha-array uploads; doing a whole tile in one frame was a
+    // multi-hundred-ms stall every time a payload landed while flying.  The
+    // staged tile (m_adtUpload*) trickles in across frames and only becomes
+    // visible once complete; the paintGL backlog check keeps repainting while
+    // either the staging or the inbox has work left.
+    int budget = maxChunksThisFrame;
+    while (budget > 0)
     {
-        std::lock_guard<std::mutex> g(m_adtPendingMutex);
-        if (m_adtPending.empty()) return;
-        int const take = std::min<int>(maxThisFrame, int(m_adtPending.size()));
-        batch.reserve(take);
-        for (int i = 0; i < take; ++i)
-            batch.push_back(std::move(m_adtPending[size_t(i)]));
-        m_adtPending.erase(m_adtPending.begin(), m_adtPending.begin() + take);
-    }
-    if (!m_terrainTextureCache && m_cascClient)
-        m_terrainTextureCache = std::make_unique<TerrainTextureCache>(m_cascClient);
-
-    // PERF: the worker carried each layer's diffuse FDID / BLP path in the
-    // payload, so there is NO GL-thread ADT re-decode here any more -- texture
-    // resolution (FDID -> GL handle via the shared cache) is the only GL work.
-    for (AdtTilePending& pending : batch)
-    {
-        uint32_t const key = (uint32_t(pending.gy) << 16)
-                           | (uint32_t(pending.gx) & 0xFFFFu);
-        m_adtInFlight.remove(key);
-        if (!pending.ok)
+        if (!m_adtUploadActive)
         {
-            qDebug("[scene3d-adt] tile (%d,%d): worker reported !ok; dropping",
-                pending.gx, pending.gy);
-            continue;
+            // Start the next pending tile, if any.
+            {
+                std::lock_guard<std::mutex> g(m_adtPendingMutex);
+                if (m_adtPending.empty()) return;
+                m_adtUploadPending = std::move(m_adtPending.front());
+                m_adtPending.erase(m_adtPending.begin());
+            }
+            if (!m_adtUploadPending.ok)
+            {
+                uint32_t const key = (uint32_t(m_adtUploadPending.gy) << 16)
+                                   | (uint32_t(m_adtUploadPending.gx) & 0xFFFFu);
+                m_adtInFlight.remove(key);
+                qDebug("[scene3d-adt] tile (%d,%d): worker reported !ok; dropping",
+                    m_adtUploadPending.gx, m_adtUploadPending.gy);
+                continue;
+            }
+            if (!m_terrainTextureCache && m_cascClient)
+                m_terrainTextureCache = std::make_unique<TerrainTextureCache>(m_cascClient);
+            // Upload the worker-pre-decoded textures first (RGBA bytes ->
+            // GL, no CASC/BLP work) so the per-chunk resolve below is pure
+            // cache hits for first-appearance textures.
+            if (m_terrainTextureCache)
+            {
+                for (auto const& [fdid, img] : m_adtUploadPending.decodedFdidTex)
+                    m_terrainTextureCache->insertDecodedFdid(fdid, img, *this);
+                for (auto const& [path, img] : m_adtUploadPending.decodedPathTex)
+                    m_terrainTextureCache->insertDecodedPath(path, img, *this);
+            }
+            m_adtUploadActive     = true;
+            m_adtUploadNextChunk  = 0;
+            m_adtUploadTexed      = 0;
+            m_adtUploadAlpha      = 0;
+            m_adtUploadGpuTex     = 0;
+            m_adtUploadFirstTexed = -1;
+            m_adtUploadTile = AdtTileRender{};
+            m_adtUploadTile.gx = m_adtUploadPending.gx;
+            m_adtUploadTile.gy = m_adtUploadPending.gy;
+            m_adtUploadTile.loadAttempted = true;
+            m_adtUploadTile.loaded = false;
+            m_adtUploadTile.chunks.reserve(m_adtUploadPending.chunks.size());
         }
 
-        AdtTileRender tile;
-        tile.gx = pending.gx;
-        tile.gy = pending.gy;
-        tile.loadAttempted = true;
-        tile.loaded = false;
-        tile.chunks.reserve(pending.chunks.size());
-        // Tile Z extent came from the worker (no re-decode to recompute it).
-        float tileMinZ = pending.tileMinZ;
-        float tileMaxZ = pending.tileMaxZ;
-
-        int firstTexedChunk = -1;
-        int chunksWithTex0 = 0;
-        int chunksWithAlpha = 0;
-        int totalGpuTextures = 0;
-
+        AdtTilePending& pending = m_adtUploadPending;
+        AdtTileRender&  tile    = m_adtUploadTile;
         size_t const chunkN = pending.chunks.size();
-        for (size_t ci = 0; ci < chunkN; ++ci)
+        while (m_adtUploadNextChunk < chunkN && budget > 0)
         {
+            size_t const ci = m_adtUploadNextChunk++;
+            --budget;
             AdtChunkCpuPayload& cpu = pending.chunks[ci];
             AdtChunkRender ch;
             ch.layerCount = cpu.layerCount;
@@ -6224,10 +7162,10 @@ void SceneView3D::drainPendingAdtUploads(int maxThisFrame)
                 tile.chunks.push_back(std::move(ch));
                 continue;
             }
-            ++chunksWithTex0;
-            if (firstTexedChunk < 0) firstTexedChunk = int(ci);
-            totalGpuTextures += ch.slotCount;
-            if (ch.alphaArray != 0) ++chunksWithAlpha;
+            ++m_adtUploadTexed;
+            if (m_adtUploadFirstTexed < 0) m_adtUploadFirstTexed = int(ci);
+            m_adtUploadGpuTex += ch.slotCount;
+            if (ch.alphaArray != 0) ++m_adtUploadAlpha;
 
             if (!cpu.verts.empty())
             {
@@ -6274,9 +7212,18 @@ void SceneView3D::drainPendingAdtUploads(int maxThisFrame)
             }
             tile.chunks.push_back(std::move(ch));
         }
+
+        // Tile not finished within this frame's budget: resume next paint.
+        if (m_adtUploadNextChunk < chunkN)
+            return;
+
+        // Finalize: the tile is fully uploaded -- publish it and free the
+        // in-flight key so eviction/redispatch bookkeeping stays correct.
+        float const tileMinZ = pending.tileMinZ;
+        float const tileMaxZ = pending.tileMaxZ;
         qDebug("[scene3d-adt] tile (%d,%d) GL upload: chunks=%zu texedChunks=%d alphaChunks=%d gpuTex=%d loaded=%d firstTexedChunk=%d",
-            pending.gx, pending.gy, chunkN, chunksWithTex0, chunksWithAlpha,
-            totalGpuTextures, tile.loaded ? 1 : 0, firstTexedChunk);
+            pending.gx, pending.gy, chunkN, m_adtUploadTexed, m_adtUploadAlpha,
+            m_adtUploadGpuTex, tile.loaded ? 1 : 0, m_adtUploadFirstTexed);
         if (tileMinZ <= tileMaxZ) { tile.minZ = tileMinZ; tile.maxZ = tileMaxZ; }
         // Z-SOURCE DIAGNOSTIC (WE_ZDIAG): compare the CASC-ADT geometry Z range
         // for this tile against the .map heightmap (heightAt) sampled at the
@@ -6299,6 +7246,12 @@ void SceneView3D::drainPendingAdtUploads(int maxThisFrame)
         }
         if (tile.loaded)
             m_adtTerrainTiles.push_back(std::move(tile));
+        uint32_t const key = (uint32_t(pending.gy) << 16)
+                           | (uint32_t(pending.gx) & 0xFFFFu);
+        m_adtInFlight.remove(key);
+        m_adtUploadActive  = false;
+        m_adtUploadPending = AdtTilePending{};
+        m_adtUploadTile    = AdtTileRender{};
     }
 }
 
@@ -6487,6 +7440,19 @@ void WmoLoadTask::run()
         }
     }
 
+    // PERF: pre-decode submesh textures the GL-side cache doesn't hold yet,
+    // so uploadWmoPayload never CASC-reads/BLP-decodes on the render thread.
+    if (pending.ok)
+    {
+        std::unordered_set<uint32_t>    doneFdids;
+        std::unordered_set<std::string> donePaths;
+        for (SceneView3D::WmoCpuSubMesh const& sm : pending.subMeshes)
+            predecodeTextureRef(*casc, sm.textureFileDataId, sm.texturePath,
+                                knownTexFdids, knownTexPaths,
+                                doneFdids, donePaths,
+                                pending.decodedFdidTex, pending.decodedPathTex);
+    }
+
     QPointer<SceneView3D> guardedView = view;
     QMetaObject::invokeMethod(QCoreApplication::instance(),
         [guardedView, pending = std::move(pending)]() mutable
@@ -6551,6 +7517,25 @@ void DoodadLoadTask::run()
         }
     }
 
+    // PERF: pre-decode submesh textures (both units) the GL-side cache
+    // doesn't hold yet -- see WmoLoadTask::run.
+    if (pending.ok)
+    {
+        std::unordered_set<uint32_t>    doneFdids;
+        std::unordered_set<std::string> donePaths;
+        for (SceneView3D::DoodadCpuSubMesh const& sm : pending.subMeshes)
+        {
+            predecodeTextureRef(*casc, sm.textureFileDataId, sm.texturePath,
+                                knownTexFdids, knownTexPaths,
+                                doneFdids, donePaths,
+                                pending.decodedFdidTex, pending.decodedPathTex);
+            predecodeTextureRef(*casc, sm.textureFileDataId2, sm.texturePath2,
+                                knownTexFdids, knownTexPaths,
+                                doneFdids, donePaths,
+                                pending.decodedFdidTex, pending.decodedPathTex);
+        }
+    }
+
     QPointer<SceneView3D> guardedView = view;
     QMetaObject::invokeMethod(QCoreApplication::instance(),
         [guardedView, pending = std::move(pending)]() mutable
@@ -6558,6 +7543,98 @@ void DoodadLoadTask::run()
             if (!guardedView) return;
             guardedView->enqueueDoodadPending(std::move(pending));
             guardedView->update();
+        },
+        Qt::QueuedConnection);
+}
+
+void PropPlacementTask::run()
+{
+    namespace io = world_editor::io;
+    using world_editor::render::SceneView3D;
+
+    SceneView3D::PropPlacementPending pending;
+    pending.generation = generation;
+
+    if (!view.isNull() && casc && casc->isOpen() && !mapDir.empty())
+    {
+        for (SceneView3D::PropPlacementJob const& job : jobs)
+        {
+            std::vector<io::DoodadInstance> tileDoodads;
+            if (!io::loadAdtDoodads(*casc, mapDir, mapId, job.gx, job.gy,
+                                    tileDoodads, job.obj0Fdid, job.rootFdid))
+                continue;
+            pending.doodads.reserve(pending.doodads.size() + tileDoodads.size());
+            for (io::DoodadInstance const& d : tileDoodads)
+            {
+                if (d.modelFileDataId == 0)
+                    continue;   // legacy filename-only entries (see sync reference).
+                SceneView3D::PropDoodadInstance gpu;
+                gpu.modelFdid = d.modelFileDataId;
+                gpu.x = d.x;  gpu.y = d.y;  gpu.z = d.z;
+                gpu.rotZ = d.rotZ;  gpu.rotY = d.rotY;  gpu.rotX = d.rotX;
+                gpu.scale = d.scale;
+                pending.doodads.push_back(gpu);
+            }
+
+            std::vector<io::WmoPlacementInstance> wmoPlacements;
+            if (!io::loadAdtWmoPlacements(*casc, mapDir, mapId, job.gx, job.gy,
+                                          wmoPlacements, job.obj0Fdid, job.rootFdid))
+                continue;
+            for (io::WmoPlacementInstance const& wp : wmoPlacements)
+            {
+                if (wp.wmoRootFileDataId == 0)
+                    continue;
+                // Straddler dedup: snapshot covers placements the view already
+                // emitted; the local insert covers recurrences within this job set.
+                if (wp.uniqueId != 0 && !emittedWmoUids.insert(wp.uniqueId).second)
+                    continue;
+                pending.wmoUids.push_back(wp.uniqueId);
+
+                {
+                    io::WmoRootPlacement const rp = io::computeWmoRootPlacement(wp);
+                    SceneView3D::PropWmoInstance gi;
+                    gi.wmoRootFdid = wp.wmoRootFileDataId;
+                    gi.x = rp.x;  gi.y = rp.y;  gi.z = rp.z;
+                    gi.rotZ = rp.rotZ;  gi.rotY = rp.rotY;  gi.rotX = rp.rotX;
+                    gi.scale = rp.scale;
+                    pending.wmos.push_back(gi);
+                }
+
+                io::WmoPlacement placement;
+                placement.positionXYZ[0] = wp.posXYZ[0];
+                placement.positionXYZ[1] = wp.posXYZ[1];
+                placement.positionXYZ[2] = wp.posXYZ[2];
+                placement.rotationDegXYZ[0] = wp.rotDegXYZ[0];
+                placement.rotationDegXYZ[1] = wp.rotDegXYZ[1];
+                placement.rotationDegXYZ[2] = wp.rotDegXYZ[2];
+                placement.scale = wp.scale;
+
+                std::vector<io::DoodadInstance> wmoDoodads;
+                if (!io::loadWmoDoodads(*casc, wp.wmoRootFileDataId, wp.doodadSet,
+                                        placement, wmoDoodads))
+                    continue;
+                pending.doodads.reserve(pending.doodads.size() + wmoDoodads.size());
+                for (io::DoodadInstance const& d : wmoDoodads)
+                {
+                    if (d.modelFileDataId == 0)
+                        continue;
+                    SceneView3D::PropDoodadInstance gpu;
+                    gpu.modelFdid = d.modelFileDataId;
+                    gpu.x = d.x;  gpu.y = d.y;  gpu.z = d.z;
+                    gpu.rotZ = d.rotZ;  gpu.rotY = d.rotY;  gpu.rotX = d.rotX;
+                    gpu.scale = d.scale;
+                    pending.doodads.push_back(gpu);
+                }
+            }
+        }
+    }
+
+    QPointer<SceneView3D> guardedView = view;
+    QMetaObject::invokeMethod(QCoreApplication::instance(),
+        [guardedView, pending = std::move(pending)]() mutable
+        {
+            if (!guardedView) return;
+            guardedView->applyPropPlacements(std::move(pending));
         },
         Qt::QueuedConnection);
 }
@@ -6590,6 +7667,11 @@ void SceneView3D::dispatchWmoLoad(uint32_t fdid)
     task->view = this;
     task->casc = m_cascClient;
     task->fdid = fdid;
+    if (m_terrainTextureCache)
+    {
+        task->knownTexFdids = m_terrainTextureCache->knownFdidKeys();
+        task->knownTexPaths = m_terrainTextureCache->knownPathKeys();
+    }
     QThreadPool::globalInstance()->start(task);
 }
 
@@ -6606,7 +7688,134 @@ void SceneView3D::dispatchDoodadLoad(uint32_t fdid)
     task->view = this;
     task->casc = m_cascClient;
     task->fdid = fdid;
+    if (m_terrainTextureCache)
+    {
+        task->knownTexFdids = m_terrainTextureCache->knownFdidKeys();
+        task->knownTexPaths = m_terrainTextureCache->knownPathKeys();
+    }
     QThreadPool::globalInstance()->start(task);
+}
+
+// PERF: async replacement for the paintGL-side rebuildDoodadInstances call.
+// Prepares the per-tile job list (navmesh walk + camera-radius gate + WDT
+// MAID lookups -- all cheap, GL thread) and hands the CASC-heavy placement
+// enumeration to a PropPlacementTask worker.  applyPropPlacements appends
+// the results on the GUI thread.  One task in flight at a time; while one
+// runs, the stream-camera sentinels stay unchanged so paintGL simply retries
+// after it lands (no tile-cross is ever lost).
+void SceneView3D::dispatchPropPlacementLoads()
+{
+    // Mirror the sync path: mark both layers built up front so paintGL does
+    // not re-fire every frame when the gates below fail (no CASC / no map).
+    m_doodadsBuilt      = true;
+    m_texturedWmosBuilt = true;
+    if (m_propPlacementInFlight)
+        return;
+    if (!m_mesh.ok() || !m_cascClient || !m_cascClient->isOpen() || !m_mapDb2)
+        return;
+    auto dirOpt = m_mapDb2->directoryFor(m_heightmapMapId);
+    if (!dirOpt) return;
+
+    constexpr int   CENTER_GRID_ID = 32;
+    constexpr float TILE_SIZE = 533.3333f;
+    m_doodadStreamCamGx = int(std::floor(CENTER_GRID_ID - m_camX / TILE_SIZE));
+    m_doodadStreamCamGy = int(std::floor(CENTER_GRID_ID - m_camY / TILE_SIZE));
+    float const propRadius   = std::min(renderRadiusYards(), 2400.0f);  // fog-capped
+    float const propRadiusSq = propRadius * propRadius;
+
+    std::vector<std::pair<int, int>> tiles;
+    dtNavMesh const* nm = m_mesh.navmesh();
+    for (int ti = 0; ti < nm->getMaxTiles(); ++ti)
+    {
+        dtMeshTile const* mt = nm->getTile(ti);
+        if (!mt || !mt->header || mt->header->polyCount <= 0) continue;
+        float const minX = mt->header->bmin[2];
+        float const minY = mt->header->bmin[0];
+        int const gx = int(std::floor(CENTER_GRID_ID - minX / TILE_SIZE));
+        int const gy = int(std::floor(CENTER_GRID_ID - minY / TILE_SIZE));
+        tiles.emplace_back(gx, gy);
+    }
+    std::sort(tiles.begin(), tiles.end());
+    tiles.erase(std::unique(tiles.begin(), tiles.end()), tiles.end());
+
+    io::Wdt const* wdt = ensureWdt();
+    std::vector<PropPlacementJob> jobs;
+    for (auto const& [gx, gy] : tiles)
+    {
+        float const tileCx = (CENTER_GRID_ID - gx) * TILE_SIZE - 0.5f * TILE_SIZE;
+        float const tileCy = (CENTER_GRID_ID - gy) * TILE_SIZE - 0.5f * TILE_SIZE;
+        float const ddx = tileCx - m_camX, ddy = tileCy - m_camY;
+        if (ddx * ddx + ddy * ddy > propRadiusSq)
+            continue;
+        // ADDITIVE residency, same as the sync path: only tiles not yet
+        // materialised are enumerated; marked at dispatch so a retry loop
+        // can't double-queue them.
+        uint64_t const tileKey = (uint64_t(uint32_t(gx)) << 32) | uint32_t(gy);
+        if (!m_loadedPropTiles.insert(tileKey).second)
+            continue;
+        PropPlacementJob job;
+        job.gx = gx;
+        job.gy = gy;
+        if (wdt)
+        {
+            io::WdtMaidEntry const& e = wdt->entryFor(gx, gy);
+            job.obj0Fdid = e.obj0ADT;
+            job.rootFdid = e.rootADT;
+        }
+        jobs.push_back(job);
+    }
+    if (jobs.empty())
+        return;
+
+    m_propPlacementInFlight = true;
+    PropPlacementTask* task = new PropPlacementTask;
+    task->view           = this;
+    task->casc           = m_cascClient;
+    task->mapDir         = *dirOpt;
+    task->mapId          = m_heightmapMapId;
+    task->generation     = m_propGeneration;
+    task->jobs           = std::move(jobs);
+    task->emittedWmoUids = m_emittedWmoUids;
+    QThreadPool::globalInstance()->start(task);
+}
+
+void SceneView3D::applyPropPlacements(PropPlacementPending pending)
+{
+    m_propPlacementInFlight = false;
+    if (pending.generation != m_propGeneration)
+        return;   // map switched while the worker ran; payload is stale.
+    for (uint32_t uid : pending.wmoUids)
+        m_emittedWmoUids.insert(uid);
+    if (pending.doodads.empty() && pending.wmos.empty())
+        return;
+    m_doodadInstances.reserve(m_doodadInstances.size() + pending.doodads.size());
+    for (PropDoodadInstance const& d : pending.doodads)
+    {
+        DoodadInstanceGpu gpu;
+        gpu.modelFdid = d.modelFdid;
+        gpu.x = d.x;  gpu.y = d.y;  gpu.z = d.z;
+        gpu.rotZ = d.rotZ;  gpu.rotY = d.rotY;  gpu.rotX = d.rotX;
+        gpu.scale = d.scale;
+        composeDoodadModelMatrix(gpu);
+        m_doodadInstances.push_back(gpu);
+    }
+    m_wmoInstances.reserve(m_wmoInstances.size() + pending.wmos.size());
+    for (PropWmoInstance const& w : pending.wmos)
+    {
+        WmoInstanceGpu gi;
+        gi.wmoRootFdid = w.wmoRootFdid;
+        gi.x = w.x;  gi.y = w.y;  gi.z = w.z;
+        gi.rotZ = w.rotZ;  gi.rotY = w.rotY;  gi.rotX = w.rotX;
+        gi.scale = w.scale;
+        m_wmoInstances.push_back(gi);
+    }
+    // Keep the per-FDID grouping drawDoodads' bind-once loop relies on.
+    std::stable_sort(m_doodadInstances.begin(), m_doodadInstances.end(),
+        [](DoodadInstanceGpu const& a, DoodadInstanceGpu const& b)
+        {
+            return a.modelFdid < b.modelFdid;
+        });
+    update();
 }
 
 bool SceneView3D::uploadWmoPayload(WmoPending& p)
@@ -6621,6 +7830,15 @@ bool SceneView3D::uploadWmoPayload(WmoPending& p)
         return false;
     if (!m_terrainTextureCache && m_cascClient)
         m_terrainTextureCache = std::make_unique<TerrainTextureCache>(m_cascClient);
+    // Worker-pre-decoded textures: upload-only inserts so the per-submesh
+    // resolve below never CASC-reads/BLP-decodes on the render thread.
+    if (m_terrainTextureCache)
+    {
+        for (auto const& [fdid, img] : p.decodedFdidTex)
+            m_terrainTextureCache->insertDecodedFdid(fdid, img, *this);
+        for (auto const& [path, img] : p.decodedPathTex)
+            m_terrainTextureCache->insertDecodedPath(path, img, *this);
+    }
 
     gpu.centerX = p.centerX; gpu.centerY = p.centerY; gpu.centerZ = p.centerZ;
     gpu.radius  = p.radius;
@@ -6687,6 +7905,15 @@ bool SceneView3D::uploadDoodadPayload(DoodadPending& p)
         return false;
     if (!m_terrainTextureCache && m_cascClient)
         m_terrainTextureCache = std::make_unique<TerrainTextureCache>(m_cascClient);
+    // Worker-pre-decoded textures: upload-only inserts so the per-submesh
+    // resolve below never CASC-reads/BLP-decodes on the render thread.
+    if (m_terrainTextureCache)
+    {
+        for (auto const& [fdid, img] : p.decodedFdidTex)
+            m_terrainTextureCache->insertDecodedFdid(fdid, img, *this);
+        for (auto const& [path, img] : p.decodedPathTex)
+            m_terrainTextureCache->insertDecodedPath(path, img, *this);
+    }
 
     gpu.centerX = p.centerX; gpu.centerY = p.centerY; gpu.centerZ = p.centerZ;
     gpu.radius  = p.radius;
@@ -6861,11 +8088,13 @@ void SceneView3D::paintOverlay()
     font.setFamily(QStringLiteral("Consolas"));
     painter.setFont(font);
 
-    // Soft dark background panel for legibility.
+    // Soft dark background panel for legibility.  Grows one line when a
+    // pathfinding-probe verdict is showing.
+    bool const probeLine = m_probeValid && !m_probeSummary.isEmpty();
     int const x0 = 8;
     int const y0 = 8;
-    int const w  = 360;
-    int const h  = 76;
+    int const w  = probeLine ? std::max(360, 12 + 8 * int(m_probeSummary.size())) : 360;
+    int const h  = probeLine ? 92 : 76;
     painter.fillRect(QRect(x0, y0, w, h), QColor(0, 0, 0, 140));
     painter.setPen(QColor(225, 225, 235, 255));
 
@@ -6885,6 +8114,13 @@ void SceneView3D::paintOverlay()
     painter.drawText(x0 + 8, y0 + 14 + lh, camLine);
     painter.drawText(x0 + 8, y0 + 14 + 2 * lh, heightLine);
     painter.drawText(x0 + 8, y0 + 14 + 3 * lh, speedLine);
+    if (probeLine)
+    {
+        painter.setPen(m_probeNoPath  ? QColor(255,  90,  90)
+                     : m_probePartial ? QColor(255, 180,  70)
+                                      : QColor(110, 255, 110));
+        painter.drawText(x0 + 8, y0 + 14 + 4 * lh, m_probeSummary);
+    }
 }
 
 } // namespace world_editor::render

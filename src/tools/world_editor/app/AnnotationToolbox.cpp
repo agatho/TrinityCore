@@ -136,6 +136,13 @@ bool AnnotationToolbox::isPlacing() const
     return m_placeToggle->isChecked();
 }
 
+void AnnotationToolbox::setPlacing(bool on)
+{
+    // setChecked emits toggled -> placeModeChanged, so MainWindow's mode
+    // state follows automatically (Escape-exit path relies on this).
+    m_placeToggle->setChecked(on);
+}
+
 render::AnnotationKind AnnotationToolbox::currentKind() const
 {
     int const idx = m_kindCombo->currentIndex();

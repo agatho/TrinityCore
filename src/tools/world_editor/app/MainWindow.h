@@ -171,6 +171,27 @@ private slots:
     void onPathClicked(int pathIndex);
     void onPathNodeClicked(int pathIndex, int nodeIndex);
     void onPathNodeMoved(int pathIndex, int nodeIndex, float worldX, float worldY);
+    // 3D variants: carry the authored Z (drag-plane / segment-lerped) and
+    // only ground-snap when the ground is near it (multi-floor guard).
+    void onPathNodeMoved3D(int pathIndex, int nodeIndex,
+                           float worldX, float worldY, float worldZ);
+    void onPathSegmentContextMenu3D(int pathIndex, int afterNodeIndex,
+                                    float worldX, float worldY, float worldZ,
+                                    QPoint globalPos);
+    // ---- Bot dungeon-route chain (shared-schema playerbot_dungeon_routes).
+    // Loaded per map, edited in the 3D view, committed as a full-map rewrite.
+    // NOTE: dungeon scripts that hand-author route_waypoints in C++ (currently
+    // Deadmines) override the DB rows at runtime -- edits there only take
+    // effect once the script's authored chain is removed.
+    void onRouteNodeMoved3D(int routeIndex, int nodeIndex,
+                            float worldX, float worldY, float worldZ);
+    void onRouteNodeContextMenu3D(int routeIndex, int nodeIndex, QPoint globalPos);
+    void onRouteSegmentContextMenu3D(int routeIndex, int afterNodeIndex,
+                                     float worldX, float worldY, float worldZ,
+                                     QPoint globalPos);
+    void onReloadDungeonRoutes();
+    void onCommitDungeonRoutes();
+    void onNewDungeonRouteAtCamera();
     void onPathNodeContextMenu(int pathIndex, int nodeIndex, QPoint globalPos);
     void onPathSegmentContextMenu(int pathIndex, int afterNodeIndex,
                                    float worldX, float worldY, QPoint globalPos);
@@ -484,6 +505,9 @@ private:
     render::SceneView3D*             m_viewer3d          = nullptr;
     ::QStackedWidget*                m_centralStack      = nullptr;
     QLabel*                          m_coordsLabel       = nullptr;
+    // Permanent editing-mode badge (leftmost status-bar widget).  Updated
+    // exclusively by updateModeBadge() via setPlacementKind().
+    QLabel*                          m_modeBadge         = nullptr;
     QLabel*                          m_meshStatsLabel    = nullptr;
     QLabel*                          m_spawnStatsLabel   = nullptr;
     QLabel*                          m_annotStatsLabel   = nullptr;
@@ -590,8 +614,38 @@ private:
     // Placement-mode dispatch: when the viewer reports
     // placementRequested(x, y), we look at this to decide which model
     // gets the new row.
-    enum class PlacementKind { None, Annotation, Spawn, PathDraw, Areatrigger, Graveyard, RoadDraw };
+    // Bot dungeon-route working copy (one render::Path per difficulty;
+    // pathId carries the difficulty).  Dirty until committed or reloaded.
+    std::vector<render::Path>              m_dungeonRoutes;
+    bool                                   m_dungeonRoutesDirty = false;
+    [[nodiscard]] QString sharedDbSchema() const;
+    void reloadDungeonRoutesForMap(uint32_t mapId);
+    void pushDungeonRoutesToViewer();
+
+    enum class PlacementKind { None, Annotation, Spawn, PathDraw, Areatrigger, Graveyard, RoadDraw, PathProbe, OffmeshDraw };
+    // Pathfinding-probe two-click state: first click = start, second = run.
+    bool  m_probeHaveStart = false;
+    float m_probeStartX = 0.0f, m_probeStartY = 0.0f, m_probeStartZ = 0.0f;
+    void onStartPathProbe();
+    void onClearPathProbe();
+    // Off-mesh authoring two-click state + offmesh.txt append.
+    bool  m_offmeshHaveStart = false;
+    float m_offmeshStartX = 0.0f, m_offmeshStartY = 0.0f, m_offmeshStartZ = 0.0f;
+    [[nodiscard]] QString offmeshFilePath() const;
+    void onStartOffmeshDraw();
+    void onSetOffmeshFile();
+    bool appendOffmeshConnection(float fx, float fy, float fz,
+                                 float tx, float ty, float tz);
     PlacementKind                              m_placementKind = PlacementKind::None;
+    // Central mode setter: every entry/exit goes through here so the
+    // permanent status-bar badge always tells the operator what a click
+    // in the viewport will do and how to leave the mode.
+    void setPlacementKind(PlacementKind kind);
+    void updateModeBadge();
+    // Escape fallback: exits whichever one-shot placement mode is armed
+    // (spawn / areatrigger / graveyard / annotation / road draw).  Path
+    // drawing keeps its dedicated cancel (same Escape action, checked first).
+    void cancelActivePlacement();
     std::unique_ptr<app::PickedTemplate>       m_pickedTemplate;
     // When a 3D click supplied an authored surface Z (depth-unprojected),
     // onPlacementRequested uses it verbatim instead of snapping to ground.
