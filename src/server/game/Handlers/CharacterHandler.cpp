@@ -604,8 +604,9 @@ void WorldSession::HandleCharEnum(CharacterDatabaseQueryHolder const& holder)
 
                 // We need the auto-generated groupId for subsequent member inserts.
                 // Since we can't get LAST_INSERT_ID in an async transaction easily,
-                // we'll set a temporary GroupID of 0 in the packet (client doesn't send it back).
-                // The members will be properly persisted when the client sends CMSG_SETUP_WARBAND_GROUPS.
+                // we'll set a temporary GroupID of 0 in the packet; the client echoes it back
+                // in CMSG_SETUP_WARBAND_GROUPS, but the handler re-derives the persistence key
+                // from the account id + order index, so the echoed value is never trusted.
             }
         }
     }
@@ -664,8 +665,18 @@ void WorldSession::HandleSetupWarbandGroups(WorldPackets::Character::SetupWarban
         return;
     }
 
+    uint32 seenOrderIndexes = 0;
     for (auto const& group : setupWarbandGroups.Groups)
     {
+        // Validate order index: bounded and unique so the derived group key cannot collide
+        if (group.OrderIndex >= 20 || (seenOrderIndexes & (1u << group.OrderIndex)))
+        {
+            TC_LOG_ERROR("network", "WorldSession::HandleSetupWarbandGroups: Account {} sent invalid or duplicate OrderIndex {}",
+                battlenetAccountId, group.OrderIndex);
+            return;
+        }
+        seenOrderIndexes |= 1u << group.OrderIndex;
+
         // Validate scene ID
         if (group.WarbandSceneID != 0 && !sWarbandSceneStore.LookupEntry(group.WarbandSceneID))
         {
@@ -707,8 +718,13 @@ void WorldSession::HandleSetupWarbandGroups(WorldPackets::Character::SetupWarban
     // Insert new groups and members
     for (auto const& group : setupWarbandGroups.Groups)
     {
+        // The client echoes the GroupID it was shown, but it must not become the persistence
+        // key: a hostile client could claim another account's ids. Re-derive an account-scoped
+        // key from the validated OrderIndex instead.
+        uint64 groupId = static_cast<uint64>(battlenetAccountId) * 100 + group.OrderIndex;
+
         stmt = CharacterDatabase.GetPreparedStatement(CHAR_INS_WARBAND_GROUP);
-        stmt->setUInt64(0, group.GroupID);
+        stmt->setUInt64(0, groupId);
         stmt->setUInt32(1, battlenetAccountId);
         stmt->setUInt8(2, group.OrderIndex);
         stmt->setUInt32(3, group.WarbandSceneID);
@@ -722,7 +738,7 @@ void WorldSession::HandleSetupWarbandGroups(WorldPackets::Character::SetupWarban
             auto const& member = group.Members[memberIdx];
 
             stmt = CharacterDatabase.GetPreparedStatement(CHAR_INS_WARBAND_GROUP_MEMBER);
-            stmt->setUInt64(0, group.GroupID);
+            stmt->setUInt64(0, groupId);
             stmt->setUInt8(1, memberIdx);
             stmt->setUInt64(2, member.Guid.GetCounter());
             stmt->setUInt32(3, member.WarbandScenePlacementID);
