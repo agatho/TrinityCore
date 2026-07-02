@@ -2,6 +2,7 @@
 #include "../BotSnapshotView.h"
 #include "../BotSnapshot.h"
 #include "DatabaseEnv.h"
+#include "Config.h"
 #include "Log.h"
 #include <algorithm>
 
@@ -11,6 +12,20 @@ namespace {
 inline uint64_t MakeKey(uint32_t map_id, uint32_t difficulty)
 {
     return (static_cast<uint64_t>(map_id) << 8) | (difficulty & 0xFFu);
+}
+
+// Dungeon route waypoints are STATIC, map-derived nav data (chain-pathfound
+// from the navmesh) — identical across every realm running the same maps, just
+// like the shared handcrafted_road table. They live in the shared playerbot
+// schema (Playerbot.SharedDatabase, default "playerbot") so all servers share
+// ONE copy instead of duplicating them in every realm's world DB, and queried
+// via CharacterDatabase with a schema qualifier (mirrors BotNamePool /
+// WorldMetadata — same MySQL server, cross-schema reference).
+std::string const& SharedDb()
+{
+    static std::string const db =
+        sConfigMgr->GetStringDefault("Playerbot.SharedDatabase", "playerbot");
+    return db;
 }
 }
 
@@ -151,13 +166,15 @@ DungeonAdvice DungeonScriptMgr::GetAdvice(BotSnapshotView const& s) const
 size_t DungeonScriptMgr::LoadGeneratedRoutes()
 {
     generated_routes_.clear();
-    QueryResult result = WorldDatabase.Query(
+    QueryResult result = CharacterDatabase.Query(fmt::format(
         "SELECT map_id, difficulty, position_x, position_y, position_z "
-        "FROM playerbot_dungeon_routes ORDER BY map_id, difficulty, seq");
+        "FROM {}.playerbot_dungeon_routes ORDER BY map_id, difficulty, seq",
+        SharedDb()).c_str());
     if (!result)
     {
         TC_LOG_INFO("playerbot.v2",
-            "[DungeonRoutes] playerbot_dungeon_routes empty/absent — no generated waypoints.");
+            "[DungeonRoutes] {}.playerbot_dungeon_routes empty/absent — no generated waypoints.",
+            SharedDb());
         return 0;
     }
     size_t count = 0;

@@ -15,6 +15,11 @@ import subprocess, re, sys, math, os
 MMAP_DIR = "M:/WorldofWarcraft/mmaps"
 PROBE    = "M:/PlayerbotServer/mmap_probe.exe"
 MYSQL    = r"C:/Program Files/MySQL/MySQL Server 9.4/bin/mysql.exe"
+# Route waypoints are STATIC map-derived data shared across all realms -> the
+# shared playerbot schema (matches the runtime LoadGeneratedRoutes + roads).
+# Boss/entrance lookups still come from the per-realm world DB.
+ROUTE_DB = os.environ.get("ROUTE_DB", "wowc_playerbot")
+WORLD_DB = "wc_world"
 # Waypoint spacing along the path. Must stay under the ~292y (74-poly) cap, but
 # for WINDING corridors a 200y straight leg can exceed the cap in PATH length,
 # so a bot that drifts off a crumb can't reach the next one (WC pocket, -57,322).
@@ -77,7 +82,7 @@ def load_dungeons_from_dump(lines=None):
 def boss_positions(mapid, bosses):
     """Return {entry:(x,y,z)} for spawned bosses on this map (nearest-to-origin spawn)."""
     ids = ",".join(str(b) for b in bosses)
-    rows = sql("wc_world",
+    rows = sql(WORLD_DB,
         f"SELECT c.id,c.position_x,c.position_y,c.position_z FROM creature c "
         f"WHERE c.id IN ({ids}) AND c.map={mapid}")
     pos = {}
@@ -87,7 +92,7 @@ def boss_positions(mapid, bosses):
     return pos
 
 def entrance(dungeon_id):
-    rows = sql("wc_world",
+    rows = sql(WORLD_DB,
         f"SELECT position_x,position_y,position_z FROM lfg_dungeon_template WHERE dungeonId={dungeon_id}")
     if not rows: return None
     return (float(rows[0][0]),float(rows[0][1]),float(rows[0][2]))
@@ -175,10 +180,10 @@ def gen_chain(name, mapid, dungeon_id, bosses):
     return out
 
 def write_db(mapid, chain):
-    sql("wc_world", f"DELETE FROM playerbot_dungeon_routes WHERE map_id={mapid} AND difficulty=0")
+    sql(ROUTE_DB, f"DELETE FROM playerbot_dungeon_routes WHERE map_id={mapid} AND difficulty=0")
     if not chain: return
     vals = ",".join(f"({mapid},0,{i},{p[0]:.3f},{p[1]:.3f},{p[2]:.3f})" for i,p in enumerate(chain))
-    sql("wc_world", f"INSERT INTO playerbot_dungeon_routes (map_id,difficulty,seq,position_x,position_y,position_z) VALUES {vals}")
+    sql(ROUTE_DB, f"INSERT INTO playerbot_dungeon_routes (map_id,difficulty,seq,position_x,position_y,position_z) VALUES {vals}")
 
 def main():
     args = sys.argv[1:]
@@ -213,8 +218,8 @@ def main():
         write_db(mapid, chain)
         if chain: ok += 1
         else: skip += 1
-    print(f"=== done: {ok} routed, {skip} empty/skipped ===")
-    for r in sql("wc_world","SELECT map_id,COUNT(*) FROM playerbot_dungeon_routes GROUP BY map_id ORDER BY map_id"):
+    print(f"=== done: {ok} routed, {skip} empty/skipped (routes -> {ROUTE_DB}) ===")
+    for r in sql(ROUTE_DB,"SELECT map_id,COUNT(*) FROM playerbot_dungeon_routes GROUP BY map_id ORDER BY map_id"):
         print(f"  map {r[0]}: {r[1]} waypoints")
 
 if __name__ == "__main__":
