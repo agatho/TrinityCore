@@ -5130,10 +5130,9 @@ struct WarbandSceneAnimChrSpecEntry
 struct WarbandScenePlacementFilterReqEntry
 {
     uint32 ID;
-    int64 Field_11_1_0_58221_000;
-    uint16 Field_11_1_0_58221_002;
+    int16 Field_11_1_0_58221_002;
     int8 Field_11_1_0_58221_005;
-    std::array<int32, 2> Field_11_1_0_58221_003;
+    std::array<int32, 2> RaceMasks;
 };
 
 struct WarbandScenePlacementOptionEntry
