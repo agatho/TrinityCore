@@ -145,51 +145,70 @@ DungeonAdvice DungeonScriptMgr::GetAdvice(BotSnapshotView const& s) const
     // changed correctness (matching the same ID twice is a no-op) but
     // they wasted compares and made the audit log noisier.
     DedupAdvice(merged);
-    // Inject auto-generated route_waypoints when the per-dungeon script authored
-    // NONE. These are the navmesh-chained corridor points (entrance->bosses) that
-    // let the far-boss advance route winding corridors past the 74-poly cap on
-    // dungeons that never got a hand-authored chain. A script that DID author its
-    // own (Deadmines' harbor descent) keeps it — the empty() guard makes authored
-    // waypoints authoritative. Difficulty-0 rows are the "any-difficulty" default.
-    if (merged.route_waypoints.empty() && !generated_routes_.empty())
+    // Inject the DB route_waypoints (the shared playerbot DB is the single
+    // route source — no script authors chains anymore; the empty() guard is
+    // kept as a safety valve for any future script override). Copy the
+    // shared_ptr under a brief shared_lock so a concurrent hot-reload
+    // (`.playerbot reloadroutes`) swapping the table can't invalidate this
+    // read; the immutable snapshot stays alive via the local shared_ptr.
+    // Difficulty-0 rows are the "any-difficulty" default.
+    if (merged.route_waypoints.empty())
     {
-        const uint32_t diff = s.raw().instance_ctx.map_difficulty;
-        auto it = generated_routes_.find(MakeKey(s.map_id(), diff));
-        if (it == generated_routes_.end() && diff != 0)
-            it = generated_routes_.find(MakeKey(s.map_id(), 0));
-        if (it != generated_routes_.end())
-            merged.route_waypoints = it->second;
+        std::shared_ptr<RouteTable const> routes;
+        {
+            std::shared_lock<std::shared_mutex> lock(routes_mutex_);
+            routes = generated_routes_;
+        }
+        if (routes && !routes->empty())
+        {
+            const uint32_t diff = s.raw().instance_ctx.map_difficulty;
+            auto it = routes->find(MakeKey(s.map_id(), diff));
+            if (it == routes->end() && diff != 0)
+                it = routes->find(MakeKey(s.map_id(), 0));
+            if (it != routes->end())
+                merged.route_waypoints = it->second;
+        }
     }
     return merged;
 }
 
 size_t DungeonScriptMgr::LoadGeneratedRoutes()
 {
-    generated_routes_.clear();
+    // Hot-reload safe: build the new table completely OFF-lock (the DB query
+    // can take milliseconds), then publish it with one brief exclusive swap.
+    // Concurrent GetAdvice readers holding the old shared_ptr keep a coherent
+    // snapshot until their tick finishes.
+    auto fresh = std::make_shared<RouteTable>();
+    size_t count = 0;
     QueryResult result = CharacterDatabase.Query(fmt::format(
         "SELECT map_id, difficulty, position_x, position_y, position_z "
         "FROM {}.playerbot_dungeon_routes ORDER BY map_id, difficulty, seq",
         SharedDb()).c_str());
-    if (!result)
+    if (result)
     {
-        TC_LOG_INFO("playerbot.v2",
-            "[DungeonRoutes] {}.playerbot_dungeon_routes empty/absent — no generated waypoints.",
-            SharedDb());
-        return 0;
+        do
+        {
+            Field* f = result->Fetch();
+            const uint32_t map  = f[0].GetUInt16();
+            const uint32_t diff = f[1].GetUInt8();
+            (*fresh)[MakeKey(map, diff)].push_back(
+                DungeonAdvice::ProgressionPoint{ f[2].GetFloat(), f[3].GetFloat(), f[4].GetFloat() });
+            ++count;
+        } while (result->NextRow());
     }
-    size_t count = 0;
-    do
+    const size_t dungeon_count = fresh->size();
     {
-        Field* f = result->Fetch();
-        const uint32_t map  = f[0].GetUInt16();
-        const uint32_t diff = f[1].GetUInt8();
-        generated_routes_[MakeKey(map, diff)].push_back(
-            DungeonAdvice::ProgressionPoint{ f[2].GetFloat(), f[3].GetFloat(), f[4].GetFloat() });
-        ++count;
-    } while (result->NextRow());
-    TC_LOG_INFO("playerbot.v2",
-        "[DungeonRoutes] loaded {} generated route waypoint(s) across {} dungeon(s).",
-        count, generated_routes_.size());
+        std::unique_lock<std::shared_mutex> lock(routes_mutex_);
+        generated_routes_ = std::move(fresh);
+    }
+    if (count == 0)
+        TC_LOG_INFO("playerbot.v2",
+            "[DungeonRoutes] {}.playerbot_dungeon_routes empty/absent — no route waypoints.",
+            SharedDb());
+    else
+        TC_LOG_INFO("playerbot.v2",
+            "[DungeonRoutes] loaded {} route waypoint(s) across {} dungeon(s).",
+            count, dungeon_count);
     return count;
 }
 

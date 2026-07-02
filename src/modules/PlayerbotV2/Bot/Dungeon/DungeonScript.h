@@ -15,6 +15,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <shared_mutex>
 #include <unordered_map>
 #include <vector>
 
@@ -214,13 +215,17 @@ public:
 
     size_t size() const { return scripts_.size(); }
 
-    // Load auto-generated route_waypoints from wc_world.playerbot_dungeon_routes
-    // (populated offline by gen_dungeon_routes.py: a navmesh-chain of on-mesh
-    // corridor points entrance->bosses). Keyed by (map_id<<8)|difficulty. These
-    // are INJECTED by GetAdvice ONLY for dungeons whose own script left
-    // route_waypoints empty — so a hand-authored chain (Deadmines) always wins.
-    // Call once at module init AFTER all scripts are registered. Returns the
-    // number of waypoints loaded.
+    // Load dungeon route_waypoints from the SHARED playerbot DB
+    // ({Playerbot.SharedDatabase}.playerbot_dungeon_routes — populated by
+    // gen_dungeon_routes.py and/or the world editor). Keyed by
+    // (map_id<<8)|difficulty; INJECTED by GetAdvice for dungeons whose script
+    // left route_waypoints empty (the DB is the single route source — no script
+    // authors chains anymore). HOT-RELOADABLE: called once at module init and
+    // again from `.playerbot reloadroutes` (SOAP) whenever the editor commits
+    // route changes — builds the new table off to the side and atomically swaps
+    // the shared_ptr under routes_mutex_, so concurrent GetAdvice readers on the
+    // AI worker threads keep a consistent (old or new) snapshot and no restart
+    // is needed. Returns the number of waypoints loaded.
     size_t LoadGeneratedRoutes();
 
     // Iterate every registered per-dungeon script (excludes globals).
@@ -242,10 +247,16 @@ private:
     // is preserved; advice is concatenated. Typical use: M+ affix
     // bundles, raid-wide pattern primitives.
     std::vector<std::unique_ptr<DungeonScript>> global_scripts_;
-    // Auto-generated route waypoints keyed by (map_id<<8)|difficulty. Filled
-    // once by LoadGeneratedRoutes(); read-only thereafter, so GetAdvice reads it
-    // lock-free from the AI worker threads.
-    std::unordered_map<uint64_t, std::vector<DungeonAdvice::ProgressionPoint>> generated_routes_;
+    // DB-sourced route waypoints keyed by (map_id<<8)|difficulty. The map is
+    // IMMUTABLE once published; LoadGeneratedRoutes builds a fresh instance and
+    // swaps the shared_ptr under routes_mutex_ (hot-reload). GetAdvice readers
+    // (AI worker threads, every tick) take a brief shared_lock only to copy the
+    // shared_ptr, then read the immutable map lock-free — an in-flight reader
+    // keeps the old table alive via its shared_ptr during a swap.
+    using RouteTable =
+        std::unordered_map<uint64_t, std::vector<DungeonAdvice::ProgressionPoint>>;
+    std::shared_ptr<RouteTable const> generated_routes_;
+    mutable std::shared_mutex routes_mutex_;
 };
 
 } // namespace Playerbot

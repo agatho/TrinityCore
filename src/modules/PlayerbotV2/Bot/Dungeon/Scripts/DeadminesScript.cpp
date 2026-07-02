@@ -171,26 +171,15 @@ public:
             {  -88.1f, -819.3f, 39.2f },   // "Captain" Cookie galley (normal spawn)
             {  -66.8f, -877.0f, 15.6f },   // Vanessa VanCleef (heroic spawn pos)
         };
-        // Harbor-descent route waypoints (NOT boss-aligned — see
-        // DungeonAdvice::route_waypoints). The single FoeReaper(-209,-568,z21)
-        // -> Ripsnarl deck(-62,-822,z42.8) leg is ~293y / well past the core
-        // 74-poly PathGenerator cap, so the strict boss reach fails and the raw
-        // truncated-path step string-pulls across the off-mesh foundry->harbor
-        // ledge (z51->z14 drop) — the tank FALLS, arrives alone, pulls the
-        // Defias pirate packs solo, dies, and the group fragments (the chronic
-        // 3/6 harbor stall). These three on-navmesh stepping stones chunk that
-        // leg into clean <=74-poly hops the boss-nav can string-pull through,
-        // so the group walks the descent single-file down the navmesh (no
-        // fall). Each leg mmap_probe STATUS:OK well under the cap:
-        //   FoeReaper -> entrance(-135,-633) [22 polys]
-        //   entrance  -> floor mid(-118,-690) [25 polys]
-        //   floor mid -> gangplank base(-107,-787) [59 polys]
-        //   gangplank -> Ripsnarl deck(-62,-822,z42.8) [42 polys] (boss-nav direct)
-        a.route_waypoints = {
-            { -135.1f, -633.4f, 14.4f },   // harbor entrance (top of the descent)
-            { -118.0f, -690.0f, 14.0f },   // harbor floor mid
-            { -107.0f, -787.0f, 18.0f },   // gangplank base (foot of the ship ramp)
-        };
+        // Route waypoints come from the shared DB (playerbot_dungeon_routes),
+        // injected by DungeonScriptMgr::GetAdvice — the DB is the SINGLE source
+        // so the world editor can author/fix routes and hot-reload them without
+        // touching code. The previously-authored harbor-descent chain
+        // ((-135,-633) -> (-118,-690) -> (-107,-787), the three on-navmesh
+        // stepping stones that chunk the FoeReaper->Ripsnarl ~293y leg into
+        // <=74-poly hops so the group walks the descent instead of falling off
+        // the z51->z14 ledge) now lives in that table; the generator's dense
+        // chain covers the same corridor. See tools/gen_dungeon_routes.py.
         // Tight-engagement zone = the harbor floor (z<30). The gauntlet sits at
         // z57-62, so this cleanly scopes the tight-cohesion / focus-kill /
         // proactive-assist toolkit to the Ripsnarl approach. See

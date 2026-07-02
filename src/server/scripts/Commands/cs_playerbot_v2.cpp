@@ -63,6 +63,9 @@
 #include "SpellInfo.h"
 #include "SpellMgr.h"
 #include "DB2Stores.h"
+#include "HandcraftedRoadStorage.h"   // .playerbot reloadroutes — road segment reload
+#include "HandcraftedRoadGraph.h"     // .playerbot reloadroutes — invalidate road graph cache
+#include "TerrainMgr.h"               // .playerbot reloadroutes — clear applied-road cache
 #include <array>
 #include <map>
 
@@ -551,6 +554,7 @@ public:
             { "dungeontest",   HandleDungeonTest,   rbac::RBAC_PERM_COMMAND_GM, Console::Yes },
             { "dungeonreset",  HandleDungeonReset,  rbac::RBAC_PERM_COMMAND_GM, Console::Yes },
             { "dungeondump",   HandleDungeonDump,   rbac::RBAC_PERM_COMMAND_GM, Console::Yes },
+            { "reloadroutes",  HandleReloadRoutes,  rbac::RBAC_PERM_COMMAND_GM, Console::Yes },
             { "bginfo",        HandleBgInfo,        rbac::RBAC_PERM_COMMAND_GM, Console::Yes },
             { "diag",          HandleDiag,          rbac::RBAC_PERM_COMMAND_GM, Console::Yes },
             { "wedges",        HandleWedges,        rbac::RBAC_PERM_COMMAND_GM, Console::Yes },
@@ -2036,6 +2040,42 @@ public:
             ++count;
         });
         handler->PSendSysMessage("DDUMP_END|%u scripts", count);
+        return true;
+    }
+
+    // .playerbot reloadroutes — hot-reload ALL bot nav data from the shared DB
+    // without a server restart, SOAP-callable so the world editor (and test
+    // harnesses) can activate committed route/road changes instantly:
+    //  * dungeon route waypoints ({SharedDb}.playerbot_dungeon_routes) —
+    //    DungeonScriptMgr::LoadGeneratedRoutes builds a fresh table and
+    //    atomically swaps it under the routes mutex (AI-worker readers keep a
+    //    coherent snapshot); the next GetAdvice tick serves the new routes.
+    //  * handcrafted roads ({SharedDb}.handcrafted_road) — storage reload bumps
+    //    the generation counter and the road GRAPH cache is invalidated, so the
+    //    next ComputeRoute rebuilds from the new segments. NOTE: navmesh AREA
+    //    tagging (NAV_AREA_ROAD slope-cost) on already-loaded maps still needs
+    //    `.reload handcrafted_road apply <mapId>` — tag flips are destructive
+    //    and per-map, so they stay an explicit step.
+    // Runs on the world thread (command context) — same thread as the startup
+    // loads, so the synchronous DB queries are safe here.
+    static bool HandleReloadRoutes(ChatHandler* handler)
+    {
+        using namespace Playerbot;
+        if (!Services::Initialized())
+        { handler->SendSysMessage("PlayerbotV2 not initialized."); return false; }
+
+        size_t const wps = Services::Dungeons().LoadGeneratedRoutes();
+
+        HandcraftedRoadStorage::LoadFromDB();
+        TerrainMgrDetail::ClearAppliedHandcraftedRoads();
+        sHandcraftedRoadGraph->InvalidateAll();
+
+        handler->PSendSysMessage(
+            "reloadroutes: %u dungeon route waypoint(s) reloaded (live next tick); "
+            "%u road segment(s) across %u map(s) reloaded (graph cache invalidated). "
+            "Navmesh road-area tags on loaded maps need `.reload handcrafted_road apply <mapId>`.",
+            uint32(wps), uint32(HandcraftedRoadStorage::SegmentCount()),
+            uint32(HandcraftedRoadStorage::MapCount()));
         return true;
     }
 
