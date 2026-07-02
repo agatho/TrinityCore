@@ -434,6 +434,10 @@ PlayerbotV2.Guilds.MaxMembersPerGuild = 75
 # Gate pre-combat DPS assists on the tank's walk cost to the target
 # (path/beeline ratio). Diagnosed 2026-07-02: SFK courtyard = 139.7yd path
 # for a 20yd beeline, navmesh connected.
+# NOTE (final-review fix, 2026-07-03): MaxDetourRatio/MinExtraYards are not
+# scoped to Enabled/this pre-combat gate alone — DisengageEnabled's in-combat
+# drop and the TankCommit START threshold both reuse these same two knobs, so
+# they stay LIVE even with Enabled=0.
 PlayerbotV2.PullGate.Enabled            = 1
 PlayerbotV2.PullGate.MaxDetourRatio     = 3.0
 PlayerbotV2.PullGate.MinExtraYards      = 40

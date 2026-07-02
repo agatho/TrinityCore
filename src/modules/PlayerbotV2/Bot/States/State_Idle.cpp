@@ -1487,8 +1487,27 @@ bool DungeonCombatPositioning(BotSnapshotView const& s, BotAI& ai,
                     for (auto const& u : s.raw().combat.nearby_enemies)
                         if (u.guid == s.victim()) { vu = &u; break; }
                     if (vu)
+                    {
+                        // Tank-to-victim prefilter (final-review fix, 2026-07-03):
+                        // a victim already trivially close to the TANK can never
+                        // be judged an excessive detour — skip the full pathfind
+                        // probe entirely (no probe, no fire) instead of paying for
+                        // a DungeonTankDetourExcessiveVerbose call whose answer is
+                        // a foregone conclusion.
+                        const float tvx = tk->x - vu->x, tvy = tk->y - vu->y, tvz = tk->z - vu->z;
+                        bool const trivially_close =
+                            (tvx * tvx + tvy * tvy + tvz * tvz) <= 12.0f * 12.0f;
+                        // Probe cadence (final-review fix, 2026-07-03): this rule
+                        // had none — once sustain>6s it re-issued a full tank
+                        // pathfind EVERY tick per non-tank bot until the verdict
+                        // flipped. Cap the probe at once per 3s, matching the
+                        // other dungeon detour rules' pacing.
+                        bool const probe_due =
+                            now_ms - ai.untankable_probe_last_ms() >= 3000u;
+                        if (!trivially_close && probe_due)
                         if (Player* tkp = ObjectAccessor::FindConnectedPlayer(tk->guid))
                         {
+                            ai.touch_untankable_probe(now_ms);
                             float dv_beeline = 0.f, dv_path_len = 0.f, dv_ratio = 0.f;
                             bool  dv_complete = false;
                             if (DungeonTankDetourExcessiveVerbose(tkp, vu->x, vu->y, vu->z,
@@ -1518,6 +1537,7 @@ bool DungeonCombatPositioning(BotSnapshotView const& s, BotAI& ai,
                                 return true;
                             }
                         }
+                    }
                 }
         }
     }
@@ -2109,7 +2129,13 @@ bool DungeonCombatPositioning(BotSnapshotView const& s, BotAI& ai,
                         DungeonTankDetourExcessiveVerbose(self_cc, vu->x, vu->y, vu->z,
                                                           dv_beeline, dv_path_len,
                                                           dv_ratio, dv_complete);
-                        if (dv_complete && dv_ratio > Services::Config().pull_gate_max_ratio())
+                        // START uses the same "excessive" definition as the pull
+                        // gates (DungeonDetourExcessive above): ratio alone lets a
+                        // 13y-beeline/40y-path ordinary mid-range chase satisfy the
+                        // ratio term and START a commitment; the MinExtraYards floor
+                        // is required too (final-review fix, 2026-07-03).
+                        if (dv_complete && dv_ratio > Services::Config().pull_gate_max_ratio() &&
+                            dv_path_len - dv_beeline > Services::Config().pull_gate_min_extra_yards())
                         {
                             ai.set_chase_commit(s.victim(), now_ms, s.map_id());
                             TC_LOG_INFO("playerbot.v2",
@@ -3080,9 +3106,15 @@ static DungeonDetourVerdict DungeonTankDetour(Player* tank,
     DungeonDetourVerdict v;
     if (!tank || !tank->IsInWorld())
         return v;
-    // Same world-thread budget guard the wedge watchdog uses (and this
-    // file's own DungeonTargetReachableAndStep just above) — a path probe
-    // is comparatively costly and must not storm the tick.
+    // Same guard the wedge watchdog uses (and this file's own
+    // DungeonTargetReachableAndStep just above). Honest scope (final-review
+    // fix, 2026-07-03): PathBudget's window is opened/closed only around
+    // DrainIntents on the WORLD thread (BotIntentExecutor.cpp); HasBudget
+    // FAILS OPEN (always true, no bound) when that window is not active —
+    // which is the case for the AI worker threads these dungeon rules
+    // actually run on. So this only bounds aggregate probe cost within a
+    // DrainIntents world-thread tick; it does NOT cap probe frequency on a
+    // worker tick, and callers here still need their own cadence/prefilter.
     if (!Playerbot::PathBudget::HasBudget(GameTime::GetGameTimeMS()))
         return v;
 
@@ -5984,6 +6016,12 @@ bool DungeonDispatch(BotSnapshotView const& s, BotAI& ai,
                 auto resolve = [&](ObjectGuid want) -> ObjectGuid
                 {
                     if (want.IsEmpty()) return ObjectGuid();
+                    // Shield consult (final-review fix, 2026-07-03): never resolve
+                    // to a guid this bot already gate-skipped and shielded via
+                    // note_engage() below — otherwise this loop re-picks (and the
+                    // gate below re-probes with a full pathfind) the same target
+                    // every tick until the shield window lapses.
+                    if (ai.engage_shielded(want, now_ms)) return ObjectGuid();
                     for (auto const& u : s.raw().combat.nearby_enemies)
                     {
                         if (u.guid != want) continue;
@@ -6009,6 +6047,8 @@ bool DungeonDispatch(BotSnapshotView const& s, BotAI& ai,
                         if (u.victim != dtk->guid) continue;
                         if (u.hp <= 0 || u.untargetable || u.is_pacified ||
                             u.no_xp_kill) continue;
+                        // Shield consult (final-review fix, 2026-07-03) — see resolve().
+                        if (ai.engage_shielded(u.guid, now_ms)) continue;
                         bool ign = false;
                         for (uint32_t ie : advice.ignore_entries)
                             if (ie == u.entry) { ign = true; break; }
@@ -6023,9 +6063,11 @@ bool DungeonDispatch(BotSnapshotView const& s, BotAI& ai,
                 // huge detour (or not at all) — one DPS shot locks the whole
                 // group into false combat the tank cannot resolve. Decline the
                 // pick (as if unresolved) so lower-priority rules can run, and
-                // shield the target briefly so the scan does not re-pick it
-                // every tick. The gate fails OPEN (uncomputed verdict never
-                // blocks a pull).
+                // shield the target — resolve() above now consults the shield
+                // too (final-review fix, 2026-07-03), so a gated candidate is
+                // re-probed at most once per 15s shield window instead of every
+                // tick. The gate fails OPEN (uncomputed verdict never blocks a
+                // pull).
                 if (Services::Config().pull_gate_enabled())
                 {
                     if (!pick.IsEmpty() && dtk->online && dtk->is_alive && dtk->map_id == s.map_id())
@@ -6122,11 +6164,20 @@ bool DungeonDispatch(BotSnapshotView const& s, BotAI& ai,
                                 if (ie == u.entry) { env_ignored = true; break; }
                             if (env_ignored) continue;
                         }
+                        // Shield consult (final-review fix, 2026-07-03): skip a
+                        // candidate this bot already gate-skipped and shielded via
+                        // note_engage() below, BEFORE the DungeonTankDetour probe —
+                        // otherwise this loop re-picks (and re-probes with a full
+                        // pathfind) the same target every tick until the shield
+                        // window lapses.
+                        if (ai.engage_shielded(u.guid, now_ms)) continue;
                         // Ranged-pull discipline (2026-07-02, SFK courtyard wedge):
                         // do NOT open fire on an enemy the TANK can only reach via a
                         // huge detour (or not at all) — one DPS shot locks the whole
                         // group into false combat the tank cannot resolve. Skip the
-                        // target and shield it briefly so the scan moves on; the gate
+                        // target and shield it — the check above now consults the
+                        // shield too, so a gated target is re-probed at most once
+                        // per 15s shield window instead of every tick. The gate
                         // fails OPEN (uncomputed verdict never blocks a pull).
                         if (Services::Config().pull_gate_enabled())
                         {

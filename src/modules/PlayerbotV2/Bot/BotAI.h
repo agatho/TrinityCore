@@ -841,6 +841,18 @@ public:
     uint32     last_engage_shield_ms() const { return last_engage_shield_ms_; }
     void       note_engage(ObjectGuid g, uint32 ms, uint32 shield_ms = 8000)
     { last_engage_target_ = g; last_engage_at_ms_ = ms; last_engage_shield_ms_ = shield_ms; }
+    // True while `g` is the most recently noted engage target AND its shield
+    // window has not yet lapsed. Final-review fix (2026-07-03): the dungeon
+    // pull-gate pick loops (idle:dungeon_focus_assist / idle:dungeon_dps_assist)
+    // called note_engage() on gate-skip but never consulted the shield
+    // themselves, so a gated candidate was re-picked — and re-probed with a
+    // full tank pathfind — every single tick instead of once per shield
+    // window. Callers MUST check this BEFORE probing/selecting a candidate.
+    bool       engage_shielded(ObjectGuid g, uint32 now_ms) const
+    {
+        return !g.IsEmpty() && g == last_engage_target_ &&
+               now_ms - last_engage_at_ms_ < last_engage_shield_ms_;
+    }
 
     // ---- dungeon route-waypoint follow cursor ----
     // The winding-corridor route follower (idle:dungeon_tank_advance_boss_route,
@@ -1075,6 +1087,14 @@ public:
     }
     void       combat_victim_latch_reset()
     { combat_victim_latch_ = ObjectGuid::Empty; combat_victim_latch_since_ms_ = 0; }
+
+    // ---- untankable-disengage probe cadence (final-review fix, 2026-07-03) ----
+    // dungeon:untankable_disengage's DungeonTankDetourExcessiveVerbose call is a
+    // full pathfind from the tank; once sustain>6s it was re-issued EVERY tick
+    // per non-tank bot until the verdict flipped (no cadence, unlike the other
+    // dungeon detour rules). Plain last-probe timestamp, touched on every probe.
+    uint32     untankable_probe_last_ms() const { return untankable_probe_last_ms_; }
+    void       touch_untankable_probe(uint32 now_ms) { untankable_probe_last_ms_ = now_ms; }
 
     // ---- combat:opener stall tracking ----
     // The opener runs the APL on an out-of-combat victim. Two failure
@@ -2810,6 +2830,8 @@ private:
     // In-combat victim acquisition latch (see combat_victim_since_ms).
     ObjectGuid     combat_victim_latch_;
     uint32         combat_victim_latch_since_ms_ = 0;
+    // Probe cadence for dungeon:untankable_disengage (see untankable_probe_last_ms).
+    uint32         untankable_probe_last_ms_ = 0;
     ObjectGuid     opener_victim_;
     uint32         opener_victim_since_ms_ = 0;
     uint32         opener_last_seen_ms_ = 0;
