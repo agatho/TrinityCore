@@ -1464,12 +1464,19 @@ bool DungeonCombatPositioning(BotSnapshotView const& s, BotAI& ai,
     // rule out of every REAL encounter, where the tank is always fighting
     // something.
     if (Services::Config().pull_gate_disengage_enabled() &&
-        s.is_in_dungeon() && s.in_combat() &&
-        ai.effective_role(s) != Role::Tank &&
-        !s.victim().IsEmpty() && g.exists())
+        s.is_in_dungeon() &&
+        ai.effective_role(s) != Role::Tank && g.exists())
     {
-        uint32 const vsince_ms = ai.combat_victim_since_ms(s.victim(), now_ms);
-        if (vsince_ms > 6000u)
+        // Latch maintenance runs on EVERY pass through here — in combat or
+        // not — feeding an EMPTY guid whenever there is no live in-combat
+        // victim. The empty-guid pass RE-ARMS the latch (guid-change branch),
+        // so ghost-combat / evade / combat-end windows clear it and a later
+        // re-aggro of the SAME mob starts a fresh 6s window instead of
+        // inheriting a stale since-timestamp and firing on the first tick of
+        // the re-engagement (review finding, 2026-07-02).
+        uint32 const vsince_ms = ai.combat_victim_since_ms(
+            s.in_combat() ? s.victim() : ObjectGuid::Empty, now_ms);
+        if (s.in_combat() && !s.victim().IsEmpty() && vsince_ms > 6000u)
         {
             if (GroupMemberSummary const* tk = g.tank())
                 if (tk->online && tk->is_alive && tk->guid != s.guid() &&
@@ -1489,6 +1496,13 @@ bool DungeonCombatPositioning(BotSnapshotView const& s, BotAI& ai,
                                                                   dv_ratio, dv_complete))
                             {
                                 emit.stop_attack();
+                                // Re-arm the sustain latch NOW: the snapshot's
+                                // victim stays set until the stop_attack lands,
+                                // and this rule's own disengage must not leave a
+                                // frozen since-timestamp that lets a post-shield
+                                // re-aggro of the same guid fire instantly
+                                // (review finding, 2026-07-02).
+                                ai.combat_victim_latch_reset();
                                 ai.note_engage(s.victim(), now_ms, 60000u);
                                 ai.set_last_rule_fired("dungeon:untankable_disengage");
                                 static uint32 s_pullgate_dbg_disengage_ms = 0;

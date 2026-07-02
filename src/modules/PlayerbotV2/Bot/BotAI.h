@@ -1003,6 +1003,14 @@ public:
     // to 0 the tick a NEW victim guid is first seen, then returns elapsed ms for
     // as long as the SAME guid persists. A target swap (old victim died / new
     // aggro) restarts the window honestly instead of reusing a stale timestamp.
+    // The latch only sees what its caller feeds it, so the disengage rule
+    // MAINTAINS it on every pass — passing ObjectGuid::Empty whenever there is
+    // no live in-combat victim (out of combat, ghost combat, evade, post-
+    // disengage) — which re-arms it through the guid-change branch below; the
+    // rule's own fire path also calls combat_victim_latch_reset() explicitly.
+    // Both paths exist so a post-shield RE-AGGRO of the SAME guid starts a
+    // fresh sustain window instead of inheriting the old since-timestamp and
+    // firing on the first tick of the re-engagement.
     uint32     combat_victim_since_ms(ObjectGuid victim, uint32 now_ms)
     {
         if (victim.IsEmpty() || victim != combat_victim_latch_)
