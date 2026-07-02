@@ -426,3 +426,21 @@ PlayerbotV2.Guilds.TargetCountPerFaction = 6
 
 # Soft cap on members per bot-founded guild.
 PlayerbotV2.Guilds.MaxMembersPerGuild = 75
+
+#-----------------------------------------------------------------------------
+# Ranged-pull discipline / tank detour commitment (SFK-wedge fixes)
+#-----------------------------------------------------------------------------
+
+# Gate pre-combat DPS assists on the tank's walk cost to the target
+# (path/beeline ratio). Diagnosed 2026-07-02: SFK courtyard = 139.7yd path
+# for a 20yd beeline, navmesh connected.
+PlayerbotV2.PullGate.Enabled            = 1
+PlayerbotV2.PullGate.MaxDetourRatio     = 3.0
+PlayerbotV2.PullGate.MinExtraYards      = 40
+# Drop a DPS's combat lock when the tank cannot cheaply reach its victim
+# and has no fight of its own (mob-initiated aggro variant).
+PlayerbotV2.PullGate.DisengageEnabled   = 1
+# Tank commits to a long-but-valid corridor instead of oscillating; gives
+# up loudly after this many ms and shields the target.
+PlayerbotV2.PullGate.TankCommitEnabled  = 1
+PlayerbotV2.PullGate.TankCommitMaxMs    = 45000
