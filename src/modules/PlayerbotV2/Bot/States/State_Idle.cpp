@@ -12,6 +12,7 @@
 #include "Bot/Battleground/BattlegroundScript.h"
 #include "Group/GroupSnapshot.h"
 #include "../Services.h"
+#include "Util/ConfigReader.h"  // full type for Services::Config() (detour pull-gate knobs)
 #include "Travel/QuestHubDatabase.h"
 #include "Travel/RepairVendorIndex.h"
 #include "Travel/UnifiedTravelGraph.h"
@@ -1054,6 +1055,12 @@ static bool DungeonTargetReachableAndStep(Player* self, float tx, float ty,
                                           G3D::Vector3& step_out,
                                           bool* step_is_offmesh = nullptr,
                                           bool allow_incomplete_progress = false);
+// Forward declaration: tank detour-ratio verdict (2026-07-02 SFK wedge, Task 1).
+// Read-only measurement helper — definition lives just after
+// DungeonTargetReachableAndStep, whose PathGenerator call shape it copies.
+struct DungeonDetourVerdict;
+static DungeonDetourVerdict DungeonTankDetour(Player* tank, float tx, float ty, float tz);
+static bool DungeonDetourExcessive(DungeonDetourVerdict const& v);
 // Forward declaration: rule (-1) at the top of DungeonCombatPositioning recovers
 // an off-mesh-stranded dungeon bot WHILE IN COMBAT (the idle DungeonDispatch nudge
 // can't run when the FSM has routed the bot to State_InCombat). Definition further
@@ -2762,6 +2769,65 @@ static bool DungeonTargetReachableAndStep(Player* self, float tx, float ty, floa
     step_out = e;
     gapLog("loop_end_e", e.x, e.y, e.z, false);
     return true;
+}
+
+// ── Tank detour verdict (2026-07-02) ────────────────────────────────────────
+// The SFK courtyard wedge: combat locks onto an enemy whose walk path for
+// the TANK is valid but enormous (139.7yd for a 20yd beeline, navmesh
+// connected — editor-probe verified). PathGenerator length vs beeline gives
+// a cheap "will the tank actually get there" verdict BEFORE the group
+// commits. Read-only helper; policy lives at the call sites.
+struct DungeonDetourVerdict
+{
+    bool  computed = false;
+    bool  complete = false;
+    float beeline  = 0.f;
+    float path_len = 0.f;
+    float ratio    = 0.f;
+};
+
+static DungeonDetourVerdict DungeonTankDetour(Player* tank,
+                                              float tx, float ty, float tz)
+{
+    DungeonDetourVerdict v;
+    if (!tank || !tank->IsInWorld())
+        return v;
+    // Same world-thread budget guard the wedge watchdog uses (and this
+    // file's own DungeonTargetReachableAndStep just above) — a path probe
+    // is comparatively costly and must not storm the tick.
+    if (!Playerbot::PathBudget::HasBudget(GameTime::GetGameTimeMS()))
+        return v;
+
+    float sx = tank->GetPositionX(), sy = tank->GetPositionY(), sz = tank->GetPositionZ();
+    float const dx = tx - sx, dy = ty - sy, dz = tz - sz;
+    v.beeline = std::sqrt(dx * dx + dy * dy + dz * dz);
+
+    PathGenerator pg(tank);
+    BotMovement::SehSafeCalculatePath(pg, tx, ty, tz);
+    PathType const pt = pg.GetPathType();
+    v.computed = true;
+    // "complete" mirrors DungeonTargetReachable's strictness: a NORMAL path
+    // that actually ends at the target (13y tolerance, same constant).
+    if (!(pt & (PATHFIND_NOPATH | PATHFIND_INCOMPLETE | PATHFIND_SHORTCUT | PATHFIND_FARFROMPOLY)))
+    {
+        G3D::Vector3 const end = pg.GetActualEndPosition();
+        float const ex = end.x - tx, ey = end.y - ty, ez = end.z - tz;
+        v.complete = (ex * ex + ey * ey + ez * ez) <= 13.0f * 13.0f;
+    }
+    v.path_len = pg.GetPathLength();
+    v.ratio    = v.path_len / std::max(v.beeline, 1.0f);
+    return v;
+}
+
+static bool DungeonDetourExcessive(DungeonDetourVerdict const& v)
+{
+    auto const& cfg = Services::Config();
+    if (!v.computed)
+        return false;              // unknown => never block (fail-open)
+    if (!v.complete)
+        return true;               // tank literally cannot arrive
+    return v.ratio    > cfg.pull_gate_max_ratio() &&
+           v.path_len - v.beeline > cfg.pull_gate_min_extra_yards();
 }
 
 // ── Off-mesh recovery for a stranded dungeon bot ──────────────────────────────
@@ -5647,6 +5713,28 @@ bool DungeonDispatch(BotSnapshotView const& s, BotAI& ai,
                         pick = u.guid; break;
                     }
                 }
+                // [detour] READ-ONLY stage (Task 1): measure, log, never block.
+                if (!pick.IsEmpty() && dtk->online && dtk->is_alive && dtk->map_id == s.map_id())
+                    if (Player* tkp = ObjectAccessor::FindConnectedPlayer(dtk->guid))
+                        for (auto const& u : s.raw().combat.nearby_enemies)
+                        {
+                            if (u.guid != pick) continue;
+                            DungeonDetourVerdict const dv =
+                                DungeonTankDetour(tkp, u.x, u.y, u.z);
+                            static uint32 s_detour_dbg_focus_ms = 0;
+                            uint32 const dnow = s.published_at_ms();
+                            if (dv.computed && dnow - s_detour_dbg_focus_ms > 1500u)
+                            {
+                                s_detour_dbg_focus_ms = dnow;
+                                TC_LOG_INFO("playerbot.v2",
+                                    "[detour] rule=focus_assist bot={} target={} beeline={:.1f} "
+                                    "path={:.1f} ratio={:.2f} complete={} excessive={}",
+                                    s.name(), pick.ToString(), dv.beeline, dv.path_len,
+                                    dv.ratio, dv.complete ? 1 : 0,
+                                    DungeonDetourExcessive(dv) ? 1 : 0);
+                            }
+                            break;
+                        }
                 if (!pick.IsEmpty() && emit.start_attack(pick))
                 {
                     ai.note_engage(pick, now_ms);
@@ -5689,6 +5777,26 @@ bool DungeonDispatch(BotSnapshotView const& s, BotAI& ai,
                                 if (ie == u.entry) { env_ignored = true; break; }
                             if (env_ignored) continue;
                         }
+                        // [detour] READ-ONLY stage (Task 1): measure, log, never block.
+                        if (GroupMemberSummary const* tk2 = g.tank())
+                            if (tk2->online && tk2->is_alive && tk2->map_id == s.map_id())
+                                if (Player* tkp = ObjectAccessor::FindConnectedPlayer(tk2->guid))
+                                {
+                                    DungeonDetourVerdict const dv =
+                                        DungeonTankDetour(tkp, u.x, u.y, u.z);
+                                    static uint32 s_detour_dbg_dps_ms = 0;
+                                    uint32 const dnow = s.published_at_ms();
+                                    if (dv.computed && dnow - s_detour_dbg_dps_ms > 1500u)
+                                    {
+                                        s_detour_dbg_dps_ms = dnow;
+                                        TC_LOG_INFO("playerbot.v2",
+                                            "[detour] rule=dps_assist bot={} target={} beeline={:.1f} "
+                                            "path={:.1f} ratio={:.2f} complete={} excessive={}",
+                                            s.name(), u.guid.ToString(), dv.beeline, dv.path_len,
+                                            dv.ratio, dv.complete ? 1 : 0,
+                                            DungeonDetourExcessive(dv) ? 1 : 0);
+                                    }
+                                }
                         if (!emit.start_attack(u.guid)) return true;
                         ai.note_engage(u.guid, now_ms);
                         ai.set_last_rule_fired("idle:dungeon_dps_assist");

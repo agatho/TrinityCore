@@ -223,6 +223,11 @@ public:
     uint32 alert_path_fail_per_min()  const { return alert_path_fail_per_min_; }
     uint32 alert_throttle_ms()        const { return alert_throttle_ms_; }
 
+    // ── Ranged-pull discipline / tank detour gate (2026-07-02 SFK wedge) ──
+    bool  pull_gate_enabled()          const { return pull_gate_enabled_; }
+    float pull_gate_max_ratio()        const { return pull_gate_max_ratio_; }
+    float pull_gate_min_extra_yards()  const { return pull_gate_min_extra_yards_; }
+
 private:
     void apply_from_loaded_config();
     std::string file_path_;
@@ -284,6 +289,10 @@ private:
     uint32 alert_intent_drop_per_min_ = 600;      // ~10/sec sustained
     uint32 alert_path_fail_per_min_   = 300;
     uint32 alert_throttle_ms_         = 300000;   // 5 min
+
+    bool  pull_gate_enabled_         = true;
+    float pull_gate_max_ratio_       = 3.0f;
+    float pull_gate_min_extra_yards_ = 40.0f;
 };
 
 } // namespace Playerbot

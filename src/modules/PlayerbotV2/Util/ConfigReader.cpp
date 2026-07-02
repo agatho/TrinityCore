@@ -125,6 +125,10 @@ void ConfigReader::apply_from_loaded_config()
     alert_intent_drop_per_min_ = static_cast<uint32>(c.GetIntDefault("PlayerbotV2.Alert.IntentDropPerMin",  600));
     alert_path_fail_per_min_   = static_cast<uint32>(c.GetIntDefault("PlayerbotV2.Alert.PathFailPerMin",     300));
     alert_throttle_ms_         = static_cast<uint32>(c.GetIntDefault("PlayerbotV2.Alert.ThrottleMs",         300000));
+
+    pull_gate_enabled_         = c.GetBoolDefault("PlayerbotV2.PullGate.Enabled",       true);
+    pull_gate_max_ratio_       = float(c.GetFloatDefault("PlayerbotV2.PullGate.MaxDetourRatio", 3.0f));
+    pull_gate_min_extra_yards_ = float(c.GetFloatDefault("PlayerbotV2.PullGate.MinExtraYards",  40.0f));
 }
 
 } // namespace Playerbot
