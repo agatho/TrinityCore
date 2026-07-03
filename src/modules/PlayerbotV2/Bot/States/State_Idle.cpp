@@ -3239,7 +3239,8 @@ static bool DungeonTargetReachable(Player* self, float tx, float ty, float tz)
 // Fires only through call sites that handle step_is_offmesh (they own the
 // cross-commit contract); a per-(bot,link) cooldown prevents ping-ponging
 // across a bidirectional link when the target is unreachable from both sides.
-static bool DungeonNavLinkHop(Player* self, G3D::Vector3& step_out, bool* step_is_offmesh)
+static bool DungeonNavLinkHop(Player* self, G3D::Vector3& step_out, bool* step_is_offmesh,
+                               char const* reason = "unspecified")
 {
     if (!step_is_offmesh || !Playerbot::Services::Initialized()) return false;
     auto links_tbl = Playerbot::Services::Dungeons().GetNavLinks();
@@ -3270,8 +3271,8 @@ static bool DungeonNavLinkHop(Player* self, G3D::Vector3& step_out, bool* step_i
             step_out = G3D::Vector3(ends[d].ox, ends[d].oy, ends[d].oz);
             *step_is_offmesh = true;
             TC_LOG_INFO("playerbot.v2",
-                "[nav_link] {} hop link {} ({:.1f},{:.1f},{:.1f})->({:.1f},{:.1f},{:.1f})",
-                self->GetName(), l.id, ends[d].x, ends[d].y, ends[d].z,
+                "[nav_link] {} hop link {} reason={} ({:.1f},{:.1f},{:.1f})->({:.1f},{:.1f},{:.1f})",
+                self->GetName(), l.id, reason, ends[d].x, ends[d].y, ends[d].z,
                 ends[d].ox, ends[d].oy, ends[d].oz);
             return true;
         }
@@ -3300,6 +3301,23 @@ static bool DungeonNavLinkMouthNear(uint32 map_id, G3D::Vector3 const& p)
         }
     }
     return false;
+}
+
+// SELF-IN-MOUTH — is the BOT ITSELF (not a path endpoint) inside a link
+// mouth right now? Same radius test as DungeonNavLinkMouthNear (in fact just
+// that check against the bot's own position), used to disambiguate WHY a
+// DungeonNavLinkHop attempt just declined: if self is in a mouth, the only
+// remaining decline reason is the per-(bot,link) cooldown (TryClaimLinkHop,
+// DungeonScript.cpp) — never "no link here". Callers use that distinction to
+// avoid emitting a fighting lip-step while a just-claimed crossing's cooldown
+// is still ticking (the pending DungeonHonorCross episode is what actually
+// carries the bot across; see DungeonTargetReachableAndStep's NORMAL
+// far-end branch).
+static bool DungeonNavLinkSelfInMouth(Player* self)
+{
+    if (!self) return false;
+    return DungeonNavLinkMouthNear(self->GetMapId(),
+        G3D::Vector3(self->GetPositionX(), self->GetPositionY(), self->GetPositionZ()));
 }
 
 static bool DungeonTargetReachableAndStep(Player* self, float tx, float ty, float tz,
@@ -3347,7 +3365,7 @@ static bool DungeonTargetReachableAndStep(Player* self, float tx, float ty, floa
     {
         // Standing at a DB traversal-link mouth with no on-mesh path to the
         // target: hop (commit the direct crossing). Otherwise reject as before.
-        if (DungeonNavLinkHop(self, step_out, step_is_offmesh))
+        if (DungeonNavLinkHop(self, step_out, step_is_offmesh, "nopath"))
         { gapLog("navlink_hop", step_out.x, step_out.y, step_out.z, true); return true; }
         gapLog("reject_nopath", 0, 0, 0, false);
         return false;
@@ -3356,6 +3374,17 @@ static bool DungeonTargetReachableAndStep(Player* self, float tx, float ty, floa
     {
         if (t & PATHFIND_INCOMPLETE)
         {
+            // A steep-drop split legitimately truncates the on-mesh path to
+            // PATHFIND_INCOMPLETE (a short/degenerate remainder past the
+            // ledge) — exactly the geometry a DB traversal link exists to
+            // bridge. Hop before rejecting, same commit contract as the
+            // NOPATH branch above; the link facility was previously dead
+            // here because INCOMPLETE short-circuited to reject first.
+            if (DungeonNavLinkHop(self, step_out, step_is_offmesh, "incomplete"))
+            {
+                gapLog("navlink_hop_incomplete", step_out.x, step_out.y, step_out.z, true);
+                return true;
+            }
             gapLog("reject_incomplete", 0, 0, 0, false);
             return false;
         }
@@ -3379,8 +3408,26 @@ static bool DungeonTargetReachableAndStep(Player* self, float tx, float ty, floa
                 // At a link mouth already -> hop. Path dead-ends AT a link
                 // mouth -> the link is the authored way onward: accept the
                 // path and walk to the mouth (hop fires when we arrive).
-                if (DungeonNavLinkHop(self, step_out, step_is_offmesh))
+                if (DungeonNavLinkHop(self, step_out, step_is_offmesh, "normal_far"))
                 { gapLog("navlink_hop", step_out.x, step_out.y, step_out.z, true); return true; }
+                // Hop declined while self stands IN a mouth: the only way
+                // DungeonNavLinkHop can decline there is the per-(bot,link)
+                // cooldown (TryClaimLinkHop) still pending from a just-
+                // claimed crossing — never "no link here" (that already
+                // requires being in-radius). Do NOT fall through to the lip
+                // step below: DungeonHonorCross (priority -2, runs before
+                // any rule reaches this stepper) is already driving that
+                // claimed crossing to completion, and a truncated ~2y lip
+                // step here would fight its spline and orbit the mouth for
+                // the 15s cooldown window (the live WC ledge oscillation).
+                // Reject; the caller retries next tick, by which point the
+                // cross has either landed (path now reads NORMAL/near) or
+                // the cooldown has cleared for a fresh hop attempt.
+                if (DungeonNavLinkSelfInMouth(self))
+                {
+                    gapLog("navlink_cooldown_wait", 0, 0, 0, false);
+                    return false;
+                }
                 if (!DungeonNavLinkMouthNear(self->GetMapId(), e))
                     return false;
             }
@@ -3402,7 +3449,7 @@ static bool DungeonTargetReachableAndStep(Player* self, float tx, float ty, floa
                 // Same link rescue as the strict branch: hop at the mouth, or
                 // accept a no-net-progress path that DEAD-ENDS at a link mouth
                 // (walking to the mouth IS the progress the gate can't see).
-                if (DungeonNavLinkHop(self, step_out, step_is_offmesh))
+                if (DungeonNavLinkHop(self, step_out, step_is_offmesh, "progress_far"))
                 { gapLog("navlink_hop", step_out.x, step_out.y, step_out.z, true); return true; }
                 if (!DungeonNavLinkMouthNear(self->GetMapId(), e))
                     return false;
@@ -5664,6 +5711,14 @@ bool DungeonDispatch(BotSnapshotView const& s, BotAI& ai,
                                 bool        wp_found = false;
                                 int         route_cur = -1;  // crumb committed this tick
                                 G3D::Vector3 best_wp_step;
+                                // Off-mesh flag for the committed-cursor steer below (the
+                                // ONLY route-rule call site wired to step_is_offmesh — see
+                                // its call site for why): lets the route follower commit a
+                                // DB nav-link crossing exactly like rule (0)'s pb_off does,
+                                // instead of silently defaulting to nullptr and never
+                                // being able to hop (the cursor OWNER could never cross the
+                                // WC ledge link before this).
+                                bool         rw_off = false;
                                 const int   route_n =
                                     static_cast<int>(advice.route_waypoints.size());
                                 // Monotonic high-water floor: the chain progress already
@@ -5842,7 +5897,8 @@ bool DungeonDispatch(BotSnapshotView const& s, BotAI& ai,
                                         auto const& rw = advice.route_waypoints[cur];
                                         G3D::Vector3 wstep;
                                         if (DungeonTargetReachableAndStep(
-                                                self_be, rw.x, rw.y, rw.z, route_step, wstep))
+                                                self_be, rw.x, rw.y, rw.z, route_step, wstep,
+                                                &rw_off))
                                         {
                                             best_wp_step = wstep;
                                             route_cur    = cur;
@@ -5882,6 +5938,18 @@ bool DungeonDispatch(BotSnapshotView const& s, BotAI& ai,
                                         s.map_id());
                                 if (wp_found)
                                 {
+                                    // Commit a DB nav-link crossing exactly like rule (0)'s
+                                    // pb_off handling (idle:dungeon_combat_advance_boss):
+                                    // the values here already equal what DungeonNavLinkHop
+                                    // set internally on the far endpoint when the step came
+                                    // from a hop, so this is a same-value refresh of the TTL
+                                    // (harmless) — it only matters (and is required) when
+                                    // rw_off came from the plain off-mesh-jump detection
+                                    // further down the stepper, which does not itself touch
+                                    // dungeon_cross.
+                                    if (rw_off)
+                                        ai.set_dungeon_cross(best_wp_step.x, best_wp_step.y,
+                                                             best_wp_step.z, now_ms + 12000);
                                     static uint32 s_route_dbg_ms = 0;
                                     if (now_ms - s_route_dbg_ms > 1500u)
                                     {
