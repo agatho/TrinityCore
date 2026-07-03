@@ -135,6 +135,8 @@ void ConfigReader::apply_from_loaded_config()
         c.GetIntDefault("PlayerbotV2.PullGate.TankCommitMaxMs", 45000));
 
     move_step_hold_enabled_ = c.GetBoolDefault("PlayerbotV2.Move.StepHoldEnabled", true);
+    route_aware_combat_advance_ = c.GetBoolDefault(
+        "PlayerbotV2.Move.RouteAwareCombatAdvance", true);
 }
 
 } // namespace Playerbot

@@ -251,6 +251,16 @@ public:
     //   (PlayerbotV2.Move.StepHoldEnabled)
     bool move_step_hold_enabled() const { return move_step_hold_enabled_; }
 
+    // Route-aware in-combat advance (2026-07-03, increment 1b): when a
+    // dungeon has route_waypoints and the OOC route cursor is armed for the
+    // current map, the in-combat boss-advance family (rules (0)/(0c) in
+    // DungeonCombatPositioning) steps toward the SAME route crumb instead of
+    // computing its own direct-to-boss step — fixes the WC crumb-14 wedge
+    // where the two step sources diverged and alternately re-aimed the
+    // spline forever. Kill switch for diagnosing without recompiling.
+    //   (PlayerbotV2.Move.RouteAwareCombatAdvance)
+    bool route_aware_combat_advance() const { return route_aware_combat_advance_; }
+
 private:
     void apply_from_loaded_config();
     std::string file_path_;
@@ -320,6 +330,7 @@ private:
     bool   tank_commit_enabled_  = true;
     uint32 tank_commit_max_ms_   = 45000;
     bool   move_step_hold_enabled_ = true;
+    bool   route_aware_combat_advance_ = true;
 };
 
 } // namespace Playerbot

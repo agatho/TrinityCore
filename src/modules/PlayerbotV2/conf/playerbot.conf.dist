@@ -453,3 +453,11 @@ PlayerbotV2.PullGate.TankCommitMaxMs    = 45000
 # toward ~that step is already in flight — re-issuing restarts the spline and
 # caused the WC/SFK stutter-in-place stalls (2026-07-03).
 PlayerbotV2.Move.StepHoldEnabled        = 1
+
+# One step source for the in-combat boss-advance family: when the dungeon has
+# route_waypoints and the OOC route cursor is armed for the current map, step
+# toward the SAME route crumb the route follower owns instead of computing a
+# separate direct-to-boss step. Fixes the WC crumb-14 wedge where the two step
+# sources diverged and alternately re-aimed the movement spline forever
+# (2026-07-03).
+PlayerbotV2.Move.RouteAwareCombatAdvance = 1

@@ -1137,6 +1137,67 @@ static void DungeonStepHoldDiag(BotSnapshotView const& s, char const* rule_tag,
     }
 }
 
+// Increment 1b (2026-07-03): ONE step source for the in-combat boss-advance
+// family. Rule (0) idle:dungeon_combat_advance_boss and (0c) the ghost-wedge/
+// harbor fighting-advance each used to compute their own DIRECT step toward
+// the boss's raw position, while idle:dungeon_tank_advance_boss_route (the
+// OOC route follower) strides toward the current route crumb — on a map with
+// route waypoints those two destinations genuinely differ (that's WHY the
+// route exists: the direct line crosses a navmesh pocket), so the two rule
+// families alternately emit and re-aim the spline forever (live-evidenced WC
+// crumb-14 wedge, 2026-07-03: route rule at (20.7,406.6) vs combat_advance's
+// direct (-14.8,395.1), 35y apart, permanent tank combat-flicker). Fix: when
+// the map has route waypoints and the cursor is armed, step toward the SAME
+// crumb the route rule owns instead of the boss. The cursor is owned by
+// idle:dungeon_tank_advance_boss_route (selection, monotonic commit,
+// leapfrog) — this is READ-ONLY and never arms/advances it.
+// Substitutes ONLY the walk TARGET passed to DungeonTargetReachableAndStep.
+// Callers must keep using bossX/Y/Z (unchanged) for engage-range / LoS / pull
+// checks — proximity-to-boss logic must never see the crumb, only the step
+// does; conflating the two would let a far crumb falsely arm/disarm a pull.
+// Falls back to the boss (tx/ty/tz = bossX/Y/Z, no diag) when: the kill
+// switch PlayerbotV2.Move.RouteAwareCombatAdvance is off, the dungeon has no
+// route_waypoints, the cursor is unarmed or stale for THIS map (cur<0 or
+// out of range — dungeon_route_wp() is map-bound and already clamps that),
+// or the crumb is already reached (<8y — kRouteArrive, same constant as the
+// route follower): that just means the idle route rule hasn't advanced the
+// cursor yet this tick, and stepping toward an already-reached crumb would
+// orbit it instead of continuing to press the boss.
+static void DungeonAdvanceTarget(BotSnapshotView const& s, BotAI& ai,
+                                 DungeonAdvice const& advice,
+                                 float bossX, float bossY, float bossZ,
+                                 float& tx, float& ty, float& tz,
+                                 char const* rule_tag)
+{
+    tx = bossX; ty = bossY; tz = bossZ;
+    if (!Services::Config().route_aware_combat_advance()) return;
+    if (advice.route_waypoints.empty()) return;
+    int const cur = ai.dungeon_route_wp(s.map_id());
+    if (cur < 0 || cur >= int(advice.route_waypoints.size())) return;
+    auto const& wp = advice.route_waypoints[size_t(cur)];
+    float bx2, by2, bz2; s.position(bx2, by2, bz2);
+    constexpr float kRouteArrive = 8.0f;   // matches the route follower
+    const float dx = wp.x - bx2, dy = wp.y - by2, dz = wp.z - bz2;
+    if (dx * dx + dy * dy + dz * dz < kRouteArrive * kRouteArrive) return;
+    tx = wp.x; ty = wp.y; tz = wp.z;
+
+    // Throttled [adv_route] diag — ONE log site, fires only while the
+    // substitution is actually active, so live forensics can grep it to
+    // confirm both rule families are now aiming at the same crumb.
+    static uint32 s_adv_route_dbg_ms = 0;
+    const uint32 now = GameTime::GetGameTimeMS();
+    if (now - s_adv_route_dbg_ms > 1500u)
+    {
+        s_adv_route_dbg_ms = now;
+        const float bdx = bossX - bx2, bdy = bossY - by2, bdz = bossZ - bz2;
+        TC_LOG_INFO("playerbot.v2",
+            "[adv_route] bot={} rule={} cur=({:.1f},{:.1f},{:.1f}) "
+            "crumb=({:.1f},{:.1f},{:.1f}) idx={} boss_d={:.1f}",
+            s.bot_id(), rule_tag, bx2, by2, bz2, wp.x, wp.y, wp.z, cur,
+            std::sqrt(bdx * bdx + bdy * bdy + bdz * bdz));
+    }
+}
+
 // Shared (declared in MaintainHelpers.h). Honor an active off-mesh crossing
 // commitment in ANY state and REFRESH its TTL so a combat-contested crossing can
 // neither be interrupted nor expire mid-jump. See the header for the full failure
@@ -1757,7 +1818,16 @@ bool DungeonCombatPositioning(BotSnapshotView const& s, BotAI& ai,
                     // at run speed toward this waypoint and is re-issued each tick, so
                     // a small waypoint paces the push without slowing the actual walk.
                     constexpr float kPbStep = 18.0f;
-                    if (DungeonTargetReachableAndStep(self_pb, pbx, pby, pbz,
+                    // Increment 1b: step toward the route crumb (when armed)
+                    // instead of the raw boss position — see DungeonAdvanceTarget.
+                    // bd2/kPbEngageR2 above (the pull/advance branch choice) and
+                    // the LoS check both already ran against pbx/pby/pbz and are
+                    // untouched; only this walk target substitutes.
+                    float pbx_t, pby_t, pbz_t;
+                    DungeonAdvanceTarget(s, ai, advice, pbx, pby, pbz,
+                                        pbx_t, pby_t, pbz_t,
+                                        "idle:dungeon_combat_advance_boss");
+                    if (DungeonTargetReachableAndStep(self_pb, pbx_t, pby_t, pbz_t,
                                                       kPbStep, pstep, &pb_off))
                     {
                         if (pb_off)
@@ -2050,9 +2120,22 @@ bool DungeonCombatPositioning(BotSnapshotView const& s, BotAI& ai,
                         // Incremental off-mesh-aware progress step (idle navigator's
                         // far-boss tier). The net-progress gate inside the helper
                         // keeps this INERT at a true navmesh disconnect.
+                        // Increment 1b: step toward the armed route crumb instead
+                        // of the raw boss position (see DungeonAdvanceTarget) — the
+                        // harbor_hold / healer-leash / segmentation gates above and
+                        // the wboss lookup itself are all still boss-position-based
+                        // and untouched; only this walk target substitutes. The
+                        // off-mesh NearestNavPoint fallback further below keeps
+                        // targeting the raw boss deck (wbx/wby/wbz) unchanged — it
+                        // is recovering from a boss-side navmesh disconnect, a
+                        // different concern from the route crumb.
                         G3D::Vector3 wstep;
                         bool w_off = false;
-                        if (DungeonTargetReachableAndStep(self_w, wbx, wby, wbz,
+                        float wbx_t, wby_t, wbz_t;
+                        DungeonAdvanceTarget(s, ai, advice, wbx, wby, wbz,
+                                            wbx_t, wby_t, wbz_t,
+                                            "idle:dungeon_combat_wedge_advance");
+                        if (DungeonTargetReachableAndStep(self_w, wbx_t, wby_t, wbz_t,
                                 wedgeStep, wstep, &w_off,
                                 /*allow_incomplete_progress=*/true))
                         {
