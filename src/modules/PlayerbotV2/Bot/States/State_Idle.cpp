@@ -1096,6 +1096,7 @@ bool DungeonStepTowardTank(ObjectGuid self_guid, float tx, float ty, float tz,
     ox = step.x; oy = step.y; oz = step.z; is_offmesh = off;
     return true;
 }
+
 // OOC dungeon step-hold (2026-07-03 WC/SFK stutter fix). True when the bot's
 // LIVE spline (snapshot path_end, populated for POINT motion) is already
 // heading within kStepReplanRange (3y) of (tx,ty,tz) AND the bot is moving.
@@ -1118,6 +1119,7 @@ static bool DungeonStepAlreadyInFlight(BotSnapshotView const& s,
     constexpr float kStepReplanRange = 3.0f;   // melee-guard tolerance
     return (dx * dx + dy * dy + dz * dz) < kStepReplanRange * kStepReplanRange;
 }
+
 // Throttled [step_hold] diag — ONE log site for the whole step-hold family
 // (2026-07-03) so forensics can grep a single tag instead of chasing
 // per-site duplicates; rule_tag identifies which OOC emit site held.
@@ -1134,6 +1136,7 @@ static void DungeonStepHoldDiag(BotSnapshotView const& s, char const* rule_tag,
             s.bot_id(), rule_tag, tx, ty, tz);
     }
 }
+
 // Shared (declared in MaintainHelpers.h). Honor an active off-mesh crossing
 // commitment in ANY state and REFRESH its TTL so a combat-contested crossing can
 // neither be interrupted nor expire mid-jump. See the header for the full failure
@@ -1755,12 +1758,14 @@ bool DungeonCombatPositioning(BotSnapshotView const& s, BotAI& ai,
                                                  now_ms + 12000);
                         if (DungeonStepAlreadyInFlight(s, pstep.x, pstep.y, pstep.z))
                         {
+                            // in-flight: skip the re-emit (spline keeps running)
+                            // and FALL THROUGH like the emitter-dedup false path
+                            // always did — lower rules (e.g. the ghost-combat
+                            // break) must keep their tick access mid-walk.
                             DungeonStepHoldDiag(s, "idle:dungeon_combat_advance_boss",
                                                 pstep.x, pstep.y, pstep.z);
-                            ai.set_last_rule_fired("idle:dungeon_combat_advance_boss_hold");
-                            return true;
                         }
-                        if (emit.move_to(pstep.x, pstep.y, pstep.z, /*run=*/true))
+                        else if (emit.move_to(pstep.x, pstep.y, pstep.z, /*run=*/true))
                         {
                             ai.set_last_rule_fired("idle:dungeon_combat_advance_boss");
                             return true;
@@ -5214,12 +5219,15 @@ bool DungeonDispatch(BotSnapshotView const& s, BotAI& ai,
                                 const float lshz = bz_adv;
                                 if (DungeonStepAlreadyInFlight(s, lshx, lshy, lshz))
                                 {
+                                    // in-flight: skip the re-emit (spline keeps
+                                    // running) and FALL THROUGH like the
+                                    // emitter-dedup false path always did —
+                                    // lower rules (e.g. the ghost-combat break)
+                                    // must keep their tick access mid-walk.
                                     DungeonStepHoldDiag(s, "idle:dungeon_tank_advance_boss",
                                                         lshx, lshy, lshz);
-                                    ai.set_last_rule_fired("idle:dungeon_tank_advance_boss_hold");
-                                    return true;
                                 }
-                                if (emit.move_to(lshx, lshy, lshz, /*run=*/true))
+                                else if (emit.move_to(lshx, lshy, lshz, /*run=*/true))
                                 {
                                     ai.set_last_rule_fired("idle:dungeon_tank_advance_boss");
                                     return true;
