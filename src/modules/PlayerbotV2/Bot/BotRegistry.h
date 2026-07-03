@@ -27,6 +27,11 @@ struct IntentHistoryEntry
     uint32 ts_ms      = 0;   // GameTime::GetGameTimeMS at execution
     uint32 intent_kind = 0;  // IntentBody variant index (see Intent.h)
     uint8  result     = 0;   // PlayerbotAPI::Result (Ok=0, NotReady=1, …)
+    // Destination for MoveToIntent (0,0,0 otherwise) — /diag prints it so
+    // alternating-target loops are visible verbatim (an Ok-per-150ms stream
+    // is ambiguous without the coords: the API's goal-key dedup also
+    // returns Ok without re-issuing).
+    float  x = 0.0f, y = 0.0f, z = 0.0f;
 };
 
 inline constexpr size_t kIntentHistoryCap = 32;
@@ -83,7 +88,8 @@ public:
     // isn't registered. Called from the world-thread intent executor right
     // after std::visit produces a Result.
     void record_intent_history(BotId id, uint32 ts_ms,
-                               uint32 intent_kind, uint8 result);
+                               uint32 intent_kind, uint8 result,
+                               float x = 0.0f, float y = 0.0f, float z = 0.0f);
     // Walk the per-bot intent history oldest-to-newest. fn takes
     // (size_t i, IntentHistoryEntry const&). Empty / unregistered → no-op.
     template <class F>

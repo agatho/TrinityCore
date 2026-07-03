@@ -86,7 +86,8 @@ size_t BotRegistry::size() const
 }
 
 void BotRegistry::record_intent_history(BotId id, uint32 ts_ms,
-                                        uint32 intent_kind, uint8 result)
+                                        uint32 intent_kind, uint8 result,
+                                        float x, float y, float z)
 {
     std::shared_lock lk(mtx_);
     auto it = entries_.find(id);
@@ -94,7 +95,7 @@ void BotRegistry::record_intent_history(BotId id, uint32 ts_ms,
     auto& e = it->second;
     std::lock_guard hl(e.intent_history_mtx);
     e.intent_history[e.intent_history_head] =
-        IntentHistoryEntry{ts_ms, intent_kind, result};
+        IntentHistoryEntry{ts_ms, intent_kind, result, x, y, z};
     e.intent_history_head = (e.intent_history_head + 1) % kIntentHistoryCap;
     if (e.intent_history_size < kIntentHistoryCap) ++e.intent_history_size;
     assert(e.intent_history_size <= kIntentHistoryCap);

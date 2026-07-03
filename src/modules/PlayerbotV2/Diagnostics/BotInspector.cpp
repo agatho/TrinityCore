@@ -1228,9 +1228,14 @@ std::string DiagBot(BotId id)
         [&](size_t /*i*/, IntentHistoryEntry const& e)
         {
             const uint32 ago = (e.ts_ms <= now_ms) ? (now_ms - e.ts_ms) : 0u;
-            out += fmt::format("  -{}ms | {} | {}\n",
-                               ago, IntentKindName(e.intent_kind),
-                               ResultName(e.result));
+            if (e.x != 0.0f || e.y != 0.0f || e.z != 0.0f)
+                out += fmt::format("  -{}ms | {} | {} | ({:.1f},{:.1f},{:.1f})\n",
+                                   ago, IntentKindName(e.intent_kind),
+                                   ResultName(e.result), e.x, e.y, e.z);
+            else
+                out += fmt::format("  -{}ms | {} | {}\n",
+                                   ago, IntentKindName(e.intent_kind),
+                                   ResultName(e.result));
             ++shown_intents;
         });
     if (shown_intents == 0) out += "  (no intents executed)\n";

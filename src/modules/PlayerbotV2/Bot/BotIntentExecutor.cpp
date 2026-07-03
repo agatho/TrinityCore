@@ -681,10 +681,18 @@ size_t V2::Module::DrainIntents()
                 // Per-bot diagnostic ring. Recorded AFTER the API call so the
                 // captured Result reflects what actually happened, not what
                 // the AI worker hoped would happen. Used by /diag <bot>.
+                // MoveTo destinations are captured so alternating-target
+                // loops show verbatim in /diag — an Ok-per-tick stream is
+                // ambiguous without them (the API's goal-key dedup also
+                // returns Ok without re-issuing the spline).
+                float ihx = 0.0f, ihy = 0.0f, ihz = 0.0f;
+                if (auto const* mv = std::get_if<MoveToIntent>(&intent.body))
+                { ihx = mv->x; ihy = mv->y; ihz = mv->z; }
                 reg.record_intent_history(id,
                                           GameTime::GetGameTimeMS(),
                                           static_cast<uint32>(intent.body.index()),
-                                          static_cast<uint8>(r));
+                                          static_cast<uint8>(r),
+                                          ihx, ihy, ihz);
             }
             catch (...)
             {
