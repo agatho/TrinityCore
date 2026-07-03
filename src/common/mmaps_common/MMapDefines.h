@@ -20,6 +20,7 @@
 
 #include "Define.h"
 #include <DetourNavMesh.h>
+#include <atomic>
 #include <unordered_set>
 
 inline uint32 constexpr MMAP_MAGIC = 0x4d4d4150; // 'MMAP'
@@ -152,6 +153,26 @@ struct MmapGenTuning
     // the concurrent tile workers only ever read it. buildMoveMapTile consults it
     // to switch such maps from Layers to Monotone.
     std::unordered_set<uint32> instanceMaps;
+
+    // Handcrafted-only road tagging (audit 2026-07-03). The texture-based road
+    // auto-detector (per-MCNK ADT roadMask + WMO-sidecar solidTriRoadFlags,
+    // both populated by TerrainBuilder) tags stone-textured mountains as roads:
+    // it is a bare substring match against the texture filename with no slope
+    // gate, and the vegetation gate meant to guard it is inert in production.
+    // Curated sources — the handcrafted_road runtime overlay and the
+    // RoadOverrides CSV baked in via TileBuilder — are therefore the ONLY road
+    // sources by default. textureRoads is OFF unless the operator passes
+    // --textureRoads on the mmaps_generator CLI (set once in PathGenerator.cpp
+    // before any tile is queued, same as partitionExplicit above); TileBuilder
+    // gates its two texture-consumption sites on this flag, opt-in for
+    // experiments only.
+    bool textureRoads = false;
+    // Set (relaxed, best-effort) by TileBuilder worker threads when texture-
+    // derived road input was present on a tile but ignored because
+    // textureRoads is off. Read once at the end of the generator run
+    // (PathGenerator.cpp main()) to print a single summary line instead of
+    // spamming per-tile.
+    std::atomic<bool> textureRoadsIgnoredSeen{false};
 };
 
 // Definition lives in TileBuilder.cpp (generator-only TU). Unreferenced in the

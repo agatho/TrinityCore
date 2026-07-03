@@ -307,7 +307,13 @@ namespace MMAP
                 // Triangles without a road flag keep whatever
                 // ClearUnwalkable / MarkWalkable assigned (GROUND, STEEP,
                 // or RC_NULL_AREA for too-steep).
-                if (!meshData.solidTriRoadFlags.empty())
+                //
+                // Texture detector tags stone-textured mountains as roads —
+                // curated handcrafted_road/RoadOverrides are the road
+                // sources; audit 2026-07-03. This WMO-sidecar signal is
+                // texture-classifier derived, so only consume it under
+                // --textureRoads (default off).
+                if (g_mmapGenTuning.textureRoads && !meshData.solidTriRoadFlags.empty())
                 {
                     int promoted = 0;
                     int limit = std::min<int>(tTriCount, static_cast<int>(meshData.solidTriRoadFlags.size()));
@@ -322,6 +328,12 @@ namespace MMAP
                     }
                     if (promoted > 0)
                         meshData.hasRoadMask = true; // signal post-pass to run
+                }
+                else if (!meshData.solidTriRoadFlags.empty())
+                {
+                    // Present on disk but ignored by policy — flagged for the
+                    // one-line-per-run summary in PathGenerator.cpp.
+                    g_mmapGenTuning.textureRoadsIgnoredSeen.store(true, std::memory_order_relaxed);
                 }
 
                 rcRasterizeTriangles(&m_rcContext, tVerts, tVertCount, tTris, triFlags.get(), tTriCount, *tile.solid, config.walkableClimb);
@@ -530,6 +542,13 @@ namespace MMAP
 
         if (meshData.hasRoadMask || !tile_overrides.empty())
         {
+            // Texture-derived ADT road mask present but policy says ignore it
+            // (see g_mmapGenTuning.textureRoads comment in MMapDefines.h) —
+            // flag once per tile for the one-line-per-run summary rather than
+            // spamming per-poly below.
+            if (meshData.hasRoadMask && !g_mmapGenTuning.textureRoads)
+                g_mmapGenTuning.textureRoadsIgnoredSeen.store(true, std::memory_order_relaxed);
+
             int const nvp = iv.polyMesh->nvp;
             float const cs = config.cs;
             // World-space origin of this tile (matches TerrainBuilder's
@@ -561,7 +580,11 @@ namespace MMAP
                 float worldZ = tileMinZ + (static_cast<float>(sz) / n) * cs;
 
                 // Texture-classifier road mask (per-MCNK 16x16 grid).
-                if (meshData.hasRoadMask)
+                // Texture detector tags stone-textured mountains as roads —
+                // curated handcrafted_road/RoadOverrides are the road
+                // sources; audit 2026-07-03. Ignored unless --textureRoads
+                // opts back into the (mistagging) legacy behavior.
+                if (g_mmapGenTuning.textureRoads && meshData.hasRoadMask)
                 {
                     static constexpr float kChunkSize = GRID_SIZE / 16.0f;
                     int mcnkCol = static_cast<int>((worldX - tileMinX) / kChunkSize);

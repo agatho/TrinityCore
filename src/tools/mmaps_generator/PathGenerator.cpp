@@ -278,6 +278,17 @@ bool handleArgs(int argc, char** argv,
         {
             g_mmapGenTuning.fineCells = true;
         }
+        else if (strcmp(argv[i], "--textureRoads") == 0)
+        {
+            // Opt-in escape hatch for experiments only. Default (flag absent)
+            // ignores the texture-based road auto-detector's output (ADT
+            // roadMask + WMO solidTriRoadFlags) because it tags stone-textured
+            // mountains as roads (substring matcher, no slope gate, vegetation
+            // gate inert in production) — curated handcrafted_road runtime
+            // overlay + RoadOverrides CSV are the only road sources in normal
+            // generation. Audit 2026-07-03.
+            g_mmapGenTuning.textureRoads = true;
+        }
         else if (strcmp(argv[i], "--gameNodes") == 0)
         {
             param = argv[++i];
@@ -1141,6 +1152,13 @@ int main(int argc, char** argv)
         builder.buildMaps(uint32(mapnum));
     else
         builder.buildMaps({});
+
+    // Handcrafted-only road tagging (audit 2026-07-03): the texture-based
+    // road auto-detector's output is ignored by default (see g_mmapGenTuning
+    // .textureRoads in MMapDefines.h). One summary line for the whole run
+    // rather than spamming per-tile.
+    if (g_mmapGenTuning.textureRoadsIgnoredSeen.load(std::memory_order_relaxed))
+        TC_LOG_INFO("tool.mmapgen", "texture road masks present but ignored (--textureRoads to enable)");
 
     if (!silent)
         TC_LOG_INFO("tool.mmapgen", "Finished. MMAPS were built in {}", secsToTimeString(GetMSTimeDiffToNow(start) / 1000));
