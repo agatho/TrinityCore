@@ -227,7 +227,53 @@ def classify_block(mapid, start, best_pt, bp, best_d, bentry, status, log):
     return "cap_stall"
 
 
-def walk_to_boss(mapid, anchor, bentry, bp, step, log):
+def load_nav_links(mapid):
+    """Verified DB traversal links for this map (playerbot_nav_links):
+    [(id, A, B, radius, bidir)]. The runtime crosses these with a committed
+    direct move; the generator threads its chain through them so the route
+    follower delivers bots to the mouth."""
+    rows = sql(ROUTE_DB,
+        f"SELECT id, from_x, from_y, from_z, to_x, to_y, to_z, radius, bidirectional "
+        f"FROM playerbot_nav_links WHERE verified=1 AND map_id={mapid}")
+    out = []
+    for r in rows:
+        v = [float(x) for x in r[1:8]]
+        out.append((int(r[0]), tuple(v[0:3]), tuple(v[3:6]), v[6], r[8] != "0"))
+    return out
+
+def link_hop_from(links, pt, used):
+    """If `pt` is within a link mouth (radius + 4y slack for the stall point
+    sitting a little short of the mouth), return (link_id, mouth, far)."""
+    for lid, A, B, radius, bidir in links:
+        ends = [(A, B)] + ([(B, A)] if bidir else [])
+        for mouth, far in ends:
+            if (lid, mouth) in used: continue
+            if dist(pt, mouth) <= radius + 4.0:
+                return lid, mouth, far
+    return None
+
+def link_detour(mapid, anchor, bp, links, used):
+    """A link need not be anywhere near where the direct walk stalls — the
+    mesh path toward the boss may dead-end in a different corridor entirely
+    (WC: the floor route ends UNDER Serpentis' platform while the jump-split
+    onto the ledge route is 165y away). Treat links as GRAPH EDGES instead:
+    find one whose mouth is reachable on-mesh from `anchor` and whose far side
+    leads onward toward the boss. Returns (lid, mouth, far, path_to_mouth) or
+    None."""
+    for lid, A, B, radius, bidir in links:
+        ends = [(A, B)] + ([(B, A)] if bidir else [])
+        for mouth, far in ends:
+            if (lid, mouth) in used: continue
+            st1, _s1, poly1, _pl1, path1 = probe(mapid, anchor, mouth)
+            if st1 not in REACHED:
+                continue                      # can't get to this mouth on-mesh
+            st2, _s2, _poly2, _pl2, _p2 = probe(mapid, far, bp)
+            if st2 not in REACHED and st2 not in WALKABLE:
+                continue                      # far side leads nowhere
+            return lid, mouth, far, path1
+    return None
+
+def walk_to_boss(mapid, anchor, bentry, bp, step, log, links=None):
     """Walk from `anchor` toward boss `bp`, dropping on-mesh crumbs. Returns
     (crumbs, new_anchor, outcome) where outcome is one of:
       'reached'      boss reachable within cap from the last crumb
@@ -235,12 +281,42 @@ def walk_to_boss(mapid, anchor, bentry, bp, step, log):
       'mesh_gap'     progress stalled at a tiny-poly disconnect (needs mesh fix)
       'cap_stall'    stalled hitting the poly cap with no clear disconnect
       'dead'         unroutable (ERR / no path)
+    A stall at a verified traversal-link mouth hops the link (both endpoints
+    become crumbs so the runtime route passes exactly through it) and the walk
+    continues from the far side.
     """
     crumbs = []
+    links = links or []
+    used_links = set()
     start_anchor = anchor
     best_d = dist(anchor, bp)
     best_pt = anchor
     seen = set()
+
+    def hop_link(at_pt):
+        # Near-mouth fast path (stall right at a mouth), then the graph-edge
+        # detour (mouth reachable on-mesh from the current anchor, far side
+        # leads onward) — the general case: the direct walk usually dead-ends
+        # in a different corridor than the one the link bridges.
+        h = link_hop_from(links, at_pt, used_links)
+        path_to_mouth = None
+        if not h:
+            d = link_detour(mapid, at_pt, bp, links, used_links)
+            if not d: return False
+            lid, mouth, far, path_to_mouth = d
+        else:
+            lid, mouth, far = h
+        used_links.add((lid, mouth))
+        if path_to_mouth:
+            for c in crumbs_along(path_to_mouth, step):
+                if not crumbs or dist(crumbs[-1], c) >= MIN_SPACE:
+                    crumbs.append(c)
+        for p in (mouth, far):
+            if not crumbs or dist(crumbs[-1], p) >= 2.0:
+                crumbs.append(p)
+        log.append(f"    boss {bentry}: crossed nav-link {lid} at {tuple(round(v,1) for v in mouth)}")
+        return far
+
     for hop in range(GUARD):
         status, _s, poly, planar, path = probe(mapid, anchor, bp)
         if status in REACHED:
@@ -252,9 +328,15 @@ def walk_to_boss(mapid, anchor, bentry, bp, step, log):
                 return crumbs, (crumbs[-1] if crumbs else anchor), "boss_offmesh"
             return crumbs, (crumbs[-1] if crumbs else anchor), "reached"
         if status not in WALKABLE or len(path) < 2:
-            # No usable path from the current anchor. If we already advanced part
-            # way, this is a corridor that dead-ends before the boss (topology),
-            # not a total routing failure -- diagnose against the best point.
+            # No usable path from the current anchor. A verified traversal link
+            # at the anchor is the authored way onward -- hop and keep walking.
+            far = hop_link(anchor)
+            if far:
+                anchor = far
+                continue
+            # If we already advanced part way, this is a corridor that dead-ends
+            # before the boss (topology), not a total routing failure --
+            # diagnose against the best point.
             if crumbs or best_pt != anchor:
                 outcome = classify_block(mapid, start_anchor, best_pt, bp, best_d,
                                          bentry, status, log)
@@ -282,7 +364,13 @@ def walk_to_boss(mapid, anchor, bentry, bp, step, log):
                 crumbs.append(wp)
             anchor = wp
             continue
-        # Stalled. Classify the blocker.
+        # Stalled. A verified traversal link at the stall point (or at the
+        # closest-to-boss point the walk reached) is the authored way onward.
+        far = hop_link(anchor) or hop_link(best_pt) or hop_link(end)
+        if far:
+            anchor = far
+            continue
+        # Otherwise classify the blocker.
         outcome = classify_block(mapid, start_anchor, best_pt, bp, best_d,
                                  bentry, status, log)
         return crumbs, best_pt, outcome
@@ -309,13 +397,19 @@ def gen_chain(name, mapid, dungeon_id, bosses, log):
     if dist(anchor, ent) > 1.0:
         log.append(f"    anchor snapped {dist(anchor,ent):.0f}y off entrance "
                    f"-> {tuple(round(v,1) for v in anchor)} ({snap_st})")
+    links = load_nav_links(mapid)
+    link_pts = [p for _lid, A, B, _r, _b in links for p in (A, B)]
+    def is_link_pt(p):
+        return any(dist(p, lp) < 0.5 for lp in link_pts)
     chain = [anchor]
     good_anchor = anchor   # last anchor from which a boss was actually REACHED
     for bentry, bp in ordered:
         crumbs, new_anchor, outcome = walk_to_boss(mapid, good_anchor, bentry, bp,
-                                                    STEP, log)
+                                                    STEP, log, links)
         for c in crumbs:
-            if not chain or dist(chain[-1], c) >= MIN_SPACE:
+            # Link endpoints are exact traversal-link mouths -- they must
+            # survive spacing dedup verbatim (the runtime hops mouth->far).
+            if is_link_pt(c) or not chain or dist(chain[-1], c) >= MIN_SPACE:
                 chain.append(c)
         stats[outcome] = stats.get(outcome, 0) + 1
         # Only carry the anchor forward when we truly reached the boss. On a
@@ -324,27 +418,41 @@ def gen_chain(name, mapid, dungeon_id, bosses, log):
         # last good anchor instead so later bosses still get a fair attempt.
         if outcome in ("reached", "boss_offmesh"):
             good_anchor = new_anchor
-    # dedup / min-spacing
+    # dedup / min-spacing (link endpoints exempt, same as above)
     out = []
     for p in chain:
-        if not out or dist(out[-1], p) >= MIN_SPACE:
+        if is_link_pt(p) or not out or dist(out[-1], p) >= MIN_SPACE:
             out.append(p)
-    out = densify_chain(mapid, out)
+    out = densify_chain(mapid, out, links)
     return out, stats
 
 
-def densify_chain(mapid, chain):
+def is_link_pair(links, a, b):
+    """True when (a,b) is exactly a traversal-link crossing (either direction) —
+    the runtime hops it with a committed direct move, so no on-mesh path exists
+    or is needed between the two."""
+    for _lid, A, B, _r, _bidir in (links or []):
+        if (dist(a, A) < 0.5 and dist(b, B) < 0.5) or \
+           (dist(a, B) < 0.5 and dist(b, A) < 0.5):
+            return True
+    return False
+
+def densify_chain(mapid, chain, links=None):
     """Ensure every consecutive crumb pair is followable within the poly cap. For
     each pair that probes non-OK or over-cap, probe it and splice in the on-mesh
     path vertices (~STEP apart) between them. Boss-boundary jumps -- where one
     boss's end crumb is far from the next boss's first corridor crumb -- are the
     main source of un-followable pairs; this stitches them. Runs one pass (the
-    inserted crumbs come straight off a single-cap path so are followable)."""
+    inserted crumbs come straight off a single-cap path so are followable).
+    Traversal-link pairs are exempt (crossed by direct move, not a path)."""
     if len(chain) < 2:
         return chain
     out = [chain[0]]
     for i in range(1, len(chain)):
         a, b = chain[i-1], chain[i]
+        if is_link_pair(links, a, b):
+            out.append(b)
+            continue
         st, _s, poly, _pl, path = probe(mapid, a, b)
         if (st in ("OK", "NORMAL") and poly <= POLY_CAP) or len(path) < 2:
             out.append(b)
@@ -358,13 +466,18 @@ def densify_chain(mapid, chain):
     return out
 
 
-def validate_followability(mapid, chain):
+def validate_followability(mapid, chain, links=None):
     """Probe each consecutive crumb pair; require a clean OK path within the cap.
+    A pair that IS a verified traversal link counts as followable (the runtime
+    crosses it with a committed direct move — no on-mesh path exists by design).
     Returns (ok_pairs, fail_pairs, [descriptions of the failing pairs])."""
     ok = fail = 0
     fails = []
     for i in range(1, len(chain)):
         a, b = chain[i-1], chain[i]
+        if is_link_pair(links, a, b):
+            ok += 1
+            continue
         st, _s, poly, planar, _p = probe(mapid, a, b)
         good = st in ("OK", "NORMAL") and poly <= POLY_CAP
         if good:
@@ -414,7 +527,7 @@ def main():
         log = []
         chain, st = gen_chain(name, mapid, did, bosses, log)
         if report:
-            fok, ffail, fdesc = validate_followability(mapid, chain) if chain else (0, 0, [])
+            fok, ffail, fdesc = validate_followability(mapid, chain, load_nav_links(mapid)) if chain else (0, 0, [])
             print(f"{name[:22]:22} {mapid:>4} {st['bosses']:>4} {st['reached']:>5} "
                   f"{st['boss_offmesh']:>4} {st['mesh_gap']:>3} {st['cap_stall']:>3} "
                   f"{st['dead']:>4} {len(chain):>6} {fok:>7} {ffail:>9}")
