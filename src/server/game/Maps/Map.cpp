@@ -35,6 +35,7 @@
 #include "Group.h"
 #include "InstanceLockMgr.h"
 #include "InstancePackets.h"
+#include "ChallengeMode.h"
 #include "InstanceScenario.h"
 #include "InstanceScript.h"
 #include "Log.h"
@@ -2877,6 +2878,10 @@ InstanceMap::InstanceMap(uint32 id, time_t expiry, uint32 InstanceId, Difficulty
         i_instanceLock->SetInUse(true);
         i_instanceExpireEvent = i_instanceLock->GetExpiryTime(); // ignore extension state for reset event (will ask players to accept extended save on expiration)
     }
+
+    // Mythic Keystone instances carry a per-run ChallengeMode state; it stays idle until a keystone is activated.
+    if (GetDifficultyID() == DIFFICULTY_MYTHIC_KEYSTONE)
+        i_challengeMode = std::make_unique<ChallengeMode>(this);
 }
 
 InstanceMap::~InstanceMap()
@@ -2994,6 +2999,9 @@ void InstanceMap::Update(uint32 t_diff)
 
     if (i_scenario)
         i_scenario->Update(t_diff);
+
+    if (i_challengeMode)
+        i_challengeMode->Update(t_diff);
 
     if (i_instanceExpireEvent && i_instanceExpireEvent < GameTime::GetSystemTime())
     {

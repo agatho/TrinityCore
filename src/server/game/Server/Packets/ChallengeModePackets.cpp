@@ -20,6 +20,13 @@
 
 namespace WorldPackets::ChallengeMode
 {
+void StartChallengeMode::Read()
+{
+    _worldPacket >> Bag;
+    _worldPacket >> Slot;
+    _worldPacket >> GameObjectGUID;
+}
+
 WorldPacket const* MythicPlusSeasonData::Write()
 {
     _worldPacket << Bits<1>(IsMythicPlusActive);

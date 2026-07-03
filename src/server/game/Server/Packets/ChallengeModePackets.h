@@ -44,6 +44,20 @@ namespace WorldPackets
             void Read() override { }
         };
 
+        // CMSG_START_CHALLENGE_MODE -- the player slots a keystone into the font of power to begin the run.
+        // Wire (client serializer @68275): uint8 Bag; uint32 Slot; ObjectGuid GameObjectGUID (plain byte stream).
+        class StartChallengeMode final : public ClientPacket
+        {
+        public:
+            explicit StartChallengeMode(WorldPacket&& packet) : ClientPacket(CMSG_START_CHALLENGE_MODE, std::move(packet)) { }
+
+            void Read() override;
+
+            ObjectGuid GameObjectGUID;
+            uint32 Slot = 0;
+            uint8 Bag = 0;
+        };
+
         // SMSG_MYTHIC_PLUS_SEASON_DATA -- whether the Mythic+ season is currently active.
         // Wire (client deserializer sub_7FF729091240 @68275): a single bit (bool, MSB-first) + FlushBits. Nothing else.
         class MythicPlusSeasonData final : public ServerPacket

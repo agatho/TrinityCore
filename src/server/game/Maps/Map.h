@@ -49,6 +49,7 @@ class BaseEntity;
 class Battleground;
 class BattlegroundMap;
 class BattlegroundScript;
+class ChallengeMode;
 class CreatureGroup;
 class GameObjectModel;
 class Group;
@@ -894,6 +895,8 @@ class TC_GAME_API InstanceMap : public Map
         InstanceScenario* GetInstanceScenario() { return i_scenario.get(); }
         InstanceScenario const* GetInstanceScenario() const { return i_scenario.get(); }
         void SetInstanceScenario(InstanceScenario* scenario);
+        ChallengeMode* GetChallengeMode() { return i_challengeMode.get(); }
+        ChallengeMode const* GetChallengeMode() const { return i_challengeMode.get(); }
         InstanceLock const* GetInstanceLock() const { return i_instanceLock; }
         void UpdateInstanceLock(UpdateBossStateSaveDataEvent const& updateSaveDataEvent);
         void UpdateInstanceLock(UpdateAdditionalSaveDataEvent const& updateSaveDataEvent);
@@ -916,6 +919,7 @@ class TC_GAME_API InstanceMap : public Map
         InstanceScript* i_data;
         uint32 i_script_id;
         std::unique_ptr<InstanceScenario> i_scenario;
+        std::unique_ptr<ChallengeMode> i_challengeMode;
         InstanceLock* i_instanceLock;
         GroupInstanceReference i_owningGroupRef;
         Optional<uint32> i_lfgDungeonsId;

@@ -246,6 +246,7 @@ namespace WorldPackets
     {
         class RequestMythicPlusSeasonData;
         class RequestMythicPlusAffixes;
+        class StartChallengeMode;
     }
 
     namespace Character
@@ -1861,6 +1862,7 @@ class TC_GAME_API WorldSession
         // Challenge Mode (Mythic+)
         void HandleRequestMythicPlusSeasonData(WorldPackets::ChallengeMode::RequestMythicPlusSeasonData& requestMythicPlusSeasonData);
         void HandleRequestMythicPlusAffixes(WorldPackets::ChallengeMode::RequestMythicPlusAffixes& requestMythicPlusAffixes);
+        void HandleStartChallengeMode(WorldPackets::ChallengeMode::StartChallengeMode& startChallengeMode);
 
         // Garrison
         void HandleGetGarrisonInfo(WorldPackets::Garrison::GetGarrisonInfo& getGarrisonInfo);
