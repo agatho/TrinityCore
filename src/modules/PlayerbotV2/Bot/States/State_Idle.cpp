@@ -5434,6 +5434,15 @@ bool DungeonDispatch(BotSnapshotView const& s, BotAI& ai,
                             const bool reachable = DungeonTargetReachableAndStep(
                                 self_be, btx, bty, btz, kMaxAdvanceStep, boss_step,
                                 &boss_step_offmesh);
+                            // Increment 1d (2026-07-03): while the OOC route follower
+                            // has an armed cursor for this map, it owns boss
+                            // navigation — the direct-step branches below defer to it
+                            // (see DungeonRouteArmed's header for the WC oscillation
+                            // this fixes). Computed here, ABOVE the [boss_nav] diag,
+                            // so the diag's action field reflects the deference
+                            // instead of claiming "stride" on a tick the stride is
+                            // gated (review fix, 2026-07-03).
+                            const bool route_armed_ooc = DungeonRouteArmed(s, ai, advice);
                             // Throttled ground-truth diagnostic so the boss
                             // approach is debuggable from the log alone.
                             if (ai.tank_diag_due(now_ms))
@@ -5443,6 +5452,7 @@ bool DungeonDispatch(BotSnapshotView const& s, BotAI& ai,
                                     s.name(), boss_target->GetEntry(),
                                     std::sqrt(bd2), in_los ? 1 : 0, reachable ? 1 : 0,
                                     (bd2 <= kBossEngageR2 && in_los) ? "engage"
+                                        : route_armed_ooc ? "route_own"
                                         : (reachable ? "stride" : "approach"),
                                     bx_adv, by_adv,
                                     boss_step.x, boss_step.y, boss_step.z);
@@ -5505,13 +5515,11 @@ bool DungeonDispatch(BotSnapshotView const& s, BotAI& ai,
                                 ai.set_last_rule_fired("idle:dungeon_engage_boss");
                                 return true;
                             }
-                            // Increment 1d (2026-07-03): while the OOC route follower
-                            // has an armed cursor for this map, it owns boss
-                            // navigation — skip straight to the route rule below
-                            // instead of computing our own direct-line step (see
-                            // DungeonRouteArmed's header for the WC oscillation this
-                            // fixes). Falls through unchanged when unarmed.
-                            const bool route_armed_ooc = DungeonRouteArmed(s, ai, advice);
+                            // Increment 1d (2026-07-03): route armed -> skip straight
+                            // to the route rule below instead of computing our own
+                            // direct-line step (route_armed_ooc hoisted above the
+                            // [boss_nav] diag; see DungeonRouteArmed's header).
+                            // Falls through unchanged when unarmed.
                             if (reachable && !route_armed_ooc)
                             {
                                 if (boss_step_offmesh)
@@ -5738,9 +5746,32 @@ bool DungeonDispatch(BotSnapshotView const& s, BotAI& ai,
                                         // the nearest pre-boss crumb.
                                         cur = near_i;
 
+                                    // Chain complete for this boss — the cursor sits ON
+                                    // the boss-nearest crumb AND we have arrived at it
+                                    // (<= kRouteArrive): DECLINE (leave wp_found false)
+                                    // and hand navigation back to the direct steppers
+                                    // (1d gated the strict stride; without this decline
+                                    // the rule would claim forever re-targeting an
+                                    // arrived crumb — a <8y destination is trivially
+                                    // strict-reachable, so the steer below kept emitting
+                                    // + returning true every tick at zero progress,
+                                    // parking a tank whose boss is >25y away or LoS-
+                                    // blocked). Control falls through to the UNGATED
+                                    // long-range incremental step below, which closes
+                                    // the last stretch to the boss via strict or
+                                    // truncated paths exactly as pre-1d. The normal
+                                    // endgame advance (cur+1 <= boss_i, handled above)
+                                    // and pass-0 / unreachable-crumb fallback behavior
+                                    // are untouched — this fires ONLY on the
+                                    // arrived-final-crumb case (review fix, 2026-07-03).
+                                    if (cur == boss_i && crumb_d(cur) <= kRouteArrive)
+                                    {
+                                        // wp_found stays false -> fall through.
+                                    }
                                     // Steer to the committed crumb; if it is (now)
                                     // unreachable, walk forward through the prefix to the
                                     // first reachable crumb and re-commit there.
+                                    else
                                     {
                                         auto const& rw = advice.route_waypoints[cur];
                                         G3D::Vector3 wstep;
