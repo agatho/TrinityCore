@@ -23,7 +23,7 @@ namespace WorldPackets::Scenes
 WorldPacket const* PlayScene::Write()
 {
     _worldPacket << int32(SceneID);
-    _worldPacket << uint32(PlaybackFlags);
+    _worldPacket << int32(PlaybackFlags);
     _worldPacket << uint32(SceneInstanceID);
     _worldPacket << int32(SceneScriptPackageID);
     _worldPacket << TransportGUID;
