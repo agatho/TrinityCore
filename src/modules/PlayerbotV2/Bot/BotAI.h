@@ -874,6 +874,26 @@ public:
     { dungeon_route_wp_ = idx; dungeon_route_wp_map_ = map_id; }
     void       clear_dungeon_route_wp() { dungeon_route_wp_ = -1; dungeon_route_wp_map_ = 0; }
 
+    // ---- route-aware combat-advance reached-crumb latch (2026-07-03, 1b) ----
+    // Hysteresis for DungeonAdvanceTarget's 8y arrive boundary. INVARIANT: once
+    // the in-combat advance has observed the bot WITHIN kRouteArrive (8y) of
+    // the route cursor's crumb, it must NOT re-substitute that SAME crumb as
+    // its walk target — even if combat micro-movement drifts the bot back
+    // beyond 8y — until the route rule ADVANCES the cursor past the recorded
+    // index (or the map changes). A stateless 8y threshold would flip the walk
+    // target crumb<->boss on every straddle; where the two diverge >3y each
+    // flip defeats the DungeonStepAlreadyInFlight dedup and restarts the
+    // spline — exactly the stateless-threshold oscillation the committed route
+    // cursor above exists to prevent. Map-bound like dungeon_route_wp (the
+    // getter returns the -1 sentinel on any map mismatch, so an LFG teleport
+    // self-invalidates the latch); set by DungeonAdvanceTarget ONLY, compared
+    // against the CURRENT cursor — a cursor advance makes the recorded index
+    // stale and substitution resumes on the next crumb automatically.
+    int32_t    adv_route_reached_idx(uint32 map_id) const
+    { return (adv_route_reached_map_ == map_id) ? adv_route_reached_idx_ : -1; }
+    void       set_adv_route_reached(int32_t idx, uint32 map_id)
+    { adv_route_reached_idx_ = idx; adv_route_reached_map_ = map_id; }
+
     // ---- dungeon off-mesh crossing commitment ----
     // When a dungeon bot begins crossing an off-mesh bridge (a single stable
     // far-vertex step longer than the per-tick step cap), it MUST keep targeting
@@ -2807,6 +2827,10 @@ private:
     // on map change). See dungeon_route_wp() for the anti-oscillation rationale.
     int32_t        dungeon_route_wp_ = -1;
     uint32         dungeon_route_wp_map_ = 0;
+    // Route-aware combat-advance reached-crumb latch + its map (self-
+    // invalidates on map change). See adv_route_reached_idx() above.
+    int32_t        adv_route_reached_idx_ = -1;
+    uint32         adv_route_reached_map_ = 0;
     // Tank chase-commit latch fields (see chase_commit_target() above).
     ObjectGuid     chase_commit_target_;
     uint32         chase_commit_since_ms_     = 0;

@@ -1155,14 +1155,31 @@ static void DungeonStepHoldDiag(BotSnapshotView const& s, char const* rule_tag,
 // Callers must keep using bossX/Y/Z (unchanged) for engage-range / LoS / pull
 // checks — proximity-to-boss logic must never see the crumb, only the step
 // does; conflating the two would let a far crumb falsely arm/disarm a pull.
-// Falls back to the boss (tx/ty/tz = bossX/Y/Z, no diag) when: the kill
-// switch PlayerbotV2.Move.RouteAwareCombatAdvance is off, the dungeon has no
-// route_waypoints, the cursor is unarmed or stale for THIS map (cur<0 or
-// out of range — dungeon_route_wp() is map-bound and already clamps that),
-// or the crumb is already reached (<8y — kRouteArrive, same constant as the
-// route follower): that just means the idle route rule hasn't advanced the
-// cursor yet this tick, and stepping toward an already-reached crumb would
-// orbit it instead of continuing to press the boss.
+// Falls back to the boss (tx/ty/tz = bossX/Y/Z, no diag) when:
+//   * the kill switch PlayerbotV2.Move.RouteAwareCombatAdvance is off;
+//   * the dungeon has no route_waypoints;
+//   * the cursor is unarmed or stale for THIS map (cur<0 or out of range —
+//     dungeon_route_wp() is map-bound and already clamps that);
+//   * the REACHED-LATCH is armed for this exact (crumb index, map): the bot
+//     was already observed within kRouteArrive of this crumb (see below) —
+//     hysteresis so combat micro-movement straddling the 8y boundary cannot
+//     flip the walk target crumb<->boss every tick (where the two diverge
+//     >3y each flip would defeat DungeonStepAlreadyInFlight and restart the
+//     spline — the stateless-threshold oscillation the route follower's
+//     committed cursor exists to kill). The latch clears itself when the
+//     route rule advances the cursor (recorded index goes stale) or the map
+//     changes (map-bound sentinel);
+//   * the bot is within kRouteArrive (8y, same constant as the route
+//     follower) of the crumb — the idle route rule just hasn't advanced the
+//     cursor yet; stepping toward an already-reached crumb would orbit it.
+//     This is also the ONLY place the reached-latch is SET;
+//   * the crumb makes no BOSS progress: require dist(crumb,boss) + 4y <
+//     dist(self,boss) (mirrors the OOC pass-0 forward-only filter). The
+//     cursor cannot advance while in combat (the route rule is !in_combat-
+//     gated), so a knockback/kite that drags the tank off-route can leave
+//     the armed crumb BEHIND it — without this guard the advance would
+//     steer the tank backward for the whole fight. The 4y margin keeps the
+//     boundary itself from flapping.
 static void DungeonAdvanceTarget(BotSnapshotView const& s, BotAI& ai,
                                  DungeonAdvice const& advice,
                                  float bossX, float bossY, float bossZ,
@@ -1174,11 +1191,29 @@ static void DungeonAdvanceTarget(BotSnapshotView const& s, BotAI& ai,
     if (advice.route_waypoints.empty()) return;
     int const cur = ai.dungeon_route_wp(s.map_id());
     if (cur < 0 || cur >= int(advice.route_waypoints.size())) return;
+    // Reached-latch hysteresis (see header comment): this crumb was already
+    // reached once — keep the boss target until the cursor moves on.
+    if (ai.adv_route_reached_idx(s.map_id()) == cur) return;
     auto const& wp = advice.route_waypoints[size_t(cur)];
     float bx2, by2, bz2; s.position(bx2, by2, bz2);
     constexpr float kRouteArrive = 8.0f;   // matches the route follower
     const float dx = wp.x - bx2, dy = wp.y - by2, dz = wp.z - bz2;
-    if (dx * dx + dy * dy + dz * dz < kRouteArrive * kRouteArrive) return;
+    if (dx * dx + dy * dy + dz * dz < kRouteArrive * kRouteArrive)
+    {
+        // Arrived at the cursor's crumb: arm the latch so post-arrival drift
+        // back across 8y cannot re-select this same crumb, then keep boss.
+        ai.set_adv_route_reached(cur, s.map_id());
+        return;
+    }
+    // Forward-progress guard: substitute only while walking to the crumb is
+    // genuinely boss progress (crumb strictly nearer the boss than we are,
+    // 4y stabilizing margin) — a combat shove can strand the armed crumb
+    // BEHIND the tank and the cursor cannot advance until combat drops.
+    const float cbx = bossX - wp.x, cby = bossY - wp.y, cbz = bossZ - wp.z;
+    const float bdx = bossX - bx2, bdy = bossY - by2, bdz = bossZ - bz2;
+    const float crumb_bd = std::sqrt(cbx * cbx + cby * cby + cbz * cbz);
+    const float self_bd  = std::sqrt(bdx * bdx + bdy * bdy + bdz * bdz);
+    if (crumb_bd + 4.0f >= self_bd) return;
     tx = wp.x; ty = wp.y; tz = wp.z;
 
     // Throttled [adv_route] diag — ONE log site, fires only while the
@@ -1189,12 +1224,11 @@ static void DungeonAdvanceTarget(BotSnapshotView const& s, BotAI& ai,
     if (now - s_adv_route_dbg_ms > 1500u)
     {
         s_adv_route_dbg_ms = now;
-        const float bdx = bossX - bx2, bdy = bossY - by2, bdz = bossZ - bz2;
         TC_LOG_INFO("playerbot.v2",
             "[adv_route] bot={} rule={} cur=({:.1f},{:.1f},{:.1f}) "
             "crumb=({:.1f},{:.1f},{:.1f}) idx={} boss_d={:.1f}",
             s.bot_id(), rule_tag, bx2, by2, bz2, wp.x, wp.y, wp.z, cur,
-            std::sqrt(bdx * bdx + bdy * bdy + bdz * bdz));
+            self_bd);
     }
 }
 
