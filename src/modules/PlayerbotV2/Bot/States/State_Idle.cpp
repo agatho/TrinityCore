@@ -1378,7 +1378,28 @@ bool DungeonHonorCross(BotSnapshotView const& s, BotAI& ai,
     // currently-committed exit once it caps — landing on solid navmesh breaks the
     // bounce; normal nav then re-evaluates from a single stable footing.
     constexpr uint32 kCrossEpisodeMs = 10000;
-    if (cross_episode > kCrossEpisodeMs && Playerbot::PathBudget::HasBudget(now_ms))
+    constexpr uint32 kCrossFrozenMs  = 6000;
+    // near_teleport_to is ServerRefused for an in-combat or casting bot
+    // (PlayerbotAPI::near_teleport_to) — and every relocate below used to
+    // clear the cross REGARDLESS of that refusal, silently tearing the
+    // crossing down so the hop just re-armed on its 15s cooldown forever
+    // (live WC crumb-27 lip, 2026-07-03: hop → direct spline stalls under
+    // combat flicker → frozen clock trips → refused teleport + cross
+    // cleared → repeat; the bot never descends). When the teleport WOULD
+    // be refused: keep the commitment, reset whichever clock capped (a
+    // full fresh window instead of re-tripping every tick), and fall
+    // through to the tail re-assert — the rescue fires on the first
+    // out-of-combat evaluation.
+    const bool can_teleport = !s.in_combat() && !s.is_casting();
+    if (!can_teleport)
+    {
+        if (cross_episode > kCrossEpisodeMs) ai.cross_episode_reset();
+        if (hold_stuck   > kCrossStuckMs)    ai.cross_hold_reset();
+        if (cross_frozen > kCrossFrozenMs)   ai.cross_frozen_reset();
+        ai.cross_window_reset();   // stale baseline must not insta-trip post-combat
+    }
+    if (can_teleport &&
+        cross_episode > kCrossEpisodeMs && Playerbot::PathBudget::HasBudget(now_ms))
     {
         emit.near_teleport_to(tgx, tgy, tgz, s.raw().position.o);
         ai.clear_dungeon_cross();
@@ -1388,7 +1409,8 @@ bool DungeonHonorCross(BotSnapshotView const& s, BotAI& ai,
         ai.set_last_rule_fired("dungeon_offmesh_cross_relocate_episode");
         return true;
     }
-    if (hold_stuck > kCrossStuckMs && Playerbot::PathBudget::HasBudget(now_ms))
+    if (can_teleport &&
+        hold_stuck > kCrossStuckMs && Playerbot::PathBudget::HasBudget(now_ms))
     {
         emit.near_teleport_to(tgx, tgy, tgz, s.raw().position.o);
         ai.clear_dungeon_cross();
@@ -1407,8 +1429,7 @@ bool DungeonHonorCross(BotSnapshotView const& s, BotAI& ai,
     // bot in place). Force-complete the committed crossing onto its far exit — a real
     // navmesh poly on solid ground (same primitive/semantics as the stale-spline
     // relocate above; the off-mesh hop is an instantaneous jump, not a content skip).
-    constexpr uint32 kCrossFrozenMs = 6000;
-    if (cross_frozen > kCrossFrozenMs)
+    if (can_teleport && cross_frozen > kCrossFrozenMs)   // constant hoisted above
     {
         emit.near_teleport_to(tgx, tgy, tgz, s.raw().position.o);
         ai.clear_dungeon_cross();
@@ -1428,7 +1449,7 @@ bool DungeonHonorCross(BotSnapshotView const& s, BotAI& ai,
     // it jitters within it. Force-complete onto the exit (same primitive/semantics
     // as the relocates above; the off-mesh hop is an instantaneous jump). dist>6
     // here always (past the landed check) so the detector ticks every honored frame.
-    if (ai.cross_window_noprogress(dist_to_exit, now_ms, 8000u, 9.0f))
+    if (can_teleport && ai.cross_window_noprogress(dist_to_exit, now_ms, 8000u, 9.0f))
     {
         emit.near_teleport_to(tgx, tgy, tgz, s.raw().position.o);
         ai.clear_dungeon_cross();
@@ -1455,7 +1476,8 @@ bool DungeonHonorCross(BotSnapshotView const& s, BotAI& ai,
     // SKIPPED for a DIRECT (nav-link) crossing: NOPATH toward the exit is EXPECTED
     // across a real navmesh split — the straight no-pathfind spline below handles it,
     // and relocating here would replace the intended walk with a teleport.
-    if (!s.is_moving() && !ai.dungeon_cross_direct() && Playerbot::PathBudget::HasBudget(now_ms))
+    if (can_teleport && !s.is_moving() && !ai.dungeon_cross_direct() &&
+        Playerbot::PathBudget::HasBudget(now_ms))
     {
         if (Player* self = ObjectAccessor::FindConnectedPlayer(s.raw().guid))
         {
