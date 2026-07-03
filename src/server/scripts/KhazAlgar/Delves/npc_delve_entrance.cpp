@@ -35,6 +35,7 @@
 #include "Creature.h"
 #include "DelveMgr.h"
 #include "DelvesDefines.h"
+#include "DelvesRewards.h"
 #include "GameObjectAI.h"
 #include "GossipDef.h"
 #include "Log.h"
@@ -173,6 +174,10 @@ struct npc_delve_entranceAI : public ScriptedAI
         // populating it here covers the gossip-driven entry path too).
         player->m_delveSelectedMapId = _delveTemplate->MapId;
         player->m_delveSelectedTier  = tier;
+
+        // Keep the client-side JamDelveData progression mirror's last-selected
+        // delve current for the gossip-driven entry path too.
+        DelvesRewards::PublishProgress(player);
 
         player->TeleportTo(_delveTemplate->MapId,
             _delveTemplate->EntryX, _delveTemplate->EntryY,

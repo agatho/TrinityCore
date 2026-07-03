@@ -2275,6 +2275,12 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
             std::vector<int32> activeOptionalAffixIDs = {},
             bool restrictRewardsToCurrentPlayers = false);
         void ClearDelveData(int32 mapId);
+        // Publishes account-wide delve progression as an additional entry in the same
+        // JamDelveData mirror map (68275: unordered_map<uint32, JamDelveData> at
+        // CGActivePlayer_C+0x1F08). Key + per-field semantics are a hypothesis —
+        // // UNVERIFIED — needs sniff. See Player.cpp::SetDelveProgressData.
+        void SetDelveProgressData(int32 key, int32 lastSelectedMapId, int32 highestTierUnlocked,
+            std::vector<int32> weeklyCounters);
         bool HasActiveDelve() const { return !m_activePlayerData->DelveData.empty(); }
         bool IsInDelveInstance() const;
 
@@ -2997,11 +3003,13 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
 
         // PlayerDataElements (PDEs) — Account-scoped and Character-scoped key-value
         // store backing C_DelvesUI / curio book / season state. The slot index in
-        // the dynamic field IS the PDE id (verified against IDA build 67186, where
-        // bit 0x20000000 of the account-data field-mask dispatches to a JamDelveData
-        // reader and the PlayerDataElementType enum has only Int=0 and Float=1).
-        // Helpers grow the array sparsely by inserting empty Int(0) padding when
-        // the requested id is past the current end.
+        // the dynamic field IS the PDE id (PlayerDataElementType enum has only
+        // Int=0 and Float=1). 68275 note: the 67186 "bit 0x20000000 dispatches to
+        // the JamDelveData reader" description is superseded — at 68275 the delve
+        // map is read UNCONDITIONALLY inside the CGActivePlayer account-data mirror
+        // deserializer (0x7FF72920BCF0); the only gate is the global partial/full
+        // discriminator (a4 & 0x20). Helpers grow the array sparsely by inserting
+        // empty Int(0) padding when the requested id is past the current end.
         void SetAccountDataElementInt(uint32 id, int64 value);
         void SetAccountDataElementFloat(uint32 id, float value);
         void SetCharacterDataElementInt(uint32 id, int64 value);

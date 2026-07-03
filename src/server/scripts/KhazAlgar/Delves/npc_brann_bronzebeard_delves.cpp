@@ -76,12 +76,9 @@ struct npc_brann_bronzebeard_delvesAI : public ScriptedAI
     bool OnGossipHello(Player* player) override
     {
         // Open the client's companion configuration frame (role/curio picker).
-        // The uint32 field carries an entity ID — sniff (12.0.1.66709) showed
-        // value 0x3EEDB; exact semantics (creature entry vs PlayerCompanionInfo
-        // record) are not symbolicated in the 67186 IDA db, so we send the
-        // creature entry as the most defensible interpretation.
+        // 68275: the client reads an EMPTY body for this SMSG (the 12.0.1.66709
+        // sniff's 4-byte payload is ignored as trailing bytes), so no fields.
         WorldPackets::Delves::ShowDelvesCompanionConfigurationUI packet;
-        packet.CreatureOrSpellID = me->GetEntry();
         player->SendDirectMessage(packet.Write());
         return true;
     }

@@ -29,7 +29,8 @@ void RequestPartyEligibilityForDelveTiers::Read()
 
 void SelectDelveEntranceTier::Read()
 {
-    _worldPacket >> MapID;
+    // 68275 wire: PackedGUID entranceGuid + uint32 tier (sender 0x7FF729155A10).
+    _worldPacket >> EntranceGUID;
     _worldPacket >> Tier;
 }
 
@@ -44,21 +45,19 @@ WorldPacket const* ShowDelvesDisplayUI::Write()
 
 WorldPacket const* ShowDelvesCompanionConfigurationUI::Write()
 {
-    _worldPacket << uint32(CreatureOrSpellID);
+    // 68275: empty body — the client read ctor (0x7FF7290BB940) takes no fields.
     return &_worldPacket;
 }
 
 WorldPacket const* PartyEligibilityForDelveTiersResponse::Write()
 {
-    // Sniff-confirmed for empty case. Per-entry layout is INFERRED — see header.
-    _worldPacket << uint32(Members.size());
-    for (EligibleMember const& member : Members)
-    {
-        _worldPacket.WriteBits(member.PlayerName.size(), 6);
-        _worldPacket.FlushBits();
-        _worldPacket.WriteString(member.PlayerName);
-        _worldPacket << uint8(member.MaxEligibleTier);
-    }
+    // 68275 wire (read ctor 0x7FF7290BBA40): PackedGUID + uint32 + uint32 + bool(MSB).
+    // One member per packet — no count framing. Field semantics UNVERIFIED — see header.
+    _worldPacket << PlayerGUID;
+    _worldPacket << uint32(MaxEligibleTier);
+    _worldPacket << uint32(ReasonOrFlags);
+    _worldPacket.WriteBit(IsEligible);
+    _worldPacket.FlushBits();
     return &_worldPacket;
 }
 

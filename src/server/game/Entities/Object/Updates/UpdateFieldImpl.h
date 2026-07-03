@@ -125,6 +125,43 @@ inline void WriteMapFieldUpdate(MapUpdateFieldBase<K, V> const& map, bool ignore
     }
 }
 
+// Delve-specific map-field update writer (12.0.7.68275 client RE, delve_wire_FULL_68275.json).
+// The client's JamDelveData map deserializer (0x7FF729225BC0, called from the CGActivePlayer
+// account-data mirror 0x7FF72920BCF0) reads a FIXED framing in both its full-reset and
+// partial-set (upsert) paths:
+//     uint32 count, then count x { uint32 key, <value> }
+// There is NO leading ignore-changesmask byte, NO uint16 changes count and NO per-entry
+// state/op byte (the 67186 op_kind hypothesis does not exist at 68275); partial-vs-full is
+// signalled out-of-band by the parent mirror's (a4 & 0x20) flag. Consequently the generic
+// WriteMapFieldUpdate framing must NOT be used for this field.
+// Limitation: the client wire has no delete op — removed entries cannot be expressed in a
+// values update and are skipped here; they only disappear on the next full create block.
+// // UNVERIFIED — needs sniff: confirm a live 12.0.7 values-update against this framing.
+template <typename K, typename V, typename T>
+inline void WriteDelveMapFieldUpdate(MapUpdateFieldBase<K, V> const& map, bool ignoreChangesMask, ByteBuffer& data, Player const* receiver, T const* owner)
+{
+    uint32 count = 0;
+    size_t countPos = data.wpos();
+    data << uint32(count);
+
+    for (auto const& [k, v] : map)
+    {
+        if (!ignoreChangesMask && v.state == MapUpdateFieldState::Unchanged)
+            continue;
+        if (v.state == MapUpdateFieldState::Deleted)
+            continue;
+
+        ++count;
+        data << k;
+        if constexpr (std::is_base_of_v<IsUpdateFieldStructureTag, V>)
+            v.value.WriteUpdate(false, data, receiver, owner);
+        else
+            data << v.value;
+    }
+
+    data.put<uint32>(countPos, count);
+}
+
 template <typename T, typename O>
 inline void WriteSetFieldCreate(SetUpdateFieldBase<T> const& set, ByteBuffer& data, Player const* receiver, O const* owner)
 {

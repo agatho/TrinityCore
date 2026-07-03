@@ -55,6 +55,7 @@
 #include "DatabaseEnv.h"
 #include "DelvesCompanion.h"
 #include "DelvesDefines.h"
+#include "DelvesRewards.h"
 #include "DisableMgr.h"
 #include "DuelPackets.h"
 #include "EquipmentSetPackets.h"
@@ -31814,8 +31815,46 @@ void Player::SetDelveData(int32 mapId, int32 tier, uint64 instanceId, int32 entr
 
 void Player::ClearDelveData(int32 mapId)
 {
+    // Note (68275): the client's delve-map wire format has no delete op — a removed
+    // entry cannot be expressed in a values update (see WriteDelveMapFieldUpdate) and
+    // only disappears client-side with the next full ActivePlayer create block
+    // (e.g. the teleport out of the delve that accompanies every ClearDelveData call).
     RemoveMapUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData)
         .ModifyValue(&UF::ActivePlayerData::DelveData), mapId);
+}
+
+void Player::SetDelveProgressData(int32 key, int32 lastSelectedMapId, int32 highestTierUnlocked,
+    std::vector<int32> weeklyCounters)
+{
+    // Publishes account-wide delve progression (Delves::DelveProgress) into the
+    // JamDelveData mirror so the client UI can populate highest-unlocked /
+    // last-selected state. The wire layout of each map entry is byte-exact
+    // (68275 per-entry deserializer 0x7FF7291628A0):
+    //   uint32, uint32, uint64, guidCount, intCount, uint32, PackedGUID[], uint32[], bool(MSB)
+    // — matched 1:1 by UF::DelveData::WriteCreate/WriteUpdate.
+    //
+    // // UNVERIFIED — needs sniff: the map KEY meaning (we use the current delves
+    // season ID; could be scenario/map ID) and the FIELD semantics of a progression
+    // entry (no reflection descriptor exists — the client names are field_XX).
+    // Hypothesis mapping (fork member name <- progression value):
+    //   MapID    (field +0x00) <- last-selected delve map ID (0 = none)
+    //   Tier     (field +0x04) <- HighestTierUnlocked
+    //   InstanceID   (+0x08)   <- 0 (no instance backs a progression entry)
+    //   EntranceType (+0x48)   <- TIERED_ENTRANCE_TYPE_DELVE
+    //   ActiveOptionalAffixIDs <- { WeeklyCompletions, HighestTierThisWeek,
+    //                               WeeklyBountifulCount, WeeklyCofferShards }
+    //   RestrictingRewardPlayers (+0x10 bool) <- false
+    // Do not treat these names as confirmed for this entry kind.
+    auto delveData = m_values.ModifyValue(&Player::m_activePlayerData)
+        .ModifyValue(&UF::ActivePlayerData::DelveData, key);
+
+    SetUpdateFieldValue(delveData.ModifyValue(&UF::DelveData::MapID), lastSelectedMapId);
+    SetUpdateFieldValue(delveData.ModifyValue(&UF::DelveData::Tier), highestTierUnlocked);
+    SetUpdateFieldValue(delveData.ModifyValue(&UF::DelveData::InstanceID), uint64(0));
+    SetUpdateFieldValue(delveData.ModifyValue(&UF::DelveData::EntranceType), int32(Delves::TIERED_ENTRANCE_TYPE_DELVE));
+    SetUpdateFieldValue(delveData.ModifyValue(&UF::DelveData::RestrictingRewardPlayers), 0u);
+    SetUpdateFieldValue(delveData.ModifyValue(&UF::DelveData::PlayersEligibleForRewards), std::vector<ObjectGuid>());
+    SetUpdateFieldValue(delveData.ModifyValue(&UF::DelveData::ActiveOptionalAffixIDs), std::move(weeklyCounters));
 }
 
 namespace
@@ -31957,4 +31996,14 @@ void Player::LoadDelvePlayerDataElements()
     // DelvesDefines.h::PDE_COMPANION_INFO_SELECTION).
     if (state.CompanionId != 0)
         SetCharacterDataElementInt(Delves::PDE_COMPANION_INFO_SELECTION, int64(state.CompanionId));
+
+    // PDE 522 (NEW 12.0.7) = TIERED_ENTRANCE_INFO_WORLD_TIER_DIFFICULTY_CHARACTER_ELEMENT_ID —
+    // backs C_DelvesUI.GetWorldTierDifficultyForActivePlayer(). We don't run World
+    // Tier content yet; expose the baseline difficulty so the client API resolves.
+    SetCharacterDataElementInt(Delves::PDE_WORLD_TIER_DIFFICULTY,
+        int64(Delves::WorldTierDifficulty::Normal));
+
+    // Mirror account-wide delve progression (highest unlocked tier, weekly counters)
+    // into the JamDelveData ActivePlayer map so the delve UI populates on login.
+    Delves::DelvesRewards::PublishProgress(this);
 }

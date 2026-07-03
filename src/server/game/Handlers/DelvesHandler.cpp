@@ -16,6 +16,7 @@
  */
 
 #include "WorldSession.h"
+#include "Creature.h"
 #include "DelveMgr.h"
 #include "DelvesDefines.h"
 #include "DelvesPackets.h"
@@ -24,6 +25,7 @@
 #include "Group.h"
 #include "Log.h"
 #include "Map.h"
+#include "ObjectAccessor.h"
 #include "Player.h"
 
 void WorldSession::HandleDelveTeleportOut(WorldPackets::Delves::DelveTeleportOut& /*delveTeleportOut*/)
@@ -57,17 +59,23 @@ void WorldSession::HandleRequestPartyEligibilityForDelveTiers(WorldPackets::Delv
         return std::min<uint8>(progress.HighestTierUnlocked, Delves::MAX_DELVE_TIER);
     };
 
-    WorldPackets::Delves::PartyEligibilityForDelveTiersResponse response;
-    auto addMember = [&](Player const* member)
+    // 68275 wire: the response carries exactly ONE member per packet
+    // (PackedGUID + uint32 + uint32 + bool — no count framing), so we send one
+    // packet per party member. Field semantics UNVERIFIED — see DelvesPackets.h.
+    auto sendMember = [&](Player const* member)
     {
-        WorldPackets::Delves::PartyEligibilityForDelveTiersResponse::EligibleMember entry;
-        entry.PlayerName = member->GetName();
-        entry.MaxEligibleTier = computeMaxEligibleTier(member);
-        response.Members.push_back(std::move(entry));
+        uint8 maxTier = computeMaxEligibleTier(member);
+
+        WorldPackets::Delves::PartyEligibilityForDelveTiersResponse response;
+        response.PlayerGUID = member->GetGUID();
+        response.MaxEligibleTier = maxTier;
+        response.ReasonOrFlags = 0;             // UNVERIFIED — needs sniff
+        response.IsEligible = maxTier > 0;      // UNVERIFIED — needs sniff
+        SendPacket(response.Write());
     };
 
     // Always emit at least the requesting player so the client populates its own row.
-    addMember(player);
+    sendMember(player);
 
     if (Group const* group = player->GetGroup(); group && !group->isRaidGroup())
     {
@@ -76,14 +84,9 @@ void WorldSession::HandleRequestPartyEligibilityForDelveTiers(WorldPackets::Delv
             Player const* member = itr.GetSource();
             if (!member || member == player)
                 continue;
-            addMember(member);
+            sendMember(member);
         }
     }
-
-    // Per-entry wire layout is unverified — the Write() emits only the count
-    // for the empty case (sniff-confirmed) and uses an inferred (string + uint8)
-    // shape for entries. See DelvesPackets.h header comment.
-    SendPacket(response.Write());
 }
 
 void WorldSession::HandleSelectDelveEntranceTier(WorldPackets::Delves::SelectDelveEntranceTier& packet)
@@ -92,8 +95,8 @@ void WorldSession::HandleSelectDelveEntranceTier(WorldPackets::Delves::SelectDel
     if (!player)
         return;
 
-    TC_LOG_DEBUG("network", "CMSG_SELECT_DELVE_ENTRANCE_TIER received from player {} mapId {} tier {}",
-        player->GetName(), packet.MapID, packet.Tier);
+    TC_LOG_DEBUG("network", "CMSG_SELECT_DELVE_ENTRANCE_TIER received from player {} entrance {} tier {}",
+        player->GetName(), packet.EntranceGUID.ToString(), packet.Tier);
 
     if (packet.Tier == 0 || packet.Tier > Delves::MAX_DELVE_TIER)
         return;
@@ -106,8 +109,24 @@ void WorldSession::HandleSelectDelveEntranceTier(WorldPackets::Delves::SelectDel
     if (packet.Tier > progress.HighestTierUnlocked)
         return;
 
-    // Selection is consumed by the subsequent CMSG_TIERED_ENTRANCE_OPEN flow; the client
+    // The 68275 wire carries the entrance ObjectGuid, not a MapID — re-derive the
+    // delve map server-side. Our entrances are gossip NPCs, so resolve the creature
+    // and match its gossip menu against the delve templates.
+    uint32 mapId = 0;
+    if (packet.EntranceGUID.IsCreatureOrVehicle())
+        if (Creature const* entrance = ObjectAccessor::GetCreature(*player, packet.EntranceGUID))
+            if (Delves::DelveTemplate const* tmpl = sDelveMgr->GetDelveTemplateByGossipMenuId(entrance->GetGossipMenuId()))
+                mapId = tmpl->MapId;
+
+    if (!mapId)
+        TC_LOG_DEBUG("network", "CMSG_SELECT_DELVE_ENTRANCE_TIER: could not resolve entrance {} to a delve template",
+            packet.EntranceGUID.ToString());
+
+    // Selection is consumed by the subsequent entrance-open flow; the client
     // re-sends the tier on entrance. We accept and validate here so eligibility is logged.
-    player->m_delveSelectedTier = packet.Tier;
-    player->m_delveSelectedMapId = packet.MapID;
+    player->m_delveSelectedTier = uint8(packet.Tier);
+    player->m_delveSelectedMapId = mapId;
+
+    // Republish progression so the mirror's last-selected delve map stays current.
+    Delves::DelvesRewards::PublishProgress(player, progress);
 }

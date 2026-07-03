@@ -7060,7 +7060,9 @@ void ActivePlayerData::WriteUpdate(Mask const& changesMask, ByteBuffer& data, Pl
         }
         if (changesMask[157])
         {
-            WriteMapFieldUpdate(DelveData, ignoreNestedChangesMask, data, receiver, owner);
+            // 68275: the delve map uses fixed {u32 count, {u32 key, value}} framing with no
+            // per-entry state byte — see WriteDelveMapFieldUpdate. Do not use the generic writer.
+            WriteDelveMapFieldUpdate(DelveData, ignoreNestedChangesMask, data, receiver, owner);
         }
         if (changesMask[158])
         {

@@ -199,6 +199,7 @@ public:
         Delves::DelvesRewards::LoadProgress(accountId, progress);
         progress.HighestTierUnlocked = tier;
         Delves::DelvesRewards::SaveProgress(accountId, progress);
+        Delves::DelvesRewards::PublishProgress(player, progress);
 
         handler->PSendSysMessage("Set highest unlocked tier to {} for account {}", tier, accountId);
         return true;

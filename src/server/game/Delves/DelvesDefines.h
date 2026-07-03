@@ -36,6 +36,9 @@ static constexpr uint8  DELVE_SCENARIO_TYPE = 8;                // ScenarioType 
 // Tier System
 // ---------------------------------------------------------------------------
 
+// NOTE (68275): the client has NO max-tier constant — the tier list is data-driven
+// (TieredEntrance/TieredEntranceTier DB2 via C_DelvesUI.GetDelveEntranceTiers()).
+// 11 is the sniff-observed live TWW value and remains our server-side cap.
 static constexpr uint8 MAX_DELVE_TIER = 11;
 static constexpr uint8 DELVE_TIER_UNLIMITED_REVIVES_MAX = 3;   // Tiers 1-3 have no death limit
 static constexpr uint8 DELVE_TIER_ENDGAME_START = 4;           // Tier 4+ requires max level
@@ -152,6 +155,9 @@ static constexpr uint32 CONTENT_TUNING_DELVE_MIN_LEVEL = 2677;
 static constexpr uint32 CURRENCY_RESTORED_COFFER_KEY = 3028;
 static constexpr uint32 PDE_COMPANION_INFO_SELECTION = 13;
 static constexpr uint32 WIDGET_SET_COMPANION_TOOLTIP = 1331;
+// TIERED_ENTRANCE_INFO_WORLD_TIER_DIFFICULTY_CHARACTER_ELEMENT_ID (NEW 12.0.7/68275):
+// character data element carrying the player's WorldTierDifficulty.
+static constexpr uint32 PDE_WORLD_TIER_DIFFICULTY = 522;
 
 // ---------------------------------------------------------------------------
 // Enums
@@ -191,13 +197,24 @@ enum class CompanionConfigSlotType : uint8
     Max
 };
 
-// TieredEntranceType from DelvesConstantsDocumentation.lua (TieredEntranceType enum)
+// TieredEntranceType from DelvesConstantsDocumentation.lua (TieredEntranceType enum).
+// 68275: value 3 is the World Tier entrance mode (was reserved/unnamed at 67186).
 enum TieredEntranceType : int32
 {
-    TIERED_ENTRANCE_TYPE_INVALID  = 0,
-    TIERED_ENTRANCE_TYPE_DELVE    = 1,
-    TIERED_ENTRANCE_TYPE_SITES    = 2,
-    TIERED_ENTRANCE_TYPE_RESERVED = 3,
+    TIERED_ENTRANCE_TYPE_INVALID    = 0,
+    TIERED_ENTRANCE_TYPE_DELVE      = 1,
+    TIERED_ENTRANCE_TYPE_SITES      = 2,
+    TIERED_ENTRANCE_TYPE_WORLD_TIER = 3,
+};
+
+// WorldTierDifficulty (NEW in 12.0.7 / 68275; DelvesConstantsDocumentation.lua).
+// Read by the client via C_DelvesUI.GetWorldTierDifficultyForActivePlayer(), backed
+// by character data element 522 (PDE_WORLD_TIER_DIFFICULTY below).
+enum class WorldTierDifficulty : uint8
+{
+    Normal = 1,
+    Heroic = 2,
+    Mythic = 3,
 };
 
 // ---------------------------------------------------------------------------

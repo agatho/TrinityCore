@@ -63,6 +63,13 @@ public:
     static void SaveProgress(uint32 battlenetAccountId, DelveProgress const& progress);
     static void ResetWeeklyProgress(uint32 battlenetAccountId, DelveProgress& progress);
 
+    // Pushes DelveProgress to the client via the ActivePlayer JamDelveData mirror
+    // (SMSG_UPDATE_OBJECT). Call after any progress mutation while the player is
+    // online, and once on login. Key/field semantics UNVERIFIED — needs sniff
+    // (see Player::SetDelveProgressData).
+    static void PublishProgress(Player* player);
+    static void PublishProgress(Player* player, DelveProgress const& progress);
+
     // Item context mapping (tier -> ItemContext enum value for loot generation)
     static uint8 GetItemContextForTier(uint8 tier, bool bountiful);
 

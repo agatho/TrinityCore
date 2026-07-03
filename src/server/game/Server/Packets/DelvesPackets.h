@@ -19,13 +19,15 @@
 #define DelvesPackets_h__
 
 #include "Packet.h"
+#include "ObjectGuid.h"
 
 namespace WorldPackets
 {
 namespace Delves
 {
 
-// CMSG_DELVE_TELEPORT_OUT (0x3B012C)
+// CMSG_DELVE_TELEPORT_OUT (0x3B012E @ 12.0.7.68275)
+// 68275 binary (sender 0x7FF7291558F0): empty body, opcode only.
 class DelveTeleportOut final : public ClientPacket
 {
 public:
@@ -34,9 +36,10 @@ public:
     void Read() override { }
 };
 
-// CMSG_REQUEST_PARTY_ELIGIBILITY_FOR_DELVE_TIERS (build 67186 = 0x3A02F4)
+// CMSG_REQUEST_PARTY_ELIGIBILITY_FOR_DELVE_TIERS (0x3A02F0 @ 12.0.7.68275; was 0x3A02F4 at 67186)
 // Lua signature: C_DelvesUI.RequestPartyEligibilityForDelveTiers(mapID)
-// Sniff (build 66562) confirms 4-byte payload (uint32 MapID only).
+// 68275 binary (sender 0x7FF72914CAB0) confirms 4-byte payload (uint32 MapID only);
+// matches the build-66562 sniff.
 class RequestPartyEligibilityForDelveTiers final : public ClientPacket
 {
 public:
@@ -47,18 +50,16 @@ public:
     uint32 MapID = 0;
 };
 
-// CMSG_SELECT_DELVE_ENTRANCE_TIER (build 67186 = 0x3B0134)
+// CMSG_SELECT_DELVE_ENTRANCE_TIER (0x3B0134 @ 12.0.7.68275)
 // Lua signature: C_DelvesUI.SelectDelveEntranceTier(tier) — single Lua arg.
 //
-// The client wrapper at IDA `0x7FF75C96F170` (Delve_Entrance_SelectDelveEntranceTier)
-// looks the tier up against a 40-entry table at g_Data_4198798, then dispatches
-// via ai_Handle_LuaNetworkMessage with a v-table-typed packet whose payload is
-// a uint32 plus a 16-byte struct copied from the matched entry's owner+0x10.
-// The exact serialized layout has NOT been observed in a sniff. Our (MapID,
-// Tier) read below is a best-effort placeholder — server-side validation in
-// HandleSelectDelveEntranceTier still gates on tier eligibility, so a wrong
-// MapID just falls through harmlessly. Replace with the verified shape once
-// alliance_deatholme_delve sniffs (or any later sniff) capture this opcode.
+// Wire resolved from the 68275 binary (sender 0x7FF729155A10, opcode immediate
+// at 0x7FF729155A23): PackedGUID entranceGuid + uint32 tier. The "16-byte struct
+// copied from the 40-entry table" of the earlier 67186 read is that ObjectGuid.
+// Tier is uint32, not uint8. The GUID is believed to be the delve entrance/POI
+// object the picker is bound to — // UNVERIFIED — needs sniff (the field widths
+// and order ARE certain; only the GUID's referent is inferred). The server
+// re-derives the delve MapID from this GUID in HandleSelectDelveEntranceTier.
 class SelectDelveEntranceTier final : public ClientPacket
 {
 public:
@@ -66,11 +67,12 @@ public:
 
     void Read() override;
 
-    uint32 MapID = 0;
-    uint8 Tier = 0;
+    ObjectGuid EntranceGUID;
+    uint32 Tier = 0;
 };
 
-// SMSG_SHOW_DELVES_DISPLAY_UI (build 67186 = 0x420359)
+// SMSG_SHOW_DELVES_DISPLAY_UI (0x420359 @ 12.0.7.68275)
+// 68275 binary (read ctor 0x7FF7290BB840): empty body (remaining-span, 0-length in practice).
 class ShowDelvesDisplayUI final : public ServerPacket
 {
 public:
@@ -79,7 +81,7 @@ public:
     WorldPacket const* Write() override;
 };
 
-// SMSG_DELVES_ACCOUNT_DATA_ELEMENT_CHANGED (build 67186 = 0x42035A)
+// SMSG_DELVES_ACCOUNT_DATA_ELEMENT_CHANGED (0x42035A @ 12.0.7.68275)
 //
 // Intentionally NO packet class. PlayerDataElement (PDE) state on the client is
 // stored on CGActivePlayer_C in two `(vector<PlayerDataElement>, vector<uint32>)`
@@ -90,48 +92,50 @@ public:
 //   void(CGActivePlayer_C&, PlayerDataElement const& oldElem,
 //        PlayerDataElement const& newElem, unsigned int idx)
 // (typename string at `0x7FF75F3A9AE0` in IDA build 66198). Mirror handlers fire
-// from UpdateField changes — the data is delivered inside SMSG_UPDATE_OBJECT, not
-// via a dedicated SMSG. Server-side, the corresponding work is to populate the
-// ActivePlayer UpdateField that holds the PDE list, which then drives the client
-// event automatically. The opcode value (0x42035A) is retained in Opcodes.h as a
-// known marker only.
+// from UpdateField changes — server-side we populate the ActivePlayer UpdateFields
+// (AccountDataElements / CharacterDataElements / DelveData) inside SMSG_UPDATE_OBJECT,
+// which drives the client event automatically.
+// 68275 note: the dedicated SMSG's read ctor (0x7FF7290BB8C0) captures the entire
+// remaining payload as an opaque account-data element blob that is fed to the same
+// CGActivePlayer mirror deserializer (0x7FF72920BCF0) — i.e. it is an alternative
+// runtime delta channel for the same mirror stream. The exact blob framing is
+// // UNVERIFIED — needs sniff; we deliver via SMSG_UPDATE_OBJECT instead.
 
-// SMSG_SHOW_DELVES_COMPANION_CONFIGURATION_UI (build 67186 = 0x42035B)
-// Sniff (66709, op 0x420358) shows 4-byte payload, value 0x0003EEDB. Single uint32.
-// Field semantics not symbolicated in IDA 66198 — likely a creature/companion entry.
+// SMSG_SHOW_DELVES_COMPANION_CONFIGURATION_UI (0x42035B @ 12.0.7.68275)
+// 68275 binary (read ctor 0x7FF7290BB940): the client reads an EMPTY body (a
+// remaining-bytes span expected to be 0-length). The earlier 66709 sniff's 4-byte
+// payload is ignored by the 68275 reader (trailing bytes are benign), so the
+// packet carries no fields. UI-trigger only.
 class ShowDelvesCompanionConfigurationUI final : public ServerPacket
 {
 public:
-    explicit ShowDelvesCompanionConfigurationUI() : ServerPacket(SMSG_SHOW_DELVES_COMPANION_CONFIGURATION_UI, 4) { }
+    explicit ShowDelvesCompanionConfigurationUI() : ServerPacket(SMSG_SHOW_DELVES_COMPANION_CONFIGURATION_UI, 0) { }
 
     WorldPacket const* Write() override;
-
-    uint32 CreatureOrSpellID = 0;
 };
 
-// SMSG_PARTY_ELIGIBILITY_FOR_DELVE_TIERS_RESPONSE (build 67186 = 0x42035D)
-// Sniff (66709, op 0x42035D) shows a single 4-byte payload `00 00 00 00` for the
-// no-eligible-member case. The Lua event PARTY_ELIGIBILITY_FOR_DELVE_TIERS_CHANGED
-// fires with (playerName: string, maxEligibleLevel: number) per entry, suggesting
-// the wire format is `uint32 Count` followed by `Count` entries. The element layout
-// (bit-prefixed name + uint8 tier) is INFERRED from TrinityCore conventions and is
-// NOT confirmed by IDA (build-66198 db has no SMSG decoder symbols) or by a
-// populated-list sniff. The current Write() emits only `uint32 Count` to remain
-// byte-exact with the observed empty case.
+// SMSG_PARTY_ELIGIBILITY_FOR_DELVE_TIERS_RESPONSE (0x42035D @ 12.0.7.68275)
+// 68275 binary (read ctor 0x7FF7290BBA40) reads exactly, in order:
+//   PackedGUID + uint32 + uint32 + uint8 (bool = byte>>7)
+// There is NO count/array framing — the packet carries a single member entry, so
+// the server sends one packet per party member. The Lua event
+// PARTY_ELIGIBILITY_FOR_DELVE_TIERS_CHANGED carries (playerName, maxEligibleLevel);
+// the name is resolved client-side from the GUID.
+// Semantics of the two uint32s and the bool are // UNVERIFIED — needs sniff.
+// Best-hypothesis mapping used here: first uint32 = max eligible tier (matches the
+// Lua event's maxEligibleLevel), second uint32 = ineligibility reason/flags (0 when
+// eligible), bool = is-eligible. Wire widths/order ARE certain.
 class PartyEligibilityForDelveTiersResponse final : public ServerPacket
 {
 public:
-    explicit PartyEligibilityForDelveTiersResponse() : ServerPacket(SMSG_PARTY_ELIGIBILITY_FOR_DELVE_TIERS_RESPONSE, 4) { }
+    explicit PartyEligibilityForDelveTiersResponse() : ServerPacket(SMSG_PARTY_ELIGIBILITY_FOR_DELVE_TIERS_RESPONSE, 16 + 2 + 4 + 4 + 1) { }
 
     WorldPacket const* Write() override;
 
-    struct EligibleMember
-    {
-        std::string PlayerName;
-        uint8 MaxEligibleTier = 0;
-    };
-
-    std::vector<EligibleMember> Members;
+    ObjectGuid PlayerGUID;
+    uint32 MaxEligibleTier = 0;   // UNVERIFIED — needs sniff (client field +0x30)
+    uint32 ReasonOrFlags = 0;     // UNVERIFIED — needs sniff (client field +0x34)
+    bool IsEligible = false;      // UNVERIFIED — needs sniff (client field +0x38, wire byte MSB)
 };
 
 } // namespace Delves

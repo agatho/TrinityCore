@@ -19,6 +19,7 @@
 #include "DatabaseEnv.h"
 #include "DelveMgr.h"
 #include "DelvesCompanion.h"
+#include "DelvesSeason.h"
 #include "Log.h"
 #include "Player.h"
 
@@ -69,8 +70,9 @@ void DelvesRewards::AwardDelveCompletion(Player* player, uint8 tier, bool bounti
             player->GetName(), progress.HighestTierUnlocked, accountId);
     }
 
-    // Save progress
+    // Save progress and mirror it to the client UI
     SaveProgress(accountId, progress);
+    PublishProgress(player, progress);
 
     TC_LOG_DEBUG("scripts.delves", "Awarded delve completion to {}: tier={}, bountiful={}, revives={}, weekly={}/{}",
         player->GetName(), tier, bountiful, hasRevivesRemaining,
@@ -132,6 +134,7 @@ void DelvesRewards::AwardCofferKeyShards(Player* player, uint32 amount)
 
     progress.WeeklyCofferShards += actualAmount;
     SaveProgress(accountId, progress);
+    PublishProgress(player, progress);
 
     // Auto-convert shards to keys (100 shards = 1 key)
     // This happens when entering a delve, but we track the shards here
@@ -210,6 +213,36 @@ void DelvesRewards::ResetWeeklyProgress(uint32 battlenetAccountId, DelveProgress
     progress.WeeklyBountifulCount = 0;
     progress.WeeklyCofferShards = 0;
     SaveProgress(battlenetAccountId, progress);
+}
+
+void DelvesRewards::PublishProgress(Player* player)
+{
+    DelveProgress progress;
+    LoadProgress(player->GetSession()->GetBattlenetAccountId(), progress);
+    PublishProgress(player, progress);
+}
+
+void DelvesRewards::PublishProgress(Player* player, DelveProgress const& progress)
+{
+    // Push account progression into the client's JamDelveData mirror (the map at
+    // CGActivePlayer_C+0x1F08, delivered inside SMSG_UPDATE_OBJECT). Without this
+    // the delve UI never sees highest-unlocked / last-selected state from us.
+    //
+    // // UNVERIFIED — needs sniff: entry KEY (we use the active delves season ID —
+    // the 68275 RE says "season or scenario id") and the progression-entry field
+    // semantics. Wire widths/order are byte-exact — see Player::SetDelveProgressData.
+    uint32 seasonId = DelvesSeason::GetCurrentSeasonNumber();
+    if (!seasonId)
+    {
+        TC_LOG_DEBUG("scripts.delves", "PublishProgress: no active delves season, skipping publish for {}",
+            player->GetName());
+        return;
+    }
+
+    player->SetDelveProgressData(int32(seasonId), int32(player->m_delveSelectedMapId),
+        int32(progress.HighestTierUnlocked),
+        { int32(progress.WeeklyCompletions), int32(progress.HighestTierThisWeek),
+          int32(progress.WeeklyBountifulCount), int32(progress.WeeklyCofferShards) });
 }
 
 uint8 DelvesRewards::GetItemContextForTier(uint8 tier, bool bountiful)
