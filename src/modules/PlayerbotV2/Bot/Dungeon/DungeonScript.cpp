@@ -212,4 +212,53 @@ size_t DungeonScriptMgr::LoadGeneratedRoutes()
     return count;
 }
 
+size_t DungeonScriptMgr::LoadNavLinks()
+{
+    // Same hot-reload discipline as the routes: build off-lock, publish with
+    // one brief exclusive swap. verified=0 rows are skipped — only rows a
+    // human (or a future validated editor flow) marked good may steer bots.
+    auto fresh = std::make_shared<NavLinkTable>();
+    size_t count = 0;
+    QueryResult result = CharacterDatabase.Query(fmt::format(
+        "SELECT id, map_id, from_x, from_y, from_z, to_x, to_y, to_z, "
+        "radius, bidirectional FROM {}.playerbot_nav_links WHERE verified=1 "
+        "ORDER BY map_id, id", SharedDb()).c_str());
+    if (result)
+    {
+        do
+        {
+            Field* f = result->Fetch();
+            NavLink l;
+            l.id            = f[0].GetUInt32();
+            l.map_id        = f[1].GetUInt32();
+            l.ax = f[2].GetFloat(); l.ay = f[3].GetFloat(); l.az = f[4].GetFloat();
+            l.bx = f[5].GetFloat(); l.by = f[6].GetFloat(); l.bz = f[7].GetFloat();
+            l.radius        = f[8].GetFloat();
+            l.bidirectional = f[9].GetUInt8() != 0;
+            if (l.radius <= 0.f) l.radius = 12.0f;
+            (*fresh)[l.map_id].push_back(l);
+            ++count;
+        } while (result->NextRow());
+    }
+    {
+        std::unique_lock<std::shared_mutex> lock(routes_mutex_);
+        nav_links_ = std::move(fresh);
+        link_hop_until_ms_.clear();
+    }
+    TC_LOG_INFO("playerbot.v2", "[NavLinks] loaded {} verified traversal link(s).", count);
+    return count;
+}
+
+bool DungeonScriptMgr::TryClaimLinkHop(uint64_t bot_guid_low, uint32_t link_id, uint32_t now_ms)
+{
+    constexpr uint32_t kHopCooldownMs = 15000;
+    const uint64_t key = (bot_guid_low << 20) ^ link_id;
+    std::unique_lock<std::shared_mutex> lock(routes_mutex_);
+    auto it = link_hop_until_ms_.find(key);
+    if (it != link_hop_until_ms_.end() && now_ms < it->second)
+        return false;
+    link_hop_until_ms_[key] = now_ms + kHopCooldownMs;
+    return true;
+}
+
 } // namespace Playerbot

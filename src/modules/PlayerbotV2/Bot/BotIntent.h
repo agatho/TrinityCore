@@ -71,7 +71,11 @@ struct NearTeleportToIntent  { float x, y, z, o; };
 struct SetStandStateIntent   { uint8 stand_state; };
 
 // ---- Movement ----
-struct MoveToIntent          { float x, y, z; bool run; };
+// direct=true executes a straight MovePoint spline WITHOUT pathfinding ("just
+// move, don't think") — used ONLY for committed traversal-link crossings whose
+// endpoints are human-verified ground truth (playerbot_nav_links); a pathfound
+// move toward the far side of a real navmesh split would NoPath and refuse.
+struct MoveToIntent          { float x, y, z; bool run; bool direct = false; };
 struct TeleportToIntent      { uint32 map_id; float x, y, z, o; };
 // clear_generators=false (default) only halts the active spline (Player::
 // StopMoving). clear_generators=true pops EVERY MotionMaster generator back to

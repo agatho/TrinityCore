@@ -66,6 +66,9 @@
 #include "HandcraftedRoadStorage.h"   // .playerbot reloadroutes — road segment reload
 #include "HandcraftedRoadGraph.h"     // .playerbot reloadroutes — invalidate road graph cache
 #include "TerrainMgr.h"               // .playerbot reloadroutes — clear applied-road cache
+#include "GridNotifiers.h"            // .playerbot killentry — AllCreaturesOfEntryInRange
+#include "GridNotifiersImpl.h"        // .playerbot killentry — CreatureListSearcher
+#include "CellImpl.h"                 // .playerbot killentry — Cell::VisitAllObjects
 #include <array>
 #include <map>
 
@@ -555,6 +558,7 @@ public:
             { "dungeonreset",  HandleDungeonReset,  rbac::RBAC_PERM_COMMAND_GM, Console::Yes },
             { "dungeondump",   HandleDungeonDump,   rbac::RBAC_PERM_COMMAND_GM, Console::Yes },
             { "reloadroutes",  HandleReloadRoutes,  rbac::RBAC_PERM_COMMAND_GM, Console::Yes },
+            { "killentry",     HandleKillEntry,     rbac::RBAC_PERM_COMMAND_GM, Console::Yes },
             { "bginfo",        HandleBgInfo,        rbac::RBAC_PERM_COMMAND_GM, Console::Yes },
             { "diag",          HandleDiag,          rbac::RBAC_PERM_COMMAND_GM, Console::Yes },
             { "wedges",        HandleWedges,        rbac::RBAC_PERM_COMMAND_GM, Console::Yes },
@@ -2064,18 +2068,55 @@ public:
         if (!Services::Initialized())
         { handler->SendSysMessage("PlayerbotV2 not initialized."); return false; }
 
-        size_t const wps = Services::Dungeons().LoadGeneratedRoutes();
+        size_t const wps   = Services::Dungeons().LoadGeneratedRoutes();
+        size_t const links = Services::Dungeons().LoadNavLinks();
 
         HandcraftedRoadStorage::LoadFromDB();
         TerrainMgrDetail::ClearAppliedHandcraftedRoads();
         sHandcraftedRoadGraph->InvalidateAll();
 
         handler->PSendSysMessage(
-            "reloadroutes: %u dungeon route waypoint(s) reloaded (live next tick); "
-            "%u road segment(s) across %u map(s) reloaded (graph cache invalidated). "
-            "Navmesh road-area tags on loaded maps need `.reload handcrafted_road apply <mapId>`.",
-            uint32(wps), uint32(HandcraftedRoadStorage::SegmentCount()),
+            "reloadroutes: %u dungeon route waypoint(s) + %u traversal link(s) reloaded "
+            "(live next tick); %u road segment(s) across %u map(s) reloaded (graph cache "
+            "invalidated). Navmesh road-area tags on loaded maps need "
+            "`.reload handcrafted_road apply <mapId>`.",
+            uint32(wps), uint32(links), uint32(HandcraftedRoadStorage::SegmentCount()),
             uint32(HandcraftedRoadStorage::MapCount()));
+        return true;
+    }
+
+    // .playerbot killentry <botname> <entry> — TEST utility: the named bot
+    // kills the nearest LIVE creature of <entry> within 300y (encounter credit
+    // goes to the bot, so dm_credit fires exactly as in a real kill). Exists so
+    // boss-progression states can be advanced without clearing every earlier
+    // encounter — e.g. validating the Lord Serpentis traversal link without
+    // first killing four bosses. GM-gated.
+    static bool HandleKillEntry(ChatHandler* handler, std::string const& botname,
+                                uint32 entry)
+    {
+        Player* p = ObjectAccessor::FindConnectedPlayerByName(botname);
+        if (!p)
+        { handler->PSendSysMessage("killentry: bot '%s' not online.", botname.c_str()); return false; }
+        Creature* found = nullptr;
+        {
+            std::list<Creature*> list;
+            Trinity::AllCreaturesOfEntryInRange chk(p, entry, 300.0f);
+            Trinity::CreatureListSearcher<Trinity::AllCreaturesOfEntryInRange> searcher(p, list, chk);
+            Cell::VisitAllObjects(p, searcher, 300.0f);
+            float best = 1e18f;
+            for (Creature* c : list)
+                if (c && c->IsAlive())
+                {
+                    const float d = p->GetExactDistSq(c);
+                    if (d < best) { best = d; found = c; }
+                }
+        }
+        if (!found)
+        { handler->PSendSysMessage("killentry: no live creature %u within 300y of '%s'.", entry, botname.c_str()); return false; }
+        Unit::Kill(p, found);
+        handler->PSendSysMessage("killentry: '%s' killed %s (entry %u) at (%.1f, %.1f, %.1f).",
+            botname.c_str(), found->GetName().c_str(), entry,
+            found->GetPositionX(), found->GetPositionY(), found->GetPositionZ());
         return true;
     }
 

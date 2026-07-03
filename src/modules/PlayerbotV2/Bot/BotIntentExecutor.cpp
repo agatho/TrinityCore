@@ -46,7 +46,7 @@ struct IntentVisitor
         return r;
     }
     Result operator()(GroundTargetSpellIntent const& i) { return api.cast_spell_at_position(i.spell_id, i.x, i.y, i.z); }
-    Result operator()(MoveToIntent const& i)           { return api.move_to(i.x, i.y, i.z, i.run); }
+    Result operator()(MoveToIntent const& i)           { return api.move_to(i.x, i.y, i.z, i.run, i.direct); }
     Result operator()(TeleportToIntent const& i)       { return api.teleport_to(i.map_id, i.x, i.y, i.z, i.o); }
     Result operator()(StopMovementIntent const& i)     { return api.stop_movement(i.clear_generators); }
     Result operator()(JumpIntent const& i)             { return api.jump(i.forward); }

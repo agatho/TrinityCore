@@ -39,23 +39,25 @@ bool BotIntentEmitter::start_attack(ObjectGuid target)
     return emit(StartAttackIntent{target});
 }
 
-bool BotIntentEmitter::move_to(float x, float y, float z, bool run)
+bool BotIntentEmitter::move_to(float x, float y, float z, bool run, bool direct)
 {
     // Per-bot dedup: skip if the previous move_to went to ~the same XYZ
     // within the lockout window. See BotAI::kMoveToEmitLockoutMs / the long
     // comment on note_move_to_emitted for the rationale (spline thrash,
-    // Detour mid-curve reset, visible stutter).
+    // Detour mid-curve reset, visible stutter). Applies to direct moves too
+    // (a committed link crossing re-asserts the same exit every tick; the
+    // dedup holds the running straight spline instead of restarting it).
     if (ai_)
     {
         const uint32 now_ms = GameTime::GetGameTimeMS();
         if (ai_->move_to_recently_emitted(x, y, z, now_ms))
             return false;
-        const bool pushed = emit(MoveToIntent{x, y, z, run});
+        const bool pushed = emit(MoveToIntent{x, y, z, run, direct});
         if (pushed)
             ai_->note_move_to_emitted(x, y, z, now_ms);
         return pushed;
     }
-    return emit(MoveToIntent{x, y, z, run});
+    return emit(MoveToIntent{x, y, z, run, direct});
 }
 
 bool BotIntentEmitter::cast(uint32 spell_id, ObjectGuid target)

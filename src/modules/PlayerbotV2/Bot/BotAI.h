@@ -894,7 +894,16 @@ public:
     void       set_dungeon_cross(float x, float y, float z, uint32 until_ms)
     { dungeon_cross_x_ = x; dungeon_cross_y_ = y; dungeon_cross_z_ = z;
       dungeon_cross_until_ms_ = until_ms; }
-    void       clear_dungeon_cross() { dungeon_cross_until_ms_ = 0; cross_episode_since_ms_ = 0; }
+    // DIRECT crossing (DB traversal link, playerbot_nav_links): DungeonHonorCross
+    // drives it with a straight no-pathfind MovePoint spline instead of a
+    // pathfound move_to (which would NoPath across a real navmesh split).
+    // Set ONLY by the nav-link hop; deliberately NOT cleared by set_dungeon_cross
+    // so the call sites' generic re-commit of the same exit keeps the mode;
+    // reset on clear_dungeon_cross (landing / relocate).
+    bool       dungeon_cross_direct() const { return dungeon_cross_direct_; }
+    void       set_dungeon_cross_direct(bool d) { dungeon_cross_direct_ = d; }
+    void       clear_dungeon_cross() { dungeon_cross_until_ms_ = 0; cross_episode_since_ms_ = 0;
+                                       dungeon_cross_direct_ = false; }
 
     // ── Tank chase-commit latch (2026-07-02, stage 4) ──────────────────────
     // Once a tank in combat chooses to walk a genuinely LONG-but-complete
@@ -2807,6 +2816,7 @@ private:
     float          dungeon_cross_y_ = 0.f;
     float          dungeon_cross_z_ = 0.f;
     uint32         dungeon_cross_until_ms_ = 0;
+    bool           dungeon_cross_direct_ = false;   // DB nav-link crossing (see accessor)
     // Cross EPISODE wall-clock — survives set_dungeon_cross re-commits; reset only
     // when the crossing is genuinely cleared (landed / relocated). See cross_episode_ms.
     uint32         cross_episode_since_ms_ = 0;

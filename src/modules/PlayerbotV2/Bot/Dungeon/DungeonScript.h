@@ -186,6 +186,26 @@ public:
 };
 
 // Registry of all loaded DungeonScripts, keyed by (map_id, difficulty).
+// A DB-authored traversal link: "from A you can just MOVE to B" (jump a real
+// geometric split, walk an unmeshed-but-walkable stretch) — the behavioral
+// alternative to baking off-mesh connections into the binary mmap tiles.
+// Owner-verified rows live in {SharedDb()}.playerbot_nav_links (editor-
+// authored, hot-reloadable via .playerbot reloadroutes); the dungeon stepper
+// consumes them when the on-mesh path dead-ends at a link mouth, committing
+// the crossing through the existing set_dungeon_cross/DungeonHonorCross
+// "just move, don't think" machinery. Bots are the only consumers who need
+// these routes, so the core PathGenerator stays untouched and the shipped
+// mmaps remain byte-identical to stock TC data.
+struct NavLink
+{
+    uint32_t id = 0;
+    uint32_t map_id = 0;
+    float ax = 0, ay = 0, az = 0;
+    float bx = 0, by = 0, bz = 0;
+    float radius = 12.0f;      // how close (3D) to a mouth the consumer must be
+    bool  bidirectional = true;
+};
+
 // Created and populated at module init via Services::Dungeons().
 // Lookup is O(1) via unordered_map.
 class DungeonScriptMgr
@@ -228,6 +248,27 @@ public:
     // is needed. Returns the number of waypoints loaded.
     size_t LoadGeneratedRoutes();
 
+    // Load DB-authored traversal links ({SharedDb()}.playerbot_nav_links).
+    // Same hot-reload pattern as the routes (build off-lock, swap under
+    // routes_mutex_); called at init + from `.playerbot reloadroutes`.
+    // Returns the number of links loaded.
+    size_t LoadNavLinks();
+
+    // Immutable snapshot of the per-map nav links (nullptr-safe; may be empty).
+    // Readers copy the shared_ptr under a brief shared_lock, then read lock-free.
+    using NavLinkTable = std::unordered_map<uint32_t, std::vector<NavLink>>;
+    std::shared_ptr<NavLinkTable const> GetNavLinks() const
+    {
+        std::shared_lock<std::shared_mutex> lock(routes_mutex_);
+        return nav_links_;
+    }
+
+    // Per-(bot,link) hop cooldown so a bot whose target is unreachable from
+    // BOTH sides of a bidirectional link cannot ping-pong across it: once a
+    // hop is claimed, the same link is refused for this bot for a few seconds
+    // (a successful crossing never needs the reverse hop that fast).
+    bool TryClaimLinkHop(uint64_t bot_guid_low, uint32_t link_id, uint32_t now_ms);
+
     // Iterate every registered per-dungeon script (excludes globals).
     // Used by the static `.playerbot smoketest dungeon` validator that
     // walks the registry to verify each script's bosses / interrupts /
@@ -256,6 +297,11 @@ private:
     using RouteTable =
         std::unordered_map<uint64_t, std::vector<DungeonAdvice::ProgressionPoint>>;
     std::shared_ptr<RouteTable const> generated_routes_;
+    // DB-authored traversal links (see NavLink). Same publish-by-swap pattern
+    // and mutex as the routes; hop-cooldown map guarded by the same mutex
+    // (exclusive) — touched only when a hop actually fires (rare).
+    std::shared_ptr<NavLinkTable const> nav_links_;
+    std::unordered_map<uint64_t, uint32_t> link_hop_until_ms_;
     mutable std::shared_mutex routes_mutex_;
 };
 

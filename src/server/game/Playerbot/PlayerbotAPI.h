@@ -99,7 +99,11 @@ public:
     // similar item-consuming profession spells. The Item GUID is the
     // bag-resident item to be transformed.
     Result cast_spell_on_item(uint32 spell_id, ObjectGuid item_guid);
-    Result move_to(float x, float y, float z, bool run = true);
+    // direct=true: straight MovePoint spline WITHOUT pathfinding — reserved for
+    // committed traversal-link crossings (playerbot_nav_links) whose endpoints
+    // are human-verified ground truth; a pathfound move across a real navmesh
+    // split would NoPath and refuse. Distance-capped; movement-lock guards apply.
+    Result move_to(float x, float y, float z, bool run = true, bool direct = false);
     // clear_generators=true pops all MotionMaster generators (Clear + MoveIdle)
     // instead of only stopping the active spline, so a stale POINT/CHASE/FOLLOW
     // target (e.g. one that survived a cross-map teleport) cannot re-issue.

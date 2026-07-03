@@ -81,7 +81,9 @@ public:
     // causes Detour pathfinding to re-plan, producing visible stutter and
     // breaking obstacle-avoidance mid-curve. Drop the duplicate emit silently.
     // When ai_ is null (test harness) the dedup is a no-op.
-    bool move_to(float x, float y, float z, bool run = true);
+    // direct=true = straight MovePoint spline, no pathfinding (committed
+    // traversal-link crossings only — see MoveToIntent).
+    bool move_to(float x, float y, float z, bool run = true, bool direct = false);
 
     bool dismiss_pet() { return emit(DismissPetIntent{}); }
     bool sit()  { return emit(SetStandStateIntent{1}); }

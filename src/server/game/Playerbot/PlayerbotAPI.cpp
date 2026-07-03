@@ -667,7 +667,7 @@ Result API::cast_spell_at_position(uint32 spell_id, float x, float y, float z)
     }
 }
 
-Result API::move_to(float x, float y, float z, bool run)
+Result API::move_to(float x, float y, float z, bool run, bool direct)
 {
     if (!p_) return Result::Other;
 
@@ -723,6 +723,26 @@ Result API::move_to(float x, float y, float z, bool run)
     if (p_->GetMotionMaster()->GetCurrentMovementGeneratorType() ==
             FLIGHT_MOTION_TYPE)
         return Result::Locked;
+
+    // ── DIRECT move: committed traversal-link crossing ("just move, don't
+    // think"). No pathfinding, no ground snap — the endpoints are human-
+    // verified rows from {SharedDb()}.playerbot_nav_links, and pathfinding
+    // toward the far side of a real navmesh split would NoPath and refuse.
+    // MovePoint with generatePath=false launches a straight walk/jump spline
+    // exactly like a player crossing the split. Distance-capped so a corrupt
+    // row cannot yeet a bot across the map; the same-goal skip below is
+    // intentionally bypassed (the caller-side emit dedup already holds the
+    // running spline — see BotIntentEmitter::move_to).
+    if (direct)
+    {
+        const float ddx = x - p_->GetPositionX();
+        const float ddy = y - p_->GetPositionY();
+        const float ddz = z - p_->GetPositionZ();
+        if (ddx*ddx + ddy*ddy + ddz*ddz > 60.0f * 60.0f)
+            return Result::Locked;
+        p_->GetMotionMaster()->MovePoint(0, x, y, z, /*generatePath*/ false);
+        return Result::Ok;
+    }
 
     // Snap target Z to a real walkable surface. Callers (idle:wander,
     // idle:travel_to_hub, idle:quest_path …) pass either the bot's

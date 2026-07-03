@@ -1258,7 +1258,10 @@ bool DungeonHonorCross(BotSnapshotView const& s, BotAI& ai,
     // solid ground). The off-mesh connection is semantically an instantaneous jump, so
     // this finishes the intended crossing — it is not a content skip (same primitive the
     // elevator/ledge stepper uses). Gated on PathBudget so it never adds a hot-path cost.
-    if (!s.is_moving() && Playerbot::PathBudget::HasBudget(now_ms))
+    // SKIPPED for a DIRECT (nav-link) crossing: NOPATH toward the exit is EXPECTED
+    // across a real navmesh split — the straight no-pathfind spline below handles it,
+    // and relocating here would replace the intended walk with a teleport.
+    if (!s.is_moving() && !ai.dungeon_cross_direct() && Playerbot::PathBudget::HasBudget(now_ms))
     {
         if (Player* self = ObjectAccessor::FindConnectedPlayer(s.raw().guid))
         {
@@ -1281,9 +1284,13 @@ bool DungeonHonorCross(BotSnapshotView const& s, BotAI& ai,
     // dedups in API::move_to (the spline is held, not restarted); the FIRST honored
     // tick after a combat interruption emits a goal different from the opener's, so
     // it relaunches the spline toward the exit and un-stalls the bot.
+    // A DIRECT crossing (DB traversal link) is driven with a straight no-pathfind
+    // MovePoint spline — a pathfound move toward the far side of a real navmesh
+    // split would NoPath and refuse (see MoveToIntent::direct).
     ai.set_dungeon_cross(tgx, tgy, tgz, now_ms + 12000);
-    emit.move_to(tgx, tgy, tgz, /*run=*/true);
-    ai.set_last_rule_fired("dungeon_offmesh_cross_hold");
+    emit.move_to(tgx, tgy, tgz, /*run=*/true, ai.dungeon_cross_direct());
+    ai.set_last_rule_fired(ai.dungeon_cross_direct() ? "dungeon_navlink_cross_hold"
+                                                     : "dungeon_offmesh_cross_hold");
     return true;
 }
 
@@ -2965,6 +2972,82 @@ static bool DungeonTargetReachable(Player* self, float tx, float ty, float tz)
 // descends to the mine floor (z≈55) via a ramp the navmesh knows about.
 // Straight-line bz_adv ignores that descent and resolves to the wrong floor
 // poly → FARFROMPOLY/INCOMPLETE move-blocked every tick.
+// ── DB-authored traversal links (playerbot_nav_links) ──────────────────────
+// The behavioral alternative to baking off-mesh connections into binary mmap
+// tiles: a human-verified "from A you can just MOVE to B" row (jump a real
+// geometric split, walk an unmeshed stretch). Consumed ONLY on the stepper's
+// reject paths, so on-mesh behavior stays byte-identical when pathing works.
+//
+// HOP — the bot itself stands at a link mouth while its on-mesh path to the
+// target failed: commit the crossing (set_dungeon_cross + direct flag) and
+// return the FAR endpoint as an off-mesh step; DungeonHonorCross then drives
+// the straight no-pathfind spline ("just move, don't think") until landing.
+// Fires only through call sites that handle step_is_offmesh (they own the
+// cross-commit contract); a per-(bot,link) cooldown prevents ping-ponging
+// across a bidirectional link when the target is unreachable from both sides.
+static bool DungeonNavLinkHop(Player* self, G3D::Vector3& step_out, bool* step_is_offmesh)
+{
+    if (!step_is_offmesh || !Playerbot::Services::Initialized()) return false;
+    auto links_tbl = Playerbot::Services::Dungeons().GetNavLinks();
+    if (!links_tbl) return false;
+    auto it = links_tbl->find(self->GetMapId());
+    if (it == links_tbl->end()) return false;
+    const float sx = self->GetPositionX(), sy = self->GetPositionY(), sz = self->GetPositionZ();
+    const uint32 now_ms = GameTime::GetGameTimeMS();
+    for (Playerbot::NavLink const& l : it->second)
+    {
+        struct End { float x, y, z, ox, oy, oz; };
+        End const ends[2] = { { l.ax, l.ay, l.az, l.bx, l.by, l.bz },
+                              { l.bx, l.by, l.bz, l.ax, l.ay, l.az } };
+        int const n = l.bidirectional ? 2 : 1;
+        for (int d = 0; d < n; ++d)
+        {
+            const float dx = sx - ends[d].x, dy = sy - ends[d].y, dz = sz - ends[d].z;
+            if (dx*dx + dy*dy + dz*dz > l.radius * l.radius) continue;
+            if (!Playerbot::Services::Dungeons().TryClaimLinkHop(
+                    self->GetGUID().GetCounter(), l.id, now_ms))
+                continue;
+            if (Playerbot::BotAI* ai = Playerbot::Services::Registry().ai(
+                    self->GetGUID().GetCounter()))
+            {
+                ai->set_dungeon_cross(ends[d].ox, ends[d].oy, ends[d].oz, now_ms + 12000);
+                ai->set_dungeon_cross_direct(true);
+            }
+            step_out = G3D::Vector3(ends[d].ox, ends[d].oy, ends[d].oz);
+            *step_is_offmesh = true;
+            TC_LOG_INFO("playerbot.v2",
+                "[nav_link] {} hop link {} ({:.1f},{:.1f},{:.1f})->({:.1f},{:.1f},{:.1f})",
+                self->GetName(), l.id, ends[d].x, ends[d].y, ends[d].z,
+                ends[d].ox, ends[d].oy, ends[d].oz);
+            return true;
+        }
+    }
+    return false;
+}
+
+// WALK — the failed path DEAD-ENDS at a link mouth: the link is the authored
+// way onward, so the stepper should NOT reject; walking the path to the mouth
+// brings the bot into hop range on a later tick.
+static bool DungeonNavLinkMouthNear(uint32 map_id, G3D::Vector3 const& p)
+{
+    if (!Playerbot::Services::Initialized()) return false;
+    auto links_tbl = Playerbot::Services::Dungeons().GetNavLinks();
+    if (!links_tbl) return false;
+    auto it = links_tbl->find(map_id);
+    if (it == links_tbl->end()) return false;
+    for (Playerbot::NavLink const& l : it->second)
+    {
+        const float a2 = (p.x-l.ax)*(p.x-l.ax) + (p.y-l.ay)*(p.y-l.ay) + (p.z-l.az)*(p.z-l.az);
+        if (a2 <= l.radius * l.radius) return true;
+        if (l.bidirectional)
+        {
+            const float b2 = (p.x-l.bx)*(p.x-l.bx) + (p.y-l.by)*(p.y-l.by) + (p.z-l.bz)*(p.z-l.bz);
+            if (b2 <= l.radius * l.radius) return true;
+        }
+    }
+    return false;
+}
+
 static bool DungeonTargetReachableAndStep(Player* self, float tx, float ty, float tz,
                                            float maxStep, G3D::Vector3& step_out,
                                            bool* step_is_offmesh,
@@ -3008,6 +3091,10 @@ static bool DungeonTargetReachableAndStep(Player* self, float tx, float ty, floa
     // pts=71-73 (right at the cap) yet its end sat 6.5y from the boss.
     if (t & (PATHFIND_NOPATH | PATHFIND_SHORTCUT | PATHFIND_FARFROMPOLY))
     {
+        // Standing at a DB traversal-link mouth with no on-mesh path to the
+        // target: hop (commit the direct crossing). Otherwise reject as before.
+        if (DungeonNavLinkHop(self, step_out, step_is_offmesh))
+        { gapLog("navlink_hop", step_out.x, step_out.y, step_out.z, true); return true; }
         gapLog("reject_nopath", 0, 0, 0, false);
         return false;
     }
@@ -3034,7 +3121,15 @@ static bool DungeonTargetReachableAndStep(Player* self, float tx, float ty, floa
         {
             // Strict: the path must reach within 13y of the exact target.
             if (end2 > 13.0f * 13.0f)
-                return false;
+            {
+                // At a link mouth already -> hop. Path dead-ends AT a link
+                // mouth -> the link is the authored way onward: accept the
+                // path and walk to the mouth (hop fires when we arrive).
+                if (DungeonNavLinkHop(self, step_out, step_is_offmesh))
+                { gapLog("navlink_hop", step_out.x, step_out.y, step_out.z, true); return true; }
+                if (!DungeonNavLinkMouthNear(self->GetMapId(), e))
+                    return false;
+            }
         }
         else
         {
@@ -3049,7 +3144,15 @@ static bool DungeonTargetReachableAndStep(Player* self, float tx, float ty, floa
             const float sdz = self->GetPositionZ() - tz;
             const float self_d = std::sqrt(sdx*sdx + sdy*sdy + sdz*sdz);
             if (std::sqrt(end2) > self_d - 12.0f)
-                return false;
+            {
+                // Same link rescue as the strict branch: hop at the mouth, or
+                // accept a no-net-progress path that DEAD-ENDS at a link mouth
+                // (walking to the mouth IS the progress the gate can't see).
+                if (DungeonNavLinkHop(self, step_out, step_is_offmesh))
+                { gapLog("navlink_hop", step_out.x, step_out.y, step_out.z, true); return true; }
+                if (!DungeonNavLinkMouthNear(self->GetMapId(), e))
+                    return false;
+            }
         }
     }
     Movement::PointsArray const& pts = pg.GetPath();
