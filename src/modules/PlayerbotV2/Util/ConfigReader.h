@@ -244,6 +244,13 @@ public:
     bool   tank_commit_enabled()  const { return tank_commit_enabled_; }
     uint32 tank_commit_max_ms()   const { return tank_commit_max_ms_; }
 
+    // OOC dungeon step-hold (2026-07-03 WC/SFK stutter fix): when a bot's
+    // live movement spline is already heading toward ~the same OOC
+    // advance/route step, skip re-emitting MoveTo instead of restarting the
+    // spline. Kill switch for diagnosing without recompiling.
+    //   (PlayerbotV2.Move.StepHoldEnabled)
+    bool move_step_hold_enabled() const { return move_step_hold_enabled_; }
+
 private:
     void apply_from_loaded_config();
     std::string file_path_;
@@ -312,6 +319,7 @@ private:
     bool  pull_gate_disengage_enabled_ = true;
     bool   tank_commit_enabled_  = true;
     uint32 tank_commit_max_ms_   = 45000;
+    bool   move_step_hold_enabled_ = true;
 };
 
 } // namespace Playerbot

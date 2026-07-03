@@ -133,6 +133,8 @@ void ConfigReader::apply_from_loaded_config()
     tank_commit_enabled_  = c.GetBoolDefault("PlayerbotV2.PullGate.TankCommitEnabled", true);
     tank_commit_max_ms_   = static_cast<uint32>(
         c.GetIntDefault("PlayerbotV2.PullGate.TankCommitMaxMs", 45000));
+
+    move_step_hold_enabled_ = c.GetBoolDefault("PlayerbotV2.Move.StepHoldEnabled", true);
 }
 
 } // namespace Playerbot

@@ -1096,6 +1096,44 @@ bool DungeonStepTowardTank(ObjectGuid self_guid, float tx, float ty, float tz,
     ox = step.x; oy = step.y; oz = step.z; is_offmesh = off;
     return true;
 }
+// OOC dungeon step-hold (2026-07-03 WC/SFK stutter fix). True when the bot's
+// LIVE spline (snapshot path_end, populated for POINT motion) is already
+// heading within kStepReplanRange (3y) of (tx,ty,tz) AND the bot is moving.
+// Callers skip their emit (and usually claim a hold tick) — re-issuing
+// MovePoint would RESTART the spline (the OOC stutter engine; the API
+// layer's 3s/4y stall-breaker re-issues on a jittering bot,
+// PlayerbotAPI.cpp:838-841). Mirrors the melee chase guard
+// (State_InCombat.cpp:1754). Config kill switch:
+// PlayerbotV2.Move.StepHoldEnabled.
+static bool DungeonStepAlreadyInFlight(BotSnapshotView const& s,
+                                       float tx, float ty, float tz)
+{
+    if (!Services::Config().move_step_hold_enabled())
+        return false;
+    if (!s.is_moving() || !s.has_path_destination())
+        return false;
+    float px, py, pz;
+    s.path_destination(px, py, pz);
+    float const dx = tx - px, dy = ty - py, dz = tz - pz;
+    constexpr float kStepReplanRange = 3.0f;   // melee-guard tolerance
+    return (dx * dx + dy * dy + dz * dz) < kStepReplanRange * kStepReplanRange;
+}
+// Throttled [step_hold] diag — ONE log site for the whole step-hold family
+// (2026-07-03) so forensics can grep a single tag instead of chasing
+// per-site duplicates; rule_tag identifies which OOC emit site held.
+static void DungeonStepHoldDiag(BotSnapshotView const& s, char const* rule_tag,
+                                float tx, float ty, float tz)
+{
+    static uint32 s_step_hold_dbg_ms = 0;
+    const uint32 now = GameTime::GetGameTimeMS();
+    if (now - s_step_hold_dbg_ms > 1500u)
+    {
+        s_step_hold_dbg_ms = now;
+        TC_LOG_INFO("playerbot.v2",
+            "[step_hold] bot={} rule={} dest=({:.1f},{:.1f},{:.1f})",
+            s.bot_id(), rule_tag, tx, ty, tz);
+    }
+}
 // Shared (declared in MaintainHelpers.h). Honor an active off-mesh crossing
 // commitment in ANY state and REFRESH its TTL so a combat-contested crossing can
 // neither be interrupted nor expire mid-jump. See the header for the full failure
@@ -1715,6 +1753,13 @@ bool DungeonCombatPositioning(BotSnapshotView const& s, BotAI& ai,
                         if (pb_off)
                             ai.set_dungeon_cross(pstep.x, pstep.y, pstep.z,
                                                  now_ms + 12000);
+                        if (DungeonStepAlreadyInFlight(s, pstep.x, pstep.y, pstep.z))
+                        {
+                            DungeonStepHoldDiag(s, "idle:dungeon_combat_advance_boss",
+                                                pstep.x, pstep.y, pstep.z);
+                            ai.set_last_rule_fired("idle:dungeon_combat_advance_boss_hold");
+                            return true;
+                        }
                         if (emit.move_to(pstep.x, pstep.y, pstep.z, /*run=*/true))
                         {
                             ai.set_last_rule_fired("idle:dungeon_combat_advance_boss");
@@ -2288,13 +2333,38 @@ bool DungeonCombatPositioning(BotSnapshotView const& s, BotAI& ai,
                             if (fr_off)
                                 ai.set_dungeon_cross(frstep.x, frstep.y, frstep.z,
                                                      now_ms + 12000);
+                            if (DungeonStepAlreadyInFlight(s, frstep.x, frstep.y, frstep.z))
+                            {
+                                DungeonStepHoldDiag(s, "idle:dungeon_combat_rejoin_tank",
+                                                    frstep.x, frstep.y, frstep.z);
+                                ai.set_last_rule_fired("idle:dungeon_combat_rejoin_tank_hold");
+                                return true;
+                            }
                             emit.move_to(frstep.x, frstep.y, frstep.z, /*run=*/true);
                         }
                         else
+                        {
+                            if (DungeonStepAlreadyInFlight(s, tk->x, tk->y, tk->z))
+                            {
+                                DungeonStepHoldDiag(s, "idle:dungeon_combat_rejoin_tank",
+                                                    tk->x, tk->y, tk->z);
+                                ai.set_last_rule_fired("idle:dungeon_combat_rejoin_tank_hold");
+                                return true;
+                            }
                             emit.move_to(tk->x, tk->y, tk->z, /*run=*/true);
+                        }
                     }
                     else
+                    {
+                        if (DungeonStepAlreadyInFlight(s, tk->x, tk->y, tk->z))
+                        {
+                            DungeonStepHoldDiag(s, "idle:dungeon_combat_rejoin_tank",
+                                                tk->x, tk->y, tk->z);
+                            ai.set_last_rule_fired("idle:dungeon_combat_rejoin_tank_hold");
+                            return true;
+                        }
                         emit.move_to(tk->x, tk->y, tk->z, /*run=*/true);
+                    }
                     ai.set_last_rule_fired("idle:dungeon_combat_rejoin_tank");
                     return true;
                 }
@@ -3513,10 +3583,24 @@ bool DungeonConvergeToFight(BotSnapshotView const& s, BotAI& ai,
     if (DungeonStepTowardTank(s.raw().guid, tk->x, tk->y, tk->z, 45.0f, rx, ry, rz, roff))
     {
         if (roff) ai.set_dungeon_cross(rx, ry, rz, now_ms + 12000);
+        if (DungeonStepAlreadyInFlight(s, rx, ry, rz))
+        {
+            DungeonStepHoldDiag(s, "dungeon:converge_to_fight", rx, ry, rz);
+            ai.set_last_rule_fired("dungeon:converge_to_fight_hold");
+            return true;
+        }
         emit.move_to(rx, ry, rz, /*run=*/true);
     }
     else
+    {
+        if (DungeonStepAlreadyInFlight(s, tk->x, tk->y, tk->z))
+        {
+            DungeonStepHoldDiag(s, "dungeon:converge_to_fight", tk->x, tk->y, tk->z);
+            ai.set_last_rule_fired("dungeon:converge_to_fight_hold");
+            return true;
+        }
         emit.move_to(tk->x, tk->y, tk->z, /*run=*/true);
+    }
     // TEMP [converge_fight] diag — remove after verify.
     TC_LOG_INFO("playerbot.v2",
         "[converge_fight] {} td={:.0f} join_ms={} -> tank=({:.0f},{:.0f})",
@@ -5103,6 +5187,14 @@ bool DungeonDispatch(BotSnapshotView const& s, BotAI& ai,
                                 if (boss_step_offmesh)
                                     ai.set_dungeon_cross(boss_step.x, boss_step.y,
                                                          boss_step.z, now_ms + 12000);
+                                if (DungeonStepAlreadyInFlight(s, boss_step.x, boss_step.y,
+                                                               boss_step.z))
+                                {
+                                    DungeonStepHoldDiag(s, "idle:dungeon_tank_advance_boss",
+                                                        boss_step.x, boss_step.y, boss_step.z);
+                                    ai.set_last_rule_fired("idle:dungeon_tank_advance_boss_hold");
+                                    return true;
+                                }
                                 emit.move_to(boss_step.x, boss_step.y, boss_step.z,
                                              /*run=*/true);
                                 ai.set_last_rule_fired("idle:dungeon_tank_advance_boss");
@@ -5117,8 +5209,17 @@ bool DungeonDispatch(BotSnapshotView const& s, BotAI& ai,
                             {
                                 const float stp = std::min(blen, kMaxAdvanceStep);
                                 const float sc  = stp / blen;
-                                if (emit.move_to(bx_adv + bdx * sc, by_adv + bdy * sc,
-                                                 bz_adv, /*run=*/true))
+                                const float lshx = bx_adv + bdx * sc;
+                                const float lshy = by_adv + bdy * sc;
+                                const float lshz = bz_adv;
+                                if (DungeonStepAlreadyInFlight(s, lshx, lshy, lshz))
+                                {
+                                    DungeonStepHoldDiag(s, "idle:dungeon_tank_advance_boss",
+                                                        lshx, lshy, lshz);
+                                    ai.set_last_rule_fired("idle:dungeon_tank_advance_boss_hold");
+                                    return true;
+                                }
+                                if (emit.move_to(lshx, lshy, lshz, /*run=*/true))
                                 {
                                     ai.set_last_rule_fired("idle:dungeon_tank_advance_boss");
                                     return true;
@@ -5364,6 +5465,16 @@ bool DungeonDispatch(BotSnapshotView const& s, BotAI& ai,
                                             best_wp_step.x, best_wp_step.y, best_wp_step.z, sd,
                                             route_cur, advice.route_waypoints.size());
                                     }
+                                    if (DungeonStepAlreadyInFlight(s, best_wp_step.x,
+                                                                   best_wp_step.y, best_wp_step.z))
+                                    {
+                                        DungeonStepHoldDiag(s, "idle:dungeon_tank_advance_boss_route",
+                                                            best_wp_step.x, best_wp_step.y,
+                                                            best_wp_step.z);
+                                        ai.set_last_rule_fired(
+                                            "idle:dungeon_tank_advance_boss_route_hold");
+                                        return true;
+                                    }
                                     emit.move_to(best_wp_step.x, best_wp_step.y,
                                                  best_wp_step.z, /*run=*/true);
                                     ai.set_last_rule_fired("idle:dungeon_tank_advance_boss_route");
@@ -5392,6 +5503,14 @@ bool DungeonDispatch(BotSnapshotView const& s, BotAI& ai,
                                     if (prog_offmesh)
                                         ai.set_dungeon_cross(prog_step.x, prog_step.y,
                                                              prog_step.z, now_ms + 12000);
+                                    if (DungeonStepAlreadyInFlight(s, prog_step.x, prog_step.y,
+                                                                   prog_step.z))
+                                    {
+                                        DungeonStepHoldDiag(s, "idle:dungeon_tank_advance_boss",
+                                                            prog_step.x, prog_step.y, prog_step.z);
+                                        ai.set_last_rule_fired("idle:dungeon_tank_advance_boss_hold");
+                                        return true;
+                                    }
                                     emit.move_to(prog_step.x, prog_step.y, prog_step.z,
                                                  /*run=*/true);
                                     ai.set_last_rule_fired("idle:dungeon_tank_advance_boss");
@@ -5446,6 +5565,15 @@ bool DungeonDispatch(BotSnapshotView const& s, BotAI& ai,
                                         if (nn_off)
                                             ai.set_dungeon_cross(nn_step.x, nn_step.y,
                                                                  nn_step.z, now_ms + 12000);
+                                        if (DungeonStepAlreadyInFlight(s, nn_step.x, nn_step.y,
+                                                                       nn_step.z))
+                                        {
+                                            DungeonStepHoldDiag(s, "idle:dungeon_tank_advance_boss",
+                                                                nn_step.x, nn_step.y, nn_step.z);
+                                            ai.set_last_rule_fired(
+                                                "idle:dungeon_tank_advance_boss_hold");
+                                            return true;
+                                        }
                                         emit.move_to(nn_step.x, nn_step.y, nn_step.z,
                                                      /*run=*/true);
                                         ai.set_last_rule_fired("idle:dungeon_tank_advance_boss");
@@ -5537,10 +5665,17 @@ bool DungeonDispatch(BotSnapshotView const& s, BotAI& ai,
                         // poly → INCOMPLETE → move blocked. The tank's Z
                         // gives a valid ground-level hop; the pathfinder
                         // naturally routes up/down ramps on later hops.
-                        emit.move_to(bx_adv + dx * scale,
-                                     by_adv + dy * scale,
-                                     bz_adv,
-                                     /*run=*/true);
+                        const float advx = bx_adv + dx * scale;
+                        const float advy = by_adv + dy * scale;
+                        const float advz = bz_adv;
+                        if (DungeonStepAlreadyInFlight(s, advx, advy, advz))
+                        {
+                            DungeonStepHoldDiag(s, "idle:dungeon_tank_advance",
+                                                advx, advy, advz);
+                            ai.set_last_rule_fired("idle:dungeon_tank_advance_hold");
+                            return true;
+                        }
+                        emit.move_to(advx, advy, advz, /*run=*/true);
                         ai.set_last_rule_fired("idle:dungeon_tank_advance");
                         return true;
                     }

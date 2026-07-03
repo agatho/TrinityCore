@@ -448,3 +448,8 @@ PlayerbotV2.PullGate.DisengageEnabled   = 1
 # up loudly after this many ms and shields the target.
 PlayerbotV2.PullGate.TankCommitEnabled  = 1
 PlayerbotV2.PullGate.TankCommitMaxMs    = 45000
+
+# Hold (do not re-issue) a dungeon advance/route step while the movement spline
+# toward ~that step is already in flight — re-issuing restarts the spline and
+# caused the WC/SFK stutter-in-place stalls (2026-07-03).
+PlayerbotV2.Move.StepHoldEnabled        = 1
