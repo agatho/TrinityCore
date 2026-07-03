@@ -1879,7 +1879,19 @@ bool DungeonCombatPositioning(BotSnapshotView const& s, BotAI& ai,
                     // stays inside heal range as it advances. The move_to spline runs
                     // at run speed toward this waypoint and is re-issued each tick, so
                     // a small waypoint paces the push without slowing the actual walk.
-                    constexpr float kPbStep = 18.0f;
+                    //
+                    // The cap MUST equal the OOC route follower's (tight_engage ? 10
+                    // : kMaxAdvanceStep 20 — see route_step at its pass-1 steer): when
+                    // this rule and the route rule alternate ticks toward the SAME
+                    // crumb, differing caps put their path-capped step points 3-7y
+                    // apart on curving corridors — past every 3y dedup radius — so the
+                    // two emitters restarted the spline 6-7x/sec and the tank crawled
+                    // at ~0.3y/s (WC east ramp, live 2026-07-03, kPbStep was 18 vs 20).
+                    // Same cap + same target + same stepper = identical point, and the
+                    // emitter dedup / step-hold guard engage as designed.
+                    const bool pb_tight =
+                        advice.tight_engage_below_z > 0.0f && sz0 < advice.tight_engage_below_z;
+                    const float kPbStep = pb_tight ? 10.0f : 20.0f;
                     // Increment 1b: step toward the route crumb (when armed)
                     // instead of the raw boss position — see DungeonAdvanceTarget.
                     // bd2/kPbEngageR2 above (the pull/advance branch choice) and
