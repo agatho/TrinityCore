@@ -262,12 +262,15 @@ public:
     bool route_aware_combat_advance() const { return route_aware_combat_advance_; }
 
     // Combat re-aim reachability gate (2026-07-03, increment 1e): do not
-    // chase / gap-close / self-acquire an attacker that is not "fightable"
-    // (untargetable / pacified / already dead — the same tally BotSnapshot-
-    // Builder uses for fightable_attackers_count()). An unreachable aggro
-    // pack otherwise steals movement ownership from dungeon navigation every
-    // combat frame (WC corridor freeze, tank frozen 15+ min re-aiming at an
-    // unfightable ledge pack). Kill switch for diagnosing without recompiling.
+    // chase / gap-close / self-acquire an attacker that is not "fightable" —
+    // untargetable / pacified / already dead (the fightable_attackers_count()
+    // flag tally), OR its own chase generator reports it cannot path to us
+    // (Creature::CanNotReachTarget, snapshot NearbyUnit::cannot_reach — the
+    // aggro-but-unreachable window; the flags alone never encode path-
+    // unreachability). Such a pack otherwise steals movement ownership from
+    // dungeon navigation every combat frame (WC corridor freeze, tank frozen
+    // 15+ min re-aiming at an ordinary-targetable z-disconnected ledge pack).
+    // Kill switch for diagnosing without recompiling.
     //   (PlayerbotV2.Combat.SkipUnfightable)
     bool combat_skip_unfightable() const { return combat_skip_unfightable_; }
 

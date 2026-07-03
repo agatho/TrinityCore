@@ -52,18 +52,37 @@ bool IsMeleeSpec(uint8 cls, uint32 spec)
     }
 }
 
-// True when an attacker/victim can actually be fought — mirrors the exact
-// tally BotSnapshotBuilder uses to compute fightable_attackers (the primitive
-// GroupWedgeWatchdog reads as tank_fightable and State_Idle reads as
-// fightable_attackers_count()). Untargetable (UNIT_FLAG_UNINTERACTIBLE),
-// pacified (UNIT_FLAG_PACIFIED) or already-dead units are never real threats;
-// reusing this exact test (rather than a new per-tick reachability probe)
-// is what increment 1e gates the melee gap-close / self-acquire re-aim on
-// (WC corridor freeze 2026-07-03: the tank's gap-close kept re-aiming at an
-// unfightable ledge pack, yanking it off its route spline every combat frame).
+// True when an attacker/victim can actually be fought. Two ingredient sets:
+//  - flags: untargetable (UNIT_FLAG_UNINTERACTIBLE), pacified
+//    (UNIT_FLAG_PACIFIED) or already dead — the exact tally BotSnapshot-
+//    Builder counts into fightable_attackers (read as tank_fightable by
+//    GroupWedgeWatchdog, fightable_attackers_count() by State_Idle). These
+//    are static/scripted authoring flags (triggers, dummies) and never
+//    encode path-unreachability.
+//  - cannot_reach: Creature::CanNotReachTarget() — the mob's OWN Chase-
+//    MovementGenerator reports it cannot path to its target (maintained
+//    per-tick by TC on !isInAccessiblePlaceFor / NOPATH). TRUE precisely
+//    during the aggro-but-unreachable window: the WC corridor freeze pack
+//    (2026-07-03) is ordinary targetable creatures on a z-disconnected
+//    ledge — flags read fightable — yet chasing it can never close and only
+//    steals movement ownership from dungeon navigation every combat frame.
+// Both are cheap snapshot boolean reads — no new per-tick pathfind. Caveat:
+// cannot_reach covers the mob-cannot-reach-bot direction (the diagnosed
+// case); the asymmetric bot-cannot-reach-mob case is handled by the
+// pull-gate / disengage machinery, not here.
 bool IsAttackerFightable(NearbyUnit const& u)
 {
-    return !u.untargetable && !u.is_pacified && u.hp > 0;
+    return !u.untargetable && !u.is_pacified && u.hp > 0 && !u.cannot_reach;
+}
+
+// Names which fightable ingredient failed, for the [skip_unfightable] diag:
+// "flags" = untargetable/pacified/dead, "cannot_reach" = the mob's own chase
+// generator reports it cannot path to us.
+char const* UnfightableReason(NearbyUnit const& u)
+{
+    if (u.untargetable || u.is_pacified || u.hp <= 0)
+        return "flags";
+    return "cannot_reach";
 }
 
 // Throttled [skip_unfightable] diag — ONE log site for both re-aim gates
@@ -71,15 +90,16 @@ bool IsAttackerFightable(NearbyUnit const& u)
 // freeze forensics can grep a single tag instead of chasing per-site
 // duplicates (mirrors the [step_hold]/[adv_route] throttle pattern already
 // used in this module).
-void DiagSkipUnfightable(BotSnapshotView const& s, ObjectGuid victim)
+void DiagSkipUnfightable(BotSnapshotView const& s, ObjectGuid victim,
+                         char const* reason)
 {
     static uint32 s_skip_unfightable_dbg_ms = 0;
     const uint32 now = s.published_at_ms();
     if (now - s_skip_unfightable_dbg_ms > 1500u)
     {
         s_skip_unfightable_dbg_ms = now;
-        TC_LOG_INFO("playerbot.v2", "[skip_unfightable] bot={} victim={}",
-                    s.bot_id(), victim.GetCounter());
+        TC_LOG_INFO("playerbot.v2", "[skip_unfightable] bot={} victim={} reason={}",
+                    s.bot_id(), victim.GetCounter(), reason);
     }
 }
 
@@ -1536,17 +1556,20 @@ void DispatchInCombat(BotAI& ai,
             // victim empty (vs churning doomed StartAttacks on a stalker swarm)
             // so the in-combat boss-advance recognizes the wedge and walks out.
             if (a.untargetable) continue;
-            // [increment 1e] Skip a pacified (UNIT_FLAG_PACIFIED) attacker too —
-            // it can never be a real threat and re-seeding one every empty-
-            // victim tick would re-install a chase the melee gap-close below
-            // then can't ever close (WC corridor freeze 2026-07-03). Completes
-            // the "fightable" test (IsAttackerFightable) to match exactly what
-            // BotSnapshotBuilder counts into fightable_attackers — the hp<=0
-            // and untargetable checks above already cover the rest of it.
-            // Kill switch: PlayerbotV2.Combat.SkipUnfightable.
-            if (Services::Config().combat_skip_unfightable() && a.is_pacified)
+            // [increment 1e] Skip a pacified (UNIT_FLAG_PACIFIED) attacker —
+            // never a real threat — AND an attacker whose own chase generator
+            // reports it cannot path to us (Creature::CanNotReachTarget(),
+            // snapshot cannot_reach): the WC corridor ledge pack (2026-07-03)
+            // is ordinary targetable creatures, so only this signal marks it.
+            // Re-seeding either kind every empty-victim tick would re-install
+            // a chase the melee gap-close below can never close. Together with
+            // the hp<=0 / untargetable checks above this completes the
+            // IsAttackerFightable test. Kill switch:
+            // PlayerbotV2.Combat.SkipUnfightable.
+            if (Services::Config().combat_skip_unfightable() &&
+                (a.is_pacified || a.cannot_reach))
             {
-                DiagSkipUnfightable(snapshot, a.guid);
+                DiagSkipUnfightable(snapshot, a.guid, UnfightableReason(a));
                 continue;
             }
             // Never SEED an unkillable IGNORED marker (e.g. Deadmines 49671
@@ -1773,20 +1796,23 @@ void DispatchInCombat(BotAI& ai,
             if (d2 > kMeleeRange * kMeleeRange && !snapshot.is_rooted())
             {
                 // [increment 1e] WC corridor freeze (2026-07-03): the victim
-                // may be untargetable / pacified / already dead (the same
-                // "fightable" test as fightable_attackers_count()). At that
-                // spot the aggro pack was unreachable from the corridor —
-                // this gap-close fired every InCombat frame (already_pathing
-                // never held since the live spline dest was the route step,
-                // not the victim) and kept yanking the tank off its route
-                // spline toward a chase that could never close. Skip the
-                // emit — fall through without stop_attack / claiming the
-                // tick — so DungeonCombatPositioning (route-aware) keeps
-                // movement ownership and the mob is left to leash.
+                // may be unfightable — untargetable / pacified / dead flags,
+                // or (the live WC case) an ordinary targetable creature whose
+                // OWN chase generator reports it cannot path to us
+                // (Creature::CanNotReachTarget → snapshot cannot_reach; the
+                // ledge pack is z-disconnected from the corridor). This
+                // gap-close fired every InCombat frame (already_pathing never
+                // held since the live spline dest was the route step, not the
+                // victim) and kept yanking the tank off its route spline
+                // toward a chase that could never close. Skip the emit — fall
+                // through without stop_attack / claiming the tick — so
+                // DungeonCombatPositioning (route-aware) keeps movement
+                // ownership and the mob is left to leash.
                 if (Services::Config().combat_skip_unfightable() &&
                     !IsAttackerFightable(*vu))
                 {
-                    DiagSkipUnfightable(snapshot, snapshot.victim());
+                    DiagSkipUnfightable(snapshot, snapshot.victim(),
+                                        UnfightableReason(*vu));
                 }
                 else
                 {

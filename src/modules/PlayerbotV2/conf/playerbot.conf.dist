@@ -462,7 +462,9 @@ PlayerbotV2.Move.StepHoldEnabled        = 1
 # (2026-07-03).
 PlayerbotV2.Move.RouteAwareCombatAdvance = 1
 
-# Do not chase/gap-close attackers with no reachable path (unfightable) — an
-# unreachable aggro pack otherwise steals movement ownership from dungeon
-# navigation every combat frame; WC corridor freeze 2026-07-03.
+# Do not chase/gap-close unfightable attackers: untargetable/pacified/dead
+# flags, or the mob's OWN chase generator reports it cannot path to us
+# (Creature::CanNotReachTarget — the aggro-but-unreachable window). Such a
+# pack otherwise steals movement ownership from dungeon navigation every
+# combat frame; WC corridor freeze 2026-07-03 (z-disconnected ledge pack).
 PlayerbotV2.Combat.SkipUnfightable       = 1

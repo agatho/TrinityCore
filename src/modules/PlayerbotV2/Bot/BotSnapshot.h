@@ -317,6 +317,19 @@ struct NearbyUnit
     // Set from BOTH the live unit flag and the creature_template flag (mirrors
     // is_pacified: a static template flag may not be applied to the live unit).
     bool       untargetable = false;
+    // Creature-only: Creature::CanNotReachTarget() — the mob's OWN
+    // ChaseMovementGenerator reports it cannot path to its current target
+    // (!isInAccessiblePlaceFor / PATHFIND_NOPATH, maintained per-tick by TC).
+    // TRUE precisely during the aggro-but-unreachable window: an aggro pack on
+    // a z-disconnected ledge (WC corridor, 2026-07-03) is ordinary targetable
+    // creatures — untargetable/is_pacified never encode unreachability — yet
+    // any chase/gap-close toward it can never close and only steals movement
+    // ownership from dungeon navigation every combat frame. The combat re-aim
+    // gates (State_InCombat IsAttackerFightable) key on this. Caveat: this
+    // covers the mob-cannot-reach-bot direction (the diagnosed case); the
+    // asymmetric bot-cannot-reach-mob case is handled by the pull-gate /
+    // disengage machinery, not here. False for players.
+    bool       cannot_reach = false;
     // Creature classification is Elite / RareElite / Rare (CreatureClassifications
     // 1/2/4). These are legitimately high-HP, slow-to-kill targets (world bosses,
     // rare spawns, elite quest mobs) — the unkillable-target leash MUST NOT

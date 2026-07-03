@@ -3364,6 +3364,10 @@ std::shared_ptr<BotSnapshot const> BotSnapshotBuilder::Build(Player* p, BotAI* b
             // and the in-combat boss-advance treat them as un-fightable — the bot
             // advances through the swarm instead of standing to die. See NearbyUnit.
             u.untargetable = ac->IsUninteractible();
+            // Mob's own chase generator reports it cannot path to its target
+            // (aggro-but-unreachable window — WC z-disconnected ledge pack).
+            // The combat re-aim gates skip chasing these. See NearbyUnit.
+            u.cannot_reach = ac->CanNotReachTarget();
             if (CreatureTemplate const* act = ac->GetCreatureTemplate())
             {
                 u.creature_type = uint8(act->type);
@@ -3928,6 +3932,10 @@ std::shared_ptr<BotSnapshot const> BotSnapshotBuilder::Build(Player* p, BotAI* b
                 // stalkers. Engage/pull rules skip these; the in-combat advance
                 // walks the tank through them. See NearbyUnit + the harbor note.
                 u.untargetable = c->IsUninteractible();
+                // Mob's own chase generator reports it cannot path to its target
+                // (aggro-but-unreachable window — WC z-disconnected ledge pack).
+                // The combat re-aim gates skip chasing these. See NearbyUnit.
+                u.cannot_reach = c->CanNotReachTarget();
                 if (CreatureTemplate const* ct = c->GetCreatureTemplate())
                 {
                     // CreatureType is uint8 in TC; Beast=1, etc.
