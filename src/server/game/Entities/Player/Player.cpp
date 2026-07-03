@@ -31808,7 +31808,7 @@ void Player::SetDelveData(int32 mapId, int32 tier, uint64 instanceId, int32 entr
     SetUpdateFieldValue(delveData.ModifyValue(&UF::DelveData::Tier), tier);
     SetUpdateFieldValue(delveData.ModifyValue(&UF::DelveData::InstanceID), instanceId);
     SetUpdateFieldValue(delveData.ModifyValue(&UF::DelveData::EntranceType), entranceType);
-    SetUpdateFieldValue(delveData.ModifyValue(&UF::DelveData::RestrictingRewardPlayers), restrictRewardsToCurrentPlayers ? 1u : 0u);
+    SetUpdateFieldValue(delveData.ModifyValue(&UF::DelveData::RestrictingRewardPlayers), uint8(restrictRewardsToCurrentPlayers ? 1 : 0));
     SetUpdateFieldValue(delveData.ModifyValue(&UF::DelveData::PlayersEligibleForRewards), std::move(playersEligibleForRewards));
     SetUpdateFieldValue(delveData.ModifyValue(&UF::DelveData::ActiveOptionalAffixIDs), std::move(activeOptionalAffixIDs));
 }
@@ -31833,18 +31833,22 @@ void Player::SetDelveProgressData(int32 key, int32 lastSelectedMapId, int32 high
     //   uint32, uint32, uint64, guidCount, intCount, uint32, PackedGUID[], uint32[], bool(MSB)
     // — matched 1:1 by UF::DelveData::WriteCreate/WriteUpdate.
     //
+    // The struct FIELD NAMES are now authoritative retail names from the 68275
+    // reflection descriptors (mapID/tier/instanceID/restrictingRewardPlayers/
+    // playersEligibleForRewards/activeOptionalAffixIDs/entranceType) — i.e. the
+    // struct canonically describes ACTIVE-delve state. This progression entry
+    // deliberately REPURPOSES those fields, which remains a hypothesis:
     // // UNVERIFIED — needs sniff: the map KEY meaning (we use the current delves
-    // season ID; could be scenario/map ID) and the FIELD semantics of a progression
-    // entry (no reflection descriptor exists — the client names are field_XX).
-    // Hypothesis mapping (fork member name <- progression value):
-    //   MapID    (field +0x00) <- last-selected delve map ID (0 = none)
-    //   Tier     (field +0x04) <- HighestTierUnlocked
-    //   InstanceID   (+0x08)   <- 0 (no instance backs a progression entry)
-    //   EntranceType (+0x48)   <- TIERED_ENTRANCE_TYPE_DELVE
+    // season ID; could be scenario/map ID) and whether retail publishes a
+    // progression-shaped entry in this map at all.
+    //   MapID  <- last-selected delve map ID (0 = none)
+    //   Tier   <- HighestTierUnlocked
+    //   InstanceID <- 0 (no instance backs a progression entry)
+    //   EntranceType <- TIERED_ENTRANCE_TYPE_DELVE
     //   ActiveOptionalAffixIDs <- { WeeklyCompletions, HighestTierThisWeek,
     //                               WeeklyBountifulCount, WeeklyCofferShards }
-    //   RestrictingRewardPlayers (+0x10 bool) <- false
-    // Do not treat these names as confirmed for this entry kind.
+    //     (weakest part of the hypothesis — retail semantics are delve affix ids)
+    //   RestrictingRewardPlayers <- false
     auto delveData = m_values.ModifyValue(&Player::m_activePlayerData)
         .ModifyValue(&UF::ActivePlayerData::DelveData, key);
 
@@ -31852,7 +31856,7 @@ void Player::SetDelveProgressData(int32 key, int32 lastSelectedMapId, int32 high
     SetUpdateFieldValue(delveData.ModifyValue(&UF::DelveData::Tier), highestTierUnlocked);
     SetUpdateFieldValue(delveData.ModifyValue(&UF::DelveData::InstanceID), uint64(0));
     SetUpdateFieldValue(delveData.ModifyValue(&UF::DelveData::EntranceType), int32(Delves::TIERED_ENTRANCE_TYPE_DELVE));
-    SetUpdateFieldValue(delveData.ModifyValue(&UF::DelveData::RestrictingRewardPlayers), 0u);
+    SetUpdateFieldValue(delveData.ModifyValue(&UF::DelveData::RestrictingRewardPlayers), uint8(0));
     SetUpdateFieldValue(delveData.ModifyValue(&UF::DelveData::PlayersEligibleForRewards), std::vector<ObjectGuid>());
     SetUpdateFieldValue(delveData.ModifyValue(&UF::DelveData::ActiveOptionalAffixIDs), std::move(weeklyCounters));
 }

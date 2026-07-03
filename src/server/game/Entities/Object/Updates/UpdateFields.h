@@ -1176,6 +1176,16 @@ struct WalkInData : public IsUpdateFieldStructureTag
     bool operator!=(WalkInData const& right) const { return !(*this == right); }
 };
 
+// JamDelveData — field names + types are AUTHORITATIVE retail names from the 12.0.7.68275
+// client reflection descriptors (C:\dumps\DELVE_REFLECTION_NAMES_68275.md); this closes the
+// earlier field_XX gap. Retail (camelCase) -> TC (PascalCase), in-memory offsets:
+//   mapID int32 @0, tier int32 @4, instanceID uint64 @8, restrictingRewardPlayers uint8 @16,
+//   playersEligibleForRewards vector @24, activeOptionalAffixIDs vector @48, entranceType int32 @72.
+// Vector ELEMENT types are not in the reflection data; PackedGUID / int (signed int32) come
+// from the 68275 binary typename literals (WowGetRawTypeName<PlayerGUID> / <int>).
+// Wire order is NOT plain ascending offset — the deserializer (0x7FF7291628A0) hoists both
+// vector counts before entranceType and reads the restricting bool LAST; see WriteCreate.
+// Only the containing map's KEY meaning still needs a live sniff.
 struct DelveData : public IsUpdateFieldStructureTag
 {
     std::vector<ObjectGuid> PlayersEligibleForRewards;
@@ -1183,8 +1193,8 @@ struct DelveData : public IsUpdateFieldStructureTag
     int32 MapID = 0;
     int32 Tier = 0;
     uint64 InstanceID = 0;
-    int32 EntranceType = 0;
-    uint32 RestrictingRewardPlayers = 0;                                        // Restricts rewards to players in m_owners if set to true. Intended to prevent rewarwding players that join in-progress delve?
+    int32 EntranceType = 0;                                                     // client reflects int32; likely a TieredEntranceType enum value
+    uint8 RestrictingRewardPlayers = 0;                                         // retail type uint8; wire = 1 byte, semantic bool = MSB. Restricts rewards to players in PlayersEligibleForRewards.
 
     using OwnerObject = Player;
     void WriteCreate(ByteBuffer& data, Player const* receiver, Player const* owner) const;
