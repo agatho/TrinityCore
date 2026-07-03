@@ -137,6 +137,8 @@ void ConfigReader::apply_from_loaded_config()
     move_step_hold_enabled_ = c.GetBoolDefault("PlayerbotV2.Move.StepHoldEnabled", true);
     route_aware_combat_advance_ = c.GetBoolDefault(
         "PlayerbotV2.Move.RouteAwareCombatAdvance", true);
+    combat_skip_unfightable_ = c.GetBoolDefault(
+        "PlayerbotV2.Combat.SkipUnfightable", true);
 }
 
 } // namespace Playerbot

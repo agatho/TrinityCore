@@ -14,6 +14,7 @@
 #include "Combat/ApRegistry.h"
 #include "Combat/ApRotation.h"
 #include "../Services.h"                          // Services::Dungeons().GetAdvice in combat path
+#include "Util/ConfigReader.h"                    // full type for Services::Config() (combat_skip_unfightable)
 #include "Travel/RepairVendorIndex.h"             // Services::RepairVendors() for critical-gear flee
 #include "Travel/QuestHubDatabase.h"              // Services::Hubs() hub fallback for flee_to_repair (start-island escape)
 #include "RaceMask.h"
@@ -48,6 +49,37 @@ bool IsMeleeSpec(uint8 cls, uint32 spec)
             return spec == 263;          // Enhancement
         default:
             return false;
+    }
+}
+
+// True when an attacker/victim can actually be fought — mirrors the exact
+// tally BotSnapshotBuilder uses to compute fightable_attackers (the primitive
+// GroupWedgeWatchdog reads as tank_fightable and State_Idle reads as
+// fightable_attackers_count()). Untargetable (UNIT_FLAG_UNINTERACTIBLE),
+// pacified (UNIT_FLAG_PACIFIED) or already-dead units are never real threats;
+// reusing this exact test (rather than a new per-tick reachability probe)
+// is what increment 1e gates the melee gap-close / self-acquire re-aim on
+// (WC corridor freeze 2026-07-03: the tank's gap-close kept re-aiming at an
+// unfightable ledge pack, yanking it off its route spline every combat frame).
+bool IsAttackerFightable(NearbyUnit const& u)
+{
+    return !u.untargetable && !u.is_pacified && u.hp > 0;
+}
+
+// Throttled [skip_unfightable] diag — ONE log site for both re-aim gates
+// below (melee gap-close + victimless self-acquire) so the WC corridor
+// freeze forensics can grep a single tag instead of chasing per-site
+// duplicates (mirrors the [step_hold]/[adv_route] throttle pattern already
+// used in this module).
+void DiagSkipUnfightable(BotSnapshotView const& s, ObjectGuid victim)
+{
+    static uint32 s_skip_unfightable_dbg_ms = 0;
+    const uint32 now = s.published_at_ms();
+    if (now - s_skip_unfightable_dbg_ms > 1500u)
+    {
+        s_skip_unfightable_dbg_ms = now;
+        TC_LOG_INFO("playerbot.v2", "[skip_unfightable] bot={} victim={}",
+                    s.bot_id(), victim.GetCounter());
     }
 }
 
@@ -1504,6 +1536,19 @@ void DispatchInCombat(BotAI& ai,
             // victim empty (vs churning doomed StartAttacks on a stalker swarm)
             // so the in-combat boss-advance recognizes the wedge and walks out.
             if (a.untargetable) continue;
+            // [increment 1e] Skip a pacified (UNIT_FLAG_PACIFIED) attacker too —
+            // it can never be a real threat and re-seeding one every empty-
+            // victim tick would re-install a chase the melee gap-close below
+            // then can't ever close (WC corridor freeze 2026-07-03). Completes
+            // the "fightable" test (IsAttackerFightable) to match exactly what
+            // BotSnapshotBuilder counts into fightable_attackers — the hp<=0
+            // and untargetable checks above already cover the rest of it.
+            // Kill switch: PlayerbotV2.Combat.SkipUnfightable.
+            if (Services::Config().combat_skip_unfightable() && a.is_pacified)
+            {
+                DiagSkipUnfightable(snapshot, a.guid);
+                continue;
+            }
             // Never SEED an unkillable IGNORED marker (e.g. Deadmines 49671
             // Vanessa cutscene double: IMMUNE_TO_NPC, boss-HP, Bloodwash pack-
             // healed). The downstream combat:drop_ignored_victim rule reads the
@@ -1727,6 +1772,24 @@ void DispatchInCombat(BotAI& ai,
             }
             if (d2 > kMeleeRange * kMeleeRange && !snapshot.is_rooted())
             {
+                // [increment 1e] WC corridor freeze (2026-07-03): the victim
+                // may be untargetable / pacified / already dead (the same
+                // "fightable" test as fightable_attackers_count()). At that
+                // spot the aggro pack was unreachable from the corridor —
+                // this gap-close fired every InCombat frame (already_pathing
+                // never held since the live spline dest was the route step,
+                // not the victim) and kept yanking the tank off its route
+                // spline toward a chase that could never close. Skip the
+                // emit — fall through without stop_attack / claiming the
+                // tick — so DungeonCombatPositioning (route-aware) keeps
+                // movement ownership and the mob is left to leash.
+                if (Services::Config().combat_skip_unfightable() &&
+                    !IsAttackerFightable(*vu))
+                {
+                    DiagSkipUnfightable(snapshot, snapshot.victim());
+                }
+                else
+                {
                 // Default: gap-close to the victim.
                 float cx = vu->x, cy = vu->y, cz = vu->z;
                 // Travel-through-combat (2026-06-15): when the bot has a FAR
@@ -1768,6 +1831,7 @@ void DispatchInCombat(BotAI& ai,
                 }
                 if (!already_pathing)
                     emit.move_to(cx, cy, cz, /*run*/ true);
+                }
             }
         }
     }

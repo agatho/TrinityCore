@@ -261,6 +261,16 @@ public:
     //   (PlayerbotV2.Move.RouteAwareCombatAdvance)
     bool route_aware_combat_advance() const { return route_aware_combat_advance_; }
 
+    // Combat re-aim reachability gate (2026-07-03, increment 1e): do not
+    // chase / gap-close / self-acquire an attacker that is not "fightable"
+    // (untargetable / pacified / already dead — the same tally BotSnapshot-
+    // Builder uses for fightable_attackers_count()). An unreachable aggro
+    // pack otherwise steals movement ownership from dungeon navigation every
+    // combat frame (WC corridor freeze, tank frozen 15+ min re-aiming at an
+    // unfightable ledge pack). Kill switch for diagnosing without recompiling.
+    //   (PlayerbotV2.Combat.SkipUnfightable)
+    bool combat_skip_unfightable() const { return combat_skip_unfightable_; }
+
 private:
     void apply_from_loaded_config();
     std::string file_path_;
@@ -331,6 +341,7 @@ private:
     uint32 tank_commit_max_ms_   = 45000;
     bool   move_step_hold_enabled_ = true;
     bool   route_aware_combat_advance_ = true;
+    bool   combat_skip_unfightable_    = true;
 };
 
 } // namespace Playerbot

@@ -461,3 +461,8 @@ PlayerbotV2.Move.StepHoldEnabled        = 1
 # sources diverged and alternately re-aimed the movement spline forever
 # (2026-07-03).
 PlayerbotV2.Move.RouteAwareCombatAdvance = 1
+
+# Do not chase/gap-close attackers with no reachable path (unfightable) — an
+# unreachable aggro pack otherwise steals movement ownership from dungeon
+# navigation every combat frame; WC corridor freeze 2026-07-03.
+PlayerbotV2.Combat.SkipUnfightable       = 1
