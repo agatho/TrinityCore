@@ -242,6 +242,12 @@ namespace WorldPackets
         class CalendarComplain;
     }
 
+    namespace ChallengeMode
+    {
+        class RequestMythicPlusSeasonData;
+        class RequestMythicPlusAffixes;
+    }
+
     namespace Character
     {
         struct CharacterCreateInfo;
@@ -1851,6 +1857,10 @@ class TC_GAME_API WorldSession
         // Compact Unit Frames (4.x)
         void HandleSaveCUFProfiles(WorldPackets::Misc::SaveCUFProfiles& packet);
         void SendLoadCUFProfiles();
+
+        // Challenge Mode (Mythic+)
+        void HandleRequestMythicPlusSeasonData(WorldPackets::ChallengeMode::RequestMythicPlusSeasonData& requestMythicPlusSeasonData);
+        void HandleRequestMythicPlusAffixes(WorldPackets::ChallengeMode::RequestMythicPlusAffixes& requestMythicPlusAffixes);
 
         // Garrison
         void HandleGetGarrisonInfo(WorldPackets::Garrison::GetGarrisonInfo& getGarrisonInfo);

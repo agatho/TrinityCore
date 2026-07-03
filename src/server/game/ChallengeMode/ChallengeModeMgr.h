@@ -64,6 +64,8 @@ public:
     uint32 GetActiveSeasonId() const { return _activeSeasonId; }
     MythicPlusSeasonEntry const* GetActiveSeason() const;
     std::vector<uint32> const& GetSeasonMapChallengeModeIds() const { return _seasonMaps; }
+    // The full weekly affix set (all bands), as advertised to the client in SMSG_MYTHIC_PLUS_CURRENT_AFFIXES.
+    std::vector<uint32> const& GetWeeklyAffixes() const { return _affixSchedule; }
     // Affixes active for a given keystone level this week (level-band gated). Rotation is config/season driven
     // (no offline DB2 rotation table exists); see worldserver.conf ChallengeMode.* and LoadAffixRotation().
     std::vector<uint32> GetActiveAffixes(uint32 keystoneLevel) const;
