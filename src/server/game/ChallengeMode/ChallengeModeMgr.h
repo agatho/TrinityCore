@@ -54,6 +54,13 @@ public:
     // keystone levels gained on completion given time spent; 0 = over time (depleted / no upgrade)
     uint32 GetKeystoneUpgradeAmount(uint32 challengeModeId, uint32 timeUsedSeconds) const;
 
+    // Per-run dungeon score (the client's "Mythic+ Rating" contribution). The exact retail constants are a
+    // server-side design value (not present in the client binary or DB2), so the base-per-level and the
+    // time bonus/penalty are config-tunable (ChallengeMode.Score*) to be matched to a sniff without a rebuild.
+    // The shape is Blizzlike: score grows with keystone level, with a bonus for beating par and a penalty for
+    // running over. affixCount contributes a small per-affix bonus.
+    float CalculateRunScore(uint32 keystoneLevel, uint32 effectiveTimeMs, uint32 timeLimitMs, uint32 affixCount) const;
+
     // --- Blizzlike scaling engine: creature HP/damage multiplier by keystone level ---
     // Reproduces the client's C_ChallengeMode.GetPowerLevelDamageHealthMod via GlobalCurve
     // ChallengeModeHealth(21)/ChallengeModeDamage(22) -> CurvePoint (68275: CurveID 61692/61693, ~+10%/level).

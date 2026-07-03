@@ -185,6 +185,30 @@ uint32 ChallengeModeMgr::GetKeystoneUpgradeAmount(uint32 challengeModeId, uint32
     return 1;                                    // in time -> +1
 }
 
+float ChallengeModeMgr::CalculateRunScore(uint32 keystoneLevel, uint32 effectiveTimeMs, uint32 timeLimitMs, uint32 affixCount) const
+{
+    if (!keystoneLevel)
+        return 0.0f;
+
+    // Config-tunable Blizzlike-shaped rating. Constants are a server design value (not in the client/DB2);
+    // defaults approximate the retail shape and can be matched to a live sniff without a rebuild.
+    float const perLevel = sConfigMgr->GetFloatDefault("ChallengeMode.ScorePerLevel", 7.5f);
+    float const perAffix = sConfigMgr->GetFloatDefault("ChallengeMode.ScorePerAffix", 5.0f);
+    float const maxTimeBonus = sConfigMgr->GetFloatDefault("ChallengeMode.ScoreMaxTimeBonus", 7.5f);
+
+    float score = keystoneLevel * perLevel + affixCount * perAffix;
+
+    // Time bonus: +maxTimeBonus for a 40%-under-par clear, tapering to -maxTimeBonus at/over par.
+    if (timeLimitMs)
+    {
+        float const parRatio = float(effectiveTimeMs) / float(timeLimitMs); // < 1.0 = under par
+        float const t = std::clamp((1.0f - parRatio) / 0.4f, -1.0f, 1.0f);
+        score += t * maxTimeBonus;
+    }
+
+    return std::max(0.0f, score);
+}
+
 float ChallengeModeMgr::GetHealthMultiplier(uint32 keystoneLevel) const
 {
     if (!_healthCurveId || !keystoneLevel)

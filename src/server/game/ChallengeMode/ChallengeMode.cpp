@@ -18,10 +18,12 @@
 #include "ChallengeMode.h"
 #include "ChallengeModeMgr.h"
 #include "Creature.h"
+#include "GameTime.h"
 #include "Group.h"
 #include "Log.h"
 #include "Map.h"
 #include "MiscPackets.h"
+#include "MythicPlusData.h"
 #include "ObjectAccessor.h"
 #include "Player.h"
 
@@ -95,20 +97,43 @@ void ChallengeMode::Complete()
     _active = false;
     _completed = true;
 
-    uint32 const effectiveSeconds = GetEffectiveTimeMs() / IN_MILLISECONDS;
-    uint32 const keystoneUpgrade = sChallengeModeMgr.GetKeystoneUpgradeAmount(_mapChallengeModeId, effectiveSeconds);
+    uint32 const effectiveTimeMs = GetEffectiveTimeMs();
+    uint32 const keystoneUpgrade = sChallengeModeMgr.GetKeystoneUpgradeAmount(_mapChallengeModeId, effectiveTimeMs / IN_MILLISECONDS);
+
+    uint32 affixCount = 0;
+    for (uint32 affixId : _affixes)
+        if (affixId)
+            ++affixCount;
+
+    float const runScore = sChallengeModeMgr.CalculateRunScore(_keystoneLevel, effectiveTimeMs, _timeLimitMs, affixCount);
+
+    // Record the run for every player present at completion (keeps the best per dungeon).
+    MythicPlusRunRecord record;
+    record.ChallengeModeID = _mapChallengeModeId;
+    record.Level = _keystoneLevel;
+    record.DurationMs = effectiveTimeMs;
+    record.Deaths = _deathCount;
+    record.CompletionDate = GameTime::GetGameTime();
+    record.Score = runScore;
+    record.Affixes = _affixes;
+
+    _instance->DoOnPlayers([&record](Player* player)
+    {
+        if (MythicPlusData* data = player->GetMythicPlusData())
+            data->RecordRun(record);
+    });
 
     // Stop the client dungeon timer.
     if (Player* starterPlayer = ObjectAccessor::GetPlayer(*_instance, _starterGuid))
         if (Group* group = starterPlayer->GetGroup())
             group->StartCountdown(CountdownTimerType::ChallengeMode, Seconds(0));
 
-    TC_LOG_INFO("challengemode", "ChallengeMode complete: instance {} challengeMode {} level {} time {}s (+{}s deaths, limit {}s) -> +{} keystone level",
+    TC_LOG_INFO("challengemode", "ChallengeMode complete: instance {} challengeMode {} level {} time {}s (+{}s deaths, limit {}s) -> +{} keystone, score {:.1f}",
         _instance->GetInstanceId(), _mapChallengeModeId, _keystoneLevel, GetElapsedMs() / IN_MILLISECONDS,
-        (_deathCount * DEATH_TIME_PENALTY_MS) / IN_MILLISECONDS, _timeLimitMs / IN_MILLISECONDS, keystoneUpgrade);
+        (_deathCount * DEATH_TIME_PENALTY_MS) / IN_MILLISECONDS, _timeLimitMs / IN_MILLISECONDS, keystoneUpgrade, runScore);
 
-    // Dungeon-score computation, the SMSG_CHALLENGE_MODE_COMPLETE reward packet, the keystone-upgrade item and
-    // end-of-run / Great Vault loot are applied in later phases (P3/P4).
+    // The SMSG_CHALLENGE_MODE_COMPLETE reward packet, the keystone-upgrade item and the end-of-run / Great Vault
+    // loot are applied in Phase 4.
 }
 
 void ChallengeMode::BroadcastTimer(uint32 timeLeftMs) const
