@@ -973,6 +973,45 @@ public:
         chase_commit_map_ = 0;
     }
 
+    // ── Movement-objective commitment (2026-07-03, increment 1h) ───────────
+    // Movement-objective commitment: the first dungeon-family rule to emit a
+    // step toward a target owns movement for a short window; competing rules
+    // hold instead of re-aiming (verbatim live failure 2026-07-03: route step
+    // east + converge_to_fight west alternating every 150ms restarted the
+    // spline 6-7x/sec — every same-target dedup layer is pairwise-defeated by
+    // two objectives). Window: committed target + last-commit timestamp; a
+    // SAME-target (<=3y) re-emit refreshes it. Expiry: kMoveCommitMs after the
+    // last refresh — and the guard additionally requires is_moving, so a dead
+    // spline reopens movement to anyone immediately.
+    //
+    // In practice the OWNING rule refreshes only when it re-emits — and a
+    // same-target re-emit (<=3y) hits DungeonStepAlreadyInFlight FIRST at the
+    // call site and skips the emit entirely, so refresh is rare. Expiry then
+    // lets the OTHER objective take a window: alternation settles to a
+    // >=kMoveCommitMs cadence with real walking progress each window, instead
+    // of a re-aim every tick. Map-bound exactly like chase_commit/
+    // dungeon_route_wp above: the getters take the CALLER's current map_id
+    // and report "no commitment" on any mismatch, so an LFG teleport self-
+    // invalidates it instead of chasing a stale commitment from another
+    // instance.
+    bool       move_commit_active(uint32 map_id, uint32 now_ms) const
+    {
+        if (move_commit_map_ != map_id || move_commit_ms_ == 0)
+            return false;
+        constexpr uint32 kMoveCommitMs = 2500;
+        return (now_ms - move_commit_ms_) < kMoveCommitMs;
+    }
+    void       move_commit_target(float& x, float& y, float& z) const
+    { x = move_commit_x_; y = move_commit_y_; z = move_commit_z_; }
+    void       note_move_commit(uint32 map_id, float x, float y, float z, uint32 now_ms)
+    {
+        move_commit_x_ = x;
+        move_commit_y_ = y;
+        move_commit_z_ = z;
+        move_commit_ms_ = now_ms ? now_ms : 1u;
+        move_commit_map_ = map_id;
+    }
+
     // Cross EPISODE wall-clock. Unlike the three detectors below — all of which the
     // FLIP-FLOP defeats (the committed exit alternates between the two bridge
     // endpoints, so the target-relative best-distance and window clocks reset on
@@ -2836,6 +2875,12 @@ private:
     uint32         chase_commit_since_ms_     = 0;
     uint32         chase_commit_last_plan_ms_ = 0;
     uint32         chase_commit_map_          = 0;
+    // Movement-objective commitment fields (see move_commit_active() above).
+    float          move_commit_x_   = 0.f;
+    float          move_commit_y_   = 0.f;
+    float          move_commit_z_   = 0.f;
+    uint32         move_commit_ms_  = 0;   // 0 = no commitment
+    uint32         move_commit_map_ = 0;
     float          dungeon_cross_x_ = 0.f;
     float          dungeon_cross_y_ = 0.f;
     float          dungeon_cross_z_ = 0.f;
