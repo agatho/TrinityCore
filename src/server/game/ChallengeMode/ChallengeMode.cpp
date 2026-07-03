@@ -17,6 +17,7 @@
 
 #include "ChallengeMode.h"
 #include "ChallengeModeMgr.h"
+#include "Creature.h"
 #include "Group.h"
 #include "Log.h"
 #include "Map.h"
@@ -45,6 +46,12 @@ void ChallengeMode::Start(uint32 mapChallengeModeId, uint32 keystoneLevel, std::
             group->StartCountdown(CountdownTimerType::ChallengeMode, Seconds(_timeLimitMs / IN_MILLISECONDS));
 
     BroadcastTimer(_timeLimitMs);
+
+    // Re-apply stats to already-spawned creatures so they pick up the keystone scaling immediately
+    // (creatures spawned/reset after this point read the level directly in Get{Max,Base}...ForLevel).
+    for (auto const& [spawnId, creature] : _instance->GetCreatureBySpawnIdStore())
+        if (creature && creature->IsAlive())
+            creature->UpdateLevelDependantStats();
 
     TC_LOG_INFO("challengemode", "ChallengeMode start: instance {} challengeMode {} level {} timeLimit {}s",
         _instance->GetInstanceId(), mapChallengeModeId, keystoneLevel, _timeLimitMs / IN_MILLISECONDS);
