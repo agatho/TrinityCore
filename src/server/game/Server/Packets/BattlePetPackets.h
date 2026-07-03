@@ -474,7 +474,15 @@ namespace WorldPackets
         public:
             explicit LeavePetBattleQueue(WorldPacket&& packet) : ClientPacket(CMSG_LEAVE_PET_BATTLE_QUEUE, std::move(packet)) { }
 
-            void Read() override { }
+            void Read() override;
+
+            // 12.0.7 (68275) wire = ObjectGuid + uint32 + uint32 + uint64 + bitfield{1}. Field roles are
+            // type-only in the RE (UNVERIFIED); consumed so the read matches the client's bytes exactly.
+            ObjectGuid TicketGUID;
+            uint32 Unk1 = 0;
+            uint32 Unk2 = 0;
+            uint64 Unk3 = 0;
+            bool UnkBit = false;
         };
 
         class PetBattleQueueProposeMatchResult final : public ClientPacket
@@ -616,8 +624,11 @@ namespace WorldPackets
 
             bool Abandoned = false;
             bool PvpBattle = false;
-            std::array<bool, 2> Winners = {};
-            std::array<int32, 2> NpcCreatureID = {};
+            // 12.0.7 (68275) JamPetBattleFinalRound: winners@32 (uint32), npcCreatureID@36 (uint32) —
+            // both flat 4-byte reads. There is ONE npcCreatureID, not an array. The flags byte's
+            // spare bits (bit5/bit4) are separate unnamed scratch bools, NOT winners (write 0).
+            uint32 Winners = 0;        // UNVERIFIED semantics — server-defined uint32 the client relays; index-vs-bitmask needs a live sniff (RE leans per-team bitmask)
+            uint32 NpcCreatureID = 0;
             std::vector<PetBattleFinalPet> Pets;
         };
 
@@ -674,9 +685,12 @@ namespace WorldPackets
         class PetBattleMaxGameLengthWarning final : public ServerPacket
         {
         public:
-            PetBattleMaxGameLengthWarning() : ServerPacket(SMSG_PET_BATTLE_MAX_GAME_LENGTH_WARNING, 0) { }
+            PetBattleMaxGameLengthWarning() : ServerPacket(SMSG_PET_BATTLE_MAX_GAME_LENGTH_WARNING, 12) { }
 
-            WorldPacket const* Write() override { return &_worldPacket; }
+            WorldPacket const* Write() override;
+
+            uint64 TimeRemaining = 0;   // JamPetBattleMaxGameLengthWarning off0 (units unverified; RE field name only)
+            uint32 RoundsRemaining = 0; // JamPetBattleMaxGameLengthWarning off8
         };
 
         // TODO: SMSG_PET_BATTLE_CHAT_RESTRICTED should be sent when a player attempts to use

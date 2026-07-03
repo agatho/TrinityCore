@@ -201,6 +201,7 @@ WorldPacket const* BattlePetDeleted::Write()
 WorldPacket const* BattlePetError::Write()
 {
     _worldPacket << Bits<4>(Result);
+    _worldPacket.FlushBits(); // 12.0.7: Result is a 4-bit packed int (byte>>4); flush before the flat uint32
     _worldPacket << int32(CreatureID);
 
     return &_worldPacket;
@@ -218,7 +219,9 @@ void BattlePetUpdateNotify::Read()
 
 void BattlePetUpdateDisplayNotify::Read()
 {
-    _worldPacket >> PetGuid;
+    // 12.0.7 (68275): empty body (header only). The sibling CMSG_BATTLE_PET_UPDATE_NOTIFY (0x3a0092)
+    // carries the ObjectGuid; this display-notify variant (0x3a0093) does not. Reading a packed GUID
+    // from a 0-byte payload would throw, so consume nothing.
 }
 
 // ============================================================================
@@ -448,6 +451,17 @@ void PetBattleRequestPVP::Read()
     ReadPetBattleLocation(_worldPacket, Location);
 }
 
+void LeavePetBattleQueue::Read()
+{
+    // 12.0.7 (68275) wire (verified): ObjectGuid + uint32 + uint32 + uint64 + bitfield{1}.
+    // Roles are type-only in the RE; consumed to match the client bytes (no semantics asserted).
+    _worldPacket >> TicketGUID;
+    _worldPacket >> Unk1;
+    _worldPacket >> Unk2;
+    _worldPacket >> Unk3;
+    _worldPacket >> Bits<1>(UnkBit);
+}
+
 void PetBattleQueueProposeMatchResult::Read()
 {
     _worldPacket >> Bits<1>(Accepted);
@@ -562,14 +576,15 @@ ByteBuffer& operator<<(ByteBuffer& data, PetBattleFinalPet const& pet)
 
 WorldPacket const* PetBattleFinalRound::Write()
 {
+    // 12.0.7 (68275) wire (verified sub_7FF729194DC0): flags_byte, winners(u32), npcCreatureID(u32), pets.count, pets[].
+    // flags_byte = MSB-first bitfield{4}: bit7=Abandoned, bit6=PvpBattle, bit5/bit4 = unnamed scratch bools (unused -> 0).
     _worldPacket << Bits<1>(Abandoned);
     _worldPacket << Bits<1>(PvpBattle);
-    for (std::size_t i = 0; i < 2; ++i)
-        _worldPacket << Bits<1>(Winners[i]);
+    _worldPacket << Bits<2>(0u);            // spare bits (RE: separate unnamed bools, not winners)
     _worldPacket.FlushBits();
 
-    for (std::size_t i = 0; i < 2; ++i)
-        _worldPacket << int32(NpcCreatureID[i]);
+    _worldPacket << uint32(Winners);        // flat uint32 (ai_Read_CompressedUInt32FromPacket = no bit ops)
+    _worldPacket << uint32(NpcCreatureID);  // single flat uint32
 
     _worldPacket << uint32(Pets.size());
 
@@ -614,6 +629,13 @@ WorldPacket const* PetBattleQueueStatus::Write()
 WorldPacket const* BattlePetTrapLevel::Write()
 {
     _worldPacket << uint16(TrapLevel);
+    return &_worldPacket;
+}
+
+WorldPacket const* PetBattleMaxGameLengthWarning::Write()
+{
+    _worldPacket << uint64(TimeRemaining);
+    _worldPacket << uint32(RoundsRemaining);
     return &_worldPacket;
 }
 }

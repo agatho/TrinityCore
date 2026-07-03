@@ -375,6 +375,8 @@ void PetBattle::Update(uint32 diff)
                 if (Player* player = GetPlayerForTeam(i))
                 {
                     WorldPackets::BattlePet::PetBattleMaxGameLengthWarning warning;
+                    warning.TimeRemaining = (PET_BATTLE_MAX_GAME_LENGTH > _elapsedSecs) ? (PET_BATTLE_MAX_GAME_LENGTH - _elapsedSecs) : 0;
+                    warning.RoundsRemaining = 0;
                     player->SendDirectMessage(warning.Write());
                 }
             }
@@ -2343,7 +2345,9 @@ void PetBattle::SendFinalRoundPacket(bool abandoned)
     WorldPackets::BattlePet::PetBattleFinalRound finalRound;
     finalRound.Abandoned = abandoned;
     finalRound.PvpBattle = (_battleType == PET_BATTLE_TYPE_PVP || _battleType == PET_BATTLE_TYPE_LFPB);
-    finalRound.Winners[_winnerTeam] = true;
+    // 12.0.7: winners is a single uint32 the client relays without interpreting. RE lean (plural name,
+    // 2-team battle) is a per-team bitmask (bit0=team0, bit1=team1) — UNVERIFIED, needs a live sniff.
+    finalRound.Winners = (1u << _winnerTeam);
 
     for (uint8 t = 0; t < MAX_PET_BATTLE_PLAYERS; ++t)
     {
@@ -2353,7 +2357,7 @@ void PetBattle::SendFinalRoundPacket(bool abandoned)
         {
             if (Player* p = GetPlayerForTeam(PET_BATTLE_TEAM_1))
                 if (Creature* trainer = ObjectAccessor::GetCreature(*p, _npcTrainerGUID))
-                    finalRound.NpcCreatureID[t] = trainer->GetEntry();
+                    finalRound.NpcCreatureID = trainer->GetEntry();
         }
 
         for (uint8 i = 0; i < team.PetCount; ++i)

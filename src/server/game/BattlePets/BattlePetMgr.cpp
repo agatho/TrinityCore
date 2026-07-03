@@ -572,6 +572,13 @@ void BattlePetMgr::ModifyName(ObjectGuid guid, std::string const& name, std::uni
     if (!pet)
         return;
 
+    // Server-authoritative name-length cap. Client BATTLE_PET_RENAME maxLetters = 16 (12.0.7 RE,
+    // HIGH conf; zhCN uses 8 — locale not known here, so 16 is the safe upper bound). A modified
+    // client could bypass the UI limit, so reject over-long names rather than store them.
+    std::string checkName = name;
+    if (utf8length(checkName) > 16)
+        return;
+
     pet->PacketInfo.Name = name;
     pet->NameTimestamp = GameTime::GetGameTime();
 
