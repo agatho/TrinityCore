@@ -34,7 +34,7 @@ namespace WorldPackets
             WorldPacket const* Write() override;
 
             int32 SceneID = 0;
-            uint32 PlaybackFlags = 0;
+            int32 PlaybackFlags = 0;
             uint32 SceneInstanceID = 0;
             int32 SceneScriptPackageID = 0;
             int32 MovieID = 0;
