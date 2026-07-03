@@ -38,7 +38,8 @@ public:
     ~ChallengeMode();
 
     // Begin a run from a slotted keystone. affixes are the (up to 4) KeystoneAffix IDs, 0 = empty slot.
-    void Start(uint32 mapChallengeModeId, uint32 keystoneLevel, std::array<uint32, 4> const& affixes, ObjectGuid starter);
+    // keystone is the item GUID that was activated; it is upgraded/depleted in place on completion.
+    void Start(uint32 mapChallengeModeId, uint32 keystoneLevel, std::array<uint32, 4> const& affixes, ObjectGuid starter, ObjectGuid keystone);
     void Reset();
 
     void Update(uint32 diff);
@@ -68,6 +69,7 @@ private:
     uint32 _keystoneLevel = 0;
     std::array<uint32, 4> _affixes = { };
     ObjectGuid _starterGuid;
+    ObjectGuid _keystoneGuid;
 
     uint32 _timeLimitMs = 0;
     uint32 _elapsedMs = 0;

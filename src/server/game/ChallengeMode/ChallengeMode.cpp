@@ -20,22 +20,26 @@
 #include "Creature.h"
 #include "GameTime.h"
 #include "Group.h"
+#include "Item.h"
+#include "ItemDefines.h"
 #include "Log.h"
 #include "Map.h"
 #include "MiscPackets.h"
 #include "MythicPlusData.h"
 #include "ObjectAccessor.h"
 #include "Player.h"
+#include "Random.h"
 
 ChallengeMode::ChallengeMode(InstanceMap* instance) : _instance(instance) { }
 ChallengeMode::~ChallengeMode() = default;
 
-void ChallengeMode::Start(uint32 mapChallengeModeId, uint32 keystoneLevel, std::array<uint32, 4> const& affixes, ObjectGuid starter)
+void ChallengeMode::Start(uint32 mapChallengeModeId, uint32 keystoneLevel, std::array<uint32, 4> const& affixes, ObjectGuid starter, ObjectGuid keystone)
 {
     _mapChallengeModeId = mapChallengeModeId;
     _keystoneLevel = keystoneLevel;
     _affixes = affixes;
     _starterGuid = starter;
+    _keystoneGuid = keystone;
     _timeLimitMs = sChallengeModeMgr.GetTimeLimit(mapChallengeModeId) * IN_MILLISECONDS;
     _elapsedMs = 0;
     _deathCount = 0;
@@ -67,6 +71,7 @@ void ChallengeMode::Reset()
     _keystoneLevel = 0;
     _affixes = { };
     _starterGuid.Clear();
+    _keystoneGuid.Clear();
     _timeLimitMs = 0;
     _elapsedMs = 0;
     _deathCount = 0;
@@ -123,10 +128,34 @@ void ChallengeMode::Complete()
             data->RecordRun(record);
     });
 
-    // Stop the client dungeon timer.
     if (Player* starterPlayer = ObjectAccessor::GetPlayer(*_instance, _starterGuid))
+    {
+        // Upgrade (or deplete) the activated keystone in place: a timed clear raises the level and rerolls the
+        // dungeon; an over-time clear depletes it by one (floor +2). Blizzlike-equivalent to the retail
+        // "receive a new keystone" reward, without depending on the seasonal keystone item entry.
+        if (Item* keystone = starterPlayer->GetItemByGuid(_keystoneGuid))
+        {
+            uint32 const newLevel = keystoneUpgrade > 0 ? _keystoneLevel + keystoneUpgrade : std::max<uint32>(2, _keystoneLevel - 1);
+
+            uint32 newChallengeModeId = _mapChallengeModeId;
+            std::vector<uint32> const& pool = sChallengeModeMgr.GetSeasonMapChallengeModeIds();
+            if (!pool.empty())
+                newChallengeModeId = pool[urand(0, uint32(pool.size() - 1))];
+
+            keystone->SetModifier(ITEM_MODIFIER_CHALLENGE_MAP_CHALLENGE_MODE_ID, newChallengeModeId);
+            keystone->SetModifier(ITEM_MODIFIER_CHALLENGE_KEYSTONE_LEVEL, newLevel);
+
+            std::vector<uint32> const newAffixes = sChallengeModeMgr.GetActiveAffixes(newLevel);
+            for (uint32 i = 0; i < 4; ++i)
+                keystone->SetModifier(ItemModifier(ITEM_MODIFIER_CHALLENGE_KEYSTONE_AFFIX_ID_1 + i), i < newAffixes.size() ? newAffixes[i] : 0u);
+
+            keystone->SetState(ITEM_CHANGED, starterPlayer);
+        }
+
+        // Stop the client dungeon timer.
         if (Group* group = starterPlayer->GetGroup())
             group->StartCountdown(CountdownTimerType::ChallengeMode, Seconds(0));
+    }
 
     TC_LOG_INFO("challengemode", "ChallengeMode complete: instance {} challengeMode {} level {} time {}s (+{}s deaths, limit {}s) -> +{} keystone, score {:.1f}",
         _instance->GetInstanceId(), _mapChallengeModeId, _keystoneLevel, GetElapsedMs() / IN_MILLISECONDS,

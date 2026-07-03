@@ -85,5 +85,5 @@ void WorldSession::HandleStartChallengeMode(WorldPackets::ChallengeMode::StartCh
         keystone->GetModifier(ITEM_MODIFIER_CHALLENGE_KEYSTONE_AFFIX_ID_4)
     };
 
-    challenge->Start(mapChallengeModeId, keystoneLevel, affixes, player->GetGUID());
+    challenge->Start(mapChallengeModeId, keystoneLevel, affixes, player->GetGUID(), keystone->GetGUID());
 }
