@@ -1217,8 +1217,12 @@ static bool DungeonMoveOwnedElsewhere(BotSnapshotView const& s, BotAI& ai,
 //     >3y each flip would defeat DungeonStepAlreadyInFlight and restart the
 //     spline — the stateless-threshold oscillation the route follower's
 //     committed cursor exists to kill). The latch clears itself when the
-//     route rule advances the cursor (recorded index goes stale) or the map
-//     changes (map-bound sentinel);
+//     route rule advances the cursor (recorded index goes stale), the map
+//     changes (map-bound sentinel), or the bot is displaced beyond the
+//     kLatchReleaseY (12y) band — a latch armed by a TRANSIENT brush past
+//     the crumb must not outlive the displacement, or this helper walks
+//     boss-ward forever while the route rule still steers to the armed
+//     crumb (live WC yo-yo, 2026-07-03);
 //   * the bot is within kRouteArrive (8y, same constant as the route
 //     follower) of the crumb — the idle route rule just hasn't advanced the
 //     cursor yet; stepping toward an already-reached crumb would orbit it.
@@ -1247,14 +1251,31 @@ static void DungeonAdvanceTarget(BotSnapshotView const& s, BotAI& ai,
     if (advice.route_waypoints.empty()) return;
     int const cur = ai.dungeon_route_wp(s.map_id());
     if (cur < 0 || cur >= int(advice.route_waypoints.size())) return;
-    // Reached-latch hysteresis (see header comment): this crumb was already
-    // reached once — keep the boss target until the cursor moves on.
-    if (ai.adv_route_reached_idx(s.map_id()) == cur) return;
     auto const& wp = advice.route_waypoints[size_t(cur)];
     float bx2, by2, bz2; s.position(bx2, by2, bz2);
     constexpr float kRouteArrive = 8.0f;   // matches the route follower
     const float dx = wp.x - bx2, dy = wp.y - by2, dz = wp.z - bz2;
-    if (dx * dx + dy * dy + dz * dz < kRouteArrive * kRouteArrive)
+    const float crumb_d2 = dx * dx + dy * dy + dz * dz;
+    // Reached-latch hysteresis (see header comment) — honored only inside a
+    // release band. Within kLatchReleaseY of the latched crumb the boss
+    // target holds (no crumb<->boss flap across the 8y arrive line). But a
+    // bot displaced FARTHER than the band never truly settled there: live
+    // deadlock 2026-07-03 (WC east ramp) — one 2.5s movement window brushed
+    // <8y of crumb 15 and armed the latch, but the OOC route rule never got
+    // the pass that advances the cursor; from then on this helper sent rule
+    // (0) WEST toward the boss while the route rule steered EAST to the
+    // still-armed crumb — a permanent two-objective yo-yo the movement-
+    // commitment layer faithfully paced at 2.5s per leg. Beyond the band:
+    // clear the latch and resume following the cursor (rejoining the route
+    // after displacement is correct; a latch that outlives the displacement
+    // is not).
+    if (ai.adv_route_reached_idx(s.map_id()) == cur)
+    {
+        constexpr float kLatchReleaseY = 12.0f;
+        if (crumb_d2 <= kLatchReleaseY * kLatchReleaseY) return;
+        ai.set_adv_route_reached(-1, s.map_id());   // transient arrival: unlatch
+    }
+    if (crumb_d2 < kRouteArrive * kRouteArrive)
     {
         // Arrived at the cursor's crumb: arm the latch so post-arrival drift
         // back across 8y cannot re-select this same crumb, then keep boss.
