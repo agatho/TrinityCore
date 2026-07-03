@@ -1172,16 +1172,20 @@ static void DungeonStepHoldDiag(BotSnapshotView const& s, char const* rule_tag,
 //   * the bot is within kRouteArrive (8y, same constant as the route
 //     follower) of the crumb — the idle route rule just hasn't advanced the
 //     cursor yet; stepping toward an already-reached crumb would orbit it.
-//     This is also the ONLY place the reached-latch is SET;
-//   * the crumb makes no BOSS progress: require dist(crumb,boss) + 4y <
-//     dist(self,boss) (mirrors the OOC pass-0 forward-only filter). "boss"
-//     here is the CANONICAL route boss, resolved fresh just above the guard
-//     — NOT the caller's own boss (Increment 1c, 2026-07-03; see that
-//     resolution's comment for why). The cursor cannot advance while in
-//     combat (the route rule is !in_combat-gated), so a knockback/kite that
-//     drags the tank off-route can leave the armed crumb BEHIND it —
-//     without this guard the advance would steer the tank backward for the
-//     whole fight. The 4y margin keeps the boundary itself from flapping.
+//     This is also the ONLY place the reached-latch is SET.
+// Otherwise: follow the armed cursor's crumb UNCONDITIONALLY when >8y away.
+// The monotonic cursor IS the committed navigation state, and route
+// segments legitimately move AWAY from the boss on detours — that is the
+// entire reason routes exist (WC serpentine east ramp, crumbs 13-15, live
+// 2026-07-03: crumb 14 at (33.6,408.8) is ~185y from boss 3669 vs the
+// tank's ~167y, so a boss-distance forward-progress guard — Increments
+// 1b/1c — vetoed the substitution exactly on the detour and split the
+// navigator into two opposite-direction emitters re-aiming the spline at
+// tick rate; tank frozen at (15.5,406.1), MovePoint restarts 6-7x/sec,
+// zero net motion). Worst-case a displaced bot walks BACK one crumb
+// spacing to rejoin the route — and rejoining the route after displacement
+// is correct; a guard that second-guesses the cursor is not (Increment 1f,
+// which removed the guard and its canonical-boss 500y scan).
 static void DungeonAdvanceTarget(BotSnapshotView const& s, BotAI& ai,
                                  DungeonAdvice const& advice,
                                  float bossX, float bossY, float bossZ,
@@ -1207,102 +1211,28 @@ static void DungeonAdvanceTarget(BotSnapshotView const& s, BotAI& ai,
         ai.set_adv_route_reached(cur, s.map_id());
         return;
     }
-    // Increment 1c (2026-07-03): resolve the CANONICAL route boss — the
-    // same earliest-live advice.bosses[] entry, in authored order, within
-    // the SAME 500y whole-dungeon scan idle:dungeon_tank_advance_boss_route
-    // uses to pick its own destination (kBossScanR, ~:5277) — and guard the
-    // crumb against THAT position, not the caller's. Root cause (live WC,
-    // 2026-07-03): rule (0) idle:dungeon_combat_advance_boss (and the
-    // harbor fighting-advance) select their boss with a much narrower 150y
-    // commit-range scan (kPbScanR, ~:1732); on a large map the nearest live
-    // boss within 150y can be a DIFFERENT, wrong boss than the true
-    // earliest-live one the route was built toward (the real boss, entry
-    // 3669, sat 229y out — past rule (0)'s 150y horizon). Guarding against
-    // that wrong boss made crumb_bd+4 >= self_bd look true even when the
-    // crumb WAS genuine progress toward the real boss, so the substitution
-    // never activated: rule (0) walked toward its near-but-wrong boss while
-    // the route follower walked toward the real one — permanent destination
-    // ping-pong, tank stall. Falls back to the caller's boss (bossX/Y/Z,
-    // exactly as before) when nothing resolves within 500y, so behavior is
-    // UNCHANGED on any map/position where the two scans agree or the lookup
-    // fails. This mirrors the route rule's selection struct/cost verbatim
-    // (same CreatureListSearcher + per-entry-in-order commit) and runs at
-    // most once per call — no caching/state added, matching that rule's own
-    // per-tick cost profile.
-    float gbx = bossX, gby = bossY, gbz = bossZ;
-    uint32 canon_entry = 0;
-    bool canon_resolved = false;
-    if (Player* self_adv = ObjectAccessor::FindConnectedPlayer(s.raw().guid))
-    {
-        struct CanonBossCheck
-        {
-            Player const* origin;
-            std::vector<uint32_t> const& entries;
-            float range;
-            bool operator()(Creature* c) const
-            {
-                if (!c || !c->IsAlive()) return false;
-                for (uint32_t e : entries)
-                    if (c->GetEntry() == e)
-                        return origin->IsWithinDistInMap(c, range);
-                return false;
-            }
-        };
-        // Matches the route follower's whole-dungeon scan radius exactly
-        // (kBossScanR, ~:5277) — this IS that scan, replicated so the guard
-        // sees the navigator's true objective instead of the caller's.
-        constexpr float kCanonBossScanR = 500.0f;
-        std::list<Creature*> canon_cre;
-        CanonBossCheck canon_chk{self_adv, advice.bosses, kCanonBossScanR};
-        Trinity::CreatureListSearcher<CanonBossCheck> canon_search(self_adv, canon_cre, canon_chk);
-        Cell::VisitAllObjects(self_adv, canon_search, kCanonBossScanR);
-
-        // Commit to the EARLIEST live boss in progression order — identical
-        // semantics to the route follower's own commit (~:5310-5320).
-        Creature* canon_boss = nullptr;
-        for (uint32_t bentry : advice.bosses)
-        {
-            for (Creature* bc : canon_cre)
-                if (bc && bc->GetEntry() == bentry && bc->IsAlive())
-                { canon_boss = bc; break; }
-            if (canon_boss) break;
-        }
-        if (canon_boss)
-        {
-            gbx = canon_boss->GetPositionX();
-            gby = canon_boss->GetPositionY();
-            gbz = canon_boss->GetPositionZ();
-            canon_entry = canon_boss->GetEntry();
-            canon_resolved = true;
-        }
-    }
-    // Forward-progress guard: substitute only while walking to the crumb is
-    // genuinely boss progress (crumb strictly nearer the boss than we are,
-    // 4y stabilizing margin) — a combat shove can strand the armed crumb
-    // BEHIND the tank and the cursor cannot advance until combat drops.
-    const float cbx = gbx - wp.x, cby = gby - wp.y, cbz = gbz - wp.z;
-    const float bdx = gbx - bx2, bdy = gby - by2, bdz = gbz - bz2;
-    const float crumb_bd = std::sqrt(cbx * cbx + cby * cby + cbz * cbz);
-    const float self_bd  = std::sqrt(bdx * bdx + bdy * bdy + bdz * bdz);
-    if (crumb_bd + 4.0f >= self_bd) return;
+    // Unconditional crumb-follow past this point (Increment 1f — see the
+    // header comment): no forward-progress / boss-distance guard, no
+    // canonical-boss resolution. The cursor is the committed navigation
+    // state; second-guessing it against ANY boss position vetoes exactly
+    // the detour segments routes exist for.
     tx = wp.x; ty = wp.y; tz = wp.z;
 
     // Throttled [adv_route] diag — ONE log site, fires only while the
     // substitution is actually active, so live forensics can grep it to
-    // confirm both rule families are now aiming at the same crumb. Includes
-    // the canonical (route) boss used for the guard, so live logs show
-    // whether it resolved and which entry/position it used.
+    // confirm both rule families are now aiming at the same crumb. boss_d
+    // is the distance to the CALLER's boss (the coords substituted away).
     static uint32 s_adv_route_dbg_ms = 0;
     const uint32 now = GameTime::GetGameTimeMS();
     if (now - s_adv_route_dbg_ms > 1500u)
     {
         s_adv_route_dbg_ms = now;
+        const float bdx = bossX - bx2, bdy = bossY - by2, bdz = bossZ - bz2;
         TC_LOG_INFO("playerbot.v2",
             "[adv_route] bot={} rule={} cur=({:.1f},{:.1f},{:.1f}) "
-            "crumb=({:.1f},{:.1f},{:.1f}) idx={} boss_d={:.1f} "
-            "canon_resolved={} canon_entry={} canon_boss=({:.1f},{:.1f},{:.1f})",
+            "crumb=({:.1f},{:.1f},{:.1f}) idx={} boss_d={:.1f}",
             s.bot_id(), rule_tag, bx2, by2, bz2, wp.x, wp.y, wp.z, cur,
-            self_bd, canon_resolved ? 1 : 0, canon_entry, gbx, gby, gbz);
+            std::sqrt(bdx * bdx + bdy * bdy + bdz * bdz));
     }
 }
 
