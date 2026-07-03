@@ -1343,7 +1343,7 @@ void HousingMap::SendPostTutorialAuras(Player* player)
         auraInfo.AuraData.emplace();
         auraInfo.AuraData->CastID = castId;
         auraInfo.AuraData->SpellID = SPELL_HOUSING_TUTORIAL_DONE_1;
-        auraInfo.AuraData->Flags = AFLAG_NOCASTER;
+        auraInfo.AuraData->Flags = AFLAG_SELF_CAST;
         auraInfo.AuraData->ActiveFlags = 1;
         auraInfo.AuraData->CastLevel = 36;
         auraInfo.AuraData->Applications = 0;
@@ -1390,7 +1390,7 @@ void HousingMap::SendPostTutorialAuras(Player* player)
         auraInfo.AuraData.emplace();
         auraInfo.AuraData->CastID = castId;
         auraInfo.AuraData->SpellID = SPELL_HOUSING_TUTORIAL_DONE_2;
-        auraInfo.AuraData->Flags = AFLAG_NOCASTER;
+        auraInfo.AuraData->Flags = AFLAG_SELF_CAST;
         auraInfo.AuraData->ActiveFlags = 1;
         auraInfo.AuraData->CastLevel = 36;
         auraInfo.AuraData->Applications = 0;
@@ -1437,7 +1437,7 @@ void HousingMap::SendPostTutorialAuras(Player* player)
         auraInfo.AuraData.emplace();
         auraInfo.AuraData->CastID = castId;
         auraInfo.AuraData->SpellID = SPELL_HOUSING_TUTORIAL_DONE_3;
-        auraInfo.AuraData->Flags = AFLAG_NOCASTER | AFLAG_SCALABLE;
+        auraInfo.AuraData->Flags = AFLAG_SELF_CAST | AFLAG_SCALABLE;
         auraInfo.AuraData->ActiveFlags = 1;
         auraInfo.AuraData->CastLevel = 36;
         auraInfo.AuraData->Applications = 0;
@@ -1504,10 +1504,10 @@ void HousingMap::SendNeighborhoodMapEntryAuras(Player* player)
         uint32 VisualSpellXSpellVisualID;
     };
     constexpr std::array<MapEntryAura, 4> kAuras = {{
-        { SPELL_HOUSING_MAP_ENTRY_FIXUP,    20,  AFLAG_NOCASTER,                1, 0                                        },
-        { SPELL_HOUSING_MAP_ENTRY_REACT,    22,  AFLAG_NOCASTER,                1, 0                                        },
-        { SPELL_HOUSING_MAP_ENTRY_ENDEAVOR, 53,  AFLAG_NOCASTER,                1, 0                                        },
-        { SPELL_HOUSING_MAP_ENTRY_NEIGHBOR, 121, uint16(AFLAG_NOCASTER | AFLAG_POSITIVE), 3, VISUAL_HOUSING_MAP_ENTRY_NEIGHBOR },
+        { SPELL_HOUSING_MAP_ENTRY_FIXUP,    20,  AFLAG_SELF_CAST,                1, 0                                        },
+        { SPELL_HOUSING_MAP_ENTRY_REACT,    22,  AFLAG_SELF_CAST,                1, 0                                        },
+        { SPELL_HOUSING_MAP_ENTRY_ENDEAVOR, 53,  AFLAG_SELF_CAST,                1, 0                                        },
+        { SPELL_HOUSING_MAP_ENTRY_NEIGHBOR, 121, uint16(AFLAG_SELF_CAST | AFLAG_POSITIVE), 3, VISUAL_HOUSING_MAP_ENTRY_NEIGHBOR },
     }};
 
     uint16 const castLevel = static_cast<uint16>(player->GetLevel());
@@ -1604,7 +1604,7 @@ void HousingMap::SendPlotEnterSpellPackets(Player* player, uint8 plotIndex)
         auraInfo.AuraData.emplace();
         auraInfo.AuraData->CastID = castId;
         auraInfo.AuraData->SpellID = SPELL_HOUSING_PLOT_ENTER;
-        auraInfo.AuraData->Flags = AFLAG_NOCASTER;
+        auraInfo.AuraData->Flags = AFLAG_SELF_CAST;
         auraInfo.AuraData->ActiveFlags = 1;
         auraInfo.AuraData->CastLevel = 36;
         auraInfo.AuraData->Applications = 0;
@@ -1661,7 +1661,7 @@ void HousingMap::SendPlotEnterSpellPackets(Player* player, uint8 plotIndex)
         auraInfo.AuraData.emplace();
         auraInfo.AuraData->CastID = castId2;
         auraInfo.AuraData->SpellID = SPELL_HOUSING_PLOT_PRESENCE;
-        auraInfo.AuraData->Flags = AFLAG_NOCASTER;
+        auraInfo.AuraData->Flags = AFLAG_SELF_CAST;
         auraInfo.AuraData->ActiveFlags = 1;
         auraInfo.AuraData->CastLevel = 36;
         auraInfo.AuraData->Applications = 0;
@@ -1719,7 +1719,7 @@ void HousingMap::SendPlotEnterSpellPackets(Player* player, uint8 plotIndex)
         auraInfo.AuraData.emplace();
         auraInfo.AuraData->CastID = castId3;
         auraInfo.AuraData->SpellID = SPELL_HOUSING_PLOT_ENTER_2;
-        auraInfo.AuraData->Flags = AFLAG_NOCASTER | AFLAG_SCALABLE;
+        auraInfo.AuraData->Flags = AFLAG_SELF_CAST | AFLAG_SCALABLE;
         auraInfo.AuraData->ActiveFlags = 1;
         auraInfo.AuraData->CastLevel = 36;
         auraInfo.AuraData->Applications = 0;

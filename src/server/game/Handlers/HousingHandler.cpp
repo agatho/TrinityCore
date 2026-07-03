@@ -106,7 +106,7 @@ namespace
             auraInfo.AuraData.emplace();
             auraInfo.AuraData->CastID = castId;
             auraInfo.AuraData->SpellID = spellId;
-            auraInfo.AuraData->Flags = AFLAG_NOCASTER;
+            auraInfo.AuraData->Flags = AFLAG_SELF_CAST;
             auraInfo.AuraData->ActiveFlags = auraActiveFlags;
             auraInfo.AuraData->CastLevel = 36;
             auraInfo.AuraData->Applications = 0;
@@ -3277,11 +3277,11 @@ void WorldSession::HandleHousingSvcsUpdateHouseSettings(WorldPackets::Housing::H
     if (housingMap)
     {
         WorldPackets::Housing::HousingGetCurrentHouseInfoResponse houseInfoUpdate;
-        houseInfoUpdate.House.HouseGuid = housing->GetHouseGuid();
-        houseInfoUpdate.House.OwnerGuid = player->GetGUID();
-        houseInfoUpdate.House.NeighborhoodGuid = housing->GetNeighborhoodGuid();
-        houseInfoUpdate.House.PlotId = housing->GetPlotIndex();
-        houseInfoUpdate.House.AccessFlags = housing->GetSettingsFlags();
+        houseInfoUpdate.House.HouseGUID = housing->GetHouseGuid();
+        houseInfoUpdate.House.OwnerGUID = player->GetGUID();
+        houseInfoUpdate.House.NeighborhoodGUID = housing->GetNeighborhoodGuid();
+        houseInfoUpdate.House.PlotIndex = housing->GetPlotIndex();
+        houseInfoUpdate.House.HouseLevel = static_cast<uint8>(housing->GetLevel()); // JamCliHouse carries level, not settings flags (RE 0x550001)
         houseInfoUpdate.Result = 0;
         WorldPacket const* updatePkt = houseInfoUpdate.Write();
 
@@ -4270,42 +4270,42 @@ void WorldSession::HandleHousingGetCurrentHouseInfo(WorldPackets::Housing::Housi
             else if (Player* ownerPlayer = ObjectAccessor::FindPlayer(plotInfo->OwnerGuid))
                 plotHousing = ownerPlayer->GetHousing();
 
-            response.House.HouseGuid = plotInfo->HouseGuid;
-            response.House.OwnerGuid = plotInfo->OwnerGuid;
-            response.House.NeighborhoodGuid = neighborhood->GetGuid();
-            response.House.PlotId = static_cast<uint8>(currentPlot);
-            response.House.AccessFlags = plotHousing ? plotHousing->GetSettingsFlags() : HOUSE_SETTING_DEFAULT;
+            response.House.HouseGUID = plotInfo->HouseGuid;
+            response.House.OwnerGUID = plotInfo->OwnerGuid;
+            response.House.NeighborhoodGUID = neighborhood->GetGuid();
+            response.House.PlotIndex = static_cast<uint8>(currentPlot);
+            response.House.HouseLevel = plotHousing ? static_cast<uint8>(plotHousing->GetLevel()) : 0; // JamCliHouse carries level, not settings flags (RE 0x550001)
         }
         else
         {
             // On an unoccupied plot
-            response.House.OwnerGuid = player->GetGUID();
-            response.House.NeighborhoodGuid = neighborhood->GetGuid();
-            response.House.PlotId = static_cast<uint8>(currentPlot);
+            response.House.OwnerGUID = player->GetGUID();
+            response.House.NeighborhoodGUID = neighborhood->GetGuid();
+            response.House.PlotIndex = static_cast<uint8>(currentPlot);
         }
     }
     else if (Housing* housing = player->GetHousing())
     {
         // Not on any tracked plot — fall back to player's own house data
-        response.House.HouseGuid = housing->GetHouseGuid();
-        response.House.OwnerGuid = player->GetGUID();
-        response.House.NeighborhoodGuid = housing->GetNeighborhoodGuid();
-        response.House.PlotId = housing->GetPlotIndex();
-        response.House.AccessFlags = housing->GetSettingsFlags();
+        response.House.HouseGUID = housing->GetHouseGuid();
+        response.House.OwnerGUID = player->GetGUID();
+        response.House.NeighborhoodGUID = housing->GetNeighborhoodGuid();
+        response.House.PlotIndex = housing->GetPlotIndex();
+        response.House.HouseLevel = static_cast<uint8>(housing->GetLevel()); // JamCliHouse carries level, not settings flags (RE 0x550001)
     }
     else if (housingMap)
     {
         // No house, no tracked plot
-        response.House.OwnerGuid = player->GetGUID();
+        response.House.OwnerGUID = player->GetGUID();
         if (Neighborhood* neighborhood = housingMap->GetNeighborhood())
-            response.House.NeighborhoodGuid = neighborhood->GetGuid();
+            response.House.NeighborhoodGUID = neighborhood->GetGuid();
     }
     response.Result = 0;
     WorldPacket const* houseInfoPkt = response.Write();
-    TC_LOG_ERROR("housing", "<<< SMSG_HOUSING_GET_CURRENT_HOUSE_INFO_RESPONSE ({} bytes) currentPlot={} HouseGuid={} OwnerGuid={} NeighborhoodGuid={} PlotId={} AccessFlags={}",
+    TC_LOG_ERROR("housing", "<<< SMSG_HOUSING_GET_CURRENT_HOUSE_INFO_RESPONSE ({} bytes) currentPlot={} HouseGuid={} OwnerGuid={} NeighborhoodGuid={} PlotIndex={} HouseLevel={}",
         houseInfoPkt->size(), currentPlot,
-        response.House.HouseGuid.ToString(), response.House.OwnerGuid.ToString(),
-        response.House.NeighborhoodGuid.ToString(), response.House.PlotId, response.House.AccessFlags);
+        response.House.HouseGUID.ToString(), response.House.OwnerGUID.ToString(),
+        response.House.NeighborhoodGUID.ToString(), response.House.PlotIndex, response.House.HouseLevel);
     SendPacket(houseInfoPkt);
 }
 
@@ -4366,7 +4366,13 @@ void WorldSession::HandleInvitePlayerToNeighborhood(WorldPackets::Housing::Invit
     if (!player)
         return;
 
-    Neighborhood* neighborhood = sNeighborhoodMgr.ResolveNeighborhood(invitePlayerToNeighborhood.NeighborhoodGuid, player);
+    // 12.0.7 (build 68275): the CMSG carries only the invitee's NAME (RE 0x40019b). Resolve the
+    // inviter's own neighborhood (their house's neighborhood) and look the invitee up by name.
+    ObjectGuid neighborhoodGuid;
+    if (Housing const* housing = player->GetHousing())
+        neighborhoodGuid = housing->GetNeighborhoodGuid();
+
+    Neighborhood* neighborhood = sNeighborhoodMgr.ResolveNeighborhood(neighborhoodGuid, player);
     if (!neighborhood)
     {
         WorldPackets::Neighborhood::NeighborhoodInviteResidentResponse response;
@@ -4383,26 +4389,40 @@ void WorldSession::HandleInvitePlayerToNeighborhood(WorldPackets::Housing::Invit
         return;
     }
 
-    HousingResult result = neighborhood->InviteResident(player->GetGUID(), invitePlayerToNeighborhood.PlayerGuid);
+    // NOTE: resolves currently-connected players by name only; offline-name lookup
+    // (name cache / DB) is a follow-up.
+    ObjectGuid inviteeGuid;
+    if (Player* invitee = ObjectAccessor::FindConnectedPlayerByName(invitePlayerToNeighborhood.PlayerName))
+        inviteeGuid = invitee->GetGUID();
+
+    if (inviteeGuid.IsEmpty())
+    {
+        WorldPackets::Neighborhood::NeighborhoodInviteResidentResponse response;
+        response.Result = static_cast<uint8>(HOUSING_RESULT_GENERIC_FAILURE);
+        SendPacket(response.Write());
+        return;
+    }
+
+    HousingResult result = neighborhood->InviteResident(player->GetGUID(), inviteeGuid);
 
     WorldPackets::Neighborhood::NeighborhoodInviteResidentResponse response;
     response.Result = static_cast<uint8>(result);
-    response.InviteeGuid = invitePlayerToNeighborhood.PlayerGuid;
+    response.InviteeGuid = inviteeGuid;
     SendPacket(response.Write());
 
     // Notify the invitee that they received a neighborhood invite
     if (result == HOUSING_RESULT_SUCCESS)
     {
-        if (Player* invitee = ObjectAccessor::FindPlayer(invitePlayerToNeighborhood.PlayerGuid))
+        if (Player* invitee = ObjectAccessor::FindPlayer(inviteeGuid))
         {
             WorldPackets::Neighborhood::NeighborhoodInviteNotification notification;
-            notification.NeighborhoodGuid = invitePlayerToNeighborhood.NeighborhoodGuid;
+            notification.NeighborhoodGuid = neighborhood->GetGuid();
             invitee->SendDirectMessage(notification.Write());
         }
     }
 
-    TC_LOG_INFO("housing", "CMSG_INVITE_PLAYER_TO_NEIGHBORHOOD PlayerGuid: {}, Result: {}",
-        invitePlayerToNeighborhood.PlayerGuid.ToString(), uint32(result));
+    TC_LOG_INFO("housing", "CMSG_INVITE_PLAYER_TO_NEIGHBORHOOD PlayerName: '{}', Result: {}",
+        invitePlayerToNeighborhood.PlayerName, uint32(result));
 }
 
 void WorldSession::HandleGuildGetOthersOwnedHouses(WorldPackets::Housing::GuildGetOthersOwnedHouses const& guildGetOthersOwnedHouses)

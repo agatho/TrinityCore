@@ -286,10 +286,9 @@ void HousingRoomSetComponentTheme::Read()
     _worldPacket >> HouseThemeID;
     for (uint32& optionID : OptionIDs)
         _worldPacket >> optionID;
-    _worldPacket >> TrailingField;
 
-    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_ROOM_SET_COMPONENT_THEME RoomGuid: {} HouseThemeID: {} OptionCount: {} TrailingField: {}",
-        RoomGuid.ToString(), HouseThemeID, OptionIDs.size(), TrailingField);
+    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_ROOM_SET_COMPONENT_THEME RoomGuid: {} HouseThemeID: {} OptionCount: {}",
+        RoomGuid.ToString(), HouseThemeID, OptionIDs.size());
 }
 
 void HousingRoomApplyComponentMaterials::Read()
@@ -480,11 +479,12 @@ void QueryNeighborhoodInfo::Read()
 
 void InvitePlayerToNeighborhood::Read()
 {
-    _worldPacket >> PlayerGuid;
-    _worldPacket >> NeighborhoodGuid;
+    // 12.0.7 (build 68275): wire is a single 6-bit-length-prefixed player name (invite by name,
+    // not GUID). RE feedback 0x40019b.
+    _worldPacket >> SizedString::BitsSize<6>(PlayerName);
+    _worldPacket >> SizedString::Data(PlayerName);
 
-    TC_LOG_DEBUG("network.opcode", "CMSG_INVITE_PLAYER_TO_NEIGHBORHOOD PlayerGuid: {} NeighborhoodGuid: {}",
-        PlayerGuid.ToString(), NeighborhoodGuid.ToString());
+    TC_LOG_DEBUG("network.opcode", "CMSG_INVITE_PLAYER_TO_NEIGHBORHOOD PlayerName: '{}'", PlayerName);
 }
 
 void GuildGetOthersOwnedHouses::Read()
@@ -1080,20 +1080,20 @@ ByteBuffer& operator<<(ByteBuffer& data, HouseInfo const& houseInfo)
 static void WriteJamCliHouse(WorldPacket& packet, JamCliHouse const& house)
 {
     // Wire: PackedGUID(House) + PackedGUID(Owner) + PackedGUID(Neighborhood)
-    //     + uint32(PlotIndex) + uint8(HouseLevel)
+    //     + uint8(HouseLevel @48) + uint32(PlotIndex @72)
     //     + uint8(bit7 = HasOptionalField) [+ uint64(OptionalValue) if flag set]
     //
-    // Confirmed in-game on 2026-04-20 13:15-13:30: wire order is uint32 BEFORE
-    // uint8. The "IDA-verified" swap (uint8 PlotIndex at +48 / uint32 HouseLevel
-    // at +72) looks right on paper but empirically breaks the regular neighborhood
-    // map — icons stop differentiating and the hover tooltip falls back to raw
-    // plot index. Order below is what the client actually accepts.
+    // Order updated 2026-06-30 to the 12.0.7 (build 68275) client binary: the
+    // JamCliHouse element reads uint8(@48) BEFORE uint32(@72). The earlier
+    // 2026-04-20 in-game test that put uint32 first validated the 12.0.5 wire
+    // (the struct's scalar order swapped between 12.0.5 and 12.0.7); the 68275
+    // serializer is authoritative. RE feedback: re_feedback_68275.json 0x54000b et al.
     size_t beforeWpos = packet.wpos();
     packet << house.HouseGUID;
     packet << house.OwnerGUID;
     packet << house.NeighborhoodGUID;
-    packet << uint32(house.PlotIndex);
     packet << uint8(house.HouseLevel);
+    packet << uint32(house.PlotIndex);
     packet << uint8(house.HasOptionalField ? 0x80 : 0x00);
     if (house.HasOptionalField)
         packet << uint64(house.OptionalValue);
@@ -1174,26 +1174,29 @@ WorldPacket const* HousingSvcsChangeHouseCosmeticOwner::Write()
 
 WorldPacket const* HousingSvcsUpdateHousesLevelFavor::Write()
 {
-    // 12.0.5 sniff-validated wire (SNIFF_VALIDATION_67186.md):
-    //   uint8(Result) + 3×uint32 + 3×PackedGUID + int64(NewFavorTotal) + uint8 + uint32 + uint8
-    // Sample sniff (40 bytes, OwnerGUID and NeighborhoodGUID empty):
-    //   00 ec 04 00 00 01 00 00 00 01 00 00 00 00 00 00 00 07 c3 0b 31 15 07 80 60 dc
-    //   ff ff ff ff ff ff ff ff 00 00 00 00 00 80
+    // 12.0.7 (build 68275) LIST form (dispatcher 0x7FF7291F1920), RE feedback 0x540011:
+    //   u8 Result + u32 ChangeAmount + u32 Reason + u32 count
+    //   + count x { 3x PackedGUID, int64 NewFavorTotal, u8 Field3, u32 Reserved, u8(bit7 Flag) }
+    // The 12.0.5 "flat record" was a 1-element list whose count was mislabeled Field2(=1);
+    // for a single house this emits identical bytes to the old sniff-validated capture.
     _worldPacket << uint8(Result);
     _worldPacket << uint32(ChangeAmount);
     _worldPacket << uint32(Reason);
-    _worldPacket << uint32(Field2);
-    _worldPacket << OwnerGUID;
-    _worldPacket << NeighborhoodGUID;
-    _worldPacket << HouseGUID;
-    _worldPacket << int64(NewFavorTotal);
-    _worldPacket << uint8(Field3);
-    _worldPacket << uint32(Reserved);
-    _worldPacket << uint8(Terminator);
+    _worldPacket << uint32(Houses.size());
+    for (HouseLevelFavor const& house : Houses)
+    {
+        _worldPacket << house.OwnerGUID;
+        _worldPacket << house.NeighborhoodGUID;
+        _worldPacket << house.HouseGUID;
+        _worldPacket << int64(house.NewFavorTotal);     // u32 low @48 + u32 high @52
+        _worldPacket << uint8(house.Field3);            // u8 @57
+        _worldPacket << uint32(house.Reserved);         // u32 @60
+        _worldPacket << uint8(house.Flag ? 0x80 : 0x00);// trailing byte, bit7 @56
+    }
 
     TC_LOG_DEBUG("network.opcode",
-        "SMSG_HOUSING_SVCS_UPDATE_HOUSES_LEVEL_FAVOR Result: {} ChangeAmount: {} Reason: {} HouseGUID: {} NewFavorTotal: {}",
-        Result, ChangeAmount, Reason, HouseGUID.ToString(), NewFavorTotal);
+        "SMSG_HOUSING_SVCS_UPDATE_HOUSES_LEVEL_FAVOR Result: {} ChangeAmount: {} Reason: {} Houses: {}",
+        Result, ChangeAmount, Reason, Houses.size());
 
     return &_worldPacket;
 }
@@ -1482,11 +1485,35 @@ WorldPacket const* HousingHouseStatusResponse::Write()
 
 WorldPacket const* HousingGetCurrentHouseInfoResponse::Write()
 {
-    _worldPacket << House;
+    WriteJamCliHouse(_worldPacket, House);
     _worldPacket << uint8(Result);
 
     TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_GET_CURRENT_HOUSE_INFO_RESPONSE Result: {} HouseGuid: {}",
-        Result, House.HouseGuid.ToString());
+        Result, House.HouseGUID.ToString());
+
+    return &_worldPacket;
+}
+
+WorldPacket const* HousingExportHouseResponse::Write()
+{
+    // 12.0.7 (build 68275), parser sub_7FF7291D7160. RE feedback 0x550003.
+    _worldPacket << HouseGuid;
+    _worldPacket << uint8(Status);
+    // Optional name string: presence byte (bit7 = present). Empty-name path is exact; the
+    // bit-packed length encoding of the present path is unconfirmed — flagged in the header.
+    if (ExportName)
+    {
+        _worldPacket << uint8(0x80 | static_cast<uint8>(ExportName->size() & 0x7F));
+        _worldPacket.WriteString(*ExportName);
+    }
+    else
+        _worldPacket << uint8(0);
+    _worldPacket << uint32(ExportBlob.size());
+    if (!ExportBlob.empty())
+        _worldPacket.append(ExportBlob.data(), ExportBlob.size());
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_EXPORT_HOUSE_RESPONSE HouseGuid: {} Status: {} BlobLen: {}",
+        HouseGuid.ToString(), Status, ExportBlob.size());
 
     return &_worldPacket;
 }
@@ -1906,9 +1933,9 @@ void NeighborhoodCharterCreate::Read()
 {
     _worldPacket >> NeighborhoodMapID;
     _worldPacket >> FactionFlags;
-    _worldPacket >> SizedString::BitsSize<7>(Name);
+    _worldPacket >> SizedCString::BitsSize<8>(Name);
 
-    _worldPacket >> SizedString::Data(Name);
+    _worldPacket >> SizedCString::Data(Name);
 
     TC_LOG_DEBUG("network.opcode", "CMSG_NEIGHBORHOOD_CHARTER_CREATE MapID: {} FactionFlags: {} Name: '{}'", NeighborhoodMapID, FactionFlags, Name);
 }
@@ -1917,9 +1944,9 @@ void NeighborhoodCharterEdit::Read()
 {
     _worldPacket >> NeighborhoodMapID;
     _worldPacket >> FactionFlags;
-    _worldPacket >> SizedString::BitsSize<7>(Name);
+    _worldPacket >> SizedCString::BitsSize<8>(Name);
 
-    _worldPacket >> SizedString::Data(Name);
+    _worldPacket >> SizedCString::Data(Name);
 
     TC_LOG_DEBUG("network.opcode", "CMSG_NEIGHBORHOOD_CHARTER_EDIT MapID: {} FactionFlags: {} Name: '{}'", NeighborhoodMapID, FactionFlags, Name);
 }
@@ -1945,9 +1972,9 @@ void NeighborhoodCharterSendSignatureRequest::Read()
 
 void NeighborhoodUpdateName::Read()
 {
-    _worldPacket >> SizedString::BitsSize<7>(NewName);
+    _worldPacket >> SizedCString::BitsSize<8>(NewName);
 
-    _worldPacket >> SizedString::Data(NewName);
+    _worldPacket >> SizedCString::Data(NewName);
 
     TC_LOG_DEBUG("network.opcode", "CMSG_NEIGHBORHOOD_UPDATE_NAME NewName: '{}'", NewName);
 }
@@ -2072,15 +2099,12 @@ void NeighborhoodOfferOwnershipResponsePacket::Read()
 
 WorldPacket const* NeighborhoodCharterUpdateResponse::Write()
 {
-    // IDA-verified wire (build 67186, sub_7FF75C1DF0B0 case 0x5B0000, EA 0x7FF75C1DF0FC):
-    //   Bits<1>(error) + ObjectGuid CharterGuid + uint32 MapID + uint32 SignatureCount
+    // 12.0.7 (build 68275): leading field is a full uint8(Result) status code (the client
+    // reads a whole byte and tests != 0), NOT a single bit. RE feedback 0x5b0000.
+    //   uint8 Result + ObjectGuid CharterGuid + uint32 MapID + uint32 SignatureCount
     //   + uint32 SignersCount + uint32 Unknown + ObjectGuid[SignersCount]
-    //   + Bits<8>(NameLen) + StringData
-    // The leading bit is the error flag (bit 7 of first byte). Old uint8(Result)
-    // wrote the full Result byte — for all standard Result values (0..127) bit 7
-    // is 0, so client always saw "no error" even on failures.
-    _worldPacket.WriteBit(Result != 0);
-    _worldPacket.FlushBits();
+    //   + uint8(NameLen) + StringData
+    _worldPacket << uint8(Result);
     _worldPacket << CharterGuid;
     _worldPacket << uint32(MapID);
     _worldPacket << uint32(SignatureCount);
@@ -2099,10 +2123,9 @@ WorldPacket const* NeighborhoodCharterUpdateResponse::Write()
 
 WorldPacket const* NeighborhoodCharterOpenUIResponse::Write()
 {
-    // IDA-verified wire (build 67186, sub_7FF75C1DF0B0 case 0x5B0001, EA 0x7FF75C1DF350):
-    // Identical to 0x5B0000 (charter UI update + open both use the same shape).
-    _worldPacket.WriteBit(Result != 0);
-    _worldPacket.FlushBits();
+    // 12.0.7 (build 68275): identical shape to 0x5B0000; leading field is a full uint8(Result),
+    // not a bit. RE feedback 0x5b0001.
+    _worldPacket << uint8(Result);
     _worldPacket << CharterGuid;
     _worldPacket << uint32(MapID);
     _worldPacket << uint32(SignatureCount);
@@ -2182,6 +2205,8 @@ WorldPacket const* NeighborhoodCharterSignatureRemovedNotification::Write()
 
 WorldPacket const* NeighborhoodEvictPlayerResponse::Write()
 {
+    // UNVERIFIED — needs live sniff. 12.0.7 client consumes this body as opaque bytes[rest]
+    // without decoding fields, so the internal layout cannot be confirmed offline (RE 0x5c0000).
     _worldPacket << PlayerGuid;
 
     TC_LOG_DEBUG("network.opcode", "SMSG_NEIGHBORHOOD_EVICT_PLAYER_RESPONSE PlayerGuid: {}", PlayerGuid.ToString());
@@ -2222,17 +2247,17 @@ WorldPacket const* NeighborhoodRemoveSecondaryOwnerResponse::Write()
 
 WorldPacket const* NeighborhoodBuyHouseResponse::Write()
 {
-    _worldPacket << House;
+    WriteJamCliHouse(_worldPacket, House);
     _worldPacket << uint8(Result);
 
-    TC_LOG_DEBUG("network.opcode", "SMSG_NEIGHBORHOOD_BUY_HOUSE_RESPONSE Result: {} HouseGuid: {}", Result, House.HouseGuid.ToString());
+    TC_LOG_DEBUG("network.opcode", "SMSG_NEIGHBORHOOD_BUY_HOUSE_RESPONSE Result: {} HouseGuid: {}", Result, House.HouseGUID.ToString());
 
     return &_worldPacket;
 }
 
 WorldPacket const* NeighborhoodMoveHouseResponse::Write()
 {
-    _worldPacket << House;
+    WriteJamCliHouse(_worldPacket, House);
     _worldPacket << MoveTransactionGuid;
     _worldPacket << uint8(Result);
 
@@ -2312,14 +2337,13 @@ WorldPacket const* NeighborhoodCancelInvitationResponse::Write()
 
 WorldPacket const* NeighborhoodDeclineInvitationResponse::Write()
 {
-    // IDA-verified wire (build 67186, sub_7FF75C1E0050 case 0x5C000A → LABEL_46):
-    // ClientOpcode_helper_31E0120(packet, &guid) — single PackedGUID, no leading byte.
-    // Failure result is communicated via SMSG_HOUSING_SVCS_NOTIFY_PERMISSIONS_FAILURE
-    // (0x540000), not via a per-response leading uint8.
+    // 12.0.7 (build 68275): leading uint8(Result) read via ClientOpcode_helper_318EF90,
+    // THEN the GUID (the invited player's guid client-side). RE feedback 0x5c000a.
+    _worldPacket << uint8(Result);
     _worldPacket << NeighborhoodGuid;
 
-    TC_LOG_DEBUG("network.opcode", "SMSG_NEIGHBORHOOD_DECLINE_INVITATION_RESPONSE NeighborhoodGuid: {} (Result {} dropped — not on wire)",
-        NeighborhoodGuid.ToString(), Result);
+    TC_LOG_DEBUG("network.opcode", "SMSG_NEIGHBORHOOD_DECLINE_INVITATION_RESPONSE Result: {} NeighborhoodGuid: {}",
+        Result, NeighborhoodGuid.ToString());
 
     return &_worldPacket;
 }
@@ -2457,24 +2481,26 @@ WorldPacket const* NeighborhoodRosterResidentUpdate::Write()
 
 WorldPacket const* NeighborhoodInviteNameLookupResult::Write()
 {
-    // IDA-verified wire (build 67186, sub_7FF75C1E0050 case 0x5C0011): single
-    // PackedGUID via ClientOpcode_helper_31E0120 — no leading uint8 Result.
+    // 12.0.7 (build 68275): leading uint8(Result) via ClientOpcode_helper_318EF90, then the GUID.
+    // RE feedback 0x5c0011.
+    _worldPacket << uint8(Result);
     _worldPacket << PlayerGuid;
 
-    TC_LOG_DEBUG("network.opcode", "SMSG_NEIGHBORHOOD_INVITE_NAME_LOOKUP_RESULT PlayerGuid: {} (Result {} dropped — not on wire)",
-        PlayerGuid.ToString(), Result);
+    TC_LOG_DEBUG("network.opcode", "SMSG_NEIGHBORHOOD_INVITE_NAME_LOOKUP_RESULT Result: {} PlayerGuid: {}",
+        Result, PlayerGuid.ToString());
 
     return &_worldPacket;
 }
 
 WorldPacket const* NeighborhoodEvictPlotResponse::Write()
 {
-    // IDA-verified wire (build 67186, sub_7FF75C1E0050 case 0x5C0012 → LABEL_46):
-    // single PackedGUID via ClientOpcode_helper_31E0120 — no leading uint8 Result.
+    // 12.0.7 (build 68275): leading uint8(Result) via ClientOpcode_helper_318EF90, then the GUID
+    // (client treats it as the evicted plot/house guid). RE feedback 0x5c0012.
+    _worldPacket << uint8(Result);
     _worldPacket << NeighborhoodGuid;
 
-    TC_LOG_DEBUG("network.opcode", "SMSG_NEIGHBORHOOD_EVICT_PLOT_RESPONSE NeighborhoodGuid: {} (Result {} dropped — not on wire)",
-        NeighborhoodGuid.ToString(), Result);
+    TC_LOG_DEBUG("network.opcode", "SMSG_NEIGHBORHOOD_EVICT_PLOT_RESPONSE Result: {} NeighborhoodGuid: {}",
+        Result, NeighborhoodGuid.ToString());
 
     return &_worldPacket;
 }

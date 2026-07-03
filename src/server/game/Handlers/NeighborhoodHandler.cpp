@@ -1183,18 +1183,18 @@ void WorldSession::HandleNeighborhoodBuyHouse(WorldPackets::Neighborhood::Neighb
         response.Result = static_cast<uint8>(HOUSING_RESULT_SUCCESS);
         if (Housing const* h = player->GetHousing())
         {
-            response.House.HouseGuid = h->GetHouseGuid();
-            response.House.OwnerGuid = player->GetGUID();
-            response.House.NeighborhoodGuid = neighborhood->GetGuid();
-            response.House.PlotId = resolvedPlotIndex;
-            response.House.AccessFlags = h->GetSettingsFlags();
+            response.House.HouseGUID = h->GetHouseGuid();
+            response.House.OwnerGUID = player->GetGUID();
+            response.House.NeighborhoodGUID = neighborhood->GetGuid();
+            response.House.PlotIndex = resolvedPlotIndex;
+            response.House.HouseLevel = static_cast<uint8>(h->GetLevel()); // JamCliHouse carries level, not settings flags (RE 0x5c0005)
         }
         WorldPacket const* buyRespPkt = response.Write();
         SendPacket(buyRespPkt);
 
         TC_LOG_DEBUG("housing", "SMSG_NEIGHBORHOOD_BUY_HOUSE_RESPONSE Result={}, PlotId={}, HouseGuid={}, OwnerGuid={}",
-            uint32(response.Result), response.House.PlotId,
-            response.House.HouseGuid.ToString(), response.House.OwnerGuid.ToString());
+            uint32(response.Result), response.House.PlotIndex,
+            response.House.HouseGUID.ToString(), response.House.OwnerGUID.ToString());
 
         // 3. Persist the starter favor server-side, then send the sniff-verified 2-packet
         // sequence (initial=0, then delta=starter). emitUpdate=false suppresses AddFavor's
@@ -1211,8 +1211,9 @@ void WorldSession::HandleNeighborhoodBuyHouse(WorldPackets::Neighborhood::Neighb
                 levelFavor.Result = 0;
                 levelFavor.ChangeAmount = 0;
                 levelFavor.Reason = 1;
-                levelFavor.HouseGUID = h->GetHouseGuid();
-                levelFavor.NewFavorTotal = newTotal;
+                auto& fav = levelFavor.Houses.emplace_back();
+                fav.HouseGUID = h->GetHouseGuid();
+                fav.NewFavorTotal = newTotal;
                 SendPacket(levelFavor.Write());
             }
             // Packet 2: Favor delta (ChangeAmount=starter → "you gained N favor").
@@ -1221,8 +1222,9 @@ void WorldSession::HandleNeighborhoodBuyHouse(WorldPackets::Neighborhood::Neighb
                 levelFavor.Result = 0;
                 levelFavor.ChangeAmount = h->GetFavor();
                 levelFavor.Reason = 1;
-                levelFavor.HouseGUID = h->GetHouseGuid();
-                levelFavor.NewFavorTotal = newTotal;
+                auto& fav = levelFavor.Houses.emplace_back();
+                fav.HouseGUID = h->GetHouseGuid();
+                fav.NewFavorTotal = newTotal;
                 SendPacket(levelFavor.Write());
             }
         }
@@ -1509,11 +1511,11 @@ void WorldSession::HandleNeighborhoodMoveHouse(WorldPackets::Neighborhood::Neigh
 
         if (Housing const* housing = player->GetHousing())
         {
-            response.House.HouseGuid = housing->GetHouseGuid();
-            response.House.OwnerGuid = player->GetGUID();
-            response.House.NeighborhoodGuid = housing->GetNeighborhoodGuid();
-            response.House.PlotId = housing->GetPlotIndex();
-            response.House.AccessFlags = housing->GetSettingsFlags();
+            response.House.HouseGUID = housing->GetHouseGuid();
+            response.House.OwnerGUID = player->GetGUID();
+            response.House.NeighborhoodGUID = housing->GetNeighborhoodGuid();
+            response.House.PlotIndex = housing->GetPlotIndex();
+            response.House.HouseLevel = static_cast<uint8>(housing->GetLevel()); // JamCliHouse carries level, not settings flags (RE 0x5c0006)
         }
 
         // Broadcast roster update to other members
@@ -1923,7 +1925,7 @@ void WorldSession::HandleNeighborhoodGetRoster(WorldPackets::Neighborhood::Neigh
         }
     }
 
-    TC_LOG_ERROR("housing", "=== SMSG_NEIGHBORHOOD_GET_ROSTER_RESPONSE (0x5C0012) [handler] ===\n"
+    TC_LOG_ERROR("housing", "=== SMSG_NEIGHBORHOOD_GET_ROSTER_RESPONSE (0x5C000F) [handler] ===\n"
         "  Result={}, Members={}, NeighborhoodName='{}'\n"
         "  GroupNeighborhoodGuid: {} ({})\n"
         "  GroupOwnerGuid: {} ({})\n"

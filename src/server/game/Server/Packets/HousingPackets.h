@@ -112,17 +112,16 @@ namespace WorldPackets::Housing
     // IDA proof: offset-0 GUID compared vs house records; offset-16 GUID passed to ai_Process_PlayerContextUpdate (name lookup).
     struct JamCliHouse
     {
-        // IDA sub_7FF624FCFE00 deserialises the wire into a 80-byte client struct.
-        // Wire order (after the three GUIDs):
-        //   uint8 PlotIndex      -> struct +48   (hash key; must be unique per plot)
-        //   uint32 HouseLevel    -> struct +72   (real level for display/tooltip)
-        //   uint8 HasOpt flag    -> struct +64   (bit 7 = OptionalValue follows)
+        // 12.0.7 (build 68275) wire order (after the three GUIDs), per RE feedback 0x54000b et al.:
+        //   uint8  HouseLevel    -> struct +48   (written BEFORE the u32 in 12.0.7; was reversed in 12.0.5)
+        //   uint32 PlotIndex     -> struct +72   (per-plot index)
+        //   uint8  HasOpt flag   -> struct +64   (bit 7 = OptionalValue follows)
         //   uint64 OptionalValue -> struct +56   (favor/secondary field)
         ObjectGuid HouseGUID;            // wire pos 1, struct +0
         ObjectGuid OwnerGUID;            // wire pos 2, struct +16
         ObjectGuid NeighborhoodGUID;     // wire pos 3, struct +32
-        uint32 PlotIndex = 0;            // written as uint8 at struct +48 (per-plot hash key)
-        uint32 HouseLevel = 0;           // written as uint32 at struct +72 (display level)
+        uint32 HouseLevel = 0;           // written as uint8 at struct +48 (display level)
+        uint32 PlotIndex = 0;            // written as uint32 at struct +72 (per-plot index)
         bool HasOptionalField = false;   // struct +64 bit 7
         uint64 OptionalValue = 0;        // struct +56 (Favor, only if HasOptionalField)
     };
@@ -554,12 +553,12 @@ namespace WorldPackets::Housing
 
         void Read() override;
 
-        // IDA-verified wire (build 67186, sub_7FF75C1AC120):
-        //   ObjectGuid RoomGuid + uint32 OptionCount + uint32 HouseThemeID + uint32[OptionCount] + uint32 TrailingField
+        // 12.0.7 (build 68275) wire, serializer 0x7FF7291A9C40:
+        //   ObjectGuid RoomGuid + uint32 OptionCount + uint32 HouseThemeID + uint32[OptionCount]
+        //   (no trailing uint32 -- the old 67186 read of one was a misread; RE feedback 0x320005).
         ObjectGuid RoomGuid;
         uint32 HouseThemeID = 0;
         std::vector<uint32> OptionIDs; // RoomComponentOption IDs (not RoomComponent IDs)
-        uint32 TrailingField = 0;
     };
 
     class HousingRoomApplyComponentMaterials final : public ClientPacket
@@ -924,8 +923,8 @@ namespace WorldPackets::Housing
 
         void Read() override;
 
-        ObjectGuid PlayerGuid;
-        ObjectGuid NeighborhoodGuid;
+        // 12.0.7 (build 68275): one 6-bit-length-prefixed name, no GUIDs. RE feedback 0x40019b.
+        std::string PlayerName;
     };
 
     class GuildGetOthersOwnedHouses final : public ClientPacket
@@ -1465,39 +1464,25 @@ namespace WorldPackets::Housing
         HousingSvcsUpdateHousesLevelFavor() : ServerPacket(SMSG_HOUSING_SVCS_UPDATE_HOUSES_LEVEL_FAVOR) { }
         WorldPacket const* Write() override;
 
-        // 12.0.5 sniff-validated wire (40 bytes total in real capture).
-        // SNIFF_VALIDATION_67186.md authoritative layout:
-        //
-        //   uint8       Result          (=0 in sniff)
-        //   uint32      ChangeAmount    (=1260, the level/favor delta)
-        //   uint32      Reason          (=1, source enum)
-        //   uint32      Field2          (=1 in sniff; semantics TBD)
-        //   PackedGUID  OwnerGUID       (empty in sniff — populated when known)
-        //   PackedGUID  NeighborhoodGUID (empty in sniff)
-        //   PackedGUID  HouseGUID       (the affected house)
-        //   uint32      NewFavorLow     ) two halves of int64 NewFavorTotal
-        //   uint32      NewFavorHigh    )  (=0xFFFFFFFF/0xFFFFFFFF = -1 sentinel "max")
-        //   uint8       Field3          (=0)
-        //   uint32      Reserved        (=0)
-        //   uint8       Terminator      (=0x80; bit7 marker)
-        //
-        // Earlier TC layout used a vector<LevelFavorEntry> with a per-entry uint8+uint32
-        // header that did NOT exist on the wire. The 13 byte difference between sniff (40)
-        // and the old encoding (40 only by coincidence when fields == 0) was masked when
-        // testing in-game with default values. Real packet captures pin the layout above.
-        uint8 Result = 0;
-        uint32 ChangeAmount = 0;
-        uint32 Reason = 0;
-        uint32 Field2 = 1;
+        // 12.0.7 (build 68275) LIST form, RE feedback 0x540011:
+        //   u8 Result + u32 ChangeAmount + u32 Reason + u32 count + count x HouseLevelFavor.
+        // The old 12.0.5 "flat record" was a 1-element list whose count field was mislabeled
+        // Field2(=1); a single-house packet emits identical bytes to the 67186 sniff capture.
+        uint8 Result = 0;        // header @0
+        uint32 ChangeAmount = 0; // header @4
+        uint32 Reason = 0;       // header @8
 
-        ObjectGuid OwnerGUID;
-        ObjectGuid NeighborhoodGUID;
-        ObjectGuid HouseGUID;
-
-        int64 NewFavorTotal = -1;
-        uint8 Field3 = 0;
-        uint32 Reserved = 0;
-        uint8 Terminator = 0x80;
+        struct HouseLevelFavor   // 64B wire element
+        {
+            ObjectGuid OwnerGUID;
+            ObjectGuid NeighborhoodGUID;
+            ObjectGuid HouseGUID;
+            int64 NewFavorTotal = -1;   // u32 low @48 + u32 high @52 (-1 = "max" sentinel)
+            uint8 Field3 = 0;           // u8 @57
+            uint32 Reserved = 0;        // u32 @60
+            bool Flag = true;           // trailing byte bit7 @56 (was 0x80 Terminator)
+        };
+        std::vector<HouseLevelFavor> Houses;
     };
 
     class HousingSvcsGuildAddHouseNotification final : public ServerPacket
@@ -1704,9 +1689,26 @@ namespace WorldPackets::Housing
         HousingGetCurrentHouseInfoResponse() : ServerPacket(SMSG_HOUSING_GET_CURRENT_HOUSE_INFO_RESPONSE) { }
         WorldPacket const* Write() override;
 
-        // Wire format: HouseInfo + uint8 Result
-        HouseInfo House;
+        // Wire format (12.0.7): JamCliHouse + uint8 Result. RE feedback 0x550001.
+        JamCliHouse House;
         uint8 Result = 0;
+    };
+
+    // SMSG_HOUSING_EXPORT_HOUSE_RESPONSE (0x550003) — live 68275 handler (parser sub_7FF7291D7160).
+    // Wire: PackedGUID HouseGuid + u8 Status + optional name string (presence byte, bit7 gates) +
+    //       uint32 BlobLen + bytes[BlobLen]. RE feedback 0x550003.
+    // NOTE: the optional-string presence/length bit encoding (ai_Process_GarrisonDataPacket) was not
+    // fully pinned by RE — the empty-name path is exact; confirm the string path vs a live capture.
+    class HousingExportHouseResponse final : public ServerPacket
+    {
+    public:
+        HousingExportHouseResponse() : ServerPacket(SMSG_HOUSING_EXPORT_HOUSE_RESPONSE) { }
+        WorldPacket const* Write() override;
+
+        ObjectGuid HouseGuid;
+        uint8 Status = 0;
+        Optional<std::string> ExportName;
+        std::vector<uint8> ExportBlob;
     };
 
     // Retired 2026-05-12: HousingExportHouseResponse — orphaned after EXPORT_HOUSE CMSG retirement.
@@ -2539,8 +2541,8 @@ namespace WorldPackets::Neighborhood
     public:
         NeighborhoodBuyHouseResponse() : ServerPacket(SMSG_NEIGHBORHOOD_BUY_HOUSE_RESPONSE) { }
         WorldPacket const* Write() override;
-        // Wire format: HouseInfo + uint8 Result
-        Housing::HouseInfo House;
+        // Wire format (12.0.7): JamCliHouse + uint8 Result. RE feedback 0x5c0005.
+        Housing::JamCliHouse House;
         uint8 Result = 0;
     };
 
@@ -2549,8 +2551,8 @@ namespace WorldPackets::Neighborhood
     public:
         NeighborhoodMoveHouseResponse() : ServerPacket(SMSG_NEIGHBORHOOD_MOVE_HOUSE_RESPONSE) { }
         WorldPacket const* Write() override;
-        // Wire format: HouseInfo + PackedGUID + uint8 Result
-        Housing::HouseInfo House;
+        // Wire format (12.0.7): JamCliHouse + PackedGUID + uint8 Result. RE feedback 0x5c0006.
+        Housing::JamCliHouse House;
         ObjectGuid MoveTransactionGuid;
         uint8 Result = 0;
     };

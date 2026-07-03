@@ -2356,6 +2356,7 @@ struct HouseLevelDataEntry
     uint32 ID;
     int32 Level;
     int32 QuestID;
+    int32 Field_12_0_7_67808_003;           // 12.0.7 (build 67808): new field, unnamed in all static sources (kept as-is per NO WRONG DATA)
 };
 
 struct HouseLevelRewardInfoEntry

@@ -1799,7 +1799,7 @@ bool HouseInteriorMap::AddPlayerToMap(Player* player, bool initPlayer /*= true*/
                                         ai.AuraData.emplace();
                                         ai.AuraData->CastID = castId;
                                         ai.AuraData->SpellID = SPELL_HOUSING_PLOT_ENTER;
-                                        ai.AuraData->Flags = AFLAG_NOCASTER;
+                                        ai.AuraData->Flags = AFLAG_SELF_CAST;
                                         ai.AuraData->ActiveFlags = 1; // sniff-verified: retail uses 1
                                         ai.AuraData->CastLevel = 36;
                                         au.Auras.push_back(std::move(ai));
@@ -1819,7 +1819,7 @@ bool HouseInteriorMap::AddPlayerToMap(Player* player, bool initPlayer /*= true*/
                                         ai.AuraData.emplace();
                                         ai.AuraData->CastID = castId;
                                         ai.AuraData->SpellID = SPELL_HOUSING_PLOT_PRESENCE;
-                                        ai.AuraData->Flags = AFLAG_NOCASTER;
+                                        ai.AuraData->Flags = AFLAG_SELF_CAST;
                                         ai.AuraData->ActiveFlags = 1;
                                         ai.AuraData->CastLevel = 36;
                                         au.Auras.push_back(std::move(ai));
@@ -2104,7 +2104,7 @@ void HouseInteriorMap::SendPostTutorialAuras(Player* player)
         auraInfo.AuraData.emplace();
         auraInfo.AuraData->CastID = castId;
         auraInfo.AuraData->SpellID = SPELL_HOUSING_TUTORIAL_DONE_1;
-        auraInfo.AuraData->Flags = AFLAG_NOCASTER;
+        auraInfo.AuraData->Flags = AFLAG_SELF_CAST;
         auraInfo.AuraData->ActiveFlags = 1;
         auraInfo.AuraData->CastLevel = 36;
         auraInfo.AuraData->Applications = 0;
@@ -2151,7 +2151,7 @@ void HouseInteriorMap::SendPostTutorialAuras(Player* player)
         auraInfo.AuraData.emplace();
         auraInfo.AuraData->CastID = castId;
         auraInfo.AuraData->SpellID = SPELL_HOUSING_TUTORIAL_DONE_2;
-        auraInfo.AuraData->Flags = AFLAG_NOCASTER;
+        auraInfo.AuraData->Flags = AFLAG_SELF_CAST;
         auraInfo.AuraData->ActiveFlags = 1;
         auraInfo.AuraData->CastLevel = 36;
         auraInfo.AuraData->Applications = 0;
@@ -2198,7 +2198,7 @@ void HouseInteriorMap::SendPostTutorialAuras(Player* player)
         auraInfo.AuraData.emplace();
         auraInfo.AuraData->CastID = castId;
         auraInfo.AuraData->SpellID = SPELL_HOUSING_TUTORIAL_DONE_3;
-        auraInfo.AuraData->Flags = AFLAG_NOCASTER | AFLAG_SCALABLE;
+        auraInfo.AuraData->Flags = AFLAG_SELF_CAST | AFLAG_SCALABLE;
         auraInfo.AuraData->ActiveFlags = 1;
         auraInfo.AuraData->CastLevel = 36;
         auraInfo.AuraData->Applications = 0;

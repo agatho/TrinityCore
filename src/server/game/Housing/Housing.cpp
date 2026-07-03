@@ -2271,8 +2271,9 @@ void Housing::AddLevel(uint32 amount)
         levelUpdate.Result = 0;
         levelUpdate.ChangeAmount = _favor;
         levelUpdate.Reason = _level;
-        levelUpdate.HouseGUID = _houseGuid;
-        levelUpdate.NewFavorTotal = static_cast<int64>(_favor);
+        auto& fav = levelUpdate.Houses.emplace_back();
+        fav.HouseGUID = _houseGuid;
+        fav.NewFavorTotal = static_cast<int64>(_favor);
         _owner->SendDirectMessage(levelUpdate.Write());
     }
 }
@@ -2303,8 +2304,9 @@ void Housing::AddFavor(uint64 amount, HousingFavorUpdateSource source /*= HOUSIN
         favorUpdate.Result = static_cast<uint8>(source);
         favorUpdate.ChangeAmount = _favor;
         favorUpdate.Reason = _level;
-        favorUpdate.HouseGUID = _houseGuid;
-        favorUpdate.NewFavorTotal = static_cast<int64>(_favor);
+        auto& fav = favorUpdate.Houses.emplace_back();
+        fav.HouseGUID = _houseGuid;
+        fav.NewFavorTotal = static_cast<int64>(_favor);
         _owner->SendDirectMessage(favorUpdate.Write());
     }
 }
@@ -2340,8 +2342,9 @@ void Housing::OnQuestCompleted(uint32 questId)
             levelUpdate.Result = 0;
             levelUpdate.ChangeAmount = _favor;
             levelUpdate.Reason = _level;
-            levelUpdate.HouseGUID = _houseGuid;
-            levelUpdate.NewFavorTotal = static_cast<int64>(_favor);
+            auto& fav = levelUpdate.Houses.emplace_back();
+            fav.HouseGUID = _houseGuid;
+            fav.NewFavorTotal = static_cast<int64>(_favor);
             _owner->SendDirectMessage(levelUpdate.Write());
         }
     }
