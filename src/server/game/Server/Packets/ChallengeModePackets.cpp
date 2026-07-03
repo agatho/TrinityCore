@@ -16,6 +16,7 @@
  */
 
 #include "ChallengeModePackets.h"
+#include "PacketOperators.h"
 
 namespace WorldPackets::ChallengeMode
 {
