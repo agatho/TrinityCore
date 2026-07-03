@@ -1306,6 +1306,30 @@ static void DungeonAdvanceTarget(BotSnapshotView const& s, BotAI& ai,
     }
 }
 
+// Increment 1d (2026-07-03): true when the OOC route follower
+// (idle:dungeon_tank_advance_boss_route below) has an armed cursor for this
+// map — same knob/state as DungeonAdvanceTarget above (the in-combat
+// sibling of this same split), one concept, no new key. When armed, the
+// plain direct-step advance branches (strict stride / leashed same-Z /
+// generic trash-chase) must defer to the route rule instead of computing
+// their own destination: on WC the direct line to the boss and the route's
+// committed crumb genuinely differ (that is WHY the route exists — the
+// direct line crosses a navmesh pocket), so letting both fire alternately
+// re-aims the spline every tick and the tank oscillates in place (live WC
+// 2026-07-03, tank_advance_boss at (-151,414) vs tank_advance_boss_route at
+// (24.5,454), 0/8). Deliberately loose (only checks cur>=0, not
+// cur<route_waypoints.size()) to match the route rule's own re-acquire
+// logic below — a stale/out-of-range cursor still routes through the
+// prefix-clamp and reachable-crumb search there rather than falling back to
+// the direct step.
+static bool DungeonRouteArmed(BotSnapshotView const& s, BotAI& ai,
+                               DungeonAdvice const& advice)
+{
+    if (!Services::Config().route_aware_combat_advance()) return false;
+    if (advice.route_waypoints.empty()) return false;
+    return ai.dungeon_route_wp(s.map_id()) >= 0;
+}
+
 // Shared (declared in MaintainHelpers.h). Honor an active off-mesh crossing
 // commitment in ANY state and REFRESH its TTL so a combat-contested crossing can
 // neither be interrupted nor expire mid-jump. See the header for the full failure
@@ -5481,7 +5505,14 @@ bool DungeonDispatch(BotSnapshotView const& s, BotAI& ai,
                                 ai.set_last_rule_fired("idle:dungeon_engage_boss");
                                 return true;
                             }
-                            if (reachable)
+                            // Increment 1d (2026-07-03): while the OOC route follower
+                            // has an armed cursor for this map, it owns boss
+                            // navigation — skip straight to the route rule below
+                            // instead of computing our own direct-line step (see
+                            // DungeonRouteArmed's header for the WC oscillation this
+                            // fixes). Falls through unchanged when unarmed.
+                            const bool route_armed_ooc = DungeonRouteArmed(s, ai, advice);
+                            if (reachable && !route_armed_ooc)
                             {
                                 if (boss_step_offmesh)
                                     ai.set_dungeon_cross(boss_step.x, boss_step.y,
@@ -5502,9 +5533,12 @@ bool DungeonDispatch(BotSnapshotView const& s, BotAI& ai,
                             // Off-mesh-footed boss the strict test rejects: close in
                             // with a leashed step toward its XY at the tank's Z,
                             // same-Z only (so we don't walk under an elevated boss).
+                            // route armed: the route follower owns OOC navigation —
+                            // the direct step diverges exactly where routes exist
+                            // (WC 2026-07-03); fall through.
                             const float blen = std::sqrt(bdx*bdx + bdy*bdy);
                             if (blen > 0.5f && blen <= kBossApproachR &&
-                                std::fabs(bdz) < 25.0f)
+                                std::fabs(bdz) < 25.0f && !route_armed_ooc)
                             {
                                 const float stp = std::min(blen, kMaxAdvanceStep);
                                 const float sc  = stp / blen;
@@ -5947,7 +5981,11 @@ bool DungeonDispatch(BotSnapshotView const& s, BotAI& ai,
                     }
                     if (d2 < far_d2) { far_d2 = d2; far_target = &u; }
                 }
-                if (!close_target && far_target)
+                // route armed: the route follower owns OOC navigation — the
+                // direct step diverges exactly where routes exist (WC
+                // 2026-07-03); fall through (toward wide-scan / boss-as-
+                // destination below, which stay ungated as the fallbacks).
+                if (!close_target && far_target && !DungeonRouteArmed(s, ai, advice))
                 {
                     // Walk to a point ~25y from the target so we end up in
                     // pull range without overshooting into the pack.
