@@ -339,3 +339,12 @@ void WorldSession::HandleLFGListInviteResponse(WorldPackets::LFGList::LFGListInv
     sLFGListMgr.RemoveApplication(applicationId);
     SendApplicantList(*listing);
 }
+
+void WorldSession::HandleRequestLFGListBlacklist(WorldPackets::LFGList::RequestLFGListBlacklist& /*packet*/)
+{
+    // The premade-finder blacklist (recently-declined groups the client hides) is not persisted server-side,
+    // so a fresh request returns the current empty set. Entries would carry {activityId, reason}; populating
+    // them requires a soft-blacklist model that a 12.0.7 sniff should confirm before it is added.
+    WorldPackets::LFGList::LFGListUpdateBlacklist packet;
+    SendPacket(packet.Write());
+}

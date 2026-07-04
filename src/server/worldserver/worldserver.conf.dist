@@ -1397,6 +1397,22 @@ Command.LookupMaxResults = 0
 DungeonFinder.OptionsMask = 1
 
 #
+#     LFGList.ListingExpiryMinutes
+#        Description: Minutes a premade group finder listing stays active before it auto-expires.
+#                     0 disables expiry.
+#        Default:     120
+
+LFGList.ListingExpiryMinutes = 120
+
+#
+#     LFGList.MaxSearchResults
+#        Description: Maximum number of listings returned for a single premade group finder search.
+#                     0 removes the cap.
+#        Default:     100
+
+LFGList.MaxSearchResults = 100
+
+#
 #   DBC.EnforceItemAttributes
 #        Description: Disallow overriding item attributes stored in DBC files with values from the
 #                     database.

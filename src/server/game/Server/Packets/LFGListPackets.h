@@ -334,6 +334,21 @@ namespace WorldPackets
             ListingInfo Listing;
         };
 
+        struct LFGListBlacklistEntry
+        {
+            uint32 ActivityID = 0;
+            uint32 Reason = 0;      // exact semantics (cooldown reason/timestamp) NEEDS-SNIFF
+        };
+
+        class LFGListUpdateBlacklist final : public ServerPacket
+        {
+        public:
+            explicit LFGListUpdateBlacklist() : ServerPacket(SMSG_LFG_LIST_UPDATE_BLACKLIST, 4) { }
+            WorldPacket const* Write() override;
+
+            std::vector<LFGListBlacklistEntry> Entries;
+        };
+
         ByteBuffer& operator<<(ByteBuffer& data, ListingInfo const& listing);
     }
 }

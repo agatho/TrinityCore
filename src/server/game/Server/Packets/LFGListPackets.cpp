@@ -249,4 +249,15 @@ WorldPacket const* LFGListApplyToGroupResult::Write()
     _worldPacket << Listing;
     return &_worldPacket;
 }
+
+WorldPacket const* LFGListUpdateBlacklist::Write()
+{
+    _worldPacket << uint32(Entries.size());
+    for (LFGListBlacklistEntry const& entry : Entries)
+    {
+        _worldPacket << uint32(entry.ActivityID);
+        _worldPacket << uint32(entry.Reason);
+    }
+    return &_worldPacket;
+}
 }

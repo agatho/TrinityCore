@@ -18,6 +18,8 @@
 #include "LFGListMgr.h"
 #include "Config.h"
 #include "GameTime.h"
+#include "LFGListPackets.h"
+#include "ObjectAccessor.h"
 #include "Player.h"
 #include "Group.h"
 
@@ -42,9 +44,27 @@ void LFGListMgr::Update(uint32 diff)
     uint32 const now = GameTime::GetGameTime();
     for (auto itr = _listings.begin(); itr != _listings.end(); )
     {
-        if (itr->second.ExpireTime && now >= itr->second.ExpireTime)
+        LFGList::Listing const& listing = itr->second;
+        if (listing.ExpireTime && now >= listing.ExpireTime)
         {
-            _listingByLeader.erase(itr->second.LeaderGuid);
+            // Tell the leader (if online) the listing expired and is no longer listed.
+            if (Player* leader = ObjectAccessor::FindConnectedPlayer(listing.LeaderGuid))
+            {
+                WorldPackets::LFGList::LFGListUpdateExpiration expiration;
+                expiration.Ticket.RequesterGuid = listing.LeaderGuid;
+                expiration.Ticket.Id = listing.Id;
+                expiration.Ticket.Type = WorldPackets::LFG::RideType::Lfg;
+                leader->SendDirectMessage(expiration.Write());
+
+                WorldPackets::LFGList::LFGListUpdateStatus status;
+                status.Ticket = expiration.Ticket;
+                status.Listed = false;
+                leader->SendDirectMessage(status.Write());
+            }
+
+            for (LFGList::Application const& app : listing.Applications)
+                _applicationIndex.erase(app.Id);
+            _listingByLeader.erase(listing.LeaderGuid);
             itr = _listings.erase(itr);
         }
         else
