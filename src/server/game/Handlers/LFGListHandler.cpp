@@ -16,6 +16,7 @@
  */
 
 #include "WorldSession.h"
+#include "DB2Stores.h"
 #include "GameTime.h"
 #include "Group.h"
 #include "GroupMgr.h"
@@ -138,6 +139,16 @@ void WorldSession::HandleLFGListJoin(WorldPackets::LFGList::LFGListJoin& packet)
             SendPacket(result.Write());
             return;
         }
+    }
+
+    // Reject listings for an activity the client made up. ActivityID is read from the (sniff-pending) listing
+    // descriptor, so a non-zero id that isn't in GroupFinderActivity.db2 is treated as invalid.
+    if (packet.Listing.ActivityID && !sGroupFinderActivityStore.LookupEntry(packet.Listing.ActivityID))
+    {
+        WorldPackets::LFGList::LFGListJoinResult result;
+        result.Result = 1; // invalid activity (exact enum value NEEDS-SNIFF)
+        SendPacket(result.Write());
+        return;
     }
 
     uint32 const id = sLFGListMgr.CreateListing(player, packet.Listing);

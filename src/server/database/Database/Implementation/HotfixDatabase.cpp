@@ -815,6 +815,13 @@ void HotfixDatabaseConnection::DoPrepareStatements()
         "Unknown_1002_14, NeighborhoodMapID, SkillLineID FROM gossip_npc_option WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
     PREPARE_MAX_ID_STMT(HOTFIX_SEL_GOSSIP_NPC_OPTION, "SELECT MAX(ID) + 1 FROM gossip_npc_option", CONNECTION_SYNCH);
 
+    // GroupFinderActivity.db2
+    PrepareStatement(HOTFIX_SEL_GROUP_FINDER_ACTIVITY, "SELECT ID, FullName, ShortName, GroupFinderCategoryID, OrderIndex, "
+        "GroupFinderActivityGrpID, Flags, MinGearLevelSuggestion, PlayerConditionID, MapID, DifficultyID, AreaID, ExpansionID, "
+        "MaxPlayers, DisplayType, Field_11_0_7_57361_013, Field_11_0_7_57361_014, Field_11_0_7_57361_015, Field_11_0_7_57361_016, "
+        "OverrideContentTuningID, MapChallengeModeID FROM group_finder_activity WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_GROUP_FINDER_ACTIVITY, "SELECT MAX(ID) + 1 FROM group_finder_activity", CONNECTION_SYNCH);
+
     // GuildColorBackground.db2
     PrepareStatement(HOTFIX_SEL_GUILD_COLOR_BACKGROUND, "SELECT ID, Red, Blue, Green FROM guild_color_background WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
     PREPARE_MAX_ID_STMT(HOTFIX_SEL_GUILD_COLOR_BACKGROUND, "SELECT MAX(ID) + 1 FROM guild_color_background", CONNECTION_SYNCH);
