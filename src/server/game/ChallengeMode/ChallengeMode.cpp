@@ -275,7 +275,10 @@ void ChallengeMode::Complete()
     _instance->DoOnPlayers([&record](Player* player)
     {
         if (MythicPlusData* data = player->GetMythicPlusData())
+        {
             data->RecordRun(record);
+            data->RecordWeeklyRun(record.ChallengeModeID, record.Level, record.CompletionDate);
+        }
     });
 
     if (Player* starterPlayer = ObjectAccessor::GetPlayer(*_instance, _starterGuid))

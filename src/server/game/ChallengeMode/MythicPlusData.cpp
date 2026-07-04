@@ -19,6 +19,8 @@
 #include "CharacterDatabase.h"
 #include "DatabaseEnv.h"
 #include "Player.h"
+#include "World.h"
+#include <algorithm>
 
 MythicPlusData::MythicPlusData(Player* owner) : _owner(owner) { }
 
@@ -47,6 +49,28 @@ void MythicPlusData::LoadFromDB(PreparedQueryResult result)
     } while (result->NextRow());
 }
 
+void MythicPlusData::LoadWeeklyFromDB(PreparedQueryResult result)
+{
+    if (!result)
+        return;
+
+    do
+    {
+        Field* fields = result->Fetch();
+
+        MythicPlusWeeklyRun run;
+        run.ChallengeModeID = fields[0].GetUInt32();
+        run.Level = fields[1].GetUInt32();
+        run.CompletionDate = fields[2].GetInt64();
+        _weeklyResetTime = fields[3].GetInt64();
+
+        _weeklyRuns.push_back(run);
+    } while (result->NextRow());
+
+    // Drop the list if it belongs to a week that has already reset.
+    PruneStaleWeek();
+}
+
 void MythicPlusData::SaveToDB(CharacterDatabaseTransaction trans)
 {
     ObjectGuid::LowType guid = _owner->GetGUID().GetCounter();
@@ -69,6 +93,24 @@ void MythicPlusData::SaveToDB(CharacterDatabaseTransaction trans)
         stmt->setUInt32(8, run.Affixes[1]);
         stmt->setUInt32(9, run.Affixes[2]);
         stmt->setUInt32(10, run.Affixes[3]);
+        trans->Append(stmt);
+    }
+
+    // Weekly Great Vault runs.
+    PruneStaleWeek();
+
+    stmt = CharacterDatabase.GetPreparedStatement(CHAR_DEL_CHARACTER_MYTHIC_PLUS_WEEKLY);
+    stmt->setUInt64(0, guid);
+    trans->Append(stmt);
+
+    for (MythicPlusWeeklyRun const& run : _weeklyRuns)
+    {
+        stmt = CharacterDatabase.GetPreparedStatement(CHAR_INS_CHARACTER_MYTHIC_PLUS_WEEKLY);
+        stmt->setUInt64(0, guid);
+        stmt->setUInt32(1, run.ChallengeModeID);
+        stmt->setUInt32(2, run.Level);
+        stmt->setInt64(3, run.CompletionDate);
+        stmt->setInt64(4, _weeklyResetTime);
         trans->Append(stmt);
     }
 }
@@ -99,4 +141,52 @@ float MythicPlusData::GetOverallScore() const
     for (auto const& [challengeModeId, run] : _bestRuns)
         total += run.Score;
     return total;
+}
+
+void MythicPlusData::PruneStaleWeek() const
+{
+    int64 const currentReset = int64(sWorld->GetNextWeeklyQuestsResetTime());
+    if (_weeklyResetTime != currentReset)
+    {
+        _weeklyRuns.clear();
+        _weeklyResetTime = currentReset;
+    }
+}
+
+void MythicPlusData::RecordWeeklyRun(uint32 challengeModeId, uint32 level, int64 date)
+{
+    PruneStaleWeek();
+    _weeklyRuns.push_back({ challengeModeId, level, date });
+}
+
+std::vector<MythicPlusWeeklyRun> MythicPlusData::GetWeeklyRunsByLevel() const
+{
+    PruneStaleWeek();
+    std::vector<MythicPlusWeeklyRun> runs = _weeklyRuns;
+    std::sort(runs.begin(), runs.end(), [](MythicPlusWeeklyRun const& a, MythicPlusWeeklyRun const& b)
+    {
+        return a.Level > b.Level;
+    });
+    return runs;
+}
+
+uint32 MythicPlusData::GetVaultSlotLevel(uint32 slotIndex) const
+{
+    if (slotIndex >= 3)
+        return 0;
+
+    PruneStaleWeek();
+    uint32 const threshold = VAULT_SLOT_THRESHOLDS[slotIndex];
+    if (_weeklyRuns.size() < threshold)
+        return 0;   // slot not yet unlocked
+
+    // The slot rewards the level of the threshold-th best run (1st / 4th / 8th).
+    std::vector<MythicPlusWeeklyRun> const runs = GetWeeklyRunsByLevel();
+    return runs[threshold - 1].Level;
+}
+
+uint32 MythicPlusData::GetWeeklyRunCount() const
+{
+    PruneStaleWeek();
+    return uint32(_weeklyRuns.size());
 }
