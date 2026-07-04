@@ -18,14 +18,19 @@
 #include "ChallengeMode.h"
 #include "ChallengeModeMgr.h"
 #include "ChallengeModePackets.h"
+#include "CharacterDatabase.h"
 #include "Containers.h"
 #include "Creature.h"
 #include "DB2Stores.h"
 #include "GameTime.h"
 #include "Group.h"
 #include "Item.h"
+#include "ItemBonusMgr.h"
 #include "ItemDefines.h"
+#include "Loot.h"
+#include "LootMgr.h"
 #include "Log.h"
+#include "Mail.h"
 #include "Map.h"
 #include "MiscPackets.h"
 #include "MythicPlusData.h"
@@ -326,6 +331,19 @@ void ChallengeMode::Complete()
         }
     }
 
+    // End-of-run gear reward: roll the configured reward loot for each player and grant every item at the
+    // authentic Mythic+ item level. The item-level scaling is real (ItemBonusMgr resolves the end-of-run context +
+    // keystone level through the reward-sequence curves); the item POOL is server content
+    // (reference_loot_template keyed by ChallengeMode.Reward.LootId). Disabled (0) or empty template -> no-op.
+    if (uint32 rewardLootId = sChallengeModeMgr.GetGearRewardLootId())
+    {
+        if (LootTemplates_Reference.HaveLootFor(rewardLootId))
+            _instance->DoOnPlayers([this, rewardLootId](Player* player)
+            {
+                AwardGearReward(player, rewardLootId);
+            });
+    }
+
     // Announce the result to the party (map/level/affixes + present players as members). The per-run
     // DungeonScoreData sub-lists are sent empty (not persisted server-side); the wire is exact (no desync).
     WorldPackets::ChallengeMode::ChallengeModeComplete completePacket;
@@ -343,6 +361,42 @@ void ChallengeMode::Complete()
     TC_LOG_INFO("challengemode", "ChallengeMode complete: instance {} challengeMode {} level {} time {}s (+{}s deaths, limit {}s) -> +{} keystone, score {:.1f}",
         _instance->GetInstanceId(), _mapChallengeModeId, _keystoneLevel, GetElapsedMs() / IN_MILLISECONDS,
         (_deathCount * DEATH_TIME_PENALTY_MS) / IN_MILLISECONDS, _timeLimitMs / IN_MILLISECONDS, keystoneUpgrade, runScore);
+}
+
+void ChallengeMode::AwardGearReward(Player* player, uint32 rewardLootId) const
+{
+    // Roll the operator-provided reward pool as personal loot tagged with the end-of-run context.
+    Loot loot(player->GetMap(), ObjectGuid::Empty, LOOT_NONE, nullptr);
+    loot.FillLoot(rewardLootId, LootTemplates_Reference, player, true /*personal*/, true /*noEmptyError*/,
+        LOOT_MODE_DEFAULT, ItemContext::MythicPlus_End_of_Run);
+
+    for (LootItem const& lootItem : loot.items)
+    {
+        if (!lootItem.itemid || !lootItem.count)
+            continue;
+
+        // Authentic Mythic+ item level: bonuses resolved from the end-of-run context + the keystone level
+        // (ItemBonusMgr walks the reward-sequence curves 62951/62952/62954 by keystone band).
+        std::vector<int32> bonuses = ItemBonusMgr::GetBonusListsForItem(lootItem.itemid,
+            ItemBonusMgr::ItemBonusGenerationParams(ItemContext::MythicPlus_End_of_Run, int32(_keystoneLevel)));
+
+        ItemPosCountVec dest;
+        if (player->CanStoreNewItem(NULL_BAG, NULL_SLOT, dest, lootItem.itemid, lootItem.count) == EQUIP_ERR_OK)
+        {
+            player->StoreNewItem(dest, lootItem.itemid, true, 0, GuidSet(), ItemContext::MythicPlus_End_of_Run, &bonuses);
+        }
+        else if (Item* item = Item::CreateItem(lootItem.itemid, lootItem.count, ItemContext::MythicPlus_End_of_Run, player, false))
+        {
+            // Bags full -> mail the reward (Blizzlike), carrying the same scaled bonuses.
+            item->SetBonuses(bonuses);
+            CharacterDatabaseTransaction trans = CharacterDatabase.BeginTransaction();
+            item->SaveToDB(trans);
+            MailDraft("Mythic Keystone Reward", "Your reward for completing a Mythic Keystone dungeon.")
+                .AddItem(item)
+                .SendMailTo(trans, player, MailSender(player, MAIL_STATIONERY_GM), MAIL_CHECK_MASK_COPIED);
+            CharacterDatabase.CommitTransaction(trans);
+        }
+    }
 }
 
 void ChallengeMode::BroadcastTimer(uint32 timeLeftMs) const

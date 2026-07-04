@@ -1164,6 +1164,17 @@ ChallengeMode.Crest.Hero.MaxLevel = 9
 ChallengeMode.Crest.Myth.CurrencyId = 3347
 
 #
+#    ChallengeMode.Reward.LootId
+#        Description: reference_loot_template entry rolled as the end-of-run gear reward (personal loot, one roll
+#                     per player). The item POOL is server content you provide in that loot table; the item LEVEL
+#                     is scaled automatically to the keystone level (ItemContext MythicPlus_End_of_Run). Use loot
+#                     groups / conditions there for per-dungeon pools. 0 disables the gear drop (crest still awarded).
+#        Default:     0 - (Disabled)
+#
+
+ChallengeMode.Reward.LootId = 0
+
+#
 #    Instance.UnloadDelay
 #        Description: Time (in milliseconds) before instance maps are unloaded from memory if no
 #                     characters are inside.

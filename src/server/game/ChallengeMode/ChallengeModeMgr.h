@@ -110,6 +110,11 @@ public:
     uint32 GetCrestCurrencyForLevel(uint32 keystoneLevel) const;
     uint32 GetCrestAmount() const;
 
+    // Reference-loot template rolled for the end-of-run gear reward (reference_loot_template, ItemContext
+    // MythicPlus_End_of_Run). The reward item POOL is server content; the item level is scaled authentically by
+    // ItemBonusMgr from the keystone level. Config-tunable (ChallengeMode.Reward.LootId); 0 disables the gear drop.
+    uint32 GetGearRewardLootId() const;
+
     // --- Great Vault thresholds (WeeklyRewardChestThreshold.db2) ---
     // One reward slot: the DB2 threshold row id, its slot index (0/1/2) and the run count required to unlock it.
     struct VaultThreshold

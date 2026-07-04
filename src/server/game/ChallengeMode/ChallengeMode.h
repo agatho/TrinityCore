@@ -78,6 +78,8 @@ private:
     void UpdateHealthThresholdAffixes();
     // Periodic (SPAWN_TICK_INTERVAL_MS) in-combat spawn of the add affixes (Incorporeal, Afflicted).
     void UpdateSpawnAffixes();
+    // Rolls the configured end-of-run reward loot for one player and grants each item at the Mythic+ item level.
+    void AwardGearReward(Player* player, uint32 rewardLootId) const;
 
     InstanceMap* _instance;
     uint32 _mapChallengeModeId = 0;
