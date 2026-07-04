@@ -1102,6 +1102,21 @@ ChallengeMode.AffixSchedule = ""
 ChallengeMode.AffixLevelBands = ""
 
 #
+#    ChallengeMode.Affix.Fortified.* / ChallengeMode.Affix.Tyrannical.*
+#        Description: Extra creature health/damage multipliers applied on top of the per-level keystone
+#                     scaling when the Fortified (non-boss enemies) or Tyrannical (bosses) affix is active.
+#                     These are the client's affix effect, which is hardcoded client-side (not in DB2 or a
+#                     GlobalCurve), so they are exposed as tunables. Defaults are current-patch values;
+#                     adjust to match the live season. 1.0 = no change.
+#        Default:     Fortified.Health = 1.20, Fortified.Damage = 1.30
+#                     Tyrannical.Health = 1.30, Tyrannical.Damage = 1.15
+
+ChallengeMode.Affix.Fortified.Health = 1.20
+ChallengeMode.Affix.Fortified.Damage = 1.30
+ChallengeMode.Affix.Tyrannical.Health = 1.30
+ChallengeMode.Affix.Tyrannical.Damage = 1.15
+
+#
 #    Instance.UnloadDelay
 #        Description: Time (in milliseconds) before instance maps are unloaded from memory if no
 #                     characters are inside.

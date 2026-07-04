@@ -67,6 +67,14 @@ public:
     float GetHealthMultiplier(uint32 keystoneLevel) const;
     float GetDamageMultiplier(uint32 keystoneLevel) const;
 
+    // --- affix scaling (Fortified / Tyrannical) ---
+    // Fortified boosts non-boss enemies; Tyrannical boosts bosses. Applied on top of the keystone-level
+    // scaling above. The multipliers are a client-hardcoded affix effect (not in KeystoneAffix.db2 or a
+    // GlobalCurve, and not traceable offline), so they are config-tunable (ChallengeMode.Affix.*) with
+    // documented current-patch defaults. `affixes` is the run's active set; `isBoss` selects which applies.
+    float GetAffixHealthMultiplier(std::array<uint32, 4> const& affixes, bool isBoss) const;
+    float GetAffixDamageMultiplier(std::array<uint32, 4> const& affixes, bool isBoss) const;
+
     // --- season / pool / affixes ---
     uint32 GetActiveSeasonId() const { return _activeSeasonId; }
     MythicPlusSeasonEntry const* GetActiveSeason() const;

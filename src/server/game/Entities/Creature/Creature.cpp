@@ -3088,7 +3088,11 @@ uint64 Creature::GetMaxHealthByLevel(uint8 level) const
     if (InstanceMap* instanceMap = GetMap()->ToInstanceMap())
         if (ChallengeMode* challenge = instanceMap->GetChallengeMode())
             if (uint32 keystoneLevel = challenge->GetKeystoneLevel())
+            {
                 health *= sChallengeModeMgr.GetHealthMultiplier(keystoneLevel);
+                // Fortified (non-boss) / Tyrannical (boss) scale on top of the per-level curve.
+                health *= sChallengeModeMgr.GetAffixHealthMultiplier(challenge->GetAffixes(), IsDungeonBoss());
+            }
 
     return std::ceil(health);
 }
@@ -3113,7 +3117,11 @@ float Creature::GetBaseDamageForLevel(uint8 level) const
     if (InstanceMap* instanceMap = GetMap()->ToInstanceMap())
         if (ChallengeMode* challenge = instanceMap->GetChallengeMode())
             if (uint32 keystoneLevel = challenge->GetKeystoneLevel())
+            {
                 baseDamage *= sChallengeModeMgr.GetDamageMultiplier(keystoneLevel);
+                // Fortified (non-boss) / Tyrannical (boss) scale on top of the per-level curve.
+                baseDamage *= sChallengeModeMgr.GetAffixDamageMultiplier(challenge->GetAffixes(), IsDungeonBoss());
+            }
 
     return baseDamage;
 }

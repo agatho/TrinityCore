@@ -223,6 +223,37 @@ float ChallengeModeMgr::GetDamageMultiplier(uint32 keystoneLevel) const
     return sDB2Manager.GetCurveValueAt(_damageCurveId, float(keystoneLevel));
 }
 
+namespace
+{
+    // KeystoneAffix.db2 IDs (build 68275).
+    constexpr uint32 AFFIX_TYRANNICAL = 9;   // scales bosses
+    constexpr uint32 AFFIX_FORTIFIED  = 10;  // scales non-boss enemies
+
+    bool HasAffixId(std::array<uint32, 4> const& affixes, uint32 affixId)
+    {
+        return std::find(affixes.begin(), affixes.end(), affixId) != affixes.end();
+    }
+}
+
+float ChallengeModeMgr::GetAffixHealthMultiplier(std::array<uint32, 4> const& affixes, bool isBoss) const
+{
+    // Only one of the pair applies to a given creature (Tyrannical -> bosses, Fortified -> everything else).
+    if (isBoss && HasAffixId(affixes, AFFIX_TYRANNICAL))
+        return sConfigMgr->GetFloatDefault("ChallengeMode.Affix.Tyrannical.Health", 1.30f);
+    if (!isBoss && HasAffixId(affixes, AFFIX_FORTIFIED))
+        return sConfigMgr->GetFloatDefault("ChallengeMode.Affix.Fortified.Health", 1.20f);
+    return 1.0f;
+}
+
+float ChallengeModeMgr::GetAffixDamageMultiplier(std::array<uint32, 4> const& affixes, bool isBoss) const
+{
+    if (isBoss && HasAffixId(affixes, AFFIX_TYRANNICAL))
+        return sConfigMgr->GetFloatDefault("ChallengeMode.Affix.Tyrannical.Damage", 1.15f);
+    if (!isBoss && HasAffixId(affixes, AFFIX_FORTIFIED))
+        return sConfigMgr->GetFloatDefault("ChallengeMode.Affix.Fortified.Damage", 1.30f);
+    return 1.0f;
+}
+
 MythicPlusSeasonEntry const* ChallengeModeMgr::GetActiveSeason() const
 {
     return sMythicPlusSeasonStore.LookupEntry(_activeSeasonId);
