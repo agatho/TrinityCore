@@ -87,3 +87,15 @@ void WorldSession::HandleStartChallengeMode(WorldPackets::ChallengeMode::StartCh
 
     challenge->Start(mapChallengeModeId, keystoneLevel, affixes, player->GetGUID(), keystone->GetGUID());
 }
+
+void WorldSession::HandleResetChallengeMode(WorldPackets::ChallengeMode::ResetChallengeMode& /*resetChallengeMode*/)
+{
+    InstanceMap* instanceMap = GetPlayer()->GetMap()->ToInstanceMap();
+    if (!instanceMap)
+        return;
+
+    // Abort the active run and stop the timer. Trash/boss respawn goes through the standard instance reset path.
+    if (ChallengeMode* challenge = instanceMap->GetChallengeMode())
+        if (challenge->IsActive())
+            challenge->Reset();
+}

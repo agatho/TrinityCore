@@ -44,6 +44,15 @@ namespace WorldPackets
             void Read() override { }
         };
 
+        // CMSG_RESET_CHALLENGE_MODE -- player requests to abort/reset the active run (empty payload).
+        class ResetChallengeMode final : public ClientPacket
+        {
+        public:
+            explicit ResetChallengeMode(WorldPacket&& packet) : ClientPacket(CMSG_RESET_CHALLENGE_MODE, std::move(packet)) { }
+
+            void Read() override { }
+        };
+
         // CMSG_START_CHALLENGE_MODE -- the player slots a keystone into the font of power to begin the run.
         // Wire (client serializer @68275): uint8 Bag; uint32 Slot; ObjectGuid GameObjectGUID (plain byte stream).
         class StartChallengeMode final : public ClientPacket
