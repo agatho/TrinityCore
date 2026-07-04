@@ -248,6 +248,7 @@ namespace WorldPackets
         class RequestMythicPlusAffixes;
         class StartChallengeMode;
         class ResetChallengeMode;
+        class MythicPlusRequestMapStats;
     }
 
     namespace Character
@@ -1865,6 +1866,7 @@ class TC_GAME_API WorldSession
         void HandleRequestMythicPlusAffixes(WorldPackets::ChallengeMode::RequestMythicPlusAffixes& requestMythicPlusAffixes);
         void HandleStartChallengeMode(WorldPackets::ChallengeMode::StartChallengeMode& startChallengeMode);
         void HandleResetChallengeMode(WorldPackets::ChallengeMode::ResetChallengeMode& resetChallengeMode);
+        void HandleMythicPlusRequestMapStats(WorldPackets::ChallengeMode::MythicPlusRequestMapStats& request);
 
         // Garrison
         void HandleGetGarrisonInfo(WorldPackets::Garrison::GetGarrisonInfo& getGarrisonInfo);

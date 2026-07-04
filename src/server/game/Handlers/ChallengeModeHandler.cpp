@@ -23,6 +23,7 @@
 #include "ItemDefines.h"
 #include "Log.h"
 #include "Map.h"
+#include "MythicPlusData.h"
 #include "Player.h"
 
 void WorldSession::HandleRequestMythicPlusSeasonData(WorldPackets::ChallengeMode::RequestMythicPlusSeasonData& /*requestMythicPlusSeasonData*/)
@@ -86,6 +87,34 @@ void WorldSession::HandleStartChallengeMode(WorldPackets::ChallengeMode::StartCh
     };
 
     challenge->Start(mapChallengeModeId, keystoneLevel, affixes, player->GetGUID(), keystone->GetGUID());
+}
+
+void WorldSession::HandleMythicPlusRequestMapStats(WorldPackets::ChallengeMode::MythicPlusRequestMapStats& /*request*/)
+{
+    Player* player = GetPlayer();
+
+    WorldPackets::ChallengeMode::MythicPlusAllMapStats response;
+    response.Field80 = sChallengeModeMgr.GetActiveSeasonId();
+
+    // One map-stat row per dungeon the player has a recorded best run for. The requester is the sole member; the
+    // full party roster is not persisted server-side. MapChallengeModeID/BestLevel/DurationMs/Affixes are populated;
+    // the remaining scalar slots await a live sniff to map (the wire is exact, so a zero there is not a desync).
+    if (MythicPlusData* data = player->GetMythicPlusData())
+    {
+        for (auto const& [challengeModeId, run] : data->GetBestRuns())
+        {
+            WorldPackets::ChallengeMode::MythicPlusMapStat& mapStat = response.MapStats.emplace_back();
+            mapStat.MapChallengeModeID = challengeModeId;
+            mapStat.BestLevel = run.Level;
+            mapStat.DurationMs = run.DurationMs;
+            mapStat.Affixes = run.Affixes;
+
+            WorldPackets::ChallengeMode::MythicPlusMapStatMember& member = mapStat.Members.emplace_back();
+            member.PlayerGUID = player->GetGUID();
+        }
+    }
+
+    SendPacket(response.Write());
 }
 
 void WorldSession::HandleResetChallengeMode(WorldPackets::ChallengeMode::ResetChallengeMode& /*resetChallengeMode*/)

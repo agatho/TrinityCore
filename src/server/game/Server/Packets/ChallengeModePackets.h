@@ -20,6 +20,8 @@
 
 #include "Packet.h"
 #include "MythicPlusPacketsCommon.h"
+#include "ObjectGuid.h"
+#include <array>
 #include <vector>
 
 namespace WorldPackets
@@ -98,6 +100,78 @@ namespace WorldPackets
             WorldPacket const* Write() override;
 
             std::vector<CurrentAffix> Affixes;
+        };
+
+        // CMSG_MYTHIC_PLUS_REQUEST_MAP_STATS -- client asks for the player's per-dungeon best-run scores (empty payload).
+        class MythicPlusRequestMapStats final : public ClientPacket
+        {
+        public:
+            explicit MythicPlusRequestMapStats(WorldPacket&& packet) : ClientPacket(CMSG_MYTHIC_PLUS_REQUEST_MAP_STATS, std::move(packet)) { }
+
+            void Read() override { }
+        };
+
+        // One member row of a dungeon best run. Wire (client deserializer sub_7FF729166F60 @68275, byte-aligned):
+        //   uint64 Field0; PackedGuid PlayerGUID; PackedGuid OwnerGUID; uint32 x3; uint8 Flag; uint32 x3.
+        struct MythicPlusMapStatMember
+        {
+            uint64 Field0 = 0;
+            ObjectGuid PlayerGUID;
+            ObjectGuid OwnerGUID;            // bnet/guild guid; unused by our populate
+            uint32 Field56 = 0;
+            uint32 Field60 = 0;
+            uint32 Field64 = 0;
+            uint8 Flag = 0;
+            uint32 Field72 = 0;
+            uint32 Field76 = 0;
+            uint32 Field80 = 0;
+        };
+
+        // Per-dungeon best-run summary. Wire (client deserializer sub_7FF729167070 @68275):
+        //   uint32 MapChallengeModeID; uint32 BestLevel; uint32 DurationMs; uint64 x2; uint32; uint32[4] Affixes;
+        //   uint32 MemberCount; uint32 x2; MemberCount x MythicPlusMapStatMember.
+        // Field semantics beyond MapChallengeModeID/Affixes/BestLevel/DurationMs are not yet sniff-confirmed.
+        struct MythicPlusMapStat
+        {
+            uint32 MapChallengeModeID = 0;
+            uint32 BestLevel = 0;               // Field8 (UNVERIFIED slot)
+            uint32 DurationMs = 0;              // Field12 (UNVERIFIED slot)
+            uint64 Field16 = 0;
+            uint64 Field24 = 0;
+            uint32 Field32 = 0;
+            std::array<uint32, 4> Affixes = { };
+            uint32 Field64 = 0;
+            uint32 Field68 = 0;
+            std::vector<MythicPlusMapStatMember> Members;
+        };
+
+        // A season best-run entry (second top-level vector). Wire (40-byte element in sub_7FF729091040):
+        //   uint64; uint32; uint32; uint64; uint64; uint8.
+        struct MythicPlusSeasonBest
+        {
+            uint64 Field0 = 0;
+            uint32 Field8 = 0;
+            uint32 Field12 = 0;
+            uint64 Field16 = 0;
+            uint64 Field24 = 0;
+            uint8 Flag = 0;
+        };
+
+        // SMSG_MYTHIC_PLUS_ALL_MAP_STATS -- the player's dungeon-score list. Wire (client deserializer
+        // sub_7FF729091040 @68275, byte-aligned, no bit-packing):
+        //   uint32 MapCount; uint32 SeasonBestCount; uint32 Field80; uint32 Field84;
+        //   MapCount x MythicPlusMapStat; SeasonBestCount x MythicPlusSeasonBest.
+        class MythicPlusAllMapStats final : public ServerPacket
+        {
+        public:
+            explicit MythicPlusAllMapStats() : ServerPacket(SMSG_MYTHIC_PLUS_ALL_MAP_STATS, 16) { }
+
+            WorldPacket const* Write() override;
+
+            std::vector<MythicPlusMapStat> MapStats;
+            std::vector<MythicPlusSeasonBest> SeasonBests;
+            uint32 Field80 = 0;
+            uint32 Field84 = 0;
         };
     }
 }

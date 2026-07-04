@@ -46,4 +46,52 @@ WorldPacket const* MythicPlusCurrentAffixes::Write()
 
     return &_worldPacket;
 }
+
+WorldPacket const* MythicPlusAllMapStats::Write()
+{
+    _worldPacket << Size<uint32>(MapStats);
+    _worldPacket << Size<uint32>(SeasonBests);
+    _worldPacket << uint32(Field80);
+    _worldPacket << uint32(Field84);
+
+    for (MythicPlusMapStat const& mapStat : MapStats)
+    {
+        _worldPacket << uint32(mapStat.MapChallengeModeID);
+        _worldPacket << uint32(mapStat.BestLevel);
+        _worldPacket << uint32(mapStat.DurationMs);
+        _worldPacket << uint64(mapStat.Field16);
+        _worldPacket << uint64(mapStat.Field24);
+        _worldPacket << uint32(mapStat.Field32);
+        for (uint32 affix : mapStat.Affixes)
+            _worldPacket << uint32(affix);
+        _worldPacket << Size<uint32>(mapStat.Members);
+        _worldPacket << uint32(mapStat.Field64);
+        _worldPacket << uint32(mapStat.Field68);
+        for (MythicPlusMapStatMember const& member : mapStat.Members)
+        {
+            _worldPacket << uint64(member.Field0);
+            _worldPacket << member.PlayerGUID;
+            _worldPacket << member.OwnerGUID;
+            _worldPacket << uint32(member.Field56);
+            _worldPacket << uint32(member.Field60);
+            _worldPacket << uint32(member.Field64);
+            _worldPacket << uint8(member.Flag);
+            _worldPacket << uint32(member.Field72);
+            _worldPacket << uint32(member.Field76);
+            _worldPacket << uint32(member.Field80);
+        }
+    }
+
+    for (MythicPlusSeasonBest const& best : SeasonBests)
+    {
+        _worldPacket << uint64(best.Field0);
+        _worldPacket << uint32(best.Field8);
+        _worldPacket << uint32(best.Field12);
+        _worldPacket << uint64(best.Field16);
+        _worldPacket << uint64(best.Field24);
+        _worldPacket << uint8(best.Flag);
+    }
+
+    return &_worldPacket;
+}
 }
