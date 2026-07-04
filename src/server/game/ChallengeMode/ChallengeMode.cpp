@@ -18,6 +18,7 @@
 #include "ChallengeMode.h"
 #include "ChallengeModeMgr.h"
 #include "ChallengeModePackets.h"
+#include "Containers.h"
 #include "Creature.h"
 #include "GameTime.h"
 #include "Group.h"
@@ -33,6 +34,7 @@
 #include "SpellMgr.h"
 #include "TemporarySummon.h"
 #include <algorithm>
+#include <vector>
 
 ChallengeMode::ChallengeMode(InstanceMap* instance) : _instance(instance) { }
 ChallengeMode::~ChallengeMode() = default;
@@ -105,6 +107,48 @@ void ChallengeMode::Update(uint32 diff)
     {
         _affixTickTimer = 0;
         UpdateHealthThresholdAffixes();
+    }
+
+    _spawnTickTimer += diff;
+    if (_spawnTickTimer >= SPAWN_TICK_INTERVAL_MS)
+    {
+        _spawnTickTimer = 0;
+        UpdateSpawnAffixes();
+    }
+}
+
+void ChallengeMode::UpdateSpawnAffixes()
+{
+    // Periodic in-combat add affixes (Incorporeal, Afflicted). Spiteful spawns on death, handled separately.
+    static constexpr uint32 spawnAffixes[] = { ChallengeModeAffix::Incorporeal, ChallengeModeAffix::Afflicted };
+
+    bool anyActive = false;
+    for (uint32 affixId : spawnAffixes)
+        if (HasAffix(affixId) && sChallengeModeMgr.GetAffixCreatureId(affixId))
+            anyActive = true;
+    if (!anyActive)
+        return;
+
+    // Anchor the spawn on a random player who is currently fighting.
+    std::vector<Player*> combatants;
+    _instance->DoOnPlayers([&combatants](Player* player)
+    {
+        if (player->IsAlive() && player->IsInCombat())
+            combatants.push_back(player);
+    });
+    if (combatants.empty())
+        return;
+
+    Player* anchor = Trinity::Containers::SelectRandomContainerElement(combatants);
+    for (uint32 affixId : spawnAffixes)
+    {
+        if (!HasAffix(affixId))
+            continue;
+        if (uint32 creatureId = sChallengeModeMgr.GetAffixCreatureId(affixId))
+        {
+            Position pos = anchor->GetRandomNearPosition(8.0f);
+            anchor->SummonCreature(creatureId, pos, TEMPSUMMON_TIMED_OR_DEAD_DESPAWN, 20s);
+        }
     }
 }
 

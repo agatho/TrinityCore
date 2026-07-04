@@ -1137,11 +1137,12 @@ ChallengeMode.Affix.Grievous.SpellId = 240559
 #        Description: Summoned-add creature entry for a spawn affix. Spiteful summons a Spiteful Shade on each
 #                     non-boss death; the shade fixates a survivor and decays. The creature entry AND its Blizzlike
 #                     AI must exist in the world DB (SummonCreature no-ops on an absent entry). 0 = disabled.
-#                     Incorporeal/Afflicted default to 0 - set a verified entry for the live build to enable them.
-#        Default:     Spiteful = 174773 (Spiteful Shade), Incorporeal = 0, Afflicted = 0
+#                     Incorporeal + Afflicted spawn periodically while in combat (near a random fighting player).
+#                     Verify the entries for the live build; Afflicted defaults to 0 (no confirmed entry).
+#        Default:     Spiteful = 174773 (Spiteful Shade), Incorporeal = 204560 (Incorporeal Being), Afflicted = 0
 
 ChallengeMode.Affix.Spiteful.CreatureId = 174773
-ChallengeMode.Affix.Incorporeal.CreatureId = 0
+ChallengeMode.Affix.Incorporeal.CreatureId = 204560
 ChallengeMode.Affix.Afflicted.CreatureId = 0
 
 #
