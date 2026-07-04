@@ -1117,6 +1117,22 @@ ChallengeMode.Affix.Tyrannical.Health = 1.30
 ChallengeMode.Affix.Tyrannical.Damage = 1.15
 
 #
+#    ChallengeMode.Affix.<Name>.SpellId
+#        Description: Effect spell cast for each behavioural affix. Bolstering empowers nearby surviving
+#                     non-boss enemies on a trash death; Bursting stacks a damage-over-time on the party;
+#                     Sanguine drops a lingering ichor pool. These are Blizzard affix spells and must exist
+#                     in the loaded Spell.db2 - the server guards on the spell existing, so an unknown/0 id
+#                     is a safe no-op. Defaults are the long-stable ids; verify them against the live build.
+#        Default:     Bolstering = 209859, Bursting = 240443, Sanguine = 226489,
+#                     Raging = 228318, Grievous = 240559
+
+ChallengeMode.Affix.Bolstering.SpellId = 209859
+ChallengeMode.Affix.Bursting.SpellId = 240443
+ChallengeMode.Affix.Sanguine.SpellId = 226489
+ChallengeMode.Affix.Raging.SpellId = 228318
+ChallengeMode.Affix.Grievous.SpellId = 240559
+
+#
 #    Instance.UnloadDelay
 #        Description: Time (in milliseconds) before instance maps are unloaded from memory if no
 #                     characters are inside.

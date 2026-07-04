@@ -26,6 +26,18 @@
 struct MapChallengeModeEntry;
 struct MythicPlusSeasonEntry;
 
+// KeystoneAffix.db2 IDs (build 68275). Shared by the scaling engine and the per-run affix behaviours.
+namespace ChallengeModeAffix
+{
+    constexpr uint32 Raging      = 6;
+    constexpr uint32 Bolstering  = 7;
+    constexpr uint32 Sanguine    = 8;
+    constexpr uint32 Tyrannical  = 9;   // scales bosses
+    constexpr uint32 Fortified   = 10;  // scales non-boss enemies
+    constexpr uint32 Bursting    = 11;
+    constexpr uint32 Grievous    = 12;
+}
+
 // Global manager for Mythic Keystone (Challenge Mode) static data: the dungeon pool, per-map par times and
 // keystone-upgrade thresholds, the season pool, and the per-level HP/damage scaling curve. Runtime per-run state
 // lives on the InstanceMap (see ChallengeMode). Mirrors the GarrisonMgr singleton idiom.
@@ -74,6 +86,12 @@ public:
     // documented current-patch defaults. `affixes` is the run's active set; `isBoss` selects which applies.
     float GetAffixHealthMultiplier(std::array<uint32, 4> const& affixes, bool isBoss) const;
     float GetAffixDamageMultiplier(std::array<uint32, 4> const& affixes, bool isBoss) const;
+
+    // Effect spell for a behavioural affix (Bolstering buff, Bursting DoT, ...). The affix effects are Blizzard
+    // spells that must exist in the loaded Spell.db2; the caller guards on GetSpellInfo, so a 0/absent id is a
+    // safe no-op. IDs are config-tunable (ChallengeMode.Affix.<Name>.SpellId) with the long-stable defaults, to
+    // be verified against the live build. Returns 0 for an affix with no on-effect spell.
+    uint32 GetAffixSpellId(uint32 affixId) const;
 
     // --- season / pool / affixes ---
     uint32 GetActiveSeasonId() const { return _activeSeasonId; }

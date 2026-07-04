@@ -225,10 +225,6 @@ float ChallengeModeMgr::GetDamageMultiplier(uint32 keystoneLevel) const
 
 namespace
 {
-    // KeystoneAffix.db2 IDs (build 68275).
-    constexpr uint32 AFFIX_TYRANNICAL = 9;   // scales bosses
-    constexpr uint32 AFFIX_FORTIFIED  = 10;  // scales non-boss enemies
-
     bool HasAffixId(std::array<uint32, 4> const& affixes, uint32 affixId)
     {
         return std::find(affixes.begin(), affixes.end(), affixId) != affixes.end();
@@ -238,20 +234,33 @@ namespace
 float ChallengeModeMgr::GetAffixHealthMultiplier(std::array<uint32, 4> const& affixes, bool isBoss) const
 {
     // Only one of the pair applies to a given creature (Tyrannical -> bosses, Fortified -> everything else).
-    if (isBoss && HasAffixId(affixes, AFFIX_TYRANNICAL))
+    if (isBoss && HasAffixId(affixes, ChallengeModeAffix::Tyrannical))
         return sConfigMgr->GetFloatDefault("ChallengeMode.Affix.Tyrannical.Health", 1.30f);
-    if (!isBoss && HasAffixId(affixes, AFFIX_FORTIFIED))
+    if (!isBoss && HasAffixId(affixes, ChallengeModeAffix::Fortified))
         return sConfigMgr->GetFloatDefault("ChallengeMode.Affix.Fortified.Health", 1.20f);
     return 1.0f;
 }
 
 float ChallengeModeMgr::GetAffixDamageMultiplier(std::array<uint32, 4> const& affixes, bool isBoss) const
 {
-    if (isBoss && HasAffixId(affixes, AFFIX_TYRANNICAL))
+    if (isBoss && HasAffixId(affixes, ChallengeModeAffix::Tyrannical))
         return sConfigMgr->GetFloatDefault("ChallengeMode.Affix.Tyrannical.Damage", 1.15f);
-    if (!isBoss && HasAffixId(affixes, AFFIX_FORTIFIED))
+    if (!isBoss && HasAffixId(affixes, ChallengeModeAffix::Fortified))
         return sConfigMgr->GetFloatDefault("ChallengeMode.Affix.Fortified.Damage", 1.30f);
     return 1.0f;
+}
+
+uint32 ChallengeModeMgr::GetAffixSpellId(uint32 affixId) const
+{
+    switch (affixId)
+    {
+        case ChallengeModeAffix::Bolstering: return uint32(sConfigMgr->GetIntDefault("ChallengeMode.Affix.Bolstering.SpellId", 209859)); // +20% max health & damage to nearby allies
+        case ChallengeModeAffix::Bursting:   return uint32(sConfigMgr->GetIntDefault("ChallengeMode.Affix.Bursting.SpellId", 240443));   // stacking damage-over-time on all players
+        case ChallengeModeAffix::Sanguine:   return uint32(sConfigMgr->GetIntDefault("ChallengeMode.Affix.Sanguine.SpellId", 226489));   // lingering ichor pool (heals allies / damages players)
+        case ChallengeModeAffix::Raging:     return uint32(sConfigMgr->GetIntDefault("ChallengeMode.Affix.Raging.SpellId", 228318));     // enrage at low health
+        case ChallengeModeAffix::Grievous:   return uint32(sConfigMgr->GetIntDefault("ChallengeMode.Affix.Grievous.SpellId", 240559));   // stacking bleed on wounded players
+        default: return 0;
+    }
 }
 
 MythicPlusSeasonEntry const* ChallengeModeMgr::GetActiveSeason() const

@@ -22,6 +22,7 @@
 #include "ObjectGuid.h"
 #include <array>
 
+class Creature;
 class InstanceMap;
 class Player;
 
@@ -44,6 +45,11 @@ public:
 
     void Update(uint32 diff);
     void OnPlayerDeath(Player* player);
+    // A non-boss enemy died: drive the on-death affix behaviours (Bolstering empowers survivors, Bursting
+    // stacks a DoT on the party, ...). No-op when the run is inactive or the victim is a boss/summon.
+    void OnCreatureDeath(Creature* victim);
+
+    bool HasAffix(uint32 affixId) const;
     // Called when a dungeon encounter reaches DONE; completes the run once every encounter is defeated.
     void Complete();
 

@@ -29,6 +29,8 @@
 #include "ObjectAccessor.h"
 #include "Player.h"
 #include "Random.h"
+#include "SpellMgr.h"
+#include <algorithm>
 
 ChallengeMode::ChallengeMode(InstanceMap* instance) : _instance(instance) { }
 ChallengeMode::~ChallengeMode() = default;
@@ -97,6 +99,48 @@ void ChallengeMode::OnPlayerDeath(Player* /*player*/)
 
     // Each death adds DEATH_TIME_PENALTY_MS to the effective run time (applied at completion via GetEffectiveTimeMs).
     ++_deathCount;
+}
+
+bool ChallengeMode::HasAffix(uint32 affixId) const
+{
+    return std::find(_affixes.begin(), _affixes.end(), affixId) != _affixes.end();
+}
+
+void ChallengeMode::OnCreatureDeath(Creature* victim)
+{
+    // On-death affixes only trigger off regular hostile trash, never bosses, pets or friendly summons.
+    if (!IsActive() || !victim || victim->IsDungeonBoss() || victim->IsPet() || victim->IsControlledByPlayer())
+        return;
+
+    // Bolstering: the death cry empowers nearby surviving non-boss enemies (buff spell handles the % itself).
+    if (HasAffix(ChallengeModeAffix::Bolstering))
+    {
+        if (uint32 spellId = sChallengeModeMgr.GetAffixSpellId(ChallengeModeAffix::Bolstering))
+            if (sSpellMgr->GetSpellInfo(spellId, DIFFICULTY_NONE))
+                for (auto const& [spawnId, other] : _instance->GetCreatureBySpawnIdStore())
+                    if (other && other != victim && other->IsAlive() && !other->IsDungeonBoss()
+                        && other->IsHostileToPlayers() && other->IsWithinDist(victim, 30.0f))
+                        other->CastSpell(other, spellId, true);
+    }
+
+    // Bursting: slain enemies inflict a stacking damage-over-time on the whole party.
+    if (HasAffix(ChallengeModeAffix::Bursting))
+    {
+        if (uint32 spellId = sChallengeModeMgr.GetAffixSpellId(ChallengeModeAffix::Bursting))
+            if (sSpellMgr->GetSpellInfo(spellId, DIFFICULTY_NONE))
+                _instance->DoOnPlayers([victim, spellId](Player* player)
+                {
+                    victim->CastSpell(player, spellId, true);
+                });
+    }
+
+    // Sanguine: the corpse leaves a lingering ichor pool (areatrigger-creating spell) that heals allies / hurts players.
+    if (HasAffix(ChallengeModeAffix::Sanguine))
+    {
+        if (uint32 spellId = sChallengeModeMgr.GetAffixSpellId(ChallengeModeAffix::Sanguine))
+            if (sSpellMgr->GetSpellInfo(spellId, DIFFICULTY_NONE))
+                victim->CastSpell(victim, spellId, true);
+    }
 }
 
 void ChallengeMode::Complete()

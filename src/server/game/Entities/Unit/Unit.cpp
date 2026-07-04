@@ -9207,11 +9207,15 @@ void Unit::setDeathState(DeathState s)
         if (ZoneScript* zoneScript = GetZoneScript() ? GetZoneScript() : GetInstanceScript())
             zoneScript->OnUnitDeath(this);
 
-        // Mythic Keystone: each player death adds a time penalty to the active run.
-        if (IsPlayer())
-            if (InstanceMap* instanceMap = GetMap()->ToInstanceMap())
-                if (ChallengeMode* challenge = instanceMap->GetChallengeMode())
+        // Mythic Keystone: player deaths add a time penalty; non-boss enemy deaths drive on-death affixes.
+        if (InstanceMap* instanceMap = GetMap()->ToInstanceMap())
+            if (ChallengeMode* challenge = instanceMap->GetChallengeMode())
+            {
+                if (IsPlayer())
                     challenge->OnPlayerDeath(ToPlayer());
+                else if (IsCreature())
+                    challenge->OnCreatureDeath(ToCreature());
+            }
     }
     else if (s == JUST_RESPAWNED)
         RemoveUnitFlag(UNIT_FLAG_SKINNABLE); // clear skinnable for creature and player (at battleground)
