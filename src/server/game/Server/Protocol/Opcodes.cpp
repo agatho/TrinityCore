@@ -634,12 +634,12 @@ void OpcodeTable::InitializeClientOpcodes()
     DEFINE_HANDLER(CMSG_LEARN_TALENTS,                                      STATUS_LOGGEDIN,  PROCESS_INPLACE,      &WorldSession::HandleLearnTalentsOpcode);
     DEFINE_HANDLER(CMSG_LEAVE_GROUP,                                        STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleLeaveGroupOpcode);
     DEFINE_HANDLER(CMSG_LEAVE_PET_BATTLE_QUEUE,                             STATUS_UNHANDLED, PROCESS_INPLACE,      &WorldSession::Handle_NULL);
-    DEFINE_HANDLER(CMSG_LFG_LIST_APPLY_TO_GROUP,                            STATUS_UNHANDLED, PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
-    DEFINE_HANDLER(CMSG_LFG_LIST_CANCEL_APPLICATION,                        STATUS_UNHANDLED, PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
-    DEFINE_HANDLER(CMSG_LFG_LIST_DECLINE_APPLICANT,                         STATUS_UNHANDLED, PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
+    DEFINE_HANDLER(CMSG_LFG_LIST_APPLY_TO_GROUP,                            STATUS_LOGGEDIN , PROCESS_THREADUNSAFE, &WorldSession::HandleLFGListApplyToGroup);
+    DEFINE_HANDLER(CMSG_LFG_LIST_CANCEL_APPLICATION,                        STATUS_LOGGEDIN , PROCESS_THREADUNSAFE, &WorldSession::HandleLFGListCancelApplication);
+    DEFINE_HANDLER(CMSG_LFG_LIST_DECLINE_APPLICANT,                         STATUS_LOGGEDIN , PROCESS_THREADUNSAFE, &WorldSession::HandleLFGListDeclineApplicant);
     DEFINE_HANDLER(CMSG_LFG_LIST_GET_STATUS,                                STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleLFGListGetStatus);
-    DEFINE_HANDLER(CMSG_LFG_LIST_INVITE_APPLICANT,                          STATUS_UNHANDLED, PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
-    DEFINE_HANDLER(CMSG_LFG_LIST_INVITE_RESPONSE,                           STATUS_UNHANDLED, PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
+    DEFINE_HANDLER(CMSG_LFG_LIST_INVITE_APPLICANT,                          STATUS_LOGGEDIN , PROCESS_THREADUNSAFE, &WorldSession::HandleLFGListInviteApplicant);
+    DEFINE_HANDLER(CMSG_LFG_LIST_INVITE_RESPONSE,                           STATUS_LOGGEDIN , PROCESS_THREADUNSAFE, &WorldSession::HandleLFGListInviteResponse);
     DEFINE_HANDLER(CMSG_LFG_LIST_JOIN,                                      STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleLFGListJoin);
     DEFINE_HANDLER(CMSG_LFG_LIST_LEAVE,                                     STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleLFGListLeave);
     DEFINE_HANDLER(CMSG_LFG_LIST_SEARCH,                                    STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleLFGListSearch);

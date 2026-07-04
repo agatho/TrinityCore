@@ -92,6 +92,8 @@ void LFGListMgr::RemoveListing(uint32 listingId, ObjectGuid leader)
     if (itr == _listings.end() || itr->second.LeaderGuid != leader)
         return;
 
+    for (LFGList::Application const& app : itr->second.Applications)
+        _applicationIndex.erase(app.Id);
     _listingByLeader.erase(itr->second.LeaderGuid);
     _listings.erase(itr);
 }
@@ -102,6 +104,9 @@ void LFGListMgr::RemoveListingsBy(ObjectGuid leader)
     if (itr == _listingByLeader.end())
         return;
 
+    if (LFGList::Listing const* listing = GetListing(itr->second))
+        for (LFGList::Application const& app : listing->Applications)
+            _applicationIndex.erase(app.Id);
     _listings.erase(itr->second);
     _listingByLeader.erase(itr);
 }
@@ -110,6 +115,82 @@ LFGList::Listing* LFGListMgr::GetListing(uint32 listingId)
 {
     auto itr = _listings.find(listingId);
     return itr != _listings.end() ? &itr->second : nullptr;
+}
+
+LFGList::Listing* LFGListMgr::GetListingByLeader(ObjectGuid leader)
+{
+    auto itr = _listingByLeader.find(leader);
+    return itr != _listingByLeader.end() ? GetListing(itr->second) : nullptr;
+}
+
+LFGList::Application* LFGListMgr::AddApplication(uint32 listingId, ObjectGuid applicant, uint8 roleMask, uint32 specId, uint32 itemLevel, std::string const& comment)
+{
+    LFGList::Listing* listing = GetListing(listingId);
+    if (!listing)
+        return nullptr;
+
+    // Re-applying replaces the previous application from the same player.
+    for (LFGList::Application& existing : listing->Applications)
+    {
+        if (existing.ApplicantGuid == applicant)
+        {
+            existing.RoleMask = roleMask;
+            existing.SpecID = specId;
+            existing.ItemLevel = itemLevel;
+            existing.Comment = comment;
+            existing.State = LFGList::ApplicationState::Applied;
+            return &existing;
+        }
+    }
+
+    LFGList::Application app;
+    app.Id = _nextApplicationId++;
+    app.ApplicantGuid = applicant;
+    app.RoleMask = roleMask;
+    app.SpecID = specId;
+    app.ItemLevel = itemLevel;
+    app.Comment = comment;
+    app.State = LFGList::ApplicationState::Applied;
+    listing->Applications.push_back(app);
+    _applicationIndex[app.Id] = listingId;
+    return &listing->Applications.back();
+}
+
+LFGList::Listing* LFGListMgr::GetListingByApplication(uint32 applicationId)
+{
+    auto itr = _applicationIndex.find(applicationId);
+    return itr != _applicationIndex.end() ? GetListing(itr->second) : nullptr;
+}
+
+LFGList::Application* LFGListMgr::GetApplication(uint32 applicationId)
+{
+    LFGList::Listing* listing = GetListingByApplication(applicationId);
+    if (!listing)
+        return nullptr;
+    for (LFGList::Application& app : listing->Applications)
+        if (app.Id == applicationId)
+            return &app;
+    return nullptr;
+}
+
+bool LFGListMgr::SetApplicationState(uint32 applicationId, LFGList::ApplicationState state)
+{
+    if (LFGList::Application* app = GetApplication(applicationId))
+    {
+        app->State = state;
+        return true;
+    }
+    return false;
+}
+
+void LFGListMgr::RemoveApplication(uint32 applicationId)
+{
+    LFGList::Listing* listing = GetListingByApplication(applicationId);
+    if (!listing)
+        return;
+
+    std::erase_if(listing->Applications, [applicationId](LFGList::Application const& a) { return a.Id == applicationId; });
+    _applicationIndex.erase(applicationId);
 }
 
 LFGList::Listing const* LFGListMgr::GetListing(uint32 listingId) const

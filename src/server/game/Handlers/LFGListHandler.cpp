@@ -58,6 +58,49 @@ namespace
             row.MemberCount = group->GetMembersCount();
         FillListingInfo(row.Listing, listing);
     }
+
+    // Push the full applicant list of a listing to its (connected) leader.
+    void SendApplicantList(LFGList::Listing const& listing)
+    {
+        Player* leader = ObjectAccessor::FindConnectedPlayer(listing.LeaderGuid);
+        if (!leader)
+            return;
+
+        WorldPackets::LFGList::LFGListApplicantListUpdate packet;
+        packet.ListingId = listing.Id;
+        for (LFGList::Application const& app : listing.Applications)
+        {
+            WorldPackets::LFGList::ApplicantInfo info;
+            info.ApplicationId = app.Id;
+            info.ApplicantGuid = app.ApplicantGuid;
+            info.PlayerGuid = app.ApplicantGuid;
+            info.RoleMask = app.RoleMask;
+            info.State = uint8(app.State);
+            info.SpecID = app.SpecID;
+            info.ItemLevel = app.ItemLevel;
+            info.Comment = app.Comment;
+            packet.Applicants.push_back(std::move(info));
+        }
+        leader->SendDirectMessage(packet.Write());
+    }
+
+    // Notify one applicant that the state of its application changed. Application tickets are keyed on the
+    // application id throughout, so both directions agree on which application a ticket refers to.
+    void SendApplicationStatus(ObjectGuid applicantGuid, uint32 applicationId, LFGList::ApplicationState state)
+    {
+        Player* applicant = ObjectAccessor::FindConnectedPlayer(applicantGuid);
+        if (!applicant)
+            return;
+
+        WorldPackets::LFGList::LFGListApplicationStatusUpdate packet;
+        packet.Ticket.RequesterGuid = applicantGuid;
+        packet.Ticket.Id = applicationId;
+        packet.Ticket.Type = WorldPackets::LFG::RideType::Lfg;
+        packet.Ticket.Time = int32(GameTime::GetGameTime());
+        packet.ApplicationId = applicationId;
+        packet.State = uint8(state);
+        applicant->SendDirectMessage(packet.Write());
+    }
 }
 
 // Send the current status of one of the player's listings (or "not listed" when it is gone).
@@ -160,4 +203,139 @@ void WorldSession::HandleLFGListSearch(WorldPackets::LFGList::LFGListSearch& pac
     WorldPackets::LFGList::LFGListSearchStatus status;
     status.Complete = true;
     SendPacket(status.Write());
+}
+
+void WorldSession::HandleLFGListApplyToGroup(WorldPackets::LFGList::LFGListApplyToGroup& packet)
+{
+    Player* player = GetPlayer();
+    if (!player)
+        return;
+
+    LFGList::Listing* listing = sLFGListMgr.GetListing(packet.Ticket.Id);
+    if (!listing || listing->LeaderGuid == player->GetGUID())
+        return;
+
+    LFGList::Application* app = sLFGListMgr.AddApplication(listing->Id, player->GetGUID(), packet.RoleMask,
+        uint32(player->GetPrimarySpecialization()), uint32(player->GetAverageItemLevel()), std::string());
+    if (!app)
+        return;
+
+    // Confirm the application to the applicant.
+    WorldPackets::LFGList::LFGListApplyToGroupResult result;
+    result.Ticket.RequesterGuid = player->GetGUID();
+    result.Ticket.Id = app->Id;
+    result.Ticket.Type = WorldPackets::LFG::RideType::Lfg;
+    result.Ticket.Time = int32(GameTime::GetGameTime());
+    result.Result = 0;
+    result.ListingId = listing->Id;
+    result.LeaderGuid = listing->LeaderGuid;
+    FillListingInfo(result.Listing, *listing);
+    SendPacket(result.Write());
+
+    SendApplicationStatus(player->GetGUID(), app->Id, LFGList::ApplicationState::Applied);
+    SendApplicantList(*listing);
+}
+
+void WorldSession::HandleLFGListCancelApplication(WorldPackets::LFGList::LFGListCancelApplication& packet)
+{
+    Player* player = GetPlayer();
+    if (!player)
+        return;
+
+    uint32 const applicationId = packet.Ticket.Id;
+    LFGList::Application const* app = sLFGListMgr.GetApplication(applicationId);
+    if (!app || app->ApplicantGuid != player->GetGUID())
+        return;
+
+    LFGList::Listing* listing = sLFGListMgr.GetListingByApplication(applicationId);
+    sLFGListMgr.RemoveApplication(applicationId);
+    if (listing)
+        SendApplicantList(*listing);
+}
+
+void WorldSession::HandleLFGListDeclineApplicant(WorldPackets::LFGList::LFGListDeclineApplicant& packet)
+{
+    Player* player = GetPlayer();
+    if (!player)
+        return;
+
+    LFGList::Listing* listing = sLFGListMgr.GetListing(packet.Ticket.Id);
+    if (!listing || listing->LeaderGuid != player->GetGUID())
+        return;
+
+    uint32 const applicationId = packet.ApplicantTicket.Id;
+    LFGList::Application const* app = sLFGListMgr.GetApplication(applicationId);
+    if (!app)
+        return;
+
+    ObjectGuid const applicant = app->ApplicantGuid;
+    SendApplicationStatus(applicant, applicationId, LFGList::ApplicationState::Declined);
+    sLFGListMgr.RemoveApplication(applicationId);
+    SendApplicantList(*listing);
+}
+
+void WorldSession::HandleLFGListInviteApplicant(WorldPackets::LFGList::LFGListInviteApplicant& packet)
+{
+    Player* player = GetPlayer();
+    if (!player)
+        return;
+
+    LFGList::Listing* listing = sLFGListMgr.GetListing(packet.Ticket.Id);
+    if (!listing || listing->LeaderGuid != player->GetGUID())
+        return;
+
+    uint32 const applicationId = packet.ApplicantTicket.Id;
+    LFGList::Application* app = sLFGListMgr.GetApplication(applicationId);
+    if (!app)
+        return;
+
+    sLFGListMgr.SetApplicationState(applicationId, LFGList::ApplicationState::Invited);
+    SendApplicationStatus(app->ApplicantGuid, applicationId, LFGList::ApplicationState::Invited);
+    SendApplicantList(*listing);
+}
+
+void WorldSession::HandleLFGListInviteResponse(WorldPackets::LFGList::LFGListInviteResponse& packet)
+{
+    Player* applicant = GetPlayer();
+    if (!applicant)
+        return;
+
+    uint32 const applicationId = packet.Ticket.Id;
+    LFGList::Application const* app = sLFGListMgr.GetApplication(applicationId);
+    LFGList::Listing* listing = sLFGListMgr.GetListingByApplication(applicationId);
+    if (!app || !listing || app->ApplicantGuid != applicant->GetGUID())
+        return;
+
+    if (!packet.Accept)
+    {
+        sLFGListMgr.RemoveApplication(applicationId);
+        SendApplicantList(*listing);
+        return;
+    }
+
+    Player* leader = ObjectAccessor::FindConnectedPlayer(listing->LeaderGuid);
+    if (!leader)
+        return;
+
+    // Join (or form) the leader's party.
+    Group* group = leader->GetGroup();
+    if (!group)
+    {
+        group = new Group();
+        if (!group->Create(leader))
+        {
+            delete group;
+            return;
+        }
+        sGroupMgr->AddGroup(group);
+        listing->GroupGuid = group->GetGUID();
+    }
+
+    if (group->IsFull() || applicant->GetGroup())
+        return;
+
+    group->AddMember(applicant);
+
+    sLFGListMgr.RemoveApplication(applicationId);
+    SendApplicantList(*listing);
 }

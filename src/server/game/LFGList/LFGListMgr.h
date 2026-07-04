@@ -83,17 +83,27 @@ public:
 
     LFGList::Listing* GetListing(uint32 listingId);
     LFGList::Listing const* GetListing(uint32 listingId) const;
+    LFGList::Listing* GetListingByLeader(ObjectGuid leader);
 
     // Search the registry. Any argument left 0 acts as a wildcard. Results are capped by config.
     std::vector<LFGList::Listing const*> Search(uint8 category, uint8 activityGroup, uint32 activityId) const;
+
+    // Applications. An application gets a globally-unique id the client keys on via a RideTicket.
+    LFGList::Application* AddApplication(uint32 listingId, ObjectGuid applicant, uint8 roleMask, uint32 specId, uint32 itemLevel, std::string const& comment);
+    LFGList::Listing* GetListingByApplication(uint32 applicationId);
+    LFGList::Application* GetApplication(uint32 applicationId);
+    bool SetApplicationState(uint32 applicationId, LFGList::ApplicationState state);
+    void RemoveApplication(uint32 applicationId);
 
 private:
     LFGListMgr() = default;
 
     uint32 _nextListingId = 1;
+    uint32 _nextApplicationId = 1;
     uint32 _expireTimer = 0;
     std::unordered_map<uint32 /*listingId*/, LFGList::Listing> _listings;
     std::unordered_map<ObjectGuid /*leader*/, uint32 /*listingId*/> _listingByLeader;
+    std::unordered_map<uint32 /*applicationId*/, uint32 /*listingId*/> _applicationIndex;
 };
 
 #define sLFGListMgr LFGListMgr::Instance()
