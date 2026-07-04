@@ -118,11 +118,24 @@ LFGList::Listing const* LFGListMgr::GetListing(uint32 listingId) const
     return itr != _listings.end() ? &itr->second : nullptr;
 }
 
-std::vector<LFGList::Listing const*> LFGListMgr::Search(uint32 activityId) const
+std::vector<LFGList::Listing const*> LFGListMgr::Search(uint8 category, uint8 activityGroup, uint32 activityId) const
 {
+    uint32 const maxResults = uint32(sConfigMgr->GetIntDefault("LFGList.MaxSearchResults", 100));
+
     std::vector<LFGList::Listing const*> results;
     for (auto const& [id, listing] : _listings)
-        if (!activityId || listing.GetActivityID() == activityId)
-            results.push_back(&listing);
+    {
+        WorldPackets::LFGList::ListingDescriptor const& d = listing.Descriptor;
+        if (category && d.ActivityGroupCategory != category)
+            continue;
+        if (activityGroup && d.ActivityGroupId != activityGroup)
+            continue;
+        if (activityId && d.ActivityID != activityId)
+            continue;
+
+        results.push_back(&listing);
+        if (maxResults && results.size() >= maxResults)
+            break;
+    }
     return results;
 }

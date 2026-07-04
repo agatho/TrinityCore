@@ -18,8 +18,10 @@
 #include "WorldSession.h"
 #include "GameTime.h"
 #include "Group.h"
+#include "GroupMgr.h"
 #include "LFGListMgr.h"
 #include "LFGListPackets.h"
+#include "ObjectAccessor.h"
 #include "Player.h"
 
 namespace
@@ -41,6 +43,20 @@ namespace
         info.ActivityID = d.ActivityID;
         info.RequiredItemLevel = d.RequiredItemLevel;
         info.Comment = d.Comment;
+        if (Player* leader = ObjectAccessor::FindConnectedPlayer(listing.LeaderGuid))
+            info.LeaderName = leader->GetName();
+    }
+
+    // Build one search-result row for a listing.
+    void FillSearchRow(WorldPackets::LFGList::SearchResultListing& row, LFGList::Listing const& listing)
+    {
+        row.ListingId = listing.Id;
+        row.ActivityID = listing.Descriptor.ActivityID;
+        row.LeaderGuid = listing.LeaderGuid;
+        row.MemberCount = 1;
+        if (Group const* group = sGroupMgr->GetGroupByGUID(listing.GroupGuid))
+            row.MemberCount = group->GetMembersCount();
+        FillListingInfo(row.Listing, listing);
     }
 }
 
@@ -121,4 +137,27 @@ void WorldSession::HandleLFGListLeave(WorldPackets::LFGList::LFGListLeave& packe
 void WorldSession::HandleLFGListGetStatus(WorldPackets::LFGList::LFGListGetStatus& packet)
 {
     SendLFGListUpdateStatus(packet.Ticket.Id);
+}
+
+void WorldSession::HandleLFGListSearch(WorldPackets::LFGList::LFGListSearch& packet)
+{
+    if (!GetPlayer())
+        return;
+
+    std::vector<LFGList::Listing const*> matches = sLFGListMgr.Search(packet.CategoryId, packet.ActivityGroupId, 0);
+
+    WorldPackets::LFGList::LFGListSearchResults results;
+    results.Listings.reserve(matches.size());
+    for (LFGList::Listing const* listing : matches)
+    {
+        WorldPackets::LFGList::SearchResultListing row;
+        FillSearchRow(row, *listing);
+        results.Listings.push_back(std::move(row));
+    }
+    SendPacket(results.Write());
+
+    // Tell the client the (single-shot) search is complete.
+    WorldPackets::LFGList::LFGListSearchStatus status;
+    status.Complete = true;
+    SendPacket(status.Write());
 }

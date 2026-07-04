@@ -84,8 +84,8 @@ public:
     LFGList::Listing* GetListing(uint32 listingId);
     LFGList::Listing const* GetListing(uint32 listingId) const;
 
-    // Search the registry for listings matching an activity (0 = any).
-    std::vector<LFGList::Listing const*> Search(uint32 activityId) const;
+    // Search the registry. Any argument left 0 acts as a wildcard. Results are capped by config.
+    std::vector<LFGList::Listing const*> Search(uint8 category, uint8 activityGroup, uint32 activityId) const;
 
 private:
     LFGListMgr() = default;

@@ -642,7 +642,7 @@ void OpcodeTable::InitializeClientOpcodes()
     DEFINE_HANDLER(CMSG_LFG_LIST_INVITE_RESPONSE,                           STATUS_UNHANDLED, PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
     DEFINE_HANDLER(CMSG_LFG_LIST_JOIN,                                      STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleLFGListJoin);
     DEFINE_HANDLER(CMSG_LFG_LIST_LEAVE,                                     STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleLFGListLeave);
-    DEFINE_HANDLER(CMSG_LFG_LIST_SEARCH,                                    STATUS_UNHANDLED, PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
+    DEFINE_HANDLER(CMSG_LFG_LIST_SEARCH,                                    STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleLFGListSearch);
     DEFINE_HANDLER(CMSG_LFG_LIST_UPDATE_REQUEST,                            STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleLFGListUpdateRequest);
     DEFINE_HANDLER(CMSG_LFG_LOREWALKING_UPDATE_REQUEST,                     STATUS_UNHANDLED, PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
     DEFINE_HANDLER(CMSG_LIST_INVENTORY,                                     STATUS_LOGGEDIN,  PROCESS_INPLACE,      &WorldSession::HandleListInventoryOpcode);
