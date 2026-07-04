@@ -162,6 +162,12 @@ void PetAbandonByNumber::Read()
     _worldPacket >> PetNumber;
 }
 
+void SetPetSpecializationRequest::Read()
+{
+    _worldPacket >> SpecID;
+    _worldPacket >> PetGUID;
+}
+
 void PetSpellAutocast::Read()
 {
     _worldPacket >> PetGUID;
