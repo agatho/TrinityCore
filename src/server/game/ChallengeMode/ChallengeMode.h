@@ -34,6 +34,8 @@ class TC_GAME_API ChallengeMode
 public:
     // Each player death adds this much to the effective run time (retail Mythic+ death penalty).
     static constexpr uint32 DEATH_TIME_PENALTY_MS = 5 * IN_MILLISECONDS;
+    // How often the health-threshold affixes (Raging, Grievous) re-scan the instance.
+    static constexpr uint32 AFFIX_TICK_INTERVAL_MS = 1 * IN_MILLISECONDS;
 
     explicit ChallengeMode(InstanceMap* instance);
     ~ChallengeMode();
@@ -69,6 +71,9 @@ public:
 
 private:
     void BroadcastTimer(uint32 timeLeftMs) const;
+    // Periodic (AFFIX_TICK_INTERVAL_MS) scan for the health-threshold affixes: Raging enrages wounded enemies,
+    // Grievous bleeds wounded players until they heal back up.
+    void UpdateHealthThresholdAffixes();
 
     InstanceMap* _instance;
     uint32 _mapChallengeModeId = 0;
@@ -80,6 +85,7 @@ private:
     uint32 _timeLimitMs = 0;
     uint32 _elapsedMs = 0;
     uint32 _deathCount = 0;
+    uint32 _affixTickTimer = 0;
     bool _active = false;
     bool _completed = false;
 };

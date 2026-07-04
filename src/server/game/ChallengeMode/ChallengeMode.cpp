@@ -90,6 +90,45 @@ void ChallengeMode::Update(uint32 diff)
         return;
 
     _elapsedMs += diff;
+
+    _affixTickTimer += diff;
+    if (_affixTickTimer >= AFFIX_TICK_INTERVAL_MS)
+    {
+        _affixTickTimer = 0;
+        UpdateHealthThresholdAffixes();
+    }
+}
+
+void ChallengeMode::UpdateHealthThresholdAffixes()
+{
+    // Raging: wounded (<=30% HP) non-boss enemies enrage until defeated. The enrage spell is applied once and
+    // persists, so re-applying is gated on the aura already being present.
+    if (HasAffix(ChallengeModeAffix::Raging))
+    {
+        if (uint32 spellId = sChallengeModeMgr.GetAffixSpellId(ChallengeModeAffix::Raging))
+            if (sSpellMgr->GetSpellInfo(spellId, DIFFICULTY_NONE))
+                for (auto const& [spawnId, creature] : _instance->GetCreatureBySpawnIdStore())
+                    if (creature && creature->IsAlive() && creature->IsInCombat() && !creature->IsDungeonBoss()
+                        && creature->IsHostileToPlayers() && creature->GetHealthPct() <= 30.0f && !creature->HasAura(spellId))
+                        creature->CastSpell(creature, spellId, true);
+    }
+
+    // Grievous: players below 90% HP take a lingering bleed; healing back to 90%+ clears it.
+    if (HasAffix(ChallengeModeAffix::Grievous))
+    {
+        if (uint32 spellId = sChallengeModeMgr.GetAffixSpellId(ChallengeModeAffix::Grievous))
+            if (sSpellMgr->GetSpellInfo(spellId, DIFFICULTY_NONE))
+                _instance->DoOnPlayers([spellId](Player* player)
+                {
+                    if (player->IsAlive() && player->GetHealthPct() < 90.0f)
+                    {
+                        if (!player->HasAura(spellId))
+                            player->CastSpell(player, spellId, true);
+                    }
+                    else
+                        player->RemoveAurasDueToSpell(spellId);
+                });
+    }
 }
 
 void ChallengeMode::OnPlayerDeath(Player* /*player*/)
