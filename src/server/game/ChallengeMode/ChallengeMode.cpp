@@ -31,6 +31,7 @@
 #include "Player.h"
 #include "Random.h"
 #include "SpellMgr.h"
+#include "TemporarySummon.h"
 #include <algorithm>
 
 ChallengeMode::ChallengeMode(InstanceMap* instance) : _instance(instance) { }
@@ -187,6 +188,14 @@ void ChallengeMode::OnCreatureDeath(Creature* victim)
         if (uint32 spellId = sChallengeModeMgr.GetAffixSpellId(ChallengeModeAffix::Sanguine))
             if (sSpellMgr->GetSpellInfo(spellId, DIFFICULTY_NONE))
                 victim->CastSpell(victim, spellId, true);
+    }
+
+    // Spiteful: the corpse rises as a Spiteful Shade that fixates a survivor. The summoned creature's world-DB AI
+    // (fixate + self-decay) drives the behaviour; SummonCreature simply no-ops if the entry is not in the DB.
+    if (HasAffix(ChallengeModeAffix::Spiteful))
+    {
+        if (uint32 creatureId = sChallengeModeMgr.GetAffixCreatureId(ChallengeModeAffix::Spiteful))
+            victim->SummonCreature(creatureId, victim->GetPosition(), TEMPSUMMON_TIMED_OR_DEAD_DESPAWN, 30s);
     }
 }
 

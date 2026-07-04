@@ -263,6 +263,17 @@ uint32 ChallengeModeMgr::GetAffixSpellId(uint32 affixId) const
     }
 }
 
+uint32 ChallengeModeMgr::GetAffixCreatureId(uint32 affixId) const
+{
+    switch (affixId)
+    {
+        case ChallengeModeAffix::Spiteful:    return uint32(sConfigMgr->GetIntDefault("ChallengeMode.Affix.Spiteful.CreatureId", 174773));  // Spiteful Shade (fixate + self-decay AI)
+        case ChallengeModeAffix::Incorporeal: return uint32(sConfigMgr->GetIntDefault("ChallengeMode.Affix.Incorporeal.CreatureId", 0));     // needs verified entry per build
+        case ChallengeModeAffix::Afflicted:   return uint32(sConfigMgr->GetIntDefault("ChallengeMode.Affix.Afflicted.CreatureId", 0));       // needs verified entry per build
+        default: return 0;
+    }
+}
+
 MythicPlusSeasonEntry const* ChallengeModeMgr::GetActiveSeason() const
 {
     return sMythicPlusSeasonStore.LookupEntry(_activeSeasonId);

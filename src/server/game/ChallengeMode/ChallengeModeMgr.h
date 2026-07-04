@@ -36,6 +36,11 @@ namespace ChallengeModeAffix
     constexpr uint32 Fortified   = 10;  // scales non-boss enemies
     constexpr uint32 Bursting    = 11;
     constexpr uint32 Grievous    = 12;
+    constexpr uint32 Spiteful    = 123;
+    constexpr uint32 Storming    = 124;
+    constexpr uint32 Entangling  = 134;
+    constexpr uint32 Afflicted   = 135;
+    constexpr uint32 Incorporeal = 136;
 }
 
 // Global manager for Mythic Keystone (Challenge Mode) static data: the dungeon pool, per-map par times and
@@ -92,6 +97,11 @@ public:
     // safe no-op. IDs are config-tunable (ChallengeMode.Affix.<Name>.SpellId) with the long-stable defaults, to
     // be verified against the live build. Returns 0 for an affix with no on-effect spell.
     uint32 GetAffixSpellId(uint32 affixId) const;
+
+    // Summoned-add creature entry for a spawn affix (Spiteful Shade, ...). The creature (and its Blizzlike AI) must
+    // exist in the world DB; SummonCreature no-ops on an absent entry. Config-tunable
+    // (ChallengeMode.Affix.<Name>.CreatureId). Returns 0 (disabled) for affixes without a configured spawn.
+    uint32 GetAffixCreatureId(uint32 affixId) const;
 
     // --- season / pool / affixes ---
     uint32 GetActiveSeasonId() const { return _activeSeasonId; }
