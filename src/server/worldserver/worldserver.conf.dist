@@ -1146,6 +1146,24 @@ ChallengeMode.Affix.Incorporeal.CreatureId = 204560
 ChallengeMode.Affix.Afflicted.CreatureId = 0
 
 #
+#    ChallengeMode.Crest.*
+#        Description: End-of-run reward. On completion each player is granted Amount crests of the tier whose
+#                     MaxLevel covers the keystone level (Veteran <= 3, Champion <= 6, Hero <= 9, else Myth).
+#                     CurrencyIds are the Midnight Season 1 Dawncrests from CurrencyTypes.db2; the grant no-ops
+#                     if the currency does not exist on this build. Set an Id to 0 to disable that tier's grant.
+#                     Amount and the tier breakpoints are season tuning - adjust to match the live season.
+#        Default:     Amount = 10; Veteran 3341/<=3, Champion 3343/<=6, Hero 3345/<=9, Myth 3347/10+
+
+ChallengeMode.Crest.Amount = 10
+ChallengeMode.Crest.Veteran.CurrencyId = 3341
+ChallengeMode.Crest.Veteran.MaxLevel = 3
+ChallengeMode.Crest.Champion.CurrencyId = 3343
+ChallengeMode.Crest.Champion.MaxLevel = 6
+ChallengeMode.Crest.Hero.CurrencyId = 3345
+ChallengeMode.Crest.Hero.MaxLevel = 9
+ChallengeMode.Crest.Myth.CurrencyId = 3347
+
+#
 #    Instance.UnloadDelay
 #        Description: Time (in milliseconds) before instance maps are unloaded from memory if no
 #                     characters are inside.

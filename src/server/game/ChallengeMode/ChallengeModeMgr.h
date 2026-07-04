@@ -103,6 +103,13 @@ public:
     // (ChallengeMode.Affix.<Name>.CreatureId). Returns 0 (disabled) for affixes without a configured spawn.
     uint32 GetAffixCreatureId(uint32 affixId) const;
 
+    // --- end-of-run crest reward ---
+    // The season crest currency awarded on completion, by keystone-level tier. Currency ids are extracted from
+    // CurrencyTypes.db2 (68275 Midnight S1 Dawncrests: Veteran 3341 / Champion 3343 / Hero 3345 / Myth 3347); the
+    // tier breakpoints and the per-run amount are season tuning, so both are config-tunable (ChallengeMode.Crest.*).
+    uint32 GetCrestCurrencyForLevel(uint32 keystoneLevel) const;
+    uint32 GetCrestAmount() const;
+
     // --- season / pool / affixes ---
     uint32 GetActiveSeasonId() const { return _activeSeasonId; }
     MythicPlusSeasonEntry const* GetActiveSeason() const;

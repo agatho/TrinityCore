@@ -274,6 +274,23 @@ uint32 ChallengeModeMgr::GetAffixCreatureId(uint32 affixId) const
     }
 }
 
+uint32 ChallengeModeMgr::GetCrestCurrencyForLevel(uint32 keystoneLevel) const
+{
+    // Tier by keystone level. Defaults follow the Midnight S1 crest ladder; breakpoints are config-tunable.
+    if (keystoneLevel <= uint32(sConfigMgr->GetIntDefault("ChallengeMode.Crest.Veteran.MaxLevel", 3)))
+        return uint32(sConfigMgr->GetIntDefault("ChallengeMode.Crest.Veteran.CurrencyId", 3341));
+    if (keystoneLevel <= uint32(sConfigMgr->GetIntDefault("ChallengeMode.Crest.Champion.MaxLevel", 6)))
+        return uint32(sConfigMgr->GetIntDefault("ChallengeMode.Crest.Champion.CurrencyId", 3343));
+    if (keystoneLevel <= uint32(sConfigMgr->GetIntDefault("ChallengeMode.Crest.Hero.MaxLevel", 9)))
+        return uint32(sConfigMgr->GetIntDefault("ChallengeMode.Crest.Hero.CurrencyId", 3345));
+    return uint32(sConfigMgr->GetIntDefault("ChallengeMode.Crest.Myth.CurrencyId", 3347));
+}
+
+uint32 ChallengeModeMgr::GetCrestAmount() const
+{
+    return uint32(sConfigMgr->GetIntDefault("ChallengeMode.Crest.Amount", 10));
+}
+
 MythicPlusSeasonEntry const* ChallengeModeMgr::GetActiveSeason() const
 {
     return sMythicPlusSeasonStore.LookupEntry(_activeSeasonId);

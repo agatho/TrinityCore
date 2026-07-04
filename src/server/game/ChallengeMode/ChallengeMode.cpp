@@ -20,6 +20,7 @@
 #include "ChallengeModePackets.h"
 #include "Containers.h"
 #include "Creature.h"
+#include "DB2Stores.h"
 #include "GameTime.h"
 #include "Group.h"
 #include "Item.h"
@@ -304,6 +305,22 @@ void ChallengeMode::Complete()
         // Stop the client dungeon timer.
         if (Group* group = starterPlayer->GetGroup())
             group->StartCountdown(CountdownTimerType::ChallengeMode, Seconds(0));
+    }
+
+    // End-of-run crest reward: award the season crest of the tier matching the keystone level to each player.
+    // Currency ids are extracted from CurrencyTypes.db2 (Midnight S1 Dawncrests); tier + amount are config-tunable.
+    // Guarded on the currency existing, so a wrong/absent id is a safe no-op.
+    if (uint32 crestId = sChallengeModeMgr.GetCrestCurrencyForLevel(_keystoneLevel))
+    {
+        if (sCurrencyTypesStore.LookupEntry(crestId))
+        {
+            uint32 const crestAmount = sChallengeModeMgr.GetCrestAmount();
+            if (crestAmount)
+                _instance->DoOnPlayers([crestId, crestAmount](Player* player)
+                {
+                    player->AddCurrency(crestId, crestAmount, CurrencyGainSource::Loot);
+                });
+        }
     }
 
     // Announce the result to the party (map/level/affixes + present players as members). The per-run
