@@ -799,6 +799,9 @@ void CharacterDatabaseConnection::DoPrepareStatements()
     PrepareStatement(CHAR_SEL_CHARACTER_MYTHIC_PLUS_WEEKLY, "SELECT challengeModeId, level, completionDate, resetTime FROM character_mythic_plus_weekly WHERE guid = ?", CONNECTION_ASYNC);
     PrepareStatement(CHAR_INS_CHARACTER_MYTHIC_PLUS_WEEKLY, "INSERT INTO character_mythic_plus_weekly (guid, challengeModeId, level, completionDate, resetTime) VALUES (?, ?, ?, ?, ?)", CONNECTION_ASYNC);
     PrepareStatement(CHAR_DEL_CHARACTER_MYTHIC_PLUS_WEEKLY, "DELETE FROM character_mythic_plus_weekly WHERE guid = ?", CONNECTION_ASYNC);
+    PrepareStatement(CHAR_SEL_CHARACTER_MYTHIC_PLUS_VAULT, "SELECT claimedResetTime FROM character_mythic_plus_vault WHERE guid = ?", CONNECTION_ASYNC);
+    PrepareStatement(CHAR_INS_CHARACTER_MYTHIC_PLUS_VAULT, "INSERT INTO character_mythic_plus_vault (guid, claimedResetTime) VALUES (?, ?)", CONNECTION_ASYNC);
+    PrepareStatement(CHAR_DEL_CHARACTER_MYTHIC_PLUS_VAULT, "DELETE FROM character_mythic_plus_vault WHERE guid = ?", CONNECTION_ASYNC);
     PrepareStatement(CHAR_UPD_CHARACTER_GARRISON_FOLLOWER_ACTIVATIONS, "UPDATE character_garrison SET followerActivationsRemainingToday = ?", CONNECTION_ASYNC);
     PrepareStatement(CHAR_SEL_CHARACTER_GARRISON_BLUEPRINTS, "SELECT buildingId FROM character_garrison_blueprints WHERE guid = ?", CONNECTION_ASYNC);
     PrepareStatement(CHAR_INS_CHARACTER_GARRISON_BLUEPRINTS, "INSERT INTO character_garrison_blueprints (guid, buildingId) VALUES (?, ?)", CONNECTION_ASYNC);

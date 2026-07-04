@@ -77,6 +77,13 @@ public:
     uint32 GetVaultSlotLevel(uint32 slotIndex) const;
     uint32 GetWeeklyRunCount() const;
 
+    // --- Great Vault claim (one reward per weekly reset) ---
+    void LoadVaultFromDB(PreparedQueryResult result);
+    // True once this week's Great Vault reward has been collected (blocks a second claim until the weekly reset).
+    bool IsVaultClaimedThisWeek() const;
+    // Marks this week's vault reward as claimed and persists it immediately.
+    void SetVaultClaimed();
+
 private:
     // Clears the weekly list when the stored weekly-reset boundary no longer matches the world's next reset.
     void PruneStaleWeek() const;
@@ -86,6 +93,7 @@ private:
 
     mutable std::vector<MythicPlusWeeklyRun> _weeklyRuns;
     mutable int64 _weeklyResetTime = 0;     // the GetNextWeeklyQuestsResetTime these runs belong to
+    int64 _vaultClaimedResetTime = 0;       // weekly-reset boundary the vault was last claimed for (0 = never)
 };
 
 #endif // MythicPlusData_h__

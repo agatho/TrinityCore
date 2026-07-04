@@ -19,6 +19,7 @@
 #define TRINITYCORE_CHALLENGE_MODE_PACKETS_H
 
 #include "Packet.h"
+#include "ItemPacketsCommon.h"
 #include "MythicPlusPacketsCommon.h"
 #include "ObjectGuid.h"
 #include <array>
@@ -284,6 +285,67 @@ namespace WorldPackets
             std::vector<WeeklyRewardThresholdProgress> Progress;
             uint8 Header = 0;
             uint32 Unused = 0;
+        };
+
+        // CMSG_CLAIM_WEEKLY_REWARD -- player collects a Great Vault reward. Wire (@68275): uint32 RewardID.
+        // The RewardID references the vault slot being claimed (WeeklyRewardChestThreshold.ID); not yet
+        // sniff-confirmed, but the claim is validated + granted server-side, so a wrong id is a safe no-op.
+        class ClaimWeeklyReward final : public ClientPacket
+        {
+        public:
+            explicit ClaimWeeklyReward(WorldPacket&& packet) : ClientPacket(CMSG_CLAIM_WEEKLY_REWARD, std::move(packet)) { }
+
+            void Read() override;
+
+            uint32 RewardID = 0;
+        };
+
+        // JamWeeklyReward (reflection-named): one selectable Great Vault reward option. Wire (sub_7FF72915E170):
+        //   uint32 Type; uint32 Value; uint8 flags(bit7=itemDBID, bit6=item, others date/currency); then each
+        //   present optional in order [ItemInstance][u64 itemDBID][u64 itemDateCreated][u32 currencyType].
+        // We emit item rewards only (item present, the rest absent). Type/Value are not sniff-confirmed (sent 0);
+        // the ItemInstance preview is the authoritative reward content shown by the client.
+        struct WeeklyReward
+        {
+            Item::ItemInstance Item;
+            int32 Type = 0;
+            int32 Value = 0;
+            bool HasItem = false;
+        };
+
+        // One vault slot's reward options (outer element of SMSG_WEEKLY_REWARDS_RESULT).
+        struct WeeklyRewardActivity
+        {
+            uint32 ThresholdID = 0;
+            std::vector<WeeklyReward> Rewards;
+        };
+
+        ByteBuffer& operator<<(ByteBuffer& data, WeeklyReward const& reward);
+
+        // SMSG_WEEKLY_REWARDS_RESULT -- the reward options shown in the Great Vault. Wire (client deserializer
+        // sub_7FF7290B6800 @68275, byte-aligned):
+        //   uint32 ActivityCount; uint32 Field56; ActivityCount x { uint32 ThresholdID; uint32 RewardCount;
+        //     RewardCount x JamWeeklyReward }.
+        class WeeklyRewardsResult final : public ServerPacket
+        {
+        public:
+            explicit WeeklyRewardsResult() : ServerPacket(SMSG_WEEKLY_REWARDS_RESULT, 16) { }
+
+            WorldPacket const* Write() override;
+
+            std::vector<WeeklyRewardActivity> Activities;
+            uint32 Field56 = 0;
+        };
+
+        // SMSG_WEEKLY_REWARD_CLAIM_RESULT -- outcome of a claim. Wire (sub_7FF7290B6960): a single uint8 (0 = ok).
+        class WeeklyRewardClaimResult final : public ServerPacket
+        {
+        public:
+            explicit WeeklyRewardClaimResult() : ServerPacket(SMSG_WEEKLY_REWARD_CLAIM_RESULT, 1) { }
+
+            WorldPacket const* Write() override;
+
+            uint8 Result = 0;
         };
     }
 }

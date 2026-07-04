@@ -334,6 +334,10 @@ bool LoginQueryHolder::Initialize()
     stmt->setUInt64(0, lowGuid);
     res &= SetPreparedQuery(PLAYER_LOGIN_QUERY_LOAD_MYTHIC_PLUS_WEEKLY, stmt);
 
+    stmt = CharacterDatabase.GetPreparedStatement(CHAR_SEL_CHARACTER_MYTHIC_PLUS_VAULT);
+    stmt->setUInt64(0, lowGuid);
+    res &= SetPreparedQuery(PLAYER_LOGIN_QUERY_LOAD_MYTHIC_PLUS_VAULT, stmt);
+
     stmt = CharacterDatabase.GetPreparedStatement(CHAR_SEL_CHARACTER_GARRISON_BLUEPRINTS);
     stmt->setUInt64(0, lowGuid);
     res &= SetPreparedQuery(PLAYER_LOGIN_QUERY_LOAD_GARRISON_BLUEPRINTS, stmt);

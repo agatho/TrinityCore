@@ -166,4 +166,42 @@ WorldPacket const* WeeklyRewardsProgressResult::Write()
 
     return &_worldPacket;
 }
+
+void ClaimWeeklyReward::Read()
+{
+    _worldPacket >> RewardID;
+}
+
+ByteBuffer& operator<<(ByteBuffer& data, WeeklyReward const& reward)
+{
+    data << int32(reward.Type);
+    data << int32(reward.Value);
+    // Presence byte: bit6 (0x40) = item preview present; itemDBID/date/currency (bit7/others) all absent.
+    data << uint8(reward.HasItem ? 0x40 : 0x00);
+    if (reward.HasItem)
+        data << reward.Item;    // present optionals are read item-first (sub_7FF72915E170)
+    return data;
+}
+
+WorldPacket const* WeeklyRewardsResult::Write()
+{
+    _worldPacket << uint32(Activities.size());
+    _worldPacket << uint32(Field56);
+
+    for (WeeklyRewardActivity const& activity : Activities)
+    {
+        _worldPacket << uint32(activity.ThresholdID);
+        _worldPacket << uint32(activity.Rewards.size());
+        for (WeeklyReward const& reward : activity.Rewards)
+            _worldPacket << reward;
+    }
+
+    return &_worldPacket;
+}
+
+WorldPacket const* WeeklyRewardClaimResult::Write()
+{
+    _worldPacket << uint8(Result);
+    return &_worldPacket;
+}
 }

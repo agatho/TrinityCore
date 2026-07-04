@@ -115,6 +115,11 @@ public:
     // ItemBonusMgr from the keystone level. Config-tunable (ChallengeMode.Reward.LootId); 0 disables the gear drop.
     uint32 GetGearRewardLootId() const;
 
+    // Reference-loot template rolled for the Great Vault reward options (ItemContext MythicPlus_Jackpot). Same
+    // model as the end-of-run drop but at the weekly-vault item level. Config-tunable (ChallengeMode.Vault.LootId);
+    // 0 disables vault rewards (progress is still tracked and shown).
+    uint32 GetVaultRewardLootId() const;
+
     // --- Great Vault thresholds (WeeklyRewardChestThreshold.db2) ---
     // One reward slot: the DB2 threshold row id, its slot index (0/1/2) and the run count required to unlock it.
     struct VaultThreshold

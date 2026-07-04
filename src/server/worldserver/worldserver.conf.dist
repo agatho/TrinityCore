@@ -1175,6 +1175,16 @@ ChallengeMode.Crest.Myth.CurrencyId = 3347
 ChallengeMode.Reward.LootId = 0
 
 #
+#    ChallengeMode.Vault.LootId
+#        Description: reference_loot_template entry rolled for Great Vault reward options (one item previewed per
+#                     unlocked slot, granted on claim). Same as ChallengeMode.Reward.LootId but scaled to the vault
+#                     (Jackpot) item level. 0 disables vault rewards; weekly progress is still tracked and shown.
+#        Default:     0 - (Disabled)
+#
+
+ChallengeMode.Vault.LootId = 0
+
+#
 #    Instance.UnloadDelay
 #        Description: Time (in milliseconds) before instance maps are unloaded from memory if no
 #                     characters are inside.

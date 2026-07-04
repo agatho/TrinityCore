@@ -296,6 +296,11 @@ uint32 ChallengeModeMgr::GetGearRewardLootId() const
     return uint32(sConfigMgr->GetIntDefault("ChallengeMode.Reward.LootId", 0));
 }
 
+uint32 ChallengeModeMgr::GetVaultRewardLootId() const
+{
+    return uint32(sConfigMgr->GetIntDefault("ChallengeMode.Vault.LootId", 0));
+}
+
 std::vector<ChallengeModeMgr::VaultThreshold> ChallengeModeMgr::GetMythicPlusVaultThresholds() const
 {
     // WeeklyRewardChestThresholdType::MythicPlus

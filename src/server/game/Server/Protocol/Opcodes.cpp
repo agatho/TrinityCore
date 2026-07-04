@@ -346,7 +346,7 @@ void OpcodeTable::InitializeClientOpcodes()
     DEFINE_HANDLER(CMSG_CHECK_IS_ADVENTURE_MAP_POI_VALID,                   STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleCheckIsAdventureMapPoiValid);
     DEFINE_HANDLER(CMSG_CHOICE_RESPONSE,                                    STATUS_LOGGEDIN,  PROCESS_INPLACE,      &WorldSession::HandlePlayerChoiceResponse);
     DEFINE_HANDLER(CMSG_CHROMIE_TIME_SELECT_EXPANSION,                      STATUS_UNHANDLED, PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
-    DEFINE_HANDLER(CMSG_CLAIM_WEEKLY_REWARD,                                STATUS_UNHANDLED, PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
+    DEFINE_HANDLER(CMSG_CLAIM_WEEKLY_REWARD,                                STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleClaimWeeklyReward);
     DEFINE_HANDLER(CMSG_CLASS_TALENTS_DELETE_CONFIG,                        STATUS_LOGGEDIN,  PROCESS_INPLACE,      &WorldSession::HandleClassTalentsDeleteConfig);
     DEFINE_HANDLER(CMSG_CLASS_TALENTS_NOTIFY_EMPTY_CONFIG,                  STATUS_UNHANDLED, PROCESS_INPLACE,      &WorldSession::Handle_NULL);
     DEFINE_HANDLER(CMSG_CLASS_TALENTS_NOTIFY_VALIDATION_FAILED,             STATUS_UNHANDLED, PROCESS_INPLACE,      &WorldSession::Handle_NULL);

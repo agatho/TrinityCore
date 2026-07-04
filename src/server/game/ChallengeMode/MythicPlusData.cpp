@@ -190,3 +190,34 @@ uint32 MythicPlusData::GetWeeklyRunCount() const
     PruneStaleWeek();
     return uint32(_weeklyRuns.size());
 }
+
+void MythicPlusData::LoadVaultFromDB(PreparedQueryResult result)
+{
+    if (!result)
+        return;
+
+    _vaultClaimedResetTime = result->Fetch()[0].GetInt64();
+}
+
+bool MythicPlusData::IsVaultClaimedThisWeek() const
+{
+    return _vaultClaimedResetTime == int64(sWorld->GetNextWeeklyQuestsResetTime());
+}
+
+void MythicPlusData::SetVaultClaimed()
+{
+    _vaultClaimedResetTime = int64(sWorld->GetNextWeeklyQuestsResetTime());
+
+    ObjectGuid::LowType guid = _owner->GetGUID().GetCounter();
+
+    CharacterDatabaseTransaction trans = CharacterDatabase.BeginTransaction();
+    CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_DEL_CHARACTER_MYTHIC_PLUS_VAULT);
+    stmt->setUInt64(0, guid);
+    trans->Append(stmt);
+
+    stmt = CharacterDatabase.GetPreparedStatement(CHAR_INS_CHARACTER_MYTHIC_PLUS_VAULT);
+    stmt->setUInt64(0, guid);
+    stmt->setInt64(1, _vaultClaimedResetTime);
+    trans->Append(stmt);
+    CharacterDatabase.CommitTransaction(trans);
+}
