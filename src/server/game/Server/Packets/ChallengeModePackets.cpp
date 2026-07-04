@@ -47,6 +47,39 @@ WorldPacket const* MythicPlusCurrentAffixes::Write()
     return &_worldPacket;
 }
 
+ByteBuffer& operator<<(ByteBuffer& data, MythicPlusMapStatMember const& member)
+{
+    data << uint64(member.Field0);
+    data << member.PlayerGUID;
+    data << member.OwnerGUID;
+    data << uint32(member.Field56);
+    data << uint32(member.Field60);
+    data << uint32(member.Field64);
+    data << uint8(member.Flag);
+    data << uint32(member.Field72);
+    data << uint32(member.Field76);
+    data << uint32(member.Field80);
+    return data;
+}
+
+ByteBuffer& operator<<(ByteBuffer& data, MythicPlusMapStat const& mapStat)
+{
+    data << uint32(mapStat.MapChallengeModeID);
+    data << uint32(mapStat.BestLevel);
+    data << uint32(mapStat.DurationMs);
+    data << uint64(mapStat.Field16);
+    data << uint64(mapStat.Field24);
+    data << uint32(mapStat.Field32);
+    for (uint32 affix : mapStat.Affixes)
+        data << uint32(affix);
+    data << Size<uint32>(mapStat.Members);
+    data << uint32(mapStat.Field64);
+    data << uint32(mapStat.Field68);
+    for (MythicPlusMapStatMember const& member : mapStat.Members)
+        data << member;
+    return data;
+}
+
 WorldPacket const* MythicPlusAllMapStats::Write()
 {
     _worldPacket << Size<uint32>(MapStats);
@@ -55,32 +88,7 @@ WorldPacket const* MythicPlusAllMapStats::Write()
     _worldPacket << uint32(Field84);
 
     for (MythicPlusMapStat const& mapStat : MapStats)
-    {
-        _worldPacket << uint32(mapStat.MapChallengeModeID);
-        _worldPacket << uint32(mapStat.BestLevel);
-        _worldPacket << uint32(mapStat.DurationMs);
-        _worldPacket << uint64(mapStat.Field16);
-        _worldPacket << uint64(mapStat.Field24);
-        _worldPacket << uint32(mapStat.Field32);
-        for (uint32 affix : mapStat.Affixes)
-            _worldPacket << uint32(affix);
-        _worldPacket << Size<uint32>(mapStat.Members);
-        _worldPacket << uint32(mapStat.Field64);
-        _worldPacket << uint32(mapStat.Field68);
-        for (MythicPlusMapStatMember const& member : mapStat.Members)
-        {
-            _worldPacket << uint64(member.Field0);
-            _worldPacket << member.PlayerGUID;
-            _worldPacket << member.OwnerGUID;
-            _worldPacket << uint32(member.Field56);
-            _worldPacket << uint32(member.Field60);
-            _worldPacket << uint32(member.Field64);
-            _worldPacket << uint8(member.Flag);
-            _worldPacket << uint32(member.Field72);
-            _worldPacket << uint32(member.Field76);
-            _worldPacket << uint32(member.Field80);
-        }
-    }
+        _worldPacket << mapStat;
 
     for (MythicPlusSeasonBest const& best : SeasonBests)
     {
@@ -106,6 +114,21 @@ WorldPacket const* ChallengeModeStart::Write()
         _worldPacket << uint32(affix);
     _worldPacket << uint32(0);          // MemberCount: party roster (720-byte specs/talents element) not populated yet
     _worldPacket << uint8(Flags);
+
+    return &_worldPacket;
+}
+
+WorldPacket const* ChallengeModeComplete::Write()
+{
+    _worldPacket << MapSummary;
+    _worldPacket << uint32(Field124);
+    _worldPacket << uint32(0);          // NamesCount (record-holder name list) - empty
+    _worldPacket << uint32(Field216);
+    _worldPacket << uint8(Flags);       // 3 bit-flags packed in one byte
+    _worldPacket << uint32(0);          // RunsCount (per-run DungeonScoreData tree) - empty, not persisted
+    _worldPacket << uint32(0);          // PairsCount - empty
+    _worldPacket << uint64(Field208);
+    // trailing Pairs / Runs / Names lists all empty (0 count above) -> nothing further on the wire
 
     return &_worldPacket;
 }

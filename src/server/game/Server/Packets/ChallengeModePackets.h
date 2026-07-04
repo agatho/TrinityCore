@@ -195,6 +195,34 @@ namespace WorldPackets
             std::array<uint32, 4> Affixes = { };
             uint8 Flags = 0;
         };
+
+        // Shared writers for the map-summary sub-struct (sub_7FF729167070), reused by ALL_MAP_STATS and COMPLETE.
+        ByteBuffer& operator<<(ByteBuffer& data, MythicPlusMapStatMember const& member);
+        ByteBuffer& operator<<(ByteBuffer& data, MythicPlusMapStat const& mapStat);
+
+        // SMSG_CHALLENGE_MODE_COMPLETE -- run result, sent to the party on completion. Full wire idat-traced
+        // (outer sub_7FF729090EE0 -> inner sub_7FF729090C10; byte-aligned; see c:\dumps\COMPLETE_PACKET_WIRE_68275.md):
+        //   MapSummary(sub_7FF729167070); uint32 F124; uint32 NamesCount; uint32 F216; uint8 Flags(3 bits);
+        //   uint32 RunsCount; uint32 PairsCount; uint64 F208;
+        //   PairsCount x {uint32; uint32};
+        //   RunsCount  x { RunElement(sub_7FF7291CBD40): uint32; uint8 optBit; SubC{uint8 cnt; cnt x {uint8;uint32}};
+        //                  opt[uint8; uint32 n; n x uint32];  ...then trailing uint32 };
+        //   NamesCount x { PackedGuid; uint8 packed(bit1=flag, value>>2=len); byte[len] name }.
+        // The three trailing lists are sent empty (0 count); the DungeonScoreData/run tree is not persisted
+        // server-side. MapSummary carries the completed run (map/level/affixes + present players as members).
+        class ChallengeModeComplete final : public ServerPacket
+        {
+        public:
+            explicit ChallengeModeComplete() : ServerPacket(SMSG_CHALLENGE_MODE_COMPLETE, 64) { }
+
+            WorldPacket const* Write() override;
+
+            MythicPlusMapStat MapSummary;
+            uint32 Field124 = 0;
+            uint32 Field216 = 0;
+            uint64 Field208 = 0;
+            uint8 Flags = 0;
+        };
     }
 }
 

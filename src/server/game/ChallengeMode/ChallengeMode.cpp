@@ -253,12 +253,23 @@ void ChallengeMode::Complete()
             group->StartCountdown(CountdownTimerType::ChallengeMode, Seconds(0));
     }
 
+    // Announce the result to the party (map/level/affixes + present players as members). The per-run
+    // DungeonScoreData sub-lists are sent empty (not persisted server-side); the wire is exact (no desync).
+    WorldPackets::ChallengeMode::ChallengeModeComplete completePacket;
+    completePacket.MapSummary.MapChallengeModeID = _mapChallengeModeId;
+    completePacket.MapSummary.BestLevel = _keystoneLevel;
+    completePacket.MapSummary.DurationMs = effectiveTimeMs;
+    completePacket.MapSummary.Affixes = _affixes;
+    _instance->DoOnPlayers([&completePacket](Player* player)
+    {
+        WorldPackets::ChallengeMode::MythicPlusMapStatMember& member = completePacket.MapSummary.Members.emplace_back();
+        member.PlayerGUID = player->GetGUID();
+    });
+    _instance->SendToPlayers(completePacket.Write());
+
     TC_LOG_INFO("challengemode", "ChallengeMode complete: instance {} challengeMode {} level {} time {}s (+{}s deaths, limit {}s) -> +{} keystone, score {:.1f}",
         _instance->GetInstanceId(), _mapChallengeModeId, _keystoneLevel, GetElapsedMs() / IN_MILLISECONDS,
         (_deathCount * DEATH_TIME_PENALTY_MS) / IN_MILLISECONDS, _timeLimitMs / IN_MILLISECONDS, keystoneUpgrade, runScore);
-
-    // The SMSG_CHALLENGE_MODE_COMPLETE reward packet, the keystone-upgrade item and the end-of-run / Great Vault
-    // loot are applied in Phase 4.
 }
 
 void ChallengeMode::BroadcastTimer(uint32 timeLeftMs) const
