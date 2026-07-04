@@ -479,6 +479,21 @@ namespace WorldPackets
         class DFGetJoinStatus;
     }
 
+    namespace LFGList
+    {
+        class LFGListJoin;
+        class LFGListUpdateRequest;
+        class LFGListLeave;
+        class LFGListGetStatus;
+        class LFGListSearch;
+        class LFGListApplyToGroup;
+        class LFGListCancelApplication;
+        class LFGListDeclineApplicant;
+        class LFGListInviteApplicant;
+        class LFGListInviteResponse;
+        class RequestLFGListBlacklist;
+    }
+
     namespace Loot
     {
         class LootUnit;
@@ -1718,6 +1733,19 @@ class TC_GAME_API WorldSession
         void HandleLfgTeleportOpcode(WorldPackets::LFG::DFTeleport& dfTeleport);
         void HandleDFGetSystemInfo(WorldPackets::LFG::DFGetSystemInfo& dfGetSystemInfo);
         void HandleDFGetJoinStatus(WorldPackets::LFG::DFGetJoinStatus& dfGetJoinStatus);
+
+        // Premade Group Finder (LFG List)
+        void HandleLFGListJoin(WorldPackets::LFGList::LFGListJoin& packet);
+        void HandleLFGListUpdateRequest(WorldPackets::LFGList::LFGListUpdateRequest& packet);
+        void HandleLFGListLeave(WorldPackets::LFGList::LFGListLeave& packet);
+        void HandleLFGListGetStatus(WorldPackets::LFGList::LFGListGetStatus& packet);
+        void HandleLFGListSearch(WorldPackets::LFGList::LFGListSearch& packet);
+        void HandleLFGListApplyToGroup(WorldPackets::LFGList::LFGListApplyToGroup& packet);
+        void HandleLFGListCancelApplication(WorldPackets::LFGList::LFGListCancelApplication& packet);
+        void HandleLFGListDeclineApplicant(WorldPackets::LFGList::LFGListDeclineApplicant& packet);
+        void HandleLFGListInviteApplicant(WorldPackets::LFGList::LFGListInviteApplicant& packet);
+        void HandleLFGListInviteResponse(WorldPackets::LFGList::LFGListInviteResponse& packet);
+        void SendLFGListUpdateStatus(uint32 listingId);
 
         void SendLfgUpdateStatus(lfg::LfgUpdateData const& updateData, bool party);
         void SendLfgRoleChosen(ObjectGuid guid, uint8 roles);
