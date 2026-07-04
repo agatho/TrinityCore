@@ -132,4 +132,38 @@ WorldPacket const* ChallengeModeComplete::Write()
 
     return &_worldPacket;
 }
+
+WorldPacket const* WeeklyRewardsProgressResult::Write()
+{
+    _worldPacket << uint8(Header);
+    _worldPacket << uint32(Progress.size());        // thresholdProgressCount (client reserves vector first)
+    _worldPacket << uint32(ActivityTiers.size());   // activityTierCount
+    _worldPacket << uint32(Unused);                 // header scalar the client reads and discards
+
+    for (WeeklyRewardActivityTier const& tier : ActivityTiers)
+    {
+        _worldPacket << int32(tier.ActivityTierID);
+        _worldPacket << int32(tier.Level);
+        _worldPacket << int32(tier.Points);
+        _worldPacket << uint8(tier.Type);
+    }
+
+    for (WeeklyRewardThresholdProgress const& progress : Progress)
+    {
+        _worldPacket << int32(progress.ThresholdID);
+        _worldPacket << int32(progress.Amount);
+        _worldPacket << int32(progress.ActivityTierID);
+        _worldPacket << int32(progress.Level);
+        _worldPacket << uint32(progress.RaidEncounters.size());
+        for (WeeklyRewardRaidEncounter const& enc : progress.RaidEncounters)
+        {
+            _worldPacket << int32(enc.EncounterID);
+            _worldPacket << int16(enc.BestDifficultyID);
+        }
+        // Flags byte: bit7 earned, bit6/bit5 = example/upgrade item preview present (both 0 -> no item structs follow).
+        _worldPacket << uint8(progress.Earned ? 0x80 : 0x00);
+    }
+
+    return &_worldPacket;
+}
 }

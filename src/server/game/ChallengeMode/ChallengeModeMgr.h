@@ -110,6 +110,19 @@ public:
     uint32 GetCrestCurrencyForLevel(uint32 keystoneLevel) const;
     uint32 GetCrestAmount() const;
 
+    // --- Great Vault thresholds (WeeklyRewardChestThreshold.db2) ---
+    // One reward slot: the DB2 threshold row id, its slot index (0/1/2) and the run count required to unlock it.
+    struct VaultThreshold
+    {
+        uint32 ThresholdID = 0;
+        uint32 Index = 0;
+        uint32 Count = 0;
+    };
+    // The three live Mythic+ vault thresholds (Type=MythicPlus), one per slot. The DB2 keeps every past season's
+    // rows with duplicate (Type,Index); per the client rule the highest-ID row per index is the live one, so this
+    // auto-tracks the current season (68275: ids 202/203/204 -> counts 1/4/8) with no hardcoding.
+    std::vector<VaultThreshold> GetMythicPlusVaultThresholds() const;
+
     // --- season / pool / affixes ---
     uint32 GetActiveSeasonId() const { return _activeSeasonId; }
     MythicPlusSeasonEntry const* GetActiveSeason() const;

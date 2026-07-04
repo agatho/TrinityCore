@@ -291,6 +291,35 @@ uint32 ChallengeModeMgr::GetCrestAmount() const
     return uint32(sConfigMgr->GetIntDefault("ChallengeMode.Crest.Amount", 10));
 }
 
+std::vector<ChallengeModeMgr::VaultThreshold> ChallengeModeMgr::GetMythicPlusVaultThresholds() const
+{
+    // WeeklyRewardChestThresholdType::MythicPlus
+    constexpr uint8 TYPE_MYTHIC_PLUS = 1;
+
+    // Keep, per slot index, the highest-ID row (the live season's) — the DB2 retains every past season's rows.
+    std::unordered_map<uint32 /*index*/, WeeklyRewardChestThresholdEntry const*> liveByIndex;
+    for (WeeklyRewardChestThresholdEntry const* entry : sWeeklyRewardChestThresholdStore)
+    {
+        if (entry->Type != TYPE_MYTHIC_PLUS)
+            continue;
+
+        auto& live = liveByIndex[uint32(entry->Index)];
+        if (!live || entry->ID > live->ID)
+            live = entry;
+    }
+
+    std::vector<VaultThreshold> thresholds;
+    thresholds.reserve(liveByIndex.size());
+    for (auto const& [index, entry] : liveByIndex)
+        thresholds.push_back({ entry->ID, index, uint32(std::max(entry->Threshold, 0)) });
+
+    std::sort(thresholds.begin(), thresholds.end(), [](VaultThreshold const& a, VaultThreshold const& b)
+    {
+        return a.Index < b.Index;
+    });
+    return thresholds;
+}
+
 MythicPlusSeasonEntry const* ChallengeModeMgr::GetActiveSeason() const
 {
     return sMythicPlusSeasonStore.LookupEntry(_activeSeasonId);

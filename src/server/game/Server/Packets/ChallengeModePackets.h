@@ -223,6 +223,68 @@ namespace WorldPackets
             uint64 Field208 = 0;
             uint8 Flags = 0;
         };
+
+        // CMSG_REQUEST_WEEKLY_REWARDS -- client opens the Great Vault UI (empty payload @68275).
+        class RequestWeeklyRewards final : public ClientPacket
+        {
+        public:
+            explicit RequestWeeklyRewards(WorldPacket&& packet) : ClientPacket(CMSG_REQUEST_WEEKLY_REWARDS, std::move(packet)) { }
+
+            void Read() override { }
+        };
+
+        // JamWeeklyRewardActivityTier (reflection-named): one Great Vault activity tier (M+/raid/pvp).
+        struct WeeklyRewardActivityTier
+        {
+            int32 ActivityTierID = 0;
+            int32 Level = 0;
+            int32 Points = 0;
+            uint8 Type = 0;                     // WeeklyRewardChestThresholdType (1 = MythicPlus)
+        };
+
+        // JamWeeklyRewardRaidEncounters (reflection-named): a raid boss credited toward a raid vault slot.
+        struct WeeklyRewardRaidEncounter
+        {
+            int32 EncounterID = 0;
+            int16 BestDifficultyID = 0;
+        };
+
+        // JamWeeklyRewardThresholdProgress (reflection-named): progress toward one vault reward slot.
+        //   thresholdID -> WeeklyRewardChestThreshold.db2 (client resolves Type/Index/required-count);
+        //   amount = runs completed, level = keystone level rewarded, earned = slot unlocked.
+        // exampleItem/upgradeExampleItem (reward previews) are optional and sent absent (need the loot pool).
+        struct WeeklyRewardThresholdProgress
+        {
+            int32 ThresholdID = 0;
+            int32 Amount = 0;
+            int32 ActivityTierID = 0;
+            int32 Level = 0;
+            std::vector<WeeklyRewardRaidEncounter> RaidEncounters;
+            bool Earned = false;
+        };
+
+        // SMSG_WEEKLY_REWARDS_PROGRESS_RESULT -- the Great Vault progress display. Wire (client deserializer
+        // sub_7FF7290B6DB0 -> JamHandler_JamWeeklyRewardActivityTier @68275, byte-aligned; field names from the
+        // JAM reflection descriptors; see c:\dumps\VAULT_PACKET_WIRE_68275.md):
+        //   uint8 Header; uint32 ThresholdProgressCount; uint32 ActivityTierCount; uint32 Unused;
+        //   ActivityTierCount x { int32 ActivityTierID; int32 Level; int32 Points; uint8 Type };
+        //   ThresholdProgressCount x { int32 ThresholdID; int32 Amount; int32 ActivityTierID; int32 Level;
+        //       uint32 RaidEncCount; RaidEncCount x { int32 EncounterID; int16 BestDifficultyID };
+        //       uint8 Flags(bit7=Earned, bit6=exampleItemPresent, bit5=upgradeItemPresent);
+        //       [exampleItem][upgradeExampleItem] }.
+        // We send both item-preview presence bits 0 (no loot preview) and no raid encounters (M+ only).
+        class WeeklyRewardsProgressResult final : public ServerPacket
+        {
+        public:
+            explicit WeeklyRewardsProgressResult() : ServerPacket(SMSG_WEEKLY_REWARDS_PROGRESS_RESULT, 16) { }
+
+            WorldPacket const* Write() override;
+
+            std::vector<WeeklyRewardActivityTier> ActivityTiers;
+            std::vector<WeeklyRewardThresholdProgress> Progress;
+            uint8 Header = 0;
+            uint32 Unused = 0;
+        };
     }
 }
 

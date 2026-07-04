@@ -117,6 +117,42 @@ void WorldSession::HandleMythicPlusRequestMapStats(WorldPackets::ChallengeMode::
     SendPacket(response.Write());
 }
 
+void WorldSession::HandleRequestWeeklyRewards(WorldPackets::ChallengeMode::RequestWeeklyRewards& /*request*/)
+{
+    Player* player = GetPlayer();
+
+    WorldPackets::ChallengeMode::WeeklyRewardsProgressResult response;
+
+    MythicPlusData* data = player->GetMythicPlusData();
+    uint32 const runCount = data ? data->GetWeeklyRunCount() : 0;
+
+    // The live Mythic+ vault thresholds (WeeklyRewardChestThreshold.db2, Type=MythicPlus): slots 0/1/2 unlock at
+    // 1/4/8 completed runs this week. Missing DB2 -> empty -> no M+ row (safe).
+    std::vector<ChallengeModeMgr::VaultThreshold> const thresholds = sChallengeModeMgr.GetMythicPlusVaultThresholds();
+
+    // A single M+ activity tier so the vault shows the dungeon row. Type=1 (MythicPlus) is authoritative; Level is
+    // the best slot's keystone level, Points the run count. ActivityTierID is left 0 (the WeeklyRewardChestActivityTier
+    // field semantics are opaque offline and not fabricated); the client categorises each slot via thresholdID.
+    if (!thresholds.empty())
+    {
+        WorldPackets::ChallengeMode::WeeklyRewardActivityTier& tier = response.ActivityTiers.emplace_back();
+        tier.Type = 1;
+        tier.Level = data ? int32(data->GetVaultSlotLevel(0)) : 0;
+        tier.Points = int32(runCount);
+    }
+
+    for (ChallengeModeMgr::VaultThreshold const& threshold : thresholds)
+    {
+        WorldPackets::ChallengeMode::WeeklyRewardThresholdProgress& progress = response.Progress.emplace_back();
+        progress.ThresholdID = int32(threshold.ThresholdID);
+        progress.Amount = int32(runCount);
+        progress.Level = data ? int32(data->GetVaultSlotLevel(threshold.Index)) : 0;
+        progress.Earned = runCount >= threshold.Count;
+    }
+
+    SendPacket(response.Write());
+}
+
 void WorldSession::HandleResetChallengeMode(WorldPackets::ChallengeMode::ResetChallengeMode& /*resetChallengeMode*/)
 {
     InstanceMap* instanceMap = GetPlayer()->GetMap()->ToInstanceMap();
