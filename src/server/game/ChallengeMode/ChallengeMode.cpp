@@ -17,6 +17,7 @@
 
 #include "ChallengeMode.h"
 #include "ChallengeModeMgr.h"
+#include "ChallengeModePackets.h"
 #include "Creature.h"
 #include "GameTime.h"
 #include "Group.h"
@@ -54,6 +55,13 @@ void ChallengeMode::Start(uint32 mapChallengeModeId, uint32 keystoneLevel, std::
             group->StartCountdown(CountdownTimerType::ChallengeMode, Seconds(_timeLimitMs / IN_MILLISECONDS));
 
     BroadcastTimer(_timeLimitMs);
+
+    // Announce the run (map / level / affixes) to the party UI. Member roster is omitted for now (see packet note).
+    WorldPackets::ChallengeMode::ChallengeModeStart startPacket;
+    startPacket.MapChallengeModeID = _mapChallengeModeId;
+    startPacket.KeystoneLevel = _keystoneLevel;
+    startPacket.Affixes = _affixes;
+    _instance->SendToPlayers(startPacket.Write());
 
     // Re-apply stats to already-spawned creatures so they pick up the keystone scaling immediately
     // (creatures spawned/reset after this point read the level directly in Get{Max,Base}...ForLevel).

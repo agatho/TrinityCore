@@ -94,4 +94,19 @@ WorldPacket const* MythicPlusAllMapStats::Write()
 
     return &_worldPacket;
 }
+
+WorldPacket const* ChallengeModeStart::Write()
+{
+    _worldPacket << uint32(MapChallengeModeID);
+    _worldPacket << uint32(KeystoneLevel);
+    _worldPacket << uint32(Field40);
+    _worldPacket << uint32(Field44);
+    _worldPacket << uint64(DeployedTime);
+    for (uint32 affix : Affixes)
+        _worldPacket << uint32(affix);
+    _worldPacket << uint32(0);          // MemberCount: party roster (720-byte specs/talents element) not populated yet
+    _worldPacket << uint8(Flags);
+
+    return &_worldPacket;
+}
 }

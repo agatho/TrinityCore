@@ -173,6 +173,28 @@ namespace WorldPackets
             uint32 Field80 = 0;
             uint32 Field84 = 0;
         };
+
+        // SMSG_CHALLENGE_MODE_START -- announces a keystone run to the party. Wire (client deserializer
+        // sub_7FF729090970 @68275, byte-aligned):
+        //   uint32 x4; uint64; uint32[4] Affixes; uint32 MemberCount; uint8 Flags (3 bit-flags in one byte);
+        //   MemberCount x member (720-byte specs/talents element).
+        // We send MemberCount = 0: the member element is not populated yet (its nested talent vectors are deep).
+        // Scalar-field semantics beyond Affixes are not sniff-confirmed; the wire framing is exact (no desync).
+        class ChallengeModeStart final : public ServerPacket
+        {
+        public:
+            explicit ChallengeModeStart() : ServerPacket(SMSG_CHALLENGE_MODE_START, 41) { }
+
+            WorldPacket const* Write() override;
+
+            uint32 MapChallengeModeID = 0;      // field @32 (UNVERIFIED slot)
+            uint32 KeystoneLevel = 0;           // field @36 (UNVERIFIED slot)
+            uint32 Field40 = 0;
+            uint32 Field44 = 0;
+            uint64 DeployedTime = 0;            // field @48 (UNVERIFIED slot)
+            std::array<uint32, 4> Affixes = { };
+            uint8 Flags = 0;
+        };
     }
 }
 
