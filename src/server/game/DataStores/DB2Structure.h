@@ -3244,6 +3244,50 @@ struct PerksActivityEntry
     int32 Priority;
 };
 
+struct PerksActivityThresholdEntry
+{
+    uint32 ID;
+    int32 BonusTendies;
+    int32 OrderIndex;
+    int32 Threshold;
+    int32 PerksActivityThresholdGroupID;
+};
+
+struct PerksActivityThresholdGroupEntry
+{
+    LocalizedString Name;
+    uint32 ID;
+    int32 PerksMonth;
+};
+
+struct PerksVendorCategoryEntry
+{
+    LocalizedString DisplayName;
+    uint32 ID;
+    int32 PerksVendorType;
+    int32 DefaultUIModelSceneID;
+};
+
+struct PerksVendorItemEntry
+{
+    uint32 ID;
+    int8 PerksVendorCategoryID;
+    int32 Field_10_0_5_47118_002;
+    int32 ItemID;
+    int32 Field_10_0_5_47118_004;
+    int32 CreatureDisplayInfoID;
+    int32 Cost;
+    int32 UiModelSceneID;
+    int32 UiGroupInfo;
+};
+
+struct PerksVendorItemXIntervalEntry
+{
+    uint32 ID;
+    int32 PerksVendorItemID;
+    int32 PerksActivityThresholdID;
+};
+
 struct PhaseEntry
 {
     uint32 ID;
