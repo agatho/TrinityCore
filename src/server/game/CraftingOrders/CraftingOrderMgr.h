@@ -109,6 +109,9 @@ public:
 private:
     CraftingOrderMgr() = default;
 
+    void SaveOrderToDB(CraftingOrders::Order const& order) const;
+    void DeleteOrderFromDB(uint64 orderId) const;
+
     uint64 _nextOrderId = 1;
     uint32 _expireTimer = 0;
     std::unordered_map<uint64 /*orderId*/, CraftingOrders::Order> _orders;

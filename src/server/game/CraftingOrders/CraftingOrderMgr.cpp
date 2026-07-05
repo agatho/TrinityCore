@@ -16,8 +16,12 @@
  */
 
 #include "CraftingOrderMgr.h"
+#include "CharacterDatabase.h"
+#include "DatabaseEnv.h"
 #include "GameTime.h"
+#include "Log.h"
 #include "Player.h"
+#include <algorithm>
 
 namespace
 {
@@ -32,8 +36,112 @@ CraftingOrderMgr& CraftingOrderMgr::Instance()
 
 void CraftingOrderMgr::LoadFromDB()
 {
-    // P1: load persisted orders (crafting_orders / _reagents) and seed _nextOrderId past the max stored id.
-    // P0 keeps the registry in memory only.
+    _orders.clear();
+    _nextOrderId = 1;
+
+    if (PreparedQueryResult result = CharacterDatabase.Query(CharacterDatabase.GetPreparedStatement(CHAR_SEL_CRAFTING_ORDERS)))
+    {
+        do
+        {
+            Field* f = result->Fetch();
+            CraftingOrders::Order order;
+            order.OrderID            = f[0].GetUInt64();
+            order.SkillLineAbilityID = f[1].GetInt32();
+            order.State              = CraftingOrders::OrderState(f[2].GetInt8());
+            order.Type               = CraftingOrders::OrderType(f[3].GetUInt8());
+            order.MinQuality         = f[4].GetUInt32();
+            order.EndDate            = f[5].GetInt64();
+            order.ClaimEndDate       = f[6].GetInt64();
+            order.TipAmount          = f[7].GetUInt64();
+            order.HouseCutAmount     = f[8].GetUInt64();
+            order.Flags              = f[9].GetInt32();
+            if (uint64 low = f[10].GetUInt64())
+                order.CustomerGUID = ObjectGuid::Create<HighGuid::Player>(low);
+            if (uint64 low = f[11].GetUInt64())
+                order.CrafterGUID = ObjectGuid::Create<HighGuid::Player>(low);
+            order.CustomerAccountId  = f[12].GetUInt32();
+            order.CustomerNotes      = f[13].GetString();
+
+            _nextOrderId = std::max<uint64>(_nextOrderId, order.OrderID + 1);
+            _orders[order.OrderID] = std::move(order);
+        } while (result->NextRow());
+    }
+
+    if (PreparedQueryResult result = CharacterDatabase.Query(CharacterDatabase.GetPreparedStatement(CHAR_SEL_CRAFTING_ORDER_REAGENTS)))
+    {
+        do
+        {
+            Field* f = result->Fetch();
+            uint64 const orderId = f[0].GetUInt64();
+            auto itr = _orders.find(orderId);
+            if (itr == _orders.end())
+                continue;
+
+            CraftingOrders::OrderReagent reagent;
+            reagent.Slot       = f[1].GetUInt8();
+            reagent.ItemID     = f[2].GetInt32();
+            reagent.CurrencyID = f[3].GetInt32();
+            reagent.Quantity   = f[4].GetUInt32();
+            itr->second.Reagents.push_back(reagent);
+        } while (result->NextRow());
+    }
+
+    TC_LOG_INFO("server.loading", ">> Loaded {} crafting orders.", _orders.size());
+}
+
+void CraftingOrderMgr::SaveOrderToDB(CraftingOrders::Order const& order) const
+{
+    CharacterDatabaseTransaction trans = CharacterDatabase.BeginTransaction();
+
+    CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_REP_CRAFTING_ORDER);
+    uint8 i = 0;
+    stmt->setUInt64(i++, order.OrderID);
+    stmt->setInt32(i++, order.SkillLineAbilityID);
+    stmt->setInt8(i++, int8(order.State));
+    stmt->setUInt8(i++, uint8(order.Type));
+    stmt->setUInt32(i++, order.MinQuality);
+    stmt->setInt64(i++, order.EndDate);
+    stmt->setInt64(i++, order.ClaimEndDate);
+    stmt->setUInt64(i++, order.TipAmount);
+    stmt->setUInt64(i++, order.HouseCutAmount);
+    stmt->setInt32(i++, order.Flags);
+    stmt->setUInt64(i++, order.CustomerGUID.GetCounter());
+    stmt->setUInt64(i++, order.CrafterGUID.GetCounter());
+    stmt->setUInt32(i++, order.CustomerAccountId);
+    stmt->setString(i++, order.CustomerNotes);
+    trans->Append(stmt);
+
+    stmt = CharacterDatabase.GetPreparedStatement(CHAR_DEL_CRAFTING_ORDER_REAGENTS);
+    stmt->setUInt64(0, order.OrderID);
+    trans->Append(stmt);
+
+    for (CraftingOrders::OrderReagent const& reagent : order.Reagents)
+    {
+        stmt = CharacterDatabase.GetPreparedStatement(CHAR_INS_CRAFTING_ORDER_REAGENT);
+        stmt->setUInt64(0, order.OrderID);
+        stmt->setUInt8(1, reagent.Slot);
+        stmt->setInt32(2, reagent.ItemID);
+        stmt->setInt32(3, reagent.CurrencyID);
+        stmt->setUInt32(4, reagent.Quantity);
+        trans->Append(stmt);
+    }
+
+    CharacterDatabase.CommitTransaction(trans);
+}
+
+void CraftingOrderMgr::DeleteOrderFromDB(uint64 orderId) const
+{
+    CharacterDatabaseTransaction trans = CharacterDatabase.BeginTransaction();
+
+    CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_DEL_CRAFTING_ORDER);
+    stmt->setUInt64(0, orderId);
+    trans->Append(stmt);
+
+    stmt = CharacterDatabase.GetPreparedStatement(CHAR_DEL_CRAFTING_ORDER_REAGENTS);
+    stmt->setUInt64(0, orderId);
+    trans->Append(stmt);
+
+    CharacterDatabase.CommitTransaction(trans);
 }
 
 void CraftingOrderMgr::Update(uint32 diff)
@@ -56,13 +164,15 @@ void CraftingOrderMgr::Update(uint32 diff)
             order.State = CraftingOrders::OrderState::Created;
             order.CrafterGUID.Clear();
             order.ClaimEndDate = 0;
+            SaveOrderToDB(order);
             ++itr;
         }
         else if (postingExpired)
         {
             // P4: refund the customer's escrowed tip/reagents before erasing.
-            order.State = CraftingOrders::OrderState::Expired;
+            uint64 const expiredId = order.OrderID;
             itr = _orders.erase(itr);
+            DeleteOrderFromDB(expiredId);
         }
         else
             ++itr;
@@ -80,7 +190,8 @@ uint64 CraftingOrderMgr::CreateOrder(Player* customer, CraftingOrders::Order ord
     order.State = CraftingOrders::OrderState::Created;
 
     uint64 const id = order.OrderID;
-    _orders[id] = std::move(order);
+    CraftingOrders::Order& stored = (_orders[id] = std::move(order));
+    SaveOrderToDB(stored);
     return id;
 }
 
@@ -96,6 +207,7 @@ bool CraftingOrderMgr::ClaimOrder(uint64 orderId, ObjectGuid crafter)
 
     order->State = CraftingOrders::OrderState::Claimed;
     order->CrafterGUID = crafter;
+    SaveOrderToDB(*order);
     return true;
 }
 
@@ -109,6 +221,7 @@ bool CraftingOrderMgr::ReleaseOrder(uint64 orderId, ObjectGuid crafter)
     order->ClaimEndDate = 0;
     if (order->Type != CraftingOrders::OrderType::Personal)
         order->CrafterGUID.Clear();
+    SaveOrderToDB(*order);
     return true;
 }
 
@@ -126,7 +239,8 @@ bool CraftingOrderMgr::CancelOrder(uint64 orderId, ObjectGuid customer)
 
 void CraftingOrderMgr::RemoveOrder(uint64 orderId)
 {
-    _orders.erase(orderId);
+    if (_orders.erase(orderId))
+        DeleteOrderFromDB(orderId);
 }
 
 CraftingOrders::Order* CraftingOrderMgr::GetOrder(uint64 orderId)
