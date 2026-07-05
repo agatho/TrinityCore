@@ -3764,6 +3764,15 @@ struct SoulbindEntry
     int32 PlayerConditionID;
 };
 
+struct SoulbindConduitEntry
+{
+    uint32 ID;
+    uint8 ConduitType;
+    int32 CovenantID;
+    int32 SpecSetID;
+    int32 Flags;
+};
+
 struct SoulbindConduitRankEntry
 {
     uint32 ID;
