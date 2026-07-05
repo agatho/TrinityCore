@@ -324,6 +324,8 @@ namespace WorldPackets
         class CraftingOrderCreate;
         class CraftingOrderClaim;
         class CraftingOrderCancel;
+        class CraftingOrderRelease;
+        class CraftingOrderReject;
     }
 
     namespace Combat
@@ -1809,6 +1811,8 @@ class TC_GAME_API WorldSession
         void HandleCraftingOrderCreate(WorldPackets::CraftingOrders::CraftingOrderCreate& packet);
         void HandleCraftingOrderClaim(WorldPackets::CraftingOrders::CraftingOrderClaim& packet);
         void HandleCraftingOrderCancel(WorldPackets::CraftingOrders::CraftingOrderCancel& packet);
+        void HandleCraftingOrderRelease(WorldPackets::CraftingOrders::CraftingOrderRelease& packet);
+        void HandleCraftingOrderReject(WorldPackets::CraftingOrders::CraftingOrderReject& packet);
 
         // Transmogrification
         void HandleTransmogrifyItems(WorldPackets::Transmogrification::TransmogrifyItems& transmogrifyItems);

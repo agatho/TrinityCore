@@ -103,6 +103,37 @@ namespace CraftingOrders
         ClientContext Context;
         bool HasContext = false;
     };
+
+    // CMSG_CRAFTING_ORDER_RELEASE (0x3B011C): { u64 OrderID; u8; bit hasContext; [ClientContext] }
+    // Crafter voluntarily gives up a claimed order; it returns to the pool. Serializer sub_7FF729154E00.
+    class CraftingOrderRelease final : public ClientPacket
+    {
+    public:
+        explicit CraftingOrderRelease(WorldPacket&& packet) : ClientPacket(CMSG_CRAFTING_ORDER_RELEASE, std::move(packet)) { }
+
+        void Read() override;
+
+        uint64 OrderID = 0;
+        uint8 Field2 = 0;
+        ClientContext Context;
+        bool HasContext = false;
+    };
+
+    // CMSG_CRAFTING_ORDER_REJECT (0x3B011F): { u64 OrderID; u8; string Reason (len in bit block, bytes after ctx);
+    // bit hasContext; [ClientContext] }. Crafter declines an order. Serializer sub_7FF7291552B0.
+    class CraftingOrderReject final : public ClientPacket
+    {
+    public:
+        explicit CraftingOrderReject(WorldPacket&& packet) : ClientPacket(CMSG_CRAFTING_ORDER_REJECT, std::move(packet)) { }
+
+        void Read() override;
+
+        uint64 OrderID = 0;
+        uint8 Field2 = 0;
+        std::string Reason;
+        ClientContext Context;
+        bool HasContext = false;
+    };
 }
 }
 

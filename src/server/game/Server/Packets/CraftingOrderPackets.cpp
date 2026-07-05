@@ -141,4 +141,37 @@ void CraftingOrderCancel::Read()
     if (HasContext)
         Context.Read(_worldPacket);
 }
+
+void CraftingOrderRelease::Read()
+{
+    _worldPacket >> OrderID;
+    _worldPacket >> Field2;
+    _worldPacket.ResetBitPos();
+    HasContext = _worldPacket.ReadBit();
+    if (HasContext)
+        Context.Read(_worldPacket);
+}
+
+void CraftingOrderReject::Read()
+{
+    _worldPacket >> OrderID;
+    _worldPacket >> Field2;
+
+    // The reason string's length is packed here (byte-aligned high byte + 2 accumulator bits), together with
+    // the hasContext bit; the reason bytes themselves follow after the optional context (matches sub_7FF7291552B0).
+    uint8 reasonLenHigh = _worldPacket.read<uint8>();
+    _worldPacket.ResetBitPos();
+    uint32 reasonLen = (uint32(reasonLenHigh) << 2) | _worldPacket.ReadBits(2);
+    HasContext = _worldPacket.ReadBit();
+
+    if (HasContext)
+        Context.Read(_worldPacket);
+
+    if (reasonLen)
+    {
+        Reason.resize(reasonLen);
+        for (uint32 i = 0; i < reasonLen; ++i)
+            Reason[i] = _worldPacket.read<char>();
+    }
+}
 }

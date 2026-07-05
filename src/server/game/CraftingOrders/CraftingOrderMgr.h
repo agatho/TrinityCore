@@ -95,7 +95,8 @@ public:
     // Post a new order; returns the new order id (0 on failure). Escrow of tip/reagents is the caller's job (P1).
     uint64 CreateOrder(Player* customer, CraftingOrders::Order order);
     bool ClaimOrder(uint64 orderId, ObjectGuid crafter);
-    bool ReleaseOrder(uint64 orderId, ObjectGuid crafter);   // un-claim
+    bool ReleaseOrder(uint64 orderId, ObjectGuid crafter);   // un-claim, back to the pool
+    bool RejectOrder(uint64 orderId, ObjectGuid crafter, std::string reason);   // crafter declines
     bool CancelOrder(uint64 orderId, ObjectGuid customer);
     void RemoveOrder(uint64 orderId);
 

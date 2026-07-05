@@ -225,6 +225,27 @@ bool CraftingOrderMgr::ReleaseOrder(uint64 orderId, ObjectGuid crafter)
     return true;
 }
 
+bool CraftingOrderMgr::RejectOrder(uint64 orderId, ObjectGuid crafter, std::string reason)
+{
+    CraftingOrders::Order* order = GetOrder(orderId);
+    if (!order)
+        return false;
+
+    // A crafter may reject an order they have claimed, or a personal order directed specifically at them.
+    bool const claimedByCrafter = order->State == CraftingOrders::OrderState::Claimed && order->CrafterGUID == crafter;
+    bool const personalForCrafter = order->Type == CraftingOrders::OrderType::Personal && order->CrafterGUID == crafter;
+    if (!claimedByCrafter && !personalForCrafter)
+        return false;
+
+    order->State = CraftingOrders::OrderState::Rejected;
+    order->ClaimEndDate = 0;
+    SaveOrderToDB(*order);
+
+    TC_LOG_DEBUG("network", "CraftingOrderMgr: order {} rejected by {} (reason: {})",
+        orderId, crafter.ToString(), reason.empty() ? "none" : reason);
+    return true;
+}
+
 bool CraftingOrderMgr::CancelOrder(uint64 orderId, ObjectGuid customer)
 {
     CraftingOrders::Order* order = GetOrder(orderId);

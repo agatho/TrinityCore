@@ -89,3 +89,21 @@ void WorldSession::HandleCraftingOrderCancel(WorldPackets::CraftingOrders::Craft
 
     sCraftingOrderMgr.CancelOrder(packet.OrderID, player->GetGUID());
 }
+
+void WorldSession::HandleCraftingOrderRelease(WorldPackets::CraftingOrders::CraftingOrderRelease& packet)
+{
+    Player* player = GetPlayer();
+    if (!player)
+        return;
+
+    sCraftingOrderMgr.ReleaseOrder(packet.OrderID, player->GetGUID());
+}
+
+void WorldSession::HandleCraftingOrderReject(WorldPackets::CraftingOrders::CraftingOrderReject& packet)
+{
+    Player* player = GetPlayer();
+    if (!player)
+        return;
+
+    sCraftingOrderMgr.RejectOrder(packet.OrderID, player->GetGUID(), std::move(packet.Reason));
+}
