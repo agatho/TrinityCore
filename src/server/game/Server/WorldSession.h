@@ -645,6 +645,11 @@ namespace WorldPackets
         class TurnInPetition;
     }
 
+    namespace PerksProgram
+    {
+        class PerksProgramStatusRequest;
+    }
+
     namespace Query
     {
         class QueryCreature;
@@ -1447,6 +1452,8 @@ class TC_GAME_API WorldSession
         void HandleGuildSetAchievementTracking(WorldPackets::Guild::GuildSetAchievementTracking& packet);
         void HandleGuildGetAchievementMembers(WorldPackets::Achievement::GuildGetAchievementMembers& getAchievementMembers);
         void HandleGuildChangeNameRequest(WorldPackets::Guild::GuildChangeNameRequest& packet);
+
+        void HandlePerksProgramStatusRequest(WorldPackets::PerksProgram::PerksProgramStatusRequest& packet);
         void HandleGuildSetGuildMaster(WorldPackets::Guild::GuildSetGuildMaster& packet);
         void HandleGuildUpdateMotdText(WorldPackets::Guild::GuildUpdateMotdText& packet);
         void HandleGuildNewsUpdateSticky(WorldPackets::Guild::GuildNewsUpdateSticky& packet);
