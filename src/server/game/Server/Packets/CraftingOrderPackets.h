@@ -1,0 +1,109 @@
+/*
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+ *
+ * This program is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License as published by the
+ * Free Software Foundation; either version 2 of the License, or (at your
+ * option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
+ * more details.
+ *
+ * You should have received a copy of the GNU General Public License along
+ * with this program. If not, see <http://www.gnu.org/licenses/>.
+ */
+
+#ifndef TRINITYCORE_CRAFTING_ORDER_PACKETS_H
+#define TRINITYCORE_CRAFTING_ORDER_PACKETS_H
+
+#include "Packet.h"
+#include "CraftingPacketsCommon.h"
+#include "ObjectGuid.h"
+#include "Optional.h"
+#include <array>
+
+namespace WorldPackets
+{
+namespace CraftingOrders
+{
+    // Optional trailing "context" struct present on most crafting-order CMSGs (client sub_7FF72906D6F0):
+    // two length-prefixed strings + two bit flags. The server does not need it (it has the GUIDs); it is
+    // read only to consume the bytes. Length encoding: 10-bit value V; V==0 means empty, else actual length = V-1.
+    struct ClientContext
+    {
+        std::string String1;
+        std::string String2;
+        bool Flag1 = false;
+        bool Flag2 = false;
+
+        void Read(ByteBuffer& data);
+    };
+
+    // CMSG_CRAFTING_ORDER_CREATE (0x3B0117). Wire recovered via Ghidra from serializer sub_7FF729154130.
+    // Scalar labels are deduced-certain by type + elimination (see CRAFTING_ORDERS_PLAN_68275.md).
+    // The four reagent-ish vectors: [0]=reagents, [1..3]=recraft enchants/gems/modifications (empty for a new order).
+    // Reagent element field semantics (ItemID vs count vs slot) are not yet confirmed, so they are read raw here and
+    // detailed reagent/escrow handling is deferred to P3 — the wire is consumed byte-exact regardless.
+    struct CraftingReagentSlot
+    {
+        uint32 Field1 = 0;
+        uint32 Field2 = 0;
+        Optional<uint8> Extra;
+        Crafting::CraftingReagentBase Reagent;   // only populated for vectors [2],[3]
+    };
+
+    class CraftingOrderCreate final : public ClientPacket
+    {
+    public:
+        explicit CraftingOrderCreate(WorldPacket&& packet) : ClientPacket(CMSG_CRAFTING_ORDER_CREATE, std::move(packet)) { }
+
+        void Read() override;
+
+        int32 SkillLineAbilityID = 0;
+        uint8 OrderType = 0;
+        uint8 MinQuality = 0;
+        uint64 TipAmount = 0;
+        ObjectGuid TargetGUID;                 // crafter target for personal orders
+        Optional<uint32> SecondaryId;          // only sent for guild/personal orders (orderType 1/2); semantics unconfirmed
+        std::string CustomerNotes;
+        std::string RecraftNote;               // only for orderType 2
+        Optional<ObjectGuid> OptionalGuid;     // written only when the first flag bit is set
+        bool Flag1 = false;
+        bool Flag2 = false;
+        std::array<std::vector<CraftingReagentSlot>, 4> Vectors;
+        ClientContext Context;
+    };
+
+    // CMSG_CRAFTING_ORDER_CLAIM (0x3B011B): { u64 OrderID; u8; bit hasContext; [ClientContext] }
+    class CraftingOrderClaim final : public ClientPacket
+    {
+    public:
+        explicit CraftingOrderClaim(WorldPacket&& packet) : ClientPacket(CMSG_CRAFTING_ORDER_CLAIM, std::move(packet)) { }
+
+        void Read() override;
+
+        uint64 OrderID = 0;
+        uint8 Field2 = 0;
+        ClientContext Context;
+        bool HasContext = false;
+    };
+
+    // CMSG_CRAFTING_ORDER_CANCEL (0x3B011E): { PackedGuid; u64 OrderID; bit hasContext; [ClientContext] }
+    class CraftingOrderCancel final : public ClientPacket
+    {
+    public:
+        explicit CraftingOrderCancel(WorldPacket&& packet) : ClientPacket(CMSG_CRAFTING_ORDER_CANCEL, std::move(packet)) { }
+
+        void Read() override;
+
+        ObjectGuid NpcGUID;                    // customer/station GUID the order lives at
+        uint64 OrderID = 0;
+        ClientContext Context;
+        bool HasContext = false;
+    };
+}
+}
+
+#endif // TRINITYCORE_CRAFTING_ORDER_PACKETS_H

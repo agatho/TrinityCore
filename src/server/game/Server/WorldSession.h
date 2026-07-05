@@ -319,6 +319,13 @@ namespace WorldPackets
         class CollectionItemSetFavorite;
     }
 
+    namespace CraftingOrders
+    {
+        class CraftingOrderCreate;
+        class CraftingOrderClaim;
+        class CraftingOrderCancel;
+    }
+
     namespace Combat
     {
         class AttackSwing;
@@ -1797,6 +1804,11 @@ class TC_GAME_API WorldSession
 
         // Collections
         void HandleCollectionItemSetFavorite(WorldPackets::Collections::CollectionItemSetFavorite& collectionItemSetFavorite);
+
+        // Crafting Orders
+        void HandleCraftingOrderCreate(WorldPackets::CraftingOrders::CraftingOrderCreate& packet);
+        void HandleCraftingOrderClaim(WorldPackets::CraftingOrders::CraftingOrderClaim& packet);
+        void HandleCraftingOrderCancel(WorldPackets::CraftingOrders::CraftingOrderCancel& packet);
 
         // Transmogrification
         void HandleTransmogrifyItems(WorldPackets::Transmogrification::TransmogrifyItems& transmogrifyItems);
