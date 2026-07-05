@@ -65,6 +65,13 @@ void WorldSession::HandleCraftingOrderCreate(WorldPackets::CraftingOrders::Craft
     }
 
     uint64 const id = sCraftingOrderMgr.CreateOrder(player, std::move(order));
+
+    WorldPackets::CraftingOrders::CraftingOrderCreateResult result;
+    result.Result = id ? WorldPackets::CraftingOrders::CraftingOrderResult::Ok
+                       : WorldPackets::CraftingOrders::CraftingOrderResult::CannotCreate;
+    result.CraftingOrderID = id;
+    SendPacket(result.Write());
+
     if (!id)
         return;
 
@@ -78,7 +85,13 @@ void WorldSession::HandleCraftingOrderClaim(WorldPackets::CraftingOrders::Crafti
     if (!player)
         return;
 
-    sCraftingOrderMgr.ClaimOrder(packet.OrderID, player->GetGUID());
+    bool const ok = sCraftingOrderMgr.ClaimOrder(packet.OrderID, player->GetGUID());
+
+    WorldPackets::CraftingOrders::CraftingOrderClaimResult result;
+    result.Result = ok ? WorldPackets::CraftingOrders::CraftingOrderResult::Ok
+                       : WorldPackets::CraftingOrders::CraftingOrderResult::CannotClaim;
+    result.CraftingOrderID = packet.OrderID;
+    SendPacket(result.Write());
 }
 
 void WorldSession::HandleCraftingOrderCancel(WorldPackets::CraftingOrders::CraftingOrderCancel& packet)
@@ -87,7 +100,13 @@ void WorldSession::HandleCraftingOrderCancel(WorldPackets::CraftingOrders::Craft
     if (!player)
         return;
 
-    sCraftingOrderMgr.CancelOrder(packet.OrderID, player->GetGUID());
+    bool const ok = sCraftingOrderMgr.CancelOrder(packet.OrderID, player->GetGUID());
+
+    WorldPackets::CraftingOrders::CraftingOrderCancelResult result;
+    result.Result = ok ? WorldPackets::CraftingOrders::CraftingOrderResult::Ok
+                       : WorldPackets::CraftingOrders::CraftingOrderResult::CannotCancel;
+    result.CraftingOrderID = packet.OrderID;
+    SendPacket(result.Write());
 }
 
 void WorldSession::HandleCraftingOrderRelease(WorldPackets::CraftingOrders::CraftingOrderRelease& packet)
@@ -96,7 +115,13 @@ void WorldSession::HandleCraftingOrderRelease(WorldPackets::CraftingOrders::Craf
     if (!player)
         return;
 
-    sCraftingOrderMgr.ReleaseOrder(packet.OrderID, player->GetGUID());
+    bool const ok = sCraftingOrderMgr.ReleaseOrder(packet.OrderID, player->GetGUID());
+
+    WorldPackets::CraftingOrders::CraftingOrderReleaseResult result;
+    result.Result = ok ? WorldPackets::CraftingOrders::CraftingOrderResult::Ok
+                       : WorldPackets::CraftingOrders::CraftingOrderResult::CannotRelease;
+    result.CraftingOrderID = packet.OrderID;
+    SendPacket(result.Write());
 }
 
 void WorldSession::HandleCraftingOrderReject(WorldPackets::CraftingOrders::CraftingOrderReject& packet)
@@ -105,5 +130,11 @@ void WorldSession::HandleCraftingOrderReject(WorldPackets::CraftingOrders::Craft
     if (!player)
         return;
 
-    sCraftingOrderMgr.RejectOrder(packet.OrderID, player->GetGUID(), std::move(packet.Reason));
+    bool const ok = sCraftingOrderMgr.RejectOrder(packet.OrderID, player->GetGUID(), std::move(packet.Reason));
+
+    WorldPackets::CraftingOrders::CraftingOrderRejectResult result;
+    result.Result = ok ? WorldPackets::CraftingOrders::CraftingOrderResult::Ok
+                       : WorldPackets::CraftingOrders::CraftingOrderResult::CannotReject;
+    result.CraftingOrderID = packet.OrderID;
+    SendPacket(result.Write());
 }

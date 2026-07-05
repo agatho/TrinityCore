@@ -174,4 +174,12 @@ void CraftingOrderReject::Read()
             Reason[i] = _worldPacket.read<char>();
     }
 }
+
+WorldPacket const* CraftingOrderActionResult::Write()
+{
+    _worldPacket << uint8(Result);
+    _worldPacket << uint64(CraftingOrderID);
+
+    return &_worldPacket;
+}
 }

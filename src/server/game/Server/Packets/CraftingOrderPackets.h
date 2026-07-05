@@ -134,6 +134,103 @@ namespace CraftingOrders
         ClientContext Context;
         bool HasContext = false;
     };
+
+    // Client enum ClientCrafting::CraftingOrderResult (12.0.7.68275, extracted from the client enum registrar).
+    enum class CraftingOrderResult : uint8
+    {
+        Ok                       = 0,
+        Aborted                  = 1,
+        AlreadyClaimed           = 2,
+        AlreadyCrafted           = 3,
+        CannotBeOrdered          = 4,
+        CannotCancel             = 5,
+        CannotClaim              = 6,
+        CannotClaimOwnOrder      = 7,
+        CannotCraft              = 8,
+        CannotCreate             = 9,
+        CannotFulfill            = 10,
+        CannotRecraft            = 11,
+        CannotReject             = 12,
+        CannotRelease            = 13,
+        CrafterIsIgnored         = 14,
+        DatabaseError            = 15,
+        Expired                  = 16,
+        Locked                   = 17,
+        InvalidDuration          = 18,
+        InvalidMinQuality        = 19,
+        InvalidNotes             = 20,
+        InvalidReagent           = 21,
+        InvalidRealm             = 22,
+        InvalidRecipe            = 23,
+        InvalidRecraftItem       = 24,
+        InvalidSort              = 25,
+        InvalidTarget            = 26,
+        InvalidType              = 27,
+        MaxOrdersReached         = 28,
+        MissingCraftingTable     = 29,
+        MissingCurrency          = 30,
+        MissingItem              = 31,
+        MissingNpc               = 32,
+        MissingOrder             = 33,
+        MissingRecraftItem       = 34,
+        NoAccountItems           = 35,
+        NotClaimed               = 36,
+        NotCrafted               = 37,
+        NotInGuild               = 38,
+        NotYetImplemented        = 39,
+        OutOfPublicOrderCapacity = 40,
+        ServerIsNotAvailable     = 41,
+        ThrottleViolation        = 42,
+        TargetCannotCraft        = 43,
+        TargetLocked             = 44,
+        Timeout                  = 45,
+        TooManyCurrencies        = 46,
+        TooManyItems             = 47,
+        WrongVersion             = 48
+    };
+
+    // The create/claim/cancel/release/reject responses share the same wire (12.0.7.68275, from the client
+    // deserializers sub_7FF7290B92D0 / _9640 / _9A90 / _96E0 / _9B90): uint8 result, then uint64 order id.
+    class CraftingOrderActionResult : public ServerPacket
+    {
+    public:
+        explicit CraftingOrderActionResult(OpcodeServer opcode) : ServerPacket(opcode, 1 + 8) { }
+
+        WorldPacket const* Write() override;
+
+        CraftingOrderResult Result = CraftingOrderResult::Ok;
+        uint64 CraftingOrderID = 0;
+    };
+
+    class CraftingOrderCreateResult final : public CraftingOrderActionResult
+    {
+    public:
+        CraftingOrderCreateResult() : CraftingOrderActionResult(SMSG_CRAFTING_ORDER_CREATE_RESULT) { }
+    };
+
+    class CraftingOrderClaimResult final : public CraftingOrderActionResult
+    {
+    public:
+        CraftingOrderClaimResult() : CraftingOrderActionResult(SMSG_CRAFTING_ORDER_CLAIM_RESULT) { }
+    };
+
+    class CraftingOrderCancelResult final : public CraftingOrderActionResult
+    {
+    public:
+        CraftingOrderCancelResult() : CraftingOrderActionResult(SMSG_CRAFTING_ORDER_CANCEL_RESULT) { }
+    };
+
+    class CraftingOrderReleaseResult final : public CraftingOrderActionResult
+    {
+    public:
+        CraftingOrderReleaseResult() : CraftingOrderActionResult(SMSG_CRAFTING_ORDER_RELEASE_RESULT) { }
+    };
+
+    class CraftingOrderRejectResult final : public CraftingOrderActionResult
+    {
+    public:
+        CraftingOrderRejectResult() : CraftingOrderActionResult(SMSG_CRAFTING_ORDER_REJECT_RESULT) { }
+    };
 }
 }
 
