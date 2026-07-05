@@ -3773,6 +3773,13 @@ struct SoulbindConduitEntry
     int32 Flags;
 };
 
+struct SoulbindConduitItemEntry
+{
+    uint32 ID;
+    int32 ItemID;
+    int32 ConduitID;
+};
+
 struct SoulbindConduitRankEntry
 {
     uint32 ID;
@@ -3780,6 +3787,14 @@ struct SoulbindConduitRankEntry
     int32 SpellID;
     float AuraPointsOverride;
     uint32 SoulbindConduitID;
+};
+
+struct SoulbindConduitRankPropertiesEntry
+{
+    uint32 ID;
+    int32 Rank;
+    int32 ItemLevel;
+    int8 QualityID;
 };
 
 struct SoundKitEntry
