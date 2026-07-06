@@ -19,6 +19,7 @@
 #define TRINITYCORE_ACCOUNT_STORE_PACKETS_H
 
 #include "Packet.h"
+#include <vector>
 
 namespace WorldPackets::AccountStore
 {
@@ -96,6 +97,33 @@ public:
     uint8 TransactionType = 0;
     int32 AccountStoreItemID = 0;
     AccountStoreItemState ItemState;
+};
+
+// One entry of the FRONT_UPDATE currency-state vector (12B, three uint32s; exact field semantics not offline-confirmed).
+struct AccountStoreCurrencyState
+{
+    uint32 Field0 = 0;
+    uint32 Field4 = 0;
+    uint32 Field8 = 0;
+};
+
+// SMSG_ACCOUNT_STORE_FRONT_UPDATE (0x42032C) — client reader sub_7FF7290B8C20:
+//   uint8 Flags, uint32 Field24, uint32 currencyCount, uint32 itemCount, currencyCount x {u32,u32,u32},
+//   uint8 (two packed bits), itemCount x item-state. Flags = AccountStoreFrontFlag (the client ctor defaults it to
+//   Enabled=1), so the store front carries the item catalogue with per-item ownership status.
+class AccountStoreFrontUpdate final : public ServerPacket
+{
+public:
+    AccountStoreFrontUpdate() : ServerPacket(SMSG_ACCOUNT_STORE_FRONT_UPDATE) { }
+
+    WorldPacket const* Write() override;
+
+    uint8 Flags = 0;                  // AccountStoreFrontFlag
+    uint32 Field24 = 0;
+    std::vector<AccountStoreCurrencyState> Currencies;
+    bool Field58 = false;
+    bool Field59 = false;
+    std::vector<AccountStoreItemState> Items;
 };
 }
 

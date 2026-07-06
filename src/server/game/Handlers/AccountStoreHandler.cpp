@@ -21,6 +21,31 @@
 #include "DB2Stores.h"
 #include "Player.h"
 
+void WorldSession::SendAccountStoreFrontUpdate()
+{
+    using namespace WorldPackets::AccountStore;
+
+    Player* player = GetPlayer();
+    if (!player)
+        return;
+
+    AccountStoreFrontUpdate front;
+    // AccountStoreFrontFlag: Enabled (1) | PurchaseEnabled (2). The client constructor defaults the flag byte to
+    // Enabled=1; enabling purchase lets the store front accept BEGIN_PURCHASE transactions. Refund stays off.
+    front.Flags = 0x03;
+
+    CollectionMgr* collectionMgr = GetCollectionMgr();
+    for (AccountStoreItemEntry const* item : sAccountStoreItemStore)
+    {
+        AccountStoreItemState state;
+        state.AccountStoreItemID = int32(item->ID);
+        state.Status = uint8(collectionMgr->HasAccountStoreItem(item->ID) ? AccountStoreItemStatus::Owned : AccountStoreItemStatus::Unowned);
+        front.Items.push_back(state);
+    }
+
+    SendPacket(front.Write());
+}
+
 void WorldSession::HandleAccountStoreBeginPurchaseOrRefund(WorldPackets::AccountStore::AccountStoreBeginPurchaseOrRefund& packet)
 {
     using namespace WorldPackets::AccountStore;

@@ -45,4 +45,26 @@ WorldPacket const* AccountStoreResult::Write()
     _worldPacket << ItemState;
     return &_worldPacket;
 }
+
+WorldPacket const* AccountStoreFrontUpdate::Write()
+{
+    _worldPacket << uint8(Flags);
+    _worldPacket << uint32(Field24);
+    _worldPacket << uint32(Currencies.size());
+    _worldPacket << uint32(Items.size());
+
+    for (AccountStoreCurrencyState const& currency : Currencies)
+    {
+        _worldPacket << uint32(currency.Field0);
+        _worldPacket << uint32(currency.Field4);
+        _worldPacket << uint32(currency.Field8);
+    }
+
+    _worldPacket << uint8((Field58 ? 0x80 : 0x00) | (Field59 ? 0x40 : 0x00));   // two packed bits
+
+    for (AccountStoreItemState const& item : Items)
+        _worldPacket << item;
+
+    return &_worldPacket;
+}
 }

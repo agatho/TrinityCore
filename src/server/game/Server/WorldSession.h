@@ -1242,6 +1242,7 @@ class TC_GAME_API WorldSession
         void LogUnprocessedTail(WorldPacket const* packet);
 
         void HandleAccountStoreBeginPurchaseOrRefund(WorldPackets::AccountStore::AccountStoreBeginPurchaseOrRefund& packet);
+        void SendAccountStoreFrontUpdate();
 
         void HandleCharEnum(CharacterDatabaseQueryHolder const& holder);
         void HandleCharEnumOpcode(WorldPackets::Character::EnumCharacters& /*enumCharacters*/);
