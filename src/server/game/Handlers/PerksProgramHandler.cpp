@@ -30,24 +30,22 @@ void WorldSession::HandlePerksProgramStatusRequest(WorldPackets::PerksProgram::P
     SendPacket(vendorUpdate.Write());
 }
 
-void WorldSession::HandlePerksProgramRequestPurchase(WorldPackets::PerksProgram::PerksProgramRequestPurchase& packet)
+// Validates a single Trading Post vendor item, deducts its Trader's Tender cost and grants the
+// resolved collectible. Returns false (leaving the player untouched) if the item is not currently
+// offered or the player cannot afford it.
+static bool PerksProgramPurchaseItem(WorldSession* session, Player* player, int32 vendorItemId)
 {
-    Player* player = GetPlayer();
-    if (!player)
-        return;
-
-    // The item must be part of the currently-offered listing (the mgr resolved its collectible + price).
-    WorldPackets::PerksProgram::PerksVendorItem const* item = sPerksProgramMgr->GetVendorItem(packet.PerksVendorItemID);
+    WorldPackets::PerksProgram::PerksVendorItem const* item = sPerksProgramMgr->GetVendorItem(vendorItemId);
     if (!item || item->Disabled)
-        return;
+        return false;
 
     if (item->Price < 0 || !player->HasCurrency(CURRENCY_TYPE_TRADERS_TENDER, uint32(item->Price)))
-        return;
+        return false;
 
     player->RemoveCurrency(CURRENCY_TYPE_TRADERS_TENDER, item->Price, CurrencyDestroyReason::Vendor);
 
     // Grant the resolved collectible. A vendor item resolves to exactly one of these.
-    CollectionMgr* collectionMgr = GetCollectionMgr();
+    CollectionMgr* collectionMgr = session->GetCollectionMgr();
     if (item->MountID)
         collectionMgr->AddMount(uint32(item->MountID), MOUNT_STATUS_NONE);
     if (item->ToyID)
@@ -55,4 +53,24 @@ void WorldSession::HandlePerksProgramRequestPurchase(WorldPackets::PerksProgram:
     if (item->ItemModifiedAppearanceID)
         if (ItemModifiedAppearanceEntry const* appearance = sItemModifiedAppearanceStore.LookupEntry(uint32(item->ItemModifiedAppearanceID)))
             collectionMgr->AddItemAppearance(appearance->ItemID, appearance->ItemAppearanceModifierID);
+
+    return true;
+}
+
+void WorldSession::HandlePerksProgramRequestPurchase(WorldPackets::PerksProgram::PerksProgramRequestPurchase& packet)
+{
+    if (Player* player = GetPlayer())
+        PerksProgramPurchaseItem(this, player, packet.PerksVendorItemID);
+}
+
+void WorldSession::HandlePerksProgramRequestCartCheckout(WorldPackets::PerksProgram::PerksProgramRequestCartCheckout& packet)
+{
+    Player* player = GetPlayer();
+    if (!player)
+        return;
+
+    // Each item is validated + charged independently; an unaffordable entry is simply skipped so the
+    // rest of the cart still goes through (mirrors buying them one by one).
+    for (int32 vendorItemId : packet.PerksVendorItemIDs)
+        PerksProgramPurchaseItem(this, player, vendorItemId);
 }

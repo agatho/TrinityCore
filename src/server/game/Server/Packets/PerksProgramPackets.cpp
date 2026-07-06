@@ -25,6 +25,19 @@ void PerksProgramRequestPurchase::Read()
     _worldPacket >> VendorGUID;
 }
 
+void PerksProgramRequestCartCheckout::Read()
+{
+    uint32 itemCount;
+    _worldPacket >> itemCount;
+    _worldPacket >> VendorGUID;
+
+    // Reserve conservatively so a bogus count cannot force a huge up-front allocation; each read is
+    // bounds-checked by the underlying buffer.
+    PerksVendorItemIDs.reserve(std::min<uint32>(itemCount, 100));
+    for (uint32 i = 0; i < itemCount; ++i)
+        PerksVendorItemIDs.push_back(_worldPacket.read<int32>());
+}
+
 WorldPacket const* PerksProgramVendorUpdate::Write()
 {
     _worldPacket << uint32(VendorItems.size());

@@ -649,6 +649,7 @@ namespace WorldPackets
     {
         class PerksProgramStatusRequest;
         class PerksProgramRequestPurchase;
+        class PerksProgramRequestCartCheckout;
     }
 
     namespace Query
@@ -1456,6 +1457,7 @@ class TC_GAME_API WorldSession
 
         void HandlePerksProgramStatusRequest(WorldPackets::PerksProgram::PerksProgramStatusRequest& packet);
         void HandlePerksProgramRequestPurchase(WorldPackets::PerksProgram::PerksProgramRequestPurchase& packet);
+        void HandlePerksProgramRequestCartCheckout(WorldPackets::PerksProgram::PerksProgramRequestCartCheckout& packet);
         void HandleGuildSetGuildMaster(WorldPackets::Guild::GuildSetGuildMaster& packet);
         void HandleGuildUpdateMotdText(WorldPackets::Guild::GuildUpdateMotdText& packet);
         void HandleGuildNewsUpdateSticky(WorldPackets::Guild::GuildNewsUpdateSticky& packet);

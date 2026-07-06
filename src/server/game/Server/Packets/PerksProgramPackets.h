@@ -46,6 +46,19 @@ public:
     ObjectGuid VendorGUID;
 };
 
+// CMSG_PERKS_PROGRAM_REQUEST_CART_CHECKOUT wire (12.0.7.68275, from the client serializer sub_7FF72914B860):
+//   uint32 ItemCount, PackedGUID VendorGUID, uint32 PerksVendorItemIDs[ItemCount].
+class PerksProgramRequestCartCheckout final : public ClientPacket
+{
+public:
+    explicit PerksProgramRequestCartCheckout(WorldPacket&& packet) : ClientPacket(CMSG_PERKS_PROGRAM_REQUEST_CART_CHECKOUT, std::move(packet)) { }
+
+    void Read() override;
+
+    ObjectGuid VendorGUID;
+    std::vector<int32> PerksVendorItemIDs;
+};
+
 // SMSG_PERKS_PROGRAM_VENDOR_UPDATE wire (12.0.7.68275, from the client deserializer sub_7FF72911D110 case 6160384):
 //   uint32 VendorItemCount, then VendorItemCount x PerksVendorItem. No header precedes the count.
 class PerksProgramVendorUpdate final : public ServerPacket
