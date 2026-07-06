@@ -184,20 +184,87 @@ void CollectionMgr::LoadAccountStorePurchases(PreparedQueryResult result)
     do
     {
         Field* fields = result->Fetch();
-        _accountStoreItems.insert(fields[0].GetUInt32());
+        _accountStoreItems.emplace(fields[0].GetUInt32(), fields[1].GetUInt32());
     } while (result->NextRow());
+}
+
+uint32 CollectionMgr::GetAccountStorePurchaseTime(uint32 accountStoreItemId) const
+{
+    auto itr = _accountStoreItems.find(accountStoreItemId);
+    return itr != _accountStoreItems.end() ? itr->second : 0;
 }
 
 bool CollectionMgr::AddAccountStorePurchase(uint32 accountStoreItemId)
 {
-    if (!_accountStoreItems.insert(accountStoreItemId).second)
+    uint32 now = uint32(GameTime::GetGameTime());
+    if (!_accountStoreItems.emplace(accountStoreItemId, now).second)
         return false;
 
     LoginDatabasePreparedStatement* stmt = LoginDatabase.GetPreparedStatement(LOGIN_INS_ACCOUNT_STORE_PURCHASE);
     stmt->setUInt32(0, _owner->GetBattlenetAccountId());
     stmt->setUInt32(1, accountStoreItemId);
-    stmt->setUInt32(2, uint32(GameTime::GetGameTime()));
+    stmt->setUInt32(2, now);
     LoginDatabase.Execute(stmt);
+    return true;
+}
+
+bool CollectionMgr::RemoveAccountStorePurchase(uint32 accountStoreItemId)
+{
+    if (_accountStoreItems.erase(accountStoreItemId) == 0)
+        return false;
+
+    LoginDatabasePreparedStatement* stmt = LoginDatabase.GetPreparedStatement(LOGIN_DEL_ACCOUNT_STORE_PURCHASE);
+    stmt->setUInt32(0, _owner->GetBattlenetAccountId());
+    stmt->setUInt32(1, accountStoreItemId);
+    LoginDatabase.Execute(stmt);
+    return true;
+}
+
+bool CollectionMgr::RemoveToy(uint32 itemId)
+{
+    if (_toys.erase(itemId) == 0)
+        return false;
+
+    if (Player* player = _owner->GetPlayer())
+        player->RemoveToy(int32(itemId));
+
+    LoginDatabasePreparedStatement* stmt = LoginDatabase.GetPreparedStatement(LOGIN_DEL_ACCOUNT_TOYS);
+    stmt->setUInt32(0, _owner->GetBattlenetAccountId());
+    stmt->setUInt32(1, itemId);
+    LoginDatabase.Execute(stmt);
+    return true;
+}
+
+bool CollectionMgr::RemoveMount(uint32 spellId)
+{
+    auto itr = _mounts.find(spellId);
+    if (itr == _mounts.end())
+        return false;
+
+    // Mirror AddMount's faction-specific pairing: revoke the paired faction mount too.
+    MountDefinitionMap::const_iterator defItr = FactionSpecificMounts.find(spellId);
+    if (defItr != FactionSpecificMounts.end())
+        RemoveMount(defItr->second);
+
+    _mounts.erase(itr);
+
+    LoginDatabasePreparedStatement* stmt = LoginDatabase.GetPreparedStatement(LOGIN_DEL_ACCOUNT_MOUNT);
+    stmt->setUInt32(0, _owner->GetBattlenetAccountId());
+    stmt->setUInt32(1, spellId);
+    LoginDatabase.Execute(stmt);
+
+    if (Player* player = _owner->GetPlayer())
+    {
+        if (player->HasSpell(spellId))
+            player->RemoveSpell(spellId);
+
+        // No single-mount-remove opcode exists; resync the whole account mount list so the client drops it.
+        WorldPackets::Misc::AccountMountUpdate mountUpdate;
+        mountUpdate.IsFullUpdate = true;
+        mountUpdate.Mounts = &_mounts;
+        player->SendDirectMessage(mountUpdate.Write());
+    }
+
     return true;
 }
 

@@ -19,6 +19,7 @@
 #include "AccountStorePackets.h"
 #include "CollectionMgr.h"
 #include "DB2Stores.h"
+#include "GameTime.h"
 #include "Player.h"
 
 void WorldSession::SendAccountStoreFrontUpdate()
@@ -65,8 +66,56 @@ void WorldSession::HandleAccountStoreBeginPurchaseOrRefund(WorldPackets::Account
         SendPacket(response.Write());
     };
 
-    // Only purchases are handled; refunds need the purchase-history / refund-window backend (not yet built),
-    // so they get an accurate NotSupported result rather than a silent drop.
+    if (packet.TransactionType == uint8(AccountStoreTransactionType::Refund))
+    {
+        AccountStoreItemEntry const* refundItem = sAccountStoreItemStore.LookupEntry(uint32(packet.AccountStoreItemID));
+        if (!refundItem)
+        {
+            sendResult(AccountStoreTransactionResult::ItemUnknown, AccountStoreItemStatus::Unowned);
+            return;
+        }
+
+        CollectionMgr* collectionMgr = GetCollectionMgr();
+        if (!collectionMgr->HasAccountStoreItem(refundItem->ID))
+        {
+            sendResult(AccountStoreTransactionResult::ItemNotOwned, AccountStoreItemStatus::Unowned);
+            return;
+        }
+
+        // RefundDuration == 0 means the item is non-refundable; otherwise the refund must fall inside the window.
+        uint32 purchaseTime = collectionMgr->GetAccountStorePurchaseTime(refundItem->ID);
+        if (refundItem->RefundDuration <= 0 || !purchaseTime
+            || uint32(GameTime::GetGameTime()) - purchaseTime > uint32(refundItem->RefundDuration))
+        {
+            sendResult(AccountStoreTransactionResult::OwnedButRefundTimeExpired, AccountStoreItemStatus::Owned);
+            return;
+        }
+
+        // Only cleanly-revocable rewards can be refunded. A transmog/appearance reward (TransmogSetID set) is
+        // append-only in the account collection and cannot be revoked without risking other sources, so such items
+        // are reported not-refundable rather than refunded into a keep-the-appearance exploit.
+        if (refundItem->TransmogSetID != 0 || !refundItem->SpellID)
+        {
+            sendResult(AccountStoreTransactionResult::NotSupported, AccountStoreItemStatus::Owned);
+            return;
+        }
+
+        // Revoke the reward: a mount teaching spell resyncs the account mount list; any other teaching spell is
+        // simply un-learned.
+        if (sDB2Manager.GetMount(uint32(refundItem->SpellID)))
+            collectionMgr->RemoveMount(uint32(refundItem->SpellID));
+        else
+            player->RemoveSpell(uint32(refundItem->SpellID));
+
+        if (refundItem->Price > 0 && refundItem->CurrencyTypesID)
+            player->AddCurrency(uint32(refundItem->CurrencyTypesID), uint32(refundItem->Price), CurrencyGainSource::ItemRefund);
+
+        collectionMgr->RemoveAccountStorePurchase(refundItem->ID);
+
+        sendResult(AccountStoreTransactionResult::Success, AccountStoreItemStatus::Unowned);
+        return;
+    }
+
     if (packet.TransactionType != uint8(AccountStoreTransactionType::Purchase))
     {
         sendResult(AccountStoreTransactionResult::NotSupported, AccountStoreItemStatus::Unowned);
