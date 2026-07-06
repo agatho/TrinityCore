@@ -182,4 +182,62 @@ WorldPacket const* CraftingOrderActionResult::Write()
 
     return &_worldPacket;
 }
+
+void CraftingOrderListCrafterOrders::Read()
+{
+    _worldPacket >> NpcCraftOrderStation;          // PackedGuid (the crafting station / NPC)
+    _worldPacket >> SkillLineAbilityID;            // recipe filter; remaining filter fields are not needed
+}
+
+ByteBuffer& operator<<(ByteBuffer& data, CraftingOrderData const& order)
+{
+    // Scalar head, byte-exact per client reader sub_7FF729160490 (offsets confirmed vs jam_reflection_FINAL_68275.json).
+    data << int32(order.Version);
+    data << uint64(order.OrderID);
+    data << int32(order.SkillLineAbilityID);
+    data << int32(order.OrderState);
+    data << uint8(order.OrderType);
+    data << uint8(order.MinQuality);
+    data << int64(order.EndDate);
+    data << int64(order.ClaimEndDate);
+    data << uint64(order.TipAmount);
+    data << uint64(order.HouseCutAmount);
+    data << int32(order.Flags);
+    data << order.CustomerGUID;                    // PackedGuid (targetGUID)
+    data << order.CrafterGUID;                     // PackedGuid
+    data << int32(order.NpcCraftingOrderSetID);
+    data << int32(order.NpcTreasureID);
+
+    // reagent count (0: customer-provided reagents omitted for browse) then the split notes-length + presence byte.
+    // notesLen = (byte1 << 2) | (byte2 >> 6); byte2 bits 5..2 are the four optional-presence flags, all absent here.
+    uint32 notesLen = std::min<uint32>(uint32(order.CustomerNotes.length()), 1023);
+    data << uint32(0);
+    data << uint8(notesLen >> 2);
+    data << uint8((notesLen & 0x3) << 6);
+    if (notesLen)
+        data.append(order.CustomerNotes.data(), notesLen);
+
+    // wrapper header byte (client sub_7FF7291611C0): presence bit + packed sub-vector counts, all zero for a
+    // basic order (no nested customer/npc block, no recraft/mod sub-vectors).
+    data << uint8(0);
+    return data;
+}
+
+WorldPacket const* CraftingOrderListOrdersResponse::Write()
+{
+    _worldPacket << uint8(ContextFlag);
+    _worldPacket << uint32(0);                     // recipe-summary vector count (none)
+    _worldPacket << uint32(Orders.size());         // order count
+    _worldPacket << uint32(Field58);
+    _worldPacket << uint32(Field5C);
+    _worldPacket << uint8(0);                       // two packed bits (unconfirmed semantics) — cleared
+    _worldPacket << uint8(Field64);
+    _worldPacket << uint32(Field6C);
+    _worldPacket << uint8(0);                       // four packed bits (unconfirmed semantics) — cleared
+
+    for (CraftingOrderData const& order : Orders)
+        _worldPacket << order;
+
+    return &_worldPacket;
+}
 }

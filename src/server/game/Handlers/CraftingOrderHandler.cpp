@@ -138,3 +138,50 @@ void WorldSession::HandleCraftingOrderReject(WorldPackets::CraftingOrders::Craft
     result.CraftingOrderID = packet.OrderID;
     SendPacket(result.Write());
 }
+
+// Projects a stored order into the client's JamCraftingOrder wire form (customer-provided reagents + the
+// optional recraft/output/npc sub-structs are sent absent — byte-exact for a basic public order).
+static WorldPackets::CraftingOrders::CraftingOrderData BuildCraftingOrderData(CraftingOrders::Order const& order)
+{
+    WorldPackets::CraftingOrders::CraftingOrderData data;
+    data.OrderID = order.OrderID;
+    data.SkillLineAbilityID = order.SkillLineAbilityID;
+    data.OrderState = int32(order.State);
+    data.OrderType = uint8(order.Type);
+    data.MinQuality = uint8(order.MinQuality);
+    data.EndDate = order.EndDate;
+    data.ClaimEndDate = order.ClaimEndDate;
+    data.TipAmount = order.TipAmount;
+    data.HouseCutAmount = order.HouseCutAmount;
+    data.Flags = order.Flags;
+    data.CustomerGUID = order.CustomerGUID;
+    data.CrafterGUID = order.CrafterGUID;
+    data.CustomerNotes = order.CustomerNotes;
+    return data;
+}
+
+void WorldSession::HandleCraftingOrderListMyOrders(WorldPackets::CraftingOrders::CraftingOrderListMyOrders& /*packet*/)
+{
+    Player* player = GetPlayer();
+    if (!player)
+        return;
+
+    WorldPackets::CraftingOrders::CraftingOrderListOrdersResponse response;
+    for (CraftingOrders::Order const* order : sCraftingOrderMgr.ListOrdersByCustomer(player->GetGUID()))
+        response.Orders.push_back(BuildCraftingOrderData(*order));
+
+    SendPacket(response.Write());
+}
+
+void WorldSession::HandleCraftingOrderListCrafterOrders(WorldPackets::CraftingOrders::CraftingOrderListCrafterOrders& packet)
+{
+    Player* player = GetPlayer();
+    if (!player)
+        return;
+
+    WorldPackets::CraftingOrders::CraftingOrderListOrdersResponse response;
+    for (CraftingOrders::Order const* order : sCraftingOrderMgr.ListClaimableForRecipe(packet.SkillLineAbilityID))
+        response.Orders.push_back(BuildCraftingOrderData(*order));
+
+    SendPacket(response.Write());
+}

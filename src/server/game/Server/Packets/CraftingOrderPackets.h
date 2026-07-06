@@ -23,6 +23,8 @@
 #include "ObjectGuid.h"
 #include "Optional.h"
 #include <array>
+#include <string>
+#include <vector>
 
 namespace WorldPackets
 {
@@ -230,6 +232,76 @@ namespace CraftingOrders
     {
     public:
         CraftingOrderRejectResult() : CraftingOrderActionResult(SMSG_CRAFTING_ORDER_REJECT_RESULT) { }
+    };
+
+    // CMSG_CRAFTING_ORDER_LIST_MY_ORDERS (0x3B0118): browse the requesting player's own posted orders. The full
+    // wire carries filter/sort fields, but the server only needs the requester (it is the packet's sender), so
+    // Read consumes nothing — the packet is length-framed, so trailing filter bytes are harmless.
+    class CraftingOrderListMyOrders final : public ClientPacket
+    {
+    public:
+        explicit CraftingOrderListMyOrders(WorldPacket&& packet) : ClientPacket(CMSG_CRAFTING_ORDER_LIST_MY_ORDERS, std::move(packet)) { }
+
+        void Read() override { }
+    };
+
+    // CMSG_CRAFTING_ORDER_LIST_CRAFTER_ORDERS (0x3B0119): browse claimable orders a crafter may take. Leading
+    // wire (client sub_7FF72915___): PackedGUID NpcCraftOrderStation, uint32 SkillLineAbilityID, then trailing
+    // filter/sort scalars + a packed-int filter vector that the server does not need (length-framed packet).
+    class CraftingOrderListCrafterOrders final : public ClientPacket
+    {
+    public:
+        explicit CraftingOrderListCrafterOrders(WorldPacket&& packet) : ClientPacket(CMSG_CRAFTING_ORDER_LIST_CRAFTER_ORDERS, std::move(packet)) { }
+
+        void Read() override;
+
+        ObjectGuid NpcCraftOrderStation;
+        int32 SkillLineAbilityID = 0;
+    };
+
+    // One order on the SMSG_CRAFTING_ORDER_LIST_ORDERS_RESPONSE wire (the client's JamCraftingOrder, reader
+    // sub_7FF7291611C0 -> scalar head sub_7FF729160490). Field order + types are byte-exact and confirmed against
+    // the reflection offset table (jam_reflection_FINAL_68275.json). Customer-provided reagents and the four
+    // presence-gated optional sub-structs (customerPlayer / customerNpc / outputOrderItem / outputItem) are sent
+    // absent for a basic browsed order, which is byte-exact for a public order without recraft/output data.
+    struct CraftingOrderData
+    {
+        int32 Version = 0;
+        uint64 OrderID = 0;
+        int32 SkillLineAbilityID = 0;
+        int32 OrderState = 0;
+        uint8 OrderType = 0;
+        uint8 MinQuality = 0;
+        int64 EndDate = 0;
+        int64 ClaimEndDate = 0;
+        uint64 TipAmount = 0;
+        uint64 HouseCutAmount = 0;
+        int32 Flags = 0;
+        ObjectGuid CustomerGUID;
+        ObjectGuid CrafterGUID;
+        int32 NpcCraftingOrderSetID = 0;
+        int32 NpcTreasureID = 0;
+        std::string CustomerNotes;
+    };
+
+    ByteBuffer& operator<<(ByteBuffer& data, CraftingOrderData const& order);
+
+    // SMSG_CRAFTING_ORDER_LIST_ORDERS_RESPONSE (0x420333, client reader sub_7FF7290B9350). Header scalars whose
+    // semantics are not offline-confirmable (ContextFlag / Field* / the two packed-bit bytes) are sent 0; the
+    // recipe-summary vector is sent empty. Orders follow.
+    class CraftingOrderListOrdersResponse final : public ServerPacket
+    {
+    public:
+        CraftingOrderListOrdersResponse() : ServerPacket(SMSG_CRAFTING_ORDER_LIST_ORDERS_RESPONSE) { }
+
+        WorldPacket const* Write() override;
+
+        uint8 ContextFlag = 0;
+        uint32 Field58 = 0;
+        uint32 Field5C = 0;
+        uint8 Field64 = 0;
+        uint32 Field6C = 0;
+        std::vector<CraftingOrderData> Orders;
     };
 }
 }
