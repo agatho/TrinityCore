@@ -87,6 +87,16 @@ void WorldSession::HandleAccountStoreBeginPurchaseOrRefund(WorldPackets::Account
         return;
     }
 
+    // Only SpellID (teaching spell) and TransmogSetID rewards are resolvable server-side. Some rows (e.g. certain
+    // Plunderstorm pets/mounts) carry SpellID == 0 && TransmogSetID == 0 and reference the collectible through a
+    // display-info / link that is not resolvable offline yet. Refuse those rather than charge currency for an item
+    // we cannot actually deliver.
+    if (!item->SpellID && !item->TransmogSetID)
+    {
+        sendResult(AccountStoreTransactionResult::Unavailable, AccountStoreItemStatus::Unowned);
+        return;
+    }
+
     if (item->Price > 0)
     {
         if (!item->CurrencyTypesID || !player->HasCurrency(uint32(item->CurrencyTypesID), uint32(item->Price)))
