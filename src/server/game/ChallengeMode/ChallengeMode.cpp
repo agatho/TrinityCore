@@ -67,6 +67,8 @@ void ChallengeMode::Start(uint32 mapChallengeModeId, uint32 keystoneLevel, std::
 
     // Announce the run (map / level / affixes) to the party UI. Member roster is omitted for now (see packet note).
     WorldPackets::ChallengeMode::ChallengeModeStart startPacket;
+    if (MapChallengeModeEntry const* challengeMode = sMapChallengeModeStore.LookupEntry(_mapChallengeModeId))
+        startPacket.MapID = challengeMode->MapID;
     startPacket.MapChallengeModeID = _mapChallengeModeId;
     startPacket.KeystoneLevel = _keystoneLevel;
     startPacket.Affixes = _affixes;

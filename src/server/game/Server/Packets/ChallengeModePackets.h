@@ -188,11 +188,14 @@ namespace WorldPackets
 
             WorldPacket const* Write() override;
 
-            uint32 MapChallengeModeID = 0;      // field @32 (UNVERIFIED slot)
-            uint32 KeystoneLevel = 0;           // field @36 (UNVERIFIED slot)
-            uint32 Field40 = 0;
+            // Wire order VERIFIED from m+ run12.0.7.pkt (SMSG_CHALLENGE_MODE_START, 45B body): MapID, then the
+            // MapChallengeMode.db2 id, then the keystone level. The old code mislabeled these (sent the challenge id
+            // in the MapID slot and the level in the challenge-id slot).
+            uint32 MapID = 0;                   // instance MapID (sniff: 2526)
+            uint32 MapChallengeModeID = 0;      // MapChallengeMode.db2 id (sniff: 402)
+            uint32 KeystoneLevel = 0;           // sniff: 2
             uint32 Field44 = 0;
-            uint64 DeployedTime = 0;            // field @48 (UNVERIFIED slot)
+            uint64 DeployedTime = 0;
             std::array<uint32, 4> Affixes = { };
             uint8 Flags = 0;
         };

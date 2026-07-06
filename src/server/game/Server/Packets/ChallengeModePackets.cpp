@@ -105,9 +105,9 @@ WorldPacket const* MythicPlusAllMapStats::Write()
 
 WorldPacket const* ChallengeModeStart::Write()
 {
+    _worldPacket << uint32(MapID);
     _worldPacket << uint32(MapChallengeModeID);
     _worldPacket << uint32(KeystoneLevel);
-    _worldPacket << uint32(Field40);
     _worldPacket << uint32(Field44);
     _worldPacket << uint64(DeployedTime);
     for (uint32 affix : Affixes)
