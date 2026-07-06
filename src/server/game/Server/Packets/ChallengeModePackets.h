@@ -104,6 +104,40 @@ namespace WorldPackets
         };
 
         // CMSG_MYTHIC_PLUS_REQUEST_MAP_STATS -- client asks for the player's per-dungeon best-run scores (empty payload).
+        // SMSG_CHALLENGE_MODE_RESET (0x4200AF) — sent when a keystone run is reset. Wire (m+ run12.0.7.pkt, 4B): { uint32 MapID }.
+        class ChallengeModeReset final : public ServerPacket
+        {
+        public:
+            explicit ChallengeModeReset() : ServerPacket(SMSG_CHALLENGE_MODE_RESET, 4) { }
+            WorldPacket const* Write() override;
+
+            uint32 MapID = 0;
+        };
+
+        // SMSG_MYTHIC_PLUS_NEW_WEEK_RECORD (0x4200BA) / SMSG_CHALLENGE_MODE_NEW_PLAYER_RECORD (0x4200B1) — sent when a
+        // new weekly/personal best is set. Wire (m+ run12.0.7.pkt, 12B each): { uint32 MapChallengeModeID; uint32 CompletionMs; uint32 KeystoneLevel }.
+        class MythicPlusNewWeekRecord final : public ServerPacket
+        {
+        public:
+            explicit MythicPlusNewWeekRecord() : ServerPacket(SMSG_MYTHIC_PLUS_NEW_WEEK_RECORD, 12) { }
+            WorldPacket const* Write() override;
+
+            uint32 MapChallengeModeID = 0;
+            uint32 CompletionMs = 0;
+            uint32 KeystoneLevel = 0;
+        };
+
+        class ChallengeModeNewPlayerRecord final : public ServerPacket
+        {
+        public:
+            explicit ChallengeModeNewPlayerRecord() : ServerPacket(SMSG_CHALLENGE_MODE_NEW_PLAYER_RECORD, 12) { }
+            WorldPacket const* Write() override;
+
+            uint32 MapChallengeModeID = 0;
+            uint32 CompletionMs = 0;
+            uint32 KeystoneLevel = 0;
+        };
+
         class MythicPlusRequestMapStats final : public ClientPacket
         {
         public:

@@ -103,6 +103,28 @@ WorldPacket const* MythicPlusAllMapStats::Write()
     return &_worldPacket;
 }
 
+WorldPacket const* ChallengeModeReset::Write()
+{
+    _worldPacket << uint32(MapID);
+    return &_worldPacket;
+}
+
+WorldPacket const* MythicPlusNewWeekRecord::Write()
+{
+    _worldPacket << uint32(MapChallengeModeID);
+    _worldPacket << uint32(CompletionMs);
+    _worldPacket << uint32(KeystoneLevel);
+    return &_worldPacket;
+}
+
+WorldPacket const* ChallengeModeNewPlayerRecord::Write()
+{
+    _worldPacket << uint32(MapChallengeModeID);
+    _worldPacket << uint32(CompletionMs);
+    _worldPacket << uint32(KeystoneLevel);
+    return &_worldPacket;
+}
+
 WorldPacket const* ChallengeModeStart::Write()
 {
     _worldPacket << uint32(MapID);

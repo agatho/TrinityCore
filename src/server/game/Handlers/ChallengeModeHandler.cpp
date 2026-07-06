@@ -285,6 +285,15 @@ void WorldSession::HandleResetChallengeMode(WorldPackets::ChallengeMode::ResetCh
 
     // Abort the active run and stop the timer. Trash/boss respawn goes through the standard instance reset path.
     if (ChallengeMode* challenge = instanceMap->GetChallengeMode())
+    {
         if (challenge->IsActive())
+        {
             challenge->Reset();
+
+            // Notify the party UI that the keystone was reset (SMSG_CHALLENGE_MODE_RESET carries the instance MapID).
+            WorldPackets::ChallengeMode::ChallengeModeReset resetPacket;
+            resetPacket.MapID = instanceMap->GetId();
+            instanceMap->SendToPlayers(resetPacket.Write());
+        }
+    }
 }
