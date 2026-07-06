@@ -19,11 +19,24 @@
 #define TRINITYCORE_REFER_A_FRIEND_PACKETS_H
 
 #include "Packet.h"
+#include <array>
+#include <vector>
 
 namespace WorldPackets
 {
     namespace RaF
     {
+        // One recruit in SMSG_RAF_ACCOUNT_INFO's recruit vector (client reader sub_7FF729139460). On the wire:
+        //   13 x uint32 scalars, uint8 NameLen, uint8 0, uint8 0 (presence + 7-bit nested char-roster count),
+        //   [char roster entries], NameLen bytes of Name. The per-recruit character roster is server-unknown
+        //   offline, so it is emitted empty (count 0) - which zeroes the two flag bytes - and the two extra
+        //   bytes carry no roster/optional. Per-scalar semantics are unconfirmed (named Fields[]); Fields[0] is
+        //   populated with the recruit's account id.
+        struct RafRecruit
+        {
+            std::array<uint32, 13> Fields = { };
+            std::string Name;
+        };
         class RecruitAFriendFailure final : public ServerPacket
         {
         public:
@@ -108,6 +121,7 @@ namespace WorldPackets
 
             uint32 Field20 = 0;
             bool FieldBit24 = false;
+            std::vector<RafRecruit> Recruits;
         };
     }
 }

@@ -59,18 +59,35 @@ void RemoveRafRecruit::Read()
     _worldPacket >> RecruitId;
 }
 
+// Serializes one recruit (client reader sub_7FF729139460) with an empty character roster.
+static void WriteRecruit(ByteBuffer& data, RafRecruit const& recruit)
+{
+    for (uint32 field : recruit.Fields)
+        data << uint32(field);
+
+    uint8 nameLen = uint8(std::min<std::size_t>(recruit.Name.length(), 0xFF));
+    data << uint8(nameLen);   // NameLen (plain uint8 length)
+    data << uint8(0);         // presence bits + high bits of the 7-bit char-roster count (all 0 -> empty, no optional)
+    data << uint8(0);         // low bit of the char-roster count + trailing optional-presence (0)
+    // empty character roster -> no entries
+    data.append(recruit.Name.data(), nameLen);   // Name bytes (no terminator on the wire)
+}
+
 WorldPacket const* RafAccountInfo::Write()
 {
-    // Byte-exact top-level layout (client body sub_7FF7290B46F0). Recruit/reward vectors are emitted empty -
-    // an account with no recruits is exactly this shape; population comes from the recruitment backend later.
+    // Byte-exact top-level layout (client body sub_7FF7290B46F0). The activity/reward vectors and optional blocks
+    // stay empty; the recruit vector is populated from the recruitment backend.
     _worldPacket << uint32(Field20);
-    _worldPacket << uint32(0);   // Count1 (vec @+0x28)
-    _worldPacket << uint32(0);   // Count2 (vec @+0x40)
-    _worldPacket << uint32(0);   // Count3 (recruit descriptors @+0x58)
-    _worldPacket << uint32(0);   // Count4 (vec @+0x70)
+    _worldPacket << uint32(0);                   // Count1 (activity vec @+0x28)
+    _worldPacket << uint32(0);                   // Count2 (vec @+0x40)
+    _worldPacket << uint32(Recruits.size());     // Count3 (recruit descriptors @+0x58)
+    _worldPacket << uint32(0);                   // Count4 (vec @+0x70)
     // vec1 loop empty
     _worldPacket << uint8(FieldBit24 ? 0x80 : 0x00);   // presence byte: bit7=FieldBit24, bit6/bit5 (optional blocks) = 0
-    // vec2/vec3/vec4 loops empty; no optional blocks
+    // vec2 loop empty
+    for (RafRecruit const& recruit : Recruits)
+        WriteRecruit(_worldPacket, recruit);
+    // vec4 loop empty; no optional blocks
     return &_worldPacket;
 }
 }
