@@ -32,4 +32,45 @@ WorldPacket const* RecruitAFriendFailure::Write()
 
     return &_worldPacket;
 }
+
+void GetRafAccountInfo::Read()
+{
+    _worldPacket >> Field;
+}
+
+void RafGenerateRecruitmentLink::Read()
+{
+    _worldPacket >> Field;
+}
+
+void RafUpdateRecruitmentInfo::Read()
+{
+    _worldPacket >> Field;
+}
+
+void RafClaimNextReward::Read()
+{
+    _worldPacket >> FieldA;
+    _worldPacket >> FieldB;
+}
+
+void RemoveRafRecruit::Read()
+{
+    _worldPacket >> RecruitId;
+}
+
+WorldPacket const* RafAccountInfo::Write()
+{
+    // Byte-exact top-level layout (client body sub_7FF7290B46F0). Recruit/reward vectors are emitted empty -
+    // an account with no recruits is exactly this shape; population comes from the recruitment backend later.
+    _worldPacket << uint32(Field20);
+    _worldPacket << uint32(0);   // Count1 (vec @+0x28)
+    _worldPacket << uint32(0);   // Count2 (vec @+0x40)
+    _worldPacket << uint32(0);   // Count3 (recruit descriptors @+0x58)
+    _worldPacket << uint32(0);   // Count4 (vec @+0x70)
+    // vec1 loop empty
+    _worldPacket << uint8(FieldBit24 ? 0x80 : 0x00);   // presence byte: bit7=FieldBit24, bit6/bit5 (optional blocks) = 0
+    // vec2/vec3/vec4 loops empty; no optional blocks
+    return &_worldPacket;
+}
 }

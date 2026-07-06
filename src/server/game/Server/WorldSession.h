@@ -689,6 +689,7 @@ namespace WorldPackets
     {
         class AcceptLevelGrant;
         class GrantLevel;
+        class GetRafAccountInfo;
     }
 
     namespace Toy
@@ -1290,6 +1291,8 @@ class TC_GAME_API WorldSession
         void HandleQueryInspectAchievements(WorldPackets::Inspect::QueryInspectAchievements& inspect);
 
         void HandleMountSpecialAnimOpcode(WorldPackets::Misc::MountSpecial& mountSpecial);
+
+        void HandleGetRafAccountInfo(WorldPackets::RaF::GetRafAccountInfo& packet);
 
         // repair
         void HandleRepairItemOpcode(WorldPackets::Item::RepairItem& packet);
