@@ -19,6 +19,12 @@
 
 namespace WorldPackets::PerksProgram
 {
+void PerksProgramRequestPurchase::Read()
+{
+    _worldPacket >> PerksVendorItemID;
+    _worldPacket >> VendorGUID;
+}
+
 WorldPacket const* PerksProgramVendorUpdate::Write()
 {
     _worldPacket << uint32(VendorItems.size());

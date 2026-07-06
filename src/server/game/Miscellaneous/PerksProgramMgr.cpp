@@ -112,3 +112,12 @@ std::vector<WorldPackets::PerksProgram::PerksVendorItem> const& PerksProgramMgr:
 
     return _vendorItems;
 }
+
+WorldPackets::PerksProgram::PerksVendorItem const* PerksProgramMgr::GetVendorItem(int32 vendorItemId)
+{
+    for (WorldPackets::PerksProgram::PerksVendorItem const& item : GetCurrentVendorItems())
+        if (item.VendorItemID == vendorItemId)
+            return &item;
+
+    return nullptr;
+}

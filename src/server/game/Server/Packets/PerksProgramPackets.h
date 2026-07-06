@@ -19,6 +19,7 @@
 #define TRINITYCORE_PERKS_PROGRAM_PACKETS_H
 
 #include "Packet.h"
+#include "ObjectGuid.h"
 #include "PerksProgramPacketsCommon.h"
 #include <vector>
 
@@ -30,6 +31,19 @@ public:
     explicit PerksProgramStatusRequest(WorldPacket&& packet) : ClientPacket(CMSG_PERKS_PROGRAM_STATUS_REQUEST, std::move(packet)) { }
 
     void Read() override { }
+};
+
+// CMSG_PERKS_PROGRAM_REQUEST_PURCHASE wire (12.0.7.68275, from the client serializer sub_7FF72914B790):
+//   uint32 PerksVendorItemID, PackedGUID VendorGUID (the interacted Trading Post vendor).
+class PerksProgramRequestPurchase final : public ClientPacket
+{
+public:
+    explicit PerksProgramRequestPurchase(WorldPacket&& packet) : ClientPacket(CMSG_PERKS_PROGRAM_REQUEST_PURCHASE, std::move(packet)) { }
+
+    void Read() override;
+
+    int32 PerksVendorItemID = 0;
+    ObjectGuid VendorGUID;
 };
 
 // SMSG_PERKS_PROGRAM_VENDOR_UPDATE wire (12.0.7.68275, from the client deserializer sub_7FF72911D110 case 6160384):

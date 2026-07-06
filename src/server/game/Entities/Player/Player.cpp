@@ -6929,6 +6929,10 @@ void Player::_LoadCurrency(PreparedQueryResult result)
         _currencyStorage.insert(PlayerCurrenciesMap::value_type(currencyID, cur));
 
     } while (result->NextRow());
+
+    // Mirror the Trader's Tender balance into the perks-program field the Trading Post UI reads.
+    if (PlayerCurrenciesMap::const_iterator itr = _currencyStorage.find(CURRENCY_TYPE_TRADERS_TENDER); itr != _currencyStorage.end())
+        SetUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::PerksProgramCurrency), int32(itr->second.Quantity));
 }
 
 void Player::_SaveCurrency(CharacterDatabaseTransaction trans)
@@ -7136,6 +7140,10 @@ void Player::ModifyCurrency(uint32 id, int32 amount, CurrencyGainSource gainSour
         itr->second.state = PLAYERCURRENCY_CHANGED;
 
     itr->second.Quantity += amount;
+
+    // Keep the perks-program field the Trading Post UI reads in sync with the tender balance.
+    if (id == CURRENCY_TYPE_TRADERS_TENDER)
+        SetUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::PerksProgramCurrency), int32(itr->second.Quantity));
 
     if (amount > 0 && !ignoreCaps) // Ignore total values update for refund
     {

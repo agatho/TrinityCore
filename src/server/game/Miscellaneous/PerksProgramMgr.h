@@ -32,6 +32,11 @@ public:
     static PerksProgramMgr* instance();
 
     std::vector<WorldPackets::PerksProgram::PerksVendorItem> const& GetCurrentVendorItems();
+
+    // Returns the currently-offered vendor item (with its resolved collectible) for a purchase
+    // request, or nullptr if the id is not part of the active listing.
+    WorldPackets::PerksProgram::PerksVendorItem const* GetVendorItem(int32 vendorItemId);
+
     void Reload() { _loaded = false; }
 
 private:
