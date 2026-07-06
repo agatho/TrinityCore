@@ -132,6 +132,11 @@ public:
     bool UpdateAccountToys(uint32 itemId, bool isFavourite, bool hasFanfare);
     bool HasToy(uint32 itemId) const { return _toys.contains(itemId); }
 
+    // Account-wide AccountStore purchases (which AccountStoreItem IDs this Battle.net account owns)
+    void LoadAccountStorePurchases(PreparedQueryResult result);
+    bool HasAccountStoreItem(uint32 accountStoreItemId) const { return _accountStoreItems.contains(accountStoreItemId); }
+    bool AddAccountStorePurchase(uint32 accountStoreItemId);
+
     ToyBoxContainer const& GetAccountToys() const { return _toys; }
 
     void OnItemAdded(Item* item);
@@ -216,6 +221,7 @@ private:
     std::unique_ptr<boost::dynamic_bitset<uint32>> _transmogIllusions;
     Trinity::Containers::FlatSet<int32> _transmogOutfits;
     WarbandSceneCollectionContainer _warbandScenes;
+    std::unordered_set<uint32> _accountStoreItems;
 };
 
 #endif // TRINITYCORE_COLLECTION_MGR_H

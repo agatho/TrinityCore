@@ -106,6 +106,11 @@ namespace WorldPackets
         class GuildGetAchievementMembers;
     }
 
+    namespace AccountStore
+    {
+        class AccountStoreBeginPurchaseOrRefund;
+    }
+
     namespace AdventureJournal
     {
         class AdventureJournalOpenQuest;
@@ -1235,6 +1240,8 @@ class TC_GAME_API WorldSession
         void Handle_NULL(WorldPackets::Null& null);          // not used
         void Handle_EarlyProccess(WorldPackets::Null& null); // just mark packets processed in WorldSocket::ReadDataHandler
         void LogUnprocessedTail(WorldPacket const* packet);
+
+        void HandleAccountStoreBeginPurchaseOrRefund(WorldPackets::AccountStore::AccountStoreBeginPurchaseOrRefund& packet);
 
         void HandleCharEnum(CharacterDatabaseQueryHolder const& holder);
         void HandleCharEnumOpcode(WorldPackets::Character::EnumCharacters& /*enumCharacters*/);

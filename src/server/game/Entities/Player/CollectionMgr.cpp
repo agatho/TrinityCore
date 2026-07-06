@@ -18,6 +18,7 @@
 #include "CollectionMgr.h"
 #include "CollectionPackets.h"
 #include "DatabaseEnv.h"
+#include "GameTime.h"
 #include "DB2Stores.h"
 #include "Item.h"
 #include "Log.h"
@@ -173,6 +174,31 @@ void CollectionMgr::SaveAccountToys(LoginDatabaseTransaction trans)
 bool CollectionMgr::UpdateAccountToys(uint32 itemId, bool isFavourite, bool hasFanfare)
 {
     return _toys.insert(ToyBoxContainer::value_type(itemId, GetToyFlags(isFavourite, hasFanfare))).second;
+}
+
+void CollectionMgr::LoadAccountStorePurchases(PreparedQueryResult result)
+{
+    if (!result)
+        return;
+
+    do
+    {
+        Field* fields = result->Fetch();
+        _accountStoreItems.insert(fields[0].GetUInt32());
+    } while (result->NextRow());
+}
+
+bool CollectionMgr::AddAccountStorePurchase(uint32 accountStoreItemId)
+{
+    if (!_accountStoreItems.insert(accountStoreItemId).second)
+        return false;
+
+    LoginDatabasePreparedStatement* stmt = LoginDatabase.GetPreparedStatement(LOGIN_INS_ACCOUNT_STORE_PURCHASE);
+    stmt->setUInt32(0, _owner->GetBattlenetAccountId());
+    stmt->setUInt32(1, accountStoreItemId);
+    stmt->setUInt32(2, uint32(GameTime::GetGameTime()));
+    LoginDatabase.Execute(stmt);
+    return true;
 }
 
 void CollectionMgr::ToySetFavorite(uint32 itemId, bool favorite)
