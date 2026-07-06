@@ -73,6 +73,41 @@ static void WriteRecruit(ByteBuffer& data, RafRecruit const& recruit)
     data.append(recruit.Name.data(), nameLen);   // Name bytes (no terminator on the wire)
 }
 
+void RafClaimActivityReward::Read()
+{
+    _worldPacket >> FieldA;
+    _worldPacket >> ActivityID;
+}
+
+WorldPacket const* ClaimRafRewardResponse::Write()
+{
+    _worldPacket << uint32(Result);
+    _worldPacket << uint32(0);   // RecruitCount (no per-claim recruit deltas)
+    _worldPacket << uint8(0);    // packed 3-bit enum @ bits 5-7
+
+    // nested block sub_7FF729195730 (8 x uint32 + 1 packed byte), zero form
+    for (int i = 0; i < 8; ++i)
+        _worldPacket << uint32(0);
+    _worldPacket << uint8(0);
+
+    // nested block sub_7FF729139200 (uint32, uint64, uint64, uint32 count1, uint32, uint32, uint32,
+    // uint32 count2, uint32, uint64, count1 x uint32, count2 x uint32, uint8 presence), zero form
+    _worldPacket << uint32(0);
+    _worldPacket << uint64(0);
+    _worldPacket << uint64(0);
+    _worldPacket << uint32(0);   // count1
+    _worldPacket << uint32(0);
+    _worldPacket << uint32(0);
+    _worldPacket << uint32(0);
+    _worldPacket << uint32(0);   // count2
+    _worldPacket << uint32(0);
+    _worldPacket << uint64(0);
+    _worldPacket << uint8(0);    // presence
+
+    // no recruit descriptors
+    return &_worldPacket;
+}
+
 WorldPacket const* RafAccountInfo::Write()
 {
     // Byte-exact top-level layout (client body sub_7FF7290B46F0). The activity/reward vectors and optional blocks

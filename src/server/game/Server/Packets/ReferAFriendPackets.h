@@ -105,6 +105,32 @@ namespace WorldPackets
             uint64 RecruitId = 0;
         };
 
+        // CMSG_RAF_CLAIM_ACTIVITY_REWARD (0x3B009D) wire (client serializer sub_7FF729152B70): { uint64 FieldA, uint32 ActivityID }.
+        class RafClaimActivityReward final : public ClientPacket
+        {
+        public:
+            explicit RafClaimActivityReward(WorldPacket&& packet) : ClientPacket(CMSG_RAF_CLAIM_ACTIVITY_REWARD, std::move(packet)) { }
+
+            void Read() override;
+
+            uint64 FieldA = 0;
+            uint32 ActivityID = 0;
+        };
+
+        // SMSG_CLAIM_RAF_REWARD_RESPONSE (0x4202EA) wire (client deserializer sub_7FF7290B4C60):
+        //   uint32 Result, uint32 RecruitCount, uint8 (bits 5-7 = a 3-bit enum), <sub_195730>, <sub_139200>,
+        //   RecruitCount x <recruit descriptor>. The two nested blocks + recruit list are emitted in their
+        //   zero form for a plain claim result (no per-claim recruit deltas needed).
+        class ClaimRafRewardResponse final : public ServerPacket
+        {
+        public:
+            ClaimRafRewardResponse() : ServerPacket(SMSG_CLAIM_RAF_REWARD_RESPONSE) { }
+
+            WorldPacket const* Write() override;
+
+            uint32 Result = 0;
+        };
+
         // SMSG_RAF_ACCOUNT_INFO (0x4202E9) wire (client deserializer body sub_7FF7290B46F0):
         //   uint32 Field20, uint32 Count1, uint32 Count2, uint32 Count3(recruits), uint32 Count4,
         //   Count1 x {6 x uint32}, uint8 presence(bit7=FieldBit24, bit6=optBlockA, bit5=optBlockB),

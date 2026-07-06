@@ -161,6 +161,18 @@ struct AreaGroupMemberLoadInfo
     static constexpr DB2LoadInfo Instance{ Fields, 3, &AreaGroupMemberMeta::Instance, HOTFIX_SEL_AREA_GROUP_MEMBER };
 };
 
+struct RafActivityLoadInfo
+{
+    static constexpr DB2FieldMeta Fields[3] =
+    {
+        { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "CriteriaTreeID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "RewardQuestID" },
+    };
+
+    static constexpr DB2LoadInfo Instance{ Fields, 3, &RafActivityMeta::Instance, HOTFIX_SEL_RAF_ACTIVITY };
+};
+
 struct AreaTableLoadInfo
 {
     static constexpr DB2FieldMeta Fields[28] =

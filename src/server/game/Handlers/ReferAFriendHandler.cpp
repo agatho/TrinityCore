@@ -18,7 +18,11 @@
 #include "WorldSession.h"
 #include "ReferAFriendPackets.h"
 #include "DatabaseEnv.h"
+#include "DB2Stores.h"
+#include "ObjectMgr.h"
+#include "Player.h"
 #include "QueryCallback.h"
+#include "QuestDef.h"
 #include <string>
 
 // Builds and sends SMSG_RAF_ACCOUNT_INFO for this account, listing the accounts it has recruited. The recruit list
@@ -67,4 +71,68 @@ void WorldSession::HandleRafGenerateRecruitmentLink(WorldPackets::RaF::RafGenera
     LoginDatabase.Execute(stmt);
 
     SendRafAccountInfo(packet.Field);
+}
+
+void WorldSession::SendClaimRafRewardResult(uint32 result)
+{
+    WorldPackets::RaF::ClaimRafRewardResponse response;
+    response.Result = result;
+    SendPacket(response.Write());
+}
+
+// Claims a specific Recruit-A-Friend reward activity. Each activity maps (via RafActivity.db2) to a RewardQuest
+// that delivers the actual reward, so we grant that quest's rewards through the normal quest reward path. A claim
+// is honoured only when the account has recruited someone and has not already claimed this activity - a
+// server-authoritable gate. (The exact Blizzlike gate is a recruited-months threshold evaluated from the
+// CriteriaTree; those months are external subscription data the server lacks offline, so recruit-count stands in
+// for it here.)
+void WorldSession::HandleRafClaimActivityReward(WorldPackets::RaF::RafClaimActivityReward& packet)
+{
+    RafActivityEntry const* activity = sRafActivityStore.LookupEntry(packet.ActivityID);
+    if (!activity)
+    {
+        SendClaimRafRewardResult(1);   // unknown activity (Result != 0 -> failure; exact codes unconfirmed)
+        return;
+    }
+
+    uint32 accountId = GetBattlenetAccountId();
+    uint32 activityId = packet.ActivityID;
+    int32 rewardQuestId = activity->RewardQuestID;
+
+    LoginDatabasePreparedStatement* stmt = LoginDatabase.GetPreparedStatement(LOGIN_SEL_ACCOUNT_RAF_CLAIM_ELIGIBILITY);
+    stmt->setUInt32(0, accountId);   // recruiterAccountId (recruit count)
+    stmt->setUInt32(1, accountId);   // accountId (already-claimed check)
+    stmt->setUInt32(2, activityId);
+
+    GetQueryProcessor().AddCallback(LoginDatabase.AsyncQuery(stmt).WithPreparedCallback([this, accountId, activityId, rewardQuestId](PreparedQueryResult result)
+    {
+        uint64 recruitCount = 0;
+        uint64 alreadyClaimed = 0;
+        if (result)
+        {
+            Field* fields = result->Fetch();
+            recruitCount = fields[0].GetUInt64();
+            alreadyClaimed = fields[1].GetUInt64();
+        }
+
+        if (alreadyClaimed > 0 || recruitCount < 1)
+        {
+            SendClaimRafRewardResult(1);   // already claimed, or not eligible
+            return;
+        }
+
+        Player* player = GetPlayer();
+        if (!player)
+            return;
+
+        if (Quest const* quest = sObjectMgr->GetQuestTemplate(uint32(rewardQuestId)))
+            player->RewardQuest(quest, LootItemType::Item, 0, player, false);
+
+        LoginDatabasePreparedStatement* ins = LoginDatabase.GetPreparedStatement(LOGIN_INS_ACCOUNT_RAF_CLAIMED);
+        ins->setUInt32(0, accountId);
+        ins->setUInt32(1, activityId);
+        LoginDatabase.Execute(ins);
+
+        SendClaimRafRewardResult(0);   // success
+    }));
 }

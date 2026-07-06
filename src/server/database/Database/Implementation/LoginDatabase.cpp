@@ -160,6 +160,8 @@ void LoginDatabaseConnection::DoPrepareStatements()
     // Account wide toys
     PrepareStatement(LOGIN_SEL_ACCOUNT_RAF_RECRUITS, "SELECT accountId, recruitName FROM battlenet_account_recruitment WHERE recruiterAccountId = ?", CONNECTION_ASYNC);
     PrepareStatement(LOGIN_INS_ACCOUNT_RAF_CODE, "INSERT INTO battlenet_account_recruitment (accountId, recruitmentCode) VALUES (?, ?) ON DUPLICATE KEY UPDATE recruitmentCode = VALUES(recruitmentCode)", CONNECTION_ASYNC);
+    PrepareStatement(LOGIN_SEL_ACCOUNT_RAF_CLAIM_ELIGIBILITY, "SELECT (SELECT COUNT(*) FROM battlenet_account_recruitment WHERE recruiterAccountId = ?) AS recruitCount, (SELECT COUNT(*) FROM battlenet_account_raf_claimed WHERE accountId = ? AND activityId = ?) AS claimed", CONNECTION_ASYNC);
+    PrepareStatement(LOGIN_INS_ACCOUNT_RAF_CLAIMED, "INSERT IGNORE INTO battlenet_account_raf_claimed (accountId, activityId) VALUES (?, ?)", CONNECTION_ASYNC);
     PrepareStatement(LOGIN_SEL_ACCOUNT_TOYS, "SELECT itemId, isFavourite, hasFanfare FROM battlenet_account_toys WHERE accountId = ?", CONNECTION_ASYNC);
     PrepareStatement(LOGIN_REP_ACCOUNT_TOYS, "REPLACE INTO battlenet_account_toys (accountId, itemId, isFavourite, hasFanfare) VALUES (?, ?, ?, ?)", CONNECTION_ASYNC);
 
