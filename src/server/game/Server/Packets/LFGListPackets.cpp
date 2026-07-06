@@ -20,30 +20,72 @@
 
 namespace WorldPackets::LFGList
 {
-// The published-listing parameters. Byte-aligned per the extracted deserialize layout; the trailing comment uses
-// a bit-length prefix. NEEDS-SNIFF: a few small header fields are bit-packed in the client serializer (2/3-bit
-// widths) and the exact comment length-prefix width is not offline-confirmable — verified structurally, values to
-// be confirmed by a 12.0.7 capture (see c:\dumps\LFG_LIST_WIRE_68275.md). The activity/item-level fields the server
-// filters on are read exactly.
+// The published-listing parameters. RESOLVED from the 12.0.7.68275 premade-groups sniff + the client JOIN
+// serializer (sub_7FF72914ABE0) + the generated Lua API doc (LfgListingCreateData). The descriptor is BIT-PACKED:
+// a bit-packed header (5-bit trailing-vector count; three bit-packed string lengths of 10/11/8 bits; four boolean
+// flags; and presence bits for the nilable numeric fields), then FlushBits, then the member-requirement block, the
+// fixed activity fields, the trailing uint32 vector, the three strings, and the present optional fields. Only
+// ActivityID + item-level drive server filtering; the rest are pass-through echo. Reads are guarded against
+// over-run (the descriptor is variable-length and pass-through, so a malformed tail is tolerated, never fatal).
+// Full layout + bit-widths: c:\dumps\LFG_LIST_WIRE_68275.md.
 static ByteBuffer& operator>>(ByteBuffer& data, ListingDescriptor& d)
 {
-    data >> d.ActivityGroupCategory >> d.ActivityGroupId;
-    data >> d.PlaystyleCategory >> d.Playstyle;
-    data >> d.QuestCategory >> d.QuestId >> d.Field6 >> d.Field7;
-    data >> d.SubActivityCategory >> d.SubActivity;
-    for (uint8& flag : d.Flags)
-        data >> flag;
-    data >> d.ActivityID;
-    data >> d.RequiredRating;
-    data >> d.Field2;
-    data >> d.RequiredItemLevel;
-    data >> d.RequiredHonorLevel;
-    data >> d.Field3;
-    data >> d.Field4;
-    data >> d.Field5;
-    data >> SizedString::BitsSize<10>(d.Comment);
-    data.ResetBitPos();
-    data >> SizedString::Data(d.Comment);
+    auto remaining = [&]() -> std::size_t { return data.size() - data.rpos(); };
+
+    // --- bit-packed header (client bit-writer, MSB-first) ---
+    uint32 vectorCount = data.ReadBits(5);      // sub_7FF729064C20: count of the trailing uint32 vector
+    uint32 str0Len = data.ReadBits(10);         // string @0x40 length
+    uint32 str1Len = data.ReadBits(11);         // string @0x241 length
+    uint32 str2Len = data.ReadBits(8);          // string @0x642 length ("crate" in the sniff)
+    d.IsAutoAccept = data.ReadBits(1) != 0;     // presence/flag bits (client offsets 0x6c3..0x703)
+    d.IsCrossFactionListing = data.ReadBits(1) != 0;
+    d.IsPrivateGroup = data.ReadBits(1) != 0;
+    d.NewPlayerFriendly = data.ReadBits(1) != 0;
+    bool hasQuestId = data.ReadBits(1) != 0;    // 0x6cc -> uint32 @0x6c8
+    bool hasOpt1 = data.ReadBits(1) != 0;       // 0x6f4 -> uint32 @0x6f0
+    bool hasOpt2 = data.ReadBits(1) != 0;       // 0x6fc -> uint32 @0x6f8
+    bool hasOpt3 = data.ReadBits(1) != 0;       // 0x701 -> uint8  @0x700
+    data.ReadBits(1);                           // 0x703 standalone flag (unused server-side)
+    data.ResetBitPos();                         // FlushBits (sub_7FF729064E60)
+
+    // --- member-requirement block (nested sub_7FF729167840) ---
+    data >> d.HeaderFloat0 >> d.HeaderFloat1;
+    uint32 memberCount = 0;
+    data >> memberCount;
+    if (memberCount <= remaining() / 0x11)      // 0x11 = min bytes per entry; guard against a bad count
+    {
+        d.MemberRequirements.resize(memberCount);
+        for (ListingMemberRequirement& m : d.MemberRequirements)
+        {
+            data >> m.Field0 >> m.Field1 >> m.Field2 >> m.Field3 >> m.Field4;
+            m.Flag = data.ReadBits(1) != 0;
+            data.ResetBitPos();
+        }
+    }
+
+    // --- fixed activity fields ---
+    data >> d.ActivityID;               // uint32 @0x38 (GroupFinderActivity id)
+    data >> d.RequiredDungeonScore;     // float  @0x3c
+    data >> d.TrailingByte;             // uint8  @0x702
+
+    // --- trailing uint32 vector ---
+    if (vectorCount <= remaining() / 4)
+    {
+        d.ActivityIDs.resize(vectorCount);
+        for (uint32& v : d.ActivityIDs)
+            data >> v;
+    }
+
+    // --- string data (order matches the serializer: @0x40, @0x241, @0x642) ---
+    if (str0Len <= remaining()) d.Name.assign(data.ReadString(str0Len));
+    if (str1Len <= remaining()) d.VoiceChat.assign(data.ReadString(str1Len));
+    if (str2Len <= remaining()) d.Comment.assign(data.ReadString(str2Len));
+
+    // --- present optional (nilable) numeric fields ---
+    if (hasQuestId && remaining() >= 4) { uint32 v; data >> v; d.QuestID = v; }
+    if (hasOpt1 && remaining() >= 4)    { uint32 v; data >> v; d.OptionalValue1 = v; }
+    if (hasOpt2 && remaining() >= 4)    { uint32 v; data >> v; d.OptionalValue2 = v; }
+    if (hasOpt3 && remaining() >= 1)    { uint8 v;  data >> v; d.OptionalValue3 = v; }
     return data;
 }
 

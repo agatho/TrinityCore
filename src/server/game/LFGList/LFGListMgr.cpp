@@ -17,6 +17,7 @@
 
 #include "LFGListMgr.h"
 #include "Config.h"
+#include "DB2Stores.h"
 #include "GameTime.h"
 #include "LFGListPackets.h"
 #include "ObjectAccessor.h"
@@ -227,9 +228,12 @@ std::vector<LFGList::Listing const*> LFGListMgr::Search(uint8 category, uint8 ac
     for (auto const& [id, listing] : _listings)
     {
         WorldPackets::LFGList::ListingDescriptor const& d = listing.Descriptor;
-        if (category && d.ActivityGroupCategory != category)
+        // Category + activity group are derived from the listing's activity (GroupFinderActivity.db2), which is the
+        // authoritative source — the descriptor carries the ActivityID, not the group ids.
+        GroupFinderActivityEntry const* activity = sGroupFinderActivityStore.LookupEntry(d.ActivityID);
+        if (category && (!activity || activity->GroupFinderCategoryID != category))
             continue;
-        if (activityGroup && d.ActivityGroupId != activityGroup)
+        if (activityGroup && (!activity || activity->GroupFinderActivityGrpID != activityGroup))
             continue;
         if (activityId && d.ActivityID != activityId)
             continue;

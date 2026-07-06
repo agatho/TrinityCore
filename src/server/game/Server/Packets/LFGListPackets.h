@@ -21,6 +21,7 @@
 #include "Packet.h"
 #include "LFGPacketsCommon.h"       // WorldPackets::LFG::RideTicket (reused as the listing/application id)
 #include "ObjectGuid.h"
+#include "Optional.h"
 #include <array>
 #include <string>
 #include <vector>
@@ -29,33 +30,49 @@ namespace WorldPackets
 {
     namespace LFGList
     {
+        // Playstyle enums (client Enum.LFGEntryPlaystyle / LFGEntryGeneralPlaystyle, from the generated API docs).
+        enum class LFGEntryPlaystyle : uint8 { None = 0, Standard = 1, Casual = 2, Hardcore = 3 };
+        enum class LFGEntryGeneralPlaystyle : uint8 { None = 0, Learning = 1, FunRelaxed = 2, FunSerious = 3, Expert = 4 };
+
+        // One required-member score entry inside a listing (nested block, client serializer sub_7FF729167840).
+        struct ListingMemberRequirement
+        {
+            uint32 Field0 = 0;
+            float Field1 = 0.0f;
+            uint32 Field2 = 0;
+            uint32 Field3 = 0;
+            uint8 Field4 = 0;
+            bool Flag = false;
+        };
+
         // The parameters a leader sets when publishing (JOIN) or editing (UPDATE_REQUEST) a premade listing.
-        // Wire (client serializer @68275, byte-aligned): the fixed activity/criteria block + a trailing comment.
-        // Most fields are pass-through listing params that the finder echoes back to searchers; only ActivityID and
-        // the item-level requirement drive server-side filtering. Field naming is best-effort from the group-finder
-        // domain; the byte layout is exact (see c:\dumps\LFG_LIST_WIRE_68275.md).
+        // RESOLVED against the 12.0.7.68275 premade-groups sniff + the client JOIN serializer (sub_7FF72914ABE0) +
+        // the generated Lua API doc (LfgListingCreateData / LfgEntryData). The descriptor is BIT-PACKED, not byte-
+        // aligned: a bit-packed header (activity group 5b, three bit-packed string lengths, member-requirement count,
+        // and the boolean/optional presence bits) is flushed, then the member-requirement block, the fixed activity/
+        // criteria fields, the string data, and the conditional (nilable) numeric fields follow. Full layout:
+        // c:\dumps\LFG_LIST_WIRE_68275.md. Field names are authoritative (Lua); only ActivityID + RequiredItemLevel
+        // drive server-side filtering, the rest are pass-through echo to searchers.
         struct ListingDescriptor
         {
-            uint8 ActivityGroupCategory = 0;    // sub_7FF729064C20 {u8,u8}
-            uint8 ActivityGroupId = 0;
-            uint8 PlaystyleCategory = 0;
-            uint8 Playstyle = 0;
-            uint8 QuestCategory = 0;            // sub_7FF7290649E0 {u8,u8}
-            uint8 QuestId = 0;
-            uint8 Field6 = 0;
-            uint8 Field7 = 0;
-            uint8 SubActivityCategory = 0;     // sub_7FF729064AA0 {u8,u8}
-            uint8 SubActivity = 0;
-            std::array<uint8, 11> Flags = { };  // private / autoaccept / voice / role-wants etc. (pass-through)
-            uint32 ActivityID = 0;              // GroupFinderActivity.db2 id (search/validation key)
-            float RequiredRating = 0.0f;
-            uint8 Field2 = 0;
-            uint32 RequiredItemLevel = 0;
-            uint32 RequiredHonorLevel = 0;
-            uint32 Field3 = 0;
-            uint32 Field4 = 0;
-            uint8 Field5 = 0;
-            std::string Comment;                // listing title / comment
+            float HeaderFloat0 = 0.0f;          // nested block leading floats (sub_7FF729167840)
+            float HeaderFloat1 = 0.0f;
+            std::vector<ListingMemberRequirement> MemberRequirements;
+            uint32 ActivityID = 0;              // GroupFinderActivity.db2 id (u32 @0x38; search/validation key)
+            float RequiredDungeonScore = 0.0f;  // float @0x3c
+            uint8 TrailingByte = 0;             // u8 @0x702
+            std::vector<uint32> ActivityIDs;    // trailing uint32 vector (count from the 5-bit header field)
+            bool IsAutoAccept = false;          // presence bits (client offsets 0x6c3..0x6c6)
+            bool IsCrossFactionListing = false;
+            bool IsPrivateGroup = false;
+            bool NewPlayerFriendly = false;
+            std::string Name;                   // bit-length-prefixed strings (client offsets 0x40 / 0x241 / 0x642)
+            std::string VoiceChat;
+            std::string Comment;                // listing title / comment ("crate" in the sniff)
+            Optional<uint32> QuestID;           // nilable numeric fields, written only when their presence bit is set
+            Optional<uint32> OptionalValue1;
+            Optional<uint32> OptionalValue2;
+            Optional<uint8> OptionalValue3;
         };
 
         // The listing snapshot the server echoes to clients (UPDATE_STATUS / search rows). Mirrors ListingDescriptor

@@ -42,7 +42,7 @@ namespace
     {
         WorldPackets::LFGList::ListingDescriptor const& d = listing.Descriptor;
         info.ActivityID = d.ActivityID;
-        info.RequiredItemLevel = d.RequiredItemLevel;
+        info.RequiredItemLevel = d.OptionalValue1.value_or(0);   // nilable requiredItemLevel (LfgListingCreateData)
         info.Comment = d.Comment;
         if (Player* leader = ObjectAccessor::FindConnectedPlayer(listing.LeaderGuid))
             info.LeaderName = leader->GetName();
