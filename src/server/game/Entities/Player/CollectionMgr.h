@@ -151,6 +151,7 @@ public:
     void AddPerksProgramPurchase(int32 perksVendorItemId, int32 price, int32 mountId, int32 toyId);
     bool RemovePerksProgramPurchase(int32 perksVendorItemId);
     PerksProgramPurchaseData const* GetPerksProgramPurchase(int32 perksVendorItemId) const;
+    std::unordered_map<int32, PerksProgramPurchaseData> const& GetPerksProgramPurchases() const { return _perksPurchases; }
 
     void OnItemAdded(Item* item);
 

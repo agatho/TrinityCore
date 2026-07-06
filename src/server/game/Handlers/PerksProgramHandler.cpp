@@ -64,6 +64,24 @@ static bool PerksProgramPurchaseItem(WorldSession* session, Player* player, int3
 // A refund is only honoured when we have a purchase record (so a collectible obtained elsewhere cannot be
 // "refunded") and when the reward is cleanly revocable. Appearance/transmog rewards are append-only in the
 // account collection and therefore stay non-refundable rather than returning currency while keeping the look.
+void WorldSession::HandlePerksProgramGetRecentPurchases(WorldPackets::PerksProgram::PerksProgramGetRecentPurchases& /*packet*/)
+{
+    CollectionMgr* collectionMgr = GetCollectionMgr();
+
+    WorldPackets::PerksProgram::ResponsePerkRecentPurchases response;
+    for (auto const& [vendorItemId, data] : collectionMgr->GetPerksProgramPurchases())
+    {
+        WorldPackets::PerksProgram::ResponsePerkRecentPurchases::RecentPurchase& entry = response.Purchases.emplace_back();
+        entry.PerksVendorItemID = vendorItemId;
+        entry.PurchaseTime = data.PurchaseTime;
+        // A purchase is refundable while its reward is cleanly revocable (a mount or toy); appearance/transmog
+        // rewards are append-only in the account collection, matching the refund handler's policy.
+        entry.Refundable = (data.MountID != 0 || data.ToyID != 0);
+    }
+
+    SendPacket(response.Write());
+}
+
 void WorldSession::HandlePerksProgramRequestRefund(WorldPackets::PerksProgram::PerksProgramRequestRefund& packet)
 {
     Player* player = GetPlayer();

@@ -46,6 +46,34 @@ public:
     ObjectGuid VendorGUID;
 };
 
+// CMSG_PERKS_PROGRAM_GET_RECENT_PURCHASES wire (12.0.7.68275, client serializer sub_7FF7291E0B20): no payload.
+class PerksProgramGetRecentPurchases final : public ClientPacket
+{
+public:
+    explicit PerksProgramGetRecentPurchases(WorldPacket&& packet) : ClientPacket(CMSG_PERKS_PROGRAM_GET_RECENT_PURCHASES, std::move(packet)) { }
+
+    void Read() override { }
+};
+
+// SMSG_RESPONSE_PERK_RECENT_PURCHASES wire (12.0.7.68275, client deserializer sub_7FF72911D110 case 0x5E0004):
+//   uint32 Count, then Count x { uint32 PerksVendorItemID, uint64 PurchaseTime, uint8 (bit7 = Refundable) }.
+class ResponsePerkRecentPurchases final : public ServerPacket
+{
+public:
+    ResponsePerkRecentPurchases() : ServerPacket(SMSG_RESPONSE_PERK_RECENT_PURCHASES) { }
+
+    WorldPacket const* Write() override;
+
+    struct RecentPurchase
+    {
+        int32 PerksVendorItemID = 0;
+        uint64 PurchaseTime = 0;   // unix seconds of the purchase
+        bool Refundable = false;   // whether this purchase can still be refunded (cleanly-revocable reward)
+    };
+
+    std::vector<RecentPurchase> Purchases;
+};
+
 // CMSG_PERKS_PROGRAM_REQUEST_REFUND wire (12.0.7.68275, from the client serializer sub_7FF72914B8F0):
 //   uint32 PerksVendorItemID, PackedGUID VendorGUID. Byte-identical to the purchase request.
 class PerksProgramRequestRefund final : public ClientPacket

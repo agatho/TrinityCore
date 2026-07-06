@@ -31,6 +31,18 @@ void PerksProgramRequestRefund::Read()
     _worldPacket >> VendorGUID;
 }
 
+WorldPacket const* ResponsePerkRecentPurchases::Write()
+{
+    _worldPacket << uint32(Purchases.size());
+    for (RecentPurchase const& purchase : Purchases)
+    {
+        _worldPacket << int32(purchase.PerksVendorItemID);
+        _worldPacket << uint64(purchase.PurchaseTime);
+        _worldPacket << uint8(purchase.Refundable ? 0x80 : 0x00);   // client reads bit7
+    }
+    return &_worldPacket;
+}
+
 void PerksProgramRequestCartCheckout::Read()
 {
     uint32 itemCount;
