@@ -25,6 +25,12 @@ void PerksProgramRequestPurchase::Read()
     _worldPacket >> VendorGUID;
 }
 
+void PerksProgramRequestRefund::Read()
+{
+    _worldPacket >> PerksVendorItemID;
+    _worldPacket >> VendorGUID;
+}
+
 void PerksProgramRequestCartCheckout::Read()
 {
     uint32 itemCount;

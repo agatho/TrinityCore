@@ -46,6 +46,19 @@ public:
     ObjectGuid VendorGUID;
 };
 
+// CMSG_PERKS_PROGRAM_REQUEST_REFUND wire (12.0.7.68275, from the client serializer sub_7FF72914B8F0):
+//   uint32 PerksVendorItemID, PackedGUID VendorGUID. Byte-identical to the purchase request.
+class PerksProgramRequestRefund final : public ClientPacket
+{
+public:
+    explicit PerksProgramRequestRefund(WorldPacket&& packet) : ClientPacket(CMSG_PERKS_PROGRAM_REQUEST_REFUND, std::move(packet)) { }
+
+    void Read() override;
+
+    int32 PerksVendorItemID = 0;
+    ObjectGuid VendorGUID;
+};
+
 // CMSG_PERKS_PROGRAM_REQUEST_CART_CHECKOUT wire (12.0.7.68275, from the client serializer sub_7FF72914B860):
 //   uint32 ItemCount, PackedGUID VendorGUID, uint32 PerksVendorItemIDs[ItemCount].
 class PerksProgramRequestCartCheckout final : public ClientPacket

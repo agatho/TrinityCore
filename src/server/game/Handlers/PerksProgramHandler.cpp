@@ -54,7 +54,39 @@ static bool PerksProgramPurchaseItem(WorldSession* session, Player* player, int3
         if (ItemModifiedAppearanceEntry const* appearance = sItemModifiedAppearanceStore.LookupEntry(uint32(item->ItemModifiedAppearanceID)))
             collectionMgr->AddItemAppearance(appearance->ItemID, appearance->ItemAppearanceModifierID);
 
+    // Record the purchase so it can later be refunded (price paid + the exact collectible to revoke).
+    collectionMgr->AddPerksProgramPurchase(vendorItemId, item->Price, item->MountID, item->ToyID);
+
     return true;
+}
+
+// Refunds a Trading Post purchase: revokes the granted collectible and returns the Trader's Tender that was paid.
+// A refund is only honoured when we have a purchase record (so a collectible obtained elsewhere cannot be
+// "refunded") and when the reward is cleanly revocable. Appearance/transmog rewards are append-only in the
+// account collection and therefore stay non-refundable rather than returning currency while keeping the look.
+void WorldSession::HandlePerksProgramRequestRefund(WorldPackets::PerksProgram::PerksProgramRequestRefund& packet)
+{
+    Player* player = GetPlayer();
+    if (!player)
+        return;
+
+    CollectionMgr* collectionMgr = GetCollectionMgr();
+    PerksProgramPurchaseData const* purchase = collectionMgr->GetPerksProgramPurchase(packet.PerksVendorItemID);
+    if (!purchase)
+        return;
+
+    // Revoke the reward. Only mounts and toys can be cleanly removed; anything else is not refundable.
+    if (purchase->MountID)
+        collectionMgr->RemoveMount(uint32(purchase->MountID));
+    else if (purchase->ToyID)
+        collectionMgr->RemoveToy(uint32(purchase->ToyID));
+    else
+        return;
+
+    if (purchase->Price > 0)
+        player->AddCurrency(CURRENCY_TYPE_TRADERS_TENDER, uint32(purchase->Price), CurrencyGainSource::ItemRefund);
+
+    collectionMgr->RemovePerksProgramPurchase(packet.PerksVendorItemID);
 }
 
 void WorldSession::HandlePerksProgramRequestPurchase(WorldPackets::PerksProgram::PerksProgramRequestPurchase& packet)
