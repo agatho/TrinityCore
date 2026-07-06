@@ -692,6 +692,7 @@ namespace WorldPackets
         class GetRafAccountInfo;
         class RafGenerateRecruitmentLink;
         class RafClaimActivityReward;
+        class RafClaimNextReward;
     }
 
     namespace Toy
@@ -1297,6 +1298,8 @@ class TC_GAME_API WorldSession
         void HandleGetRafAccountInfo(WorldPackets::RaF::GetRafAccountInfo& packet);
         void HandleRafGenerateRecruitmentLink(WorldPackets::RaF::RafGenerateRecruitmentLink& packet);
         void HandleRafClaimActivityReward(WorldPackets::RaF::RafClaimActivityReward& packet);
+        void HandleRafClaimNextReward(WorldPackets::RaF::RafClaimNextReward& packet);
+        void ClaimRafActivity(uint32 activityId);
         void SendRafAccountInfo(uint32 field);
         void SendClaimRafRewardResult(uint32 result);
 

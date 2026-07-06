@@ -23,6 +23,7 @@
 #include "Player.h"
 #include "QueryCallback.h"
 #include "QuestDef.h"
+#include <set>
 #include <string>
 
 // Builds and sends SMSG_RAF_ACCOUNT_INFO for this account, listing the accounts it has recruited. The recruit list
@@ -80,15 +81,15 @@ void WorldSession::SendClaimRafRewardResult(uint32 result)
     SendPacket(response.Write());
 }
 
-// Claims a specific Recruit-A-Friend reward activity. Each activity maps (via RafActivity.db2) to a RewardQuest
-// that delivers the actual reward, so we grant that quest's rewards through the normal quest reward path. A claim
-// is honoured only when the account has recruited someone and has not already claimed this activity - a
+// Claims one Recruit-A-Friend reward activity. Each activity maps (via RafActivity.db2) to a RewardQuest that
+// delivers the actual reward, so we grant that quest's rewards through the normal quest reward path. A claim is
+// honoured only when the account has recruited someone and has not already claimed this activity - a
 // server-authoritable gate. (The exact Blizzlike gate is a recruited-months threshold evaluated from the
 // CriteriaTree; those months are external subscription data the server lacks offline, so recruit-count stands in
 // for it here.)
-void WorldSession::HandleRafClaimActivityReward(WorldPackets::RaF::RafClaimActivityReward& packet)
+void WorldSession::ClaimRafActivity(uint32 activityId)
 {
-    RafActivityEntry const* activity = sRafActivityStore.LookupEntry(packet.ActivityID);
+    RafActivityEntry const* activity = sRafActivityStore.LookupEntry(activityId);
     if (!activity)
     {
         SendClaimRafRewardResult(1);   // unknown activity (Result != 0 -> failure; exact codes unconfirmed)
@@ -96,7 +97,6 @@ void WorldSession::HandleRafClaimActivityReward(WorldPackets::RaF::RafClaimActiv
     }
 
     uint32 accountId = GetBattlenetAccountId();
-    uint32 activityId = packet.ActivityID;
     int32 rewardQuestId = activity->RewardQuestID;
 
     LoginDatabasePreparedStatement* stmt = LoginDatabase.GetPreparedStatement(LOGIN_SEL_ACCOUNT_RAF_CLAIM_ELIGIBILITY);
@@ -134,5 +134,50 @@ void WorldSession::HandleRafClaimActivityReward(WorldPackets::RaF::RafClaimActiv
         LoginDatabase.Execute(ins);
 
         SendClaimRafRewardResult(0);   // success
+    }));
+}
+
+// Claims a specific activity chosen by the client.
+void WorldSession::HandleRafClaimActivityReward(WorldPackets::RaF::RafClaimActivityReward& packet)
+{
+    ClaimRafActivity(packet.ActivityID);
+}
+
+// Claims the "next" reward: the lowest-id RafActivity this account has not yet claimed. The set of already-claimed
+// activities is an account-wide login-DB lookup, so it is resolved async before the activity is selected and run
+// through the same eligibility/grant path as an explicit claim.
+void WorldSession::HandleRafClaimNextReward(WorldPackets::RaF::RafClaimNextReward& /*packet*/)
+{
+    LoginDatabasePreparedStatement* stmt = LoginDatabase.GetPreparedStatement(LOGIN_SEL_ACCOUNT_RAF_CLAIMED_ALL);
+    stmt->setUInt32(0, GetBattlenetAccountId());
+
+    GetQueryProcessor().AddCallback(LoginDatabase.AsyncQuery(stmt).WithPreparedCallback([this](PreparedQueryResult result)
+    {
+        std::set<uint32> claimed;
+        if (result)
+        {
+            do
+            {
+                claimed.insert(result->Fetch()[0].GetUInt32());
+            } while (result->NextRow());
+        }
+
+        // Pick the lowest activity id not yet claimed.
+        uint32 next = 0;
+        for (RafActivityEntry const* activity : sRafActivityStore)
+        {
+            if (claimed.find(activity->ID) != claimed.end())
+                continue;
+            if (next == 0 || activity->ID < next)
+                next = activity->ID;
+        }
+
+        if (next == 0)
+        {
+            SendClaimRafRewardResult(1);   // nothing left to claim
+            return;
+        }
+
+        ClaimRafActivity(next);
     }));
 }
