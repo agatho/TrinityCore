@@ -143,6 +143,20 @@ void WorldSession::HandleRafClaimActivityReward(WorldPackets::RaF::RafClaimActiv
     ClaimRafActivity(packet.ActivityID);
 }
 
+// Removes a recruit from this account's recruit list. The client's RecruitId is a uint64 built from the recruit
+// descriptor's leading fields (Fields[0..1]); the low 32 bits are the recruit's account id (what we place in
+// Fields[0]). The unlink is scoped to this account's own recruits (recruiterAccountId = self) so it can only ever
+// clear the caller's own link, never another recruiter's; the recruit's own account/code row is left intact.
+void WorldSession::HandleRemoveRafRecruit(WorldPackets::RaF::RemoveRafRecruit& packet)
+{
+    LoginDatabasePreparedStatement* stmt = LoginDatabase.GetPreparedStatement(LOGIN_DEL_ACCOUNT_RAF_RECRUIT);
+    stmt->setUInt32(0, uint32(packet.RecruitId));   // recruit account id (low 32 bits)
+    stmt->setUInt32(1, GetBattlenetAccountId());     // must be one of my recruits
+    LoginDatabase.Execute(stmt);
+
+    SendRafAccountInfo(0);   // refresh the panel with the recruit removed
+}
+
 // Claims the "next" reward: the lowest-id RafActivity this account has not yet claimed. The set of already-claimed
 // activities is an account-wide login-DB lookup, so it is resolved async before the activity is selected and run
 // through the same eligibility/grant path as an explicit claim.

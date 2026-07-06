@@ -932,7 +932,7 @@ void OpcodeTable::InitializeClientOpcodes()
     DEFINE_HANDLER(CMSG_REFRESH_ENTITLEMENTS_ON_ORDER_COMPLETE,             STATUS_UNHANDLED, PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
     DEFINE_HANDLER(CMSG_REGISTER_FAST_LOGIN,                                STATUS_UNHANDLED, PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
     DEFINE_HANDLER(CMSG_REMOVE_NEW_ITEM,                                    STATUS_LOGGEDIN,  PROCESS_INPLACE,      &WorldSession::HandleRemoveNewItem);
-    DEFINE_HANDLER(CMSG_REMOVE_RAF_RECRUIT,                                 STATUS_UNHANDLED, PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
+    DEFINE_HANDLER(CMSG_REMOVE_RAF_RECRUIT,                                 STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleRemoveRafRecruit);
     DEFINE_HANDLER(CMSG_REORDER_CHARACTERS,                                 STATUS_AUTHED,    PROCESS_THREADUNSAFE, &WorldSession::HandleReorderCharacters);
     DEFINE_HANDLER(CMSG_REPAIR_ITEM,                                        STATUS_LOGGEDIN,  PROCESS_INPLACE,      &WorldSession::HandleRepairItemOpcode);
     DEFINE_HANDLER(CMSG_REPLACE_TROPHY,                                     STATUS_UNHANDLED, PROCESS_INPLACE,      &WorldSession::Handle_NULL);
