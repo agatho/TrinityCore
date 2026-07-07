@@ -293,6 +293,28 @@ namespace CraftingOrders
 
     ByteBuffer& operator<<(ByteBuffer& data, CraftingOrderData const& order);
 
+    // SMSG_CRAFTING_ORDER_UPDATE_STATE (0x42033D): pushed to the customer + crafter when an order changes state
+    // (claimed / released / rejected / cancelled / fulfilled) so open browse windows refresh live. Layout is
+    // sniff-resolved (C:\sniff\ingame-shop_ordersCrafting_professions.pkt, cross-checked against the same order in
+    // LIST_ORDERS_RESPONSE — OrderID/State/CrafterGUID/SkillLineAbilityID/OrderType all match byte-exact):
+    //   { u64 OrderID; u8 (0); u8 OrderState; u16 (0); PackedGUID CrafterGUID; u32 SkillLineAbilityID; u32 (0);
+    //     u8 OrderType; u32 Field30; u32 Field34 }.
+    // Field30/Field34 carry small per-order values in the capture (~96 / ~38) that map to none of the order's known
+    // fields (tip/cut/dates/quality); their semantics are not offline-resolvable, so they are sent 0 (honest unknown).
+    class CraftingOrderUpdateState final : public ServerPacket
+    {
+    public:
+        CraftingOrderUpdateState() : ServerPacket(SMSG_CRAFTING_ORDER_UPDATE_STATE, 8 + 1 + 1 + 2 + 9 + 4 + 4 + 1 + 4 + 4) { }
+
+        WorldPacket const* Write() override;
+
+        uint64 OrderID = 0;
+        uint8 OrderState = 0;
+        ObjectGuid CrafterGUID;
+        int32 SkillLineAbilityID = 0;
+        uint8 OrderType = 0;
+    };
+
     // SMSG_CRAFTING_ORDER_LIST_ORDERS_RESPONSE (0x420333, client reader sub_7FF7290B9350). Header layout is
     // SNIFF-CONFIRMED byte-exact (C:\sniff\ingame-shop_ordersCrafting_professions.pkt): { u8 ContextFlag; u32
     // recipeSummaryCount; u32 orderCount; u32 Field58; u32 Field5C; u8 packedBits2; u8 Field64; u32 Field6C;

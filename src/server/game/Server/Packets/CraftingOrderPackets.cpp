@@ -223,6 +223,22 @@ ByteBuffer& operator<<(ByteBuffer& data, CraftingOrderData const& order)
     return data;
 }
 
+WorldPacket const* CraftingOrderUpdateState::Write()
+{
+    _worldPacket << uint64(OrderID);
+    _worldPacket << uint8(0);                      // Field8 (observed 0)
+    _worldPacket << uint8(OrderState);
+    _worldPacket << uint16(0);                     // Field10 (observed 0)
+    _worldPacket << CrafterGUID;                   // PackedGuid
+    _worldPacket << int32(SkillLineAbilityID);
+    _worldPacket << uint32(0);                     // Field25 (observed 0)
+    _worldPacket << uint8(OrderType);
+    _worldPacket << uint32(0);                     // Field30 (unknown semantics -> 0)
+    _worldPacket << uint32(0);                     // Field34 (unknown semantics -> 0)
+
+    return &_worldPacket;
+}
+
 WorldPacket const* CraftingOrderListOrdersResponse::Write()
 {
     _worldPacket << uint8(ContextFlag);

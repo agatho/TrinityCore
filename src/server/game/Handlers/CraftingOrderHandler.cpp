@@ -21,8 +21,28 @@
 #include "DB2Stores.h"
 #include "GameTime.h"
 #include "Log.h"
+#include "ObjectAccessor.h"
 #include "Player.h"
 #include "World.h"
+
+// Pushes SMSG_CRAFTING_ORDER_UPDATE_STATE to the online parties interested in an order (its customer and, once
+// assigned, its crafter) so their open browse windows reflect the new state without a manual refresh.
+static void BroadcastCraftingOrderState(CraftingOrders::Order const& order)
+{
+    WorldPackets::CraftingOrders::CraftingOrderUpdateState update;
+    update.OrderID = order.OrderID;
+    update.OrderState = uint8(order.State);
+    update.CrafterGUID = order.CrafterGUID;
+    update.SkillLineAbilityID = order.SkillLineAbilityID;
+    update.OrderType = uint8(order.Type);
+    WorldPacket const* built = update.Write();
+
+    if (Player* customer = ObjectAccessor::FindConnectedPlayer(order.CustomerGUID))
+        customer->SendDirectMessage(built);
+    if (!order.CrafterGUID.IsEmpty() && order.CrafterGUID != order.CustomerGUID)
+        if (Player* crafter = ObjectAccessor::FindConnectedPlayer(order.CrafterGUID))
+            crafter->SendDirectMessage(built);
+}
 
 void WorldSession::HandleCraftingOrderCreate(WorldPackets::CraftingOrders::CraftingOrderCreate& packet)
 {
@@ -92,6 +112,10 @@ void WorldSession::HandleCraftingOrderClaim(WorldPackets::CraftingOrders::Crafti
                        : WorldPackets::CraftingOrders::CraftingOrderResult::CannotClaim;
     result.CraftingOrderID = packet.OrderID;
     SendPacket(result.Write());
+
+    if (ok)
+        if (CraftingOrders::Order const* order = sCraftingOrderMgr.GetOrder(packet.OrderID))
+            BroadcastCraftingOrderState(*order);
 }
 
 void WorldSession::HandleCraftingOrderCancel(WorldPackets::CraftingOrders::CraftingOrderCancel& packet)
@@ -122,6 +146,10 @@ void WorldSession::HandleCraftingOrderRelease(WorldPackets::CraftingOrders::Craf
                        : WorldPackets::CraftingOrders::CraftingOrderResult::CannotRelease;
     result.CraftingOrderID = packet.OrderID;
     SendPacket(result.Write());
+
+    if (ok)
+        if (CraftingOrders::Order const* order = sCraftingOrderMgr.GetOrder(packet.OrderID))
+            BroadcastCraftingOrderState(*order);
 }
 
 void WorldSession::HandleCraftingOrderReject(WorldPackets::CraftingOrders::CraftingOrderReject& packet)
@@ -137,6 +165,10 @@ void WorldSession::HandleCraftingOrderReject(WorldPackets::CraftingOrders::Craft
                        : WorldPackets::CraftingOrders::CraftingOrderResult::CannotReject;
     result.CraftingOrderID = packet.OrderID;
     SendPacket(result.Write());
+
+    if (ok)
+        if (CraftingOrders::Order const* order = sCraftingOrderMgr.GetOrder(packet.OrderID))
+            BroadcastCraftingOrderState(*order);
 }
 
 // Projects a stored order into the client's JamCraftingOrder wire form (customer-provided reagents + the
