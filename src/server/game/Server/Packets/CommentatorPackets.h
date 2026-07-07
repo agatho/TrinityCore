@@ -108,6 +108,20 @@ namespace WorldPackets
             std::vector<TrackedSpell> TrackedSpells;
         };
 
+        class CommentatorStartWargame final : public ClientPacket
+        {
+        public:
+            explicit CommentatorStartWargame(WorldPacket&& packet) : ClientPacket(CMSG_COMMENTATOR_START_WARGAME, std::move(packet)) { }
+
+            void Read() override;
+
+            uint32 ListID = 0;                               // BattlemasterList id (arena type)
+            uint32 TeamSize = 0;
+            bool TournamentRules = false;
+            std::string TeamOneCaptain;
+            std::string TeamTwoCaptain;
+        };
+
         // SMSG_COMMENTATOR_PLAYER_INFO - per-player match stats. Wire byte-exact from the client deserializer
         // sub_7FF7290A19D0 / the 152-byte record reader sub_7FF72906EFA0 (all fixed-width LE; guid PackedGuid).
         class CommentatorPlayerInfo final : public ServerPacket
