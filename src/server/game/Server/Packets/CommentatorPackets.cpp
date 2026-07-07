@@ -41,6 +41,62 @@ void WorldPackets::Commentator::CommentatorSpectate::Read()
     TargetName = _worldPacket.ReadString(_worldPacket.ReadBits(6));
 }
 
+void WorldPackets::Commentator::CommentatorGetPlayerInfo::Read()
+{
+    _worldPacket >> Field0;
+    _worldPacket >> Field1;
+    _worldPacket >> Field2;
+    Field3 = _worldPacket.ReadBit();
+}
+
+void WorldPackets::Commentator::CommentatorGetPlayerCooldowns::Read()
+{
+    _worldPacket >> Player;
+    uint32 count;
+    _worldPacket >> count;
+    TrackedSpells.resize(count);
+    for (TrackedSpell& spell : TrackedSpells)
+    {
+        _worldPacket >> spell.SpellID;
+        _worldPacket >> spell.Category;
+    }
+}
+
+WorldPacket const* WorldPackets::Commentator::CommentatorPlayerInfo::Write()
+{
+    _worldPacket << uint32(LeadingId);
+    _worldPacket << uint32(SpellTuple1);
+    _worldPacket << uint32(SpellTuple2);
+    _worldPacket << uint8(SpellTuple3);
+    _worldPacket << uint64(PackedId);
+    _worldPacket << uint32(Players.size());
+    _worldPacket << uint8(Flag ? 0x80 : 0x00);              // the client takes bit 7 of this byte
+
+    for (PlayerData const& player : Players)
+    {
+        _worldPacket << player.UnitGUID;
+        _worldPacket << uint8(player.Faction);
+        _worldPacket << uint32(player.Specialization);
+        _worldPacket << uint8(player.Field3);
+        _worldPacket << uint8(player.Field4);
+        _worldPacket << uint16(player.Kills);
+        _worldPacket << uint16(player.Deaths);
+        _worldPacket << uint32(player.DamageDone);
+        _worldPacket << uint32(player.DamageTaken);
+        _worldPacket << uint32(player.HealingDone);
+        _worldPacket << uint32(player.HealingTaken);
+        _worldPacket << uint8(player.SoloShuffleRoundWins);
+        _worldPacket << uint8(player.SoloShuffleRoundLosses);
+        // Four tracked-spell/cooldown arrays, all empty (count = 0).
+        _worldPacket << uint32(0);
+        _worldPacket << uint32(0);
+        _worldPacket << uint32(0);
+        _worldPacket << uint32(0);
+    }
+
+    return &_worldPacket;
+}
+
 WorldPacket const* WorldPackets::Commentator::CommentatorMapInfo::Write()
 {
     _worldPacket << uint64(DirectoryId);
