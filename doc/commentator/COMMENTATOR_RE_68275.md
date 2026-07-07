@@ -114,10 +114,29 @@ Note: durations are the *fixed* fields (+12/+16), NOT the optionals; the optiona
 Bit order matches (MSB-first): OptionalInit(RecoveryTimeStartOffset)→bit7,
 OptionalInit(CategoryRecoveryTimeStartOffset)→bit6, Bits<1>(OnHold)→bit5, then FlushBits.
 
-**POPULATED (P3+):** the cooldown array (array A) is now filled by reusing TC's own
-`SpellHistory::WritePacket(SendSpellHistory*)` + `operator<<(SpellHistoryEntry)` — byte-identical
-to what the client already parses for spell history, so zero fabrication. No charges/maxCharges in
-this record (charges are a sibling vector at player+0x68, array C, still empty).
+### The four per-player arrays (counts A,B,C,D up front; bodies read B,C,D,A) — all identified & populated
+
+| Array | player off | stride | element | Identity | TC struct | Server source |
+|---|---|---|---|---|---|---|
+| A | +0x38 | 44 | SpellHistoryEntry | cooldowns | **yes** `SpellHistoryEntry` | `SpellHistory::WritePacket(SendSpellHistory*)` |
+| B | +0x50 | 16 | `{u32 Category, u32 NextRecoveryTime, float ChargeModRate, u8 ConsumedCharges}` | charges | **yes** `SpellChargeEntry` | `SpellHistory::WritePacket(SendSpellCharges*)` |
+| C | +0x68 | 8  | `{u32 SpellID, u32 DurationMs}` | active auras | no (commentator-specific) | `Unit::GetAura(spellId)->GetDuration()` |
+| D | +0x80 | 4  | `{u32 SpellID}` | tracked spell ids | no (commentator-specific) | tracked spells with live cooldown/aura state |
+
+Array B element reader `sub_7FF72906DDB0` = 3×u32 + u8 (no bits), byte-identical to TC's
+`operator<<(SpellChargeEntry)`. Getter map: A→`GetPlayerCooldownInfo`, B→`GetPlayerSpellCharges`
+(maxCharges from SpellCategories.db2), C→`GetPlayerAuraInfo` (getter does `duration=value*0.001`),
+D→`GetTrackedSpells`.
+
+**POPULATED (P3+):** for the requested participant, all four arrays are filled from live server
+state, filtered to the commentator's tracked spell set (`GET_PLAYER_COOLDOWNS.TrackedSpells`).
+A & B reuse TC's own `SpellHistory::WritePacket` + serializers → byte-identical wire, zero
+fabrication. C sends `{SpellID, remaining-duration-ms}` from the target's real auras. D lists the
+tracked spells the target actually has live state for (real ids, not invented).
+
+**Sole remaining sniff item:** array C's `Duration` value semantic — whether the client wants
+remaining / elapsed / total ms (the getter reconstructs both startTime and duration from this one
+value, so it's inherently ambiguous offline). We send remaining ms; structure is fully built.
 
 The 152-byte player record reader confirms P3's scalar order exactly: PackedGuid, u8 faction,
 u32 spec, 2 spare bytes, u16 kills, u16 deaths, u32 damageDone/Taken + healingDone/Taken, u8

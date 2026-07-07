@@ -105,13 +105,22 @@ WorldPacket const* WorldPackets::Commentator::CommentatorPlayerInfo::Write()
         _worldPacket << uint8(player.SoloShuffleRoundWins);
         _worldPacket << uint8(player.SoloShuffleRoundLosses);
         // Four array counts are written up front in order A,B,C,D; the client then reads the bodies in the
-        // order B,C,D,A (confirmed from the deserializer sub_7FF72906EFA0). Only array A (cooldowns) is
-        // produced; B (auras), C (charges), D (spell ids) are empty.
+        // order B,C,D,A (confirmed from the deserializer sub_7FF72906EFA0).
         _worldPacket << uint32(player.Cooldowns.size());        // count A - cooldowns
-        _worldPacket << uint32(0);                              // count B - auras
-        _worldPacket << uint32(0);                              // count C - charges
-        _worldPacket << uint32(0);                              // count D - spell ids
-        // Bodies B, C, D are empty; body A (SpellHistoryEntry list) comes last.
+        _worldPacket << uint32(player.Charges.size());          // count B - charges
+        _worldPacket << uint32(player.Auras.size());            // count C - auras
+        _worldPacket << uint32(player.TrackedSpellIds.size());  // count D - tracked spell ids
+
+        // Bodies in the client's read order: B (charges), C (auras), D (ids), then A (cooldowns) last.
+        for (Spells::SpellChargeEntry const& charge : player.Charges)
+            _worldPacket << charge;
+        for (PlayerData::AuraState const& aura : player.Auras)
+        {
+            _worldPacket << uint32(aura.SpellID);
+            _worldPacket << uint32(aura.Duration);
+        }
+        for (uint32 trackedSpellId : player.TrackedSpellIds)
+            _worldPacket << uint32(trackedSpellId);
         for (Spells::SpellHistoryEntry const& cooldown : player.Cooldowns)
             _worldPacket << cooldown;
     }

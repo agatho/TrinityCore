@@ -694,6 +694,8 @@ namespace WorldPackets
             uint8 ConsumedCharges = 0;
         };
 
+        ByteBuffer& operator<<(ByteBuffer& data, SpellChargeEntry const& chargeEntry);
+
         class SendSpellCharges final : public ServerPacket
         {
         public:
