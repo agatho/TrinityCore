@@ -27,8 +27,11 @@
 #include "ObjectMgr.h"
 #include "Player.h"
 #include "RBAC.h"
+#include "SpellHistory.h"
+#include "SpellPackets.h"
 #include "Util.h"
 #include <unordered_map>
+#include <unordered_set>
 
 namespace
 {
@@ -55,6 +58,25 @@ namespace
                 // DamageTaken / HealingTaken / SoloShuffle round tallies have no score getter - left 0 (honest).
             }
         }
+    }
+
+    // Fills a player-record's cooldown array (array A) from the target's live SpellHistory, restricted to the
+    // spells the commentator asked to track. The 44-byte wire record is exactly WorldPackets::Spells::
+    // SpellHistoryEntry (proven identical to SMSG_SEND_SPELL_HISTORY), so we reuse TrinityCore's own builder -
+    // the produced timings are byte-identical to what the client already parses for spell history.
+    void BuildPlayerCooldowns(Player* target, std::vector<WorldPackets::Commentator::CommentatorGetPlayerCooldowns::TrackedSpell> const& tracked,
+        std::vector<WorldPackets::Spells::SpellHistoryEntry>& out)
+    {
+        WorldPackets::Spells::SendSpellHistory history;
+        target->GetSpellHistory()->WritePacket(&history);
+
+        std::unordered_set<uint32> wanted;
+        for (auto const& trackedSpell : tracked)
+            wanted.insert(trackedSpell.SpellID);
+
+        for (WorldPackets::Spells::SpellHistoryEntry const& entry : history.Entries)
+            if (wanted.empty() || wanted.count(entry.SpellID))
+                out.push_back(entry);
     }
 
     // Resolves the arena the given session is currently spectating (entered via CMSG_COMMENTATOR_ENTER_INSTANCE).
@@ -278,19 +300,34 @@ void WorldSession::HandleCommentatorStartWargame(WorldPackets::Commentator::Comm
     arena->StartBattleground();
 }
 
-void WorldSession::HandleCommentatorGetPlayerCooldowns(WorldPackets::Commentator::CommentatorGetPlayerCooldowns& /*getPlayerCooldowns*/)
+void WorldSession::HandleCommentatorGetPlayerCooldowns(WorldPackets::Commentator::CommentatorGetPlayerCooldowns& getPlayerCooldowns)
 {
     Player* player = GetPlayer();
     if (!player || !IsCommentator())
         return;
 
-    // Cooldown data rides in the PLAYER_INFO record's tracked-spell arrays; refresh player info for the
-    // spectated arena. (Populating the per-spell cooldown records is gated on confirming their 44-byte layout.)
+    // Cooldown data rides in the PLAYER_INFO record's array A. Rebuild the scalar player info for the
+    // spectated arena, then populate the requested player's cooldown list from their live SpellHistory.
     Battleground* arena = GetSpectatedArena(player);
     if (!arena)
         return;
 
     WorldPackets::Commentator::CommentatorPlayerInfo playerInfo;
     BuildCommentatorPlayerInfo(arena, playerInfo);
+
+    // The request names one participant + the spells the commentator tracks. Fill that participant's record
+    // only (the loop is scoped to arena members, so cooldowns of non-participants can never leak).
+    if (Player* target = ObjectAccessor::FindConnectedPlayer(getPlayerCooldowns.Player))
+    {
+        for (WorldPackets::Commentator::CommentatorPlayerInfo::PlayerData& data : playerInfo.Players)
+        {
+            if (data.UnitGUID != target->GetGUID())
+                continue;
+
+            BuildPlayerCooldowns(target, getPlayerCooldowns.TrackedSpells, data.Cooldowns);
+            break;
+        }
+    }
+
     SendPacket(playerInfo.Write());
 }
