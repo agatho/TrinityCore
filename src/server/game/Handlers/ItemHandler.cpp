@@ -1269,6 +1269,24 @@ void WorldSession::HandleChangeBagSlotFlag(WorldPackets::Item::ChangeBagSlotFlag
         _player->RemoveBagSlotFlag(changeBagSlotFlag.BagIndex, changeBagSlotFlag.FlagToChange);
 }
 
+void WorldSession::HandleChangeBankBagSlotFlag(WorldPackets::Item::ChangeBankBagSlotFlag const& changeBankBagSlotFlag)
+{
+    // Bank sibling of CMSG_CHANGE_BAG_SLOT_FLAG: the "bags" of the modern bank are its tabs,
+    // and each tab carries its auto-deposit BagSlotFlags in CharacterBankTabSettings::DepositFlags.
+    if (changeBankBagSlotFlag.BagIndex >= _player->m_activePlayerData->CharacterBankTabSettings.size())
+        return;
+
+    UF::BankTabSettings const& tab = _player->m_activePlayerData->CharacterBankTabSettings[changeBankBagSlotFlag.BagIndex];
+
+    BagSlotFlags depositFlags = static_cast<BagSlotFlags>(*tab.DepositFlags);
+    if (changeBankBagSlotFlag.On)
+        depositFlags |= changeBankBagSlotFlag.FlagToChange;
+    else
+        depositFlags &= ~changeBankBagSlotFlag.FlagToChange;
+
+    _player->SetCharacterBankTabSettings(changeBankBagSlotFlag.BagIndex, *tab.Name, *tab.Icon, *tab.Description, depositFlags);
+}
+
 void WorldSession::HandleSetBackpackAutosortDisabled(WorldPackets::Item::SetBackpackAutosortDisabled const& setBackpackAutosortDisabled)
 {
     _player->SetBackpackAutoSortDisabled(setBackpackAutosortDisabled.Disable);
