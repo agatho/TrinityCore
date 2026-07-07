@@ -534,6 +534,7 @@ namespace WorldPackets
         class MountSpecial;
         class SetTaxiBenchmarkMode;
         class MountSetFavorite;
+        class MountClearFanfare;
         class CloseInteraction;
         class ConversationLineStarted;
         class RequestLatestSplashScreen;
@@ -1838,6 +1839,7 @@ class TC_GAME_API WorldSession
         void HandleToyClearFanfare(WorldPackets::Toy::ToyClearFanfare& toyClearFanfare);
 
         void HandleMountSetFavorite(WorldPackets::Misc::MountSetFavorite& mountSetFavorite);
+        void HandleMountClearFanfare(WorldPackets::Misc::MountClearFanfare& mountClearFanfare);
 
         // Scenes
         void HandleSceneTriggerEvent(WorldPackets::Scenes::SceneTriggerEvent& sceneTriggerEvent);
