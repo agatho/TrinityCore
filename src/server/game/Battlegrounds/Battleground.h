@@ -329,6 +329,12 @@ class TC_GAME_API Battleground
         BattlegroundPlayerMap const& GetPlayers() const { return m_Players; }
         uint32 GetPlayersSize() const { return uint32(m_Players.size()); }
 
+        // Commentators/spectators observing this match (not participants; ejected when the match ends).
+        void AddSpectator(ObjectGuid guid) { m_Spectators.insert(guid); }
+        void RemoveSpectator(ObjectGuid guid) { m_Spectators.erase(guid); }
+        bool HasSpectator(ObjectGuid guid) const { return m_Spectators.find(guid) != m_Spectators.end(); }
+        GuidUnorderedSet const& GetSpectators() const { return m_Spectators; }
+
         typedef std::map<ObjectGuid, BattlegroundScore*> BattlegroundScoreMap;
         uint32 GetPlayerScoresSize() const { return uint32(PlayerScores.size()); }
 
@@ -511,6 +517,7 @@ class TC_GAME_API Battleground
 
         // Player lists, those need to be accessible by inherited classes
         BattlegroundPlayerMap m_Players;
+        GuidUnorderedSet m_Spectators;                          // commentators observing this match
 
         // these are important variables used for starting messages
         uint8 m_Events;

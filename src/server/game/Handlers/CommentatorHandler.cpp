@@ -21,6 +21,7 @@
 #include "CommentatorPackets.h"
 #include "Log.h"
 #include "ObjectAccessor.h"
+#include "ObjectMgr.h"
 #include "Player.h"
 #include "RBAC.h"
 #include "Util.h"
@@ -89,4 +90,73 @@ void WorldSession::HandleCommentatorGetMapInfo(WorldPackets::Commentator::Commen
     }
 
     SendPacket(mapInfo.Write());
+}
+
+void WorldSession::HandleCommentatorEnterInstance(WorldPackets::Commentator::CommentatorEnterInstance& enterInstance)
+{
+    Player* player = GetPlayer();
+    if (!player || !IsCommentator())
+        return;
+
+    // Arena instance ids are 32-bit; the high dword is unused for battlegrounds.
+    uint32 const instanceId = enterInstance.InstanceIDLow;
+
+    std::vector<Battleground*> arenas;
+    sBattlegroundMgr->GetActiveArenas(arenas);
+    Battleground* arena = nullptr;
+    for (Battleground* bg : arenas)
+    {
+        if (bg->GetInstanceID() == instanceId && bg->GetMapId() == enterInstance.MapID)
+        {
+            arena = bg;
+            break;
+        }
+    }
+
+    if (!arena)
+        return;
+
+    // Enter as an observer: remember where we came from, satisfy the BG-map entry gate
+    // (BattlegroundMap::CannotEnter requires GetBattlegroundId() == instanceId), and become an inert
+    // game-master so participants don't see us and we can't affect the match.
+    player->SetBattlegroundEntryPoint();
+    player->SetBattlegroundId(arena->GetInstanceID(), arena->GetTypeID(), BATTLEGROUND_QUEUE_NONE);
+    arena->AddSpectator(player->GetGUID());
+    if (!player->IsGameMaster())
+        player->SetGameMaster(true);
+
+    if (WorldSafeLocsEntry const* start = arena->GetTeamStartPosition(TEAM_ALLIANCE))
+        player->TeleportTo(start->Loc);
+}
+
+void WorldSession::HandleCommentatorExitInstance(WorldPackets::Commentator::CommentatorExitInstance& /*exitInstance*/)
+{
+    Player* player = GetPlayer();
+    if (!player)
+        return;
+
+    // Only act if we are actually spectating the arena we're currently bound to (not a real participant).
+    Battleground* arena = sBattlegroundMgr->GetBattleground(player->GetBattlegroundId(), player->GetBattlegroundTypeId());
+    if (!arena || !arena->HasSpectator(player->GetGUID()))
+        return;
+
+    arena->RemoveSpectator(player->GetGUID());
+    player->SetSpectateTarget(ObjectGuid::Empty);
+    if (player->IsGameMaster())
+        player->SetGameMaster(false);
+    player->TeleportToBGEntryPoint();
+}
+
+void WorldSession::HandleCommentatorSpectate(WorldPackets::Commentator::CommentatorSpectate& spectate)
+{
+    Player* player = GetPlayer();
+    if (!player || !IsCommentator())
+        return;
+
+    // Follow the named player, but only if they are in the very arena we are spectating.
+    Player* target = ObjectAccessor::FindConnectedPlayerByName(spectate.TargetName);
+    if (target && player->GetBattlegroundId() != 0 && target->GetBattlegroundId() == player->GetBattlegroundId())
+        player->SetSpectateTarget(target->GetGUID());
+    else
+        player->SetSpectateTarget(ObjectGuid::Empty);
 }
