@@ -170,7 +170,7 @@ void OpcodeTable::InitializeClientOpcodes()
     DEFINE_HANDLER(CMSG_AREA_TRIGGER,                                       STATUS_LOGGEDIN,  PROCESS_INPLACE,      &WorldSession::HandleAreaTriggerOpcode);
     DEFINE_HANDLER(CMSG_ARTIFACT_ADD_POWER,                                 STATUS_LOGGEDIN,  PROCESS_INPLACE,      &WorldSession::HandleArtifactAddPower);
     DEFINE_HANDLER(CMSG_ARTIFACT_SET_APPEARANCE,                            STATUS_LOGGEDIN,  PROCESS_INPLACE,      &WorldSession::HandleArtifactSetAppearance);
-    DEFINE_HANDLER(CMSG_ASSIGN_EQUIPMENT_SET_SPEC,                          STATUS_UNHANDLED, PROCESS_INPLACE,      &WorldSession::Handle_NULL);
+    DEFINE_HANDLER(CMSG_ASSIGN_EQUIPMENT_SET_SPEC,                          STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleAssignEquipmentSetSpec);
     DEFINE_HANDLER(CMSG_ATTACK_STOP,                                        STATUS_LOGGEDIN,  PROCESS_INPLACE,      &WorldSession::HandleAttackStopOpcode);
     DEFINE_HANDLER(CMSG_ATTACK_SWING,                                       STATUS_LOGGEDIN,  PROCESS_INPLACE,      &WorldSession::HandleAttackSwingOpcode);
     DEFINE_HANDLER(CMSG_AUCTIONABLE_TOKEN_SELL,                             STATUS_IGNORED,   PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
