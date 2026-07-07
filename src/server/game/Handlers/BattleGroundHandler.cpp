@@ -40,6 +40,7 @@
 #include "SpellMgr.h"
 #include "SpellInfo.h"
 #include "World.h"
+#include <unordered_map>
 
 void WorldSession::HandleBattlemasterHelloOpcode(WorldPackets::NPC::Hello& hello)
 {
@@ -716,4 +717,97 @@ void WorldSession::HandleHearthAndResurrect(WorldPackets::Battleground::HearthAn
     _player->BuildPlayerRepop();
     _player->ResurrectPlayer(1.0f);
     _player->TeleportTo(_player->m_homebind);
+}
+
+namespace
+{
+    // A pending war-game challenge, keyed by the opposing group leader who must accept it. War games are
+    // ephemeral (no persistence): the challenge lives only until the opponent answers or logs off. These
+    // handlers run on the world update thread (PROCESS_THREADUNSAFE), so a plain map needs no locking.
+    struct WargamePendingRequest
+    {
+        ObjectGuid Initiator;
+        uint64 QueueID = 0;
+        uint32 BattlemasterListID = 0;
+        uint16 Bracket = 0;
+        bool TournamentRules = false;
+    };
+
+    std::unordered_map<ObjectGuid /*opponentLeader*/, WargamePendingRequest> g_wargameRequests;
+}
+
+void WorldSession::HandleStartWarGame(WorldPackets::Battleground::StartWarGame& packet)
+{
+    Player* initiator = _player;
+
+    // Only a party leader may issue a war-game challenge on behalf of their group.
+    Group* group = initiator->GetGroup();
+    if (!group || group->GetLeaderGUID() != initiator->GetGUID())
+        return;
+
+    // Resolve the opposing group from the named member, then its leader (who receives the prompt).
+    Player* opposingMember = ObjectAccessor::FindConnectedPlayer(packet.OpposingPartyMember);
+    if (!opposingMember)
+        return;
+
+    Group* opposingGroup = opposingMember->GetGroup();
+    if (!opposingGroup)
+        return;
+
+    ObjectGuid opposingLeaderGuid = opposingGroup->GetLeaderGUID();
+    if (opposingGroup == group)
+        return; // cannot war-game your own group
+
+    Player* opposingLeader = ObjectAccessor::FindConnectedPlayer(opposingLeaderGuid);
+    if (!opposingLeader)
+        return;
+
+    // Register the pending challenge so the opponent's acceptance can be correlated back.
+    WargamePendingRequest& req = g_wargameRequests[opposingLeaderGuid];
+    req.Initiator = initiator->GetGUID();
+    req.QueueID = packet.QueueID;
+    req.BattlemasterListID = packet.BattlemasterListID;
+    req.Bracket = packet.Bracket;
+    req.TournamentRules = packet.TournamentRules;
+
+    // Prompt the opposing leader to accept or decline.
+    WorldPackets::Battleground::CheckWargameEntry check;
+    check.OpposingPartyMember = initiator->GetGUID();
+    check.QueueID = packet.QueueID;
+    check.Time = 0;
+    check.TournamentRules = packet.TournamentRules;
+    opposingLeader->SendDirectMessage(check.Write());
+
+    // Confirm to the initiator that the challenge was delivered.
+    WorldPackets::Battleground::WargameRequestSuccessfullySentToOpponent sent;
+    sent.OpposingPartyMember = opposingLeaderGuid;
+    initiator->SendDirectMessage(sent.Write());
+}
+
+void WorldSession::HandleAcceptWargameInvite(WorldPackets::Battleground::AcceptWargameInvite& packet)
+{
+    Player* responder = _player;
+
+    auto itr = g_wargameRequests.find(responder->GetGUID());
+    if (itr == g_wargameRequests.end())
+        return; // no outstanding challenge for this player
+
+    WargamePendingRequest const req = itr->second;
+    g_wargameRequests.erase(itr);
+
+    // The invite being answered must match the challenger we recorded.
+    if (packet.OpposingPartyMember != req.Initiator || packet.QueueID != req.QueueID)
+        return;
+
+    // Report the outcome to the challenger.
+    if (Player* initiator = ObjectAccessor::FindConnectedPlayer(req.Initiator))
+    {
+        WorldPackets::Battleground::WargameRequestOpponentResponse response;
+        response.OpposingPartyMember = responder->GetGUID();
+        response.Accepted = packet.Accept;
+        initiator->SendDirectMessage(response.Write());
+    }
+
+    // P1: on acceptance, queue both groups into a war-game battleground/arena instance
+    // (BattlegroundQueueIdType::Wargame already exists in the queue infrastructure).
 }
