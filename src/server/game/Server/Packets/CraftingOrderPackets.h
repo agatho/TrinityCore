@@ -193,6 +193,8 @@ namespace CraftingOrders
 
     // The create/claim/cancel/release/reject responses share the same wire (12.0.7.68275, from the client
     // deserializers sub_7FF7290B92D0 / _9640 / _9A90 / _96E0 / _9B90): uint8 result, then uint64 order id.
+    // SNIFF-CONFIRMED byte-exact (C:\sniff\ingame-shop_ordersCrafting_professions.pkt, SMSG_CRAFTING_ORDER_CLAIM_RESULT
+    // 0x420334: "00 c112bb3600000000" = {Result=Ok(0), OrderID=0x36bb12c1}). No longer a hypothesis.
     class CraftingOrderActionResult : public ServerPacket
     {
     public:
@@ -261,9 +263,14 @@ namespace CraftingOrders
 
     // One order on the SMSG_CRAFTING_ORDER_LIST_ORDERS_RESPONSE wire (the client's JamCraftingOrder, reader
     // sub_7FF7291611C0 -> scalar head sub_7FF729160490). Field order + types are byte-exact and confirmed against
-    // the reflection offset table (jam_reflection_FINAL_68275.json). Customer-provided reagents and the four
-    // presence-gated optional sub-structs (customerPlayer / customerNpc / outputOrderItem / outputItem) are sent
-    // absent for a basic browsed order, which is byte-exact for a public order without recraft/output data.
+    // the reflection offset table (jam_reflection_FINAL_68275.json) AND against a live sniff
+    // (C:\sniff\ingame-shop_ordersCrafting_professions.pkt): the scalar head decodes cleanly for every order in a
+    // 12-order response (e.g. OID 0x36bb12bc, SkillLineAbilityID 52199, OrderState 2, OrderType 3, MinQuality 1,
+    // TipAmount 739311, Flags 4). Customer-provided reagents and the four presence-gated optional sub-structs
+    // (customerPlayer / customerNpc / outputOrderItem / outputItem) are sent absent here, which is byte-exact for a
+    // public order without recraft/output data. NOTE (from the sniff): real retail orders DO populate the reagent
+    // count (uint32 > 0, each reagent a nested item block) and the presence byte's low bits when a customer supplies
+    // materials or requests recraft/output; adding those blocks is deferred to the P4 reagent/fulfil phase.
     struct CraftingOrderData
     {
         int32 Version = 0;
@@ -286,9 +293,13 @@ namespace CraftingOrders
 
     ByteBuffer& operator<<(ByteBuffer& data, CraftingOrderData const& order);
 
-    // SMSG_CRAFTING_ORDER_LIST_ORDERS_RESPONSE (0x420333, client reader sub_7FF7290B9350). Header scalars whose
-    // semantics are not offline-confirmable (ContextFlag / Field* / the two packed-bit bytes) are sent 0; the
-    // recipe-summary vector is sent empty. Orders follow.
+    // SMSG_CRAFTING_ORDER_LIST_ORDERS_RESPONSE (0x420333, client reader sub_7FF7290B9350). Header layout is
+    // SNIFF-CONFIRMED byte-exact (C:\sniff\ingame-shop_ordersCrafting_professions.pkt): { u8 ContextFlag; u32
+    // recipeSummaryCount; u32 orderCount; u32 Field58; u32 Field5C; u8 packedBits2; u8 Field64; u32 Field6C;
+    // u8 packedBits4; orders[] }. An empty response (orderCount 0) parses to exactly the 24-byte header; a 12-order
+    // response parses cleanly with orderCount 12. The Field58/Field5C/Field64 + packed-bit scalars carry live values
+    // in the capture (informational; their semantics are still not resolvable offline) and are sent 0 here, which the
+    // client accepts. The recipe-summary vector is sent empty.
     class CraftingOrderListOrdersResponse final : public ServerPacket
     {
     public:
