@@ -251,8 +251,9 @@ void WorldSession::HandleCraftingOrderFulfill(WorldPackets::CraftingOrders::Craf
             BroadcastCraftingOrderState(*fulfilled);
 }
 
-// Projects a stored order into the client's JamCraftingOrder wire form (customer-provided reagents + the
-// optional recraft/output/npc sub-structs are sent absent — byte-exact for a basic public order).
+// Projects a stored order into the client's JamCraftingOrder wire form. Customer-provided reagents are now emitted
+// (JamCraftingOrderItem records, validated byte-exact vs the live sniff); the optional recraft/output/npc
+// sub-structs are still sent absent, which is byte-exact for a basic public order.
 static WorldPackets::CraftingOrders::CraftingOrderData BuildCraftingOrderData(CraftingOrders::Order const& order)
 {
     WorldPackets::CraftingOrders::CraftingOrderData data;
@@ -269,6 +270,27 @@ static WorldPackets::CraftingOrders::CraftingOrderData BuildCraftingOrderData(Cr
     data.CustomerGUID = order.CustomerGUID;
     data.CrafterGUID = order.CrafterGUID;
     data.CustomerNotes = order.CustomerNotes;
+
+    // Player-placed orders carry a customerPlayer sub-struct so the client can display who ordered. NPC/patron
+    // orders (OrderType::Npc) would instead use customerNpc, which is not produced yet.
+    if (order.Type != CraftingOrders::OrderType::Npc && order.CustomerGUID.IsPlayer())
+    {
+        data.HasCustomerPlayer = true;
+        if (order.CustomerAccountId)
+            data.CustomerWowAccount = ObjectGuid::Create<HighGuid::WowAccount>(order.CustomerAccountId);
+    }
+
+    data.Reagents.reserve(order.Reagents.size());
+    for (CraftingOrders::OrderReagent const& reagent : order.Reagents)
+    {
+        WorldPackets::CraftingOrders::CraftingOrderReagentData& wire = data.Reagents.emplace_back();
+        wire.OwnerGUID = order.CustomerGUID;        // the customer supplied it (matches the sniffed ownerGUID)
+        wire.Quantity = reagent.Quantity;
+        wire.ReagentItemID = reagent.ItemID;
+        wire.ReagentCurrencyID = reagent.CurrencyID;
+        wire.Slot = reagent.Slot;
+        // Flags default 1 (customer-provided); orderItemID/type/itemGUID/qualityID stay 0 for an unclaimed posting.
+    }
     return data;
 }
 

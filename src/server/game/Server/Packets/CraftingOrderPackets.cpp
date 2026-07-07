@@ -244,17 +244,57 @@ ByteBuffer& operator<<(ByteBuffer& data, CraftingOrderData const& order)
     data << int32(order.NpcCraftingOrderSetID);
     data << int32(order.NpcTreasureID);
 
-    // reagent count (0: customer-provided reagents omitted for browse) then the split notes-length + presence byte.
-    // notesLen = (byte1 << 2) | (byte2 >> 6); byte2 bits 5..2 are the four optional-presence flags, all absent here.
+    // reagent count, then the split notes-length + presence byte. notesLen = (byte1 << 2) | (byte2 >> 6);
+    // byte2 bits 5..2 are the four optional-presence flags: bit5 (0x20) customerPlayer, bit4 (0x10) customerNpc,
+    // bit3 (0x08) outputOrderItem, bit2 (0x04) outputItem (bit assignment confirmed from reader sub_7FF729160490).
+    // customerPlayer is set for player orders; customerNpc/output sub-structs are not produced yet. The reagent
+    // vector (each a JamCraftingOrderItem) is emitted between the two note bytes and the notes text — the exact
+    // position the client reader expects (validated byte-exact vs the live sniff).
     uint32 notesLen = std::min<uint32>(uint32(order.CustomerNotes.length()), 1023);
-    data << uint32(0);
+    uint8 presence = order.HasCustomerPlayer ? 0x20 : 0;
+    data << uint32(uint32(order.Reagents.size()));
     data << uint8(notesLen >> 2);
-    data << uint8((notesLen & 0x3) << 6);
+    data << uint8(uint8((notesLen & 0x3) << 6) | presence);
+
+    for (CraftingOrderReagentData const& reagent : order.Reagents)
+    {
+        // JamCraftingOrderItem, mirror of client reader sub_7FF72915FF20 (validated byte-exact vs the sniff).
+        data << uint64(reagent.OrderItemID);
+        data << int32(reagent.OrderItemType);
+        data << reagent.ItemGUID;                  // PackedGuid (empty for a posting)
+        data << reagent.OwnerGUID;                 // PackedGuid (the customer)
+        data << uint32(reagent.Quantity);
+        data << int32(reagent.CraftingQualityID);
+        data << int32(reagent.Flags);
+
+        // reagent base (client sub_7FF7291B42A0): presence byte { bit7 = has itemID, bit6 = has currencyID },
+        // then the present values as uint32.
+        uint8 basePresence = (reagent.ReagentItemID ? 0x80 : 0) | (reagent.ReagentCurrencyID ? 0x40 : 0);
+        data << uint8(basePresence);
+        if (reagent.ReagentItemID)
+            data << int32(reagent.ReagentItemID);
+        if (reagent.ReagentCurrencyID)
+            data << int32(reagent.ReagentCurrencyID);
+
+        // optional slot (client tail of sub_7FF72915FF20): presence byte bit7, then the u8 slot. Customer orders
+        // always carry a dataSlotIndex, so it is emitted present.
+        data << uint8(0x80);
+        data << uint8(reagent.Slot);
+    }
+
     if (notesLen)
         data.append(order.CustomerNotes.data(), notesLen);
 
-    // wrapper header byte (client sub_7FF7291611C0): presence bit + packed sub-vector counts, all zero for a
-    // basic order (no nested customer/npc block, no recraft/mod sub-vectors).
+    // Optional sub-structs, in reader order (customerPlayer, customerNpc, outputOrderItem, outputItem). Only
+    // customerPlayer is emitted (when present); it is two PackedGuids: the customer and their WoW-account guid.
+    if (order.HasCustomerPlayer)
+    {
+        data << order.CustomerGUID;                // JamCraftingOrderCustomerPlayer.guid
+        data << order.CustomerWowAccount;          // JamCraftingOrderCustomerPlayer.wowAccount
+    }
+
+    // wrapper header byte (client sub_7FF7291611C0): recraftItem presence bit + packed recraft sub-vector counts,
+    // all zero for a basic order (no recraft item, enchants, or gems).
     data << uint8(0);
     return data;
 }

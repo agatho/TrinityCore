@@ -297,16 +297,36 @@ namespace CraftingOrders
         int32 SkillLineAbilityID = 0;
     };
 
+    // One customer-provided reagent on the JamCraftingOrder wire (the client's JamCraftingOrderItem, reader
+    // sub_7FF72915FF20). Recovered byte-exact and VALIDATED against the live sniff: every one of the 23 orders in
+    // C:\sniff\ingame-shop_ordersCrafting_professions.pkt parses cleanly with this layout (the whole 2054-byte and
+    // 1875-byte responses consume to the byte, 0 leftover). The block is entirely flat scalars/GUIDs — the earlier
+    // "needs full ItemInstance serialization" note was a misattribution: the ItemInstance readers (sub_7FF7291CBD40)
+    // belong to the JamCliCraftingOrder *recraft* fields (recraftItem / recraftItemGems), NOT to an order's reagents.
+    // For a customer posting the wire carries: orderItemID/type/itemGUID/qualityID = 0, ownerGUID = the customer's
+    // GUID, flags = 1, reagent = { itemID (present), currencyID (absent) }, quantity, and an optional u8 slot.
+    struct CraftingOrderReagentData
+    {
+        uint64 OrderItemID = 0;
+        int32 OrderItemType = 0;
+        ObjectGuid ItemGUID;
+        ObjectGuid OwnerGUID;                   // the customer who provided the reagent
+        uint32 Quantity = 0;
+        int32 CraftingQualityID = 0;
+        int32 Flags = 1;                        // 1 = customer-provided (constant in the capture)
+        int32 ReagentItemID = 0;
+        int32 ReagentCurrencyID = 0;
+        uint8 Slot = 0;
+    };
+
     // One order on the SMSG_CRAFTING_ORDER_LIST_ORDERS_RESPONSE wire (the client's JamCraftingOrder, reader
     // sub_7FF7291611C0 -> scalar head sub_7FF729160490). Field order + types are byte-exact and confirmed against
     // the reflection offset table (jam_reflection_FINAL_68275.json) AND against a live sniff
     // (C:\sniff\ingame-shop_ordersCrafting_professions.pkt): the scalar head decodes cleanly for every order in a
     // 12-order response (e.g. OID 0x36bb12bc, SkillLineAbilityID 52199, OrderState 2, OrderType 3, MinQuality 1,
-    // TipAmount 739311, Flags 4). Customer-provided reagents and the four presence-gated optional sub-structs
-    // (customerPlayer / customerNpc / outputOrderItem / outputItem) are sent absent here, which is byte-exact for a
-    // public order without recraft/output data. NOTE (from the sniff): real retail orders DO populate the reagent
-    // count (uint32 > 0, each reagent a nested item block) and the presence byte's low bits when a customer supplies
-    // materials or requests recraft/output; adding those blocks is deferred to the P4 reagent/fulfil phase.
+    // TipAmount 739311, Flags 4). Customer-provided reagents are now emitted (see Reagents); the four presence-gated
+    // optional sub-structs (customerPlayer / customerNpc / outputOrderItem / outputItem) are still sent absent, which
+    // is byte-exact for a public player order without recraft/output data.
     struct CraftingOrderData
     {
         int32 Version = 0;
@@ -325,6 +345,12 @@ namespace CraftingOrders
         int32 NpcCraftingOrderSetID = 0;
         int32 NpcTreasureID = 0;
         std::string CustomerNotes;
+        std::vector<CraftingOrderReagentData> Reagents;
+        // customerPlayer sub-struct (client @1176, JamCraftingOrderCustomerPlayer = { PackedGuid guid, PackedGuid
+        // wowAccount }): present for a player-placed order so the client can show who ordered. Emitted when
+        // HasCustomerPlayer is set; NPC/patron orders would instead carry customerNpc (not produced yet).
+        bool HasCustomerPlayer = false;
+        ObjectGuid CustomerWowAccount;
     };
 
     ByteBuffer& operator<<(ByteBuffer& data, CraftingOrderData const& order);
