@@ -40,6 +40,7 @@
 #include "CollectionPackets.h"
 #include "CombatLogPackets.h"
 #include "CombatPackets.h"
+#include "ContentTrackingPackets.h"
 #include "DuelPackets.h"
 #include "EquipmentSetPackets.h"
 #include "GameObjectPackets.h"

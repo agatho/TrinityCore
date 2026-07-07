@@ -838,6 +838,12 @@ namespace WorldPackets
         class MoveSetVehicleRecIdAck;
     }
 
+    namespace ContentTracking
+    {
+        class StartTracking;
+        class StopTracking;
+    }
+
     namespace WeeklyRewards
     {
         class ClaimWeeklyReward;
@@ -1696,6 +1702,10 @@ class TC_GAME_API WorldSession
         // Great Vault / weekly rewards
         void HandleRequestWeeklyRewards(WorldPackets::WeeklyRewards::RequestWeeklyRewards& packet);
         void HandleClaimWeeklyReward(WorldPackets::WeeklyRewards::ClaimWeeklyReward& packet);
+
+        // Content tracking
+        void HandleContentTrackingStartTracking(WorldPackets::ContentTracking::StartTracking& packet);
+        void HandleContentTrackingStopTracking(WorldPackets::ContentTracking::StopTracking& packet);
         void HandleRequestRatedPvpInfo(WorldPackets::Battleground::RequestRatedPvpInfo& packet);
         void HandleGetPVPOptionsEnabled(WorldPackets::Battleground::GetPVPOptionsEnabled& getPvPOptionsEnabled);
         void HandleRequestPvpReward(WorldPackets::Battleground::RequestPVPRewards& packet);

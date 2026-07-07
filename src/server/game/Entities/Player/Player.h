@@ -1024,6 +1024,7 @@ enum PlayerLoginQueryIndex
     PLAYER_LOGIN_QUERY_LOAD_DATA_ELEMENTS,
     PLAYER_LOGIN_QUERY_LOAD_DATA_FLAGS,
     PLAYER_LOGIN_QUERY_LOAD_BANK_TAB_SETTINGS,
+    PLAYER_LOGIN_QUERY_LOAD_CONTENT_TRACKING,
     MAX_PLAYER_LOGIN_QUERY
 };
 
@@ -1830,6 +1831,11 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         void SendQuestUpdateAddPlayer(Quest const* quest, uint16 newCount) const;
         void SendQuestGiverStatusMultiple();
         void SendDisplayToast(uint32 entry, DisplayToastType type, bool isBonusRoll, uint32 quantity, DisplayToastMethod method, uint32 questId = 0, Item* item = nullptr) const;
+
+        // Content tracking: mirrors a tracked map-content entry into the ActivePlayer.TrackedCollectableSources update
+        // field and persists it, so tracking survives relog. Returns true if the tracked set changed.
+        bool AddTrackedContent(int32 targetType, int32 targetId, int32 collectableSourceInfoId);
+        bool RemoveTrackedContent(int32 targetType, int32 targetId);
 
         uint32 GetSharedQuestID() const { return m_sharedQuestId; }
         ObjectGuid GetPlayerSharingQuest() const { return m_playerSharingQuest; }
@@ -3132,6 +3138,7 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         void _LoadQuestStatusObjectives(PreparedQueryResult result);
         void _LoadQuestStatusObjectiveSpawnTrackings(PreparedQueryResult result);
         void _LoadQuestStatusRewarded(PreparedQueryResult result);
+        void _LoadContentTracking(PreparedQueryResult result);
         void _LoadDailyQuestStatus(PreparedQueryResult result);
         void _LoadWeeklyQuestStatus(PreparedQueryResult result);
         void _LoadMonthlyQuestStatus(PreparedQueryResult result);
