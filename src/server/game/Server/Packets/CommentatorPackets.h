@@ -78,6 +78,73 @@ namespace WorldPackets
             std::string TargetName;                          // player to follow
         };
 
+        class CommentatorGetPlayerInfo final : public ClientPacket
+        {
+        public:
+            explicit CommentatorGetPlayerInfo(WorldPacket&& packet) : ClientPacket(CMSG_COMMENTATOR_GET_PLAYER_INFO, std::move(packet)) { }
+
+            void Read() override;
+
+            uint32 Field0 = 0;                               // request context (unnamed offline)
+            uint32 Field1 = 0;
+            uint32 Field2 = 0;
+            bool Field3 = false;
+        };
+
+        class CommentatorGetPlayerCooldowns final : public ClientPacket
+        {
+        public:
+            explicit CommentatorGetPlayerCooldowns(WorldPacket&& packet) : ClientPacket(CMSG_COMMENTATOR_GET_PLAYER_COOLDOWNS, std::move(packet)) { }
+
+            void Read() override;
+
+            struct TrackedSpell
+            {
+                uint32 SpellID = 0;
+                uint32 Category = 0;
+            };
+
+            ObjectGuid Player;
+            std::vector<TrackedSpell> TrackedSpells;
+        };
+
+        // SMSG_COMMENTATOR_PLAYER_INFO - per-player match stats. Wire byte-exact from the client deserializer
+        // sub_7FF7290A19D0 / the 152-byte record reader sub_7FF72906EFA0 (all fixed-width LE; guid PackedGuid).
+        class CommentatorPlayerInfo final : public ServerPacket
+        {
+        public:
+            explicit CommentatorPlayerInfo() : ServerPacket(SMSG_COMMENTATOR_PLAYER_INFO, 32) { }
+
+            WorldPacket const* Write() override;
+
+            struct PlayerData
+            {
+                ObjectGuid UnitGUID;                         // -> CommentatorPlayerData.unitToken (name resolved client-side)
+                uint8 Faction = 0;
+                uint32 Specialization = 0;
+                uint8 Field3 = 0;                            // two extra wire bytes (not in the Lua struct)
+                uint8 Field4 = 0;
+                uint16 Kills = 0;
+                uint16 Deaths = 0;
+                uint32 DamageDone = 0;
+                uint32 DamageTaken = 0;
+                uint32 HealingDone = 0;
+                uint32 HealingTaken = 0;
+                uint8 SoloShuffleRoundWins = 0;
+                uint8 SoloShuffleRoundLosses = 0;
+                // Four tracked-spell/cooldown arrays follow (counts A..D). Sent empty until the 44-byte cooldown
+                // record's optional-field layout is confirmed - we do not fabricate cooldown timings.
+            };
+
+            uint32 LeadingId = 0;                            // match/update id (unnamed offline)
+            uint32 SpellTuple1 = 0;                          // top-level tracked-spell triple
+            uint32 SpellTuple2 = 0;
+            uint8 SpellTuple3 = 0;
+            uint64 PackedId = 0;                             // opaque handle (unnamed offline)
+            bool Flag = false;                               // trailing bool (bit7 of a byte)
+            std::vector<PlayerData> Players;
+        };
+
         // SMSG_COMMENTATOR_MAP_INFO - the catalogue of arena maps and their currently-active instances.
         // Wire recovered byte-exact from the client deserializer (all fixed-width LE; guids are PackedGuid).
         class CommentatorMapInfo final : public ServerPacket

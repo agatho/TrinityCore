@@ -18,6 +18,7 @@
 #include "WorldSession.h"
 #include "Battleground.h"
 #include "BattlegroundMgr.h"
+#include "BattlegroundScore.h"
 #include "CommentatorPackets.h"
 #include "Log.h"
 #include "ObjectAccessor.h"
@@ -26,6 +27,43 @@
 #include "RBAC.h"
 #include "Util.h"
 #include <unordered_map>
+
+namespace
+{
+    // Builds SMSG_COMMENTATOR_PLAYER_INFO for every participant of the given arena, filling the scalar stats
+    // from the live battleground scores. The tracked-cooldown arrays are left empty (see packet notes).
+    void BuildCommentatorPlayerInfo(Battleground* arena, WorldPackets::Commentator::CommentatorPlayerInfo& packet)
+    {
+        for (auto const& [guid, bgPlayer] : arena->GetPlayers())
+        {
+            WorldPackets::Commentator::CommentatorPlayerInfo::PlayerData& data = packet.Players.emplace_back();
+            data.UnitGUID = guid;
+            data.Faction = uint8(Battleground::GetTeamIndexByTeamId(bgPlayer.Team));
+
+            Player* member = ObjectAccessor::FindConnectedPlayer(guid);
+            if (member)
+                data.Specialization = AsUnderlyingType(member->GetPrimarySpecialization());
+
+            if (BattlegroundScore const* score = member ? arena->GetBattlegroundScore(member) : nullptr)
+            {
+                data.Kills = uint16(score->GetKillingBlows());
+                data.Deaths = uint16(score->GetDeaths());
+                data.DamageDone = score->GetDamageDone();
+                data.HealingDone = score->GetHealingDone();
+                // DamageTaken / HealingTaken / SoloShuffle round tallies have no score getter - left 0 (honest).
+            }
+        }
+    }
+
+    // Resolves the arena the given session is currently spectating (entered via CMSG_COMMENTATOR_ENTER_INSTANCE).
+    Battleground* GetSpectatedArena(Player* player)
+    {
+        Battleground* arena = sBattlegroundMgr->GetBattleground(player->GetBattlegroundId(), player->GetBattlegroundTypeId());
+        if (arena && arena->HasSpectator(player->GetGUID()))
+            return arena;
+        return nullptr;
+    }
+}
 
 void WorldSession::HandleCommentatorEnable(WorldPackets::Commentator::CommentatorEnable& packet)
 {
@@ -159,4 +197,38 @@ void WorldSession::HandleCommentatorSpectate(WorldPackets::Commentator::Commenta
         player->SetSpectateTarget(target->GetGUID());
     else
         player->SetSpectateTarget(ObjectGuid::Empty);
+}
+
+void WorldSession::HandleCommentatorGetPlayerInfo(WorldPackets::Commentator::CommentatorGetPlayerInfo& /*getPlayerInfo*/)
+{
+    Player* player = GetPlayer();
+    if (!player || !IsCommentator())
+        return;
+
+    // Answer for the arena we are currently spectating (the request's context fields are opaque offline;
+    // the spectated instance unambiguously identifies the match).
+    Battleground* arena = GetSpectatedArena(player);
+    if (!arena)
+        return;
+
+    WorldPackets::Commentator::CommentatorPlayerInfo playerInfo;
+    BuildCommentatorPlayerInfo(arena, playerInfo);
+    SendPacket(playerInfo.Write());
+}
+
+void WorldSession::HandleCommentatorGetPlayerCooldowns(WorldPackets::Commentator::CommentatorGetPlayerCooldowns& /*getPlayerCooldowns*/)
+{
+    Player* player = GetPlayer();
+    if (!player || !IsCommentator())
+        return;
+
+    // Cooldown data rides in the PLAYER_INFO record's tracked-spell arrays; refresh player info for the
+    // spectated arena. (Populating the per-spell cooldown records is gated on confirming their 44-byte layout.)
+    Battleground* arena = GetSpectatedArena(player);
+    if (!arena)
+        return;
+
+    WorldPackets::Commentator::CommentatorPlayerInfo playerInfo;
+    BuildCommentatorPlayerInfo(arena, playerInfo);
+    SendPacket(playerInfo.Write());
 }
