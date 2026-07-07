@@ -147,11 +147,26 @@ namespace WorldPackets
                 uint32 HealingTaken = 0;
                 uint8 SoloShuffleRoundWins = 0;
                 uint8 SoloShuffleRoundLosses = 0;
-                // Four tracked-spell arrays follow (counts A..D, bodies in wire order B,C,D,A). Array A is the
-                // spell-cooldown list: the 44-byte record is exactly WorldPackets::Spells::SpellHistoryEntry
-                // (proven == SMSG_SEND_SPELL_HISTORY, opcode 0x62001A). Arrays B (auras), C (charges), D (spell
-                // ids) have no offline-confirmed producer yet and stay empty.
-                std::vector<Spells::SpellHistoryEntry> Cooldowns;
+
+                // A compact per-aura record (array C). SpellID is certain; Duration is a millisecond time span
+                // (the client getter does duration = value * 0.001). Whether the client reads it as remaining /
+                // elapsed / total is the sole sniff-gated subfield - we send the aura's remaining duration.
+                struct AuraState
+                {
+                    uint32 SpellID = 0;
+                    uint32 Duration = 0;
+                };
+
+                // Four tracked-spell arrays follow. Counts are written up front in order A,B,C,D; the client
+                // reads the BODIES in the order B,C,D,A. Identities (all from the client deserializer):
+                //   A = spell cooldowns   -> WorldPackets::Spells::SpellHistoryEntry (== SMSG_SEND_SPELL_HISTORY)
+                //   B = spell charges     -> WorldPackets::Spells::SpellChargeEntry  (== SMSG_SEND_SPELL_CHARGES)
+                //   C = active auras      -> {uint32 SpellID, uint32 DurationMs}     (commentator-specific)
+                //   D = tracked spell ids -> uint32 list                            (commentator-specific)
+                std::vector<Spells::SpellHistoryEntry> Cooldowns;   // array A
+                std::vector<Spells::SpellChargeEntry> Charges;      // array B
+                std::vector<AuraState> Auras;                       // array C
+                std::vector<uint32> TrackedSpellIds;                // array D
             };
 
             uint32 LeadingId = 0;                            // match/update id (unnamed offline)

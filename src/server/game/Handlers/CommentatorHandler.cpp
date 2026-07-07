@@ -27,9 +27,11 @@
 #include "ObjectMgr.h"
 #include "Player.h"
 #include "RBAC.h"
+#include "SpellAuras.h"
 #include "SpellHistory.h"
 #include "SpellPackets.h"
 #include "Util.h"
+#include <algorithm>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -60,23 +62,51 @@ namespace
         }
     }
 
-    // Fills a player-record's cooldown array (array A) from the target's live SpellHistory, restricted to the
-    // spells the commentator asked to track. The 44-byte wire record is exactly WorldPackets::Spells::
-    // SpellHistoryEntry (proven identical to SMSG_SEND_SPELL_HISTORY), so we reuse TrinityCore's own builder -
-    // the produced timings are byte-identical to what the client already parses for spell history.
-    void BuildPlayerCooldowns(Player* target, std::vector<WorldPackets::Commentator::CommentatorGetPlayerCooldowns::TrackedSpell> const& tracked,
-        std::vector<WorldPackets::Spells::SpellHistoryEntry>& out)
+    // Fills a participant's four tracked-spell arrays from live server state, restricted (where the array is
+    // keyed by spell) to the spells the commentator asked to track:
+    //   A cooldowns / B charges -> reuse TrinityCore's own SendSpellHistory / SendSpellCharges builders, so the
+    //     wire is byte-identical to what the client already parses (arrays A/B are TC SpellHistoryEntry /
+    //     SpellChargeEntry). Charges are keyed by category, not spell, so the full charge set is sent.
+    //   C auras -> {SpellID, remaining duration ms} for each tracked spell the target currently has applied.
+    //   D tracked ids -> the tracked spells the target actually has live state for (cooldown or aura), so the
+    //     client tray reflects real state rather than an invented list.
+    void BuildPlayerTrackedState(Player* target,
+        std::vector<WorldPackets::Commentator::CommentatorGetPlayerCooldowns::TrackedSpell> const& tracked,
+        WorldPackets::Commentator::CommentatorPlayerInfo::PlayerData& data)
     {
-        WorldPackets::Spells::SendSpellHistory history;
-        target->GetSpellHistory()->WritePacket(&history);
-
         std::unordered_set<uint32> wanted;
         for (auto const& trackedSpell : tracked)
             wanted.insert(trackedSpell.SpellID);
 
-        for (WorldPackets::Spells::SpellHistoryEntry const& entry : history.Entries)
+        SpellHistory* history = target->GetSpellHistory();
+
+        // Array A - cooldowns (filtered to the tracked spells).
+        WorldPackets::Spells::SendSpellHistory spellHistory;
+        history->WritePacket(&spellHistory);
+        for (WorldPackets::Spells::SpellHistoryEntry const& entry : spellHistory.Entries)
             if (wanted.empty() || wanted.count(entry.SpellID))
-                out.push_back(entry);
+                data.Cooldowns.push_back(entry);
+
+        // Array B - charges (category-keyed; the full set is sent and the client maps spell -> category).
+        WorldPackets::Spells::SendSpellCharges spellCharges;
+        history->WritePacket(&spellCharges);
+        for (WorldPackets::Spells::SpellChargeEntry const& entry : spellCharges.Entries)
+            data.Charges.push_back(entry);
+
+        // Array C - active auras + array D - tracked ids with live state.
+        for (uint32 spellId : wanted)
+        {
+            bool hasState = false;
+            if (Aura const* aura = target->GetAura(spellId))
+            {
+                WorldPackets::Commentator::CommentatorPlayerInfo::PlayerData::AuraState& auraState = data.Auras.emplace_back();
+                auraState.SpellID = spellId;
+                auraState.Duration = uint32(std::max(aura->GetDuration(), 0));
+                hasState = true;
+            }
+            if (hasState || history->HasCooldown(spellId))
+                data.TrackedSpellIds.push_back(spellId);
+        }
     }
 
     // Resolves the arena the given session is currently spectating (entered via CMSG_COMMENTATOR_ENTER_INSTANCE).
@@ -324,7 +354,7 @@ void WorldSession::HandleCommentatorGetPlayerCooldowns(WorldPackets::Commentator
             if (data.UnitGUID != target->GetGUID())
                 continue;
 
-            BuildPlayerCooldowns(target, getPlayerCooldowns.TrackedSpells, data.Cooldowns);
+            BuildPlayerTrackedState(target, getPlayerCooldowns.TrackedSpells, data);
             break;
         }
     }
