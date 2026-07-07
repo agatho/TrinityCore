@@ -616,6 +616,24 @@ void Battleground::EndBattleground(Team winner)
 {
     RemoveFromBGFreeSlotQueue();
 
+    // Eject any commentators/spectators - the match is over. They are not participants, so the normal
+    // player-removal path never touches them; send them back to where they entered from.
+    if (!m_Spectators.empty())
+    {
+        for (ObjectGuid spectatorGuid : m_Spectators)
+        {
+            if (Player* spectator = ObjectAccessor::FindPlayer(spectatorGuid))
+            {
+                spectator->SetSpectateTarget(ObjectGuid::Empty);
+                if (spectator->IsGameMaster())
+                    spectator->SetGameMaster(false);
+                spectator->SetBattlegroundId(0, BATTLEGROUND_TYPE_NONE, BATTLEGROUND_QUEUE_NONE);
+                spectator->TeleportToBGEntryPoint();
+            }
+        }
+        m_Spectators.clear();
+    }
+
     bool guildAwarded = false;
 
     if (winner == ALLIANCE)

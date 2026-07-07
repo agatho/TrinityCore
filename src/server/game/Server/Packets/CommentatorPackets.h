@@ -47,6 +47,37 @@ namespace WorldPackets
             std::string TargetPlayer;                       // optional player name to centre the map list on
         };
 
+        class CommentatorEnterInstance final : public ClientPacket
+        {
+        public:
+            explicit CommentatorEnterInstance(WorldPacket&& packet) : ClientPacket(CMSG_COMMENTATOR_ENTER_INSTANCE, std::move(packet)) { }
+
+            void Read() override;
+
+            uint32 MapID = 0;
+            uint32 InstanceIDLow = 0;
+            uint32 InstanceIDHigh = 0;
+            bool Field3 = false;                            // trailing bit (unnamed offline)
+        };
+
+        class CommentatorExitInstance final : public ClientPacket
+        {
+        public:
+            explicit CommentatorExitInstance(WorldPacket&& packet) : ClientPacket(CMSG_COMMENTATOR_EXIT_INSTANCE, std::move(packet)) { }
+
+            void Read() override { }                         // empty payload
+        };
+
+        class CommentatorSpectate final : public ClientPacket
+        {
+        public:
+            explicit CommentatorSpectate(WorldPacket&& packet) : ClientPacket(CMSG_COMMENTATOR_SPECTATE, std::move(packet)) { }
+
+            void Read() override;
+
+            std::string TargetName;                          // player to follow
+        };
+
         // SMSG_COMMENTATOR_MAP_INFO - the catalogue of arena maps and their currently-active instances.
         // Wire recovered byte-exact from the client deserializer (all fixed-width LE; guids are PackedGuid).
         class CommentatorMapInfo final : public ServerPacket

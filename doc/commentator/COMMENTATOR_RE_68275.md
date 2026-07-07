@@ -97,9 +97,15 @@ These are field VALUES, not structure — build sends honest 0/best-guess and na
 - ENTER_INSTANCE: `BattlegroundMgr::GetBattleground(instanceId, bgTypeId)` → teleport into `GetBgMap()`.
 - PLAYER_INFO: `GetBattlegroundScore(player)` for damage/healing/kills/deaths; spec/faction from Player.
 
-## Build order
+## Build status
 
-P1 = packet layer (all CMSG + both SMSG, byte-exact above) + GET_MAP_INFO→MAP_INFO from live
-arenas. P2 = spectator subsystem in `Battleground` (add/remove team-less observer, teleport
-in/out) for ENTER/EXIT/SPECTATE. P3 = PLAYER_INFO/COOLDOWNS. P4 = START_WARGAME (reuse arranged
-wargame, see `feature/war-games`).
+- **P0 BUILT** — ENABLE (RBAC gate) + STATE_CHANGED.
+- **P1 BUILT** — GET_MAP_INFO → SMSG_COMMENTATOR_MAP_INFO from live arenas
+  (`BattlegroundMgr::GetActiveArenas`).
+- **P2 BUILT** — spectator subsystem: `Battleground` gains a spectator set
+  (Add/Remove/HasSpectator, ejected in `EndBattleground`); ENTER_INSTANCE finds the arena,
+  sets the commentator's BattlegroundId (satisfies `BattlegroundMap::CannotEnter`), makes them
+  an inert game-master observer, and teleports into the arena map; EXIT_INSTANCE restores +
+  teleports out; SPECTATE sets the native `PlayerData::SpectateTarget` UF to the followed unit.
+- **P3 (next)** = PLAYER_INFO/COOLDOWNS (byte-exact wire above, populate from
+  `GetBattlegroundScore`). **P4** = START_WARGAME (reuse arranged wargame, see `feature/war-games`).

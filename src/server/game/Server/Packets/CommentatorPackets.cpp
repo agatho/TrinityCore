@@ -28,6 +28,19 @@ void WorldPackets::Commentator::CommentatorGetMapInfo::Read()
     TargetPlayer = _worldPacket.ReadString(_worldPacket.ReadBits(6));
 }
 
+void WorldPackets::Commentator::CommentatorEnterInstance::Read()
+{
+    _worldPacket >> MapID;
+    _worldPacket >> InstanceIDLow;
+    _worldPacket >> InstanceIDHigh;
+    Field3 = _worldPacket.ReadBit();
+}
+
+void WorldPackets::Commentator::CommentatorSpectate::Read()
+{
+    TargetName = _worldPacket.ReadString(_worldPacket.ReadBits(6));
+}
+
 WorldPacket const* WorldPackets::Commentator::CommentatorMapInfo::Write()
 {
     _worldPacket << uint64(DirectoryId);
