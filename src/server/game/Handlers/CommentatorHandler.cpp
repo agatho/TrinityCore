@@ -16,10 +16,15 @@
  */
 
 #include "WorldSession.h"
+#include "Battleground.h"
+#include "BattlegroundMgr.h"
 #include "CommentatorPackets.h"
 #include "Log.h"
+#include "ObjectAccessor.h"
 #include "Player.h"
 #include "RBAC.h"
+#include "Util.h"
+#include <unordered_map>
 
 void WorldSession::HandleCommentatorEnable(WorldPackets::Commentator::CommentatorEnable& packet)
 {
@@ -39,4 +44,49 @@ void WorldSession::HandleCommentatorEnable(WorldPackets::Commentator::Commentato
     stateChanged.MatchGUID = _player ? _player->GetGUID() : ObjectGuid::Empty;
     stateChanged.Enabled = enabled;
     SendPacket(stateChanged.Write());
+}
+
+void WorldSession::HandleCommentatorGetMapInfo(WorldPackets::Commentator::CommentatorGetMapInfo& /*getMapInfo*/)
+{
+    if (!IsCommentator())
+        return;
+
+    std::vector<Battleground*> arenas;
+    sBattlegroundMgr->GetActiveArenas(arenas);
+
+    // Group the active arenas by map into the client's map->instances catalogue.
+    WorldPackets::Commentator::CommentatorMapInfo mapInfo;
+    std::unordered_map<uint32, std::size_t> mapIndexByMapId;
+    for (Battleground* arena : arenas)
+    {
+        uint32 const mapId = arena->GetMapId();
+        auto [itr, inserted] = mapIndexByMapId.try_emplace(mapId, mapInfo.Maps.size());
+        if (inserted)
+        {
+            WorldPackets::Commentator::CommentatorMapInfo::MapInfo& map = mapInfo.Maps.emplace_back();
+            map.TeamSize = arena->GetArenaType();
+            map.MinLevel = arena->GetMinLevel();
+            map.MaxLevel = arena->GetMaxLevel();
+        }
+
+        WorldPackets::Commentator::CommentatorMapInfo::InstanceInfo& instance = mapInfo.Maps[itr->second].Instances.emplace_back();
+        instance.MapID = mapId;
+        instance.InstanceID = arena->GetInstanceID();
+        instance.Status = arena->GetStatus();
+
+        for (auto const& [guid, bgPlayer] : arena->GetPlayers())
+        {
+            TeamId const teamIndex = Battleground::GetTeamIndexByTeamId(bgPlayer.Team);
+            if (teamIndex != TEAM_ALLIANCE && teamIndex != TEAM_HORDE)
+                continue;
+
+            WorldPackets::Commentator::CommentatorMapInfo::PlayerInfo& player = instance.Teams[teamIndex].Players.emplace_back();
+            player.PlayerGUID = guid;
+            player.Field3 = uint8(teamIndex);                              // hypothesis: faction (see dossier)
+            if (Player* member = ObjectAccessor::FindConnectedPlayer(guid))
+                player.Field1 = AsUnderlyingType(member->GetPrimarySpecialization());  // hypothesis: specID
+        }
+    }
+
+    SendPacket(mapInfo.Write());
 }
