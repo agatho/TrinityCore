@@ -2405,6 +2405,14 @@ void SmartScript::ProcessAction(SmartScriptHolder& e, Unit* unit, uint32 var0, u
                     TC_LOG_DEBUG("scripts.ai", "SmartScript::ProcessAction:: SMART_ACTION_PLAY_SPELL_VISUAL_KIT: target: {} ({}), SpellVisualKit: {}",
                         target->GetName(), target->GetGUID(), e.action.spellVisualKit.spellVisualKitId);
                 }
+                else if (GameObject* goTarget = target->ToGameObject())
+                {
+                    goTarget->SendPlaySpellVisualKit(e.action.spellVisualKit.spellVisualKitId, e.action.spellVisualKit.kitType,
+                        e.action.spellVisualKit.duration);
+
+                    TC_LOG_DEBUG("scripts.ai", "SmartScript::ProcessAction:: SMART_ACTION_PLAY_SPELL_VISUAL_KIT: gameobject target: {} ({}), SpellVisualKit: {}",
+                        target->GetName(), target->GetGUID(), e.action.spellVisualKit.spellVisualKitId);
+                }
             }
 
             break;

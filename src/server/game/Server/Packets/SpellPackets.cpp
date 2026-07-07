@@ -847,6 +847,16 @@ WorldPacket const* PlaySpellVisualKit::Write()
     return &_worldPacket;
 }
 
+WorldPacket const* GameObjectPlaySpellVisualKit::Write()
+{
+    _worldPacket << Object;
+    _worldPacket << int32(KitRecID);
+    _worldPacket << int32(KitType);
+    _worldPacket << uint32(Duration);
+
+    return &_worldPacket;
+}
+
 WorldPacket const* SpellVisualLoadScreen::Write()
 {
     _worldPacket << int32(SpellVisualKitID);

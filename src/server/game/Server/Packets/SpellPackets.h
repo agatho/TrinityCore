@@ -799,6 +799,19 @@ namespace WorldPackets
             bool MountedVisual = false;
         };
 
+        class GameObjectPlaySpellVisualKit final : public ServerPacket
+        {
+        public:
+            explicit GameObjectPlaySpellVisualKit() : ServerPacket(SMSG_GAME_OBJECT_PLAY_SPELL_VISUAL_KIT, 16 + 4 + 4 + 4) { }
+
+            WorldPacket const* Write() override;
+
+            ObjectGuid Object;
+            int32 KitRecID = 0;
+            int32 KitType = 0;
+            uint32 Duration = 0;
+        };
+
         class SpellVisualLoadScreen final : public ServerPacket
         {
         public:
