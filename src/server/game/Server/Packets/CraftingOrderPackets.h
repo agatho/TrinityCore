@@ -137,6 +137,25 @@ namespace CraftingOrders
         bool HasContext = false;
     };
 
+    // CMSG_CRAFTING_ORDER_FULFILL (0x3B011D): the crafter confirms a claimed order is crafted and delivers it.
+    // Serializer sub_7FF729155000 is BYTE-IDENTICAL to CMSG_CRAFTING_ORDER_REJECT's (sub_7FF7291552B0), so the wire
+    // is the same: { u64 OrderID; u8 Field2; string (the reject/note slot, empty for a plain fulfil); bit hasContext;
+    // [ClientContext] }. No crafted-item payload rides the wire — the server derives the output from the order's
+    // recipe (SkillLineAbility -> spell -> SPELL_EFFECT_CREATE_ITEM), matching the client's craft-then-fulfil flow.
+    class CraftingOrderFulfill final : public ClientPacket
+    {
+    public:
+        explicit CraftingOrderFulfill(WorldPacket&& packet) : ClientPacket(CMSG_CRAFTING_ORDER_FULFILL, std::move(packet)) { }
+
+        void Read() override;
+
+        uint64 OrderID = 0;
+        uint8 Field2 = 0;
+        std::string Note;
+        ClientContext Context;
+        bool HasContext = false;
+    };
+
     // Client enum ClientCrafting::CraftingOrderResult (12.0.7.68275, extracted from the client enum registrar).
     enum class CraftingOrderResult : uint8
     {
@@ -228,6 +247,23 @@ namespace CraftingOrders
     {
     public:
         CraftingOrderReleaseResult() : CraftingOrderActionResult(SMSG_CRAFTING_ORDER_RELEASE_RESULT) { }
+    };
+
+    // SMSG_CRAFTING_ORDER_FULFILL_RESULT (0x420337): unlike the other results this carries a richer body. Recovered
+    // byte-exact from the client reader sub_7FF7290B9950 (all reads are plain — the "CompressedUInt32" reader
+    // 0x7FF72BE6C410 is ReadUInt32): { u8 Result; u64 OrderID; u64 Field2; u8 Field3; PackedGUID Field4; u32 Field5;
+    // u32 Field6; u32 Field7 }. Only Result + OrderID have offline-confirmable meaning; Field2..7 (likely the
+    // delivered item guid / quality / counts) have no resolvable semantics and are sent 0/empty (honest, structurally
+    // exact — the client reads a valid packet; the fulfilment itself is also signalled via UPDATE_STATE).
+    class CraftingOrderFulfillResult final : public ServerPacket
+    {
+    public:
+        CraftingOrderFulfillResult() : ServerPacket(SMSG_CRAFTING_ORDER_FULFILL_RESULT, 1 + 8 + 8 + 1 + 2 + 4 + 4 + 4) { }
+
+        WorldPacket const* Write() override;
+
+        CraftingOrderResult Result = CraftingOrderResult::Ok;
+        uint64 CraftingOrderID = 0;
     };
 
     class CraftingOrderRejectResult final : public CraftingOrderActionResult

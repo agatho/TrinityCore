@@ -410,7 +410,7 @@ void OpcodeTable::InitializeClientOpcodes()
     DEFINE_HANDLER(CMSG_CRAFTING_ORDER_CANCEL,                              STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleCraftingOrderCancel);
     DEFINE_HANDLER(CMSG_CRAFTING_ORDER_CLAIM,                               STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleCraftingOrderClaim);
     DEFINE_HANDLER(CMSG_CRAFTING_ORDER_CREATE,                              STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleCraftingOrderCreate);
-    DEFINE_HANDLER(CMSG_CRAFTING_ORDER_FULFILL,                             STATUS_UNHANDLED, PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
+    DEFINE_HANDLER(CMSG_CRAFTING_ORDER_FULFILL,                             STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleCraftingOrderFulfill);
     DEFINE_HANDLER(CMSG_CRAFTING_ORDER_GET_NPC_REWARD_INFO,                 STATUS_UNHANDLED, PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
     DEFINE_HANDLER(CMSG_CRAFTING_ORDER_LIST_CRAFTER_ORDERS,                 STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleCraftingOrderListCrafterOrders);
     DEFINE_HANDLER(CMSG_CRAFTING_ORDER_LIST_MY_ORDERS,                      STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleCraftingOrderListMyOrders);

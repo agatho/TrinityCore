@@ -18,11 +18,16 @@
 #include "WorldSession.h"
 #include "CraftingOrderMgr.h"
 #include "CraftingOrderPackets.h"
+#include "CharacterDatabase.h"
 #include "DB2Stores.h"
 #include "GameTime.h"
+#include "Item.h"
 #include "Log.h"
+#include "Mail.h"
 #include "ObjectAccessor.h"
 #include "Player.h"
+#include "SpellInfo.h"
+#include "SpellMgr.h"
 #include "World.h"
 
 // Pushes SMSG_CRAFTING_ORDER_UPDATE_STATE to the online parties interested in an order (its customer and, once
@@ -84,6 +89,18 @@ void WorldSession::HandleCraftingOrderCreate(WorldPackets::CraftingOrders::Craft
         order.Reagents.push_back(reagent);
     }
 
+    // The tip is escrowed up front (like an auction deposit): the customer must have the gold, and it is held by
+    // the order until it is fulfilled (paid to the crafter) or dies (refunded). This is the only place gold leaves
+    // the customer; every terminal transition releases exactly the escrowed amount, so no gold is created or lost.
+    uint64 const tip = packet.TipAmount;
+    if (tip && !player->HasEnoughMoney(tip))
+    {
+        WorldPackets::CraftingOrders::CraftingOrderCreateResult result;
+        result.Result = WorldPackets::CraftingOrders::CraftingOrderResult::MissingCurrency;
+        SendPacket(result.Write());
+        return;
+    }
+
     uint64 const id = sCraftingOrderMgr.CreateOrder(player, std::move(order));
 
     WorldPackets::CraftingOrders::CraftingOrderCreateResult result;
@@ -94,6 +111,14 @@ void WorldSession::HandleCraftingOrderCreate(WorldPackets::CraftingOrders::Craft
 
     if (!id)
         return;
+
+    if (tip)
+    {
+        player->ModifyMoney(-int64(tip));
+        CharacterDatabaseTransaction trans = CharacterDatabase.BeginTransaction();
+        player->SaveInventoryAndGoldToDB(trans);
+        CharacterDatabase.CommitTransaction(trans);
+    }
 
     TC_LOG_DEBUG("network", "CMSG_CRAFTING_ORDER_CREATE: {} posted order {} for recipe {} (tip {})",
         player->GetGUID().ToString(), id, packet.SkillLineAbilityID, packet.TipAmount);
@@ -169,6 +194,61 @@ void WorldSession::HandleCraftingOrderReject(WorldPackets::CraftingOrders::Craft
     if (ok)
         if (CraftingOrders::Order const* order = sCraftingOrderMgr.GetOrder(packet.OrderID))
             BroadcastCraftingOrderState(*order);
+}
+
+void WorldSession::HandleCraftingOrderFulfill(WorldPackets::CraftingOrders::CraftingOrderFulfill& packet)
+{
+    Player* player = GetPlayer();
+    if (!player)
+        return;
+
+    CraftingOrders::Order const* order = sCraftingOrderMgr.GetOrder(packet.OrderID);
+    bool ok = order && order->State == CraftingOrders::OrderState::Claimed && order->CrafterGUID == player->GetGUID();
+
+    if (ok)
+    {
+        // No crafted item rides the fulfil wire — derive the recipe's output (SkillLineAbility -> spell ->
+        // SPELL_EFFECT_CREATE_ITEM) and mail it to the customer, mirroring the client's craft-then-fulfil flow.
+        uint32 outItemId = 0;
+        int32 outCount = 1;
+        if (SkillLineAbilityEntry const* ability = sSkillLineAbilityStore.LookupEntry(order->SkillLineAbilityID))
+            if (SpellInfo const* recipe = sSpellMgr->GetSpellInfo(ability->Spell, DIFFICULTY_NONE))
+                for (SpellEffectInfo const& effect : recipe->GetEffects())
+                    if (effect.IsEffect(SPELL_EFFECT_CREATE_ITEM))
+                    {
+                        outItemId = effect.ItemType;
+                        outCount = std::max<int32>(1, effect.CalcValue(player));
+                        break;
+                    }
+
+        ObjectGuid const customerGuid = order->CustomerGUID;
+        if (outItemId)
+        {
+            if (Item* crafted = Item::CreateItem(outItemId, uint32(outCount), ItemContext::NONE, player))
+            {
+                CharacterDatabaseTransaction trans = CharacterDatabase.BeginTransaction();
+                crafted->SaveToDB(trans);
+                MailDraft("Crafting Order Complete", "Your crafted item is enclosed.")
+                    .AddItem(crafted)
+                    .SendMailTo(trans, MailReceiver(ObjectAccessor::FindConnectedPlayer(customerGuid), customerGuid.GetCounter()),
+                        MailSender(player, MAIL_STATIONERY_DEFAULT), MAIL_CHECK_MASK_COPIED);
+                CharacterDatabase.CommitTransaction(trans);
+            }
+        }
+
+        // Transition Claimed -> Fulfilled and release the escrowed tip to the crafter.
+        ok = sCraftingOrderMgr.FulfillOrder(packet.OrderID, player->GetGUID());
+    }
+
+    WorldPackets::CraftingOrders::CraftingOrderFulfillResult result;
+    result.Result = ok ? WorldPackets::CraftingOrders::CraftingOrderResult::Ok
+                       : WorldPackets::CraftingOrders::CraftingOrderResult::CannotFulfill;
+    result.CraftingOrderID = packet.OrderID;
+    SendPacket(result.Write());
+
+    if (ok)
+        if (CraftingOrders::Order const* fulfilled = sCraftingOrderMgr.GetOrder(packet.OrderID))
+            BroadcastCraftingOrderState(*fulfilled);
 }
 
 // Projects a stored order into the client's JamCraftingOrder wire form (customer-provided reagents + the

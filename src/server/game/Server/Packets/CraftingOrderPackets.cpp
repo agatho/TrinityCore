@@ -175,10 +175,46 @@ void CraftingOrderReject::Read()
     }
 }
 
+void CraftingOrderFulfill::Read()
+{
+    // Wire is byte-identical to CraftingOrderReject (client serializers sub_7FF729155000 == sub_7FF7291552B0).
+    _worldPacket >> OrderID;
+    _worldPacket >> Field2;
+
+    uint8 noteLenHigh = _worldPacket.read<uint8>();
+    _worldPacket.ResetBitPos();
+    uint32 noteLen = (uint32(noteLenHigh) << 2) | _worldPacket.ReadBits(2);
+    HasContext = _worldPacket.ReadBit();
+
+    if (HasContext)
+        Context.Read(_worldPacket);
+
+    if (noteLen)
+    {
+        Note.resize(noteLen);
+        for (uint32 i = 0; i < noteLen; ++i)
+            Note[i] = _worldPacket.read<char>();
+    }
+}
+
 WorldPacket const* CraftingOrderActionResult::Write()
 {
     _worldPacket << uint8(Result);
     _worldPacket << uint64(CraftingOrderID);
+
+    return &_worldPacket;
+}
+
+WorldPacket const* CraftingOrderFulfillResult::Write()
+{
+    _worldPacket << uint8(Result);
+    _worldPacket << uint64(CraftingOrderID);
+    _worldPacket << uint64(0);                     // Field2 (unknown semantics)
+    _worldPacket << uint8(0);                      // Field3 (unknown semantics)
+    _worldPacket << ObjectGuid::Empty;             // Field4 PackedGuid (delivered-item/crafter guid; not resolvable)
+    _worldPacket << uint32(0);                     // Field5
+    _worldPacket << uint32(0);                     // Field6
+    _worldPacket << uint32(0);                     // Field7
 
     return &_worldPacket;
 }

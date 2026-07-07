@@ -98,6 +98,7 @@ public:
     bool ReleaseOrder(uint64 orderId, ObjectGuid crafter);   // un-claim, back to the pool
     bool RejectOrder(uint64 orderId, ObjectGuid crafter, std::string reason);   // crafter declines
     bool CancelOrder(uint64 orderId, ObjectGuid customer);
+    bool FulfillOrder(uint64 orderId, ObjectGuid crafter);   // crafter delivers: Claimed -> Fulfilled, tip paid out
     void RemoveOrder(uint64 orderId);
 
     CraftingOrders::Order* GetOrder(uint64 orderId);

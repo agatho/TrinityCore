@@ -326,6 +326,7 @@ namespace WorldPackets
         class CraftingOrderCancel;
         class CraftingOrderRelease;
         class CraftingOrderReject;
+        class CraftingOrderFulfill;
         class CraftingOrderListMyOrders;
         class CraftingOrderListCrafterOrders;
     }
@@ -1815,6 +1816,7 @@ class TC_GAME_API WorldSession
         void HandleCraftingOrderCancel(WorldPackets::CraftingOrders::CraftingOrderCancel& packet);
         void HandleCraftingOrderRelease(WorldPackets::CraftingOrders::CraftingOrderRelease& packet);
         void HandleCraftingOrderReject(WorldPackets::CraftingOrders::CraftingOrderReject& packet);
+        void HandleCraftingOrderFulfill(WorldPackets::CraftingOrders::CraftingOrderFulfill& packet);
         void HandleCraftingOrderListMyOrders(WorldPackets::CraftingOrders::CraftingOrderListMyOrders& packet);
         void HandleCraftingOrderListCrafterOrders(WorldPackets::CraftingOrders::CraftingOrderListCrafterOrders& packet);
 

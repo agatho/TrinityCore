@@ -20,12 +20,30 @@
 #include "DatabaseEnv.h"
 #include "GameTime.h"
 #include "Log.h"
+#include "Mail.h"
+#include "ObjectAccessor.h"
 #include "Player.h"
 #include <algorithm>
 
 namespace
 {
     constexpr uint32 EXPIRE_CHECK_INTERVAL_MS = 30 * IN_MILLISECONDS;
+
+    // Delivers a crafting-order tip by mail (payout to the crafter on fulfil, or refund to the customer when the
+    // order dies unfulfilled). Works whether the recipient is online or not. The tip is escrowed from the customer
+    // at create time, so this only ever moves already-reserved gold — it never creates any.
+    void MailCraftingOrderTip(ObjectGuid recipient, uint64 amount, char const* subject, char const* body)
+    {
+        if (!amount || recipient.IsEmpty())
+            return;
+
+        CharacterDatabaseTransaction trans = CharacterDatabase.BeginTransaction();
+        MailDraft(subject, body)
+            .AddMoney(amount)
+            .SendMailTo(trans, MailReceiver(ObjectAccessor::FindConnectedPlayer(recipient), recipient.GetCounter()),
+                MailSender(MAIL_NORMAL, UI64LIT(0), MAIL_STATIONERY_DEFAULT), MAIL_CHECK_MASK_COPIED);
+        CharacterDatabase.CommitTransaction(trans);
+    }
 }
 
 CraftingOrderMgr& CraftingOrderMgr::Instance()
@@ -169,7 +187,9 @@ void CraftingOrderMgr::Update(uint32 diff)
         }
         else if (postingExpired)
         {
-            // P4: refund the customer's escrowed tip/reagents before erasing.
+            // Order lapsed unclaimed: refund the customer's escrowed tip, then erase.
+            MailCraftingOrderTip(order.CustomerGUID, order.TipAmount,
+                "Crafting Order Expired", "Your crafting order expired unclaimed. Your tip has been refunded.");
             uint64 const expiredId = order.OrderID;
             itr = _orders.erase(itr);
             DeleteOrderFromDB(expiredId);
@@ -241,8 +261,27 @@ bool CraftingOrderMgr::RejectOrder(uint64 orderId, ObjectGuid crafter, std::stri
     order->ClaimEndDate = 0;
     SaveOrderToDB(*order);
 
+    // The order is declined and terminal: return the customer's escrowed tip.
+    MailCraftingOrderTip(order->CustomerGUID, order->TipAmount,
+        "Crafting Order Declined", "The crafter declined your order. Your tip has been refunded.");
+
     TC_LOG_DEBUG("network", "CraftingOrderMgr: order {} rejected by {} (reason: {})",
         orderId, crafter.ToString(), reason.empty() ? "none" : reason);
+    return true;
+}
+
+bool CraftingOrderMgr::FulfillOrder(uint64 orderId, ObjectGuid crafter)
+{
+    CraftingOrders::Order* order = GetOrder(orderId);
+    if (!order || order->State != CraftingOrders::OrderState::Claimed || order->CrafterGUID != crafter)
+        return false;
+
+    order->State = CraftingOrders::OrderState::Fulfilled;
+    SaveOrderToDB(*order);
+
+    // Release the escrowed tip to the crafter who completed the work.
+    MailCraftingOrderTip(order->CrafterGUID, order->TipAmount,
+        "Crafting Order Payment", "Payment for a completed crafting order is enclosed.");
     return true;
 }
 
@@ -253,6 +292,10 @@ bool CraftingOrderMgr::CancelOrder(uint64 orderId, ObjectGuid customer)
         return false;
     if (order->State != CraftingOrders::OrderState::Created)
         return false;   // can't cancel once a crafter has claimed it
+
+    // Refund the customer's escrowed tip before the order is erased.
+    MailCraftingOrderTip(order->CustomerGUID, order->TipAmount,
+        "Crafting Order Cancelled", "You cancelled your crafting order. Your tip has been refunded.");
 
     RemoveOrder(orderId);
     return true;
