@@ -326,6 +326,11 @@ namespace WorldPackets
         class SetSheathed;
     }
 
+    namespace Commentator
+    {
+        class CommentatorEnable;
+    }
+
     namespace Duel
     {
         class CanDuel;
@@ -1827,6 +1832,11 @@ class TC_GAME_API WorldSession
         void HandleObjectUpdateFailedOpcode(WorldPackets::Misc::ObjectUpdateFailed& objectUpdateFailed);
         void HandleObjectUpdateRescuedOpcode(WorldPackets::Misc::ObjectUpdateRescued& objectUpdateRescued);
         void HandleCloseInteraction(WorldPackets::Misc::CloseInteraction& closeInteraction);
+
+        // Commentator (spectator) mode
+        void HandleCommentatorEnable(WorldPackets::Commentator::CommentatorEnable& packet);
+        bool IsCommentator() const { return _isCommentator; }
+        void SetCommentator(bool on) { _isCommentator = on; }
         void HandleConversationLineStarted(WorldPackets::Misc::ConversationLineStarted& conversationLineStarted);
         void HandleKeyboundOverride(WorldPackets::Spells::KeyboundOverride& keyboundOverride);
         void HandleQueryCountdownTimer(WorldPackets::Misc::QueryCountdownTimer& queryCountdownTimer);
@@ -2036,6 +2046,7 @@ class TC_GAME_API WorldSession
         bool _filterAddonMessages;
         uint32 recruiterId;
         bool isRecruiter;
+        bool _isCommentator = false;                        // account is currently in commentator (spectator) mode
         LockedQueue<WorldPacket*> _recvQueue;
         rbac::RBACData* _RBACData;
         uint32 expireTime;
