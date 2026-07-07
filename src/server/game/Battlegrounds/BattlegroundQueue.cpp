@@ -228,6 +228,26 @@ GroupQueueInfo* BattlegroundQueue::AddGroup(Player const* leader, Group const* g
     return ginfo;
 }
 
+bool BattlegroundQueue::AddWargameSide(Player* leader, Group* group, Battleground* bg, PVPDifficultyEntry const* bracketEntry, Team team)
+{
+    // Queue the group onto the forced team (premade so it lands in the premade pool), then register the queue slot
+    // on each member and invite the whole side. Rating fields are irrelevant for war games (0).
+    GroupQueueInfo* ginfo = AddGroup(leader, group, team, bracketEntry, true, 0, 0);
+    if (!ginfo)
+        return false;
+
+    if (group)
+    {
+        for (GroupReference const& ref : group->GetMembers())
+            if (Player* member = ref.GetSource())
+                member->AddBattlegroundQueueId(m_queueId);
+    }
+    else
+        leader->AddBattlegroundQueueId(m_queueId);
+
+    return InviteGroupToBG(ginfo, bg, team);
+}
+
 void BattlegroundQueue::PlayerInvitedToBGUpdateAverageWaitTime(GroupQueueInfo* ginfo, BattlegroundBracketId bracket_id)
 {
     uint32 timeInQueue = getMSTimeDiff(ginfo->JoinTime, GameTime::GetGameTimeMS());

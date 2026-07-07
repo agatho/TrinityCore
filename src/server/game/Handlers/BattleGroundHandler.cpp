@@ -800,7 +800,8 @@ void WorldSession::HandleAcceptWargameInvite(WorldPackets::Battleground::AcceptW
         return;
 
     // Report the outcome to the challenger.
-    if (Player* initiator = ObjectAccessor::FindConnectedPlayer(req.Initiator))
+    Player* initiator = ObjectAccessor::FindConnectedPlayer(req.Initiator);
+    if (initiator)
     {
         WorldPackets::Battleground::WargameRequestOpponentResponse response;
         response.OpposingPartyMember = responder->GetGUID();
@@ -808,6 +809,54 @@ void WorldSession::HandleAcceptWargameInvite(WorldPackets::Battleground::AcceptW
         initiator->SendDirectMessage(response.Write());
     }
 
-    // P1: on acceptance, queue both groups into a war-game battleground/arena instance
-    // (BattlegroundQueueIdType::Wargame already exists in the queue infrastructure).
+    // P1: on acceptance, spin up a war-game battleground/arena instance and port both groups in. This mirrors the
+    // rated-arena start path (create bg -> queue each side -> invite -> start), but the two premade groups are
+    // known up front so no matchmaking is involved; the challenger's side is forced ALLIANCE, the opponent HORDE.
+    if (!packet.Accept || !initiator)
+        return;
+
+    Group* initiatorGroup = initiator->GetGroup();
+    Group* responderGroup = responder->GetGroup();
+    if (!initiatorGroup || !responderGroup || initiatorGroup == responderGroup)
+        return;
+    // Both must still be led by the players who arranged the match.
+    if (initiatorGroup->GetLeaderGUID() != initiator->GetGUID() || responderGroup->GetLeaderGUID() != responder->GetGUID())
+        return;
+    // Neither side may already be in a battleground.
+    if (initiator->InBattleground() || responder->InBattleground())
+        return;
+
+    // Resolve the chosen battleground/arena from the recorded challenge.
+    uint16 battlemasterListId = uint16(req.BattlemasterListID);
+    BattlemasterListEntry const* battlemasterList = sBattlemasterListStore.LookupEntry(battlemasterListId);
+    if (!battlemasterList)
+        return;
+
+    BattlegroundTypeId bgTypeId = BattlegroundTypeId(battlemasterListId);
+    BattlegroundTemplate const* bgTemplate = sBattlegroundMgr->GetBattlegroundTemplateByTypeId(bgTypeId);
+    if (!bgTemplate)
+        return;
+
+    // Arena war games carry a team size (derived from the challenging group); battleground war games use 0.
+    uint8 teamSize = 0;
+    if (bgTemplate->IsArena())
+        teamSize = uint8(std::max<uint32>(1, initiatorGroup->GetMembersCount()));
+
+    BattlegroundQueueTypeId queueId = BattlegroundMgr::BGQueueTypeId(battlemasterListId, BattlegroundQueueIdType::Wargame, false, teamSize);
+
+    PVPDifficultyEntry const* bracketEntry = DB2Manager::GetBattlegroundBracketByLevel(bgTemplate->MapIDs.front(), initiator->GetLevel());
+    if (!bracketEntry)
+        return;
+
+    Battleground* bg = sBattlegroundMgr->CreateNewBattleground(queueId, bracketEntry->GetBracketId());
+    if (!bg)
+        return;
+
+    BattlegroundQueue& queue = sBattlegroundMgr->GetBattlegroundQueue(queueId);
+    queue.AddWargameSide(initiator, initiatorGroup, bg, bracketEntry, ALLIANCE);
+    queue.AddWargameSide(responder, responderGroup, bg, bracketEntry, HORDE);
+
+    // Register the instance and open it; both sides now hold an enter-confirmation and port in via the existing
+    // CMSG_BATTLEFIELD_PORT -> SendToBattleground handshake.
+    bg->StartBattleground();
 }

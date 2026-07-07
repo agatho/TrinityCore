@@ -79,6 +79,9 @@ class TC_GAME_API BattlegroundQueue
         bool CheckNormalMatch(BattlegroundBracketId bracket_id, uint32 minPlayers, uint32 maxPlayers);
         bool CheckSkirmishForSameFaction(BattlegroundBracketId bracket_id, uint32 minPlayersPerTeam);
         GroupQueueInfo* AddGroup(Player const* leader, Group const* group, Team team, PVPDifficultyEntry const*  bracketEntry, bool isPremade, uint32 ArenaRating, uint32 MatchmakerRating);
+        // War games bypass matchmaking: both premade groups are known up front, so this queues one side onto a
+        // forced team and immediately sends its members the enter-confirmation for the given battleground.
+        bool AddWargameSide(Player* leader, Group* group, Battleground* bg, PVPDifficultyEntry const* bracketEntry, Team team);
         void RemovePlayer(ObjectGuid guid, bool decreaseInvitedCount);
         bool IsPlayerInvited(ObjectGuid pl_guid, const uint32 bgInstanceGuid, const uint32 removeTime);
         bool GetPlayerGroupInfoData(ObjectGuid guid, GroupQueueInfo* ginfo);
