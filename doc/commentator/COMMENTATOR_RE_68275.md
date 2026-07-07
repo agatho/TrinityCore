@@ -89,23 +89,35 @@ record reader (`sub_7FF72906EFA0`) were re-decompiled in Ghidra (`wow_co3` / `wo
 and match the IDA output exactly. Primitive readers reconfirmed: `func_0x7ff72be6c410`=u32,
 `func_0x7ff72be6c370`=u8, `func_0x7ff72be6c3c0`=u16, `func_0x7ff72bebdea0`=PackedGuid.
 
-**44-byte cooldown record wire (fixed, then flag-gated optionals):**
-```
-uint32  Field0            (mem +0)     ← key/timer (likely SpellID)
-uint32  Field4            (mem +4)
-uint32  Field8            (mem +8)
-uint32  Field12           (mem +12)
-uint32  Field16           (mem +16)
-uint32  Field40           (mem +40)
-uint8   Flags             bit7 -> HasField20, bit6 -> HasField28, bit5 -> Enable bool (+36)
-[uint32 Field20]          only if Flags bit7   (start/charges)
-[uint32 Field28]          only if Flags bit6   (duration)
-```
-Maps to `GetPlayerCooldownInfo -> {startTime, duration, enable}` (enable = Flags bit5; the two
-optionals are the timer pair). **Structure is now byte-exact and dual-tool-confirmed** — only
-the semantic label of *which* fixed uint32 is SpellID vs which timer remains (the
-`C_Commentator.GetPlayerCooldownInfo` native binding pins that). The P3 empty-array choice
-stays correct until those labels are set; populating is now unblocked structurally.
+### The 44-byte record IS `WorldPackets::Spells::SpellHistoryEntry` (SMSG_SEND_SPELL_HISTORY, opcode 0x62001A)
+
+Triangulated three independent ways: (1) the client reader `sub_7FF72906DC60`; (2) the message
+vtable `off_7FF72C4BB608` that owns this vector references `WowGetRawTypeName<struct
+SpellHistoryEntry>` and returns opcode `6422554 == 0x62001A`; (3) TrinityCore's own serializer
+`operator<<(ByteBuffer&, SpellHistoryEntry const&)` (`SpellPackets.cpp:680`) matches the reader
+field-for-field and bit-for-bit. So the semantics are TC's existing struct — no guessing:
+
+| mem | wire | type | gating | SpellHistoryEntry field |
+|---|---|---|---|---|
+| +0  | 1 | uint32 | fixed | **SpellID** (the lookup key) |
+| +4  | 2 | uint32 | fixed | **ItemID** |
+| +8  | 3 | uint32 | fixed | **Category** |
+| +12 | 4 | int32  | fixed | **RecoveryTime** (cooldown duration, ms) |
+| +16 | 5 | int32  | fixed | **CategoryRecoveryTime** (ms) |
+| +40 | 6 | float  | fixed | **ModRate** (default 1.0) |
+| +20 | 7 | int32  | optional bit7 | **RecoveryTimeStartOffset** |
+| +28 | 8 | int32  | optional bit6 | **CategoryRecoveryTimeStartOffset** |
+| +36 | — | bool   | bit5          | **OnHold** |
+
+Note: durations are the *fixed* fields (+12/+16), NOT the optionals; the optionals are start
+*offsets*. So my earlier "+20=startTime / +28=duration" hypothesis was wrong — corrected here.
+Bit order matches (MSB-first): OptionalInit(RecoveryTimeStartOffset)→bit7,
+OptionalInit(CategoryRecoveryTimeStartOffset)→bit6, Bits<1>(OnHold)→bit5, then FlushBits.
+
+**POPULATED (P3+):** the cooldown array (array A) is now filled by reusing TC's own
+`SpellHistory::WritePacket(SendSpellHistory*)` + `operator<<(SpellHistoryEntry)` — byte-identical
+to what the client already parses for spell history, so zero fabrication. No charges/maxCharges in
+this record (charges are a sibling vector at player+0x68, array C, still empty).
 
 The 152-byte player record reader confirms P3's scalar order exactly: PackedGuid, u8 faction,
 u32 spec, 2 spare bytes, u16 kills, u16 deaths, u32 damageDone/Taken + healingDone/Taken, u8

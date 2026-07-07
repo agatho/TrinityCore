@@ -20,6 +20,7 @@
 
 #include "Packet.h"
 #include "ObjectGuid.h"
+#include "SpellPackets.h"
 #include <array>
 #include <vector>
 
@@ -146,8 +147,11 @@ namespace WorldPackets
                 uint32 HealingTaken = 0;
                 uint8 SoloShuffleRoundWins = 0;
                 uint8 SoloShuffleRoundLosses = 0;
-                // Four tracked-spell/cooldown arrays follow (counts A..D). Sent empty until the 44-byte cooldown
-                // record's optional-field layout is confirmed - we do not fabricate cooldown timings.
+                // Four tracked-spell arrays follow (counts A..D, bodies in wire order B,C,D,A). Array A is the
+                // spell-cooldown list: the 44-byte record is exactly WorldPackets::Spells::SpellHistoryEntry
+                // (proven == SMSG_SEND_SPELL_HISTORY, opcode 0x62001A). Arrays B (auras), C (charges), D (spell
+                // ids) have no offline-confirmed producer yet and stay empty.
+                std::vector<Spells::SpellHistoryEntry> Cooldowns;
             };
 
             uint32 LeadingId = 0;                            // match/update id (unnamed offline)

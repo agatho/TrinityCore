@@ -104,11 +104,16 @@ WorldPacket const* WorldPackets::Commentator::CommentatorPlayerInfo::Write()
         _worldPacket << uint32(player.HealingTaken);
         _worldPacket << uint8(player.SoloShuffleRoundWins);
         _worldPacket << uint8(player.SoloShuffleRoundLosses);
-        // Four tracked-spell/cooldown arrays, all empty (count = 0).
-        _worldPacket << uint32(0);
-        _worldPacket << uint32(0);
-        _worldPacket << uint32(0);
-        _worldPacket << uint32(0);
+        // Four array counts are written up front in order A,B,C,D; the client then reads the bodies in the
+        // order B,C,D,A (confirmed from the deserializer sub_7FF72906EFA0). Only array A (cooldowns) is
+        // produced; B (auras), C (charges), D (spell ids) are empty.
+        _worldPacket << uint32(player.Cooldowns.size());        // count A - cooldowns
+        _worldPacket << uint32(0);                              // count B - auras
+        _worldPacket << uint32(0);                              // count C - charges
+        _worldPacket << uint32(0);                              // count D - spell ids
+        // Bodies B, C, D are empty; body A (SpellHistoryEntry list) comes last.
+        for (Spells::SpellHistoryEntry const& cooldown : player.Cooldowns)
+            _worldPacket << cooldown;
     }
 
     return &_worldPacket;

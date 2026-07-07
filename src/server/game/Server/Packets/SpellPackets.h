@@ -626,6 +626,8 @@ namespace WorldPackets
             Optional<int32> CategoryRecoveryTimeStartOffset;
         };
 
+        ByteBuffer& operator<<(ByteBuffer& data, SpellHistoryEntry const& historyEntry);
+
         class SendSpellHistory final : public ServerPacket
         {
         public:
