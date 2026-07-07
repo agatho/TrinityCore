@@ -816,6 +816,17 @@ namespace WorldPackets
             bool IsReroll = false;
         };
 
+        // CMSG_CLOSE_QUEST_CHOICE -- the player dismisses the active PlayerChoice UI. Opcode-only (empty payload
+        // confirmed by client serializer 0x7FF729148D10, n=0). Server clears the active choice so a stale
+        // CMSG_CHOICE_RESPONSE cannot fire against a closed choice.
+        class CloseQuestChoice final : public ClientPacket
+        {
+        public:
+            explicit CloseQuestChoice(WorldPacket&& packet) : ClientPacket(CMSG_CLOSE_QUEST_CHOICE, std::move(packet)) { }
+
+            void Read() override { }
+        };
+
         class UiMapQuestLinesResponse final : public ServerPacket
         {
         public:
