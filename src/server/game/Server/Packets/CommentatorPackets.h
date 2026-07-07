@@ -20,6 +20,8 @@
 
 #include "Packet.h"
 #include "ObjectGuid.h"
+#include <array>
+#include <vector>
 
 namespace WorldPackets
 {
@@ -33,6 +35,63 @@ namespace WorldPackets
             void Read() override;
 
             uint32 Enable = 0;
+        };
+
+        class CommentatorGetMapInfo final : public ClientPacket
+        {
+        public:
+            explicit CommentatorGetMapInfo(WorldPacket&& packet) : ClientPacket(CMSG_COMMENTATOR_GET_MAP_INFO, std::move(packet)) { }
+
+            void Read() override;
+
+            std::string TargetPlayer;                       // optional player name to centre the map list on
+        };
+
+        // SMSG_COMMENTATOR_MAP_INFO - the catalogue of arena maps and their currently-active instances.
+        // Wire recovered byte-exact from the client deserializer (all fixed-width LE; guids are PackedGuid).
+        class CommentatorMapInfo final : public ServerPacket
+        {
+        public:
+            explicit CommentatorMapInfo() : ServerPacket(SMSG_COMMENTATOR_MAP_INFO, 64) { }
+
+            WorldPacket const* Write() override;
+
+            struct PlayerInfo
+            {
+                ObjectGuid PlayerGUID;
+                uint32 Field1 = 0;                          // per-player triple (hypothesis: specID)
+                uint32 Field2 = 0;
+                uint8 Field3 = 0;                           // hypothesis: faction
+            };
+
+            struct TeamInfo
+            {
+                ObjectGuid TeamGUID;
+                std::vector<PlayerInfo> Players;
+            };
+
+            struct InstanceInfo
+            {
+                uint32 MapID = 0;
+                uint32 Field1 = 0;                          // per-instance triple (unnamed offline)
+                uint32 Field2 = 0;
+                uint8 Field3 = 0;
+                uint64 InstanceID = 0;                      // InstanceIDLow | (InstanceIDHigh << 32)
+                uint32 Status = 0;
+                std::array<TeamInfo, 2> Teams;              // arena = 2 factions
+            };
+
+            struct MapInfo
+            {
+                uint32 TeamSize = 0;
+                uint32 MinLevel = 0;
+                uint32 MaxLevel = 0;
+                uint16 Field3 = 0;                          // unnamed (bracket/season/flags?)
+                std::vector<InstanceInfo> Instances;
+            };
+
+            uint64 DirectoryId = 0;                         // opaque blob id (unnamed offline)
+            std::vector<MapInfo> Maps;
         };
 
         class CommentatorStateChanged final : public ServerPacket

@@ -329,6 +329,7 @@ namespace WorldPackets
     namespace Commentator
     {
         class CommentatorEnable;
+        class CommentatorGetMapInfo;
     }
 
     namespace Duel
@@ -1827,6 +1828,7 @@ class TC_GAME_API WorldSession
 
         // Commentator (spectator) mode
         void HandleCommentatorEnable(WorldPackets::Commentator::CommentatorEnable& packet);
+        void HandleCommentatorGetMapInfo(WorldPackets::Commentator::CommentatorGetMapInfo& getMapInfo);
         bool IsCommentator() const { return _isCommentator; }
         void SetCommentator(bool on) { _isCommentator = on; }
         void HandleConversationLineStarted(WorldPackets::Misc::ConversationLineStarted& conversationLineStarted);
