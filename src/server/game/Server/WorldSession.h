@@ -335,6 +335,7 @@ namespace WorldPackets
         class CommentatorSpectate;
         class CommentatorGetPlayerInfo;
         class CommentatorGetPlayerCooldowns;
+        class CommentatorStartWargame;
     }
 
     namespace Duel
@@ -1839,6 +1840,7 @@ class TC_GAME_API WorldSession
         void HandleCommentatorSpectate(WorldPackets::Commentator::CommentatorSpectate& spectate);
         void HandleCommentatorGetPlayerInfo(WorldPackets::Commentator::CommentatorGetPlayerInfo& getPlayerInfo);
         void HandleCommentatorGetPlayerCooldowns(WorldPackets::Commentator::CommentatorGetPlayerCooldowns& getPlayerCooldowns);
+        void HandleCommentatorStartWargame(WorldPackets::Commentator::CommentatorStartWargame& startWargame);
         bool IsCommentator() const { return _isCommentator; }
         void SetCommentator(bool on) { _isCommentator = on; }
         void HandleConversationLineStarted(WorldPackets::Misc::ConversationLineStarted& conversationLineStarted);

@@ -62,6 +62,23 @@ void WorldPackets::Commentator::CommentatorGetPlayerCooldowns::Read()
     }
 }
 
+void WorldPackets::Commentator::CommentatorStartWargame::Read()
+{
+    // Bit block first: two 6-bit captain-name lengths + the tournament-rules flag, then a byte-aligned u64
+    // packing { ListID (low 32) | TeamSize (high 32) }, then the two captain names as raw bytes.
+    uint32 const lenOne = _worldPacket.ReadBits(6);
+    uint32 const lenTwo = _worldPacket.ReadBits(6);
+    TournamentRules = _worldPacket.ReadBit();
+
+    uint64 packed;
+    _worldPacket >> packed;                                 // read<T> resets the bit cursor, so this is byte-aligned
+    ListID = uint32(packed & 0xFFFFFFFFu);
+    TeamSize = uint32(packed >> 32);
+
+    TeamOneCaptain = _worldPacket.ReadString(lenOne);
+    TeamTwoCaptain = _worldPacket.ReadString(lenTwo);
+}
+
 WorldPacket const* WorldPackets::Commentator::CommentatorPlayerInfo::Write()
 {
     _worldPacket << uint32(LeadingId);

@@ -107,5 +107,19 @@ These are field VALUES, not structure — build sends honest 0/best-guess and na
   sets the commentator's BattlegroundId (satisfies `BattlegroundMap::CannotEnter`), makes them
   an inert game-master observer, and teleports into the arena map; EXIT_INSTANCE restores +
   teleports out; SPECTATE sets the native `PlayerData::SpectateTarget` UF to the followed unit.
-- **P3 (next)** = PLAYER_INFO/COOLDOWNS (byte-exact wire above, populate from
-  `GetBattlegroundScore`). **P4** = START_WARGAME (reuse arranged wargame, see `feature/war-games`).
+- **P3 BUILT** — GET_PLAYER_INFO / GET_PLAYER_COOLDOWNS → SMSG_COMMENTATOR_PLAYER_INFO for the
+  spectated arena; scalar stats from `GetBattlegroundScore` (kills/deaths/damage/healing) +
+  spec/faction. The four tracked-spell/cooldown arrays are sent empty (count 0) — structure
+  known, but the 44-byte cooldown record's optional-field layout is unconfirmed, so no
+  fabricated timings (empty is byte-exact regardless of array order). Sole residual.
+- **P4 BUILT** — CMSG_COMMENTATOR_START_WARGAME reader (bit-packed: 6-bit name lengths +
+  tournament-rules bit, byte-aligned `u64(ListID | TeamSize<<32)`, two captain strings) +
+  handler: validates both captains (online, distinct, lead distinct groups), resolves the
+  arena template + level bracket, creates a non-rated Wargame-type arena
+  (`CreateNewBattleground`), registers it, and ports both groups in as opposing sides
+  (`SetBattlegroundId`/`SetBGTeam`/`SendToBattleground`; `AddPlayer` auto-fires on map arrival),
+  then `StartBattleground`. TC base had no wargame-start path — this builds it from the BG
+  primitives.
+
+**ALL 8 CMSG + 3 SMSG implemented** (0 remaining Handle_NULL). Residual is the one documented
+sniff item (cooldown-record optional-field layout + a few opaque u64/tuple VALUES).

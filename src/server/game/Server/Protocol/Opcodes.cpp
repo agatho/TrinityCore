@@ -381,7 +381,7 @@ void OpcodeTable::InitializeClientOpcodes()
     DEFINE_HANDLER(CMSG_COMMENTATOR_GET_PLAYER_COOLDOWNS,                  STATUS_LOGGEDIN, PROCESS_THREADUNSAFE, &WorldSession::HandleCommentatorGetPlayerCooldowns);
     DEFINE_HANDLER(CMSG_COMMENTATOR_GET_PLAYER_INFO,                       STATUS_LOGGEDIN, PROCESS_THREADUNSAFE, &WorldSession::HandleCommentatorGetPlayerInfo);
     DEFINE_HANDLER(CMSG_COMMENTATOR_SPECTATE,                              STATUS_LOGGEDIN, PROCESS_THREADUNSAFE, &WorldSession::HandleCommentatorSpectate);
-    DEFINE_HANDLER(CMSG_COMMENTATOR_START_WARGAME,                          STATUS_UNHANDLED, PROCESS_INPLACE,      &WorldSession::Handle_NULL);
+    DEFINE_HANDLER(CMSG_COMMENTATOR_START_WARGAME,                         STATUS_LOGGEDIN, PROCESS_THREADUNSAFE, &WorldSession::HandleCommentatorStartWargame);
     DEFINE_HANDLER(CMSG_COMMERCE_TOKEN_GET_COUNT,                           STATUS_IGNORED,   PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
     DEFINE_HANDLER(CMSG_COMMERCE_TOKEN_GET_LOG,                             STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleCommerceTokenGetLog);
     DEFINE_HANDLER(CMSG_COMMERCE_TOKEN_GET_MARKET_PRICE,                    STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleCommerceTokenGetMarketPrice);

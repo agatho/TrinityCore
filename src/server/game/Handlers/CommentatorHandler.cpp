@@ -20,6 +20,8 @@
 #include "BattlegroundMgr.h"
 #include "BattlegroundScore.h"
 #include "CommentatorPackets.h"
+#include "DB2Stores.h"
+#include "Group.h"
 #include "Log.h"
 #include "ObjectAccessor.h"
 #include "ObjectMgr.h"
@@ -214,6 +216,66 @@ void WorldSession::HandleCommentatorGetPlayerInfo(WorldPackets::Commentator::Com
     WorldPackets::Commentator::CommentatorPlayerInfo playerInfo;
     BuildCommentatorPlayerInfo(arena, playerInfo);
     SendPacket(playerInfo.Write());
+}
+
+void WorldSession::HandleCommentatorStartWargame(WorldPackets::Commentator::CommentatorStartWargame& startWargame)
+{
+    Player* player = GetPlayer();
+    if (!player || !IsCommentator())
+        return;
+
+    // Both captains must be online, distinct, and lead distinct groups.
+    Player* captainOne = ObjectAccessor::FindConnectedPlayerByName(startWargame.TeamOneCaptain);
+    Player* captainTwo = ObjectAccessor::FindConnectedPlayerByName(startWargame.TeamTwoCaptain);
+    if (!captainOne || !captainTwo || captainOne == captainTwo)
+        return;
+
+    Group* groupOne = captainOne->GetGroup();
+    Group* groupTwo = captainTwo->GetGroup();
+    if (!groupOne || !groupTwo || groupOne == groupTwo)
+        return;
+
+    // Resolve the arena template + level bracket for the requested list.
+    BattlegroundTypeId const bgTypeId = sBattlegroundMgr->GetRandomBG(BattlegroundTypeId(startWargame.ListID));
+    BattlegroundTemplate const* bgTemplate = sBattlegroundMgr->GetBattlegroundTemplateByTypeId(bgTypeId);
+    if (!bgTemplate || !bgTemplate->IsArena() || bgTemplate->MapIDs.empty())
+        return;
+
+    PVPDifficultyEntry const* bracket = DB2Manager::GetBattlegroundBracketByLevel(bgTemplate->MapIDs.front(), captainOne->GetLevel());
+    if (!bracket)
+        return;
+
+    BattlegroundQueueTypeId queueId;
+    queueId.BattlemasterListId = uint16(startWargame.ListID);
+    queueId.Type = uint8(BattlegroundQueueIdType::Wargame);
+    queueId.Rated = false;
+    queueId.TeamSize = uint8(startWargame.TeamSize);
+
+    Battleground* arena = sBattlegroundMgr->CreateNewBattleground(queueId, bracket->GetBracketId());
+    if (!arena)
+        return;
+
+    sBattlegroundMgr->AddBattleground(arena);
+
+    // Port each captain's group in as opposing sides; Battleground::AddPlayer fires automatically on map arrival.
+    auto portGroup = [&](Group* group, Team team)
+    {
+        for (GroupReference const& itr : group->GetMembers())
+        {
+            Player* member = itr.GetSource();
+            if (!member || !member->IsInWorld())
+                continue;
+
+            member->SetBattlegroundEntryPoint();
+            member->SetBattlegroundId(arena->GetInstanceID(), arena->GetTypeID(), queueId);
+            member->SetBGTeam(team);
+            BattlegroundMgr::SendToBattleground(member, arena);
+        }
+    };
+    portGroup(groupOne, ALLIANCE);
+    portGroup(groupTwo, HORDE);
+
+    arena->StartBattleground();
 }
 
 void WorldSession::HandleCommentatorGetPlayerCooldowns(WorldPackets::Commentator::CommentatorGetPlayerCooldowns& /*getPlayerCooldowns*/)
