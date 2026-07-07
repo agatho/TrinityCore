@@ -82,6 +82,35 @@ bool  Field80  (stored in bit7 of a byte)
 Note: `CommentatorPlayerData.name` is **NOT** in the record — carried via
 `COMMENTATOR_PLAYER_NAME_OVERRIDE_UPDATE` / resolved from the GUID.
 
+## Cooldown record layout — CONFIRMED by IDA + Ghidra (both agree byte-for-byte)
+
+The 44-byte per-cooldown record reader (`sub_7FF72906DC60`) and its parent 152-byte player
+record reader (`sub_7FF72906EFA0`) were re-decompiled in Ghidra (`wow_co3` / `wow_dump.bin`)
+and match the IDA output exactly. Primitive readers reconfirmed: `func_0x7ff72be6c410`=u32,
+`func_0x7ff72be6c370`=u8, `func_0x7ff72be6c3c0`=u16, `func_0x7ff72bebdea0`=PackedGuid.
+
+**44-byte cooldown record wire (fixed, then flag-gated optionals):**
+```
+uint32  Field0            (mem +0)     ← key/timer (likely SpellID)
+uint32  Field4            (mem +4)
+uint32  Field8            (mem +8)
+uint32  Field12           (mem +12)
+uint32  Field16           (mem +16)
+uint32  Field40           (mem +40)
+uint8   Flags             bit7 -> HasField20, bit6 -> HasField28, bit5 -> Enable bool (+36)
+[uint32 Field20]          only if Flags bit7   (start/charges)
+[uint32 Field28]          only if Flags bit6   (duration)
+```
+Maps to `GetPlayerCooldownInfo -> {startTime, duration, enable}` (enable = Flags bit5; the two
+optionals are the timer pair). **Structure is now byte-exact and dual-tool-confirmed** — only
+the semantic label of *which* fixed uint32 is SpellID vs which timer remains (the
+`C_Commentator.GetPlayerCooldownInfo` native binding pins that). The P3 empty-array choice
+stays correct until those labels are set; populating is now unblocked structurally.
+
+The 152-byte player record reader confirms P3's scalar order exactly: PackedGuid, u8 faction,
+u32 spec, 2 spare bytes, u16 kills, u16 deaths, u32 damageDone/Taken + healingDone/Taken, u8
+soloShuffle win/loss, then 4 array counts (A,B,C,D) — matching the shipped CommentatorPlayerInfo writer.
+
 ## Residual sniff items (VALUES only — structure is byte-exact and buildable now)
 
 - Meaning of the top-level `uint64` ids (MAP_INFO DirectoryId, PLAYER_INFO PackedId).
