@@ -2566,6 +2566,7 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
 
         void SendEquipmentSetList();
         void SetEquipmentSet(EquipmentSetInfo::EquipmentSetData const& newEqSet);
+        void SetEquipmentSetAssignedSpec(uint64 setGuid, int32 assignedSpecIndex);
         void DeleteEquipmentSet(uint64 id);
 
         void SendInitWorldStates(uint32 zoneId, uint32 areaId) const;

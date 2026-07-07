@@ -28250,6 +28250,23 @@ void Player::SetEquipmentSet(EquipmentSetInfo::EquipmentSetData const& newEqSet)
     eqSlot.State = eqSlot.State == EQUIPMENT_SET_NEW ? EQUIPMENT_SET_NEW : EQUIPMENT_SET_CHANGED;
 }
 
+void Player::SetEquipmentSetAssignedSpec(uint64 setGuid, int32 assignedSpecIndex)
+{
+    auto itr = _equipmentSets.find(setGuid);
+    if (itr == _equipmentSets.end())
+        return;
+
+    EquipmentSetInfo& eqSet = itr->second;
+    // A negative index clears the assignment (no spec auto-equips this set).
+    if (assignedSpecIndex >= 0)
+        eqSet.Data.AssignedSpecIndex = assignedSpecIndex;
+    else
+        eqSet.Data.AssignedSpecIndex.reset();
+
+    if (eqSet.State != EQUIPMENT_SET_NEW)
+        eqSet.State = EQUIPMENT_SET_CHANGED;
+}
+
 void Player::_SaveEquipmentSets(CharacterDatabaseTransaction trans)
 {
     for (EquipmentSetContainer::iterator itr = _equipmentSets.begin(); itr != _equipmentSets.end();)

@@ -2086,6 +2086,11 @@ void WorldSession::HandleDeleteEquipmentSet(WorldPackets::EquipmentSet::DeleteEq
     _player->DeleteEquipmentSet(deleteEquipmentSet.ID);
 }
 
+void WorldSession::HandleAssignEquipmentSetSpec(WorldPackets::EquipmentSet::AssignEquipmentSetSpec& assignEquipmentSetSpec)
+{
+    _player->SetEquipmentSetAssignedSpec(assignEquipmentSetSpec.GUID, assignEquipmentSetSpec.AssignedSpecIndex);
+}
+
 void WorldSession::HandleUseEquipmentSet(WorldPackets::EquipmentSet::UseEquipmentSet& useEquipmentSet)
 {
     ObjectGuid ignoredItemGuid;
