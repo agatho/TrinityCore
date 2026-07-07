@@ -17,6 +17,7 @@
 
 #include "Battleground.h"
 #include "BattlegroundMgr.h"
+#include "WeeklyRewardsMgr.h"
 #include "BattlegroundPackets.h"
 #include "BattlegroundScore.h"
 #include "BattlegroundScript.h"
@@ -722,6 +723,10 @@ void Battleground::EndBattleground(Team winner)
 
             CharacterDatabase.Execute(stmt);
         }
+
+        // Great Vault: a PvP win credits this week's World/PvP activity row (bracket stands in for the reward tier).
+        if (team == winner)
+            sWeeklyRewardsMgr.RecordActivity(player, WeeklyRewards::ActivityType::World, GetUniqueBracketId());
 
         // Reward winner team
         if (team == winner)
