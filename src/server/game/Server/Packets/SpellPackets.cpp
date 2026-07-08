@@ -170,6 +170,22 @@ WorldPacket const* AddLossOfControl::Write()
     return &_worldPacket;
 }
 
+WorldPacket const* LossOfControlAuraUpdate::Write()
+{
+    _worldPacket << Unit;
+    _worldPacket << uint32(Infos.size());
+    for (LossOfControlInfo const& info : Infos)
+    {
+        _worldPacket << uint32(info.TimeRemaining);
+        _worldPacket << uint16(info.AuraSlot);
+        _worldPacket << uint8(info.EffectIndex);
+        _worldPacket << uint8(info.Mechanic);
+        _worldPacket << uint8(info.Mechanic2);
+    }
+
+    return &_worldPacket;
+}
+
 ByteBuffer& operator>>(ByteBuffer& buffer, TargetLocation& location)
 {
     buffer >> location.Transport;
