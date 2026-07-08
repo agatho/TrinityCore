@@ -156,6 +156,17 @@ WorldPacket const* AuraUpdate::Write()
     return &_worldPacket;
 }
 
+WorldPacket const* DiminishingReturnStart::Write()
+{
+    _worldPacket << Unit;
+    _worldPacket << uint8(Category);
+    _worldPacket << Bits<1>(ShowCountdown);
+    _worldPacket << Bits<1>(IsImmune);
+    _worldPacket.FlushBits();
+
+    return &_worldPacket;
+}
+
 ByteBuffer& operator>>(ByteBuffer& buffer, TargetLocation& location)
 {
     buffer >> location.Transport;

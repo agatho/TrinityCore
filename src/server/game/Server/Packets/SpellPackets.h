@@ -196,6 +196,19 @@ namespace WorldPackets
             std::vector<AuraInfo> Auras;
         };
 
+        class DiminishingReturnStart final : public ServerPacket
+        {
+        public:
+            explicit DiminishingReturnStart() : ServerPacket(SMSG_UNIT_DIMINISHING_RETURN_START, 16 + 1 + 1) { }
+
+            WorldPacket const* Write() override;
+
+            ObjectGuid Unit;
+            uint8 Category = 0;         ///< DiminishingGroup of the applied crowd-control aura
+            bool ShowCountdown = false;
+            bool IsImmune = false;
+        };
+
         struct TargetLocation
         {
             ObjectGuid Transport;
