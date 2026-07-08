@@ -810,7 +810,6 @@ void OpcodeTable::InitializeClientOpcodes()
     DEFINE_HANDLER(CMSG_NEIGHBORHOOD_ADD_SECONDARY_OWNER,                   STATUS_LOGGEDIN, PROCESS_THREADUNSAFE, &WorldSession::HandleNeighborhoodAddSecondaryOwner);
     DEFINE_HANDLER(CMSG_NEIGHBORHOOD_BUY_HOUSE,                             STATUS_LOGGEDIN, PROCESS_THREADUNSAFE, &WorldSession::HandleNeighborhoodBuyHouse);
     DEFINE_HANDLER(CMSG_NEIGHBORHOOD_CANCEL_INVITATION,                     STATUS_LOGGEDIN, PROCESS_THREADUNSAFE, &WorldSession::HandleNeighborhoodCancelInvitation);
-    DEFINE_HANDLER(CMSG_NEIGHBORHOOD_CANCEL_INVITATION_ALT,                       STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleNeighborhoodCancelInvitationAlt);
     DEFINE_HANDLER(CMSG_NEIGHBORHOOD_CHARTER_ADD_SIGNATURE,                 STATUS_LOGGEDIN, PROCESS_THREADUNSAFE, &WorldSession::HandleNeighborhoodCharterAddSignature);
     DEFINE_HANDLER(CMSG_NEIGHBORHOOD_CHARTER_CREATE,                        STATUS_LOGGEDIN, PROCESS_THREADUNSAFE, &WorldSession::HandleNeighborhoodCharterCreate);
     DEFINE_HANDLER(CMSG_NEIGHBORHOOD_CHARTER_EDIT,                          STATUS_LOGGEDIN, PROCESS_THREADUNSAFE, &WorldSession::HandleNeighborhoodCharterEdit);
@@ -837,11 +836,9 @@ void OpcodeTable::InitializeClientOpcodes()
     DEFINE_HANDLER(CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_0D,                  STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleNeighborhoodInitiativeOp0D);
     DEFINE_HANDLER(CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_0E,                  STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleNeighborhoodInitiativeOp0E);
     DEFINE_HANDLER(CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_0F,                  STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleNeighborhoodInitiativeOp0F);
-    DEFINE_HANDLER(CMSG_NEIGHBORHOOD_INVITE_NOTIFICATION_ACK,                       STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleNeighborhoodInviteNotificationAck);
     DEFINE_HANDLER(CMSG_NEIGHBORHOOD_INVITE_RESIDENT,                       STATUS_LOGGEDIN, PROCESS_THREADUNSAFE, &WorldSession::HandleNeighborhoodInviteResident);
     DEFINE_HANDLER(CMSG_NEIGHBORHOOD_MOVE_HOUSE,                            STATUS_LOGGEDIN, PROCESS_THREADUNSAFE, &WorldSession::HandleNeighborhoodMoveHouse);
     DEFINE_HANDLER(CMSG_NEIGHBORHOOD_OFFER_OWNERSHIP,                       STATUS_LOGGEDIN, PROCESS_THREADUNSAFE, &WorldSession::HandleNeighborhoodOfferOwnership);
-    DEFINE_HANDLER(CMSG_NEIGHBORHOOD_OFFER_OWNERSHIP_RESPONSE,                       STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleNeighborhoodOfferOwnershipResponse);
     DEFINE_HANDLER(CMSG_NEIGHBORHOOD_OPEN_CORNERSTONE_UI,                   STATUS_LOGGEDIN, PROCESS_THREADUNSAFE, &WorldSession::HandleNeighborhoodOpenCornerstoneUI);
     DEFINE_HANDLER(CMSG_NEIGHBORHOOD_PLAYER_DECLINE_INVITE,                 STATUS_LOGGEDIN, PROCESS_THREADUNSAFE, &WorldSession::HandleNeighborhoodPlayerDeclineInvite);
     DEFINE_HANDLER(CMSG_NEIGHBORHOOD_PLAYER_GET_INVITE,                     STATUS_LOGGEDIN, PROCESS_THREADUNSAFE, &WorldSession::HandleNeighborhoodPlayerGetInvite);

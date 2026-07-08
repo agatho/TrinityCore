@@ -2385,31 +2385,6 @@ namespace WorldPackets::Neighborhood
         uint32 PlotIndex = 0;
     };
 
-    class NeighborhoodCancelInvitationAlt final : public ClientPacket
-    {
-    public:
-        explicit NeighborhoodCancelInvitationAlt(WorldPacket&& packet) : ClientPacket(CMSG_NEIGHBORHOOD_CANCEL_INVITATION_ALT, std::move(packet)) { }
-        void Read() override;
-        ObjectGuid InviteeGuid;
-    };
-
-    class NeighborhoodInviteNotificationAck final : public ClientPacket
-    {
-    public:
-        explicit NeighborhoodInviteNotificationAck(WorldPacket&& packet) : ClientPacket(CMSG_NEIGHBORHOOD_INVITE_NOTIFICATION_ACK, std::move(packet)) { }
-        void Read() override;
-        ObjectGuid NeighborhoodGuid;
-    };
-
-    class NeighborhoodOfferOwnershipResponsePacket final : public ClientPacket
-    {
-    public:
-        explicit NeighborhoodOfferOwnershipResponsePacket(WorldPacket&& packet) : ClientPacket(CMSG_NEIGHBORHOOD_OFFER_OWNERSHIP_RESPONSE, std::move(packet)) { }
-        void Read() override;
-        ObjectGuid NeighborhoodGuid;
-        bool Accept = false;
-    };
-
     // ============================================================
     // Neighborhood Charter SMSG Responses (0x5Bxxxx)
     // ============================================================

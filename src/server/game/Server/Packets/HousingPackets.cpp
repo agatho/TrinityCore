@@ -2070,28 +2070,8 @@ void NeighborhoodEvictPlot::Read()
     TC_LOG_DEBUG("network.opcode", "CMSG_NEIGHBORHOOD_EVICT_PLOT PlotIndex: {} NeighborhoodGuid: {}", PlotIndex, NeighborhoodGuid.ToString());
 }
 
-void NeighborhoodCancelInvitationAlt::Read()
-{
-    _worldPacket >> InviteeGuid;
 
-    TC_LOG_DEBUG("network.opcode", "CMSG_NEIGHBORHOOD_CANCEL_INVITATION_ALT InviteeGuid: {}", InviteeGuid.ToString());
-}
 
-void NeighborhoodInviteNotificationAck::Read()
-{
-    _worldPacket >> NeighborhoodGuid;
-
-    TC_LOG_DEBUG("network.opcode", "CMSG_NEIGHBORHOOD_INVITE_NOTIFICATION_ACK NeighborhoodGuid: {}", NeighborhoodGuid.ToString());
-}
-
-void NeighborhoodOfferOwnershipResponsePacket::Read()
-{
-    _worldPacket >> NeighborhoodGuid;
-    _worldPacket >> Bits<1>(Accept);
-
-    TC_LOG_DEBUG("network.opcode", "CMSG_NEIGHBORHOOD_OFFER_OWNERSHIP_RESPONSE NeighborhoodGuid: {} Accept: {}",
-        NeighborhoodGuid.ToString(), Accept);
-}
 
 // ============================================================
 // Neighborhood Charter SMSG Responses (0x5Bxxxx)

@@ -536,9 +536,6 @@ namespace WorldPackets
         class NeighborhoodInitiativeOp0D;
         class NeighborhoodInitiativeOp0E;
         class NeighborhoodInitiativeOp0F;
-        class NeighborhoodCancelInvitationAlt;
-        class NeighborhoodInviteNotificationAck;
-        class NeighborhoodOfferOwnershipResponsePacket;
     }
 
     namespace Inspect
@@ -1724,9 +1721,6 @@ class TC_GAME_API WorldSession
         // (fake CMSGs 0x370002 + 0x370005 — STUB-OK only, no client senders).
 
         // Phase 7 Neighborhood handlers
-        void HandleNeighborhoodCancelInvitationAlt(WorldPackets::Neighborhood::NeighborhoodCancelInvitationAlt const& neighborhoodCancelInvitationAlt);
-        void HandleNeighborhoodInviteNotificationAck(WorldPackets::Neighborhood::NeighborhoodInviteNotificationAck const& neighborhoodInviteNotificationAck);
-        void HandleNeighborhoodOfferOwnershipResponse(WorldPackets::Neighborhood::NeighborhoodOfferOwnershipResponsePacket const& neighborhoodOfferOwnershipResponse);
 
         void HandleNeighborhoodInitiativeServiceStatusCheck(WorldPackets::Neighborhood::NeighborhoodInitiativeServiceStatusCheck const& packet);
         void HandleGetAvailableInitiativeRequest(WorldPackets::Neighborhood::GetAvailableInitiativeRequest const& getAvailableInitiativeRequest);

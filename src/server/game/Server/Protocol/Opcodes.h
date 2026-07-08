@@ -1113,12 +1113,9 @@ enum OpcodeClient : uint32
     //   0x350002 SYSTEM_HOUSE_SNAPSHOT (retired 2026-05-11) — no C_HouseSnapshot Lua API
     //   0x350003 SYSTEM_EXPORT_HOUSE             — no C_HouseExport Lua API
     //   0x350004 SYSTEM_UPDATE_HOUSE_INFO        — no client sender; house naming has no wire path
-    CMSG_NEIGHBORHOOD_CANCEL_INVITATION_ALT                         = 0x39000C, // TC-CUSTOM
     // Retired 2026-05-12: CMSG_NEIGHBORHOOD_CHARTER_REMOVE_SIGNATURE (was 0x370005)
     // and CMSG_NEIGHBORHOOD_CHARTER_SIGN_RESPONSE (was 0x370002) — STUB-OK only;
     // IDA verification (build 67186): no client senders.
-    CMSG_NEIGHBORHOOD_INVITE_NOTIFICATION_ACK                       = 0x390010, // TC-CUSTOM
-    CMSG_NEIGHBORHOOD_OFFER_OWNERSHIP_RESPONSE                      = 0x390011, // TC-CUSTOM
 };
 
 inline constexpr std::size_t NUM_CMSG_OPCODES = 1950;
