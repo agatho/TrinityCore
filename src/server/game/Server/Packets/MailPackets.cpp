@@ -306,4 +306,39 @@ WorldPacket const* NotifyReceivedMail::Write()
 
     return &_worldPacket;
 }
+
+void GetRegionwideCharacterRestrictionAndMailData::Read()
+{
+    Characters.resize(_worldPacket.read<uint32>());
+    for (ObjectGuid& character : Characters)
+        _worldPacket >> character;
+}
+
+WorldPacket const* RegionwideCharacterMailData::Write()
+{
+    _worldPacket << uint32(Characters.size());
+    for (MailDataEntry const& entry : Characters)
+    {
+        _worldPacket << uint8(entry.Flags);
+        _worldPacket << entry.Character;
+        _worldPacket << uint32(entry.MailCount);
+        _worldPacket << uint32(entry.NextDeliveryTime);
+    }
+
+    return &_worldPacket;
+}
+
+WorldPacket const* RegionwideCharacterRestrictionsData::Write()
+{
+    _worldPacket << uint32(Characters.size());
+    for (RestrictionEntry const& entry : Characters)
+    {
+        _worldPacket << uint8(entry.Flags);
+        _worldPacket << entry.Character;
+        _worldPacket << uint32(entry.Restriction);
+        _worldPacket << uint32(entry.Value);
+    }
+
+    return &_worldPacket;
+}
 }
