@@ -512,6 +512,7 @@ namespace WorldPackets
         class SetDungeonDifficulty;
         class SetRaidDifficulty;
         class PortGraveyard;
+        class GetAccountNotifications;
         class ReclaimCorpse;
         class RepopRequest;
         class RequestCemeteryList;
@@ -1284,6 +1285,7 @@ class TC_GAME_API WorldSession
         // cemetery/graveyard related
         void HandlePortGraveyard(WorldPackets::Misc::PortGraveyard& packet);
         void HandleRequestCemeteryList(WorldPackets::Misc::RequestCemeteryList& packet);
+        void HandleGetAccountNotifications(WorldPackets::Misc::GetAccountNotifications& packet);
 
         // Inspect
         void HandleInspectOpcode(WorldPackets::Inspect::Inspect& inspect);

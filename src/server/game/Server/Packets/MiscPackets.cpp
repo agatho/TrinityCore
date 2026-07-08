@@ -317,6 +317,13 @@ WorldPacket const* RequestCemeteryListResponse::Write()
     return &_worldPacket;
 }
 
+WorldPacket const* AccountNotificationsResponse::Write()
+{
+    _worldPacket << uint32(0); // notification count - TrinityCore has no account notifications (empty list)
+
+    return &_worldPacket;
+}
+
 void ResurrectResponse::Read()
 {
     _worldPacket >> Resurrecter;

@@ -403,6 +403,25 @@ namespace WorldPackets
             std::vector<uint32> CemeteryID;
         };
 
+        class GetAccountNotifications final : public ClientPacket
+        {
+        public:
+            explicit GetAccountNotifications(WorldPacket&& packet) : ClientPacket(CMSG_GET_ACCOUNT_NOTIFICATIONS, std::move(packet)) { }
+
+            void Read() override { }
+        };
+
+        // SMSG_ACCOUNT_NOTIFICATIONS_RESPONSE (0x420310): wire is a single uint32 count followed by that
+        // many notification entries. TrinityCore has no account-notification system, so the count is
+        // always 0 (an honest empty list), which is exactly what live 12.0.7 captures show (4-byte payload).
+        class AccountNotificationsResponse final : public ServerPacket
+        {
+        public:
+            explicit AccountNotificationsResponse() : ServerPacket(SMSG_ACCOUNT_NOTIFICATIONS_RESPONSE, 4) { }
+
+            WorldPacket const* Write() override;
+        };
+
         class ResurrectResponse final : public ClientPacket
         {
         public:
