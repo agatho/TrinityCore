@@ -133,6 +133,8 @@ DB2Storage<CurvePointEntry>                     sCurvePointStore("CurvePoint.db2
 DB2Storage<DataTagXHouseDecorRecordEntry>       sDataTagXHouseDecorRecordStore("DataTagXHouseDecorRecord.db2", &DataTagXHouseDecorRecordLoadInfo::Instance);
 DB2Storage<DecorCategoryEntry>                  sDecorCategoryStore("DecorCategory.db2", &DecorCategoryLoadInfo::Instance);
 DB2Storage<DecorDyeSlotEntry>                   sDecorDyeSlotStore("DecorDyeSlot.db2", &DecorDyeSlotLoadInfo::Instance);
+DB2Storage<DyeColorEntry>                       sDyeColorStore("DyeColor.db2", &DyeColorLoadInfo::Instance);
+DB2Storage<DyeColorCategoryEntry>               sDyeColorCategoryStore("DyeColorCategory.db2", &DyeColorCategoryLoadInfo::Instance);
 DB2Storage<DecorSubcategoryEntry>               sDecorSubcategoryStore("DecorSubcategory.db2", &DecorSubcategoryLoadInfo::Instance);
 DB2Storage<DecorXDecorSubcategoryEntry>         sDecorXDecorSubcategoryStore("DecorXDecorSubcategory.db2", &DecorXDecorSubcategoryLoadInfo::Instance);
 DB2Storage<DestructibleModelDataEntry>          sDestructibleModelDataStore("DestructibleModelData.db2", &DestructibleModelDataLoadInfo::Instance);
@@ -802,6 +804,8 @@ uint32 DB2Manager::LoadStores(std::string const& dataPath, LocaleConstant defaul
     LOAD_DB2(sDataTagXHouseDecorRecordStore);
     LOAD_DB2(sDecorCategoryStore);
     LOAD_DB2(sDecorDyeSlotStore);
+    LOAD_DB2(sDyeColorStore);
+    LOAD_DB2(sDyeColorCategoryStore);
     LOAD_DB2(sDecorSubcategoryStore);
     LOAD_DB2(sDecorXDecorSubcategoryStore);
     LOAD_DB2(sDestructibleModelDataStore);

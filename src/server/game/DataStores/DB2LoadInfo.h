@@ -1763,6 +1763,34 @@ struct DecorDyeSlotLoadInfo
     static constexpr DB2LoadInfo Instance{ Fields, 5, &DecorDyeSlotMeta::Instance, HOTFIX_SEL_DECOR_DYE_SLOT };
 };
 
+struct DyeColorLoadInfo
+{
+    static constexpr DB2FieldMeta Fields[8] =
+    {
+        { .IsSigned = false, .Type = FT_STRING, .Name = "Name" },
+        { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "DyeColorCategoryID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "GradientTextureIndex" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "ItemID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "SwatchColorStart" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "SwatchColorEnd" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "SortOrder" },
+    };
+
+    static constexpr DB2LoadInfo Instance{ Fields, 8, &DyeColorMeta::Instance, HOTFIX_SEL_DYE_COLOR };
+};
+
+struct DyeColorCategoryLoadInfo
+{
+    static constexpr DB2FieldMeta Fields[2] =
+    {
+        { .IsSigned = false, .Type = FT_STRING, .Name = "Name" },
+        { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
+    };
+
+    static constexpr DB2LoadInfo Instance{ Fields, 2, &DyeColorCategoryMeta::Instance, HOTFIX_SEL_DYE_COLOR_CATEGORY };
+};
+
 struct DecorSubcategoryLoadInfo
 {
     static constexpr DB2FieldMeta Fields[5] =

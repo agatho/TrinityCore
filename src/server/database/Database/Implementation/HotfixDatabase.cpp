@@ -598,6 +598,18 @@ void HotfixDatabaseConnection::DoPrepareStatements()
         " WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
     PREPARE_MAX_ID_STMT(HOTFIX_SEL_DECOR_DYE_SLOT, "SELECT MAX(ID) + 1 FROM decor_dye_slot", CONNECTION_SYNCH);
 
+    // DyeColor.db2
+    PrepareStatement(HOTFIX_SEL_DYE_COLOR, "SELECT Name, ID, DyeColorCategoryID, GradientTextureIndex, ItemID, SwatchColorStart, SwatchColorEnd, SortOrder FROM dye_color"
+        " WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_DYE_COLOR, "SELECT MAX(ID) + 1 FROM dye_color", CONNECTION_SYNCH);
+    PREPARE_LOCALE_STMT(HOTFIX_SEL_DYE_COLOR, "SELECT ID, Name_lang FROM dye_color_locale WHERE (`VerifiedBuild` > 0) = ? AND locale = ?", CONNECTION_SYNCH);
+
+    // DyeColorCategory.db2
+    PrepareStatement(HOTFIX_SEL_DYE_COLOR_CATEGORY, "SELECT Name, ID FROM dye_color_category"
+        " WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_DYE_COLOR_CATEGORY, "SELECT MAX(ID) + 1 FROM dye_color_category", CONNECTION_SYNCH);
+    PREPARE_LOCALE_STMT(HOTFIX_SEL_DYE_COLOR_CATEGORY, "SELECT ID, Name_lang FROM dye_color_category_locale WHERE (`VerifiedBuild` > 0) = ? AND locale = ?", CONNECTION_SYNCH);
+
     // DecorSubcategory.db2
     PrepareStatement(HOTFIX_SEL_DECOR_SUBCATEGORY, "SELECT Name, ID, IconFileDataID, DecorCategoryID, DisplayIndex FROM decor_subcategory"
         " WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);

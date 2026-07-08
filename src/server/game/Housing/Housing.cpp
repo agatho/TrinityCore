@@ -28,6 +28,7 @@
 #include "Log.h"
 #include "ObjectMgr.h"
 #include "Player.h"
+#include <algorithm>
 #include "RealmList.h"
 #include "WorldSession.h"
 #include <cmath>
@@ -1278,6 +1279,28 @@ HousingResult Housing::CommitDecorDyes(ObjectGuid decorGuid, std::array<uint32, 
     auto itr = _placedDecor.find(decorGuid);
     if (itr == _placedDecor.end())
         return HOUSING_RESULT_DECOR_NOT_FOUND;
+
+    // Validate each requested dye against the palette (DyeColor.db2) and the decor's
+    // supported dye categories (DecorDyeSlot.db2). A color of 0 clears that slot and is
+    // always allowed. This rejects arbitrary/unavailable colors the client could never
+    // legitimately offer for this decor. (Per-account dye OWNERSHIP is a separate, currently
+    // wire-unrecovered gate - see HOUSING_DYE_SYSTEM_ANALYSIS_68275.md.)
+    std::vector<DecorDyeSlotData const*> const allowedSlots = sHousingMgr.GetDyeSlotsForDecor(itr->second.DecorEntryId);
+    for (uint32 channel = 0; channel < MAX_HOUSING_DYE_SLOTS; ++channel)
+    {
+        uint32 const dyeColorId = dyeSlots[channel];
+        if (!dyeColorId)
+            continue;
+
+        DyeColorEntry const* dyeColor = sDyeColorStore.LookupEntry(dyeColorId);
+        if (!dyeColor)
+            return HOUSING_RESULT_MISSING_DYE; // color does not exist in DyeColor.db2
+
+        // If the decor declares dye channels, the color's category must match one of them.
+        if (!allowedSlots.empty() && std::none_of(allowedSlots.begin(), allowedSlots.end(),
+            [dyeColor](DecorDyeSlotData const* slot) { return slot->DyeColorCategoryID == dyeColor->DyeColorCategoryID; }))
+            return HOUSING_RESULT_MISSING_DYE; // color category not valid for this decor
+    }
 
     itr->second.DyeSlots = dyeSlots;
 

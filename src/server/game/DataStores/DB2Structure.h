@@ -1558,6 +1558,24 @@ struct DecorDyeSlotEntry
     int32 Channel;                           // Meta[4] INT: WoWDBDefs "Channel"
 };
 
+struct DyeColorEntry
+{
+    LocalizedString Name;
+    uint32 ID;
+    int32 DyeColorCategoryID;                // Meta[2] INT: WoWDBDefs FK->DyeColorCategory ($relation$)
+    int32 GradientTextureIndex;              // Meta[3] INT: WoWDBDefs "GradientTextureIndex"
+    int32 ItemID;                            // Meta[4] INT: WoWDBDefs FK->Item
+    int32 SwatchColorStart;                  // Meta[5] INT: WoWDBDefs "SwatchColorStart"
+    int32 SwatchColorEnd;                    // Meta[6] INT: WoWDBDefs "SwatchColorEnd"
+    int32 SortOrder;                         // Meta[7] INT: WoWDBDefs "SortOrder"
+};
+
+struct DyeColorCategoryEntry
+{
+    LocalizedString Name;
+    uint32 ID;
+};
+
 struct DecorSubcategoryEntry
 {
     LocalizedString Name;
