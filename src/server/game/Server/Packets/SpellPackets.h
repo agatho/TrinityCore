@@ -196,6 +196,18 @@ namespace WorldPackets
             std::vector<AuraInfo> Auras;
         };
 
+        class AuraPointsDepleted final : public ServerPacket
+        {
+        public:
+            explicit AuraPointsDepleted() : ServerPacket(SMSG_AURA_POINTS_DEPLETED, 16 + 2 + 1) { }
+
+            WorldPacket const* Write() override;
+
+            ObjectGuid Unit;
+            uint16 Slot = 0;
+            uint8 EffectIndex = 0;
+        };
+
         struct TargetLocation
         {
             ObjectGuid Transport;
