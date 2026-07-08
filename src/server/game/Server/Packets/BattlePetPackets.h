@@ -320,7 +320,7 @@ namespace WorldPackets
             int32 Power = 0;
             int32 Speed = 0;
             int32 NpcTeamMemberID = 0;
-            uint8 BreedQuality = 0;
+            uint8 BreedQuality = 0;         // wire u8; JamPetBattlePetUpdate declares uint32@52 (see report)
             uint16 StatusFlags = 0;
             int8 Slot = 0;
             std::string CustomName;
@@ -329,14 +329,17 @@ namespace WorldPackets
             std::vector<PetBattleStateInfo> States;
         };
 
+        // JamPetBattlePlayerUpdate. NOTE: reflection in-memory offsets place pets@32 before frontPet@56/
+        // inputFlags@57, but the verified 12.0.7 parser serializes frontPet+inputFlags BEFORE the pets
+        // vector (see operator<<). Wire order (verified) is kept; offset order is NOT the wire order here.
         struct PetBattlePlayerUpdateInfo
         {
-            ObjectGuid CharacterID;
+            ObjectGuid CharacterGUID;
             int32 TrapAbilityID = 0;
             int32 TrapStatus = 0;
             uint16 RoundTimeSecs = 0;
             int8 FrontPet = 0;
-            uint8 InputFlags = 0;
+            uint8 InputFlags = 0;           // wire u8; JamPetBattlePlayerUpdate declares uint32@57 (see report)
             std::vector<PetBattlePetUpdateInfo> Pets;
         };
 
@@ -346,14 +349,22 @@ namespace WorldPackets
             std::vector<PetBattleStateInfo> States;
         };
 
+        // JamPetBattleEffectTarget is a tagged union on the wire: discriminator (Type, upper nibble) +
+        // Petx (target PBOID) + the variant fields selected by Type (carried in Params). The reflection
+        // descriptor lists all 18 union members flat; only the active variant is serialized.
         struct PetBattleEffectTargetInfo
         {
-            uint8 Type = 0;     // Written as uint8(Type << 4) — upper nibble (IDA-verified 12.0)
-            int32 Remaining = 0;
-            // Variable-length params based on Type:
-            // 0: nothing, 1: 4 int32s (aura), 2: 2 int32s (state), 3: 1 int32 (health),
-            // 4: 1 int32 (stat), 5: 1 int32 (trigger), 6: 3 int32s (cooldown), 7: 1 int32 (broadcast)
-            // 8: embedded PetBattlePetUpdateInfo + params
+            uint8 Type = 0;     // JamPetBattleEffectTarget field 0 (wire: uint8(Type << 4); client reads byte>>4)
+            int32 Petx = 0;     // field 1 (petx@4) — target pet index / PBOID, always read after the discriminator
+            // Params carry the type-specific union members (ascending reflection offset):
+            //  1 aura:     auraInstanceID, auraAbilityID, roundsRemaining, currentRound (fields 2-5)
+            //  2 state:    stateID, stateValue                                         (fields 6-7)
+            //  3 health:   health                                                      (field 8)
+            //  4 stat:     newStatValue                                                (field 9)
+            //  5 trigger:  triggerAbilityID                                            (field 10)
+            //  6 cooldown: changedAbilityID, cooldownRemaining, lockdownRemaining      (fields 11-13)
+            //  7 broadcast:broadcastTextID                                             (field 14)
+            //  8 pet:      EmbeddedPetUpdate (field 15 'pet'); slot/newAbilityID (16-17) not serialized — see report
             std::vector<int32> Params;
             Optional<PetBattlePetUpdateInfo> EmbeddedPetUpdate; // Only when Type == 8
         };
@@ -364,9 +375,9 @@ namespace WorldPackets
             int32 Flags = 0;
             int16 SourceAuraInstanceID = 0;
             int16 TurnInstanceID = 0;
-            int32 EffectIndex = 0;          // Actually PetBattleEffectType — client switches on this value
+            int32 PetBattleEffectType = 0;  // JamPetBattleEffect field 4 (client switches on this value)
             int32 CasterPBOID = 0;
-            uint8 StackDepth = 0;
+            uint8 StackDepth = 0;           // wire u8; JamPetBattleEffect declares uint32@20 (see report)
             std::vector<PetBattleEffectTargetInfo> Targets;
         };
 
@@ -624,10 +635,11 @@ namespace WorldPackets
 
             bool Abandoned = false;
             bool PvpBattle = false;
-            // 12.0.7 (68275) JamPetBattleFinalRound: winners@32 (uint32), npcCreatureID@36 (uint32) —
-            // both flat 4-byte reads. There is ONE npcCreatureID, not an array. The flags byte's
-            // spare bits (bit5/bit4) are separate unnamed scratch bools, NOT winners (write 0).
-            uint32 Winners = 0;        // UNVERIFIED semantics — server-defined uint32 the client relays; index-vs-bitmask needs a live sniff (RE leans per-team bitmask)
+            // 12.0.7 (68275) JamPetBattleFinalRound (sniff-verified vs b_pets, 5 battles): the winner is the
+            // per-team flag pair in the flag byte — bit5=Winners[0] (team0), bit4=Winners[1] (team1). The two
+            // flat uint32s after the flush are field#1 (0 in every capture, role unknown, NOT winners) and
+            // NpcCreatureID (0 for wild battles, the trainer entry for NPC battles).
+            std::array<bool, 2> Winners = {};
             uint32 NpcCreatureID = 0;
             std::vector<PetBattleFinalPet> Pets;
         };

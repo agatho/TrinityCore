@@ -2345,9 +2345,10 @@ void PetBattle::SendFinalRoundPacket(bool abandoned)
     WorldPackets::BattlePet::PetBattleFinalRound finalRound;
     finalRound.Abandoned = abandoned;
     finalRound.PvpBattle = (_battleType == PET_BATTLE_TYPE_PVP || _battleType == PET_BATTLE_TYPE_LFPB);
-    // 12.0.7: winners is a single uint32 the client relays without interpreting. RE lean (plural name,
-    // 2-team battle) is a per-team bitmask (bit0=team0, bit1=team1) — UNVERIFIED, needs a live sniff.
-    finalRound.Winners = (1u << _winnerTeam);
+    // 12.0.7 (sniff-verified vs b_pets, 5 battles): the winner is the per-team flag pair in the FinalRound
+    // flag byte (bit5=team0, bit4=team1), not a flat uint32 (which is 0 in every capture).
+    if (_winnerTeam < finalRound.Winners.size())
+        finalRound.Winners[_winnerTeam] = true;
 
     for (uint8 t = 0; t < MAX_PET_BATTLE_PLAYERS; ++t)
     {

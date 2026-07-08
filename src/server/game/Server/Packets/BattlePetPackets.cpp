@@ -297,7 +297,7 @@ ByteBuffer& operator<<(ByteBuffer& data, PetBattlePetUpdateInfo const& pet)
 
 ByteBuffer& operator<<(ByteBuffer& data, PetBattlePlayerUpdateInfo const& player)
 {
-    data << player.CharacterID;
+    data << player.CharacterGUID;
     data << int32(player.TrapAbilityID);
     data << int32(player.TrapStatus);
     data << uint16(player.RoundTimeSecs);
@@ -334,7 +334,7 @@ ByteBuffer& operator<<(ByteBuffer& data, PetBattleEffectTargetInfo const& target
     if (target.Type == 8 && target.EmbeddedPetUpdate)
         data << *target.EmbeddedPetUpdate;
 
-    data << int32(target.Remaining);
+    data << int32(target.Petx);
 
     for (int32 param : target.Params)
         data << int32(param);
@@ -348,7 +348,7 @@ ByteBuffer& operator<<(ByteBuffer& data, PetBattleEffectInfo const& effect)
     data << int32(effect.Flags);
     data << int16(effect.SourceAuraInstanceID);
     data << int16(effect.TurnInstanceID);
-    data << int32(effect.EffectIndex);
+    data << int32(effect.PetBattleEffectType);
     data << int32(effect.CasterPBOID);
     data << uint8(effect.StackDepth);
 
@@ -502,7 +502,7 @@ WorldPacket const* PetBattleInitialUpdate::Write()
     // Wire format matches BaseEntity.cpp:494-588
     for (std::size_t i = 0; i < 2; ++i)
     {
-        _worldPacket << Players[i].CharacterID;
+        _worldPacket << Players[i].CharacterGUID;
         _worldPacket << int32(Players[i].TrapAbilityID);
         _worldPacket << int32(Players[i].TrapStatus);
         _worldPacket << uint16(Players[i].RoundTimeSecs);
@@ -576,15 +576,16 @@ ByteBuffer& operator<<(ByteBuffer& data, PetBattleFinalPet const& pet)
 
 WorldPacket const* PetBattleFinalRound::Write()
 {
-    // 12.0.7 (68275) wire (verified sub_7FF729194DC0): flags_byte, winners(u32), npcCreatureID(u32), pets.count, pets[].
-    // flags_byte = MSB-first bitfield{4}: bit7=Abandoned, bit6=PvpBattle, bit5/bit4 = unnamed scratch bools (unused -> 0).
+    // 12.0.7 (68275) wire (sniff-verified vs b_pets, 5 battles): flags_byte, u32(=0), npcCreatureID(u32), pets.count, pets[].
+    // flags_byte = MSB-first bitfield{4}: bit7=Abandoned, bit6=PvpBattle, bit5=Winners[0] (team0), bit4=Winners[1] (team1).
     _worldPacket << Bits<1>(Abandoned);
     _worldPacket << Bits<1>(PvpBattle);
-    _worldPacket << Bits<2>(0u);            // spare bits (RE: separate unnamed bools, not winners)
+    _worldPacket << Bits<1>(Winners[0]);    // bit5 — team0 won (0 in every captured win/loss unless that team won)
+    _worldPacket << Bits<1>(Winners[1]);    // bit4 — team1 won
     _worldPacket.FlushBits();
 
-    _worldPacket << uint32(Winners);        // flat uint32 (ai_Read_CompressedUInt32FromPacket = no bit ops)
-    _worldPacket << uint32(NpcCreatureID);  // single flat uint32
+    _worldPacket << uint32(0);              // flat field #1: 0 in every captured battle; role unknown, NOT winners
+    _worldPacket << uint32(NpcCreatureID);  // 0 for wild battles (no trainer); trainer entry for NPC battles
 
     _worldPacket << uint32(Pets.size());
 
