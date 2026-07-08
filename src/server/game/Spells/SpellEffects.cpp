@@ -3010,6 +3010,9 @@ void Spell::EffectInterruptCast()
                 int32 duration = m_spellInfo->GetDuration();
                 duration = unitTarget->ModSpellDuration(m_spellInfo, unitTarget, duration, false, 1 << effectInfo->EffectIndex);
                 unitTarget->GetSpellHistory()->LockSpellSchool(curSpellInfo->GetSchoolMask(), Milliseconds(duration));
+                // Drive the client's loss-of-control UI: a school interrupt locks the interrupted spell's
+                // school for the lockout duration (SMSG_ADD_LOSS_OF_CONTROL, LossOfControlType school-interrupt).
+                unitTarget->SendAddLossOfControl(m_caster->GetGUID(), m_spellInfo->Id, curSpellInfo->GetSchoolMask(), duration);
                 std::ranges::find(m_UniqueTargetInfo, unitTarget->GetGUID(), &TargetInfo::TargetGUID)->ProcHitMask |= PROC_HIT_INTERRUPT;
                 SendSpellInterruptLog(unitTarget, curSpellInfo->Id);
                 unitTarget->InterruptSpell(CurrentSpellTypes(i), false, false, SPELL_FAILED_INTERRUPTED_COMBAT, SPELL_FAILED_DONT_REPORT, m_caster->GetGUID());

@@ -6590,6 +6590,16 @@ enum DiminishingReturnsType
 };
 
 // Diminishing Return Groups
+// Client-side loss-of-control category sent in SMSG_ADD_LOSS_OF_CONTROL / SMSG_LOSS_OF_CONTROL_AURA_UPDATE.
+// Only SCHOOL_INTERRUPT is currently confirmed: in a live 12.0.7 rated-BG capture every
+// SMSG_ADD_LOSS_OF_CONTROL carried type 11 and an interrupt ability (Kick/Rebuke/Mind Freeze/...),
+// with the school mask of the interrupted spell in the lockout-school field. Aura-based crowd control
+// (stun/root/fear/silence/...) is delivered via SMSG_LOSS_OF_CONTROL_AURA_UPDATE and is not yet mapped.
+enum LossOfControlType : uint8
+{
+    LOSS_OF_CONTROL_TYPE_SCHOOL_INTERRUPT = 11
+};
+
 enum DiminishingGroup : uint16
 {
     DIMINISHING_NONE             = 0,

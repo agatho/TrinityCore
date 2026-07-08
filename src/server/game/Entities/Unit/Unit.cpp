@@ -9432,6 +9432,26 @@ bool Unit::ApplyDiminishingToDuration(SpellInfo const* auraSpellInfo, int32& dur
     return (duration != 0);
 }
 
+void Unit::SendAddLossOfControl(ObjectGuid caster, uint32 spellId, SpellSchoolMask lockoutSchoolMask, int32 durationMs)
+{
+    // Only players track a loss-of-control UI; the packet is unicast to the affected player,
+    // mirroring the school-lockout SpellCooldown sent from SpellHistory::LockSpellSchool.
+    Player* player = ToPlayer();
+    if (!player)
+        return;
+
+    WorldPackets::Spells::AddLossOfControl addLossOfControl;
+    addLossOfControl.Target = GetGUID();
+    addLossOfControl.Caster = caster;
+    addLossOfControl.SpellID = spellId;
+    addLossOfControl.Duration = durationMs;
+    addLossOfControl.DurationLeft = durationMs;
+    addLossOfControl.LockoutSchoolMask = lockoutSchoolMask;
+    addLossOfControl.Type = LOSS_OF_CONTROL_TYPE_SCHOOL_INTERRUPT;
+    addLossOfControl.DisplayType = 0;
+    player->SendDirectMessage(addLossOfControl.Write());
+}
+
 void Unit::ApplyDiminishingAura(DiminishingGroup group, bool apply)
 {
     // Checking for existing in the table

@@ -196,6 +196,23 @@ namespace WorldPackets
             std::vector<AuraInfo> Auras;
         };
 
+        class AddLossOfControl final : public ServerPacket
+        {
+        public:
+            explicit AddLossOfControl() : ServerPacket(SMSG_ADD_LOSS_OF_CONTROL, 16 + 4 + 16 + 4 + 4 + 4 + 1 + 1) { }
+
+            WorldPacket const* Write() override;
+
+            ObjectGuid Target;
+            ObjectGuid Caster;
+            int32 SpellID = 0;
+            int32 Duration = 0;              ///< total lockout duration in ms
+            int32 DurationLeft = 0;          ///< remaining lockout in ms (== Duration on apply)
+            uint32 LockoutSchoolMask = 0;    ///< SpellSchoolMask of the interrupted spell
+            uint8 Type = 0;                  ///< LossOfControlType (11 = school interrupt)
+            uint8 DisplayType = 0;
+        };
+
         struct TargetLocation
         {
             ObjectGuid Transport;
