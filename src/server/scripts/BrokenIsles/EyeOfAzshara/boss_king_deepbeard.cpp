@@ -17,6 +17,7 @@
 
 #include "AreaTrigger.h"
 #include "AreaTriggerAI.h"
+#include "CellImpl.h"
 #include "Creature.h"
 #include "GridNotifiersImpl.h"
 #include "InstanceScript.h"
