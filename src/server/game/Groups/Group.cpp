@@ -36,6 +36,7 @@
 #include "PartyPackets.h"
 #include "Pet.h"
 #include "Player.h"
+#include "RecentAlliesMgr.h"
 #include "UpdateData.h"
 #include "WorldSession.h"
 
@@ -505,6 +506,18 @@ bool Group::AddMember(Player* player)
         player->UpdateVisibleObjectInteractions(false, true, false, true);
 
     player->FailCriteria(CriteriaFailEvent::ModifyPartyStatus, 0);
+
+    // Record the "recent allies" relationship: the joining player and every other online, real member of this
+    // group are now people they recently grouped with (skip battleground/battlefield groups — those are not social).
+    if (!isBGGroup() && !isBFGroup())
+    {
+        for (GroupReference const& itr : GetMembers())
+        {
+            Player* existingMember = itr.GetSource();
+            if (existingMember && existingMember != player)
+                RecentAllies::RecordGrouping(player, existingMember);
+        }
+    }
 
     {
         // Broadcast new player group member fields to rest of the group
