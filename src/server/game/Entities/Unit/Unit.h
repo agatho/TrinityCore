@@ -689,6 +689,8 @@ class TC_GAME_API Unit : public WorldObject
         void ApplyDiminishingAura(DiminishingGroup group, bool apply);
         void SendDiminishingReturnStart(DiminishingGroup group, bool showCountdown, bool isImmune) const;
         void ClearDiminishings();
+        void SendAddLossOfControl(ObjectGuid caster, uint32 spellId, SpellSchoolMask lockoutSchoolMask, int32 durationMs);
+        void SendLossOfControlAuraUpdate();
 
         virtual void Update(uint32 time) override;
 

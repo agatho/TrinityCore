@@ -9509,6 +9509,78 @@ bool Unit::ApplyDiminishingToDuration(SpellInfo const* auraSpellInfo, int32& dur
     return (duration != 0);
 }
 
+void Unit::SendAddLossOfControl(ObjectGuid caster, uint32 spellId, SpellSchoolMask lockoutSchoolMask, int32 durationMs)
+{
+    // Only players track a loss-of-control UI; the packet is unicast to the affected player,
+    // mirroring the school-lockout SpellCooldown sent from SpellHistory::LockSpellSchool.
+    Player* player = ToPlayer();
+    if (!player)
+        return;
+
+    WorldPackets::Spells::AddLossOfControl addLossOfControl;
+    addLossOfControl.Target = GetGUID();
+    addLossOfControl.Caster = caster;
+    addLossOfControl.SpellID = spellId;
+    addLossOfControl.Duration = durationMs;
+    addLossOfControl.DurationLeft = durationMs;
+    addLossOfControl.LockoutSchoolMask = lockoutSchoolMask;
+    addLossOfControl.Type = LOSS_OF_CONTROL_TYPE_SCHOOL_INTERRUPT;
+    addLossOfControl.DisplayType = 0;
+    player->SendDirectMessage(addLossOfControl.Write());
+}
+
+// Rebuilds and unicasts the full aura-driven loss-of-control list for this unit. The client keys each
+// entry by (aura slot, effect index) and derives the LoC display category from the referenced aura, so
+// we emit one entry per applied aura effect whose mechanic is a control mechanic (MECHANIC_LOSS_CONTROL_MASK).
+void Unit::SendLossOfControlAuraUpdate()
+{
+    Player* player = ToPlayer();
+    if (!player)
+        return;
+
+    WorldPackets::Spells::LossOfControlAuraUpdate update;
+    update.Unit = GetGUID();
+
+    for (AuraApplication const* aurApp : GetVisibleAuras())
+    {
+        Aura const* aura = aurApp->GetBase();
+        SpellInfo const* spellInfo = aura->GetSpellInfo();
+        if (!(spellInfo->GetAllEffectsMechanicMask() & MECHANIC_LOSS_CONTROL_MASK))
+            continue;
+
+        uint8 const spellMechanic = uint8(spellInfo->Mechanic);
+        bool anyEffect = false;
+        for (SpellEffectInfo const& effect : spellInfo->GetEffects())
+        {
+            if (!(aurApp->GetEffectMask() & (1u << effect.EffectIndex)))
+                continue;
+            if (!effect.Mechanic || !((UI64LIT(1) << effect.Mechanic) & MECHANIC_LOSS_CONTROL_MASK))
+                continue;
+
+            WorldPackets::Spells::LossOfControlAuraUpdate::LossOfControlInfo& info = update.Infos.emplace_back();
+            info.TimeRemaining = uint32(std::max(aura->GetDuration(), 0));
+            info.AuraSlot = aurApp->GetSlot();
+            info.EffectIndex = uint8(effect.EffectIndex);
+            info.Mechanic = uint8(effect.Mechanic);
+            info.Mechanic2 = spellMechanic ? spellMechanic : uint8(effect.Mechanic);
+            anyEffect = true;
+        }
+
+        // Spell-level control mechanic with no per-effect mechanic (rare): emit a single entry.
+        if (!anyEffect && spellMechanic && ((UI64LIT(1) << spellMechanic) & MECHANIC_LOSS_CONTROL_MASK))
+        {
+            WorldPackets::Spells::LossOfControlAuraUpdate::LossOfControlInfo& info = update.Infos.emplace_back();
+            info.TimeRemaining = uint32(std::max(aura->GetDuration(), 0));
+            info.AuraSlot = aurApp->GetSlot();
+            info.EffectIndex = 0;
+            info.Mechanic = spellMechanic;
+            info.Mechanic2 = spellMechanic;
+        }
+    }
+
+    player->SendDirectMessage(update.Write());
+}
+
 void Unit::SendDiminishingReturnStart(DiminishingGroup group, bool showCountdown, bool isImmune) const
 {
     WorldPackets::Spells::DiminishingReturnStart diminishingReturnStart;
