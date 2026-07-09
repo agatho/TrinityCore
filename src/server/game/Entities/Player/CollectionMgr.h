@@ -131,6 +131,18 @@ public:
     bool AddToy(uint32 itemId, bool isFavourite, bool hasFanfare);
     bool UpdateAccountToys(uint32 itemId, bool isFavourite, bool hasFanfare);
     bool HasToy(uint32 itemId) const { return _toys.contains(itemId); }
+    // Revoke a toy (in-memory + client update field + account DB). Returns false if not owned.
+    bool RemoveToy(uint32 itemId);
+
+    // Revoke a mount (in-memory + un-learn spell + full mount resync + account DB). Returns false if not owned.
+    bool RemoveMount(uint32 spellId);
+
+    // Account-wide AccountStore purchases (AccountStoreItem ID -> unix purchase time)
+    void LoadAccountStorePurchases(PreparedQueryResult result);
+    bool HasAccountStoreItem(uint32 accountStoreItemId) const { return _accountStoreItems.contains(accountStoreItemId); }
+    uint32 GetAccountStorePurchaseTime(uint32 accountStoreItemId) const;
+    bool AddAccountStorePurchase(uint32 accountStoreItemId);
+    bool RemoveAccountStorePurchase(uint32 accountStoreItemId);
 
     ToyBoxContainer const& GetAccountToys() const { return _toys; }
 
@@ -216,6 +228,7 @@ private:
     std::unique_ptr<boost::dynamic_bitset<uint32>> _transmogIllusions;
     Trinity::Containers::FlatSet<int32> _transmogOutfits;
     WarbandSceneCollectionContainer _warbandScenes;
+    std::unordered_map<uint32, uint32> _accountStoreItems;   // AccountStoreItem ID -> unix purchase time
 };
 
 #endif // TRINITYCORE_COLLECTION_MGR_H

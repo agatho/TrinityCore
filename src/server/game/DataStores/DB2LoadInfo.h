@@ -25,6 +25,50 @@
 #include "DB2Metadata.h"
 #include "HotfixDatabase.h"
 
+struct AccountStoreCategoryLoadInfo
+{
+    static constexpr DB2FieldMeta Fields[6] =
+    {
+        { .IsSigned = false, .Type = FT_STRING, .Name = "Name" },
+        { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "StoreFrontID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "OrderIndex" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "Icon" },
+        { .IsSigned = false, .Type = FT_BYTE, .Name = "Field_11_0_7_57361_005" },
+    };
+
+    static constexpr DB2LoadInfo Instance{ Fields, 6, &AccountStoreCategoryMeta::Instance, HOTFIX_SEL_ACCOUNT_STORE_CATEGORY };
+};
+
+struct AccountStoreItemLoadInfo
+{
+    static constexpr DB2FieldMeta Fields[20] =
+    {
+        { .IsSigned = false, .Type = FT_STRING, .Name = "Name" },
+        { .IsSigned = false, .Type = FT_STRING, .Name = "Description" },
+        { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "StoreFrontID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "AccountStoreCategoryID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "OrderIndex" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "Price" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "CurrencyTypesID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "Field_11_0_7_57361_008" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "RefundDuration" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "Field_11_0_7_57361_010" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "Field_11_0_7_57361_011" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "SpellID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "TransmogSetID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "CreatureDisplayInfoID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "UiModelSceneID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "Icon" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "Field_12_0_0_63534_017" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "Field_12_0_0_63534_018" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "Field_12_0_0_63534_019" },
+    };
+
+    static constexpr DB2LoadInfo Instance{ Fields, 20, &AccountStoreItemMeta::Instance, HOTFIX_SEL_ACCOUNT_STORE_ITEM };
+};
+
 struct AchievementLoadInfo
 {
     static constexpr DB2FieldMeta Fields[19] =

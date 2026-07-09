@@ -2304,8 +2304,8 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         void SendAutoRepeatCancel(Unit* target);
         void SendExplorationExperience(uint32 Area, uint32 Experience) const;
 
-        void SendDungeonDifficulty(int32 forcedDifficulty = -1) const;
-        void SendRaidDifficulty(bool legacy, int32 forcedDifficulty = -1) const;
+        void SendDungeonDifficulty() const;
+        void SendRaidDifficulty(bool legacy) const;
         void ResetInstances(InstanceResetMethod method);
         void SendResetInstanceSuccess(uint32 MapId) const;
         void SendResetInstanceFailed(ResetFailedReason reason, uint32 mapID) const;
@@ -2963,6 +2963,15 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         {
             AddDynamicUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::Toys)) = itemId;
             AddDynamicUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::ToyFlags)) = flags;
+        }
+        void RemoveToy(int32 itemId)
+        {
+            // Toys and ToyFlags are parallel dynamic arrays sharing the same index.
+            int32 index = m_activePlayerData->Toys.FindIndex(itemId);
+            if (index < 0)
+                return;
+            RemoveDynamicUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::Toys), uint32(index));
+            RemoveDynamicUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::ToyFlags), uint32(index));
         }
 
         void AddTransmogBlock(uint32 blockValue) { AddDynamicUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::Transmog)) = blockValue; }

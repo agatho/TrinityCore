@@ -38,6 +38,8 @@
 #include <cctype>
 #include <cmath>
 
+DB2Storage<AccountStoreCategoryEntry>           sAccountStoreCategoryStore("AccountStoreCategory.db2", &AccountStoreCategoryLoadInfo::Instance);
+DB2Storage<AccountStoreItemEntry>               sAccountStoreItemStore("AccountStoreItem.db2", &AccountStoreItemLoadInfo::Instance);
 DB2Storage<AchievementEntry>                    sAchievementStore("Achievement.db2", &AchievementLoadInfo::Instance);
 DB2Storage<Achievement_CategoryEntry>           sAchievementCategoryStore("Achievement_Category.db2", &AchievementCategoryLoadInfo::Instance);
 DB2Storage<AdventureJournalEntry>               sAdventureJournalStore("AdventureJournal.db2", &AdventureJournalLoadInfo::Instance);
@@ -671,6 +673,8 @@ uint32 DB2Manager::LoadStores(std::string const& dataPath, LocaleConstant defaul
         LoadDB2(availableDb2Locales, loadErrors, _stores, &store, db2Path, defaultLocale, sizeof(T));
     };
 
+    LOAD_DB2(sAccountStoreCategoryStore);
+    LOAD_DB2(sAccountStoreItemStore);
     LOAD_DB2(sAchievementStore);
     LOAD_DB2(sAchievementCategoryStore);
     LOAD_DB2(sAdventureJournalStore);

@@ -25,6 +25,40 @@
 
 #pragma pack(push, 1)
 
+struct AccountStoreCategoryEntry
+{
+    LocalizedString Name;
+    uint32 ID;
+    int32 StoreFrontID;
+    int32 OrderIndex;
+    int32 Icon;
+    uint8 Field_11_0_7_57361_005;
+};
+
+struct AccountStoreItemEntry
+{
+    LocalizedString Name;
+    LocalizedString Description;
+    uint32 ID;
+    int32 StoreFrontID;
+    int32 AccountStoreCategoryID;
+    int32 OrderIndex;
+    int32 Price;
+    int32 CurrencyTypesID;
+    int32 Field_11_0_7_57361_008;
+    int32 RefundDuration;
+    int32 Field_11_0_7_57361_010;
+    int32 Field_11_0_7_57361_011;
+    int32 SpellID;
+    int32 TransmogSetID;
+    int32 CreatureDisplayInfoID;
+    int32 UiModelSceneID;
+    int32 Icon;
+    int32 Field_12_0_0_63534_017;
+    int32 Field_12_0_0_63534_018;
+    int32 Field_12_0_0_63534_019;
+};
+
 struct AchievementEntry
 {
     LocalizedString Description;
