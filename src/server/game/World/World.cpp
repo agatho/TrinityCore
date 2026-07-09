@@ -83,6 +83,7 @@
 #include "PlayerDump.h"
 #include "PoolMgr.h"
 #include "QuestMgr.h"
+#include "AreaPoiMgr.h"
 #include "QuestPools.h"
 #include "WorldQuestMgr.h"
 #include "RealmList.h"
@@ -1615,6 +1616,9 @@ bool World::SetInitialWorldSettings()
     TC_LOG_INFO("server.loading", "Loading World Quests...");
     sWorldQuestMgr->LoadFromDB();                               // must be after quest templates
 
+    TC_LOG_INFO("server.loading", "Loading Area POIs...");
+    sAreaPoiMgr->LoadFromDB();
+
     TC_LOG_INFO("server.loading", "Loading World State templates...");
     WorldStateMgr::LoadFromDB();                               // must be loaded before battleground, outdoor PvP, game events and conditions
 
@@ -2362,6 +2366,11 @@ void World::Update(uint32 diff)
     {
         TC_METRIC_TIMER("world_update_time", TC_METRIC_TAG("type", "Update world quests"));
         sWorldQuestMgr->Update(diff);
+    }
+
+    {
+        TC_METRIC_TIMER("world_update_time", TC_METRIC_TAG("type", "Update area POIs"));
+        sAreaPoiMgr->Update(diff);
     }
 
     {

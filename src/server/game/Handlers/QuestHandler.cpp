@@ -40,6 +40,7 @@
 #include "QuestPools.h"
 #include "ReputationMgr.h"
 #include "ScriptMgr.h"
+#include "AreaPoiMgr.h"
 #include "World.h"
 #include "WorldQuestMgr.h"
 
@@ -752,6 +753,13 @@ void WorldSession::HandleRequestWorldQuestUpdate(WorldPackets::Quest::RequestWor
 {
     WorldPackets::Quest::WorldQuestUpdateResponse response;
     sWorldQuestMgr->FillActiveWorldQuests(response.WorldQuestUpdates);
+    SendPacket(response.Write());
+}
+
+void WorldSession::HandleRequestAreaPoiUpdate(WorldPackets::Quest::RequestAreaPoiUpdate& /*packet*/)
+{
+    WorldPackets::Quest::AreaPoiUpdateResponse response;
+    sAreaPoiMgr->FillActiveAreaPois(response.AreaPois);
     SendPacket(response.Write());
 }
 
