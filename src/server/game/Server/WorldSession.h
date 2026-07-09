@@ -343,6 +343,9 @@ namespace WorldPackets
         class CommentatorGetPlayerInfo;
         class CommentatorGetPlayerCooldowns;
         class CommentatorStartWargame;
+    namespace Contribution
+    {
+        class ContributionContribute;
     }
 
     namespace Duel
@@ -1860,6 +1863,7 @@ class TC_GAME_API WorldSession
         void HandleCommentatorStartWargame(WorldPackets::Commentator::CommentatorStartWargame& startWargame);
         bool IsCommentator() const { return _isCommentator; }
         void SetCommentator(bool on) { _isCommentator = on; }
+        void HandleContributionContribute(WorldPackets::Contribution::ContributionContribute& contribute);
         void HandleConversationLineStarted(WorldPackets::Misc::ConversationLineStarted& conversationLineStarted);
         void HandleKeyboundOverride(WorldPackets::Spells::KeyboundOverride& keyboundOverride);
         void HandleQueryCountdownTimer(WorldPackets::Misc::QueryCountdownTimer& queryCountdownTimer);
