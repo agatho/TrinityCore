@@ -1867,13 +1867,12 @@ enum OpcodeServer : uint32
     SMSG_LFG_LIST_SEARCH_RESULTS                                    = 0x560002,
     SMSG_LFG_LIST_SEARCH_RESULTS_UPDATE                             = 0x560010,
     SMSG_LFG_LIST_SEARCH_STATUS                                     = 0x560003,
-    SMSG_HOUSING_CATALOG_STATE_SYNC                                 = 0x56000E, // ClientMirrorSystem subgroup; sniff-verified wire = uint32 count + count*(uint32 ID, uint32 PackedState)
-    // COLLISION FLAG (integration): 0x56000E is claimed by BOTH the housing branch (CATALOG_STATE_SYNC, above,
-    // housing sniff shows SMSG 0x56000E x2 in a housing session) AND TC master + all feature branches
-    // (SMSG_LFG_LIST_UPDATE_BLACKLIST, below). Only CATALOG_STATE_SYNC is registered in Opcodes.cpp.
-    // Kept both enumerators (duplicate value is legal) so neither feature loses its declared opcode.
-    // Needs a targeted 12.0.7 LFG-list sniff to decide the true owner of 0x56000E. Do NOT silently drop either.
-    SMSG_LFG_LIST_UPDATE_BLACKLIST                                  = 0x56000E,
+    SMSG_HOUSING_CATALOG_STATE_SYNC                                 = 0x56000E, // ClientMirrorSystem subgroup; sniff-verified owner of 0x56000E (12.0.7 housing capture: ~4KB server->client payload, x2)
+    // 0x56000E RESOLVED to housing (2026-07): the live 12.0.7 housing sniff shows a ~4KB ClientMirrorSystem
+    // bulk-sync payload on 0x56000E, which is the wrong order of magnitude for the tiny LFG blacklist delta.
+    // TC master's SMSG_LFG_LIST_UPDATE_BLACKLIST = 0x56000E is therefore a stale/mislabeled value; parked on
+    // UNKNOWN_OPCODE below until a dedicated LFG-list sniff yields its real opcode. Send-site is disabled.
+    SMSG_LFG_LIST_UPDATE_BLACKLIST                                  = UNKNOWN_OPCODE,
     SMSG_LFG_LIST_UPDATE_EXPIRATION                                 = 0x56000B,
     SMSG_LFG_LIST_UPDATE_STATUS                                     = 0x56000A,
     SMSG_LFG_OFFER_CONTINUE                                         = 0x560018,
