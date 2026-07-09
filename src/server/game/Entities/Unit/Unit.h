@@ -1138,6 +1138,9 @@ class TC_GAME_API Unit : public WorldObject
         void UpdateHeight(float newZ);
 
         void SendMoveKnockBack(Player* player, float speedXY, float speedZ, float vcos, float vsin);
+        void SendApplyInertia(int32 movementInertiaID, uint32 lifetimeMs);
+        void SendRemoveInertia(int32 movementInertiaID);
+        void SendAddImpulse(Position const& direction);
         void KnockbackFrom(Position const& origin, float speedXY, float speedZ, float angle = M_PI, Movement::SpellEffectExtraData const* spellEffectExtraData = nullptr);
 
         void MonsterMoveWithSpeed(float x, float y, float z, float speed, bool generatePath = false, bool forceDestination = false);
@@ -1712,6 +1715,8 @@ class TC_GAME_API Unit : public WorldObject
 
         int32 GetFlightCapabilityID() const { return m_unitData->FlightCapabilityID; }
         void SetFlightCapabilityID(int32 flightCapabilityId, bool clientUpdate);
+        int32 GetDriveCapabilityID() const { return m_unitData->DriveCapabilityID; }
+        void SetDriveCapabilityID(int32 driveCapabilityId, bool clientUpdate);
         float GetAdvFlyingSpeed(AdvFlyingRateTypeSingle speedType) const { return m_advFlyingSpeed[speedType]; }
         float GetAdvFlyingSpeedMin(AdvFlyingRateTypeRange speedType) const { return m_advFlyingSpeed[speedType]; }
         float GetAdvFlyingSpeedMax(AdvFlyingRateTypeRange speedType) const { return m_advFlyingSpeed[speedType + 1]; }

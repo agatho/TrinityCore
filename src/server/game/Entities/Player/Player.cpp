@@ -1656,6 +1656,19 @@ void Player::Regenerate(Powers power)
     int32 curValue = GetPower(power);
     float addvalue = GetPowerRegen(power) * 0.001f * m_regenTimer;
 
+    // Vigor regen scales with forward velocity during advanced flying
+    if (power == POWER_ALTERNATE_MOUNT && m_movementInfo.HasExtraMovementFlag2(MOVEMENTFLAG3_ADV_FLYING) && m_movementInfo.advFlying)
+    {
+        if (FlightCapabilityEntry const* flightCapability = sFlightCapabilityStore.LookupEntry(GetFlightCapabilityID()))
+        {
+            if (flightCapability->VigorRegenMaxVelCoefficient > 0.0f && flightCapability->MaxVel > 0.0f)
+            {
+                float velocityPct = std::min(m_movementInfo.advFlying->forwardVelocity / flightCapability->MaxVel, 1.0f);
+                addvalue *= 1.0f + velocityPct * flightCapability->VigorRegenMaxVelCoefficient;
+            }
+        }
+    }
+
     int32 minPower = powerType->MinPower;
     int32 maxPower = GetMaxPower(power);
 
@@ -19255,8 +19268,6 @@ void Player::_LoadAuras(PreparedQueryResult auraResult, PreparedQueryResult effe
         while (auraResult->NextRow());
     }
 
-    // TODO: finish dragonriding - this forces old flight mode
-    AddAura(404468, this);
 }
 
 void Player::_LoadGlyphAuras()
@@ -25575,6 +25586,12 @@ void Player::SendInitialPacketsAfterAddToMap()
 
     if (HasAuraType(SPELL_AURA_DISABLE_INERTIA))
         setCompoundState.StateChanges.emplace_back(SMSG_MOVE_DISABLE_INERTIA, m_movementCounter++);
+
+    if (int32 driveCapabilityId = m_unitData->DriveCapabilityID)
+    {
+        auto& stateChange = setCompoundState.StateChanges.emplace_back(SMSG_MOVE_SET_CAN_DRIVE, m_movementCounter++);
+        stateChange.DriveCapabilityRecID = driveCapabilityId;
+    }
 
     if (!setCompoundState.StateChanges.empty())
     {

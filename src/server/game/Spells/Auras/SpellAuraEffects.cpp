@@ -2830,6 +2830,7 @@ void AuraEffect::HandleAuraMounted(AuraApplication const* aurApp, uint8 mode, bo
             if (MountCapabilityEntry const* mountCapability = sMountCapabilityStore.LookupEntry(GetAmountAsInt()))
             {
                 target->SetFlightCapabilityID(mountCapability->FlightCapabilityID, true);
+                target->SetDriveCapabilityID(mountCapability->DriveCapabilityID, false);
                 target->CastSpell(target, mountCapability->ModSpellAuraID, this);
             }
         }
@@ -2855,6 +2856,7 @@ void AuraEffect::HandleAuraMounted(AuraApplication const* aurApp, uint8 mode, bo
                 target->RemoveAurasDueToSpell(mountCapability->ModSpellAuraID, target->GetGUID());
 
         target->SetFlightCapabilityID(0, true);
+        target->SetDriveCapabilityID(0, true);
     }
 }
 
