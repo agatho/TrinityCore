@@ -1,0 +1,750 @@
+MSBuild-Version 17.14.23+b0019275e für .NET Framework
+
+  1>Checking Build System
+  Building Custom Rule I:/TrinityCore/_integration/dep/recastnavigation/Detour/CMakeLists.txt
+  Building Custom Rule I:/TrinityCore/_integration/dep/argon2/CMakeLists.txt
+  Building Custom Rule I:/TrinityCore/_integration/dep/recastnavigation/Recast/CMakeLists.txt
+  DetourAlloc.cpp
+  DetourAssert.cpp
+  DetourCommon.cpp
+  DetourNavMesh.cpp
+  DetourNavMeshBuilder.cpp
+  DetourNavMeshQuery.cpp
+  DetourNode.cpp
+  argon2.c
+  core.c
+  encoding.c
+  thread.c
+  blake2b.c
+  opt.c
+  Recast.cpp
+  RecastAlloc.cpp
+  RecastAssert.cpp
+  RecastArea.cpp
+  RecastContour.cpp
+  RecastFilter.cpp
+  RecastLayers.cpp
+  RecastMesh.cpp
+  RecastMeshDetail.cpp
+  RecastRasterization.cpp
+  RecastRegion.cpp
+  Detour.vcxproj -> I:\TrinityCore\_integration\build\dep\recastnavigation\Detour\Release\Detour.lib
+  argon2.vcxproj -> I:\TrinityCore\_integration\build\dep\argon2\Release\argon2.lib
+  Building Custom Rule I:/TrinityCore/_integration/dep/fmt/CMakeLists.txt
+  Building Custom Rule I:/TrinityCore/_integration/dep/zlib/CMakeLists.txt
+  format.cc
+  os.cc
+  Building Custom Rule I:/TrinityCore/_integration/src/genrev/CMakeLists.txt
+  adler32.c
+  compress.c
+  crc32.c
+  deflate.c
+  infback.c
+  inffast.c
+  inflate.c
+  inftrees.c
+  trees.c
+  uncompr.c
+  zutil.c
+  Recast.vcxproj -> I:\TrinityCore\_integration\build\dep\recastnavigation\Recast\Release\Recast.lib
+  Building Custom Rule I:/TrinityCore/_integration/dep/openssl_ed25519/CMakeLists.txt
+  zlib.vcxproj -> I:\TrinityCore\_integration\build\dep\zlib\Release\zlib.lib
+  Building Custom Rule I:/TrinityCore/_integration/dep/SFMT/CMakeLists.txt
+  curve25519.c
+  SFMT.c
+  Building Custom Rule I:/TrinityCore/_integration/dep/g3dlite/CMakeLists.txt
+     Bibliothek "I:/TrinityCore/_integration/build/dep/openssl_ed25519/Release/openssl_ed25519.lib" und Objekt "I:/TrinityCore/_integration/build/dep/openssl_ed25519/Release/openssl_ed25519.exp" werden erstellt.
+  cmake_pch.cxx
+  openssl_ed25519.vcxproj -> I:\TrinityCore\_integration\build\bin\Release\openssl_ed25519.dll
+  Der Befehl "pwsh.exe" ist entweder falsch geschrieben oder
+  konnte nicht gefunden werden.
+  fmt.vcxproj -> I:\TrinityCore\_integration\build\dep\fmt\Release\fmt.lib
+  Building Custom Rule I:/TrinityCore/_integration/dep/protobuf/CMakeLists.txt
+  sfmt.vcxproj -> I:\TrinityCore\_integration\build\dep\SFMT\Release\sfmt.lib
+  cmake_pch.cxx
+  AABox.cpp
+  Any.cpp
+  AnyTableReader.cpp
+  BinaryFormat.cpp
+  BinaryInput.cpp
+  BinaryOutput.cpp
+  Box.cpp
+  Capsule.cpp
+  CollisionDetection.cpp
+  CoordinateFrame.cpp
+  Crypto.cpp
+  Cylinder.cpp
+  debugAssert.cpp
+  FileSystem.cpp
+  fileutils.cpp
+  format.cpp
+  g3dfnmatch.cpp
+  g3dmath.cpp
+  GThread.cpp
+  Line.cpp
+  LineSegment.cpp
+  Log.cpp
+  Matrix3.cpp
+  Matrix4.cpp
+  MemoryManager.cpp
+  PhysicsFrame.cpp
+  Plane.cpp
+  prompt.cpp
+  Quat.cpp
+  Random.cpp
+  Ray.cpp
+  RegistryUtil.cpp
+  Sphere.cpp
+  stringutils.cpp
+  System.cpp
+  TextInput.cpp
+  TextOutput.cpp
+  Triangle.cpp
+  uint128.cpp
+  UprightFrame.cpp
+  Vector2.cpp
+  Vector3.cpp
+  Vector4.cpp
+  importer.cc
+  parser.cc
+  descriptor.cc
+  descriptor.pb.cc
+  descriptor_database.cc
+  dynamic_message.cc
+  extension_set.cc
+  extension_set_heavy.cc
+  generated_message_reflection.cc
+  generated_message_util.cc
+  coded_stream.cc
+  gzip_stream.cc
+  printer.cc
+  strtod.cc
+  tokenizer.cc
+  zero_copy_stream.cc
+  zero_copy_stream_impl.cc
+  zero_copy_stream_impl_lite.cc
+  message.cc
+  message_lite.cc
+  reflection_ops.cc
+  repeated_field.cc
+  service.cc
+  atomicops_internals_x86_gcc.cc
+  atomicops_internals_x86_msvc.cc
+  common.cc
+  once.cc
+  stringprintf.cc
+  structurally_valid.cc
+  strutil.cc
+  substitute.cc
+  text_format.cc
+  unknown_field_set.cc
+  wire_format.cc
+  wire_format_lite.cc
+  g3dlib.vcxproj -> I:\TrinityCore\_integration\build\dep\g3dlite\Release\g3dlib.lib
+  Building Custom Rule I:/TrinityCore/_integration/src/common/CMakeLists.txt
+  cmake_pch.cxx
+  protobuf.vcxproj -> I:\TrinityCore\_integration\build\dep\protobuf\Release\protobuf.lib
+  Banner.cpp
+  Common.cpp
+  GitRevision.cpp
+  BoundingIntervalHierarchy.cpp
+  DynamicTree.cpp
+  VMapFactory.cpp
+  VMapManager.cpp
+  MapDefines.cpp
+  MapTree.cpp
+  GameObjectModel.cpp
+  ModelInstance.cpp
+  WorldModel.cpp
+  BuiltInConfig.cpp
+  Config.cpp
+  AES.cpp
+  ARC4.cpp
+  Argon2Hash.cpp
+  BigNumber.cpp
+  CryptoRandom.cpp
+  Ed25519.cpp
+  OpenSSLCrypto.cpp
+  RSA.cpp
+  TOTP.cpp
+  SRP6.cpp
+  WorldPacketCrypt.cpp
+  DB2FileLoader.cpp
+  DB2FileSystemSource.cpp
+  DB2Meta.cpp
+  Errors.cpp
+  Base32.cpp
+  Base64.cpp
+  Appender.cpp
+  AppenderConsole.cpp
+  AppenderFile.cpp
+  Log.cpp
+  LogMessage.cpp
+  LogOperation.cpp
+  Logger.cpp
+  enuminfo_AppenderConsole.cpp
+  enuminfo_LogCommon.cpp
+  Metric.cpp
+  ProcessPriority.cpp
+  Timezone.cpp
+  EventMap.cpp
+  EventProcessor.cpp
+  Locales.cpp
+  Random.cpp
+  SFMTRand.cpp
+  StartProcess.cpp
+  StringFormat.cpp
+  TaskScheduler.cpp
+  Util.cpp
+  WheatyExceptionReport.cpp
+  ServiceWin32.cpp
+  common.vcxproj -> I:\TrinityCore\_integration\build\src\common\Release\common.lib
+  Building Custom Rule I:/TrinityCore/_integration/src/common/network/CMakeLists.txt
+  Building Custom Rule I:/TrinityCore/_integration/src/server/database/CMakeLists.txt
+  Building Custom Rule I:/TrinityCore/_integration/src/common/mmaps_common/CMakeLists.txt
+  cmake_pch.cxx
+  cmake_pch.cxx
+  IntermediateValues.cpp
+  TerrainBuilder.cpp
+  TileBuilder.cpp
+  MMapManager.cpp
+  mmaps_common.vcxproj -> I:\TrinityCore\_integration\build\src\common\mmaps_common\Release\mmaps_common.lib
+  Building Custom Rule I:/TrinityCore/_integration/src/server/proto/CMakeLists.txt
+  AdhocStatement.cpp
+  DatabaseEnv.cpp
+  DatabaseLoader.cpp
+  DatabaseWorkerPool.cpp
+  Field.cpp
+  FieldValueConverter.cpp
+  MySQLConnection.cpp
+  MySQLPreparedStatement.cpp
+  MySQLThreading.cpp
+  PreparedStatement.cpp
+  QueryCallback.cpp
+  QueryHolder.cpp
+  QueryResult.cpp
+  Transaction.cpp
+  CharacterDatabase.cpp
+  HotfixDatabase.cpp
+  LoginDatabase.cpp
+  WorldDatabase.cpp
+  AppenderDB.cpp
+  DBUpdater.cpp
+  UpdateFetcher.cpp
+  cmake_pch.cxx
+  ServiceBase.cpp
+  challenge_service.pb.cc
+  connection_service.pb.cc
+  content_handle_types.pb.cc
+  entity_types.pb.cc
+  ets_types.pb.cc
+  game_utilities_types.pb.cc
+  profanity_filter_config.pb.cc
+  resource_service.pb.cc
+  role_types.pb.cc
+  rpc_config.pb.cc
+  rpc_types.pb.cc
+  semantic_version.pb.cc
+  block_list_listener.pb.cc
+  block_list_service.pb.cc
+  block_list_types.pb.cc
+  channel_id.pb.cc
+  channel_types.pb.cc
+  club_ban.pb.cc
+  club_invitation.pb.cc
+  club_listener.pb.cc
+  club_member.pb.cc
+  club_membership_listener.pb.cc
+  club_membership_service.pb.cc
+  club_membership_types.pb.cc
+  club_name_generator.pb.cc
+  club_notification.pb.cc
+  club_range_set.pb.cc
+  club_request.pb.cc
+  club_role.pb.cc
+  club_service.pb.cc
+  club_stream.pb.cc
+  club_types.pb.cc
+  authentication_listener.pb.cc
+  authentication_types.pb.cc
+  friends_listener.pb.cc
+  notification_listener.pb.cc
+  whisper_listener.pb.cc
+  whisper_service.pb.cc
+  club_member_id.pb.cc
+  club_tag.pb.cc
+  club_type.pb.cc
+  account_identity.pb.cc
+  game_account_handle.pb.cc
+  whisper_types.pb.cc
+  field_options.pb.cc
+  file_options.pb.cc
+  message_options.pb.cc
+  method_options.pb.cc
+  range.pb.cc
+  register_method_types.pb.cc
+  routing.pb.cc
+  service_options.pb.cc
+  Login.pb.cc
+  RealmList.pb.cc
+  IpAddress.cpp
+  IpNetwork.cpp
+  Resolver.cpp
+  SslStream.cpp
+  BaseHttpSocket.cpp
+  HttpService.cpp
+  HttpSocket.cpp
+  HttpSslSocket.cpp
+  account_service.pb.cc
+  account_types.pb.cc
+  attribute_types.pb.cc
+  authentication_service.pb.cc
+  database.vcxproj -> I:\TrinityCore\_integration\build\src\server\database\Release\database.lib
+  embed_types.pb.cc
+  event_view_types.pb.cc
+  friends_service.pb.cc
+  network.vcxproj -> I:\TrinityCore\_integration\build\src\common\network\Release\trinity_network.lib
+  friends_types.pb.cc
+  game_utilities_service.pb.cc
+  invitation_types.pb.cc
+  message_types.pb.cc
+  notification_service.pb.cc
+  notification_types.pb.cc
+  presence_listener.pb.cc
+  presence_service.pb.cc
+  presence_types.pb.cc
+  report_service.pb.cc
+  report_types.pb.cc
+  voice_types.pb.cc
+  club_core.pb.cc
+  club_enum.pb.cc
+  account_service.pb.cc
+  authentication_service.pb.cc
+  friends_service.pb.cc
+  friends_types.pb.cc
+  game_utilities_service.pb.cc
+  notification_service.pb.cc
+  notification_types.pb.cc
+  presence_listener.pb.cc
+  presence_service.pb.cc
+  presence_types.pb.cc
+  report_service.pb.cc
+  report_types.pb.cc
+  report_service.pb.cc
+  report_types.pb.cc
+  club_core.pb.cc
+  club_enum.pb.cc
+  embed_types.pb.cc
+  event_view_types.pb.cc
+  invitation_types.pb.cc
+  message_types.pb.cc
+  voice_types.pb.cc
+  account_types.pb.cc
+  attribute_types.pb.cc
+  proto.vcxproj -> I:\TrinityCore\_integration\build\src\server\proto\Release\proto.lib
+  Building Custom Rule I:/TrinityCore/_integration/src/server/shared/CMakeLists.txt
+  cmake_pch.cxx
+  DB2DatabaseLoader.cpp
+  DB2Store.cpp
+  IPLocation.cpp
+  ProtobufJSON.cpp
+  IpBanCheckConnectionInitializer.cpp
+  ByteBuffer.cpp
+  ClientBuildInfo.cpp
+  Realm.cpp
+  RealmList.cpp
+  SecretMgr.cpp
+  shared.vcxproj -> I:\TrinityCore\_integration\build\src\server\shared\Release\shared.lib
+  Building Custom Rule I:/TrinityCore/_integration/src/server/game/CMakeLists.txt
+  cmake_pch.cxx
+I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(1178,20): error C2039: "Account" ist kein Member von "WorldPackets::Battlenet". [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(204,15):
+      Siehe Deklaration von "WorldPackets::Battlenet"
+  
+I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(1178,27): error C2143: Syntaxfehler: Es fehlt ";" vor "&" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(1178,57): error C2334: Unerwartete(s) Token vor "{"; sichtbarer Funktionstext wird übersprungen [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(1231,64): error C3083: "Query": Das Symbol links neben "::" muss ein Typ sein. [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(1231,71): error C2039: "NameCacheLookupResult" ist kein Member von "WorldPackets". [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(101,11):
+      Siehe Deklaration von "WorldPackets"
+  
+I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(1231,71): error C2061: Syntaxfehler: Bezeichner "NameCacheLookupResult" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(1243,44): error C3083: "Trade": Das Symbol links neben "::" muss ein Typ sein. [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(1243,51): error C2039: "TradeStatus" ist kein Member von "WorldPackets". [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(101,11):
+      Siehe Deklaration von "WorldPackets"
+  
+I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(1330,76): error C2061: Syntaxfehler: Bezeichner "Item" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(1394,40): error C2039: "Null" ist kein Member von "WorldPackets". [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(101,11):
+      Siehe Deklaration von "WorldPackets"
+  
+I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(1394,40): error C2061: Syntaxfehler: Bezeichner "Null" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(1395,49): error C2039: "Null" ist kein Member von "WorldPackets". [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(101,11):
+      Siehe Deklaration von "WorldPackets"
+  
+I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(1395,49): error C2061: Syntaxfehler: Bezeichner "Null" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(1424,57): error C2039: "OpeningCinematic" ist kein Member von "WorldPackets::Misc". [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Entities\Player\Player.h(131,15):
+      Siehe Deklaration von "WorldPackets::Misc"
+  
+I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(1424,57): error C2061: Syntaxfehler: Bezeichner "OpeningCinematic" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(1447,54): error C2039: "PortGraveyard" ist kein Member von "WorldPackets::Misc". [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Entities\Player\Player.h(131,15):
+      Siehe Deklaration von "WorldPackets::Misc"
+  
+I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(1447,54): error C2061: Syntaxfehler: Bezeichner "PortGraveyard" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(1448,60): error C2039: "RequestCemeteryList" ist kein Member von "WorldPackets::Misc". [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Entities\Player\Player.h(131,15):
+      Siehe Deklaration von "WorldPackets::Misc"
+  
+I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(1448,60): error C2061: Syntaxfehler: Bezeichner "RequestCemeteryList" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(1449,64): error C2039: "GetAccountNotifications" ist kein Member von "WorldPackets::Misc". [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Entities\Player\Player.h(131,15):
+      Siehe Deklaration von "WorldPackets::Misc"
+  
+I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(1449,64): error C2061: Syntaxfehler: Bezeichner "GetAccountNotifications" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(1452,48): error C3083: "Inspect": Das Symbol links neben "::" muss ein Typ sein. [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(1452,57): error C2039: "Inspect" ist kein Member von "WorldPackets". [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(101,11):
+      Siehe Deklaration von "WorldPackets"
+  
+I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(1452,57): error C2061: Syntaxfehler: Bezeichner "Inspect" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(1453,59): error C3083: "Inspect": Das Symbol links neben "::" muss ein Typ sein. [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(1453,68): error C2039: "QueryInspectAchievements" ist kein Member von "WorldPackets". [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(101,11):
+      Siehe Deklaration von "WorldPackets"
+  
+I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(1453,68): error C2061: Syntaxfehler: Bezeichner "QueryInspectAchievements" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(1455,63): error C2039: "MountSpecial" ist kein Member von "WorldPackets::Misc". [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Entities\Player\Player.h(131,15):
+      Siehe Deklaration von "WorldPackets::Misc"
+  
+I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(1455,63): error C2061: Syntaxfehler: Bezeichner "MountSpecial" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(1457,52): error C3083: "RaF": Das Symbol links neben "::" muss ein Typ sein. [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(1457,57): error C2039: "GetRafAccountInfo" ist kein Member von "WorldPackets". [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(101,11):
+      Siehe Deklaration von "WorldPackets"
+  
+I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(1457,57): error C2061: Syntaxfehler: Bezeichner "GetRafAccountInfo" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(1458,61): error C3083: "RaF": Das Symbol links neben "::" muss ein Typ sein. [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(1458,66): error C2039: "RafGenerateRecruitmentLink" ist kein Member von "WorldPackets". [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(101,11):
+      Siehe Deklaration von "WorldPackets"
+  
+I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(1458,66): error C2061: Syntaxfehler: Bezeichner "RafGenerateRecruitmentLink" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(1459,57): error C3083: "RaF": Das Symbol links neben "::" muss ein Typ sein. [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(1459,62): error C2039: "RafClaimActivityReward" ist kein Member von "WorldPackets". [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(101,11):
+      Siehe Deklaration von "WorldPackets"
+  
+I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(1459,62): error C2061: Syntaxfehler: Bezeichner "RafClaimActivityReward" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(1460,53): error C3083: "RaF": Das Symbol links neben "::" muss ein Typ sein. [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(1460,58): error C2039: "RafClaimNextReward" ist kein Member von "WorldPackets". [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(101,11):
+      Siehe Deklaration von "WorldPackets"
+  
+I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(1460,58): error C2061: Syntaxfehler: Bezeichner "RafClaimNextReward" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(1461,51): error C3083: "RaF": Das Symbol links neben "::" muss ein Typ sein. [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(1461,56): error C2039: "RemoveRafRecruit" ist kein Member von "WorldPackets". [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(101,11):
+      Siehe Deklaration von "WorldPackets"
+  
+I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(1461,56): error C2061: Syntaxfehler: Bezeichner "RemoveRafRecruit" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(1467,57): error C2039: "RepairItem" ist kein Member von "WorldPackets::Item". [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Server\Packets\ItemPacketsCommon.h(39,15):
+      Siehe Deklaration von "WorldPackets::Item"
+  
+I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(1467,57): error C2061: Syntaxfehler: Bezeichner "RepairItem" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(1470,61): error C2039: "MoveKnockBackAck" ist kein Member von "WorldPackets::Movement". [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Entities\Player\Player.h(136,15):
+      Siehe Deklaration von "WorldPackets::Movement"
+  
+I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(1470,61): error C2061: Syntaxfehler: Bezeichner "MoveKnockBackAck" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(1472,60): error C2039: "MoveTeleportAck" ist kein Member von "WorldPackets::Movement". [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Entities\Player\Player.h(136,15):
+      Siehe Deklaration von "WorldPackets::Movement"
+  
+I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(1472,60): error C2061: Syntaxfehler: Bezeichner "MoveTeleportAck" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(1473,64): error C2039: "MovementSpeedAck" ist kein Member von "WorldPackets::Movement". [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Entities\Player\Player.h(136,15):
+      Siehe Deklaration von "WorldPackets::Movement"
+  
+I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(1473,64): error C2061: Syntaxfehler: Bezeichner "MovementSpeedAck" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(1474,65): error C2039: "MovementSpeedAck" ist kein Member von "WorldPackets::Movement". [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Entities\Player\Player.h(136,15):
+      Siehe Deklaration von "WorldPackets::Movement"
+  
+I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(1474,65): error C2061: Syntaxfehler: Bezeichner "MovementSpeedAck" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(1475,70): error C2039: "MovementSpeedRangeAck" ist kein Member von "WorldPackets::Movement". [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Entities\Player\Player.h(136,15):
+      Siehe Deklaration von "WorldPackets::Movement"
+  
+I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(1475,70): error C2061: Syntaxfehler: Bezeichner "MovementSpeedRangeAck" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(1476,66): error C2039: "MoveSetCollisionHeightAck" ist kein Member von "WorldPackets::Movement". [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Entities\Player\Player.h(136,15):
+      Siehe Deklaration von "WorldPackets::Movement"
+  
+I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(1476,66): error C2061: Syntaxfehler: Bezeichner "MoveSetCollisionHeightAck" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(1479,70): error C2039: "MoveApplyMovementForceAck" ist kein Member von "WorldPackets::Movement". [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Entities\Player\Player.h(136,15):
+      Siehe Deklaration von "WorldPackets::Movement"
+  
+I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(1479,70): error C2061: Syntaxfehler: Bezeichner "MoveApplyMovementForceAck" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(1480,71): error C2039: "MoveRemoveMovementForceAck" ist kein Member von "WorldPackets::Movement". [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Entities\Player\Player.h(136,15):
+      Siehe Deklaration von "WorldPackets::Movement"
+  
+I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(1480,71): error C2061: Syntaxfehler: Bezeichner "MoveRemoveMovementForceAck" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(1481,80): error C2039: "MovementSpeedAck" ist kein Member von "WorldPackets::Movement". [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Entities\Player\Player.h(136,15):
+      Siehe Deklaration von "WorldPackets::Movement"
+  
+I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(1481,80): error C2061: Syntaxfehler: Bezeichner "MovementSpeedAck" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(1484,64): error C2039: "MoveApplyInertiaAck" ist kein Member von "WorldPackets::Movement". [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Entities\Player\Player.h(136,15):
+      Siehe Deklaration von "WorldPackets::Movement"
+  
+I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(1484,64): error C2061: Syntaxfehler: Bezeichner "MoveApplyInertiaAck" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(1485,65): error C2039: "MoveRemoveInertiaAck" ist kein Member von "WorldPackets::Movement". [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Entities\Player\Player.h(136,15):
+      Siehe Deklaration von "WorldPackets::Movement"
+  
+I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(1485,65): error C2061: Syntaxfehler: Bezeichner "MoveRemoveInertiaAck" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(1486,62): error C2039: "MoveAddImpulseAck" ist kein Member von "WorldPackets::Movement". [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Entities\Player\Player.h(136,15):
+      Siehe Deklaration von "WorldPackets::Movement"
+  
+I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(1486,62): error C2061: Syntaxfehler: Bezeichner "MoveAddImpulseAck" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(1487,63): error C2039: "MoveSetCanDriveAck" ist kein Member von "WorldPackets::Movement". [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Entities\Player\Player.h(136,15):
+      Siehe Deklaration von "WorldPackets::Movement"
+  
+I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(1487,63): error C2061: Syntaxfehler: Bezeichner "MoveSetCanDriveAck" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(1488,66): error C2039: "MoveStartDriveForward" ist kein Member von "WorldPackets::Movement". [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Entities\Player\Player.h(136,15):
+      Siehe Deklaration von "WorldPackets::Movement"
+  
+I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(1488,66): error C2061: Syntaxfehler: Bezeichner "MoveStartDriveForward" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(1490,53): error C2039: "RepopRequest" ist kein Member von "WorldPackets::Misc". [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Entities\Player\Player.h(131,15):
+      Siehe Deklaration von "WorldPackets::Misc"
+  
+I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(1490,53): error C2061: Syntaxfehler: Bezeichner "RepopRequest" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(1491,58): error C3083: "Loot": Das Symbol links neben "::" muss ein Typ sein. [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(1491,64): error C2039: "LootItem" ist kein Member von "WorldPackets". [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(101,11):
+      Siehe Deklaration von "WorldPackets"
+  
+I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(1492,50): error C3083: "Loot": Das Symbol links neben "::" muss ein Typ sein. [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(1492,56): error C2039: "LootMoney" ist kein Member von "WorldPackets". [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(101,11):
+      Siehe Deklaration von "WorldPackets"
+  
+I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(1492,56): error C2061: Syntaxfehler: Bezeichner "LootMoney" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(1493,45): error C3083: "Loot": Das Symbol links neben "::" muss ein Typ sein. [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(1493,51): error C2039: "LootUnit" ist kein Member von "WorldPackets". [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(101,11):
+      Siehe Deklaration von "WorldPackets"
+  
+I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(1493,51): error C2061: Syntaxfehler: Bezeichner "LootUnit" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(1494,52): error C3083: "Loot": Das Symbol links neben "::" muss ein Typ sein. [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(1494,58): error C2039: "LootRelease" ist kein Member von "WorldPackets". [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(101,11):
+      Siehe Deklaration von "WorldPackets"
+  
+I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(1494,58): error C2061: Syntaxfehler: Bezeichner "LootRelease" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(1495,55): error C3083: "Loot": Das Symbol links neben "::" muss ein Typ sein. [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(1495,61): error C2039: "MasterLootItem" ist kein Member von "WorldPackets". [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(101,11):
+      Siehe Deklaration von "WorldPackets"
+  
+I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(1495,61): error C2061: Syntaxfehler: Bezeichner "MasterLootItem" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(1496,56): error C3083: "Loot": Das Symbol links neben "::" muss ein Typ sein. [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(1496,62): error C2039: "SetLootSpecialization" ist kein Member von "WorldPackets". [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(101,11):
+      Siehe Deklaration von "WorldPackets"
+  
+I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(1496,62): error C2061: Syntaxfehler: Bezeichner "SetLootSpecialization" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(1498,44): error C3083: "Who": Das Symbol links neben "::" muss ein Typ sein. [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(1498,49): error C2039: "WhoRequestPkt" ist kein Member von "WorldPackets". [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(101,11):
+      Siehe Deklaration von "WorldPackets"
+  
+I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(1498,49): error C2061: Syntaxfehler: Bezeichner "WhoRequestPkt" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(1503,62): error C3083: "Ticket": Das Symbol links neben "::" muss ein Typ sein. [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(1503,70): error C2039: "GMTicketGetCaseStatus" ist kein Member von "WorldPackets". [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(101,11):
+      Siehe Deklaration von "WorldPackets"
+  
+I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(1503,70): error C2061: Syntaxfehler: Bezeichner "GMTicketGetCaseStatus" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(1504,61): error C3083: "Ticket": Das Symbol links neben "::" muss ein Typ sein. [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(1504,69): error C2039: "GMTicketGetSystemStatus" ist kein Member von "WorldPackets". [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(101,11):
+      Siehe Deklaration von "WorldPackets"
+  
+I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(1504,69): error C1003: Mehr als 100 Fehler gefunden; Kompilierung wird abgebrochen. [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+BUILD EXIT: 1 at Thu Jul  9 19:08:23     2026

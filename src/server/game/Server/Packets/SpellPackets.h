@@ -200,10 +200,27 @@ namespace WorldPackets
         {
         public:
             explicit AuraPointsDepleted() : ServerPacket(SMSG_AURA_POINTS_DEPLETED, 16 + 2 + 1) { }
+
+            WorldPacket const* Write() override;
+
+            ObjectGuid Unit;
+            uint16 Slot = 0;
+            uint8 EffectIndex = 0;
+        };
+
         class DiminishingReturnStart final : public ServerPacket
         {
         public:
             explicit DiminishingReturnStart() : ServerPacket(SMSG_UNIT_DIMINISHING_RETURN_START, 16 + 1 + 1) { }
+
+            WorldPacket const* Write() override;
+
+            ObjectGuid Unit;
+            uint8 Category = 0;         ///< DiminishingGroup of the applied crowd-control aura
+            bool ShowCountdown = false;
+            bool IsImmune = false;
+        };
+
         class AddLossOfControl final : public ServerPacket
         {
         public:

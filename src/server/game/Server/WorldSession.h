@@ -375,9 +375,13 @@ namespace WorldPackets
         class CommentatorGetPlayerInfo;
         class CommentatorGetPlayerCooldowns;
         class CommentatorStartWargame;
+    }
+
     namespace Contribution
     {
         class ContributionContribute;
+    }
+
     namespace Covenant
     {
         class ActivateSoulbind;
