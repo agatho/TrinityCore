@@ -379,6 +379,16 @@ void CharacterDatabaseConnection::DoPrepareStatements()
                      "item4, item5, item6, item7, item8, item9, item10, item11, item12, item13, item14, item15, item16, item17, item18) "
                      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", CONNECTION_ASYNC);
     PrepareStatement(CHAR_DEL_EQUIP_SET, "DELETE FROM character_equipmentsets WHERE setguid=?", CONNECTION_ASYNC);
+
+    PrepareStatement(CHAR_SEL_CRAFTING_ORDERS, "SELECT OrderID, SkillLineAbilityID, OrderState, OrderType, MinQuality, EndDate, ClaimEndDate, "
+        "TipAmount, HouseCutAmount, Flags, CustomerGuid, CrafterGuid, CustomerAccountId, CustomerNotes FROM crafting_orders", CONNECTION_SYNCH);
+    PrepareStatement(CHAR_SEL_CRAFTING_ORDER_REAGENTS, "SELECT OrderID, Slot, ItemID, CurrencyID, Quantity FROM crafting_order_reagents ORDER BY OrderID", CONNECTION_SYNCH);
+    PrepareStatement(CHAR_REP_CRAFTING_ORDER, "REPLACE INTO crafting_orders (OrderID, SkillLineAbilityID, OrderState, OrderType, MinQuality, EndDate, "
+        "ClaimEndDate, TipAmount, HouseCutAmount, Flags, CustomerGuid, CrafterGuid, CustomerAccountId, CustomerNotes) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", CONNECTION_ASYNC);
+    PrepareStatement(CHAR_DEL_CRAFTING_ORDER, "DELETE FROM crafting_orders WHERE OrderID=?", CONNECTION_ASYNC);
+    PrepareStatement(CHAR_DEL_CRAFTING_ORDER_REAGENTS, "DELETE FROM crafting_order_reagents WHERE OrderID=?", CONNECTION_ASYNC);
+    PrepareStatement(CHAR_INS_CRAFTING_ORDER_REAGENT, "INSERT INTO crafting_order_reagents (OrderID, Slot, ItemID, CurrencyID, Quantity) VALUES (?, ?, ?, ?, ?)", CONNECTION_ASYNC);
     PrepareStatement(CHAR_UPD_TRANSMOG_OUTFIT, "UPDATE character_transmog_outfits SET name=?, iconname=?, ignore_mask=?, appearance0=?, appearance1=?, appearance2=?, appearance3=?, "
         "appearance4=?, appearance5=?, appearance6=?, appearance7=?, appearance8=?, appearance9=?, appearance10=?, appearance11=?, appearance12=?, appearance13=?, appearance14=?, "
         "appearance15=?, appearance16=?, appearance17=?, appearance18=?, mainHandEnchant=?, offHandEnchant=? WHERE guid=? AND setguid=? AND setindex=?", CONNECTION_ASYNC);

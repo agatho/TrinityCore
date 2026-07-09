@@ -326,6 +326,18 @@ namespace WorldPackets
         class CollectionItemSetFavorite;
     }
 
+    namespace CraftingOrders
+    {
+        class CraftingOrderCreate;
+        class CraftingOrderClaim;
+        class CraftingOrderCancel;
+        class CraftingOrderRelease;
+        class CraftingOrderReject;
+        class CraftingOrderFulfill;
+        class CraftingOrderListMyOrders;
+        class CraftingOrderListCrafterOrders;
+    }
+
     namespace Combat
     {
         class AttackSwing;
@@ -1834,6 +1846,16 @@ class TC_GAME_API WorldSession
 
         // Collections
         void HandleCollectionItemSetFavorite(WorldPackets::Collections::CollectionItemSetFavorite& collectionItemSetFavorite);
+
+        // Crafting Orders
+        void HandleCraftingOrderCreate(WorldPackets::CraftingOrders::CraftingOrderCreate& packet);
+        void HandleCraftingOrderClaim(WorldPackets::CraftingOrders::CraftingOrderClaim& packet);
+        void HandleCraftingOrderCancel(WorldPackets::CraftingOrders::CraftingOrderCancel& packet);
+        void HandleCraftingOrderRelease(WorldPackets::CraftingOrders::CraftingOrderRelease& packet);
+        void HandleCraftingOrderReject(WorldPackets::CraftingOrders::CraftingOrderReject& packet);
+        void HandleCraftingOrderFulfill(WorldPackets::CraftingOrders::CraftingOrderFulfill& packet);
+        void HandleCraftingOrderListMyOrders(WorldPackets::CraftingOrders::CraftingOrderListMyOrders& packet);
+        void HandleCraftingOrderListCrafterOrders(WorldPackets::CraftingOrders::CraftingOrderListCrafterOrders& packet);
 
         // Transmogrification
         void HandleTransmogrifyItems(WorldPackets::Transmogrification::TransmogrifyItems& transmogrifyItems);
