@@ -1056,6 +1056,12 @@ ObjectGuid ObjectGuidFactory::CreateHousing(uint32 subType, uint32 arg1, uint32 
     {
         case 1:
         case 4:
+        case 5: // Housing/sub5: cross-sniff analysis shows ZERO wire CREATEs
+                // across all retail captures. Likely session-local state for
+                // user interaction on a plot (editor/placement mode) â€” never
+                // shipped as a standalone wire entity. Encoding kept here as
+                // a pass-through in case callers construct an in-memory GUID;
+                // it will never reach the client as a CREATE block.
             return ObjectGuid(uint64((uint64(HighGuid::Housing) << 58)
                 | (uint64(subType & 0x1F) << 53)
                 | (uint64(arg1 & 0xFFFF) << 32)

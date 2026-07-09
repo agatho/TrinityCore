@@ -113,7 +113,7 @@ void AreaTrigger::PlaySpellVisual(uint32 spellVisualId) const
     SendMessageToSet(packet.Write(), false);
 }
 
-bool AreaTrigger::Create(AreaTriggerCreatePropertiesId areaTriggerCreatePropertiesId, Map* map, Position const& pos, int32 duration, AreaTriggerSpawn const* spawnData /*= nullptr*/, Unit* caster /*= nullptr*/, Unit* target /*= nullptr*/, SpellCastVisual spellVisual /*= { 0, 0 }*/, SpellInfo const* spellInfo /*= nullptr*/, Spell* spell /*= nullptr*/, AuraEffect const* aurEff /*= nullptr*/)
+bool AreaTrigger::Create(AreaTriggerCreatePropertiesId areaTriggerCreatePropertiesId, Map* map, Position const& pos, int32 duration, AreaTriggerSpawn const* spawnData /*= nullptr*/, Unit* caster /*= nullptr*/, Unit* target /*= nullptr*/, SpellCastVisual spellVisual /*= { 0, 0 }*/, SpellInfo const* spellInfo /*= nullptr*/, Spell* spell /*= nullptr*/, AuraEffect const* aurEff /*= nullptr*/, bool addToMap /*= true*/)
 {
     _targetGuid = target ? target->GetGUID() : ObjectGuid::Empty;
     _aurEff = aurEff;
@@ -287,7 +287,7 @@ bool AreaTrigger::Create(AreaTriggerCreatePropertiesId areaTriggerCreateProperti
     if (HasOrbit())
         Relocate(CalculateOrbitPosition());
 
-    if (!IsStaticSpawn())
+    if (!IsStaticSpawn() && addToMap)
     {
         if (!GetMap()->AddToMap(this))
         {
@@ -316,6 +316,58 @@ AreaTrigger* AreaTrigger::CreateAreaTrigger(AreaTriggerCreatePropertiesId areaTr
     }
 
     return at;
+}
+
+AreaTrigger* AreaTrigger::CreateStaticAreaTrigger(AreaTriggerCreatePropertiesId areaTriggerCreatePropertiesId, Map* map, Position const& pos, int32 duration /*= -1*/, bool addToMap /*= true*/)
+{
+    AreaTrigger* at = new AreaTrigger();
+    if (!at->Create(areaTriggerCreatePropertiesId, map, pos, duration, nullptr, nullptr, nullptr, { 0, 0 }, nullptr, nullptr, nullptr, addToMap))
+    {
+        delete at;
+        return nullptr;
+    }
+
+    return at;
+}
+
+// 12.0.5 removed FHousingPlotAreaTrigger_C fragment. The previous InitHousingPlotData
+// stored PlotID + owner/house/bnet GUIDs per-AT; that mechanism is gone. Plot ownership
+// is now communicated via PlayerHouseInfoComponentData.CurrentHouse on the Player entity.
+// The AT still exists for editor-menu plot bounds + decal visuals, so this thin init
+// only touches the AreaTrigger's own visual fields.
+void AreaTrigger::InitHousingPlotVisuals()
+{
+    // Force SpellForVisuals=1282351 and SpellXSpellVisualID=510142 for housing plot ATs.
+    // Spell 1282351 doesn't exist in sSpellMgr (AreaTriggerDataStore resets SpellForVisuals
+    // to 0 during load, and the normal SpellXSpellVisualID lookup in _InitFields fails).
+    // The client requires BOTH values to properly identify the AT as a housing plot
+    // boundary for the editor-menu decal and placement validation system.
+    {
+        auto areaTriggerData = m_values.ModifyValue(&AreaTrigger::m_areaTriggerData);
+        if (*m_areaTriggerData->SpellForVisuals == 0)
+            SetUpdateFieldValue(areaTriggerData.ModifyValue(&UF::AreaTriggerData::SpellForVisuals), int32(1282351));
+        if (m_areaTriggerData->SpellVisual->SpellXSpellVisualID == 0)
+            SetUpdateFieldValue(areaTriggerData.ModifyValue(&UF::AreaTriggerData::SpellVisual).ModifyValue(&UF::SpellCastVisual::SpellXSpellVisualID), int32(510142));
+    }
+
+    // PeriodModifier=(0, 1.0) â€” retail sniff-verified on all housing plot ATs.
+    {
+        auto areaTriggerData = m_values.ModifyValue(&AreaTrigger::m_areaTriggerData);
+        SetUpdateFieldValue(areaTriggerData.ModifyValue(&UF::AreaTriggerData::PeriodModifier)
+            .ModifyValue(&UF::AreaTriggerActionSetPeriodModifier::Field_0), int32(0));
+        SetUpdateFieldValue(areaTriggerData.ModifyValue(&UF::AreaTriggerData::PeriodModifier)
+            .ModifyValue(&UF::AreaTriggerActionSetPeriodModifier::Field_4), 1.0f);
+    }
+
+    // ExtraScaleCurve: ParameterCurve=0x3F800001, OverrideActive=true â€” tells client to
+    // flatten terrain / remove grass within the plot boundary (decor placement surface).
+    {
+        auto areaTriggerData = m_values.ModifyValue(&AreaTrigger::m_areaTriggerData);
+        SetUpdateFieldValue(areaTriggerData.ModifyValue(&UF::AreaTriggerData::ExtraScaleCurve)
+            .ModifyValue(&UF::ScaleCurve::ParameterCurve), uint32(0x3F800001));
+        SetUpdateFieldValue(areaTriggerData.ModifyValue(&UF::AreaTriggerData::ExtraScaleCurve)
+            .ModifyValue(&UF::ScaleCurve::OverrideActive), true);
+    }
 }
 
 ObjectGuid AreaTrigger::CreateNewMovementForceId(Map* map, uint32 areaTriggerId)

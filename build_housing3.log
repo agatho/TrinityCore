@@ -1,0 +1,43 @@
+MSBuild-Version 17.14.23+b0019275e für .NET Framework
+
+  Recast.vcxproj -> I:\TrinityCore\_integration\build\dep\recastnavigation\Recast\Release\Recast.lib
+  Detour.vcxproj -> I:\TrinityCore\_integration\build\dep\recastnavigation\Detour\Release\Detour.lib
+  argon2.vcxproj -> I:\TrinityCore\_integration\build\dep\argon2\Release\argon2.lib
+  fmt.vcxproj -> I:\TrinityCore\_integration\build\dep\fmt\Release\fmt.lib
+  zlib.vcxproj -> I:\TrinityCore\_integration\build\dep\zlib\Release\zlib.lib
+  g3dlib.vcxproj -> I:\TrinityCore\_integration\build\dep\g3dlite\Release\g3dlib.lib
+  openssl_ed25519.vcxproj -> I:\TrinityCore\_integration\build\bin\Release\openssl_ed25519.dll
+  sfmt.vcxproj -> I:\TrinityCore\_integration\build\dep\SFMT\Release\sfmt.lib
+  protobuf.vcxproj -> I:\TrinityCore\_integration\build\dep\protobuf\Release\protobuf.lib
+  common.vcxproj -> I:\TrinityCore\_integration\build\src\common\Release\common.lib
+  network.vcxproj -> I:\TrinityCore\_integration\build\src\common\network\Release\trinity_network.lib
+  mmaps_common.vcxproj -> I:\TrinityCore\_integration\build\src\common\mmaps_common\Release\mmaps_common.lib
+  cmake_pch.cxx
+  proto.vcxproj -> I:\TrinityCore\_integration\build\src\server\proto\Release\proto.lib
+  AdhocStatement.cpp
+  DatabaseEnv.cpp
+  DatabaseLoader.cpp
+  DatabaseWorkerPool.cpp
+  Field.cpp
+  FieldValueConverter.cpp
+  MySQLConnection.cpp
+  MySQLPreparedStatement.cpp
+  MySQLThreading.cpp
+  PreparedStatement.cpp
+  QueryCallback.cpp
+  QueryHolder.cpp
+  QueryResult.cpp
+  Transaction.cpp
+  CharacterDatabase.cpp
+  HotfixDatabase.cpp
+  LoginDatabase.cpp
+  WorldDatabase.cpp
+  AppenderDB.cpp
+  DBUpdater.cpp
+  UpdateFetcher.cpp
+I:\TrinityCore\_integration\src\server\database\Database\Implementation\HotfixDatabase.cpp(698,5): error C2338: static_assert failed: 'Invalid prepared statement index for HOTFIX_SEL_DYE_COLOR_MAX_ID' [I:\TrinityCore\_integration\build\src\server\database\database.vcxproj]
+  (Quelldatei „../../../../src/server/database/Database/Implementation/HotfixDatabase.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\database\Database\Implementation\HotfixDatabase.cpp(699,5): error C2338: static_assert failed: 'Invalid prepared statement index for HOTFIX_SEL_DYE_COLOR_LOCALE' [I:\TrinityCore\_integration\build\src\server\database\database.vcxproj]
+  (Quelldatei „../../../../src/server/database/Database/Implementation/HotfixDatabase.cpp“ wird kompiliert)
+  

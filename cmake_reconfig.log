@@ -1,0 +1,68 @@
+-- Selecting Windows SDK version 10.0.26100.0 to target Windows 10.0.26200.
+-- Detected 64-bit platform
+-- Detected amd64 processor architecture
+-- MSVC: Minimum version required is 19.32, found 19.44.35220.0 - ok!
+-- MSVC: Enabled increased number of sections in object files
+-- MSVC: Overloaded standard names
+-- MSVC: Disabled NON-SECURE warnings
+-- MSVC: Disabled POSIX warnings
+-- MSVC: Disabled generic compiletime warnings
+-- Found MySQL:   found components: binary
+-- Found MySQL executable: C:/Program Files/MySQL/MySQL Server 9.4/bin/mysql.exe
+
+* TrinityCore revision   : af42f196e8d9+ 2026-07-09 21:00:27 +0200 (integration/housing-port branch)
+
+* Install core to        : C:/Program Files/TrinityCore
+* Install configs to     : C:/Program Files/TrinityCore
+
+* Build world/auth       : Yes (default)
+* Build with scripts     : Yes (static)
+* Build map/vmap tools   : No
+* Build unit tests       : No (default)
+* Build core w/PCH       : Yes (default)
+* Build scripts w/PCH    : Yes (default)
+* Show all warnings      : No  (default)
+* Stop build on warning  : No  (default)
+* Use coreside debug     : No  (default)
+* Show source tree       : Yes (hierarchical)
+* Use GIT revision hash  : Yes (default)
+
+-- Found MySQL: C:/Program Files/MySQL/MySQL Server 9.4/lib/libmysql.lib  found components: lib
+-- Found MySQL version: "9.4.0", minimum required is "8.0.34"
+-- Found MySQL library: C:/Program Files/MySQL/MySQL Server 9.4/lib/libmysql.lib
+-- Found MySQL headers: C:/Program Files/MySQL/MySQL Server 9.4/include
+
+* Script configuration (static):
+    |
+    +- worldserver
+    |   +- Argus
+    |   +- Battlefield
+    |   +- Battlegrounds
+    |   +- BrokenIsles
+    |   +- Commands
+    |   +- Custom
+    |   +- Draenor
+    |   +- DragonIsles
+    |   +- EasternKingdoms
+    |   +- Events
+    |   +- ExilesReach
+    |   +- Kalimdor
+    |   +- Karesh
+    |   +- KhazAlgar
+    |   +- KulTiras
+    |   +- Maelstrom
+    |   +- Northrend
+    |   +- OutdoorPvP
+    |   +- Outland
+    |   +- Pandaria
+    |   +- Pet
+    |   +- QuelThalas
+    |   +- Shadowlands
+    |   +- Spells
+    |   +- World
+    |   +- Zandalar
+    |
+
+-- Configuring done (3.5s)
+-- Generating done (4.4s)
+-- Build files have been written to: I:/TrinityCore/_integration/build

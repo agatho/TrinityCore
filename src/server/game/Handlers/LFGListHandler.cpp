@@ -356,6 +356,11 @@ void WorldSession::HandleRequestLFGListBlacklist(WorldPackets::LFGList::RequestL
     // The premade-finder blacklist (recently-declined groups the client hides) is not persisted server-side,
     // so a fresh request returns the current empty set. Entries would carry {activityId, reason}; populating
     // them requires a soft-blacklist model that a 12.0.7 sniff should confirm before it is added.
-    WorldPackets::LFGList::LFGListUpdateBlacklist packet;
-    SendPacket(packet.Write());
+    //
+    // Send-site DISABLED (2026-07): SMSG_LFG_LIST_UPDATE_BLACKLIST is currently parked on UNKNOWN_OPCODE
+    // because 0x56000E was resolved by 12.0.7 sniff to belong to SMSG_HOUSING_CATALOG_STATE_SYNC. Transmitting
+    // this packet would put it on a bogus/colliding opcode, so it is held until a dedicated LFG-list sniff
+    // recovers its real wire value. Skipping the send is behaviorally identical to sending an empty blacklist.
+    // WorldPackets::LFGList::LFGListUpdateBlacklist packet;
+    // SendPacket(packet.Write());
 }

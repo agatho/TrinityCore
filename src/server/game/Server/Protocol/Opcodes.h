@@ -387,6 +387,23 @@ enum OpcodeClient : uint32
     CMSG_GET_DECOR_REFUND_LIST                                      = 0x290031,
     CMSG_GET_GARRISON_INFO                                          = 0x3A01A4,
     CMSG_GET_INITIATIVE_ACTIVITY_LOG_REQUEST                        = 0x380004,
+    CMSG_GET_NEIGHBORHOOD_INITIATIVE_INFO_REQUEST                   = 0x380003, // 12.0.5 â€” Lua C_NeighborhoodInitiative.RequestNeighborhoodInitiativeInfo
+    // 12.0.5 â€” IDA-catalogued NeighborhoodInitiative opcodes (sub_7FF75C176*).
+    // Wire format known from senders, semantic still pending Lua-handler binding.
+    // Names use NEIGHBORHOOD_INITIATIVE_<index> to keep the wire-format catalogue
+    // stable while we bind handlers; rename when retail Lua API map is confirmed.
+    CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_01                          = 0x380001, // PackedGUID
+    CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_05                          = 0x380005, // uint32 + PackedGUID
+    CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_06                          = 0x380006, // empty
+    CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_07                          = 0x380007, // uint32
+    CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_08                          = 0x380008, // empty
+    CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_09                          = 0x380009, // float
+    CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_0A                          = 0x38000A, // uint32
+    CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_0B                          = 0x38000B, // uint32
+    CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_0C                          = 0x38000C, // PackedGUID
+    CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_0D                          = 0x38000D, // uint32 + uint32 + (uint32,uint32)[N] + Bits<1>
+    CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_0E                          = 0x38000E, // uint32 + uint32[N]
+    CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_0F                          = 0x38000F, // uint32 + (uint32Ã—4)[N]
     CMSG_GET_ITEM_PURCHASE_DATA                                     = 0x3B00CF,
     CMSG_GET_LANDING_PAGE_SHIPMENTS                                 = 0x3A01E0,
     CMSG_GET_LAST_CATALOG_FETCH                                     = 0x290036,
@@ -1049,6 +1066,56 @@ enum OpcodeClient : uint32
 
     // Deleted opcodes, here only to allow compile
     CMSG_TRANSMOGRIFY_ITEMS                                         = CMSG_REQUEST_SCHEDULED_PVP_INFO + 1,
+
+    // TC-CUSTOM housing opcodes â€” added by the housing-system branch from client research
+    // (IDA + pre-12.0.5 sniffs). Not in upstream TC's extracted opcode list. Values
+    // marked `0xF*******` collided with master's 12.0.5 values and were reassigned to
+    // the 0xF0000000+ range as unreachable placeholders pending 12.0.5 sniff verification.
+    // Retired 2026-05-11 (Lua-API verified â€” no retail counterpart):
+    //   CMSG_HOUSING_DECOR_BATCH_OPERATION             (was 0x30000D)
+    //   CMSG_HOUSING_DECOR_CATALOG_CREATE_SEARCHER     (was 0x300007 â€” Searcher API is client-side)
+    //   CMSG_HOUSING_DECOR_PLACEMENT_PREVIEW           (was 0x30000F)
+    //   CMSG_HOUSING_DECOR_START_PLACING_FROM_SOURCE   (was 0x30000B)
+    //   CMSG_HOUSING_DECOR_START_PLACING_NEW_DECOR     (was 0x300005 â€” fire-and-forget Lua)
+    // Retired 2026-05-12: 6 fake decor/fixture CMSGs â€” IDA verification (build 67186) confirms
+    // no client senders for any of these:
+    //   0x30000C DECOR_CLEANUP_MODE_TOGGLE     â€” activated via C_HouseEditor mode change
+    //   0x300011 DECOR_CONFIRM_PREVIEW_PLACEMENT â€” STUB-LOG only, no real protocol path
+    //   0x30000A DECOR_DELETE_FROM_STORAGE_BY_ID â€” no sender
+    //   0x300008 DECOR_UPDATE_DYE_SLOT         â€” duplicate of 0x300006 SET_DYE_SLOTS
+    //   0x310001 FIXTURE_CREATE_BASIC_HOUSE    â€” house creation goes through NEIGHBORHOOD_BUY_HOUSE
+    //   0x310002 FIXTURE_DELETE_HOUSE          â€” duplicate of real 0x33000A SVCS_RELINQUISH_HOUSE
+    // Retired 2026-05-11: CMSG_HOUSING_REQUEST_EDITOR_AVAILABILITY (was 0x350009).
+    // C_HouseEditor.GetHouseEditorAvailability returns synchronously in retail â€” no server roundtrip.
+    // Removed 2026-04-24 after IDA 12.0.5 verification:
+    //   CMSG_HOUSING_SVCS_CHANGE_HOUSE_COSMETIC_OWNER â€” cosmetic owner is saved
+    //     via CMSG_HOUSING_SVCS_UPDATE_HOUSE_SETTINGS (0x33000B), no separate opcode.
+    //   CMSG_HOUSING_SVCS_COMPLETE_TUTORIAL_STEP, SET_TUTORIAL_STATE, SKIP_TUTORIAL â€”
+    //     no matching C_Housing Lua API exists; only StartTutorial is real.
+    //   CMSG_HOUSING_SVCS_GET_PLAYER_HOUSES_INFO_ALT â€” duplicate of
+    //     CMSG_HOUSING_SVCS_GET_PLAYER_HOUSES_INFO (0x330013).
+    //   CMSG_HOUSING_SVCS_QUERY_PENDING_INVITES â€” not in C_Housing API.
+    //   CMSG_HOUSING_SVCS_GUILD_ADD_HOUSE â€” not in C_Housing API.
+    // Retired 2026-05-12 (batch 2): 8 TC-CUSTOM SVCS CMSGs verified fake via IDA
+    // (no sender in build 67186 binary) AND sniff cross-check (21 sessions, 0 hits each):
+    //   0x330000 SVCS_REQUEST_PERMISSIONS_CHECK
+    //   0x330005 SVCS_CLEAR_PLOT_RESERVATION
+    //   0x33000C SVCS_GET_ROSTER_DATA            (use 0x39xxxx NEIGHBORHOOD_GET_ROSTER)
+    //   0x33000D SVCS_ROSTER_UPDATE_SUBSCRIBE
+    //   0x330012 SVCS_QUERY_HOUSE_LEVEL_FAVOR
+    //   0x330014 SVCS_GUILD_APPEND_NEIGHBORHOOD
+    //   0x330015 SVCS_GUILD_RENAME_NEIGHBORHOOD
+    //   0x330016 SVCS_GUILD_GET_HOUSING_INFO
+    // Retired 2026-05-12: entire group 0x35 CMSG block (0x350000-0x350004).
+    // IDA verification (build 67186): no client senders for any of these opcodes:
+    //   0x350000 SYSTEM_HOUSE_STATUS_QUERY       â€” duplicate of real 0x350005 HOUSE_STATUS
+    //   0x350001 SYSTEM_GET_HOUSE_INFO_ALT       â€” duplicate of real 0x350006 GET_CURRENT_HOUSE_INFO
+    //   0x350002 SYSTEM_HOUSE_SNAPSHOT (retired 2026-05-11) â€” no C_HouseSnapshot Lua API
+    //   0x350003 SYSTEM_EXPORT_HOUSE             â€” no C_HouseExport Lua API
+    //   0x350004 SYSTEM_UPDATE_HOUSE_INFO        â€” no client sender; house naming has no wire path
+    // Retired 2026-05-12: CMSG_NEIGHBORHOOD_CHARTER_REMOVE_SIGNATURE (was 0x370005)
+    // and CMSG_NEIGHBORHOOD_CHARTER_SIGN_RESPONSE (was 0x370002) â€” STUB-OK only;
+    // IDA verification (build 67186): no client senders.
 };
 
 inline constexpr std::size_t NUM_CMSG_OPCODES = 1950;
@@ -1667,12 +1734,16 @@ enum OpcodeServer : uint32
     SMSG_HOUSING_FIXTURE_CREATE_BASIC_HOUSE_RESPONSE                = 0x520001,
     SMSG_HOUSING_FIXTURE_CREATE_FIXTURE_RESPONSE                    = 0x520006,
     SMSG_HOUSING_FIXTURE_DELETE_FIXTURE_RESPONSE                    = 0x520007,
-    SMSG_HOUSING_FIXTURE_DELETE_HOUSE_RESPONSE                      = 0x520002,
+    // Retired 2026-05-12: SMSG_HOUSING_FIXTURE_DELETE_HOUSE_RESPONSE (was 0x520002) â€”
+    // orphaned after CMSG_HOUSING_FIXTURE_DELETE_HOUSE retirement.
     SMSG_HOUSING_FIXTURE_SET_CORE_FIXTURE_RESPONSE                  = 0x520005,
     SMSG_HOUSING_FIXTURE_SET_EDIT_MODE_RESPONSE                     = 0x520000,
     SMSG_HOUSING_FIXTURE_SET_HOUSE_SIZE_RESPONSE                    = 0x520003,
     SMSG_HOUSING_FIXTURE_SET_HOUSE_TYPE_RESPONSE                    = 0x520004,
     SMSG_HOUSING_GET_CURRENT_HOUSE_INFO_RESPONSE                    = 0x550001,
+    // Retired 2026-05-12: SMSG_HOUSING_UPDATE_HOUSE_INFO (was 0x550004) â€” opcode is real per IDA
+    // (sub_7FF75C1D1020 case 0x550004) but the only emit-site was HandleHousingSystemUpdateHouseInfo,
+    // which never executes (no client sender for CMSG 0x350004 in build 67186).
     SMSG_HOUSING_GET_PLAYER_PERMISSIONS_RESPONSE                    = 0x550006,
     SMSG_HOUSING_HOUSE_STATUS_RESPONSE                              = 0x550000,
     SMSG_HOUSING_PHOTO_SHARING_AUTHORIZATION_CLEARED_RESULT         = 0x420380,
@@ -1690,7 +1761,8 @@ enum OpcodeServer : uint32
     SMSG_HOUSING_SVCS_ACCEPT_NEIGHBORHOOD_OWNERSHIP_RESPONSE        = 0x540017,
     SMSG_HOUSING_SVCS_CANCEL_RELINQUISH_HOUSE_RESPONSE              = 0x540008,
     SMSG_HOUSING_SVCS_CHANGE_HOUSE_COSMETIC_OWNER                   = 0x540010,
-    SMSG_HOUSING_SVCS_CLEAR_PLOT_RESERVATION_RESPONSE               = 0x540005,
+    // Retired 2026-05-12 (batch 2): SMSG_HOUSING_SVCS_CLEAR_PLOT_RESERVATION_RESPONSE (was 0x540005)
+    // â€” orphaned after CLEAR_PLOT_RESERVATION CMSG retirement.
     SMSG_HOUSING_SVCS_CREATE_CHARTER_NEIGHBORHOOD_RESPONSE          = 0x540003,
     SMSG_HOUSING_SVCS_DELETE_ALL_NEIGHBORHOOD_INVITES_RESPONSE      = 0x540021,
     SMSG_HOUSING_SVCS_GET_BNET_FRIEND_NEIGHBORHOODS_RESPONSE        = 0x54001E,
@@ -1699,7 +1771,8 @@ enum OpcodeServer : uint32
     SMSG_HOUSING_SVCS_GET_PLAYER_HOUSES_INFO_RESPONSE               = 0x54000B,
     SMSG_HOUSING_SVCS_GET_POTENTIAL_HOUSE_OWNERS_RESPONSE           = 0x54001A,
     SMSG_HOUSING_SVCS_GUILD_ADD_HOUSE_NOTIFICATION                  = 0x540012,
-    SMSG_HOUSING_SVCS_GUILD_APPEND_NEIGHBORHOOD_NOTIFICATION        = 0x540014,
+    // Retired 2026-05-12 (batch 2): SMSG_HOUSING_SVCS_GUILD_APPEND_NEIGHBORHOOD_NOTIFICATION (was 0x540014)
+    // â€” orphaned after GUILD_APPEND_NEIGHBORHOOD CMSG retirement.
     SMSG_HOUSING_SVCS_GUILD_CREATE_NEIGHBORHOOD_NOTIFICATION        = 0x540001,
     SMSG_HOUSING_SVCS_GUILD_GET_HOUSING_INFO_RESPONSE               = 0x540016,
     SMSG_HOUSING_SVCS_GUILD_REMOVE_HOUSE_NOTIFICATION               = 0x540013,
@@ -1794,7 +1867,12 @@ enum OpcodeServer : uint32
     SMSG_LFG_LIST_SEARCH_RESULTS                                    = 0x560002,
     SMSG_LFG_LIST_SEARCH_RESULTS_UPDATE                             = 0x560010,
     SMSG_LFG_LIST_SEARCH_STATUS                                     = 0x560003,
-    SMSG_LFG_LIST_UPDATE_BLACKLIST                                  = 0x56000E,
+    SMSG_HOUSING_CATALOG_STATE_SYNC                                 = 0x56000E, // ClientMirrorSystem subgroup; sniff-verified owner of 0x56000E (12.0.7 housing capture: ~4KB server->client payload, x2)
+    // 0x56000E RESOLVED to housing (2026-07): the live 12.0.7 housing sniff shows a ~4KB ClientMirrorSystem
+    // bulk-sync payload on 0x56000E, which is the wrong order of magnitude for the tiny LFG blacklist delta.
+    // TC master's SMSG_LFG_LIST_UPDATE_BLACKLIST = 0x56000E is therefore a stale/mislabeled value; parked on
+    // UNKNOWN_OPCODE below until a dedicated LFG-list sniff yields its real opcode. Send-site is disabled.
+    SMSG_LFG_LIST_UPDATE_BLACKLIST                                  = UNKNOWN_OPCODE,
     SMSG_LFG_LIST_UPDATE_EXPIRATION                                 = 0x56000B,
     SMSG_LFG_LIST_UPDATE_STATUS                                     = 0x56000A,
     SMSG_LFG_OFFER_CONTINUE                                         = 0x560018,
@@ -2497,6 +2575,49 @@ enum OpcodeServer : uint32
 
     // Deleted opcodes, here only to allow compile
     SMSG_ARENA_TEAM_STATS                                           = UNKNOWN_OPCODE,
+
+    // TC-CUSTOM housing SMSG opcodes â€” see corresponding block in OpcodeClient above.
+    // All values here are PLACEHOLDERS in the 0xF1000000+ range. Our pre-12.0.5 guesses
+    // all collided with master's 12.0.5 opcode regeneration, so the classes compile but
+    // Writes will not reach the client until each opcode is remapped to a verified
+    // 12.0.5 value (preferably from a sniff).
+    // Removed 2026-04-24 after IDA 12.0.5 verification:
+    //   SMSG_HOUSE_INTERIOR_ENTER_HOUSE / SMSG_HOUSE_INTERIOR_LEAVE_HOUSE_RESPONSE â€”
+    //     both are replaced by the PlayerHouseInfoComponentData.CurrentHouse
+    //     UpdateField mechanism. Client fires HOUSE_PLOT_ENTERED via field-change
+    //     callback when CurrentHouse changes (verified via IDA xref trace of
+    //     sub_7FF75CC8BAA0 registered in the field-change callback table).
+    // SMSG_HOUSING_CATALOG_STATE_SYNC retired here 2026-05-11, real opcode 0x56000E reclaimed
+    // (previously mislabeled as SMSG_LFG_LIST_UPDATE_BLACKLIST per the LFG opcode block).
+    // Retired 2026-05-11: 5 speculative SMSGs (0xF1000003..0xF1000007) â€” Lua-API-confirmed dead.
+    // No C_HousingDecor.BatchOperation/PlacementPreview/CreateCatalogSearcher; StartPlacingNewDecor
+    // is fire-and-forget; GetHouseEditorAvailability returns sync. None correspond to a retail SMSG.
+    // Retired 2026-05-11: 9 speculative SMSG opcodes deleted (0xF1000008..0xF1000010).
+    // IDA-derived real values harvested in 2026-05-11 sniff verification log:
+    //   SET_HOUSE_NAME_RESPONSE                  -> 0x550005
+    //   SVCS_CREATE_NEIGHBORHOOD_RESPONSE        -> 0x540002
+    //   SVCS_GET_NEIGHBORHOOD_DETAILS_RESPONSE   -> 0x54000A
+    //   SVCS_GET_NEIGHBORHOOD_HOUSES_RESPONSE    -> 0x54000D
+    //   SVCS_HOUSE_EXPIRATION_NOTIFICATION       -> 0x540006
+    //   SVCS_MOVE_HOUSE_RESPONSE                 -> 0x54000E  (also SMSG_NEIGHBORHOOD_MOVE_HOUSE_RESPONSE = 0x5C0006 is the actual emit path)
+    //   SVCS_SEARCH_NEIGHBORHOODS_RESPONSE       -> 0x540009
+    //   SVCS_SET_NEIGHBORHOOD_SETTINGS_RESPONSE  -> 0x540022
+    //   SVCS_SWAP_PLOTS_RESPONSE                 -> 0x54000F
+    // Recreate with the real opcode when a handler needs to emit one.
+    // Retired 2026-05-11: SMSG_HOUSING_SYSTEM_HOUSE_SNAPSHOT_RESPONSE (0xF1000011) â€” no C_HouseSnapshot Lua namespace exists in retail.
+    // SMSG_HOUSING_UPDATE_HOUSE_INFO retired here 2026-05-11, real opcode 0x550004 added above.
+    // Removed 2026-04-24: SMSG_NEIGHBORHOOD_UPDATE_NAME_NOTIFICATION superseded by
+    // master's SMSG_HOUSING_SVCS_NEIGHBORHOOD_UPDATE_NAME_NOTIFICATION = 0x540023.
+
+    // TC-CUSTOM initiative SMSG opcodes
+    // Note: SMSG_ACCOUNT_HOUSING_{FIXTURE,ROOM,ROOM_COMPONENT_TEXTURE,THEME}_ADDED retired
+    // 2026-05-11. They were speculative pre-12.0.5 design; retail uses the real
+    // SMSG_ACCOUNT_{ROOM,ROOM_THEME,ROOM_MATERIAL,EXTERIOR_FIXTURE,HOUSE_TYPE}_COLLECTION_UPDATE
+    // family (0x420053-0x420057) for both bulk sync and single-item unlocks via AddSingle().
+    // Retired 2026-05-11: 4 speculative SMSG_INITIATIVE_* opcodes deleted (0xF1000018..0xF100001C).
+    // Sniff-verified zero retail occurrences; same state changes propagate via the real
+    // SMSG_INITIATIVE_TASK_COMPLETE (0x420365), SMSG_INITIATIVE_COMPLETE (0x420366),
+    // SMSG_INITIATIVE_REWARD_AVAILABLE (0x42036B), plus entity-fragment updates.
 };
 
 inline constexpr std::size_t NUM_SMSG_OPCODES = 1654;

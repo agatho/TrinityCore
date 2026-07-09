@@ -1,0 +1,177 @@
+MSBuild-Version 17.14.23+b0019275e für .NET Framework
+
+  1>Checking Build System
+  Detour.vcxproj -> I:\TrinityCore\_integration\build\dep\recastnavigation\Detour\Release\Detour.lib
+  argon2.vcxproj -> I:\TrinityCore\_integration\build\dep\argon2\Release\argon2.lib
+  Recast.vcxproj -> I:\TrinityCore\_integration\build\dep\recastnavigation\Recast\Release\Recast.lib
+  fmt.vcxproj -> I:\TrinityCore\_integration\build\dep\fmt\Release\fmt.lib
+  zlib.vcxproj -> I:\TrinityCore\_integration\build\dep\zlib\Release\zlib.lib
+  g3dlib.vcxproj -> I:\TrinityCore\_integration\build\dep\g3dlite\Release\g3dlib.lib
+  openssl_ed25519.vcxproj -> I:\TrinityCore\_integration\build\bin\Release\openssl_ed25519.dll
+  sfmt.vcxproj -> I:\TrinityCore\_integration\build\dep\SFMT\Release\sfmt.lib
+  protobuf.vcxproj -> I:\TrinityCore\_integration\build\dep\protobuf\Release\protobuf.lib
+  GitRevision.cpp
+  common.vcxproj -> I:\TrinityCore\_integration\build\src\common\Release\common.lib
+  network.vcxproj -> I:\TrinityCore\_integration\build\src\common\network\Release\trinity_network.lib
+  mmaps_common.vcxproj -> I:\TrinityCore\_integration\build\src\common\mmaps_common\Release\mmaps_common.lib
+  cmake_pch.cxx
+  proto.vcxproj -> I:\TrinityCore\_integration\build\src\server\proto\Release\proto.lib
+  AdhocStatement.cpp
+  DatabaseEnv.cpp
+  DatabaseLoader.cpp
+  DatabaseWorkerPool.cpp
+  Field.cpp
+  FieldValueConverter.cpp
+  CharacterDatabase.cpp
+  HotfixDatabase.cpp
+  LoginDatabase.cpp
+  WorldDatabase.cpp
+  MySQLConnection.cpp
+  MySQLPreparedStatement.cpp
+  MySQLThreading.cpp
+  PreparedStatement.cpp
+  QueryCallback.cpp
+  QueryHolder.cpp
+  QueryResult.cpp
+  Transaction.cpp
+  AppenderDB.cpp
+  DBUpdater.cpp
+  UpdateFetcher.cpp
+I:\TrinityCore\_integration\src\server\database\Database\Implementation\HotfixDatabase.cpp(680,22): error C2065: "HOTFIX_SEL_DATA_TAG_X_HOUSE_DECOR_RECORD": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\database\database.vcxproj]
+  (Quelldatei „../../../../src/server/database/Database/Implementation/HotfixDatabase.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\database\Database\Implementation\HotfixDatabase.cpp(682,5): error C2065: "HOTFIX_SEL_DATA_TAG_X_HOUSE_DECOR_RECORD": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\database\database.vcxproj]
+  (Quelldatei „../../../../src/server/database/Database/Implementation/HotfixDatabase.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\database\Database\Implementation\HotfixDatabase.cpp(682,5): error C2065: "HOTFIX_SEL_DATA_TAG_X_HOUSE_DECOR_RECORD_MAX_ID": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\database\database.vcxproj]
+  (Quelldatei „../../../../src/server/database/Database/Implementation/HotfixDatabase.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\database\Database\Implementation\HotfixDatabase.cpp(685,22): error C2065: "HOTFIX_SEL_DECOR_CATEGORY": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\database\database.vcxproj]
+  (Quelldatei „../../../../src/server/database/Database/Implementation/HotfixDatabase.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\database\Database\Implementation\HotfixDatabase.cpp(687,5): error C2065: "HOTFIX_SEL_DECOR_CATEGORY": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\database\database.vcxproj]
+  (Quelldatei „../../../../src/server/database/Database/Implementation/HotfixDatabase.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\database\Database\Implementation\HotfixDatabase.cpp(687,5): error C2065: "HOTFIX_SEL_DECOR_CATEGORY_MAX_ID": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\database\database.vcxproj]
+  (Quelldatei „../../../../src/server/database/Database/Implementation/HotfixDatabase.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\database\Database\Implementation\HotfixDatabase.cpp(688,5): error C2065: "HOTFIX_SEL_DECOR_CATEGORY": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\database\database.vcxproj]
+  (Quelldatei „../../../../src/server/database/Database/Implementation/HotfixDatabase.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\database\Database\Implementation\HotfixDatabase.cpp(688,5): error C2065: "HOTFIX_SEL_DECOR_CATEGORY_LOCALE": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\database\database.vcxproj]
+  (Quelldatei „../../../../src/server/database/Database/Implementation/HotfixDatabase.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\database\Database\Implementation\HotfixDatabase.cpp(691,22): error C2065: "HOTFIX_SEL_DECOR_DYE_SLOT": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\database\database.vcxproj]
+  (Quelldatei „../../../../src/server/database/Database/Implementation/HotfixDatabase.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\database\Database\Implementation\HotfixDatabase.cpp(693,5): error C2065: "HOTFIX_SEL_DECOR_DYE_SLOT": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\database\database.vcxproj]
+  (Quelldatei „../../../../src/server/database/Database/Implementation/HotfixDatabase.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\database\Database\Implementation\HotfixDatabase.cpp(693,5): error C2065: "HOTFIX_SEL_DECOR_DYE_SLOT_MAX_ID": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\database\database.vcxproj]
+  (Quelldatei „../../../../src/server/database/Database/Implementation/HotfixDatabase.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\database\Database\Implementation\HotfixDatabase.cpp(696,22): error C2065: "HOTFIX_SEL_DYE_COLOR": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\database\database.vcxproj]
+  (Quelldatei „../../../../src/server/database/Database/Implementation/HotfixDatabase.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\database\Database\Implementation\HotfixDatabase.cpp(698,5): error C2065: "HOTFIX_SEL_DYE_COLOR": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\database\database.vcxproj]
+  (Quelldatei „../../../../src/server/database/Database/Implementation/HotfixDatabase.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\database\Database\Implementation\HotfixDatabase.cpp(698,5): error C2065: "HOTFIX_SEL_DYE_COLOR_MAX_ID": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\database\database.vcxproj]
+  (Quelldatei „../../../../src/server/database/Database/Implementation/HotfixDatabase.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\database\Database\Implementation\HotfixDatabase.cpp(699,5): error C2065: "HOTFIX_SEL_DYE_COLOR": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\database\database.vcxproj]
+  (Quelldatei „../../../../src/server/database/Database/Implementation/HotfixDatabase.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\database\Database\Implementation\HotfixDatabase.cpp(699,5): error C2065: "HOTFIX_SEL_DYE_COLOR_LOCALE": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\database\database.vcxproj]
+  (Quelldatei „../../../../src/server/database/Database/Implementation/HotfixDatabase.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\database\Database\Implementation\HotfixDatabase.cpp(702,22): error C2065: "HOTFIX_SEL_DYE_COLOR_CATEGORY": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\database\database.vcxproj]
+  (Quelldatei „../../../../src/server/database/Database/Implementation/HotfixDatabase.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\database\Database\Implementation\HotfixDatabase.cpp(704,5): error C2065: "HOTFIX_SEL_DYE_COLOR_CATEGORY": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\database\database.vcxproj]
+  (Quelldatei „../../../../src/server/database/Database/Implementation/HotfixDatabase.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\database\Database\Implementation\HotfixDatabase.cpp(704,5): error C2065: "HOTFIX_SEL_DYE_COLOR_CATEGORY_MAX_ID": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\database\database.vcxproj]
+  (Quelldatei „../../../../src/server/database/Database/Implementation/HotfixDatabase.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\database\Database\Implementation\HotfixDatabase.cpp(705,5): error C2065: "HOTFIX_SEL_DYE_COLOR_CATEGORY": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\database\database.vcxproj]
+  (Quelldatei „../../../../src/server/database/Database/Implementation/HotfixDatabase.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\database\Database\Implementation\HotfixDatabase.cpp(705,5): error C2065: "HOTFIX_SEL_DYE_COLOR_CATEGORY_LOCALE": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\database\database.vcxproj]
+  (Quelldatei „../../../../src/server/database/Database/Implementation/HotfixDatabase.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\database\Database\Implementation\HotfixDatabase.cpp(708,22): error C2065: "HOTFIX_SEL_DECOR_SUBCATEGORY": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\database\database.vcxproj]
+  (Quelldatei „../../../../src/server/database/Database/Implementation/HotfixDatabase.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\database\Database\Implementation\HotfixDatabase.cpp(710,5): error C2065: "HOTFIX_SEL_DECOR_SUBCATEGORY": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\database\database.vcxproj]
+  (Quelldatei „../../../../src/server/database/Database/Implementation/HotfixDatabase.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\database\Database\Implementation\HotfixDatabase.cpp(710,5): error C2065: "HOTFIX_SEL_DECOR_SUBCATEGORY_MAX_ID": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\database\database.vcxproj]
+  (Quelldatei „../../../../src/server/database/Database/Implementation/HotfixDatabase.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\database\Database\Implementation\HotfixDatabase.cpp(711,5): error C2065: "HOTFIX_SEL_DECOR_SUBCATEGORY": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\database\database.vcxproj]
+  (Quelldatei „../../../../src/server/database/Database/Implementation/HotfixDatabase.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\database\Database\Implementation\HotfixDatabase.cpp(711,5): error C2065: "HOTFIX_SEL_DECOR_SUBCATEGORY_LOCALE": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\database\database.vcxproj]
+  (Quelldatei „../../../../src/server/database/Database/Implementation/HotfixDatabase.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\database\Database\Implementation\HotfixDatabase.cpp(714,22): error C2065: "HOTFIX_SEL_DECOR_X_DECOR_SUBCATEGORY": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\database\database.vcxproj]
+  (Quelldatei „../../../../src/server/database/Database/Implementation/HotfixDatabase.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\database\Database\Implementation\HotfixDatabase.cpp(716,5): error C2065: "HOTFIX_SEL_DECOR_X_DECOR_SUBCATEGORY": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\database\database.vcxproj]
+  (Quelldatei „../../../../src/server/database/Database/Implementation/HotfixDatabase.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\database\Database\Implementation\HotfixDatabase.cpp(716,5): error C2065: "HOTFIX_SEL_DECOR_X_DECOR_SUBCATEGORY_MAX_ID": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\database\database.vcxproj]
+  (Quelldatei „../../../../src/server/database/Database/Implementation/HotfixDatabase.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\database\Database\Implementation\HotfixDatabase.cpp(2001,22): error C2065: "HOTFIX_SEL_ROOM_COMPONENT": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\database\database.vcxproj]
+  (Quelldatei „../../../../src/server/database/Database/Implementation/HotfixDatabase.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\database\Database\Implementation\HotfixDatabase.cpp(2003,5): error C2065: "HOTFIX_SEL_ROOM_COMPONENT": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\database\database.vcxproj]
+  (Quelldatei „../../../../src/server/database/Database/Implementation/HotfixDatabase.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\database\Database\Implementation\HotfixDatabase.cpp(2003,5): error C2065: "HOTFIX_SEL_ROOM_COMPONENT_MAX_ID": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\database\database.vcxproj]
+  (Quelldatei „../../../../src/server/database/Database/Implementation/HotfixDatabase.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\database\Database\Implementation\HotfixDatabase.cpp(2006,22): error C2065: "HOTFIX_SEL_ROOM_COMPONENT_OPTION": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\database\database.vcxproj]
+  (Quelldatei „../../../../src/server/database/Database/Implementation/HotfixDatabase.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\database\Database\Implementation\HotfixDatabase.cpp(2008,5): error C2065: "HOTFIX_SEL_ROOM_COMPONENT_OPTION": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\database\database.vcxproj]
+  (Quelldatei „../../../../src/server/database/Database/Implementation/HotfixDatabase.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\database\Database\Implementation\HotfixDatabase.cpp(2008,5): error C2065: "HOTFIX_SEL_ROOM_COMPONENT_OPTION_MAX_ID": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\database\database.vcxproj]
+  (Quelldatei „../../../../src/server/database/Database/Implementation/HotfixDatabase.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\database\Database\Implementation\HotfixDatabase.cpp(2011,22): error C2065: "HOTFIX_SEL_ROOM_COMPONENT_OPTION_TEXTURE": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\database\database.vcxproj]
+  (Quelldatei „../../../../src/server/database/Database/Implementation/HotfixDatabase.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\database\Database\Implementation\HotfixDatabase.cpp(2013,5): error C2065: "HOTFIX_SEL_ROOM_COMPONENT_OPTION_TEXTURE": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\database\database.vcxproj]
+  (Quelldatei „../../../../src/server/database/Database/Implementation/HotfixDatabase.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\database\Database\Implementation\HotfixDatabase.cpp(2013,5): error C2065: "HOTFIX_SEL_ROOM_COMPONENT_OPTION_TEXTURE_MAX_ID": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\database\database.vcxproj]
+  (Quelldatei „../../../../src/server/database/Database/Implementation/HotfixDatabase.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\database\Database\Implementation\HotfixDatabase.cpp(2016,22): error C2065: "HOTFIX_SEL_ROOM_COMPONENT_TEXTURE": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\database\database.vcxproj]
+  (Quelldatei „../../../../src/server/database/Database/Implementation/HotfixDatabase.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\database\Database\Implementation\HotfixDatabase.cpp(2018,5): error C2065: "HOTFIX_SEL_ROOM_COMPONENT_TEXTURE": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\database\database.vcxproj]
+  (Quelldatei „../../../../src/server/database/Database/Implementation/HotfixDatabase.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\database\Database\Implementation\HotfixDatabase.cpp(2018,5): error C2065: "HOTFIX_SEL_ROOM_COMPONENT_TEXTURE_MAX_ID": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\database\database.vcxproj]
+  (Quelldatei „../../../../src/server/database/Database/Implementation/HotfixDatabase.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\database\Database\Implementation\HotfixDatabase.cpp(2019,5): error C2065: "HOTFIX_SEL_ROOM_COMPONENT_TEXTURE": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\database\database.vcxproj]
+  (Quelldatei „../../../../src/server/database/Database/Implementation/HotfixDatabase.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\database\Database\Implementation\HotfixDatabase.cpp(2019,5): error C2065: "HOTFIX_SEL_ROOM_COMPONENT_TEXTURE_LOCALE": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\database\database.vcxproj]
+  (Quelldatei „../../../../src/server/database/Database/Implementation/HotfixDatabase.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\database\Database\Implementation\HotfixDatabase.cpp(2022,22): error C2065: "HOTFIX_SEL_ROOM_WMO_DATA": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\database\database.vcxproj]
+  (Quelldatei „../../../../src/server/database/Database/Implementation/HotfixDatabase.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\database\Database\Implementation\HotfixDatabase.cpp(2024,5): error C2065: "HOTFIX_SEL_ROOM_WMO_DATA": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\database\database.vcxproj]
+  (Quelldatei „../../../../src/server/database/Database/Implementation/HotfixDatabase.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\database\Database\Implementation\HotfixDatabase.cpp(2024,5): error C2065: "HOTFIX_SEL_ROOM_WMO_DATA_MAX_ID": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\database\database.vcxproj]
+  (Quelldatei „../../../../src/server/database/Database/Implementation/HotfixDatabase.cpp“ wird kompiliert)
+  

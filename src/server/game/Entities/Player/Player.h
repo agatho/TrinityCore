@@ -80,6 +80,7 @@ class CinematicMgr;
 class Creature;
 class DynamicObject;
 class Garrison;
+class Housing;
 class MythicPlusData;
 enum GarrisonType : int32;
 class Group;
@@ -1041,6 +1042,11 @@ enum PlayerLoginQueryIndex
     PLAYER_LOGIN_QUERY_LOAD_DATA_ELEMENTS,
     PLAYER_LOGIN_QUERY_LOAD_DATA_FLAGS,
     PLAYER_LOGIN_QUERY_LOAD_BANK_TAB_SETTINGS,
+    PLAYER_LOGIN_QUERY_LOAD_HOUSING,
+    PLAYER_LOGIN_QUERY_LOAD_HOUSING_DECOR,
+    PLAYER_LOGIN_QUERY_LOAD_HOUSING_ROOMS,
+    PLAYER_LOGIN_QUERY_LOAD_HOUSING_FIXTURES,
+    PLAYER_LOGIN_QUERY_LOAD_HOUSING_CATALOG,
     PLAYER_LOGIN_QUERY_LOAD_COVENANT,
     PLAYER_LOGIN_QUERY_LOAD_SOULBIND_CONDUITS,
     PLAYER_LOGIN_QUERY_LOAD_SOULBIND_CONDUIT_SOCKETS,
@@ -2934,6 +2940,30 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         void CreateGarrison(uint32 garrSiteId);
         void DeleteGarrison(GarrisonType type = GarrisonType(2) /*GARRISON_TYPE_GARRISON*/);
         Garrison* GetGarrison() const { return GetGarrison(GarrisonType(2) /*GARRISON_TYPE_GARRISON*/); }
+
+        void CreateHousing(ObjectGuid neighborhoodGuid, uint8 plotIndex);
+        void DeleteHousing(ObjectGuid neighborhoodGuid);
+        Housing* GetHousing() const;
+        Housing* GetHousingForNeighborhood(ObjectGuid neighborhoodGuid) const;
+        std::vector<Housing const*> GetAllHousings() const;
+        void SetHousingEditorModeUpdateField(uint8 mode);
+        void UpdateHousingMapId(ObjectGuid houseGuid, int32 mapId);
+        void UpdateInitiativeFavor(uint32 favor);
+
+        // 12.0.5 plot-entry mechanism: writes PlayerHouseInfoComponentData.CurrentHouse to
+        // the given house GUID (or ObjectGuid::Empty on plot-leave). Client tracks plot
+        // occupancy by observing this field's UPDATE_OBJECT changes -- it replaces the
+        // removed SMSG_NEIGHBORHOOD_PLAYER_ENTER_PLOT / LEAVE_PLOT opcodes and the
+        // per-AT FHousingPlotAreaTrigger_C fragment that were deleted in 12.0.5.
+        void SetCurrentHouse(ObjectGuid houseGuid);
+
+        // Transient -- set by the door GO script before a visit teleport so
+        // MapManager routes the visitor to the owner's HouseInteriorMap
+        // instance (instanceId = owner's GUID counter). Empty means "enter my
+        // own interior" (the default case). Cleared by MapManager once read.
+        void SetHouseVisitTarget(ObjectGuid ownerGuid) { _houseVisitTargetOwner = ownerGuid; }
+        ObjectGuid GetHouseVisitTarget() const { return _houseVisitTargetOwner; }
+        void ClearHouseVisitTarget() { _houseVisitTargetOwner = ObjectGuid::Empty; }
         Garrison* GetGarrison(GarrisonType type) const;
         std::unordered_map<int32, std::unique_ptr<Garrison>> const& GetGarrisons() const { return _garrisons; }
         MythicPlusData* GetMythicPlusData() const { return _mythicPlusData.get(); }
@@ -3170,6 +3200,12 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
 
         UF::UpdateField<UF::PlayerData, int32(WowCS::EntityFragment::CGObject), TYPEID_PLAYER> m_playerData;
         UF::UpdateField<UF::ActivePlayerData, int32(WowCS::EntityFragment::CGObject), TYPEID_ACTIVE_PLAYER> m_activePlayerData;
+
+        // Housing entity fragment (optional - only set when player has housing data)
+        UF::OptionalUpdateField<UF::PlayerHouseInfoComponentData, int32(WowCS::EntityFragment::PlayerHouseInfoComponent_C), 0> m_playerHouseInfoComponentData;
+
+        // Initiative entity fragment (optional - initiative/endeavor state for UI)
+        UF::OptionalUpdateField<UF::PlayerInitiativeComponentData, int32(WowCS::EntityFragment::PlayerInitiativeComponent_C), 0> m_playerInitiativeComponentData;
 
         void SetAreaSpiritHealer(Creature* creature);
         ObjectGuid const& GetSpiritHealerGUID() const { return _areaSpiritHealerGUID; }
@@ -3519,8 +3555,15 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
 
         uint32 _pendingBindId;
         uint32 _pendingBindTimer;
+        // Owner of the house this player is currently teleporting to visit.
+        // Empty for "enter my own interior". Set by the door GO script and
+        // consumed by MapManager when it creates/finds the HouseInteriorMap
+        // instance. Not persisted.
+        ObjectGuid _houseVisitTargetOwner;
+
 
         uint32 _activeCheats;
+        std::vector<std::unique_ptr<Housing>> _housings;
 
         std::unordered_map<int32 /*GarrisonType*/, std::unique_ptr<Garrison>> _garrisons;
         std::unique_ptr<MythicPlusData> _mythicPlusData;

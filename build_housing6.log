@@ -1,0 +1,1268 @@
+MSBuild-Version 17.14.23+b0019275e für .NET Framework
+
+  Recast.vcxproj -> I:\TrinityCore\_integration\build\dep\recastnavigation\Recast\Release\Recast.lib
+  Detour.vcxproj -> I:\TrinityCore\_integration\build\dep\recastnavigation\Detour\Release\Detour.lib
+  argon2.vcxproj -> I:\TrinityCore\_integration\build\dep\argon2\Release\argon2.lib
+  fmt.vcxproj -> I:\TrinityCore\_integration\build\dep\fmt\Release\fmt.lib
+  zlib.vcxproj -> I:\TrinityCore\_integration\build\dep\zlib\Release\zlib.lib
+  g3dlib.vcxproj -> I:\TrinityCore\_integration\build\dep\g3dlite\Release\g3dlib.lib
+  openssl_ed25519.vcxproj -> I:\TrinityCore\_integration\build\bin\Release\openssl_ed25519.dll
+  sfmt.vcxproj -> I:\TrinityCore\_integration\build\dep\SFMT\Release\sfmt.lib
+  protobuf.vcxproj -> I:\TrinityCore\_integration\build\dep\protobuf\Release\protobuf.lib
+  common.vcxproj -> I:\TrinityCore\_integration\build\src\common\Release\common.lib
+  network.vcxproj -> I:\TrinityCore\_integration\build\src\common\network\Release\trinity_network.lib
+  database.vcxproj -> I:\TrinityCore\_integration\build\src\server\database\Release\database.lib
+  mmaps_common.vcxproj -> I:\TrinityCore\_integration\build\src\common\mmaps_common\Release\mmaps_common.lib
+  proto.vcxproj -> I:\TrinityCore\_integration\build\src\server\proto\Release\proto.lib
+  shared.vcxproj -> I:\TrinityCore\_integration\build\src\server\shared\Release\shared.lib
+  Account.cpp
+  AreaTrigger.cpp
+  GameObject.cpp
+  HousingMirrorEntity.cpp
+  HousingNeighborhoodMirrorEntity.cpp
+  HousingPlayerHouseEntity.cpp
+  MeshObject.cpp
+  Player.cpp
+  HousingHandler.cpp
+  LFGListHandler.cpp
+  NeighborhoodHandler.cpp
+  HouseInteriorMap.cpp
+  Housing.cpp
+  HousingMap.cpp
+  HousingMgr.cpp
+  InitiativeManager.cpp
+  Neighborhood.cpp
+  LFGListMgr.cpp
+  WorldSession.cpp
+  HousingPackets.cpp
+  LFGListPackets.cpp
+  Opcodes.cpp
+  SpellEffects.cpp
+  World.cpp
+I:\TrinityCore\_integration\src\server\game\Entities\Housing\HousingMirrorEntity.h(67,10): error C3668: "HousingMirrorEntity::ClearUpdateMask": Die Methode mit dem Überschreibungsspezifizierer "override" hat keine Basisklassenmethoden überschrieben. [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/Housing/HousingMirrorEntity.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Entities\Account\Account.h(32,10): error C3668: "Battlenet::Account::ClearUpdateMask": Die Methode mit dem Überschreibungsspezifizierer "override" hat keine Basisklassenmethoden überschrieben. [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/Account/Account.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Entities\Housing\HousingNeighborhoodMirrorEntity.h(32,10): error C3668: "HousingNeighborhoodMirrorEntity::ClearUpdateMask": Die Methode mit dem Überschreibungsspezifizierer "override" hat keine Basisklassenmethoden überschrieben. [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/Housing/HousingNeighborhoodMirrorEntity.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Entities\Housing\HousingPlayerHouseEntity.h(32,10): error C3668: "HousingPlayerHouseEntity::ClearUpdateMask": Die Methode mit dem Überschreibungsspezifizierer "override" hat keine Basisklassenmethoden überschrieben. [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/Housing/HousingPlayerHouseEntity.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Entities\Account\Account.h(32,10): error C3668: "Battlenet::Account::ClearUpdateMask": Die Methode mit dem Überschreibungsspezifizierer "override" hat keine Basisklassenmethoden überschrieben. [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/Player/Player.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Entities\Account\Account.h(32,10): error C3668: "Battlenet::Account::ClearUpdateMask": Die Methode mit dem Überschreibungsspezifizierer "override" hat keine Basisklassenmethoden überschrieben. [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Handlers/NeighborhoodHandler.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Entities\Housing\HousingNeighborhoodMirrorEntity.h(32,10): error C3668: "HousingNeighborhoodMirrorEntity::ClearUpdateMask": Die Methode mit dem Überschreibungsspezifizierer "override" hat keine Basisklassenmethoden überschrieben. [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Handlers/NeighborhoodHandler.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Entities\Account\Account.h(32,10): error C3668: "Battlenet::Account::ClearUpdateMask": Die Methode mit dem Überschreibungsspezifizierer "override" hat keine Basisklassenmethoden überschrieben. [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Server/WorldSession.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Entities\Housing\HousingNeighborhoodMirrorEntity.h(32,10): error C3668: "HousingNeighborhoodMirrorEntity::ClearUpdateMask": Die Methode mit dem Überschreibungsspezifizierer "override" hat keine Basisklassenmethoden überschrieben. [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Server/WorldSession.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Entities\Housing\HousingPlayerHouseEntity.h(32,10): error C3668: "HousingPlayerHouseEntity::ClearUpdateMask": Die Methode mit dem Überschreibungsspezifizierer "override" hat keine Basisklassenmethoden überschrieben. [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Server/WorldSession.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Server\Packets\LFGListPackets.h(363,62): error C2065: "SMSG_LFG_LIST_UPDATE_BLACKLIST": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Server/Packets/LFGListPackets.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Server\Packets\LFGListPackets.h(363,62): error C2065: "SMSG_LFG_LIST_UPDATE_BLACKLIST": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/LFGList/LFGListMgr.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Server\Packets\LFGListPackets.h(363,62): error C2065: "SMSG_LFG_LIST_UPDATE_BLACKLIST": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Handlers/LFGListHandler.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Entities\MeshObject\MeshObject.cpp(254,53): error C2065: "sExteriorComponentStore": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/MeshObject/MeshObject.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Entities\Account\Account.h(32,10): error C3668: "Battlenet::Account::ClearUpdateMask": Die Methode mit dem Überschreibungsspezifizierer "override" hat keine Basisklassenmethoden überschrieben. [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Housing/Housing.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Entities\Housing\HousingPlayerHouseEntity.h(32,10): error C3668: "HousingPlayerHouseEntity::ClearUpdateMask": Die Methode mit dem Überschreibungsspezifizierer "override" hat keine Basisklassenmethoden überschrieben. [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Housing/Housing.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Entities\Housing\HousingPlayerHouseEntity.h(32,10): error C3668: "HousingPlayerHouseEntity::ClearUpdateMask": Die Methode mit dem Überschreibungsspezifizierer "override" hat keine Basisklassenmethoden überschrieben. [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Handlers/NeighborhoodHandler.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Entities\Housing\HousingMirrorEntity.h(67,10): error C3668: "HousingMirrorEntity::ClearUpdateMask": Die Methode mit dem Überschreibungsspezifizierer "override" hat keine Basisklassenmethoden überschrieben. [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/Player/Player.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Entities\Housing\HousingNeighborhoodMirrorEntity.h(32,10): error C3668: "HousingNeighborhoodMirrorEntity::ClearUpdateMask": Die Methode mit dem Überschreibungsspezifizierer "override" hat keine Basisklassenmethoden überschrieben. [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/Player/Player.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Entities\Housing\HousingPlayerHouseEntity.h(32,10): error C3668: "HousingPlayerHouseEntity::ClearUpdateMask": Die Methode mit dem Überschreibungsspezifizierer "override" hat keine Basisklassenmethoden überschrieben. [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/Player/Player.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Entities\Account\Account.h(32,10): error C3668: "Battlenet::Account::ClearUpdateMask": Die Methode mit dem Überschreibungsspezifizierer "override" hat keine Basisklassenmethoden überschrieben. [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Housing/HouseInteriorMap.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Entities\Housing\HousingPlayerHouseEntity.h(32,10): error C3668: "HousingPlayerHouseEntity::ClearUpdateMask": Die Methode mit dem Überschreibungsspezifizierer "override" hat keine Basisklassenmethoden überschrieben. [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Housing/HouseInteriorMap.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(116,19): error C2511: "bool AreaTrigger::Create(AreaTriggerCreatePropertiesId,Map *,const Position &,int32,const AreaTriggerSpawn *,Unit *,Unit *,SpellCastVisual,const SpellInfo *,Spell *,const AuraEffect *)": Überladene Memberfunktion nicht in "AreaTrigger" gefunden [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/AreaTrigger/AreaTrigger.cpp“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.h(74,19):
+      Siehe Deklaration von "AreaTrigger"
+  
+I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(118,5): error C2597: Ungültiger Verweis auf nicht-statischen Member "AreaTrigger::_targetGuid" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/AreaTrigger/AreaTrigger.cpp“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.h(271,20):
+      Siehe Deklaration von "AreaTrigger::_targetGuid"
+  
+I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(119,5): error C2597: Ungültiger Verweis auf nicht-statischen Member "AreaTrigger::_aurEff" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/AreaTrigger/AreaTrigger.cpp“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.h(273,27):
+      Siehe Deklaration von "AreaTrigger::_aurEff"
+  
+I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(121,5): error C2352: "WorldObject::SetMap": Ein Aufruf einer nicht statischen Memberfunktion erfordert ein Objekt [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/AreaTrigger/AreaTrigger.cpp“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Entities\Object\Object.h(422,22):
+      Siehe Deklaration von "WorldObject::SetMap"
+  
+I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(122,5): error C2352: "Position::Relocate": Ein Aufruf einer nicht statischen Memberfunktion erfordert ein Objekt [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/AreaTrigger/AreaTrigger.cpp“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Entities\Object\Position.h(77,20):
+      Siehe Deklaration von "Position::Relocate"
+  
+I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(123,5): error C2352: "AreaTrigger::RelocateStationaryPosition": Ein Aufruf einer nicht statischen Memberfunktion erfordert ein Objekt [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/AreaTrigger/AreaTrigger.cpp“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.h(117,14):
+      Siehe Deklaration von "AreaTrigger::RelocateStationaryPosition"
+  
+I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(124,10): error C2352: "Position::IsPositionValid": Ein Aufruf einer nicht statischen Memberfunktion erfordert ein Objekt [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/AreaTrigger/AreaTrigger.cpp“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Entities\Object\Position.h(106,10):
+      Siehe Deklaration von "Position::IsPositionValid"
+  
+I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(126,9): error C2352: "Position::GetPositionX": Ein Aufruf einer nicht statischen Memberfunktion erfordert ein Objekt [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/AreaTrigger/AreaTrigger.cpp“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Entities\Object\Position.h(87,21):
+      Siehe Deklaration von "Position::GetPositionX"
+  
+I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(126,9): error C2352: "Position::GetPositionY": Ein Aufruf einer nicht statischen Memberfunktion erfordert ein Objekt [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/AreaTrigger/AreaTrigger.cpp“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Entities\Object\Position.h(88,21):
+      Siehe Deklaration von "Position::GetPositionY"
+  
+I:\TrinityCore\_integration\src\server\game\Entities\Housing\HousingNeighborhoodMirrorEntity.h(32,10): error C3668: "HousingNeighborhoodMirrorEntity::ClearUpdateMask": Die Methode mit dem Überschreibungsspezifizierer "override" hat keine Basisklassenmethoden überschrieben. [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Housing/Neighborhood.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(126,9): error C7595: "fmt::v12::fstring<uint32 &,uint32>::fstring": Der Aufruf einer unmittelbaren Funktion ist kein konstanter Ausdruck. [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/AreaTrigger/AreaTrigger.cpp“ wird kompiliert)
+      I:\TrinityCore\_integration\dep\fmt\include\fmt\base.h(2465,48):
+      Fehler wurde durch den Aufruf einer nicht definierten Funktion oder eines nicht deklarierten "constexpr" verursacht
+      I:\TrinityCore\_integration\dep\fmt\include\fmt\base.h(2465,48):
+      siehe Verwendung von "fmt::v12::report_error"
+      I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(126,9):
+      Die Aufrufliste der Auswertung (der älteste Aufruf zuerst) ist
+          I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(126,9):
+          beim Auswerten der Funktion „fmt::v12::fstring<uint32 &,uint32>::fstring<Trinity::FormatStringView,0>(const S &)“
+          with
+          [
+              S=Trinity::FormatStringView
+          ]
+          I:\TrinityCore\_integration\dep\fmt\include\fmt\base.h(2767,40):
+          beim Auswerten der Funktion „void fmt::v12::detail::parse_format_string<char,fmt::v12::detail::format_string_checker<char,2,0,false>>(fmt::v12::basic_string_view<char>,Handler &&)“
+          with
+          [
+              Handler=fmt::v12::detail::format_string_checker<char,2,0,false>
+          ]
+          I:\TrinityCore\_integration\dep\fmt\include\fmt\base.h(1660,42):
+          beim Auswerten der Funktion „const Char *fmt::v12::detail::parse_replacement_field<Char,Handler&>(const Char *,const Char *,fmt::v12::detail::format_string_checker<Char,2,0,false>&)“
+          with
+          [
+              Char=char,
+              Handler=fmt::v12::detail::format_string_checker<char,2,0,false>
+          ]
+          I:\TrinityCore\_integration\dep\fmt\include\fmt\base.h(1617,51):
+          beim Auswerten der Funktion „int fmt::v12::detail::format_string_checker<char,2,0,false>::on_arg_id(void)“
+          I:\TrinityCore\_integration\dep\fmt\include\fmt\base.h(1727,70):
+          beim Auswerten der Funktion „int fmt::v12::detail::compile_parse_context<Char>::next_arg_id(void)“
+          with
+          [
+              Char=char
+          ]
+          I:\TrinityCore\_integration\dep\fmt\include\fmt\base.h(1266,31):
+          beim Auswerten der Funktion „int fmt::v12::parse_context<char>::next_arg_id(void)“
+          I:\TrinityCore\_integration\dep\fmt\include\fmt\base.h(893,20):
+          beim Auswerten der Funktion „void fmt::v12::parse_context<char>::do_check_arg_id(int)“
+          I:\TrinityCore\_integration\dep\fmt\include\fmt\base.h(2465,48):
+          beim Auswerten der Funktion „void fmt::v12::report_error(const char *)“
+  
+I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(130,5): error C2597: Ungültiger Verweis auf nicht-statischen Member "AreaTrigger::_areaTriggerCreateProperties" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/AreaTrigger/AreaTrigger.cpp“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.h(287,44):
+      Siehe Deklaration von "AreaTrigger::_areaTriggerCreateProperties"
+  
+I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(131,10): error C2597: Ungültiger Verweis auf nicht-statischen Member "AreaTrigger::_areaTriggerCreateProperties" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/AreaTrigger/AreaTrigger.cpp“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.h(287,44):
+      Siehe Deklaration von "AreaTrigger::_areaTriggerCreateProperties"
+  
+I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(137,5): error C2352: "WorldObject::SetZoneScript": Ein Aufruf einer nicht statischen Memberfunktion erfordert ein Objekt [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/AreaTrigger/AreaTrigger.cpp“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Entities\Object\Object.h(428,14):
+      Siehe Deklaration von "WorldObject::SetZoneScript"
+  
+I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(141,55): error C2352: "WorldLocation::GetMapId": Ein Aufruf einer nicht statischen Memberfunktion erfordert ein Objekt [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/AreaTrigger/AreaTrigger.cpp“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Entities\Object\Position.h(216,22):
+      Siehe Deklaration von "WorldLocation::GetMapId"
+  
+I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(141,67): error C2352: "AreaTrigger::GetTemplate": Ein Aufruf einer nicht statischen Memberfunktion erfordert ein Objekt [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/AreaTrigger/AreaTrigger.cpp“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.h(184,36):
+      Siehe Deklaration von "AreaTrigger::GetTemplate"
+  
+I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(141,83): error C2352: "AreaTrigger::GetTemplate": Ein Aufruf einer nicht statischen Memberfunktion erfordert ein Objekt [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/AreaTrigger/AreaTrigger.cpp“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.h(184,36):
+      Siehe Deklaration von "AreaTrigger::GetTemplate"
+  
+I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(141,109): error C2352: "WorldObject::GetMap": Ein Aufruf einer nicht statischen Memberfunktion erfordert ein Objekt [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/AreaTrigger/AreaTrigger.cpp“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Entities\Object\Object.h(424,14):
+      Siehe Deklaration von "WorldObject::GetMap"
+  
+I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(141,158): error C2059: Syntaxfehler: ")" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/AreaTrigger/AreaTrigger.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(143,9): error C2352: "AreaTrigger::GetTemplate": Ein Aufruf einer nicht statischen Memberfunktion erfordert ein Objekt [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/AreaTrigger/AreaTrigger.cpp“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.h(184,36):
+      Siehe Deklaration von "AreaTrigger::GetTemplate"
+  
+I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(144,18): error C2352: "AreaTrigger::GetTemplate": Ein Aufruf einer nicht statischen Memberfunktion erfordert ein Objekt [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/AreaTrigger/AreaTrigger.cpp“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.h(184,36):
+      Siehe Deklaration von "AreaTrigger::GetTemplate"
+  
+I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(146,5): error C2352: "Object::SetObjectScale": Ein Aufruf einer nicht statischen Memberfunktion erfordert ein Objekt [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/AreaTrigger/AreaTrigger.cpp“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Entities\Object\Object.h(94,22):
+      Siehe Deklaration von "Object::SetObjectScale"
+  
+I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(147,5): error C2352: "AreaTrigger::SetDuration": Ein Aufruf einer nicht statischen Memberfunktion erfordert ein Objekt [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/AreaTrigger/AreaTrigger.cpp“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.h(178,14):
+      Siehe Deklaration von "AreaTrigger::SetDuration"
+  
+I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(149,14): error C2352: "AreaTrigger::GetCreateProperties": Ein Aufruf einer nicht statischen Memberfunktion erfordert ein Objekt [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/AreaTrigger/AreaTrigger.cpp“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.h(183,44):
+      Siehe Deklaration von "AreaTrigger::GetCreateProperties"
+  
+I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(153,29): error C3536: "areaTriggerData": Kann nicht verwendet werden, bevor es initialisiert wurde. [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/AreaTrigger/AreaTrigger.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(153,9): error C2672: "BaseEntity::SetUpdateFieldValue": keine übereinstimmende überladene Funktion gefunden [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/AreaTrigger/AreaTrigger.cpp“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Entities\Object\BaseEntity.h(224,14):
+      kann "void BaseEntity::SetUpdateFieldValue(UF::UpdateFieldPrivateSetter<T>,UF::UpdateFieldPrivateSetter<T>::value_type)" sein
+  
+I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(155,9): error C2672: "BaseEntity::SetUpdateFieldValue": keine übereinstimmende überladene Funktion gefunden [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/AreaTrigger/AreaTrigger.cpp“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Entities\Object\BaseEntity.h(224,14):
+      kann "void BaseEntity::SetUpdateFieldValue(UF::UpdateFieldPrivateSetter<T>,UF::UpdateFieldPrivateSetter<T>::value_type)" sein
+  
+I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(156,23): error C2352: "AreaTrigger::IsStaticSpawn": Ein Aufruf einer nicht statischen Memberfunktion erfordert ein Objekt [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/AreaTrigger/AreaTrigger.cpp“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.h(111,14):
+      Siehe Deklaration von "AreaTrigger::IsStaticSpawn"
+  
+I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(157,9): error C2672: "BaseEntity::SetUpdateFieldValue": keine übereinstimmende überladene Funktion gefunden [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/AreaTrigger/AreaTrigger.cpp“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Entities\Object\BaseEntity.h(224,14):
+      kann "void BaseEntity::SetUpdateFieldValue(UF::UpdateFieldPrivateSetter<T>,UF::UpdateFieldPrivateSetter<T>::value_type)" sein
+  
+I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(160,9): error C2352: "AreaTrigger::GetCreateProperties": Ein Aufruf einer nicht statischen Memberfunktion erfordert ein Objekt [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/AreaTrigger/AreaTrigger.cpp“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.h(183,44):
+      Siehe Deklaration von "AreaTrigger::GetCreateProperties"
+  
+I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(162,52): error C2352: "AreaTrigger::GetCreateProperties": Ein Aufruf einer nicht statischen Memberfunktion erfordert ein Objekt [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/AreaTrigger/AreaTrigger.cpp“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.h(183,44):
+      Siehe Deklaration von "AreaTrigger::GetCreateProperties"
+  
+I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(168,9): error C2672: "BaseEntity::SetUpdateFieldValue": keine übereinstimmende überladene Funktion gefunden [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/AreaTrigger/AreaTrigger.cpp“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Entities\Object\BaseEntity.h(224,14):
+      kann "void BaseEntity::SetUpdateFieldValue(UF::UpdateFieldPrivateSetter<T>,UF::UpdateFieldPrivateSetter<T>::value_type)" sein
+  
+I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(170,5): error C2352: "AreaTrigger::SetSpellVisual": Ein Aufruf einer nicht statischen Memberfunktion erfordert ein Objekt [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/AreaTrigger/AreaTrigger.cpp“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.h(174,14):
+      Siehe Deklaration von "AreaTrigger::SetSpellVisual"
+  
+I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(171,10): error C2352: "AreaTrigger::IsStaticSpawn": Ein Aufruf einer nicht statischen Memberfunktion erfordert ein Objekt [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/AreaTrigger/AreaTrigger.cpp“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.h(111,14):
+      Siehe Deklaration von "AreaTrigger::IsStaticSpawn"
+  
+I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(173,99): error C2352: "AreaTrigger::GetCreateProperties": Ein Aufruf einer nicht statischen Memberfunktion erfordert ein Objekt [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/AreaTrigger/AreaTrigger.cpp“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.h(183,44):
+      Siehe Deklaration von "AreaTrigger::GetCreateProperties"
+  
+I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(173,147): error C2352: "AreaTrigger::GetCreateProperties": Ein Aufruf einer nicht statischen Memberfunktion erfordert ein Objekt [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/AreaTrigger/AreaTrigger.cpp“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.h(183,44):
+      Siehe Deklaration von "AreaTrigger::GetCreateProperties"
+  
+I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(173,9): error C2672: "BaseEntity::SetUpdateFieldValue": keine übereinstimmende überladene Funktion gefunden [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/AreaTrigger/AreaTrigger.cpp“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Entities\Object\BaseEntity.h(224,14):
+      kann "void BaseEntity::SetUpdateFieldValue(UF::UpdateFieldPrivateSetter<T>,UF::UpdateFieldPrivateSetter<T>::value_type)" sein
+          I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(173,9):
+          „void BaseEntity::SetUpdateFieldValue(UF::UpdateFieldPrivateSetter<T>,UF::UpdateFieldPrivateSetter<T>::value_type)“ erwartet, dass 2 Argumente – 1 angegeben werden.
+  
+I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(174,9): error C2672: "BaseEntity::SetUpdateFieldValue": keine übereinstimmende überladene Funktion gefunden [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/AreaTrigger/AreaTrigger.cpp“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Entities\Object\BaseEntity.h(224,14):
+      kann "void BaseEntity::SetUpdateFieldValue(UF::UpdateFieldPrivateSetter<T>,UF::UpdateFieldPrivateSetter<T>::value_type)" sein
+          I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(174,9):
+          „void BaseEntity::SetUpdateFieldValue(UF::UpdateFieldPrivateSetter<T>,UF::UpdateFieldPrivateSetter<T>::value_type)“ erwartet, dass 2 Argumente – 1 angegeben werden.
+  
+I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(176,92): error C2352: "AreaTrigger::GetCreateProperties": Ein Aufruf einer nicht statischen Memberfunktion erfordert ein Objekt [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/AreaTrigger/AreaTrigger.cpp“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.h(183,44):
+      Siehe Deklaration von "AreaTrigger::GetCreateProperties"
+  
+I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(176,5): error C2672: "BaseEntity::SetUpdateFieldValue": keine übereinstimmende überladene Funktion gefunden [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/AreaTrigger/AreaTrigger.cpp“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Entities\Object\BaseEntity.h(224,14):
+      kann "void BaseEntity::SetUpdateFieldValue(UF::UpdateFieldPrivateSetter<T>,UF::UpdateFieldPrivateSetter<T>::value_type)" sein
+          I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(176,5):
+          „void BaseEntity::SetUpdateFieldValue(UF::UpdateFieldPrivateSetter<T>,UF::UpdateFieldPrivateSetter<T>::value_type)“ erwartet, dass 2 Argumente – 1 angegeben werden.
+  
+I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(177,95): error C2352: "AreaTrigger::GetCreateProperties": Ein Aufruf einer nicht statischen Memberfunktion erfordert ein Objekt [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/AreaTrigger/AreaTrigger.cpp“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.h(183,44):
+      Siehe Deklaration von "AreaTrigger::GetCreateProperties"
+  
+I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(177,5): error C2672: "BaseEntity::SetUpdateFieldValue": keine übereinstimmende überladene Funktion gefunden [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/AreaTrigger/AreaTrigger.cpp“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Entities\Object\BaseEntity.h(224,14):
+      kann "void BaseEntity::SetUpdateFieldValue(UF::UpdateFieldPrivateSetter<T>,UF::UpdateFieldPrivateSetter<T>::value_type)" sein
+          I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(177,5):
+          „void BaseEntity::SetUpdateFieldValue(UF::UpdateFieldPrivateSetter<T>,UF::UpdateFieldPrivateSetter<T>::value_type)“ erwartet, dass 2 Argumente – 1 angegeben werden.
+  
+I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(178,9): error C2352: "AreaTrigger::IsServerSide": Ein Aufruf einer nicht statischen Memberfunktion erfordert ein Objekt [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/AreaTrigger/AreaTrigger.cpp“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.h(110,14):
+      Siehe Deklaration von "AreaTrigger::IsServerSide"
+  
+I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(179,9): error C2672: "BaseEntity::SetUpdateFieldValue": keine übereinstimmende überladene Funktion gefunden [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/AreaTrigger/AreaTrigger.cpp“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Entities\Object\BaseEntity.h(224,14):
+      kann "void BaseEntity::SetUpdateFieldValue(UF::UpdateFieldPrivateSetter<T>,UF::UpdateFieldPrivateSetter<T>::value_type)" sein
+  
+I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(189,23): error C2660: "Player::GetSpellModValues": Funktion akzeptiert keine 5 Argumente [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/AreaTrigger/AreaTrigger.cpp“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Entities\Player\Player.h(2109,14):
+      Siehe Deklaration von "Player::GetSpellModValues"
+      I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(189,23):
+      bei Anpassung der Argumentliste "(const SpellInfo *, SpellModOp, Spell *, int32 *, float *)"
+  
+I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(199,9): error C2352: "AreaTrigger::GetCreateProperties": Ein Aufruf einer nicht statischen Memberfunktion erfordert ein Objekt [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/AreaTrigger/AreaTrigger.cpp“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.h(183,44):
+      Siehe Deklaration von "AreaTrigger::GetCreateProperties"
+  
+I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(200,141): error C2352: "AreaTrigger::GetCreateProperties": Ein Aufruf einer nicht statischen Memberfunktion erfordert ein Objekt [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/AreaTrigger/AreaTrigger.cpp“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.h(183,44):
+      Siehe Deklaration von "AreaTrigger::GetCreateProperties"
+  
+I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(200,9): error C2672: "BaseEntity::SetUpdateFieldValue": keine übereinstimmende überladene Funktion gefunden [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/AreaTrigger/AreaTrigger.cpp“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Entities\Object\BaseEntity.h(224,14):
+      kann "void BaseEntity::SetUpdateFieldValue(UF::UpdateFieldPrivateSetter<T>,UF::UpdateFieldPrivateSetter<T>::value_type)" sein
+          I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(200,9):
+          „void BaseEntity::SetUpdateFieldValue(UF::UpdateFieldPrivateSetter<T>,UF::UpdateFieldPrivateSetter<T>::value_type)“ erwartet, dass 2 Argumente – 1 angegeben werden.
+  
+I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(201,128): error C2352: "AreaTrigger::GetCreateProperties": Ein Aufruf einer nicht statischen Memberfunktion erfordert ein Objekt [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/AreaTrigger/AreaTrigger.cpp“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.h(183,44):
+      Siehe Deklaration von "AreaTrigger::GetCreateProperties"
+  
+I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(201,5): error C2672: "BaseEntity::SetUpdateFieldValue": keine übereinstimmende überladene Funktion gefunden [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/AreaTrigger/AreaTrigger.cpp“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Entities\Object\BaseEntity.h(224,14):
+      kann "void BaseEntity::SetUpdateFieldValue(UF::UpdateFieldPrivateSetter<T>,UF::UpdateFieldPrivateSetter<T>::value_type)" sein
+          I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(201,5):
+          „void BaseEntity::SetUpdateFieldValue(UF::UpdateFieldPrivateSetter<T>,UF::UpdateFieldPrivateSetter<T>::value_type)“ erwartet, dass 2 Argumente – 1 angegeben werden.
+  
+I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(202,9): error C2352: "AreaTrigger::GetCreateProperties": Ein Aufruf einer nicht statischen Memberfunktion erfordert ein Objekt [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/AreaTrigger/AreaTrigger.cpp“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.h(183,44):
+      Siehe Deklaration von "AreaTrigger::GetCreateProperties"
+  
+I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(203,9): error C2672: "BaseEntity::SetUpdateFieldValue": keine übereinstimmende überladene Funktion gefunden [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/AreaTrigger/AreaTrigger.cpp“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Entities\Object\BaseEntity.h(224,14):
+      kann "void BaseEntity::SetUpdateFieldValue(UF::UpdateFieldPrivateSetter<T>,UF::UpdateFieldPrivateSetter<T>::value_type)" sein
+  
+I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(205,49): error C2352: "AreaTrigger::GetCreateProperties": Ein Aufruf einer nicht statischen Memberfunktion erfordert ein Objekt [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/AreaTrigger/AreaTrigger.cpp“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.h(183,44):
+      Siehe Deklaration von "AreaTrigger::GetCreateProperties"
+  
+I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(208,13): error C3493: "flags" kann nicht implizit erfasst werden, da kein Standarderfassungsmodus angegeben wurde. [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/AreaTrigger/AreaTrigger.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(210,13): error C3493: "flags" kann nicht implizit erfasst werden, da kein Standarderfassungsmodus angegeben wurde. [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/AreaTrigger/AreaTrigger.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(212,13): error C3493: "flags" kann nicht implizit erfasst werden, da kein Standarderfassungsmodus angegeben wurde. [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/AreaTrigger/AreaTrigger.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(214,13): error C3493: "flags" kann nicht implizit erfasst werden, da kein Standarderfassungsmodus angegeben wurde. [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/AreaTrigger/AreaTrigger.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(216,13): error C3493: "flags" kann nicht implizit erfasst werden, da kein Standarderfassungsmodus angegeben wurde. [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/AreaTrigger/AreaTrigger.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(208,13): error C2065: "flags": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/AreaTrigger/AreaTrigger.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(210,13): error C2065: "flags": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/AreaTrigger/AreaTrigger.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(212,13): error C2065: "flags": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/AreaTrigger/AreaTrigger.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(214,13): error C2065: "flags": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/AreaTrigger/AreaTrigger.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(216,13): error C2065: "flags": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/AreaTrigger/AreaTrigger.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(220,5): error C2352: "AreaTrigger::ReplaceAllAreaTriggerFlags": Ein Aufruf einer nicht statischen Memberfunktion erfordert ein Objekt [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/AreaTrigger/AreaTrigger.cpp“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.h(146,14):
+      Siehe Deklaration von "AreaTrigger::ReplaceAllAreaTriggerFlags"
+  
+I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(222,5): error C2672: "BaseEntity::SetUpdateFieldValue": keine übereinstimmende überladene Funktion gefunden [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/AreaTrigger/AreaTrigger.cpp“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Entities\Object\BaseEntity.h(224,14):
+      kann "void BaseEntity::SetUpdateFieldValue(UF::UpdateFieldPrivateSetter<T>,UF::UpdateFieldPrivateSetter<T>::value_type)" sein
+  
+I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(223,5): error C2672: "BaseEntity::SetUpdateFieldValue": keine übereinstimmende überladene Funktion gefunden [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/AreaTrigger/AreaTrigger.cpp“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Entities\Object\BaseEntity.h(224,14):
+      kann "void BaseEntity::SetUpdateFieldValue(UF::UpdateFieldPrivateSetter<T>,UF::UpdateFieldPrivateSetter<T>::value_type)" sein
+  
+I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(225,90): error C2352: "AreaTrigger::GetCreateProperties": Ein Aufruf einer nicht statischen Memberfunktion erfordert ein Objekt [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/AreaTrigger/AreaTrigger.cpp“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.h(183,44):
+      Siehe Deklaration von "AreaTrigger::GetCreateProperties"
+  
+I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(225,5): error C2672: "BaseEntity::SetUpdateFieldValue": keine übereinstimmende überladene Funktion gefunden [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/AreaTrigger/AreaTrigger.cpp“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Entities\Object\BaseEntity.h(224,14):
+      kann "void BaseEntity::SetUpdateFieldValue(UF::UpdateFieldPrivateSetter<T>,UF::UpdateFieldPrivateSetter<T>::value_type)" sein
+          I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(225,5):
+          „void BaseEntity::SetUpdateFieldValue(UF::UpdateFieldPrivateSetter<T>,UF::UpdateFieldPrivateSetter<T>::value_type)“ erwartet, dass 2 Argumente – 1 angegeben werden.
+  
+I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(226,91): error C2352: "AreaTrigger::GetCreateProperties": Ein Aufruf einer nicht statischen Memberfunktion erfordert ein Objekt [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/AreaTrigger/AreaTrigger.cpp“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.h(183,44):
+      Siehe Deklaration von "AreaTrigger::GetCreateProperties"
+  
+I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(226,5): error C2672: "BaseEntity::SetUpdateFieldValue": keine übereinstimmende überladene Funktion gefunden [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/AreaTrigger/AreaTrigger.cpp“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Entities\Object\BaseEntity.h(224,14):
+      kann "void BaseEntity::SetUpdateFieldValue(UF::UpdateFieldPrivateSetter<T>,UF::UpdateFieldPrivateSetter<T>::value_type)" sein
+          I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(226,5):
+          „void BaseEntity::SetUpdateFieldValue(UF::UpdateFieldPrivateSetter<T>,UF::UpdateFieldPrivateSetter<T>::value_type)“ erwartet, dass 2 Argumente – 1 angegeben werden.
+  
+I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(227,90): error C2352: "AreaTrigger::GetCreateProperties": Ein Aufruf einer nicht statischen Memberfunktion erfordert ein Objekt [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/AreaTrigger/AreaTrigger.cpp“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.h(183,44):
+      Siehe Deklaration von "AreaTrigger::GetCreateProperties"
+  
+I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(227,5): error C2672: "BaseEntity::SetUpdateFieldValue": keine übereinstimmende überladene Funktion gefunden [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/AreaTrigger/AreaTrigger.cpp“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Entities\Object\BaseEntity.h(224,14):
+      kann "void BaseEntity::SetUpdateFieldValue(UF::UpdateFieldPrivateSetter<T>,UF::UpdateFieldPrivateSetter<T>::value_type)" sein
+          I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(227,5):
+          „void BaseEntity::SetUpdateFieldValue(UF::UpdateFieldPrivateSetter<T>,UF::UpdateFieldPrivateSetter<T>::value_type)“ erwartet, dass 2 Argumente – 1 angegeben werden.
+  
+I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(228,89): error C2352: "AreaTrigger::GetCreateProperties": Ein Aufruf einer nicht statischen Memberfunktion erfordert ein Objekt [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/AreaTrigger/AreaTrigger.cpp“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.h(183,44):
+      Siehe Deklaration von "AreaTrigger::GetCreateProperties"
+  
+I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(228,5): error C2672: "BaseEntity::SetUpdateFieldValue": keine übereinstimmende überladene Funktion gefunden [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/AreaTrigger/AreaTrigger.cpp“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Entities\Object\BaseEntity.h(224,14):
+      kann "void BaseEntity::SetUpdateFieldValue(UF::UpdateFieldPrivateSetter<T>,UF::UpdateFieldPrivateSetter<T>::value_type)" sein
+          I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(228,5):
+          „void BaseEntity::SetUpdateFieldValue(UF::UpdateFieldPrivateSetter<T>,UF::UpdateFieldPrivateSetter<T>::value_type)“ erwartet, dass 2 Argumente – 1 angegeben werden.
+  
+I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(231,43): error C2671: "AreaTrigger::Create": Statische Memberfunktionen haben keinen this-Zeiger [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/AreaTrigger/AreaTrigger.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(232,14): error C2352: "AreaTrigger::IsStaticSpawn": Ein Aufruf einer nicht statischen Memberfunktion erfordert ein Objekt [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/AreaTrigger/AreaTrigger.cpp“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.h(111,14):
+      Siehe Deklaration von "AreaTrigger::IsStaticSpawn"
+  
+I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(235,46): error C2668: "WorldObject::GetPhaseShift": Mehrdeutiger Aufruf einer überladenen Funktion [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/AreaTrigger/AreaTrigger.cpp“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Entities\Object\Object.h(324,27):
+      kann "const PhaseShift &WorldObject::GetPhaseShift(void) const" sein
+      I:\TrinityCore\_integration\src\server\game\Entities\Object\Object.h(323,21):
+      oder "PhaseShift &WorldObject::GetPhaseShift(void)"
+      I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(235,46):
+      bei Anpassung der Argumentliste "()"
+  
+I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(240,9): error C2352: "AreaTrigger::SetAreaTriggerFlag": Ein Aufruf einer nicht statischen Memberfunktion erfordert ein Objekt [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/AreaTrigger/AreaTrigger.cpp“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.h(144,14):
+      Siehe Deklaration von "AreaTrigger::SetAreaTriggerFlag"
+  
+I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(245,10): error C2352: "AreaTrigger::IsStaticSpawn": Ein Aufruf einer nicht statischen Memberfunktion erfordert ein Objekt [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/AreaTrigger/AreaTrigger.cpp“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.h(111,14):
+      Siehe Deklaration von "AreaTrigger::IsStaticSpawn"
+  
+I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(246,9): error C2352: "WorldObject::UpdatePositionData": Ein Aufruf einer nicht statischen Memberfunktion erfordert ein Objekt [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/AreaTrigger/AreaTrigger.cpp“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Entities\Object\Object.h(525,14):
+      Siehe Deklaration von "WorldObject::UpdatePositionData"
+  
+I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(248,5): error C2352: "AreaTrigger::UpdateShape": Ein Aufruf einer nicht statischen Memberfunktion erfordert ein Objekt [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/AreaTrigger/AreaTrigger.cpp“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.h(211,14):
+      Siehe Deklaration von "AreaTrigger::UpdateShape"
+  
+I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(268,5): error C2671: "AreaTrigger::Create": Statische Memberfunktionen haben keinen this-Zeiger [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/AreaTrigger/AreaTrigger.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(268,5): error C2440: "<function-style-cast>": "initializer list" kann nicht in "AreaTrigger::Create::<lambda_2>" konvertiert werden [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/AreaTrigger/AreaTrigger.cpp“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(268,5):
+      "AreaTrigger::Create::<lambda_2>::<lambda_2>": Funktion akzeptiert keine 3 Argumente
+          I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(268,5):
+          bei Anpassung der Argumentliste "(Unit *, const Position, <error type>)"
+  
+I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(268,8): error C2352: "AreaTrigger::GetCreateProperties": Ein Aufruf einer nicht statischen Memberfunktion erfordert ein Objekt [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/AreaTrigger/AreaTrigger.cpp“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.h(183,44):
+      Siehe Deklaration von "AreaTrigger::GetCreateProperties"
+  
+I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(250,10): error C2672: "std::visit": keine übereinstimmende überladene Funktion gefunden [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/AreaTrigger/AreaTrigger.cpp“ wird kompiliert)
+      C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\14.44.35207\include\variant(1633,16):
+      kann "_Ret std::visit(_Callable &&,_Variants ...)" sein
+      C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\14.44.35207\include\variant(1587,73):
+      oder "unknown-type std::visit(_Callable &&,_Variants ...)"
+  
+I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(270,5): error C2672: "BaseEntity::SetUpdateFieldValue": keine übereinstimmende überladene Funktion gefunden [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/AreaTrigger/AreaTrigger.cpp“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Entities\Object\BaseEntity.h(224,14):
+      kann "void BaseEntity::SetUpdateFieldValue(UF::UpdateFieldPrivateSetter<T>,UF::UpdateFieldPrivateSetter<T>::value_type)" sein
+          I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(270,5):
+          „void BaseEntity::SetUpdateFieldValue(UF::UpdateFieldPrivateSetter<T>,UF::UpdateFieldPrivateSetter<T>::value_type)“ erwartet, dass 2 Argumente – 1 angegeben werden.
+  
+I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(280,37): error C2671: "AreaTrigger::Create": Statische Memberfunktionen haben keinen this-Zeiger [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/AreaTrigger/AreaTrigger.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(284,5): error C2352: "AreaTrigger::AI_Initialize": Ein Aufruf einer nicht statischen Memberfunktion erfordert ein Objekt [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/AreaTrigger/AreaTrigger.cpp“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.h(104,14):
+      Siehe Deklaration von "AreaTrigger::AI_Initialize"
+  
+I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(287,9): error C2352: "AreaTrigger::HasOrbit": Ein Aufruf einer nicht statischen Memberfunktion erfordert ein Objekt [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/AreaTrigger/AreaTrigger.cpp“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.h(204,14):
+      Siehe Deklaration von "AreaTrigger::HasOrbit"
+  
+I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(288,18): error C2352: "AreaTrigger::CalculateOrbitPosition": Ein Aufruf einer nicht statischen Memberfunktion erfordert ein Objekt [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/AreaTrigger/AreaTrigger.cpp“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.h(263,18):
+      Siehe Deklaration von "AreaTrigger::CalculateOrbitPosition"
+  
+I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(290,10): error C2352: "AreaTrigger::IsStaticSpawn": Ein Aufruf einer nicht statischen Memberfunktion erfordert ein Objekt [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/AreaTrigger/AreaTrigger.cpp“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.h(111,14):
+      Siehe Deklaration von "AreaTrigger::IsStaticSpawn"
+  
+I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(292,14): error C2352: "WorldObject::GetMap": Ein Aufruf einer nicht statischen Memberfunktion erfordert ein Objekt [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/AreaTrigger/AreaTrigger.cpp“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Entities\Object\Object.h(424,14):
+      Siehe Deklaration von "WorldObject::GetMap"
+  
+I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(292,33): error C2671: "AreaTrigger::Create": Statische Memberfunktionen haben keinen this-Zeiger [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/AreaTrigger/AreaTrigger.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(296,44): error C2671: "AreaTrigger::Create": Statische Memberfunktionen haben keinen this-Zeiger [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/AreaTrigger/AreaTrigger.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Entities\AreaTrigger\AreaTrigger.cpp(302,38): error C2671: "AreaTrigger::Create": Statische Memberfunktionen haben keinen this-Zeiger [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/AreaTrigger/AreaTrigger.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Server\Packets\LFGListPackets.h(363,62): error C2065: "SMSG_LFG_LIST_UPDATE_BLACKLIST": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Server/WorldSession.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Entities\Account\Account.h(32,10): error C3668: "Battlenet::Account::ClearUpdateMask": Die Methode mit dem Überschreibungsspezifizierer "override" hat keine Basisklassenmethoden überschrieben. [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Housing/HousingMap.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Entities\Housing\HousingMirrorEntity.h(67,10): error C3668: "HousingMirrorEntity::ClearUpdateMask": Die Methode mit dem Überschreibungsspezifizierer "override" hat keine Basisklassenmethoden überschrieben. [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Housing/HousingMap.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Entities\Housing\HousingNeighborhoodMirrorEntity.h(32,10): error C3668: "HousingNeighborhoodMirrorEntity::ClearUpdateMask": Die Methode mit dem Überschreibungsspezifizierer "override" hat keine Basisklassenmethoden überschrieben. [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Housing/HousingMap.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Entities\Housing\HousingPlayerHouseEntity.h(32,10): error C3668: "HousingPlayerHouseEntity::ClearUpdateMask": Die Methode mit dem Überschreibungsspezifizierer "override" hat keine Basisklassenmethoden überschrieben. [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Housing/HousingMap.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Housing\HousingMgr.cpp(392,79): error C2039: "GetGameObjectTemplateStoreForHotfix" ist kein Member von "ObjectMgr". [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Housing/HousingMgr.cpp“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Globals\ObjectMgr.h(959,19):
+      Siehe Deklaration von "ObjectMgr"
+  
+I:\TrinityCore\_integration\src\server\game\Housing\HousingMgr.cpp(392,41): error C2530: "got": Verweise müssen initialisiert werden [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Housing/HousingMgr.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Housing\HousingMgr.cpp(420,79): error C2039: "GetGameObjectTemplateStoreForHotfix" ist kein Member von "ObjectMgr". [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Housing/HousingMgr.cpp“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Globals\ObjectMgr.h(959,19):
+      Siehe Deklaration von "ObjectMgr"
+  
+I:\TrinityCore\_integration\src\server\game\Housing\HousingMgr.cpp(420,41): error C2530: "got": Verweise müssen initialisiert werden [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Housing/HousingMgr.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Housing\Housing.cpp(353,50): error C2065: "sExteriorComponentStore": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Housing/Housing.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Housing\Housing.cpp(363,50): error C2065: "sExteriorComponentStore": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Housing/Housing.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Housing\HousingMgr.cpp(1435,48): error C2065: "sExteriorComponentStore": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Housing/HousingMgr.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Housing\HousingMgr.cpp(1435,46): error C2143: Syntaxfehler: Es fehlt ";" vor ":" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Housing/HousingMgr.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Housing\HousingMgr.cpp(1435,71): error C2143: Syntaxfehler: Es fehlt ";" vor ")" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Housing/HousingMgr.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Housing\HousingMgr.cpp(1449,54): error C2039: "GetGameObjectTemplateStoreForHotfix" ist kein Member von "ObjectMgr". [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Housing/HousingMgr.cpp“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Globals\ObjectMgr.h(959,19):
+      Siehe Deklaration von "ObjectMgr"
+  
+I:\TrinityCore\_integration\src\server\game\Housing\HousingMgr.cpp(1449,40): error C2530: "goTemplate": Verweise müssen initialisiert werden [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Housing/HousingMgr.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Housing\HousingMgr.cpp(1482,51): error C2065: "sExteriorComponentHookStore": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Housing/HousingMgr.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Housing\HousingMgr.cpp(1482,49): error C2143: Syntaxfehler: Es fehlt ";" vor ":" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Housing/HousingMgr.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Housing\HousingMgr.cpp(1482,78): error C2143: Syntaxfehler: Es fehlt ";" vor ")" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Housing/HousingMgr.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Housing\HousingMgr.cpp(1501,47): error C2065: "sExteriorComponentStore": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Housing/HousingMgr.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Housing\HousingMgr.cpp(1501,45): error C2143: Syntaxfehler: Es fehlt ";" vor ":" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Housing/HousingMgr.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Housing\HousingMgr.cpp(1501,70): error C2143: Syntaxfehler: Es fehlt ";" vor ")" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Housing/HousingMgr.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Housing\HousingMgr.cpp(1516,59): error C2065: "sExteriorComponentTypeStore": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Housing/HousingMgr.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Housing\HousingMgr.cpp(1538,51): error C2065: "sExteriorComponentXGroupStore": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Housing/HousingMgr.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Housing\HousingMgr.cpp(1538,49): error C2143: Syntaxfehler: Es fehlt ";" vor ":" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Housing/HousingMgr.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Housing\HousingMgr.cpp(1538,80): error C2143: Syntaxfehler: Es fehlt ";" vor ")" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Housing/HousingMgr.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Housing\HousingMgr.cpp(1557,47): error C2065: "sExteriorComponentStore": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Housing/HousingMgr.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Housing\HousingMgr.cpp(1557,45): error C2143: Syntaxfehler: Es fehlt ";" vor ":" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Housing/HousingMgr.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Housing\HousingMgr.cpp(1557,70): error C2143: Syntaxfehler: Es fehlt ";" vor ")" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Housing/HousingMgr.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Housing\HousingMgr.cpp(1582,58): error C2065: "sExteriorComponentExitPointStore": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Housing/HousingMgr.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Housing\HousingMgr.cpp(1582,56): error C2143: Syntaxfehler: Es fehlt ";" vor ":" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Housing/HousingMgr.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Housing\HousingMgr.cpp(1582,90): error C2143: Syntaxfehler: Es fehlt ";" vor ")" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Housing/HousingMgr.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Housing\HousingMap.cpp(465,54): error C2065: "sExteriorComponentStore": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Housing/HousingMap.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Housing\HousingMap.cpp(480,62): error C2065: "sExteriorComponentStore": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Housing/HousingMap.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Housing\HousingMgr.cpp(1676,5): error C2065: "sExteriorComponentStore": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Housing/HousingMgr.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Housing\HousingMgr.cpp(1676,5): error C7595: "fmt::v12::fstring<>::fstring": Der Aufruf einer unmittelbaren Funktion ist kein konstanter Ausdruck. [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Housing/HousingMgr.cpp“ wird kompiliert)
+      I:\TrinityCore\_integration\dep\fmt\include\fmt\base.h(2465,48):
+      Fehler wurde durch den Aufruf einer nicht definierten Funktion oder eines nicht deklarierten "constexpr" verursacht
+      I:\TrinityCore\_integration\dep\fmt\include\fmt\base.h(2465,48):
+      siehe Verwendung von "fmt::v12::report_error"
+      I:\TrinityCore\_integration\src\server\game\Housing\HousingMgr.cpp(1676,5):
+      Die Aufrufliste der Auswertung (der älteste Aufruf zuerst) ist
+          I:\TrinityCore\_integration\src\server\game\Housing\HousingMgr.cpp(1676,5):
+          beim Auswerten der Funktion „fmt::v12::fstring<>::fstring<Trinity::FormatStringView,0>(const S &)“
+          with
+          [
+              S=Trinity::FormatStringView
+          ]
+          I:\TrinityCore\_integration\dep\fmt\include\fmt\base.h(2767,40):
+          beim Auswerten der Funktion „void fmt::v12::detail::parse_format_string<char,fmt::v12::detail::format_string_checker<char,0,0,false>>(fmt::v12::basic_string_view<char>,Handler &&)“
+          with
+          [
+              Handler=fmt::v12::detail::format_string_checker<char,0,0,false>
+          ]
+          I:\TrinityCore\_integration\dep\fmt\include\fmt\base.h(1660,42):
+          beim Auswerten der Funktion „const Char *fmt::v12::detail::parse_replacement_field<Char,Handler&>(const Char *,const Char *,fmt::v12::detail::format_string_checker<Char,0,0,false>&)“
+          with
+          [
+              Char=char,
+              Handler=fmt::v12::detail::format_string_checker<char,0,0,false>
+          ]
+          I:\TrinityCore\_integration\dep\fmt\include\fmt\base.h(1617,51):
+          beim Auswerten der Funktion „int fmt::v12::detail::format_string_checker<char,0,0,false>::on_arg_id(void)“
+          I:\TrinityCore\_integration\dep\fmt\include\fmt\base.h(1727,70):
+          beim Auswerten der Funktion „int fmt::v12::detail::compile_parse_context<Char>::next_arg_id(void)“
+          with
+          [
+              Char=char
+          ]
+          I:\TrinityCore\_integration\dep\fmt\include\fmt\base.h(1266,31):
+          beim Auswerten der Funktion „int fmt::v12::parse_context<char>::next_arg_id(void)“
+          I:\TrinityCore\_integration\dep\fmt\include\fmt\base.h(893,20):
+          beim Auswerten der Funktion „void fmt::v12::parse_context<char>::do_check_arg_id(int)“
+          I:\TrinityCore\_integration\dep\fmt\include\fmt\base.h(2465,48):
+          beim Auswerten der Funktion „void fmt::v12::report_error(const char *)“
+  
+I:\TrinityCore\_integration\src\server\game\Housing\HousingMgr.cpp(1677,5): error C2065: "sExteriorComponentHookStore": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Housing/HousingMgr.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Housing\HousingMgr.cpp(1677,5): error C7595: "fmt::v12::fstring<>::fstring": Der Aufruf einer unmittelbaren Funktion ist kein konstanter Ausdruck. [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Housing/HousingMgr.cpp“ wird kompiliert)
+      I:\TrinityCore\_integration\dep\fmt\include\fmt\base.h(2465,48):
+      Fehler wurde durch den Aufruf einer nicht definierten Funktion oder eines nicht deklarierten "constexpr" verursacht
+      I:\TrinityCore\_integration\dep\fmt\include\fmt\base.h(2465,48):
+      siehe Verwendung von "fmt::v12::report_error"
+      I:\TrinityCore\_integration\src\server\game\Housing\HousingMgr.cpp(1677,5):
+      Die Aufrufliste der Auswertung (der älteste Aufruf zuerst) ist
+          I:\TrinityCore\_integration\src\server\game\Housing\HousingMgr.cpp(1677,5):
+          beim Auswerten der Funktion „fmt::v12::fstring<>::fstring<Trinity::FormatStringView,0>(const S &)“
+          with
+          [
+              S=Trinity::FormatStringView
+          ]
+          I:\TrinityCore\_integration\dep\fmt\include\fmt\base.h(2767,40):
+          beim Auswerten der Funktion „void fmt::v12::detail::parse_format_string<char,fmt::v12::detail::format_string_checker<char,0,0,false>>(fmt::v12::basic_string_view<char>,Handler &&)“
+          with
+          [
+              Handler=fmt::v12::detail::format_string_checker<char,0,0,false>
+          ]
+          I:\TrinityCore\_integration\dep\fmt\include\fmt\base.h(1660,42):
+          beim Auswerten der Funktion „const Char *fmt::v12::detail::parse_replacement_field<Char,Handler&>(const Char *,const Char *,fmt::v12::detail::format_string_checker<Char,0,0,false>&)“
+          with
+          [
+              Char=char,
+              Handler=fmt::v12::detail::format_string_checker<char,0,0,false>
+          ]
+          I:\TrinityCore\_integration\dep\fmt\include\fmt\base.h(1617,51):
+          beim Auswerten der Funktion „int fmt::v12::detail::format_string_checker<char,0,0,false>::on_arg_id(void)“
+          I:\TrinityCore\_integration\dep\fmt\include\fmt\base.h(1727,70):
+          beim Auswerten der Funktion „int fmt::v12::detail::compile_parse_context<Char>::next_arg_id(void)“
+          with
+          [
+              Char=char
+          ]
+          I:\TrinityCore\_integration\dep\fmt\include\fmt\base.h(1266,31):
+          beim Auswerten der Funktion „int fmt::v12::parse_context<char>::next_arg_id(void)“
+          I:\TrinityCore\_integration\dep\fmt\include\fmt\base.h(893,20):
+          beim Auswerten der Funktion „void fmt::v12::parse_context<char>::do_check_arg_id(int)“
+          I:\TrinityCore\_integration\dep\fmt\include\fmt\base.h(2465,48):
+          beim Auswerten der Funktion „void fmt::v12::report_error(const char *)“
+  
+I:\TrinityCore\_integration\src\server\game\Housing\HousingMgr.cpp(1678,5): error C2065: "sExteriorComponentExitPointStore": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Housing/HousingMgr.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Housing\HousingMgr.cpp(1678,5): error C7595: "fmt::v12::fstring<>::fstring": Der Aufruf einer unmittelbaren Funktion ist kein konstanter Ausdruck. [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Housing/HousingMgr.cpp“ wird kompiliert)
+      I:\TrinityCore\_integration\dep\fmt\include\fmt\base.h(2465,48):
+      Fehler wurde durch den Aufruf einer nicht definierten Funktion oder eines nicht deklarierten "constexpr" verursacht
+      I:\TrinityCore\_integration\dep\fmt\include\fmt\base.h(2465,48):
+      siehe Verwendung von "fmt::v12::report_error"
+      I:\TrinityCore\_integration\src\server\game\Housing\HousingMgr.cpp(1678,5):
+      Die Aufrufliste der Auswertung (der älteste Aufruf zuerst) ist
+          I:\TrinityCore\_integration\src\server\game\Housing\HousingMgr.cpp(1678,5):
+          beim Auswerten der Funktion „fmt::v12::fstring<>::fstring<Trinity::FormatStringView,0>(const S &)“
+          with
+          [
+              S=Trinity::FormatStringView
+          ]
+          I:\TrinityCore\_integration\dep\fmt\include\fmt\base.h(2767,40):
+          beim Auswerten der Funktion „void fmt::v12::detail::parse_format_string<char,fmt::v12::detail::format_string_checker<char,0,0,false>>(fmt::v12::basic_string_view<char>,Handler &&)“
+          with
+          [
+              Handler=fmt::v12::detail::format_string_checker<char,0,0,false>
+          ]
+          I:\TrinityCore\_integration\dep\fmt\include\fmt\base.h(1660,42):
+          beim Auswerten der Funktion „const Char *fmt::v12::detail::parse_replacement_field<Char,Handler&>(const Char *,const Char *,fmt::v12::detail::format_string_checker<Char,0,0,false>&)“
+          with
+          [
+              Char=char,
+              Handler=fmt::v12::detail::format_string_checker<char,0,0,false>
+          ]
+          I:\TrinityCore\_integration\dep\fmt\include\fmt\base.h(1617,51):
+          beim Auswerten der Funktion „int fmt::v12::detail::format_string_checker<char,0,0,false>::on_arg_id(void)“
+          I:\TrinityCore\_integration\dep\fmt\include\fmt\base.h(1727,70):
+          beim Auswerten der Funktion „int fmt::v12::detail::compile_parse_context<Char>::next_arg_id(void)“
+          with
+          [
+              Char=char
+          ]
+          I:\TrinityCore\_integration\dep\fmt\include\fmt\base.h(1266,31):
+          beim Auswerten der Funktion „int fmt::v12::parse_context<char>::next_arg_id(void)“
+          I:\TrinityCore\_integration\dep\fmt\include\fmt\base.h(893,20):
+          beim Auswerten der Funktion „void fmt::v12::parse_context<char>::do_check_arg_id(int)“
+          I:\TrinityCore\_integration\dep\fmt\include\fmt\base.h(2465,48):
+          beim Auswerten der Funktion „void fmt::v12::report_error(const char *)“
+  
+I:\TrinityCore\_integration\src\server\game\Housing\HousingMgr.cpp(1679,5): error C2065: "sExteriorComponentGroupStore": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Housing/HousingMgr.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Housing\HousingMgr.cpp(1679,5): error C7595: "fmt::v12::fstring<>::fstring": Der Aufruf einer unmittelbaren Funktion ist kein konstanter Ausdruck. [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Housing/HousingMgr.cpp“ wird kompiliert)
+      I:\TrinityCore\_integration\dep\fmt\include\fmt\base.h(2465,48):
+      Fehler wurde durch den Aufruf einer nicht definierten Funktion oder eines nicht deklarierten "constexpr" verursacht
+      I:\TrinityCore\_integration\dep\fmt\include\fmt\base.h(2465,48):
+      siehe Verwendung von "fmt::v12::report_error"
+      I:\TrinityCore\_integration\src\server\game\Housing\HousingMgr.cpp(1679,5):
+      Die Aufrufliste der Auswertung (der älteste Aufruf zuerst) ist
+          I:\TrinityCore\_integration\src\server\game\Housing\HousingMgr.cpp(1679,5):
+          beim Auswerten der Funktion „fmt::v12::fstring<>::fstring<Trinity::FormatStringView,0>(const S &)“
+          with
+          [
+              S=Trinity::FormatStringView
+          ]
+          I:\TrinityCore\_integration\dep\fmt\include\fmt\base.h(2767,40):
+          beim Auswerten der Funktion „void fmt::v12::detail::parse_format_string<char,fmt::v12::detail::format_string_checker<char,0,0,false>>(fmt::v12::basic_string_view<char>,Handler &&)“
+          with
+          [
+              Handler=fmt::v12::detail::format_string_checker<char,0,0,false>
+          ]
+          I:\TrinityCore\_integration\dep\fmt\include\fmt\base.h(1660,42):
+          beim Auswerten der Funktion „const Char *fmt::v12::detail::parse_replacement_field<Char,Handler&>(const Char *,const Char *,fmt::v12::detail::format_string_checker<Char,0,0,false>&)“
+          with
+          [
+              Char=char,
+              Handler=fmt::v12::detail::format_string_checker<char,0,0,false>
+          ]
+          I:\TrinityCore\_integration\dep\fmt\include\fmt\base.h(1617,51):
+          beim Auswerten der Funktion „int fmt::v12::detail::format_string_checker<char,0,0,false>::on_arg_id(void)“
+          I:\TrinityCore\_integration\dep\fmt\include\fmt\base.h(1727,70):
+          beim Auswerten der Funktion „int fmt::v12::detail::compile_parse_context<Char>::next_arg_id(void)“
+          with
+          [
+              Char=char
+          ]
+          I:\TrinityCore\_integration\dep\fmt\include\fmt\base.h(1266,31):
+          beim Auswerten der Funktion „int fmt::v12::parse_context<char>::next_arg_id(void)“
+          I:\TrinityCore\_integration\dep\fmt\include\fmt\base.h(893,20):
+          beim Auswerten der Funktion „void fmt::v12::parse_context<char>::do_check_arg_id(int)“
+          I:\TrinityCore\_integration\dep\fmt\include\fmt\base.h(2465,48):
+          beim Auswerten der Funktion „void fmt::v12::report_error(const char *)“
+  
+I:\TrinityCore\_integration\src\server\game\Housing\HousingMgr.cpp(1680,5): error C2065: "sExteriorComponentGroupXHookStore": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Housing/HousingMgr.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Housing\HousingMgr.cpp(1680,5): error C7595: "fmt::v12::fstring<>::fstring": Der Aufruf einer unmittelbaren Funktion ist kein konstanter Ausdruck. [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Housing/HousingMgr.cpp“ wird kompiliert)
+      I:\TrinityCore\_integration\dep\fmt\include\fmt\base.h(2465,48):
+      Fehler wurde durch den Aufruf einer nicht definierten Funktion oder eines nicht deklarierten "constexpr" verursacht
+      I:\TrinityCore\_integration\dep\fmt\include\fmt\base.h(2465,48):
+      siehe Verwendung von "fmt::v12::report_error"
+      I:\TrinityCore\_integration\src\server\game\Housing\HousingMgr.cpp(1680,5):
+      Die Aufrufliste der Auswertung (der älteste Aufruf zuerst) ist
+          I:\TrinityCore\_integration\src\server\game\Housing\HousingMgr.cpp(1680,5):
+          beim Auswerten der Funktion „fmt::v12::fstring<>::fstring<Trinity::FormatStringView,0>(const S &)“
+          with
+          [
+              S=Trinity::FormatStringView
+          ]
+          I:\TrinityCore\_integration\dep\fmt\include\fmt\base.h(2767,40):
+          beim Auswerten der Funktion „void fmt::v12::detail::parse_format_string<char,fmt::v12::detail::format_string_checker<char,0,0,false>>(fmt::v12::basic_string_view<char>,Handler &&)“
+          with
+          [
+              Handler=fmt::v12::detail::format_string_checker<char,0,0,false>
+          ]
+          I:\TrinityCore\_integration\dep\fmt\include\fmt\base.h(1660,42):
+          beim Auswerten der Funktion „const Char *fmt::v12::detail::parse_replacement_field<Char,Handler&>(const Char *,const Char *,fmt::v12::detail::format_string_checker<Char,0,0,false>&)“
+          with
+          [
+              Char=char,
+              Handler=fmt::v12::detail::format_string_checker<char,0,0,false>
+          ]
+          I:\TrinityCore\_integration\dep\fmt\include\fmt\base.h(1617,51):
+          beim Auswerten der Funktion „int fmt::v12::detail::format_string_checker<char,0,0,false>::on_arg_id(void)“
+          I:\TrinityCore\_integration\dep\fmt\include\fmt\base.h(1727,70):
+          beim Auswerten der Funktion „int fmt::v12::detail::compile_parse_context<Char>::next_arg_id(void)“
+          with
+          [
+              Char=char
+          ]
+          I:\TrinityCore\_integration\dep\fmt\include\fmt\base.h(1266,31):
+          beim Auswerten der Funktion „int fmt::v12::parse_context<char>::next_arg_id(void)“
+          I:\TrinityCore\_integration\dep\fmt\include\fmt\base.h(893,20):
+          beim Auswerten der Funktion „void fmt::v12::parse_context<char>::do_check_arg_id(int)“
+          I:\TrinityCore\_integration\dep\fmt\include\fmt\base.h(2465,48):
+          beim Auswerten der Funktion „void fmt::v12::report_error(const char *)“
+  
+I:\TrinityCore\_integration\src\server\game\Housing\HousingMgr.cpp(1681,5): error C2065: "sExteriorComponentTypeStore": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Housing/HousingMgr.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Housing\Housing.cpp(1843,55): error C2065: "sExteriorComponentHookStore": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Housing/Housing.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Housing\HousingMgr.cpp(1681,5): error C7595: "fmt::v12::fstring<>::fstring": Der Aufruf einer unmittelbaren Funktion ist kein konstanter Ausdruck. [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Housing/HousingMgr.cpp“ wird kompiliert)
+      I:\TrinityCore\_integration\dep\fmt\include\fmt\base.h(2465,48):
+      Fehler wurde durch den Aufruf einer nicht definierten Funktion oder eines nicht deklarierten "constexpr" verursacht
+      I:\TrinityCore\_integration\dep\fmt\include\fmt\base.h(2465,48):
+      siehe Verwendung von "fmt::v12::report_error"
+      I:\TrinityCore\_integration\src\server\game\Housing\HousingMgr.cpp(1681,5):
+      Die Aufrufliste der Auswertung (der älteste Aufruf zuerst) ist
+          I:\TrinityCore\_integration\src\server\game\Housing\HousingMgr.cpp(1681,5):
+          beim Auswerten der Funktion „fmt::v12::fstring<>::fstring<Trinity::FormatStringView,0>(const S &)“
+          with
+          [
+              S=Trinity::FormatStringView
+          ]
+          I:\TrinityCore\_integration\dep\fmt\include\fmt\base.h(2767,40):
+          beim Auswerten der Funktion „void fmt::v12::detail::parse_format_string<char,fmt::v12::detail::format_string_checker<char,0,0,false>>(fmt::v12::basic_string_view<char>,Handler &&)“
+          with
+          [
+              Handler=fmt::v12::detail::format_string_checker<char,0,0,false>
+          ]
+          I:\TrinityCore\_integration\dep\fmt\include\fmt\base.h(1660,42):
+          beim Auswerten der Funktion „const Char *fmt::v12::detail::parse_replacement_field<Char,Handler&>(const Char *,const Char *,fmt::v12::detail::format_string_checker<Char,0,0,false>&)“
+          with
+          [
+              Char=char,
+              Handler=fmt::v12::detail::format_string_checker<char,0,0,false>
+          ]
+          I:\TrinityCore\_integration\dep\fmt\include\fmt\base.h(1617,51):
+          beim Auswerten der Funktion „int fmt::v12::detail::format_string_checker<char,0,0,false>::on_arg_id(void)“
+          I:\TrinityCore\_integration\dep\fmt\include\fmt\base.h(1727,70):
+          beim Auswerten der Funktion „int fmt::v12::detail::compile_parse_context<Char>::next_arg_id(void)“
+          with
+          [
+              Char=char
+          ]
+          I:\TrinityCore\_integration\dep\fmt\include\fmt\base.h(1266,31):
+          beim Auswerten der Funktion „int fmt::v12::parse_context<char>::next_arg_id(void)“
+          I:\TrinityCore\_integration\dep\fmt\include\fmt\base.h(893,20):
+          beim Auswerten der Funktion „void fmt::v12::parse_context<char>::do_check_arg_id(int)“
+          I:\TrinityCore\_integration\dep\fmt\include\fmt\base.h(2465,48):
+          beim Auswerten der Funktion „void fmt::v12::report_error(const char *)“
+  
+I:\TrinityCore\_integration\src\server\game\Housing\HousingMgr.cpp(1682,5): error C2065: "sExteriorComponentXGroupStore": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Housing/HousingMgr.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Housing\HousingMgr.cpp(1682,5): error C7595: "fmt::v12::fstring<>::fstring": Der Aufruf einer unmittelbaren Funktion ist kein konstanter Ausdruck. [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Housing/HousingMgr.cpp“ wird kompiliert)
+      I:\TrinityCore\_integration\dep\fmt\include\fmt\base.h(2465,48):
+      Fehler wurde durch den Aufruf einer nicht definierten Funktion oder eines nicht deklarierten "constexpr" verursacht
+      I:\TrinityCore\_integration\dep\fmt\include\fmt\base.h(2465,48):
+      siehe Verwendung von "fmt::v12::report_error"
+      I:\TrinityCore\_integration\src\server\game\Housing\HousingMgr.cpp(1682,5):
+      Die Aufrufliste der Auswertung (der älteste Aufruf zuerst) ist
+          I:\TrinityCore\_integration\src\server\game\Housing\HousingMgr.cpp(1682,5):
+          beim Auswerten der Funktion „fmt::v12::fstring<>::fstring<Trinity::FormatStringView,0>(const S &)“
+          with
+          [
+              S=Trinity::FormatStringView
+          ]
+          I:\TrinityCore\_integration\dep\fmt\include\fmt\base.h(2767,40):
+          beim Auswerten der Funktion „void fmt::v12::detail::parse_format_string<char,fmt::v12::detail::format_string_checker<char,0,0,false>>(fmt::v12::basic_string_view<char>,Handler &&)“
+          with
+          [
+              Handler=fmt::v12::detail::format_string_checker<char,0,0,false>
+          ]
+          I:\TrinityCore\_integration\dep\fmt\include\fmt\base.h(1660,42):
+          beim Auswerten der Funktion „const Char *fmt::v12::detail::parse_replacement_field<Char,Handler&>(const Char *,const Char *,fmt::v12::detail::format_string_checker<Char,0,0,false>&)“
+          with
+          [
+              Char=char,
+              Handler=fmt::v12::detail::format_string_checker<char,0,0,false>
+          ]
+          I:\TrinityCore\_integration\dep\fmt\include\fmt\base.h(1617,51):
+          beim Auswerten der Funktion „int fmt::v12::detail::format_string_checker<char,0,0,false>::on_arg_id(void)“
+          I:\TrinityCore\_integration\dep\fmt\include\fmt\base.h(1727,70):
+          beim Auswerten der Funktion „int fmt::v12::detail::compile_parse_context<Char>::next_arg_id(void)“
+          with
+          [
+              Char=char
+          ]
+          I:\TrinityCore\_integration\dep\fmt\include\fmt\base.h(1266,31):
+          beim Auswerten der Funktion „int fmt::v12::parse_context<char>::next_arg_id(void)“
+          I:\TrinityCore\_integration\dep\fmt\include\fmt\base.h(893,20):
+          beim Auswerten der Funktion „void fmt::v12::parse_context<char>::do_check_arg_id(int)“
+          I:\TrinityCore\_integration\dep\fmt\include\fmt\base.h(2465,48):
+          beim Auswerten der Funktion „void fmt::v12::report_error(const char *)“
+  
+I:\TrinityCore\_integration\src\server\game\Housing\Housing.cpp(1851,51): error C2065: "sExteriorComponentStore": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Housing/Housing.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Housing\HousingMgr.cpp(1692,46): error C2065: "sExteriorComponentStore": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Housing/HousingMgr.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Housing\Housing.cpp(1876,62): error C2065: "sExteriorComponentStore": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Housing/Housing.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Housing\HousingMgr.cpp(1706,51): error C2065: "sExteriorComponentHookStore": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Housing/HousingMgr.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Housing\HousingMgr.cpp(1706,49): error C2143: Syntaxfehler: Es fehlt ";" vor ":" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Housing/HousingMgr.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Housing\HousingMgr.cpp(1706,78): error C2143: Syntaxfehler: Es fehlt ";" vor ")" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Housing/HousingMgr.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Housing\HousingMgr.cpp(1729,58): error C2065: "sExteriorComponentExitPointStore": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Housing/HousingMgr.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Housing\Housing.cpp(1917,49): error C2065: "sExteriorComponentStore": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Housing/Housing.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Housing\HousingMgr.cpp(1729,56): error C2143: Syntaxfehler: Es fehlt ";" vor ":" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Housing/HousingMgr.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Housing\HousingMgr.cpp(1729,90): error C2143: Syntaxfehler: Es fehlt ";" vor ")" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Housing/HousingMgr.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Housing\Housing.cpp(1926,57): error C2065: "sExteriorComponentStore": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Housing/Housing.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Housing\HousingMgr.cpp(1752,46): error C2065: "sExteriorComponentStore": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Housing/HousingMgr.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Housing\HousingMgr.cpp(1760,51): error C2065: "sExteriorComponentXGroupStore": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Housing/HousingMgr.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Housing\HousingMgr.cpp(1760,49): error C2143: Syntaxfehler: Es fehlt ";" vor ":" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Housing/HousingMgr.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Housing\HousingMgr.cpp(1760,80): error C2143: Syntaxfehler: Es fehlt ";" vor ")" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Housing/HousingMgr.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Housing\Housing.cpp(2082,46): error C2065: "sExteriorComponentStore": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Housing/Housing.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Housing\Housing.cpp(2121,50): error C2065: "sExteriorComponentStore": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Housing/Housing.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Housing\Housing.cpp(2138,54): error C2065: "sExteriorComponentStore": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Housing/Housing.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Server\Packets\LFGListPackets.h(363,62): error C2065: "SMSG_LFG_LIST_UPDATE_BLACKLIST": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Server/Protocol/Opcodes.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Housing\Housing.cpp(2736,46): error C2065: "sExteriorComponentStore": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Housing/Housing.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Housing\Housing.cpp(2788,46): error C2065: "sExteriorComponentStore": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Housing/Housing.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Housing\Housing.cpp(2804,50): error C2065: "sExteriorComponentStore": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Housing/Housing.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Entities\GameObject\GameObject.cpp(3461,36): error C2039: "NPCInteractionOpenResult" ist kein Member von "WorldPackets::NPC". [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/GameObject/GameObject.cpp“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(834,15):
+      Siehe Deklaration von "WorldPackets::NPC"
+  
+I:\TrinityCore\_integration\src\server\game\Entities\GameObject\GameObject.cpp(3461,36): error C2065: "NPCInteractionOpenResult": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/GameObject/GameObject.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Entities\GameObject\GameObject.cpp(3461,61): error C2146: Syntaxfehler: Fehlendes ";" vor Bezeichner "npcInteraction" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/GameObject/GameObject.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Entities\GameObject\GameObject.cpp(3461,61): error C2065: "npcInteraction": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/GameObject/GameObject.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Entities\GameObject\GameObject.cpp(3462,17): error C2065: "npcInteraction": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/GameObject/GameObject.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Entities\GameObject\GameObject.cpp(3463,17): error C2065: "npcInteraction": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/GameObject/GameObject.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Entities\GameObject\GameObject.cpp(3464,17): error C2065: "npcInteraction": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/GameObject/GameObject.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Entities\GameObject\GameObject.cpp(3465,43): error C2065: "npcInteraction": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Entities/GameObject/GameObject.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Housing\HousingMap.cpp(2495,46): error C2065: "sExteriorComponentStore": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Housing/HousingMap.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Housing\HousingMap.cpp(2510,52): error C2065: "sExteriorComponentStore": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Housing/HousingMap.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Housing\HousingMap.cpp(2552,61): error C2065: "sExteriorComponentStore": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Housing/HousingMap.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Housing\HousingMap.cpp(2782,42): error C2065: "sExteriorComponentStore": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Housing/HousingMap.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Housing\HousingMap.cpp(2963,33): error C2065: "sExteriorComponentStore": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Housing/HousingMap.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Housing\HousingMap.cpp(3077,51): error C2065: "sExteriorComponentHookStore": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Housing/HousingMap.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Housing\HousingMap.cpp(3307,46): error C2065: "sExteriorComponentStore": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Housing/HousingMap.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Housing\HousingMap.cpp(3323,51): error C2065: "sExteriorComponentHookStore": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Housing/HousingMap.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Server\Packets\LFGListPackets.h(363,62): error C2065: "SMSG_LFG_LIST_UPDATE_BLACKLIST": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/World/World.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Spells\SpellEffects.cpp(6478,26): error C2065: "sRealmList": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Spells/SpellEffects.cpp“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Spells\SpellEffects.cpp(6476,55): error C2672: "ObjectGuid::Create": keine übereinstimmende überladene Funktion gefunden [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Spells/SpellEffects.cpp“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Entities\Object\ObjectGuid.h(428,153):
+      kann "ObjectGuid ObjectGuid::Create(uint32,uint32,uint32,uint64)" sein
+          I:\TrinityCore\_integration\src\server\game\Spells\SpellEffects.cpp(6476,55):
+          „ObjectGuid ObjectGuid::Create(uint32,uint32,uint32,uint64)“ erwartet, dass 4 Argumente – 3 angegeben werden.
+      I:\TrinityCore\_integration\src\server\game\Entities\Object\ObjectGuid.h(427,154):
+      oder "ObjectGuid ObjectGuid::Create(uint32,uint8,uint8,ObjectGuid::LowType)"
+          I:\TrinityCore\_integration\src\server\game\Spells\SpellEffects.cpp(6476,55):
+          „ObjectGuid ObjectGuid::Create(uint32,uint8,uint8,ObjectGuid::LowType)“ erwartet, dass 4 Argumente – 3 angegeben werden.
+      I:\TrinityCore\_integration\src\server\game\Entities\Object\ObjectGuid.h(426,156):
+      oder "ObjectGuid ObjectGuid::Create(uint32,uint16,uint8,uint32)"
+          I:\TrinityCore\_integration\src\server\game\Spells\SpellEffects.cpp(6476,55):
+          „ObjectGuid ObjectGuid::Create(uint32,uint16,uint8,uint32)“ erwartet, dass 4 Argumente – 3 angegeben werden.
+      I:\TrinityCore\_integration\src\server\game\Entities\Object\ObjectGuid.h(425,157):
+      oder "ObjectGuid ObjectGuid::Create(uint16,uint32,ObjectGuid::LowType)"
+          I:\TrinityCore\_integration\src\server\game\Spells\SpellEffects.cpp(6476,55):
+          „ObjectGuid ObjectGuid::Create(uint16,uint32,ObjectGuid::LowType)“: Das Vorlage-Argument für „__formal“ konnte nicht abgeleitet werden.
+              I:\TrinityCore\_integration\src\server\game\Entities\Object\ObjectGuid.h(425,39):
+              "std::enable_if_t<false,int32>": Spezialisierung der Aliasvorlage fehlgeschlagen
+      I:\TrinityCore\_integration\src\server\game\Entities\Object\ObjectGuid.h(424,156):
+      oder "ObjectGuid ObjectGuid::Create(uint8,uint32,ObjectGuid::LowType)"
+          I:\TrinityCore\_integration\src\server\game\Spells\SpellEffects.cpp(6476,55):
+          „ObjectGuid ObjectGuid::Create(uint8,uint32,ObjectGuid::LowType)“: Das Vorlage-Argument für „__formal“ konnte nicht abgeleitet werden.
+              I:\TrinityCore\_integration\src\server\game\Entities\Object\ObjectGuid.h(424,39):
+              "std::enable_if_t<false,int32>": Spezialisierung der Aliasvorlage fehlgeschlagen
+      I:\TrinityCore\_integration\src\server\game\Entities\Object\ObjectGuid.h(423,152):
+      oder "ObjectGuid ObjectGuid::Create(uint32,ObjectGuid::LowType)"
+          I:\TrinityCore\_integration\src\server\game\Spells\SpellEffects.cpp(6476,55):
+          „ObjectGuid ObjectGuid::Create(uint32,ObjectGuid::LowType)“ erwartet, dass 2 Argumente – 3 angegeben werden.
+      I:\TrinityCore\_integration\src\server\game\Entities\Object\ObjectGuid.h(422,153):
+      oder "ObjectGuid ObjectGuid::Create(uint8,ObjectGuid::LowType)"
+          I:\TrinityCore\_integration\src\server\game\Spells\SpellEffects.cpp(6476,55):
+          „ObjectGuid ObjectGuid::Create(uint8,ObjectGuid::LowType)“ erwartet, dass 2 Argumente – 3 angegeben werden.
+      I:\TrinityCore\_integration\src\server\game\Entities\Object\ObjectGuid.h(421,155):
+      oder "ObjectGuid ObjectGuid::Create(uint8,uint8,uint8,uint8,bool,uint8,ObjectGuid::LowType)"
+          I:\TrinityCore\_integration\src\server\game\Spells\SpellEffects.cpp(6476,55):
+          „ObjectGuid ObjectGuid::Create(uint8,uint8,uint8,uint8,bool,uint8,ObjectGuid::LowType)“ erwartet, dass 7 Argumente – 3 angegeben werden.
+      I:\TrinityCore\_integration\src\server\game\Entities\Object\ObjectGuid.h(420,152):
+      oder "ObjectGuid ObjectGuid::Create(uint8,uint8,ObjectGuid::LowType)"
+          I:\TrinityCore\_integration\src\server\game\Spells\SpellEffects.cpp(6476,55):
+          „ObjectGuid ObjectGuid::Create(uint8,uint8,ObjectGuid::LowType)“: Das Vorlage-Argument für „__formal“ konnte nicht abgeleitet werden.
+              I:\TrinityCore\_integration\src\server\game\Entities\Object\ObjectGuid.h(420,39):
+              "std::enable_if_t<false,int32>": Spezialisierung der Aliasvorlage fehlgeschlagen
+      I:\TrinityCore\_integration\src\server\game\Entities\Object\ObjectGuid.h(419,159):
+      oder "ObjectGuid ObjectGuid::Create(uint16,ObjectGuid::LowType)"
+          I:\TrinityCore\_integration\src\server\game\Spells\SpellEffects.cpp(6476,55):
+          „ObjectGuid ObjectGuid::Create(uint16,ObjectGuid::LowType)“ erwartet, dass 2 Argumente – 3 angegeben werden.
+      I:\TrinityCore\_integration\src\server\game\Entities\Object\ObjectGuid.h(418,151):
+      oder "ObjectGuid ObjectGuid::Create(ObjectGuid::LowType)"
+          I:\TrinityCore\_integration\src\server\game\Spells\SpellEffects.cpp(6476,55):
+          „ObjectGuid ObjectGuid::Create(ObjectGuid::LowType)“ erwartet, dass 1 Argumente – 3 angegeben werden.
+      I:\TrinityCore\_integration\src\server\game\Entities\Object\ObjectGuid.h(417,152):
+      oder "ObjectGuid ObjectGuid::Create(ObjectGuid::LowType)"
+          I:\TrinityCore\_integration\src\server\game\Spells\SpellEffects.cpp(6476,55):
+          „ObjectGuid ObjectGuid::Create(ObjectGuid::LowType)“ erwartet, dass 1 Argumente – 3 angegeben werden.
+      I:\TrinityCore\_integration\src\server\game\Entities\Object\ObjectGuid.h(416,157):
+      oder "ObjectGuid ObjectGuid::Create(bool,bool,uint16,uint8,ObjectGuid::LowType)"
+          I:\TrinityCore\_integration\src\server\game\Spells\SpellEffects.cpp(6476,55):
+          „ObjectGuid ObjectGuid::Create(bool,bool,uint16,uint8,ObjectGuid::LowType)“ erwartet, dass 5 Argumente – 3 angegeben werden.
+      I:\TrinityCore\_integration\src\server\game\Entities\Object\ObjectGuid.h(415,157):
+      oder "ObjectGuid ObjectGuid::Create(uint16,uint16,uint32)"
+          I:\TrinityCore\_integration\src\server\game\Spells\SpellEffects.cpp(6476,55):
+          „ObjectGuid ObjectGuid::Create(uint16,uint16,uint32)“: Das Vorlage-Argument für „__formal“ konnte nicht abgeleitet werden.
+              I:\TrinityCore\_integration\src\server\game\Entities\Object\ObjectGuid.h(415,39):
+              "std::enable_if_t<false,int32>": Spezialisierung der Aliasvorlage fehlgeschlagen
+      I:\TrinityCore\_integration\src\server\game\Entities\Object\ObjectGuid.h(414,155):
+      oder "ObjectGuid ObjectGuid::Create(uint32)"
+          I:\TrinityCore\_integration\src\server\game\Spells\SpellEffects.cpp(6476,55):
+          „ObjectGuid ObjectGuid::Create(uint32)“ erwartet, dass 1 Argumente – 3 angegeben werden.
+      I:\TrinityCore\_integration\src\server\game\Entities\Object\ObjectGuid.h(413,157):
+      oder "ObjectGuid ObjectGuid::Create(uint8,uint16,uint32,ObjectGuid::LowType)"
+          I:\TrinityCore\_integration\src\server\game\Spells\SpellEffects.cpp(6476,55):
+          „ObjectGuid ObjectGuid::Create(uint8,uint16,uint32,ObjectGuid::LowType)“ erwartet, dass 4 Argumente – 3 angegeben werden.
+      I:\TrinityCore\_integration\src\server\game\Entities\Object\ObjectGuid.h(412,157):
+      oder "ObjectGuid ObjectGuid::Create(uint16,uint32,ObjectGuid::LowType)"
+          I:\TrinityCore\_integration\src\server\game\Spells\SpellEffects.cpp(6476,55):
+          „ObjectGuid ObjectGuid::Create(uint16,uint32,ObjectGuid::LowType)“: Das Vorlage-Argument für „__formal“ konnte nicht abgeleitet werden.
+              I:\TrinityCore\_integration\src\server\game\Entities\Object\ObjectGuid.h(412,39):
+              "std::enable_if_t<false,int32>": Spezialisierung der Aliasvorlage fehlgeschlagen
+      I:\TrinityCore\_integration\src\server\game\Entities\Object\ObjectGuid.h(411,150):
+      oder "ObjectGuid ObjectGuid::Create(ObjectGuid::LowType)"
+          I:\TrinityCore\_integration\src\server\game\Spells\SpellEffects.cpp(6476,55):
+          „ObjectGuid ObjectGuid::Create(ObjectGuid::LowType)“ erwartet, dass 1 Argumente – 3 angegeben werden.
+      I:\TrinityCore\_integration\src\server\game\Entities\Object\ObjectGuid.h(410,152):
+      oder "ObjectGuid ObjectGuid::Create(ObjectGuid::LowType)"
+          I:\TrinityCore\_integration\src\server\game\Spells\SpellEffects.cpp(6476,55):
+          „ObjectGuid ObjectGuid::Create(ObjectGuid::LowType)“ erwartet, dass 1 Argumente – 3 angegeben werden.
+      I:\TrinityCore\_integration\src\server\game\Entities\Object\ObjectGuid.h(409,160):
+      oder "ObjectGuid ObjectGuid::Create(ObjectGuid::LowType)"
+          I:\TrinityCore\_integration\src\server\game\Spells\SpellEffects.cpp(6476,55):
+          „ObjectGuid ObjectGuid::Create(ObjectGuid::LowType)“ erwartet, dass 1 Argumente – 3 angegeben werden.
+      I:\TrinityCore\_integration\src\server\game\Entities\Object\ObjectGuid.h(408,160):
+      oder "ObjectGuid ObjectGuid::Create(void)"
+          I:\TrinityCore\_integration\src\server\game\Spells\SpellEffects.cpp(6476,55):
+          „ObjectGuid ObjectGuid::Create(void)“ erwartet, dass 0 Argumente – 3 angegeben werden.
+  
+I:\TrinityCore\_integration\src\server\game\Spells\SpellEffects.cpp(6483,13): error C2027: Verwendung des undefinierten Typs "Battlenet::Account" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Spells/SpellEffects.cpp“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(75,7):
+      Siehe Deklaration von "Battlenet::Account"
+  
+I:\TrinityCore\_integration\src\server\game\Spells\SpellEffects.cpp(6485,13): error C2027: Verwendung des undefinierten Typs "Battlenet::Account" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Spells/SpellEffects.cpp“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(75,7):
+      Siehe Deklaration von "Battlenet::Account"
+  

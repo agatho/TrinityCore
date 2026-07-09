@@ -482,6 +482,13 @@ class TC_GAME_API Spell
         void EffectSetPlayerDataFlagAccount();
         void EffectSetPlayerDataFlagCharacter();
         void EffectEquipTransmogOutfit();
+        void EffectGiveHouseLevel();
+        void EffectCollectHousingDecor();
+        void EffectLearnHouseRoom();
+        void EffectLearnHouseExteriorComponent();
+        void EffectLearnHouseTheme();
+        void EffectLearnHouseRoomComponentTexture();
+        void EffectSetNeighborhoodInitiative();
 
         typedef std::unordered_set<Aura*> UsedSpellMods;
 
