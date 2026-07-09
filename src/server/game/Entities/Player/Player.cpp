@@ -28844,6 +28844,43 @@ void Player::DeleteEquipmentSet(uint64 id)
     }
 }
 
+void Player::AssignEquipmentSetSpec(uint64 id, int32 specIndex)
+{
+    auto itr = _equipmentSets.find(id);
+    if (itr == _equipmentSets.end() || itr->second.Data.Guid != id)
+        return;
+
+    // Equipment sets are auto-equipped on specialization change; the assignment only makes
+    // sense for a real gear set, not for a transmog outfit.
+    if (itr->second.Data.Type != EquipmentSetInfo::EQUIPMENT)
+        return;
+
+    auto markChanged = [](EquipmentSetInfo& set)
+    {
+        if (set.State != EQUIPMENT_SET_NEW)
+            set.State = EQUIPMENT_SET_CHANGED;
+    };
+
+    if (specIndex >= 0)
+    {
+        // Only one equipment set may be auto-equipped per specialization: clear the
+        // assignment from any other set currently bound to this spec so state stays consistent.
+        for (auto& [otherGuid, otherSet] : _equipmentSets)
+        {
+            if (otherGuid != id && otherSet.Data.AssignedSpecIndex == specIndex)
+            {
+                otherSet.Data.AssignedSpecIndex.reset();
+                markChanged(otherSet);
+            }
+        }
+        itr->second.Data.AssignedSpecIndex = specIndex;
+    }
+    else
+        itr->second.Data.AssignedSpecIndex.reset();
+
+    markChanged(itr->second);
+}
+
 void Player::RemoveAtLoginFlag(AtLoginFlags flags, bool persist /*= false*/)
 {
     m_atLoginFlags &= ~flags;
