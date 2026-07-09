@@ -1076,6 +1076,115 @@ Instance.IgnoreLevel = 0
 Instance.IgnoreRaid = 0
 
 #
+#    ChallengeMode.SeasonId
+#        Description: Active Mythic Keystone season (MythicPlusSeason.db2 ID). Selects which reward-level rows and
+#                     season pool apply. 0 = auto-detect the latest-started season of the highest expansion.
+#        Default:     0 - (auto-detect)
+
+ChallengeMode.SeasonId = 0
+
+#
+#    ChallengeMode.AffixSchedule
+#        Description: This week's Keystone affixes (KeystoneAffix.db2 IDs), comma-separated, lowest level band first.
+#                     Advertised to the client via SMSG_MYTHIC_PLUS_CURRENT_AFFIXES and applied to new runs. There is
+#                     no DB2 rotation table, so the weekly schedule is set here. Example: "10,7,124" (Fortified, Bolstering, Storming).
+#        Default:     "" - (no affixes)
+
+ChallengeMode.AffixSchedule = ""
+
+#
+#    ChallengeMode.AffixLevelBands
+#        Description: Keystone levels at which each successive affix in ChallengeMode.AffixSchedule turns on,
+#                     comma-separated and parallel to that list. Example: "2,4,7" activates the 1st affix at +2,
+#                     the 2nd at +4, the 3rd at +7. Missing/short entries default to level 0 (always on).
+#        Default:     "" - (all listed affixes always on)
+
+ChallengeMode.AffixLevelBands = ""
+
+#
+#    ChallengeMode.Affix.Fortified.* / ChallengeMode.Affix.Tyrannical.*
+#        Description: Extra creature health/damage multipliers applied on top of the per-level keystone
+#                     scaling when the Fortified (non-boss enemies) or Tyrannical (bosses) affix is active.
+#                     These are the client's affix effect, which is hardcoded client-side (not in DB2 or a
+#                     GlobalCurve), so they are exposed as tunables. Defaults are current-patch values;
+#                     adjust to match the live season. 1.0 = no change.
+#        Default:     Fortified.Health = 1.20, Fortified.Damage = 1.30
+#                     Tyrannical.Health = 1.30, Tyrannical.Damage = 1.15
+
+ChallengeMode.Affix.Fortified.Health = 1.20
+ChallengeMode.Affix.Fortified.Damage = 1.30
+ChallengeMode.Affix.Tyrannical.Health = 1.30
+ChallengeMode.Affix.Tyrannical.Damage = 1.15
+
+#
+#    ChallengeMode.Affix.<Name>.SpellId
+#        Description: Effect spell cast for each behavioural affix. Bolstering empowers nearby surviving
+#                     non-boss enemies on a trash death; Bursting stacks a damage-over-time on the party;
+#                     Sanguine drops a lingering ichor pool. These are Blizzard affix spells and must exist
+#                     in the loaded Spell.db2 - the server guards on the spell existing, so an unknown/0 id
+#                     is a safe no-op. Defaults are the long-stable ids; verify them against the live build.
+#        Default:     Bolstering = 209859, Bursting = 240443, Sanguine = 226489,
+#                     Raging = 228318, Grievous = 240559
+
+ChallengeMode.Affix.Bolstering.SpellId = 209859
+ChallengeMode.Affix.Bursting.SpellId = 240443
+ChallengeMode.Affix.Sanguine.SpellId = 226489
+ChallengeMode.Affix.Raging.SpellId = 228318
+ChallengeMode.Affix.Grievous.SpellId = 240559
+
+#
+#    ChallengeMode.Affix.<Name>.CreatureId
+#        Description: Summoned-add creature entry for a spawn affix. Spiteful summons a Spiteful Shade on each
+#                     non-boss death; the shade fixates a survivor and decays. The creature entry AND its Blizzlike
+#                     AI must exist in the world DB (SummonCreature no-ops on an absent entry). 0 = disabled.
+#                     Incorporeal + Afflicted spawn periodically while in combat (near a random fighting player).
+#                     Verify the entries for the live build; Afflicted defaults to 0 (no confirmed entry).
+#        Default:     Spiteful = 174773 (Spiteful Shade), Incorporeal = 204560 (Incorporeal Being), Afflicted = 0
+
+ChallengeMode.Affix.Spiteful.CreatureId = 174773
+ChallengeMode.Affix.Incorporeal.CreatureId = 204560
+ChallengeMode.Affix.Afflicted.CreatureId = 0
+
+#
+#    ChallengeMode.Crest.*
+#        Description: End-of-run reward. On completion each player is granted Amount crests of the tier whose
+#                     MaxLevel covers the keystone level (Veteran <= 3, Champion <= 6, Hero <= 9, else Myth).
+#                     CurrencyIds are the Midnight Season 1 Dawncrests from CurrencyTypes.db2; the grant no-ops
+#                     if the currency does not exist on this build. Set an Id to 0 to disable that tier's grant.
+#                     Amount and the tier breakpoints are season tuning - adjust to match the live season.
+#        Default:     Amount = 10; Veteran 3341/<=3, Champion 3343/<=6, Hero 3345/<=9, Myth 3347/10+
+
+ChallengeMode.Crest.Amount = 10
+ChallengeMode.Crest.Veteran.CurrencyId = 3341
+ChallengeMode.Crest.Veteran.MaxLevel = 3
+ChallengeMode.Crest.Champion.CurrencyId = 3343
+ChallengeMode.Crest.Champion.MaxLevel = 6
+ChallengeMode.Crest.Hero.CurrencyId = 3345
+ChallengeMode.Crest.Hero.MaxLevel = 9
+ChallengeMode.Crest.Myth.CurrencyId = 3347
+
+#
+#    ChallengeMode.Reward.LootId
+#        Description: reference_loot_template entry rolled as the end-of-run gear reward (personal loot, one roll
+#                     per player). The item POOL is server content you provide in that loot table; the item LEVEL
+#                     is scaled automatically to the keystone level (ItemContext MythicPlus_End_of_Run). Use loot
+#                     groups / conditions there for per-dungeon pools. 0 disables the gear drop (crest still awarded).
+#        Default:     0 - (Disabled)
+#
+
+ChallengeMode.Reward.LootId = 0
+
+#
+#    ChallengeMode.Vault.LootId
+#        Description: reference_loot_template entry rolled for Great Vault reward options (one item previewed per
+#                     unlocked slot, granted on claim). Same as ChallengeMode.Reward.LootId but scaled to the vault
+#                     (Jackpot) item level. 0 disables vault rewards; weekly progress is still tracked and shown.
+#        Default:     0 - (Disabled)
+#
+
+ChallengeMode.Vault.LootId = 0
+
+#
 #    Instance.UnloadDelay
 #        Description: Time (in milliseconds) before instance maps are unloaded from memory if no
 #                     characters are inside.

@@ -55,6 +55,7 @@
 #include "GameObjectModel.h"
 #include "GameTables.h"
 #include "GameTime.h"
+#include "ChallengeModeMgr.h"
 #include "GarrisonMgr.h"
 #include "GitRevision.h"
 #include "GridNotifiersImpl.h"
@@ -1917,6 +1918,9 @@ bool World::SetInitialWorldSettings()
 
     TC_LOG_INFO("server.loading", "Loading garrison info...");
     sGarrisonMgr.Initialize();
+
+    TC_LOG_INFO("server.loading", "Loading Mythic+ (Challenge Mode) data...");
+    sChallengeModeMgr.Initialize();
 
     ///- Handle outdated emails (delete/return)
     TC_LOG_INFO("server.loading", "Returning old mails...");

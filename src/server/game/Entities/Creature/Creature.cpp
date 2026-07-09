@@ -18,6 +18,8 @@
 #include "Creature.h"
 #include "BattlegroundMgr.h"
 #include "CellImpl.h"
+#include "ChallengeMode.h"
+#include "ChallengeModeMgr.h"
 #include "CharmInfo.h"
 #include "CombatPackets.h"
 #include "Containers.h"
@@ -35,6 +37,7 @@
 #include "Log.h"
 #include "Loot.h"
 #include "LootMgr.h"
+#include "Map.h"
 #include "MapManager.h"
 #include "MapUtils.h"
 #include "MiscPackets.h"
@@ -3100,7 +3103,19 @@ uint64 Creature::GetMaxHealthByLevel(uint8 level, uint32 contentTuningId) const
     CreatureTemplate const* cInfo = GetCreatureTemplate();
     CreatureDifficulty const* creatureDifficulty = GetCreatureDifficulty();
     double baseHealth = sDB2Manager.EvaluateExpectedStat(ExpectedStatType::CreatureHealth, level, creatureDifficulty->GetHealthScalingExpansion(), contentTuningId, Classes(cInfo->unit_class), 0);
-    return std::ceil(baseHealth * creatureDifficulty->HealthModifier);
+    double health = baseHealth * creatureDifficulty->HealthModifier;
+
+    // Mythic Keystone: scale creature health by the per-level challenge curve (GlobalCurve ChallengeModeHealth).
+    if (InstanceMap* instanceMap = GetMap()->ToInstanceMap())
+        if (ChallengeMode* challenge = instanceMap->GetChallengeMode())
+            if (uint32 keystoneLevel = challenge->GetKeystoneLevel())
+            {
+                health *= sChallengeModeMgr.GetHealthMultiplier(keystoneLevel);
+                // Fortified (non-boss) / Tyrannical (boss) scale on top of the per-level curve.
+                health *= sChallengeModeMgr.GetAffixHealthMultiplier(challenge->GetAffixes(), IsDungeonBoss());
+            }
+
+    return std::ceil(health);
 }
 
 float Creature::GetHealthMultiplierForTarget(WorldObject const* target) const
@@ -3124,7 +3139,19 @@ float Creature::GetBaseDamageForLevel(uint8 level, uint32 contentTuningId) const
 {
     CreatureTemplate const* cInfo = GetCreatureTemplate();
     CreatureDifficulty const* creatureDifficulty = GetCreatureDifficulty();
-    return sDB2Manager.EvaluateExpectedStat(ExpectedStatType::CreatureAutoAttackDps, level, creatureDifficulty->GetHealthScalingExpansion(), contentTuningId, Classes(cInfo->unit_class), 0);
+    float baseDamage = sDB2Manager.EvaluateExpectedStat(ExpectedStatType::CreatureAutoAttackDps, level, creatureDifficulty->GetHealthScalingExpansion(), contentTuningId, Classes(cInfo->unit_class), 0);
+
+    // Mythic Keystone: scale creature damage by the per-level challenge curve (GlobalCurve ChallengeModeDamage).
+    if (InstanceMap* instanceMap = GetMap()->ToInstanceMap())
+        if (ChallengeMode* challenge = instanceMap->GetChallengeMode())
+            if (uint32 keystoneLevel = challenge->GetKeystoneLevel())
+            {
+                baseDamage *= sChallengeModeMgr.GetDamageMultiplier(keystoneLevel);
+                // Fortified (non-boss) / Tyrannical (boss) scale on top of the per-level curve.
+                baseDamage *= sChallengeModeMgr.GetAffixDamageMultiplier(challenge->GetAffixes(), IsDungeonBoss());
+            }
+
+    return baseDamage;
 }
 
 float Creature::GetDamageMultiplierForTarget(WorldObject const* target) const

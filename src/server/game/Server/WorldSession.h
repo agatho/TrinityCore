@@ -257,6 +257,17 @@ namespace WorldPackets
         class CalendarComplain;
     }
 
+    namespace ChallengeMode
+    {
+        class RequestMythicPlusSeasonData;
+        class RequestMythicPlusAffixes;
+        class StartChallengeMode;
+        class ResetChallengeMode;
+        class MythicPlusRequestMapStats;
+        class RequestWeeklyRewards;
+        class ClaimWeeklyReward;
+    }
+
     namespace Character
     {
         struct CharacterCreateInfo;
@@ -2080,6 +2091,15 @@ class TC_GAME_API WorldSession
         // Compact Unit Frames (4.x)
         void HandleSaveCUFProfiles(WorldPackets::Misc::SaveCUFProfiles& packet);
         void SendLoadCUFProfiles();
+
+        // Challenge Mode (Mythic+)
+        void HandleRequestMythicPlusSeasonData(WorldPackets::ChallengeMode::RequestMythicPlusSeasonData& requestMythicPlusSeasonData);
+        void HandleRequestMythicPlusAffixes(WorldPackets::ChallengeMode::RequestMythicPlusAffixes& requestMythicPlusAffixes);
+        void HandleStartChallengeMode(WorldPackets::ChallengeMode::StartChallengeMode& startChallengeMode);
+        void HandleResetChallengeMode(WorldPackets::ChallengeMode::ResetChallengeMode& resetChallengeMode);
+        void HandleMythicPlusRequestMapStats(WorldPackets::ChallengeMode::MythicPlusRequestMapStats& request);
+        void HandleRequestWeeklyRewards(WorldPackets::ChallengeMode::RequestWeeklyRewards& request);
+        void HandleClaimWeeklyReward(WorldPackets::ChallengeMode::ClaimWeeklyReward& claim);
 
         // Garrison
         void HandleGetGarrisonInfo(WorldPackets::Garrison::GetGarrisonInfo& getGarrisonInfo);

@@ -65,6 +65,7 @@
 #include "GameObjectAI.h"
 #include "Garrison.h"
 #include "GarrisonMgr.h"
+#include "MythicPlusData.h"
 #include "GitRevision.h"
 #include "GossipDef.h"
 #include "GridNotifiers.h"
@@ -18989,6 +18990,11 @@ bool Player::LoadFromDB(ObjectGuid guid, CharacterDatabaseQueryHolder const& hol
         holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_GARRISON_ARCHIVED_MISSIONS)))
         _garrisons[garrison->GetType()] = std::move(garrison);
 
+    _mythicPlusData = std::make_unique<MythicPlusData>(this);
+    _mythicPlusData->LoadFromDB(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_MYTHIC_PLUS));
+    _mythicPlusData->LoadWeeklyFromDB(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_MYTHIC_PLUS_WEEKLY));
+    _mythicPlusData->LoadVaultFromDB(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_MYTHIC_PLUS_VAULT));
+
     _InitHonorLevelOnLoadFromDB(fields.honor, fields.honorLevel);
 
     _restMgr->LoadRestBonus(REST_TYPE_HONOR, fields.honorRestState, fields.honorRestBonus);
@@ -21311,6 +21317,9 @@ void Player::SaveToDB(LoginDatabaseTransaction loginTransaction, CharacterDataba
     _SaveCharacterBankTabSettings(trans);
     for (auto const& [type, garrison] : _garrisons)
         garrison->SaveToDB(trans);
+
+    if (_mythicPlusData)
+        _mythicPlusData->SaveToDB(trans);
 
     // check if stats should only be saved on logout
     // save stats can be out of transaction

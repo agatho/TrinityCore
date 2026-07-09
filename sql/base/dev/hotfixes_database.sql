@@ -134,7 +134,7 @@ CREATE TABLE `adventure_journal` (
   `ButtonText` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
   `RewardDescription` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
   `ContinueDescription` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
-  `Type` tinyint unsigned NOT NULL DEFAULT '0',
+  `Type` tinyint NOT NULL DEFAULT '0',
   `PlayerConditionID` int unsigned NOT NULL DEFAULT '0',
   `Flags` int NOT NULL DEFAULT '0',
   `ButtonActionType` tinyint unsigned NOT NULL DEFAULT '0',
@@ -1094,7 +1094,7 @@ CREATE TABLE `barber_shop_style` (
   `ID` int unsigned NOT NULL DEFAULT '0',
   `DisplayName` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
   `Description` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
-  `Type` tinyint unsigned NOT NULL DEFAULT '0',
+  `Type` tinyint NOT NULL DEFAULT '0',
   `CostModifier` float NOT NULL DEFAULT '0',
   `Race` tinyint NOT NULL DEFAULT '0',
   `Sex` tinyint NOT NULL DEFAULT '0',
@@ -2945,7 +2945,7 @@ DROP TABLE IF EXISTS `curve`;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `curve` (
   `ID` int unsigned NOT NULL DEFAULT '0',
-  `Type` tinyint unsigned NOT NULL DEFAULT '0',
+  `Type` tinyint NOT NULL DEFAULT '0',
   `Flags` int NOT NULL DEFAULT '0',
   `VerifiedBuild` int NOT NULL DEFAULT '0',
   PRIMARY KEY (`ID`,`VerifiedBuild`)
@@ -4779,7 +4779,7 @@ CREATE TABLE `item_bonus` (
   `Value3` int NOT NULL DEFAULT '0',
   `Value4` int NOT NULL DEFAULT '0',
   `ParentItemBonusListID` smallint unsigned NOT NULL DEFAULT '0',
-  `Type` tinyint unsigned NOT NULL DEFAULT '0',
+  `Type` tinyint NOT NULL DEFAULT '0',
   `OrderIndex` tinyint unsigned NOT NULL DEFAULT '0',
   `VerifiedBuild` int NOT NULL DEFAULT '0',
   PRIMARY KEY (`ID`,`VerifiedBuild`)
@@ -5857,7 +5857,7 @@ CREATE TABLE `journal_encounter_section` (
   `ParentSectionID` smallint unsigned NOT NULL DEFAULT '0',
   `FirstChildSectionID` smallint unsigned NOT NULL DEFAULT '0',
   `NextSiblingSectionID` smallint unsigned NOT NULL DEFAULT '0',
-  `Type` tinyint unsigned NOT NULL DEFAULT '0',
+  `Type` tinyint NOT NULL DEFAULT '0',
   `IconCreatureDisplayInfoID` int unsigned NOT NULL DEFAULT '0',
   `UiModelSceneID` int NOT NULL DEFAULT '0',
   `SpellID` int NOT NULL DEFAULT '0',
@@ -7040,7 +7040,7 @@ DROP TABLE IF EXISTS `path`;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `path` (
   `ID` int unsigned NOT NULL DEFAULT '0',
-  `Type` tinyint unsigned NOT NULL DEFAULT '0',
+  `Type` tinyint NOT NULL DEFAULT '0',
   `SplineType` tinyint unsigned NOT NULL DEFAULT '0',
   `Red` tinyint unsigned NOT NULL DEFAULT '0',
   `Green` tinyint unsigned NOT NULL DEFAULT '0',
@@ -10307,7 +10307,7 @@ CREATE TABLE `trait_edge` (
   `VisualStyle` int NOT NULL DEFAULT '0',
   `LeftTraitNodeID` int unsigned NOT NULL DEFAULT '0',
   `RightTraitNodeID` int NOT NULL DEFAULT '0',
-  `Type` tinyint unsigned NOT NULL DEFAULT '0',
+  `Type` tinyint NOT NULL DEFAULT '0',
   `VerifiedBuild` int NOT NULL DEFAULT '0',
   PRIMARY KEY (`ID`,`VerifiedBuild`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -10325,7 +10325,7 @@ CREATE TABLE `trait_node` (
   `TraitTreeID` int unsigned NOT NULL DEFAULT '0',
   `PosX` int NOT NULL DEFAULT '0',
   `PosY` int NOT NULL DEFAULT '0',
-  `Type` tinyint unsigned NOT NULL DEFAULT '0',
+  `Type` tinyint NOT NULL DEFAULT '0',
   `Flags` int NOT NULL DEFAULT '0',
   `TraitSubTreeID` int NOT NULL DEFAULT '0',
   `VerifiedBuild` int NOT NULL DEFAULT '0',
@@ -10849,7 +10849,7 @@ CREATE TABLE `ui_map` (
   `ParentUiMapID` int unsigned NOT NULL DEFAULT '0',
   `Flags` int NOT NULL DEFAULT '0',
   `System` tinyint unsigned NOT NULL DEFAULT '0',
-  `Type` tinyint unsigned NOT NULL DEFAULT '0',
+  `Type` tinyint NOT NULL DEFAULT '0',
   `BountySetID` int NOT NULL DEFAULT '0',
   `BountyDisplayLocation` int unsigned NOT NULL DEFAULT '0',
   `VisibilityPlayerConditionID` int NOT NULL DEFAULT '0',
@@ -11395,6 +11395,23 @@ CREATE TABLE `warband_scene_locale` (
  PARTITION ruRU VALUES IN ('ruRU') ENGINE = InnoDB,
  PARTITION zhCN VALUES IN ('zhCN') ENGINE = InnoDB,
  PARTITION zhTW VALUES IN ('zhTW') ENGINE = InnoDB) */;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `weekly_reward_chest_threshold`
+--
+
+DROP TABLE IF EXISTS `weekly_reward_chest_threshold`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `weekly_reward_chest_threshold` (
+  `ID` int unsigned NOT NULL DEFAULT '0',
+  `Type` tinyint NOT NULL DEFAULT '0',
+  `Threshold` int NOT NULL DEFAULT '0',
+  `Index` int NOT NULL DEFAULT '0',
+  `VerifiedBuild` int NOT NULL DEFAULT '0',
+  PRIMARY KEY (`ID`,`VerifiedBuild`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --

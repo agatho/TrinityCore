@@ -24,6 +24,7 @@
 #include "BattlegroundScore.h"
 #include "BattlePetMgr.h"
 #include "CellImpl.h"
+#include "ChallengeMode.h"
 #include "CharacterCache.h"
 #include "CharmInfo.h"
 #include "ChatPackets.h"
@@ -9264,6 +9265,16 @@ void Unit::setDeathState(DeathState s)
         // players in instance don't have ZoneScript, but they have InstanceScript
         if (ZoneScript* zoneScript = GetZoneScript() ? GetZoneScript() : GetInstanceScript())
             zoneScript->OnUnitDeath(this);
+
+        // Mythic Keystone: player deaths add a time penalty; non-boss enemy deaths drive on-death affixes.
+        if (InstanceMap* instanceMap = GetMap()->ToInstanceMap())
+            if (ChallengeMode* challenge = instanceMap->GetChallengeMode())
+            {
+                if (IsPlayer())
+                    challenge->OnPlayerDeath(ToPlayer());
+                else if (IsCreature())
+                    challenge->OnCreatureDeath(ToCreature());
+            }
     }
     else if (s == JUST_RESPAWNED)
         RemoveUnitFlag(UNIT_FLAG_SKINNABLE); // clear skinnable for creature and player (at battleground)

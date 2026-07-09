@@ -16,6 +16,7 @@
  */
 
 #include "InstanceScript.h"
+#include "ChallengeMode.h"
 #include "AreaBoundary.h"
 #include "Creature.h"
 #include "CreatureAI.h"
@@ -480,6 +481,30 @@ bool InstanceScript::SetBossState(uint32 id, EncounterState state)
                 UpdateMinionState(minion, state);
 
         UpdateSpawnGroups();
+
+        // Mythic Keystone: the run completes once every encounter in the instance is defeated.
+        if (state == DONE)
+        {
+            if (ChallengeMode* challenge = instance->GetChallengeMode())
+            {
+                if (challenge->IsActive())
+                {
+                    bool allDone = true;
+                    for (BossInfo const& boss : bosses)
+                    {
+                        if (boss.state != DONE)
+                        {
+                            allDone = false;
+                            break;
+                        }
+                    }
+
+                    if (allDone)
+                        challenge->Complete();
+                }
+            }
+        }
+
         return true;
     }
     return false;

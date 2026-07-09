@@ -80,6 +80,7 @@ class CinematicMgr;
 class Creature;
 class DynamicObject;
 class Garrison;
+class MythicPlusData;
 enum GarrisonType : int32;
 class Group;
 class Guild;
@@ -1022,6 +1023,9 @@ enum PlayerLoginQueryIndex
     PLAYER_LOGIN_QUERY_LOAD_CORPSE_LOCATION,
     PLAYER_LOGIN_QUERY_LOAD_PET_SLOTS,
     PLAYER_LOGIN_QUERY_LOAD_GARRISON,
+    PLAYER_LOGIN_QUERY_LOAD_MYTHIC_PLUS,
+    PLAYER_LOGIN_QUERY_LOAD_MYTHIC_PLUS_WEEKLY,
+    PLAYER_LOGIN_QUERY_LOAD_MYTHIC_PLUS_VAULT,
     PLAYER_LOGIN_QUERY_LOAD_GARRISON_BLUEPRINTS,
     PLAYER_LOGIN_QUERY_LOAD_GARRISON_BUILDINGS,
     PLAYER_LOGIN_QUERY_LOAD_GARRISON_FOLLOWERS,
@@ -2931,6 +2935,7 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         Garrison* GetGarrison() const { return GetGarrison(GarrisonType(2) /*GARRISON_TYPE_GARRISON*/); }
         Garrison* GetGarrison(GarrisonType type) const;
         std::unordered_map<int32, std::unique_ptr<Garrison>> const& GetGarrisons() const { return _garrisons; }
+        MythicPlusData* GetMythicPlusData() const { return _mythicPlusData.get(); }
 
         // Covenant / Soulbind
         uint32 GetActiveCovenant() const { return m_activeCovenantId; }
@@ -3517,6 +3522,7 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         uint32 _activeCheats;
 
         std::unordered_map<int32 /*GarrisonType*/, std::unique_ptr<Garrison>> _garrisons;
+        std::unique_ptr<MythicPlusData> _mythicPlusData;
 
         bool _advancedCombatLoggingEnabled;
 
