@@ -323,6 +323,11 @@ DB2Storage<PathEntry>                           sPathStore("Path.db2", &PathLoad
 DB2Storage<PathNodeEntry>                       sPathNodeStore("PathNode.db2", &PathNodeLoadInfo::Instance);
 DB2Storage<PathPropertyEntry>                   sPathPropertyStore("PathProperty.db2", &PathPropertyLoadInfo::Instance);
 DB2Storage<PerksActivityEntry>                  sPerksActivityStore("PerksActivity.db2", &PerksActivityLoadInfo::Instance);
+DB2Storage<PerksActivityThresholdEntry>         sPerksActivityThresholdStore("PerksActivityThreshold.db2", &PerksActivityThresholdLoadInfo::Instance);
+DB2Storage<PerksActivityThresholdGroupEntry>    sPerksActivityThresholdGroupStore("PerksActivityThresholdGroup.db2", &PerksActivityThresholdGroupLoadInfo::Instance);
+DB2Storage<PerksVendorCategoryEntry>            sPerksVendorCategoryStore("PerksVendorCategory.db2", &PerksVendorCategoryLoadInfo::Instance);
+DB2Storage<PerksVendorItemEntry>                sPerksVendorItemStore("PerksVendorItem.db2", &PerksVendorItemLoadInfo::Instance);
+DB2Storage<PerksVendorItemXIntervalEntry>       sPerksVendorItemXIntervalStore("PerksVendorItemXInterval.db2", &PerksVendorItemXIntervalLoadInfo::Instance);
 DB2Storage<PhaseEntry>                          sPhaseStore("Phase.db2", &PhaseLoadInfo::Instance);
 DB2Storage<PhaseXPhaseGroupEntry>               sPhaseXPhaseGroupStore("PhaseXPhaseGroup.db2", &PhaseXPhaseGroupLoadInfo::Instance);
 DB2Storage<PlayerCompanionInfoEntry>            sPlayerCompanionInfoStore("PlayerCompanionInfo.db2", &PlayerCompanionInfoLoadInfo::Instance);
@@ -1028,6 +1033,11 @@ uint32 DB2Manager::LoadStores(std::string const& dataPath, LocaleConstant defaul
     LOAD_DB2(sPathNodeStore);
     LOAD_DB2(sPathPropertyStore);
     LOAD_DB2(sPerksActivityStore);
+    LOAD_DB2(sPerksActivityThresholdStore);
+    LOAD_DB2(sPerksActivityThresholdGroupStore);
+    LOAD_DB2(sPerksVendorCategoryStore);
+    LOAD_DB2(sPerksVendorItemStore);
+    LOAD_DB2(sPerksVendorItemXIntervalStore);
     LOAD_DB2(sPhaseStore);
     LOAD_DB2(sPhaseXPhaseGroupStore);
     LOAD_DB2(sPlayerCompanionInfoStore);

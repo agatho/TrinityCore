@@ -5352,6 +5352,75 @@ struct PerksActivityLoadInfo
     static constexpr DB2LoadInfo Instance{ Fields, 7, &PerksActivityMeta::Instance, HOTFIX_SEL_PERKS_ACTIVITY };
 };
 
+struct PerksActivityThresholdLoadInfo
+{
+    static constexpr DB2FieldMeta Fields[5] =
+    {
+        { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "BonusTendies" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "OrderIndex" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "Threshold" },
+        { .IsSigned = false, .Type = FT_INT, .Name = "PerksActivityThresholdGroupID" },
+    };
+
+    static constexpr DB2LoadInfo Instance{ Fields, 5, &PerksActivityThresholdMeta::Instance, HOTFIX_SEL_PERKS_ACTIVITY_THRESHOLD };
+};
+
+struct PerksActivityThresholdGroupLoadInfo
+{
+    static constexpr DB2FieldMeta Fields[3] =
+    {
+        { .IsSigned = false, .Type = FT_STRING, .Name = "Name" },
+        { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "PerksMonth" },
+    };
+
+    static constexpr DB2LoadInfo Instance{ Fields, 3, &PerksActivityThresholdGroupMeta::Instance, HOTFIX_SEL_PERKS_ACTIVITY_THRESHOLD_GROUP };
+};
+
+struct PerksVendorCategoryLoadInfo
+{
+    static constexpr DB2FieldMeta Fields[4] =
+    {
+        { .IsSigned = false, .Type = FT_STRING, .Name = "DisplayName" },
+        { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "PerksVendorType" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "DefaultUIModelSceneID" },
+    };
+
+    static constexpr DB2LoadInfo Instance{ Fields, 4, &PerksVendorCategoryMeta::Instance, HOTFIX_SEL_PERKS_VENDOR_CATEGORY };
+};
+
+struct PerksVendorItemLoadInfo
+{
+    static constexpr DB2FieldMeta Fields[9] =
+    {
+        { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
+        { .IsSigned = true, .Type = FT_BYTE, .Name = "PerksVendorCategoryID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "Field_10_0_5_47118_002" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "ItemID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "Field_10_0_5_47118_004" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "CreatureDisplayInfoID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "Cost" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "UiModelSceneID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "UiGroupInfo" },
+    };
+
+    static constexpr DB2LoadInfo Instance{ Fields, 9, &PerksVendorItemMeta::Instance, HOTFIX_SEL_PERKS_VENDOR_ITEM };
+};
+
+struct PerksVendorItemXIntervalLoadInfo
+{
+    static constexpr DB2FieldMeta Fields[3] =
+    {
+        { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "PerksVendorItemID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "PerksActivityThresholdID" },
+    };
+
+    static constexpr DB2LoadInfo Instance{ Fields, 3, &PerksVendorItemXIntervalMeta::Instance, HOTFIX_SEL_PERKS_VENDOR_ITEM_X_INTERVAL };
+};
+
 struct PhaseLoadInfo
 {
     static constexpr DB2FieldMeta Fields[2] =

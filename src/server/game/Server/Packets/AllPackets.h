@@ -68,6 +68,7 @@
 #include "PacketUtilities.h"
 #include "PartyPackets.h"
 #include "PetPackets.h"
+#include "PerksProgramPackets.h"
 #include "PetitionPackets.h"
 #include "QueryPackets.h"
 #include "QuestPackets.h"

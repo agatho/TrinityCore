@@ -105,6 +105,16 @@ struct WarbandSceneCollectionItem
 
 using WarbandSceneCollectionContainer = std::map<uint32, WarbandSceneCollectionItem>;
 
+// A recorded Trading Post purchase (kept so a later refund knows the price paid and the exact
+// collectible to revoke, even after the vendor rotation no longer offers the item).
+struct PerksProgramPurchaseData
+{
+    int32 Price = 0;
+    uint32 PurchaseTime = 0;
+    int32 MountID = 0;   // mount teaching spell id, 0 if the reward was not a mount
+    int32 ToyID = 0;     // toy item id, 0 if the reward was not a toy
+};
+
 class TC_GAME_API CollectionMgr
 {
 public:
@@ -146,6 +156,13 @@ public:
 
     ToyBoxContainer const& GetAccountToys() const { return _toys; }
 
+    // Account-wide Perks Program (Trading Post) purchase history, used to authorise refunds.
+    void LoadPerksProgramPurchases(PreparedQueryResult result);
+    void AddPerksProgramPurchase(int32 perksVendorItemId, int32 price, int32 mountId, int32 toyId);
+    bool RemovePerksProgramPurchase(int32 perksVendorItemId);
+    PerksProgramPurchaseData const* GetPerksProgramPurchase(int32 perksVendorItemId) const;
+    std::unordered_map<int32, PerksProgramPurchaseData> const& GetPerksProgramPurchases() const { return _perksPurchases; }
+
     void OnItemAdded(Item* item);
 
     // Account-wide heirlooms
@@ -169,6 +186,8 @@ public:
     void MountSetFavorite(uint32 spellId, bool favorite);
     void MountClearFanfare(uint32 spellId);
     void SendSingleMountUpdate(std::pair<uint32, MountStatusFlags> mount);
+    // Revoke a mount (in-memory + un-learn spell + full mount resync + account DB). Returns false if not owned.
+    bool RemoveMount(uint32 spellId);
     MountContainer const& GetAccountMounts() const { return _mounts; }
 
     // Appearances
@@ -230,6 +249,7 @@ private:
     Trinity::Containers::FlatSet<int32> _transmogOutfits;
     WarbandSceneCollectionContainer _warbandScenes;
     std::unordered_map<uint32, uint32> _accountStoreItems;   // AccountStoreItem ID -> unix purchase time
+    std::unordered_map<int32, PerksProgramPurchaseData> _perksPurchases;   // perksVendorItemId -> purchase record
 };
 
 #endif // TRINITYCORE_COLLECTION_MGR_H

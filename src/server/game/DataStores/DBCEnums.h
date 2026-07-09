@@ -854,6 +854,7 @@ enum CurrencyConsts
 {
     CURRENCY_TYPE_ANCIENT_MANA    = 1155,
     CURRENCY_TYPE_AZERITE         = 1553,
+    CURRENCY_TYPE_TRADERS_TENDER  = 2032, // Trading Post / Perks Program currency
 
     CURRENCY_MAX_CAP_ANCIENT_MANA = 2000
 };
