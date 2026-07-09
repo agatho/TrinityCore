@@ -529,7 +529,7 @@ void OpcodeTable::InitializeClientOpcodes()
     DEFINE_HANDLER(CMSG_GUILD_BANK_UPDATE_TAB,                              STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleGuildBankUpdateTab);
     DEFINE_HANDLER(CMSG_GUILD_BANK_WITHDRAW_MONEY,                          STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleGuildBankWithdrawMoney);
     DEFINE_HANDLER(CMSG_GUILD_CHALLENGE_UPDATE_REQUEST,                     STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleGuildChallengeUpdateRequest);
-    DEFINE_HANDLER(CMSG_GUILD_CHANGE_NAME_REQUEST,                          STATUS_UNHANDLED, PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
+    DEFINE_HANDLER(CMSG_GUILD_CHANGE_NAME_REQUEST,                          STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleGuildChangeNameRequest);
     DEFINE_HANDLER(CMSG_GUILD_DECLINE_INVITATION,                           STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleGuildDeclineInvitation);
     DEFINE_HANDLER(CMSG_GUILD_DELETE,                                       STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleGuildDelete);
     DEFINE_HANDLER(CMSG_GUILD_DELETE_RANK,                                  STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleGuildDeleteRank);

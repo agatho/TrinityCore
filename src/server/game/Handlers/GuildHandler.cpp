@@ -607,3 +607,22 @@ void WorldSession::HandleGuildGetAchievementMembers(WorldPackets::Achievement::G
     if (Guild* guild = GetPlayer()->GetGuild())
         guild->HandleGetAchievementMembers(this, uint32(getAchievementMembers.AchievementID));
 }
+
+void WorldSession::HandleGuildChangeNameRequest(WorldPackets::Guild::GuildChangeNameRequest& packet)
+{
+    Guild* guild = GetPlayer()->GetGuild();
+    if (!guild)
+        return;
+
+    // Only the guild master may rename the guild.
+    if (guild->GetLeaderGUID() != GetPlayer()->GetGUID())
+        return;
+
+    // Reject a name already taken by another guild. Guild::SetName performs the remaining validation (non-empty,
+    // <= 24 chars, not reserved, valid charter name, actually changed) and, on success, persists the new name and
+    // broadcasts SMSG_GUILD_NAME_CHANGED to every member so their client reflects it.
+    if (sGuildMgr->GetGuildByName(packet.NewName))
+        return;
+
+    guild->SetName(packet.NewName);
+}
