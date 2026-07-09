@@ -40,7 +40,9 @@
 #include "QuestPools.h"
 #include "ReputationMgr.h"
 #include "ScriptMgr.h"
+#include "AreaPoiMgr.h"
 #include "World.h"
+#include "WorldQuestMgr.h"
 
 void WorldSession::HandleQuestgiverStatusQueryOpcode(WorldPackets::Quest::QuestGiverStatusQuery& packet)
 {
@@ -750,10 +752,14 @@ void WorldSession::HandleQuestgiverStatusMultipleQuery(WorldPackets::Quest::Ques
 void WorldSession::HandleRequestWorldQuestUpdate(WorldPackets::Quest::RequestWorldQuestUpdate& /*packet*/)
 {
     WorldPackets::Quest::WorldQuestUpdateResponse response;
+    sWorldQuestMgr->FillActiveWorldQuests(response.WorldQuestUpdates);
+    SendPacket(response.Write());
+}
 
-    /// @todo: 7.x Has to be implemented
-    //response.WorldQuestUpdates.push_back(WorldPackets::Quest::WorldQuestUpdateInfo(lastUpdate, questID, timer, variableID, value));
-
+void WorldSession::HandleRequestAreaPoiUpdate(WorldPackets::Quest::RequestAreaPoiUpdate& /*packet*/)
+{
+    WorldPackets::Quest::AreaPoiUpdateResponse response;
+    sAreaPoiMgr->FillActiveAreaPois(response.AreaPois);
     SendPacket(response.Write());
 }
 
