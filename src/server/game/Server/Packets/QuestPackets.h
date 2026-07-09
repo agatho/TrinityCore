@@ -955,6 +955,10 @@ namespace WorldPackets
         {
         public:
             explicit CloseQuestChoice(WorldPacket&& packet) : ClientPacket(CMSG_CLOSE_QUEST_CHOICE, std::move(packet)) { }
+
+            void Read() override { }
+        };
+
         // Quest Session packets
         // ============================================================
 
@@ -1004,6 +1008,8 @@ namespace WorldPackets
             ObjectGuid QuestGiverGUID;
             int32 QuestID = 0;
             int32 QuestFlags = 0;
+        };
+
         class QuestSessionRequestStop final : public ClientPacket
         {
         public:

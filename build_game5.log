@@ -1,0 +1,378 @@
+MSBuild-Version 17.14.23+b0019275e für .NET Framework
+
+  Recast.vcxproj -> I:\TrinityCore\_integration\build\dep\recastnavigation\Recast\Release\Recast.lib
+  Detour.vcxproj -> I:\TrinityCore\_integration\build\dep\recastnavigation\Detour\Release\Detour.lib
+  argon2.vcxproj -> I:\TrinityCore\_integration\build\dep\argon2\Release\argon2.lib
+  fmt.vcxproj -> I:\TrinityCore\_integration\build\dep\fmt\Release\fmt.lib
+  zlib.vcxproj -> I:\TrinityCore\_integration\build\dep\zlib\Release\zlib.lib
+  g3dlib.vcxproj -> I:\TrinityCore\_integration\build\dep\g3dlite\Release\g3dlib.lib
+  openssl_ed25519.vcxproj -> I:\TrinityCore\_integration\build\bin\Release\openssl_ed25519.dll
+  sfmt.vcxproj -> I:\TrinityCore\_integration\build\dep\SFMT\Release\sfmt.lib
+  protobuf.vcxproj -> I:\TrinityCore\_integration\build\dep\protobuf\Release\protobuf.lib
+  GitRevision.cpp
+  common.vcxproj -> I:\TrinityCore\_integration\build\src\common\Release\common.lib
+  network.vcxproj -> I:\TrinityCore\_integration\build\src\common\network\Release\trinity_network.lib
+  database.vcxproj -> I:\TrinityCore\_integration\build\src\server\database\Release\database.lib
+  mmaps_common.vcxproj -> I:\TrinityCore\_integration\build\src\common\mmaps_common\Release\mmaps_common.lib
+  proto.vcxproj -> I:\TrinityCore\_integration\build\src\server\proto\Release\proto.lib
+  shared.vcxproj -> I:\TrinityCore\_integration\build\src\server\shared\Release\shared.lib
+  cmake_pch.cxx
+I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(1835,14): error C2535: "void WorldSession::HandleCloseQuestChoice(WorldPackets::Quest::CloseQuestChoice &)": Memberfunktion bereits definiert oder deklariert [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(1830,14):
+      Siehe Deklaration von "WorldSession::HandleCloseQuestChoice"
+  
+I:\TrinityCore\_integration\src\server\game\Server\Packets\MiscPackets.h(1167,1): error C2059: Syntaxfehler: "}" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Server\Packets\MiscPackets.h(1167,1): error C2143: Syntaxfehler: Es fehlt ";" vor "}" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\src\server\game\Guilds\Guild.h(33,7): error C2365: "WorldPackets::Item": Erneute Definition; vorherige Definition war "Namespace". [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Entities\Item\Item.h(34,15):
+      Siehe Deklaration von "WorldPackets::Item"
+  
+I:\TrinityCore\_integration\src\server\game\Guilds\Guild.h(328,19): error C2869: "WorldPackets::Guild": Wurde bereits als Namespace definiert [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(461,15):
+      Siehe Deklaration von "WorldPackets::Guild"
+  
+I:\TrinityCore\_integration\dep\g3dlite\include\G3D\format.h(30,6): error C2039: "string" ist kein Member von "WorldPackets::std". [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+      C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\14.44.35207\include\cstdarg(20,1):
+      Siehe Deklaration von "WorldPackets::std"
+  
+I:\TrinityCore\_integration\dep\g3dlite\include\G3D\format.h(30,15): error C2143: Syntaxfehler: Es fehlt ";" vor "__cdecl" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\dep\g3dlite\include\G3D\format.h(37,6): error C2039: "string" ist kein Member von "WorldPackets::std". [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+      C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\14.44.35207\include\cstdarg(20,1):
+      Siehe Deklaration von "WorldPackets::std"
+  
+I:\TrinityCore\_integration\dep\g3dlite\include\G3D\format.h(37,6): error C2086: "int WorldPackets::G3D::string": Neudefinition [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+      I:\TrinityCore\_integration\dep\g3dlite\include\G3D\format.h(30,6):
+      Siehe Deklaration von "WorldPackets::G3D::string"
+  
+I:\TrinityCore\_integration\dep\g3dlite\include\G3D\format.h(37,13): error C2146: Syntaxfehler: Fehlendes ";" vor Bezeichner "vformat" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\dep\g3dlite\include\G3D\debugPrintf.h(24,45): error C2039: "string" ist kein Member von "WorldPackets::std". [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+      C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\14.44.35207\include\cstdarg(20,1):
+      Siehe Deklaration von "WorldPackets::std"
+  
+I:\TrinityCore\_integration\dep\g3dlite\include\G3D\debugPrintf.h(24,51): error C2143: Syntaxfehler: Es fehlt "," vor "&" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\dep\g3dlite\include\G3D\debugPrintf.h(44,6): error C2039: "string" ist kein Member von "WorldPackets::std". [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+      C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\14.44.35207\include\cstdarg(20,1):
+      Siehe Deklaration von "WorldPackets::std"
+  
+I:\TrinityCore\_integration\dep\g3dlite\include\G3D\debugPrintf.h(44,13): error C2143: Syntaxfehler: Es fehlt ";" vor "__cdecl" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\dep\g3dlite\include\G3D\debugPrintf.h(44,6): error C2086: "int WorldPackets::G3D::string": Neudefinition [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+      I:\TrinityCore\_integration\dep\g3dlite\include\G3D\format.h(30,6):
+      Siehe Deklaration von "WorldPackets::G3D::string"
+  
+I:\TrinityCore\_integration\dep\g3dlite\include\G3D\debugPrintf.h(45,6): error C2039: "string" ist kein Member von "WorldPackets::std". [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+      C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\14.44.35207\include\cstdarg(20,1):
+      Siehe Deklaration von "WorldPackets::std"
+  
+I:\TrinityCore\_integration\dep\g3dlite\include\G3D\debugPrintf.h(45,6): error C2086: "int WorldPackets::G3D::string": Neudefinition [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+      I:\TrinityCore\_integration\dep\g3dlite\include\G3D\format.h(30,6):
+      Siehe Deklaration von "WorldPackets::G3D::string"
+  
+I:\TrinityCore\_integration\dep\g3dlite\include\G3D\debugPrintf.h(45,13): error C2146: Syntaxfehler: Fehlendes ";" vor Bezeichner "consolePrint" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\dep\g3dlite\include\G3D\debugPrintf.h(45,37): error C2039: "string" ist kein Member von "WorldPackets::std". [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+      C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\14.44.35207\include\cstdarg(20,1):
+      Siehe Deklaration von "WorldPackets::std"
+  
+I:\TrinityCore\_integration\dep\g3dlite\include\G3D\debugPrintf.h(56,6): error C2039: "string" ist kein Member von "WorldPackets::std". [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+      C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\14.44.35207\include\cstdarg(20,1):
+      Siehe Deklaration von "WorldPackets::std"
+  
+I:\TrinityCore\_integration\dep\g3dlite\include\G3D\debugPrintf.h(56,13): error C2143: Syntaxfehler: Es fehlt ";" vor "__cdecl" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\dep\g3dlite\include\G3D\debugPrintf.h(56,6): error C2086: "int WorldPackets::G3D::string": Neudefinition [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+      I:\TrinityCore\_integration\dep\g3dlite\include\G3D\format.h(30,6):
+      Siehe Deklaration von "WorldPackets::G3D::string"
+  
+I:\TrinityCore\_integration\dep\g3dlite\include\G3D\debugPrintf.h(57,6): error C2039: "string" ist kein Member von "WorldPackets::std". [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+      C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\14.44.35207\include\cstdarg(20,1):
+      Siehe Deklaration von "WorldPackets::std"
+  
+I:\TrinityCore\_integration\dep\g3dlite\include\G3D\debugPrintf.h(57,6): error C2086: "int WorldPackets::G3D::string": Neudefinition [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+      I:\TrinityCore\_integration\dep\g3dlite\include\G3D\format.h(30,6):
+      Siehe Deklaration von "WorldPackets::G3D::string"
+  
+I:\TrinityCore\_integration\dep\g3dlite\include\G3D\debugPrintf.h(57,13): error C2146: Syntaxfehler: Fehlendes ";" vor Bezeichner "debugPrint" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\dep\g3dlite\include\G3D\debugPrintf.h(57,35): error C2039: "string" ist kein Member von "WorldPackets::std". [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+      C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\14.44.35207\include\cstdarg(20,1):
+      Siehe Deklaration von "WorldPackets::std"
+  
+I:\TrinityCore\_integration\dep\g3dlite\include\G3D\debugAssert.h(84,16): error C2039: "string" ist kein Member von "WorldPackets::std". [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+      C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\14.44.35207\include\cstdarg(20,1):
+      Siehe Deklaration von "WorldPackets::std"
+  
+I:\TrinityCore\_integration\dep\g3dlite\include\G3D\debugAssert.h(84,22): error C2143: Syntaxfehler: Es fehlt "," vor "&" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\dep\g3dlite\include\G3D\debugAssert.h(211,16): error C2039: "string" ist kein Member von "WorldPackets::std". [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+      C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\14.44.35207\include\cstdarg(20,1):
+      Siehe Deklaration von "WorldPackets::std"
+  
+I:\TrinityCore\_integration\dep\g3dlite\include\G3D\debugAssert.h(211,22): error C2143: Syntaxfehler: Es fehlt "," vor "&" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\dep\g3dlite\include\G3D\debugAssert.h(218,16): error C2039: "string" ist kein Member von "WorldPackets::std". [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+      C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\14.44.35207\include\cstdarg(20,1):
+      Siehe Deklaration von "WorldPackets::std"
+  
+I:\TrinityCore\_integration\dep\g3dlite\include\G3D\debugAssert.h(218,22): error C2143: Syntaxfehler: Es fehlt "," vor "&" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\dep\g3dlite\include\G3D\g3dmath.h(307,22): error C3878: Syntaxfehler: Unerwartetes Token ">" nach "simple-type-specifier" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+      I:\TrinityCore\_integration\dep\g3dlite\include\G3D\g3dmath.h(307,22):
+      Es fehlt einer von: '(' '{' ?
+  
+I:\TrinityCore\_integration\dep\g3dlite\include\G3D\g3dmath.h(307,22): error C3878: Syntaxfehler: Unerwartetes Token ">" nach "expression" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\dep\g3dlite\include\G3D\g3dmath.h(307,25): error C2760: Syntaxfehler: „,“ wurde hier nicht erwartet, sondern „;“. [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\dep\g3dlite\include\G3D\g3dmath.h(307,25): error C3878: Syntaxfehler: Unerwartetes Token "," nach "jump-statement" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\dep\g3dlite\include\G3D\g3dmath.h(307,28): error C2760: Syntaxfehler: „)“ wurde hier nicht erwartet, sondern „;“. [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\dep\g3dlite\include\G3D\g3dmath.h(307,28): error C3878: Syntaxfehler: Unerwartetes Token ")" nach "expression-statement" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\dep\g3dlite\include\G3D\g3dmath.h(312,22): error C3878: Syntaxfehler: Unerwartetes Token ">" nach "simple-type-specifier" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+      I:\TrinityCore\_integration\dep\g3dlite\include\G3D\g3dmath.h(312,22):
+      Es fehlt einer von: '(' '{' ?
+  
+I:\TrinityCore\_integration\dep\g3dlite\include\G3D\g3dmath.h(312,22): error C3878: Syntaxfehler: Unerwartetes Token ">" nach "expression" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+      I:\TrinityCore\_integration\dep\g3dlite\include\G3D\g3dmath.h(312,37):
+      Die Analyse wird hier fortgesetzt
+  
+I:\TrinityCore\_integration\dep\g3dlite\include\G3D\g3dmath.h(312,37): error C2760: Syntaxfehler: „,“ wurde hier nicht erwartet, sondern „;“. [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\dep\g3dlite\include\G3D\g3dmath.h(312,37): error C3878: Syntaxfehler: Unerwartetes Token "," nach "jump-statement" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\dep\g3dlite\include\G3D\g3dmath.h(312,40): error C2760: Syntaxfehler: „)“ wurde hier nicht erwartet, sondern „;“. [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\dep\g3dlite\include\G3D\g3dmath.h(312,40): error C3878: Syntaxfehler: Unerwartetes Token ")" nach "expression-statement" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\dep\g3dlite\include\G3D\g3dmath.h(312,44): error C2760: Syntaxfehler: „)“ wurde hier nicht erwartet, sondern „;“. [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\dep\g3dlite\include\G3D\g3dmath.h(312,44): error C3878: Syntaxfehler: Unerwartetes Token ")" nach "expression-statement" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\dep\g3dlite\include\G3D\g3dmath.h(317,22): error C3878: Syntaxfehler: Unerwartetes Token ">" nach "simple-type-specifier" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+      I:\TrinityCore\_integration\dep\g3dlite\include\G3D\g3dmath.h(317,22):
+      Es fehlt einer von: '(' '{' ?
+  
+I:\TrinityCore\_integration\dep\g3dlite\include\G3D\g3dmath.h(317,22): error C3878: Syntaxfehler: Unerwartetes Token ">" nach "expression" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+      I:\TrinityCore\_integration\dep\g3dlite\include\G3D\g3dmath.h(317,37):
+      Die Analyse wird hier fortgesetzt
+  
+I:\TrinityCore\_integration\dep\g3dlite\include\G3D\g3dmath.h(317,37): error C2760: Syntaxfehler: „,“ wurde hier nicht erwartet, sondern „;“. [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\dep\g3dlite\include\G3D\g3dmath.h(317,37): error C3878: Syntaxfehler: Unerwartetes Token "," nach "jump-statement" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\dep\g3dlite\include\G3D\g3dmath.h(317,40): error C2760: Syntaxfehler: „)“ wurde hier nicht erwartet, sondern „;“. [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\dep\g3dlite\include\G3D\g3dmath.h(317,40): error C3878: Syntaxfehler: Unerwartetes Token ")" nach "expression-statement" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\dep\g3dlite\include\G3D\g3dmath.h(317,53): error C3878: Syntaxfehler: Unerwartetes Token ">" nach "simple-type-specifier" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+      I:\TrinityCore\_integration\dep\g3dlite\include\G3D\g3dmath.h(317,53):
+      Es fehlt einer von: '(' '{' ?
+  
+I:\TrinityCore\_integration\dep\g3dlite\include\G3D\g3dmath.h(317,53): error C3878: Syntaxfehler: Unerwartetes Token ">" nach "expression" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\dep\g3dlite\include\G3D\g3dmath.h(317,56): error C2760: Syntaxfehler: „,“ wurde hier nicht erwartet, sondern „;“. [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\dep\g3dlite\include\G3D\g3dmath.h(317,56): error C3878: Syntaxfehler: Unerwartetes Token "," nach "expression-statement" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\dep\g3dlite\include\G3D\g3dmath.h(317,59): error C2760: Syntaxfehler: „)“ wurde hier nicht erwartet, sondern „;“. [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\dep\g3dlite\include\G3D\g3dmath.h(317,59): error C3878: Syntaxfehler: Unerwartetes Token ")" nach "expression-statement" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\dep\g3dlite\include\G3D\g3dmath.h(322,22): error C3878: Syntaxfehler: Unerwartetes Token ">" nach "simple-type-specifier" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+      I:\TrinityCore\_integration\dep\g3dlite\include\G3D\g3dmath.h(322,22):
+      Es fehlt einer von: '(' '{' ?
+  
+I:\TrinityCore\_integration\dep\g3dlite\include\G3D\g3dmath.h(322,22): error C3878: Syntaxfehler: Unerwartetes Token ">" nach "expression" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\dep\g3dlite\include\G3D\g3dmath.h(322,25): error C2760: Syntaxfehler: „,“ wurde hier nicht erwartet, sondern „;“. [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\dep\g3dlite\include\G3D\g3dmath.h(322,25): error C3878: Syntaxfehler: Unerwartetes Token "," nach "jump-statement" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\dep\g3dlite\include\G3D\g3dmath.h(322,28): error C2760: Syntaxfehler: „)“ wurde hier nicht erwartet, sondern „;“. [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\dep\g3dlite\include\G3D\g3dmath.h(322,28): error C3878: Syntaxfehler: Unerwartetes Token ")" nach "expression-statement" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\dep\g3dlite\include\G3D\g3dmath.h(327,22): error C3878: Syntaxfehler: Unerwartetes Token ">" nach "simple-type-specifier" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+      I:\TrinityCore\_integration\dep\g3dlite\include\G3D\g3dmath.h(327,22):
+      Es fehlt einer von: '(' '{' ?
+  
+I:\TrinityCore\_integration\dep\g3dlite\include\G3D\g3dmath.h(327,22): error C3878: Syntaxfehler: Unerwartetes Token ">" nach "expression" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+      I:\TrinityCore\_integration\dep\g3dlite\include\G3D\g3dmath.h(327,37):
+      Die Analyse wird hier fortgesetzt
+  
+I:\TrinityCore\_integration\dep\g3dlite\include\G3D\g3dmath.h(327,37): error C2760: Syntaxfehler: „,“ wurde hier nicht erwartet, sondern „;“. [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\dep\g3dlite\include\G3D\g3dmath.h(327,37): error C3878: Syntaxfehler: Unerwartetes Token "," nach "jump-statement" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\dep\g3dlite\include\G3D\g3dmath.h(327,40): error C2760: Syntaxfehler: „)“ wurde hier nicht erwartet, sondern „;“. [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\dep\g3dlite\include\G3D\g3dmath.h(327,40): error C3878: Syntaxfehler: Unerwartetes Token ")" nach "expression-statement" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\dep\g3dlite\include\G3D\g3dmath.h(327,44): error C2760: Syntaxfehler: „)“ wurde hier nicht erwartet, sondern „;“. [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\dep\g3dlite\include\G3D\g3dmath.h(327,44): error C3878: Syntaxfehler: Unerwartetes Token ")" nach "expression-statement" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\dep\g3dlite\include\G3D\g3dmath.h(332,22): error C3878: Syntaxfehler: Unerwartetes Token ">" nach "simple-type-specifier" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+      I:\TrinityCore\_integration\dep\g3dlite\include\G3D\g3dmath.h(332,22):
+      Es fehlt einer von: '(' '{' ?
+  
+I:\TrinityCore\_integration\dep\g3dlite\include\G3D\g3dmath.h(332,22): error C3878: Syntaxfehler: Unerwartetes Token ">" nach "expression" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+      I:\TrinityCore\_integration\dep\g3dlite\include\G3D\g3dmath.h(332,37):
+      Die Analyse wird hier fortgesetzt
+  
+I:\TrinityCore\_integration\dep\g3dlite\include\G3D\g3dmath.h(332,37): error C2760: Syntaxfehler: „,“ wurde hier nicht erwartet, sondern „;“. [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\dep\g3dlite\include\G3D\g3dmath.h(332,37): error C3878: Syntaxfehler: Unerwartetes Token "," nach "jump-statement" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\dep\g3dlite\include\G3D\g3dmath.h(332,40): error C2760: Syntaxfehler: „)“ wurde hier nicht erwartet, sondern „;“. [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\dep\g3dlite\include\G3D\g3dmath.h(332,40): error C3878: Syntaxfehler: Unerwartetes Token ")" nach "expression-statement" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\dep\g3dlite\include\G3D\g3dmath.h(332,53): error C3878: Syntaxfehler: Unerwartetes Token ">" nach "simple-type-specifier" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+      I:\TrinityCore\_integration\dep\g3dlite\include\G3D\g3dmath.h(332,53):
+      Es fehlt einer von: '(' '{' ?
+  
+I:\TrinityCore\_integration\dep\g3dlite\include\G3D\g3dmath.h(332,53): error C3878: Syntaxfehler: Unerwartetes Token ">" nach "expression" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\dep\g3dlite\include\G3D\g3dmath.h(332,56): error C2760: Syntaxfehler: „,“ wurde hier nicht erwartet, sondern „;“. [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\dep\g3dlite\include\G3D\g3dmath.h(332,56): error C3878: Syntaxfehler: Unerwartetes Token "," nach "expression-statement" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\dep\g3dlite\include\G3D\g3dmath.h(332,59): error C2760: Syntaxfehler: „)“ wurde hier nicht erwartet, sondern „;“. [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\dep\g3dlite\include\G3D\g3dmath.h(332,59): error C3878: Syntaxfehler: Unerwartetes Token ")" nach "expression-statement" [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\dep\g3dlite\include\G3D\HashTrait.h(111,36): error C2039: "type_info" ist kein Member von "WorldPackets::std". [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+      I:\TrinityCore\_integration\dep\g3dlite\include\G3D\g3dmath.h(936,11):
+      Siehe Deklaration von "WorldPackets::std"
+  
+I:\TrinityCore\_integration\dep\g3dlite\include\G3D\HashTrait.h(112,39): error C2039: "type_info" ist kein Member von "WorldPackets::std". [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+      I:\TrinityCore\_integration\dep\g3dlite\include\G3D\g3dmath.h(936,11):
+      Siehe Deklaration von "WorldPackets::std"
+  
+I:\TrinityCore\_integration\dep\g3dlite\include\G3D\HashTrait.h(153,36): error C2039: "string" ist kein Member von "WorldPackets::std". [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+      I:\TrinityCore\_integration\dep\g3dlite\include\G3D\g3dmath.h(936,11):
+      Siehe Deklaration von "WorldPackets::std"
+  
+I:\TrinityCore\_integration\dep\g3dlite\include\G3D\HashTrait.h(153,36): error C2065: "string": nichtdeklarierter Bezeichner [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\dep\g3dlite\include\G3D\HashTrait.h(153,20): error C2923: „WorldPackets::HashTrait“: „string“ ist kein gültiges Vorlage-Typargument für Parameter „T“. [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+      I:\TrinityCore\_integration\dep\g3dlite\include\G3D\HashTrait.h(153,36):
+      Siehe Deklaration von "string"
+  
+I:\TrinityCore\_integration\dep\g3dlite\include\G3D\HashTrait.h(153,20): error C2913: Explizite Spezialisierung; "WorldPackets::HashTrait" ist keine Spezialisierung einer Klassenvorlage [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\dep\g3dlite\include\G3D\HashTrait.h(160,20): error C2913: Explizite Spezialisierung; "WorldPackets::HashTrait" ist keine Spezialisierung einer Klassenvorlage [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\dep\g3dlite\include\G3D\Vector2int16.h(140,19): error C2913: Explizite Spezialisierung; "WorldPackets::HashTrait" ist keine Spezialisierung einer Klassenvorlage [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\dep\g3dlite\include\G3D\Vector2unorm16.h(87,19): error C2913: Explizite Spezialisierung; "WorldPackets::HashTrait" ist keine Spezialisierung einer Klassenvorlage [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  
+I:\TrinityCore\_integration\dep\g3dlite\include\G3D\Vector2.h(229,10): error C2039: "string" ist kein Member von "WorldPackets::std". [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+      I:\TrinityCore\_integration\dep\g3dlite\include\G3D\g3dmath.h(936,11):
+      Siehe Deklaration von "WorldPackets::std"
+  
+I:\TrinityCore\_integration\dep\g3dlite\include\G3D\Vector2.h(229,10): error C1003: Mehr als 100 Fehler gefunden; Kompilierung wird abgebrochen. [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+  

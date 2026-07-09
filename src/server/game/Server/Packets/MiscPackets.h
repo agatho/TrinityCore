@@ -1142,6 +1142,8 @@ namespace WorldPackets
 
             CTROptionsBlock Previous;
             CTROptionsBlock Current;
+        };
+
         class MultiFloorNewFloor final : public ServerPacket
         {
         public:

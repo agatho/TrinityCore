@@ -1832,7 +1832,6 @@ class TC_GAME_API WorldSession
         void HandleQueryTreasurePicker(WorldPackets::Query::QueryTreasurePicker const& queryTreasurePicker);
         void HandleSpawnTrackingUpdate(WorldPackets::Quest::SpawnTrackingUpdate& spawnTrackingUpdate);
         void HandleQueryQuestItemUsability(WorldPackets::Quest::QueryQuestItemUsability& queryQuestItemUsability);
-        void HandleCloseQuestChoice(WorldPackets::Quest::CloseQuestChoice& closeQuestChoice);
         void HandleQuestSessionRequestStart(WorldPackets::Quest::QuestSessionRequestStart& packet);
         void HandleQuestSessionRequestStop(WorldPackets::Quest::QuestSessionRequestStop& packet);
         void HandleQuestSessionBeginResponse(WorldPackets::Quest::QuestSessionBeginResponse& packet);

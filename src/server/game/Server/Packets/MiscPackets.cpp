@@ -871,6 +871,10 @@ void ChromieTimeSelectExpansion::Read()
 WorldPacket const* TimerunningSeasonEnded::Write()
 {
     _worldPacket << uint32(SeasonID);
+
+    return &_worldPacket;
+}
+
 WorldPacket const* MultiFloorNewFloor::Write()
 {
     _worldPacket << int32(MapID);
@@ -892,6 +896,10 @@ WorldPacket const* SetCtrOptions::Write()
 
     writeBlock(Previous);
     writeBlock(Current);
+
+    return &_worldPacket;
+}
+
 WorldPacket const* MultiFloorLeaveFloor::Write()
 {
     _worldPacket << int32(MapID);
