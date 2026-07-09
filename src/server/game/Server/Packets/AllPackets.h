@@ -55,6 +55,7 @@
 #include "InspectPackets.h"
 #include "InstancePackets.h"
 #include "ItemPackets.h"
+#include "LFGListPackets.h"
 #include "LFGPackets.h"
 #include "LootPackets.h"
 #include "MailPackets.h"
