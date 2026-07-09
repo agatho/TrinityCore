@@ -549,6 +549,17 @@ void CollectionMgr::MountSetFavorite(uint32 spellId, bool favorite)
     SendSingleMountUpdate(*itr);
 }
 
+void CollectionMgr::MountClearFanfare(uint32 spellId)
+{
+    auto itr = _mounts.find(spellId);
+    if (itr == _mounts.end())
+        return;
+
+    // Drop the "new mount" fanfare flag so the client stops replaying the acquisition flourish.
+    // Mirrors ToyClearFanfare: the flag change is persisted by SaveAccountMounts, no packet echo needed.
+    itr->second = MountStatusFlags(itr->second & ~MOUNT_NEEDS_FANFARE);
+}
+
 void CollectionMgr::SendSingleMountUpdate(std::pair<uint32, MountStatusFlags> mount)
 {
     Player* player = _owner->GetPlayer();

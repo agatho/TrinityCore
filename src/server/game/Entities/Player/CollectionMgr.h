@@ -167,6 +167,7 @@ public:
     void SaveAccountMounts(LoginDatabaseTransaction trans);
     bool AddMount(uint32 spellId, MountStatusFlags flags, bool factionMount = false, bool learned = false);
     void MountSetFavorite(uint32 spellId, bool favorite);
+    void MountClearFanfare(uint32 spellId);
     void SendSingleMountUpdate(std::pair<uint32, MountStatusFlags> mount);
     MountContainer const& GetAccountMounts() const { return _mounts; }
 

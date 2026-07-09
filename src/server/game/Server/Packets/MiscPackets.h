@@ -970,6 +970,16 @@ namespace WorldPackets
             bool IsFavorite = false;
         };
 
+        class MountClearFanfare final : public ClientPacket
+        {
+        public:
+            explicit MountClearFanfare(WorldPacket&& packet) : ClientPacket(CMSG_MOUNT_CLEAR_FANFARE, std::move(packet)) { }
+
+            void Read() override;
+
+            uint32 MountSpellID = 0;
+        };
+
         class CloseInteraction final : public ClientPacket
         {
         public:
