@@ -367,6 +367,7 @@ class TC_GAME_API GameObject : public WorldObject, public GridObject<GameObject>
         GameObject* LookupFishingHoleAround(float range);
 
         void SendCustomAnim(uint32 anim);
+        void SendPlaySpellVisualKit(uint32 id, uint32 type, uint32 duration) const;
         bool IsInRange(float x, float y, float z, float radius) const;
 
         void ModifyHealth(int32 change, WorldObject* attackerOrHealer = nullptr, uint32 spellId = 0);
