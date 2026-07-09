@@ -255,11 +255,22 @@ namespace WorldPackets
 
             WorldPacket const* Write() override;
 
+            // Names (record-holder / eligible-player) list element, as the client deserializer
+            // (sub_7FF729090EE0) reads it: PackedGuid, then one packed byte (Name length in the high
+            // 6 bits, IsEligibleForScore in bit 1), then the raw name bytes.
+            struct MemberName
+            {
+                ObjectGuid PlayerGUID;
+                bool IsEligibleForScore = false;
+                std::string Name;
+            };
+
             MythicPlusMapStat MapSummary;
             uint32 Field124 = 0;
             uint32 Field216 = 0;
             uint64 Field208 = 0;
             uint8 Flags = 0;
+            std::vector<MemberName> Names;
         };
 
         // CMSG_REQUEST_WEEKLY_REWARDS -- client opens the Great Vault UI (empty payload @68275).

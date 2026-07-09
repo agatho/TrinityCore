@@ -144,13 +144,22 @@ WorldPacket const* ChallengeModeComplete::Write()
 {
     _worldPacket << MapSummary;
     _worldPacket << uint32(Field124);
-    _worldPacket << uint32(0);          // NamesCount (record-holder name list) - empty
+    _worldPacket << uint32(Names.size());   // NamesCount
     _worldPacket << uint32(Field216);
     _worldPacket << uint8(Flags);       // 3 bit-flags packed in one byte
     _worldPacket << uint32(0);          // RunsCount (per-run DungeonScoreData tree) - empty, not persisted
     _worldPacket << uint32(0);          // PairsCount - empty
     _worldPacket << uint64(Field208);
-    // trailing Pairs / Runs / Names lists all empty (0 count above) -> nothing further on the wire
+
+    // Body order (client deserializer sub_7FF729090EE0): Pairs, Runs, Names. Pairs/Runs are empty
+    // (0 count above); the Names list follows. Element = PackedGuid + one packed byte
+    // ((Name.length() << 2) | (IsEligibleForScore << 1)) + the raw name bytes (no terminator).
+    for (MemberName const& member : Names)
+    {
+        _worldPacket << member.PlayerGUID;
+        _worldPacket << uint8((member.Name.length() << 2) | (member.IsEligibleForScore ? 2 : 0));
+        _worldPacket.append(member.Name.data(), member.Name.length());
+    }
 
     return &_worldPacket;
 }

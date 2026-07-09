@@ -357,6 +357,12 @@ void ChallengeMode::Complete()
     {
         WorldPackets::ChallengeMode::MythicPlusMapStatMember& member = completePacket.MapSummary.Members.emplace_back();
         member.PlayerGUID = player->GetGUID();
+
+        // Names list: the party members present at completion, shown on the client's run-result screen.
+        WorldPackets::ChallengeMode::ChallengeModeComplete::MemberName& name = completePacket.Names.emplace_back();
+        name.PlayerGUID = player->GetGUID();
+        name.IsEligibleForScore = true;     // present members completed the run
+        name.Name = player->GetName();
     });
     _instance->SendToPlayers(completePacket.Write());
 
