@@ -2279,6 +2279,25 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
 
         WorldSession* GetSession() const { return m_session; }
 
+        // Delves update field management (m_activePlayerData->DelveData is a map keyed by MapID)
+        void SetDelveData(int32 mapId, int32 tier, uint64 instanceId, int32 entranceType,
+            std::vector<ObjectGuid> playersEligibleForRewards = {},
+            std::vector<int32> activeOptionalAffixIDs = {},
+            bool restrictRewardsToCurrentPlayers = false);
+        void ClearDelveData(int32 mapId);
+        // Publishes account-wide delve progression as an additional entry in the same
+        // JamDelveData mirror map (68275: unordered_map<uint32, JamDelveData> at
+        // CGActivePlayer_C+0x1F08). Key + per-field semantics are a hypothesis —
+        // // UNVERIFIED — needs sniff. See Player.cpp::SetDelveProgressData.
+        void SetDelveProgressData(int32 key, int32 lastSelectedMapId, int32 highestTierUnlocked,
+            std::vector<int32> weeklyCounters);
+        bool HasActiveDelve() const { return !m_activePlayerData->DelveData.empty(); }
+        bool IsInDelveInstance() const;
+
+        // Transient per-session selection from CMSG_SELECT_DELVE_ENTRANCE_TIER (re-sent by client on TIERED_ENTRANCE_OPEN).
+        uint8 m_delveSelectedTier = 0;
+        uint32 m_delveSelectedMapId = 0;
+
     protected:
         UF::UpdateFieldFlag GetUpdateFieldFlagsFor(Player const* target) const override;
         void BuildValuesCreate(UF::UpdateFieldFlag flags, ByteBuffer& data, Player const* target) const override;
@@ -3028,6 +3047,28 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
 
         void AddWarbandScenesBlock(uint32 blockValue) { AddDynamicUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::WarbandScenes)) = blockValue; }
         void AddWarbandScenesFlag(uint32 slot, uint32 flag) { SetUpdateFieldFlagValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::WarbandScenes, slot), flag); }
+
+        // PlayerDataElements (PDEs) — Account-scoped and Character-scoped key-value
+        // store backing C_DelvesUI / curio book / season state. The slot index in
+        // the dynamic field IS the PDE id (PlayerDataElementType enum has only
+        // Int=0 and Float=1). 68275 note: the 67186 "bit 0x20000000 dispatches to
+        // the JamDelveData reader" description is superseded — at 68275 the delve
+        // map is read UNCONDITIONALLY inside the CGActivePlayer account-data mirror
+        // deserializer (0x7FF72920BCF0); the only gate is the global partial/full
+        // discriminator (a4 & 0x20). Helpers grow the array sparsely by inserting
+        // empty Int(0) padding when the requested id is past the current end.
+        void SetAccountDataElementInt(uint32 id, int64 value);
+        void SetAccountDataElementFloat(uint32 id, float value);
+        void SetCharacterDataElementInt(uint32 id, int64 value);
+        void SetCharacterDataElementFloat(uint32 id, float value);
+        UF::PlayerDataElement const* GetAccountDataElement(uint32 id) const;
+        UF::PlayerDataElement const* GetCharacterDataElement(uint32 id) const;
+        void RemoveAccountDataElement(uint32 id);
+        void RemoveCharacterDataElement(uint32 id);
+
+        // Delves: load persisted companion state from DB and project it into PDEs
+        // the client expects. Called from SendInitialPacketsBeforeAddToMap.
+        void LoadDelvePlayerDataElements();
 
         void AddSelfResSpell(int32 spellId) { AddDynamicUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::SelfResSpells)) = spellId; }
         void RemoveSelfResSpell(int32 spellId)

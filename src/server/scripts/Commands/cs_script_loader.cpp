@@ -29,6 +29,7 @@ void AddSC_character_commandscript();
 void AddSC_cheat_commandscript();
 void AddSC_conduit_commandscript();
 void AddSC_debug_commandscript();
+void AddSC_delve_commandscript();
 void AddSC_deserter_commandscript();
 void AddSC_disable_commandscript();
 void AddSC_event_commandscript();
@@ -78,6 +79,7 @@ void AddCommandsScripts()
     AddSC_cheat_commandscript();
     AddSC_conduit_commandscript();
     AddSC_debug_commandscript();
+    AddSC_delve_commandscript();
     AddSC_deserter_commandscript();
     AddSC_disable_commandscript();
     AddSC_event_commandscript();

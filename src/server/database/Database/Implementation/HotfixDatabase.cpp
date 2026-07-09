@@ -644,6 +644,16 @@ void HotfixDatabaseConnection::DoPrepareStatements()
         " WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
     PREPARE_MAX_ID_STMT(HOTFIX_SEL_DESTRUCTIBLE_MODEL_DATA, "SELECT MAX(ID) + 1 FROM destructible_model_data", CONNECTION_SYNCH);
 
+    // DelvesSeason.db2
+    PrepareStatement(HOTFIX_SEL_DELVES_SEASON, "SELECT ID, FactionID FROM delves_season"
+        " WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_DELVES_SEASON, "SELECT MAX(ID) + 1 FROM delves_season", CONNECTION_SYNCH);
+
+    // DelvesSeasonXSpell.db2
+    PrepareStatement(HOTFIX_SEL_DELVES_SEASON_X_SPELL, "SELECT ID, SpellID, DelvesSeasonID FROM delves_season_x_spell"
+        " WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_DELVES_SEASON_X_SPELL, "SELECT MAX(ID) + 1 FROM delves_season_x_spell", CONNECTION_SYNCH);
+
     // Difficulty.db2
     PrepareStatement(HOTFIX_SEL_DIFFICULTY, "SELECT ID, Name, InstanceType, OrderIndex, OldEnumValue, FallbackDifficultyID, MinPlayers, MaxPlayers, "
         "Flags, ItemContext, ToggleDifficultyID, GroupSizeHealthCurveID, GroupSizeDmgCurveID, GroupSizeSpellPointsCurveID, Unknown1105 FROM difficulty"
@@ -1395,6 +1405,16 @@ void HotfixDatabaseConnection::DoPrepareStatements()
     // PhaseXPhaseGroup.db2
     PrepareStatement(HOTFIX_SEL_PHASE_X_PHASE_GROUP, "SELECT ID, PhaseID, PhaseGroupID FROM phase_x_phase_group WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
     PREPARE_MAX_ID_STMT(HOTFIX_SEL_PHASE_X_PHASE_GROUP, "SELECT MAX(ID) + 1 FROM phase_x_phase_group", CONNECTION_SYNCH);
+
+    // PlayerCompanionInfo.db2
+    PrepareStatement(HOTFIX_SEL_PLAYER_COMPANION_INFO, "SELECT UnlockDescription, ID, DelvesSeasonID, TraitTreeID, "
+        "TraitNodeID_DPS, TraitNodeID_Heal, TraitSubTreeID_DPS, TraitSubTreeID_Heal, TraitSubTreeID_Tank, "
+        "FactionID, CreatureDisplayInfoID, UiModelSceneID, "
+        "Field_12_0_0_64499_011, Field_12_0_0_64499_012, ParentID"
+        " FROM player_companion_info WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_PLAYER_COMPANION_INFO, "SELECT MAX(ID) + 1 FROM player_companion_info", CONNECTION_SYNCH);
+    PrepareStatement(HOTFIX_SEL_PLAYER_COMPANION_INFO_LOCALE, "SELECT ID, UnlockDescription_lang FROM player_companion_info_locale"
+        " WHERE (`VerifiedBuild` > 0) = ? AND locale = ?", CONNECTION_SYNCH);
 
     // PlayerCondition.db2
     PrepareStatement(HOTFIX_SEL_PLAYER_CONDITION, "SELECT ID, FailureDescription, MinLevel, MaxLevel, ClassMask, SkillLogic, LanguageID, MinLanguage, "

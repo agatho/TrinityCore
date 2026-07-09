@@ -124,6 +124,7 @@ void CharacterDatabaseConnection::DoPrepareStatements()
                      "raidDifficulty, legacyRaidDifficulty, fishingSteps, honor, honorLevel, honorRestState, honorRestBonus, numRespecs, "
                      "personalTabardEmblemStyle, personalTabardEmblemColor, personalTabardBorderStyle, personalTabardBorderColor, personalTabardBackgroundColor, transmogOutfitEquippedId, transmogOutfitLocked, "
                      "chromieTimeExpansionId, timerunningSeasonId "
+                     "personalTabardEmblemStyle, personalTabardEmblemColor, personalTabardBorderStyle, personalTabardBorderColor, personalTabardBackgroundColor, transmogOutfitEquippedId, transmogOutfitLocked "
                      "FROM characters c LEFT JOIN character_fishingsteps cfs ON c.guid = cfs.guid WHERE c.guid = ?", CONNECTION_ASYNC);
 
     PrepareStatement(CHAR_SEL_CHARACTER_CUSTOMIZATIONS, "SELECT chrCustomizationOptionID, chrCustomizationChoiceID FROM character_customizations WHERE guid = ? ORDER BY chrCustomizationOptionID", CONNECTION_ASYNC);
@@ -870,6 +871,13 @@ void CharacterDatabaseConnection::DoPrepareStatements()
     PrepareStatement(CHAR_DEL_CHARACTER_SOULBIND_CONDUIT_SOCKET, "DELETE FROM character_soulbind_conduit_sockets WHERE guid = ? AND garrTalentId = ?", CONNECTION_ASYNC);
     PrepareStatement(CHAR_SEL_CHARACTER_COVENANT_RENOWN, "SELECT covenantId, grantedLevel FROM character_covenant_renown WHERE guid = ?", CONNECTION_ASYNC);
     PrepareStatement(CHAR_REP_CHARACTER_COVENANT_RENOWN, "REPLACE INTO character_covenant_renown (guid, covenantId, grantedLevel) VALUES (?, ?, ?)", CONNECTION_ASYNC);
+    // Delves companion
+    PrepareStatement(CHAR_SEL_DELVE_COMPANION, "SELECT companionId, level, xp, selectedRole, combatCurioNodeId, utilityCurioNodeId FROM delve_companion WHERE battlenetAccountId = ? LIMIT 1", CONNECTION_SYNCH);
+    PrepareStatement(CHAR_REP_DELVE_COMPANION, "REPLACE INTO delve_companion (battlenetAccountId, companionId, level, xp, selectedRole, combatCurioNodeId, utilityCurioNodeId) VALUES (?, ?, ?, ?, ?, ?, ?)", CONNECTION_ASYNC);
+
+    // Delves progress
+    PrepareStatement(CHAR_SEL_DELVE_PROGRESS, "SELECT highestTierUnlocked, weeklyCompletions, highestTierThisWeek, weeklyBountifulCount, weeklyCofferShards FROM delve_progress WHERE battlenetAccountId = ?", CONNECTION_SYNCH);
+    PrepareStatement(CHAR_REP_DELVE_PROGRESS, "REPLACE INTO delve_progress (battlenetAccountId, highestTierUnlocked, weeklyCompletions, highestTierThisWeek, weeklyBountifulCount, weeklyCofferShards) VALUES (?, ?, ?, ?, ?, ?)", CONNECTION_ASYNC);
 }
 
 CharacterDatabaseConnection::CharacterDatabaseConnection(MySQLConnectionInfo& connInfo, ConnectionFlags connectionFlags) : MySQLConnection(connInfo, connectionFlags)

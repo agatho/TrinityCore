@@ -53,6 +53,9 @@
 #include "CreatureAI.h"
 #include "DB2Stores.h"
 #include "DatabaseEnv.h"
+#include "DelvesCompanion.h"
+#include "DelvesDefines.h"
+#include "DelvesRewards.h"
 #include "DisableMgr.h"
 #include "DuelPackets.h"
 #include "EquipmentSetPackets.h"
@@ -4397,6 +4400,9 @@ void Player::KillPlayer()
 
     setDeathState(CORPSE);
     //SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NOT_IN_PVP);
+
+    // Delve death tracking is handled via InstanceScript::OnUnitDeath
+    // in DelveInstanceScript (see delves_common.cpp)
 
     ReplaceAllDynamicFlags(UNIT_DYNFLAG_NONE);
     if (!sMapStore.LookupEntry(GetMapId())->Instanceable() && !HasAuraType(SPELL_AURA_PREVENT_RESURRECTION))
@@ -14302,6 +14308,21 @@ void Player::OnGossipSelect(WorldObject* source, int32 gossipOptionId, uint32 me
                 SendDirectMessage(npcInteraction.Write());
             }
         }
+    }
+
+    // Cast associated spell if gossip option has one (used by delve entrances, scenario triggers, etc.)
+    if (item->SpellID)
+    {
+        if (SpellInfo const* spellInfo = sSpellMgr->GetSpellInfo(*item->SpellID, GetMap()->GetDifficultyID()))
+        {
+            if (source->GetTypeId() == TYPEID_GAMEOBJECT)
+                source->ToGameObject()->CastSpell(this, *item->SpellID);
+            else if (source->GetTypeId() == TYPEID_UNIT)
+                source->ToCreature()->CastSpell(this, *item->SpellID);
+            else
+                CastSpell(this, *item->SpellID, true);
+        }
+        PlayerTalkClass->SendCloseGossip();
     }
 
     ModifyMoney(-cost);
@@ -25422,6 +25443,10 @@ void Player::SendInitialPacketsBeforeAddToMap()
     /// SMSG_EQUIPMENT_SET_LIST
     SendEquipmentSetList();
 
+    /// Project persisted delve state into PlayerDataElement UpdateField slots
+    /// (driven by the C_DelvesUI Lua API on the client).
+    LoadDelvePlayerDataElements();
+
     m_achievementMgr->SendAllData(this);
     m_questObjectiveCriteriaMgr->SendAllData(this);
 
@@ -32261,4 +32286,220 @@ bool Player::CanExecutePendingSpellCastRequest()
         return false;
 
     return true;
+}
+
+void Player::SetDelveData(int32 mapId, int32 tier, uint64 instanceId, int32 entranceType,
+    std::vector<ObjectGuid> playersEligibleForRewards,
+    std::vector<int32> activeOptionalAffixIDs,
+    bool restrictRewardsToCurrentPlayers)
+{
+    auto delveData = m_values.ModifyValue(&Player::m_activePlayerData)
+        .ModifyValue(&UF::ActivePlayerData::DelveData, mapId);
+
+    SetUpdateFieldValue(delveData.ModifyValue(&UF::DelveData::MapID), mapId);
+    SetUpdateFieldValue(delveData.ModifyValue(&UF::DelveData::Tier), tier);
+    SetUpdateFieldValue(delveData.ModifyValue(&UF::DelveData::InstanceID), instanceId);
+    SetUpdateFieldValue(delveData.ModifyValue(&UF::DelveData::EntranceType), entranceType);
+    SetUpdateFieldValue(delveData.ModifyValue(&UF::DelveData::RestrictingRewardPlayers), uint8(restrictRewardsToCurrentPlayers ? 1 : 0));
+    SetUpdateFieldValue(delveData.ModifyValue(&UF::DelveData::PlayersEligibleForRewards), std::move(playersEligibleForRewards));
+    SetUpdateFieldValue(delveData.ModifyValue(&UF::DelveData::ActiveOptionalAffixIDs), std::move(activeOptionalAffixIDs));
+}
+
+void Player::ClearDelveData(int32 mapId)
+{
+    // Note (68275): the client's delve-map wire format has no delete op — a removed
+    // entry cannot be expressed in a values update (see WriteDelveMapFieldUpdate) and
+    // only disappears client-side with the next full ActivePlayer create block
+    // (e.g. the teleport out of the delve that accompanies every ClearDelveData call).
+    RemoveMapUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData)
+        .ModifyValue(&UF::ActivePlayerData::DelveData), mapId);
+}
+
+void Player::SetDelveProgressData(int32 key, int32 lastSelectedMapId, int32 highestTierUnlocked,
+    std::vector<int32> weeklyCounters)
+{
+    // Publishes account-wide delve progression (Delves::DelveProgress) into the
+    // JamDelveData mirror so the client UI can populate highest-unlocked /
+    // last-selected state. The wire layout of each map entry is byte-exact
+    // (68275 per-entry deserializer 0x7FF7291628A0):
+    //   uint32, uint32, uint64, guidCount, intCount, uint32, PackedGUID[], uint32[], bool(MSB)
+    // — matched 1:1 by UF::DelveData::WriteCreate/WriteUpdate.
+    //
+    // The struct FIELD NAMES are now authoritative retail names from the 68275
+    // reflection descriptors (mapID/tier/instanceID/restrictingRewardPlayers/
+    // playersEligibleForRewards/activeOptionalAffixIDs/entranceType) — i.e. the
+    // struct canonically describes ACTIVE-delve state. This progression entry
+    // deliberately REPURPOSES those fields, which remains a hypothesis:
+    // // UNVERIFIED — needs sniff: the map KEY meaning (we use the current delves
+    // season ID; could be scenario/map ID) and whether retail publishes a
+    // progression-shaped entry in this map at all.
+    //   MapID  <- last-selected delve map ID (0 = none)
+    //   Tier   <- HighestTierUnlocked
+    //   InstanceID <- 0 (no instance backs a progression entry)
+    //   EntranceType <- TIERED_ENTRANCE_TYPE_DELVE
+    //   ActiveOptionalAffixIDs <- { WeeklyCompletions, HighestTierThisWeek,
+    //                               WeeklyBountifulCount, WeeklyCofferShards }
+    //     (weakest part of the hypothesis — retail semantics are delve affix ids)
+    //   RestrictingRewardPlayers <- false
+    auto delveData = m_values.ModifyValue(&Player::m_activePlayerData)
+        .ModifyValue(&UF::ActivePlayerData::DelveData, key);
+
+    SetUpdateFieldValue(delveData.ModifyValue(&UF::DelveData::MapID), lastSelectedMapId);
+    SetUpdateFieldValue(delveData.ModifyValue(&UF::DelveData::Tier), highestTierUnlocked);
+    SetUpdateFieldValue(delveData.ModifyValue(&UF::DelveData::InstanceID), uint64(0));
+    SetUpdateFieldValue(delveData.ModifyValue(&UF::DelveData::EntranceType), int32(Delves::TIERED_ENTRANCE_TYPE_DELVE));
+    SetUpdateFieldValue(delveData.ModifyValue(&UF::DelveData::RestrictingRewardPlayers), uint8(0));
+    SetUpdateFieldValue(delveData.ModifyValue(&UF::DelveData::PlayersEligibleForRewards), std::vector<ObjectGuid>());
+    SetUpdateFieldValue(delveData.ModifyValue(&UF::DelveData::ActiveOptionalAffixIDs), std::move(weeklyCounters));
+}
+
+namespace
+{
+    // PlayerDataElementType: Int=0 (int64), Float=1 (32-bit float). Verified
+    // against IDA build 67186 (sub_7FF75CF73E50) and PlayerDataElementAccount.dbd
+    // / PlayerDataElementCharacter.dbd LAYOUT AEC1DEF3 (build 12.0.5.67186).
+    constexpr uint32 PDE_TYPE_INT = 0;
+    constexpr uint32 PDE_TYPE_FLOAT = 1;
+
+    // Resolve a PDE record id (used by the C_DelvesUI Lua API and by the
+    // server-side PDE_* constants in DelvesDefines.h) into the corresponding
+    // ActivePlayerData::{Account,Character}DataElements array index.
+    // Returns std::nullopt if the record id is not in the DB2 store.
+    inline Optional<uint32> ResolveAccountPdeStorageIndex(uint32 recordId)
+    {
+        if (PlayerDataElementAccountEntry const* entry = sPlayerDataElementAccountStore.LookupEntry(recordId))
+            return uint32(entry->StorageIndex);
+        return std::nullopt;
+    }
+    inline Optional<uint32> ResolveCharacterPdeStorageIndex(uint32 recordId)
+    {
+        if (PlayerDataElementCharacterEntry const* entry = sPlayerDataElementCharacterStore.LookupEntry(recordId))
+            return uint32(entry->StorageIndex);
+        return std::nullopt;
+    }
+}
+
+void Player::SetAccountDataElementInt(uint32 id, int64 value)
+{
+    Optional<uint32> storageIdx = ResolveAccountPdeStorageIndex(id);
+    if (!storageIdx)
+    {
+        TC_LOG_DEBUG("entities.player", "SetAccountDataElementInt: PDE record {} not in PlayerDataElementAccount.db2", id);
+        return;
+    }
+    // ModifyValue(field, index) auto-grows the dynamic field with zero-initialised
+    // slots up to `index`, marks the slot dirty, and returns a mutable reference.
+    auto slot = m_values.ModifyValue(&Player::m_activePlayerData)
+        .ModifyValue(&UF::ActivePlayerData::AccountDataElements, *storageIdx);
+    SetUpdateFieldValue(slot.ModifyValue(&UF::PlayerDataElement::Type), PDE_TYPE_INT);
+    SetUpdateFieldValue(slot.ModifyValue(&UF::PlayerDataElement::Int64Value), value);
+}
+
+void Player::SetAccountDataElementFloat(uint32 id, float value)
+{
+    Optional<uint32> storageIdx = ResolveAccountPdeStorageIndex(id);
+    if (!storageIdx)
+    {
+        TC_LOG_DEBUG("entities.player", "SetAccountDataElementFloat: PDE record {} not in PlayerDataElementAccount.db2", id);
+        return;
+    }
+    auto slot = m_values.ModifyValue(&Player::m_activePlayerData)
+        .ModifyValue(&UF::ActivePlayerData::AccountDataElements, *storageIdx);
+    SetUpdateFieldValue(slot.ModifyValue(&UF::PlayerDataElement::Type), PDE_TYPE_FLOAT);
+    SetUpdateFieldValue(slot.ModifyValue(&UF::PlayerDataElement::FloatValue), value);
+}
+
+void Player::SetCharacterDataElementInt(uint32 id, int64 value)
+{
+    Optional<uint32> storageIdx = ResolveCharacterPdeStorageIndex(id);
+    if (!storageIdx)
+    {
+        TC_LOG_DEBUG("entities.player", "SetCharacterDataElementInt: PDE record {} not in PlayerDataElementCharacter.db2", id);
+        return;
+    }
+    auto slot = m_values.ModifyValue(&Player::m_activePlayerData)
+        .ModifyValue(&UF::ActivePlayerData::CharacterDataElements, *storageIdx);
+    SetUpdateFieldValue(slot.ModifyValue(&UF::PlayerDataElement::Type), PDE_TYPE_INT);
+    SetUpdateFieldValue(slot.ModifyValue(&UF::PlayerDataElement::Int64Value), value);
+}
+
+void Player::SetCharacterDataElementFloat(uint32 id, float value)
+{
+    Optional<uint32> storageIdx = ResolveCharacterPdeStorageIndex(id);
+    if (!storageIdx)
+    {
+        TC_LOG_DEBUG("entities.player", "SetCharacterDataElementFloat: PDE record {} not in PlayerDataElementCharacter.db2", id);
+        return;
+    }
+    auto slot = m_values.ModifyValue(&Player::m_activePlayerData)
+        .ModifyValue(&UF::ActivePlayerData::CharacterDataElements, *storageIdx);
+    SetUpdateFieldValue(slot.ModifyValue(&UF::PlayerDataElement::Type), PDE_TYPE_FLOAT);
+    SetUpdateFieldValue(slot.ModifyValue(&UF::PlayerDataElement::FloatValue), value);
+}
+
+UF::PlayerDataElement const* Player::GetAccountDataElement(uint32 id) const
+{
+    Optional<uint32> storageIdx = ResolveAccountPdeStorageIndex(id);
+    if (!storageIdx || *storageIdx >= m_activePlayerData->AccountDataElements.size())
+        return nullptr;
+    return &m_activePlayerData->AccountDataElements[*storageIdx];
+}
+
+UF::PlayerDataElement const* Player::GetCharacterDataElement(uint32 id) const
+{
+    Optional<uint32> storageIdx = ResolveCharacterPdeStorageIndex(id);
+    if (!storageIdx || *storageIdx >= m_activePlayerData->CharacterDataElements.size())
+        return nullptr;
+    return &m_activePlayerData->CharacterDataElements[*storageIdx];
+}
+
+void Player::RemoveAccountDataElement(uint32 id)
+{
+    Optional<uint32> storageIdx = ResolveAccountPdeStorageIndex(id);
+    if (!storageIdx || *storageIdx >= m_activePlayerData->AccountDataElements.size())
+        return;
+    RemoveDynamicUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData)
+        .ModifyValue(&UF::ActivePlayerData::AccountDataElements), *storageIdx);
+}
+
+void Player::RemoveCharacterDataElement(uint32 id)
+{
+    Optional<uint32> storageIdx = ResolveCharacterPdeStorageIndex(id);
+    if (!storageIdx || *storageIdx >= m_activePlayerData->CharacterDataElements.size())
+        return;
+    RemoveDynamicUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData)
+        .ModifyValue(&UF::ActivePlayerData::CharacterDataElements), *storageIdx);
+}
+
+bool Player::IsInDelveInstance() const
+{
+    Map const* map = GetMap();
+    if (!map || !map->Instanceable())
+        return false;
+    return map->GetDifficultyID() == Difficulty(Delves::DELVE_DIFFICULTY_ID);
+}
+
+void Player::LoadDelvePlayerDataElements()
+{
+    // Project persisted delve state (delve_companion DB row) into the
+    // PlayerDataElement UpdateField. The client surfaces these via the
+    // C_DelvesUI Lua API (e.g. GetPlayerCompanionPDEID, GetCurrentDelvesSeasonNumber).
+    Delves::CompanionState state;
+    Delves::DelvesCompanion::LoadFromDB(GetSession()->GetBattlenetAccountId(), state);
+
+    // PDE 13 = DELVES_COMPANION_INFO_SELECTION_CHARACTER_DATA_ELEMENT_ID — the
+    // currently-selected companion's PlayerCompanionInfo.ID (from
+    // DelvesDefines.h::PDE_COMPANION_INFO_SELECTION).
+    if (state.CompanionId != 0)
+        SetCharacterDataElementInt(Delves::PDE_COMPANION_INFO_SELECTION, int64(state.CompanionId));
+
+    // PDE 522 (NEW 12.0.7) = TIERED_ENTRANCE_INFO_WORLD_TIER_DIFFICULTY_CHARACTER_ELEMENT_ID —
+    // backs C_DelvesUI.GetWorldTierDifficultyForActivePlayer(). We don't run World
+    // Tier content yet; expose the baseline difficulty so the client API resolves.
+    SetCharacterDataElementInt(Delves::PDE_WORLD_TIER_DIFFICULTY,
+        int64(Delves::WorldTierDifficulty::Normal));
+
+    // Mirror account-wide delve progression (highest unlocked tier, weekly counters)
+    // into the JamDelveData ActivePlayer map so the delve UI populates on login.
+    Delves::DelvesRewards::PublishProgress(this);
 }

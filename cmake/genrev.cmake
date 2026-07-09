@@ -126,13 +126,17 @@ cmake_host_system_information(RESULT TRINITY_BUILD_HOST_SYSTEM QUERY OS_NAME)
 cmake_host_system_information(RESULT TRINITY_BUILD_HOST_DISTRO QUERY DISTRIB_INFO)
 cmake_host_system_information(RESULT TRINITY_BUILD_HOST_SYSTEM_RELEASE QUERY OS_RELEASE)
 # on windows OS_RELEASE contains sub-type string tag like "Professional" instead of a version number and OS_VERSION has only build number
-# so we grab that with Get-CimInstance powershell cmdlet
+# so we grab that with a fast PowerShell alternative (Get-CimInstance/WMI is unreliable on some hosts and can hang the build)
 if(WIN32)
   execute_process(
-    COMMAND powershell -NoProfile -Command "$v=(Get-CimInstance -ClassName Win32_OperatingSystem); '{0} ({1})' -f $v.Caption, $v.Version"
+    COMMAND powershell -NoProfile -NonInteractive -Command "$os=[System.Environment]::OSVersion; $product=(Get-ItemProperty 'HKLM:\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion' -Name ProductName).ProductName; '{0} ({1})' -f $product, $os.Version"
     OUTPUT_VARIABLE TRINITY_BUILD_HOST_SYSTEM_RELEASE
-	OUTPUT_STRIP_TRAILING_WHITESPACE
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    TIMEOUT 10
   )
+  if(NOT TRINITY_BUILD_HOST_SYSTEM_RELEASE)
+    set(TRINITY_BUILD_HOST_SYSTEM_RELEASE "Windows (unknown)")
+  endif()
   # Remove "Microsoft Windows" from the result
   string(REGEX REPLACE "^.* Windows " "" TRINITY_BUILD_HOST_SYSTEM_RELEASE "${TRINITY_BUILD_HOST_SYSTEM_RELEASE}")
 endif()

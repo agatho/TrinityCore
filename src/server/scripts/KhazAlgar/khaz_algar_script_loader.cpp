@@ -43,6 +43,30 @@ void AddSC_boss_orator_krix_vizk();
 void AddSC_instance_darkflame_cleft();
 void AddSC_boss_the_candle_king();
 
+// Delves - Isle of Dorn
+void AddSC_instance_earthcrawl_mines();
+void AddSC_instance_fungal_folly();
+void AddSC_instance_kriegvals_rest();
+// Delves - The Ringing Deeps
+void AddSC_instance_the_waterworks();
+void AddSC_instance_the_dread_pit();
+// Delves - Hallowfall
+void AddSC_instance_nightfall_sanctum();
+void AddSC_instance_mycomancer_cavern();
+void AddSC_instance_skittering_breach();
+void AddSC_instance_the_sinkhole();
+// Delves - Azj-Kahet
+void AddSC_instance_the_spiral_weave();
+void AddSC_instance_tak_rethan_abyss();
+void AddSC_instance_the_underkeep();
+void AddSC_instance_zekvirs_lair();
+// Delves - Undermine / Khaz Algar (Season 2/3)
+void AddSC_instance_atal_aman_delve();
+void AddSC_instance_shadow_enclave_delve();
+// Delves - Common
+void AddSC_npc_delve_entrance();
+void AddSC_npc_brann_bronzebeard_delves();
+
 // The name of this function should match:
 // void Add${NameOfDirectory}Scripts()
 void AddKhazAlgarScripts()
@@ -72,4 +96,28 @@ void AddKhazAlgarScripts()
     // Darkflame Cleft
     AddSC_instance_darkflame_cleft();
     AddSC_boss_the_candle_king();
+
+    // Delves - Isle of Dorn
+    AddSC_instance_earthcrawl_mines();
+    AddSC_instance_fungal_folly();
+    AddSC_instance_kriegvals_rest();
+    // Delves - The Ringing Deeps
+    AddSC_instance_the_waterworks();
+    AddSC_instance_the_dread_pit();
+    // Delves - Hallowfall
+    AddSC_instance_nightfall_sanctum();
+    AddSC_instance_mycomancer_cavern();
+    AddSC_instance_skittering_breach();
+    AddSC_instance_the_sinkhole();
+    // Delves - Azj-Kahet
+    AddSC_instance_the_spiral_weave();
+    AddSC_instance_tak_rethan_abyss();
+    AddSC_instance_the_underkeep();
+    AddSC_instance_zekvirs_lair();
+    // Delves - Undermine / Khaz Algar (Season 2/3)
+    AddSC_instance_atal_aman_delve();
+    AddSC_instance_shadow_enclave_delve();
+    // Delves - Common
+    AddSC_npc_delve_entrance();
+    AddSC_npc_brann_bronzebeard_delves();
 }
