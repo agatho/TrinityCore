@@ -6607,6 +6607,27 @@ enum DiminishingReturnsType
 };
 
 // Diminishing Return Groups
+// Client-side loss-of-control category sent in SMSG_ADD_LOSS_OF_CONTROL (the "Type" field).
+// Extracted verbatim from the 12.0.7.68275 client's LossOfControlType string table (image-relative
+// RVA 0x41FDC30) and cross-checked against a live rated-BG capture (school interrupts carry type 11).
+enum LossOfControlType : uint8
+{
+    LOSS_OF_CONTROL_TYPE_NONE             = 0,
+    LOSS_OF_CONTROL_TYPE_POSSESS          = 1,
+    LOSS_OF_CONTROL_TYPE_CONFUSE          = 2,
+    LOSS_OF_CONTROL_TYPE_CHARM            = 3,
+    LOSS_OF_CONTROL_TYPE_FEAR             = 4,
+    LOSS_OF_CONTROL_TYPE_STUN             = 5,
+    LOSS_OF_CONTROL_TYPE_PACIFY           = 6,
+    LOSS_OF_CONTROL_TYPE_ROOT             = 7,
+    LOSS_OF_CONTROL_TYPE_SILENCE          = 8,
+    LOSS_OF_CONTROL_TYPE_PACIFYSILENCE    = 9,
+    LOSS_OF_CONTROL_TYPE_DISARM           = 10,
+    LOSS_OF_CONTROL_TYPE_SCHOOL_INTERRUPT = 11,
+    LOSS_OF_CONTROL_TYPE_STUN_MECHANIC    = 12,
+    LOSS_OF_CONTROL_TYPE_FEAR_MECHANIC    = 13
+};
+
 enum DiminishingGroup : uint16
 {
     DIMINISHING_NONE             = 0,

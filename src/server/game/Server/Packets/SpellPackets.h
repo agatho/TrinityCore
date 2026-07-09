@@ -204,6 +204,40 @@ namespace WorldPackets
         {
         public:
             explicit DiminishingReturnStart() : ServerPacket(SMSG_UNIT_DIMINISHING_RETURN_START, 16 + 1 + 1) { }
+        class AddLossOfControl final : public ServerPacket
+        {
+        public:
+            explicit AddLossOfControl() : ServerPacket(SMSG_ADD_LOSS_OF_CONTROL, 16 + 4 + 16 + 4 + 4 + 4 + 1 + 1) { }
+
+            WorldPacket const* Write() override;
+
+            ObjectGuid Target;
+            ObjectGuid Caster;
+            int32 SpellID = 0;
+            int32 Duration = 0;              ///< total lockout duration in ms
+            int32 DurationLeft = 0;          ///< remaining lockout in ms (== Duration on apply)
+            uint32 LockoutSchoolMask = 0;    ///< SpellSchoolMask of the interrupted spell
+            uint8 Type = 0;                  ///< LossOfControlType (11 = school interrupt)
+            uint8 DisplayType = 0;
+        };
+
+        // SMSG_LOSS_OF_CONTROL_AURA_UPDATE (0x420119): the aura-driven loss-of-control notification.
+        // Each entry references an active aura on the unit (by client aura slot) whose effect applies a
+        // control mechanic; the client derives the LoC display category from the referenced aura.
+        // Wire element = { u32 TimeRemaining, u16 AuraSlot, u8 EffectIndex, u8 Mechanic, u8 Mechanic2 }.
+        class LossOfControlAuraUpdate final : public ServerPacket
+        {
+        public:
+            struct LossOfControlInfo
+            {
+                uint32 TimeRemaining = 0;    ///< remaining CC duration in ms
+                uint16 AuraSlot = 0;         ///< AuraApplication::GetSlot() of the referenced aura
+                uint8 EffectIndex = 0;       ///< aura effect index that applies the control mechanic
+                uint8 Mechanic = 0;          ///< effect-level SpellMechanic (Mechanics enum)
+                uint8 Mechanic2 = 0;         ///< spell-level SpellMechanic (Mechanics enum)
+            };
+
+            explicit LossOfControlAuraUpdate() : ServerPacket(SMSG_LOSS_OF_CONTROL_AURA_UPDATE) { }
 
             WorldPacket const* Write() override;
 
@@ -213,6 +247,7 @@ namespace WorldPackets
             uint8 Category = 0;         ///< DiminishingGroup of the applied crowd-control aura
             bool ShowCountdown = false;
             bool IsImmune = false;
+            std::vector<LossOfControlInfo> Infos;
         };
 
         struct TargetLocation

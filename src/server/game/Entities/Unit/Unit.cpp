@@ -720,13 +720,20 @@ void Unit::SetVisibleAura(AuraApplication* aurApp)
     m_visibleAuras.insert(aurApp);
     m_visibleAurasToUpdate.insert(aurApp);
     UpdateAuraForGroup();
+    // A control aura became visible: refresh the client's loss-of-control list.
+    if (aurApp->GetBase()->GetSpellInfo()->GetAllEffectsMechanicMask() & MECHANIC_LOSS_CONTROL_MASK)
+        SendLossOfControlAuraUpdate();
 }
 
 void Unit::RemoveVisibleAura(AuraApplication* aurApp)
 {
+    bool const wasLossOfControl = (aurApp->GetBase()->GetSpellInfo()->GetAllEffectsMechanicMask() & MECHANIC_LOSS_CONTROL_MASK) != 0;
     m_visibleAuras.erase(aurApp);
     m_visibleAurasToUpdate.erase(aurApp);
     UpdateAuraForGroup();
+    // A control aura was removed (already erased above, so it is excluded from the rebuilt list).
+    if (wasLossOfControl)
+        SendLossOfControlAuraUpdate();
 }
 
 void Unit::SetVisibleAuraUpdate(AuraApplication* aurApp)
