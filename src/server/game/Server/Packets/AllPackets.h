@@ -43,6 +43,7 @@
 #include "CommentatorPackets.h"
 #include "CombatPackets.h"
 #include "ContributionPackets.h"
+#include "CovenantPackets.h"
 #include "DuelPackets.h"
 #include "EquipmentSetPackets.h"
 #include "GameObjectPackets.h"
