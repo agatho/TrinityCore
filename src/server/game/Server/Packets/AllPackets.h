@@ -46,6 +46,7 @@
 #include "CovenantPackets.h"
 #include "CraftingOrderPackets.h"
 #include "DelvesPackets.h"
+#include "ContentTrackingPackets.h"
 #include "DuelPackets.h"
 #include "EquipmentSetPackets.h"
 #include "GameObjectPackets.h"
@@ -88,6 +89,7 @@
 #include "TransmogrificationPackets.h"
 #include "VehiclePackets.h"
 #include "VignettePackets.h"
+#include "WeeklyRewardsPackets.h"
 #include "WhoPackets.h"
 #include "WorldStatePackets.h"
 

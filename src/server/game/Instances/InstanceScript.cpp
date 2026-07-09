@@ -34,6 +34,7 @@
 #include "ObjectMgr.h"
 #include "PhasingHandler.h"
 #include "Player.h"
+#include "WeeklyRewardsMgr.h"
 #include "RBAC.h"
 #include "ScriptedCreature.h"
 #include "ScriptReloadMgr.h"
@@ -432,10 +433,17 @@ bool InstanceScript::SetBossState(uint32 id, EncounterState state)
                     dungeonEncounter = bossInfo->GetDungeonEncounterForDifficulty(instance->GetDifficultyID());
                     if (dungeonEncounter)
                     {
+                        bool const isRaidEncounter = instance->IsRaid();
                         instance->DoOnPlayers([&](Player* player)
                         {
                             if (!player->IsLockedToDungeonEncounter(dungeonEncounter->ID))
                                 player->UpdateCriteria(CriteriaType::DefeatDungeonEncounterWhileElegibleForLoot, dungeonEncounter->ID);
+
+                            // Great Vault: credit the kill toward this week's raid or dungeon activity row. The
+                            // instance difficulty stands in for the reward tier (raid difficulty / keystone level).
+                            sWeeklyRewardsMgr.RecordActivity(player,
+                                isRaidEncounter ? WeeklyRewards::ActivityType::Raid : WeeklyRewards::ActivityType::Dungeon,
+                                uint32(instance->GetDifficultyID()));
                         });
 
                         DoUpdateCriteria(CriteriaType::DefeatDungeonEncounter, dungeonEncounter->ID);

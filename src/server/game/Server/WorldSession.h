@@ -382,6 +382,7 @@ namespace WorldPackets
     namespace EquipmentSet
     {
         class SaveEquipmentSet;
+        class AssignEquipmentSetSpec;
         class DeleteEquipmentSet;
         class AssignEquipmentSetSpec;
         class UseEquipmentSet;
@@ -642,6 +643,8 @@ namespace WorldPackets
         class CloseInteraction;
         class CloseTraitSystemInteraction;
         class CloseRuneforgeInteraction;
+        class CloseRuneforgeInteraction;
+        class CloseTraitSystemInteraction;
         class ConversationLineStarted;
         class RequestLatestSplashScreen;
         class QueryCountdownTimer;
@@ -960,6 +963,18 @@ namespace WorldPackets
         class EjectPassenger;
         class RequestVehicleExit;
         class MoveSetVehicleRecIdAck;
+    }
+
+    namespace ContentTracking
+    {
+        class StartTracking;
+        class StopTracking;
+    }
+
+    namespace WeeklyRewards
+    {
+        class ClaimWeeklyReward;
+        class RequestWeeklyRewards;
     }
 
     namespace Who
@@ -1842,6 +1857,14 @@ class TC_GAME_API WorldSession
         void HandleStartWarGame(WorldPackets::Battleground::StartWarGame& packet);
         void HandleAcceptWargameInvite(WorldPackets::Battleground::AcceptWargameInvite& packet);
         void HandleReportPvPAFK(WorldPackets::Battleground::ReportPvPPlayerAFK& reportPvPPlayerAFK);
+
+        // Great Vault / weekly rewards
+        void HandleRequestWeeklyRewards(WorldPackets::WeeklyRewards::RequestWeeklyRewards& packet);
+        void HandleClaimWeeklyReward(WorldPackets::WeeklyRewards::ClaimWeeklyReward& packet);
+
+        // Content tracking
+        void HandleContentTrackingStartTracking(WorldPackets::ContentTracking::StartTracking& packet);
+        void HandleContentTrackingStopTracking(WorldPackets::ContentTracking::StopTracking& packet);
         void HandleRequestRatedPvpInfo(WorldPackets::Battleground::RequestRatedPvpInfo& packet);
         void HandleGetPVPOptionsEnabled(WorldPackets::Battleground::GetPVPOptionsEnabled& getPvPOptionsEnabled);
         void HandleRequestPvpReward(WorldPackets::Battleground::RequestPVPRewards& packet);
@@ -1991,6 +2014,7 @@ class TC_GAME_API WorldSession
         void HandleGuildSetFocusedAchievement(WorldPackets::Achievement::GuildSetFocusedAchievement& setFocusedAchievement);
         void HandleEquipmentSetSave(WorldPackets::EquipmentSet::SaveEquipmentSet& saveEquipmentSet);
         void HandleDeleteEquipmentSet(WorldPackets::EquipmentSet::DeleteEquipmentSet& deleteEquipmentSet);
+        void HandleAssignEquipmentSetSpec(WorldPackets::EquipmentSet::AssignEquipmentSetSpec& assignEquipmentSetSpec);
         void HandleUseEquipmentSet(WorldPackets::EquipmentSet::UseEquipmentSet& useEquipmentSet);
         void HandleAssignEquipmentSetSpec(WorldPackets::EquipmentSet::AssignEquipmentSetSpec& assignEquipmentSetSpec);
         void HandleServerTimeOffsetRequest(WorldPackets::Misc::ServerTimeOffsetRequest& /*request*/);
@@ -2015,6 +2039,8 @@ class TC_GAME_API WorldSession
         void HandleContributionContribute(WorldPackets::Contribution::ContributionContribute& contribute);
         void HandleCloseTraitSystemInteraction(WorldPackets::Misc::CloseTraitSystemInteraction& closeTraitSystemInteraction);
         void HandleCloseRuneforgeInteraction(WorldPackets::Misc::CloseRuneforgeInteraction& closeRuneforgeInteraction);
+        void HandleCloseRuneforgeInteraction(WorldPackets::Misc::CloseRuneforgeInteraction& closeRuneforgeInteraction);
+        void HandleCloseTraitSystemInteraction(WorldPackets::Misc::CloseTraitSystemInteraction& closeTraitSystemInteraction);
         void HandleConversationLineStarted(WorldPackets::Misc::ConversationLineStarted& conversationLineStarted);
         void HandleKeyboundOverride(WorldPackets::Spells::KeyboundOverride& keyboundOverride);
         void HandleQueryCountdownTimer(WorldPackets::Misc::QueryCountdownTimer& queryCountdownTimer);

@@ -33,6 +33,7 @@
 #include "DatabaseEnv.h"
 #include "DB2Stores.h"
 #include "GameTime.h"
+#include "DBCEnums.h"
 #include "GossipDef.h"
 #include "Group.h"
 #include "Guild.h"

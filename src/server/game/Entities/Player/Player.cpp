@@ -18796,6 +18796,7 @@ bool Player::LoadFromDB(ObjectGuid guid, CharacterDatabaseQueryHolder const& hol
     _LoadQuestStatusObjectives(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_QUEST_STATUS_OBJECTIVES));
     _LoadQuestStatusObjectiveSpawnTrackings(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_QUEST_STATUS_OBJECTIVES_SPAWN_TRACKING));
     _LoadQuestStatusRewarded(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_QUEST_STATUS_REW));
+    _LoadContentTracking(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_CONTENT_TRACKING));
     _LoadDailyQuestStatus(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_DAILY_QUEST_STATUS));
     _LoadWeeklyQuestStatus(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_WEEKLY_QUEST_STATUS));
     _LoadSeasonalQuestStatus(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_SEASONAL_QUEST_STATUS));
@@ -19959,6 +19960,63 @@ void Player::_LoadQuestStatusRewarded(PreparedQueryResult result)
         }
         while (result->NextRow());
     }
+}
+
+bool Player::AddTrackedContent(int32 targetType, int32 targetId, int32 collectableSourceInfoId)
+{
+    // Ignore duplicates: the same (TargetType, TargetID) is only tracked once.
+    if (m_activePlayerData->TrackedCollectableSources.FindIndexIf([targetType, targetId](UF::CollectableSourceTrackedData const& e)
+        { return e.TargetType == targetType && e.TargetID == targetId; }) >= 0)
+        return false;
+
+    auto trackedSources = m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::TrackedCollectableSources);
+    auto entry = AddDynamicUpdateFieldValue(trackedSources);
+    entry.ModifyValue(&UF::CollectableSourceTrackedData::TargetType).SetValue(targetType);
+    entry.ModifyValue(&UF::CollectableSourceTrackedData::TargetID).SetValue(targetId);
+    entry.ModifyValue(&UF::CollectableSourceTrackedData::CollectableSourceInfoID).SetValue(collectableSourceInfoId);
+
+    CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_REP_CONTENT_TRACKING);
+    stmt->setUInt64(0, GetGUID().GetCounter());
+    stmt->setInt32(1, targetType);
+    stmt->setInt32(2, targetId);
+    stmt->setInt32(3, collectableSourceInfoId);
+    CharacterDatabase.Execute(stmt);
+    return true;
+}
+
+bool Player::RemoveTrackedContent(int32 targetType, int32 targetId)
+{
+    auto trackedSources = m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::TrackedCollectableSources);
+    int32 const index = m_activePlayerData->TrackedCollectableSources.FindIndexIf([targetType, targetId](UF::CollectableSourceTrackedData const& e)
+        { return e.TargetType == targetType && e.TargetID == targetId; });
+    if (index < 0)
+        return false;
+
+    RemoveDynamicUpdateFieldValue(trackedSources, index);
+
+    CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_DEL_CONTENT_TRACKING);
+    stmt->setUInt64(0, GetGUID().GetCounter());
+    stmt->setInt32(1, targetType);
+    stmt->setInt32(2, targetId);
+    CharacterDatabase.Execute(stmt);
+    return true;
+}
+
+void Player::_LoadContentTracking(PreparedQueryResult result)
+{
+    if (!result)
+        return;
+
+    auto trackedSources = m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::TrackedCollectableSources);
+    do
+    {
+        Field* fields = result->Fetch();
+        auto entry = AddDynamicUpdateFieldValue(trackedSources);
+        entry.ModifyValue(&UF::CollectableSourceTrackedData::TargetType).SetValue(fields[0].GetInt32());
+        entry.ModifyValue(&UF::CollectableSourceTrackedData::TargetID).SetValue(fields[1].GetInt32());
+        entry.ModifyValue(&UF::CollectableSourceTrackedData::CollectableSourceInfoID).SetValue(fields[2].GetInt32());
+    }
+    while (result->NextRow());
 }
 
 void Player::_LoadDailyQuestStatus(PreparedQueryResult result)
@@ -28697,6 +28755,23 @@ void Player::SetEquipmentSet(EquipmentSetInfo::EquipmentSetData const& newEqSet)
     }
 
     eqSlot.State = eqSlot.State == EQUIPMENT_SET_NEW ? EQUIPMENT_SET_NEW : EQUIPMENT_SET_CHANGED;
+}
+
+void Player::SetEquipmentSetAssignedSpec(uint64 setGuid, int32 assignedSpecIndex)
+{
+    auto itr = _equipmentSets.find(setGuid);
+    if (itr == _equipmentSets.end())
+        return;
+
+    EquipmentSetInfo& eqSet = itr->second;
+    // A negative index clears the assignment (no spec auto-equips this set).
+    if (assignedSpecIndex >= 0)
+        eqSet.Data.AssignedSpecIndex = assignedSpecIndex;
+    else
+        eqSet.Data.AssignedSpecIndex.reset();
+
+    if (eqSet.State != EQUIPMENT_SET_NEW)
+        eqSet.State = EQUIPMENT_SET_CHANGED;
 }
 
 void Player::_SaveEquipmentSets(CharacterDatabaseTransaction trans)

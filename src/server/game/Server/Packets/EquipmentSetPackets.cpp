@@ -109,6 +109,8 @@ void AssignEquipmentSetSpec::Read()
 {
     _worldPacket >> Guid;
     _worldPacket >> SpecIndex;
+    _worldPacket >> GUID;
+    _worldPacket >> AssignedSpecIndex;
 }
 
 void UseEquipmentSet::Read()

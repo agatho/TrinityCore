@@ -68,6 +68,8 @@ namespace WorldPackets
             uint64 ID = 0;
         };
 
+        // CMSG_ASSIGN_EQUIPMENT_SET_SPEC: assigns an equipment set to a character specialization so it auto-equips on
+        // spec change. Wire (client serializer sub_7FF729146E20): { uint64 GUID, int32 AssignedSpecIndex }.
         class AssignEquipmentSetSpec final : public ClientPacket
         {
         public:
@@ -77,6 +79,8 @@ namespace WorldPackets
 
             uint64 Guid = 0;        ///< Set Identifier
             int32 SpecIndex = 0;    ///< Specialization index to auto-equip this set for (-1 clears the assignment)
+            uint64 GUID = 0; ///< Set Identifier
+            int32 AssignedSpecIndex = 0;
         };
 
         class UseEquipmentSet final : public ClientPacket
