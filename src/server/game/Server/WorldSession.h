@@ -549,6 +549,7 @@ namespace WorldPackets
 
     namespace Mail
     {
+        class GetRegionwideCharacterRestrictionAndMailData;
         class MailCreateTextItem;
         class MailDelete;
         class MailGetList;
@@ -1608,6 +1609,7 @@ class TC_GAME_API WorldSession
         void HandleItemTextQuery(WorldPackets::Query::ItemTextQuery& itemTextQuery);
         void HandleMailCreateTextItem(WorldPackets::Mail::MailCreateTextItem& createTextItem);
         void HandleQueryNextMailTime(WorldPackets::Mail::MailQueryNextMailTime& queryNextMailTime);
+        void HandleGetRegionwideCharacterRestrictionAndMailData(WorldPackets::Mail::GetRegionwideCharacterRestrictionAndMailData& getRegionwideData);
 
         void HandleSplitItemOpcode(WorldPackets::Item::SplitItem& splitItem);
         void HandleSwapInvItemOpcode(WorldPackets::Item::SwapInvItem& swapInvItem);
