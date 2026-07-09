@@ -186,6 +186,7 @@ namespace WorldPackets
         class AreaSpiritHealerQueue;
         class HearthAndResurrect;
         class PVPLogDataRequest;
+        class SurrenderArena;
         class BattlemasterJoin;
         class BattlemasterJoinArena;
         class BattlefieldLeave;
@@ -1691,6 +1692,7 @@ class TC_GAME_API WorldSession
         void HandleBattlemasterHelloOpcode(WorldPackets::NPC::Hello& hello);
         void HandleBattlemasterJoinOpcode(WorldPackets::Battleground::BattlemasterJoin& battlemasterJoin);
         void HandlePVPLogDataOpcode(WorldPackets::Battleground::PVPLogDataRequest& pvpLogDataRequest);
+        void HandleSurrenderArena(WorldPackets::Battleground::SurrenderArena& surrenderArena);
         void HandleBattleFieldPortOpcode(WorldPackets::Battleground::BattlefieldPort& battlefieldPort);
         void HandleBattlefieldListOpcode(WorldPackets::Battleground::BattlefieldListRequest& battlefieldList);
         void HandleBattlefieldLeaveOpcode(WorldPackets::Battleground::BattlefieldLeave& battlefieldLeave);

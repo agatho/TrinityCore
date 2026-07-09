@@ -266,6 +266,22 @@ void WorldSession::HandlePVPLogDataOpcode(WorldPackets::Battleground::PVPLogData
     SendPacket(pvpMatchStatistics.Write());
 }
 
+void WorldSession::HandleSurrenderArena(WorldPackets::Battleground::SurrenderArena& /*surrenderArena*/)
+{
+    // Arena forfeit: the sender concedes an in-progress arena match. Their team is marked as the loser and the
+    // match ends through the standard arena end path (winner = opposing team), which applies the normal rating
+    // change / MMR update for both teams exactly like a fought-out loss.
+    Battleground* bg = _player->GetBattleground();
+    if (!bg || !bg->isArena() || bg->GetStatus() != STATUS_IN_PROGRESS)
+        return;
+
+    Team const surrenderingTeam = bg->GetPlayerTeam(_player->GetGUID());
+    if (surrenderingTeam != ALLIANCE && surrenderingTeam != HORDE)
+        return;
+
+    bg->EndBattleground(GetOtherTeam(surrenderingTeam));
+}
+
 void WorldSession::HandleBattlefieldListOpcode(WorldPackets::Battleground::BattlefieldListRequest& battlefieldList)
 {
     BattlemasterListEntry const* battlemasterListEntry = sBattlemasterListStore.LookupEntry(battlefieldList.ListID);

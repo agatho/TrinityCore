@@ -96,6 +96,16 @@ namespace WorldPackets
             void Read() override { }
         };
 
+        // CMSG_SURRENDER_ARENA -- the client's arena "Surrender"/forfeit button. Opcode-only signal (empty payload,
+        // confirmed by client RE: no wire fields). The sender's team concedes the active arena match.
+        class SurrenderArena final : public ClientPacket
+        {
+        public:
+            explicit SurrenderArena(WorldPacket&& packet) : ClientPacket(CMSG_SURRENDER_ARENA, std::move(packet)) { }
+
+            void Read() override { }
+        };
+
         struct PVPMatchStatistics
         {
             struct RatingData
