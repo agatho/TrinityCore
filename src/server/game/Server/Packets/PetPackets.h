@@ -68,6 +68,17 @@ namespace WorldPackets
             uint32 PetNumber = 0;
         };
 
+        class SetPetSpecializationRequest final : public ClientPacket
+        {
+        public:
+            explicit SetPetSpecializationRequest(WorldPacket&& packet) : ClientPacket(CMSG_SET_PET_SPECIALIZATION, std::move(packet)) { }
+
+            void Read() override;
+
+            uint32 SpecID = 0;
+            ObjectGuid PetGUID;
+        };
+
         class PetStopAttack final : public ClientPacket
         {
         public:
