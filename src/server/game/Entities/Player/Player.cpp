@@ -2173,7 +2173,15 @@ void Player::GiveXP(uint32 xp, Unit* victim, float group_rate)
 
     // XP to money conversion processed in Player::RewardQuest
     if (IsMaxLevel())
+    {
+        // The kill was eligible for XP but the award is aborted at max level. Notify the client so its
+        // XP UI can reflect the aborted gain (SMSG_XP_GAIN_ABORTED, observed for max-level kills in 12.0.7).
+        WorldPackets::Character::XPGainAborted xpGainAborted;
+        xpGainAborted.Victim = victim ? victim->GetGUID() : ObjectGuid::Empty;
+        xpGainAborted.Amount = xp;
+        SendDirectMessage(xpGainAborted.Write());
         return;
+    }
 
     uint32 bonus_xp;
     bool recruitAFriend = GetsRecruitAFriendBonus(true);

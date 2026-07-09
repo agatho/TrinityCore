@@ -827,6 +827,16 @@ WorldPacket const* LogXPGain::Write()
     return &_worldPacket;
 }
 
+WorldPacket const* XPGainAborted::Write()
+{
+    _worldPacket << Victim;
+    _worldPacket << int32(Amount);
+    _worldPacket << int32(Unused1);
+    _worldPacket << int32(Unused2);
+
+    return &_worldPacket;
+}
+
 WorldPacket const* TitleEarned::Write()
 {
     _worldPacket << uint32(Index);

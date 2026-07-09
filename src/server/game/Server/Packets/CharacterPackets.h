@@ -802,6 +802,23 @@ namespace WorldPackets
             float GroupBonus = 0.0f;
         };
 
+        // SMSG_XP_GAIN_ABORTED (0x42006C): sent when a kill/credit would have granted XP but it was
+        // aborted (e.g. the killer is at max level). Wire (client reader sub_7FF72908C710): PackedGuid
+        // Victim + 3x uint32. The trailing two were 0 in every 12.0.7 capture; their exact role is
+        // unconfirmed, so they are sent honestly as 0.
+        class XPGainAborted final : public ServerPacket
+        {
+        public:
+            explicit XPGainAborted() : ServerPacket(SMSG_XP_GAIN_ABORTED, 16 + 4 + 4 + 4) { }
+
+            WorldPacket const* Write() override;
+
+            ObjectGuid Victim;
+            int32 Amount = 0;      ///< the XP amount whose award was aborted
+            int32 Unused1 = 0;     ///< observed 0 in all 12.0.7 captures; meaning unconfirmed
+            int32 Unused2 = 0;     ///< observed 0 in all 12.0.7 captures; meaning unconfirmed
+        };
+
         class TitleEarned final : public ServerPacket
         {
         public:
