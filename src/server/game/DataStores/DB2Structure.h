@@ -156,6 +156,13 @@ struct AreaGroupMemberEntry
     uint32 AreaGroupID;
 };
 
+struct RafActivityEntry
+{
+    uint32 ID;
+    int32 CriteriaTreeID;
+    int32 RewardQuestID;
+};
+
 struct AreaTableEntry
 {
     uint32 ID;

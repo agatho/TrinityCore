@@ -47,6 +47,7 @@ DB2Storage<AdventureMapPOIEntry>                sAdventureMapPOIStore("Adventure
 DB2Storage<AnimationDataEntry>                  sAnimationDataStore("AnimationData.db2", &AnimationDataLoadInfo::Instance);
 DB2Storage<AnimKitEntry>                        sAnimKitStore("AnimKit.db2", &AnimKitLoadInfo::Instance);
 DB2Storage<AreaGroupMemberEntry>                sAreaGroupMemberStore("AreaGroupMember.db2", &AreaGroupMemberLoadInfo::Instance);
+DB2Storage<RafActivityEntry>                    sRafActivityStore("RafActivity.db2", &RafActivityLoadInfo::Instance);
 DB2Storage<AreaTableEntry>                      sAreaTableStore("AreaTable.db2", &AreaTableLoadInfo::Instance);
 DB2Storage<AreaTriggerEntry>                    sAreaTriggerStore("AreaTrigger.db2", &AreaTriggerLoadInfo::Instance);
 DB2Storage<AreaTriggerActionSetEntry>           sAreaTriggerActionSetStore("AreaTriggerActionSet.db2", &AreaTriggerActionSetLoadInfo::Instance);
@@ -700,6 +701,7 @@ uint32 DB2Manager::LoadStores(std::string const& dataPath, LocaleConstant defaul
     LOAD_DB2(sAnimationDataStore);
     LOAD_DB2(sAnimKitStore);
     LOAD_DB2(sAreaGroupMemberStore);
+    LOAD_DB2(sRafActivityStore);
     LOAD_DB2(sAreaTableStore);
     LOAD_DB2(sAreaTriggerStore);
     LOAD_DB2(sAreaTriggerActionSetStore);
