@@ -29,9 +29,12 @@
 class GameObject;
 class Map;
 class Player;
+struct GarrBuildingEntry;
+struct GarrItemLevelUpgradeDataEntry;
+struct GarrMissionEntry;
 struct GarrSiteLevelEntry;
 
-enum GarrisonType
+enum GarrisonType : int32
 {
     GARRISON_TYPE_GARRISON      = 2,
     GARRISON_TYPE_CLASS_ORDER   = 3,
@@ -60,7 +63,7 @@ enum GarrisonFollowerType
     FOLLOWER_TYPE_GARRISON      = 1,
     FOLLOWER_TYPE_SHIPYARD      = 2,
     FOLLOWER_TYPE_CLASS_ORDER   = 4,
-    FOLLOWER_TYPE_WAR_CAMPAIGN  = 11,
+    FOLLOWER_TYPE_WAR_CAMPAIGN  = 22,
     FOLLOWER_TYPE_COVENANT      = 123
 };
 
@@ -215,10 +218,52 @@ public:
         WorldPackets::Garrison::GarrisonFollower PacketInfo;
     };
 
+    struct Mission
+    {
+        WorldPackets::Garrison::GarrisonMission PacketInfo;
+        std::vector<uint64> CurrentFollowerDBIDs;
+    };
+
+    struct Shipment
+    {
+        uint64 DbID = 0;
+        uint32 ShipmentRecID = 0;
+        uint32 PlotInstanceID = 0;
+        time_t CreationTime = 0;
+        int32 Duration = 0;
+        uint64 AssignedFollowerDBID = 0;
+
+        bool IsReady() const;
+    };
+
+    // Bit values for Garrison::Talent::Flags. Exact wire bits unverified by sniff;
+    // the Temporary bit is server-only and routed back into the wire Flags value.
+    enum GarrisonTalentFlags : int32
+    {
+        GARRISON_TALENT_FLAG_NONE       = 0x0,
+        GARRISON_TALENT_FLAG_TEMPORARY  = 0x1,  // Legion class-hall one-shot/temporary talent
+    };
+
+    struct Talent
+    {
+        uint32 GarrTalentID = 0;
+        int32 Rank = 0;
+        time_t ResearchStartTime = 0;
+        int32 Flags = 0;
+        int32 SoulbindConduitID = 0;
+        int32 SoulbindConduitRank = 0;
+
+        bool IsResearching() const;
+        bool IsResearchComplete() const;
+        bool IsTemporary() const { return (Flags & GARRISON_TALENT_FLAG_TEMPORARY) != 0; }
+    };
+
     explicit Garrison(Player* owner);
 
     bool LoadFromDB(PreparedQueryResult garrison, PreparedQueryResult blueprints, PreparedQueryResult buildings,
-        PreparedQueryResult followers, PreparedQueryResult abilities);
+        PreparedQueryResult followers, PreparedQueryResult abilities, PreparedQueryResult missions,
+        PreparedQueryResult specializations, PreparedQueryResult shipments, PreparedQueryResult talents,
+        PreparedQueryResult trophies, PreparedQueryResult archivedMissions);
     void SaveToDB(CharacterDatabaseTransaction trans);
     static void DeleteFromDB(ObjectGuid::LowType ownerGuid, CharacterDatabaseTransaction trans);
 
@@ -226,12 +271,13 @@ public:
     void Delete();
     void Upgrade();
 
+    void Update(uint32 diff);
     void Enter() const;
     void Leave() const;
 
     static constexpr GarrisonFactionIndex GetFaction(Team team) { return team == HORDE ? GARRISON_FACTION_INDEX_HORDE : GARRISON_FACTION_INDEX_ALLIANCE; }
     GarrisonFactionIndex GetFaction() const;
-    GarrisonType GetType() const { return GARRISON_TYPE_GARRISON; }
+    GarrisonType GetType() const { return _garrType; }
     GarrSiteLevelEntry const* GetSiteLevel() const { return _siteLevel; }
 
     // Plots
@@ -246,10 +292,26 @@ public:
     void PlaceBuilding(uint32 garrPlotInstanceId, uint32 garrBuildingId);
     void CancelBuildingConstruction(uint32 garrPlotInstanceId);
     void ActivateBuilding(uint32 garrPlotInstanceId);
+    void SwapBuildings(uint32 plotId1, uint32 plotId2);
+
+    // Specializations
+    void LearnSpecialization(uint32 garrSpecId);
+    bool HasSpecialization(uint32 garrSpecId) const { return _knownSpecializations.find(garrSpecId) != _knownSpecializations.end(); }
+    void SetBuildingSpecialization(uint32 garrPlotInstanceId, uint32 garrSpecId);
 
     // Followers
     void AddFollower(uint32 garrFollowerId);
+    void AddTroop(uint32 garrFollowerId, uint32 durability);
     Follower const* GetFollower(uint64 dbId) const;
+    Follower* GetFollower(uint64 dbId);
+    Follower const* GetFollowerByEntry(uint32 garrFollowerId) const;
+    void RemoveFollower(uint64 dbId);
+    void SetFollowerFavorite(uint64 dbId, bool favorite);
+    void SetFollowerInactive(uint64 dbId, bool inactive);
+    void RenameFollower(uint64 dbId, std::string const& name);
+    void AssignFollowerToBuilding(uint64 dbId, uint32 plotInstanceId);
+    void RemoveFollowerFromBuilding(uint64 dbId);
+    std::unordered_map<uint64, Follower> const& GetFollowerMap() const { return _followers; }
     template<typename Predicate>
     uint32 CountFollowers(Predicate&& predicate) const
     {
@@ -261,10 +323,84 @@ public:
         return count;
     }
 
+    // Missions
+    void AddMission(uint32 garrMissionId);
+    Mission const* GetMission(uint64 dbId) const;
+    Mission* GetMission(uint64 dbId);
+    Mission const* GetMissionByRecID(uint32 missionRecID) const;
+    Mission* GetMissionByRecID(uint32 missionRecID);
+    GarrisonError StartMission(uint32 missionRecID, std::vector<uint64> const& followerDBIDs);
+    GarrisonError CompleteMission(uint32 missionRecID);
+    GarrisonError ClaimMissionReward(uint32 missionRecID);
+    GarrisonError MissionBonusRoll(uint32 missionRecID);
+    void RemoveMission(uint32 missionRecID);
+    void GenerateAvailableMissions();
+    uint64 GenerateMissionDbId();
+    int32 CalculateSuccessChance(uint32 missionRecID, std::vector<uint64> const& followerDBIDs) const;
+    void PopulateMissionData(Mission& mission, GarrMissionEntry const* missionEntry) const;
+    bool IsAutoCombatMission(Mission const& mission) const;
+    void RemoveExpiredMissions();
+    uint32 GetAndIncrementSessionMissionCount() { return _sessionMissionCount++; }
+    void SendDeleteExpiredMissionsResult() const;
+
+    // Recruitment
+    void SetRecruitmentPreferences(uint32 abilityId, uint32 traitId);
+    void GenerateRecruits(uint32 faction);
+    GarrisonError RecruitFollower(uint32 garrFollowerID);
+    std::vector<WorldPackets::Garrison::GarrisonFollower> const& GetAvailableRecruits() const { return _availableRecruits; }
+
+    // Follower healing
+    void HealAllFollowers();
+    void SendAllFollowerUpdates();
+
+    // Spell-driven operations
+    void FinishMission(uint32 garrMissionRecID);
+    void FinishShipment(uint32 plotInstanceId);
+    void SetFollowerQuality(uint64 dbId, uint32 quality);
+    void SetFollowerLevel(uint64 dbId, uint32 level);
+    void AddFollowerXP(uint64 dbId, uint32 xp);
+    void LearnFollowerAbility(uint64 dbId, uint32 abilityId);
+    void RandomizeFollowerAbilities(uint64 dbId);
+    void EndBuildingConstruction(uint32 garrPlotInstanceId);
+    void SetGarrisonCacheSize(uint32 size);
+    Follower* GetFollowerByGarrFollowerID(uint32 garrFollowerID);
+    GarrisonError UpgradeFollowerItemLevel(uint64 dbId, int32 amount, int32 slot, GarrItemLevelUpgradeDataEntry const* upgradeData = nullptr);
+
+    // Building-specific helpers
+    GarrBuildingEntry const* GetActiveBuildingByType(uint32 buildingType) const;
+    uint32 GetBonusFollowerSlots() const;
+
+    // Shipments (work orders)
+    GarrisonError CreateShipment(ObjectGuid npcGUID, uint32 count);
+    void CompleteShipment(uint64 dbId);
+    void CompleteReadyShipments();
+    std::vector<Shipment const*> GetShipmentsForPlot(uint32 plotInstanceId) const;
+    std::vector<Shipment const*> GetAllShipments() const;
+    void SendShipmentInfo(ObjectGuid npcGUID);
+    void SendLandingPageShipments();
+    uint32 GetBuildingTypeForPlot(uint32 plotInstanceId) const;
+    uint32 FindPlotInstanceForNpc(ObjectGuid npcGUID) const;
+
+    // Talent system
+    uint32 LearnTalent(uint32 garrTalentID, bool isTemporary);
+    uint32 ResearchTalent(uint32 garrTalentID);
+    uint32 SocketTalent(uint32 garrTalentID, int32 soulbindConduitID, int32 soulbindConduitRank);
+    Talent const* GetTalent(uint32 garrTalentID) const;
+    std::unordered_map<uint32, Talent> const& GetAllTalents() const { return _talents; }
+    void CompleteAllTalentResearch();
+
+    // Trophy system
+    void AddTrophy(uint32 trophyID);
+    void RemoveTrophy(uint32 trophyID);
+    bool HasTrophy(uint32 trophyID) const { return _trophies.count(trophyID) > 0; }
+    std::unordered_set<uint32> const& GetTrophies() const { return _trophies; }
+
     void BuildInfoPacket(WorldPackets::Garrison::GarrisonInfo& garrison) const;
     void SendRemoteInfo() const;
     void SendBlueprintAndSpecializationData();
     void SendMapData(Player* receiver) const;
+    void SendMissionStartConditionUpdate() const;
+    void SendTroopQualityRefresh() const;
 
     void ResetFollowerActivationLimit() { _followerActivationsRemainingToday = 1; }
 
@@ -274,13 +410,41 @@ private:
     GarrisonError CheckBuildingPlacement(uint32 garrPlotInstanceId, uint32 garrBuildingId) const;
     GarrisonError CheckBuildingRemoval(uint32 garrPlotInstanceId) const;
     Player* _owner;
+    GarrisonType _garrType;
     GarrSiteLevelEntry const* _siteLevel;
     uint32 _followerActivationsRemainingToday;
+    uint32 _updateTimer = 0;
+    uint32 _garrisonCacheSize = 500;
+    static constexpr uint32 GARRISON_UPDATE_INTERVAL = 60000; // 60 seconds
 
     std::unordered_map<uint32 /*garrPlotInstanceId*/, Plot> _plots;
     std::unordered_set<uint32 /*garrBuildingId*/> _knownBuildings;
+    std::unordered_set<uint32 /*garrSpecId*/> _knownSpecializations;
     std::unordered_map<uint64 /*dbId*/, Follower> _followers;
     std::unordered_set<uint32> _followerIds;
+    std::unordered_map<uint64 /*dbId*/, Mission> _missions;
+    uint64 _missionDbIdGenerator = 1;
+    time_t _lastMissionGenerationTime = 0;
+    std::unordered_set<uint32 /*missionRecID*/> _activeMissionRecIDs;
+    uint32 _sessionMissionCount = 0;
+    uint32 _missionsStartedToday = 0;
+    uint32 _lastMissionStartDay = 0; // days since epoch, for daily reset detection
+    std::vector<int32> _archivedMissions;
+
+    // Recruitment
+    std::vector<WorldPackets::Garrison::GarrisonFollower> _availableRecruits;
+    uint32 _recruitmentPreferenceAbilityId = 0;
+    uint32 _recruitmentPreferenceTraitId = 0;
+
+    // Shipments
+    std::unordered_map<uint64 /*dbId*/, Shipment> _shipments;
+    std::unordered_map<uint32 /*garrTalentID*/, Talent> _talents;
+
+    // Trophies
+    std::unordered_set<uint32 /*trophyID*/> _trophies;
+
+    // Temporary storage for BuildInfoPacket (mission copies with cleared inline rewards)
+    mutable std::vector<WorldPackets::Garrison::GarrisonMission> _infoMissions;
 };
 
 #endif // Garrison_h__

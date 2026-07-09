@@ -1054,6 +1054,10 @@ void Player::Update(uint32 p_time)
             m_nextSave -= p_time;
     }
 
+    // Update garrison timers (building completion, shipments, talent research, mission expiry)
+    for (auto& [type, garrison] : _garrisons)
+        garrison->Update(p_time);
+
     //Handle Water/drowning
     HandleDrowning(p_time);
 
@@ -18975,8 +18979,14 @@ bool Player::LoadFromDB(ObjectGuid guid, CharacterDatabaseQueryHolder const& hol
         holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_GARRISON_BLUEPRINTS),
         holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_GARRISON_BUILDINGS),
         holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_GARRISON_FOLLOWERS),
-        holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_GARRISON_FOLLOWER_ABILITIES)))
-        _garrison = std::move(garrison);
+        holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_GARRISON_FOLLOWER_ABILITIES),
+        holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_GARRISON_MISSIONS),
+        holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_GARRISON_SPECIALIZATIONS),
+        holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_GARRISON_SHIPMENTS),
+        holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_GARRISON_TALENTS),
+        holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_GARRISON_TROPHIES),
+        holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_GARRISON_ARCHIVED_MISSIONS)))
+        _garrisons[garrison->GetType()] = std::move(garrison);
 
     _InitHonorLevelOnLoadFromDB(fields.honor, fields.honorLevel);
 
@@ -21241,8 +21251,8 @@ void Player::SaveToDB(LoginDatabaseTransaction loginTransaction, CharacterDataba
     _SaveCUFProfiles(trans);
     _SavePlayerData(trans);
     _SaveCharacterBankTabSettings(trans);
-    if (_garrison)
-        _garrison->SaveToDB(trans);
+    for (auto const& [type, garrison] : _garrisons)
+        garrison->SaveToDB(trans);
 
     // check if stats should only be saved on logout
     // save stats can be out of transaction
@@ -25609,8 +25619,8 @@ void Player::SendInitialPacketsAfterAddToMap()
 
     PhasingHandler::OnMapChange(this);
 
-    if (_garrison)
-        _garrison->SendRemoteInfo();
+    for (auto const& [type, garrison] : _garrisons)
+        garrison->SendRemoteInfo();
 
     UpdateItemLevelAreaBasedScaling();
 
@@ -26079,8 +26089,8 @@ void Player::DailyReset()
     m_DailyQuestChanged = false;
     m_lastDailyQuestTime = 0;
 
-    if (_garrison)
-        _garrison->ResetFollowerActivationLimit();
+    for (auto const& [type, garrison] : _garrisons)
+        garrison->ResetFollowerActivationLimit();
 
     FailCriteria(CriteriaFailEvent::DailyQuestsCleared, 0);
 }
@@ -30614,16 +30624,26 @@ void Player::CreateGarrison(uint32 garrSiteId)
 {
     std::unique_ptr<Garrison> garrison(new Garrison(this));
     if (garrison->Create(garrSiteId))
-        _garrison = std::move(garrison);
+        _garrisons[garrison->GetType()] = std::move(garrison);
 }
 
-void Player::DeleteGarrison()
+void Player::DeleteGarrison(GarrisonType type)
 {
-    if (_garrison)
+    auto itr = _garrisons.find(type);
+    if (itr != _garrisons.end())
     {
-        _garrison->Delete();
-        _garrison.reset();
+        itr->second->Delete();
+        _garrisons.erase(itr);
     }
+}
+
+Garrison* Player::GetGarrison(GarrisonType type) const
+{
+    auto itr = _garrisons.find(type);
+    if (itr != _garrisons.end())
+        return itr->second.get();
+
+    return nullptr;
 }
 
 void Player::SendMovementSetCollisionHeight(float height, WorldPackets::Movement::UpdateCollisionHeightReason reason)

@@ -80,6 +80,7 @@ class CinematicMgr;
 class Creature;
 class DynamicObject;
 class Garrison;
+enum GarrisonType : int32;
 class Group;
 class Guild;
 class Item;
@@ -1025,6 +1026,12 @@ enum PlayerLoginQueryIndex
     PLAYER_LOGIN_QUERY_LOAD_GARRISON_BUILDINGS,
     PLAYER_LOGIN_QUERY_LOAD_GARRISON_FOLLOWERS,
     PLAYER_LOGIN_QUERY_LOAD_GARRISON_FOLLOWER_ABILITIES,
+    PLAYER_LOGIN_QUERY_LOAD_GARRISON_MISSIONS,
+    PLAYER_LOGIN_QUERY_LOAD_GARRISON_SPECIALIZATIONS,
+    PLAYER_LOGIN_QUERY_LOAD_GARRISON_SHIPMENTS,
+    PLAYER_LOGIN_QUERY_LOAD_GARRISON_TALENTS,
+    PLAYER_LOGIN_QUERY_LOAD_GARRISON_TROPHIES,
+    PLAYER_LOGIN_QUERY_LOAD_GARRISON_ARCHIVED_MISSIONS,
     PLAYER_LOGIN_QUERY_LOAD_TRAIT_ENTRIES,
     PLAYER_LOGIN_QUERY_LOAD_TRAIT_CONFIGS,
     PLAYER_LOGIN_QUERY_LOAD_DATA_ELEMENTS,
@@ -2914,8 +2921,10 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         void UnlockReagentBank() { SetPlayerFlagEx(PLAYER_FLAGS_EX_REAGENT_BANK_UNLOCKED); }
 
         void CreateGarrison(uint32 garrSiteId);
-        void DeleteGarrison();
-        Garrison* GetGarrison() const { return _garrison.get(); }
+        void DeleteGarrison(GarrisonType type = GarrisonType(2) /*GARRISON_TYPE_GARRISON*/);
+        Garrison* GetGarrison() const { return GetGarrison(GarrisonType(2) /*GARRISON_TYPE_GARRISON*/); }
+        Garrison* GetGarrison(GarrisonType type) const;
+        std::unordered_map<int32, std::unique_ptr<Garrison>> const& GetGarrisons() const { return _garrisons; }
 
         // Covenant / Soulbind
         uint32 GetActiveCovenant() const { return m_activeCovenantId; }
@@ -3500,7 +3509,7 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
 
         uint32 _activeCheats;
 
-        std::unique_ptr<Garrison> _garrison;
+        std::unordered_map<int32 /*GarrisonType*/, std::unique_ptr<Garrison>> _garrisons;
 
         bool _advancedCombatLoggingEnabled;
 

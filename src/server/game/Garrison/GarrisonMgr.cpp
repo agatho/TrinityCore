@@ -19,6 +19,7 @@
 #include "Containers.h"
 #include "DatabaseEnv.h"
 #include "DB2Stores.h"
+#include "DB2Structure.h"
 #include "Garrison.h"
 #include "Log.h"
 #include "ObjectMgr.h"
@@ -37,6 +38,10 @@ GarrisonMgr& GarrisonMgr::Instance()
 
 void GarrisonMgr::Initialize()
 {
+    // Build site level index for O(1) lookups by (siteId, level)
+    for (GarrSiteLevelEntry const* siteLevel : sGarrSiteLevelStore)
+        _garrSiteLevelBySiteAndLevel[std::make_pair(siteLevel->GarrSiteID, siteLevel->GarrLevel)] = siteLevel;
+
     for (GarrSiteLevelPlotInstEntry const* siteLevelPlotInst : sGarrSiteLevelPlotInstStore)
         _garrisonPlotInstBySiteLevel[siteLevelPlotInst->GarrSiteLevelID].push_back(siteLevelPlotInst);
 
@@ -73,6 +78,85 @@ void GarrisonMgr::Initialize()
         }
     }
 
+    // Build follower level XP index
+    for (GarrFollowerLevelXPEntry const* levelXP : sGarrFollowerLevelXPStore)
+        _followerLevelXP[std::make_pair(levelXP->GarrFollowerTypeID, levelXP->FollowerLevel)] = levelXP;
+
+    // Build follower quality index
+    for (GarrFollowerQualityEntry const* quality : sGarrFollowerQualityStore)
+        _followerQuality[std::make_pair(quality->GarrFollowerTypeID, quality->Quality)] = quality;
+
+    // Build mission index by garrison type
+    for (GarrMissionEntry const* mission : sGarrMissionStore)
+        _missionsByGarrType[mission->GarrTypeID].push_back(mission);
+
+    // Build mission encounter index
+    for (GarrMissionXEncounterEntry const* missionEncounter : sGarrMissionXEncounterStore)
+        _missionEncounters[missionEncounter->GarrMissionID].push_back(missionEncounter);
+
+    // Build mission required followers index
+    for (GarrMissionXFollowerEntry const* missionFollower : sGarrMissionXFollowerStore)
+        _missionRequiredFollowers[missionFollower->GarrMissionID].push_back(missionFollower);
+
+    // Build encounter mechanics index (GarrEncounterXMechanic -> GarrMechanic per encounter)
+    for (GarrEncounterXMechanicEntry const* encounterMechanic : sGarrEncounterXMechanicStore)
+    {
+        if (GarrMechanicEntry const* mechanic = sGarrMechanicStore.LookupEntry(encounterMechanic->GarrMechanicID))
+            _encounterMechanics[encounterMechanic->GarrEncounterID].push_back(mechanic);
+    }
+
+    // Build shipment container index (building type -> container)
+    for (CharShipmentContainerEntry const* container : sCharShipmentContainerStore)
+        _shipmentContainersByBuildingType[container->GarrBuildingType] = container;
+
+    // Build shipment index (container -> shipments)
+    for (CharShipmentEntry const* shipment : sCharShipmentStore)
+        _shipmentsByContainer[shipment->ContainerID].push_back(shipment);
+
+    // Build follower type index (garrison type -> primary follower type)
+    // Each garrison type has one primary follower type (e.g., type 2 -> follower type 1, type 3 -> follower type 4)
+    for (GarrFollowerTypeEntry const* followerType : sGarrFollowerTypeStore)
+    {
+        // Use first (non-shipyard) follower type per garrison type as primary
+        // Shipyard followers (type 2) share garrTypeID 2 with regular followers (type 1)
+        auto itr = _followerTypeByGarrType.find(followerType->GarrTypeID);
+        if (itr == _followerTypeByGarrType.end() || followerType->ID < itr->second->ID)
+            _followerTypeByGarrType[followerType->GarrTypeID] = followerType;
+    }
+
+    // Build talent tree index (garrison type -> talent trees)
+    for (GarrTalentTreeEntry const* tree : sGarrTalentTreeStore)
+        _talentTreesByGarrType[tree->GarrTypeID].push_back(tree);
+
+    // Build talent index (talent tree -> talents)
+    for (GarrTalentEntry const* talent : sGarrTalentStore)
+        _talentsByTree[talent->GarrTalentTreeID].push_back(talent);
+
+    // Build talent rank index (talent -> ranks, sorted by rank)
+    for (GarrTalentRankEntry const* rank : sGarrTalentRankStore)
+        _talentRanksByTalent[rank->GarrTalentID].push_back(rank);
+
+    for (auto& [talentId, ranks] : _talentRanksByTalent)
+        std::sort(ranks.begin(), ranks.end(), [](GarrTalentRankEntry const* a, GarrTalentRankEntry const* b) { return a->Rank < b->Rank; });
+
+    // Build talent research index (talent tree -> research entry via crossref)
+    for (GarrTalTreeXGarrTalResearchEntry const* xref : sGarrTalTreeXGarrTalResearchStore)
+    {
+        if (GarrTalentResearchEntry const* research = sGarrTalentResearchStore.LookupEntry(xref->GarrTalentResearchID))
+            _talentResearchByTree[xref->GarrTalentTreeID] = research;
+    }
+
+    // Auto-combat indices
+    for (GarrAutoSpellEffectEntry const* effect : sGarrAutoSpellEffectStore)
+        _autoSpellEffects[effect->GarrAutoSpellID].push_back(effect);
+
+    for (GarrEncounterSetXEncounterEntry const* xref : sGarrEncounterSetXEncounterStore)
+        _encounterSetEncounters[xref->GarrEncounterSetID].push_back(xref->GarrEncounterID);
+
+    for (GarrAutoCombatantEntry const* combatant : sGarrAutoCombatantStore)
+        if (combatant->GarrEncounterID != 0)
+            _autoCombatantByEncounter[combatant->GarrEncounterID] = combatant;
+
     InitializeDbIdSequences();
     LoadPlotFinalizeGOInfo();
     LoadFollowerClassSpecAbilities();
@@ -80,9 +164,9 @@ void GarrisonMgr::Initialize()
 
 GarrSiteLevelEntry const* GarrisonMgr::GetGarrSiteLevelEntry(uint32 garrSiteId, uint32 level) const
 {
-    for (GarrSiteLevelEntry const* siteLevel : sGarrSiteLevelStore)
-        if (siteLevel->GarrSiteID == garrSiteId && siteLevel->GarrLevel == level)
-            return siteLevel;
+    auto itr = _garrSiteLevelBySiteAndLevel.find(std::make_pair(garrSiteId, level));
+    if (itr != _garrSiteLevelBySiteAndLevel.end())
+        return itr->second;
 
     return nullptr;
 }
@@ -332,10 +416,183 @@ std::list<GarrAbilityEntry const*> GarrisonMgr::GetClassSpecAbilities(GarrFollow
     return abilities;
 }
 
+GarrFollowerTypeEntry const* GarrisonMgr::GetFollowerTypeForGarrType(int8 garrTypeID) const
+{
+    auto itr = _followerTypeByGarrType.find(garrTypeID);
+    if (itr != _followerTypeByGarrType.end())
+        return itr->second;
+
+    return nullptr;
+}
+
+uint8 GarrisonMgr::GetPrimaryFollowerType(int8 garrTypeID) const
+{
+    GarrFollowerTypeEntry const* entry = GetFollowerTypeForGarrType(garrTypeID);
+    if (entry)
+        return entry->ID;
+
+    // Fallback to WoD follower type
+    return FOLLOWER_TYPE_GARRISON;
+}
+
+GarrFollowerLevelXPEntry const* GarrisonMgr::GetFollowerLevelXP(uint8 garrFollowerTypeID, int8 followerLevel) const
+{
+    auto itr = _followerLevelXP.find(std::make_pair(garrFollowerTypeID, followerLevel));
+    if (itr != _followerLevelXP.end())
+        return itr->second;
+
+    return nullptr;
+}
+
+GarrFollowerQualityEntry const* GarrisonMgr::GetFollowerQuality(uint16 garrFollowerTypeID, int8 quality) const
+{
+    auto itr = _followerQuality.find(std::make_pair(garrFollowerTypeID, quality));
+    if (itr != _followerQuality.end())
+        return itr->second;
+
+    return nullptr;
+}
+
+uint32 GarrisonMgr::GetFollowerZoneSupportSpell(uint32 garrFollowerID, uint32 factionIndex) const
+{
+    GarrFollSupportSpellEntry const* best = nullptr;
+    for (GarrFollSupportSpellEntry const* entry : sGarrFollSupportSpellStore)
+    {
+        if (entry->GarrFollowerID != garrFollowerID)
+            continue;
+        if (!best || entry->OrderIndex < best->OrderIndex)
+            best = entry;
+    }
+
+    if (!best)
+        return 0;
+
+    return factionIndex == GARRISON_FACTION_INDEX_ALLIANCE ? uint32(best->AllianceSpellID) : uint32(best->HordeSpellID);
+}
+
+std::vector<GarrMissionEntry const*> const* GarrisonMgr::GetMissionsByGarrType(int8 garrTypeID) const
+{
+    auto itr = _missionsByGarrType.find(garrTypeID);
+    if (itr != _missionsByGarrType.end())
+        return &itr->second;
+
+    return nullptr;
+}
+
+std::vector<GarrMissionXEncounterEntry const*> const* GarrisonMgr::GetMissionEncounters(uint32 garrMissionID) const
+{
+    auto itr = _missionEncounters.find(garrMissionID);
+    if (itr != _missionEncounters.end())
+        return &itr->second;
+
+    return nullptr;
+}
+
+std::vector<GarrMechanicEntry const*> const* GarrisonMgr::GetEncounterMechanics(uint32 garrEncounterID) const
+{
+    auto itr = _encounterMechanics.find(garrEncounterID);
+    if (itr != _encounterMechanics.end())
+        return &itr->second;
+
+    return nullptr;
+}
+
+std::vector<GarrMissionXFollowerEntry const*> const* GarrisonMgr::GetMissionRequiredFollowers(uint32 garrMissionID) const
+{
+    auto itr = _missionRequiredFollowers.find(garrMissionID);
+    if (itr != _missionRequiredFollowers.end())
+        return &itr->second;
+
+    return nullptr;
+}
+
+GarrMechanicTypeEntry const* GarrisonMgr::GetMechanicType(int32 garrMechanicTypeID) const
+{
+    return sGarrMechanicTypeStore.LookupEntry(garrMechanicTypeID);
+}
+
+bool GarrisonMgr::DoesAbilityCounterMechanic(GarrAbilityEntry const* ability, GarrMechanicTypeEntry const* mechanicType) const
+{
+    if (!ability || !mechanicType)
+        return false;
+
+    // An ability counters a mechanic if they share the same GarrAbilityCategoryID
+    return ability->GarrAbilityCategoryID == mechanicType->GarrAbilityCategoryID
+        && ability->GarrAbilityCategoryID != 0;
+}
+
+CharShipmentContainerEntry const* GarrisonMgr::GetShipmentContainerForBuilding(uint8 garrBuildingType) const
+{
+    auto itr = _shipmentContainersByBuildingType.find(garrBuildingType);
+    if (itr != _shipmentContainersByBuildingType.end())
+        return itr->second;
+
+    return nullptr;
+}
+
+std::vector<CharShipmentEntry const*> const* GarrisonMgr::GetShipmentsForContainer(uint32 containerID) const
+{
+    auto itr = _shipmentsByContainer.find(containerID);
+    if (itr != _shipmentsByContainer.end())
+        return &itr->second;
+
+    return nullptr;
+}
+
+uint64 GarrisonMgr::GenerateShipmentDbId()
+{
+    if (_shipmentDbIdGenerator >= std::numeric_limits<uint64>::max())
+    {
+        TC_LOG_ERROR("misc", "Garrison shipment db id overflow! Can't continue, shutting down server. ");
+        World::StopNow(ERROR_EXIT_CODE);
+    }
+
+    return _shipmentDbIdGenerator++;
+}
+
+std::vector<GarrTalentTreeEntry const*> const* GarrisonMgr::GetTalentTreesForGarrType(int8 garrTypeID) const
+{
+    auto itr = _talentTreesByGarrType.find(garrTypeID);
+    if (itr != _talentTreesByGarrType.end())
+        return &itr->second;
+
+    return nullptr;
+}
+
+std::vector<GarrTalentEntry const*> const* GarrisonMgr::GetTalentsForTree(uint32 garrTalentTreeID) const
+{
+    auto itr = _talentsByTree.find(garrTalentTreeID);
+    if (itr != _talentsByTree.end())
+        return &itr->second;
+
+    return nullptr;
+}
+
+std::vector<GarrTalentRankEntry const*> const* GarrisonMgr::GetTalentRanksForTalent(uint32 garrTalentID) const
+{
+    auto itr = _talentRanksByTalent.find(garrTalentID);
+    if (itr != _talentRanksByTalent.end())
+        return &itr->second;
+
+    return nullptr;
+}
+
+GarrTalentResearchEntry const* GarrisonMgr::GetTalentResearchForTree(uint32 garrTalentTreeID) const
+{
+    auto itr = _talentResearchByTree.find(garrTalentTreeID);
+    if (itr != _talentResearchByTree.end())
+        return itr->second;
+
+    return nullptr;
+}
+
 void GarrisonMgr::InitializeDbIdSequences()
 {
     if (QueryResult result = CharacterDatabase.Query("SELECT MAX(dbId) FROM character_garrison_followers"))
         _followerDbIdGenerator = (*result)[0].GetUInt64() + 1;
+
+    if (QueryResult result = CharacterDatabase.Query("SELECT MAX(dbId) FROM character_garrison_shipments"))
+        _shipmentDbIdGenerator = (*result)[0].GetUInt64() + 1;
 }
 
 void GarrisonMgr::LoadPlotFinalizeGOInfo()
@@ -463,4 +720,36 @@ void GarrisonMgr::LoadFollowerClassSpecAbilities()
         pair.second.sort();
 
     TC_LOG_INFO("server.loading", ">> Loaded {} garrison follower class spec abilities in {}.", count, GetMSTimeDiffToNow(msTime));
+}
+
+GarrAutoCombatantEntry const* GarrisonMgr::GetAutoCombatant(uint32 garrAutoCombatantID) const
+{
+    return sGarrAutoCombatantStore.LookupEntry(garrAutoCombatantID);
+}
+
+GarrAutoCombatantEntry const* GarrisonMgr::GetAutoCombatantForEncounter(uint32 garrEncounterID) const
+{
+    auto itr = _autoCombatantByEncounter.find(garrEncounterID);
+    if (itr != _autoCombatantByEncounter.end())
+        return itr->second;
+
+    return nullptr;
+}
+
+std::vector<GarrAutoSpellEffectEntry const*> const* GarrisonMgr::GetAutoSpellEffects(uint32 garrAutoSpellID) const
+{
+    auto itr = _autoSpellEffects.find(garrAutoSpellID);
+    if (itr != _autoSpellEffects.end())
+        return &itr->second;
+
+    return nullptr;
+}
+
+std::vector<uint32> const* GarrisonMgr::GetEncounterSetEncounters(int32 garrEncounterSetID) const
+{
+    auto itr = _encounterSetEncounters.find(garrEncounterSetID);
+    if (itr != _encounterSetEncounters.end())
+        return &itr->second;
+
+    return nullptr;
 }
