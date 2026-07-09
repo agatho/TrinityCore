@@ -390,6 +390,13 @@ void ChangeBagSlotFlag::Read()
     _worldPacket >> Bits<1>(On);
 }
 
+void ChangeBankBagSlotFlag::Read()
+{
+    _worldPacket >> BagIndex;
+    _worldPacket >> As<uint32>(FlagToChange);
+    _worldPacket >> Bits<1>(On);
+}
+
 void SetBackpackAutosortDisabled::Read()
 {
     _worldPacket >> Bits<1>(Disable);

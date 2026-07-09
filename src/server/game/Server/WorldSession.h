@@ -468,6 +468,7 @@ namespace WorldPackets
         struct ItemInstance;
         class RemoveNewItem;
         class ChangeBagSlotFlag;
+        class ChangeBankBagSlotFlag;
         class SetBackpackAutosortDisabled;
         class SetBackpackSellJunkDisabled;
         class SetBankAutosortDisabled;
@@ -1569,6 +1570,7 @@ class TC_GAME_API WorldSession
         void HandleWrapItem(WorldPackets::Item::WrapItem& packet);
         void HandleUseCritterItem(WorldPackets::Item::UseCritterItem& packet);
         void HandleChangeBagSlotFlag(WorldPackets::Item::ChangeBagSlotFlag const& changeBagSlotFlag);
+        void HandleChangeBankBagSlotFlag(WorldPackets::Item::ChangeBankBagSlotFlag const& changeBankBagSlotFlag);
         void HandleSetBackpackAutosortDisabled(WorldPackets::Item::SetBackpackAutosortDisabled const& setBackpackAutosortDisabled);
         void HandleSetBackpackSellJunkDisabled(WorldPackets::Item::SetBackpackSellJunkDisabled const& setBackpackSellJunkDisabled);
         void HandleSetBankAutosortDisabled(WorldPackets::Item::SetBankAutosortDisabled const& setBankAutosortDisabled);
