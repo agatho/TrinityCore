@@ -39,6 +39,7 @@
 #include "Random.h"
 #include "SpellMgr.h"
 #include "TemporarySummon.h"
+#include "WeeklyRewardsMgr.h"
 #include <algorithm>
 #include <vector>
 
@@ -286,6 +287,11 @@ void ChallengeMode::Complete()
             data->RecordRun(record);
             data->RecordWeeklyRun(record.ChallengeModeID, record.Level, record.CompletionDate);
         }
+
+        // Great Vault: a completed Mythic+ keystone credits the Dungeon row at its true keystone level (the level
+        // drives the reward tier). This is the only thing that feeds the Dungeon row — regular/heroic/mythic-0
+        // dungeon boss kills do not (see InstanceScript encounter DONE, which only credits the Raid row).
+        sWeeklyRewardsMgr.RecordActivity(player, WeeklyRewards::ActivityType::Dungeon, record.Level);
     });
 
     if (Player* starterPlayer = ObjectAccessor::GetPlayer(_instance, _starterGuid))

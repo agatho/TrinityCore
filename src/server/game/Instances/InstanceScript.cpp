@@ -450,11 +450,13 @@ bool InstanceScript::SetBossState(uint32 id, EncounterState state)
                             if (!player->IsLockedToDungeonEncounter(dungeonEncounter->ID))
                                 player->UpdateCriteria(CriteriaType::DefeatDungeonEncounterWhileElegibleForLoot, dungeonEncounter->ID);
 
-                            // Great Vault: credit the kill toward this week's raid or dungeon activity row. The
-                            // instance difficulty stands in for the reward tier (raid difficulty / keystone level).
-                            sWeeklyRewardsMgr.RecordActivity(player,
-                                isRaidEncounter ? WeeklyRewards::ActivityType::Raid : WeeklyRewards::ActivityType::Dungeon,
-                                uint32(instance->GetDifficultyID()));
+                            // Great Vault: only raid boss kills feed the Raid row here (tier = raid difficulty).
+                            // The Dungeon row is credited exclusively on Mythic+ keystone completion
+                            // (ChallengeMode::Complete, at the true keystone level) — individual dungeon boss kills,
+                            // including inside a keystone run, must not credit it or the count/tier would be wrong.
+                            if (isRaidEncounter)
+                                sWeeklyRewardsMgr.RecordActivity(player, WeeklyRewards::ActivityType::Raid,
+                                    uint32(instance->GetDifficultyID()));
                         });
 
                         DoUpdateCriteria(CriteriaType::DefeatDungeonEncounter, dungeonEncounter->ID);
