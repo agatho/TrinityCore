@@ -1,0 +1,64 @@
+MSBuild-Version 17.14.23+b0019275e für .NET Framework
+
+  Recast.vcxproj -> I:\TrinityCore\_integration\build\dep\recastnavigation\Recast\Release\Recast.lib
+  Detour.vcxproj -> I:\TrinityCore\_integration\build\dep\recastnavigation\Detour\Release\Detour.lib
+  argon2.vcxproj -> I:\TrinityCore\_integration\build\dep\argon2\Release\argon2.lib
+  fmt.vcxproj -> I:\TrinityCore\_integration\build\dep\fmt\Release\fmt.lib
+  zlib.vcxproj -> I:\TrinityCore\_integration\build\dep\zlib\Release\zlib.lib
+  g3dlib.vcxproj -> I:\TrinityCore\_integration\build\dep\g3dlite\Release\g3dlib.lib
+  openssl_ed25519.vcxproj -> I:\TrinityCore\_integration\build\bin\Release\openssl_ed25519.dll
+  sfmt.vcxproj -> I:\TrinityCore\_integration\build\dep\SFMT\Release\sfmt.lib
+  protobuf.vcxproj -> I:\TrinityCore\_integration\build\dep\protobuf\Release\protobuf.lib
+  common.vcxproj -> I:\TrinityCore\_integration\build\src\common\Release\common.lib
+  network.vcxproj -> I:\TrinityCore\_integration\build\src\common\network\Release\trinity_network.lib
+  mmaps_common.vcxproj -> I:\TrinityCore\_integration\build\src\common\mmaps_common\Release\mmaps_common.lib
+  cmake_pch.cxx
+  proto.vcxproj -> I:\TrinityCore\_integration\build\src\server\proto\Release\proto.lib
+  AdhocStatement.cpp
+  DatabaseEnv.cpp
+  DatabaseLoader.cpp
+  DatabaseWorkerPool.cpp
+  Field.cpp
+  FieldValueConverter.cpp
+  MySQLConnection.cpp
+  MySQLPreparedStatement.cpp
+  MySQLThreading.cpp
+  PreparedStatement.cpp
+  QueryCallback.cpp
+  QueryHolder.cpp
+  QueryResult.cpp
+  Transaction.cpp
+  CharacterDatabase.cpp
+  HotfixDatabase.cpp
+  LoginDatabase.cpp
+  WorldDatabase.cpp
+  AppenderDB.cpp
+  DBUpdater.cpp
+  UpdateFetcher.cpp
+  database.vcxproj -> I:\TrinityCore\_integration\build\src\server\database\Release\database.lib
+  cmake_pch.cxx
+  DB2DatabaseLoader.cpp
+  DB2Store.cpp
+  IPLocation.cpp
+  ProtobufJSON.cpp
+  IpBanCheckConnectionInitializer.cpp
+  ByteBuffer.cpp
+  ClientBuildInfo.cpp
+  Realm.cpp
+  RealmList.cpp
+  SecretMgr.cpp
+  shared.vcxproj -> I:\TrinityCore\_integration\build\src\server\shared\Release\shared.lib
+  cmake_pch.cxx
+I:\TrinityCore\_integration\src\server\game\Entities\Object\BaseEntity.h(431,36): error C2244: "UF::UpdateFieldHolder::ClearChangesMask": Keine Übereinstimmung für Funktionsdefinition mit vorhandener Deklaration gefunden [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Entities\Object\BaseEntity.h(431,36):
+      Siehe Deklaration von "UF::UpdateFieldHolder::ClearChangesMask"
+      I:\TrinityCore\_integration\src\server\game\Entities\Object\BaseEntity.h(431,36):
+      Definition
+      I:\TrinityCore\_integration\src\server\game\Entities\Object\BaseEntity.h(431,36):
+      'void UF::UpdateFieldHolder::ClearChangesMask(UF::OptionalUpdateField<T,BlockBit,Bit> Derived::* )'
+      I:\TrinityCore\_integration\src\server\game\Entities\Object\BaseEntity.h(431,36):
+      Vorhandene Deklarationen
+      I:\TrinityCore\_integration\src\server\game\Entities\Object\BaseEntity.h(79,21):
+      'void UF::UpdateFieldHolder::ClearChangesMask(UF::UpdateField<T,BlockBit,Bit> Derived::* )'
+  

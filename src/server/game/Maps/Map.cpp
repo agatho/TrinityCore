@@ -24,6 +24,8 @@
 #include "ChatPackets.h"
 #include "Conversation.h"
 #include "DB2Stores.h"
+#include "HousingDecorEntity.h"
+#include "HousingRoomEntity.h"
 #include "DatabaseEnv.h"
 #include "DynamicTree.h"
 #include "DynamicMMapTileBuilder.h"
@@ -39,6 +41,7 @@
 #include "InstanceScenario.h"
 #include "InstanceScript.h"
 #include "Log.h"
+#include "MeshObject.h"
 #include "MMapManager.h"
 #include "MapManager.h"
 #include "MapUtils.h"
@@ -2847,6 +2850,9 @@ template TC_GAME_API bool Map::AddToMap(DynamicObject*);
 template TC_GAME_API bool Map::AddToMap(AreaTrigger*);
 template TC_GAME_API bool Map::AddToMap(SceneObject*);
 template TC_GAME_API bool Map::AddToMap(Conversation*);
+template TC_GAME_API bool Map::AddToMap(MeshObject*);
+template TC_GAME_API bool Map::AddToMap(HousingRoomEntity*);
+template TC_GAME_API bool Map::AddToMap(HousingDecorEntity*);
 
 template TC_GAME_API void Map::RemoveFromMap(Corpse*, bool);
 template TC_GAME_API void Map::RemoveFromMap(Creature*, bool);
@@ -2855,6 +2861,9 @@ template TC_GAME_API void Map::RemoveFromMap(DynamicObject*, bool);
 template TC_GAME_API void Map::RemoveFromMap(AreaTrigger*, bool);
 template TC_GAME_API void Map::RemoveFromMap(SceneObject*, bool);
 template TC_GAME_API void Map::RemoveFromMap(Conversation*, bool);
+template TC_GAME_API void Map::RemoveFromMap(MeshObject*, bool);
+template TC_GAME_API void Map::RemoveFromMap(HousingRoomEntity*, bool);
+template TC_GAME_API void Map::RemoveFromMap(HousingDecorEntity*, bool);
 
 /* ******* Dungeon Instance Maps ******* */
 
@@ -3417,6 +3426,11 @@ bool Map::IsGarrison() const
     return i_mapEntry && i_mapEntry->IsGarrison();
 }
 
+bool Map::IsHouseInterior() const
+{
+    return i_mapEntry && i_mapEntry->IsHouseInterior();
+}
+
 bool Map::IsAlwaysActive() const
 {
     return IsBattlegroundOrArena();
@@ -3563,6 +3577,16 @@ SceneObject* Map::GetSceneObject(ObjectGuid const& guid)
 Conversation* Map::GetConversation(ObjectGuid const& guid)
 {
     return _objectsStore.Find<Conversation>(guid);
+}
+
+MeshObject* Map::GetMeshObject(ObjectGuid const& guid)
+{
+    return _objectsStore.Find<MeshObject>(guid);
+}
+
+HousingRoomEntity* Map::GetHousingRoomEntity(ObjectGuid const& guid)
+{
+    return _objectsStore.Find<HousingRoomEntity>(guid);
 }
 
 Player* Map::GetPlayer(ObjectGuid const& guid)
@@ -4135,4 +4159,4 @@ std::string InstanceMap::GetDebugInfo() const
     return sstr.str();
 }
 
-template struct TC_GAME_API TypeListContainer<MapStoredObjectsUnorderedMap, Creature, GameObject, DynamicObject, Pet, Corpse, AreaTrigger, SceneObject, Conversation>;
+template struct TC_GAME_API TypeListContainer<MapStoredObjectsUnorderedMap, Creature, GameObject, DynamicObject, Pet, Corpse, AreaTrigger, SceneObject, Conversation, MeshObject, HousingRoomEntity, HousingDecorEntity>;

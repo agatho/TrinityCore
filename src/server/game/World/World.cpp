@@ -59,6 +59,9 @@
 #include "ChallengeModeMgr.h"
 #include "GarrisonMgr.h"
 #include "GitRevision.h"
+#include "HousingMgr.h"
+#include "InitiativeManager.h"
+#include "NeighborhoodMgr.h"
 #include "GridNotifiersImpl.h"
 #include "GroupMgr.h"
 #include "GuildMgr.h"
@@ -701,6 +704,12 @@ void World::LoadConfigSettings(bool reload)
         { .Name = "AllowLoggingIPAddressesInDatabase"sv, .DefaultValue = true, .Index = CONFIG_ALLOW_LOGGING_IP_ADDRESSES_IN_DATABASE },
         { .Name = "Loot.EnableAELoot"sv, .DefaultValue = true, .Index = CONFIG_ENABLE_AE_LOOT },
         { .Name = "Load.Locales"sv, .DefaultValue = true, .Index = CONFIG_LOAD_LOCALES },
+        { .Name = "Housing.EnableBuyHouse"sv, .DefaultValue = true, .Index = CONFIG_HOUSING_ENABLE_BUY_HOUSE },
+        { .Name = "Housing.EnableDeleteHouse"sv, .DefaultValue = true, .Index = CONFIG_HOUSING_ENABLE_DELETE_HOUSE },
+        { .Name = "Housing.EnableMoveHouse"sv, .DefaultValue = true, .Index = CONFIG_HOUSING_ENABLE_MOVE_HOUSE },
+        { .Name = "Housing.EnableCreateCharterNeighborhood"sv, .DefaultValue = true, .Index = CONFIG_HOUSING_ENABLE_CREATE_CHARTER_NEIGHBORHOOD },
+        { .Name = "Housing.EnableCreateGuildNeighborhood"sv, .DefaultValue = true, .Index = CONFIG_HOUSING_ENABLE_CREATE_GUILD_NEIGHBORHOOD },
+        { .Name = "Housing.TutorialsEnabled"sv, .DefaultValue = true, .Index = CONFIG_HOUSING_TUTORIALS_ENABLED },
     } };
 
     static constexpr ConfigOptionLoadDefinitionArray<uint32, INT_CONFIG_VALUE_COUNT> ints =
@@ -1214,7 +1223,7 @@ void World::LoadConfigSettings(bool reload)
     _gameRules =
     {
         { .Rule = ::GameRule::TransmogEnabled, .Value = true },
-        { .Rule = ::GameRule::HousingEnabled, .Value = true }
+        { .Rule = ::GameRule::HousingEnabled, .Value = int32(EXPANSION_MIDNIGHT) }
     };
 
     if (reload)
@@ -1919,6 +1928,18 @@ bool World::SetInitialWorldSettings()
 
     TC_LOG_INFO("server.loading", "Loading garrison info...");
     sGarrisonMgr.Initialize();
+    TC_LOG_INFO("server.loading", "Loading housing info...");
+    sHousingMgr.Initialize();
+
+    TC_LOG_INFO("server.loading", "Loading neighborhood info...");
+    sNeighborhoodMgr.Initialize();
+
+    TC_LOG_INFO("server.loading", "Loading initiative info...");
+    sInitiativeManager.Initialize();
+
+    TC_LOG_INFO("server.loading", "Pre-loading housing neighborhood maps...");
+    sMapMgr->PreloadHousingMaps();
+
 
     TC_LOG_INFO("server.loading", "Loading Mythic+ (Challenge Mode) data...");
     sChallengeModeMgr.Initialize();
@@ -2389,6 +2410,9 @@ void World::Update(uint32 diff)
         TC_METRIC_TIMER("world_update_time", TC_METRIC_TAG("type", "Update battlefields"));
         sBattlefieldMgr->Update(diff);
     }
+
+    sInitiativeManager.Update(diff);
+    sNeighborhoodMgr.Update(diff);
 
     ///- Delete all characters which have been deleted X days before
     if (m_timers[WUPDATE_DELETECHARS].Passed())
