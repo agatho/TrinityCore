@@ -990,6 +990,22 @@ namespace WorldPackets
             ObjectGuid SourceGuid;
         };
 
+        class CloseTraitSystemInteraction final : public ClientPacket
+        {
+        public:
+            explicit CloseTraitSystemInteraction(WorldPacket&& packet) : ClientPacket(CMSG_CLOSE_TRAIT_SYSTEM_INTERACTION, std::move(packet)) { }
+
+            void Read() override { }
+        };
+
+        class CloseRuneforgeInteraction final : public ClientPacket
+        {
+        public:
+            explicit CloseRuneforgeInteraction(WorldPacket&& packet) : ClientPacket(CMSG_CLOSE_RUNEFORGE_INTERACTION, std::move(packet)) { }
+
+            void Read() override { }
+        };
+
         class StartTimer final : public ServerPacket
         {
         public:

@@ -1210,6 +1210,22 @@ void WorldSession::HandleCloseInteraction(WorldPackets::Misc::CloseInteraction& 
         _player->SetStableMaster(ObjectGuid::Empty);
 }
 
+void WorldSession::HandleCloseTraitSystemInteraction(WorldPackets::Misc::CloseTraitSystemInteraction& /*closeTraitSystemInteraction*/)
+{
+    // Empty-payload notification that the client dismissed the trait/talent window opened
+    // via a TraitSystem gossip option (see Player::OnGossipSelect -> StartInteraction).
+    if (_player->PlayerTalkClass->GetInteractionData().Type == PlayerInteractionType::TraitSystem)
+        _player->PlayerTalkClass->GetInteractionData().Reset();
+}
+
+void WorldSession::HandleCloseRuneforgeInteraction(WorldPackets::Misc::CloseRuneforgeInteraction& /*closeRuneforgeInteraction*/)
+{
+    // Empty-payload notification that the client dismissed the Runecarver (legendary crafting)
+    // window opened via a LegendaryCrafting gossip option.
+    if (_player->PlayerTalkClass->GetInteractionData().Type == PlayerInteractionType::LegendaryCrafting)
+        _player->PlayerTalkClass->GetInteractionData().Reset();
+}
+
 void WorldSession::HandleConversationLineStarted(WorldPackets::Misc::ConversationLineStarted& conversationLineStarted)
 {
     if (Conversation* conversation = ObjectAccessor::GetConversation(*_player, conversationLineStarted.ConversationGUID))
