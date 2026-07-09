@@ -1008,14 +1008,6 @@ namespace WorldPackets
             void Read() override { }
         };
 
-        class CloseTraitSystemInteraction final : public ClientPacket
-        {
-        public:
-            explicit CloseTraitSystemInteraction(WorldPacket&& packet) : ClientPacket(CMSG_CLOSE_TRAIT_SYSTEM_INTERACTION, std::move(packet)) { }
-
-            void Read() override { }
-        };
-
         class StartTimer final : public ServerPacket
         {
         public:

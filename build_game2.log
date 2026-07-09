@@ -1,0 +1,50 @@
+MSBuild-Version 17.14.23+b0019275e für .NET Framework
+
+  Recast.vcxproj -> I:\TrinityCore\_integration\build\dep\recastnavigation\Recast\Release\Recast.lib
+  Detour.vcxproj -> I:\TrinityCore\_integration\build\dep\recastnavigation\Detour\Release\Detour.lib
+  argon2.vcxproj -> I:\TrinityCore\_integration\build\dep\argon2\Release\argon2.lib
+  fmt.vcxproj -> I:\TrinityCore\_integration\build\dep\fmt\Release\fmt.lib
+  zlib.vcxproj -> I:\TrinityCore\_integration\build\dep\zlib\Release\zlib.lib
+  g3dlib.vcxproj -> I:\TrinityCore\_integration\build\dep\g3dlite\Release\g3dlib.lib
+  openssl_ed25519.vcxproj -> I:\TrinityCore\_integration\build\bin\Release\openssl_ed25519.dll
+  sfmt.vcxproj -> I:\TrinityCore\_integration\build\dep\SFMT\Release\sfmt.lib
+  protobuf.vcxproj -> I:\TrinityCore\_integration\build\dep\protobuf\Release\protobuf.lib
+  GitRevision.cpp
+  common.vcxproj -> I:\TrinityCore\_integration\build\src\common\Release\common.lib
+  network.vcxproj -> I:\TrinityCore\_integration\build\src\common\network\Release\trinity_network.lib
+  database.vcxproj -> I:\TrinityCore\_integration\build\src\server\database\Release\database.lib
+  mmaps_common.vcxproj -> I:\TrinityCore\_integration\build\src\common\mmaps_common\Release\mmaps_common.lib
+  proto.vcxproj -> I:\TrinityCore\_integration\build\src\server\proto\Release\proto.lib
+  shared.vcxproj -> I:\TrinityCore\_integration\build\src\server\shared\Release\shared.lib
+  cmake_pch.cxx
+I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(2049,14): error C2535: "void WorldSession::HandleAssignEquipmentSetSpec(WorldPackets::EquipmentSet::AssignEquipmentSetSpec &)": Memberfunktion bereits definiert oder deklariert [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(2047,14):
+      Siehe Deklaration von "WorldSession::HandleAssignEquipmentSetSpec"
+  
+I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(2072,14): error C2535: "void WorldSession::HandleCloseRuneforgeInteraction(WorldPackets::Misc::CloseRuneforgeInteraction &)": Memberfunktion bereits definiert oder deklariert [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(2071,14):
+      Siehe Deklaration von "WorldSession::HandleCloseRuneforgeInteraction"
+  
+I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(2073,14): error C2535: "void WorldSession::HandleCloseTraitSystemInteraction(WorldPackets::Misc::CloseTraitSystemInteraction &)": Memberfunktion bereits definiert oder deklariert [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(2070,14):
+      Siehe Deklaration von "WorldSession::HandleCloseTraitSystemInteraction"
+  
+I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(2153,14): error C2535: "void WorldSession::HandleGarrisonSocketTalent(WorldPackets::Garrison::GarrisonSocketTalent &)": Memberfunktion bereits definiert oder deklariert [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Server\WorldSession.h(2129,14):
+      Siehe Deklaration von "WorldSession::HandleGarrisonSocketTalent"
+  
+I:\TrinityCore\_integration\src\server\game\Entities\Player\CollectionMgr.h(190,10): error C2535: "bool CollectionMgr::RemoveMount(uint32)": Memberfunktion bereits definiert oder deklariert [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Entities\Player\CollectionMgr.h(148,10):
+      Siehe Deklaration von "CollectionMgr::RemoveMount"
+  
+I:\TrinityCore\_integration\src\server\game\Server\Packets\MiscPackets.h(1011,15): error C2011: "WorldPackets::Misc::CloseTraitSystemInteraction": "class" Typneudefinition [I:\TrinityCore\_integration\build\src\server\game\game.vcxproj]
+  (Quelldatei „CMakeFiles/game.dir/cmake_pch.cxx“ wird kompiliert)
+      I:\TrinityCore\_integration\src\server\game\Server\Packets\MiscPackets.h(993,15):
+      Siehe Deklaration von "WorldPackets::Misc::CloseTraitSystemInteraction"
+  
+BUILD EXIT: 1

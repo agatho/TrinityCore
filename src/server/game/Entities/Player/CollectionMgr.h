@@ -187,7 +187,6 @@ public:
     void MountClearFanfare(uint32 spellId);
     void SendSingleMountUpdate(std::pair<uint32, MountStatusFlags> mount);
     // Revoke a mount (in-memory + un-learn spell + full mount resync + account DB). Returns false if not owned.
-    bool RemoveMount(uint32 spellId);
     MountContainer const& GetAccountMounts() const { return _mounts; }
 
     // Appearances

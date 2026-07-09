@@ -1438,18 +1438,6 @@ namespace WorldPackets
             int32 GarrTalentID = 0;
         };
 
-        class GarrisonSocketTalent final : public ClientPacket
-        {
-        public:
-            explicit GarrisonSocketTalent(WorldPacket&& packet) : ClientPacket(CMSG_GARRISON_SOCKET_TALENT, std::move(packet)) { }
-
-            void Read() override;
-
-            int32 GarrTalentID = 0;
-            int32 SoulbindConduitID = 0;
-            int32 SoulbindConduitRank = 0;
-        };
-
         // IDA case 4980750: u32 Result, u8 GarrTypeID, Bits<1> (purpose unknown — observed
         // value 0 in the static analysis), GarrisonTalent. See SNIFF_AUDIT §8.11.
         class GarrisonResearchTalentResult final : public ServerPacket
