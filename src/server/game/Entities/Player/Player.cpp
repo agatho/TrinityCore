@@ -25841,6 +25841,11 @@ void Player::SetBattlegroundId(uint32 val, BattlegroundTypeId bgTypeId, Battlegr
     m_bgData.queueId = queueId;
 }
 
+void Player::SetSpectateTarget(ObjectGuid guid)
+{
+    SetUpdateFieldValue(m_values.ModifyValue(&Player::m_playerData).ModifyValue(&UF::PlayerData::SpectateTarget), guid);
+}
+
 uint32 Player::AddBattlegroundQueueId(BattlegroundQueueTypeId val)
 {
     for (uint8 i=0; i < PLAYER_MAX_BATTLEGROUND_QUEUES; ++i)

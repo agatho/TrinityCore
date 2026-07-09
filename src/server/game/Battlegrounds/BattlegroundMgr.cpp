@@ -252,6 +252,19 @@ Battleground* BattlegroundMgr::GetBattleground(uint32 instanceId, BattlegroundTy
     return nullptr;
 }
 
+void BattlegroundMgr::GetActiveArenas(std::vector<Battleground*>& arenas) const
+{
+    for (auto const& [bgTypeId, data] : bgDataStore)
+    {
+        for (auto const& [instanceId, bg] : data.m_Battlegrounds)
+        {
+            Battleground* arena = bg.get();
+            if (arena && arena->isArena() && arena->GetStatus() == STATUS_IN_PROGRESS)
+                arenas.push_back(arena);
+        }
+    }
+}
+
 void BattlegroundMgr::LoadBattlegroundScriptTemplate()
 {
     uint32 oldMSTime = getMSTime();
