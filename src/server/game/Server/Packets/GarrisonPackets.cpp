@@ -1234,13 +1234,6 @@ void GarrisonResearchTalent::Read()
     _worldPacket >> GarrTalentID;
 }
 
-void GarrisonSocketTalent::Read()
-{
-    _worldPacket >> GarrTalentID;
-    _worldPacket >> SoulbindConduitID;
-    _worldPacket >> SoulbindConduitRank;
-}
-
 // IDA case 4980750: u32 Result, u8 GarrTypeID, Bits<1>+Flush, GarrisonTalent.
 // See SNIFF_AUDIT §8.11.
 WorldPacket const* GarrisonResearchTalentResult::Write()

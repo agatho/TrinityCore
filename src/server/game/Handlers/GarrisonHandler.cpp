@@ -586,39 +586,6 @@ void WorldSession::HandleGarrisonResearchTalent(WorldPackets::Garrison::Garrison
     garrison->ResearchTalent(garrisonResearchTalent.GarrTalentID);
 }
 
-void WorldSession::HandleGarrisonSocketTalent(WorldPackets::Garrison::GarrisonSocketTalent& garrisonSocketTalent)
-{
-    GarrTalentEntry const* talentEntry = sGarrTalentStore.LookupEntry(garrisonSocketTalent.GarrTalentID);
-    if (!talentEntry)
-    {
-        WorldPackets::Garrison::GarrisonResearchTalentResult result;
-        result.Result = GARRISON_ERROR_INVALID_TALENT;
-        SendPacket(result.Write());
-        return;
-    }
-
-    GarrTalentTreeEntry const* treeEntry = sGarrTalentTreeStore.LookupEntry(talentEntry->GarrTalentTreeID);
-    if (!treeEntry)
-    {
-        WorldPackets::Garrison::GarrisonResearchTalentResult result;
-        result.Result = GARRISON_ERROR_INVALID_TALENT;
-        SendPacket(result.Write());
-        return;
-    }
-
-    Garrison* garrison = _player->GetGarrison(static_cast<GarrisonType>(treeEntry->GarrTypeID));
-    if (!garrison)
-    {
-        WorldPackets::Garrison::GarrisonResearchTalentResult result;
-        result.Result = GARRISON_ERROR_NO_GARRISON;
-        result.GarrTypeID = treeEntry->GarrTypeID;
-        SendPacket(result.Write());
-        return;
-    }
-
-    garrison->SocketTalent(garrisonSocketTalent.GarrTalentID, garrisonSocketTalent.SoulbindConduitID, garrisonSocketTalent.SoulbindConduitRank);
-}
-
 // ============================================================
 // Other utility handlers
 // ============================================================

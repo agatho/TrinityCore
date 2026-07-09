@@ -1013,7 +1013,7 @@ void WorldSession::HandleMoveApplyInertiaAck(WorldPackets::Movement::MoveApplyIn
 {
     Unit* mover = _player->m_unitMovedByMe;
     ASSERT(mover != nullptr);
-    _player->ValidateMovementInfo(&moveApplyInertiaAck.Ack.Status);
+    ValidateMovementInfo(mover, &moveApplyInertiaAck.Ack.Status);
 
     if (moveApplyInertiaAck.Ack.Status.guid != mover->GetGUID())
     {
@@ -1035,7 +1035,7 @@ void WorldSession::HandleMoveRemoveInertiaAck(WorldPackets::Movement::MoveRemove
 {
     Unit* mover = _player->m_unitMovedByMe;
     ASSERT(mover != nullptr);
-    _player->ValidateMovementInfo(&moveRemoveInertiaAck.Ack.Status);
+    ValidateMovementInfo(mover, &moveRemoveInertiaAck.Ack.Status);
 
     if (moveRemoveInertiaAck.Ack.Status.guid != mover->GetGUID())
     {
@@ -1056,7 +1056,7 @@ void WorldSession::HandleMoveAddImpulseAck(WorldPackets::Movement::MoveAddImpuls
 {
     Unit* mover = _player->m_unitMovedByMe;
     ASSERT(mover != nullptr);
-    _player->ValidateMovementInfo(&moveAddImpulseAck.Ack.Status);
+    ValidateMovementInfo(mover, &moveAddImpulseAck.Ack.Status);
 
     if (moveAddImpulseAck.Ack.Status.guid != mover->GetGUID())
     {
@@ -1074,7 +1074,7 @@ void WorldSession::HandleMoveAddImpulseAck(WorldPackets::Movement::MoveAddImpuls
 
 void WorldSession::HandleMoveSetCanDriveAck(WorldPackets::Movement::MoveSetCanDriveAck& moveSetCanDriveAck)
 {
-    _player->ValidateMovementInfo(&moveSetCanDriveAck.Ack.Status);
+    ValidateMovementInfo(_player->m_unitMovedByMe, &moveSetCanDriveAck.Ack.Status);
 }
 
 void WorldSession::HandleMoveStartDriveForward(WorldPackets::Movement::MoveStartDriveForward& moveStartDriveForward)

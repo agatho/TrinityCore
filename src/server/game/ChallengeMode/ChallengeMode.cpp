@@ -59,7 +59,7 @@ void ChallengeMode::Start(uint32 mapChallengeModeId, uint32 keystoneLevel, std::
     _completed = false;
 
     // Drive the client dungeon timer via the group's ChallengeMode countdown slot (the one C_ChallengeMode reads).
-    if (Player* starterPlayer = ObjectAccessor::GetPlayer(*_instance, _starterGuid))
+    if (Player* starterPlayer = ObjectAccessor::GetPlayer(_instance, _starterGuid))
         if (Group* group = starterPlayer->GetGroup())
             group->StartCountdown(CountdownTimerType::ChallengeMode, Seconds(_timeLimitMs / IN_MILLISECONDS));
 
@@ -87,7 +87,7 @@ void ChallengeMode::Start(uint32 mapChallengeModeId, uint32 keystoneLevel, std::
 void ChallengeMode::Reset()
 {
     // Stop the client dungeon timer if a run was in progress.
-    if (Player* starterPlayer = ObjectAccessor::GetPlayer(*_instance, _starterGuid))
+    if (Player* starterPlayer = ObjectAccessor::GetPlayer(_instance, _starterGuid))
         if (Group* group = starterPlayer->GetGroup())
             group->StartCountdown(CountdownTimerType::ChallengeMode, Seconds(0));
 
@@ -288,7 +288,7 @@ void ChallengeMode::Complete()
         }
     });
 
-    if (Player* starterPlayer = ObjectAccessor::GetPlayer(*_instance, _starterGuid))
+    if (Player* starterPlayer = ObjectAccessor::GetPlayer(_instance, _starterGuid))
     {
         // Upgrade (or deplete) the activated keystone in place: a timed clear raises the level and rerolls the
         // dungeon; an over-time clear depletes it by one (floor +2). Blizzlike-equivalent to the retail

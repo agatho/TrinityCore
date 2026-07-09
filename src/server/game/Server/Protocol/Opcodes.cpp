@@ -1160,6 +1160,7 @@ void OpcodeTable::InitializeClientOpcodes()
 
 void OpcodeTable::InitializeServerOpcodes()
 {
+#define DEFINE_SERVER_OPCODE_HANDLER(opcode, status, con) \
     static_assert((status) == STATUS_NEVER || (status) == STATUS_UNHANDLED, "Invalid status for server opcode"); \
     ValidateAndSetServerOpcode(opcode, #opcode, status, con)
 
