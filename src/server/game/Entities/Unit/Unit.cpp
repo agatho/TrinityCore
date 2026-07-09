@@ -9444,6 +9444,16 @@ bool Unit::ApplyDiminishingToDuration(SpellInfo const* auraSpellInfo, int32& dur
     return (duration != 0);
 }
 
+void Unit::SendDiminishingReturnStart(DiminishingGroup group, bool showCountdown, bool isImmune) const
+{
+    WorldPackets::Spells::DiminishingReturnStart diminishingReturnStart;
+    diminishingReturnStart.Unit = GetGUID();
+    diminishingReturnStart.Category = uint8(group);
+    diminishingReturnStart.ShowCountdown = showCountdown;
+    diminishingReturnStart.IsImmune = isImmune;
+    SendMessageToSet(diminishingReturnStart.Write(), true);
+}
+
 void Unit::ApplyDiminishingAura(DiminishingGroup group, bool apply)
 {
     // Checking for existing in the table

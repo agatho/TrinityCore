@@ -687,6 +687,7 @@ class TC_GAME_API Unit : public WorldObject
         void IncrDiminishing(SpellInfo const* auraSpellInfo);
         bool ApplyDiminishingToDuration(SpellInfo const* auraSpellInfo, int32& duration, WorldObject* caster, DiminishingLevels previousLevel) const;
         void ApplyDiminishingAura(DiminishingGroup group, bool apply);
+        void SendDiminishingReturnStart(DiminishingGroup group, bool showCountdown, bool isImmune) const;
         void ClearDiminishings();
 
         virtual void Update(uint32 time) override;

@@ -3215,9 +3215,19 @@ SpellMissInfo Spell::PreprocessSpellHit(Unit* unit, TargetInfo& hitInfo)
             hitInfo.AuraDuration = Aura::CalcMaxDuration(m_spellInfo, origCaster, &m_powerCost);
 
         // unit is immune to aura if it was diminished to 0 duration
-        if (!hitInfo.Positive && !unit->ApplyDiminishingToDuration(m_spellInfo, hitInfo.AuraDuration, origCaster, diminishLevel))
-            if (std::all_of(std::begin(m_spellInfo->GetEffects()), std::end(m_spellInfo->GetEffects()), [](SpellEffectInfo const& effInfo) { return !effInfo.IsEffect() || effInfo.Effect == SPELL_EFFECT_APPLY_AURA; }))
-                return SPELL_MISS_IMMUNE;
+        if (!hitInfo.Positive)
+        {
+            bool const notImmune = unit->ApplyDiminishingToDuration(m_spellInfo, hitInfo.AuraDuration, origCaster, diminishLevel);
+
+            // Notify observers that a diminishing-returns category has (re)started on the target so the
+            // client's DR tracker can start/refresh its countdown for that category (SMSG_UNIT_DIMINISHING_RETURN_START).
+            if (hitInfo.DRGroup)
+                unit->SendDiminishingReturnStart(hitInfo.DRGroup, diminishLevel > DIMINISHING_LEVEL_1, !notImmune);
+
+            if (!notImmune)
+                if (std::all_of(std::begin(m_spellInfo->GetEffects()), std::end(m_spellInfo->GetEffects()), [](SpellEffectInfo const& effInfo) { return !effInfo.IsEffect() || effInfo.Effect == SPELL_EFFECT_APPLY_AURA; }))
+                    return SPELL_MISS_IMMUNE;
+        }
     }
 
     return SPELL_MISS_NONE;
