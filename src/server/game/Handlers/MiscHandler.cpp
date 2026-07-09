@@ -1141,10 +1141,68 @@ void WorldSession::HandleSetDifficultyID(WorldPackets::Instance::SetDifficultyID
         return;
     }
 
+    if (!(difficultyEntry->Flags & DIFFICULTY_FLAG_CAN_SELECT))
+        return;
+
+    // cannot reset while in an instance
+    Map* map = _player->FindMap();
+    if (map && map->Instanceable())
+        return;
+
+    Difficulty difficultyID = Difficulty(difficultyEntry->ID);
+    Group* group = _player->GetGroup();
+
     if (difficultyEntry->InstanceType == MAP_INSTANCE)
-        _player->SendDungeonDifficulty(Difficulty(setDifficultyID.DifficultyID));
+    {
+        if (group)
+        {
+            if (difficultyID == group->GetDungeonDifficultyID())
+                return;
+            if (!group->IsLeader(_player->GetGUID()) || group->isLFGGroup())
+                return;
+            group->ResetInstances(InstanceResetMethod::OnChangeDifficulty, _player);
+            group->SetDungeonDifficultyID(difficultyID);
+        }
+
+        if (difficultyID == _player->GetDungeonDifficultyID())
+            return;
+
+        if (!group)
+            _player->ResetInstances(InstanceResetMethod::OnChangeDifficulty);
+
+        _player->SetDungeonDifficultyID(difficultyID);
+        _player->SendDungeonDifficulty();
+    }
     else if (difficultyEntry->InstanceType == MAP_RAID)
-        _player->SendRaidDifficulty(difficultyEntry->Flags & 0x4 ? true : false, Difficulty(setDifficultyID.DifficultyID)); // 0x4 = legacy
+    {
+        bool const legacy = (difficultyEntry->Flags & DIFFICULTY_FLAG_LEGACY) != 0;
+
+        if (group)
+        {
+            if (difficultyID == (legacy ? group->GetLegacyRaidDifficultyID() : group->GetRaidDifficultyID()))
+                return;
+            if (!group->IsLeader(_player->GetGUID()) || group->isLFGGroup())
+                return;
+            group->ResetInstances(InstanceResetMethod::OnChangeDifficulty, _player);
+            if (legacy)
+                group->SetLegacyRaidDifficultyID(difficultyID);
+            else
+                group->SetRaidDifficultyID(difficultyID);
+        }
+
+        if (difficultyID == (legacy ? _player->GetLegacyRaidDifficultyID() : _player->GetRaidDifficultyID()))
+            return;
+
+        if (!group)
+            _player->ResetInstances(InstanceResetMethod::OnChangeDifficulty);
+
+        if (legacy)
+            _player->SetLegacyRaidDifficultyID(difficultyID);
+        else
+            _player->SetRaidDifficultyID(difficultyID);
+
+        _player->SendRaidDifficulty(legacy);
+    }
 }
 
 void WorldSession::HandleToggleDifficulty(WorldPackets::Instance::ToggleDifficulty& /*toggleDifficulty*/)

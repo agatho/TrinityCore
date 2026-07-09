@@ -2483,6 +2483,17 @@ enum OpcodeServer : uint32
     SMSG_XP_GAIN_ABORTED                                            = 0x42006C,
     SMSG_XP_GAIN_ENABLED                                            = 0x420256,
     SMSG_ZONE_UNDER_ATTACK                                          = 0x47000B,
+    SMSG_ACCOUNT_HOUSING_FIXTURE_ADDED                              = 0x400050,
+    SMSG_ACCOUNT_HOUSING_ROOM_ADDED                                = 0x40004F,
+    SMSG_ACCOUNT_HOUSING_ROOM_COMPONENT_TEXTURE_ADDED              = 0x400052,
+    SMSG_ACCOUNT_HOUSING_THEME_ADDED                               = 0x400051,
+    SMSG_FEATURE_SYSTEM_STATUS2                                     = 0x40034A,
+    SMSG_MOVE_SET_CANT_SWIM                                         = 0x580035,
+    SMSG_MOVE_UNSET_CANT_SWIM                                       = 0x580036,
+    SMSG_TAKE_SCREENSHOT_FOR_COMPLAINT                              = 0x5C0032,
+    SMSG_WOW_LABS_AREA_INFO                                         = 0x400322,
+    SMSG_WOW_LABS_SET_AREA_ID_RESULT                               = 0x400320,
+    SMSG_WOW_LABS_SET_SELECTED_AREA_ID                             = 0x400321,
 
     // Deleted opcodes, here only to allow compile
     SMSG_ARENA_TEAM_STATS                                           = UNKNOWN_OPCODE,
