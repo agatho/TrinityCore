@@ -580,6 +580,71 @@ namespace WorldPackets
 
             ObjectGuid CapturePointGUID;
         };
+
+        // War Games: an arranged PvP practice match between two premade groups. The initiating party leader
+        // picks a battleground/arena and challenges the leader of another group; that leader accepts or declines.
+        // Wire recovered byte-exact from the 12.0.7 client (send serializers sub_7FF72906F9F0 / sub_7FF72906FC80,
+        // SMSG deserializer sub_7FF729086A80). Field48/Field52 identify the chosen battleground selection; QueueID
+        // is the packed queue descriptor echoed back by the opponent to correlate the response.
+        class StartWarGame final : public ClientPacket
+        {
+        public:
+            explicit StartWarGame(WorldPacket&& packet) : ClientPacket(CMSG_START_WAR_GAME, std::move(packet)) { }
+
+            void Read() override;
+
+            ObjectGuid OpposingPartyMember;      // a member of the group being challenged
+            uint32 BattlemasterListID = 0;       // wire uint32 @48 (chosen BG/arena; inferred)
+            uint16 Bracket = 0;                   // wire uint16 @52 (bracket/team-size selector; inferred)
+            uint64 QueueID = 0;                   // wire uint64 @56 (packed queue descriptor)
+            bool TournamentRules = false;         // trailing bit
+        };
+
+        class AcceptWargameInvite final : public ClientPacket
+        {
+        public:
+            explicit AcceptWargameInvite(WorldPacket&& packet) : ClientPacket(CMSG_ACCEPT_WARGAME_INVITE, std::move(packet)) { }
+
+            void Read() override;
+
+            ObjectGuid OpposingPartyMember;      // the challenger (initiator) whose invite this answers
+            uint64 QueueID = 0;
+            bool Accept = false;
+        };
+
+        class CheckWargameEntry final : public ServerPacket
+        {
+        public:
+            explicit CheckWargameEntry() : ServerPacket(SMSG_CHECK_WARGAME_ENTRY, 16 + 8 + 8 + 1) { }
+
+            WorldPacket const* Write() override;
+
+            ObjectGuid OpposingPartyMember;      // the challenger's group leader
+            uint64 QueueID = 0;
+            uint64 Time = 0;                      // wire uint64 (response window; sent 0 until timed out in P1)
+            bool TournamentRules = false;
+        };
+
+        class WargameRequestSuccessfullySentToOpponent final : public ServerPacket
+        {
+        public:
+            explicit WargameRequestSuccessfullySentToOpponent() : ServerPacket(SMSG_WARGAME_REQUEST_SUCCESSFULLY_SENT_TO_OPPONENT, 16) { }
+
+            WorldPacket const* Write() override;
+
+            ObjectGuid OpposingPartyMember;      // the opposing group leader the challenge was sent to
+        };
+
+        class WargameRequestOpponentResponse final : public ServerPacket
+        {
+        public:
+            explicit WargameRequestOpponentResponse() : ServerPacket(SMSG_WARGAME_REQUEST_OPPONENT_RESPONSE, 16 + 1) { }
+
+            WorldPacket const* Write() override;
+
+            ObjectGuid OpposingPartyMember;      // the responder (opposing group leader)
+            bool Accepted = false;
+        };
     }
 }
 

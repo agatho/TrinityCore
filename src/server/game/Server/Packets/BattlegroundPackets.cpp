@@ -458,4 +458,46 @@ WorldPacket const* CapturePointRemoved::Write()
 
     return &_worldPacket;
 }
+
+void StartWarGame::Read()
+{
+    _worldPacket >> OpposingPartyMember;
+    _worldPacket >> BattlemasterListID;
+    _worldPacket >> Bracket;
+    _worldPacket >> QueueID;
+    _worldPacket >> Bits<1>(TournamentRules);
+}
+
+void AcceptWargameInvite::Read()
+{
+    _worldPacket >> OpposingPartyMember;
+    _worldPacket >> QueueID;
+    _worldPacket >> Bits<1>(Accept);
+}
+
+WorldPacket const* CheckWargameEntry::Write()
+{
+    _worldPacket << OpposingPartyMember;
+    _worldPacket << uint64(QueueID);
+    _worldPacket << uint64(Time);
+    // The client reads this flag as bit 7 of a standalone byte (MSB-first); write it explicitly to match.
+    _worldPacket << uint8(TournamentRules ? 0x80 : 0);
+
+    return &_worldPacket;
+}
+
+WorldPacket const* WargameRequestSuccessfullySentToOpponent::Write()
+{
+    _worldPacket << OpposingPartyMember;
+
+    return &_worldPacket;
+}
+
+WorldPacket const* WargameRequestOpponentResponse::Write()
+{
+    _worldPacket << OpposingPartyMember;
+    _worldPacket << uint8(Accepted ? 0x80 : 0);
+
+    return &_worldPacket;
+}
 }
