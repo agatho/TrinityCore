@@ -262,22 +262,18 @@ namespace WorldPackets
         };
 
         // One row of a search result (2008-byte element): the listing + leader/member info.
+        // Exact SMSG_LFG_LIST_SEARCH_RESULTS (0x560002) row. Layout reverse-engineered from the client
+        // deserializers and validated byte-exact against a real 12.0.7.68275 sniff (see
+        // c:\dumps\lfg_search_results_layout.md). The embedded descriptor is echoed verbatim from the bytes
+        // the client sent in CMSG_LFG_LIST_JOIN (same replay strategy proven for SMSG_LFG_LIST_UPDATE_STATUS).
         struct SearchResultListing
         {
-            uint32 ListingId = 0;
-            uint32 ActivityID = 0;
-            uint8 Field2 = 0;
-            uint8 Field3 = 0;
-            uint8 Field4 = 0;
-            uint8 Field5 = 0;
-            ListingInfo Listing;
-            ObjectGuid LeaderGuid;
-            uint32 MemberCount = 0;
-            uint32 Field6 = 0;
-            ObjectGuid Field7;
-            ObjectGuid Field8;
-            ObjectGuid Field9;
-            ObjectGuid Field10;
+            ObjectGuid GroupGuid;                 // party/group guid (also echoed as LeaderGuidEcho)
+            uint32 ListingId = 0;                 // stable id the client sends back in APPLY_TO_GROUP
+            uint64 PostTime = 0;                  // listing creation unix seconds (emitted twice)
+            ObjectGuid LeaderGuid;                // fills Guid_A..E
+            std::vector<ObjectGuid> Members;      // group roster -> MemberCount + MemberDetail records
+            std::vector<uint8> RawDescriptor;     // verbatim ListingDescriptor bytes
         };
 
         class LFGListSearchResults final : public ServerPacket

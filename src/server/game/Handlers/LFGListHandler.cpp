@@ -51,13 +51,18 @@ namespace
     // Build one search-result row for a listing.
     void FillSearchRow(WorldPackets::LFGList::SearchResultListing& row, LFGList::Listing const& listing)
     {
+        row.GroupGuid = !listing.GroupGuid.IsEmpty() ? listing.GroupGuid : listing.LeaderGuid;
         row.ListingId = listing.Id;
-        row.ActivityID = listing.Descriptor.ActivityID;
+        row.PostTime = listing.CreatedTime;
         row.LeaderGuid = listing.LeaderGuid;
-        row.MemberCount = 1;
+        row.RawDescriptor = listing.Descriptor.RawBytes;    // verbatim echo of the client's descriptor bytes
+
+        row.Members.clear();
         if (Group const* group = sGroupMgr->GetGroupByGUID(listing.GroupGuid))
-            row.MemberCount = group->GetMembersCount();
-        FillListingInfo(row.Listing, listing);
+            for (Group::MemberSlot const& slot : group->GetMemberSlots())
+                row.Members.push_back(slot.guid);
+        if (row.Members.empty())
+            row.Members.push_back(listing.LeaderGuid);      // solo listing: the leader is the only member
     }
 
     // Push the full applicant list of a listing to its (connected) leader.
