@@ -73,6 +73,11 @@ namespace WorldPackets
             Optional<uint32> OptionalValue1;
             Optional<uint32> OptionalValue2;
             Optional<uint8> OptionalValue3;
+
+            // Exact bytes consumed while reading this descriptor. The server echoes a listing back verbatim in
+            // SMSG_LFG_LIST_UPDATE_STATUS (proven by sniff), so we replay these rather than re-serialize the
+            // bit-packed descriptor (which is error-prone and was previously malformed).
+            std::vector<uint8> RawBytes;
         };
 
         // The listing snapshot the server echoes to clients (UPDATE_STATUS / search rows). Mirrors ListingDescriptor
@@ -232,7 +237,7 @@ namespace WorldPackets
 
             LFG::RideTicket Ticket;
             uint8 Status = 0;
-            ListingInfo Listing;
+            std::vector<uint8> RawDescriptor;   // the listing's descriptor bytes, echoed verbatim (empty when not listed)
             bool Listed = true;
         };
 

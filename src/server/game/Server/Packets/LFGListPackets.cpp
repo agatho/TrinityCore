@@ -115,13 +115,17 @@ ByteBuffer& operator<<(ByteBuffer& data, ListingInfo const& listing)
 
 void LFGListJoin::Read()
 {
+    std::size_t const start = _worldPacket.rpos();
     _worldPacket >> Listing;
+    Listing.RawBytes.assign(_worldPacket.data() + start, _worldPacket.data() + _worldPacket.rpos());
 }
 
 void LFGListUpdateRequest::Read()
 {
     _worldPacket >> Ticket;
+    std::size_t const start = _worldPacket.rpos();
     _worldPacket >> Listing;
+    Listing.RawBytes.assign(_worldPacket.data() + start, _worldPacket.data() + _worldPacket.rpos());
 }
 
 void LFGListLeave::Read()
@@ -191,9 +195,16 @@ WorldPacket const* LFGListJoinResult::Write()
 
 WorldPacket const* LFGListUpdateStatus::Write()
 {
+    // Layout proven from the sniff: Ticket, Status byte, the listing descriptor echoed VERBATIM, then a
+    // single Listed bit (flushed). When not listed the descriptor is an all-zero 27-byte empty descriptor.
+    static constexpr std::size_t EMPTY_DESCRIPTOR_SIZE = 27;
+
     _worldPacket << Ticket;
     _worldPacket << uint8(Status);
-    _worldPacket << Listing;
+    if (Listed && !RawDescriptor.empty())
+        _worldPacket.append(RawDescriptor.data(), RawDescriptor.size());
+    else
+        _worldPacket.append(std::vector<uint8>(EMPTY_DESCRIPTOR_SIZE, 0).data(), EMPTY_DESCRIPTOR_SIZE);
     _worldPacket << Bits<1>(Listed);
     _worldPacket.FlushBits();
     return &_worldPacket;
