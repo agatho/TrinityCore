@@ -258,6 +258,7 @@ Player::Player(WorldSession* session) : Unit(true), m_sceneMgr(this)
     m_drunkTimer = 0;
     m_deathTimer = 0;
     m_deathExpireTime = 0;
+    m_preferredGraveyardId = 0;
 
     for (uint8 j = 0; j < PLAYER_MAX_BATTLEGROUND_QUEUES; ++j)
     {
@@ -4940,7 +4941,16 @@ void Player::RepopAtGraveyard()
         closestGrave = sObjectMgr->GetWorldSafeLoc(instance->GetEntranceLocation());
 
     if (!closestGrave)
-        closestGrave = sObjectMgr->GetClosestGraveyard(*this, GetTeam(), this);
+    {
+        // Honor a player-chosen preferred graveyard, but only when it is actually a graveyard linked to the
+        // player's current zone (guards against a spoofed id); otherwise fall back to the nearest one.
+        if (m_preferredGraveyardId)
+            if (sObjectMgr->FindGraveyardData(m_preferredGraveyardId, GetZoneId()))
+                closestGrave = sObjectMgr->GetWorldSafeLoc(m_preferredGraveyardId);
+
+        if (!closestGrave)
+            closestGrave = sObjectMgr->GetClosestGraveyard(*this, GetTeam(), this);
+    }
 
     // stop countdown until repop
     m_deathTimer = 0;

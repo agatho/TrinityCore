@@ -87,6 +87,12 @@ void WorldSession::HandleRepopRequest(WorldPackets::Misc::RepopRequest& /*packet
     GetPlayer()->RepopAtGraveyard();
 }
 
+void WorldSession::HandleSetPreferredCemetery(WorldPackets::Misc::SetPreferredCemetery& packet)
+{
+    // Store the player's chosen graveyard; RepopAtGraveyard honors it when it is linked to the current zone.
+    _player->SetPreferredGraveyard(packet.CemeteryID);
+}
+
 void WorldSession::HandleReportStuckInCombat(WorldPackets::Misc::ReportStuckInCombat& /*packet*/)
 {
     // The client reports it believes the player is wrongly stuck in combat. Re-validate the player's
