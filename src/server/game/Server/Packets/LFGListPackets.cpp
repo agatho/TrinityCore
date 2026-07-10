@@ -225,22 +225,94 @@ WorldPacket const* LFGListSearchStatus::Write()
     return &_worldPacket;
 }
 
+// Emit one SMSG_LFG_LIST_SEARCH_RESULTS row per c:\dumps\lfg_search_results_layout.md (byte-exact vs sniff).
+// Row-level "bit" fields are full wire bytes with the boolean in bit 7 (client reads x >> 7); PackedGuid uses
+// the standard TrinityCore ObjectGuid operator<< (u16 mask + data bytes). Unknown scalars are zero-filled
+// (the client parses them fine); the few observed retail constants are mirrored (Unk_b=4, Unk1816/Unk2160=5).
 static ByteBuffer& operator<<(ByteBuffer& data, SearchResultListing const& row)
 {
-    data << uint32(row.ListingId);
-    data << uint32(row.ActivityID);
-    data << uint8(row.Field2) << uint8(row.Field3) << uint8(row.Field4) << uint8(row.Field5);
-    data << row.Listing;
-    data << row.LeaderGuid;
-    data << uint32(row.MemberCount);
-    data << uint32(row.Field6);
-    data << row.Field7 << row.Field8 << row.Field9 << row.Field10;
+    // === header block (sub_7FF7291CCDB0) ===
+    data << row.GroupGuid;                          // PackedGuid GroupGuid
+    data << uint32(row.ListingId);                  // ListingId (APPLY_TO_GROUP key)
+    data << uint32(4);                              // Unk_b   (observed constant 4)
+    data << uint64(row.PostTime);                   // PostTime
+    data << uint8(0);                               // Unk_hdrbit (bit-as-byte, observed 0)
+
+    // === fixed fields ===
+    data << uint32(0);                              // Unk40
+    data << uint8(5);                               // Unk1816 (observed 5)
+    data << row.LeaderGuid;                         // Guid_A
+    data << row.LeaderGuid;                         // Guid_B
+    data << row.LeaderGuid;                         // Guid_C
+    data << row.LeaderGuid;                         // Guid_D
+    data << row.LeaderGuid;                         // Guid_E
+    data << uint32(0);                              // Unk1904
+    data << uint32(0);                              // Unk1908
+    data << uint32(0);                              // Unk1912
+    data << uint32(0);                              // Count1 (GuidList1 length)
+    data << uint32(0);                              // Count2 (GuidList2 length)
+    data << uint32(0);                              // Count3 (GuidList3 length)
+    data << uint32(uint32(row.Members.size()));     // MemberCount
+    data << uint32(0);                              // Unk2016
+    data << uint64(row.PostTime);                   // PostTime2 (== PostTime)
+    data << uint8(0);                               // Unk2032
+    data << row.GroupGuid;                          // LeaderGuidEcho (== GroupGuid)
+    for (uint32 i = 0; i < 9; ++i)                  // fixed 9-entry {u32,u8} table (sub_7FF729195220)
+    {
+        data << uint32(i);
+        data << uint8(0);
+    }
+    data << uint8(5);                               // Unk2160 (observed 5)
+    data << uint8(0);                               // Unk2161
+
+    // === three PackedGuid lists (all empty, Count1/2/3 == 0) -> emit nothing ===
+
+    // === embedded ListingDescriptor (echo verbatim) ===
+    if (!row.RawDescriptor.empty())
+        data.append(row.RawDescriptor.data(), row.RawDescriptor.size());
+    else
+        data.append(std::vector<uint8>(27, 0).data(), 27);  // minimal all-zero descriptor fallback
+
+    // === trailing bit ===
+    data << uint8(0);                               // Unk1916 (bit-as-byte, observed 0)
+
+    // === block sub_7FF7291676F0 @2056 (empty) ===
+    data << uint32(0);                              // Blk_f0
+    data << uint32(0);                              // Blk_f1
+    data << uint32(0);                              // Blk_count == 0
+
+    // === member detail list x MemberCount (sub_7FF7291DBF80 + tail sub_7FF729162CC0) ===
+    // Real member guids with zero-filled per-member stats (spec/ilvl/etc. are not recoverable offline;
+    // zero is honest here and the structure is parser-verified against the sniff).
+    for (ObjectGuid const& member : row.Members)
+    {
+        data << member;                            // PackedGuid MemberGuid
+        data << uint8(0);                          // Role0
+        data << uint8(0);                          // Role1
+        data << uint8(0);                          // Role2
+        data << uint32(0);                         // Unk20
+        data << uint8(0);                          // Unk24
+        data << uint8(0);                          // Unk16 (bit-as-byte)
+        // tail (sub_7FF729162CC0)
+        data << member;                            // PackedGuid MemberGuid2
+        data << uint32(0);                         // T20
+        data << uint32(0);                         // T24
+        data << uint32(0);                         // T28
+        data << uint32(0);                         // T32
+        data << uint32(0);                         // T36
+        data << uint64(0);                         // T40
+        data << uint64(0);                         // T48
+        data << uint32(0);                         // T56
+        data << uint8(0);                          // T_flag (bit-as-byte)
+    }
+
     return data;
 }
 
 WorldPacket const* LFGListSearchResults::Write()
 {
-    _worldPacket << uint32(Listings.size());
+    _worldPacket << uint16(Listings.size());        // Unk32 (duplicate row-count hint; == RowCount in sniffs)
+    _worldPacket << uint32(Listings.size());        // RowCount (array length)
     for (SearchResultListing const& row : Listings)
         _worldPacket << row;
     return &_worldPacket;
