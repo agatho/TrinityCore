@@ -393,6 +393,17 @@ namespace WorldPackets
             void Read() override { }
         };
 
+        // Player chooses which graveyard (WorldSafeLocs id) they prefer to resurrect at in the current zone.
+        class SetPreferredCemetery final : public ClientPacket
+        {
+        public:
+            explicit SetPreferredCemetery(WorldPacket&& packet) : ClientPacket(CMSG_SET_PREFERRED_CEMETERY, std::move(packet)) { }
+
+            void Read() override;
+
+            uint32 CemeteryID = 0;
+        };
+
         class RequestCemeteryList final : public ClientPacket
         {
         public:
