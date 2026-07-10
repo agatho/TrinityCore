@@ -25,6 +25,7 @@
 #include "Chat.h"
 #include "CinematicMgr.h"
 #include "ClientConfigPackets.h"
+#include "CombatManager.h"
 #include "Common.h"
 #include "Conversation.h"
 #include "ConversationAI.h"
@@ -81,6 +82,17 @@ void WorldSession::HandleRepopRequest(WorldPackets::Misc::RepopRequest& /*packet
     GetPlayer()->RemovePet(nullptr, PET_SAVE_NOT_IN_SLOT, true);
     GetPlayer()->BuildPlayerRepop();
     GetPlayer()->RepopAtGraveyard();
+}
+
+void WorldSession::HandleReportStuckInCombat(WorldPackets::Misc::ReportStuckInCombat& /*packet*/)
+{
+    // The client reports it believes the player is wrongly stuck in combat. Re-validate the player's
+    // combat references and drop any that are no longer valid (dead / out of range / gone), which clears
+    // a desynced combat state without ending combat that is still legitimately ongoing.
+    if (!_player->IsInCombat())
+        return;
+
+    _player->GetCombatManager().RevalidateCombat();
 }
 
 void WorldSession::HandleWhoOpcode(WorldPackets::Who::WhoRequestPkt& whoRequest)
