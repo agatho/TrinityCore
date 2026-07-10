@@ -111,7 +111,7 @@ void WorldSession::SendLFGListUpdateStatus(uint32 listingId)
     if (LFGList::Listing const* listing = sLFGListMgr.GetListing(listingId))
     {
         FillListingTicket(packet.Ticket, *listing);
-        FillListingInfo(packet.Listing, *listing);
+        packet.RawDescriptor = listing->Descriptor.RawBytes;   // echo the client's descriptor verbatim
         packet.Listed = true;
     }
     else
@@ -152,14 +152,18 @@ void WorldSession::HandleLFGListJoin(WorldPackets::LFGList::LFGListJoin& packet)
     }
 
     uint32 const id = sLFGListMgr.CreateListing(player, packet.Listing);
-
-    WorldPackets::LFGList::LFGListJoinResult result;
-    result.Status = 0;
-    result.Result = id ? 0 : 1;
-    SendPacket(result.Write());
-
     if (id)
+    {
+        // A successful create is signalled by UPDATE_STATUS alone - the sniff shows the retail server sends
+        // no JOIN_RESULT on success (only UPDATE_STATUS echoing the listing back).
         SendLFGListUpdateStatus(id);
+    }
+    else
+    {
+        WorldPackets::LFGList::LFGListJoinResult result;
+        result.Result = 1; // create failed (exact enum value NEEDS-SNIFF)
+        SendPacket(result.Write());
+    }
 }
 
 void WorldSession::HandleLFGListUpdateRequest(WorldPackets::LFGList::LFGListUpdateRequest& packet)
