@@ -516,6 +516,7 @@ namespace WorldPackets
         class RepopRequest;
         class ReportStuckInCombat;
         class RequestCemeteryList;
+        class SetPreferredCemetery;
         class ResurrectResponse;
         class StandStateChange;
         class ServerTimeOffsetRequest;
@@ -1312,6 +1313,7 @@ class TC_GAME_API WorldSession
 
         void HandleRepopRequest(WorldPackets::Misc::RepopRequest& packet);
         void HandleReportStuckInCombat(WorldPackets::Misc::ReportStuckInCombat& packet);
+        void HandleSetPreferredCemetery(WorldPackets::Misc::SetPreferredCemetery& packet);
         void HandleAutostoreLootItemOpcode(WorldPackets::Loot::LootItem& packet);
         void HandleLootMoneyOpcode(WorldPackets::Loot::LootMoney& packet);
         void HandleLootOpcode(WorldPackets::Loot::LootUnit& packet);

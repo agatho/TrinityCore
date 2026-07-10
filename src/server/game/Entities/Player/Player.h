@@ -2338,6 +2338,7 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         void ResurrectPlayer(float restore_percent, bool applySickness = false);
         void BuildPlayerRepop();
         void RepopAtGraveyard();
+        void SetPreferredGraveyard(uint32 graveyardId) { m_preferredGraveyardId = graveyardId; }
 
         void DurabilityLossAll(double percent, bool inventory);
         void DurabilityLoss(Item* item, double percent);
@@ -3293,6 +3294,7 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
 
         uint32 m_deathTimer;
         time_t m_deathExpireTime;
+        uint32 m_preferredGraveyardId;
 
         uint32 m_WeaponProficiency;
         uint32 m_ArmorProficiency;
