@@ -29,6 +29,7 @@
 #include "AuthenticationPackets.h"
 #include "AzeritePackets.h"
 #include "BankPackets.h"
+#include "BattlePayPackets.h"
 #include "BattlePetPackets.h"
 #include "BattlegroundPackets.h"
 #include "BattlenetPackets.h"
