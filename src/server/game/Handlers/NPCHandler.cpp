@@ -190,6 +190,26 @@ void WorldSession::HandleGossipHelloOpcode(WorldPackets::NPC::Hello& packet)
     }
 }
 
+void WorldSession::HandleGossipRefreshOptions(WorldPackets::NPC::GossipRefreshOptions& /*packet*/)
+{
+    // The client asks the server to re-send the currently open gossip menu (e.g. after a state change
+    // that could alter the available options). Re-prepare and re-send the menu for the interacting NPC.
+    InteractionData const& interaction = _player->PlayerTalkClass->GetInteractionData();
+    if (interaction.Type != PlayerInteractionType::Gossip || interaction.SourceGuid.IsEmpty())
+        return;
+
+    Creature* unit = _player->GetNPCIfCanInteractWith(interaction.SourceGuid, UNIT_NPC_FLAG_GOSSIP, UNIT_NPC_FLAG_2_NONE);
+    if (!unit)
+        return;
+
+    _player->PlayerTalkClass->ClearMenus();
+    if (!unit->AI()->OnGossipHello(_player))
+    {
+        _player->PrepareGossipMenu(unit, _player->GetGossipMenuForSource(unit), true);
+        _player->SendPreparedGossip(unit);
+    }
+}
+
 void WorldSession::HandleGossipSelectOptionOpcode(WorldPackets::NPC::GossipSelectOption& packet)
 {
     GossipMenuItem const* gossipMenuItem = _player->PlayerTalkClass->GetGossipMenu().GetItem(packet.GossipOptionID);

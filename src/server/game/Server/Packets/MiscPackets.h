@@ -384,6 +384,15 @@ namespace WorldPackets
             bool CheckInstance = false;
         };
 
+        // Empty client request sent when the client believes the player is wrongly stuck in combat.
+        class ReportStuckInCombat final : public ClientPacket
+        {
+        public:
+            explicit ReportStuckInCombat(WorldPacket&& packet) : ClientPacket(CMSG_REPORT_STUCK_IN_COMBAT, std::move(packet)) { }
+
+            void Read() override { }
+        };
+
         class RequestCemeteryList final : public ClientPacket
         {
         public:

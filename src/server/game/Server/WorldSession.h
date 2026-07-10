@@ -514,6 +514,7 @@ namespace WorldPackets
         class PortGraveyard;
         class ReclaimCorpse;
         class RepopRequest;
+        class ReportStuckInCombat;
         class RequestCemeteryList;
         class ResurrectResponse;
         class StandStateChange;
@@ -564,6 +565,7 @@ namespace WorldPackets
     namespace NPC
     {
         class Hello;
+        class GossipRefreshOptions;
         class GossipSelectOption;
         class SpiritHealerActivate;
         class TabardVendorActivate;
@@ -1309,6 +1311,7 @@ class TC_GAME_API WorldSession
         void HandleMoveSetModMovementForceMagnitudeAck(WorldPackets::Movement::MovementSpeedAck& setModMovementForceMagnitudeAck);
 
         void HandleRepopRequest(WorldPackets::Misc::RepopRequest& packet);
+        void HandleReportStuckInCombat(WorldPackets::Misc::ReportStuckInCombat& packet);
         void HandleAutostoreLootItemOpcode(WorldPackets::Loot::LootItem& packet);
         void HandleLootMoneyOpcode(WorldPackets::Loot::LootMoney& packet);
         void HandleLootOpcode(WorldPackets::Loot::LootUnit& packet);
@@ -1477,6 +1480,7 @@ class TC_GAME_API WorldSession
         void HandleTrainerBuySpellOpcode(WorldPackets::NPC::TrainerBuySpell& packet);
         void HandlePetitionShowList(WorldPackets::Petition::PetitionShowList& packet);
         void HandleGossipHelloOpcode(WorldPackets::NPC::Hello& packet);
+        void HandleGossipRefreshOptions(WorldPackets::NPC::GossipRefreshOptions& packet);
         void HandleGossipSelectOptionOpcode(WorldPackets::NPC::GossipSelectOption& packet);
         void HandleSpiritHealerActivate(WorldPackets::NPC::SpiritHealerActivate& packet);
         void HandleNpcTextQueryOpcode(WorldPackets::Query::QueryNPCText& packet);

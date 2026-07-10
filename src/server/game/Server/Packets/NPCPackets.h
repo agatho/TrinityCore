@@ -50,6 +50,15 @@ namespace WorldPackets
             ObjectGuid Unit;
         };
 
+        // Empty client request asking the server to re-send the currently open gossip menu.
+        class GossipRefreshOptions final : public ClientPacket
+        {
+        public:
+            explicit GossipRefreshOptions(WorldPacket&& packet) : ClientPacket(CMSG_GOSSIP_REFRESH_OPTIONS, std::move(packet)) { }
+
+            void Read() override { }
+        };
+
         class TC_GAME_API NPCInteractionOpenResult final : public ServerPacket
         {
         public:
