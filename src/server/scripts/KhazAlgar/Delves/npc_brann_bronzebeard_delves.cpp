@@ -36,9 +36,9 @@ static constexpr float COMPANION_FOLLOW_DISTANCE = 3.0f;
 static constexpr float COMPANION_FOLLOW_ANGLE = float(M_PI) / 4.0f; // 45 degrees behind-left
 
 // Combat ranges
-static constexpr float COMPANION_MELEE_RANGE = 5.0f;
-static constexpr float COMPANION_RANGED_RANGE = 30.0f;
-static constexpr float COMPANION_HEAL_RANGE = 40.0f;
+[[maybe_unused]] static constexpr float COMPANION_MELEE_RANGE = 5.0f;
+[[maybe_unused]] static constexpr float COMPANION_RANGED_RANGE = 30.0f;
+[[maybe_unused]] static constexpr float COMPANION_HEAL_RANGE = 40.0f;
 
 // Health thresholds
 static constexpr float HEAL_THRESHOLD_PCT = 70.0f;

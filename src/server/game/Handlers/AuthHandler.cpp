@@ -22,6 +22,7 @@
 #include "ClientConfigPackets.h"
 #include "DisableMgr.h"
 #include "GameTime.h"
+#include "Log.h"
 #include "ObjectMgr.h"
 #include "RBAC.h"
 #include "RealmList.h"
