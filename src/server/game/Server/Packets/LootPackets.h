@@ -107,6 +107,21 @@ namespace WorldPackets
             ObjectGuid Target;
         };
 
+        // Master looter chooses to start a group roll on a single master-loot item instead of assigning it.
+        // The wire carries two loot-addressing guids (loot object + owner); which is which is resolved at
+        // runtime against the player's active loot view, so only one field order assumption is not baked in.
+        class DoMasterLootRoll final : public ClientPacket
+        {
+        public:
+            explicit DoMasterLootRoll(WorldPacket&& packet) : ClientPacket(CMSG_DO_MASTER_LOOT_ROLL, std::move(packet)) { }
+
+            void Read() override;
+
+            ObjectGuid LootObj;
+            ObjectGuid Owner;
+            uint8 LootListID = 0;
+        };
+
         class LootRemoved final : public ServerPacket
         {
         public:
