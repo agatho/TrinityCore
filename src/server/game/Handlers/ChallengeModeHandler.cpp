@@ -46,7 +46,7 @@ namespace
     }
 
     // Item bonuses that scale a reward item to the Mythic+ item level for the given context + keystone level.
-    std::vector<int32> MythicPlusRewardBonuses(uint32 itemId, ItemContext context, int32 keystoneLevel)
+    [[maybe_unused]] std::vector<int32> MythicPlusRewardBonuses(uint32 itemId, ItemContext context, int32 keystoneLevel)
     {
         return ItemBonusMgr::GetBonusListsForItem(itemId, ItemBonusMgr::ItemBonusGenerationParams(context, keystoneLevel));
     }

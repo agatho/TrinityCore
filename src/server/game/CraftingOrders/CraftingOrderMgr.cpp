@@ -23,6 +23,7 @@
 #include "Mail.h"
 #include "ObjectAccessor.h"
 #include "Player.h"
+#include "WorldSession.h"
 #include <algorithm>
 
 namespace
