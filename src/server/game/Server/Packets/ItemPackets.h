@@ -603,6 +603,30 @@ namespace WorldPackets
             bool Disable = false;
         };
 
+        // CMSG_SET_SORT_BAGS_RIGHT_TO_LEFT (0x3A021C): a single bit (client serializer sub_7FF72914A700 reads the
+        // bool at msg+0x20 and writes 1 bit). Sets the matching ActivePlayerData.SortBagsRightToLeft update field.
+        class SetSortBagsRightToLeft final : public ClientPacket
+        {
+        public:
+            explicit SetSortBagsRightToLeft(WorldPacket&& packet) : ClientPacket(CMSG_SET_SORT_BAGS_RIGHT_TO_LEFT, std::move(packet)) { }
+
+            void Read() override;
+
+            bool Enable = false;
+        };
+
+        // CMSG_SET_INSERT_ITEMS_LEFT_TO_RIGHT (0x3A021D): a single bit (client serializer sub_7FF72914A770). Sets
+        // the ActivePlayerData.InsertItemsLeftToRight update field.
+        class SetInsertItemsLeftToRight final : public ClientPacket
+        {
+        public:
+            explicit SetInsertItemsLeftToRight(WorldPacket&& packet) : ClientPacket(CMSG_SET_INSERT_ITEMS_LEFT_TO_RIGHT, std::move(packet)) { }
+
+            void Read() override;
+
+            bool Enable = false;
+        };
+
         class AddItemPassive final : public ServerPacket
         {
         public:
