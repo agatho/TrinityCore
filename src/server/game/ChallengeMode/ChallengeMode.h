@@ -18,6 +18,7 @@
 #ifndef ChallengeMode_h__
 #define ChallengeMode_h__
 
+#include "Common.h"
 #include "Define.h"
 #include "ObjectGuid.h"
 #include <array>

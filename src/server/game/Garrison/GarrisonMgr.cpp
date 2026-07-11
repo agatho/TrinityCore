@@ -458,7 +458,7 @@ uint32 GarrisonMgr::GetFollowerZoneSupportSpell(uint32 garrFollowerID, uint32 fa
     GarrFollSupportSpellEntry const* best = nullptr;
     for (GarrFollSupportSpellEntry const* entry : sGarrFollSupportSpellStore)
     {
-        if (entry->GarrFollowerID != garrFollowerID)
+        if (uint32(entry->GarrFollowerID) != garrFollowerID)
             continue;
         if (!best || entry->OrderIndex < best->OrderIndex)
             best = entry;
