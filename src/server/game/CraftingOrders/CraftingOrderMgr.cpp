@@ -345,3 +345,19 @@ std::vector<CraftingOrders::Order const*> CraftingOrderMgr::ListNpcOrders() cons
             result.push_back(&order);
     return result;
 }
+
+void CraftingOrderMgr::SetIgnoreList(ObjectGuid owner, std::vector<ObjectGuid> ignored)
+{
+    if (ignored.empty())
+        _ignoreLists.erase(owner);
+    else
+        _ignoreLists[owner] = std::move(ignored);
+}
+
+bool CraftingOrderMgr::IsIgnoring(ObjectGuid owner, ObjectGuid other) const
+{
+    auto it = _ignoreLists.find(owner);
+    if (it == _ignoreLists.end())
+        return false;
+    return std::find(it->second.begin(), it->second.end(), other) != it->second.end();
+}
