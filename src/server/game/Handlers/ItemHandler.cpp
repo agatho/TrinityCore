@@ -1292,6 +1292,16 @@ void WorldSession::HandleSetBackpackAutosortDisabled(WorldPackets::Item::SetBack
     _player->SetBackpackAutoSortDisabled(setBackpackAutosortDisabled.Disable);
 }
 
+void WorldSession::HandleSetSortBagsRightToLeft(WorldPackets::Item::SetSortBagsRightToLeft const& setSortBagsRightToLeft)
+{
+    _player->SetSortBagsRightToLeft(setSortBagsRightToLeft.Enable);
+}
+
+void WorldSession::HandleSetInsertItemsLeftToRight(WorldPackets::Item::SetInsertItemsLeftToRight const& setInsertItemsLeftToRight)
+{
+    _player->SetInsertItemsLeftToRight(setInsertItemsLeftToRight.Enable);
+}
+
 void WorldSession::HandleSetBackpackSellJunkDisabled(WorldPackets::Item::SetBackpackSellJunkDisabled const& setBackpackSellJunkDisabled)
 {
     _player->SetBackpackSellJunkDisabled(setBackpackSellJunkDisabled.Disable);

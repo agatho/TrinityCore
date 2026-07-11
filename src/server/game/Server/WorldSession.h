@@ -714,6 +714,8 @@ namespace WorldPackets
         class ChangeBagSlotFlag;
         class ChangeBankBagSlotFlag;
         class SetBackpackAutosortDisabled;
+        class SetSortBagsRightToLeft;
+        class SetInsertItemsLeftToRight;
         class SetBackpackSellJunkDisabled;
         class SetBankAutosortDisabled;
         class PerformItemInteraction;
@@ -2081,6 +2083,8 @@ class TC_GAME_API WorldSession
         void HandleChangeBagSlotFlag(WorldPackets::Item::ChangeBagSlotFlag const& changeBagSlotFlag);
         void HandleChangeBankBagSlotFlag(WorldPackets::Item::ChangeBankBagSlotFlag const& changeBankBagSlotFlag);
         void HandleSetBackpackAutosortDisabled(WorldPackets::Item::SetBackpackAutosortDisabled const& setBackpackAutosortDisabled);
+        void HandleSetSortBagsRightToLeft(WorldPackets::Item::SetSortBagsRightToLeft const& setSortBagsRightToLeft);
+        void HandleSetInsertItemsLeftToRight(WorldPackets::Item::SetInsertItemsLeftToRight const& setInsertItemsLeftToRight);
         void HandleSetBackpackSellJunkDisabled(WorldPackets::Item::SetBackpackSellJunkDisabled const& setBackpackSellJunkDisabled);
         void HandleSetBankAutosortDisabled(WorldPackets::Item::SetBankAutosortDisabled const& setBankAutosortDisabled);
 
