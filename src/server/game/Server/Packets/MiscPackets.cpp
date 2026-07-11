@@ -170,6 +170,23 @@ WorldPacket const* SetupCurrency::Write()
     return &_worldPacket;
 }
 
+WorldPacket const* CurrencyTransferLog::Write()
+{
+    _worldPacket << Size<uint32>(Entries);
+
+    for (Entry const& entry : Entries)
+    {
+        _worldPacket << entry.Source;              // PackedGuid (source character)
+        _worldPacket << entry.Dest;                // PackedGuid (destination character)
+        _worldPacket << int32(entry.CurrencyID);
+        _worldPacket << int32(entry.Quantity);
+        _worldPacket << int32(entry.Field3);
+        _worldPacket << uint64(entry.TransferTime);
+    }
+
+    return &_worldPacket;
+}
+
 void ViolenceLevel::Read()
 {
     _worldPacket >> ViolenceLvl;
