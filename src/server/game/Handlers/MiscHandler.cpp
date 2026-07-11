@@ -1134,6 +1134,15 @@ void WorldSession::HandleGetCharacterCurrencyTransferLog(WorldPackets::Misc::Get
     SendPacket(response.Write());
 }
 
+// CMSG_REQUEST_CURRENCY_DATA_FOR_ACCOUNT_CHARACTERS (empty): the client wants every account character's currency
+// totals for the warband currency view. Core does not aggregate other characters' currencies for this panel, so the
+// reply is an empty list -- the truthful "no account-character currency data", clearing the panel's loading state.
+void WorldSession::HandleRequestCurrencyDataForAccountCharacters(WorldPackets::Misc::RequestCurrencyDataForAccountCharacters& /*packet*/)
+{
+    WorldPackets::Misc::AccountCharacterCurrencyLists response;
+    SendPacket(response.Write());
+}
+
 void WorldSession::HandleObjectUpdateFailedOpcode(WorldPackets::Misc::ObjectUpdateFailed& objectUpdateFailed)
 {
     TC_LOG_ERROR("network", "Object update failed for {} for player {} ({})", objectUpdateFailed.ObjectGUID.ToString(), GetPlayerName(), _player->GetGUID().ToString());
