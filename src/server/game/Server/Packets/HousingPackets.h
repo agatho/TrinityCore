@@ -248,8 +248,8 @@ namespace WorldPackets::Housing
         // (Field_61 u8 + Field_62 u8 + Field_63 s32 + speculative tail) — bytes
         // happened to total correctly only for the empty-anchor case.
         ObjectGuid DecorGuid;
-        TaggedPosition<Position::XYZ> Position;
-        TaggedPosition<Position::XYZ> Rotation;
+        TaggedPosition<::Position::XYZ> Position;
+        TaggedPosition<::Position::XYZ> Rotation;
         float Scale = 1.0f;
         ObjectGuid AttachParentGuid;
         ObjectGuid RoomGuid;
@@ -265,8 +265,8 @@ namespace WorldPackets::Housing
         void Read() override;
 
         ObjectGuid DecorGuid;
-        TaggedPosition<Position::XYZ> Position;
-        TaggedPosition<Position::XYZ> Rotation;
+        TaggedPosition<::Position::XYZ> Position;
+        TaggedPosition<::Position::XYZ> Rotation;
         float Scale = 1.0f;
         ObjectGuid AttachParentGuid;
         ObjectGuid RoomGuid;

@@ -77,7 +77,7 @@ protected:
     void RemoveFromObjectUpdate() override;
 
 private:
-    Map* _map;
+    [[maybe_unused]] Map* _map;
 };
 
 #endif // TRINITYCORE_HOUSING_MIRROR_ENTITY_H

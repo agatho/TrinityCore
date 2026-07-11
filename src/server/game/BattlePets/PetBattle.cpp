@@ -22,6 +22,7 @@
 #include "DB2Stores.h"
 #include "GameTables.h"
 #include "Log.h"
+#include "MotionMaster.h"
 #include "ObjectAccessor.h"
 #include "ObjectMgr.h"
 #include "PetBattleMgr.h"
