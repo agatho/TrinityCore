@@ -649,6 +649,14 @@ void WorldSession::HandleRequestRatedPvpInfo(WorldPackets::Battleground::Request
     SendPacket(ratedPvpInfo.Write());
 }
 
+void WorldSession::HandleRequestScheduledPvpInfo(WorldPackets::Battleground::RequestScheduledPvpInfo& /*packet*/)
+{
+    // No PvP-event scheduler in core: answer with an all-inactive response (no scheduled PvP event), mirroring the
+    // default-response pattern of HandleRequestRatedPvpInfo. Clears the client's scheduled-PvP query state.
+    WorldPackets::Battleground::RequestScheduledPvpInfoResponse response;
+    SendPacket(response.Write());
+}
+
 void WorldSession::HandleGetPVPOptionsEnabled(WorldPackets::Battleground::GetPVPOptionsEnabled& /*getPvPOptionsEnabled*/)
 {
     WorldPackets::Battleground::PVPOptionsEnabled pvpOptionsEnabled;
