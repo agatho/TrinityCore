@@ -948,10 +948,8 @@ bool HousingMap::AddPlayerToMap(Player* player, bool initPlayer /*= true*/)
         SetPlayerCurrentPlot(player->GetGUID(), plotIndex);
 
         ObjectGuid playerGuid = player->GetGUID();
-        ObjectGuid houseGuid = housing->GetHouseGuid();
-        ObjectGuid neighborhoodGuid = housing->GetNeighborhoodGuid();
         uint8 deferredPlotIndex = plotIndex;
-        player->m_Events.AddEventAtOffset([playerGuid, deferredPlotIndex, houseGuid, neighborhoodGuid]()
+        player->m_Events.AddEventAtOffset([playerGuid, deferredPlotIndex]()
         {
             Player* p = ObjectAccessor::FindPlayer(playerGuid);
             if (!p || !p->IsInWorld())
@@ -1299,7 +1297,7 @@ bool HousingMap::AddPlayerToMap(Player* player, bool initPlayer /*= true*/)
 void HousingMap::RemovePlayerFromMap(Player* player, bool remove)
 {
     // Remove plot auras before removing housing data.
-    if (Housing const* housing = GetHousingForPlayer(player->GetGUID()))
+    if (GetHousingForPlayer(player->GetGUID()))
     {
         // Remove all plot enter/presence auras (manual packets — spells not in DB2)
         SendPlotLeaveAuraRemoval(player);

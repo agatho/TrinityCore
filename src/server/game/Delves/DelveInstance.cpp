@@ -21,6 +21,7 @@
 #include "DelvesRewards.h"
 #include "Creature.h"
 #include "CreatureAI.h"
+#include "DB2Stores.h"
 #include "Group.h"
 #include "Log.h"
 #include "Map.h"

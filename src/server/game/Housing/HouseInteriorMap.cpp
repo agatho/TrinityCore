@@ -1657,13 +1657,9 @@ bool HouseInteriorMap::AddPlayerToMap(Player* player, bool initPlayer /*= true*/
             // client silently drops the Status/Permissions packets.
             {
                 ObjectGuid playerGuid = player->GetGUID();
-                ObjectGuid houseGuid = housing->GetHouseGuid();
-                ObjectGuid neighborhoodGuid = housing->GetNeighborhoodGuid();
-                ObjectGuid accountGuid = player->GetSession()->GetBattlenetAccountGUID();
                 uint8 plotIndex = housing->GetPlotIndex();
-                uint32 settingsFlags = housing->GetSettingsFlags();
 
-                player->m_Events.AddEventAtOffset([this, playerGuid, neighborhoodGuid, accountGuid, plotIndex, settingsFlags]()
+                player->m_Events.AddEventAtOffset([this, playerGuid, plotIndex]()
                 {
                     Player* p = ObjectAccessor::FindPlayer(playerGuid);
                     if (!p || !p->IsInWorld())
