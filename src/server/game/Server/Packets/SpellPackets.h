@@ -1221,6 +1221,33 @@ namespace WorldPackets
             void Read() override { }
         };
 
+        // CMSG_REQUEST_CROWD_CONTROL_SPELL (0x3B00CA): in arenas the client asks which spell is currently
+        // crowd-controlling a target so it can display it. Wire is a single PackedGuid (client serializer
+        // sub_7FF729153490). Answered with SMSG_ARENA_CROWD_CONTROL_SPELL_RESULT.
+        class RequestCrowdControlSpell final : public ClientPacket
+        {
+        public:
+            explicit RequestCrowdControlSpell(WorldPacket&& packet) : ClientPacket(CMSG_REQUEST_CROWD_CONTROL_SPELL, std::move(packet)) { }
+
+            void Read() override;
+
+            ObjectGuid Target;
+        };
+
+        // SMSG_ARENA_CROWD_CONTROL_SPELL_RESULT (0x4200DA): { PackedGuid Guid; uint32 SpellID }. Wire confirmed from
+        // the client reader sub_7FF729094FC0 (PackedGuid read via sub_7FF72BEBDEA0 + a uint32). SpellID 0 = no active
+        // crowd-control on the target.
+        class ArenaCrowdControlSpellResult final : public ServerPacket
+        {
+        public:
+            explicit ArenaCrowdControlSpellResult() : ServerPacket(SMSG_ARENA_CROWD_CONTROL_SPELL_RESULT, 16 + 4) { }
+
+            WorldPacket const* Write() override;
+
+            ObjectGuid Guid;
+            int32 SpellID = 0;
+        };
+
         ByteBuffer& operator>>(ByteBuffer& buffer, SpellCastRequest& request);
     }
 }

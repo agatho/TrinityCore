@@ -621,3 +621,36 @@ void WorldSession::HandleKeyboundOverride(WorldPackets::Spells::KeyboundOverride
 
     player->CastSpell(player, spellKeyboundOverride->Data);
 }
+
+void WorldSession::HandleRequestCrowdControlSpell(WorldPackets::Spells::RequestCrowdControlSpell& requestCrowdControlSpell)
+{
+    Player* player = GetPlayer();
+    if (!player)
+        return;
+
+    // Answer with the spell currently crowd-controlling the target (any active loss-of-control aura); the arena UI
+    // uses this to show the CC on an enemy. SpellID 0 = the target is not crowd-controlled.
+    WorldPackets::Spells::ArenaCrowdControlSpellResult result;
+    result.Guid = requestCrowdControlSpell.Target;
+
+    if (Unit* target = ObjectAccessor::GetUnit(*player, requestCrowdControlSpell.Target))
+    {
+        static constexpr AuraType ccAuraTypes[] =
+        {
+            SPELL_AURA_MOD_STUN, SPELL_AURA_MOD_FEAR, SPELL_AURA_MOD_CONFUSE,
+            SPELL_AURA_MOD_ROOT, SPELL_AURA_MOD_POSSESS, SPELL_AURA_MOD_PACIFY_SILENCE
+        };
+
+        for (AuraType type : ccAuraTypes)
+        {
+            Unit::AuraEffectList const& effects = target->GetAuraEffectsByType(type);
+            if (!effects.empty())
+            {
+                result.SpellID = int32(effects.front()->GetId());
+                break;
+            }
+        }
+    }
+
+    SendPacket(result.Write());
+}

@@ -755,6 +755,7 @@ namespace WorldPackets
         class UpdateAuraVisual;
         class TradeSkillSetFavorite;
         class KeyboundOverride;
+        class RequestCrowdControlSpell;
         class SetEmpowerMinHoldStagePercent;
         class SpellEmpowerRelease;
         class SpellEmpowerRestart;
@@ -1837,6 +1838,7 @@ class TC_GAME_API WorldSession
         void HandleCloseInteraction(WorldPackets::Misc::CloseInteraction& closeInteraction);
         void HandleConversationLineStarted(WorldPackets::Misc::ConversationLineStarted& conversationLineStarted);
         void HandleKeyboundOverride(WorldPackets::Spells::KeyboundOverride& keyboundOverride);
+        void HandleRequestCrowdControlSpell(WorldPackets::Spells::RequestCrowdControlSpell& requestCrowdControlSpell);
         void HandleQueryCountdownTimer(WorldPackets::Misc::QueryCountdownTimer& queryCountdownTimer);
         void HandleSetCurrencyFlags(WorldPackets::Misc::SetCurrencyFlags const& setCurrenctFlags);
 
