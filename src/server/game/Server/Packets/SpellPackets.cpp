@@ -1265,6 +1265,15 @@ WorldPacket const* RestartGlobalCooldown::Write()
 {
     _worldPacket << int32(SpellID);
     _worldPacket << Duration;
+void RequestCrowdControlSpell::Read()
+{
+    _worldPacket >> Target;
+}
+
+WorldPacket const* ArenaCrowdControlSpellResult::Write()
+{
+    _worldPacket << Guid;
+    _worldPacket << int32(SpellID);
 
     return &_worldPacket;
 }
