@@ -35,7 +35,7 @@ namespace
 {
     // Rolls the configured reward pool once (personal loot, tagged with the given context) and returns a single
     // item id, or 0 if nothing rolled / the pool is empty.
-    uint32 RollMythicPlusRewardItem(Player* player, uint32 lootId, ItemContext context)
+    [[maybe_unused]] uint32 RollMythicPlusRewardItem(Player* player, uint32 lootId, ItemContext context)
     {
         Loot loot(player->GetMap(), ObjectGuid::Empty, LOOT_NONE, nullptr);
         loot.FillLoot(lootId, LootTemplates_Reference, player, true /*personal*/, true /*noEmptyError*/, LOOT_MODE_DEFAULT, context);

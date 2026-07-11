@@ -2334,7 +2334,6 @@ void Housing::OnQuestCompleted(uint32 questId)
     uint32 nextLevelQuestId = sHousingMgr.GetQuestForLevel(_level + 1);
     if (nextLevelQuestId > 0 && nextLevelQuestId == questId)
     {
-        uint32 previousLevel = _level;
         _level++;
         TC_LOG_DEBUG("housing", "Housing::OnQuestCompleted: Player {} house leveled up to {} (quest {}) in house {}",
             _owner->GetName(), _level, questId, _houseGuid.ToString());

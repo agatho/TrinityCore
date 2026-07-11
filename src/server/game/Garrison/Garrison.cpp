@@ -1932,7 +1932,7 @@ GarrisonError Garrison::ClaimMissionReward(uint32 missionRecID)
                 WorldPackets::Garrison::GarrisonFollower oldFollowerState = follower->PacketInfo;
 
                 GarrFollowerEntry const* followerEntry = sGarrFollowerStore.LookupEntry(follower->PacketInfo.GarrFollowerID);
-                uint8 followerTypeID = followerEntry ? followerEntry->GarrFollowerTypeID : FOLLOWER_TYPE_GARRISON;
+                uint8 followerTypeID = followerEntry ? followerEntry->GarrFollowerTypeID : uint8(FOLLOWER_TYPE_GARRISON);
 
                 follower->PacketInfo.Xp += followerXP;
 

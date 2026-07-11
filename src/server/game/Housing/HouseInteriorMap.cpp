@@ -702,7 +702,7 @@ void HouseInteriorMap::DespawnRoomEntities(ObjectGuid roomGuid)
 }
 
 void HouseInteriorMap::ReplaceWallWithDoorway(ObjectGuid roomGuid, uint32 doorComponentID,
-    int32 factionRestriction, Housing::Room const& room, ObjectGuid newRoomGuid)
+    int32 factionRestriction, Housing::Room const& room, ObjectGuid /*newRoomGuid*/)
 {
     // The parent room keeps its Cosmetic wall (Type=0) to fill the full wall width.
     // The child room's DoorwayWall+Doorway renders over it to create the door opening.
@@ -800,7 +800,7 @@ void HouseInteriorMap::ReplaceWallWithDoorway(ObjectGuid roomGuid, uint32 doorCo
         roomGuid.ToString(), doorComponentID);
 }
 
-void HouseInteriorMap::UpdateRoomComponentTextures(ObjectGuid roomGuid, Housing::Room const& room,
+void HouseInteriorMap::UpdateRoomComponentTextures(ObjectGuid roomGuid, Housing::Room const& /*room*/,
     std::vector<uint32> const* componentIDs, int32 textureID)
 {
     // Material/texture-only change: update existing MeshObjects in-place via UPDATE_OBJECT.

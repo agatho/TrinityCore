@@ -22,6 +22,7 @@
 #include "Containers.h"
 #include "Creature.h"
 #include "DB2Stores.h"
+#include "DatabaseEnv.h"
 #include "GameTime.h"
 #include "Group.h"
 #include "Item.h"
