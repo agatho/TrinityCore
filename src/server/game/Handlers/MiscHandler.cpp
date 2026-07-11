@@ -1124,6 +1124,16 @@ void WorldSession::HandleViolenceLevel(WorldPackets::Misc::ViolenceLevel& /*viol
     // do something?
 }
 
+// CMSG_GET_CHARACTER_CURRENCY_TRANSFER_LOG (empty): the client opened the account/warband currency transfer-history
+// panel. Answer with SMSG_CURRENCY_TRANSFER_LOG. TrinityCore does not implement account currency transfer, so there
+// is no history to report and the reply is an empty log — the truthful "no transfers" answer that clears the panel's
+// loading state (without a reply the client leaves it blank/spinning).
+void WorldSession::HandleGetCharacterCurrencyTransferLog(WorldPackets::Misc::GetCharacterCurrencyTransferLog& /*packet*/)
+{
+    WorldPackets::Misc::CurrencyTransferLog response;
+    SendPacket(response.Write());
+}
+
 void WorldSession::HandleObjectUpdateFailedOpcode(WorldPackets::Misc::ObjectUpdateFailed& objectUpdateFailed)
 {
     TC_LOG_ERROR("network", "Object update failed for {} for player {} ({})", objectUpdateFailed.ObjectGUID.ToString(), GetPlayerName(), _player->GetGUID().ToString());

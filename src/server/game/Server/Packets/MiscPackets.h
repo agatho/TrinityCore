@@ -168,6 +168,45 @@ namespace WorldPackets
             std::vector<Record> Data;
         };
 
+        // CMSG_GET_CHARACTER_CURRENCY_TRANSFER_LOG (0x29001F): the client opens the account/warband currency
+        // "transfer history" panel. SNIFF-CONFIRMED empty body (size 4 = bare opcode). Answered with
+        // SMSG_CURRENCY_TRANSFER_LOG.
+        class GetCharacterCurrencyTransferLog final : public ClientPacket
+        {
+        public:
+            explicit GetCharacterCurrencyTransferLog(WorldPacket&& packet) : ClientPacket(CMSG_GET_CHARACTER_CURRENCY_TRANSFER_LOG, std::move(packet)) { }
+
+            void Read() override { }
+        };
+
+        // SMSG_CURRENCY_TRANSFER_LOG (0x420355): the history of account/warband currency transfers involving this
+        // character. Wire recovered byte-exact from a live 12.0.7 sniff (C:\sniff\b_pets12.0.7.pkt, a 3-entry
+        // capture parses to the byte, 0 leftover): { u32 count; count x entry }, entry =
+        // { PackedGuid Source; PackedGuid Dest; u32 CurrencyID; u32 Quantity; u32 Field3; u64 TransferTime }.
+        // (CurrencyID was a constant 1792 across the capture; Quantity/Field3 are the two per-transfer amounts —
+        // exact roles not offline-confirmable but they are only written when real entries exist.) TrinityCore does
+        // not implement account currency transfer, so there is no transfer history to report and the reply is a bare
+        // header (count 0) — the truthful "no transfers" answer, which clears the client's transfer-history panel.
+        class CurrencyTransferLog final : public ServerPacket
+        {
+        public:
+            struct Entry
+            {
+                ObjectGuid Source;
+                ObjectGuid Dest;
+                int32 CurrencyID = 0;
+                int32 Quantity = 0;
+                int32 Field3 = 0;
+                uint64 TransferTime = 0;
+            };
+
+            explicit CurrencyTransferLog() : ServerPacket(SMSG_CURRENCY_TRANSFER_LOG, 4) { }
+
+            WorldPacket const* Write() override;
+
+            std::vector<Entry> Entries;
+        };
+
         class ViolenceLevel final : public ClientPacket
         {
         public:
