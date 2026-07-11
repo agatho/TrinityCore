@@ -435,6 +435,22 @@ void WorldSession::HandleDoMasterLootRoll(WorldPackets::Loot::DoMasterLootRoll& 
     loot->StartRoll(_player->GetMap(), packet.LootListID);
 }
 
+void WorldSession::HandleCancelMasterLootRoll(WorldPackets::Loot::CancelMasterLootRoll& packet)
+{
+    // Only the master looter may cancel a roll they started.
+    if (!_player->GetGroup() || _player->GetGroup()->GetMasterLooterGuid() != _player->GetGUID())
+        return;
+
+    Loot* loot = Trinity::Containers::MapGetValuePtr(_player->GetAELootView(), packet.LootObj);
+    if (!loot)
+        loot = Trinity::Containers::MapGetValuePtr(_player->GetAELootView(), packet.Owner);
+
+    if (!loot || loot->GetLootMethod() != MASTER_LOOT)
+        return;
+
+    loot->CancelRoll(packet.LootListID);
+}
+
 void WorldSession::HandleLootMasterGiveOpcode(WorldPackets::Loot::MasterLootItem& masterLootItem)
 {
     AELootResult aeResult;

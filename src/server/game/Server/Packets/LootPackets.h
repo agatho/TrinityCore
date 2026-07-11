@@ -122,6 +122,19 @@ namespace WorldPackets
             uint8 LootListID = 0;
         };
 
+        // Master looter aborts an in-progress roll on an item. Same wire as DoMasterLootRoll.
+        class CancelMasterLootRoll final : public ClientPacket
+        {
+        public:
+            explicit CancelMasterLootRoll(WorldPacket&& packet) : ClientPacket(CMSG_CANCEL_MASTER_LOOT_ROLL, std::move(packet)) { }
+
+            void Read() override;
+
+            ObjectGuid LootObj;
+            ObjectGuid Owner;
+            uint8 LootListID = 0;
+        };
+
         class LootRemoved final : public ServerPacket
         {
         public:
