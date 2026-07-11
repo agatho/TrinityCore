@@ -108,6 +108,10 @@ public:
     std::vector<CraftingOrders::Order const*> ListClaimableForRecipe(int32 skillLineAbilityID) const;
     std::vector<CraftingOrders::Order const*> ListOrdersByCustomer(ObjectGuid customer) const;
 
+    // NPC (patron) work orders: server-issued orders any eligible crafter can pick up. Content-agnostic — returns
+    // whatever OrderType::Npc orders exist in the pool (currently none until NPC-order content is authored).
+    std::vector<CraftingOrders::Order const*> ListNpcOrders() const;
+
 private:
     CraftingOrderMgr() = default;
 

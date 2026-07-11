@@ -336,3 +336,12 @@ std::vector<CraftingOrders::Order const*> CraftingOrderMgr::ListOrdersByCustomer
             result.push_back(&order);
     return result;
 }
+
+std::vector<CraftingOrders::Order const*> CraftingOrderMgr::ListNpcOrders() const
+{
+    std::vector<CraftingOrders::Order const*> result;
+    for (auto const& [id, order] : _orders)
+        if (order.Type == CraftingOrders::OrderType::Npc && order.IsClaimable())
+            result.push_back(&order);
+    return result;
+}

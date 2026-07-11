@@ -332,4 +332,35 @@ WorldPacket const* CraftingOrderListOrdersResponse::Write()
 
     return &_worldPacket;
 }
+
+void CraftingOrderGetNpcRewardInfo::Read()
+{
+    uint32 count;
+    _worldPacket >> count;
+    _worldPacket >> ContextField;
+
+    count = std::min<uint32>(count, 1000);         // sanity cap; the browse view lists at most a screenful of orders
+    Orders.resize(count);
+    for (NpcRewardInfoRequest& req : Orders)
+    {
+        _worldPacket >> req.OrderID;
+        _worldPacket >> req.Field1;
+        _worldPacket >> req.Field2;
+        _worldPacket >> req.Field3;
+    }
+}
+
+WorldPacket const* CraftingOrderNpcRewardInfo::Write()
+{
+    _worldPacket << uint32(Entries.size());
+    _worldPacket << uint32(ContextField);          // echo the request's context field
+
+    for (NpcRewardInfoEntry const& entry : Entries)
+    {
+        _worldPacket << uint64(entry.OrderID);
+        _worldPacket << uint32(0);                 // rewardCount — 0 until NPC-order reward content is authored
+    }
+
+    return &_worldPacket;
+}
 }

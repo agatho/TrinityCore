@@ -297,6 +297,18 @@ namespace CraftingOrders
         int32 SkillLineAbilityID = 0;
     };
 
+    // CMSG_NPC_CRAFTING_ORDER_REQUEST (0x3B012F): the client asks for the list of available NPC (patron) work orders
+    // when opening a crafting-order NPC. SNIFF-CONFIRMED empty body (size 4 = bare opcode, 4 captures in
+    // C:\sniff\ingame-shop_ordersCrafting_professions.pkt), so Read consumes nothing. The server answers with a
+    // SMSG_CRAFTING_ORDER_LIST_ORDERS_RESPONSE carrying the OrderType::Npc orders (empty until content is authored).
+    class NpcCraftingOrderRequest final : public ClientPacket
+    {
+    public:
+        explicit NpcCraftingOrderRequest(WorldPacket&& packet) : ClientPacket(CMSG_NPC_CRAFTING_ORDER_REQUEST, std::move(packet)) { }
+
+        void Read() override { }
+    };
+
     // One customer-provided reagent on the JamCraftingOrder wire (the client's JamCraftingOrderItem, reader
     // sub_7FF72915FF20). Recovered byte-exact and VALIDATED against the live sniff: every one of the 23 orders in
     // C:\sniff\ingame-shop_ordersCrafting_professions.pkt parses cleanly with this layout (the whole 2054-byte and
@@ -397,6 +409,58 @@ namespace CraftingOrders
         uint8 Field64 = 0;
         uint32 Field6C = 0;
         std::vector<CraftingOrderData> Orders;
+    };
+
+    // CMSG_CRAFTING_ORDER_GET_NPC_REWARD_INFO (0x3B011A): the client asks for the reward preview of a set of NPC
+    // (patron) work orders it is currently browsing. Wire recovered byte-exact from a live sniff
+    // (C:\sniff\ingame-shop_ordersCrafting_professions.pkt, one 252-byte capture parses to the byte): a u32 count, a
+    // u32 context field (echoed back in the response — 1 in the capture), then count records of
+    // { u64 OrderID; u32 Field1; u32 Field2; u32 Field3 }. Only OrderID has offline-confirmable meaning (it matches
+    // the order ids in the paired SMSG_CRAFTING_ORDER_NPC_REWARD_INFO); Field1..3 are read byte-exact but their
+    // semantics (likely recipe/quality/set hints the client already knows) are not needed server-side.
+    struct NpcRewardInfoRequest
+    {
+        uint64 OrderID = 0;
+        uint32 Field1 = 0;
+        uint32 Field2 = 0;
+        uint32 Field3 = 0;
+    };
+
+    class CraftingOrderGetNpcRewardInfo final : public ClientPacket
+    {
+    public:
+        explicit CraftingOrderGetNpcRewardInfo(WorldPacket&& packet) : ClientPacket(CMSG_CRAFTING_ORDER_GET_NPC_REWARD_INFO, std::move(packet)) { }
+
+        void Read() override;
+
+        uint32 ContextField = 0;
+        std::vector<NpcRewardInfoRequest> Orders;
+    };
+
+    // SMSG_CRAFTING_ORDER_NPC_REWARD_INFO (0x42033E): the paired reply, byte-exact from the same sniff (430-byte
+    // capture). Header: { u32 count; u32 ContextField (echoes the request) }, then count records of
+    // { u64 OrderID; u32 rewardCount; rewardCount x <reward blob> }. The reward blob is a reflection-serialized,
+    // variable-length record carrying the patron's item/currency rewards — that is authored NPC-order CONTENT (the
+    // specific per-order rewards live on Blizzard's servers, not in any offline data), so it is NOT synthesized here.
+    // The server answers with the NPC orders it actually knows about (from CraftingOrderMgr); each such order emits
+    // rewardCount=0 until reward content is attached, which is byte-exact (the client accepts a zero-reward order) and
+    // honest. With no NPC-order content configured the reply is a bare header (count 0) — the truthful "no NPC orders"
+    // answer, exactly like an empty browse response.
+    struct NpcRewardInfoEntry
+    {
+        uint64 OrderID = 0;
+        // Rewards are authored content (see class note); none are emitted yet, so rewardCount is written as 0.
+    };
+
+    class CraftingOrderNpcRewardInfo final : public ServerPacket
+    {
+    public:
+        CraftingOrderNpcRewardInfo() : ServerPacket(SMSG_CRAFTING_ORDER_NPC_REWARD_INFO, 4 + 4) { }
+
+        WorldPacket const* Write() override;
+
+        uint32 ContextField = 0;
+        std::vector<NpcRewardInfoEntry> Entries;
     };
 }
 }
