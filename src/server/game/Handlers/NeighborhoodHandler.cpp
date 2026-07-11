@@ -38,6 +38,7 @@
 #include "ObjectMgr.h"
 #include "Player.h"
 #include "GameTime.h"
+#include "UpdateData.h"
 #include "World.h"
 
 namespace

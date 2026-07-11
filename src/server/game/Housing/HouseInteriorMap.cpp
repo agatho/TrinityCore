@@ -41,6 +41,7 @@
 #include "SpellAuraDefines.h"
 #include "SpellPackets.h"
 #include "RealmList.h"
+#include "UpdateData.h"
 #include "World.h"
 #include "WorldSession.h"
 
