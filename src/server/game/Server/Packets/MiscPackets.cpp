@@ -187,6 +187,27 @@ WorldPacket const* CurrencyTransferLog::Write()
     return &_worldPacket;
 }
 
+WorldPacket const* AccountCharacterCurrencyLists::Write()
+{
+    _worldPacket << Size<uint32>(Currencies);
+
+    for (CharacterCurrency const& currency : Currencies)
+    {
+        _worldPacket << int32(currency.CurrencyID);
+        _worldPacket << currency.Character;        // PackedGuid
+        _worldPacket << uint32(currency.Quantity);
+        _worldPacket << uint32(currency.WeeklyQuantity);
+        _worldPacket << uint32(currency.MaxQuantity);
+        _worldPacket << Bits<1>(currency.Flag);
+        _worldPacket.FlushBits();
+    }
+
+    _worldPacket << Bits<1>(TrailingFlag);
+    _worldPacket.FlushBits();
+
+    return &_worldPacket;
+}
+
 void ViolenceLevel::Read()
 {
     _worldPacket >> ViolenceLvl;
