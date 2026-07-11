@@ -30748,6 +30748,69 @@ void Player::ApplyTraitEntryChanges(int32 editedConfigId, WorldPackets::Traits::
     m_traitConfigStates[editedConfigId] = PLAYERSPELL_CHANGED;
 }
 
+void Player::ResetProfessionSpecialization(int32 identifier)
+{
+    // The client's identifier may be either the TraitConfig ID or the profession SkillLineID; match a Profession
+    // config on either so we never act on the wrong (or a combat) config.
+    UF::TraitConfig const* config = m_activePlayerData->TraitConfigs.FindIf([identifier](UF::TraitConfig const& c)
+    {
+        return static_cast<TraitConfigType>(*c.Type) == TraitConfigType::Profession
+            && (*c.ID == identifier || *c.SkillLineID == identifier);
+    }).second;
+    if (!config)
+        return;
+
+    int32 const configId = *config->ID;
+
+    // Refund the currency the player actually spent to fill this tree. Cost is linear in rank and granted (free)
+    // ranks were never paid for, so the refundable amount is the cost of (Rank - GrantedRanks) per entry.
+    std::vector<WorldPackets::Traits::TraitEntry> spentEntries;
+    for (int32 i = 0; i < std::ssize(config->Entries); ++i)
+    {
+        UF::TraitEntry const& entry = config->Entries[i];
+        int32 const paidRank = int32(entry.Rank) - int32(entry.GrantedRanks);
+        if (paidRank <= 0)
+            continue;
+
+        WorldPackets::Traits::TraitEntry& refundEntry = spentEntries.emplace_back();
+        refundEntry.TraitNodeID = entry.TraitNodeID;
+        refundEntry.TraitNodeEntryID = entry.TraitNodeEntryID;
+        refundEntry.Rank = paidRank;
+        refundEntry.GrantedRanks = 0;
+    }
+
+    std::map<int32, TraitMgr::SpentCurrency> refund;
+    TraitMgr::FillSpentCurrenciesMap(spentEntries, refund);
+    for (auto const& [traitCurrencyId, amount] : refund)
+    {
+        TraitCurrencyEntry const* traitCurrency = sTraitCurrencyStore.LookupEntry(traitCurrencyId);
+        if (!traitCurrency || amount.Total <= 0)
+            continue;
+
+        switch (traitCurrency->GetType())
+        {
+            case TraitCurrencyType::Gold:
+                ModifyMoney(amount.Total);
+                break;
+            case TraitCurrencyType::CurrencyTypesBased:
+                AddCurrency(traitCurrency->CurrencyTypesID, uint32(amount.Total), CurrencyGainSource::AzeriteRespec);
+                break;
+            default:
+                break;
+        }
+    }
+
+    // Reset the specialization tree: apply an empty copy of the config. UpdateTraitConfig removes every entry
+    // (unapplying the profession bonuses) and replicates the cleared config to the client. No gold cost is charged
+    // for the respec itself (the retail escalating cost is a follow-up); the knowledge refund above is exact.
+    WorldPackets::Traits::TraitConfig emptyConfig(*config);
+    emptyConfig.Entries.clear();
+    emptyConfig.SubTrees.clear();
+    UpdateTraitConfig(std::move(emptyConfig), 0, false);
+
+    m_traitConfigStates[configId] = PLAYERSPELL_CHANGED;
+}
+
 void Player::RenameTraitConfig(int32 editedConfigId, std::string&& newName)
 {
     UF::TraitConfig const* editedConfig = m_activePlayerData->TraitConfigs.Get(editedConfigId);

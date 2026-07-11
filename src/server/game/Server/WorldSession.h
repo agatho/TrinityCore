@@ -1132,6 +1132,7 @@ namespace WorldPackets
         class ClassTalentsDeleteConfig;
         class ClassTalentsSetStarterBuildActive;
         class ClassTalentsSetUsesSharedActionBars;
+        class ConfirmProfessionRespec;
     }
 
     namespace Transmogrification
@@ -2127,6 +2128,7 @@ class TC_GAME_API WorldSession
         void HandleClassTalentsDeleteConfig(WorldPackets::Traits::ClassTalentsDeleteConfig const& classTalentsDeleteConfig);
         void HandleClassTalentsSetStarterBuildActive(WorldPackets::Traits::ClassTalentsSetStarterBuildActive const& classTalentsSetStarterBuildActive);
         void HandleClassTalentsSetUsesSharedActionBars(WorldPackets::Traits::ClassTalentsSetUsesSharedActionBars const& classTalentsSetUsesSharedActionBars);
+        void HandleConfirmProfessionRespec(WorldPackets::Traits::ConfirmProfessionRespec const& confirmProfessionRespec);
 
         void HandleQuestgiverStatusQueryOpcode(WorldPackets::Quest::QuestGiverStatusQuery& packet);
         void HandleQuestgiverStatusMultipleQuery(WorldPackets::Quest::QuestGiverStatusMultipleQuery& packet);
