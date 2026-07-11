@@ -1183,4 +1183,17 @@ void KeyboundOverride::Read()
 {
     _worldPacket >> OverrideID;
 }
+
+void RequestCrowdControlSpell::Read()
+{
+    _worldPacket >> Target;
+}
+
+WorldPacket const* ArenaCrowdControlSpellResult::Write()
+{
+    _worldPacket << Guid;
+    _worldPacket << int32(SpellID);
+
+    return &_worldPacket;
+}
 }
