@@ -21,6 +21,7 @@
 #include "HousingPlayerHouseEntity.h"
 #include "DB2Stores.h"
 #include "DBCEnums.h"
+#include "GameObject.h"
 #include "GameObjectData.h"
 #include "Housing.h"
 #include "HousingDefines.h"
