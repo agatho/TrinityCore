@@ -36,6 +36,7 @@
 #include "StringFormat.h"
 #include "Timer.h"
 #include "World.h"
+#include "WorldPacket.h"
 #include <algorithm>
 #include <unordered_set>
 
