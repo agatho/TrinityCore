@@ -106,7 +106,6 @@ void PetBattle::LoadPlayerTeam(Player* player, PetBattleTeamData& team)
             sPetBattleMgr->GetSpeciesAbilitiesFull(battlePet.Species);
         if (speciesAbilities)
         {
-            uint8 abilitySlot = 0;
             for (BattlePetSpeciesXAbilityEntry const* entry : *speciesAbilities)
             {
                 if (entry->RequiredLevel > battlePet.Level)
@@ -116,7 +115,6 @@ void PetBattle::LoadPlayerTeam(Player* player, PetBattleTeamData& team)
 
                 uint8 slotIdx = static_cast<uint8>(entry->SlotEnum);
                 battlePet.AbilityIDs[slotIdx] = entry->BattlePetAbilityID;
-                ++abilitySlot;
             }
         }
 

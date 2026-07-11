@@ -62,6 +62,7 @@ struct Mail;
 struct MapEntry;
 struct PvpTalentEntry;
 struct QuestPackageItemEntry;
+struct RenownRewardsEntry;
 struct RewardPackEntry;
 struct SkillRaceClassInfoEntry;
 struct SoulbindEntry;
