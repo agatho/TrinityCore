@@ -33,7 +33,7 @@ namespace
 
 // Follow distance and angle
 static constexpr float COMPANION_FOLLOW_DISTANCE = 3.0f;
-static constexpr float COMPANION_FOLLOW_ANGLE = M_PI / 4.0f; // 45 degrees behind-left
+static constexpr float COMPANION_FOLLOW_ANGLE = float(M_PI) / 4.0f; // 45 degrees behind-left
 
 // Combat ranges
 static constexpr float COMPANION_MELEE_RANGE = 5.0f;

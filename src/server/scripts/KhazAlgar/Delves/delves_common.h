@@ -44,7 +44,7 @@ public:
     virtual void OnDelveStart() { }
     virtual void OnDelveComplete() { }
     virtual void OnDelveFailed() { }
-    virtual void OnCheckpointReached(uint32 checkpointId) { }
+    virtual void OnCheckpointReached(uint32 /*checkpointId*/) { }
 
     // Scenario integration
     void OnScenarioComplete();

@@ -20,6 +20,7 @@
 #include "DB2Stores.h"
 #include "GameTime.h"
 #include "Log.h"
+#include "Timer.h"
 
 namespace Delves
 {

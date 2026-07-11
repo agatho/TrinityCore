@@ -52,7 +52,7 @@ namespace
     }
 
     // Grants one item (bags, or mail on a full bag) carrying the given scaled bonuses.
-    void GrantMythicPlusItem(Player* player, uint32 itemId, ItemContext context, std::vector<int32> const& bonuses)
+    [[maybe_unused]] void GrantMythicPlusItem(Player* player, uint32 itemId, ItemContext context, std::vector<int32> const& bonuses)
     {
         ItemPosCountVec dest;
         if (player->CanStoreNewItem(NULL_BAG, NULL_SLOT, dest, itemId, 1) == EQUIP_ERR_OK)

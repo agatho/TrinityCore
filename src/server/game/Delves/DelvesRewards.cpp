@@ -22,6 +22,7 @@
 #include "DelvesSeason.h"
 #include "Log.h"
 #include "Player.h"
+#include "WorldSession.h"
 
 namespace Delves
 {

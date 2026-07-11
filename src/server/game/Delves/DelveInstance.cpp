@@ -23,6 +23,7 @@
 #include "Log.h"
 #include "Map.h"
 #include "Player.h"
+#include "WorldSession.h"
 
 namespace Delves
 {
