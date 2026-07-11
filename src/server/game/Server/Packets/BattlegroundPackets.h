@@ -442,6 +442,35 @@ namespace WorldPackets
             void Read() override { }
         };
 
+        class RequestScheduledPvpInfo final : public ClientPacket
+        {
+        public:
+            explicit RequestScheduledPvpInfo(WorldPacket&& packet) : ClientPacket(CMSG_REQUEST_SCHEDULED_PVP_INFO, std::move(packet)) { }
+
+            void Read() override { }
+        };
+
+        // SMSG_REQUEST_SCHEDULED_PVP_INFO_RESPONSE (0x480015): describes the currently-scheduled special PvP event
+        // (e.g. a PvP brawl / timewalking-PvP rotation). Wire from the client reader (all_smsg_layouts):
+        // { uint8; uint32; uint32; bit; uint32; uint32; bit }. TrinityCore has no PvP-event scheduler, so the
+        // response is all-inactive (every field 0 / flag false) -- the truthful "no scheduled PvP event", mirroring
+        // how HandleRequestRatedPvpInfo answers with a default/empty RatedPvpInfo.
+        class RequestScheduledPvpInfoResponse final : public ServerPacket
+        {
+        public:
+            explicit RequestScheduledPvpInfoResponse() : ServerPacket(SMSG_REQUEST_SCHEDULED_PVP_INFO_RESPONSE, 1 + 4 + 4 + 1 + 4 + 4 + 1) { }
+
+            WorldPacket const* Write() override;
+
+            uint8 Field1 = 0;
+            uint32 Field2 = 0;
+            uint32 Field3 = 0;
+            bool Flag1 = false;
+            uint32 Field4 = 0;
+            uint32 Field5 = 0;
+            bool Flag2 = false;
+        };
+
         class RatedPvpInfo final : public ServerPacket
         {
         public:
