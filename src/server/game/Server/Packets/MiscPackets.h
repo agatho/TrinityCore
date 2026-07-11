@@ -207,6 +207,43 @@ namespace WorldPackets
             std::vector<Entry> Entries;
         };
 
+        // CMSG_REQUEST_CURRENCY_DATA_FOR_ACCOUNT_CHARACTERS (0x29001F... 0x29001E): empty body; the client asks for
+        // every account character's currency totals (the warband currency view). Answered with
+        // SMSG_ACCOUNT_CHARACTER_CURRENCY_LISTS.
+        class RequestCurrencyDataForAccountCharacters final : public ClientPacket
+        {
+        public:
+            explicit RequestCurrencyDataForAccountCharacters(WorldPacket&& packet) : ClientPacket(CMSG_REQUEST_CURRENCY_DATA_FOR_ACCOUNT_CHARACTERS, std::move(packet)) { }
+
+            void Read() override { }
+        };
+
+        // SMSG_ACCOUNT_CHARACTER_CURRENCY_LISTS (0x420353): the per-account-character currency totals. Wire from the
+        // client reader (sub_7FF7290BB150): { uint32 count; count x { uint32 CurrencyID; PackedGuid Character;
+        // uint32 Quantity; uint32 WeeklyQuantity; uint32 MaxQuantity; bit }; bit trailing }. TrinityCore does not
+        // aggregate other characters' currencies for this view, so the reply is empty (count 0) -- the truthful "no
+        // account-character currency data", which clears the client's warband-currency panel.
+        class AccountCharacterCurrencyLists final : public ServerPacket
+        {
+        public:
+            struct CharacterCurrency
+            {
+                int32 CurrencyID = 0;
+                ObjectGuid Character;
+                uint32 Quantity = 0;
+                uint32 WeeklyQuantity = 0;
+                uint32 MaxQuantity = 0;
+                bool Flag = false;
+            };
+
+            explicit AccountCharacterCurrencyLists() : ServerPacket(SMSG_ACCOUNT_CHARACTER_CURRENCY_LISTS, 4 + 1) { }
+
+            WorldPacket const* Write() override;
+
+            std::vector<CharacterCurrency> Currencies;
+            bool TrailingFlag = false;
+        };
+
         class ViolenceLevel final : public ClientPacket
         {
         public:
