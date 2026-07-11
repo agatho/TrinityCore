@@ -36,6 +36,7 @@
 #include "HousingMgr.h"
 #include "MeshObject.h"
 #include "HousingPackets.h"
+#include "HousingRoomEntity.h"
 #include "Log.h"
 #include "Neighborhood.h"
 #include "NeighborhoodCharter.h"

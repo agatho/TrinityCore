@@ -32,7 +32,7 @@
 
 namespace
 {
-    constexpr uint32 HOUSING_DOOR_ENTRY    = 586576;  // retail "Founder's Point Front Door"
+    [[maybe_unused]] constexpr uint32 HOUSING_DOOR_ENTRY    = 586576;  // retail "Founder's Point Front Door"
     constexpr uint32 HOUSE_INTERIOR_MAP_ID = 2783;     // "Home Interior" — InstanceType 7 (MAP_HOUSE_INTERIOR)
 
     // Interior spawn position from NeighborhoodMap ID=7 (sniff-confirmed)
