@@ -19,6 +19,7 @@
 #include "DelvesCompanion.h"
 #include "DelveMgr.h"
 #include "DelvesRewards.h"
+#include "Creature.h"
 #include "Group.h"
 #include "Log.h"
 #include "Map.h"

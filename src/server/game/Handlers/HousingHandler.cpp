@@ -76,7 +76,7 @@ namespace
         return result;
     }
 
-    std::string GuidHex(ObjectGuid const& guid)
+    [[maybe_unused]] std::string GuidHex(ObjectGuid const& guid)
     {
         return fmt::format("lo={:016X} hi={:016X}", guid.GetRawValue(0), guid.GetRawValue(1));
     }
@@ -154,7 +154,7 @@ namespace
 
     // Refreshes all room MeshObjects in the player's interior instance after a room
     // data change (add, remove, rotate, move, theme, material, door, ceiling).
-    void RefreshInteriorRoomVisuals(Player* player, Housing* housing)
+    [[maybe_unused]] void RefreshInteriorRoomVisuals(Player* player, Housing* housing)
     {
         HouseInteriorMap* interiorMap = dynamic_cast<HouseInteriorMap*>(player->GetMap());
         if (!interiorMap)
