@@ -437,6 +437,24 @@ namespace CraftingOrders
         std::vector<NpcRewardInfoRequest> Orders;
     };
 
+    // CMSG_CRAFTING_ORDER_UPDATE_IGNORE_LIST (0x3B0121): the player pushes their full crafting-order ignore list.
+    // Wire recovered from the client serializer (sub_7FF7291556E0) by disassembly (no sniff needed): after the
+    // opcode, a 6-bit packed count, then count PackedGuids. Decoding evidence: the serializer writes the opcode as a
+    // leading u32 (0x3B0121), then the count via the 6-bit bit-count writer sub_7FF729064CE0 (masks to 0x3F; the
+    // >=64 path is a bare return, so the field is a fixed 6-bit count, max 63), flushes bits, then loops count times
+    // writing each 16-byte guid via the PackedGuid serializer sub_7FF72BEBDED0 (18-byte reserve + mask-per-nonzero-
+    // byte). The client re-sends the whole list on login/change, so the server stores it wholesale (no delta, no
+    // persistence needed).
+    class CraftingOrderUpdateIgnoreList final : public ClientPacket
+    {
+    public:
+        explicit CraftingOrderUpdateIgnoreList(WorldPacket&& packet) : ClientPacket(CMSG_CRAFTING_ORDER_UPDATE_IGNORE_LIST, std::move(packet)) { }
+
+        void Read() override;
+
+        std::vector<ObjectGuid> IgnoredPlayers;
+    };
+
     // SMSG_CRAFTING_ORDER_NPC_REWARD_INFO (0x42033E): the paired reply, byte-exact from the same sniff (430-byte
     // capture). Header: { u32 count; u32 ContextField (echoes the request) }, then count records of
     // { u64 OrderID; u32 rewardCount; rewardCount x <reward blob> }. The reward blob is a reflection-serialized,

@@ -65,6 +65,16 @@ void WorldSession::HandleCraftingOrderCreate(WorldPackets::CraftingOrders::Craft
         return;
     }
 
+    // A personal order aimed at a crafter the customer has ignored is refused (client result CrafterIsIgnored).
+    // The ignore set is populated by CMSG_CRAFTING_ORDER_UPDATE_IGNORE_LIST.
+    if (!packet.TargetGUID.IsEmpty() && sCraftingOrderMgr.IsIgnoring(player->GetGUID(), packet.TargetGUID))
+    {
+        WorldPackets::CraftingOrders::CraftingOrderCreateResult result;
+        result.Result = WorldPackets::CraftingOrders::CraftingOrderResult::CrafterIsIgnored;
+        SendPacket(result.Write());
+        return;
+    }
+
     CraftingOrders::Order order;
     order.SkillLineAbilityID = packet.SkillLineAbilityID;
     order.Type = CraftingOrders::OrderType(packet.OrderType);
@@ -362,4 +372,16 @@ void WorldSession::HandleCraftingOrderGetNpcRewardInfo(WorldPackets::CraftingOrd
     }
 
     SendPacket(response.Write());
+}
+
+// CMSG_CRAFTING_ORDER_UPDATE_IGNORE_LIST: the client sends the player's full crafting-order ignore list (the set of
+// crafters they don't want to deal with). Stored wholesale on the manager; a personal order aimed at an ignored
+// crafter is subsequently refused in HandleCraftingOrderCreate (CrafterIsIgnored).
+void WorldSession::HandleCraftingOrderUpdateIgnoreList(WorldPackets::CraftingOrders::CraftingOrderUpdateIgnoreList& packet)
+{
+    Player* player = GetPlayer();
+    if (!player)
+        return;
+
+    sCraftingOrderMgr.SetIgnoreList(player->GetGUID(), std::move(packet.IgnoredPlayers));
 }

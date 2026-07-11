@@ -363,4 +363,15 @@ WorldPacket const* CraftingOrderNpcRewardInfo::Write()
 
     return &_worldPacket;
 }
+
+void CraftingOrderUpdateIgnoreList::Read()
+{
+    // 6-bit packed count (client writer sub_7FF729064CE0 masks to 0x3F), then byte-aligned PackedGuids.
+    uint32 count = _worldPacket.ReadBits(6);
+    _worldPacket.ResetBitPos();
+
+    IgnoredPlayers.resize(count);
+    for (ObjectGuid& guid : IgnoredPlayers)
+        _worldPacket >> guid;                      // PackedGuid
+}
 }

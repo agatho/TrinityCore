@@ -112,6 +112,12 @@ public:
     // whatever OrderType::Npc orders exist in the pool (currently none until NPC-order content is authored).
     std::vector<CraftingOrders::Order const*> ListNpcOrders() const;
 
+    // Per-player crafting-order ignore list. The client sends the FULL list on login and whenever it changes
+    // (CMSG_CRAFTING_ORDER_UPDATE_IGNORE_LIST), so this replaces the stored set wholesale — no persistence is
+    // needed (it is re-synced every session). Used to reject personal orders aimed at an ignored crafter.
+    void SetIgnoreList(ObjectGuid owner, std::vector<ObjectGuid> ignored);
+    bool IsIgnoring(ObjectGuid owner, ObjectGuid other) const;
+
 private:
     CraftingOrderMgr() = default;
 
@@ -121,6 +127,7 @@ private:
     uint64 _nextOrderId = 1;
     uint32 _expireTimer = 0;
     std::unordered_map<uint64 /*orderId*/, CraftingOrders::Order> _orders;
+    std::unordered_map<ObjectGuid, std::vector<ObjectGuid>> _ignoreLists;
 };
 
 #define sCraftingOrderMgr CraftingOrderMgr::Instance()
