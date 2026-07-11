@@ -20,6 +20,7 @@
 #include "ChallengeModeMgr.h"
 #include "ChallengeModePackets.h"
 #include "CharacterDatabase.h"
+#include "DatabaseEnv.h"
 #include "Item.h"
 #include "ItemBonusMgr.h"
 #include "ItemDefines.h"

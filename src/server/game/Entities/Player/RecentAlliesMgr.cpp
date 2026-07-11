@@ -17,6 +17,7 @@
 
 #include "RecentAlliesMgr.h"
 #include "CharacterDatabase.h"
+#include "DatabaseEnv.h"
 #include "GameTime.h"
 #include "Player.h"
 #include "WorldSession.h"

@@ -17,6 +17,7 @@
 
 #include "WeeklyRewardsMgr.h"
 #include "CharacterDatabase.h"
+#include "DatabaseEnv.h"
 #include "Common.h"
 #include "GameTime.h"
 #include "Player.h"
