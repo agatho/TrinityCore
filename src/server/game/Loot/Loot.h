@@ -318,6 +318,8 @@ struct TC_GAME_API Loot
     void OnLootOpened(Map* map, Player* looter);
     // Start a group roll on a single item (used when the master looter chooses to roll instead of assign).
     bool StartRoll(Map* map, uint32 lootListId);
+    // Cancel an in-progress roll on an item (master looter aborts); the item returns to the loot pool.
+    bool CancelRoll(uint32 lootListId);
     void AddLooter(ObjectGuid GUID) { PlayersLooting.insert(GUID); }
     void RemoveLooter(ObjectGuid GUID) { PlayersLooting.erase(GUID); }
 

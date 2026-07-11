@@ -816,6 +816,22 @@ bool Loot::StartRoll(Map* map, uint32 lootListId)
     return true;
 }
 
+bool Loot::CancelRoll(uint32 lootListId)
+{
+    auto itr = _rolls.find(lootListId);
+    if (itr == _rolls.end())
+        return false;
+
+    // Unblock the item so it returns to the master-loot pool (the normal end paths clear this, but tearing the
+    // roll down early does not). Erasing the roll runs ~LootRoll, which sends LootAllPassed to notify clients.
+    if (lootListId < items.size())
+        items[lootListId].is_blocked = false;
+
+    _rolls.erase(itr);
+    _changed = true;
+    return true;
+}
+
 void Loot::OnLootOpened(Map* map, Player* looter)
 {
     AddLooter(looter->GetGUID());
