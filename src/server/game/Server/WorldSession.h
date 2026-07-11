@@ -485,6 +485,7 @@ namespace WorldPackets
         class LootItem;
         class MasterLootItem;
         class DoMasterLootRoll;
+        class CancelMasterLootRoll;
         class LootRelease;
         class LootMoney;
         class LootRoll;
@@ -1321,6 +1322,7 @@ class TC_GAME_API WorldSession
         void HandleLootReleaseOpcode(WorldPackets::Loot::LootRelease& packet);
         void HandleLootMasterGiveOpcode(WorldPackets::Loot::MasterLootItem& masterLootItem);
         void HandleDoMasterLootRoll(WorldPackets::Loot::DoMasterLootRoll& packet);
+        void HandleCancelMasterLootRoll(WorldPackets::Loot::CancelMasterLootRoll& packet);
         void HandleSetLootSpecialization(WorldPackets::Loot::SetLootSpecialization& packet);
 
         void HandleWhoOpcode(WorldPackets::Who::WhoRequestPkt& whoRequest);

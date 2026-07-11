@@ -107,6 +107,13 @@ void DoMasterLootRoll::Read()
     _worldPacket >> LootListID;
 }
 
+void CancelMasterLootRoll::Read()
+{
+    _worldPacket >> LootObj;
+    _worldPacket >> Owner;
+    _worldPacket >> LootListID;
+}
+
 WorldPacket const* LootRemoved::Write()
 {
     _worldPacket << Owner;
