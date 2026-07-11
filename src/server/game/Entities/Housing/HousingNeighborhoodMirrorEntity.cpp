@@ -20,6 +20,7 @@
 #include "Player.h"
 #include "StringFormat.h"
 #include "UpdateData.h"
+#include "WorldPacket.h"
 #include "WorldSession.h"
 
 HousingNeighborhoodMirrorEntity::HousingNeighborhoodMirrorEntity(WorldSession* session, ObjectGuid guid) : _session(session)

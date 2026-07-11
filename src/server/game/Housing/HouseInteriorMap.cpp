@@ -1657,9 +1657,8 @@ bool HouseInteriorMap::AddPlayerToMap(Player* player, bool initPlayer /*= true*/
             // client silently drops the Status/Permissions packets.
             {
                 ObjectGuid playerGuid = player->GetGUID();
-                uint8 plotIndex = housing->GetPlotIndex();
 
-                player->m_Events.AddEventAtOffset([this, playerGuid, plotIndex]()
+                player->m_Events.AddEventAtOffset([this, playerGuid]()
                 {
                     Player* p = ObjectAccessor::FindPlayer(playerGuid);
                     if (!p || !p->IsInWorld())

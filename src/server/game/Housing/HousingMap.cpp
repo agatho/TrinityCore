@@ -59,7 +59,7 @@
 
 namespace
 {
-    std::string HexDumpPacket(WorldPacket const* packet, size_t maxBytes = 128)
+    [[maybe_unused]] std::string HexDumpPacket(WorldPacket const* packet, size_t maxBytes = 128)
     {
         if (!packet || packet->size() == 0)
             return "(empty)";

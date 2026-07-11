@@ -16,10 +16,12 @@
 */
 
 #include "HousingPlayerHouseEntity.h"
+#include "Log.h"
 #include "Map.h"
 #include "Player.h"
 #include "StringFormat.h"
 #include "UpdateData.h"
+#include "WorldPacket.h"
 #include "WorldSession.h"
 
 HousingPlayerHouseEntity::HousingPlayerHouseEntity(WorldSession* session, ObjectGuid guid) : _session(session)
