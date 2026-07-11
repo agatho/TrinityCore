@@ -404,6 +404,37 @@ void WorldSession::DoLootReleaseAll()
         DoLootRelease(loot);
 }
 
+void WorldSession::HandleDoMasterLootRoll(WorldPackets::Loot::DoMasterLootRoll& packet)
+{
+    // Only the master looter may start a roll on a master-loot item.
+    if (!_player->GetGroup() || _player->GetGroup()->GetMasterLooterGuid() != _player->GetGUID())
+    {
+        _player->SendLootError(ObjectGuid::Empty, ObjectGuid::Empty, LOOT_ERROR_DIDNT_KILL);
+        return;
+    }
+
+    // The packet carries two loot-addressing guids (loot object + owner); resolve whichever is the addressable
+    // loot in the player's active loot view so the exact wire field order does not have to be assumed.
+    Loot* loot = Trinity::Containers::MapGetValuePtr(_player->GetAELootView(), packet.LootObj);
+    if (!loot)
+        loot = Trinity::Containers::MapGetValuePtr(_player->GetAELootView(), packet.Owner);
+
+    if (!loot || loot->GetLootMethod() != MASTER_LOOT)
+        return;
+
+    if (packet.LootListID >= loot->items.size())
+    {
+        _player->SendLootError(loot->GetGUID(), loot->GetOwnerGUID(), LOOT_ERROR_MASTER_OTHER);
+        return;
+    }
+
+    LootItem const& item = loot->items[packet.LootListID];
+    if (item.type != LootItemType::Item || item.is_looted)
+        return;
+
+    loot->StartRoll(_player->GetMap(), packet.LootListID);
+}
+
 void WorldSession::HandleLootMasterGiveOpcode(WorldPackets::Loot::MasterLootItem& masterLootItem)
 {
     AELootResult aeResult;

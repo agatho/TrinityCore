@@ -447,7 +447,7 @@ void OpcodeTable::InitializeClientOpcodes()
     DEFINE_HANDLER(CMSG_DISCORD_SET_GUILD_SETTING,                          STATUS_UNHANDLED, PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
     DEFINE_HANDLER(CMSG_DISMISS_CRITTER,                                    STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleDismissCritter);
     DEFINE_HANDLER(CMSG_DO_COUNTDOWN,                                       STATUS_UNHANDLED, PROCESS_INPLACE,      &WorldSession::Handle_NULL);
-    DEFINE_HANDLER(CMSG_DO_MASTER_LOOT_ROLL,                                STATUS_UNHANDLED, PROCESS_INPLACE,      &WorldSession::Handle_NULL);
+    DEFINE_HANDLER(CMSG_DO_MASTER_LOOT_ROLL,                                STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleDoMasterLootRoll);
     DEFINE_HANDLER(CMSG_DO_READY_CHECK,                                     STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleDoReadyCheckOpcode);
     DEFINE_HANDLER(CMSG_DUEL_RESPONSE,                                      STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleDuelResponseOpcode);
     DEFINE_HANDLER(CMSG_EJECT_PASSENGER,                                    STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleEjectPassenger);

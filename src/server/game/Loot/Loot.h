@@ -316,6 +316,8 @@ struct TC_GAME_API Loot
     void NotifyItemRemoved(uint8 lootListId, Map const* map);
     void NotifyMoneyRemoved(Map const* map);
     void OnLootOpened(Map* map, Player* looter);
+    // Start a group roll on a single item (used when the master looter chooses to roll instead of assign).
+    bool StartRoll(Map* map, uint32 lootListId);
     void AddLooter(ObjectGuid GUID) { PlayersLooting.insert(GUID); }
     void RemoveLooter(ObjectGuid GUID) { PlayersLooting.erase(GUID); }
 
