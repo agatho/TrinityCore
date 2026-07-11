@@ -27,6 +27,7 @@
 #include <vector>
 
 class Neighborhood;
+class Player;
 struct ExteriorComponentEntry;
 struct ExteriorComponentExitPointEntry;
 struct ExteriorComponentHookEntry;

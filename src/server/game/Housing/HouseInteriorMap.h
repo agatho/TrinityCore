@@ -25,6 +25,7 @@
 
 class HousingRoomEntity;
 class Player;
+struct QuaternionData;
 
 /// Map instance for a player's house interior (MAP_HOUSE_INTERIOR = 7, MapID 2783).
 /// Each player/account gets their own instance of this map. The interior is a
