@@ -320,3 +320,46 @@ void WorldSession::HandleCraftingOrderListCrafterOrders(WorldPackets::CraftingOr
 
     SendPacket(response.Write());
 }
+
+// CMSG_NPC_CRAFTING_ORDER_REQUEST (empty body): the client opened an NPC (patron) work-order board and wants the
+// available NPC orders. Answered with the same LIST_ORDERS_RESPONSE the browse handlers use, filtered to NPC orders.
+// Content-agnostic: whatever OrderType::Npc orders exist in the pool are returned (currently none — NPC-order content
+// is a separate authoring task — so this is a truthful empty list, exactly like a browse that matched nothing).
+void WorldSession::HandleNpcCraftingOrderRequest(WorldPackets::CraftingOrders::NpcCraftingOrderRequest& /*packet*/)
+{
+    Player* player = GetPlayer();
+    if (!player)
+        return;
+
+    WorldPackets::CraftingOrders::CraftingOrderListOrdersResponse response;
+    for (CraftingOrders::Order const* order : sCraftingOrderMgr.ListNpcOrders())
+        response.Orders.push_back(BuildCraftingOrderData(*order));
+
+    SendPacket(response.Write());
+}
+
+// CMSG_CRAFTING_ORDER_GET_NPC_REWARD_INFO: the client asks for the reward preview of the NPC orders it is browsing.
+// The reply carries reward info only for orders the server actually knows about (NPC orders in the pool); each such
+// order emits a zero-length reward list until reward content is attached (the reward blob is authored NPC-order
+// content, not synthesized here). With no NPC-order content this is a bare-header reply — the honest "no reward data"
+// answer for orders the server does not have.
+void WorldSession::HandleCraftingOrderGetNpcRewardInfo(WorldPackets::CraftingOrders::CraftingOrderGetNpcRewardInfo& packet)
+{
+    Player* player = GetPlayer();
+    if (!player)
+        return;
+
+    WorldPackets::CraftingOrders::CraftingOrderNpcRewardInfo response;
+    response.ContextField = packet.ContextField;
+    for (WorldPackets::CraftingOrders::NpcRewardInfoRequest const& req : packet.Orders)
+    {
+        CraftingOrders::Order const* order = sCraftingOrderMgr.GetOrder(req.OrderID);
+        if (order && order->Type == CraftingOrders::OrderType::Npc)
+        {
+            WorldPackets::CraftingOrders::NpcRewardInfoEntry& entry = response.Entries.emplace_back();
+            entry.OrderID = order->OrderID;
+        }
+    }
+
+    SendPacket(response.Write());
+}

@@ -385,6 +385,8 @@ namespace WorldPackets
         class CraftingOrderFulfill;
         class CraftingOrderListMyOrders;
         class CraftingOrderListCrafterOrders;
+        class NpcCraftingOrderRequest;
+        class CraftingOrderGetNpcRewardInfo;
     }
 
     namespace Combat
@@ -2363,6 +2365,8 @@ class TC_GAME_API WorldSession
         void HandleCraftingOrderFulfill(WorldPackets::CraftingOrders::CraftingOrderFulfill& packet);
         void HandleCraftingOrderListMyOrders(WorldPackets::CraftingOrders::CraftingOrderListMyOrders& packet);
         void HandleCraftingOrderListCrafterOrders(WorldPackets::CraftingOrders::CraftingOrderListCrafterOrders& packet);
+        void HandleNpcCraftingOrderRequest(WorldPackets::CraftingOrders::NpcCraftingOrderRequest& packet);
+        void HandleCraftingOrderGetNpcRewardInfo(WorldPackets::CraftingOrders::CraftingOrderGetNpcRewardInfo& packet);
 
         // Transmogrification
         void HandleTransmogrifyItems(WorldPackets::Transmogrification::TransmogrifyItems& transmogrifyItems);
