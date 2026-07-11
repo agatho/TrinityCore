@@ -1663,7 +1663,7 @@ bool HouseInteriorMap::AddPlayerToMap(Player* player, bool initPlayer /*= true*/
                 uint8 plotIndex = housing->GetPlotIndex();
                 uint32 settingsFlags = housing->GetSettingsFlags();
 
-                player->m_Events.AddEventAtOffset([this, playerGuid, houseGuid, neighborhoodGuid, accountGuid, plotIndex, settingsFlags]()
+                player->m_Events.AddEventAtOffset([this, playerGuid, neighborhoodGuid, accountGuid, plotIndex, settingsFlags]()
                 {
                     Player* p = ObjectAccessor::FindPlayer(playerGuid);
                     if (!p || !p->IsInWorld())

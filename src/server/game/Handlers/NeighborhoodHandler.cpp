@@ -1276,7 +1276,7 @@ void WorldSession::HandleNeighborhoodBuyHouse(WorldPackets::Neighborhood::Neighb
         }
 
         // Notify client that the basic house was created
-        if (Housing const* h = player->GetHousing())
+        if (player->GetHousing())
         {
             WorldPackets::Housing::HousingFixtureCreateBasicHouseResponse houseResponse;
             houseResponse.Result = static_cast<uint8>(HOUSING_RESULT_SUCCESS);
