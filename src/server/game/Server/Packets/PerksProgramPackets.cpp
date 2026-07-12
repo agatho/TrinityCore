@@ -16,6 +16,7 @@
  */
 
 #include "PerksProgramPackets.h"
+#include "PacketOperators.h"
 
 namespace WorldPackets::PerksProgram
 {
@@ -29,6 +30,14 @@ void PerksProgramRequestRefund::Read()
 {
     _worldPacket >> PerksVendorItemID;
     _worldPacket >> VendorGUID;
+}
+
+void PerksProgramSetFrozenVendorItem::Read()
+{
+    _worldPacket >> Bits<1>(Frozen);
+    _worldPacket.ResetBitPos();
+    _worldPacket >> PerksVendorItemID;
+    _worldPacket >> NpcGUID;
 }
 
 WorldPacket const* ResponsePerkRecentPurchases::Write()

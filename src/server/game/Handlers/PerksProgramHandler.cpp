@@ -124,3 +124,17 @@ void WorldSession::HandlePerksProgramRequestCartCheckout(WorldPackets::PerksProg
     for (int32 vendorItemId : packet.PerksVendorItemIDs)
         PerksProgramPurchaseItem(this, player, vendorItemId);
 }
+
+void WorldSession::HandlePerksProgramSetFrozenVendorItem(WorldPackets::PerksProgram::PerksProgramSetFrozenVendorItem& packet)
+{
+    Player* player = GetPlayer();
+    if (!player)
+        return;
+
+    // Freeze pins the chosen Trading Post item so it carries to next rotation (client shows the frozen indicator);
+    // unfreeze clears it. An unknown item id resolves to nullptr, which clears the pin -- a safe no-op.
+    if (packet.Frozen)
+        player->SetFrozenPerksProgramVendorItem(sPerksProgramMgr->GetVendorItem(packet.PerksVendorItemID));
+    else
+        player->SetFrozenPerksProgramVendorItem(nullptr);
+}

@@ -29385,6 +29385,15 @@ void Player::DeleteTraitConfig(int32 deletedConfigId)
     m_traitConfigStates[deletedConfigId] = PLAYERSPELL_REMOVED;
 }
 
+void Player::SetFrozenPerksProgramVendorItem(WorldPackets::PerksProgram::PerksVendorItem const* item)
+{
+    auto setter = m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::FrozenPerksVendorItem);
+    if (item)
+        SetUpdateFieldValue(setter, *item);
+    else
+        SetUpdateFieldValue(setter, WorldPackets::PerksProgram::PerksVendorItem{});
+}
+
 void Player::ApplyTraitConfig(int32 configId, bool apply)
 {
     UF::TraitConfig const* traitConfig = GetTraitConfig(configId);
