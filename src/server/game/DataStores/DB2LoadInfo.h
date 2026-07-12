@@ -9023,6 +9023,8 @@ struct WeeklyRewardChestThresholdLoadInfo
     };
 
     static constexpr DB2LoadInfo Instance{ Fields, 4, &WeeklyRewardChestThresholdMeta::Instance, HOTFIX_SEL_WEEKLY_REWARD_CHEST_THRESHOLD };
+};
+
 struct WarbandScenePlacementLoadInfo
 {
     static constexpr DB2FieldMeta Fields[12] =

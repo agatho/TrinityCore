@@ -932,6 +932,8 @@ namespace WorldPackets
 
             ObjectGuid CharacterGuid;
             uint32 RaceAndFaction = 0;  // packed: low 16 bits = RaceID, high 8 bits = faction sign (see binary sub_7FF75DBB01B0)
+        };
+
         class SetupWarbandGroups final : public ClientPacket
         {
         public:
@@ -945,6 +947,8 @@ namespace WorldPackets
 
             struct WarbandGroupSetup
             {
+                uint64 GroupID = 0;
+                uint8 OrderIndex = 0;
                 uint32 WarbandSceneID = 0;
                 uint32 Flags = 0;
                 int32 ContentSetID = 0;
