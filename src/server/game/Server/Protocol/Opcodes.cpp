@@ -852,7 +852,7 @@ void OpcodeTable::InitializeClientOpcodes()
     DEFINE_HANDLER(CMSG_PERKS_PROGRAM_REQUEST_PENDING_REWARDS,              STATUS_UNHANDLED, PROCESS_INPLACE,      &WorldSession::Handle_NULL);
     DEFINE_HANDLER(CMSG_PERKS_PROGRAM_REQUEST_PURCHASE,                     STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandlePerksProgramRequestPurchase);
     DEFINE_HANDLER(CMSG_PERKS_PROGRAM_REQUEST_REFUND,                       STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandlePerksProgramRequestRefund);
-    DEFINE_HANDLER(CMSG_PERKS_PROGRAM_SET_FROZEN_VENDOR_ITEM,               STATUS_UNHANDLED, PROCESS_INPLACE,      &WorldSession::Handle_NULL);
+    DEFINE_HANDLER(CMSG_PERKS_PROGRAM_SET_FROZEN_VENDOR_ITEM,               STATUS_LOGGEDIN,  PROCESS_INPLACE,      &WorldSession::HandlePerksProgramSetFrozenVendorItem);
     DEFINE_HANDLER(CMSG_PERKS_PROGRAM_STATUS_REQUEST,                       STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandlePerksProgramStatusRequest);
     DEFINE_HANDLER(CMSG_PETITION_BUY,                                       STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandlePetitionBuy);
     DEFINE_HANDLER(CMSG_PETITION_RENAME_GUILD,                              STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandlePetitionRenameGuild);

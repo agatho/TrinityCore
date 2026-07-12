@@ -943,6 +943,7 @@ namespace WorldPackets
         class PerksProgramGetRecentPurchases;
         class PerksProgramRequestPurchase;
         class PerksProgramRequestRefund;
+        class PerksProgramSetFrozenVendorItem;
         class PerksProgramRequestCartCheckout;
     }
 
@@ -1813,6 +1814,7 @@ class TC_GAME_API WorldSession
         void HandlePerksProgramGetRecentPurchases(WorldPackets::PerksProgram::PerksProgramGetRecentPurchases& packet);
         void HandlePerksProgramRequestPurchase(WorldPackets::PerksProgram::PerksProgramRequestPurchase& packet);
         void HandlePerksProgramRequestRefund(WorldPackets::PerksProgram::PerksProgramRequestRefund& packet);
+        void HandlePerksProgramSetFrozenVendorItem(WorldPackets::PerksProgram::PerksProgramSetFrozenVendorItem& packet);
         void HandlePerksProgramRequestCartCheckout(WorldPackets::PerksProgram::PerksProgramRequestCartCheckout& packet);
         void HandleGuildSetGuildMaster(WorldPackets::Guild::GuildSetGuildMaster& packet);
         void HandleGuildUpdateMotdText(WorldPackets::Guild::GuildUpdateMotdText& packet);

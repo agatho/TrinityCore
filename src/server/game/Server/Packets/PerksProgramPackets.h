@@ -87,6 +87,21 @@ public:
     ObjectGuid VendorGUID;
 };
 
+// CMSG_PERKS_PROGRAM_SET_FROZEN_VENDOR_ITEM (0x3A02BA). Serializer sub_7FF72914B9C0 writes { bit Frozen; uint32
+// PerksVendorItemID; PackedGuid NpcGUID }. Frozen=true pins the item so it carries to the next Trading Post
+// rotation (shown with the "frozen" indicator); Frozen=false clears the pin.
+class PerksProgramSetFrozenVendorItem final : public ClientPacket
+{
+public:
+    explicit PerksProgramSetFrozenVendorItem(WorldPacket&& packet) : ClientPacket(CMSG_PERKS_PROGRAM_SET_FROZEN_VENDOR_ITEM, std::move(packet)) { }
+
+    void Read() override;
+
+    bool Frozen = false;
+    int32 PerksVendorItemID = 0;
+    ObjectGuid NpcGUID;
+};
+
 // CMSG_PERKS_PROGRAM_REQUEST_CART_CHECKOUT wire (12.0.7.68275, from the client serializer sub_7FF72914B860):
 //   uint32 ItemCount, PackedGUID VendorGUID, uint32 PerksVendorItemIDs[ItemCount].
 class PerksProgramRequestCartCheckout final : public ClientPacket

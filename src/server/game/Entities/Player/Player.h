@@ -146,6 +146,11 @@ namespace WorldPackets
         struct TraitEntry;
     }
 
+    namespace PerksProgram
+    {
+        struct PerksVendorItem;
+    }
+
     namespace Transmogrification
     {
         struct TransmogOutfitDataInfo;
@@ -2093,6 +2098,7 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         void RenameTraitConfig(int32 editedConfigId, std::string&& newName);
         void DeleteTraitConfig(int32 deletedConfigId);
         void ResetProfessionSpecialization(int32 identifier);   // profession respec: refund spent knowledge + clear the tree
+        void SetFrozenPerksProgramVendorItem(WorldPackets::PerksProgram::PerksVendorItem const* item);   // nullptr clears the Trading Post freeze
         void ApplyTraitConfig(int32 configId, bool apply);
         void ApplyTraitEntry(int32 traitNodeEntryId, int32 rank, int32 grantedRanks, bool apply);
         void SetActiveCombatTraitConfigID(int32 traitConfigId) { SetUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::ActiveCombatTraitConfigID), traitConfigId); }
