@@ -19,6 +19,7 @@
 #define TRINITYCORE_TRAIT_PACKETS_H
 
 #include "Packet.h"
+#include "ObjectGuid.h"
 #include "TraitPacketsCommon.h"
 
 namespace WorldPackets::Traits
