@@ -170,43 +170,7 @@ WorldPacket const* SetupCurrency::Write()
     return &_worldPacket;
 }
 
-WorldPacket const* CurrencyTransferLog::Write()
-{
-    _worldPacket << Size<uint32>(Entries);
 
-    for (Entry const& entry : Entries)
-    {
-        _worldPacket << entry.Source;              // PackedGuid (source character)
-        _worldPacket << entry.Dest;                // PackedGuid (destination character)
-        _worldPacket << int32(entry.CurrencyID);
-        _worldPacket << int32(entry.Quantity);
-        _worldPacket << int32(entry.Field3);
-        _worldPacket << uint64(entry.TransferTime);
-    }
-
-    return &_worldPacket;
-}
-
-WorldPacket const* AccountCharacterCurrencyLists::Write()
-{
-    _worldPacket << Size<uint32>(Currencies);
-
-    for (CharacterCurrency const& currency : Currencies)
-    {
-        _worldPacket << int32(currency.CurrencyID);
-        _worldPacket << currency.Character;        // PackedGuid
-        _worldPacket << uint32(currency.Quantity);
-        _worldPacket << uint32(currency.WeeklyQuantity);
-        _worldPacket << uint32(currency.MaxQuantity);
-        _worldPacket << Bits<1>(currency.Flag);
-        _worldPacket.FlushBits();
-    }
-
-    _worldPacket << Bits<1>(TrailingFlag);
-    _worldPacket.FlushBits();
-
-    return &_worldPacket;
-}
 
 void ViolenceLevel::Read()
 {
@@ -939,6 +903,10 @@ WorldPacket const* SetCtrOptions::Write()
 
     writeBlock(Previous);
     writeBlock(Current);
+
+    return &_worldPacket;
+}
+
 void TransferCurrencyFromAccountCharacter::Read()
 {
     _worldPacket >> SourceCharacterGUID;
@@ -978,6 +946,10 @@ WorldPacket const* MultiFloorLeaveFloor::Write()
 {
     _worldPacket << int32(MapID);
     _worldPacket << int32(FloorIndex);
+
+    return &_worldPacket;
+}
+
 WorldPacket const* CurrencyTransferResult::Write()
 {
     _worldPacket << int32(CurrencyID);

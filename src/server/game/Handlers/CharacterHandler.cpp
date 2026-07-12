@@ -71,12 +71,14 @@ class LoginQueryHolder : public CharacterDatabaseQueryHolder
 {
     private:
         uint32 m_accountId;
+        uint32 m_battlenetAccountId;
         ObjectGuid m_guid;
     public:
-        LoginQueryHolder(uint32 accountId, ObjectGuid guid)
-            : m_accountId(accountId), m_guid(guid) { }
+        LoginQueryHolder(uint32 accountId, uint32 battlenetAccountId, ObjectGuid guid)
+            : m_accountId(accountId), m_battlenetAccountId(battlenetAccountId), m_guid(guid) { }
         ObjectGuid GetGuid() const { return m_guid; }
         uint32 GetAccountId() const { return m_accountId; }
+        uint32 GetBattlenetAccountId() const { return m_battlenetAccountId; }
         bool Initialize();
 };
 
@@ -439,11 +441,11 @@ bool LoginQueryHolder::Initialize()
     res &= SetPreparedQuery(PLAYER_LOGIN_QUERY_LOAD_RENOWN_REWARDS, stmt);
 
     stmt = CharacterDatabase.GetPreparedStatement(CHAR_SEL_ACCOUNT_REPUTATION);
-    stmt->setUInt32(0, m_battlenetAccountId);
+    stmt->setUInt32(0, GetBattlenetAccountId());
     res &= SetPreparedQuery(PLAYER_LOGIN_QUERY_LOAD_ACCOUNT_REPUTATION, stmt);
 
     stmt = CharacterDatabase.GetPreparedStatement(CHAR_SEL_WARBAND_TAXI_MASK);
-    stmt->setUInt32(0, m_battlenetAccountId);
+    stmt->setUInt32(0, GetBattlenetAccountId());
     res &= SetPreparedQuery(PLAYER_LOGIN_QUERY_LOAD_WARBAND_TAXI_MASK, stmt);
 
     return res;
@@ -1429,7 +1431,7 @@ void WorldSession::HandleContinuePlayerLogin()
         return;
     }
 
-    std::shared_ptr<LoginQueryHolder> holder = std::make_shared<LoginQueryHolder>(GetAccountId(), m_playerLoading);
+    std::shared_ptr<LoginQueryHolder> holder = std::make_shared<LoginQueryHolder>(GetAccountId(), GetBattlenetAccountId(), m_playerLoading);
     if (!holder->Initialize())
     {
         m_playerLoading.Clear();
