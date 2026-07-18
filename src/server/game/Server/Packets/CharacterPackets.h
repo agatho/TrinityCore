@@ -905,6 +905,31 @@ namespace WorldPackets
 
             int32 Error;
         };
+
+        // Sent by a neutral Pandaren choosing a faction at the end of the Wandering Isle.
+        // Client UI (Blizzard_FrameXML/DestinyFrame.xml): Alliance button = NeutralPlayerSelectFaction(2),
+        // Horde button = NeutralPlayerSelectFaction(1).
+        class NeutralPlayerSelectFaction final : public ClientPacket
+        {
+        public:
+            explicit NeutralPlayerSelectFaction(WorldPacket&& packet) : ClientPacket(CMSG_NEUTRAL_PLAYER_SELECT_FACTION, std::move(packet)) { }
+
+            void Read() override;
+
+            uint8 FactionIndex = 0; // 1 = Horde, 2 = Alliance
+        };
+
+        // Fires the client's NEUTRAL_FACTION_SELECT_RESULT event (Lua payload = { success }).
+        class NeutralPlayerFactionSelectResult final : public ServerPacket
+        {
+        public:
+            NeutralPlayerFactionSelectResult() : ServerPacket(SMSG_NEUTRAL_PLAYER_FACTION_SELECT_RESULT, 1 + 1) { }
+
+            WorldPacket const* Write() override;
+
+            bool Success = false;
+            uint8 Faction = 0; // echoes the chosen FactionIndex so the client can update its faction-group state
+        };
     }
 }
 

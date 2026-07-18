@@ -893,4 +893,18 @@ WorldPacket const* PlayerSavePersonalEmblem::Write()
 
     return &_worldPacket;
 }
+
+void NeutralPlayerSelectFaction::Read()
+{
+    _worldPacket >> FactionIndex;
+}
+
+WorldPacket const* NeutralPlayerFactionSelectResult::Write()
+{
+    _worldPacket.WriteBit(Success);
+    _worldPacket.FlushBits();
+    _worldPacket << uint8(Faction);
+
+    return &_worldPacket;
+}
 }
