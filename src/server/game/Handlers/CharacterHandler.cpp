@@ -3366,3 +3366,42 @@ void WorldSession::HandleConvertTimerunningCharacter(WorldPackets::Character::Co
     ended.SeasonID = 0;  // post-conversion: not in any season
     SendPacket(ended.Write());
 }
+
+void WorldSession::HandleNeutralPlayerSelectFaction(WorldPackets::Character::NeutralPlayerSelectFaction const& packet)
+{
+    Player* player = GetPlayer();
+    if (!player)
+        return;
+
+    auto sendResult = [this](bool success, uint8 faction)
+    {
+        WorldPackets::Character::NeutralPlayerFactionSelectResult result;
+        result.Success = success;
+        result.Faction = faction;
+        SendPacket(result.Write());
+    };
+
+    // Only a neutral Pandaren may pick a faction, and only the two choices the client UI offers
+    // are valid: DestinyFrame.xml maps the Alliance button to 2 and the Horde button to 1.
+    if (player->GetRace() != RACE_PANDAREN_NEUTRAL || (packet.FactionIndex != 1 && packet.FactionIndex != 2))
+    {
+        sendResult(false, packet.FactionIndex);
+        return;
+    }
+
+    uint8 const newRace = (packet.FactionIndex == 2) ? RACE_PANDAREN_ALLIANCE : RACE_PANDAREN_HORDE;
+
+    // Commit the faction: race drives team + faction via SetFactionForRace, and the Race
+    // UnitData field flows to the client through the next UPDATE_OBJECT.
+    player->SetRace(newRace);
+    player->SetFactionForRace(newRace);
+
+    // A faction choice is a permanent, one-time change; persist it now so it survives a
+    // disconnect before the next periodic save.
+    player->SaveToDB();
+
+    sendResult(true, packet.FactionIndex);
+
+    TC_LOG_DEBUG("network", "HandleNeutralPlayerSelectFaction: Player {} joined the {} (race -> {})",
+        player->GetGUID().ToString(), packet.FactionIndex == 2 ? "Alliance" : "Horde", uint32(newRace));
+}

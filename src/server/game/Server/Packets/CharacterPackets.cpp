@@ -939,4 +939,18 @@ void SetupWarbandGroups::Read()
         _worldPacket >> SizedString::Data(group.Name);
     }
 }
+
+void NeutralPlayerSelectFaction::Read()
+{
+    _worldPacket >> FactionIndex;
+}
+
+WorldPacket const* NeutralPlayerFactionSelectResult::Write()
+{
+    _worldPacket.WriteBit(Success);
+    _worldPacket.FlushBits();
+    _worldPacket << uint8(Faction);
+
+    return &_worldPacket;
+}
 }

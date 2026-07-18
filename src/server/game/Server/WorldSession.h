@@ -333,6 +333,7 @@ namespace WorldPackets
         class SetPlayerDeclinedNames;
         class SavePersonalEmblem;
         class ConvertTimerunningCharacter;
+        class NeutralPlayerSelectFaction;
 
         enum class LoginFailureReason : uint8;
     }
@@ -1606,6 +1607,7 @@ class TC_GAME_API WorldSession
         void HandleUndeleteCooldownStatusCallback(PreparedQueryResult result);
         void HandleCharUndeleteOpcode(WorldPackets::Character::UndeleteCharacter& undeleteInfo);
         void HandleSavePersonalEmblem(WorldPackets::Character::SavePersonalEmblem const& savePersonalEmblem);
+        void HandleNeutralPlayerSelectFaction(WorldPackets::Character::NeutralPlayerSelectFaction const& packet);
         bool MeetsChrCustomizationReq(ChrCustomizationReqEntry const* req, Races race, Classes playerClass,
             bool checkRequiredDependentChoices, Trinity::IteratorPair<UF::ChrCustomizationChoice const*> selectedChoices) const;
         bool ValidateAppearance(Races race, Classes playerClass, Gender gender,
