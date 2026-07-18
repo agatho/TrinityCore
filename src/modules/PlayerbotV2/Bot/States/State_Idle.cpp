@@ -5797,6 +5797,9 @@ bool DungeonDispatch(BotSnapshotView const& s, BotAI& ai,
                                         if (swx*swx + swy*swy + swz*swz < 6.0f * 6.0f) continue;
                                         if (wp_bd >= best_wp_bd) continue;
                                         G3D::Vector3 wstep;
+                                        // scan probe — hop side effects (cross commit + cooldown
+                                        // claim) must not fire here; links are consumed at the
+                                        // STEER call (the committed-cursor branch below).
                                         if (!DungeonTargetReachableAndStep(
                                                 self_be, rw.x, rw.y, rw.z, route_step, wstep))
                                             continue;
@@ -5939,6 +5942,10 @@ bool DungeonDispatch(BotSnapshotView const& s, BotAI& ai,
                                                 // the incremental boss step below.
                                                 if (crumb_d(i) <= kRouteArrive) continue;
                                                 auto const& rr = advice.route_waypoints[i];
+                                                // scan probe — hop side effects (cross commit +
+                                                // cooldown claim) must not fire here; links are
+                                                // consumed at the STEER call above (cur's
+                                                // DungeonTargetReachableAndStep(..., &rw_off)).
                                                 if (!DungeonTargetReachableAndStep(
                                                         self_be, rr.x, rr.y, rr.z, route_step, wstep))
                                                     continue;
