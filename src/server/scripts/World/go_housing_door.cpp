@@ -16,6 +16,7 @@
  */
 
 #include "ScriptMgr.h"
+#include "GameObject.h"
 #include "GameObjectAI.h"
 #include "Group.h"
 #include "Guild.h"

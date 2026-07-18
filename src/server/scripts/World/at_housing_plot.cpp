@@ -25,6 +25,7 @@
 #include "HousingMgr.h"
 #include "HousingPackets.h"
 #include "Log.h"
+#include "WorldSession.h"
 #include "Neighborhood.h"
 #include "NeighborhoodMgr.h"
 #include "ObjectAccessor.h"
