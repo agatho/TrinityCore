@@ -994,6 +994,26 @@ public:
     // and report "no commitment" on any mismatch, so an LFG teleport self-
     // invalidates it instead of chasing a stale commitment from another
     // instance.
+    //
+    // Increment 1k (2026-07-18): pure-XYZ arbitration is not enough when TWO
+    // rules chase the SAME objective through DIFFERENT steppers. Live WC
+    // crumb-27 lip: the route rule and rule (0) both target route crumb 27,
+    // but from start positions ~9y apart their capped path-steppers return
+    // points ~21y apart (route: direct descent step; rule (0): east-
+    // switchback point) — past the 3y kOwnedRange, so the XYZ check alone
+    // sees "different target" and lets both sides fight for the window every
+    // 2.5s, each spline-restarting the other; the tank shuttles in place and
+    // never completes the 19y descent. Fix: additionally key the commitment
+    // on the OBJECTIVE (the route-crumb index the step serves), threaded in
+    // by the crumb-following call sites (DungeonAdvanceTarget's out_crumb_idx,
+    // the route follower's committed route_cur). -1 means "not a crumb-based
+    // step" (rejoin/converge/direct-advance/off-mesh-recovery — those keep
+    // the pre-1k pure-XYZ semantics unchanged). A caller with the SAME
+    // objective as the in-flight commitment defers to it even when its own
+    // capped step point lands >3y away — the two rules agree on WHERE they
+    // are going, just not on the intermediate waypoint, so the in-flight
+    // solution should be allowed to run to completion instead of being
+    // fought over.
     bool       move_commit_active(uint32 map_id, uint32 now_ms) const
     {
         if (move_commit_map_ != map_id || move_commit_ms_ == 0)
@@ -1003,13 +1023,24 @@ public:
     }
     void       move_commit_target(float& x, float& y, float& z) const
     { x = move_commit_x_; y = move_commit_y_; z = move_commit_z_; }
-    void       note_move_commit(uint32 map_id, float x, float y, float z, uint32 now_ms)
+    // Objective the CURRENTLY-committed move serves (route-crumb index), or
+    // -1 if none/not crumb-based. Map-bound like the rest of this block: a
+    // map mismatch (LFG teleport to another instance) reports -1 rather than
+    // a stale objective from a previous instance. Deliberately does NOT also
+    // check move_commit_active/expiry — callers that care already gate on
+    // move_commit_active(map, now) before consulting this, exactly like the
+    // existing move_commit_target().
+    int32_t    move_commit_objective(uint32 map_id) const
+    { return (move_commit_map_ == map_id) ? move_commit_objective_ : -1; }
+    void       note_move_commit(uint32 map_id, float x, float y, float z, uint32 now_ms,
+                                int32_t objective = -1)
     {
         move_commit_x_ = x;
         move_commit_y_ = y;
         move_commit_z_ = z;
         move_commit_ms_ = now_ms ? now_ms : 1u;
         move_commit_map_ = map_id;
+        move_commit_objective_ = objective;
     }
 
     // Cross EPISODE wall-clock. Unlike the three detectors below — all of which the
@@ -2881,6 +2912,9 @@ private:
     float          move_commit_z_   = 0.f;
     uint32         move_commit_ms_  = 0;   // 0 = no commitment
     uint32         move_commit_map_ = 0;
+    // Objective (route-crumb index) the committed move serves; -1 = none/
+    // not crumb-based. See move_commit_objective() above (increment 1k).
+    int32_t        move_commit_objective_ = -1;
     float          dungeon_cross_x_ = 0.f;
     float          dungeon_cross_y_ = 0.f;
     float          dungeon_cross_z_ = 0.f;

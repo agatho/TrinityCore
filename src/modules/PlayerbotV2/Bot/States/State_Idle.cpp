@@ -1137,12 +1137,16 @@ static void DungeonStepHoldDiag(BotSnapshotView const& s, char const* rule_tag,
     }
 }
 
-// Throttled [move_owned] diag (increment 1h, 2026-07-03) — ONE log site for
-// the whole commitment-arbitration family so forensics can grep who deferred
-// to whom, instead of chasing per-site duplicates.
+// Throttled [move_owned] diag (increment 1h, 2026-07-03; extended increment
+// 1k, 2026-07-18 with the caller's rule tag + the objective on both sides —
+// the long-standing diag gap: forensics could see the competing XYZs but not
+// WHICH rule lost the window or whether the two sides shared an objective)
+// — ONE log site for the whole commitment-arbitration family so forensics
+// can grep who deferred to whom, instead of chasing per-site duplicates.
 static void DungeonMoveOwnedDiag(BotSnapshotView const& s,
-                                 float tx, float ty, float tz,
-                                 float ox, float oy, float oz)
+                                 char const* rule_tag,
+                                 float tx, float ty, float tz, int32_t my_objective,
+                                 float ox, float oy, float oz, int32_t owning_objective)
 {
     static uint32 s_move_owned_dbg_ms = 0;
     const uint32 now = GameTime::GetGameTimeMS();
@@ -1150,9 +1154,9 @@ static void DungeonMoveOwnedDiag(BotSnapshotView const& s,
     {
         s_move_owned_dbg_ms = now;
         TC_LOG_INFO("playerbot.v2",
-            "[move_owned] bot={} my_target=({:.1f},{:.1f},{:.1f}) "
-            "owning_target=({:.1f},{:.1f},{:.1f})",
-            s.bot_id(), tx, ty, tz, ox, oy, oz);
+            "[move_owned] bot={} rule={} my_target=({:.1f},{:.1f},{:.1f}) my_obj={} "
+            "owning_target=({:.1f},{:.1f},{:.1f}) owning_obj={}",
+            s.bot_id(), rule_tag, tx, ty, tz, my_objective, ox, oy, oz, owning_objective);
     }
 }
 
@@ -1168,8 +1172,24 @@ static void DungeonMoveOwnedDiag(BotSnapshotView const& s,
 // key). A SAME-target caller (<=3y) is NOT "owned elsewhere": it hits
 // DungeonStepAlreadyInFlight at the call site first, which already holds/
 // refreshes for it, so this helper never needs to special-case that path.
+//
+// Increment 1k (2026-07-18): a SECOND ownership path, keyed on the OBJECTIVE
+// rather than the XYZ. Two rules can target the exact same route crumb yet,
+// through different capped steppers from different start positions, land
+// >3y apart (live WC crumb-27 lip: route rule's direct-descent step vs rule
+// (0)'s east-switchback point, 21y apart, both aimed at crumb 27) — the pure
+// -XYZ check above sees "different target" and lets both fight for the
+// window, each spline-restarting the other every 2.5s forever. my_objective
+// >= 0 identifies a crumb-based caller; when it equals the in-flight
+// commitment's objective, that caller owns the window regardless of XYZ
+// distance — the two rules agree on WHERE they are ultimately going, so the
+// in-flight path solution should run to completion rather than be re-aimed.
+// Objective-less callers (my_objective < 0: rejoin/converge/direct-advance/
+// off-mesh-recovery) and callers whose objective differs from the owner's
+// are UNCHANGED — they still fall through to the pure-XYZ check.
 static bool DungeonMoveOwnedElsewhere(BotSnapshotView const& s, BotAI& ai,
-                                      float tx, float ty, float tz, uint32 now_ms)
+                                      float tx, float ty, float tz, uint32 now_ms,
+                                      char const* rule_tag, int32_t my_objective = -1)
 {
     if (!Services::Config().move_step_hold_enabled())
         return false;
@@ -1179,11 +1199,20 @@ static bool DungeonMoveOwnedElsewhere(BotSnapshotView const& s, BotAI& ai,
         return false;
     float ox, oy, oz;
     ai.move_commit_target(ox, oy, oz);
+    const int32_t owning_objective = ai.move_commit_objective(s.map_id());
+    if (my_objective >= 0 && my_objective == owning_objective)
+    {
+        // Same objective, different capped step point: the in-flight
+        // solution owns the window even though it is >3y from mine.
+        DungeonMoveOwnedDiag(s, rule_tag, tx, ty, tz, my_objective,
+                             ox, oy, oz, owning_objective);
+        return true;
+    }
     const float dx = tx - ox, dy = ty - oy, dz = tz - oz;
     constexpr float kOwnedRange = 3.0f;   // matches DungeonStepAlreadyInFlight
     if (dx * dx + dy * dy + dz * dz <= kOwnedRange * kOwnedRange)
         return false;   // same target — not a competing objective
-    DungeonMoveOwnedDiag(s, tx, ty, tz, ox, oy, oz);
+    DungeonMoveOwnedDiag(s, rule_tag, tx, ty, tz, my_objective, ox, oy, oz, owning_objective);
     return true;
 }
 
@@ -1244,9 +1273,17 @@ static void DungeonAdvanceTarget(BotSnapshotView const& s, BotAI& ai,
                                  DungeonAdvice const& advice,
                                  float bossX, float bossY, float bossZ,
                                  float& tx, float& ty, float& tz,
-                                 char const* rule_tag)
+                                 char const* rule_tag,
+                                 int32_t* out_crumb_idx = nullptr)
 {
     tx = bossX; ty = bossY; tz = bossZ;
+    // Increment 1k (2026-07-18): the objective (route-crumb index) this step
+    // serves, for the movement-commitment layer's same-objective ownership
+    // check (see DungeonMoveOwnedElsewhere). -1 whenever the substitution is
+    // NOT active (boss fallback / arrived-latch) — set below the ONE place
+    // the substitution actually fires (tx = wp.x), so every early return
+    // here keeps this at -1 without needing to touch each return site.
+    if (out_crumb_idx) *out_crumb_idx = -1;
     if (!Services::Config().route_aware_combat_advance()) return;
     if (advice.route_waypoints.empty()) return;
     int const cur = ai.dungeon_route_wp(s.map_id());
@@ -1288,6 +1325,7 @@ static void DungeonAdvanceTarget(BotSnapshotView const& s, BotAI& ai,
     // state; second-guessing it against ANY boss position vetoes exactly
     // the detour segments routes exist for.
     tx = wp.x; ty = wp.y; tz = wp.z;
+    if (out_crumb_idx) *out_crumb_idx = cur;
 
     // Throttled [adv_route] diag — ONE log site, fires only while the
     // substitution is actually active, so live forensics can grep it to
@@ -1991,9 +2029,11 @@ bool DungeonCombatPositioning(BotSnapshotView const& s, BotAI& ai,
                     // the LoS check both already ran against pbx/pby/pbz and are
                     // untouched; only this walk target substitutes.
                     float pbx_t, pby_t, pbz_t;
+                    int32_t pb_crumb = -1;
                     DungeonAdvanceTarget(s, ai, advice, pbx, pby, pbz,
                                         pbx_t, pby_t, pbz_t,
-                                        "idle:dungeon_combat_advance_boss");
+                                        "idle:dungeon_combat_advance_boss",
+                                        &pb_crumb);
                     if (DungeonTargetReachableAndStep(self_pb, pbx_t, pby_t, pbz_t,
                                                       kPbStep, pstep, &pb_off))
                     {
@@ -2010,7 +2050,9 @@ bool DungeonCombatPositioning(BotSnapshotView const& s, BotAI& ai,
                                                 pstep.x, pstep.y, pstep.z);
                         }
                         else if (DungeonMoveOwnedElsewhere(s, ai, pstep.x, pstep.y,
-                                                           pstep.z, now_ms))
+                                                           pstep.z, now_ms,
+                                                           "idle:dungeon_combat_advance_boss",
+                                                           pb_crumb))
                         {
                             // another objective owns the spline this window —
                             // FALL THROUGH exactly like the in-flight branch above.
@@ -2018,7 +2060,8 @@ bool DungeonCombatPositioning(BotSnapshotView const& s, BotAI& ai,
                         else if (emit.move_to(pstep.x, pstep.y, pstep.z, /*run=*/true))
                         {
                             ai.set_last_rule_fired("idle:dungeon_combat_advance_boss");
-                            ai.note_move_commit(s.map_id(), pstep.x, pstep.y, pstep.z, now_ms);
+                            ai.note_move_commit(s.map_id(), pstep.x, pstep.y, pstep.z, now_ms,
+                                               pb_crumb);
                             return true;
                         }
                     }
@@ -2306,9 +2349,11 @@ bool DungeonCombatPositioning(BotSnapshotView const& s, BotAI& ai,
                         G3D::Vector3 wstep;
                         bool w_off = false;
                         float wbx_t, wby_t, wbz_t;
+                        int32_t w_crumb = -1;
                         DungeonAdvanceTarget(s, ai, advice, wbx, wby, wbz,
                                             wbx_t, wby_t, wbz_t,
-                                            "idle:dungeon_combat_wedge_advance");
+                                            "idle:dungeon_combat_wedge_advance",
+                                            &w_crumb);
                         if (DungeonTargetReachableAndStep(self_w, wbx_t, wby_t, wbz_t,
                                 wedgeStep, wstep, &w_off,
                                 /*allow_incomplete_progress=*/true))
@@ -2316,9 +2361,19 @@ bool DungeonCombatPositioning(BotSnapshotView const& s, BotAI& ai,
                             if (w_off)
                                 ai.set_dungeon_cross(wstep.x, wstep.y, wstep.z,
                                                      now_ms + 12000);
+                            if (DungeonMoveOwnedElsewhere(s, ai, wstep.x, wstep.y, wstep.z,
+                                                          now_ms,
+                                                          "idle:dungeon_combat_wedge_advance",
+                                                          w_crumb))
+                            {
+                                ai.set_last_rule_fired("idle:dungeon_combat_wedge_advance_hold");
+                                return true;
+                            }
                             if (emit.move_to(wstep.x, wstep.y, wstep.z, /*run=*/true))
                             {
                                 ai.set_last_rule_fired("idle:dungeon_combat_wedge_advance");
+                                ai.note_move_commit(s.map_id(), wstep.x, wstep.y, wstep.z, now_ms,
+                                                   w_crumb);
                                 return true;
                             }
                         }
@@ -2610,7 +2665,8 @@ bool DungeonCombatPositioning(BotSnapshotView const& s, BotAI& ai,
                                 return true;
                             }
                             if (DungeonMoveOwnedElsewhere(s, ai, frstep.x, frstep.y,
-                                                          frstep.z, now_ms))
+                                                          frstep.z, now_ms,
+                                                          "idle:dungeon_combat_rejoin_tank"))
                             {
                                 ai.set_last_rule_fired("idle:dungeon_combat_rejoin_tank_hold");
                                 return true;
@@ -2627,7 +2683,8 @@ bool DungeonCombatPositioning(BotSnapshotView const& s, BotAI& ai,
                                 ai.set_last_rule_fired("idle:dungeon_combat_rejoin_tank_hold");
                                 return true;
                             }
-                            if (DungeonMoveOwnedElsewhere(s, ai, tk->x, tk->y, tk->z, now_ms))
+                            if (DungeonMoveOwnedElsewhere(s, ai, tk->x, tk->y, tk->z, now_ms,
+                                                          "idle:dungeon_combat_rejoin_tank"))
                             {
                                 ai.set_last_rule_fired("idle:dungeon_combat_rejoin_tank_hold");
                                 return true;
@@ -2645,7 +2702,8 @@ bool DungeonCombatPositioning(BotSnapshotView const& s, BotAI& ai,
                             ai.set_last_rule_fired("idle:dungeon_combat_rejoin_tank_hold");
                             return true;
                         }
-                        if (DungeonMoveOwnedElsewhere(s, ai, tk->x, tk->y, tk->z, now_ms))
+                        if (DungeonMoveOwnedElsewhere(s, ai, tk->x, tk->y, tk->z, now_ms,
+                                                      "idle:dungeon_combat_rejoin_tank"))
                         {
                             ai.set_last_rule_fired("idle:dungeon_combat_rejoin_tank_hold");
                             return true;
@@ -4020,7 +4078,8 @@ bool DungeonConvergeToFight(BotSnapshotView const& s, BotAI& ai,
             ai.set_last_rule_fired("dungeon:converge_to_fight_hold");
             return true;
         }
-        if (DungeonMoveOwnedElsewhere(s, ai, rx, ry, rz, now_ms))
+        if (DungeonMoveOwnedElsewhere(s, ai, rx, ry, rz, now_ms,
+                                      "dungeon:converge_to_fight"))
         {
             ai.set_last_rule_fired("dungeon:converge_to_fight_hold");
             return true;
@@ -4036,7 +4095,8 @@ bool DungeonConvergeToFight(BotSnapshotView const& s, BotAI& ai,
             ai.set_last_rule_fired("dungeon:converge_to_fight_hold");
             return true;
         }
-        if (DungeonMoveOwnedElsewhere(s, ai, tk->x, tk->y, tk->z, now_ms))
+        if (DungeonMoveOwnedElsewhere(s, ai, tk->x, tk->y, tk->z, now_ms,
+                                      "dungeon:converge_to_fight"))
         {
             ai.set_last_rule_fired("dungeon:converge_to_fight_hold");
             return true;
@@ -5654,7 +5714,8 @@ bool DungeonDispatch(BotSnapshotView const& s, BotAI& ai,
                                     return true;
                                 }
                                 if (DungeonMoveOwnedElsewhere(s, ai, boss_step.x, boss_step.y,
-                                                              boss_step.z, now_ms))
+                                                              boss_step.z, now_ms,
+                                                              "idle:dungeon_tank_advance_boss"))
                                 {
                                     ai.set_last_rule_fired("idle:dungeon_tank_advance_boss_hold");
                                     return true;
@@ -5692,7 +5753,8 @@ bool DungeonDispatch(BotSnapshotView const& s, BotAI& ai,
                                                         lshx, lshy, lshz);
                                 }
                                 else if (DungeonMoveOwnedElsewhere(s, ai, lshx, lshy, lshz,
-                                                                   now_ms))
+                                                                   now_ms,
+                                                                   "idle:dungeon_tank_advance_boss"))
                                 {
                                     // another objective owns the spline this
                                     // window — FALL THROUGH like above.
@@ -6007,7 +6069,9 @@ bool DungeonDispatch(BotSnapshotView const& s, BotAI& ai,
                                     }
                                     if (DungeonMoveOwnedElsewhere(s, ai, best_wp_step.x,
                                                                   best_wp_step.y, best_wp_step.z,
-                                                                  now_ms))
+                                                                  now_ms,
+                                                                  "idle:dungeon_tank_advance_boss_route",
+                                                                  route_cur))
                                     {
                                         ai.set_last_rule_fired(
                                             "idle:dungeon_tank_advance_boss_route_hold");
@@ -6016,7 +6080,8 @@ bool DungeonDispatch(BotSnapshotView const& s, BotAI& ai,
                                     if (emit.move_to(best_wp_step.x, best_wp_step.y,
                                                      best_wp_step.z, /*run=*/true))
                                         ai.note_move_commit(s.map_id(), best_wp_step.x,
-                                                            best_wp_step.y, best_wp_step.z, now_ms);
+                                                            best_wp_step.y, best_wp_step.z, now_ms,
+                                                            route_cur);
                                     ai.set_last_rule_fired("idle:dungeon_tank_advance_boss_route");
                                     return true;
                                 }
@@ -6052,7 +6117,8 @@ bool DungeonDispatch(BotSnapshotView const& s, BotAI& ai,
                                         return true;
                                     }
                                     if (DungeonMoveOwnedElsewhere(s, ai, prog_step.x, prog_step.y,
-                                                                  prog_step.z, now_ms))
+                                                                  prog_step.z, now_ms,
+                                                                  "idle:dungeon_tank_advance_boss"))
                                     {
                                         ai.set_last_rule_fired("idle:dungeon_tank_advance_boss_hold");
                                         return true;
@@ -6123,7 +6189,8 @@ bool DungeonDispatch(BotSnapshotView const& s, BotAI& ai,
                                             return true;
                                         }
                                         if (DungeonMoveOwnedElsewhere(s, ai, nn_step.x, nn_step.y,
-                                                                      nn_step.z, now_ms))
+                                                                      nn_step.z, now_ms,
+                                                                      "idle:dungeon_tank_advance_boss"))
                                         {
                                             ai.set_last_rule_fired(
                                                 "idle:dungeon_tank_advance_boss_hold");
@@ -6236,7 +6303,8 @@ bool DungeonDispatch(BotSnapshotView const& s, BotAI& ai,
                             ai.set_last_rule_fired("idle:dungeon_tank_advance_hold");
                             return true;
                         }
-                        if (DungeonMoveOwnedElsewhere(s, ai, advx, advy, advz, now_ms))
+                        if (DungeonMoveOwnedElsewhere(s, ai, advx, advy, advz, now_ms,
+                                                      "idle:dungeon_tank_advance"))
                         {
                             ai.set_last_rule_fired("idle:dungeon_tank_advance_hold");
                             return true;
