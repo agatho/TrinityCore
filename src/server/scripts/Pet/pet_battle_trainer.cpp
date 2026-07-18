@@ -16,6 +16,7 @@
  */
 
 #include "ScriptMgr.h"
+#include "Creature.h"
 #include "Player.h"
 #include "ScriptedCreature.h"
 #include "ScriptedGossip.h"
