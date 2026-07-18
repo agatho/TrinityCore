@@ -1274,7 +1274,8 @@ static void DungeonAdvanceTarget(BotSnapshotView const& s, BotAI& ai,
                                  float bossX, float bossY, float bossZ,
                                  float& tx, float& ty, float& tz,
                                  char const* rule_tag,
-                                 int32_t* out_crumb_idx = nullptr)
+                                 int32_t* out_crumb_idx = nullptr,
+                                 bool* out_yield = nullptr)
 {
     tx = bossX; ty = bossY; tz = bossZ;
     // Increment 1k (2026-07-18): the objective (route-crumb index) this step
@@ -1306,17 +1307,32 @@ static void DungeonAdvanceTarget(BotSnapshotView const& s, BotAI& ai,
     // clear the latch and resume following the cursor (rejoining the route
     // after displacement is correct; a latch that outlives the displacement
     // is not).
+    // Latched / arrived near the cursor's crumb: YIELD (no step) instead of
+    // walking boss-ward. Pre-1d, the boss fallback was a real navigation
+    // option; post route-ownership it is actively harmful here — live WC
+    // crumb-27 lip, 2026-07-19 00:32 verdict: latch armed by a transient
+    // brush, rule (0) in the 8-12y dead zone walked BOSS-ward whose mesh
+    // path wraps through the SAME east switchback (my_obj=-1 NE step) while
+    // the route rule steered the crumb (obj=27) — an objective-less pair
+    // the 1k arbitration correctly cannot unify. Near-arrived means the
+    // route rule owns completion/advance; the in-combat advance simply does
+    // not step this tick (callers fall through / hold per their own shape).
     if (ai.adv_route_reached_idx(s.map_id()) == cur)
     {
         constexpr float kLatchReleaseY = 12.0f;
-        if (crumb_d2 <= kLatchReleaseY * kLatchReleaseY) return;
+        if (crumb_d2 <= kLatchReleaseY * kLatchReleaseY)
+        {
+            if (out_yield) *out_yield = true;
+            return;
+        }
         ai.set_adv_route_reached(-1, s.map_id());   // transient arrival: unlatch
     }
     if (crumb_d2 < kRouteArrive * kRouteArrive)
     {
         // Arrived at the cursor's crumb: arm the latch so post-arrival drift
-        // back across 8y cannot re-select this same crumb, then keep boss.
+        // back across 8y cannot re-select this same crumb, then yield.
         ai.set_adv_route_reached(cur, s.map_id());
+        if (out_yield) *out_yield = true;
         return;
     }
     // Unconditional crumb-follow past this point (Increment 1f — see the
@@ -2030,11 +2046,17 @@ bool DungeonCombatPositioning(BotSnapshotView const& s, BotAI& ai,
                     // untouched; only this walk target substitutes.
                     float pbx_t, pby_t, pbz_t;
                     int32_t pb_crumb = -1;
+                    bool pb_yield = false;
                     DungeonAdvanceTarget(s, ai, advice, pbx, pby, pbz,
                                         pbx_t, pby_t, pbz_t,
                                         "idle:dungeon_combat_advance_boss",
-                                        &pb_crumb);
-                    if (DungeonTargetReachableAndStep(self_pb, pbx_t, pby_t, pbz_t,
+                                        &pb_crumb, &pb_yield);
+                    // Near-arrived at the cursor's crumb (latch/arrive): do not
+                    // step at all — the route rule owns completion/advance. FALL
+                    // THROUGH like this site's in-flight branch (lower rules keep
+                    // their tick access), never boss-ward-step from the dead zone.
+                    if (!pb_yield &&
+                        DungeonTargetReachableAndStep(self_pb, pbx_t, pby_t, pbz_t,
                                                       kPbStep, pstep, &pb_off))
                     {
                         if (pb_off)
@@ -2350,10 +2372,20 @@ bool DungeonCombatPositioning(BotSnapshotView const& s, BotAI& ai,
                         bool w_off = false;
                         float wbx_t, wby_t, wbz_t;
                         int32_t w_crumb = -1;
+                        bool w_yield = false;
                         DungeonAdvanceTarget(s, ai, advice, wbx, wby, wbz,
                                             wbx_t, wby_t, wbz_t,
                                             "idle:dungeon_combat_wedge_advance",
-                                            &w_crumb);
+                                            &w_crumb, &w_yield);
+                        // Near-arrived at the cursor's crumb: yield the WHOLE emit
+                        // region (primary step AND the NearestNavPoint fallback —
+                        // both would walk boss-ward) so the route rule owns
+                        // completion; hold-claim per this site's 1k shape.
+                        if (w_yield)
+                        {
+                            ai.set_last_rule_fired("idle:dungeon_combat_wedge_advance_hold");
+                            return true;
+                        }
                         if (DungeonTargetReachableAndStep(self_w, wbx_t, wby_t, wbz_t,
                                 wedgeStep, wstep, &w_off,
                                 /*allow_incomplete_progress=*/true))
