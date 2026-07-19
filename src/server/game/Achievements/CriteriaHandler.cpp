@@ -4787,6 +4787,7 @@ void CriteriaMgr::LoadCriteriaList()
     for (size_t i = 0; i < size_t(CriteriaType::Count); ++i)
     {
         _questObjectiveCriteriasByType[i].clear();
+        _perksActivityCriteriasByType[i].clear();
         _guildCriteriasByType[i].clear();
         _criteriasByType[i].clear();
     }
@@ -4818,6 +4819,11 @@ void CriteriaMgr::LoadCriteriaList()
         }
     }
 
+    std::unordered_map<uint32 /*criteriaTreeID*/, PerksActivityEntry const*> perksActivityCriteriaTreeIds;
+    for (PerksActivityEntry const* perksActivity : sPerksActivityStore)
+        if (perksActivity->CriteriaTreeID)
+            perksActivityCriteriaTreeIds[perksActivity->CriteriaTreeID] = perksActivity;
+
     // Load criteria tree nodes
     for (CriteriaTreeEntry const* tree : sCriteriaTreeStore)
     {
@@ -4825,7 +4831,8 @@ void CriteriaMgr::LoadCriteriaList()
         AchievementEntry const* achievement = GetEntry(achievementCriteriaTreeIds, tree);
         ScenarioStepEntry const* scenarioStep = GetEntry(scenarioCriteriaTreeIds, tree);
         QuestObjective const* questObjective = GetEntry(questObjectiveCriteriaTreeIds, tree);
-        if (!achievement && !scenarioStep && !questObjective)
+        PerksActivityEntry const* perksActivity = GetEntry(perksActivityCriteriaTreeIds, tree);
+        if (!achievement && !scenarioStep && !questObjective && !perksActivity)
             continue;
 
         CriteriaTree& criteriaTree = _criteriaTrees[tree->ID];
@@ -4833,6 +4840,7 @@ void CriteriaMgr::LoadCriteriaList()
         criteriaTree.Achievement = achievement;
         criteriaTree.ScenarioStep = scenarioStep;
         criteriaTree.QuestObjective = questObjective;
+        criteriaTree.PerksActivity = perksActivity;
         criteriaTree.Entry = tree;
     }
 
@@ -4891,6 +4899,8 @@ void CriteriaMgr::LoadCriteriaList()
             }
             else if (tree->QuestObjective)
                 criteria.FlagsCu |= CRITERIA_FLAG_CU_QUEST_OBJECTIVE;
+            else if (tree->PerksActivity)
+                criteria.FlagsCu |= CRITERIA_FLAG_CU_PERKS_ACTIVITY;
         }
 
         if (criteria.FlagsCu & (CRITERIA_FLAG_CU_PLAYER | CRITERIA_FLAG_CU_ACCOUNT))
@@ -4941,6 +4951,9 @@ void CriteriaMgr::LoadCriteriaList()
             ++questObjectiveCriterias;
             _questObjectiveCriteriasByType[criteriaEntry->Type].push_back(&criteria);
         }
+
+        if (criteria.FlagsCu & CRITERIA_FLAG_CU_PERKS_ACTIVITY)
+            _perksActivityCriteriasByType[criteriaEntry->Type].push_back(&criteria);
 
         if (criteriaEntry->StartEvent)
             _criteriasByStartEvent[std::pair<int32, int32>(criteriaEntry->StartEvent, criteriaEntry->StartAsset)].push_back(&criteria);

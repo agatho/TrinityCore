@@ -20,6 +20,7 @@
 #include "DB2Stores.h"
 #include "DBCEnums.h"
 #include "Player.h"
+#include "PerksProgramActivityMgr.h"
 #include "PerksProgramMgr.h"
 #include "PerksProgramPackets.h"
 
@@ -40,6 +41,13 @@ void WorldSession::SendPerksProgramActivityUpdate()
 {
     WorldPackets::PerksProgram::PerksProgramActivityUpdate activityUpdate;
     sPerksProgramMgr->GetCurrentPeriod(activityUpdate.PeriodStart, activityUpdate.PeriodEnd);
+
+    if (Player* player = GetPlayer())
+    {
+        std::unordered_set<uint32> const& completed = player->GetPerksActivityMgr()->GetCompletedActivities();
+        activityUpdate.CompletedActivityIDs.assign(completed.begin(), completed.end());
+    }
+
     SendPacket(activityUpdate.Write());
 }
 
