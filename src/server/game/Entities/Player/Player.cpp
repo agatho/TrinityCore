@@ -109,6 +109,7 @@
 #include "QueryResultStructured.h"
 #include "QuestDef.h"
 #include "QuestMgr.h"
+#include "PerksProgramActivityMgr.h"
 #include "QuestObjectiveCriteriaMgr.h"
 #include "QuestPackets.h"
 #include "RealmList.h"
@@ -343,6 +344,7 @@ Player::Player(WorldSession* session) : Unit(true), m_sceneMgr(this)
     m_achievementMgr = std::make_unique<PlayerAchievementMgr>(this);
     m_reputationMgr = std::make_unique<ReputationMgr>(this);
     m_questObjectiveCriteriaMgr = std::make_unique<QuestObjectiveCriteriaMgr>(this);
+    m_perksActivityMgr = std::make_unique<PerksProgramActivityMgr>(this);
 
     for (uint8 i = 0; i < MAX_CUF_PROFILES; ++i)
         _CUFProfiles[i] = nullptr;
@@ -18188,6 +18190,7 @@ bool Player::LoadFromDB(ObjectGuid guid, CharacterDatabaseQueryHolder const& hol
     // load achievements before anything else to prevent multiple gains for the same achievement/criteria on every loading (as loading does call UpdateCriteria)
     m_achievementMgr->LoadFromDB(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_ACHIEVEMENTS), holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_CRITERIA_PROGRESS));
     m_questObjectiveCriteriaMgr->LoadFromDB(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_QUEST_STATUS_OBJECTIVES_CRITERIA), holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_QUEST_STATUS_OBJECTIVES_CRITERIA_PROGRESS));
+    m_perksActivityMgr->LoadFromDB(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_PERKS_ACTIVITY));
 
     SetMoney(std::min(fields.money, MAX_MONEY_AMOUNT));
 
@@ -20753,6 +20756,7 @@ void Player::SaveToDB(LoginDatabaseTransaction loginTransaction, CharacterDataba
     m_achievementMgr->SaveToDB(trans);
     m_reputationMgr->SaveToDB(trans);
     m_questObjectiveCriteriaMgr->SaveToDB(trans);
+    m_perksActivityMgr->SaveToDB(trans);
     _SaveEquipmentSets(trans);
     _SaveTransmogOutfits(trans);
     _SaveCharacterSelectOutfit(trans);
@@ -27543,6 +27547,7 @@ void Player::UpdateCriteria(CriteriaType type, uint64 miscValue1 /*= 0*/, uint64
 {
     m_achievementMgr->UpdateCriteria(type, miscValue1, miscValue2, miscValue3, ref, this);
     m_questObjectiveCriteriaMgr->UpdateCriteria(type, miscValue1, miscValue2, miscValue3, ref, this);
+    m_perksActivityMgr->UpdateCriteria(type, miscValue1, miscValue2, miscValue3, ref, this);
 
     // Update only individual achievement criteria here, otherwise we may get multiple updates
     // from a single boss kill

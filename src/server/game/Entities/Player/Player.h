@@ -89,6 +89,7 @@ class Pet;
 class PetAura;
 class PlayerAI;
 class PlayerAchievementMgr;
+class PerksProgramActivityMgr;
 class PlayerMenu;
 class PlayerSocial;
 class QuestObjectiveCriteriaMgr;
@@ -973,6 +974,7 @@ enum PlayerLoginQueryIndex
     PLAYER_LOGIN_QUERY_LOAD_QUEST_STATUS_OBJECTIVES,
     PLAYER_LOGIN_QUERY_LOAD_QUEST_STATUS_OBJECTIVES_CRITERIA,
     PLAYER_LOGIN_QUERY_LOAD_QUEST_STATUS_OBJECTIVES_CRITERIA_PROGRESS,
+    PLAYER_LOGIN_QUERY_LOAD_PERKS_ACTIVITY,
     PLAYER_LOGIN_QUERY_LOAD_QUEST_STATUS_OBJECTIVES_SPAWN_TRACKING,
     PLAYER_LOGIN_QUERY_LOAD_DAILY_QUEST_STATUS,
     PLAYER_LOGIN_QUERY_LOAD_REPUTATION,
@@ -2442,6 +2444,7 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
 
         ReputationMgr&       GetReputationMgr()       { return *m_reputationMgr; }
         ReputationMgr const& GetReputationMgr() const { return *m_reputationMgr; }
+        PerksProgramActivityMgr* GetPerksActivityMgr() const { return m_perksActivityMgr.get(); }
         ReputationRank GetReputationRank(uint32 faction_id) const;
         void RewardReputation(Unit* victim, float rate);
         void RewardReputation(Quest const* quest);
@@ -3406,6 +3409,7 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         std::unique_ptr<PlayerAchievementMgr> m_achievementMgr;
         std::unique_ptr<ReputationMgr> m_reputationMgr;
         std::unique_ptr<QuestObjectiveCriteriaMgr> m_questObjectiveCriteriaMgr;
+        std::unique_ptr<PerksProgramActivityMgr> m_perksActivityMgr;
 
         uint32 m_ChampioningFaction;
 

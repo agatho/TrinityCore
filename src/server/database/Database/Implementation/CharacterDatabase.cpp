@@ -685,6 +685,9 @@ void CharacterDatabaseConnection::DoPrepareStatements()
     PrepareStatement(CHAR_REP_CHAR_QUESTSTATUS_OBJECTIVES, "REPLACE INTO character_queststatus_objectives (guid, quest, objective, data) VALUES (?, ?, ?, ?)", CONNECTION_ASYNC);
     PrepareStatement(CHAR_DEL_CHAR_QUESTSTATUS_OBJECTIVES_BY_QUEST, "DELETE FROM character_queststatus_objectives WHERE guid = ? AND quest = ?", CONNECTION_ASYNC);
     PrepareStatement(CHAR_INS_CHAR_QUESTSTATUS_OBJECTIVES_CRITERIA, "INSERT INTO character_queststatus_objectives_criteria (guid, questObjectiveId) VALUES (?, ?)", CONNECTION_ASYNC);
+    PrepareStatement(CHAR_SEL_CHAR_PERKS_ACTIVITY, "SELECT activityId FROM character_perks_activity WHERE guid = ?", CONNECTION_ASYNC);
+    PrepareStatement(CHAR_INS_CHAR_PERKS_ACTIVITY, "INSERT INTO character_perks_activity (guid, activityId) VALUES (?, ?)", CONNECTION_ASYNC);
+    PrepareStatement(CHAR_DEL_CHAR_PERKS_ACTIVITY, "DELETE FROM character_perks_activity WHERE guid = ?", CONNECTION_ASYNC);
     PrepareStatement(CHAR_INS_CHAR_QUESTSTATUS_OBJECTIVES_CRITERIA_PROGRESS, "INSERT INTO character_queststatus_objectives_criteria_progress (guid, criteriaId, counter, date) VALUES (?, ?, ?, ?)", CONNECTION_ASYNC);
     PrepareStatement(CHAR_REP_CHAR_QUESTSTATUS_OBJECTIVES_SPAWN_TRACKING, "REPLACE INTO character_queststatus_objectives_spawn_tracking (guid, quest, objective, spawnTrackingId) VALUES (?, ?, ?, ?)", CONNECTION_ASYNC);
     PrepareStatement(CHAR_DEL_CHAR_QUESTSTATUS_OBJECTIVES_SPAWN_TRACKING_BY_QUEST, "DELETE FROM character_queststatus_objectives_spawn_tracking WHERE guid = ? AND quest = ?", CONNECTION_ASYNC);
