@@ -1263,8 +1263,8 @@ WorldPacket const* SpellFailureMessage::Write()
 
 WorldPacket const* RestartGlobalCooldown::Write()
 {
+    _worldPacket << CasterGUID;
     _worldPacket << int32(SpellID);
-    _worldPacket << Duration;
 
     return &_worldPacket;
 }

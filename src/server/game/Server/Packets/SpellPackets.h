@@ -1372,15 +1372,23 @@ namespace WorldPackets
             uint8 Reason = 0;
         };
 
+        // SMSG_RESTART_GLOBAL_COOLDOWN wire (12.0.7.68275, client deserializer 0x7ff72913eff0 case
+        // 0x620054): { PackedGuid CasterGUID, uint32 SpellID }. Confirmed against live sniffs — the
+        // observed 16..21 byte bodies are exactly a variable-length PackedGuid followed by a uint32,
+        // and that trailing uint32 is the cast spell id. The previous int32 SpellID + Duration layout
+        // was stale and would have put a malformed 8-byte packet on the wire.
+        // NOTE: no send-site yet. Retail emits this only ~15 times across 1.3M sniffed records
+        // (between SMSG_SPELL_PREPARE and SMSG_SPELL_START), so the trigger is conditional and is
+        // deliberately not guessed here.
         class RestartGlobalCooldown final : public ServerPacket
         {
         public:
-            explicit RestartGlobalCooldown() : ServerPacket(SMSG_RESTART_GLOBAL_COOLDOWN, 4 + 4) { }
+            explicit RestartGlobalCooldown() : ServerPacket(SMSG_RESTART_GLOBAL_COOLDOWN, 16 + 4) { }
 
             WorldPacket const* Write() override;
 
+            ObjectGuid CasterGUID;
             int32 SpellID = 0;
-            WorldPackets::Duration<Milliseconds, int32> Duration;
         };
     }
 }
