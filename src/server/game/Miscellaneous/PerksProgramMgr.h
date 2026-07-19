@@ -37,6 +37,10 @@ public:
     // request, or nullptr if the id is not part of the active listing.
     WorldPackets::PerksProgram::PerksVendorItem const* GetVendorItem(int32 vendorItemId);
 
+    // Fills the current Trading Post period as UTC unix timestamps for the current calendar month
+    // [periodStart, periodEnd). The client uses periodEnd to show the "time remaining" countdown.
+    void GetCurrentPeriod(uint64& periodStart, uint64& periodEnd) const;
+
     void Reload() { _loaded = false; }
 
 private:
