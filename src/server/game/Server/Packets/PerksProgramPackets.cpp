@@ -73,4 +73,16 @@ WorldPacket const* PerksProgramVendorUpdate::Write()
 
     return &_worldPacket;
 }
+
+WorldPacket const* PerksProgramActivityUpdate::Write()
+{
+    _worldPacket << uint32(CompletedActivityIDs.size());
+    _worldPacket << uint64(PeriodEnd);
+    _worldPacket << uint64(PeriodStart);
+    _worldPacket << uint32(Unused);
+    for (uint32 activityId : CompletedActivityIDs)
+        _worldPacket << uint32(activityId);
+
+    return &_worldPacket;
+}
 }

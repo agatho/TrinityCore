@@ -28,6 +28,19 @@ void WorldSession::HandlePerksProgramStatusRequest(WorldPackets::PerksProgram::P
     WorldPackets::PerksProgram::PerksProgramVendorUpdate vendorUpdate;
     vendorUpdate.VendorItems = sPerksProgramMgr->GetCurrentVendorItems();
     SendPacket(vendorUpdate.Write());
+
+    SendPerksProgramActivityUpdate();
+}
+
+// Sends SMSG_PERKS_PROGRAM_ACTIVITY_UPDATE: the current Trading Post period plus the player's
+// completed activities for it. Completed-activity tracking (deriving completion from each
+// PerksActivity's CriteriaTree and awarding threshold tender) is a separate phase, so today the
+// completed set is empty — the client still needs the period to show the activity countdown.
+void WorldSession::SendPerksProgramActivityUpdate()
+{
+    WorldPackets::PerksProgram::PerksProgramActivityUpdate activityUpdate;
+    sPerksProgramMgr->GetCurrentPeriod(activityUpdate.PeriodStart, activityUpdate.PeriodEnd);
+    SendPacket(activityUpdate.Write());
 }
 
 // Validates a single Trading Post vendor item, deducts its Trader's Tender cost and grants the

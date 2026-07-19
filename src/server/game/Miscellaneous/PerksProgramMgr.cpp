@@ -17,11 +17,14 @@
 
 #include "PerksProgramMgr.h"
 #include "DB2Stores.h"
+#include "GameTime.h"
 #include "ItemTemplate.h"
 #include "Log.h"
 #include "ObjectMgr.h"
 #include "PerksProgramPackets.h"
+#include "Util.h"
 #include <algorithm>
+#include <ctime>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -111,6 +114,28 @@ std::vector<WorldPackets::PerksProgram::PerksVendorItem> const& PerksProgramMgr:
         BuildVendorList();
 
     return _vendorItems;
+}
+
+void PerksProgramMgr::GetCurrentPeriod(uint64& periodStart, uint64& periodEnd) const
+{
+    // The Trading Post period is the current calendar month (UTC). A live retail sniff showed the
+    // boundaries land on midnight of the 1st, e.g. [Oct 1, Nov 1). Without a live rotation calendar
+    // this is the correct, derivable period.
+    time_t now = GameTime::GetGameTime();
+    tm date;
+    gmtime_r(&now, &date);
+    date.tm_mday = 1;
+    date.tm_hour = 0;
+    date.tm_min = 0;
+    date.tm_sec = 0;
+    periodStart = uint64(timegm(&date));
+
+    if (++date.tm_mon > 11)
+    {
+        date.tm_mon = 0;
+        ++date.tm_year;
+    }
+    periodEnd = uint64(timegm(&date));
 }
 
 WorldPackets::PerksProgram::PerksVendorItem const* PerksProgramMgr::GetVendorItem(int32 vendorItemId)

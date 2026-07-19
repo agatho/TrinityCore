@@ -126,6 +126,24 @@ public:
 
     std::vector<PerksVendorItem> VendorItems;
 };
+
+// SMSG_PERKS_PROGRAM_ACTIVITY_UPDATE wire (12.0.7.68275, from the client deserializer sub_7FF72911D110 case 6160385):
+//   uint32 CompletedActivityCount; uint64 PeriodEnd; uint64 PeriodStart; uint32 Unused;
+//   uint32 CompletedActivityID[CompletedActivityCount].
+// The id list is the player's COMPLETED Trading Post activities for the period (the client already
+// has the activity catalogue from PerksActivity.db2 and marks each id it receives as completed).
+class PerksProgramActivityUpdate final : public ServerPacket
+{
+public:
+    explicit PerksProgramActivityUpdate() : ServerPacket(SMSG_PERKS_PROGRAM_ACTIVITY_UPDATE) { }
+
+    WorldPacket const* Write() override;
+
+    uint64 PeriodStart = 0;
+    uint64 PeriodEnd = 0;
+    uint32 Unused = 0;
+    std::vector<uint32> CompletedActivityIDs;
+};
 }
 
 #endif // TRINITYCORE_PERKS_PROGRAM_PACKETS_H
