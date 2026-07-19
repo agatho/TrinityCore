@@ -36,7 +36,7 @@ public:
     void Reset() override;
 
     static void DeleteFromDB(ObjectGuid const& guid);
-    void LoadFromDB(PreparedQueryResult activityResult);
+    void LoadFromDB(PreparedQueryResult activityResult, PreparedQueryResult criteriaResult);
     void SaveToDB(CharacterDatabaseTransaction trans);
 
     void SendAllData(Player const* receiver) const override;
@@ -65,8 +65,13 @@ private:
     void AwardThresholds(int64 oldTotal, int64 newTotal);
     int64 ContributionTotal() const;
 
+    // Current Trading Post interval start (UTC month-start unix time). Stored rows from a different
+    // interval are wiped on load so completions/criteria reset each month.
+    uint64 CurrentPeriodStart() const;
+
     Player* _owner;
     std::unordered_set<uint32> _completedActivities;
+    uint64 _periodStart = 0;
     bool _changed = false;
 };
 

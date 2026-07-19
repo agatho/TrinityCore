@@ -18531,7 +18531,7 @@ bool Player::LoadFromDB(ObjectGuid guid, CharacterDatabaseQueryHolder const& hol
     m_achievementMgr->LoadFromDB(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_ACHIEVEMENTS), holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_CRITERIA_PROGRESS),
         holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_WARBAND_ACHIEVEMENTS), holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_WARBAND_ACHIEVEMENT_PROGRESS));
     m_questObjectiveCriteriaMgr->LoadFromDB(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_QUEST_STATUS_OBJECTIVES_CRITERIA), holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_QUEST_STATUS_OBJECTIVES_CRITERIA_PROGRESS));
-    m_perksActivityMgr->LoadFromDB(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_PERKS_ACTIVITY));
+    m_perksActivityMgr->LoadFromDB(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_PERKS_ACTIVITY), holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_PERKS_ACTIVITY_CRITERIA));
 
     SetMoney(std::min(fields.money, MAX_MONEY_AMOUNT));
 

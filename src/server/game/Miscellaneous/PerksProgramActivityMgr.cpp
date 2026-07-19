@@ -24,6 +24,7 @@
 #include "DBCEnums.h"
 #include "GameTime.h"
 #include "Log.h"
+#include "PerksProgramMgr.h"
 #include "Player.h"
 #include "SharedDefines.h"
 #include "WorldSession.h"
@@ -47,44 +48,132 @@ void PerksProgramActivityMgr::Reset()
     DeleteFromDB(_owner->GetGUID());
 }
 
-void PerksProgramActivityMgr::DeleteFromDB(ObjectGuid const& guid)
+uint64 PerksProgramActivityMgr::CurrentPeriodStart() const
 {
-    CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_DEL_CHAR_PERKS_ACTIVITY);
-    stmt->setUInt64(0, guid.GetCounter());
-    CharacterDatabase.Execute(stmt);
+    uint64 start = 0;
+    uint64 end = 0;
+    sPerksProgramMgr->GetCurrentPeriod(start, end);
+    return start;
 }
 
-void PerksProgramActivityMgr::LoadFromDB(PreparedQueryResult activityResult)
+void PerksProgramActivityMgr::DeleteFromDB(ObjectGuid const& guid)
 {
+    CharacterDatabaseTransaction trans = CharacterDatabase.BeginTransaction();
+
+    CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_DEL_CHAR_PERKS_ACTIVITY);
+    stmt->setUInt64(0, guid.GetCounter());
+    trans->Append(stmt);
+
+    stmt = CharacterDatabase.GetPreparedStatement(CHAR_DEL_CHAR_PERKS_ACTIVITY_CRITERIA);
+    stmt->setUInt64(0, guid.GetCounter());
+    trans->Append(stmt);
+
+    CharacterDatabase.CommitTransaction(trans);
+}
+
+void PerksProgramActivityMgr::LoadFromDB(PreparedQueryResult activityResult, PreparedQueryResult criteriaResult)
+{
+    _periodStart = CurrentPeriodStart();
+    bool rolledOver = false;
+
     if (activityResult)
     {
         do
         {
-            uint32 activityId = (*activityResult)[0].GetUInt32();
+            Field* fields = activityResult->Fetch();
+            uint32 activityId = fields[0].GetUInt32();
+            uint64 rowPeriod = fields[1].GetUInt64();
+            if (rowPeriod != _periodStart)
+            {
+                rolledOver = true;
+                continue;
+            }
             if (sPerksActivityStore.LookupEntry(activityId))
                 _completedActivities.insert(activityId);
         } while (activityResult->NextRow());
+    }
+
+    if (criteriaResult)
+    {
+        do
+        {
+            Field* fields = criteriaResult->Fetch();
+            uint32 criteriaId = fields[0].GetUInt32();
+            uint64 counter = fields[1].GetUInt64();
+            time_t date = fields[2].GetInt64();
+            uint64 rowPeriod = fields[3].GetUInt64();
+            if (rowPeriod != _periodStart)
+            {
+                rolledOver = true;
+                continue;
+            }
+            if (!sCriteriaMgr->GetCriteria(criteriaId))
+                continue;
+
+            CriteriaProgress& progress = _criteriaProgress[criteriaId];
+            progress.Counter = counter;
+            progress.Date = date;
+            progress.Changed = false;
+        } while (criteriaResult->NextRow());
+    }
+
+    // Any stored row from a previous Trading Post interval means the whole set is stale: wipe the
+    // completions and criteria so the new month starts fresh (and clean up the old rows).
+    if (rolledOver)
+    {
+        _completedActivities.clear();
+        _criteriaProgress.clear();
+        DeleteFromDB(_owner->GetGUID());
     }
 }
 
 void PerksProgramActivityMgr::SaveToDB(CharacterDatabaseTransaction trans)
 {
-    if (!_changed)
-        return;
+    if (!_periodStart)
+        _periodStart = CurrentPeriodStart();
 
-    CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_DEL_CHAR_PERKS_ACTIVITY);
-    stmt->setUInt64(0, _owner->GetGUID().GetCounter());
-    trans->Append(stmt);
-
-    for (uint32 activityId : _completedActivities)
+    if (_changed)
     {
-        stmt = CharacterDatabase.GetPreparedStatement(CHAR_INS_CHAR_PERKS_ACTIVITY);
+        CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_DEL_CHAR_PERKS_ACTIVITY);
         stmt->setUInt64(0, _owner->GetGUID().GetCounter());
-        stmt->setUInt32(1, activityId);
         trans->Append(stmt);
+
+        for (uint32 activityId : _completedActivities)
+        {
+            stmt = CharacterDatabase.GetPreparedStatement(CHAR_INS_CHAR_PERKS_ACTIVITY);
+            stmt->setUInt64(0, _owner->GetGUID().GetCounter());
+            stmt->setUInt32(1, activityId);
+            stmt->setUInt64(2, _periodStart);
+            trans->Append(stmt);
+        }
+
+        _changed = false;
     }
 
-    _changed = false;
+    // Persist changed in-progress criteria counters (mirrors QuestObjectiveCriteriaMgr).
+    for (auto& criteriaProgress : _criteriaProgress)
+    {
+        if (!criteriaProgress.second.Changed)
+            continue;
+
+        CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_DEL_CHAR_PERKS_ACTIVITY_CRITERIA_BY_CRITERIA);
+        stmt->setUInt64(0, _owner->GetGUID().GetCounter());
+        stmt->setUInt32(1, criteriaProgress.first);
+        trans->Append(stmt);
+
+        if (criteriaProgress.second.Counter)
+        {
+            stmt = CharacterDatabase.GetPreparedStatement(CHAR_INS_CHAR_PERKS_ACTIVITY_CRITERIA);
+            stmt->setUInt64(0, _owner->GetGUID().GetCounter());
+            stmt->setUInt32(1, criteriaProgress.first);
+            stmt->setUInt64(2, criteriaProgress.second.Counter);
+            stmt->setInt64(3, criteriaProgress.second.Date);
+            stmt->setUInt64(4, _periodStart);
+            trans->Append(stmt);
+        }
+
+        criteriaProgress.second.Changed = false;
+    }
 }
 
 void PerksProgramActivityMgr::SendAllData(Player const* /*receiver*/) const
