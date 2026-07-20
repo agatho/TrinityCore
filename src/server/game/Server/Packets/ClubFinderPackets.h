@@ -132,8 +132,25 @@ namespace WorldPackets
 
             std::vector<uint32> ClubPostingIDs;
             std::vector<ClubFinderPostingFilter> Filters;
-            uint8 Type        = 0;   // 3 bits, ClubFinderRequestType
-            bool CrossFaction = false;
+            uint8 Type         = 0;   // 3 bits, ClubFinderRequestType
+            // Set when the client is resolving a single linked club rather than paging a browse. The
+            // response must echo it: the client only hands the record to the invitation frame, via
+            // CLUB_FINDER_LINKED_CLUB_RETURNED, when it comes back set.
+            bool LinkedLookup  = false;
+        };
+
+        // The answer to a search. Reader sub_7FF7290B37C0; handler sub_7FF72ACABC70 stores the ids as
+        // the client's complete match list and drives its own paging from there, so this must carry
+        // EVERY match - truncating it silently shrinks the client's page count.
+        class ClubFinderReturnRecruitingClubs final : public ServerPacket
+        {
+        public:
+            explicit ClubFinderReturnRecruitingClubs() : ServerPacket(SMSG_RETURN_RECRUITING_CLUBS, 5) { }
+
+            WorldPacket const* Write() override;
+
+            std::vector<uint32> ClubPostingIDs;
+            uint8 Type = 0;   // 3 bits, ClubFinderRequestType
         };
 
         // Produced by Lua C_ClubFinder.RequestClubsList(guildListRequested, searchString, specIDs) via
@@ -180,8 +197,10 @@ namespace WorldPackets
             };
 
             std::vector<ClubCacheData> Postings;
-            uint8 Type     = 0;       // 3 bits; the captures echo the request's ClubFinderRequestType
-            bool Unknown   = false;   // 1 bit; false in every capture
+            // The type MUST echo the request: the handler only fires the pending page callback (and so
+            // CLUB_FINDER_CLUB_LIST_RETURNED) for callbacks whose type matches this field.
+            uint8 Type        = 0;
+            bool LinkedLookup = false;   // echo of the request's flag; false for browse and paging
         };
 
         // Lua RequestMembershipToClub(clubFinderGUID, comment, specIDs). Comment buffer is char[513]

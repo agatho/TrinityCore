@@ -163,8 +163,11 @@ void WorldSession::HandleClubFinderRequestClubsData(WorldPackets::ClubFinder::Cl
 {
     WorldPackets::ClubFinder::ClubFinderLookupClubPostingsList response;
 
-    // The captured response echoes the request's type in the envelope's 3-bit field.
+    // Both bits are echoes of the request. The type gates which pending page callback the client
+    // fires, and the linked-lookup flag decides whether the record goes to the invitation frame, so
+    // getting either wrong leaves the UI silently unrefreshed.
     response.Type = request.Type;
+    response.LinkedLookup = request.LinkedLookup;
 
     for (uint32 clubPostingId : request.ClubPostingIDs)
     {
@@ -214,7 +217,10 @@ static void ApplySearchFilters(std::vector<WorldPackets::ClubFinder::ClubFinderP
     }
 }
 
-// The Club Finder search: "show me guilds recruiting".
+// The Club Finder search. The answer is the complete list of matching posting IDS, not the postings
+// themselves: the client stores that list, derives its page count from its length, and then asks for
+// the records of each page through CMSG_CLUB_FINDER_REQUEST_CLUBS_DATA. Truncating the list here would
+// silently shrink the client page count, so every match is sent.
 void WorldSession::HandleClubFinderRequestClubsList(WorldPackets::ClubFinder::ClubFinderRequestClubsList& request)
 {
     ClubFinderMgr::SearchCriteria criteria;
@@ -222,15 +228,11 @@ void WorldSession::HandleClubFinderRequestClubsList(WorldPackets::ClubFinder::Cl
     criteria.Type = request.Type;
     ApplySearchFilters(request.Filters, criteria);
 
-    WorldPackets::ClubFinder::ClubFinderLookupClubPostingsList response;
+    WorldPackets::ClubFinder::ClubFinderReturnRecruitingClubs response;
     response.Type = request.Type;
 
     for (ClubFinderPosting const* posting : sClubFinderMgr->Search(criteria))
-    {
-        WorldPackets::ClubFinder::ClubFinderLookupClubPostingsList::ClubCacheData& data = response.Postings.emplace_back();
-        if (!BuildClubCacheData(*posting, data))
-            response.Postings.pop_back();
-    }
+        response.ClubPostingIDs.push_back(posting->PostingId);
 
     SendPacket(response.Write());
 }

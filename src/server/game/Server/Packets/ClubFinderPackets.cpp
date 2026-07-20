@@ -123,12 +123,24 @@ void ClubFinderRequestClubsData::Read()
         _worldPacket >> clubPostingId;
 
     _worldPacket >> Bits<3>(Type);
-    _worldPacket >> Bits<1>(CrossFaction);
+    _worldPacket >> Bits<1>(LinkedLookup);
     _worldPacket.ResetBitPos();
 
     Filters.resize(filterCount);
     for (ClubFinderPostingFilter& filter : Filters)
         _worldPacket >> filter;
+}
+
+WorldPacket const* ClubFinderReturnRecruitingClubs::Write()
+{
+    _worldPacket << Size<uint32>(ClubPostingIDs);
+    for (uint32 clubPostingId : ClubPostingIDs)
+        _worldPacket << clubPostingId;
+
+    _worldPacket << Bits<3>(Type);
+    _worldPacket.FlushBits();
+
+    return &_worldPacket;
 }
 
 void ClubFinderRequestClubsList::Read()
@@ -157,7 +169,7 @@ WorldPacket const* ClubFinderLookupClubPostingsList::Write()
 {
     _worldPacket << Size<uint32>(Postings);
     _worldPacket << Bits<3>(Type);
-    _worldPacket << Bits<1>(Unknown);
+    _worldPacket << Bits<1>(LinkedLookup);
     _worldPacket.FlushBits();
 
     for (ClubCacheData const& posting : Postings)
