@@ -675,14 +675,15 @@ namespace WorldPackets
             uint32 QuestID = 0;
         };
 
+        // SMSG_DAILY_QUESTS_RESET carries an EMPTY body in 12.0.7: the client reader consumes no
+        // fields, and every occurrence in the live sniffs is 0 bytes. The old int32 Count was stale
+        // and was being transmitted on every daily reset.
         class DailyQuestsReset final : public ServerPacket
         {
         public:
-            explicit DailyQuestsReset() : ServerPacket(SMSG_DAILY_QUESTS_RESET, 4) { }
+            explicit DailyQuestsReset() : ServerPacket(SMSG_DAILY_QUESTS_RESET, 0) { }
 
             WorldPacket const* Write() override;
-
-            int32 Count = 0;
         };
 
         class QuestForceRemoved final : public ServerPacket

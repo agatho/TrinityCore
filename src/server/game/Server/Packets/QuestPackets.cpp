@@ -712,8 +712,6 @@ void PushQuestToParty::Read()
 
 WorldPacket const* DailyQuestsReset::Write()
 {
-    _worldPacket << int32(Count);
-
     return &_worldPacket;
 }
 

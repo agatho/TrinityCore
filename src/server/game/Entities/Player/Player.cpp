@@ -26915,7 +26915,6 @@ void Player::DailyReset()
         SetQuestCompletedBit(questId, false);
 
     WorldPackets::Quest::DailyQuestsReset dailyQuestsReset;
-    dailyQuestsReset.Count = int32(m_activePlayerData->DailyQuestsCompleted.size());
     SendDirectMessage(dailyQuestsReset.Write());
 
     ClearDynamicUpdateFieldValues(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::DailyQuestsCompleted));
