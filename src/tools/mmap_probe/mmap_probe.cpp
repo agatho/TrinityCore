@@ -22,7 +22,9 @@
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
+#include <iostream>
 #include <regex>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -233,62 +235,17 @@ const char* DescribeStatus(dtStatus st, bool partial, bool startFar, bool endFar
 }
 } // anonymous namespace
 
-int main(int argc, char** argv)
+// Run one findPath probe on an already-loaded navMesh/query and print the
+// same result block the original single-shot tool printed (STATUS, snap
+// info, polyCount, straight-path dump with OFFMESH flags). Does NOT free
+// navMesh/query -- the caller owns their lifetime (batch mode reuses them
+// across many calls). Returns 0 iff Detour returned a complete path whose
+// final waypoint is within 5y of dst, 1 otherwise.
+int RunQuery(dtNavMesh* navMesh, dtNavMeshQuery* query,
+    float srcX, float srcY, float srcZ,
+    float dstX, float dstY, float dstZ)
 {
-    if (argc != 9)
-    {
-        std::fprintf(stderr,
-            "Usage: %s <mmaps_dir> <mapId> <srcX> <srcY> <srcZ> <dstX> <dstY> <dstZ>\n",
-            argv[0]);
-        return 2;
-    }
-
-    std::string dir = argv[1];
-    uint32_t mapId = static_cast<uint32_t>(std::strtoul(argv[2], nullptr, 10));
-    float srcX = std::strtof(argv[3], nullptr);
-    float srcY = std::strtof(argv[4], nullptr);
-    float srcZ = std::strtof(argv[5], nullptr);
-    float dstX = std::strtof(argv[6], nullptr);
-    float dstY = std::strtof(argv[7], nullptr);
-    float dstZ = std::strtof(argv[8], nullptr);
-
-    std::printf("mmap_probe: dir=%s mapId=%u\n", dir.c_str(), mapId);
-    std::printf("  TC src = (%.3f, %.3f, %.3f)\n", srcX, srcY, srcZ);
-    std::printf("  TC dst = (%.3f, %.3f, %.3f)\n", dstX, dstY, dstZ);
-
-    dtNavMeshParams params{};
-    if (!LoadNavMeshParams(dir, mapId, params))
-        return 2;
-
-    std::printf("  navMeshParams: orig=(%.3f,%.3f,%.3f) tileWidth=%.3f tileHeight=%.3f maxTiles=%d maxPolys=%d\n",
-        params.orig[0], params.orig[1], params.orig[2],
-        params.tileWidth, params.tileHeight, params.maxTiles, params.maxPolys);
-
-    dtNavMesh* navMesh = dtAllocNavMesh();
-    if (!navMesh || dtStatusFailed(navMesh->init(&params)))
-    {
-        std::fprintf(stderr, "ERROR: dtNavMesh init failed\n");
-        return 2;
-    }
-
-    std::vector<LoadedTile> loaded;
-    int nTiles = LoadAllTiles(navMesh, dir, mapId, loaded);
-    std::printf("  loaded %d tile(s):", nTiles);
-    for (auto const& t : loaded)
-        std::printf(" [%02d,%02d]", t.x, t.y);
-    std::printf("\n");
-    if (nTiles == 0)
-    {
-        std::fprintf(stderr, "ERROR: no tiles loaded\n");
-        return 2;
-    }
-
-    dtNavMeshQuery* query = dtAllocNavMeshQuery();
-    if (!query || dtStatusFailed(query->init(navMesh, 4096)))
-    {
-        std::fprintf(stderr, "ERROR: dtNavMeshQuery init failed\n");
-        return 2;
-    }
+    (void)navMesh;
 
     // Axis flip: TC (x, y, z) -> Detour (y, z, x). Matches PathGenerator.
     float startPoint[3] = { srcY, srcZ, srcX };
@@ -366,8 +323,6 @@ int main(int argc, char** argv)
     if (failed || polyCount == 0)
     {
         std::printf("STATUS: NOPATH\n");
-        dtFreeNavMeshQuery(query);
-        dtFreeNavMesh(navMesh);
         return 1;
     }
 
@@ -443,7 +398,118 @@ int main(int argc, char** argv)
     bool ok = !partial && !failed && (planarDist <= 5.0f);
     std::printf("EXIT: %d\n", ok ? 0 : 1);
 
+    return ok ? 0 : 1;
+}
+
+int main(int argc, char** argv)
+{
+    if (argc < 3)
+    {
+        std::fprintf(stderr,
+            "Usage: %s <mmaps_dir> <mapId> <srcX> <srcY> <srcZ> <dstX> <dstY> <dstZ>\n"
+            "       %s <mmaps_dir> <mapId> --batch   (reads 'sx sy sz dx dy dz' lines from stdin)\n",
+            argv[0], argv[0]);
+        return 2;
+    }
+
+    std::string dir = argv[1];
+    uint32_t mapId = static_cast<uint32_t>(std::strtoul(argv[2], nullptr, 10));
+    bool batch = (argc == 4 && std::strcmp(argv[3], "--batch") == 0);
+    if (!batch && argc != 9)
+    {
+        std::fprintf(stderr,
+            "Usage: %s <mmaps_dir> <mapId> <srcX> <srcY> <srcZ> <dstX> <dstY> <dstZ>\n"
+            "       %s <mmaps_dir> <mapId> --batch   (reads 'sx sy sz dx dy dz' lines from stdin)\n",
+            argv[0], argv[0]);
+        return 2;
+    }
+
+    std::printf("mmap_probe: dir=%s mapId=%u%s\n", dir.c_str(), mapId, batch ? " [BATCH]" : "");
+
+    // Parsed early (and printed here) only for the single-shot path, so the
+    // overall print order stays byte-identical to the original tool.
+    float srcX = 0, srcY = 0, srcZ = 0, dstX = 0, dstY = 0, dstZ = 0;
+    if (!batch)
+    {
+        srcX = std::strtof(argv[3], nullptr);
+        srcY = std::strtof(argv[4], nullptr);
+        srcZ = std::strtof(argv[5], nullptr);
+        dstX = std::strtof(argv[6], nullptr);
+        dstY = std::strtof(argv[7], nullptr);
+        dstZ = std::strtof(argv[8], nullptr);
+        std::printf("  TC src = (%.3f, %.3f, %.3f)\n", srcX, srcY, srcZ);
+        std::printf("  TC dst = (%.3f, %.3f, %.3f)\n", dstX, dstY, dstZ);
+    }
+
+    dtNavMeshParams params{};
+    if (!LoadNavMeshParams(dir, mapId, params))
+        return 2;
+
+    std::printf("  navMeshParams: orig=(%.3f,%.3f,%.3f) tileWidth=%.3f tileHeight=%.3f maxTiles=%d maxPolys=%d\n",
+        params.orig[0], params.orig[1], params.orig[2],
+        params.tileWidth, params.tileHeight, params.maxTiles, params.maxPolys);
+
+    dtNavMesh* navMesh = dtAllocNavMesh();
+    if (!navMesh || dtStatusFailed(navMesh->init(&params)))
+    {
+        std::fprintf(stderr, "ERROR: dtNavMesh init failed\n");
+        return 2;
+    }
+
+    std::vector<LoadedTile> loaded;
+    int nTiles = LoadAllTiles(navMesh, dir, mapId, loaded);
+    std::printf("  loaded %d tile(s):", nTiles);
+    for (auto const& t : loaded)
+        std::printf(" [%02d,%02d]", t.x, t.y);
+    std::printf("\n");
+    if (nTiles == 0)
+    {
+        std::fprintf(stderr, "ERROR: no tiles loaded\n");
+        return 2;
+    }
+
+    dtNavMeshQuery* query = dtAllocNavMeshQuery();
+    if (!query || dtStatusFailed(query->init(navMesh, 4096)))
+    {
+        std::fprintf(stderr, "ERROR: dtNavMeshQuery init failed\n");
+        return 2;
+    }
+
+    int rc = 0;
+    if (!batch)
+    {
+        rc = RunQuery(navMesh, query, srcX, srcY, srcZ, dstX, dstY, dstZ);
+    }
+    else
+    {
+        // Batch mode: mesh is loaded ONCE above; each stdin line is one
+        // src->dst query. Emit the same result block RunQuery always
+        // printed, terminated by a sentinel "END" line so the caller can
+        // split stdout into per-query chunks without needing exit codes
+        // (the process only exits once, at EOF).
+        std::string line;
+        while (std::getline(std::cin, line))
+        {
+            if (line.find_first_not_of(" \t\r\n") == std::string::npos)
+                continue;
+            std::istringstream iss(line);
+            float sx, sy, sz, dx, dy, dz;
+            if (!(iss >> sx >> sy >> sz >> dx >> dy >> dz))
+            {
+                std::printf("STATUS: ERR\n");
+                std::printf("END\n");
+                std::fflush(stdout);
+                continue;
+            }
+            std::printf("  TC src = (%.3f, %.3f, %.3f)\n", sx, sy, sz);
+            std::printf("  TC dst = (%.3f, %.3f, %.3f)\n", dx, dy, dz);
+            RunQuery(navMesh, query, sx, sy, sz, dx, dy, dz);
+            std::printf("END\n");
+            std::fflush(stdout);
+        }
+    }
+
     dtFreeNavMeshQuery(query);
     dtFreeNavMesh(navMesh);
-    return ok ? 0 : 1;
+    return rc;
 }
