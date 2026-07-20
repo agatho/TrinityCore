@@ -16,6 +16,8 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <cmath>
+#include <limits>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -1014,15 +1016,45 @@ public:
     // are going, just not on the intermediate waypoint, so the in-flight
     // solution should be allowed to run to completion instead of being
     // fought over.
+    // Increment 1m (2026-07-20): PROGRESS-STICKY ownership. The prior
+    // kMoveCommitMs=2500 fixed wall-clock window (comment above) was tuned
+    // for "2.5s of genuine walking per window" but live campaign evidence
+    // (2026-07-19/20, 6+ dungeons: Blackfathom Deeps, Sunken Temple,
+    // Zul'Farrak, LBRS, Stratholme, Maraudon — 40% of all campaign
+    // failures) shows the window routinely expires MID-STRIDE: a ~20y step
+    // at ~7y/s plus spline-start latency exceeds 2.5s, so ownership flips
+    // to the contender every window, the new owner restarts the spline
+    // toward ITS target, and the two rules oscillate forever with the bot
+    // frozen (<2y net drift) for 10+ minutes — "2.5s of spline restart with
+    // zero net progress" instead of the intended real walking. Fix: a
+    // commitment stays active as long as the bot keeps CLOSING distance on
+    // the committed target (tracked by move_commit_note_progress(), called
+    // once per dungeon tick) — expire on STALLED progress (no improvement
+    // for kMoveCommitStallMs), not on wall-clock alone. kMoveCommitMaxMs is
+    // a hard cap so a pathological commitment (e.g. a target that can never
+    // actually be reached, yet keeps registering sub-threshold "closer"
+    // ticks from jitter) cannot own the spline forever.
     bool       move_commit_active(uint32 map_id, uint32 now_ms) const
     {
         if (move_commit_map_ != map_id || move_commit_ms_ == 0)
             return false;
-        constexpr uint32 kMoveCommitMs = 2500;
-        return (now_ms - move_commit_ms_) < kMoveCommitMs;
+        constexpr uint32 kMoveCommitStallMs = 3000;
+        constexpr uint32 kMoveCommitMaxMs   = 15000;
+        const uint32 stall_ref = move_commit_progress_ms_ ? move_commit_progress_ms_
+                                                            : move_commit_ms_;
+        return (now_ms - stall_ref) < kMoveCommitStallMs &&
+               (now_ms - move_commit_ms_) < kMoveCommitMaxMs;
     }
     void       move_commit_target(float& x, float& y, float& z) const
     { x = move_commit_x_; y = move_commit_y_; z = move_commit_z_; }
+    // Diagnostics only (increment 1m) — age of the commitment itself and
+    // age since progress last improved, for the [move_owned] log line. 0
+    // when there is no commitment (caller should already be gating on
+    // move_commit_active/move_commit_map_ as everywhere else in this block).
+    uint32     move_commit_age_ms(uint32 now_ms) const
+    { return move_commit_ms_ ? (now_ms - move_commit_ms_) : 0; }
+    uint32     move_commit_prog_age_ms(uint32 now_ms) const
+    { return move_commit_progress_ms_ ? (now_ms - move_commit_progress_ms_) : 0; }
     // Objective the CURRENTLY-committed move serves (route-crumb index), or
     // -1 if none/not crumb-based. Map-bound like the rest of this block: a
     // map mismatch (LFG teleport to another instance) reports -1 rather than
@@ -1041,6 +1073,50 @@ public:
         move_commit_ms_ = now_ms ? now_ms : 1u;
         move_commit_map_ = map_id;
         move_commit_objective_ = objective;
+        // Increment 1m: reset the progress clock alongside the commitment
+        // itself, and reset best_d2_ to the sentinel below so the very next
+        // move_commit_note_progress() call establishes the distance
+        // baseline unconditionally (no bot position is known here — only
+        // the target is — so "improvement" can't be judged until the first
+        // post-commit position sample).
+        move_commit_progress_ms_ = move_commit_ms_;
+        move_commit_best_d2_ = std::numeric_limits<float>::max();
+    }
+    // Increment 1m (2026-07-20): called once per dungeon tick (top of
+    // DungeonDispatch and DispatchInCombat's dungeon block — see those call
+    // sites) with the bot's CURRENT position. Refreshes
+    // move_commit_progress_ms_ whenever distance-to-the-committed-target has
+    // improved by more than kMoveCommitProgressY since the best distance
+    // previously observed, so move_commit_active() can tell a genuinely
+    // walking owner from a stalled one. No-op when there is no commitment
+    // for this map (nothing to track) — matches the map-bound self-
+    // invalidation of the rest of this block.
+    void       move_commit_note_progress(uint32 map_id, float cur_x, float cur_y,
+                                         float cur_z, uint32 now_ms)
+    {
+        if (move_commit_map_ != map_id || move_commit_ms_ == 0)
+            return;
+        const float dx = cur_x - move_commit_x_;
+        const float dy = cur_y - move_commit_y_;
+        const float dz = cur_z - move_commit_z_;
+        const float d2 = dx * dx + dy * dy + dz * dz;
+        constexpr float kMoveCommitProgressY = 2.0f;   // closing-distance margin
+        // best_d2_ == FLT_MAX sentinel: no baseline yet (fresh commitment) —
+        // the first observation always counts as progress.
+        bool improved;
+        if (move_commit_best_d2_ >= std::numeric_limits<float>::max() * 0.5f)
+            improved = true;
+        else
+        {
+            const float d = std::sqrt(d2);
+            const float best_d = std::sqrt(move_commit_best_d2_);
+            improved = (best_d - d) > kMoveCommitProgressY;
+        }
+        if (improved)
+        {
+            move_commit_best_d2_ = d2;
+            move_commit_progress_ms_ = now_ms ? now_ms : 1u;
+        }
     }
 
     // Cross EPISODE wall-clock. Unlike the three detectors below — all of which the
@@ -2915,6 +2991,13 @@ private:
     // Objective (route-crumb index) the committed move serves; -1 = none/
     // not crumb-based. See move_commit_objective() above (increment 1k).
     int32_t        move_commit_objective_ = -1;
+    // PROGRESS-STICKY fields (increment 1m, 2026-07-20). best_d2_ = the
+    // smallest squared distance to move_commit_{x,y,z}_ observed since the
+    // commitment was (re-)made; FLT_MAX = no baseline sample yet.
+    // progress_ms_ = the timestamp that best distance was last improved.
+    // See move_commit_note_progress()/move_commit_active() above.
+    float          move_commit_best_d2_     = 0.f;
+    uint32         move_commit_progress_ms_ = 0;
     float          dungeon_cross_x_ = 0.f;
     float          dungeon_cross_y_ = 0.f;
     float          dungeon_cross_z_ = 0.f;

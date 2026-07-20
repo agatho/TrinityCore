@@ -1628,6 +1628,22 @@ void DispatchInCombat(BotAI& ai,
         }
     }
 
+    // Increment 1m (2026-07-20): PROGRESS-STICKY ownership tick — the
+    // in-combat counterpart of the one at the top of DungeonDispatch
+    // (State_Idle.cpp; see BotAI::move_commit_note_progress()). A dungeon
+    // bot mid boss-advance often stays in the InCombat FSM state for the
+    // whole fight, so DungeonDispatch's idle-side tick never runs for it —
+    // DungeonCombatPositioning/DungeonConvergeToFight below (this file's
+    // dungeon movement entry) are the equivalent per-tick hook here. Same
+    // kill switch as step-hold.
+    if (snapshot.is_in_instance() && Services::Config().move_step_hold_enabled())
+    {
+        float mc_x, mc_y, mc_z;
+        snapshot.position(mc_x, mc_y, mc_z);
+        ai.move_commit_note_progress(snapshot.map_id(), mc_x, mc_y, mc_z,
+                                     snapshot.published_at_ms());
+    }
+
     // Stranded-member recovery (shared): a follower that respawned at the far
     // entrance graveyard or wedged on a disconnected poly cannot rejoin on foot and
     // would oscillate the in-combat rejoin (rule 0b inside DungeonCombatPositioning)

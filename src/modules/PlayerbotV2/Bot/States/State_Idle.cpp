@@ -1143,10 +1143,16 @@ static void DungeonStepHoldDiag(BotSnapshotView const& s, char const* rule_tag,
 // WHICH rule lost the window or whether the two sides shared an objective)
 // — ONE log site for the whole commitment-arbitration family so forensics
 // can grep who deferred to whom, instead of chasing per-site duplicates.
+// owner_age_ms/prog_age_ms (increment 1m, 2026-07-20): the in-flight
+// commitment's total age and its age-since-progress-last-improved — live
+// forensics for the PROGRESS-STICKY fix (BotAI::move_commit_active) needs
+// to see whether a held window is genuinely still closing distance
+// (prog_age small) or stalled (prog_age approaching kMoveCommitStallMs).
 static void DungeonMoveOwnedDiag(BotSnapshotView const& s,
                                  char const* rule_tag,
                                  float tx, float ty, float tz, int32_t my_objective,
-                                 float ox, float oy, float oz, int32_t owning_objective)
+                                 float ox, float oy, float oz, int32_t owning_objective,
+                                 uint32 owner_age_ms, uint32 prog_age_ms)
 {
     static uint32 s_move_owned_dbg_ms = 0;
     const uint32 now = GameTime::GetGameTimeMS();
@@ -1155,8 +1161,9 @@ static void DungeonMoveOwnedDiag(BotSnapshotView const& s,
         s_move_owned_dbg_ms = now;
         TC_LOG_INFO("playerbot.v2",
             "[move_owned] bot={} rule={} my_target=({:.1f},{:.1f},{:.1f}) my_obj={} "
-            "owning_target=({:.1f},{:.1f},{:.1f}) owning_obj={}",
-            s.bot_id(), rule_tag, tx, ty, tz, my_objective, ox, oy, oz, owning_objective);
+            "owning_target=({:.1f},{:.1f},{:.1f}) owning_obj={} owner_age={}ms prog_age={}ms",
+            s.bot_id(), rule_tag, tx, ty, tz, my_objective, ox, oy, oz, owning_objective,
+            owner_age_ms, prog_age_ms);
     }
 }
 
@@ -1200,19 +1207,22 @@ static bool DungeonMoveOwnedElsewhere(BotSnapshotView const& s, BotAI& ai,
     float ox, oy, oz;
     ai.move_commit_target(ox, oy, oz);
     const int32_t owning_objective = ai.move_commit_objective(s.map_id());
+    const uint32 owner_age_ms = ai.move_commit_age_ms(now_ms);
+    const uint32 prog_age_ms = ai.move_commit_prog_age_ms(now_ms);
     if (my_objective >= 0 && my_objective == owning_objective)
     {
         // Same objective, different capped step point: the in-flight
         // solution owns the window even though it is >3y from mine.
         DungeonMoveOwnedDiag(s, rule_tag, tx, ty, tz, my_objective,
-                             ox, oy, oz, owning_objective);
+                             ox, oy, oz, owning_objective, owner_age_ms, prog_age_ms);
         return true;
     }
     const float dx = tx - ox, dy = ty - oy, dz = tz - oz;
     constexpr float kOwnedRange = 3.0f;   // matches DungeonStepAlreadyInFlight
     if (dx * dx + dy * dy + dz * dz <= kOwnedRange * kOwnedRange)
         return false;   // same target — not a competing objective
-    DungeonMoveOwnedDiag(s, rule_tag, tx, ty, tz, my_objective, ox, oy, oz, owning_objective);
+    DungeonMoveOwnedDiag(s, rule_tag, tx, ty, tz, my_objective, ox, oy, oz, owning_objective,
+                         owner_age_ms, prog_age_ms);
     return true;
 }
 
@@ -4159,6 +4169,28 @@ bool DungeonDispatch(BotSnapshotView const& s, BotAI& ai,
     if (!ai.dungeon_active()) return false;
 
     const uint32 now_ms = s.published_at_ms();
+
+    // Increment 1m (2026-07-20): PROGRESS-STICKY ownership tick. Refresh
+    // this bot's move-commitment progress clock BEFORE any sub-dispatcher
+    // below runs — see BotAI::move_commit_note_progress()/move_commit_active()
+    // for the full rationale. Must run unconditionally on every idle dungeon
+    // tick: the OWNING rule's own steady re-evaluation usually takes the
+    // DungeonStepAlreadyInFlight hold branch at its call site (same target,
+    // live spline already heading there) and never reaches
+    // DungeonMoveOwnedElsewhere/note_move_commit — so without this tick the
+    // stall clock would never advance for a genuinely-walking owner and
+    // move_commit_active() would see it as stale the moment a contender
+    // shows up. Same kill switch as step-hold (one concept: spline
+    // protection). The in-combat counterpart lives at the top of the
+    // dungeon block in DispatchInCombat (State_InCombat.cpp) — this
+    // function and that one are the only two places a dungeon bot's
+    // movement gets dispatched.
+    if (Services::Config().move_step_hold_enabled())
+    {
+        float mc_x, mc_y, mc_z;
+        s.position(mc_x, mc_y, mc_z);
+        ai.move_commit_note_progress(s.map_id(), mc_x, mc_y, mc_z, now_ms);
+    }
 
     // ── Off-mesh crossing commitment ──────────────────────────────────────────
     // While a dungeon bot is mid-crossing an off-mesh bridge, HOLD the fixed
