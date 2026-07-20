@@ -64,3 +64,4 @@ option(BUILD_TESTING    "Build test suite"                                      
 if(UNIX)
   option(USE_LD_GOLD    "Use GNU gold linker"                                         0)
 endif()
+option(BUILD_PLAYERBOT_V2 "Build the Playerbot V2 module (next-generation, see v2/REQUIREMENTS.md)" 0)

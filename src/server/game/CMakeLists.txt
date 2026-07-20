@@ -31,15 +31,51 @@ target_link_libraries(game-interface
 
 add_library(game)
 
+# The Playerbot implementation files are excluded unless the module is enabled:
+# with V2 off, PlayerbotHooks.h supplies inline no-op bodies and no .cpp is
+# needed, so a bot-free build compiles exactly the sources it always did.
+if(BUILD_PLAYERBOT_V2)
+  set(GAME_SOURCE_EXCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/PrecompiledHeaders)
+else()
+  set(GAME_SOURCE_EXCLUDES
+    ${CMAKE_CURRENT_SOURCE_DIR}/PrecompiledHeaders
+    ${CMAKE_CURRENT_SOURCE_DIR}/Playerbot)
+endif()
+
 CollectAndAddSourceFiles(
   game
   ${CMAKE_CURRENT_SOURCE_DIR}
   EXCLUDE
-  ${CMAKE_CURRENT_SOURCE_DIR}/PrecompiledHeaders)
+  ${GAME_SOURCE_EXCLUDES})
 
 target_include_directories(game
   PRIVATE
     ${CMAKE_CURRENT_BINARY_DIR})
+
+# Playerbot V2 module support.
+#
+# The core-side API header (Playerbot/PlayerbotHooks.h) is always on the include
+# path so core code can include it unconditionally - the header itself selects
+# real bodies vs inline no-ops via TRINITY_PLAYERBOT_V2. That keeps the core
+# hooks free of #ifdef noise and makes a bot-free build byte-for-byte ordinary.
+target_include_directories(game
+  PUBLIC
+    ${CMAKE_SOURCE_DIR}/src/server/game/Playerbot)
+
+if(TARGET modules-common)
+  target_link_libraries(game
+    PRIVATE
+      modules-common)
+endif()
+
+if(BUILD_PLAYERBOT_V2)
+  target_compile_definitions(game
+    PUBLIC
+      TRINITY_PLAYERBOT_V2=1)
+  target_include_directories(game
+    PRIVATE
+      ${CMAKE_SOURCE_DIR}/src/modules/PlayerbotV2)
+endif()
 
 target_link_libraries(game
   PRIVATE
