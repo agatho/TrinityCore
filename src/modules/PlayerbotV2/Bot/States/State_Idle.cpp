@@ -6179,18 +6179,20 @@ bool DungeonDispatch(BotSnapshotView const& s, BotAI& ai,
                                 // the 1k same-objective hold applies between them.
                                 float ptx = btx, pty = bty, ptz = btz;
                                 int32_t prog_crumb = -1;
-                                bool prog_yield = false;
+                                // NO yield here (deliberate — first attempt at this
+                                // fix added one and DEADLOCKED Blackfathom: 20 min
+                                // with every rule *_hold and zero MoveTo). THIS rule
+                                // is the handoff target of the route rule's own
+                                // final-crumb decline (1d) — if it yields too, the
+                                // route declines, the fallback yields, and nobody
+                                // claims. Substitution only: walk the SAME crumb the
+                                // route owns while it is armed; when near-arrived
+                                // DungeonAdvanceTarget returns the boss target and
+                                // this rule legitimately closes the last stretch.
                                 DungeonAdvanceTarget(s, ai, advice, btx, bty, btz,
                                                      ptx, pty, ptz,
                                                      "idle:dungeon_tank_advance_boss",
-                                                     &prog_crumb, &prog_yield);
-                                if (prog_yield)
-                                {
-                                    // Near-arrived at the crumb: the route rule owns
-                                    // completion/advance — do not walk boss-ward.
-                                    ai.set_last_rule_fired("idle:dungeon_tank_advance_boss_hold");
-                                    return true;
-                                }
+                                                     &prog_crumb);
                                 if (DungeonTargetReachableAndStep(
                                         self_be, ptx, pty, ptz, kMaxAdvanceStep,
                                         prog_step, &prog_offmesh,
