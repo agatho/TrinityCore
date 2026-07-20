@@ -6015,9 +6015,30 @@ bool DungeonDispatch(BotSnapshotView const& s, BotAI& ai,
                                         cur = (near_d <= kRouteArrive && near_i + 1 <= boss_i)
                                                   ? near_i + 1 : near_i;
                                     else if (crumb_d(cur) <= kRouteArrive)
+                                    {
                                         // Reached the committed crumb -> advance one,
                                         // never past the boss node.
                                         cur = (cur + 1 <= boss_i) ? cur + 1 : cur;
+                                        // PERSIST THE ARRIVAL IMMEDIATELY. Arrival is
+                                        // progress STATE, not a steer result — the
+                                        // unified commit below only writes the cursor
+                                        // `if (wp_found)`, i.e. only when the NEXT
+                                        // crumb is strictly reachable in one step.
+                                        // 90% of shipped routes contain >50y crumb
+                                        // gaps (campaign audit 2026-07-20: 129/144
+                                        // maps, worst 1114y), so that steer fails, the
+                                        // advance is DISCARDED, the boss-ward fallback
+                                        // drags the tank 20y, the bot is then >8y from
+                                        // the crumb and this rule steers BACK to it —
+                                        // the 20y patrol loop that blocked most of the
+                                        // dungeon matrix. Persisting here turns an
+                                        // unreachable next crumb into a long walk
+                                        // (the incremental fallback closes it) instead
+                                        // of an infinite oscillation. Still monotonic
+                                        // (floor-clamped) and still bounded by boss_i.
+                                        ai.set_dungeon_route_wp(
+                                            cur < route_lo ? route_lo : cur, s.map_id());
+                                    }
                                     else if (near_d > kRouteReacquire && near_i != cur)
                                         // Combat shoved us far off the chain -> re-acquire
                                         // the nearest pre-boss crumb.
