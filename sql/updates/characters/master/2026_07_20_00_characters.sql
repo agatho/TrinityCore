@@ -18,3 +18,15 @@ CREATE TABLE `club_finder_posting` (
   PRIMARY KEY (`postingId`),
   UNIQUE KEY `idx_club` (`clubId`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Club Finder guild recruitment postings';
+
+DROP TABLE IF EXISTS `club_finder_application`;
+CREATE TABLE `club_finder_application` (
+  `postingId` int unsigned NOT NULL,
+  `playerGuid` bigint unsigned NOT NULL,
+  `comment` varchar(512) NOT NULL DEFAULT '' COMMENT 'Client buffer is char[513]',
+  `specs` bigint unsigned NOT NULL DEFAULT '0' COMMENT 'Recruiting-spec bitmask the applicant offers',
+  `status` tinyint unsigned NOT NULL DEFAULT '1' COMMENT 'PlayerClubRequestStatus: 1 Pending, 3 Declined, 4 Approved, 5 Joined, 7 Canceled',
+  `lastUpdatedTime` bigint NOT NULL DEFAULT '0',
+  PRIMARY KEY (`postingId`,`playerGuid`),
+  KEY `idx_player` (`playerGuid`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Club Finder membership applications';

@@ -2443,6 +2443,27 @@ CREATE TABLE `crafting_order_reagents` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 --
+-- Table structure for table `club_finder_application`
+--
+
+DROP TABLE IF EXISTS `club_finder_application`;
+CREATE TABLE `club_finder_application` (
+  `postingId` int unsigned NOT NULL,
+  `playerGuid` bigint unsigned NOT NULL,
+  `comment` varchar(512) NOT NULL DEFAULT '' COMMENT 'Client buffer is char[513]',
+  `specs` bigint unsigned NOT NULL DEFAULT '0' COMMENT 'Recruiting-spec bitmask the applicant offers',
+  `status` tinyint unsigned NOT NULL DEFAULT '1' COMMENT 'PlayerClubRequestStatus: 1 Pending, 3 Declined, 4 Approved, 5 Joined, 7 Canceled',
+  `lastUpdatedTime` bigint NOT NULL DEFAULT '0',
+  PRIMARY KEY (`postingId`,`playerGuid`),
+  KEY `idx_player` (`playerGuid`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Club Finder membership applications';
+
+LOCK TABLES `club_finder_application` WRITE;
+/*!40000 ALTER TABLE `club_finder_application` DISABLE KEYS */;
+/*!40000 ALTER TABLE `club_finder_application` ENABLE KEYS */;
+UNLOCK TABLES;
+
+--
 -- Table structure for table `club_finder_posting`
 --
 

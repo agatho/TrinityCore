@@ -186,6 +186,64 @@ WorldPacket const* ClubFinderLookupClubPostingsList::Write()
     return &_worldPacket;
 }
 
+void ClubFinderRequestMembershipToClub::Read()
+{
+    _worldPacket >> ClubFinderGUID;
+    _worldPacket >> RecruitingSpecs;
+    _worldPacket >> SizedString::BitsSize<10>(Comment);
+    _worldPacket.ResetBitPos();
+    _worldPacket >> SizedString::Data(Comment);
+}
+
+void ClubFinderGetApplicantsList::Read()
+{
+    _worldPacket >> Bits<3>(Type);
+    _worldPacket.ResetBitPos();
+}
+
+void ClubFinderRequestPendingClubsList::Read()
+{
+    _worldPacket >> Bits<3>(Type);
+    _worldPacket.ResetBitPos();
+}
+
+void ClubFinderRespondToApplicant::Read()
+{
+    _worldPacket >> ClubFinderGUID;
+    _worldPacket >> PlayerGUID;
+    _worldPacket >> Bits<1>(ShouldAccept);
+    _worldPacket >> Bits<3>(Type);
+    _worldPacket >> Bits<1>(ForceAccept);
+    _worldPacket.ResetBitPos();
+}
+
+void ClubFinderApplicationResponse::Read()
+{
+    _worldPacket >> ClubFinderGUID;
+    _worldPacket >> Bits<3>(UpdateType);
+    _worldPacket >> Bits<3>(Type);
+    _worldPacket.ResetBitPos();
+}
+
+WorldPacket const* ClubFinderApplicationList::Write()
+{
+    _worldPacket << Size<uint32>(Applications);
+    _worldPacket << Bits<3>(Type);
+    _worldPacket.FlushBits();
+
+    for (PendingApplication const& application : Applications)
+    {
+        _worldPacket << application.ClubFinderGUID;
+        _worldPacket << application.PlayerGUID;
+        _worldPacket << application.Closed;
+        _worldPacket << application.LastUpdatedTime;
+        _worldPacket << Bits<4>(application.ApplicationStatus);
+        _worldPacket.FlushBits();
+    }
+
+    return &_worldPacket;
+}
+
 WorldPacket const* ClubFinderErrorMessage::Write()
 {
     _worldPacket << Bits<3>(Type);

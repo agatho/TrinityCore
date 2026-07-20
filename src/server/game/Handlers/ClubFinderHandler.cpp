@@ -201,10 +201,14 @@ static void ApplySearchFilters(std::vector<WorldPackets::ClubFinder::ClubFinderP
             case 5:     // specialization bitmask
                 criteria.Specs = filter.Uint64Value;
                 break;
+            case 4:     // the searching player class id
+                criteria.ClassId = uint8(filter.UintValue);
+                break;
+            case 6:     // applicant locale flags, a bitmask of (1 << WowLocale). The client applies no
+                        // validation to this value, so it is masked to the legal locale set here.
+                criteria.LocaleFlags = filter.UintValue & CLUB_FINDER_LOCALE_FLAGS_ALL;
+                break;
             default:
-                // 4 = player class and 6 = applicant locale flags. Matching those needs the spec
-                // bitmask's class mapping and the applicant locale encoding respectively; until both
-                // are derived they are ignored rather than matched incorrectly.
                 break;
         }
     }
@@ -229,4 +233,208 @@ void WorldSession::HandleClubFinderRequestClubsList(WorldPackets::ClubFinder::Cl
     }
 
     SendPacket(response.Write());
+}
+
+// ---------------------------------------------------------------------------------------------
+// P2: applications
+// ---------------------------------------------------------------------------------------------
+
+// The posting a clubFinderGUID refers to: the posting id is the low 32 bits of the GUID high qword.
+static ClubFinderPosting const* GetPostingFromGUID(ObjectGuid const& clubFinderGUID)
+{
+    return sClubFinderMgr->GetPosting(uint32(clubFinderGUID.GetRawValue(0) & 0xFFFFFFFF));
+}
+
+static void FillApplicationList(WorldPackets::ClubFinder::ClubFinderApplicationList& packet,
+    std::vector<ClubFinderApplication const*> const& applications)
+{
+    for (ClubFinderApplication const* application : applications)
+    {
+        ClubFinderPosting const* posting = sClubFinderMgr->GetPosting(application->PostingId);
+        if (!posting)
+            continue;
+
+        WorldPackets::ClubFinder::ClubFinderApplicationList::PendingApplication& entry = packet.Applications.emplace_back();
+        entry.ClubFinderGUID    = posting->GetClubFinderGUID();
+        entry.PlayerGUID        = application->PlayerGuid;
+        entry.LastUpdatedTime   = application->LastUpdatedTime;
+        entry.ApplicationStatus = application->Status;
+
+        // closed marks an application that is no longer actionable.
+        entry.Closed = (application->Status == CLUB_FINDER_APPLICATION_PENDING) ? 0 : 1;
+    }
+}
+
+void WorldSession::SendClubFinderPendingApplications(uint8 type)
+{
+    WorldPackets::ClubFinder::ClubFinderApplicationList response(SMSG_CLUB_FINDER_RESPONSE_CHARACTER_APPLICATION_LIST);
+    response.Type = type;
+    FillApplicationList(response, sClubFinderMgr->GetApplicationsForPlayer(GetPlayer()->GetGUID()));
+    SendPacket(response.Write());
+}
+
+// A player applies to a guild posting.
+void WorldSession::HandleClubFinderRequestMembershipToClub(WorldPackets::ClubFinder::ClubFinderRequestMembershipToClub& request)
+{
+    Player* player = GetPlayer();
+    if (!player)
+        return;
+
+    auto sendError = [&](uint8 error)
+    {
+        WorldPackets::ClubFinder::ClubFinderErrorMessage errorMessage;
+        errorMessage.Type = CLUB_FINDER_REQUEST_TYPE_GUILD;
+        errorMessage.Error = error;
+        SendPacket(errorMessage.Write());
+    };
+
+    ClubFinderPosting const* posting = GetPostingFromGUID(request.ClubFinderGUID);
+    if (!posting)
+    {
+        sendError(CLUB_FINDER_ERROR_APPLY_CLUB);
+        return;
+    }
+
+    // Applying to your own guild is meaningless, and a guild that stopped listing is not accepting.
+    if (player->GetGuildId() == posting->ClubId || !(posting->RecruitmentFlags & CLUB_FINDER_SETTING_ENABLE_LISTING))
+    {
+        sendError(CLUB_FINDER_ERROR_APPLY_CLUB);
+        return;
+    }
+
+    ClubFinderApplication application;
+    application.PostingId  = posting->PostingId;
+    application.PlayerGuid = player->GetGUID();
+    application.Comment    = request.Comment.substr(0, 512);
+    application.Specs      = request.RecruitingSpecs;
+
+    // A guild that auto-accepts admits the applicant without the officer step.
+    application.Status = (posting->RecruitmentFlags & CLUB_FINDER_SETTING_AUTO_ACCEPT)
+        ? CLUB_FINDER_APPLICATION_AUTO_APPROVED : CLUB_FINDER_APPLICATION_PENDING;
+
+    sClubFinderMgr->SaveApplication(std::move(application));
+
+    // Echo the pending list back so the applicant UI reflects the new application.
+    SendClubFinderPendingApplications(CLUB_FINDER_REQUEST_TYPE_GUILD);
+
+    TC_LOG_INFO("network", "ClubFinder: {} applied to posting {} (guild {}).",
+        GetPlayerInfo(), posting->PostingId, posting->ClubId);
+}
+
+// A guild officer asks for the applicants to their own posting. The request carries no club GUID, so
+// the posting is resolved from the sender guild membership.
+void WorldSession::HandleClubFinderGetApplicantsList(WorldPackets::ClubFinder::ClubFinderGetApplicantsList& request)
+{
+    Player* player = GetPlayer();
+    if (!player)
+        return;
+
+    WorldPackets::ClubFinder::ClubFinderApplicationList response(SMSG_CLUB_FINDER_RESPONSE_CHARACTER_APPLICATION_LIST);
+    response.Type = request.Type;
+
+    Guild* guild = sGuildMgr->GetGuildById(player->GetGuildId());
+    ClubFinderPosting const* posting = guild ? sClubFinderMgr->GetPostingForClub(guild->GetId()) : nullptr;
+
+    // No posting, or no authority over it: an empty list is the truthful answer, and never another
+    // guild applicants.
+    if (!posting || guild->GetLeaderGUID() != player->GetGUID())
+    {
+        SendPacket(response.Write());
+        return;
+    }
+
+    FillApplicationList(response, sClubFinderMgr->GetApplicationsForPosting(posting->PostingId));
+    SendPacket(response.Write());
+}
+
+void WorldSession::HandleClubFinderRequestPendingClubsList(WorldPackets::ClubFinder::ClubFinderRequestPendingClubsList& request)
+{
+    if (!GetPlayer())
+        return;
+
+    SendClubFinderPendingApplications(request.Type);
+}
+
+// A guild officer accepts or declines an applicant.
+void WorldSession::HandleClubFinderRespondToApplicant(WorldPackets::ClubFinder::ClubFinderRespondToApplicant& request)
+{
+    Player* player = GetPlayer();
+    if (!player)
+        return;
+
+    auto sendError = [&](uint8 error)
+    {
+        WorldPackets::ClubFinder::ClubFinderErrorMessage errorMessage;
+        errorMessage.Type = request.Type;
+        errorMessage.Error = error;
+        SendPacket(errorMessage.Write());
+    };
+
+    ClubFinderPosting const* posting = GetPostingFromGUID(request.ClubFinderGUID);
+    Guild* guild = posting ? sGuildMgr->GetGuildById(posting->ClubId) : nullptr;
+    if (!posting || !guild)
+    {
+        sendError(CLUB_FINDER_ERROR_RESPOND_APPLICANT);
+        return;
+    }
+
+    if (guild->GetLeaderGUID() != player->GetGUID())
+    {
+        sendError(CLUB_FINDER_ERROR_NO_INVITE_PERMISSIONS);
+        return;
+    }
+
+    ClubFinderApplication const* existing = sClubFinderMgr->GetApplication(posting->PostingId, request.PlayerGUID);
+    if (!existing)
+    {
+        sendError(CLUB_FINDER_ERROR_RESPOND_APPLICANT);
+        return;
+    }
+
+    ClubFinderApplication updated = *existing;
+    updated.Status = request.ShouldAccept ? CLUB_FINDER_APPLICATION_APPROVED : CLUB_FINDER_APPLICATION_DECLINED;
+    sClubFinderMgr->SaveApplication(std::move(updated));
+
+    // Refresh the officer applicant list so the decision shows immediately.
+    WorldPackets::ClubFinder::ClubFinderApplicationList response(SMSG_CLUB_FINDER_UPDATE_APPLICATIONS);
+    response.Type = request.Type;
+    FillApplicationList(response, sClubFinderMgr->GetApplicationsForPosting(posting->PostingId));
+    SendPacket(response.Write());
+
+    TC_LOG_INFO("network", "ClubFinder: {} responded to applicant {} for posting {} (accepted: {}).",
+        GetPlayerInfo(), request.PlayerGUID.ToString(), posting->PostingId, request.ShouldAccept);
+}
+
+// The applicant accepts an invite, or withdraws. DeclineInvite is never emitted by the client - a
+// declined invite arrives as Cancel - so both are handled as a withdrawal.
+void WorldSession::HandleClubFinderApplicationResponse(WorldPackets::ClubFinder::ClubFinderApplicationResponse& request)
+{
+    Player* player = GetPlayer();
+    if (!player)
+        return;
+
+    ClubFinderPosting const* posting = GetPostingFromGUID(request.ClubFinderGUID);
+    if (!posting)
+        return;
+
+    ClubFinderApplication const* existing = sClubFinderMgr->GetApplication(posting->PostingId, player->GetGUID());
+    if (!existing)
+        return;
+
+    ClubFinderApplication updated = *existing;
+    switch (request.UpdateType)
+    {
+        case CLUB_FINDER_APPLICATION_UPDATE_ACCEPT_INVITE:
+            updated.Status = CLUB_FINDER_APPLICATION_JOINED;
+            break;
+        case CLUB_FINDER_APPLICATION_UPDATE_DECLINE_INVITE:
+        case CLUB_FINDER_APPLICATION_UPDATE_CANCEL:
+            updated.Status = CLUB_FINDER_APPLICATION_CANCELED;
+            break;
+        default:
+            return;
+    }
+
+    sClubFinderMgr->SaveApplication(std::move(updated));
+    SendClubFinderPendingApplications(request.Type);
 }

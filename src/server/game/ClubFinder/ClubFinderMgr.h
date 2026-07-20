@@ -97,9 +97,47 @@ enum ClubFinderSettingFlag : uint32
     CLUB_FINDER_SETTING_MASK_SIZE        = 0x1C0    // Small / Medium / Large
 };
 
-// Locale is packed as (locale + 1) into bits 21-25 of a posting's recruitmentFlags.
-constexpr uint32 CLUB_FINDER_LOCALE_SHIFT = 21;
-constexpr uint32 CLUB_FINDER_LOCALE_MASK  = 0x3E00000;
+// Locale is packed as (locale + 1) into bits 21-25 of a posting's recruitmentFlags, while an
+// applicant's locale filter is a bitmask of (1 << WowLocale). Both sides use the same numbering
+// (Locale.db2 WowLocale, identical to TrinityCore's LocaleConstant); bit 9 is a hole and bits above
+// 11 are unused, so incoming filter values are masked to the legal set.
+constexpr uint32 CLUB_FINDER_LOCALE_SHIFT     = 21;
+constexpr uint32 CLUB_FINDER_LOCALE_MASK      = 0x1F;
+constexpr uint32 CLUB_FINDER_LOCALE_FLAGS_ALL = 0xEFF;
+
+// PlayerClubRequestStatus, from the client's enum registrar at 0x7FF729698C40. Four bits on the wire.
+enum ClubFinderApplicationStatus : uint8
+{
+    CLUB_FINDER_APPLICATION_NONE           = 0,
+    CLUB_FINDER_APPLICATION_PENDING        = 1,
+    CLUB_FINDER_APPLICATION_AUTO_APPROVED  = 2,
+    CLUB_FINDER_APPLICATION_DECLINED       = 3,
+    CLUB_FINDER_APPLICATION_APPROVED       = 4,
+    CLUB_FINDER_APPLICATION_JOINED         = 5,
+    CLUB_FINDER_APPLICATION_JOINED_ANOTHER = 6,
+    CLUB_FINDER_APPLICATION_CANCELED       = 7
+};
+
+// ClubFinderApplicationUpdateType. DeclineInvite is registered but never emitted by the client - a
+// declined invite is sent as Cancel - so both must be treated as "withdraw or decline".
+enum ClubFinderApplicationUpdateType : uint8
+{
+    CLUB_FINDER_APPLICATION_UPDATE_NONE           = 0,
+    CLUB_FINDER_APPLICATION_UPDATE_ACCEPT_INVITE  = 1,
+    CLUB_FINDER_APPLICATION_UPDATE_DECLINE_INVITE = 2,
+    CLUB_FINDER_APPLICATION_UPDATE_CANCEL         = 3
+};
+
+// A player's application to a posting.
+struct ClubFinderApplication
+{
+    uint32 PostingId       = 0;
+    ObjectGuid PlayerGuid;
+    std::string Comment;
+    uint64 Specs           = 0;
+    uint8 Status           = CLUB_FINDER_APPLICATION_PENDING;
+    time_t LastUpdatedTime = 0;
+};
 
 // The client accepts 0 and 1 as success in the post response and treats everything else as a failure.
 enum ClubFinderPostResult : uint8
@@ -144,6 +182,7 @@ public:
     static ClubFinderMgr* instance();
 
     void Load();
+    void LoadApplications();
 
     ClubFinderPosting const* GetPosting(uint32 postingId) const;
     ClubFinderPosting const* GetPostingForClub(uint64 clubId) const;
@@ -162,10 +201,24 @@ public:
         uint32 ItemLevel    = 0;    // filter 3: the searcher's average item level
         uint32 FocusFlags   = 0;    // filter 1: Dungeons / Raids / PvP / RP / Social
         uint32 SizeFlags    = 0;    // filter 2: Small / Medium / Large
+        uint32 LocaleFlags  = 0;    // filter 6: bitmask of (1 << WowLocale)
+        uint8 ClassId       = 0;    // filter 4: the searching player class
         uint8 Type          = CLUB_FINDER_REQUEST_TYPE_ALL;
     };
 
     std::vector<ClubFinderPosting const*> Search(SearchCriteria const& criteria) const;
+
+    // The client packs a set of specialisations into a uint64 as OR of (1 << bitIndex), where the bit
+    // index is the rank of the specialisation's id in the ascending list of every ChrSpecialization
+    // row with a non-zero ClassID. Rebuilt here from our own store so the two agree exactly.
+    void BuildSpecBitIndex();
+    uint64 GetSpecMaskForClass(uint8 classId) const;
+
+    // Applications.
+    std::vector<ClubFinderApplication const*> GetApplicationsForPosting(uint32 postingId) const;
+    std::vector<ClubFinderApplication const*> GetApplicationsForPlayer(ObjectGuid playerGuid) const;
+    ClubFinderApplication const* GetApplication(uint32 postingId, ObjectGuid playerGuid) const;
+    ClubFinderApplication const* SaveApplication(ClubFinderApplication application);
 
 private:
     ClubFinderMgr() = default;
@@ -175,6 +228,8 @@ private:
 
     std::unordered_map<uint32, ClubFinderPosting> _postings;    // by posting id
     std::unordered_map<uint64, uint32> _postingsByClub;         // club id -> posting id
+    std::unordered_map<uint32, uint64> _specMaskByClass;        // class id -> mask of its spec bits
+    std::vector<ClubFinderApplication> _applications;
     uint32 _maxPostingId = 0;
 };
 

@@ -17,6 +17,7 @@
 
 #include "ClubFinderMgr.h"
 #include "DatabaseEnv.h"
+#include "DB2Stores.h"
 #include "GameTime.h"
 #include "Log.h"
 #include "Timer.h"
@@ -81,6 +82,127 @@ void ClubFinderMgr::Load()
     while (result->NextRow());
 
     TC_LOG_INFO("server.loading", ">> Loaded {} club finder postings in {} ms", _postings.size(), GetMSTimeDiffToNow(oldMSTime));
+
+    LoadApplications();
+    BuildSpecBitIndex();
+}
+
+void ClubFinderMgr::LoadApplications()
+{
+    _applications.clear();
+
+    QueryResult result = CharacterDatabase.Query("SELECT postingId, playerGuid, comment, specs, status, lastUpdatedTime FROM club_finder_application");
+    if (!result)
+        return;
+
+    do
+    {
+        Field* fields = result->Fetch();
+
+        ClubFinderApplication application;
+        application.PostingId       = fields[0].GetUInt32();
+        application.PlayerGuid      = ObjectGuid::Create<HighGuid::Player>(fields[1].GetUInt64());
+        application.Comment         = fields[2].GetString();
+        application.Specs           = fields[3].GetUInt64();
+        application.Status          = fields[4].GetUInt8();
+        application.LastUpdatedTime = fields[5].GetInt64();
+
+        _applications.push_back(std::move(application));
+    }
+    while (result->NextRow());
+
+    TC_LOG_INFO("server.loading", ">> Loaded {} club finder applications", _applications.size());
+}
+
+// The client's bit index for a specialisation is its rank in the ascending list of every
+// ChrSpecialization id whose ClassID is non-zero (builder 0x7FF72ACAB250: filter ClassID != 0, sort
+// ascending, assign running index). Reproduced here so a class filter can be tested against the
+// recruitingSpecs mask a client sent us.
+void ClubFinderMgr::BuildSpecBitIndex()
+{
+    _specMaskByClass.clear();
+
+    std::vector<ChrSpecializationEntry const*> specs;
+    for (ChrSpecializationEntry const* spec : sChrSpecializationStore)
+        if (spec->ClassID)
+            specs.push_back(spec);
+
+    std::sort(specs.begin(), specs.end(), [](ChrSpecializationEntry const* left, ChrSpecializationEntry const* right)
+    {
+        return left->ID < right->ID;
+    });
+
+    if (specs.size() > 64)
+    {
+        // The client shifts with `bts`, which masks the count to 63 and would silently alias specs
+        // onto each other. Refuse to build a mapping we know is wrong rather than mismatch quietly.
+        TC_LOG_ERROR("server.loading", "ClubFinder: {} class specialisations exceed the 64 bit recruiting mask; spec filters disabled.", specs.size());
+        return;
+    }
+
+    for (std::size_t bitIndex = 0; bitIndex < specs.size(); ++bitIndex)
+        _specMaskByClass[specs[bitIndex]->ClassID] |= UI64LIT(1) << bitIndex;
+}
+
+uint64 ClubFinderMgr::GetSpecMaskForClass(uint8 classId) const
+{
+    auto itr = _specMaskByClass.find(classId);
+    return itr != _specMaskByClass.end() ? itr->second : UI64LIT(0);
+}
+
+std::vector<ClubFinderApplication const*> ClubFinderMgr::GetApplicationsForPosting(uint32 postingId) const
+{
+    std::vector<ClubFinderApplication const*> applications;
+    for (ClubFinderApplication const& application : _applications)
+        if (application.PostingId == postingId)
+            applications.push_back(&application);
+
+    return applications;
+}
+
+std::vector<ClubFinderApplication const*> ClubFinderMgr::GetApplicationsForPlayer(ObjectGuid playerGuid) const
+{
+    std::vector<ClubFinderApplication const*> applications;
+    for (ClubFinderApplication const& application : _applications)
+        if (application.PlayerGuid == playerGuid)
+            applications.push_back(&application);
+
+    return applications;
+}
+
+ClubFinderApplication const* ClubFinderMgr::GetApplication(uint32 postingId, ObjectGuid playerGuid) const
+{
+    for (ClubFinderApplication const& application : _applications)
+        if (application.PostingId == postingId && application.PlayerGuid == playerGuid)
+            return &application;
+
+    return nullptr;
+}
+
+ClubFinderApplication const* ClubFinderMgr::SaveApplication(ClubFinderApplication application)
+{
+    application.LastUpdatedTime = GameTime::GetGameTime();
+
+    CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_REP_CLUB_FINDER_APPLICATION);
+    stmt->setUInt32(0, application.PostingId);
+    stmt->setUInt64(1, application.PlayerGuid.GetCounter());
+    stmt->setString(2, application.Comment);
+    stmt->setUInt64(3, application.Specs);
+    stmt->setUInt8(4, application.Status);
+    stmt->setInt64(5, application.LastUpdatedTime);
+    CharacterDatabase.Execute(stmt);
+
+    for (ClubFinderApplication& existing : _applications)
+    {
+        if (existing.PostingId == application.PostingId && existing.PlayerGuid == application.PlayerGuid)
+        {
+            existing = std::move(application);
+            return &existing;
+        }
+    }
+
+    _applications.push_back(std::move(application));
+    return &_applications.back();
 }
 
 ClubFinderPosting const* ClubFinderMgr::GetPosting(uint32 postingId) const
@@ -182,6 +304,28 @@ std::vector<ClubFinderPosting const*> ClubFinderMgr::Search(SearchCriteria const
         // A spec filter matches when the guild recruits at least one of the requested specs.
         if (criteria.Specs && posting.RecruitingSpecs && !(posting.RecruitingSpecs & criteria.Specs))
             continue;
+
+        // A class filter matches when the guild recruits any specialisation of that class. The spec
+        // mask uses the client bit ordering, rebuilt in BuildSpecBitIndex.
+        if (criteria.ClassId && posting.RecruitingSpecs)
+            if (uint64 classMask = GetSpecMaskForClass(criteria.ClassId); classMask && !(posting.RecruitingSpecs & classMask))
+                continue;
+
+        // Locale: the posting packs (locale + 1) into bits 21-25 of its flags, the applicant sends a
+        // bitmask of (1 << locale). An unset posting locale (packed 0) or an empty applicant mask is
+        // treated as "no constraint" - the client gives no evidence either way, so the permissive
+        // reading is used rather than silently hiding postings.
+        if (criteria.LocaleFlags)
+        {
+            uint32 const packedLocale = (posting.RecruitmentFlags >> CLUB_FINDER_LOCALE_SHIFT) & CLUB_FINDER_LOCALE_MASK;
+            if (packedLocale)
+            {
+                uint32 const localeId = packedLocale - 1;
+                // Bit 9 is a hole in the locale table and anything above 11 is unused.
+                if (localeId == 9 || localeId > 11 || !((criteria.LocaleFlags >> localeId) & 1))
+                    continue;
+            }
+        }
 
         if (!needle.empty())
         {

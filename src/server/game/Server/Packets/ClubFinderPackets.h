@@ -184,6 +184,92 @@ namespace WorldPackets
             bool Unknown   = false;   // 1 bit; false in every capture
         };
 
+        // Lua RequestMembershipToClub(clubFinderGUID, comment, specIDs). Comment buffer is char[513]
+        // client-side, so it is clamped to 512 here even though Bits<10> would permit 1023.
+        class ClubFinderRequestMembershipToClub final : public ClientPacket
+        {
+        public:
+            explicit ClubFinderRequestMembershipToClub(WorldPacket&& packet) : ClientPacket(CMSG_CLUB_FINDER_REQUEST_MEMBERSHIP_TO_CLUB, std::move(packet)) { }
+
+            void Read() override;
+
+            ObjectGuid ClubFinderGUID;
+            uint64 RecruitingSpecs = 0;
+            std::string Comment;
+        };
+
+        // Body is a single byte. Notably it carries no club GUID, so the club has to be inferred from
+        // the sender's own guild.
+        class ClubFinderGetApplicantsList final : public ClientPacket
+        {
+        public:
+            explicit ClubFinderGetApplicantsList(WorldPacket&& packet) : ClientPacket(CMSG_CLUB_FINDER_GET_APPLICANTS_LIST, std::move(packet)) { }
+
+            void Read() override;
+
+            uint8 Type = 0;
+        };
+
+        class ClubFinderRequestPendingClubsList final : public ClientPacket
+        {
+        public:
+            explicit ClubFinderRequestPendingClubsList(WorldPacket&& packet) : ClientPacket(CMSG_CLUB_FINDER_REQUEST_PENDING_CLUBS_LIST, std::move(packet)) { }
+
+            void Read() override;
+
+            uint8 Type = 0;
+        };
+
+        // The Lua binding also takes playerName and reported, but neither reaches the wire.
+        class ClubFinderRespondToApplicant final : public ClientPacket
+        {
+        public:
+            explicit ClubFinderRespondToApplicant(WorldPacket&& packet) : ClientPacket(CMSG_CLUB_FINDER_RESPOND_TO_APPLICANT, std::move(packet)) { }
+
+            void Read() override;
+
+            ObjectGuid ClubFinderGUID;
+            ObjectGuid PlayerGUID;
+            uint8 Type        = 0;
+            bool ShouldAccept = false;
+            bool ForceAccept  = false;
+        };
+
+        class ClubFinderApplicationResponse final : public ClientPacket
+        {
+        public:
+            explicit ClubFinderApplicationResponse(WorldPacket&& packet) : ClientPacket(CMSG_CLUB_FINDER_APPLICATION_RESPONSE, std::move(packet)) { }
+
+            void Read() override;
+
+            ObjectGuid ClubFinderGUID;
+            uint8 UpdateType = 0;   // ClubFinderApplicationUpdateType
+            uint8 Type       = 0;   // ClubFinderRequestType
+        };
+
+        // Record type ClubFinderPendingApplicationData / ClubFinderUpdateApplicationData - both readers
+        // are instruction-for-instruction identical, so the two opcodes share this body. Verified
+        // byte-exact against the captured 5-byte empty and 74-byte two-record bodies.
+        class ClubFinderApplicationList final : public ServerPacket
+        {
+        public:
+            explicit ClubFinderApplicationList(OpcodeServer opcode) : ServerPacket(opcode, 5) { }
+
+            WorldPacket const* Write() override;
+
+            struct PendingApplication
+            {
+                ObjectGuid ClubFinderGUID;
+                ObjectGuid PlayerGUID;
+                int64 LastUpdatedTime = 0;
+                uint32 Closed         = 0;
+                uint8 ApplicationStatus = 0;   // 4 bits, PlayerClubRequestStatus
+            };
+
+            std::vector<PendingApplication> Applications;
+            uint8 Type = 0;   // 3 bits, ClubFinderRequestType
+        };
+
         // Reader sub_7FF7290B4020: a 3-bit field (+32 = b >> 5) and a 4-bit field (+36 = (b >> 1) & 0xF).
         //
         // Handler sub_7FF72ACABB30 switches on the 4-bit field, mapping each value 1:1 onto an

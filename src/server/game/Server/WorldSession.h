@@ -1107,6 +1107,11 @@ namespace WorldPackets
         class ClubFinderRequestSubscribedClubPostingIds;
         class ClubFinderRequestClubsData;
         class ClubFinderRequestClubsList;
+        class ClubFinderRequestMembershipToClub;
+        class ClubFinderGetApplicantsList;
+        class ClubFinderRequestPendingClubsList;
+        class ClubFinderRespondToApplicant;
+        class ClubFinderApplicationResponse;
     }
 
     namespace Token
@@ -2474,6 +2479,12 @@ class TC_GAME_API WorldSession
         void HandleClubFinderRequestSubscribedClubPostingIds(WorldPackets::ClubFinder::ClubFinderRequestSubscribedClubPostingIds& request);
         void HandleClubFinderRequestClubsData(WorldPackets::ClubFinder::ClubFinderRequestClubsData& request);
         void HandleClubFinderRequestClubsList(WorldPackets::ClubFinder::ClubFinderRequestClubsList& request);
+        void HandleClubFinderRequestMembershipToClub(WorldPackets::ClubFinder::ClubFinderRequestMembershipToClub& request);
+        void HandleClubFinderGetApplicantsList(WorldPackets::ClubFinder::ClubFinderGetApplicantsList& request);
+        void HandleClubFinderRequestPendingClubsList(WorldPackets::ClubFinder::ClubFinderRequestPendingClubsList& request);
+        void HandleClubFinderRespondToApplicant(WorldPackets::ClubFinder::ClubFinderRespondToApplicant& request);
+        void HandleClubFinderApplicationResponse(WorldPackets::ClubFinder::ClubFinderApplicationResponse& request);
+        void SendClubFinderPendingApplications(uint8 type);
 
         // Token
         void HandleCommerceTokenGetLog(WorldPackets::Token::CommerceTokenGetLog& updateListedAuctionableTokens);
