@@ -1299,6 +1299,11 @@ static void DungeonAdvanceTarget(BotSnapshotView const& s, BotAI& ai,
     if (advice.route_waypoints.empty()) return;
     int const cur = ai.dungeon_route_wp(s.map_id());
     if (cur < 0 || cur >= int(advice.route_waypoints.size())) return;
+    // Route CONSUMED for this crumb: the follower already declined here at
+    // the arrived final crumb and handed the approach to the boss-ward
+    // fallback. Never re-select it — re-selection is what dragged the tank
+    // back into the 20y patrol loop once the reached-latch released.
+    if (ai.route_consumed_idx(s.map_id()) == cur) return;
     auto const& wp = advice.route_waypoints[size_t(cur)];
     float bx2, by2, bz2; s.position(bx2, by2, bz2);
     constexpr float kRouteArrive = 8.0f;   // matches the route follower
@@ -6039,6 +6044,20 @@ bool DungeonDispatch(BotSnapshotView const& s, BotAI& ai,
                                     if (cur == boss_i && crumb_d(cur) <= kRouteArrive)
                                     {
                                         // wp_found stays false -> fall through.
+                                        // CONSUME the route for this map: the chain is
+                                        // walked, the boss-ward fallback owns the rest.
+                                        // Without this the campaign's 20y patrol loop
+                                        // runs forever (live 2026-07-20, Blackfathom +
+                                        // Sunken Temple): decline -> fallback steps 20y
+                                        // boss-ward (obj=-1) -> bot now >12y from the
+                                        // crumb -> the 1i latch-release band frees the
+                                        // reached-latch -> this rule RE-ACQUIRES the
+                                        // crumb it already finished and walks the tank
+                                        // back -> arrive -> decline -> repeat. 1i's
+                                        // release is right for a transient brush at a
+                                        // MID-route crumb; at the FINAL crumb the route
+                                        // is genuinely done and must stop competing.
+                                        ai.set_route_consumed(cur, s.map_id());
                                     }
                                     // Steer to the committed crumb; if it is (now)
                                     // unreachable, walk forward through the prefix to the

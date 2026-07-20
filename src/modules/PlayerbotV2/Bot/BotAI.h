@@ -896,6 +896,22 @@ public:
     void       set_adv_route_reached(int32_t idx, uint32 map_id)
     { adv_route_reached_idx_ = idx; adv_route_reached_map_ = map_id; }
 
+    // ---- route CONSUMED latch (campaign class-B, 2026-07-20) ----
+    // Set by the route follower when it declines at the arrived FINAL crumb
+    // (cur == boss_i, within kRouteArrive): the chain is walked and the
+    // boss-ward fallback owns the remaining approach. While consumed, the
+    // in-combat/fallback crumb substitution stops re-selecting that crumb,
+    // so the tank cannot be dragged back to it after the fallback steps
+    // 20y boss-ward and the reached-latch release band (1i) frees the
+    // ordinary latch — the live 20y patrol loop (Blackfathom, Sunken
+    // Temple). Map-bound (-1 sentinel on mismatch, self-invalidating on
+    // LFG teleport) exactly like dungeon_route_wp / adv_route_reached.
+    // Cleared automatically when the cursor moves OFF the consumed index.
+    int32_t    route_consumed_idx(uint32 map_id) const
+    { return (route_consumed_map_ == map_id) ? route_consumed_idx_ : -1; }
+    void       set_route_consumed(int32_t idx, uint32 map_id)
+    { route_consumed_idx_ = idx; route_consumed_map_ = map_id; }
+
     // ---- dungeon off-mesh crossing commitment ----
     // When a dungeon bot begins crossing an off-mesh bridge (a single stable
     // far-vertex step longer than the per-tick step cap), it MUST keep targeting
@@ -2977,6 +2993,9 @@ private:
     // invalidates on map change). See adv_route_reached_idx() above.
     int32_t        adv_route_reached_idx_ = -1;
     uint32         adv_route_reached_map_ = 0;
+    // Route-consumed latch + its map (see route_consumed_idx() above).
+    int32_t        route_consumed_idx_ = -1;
+    uint32         route_consumed_map_ = 0;
     // Tank chase-commit latch fields (see chase_commit_target() above).
     ObjectGuid     chase_commit_target_;
     uint32         chase_commit_since_ms_     = 0;
