@@ -1325,6 +1325,10 @@ struct PacketCounter
 };
 
 /// Player session in the World
+#if defined(TRINITY_PLAYERBOT_V2)
+namespace Playerbot::V2 { class BotSession; }
+#endif
+
 class TC_GAME_API WorldSession
 {
     public:
@@ -1335,7 +1339,7 @@ class TC_GAME_API WorldSession
             , bool is_bot = false
 #endif
             );
-        ~WorldSession();
+        virtual ~WorldSession();                                                // virtual: BotSession derives from this
 
         bool PlayerLoading() const { return !m_playerLoading.IsEmpty(); }
         bool PlayerLogout() const { return m_playerLogout; }
@@ -1345,7 +1349,7 @@ class TC_GAME_API WorldSession
 
         bool IsAddonRegistered(std::string_view prefix) const;
 
-        void SendPacket(WorldPacket const* packet, bool forced = false);
+        virtual void SendPacket(WorldPacket const* packet, bool forced = false);
 
         void SendNotification(char const* format, ...) ATTR_PRINTF(2, 3);
         void SendNotification(uint32 stringId, ...);
@@ -2672,6 +2676,11 @@ class TC_GAME_API WorldSession
         AsyncCallbackProcessor<TransactionCallback> _transactionCallbacks;
         AsyncCallbackProcessor<SQLQueryHolderCallback> _queryHolderProcessor;
 
+#if defined(TRINITY_PLAYERBOT_V2)
+    // BotSession derives from WorldSession and drives a bot through the same
+    // login/logout and packet paths a real client uses.
+    friend class Playerbot::V2::BotSession;
+#endif
     friend class World;
     protected:
         class DosProtection
