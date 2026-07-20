@@ -19,6 +19,7 @@
 #include "ClubFinderMgr.h"
 #include "Common.h"
 #include "DatabaseEnv.h"
+#include "Log.h"
 #include "SupportMgr.h"
 #include "TicketPackets.h"
 
