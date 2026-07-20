@@ -222,6 +222,10 @@ void LoginDatabaseConnection::DoPrepareStatements()
 
     PrepareStatement(LOGIN_INS_ACCOUNT_WOW_TOKEN, "INSERT INTO account_wow_token (id, account, state, price, createTime) VALUES (?, ?, ?, ?, ?)", CONNECTION_ASYNC);
     PrepareStatement(LOGIN_UPD_ACCOUNT_WOW_TOKEN, "UPDATE account_wow_token SET account = ?, state = ?, price = ? WHERE id = ?", CONNECTION_ASYNC);
+
+    // Playerbot module statements
+    PrepareStatement(LOGIN_SEL_BNET_ACCOUNT_EXISTS, "SELECT ba.id FROM battlenet_accounts ba LEFT JOIN account a ON a.battlenet_account = ba.id WHERE ba.id = ? LIMIT 1", CONNECTION_SYNCH);
+    PrepareStatement(LOGIN_SEL_BOT_ACCOUNTS_ALL, "SELECT ba.id, ba.email, a.id as legacy_account_id FROM battlenet_accounts ba LEFT JOIN account a ON a.battlenet_account = ba.id WHERE ba.email LIKE '%#%' OR ba.email LIKE '%@playerbot.local' ORDER BY ba.email", CONNECTION_SYNCH);
 }
 
 LoginDatabaseConnection::LoginDatabaseConnection(MySQLConnectionInfo& connInfo, ConnectionFlags connectionFlags) : MySQLConnection(connInfo, connectionFlags)

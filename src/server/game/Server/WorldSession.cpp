@@ -16,6 +16,7 @@
  */
 
 #include "WorldSession.h"
+#include "Playerbot/PlayerbotHooks.h"
 #include "Account.h"
 #include "HousingNeighborhoodMirrorEntity.h"
 #include "HousingPlayerHouseEntity.h"
@@ -110,7 +111,11 @@ bool WorldSessionFilter::Process(WorldPacket* packet)
 /// WorldSession constructor
 WorldSession::WorldSession(uint32 id, std::string&& name, uint32 battlenetAccountId, std::string&& battlenetAccountEmail,
     std::shared_ptr<WorldSocket>&& sock, AccountTypes sec, uint8 expansion, time_t mute_time, std::string&& os, Minutes timezoneOffset,
-    uint32 build, ClientBuild::VariantId clientBuildVariant, LocaleConstant locale, uint32 recruiter, bool isARecruiter) :
+    uint32 build, ClientBuild::VariantId clientBuildVariant, LocaleConstant locale, uint32 recruiter, bool isARecruiter
+#if defined(TRINITY_PLAYERBOT_V2)
+    , bool is_bot
+#endif
+    ) :
     m_muteTime(mute_time),
     m_timeOutTime(0),
     AntiDOS(this),
@@ -144,6 +149,9 @@ WorldSession::WorldSession(uint32 id, std::string&& name, uint32 battlenetAccoun
     _filterAddonMessages(false),
     recruiterId(recruiter),
     isRecruiter(isARecruiter),
+#if defined(TRINITY_PLAYERBOT_V2)
+    _isBot(is_bot),
+#endif
     _RBACData(nullptr),
     expireTime(60000), // 1 min after socket loss, session is deleted
     forceExit(false),

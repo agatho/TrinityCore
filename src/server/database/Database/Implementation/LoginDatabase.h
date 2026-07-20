@@ -207,6 +207,10 @@ enum LoginDatabaseStatements : uint32
     LOGIN_INS_ACCOUNT_WOW_TOKEN,
     LOGIN_UPD_ACCOUNT_WOW_TOKEN,
 
+    // Playerbot module statements
+    LOGIN_SEL_BNET_ACCOUNT_EXISTS,
+    LOGIN_SEL_BOT_ACCOUNTS_ALL,
+
     MAX_LOGINDATABASE_STATEMENTS
 };
 

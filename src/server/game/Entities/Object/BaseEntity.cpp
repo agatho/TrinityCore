@@ -674,7 +674,9 @@ UF::UpdateFieldFlag BaseEntity::GetUpdateFieldFlagsFor(Player const* /*target*/)
 
 void BaseEntity::AddToObjectUpdateIfNeeded()
 {
-    if (m_inWorld && !m_objectUpdated)
+    // Playerbot: also honour m_isDestroyedObject, so a bot marked for removal cannot be
+    // re-added to _updateObjects by a late property write and leave a dangling pointer.
+    if (m_inWorld && !m_objectUpdated && !m_isDestroyedObject)
         m_objectUpdated = AddToObjectUpdate();
 }
 

@@ -88,6 +88,10 @@ enum WorldDatabaseStatements : uint32
     WORLD_INS_CONDITION,
     WORLD_SEL_WARBAND_REPUTATION_FACTIONS,
 
+    // Playerbot module statements
+    WORLD_SEL_QUEST_GIVER_SPAWNS,
+    WORLD_SEL_REPAIR_VENDOR_SPAWNS,
+
     MAX_WORLDDATABASE_STATEMENTS
 };
 

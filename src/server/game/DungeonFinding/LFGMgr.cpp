@@ -16,6 +16,7 @@
  */
 
 #include "LFGMgr.h"
+#include "Playerbot/PlayerbotHooks.h"
 #include "DatabaseEnv.h"
 #include "DB2Stores.h"
 #include "DisableMgr.h"
@@ -368,6 +369,11 @@ void LFGMgr::Update(uint32 diff)
                 else
                     SendLfgUpdateStatus(guid, LfgUpdateData(LFG_UPDATETYPE_PROPOSAL_BEGIN, GetSelectedDungeons(guid)), false);
                 SendLfgUpdateProposal(guid, proposal);
+
+                // PlayerbotV2: bots ack the proposal synchronously so a full group answers
+                // well inside LFG_TIME_PROPOSAL instead of waiting for a snapshot poll.
+                if (Player* candidate = ObjectAccessor::FindConnectedPlayer(guid))
+                    Playerbot::Hooks::OnLfgProposalReceived(candidate, proposalId);
             }
 
             if (proposal.state == LFG_PROPOSAL_SUCCESS)
