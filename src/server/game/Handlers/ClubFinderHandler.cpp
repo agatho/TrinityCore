@@ -18,6 +18,8 @@
 #include "ClubFinderPackets.h"
 #include "ClubFinderMgr.h"
 #include "CharacterCache.h"
+#include "DatabaseEnv.h"
+#include "ObjectAccessor.h"
 #include "Guild.h"
 #include "GuildMgr.h"
 #include "Log.h"
@@ -256,6 +258,10 @@ static void FillApplicationList(WorldPackets::ClubFinder::ClubFinderApplicationL
         if (!posting)
             continue;
 
+        // The client treats an application older than a week as expired; do not list it as live.
+        if (application->Status == CLUB_FINDER_APPLICATION_PENDING && ClubFinderMgr::IsApplicationExpired(*application))
+            continue;
+
         WorldPackets::ClubFinder::ClubFinderApplicationList::PendingApplication& entry = packet.Applications.emplace_back();
         entry.ClubFinderGUID    = posting->GetClubFinderGUID();
         entry.PlayerGUID        = application->PlayerGuid;
@@ -297,8 +303,11 @@ void WorldSession::HandleClubFinderRequestMembershipToClub(WorldPackets::ClubFin
         return;
     }
 
-    // Applying to your own guild is meaningless, and a guild that stopped listing is not accepting.
-    if (player->GetGuildId() == posting->ClubId || !(posting->RecruitmentFlags & CLUB_FINDER_SETTING_ENABLE_LISTING))
+    // Applying to your own guild is meaningless, and a guild that stopped listing or let its posting
+    // lapse is not accepting.
+    if (player->GetGuildId() == posting->ClubId
+        || !(posting->RecruitmentFlags & CLUB_FINDER_SETTING_ENABLE_LISTING)
+        || ClubFinderMgr::IsPostingExpired(*posting))
     {
         sendError(CLUB_FINDER_ERROR_APPLY_CLUB);
         return;
@@ -395,6 +404,30 @@ void WorldSession::HandleClubFinderRespondToApplicant(WorldPackets::ClubFinder::
 
     ClubFinderApplication updated = *existing;
     updated.Status = request.ShouldAccept ? CLUB_FINDER_APPLICATION_APPROVED : CLUB_FINDER_APPLICATION_DECLINED;
+
+    // Accepting has to actually admit the player, otherwise the whole flow ends in a status change
+    // that means nothing. A player who joined elsewhere in the meantime is recorded as such rather
+    // than being silently dropped.
+    if (request.ShouldAccept)
+    {
+        if (Player* applicant = ObjectAccessor::FindConnectedPlayer(request.PlayerGUID); applicant && applicant->GetGuildId())
+            updated.Status = CLUB_FINDER_APPLICATION_JOINED_ANOTHER;
+        else
+        {
+            CharacterDatabaseTransaction trans = CharacterDatabase.BeginTransaction();
+            if (guild->AddMember(trans, request.PlayerGUID))
+            {
+                CharacterDatabase.CommitTransaction(trans);
+                updated.Status = CLUB_FINDER_APPLICATION_JOINED;
+            }
+            else
+            {
+                sendError(CLUB_FINDER_ERROR_ACCEPT_APPLICATION);
+                return;
+            }
+        }
+    }
+
     sClubFinderMgr->SaveApplication(std::move(updated));
 
     // Refresh the officer applicant list so the decision shows immediately.
@@ -402,6 +435,10 @@ void WorldSession::HandleClubFinderRespondToApplicant(WorldPackets::ClubFinder::
     response.Type = request.Type;
     FillApplicationList(response, sClubFinderMgr->GetApplicationsForPosting(posting->PostingId));
     SendPacket(response.Write());
+
+    // The applicant is the one waiting on this answer, so push their own list too.
+    if (Player* applicant = ObjectAccessor::FindConnectedPlayer(request.PlayerGUID))
+        applicant->GetSession()->SendClubFinderPendingApplications(request.Type);
 
     TC_LOG_INFO("network", "ClubFinder: {} responded to applicant {} for posting {} (accepted: {}).",
         GetPlayerInfo(), request.PlayerGUID.ToString(), posting->PostingId, request.ShouldAccept);
@@ -439,4 +476,27 @@ void WorldSession::HandleClubFinderApplicationResponse(WorldPackets::ClubFinder:
 
     sClubFinderMgr->SaveApplication(std::move(updated));
     SendClubFinderPendingApplications(request.Type);
+}
+
+// An officer asks whether they may whisper an applicant. Answering opens the whisper window client
+// side, so it is gated on the officer actually owning the posting and the target actually having
+// applied to it.
+void WorldSession::HandleClubFinderWhisperApplicantRequest(WorldPackets::ClubFinder::ClubFinderWhisperApplicantRequest& request)
+{
+    Player* player = GetPlayer();
+    if (!player)
+        return;
+
+    ClubFinderPosting const* posting = GetPostingFromGUID(request.ClubFinderGUID);
+    Guild* guild = posting ? sGuildMgr->GetGuildById(posting->ClubId) : nullptr;
+    if (!posting || !guild || guild->GetLeaderGUID() != player->GetGUID())
+        return;
+
+    if (!sClubFinderMgr->GetApplication(posting->PostingId, request.PlayerGUID))
+        return;
+
+    WorldPackets::ClubFinder::ClubFinderWhisperApplicantResponse response;
+    response.ClubFinderGUID = request.ClubFinderGUID;
+    response.PlayerGUID = request.PlayerGUID;
+    SendPacket(response.Write());
 }

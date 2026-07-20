@@ -1112,6 +1112,7 @@ namespace WorldPackets
         class ClubFinderRequestPendingClubsList;
         class ClubFinderRespondToApplicant;
         class ClubFinderApplicationResponse;
+        class ClubFinderWhisperApplicantRequest;
     }
 
     namespace Token
@@ -2484,6 +2485,7 @@ class TC_GAME_API WorldSession
         void HandleClubFinderRequestPendingClubsList(WorldPackets::ClubFinder::ClubFinderRequestPendingClubsList& request);
         void HandleClubFinderRespondToApplicant(WorldPackets::ClubFinder::ClubFinderRespondToApplicant& request);
         void HandleClubFinderApplicationResponse(WorldPackets::ClubFinder::ClubFinderApplicationResponse& request);
+        void HandleClubFinderWhisperApplicantRequest(WorldPackets::ClubFinder::ClubFinderWhisperApplicantRequest& request);
         void SendClubFinderPendingApplications(uint8 type);
 
         // Token

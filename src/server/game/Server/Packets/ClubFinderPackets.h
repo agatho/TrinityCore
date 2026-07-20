@@ -289,6 +289,30 @@ namespace WorldPackets
             uint8 Type = 0;   // 3 bits, ClubFinderRequestType
         };
 
+        // An officer asks permission to whisper an applicant. Both directions carry the same pair of
+        // PackedGuids; the client opens a whisper to the applicant when the response arrives.
+        class ClubFinderWhisperApplicantRequest final : public ClientPacket
+        {
+        public:
+            explicit ClubFinderWhisperApplicantRequest(WorldPacket&& packet) : ClientPacket(CMSG_CLUB_FINDER_WHISPER_APPLICANT_REQUEST, std::move(packet)) { }
+
+            void Read() override;
+
+            ObjectGuid ClubFinderGUID;
+            ObjectGuid PlayerGUID;
+        };
+
+        class ClubFinderWhisperApplicantResponse final : public ServerPacket
+        {
+        public:
+            explicit ClubFinderWhisperApplicantResponse() : ServerPacket(SMSG_CLUB_FINDER_WHISPER_APPLICANT_RESPONSE, 34) { }
+
+            WorldPacket const* Write() override;
+
+            ObjectGuid ClubFinderGUID;
+            ObjectGuid PlayerGUID;
+        };
+
         // Reader sub_7FF7290B4020: a 3-bit field (+32 = b >> 5) and a 4-bit field (+36 = (b >> 1) & 0xF).
         //
         // Handler sub_7FF72ACABB30 switches on the 4-bit field, mapping each value 1:1 onto an

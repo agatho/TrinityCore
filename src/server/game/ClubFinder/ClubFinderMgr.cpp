@@ -18,6 +18,7 @@
 #include "ClubFinderMgr.h"
 #include "DatabaseEnv.h"
 #include "DB2Stores.h"
+#include "Common.h"
 #include "GameTime.h"
 #include "Log.h"
 #include "Timer.h"
@@ -269,6 +270,18 @@ ClubFinderPosting const* ClubFinderMgr::SavePosting(ClubFinderPosting posting)
     return &_postings[postingId];
 }
 
+bool ClubFinderMgr::IsPostingExpired(ClubFinderPosting const& posting)
+{
+    return posting.LastUpdatedTime
+        && GameTime::GetGameTime() - posting.LastUpdatedTime > time_t(CLUB_FINDER_POSTING_EXPIRY_DAYS) * DAY;
+}
+
+bool ClubFinderMgr::IsApplicationExpired(ClubFinderApplication const& application)
+{
+    return application.LastUpdatedTime
+        && GameTime::GetGameTime() - application.LastUpdatedTime > time_t(CLUB_FINDER_APPLICATION_EXPIRY_DAYS) * DAY;
+}
+
 bool ClubFinderMgr::AddPostingDisplayFlags(uint32 postingId, uint32 flags)
 {
     auto itr = _postings.find(postingId);
@@ -306,6 +319,10 @@ std::vector<ClubFinderPosting const*> ClubFinderMgr::Search(SearchCriteria const
 
         // A guild that has not enabled its listing is not advertising.
         if (!(posting.RecruitmentFlags & CLUB_FINDER_SETTING_ENABLE_LISTING))
+            continue;
+
+        // The client stops showing a posting as active after 30 days; do not offer it either.
+        if (IsPostingExpired(posting))
             continue;
 
         // The posting only advertises to players who meet its own item level requirement.

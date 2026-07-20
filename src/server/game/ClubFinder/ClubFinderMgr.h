@@ -97,6 +97,12 @@ enum ClubFinderSettingFlag : uint32
     CLUB_FINDER_SETTING_MASK_SIZE        = 0x1C0    // Small / Medium / Large
 };
 
+// The client renders a posting as expired after 30 days without an update, and an application after 7
+// (Blizzard_Communities/ClubFinder.lua). The server enforces the same windows so its view agrees with
+// what players are shown.
+constexpr uint32 CLUB_FINDER_POSTING_EXPIRY_DAYS     = 30;
+constexpr uint32 CLUB_FINDER_APPLICATION_EXPIRY_DAYS = 7;
+
 // Locale is packed as (locale + 1) into bits 21-25 of a posting's recruitmentFlags, while an
 // applicant's locale filter is a bitmask of (1 << WowLocale). Both sides use the same numbering
 // (Locale.db2 WowLocale, identical to TrinityCore's LocaleConstant); bit 9 is a hole and bits above
@@ -192,6 +198,9 @@ public:
 
     // Adds moderation flags to a posting and persists them. Used when a posting is reported.
     bool AddPostingDisplayFlags(uint32 postingId, uint32 flags);
+
+    static bool IsPostingExpired(ClubFinderPosting const& posting);
+    static bool IsApplicationExpired(ClubFinderApplication const& application);
 
     // All currently listed postings, for the browse responses built on top of this in P1.
     std::vector<ClubFinderPosting const*> GetAllPostings() const;

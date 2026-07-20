@@ -256,6 +256,20 @@ WorldPacket const* ClubFinderApplicationList::Write()
     return &_worldPacket;
 }
 
+void ClubFinderWhisperApplicantRequest::Read()
+{
+    _worldPacket >> ClubFinderGUID;
+    _worldPacket >> PlayerGUID;
+}
+
+WorldPacket const* ClubFinderWhisperApplicantResponse::Write()
+{
+    _worldPacket << ClubFinderGUID;
+    _worldPacket << PlayerGUID;
+
+    return &_worldPacket;
+}
+
 WorldPacket const* ClubFinderErrorMessage::Write()
 {
     _worldPacket << Bits<3>(Type);
