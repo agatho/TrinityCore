@@ -16,6 +16,7 @@
  */
 
 #include "WorldSession.h"
+#include "WowTokenMgr.h"
 #include "BattlePayMgr.h"
 #include "BattlePayPackets.h"
 #include "Log.h"
@@ -103,6 +104,14 @@ void WorldSession::BattlePayProcessPurchase(uint32 productID)
         case 2: // spell (mount / toy / appearance)
             if (!player->HasSpell(product->GrantId))
                 player->LearnSpell(product->GrantId, false);
+            granted = true;
+            break;
+        case 3: // WoW Token - the retail acquisition path: bought from the shop, then sellable
+            for (uint32 i = 0; i < std::max<uint32>(product->GrantCount, 1); ++i)
+                sWowTokenMgr->CreateToken(GetAccountId(), WOW_TOKEN_STATE_AUCTIONABLE);
+
+            // Confirmed trigger for this push: the account's token holdings changed.
+            SendCommerceTokenUpdate();
             granted = true;
             break;
         default:
