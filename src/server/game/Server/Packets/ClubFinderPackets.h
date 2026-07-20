@@ -74,6 +74,82 @@ namespace WorldPackets
             uint8 Unused = 0;   // 3 bits; parsed by the client and discarded
         };
 
+        class ClubFinderRequestSubscribedClubPostingIds final : public ClientPacket
+        {
+        public:
+            explicit ClubFinderRequestSubscribedClubPostingIds(WorldPacket&& packet) : ClientPacket(CMSG_CLUB_FINDER_REQUEST_SUBSCRIBED_CLUB_POSTING_IDS, std::move(packet)) { }
+
+            void Read() override;
+
+            std::vector<uint64> ClubIds;
+        };
+
+        // Reader sub_7FF7290B4380 fills a stride-16 vector of { uint64, uint32, uint32 }, which is
+        // exactly the client's own ClubFinderClubPostingClubIDMap reflection type.
+        class ClubFinderGetClubPostingIdsResponse final : public ServerPacket
+        {
+        public:
+            explicit ClubFinderGetClubPostingIdsResponse() : ServerPacket(SMSG_CLUB_FINDER_GET_CLUB_POSTING_IDS_RESPONSE, 4) { }
+
+            WorldPacket const* Write() override;
+
+            struct ClubPostingClubIDMap
+            {
+                uint64 ClubID              = 0;
+                uint32 ClubPostingID       = 0;
+                uint32 PostingDisplayFlags = 0;
+            };
+
+            std::vector<ClubPostingClubIDMap> PostingIds;
+        };
+
+        // Serializer sub_7FF72907EAA0: two counts, then the posting ids, then the bit block, then any
+        // filters. Both captured bodies (13B with one id, 17B with two) carry FilterCount == 0 and end
+        // at the bit byte, which is what pins the second uint32 as the filter count.
+        class ClubFinderRequestClubsData final : public ClientPacket
+        {
+        public:
+            explicit ClubFinderRequestClubsData(WorldPacket&& packet) : ClientPacket(CMSG_CLUB_FINDER_REQUEST_CLUBS_DATA, std::move(packet)) { }
+
+            void Read() override;
+
+            std::vector<uint32> ClubPostingIDs;
+            uint32 FilterCount = 0;
+            uint8 Type         = 0;   // 3 bits, ClubFinderRequestType
+            bool Unknown       = false;
+        };
+
+        // The browse response. Envelope is uint32 Count plus one bit byte (Bits<3> request type,
+        // Bits<1> flag), then Count records. The record layout is verified byte-for-byte against the
+        // real 326-byte and 565-byte captures - see c:/dumps/CLUB_FINDER_SCOPING_68275.md.
+        class ClubFinderLookupClubPostingsList final : public ServerPacket
+        {
+        public:
+            explicit ClubFinderLookupClubPostingsList() : ServerPacket(SMSG_CLUB_FINDER_LOOKUP_CLUB_POSTINGS_LIST, 5) { }
+
+            WorldPacket const* Write() override;
+
+            struct ClubCacheData
+            {
+                std::string ClubName;
+                std::string Comment;
+                std::string GuildLeader;
+                ObjectGuid ClubFinderGUID;
+                ObjectGuid LastPosterGUID;
+                uint64 RecruitingSpecs  = 0;
+                uint64 ClubID           = 0;
+                int64 LastUpdatedTime   = 0;
+                uint32 NumActiveMembers = 0;
+                uint32 TabardInfo       = 0;
+                int32 RecruitmentFlags  = 0;
+                int32 MinIlvl           = 0;
+            };
+
+            std::vector<ClubCacheData> Postings;
+            uint8 Type     = 0;       // 3 bits; the captures echo the request's ClubFinderRequestType
+            bool Unknown   = false;   // 1 bit; false in every capture
+        };
+
         // Reader sub_7FF7290B4020: a 3-bit field (+32 = b >> 5) and a 4-bit field (+36 = (b >> 1) & 0xF).
         //
         // Handler sub_7FF72ACABB30 switches on the 4-bit field, mapping each value 1:1 onto an

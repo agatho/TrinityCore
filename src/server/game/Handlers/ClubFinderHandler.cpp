@@ -17,6 +17,7 @@
 
 #include "ClubFinderPackets.h"
 #include "ClubFinderMgr.h"
+#include "CharacterCache.h"
 #include "Guild.h"
 #include "GuildMgr.h"
 #include "Log.h"
@@ -105,4 +106,79 @@ void WorldSession::HandleClubFinderPost(WorldPackets::ClubFinder::ClubFinderPost
 
     TC_LOG_INFO("network", "ClubFinder: {} posted guild {} as posting {} (\"{}\").",
         GetPlayerInfo(), stored->ClubId, stored->PostingId, stored->Name);
+}
+
+// Fills one browse record from a stored posting. The counts and the leader name are read from the live
+// guild rather than cached on the posting, so a browsing player sees the guild's real current state.
+static bool BuildClubCacheData(ClubFinderPosting const& posting, WorldPackets::ClubFinder::ClubFinderLookupClubPostingsList::ClubCacheData& data)
+{
+    Guild* guild = sGuildMgr->GetGuildById(posting.ClubId);
+    if (!guild)
+        return false;
+
+    data.ClubName         = posting.Name;
+    data.Comment          = posting.Description;
+    data.ClubFinderGUID   = posting.GetClubFinderGUID();
+    data.LastPosterGUID   = posting.LastPosterGUID;
+    data.RecruitingSpecs  = posting.RecruitingSpecs;
+    data.ClubID           = posting.ClubId;
+    data.LastUpdatedTime  = posting.LastUpdatedTime;
+    data.NumActiveMembers = guild->GetMembersCount();
+    data.TabardInfo       = posting.AvatarId;
+    data.RecruitmentFlags = int32(posting.RecruitmentFlags);
+    data.MinIlvl          = int32(posting.ItemLevelRequirement);
+
+    // The wire field is the guild leader's name; the posting only stores who last edited it.
+    sCharacterCache->GetCharacterNameByGuid(guild->GetLeaderGUID(), data.GuildLeader);
+
+    return true;
+}
+
+// The client asks which of the clubs it knows about currently have a posting.
+void WorldSession::HandleClubFinderRequestSubscribedClubPostingIds(WorldPackets::ClubFinder::ClubFinderRequestSubscribedClubPostingIds& request)
+{
+    WorldPackets::ClubFinder::ClubFinderGetClubPostingIdsResponse response;
+
+    for (uint64 clubId : request.ClubIds)
+    {
+        ClubFinderPosting const* posting = sClubFinderMgr->GetPostingForClub(clubId);
+        if (!posting)
+            continue;
+
+        WorldPackets::ClubFinder::ClubFinderGetClubPostingIdsResponse::ClubPostingClubIDMap& entry = response.PostingIds.emplace_back();
+        entry.ClubID = clubId;
+        entry.ClubPostingID = posting->PostingId;
+
+        // postingDisplayFlags is 0 in the capture and its bit meanings are not derived, so it is left
+        // at 0 rather than populated with a guess.
+        entry.PostingDisplayFlags = 0;
+    }
+
+    SendPacket(response.Write());
+}
+
+// The client asks for the full posting records behind a set of posting ids.
+void WorldSession::HandleClubFinderRequestClubsData(WorldPackets::ClubFinder::ClubFinderRequestClubsData& request)
+{
+    if (request.FilterCount)
+        TC_LOG_DEBUG("network", "CMSG_CLUB_FINDER_REQUEST_CLUBS_DATA from {} carries {} filters, which are not parsed.",
+            GetPlayerInfo(), request.FilterCount);
+
+    WorldPackets::ClubFinder::ClubFinderLookupClubPostingsList response;
+
+    // The captured response echoes the request's type in the envelope's 3-bit field.
+    response.Type = request.Type;
+
+    for (uint32 clubPostingId : request.ClubPostingIDs)
+    {
+        ClubFinderPosting const* posting = sClubFinderMgr->GetPosting(clubPostingId);
+        if (!posting)
+            continue;
+
+        WorldPackets::ClubFinder::ClubFinderLookupClubPostingsList::ClubCacheData& data = response.Postings.emplace_back();
+        if (!BuildClubCacheData(*posting, data))
+            response.Postings.pop_back();
+    }
+
+    SendPacket(response.Write());
 }

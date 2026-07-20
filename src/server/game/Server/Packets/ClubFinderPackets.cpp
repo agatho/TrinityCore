@@ -50,6 +50,75 @@ WorldPacket const* ClubFinderResponsePostRecruitmentMessage::Write()
     return &_worldPacket;
 }
 
+void ClubFinderRequestSubscribedClubPostingIds::Read()
+{
+    _worldPacket >> Size<uint32>(ClubIds);
+    for (uint64& clubId : ClubIds)
+        _worldPacket >> clubId;
+}
+
+WorldPacket const* ClubFinderGetClubPostingIdsResponse::Write()
+{
+    _worldPacket << Size<uint32>(PostingIds);
+    for (ClubPostingClubIDMap const& postingId : PostingIds)
+    {
+        _worldPacket << postingId.ClubID;
+        _worldPacket << postingId.ClubPostingID;
+        _worldPacket << postingId.PostingDisplayFlags;
+    }
+
+    return &_worldPacket;
+}
+
+void ClubFinderRequestClubsData::Read()
+{
+    _worldPacket >> Size<uint32>(ClubPostingIDs);
+    _worldPacket >> FilterCount;
+    for (uint32& clubPostingId : ClubPostingIDs)
+        _worldPacket >> clubPostingId;
+
+    _worldPacket >> Bits<3>(Type);
+    _worldPacket >> Bits<1>(Unknown);
+    _worldPacket.ResetBitPos();
+
+    // Any trailing ClubFinderPostingFilter records are deliberately not parsed: their wire layout is
+    // not derived, and every captured request carries FilterCount == 0. The handler reports a
+    // non-zero count rather than misreading the tail.
+}
+
+WorldPacket const* ClubFinderLookupClubPostingsList::Write()
+{
+    _worldPacket << Size<uint32>(Postings);
+    _worldPacket << Bits<3>(Type);
+    _worldPacket << Bits<1>(Unknown);
+    _worldPacket.FlushBits();
+
+    for (ClubCacheData const& posting : Postings)
+    {
+        // One bit block per record: 7 + 12 + 6 = 25 bits, flushed to four whole bytes.
+        _worldPacket << SizedString::BitsSize<7>(posting.ClubName);
+        _worldPacket << SizedString::BitsSize<12>(posting.Comment);
+        _worldPacket << SizedString::BitsSize<6>(posting.GuildLeader);
+        _worldPacket.FlushBits();
+
+        _worldPacket << posting.ClubFinderGUID;
+        _worldPacket << posting.NumActiveMembers;
+        _worldPacket << posting.RecruitingSpecs;
+        _worldPacket << posting.RecruitmentFlags;
+        _worldPacket << posting.MinIlvl;
+        _worldPacket << posting.TabardInfo;          // precedes LastPosterGUID on the wire
+        _worldPacket << posting.LastPosterGUID;
+        _worldPacket << posting.ClubID;
+        _worldPacket << posting.LastUpdatedTime;
+
+        _worldPacket << SizedString::Data(posting.ClubName);
+        _worldPacket << SizedString::Data(posting.Comment);
+        _worldPacket << SizedString::Data(posting.GuildLeader);
+    }
+
+    return &_worldPacket;
+}
+
 WorldPacket const* ClubFinderErrorMessage::Write()
 {
     _worldPacket << Bits<3>(Type);
