@@ -2443,6 +2443,40 @@ CREATE TABLE `crafting_order_reagents` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 --
+-- Table structure for table `club_finder_posting`
+--
+
+DROP TABLE IF EXISTS `club_finder_posting`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `club_finder_posting` (
+  `postingId` int unsigned NOT NULL,
+  `clubId` bigint unsigned NOT NULL COMMENT 'Guild id this posting advertises',
+  `name` varchar(96) NOT NULL DEFAULT '',
+  `description` varchar(2048) NOT NULL DEFAULT '',
+  `recruitingSpecs` bigint unsigned NOT NULL DEFAULT '0',
+  `recruitmentFlags` int unsigned NOT NULL DEFAULT '0',
+  `itemLevelRequirement` int unsigned NOT NULL DEFAULT '0',
+  `avatarId` int unsigned NOT NULL DEFAULT '0',
+  `type` tinyint unsigned NOT NULL DEFAULT '3',
+  `crossFaction` tinyint unsigned NOT NULL DEFAULT '0',
+  `lastPosterGuid` bigint unsigned NOT NULL DEFAULT '0',
+  `lastUpdatedTime` bigint NOT NULL DEFAULT '0',
+  PRIMARY KEY (`postingId`),
+  UNIQUE KEY `idx_club` (`clubId`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `club_finder_posting`
+--
+
+LOCK TABLES `club_finder_posting` WRITE;
+/*!40000 ALTER TABLE `club_finder_posting` DISABLE KEYS */;
+/*!40000 ALTER TABLE `club_finder_posting` ENABLE KEYS */;
+UNLOCK TABLES;
+
+--
 -- Table structure for table `corpse`
 --
 

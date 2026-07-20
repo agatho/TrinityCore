@@ -1101,6 +1101,11 @@ namespace WorldPackets
         class Complaint;
     }
 
+    namespace ClubFinder
+    {
+        class ClubFinderPost;
+    }
+
     namespace Token
     {
         class CommerceTokenGetLog;
@@ -2460,6 +2465,9 @@ class TC_GAME_API WorldSession
         void HandleSceneTriggerEvent(WorldPackets::Scenes::SceneTriggerEvent& sceneTriggerEvent);
         void HandleScenePlaybackComplete(WorldPackets::Scenes::ScenePlaybackComplete& scenePlaybackComplete);
         void HandleScenePlaybackCanceled(WorldPackets::Scenes::ScenePlaybackCanceled& scenePlaybackCanceled);
+
+        // Club Finder
+        void HandleClubFinderPost(WorldPackets::ClubFinder::ClubFinderPost& clubFinderPost);
 
         // Token
         void HandleCommerceTokenGetLog(WorldPackets::Token::CommerceTokenGetLog& updateListedAuctionableTokens);

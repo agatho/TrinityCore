@@ -49,6 +49,7 @@
 #include "CraftingOrderPackets.h"
 #include "DelvesPackets.h"
 #include "ContentTrackingPackets.h"
+#include "ClubFinderPackets.h"
 #include "DuelPackets.h"
 #include "EquipmentSetPackets.h"
 #include "GameObjectPackets.h"

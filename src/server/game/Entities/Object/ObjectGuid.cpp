@@ -1016,9 +1016,16 @@ ObjectGuid ObjectGuidFactory::CreateClient(HighGuid type, uint32 realmId, uint32
 
 ObjectGuid ObjectGuidFactory::CreateClubFinder(uint32 realmId, uint8 type, uint32 clubFinderId, ObjectGuid::LowType dbId)
 {
+    // The type field sits at bit 32, not bit 33. Verified against three real 12.0.7 (68275)
+    // SMSG_CLUB_FINDER_LOOKUP_CLUB_POSTINGS_LIST captures whose clubFinderGUIDs are
+    // 0xC41644030002B3A7 / 0xC41644030000A2EC / 0xC4164C030003907E: this expression reproduces all
+    // three byte-exactly, whereas a << 33 shift cannot produce the observed 0x3 at bits 32-39 for any
+    // integer type. The realm is present in all three, so it is no longer gated on type == 1.
+    // Caveat: every captured sample is a guild posting (type 3), so other club types are unverified.
+    // See c:/dumps/CLUB_FINDER_SCOPING_68275.md.
     return ObjectGuid(uint64((uint64(HighGuid::ClubFinder) << 58)
-        | (type == 1 ? (uint64(GetRealmIdForObjectGuid(realmId) & 0x1FFF) << 42) : UI64LIT(0))
-        | (uint64(type & 0xFF) << 33)
+        | (uint64(GetRealmIdForObjectGuid(realmId) & 0x1FFF) << 42)
+        | (uint64(type & 0xFF) << 32)
         | (uint64(clubFinderId & 0xFFFFFFFF))),
         dbId);
 }
