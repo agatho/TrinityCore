@@ -589,6 +589,7 @@ void WorldSession::LogoutPlayer(bool save)
     {
         // Remove any premade group finder listing this player owns.
         sLFGListMgr.RemoveListingsBy(_player->GetGUID());
+        sLFGListMgr.UnregisterSearch(_player->GetGUID());
 
         if (!_player->GetLootGUID().IsEmpty())
             DoLootReleaseAll();

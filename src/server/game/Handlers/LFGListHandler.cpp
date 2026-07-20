@@ -49,22 +49,6 @@ namespace
     }
 
     // Build one search-result row for a listing.
-    void FillSearchRow(WorldPackets::LFGList::SearchResultListing& row, LFGList::Listing const& listing)
-    {
-        row.GroupGuid = !listing.GroupGuid.IsEmpty() ? listing.GroupGuid : listing.LeaderGuid;
-        row.ListingId = listing.Id;
-        row.PostTime = listing.CreatedTime;
-        row.LeaderGuid = listing.LeaderGuid;
-        row.RawDescriptor = listing.Descriptor.RawBytes;    // verbatim echo of the client's descriptor bytes
-
-        row.Members.clear();
-        if (Group const* group = sGroupMgr->GetGroupByGUID(listing.GroupGuid))
-            for (Group::MemberSlot const& slot : group->GetMemberSlots())
-                row.Members.push_back(slot.guid);
-        if (row.Members.empty())
-            row.Members.push_back(listing.LeaderGuid);      // solo listing: the leader is the only member
-    }
-
     // Push the full applicant list of a listing to its (connected) leader.
     void SendApplicantList(LFGList::Listing const& listing)
     {
@@ -207,6 +191,10 @@ void WorldSession::HandleLFGListSearch(WorldPackets::LFGList::LFGListSearch& pac
     if (!GetPlayer())
         return;
 
+    // Keep this browser subscribed so listings published/edited from now on are pushed live via
+    // SMSG_LFG_LIST_SEARCH_RESULTS_UPDATE instead of the player having to re-search.
+    sLFGListMgr.RegisterSearch(GetPlayer()->GetGUID(), packet.CategoryId, packet.ActivityGroupId);
+
     std::vector<LFGList::Listing const*> matches = sLFGListMgr.Search(packet.CategoryId, packet.ActivityGroupId, 0);
 
     WorldPackets::LFGList::LFGListSearchResults results;
@@ -214,7 +202,7 @@ void WorldSession::HandleLFGListSearch(WorldPackets::LFGList::LFGListSearch& pac
     for (LFGList::Listing const* listing : matches)
     {
         WorldPackets::LFGList::SearchResultListing row;
-        FillSearchRow(row, *listing);
+        sLFGListMgr.FillSearchRow(row, *listing);
         results.Listings.push_back(std::move(row));
     }
     SendPacket(results.Write());

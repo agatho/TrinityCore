@@ -23,10 +23,14 @@
 #include "ObjectAccessor.h"
 #include "Player.h"
 #include "Group.h"
+#include "GroupMgr.h"
 
 namespace
 {
     constexpr uint32 EXPIRE_CHECK_INTERVAL_MS = 10 * IN_MILLISECONDS;
+    // How long an open Premade Groups browser keeps receiving live pushes without re-searching. There is
+    // no "stopped searching" opcode, so the subscription lapses instead of leaking.
+    constexpr uint32 SEARCH_SUBSCRIPTION_TTL_SECONDS = 5 * MINUTE;
 }
 
 LFGListMgr& LFGListMgr::Instance()
@@ -94,6 +98,9 @@ uint32 LFGListMgr::CreateListing(Player* leader, WorldPackets::LFGList::ListingD
     listing.ExpireTime = expireMinutes ? listing.CreatedTime + expireMinutes * MINUTE : 0;
 
     _listingByLeader[leader->GetGUID()] = id;
+
+    // A newly published listing must appear in every open browser it matches.
+    NotifyListingChanged(id);
     return id;
 }
 
@@ -104,6 +111,9 @@ bool LFGListMgr::UpdateListing(uint32 listingId, ObjectGuid leader, WorldPackets
         return false;
 
     listing->Descriptor = descriptor;
+
+    // Edited listings are pushed so open browsers show the new title/activity without re-searching.
+    NotifyListingChanged(listingId);
     return true;
 }
 
@@ -243,4 +253,79 @@ std::vector<LFGList::Listing const*> LFGListMgr::Search(uint8 category, uint8 ac
             break;
     }
     return results;
+}
+
+void LFGListMgr::FillSearchRow(WorldPackets::LFGList::SearchResultListing& row, LFGList::Listing const& listing) const
+{
+    row.GroupGuid = !listing.GroupGuid.IsEmpty() ? listing.GroupGuid : listing.LeaderGuid;
+    row.ListingId = listing.Id;
+    row.PostTime = listing.CreatedTime;
+    row.LeaderGuid = listing.LeaderGuid;
+    row.RawDescriptor = listing.Descriptor.RawBytes;    // verbatim echo of the client's descriptor bytes
+
+    row.Members.clear();
+    if (Group const* group = sGroupMgr->GetGroupByGUID(listing.GroupGuid))
+        for (Group::MemberSlot const& slot : group->GetMemberSlots())
+            row.Members.push_back(slot.guid);
+    if (row.Members.empty())
+        row.Members.push_back(listing.LeaderGuid);      // solo listing: the leader is the only member
+}
+
+void LFGListMgr::RegisterSearch(ObjectGuid player, uint8 category, uint8 activityGroup)
+{
+    SearchSubscription& sub = _searchSubscriptions[player];
+    sub.CategoryId = category;
+    sub.ActivityGroupId = activityGroup;
+    sub.ExpireTime = GameTime::GetGameTime() + SEARCH_SUBSCRIPTION_TTL_SECONDS;
+}
+
+void LFGListMgr::UnregisterSearch(ObjectGuid player)
+{
+    _searchSubscriptions.erase(player);
+}
+
+void LFGListMgr::NotifyListingChanged(uint32 listingId)
+{
+    if (_searchSubscriptions.empty())
+        return;
+
+    LFGList::Listing const* listing = GetListing(listingId);
+    if (!listing)
+        return;
+
+    // Category/activity group come from GroupFinderActivity.db2 - the same authority Search() uses, so a
+    // pushed row can never reach a browser whose filters would have excluded it.
+    GroupFinderActivityEntry const* activity = sGroupFinderActivityStore.LookupEntry(listing->GetActivityID());
+
+    WorldPackets::LFGList::LFGListSearchResultsUpdate update;
+    WorldPackets::LFGList::SearchResultListing row;
+    FillSearchRow(row, *listing);
+    update.Listings.push_back(std::move(row));
+    WorldPacket const* packet = update.Write();
+
+    uint32 const now = GameTime::GetGameTime();
+    for (auto itr = _searchSubscriptions.begin(); itr != _searchSubscriptions.end(); )
+    {
+        SearchSubscription const& sub = itr->second;
+        if (sub.ExpireTime && now >= sub.ExpireTime)
+        {
+            itr = _searchSubscriptions.erase(itr);
+            continue;
+        }
+
+        Player* searcher = ObjectAccessor::FindConnectedPlayer(itr->first);
+        if (!searcher)
+        {
+            itr = _searchSubscriptions.erase(itr);
+            continue;
+        }
+
+        bool const matches =
+            (!sub.CategoryId || (activity && activity->GroupFinderCategoryID == sub.CategoryId)) &&
+            (!sub.ActivityGroupId || (activity && activity->GroupFinderActivityGrpID == sub.ActivityGroupId));
+        if (matches)
+            searcher->SendDirectMessage(packet);
+
+        ++itr;
+    }
 }
