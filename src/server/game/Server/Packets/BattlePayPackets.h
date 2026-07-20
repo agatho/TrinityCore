@@ -121,6 +121,21 @@ namespace WorldPackets
             uint32 Result = 0;
             std::vector<PurchaseRecord> Purchases;
         };
+
+        // Reply to CMSG_BATTLE_PAY_GET_PURCHASE_LIST. Body layout is identical to
+        // SMSG_BATTLE_PAY_PURCHASE_UPDATE: { uint32 Result, uint32 Count, Count x PurchaseRecord }.
+        // Proven against a live sniff: a retail account with 9 purchases produced a 413-byte body, and
+        // 8 (header) + 9 * 45 (PurchaseRecord = u64+i32+i32+u32+u8+u64+u64+i64) == 413 exactly.
+        class GetPurchaseListResponse final : public ServerPacket
+        {
+        public:
+            explicit GetPurchaseListResponse() : ServerPacket(SMSG_BATTLE_PAY_GET_PURCHASE_LIST_RESPONSE, 4 + 4) { }
+
+            WorldPacket const* Write() override;
+
+            uint32 Result = 0;
+            std::vector<PurchaseRecord> Purchases;
+        };
     }
 }
 

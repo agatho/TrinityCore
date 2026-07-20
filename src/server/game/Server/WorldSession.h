@@ -2558,6 +2558,7 @@ class TC_GAME_API WorldSession
 
         // In-game Shop (BattlePay)
         void HandleBattlePayGetProductList(WorldPackets::BattlePay::GetProductList& getProductList);
+        void HandleBattlePayGetPurchaseList(WorldPackets::BattlePay::GetPurchaseList& getPurchaseList);
         void HandleBattlePayStartPurchase(WorldPackets::BattlePay::StartPurchase& startPurchase);
         void HandleBattlePayOpenCheckout(WorldPackets::BattlePay::OpenCheckout& openCheckout);
         void BattlePayProcessPurchase(uint32 productID);

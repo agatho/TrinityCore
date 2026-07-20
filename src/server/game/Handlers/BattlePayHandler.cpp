@@ -146,3 +146,14 @@ void WorldSession::HandleBattlePayOpenCheckout(WorldPackets::BattlePay::OpenChec
     TC_LOG_INFO("network", "BattlePay: OpenCheckout from {} distributionID={} (web-checkout path, not handled).",
         GetPlayerInfo(), openCheckout.DistributionID);
 }
+
+void WorldSession::HandleBattlePayGetPurchaseList(WorldPackets::BattlePay::GetPurchaseList& /*getPurchaseList*/)
+{
+    // The client polls this whenever the Shop is opened (390 requests across our sniffs) and blocks its
+    // purchase UI until it gets a reply. Answer with this account's real purchase history: the Shop only
+    // grants products through BattlePayProcessPurchase, which does not persist a purchase ledger, so the
+    // honest answer today is an empty list rather than fabricated entries.
+    WorldPackets::BattlePay::GetPurchaseListResponse response;
+    response.Result = 0;    // PurchaseResult::Ok
+    SendPacket(response.Write());
+}
