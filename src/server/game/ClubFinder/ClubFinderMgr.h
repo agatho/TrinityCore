@@ -54,6 +54,21 @@ enum ClubFinderErrorType : uint8
     CLUB_FINDER_ERROR_REALM_NOT_ELIGIBLE        = 14
 };
 
+// ClubFinderClubPostingStatusFlags. The wire field postingDisplayFlags is a mask of (1 << value):
+// C_ClubFinder.GetStatusOfPostingFromClubId walks bits 1..8 and returns the set bit indices, and
+// PostClub's validation tests the same stored u32 with & 4 and & 8 for the two forced-change flags.
+enum ClubFinderPostingStatusFlag : uint32
+{
+    CLUB_FINDER_POSTING_FLAG_NEEDS_CACHE_UPDATE       = 1 << 1,
+    CLUB_FINDER_POSTING_FLAG_FORCE_DESCRIPTION_CHANGE = 1 << 2,
+    CLUB_FINDER_POSTING_FLAG_FORCE_NAME_CHANGE        = 1 << 3,
+    CLUB_FINDER_POSTING_FLAG_UNDER_REVIEW             = 1 << 4,
+    CLUB_FINDER_POSTING_FLAG_BANNED                   = 1 << 5,
+    CLUB_FINDER_POSTING_FLAG_FAKE_POST                = 1 << 6,
+    CLUB_FINDER_POSTING_FLAG_PENDING_DELETE           = 1 << 7,
+    CLUB_FINDER_POSTING_FLAG_POST_DELISTED            = 1 << 8
+};
+
 // The client accepts 0 and 1 as success in the post response and treats everything else as a failure.
 enum ClubFinderPostResult : uint8
 {
@@ -71,6 +86,7 @@ struct ClubFinderPosting
     uint32 RecruitmentFlags     = 0;    // ClubFinderSettingFlags bit-index mask; locale in bits 21-25
     uint32 ItemLevelRequirement = 0;
     uint32 AvatarId             = 0;
+    uint32 DisplayFlags         = 0;    // mask of ClubFinderPostingStatusFlag; moderation state
     uint8 Type                  = CLUB_FINDER_REQUEST_TYPE_GUILD;
     bool CrossFaction           = false;
     ObjectGuid LastPosterGUID;
@@ -105,6 +121,11 @@ public:
 
     // All currently listed postings, for the browse responses built on top of this in P1.
     std::vector<ClubFinderPosting const*> GetAllPostings() const;
+
+    // Postings matching a search: a case-insensitive substring of the posting or guild name, the
+    // requested club type, and any recruiting-spec / item-level filters the client sent.
+    std::vector<ClubFinderPosting const*> Search(std::string const& searchString, uint8 type,
+        uint64 specs, uint32 maxItemLevel) const;
 
 private:
     ClubFinderMgr() = default;

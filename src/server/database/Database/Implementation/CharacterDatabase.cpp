@@ -1064,7 +1064,7 @@ void CharacterDatabaseConnection::DoPrepareStatements()
     PrepareStatement(CHAR_REP_WARBAND_ACHIEVEMENT_PROGRESS, "REPLACE INTO warband_achievement_progress (battlenetAccountId, criteria, counter, date) VALUES (?, ?, ?, ?)", CONNECTION_ASYNC);
     PrepareStatement(CHAR_DEL_WARBAND_ACHIEVEMENT_PROGRESS_BY_CRITERIA, "DELETE FROM warband_achievement_progress WHERE battlenetAccountId = ? AND criteria = ?", CONNECTION_ASYNC);
 
-    PrepareStatement(CHAR_REP_CLUB_FINDER_POSTING, "REPLACE INTO club_finder_posting (postingId, clubId, name, description, recruitingSpecs, recruitmentFlags, itemLevelRequirement, avatarId, type, crossFaction, lastPosterGuid, lastUpdatedTime) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", CONNECTION_ASYNC);
+    PrepareStatement(CHAR_REP_CLUB_FINDER_POSTING, "REPLACE INTO club_finder_posting (postingId, clubId, name, description, recruitingSpecs, recruitmentFlags, itemLevelRequirement, avatarId, displayFlags, type, crossFaction, lastPosterGuid, lastUpdatedTime) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", CONNECTION_ASYNC);
 }
 
 CharacterDatabaseConnection::CharacterDatabaseConnection(MySQLConnectionInfo& connInfo, ConnectionFlags connectionFlags) : MySQLConnection(connInfo, connectionFlags)

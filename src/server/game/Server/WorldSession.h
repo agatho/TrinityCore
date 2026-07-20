@@ -1106,6 +1106,7 @@ namespace WorldPackets
         class ClubFinderPost;
         class ClubFinderRequestSubscribedClubPostingIds;
         class ClubFinderRequestClubsData;
+        class ClubFinderRequestClubsList;
     }
 
     namespace Token
@@ -2472,6 +2473,7 @@ class TC_GAME_API WorldSession
         void HandleClubFinderPost(WorldPackets::ClubFinder::ClubFinderPost& clubFinderPost);
         void HandleClubFinderRequestSubscribedClubPostingIds(WorldPackets::ClubFinder::ClubFinderRequestSubscribedClubPostingIds& request);
         void HandleClubFinderRequestClubsData(WorldPackets::ClubFinder::ClubFinderRequestClubsData& request);
+        void HandleClubFinderRequestClubsList(WorldPackets::ClubFinder::ClubFinderRequestClubsList& request);
 
         // Token
         void HandleCommerceTokenGetLog(WorldPackets::Token::CommerceTokenGetLog& updateListedAuctionableTokens);

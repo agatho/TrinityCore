@@ -74,6 +74,23 @@ namespace WorldPackets
             uint8 Unused = 0;   // 3 bits; parsed by the client and discarded
         };
 
+        // ClubFinderPostingFilter, written by sub_7FF729143D20 and shared by REQUEST_CLUBS_DATA and
+        // REQUEST_CLUBS_LIST. Wire is Bits<3> Type, flush, Bits<3> ValueType, a Bits<24> byte count for
+        // the string forms only, flush, then the value itself. Producer sub_7FF72ACB1520 emits:
+        //   1 = focus flags (Dungeons/Raids/PvP/RP/Social)   2 = guild size (Small/Medium/Large)
+        //   3 = player average item level                    4 = player class id (strong, not proven)
+        //   5 = specialization bitmask (uint64)              6 = locale flags
+        struct ClubFinderPostingFilter
+        {
+            uint8 Type        = 0;   // 3 bits
+            uint8 ValueType   = 0;   // 3 bits; 1/2 uint32, 3/4 uint64, 5/6 sized bytes
+            uint32 UintValue  = 0;
+            uint64 Uint64Value = 0;
+            std::string StringValue;
+        };
+
+        ByteBuffer& operator>>(ByteBuffer& data, ClubFinderPostingFilter& filter);
+
         class ClubFinderRequestSubscribedClubPostingIds final : public ClientPacket
         {
         public:
@@ -114,9 +131,26 @@ namespace WorldPackets
             void Read() override;
 
             std::vector<uint32> ClubPostingIDs;
-            uint32 FilterCount = 0;
-            uint8 Type         = 0;   // 3 bits, ClubFinderRequestType
-            bool Unknown       = false;
+            std::vector<ClubFinderPostingFilter> Filters;
+            uint8 Type        = 0;   // 3 bits, ClubFinderRequestType
+            bool CrossFaction = false;
+        };
+
+        // Produced by Lua C_ClubFinder.RequestClubsList(guildListRequested, searchString, specIDs) via
+        // builder sub_7FF72ACB1520; body writer sub_7FF72907E300. The search string is capped at 400
+        // characters by the client's own buffer and carries no terminator on the wire.
+        class ClubFinderRequestClubsList final : public ClientPacket
+        {
+        public:
+            explicit ClubFinderRequestClubsList(WorldPacket&& packet) : ClientPacket(CMSG_CLUB_FINDER_REQUEST_CLUBS_LIST, std::move(packet)) { }
+
+            void Read() override;
+
+            std::string SearchString;
+            std::vector<ClubFinderPostingFilter> Filters;
+            uint32 ApplicantSettings = 0;   // ClubFinderSettingFlags bit-index mask
+            uint8 Type               = 0;   // 3 bits; 1 = Guild, 2 = Community
+            bool CrossFaction        = false;
         };
 
         // The browse response. Envelope is uint32 Count plus one bit byte (Bits<3> request type,

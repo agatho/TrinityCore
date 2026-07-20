@@ -10,6 +10,7 @@ CREATE TABLE `club_finder_posting` (
   `recruitmentFlags` int unsigned NOT NULL DEFAULT '0' COMMENT 'ClubFinderSettingFlags bit-index mask; locale in bits 21-25',
   `itemLevelRequirement` int unsigned NOT NULL DEFAULT '0',
   `avatarId` int unsigned NOT NULL DEFAULT '0',
+  `displayFlags` int unsigned NOT NULL DEFAULT '0' COMMENT 'Mask of (1 << ClubFinderClubPostingStatusFlags); moderation state',
   `type` tinyint unsigned NOT NULL DEFAULT '1' COMMENT 'ClubFinderRequestType: 0 None, 1 Guild, 2 Community, 3 All',
   `crossFaction` tinyint unsigned NOT NULL DEFAULT '0',
   `lastPosterGuid` bigint unsigned NOT NULL DEFAULT '0',

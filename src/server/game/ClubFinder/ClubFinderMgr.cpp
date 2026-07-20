@@ -21,6 +21,7 @@
 #include "Log.h"
 #include "Timer.h"
 #include <algorithm>
+#include <cctype>
 
 ObjectGuid ClubFinderPosting::GetClubFinderGUID() const
 {
@@ -44,7 +45,7 @@ void ClubFinderMgr::Load()
     //                                                       0          1      2            3
     QueryResult result = CharacterDatabase.Query("SELECT postingId, clubId, name, description, "
     //   4                5                 6                     7         8      9             10
-        "recruitingSpecs, recruitmentFlags, itemLevelRequirement, avatarId, type, crossFaction, lastPosterGuid, "
+        "recruitingSpecs, recruitmentFlags, itemLevelRequirement, avatarId, displayFlags, type, crossFaction, lastPosterGuid, "
     //   11
         "lastUpdatedTime FROM club_finder_posting");
 
@@ -67,10 +68,11 @@ void ClubFinderMgr::Load()
         posting.RecruitmentFlags     = fields[5].GetUInt32();
         posting.ItemLevelRequirement = fields[6].GetUInt32();
         posting.AvatarId             = fields[7].GetUInt32();
-        posting.Type                 = fields[8].GetUInt8();
-        posting.CrossFaction         = fields[9].GetBool();
-        posting.LastPosterGUID       = ObjectGuid::Create<HighGuid::Player>(fields[10].GetUInt64());
-        posting.LastUpdatedTime      = fields[11].GetInt64();
+        posting.DisplayFlags         = fields[8].GetUInt32();
+        posting.Type                 = fields[9].GetUInt8();
+        posting.CrossFaction         = fields[10].GetBool();
+        posting.LastPosterGUID       = ObjectGuid::Create<HighGuid::Player>(fields[11].GetUInt64());
+        posting.LastUpdatedTime      = fields[12].GetInt64();
 
         _maxPostingId = std::max(_maxPostingId, posting.PostingId);
         _postingsByClub[posting.ClubId] = posting.PostingId;
@@ -108,7 +110,13 @@ ClubFinderPosting const* ClubFinderMgr::SavePosting(ClubFinderPosting posting)
     // One posting per club: re-posting updates the existing entry rather than stacking duplicates,
     // which is what the client's single "post/update" button expects.
     if (ClubFinderPosting const* existing = GetPostingForClub(posting.ClubId))
+    {
         posting.PostingId = existing->PostingId;
+
+        // Moderation state belongs to the posting, not to whoever last edited it, so a re-post must
+        // not clear it.
+        posting.DisplayFlags = existing->DisplayFlags;
+    }
     else
         posting.PostingId = ++_maxPostingId;
 
@@ -123,10 +131,11 @@ ClubFinderPosting const* ClubFinderMgr::SavePosting(ClubFinderPosting posting)
     stmt->setUInt32(5, posting.RecruitmentFlags);
     stmt->setUInt32(6, posting.ItemLevelRequirement);
     stmt->setUInt32(7, posting.AvatarId);
-    stmt->setUInt8(8, posting.Type);
-    stmt->setBool(9, posting.CrossFaction);
-    stmt->setUInt64(10, posting.LastPosterGUID.GetCounter());
-    stmt->setInt64(11, posting.LastUpdatedTime);
+    stmt->setUInt32(8, posting.DisplayFlags);
+    stmt->setUInt8(9, posting.Type);
+    stmt->setBool(10, posting.CrossFaction);
+    stmt->setUInt64(11, posting.LastPosterGUID.GetCounter());
+    stmt->setInt64(12, posting.LastUpdatedTime);
     CharacterDatabase.Execute(stmt);
 
     uint32 const postingId = posting.PostingId;
@@ -136,4 +145,42 @@ ClubFinderPosting const* ClubFinderMgr::SavePosting(ClubFinderPosting posting)
     _postingsByClub[clubId] = postingId;
 
     return &_postings[postingId];
+}
+
+std::vector<ClubFinderPosting const*> ClubFinderMgr::Search(std::string const& searchString, uint8 type,
+    uint64 specs, uint32 maxItemLevel) const
+{
+    std::string needle = searchString;
+    std::transform(needle.begin(), needle.end(), needle.begin(), [](unsigned char c) { return char(std::tolower(c)); });
+
+    std::vector<ClubFinderPosting const*> results;
+    for (auto const& [postingId, posting] : _postings)
+    {
+        if (type != CLUB_FINDER_REQUEST_TYPE_ALL && posting.Type != type)
+            continue;
+
+        // A delisted or removed posting must not surface in a search.
+        if (posting.DisplayFlags & (CLUB_FINDER_POSTING_FLAG_POST_DELISTED | CLUB_FINDER_POSTING_FLAG_PENDING_DELETE | CLUB_FINDER_POSTING_FLAG_BANNED))
+            continue;
+
+        // The posting only advertises to players who meet its own item level requirement.
+        if (maxItemLevel && posting.ItemLevelRequirement > maxItemLevel)
+            continue;
+
+        // A spec filter matches when the guild recruits at least one of the requested specs.
+        if (specs && posting.RecruitingSpecs && !(posting.RecruitingSpecs & specs))
+            continue;
+
+        if (!needle.empty())
+        {
+            std::string name = posting.Name;
+            std::transform(name.begin(), name.end(), name.begin(), [](unsigned char c) { return char(std::tolower(c)); });
+            if (name.find(needle) == std::string::npos)
+                continue;
+        }
+
+        results.push_back(&posting);
+    }
+
+    return results;
 }

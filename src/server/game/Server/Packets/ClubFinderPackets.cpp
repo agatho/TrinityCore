@@ -70,20 +70,87 @@ WorldPacket const* ClubFinderGetClubPostingIdsResponse::Write()
     return &_worldPacket;
 }
 
+// Element writer sub_7FF729143D20. The Bits<24> byte count is present only for the string-valued
+// forms, and the client emits strlen + 1, so the count always equals the number of bytes that follow.
+ByteBuffer& operator>>(ByteBuffer& data, ClubFinderPostingFilter& filter)
+{
+    data >> Bits<3>(filter.Type);
+    data.ResetBitPos();
+
+    data >> Bits<3>(filter.ValueType);
+
+    uint32 byteCount = 0;
+    if (filter.ValueType == 5 || filter.ValueType == 6)
+        byteCount = data.ReadBits(24);
+
+    data.ResetBitPos();
+
+    switch (filter.ValueType)
+    {
+        case 1:
+        case 2:
+            data >> filter.UintValue;
+            break;
+        case 3:
+        case 4:
+            data >> filter.Uint64Value;
+            break;
+        case 5:
+        case 6:
+            if (byteCount)
+            {
+                filter.StringValue.resize(byteCount);
+                data.read(reinterpret_cast<uint8*>(filter.StringValue.data()), byteCount);
+                // The client counts the terminator; drop it so the value is a plain string.
+                if (!filter.StringValue.empty() && filter.StringValue.back() == '\0')
+                    filter.StringValue.pop_back();
+            }
+            break;
+        default:
+            break;
+    }
+
+    return data;
+}
+
 void ClubFinderRequestClubsData::Read()
 {
+    uint32 filterCount = 0;
+
     _worldPacket >> Size<uint32>(ClubPostingIDs);
-    _worldPacket >> FilterCount;
+    _worldPacket >> filterCount;
     for (uint32& clubPostingId : ClubPostingIDs)
         _worldPacket >> clubPostingId;
 
     _worldPacket >> Bits<3>(Type);
-    _worldPacket >> Bits<1>(Unknown);
+    _worldPacket >> Bits<1>(CrossFaction);
     _worldPacket.ResetBitPos();
 
-    // Any trailing ClubFinderPostingFilter records are deliberately not parsed: their wire layout is
-    // not derived, and every captured request carries FilterCount == 0. The handler reports a
-    // non-zero count rather than misreading the tail.
+    Filters.resize(filterCount);
+    for (ClubFinderPostingFilter& filter : Filters)
+        _worldPacket >> filter;
+}
+
+void ClubFinderRequestClubsList::Read()
+{
+    uint32 const searchStringLength = _worldPacket.ReadBits(9);
+    _worldPacket >> Bits<3>(Type);
+    _worldPacket >> Bits<1>(CrossFaction);
+    _worldPacket.ResetBitPos();
+
+    uint32 filterCount = 0;
+    _worldPacket >> filterCount;
+    _worldPacket >> ApplicantSettings;
+
+    if (searchStringLength)
+    {
+        SearchString.resize(searchStringLength);
+        _worldPacket.read(reinterpret_cast<uint8*>(SearchString.data()), searchStringLength);
+    }
+
+    Filters.resize(filterCount);
+    for (ClubFinderPostingFilter& filter : Filters)
+        _worldPacket >> filter;
 }
 
 WorldPacket const* ClubFinderLookupClubPostingsList::Write()

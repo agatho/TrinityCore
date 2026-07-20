@@ -2458,6 +2458,7 @@ CREATE TABLE `club_finder_posting` (
   `recruitmentFlags` int unsigned NOT NULL DEFAULT '0',
   `itemLevelRequirement` int unsigned NOT NULL DEFAULT '0',
   `avatarId` int unsigned NOT NULL DEFAULT '0',
+  `displayFlags` int unsigned NOT NULL DEFAULT '0' COMMENT 'Mask of (1 << ClubFinderClubPostingStatusFlags); moderation state',
   `type` tinyint unsigned NOT NULL DEFAULT '1',
   `crossFaction` tinyint unsigned NOT NULL DEFAULT '0',
   `lastPosterGuid` bigint unsigned NOT NULL DEFAULT '0',

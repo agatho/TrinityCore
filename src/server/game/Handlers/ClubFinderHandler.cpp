@@ -149,9 +149,10 @@ void WorldSession::HandleClubFinderRequestSubscribedClubPostingIds(WorldPackets:
         entry.ClubID = clubId;
         entry.ClubPostingID = posting->PostingId;
 
-        // postingDisplayFlags is 0 in the capture and its bit meanings are not derived, so it is left
-        // at 0 rather than populated with a guess.
-        entry.PostingDisplayFlags = 0;
+        // Real moderation state. The client decodes this as a mask of (1 << ClubFinderClubPostingStatusFlags)
+        // in C_ClubFinder.GetStatusOfPostingFromClubId, and PostClub tests bits 2 and 3 of it to force a
+        // description or name change before it will let the guild re-post.
+        entry.PostingDisplayFlags = posting->DisplayFlags;
     }
 
     SendPacket(response.Write());
@@ -160,10 +161,6 @@ void WorldSession::HandleClubFinderRequestSubscribedClubPostingIds(WorldPackets:
 // The client asks for the full posting records behind a set of posting ids.
 void WorldSession::HandleClubFinderRequestClubsData(WorldPackets::ClubFinder::ClubFinderRequestClubsData& request)
 {
-    if (request.FilterCount)
-        TC_LOG_DEBUG("network", "CMSG_CLUB_FINDER_REQUEST_CLUBS_DATA from {} carries {} filters, which are not parsed.",
-            GetPlayerInfo(), request.FilterCount);
-
     WorldPackets::ClubFinder::ClubFinderLookupClubPostingsList response;
 
     // The captured response echoes the request's type in the envelope's 3-bit field.
@@ -175,6 +172,50 @@ void WorldSession::HandleClubFinderRequestClubsData(WorldPackets::ClubFinder::Cl
         if (!posting)
             continue;
 
+        WorldPackets::ClubFinder::ClubFinderLookupClubPostingsList::ClubCacheData& data = response.Postings.emplace_back();
+        if (!BuildClubCacheData(*posting, data))
+            response.Postings.pop_back();
+    }
+
+    SendPacket(response.Write());
+}
+
+// Reads the client's filter list. Only the forms the client actually produces are interpreted; the
+// rest are left alone rather than being given invented meanings.
+static void ApplySearchFilters(std::vector<WorldPackets::ClubFinder::ClubFinderPostingFilter> const& filters,
+    uint64& specs, uint32& itemLevel)
+{
+    for (WorldPackets::ClubFinder::ClubFinderPostingFilter const& filter : filters)
+    {
+        switch (filter.Type)
+        {
+            case 3:     // the searching player's average item level
+                itemLevel = filter.UintValue;
+                break;
+            case 5:     // specialization bitmask
+                specs = filter.Uint64Value;
+                break;
+            default:
+                // 1 focus flags, 2 guild size, 4 player class, 6 locale flags. Their wire form is known
+                // but matching them needs posting-side data we do not model yet, so they are ignored
+                // rather than applied incorrectly.
+                break;
+        }
+    }
+}
+
+// The Club Finder search: "show me guilds recruiting".
+void WorldSession::HandleClubFinderRequestClubsList(WorldPackets::ClubFinder::ClubFinderRequestClubsList& request)
+{
+    uint64 specs = 0;
+    uint32 itemLevel = 0;
+    ApplySearchFilters(request.Filters, specs, itemLevel);
+
+    WorldPackets::ClubFinder::ClubFinderLookupClubPostingsList response;
+    response.Type = request.Type;
+
+    for (ClubFinderPosting const* posting : sClubFinderMgr->Search(request.SearchString, request.Type, specs, itemLevel))
+    {
         WorldPackets::ClubFinder::ClubFinderLookupClubPostingsList::ClubCacheData& data = response.Postings.emplace_back();
         if (!BuildClubCacheData(*posting, data))
             response.Postings.pop_back();
