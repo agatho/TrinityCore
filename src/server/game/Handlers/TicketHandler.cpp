@@ -16,6 +16,7 @@
  */
 
 #include "WorldSession.h"
+#include "ClubFinderMgr.h"
 #include "Common.h"
 #include "DatabaseEnv.h"
 #include "SupportMgr.h"
@@ -81,6 +82,19 @@ void WorldSession::HandleSupportTicketSubmitComplaint(WorldPackets::Ticket::Supp
     comp->SetNote(packet.Note);
 
     sSupportMgr->AddTicket(comp);
+
+    // A reported Club Finder posting is flagged for review. The client reads this back through
+    // C_ClubFinder.GetStatusOfPostingFromClubId, so the report becomes visible state rather than only a
+    // GM ticket, and a reviewer can escalate it to Banned or a forced name/description change. Without
+    // this the posting id the client took the trouble to send is simply discarded.
+    if (packet.ClubFinderInfo)
+    {
+        ReportType const reportType = ReportType(packet.ReportType);
+        if (reportType == ReportType::ClubFinderPosting || reportType == ReportType::ClubFinderApplicant)
+            if (sClubFinderMgr->AddPostingDisplayFlags(uint32(packet.ClubFinderInfo->PostingID), CLUB_FINDER_POSTING_FLAG_UNDER_REVIEW))
+                TC_LOG_INFO("network", "ClubFinder: posting {} (club {}) flagged under review after a report by {}.",
+                    packet.ClubFinderInfo->PostingID, packet.ClubFinderInfo->ClubID, GetPlayerInfo());
+    }
 }
 
 void WorldSession::HandleBugReportOpcode(WorldPackets::Ticket::BugReport& bugReport)

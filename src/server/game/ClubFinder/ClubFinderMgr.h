@@ -190,6 +190,9 @@ public:
     // Creates or updates the posting for a club and persists it. Returns the stored posting.
     ClubFinderPosting const* SavePosting(ClubFinderPosting posting);
 
+    // Adds moderation flags to a posting and persists them. Used when a posting is reported.
+    bool AddPostingDisplayFlags(uint32 postingId, uint32 flags);
+
     // All currently listed postings, for the browse responses built on top of this in P1.
     std::vector<ClubFinderPosting const*> GetAllPostings() const;
 
