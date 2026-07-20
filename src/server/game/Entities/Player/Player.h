@@ -2207,6 +2207,7 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         void UpdateMaxHealth() override;
         void UpdateMaxPower(Powers power) override;
         uint32 GetPowerIndex(Powers power) const override;
+        ClassPowerTypes GetPowerTypes() const override;
         void UpdateAttackPowerAndDamage(bool ranged = false) override;
         void ApplySpellPowerBonus(int32 amount, bool apply);
         void UpdateSpellDamageAndHealingBonus();
@@ -3073,6 +3074,7 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         GuidList WhisperList;
         TimePoint m_regenInterruptTimestamp;
         uint32 m_regenTimerCount;
+        float m_healthFraction;
         std::array<float, MAX_POWERS_PER_CLASS> m_powerFraction;
         uint32 m_contestedPvPTimer;
 
