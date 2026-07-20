@@ -147,28 +147,40 @@ ClubFinderPosting const* ClubFinderMgr::SavePosting(ClubFinderPosting posting)
     return &_postings[postingId];
 }
 
-std::vector<ClubFinderPosting const*> ClubFinderMgr::Search(std::string const& searchString, uint8 type,
-    uint64 specs, uint32 maxItemLevel) const
+std::vector<ClubFinderPosting const*> ClubFinderMgr::Search(SearchCriteria const& criteria) const
 {
-    std::string needle = searchString;
+    std::string needle = criteria.SearchString;
     std::transform(needle.begin(), needle.end(), needle.begin(), [](unsigned char c) { return char(std::tolower(c)); });
 
     std::vector<ClubFinderPosting const*> results;
     for (auto const& [postingId, posting] : _postings)
     {
-        if (type != CLUB_FINDER_REQUEST_TYPE_ALL && posting.Type != type)
+        if (criteria.Type != CLUB_FINDER_REQUEST_TYPE_ALL && posting.Type != criteria.Type)
             continue;
 
         // A delisted or removed posting must not surface in a search.
         if (posting.DisplayFlags & (CLUB_FINDER_POSTING_FLAG_POST_DELISTED | CLUB_FINDER_POSTING_FLAG_PENDING_DELETE | CLUB_FINDER_POSTING_FLAG_BANNED))
             continue;
 
+        // A guild that has not enabled its listing is not advertising.
+        if (!(posting.RecruitmentFlags & CLUB_FINDER_SETTING_ENABLE_LISTING))
+            continue;
+
         // The posting only advertises to players who meet its own item level requirement.
-        if (maxItemLevel && posting.ItemLevelRequirement > maxItemLevel)
+        if (criteria.ItemLevel && posting.ItemLevelRequirement > criteria.ItemLevel)
+            continue;
+
+        // Focus and size filters live in the same ClubFinderSettingFlags bit space as the posting's
+        // own recruitmentFlags, so they match directly: the guild must share at least one of the
+        // requested focuses / sizes.
+        if (criteria.FocusFlags && !(posting.RecruitmentFlags & criteria.FocusFlags & CLUB_FINDER_SETTING_MASK_FOCUS))
+            continue;
+
+        if (criteria.SizeFlags && !(posting.RecruitmentFlags & criteria.SizeFlags & CLUB_FINDER_SETTING_MASK_SIZE))
             continue;
 
         // A spec filter matches when the guild recruits at least one of the requested specs.
-        if (specs && posting.RecruitingSpecs && !(posting.RecruitingSpecs & specs))
+        if (criteria.Specs && posting.RecruitingSpecs && !(posting.RecruitingSpecs & criteria.Specs))
             continue;
 
         if (!needle.empty())

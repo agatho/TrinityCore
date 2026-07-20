@@ -69,6 +69,38 @@ enum ClubFinderPostingStatusFlag : uint32
     CLUB_FINDER_POSTING_FLAG_POST_DELISTED            = 1 << 8
 };
 
+// ClubFinderSettingFlags, recovered from the client's enum registrar. Both the posting's
+// recruitmentFlags and the searcher's applicantSettings are bit-index masks over these values, which
+// is why a focus or size filter can be matched directly against a posting's flags.
+enum ClubFinderSettingFlag : uint32
+{
+    CLUB_FINDER_SETTING_DUNGEONS         = 1 << 1,
+    CLUB_FINDER_SETTING_RAIDS            = 1 << 2,
+    CLUB_FINDER_SETTING_PVP              = 1 << 3,
+    CLUB_FINDER_SETTING_RP               = 1 << 4,
+    CLUB_FINDER_SETTING_SOCIAL           = 1 << 5,
+    CLUB_FINDER_SETTING_SMALL            = 1 << 6,
+    CLUB_FINDER_SETTING_MEDIUM           = 1 << 7,
+    CLUB_FINDER_SETTING_LARGE            = 1 << 8,
+    CLUB_FINDER_SETTING_TANK             = 1 << 9,
+    CLUB_FINDER_SETTING_HEALER           = 1 << 10,
+    CLUB_FINDER_SETTING_DAMAGE           = 1 << 11,
+    CLUB_FINDER_SETTING_ENABLE_LISTING   = 1 << 12,
+    CLUB_FINDER_SETTING_MAX_LEVEL_ONLY   = 1 << 13,
+    CLUB_FINDER_SETTING_AUTO_ACCEPT      = 1 << 14,
+    CLUB_FINDER_SETTING_FACTION_HORDE    = 1 << 15,
+    CLUB_FINDER_SETTING_FACTION_ALLIANCE = 1 << 16,
+    CLUB_FINDER_SETTING_FACTION_NEUTRAL  = 1 << 17,
+
+    // The masks the client itself slices out when building filters 1 and 2.
+    CLUB_FINDER_SETTING_MASK_FOCUS       = 0x3E,    // Dungeons .. Social
+    CLUB_FINDER_SETTING_MASK_SIZE        = 0x1C0    // Small / Medium / Large
+};
+
+// Locale is packed as (locale + 1) into bits 21-25 of a posting's recruitmentFlags.
+constexpr uint32 CLUB_FINDER_LOCALE_SHIFT = 21;
+constexpr uint32 CLUB_FINDER_LOCALE_MASK  = 0x3E00000;
+
 // The client accepts 0 and 1 as success in the post response and treats everything else as a failure.
 enum ClubFinderPostResult : uint8
 {
@@ -122,10 +154,18 @@ public:
     // All currently listed postings, for the browse responses built on top of this in P1.
     std::vector<ClubFinderPosting const*> GetAllPostings() const;
 
-    // Postings matching a search: a case-insensitive substring of the posting or guild name, the
-    // requested club type, and any recruiting-spec / item-level filters the client sent.
-    std::vector<ClubFinderPosting const*> Search(std::string const& searchString, uint8 type,
-        uint64 specs, uint32 maxItemLevel) const;
+    // The search criteria the client sends, already decoded out of its filter list.
+    struct SearchCriteria
+    {
+        std::string SearchString;
+        uint64 Specs        = 0;    // filter 5: recruiting-spec bitmask
+        uint32 ItemLevel    = 0;    // filter 3: the searcher's average item level
+        uint32 FocusFlags   = 0;    // filter 1: Dungeons / Raids / PvP / RP / Social
+        uint32 SizeFlags    = 0;    // filter 2: Small / Medium / Large
+        uint8 Type          = CLUB_FINDER_REQUEST_TYPE_ALL;
+    };
+
+    std::vector<ClubFinderPosting const*> Search(SearchCriteria const& criteria) const;
 
 private:
     ClubFinderMgr() = default;

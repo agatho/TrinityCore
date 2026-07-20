@@ -180,25 +180,31 @@ void WorldSession::HandleClubFinderRequestClubsData(WorldPackets::ClubFinder::Cl
     SendPacket(response.Write());
 }
 
-// Reads the client's filter list. Only the forms the client actually produces are interpreted; the
-// rest are left alone rather than being given invented meanings.
+// Decodes the client's filter list into search criteria. Filter types 1, 2, 3 and 5 map directly onto
+// data the posting carries; 4 (class) and 6 (locale) are parsed but not yet matched - see below.
 static void ApplySearchFilters(std::vector<WorldPackets::ClubFinder::ClubFinderPostingFilter> const& filters,
-    uint64& specs, uint32& itemLevel)
+    ClubFinderMgr::SearchCriteria& criteria)
 {
     for (WorldPackets::ClubFinder::ClubFinderPostingFilter const& filter : filters)
     {
         switch (filter.Type)
         {
+            case 1:     // focus flags, same bit space as the posting's recruitmentFlags
+                criteria.FocusFlags = filter.UintValue;
+                break;
+            case 2:     // guild size flags, likewise
+                criteria.SizeFlags = filter.UintValue;
+                break;
             case 3:     // the searching player's average item level
-                itemLevel = filter.UintValue;
+                criteria.ItemLevel = filter.UintValue;
                 break;
             case 5:     // specialization bitmask
-                specs = filter.Uint64Value;
+                criteria.Specs = filter.Uint64Value;
                 break;
             default:
-                // 1 focus flags, 2 guild size, 4 player class, 6 locale flags. Their wire form is known
-                // but matching them needs posting-side data we do not model yet, so they are ignored
-                // rather than applied incorrectly.
+                // 4 = player class and 6 = applicant locale flags. Matching those needs the spec
+                // bitmask's class mapping and the applicant locale encoding respectively; until both
+                // are derived they are ignored rather than matched incorrectly.
                 break;
         }
     }
@@ -207,14 +213,15 @@ static void ApplySearchFilters(std::vector<WorldPackets::ClubFinder::ClubFinderP
 // The Club Finder search: "show me guilds recruiting".
 void WorldSession::HandleClubFinderRequestClubsList(WorldPackets::ClubFinder::ClubFinderRequestClubsList& request)
 {
-    uint64 specs = 0;
-    uint32 itemLevel = 0;
-    ApplySearchFilters(request.Filters, specs, itemLevel);
+    ClubFinderMgr::SearchCriteria criteria;
+    criteria.SearchString = request.SearchString;
+    criteria.Type = request.Type;
+    ApplySearchFilters(request.Filters, criteria);
 
     WorldPackets::ClubFinder::ClubFinderLookupClubPostingsList response;
     response.Type = request.Type;
 
-    for (ClubFinderPosting const* posting : sClubFinderMgr->Search(request.SearchString, request.Type, specs, itemLevel))
+    for (ClubFinderPosting const* posting : sClubFinderMgr->Search(criteria))
     {
         WorldPackets::ClubFinder::ClubFinderLookupClubPostingsList::ClubCacheData& data = response.Postings.emplace_back();
         if (!BuildClubCacheData(*posting, data))
