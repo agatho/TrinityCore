@@ -25,12 +25,39 @@
 #include <unordered_map>
 #include <vector>
 
-// ClubFinderRequestType. Every captured posting is type 3, which is also the value the client encodes
-// into the clubFinderGUID's type field for guild postings - see c:/dumps/CLUB_FINDER_SCOPING_68275.md.
+// ClubFinderRequestType, from the client's own Lua API documentation. Carried as 3 bits on the wire.
 enum ClubFinderRequestType : uint8
 {
-    CLUB_FINDER_REQUEST_TYPE_NONE   = 0,
-    CLUB_FINDER_REQUEST_TYPE_GUILD  = 3
+    CLUB_FINDER_REQUEST_TYPE_NONE      = 0,
+    CLUB_FINDER_REQUEST_TYPE_GUILD     = 1,
+    CLUB_FINDER_REQUEST_TYPE_COMMUNITY = 2,
+    CLUB_FINDER_REQUEST_TYPE_ALL       = 3
+};
+
+// The 4-bit error selector of SMSG_CLUB_FINDER_ERROR_MESSAGE. Recovered by decompiling the client's
+// handler sub_7FF72ACABB30, whose switch maps each value 1:1 onto an ERR_CLUB_FINDER_* global string.
+// Values 12, 13 and 15 fall through to a no-op in the client.
+enum ClubFinderErrorType : uint8
+{
+    CLUB_FINDER_ERROR_POST_CLUB                 = 0,
+    CLUB_FINDER_ERROR_RESPOND_APPLICANT         = 1,    // client also re-requests the applicant list
+    CLUB_FINDER_ERROR_APPLY_CLUB                = 2,
+    CLUB_FINDER_ERROR_CANCEL_APPLICATION        = 3,    // client also re-requests the pending list
+    CLUB_FINDER_ERROR_ACCEPT_APPLICATION        = 4,    // client also re-requests the pending list
+    CLUB_FINDER_ERROR_NO_INVITE_PERMISSIONS     = 5,
+    CLUB_FINDER_ERROR_NO_POSTING_PERMISSIONS    = 6,
+    CLUB_FINDER_ERROR_APPLICANT_LIST            = 7,
+    CLUB_FINDER_ERROR_APPLICANT_LIST_NO_PERM    = 8,
+    CLUB_FINDER_ERROR_FINDER_NOT_AVAILABLE      = 9,
+    CLUB_FINDER_ERROR_GET_POSTING_IDS           = 10,
+    CLUB_FINDER_ERROR_JOIN_APPLICATION          = 11,
+    CLUB_FINDER_ERROR_REALM_NOT_ELIGIBLE        = 14
+};
+
+// The client accepts 0 and 1 as success in the post response and treats everything else as a failure.
+enum ClubFinderPostResult : uint8
+{
+    CLUB_FINDER_POST_RESULT_OK = 0
 };
 
 // A guild's recruitment posting, as the client posts it via C_ClubFinder.PostClub.
@@ -51,6 +78,11 @@ struct ClubFinderPosting
 
     // The posting id is not a wire field of its own: the client reads it back out of the low 32 bits
     // of the clubFinderGUID's high qword. This mints the GUID the client expects.
+    //
+    // The GUID's type field is an intrinsic club type, NOT an echo of the request that produced it:
+    // C_ClubFinder.GetClubTypeFromFinderGUID decodes it as `hi >> 33` and accepts only 1 (Guild) and
+    // 2 (Community), returning nothing for anything else. Echoing a request type of All (3) would
+    // therefore make the client's own getter fail.
     ObjectGuid GetClubFinderGUID() const;
 };
 

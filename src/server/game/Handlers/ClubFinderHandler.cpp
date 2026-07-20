@@ -34,12 +34,24 @@ void WorldSession::HandleClubFinderPost(WorldPackets::ClubFinder::ClubFinderPost
     if (!player)
         return;
 
+    // Failures are answered with SMSG_CLUB_FINDER_ERROR_MESSAGE. The 4-bit error selector maps 1:1 onto
+    // the client's ERR_CLUB_FINDER_* strings (decompiled from handler sub_7FF72ACABB30), so these are
+    // real, correctly-worded messages rather than a guessed code.
+    auto sendError = [&](uint8 error)
+    {
+        WorldPackets::ClubFinder::ClubFinderErrorMessage errorMessage;
+        errorMessage.Type = clubFinderPost.Type;
+        errorMessage.Error = error;
+        SendPacket(errorMessage.Write());
+    };
+
     // Only a guild can be posted, and only by someone who speaks for it. The client's own UI gates the
     // button on guild permissions, so a failure here means the request did not come from that UI.
     Guild* guild = sGuildMgr->GetGuildById(player->GetGuildId());
     if (!guild)
     {
         TC_LOG_DEBUG("network", "CMSG_CLUB_FINDER_POST: {} is not in a guild.", GetPlayerInfo());
+        sendError(CLUB_FINDER_ERROR_POST_CLUB);
         return;
     }
 
@@ -47,6 +59,7 @@ void WorldSession::HandleClubFinderPost(WorldPackets::ClubFinder::ClubFinderPost
     {
         TC_LOG_DEBUG("network", "CMSG_CLUB_FINDER_POST: {} tried to post for club {} but is in guild {}.",
             GetPlayerInfo(), clubFinderPost.ClubId, guild->GetId());
+        sendError(CLUB_FINDER_ERROR_POST_CLUB);
         return;
     }
 
@@ -54,6 +67,7 @@ void WorldSession::HandleClubFinderPost(WorldPackets::ClubFinder::ClubFinderPost
     {
         TC_LOG_DEBUG("network", "CMSG_CLUB_FINDER_POST: {} is not the leader of guild {}.",
             GetPlayerInfo(), guild->GetId());
+        sendError(CLUB_FINDER_ERROR_NO_POSTING_PERMISSIONS);
         return;
     }
 
@@ -71,19 +85,21 @@ void WorldSession::HandleClubFinderPost(WorldPackets::ClubFinder::ClubFinderPost
 
     ClubFinderPosting const* stored = sClubFinderMgr->SavePosting(std::move(posting));
     if (!stored)
+    {
+        sendError(CLUB_FINDER_ERROR_POST_CLUB);
         return;
+    }
 
     WorldPackets::ClubFinder::ClubFinderResponsePostRecruitmentMessage response;
     response.ClubFinderGUID = stored->GetClubFinderGUID();
 
-    // Echoing the request type is the convention this protocol family uses to let the client route a
-    // response back to the tab that asked for it. Flagged as an inference: this opcode appears in none
-    // of the 12.0.7 captures, so only its field widths are proven, not its values.
-    response.Type = stored->Type;
+    // The client's handler rejects anything but 0 or 1 here, raising ERR_CLUB_FINDER_ERROR_POST_CLUB
+    // and discarding the update. 0 is the success path that closes the posting dialog.
+    response.Result = CLUB_FINDER_POST_RESULT_OK;
 
-    // Second 3-bit field left at 0 - its meaning is genuinely unknown and guessing a status code would
-    // put invented data on the wire. See c:/dumps/CLUB_FINDER_SCOPING_68275.md.
-    response.Status = 0;
+    // The client parses this second field and never reads it again, so its value cannot affect
+    // behaviour either way. Left at 0 rather than filled with a guess.
+    response.Unused = 0;
 
     SendPacket(response.Write());
 

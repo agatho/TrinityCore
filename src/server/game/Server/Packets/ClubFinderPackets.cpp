@@ -43,8 +43,8 @@ void ClubFinderPost::Read()
 WorldPacket const* ClubFinderResponsePostRecruitmentMessage::Write()
 {
     _worldPacket << ClubFinderGUID;
-    _worldPacket << Bits<3>(Type);
-    _worldPacket << Bits<3>(Status);
+    _worldPacket << Bits<3>(Result);
+    _worldPacket << Bits<3>(Unused);
     _worldPacket.FlushBits();
 
     return &_worldPacket;

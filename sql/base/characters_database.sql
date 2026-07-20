@@ -2458,7 +2458,7 @@ CREATE TABLE `club_finder_posting` (
   `recruitmentFlags` int unsigned NOT NULL DEFAULT '0',
   `itemLevelRequirement` int unsigned NOT NULL DEFAULT '0',
   `avatarId` int unsigned NOT NULL DEFAULT '0',
-  `type` tinyint unsigned NOT NULL DEFAULT '3',
+  `type` tinyint unsigned NOT NULL DEFAULT '1',
   `crossFaction` tinyint unsigned NOT NULL DEFAULT '0',
   `lastPosterGuid` bigint unsigned NOT NULL DEFAULT '0',
   `lastUpdatedTime` bigint NOT NULL DEFAULT '0',

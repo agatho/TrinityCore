@@ -53,7 +53,15 @@ namespace WorldPackets
         };
 
         // Reader sub_7FF7290B42E0: a PackedGuid followed by one bit byte carrying two 3-bit fields
-        // (stored at +48 = b >> 5 and +52 = (b >> 2) & 7).
+        // (+48 = b >> 5, +52 = (b >> 2) & 7).
+        //
+        // Handler sub_7FF72ACAB9D0 branches on the FIRST field only: anything other than 0 or 1 makes
+        // it raise ERR_CLUB_FINDER_ERROR_POST_CLUB and drop the message. On 0/1 it refreshes the
+        // posting cache and fires CLUB_FINDER_POST_UPDATED, which is what closes the posting dialog.
+        // So the field is a post result code, not a request type.
+        //
+        // The second field is parsed and then never read by the handler - it reaches neither Lua nor
+        // manager state. Its value does not affect client behaviour.
         class ClubFinderResponsePostRecruitmentMessage final : public ServerPacket
         {
         public:
@@ -62,13 +70,15 @@ namespace WorldPackets
             WorldPacket const* Write() override;
 
             ObjectGuid ClubFinderGUID;
-            uint8 Type   = 0;   // 3 bits
-            uint8 Status = 0;   // 3 bits - meaning unverified, this opcode is absent from all captures
+            uint8 Result = 0;   // 3 bits; 0 and 1 are success, >= 2 makes the client report a failure
+            uint8 Unused = 0;   // 3 bits; parsed by the client and discarded
         };
 
-        // Reader sub_7FF7290B4020: one bit byte, a 3-bit field (+32 = b >> 5) and a 4-bit field
-        // (+36 = (b >> 1) & 0xF). Widths and order are proven; the field VALUES are not, because the
-        // opcode never appears in the 12.0.7 captures.
+        // Reader sub_7FF7290B4020: a 3-bit field (+32 = b >> 5) and a 4-bit field (+36 = (b >> 1) & 0xF).
+        //
+        // Handler sub_7FF72ACABB30 switches on the 4-bit field, mapping each value 1:1 onto an
+        // ERR_CLUB_FINDER_* global string, and uses the 3-bit field as the ClubFinderRequestType of the
+        // list re-request it issues for the recoverable cases.
         class ClubFinderErrorMessage final : public ServerPacket
         {
         public:
@@ -76,8 +86,8 @@ namespace WorldPackets
 
             WorldPacket const* Write() override;
 
-            uint8 Type  = 0;   // 3 bits
-            uint8 Error = 0;   // 4 bits
+            uint8 Type  = 0;   // 3 bits, ClubFinderRequestType
+            uint8 Error = 0;   // 4 bits, ClubFinderErrorType
         };
     }
 }
