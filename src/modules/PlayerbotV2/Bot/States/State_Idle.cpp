@@ -6164,8 +6164,35 @@ bool DungeonDispatch(BotSnapshotView const& s, BotAI& ai,
                             {
                                 G3D::Vector3 prog_step;
                                 bool prog_offmesh = false;
+                                // Campaign class-B fix (2026-07-20): when a route is
+                                // armed this fallback must walk to the SAME crumb the
+                                // route rule owns, not the raw boss. Live evidence
+                                // (Blackfathom/Sunken Temple/ZF/LBRS/Strat/Maraudon —
+                                // 40% of all campaign failures): boss-direct and crumb
+                                // targets sit 15-30y apart, each rule COMPLETES its
+                                // walk, and the other walks the tank straight back —
+                                // a 20y patrol loop forever (sticky ownership 1m made
+                                // the walks complete, exposing the arrival-level
+                                // ping-pong underneath). Same doctrine as 1b/1f: the
+                                // armed cursor is the single source of truth for
+                                // "which way to the boss". Objective threaded too, so
+                                // the 1k same-objective hold applies between them.
+                                float ptx = btx, pty = bty, ptz = btz;
+                                int32_t prog_crumb = -1;
+                                bool prog_yield = false;
+                                DungeonAdvanceTarget(s, ai, advice, btx, bty, btz,
+                                                     ptx, pty, ptz,
+                                                     "idle:dungeon_tank_advance_boss",
+                                                     &prog_crumb, &prog_yield);
+                                if (prog_yield)
+                                {
+                                    // Near-arrived at the crumb: the route rule owns
+                                    // completion/advance — do not walk boss-ward.
+                                    ai.set_last_rule_fired("idle:dungeon_tank_advance_boss_hold");
+                                    return true;
+                                }
                                 if (DungeonTargetReachableAndStep(
-                                        self_be, btx, bty, btz, kMaxAdvanceStep,
+                                        self_be, ptx, pty, ptz, kMaxAdvanceStep,
                                         prog_step, &prog_offmesh,
                                         /*allow_incomplete_progress=*/true))
                                 {
@@ -6182,7 +6209,8 @@ bool DungeonDispatch(BotSnapshotView const& s, BotAI& ai,
                                     }
                                     if (DungeonMoveOwnedElsewhere(s, ai, prog_step.x, prog_step.y,
                                                                   prog_step.z, now_ms,
-                                                                  "idle:dungeon_tank_advance_boss"))
+                                                                  "idle:dungeon_tank_advance_boss",
+                                                                  prog_crumb))
                                     {
                                         ai.set_last_rule_fired("idle:dungeon_tank_advance_boss_hold");
                                         return true;
@@ -6190,7 +6218,7 @@ bool DungeonDispatch(BotSnapshotView const& s, BotAI& ai,
                                     if (emit.move_to(prog_step.x, prog_step.y, prog_step.z,
                                                      /*run=*/true))
                                         ai.note_move_commit(s.map_id(), prog_step.x, prog_step.y,
-                                                            prog_step.z, now_ms);
+                                                            prog_step.z, now_ms, prog_crumb);
                                     ai.set_last_rule_fired("idle:dungeon_tank_advance_boss");
                                     return true;
                                 }
