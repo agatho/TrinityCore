@@ -89,7 +89,8 @@ void BattlePayMgr::LoadProducts()
         product.GrantCount    = fields[6].GetUInt32();
         product.Name          = fields[7].GetString();
 
-        if (!product.GrantId || (product.GrantType != 1 && product.GrantType != 2))
+        // GrantType 3 (WoW Token) carries no GrantId - the token itself is the product.
+        if (product.GrantType != 3 && (!product.GrantId || (product.GrantType != 1 && product.GrantType != 2)))
         {
             TC_LOG_ERROR("sql.sql", "BattlePay: product {} has invalid grantType {} / grantId {} - skipped.",
                 product.ProductID, product.GrantType, product.GrantId);
