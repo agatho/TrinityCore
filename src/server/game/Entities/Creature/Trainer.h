@@ -69,6 +69,10 @@ namespace Trainer
 
         void SendSpells(Creature const* npc, Player* player, LocaleConstant locale) const;
         void TeachSpell(Creature const* npc, Player* player, uint32 spellId) const;
+        // Read-only access to the underlying spell list. Lets callers
+        // enumerate trainer offerings without going through the full
+        // SendSpells packet build (used by Playerbot to drive bulk-train).
+        std::vector<Spell> const& GetSpells() const { return _spells; }
 
     private:
         Spell const* GetSpell(uint32 spellId) const;

@@ -289,6 +289,11 @@ public:
     std::map<uint32, AuctionPosting>::iterator GetAuctionsEnd() { return _itemsByAuctionId.end(); }
 
     AuctionPosting* GetAuction(uint32 auctionId);
+    // Returns the auction ids the given player currently owns in this house.
+    // Read-only â€” does not mutate _playerOwnedAuctions / _itemsByAuctionId.
+    // Used by Playerbot V2 to drive bulk-cancel and snapshot enrichment
+    // without exposing the internal multimap.
+    std::vector<uint32> GetOwnedAuctionIds(ObjectGuid owner) const;
 
     void AddAuction(CharacterDatabaseTransaction trans, AuctionPosting auction);
 

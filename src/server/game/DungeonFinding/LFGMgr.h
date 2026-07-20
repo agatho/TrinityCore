@@ -419,6 +419,17 @@ class TC_GAME_API LFGMgr
         void UpdateBoot(ObjectGuid guid, bool accept);
         /// Updates proposal to join dungeon with player answer
         void UpdateProposal(uint32 proposalId, ObjectGuid guid, bool accept);
+        /// Returns the proposal id for `guid` if a join-dungeon proposal is
+        /// currently pending response, or 0 if none. Read-only â€” does not
+        /// mutate proposal state. Used by Playerbot V2 to surface the popup
+        /// in the bot's snapshot so the AI can accept without traversing
+        /// internal proposal storage.
+        uint32 GetActiveProposalIdForPlayer(ObjectGuid guid) const;
+        /// True when the given group has an active role-check waiting on
+        /// `player_guid` to respond. Read-only; used by Playerbot V2 to
+        /// surface the pending role-check in the bot snapshot so the AI
+        /// can auto-respond with the bot's spec-derived role.
+        bool IsRoleCheckPending(ObjectGuid group_guid, ObjectGuid player_guid) const;
         /// Updates the role check with player answer
         void UpdateRoleCheck(ObjectGuid gguid, ObjectGuid guid = ObjectGuid::Empty, uint8 roles = PLAYER_ROLE_NONE);
         /// Sets player lfg roles

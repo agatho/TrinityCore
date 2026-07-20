@@ -30,6 +30,11 @@
 #include "Player.h"
 #include "World.h"
 
+// PlayerbotV2: synchronous BG-invite hook so bots port within the same world
+// tick the invite is sent (otherwise the snapshot-poll fallback can miss the
+// 90s INVITE_ACCEPT_WAIT_TIME under load and only the fastest 5-6 bots port).
+#include "Playerbot/PlayerbotHooks.h"
+
 /*********************************************************/
 /***            BATTLEGROUND QUEUE SYSTEM              ***/
 /*********************************************************/
@@ -492,6 +497,11 @@ bool BattlegroundQueue::InviteGroupToBG(GroupQueueInfo* ginfo, Battleground* bg,
             WorldPackets::Battleground::BattlefieldStatusNeedConfirmation battlefieldStatus;
             BattlegroundMgr::BuildBattlegroundStatusNeedConfirmation(&battlefieldStatus, bg, player, queueSlot, player->GetBattlegroundQueueJoinTime(bgQueueTypeId), INVITE_ACCEPT_WAIT_TIME, bgQueueTypeId);
             player->SendDirectMessage(battlefieldStatus.Write());
+
+            // PlayerbotV2 path: pushes a BgPortIntent into the bot's intent
+            // queue immediately (idempotent for non-bots; inline no-op when
+            // V2 not built).
+            Playerbot::Hooks::OnBGInvitationReceived(player, bg->GetInstanceID(), bg->GetTypeID());
         }
         return true;
     }
@@ -1042,6 +1052,11 @@ bool BGQueueInviteEvent::Execute(uint64 /*e_time*/, uint32 /*p_time*/)
             WorldPackets::Battleground::BattlefieldStatusNeedConfirmation battlefieldStatus;
             BattlegroundMgr::BuildBattlegroundStatusNeedConfirmation(&battlefieldStatus, bg, player, queueSlot, player->GetBattlegroundQueueJoinTime(m_QueueId), INVITE_ACCEPT_WAIT_TIME - INVITATION_REMIND_TIME, m_QueueId);
             player->SendDirectMessage(battlefieldStatus.Write());
+
+            // PlayerbotV2: reminder-event re-fire â€” handler is idempotent
+            // (the per-bot BgPort cooldown stamped on first invite suppresses
+            // duplicate intent emission within the 5s window).
+            Playerbot::Hooks::OnBGInvitationReceived(player, m_BgInstanceGUID, m_BgTypeId);
         }
     }
     return true;                                            //event will be deleted

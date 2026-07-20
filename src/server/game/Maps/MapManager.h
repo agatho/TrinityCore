@@ -59,6 +59,14 @@ class TC_GAME_API MapManager
         Map* FindMap(uint32 mapId, uint32 instanceId) const;
         uint32 FindInstanceIdForPlayer(uint32 mapId, Player const* player) const;
 
+        // Headless creator for continent (non-instance, non-bg, non-split-by-faction)
+        // base maps. Used by Playerbot V2 navmesh pre-warm at module init: forces
+        // grid + nav-tile load on the world thread BEFORE bot population starts,
+        // so the first bot teleporting in doesn't pay the cold-load cost on the
+        // map worker. Returns nullptr for unknown map ids and for maps that
+        // require a Player context (BG/dungeon/garrison/split-by-faction).
+        Map* PrewarmContinentMap(uint32 mapId);
+
         void Initialize();
         void Update(uint32 diff);
 

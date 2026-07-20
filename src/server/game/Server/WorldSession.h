@@ -1386,6 +1386,14 @@ class TC_GAME_API WorldSession
         uint32 GetClientBuild() const { return _clientBuild; }
         ClientBuild::VariantId const& GetClientBuildVariant() const { return _clientBuildVariant; }
 
+        // Always defined so core hook sites can call it unconditionally; a bot-free
+        // build simply answers false, mirroring the inline no-ops in PlayerbotHooks.h.
+#if defined(TRINITY_PLAYERBOT_V2)
+        bool IsBot() const { return _isBot; }
+#else
+        static constexpr bool IsBot() { return false; }
+#endif
+
         bool CanAccessAlliedRaces() const;
 
         /// Session in auth.queue currently

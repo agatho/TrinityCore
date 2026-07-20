@@ -26,6 +26,35 @@
 #include "Map.h"
 #include "Metric.h"
 #include "PhasingHandler.h"
+#include <array>
+#include <mutex>
+
+namespace
+{
+    // The dtNavMeshQuery for a given {map,instance} is SHARED and NOT thread-safe
+    // (MMapManager.cpp: "we have to use single dtNavMeshQuery for every instance,
+    // since those are not thread safe"; MMapManager.h:68). In the Playerbot build
+    // three contexts reach BuildPolyPath -> dtNavMeshQuery::findPath / moveAlongSurface
+    // on the SAME query concurrently: the world thread (bot move_to via DrainIntents),
+    // AiWorkerPool workers (bot State_Idle reachability via BotAI::tick) and MapUpdater
+    // workers (creature pathing in Map::Update). With no synchronization they mutate
+    // the query's node pools at once, corrupting dtNodePool's m_next[] into a cycle ->
+    // dtNodePool::getNode spins forever -> 60s world-thread hang + 0xC0000005 AV ->
+    // FreezeDetector crash (observed live 2026-06-27 at the Deadmines harbor;
+    // docs/playerbot/DESIGN_ASYNC_PATHFINDING_20260620.md lists this exact race as a
+    // known, unimplemented fix). Serialize the node-pool-mutating A* per map with a
+    // striped lock keyed by the owner's map id: all pathfinds that can share a query
+    // share a stripe (correct), and distinct maps that collide on a stripe only suffer
+    // harmless extra serialization. findNearestPoly is read-only on the navmesh and is
+    // intentionally left UNGUARDED so spatial probes don't contend. Striping avoids a
+    // single global pathfinding bottleneck across all maps.
+    constexpr std::size_t kNavExecLockStripes = 64;
+    inline std::mutex& NavExecLock(uint32 mapId)
+    {
+        static std::array<std::mutex, kNavExecLockStripes> locks;
+        return locks[mapId % kNavExecLockStripes];
+    }
+}
 
 ////////////////// PathGenerator //////////////////
 PathGenerator::PathGenerator(WorldObject const* owner) :

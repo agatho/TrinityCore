@@ -424,6 +424,131 @@ DisconnectToleranceInterval = 0
 mmap.enablePathFinding = 1
 
 #
+#    Pathfinding.PreferRoads
+#        Description: Road-aware pathfinding. When enabled, Detour's
+#                     query filter biases shortest-path search toward
+#                     polygons tagged NAV_AREA_ROAD by the mmaps
+#                     generator. Requires mmaps regenerated with the
+#                     road-aware mapextractor + mmaps_generator binaries
+#                     (writes parallel <map>_<y>_<x>.road files alongside
+#                     each <map>_<y>_<x>.map). Polygons without a road
+#                     tag are unaffected â€” old extracted mmaps without
+#                     .road files behave identically to before.
+#                     See src/modules/PlayerbotV2/docs/ROAD_AWARE_PATHFINDING_PLAN.md.
+#        Default:     0 - (Disabled, neutral cost for road polygons)
+#                     1 - (Enabled, road polygons cost less to traverse)
+
+Pathfinding.PreferRoads = 0
+
+#
+#    Pathfinding.RoadCost
+#        Description: Per-polygon traversal cost for road-tagged
+#                     polygons when Pathfinding.PreferRoads is enabled.
+#                     Default 0.5 means roads cost half as much as
+#                     plain ground â€” Detour will prefer routes that
+#                     stay on roads even when they're geometrically
+#                     longer (up to 2x). Lower = stronger preference;
+#                     1.0 = neutral; values above 1.0 actively avoid
+#                     roads (unusual).
+#        Default:     0.5
+
+Pathfinding.RoadCost = 0.5
+
+#
+#    Pathfinding.RoadCostMounted
+#        Description: Road cost when the unit is mounted. Mounted bots
+#                     benefit more from roads (mount speed applies
+#                     cleanly, no terrain skidding) so we offer a
+#                     tighter cost than the on-foot RoadCost. Only
+#                     active when PreferRoads = 1.
+#        Default:     0.35
+#
+
+Pathfinding.RoadCostMounted = 0.35
+
+#
+#    Pathfinding.SlopeCoefficient
+#        Description: Road-aware pathfinding Phase 3 â€” slope-aware cost
+#                     modifier. Each path segment's cost is multiplied by
+#                     `1.0 + slopeAngleDegrees * SlopeCoefficient / 100`
+#                     (clamped to 2.0). At default 1.0: 30Â° slope costs
+#                     1.3Ã—, 60Â° costs 1.6Ã—. The slope term tempers raw
+#                     road preference so bots don't switchback up a
+#                     mountain just because there's a road on it.
+#                     Set to 0.0 to disable the slope penalty entirely.
+#                     The dtQueryFilterTC subclass implements this; see
+#                     src/server/game/Movement/dtQueryFilterTC.cpp.
+#        Default:     1.0
+
+Pathfinding.SlopeCoefficient = 1.0
+
+###################################################################################################
+# Shared playerbot database
+#
+#    Playerbot.SharedDatabase
+#        Description: Schema name of the single database that holds ALL instance-
+#                     shared playerbot data â€” curated names, templates, activity
+#                     patterns, talent loadouts, chat, world-metadata, and the
+#                     handcrafted road network. Authored ONCE and reused across
+#                     every world-DB variant, so swapping the active world/
+#                     character DB never strands the shared bot data. Queries are
+#                     cross-DB qualified (<schema>.table) on the existing
+#                     connections; the configured DB user must have access to it.
+#                     SET THIS to your own schema name â€” it is NOT one of the
+#                     World/Character DBs and is shared across all of them.
+#        Default:     playerbot
+###################################################################################################
+Playerbot.SharedDatabase = playerbot
+
+###################################################################################################
+# Handcrafted road segments
+#
+#    HandcraftedRoads.Enable
+#        Description: Apply operator-curated road segments from the handcrafted_road table
+#                     to each map's navmesh at load time.  Tagged polys get the road-bias in
+#                     PathGenerator (slope-aware road bonus). Set to 0 to disable for debugging.
+#        Default:     1
+###################################################################################################
+HandcraftedRoads.Enable = 1
+
+###################################################################################################
+# Handcrafted road centerline routing (bots)
+#
+#    RoadGraph.Enable
+#        Description: Build a routable centerline graph from the handcrafted_road table and have
+#                     bots FOLLOW the authored road polylines for long ground trips (via a waypoint
+#                     spline) instead of only getting the NAV_AREA_ROAD area-cost nudge. The
+#                     area-cost bias (HandcraftedRoads.Enable above) remains the fallback.
+#        Default:     1 (enabled)
+#
+#    RoadGraph.MinDistance
+#        Description: Minimum straight-line distance (yards) before road routing is considered.
+#                     Shorter hops use direct navmesh movement.
+#        Default:     150.0
+#
+#    RoadGraph.MaxDetourRatio
+#        Description: Max allowed ratio of (entry + road + exit) length to the direct distance.
+#                     A road route longer than this is rejected in favour of the direct path.
+#        Default:     1.6
+#
+#    RoadGraph.MaxEntryDistance
+#        Description: Max distance (yards) a bot will treat a road node as a viable on/off ramp.
+#                     If no road node is within this range of the start or destination, the bot
+#                     uses direct movement.
+#        Default:     120.0
+#
+#    RoadGraph.NodeMergeEpsilon
+#        Description: Authored segment endpoints within this distance (yards) collapse into one
+#                     shared junction node when building the graph.
+#        Default:     3.0
+###################################################################################################
+RoadGraph.Enable = 1
+RoadGraph.MinDistance = 150.0
+RoadGraph.MaxDetourRatio = 1.6
+RoadGraph.MaxEntryDistance = 120.0
+RoadGraph.NodeMergeEpsilon = 3.0
+
+#
 #    vmap.enableLOS
 #    vmap.enableHeight
 #        Description: Vmap support for line of sight and height calculation.

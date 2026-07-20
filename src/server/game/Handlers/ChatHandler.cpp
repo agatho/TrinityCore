@@ -40,6 +40,7 @@
 #include "SpellAuraEffects.h"
 #include "Util.h"
 #include "World.h"
+#include "Playerbot/PlayerbotHooks.h"
 #include <algorithm>
 
 enum class ChatWhisperTargetStatus : uint8
@@ -256,6 +257,10 @@ ChatMessageResult WorldSession::HandleChatMessage(ChatMsg type, Language lang, s
             }
 
             sender->Say(msg, lang);
+            // PlayerbotV2 SC-P1a: let a nearby bot answer /say (greetings,
+            // direct-name mentions, "anyone know where X is?"). Reactor
+            // self-filters bot senders + range-gates via CONFIG_LISTEN_RANGE_SAY.
+            Playerbot::Hooks::OnSayChat(sender, msg);
             break;
         }
         case CHAT_MSG_EMOTE:
@@ -286,6 +291,9 @@ ChatMessageResult WorldSession::HandleChatMessage(ChatMsg type, Language lang, s
             }
 
             sender->Yell(msg, lang);
+            // PlayerbotV2 SC-P1a: yell reactions are rarer than say (handled
+            // inside the reactor) but a nearby bot may still respond.
+            Playerbot::Hooks::OnYellChat(sender, msg);
             break;
         }
         case CHAT_MSG_WHISPER:
@@ -343,6 +351,7 @@ ChatMessageResult WorldSession::HandleChatMessage(ChatMsg type, Language lang, s
                 sender->AddWhisperWhiteList(receiver->GetGUID());
 
             GetPlayer()->Whisper(msg, lang, receiver);
+            Playerbot::Hooks::OnWhisperReceived(GetPlayer(), receiver, msg);
             break;
         }
         case CHAT_MSG_PARTY:
@@ -363,6 +372,13 @@ ChatMessageResult WorldSession::HandleChatMessage(ChatMsg type, Language lang, s
             WorldPackets::Chat::Chat packet;
             packet.Initialize(ChatMsg(type), lang, sender, nullptr, msg);
             group->BroadcastPacket(packet.Write(), false, group->GetMemberGroup(GetPlayer()->GetGUID()));
+            // Playerbot V2: route party-chat squad commands. Messages
+            // starting with `;` (the squad prefix) are dispatched to
+            // the sender's bots in the group via the address resolver.
+            // Any non-bot listeners see the literal message in chat;
+            // bots react. This makes raid-leader chatter ergonomic
+            // ("` ;tank pull") without forcing whisper-per-bot.
+            Playerbot::Hooks::OnPartyChat(GetPlayer(), group, msg);
             break;
         }
         case CHAT_MSG_GUILD:
@@ -374,6 +390,11 @@ ChatMessageResult WorldSession::HandleChatMessage(ChatMsg type, Language lang, s
                     sScriptMgr->OnPlayerChat(GetPlayer(), type, lang, msg, guild);
 
                     guild->BroadcastToGuild(this, false, msg, lang == LANG_ADDON ? LANG_ADDON : LANG_UNIVERSAL);
+                    // V2 Phase C.3: route to BotChatReactor so an online
+                    // officer of the sender's guild can drop a contextual
+                    // reply (gz/nice/:) ). Bot-originated chat is
+                    // self-filtered by the reactor.
+                    Playerbot::Hooks::OnGuildChat(GetPlayer(), GetPlayer()->GetGuildId(), msg);
                 }
             }
             break;
@@ -405,6 +426,9 @@ ChatMessageResult WorldSession::HandleChatMessage(ChatMsg type, Language lang, s
             WorldPackets::Chat::Chat packet;
             packet.Initialize(ChatMsg(type), lang, sender, nullptr, msg);
             group->BroadcastPacket(packet.Write(), false);
+            // PlayerbotV2: same squad-chat surface as PARTY for the user.
+            // Raid/instance chat is what LFG groups end up using by default.
+            Playerbot::Hooks::OnPartyChat(GetPlayer(), group, msg);
             break;
         }
         case CHAT_MSG_RAID_WARNING:
@@ -468,6 +492,13 @@ ChatMessageResult WorldSession::HandleChatMessage(ChatMsg type, Language lang, s
             WorldPackets::Chat::Chat packet;
             packet.Initialize(ChatMsg(type), lang, sender, nullptr, msg);
             group->BroadcastPacket(packet.Write(), false);
+            // PlayerbotV2: route instance chat the same way as party chat
+            // for squad command dispatch (`;all run`, `;tank pull`, etc.).
+            // LFG groups default to instance chat â€” without this hook the
+            // user's commands never reach the resolver. Fix 2026-05-13:
+            // observed "Player Balastan tells instance with leader Thaoir:
+            // ;all run" with bots not responding.
+            Playerbot::Hooks::OnPartyChat(GetPlayer(), group, msg);
             break;
         }
         default:
@@ -747,6 +778,12 @@ void WorldSession::HandleTextEmoteOpcode(WorldPackets::Chat::CTextEmote& packet)
     textEmote.EmoteID = packet.EmoteID;
     textEmote.SoundIndex = packet.SoundIndex;
     _player->SendMessageToSetInRange(textEmote.Write(), sWorld->getFloatConfig(CONFIG_LISTEN_RANGE_TEXTEMOTE), true);
+
+    // PlayerbotV2 SC-P2c: a nearby bot reciprocates a text emote (waves
+    // back, returns a salute/cheer). Pass the resolved Emote id + target so
+    // the reactor can pick a reciprocal animation. Reactor self-filters bot
+    // senders and range-gates via CONFIG_LISTEN_RANGE_TEXTEMOTE.
+    Playerbot::Hooks::OnTextEmote(_player, static_cast<uint32>(emote), packet.Target);
 
     Unit* unit = ObjectAccessor::GetUnit(*_player, packet.Target);
 
