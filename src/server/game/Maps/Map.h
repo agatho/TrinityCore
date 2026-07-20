@@ -445,6 +445,11 @@ class TC_GAME_API Map : public GridRefManager<NGridType>
         Creature* GetCreature(ObjectGuid const& guid);
         DynamicObject* GetDynamicObject(ObjectGuid const& guid);
         GameObject* GetGameObject(ObjectGuid const& guid);
+        // Read-only access to the map MO-transport set (ships/zeppelins). These live in
+        // _transports, not the grid, so Cell::VisitGridObjects never returns them - the bot
+        // module needs this to find a docked ship for cross-continent travel.
+        std::set<Transport*> const& GetTransports() const { return _transports; }
+
         MeshObject* GetMeshObject(ObjectGuid const& guid);
         HousingRoomEntity* GetHousingRoomEntity(ObjectGuid const& guid);
         Pet* GetPet(ObjectGuid const& guid);

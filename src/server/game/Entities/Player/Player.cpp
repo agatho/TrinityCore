@@ -13531,6 +13531,18 @@ bool Player::IsUsingTwoHandedWeaponInOneHand() const
     return true;
 }
 
+
+// Playerbot: minimal core hook so the bot module can open a trade window without
+// going through the CMSG path. Mirrors what TradeHandler does on a real request.
+void Player::InitiateTrade(Player* trader)
+{
+    if (!trader || m_trade || trader->m_trade)
+        return;
+
+    m_trade = new TradeData(this, trader);
+    trader->m_trade = new TradeData(trader, this);
+}
+
 void Player::TradeCancel(bool sendback, TradeStatus status /*= TRADE_STATUS_CANCELLED*/)
 {
     if (m_trade)
@@ -26328,6 +26340,11 @@ void Player::SendInitialPacketsAfterAddToMap()
 
     GetSession()->SendLoadCUFProfiles();
 
+    // Bots never ack CMSG_CAST_SPELL, which trips the m_spellModTakingSpell assertion,
+    // and the effect is purely visual - so skip it for them.
+#if defined(TRINITY_PLAYERBOT_V2)
+    if (!GetSession()->IsBot())
+#endif
     CastSpell(this, 836, true);                             // LOGINEFFECT
 
     WorldPackets::Movement::MoveSetCompoundState setCompoundState;

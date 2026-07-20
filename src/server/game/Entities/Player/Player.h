@@ -1697,6 +1697,7 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
 
         Player* GetTrader() const;
         TradeData* GetTradeData() const { return m_trade; }
+        void InitiateTrade(Player* trader);                                     // Playerbot: core hook for bot-initiated trade
         void TradeCancel(bool sendback, TradeStatus status = TRADE_STATUS_CANCELLED);
 
         CinematicMgr* GetCinematicMgr() const { return _cinematicMgr.get(); }
@@ -2313,6 +2314,9 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         Loot* GetLootByWorldObjectGUID(ObjectGuid const& lootWorldObjectGuid) const;
         std::unordered_map<ObjectGuid, Loot*> const& GetAELootView() const { return m_AELootView; }
         LootRoll* GetLootRoll(ObjectGuid const& lootObjectGuid, uint8 lootListId);
+        // Read-only view of in-flight loot rolls, so the bot module can enumerate
+        // pending rolls without a per-roll GetLootRoll lookup.
+        std::vector<LootRoll*> const& GetLootRolls() const { return m_lootRolls; }
         void AddLootRoll(LootRoll* roll);
         void RemoveLootRoll(LootRoll* roll);
 
