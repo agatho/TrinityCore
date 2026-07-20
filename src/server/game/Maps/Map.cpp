@@ -1974,8 +1974,15 @@ void Map::SendObjectUpdates()
     while (!_updateObjects.empty())
     {
         BaseEntity* obj = *_updateObjects.begin();
-        ASSERT(obj->IsInWorld());
         _updateObjects.erase(_updateObjects.begin());
+
+        // A bot can be despawned between being queued here and this flush, so drop
+        // anything no longer in world or already marked destroyed instead of building
+        // an update for it. Without bots the ASSERT below never fired, hence the
+        // original hard assertion.
+        if (!obj->IsInWorld() || obj->IsDestroyedObject())
+            continue;
+
         obj->BuildUpdate(update_players);
     }
 
