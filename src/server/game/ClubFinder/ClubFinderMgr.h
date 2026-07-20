@@ -198,6 +198,7 @@ public:
 
     // Adds moderation flags to a posting and persists them. Used when a posting is reported.
     bool AddPostingDisplayFlags(uint32 postingId, uint32 flags);
+    bool RemovePostingDisplayFlags(uint32 postingId, uint32 flags);
 
     static bool IsPostingExpired(ClubFinderPosting const& posting);
     static bool IsApplicationExpired(ClubFinderApplication const& application);

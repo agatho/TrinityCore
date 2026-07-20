@@ -302,6 +302,26 @@ bool ClubFinderMgr::AddPostingDisplayFlags(uint32 postingId, uint32 flags)
     return true;
 }
 
+bool ClubFinderMgr::RemovePostingDisplayFlags(uint32 postingId, uint32 flags)
+{
+    auto itr = _postings.find(postingId);
+    if (itr == _postings.end())
+        return false;
+
+    ClubFinderPosting& posting = itr->second;
+    if (!(posting.DisplayFlags & flags))
+        return false;
+
+    posting.DisplayFlags &= ~flags;
+
+    CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_UPD_CLUB_FINDER_POSTING_FLAGS);
+    stmt->setUInt32(0, posting.DisplayFlags);
+    stmt->setUInt32(1, posting.PostingId);
+    CharacterDatabase.Execute(stmt);
+
+    return true;
+}
+
 std::vector<ClubFinderPosting const*> ClubFinderMgr::Search(SearchCriteria const& criteria) const
 {
     std::string needle = criteria.SearchString;

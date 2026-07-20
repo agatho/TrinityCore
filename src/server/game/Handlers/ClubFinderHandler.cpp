@@ -74,6 +74,56 @@ void WorldSession::HandleClubFinderPost(WorldPackets::ClubFinder::ClubFinderPost
         return;
     }
 
+    // A community posting advertises a Battle.net club, and this server has none: ClubService supports
+    // only guild clubs, so nothing could ever be joined through such a posting. Refusing it is honest;
+    // storing it would create an entry that browse silently drops because there is no guild behind it.
+    if (clubFinderPost.Type != CLUB_FINDER_REQUEST_TYPE_GUILD)
+    {
+        TC_LOG_DEBUG("network", "CMSG_CLUB_FINDER_POST: {} posted club type {}, which is not supported.",
+            GetPlayerInfo(), clubFinderPost.Type);
+        sendError(CLUB_FINDER_ERROR_FINDER_NOT_AVAILABLE);
+        return;
+    }
+
+    // Moderation: a posting flagged for a forced rename or rewrite may not be re-listed until the
+    // offending text actually changes. The client enforces this too, but the check has to hold here or
+    // it is trivially bypassed. Satisfying it clears the flag.
+    if (ClubFinderPosting const* current = sClubFinderMgr->GetPostingForClub(clubFinderPost.ClubId))
+    {
+        uint32 clearedFlags = 0;
+        if (current->DisplayFlags & CLUB_FINDER_POSTING_FLAG_FORCE_NAME_CHANGE)
+        {
+            if (current->Name == clubFinderPost.Name)
+            {
+                sendError(CLUB_FINDER_ERROR_POST_CLUB);
+                return;
+            }
+
+            clearedFlags |= CLUB_FINDER_POSTING_FLAG_FORCE_NAME_CHANGE;
+        }
+
+        if (current->DisplayFlags & CLUB_FINDER_POSTING_FLAG_FORCE_DESCRIPTION_CHANGE)
+        {
+            if (current->Description == clubFinderPost.Description)
+            {
+                sendError(CLUB_FINDER_ERROR_POST_CLUB);
+                return;
+            }
+
+            clearedFlags |= CLUB_FINDER_POSTING_FLAG_FORCE_DESCRIPTION_CHANGE;
+        }
+
+        // A banned posting cannot be revived by editing it.
+        if (current->DisplayFlags & CLUB_FINDER_POSTING_FLAG_BANNED)
+        {
+            sendError(CLUB_FINDER_ERROR_POST_CLUB);
+            return;
+        }
+
+        if (clearedFlags)
+            sClubFinderMgr->RemovePostingDisplayFlags(current->PostingId, clearedFlags);
+    }
+
     ClubFinderPosting posting;
     posting.ClubId               = clubFinderPost.ClubId;
     posting.Name                 = clubFinderPost.Name;
