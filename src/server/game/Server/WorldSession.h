@@ -2800,6 +2800,13 @@ class TC_GAME_API WorldSession
 
         ConnectToKey _instanceConnectKey;
 
+
+        #if defined(TRINITY_PLAYERBOT_V2)
+
+        bool _isBot = false;
+
+        #endif
+
         // Housing: client's last-used PlotIndex from OpenCornerstoneUI,
         // cached for the subsequent BuyHouse CMSG which doesn't include it.
         // The client's PlotIndex may differ from our DB2 PlotIndex values.
