@@ -16,6 +16,7 @@
  */
 
 #include "Unit.h"
+#include "Playerbot/PlayerbotHooks.h"
 #include "AbstractFollower.h"
 #include "Battlefield.h"
 #include "BattlefieldMgr.h"

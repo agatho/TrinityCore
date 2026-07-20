@@ -1652,9 +1652,16 @@ void WorldSession::HandlePlayerLogin(LoginQueryHolder const& holder)
     stmt->setUInt64(0, pCurrChar->GetGUID().GetCounter());
     CharacterDatabase.Execute(stmt);
 
+    // Bot sessions share the owner's account id, so letting them flip account.online
+    // would clobber the real player's state.
+#if defined(TRINITY_PLAYERBOT_V2)
+    if (!IsBot())
+#endif
+    {
     LoginDatabasePreparedStatement* loginStmt = LoginDatabase.GetPreparedStatement(LOGIN_UPD_ACCOUNT_ONLINE);
     loginStmt->setUInt32(0, GetAccountId());
     LoginDatabase.Execute(loginStmt);
+    }
 
     pCurrChar->SetInGameTime(GameTime::GetGameTimeMS());
 
