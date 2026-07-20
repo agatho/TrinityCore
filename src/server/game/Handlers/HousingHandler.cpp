@@ -3791,7 +3791,7 @@ void WorldSession::HandleHousingSvcsGetPotentialHouseOwners(WorldPackets::Housin
         WorldPackets::Housing::HousingSvcsGetPotentialHouseOwnersResponse::PotentialOwnerData ownerData;
         ownerData.PlayerGuid = member.PlayerGuid;
         if (Player* memberPlayer = ObjectAccessor::FindPlayer(member.PlayerGuid))
-            ownerData.PlayerName = memberPlayer->GetName() + realmSuffix;
+            ownerData.CharacterName = memberPlayer->GetName() + realmSuffix;
         response.PotentialOwners.push_back(std::move(ownerData));
     }
     SendPacket(response.Write());
@@ -4536,8 +4536,8 @@ void WorldSession::HandleGetAllLicensedDecorQuantities(WorldPackets::Housing::Ge
         for (Housing::CatalogEntry const* entry : housing->GetCatalogEntries())
         {
             WorldPackets::Housing::JamLicensedDecorQuantity qty;
-            qty.DecorID = entry->DecorEntryId;
-            qty.Quantity = entry->Count;
+            qty.HouseDecorID = entry->DecorEntryId;
+            qty.PlacedQuantity = entry->Count;
             response.Quantities.push_back(qty);
         }
 
@@ -4548,7 +4548,7 @@ void WorldSession::HandleGetAllLicensedDecorQuantities(WorldPackets::Housing::Ge
             bool found = false;
             for (auto const& existing : response.Quantities)
             {
-                if (existing.DecorID == decorId)
+                if (existing.HouseDecorID == decorId)
                 {
                     found = true;
                     break;
@@ -4557,8 +4557,8 @@ void WorldSession::HandleGetAllLicensedDecorQuantities(WorldPackets::Housing::Ge
             if (!found)
             {
                 WorldPackets::Housing::JamLicensedDecorQuantity qty;
-                qty.DecorID = decorId;
-                qty.Quantity = quantity;
+                qty.HouseDecorID = decorId;
+                qty.PlacedQuantity = quantity;
                 response.Quantities.push_back(qty);
             }
         }
