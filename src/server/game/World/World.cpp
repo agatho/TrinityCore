@@ -71,6 +71,7 @@
 #include "ItemBonusMgr.h"
 #include "ContributionMgr.h"
 #include "CraftingOrderMgr.h"
+#include "ClubFinderMgr.h"
 #include "LFGListMgr.h"
 #include "LFGMgr.h"
 #include "Language.h"
@@ -1651,6 +1652,9 @@ bool World::SetInitialWorldSettings()
 
     TC_LOG_INFO("server.loading", "Loading Game Event Data...");               // must be after loading pools fully
     sGameEventMgr->LoadFromDB();
+
+    TC_LOG_INFO("server.loading", "Loading club finder postings...");
+    sClubFinderMgr->Load();
 
     TC_LOG_INFO("server.loading", "Loading in-game Shop (BattlePay) catalog...");
     sBattlePayMgr->Load();

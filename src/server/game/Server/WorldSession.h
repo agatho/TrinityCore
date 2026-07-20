@@ -1101,6 +1101,20 @@ namespace WorldPackets
         class Complaint;
     }
 
+    namespace ClubFinder
+    {
+        class ClubFinderPost;
+        class ClubFinderRequestSubscribedClubPostingIds;
+        class ClubFinderRequestClubsData;
+        class ClubFinderRequestClubsList;
+        class ClubFinderRequestMembershipToClub;
+        class ClubFinderGetApplicantsList;
+        class ClubFinderRequestPendingClubsList;
+        class ClubFinderRespondToApplicant;
+        class ClubFinderApplicationResponse;
+        class ClubFinderWhisperApplicantRequest;
+    }
+
     namespace Token
     {
         class CommerceTokenGetLog;
@@ -2463,6 +2477,19 @@ class TC_GAME_API WorldSession
         void HandleSceneTriggerEvent(WorldPackets::Scenes::SceneTriggerEvent& sceneTriggerEvent);
         void HandleScenePlaybackComplete(WorldPackets::Scenes::ScenePlaybackComplete& scenePlaybackComplete);
         void HandleScenePlaybackCanceled(WorldPackets::Scenes::ScenePlaybackCanceled& scenePlaybackCanceled);
+
+        // Club Finder
+        void HandleClubFinderPost(WorldPackets::ClubFinder::ClubFinderPost& clubFinderPost);
+        void HandleClubFinderRequestSubscribedClubPostingIds(WorldPackets::ClubFinder::ClubFinderRequestSubscribedClubPostingIds& request);
+        void HandleClubFinderRequestClubsData(WorldPackets::ClubFinder::ClubFinderRequestClubsData& request);
+        void HandleClubFinderRequestClubsList(WorldPackets::ClubFinder::ClubFinderRequestClubsList& request);
+        void HandleClubFinderRequestMembershipToClub(WorldPackets::ClubFinder::ClubFinderRequestMembershipToClub& request);
+        void HandleClubFinderGetApplicantsList(WorldPackets::ClubFinder::ClubFinderGetApplicantsList& request);
+        void HandleClubFinderRequestPendingClubsList(WorldPackets::ClubFinder::ClubFinderRequestPendingClubsList& request);
+        void HandleClubFinderRespondToApplicant(WorldPackets::ClubFinder::ClubFinderRespondToApplicant& request);
+        void HandleClubFinderApplicationResponse(WorldPackets::ClubFinder::ClubFinderApplicationResponse& request);
+        void HandleClubFinderWhisperApplicantRequest(WorldPackets::ClubFinder::ClubFinderWhisperApplicantRequest& request);
+        void SendClubFinderPendingApplications(uint8 type);
 
         // Token
         void HandleCommerceTokenGetLog(WorldPackets::Token::CommerceTokenGetLog& updateListedAuctionableTokens);

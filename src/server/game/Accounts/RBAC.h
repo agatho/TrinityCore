@@ -759,6 +759,7 @@ enum RBACPermissions
     //
     // custom permissions 1000+
     RBAC_PERM_COMMAND_CHROMIE_TIME                           = 1000,
+    RBAC_PERM_COMMAND_CLUB_FINDER                            = 1001,
     RBAC_PERM_MAX
 };
 

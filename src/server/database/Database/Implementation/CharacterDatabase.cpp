@@ -1065,6 +1065,10 @@ void CharacterDatabaseConnection::DoPrepareStatements()
     PrepareStatement(CHAR_DEL_WARBAND_ACHIEVEMENT_PROGRESS_BY_CRITERIA, "DELETE FROM warband_achievement_progress WHERE battlenetAccountId = ? AND criteria = ?", CONNECTION_ASYNC);
 
     PrepareStatement(CHAR_SEL_ACCOUNT_TOTAL_MONEY, "SELECT SUM(money) FROM characters WHERE account = ? AND deleteDate IS NULL", CONNECTION_ASYNC);
+    PrepareStatement(CHAR_REP_CLUB_FINDER_POSTING, "REPLACE INTO club_finder_posting (postingId, clubId, name, description, recruitingSpecs, recruitmentFlags, itemLevelRequirement, avatarId, displayFlags, type, crossFaction, lastPosterGuid, lastUpdatedTime) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", CONNECTION_ASYNC);
+    PrepareStatement(CHAR_REP_CLUB_FINDER_APPLICATION, "REPLACE INTO club_finder_application (postingId, playerGuid, comment, specs, status, lastUpdatedTime) VALUES (?, ?, ?, ?, ?, ?)", CONNECTION_ASYNC);
+    PrepareStatement(CHAR_DEL_CLUB_FINDER_APPLICATION, "DELETE FROM club_finder_application WHERE postingId = ? AND playerGuid = ?", CONNECTION_ASYNC);
+    PrepareStatement(CHAR_UPD_CLUB_FINDER_POSTING_FLAGS, "UPDATE club_finder_posting SET displayFlags = ? WHERE postingId = ?", CONNECTION_ASYNC);
 }
 
 CharacterDatabaseConnection::CharacterDatabaseConnection(MySQLConnectionInfo& connInfo, ConnectionFlags connectionFlags) : MySQLConnection(connInfo, connectionFlags)
