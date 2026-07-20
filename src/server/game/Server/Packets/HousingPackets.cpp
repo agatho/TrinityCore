@@ -1185,13 +1185,14 @@ WorldPacket const* HousingSvcsUpdateHousesLevelFavor::Write()
     _worldPacket << uint32(Houses.size());
     for (HouseLevelFavor const& house : Houses)
     {
-        _worldPacket << house.OwnerGUID;
+        _worldPacket << house.BnetAccount;
         _worldPacket << house.NeighborhoodGUID;
         _worldPacket << house.HouseGUID;
-        _worldPacket << int64(house.NewFavorTotal);     // u32 low @48 + u32 high @52
-        _worldPacket << uint8(house.Field3);            // u8 @57
-        _worldPacket << uint32(house.Reserved);         // u32 @60
-        _worldPacket << uint8(house.Flag ? 0x80 : 0x00);// trailing byte, bit7 @56
+        _worldPacket << int32(house.HouseLevel);            // @48 (was low dword of int64 NewFavorTotal)
+        _worldPacket << int32(house.FavorValue);            // @52 (was high dword)
+        _worldPacket << uint8(house.UpdateSource);          // u8 @57 (low byte of in-mem uint32)
+        _worldPacket << uint32(house.SourceDataDecorID);    // u32 @60 (sourceData.decorID)
+        _worldPacket << uint8(house.IsAdditive ? 0x80 : 0x00); // trailing byte, bit7 @56
     }
 
     TC_LOG_DEBUG("network.opcode",
@@ -1317,15 +1318,15 @@ WorldPacket const* HousingSvcsGetPotentialHouseOwnersResponse::Write()
     for (auto const& owner : PotentialOwners)
     {
         _worldPacket << owner.PlayerGuid;
-        _worldPacket << uint32(owner.Field1);
-        _worldPacket << uint8(owner.AccessLevel);
-        uint32 nameLen = static_cast<uint32>(owner.PlayerName.size());
+        _worldPacket << uint32(owner.ClassID);
+        _worldPacket << uint8(owner.Error);
+        uint32 nameLen = static_cast<uint32>(owner.CharacterName.size());
         uint8 lenByte1 = static_cast<uint8>(nameLen >> 1);
         uint8 lenByte2 = static_cast<uint8>((nameLen & 1) << 7);
         _worldPacket << uint8(lenByte1);
         _worldPacket << uint8(lenByte2);
         if (nameLen > 0)
-            _worldPacket.append(owner.PlayerName.c_str(), nameLen);
+            _worldPacket.append(owner.CharacterName.c_str(), nameLen);
     }
 
     TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_SVCS_GET_POTENTIAL_HOUSE_OWNERS_RESPONSE OwnerCount: {}", PotentialOwners.size());
@@ -1684,15 +1685,15 @@ WorldPacket const* GetAllLicensedDecorQuantitiesResponse::Write()
     _worldPacket << uint32(Quantities.size());
     for (auto const& qty : Quantities)
     {
-        _worldPacket << uint32(qty.DecorID);
-        _worldPacket << uint32(qty.Quantity);
-        _worldPacket << uint32(qty.MaxQuantity);
+        _worldPacket << uint32(qty.HouseDecorID);
+        _worldPacket << uint32(qty.PlacedQuantity);
+        _worldPacket << uint32(qty.StoredQuantity);
     }
 
     TC_LOG_DEBUG("network.opcode", "SMSG_GET_ALL_LICENSED_DECOR_QUANTITIES_RESPONSE QuantityCount: {}", Quantities.size());
     for (size_t i = 0; i < Quantities.size(); ++i)
         TC_LOG_DEBUG("network.opcode", "  Quantity[{}]: DecorID={} Quantity={} MaxQuantity={}",
-            i, Quantities[i].DecorID, Quantities[i].Quantity, Quantities[i].MaxQuantity);
+            i, Quantities[i].HouseDecorID, Quantities[i].PlacedQuantity, Quantities[i].StoredQuantity);
 
     return &_worldPacket;
 }
@@ -1702,15 +1703,15 @@ WorldPacket const* LicensedDecorQuantitiesUpdate::Write()
     _worldPacket << uint32(Quantities.size());
     for (auto const& qty : Quantities)
     {
-        _worldPacket << uint32(qty.DecorID);
-        _worldPacket << uint32(qty.Quantity);
-        _worldPacket << uint32(qty.MaxQuantity);
+        _worldPacket << uint32(qty.HouseDecorID);
+        _worldPacket << uint32(qty.PlacedQuantity);
+        _worldPacket << uint32(qty.StoredQuantity);
     }
 
     TC_LOG_DEBUG("network.opcode", "SMSG_LICENSED_DECOR_QUANTITIES_UPDATE QuantityCount: {}", Quantities.size());
     for (size_t i = 0; i < Quantities.size(); ++i)
         TC_LOG_DEBUG("network.opcode", "  Quantity[{}]: DecorID={} Quantity={} MaxQuantity={}",
-            i, Quantities[i].DecorID, Quantities[i].Quantity, Quantities[i].MaxQuantity);
+            i, Quantities[i].HouseDecorID, Quantities[i].PlacedQuantity, Quantities[i].StoredQuantity);
 
     return &_worldPacket;
 }

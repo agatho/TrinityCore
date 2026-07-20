@@ -1404,12 +1404,13 @@ namespace WorldPackets::Housing
     // Deserializer: Deserialize_JamHousingSearchResult (0x7FF724C7D4A0)
     struct JamHousingSearchResult
     {
-        ObjectGuid PrimaryGUID;      // +0: Neighborhood/search entity GUID
-        uint64 SortKey = 0;          // +16: timestamp or sort priority
-        uint64 SortData = 0;         // +24: additional sort data
-        uint8 StatusType = 0;        // +32: result status type
-        ObjectGuid SecondaryGUID;    // +40: related entity GUID (owner)
-        std::string Name;            // +56: result name string (len at +64)
+        // Field names + types from 12.0.7 (68275) client reflection descriptor (HOUSING_REFLECTION_NAMES_68275.md).
+        ObjectGuid Guid;             // +0  reflection: guid
+        uint64 OccupiedPlots = 0;    // +16 reflection: occupiedPlots
+        uint64 ReservationMask = 0;  // +24 reflection: reservationMask
+        uint32 Flags = 0;            // +32 reflection: flags (uint32; was uint8 StatusType — widened per reflection, struct is unused scaffolding)
+        ObjectGuid OwnerGUID;        // +40 reflection: ownerGUID
+        std::string NeighborhoodName; // +56 reflection: neighborhoodName (len at +64)
     };
 
     // Retired 2026-05-11: HousingSvcsSearchNeighborhoodsResponse + HousingSvcsGetNeighborhoodDetailsResponse
@@ -1472,15 +1473,18 @@ namespace WorldPackets::Housing
         uint32 ChangeAmount = 0; // header @4
         uint32 Reason = 0;       // header @8
 
+        // Field names from 12.0.7 (68275) reflection: JamHousingDBHouseLevelFavorUpdateData (RE refl-03).
+        // Wire unchanged: split of the former int64 into two int32s is byte-identical (LE low/high dword).
         struct HouseLevelFavor   // 64B wire element
         {
-            ObjectGuid OwnerGUID;
-            ObjectGuid NeighborhoodGUID;
-            ObjectGuid HouseGUID;
-            int64 NewFavorTotal = -1;   // u32 low @48 + u32 high @52 (-1 = "max" sentinel)
-            uint8 Field3 = 0;           // u8 @57
-            uint32 Reserved = 0;        // u32 @60
-            bool Flag = true;           // trailing byte bit7 @56 (was 0x80 Terminator)
+            ObjectGuid BnetAccount;         // reflection: bnetAccount @0 (was OwnerGUID)
+            ObjectGuid NeighborhoodGUID;    // reflection: neighborhoodGUID @16
+            ObjectGuid HouseGUID;           // reflection: houseGUID @32
+            int32 HouseLevel = 0;           // reflection: houseLevel @48  (was low dword of NewFavorTotal)
+            int32 FavorValue = 0;           // reflection: favorValue @52  (was high dword of NewFavorTotal)
+            uint8 UpdateSource = 0;         // reflection: updateSource @57 (in-mem uint32; wire u8 low byte, verified)
+            uint32 SourceDataDecorID = 0;   // reflection: sourceData.decorID @60 (JamHousingDBHouseLevelFavorUpdateSourceData)
+            bool IsAdditive = true;         // reflection: isAdditive @56 (wire bit7)
         };
         std::vector<HouseLevelFavor> Houses;
     };
@@ -1566,12 +1570,13 @@ namespace WorldPackets::Housing
 
         // IDA case 5505050 (sub_7FF724C7DA70): NO Result byte
         // uint32(count) + Entry[count]{PackedGUID + uint32 + uint8 + uint8 + uint8(bit7→nameLen) + String(nameLen)}
+        // Field names from 12.0.7 (68275) reflection: JamPotentialCosmeticHouseOwner (HOUSING_REFLECTION_NAMES_68275.md).
         struct PotentialOwnerData
         {
-            ObjectGuid PlayerGuid;
-            uint32 Field1 = 0;          // offset 324 in client struct
-            uint8 AccessLevel = 0;      // offset 328 in client struct
-            std::string PlayerName;     // offset 16 in client struct, variable length
+            ObjectGuid PlayerGuid;      // reflection: playerGUID @0
+            uint32 ClassID = 0;         // reflection: classID @324 (was Field1)
+            uint8 Error = 0;            // reflection: error @328 (HousingResult code, in-mem uint32; wire = low byte, verified u8). RE refl-02.
+            std::string CharacterName;  // reflection: characterName @16 (was PlayerName), variable length
         };
         std::vector<PotentialOwnerData> PotentialOwners;
     };
@@ -1849,10 +1854,11 @@ namespace WorldPackets::Housing
 
     struct JamLicensedDecorQuantity
     {
-        // IDA-verified wire (build 67186, sub_7FF75C0EFBA0): 3 uint32 fields per entry (12 bytes)
-        uint32 DecorID = 0;
-        uint32 Quantity = 0;
-        uint32 MaxQuantity = 0; // semantic name not yet verified
+        // Field names from 12.0.7 (68275) client reflection descriptor (HOUSING_REFLECTION_NAMES_68275.md).
+        // Wire unchanged: 3 uint32 fields per entry (12 bytes), verified build 67186 sub_7FF75C0EFBA0.
+        uint32 HouseDecorID = 0;    // reflection: houseDecorID
+        uint32 PlacedQuantity = 0;  // reflection: placedQuantity
+        uint32 StoredQuantity = 0;  // reflection: storedQuantity (was MaxQuantity — reflection resolves it: stored, not max)
     };
 
     // ============================================================

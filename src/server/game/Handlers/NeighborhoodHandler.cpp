@@ -1213,7 +1213,7 @@ void WorldSession::HandleNeighborhoodBuyHouse(WorldPackets::Neighborhood::Neighb
                 levelFavor.Reason = 1;
                 auto& fav = levelFavor.Houses.emplace_back();
                 fav.HouseGUID = h->GetHouseGuid();
-                fav.NewFavorTotal = newTotal;
+                fav.HouseLevel = static_cast<int32>(newTotal);
                 SendPacket(levelFavor.Write());
             }
             // Packet 2: Favor delta (ChangeAmount=starter → "you gained N favor").
@@ -1224,7 +1224,7 @@ void WorldSession::HandleNeighborhoodBuyHouse(WorldPackets::Neighborhood::Neighb
                 levelFavor.Reason = 1;
                 auto& fav = levelFavor.Houses.emplace_back();
                 fav.HouseGUID = h->GetHouseGuid();
-                fav.NewFavorTotal = newTotal;
+                fav.HouseLevel = static_cast<int32>(newTotal);
                 SendPacket(levelFavor.Write());
             }
         }
