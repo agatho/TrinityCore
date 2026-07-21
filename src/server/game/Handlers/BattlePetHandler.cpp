@@ -183,7 +183,7 @@ static WorldPackets::BattlePet::PetBattlePetUpdateInfo BuildPetUpdateInfo(
 static void BuildPetBattlePlayerUpdate(WorldPackets::BattlePet::PetBattlePlayerUpdateInfo& update,
     PetBattles::PetBattleTeamData const& team, bool isWildTeam, PetBattles::PetBattle const* battle, uint8 teamIdx)
 {
-    update.CharacterID = team.PlayerGUID;
+    update.CharacterGUID = team.PlayerGUID;
     update.TrapAbilityID = team.TrapAbilityID;
     update.TrapStatus = battle ? battle->GetTrapStatus(teamIdx) : team.TrapStatus;
     update.RoundTimeSecs = 0; // Initial update uses 0; round-level timer is in PvpMaxRoundTime
@@ -239,12 +239,12 @@ static void EmitInitialFrontPetSwapEffects(std::vector<WorldPackets::BattlePet::
         int32 frontPBOID = static_cast<int32>(t * PetBattles::MAX_PET_BATTLE_TEAM_SIZE + team.FrontPetIndex);
 
         WorldPackets::BattlePet::PetBattleEffectInfo swapEffect;
-        swapEffect.EffectIndex = PetBattles::PET_BATTLE_EFFECT_PET_SWAP;
+        swapEffect.PetBattleEffectType = PetBattles::PET_BATTLE_EFFECT_PET_SWAP;
         swapEffect.CasterPBOID = frontPBOID;
 
         WorldPackets::BattlePet::PetBattleEffectTargetInfo swapTarget;
         swapTarget.Type = 0;
-        swapTarget.Remaining = frontPBOID;
+        swapTarget.Petx = frontPBOID;
         swapEffect.Targets.push_back(std::move(swapTarget));
 
         effects.push_back(std::move(swapEffect));
@@ -373,16 +373,16 @@ static void BuildRoundEffects(std::vector<WorldPackets::BattlePet::PetBattleEffe
         effect.TurnInstanceID = 0;
         // Wire offset 12 is the PetBattleEffectType — client switches on this to process effects
         // (SetHealth=0, AuraApply=1, PetSwap=4, SetState=6, etc.), NOT a sequential index
-        effect.EffectIndex = roundEffect.EffectType;
+        effect.PetBattleEffectType = roundEffect.EffectType;
         effect.CasterPBOID = static_cast<int32>(roundEffect.SourceTeam * PetBattles::MAX_PET_BATTLE_TEAM_SIZE + roundEffect.SourcePet);
         effect.StackDepth = 0;
 
         WorldPackets::BattlePet::PetBattleEffectTargetInfo target;
         // Environment targets use PBOID_ENVIRONMENT_BASE + slot; pet targets use team * TEAM_SIZE + pet
         if (roundEffect.TargetEnvSlot >= 0)
-            target.Remaining = static_cast<int32>(PetBattles::PBOID_ENVIRONMENT_BASE + roundEffect.TargetEnvSlot);
+            target.Petx = static_cast<int32>(PetBattles::PBOID_ENVIRONMENT_BASE + roundEffect.TargetEnvSlot);
         else
-            target.Remaining = static_cast<int32>(roundEffect.TargetTeam * PetBattles::MAX_PET_BATTLE_TEAM_SIZE + roundEffect.TargetPet);
+            target.Petx = static_cast<int32>(roundEffect.TargetTeam * PetBattles::MAX_PET_BATTLE_TEAM_SIZE + roundEffect.TargetPet);
 
         // Map effect type to target type and variable-length params
         // Target types: 0=none, 1=aura(4 i32), 2=state(2 i32), 3=health(1 i32),
@@ -611,7 +611,7 @@ void WorldSession::HandlePetBattleRequestWild(WorldPackets::BattlePet::PetBattle
     {
         auto const& pu = initialUpdate.Players[t];
         TC_LOG_DEBUG("server.loading", "PetBattle InitialUpdate Player[{}]: CharID={} TrapAbilityID={} TrapStatus={} RoundTimeSecs={} FrontPet={} InputFlags={} PetCount={}",
-            t, pu.CharacterID.ToString(), pu.TrapAbilityID, pu.TrapStatus, pu.RoundTimeSecs, pu.FrontPet, pu.InputFlags, pu.Pets.size());
+            t, pu.CharacterGUID.ToString(), pu.TrapAbilityID, pu.TrapStatus, pu.RoundTimeSecs, pu.FrontPet, pu.InputFlags, pu.Pets.size());
         for (uint8 p = 0; p < pu.Pets.size(); ++p)
         {
             auto const& pet = pu.Pets[p];
@@ -875,7 +875,7 @@ void WorldSession::HandlePetBattleInput(WorldPackets::BattlePet::PetBattleInput&
             {
                 auto const& eff = roundResult.Effects[e];
                 TC_LOG_DEBUG("server.loading", "  Effect[{}]: AbilEffID={} Flags=0x{:X} Idx={} CasterPBOID={} StackDepth={} Targets={}",
-                    e, eff.AbilityEffectID, eff.Flags, eff.EffectIndex, eff.CasterPBOID, eff.StackDepth, eff.Targets.size());
+                    e, eff.AbilityEffectID, eff.Flags, eff.PetBattleEffectType, eff.CasterPBOID, eff.StackDepth, eff.Targets.size());
                 for (std::size_t tgt = 0; tgt < eff.Targets.size(); ++tgt)
                 {
                     auto const& t = eff.Targets[tgt];
@@ -883,7 +883,7 @@ void WorldSession::HandlePetBattleInput(WorldPackets::BattlePet::PetBattleInput&
                     for (int32 p : t.Params)
                         paramStr += std::to_string(p) + " ";
                     TC_LOG_DEBUG("server.loading", "    Target[{}]: Type={} Remaining(PBOID)={} Params=[{}]",
-                        tgt, t.Type, t.Remaining, paramStr);
+                        tgt, t.Type, t.Petx, paramStr);
                 }
             }
 
@@ -961,12 +961,12 @@ void WorldSession::HandlePetBattleReplaceFrontPet(WorldPackets::BattlePet::PetBa
     swapEffect.Flags = 0;
     swapEffect.SourceAuraInstanceID = 0;
     swapEffect.TurnInstanceID = 0;
-    swapEffect.EffectIndex = PetBattles::PET_BATTLE_EFFECT_PET_SWAP; // Wire offset 12 = EffectType, client case 4
+    swapEffect.PetBattleEffectType = PetBattles::PET_BATTLE_EFFECT_PET_SWAP; // Wire offset 12 = EffectType, client case 4
     swapEffect.CasterPBOID = static_cast<int32>(teamIdx * PetBattles::MAX_PET_BATTLE_TEAM_SIZE + newPetIdx);
     swapEffect.StackDepth = 0;
     WorldPackets::BattlePet::PetBattleEffectTargetInfo swapTarget;
     swapTarget.Type = 0; // No extra params needed for PetSwap
-    swapTarget.Remaining = static_cast<int32>(teamIdx * PetBattles::MAX_PET_BATTLE_TEAM_SIZE + newPetIdx);
+    swapTarget.Petx = static_cast<int32>(teamIdx * PetBattles::MAX_PET_BATTLE_TEAM_SIZE + newPetIdx);
     swapEffect.Targets.push_back(swapTarget);
     replacements.Effects.push_back(std::move(swapEffect));
 
