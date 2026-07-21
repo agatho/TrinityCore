@@ -1137,6 +1137,40 @@ static void DungeonStepHoldDiag(BotSnapshotView const& s, char const* rule_tag,
     }
 }
 
+// Refusal-aware target selection (2026-07-20). True when API::move_to
+// refused (Result::Locked) this EXACT destination recently — see
+// BotAI::move_refused_recently's header comment for the poison-loop bug
+// this fixes (a rule that keeps re-selecting the same refused destination
+// re-arms the API's own path-fail backoff forever, freezing the bot over a
+// perfectly valid navmesh). Callers must NOT emit toward a refused
+// destination and must NOT claim the tick for it — fall through so the
+// next rule/candidate gets tried instead. Gated on the same kill switch as
+// the step-hold family (one concept: spline/emit protection, no new key).
+static bool DungeonStepRefused(BotSnapshotView const& s, BotAI& ai,
+                               float tx, float ty, float tz, uint32 now_ms)
+{
+    if (!Services::Config().move_step_hold_enabled())
+        return false;
+    return ai.move_refused_recently(tx, ty, tz, now_ms);
+}
+
+// Throttled [step_refused] diag — mirrors DungeonStepHoldDiag's one-log-site
+// shape for the refusal-skip family; rule_tag identifies which emit site
+// declined a poisoned destination.
+static void DungeonStepRefusedDiag(BotSnapshotView const& s, char const* rule_tag,
+                                   float tx, float ty, float tz)
+{
+    static uint32 s_step_refused_dbg_ms = 0;
+    const uint32 now = GameTime::GetGameTimeMS();
+    if (now - s_step_refused_dbg_ms > 1500u)
+    {
+        s_step_refused_dbg_ms = now;
+        TC_LOG_INFO("playerbot.v2",
+            "[step_refused] bot={} rule={} dest=({:.1f},{:.1f},{:.1f})",
+            s.bot_id(), rule_tag, tx, ty, tz);
+    }
+}
+
 // Throttled [move_owned] diag (increment 1h, 2026-07-03; extended increment
 // 1k, 2026-07-18 with the caller's rule tag + the objective on both sides —
 // the long-standing diag gap: forensics could see the competing XYZs but not
@@ -2106,6 +2140,14 @@ bool DungeonCombatPositioning(BotSnapshotView const& s, BotAI& ai,
                             // another objective owns the spline this window —
                             // FALL THROUGH exactly like the in-flight branch above.
                         }
+                        else if (DungeonStepRefused(s, ai, pstep.x, pstep.y, pstep.z, now_ms))
+                        {
+                            // API refused this exact destination recently — FALL
+                            // THROUGH so a different candidate is tried next tick
+                            // instead of re-poisoning the API's own backoff.
+                            DungeonStepRefusedDiag(s, "idle:dungeon_combat_advance_boss",
+                                                   pstep.x, pstep.y, pstep.z);
+                        }
                         else if (emit.move_to(pstep.x, pstep.y, pstep.z, /*run=*/true))
                         {
                             ai.set_last_rule_fired("idle:dungeon_combat_advance_boss");
@@ -2730,6 +2772,13 @@ bool DungeonCombatPositioning(BotSnapshotView const& s, BotAI& ai,
                                 ai.set_last_rule_fired("idle:dungeon_combat_rejoin_tank_hold");
                                 return true;
                             }
+                            if (DungeonStepRefused(s, ai, frstep.x, frstep.y, frstep.z, now_ms))
+                            {
+                                DungeonStepRefusedDiag(s, "idle:dungeon_combat_rejoin_tank",
+                                                       frstep.x, frstep.y, frstep.z);
+                                ai.set_last_rule_fired("idle:dungeon_combat_rejoin_tank_hold");
+                                return true;
+                            }
                             if (emit.move_to(frstep.x, frstep.y, frstep.z, /*run=*/true))
                                 ai.note_move_commit(s.map_id(), frstep.x, frstep.y, frstep.z, now_ms);
                         }
@@ -2745,6 +2794,13 @@ bool DungeonCombatPositioning(BotSnapshotView const& s, BotAI& ai,
                             if (DungeonMoveOwnedElsewhere(s, ai, tk->x, tk->y, tk->z, now_ms,
                                                           "idle:dungeon_combat_rejoin_tank"))
                             {
+                                ai.set_last_rule_fired("idle:dungeon_combat_rejoin_tank_hold");
+                                return true;
+                            }
+                            if (DungeonStepRefused(s, ai, tk->x, tk->y, tk->z, now_ms))
+                            {
+                                DungeonStepRefusedDiag(s, "idle:dungeon_combat_rejoin_tank",
+                                                       tk->x, tk->y, tk->z);
                                 ai.set_last_rule_fired("idle:dungeon_combat_rejoin_tank_hold");
                                 return true;
                             }
@@ -2764,6 +2820,13 @@ bool DungeonCombatPositioning(BotSnapshotView const& s, BotAI& ai,
                         if (DungeonMoveOwnedElsewhere(s, ai, tk->x, tk->y, tk->z, now_ms,
                                                       "idle:dungeon_combat_rejoin_tank"))
                         {
+                            ai.set_last_rule_fired("idle:dungeon_combat_rejoin_tank_hold");
+                            return true;
+                        }
+                        if (DungeonStepRefused(s, ai, tk->x, tk->y, tk->z, now_ms))
+                        {
+                            DungeonStepRefusedDiag(s, "idle:dungeon_combat_rejoin_tank",
+                                                   tk->x, tk->y, tk->z);
                             ai.set_last_rule_fired("idle:dungeon_combat_rejoin_tank_hold");
                             return true;
                         }
@@ -4143,6 +4206,17 @@ bool DungeonConvergeToFight(BotSnapshotView const& s, BotAI& ai,
             ai.set_last_rule_fired("dungeon:converge_to_fight_hold");
             return true;
         }
+        // Refused destination: unlike the in-flight/owned-elsewhere holds
+        // above, genuinely FALL THROUGH (return false) — this is a
+        // standalone function with its own early-return exits (see
+        // !stuck_out / join_ms above), so declining here lets the caller
+        // (DungeonDispatch) try a lower-priority rule THIS SAME TICK
+        // instead of re-hammering the same poisoned destination.
+        if (DungeonStepRefused(s, ai, rx, ry, rz, now_ms))
+        {
+            DungeonStepRefusedDiag(s, "dungeon:converge_to_fight", rx, ry, rz);
+            return false;
+        }
         if (emit.move_to(rx, ry, rz, /*run=*/true))
             ai.note_move_commit(s.map_id(), rx, ry, rz, now_ms);
     }
@@ -4159,6 +4233,11 @@ bool DungeonConvergeToFight(BotSnapshotView const& s, BotAI& ai,
         {
             ai.set_last_rule_fired("dungeon:converge_to_fight_hold");
             return true;
+        }
+        if (DungeonStepRefused(s, ai, tk->x, tk->y, tk->z, now_ms))
+        {
+            DungeonStepRefusedDiag(s, "dungeon:converge_to_fight", tk->x, tk->y, tk->z);
+            return false;
         }
         if (emit.move_to(tk->x, tk->y, tk->z, /*run=*/true))
             ai.note_move_commit(s.map_id(), tk->x, tk->y, tk->z, now_ms);
@@ -5801,12 +5880,24 @@ bool DungeonDispatch(BotSnapshotView const& s, BotAI& ai,
                                     ai.set_last_rule_fired("idle:dungeon_tank_advance_boss_hold");
                                     return true;
                                 }
-                                if (emit.move_to(boss_step.x, boss_step.y, boss_step.z,
-                                                 /*run=*/true))
-                                    ai.note_move_commit(s.map_id(), boss_step.x, boss_step.y,
-                                                        boss_step.z, now_ms);
-                                ai.set_last_rule_fired("idle:dungeon_tank_advance_boss");
-                                return true;
+                                // Refused destination: FALL THROUGH past this whole
+                                // direct-step branch (skip the unconditional return
+                                // below) so the leashed-step / waypoint-chunked
+                                // fallbacks further down — genuinely DIFFERENT
+                                // candidates — get tried this same tick instead of
+                                // re-hammering the poisoned boss_step.
+                                if (!DungeonStepRefused(s, ai, boss_step.x, boss_step.y,
+                                                        boss_step.z, now_ms))
+                                {
+                                    if (emit.move_to(boss_step.x, boss_step.y, boss_step.z,
+                                                     /*run=*/true))
+                                        ai.note_move_commit(s.map_id(), boss_step.x, boss_step.y,
+                                                            boss_step.z, now_ms);
+                                    ai.set_last_rule_fired("idle:dungeon_tank_advance_boss");
+                                    return true;
+                                }
+                                DungeonStepRefusedDiag(s, "idle:dungeon_tank_advance_boss",
+                                                       boss_step.x, boss_step.y, boss_step.z);
                             }
                             // Off-mesh-footed boss the strict test rejects: close in
                             // with a leashed step toward its XY at the tank's Z,
@@ -5839,6 +5930,14 @@ bool DungeonDispatch(BotSnapshotView const& s, BotAI& ai,
                                 {
                                     // another objective owns the spline this
                                     // window — FALL THROUGH like above.
+                                }
+                                else if (DungeonStepRefused(s, ai, lshx, lshy, lshz, now_ms))
+                                {
+                                    // refused destination — FALL THROUGH so the
+                                    // waypoint-chunked fallback below (a genuinely
+                                    // different candidate) gets tried this tick.
+                                    DungeonStepRefusedDiag(s, "idle:dungeon_tank_advance_boss",
+                                                           lshx, lshy, lshz);
                                 }
                                 else if (emit.move_to(lshx, lshy, lshz, /*run=*/true))
                                 {
@@ -6120,6 +6219,20 @@ bool DungeonDispatch(BotSnapshotView const& s, BotAI& ai,
                                                 // the incremental boss step below.
                                                 if (crumb_d(i) <= kRouteArrive) continue;
                                                 auto const& rr = advice.route_waypoints[i];
+                                                // Refusal-aware target selection (2026-07-20):
+                                                // skip a crumb whose destination the API
+                                                // refused recently (path-fail backoff) so the
+                                                // leapfrog scan advances to the NEXT crumb
+                                                // instead of re-committing the same poisoned
+                                                // one every tick — see
+                                                // BotAI::move_refused_recently header comment.
+                                                // Gated on the same kill switch as the rest of
+                                                // the step-hold/refusal family so
+                                                // PlayerbotV2.Move.StepHoldEnabled=false keeps
+                                                // this scan byte-identical to pre-fix behavior.
+                                                if (Services::Config().move_step_hold_enabled() &&
+                                                    ai.move_refused_recently(rr.x, rr.y, rr.z, now_ms))
+                                                    continue;
                                                 // scan probe — hop side effects (cross commit +
                                                 // cooldown claim) must not fire here; links are
                                                 // consumed at the STEER call above (cur's
@@ -6193,13 +6306,26 @@ bool DungeonDispatch(BotSnapshotView const& s, BotAI& ai,
                                             "idle:dungeon_tank_advance_boss_route_hold");
                                         return true;
                                     }
-                                    if (emit.move_to(best_wp_step.x, best_wp_step.y,
-                                                     best_wp_step.z, /*run=*/true))
-                                        ai.note_move_commit(s.map_id(), best_wp_step.x,
-                                                            best_wp_step.y, best_wp_step.z, now_ms,
-                                                            route_cur);
-                                    ai.set_last_rule_fired("idle:dungeon_tank_advance_boss_route");
-                                    return true;
+                                    // Refused destination: FALL THROUGH past this
+                                    // route-waypoint branch (skip the unconditional
+                                    // return below) so the long-range incremental /
+                                    // off-mesh-recovery fallbacks further down — real
+                                    // alternative candidates — get a chance this tick.
+                                    if (!DungeonStepRefused(s, ai, best_wp_step.x,
+                                                            best_wp_step.y, best_wp_step.z,
+                                                            now_ms))
+                                    {
+                                        if (emit.move_to(best_wp_step.x, best_wp_step.y,
+                                                         best_wp_step.z, /*run=*/true))
+                                            ai.note_move_commit(s.map_id(), best_wp_step.x,
+                                                                best_wp_step.y, best_wp_step.z, now_ms,
+                                                                route_cur);
+                                        ai.set_last_rule_fired("idle:dungeon_tank_advance_boss_route");
+                                        return true;
+                                    }
+                                    DungeonStepRefusedDiag(s, "idle:dungeon_tank_advance_boss_route",
+                                                           best_wp_step.x, best_wp_step.y,
+                                                           best_wp_step.z);
                                 }
                             }
                             // Long-range incremental approach: the strict test failed
@@ -6269,12 +6395,24 @@ bool DungeonDispatch(BotSnapshotView const& s, BotAI& ai,
                                         ai.set_last_rule_fired("idle:dungeon_tank_advance_boss_hold");
                                         return true;
                                     }
-                                    if (emit.move_to(prog_step.x, prog_step.y, prog_step.z,
-                                                     /*run=*/true))
-                                        ai.note_move_commit(s.map_id(), prog_step.x, prog_step.y,
-                                                            prog_step.z, now_ms, prog_crumb);
-                                    ai.set_last_rule_fired("idle:dungeon_tank_advance_boss");
-                                    return true;
+                                    // Refused destination: FALL THROUGH past this
+                                    // incremental-progress branch (skip the
+                                    // unconditional return below) so the off-mesh
+                                    // boss-destination recovery further down — a
+                                    // real alternative candidate — gets tried this
+                                    // same tick.
+                                    if (!DungeonStepRefused(s, ai, prog_step.x, prog_step.y,
+                                                            prog_step.z, now_ms))
+                                    {
+                                        if (emit.move_to(prog_step.x, prog_step.y, prog_step.z,
+                                                         /*run=*/true))
+                                            ai.note_move_commit(s.map_id(), prog_step.x, prog_step.y,
+                                                                prog_step.z, now_ms, prog_crumb);
+                                        ai.set_last_rule_fired("idle:dungeon_tank_advance_boss");
+                                        return true;
+                                    }
+                                    DungeonStepRefusedDiag(s, "idle:dungeon_tank_advance_boss",
+                                                           prog_step.x, prog_step.y, prog_step.z);
                                 }
                             }
                             // Off-mesh boss DESTINATION recovery (Admiral Ripsnarl stands
@@ -6342,12 +6480,23 @@ bool DungeonDispatch(BotSnapshotView const& s, BotAI& ai,
                                                 "idle:dungeon_tank_advance_boss_hold");
                                             return true;
                                         }
-                                        if (emit.move_to(nn_step.x, nn_step.y, nn_step.z,
-                                                         /*run=*/true))
-                                            ai.note_move_commit(s.map_id(), nn_step.x, nn_step.y,
-                                                                nn_step.z, now_ms);
-                                        ai.set_last_rule_fired("idle:dungeon_tank_advance_boss");
-                                        return true;
+                                        // Refused destination: FALL THROUGH (this is
+                                        // the last fallback in the boss-advance
+                                        // cascade) to the trash navigators below —
+                                        // a genuinely different candidate — instead
+                                        // of re-hammering the poisoned nn_step.
+                                        if (!DungeonStepRefused(s, ai, nn_step.x, nn_step.y,
+                                                                nn_step.z, now_ms))
+                                        {
+                                            if (emit.move_to(nn_step.x, nn_step.y, nn_step.z,
+                                                             /*run=*/true))
+                                                ai.note_move_commit(s.map_id(), nn_step.x, nn_step.y,
+                                                                    nn_step.z, now_ms);
+                                            ai.set_last_rule_fired("idle:dungeon_tank_advance_boss");
+                                            return true;
+                                        }
+                                        DungeonStepRefusedDiag(s, "idle:dungeon_tank_advance_boss",
+                                                               nn_step.x, nn_step.y, nn_step.z);
                                     }
                                 }
                             }
@@ -6455,10 +6604,19 @@ bool DungeonDispatch(BotSnapshotView const& s, BotAI& ai,
                             ai.set_last_rule_fired("idle:dungeon_tank_advance_hold");
                             return true;
                         }
-                        if (emit.move_to(advx, advy, advz, /*run=*/true))
-                            ai.note_move_commit(s.map_id(), advx, advy, advz, now_ms);
-                        ai.set_last_rule_fired("idle:dungeon_tank_advance");
-                        return true;
+                        // Refused destination: FALL THROUGH past this far-trash
+                        // advance (skip the unconditional return below) so the
+                        // wide-scan / boss-as-destination / waypoint fallbacks
+                        // below — real alternative candidates — get tried this
+                        // same tick instead of re-hammering the poisoned spot.
+                        if (!DungeonStepRefused(s, ai, advx, advy, advz, now_ms))
+                        {
+                            if (emit.move_to(advx, advy, advz, /*run=*/true))
+                                ai.note_move_commit(s.map_id(), advx, advy, advz, now_ms);
+                            ai.set_last_rule_fired("idle:dungeon_tank_advance");
+                            return true;
+                        }
+                        DungeonStepRefusedDiag(s, "idle:dungeon_tank_advance", advx, advy, advz);
                     }
                 }
                 // A route-owned far_target must not ALSO veto the ladder below.

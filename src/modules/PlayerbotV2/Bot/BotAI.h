@@ -1135,6 +1135,46 @@ public:
         }
     }
 
+    // ---- refused-destination memory (refusal-aware target selection,
+    // 2026-07-20) ----
+    // BUG THIS FIXES: PlayerbotAPI::move_to keeps a PER-DESTINATION path-fail
+    // backoff — one failed pathfind poisons that destination for a TTL, and
+    // every later move_to to ~that destination returns Result::Locked
+    // without issuing a spline. The RULE has no idea the destination is
+    // poisoned — it re-selects the SAME destination every tick, gets Locked,
+    // and the backoff is continuously re-armed => a PERMANENT FREEZE over a
+    // perfectly valid navmesh (live: bot 164465, dst=(1848.1,1530.5,123.4),
+    // "[move_lock] reason=path_fail_backoff" repeating forever, headless
+    // probes proved the mesh itself was fine). This ring lets the AI side
+    // remember "that spot was just refused by the API" so the NEXT tick's
+    // candidate selection (dungeon step-emit sites, route-follower crumb
+    // scan) can skip it and try a DIFFERENT candidate instead of
+    // re-committing to the same poisoned destination.
+    //
+    // 4-slot ring (oldest slot overwritten on note), TTL-gated so a stale
+    // refusal eventually ages out and the destination can be retried.
+    // kMoveRefusedTtlMs is deliberately a bit longer than the API's own
+    // short (3s) path-fail backoff so we don't re-try INSIDE that window and
+    // immediately re-poison it. Radius matches the emitter dedup (3y) so a
+    // refusal at one point also covers near-identical restated destinations.
+    static constexpr uint32 kMoveRefusedTtlMs    = 6000;
+    static constexpr float  kMoveRefusedRadiusSq = 9.0f;   // 3y
+    void note_move_refused(float x, float y, float z, uint32 now_ms)
+    {
+        move_refused_[move_refused_head_] = RefusedDst{x, y, z, now_ms ? now_ms : 1u};
+        move_refused_head_ = (move_refused_head_ + 1) % move_refused_.size();
+    }
+    bool move_refused_recently(float x, float y, float z, uint32 now_ms) const
+    {
+        for (RefusedDst const& r : move_refused_)
+        {
+            if (r.ms == 0 || now_ms - r.ms >= kMoveRefusedTtlMs) continue;
+            const float dx = x - r.x, dy = y - r.y, dz = z - r.z;
+            if (dx * dx + dy * dy + dz * dz <= kMoveRefusedRadiusSq) return true;
+        }
+        return false;
+    }
+
     // Cross EPISODE wall-clock. Unlike the three detectors below — all of which the
     // FLIP-FLOP defeats (the committed exit alternates between the two bridge
     // endpoints, so the target-relative best-distance and window clocks reset on
@@ -3017,6 +3057,10 @@ private:
     // See move_commit_note_progress()/move_commit_active() above.
     float          move_commit_best_d2_     = 0.f;
     uint32         move_commit_progress_ms_ = 0;
+    // Refused-destination ring (see move_refused_recently() above).
+    struct RefusedDst { float x = 0.f, y = 0.f, z = 0.f; uint32 ms = 0; };
+    std::array<RefusedDst, 4> move_refused_{};
+    size_t                    move_refused_head_ = 0;
     float          dungeon_cross_x_ = 0.f;
     float          dungeon_cross_y_ = 0.f;
     float          dungeon_cross_z_ = 0.f;

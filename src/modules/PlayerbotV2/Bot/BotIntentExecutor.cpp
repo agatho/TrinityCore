@@ -564,6 +564,17 @@ size_t V2::Module::DrainIntents()
                     if (BotAI* botai = reg.ai(id))
                     {
                         botai->note_path_blocked(GameTime::GetGameTimeMS());
+                        // Refusal-aware target selection: remember the EXACT
+                        // destination the API just refused so rules skip it
+                        // next tick instead of re-selecting the same poisoned
+                        // spot and re-arming the API's own path-fail backoff
+                        // forever (see BotAI::move_refused_recently header
+                        // comment for the full failure this fixes).
+                        if (auto const* mv_locked =
+                                std::get_if<MoveToIntent>(&intent.body))
+                            botai->note_move_refused(mv_locked->x, mv_locked->y,
+                                                     mv_locked->z,
+                                                     GameTime::GetGameTimeMS());
                         // Diagnostic linkage: pair the API-side path_fail
                         // log line with the rule that emitted the move.
                         // Without this we can't tell whether wander, hub-
