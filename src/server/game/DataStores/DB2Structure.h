@@ -6374,14 +6374,15 @@ struct WarbandScenePlacementEntry
 {
     DBCPosition3D Position;
     uint32 ID;
-    int32 WarbandSceneID;
+    uint32 WarbandSceneID;                  // ParentIndexField - must be unsigned
     int32 SlotType;
     float Rotation;
     float Scale;
     uint32 Field_11_0_0_54210_004;
     uint32 Field_11_0_0_54210_005;
+    int32 Field_12_0_0_63534_008;
     int32 SlotID;
-    int32 Field_11_1_0_58221_009;
+    int32 Field_12_0_0_63534_010;
 };
 
 struct WMOAreaTableEntry
