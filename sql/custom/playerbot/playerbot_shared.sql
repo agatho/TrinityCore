@@ -1,3 +1,10 @@
+-- NOTE: all DEFINER clauses were stripped and views switched to SQL SECURITY INVOKER.
+-- mysqldump hardcodes DEFINER=`root`@`localhost`, which makes the import fail for any
+-- non-root operator with:
+--   ERROR 1227: Access denied; you need (at least one of) the SYSTEM_USER privilege(s)
+-- and because MySQL stops at the first error, the import silently ends there (7 of 49
+-- tables created). Objects now inherit the importing user's identity.
+
 -- Playerbot V2 shared database - schema only.
 --
 -- Dumped from the playerbot test environment, so this is the real DDL rather than a
@@ -161,7 +168,7 @@ CREATE TABLE `playerbot_bot_templates` (
 /*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
 /*!50003 SET sql_mode              = 'ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
 DELIMITER ;;
-/*!50003 CREATE*/ /*!50017 DEFINER=`root`@`localhost`*/ /*!50003 TRIGGER `trg_bot_templates_before_insert` BEFORE INSERT ON `playerbot_bot_templates` FOR EACH ROW BEGIN
+/*!50003 CREATE*/ /*!50017*/ /*!50003 TRIGGER `trg_bot_templates_before_insert` BEFORE INSERT ON `playerbot_bot_templates` FOR EACH ROW BEGIN
 
     -- Validate class_id (WoW classes are 1-13)
 
@@ -214,7 +221,7 @@ DELIMITER ;
 /*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
 /*!50003 SET sql_mode              = 'ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
 DELIMITER ;;
-/*!50003 CREATE*/ /*!50017 DEFINER=`root`@`localhost`*/ /*!50003 TRIGGER `trg_bot_templates_before_update` BEFORE UPDATE ON `playerbot_bot_templates` FOR EACH ROW BEGIN
+/*!50003 CREATE*/ /*!50017*/ /*!50003 TRIGGER `trg_bot_templates_before_update` BEFORE UPDATE ON `playerbot_bot_templates` FOR EACH ROW BEGIN
 
     -- Same validations as insert
 
@@ -1148,7 +1155,7 @@ SET character_set_client = @saved_cs_client;
 /*!50001 SET character_set_results     = utf8mb4 */;
 /*!50001 SET collation_connection      = utf8mb4_0900_ai_ci */;
 /*!50001 CREATE ALGORITHM=UNDEFINED */
-/*!50013 DEFINER=`root`@`localhost` SQL SECURITY DEFINER */
+/*!50013 SQL SECURITY INVOKER */
 /*!50001 VIEW `v_gear_sets_overview` AS select `t`.`template_name` AS `template_name`,`gs`.`target_ilvl` AS `target_ilvl`,`gs`.`gear_set_name` AS `gear_set_name`,`gs`.`content_tier` AS `content_tier`,`gs`.`actual_gear_score` AS `actual_gear_score`,count(`gi`.`id`) AS `items_defined` from ((`playerbot_bot_templates` `t` join `playerbot_template_gear_sets` `gs` on((`t`.`template_id` = `gs`.`template_id`))) left join `playerbot_template_gear_items` `gi` on((`gs`.`gear_set_id` = `gi`.`gear_set_id`))) group by `t`.`template_name`,`gs`.`gear_set_id` */;
 /*!50001 SET character_set_client      = @saved_cs_client */;
 /*!50001 SET character_set_results     = @saved_cs_results */;
@@ -1161,7 +1168,7 @@ SET character_set_client = @saved_cs_client;
 /*!50001 SET character_set_results     = utf8mb4 */;
 /*!50001 SET collation_connection      = utf8mb4_0900_ai_ci */;
 /*!50001 CREATE ALGORITHM=UNDEFINED */
-/*!50013 DEFINER=`root`@`localhost` SQL SECURITY DEFINER */
+/*!50013 SQL SECURITY INVOKER */
 /*!50001 VIEW `v_pool_roles` AS select `playerbot_instance_pool`.`faction` AS `faction`,`playerbot_instance_pool`.`role` AS `role`,`playerbot_instance_pool`.`slot_state` AS `slot_state`,count(0) AS `count` from `playerbot_instance_pool` group by `playerbot_instance_pool`.`faction`,`playerbot_instance_pool`.`role`,`playerbot_instance_pool`.`slot_state` */;
 /*!50001 SET character_set_client      = @saved_cs_client */;
 /*!50001 SET character_set_results     = @saved_cs_results */;
@@ -1174,7 +1181,7 @@ SET character_set_client = @saved_cs_client;
 /*!50001 SET character_set_results     = utf8mb4 */;
 /*!50001 SET collation_connection      = utf8mb4_0900_ai_ci */;
 /*!50001 CREATE ALGORITHM=UNDEFINED */
-/*!50013 DEFINER=`root`@`localhost` SQL SECURITY DEFINER */
+/*!50013 SQL SECURITY INVOKER */
 /*!50001 VIEW `v_pool_status` AS select `playerbot_instance_pool`.`slot_state` AS `slot_state`,count(0) AS `count`,round(((count(0) * 100.0) / (select count(0) from `playerbot_instance_pool`)),2) AS `percentage` from `playerbot_instance_pool` group by `playerbot_instance_pool`.`slot_state` */;
 /*!50001 SET character_set_client      = @saved_cs_client */;
 /*!50001 SET character_set_results     = @saved_cs_results */;
@@ -1187,7 +1194,7 @@ SET character_set_client = @saved_cs_client;
 /*!50001 SET character_set_results     = utf8mb4 */;
 /*!50001 SET collation_connection      = utf8mb4_0900_ai_ci */;
 /*!50001 CREATE ALGORITHM=UNDEFINED */
-/*!50013 DEFINER=`root`@`localhost` SQL SECURITY DEFINER */
+/*!50013 SQL SECURITY INVOKER */
 /*!50001 VIEW `v_template_details` AS select `t`.`template_id` AS `template_id`,`t`.`template_name` AS `template_name`,`t`.`spec_id` AS `spec_id`,`t`.`class_id` AS `class_id`,`s`.`class_name` AS `class_name`,`s`.`spec_name` AS `spec_name`,`t`.`role` AS `role`,`s`.`armor_type` AS `armor_type`,`s`.`primary_stat` AS `primary_stat`,`t`.`enabled` AS `enabled`,`t`.`validated` AS `validated`,`t`.`version` AS `version`,`t`.`patch_version` AS `patch_version`,`ts`.`total_uses` AS `total_uses`,`ts`.`avg_creation_time_ms` AS `avg_creation_time_ms` from ((`playerbot_bot_templates` `t` join `playerbot_spec_info` `s` on((`t`.`spec_id` = `s`.`spec_id`))) left join `playerbot_template_statistics` `ts` on((`t`.`template_id` = `ts`.`template_id`))) */;
 /*!50001 SET character_set_client      = @saved_cs_client */;
 /*!50001 SET character_set_results     = @saved_cs_results */;
@@ -1200,7 +1207,7 @@ SET character_set_client = @saved_cs_client;
 /*!50001 SET character_set_results     = utf8mb4 */;
 /*!50001 SET collation_connection      = utf8mb4_0900_ai_ci */;
 /*!50001 CREATE ALGORITHM=UNDEFINED */
-/*!50013 DEFINER=`root`@`localhost` SQL SECURITY DEFINER */
+/*!50013 SQL SECURITY INVOKER */
 /*!50001 VIEW `v_templates_by_role` AS select `s`.`role` AS `role`,count(0) AS `template_count`,sum((case when (`t`.`enabled` = 1) then 1 else 0 end)) AS `enabled_count`,sum((case when (`t`.`validated` = 1) then 1 else 0 end)) AS `validated_count` from (`playerbot_bot_templates` `t` join `playerbot_spec_info` `s` on((`t`.`spec_id` = `s`.`spec_id`))) group by `s`.`role` */;
 /*!50001 SET character_set_client      = @saved_cs_client */;
 /*!50001 SET character_set_results     = @saved_cs_results */;
@@ -1213,7 +1220,7 @@ SET character_set_client = @saved_cs_client;
 /*!50001 SET character_set_results     = utf8mb4 */;
 /*!50001 SET collation_connection      = utf8mb4_0900_ai_ci */;
 /*!50001 CREATE ALGORITHM=UNDEFINED */
-/*!50013 DEFINER=`root`@`localhost` SQL SECURITY DEFINER */
+/*!50013 SQL SECURITY INVOKER */
 /*!50001 VIEW `v_warm_pool_bracket_summary` AS select `playerbot_instance_pool`.`bracket` AS `bracket`,`playerbot_instance_pool`.`faction` AS `faction`,sum((case when (`playerbot_instance_pool`.`role` = 'TANK') then 1 else 0 end)) AS `tanks`,sum((case when (`playerbot_instance_pool`.`role` = 'HEALER') then 1 else 0 end)) AS `healers`,sum((case when (`playerbot_instance_pool`.`role` = 'DPS') then 1 else 0 end)) AS `dps`,count(0) AS `total` from `playerbot_instance_pool` where (`playerbot_instance_pool`.`is_warm_pool` = 1) group by `playerbot_instance_pool`.`bracket`,`playerbot_instance_pool`.`faction` */;
 /*!50001 SET character_set_client      = @saved_cs_client */;
 /*!50001 SET character_set_results     = @saved_cs_results */;
@@ -1226,7 +1233,7 @@ SET character_set_client = @saved_cs_client;
 /*!50001 SET character_set_results     = utf8mb4 */;
 /*!50001 SET collation_connection      = utf8mb4_0900_ai_ci */;
 /*!50001 CREATE ALGORITHM=UNDEFINED */
-/*!50013 DEFINER=`root`@`localhost` SQL SECURITY DEFINER */
+/*!50013 SQL SECURITY INVOKER */
 /*!50001 VIEW `v_warm_pool_health` AS select `b`.`bracket` AS `bracket`,`b`.`faction` AS `faction`,coalesce(`p`.`tanks`,0) AS `actual_tanks`,10 AS `target_tanks`,coalesce(`p`.`healers`,0) AS `actual_healers`,15 AS `target_healers`,coalesce(`p`.`dps`,0) AS `actual_dps`,25 AS `target_dps`,coalesce(`p`.`total`,0) AS `actual_total`,50 AS `target_total`,(case when (coalesce(`p`.`total`,0) = 50) then 'HEALTHY' when (coalesce(`p`.`total`,0) >= 40) then 'WARNING' else 'CRITICAL' end) AS `status` from ((select `b`.`bracket` AS `bracket`,`f`.`faction` AS `faction` from ((select 0 AS `bracket` union all select 1 AS `1` union all select 2 AS `2` union all select 3 AS `3` union all select 4 AS `4` union all select 5 AS `5` union all select 6 AS `6` union all select 7 AS `7`) `b` join (select 'ALLIANCE' AS `faction` union all select 'HORDE' AS `HORDE`) `f`)) `b` left join `v_warm_pool_bracket_summary` `p` on(((`b`.`bracket` = `p`.`bracket`) and (`b`.`faction` = `p`.`faction`)))) */;
 /*!50001 SET character_set_client      = @saved_cs_client */;
 /*!50001 SET character_set_results     = @saved_cs_results */;
