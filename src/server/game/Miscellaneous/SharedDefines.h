@@ -118,6 +118,13 @@ enum TimerunningSeasons : uint32
     TIMERUNNING_SEASON_LEGION   = 2
 };
 
+// Client Constants.TimerunningConsts (build 68275): "CTR" values interpreted as the
+// ContentTuning record IDs tagging timerunning-only items (ItemSparse.ContentTuningID).
+// Interpretation is fail-safe: if wrong, no item template carries these tunings and
+// conversion simply removes nothing.
+constexpr uint32 CONTENT_TUNING_ID_TIMERUNNING_ITEM            = 2905; // TIMERUNNING_ITEM_CTR
+constexpr uint32 CONTENT_TUNING_ID_TIMERUNNING_LEGION_ARTIFACT = 4579; // TIMERUNNING_LEGION_ARTIFACT_CTR
+
 constexpr uint32 GetMaxLevelForExpansion(uint32 expansion)
 {
     switch (expansion)
