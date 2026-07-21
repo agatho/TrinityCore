@@ -1348,6 +1348,15 @@ public:
     // later trips the stale since-timestamp and gives up instantly.
     uint32     opener_last_seen_ms() const { return opener_last_seen_ms_; }
     void       set_opener_last_seen(uint32 ms) { opener_last_seen_ms_ = ms; }
+    // Absolute opener ownership clock (2026-07-21): the FIRST tick the opener
+    // took for this bot in an unbroken out-of-combat run, INDEPENDENT of the
+    // victim GUID. Immune to the set_opener_victim re-stamp that defeats the
+    // per-victim give-up when the selection flips (live [opener_own]: fresh=1
+    // since=0ms forever). Cleared the moment the bot is genuinely in combat
+    // (see reset in BotAI's combat path). 0 = not currently owning.
+    uint32     opener_own_since_ms() const { return opener_own_since_ms_; }
+    void       set_opener_own_since(uint32 ms) { opener_own_since_ms_ = ms; }
+    void       reset_opener_own_since() { opener_own_since_ms_ = 0; }
     // Whether the opener's current victim is a dungeon boss (recorded while it is
     // still visible in the snapshot). Used so that when a VANISHING boss (e.g.
     // Admiral Ripsnarl's stealth/fog) drops out of the snapshot, the lost-victim
@@ -3093,6 +3102,7 @@ private:
     uint32         untankable_probe_last_ms_ = 0;
     ObjectGuid     opener_victim_;
     uint32         opener_victim_since_ms_ = 0;
+    uint32         opener_own_since_ms_ = 0;   // absolute OOC opener clock
     uint32         opener_last_seen_ms_ = 0;
     bool           opener_victim_is_boss_ = false;
     uint32         cast_oor_count_ = 0;

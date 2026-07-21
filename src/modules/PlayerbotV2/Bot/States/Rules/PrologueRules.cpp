@@ -133,7 +133,36 @@ bool BgOrphanEscapeFire(BotSnapshotView const& s, BotAI& ai,
 // ---------- combat:opener ----------
 bool OpenerGate(BotSnapshotView const& s, BotAI& ai, GroupSnapshotView const& g, uint32)
 {
-    if (s.victim().IsEmpty() || s.is_casting() || s.in_combat()) return false;
+    // Genuinely in combat / no victim / casting: the opener isn't owning
+    // OOC ticks, so the absolute clock resets (it only counts UNBROKEN
+    // out-of-combat opener ownership).
+    if (s.victim().IsEmpty() || s.is_casting() || s.in_combat())
+    {
+        ai.reset_opener_own_since();
+        return false;
+    }
+    // ABSOLUTE opener ceiling inside a dungeon (2026-07-21). The per-victim
+    // give-up (opener_victim_since_ms, 25s) is DEFEATED when the server-side
+    // victim selection flips between GUIDs every tick: set_opener_victim
+    // re-stamps since=now each time, so `now - since` never reaches 25s and
+    // the opener (prio 993) owns the tick forever, ABOVE idle:dungeon_dispatch
+    // (720). Live-proven with [opener_own]: every line fresh=1 since=0ms — a
+    // frozen tank still "fighting" (rotation names in RuleHist, InCombat=0,
+    // no MoveTo). This ceiling tracks the FIRST tick the opener took for this
+    // bot out of combat, independent of the victim, and yields to the dungeon
+    // navigator once it caps — the navigator then walks the bot to a real
+    // target or holds cleanly. Reset whenever the bot is genuinely in combat
+    // (opener_own_since is cleared on the in_combat exclusion above via
+    // note_opener_own below).
+    if (ai.dungeon_active())
+    {
+        const uint32 now = s.published_at_ms();
+        const uint32 own_since = ai.opener_own_since_ms();
+        if (own_since == 0)
+            ai.set_opener_own_since(now);
+        else if (now - own_since > 12000u)   // 12s of unbroken OOC opener → yield
+            return false;
+    }
     // Dungeon cohesion: a follower far from the tank must not burn ticks opening
     // on a target across a chokepoint it can't reach (the Gap-1 lip). The opener
     // (prio 993) otherwise preempts the DungeonDispatch regroup-cross (prio 720)
