@@ -14,14 +14,25 @@ different SHA, ancestry lies, and every later merge re-applies or conflicts.
 
 ## 1. Layout
 
-One worktree per feature, all under `I:\TrinityCore\`:
+A single **bare** repository is the parent of every worktree, so no feature
+directory is load-bearing:
 
 ```
 I:\TrinityCore\
+  .bare\                       the repository - objects and refs live here only
   <feature-name>\              worktree for feature/<feature-name>
   _integration\                worktree for integration/with-bots
   _integration-all-systems\    worktree for integration/all-systems
 ```
+
+Why bare: the tree previously hung off `pet-battles\TrinityCore\.git`, so that
+one feature folder was the parent of all seventeen worktrees. Deleting it (which
+happened, 2026-07-21) took every worktree down at once. With `.bare` there is no
+feature directory whose removal can break anything else, and `git worktree list`
+is a complete, trustworthy inventory.
+
+Run git commands from inside any worktree as normal. To address the repository
+itself: `git --git-dir=I:/TrinityCore/.bare <cmd>`.
 
 * Folder name == branch name minus the `feature/` prefix.
 * Integration worktrees are prefixed `_` so they sort first and read as not-a-feature.
