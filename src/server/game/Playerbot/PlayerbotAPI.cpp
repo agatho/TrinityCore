@@ -714,7 +714,25 @@ Result API::move_to(float x, float y, float z, bool run, bool direct)
     // the rule's per-target retry / fallback rules can take over.
     if (p_->HasUnitState(UNIT_STATE_NOT_MOVE) ||
         p_->IsMovementPreventedByCasting())
+    {
+        // Name the refusal. A repeating MoveTo|Locked is indistinguishable in
+        // the intent ring from a pathfinding refusal, and the campaign burned
+        // two Phase-2 candidates (Shadow Labyrinth, SFK) chasing "missing
+        // geometry" that headless probes then proved COMPLETE — the real
+        // cause is one of ~7 unnamed Locked branches. Throttled, one line.
+        static uint32 s_lock_state_ms = 0;
+        const uint32 lk_now = GameTime::GetGameTimeMS();
+        if (lk_now - s_lock_state_ms > 2000u)
+        {
+            s_lock_state_ms = lk_now;
+            TC_LOG_INFO("playerbot.v2",
+                "[move_lock] bot={} reason={} dst=({:.1f},{:.1f},{:.1f})",
+                p_->GetGUID().GetCounter(),
+                p_->IsMovementPreventedByCasting() ? "casting" : "unit_state_not_move",
+                x, y, z);
+        }
         return Result::Locked;
+    }
 
     // Active FlightPath guard. Bot is on a taxi spline (FLIGHT_MOTION_TYPE)
     // — issuing MovePoint while in flight queues under, not over, the
@@ -876,7 +894,19 @@ Result API::move_to(float x, float y, float z, bool run, bool direct)
         uint32 const move_now_ms = GameTime::GetGameTimeMS();
         uint64 const dest_key = PathDestKey(p_->GetMapId(), x, y);
         if (PathFailedRecently(p_, dest_key, move_now_ms))
+        {
+            // Named refusal (see [move_lock] above): a poisoned destination
+            // backoff looks identical to "no path" in the intent ring.
+            static uint32 s_lock_backoff_ms = 0;
+            if (move_now_ms - s_lock_backoff_ms > 2000u)
+            {
+                s_lock_backoff_ms = move_now_ms;
+                TC_LOG_INFO("playerbot.v2",
+                    "[move_lock] bot={} reason=path_fail_backoff dst=({:.1f},{:.1f},{:.1f})",
+                    p_->GetGUID().GetCounter(), x, y, z);
+            }
             return Result::Locked;
+        }
     }
 
     // Per-world-tick pathfinding budget. Once this tick's bot-pathfinding window
