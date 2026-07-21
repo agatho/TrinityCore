@@ -848,6 +848,14 @@ AuctionPosting* AuctionHouseObject::GetAuction(uint32 auctionId)
     return Trinity::Containers::MapGetValuePtr(_itemsByAuctionId, auctionId);
 }
 
+std::vector<uint32> AuctionHouseObject::GetOwnedAuctionIds(ObjectGuid owner) const
+{
+    std::vector<uint32> result;
+    for (auto const& entry : Trinity::Containers::MapEqualRange(_playerOwnedAuctions, owner))
+        result.push_back(entry.second);
+    return result;
+}
+
 void AuctionHouseObject::AddAuction(CharacterDatabaseTransaction trans, AuctionPosting auction)
 {
     AuctionsBucketKey key = AuctionsBucketKey::ForItem(auction.Items[0]);

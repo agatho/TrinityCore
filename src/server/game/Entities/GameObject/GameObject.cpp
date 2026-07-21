@@ -643,6 +643,8 @@ public:
         _value = RoundToInterval<float>(value, 0.0f, 100.0f);
     }
 
+    float GetValue() const { return _value; }
+
     void HandleHeartbeat()
     {
         // update player list inside control zone
@@ -4811,6 +4813,18 @@ TeamId GameObject::GetControllingTeam() const
         return TEAM_NEUTRAL;
 
     return controlZone->GetControllingTeam();
+}
+
+float GameObject::GetControlZoneValue() const
+{
+    if (GetGoType() != GAMEOBJECT_TYPE_CONTROL_ZONE)
+        return -1.0f;
+
+    GameObjectType::ControlZone const* controlZone = dynamic_cast<GameObjectType::ControlZone const*>(m_goTypeImpl.get());
+    if (!controlZone)
+        return -1.0f;
+
+    return controlZone->GetValue();
 }
 
 void GameObject::CreateModel()

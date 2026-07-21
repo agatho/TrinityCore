@@ -1055,6 +1055,38 @@ uint32 LFGMgr::AddProposal(LfgProposal& proposal)
    @param[in]     guid Player guid to update answer
    @param[in]     accept Player answer
 */
+bool LFGMgr::IsRoleCheckPending(ObjectGuid group_guid, ObjectGuid player_guid) const
+{
+    auto it = RoleChecksStore.find(group_guid);
+    if (it == RoleChecksStore.end())
+        return false;
+
+    if (it->second.state != LFG_ROLECHECK_INITIALITING && it->second.state != LFG_ROLECHECK_DEFAULT)
+        return false;
+
+    auto rit = it->second.roles.find(player_guid);
+    // Pending = role hasn't been set yet (PLAYER_ROLE_NONE = 0). Once
+    // UpdateRoleCheck commits a role it shows up here non-zero and we skip.
+    return rit == it->second.roles.end() || rit->second == PLAYER_ROLE_NONE;
+}
+
+uint32 LFGMgr::GetActiveProposalIdForPlayer(ObjectGuid guid) const
+{
+    // First proposal where this player is present and hasn't answered yet.
+    // One queue = one proposal at a time in Trinity's design, but return the
+    // first match rather than assuming uniqueness.
+    for (auto const& [pid, prop] : ProposalsStore)
+    {
+        auto it = prop.players.find(guid);
+        if (it == prop.players.end())
+            continue;
+        if (it->second.accept != LFG_ANSWER_PENDING)
+            continue;
+        return pid;
+    }
+    return 0;
+}
+
 void LFGMgr::UpdateProposal(uint32 proposalId, ObjectGuid guid, bool accept)
 {
     // Check if the proposal exists

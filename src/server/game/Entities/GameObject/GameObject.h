@@ -493,6 +493,9 @@ class TC_GAME_API GameObject : public WorldObject, public GridObject<GameObject>
             uint8 exteriorComponentType = 9, uint8 houseSize = 2, int32 exteriorComponentHookID = -1);
 
         TeamId GetControllingTeam() const;
+        // Current capture progress of a GAMEOBJECT_TYPE_CONTROL_ZONE (0-100).
+        // Returns -1.0f for any other type. Diagnostics only.
+        float GetControlZoneValue() const;
 
     protected:
         void CreateModel();

@@ -94,6 +94,36 @@ Map* MapManager::CreateWorldMap(uint32 mapId, uint32 instanceId)
     return map;
 }
 
+Map* MapManager::PrewarmContinentMap(uint32 mapId)
+{
+    MapEntry const* entry = sMapStore.LookupEntry(mapId);
+    if (!entry)
+        return nullptr;
+
+    // Continent base maps only: bg/arena/dungeon/garrison/split-by-faction need
+    // a Player context for instance routing, so they cannot be created headlessly.
+    if (entry->IsBattlegroundOrArena() || entry->IsDungeon() ||
+        entry->IsGarrison() || entry->IsSplitByFaction())
+        return nullptr;
+
+    std::scoped_lock lock(_mapsLock);
+    constexpr uint32 instanceId = 0;
+    if (Map* m = FindMap_i(mapId, instanceId))
+        return m;
+
+    Map* map = CreateWorldMap(mapId, instanceId);
+    if (map)
+    {
+        Trinity::unique_trackable_ptr<Map>& ptr = i_maps[{ map->GetId(), map->GetInstanceId() }];
+        ptr.reset(map);
+        map->SetWeakPtr(ptr);
+        sScriptMgr->OnCreateMap(map);
+        sOutdoorPvPMgr->CreateOutdoorPvPForMap(map);
+        sBattlefieldMgr->CreateBattlefieldsForMap(map);
+    }
+    return map;
+}
+
 InstanceMap* MapManager::CreateInstance(uint32 mapId, uint32 instanceId, InstanceLock* instanceLock, Difficulty difficulty, TeamId team, Group* group,
     Optional<uint32> lfgDungeonsId)
 {

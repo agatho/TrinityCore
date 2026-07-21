@@ -20,7 +20,10 @@ target_link_libraries(extractor_common
   PUBLIC
     casc
     common
-    network)
+    network
+    # RoadCorridor.cpp is Detour-only geometry and includes DetourNavMesh.h;
+    # Detour exposes its headers through its PUBLIC include directories.
+    Detour)
 
 set_target_properties(extractor_common
   PROPERTIES
