@@ -6471,8 +6471,19 @@ bool DungeonDispatch(BotSnapshotView const& s, BotAI& ai,
                 // idle:dungeon_hold for 11+ minutes after the second-to-last
                 // boss (campaign 2026-07-21). Clearing it here restores the
                 // fallbacks without re-enabling the trash walk itself.
-                if (far_target && DungeonRouteArmed(s, ai, advice))
-                    far_target = nullptr;
+                // Keyed on CONSUMED, not merely armed. First cut used
+                // DungeonRouteArmed() and was wrong twice over: (a) fix 1 makes
+                // that false exactly at the consumed hand-off, so the veto it
+                // was meant to lift stayed in place, and (b) it therefore fired
+                // during NORMAL mid-route travel, letting wide-scan/waypoint
+                // fallbacks compete with the follower — Deadmines regressed
+                // 6/6 -> 2/6 on the control run (campaign 2026-07-21).
+                {
+                    const int32_t rc_cur = ai.dungeon_route_wp(s.map_id());
+                    if (far_target && rc_cur >= 0 &&
+                        ai.route_consumed_idx(s.map_id()) == rc_cur)
+                        far_target = nullptr;
+                }
                 // Wide-scan fallback: snapshot's nearby_enemies is 40y-capped
                 // (BotSnapshotBuilder SCAN_RADIUS), so trash 50-150y away is
                 // invisible to the rules above. Without this, the tank falls
