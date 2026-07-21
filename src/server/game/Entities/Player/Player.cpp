@@ -26243,7 +26243,10 @@ void Player::SendInitialPacketsBeforeAddToMap()
     WorldPacket const* wsiPkt = worldServerInfo.Write();
     SendDirectMessage(wsiPkt);
 
-    TC_LOG_ERROR("housing", "=== SMSG_WORLD_SERVER_INFO (login) ===\n"
+    // DEBUG, not ERROR: this fires on EVERY login and emits six lines per character,
+    // at error severity, for a completely normal event. Kept rather than deleted because
+    // it is useful housing diagnostics - raise the `housing` log channel to debug to see it.
+    TC_LOG_DEBUG("housing", "=== SMSG_WORLD_SERVER_INFO (login) ===\n"
         "  DifficultyID={}, IsTournament={}, XRealmPvp={}, BlockExit={}\n"
         "  HouseGUID: {} (lo={:016X} hi={:016X})\n"
         "  HouseOwnerAccountGUID: {} (lo={:016X} hi={:016X})\n"
