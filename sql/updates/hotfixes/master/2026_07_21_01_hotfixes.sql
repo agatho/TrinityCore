@@ -15,7 +15,15 @@
 -- i.e. a field is inserted *before* SlotID and the trailing field is renamed
 -- (it is not an append). Field_12_0_0_63534_008 was already added to this
 -- table; only the trailing rename is still outstanding.
+--
+-- Guarded on information_schema so the file is safe to re-run.
 -- ============================================================================
 
-ALTER TABLE `warband_scene_placement`
-  CHANGE COLUMN `Field_11_1_0_58221_009` `Field_12_0_0_63534_010` int NOT NULL DEFAULT '0';
+SET @has_old := (SELECT COUNT(*) FROM information_schema.COLUMNS
+                 WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'warband_scene_placement'
+                   AND COLUMN_NAME = 'Field_11_1_0_58221_009');
+SET @sql := IF(@has_old > 0,
+    "ALTER TABLE `warband_scene_placement`
+       CHANGE COLUMN `Field_11_1_0_58221_009` `Field_12_0_0_63534_010` int NOT NULL DEFAULT 0",
+    "DO 0");
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;

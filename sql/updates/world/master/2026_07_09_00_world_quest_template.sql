@@ -1,15 +1,19 @@
 -- World Quest system: which quests are world quests + their active duration/worldstate.
 -- Loaded by WorldQuestMgr (must be after quest_template). Duration in seconds (259200 = 72h,
 -- the retail default observed on the wire). VariableID/Value = optional WorldState pair (0 = none).
-CREATE TABLE IF NOT EXISTS `world_quest_template` (
+-- DROP + CREATE rather than CREATE TABLE IF NOT EXISTS: some world database
+-- packs (e.g. WCDB) ship an unrelated legacy `world_quest_template` with a
+-- completely different column set. IF NOT EXISTS silently keeps that foreign
+-- table, and the INSERT below then fails with "Unknown column 'QuestID' in
+-- 'field list'", aborting worldserver startup at "Loading World Quests...".
+DROP TABLE IF EXISTS `world_quest_template`;
+CREATE TABLE `world_quest_template` (
   `QuestID` INT UNSIGNED NOT NULL,
   `Duration` INT UNSIGNED NOT NULL DEFAULT '259200',
   `VariableID` INT NOT NULL DEFAULT '0',
   `Value` INT NOT NULL DEFAULT '0',
   PRIMARY KEY (`QuestID`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='World Quest activation templates';
-
-DELETE FROM `world_quest_template`;
 INSERT INTO `world_quest_template` (`QuestID`, `Duration`, `VariableID`, `Value`) VALUES
  (76247,259200,0,0),
  (76588,259200,0,0),
