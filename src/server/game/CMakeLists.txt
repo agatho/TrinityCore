@@ -34,6 +34,19 @@ add_library(game)
 # The Playerbot implementation files are excluded unless the module is enabled:
 # with V2 off, PlayerbotHooks.h supplies inline no-op bodies and no .cpp is
 # needed, so a bot-free build compiles exactly the sources it always did.
+# Handcrafted road corridors: RoadCorridor is a pure Detour-only geometry helper
+# living in extractor_common, applied to each map's navmesh at load time from the
+# handcrafted_road table. No mmap regeneration is involved - the polys are retagged
+# at runtime - but the code does need the tools subtree to be built.
+if(TOOLS)
+  target_include_directories(game
+    PRIVATE
+      ${CMAKE_SOURCE_DIR}/src/tools/extractor_common)
+  target_compile_definitions(game
+    PRIVATE
+      TRINITY_HANDCRAFTED_ROADS=1)
+endif()
+
 if(BUILD_PLAYERBOT_V2)
   set(GAME_SOURCE_EXCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/PrecompiledHeaders)
 else()

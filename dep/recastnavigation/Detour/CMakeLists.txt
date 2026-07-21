@@ -39,6 +39,13 @@ target_link_libraries(Detour
   PRIVATE
     trinity-dependency-interface)
 
+# Make dtQueryFilter::getCost / passFilter virtual so dtQueryFilterTC can override
+# the cost formula (slope penalty plus the per-path road-bonus opt-out). Without
+# this the Detour vtable is empty and the override silently does nothing.
+target_compile_definitions(Detour
+  PUBLIC
+    DT_VIRTUAL_QUERYFILTER=1)
+
 set_target_properties(Detour
     PROPERTIES
       FOLDER

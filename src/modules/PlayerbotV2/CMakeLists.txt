@@ -35,6 +35,7 @@ function(playerbot_v2_configure_sublib target_name)
       trinity-core-interface
       game-interface
       modules-common
+      Detour
     PRIVATE
       shared
       common

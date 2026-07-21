@@ -20,6 +20,7 @@
 
 #include "DetourNavMesh.h"
 #include "DetourNavMeshQuery.h"
+#include "dtQueryFilterTC.h"
 #include "MMapDefines.h"
 #include "MoveSplineInitArgs.h"
 #include <G3D/Vector3.h>
@@ -68,6 +69,15 @@ class TC_GAME_API PathGenerator
         bool CalculatePath(float srcX, float srcY, float srcZ, float destX, float destY, float destZ, bool forceDest = false);
         bool CalculatePath(float destX, float destY, float destZ, bool forceDest = false);
         bool IsInvalidDestinationZ(WorldObject const* target) const;
+        // Per-pathfind opt-out from the road-cost bonus (tanks pulling, tight-formation followers).
+        // True when the computed path crosses an off-mesh connection (an offmesh.txt
+        // link); the bot module uses it to decide between walking and taking the link.
+        bool PathTraversesOffMesh() const { return _pathTraversesOffMesh; }
+        G3D::Vector3 const& GetFirstOffMeshLanding() const { return _firstOffMeshLanding; }
+
+        void SetDisableRoadBonus(bool disable) { _filter.SetDisableRoadBonus(disable); }
+        bool GetDisableRoadBonus() const { return _filter.GetDisableRoadBonus(); }
+
 
         // option setters - use optional
         void SetUseStraightPath(bool useStraightPath) { _useStraightPath = useStraightPath; }
@@ -108,7 +118,11 @@ class TC_GAME_API PathGenerator
         dtNavMesh const* _navMesh;              // the nav mesh
         dtNavMeshQuery const* _navMeshQuery;    // the nav mesh query used to find the path
 
-        dtQueryFilter _filter;  // use single filter for all movements, update it when needed
+        dtQueryFilterTC _filter;
+
+        bool _pathTraversesOffMesh = false;
+
+        G3D::Vector3 _firstOffMeshLanding;
 
         void SetStartPosition(G3D::Vector3 const& point) { _startPosition = point; }
         void SetEndPosition(G3D::Vector3 const& point) { _actualEndPosition = point; _endPosition = point; }

@@ -18,3 +18,10 @@ endif(SERVERS)
 if(TOOLS)
   add_subdirectory(tools)
 endif(TOOLS)
+
+# Deferred link: src/server/game is configured before src/tools, so extractor_common
+# does not exist as a target yet when game declares its libraries. Wire it here,
+# once both subtrees have been visited.
+if(SERVERS AND TOOLS AND TARGET game AND TARGET extractor_common)
+  target_link_libraries(game PRIVATE extractor_common)
+endif()

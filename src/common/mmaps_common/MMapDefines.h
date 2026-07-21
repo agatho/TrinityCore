@@ -62,8 +62,14 @@ enum NavArea
     NAV_AREA_GROUND_STEEP   = 10,
     NAV_AREA_WATER          = 9,
     NAV_AREA_MAGMA_SLIME    = 8, // don't need to differentiate between them
+    // Handcrafted road corridors. Polygons are retagged with this area at map-load
+    // time by Road::ApplyCorridorsToNavmesh from the handcrafted_road table, so no
+    // mmap regeneration is required - the value only has to exist. Chosen so the
+    // existing (NAV_AREA_MAX_VALUE - area) bit formula yields an unused bit (0x10)
+    // without disturbing the other flags.
+    NAV_AREA_ROAD           = 7,
     NAV_AREA_MAX_VALUE      = NAV_AREA_GROUND,
-    NAV_AREA_MIN_VALUE      = NAV_AREA_MAGMA_SLIME,
+    NAV_AREA_MIN_VALUE      = NAV_AREA_ROAD,
     NAV_AREA_ALL_MASK       = 0x3F // max allowed value
 };
 
@@ -73,7 +79,8 @@ enum NavTerrainFlag : uint16
     NAV_GROUND       = 1 << (NAV_AREA_MAX_VALUE - NAV_AREA_GROUND),
     NAV_GROUND_STEEP = 1 << (NAV_AREA_MAX_VALUE - NAV_AREA_GROUND_STEEP),
     NAV_WATER        = 1 << (NAV_AREA_MAX_VALUE - NAV_AREA_WATER),
-    NAV_MAGMA_SLIME  = 1 << (NAV_AREA_MAX_VALUE - NAV_AREA_MAGMA_SLIME)
+    NAV_MAGMA_SLIME  = 1 << (NAV_AREA_MAX_VALUE - NAV_AREA_MAGMA_SLIME),
+    NAV_ROAD         = 1 << (NAV_AREA_MAX_VALUE - NAV_AREA_ROAD)
 };
 
 enum OffMeshConnectionFlag : uint8
