@@ -1,5 +1,6 @@
 #include "BotIntentEmitter.h"
 #include "BotAI.h"
+#include "Log.h"
 #include "Threading/IntentQueue.h"
 #include "../Services.h"
 #include "../Diagnostics/PerfCounters.h"
@@ -52,6 +53,37 @@ bool BotIntentEmitter::move_to(float x, float y, float z, bool run, bool direct)
         const uint32 now_ms = GameTime::GetGameTimeMS();
         if (ai_->move_to_recently_emitted(x, y, z, now_ms))
             return false;
+        // REFUSAL GUARD (emitter-level on purpose). PlayerbotAPI::move_to
+        // keeps a per-destination path-fail backoff: one failed pathfind
+        // poisons that dst, every later move_to to ~it returns Locked
+        // WITHOUT issuing a spline, and a rule that re-selects the same dst
+        // re-arms the backoff forever -> permanent freeze over a VALID
+        // navmesh (live: RFK/Gnomeregan/Shadow Labyrinth/Arcatraz/Stonecore;
+        // headless probes of those corridors come back COMPLETE).
+        // The first cut of this fix guarded 12 rule-level step sites and the
+        // route leapfrog scan — and the live acceptance test showed ZERO
+        // [step_refused] lines, because the route follower's COMMITTED steer
+        // emits through its own path and bypassed all of them. Placing the
+        // check HERE is the robust placement: every caller funnels through
+        // this one function, so no emit path can bypass it. Returning false
+        // is exactly what an emitter-deduped call already returns, so callers
+        // that test the result take their existing "not emitted" branch and
+        // fall through to their next candidate.
+        // Bounded: entries live only kMoveRefusedTtlMs (6s), so a dst that
+        // merely had a transient failure becomes selectable again.
+        if (!direct && ai_->move_refused_recently(x, y, z, now_ms))
+        {
+            static uint32 s_refused_dbg_ms = 0;
+            if (now_ms - s_refused_dbg_ms > 2000u)
+            {
+                s_refused_dbg_ms = now_ms;
+                TC_LOG_INFO("playerbot.v2",
+                    "[emit_refused] bot={} dst=({:.1f},{:.1f},{:.1f}) "
+                    "(recently refused; caller must pick another target)",
+                    ai_->bot_id(), x, y, z);
+            }
+            return false;
+        }
         const bool pushed = emit(MoveToIntent{x, y, z, run, direct});
         if (pushed)
             ai_->note_move_to_emitted(x, y, z, now_ms);
