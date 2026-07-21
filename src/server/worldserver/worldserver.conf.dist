@@ -1677,6 +1677,21 @@ ChallengeMode.AffixSchedule = ""
 ChallengeMode.AffixLevelBands = ""
 
 #
+#    ChallengeMode.ScorePerLevel / ScorePerAffix / ScoreMaxTimeBonus
+#        Description: Shape of the Mythic+ rating awarded for a timed run:
+#                       score = keystoneLevel * ScorePerLevel + affixCount * ScorePerAffix
+#                     plus a time bonus of +ScoreMaxTimeBonus for a clear 40% under par,
+#                     tapering to -ScoreMaxTimeBonus at or over par.
+#                     These constants are a server design value - they are not in the client
+#                     or in DB2 - so the defaults only approximate the retail shape. They can
+#                     be matched to a live sniff by editing them here, with no rebuild.
+#        Default:     ScorePerLevel = 7.5, ScorePerAffix = 5.0, ScoreMaxTimeBonus = 7.5
+
+ChallengeMode.ScorePerLevel = 7.5
+ChallengeMode.ScorePerAffix = 5.0
+ChallengeMode.ScoreMaxTimeBonus = 7.5
+
+#
 #    ChallengeMode.Affix.Fortified.* / ChallengeMode.Affix.Tyrannical.*
 #        Description: Extra creature health/damage multipliers applied on top of the per-level keystone
 #                     scaling when the Fortified (non-boss enemies) or Tyrannical (bosses) affix is active.
@@ -5104,3 +5119,49 @@ Load.Locales = 1
 
 #
 ###################################################################################################
+
+###################################################################################################
+# Housing
+#
+#    These gate the housing system server-side AND are mirrored to the client in the
+#    login config bag (housingEnableBuyHouse and friends), so the client UI hides or
+#    disables the corresponding options when a flag is off. Turning one off therefore
+#    both refuses the action in the handler and stops the client offering it.
+#
+#    Housing.EnableBuyHouse
+#        Description: Allow players to purchase a house.
+#        Default:     1 - (Enabled)
+#                     0 - (Disabled)
+#
+#    Housing.EnableDeleteHouse
+#        Description: Allow players to delete a house they own.
+#        Default:     1 - (Enabled)
+#                     0 - (Disabled)
+#
+#    Housing.EnableMoveHouse
+#        Description: Allow players to move a house to a different plot.
+#        Default:     1 - (Enabled)
+#                     0 - (Disabled)
+#
+#    Housing.EnableCreateCharterNeighborhood
+#        Description: Allow players to found a charter (player) neighbourhood.
+#        Default:     1 - (Enabled)
+#                     0 - (Disabled)
+#
+#    Housing.EnableCreateGuildNeighborhood
+#        Description: Allow guilds to found a guild neighbourhood.
+#        Default:     1 - (Enabled)
+#                     0 - (Disabled)
+#
+#    Housing.TutorialsEnabled
+#        Description: Send the housing tutorial prompts to players.
+#        Default:     1 - (Enabled)
+#                     0 - (Disabled)
+###################################################################################################
+
+Housing.EnableBuyHouse = 1
+Housing.EnableDeleteHouse = 1
+Housing.EnableMoveHouse = 1
+Housing.EnableCreateCharterNeighborhood = 1
+Housing.EnableCreateGuildNeighborhood = 1
+Housing.TutorialsEnabled = 1
