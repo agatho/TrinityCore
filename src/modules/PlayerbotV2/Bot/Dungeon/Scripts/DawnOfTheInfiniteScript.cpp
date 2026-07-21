@@ -61,7 +61,11 @@ public:
 class DawnOfTheInfiniteRiseScript final : public DungeonScript
 {
 public:
-    uint32_t  map_id() const override { return 2581; }
+    uint32_t  map_id() const override { return 2581; }  // NOTE (audit 2026-07-21): map 2581 has ZERO creatures;
+    // both bosses actually spawn on 2579, which the Fall wing already claims. Changing this to 2579 would
+    // COLLIDE in DungeonScriptMgr (same map+difficulty key -> second registration discarded, like the
+    // duplicate ScarletMonastery scripts). Correct fix = MERGE both wings' boss lists into one script for
+    // map 2579; left as-is deliberately rather than creating a silent collision.
     char const* name() const override { return "dawn_of_the_infinite_rise"; }
 
     DungeonAdvice get_advice(BotSnapshotView const& /*s*/) const override

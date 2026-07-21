@@ -97,7 +97,10 @@ public:
         // and Helix had the wrong entry (49674 vs 47296).
         a.bosses = {
             47162,  // Glubtok
-            47296,  // Helix Gearbreaker
+            49674,  // Helix Gearbreaker (47296 has ZERO spawns on map 36 —
+                    // the comment above diagnosed this and the fix was never
+                    // applied; DB audit 2026-07-21 confirmed 49674 is the
+                    // entry that actually spawns)
             43778,  // Foe Reaper 5000
             47626,  // Admiral Ripsnarl
             47739,  // "Captain" Cookie

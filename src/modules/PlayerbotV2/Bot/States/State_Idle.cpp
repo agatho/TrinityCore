@@ -1397,7 +1397,19 @@ static bool DungeonRouteArmed(BotSnapshotView const& s, BotAI& ai,
 {
     if (!Services::Config().route_aware_combat_advance()) return false;
     if (advice.route_waypoints.empty()) return false;
-    return ai.dungeon_route_wp(s.map_id()) >= 0;
+    const int32_t cur = ai.dungeon_route_wp(s.map_id());
+    if (cur < 0) return false;
+    // A CONSUMED route must stop asserting ownership. Once the follower has
+    // declined at the arrived final crumb it no longer navigates — but this
+    // flag was still gating OFF the direct stride, the leashed approach and
+    // the far-trash advance (and nothing ever clears the cursor:
+    // clear_dungeon_route_wp has zero call sites), so at the LAST boss the
+    // whole ladder was disabled and idle:dungeon_hold claimed every tick
+    // silently. Live: 11+ minutes with zero MoveTo after the second-to-last
+    // boss died — Arcatraz 3/4, Botanica 4/5, Shadow Labyrinth 3/4,
+    // Stonecore 3/4, Utgarde Keep 3/4, Halls of Stone 2/3 (campaign
+    // 2026-07-21). Consume = release ownership, not merely stop substituting.
+    return ai.route_consumed_idx(s.map_id()) != cur;
 }
 
 // Shared (declared in MaintainHelpers.h). Honor an active off-mesh crossing
@@ -6449,6 +6461,18 @@ bool DungeonDispatch(BotSnapshotView const& s, BotAI& ai,
                         return true;
                     }
                 }
+                // A route-owned far_target must not ALSO veto the ladder below.
+                // The far-trash advance is gated off while the route is armed
+                // (correct — the route owns navigation), but wide-scan,
+                // boss-as-destination and waypoint progression all test
+                // `!far_target`, so a single un-aggroed mob in the 30-40y band
+                // silently disabled every remaining fallback. Combined with the
+                // never-cleared armed flag this is what left tanks in
+                // idle:dungeon_hold for 11+ minutes after the second-to-last
+                // boss (campaign 2026-07-21). Clearing it here restores the
+                // fallbacks without re-enabling the trash walk itself.
+                if (far_target && DungeonRouteArmed(s, ai, advice))
+                    far_target = nullptr;
                 // Wide-scan fallback: snapshot's nearby_enemies is 40y-capped
                 // (BotSnapshotBuilder SCAN_RADIUS), so trash 50-150y away is
                 // invisible to the rules above. Without this, the tank falls

@@ -50,7 +50,8 @@ public:
         // (Rocketspark+Borka duo as one slot).
         a.bosses = {
             77803,  // Railmaster Rocketspark (duo with Borka)
-            77816,  // Borka the Brute (duo)
+            86226,  // Borka the Brute (duo) — 77816 has zero spawns; DB audit 2026-07-21
+            //         found 86226 as the spawned boss-rank entry on map 1208
             79545,  // Nitrogg Thundertower
             80005,  // Skylord Tovra (final)
         };

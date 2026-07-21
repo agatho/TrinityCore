@@ -14,7 +14,7 @@ namespace {
 class BrackenhideHollowScript final : public DungeonScript
 {
 public:
-    uint32_t  map_id() const override { return 2522; }
+    uint32_t  map_id() const override { return 2520; }  // all 4 bosses spawn on 2520, not 2522 (DB audit 2026-07-21)
     char const* name() const override { return "brackenhide_hollow"; }
 
     DungeonAdvice get_advice(BotSnapshotView const& /*s*/) const override
