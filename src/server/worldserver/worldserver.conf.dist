@@ -501,6 +501,456 @@ Pathfinding.SlopeCoefficient = 1.0
 Playerbot.SharedDatabase = playerbot
 
 ###################################################################################################
+#  PLAYERBOT V2
+#
+#    These are read by the PlayerbotV2 module and only take effect in a build configured
+#    with BUILD_PLAYERBOT_V2=ON. Every one of them has a built-in default, so a server
+#    runs without setting any of them - but an unset key is reported once per start as
+#    "Missing name <key> in config file worldserver.conf", which is what this section
+#    silences. See also Playerbot.SharedDatabase above.
+#
+###################################################################################################
+
+###################################################################################################
+# Playerbot - threading and tick budget
+#
+#    Playerbot.AiWorkerThreads
+#        Description: Worker threads for bot AI. 0 = auto-size from the hardware concurrency.
+#        Default:     0
+#
+#    Playerbot.FleetThreadEnabled
+#        Description: Run the fleet manager (population, spawning, retirement) on its own thread.
+#        Default:     1
+#
+#    Playerbot.TickBudgetMs
+#        Description: Milliseconds of each world tick the bot AI may consume before yielding.
+#        Default:     10
+#
+#    PlayerbotV2.ParallelSnapshotBuild
+#        Description: Build per-bot decision snapshots in parallel. Set to 0 to fall back to serial
+#                     building if you suspect a threading problem.
+#        Default:     1
+#
+#    PlayerbotV2.SnapshotBuildThreads
+#        Description: Threads used for parallel snapshot building. 0 = auto.
+#        Default:     0
+#
+###################################################################################################
+
+Playerbot.AiWorkerThreads = 0
+Playerbot.FleetThreadEnabled = 1
+Playerbot.TickBudgetMs = 10
+PlayerbotV2.ParallelSnapshotBuild = 1
+PlayerbotV2.SnapshotBuildThreads = 0
+
+###################################################################################################
+# Playerbot - population
+#
+#    Playerbot.Population.TotalTarget
+#        Description: Desired number of online bots the fleet manager aims for.
+#        Default:     2000
+#
+#    Playerbot.Population.Floor
+#        Description: Never drop below this many online bots.
+#        Default:     100
+#
+#    Playerbot.Population.Ceiling
+#        Description: Never exceed this many online bots.
+#        Default:     5000
+#
+#    Playerbot.Population.AutoScale
+#        Description: Scale the live target between Floor and Ceiling instead of pinning
+#                     TotalTarget.
+#        Default:     1
+#
+#    Playerbot.Population.HordePct
+#        Description: Percentage of the bot population created Horde-side (0-100); the remainder is
+#                     Alliance.
+#        Default:     50
+#
+#    Playerbot.Population.Shape
+#        Description: Level distribution of the bot population. MaxHeavy weights it toward max
+#                     level.
+#        Default:     MaxHeavy
+#
+#    Playerbot.Population.MaxHeavyFactor
+#        Description: Fraction of the population placed at max level when Shape = MaxHeavy.
+#        Default:     0.40
+#
+###################################################################################################
+
+Playerbot.Population.TotalTarget = 2000
+Playerbot.Population.Floor = 100
+Playerbot.Population.Ceiling = 5000
+Playerbot.Population.AutoScale = 1
+Playerbot.Population.HordePct = 50
+Playerbot.Population.Shape = MaxHeavy
+Playerbot.Population.MaxHeavyFactor = 0.40
+
+###################################################################################################
+# Playerbot - lifecycle
+#
+#    Playerbot.V2.AutoResumeOnBoot
+#        Description: On startup, log previously-active bots back in.
+#        Default:     0
+#
+#    Playerbot.V2.AutoResumeCap
+#        Description: Maximum bots resumed on startup when AutoResumeOnBoot is enabled.
+#        Default:     100
+#
+#    Playerbot.V2.AutoSpawnOnBoot
+#        Description: Bots to create and log in on startup. 0 disables boot-time spawning.
+#        Default:     0
+#
+#    Playerbot.V2.RandomPersonality
+#        Description: Assign each new bot a randomised personality profile.
+#        Default:     1
+#
+#    PlayerbotV2.MaxAltsAsBots
+#        Description: Maximum characters on one player account that may be driven as bots.
+#        Default:     5
+#
+#    PlayerbotV2.Archetype.Enabled
+#        Description: Enable archetype-driven behaviour selection.
+#        Default:     1
+#
+###################################################################################################
+
+Playerbot.V2.AutoResumeOnBoot = 0
+Playerbot.V2.AutoResumeCap = 100
+Playerbot.V2.AutoSpawnOnBoot = 0
+Playerbot.V2.RandomPersonality = 1
+PlayerbotV2.MaxAltsAsBots = 5
+PlayerbotV2.Archetype.Enabled = 1
+
+###################################################################################################
+# Playerbot - session rhythm
+#
+#    PlayerbotV2.SessionRhythm.Enabled
+#        Description: Bots log in and out over the day instead of staying online permanently.
+#        Default:     1
+#
+#    PlayerbotV2.SessionRhythm.Multiplier
+#        Description: Scales session length. Values above 1.0 keep bots online longer.
+#        Default:     1.0
+#
+#    PlayerbotV2.SessionRhythm.MaxLogoutsPerCycle
+#        Description: Upper bound on bots logged out in a single rhythm cycle, so populations do not
+#                     drop in visible waves.
+#        Default:     25
+#
+###################################################################################################
+
+PlayerbotV2.SessionRhythm.Enabled = 1
+PlayerbotV2.SessionRhythm.Multiplier = 1.0
+PlayerbotV2.SessionRhythm.MaxLogoutsPerCycle = 25
+
+###################################################################################################
+# Playerbot - interaction with players
+#
+#    Playerbot.Interact.AutoAcceptInvites
+#        Description: Whose group invites bots accept: none, friends_or_higher, guild, or anyone.
+#        Default:     friends_or_higher
+#
+#    Playerbot.Interact.AutoLeaderHandover
+#        Description: Bots hand group leadership to a real player who joins.
+#        Default:     1
+#
+#    Playerbot.Interact.CommandPrefix
+#        Description: First character of in-game bot chat commands. Only the first character is
+#                     used.
+#        Default:     !
+#
+###################################################################################################
+
+Playerbot.Interact.AutoAcceptInvites = friends_or_higher
+Playerbot.Interact.AutoLeaderHandover = 1
+Playerbot.Interact.CommandPrefix = !
+
+###################################################################################################
+# Playerbot - guilds
+#
+#    PlayerbotV2.Guilds.Enabled
+#        Description: Let bots form and populate their own guilds.
+#        Default:     1
+#
+#    PlayerbotV2.Guilds.TargetCountPerFaction
+#        Description: Number of bot guilds maintained per faction.
+#        Default:     6
+#
+#    PlayerbotV2.Guilds.MaxMembersPerGuild
+#        Description: Member cap for a bot guild.
+#        Default:     75
+#
+#    PlayerbotV2.Guilds.EventsEnabled
+#        Description: Bot guilds run guild events.
+#        Default:     1
+#
+#    PlayerbotV2.Guilds.RecruitmentChannelEnabled
+#        Description: Bot guilds advertise in the recruitment channel.
+#        Default:     1
+#
+###################################################################################################
+
+PlayerbotV2.Guilds.Enabled = 1
+PlayerbotV2.Guilds.TargetCountPerFaction = 6
+PlayerbotV2.Guilds.MaxMembersPerGuild = 75
+PlayerbotV2.Guilds.EventsEnabled = 1
+PlayerbotV2.Guilds.RecruitmentChannelEnabled = 1
+
+###################################################################################################
+# Playerbot - housing
+#
+#    Playerbot.Housing.Enabled
+#        Description: Allow bots to participate in the housing system.
+#        Default:     1
+#
+#    Playerbot.Housing.NeighborhoodTargetOccupancy
+#        Description: Percentage of plots in a neighbourhood bots try to keep occupied (0-100).
+#        Default:     60
+#
+#    Playerbot.Housing.PlotPurchaseEligibilityCheck
+#        Description: strict = bots obey the same plot-purchase eligibility rules as players.
+#                     Anything else (e.g. lenient) relaxes them.
+#        Default:     strict
+#
+###################################################################################################
+
+Playerbot.Housing.Enabled = 1
+Playerbot.Housing.NeighborhoodTargetOccupancy = 60
+Playerbot.Housing.PlotPurchaseEligibilityCheck = strict
+
+###################################################################################################
+# Playerbot - economy
+#
+#    PlayerbotV2.Economy.BuyEnabled
+#        Description: Allow bots to buy from vendors and the auction house.
+#        Default:     1
+#
+#    PlayerbotV2.Economy.MaxReagentVendorMultiple
+#        Description: Cap on how many multiples of a required reagent a bot buys in one trip.
+#        Default:     15
+#
+###################################################################################################
+
+PlayerbotV2.Economy.BuyEnabled = 1
+PlayerbotV2.Economy.MaxReagentVendorMultiple = 15
+
+###################################################################################################
+# Playerbot - movement and combat
+#
+#    PlayerbotV2.Move.StepHoldEnabled
+#        Description: Hold position briefly between movement steps, smoothing bot pathing.
+#        Default:     1
+#
+#    PlayerbotV2.Move.RouteAwareCombatAdvance
+#        Description: Advance along the planned route while in combat instead of chasing directly.
+#        Default:     1
+#
+#    PlayerbotV2.Combat.SkipUnfightable
+#        Description: Skip targets the bot cannot meaningfully fight rather than stalling on them.
+#        Default:     1
+#
+###################################################################################################
+
+PlayerbotV2.Move.StepHoldEnabled = 1
+PlayerbotV2.Move.RouteAwareCombatAdvance = 1
+PlayerbotV2.Combat.SkipUnfightable = 1
+
+###################################################################################################
+# Playerbot - pull gating
+#
+#    PlayerbotV2.PullGate.Enabled
+#        Description: Gate bot pulls so they do not chain-pull across a dungeon.
+#        Default:     1
+#
+#    PlayerbotV2.PullGate.MaxDetourRatio
+#        Description: Reject a pull whose path is longer than this multiple of the direct distance.
+#        Default:     3.0
+#
+#    PlayerbotV2.PullGate.MinExtraYards
+#        Description: Detour ratio is only applied once the detour exceeds this many extra yards, so
+#                     short awkward paths are not rejected.
+#        Default:     40.0
+#
+#    PlayerbotV2.PullGate.DisengageEnabled
+#        Description: Allow bots to disengage from a pull that fails the gate.
+#        Default:     1
+#
+#    PlayerbotV2.PullGate.TankCommitEnabled
+#        Description: Once a tank commits to a pull, hold the group to it.
+#        Default:     1
+#
+#    PlayerbotV2.PullGate.TankCommitMaxMs
+#        Description: Maximum time a tank stays committed to one pull.
+#        Default:     45000
+#
+###################################################################################################
+
+PlayerbotV2.PullGate.Enabled = 1
+PlayerbotV2.PullGate.MaxDetourRatio = 3.0
+PlayerbotV2.PullGate.MinExtraYards = 40.0
+PlayerbotV2.PullGate.DisengageEnabled = 1
+PlayerbotV2.PullGate.TankCommitEnabled = 1
+PlayerbotV2.PullGate.TankCommitMaxMs = 45000
+
+###################################################################################################
+# Playerbot - battleground and PvE coordination
+#
+#    Playerbot.Bg.Coordinator.Enable
+#        Description: Enable battleground team coordination for bots.
+#        Default:     1
+#
+#    Playerbot.Bg.AutoSeed.Matches
+#        Description: Battleground matches the fleet seeds with bots. 0 disables seeding.
+#        Default:     1
+#
+#    Playerbot.Bg.AutoSeed.Arena
+#        Description: Arena matches the fleet seeds with bots. 0 disables arena seeding.
+#        Default:     0
+#
+#    Playerbot.Bg.AutoSeed.ForceType
+#        Description: Force seeded matches to one battleground type id. 0 = no forcing.
+#        Default:     0
+#
+#    Playerbot.Pve.Coordinator.Enable
+#        Description: Enable PvE group coordination (dungeon roles, pulls, objectives).
+#        Default:     1
+#
+###################################################################################################
+
+Playerbot.Bg.Coordinator.Enable = 1
+Playerbot.Bg.AutoSeed.Matches = 1
+Playerbot.Bg.AutoSeed.Arena = 0
+Playerbot.Bg.AutoSeed.ForceType = 0
+Playerbot.Pve.Coordinator.Enable = 1
+
+###################################################################################################
+# Playerbot - stuck detection (single bot)
+#
+#    PlayerbotV2.WedgeWatchdog.ThresholdMs
+#        Description: A bot that has not moved meaningfully for this long is treated as wedged.
+#        Default:     90000
+#
+#    PlayerbotV2.WedgeWatchdog.CombatThresholdMs
+#        Description: As ThresholdMs, but while the bot is in combat (kept longer to avoid false
+#                     positives during long fights).
+#        Default:     180000
+#
+#    PlayerbotV2.WedgeWatchdog.MinDisplacementYards
+#        Description: Movement below this distance within the window does not count as progress.
+#        Default:     20.0
+#
+#    PlayerbotV2.WedgeWatchdog.RemediationEnabled
+#        Description: Act on wedged bots rather than only reporting them.
+#        Default:     1
+#
+#    PlayerbotV2.WedgeWatchdog.RemediationMs
+#        Description: How long a bot stays wedged before remediation is applied.
+#        Default:     180000
+#
+#    PlayerbotV2.WedgeWatchdog.NoProgressEnabled
+#        Description: Enable the secondary detector that watches for no XP/objective progress, which
+#                     catches bots that move but achieve nothing.
+#        Default:     1
+#
+#    PlayerbotV2.WedgeWatchdog.NoProgressMs
+#        Description: Window with no measurable progress before that detector fires.
+#        Default:     900000
+#
+#    PlayerbotV2.WedgeWatchdog.NoProgressRadiusYards
+#        Description: A bot staying within this radius for the window counts as making no progress.
+#        Default:     150.0
+#
+###################################################################################################
+
+PlayerbotV2.WedgeWatchdog.ThresholdMs = 90000
+PlayerbotV2.WedgeWatchdog.CombatThresholdMs = 180000
+PlayerbotV2.WedgeWatchdog.MinDisplacementYards = 20.0
+PlayerbotV2.WedgeWatchdog.RemediationEnabled = 1
+PlayerbotV2.WedgeWatchdog.RemediationMs = 180000
+PlayerbotV2.WedgeWatchdog.NoProgressEnabled = 1
+PlayerbotV2.WedgeWatchdog.NoProgressMs = 900000
+PlayerbotV2.WedgeWatchdog.NoProgressRadiusYards = 150.0
+
+###################################################################################################
+# Playerbot - stuck detection (group)
+#
+#    PlayerbotV2.GroupWedge.Enabled
+#        Description: Watch for groups that stall as a unit (as opposed to a single wedged bot).
+#        Default:     1
+#
+#    PlayerbotV2.GroupWedge.WindowMs
+#        Description: Observation window for the group-stall detector.
+#        Default:     20000
+#
+#    PlayerbotV2.GroupWedge.CohereYards
+#        Description: Radius within which group members are considered together.
+#        Default:     30.0
+#
+#    PlayerbotV2.GroupWedge.SplitYards
+#        Description: Separation beyond which the group counts as split.
+#        Default:     45.0
+#
+#    PlayerbotV2.GroupWedge.FarYards
+#        Description: Distance at which a member is treated as far from the group.
+#        Default:     45.0
+#
+#    PlayerbotV2.GroupWedge.MoveYards
+#        Description: Movement below this distance in the window is treated as the group not moving.
+#        Default:     12.0
+#
+###################################################################################################
+
+PlayerbotV2.GroupWedge.Enabled = 1
+PlayerbotV2.GroupWedge.WindowMs = 20000
+PlayerbotV2.GroupWedge.CohereYards = 30.0
+PlayerbotV2.GroupWedge.SplitYards = 45.0
+PlayerbotV2.GroupWedge.FarYards = 45.0
+PlayerbotV2.GroupWedge.MoveYards = 12.0
+
+###################################################################################################
+# Playerbot - alerting and diagnostics
+#
+#    PlayerbotV2.Alert.WedgedBots
+#        Description: Raise a fleet alert once this many bots are wedged at the same time.
+#        Default:     5
+#
+#    PlayerbotV2.Alert.TickP99Us
+#        Description: Raise an alert when the p99 bot tick exceeds this many microseconds.
+#        Default:     200000
+#
+#    PlayerbotV2.Alert.IntentDropPerMin
+#        Description: Raise an alert above this many dropped intents per minute.
+#        Default:     600
+#
+#    PlayerbotV2.Alert.PathFailPerMin
+#        Description: Raise an alert above this many pathfinding failures per minute.
+#        Default:     300
+#
+#    PlayerbotV2.Alert.ThrottleMs
+#        Description: Minimum gap between repeats of the same fleet alert.
+#        Default:     300000
+#
+#    Playerbot.Diag.HealthEndpointPort
+#        Description: TCP port for the bot health endpoint. 0 disables it.
+#        Default:     0
+#
+#    Playerbot.Log.Level
+#        Description: Verbosity of the playerbot log channel (e.g. trace, debug, info, warn, error).
+#        Default:     info
+#
+###################################################################################################
+
+PlayerbotV2.Alert.WedgedBots = 5
+PlayerbotV2.Alert.TickP99Us = 200000
+PlayerbotV2.Alert.IntentDropPerMin = 600
+PlayerbotV2.Alert.PathFailPerMin = 300
+PlayerbotV2.Alert.ThrottleMs = 300000
+Playerbot.Diag.HealthEndpointPort = 0
+Playerbot.Log.Level = info
+
+###################################################################################################
 # Handcrafted road segments
 #
 #    HandcraftedRoads.Enable
