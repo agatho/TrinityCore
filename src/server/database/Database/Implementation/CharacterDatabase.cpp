@@ -426,7 +426,15 @@ void CharacterDatabaseConnection::DoPrepareStatements()
 
     // Tutorials
     PrepareStatement(CHAR_SEL_TUTORIALS, "SELECT tut0, tut1, tut2, tut3, tut4, tut5, tut6, tut7 FROM account_tutorial WHERE accountId = ?", CONNECTION_ASYNC);
-    PrepareStatement(CHAR_INS_TUTORIALS, "INSERT INTO account_tutorial(tut0, tut1, tut2, tut3, tut4, tut5, tut6, tut7, accountId) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", CONNECTION_ASYNC);
+    // REPLACE, not INSERT: account_tutorial is keyed per ACCOUNT, but several sessions
+    // of the same account can be online at once (multi-boxing, and a playerbot fleet runs
+    // up to a dozen characters per account). Each session decides INSERT-vs-UPDATE from
+    // its own TUTORIALS_FLAG_LOADED_FROM_DB, so when the row does not exist yet they all
+    // race to create it and every loser failed with
+    //   [1062] Duplicate entry '<accountId>' for key 'account_tutorial.PRIMARY'
+    // Safe as a REPLACE: the statement supplies every column, and the table has a plain
+    // accountId primary key with no auto-increment and no foreign keys.
+    PrepareStatement(CHAR_REP_TUTORIALS, "REPLACE INTO account_tutorial(tut0, tut1, tut2, tut3, tut4, tut5, tut6, tut7, accountId) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", CONNECTION_ASYNC);
     PrepareStatement(CHAR_UPD_TUTORIALS, "UPDATE account_tutorial SET tut0 = ?, tut1 = ?, tut2 = ?, tut3 = ?, tut4 = ?, tut5 = ?, tut6 = ?, tut7 = ? WHERE accountId = ?", CONNECTION_ASYNC);
     PrepareStatement(CHAR_DEL_TUTORIALS, "DELETE FROM account_tutorial WHERE accountId = ?", CONNECTION_ASYNC);
 
