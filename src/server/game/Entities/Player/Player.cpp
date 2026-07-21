@@ -29815,9 +29815,13 @@ ObjectGuid Player::GetStableMaster() const
 
 void Player::SetStableMaster(ObjectGuid stableMaster)
 {
-    if (!m_activePlayerData->PetStable.has_value())
-        return;
-
+    // The modern (Dragonflight+) stable window is opened client-side from the
+    // ActivePlayerData::PetStable update field: the client shows it once StableMaster
+    // is a valid GUID. The previous early-return when PetStable had no value meant a
+    // hunter whose stable info was not yet initialized (e.g. no pets in the stable
+    // list) never got StableMaster set, so the stable window would not open at all.
+    // Passing index 0 to ModifyValue initialises the optional if it is not present,
+    // exactly as AddPetToUpdateFields does, so the window can always open.
     SetUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData)
         .ModifyValue(&UF::ActivePlayerData::PetStable, 0)
         .ModifyValue(&UF::StableInfo::StableMaster), stableMaster);
