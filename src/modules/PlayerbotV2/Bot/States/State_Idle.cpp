@@ -5889,12 +5889,21 @@ bool DungeonDispatch(BotSnapshotView const& s, BotAI& ai,
                                 if (!DungeonStepRefused(s, ai, boss_step.x, boss_step.y,
                                                         boss_step.z, now_ms))
                                 {
+                                    // Claim the tick ONLY if an intent was really
+                                    // pushed. The emitter now returns false for a
+                                    // recently-REFUSED destination (see the
+                                    // [emit_refused] guard in BotIntentEmitter), and
+                                    // claiming anyway produced "claim, no intent, no
+                                    // fallback" — a silent freeze with the ladder
+                                    // below never reached (campaign 2026-07-21).
                                     if (emit.move_to(boss_step.x, boss_step.y, boss_step.z,
                                                      /*run=*/true))
+                                    {
                                         ai.note_move_commit(s.map_id(), boss_step.x, boss_step.y,
                                                             boss_step.z, now_ms);
-                                    ai.set_last_rule_fired("idle:dungeon_tank_advance_boss");
-                                    return true;
+                                        ai.set_last_rule_fired("idle:dungeon_tank_advance_boss");
+                                        return true;
+                                    }
                                 }
                                 DungeonStepRefusedDiag(s, "idle:dungeon_tank_advance_boss",
                                                        boss_step.x, boss_step.y, boss_step.z);
@@ -6404,12 +6413,16 @@ bool DungeonDispatch(BotSnapshotView const& s, BotAI& ai,
                                     if (!DungeonStepRefused(s, ai, prog_step.x, prog_step.y,
                                                             prog_step.z, now_ms))
                                     {
+                                        // Claim only on a real emit (see the same
+                                        // note at the strict-stride site above).
                                         if (emit.move_to(prog_step.x, prog_step.y, prog_step.z,
                                                          /*run=*/true))
+                                        {
                                             ai.note_move_commit(s.map_id(), prog_step.x, prog_step.y,
                                                                 prog_step.z, now_ms, prog_crumb);
-                                        ai.set_last_rule_fired("idle:dungeon_tank_advance_boss");
-                                        return true;
+                                            ai.set_last_rule_fired("idle:dungeon_tank_advance_boss");
+                                            return true;
+                                        }
                                     }
                                     DungeonStepRefusedDiag(s, "idle:dungeon_tank_advance_boss",
                                                            prog_step.x, prog_step.y, prog_step.z);
@@ -7985,6 +7998,27 @@ bool DungeonDispatch(BotSnapshotView const& s, BotAI& ai,
                 }
             }
             // Hard-stop: no world-idle rule runs inside a dungeon.
+            // Name WHY we reached the terminal hold — the whole advance ladder
+            // declined. route_cur with consumed!=cur or a non-null far-target
+            // that got vetoed points at the route-armed veto; empty victim +
+            // no candidates points at a genuine dead end. (Diagnostic pattern:
+            // [move_lock]/[emit_refused] named the last two freeze classes.)
+            {
+                static uint32 s_dhold_dbg_ms = 0;
+                const uint32 dh_now = GameTime::GetGameTimeMS();
+                if (dh_now - s_dhold_dbg_ms > 5000u)
+                {
+                    s_dhold_dbg_ms = dh_now;
+                    TC_LOG_INFO("playerbot.v2",
+                        "[dungeon_hold] bot={} role={} victim={} route_cur={} "
+                        "consumed={} reached={}",
+                        s.bot_id(), int(ai.effective_role(s)),
+                        s.victim().IsEmpty() ? 0u : 1u,
+                        ai.dungeon_route_wp(s.map_id()),
+                        ai.route_consumed_idx(s.map_id()),
+                        ai.adv_route_reached_idx(s.map_id()));
+                }
+            }
             ai.set_last_rule_fired("idle:dungeon_hold");
             return true;
         }

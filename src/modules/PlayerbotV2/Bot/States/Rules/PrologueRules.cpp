@@ -191,6 +191,29 @@ bool OpenerFire(BotSnapshotView const& s, BotAI& ai,
         ai.set_opener_victim(vg, now_ms);
     ai.set_opener_last_seen(now_ms);
 
+    // Name the opener when it owns a dungeon tank's tick out of combat. This
+    // rule (prio 993) sits ABOVE idle:dungeon_dispatch (720) and, for a tank
+    // (which is exempt from the yield below), can claim every tick on a stale
+    // victim selection with no MoveTo — presenting as a frozen tank still
+    // "fighting" (InCombat=false, rotation names in RuleHist). If `since`
+    // visibly RE-STAMPS while frozen, the 25s give-up can never fire because
+    // the selection is flipping GUIDs. Same "make it say why" play as
+    // [move_lock]/[emit_refused]. Throttled.
+    if (ai.dungeon_active())
+    {
+        static uint32 s_opener_dbg_ms = 0;
+        if (now_ms - s_opener_dbg_ms > 1500u)
+        {
+            s_opener_dbg_ms = now_ms;
+            TC_LOG_INFO("playerbot.v2",
+                "[opener_own] bot={} role={} in_combat={} fresh={} "
+                "since={}ms oor={}",
+                s.bot_id(), int(ai.effective_role(s)), s.in_combat() ? 1 : 0,
+                fresh_open ? 1 : 0, now_ms - ai.opener_victim_since_ms(),
+                ai.cast_oor_count());
+        }
+    }
+
     NearbyUnit const* vu = nullptr;
     for (auto const& u : s.raw().combat.nearby_enemies)
         if (u.guid == vg) { vu = &u; break; }
