@@ -221,7 +221,13 @@ bool MySQLConnection::Execute(PreparedStatementBase* stmt)
     uint32 index = stmt->GetIndex();
 
     MySQLPreparedStatement* m_mStmt = GetPreparedStatement(index);
-    ASSERT(m_mStmt);            // Can only be null if preparation failed, server side error or bad query
+    // Null only if preparation failed (server-side error / bad query) or - far
+    // more commonly - the statement is not prepared on THIS connection because
+    // its CONNECTION_* flags do not cover it (e.g. a CONNECTION_SYNCH statement
+    // reaching an async connection, or vice versa). Naming the index matters: a
+    // bare assert says nothing about which of ~2000 statements is at fault.
+    ASSERT(m_mStmt, "Execute: prepared statement index %u is not prepared on this "
+                    "connection (CONNECTION_* flags mismatch, or preparation failed)", index);
 
     m_mStmt->BindParameters(stmt);
 
@@ -268,7 +274,13 @@ bool MySQLConnection::_Query(PreparedStatementBase* stmt, MySQLPreparedStatement
     uint32 index = stmt->GetIndex();
 
     MySQLPreparedStatement* m_mStmt = GetPreparedStatement(index);
-    ASSERT(m_mStmt);            // Can only be null if preparation failed, server side error or bad query
+    // Null only if preparation failed (server-side error / bad query) or - far
+    // more commonly - the statement is not prepared on THIS connection because
+    // its CONNECTION_* flags do not cover it (e.g. a CONNECTION_SYNCH statement
+    // reaching an async connection, or vice versa). Naming the index matters: a
+    // bare assert says nothing about which of ~2000 statements is at fault.
+    ASSERT(m_mStmt, "Query: prepared statement index %u is not prepared on this "
+                    "connection (CONNECTION_* flags mismatch, or preparation failed)", index);
 
     m_mStmt->BindParameters(stmt);
     *mysqlStmt = m_mStmt;
