@@ -40,8 +40,21 @@ is byte-exact with the runtime result.
 
 ## Schema provenance
 
-These definitions were **reconstructed from the loader queries**, because playerbot-v2 carries no SQL
-file for them - the database is created outside the repository. Column names and order match the
-`SELECT` statements exactly; column *types* are inferred from the `Field::GetX()` calls used to read
-them, so widths are a reasonable guess rather than a copy of the original DDL. Verify against a
-populated instance before relying on them.
+`playerbot_shared.sql` is a **real `mysqldump --no-data` of the playerbot test environment**, not a
+reconstruction. 49 tables; the one `*_bak_*` scratch table was excluded, and no data or credentials
+are included.
+
+Worth knowing: an earlier reconstruction from the loader `SELECT`s got the structure right but the
+details wrong - `handcrafted_road.width` defaults to 8 rather than 10, `playerbot_nav_links.radius` to
+12 rather than 2, `playerbots_names.gender` has three values (0/1/2, neutral) rather than two, and
+columns that no query touches (`created_by`, `created_at`, `race_mask`, `is_taken`, `used_by_guid`,
+`kind`) were invisible from the code alone. Inferring a schema from its readers is not good enough.
+
+Note also that the module reads only four of these 49 tables through the queries visible in the core;
+the rest belong to bot account pooling, templates, scheduling, statistics and dragonriding, and are
+driven from inside the module.
+
+## Database name
+
+The test environment names this database **`wowc_playerbot`**, not the module default `playerbot`.
+Always take the name from `Playerbot.SharedDatabase` rather than assuming.
