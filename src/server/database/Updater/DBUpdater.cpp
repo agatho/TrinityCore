@@ -20,6 +20,7 @@
 #include "Config.h"
 #include "DatabaseEnv.h"
 #include "DatabaseLoader.h"
+#include "MySQLWorkaround.h"    // pulls in mysql.h so MYSQL_VERSION_ID is defined below
 #include "GitRevision.h"
 #include "Log.h"
 #include "QueryResult.h"
