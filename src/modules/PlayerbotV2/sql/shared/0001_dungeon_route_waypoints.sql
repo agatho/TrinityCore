@@ -18,7 +18,9 @@
 -- (DungeonScriptMgr::LoadGeneratedRoutes) reads them via CharacterDatabase with a
 -- {SharedDb()}. schema qualifier; the offline generator
 -- (src/modules/PlayerbotV2/tools/gen_dungeon_routes.py, ROUTE_DB env) writes here.
--- This migration only creates the empty table; run the generator to populate it.
+-- This migration only creates the empty table; the shipped route DATA is in
+-- shared/0004_dungeon_route_waypoints_data.sql (apply it next). Re-run the
+-- generator + re-dump 0004 to refresh routes.
 -- ===========================================================================
 
 CREATE TABLE IF NOT EXISTS `playerbot_dungeon_routes` (
