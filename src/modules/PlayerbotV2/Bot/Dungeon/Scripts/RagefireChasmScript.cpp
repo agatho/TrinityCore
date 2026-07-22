@@ -26,24 +26,42 @@ public:
     DungeonAdvice get_advice(BotSnapshotView const& /*s*/) const override
     {
         DungeonAdvice a;
-        // Modern RFC bosses (TC instance_ragefire_chasm.cpp encounter order).
+        // Boss order MUST match the DB crumb-route order (wowc_playerbot.
+        // playerbot_dungeon_routes map389, 54 crumbs): the route descends into
+        // Adarogg's pit FIRST (crumbs 1-13, entrance→-285,-54,-61) then rises to
+        // Koranthal (24) → Slagmaw (32) → Gordoth (53). That IS the TC encounter
+        // index order. bosses_done_count indexes both bosses[] and the escape's
+        // progression_waypoints[], and the tank-advance pushes the earliest LIVE
+        // bosses[i] — so a Koranthal-first reorder (tried 07-22) fights the route:
+        // the tank beelined 104y NW toward Koranthal OFF the route and stalled,
+        // because the route cursor still wanted the Adarogg descent first. Keep
+        // encounter/route order.
         a.bosses = {
-            61408,  // Adarogg
-            61412,  // Dark Shaman Koranthal
-            61463,  // Slagmaw
-            61528,  // Lava Guard Gordoth
+            61408,  // Adarogg               (SW pit, z-60 — route crumb 13)
+            61412,  // Dark Shaman Koranthal (NE, z-20   — route crumb 24)
+            61463,  // Slagmaw               (N,  z-19   — route crumb 32)
+            61528,  // Lava Guard Gordoth    (NW, z-18   — route crumb 53)
         };
-        // Progression waypoints. Approximate spiral coords through the
-        // cavern — tank walks them in order, mobs aggro along the way.
-        // Tuning note: if a waypoint sits in unreachable geometry on a
-        // particular server's map data, move_to's Detour check rejects
-        // and the tank stalls. Re-survey via `.gps` in-game and update.
+        // Progression waypoints — the ACTUAL boss spawn positions, aligned
+        // 1:1 with bosses[] above (waypoints[i] == bosses[i]). This alignment
+        // is REQUIRED: the false-combat escape (State_Idle) relocates a wedged
+        // bot to waypoints[bosses_done_count] and its logic asserts
+        // waypoints[i]==bosses[i] "is exactly the encounter we still owe".
+        //
+        // ROOT-FIX 2026-07-22: the previous coords were mis-surveyed by
+        // 200-400y (e.g. Koranthal waypoint (38.7,-90) vs the real (-117,71))
+        // AND off-by-one (a leading "ramp" entry shifted every boss). The tank-
+        // advance's Detour check therefore rejected every waypoint as
+        // unreachable geometry, so the group never routed to a pack — it drifted
+        // via incidental aggro, stalling 60-80y short of each boss while a bot
+        // sat in false-combat, and the escape teleported to the wrong point.
+        // Coords are the live wc_world.creature spawn positions on map 389
+        // (verified reachable — the squad kills these bosses when it arrives).
         a.progression_waypoints = {
-            { -317.9f,  -10.9f, -19.4f },   // ramp bottom past entrance
-            {   -3.2f,  -25.1f, -19.4f },   // Adarogg's chamber
-            {   38.7f,  -90.0f, -19.5f },   // approach to Koranthal
-            {  -29.6f, -101.0f, -19.7f },   // Slagmaw's pit
-            {   -1.3f,  -39.9f, -19.5f },   // Lava Guard Gordoth's room
+            { -284.6f,  -53.8f, -60.7f },   // 61408 Adarogg (pit — route crumb 13)
+            { -117.0f,   71.1f, -20.7f },   // 61412 Dark Shaman Koranthal
+            { -257.2f,  172.4f, -19.6f },   // 61463 Slagmaw
+            { -369.5f,  166.2f, -18.5f },   // 61528 Lava Guard Gordoth
         };
         // Boss-specific interrupts / dangerous casts. Spell IDs from TC
         // boss scripts (or WoWHead) — populate as we identify them

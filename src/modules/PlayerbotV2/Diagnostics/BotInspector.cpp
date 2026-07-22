@@ -1,4 +1,5 @@
 ﻿#include "BotInspector.h"
+#include <cmath>            // std::sqrt for the nearby-enemy distance dump
 #include "PerfCounters.h"
 #include "WedgeWatchdog.h"
 #include "../PlayerbotV2.h"   // Module::instance().wedge_watchdog() for WedgesReport
@@ -138,7 +139,7 @@ std::string Inspect(BotId id)
         return tr.blacklisted_until_ms > now ? tr.blacklisted_until_ms - now : 0u;
     }();
 
-    return fmt::format(
+    std::string out = fmt::format(
         "BotId      : {}\n"
         "Name       : {}\n"
         "State      : {} (was {})\n"
@@ -481,6 +482,45 @@ std::string Inspect(BotId id)
             return "?";
         }(),
         ai->activity_mode_expired(GameTime::GetGameTimeMS()));
+
+    // DIAG (2026-07-22): nearby-enemy dump with the exact fields the combat /
+    // escape gates read (in_los, cannot_reach, untargetable, is_pacified, hp,
+    // distance, whose victim). Lets a false-combat wedge be diagnosed WITHOUT
+    // guessing which gate suppresses a DPS from finishing the mob.
+    if (snap)
+    {
+        const float bx = snap->position.x, by = snap->position.y, bz = snap->position.z;
+        out += fmt::format("Enemies    : {} nearby, {} attackers\n",
+            snap->combat.nearby_enemies.size(), snap->combat.attackers.size());
+        for (auto const& a : snap->combat.attackers)
+        {
+            const float dx = a.x - bx, dy = a.y - by, dz = a.z - bz;
+            const float dist = std::sqrt(dx * dx + dy * dy + dz * dz);
+            std::string avic = a.victim.IsEmpty() ? std::string{"-"} : a.victim.ToString();
+            out += fmt::format(
+                "  ATK E{} hp{}% d{:.0f}y los{} cannot_reach{} unt{} pac{} vic={}\n",
+                a.entry, a.max_hp > 0 ? (a.hp * 100 / a.max_hp) : 0, dist,
+                a.in_los ? 1 : 0, a.cannot_reach ? 1 : 0, a.untargetable ? 1 : 0,
+                a.is_pacified ? 1 : 0, avic);
+        }
+        std::size_t shown = 0;
+        for (auto const& u : snap->combat.nearby_enemies)
+        {
+            if (shown++ >= 16) break;
+            const float dx = u.x - bx, dy = u.y - by, dz = u.z - bz;
+            const float dist = std::sqrt(dx * dx + dy * dy + dz * dz);
+            bool is_attacker = false;
+            for (auto const& a : snap->combat.attackers)
+                if (a.guid == u.guid) { is_attacker = true; break; }
+            std::string vic = u.victim.IsEmpty() ? std::string{"-"} : u.victim.ToString();
+            out += fmt::format(
+                "  E{} hp{}% d{:.0f}y los{} cannot_reach{} unt{} pac{} atk{} vic={}\n",
+                u.entry, u.max_hp > 0 ? (u.hp * 100 / u.max_hp) : 0, dist,
+                u.in_los ? 1 : 0, u.cannot_reach ? 1 : 0, u.untargetable ? 1 : 0,
+                u.is_pacified ? 1 : 0, is_attacker ? 1 : 0, vic);
+        }
+    }
+    return out;
 }
 
 std::string SystemStatus()

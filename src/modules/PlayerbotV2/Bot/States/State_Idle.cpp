@@ -1097,6 +1097,58 @@ bool DungeonStepTowardTank(ObjectGuid self_guid, float tx, float ty, float tz,
     return true;
 }
 
+// Route-aware step toward an arbitrary target position (2026-07-22). Fallback
+// for a FOLLOWER whose DIRECT path to the tank is broken by a navmesh gap: the
+// tank route-follows DOWN a descent (RFC Adarogg pit — the DB crumb-route steps
+// z-29→-61 in navigable ~24y hops, crumbs 5-13), then the follower's rejoin
+// BEELINES the 60y straight to the tank, NoPaths across the gap, and strands —
+// halting the whole group on the cohesion gate (live 2026-07-22: Dunghealer
+// NoPath (-141,-23,-29)->(-203,-36,-49), group frozen 0/4). Instead, walk the
+// follower along the SAME crumb chain the tank used: find the crumb nearest the
+// tank (ti) and nearest self (fi), and step to the next crumb from fi toward ti
+// that is actually reachable. Each hop is short + on-mesh, so the follower
+// descends exactly where the tank did. Returns false when there is no route,
+// self and tank share a crumb (direct step should have worked), or the very
+// next crumb is itself unreachable (a real gap the route can't bridge — leave
+// it to strand-recovery). Fallback-ONLY: callers invoke it after the direct
+// step fails, so reachable rejoins and non-routed dungeons are byte-unchanged.
+bool DungeonRouteStepTowardPos(BotSnapshotView const& s,
+                               float tx, float ty, float tz, float maxStep,
+                               float& ox, float& oy, float& oz)
+{
+    DungeonAdvice const advice = Services::Dungeons().GetAdvice(s);
+    auto const& R = advice.route_waypoints;
+    if (R.size() < 2) return false;
+    Player* self = ObjectAccessor::FindConnectedPlayer(s.raw().guid);
+    if (!self) return false;
+    float sx, sy, sz; s.position(sx, sy, sz);
+    auto nearest = [&](float x, float y, float z) -> int {
+        int bi = 0; float bd = 1.0e18f;
+        for (int i = 0; i < static_cast<int>(R.size()); ++i)
+        {
+            const float dx = R[i].x - x, dy = R[i].y - y, dz = R[i].z - z;
+            const float d = dx * dx + dy * dy + dz * dz;
+            if (d < bd) { bd = d; bi = i; }
+        }
+        return bi;
+    };
+    const int ti = nearest(tx, ty, tz);
+    const int fi = nearest(sx, sy, sz);
+    if (ti == fi) return false;               // co-located on the route
+    const int dir = (ti > fi) ? 1 : -1;
+    for (int i = fi + dir; dir > 0 ? i <= ti : i >= ti; i += dir)
+    {
+        auto const& rw = R[size_t(i)];
+        const float dx = rw.x - sx, dy = rw.y - sy, dz = rw.z - sz;
+        if (dx * dx + dy * dy + dz * dz < 6.0f * 6.0f) continue;  // already at this crumb
+        G3D::Vector3 step;
+        if (DungeonTargetReachableAndStep(self, rw.x, rw.y, rw.z, maxStep, step))
+        { ox = step.x; oy = step.y; oz = step.z; return true; }
+        break;   // next crumb toward the tank is itself gap-blocked — give up
+    }
+    return false;
+}
+
 // OOC dungeon step-hold (2026-07-03 WC/SFK stutter fix). True when the bot's
 // LIVE spline (snapshot path_end, populated for POINT motion) is already
 // heading within kStepReplanRange (3y) of (tx,ty,tz) AND the bot is moving.
@@ -1743,9 +1795,25 @@ bool DungeonCombatPositioning(BotSnapshotView const& s, BotAI& ai,
     {
         Player* self_seed = ObjectAccessor::FindConnectedPlayer(s.raw().guid);
         bool any_seedable = false;
+        // Classify WHY there is no seedable victim, to pick the right escape:
+        //  - immune_present : a reachable, fully-selectable attacker the bot simply
+        //    cannot DAMAGE (Unit::IsValidAttackTarget false — an IMMUNE_TO_PC event
+        //    creature). These live AT the boss, so teleporting toward the boss just
+        //    re-aggros them — an escape-teleport LOOP (observed live 2026-07-22: RFC
+        //    healer teleport-looped onto immune Dark Shaman Acolyte 61672, InCombat
+        //    285s). The cure is to STOP teleporting so the creature leashes.
+        //  - dragger_present : an untargetable / pacified / UNREACHABLE attacker
+        //    (chasing firewall platters, lightning stalkers on a nav-island) that
+        //    dragged the group BACK off the boss. Here the forward teleport is
+        //    exactly right — it breaks the leash and puts us back on the objective.
+        // immune_lock (immune, and NOTHING draggable) => disengage in place, never
+        // teleport. Otherwise keep the original forward-teleport-when-far behavior.
+        bool immune_present = false;
+        bool dragger_present = false;
         for (auto const& a : s.raw().combat.attackers)
         {
-            if (a.hp <= 0 || a.untargetable || a.is_pacified) continue;
+            if (a.hp <= 0) continue;
+            if (a.untargetable || a.is_pacified) { dragger_present = true; continue; }
             bool ign = false;
             for (uint32_t ie : advice.ignore_entries)
                 if (ie == a.entry) { ign = true; break; }
@@ -1759,17 +1827,35 @@ bool DungeonCombatPositioning(BotSnapshotView const& s, BotAI& ai,
             // never fired, while the InCombat seed loop rejected it as unreachable).
             // Require the attacker be reachable for it to suppress the escape, so the
             // two tests agree. Cheap here: only runs while in_combat + victim empty.
-            if (!a.in_los) continue;
+            if (!a.in_los) { dragger_present = true; continue; }
+            // An IMMUNE_TO_PC attacker is fully SELECTABLE and REACHABLE yet
+            // UNDAMAGEABLE by the bot — Unit::IsValidAttackTarget rejects it, so
+            // every StartAttack returns InvalidTarget and victim() stays empty. It
+            // is therefore NOT a way out of false combat and must not count as
+            // seedable (distinct from untargetable/is_pacified, already skipped
+            // above — an immune event creature carries none of those). This is the
+            // wc_world faction-14-on-immune-event-creature corruption class:
+            // root-fixed in the data (sql/world/0006_immune_event_creature_faction_
+            // restore, 14->16 for 335 audited carriers), but defended here so a
+            // single residual/re-introduced mis-authored faction can never again
+            // pin the whole group InCombat with nothing killable. Checked before
+            // the (expensive) reachability probe so immune attackers short-circuit.
+            if (self_seed)
+                if (Unit* au = ObjectAccessor::GetUnit(*self_seed, a.guid))
+                    if (!self_seed->IsValidAttackTarget(au))
+                        { immune_present = true; continue; }
             if (self_seed)
             {
                 G3D::Vector3 _seed_step;
                 if (!DungeonTargetReachableAndStep(self_seed, a.x, a.y, a.z,
                                                    20.0f, _seed_step))
-                    continue;
+                    { dragger_present = true; continue; }
             }
             any_seedable = true;
             break;
         }
+        // An immune-only lock: teleporting forward re-aggros the same immune adds.
+        bool const immune_lock = immune_present && !dragger_present && !any_seedable;
         constexpr uint32 kFalseCombatEscapeMs = 5000;   // grace before relocating
         const uint32 fc_ms = ai.false_combat_ms(!any_seedable, now_ms);
         if (!any_seedable && fc_ms > kFalseCombatEscapeMs)
@@ -1801,7 +1887,7 @@ bool DungeonCombatPositioning(BotSnapshotView const& s, BotAI& ai,
                 // ~ the advance/heal leash. (Falls through, so the boss-push still
                 // runs when we're already on the boss.)
                 constexpr float kEscapeMinDisplaceSq = 40.0f * 40.0f;
-                if (wd2 >= kEscapeMinDisplaceSq)
+                if (!immune_lock && wd2 >= kEscapeMinDisplaceSq)
                 {
                     float tx = wp.x, ty = wp.y, tz = wp.z;
                     Position dest;
@@ -1820,6 +1906,41 @@ bool DungeonCombatPositioning(BotSnapshotView const& s, BotAI& ai,
                     ai.reset_regroup_tracking();
                     ai.set_last_rule_fired("dungeon:false_combat_escape");
                     return true;
+                }
+                else
+                {
+                    // DISENGAGE IN PLACE. Reached when a forward teleport is either
+                    // useless or harmful:
+                    //  - immune_lock: the only thing holding us is UNDAMAGEABLE
+                    //    immune adds that live AT the boss — teleporting toward the
+                    //    boss re-aggros them (the escape-teleport loop). We must
+                    //    stop relocating so the immune creature leashes and drops us.
+                    //  - boss CLOSE (< 40y, the original fall-through): a teleport
+                    //    can't help and would risk skipping the boss we owe.
+                    // Either way: shield every current attacker so combat target-
+                    // selection stops re-acquiring them, and stop attacking. We
+                    // DELIBERATELY do NOT return true — control falls through to the
+                    // in-combat boss-advance below, so the bot keeps navigating (onto
+                    // the boss, or off the immune creature's leash) instead of
+                    // thrashing. No teleport-rescue (feedback_no_teleport_rescue).
+                    // The 60s shield is refreshed every tick we remain wedged, so it
+                    // never lapses mid-escape; it expires on its own once we are clear.
+                    for (auto const& atk : s.raw().combat.attackers)
+                        if (atk.hp > 0)
+                            ai.note_engage(atk.guid, now_ms, 60000u);
+                    emit.stop_attack();
+                    ai.set_last_rule_fired("dungeon:false_combat_disengage");
+                    static uint32 s_fc_disengage_dbg_ms = 0;
+                    if (now_ms - s_fc_disengage_dbg_ms > 1500u)
+                    {
+                        s_fc_disengage_dbg_ms = now_ms;
+                        TC_LOG_INFO("playerbot.v2",
+                            "[false_combat_esc] {} pos=({:.0f},{:.0f},{:.0f}) atk={} "
+                            "held={}ms boss_wp[{}] within {:.0f}y -> DISENGAGE in place",
+                            s.name(), fcx, fcy, fcz,
+                            static_cast<unsigned>(s.raw().combat.attackers.size()),
+                            fc_ms, static_cast<unsigned>(wi), std::sqrt(wd2));
+                    }
                 }
             }
         }
@@ -2784,6 +2905,29 @@ bool DungeonCombatPositioning(BotSnapshotView const& s, BotAI& ai,
                         }
                         else
                         {
+                            // Direct path to the tank is gap-broken (NoPath).
+                            // Rejoin along the crumb-route — same fix + same crumb
+                            // as the InGroup rejoin, so the Idle/InGroup states
+                            // share ONE goal-key and never flip-flop the spline
+                            // (the Gap-1 two-state yo-yo this module already fought).
+                            {
+                                float qx, qy, qz;
+                                if (DungeonRouteStepTowardPos(s, tk->x, tk->y, tk->z,
+                                                              45.0f, qx, qy, qz))
+                                {
+                                    if (DungeonStepAlreadyInFlight(s, qx, qy, qz))
+                                    {
+                                        DungeonStepHoldDiag(s, "idle:dungeon_combat_rejoin_tank_route",
+                                                            qx, qy, qz);
+                                        ai.set_last_rule_fired("idle:dungeon_combat_rejoin_tank_hold");
+                                        return true;
+                                    }
+                                    if (emit.move_to(qx, qy, qz, /*run=*/true))
+                                        ai.note_move_commit(s.map_id(), qx, qy, qz, now_ms);
+                                    ai.set_last_rule_fired("idle:dungeon_combat_rejoin_tank_route");
+                                    return true;
+                                }
+                            }
                             if (DungeonStepAlreadyInFlight(s, tk->x, tk->y, tk->z))
                             {
                                 DungeonStepHoldDiag(s, "idle:dungeon_combat_rejoin_tank",

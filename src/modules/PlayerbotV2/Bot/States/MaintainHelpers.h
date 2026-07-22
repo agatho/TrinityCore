@@ -48,6 +48,17 @@ bool DungeonStepTowardTank(ObjectGuid self_guid, float tx, float ty, float tz,
                            float maxStep, float& ox, float& oy, float& oz,
                            bool& is_offmesh);
 
+// Route-aware fallback for a follower whose DIRECT step to (tx,ty,tz) is broken
+// by a navmesh gap: walks the follower along the dungeon crumb-route toward the
+// target (the same navigable hops the tank descended) instead of beelining
+// across the gap and stranding. Definition in State_Idle.cpp. Returns false
+// when there is no route, self is co-located on the route, or the next crumb
+// toward the target is itself unreachable. Fallback-only — call after the
+// direct step fails so reachable rejoins / non-routed dungeons are unchanged.
+bool DungeonRouteStepTowardPos(BotSnapshotView const& s,
+                               float tx, float ty, float tz, float maxStep,
+                               float& ox, float& oy, float& oz);
+
 // Off-mesh crossing COMMITMENT honored in EVERY state (idle / InGroup / InCombat).
 // When a follower starts crossing a Gap-1-style off-mesh bridge it stores a fixed
 // far-vertex goal (BotAI::set_dungeon_cross). The MoveSpline traverses the off-mesh

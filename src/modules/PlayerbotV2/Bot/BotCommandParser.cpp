@@ -5869,6 +5869,47 @@ done_dispel:
         }
         return true;
     }
+    if (cmd == "enemies")
+    {
+        // DIAG (2026-07-22): dump the bot's nearby_enemies with the exact
+        // decision fields the combat/escape gates read (in_los, cannot_reach,
+        // untargetable, is_pacified, hp, distance, victim), so a false-combat
+        // wedge can be diagnosed WITHOUT guessing which gate suppresses a DPS.
+        const BotId id = bot->GetGUID().GetCounter();
+        auto snap = Services::Snapshots().latest(id);
+        if (!snap)
+        {
+            Push(bot, WhisperIntent{sender->GetName(), "enemies: no snapshot."});
+            return true;
+        }
+        const float bx = snap->position.x, by = snap->position.y, bz = snap->position.z;
+        Push(bot, WhisperIntent{sender->GetName(),
+            fmt::format("enemies: {} nearby, {} attackers, victim={} pos=({:.0f},{:.0f},{:.0f})",
+                snap->combat.nearby_enemies.size(), snap->combat.attackers.size(),
+                snap->combat.victim.IsEmpty() ? std::string{"(empty)"}
+                    : snap->combat.victim.ToString(), bx, by, bz)});
+        std::size_t shown = 0;
+        for (auto const& u : snap->combat.nearby_enemies)
+        {
+            if (shown++ >= 16) break;
+            const float dx = u.x - bx, dy = u.y - by, dz = u.z - bz;
+            const float dist = std::sqrt(dx * dx + dy * dy + dz * dz);
+            bool is_attacker = false;
+            for (auto const& a : snap->combat.attackers)
+                if (a.guid == u.guid) { is_attacker = true; break; }
+            Push(bot, WhisperIntent{sender->GetName(),
+                fmt::format("E{} hp{}% d{:.0f}y los{} cr{} unt{} pac{} atk{} vic={}",
+                    u.entry,
+                    u.max_hp > 0 ? (u.hp * 100 / u.max_hp) : 0,
+                    dist, u.in_los ? 1 : 0, u.cannot_reach ? 1 : 0,
+                    u.untargetable ? 1 : 0, u.is_pacified ? 1 : 0,
+                    is_attacker ? 1 : 0,
+                    u.victim.IsEmpty() ? std::string{"-"}
+                        : u.victim.ToString().substr(u.victim.ToString().size() > 8
+                            ? u.victim.ToString().size() - 8 : 0))});
+        }
+        return true;
+    }
     if (cmd == "quest")
     {
         // Whisper-back the bot's current_objective (the one State_Idle's

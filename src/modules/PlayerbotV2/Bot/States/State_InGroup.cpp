@@ -510,6 +510,20 @@ void DispatchInGroup(BotAI& ai,
                                                  snapshot.published_at_ms() + 12000);
                         emit.move_to(rx, ry, rz, /*run=*/true);
                     }
+                    // Direct path to the tank is gap-broken (NoPath). Before the
+                    // doomed beeline, try to rejoin ALONG the crumb-route — the
+                    // tank reached its spot by route-following down a descent the
+                    // straight line NoPaths (RFC Adarogg pit); the follower must
+                    // descend the SAME navigable crumbs, not beeline across the
+                    // gap and strand the whole group on the cohesion gate.
+                    else if (DungeonRouteStepTowardPos(snapshot,
+                                                       tk->x, tk->y, tk->z, 45.0f,
+                                                       rx, ry, rz))
+                    {
+                        emit.move_to(rx, ry, rz, /*run=*/true);
+                        ai.set_last_rule_fired("ingroup:dungeon_rejoin_tank_route");
+                        return;
+                    }
                     else
                         emit.move_to(tk->x, tk->y, tk->z, /*run=*/true);
                 }
