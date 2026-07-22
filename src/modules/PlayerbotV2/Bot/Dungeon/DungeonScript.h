@@ -183,6 +183,24 @@ public:
     // Per-tick advice. Called by the Idle dungeon rules when the
     // bot is inside the dungeon. Snapshot view is read-only.
     virtual DungeonAdvice get_advice(BotSnapshotView const& s) const = 0;
+
+    // Subset of this dungeon's bosses whose creature is EVENT-SUMMONED by the
+    // instance script (Skyriss via the Arcatraz warden consoles, Baron
+    // Rivendare after the Stratholme ziggurats, Urok Doomhowl from the LBRS
+    // ogre summoner, …) and therefore has ZERO static creature spawns. A
+    // clientless bot squad can never trigger the summon event, so the boss's
+    // InstanceScript encounter sits at NOT_STARTED forever. Full-clear
+    // completion (BotSnapshotBuilder) EXCLUDES these: a 5-man is "complete"
+    // once every *spawnable* boss is DONE. Snapshot-INDEPENDENT (a static fact
+    // about the dungeon design) so the completion path can read it via the
+    // cheap O(1) registry lookup without the per-tick GetAdvice() churn.
+    //
+    // Declared explicitly (author intent is ground truth) rather than
+    // DB-censused at runtime. Before adding an entry, verify
+    //   SELECT COUNT(*) FROM creature WHERE id=<entry> AND map=<map_id>  == 0
+    // A zero-spawn boss that is NOT event-summoned is a DATA ERROR (wrong
+    // entry id) and must be fixed in bosses[], never masked here.
+    virtual std::vector<uint32_t> event_summoned_bosses() const { return {}; }
 };
 
 // Registry of all loaded DungeonScripts, keyed by (map_id, difficulty).

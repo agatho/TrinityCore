@@ -17,6 +17,12 @@ public:
     uint32_t  map_id() const override { return 552; }
     char const* name() const override { return "arcatraz"; }
 
+    // Skyriss is summoned by activating the three Warden's Shield consoles —
+    // a clientless bot squad can't trigger it, so his encounter never leaves
+    // NOT_STARTED (0 static spawns, verified). Exclude from the full-clear
+    // completion gate so the run reads complete after the other 3 bosses.
+    std::vector<uint32_t> event_summoned_bosses() const override { return { 20912 }; }
+
     DungeonAdvice get_advice(BotSnapshotView const& /*s*/) const override
     {
         DungeonAdvice a;

@@ -28,12 +28,18 @@ public:
             12544,  // Frost Armor (Razorfen Defenders)
             7657,   // Bone Shield (Death Speaker)
         };
-        // Boss progression — NPC entries from TC's razorfen_kraul.h
-        // (plus Aggem 4424 / Jargba 4428 from WoWHead, missing in TC header).
+        // Boss progression — aligned to the LIVE instance_razorfen_kraul
+        // encounter list (RFKBossIds order). The pre-revamp entries this list
+        // used to carry (Aggem Thorncurse 4424, Death Speaker Jargba 4428) are
+        // NOT tracked encounters in the modern RFK script and 4424 has no static
+        // spawn at all, so the tank-advance rule was steering to a creature that
+        // never exists. All five below are verified map-47 spawns and match the
+        // InstanceScript's SetBossState credit creatures.
         a.bosses = {
+            75001,  // Hunter Bonetusk
             6168,   // Roogug
-            4424,   // Aggem Thorncurse
-            4428,   // Death Speaker Jargba
+            74462,  // Warlord Ramtusk
+            75247,  // Groyat, the Blind Hunter
             4421,   // Charlga Razorflank (final)
         };
         // Progression waypoints — Razorfen Kraul is a Barrens quilboar

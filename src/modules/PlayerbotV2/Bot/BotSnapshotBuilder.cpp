@@ -13,6 +13,7 @@
 #include "../Fleet/CraftOrderBoard.h"
 #include "Battleground/BgTeamCoordinator.h"
 #include "Dungeon/PveGroupCoordinator.h"
+#include "Dungeon/DungeonScript.h"      // DungeonScriptMgr::GetScriptFor + event_summoned_bosses()
 #include "Player.h"
 #include "Formulas.h"                 // Trinity::XP::GetGrayLevel (Fix 2 trivial-quest gate)
 #include "Corpse.h"
@@ -3489,6 +3490,7 @@ std::shared_ptr<BotSnapshot const> BotSnapshotBuilder::Build(Player* p, BotAI* b
                 bool any_boss_known = false;
                 bool all_done       = true;
                 uint8 done_count    = 0;
+                uint8 decided_count = 0;
                 bool any_special    = false;
                 const uint32 enc_count = is->GetEncounterCount();
                 for (uint32 i = 0; i < enc_count; ++i)
@@ -3496,6 +3498,7 @@ std::shared_ptr<BotSnapshot const> BotSnapshotBuilder::Build(Player* p, BotAI* b
                     EncounterState st = is->GetBossState(i);
                     if (st == TO_BE_DECIDED) continue;
                     any_boss_known = true;
+                    if (decided_count < 0xFFu) ++decided_count;
                     if (st != DONE) { all_done = false; }
                     if (st == DONE && done_count < 0xFFu) ++done_count;
                     if (st == SPECIAL) any_special = true;
@@ -3514,9 +3517,27 @@ std::shared_ptr<BotSnapshot const> BotSnapshotBuilder::Build(Player* p, BotAI* b
                 // (Stockades: Hogger before Lord Overheat) — under
                 // full-clear semantics the tank just keeps advancing to
                 // the remaining bosses[] entries afterward.
+                // Event-summoned bosses (Skyriss, Baron Rivendare, Urok
+                // Doomhowl, …) have no static spawn, so their encounter never
+                // leaves NOT_STARTED for a clientless bot squad — under strict
+                // full-clear semantics the run would read incomplete forever
+                // and the squad would never auto-leave. Exclude them: the 5-man
+                // is a full clear once at most `phantom_k` encounters remain
+                // unfinished and the dungeon script has declared exactly that
+                // many bosses as unspawnable. phantom_k == 0 reduces this to the
+                // original all_done gate. Cheap O(1) registry read — no per-tick
+                // GetAdvice() churn (the builder deliberately avoids GetAdvice).
+                uint8 phantom_k = 0;
+                if (DungeonScript const* ds = Services::Dungeons().GetScriptFor(
+                        p->GetMapId(), uint32(snap->instance_ctx.map_difficulty)))
+                    phantom_k = uint8(std::min<size_t>(
+                        ds->event_summoned_bosses().size(), size_t{0xFFu}));
+                const uint8 not_done = uint8(decided_count - done_count);
+
                 const bool is_raid_map = p->GetMap() && p->GetMap()->IsRaid();
+                const bool full_clear = any_boss_known && (not_done <= phantom_k);
                 snap->dungeon_exec.dungeon_complete =
-                    (any_boss_known && all_done) || (is_raid_map && final_done);
+                    full_clear || (is_raid_map && final_done);
             }
             // Members dead on this map — drives wipe detection (3+ dead
             // while encounter active is the canonical wipe signal). Walks
