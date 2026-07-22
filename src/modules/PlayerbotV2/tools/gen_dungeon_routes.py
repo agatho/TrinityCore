@@ -218,7 +218,40 @@ def dist(a, b):
     return math.sqrt((a[0]-b[0])**2 + (a[1]-b[1])**2 + (a[2]-b[2])**2)
 
 
-def resample(path, step=STEP, max_gap=MAX_GAP):
+_snap_cache = {}
+def snap_to_mesh(mapid, pt, max_move=6.0):
+    """Correct a crumb onto the navmesh surface. resample() interpolates x/y/z
+    LINEARLY between on-mesh path vertices; on a sloped or stepped corridor the
+    straight-line Z leaves the mesh surface, so the interpolated crumb probes
+    FARFROMPOLY and the whole map is refused for "unfollowable pairs" even
+    though the runtime route-follower (which pathfinds to each crumb) reaches it
+    fine. The batch probe's START field is the nearest on-mesh point to `pt`;
+    use it, but ONLY when the horizontal correction stays within max_move yds so
+    a crumb can never be yanked sideways onto a different surface (Z is allowed
+    to move freely -- that IS the drift being fixed). Cached by rounded coord so
+    the multi-pass densifier doesn't re-probe the same interpolated point."""
+    key = (mapid, round(pt[0], 1), round(pt[1], 1), round(pt[2], 1))
+    c = _snap_cache.get(key)
+    if c is not None:
+        return c
+    st, snap, _poly, _pl, _path = probe(mapid, pt, (pt[0] + 1.0, pt[1], pt[2]))
+    res = pt
+    # Use the START snap whenever it lands within max_move yds HORIZONTALLY --
+    # including the FARFROMPOLY_START case, which is precisely a crumb floating
+    # off the surface (Z drift) with the real mesh directly below it. If there
+    # were a genuine walkable surface at pt's height the status would be OK; a
+    # FARFROMPOLY_START with a planar-close snap means pt is floating and must
+    # drop to the found surface. The planar cap keeps a crumb from sliding
+    # sideways onto a different floor; Z is free (that IS the drift being fixed).
+    # snap is None only when NO poly exists near pt at all -- a real gap, left
+    # for validate_followability to fail loudly.
+    if snap is not None and math.hypot(snap[0] - pt[0], snap[1] - pt[1]) <= max_move:
+        res = snap
+    _snap_cache[key] = res
+    return res
+
+
+def resample(mapid, path, step=STEP, max_gap=MAX_GAP):
     """Resample a probe corridor (list of (x,y,z[,offmesh]) verts, in path
     order) into points spaced ~step yds apart ALONG ARC LENGTH -- i.e.
     interpolated WITHIN long segments, not just emitted at existing
@@ -259,12 +292,21 @@ def resample(path, step=STEP, max_gap=MAX_GAP):
                 break
             pos += need
             t = pos / seg_len
-            out.append((p0[0] + (p1[0]-p0[0]) * t,
+            # Snap the interpolated point onto the mesh: linear-interp Z drifts
+            # off the surface on slopes/steps, which is exactly what produced
+            # the FARFROMPOLY "unfollowable pair" refusals.
+            out.append(snap_to_mesh(mapid,
+                       (p0[0] + (p1[0]-p0[0]) * t,
                         p0[1] + (p1[1]-p0[1]) * t,
-                        p0[2] + (p1[2]-p0[2]) * t))
+                        p0[2] + (p1[2]-p0[2]) * t)))
             acc = 0.0
     if not out or dist(out[-1], pts[-1]) > 0.01:
-        out.append(pts[-1])
+        # Snap the terminal vertex too: when a leg reaches an off-mesh boss the
+        # last path vertex arrives FARFROMPOLY_END, and emitting it verbatim
+        # plants a floating crumb (the "unfollowable pair" at a boss approach).
+        # Off-mesh-connection endpoints keep their exact mouth coord (handled by
+        # the flags[] passthrough above), so this only ever touches walked verts.
+        out.append(snap_to_mesh(mapid, pts[-1]))
     return out
 
 
@@ -416,7 +458,7 @@ def walk_to_boss(mapid, anchor, bentry, bp, step, log, links=None):
             lid, mouth, far = h
         used_links.add((lid, mouth))
         if path_to_mouth:
-            for c in resample(path_to_mouth, step):
+            for c in resample(mapid, path_to_mouth, step):
                 if not crumbs or dist(crumbs[-1], c) >= MIN_SPACE:
                     crumbs.append(c)
         for p in (mouth, far):
@@ -447,7 +489,7 @@ def walk_to_boss(mapid, anchor, bentry, bp, step, log, links=None):
             # Emit the WHOLE resampled corridor, not just the final vertex --
             # discarding it here is what starved 129/144 maps of crumbs
             # (>200y consecutive-crumb gaps).
-            crumbs.extend(resample(path, step))
+            crumbs.extend(resample(mapid, path, step))
             if status == "FARFROMPOLY_END" and planar and planar > 12.0:
                 log.append(f"    boss {bentry}: reached nearest on-mesh pt, boss "
                            f"off-mesh by ~{planar:.0f}y")
@@ -489,7 +531,7 @@ def walk_to_boss(mapid, anchor, bentry, bp, step, log, links=None):
         stalled = (dist(end, anchor) < MIN_SPACE) or (key in seen)
         seen.add(key)
         if not stalled:
-            for c in resample(path, step):
+            for c in resample(mapid, path, step):
                 if not crumbs or dist(crumbs[-1], c) >= MIN_SPACE:
                     crumbs.append(c)
             anchor = end
@@ -600,7 +642,7 @@ def _densify_pass(mapid, chain, links=None):
             continue
         changed = True
         if len(path) >= 2:
-            for c in resample(path, STEP):
+            for c in resample(mapid, path, STEP):
                 if dist(out[-1], c) >= MIN_SPACE and dist(c, b) >= MIN_SPACE:
                     out.append(c)
         # b still gets appended even when nothing could be spliced (e.g. no
@@ -648,18 +690,30 @@ def validate_followability(mapid, chain, links=None):
     return ok, fail, fails
 
 
-def write_db(mapid, chain):
+def write_db(mapid, chain, batch=150):
     """Overwrite this map's route with `chain`. Only called by main() AFTER
     validate_route_gate() has passed -- never delete existing rows for a
     chain that hasn't been validated (a failed/empty chain must leave prior
-    rows in place, not wipe them)."""
+    rows in place, not wipe them). The INSERT is CHUNKED: a single VALUES list
+    for a large route (dire_maul is ~1400 crumbs) overflows the Windows
+    command-line length limit on `mysql -e`, which silently wrote NOTHING and
+    left the map routeless. After writing, the row count is verified against
+    len(chain) and a mismatch raises -- fail loudly rather than ship a partial
+    or empty route."""
     if not chain:
         return
     sql(ROUTE_DB, f"DELETE FROM playerbot_dungeon_routes WHERE map_id={mapid} AND difficulty=0")
-    vals = ",".join(f"({mapid},0,{i},{p[0]:.3f},{p[1]:.3f},{p[2]:.3f})"
-                    for i, p in enumerate(chain))
-    sql(ROUTE_DB, "INSERT INTO playerbot_dungeon_routes "
-        "(map_id,difficulty,seq,position_x,position_y,position_z) VALUES " + vals)
+    for s in range(0, len(chain), batch):
+        vals = ",".join(f"({mapid},0,{i},{p[0]:.3f},{p[1]:.3f},{p[2]:.3f})"
+                        for i, p in enumerate(chain[s:s+batch], start=s))
+        sql(ROUTE_DB, "INSERT INTO playerbot_dungeon_routes "
+            "(map_id,difficulty,seq,position_x,position_y,position_z) VALUES " + vals)
+    rows = sql(ROUTE_DB, f"SELECT COUNT(*) FROM playerbot_dungeon_routes "
+                         f"WHERE map_id={mapid} AND difficulty=0")
+    got = int(rows[0][0]) if rows and rows[0] else 0
+    if got != len(chain):
+        raise RuntimeError(f"write_db map={mapid}: wrote {got}/{len(chain)} rows "
+                           f"(chunked INSERT failed -- route left partial)")
 
 
 def gap_stats(chain):
