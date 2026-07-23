@@ -1136,6 +1136,17 @@ bool DungeonRouteStepTowardPos(BotSnapshotView const& s,
     const int fi = nearest(sx, sy, sz);
     if (ti == fi) return false;               // co-located on the route
     const int dir = (ti > fi) ? 1 : -1;
+    // FORWARD-ONLY guard (2026-07-23): the crumb we step to MUST be closer to the
+    // target than we currently are. Without this, when self is FAR from the target
+    // (>120y), every crumb near the target is skipped by the range cap and the scan
+    // falls back to a crumb near SELF — which is not forward at all and DRAGGED the
+    // group backward toward a mis-forward waypoint (live Deadmines: tank at the
+    // entrance, target Cookie deep in the ship, helper returned an entrance crumb
+    // and yo-yoed the group entrance<->deep). Requiring net progress toward the
+    // target makes the escape/rejoin either advance or (no forward crumb reachable)
+    // return false so the caller disengages instead of walking the wrong way.
+    const float stx = tx - sx, sty = ty - sy, stz = tz - sz;
+    const float self_to_target2 = stx * stx + sty * sty + stz * stz;
     // Step to the FARTHEST-along crumb (toward ti) that is reachable from self in
     // one step — scanning from ti BACK toward fi, not fi forward. This makes
     // maximal monotonic forward progress and is immune to route SELF-CROSSINGS:
@@ -1152,6 +1163,9 @@ bool DungeonRouteStepTowardPos(BotSnapshotView const& s,
         const float d2 = dx * dx + dy * dy + dz * dz;
         if (d2 < 6.0f * 6.0f) continue;             // already at/through this crumb
         if (d2 > 120.0f * 120.0f) continue;         // too far to anchor this step
+        // FORWARD only: the crumb must be closer to the target than we are.
+        const float ctx = tx - rw.x, cty = ty - rw.y, ctz = tz - rw.z;
+        if (ctx * ctx + cty * cty + ctz * ctz >= self_to_target2) continue;
         G3D::Vector3 step;
         if (DungeonTargetReachableAndStep(self, rw.x, rw.y, rw.z, maxStep, step))
         { ox = step.x; oy = step.y; oz = step.z; return true; }
@@ -1897,63 +1911,63 @@ bool DungeonCombatPositioning(BotSnapshotView const& s, BotAI& ai,
                 // ~ the advance/heal leash. (Falls through, so the boss-push still
                 // runs when we're already on the boss.)
                 constexpr float kEscapeMinDisplaceSq = 40.0f * 40.0f;
+                // Route-WALK forward out of the false-combat lock (near_teleport_to
+                // is gone: it REFUSES in combat — the escape's own precondition — so
+                // it was always a silent no-op that looped forever, RFC Dancing
+                // Flames 2026-07-22). The route helper is now FORWARD-ONLY (only
+                // returns a crumb closer to the target than we are), so neither of
+                // these can drag the group backward the way the Deadmines yo-yo did:
+                //  - a FOLLOWER walks toward the TANK (cohesion — the tank leads);
+                //  - the TANK walks toward the boss WAYPOINT it owes. The tank MUST
+                //    have its own in-combat mover here: RFC's Dancing Flames is a
+                //    PERSISTENT hazard the tank stands in, so it never goes OOC and
+                //    the OOC route-follower never runs — merely disengaging left the
+                //    tank pinned (RFC regressed to 2/4, combat 578s, 2026-07-23).
+                // If no forward step resolves for either, fall through to disengage.
                 if (!immune_lock && wd2 >= kEscapeMinDisplaceSq)
                 {
-                    // WALK forward along the crumb-route toward the boss FIRST.
-                    // near_teleport_to (below) REFUSES while in combat
-                    // (PlayerbotAPI: IsInCombat -> ServerRefused) — and this escape
-                    // fires ONLY while in combat, so the teleport silently no-ops
-                    // and the escape loops forever (live RFC 2026-07-22: healer
-                    // pinned in an untargetable Dancing Flames hazard, escape fired
-                    // -> boss_wp every 5s for 11 min, never moved). move_to has no
-                    // in-combat gate, so striding up the route walks the bot OUT of
-                    // the hazard/chaser lock; combat then ends and normal advance
-                    // resumes. No teleport-rescue. Teleport is kept only as the
-                    // last resort for a routeless dungeon (where it is the sole
-                    // relocate available, combat-flicker permitting).
+                    float qx, qy, qz;
+                    bool have_step = false;
+                    char const* esc_tag = "";
+                    if (ai.effective_role(s) != Role::Tank)
                     {
-                        float qx, qy, qz;
-                        if (DungeonRouteStepTowardPos(s, wp.x, wp.y, wp.z, 45.0f, qx, qy, qz))
-                        {
-                            TC_LOG_INFO("playerbot.v2",
-                                "[false_combat_esc] {} pos=({:.0f},{:.0f},{:.0f}) atk={} "
-                                "held={}ms -> ROUTE-WALK boss_wp[{}] via ({:.0f},{:.0f},{:.0f})",
-                                s.name(), fcx, fcy, fcz,
-                                static_cast<unsigned>(s.raw().combat.attackers.size()),
-                                fc_ms, static_cast<unsigned>(wi), qx, qy, qz);
-                            emit.move_to(qx, qy, qz, /*run=*/true);
-                            // Do NOT reset the false-combat clock here (unlike the
-                            // one-shot teleport below): the walk is multi-tick, so
-                            // keep the escape armed to re-issue the next step each
-                            // tick until we clear the hazard and combat ends. The
-                            // step target is the stable next crumb, so move_to's
-                            // dedup keeps the spline steady between ticks.
-                            ai.set_last_rule_fired("dungeon:false_combat_escape_route");
-                            return true;
-                        }
+                        if (GroupMemberSummary const* tk = g.tank())
+                            if (tk->online && tk->is_alive &&
+                                tk->guid != s.guid() && tk->map_id == s.map_id())
+                            {
+                                have_step = DungeonRouteStepTowardPos(
+                                    s, tk->x, tk->y, tk->z, 45.0f, qx, qy, qz);
+                                esc_tag = "TANK";
+                            }
                     }
-                    float tx = wp.x, ty = wp.y, tz = wp.z;
-                    Position dest;
-                    if (BotMovement::NearestNavPoint(self_fc, wp.x, wp.y, wp.z, 10.0f, 8.0f, dest))
-                    { tx = dest.GetPositionX(); ty = dest.GetPositionY(); tz = dest.GetPositionZ(); }
-                    TC_LOG_INFO("playerbot.v2",
-                        "[false_combat_esc] {} pos=({:.0f},{:.0f},{:.0f}) atk={} held={}ms "
-                        "-> boss_wp[{}]=({:.0f},{:.0f},{:.0f}) (teleport fallback)",
-                        s.name(), fcx, fcy, fcz,
-                        static_cast<unsigned>(s.raw().combat.attackers.size()), fc_ms,
-                        static_cast<unsigned>(wi), tx, ty, tz);
-                    emit.near_teleport_to(tx, ty, tz, s.raw().position.o);
-                    ai.false_combat_reset();
-                    ai.frozen_reset();
-                    ai.regroup_stuck_reset();
-                    ai.reset_regroup_tracking();
-                    ai.set_last_rule_fired("dungeon:false_combat_escape");
-                    return true;
+                    else
+                    {
+                        have_step = DungeonRouteStepTowardPos(
+                            s, wp.x, wp.y, wp.z, 45.0f, qx, qy, qz);
+                        esc_tag = "boss_wp";
+                    }
+                    if (have_step)
+                    {
+                        TC_LOG_INFO("playerbot.v2",
+                            "[false_combat_esc] {} pos=({:.0f},{:.0f},{:.0f}) atk={} "
+                            "held={}ms -> ROUTE-WALK toward {} via ({:.0f},{:.0f},{:.0f})",
+                            s.name(), fcx, fcy, fcz,
+                            static_cast<unsigned>(s.raw().combat.attackers.size()),
+                            fc_ms, esc_tag, qx, qy, qz);
+                        emit.move_to(qx, qy, qz, /*run=*/true);
+                        // Multi-tick walk: leave the false-combat clock armed so the
+                        // escape re-issues the step until combat ends; the target is
+                        // stable so move_to dedups the spline between ticks.
+                        ai.set_last_rule_fired("dungeon:false_combat_escape_route");
+                        return true;
+                    }
+                    // No forward step → fall through to disengage.
                 }
-                else
                 {
-                    // DISENGAGE IN PLACE. Reached when a forward teleport is either
-                    // useless or harmful:
+                    // DISENGAGE IN PLACE — the universal fallback: the TANK (which
+                    // must not be route-walked), an immune_lock, boss-close, or a
+                    // follower with no route step to the tank. Reached when relocating
+                    // is either useless or harmful:
                     //  - immune_lock: the only thing holding us is UNDAMAGEABLE
                     //    immune adds that live AT the boss — teleporting toward the
                     //    boss re-aggros them (the escape-teleport loop). We must
