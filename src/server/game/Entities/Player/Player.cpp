@@ -14107,8 +14107,16 @@ void Player::OnGossipSelect(WorldObject* source, int32 gossipOptionId, uint32 me
             SendRespecWipeConfirm(guid, GetNextResetTalentsCost(), SPEC_RESET_TALENTS);
             break;
         case GossipOptionNpc::Stablemaster:
+            // Sniff-verified against a real 12.0.7 stablemaster visit: retail sends NO gossip
+            // interaction packet for a stablemaster option. The client opens the stable window
+            // itself from selecting the OptionNPC == Stablemaster gossip option plus the
+            // ActivePlayerData::PetStable::StableMaster update field that SetStableMaster sets
+            // (delivered via the normal object update). Falling through to the generic
+            // !handled block sends SMSG_GOSSIP_OPTION_NPC_INTERACTION / NPCInteractionOpenResult,
+            // which retail never sends and which suppresses the client-side open — so mark it
+            // handled and send nothing extra.
             SetStableMaster(guid);
-            handled = false;
+            handled = true;
             break;
         case GossipOptionNpc::PetSpecializationMaster:
             PlayerTalkClass->SendCloseGossip();
