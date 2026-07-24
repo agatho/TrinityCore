@@ -178,6 +178,12 @@ class spell_dragonriding_lift_off : public SpellScript
 
     SpellCastResult CheckCast()
     {
+        // launch only transitions INTO advanced flight - while already adv-flying the client uses
+        // Skyward Ascent instead, and since the keybound-override cast is triggered (no cooldown)
+        // this also stops a client from stacking launch impulses midair
+        if (GetCaster()->m_movementInfo.HasExtraMovementFlag2(MOVEMENTFLAG3_ADV_FLYING))
+            return SPELL_FAILED_DONT_REPORT;
+
         return CheckSkyriding(this);
     }
 
