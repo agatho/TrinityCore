@@ -64,6 +64,14 @@ static SpellCastResult CheckSkyriding(SpellScript* script)
     return SPELL_CAST_OK;
 }
 
+// Refresh the vigor bar right after a charge was consumed instead of waiting for the next regen tick.
+static void UpdateVigorAfterCast(SpellScript* script)
+{
+    if (Unit* caster = script->GetCaster())
+        if (Player* player = caster->ToPlayer())
+            player->UpdateVigor();
+}
+
 // 372608 - Surge Forward
 class spell_dragonriding_surge_forward : public SpellScript
 {
@@ -78,10 +86,16 @@ class spell_dragonriding_surge_forward : public SpellScript
             SendFacingImpulse(caster, 18.0f);
     }
 
+    void RefreshVigor()
+    {
+        UpdateVigorAfterCast(this);
+    }
+
     void Register() override
     {
         OnCheckCast += SpellCheckCastFn(spell_dragonriding_surge_forward::CheckCast);
         OnEffectHitTarget += SpellEffectFn(spell_dragonriding_surge_forward::HandleHit, EFFECT_0, SPELL_EFFECT_DUMMY);
+        AfterCast += SpellCastFn(spell_dragonriding_surge_forward::RefreshVigor);
     }
 };
 
@@ -108,10 +122,16 @@ class spell_dragonriding_skyward_ascent : public SpellScript
         }
     }
 
+    void RefreshVigor()
+    {
+        UpdateVigorAfterCast(this);
+    }
+
     void Register() override
     {
         OnCheckCast += SpellCheckCastFn(spell_dragonriding_skyward_ascent::CheckCast);
         OnEffectHitTarget += SpellEffectFn(spell_dragonriding_skyward_ascent::HandleHit, EFFECT_0, SPELL_EFFECT_DUMMY);
+        AfterCast += SpellCastFn(spell_dragonriding_skyward_ascent::RefreshVigor);
     }
 };
 
@@ -131,10 +151,46 @@ class spell_dragonriding_whirling_surge : public SpellScript
             SendFacingImpulse(caster, 60.0f);
     }
 
+    void RefreshVigor()
+    {
+        UpdateVigorAfterCast(this);
+    }
+
     void Register() override
     {
         OnCheckCast += SpellCheckCastFn(spell_dragonriding_whirling_surge::CheckCast);
         OnEffectHitTarget += SpellEffectFn(spell_dragonriding_whirling_surge::HandleHit, EFFECT_0, SPELL_EFFECT_DUMMY);
+        AfterCast += SpellCastFn(spell_dragonriding_whirling_surge::RefreshVigor);
+    }
+};
+
+// 374763 - Lift Off (the double-jump takeoff, cast by the server via SpellKeyboundOverride 218 "JUMP"
+// when the client sends CMSG_KEYBOUND_OVERRIDE while the Skyriding aura arms the override).
+// The spell itself only carries a dummy + a force-cast of the 404191 marker; the actual launch
+// impulse is delivered by Launch Boost (392752), which the retail server casts alongside
+// (sniff 66709: takeoff = SPELL_GO 392752 + 374763 + 404191, then SMSG_MOVE_ADD_IMPULSE (0,0,45)).
+class spell_dragonriding_lift_off : public SpellScript
+{
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellInfo({ SPELL_DRAGONRIDING_LAUNCH_BOOST });
+    }
+
+    SpellCastResult CheckCast()
+    {
+        return CheckSkyriding(this);
+    }
+
+    void HandleHit(SpellEffIndex /*effIndex*/)
+    {
+        if (Unit* caster = GetCaster())
+            caster->CastSpell(caster, SPELL_DRAGONRIDING_LAUNCH_BOOST, true);
+    }
+
+    void Register() override
+    {
+        OnCheckCast += SpellCheckCastFn(spell_dragonriding_lift_off::CheckCast);
+        OnEffectHitTarget += SpellEffectFn(spell_dragonriding_lift_off::HandleHit, EFFECT_0, SPELL_EFFECT_DUMMY);
     }
 };
 
@@ -180,6 +236,7 @@ class spell_dragonriding_launch_boost_aura : public AuraScript
 void AddSC_dragonriding_spell_scripts()
 {
     RegisterSpellAndAuraScriptPair(spell_dragonriding_launch_boost, spell_dragonriding_launch_boost_aura);
+    RegisterSpellScript(spell_dragonriding_lift_off);
     RegisterSpellScript(spell_dragonriding_whirling_surge);
     RegisterSpellScript(spell_dragonriding_surge_forward);
     RegisterSpellScript(spell_dragonriding_skyward_ascent);
