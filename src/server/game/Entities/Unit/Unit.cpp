@@ -9031,41 +9031,64 @@ void Unit::SetFlightCapabilityID(int32 flightCapabilityId, bool clientUpdate)
     // 1.0 is the neutral default; 0.0 would cause divide-by-zero on the client.
     SetUpdateFieldValue(m_values.ModifyValue(&Unit::m_unitData).ModifyValue(&UF::UnitData::GlideEventSpeedDivisor), 1.0f);
 
-    UpdateAdvFlyingSpeed(ADV_FLYING_AIR_FRICTION, clientUpdate);
-    UpdateAdvFlyingSpeed(ADV_FLYING_MAX_VEL, clientUpdate);
-    UpdateAdvFlyingSpeed(ADV_FLYING_LIFT_COEFFICIENT, clientUpdate);
-    UpdateAdvFlyingSpeed(ADV_FLYING_DOUBLE_JUMP_VEL_MOD, clientUpdate);
-    UpdateAdvFlyingSpeed(ADV_FLYING_GLIDE_START_MIN_HEIGHT, clientUpdate);
-    UpdateAdvFlyingSpeed(ADV_FLYING_ADD_IMPULSE_MAX_SPEED, clientUpdate);
-    UpdateAdvFlyingSpeed(ADV_FLYING_BANKING_RATE, clientUpdate);
-    UpdateAdvFlyingSpeed(ADV_FLYING_PITCHING_RATE_DOWN, clientUpdate);
-    UpdateAdvFlyingSpeed(ADV_FLYING_PITCHING_RATE_UP, clientUpdate);
-    UpdateAdvFlyingSpeed(ADV_FLYING_TURN_VELOCITY_THRESHOLD, clientUpdate);
-    UpdateAdvFlyingSpeed(ADV_FLYING_SURFACE_FRICTION, clientUpdate);
-    UpdateAdvFlyingSpeed(ADV_FLYING_OVER_MAX_DECELERATION, clientUpdate);
-    UpdateAdvFlyingSpeed(ADV_FLYING_LAUNCH_SPEED_COEFFICIENT, clientUpdate);
+    // When a capability engages, the client requires the COMPLETE parameter burst: the double-jump
+    // launch gate checks that its FlightCapability physics array is populated, and it may have been
+    // cleared by a previous dismount. The change-suppression in UpdateAdvFlyingSpeed would otherwise
+    // swallow most of the burst - m_advFlyingSpeed is pre-seeded with FlightCapability fallback row 1,
+    // which differs from typical live rows in only a field or two. Retail sends all 13 on every mount.
+    bool force = flightCapabilityId != 0;
 
-    // Vigor (POWER_ALTERNATE_MOUNT) is the Skyriding resource that powers Skyward Ascent / Surge Forward.
-    // It is a valid class power (ChrClassesXPowerTypes lists it for every class), but its
-    // PowerType.MaxBasePower is 0 and nothing else grants capacity, so the bar never appears and the
-    // abilities have nothing to spend (you glide but cannot ascend). Give it the base Skyriding vigor
-    // while a flight capability is engaged, and clear it when the mount / capability drops. Value 6 =
-    // the base dragonriding kit (sniff shows the power carrying single-digit vigor charges, 1 per ability).
+    UpdateAdvFlyingSpeed(ADV_FLYING_AIR_FRICTION, clientUpdate, force);
+    UpdateAdvFlyingSpeed(ADV_FLYING_MAX_VEL, clientUpdate, force);
+    UpdateAdvFlyingSpeed(ADV_FLYING_LIFT_COEFFICIENT, clientUpdate, force);
+    UpdateAdvFlyingSpeed(ADV_FLYING_DOUBLE_JUMP_VEL_MOD, clientUpdate, force);
+    UpdateAdvFlyingSpeed(ADV_FLYING_GLIDE_START_MIN_HEIGHT, clientUpdate, force);
+    UpdateAdvFlyingSpeed(ADV_FLYING_ADD_IMPULSE_MAX_SPEED, clientUpdate, force);
+    UpdateAdvFlyingSpeed(ADV_FLYING_BANKING_RATE, clientUpdate, force);
+    UpdateAdvFlyingSpeed(ADV_FLYING_PITCHING_RATE_DOWN, clientUpdate, force);
+    UpdateAdvFlyingSpeed(ADV_FLYING_PITCHING_RATE_UP, clientUpdate, force);
+    UpdateAdvFlyingSpeed(ADV_FLYING_TURN_VELOCITY_THRESHOLD, clientUpdate, force);
+    UpdateAdvFlyingSpeed(ADV_FLYING_SURFACE_FRICTION, clientUpdate, force);
+    UpdateAdvFlyingSpeed(ADV_FLYING_OVER_MAX_DECELERATION, clientUpdate, force);
+    UpdateAdvFlyingSpeed(ADV_FLYING_LAUNCH_SPEED_COEFFICIENT, clientUpdate, force);
+
+    // Vigor - the Skyriding resource - is a spell-charge system: SpellCategory 2391 ("Skryriding
+    // Charges - Core" [sic], 6 charges / 15s recovery) is consumed by Skyward Ascent / Surge Forward
+    // and refunded by Second Wind; the Skyriding aura (406095) speeds recovery up via
+    // SPELL_AURA_CHARGE_RECOVERY_MULTIPLIER. The on-screen Vigor bar is UI widget 4604 of the
+    // client's hardcoded power-bar widget set 283: it is visible while aura 398214
+    // (SPELL_AURA_ENABLE_ALT_POWER, UnitPowerBar 650 "Vigor") is present, draws its full pips from
+    // POWER_ALTERNATE_POWER and animates the recharging pip from aura 398218's amount (0..100).
+    // POWER_ALTERNATE_MOUNT additionally mirrors the value for the pre-12.0.7 widget wiring that is
+    // observed on the wire in older sniffs. Player::UpdateVigor keeps all of these in sync with the
+    // charge state; 423624 is the marker retail applies alongside (observed in the 66709 sniff).
     if (Player* vigorPlayer = ToPlayer())
     {
-        constexpr int32 SKYRIDING_BASE_VIGOR = 6;
+        constexpr uint32 SPELL_SKYRIDING_VIGOR_BAR = 398214;
+        constexpr uint32 SPELL_SKYRIDING_VIGOR_FILL = 398218;
+        constexpr uint32 SPELL_SKYRIDING_VIGOR_PULSE = 398219;
+        constexpr uint32 SPELL_SKYRIDING_ENERGY_BAR_WIDGET = 423624;
+        constexpr uint32 SPELL_CATEGORY_SKYRIDING_VIGOR = 2391;
+
         if (flightCapabilityId)
         {
-            if (vigorPlayer->GetMaxPower(POWER_ALTERNATE_MOUNT) <= 0)
-            {
-                vigorPlayer->SetMaxPower(POWER_ALTERNATE_MOUNT, SKYRIDING_BASE_VIGOR);
-                vigorPlayer->SetPower(POWER_ALTERNATE_MOUNT, SKYRIDING_BASE_VIGOR);
-            }
+            vigorPlayer->CastSpell(vigorPlayer, SPELL_SKYRIDING_VIGOR_BAR, true);
+            vigorPlayer->CastSpell(vigorPlayer, SPELL_SKYRIDING_ENERGY_BAR_WIDGET, true);
+            vigorPlayer->SetMaxPower(POWER_ALTERNATE_MOUNT, vigorPlayer->GetSpellHistory()->GetMaxCharges(SPELL_CATEGORY_SKYRIDING_VIGOR));
+            vigorPlayer->UpdateVigor();
         }
-        else if (vigorPlayer->GetMaxPower(POWER_ALTERNATE_MOUNT) > 0)
+        else
         {
-            vigorPlayer->SetPower(POWER_ALTERNATE_MOUNT, 0);
-            vigorPlayer->SetMaxPower(POWER_ALTERNATE_MOUNT, 0);
+            // removing 398214 unapplies ENABLE_ALT_POWER, which zeroes POWER_ALTERNATE_POWER max+value
+            vigorPlayer->RemoveAurasDueToSpell(SPELL_SKYRIDING_VIGOR_BAR);
+            vigorPlayer->RemoveAurasDueToSpell(SPELL_SKYRIDING_VIGOR_FILL);
+            vigorPlayer->RemoveAurasDueToSpell(SPELL_SKYRIDING_VIGOR_PULSE);
+            vigorPlayer->RemoveAurasDueToSpell(SPELL_SKYRIDING_ENERGY_BAR_WIDGET);
+            if (vigorPlayer->GetMaxPower(POWER_ALTERNATE_MOUNT) > 0)
+            {
+                vigorPlayer->SetPower(POWER_ALTERNATE_MOUNT, 0);
+                vigorPlayer->SetMaxPower(POWER_ALTERNATE_MOUNT, 0);
+            }
         }
     }
 }
@@ -9112,7 +9135,7 @@ void Unit::SetDriveCapabilityID(int32 driveCapabilityId, bool clientUpdate)
     }
 }
 
-void Unit::UpdateAdvFlyingSpeed(AdvFlyingRateTypeSingle speedType, bool clientUpdate)
+void Unit::UpdateAdvFlyingSpeed(AdvFlyingRateTypeSingle speedType, bool clientUpdate, bool force /*= false*/)
 {
     FlightCapabilityEntry const* flightCapabilityEntry = sFlightCapabilityStore.LookupEntry(GetFlightCapabilityID());
     if (!flightCapabilityEntry)
@@ -9155,7 +9178,7 @@ void Unit::UpdateAdvFlyingSpeed(AdvFlyingRateTypeSingle speedType, bool clientUp
             ApplyPct(newValue, pos);
     }
 
-    if (m_advFlyingSpeed[speedType] == newValue)
+    if (!force && m_advFlyingSpeed[speedType] == newValue)
         return;
 
     m_advFlyingSpeed[speedType] = newValue;
@@ -9173,7 +9196,7 @@ void Unit::UpdateAdvFlyingSpeed(AdvFlyingRateTypeSingle speedType, bool clientUp
     }
 }
 
-void Unit::UpdateAdvFlyingSpeed(AdvFlyingRateTypeRange speedType, bool clientUpdate)
+void Unit::UpdateAdvFlyingSpeed(AdvFlyingRateTypeRange speedType, bool clientUpdate, bool force /*= false*/)
 {
     FlightCapabilityEntry const* flightCapabilityEntry = sFlightCapabilityStore.LookupEntry(GetFlightCapabilityID());
     if (!flightCapabilityEntry)
@@ -9212,7 +9235,7 @@ void Unit::UpdateAdvFlyingSpeed(AdvFlyingRateTypeRange speedType, bool clientUpd
         }
     }
 
-    if (m_advFlyingSpeed[speedType] == min && m_advFlyingSpeed[speedType + 1] == max)
+    if (!force && m_advFlyingSpeed[speedType] == min && m_advFlyingSpeed[speedType + 1] == max)
         return;
 
     m_advFlyingSpeed[speedType] = min;

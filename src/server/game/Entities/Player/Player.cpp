@@ -1683,21 +1683,17 @@ void Player::Regenerate(Powers power)
     if (!powerType)
         return;
 
+    // Vigor (Skyriding) is not a value-regenerating power: it is a mirror of the SpellCategory 2391
+    // charge state (PowerType 25 has zero base regen in every build's data). Keep the mirror - and
+    // the vigor bar's recharging-pip animation - in sync from the regen tick instead.
+    if (power == POWER_ALTERNATE_MOUNT)
+    {
+        UpdateVigor();
+        return;
+    }
+
     int32 curValue = GetPower(power);
     float addvalue = GetPowerRegen(power) * 0.001f * m_regenTimer;
-
-    // Vigor regen scales with forward velocity during advanced flying
-    if (power == POWER_ALTERNATE_MOUNT && m_movementInfo.HasExtraMovementFlag2(MOVEMENTFLAG3_ADV_FLYING) && m_movementInfo.advFlying)
-    {
-        if (FlightCapabilityEntry const* flightCapability = sFlightCapabilityStore.LookupEntry(GetFlightCapabilityID()))
-        {
-            if (flightCapability->VigorRegenMaxVelCoefficient > 0.0f && flightCapability->MaxVel > 0.0f)
-            {
-                float velocityPct = std::min(m_movementInfo.advFlying->forwardVelocity / flightCapability->MaxVel, 1.0f);
-                addvalue *= 1.0f + velocityPct * flightCapability->VigorRegenMaxVelCoefficient;
-            }
-        }
-    }
 
     int32 minPower = powerType->MinPower;
     int32 maxPower = GetMaxPower(power);
@@ -1789,6 +1785,56 @@ void Player::InterruptPowerRegen(Powers power)
     m_regenInterruptTimestamp = GameTime::Now();
     m_powerFraction[powerIndex] = 0.0f;
     SendDirectMessage(WorldPackets::Combat::InterruptPowerRegen(power).Write());
+}
+
+void Player::UpdateVigor()
+{
+    // Vigor (Skyriding) = the charge state of SpellCategory 2391, mirrored into the two power
+    // fields the vigor bar widgets read, plus the recharging-pip animation auras. Active only
+    // while a flight capability is engaged (Unit::SetFlightCapabilityID applies/removes the bar
+    // aura 398214 and the POWER_ALTERNATE_MOUNT capacity).
+    constexpr uint32 SPELL_SKYRIDING_VIGOR_FILL = 398218;   // aura amount 0..100 = widget fillValue
+    constexpr uint32 SPELL_SKYRIDING_VIGOR_PULSE = 398219;  // pulses the recharging pip while present
+    constexpr uint32 SPELL_CATEGORY_SKYRIDING_VIGOR = 2391;
+
+    if (!GetFlightCapabilityID())
+        return;
+
+    SpellHistory* history = GetSpellHistory();
+    int32 maxVigor = history->GetMaxCharges(SPELL_CATEGORY_SKYRIDING_VIGOR);
+    if (maxVigor <= 0)
+        return;
+
+    int32 vigor = history->GetChargeCount(SPELL_CATEGORY_SKYRIDING_VIGOR);
+
+    // POWER_ALTERNATE_POWER feeds the live 12.0.7 vigor widget (4604), POWER_ALTERNATE_MOUNT the
+    // pre-12.0.7 wiring; SetPower only sends when the value actually changes.
+    SetPower(POWER_ALTERNATE_POWER, vigor);
+    SetPower(POWER_ALTERNATE_MOUNT, vigor);
+
+    if (vigor < maxVigor)
+    {
+        int32 fill = int32(std::lround(history->GetChargeRecoveryProgress(SPELL_CATEGORY_SKYRIDING_VIGOR) * 100.0f));
+        Aura* fillAura = GetAura(SPELL_SKYRIDING_VIGOR_FILL);
+        if (!fillAura)
+        {
+            CastSpell(this, SPELL_SKYRIDING_VIGOR_FILL, true);
+            fillAura = GetAura(SPELL_SKYRIDING_VIGOR_FILL);
+        }
+
+        if (fillAura)
+            if (AuraEffect* fillEffect = fillAura->GetEffect(EFFECT_0))
+                if (fillEffect->GetAmount() != fill)
+                    fillEffect->ChangeAmount(fill);
+
+        if (!HasAura(SPELL_SKYRIDING_VIGOR_PULSE))
+            CastSpell(this, SPELL_SKYRIDING_VIGOR_PULSE, true);
+    }
+    else
+    {
+        RemoveAurasDueToSpell(SPELL_SKYRIDING_VIGOR_FILL);
+        RemoveAurasDueToSpell(SPELL_SKYRIDING_VIGOR_PULSE);
+    }
 }
 
 void Player::RegenerateHealth()

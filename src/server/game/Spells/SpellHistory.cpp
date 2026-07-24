@@ -32,6 +32,7 @@
 #include "SpellMgr.h"
 #include "SpellPackets.h"
 #include "World.h"
+#include <algorithm>
 #include <boost/container/small_vector.hpp>
 
 template<>
@@ -970,6 +971,43 @@ int32 SpellHistory::GetMaxCharges(uint32 chargeCategoryId) const
     uint32 charges = chargeCategoryEntry->MaxCharges;
     charges += _owner->GetTotalAuraModifierByMiscValue(SPELL_AURA_MOD_MAX_CHARGES, chargeCategoryId);
     return charges;
+}
+
+int32 SpellHistory::GetChargeCount(uint32 chargeCategoryId) const
+{
+    int32 maxCharges = GetMaxCharges(chargeCategoryId);
+    auto itr = _categoryCharges.find(chargeCategoryId);
+    if (itr == _categoryCharges.end())
+        return maxCharges;
+
+    // entries whose recharge already finished are only popped lazily in Update(), skip them here
+    TimePoint now = time_point_cast<Duration>(GameTime::GetTime<Clock>());
+    int32 used = int32(std::count_if(itr->second.begin(), itr->second.end(),
+        [now](ChargeEntry const& charge) { return charge.RechargeEnd > now; }));
+    return std::max(maxCharges - used, 0);
+}
+
+float SpellHistory::GetChargeRecoveryProgress(uint32 chargeCategoryId) const
+{
+    auto itr = _categoryCharges.find(chargeCategoryId);
+    if (itr == _categoryCharges.end() || itr->second.empty())
+        return 0.0f;
+
+    TimePoint now = time_point_cast<Duration>(GameTime::GetTime<Clock>());
+    for (ChargeEntry const& charge : itr->second)
+    {
+        if (charge.RechargeEnd <= now)
+            continue;
+
+        auto total = charge.RechargeEnd - charge.RechargeStart;
+        if (total.count() <= 0)
+            return 0.0f;
+
+        auto elapsed = now - charge.RechargeStart;
+        return std::clamp(float(elapsed.count()) / float(total.count()), 0.0f, 1.0f);
+    }
+
+    return 0.0f;
 }
 
 int32 SpellHistory::GetChargeRecoveryTime(uint32 chargeCategoryId) const

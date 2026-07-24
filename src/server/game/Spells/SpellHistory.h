@@ -187,6 +187,8 @@ public:
     void ResetAllCharges();
     bool HasCharge(uint32 chargeCategoryId) const;
     int32 GetMaxCharges(uint32 chargeCategoryId) const;
+    int32 GetChargeCount(uint32 chargeCategoryId) const;
+    float GetChargeRecoveryProgress(uint32 chargeCategoryId) const;
     int32 GetChargeRecoveryTime(uint32 chargeCategoryId) const;
 
     // Global cooldown
