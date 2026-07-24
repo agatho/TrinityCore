@@ -26163,6 +26163,17 @@ void Player::SendInitialPacketsBeforeAddToMap()
     /// SMSG_INITIAL_SPELLS
     SendKnownSpells();
 
+    // Skyriding: the client gates the dynamic-flight UI (C_MountJournal.IsDragonridingUnlocked -
+    // the mount journal's flight-style switch) behind PlayerCondition 106228 -> ModifierTree 282179,
+    // whose only satisfiable leg in this build's data is having completed "Tour the Trading Post"
+    // (66858 Alliance / 66959 Horde) - the aura leg (424143) is the harmful Remix timerunning buff.
+    // The quest's reward spell is a [DND] no-op, it has no reset flags and awards nothing, so
+    // advertising it as completed once the character knows Skyriding (376777) is retail-equivalent
+    // account state. This only sets the client-visible completed bit; the quest log and DB are
+    // untouched.
+    if (HasSpell(376777 /*Skyriding*/))
+        SetQuestCompletedBit(GetTeam() == ALLIANCE ? 66858 : 66959, true);
+
     /// SMSG_SEND_UNLEARN_SPELLS
     SendUnlearnSpells();
 
