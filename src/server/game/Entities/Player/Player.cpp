@@ -26341,6 +26341,14 @@ void Player::SendInitialPacketsAfterAddToMap()
 
     CastSpell(this, 836, true);                             // LOGINEFFECT
 
+    // Skyriding (dynamic flight) unlock marker. The client's C_MountJournal.IsDragonridingUnlocked()
+    // evaluates ModifierTree 282179 = "player has aura 424143 OR completed the dragonriding intro quest".
+    // Retail unlocks Skyriding account-wide in Midnight; we replicate that by applying the marker aura
+    // every login, so the flight-mode switch control and dynamic-flight UI recognise the character as a
+    // Skyrider. Paired with the auto-granted Skyriding trait kit (see _LoadTraits).
+    if (!HasAura(424143))
+        CastSpell(this, 424143, true);
+
     WorldPackets::Movement::MoveSetCompoundState setCompoundState;
 
     // manual send package (have code in HandleEffect(this, AURA_EFFECT_HANDLE_SEND_FOR_CLIENT, true); that must not be re-applied.
