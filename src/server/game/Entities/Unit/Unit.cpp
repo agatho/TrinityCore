@@ -9044,6 +9044,30 @@ void Unit::SetFlightCapabilityID(int32 flightCapabilityId, bool clientUpdate)
     UpdateAdvFlyingSpeed(ADV_FLYING_SURFACE_FRICTION, clientUpdate);
     UpdateAdvFlyingSpeed(ADV_FLYING_OVER_MAX_DECELERATION, clientUpdate);
     UpdateAdvFlyingSpeed(ADV_FLYING_LAUNCH_SPEED_COEFFICIENT, clientUpdate);
+
+    // Vigor (POWER_ALTERNATE_MOUNT) is the Skyriding resource that powers Skyward Ascent / Surge Forward.
+    // It is a valid class power (ChrClassesXPowerTypes lists it for every class), but its
+    // PowerType.MaxBasePower is 0 and nothing else grants capacity, so the bar never appears and the
+    // abilities have nothing to spend (you glide but cannot ascend). Give it the base Skyriding vigor
+    // while a flight capability is engaged, and clear it when the mount / capability drops. Value 6 =
+    // the base dragonriding kit (sniff shows the power carrying single-digit vigor charges, 1 per ability).
+    if (Player* vigorPlayer = ToPlayer())
+    {
+        constexpr int32 SKYRIDING_BASE_VIGOR = 6;
+        if (flightCapabilityId)
+        {
+            if (vigorPlayer->GetMaxPower(POWER_ALTERNATE_MOUNT) <= 0)
+            {
+                vigorPlayer->SetMaxPower(POWER_ALTERNATE_MOUNT, SKYRIDING_BASE_VIGOR);
+                vigorPlayer->SetPower(POWER_ALTERNATE_MOUNT, SKYRIDING_BASE_VIGOR);
+            }
+        }
+        else if (vigorPlayer->GetMaxPower(POWER_ALTERNATE_MOUNT) > 0)
+        {
+            vigorPlayer->SetPower(POWER_ALTERNATE_MOUNT, 0);
+            vigorPlayer->SetMaxPower(POWER_ALTERNATE_MOUNT, 0);
+        }
+    }
 }
 
 void Unit::SetDriveCapabilityID(int32 driveCapabilityId, bool clientUpdate)
