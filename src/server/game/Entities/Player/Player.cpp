@@ -30057,6 +30057,30 @@ void Player::_LoadTraits(PreparedQueryResult configsResult, PreparedQueryResult 
         }
     }
 
+    // Auto-grant the Skyriding (dynamic-flight) trait config if the character lacks it. The base
+    // Skyriding kit lives in a Generic trait config (TraitSystemID == 1, tree 672). Unlike Combat
+    // configs, retail creates it client-side once Skyriding is unlocked, so boosted / pre-existing
+    // characters never receive it and end up in Skyriding mode with no abilities and no Vigor. Seed
+    // it server-side with the full kit (movement abilities + every Vigor node) so the mode is usable.
+    // The abilities are learned by the generic-config apply pass below (default case) via ApplyTraitConfig.
+    constexpr int32 SKYRIDING_TRAIT_SYSTEM_ID = 1;
+    bool const hasSkyridingConfig = m_activePlayerData->TraitConfigs.FindIf([](UF::TraitConfig const& traitConfig)
+    {
+        return static_cast<TraitConfigType>(*traitConfig.Type) == TraitConfigType::Generic
+            && traitConfig.TraitSystemID == SKYRIDING_TRAIT_SYSTEM_ID;
+    }).first != nullptr;
+
+    if (!hasSkyridingConfig)
+    {
+        WorldPackets::Traits::TraitConfig skyridingConfig;
+        skyridingConfig.Type = TraitConfigType::Generic;
+        skyridingConfig.TraitSystemID = SKYRIDING_TRAIT_SYSTEM_ID;
+        skyridingConfig.Name = "Skyriding";
+        TraitMgr::FillTraitConfigWithSystemKit(skyridingConfig);
+        if (!skyridingConfig.Entries.empty())
+            CreateTraitConfig(skyridingConfig);
+    }
+
     UF::TraitConfig const* activeTraitConfig = m_activePlayerData->TraitConfigs.FindIf([&](UF::TraitConfig const& traitConfig)
     {
         return traitConfig.Type == AsUnderlyingType(TraitConfigType::Combat)

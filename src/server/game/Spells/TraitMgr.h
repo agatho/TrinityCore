@@ -93,6 +93,11 @@ LearnResult ValidateConfig(WorldPackets::Traits::TraitConfig& traitConfig, Playe
 bool CanApplyTraitNode(UF::TraitConfig const& traitConfig, UF::TraitEntry const& traitEntry);
 std::vector<TraitDefinitionEffectPointsEntry const*> const* GetTraitDefinitionEffectPointModifiers(int32 traitDefinitionId);
 void InitializeStarterBuildTraitConfig(WorldPackets::Traits::TraitConfig& traitConfig, PlayerDataAccessor player);
+// Fill a Generic trait config (e.g. Skyriding, TraitSystemID based) with every ability node of its
+// trees granted at max rank. Used to seed the default Skyriding kit for characters, since those
+// nodes carry no DB2 "Granted" condition and no spec loadout, so the normal starter-build path
+// (InitializeStarterBuildTraitConfig) yields nothing for them.
+void FillTraitConfigWithSystemKit(WorldPackets::Traits::TraitConfig& traitConfig);
 }
 
 #endif // TRINITY_TRAIT_MGR_H
