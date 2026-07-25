@@ -9053,42 +9053,22 @@ void Unit::SetFlightCapabilityID(int32 flightCapabilityId, bool clientUpdate)
     // extra server duty is mirroring the charge count into POWER_ALTERNATE_MOUNT (seen as
     // SMSG_POWER_UPDATE type 25 on the retail wire) and pacing the speed-scaled recharge -
     // Player::UpdateVigor does both.
+    // NOTE: no action-bar override here. The DF-era swap (OverrideSpellData 2106) is retired on
+    // retail since 11.2.7 - the skyriding abilities live on the normal action bars, default-placed
+    // at login (see the skyriding block in Player::SendInitialPacketsBeforeAddToMap).
     if (Player* vigorPlayer = ToPlayer())
     {
         constexpr uint32 SPELL_CATEGORY_SKYRIDING_VIGOR = 2391;
-        // Retail swaps the action bar to the dragonriding kit while a skyriding capability is
-        // engaged: OverrideSpellData 2106 = Surge Forward, Skyward Ascent, Whirling Surge, Bronze
-        // Timelock + Dismount in the last slot. No spell in this build's data carries it as an
-        // OVERRIDE_SPELLS aura, so apply it here, mirroring HandleAuraOverrideSpells.
-        constexpr uint32 OVERRIDE_SPELLS_SKYRIDING = 2106;
 
         if (flightCapabilityId)
         {
             vigorPlayer->SetMaxPower(POWER_ALTERNATE_MOUNT, vigorPlayer->GetSpellHistory()->GetMaxCharges(SPELL_CATEGORY_SKYRIDING_VIGOR));
             vigorPlayer->UpdateVigor();
-
-            vigorPlayer->SetOverrideSpellsId(OVERRIDE_SPELLS_SKYRIDING);
-            if (OverrideSpellDataEntry const* overrideSpells = sOverrideSpellDataStore.LookupEntry(OVERRIDE_SPELLS_SKYRIDING))
-                for (uint8 i = 0; i < MAX_OVERRIDE_SPELL; ++i)
-                    if (uint32 spellId = overrideSpells->Spells[i])
-                        vigorPlayer->AddTemporarySpell(spellId);
         }
-        else
+        else if (vigorPlayer->GetMaxPower(POWER_ALTERNATE_MOUNT) > 0)
         {
-            if (vigorPlayer->GetMaxPower(POWER_ALTERNATE_MOUNT) > 0)
-            {
-                vigorPlayer->SetPower(POWER_ALTERNATE_MOUNT, 0);
-                vigorPlayer->SetMaxPower(POWER_ALTERNATE_MOUNT, 0);
-            }
-
-            if (vigorPlayer->m_activePlayerData->OverrideSpellsID == int32(OVERRIDE_SPELLS_SKYRIDING))
-            {
-                vigorPlayer->SetOverrideSpellsId(0);
-                if (OverrideSpellDataEntry const* overrideSpells = sOverrideSpellDataStore.LookupEntry(OVERRIDE_SPELLS_SKYRIDING))
-                    for (uint8 i = 0; i < MAX_OVERRIDE_SPELL; ++i)
-                        if (uint32 spellId = overrideSpells->Spells[i])
-                            vigorPlayer->RemoveTemporarySpell(spellId);
-            }
+            vigorPlayer->SetPower(POWER_ALTERNATE_MOUNT, 0);
+            vigorPlayer->SetMaxPower(POWER_ALTERNATE_MOUNT, 0);
         }
     }
 }
