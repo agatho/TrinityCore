@@ -1900,6 +1900,7 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         void InterruptPowerRegen(Powers power);
         void RegenerateHealth();
         void UpdateVigor(uint32 elapsedMs = 0);
+        void EnsureSkyridingActionDefaults();
         void setRegenTimerCount(uint32 time) {m_regenTimerCount = time;}
         void setWeaponChangeTimer(uint32 time) {m_weaponChangeTimer = time;}
 
