@@ -26215,10 +26215,26 @@ void Player::SendInitialPacketsBeforeAddToMap()
     // (66858 Alliance / 66959 Horde) - the aura leg (424143) is the harmful Remix timerunning buff.
     // The quest's reward spell is a [DND] no-op, it has no reset flags and awards nothing, so
     // advertising it as completed once the character knows Skyriding (376777) is retail-equivalent
-    // account state. This only sets the client-visible completed bit; the quest log and DB are
-    // untouched.
+    // account state. This only sets the client-visible completed bits; the quest log and DB are
+    // untouched. These are ACCOUNT quests, so besides the character quest-completed vector the
+    // account-combined vectors must carry the bit too - the client's completed-quest conditions
+    // for account quests read those.
     if (HasSpell(376777 /*Skyriding*/))
-        SetQuestCompletedBit(GetTeam() == ALLIANCE ? 66858 : 66959, true);
+    {
+        uint32 skyridingUnlockQuest = GetTeam() == ALLIANCE ? 66858 : 66959;
+        SetQuestCompletedBit(skyridingUnlockQuest, true);
+        if (uint32 questBit = sDB2Manager.GetQuestUniqueBitFlag(skyridingUnlockQuest))
+        {
+            uint32 fieldOffset = (questBit - 1) / QUESTS_COMPLETED_BITS_PER_BLOCK;
+            uint64 flag = UI64LIT(1) << ((questBit - 1) % QUESTS_COMPLETED_BITS_PER_BLOCK);
+            for (uint32 vectorIndex : { PLAYER_DATA_FLAG_ACCOUNT_COMBINED_QUESTS_INDEX, PLAYER_DATA_FLAG_ACCOUNT_COMBINED_QUEST_REWARDS_INDEX })
+                SetUpdateFieldFlagValue(m_values
+                    .ModifyValue(&Player::m_activePlayerData)
+                    .ModifyValue(&UF::ActivePlayerData::BitVectors)
+                    .ModifyValue(&UF::BitVectors::Values, vectorIndex)
+                    .ModifyValue(&UF::BitVector::Values, fieldOffset), flag);
+        }
+    }
 
     /// SMSG_SEND_UNLEARN_SPELLS
     SendUnlearnSpells();
