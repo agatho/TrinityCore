@@ -30625,18 +30625,19 @@ void Player::LoadActions(PreparedQueryResult result)
 
 void Player::EnsureSkyridingActionDefaults()
 {
-    // Retail (11.2.7+) no longer swaps to an override bar while skyriding - the abilities live on
-    // the normal action bars, and the default UI re-adds Surge Forward, Skyward Ascent, Dismount
-    // and Whirling Surge whenever they are missing from every bar. Trait-granted spells never fire
-    // the client's on-learn auto-placement, so replicate that default. Must run AFTER the async
-    // action-button load (_LoadActions clears and rebuilds m_actionButtons), i.e. from LoadActions.
+    // While on a skyriding mount the client swaps the main bar to the skyriding bonus-bar page,
+    // which reads action-button slots 120-131. Retail's default UI populates that page with Surge
+    // Forward, Skyward Ascent, Dismount and Whirling Surge whenever they are missing from every
+    // bar; trait-granted spells never fire the client's on-learn auto-placement, so replicate the
+    // default here. Must run AFTER the async action-button load (_LoadActions clears and rebuilds
+    // m_actionButtons), i.e. from LoadActions.
+    constexpr uint8 SKYRIDING_BAR_FIRST_SLOT = 120;
+    constexpr uint8 SKYRIDING_BAR_LAST_SLOT = 131;
+
     for (uint32 barSpellId : { 372608u, 372610u, 377042u, 361584u })
     {
         if (!HasSpell(barSpellId))
-        {
-            TC_LOG_INFO("entities.player", "SKYDIAG-BAR: {} spell {} not known, skipping placement", GetName(), barSpellId);
             continue;
-        }
 
         bool onAnyBar = std::ranges::any_of(m_actionButtons, [barSpellId](auto const& button)
         {
@@ -30645,18 +30646,14 @@ void Player::EnsureSkyridingActionDefaults()
                 && button.second.GetAction() == barSpellId;
         });
         if (onAnyBar)
-        {
-            TC_LOG_INFO("entities.player", "SKYDIAG-BAR: {} spell {} already on a bar", GetName(), barSpellId);
             continue;
-        }
 
-        for (uint8 slot = 0; slot < MAX_ACTION_BUTTONS; ++slot)
+        for (uint8 slot = SKYRIDING_BAR_FIRST_SLOT; slot <= SKYRIDING_BAR_LAST_SLOT; ++slot)
         {
             auto buttonItr = m_actionButtons.find(slot);
             if (buttonItr == m_actionButtons.end() || buttonItr->second.uState == ACTIONBUTTON_DELETED)
             {
-                TC_LOG_INFO("entities.player", "SKYDIAG-BAR: {} placing spell {} into slot {} -> {}", GetName(), barSpellId, slot,
-                    AddActionButton(slot, barSpellId, ACTION_BUTTON_SPELL) != nullptr);
+                AddActionButton(slot, barSpellId, ACTION_BUTTON_SPELL);
                 break;
             }
         }
