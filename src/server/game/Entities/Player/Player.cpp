@@ -26240,35 +26240,8 @@ void Player::SendInitialPacketsBeforeAddToMap()
         if (!HasSpell(377042 /*Dismount*/))
             LearnSpell(377042, false);
 
-        // Retail (11.2.7+) no longer swaps to an override bar while skyriding - the abilities live
-        // on the normal action bars, and the default UI re-adds Surge Forward, Skyward Ascent,
-        // Dismount and Whirling Surge whenever they are missing from every bar. Trait-granted
-        // spells never fire the client's on-learn auto-placement, so replicate that default here
-        // (runs before SendInitialActionButtons below).
-        for (uint32 barSpellId : { 372608u, 372610u, 377042u, 361584u })
-        {
-            if (!HasSpell(barSpellId))
-                continue;
-
-            bool onAnyBar = std::ranges::any_of(m_actionButtons, [barSpellId](auto const& button)
-            {
-                return button.second.uState != ACTIONBUTTON_DELETED
-                    && button.second.GetType() == ACTION_BUTTON_SPELL
-                    && button.second.GetAction() == barSpellId;
-            });
-            if (onAnyBar)
-                continue;
-
-            for (uint8 slot = 0; slot < MAX_ACTION_BUTTONS; ++slot)
-            {
-                auto buttonItr = m_actionButtons.find(slot);
-                if (buttonItr == m_actionButtons.end() || buttonItr->second.uState == ACTIONBUTTON_DELETED)
-                {
-                    AddActionButton(slot, barSpellId, ACTION_BUTTON_SPELL);
-                    break;
-                }
-            }
-        }
+        // The action-bar defaults are applied in LoadActions - action buttons load asynchronously
+        // and would wipe anything placed here.
     }
 
     /// SMSG_TALENTS_INFO
@@ -30645,7 +30618,49 @@ void Player::LoadActions(PreparedQueryResult result)
 {
     _LoadActions(result);
 
+    EnsureSkyridingActionDefaults();
+
     SendActionButtons(1);
+}
+
+void Player::EnsureSkyridingActionDefaults()
+{
+    // Retail (11.2.7+) no longer swaps to an override bar while skyriding - the abilities live on
+    // the normal action bars, and the default UI re-adds Surge Forward, Skyward Ascent, Dismount
+    // and Whirling Surge whenever they are missing from every bar. Trait-granted spells never fire
+    // the client's on-learn auto-placement, so replicate that default. Must run AFTER the async
+    // action-button load (_LoadActions clears and rebuilds m_actionButtons), i.e. from LoadActions.
+    for (uint32 barSpellId : { 372608u, 372610u, 377042u, 361584u })
+    {
+        if (!HasSpell(barSpellId))
+        {
+            TC_LOG_INFO("entities.player", "SKYDIAG-BAR: {} spell {} not known, skipping placement", GetName(), barSpellId);
+            continue;
+        }
+
+        bool onAnyBar = std::ranges::any_of(m_actionButtons, [barSpellId](auto const& button)
+        {
+            return button.second.uState != ACTIONBUTTON_DELETED
+                && button.second.GetType() == ACTION_BUTTON_SPELL
+                && button.second.GetAction() == barSpellId;
+        });
+        if (onAnyBar)
+        {
+            TC_LOG_INFO("entities.player", "SKYDIAG-BAR: {} spell {} already on a bar", GetName(), barSpellId);
+            continue;
+        }
+
+        for (uint8 slot = 0; slot < MAX_ACTION_BUTTONS; ++slot)
+        {
+            auto buttonItr = m_actionButtons.find(slot);
+            if (buttonItr == m_actionButtons.end() || buttonItr->second.uState == ACTIONBUTTON_DELETED)
+            {
+                TC_LOG_INFO("entities.player", "SKYDIAG-BAR: {} placing spell {} into slot {} -> {}", GetName(), barSpellId, slot,
+                    AddActionButton(slot, barSpellId, ACTION_BUTTON_SPELL) != nullptr);
+                break;
+            }
+        }
+    }
 }
 
 void Player::CreateTraitConfig(WorldPackets::Traits::TraitConfig& traitConfig)
