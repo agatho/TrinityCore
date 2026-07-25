@@ -26224,7 +26224,9 @@ void Player::SendInitialPacketsBeforeAddToMap()
         {
             uint32 fieldOffset = (questBit - 1) / QUESTS_COMPLETED_BITS_PER_BLOCK;
             uint64 flag = UI64LIT(1) << ((questBit - 1) % QUESTS_COMPLETED_BITS_PER_BLOCK);
-            for (uint32 vectorIndex : { PLAYER_DATA_FLAG_ACCOUNT_COMBINED_QUESTS_INDEX, PLAYER_DATA_FLAG_ACCOUNT_COMBINED_QUEST_REWARDS_INDEX })
+            // index 12 = the completed-quest vector the client consults instead of the account one
+            // while a content-tracking mode (ctrOptions & 0x2000) is active
+            for (uint32 vectorIndex : { uint32(PLAYER_DATA_FLAG_ACCOUNT_COMBINED_QUESTS_INDEX), uint32(PLAYER_DATA_FLAG_ACCOUNT_COMBINED_QUEST_REWARDS_INDEX), 12u })
                 SetUpdateFieldFlagValue(m_values
                     .ModifyValue(&Player::m_activePlayerData)
                     .ModifyValue(&UF::ActivePlayerData::BitVectors)
