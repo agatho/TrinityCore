@@ -2994,6 +2994,12 @@ void AuraEffect::HandleModAdvFlying(AuraApplication const* aurApp, uint8 mode, b
     target->SetCanDoubleJump(apply || target->HasAura(SPELL_DH_DOUBLE_JUMP));
     target->SetCanFly(apply);
     target->SetCanAdvFly(apply);
+
+    // Retail delivers the full FlightCapability parameter burst right after SET_CAN_ADV_FLY on every
+    // engage (sniff 66709). Sending it earlier is useless: the client only accepts/keeps the physics
+    // params once the adv-fly state is enabled, and its double-jump launch gate requires them.
+    if (apply)
+        target->SendAdvFlyingSpeedBurst();
 }
 
 void AuraEffect::HandleIgnoreMovementForces(AuraApplication const* aurApp, uint8 mode, bool apply) const
