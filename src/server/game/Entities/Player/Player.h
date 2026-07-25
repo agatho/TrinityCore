@@ -1948,7 +1948,7 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         void Regenerate(Powers power);
         void InterruptPowerRegen(Powers power);
         void RegenerateHealth();
-        void UpdateVigor();
+        void UpdateVigor(uint32 elapsedMs = 0);
         void setRegenTimerCount(uint32 time) {m_regenTimerCount = time;}
         void setWeaponChangeTimer(uint32 time) {m_weaponChangeTimer = time;}
 

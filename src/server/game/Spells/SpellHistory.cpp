@@ -987,29 +987,6 @@ int32 SpellHistory::GetChargeCount(uint32 chargeCategoryId) const
     return std::max(maxCharges - used, 0);
 }
 
-float SpellHistory::GetChargeRecoveryProgress(uint32 chargeCategoryId) const
-{
-    auto itr = _categoryCharges.find(chargeCategoryId);
-    if (itr == _categoryCharges.end() || itr->second.empty())
-        return 0.0f;
-
-    TimePoint now = time_point_cast<Duration>(GameTime::GetTime<Clock>());
-    for (ChargeEntry const& charge : itr->second)
-    {
-        if (charge.RechargeEnd <= now)
-            continue;
-
-        auto total = charge.RechargeEnd - charge.RechargeStart;
-        if (total.count() <= 0)
-            return 0.0f;
-
-        auto elapsed = now - charge.RechargeStart;
-        return std::clamp(float(elapsed.count()) / float(total.count()), 0.0f, 1.0f);
-    }
-
-    return 0.0f;
-}
-
 int32 SpellHistory::GetChargeRecoveryTime(uint32 chargeCategoryId) const
 {
     SpellCategoryEntry const* chargeCategoryEntry = sSpellCategoryStore.LookupEntry(chargeCategoryId);

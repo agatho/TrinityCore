@@ -9048,40 +9048,24 @@ void Unit::SetFlightCapabilityID(int32 flightCapabilityId, bool clientUpdate)
     // Vigor - the Skyriding resource - is a spell-charge system: SpellCategory 2391 ("Skryriding
     // Charges - Core" [sic], 6 charges / 15s recovery) is consumed by Skyward Ascent / Surge Forward
     // and refunded by Second Wind; the Skyriding aura (406095) speeds recovery up via
-    // SPELL_AURA_CHARGE_RECOVERY_MULTIPLIER. The on-screen Vigor bar is UI widget 4604 of the
-    // client's hardcoded power-bar widget set 283: it is visible while aura 398214
-    // (SPELL_AURA_ENABLE_ALT_POWER, UnitPowerBar 650 "Vigor") is present, draws its full pips from
-    // POWER_ALTERNATE_POWER and animates the recharging pip from aura 398218's amount (0..100).
-    // POWER_ALTERNATE_MOUNT additionally mirrors the value for the pre-12.0.7 widget wiring that is
-    // observed on the wire in older sniffs. Player::UpdateVigor keeps all of these in sync with the
-    // charge state; 423624 is the marker retail applies alongside (observed in the 66709 sniff).
+    // SPELL_AURA_CHARGE_RECOVERY_MULTIPLIER. Since 11.2.7 retail has NO vigor bar - the client shows
+    // the charge count on the ability icons (native SetSpellCharges traffic covers that). The only
+    // extra server duty is mirroring the charge count into POWER_ALTERNATE_MOUNT (seen as
+    // SMSG_POWER_UPDATE type 25 on the retail wire) and pacing the speed-scaled recharge -
+    // Player::UpdateVigor does both.
     if (Player* vigorPlayer = ToPlayer())
     {
-        constexpr uint32 SPELL_SKYRIDING_VIGOR_BAR = 398214;
-        constexpr uint32 SPELL_SKYRIDING_VIGOR_FILL = 398218;
-        constexpr uint32 SPELL_SKYRIDING_VIGOR_PULSE = 398219;
-        constexpr uint32 SPELL_SKYRIDING_ENERGY_BAR_WIDGET = 423624;
         constexpr uint32 SPELL_CATEGORY_SKYRIDING_VIGOR = 2391;
 
         if (flightCapabilityId)
         {
-            vigorPlayer->CastSpell(vigorPlayer, SPELL_SKYRIDING_VIGOR_BAR, true);
-            vigorPlayer->CastSpell(vigorPlayer, SPELL_SKYRIDING_ENERGY_BAR_WIDGET, true);
             vigorPlayer->SetMaxPower(POWER_ALTERNATE_MOUNT, vigorPlayer->GetSpellHistory()->GetMaxCharges(SPELL_CATEGORY_SKYRIDING_VIGOR));
             vigorPlayer->UpdateVigor();
         }
-        else
+        else if (vigorPlayer->GetMaxPower(POWER_ALTERNATE_MOUNT) > 0)
         {
-            // removing 398214 unapplies ENABLE_ALT_POWER, which zeroes POWER_ALTERNATE_POWER max+value
-            vigorPlayer->RemoveAurasDueToSpell(SPELL_SKYRIDING_VIGOR_BAR);
-            vigorPlayer->RemoveAurasDueToSpell(SPELL_SKYRIDING_VIGOR_FILL);
-            vigorPlayer->RemoveAurasDueToSpell(SPELL_SKYRIDING_VIGOR_PULSE);
-            vigorPlayer->RemoveAurasDueToSpell(SPELL_SKYRIDING_ENERGY_BAR_WIDGET);
-            if (vigorPlayer->GetMaxPower(POWER_ALTERNATE_MOUNT) > 0)
-            {
-                vigorPlayer->SetPower(POWER_ALTERNATE_MOUNT, 0);
-                vigorPlayer->SetMaxPower(POWER_ALTERNATE_MOUNT, 0);
-            }
+            vigorPlayer->SetPower(POWER_ALTERNATE_MOUNT, 0);
+            vigorPlayer->SetMaxPower(POWER_ALTERNATE_MOUNT, 0);
         }
     }
 }

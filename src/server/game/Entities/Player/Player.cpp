@@ -1684,11 +1684,11 @@ void Player::Regenerate(Powers power)
         return;
 
     // Vigor (Skyriding) is not a value-regenerating power: it is a mirror of the SpellCategory 2391
-    // charge state (PowerType 25 has zero base regen in every build's data). Keep the mirror - and
-    // the vigor bar's recharging-pip animation - in sync from the regen tick instead.
+    // charge state (PowerType 25 has zero base regen in every build's data). Keep the mirror and
+    // the speed-scaled recharge pacing in sync from the regen tick instead.
     if (power == POWER_ALTERNATE_MOUNT)
     {
-        UpdateVigor();
+        UpdateVigor(m_regenTimer);
         return;
     }
 
@@ -1787,14 +1787,14 @@ void Player::InterruptPowerRegen(Powers power)
     SendDirectMessage(WorldPackets::Combat::InterruptPowerRegen(power).Write());
 }
 
-void Player::UpdateVigor()
+void Player::UpdateVigor(uint32 elapsedMs /*= 0*/)
 {
-    // Vigor (Skyriding) = the charge state of SpellCategory 2391, mirrored into the two power
-    // fields the vigor bar widgets read, plus the recharging-pip animation auras. Active only
-    // while a flight capability is engaged (Unit::SetFlightCapabilityID applies/removes the bar
-    // aura 398214 and the POWER_ALTERNATE_MOUNT capacity).
-    constexpr uint32 SPELL_SKYRIDING_VIGOR_FILL = 398218;   // aura amount 0..100 = widget fillValue
-    constexpr uint32 SPELL_SKYRIDING_VIGOR_PULSE = 398219;  // pulses the recharging pip while present
+    // Vigor (Skyriding) = the charge state of SpellCategory 2391. Since 11.2.7 retail shows it only
+    // as the charge count on the ability icons (no bar), so the server work is: mirror the count
+    // into POWER_ALTERNATE_MOUNT, and pace the recharge with forward speed - retail recovers a
+    // charge in ~12s when slow and ~6s at high speed; the flat data value (15s scaled by the
+    // Skyriding aura's recovery multiplier) covers the slow case, and FlightCapability's
+    // VigorRegenMaxVelCoefficient supplies the velocity scaling on top.
     constexpr uint32 SPELL_CATEGORY_SKYRIDING_VIGOR = 2391;
 
     if (!GetFlightCapabilityID())
@@ -1806,34 +1806,31 @@ void Player::UpdateVigor()
         return;
 
     int32 vigor = history->GetChargeCount(SPELL_CATEGORY_SKYRIDING_VIGOR);
-
-    // POWER_ALTERNATE_POWER feeds the live 12.0.7 vigor widget (4604), POWER_ALTERNATE_MOUNT the
-    // pre-12.0.7 wiring; SetPower only sends when the value actually changes.
-    SetPower(POWER_ALTERNATE_POWER, vigor);
     SetPower(POWER_ALTERNATE_MOUNT, vigor);
 
-    if (vigor < maxVigor)
-    {
-        int32 fill = int32(std::lround(history->GetChargeRecoveryProgress(SPELL_CATEGORY_SKYRIDING_VIGOR) * 100.0f));
-        Aura* fillAura = GetAura(SPELL_SKYRIDING_VIGOR_FILL);
-        if (!fillAura)
-        {
-            CastSpell(this, SPELL_SKYRIDING_VIGOR_FILL, true);
-            fillAura = GetAura(SPELL_SKYRIDING_VIGOR_FILL);
-        }
+    if (!elapsedMs || vigor >= maxVigor)
+        return;
 
-        if (fillAura)
-            if (AuraEffect* fillEffect = fillAura->GetEffect(EFFECT_0))
-                if (fillEffect->GetAmount() != fill)
-                    fillEffect->ChangeAmount(fill);
+    if (!m_movementInfo.HasExtraMovementFlag2(MOVEMENTFLAG3_ADV_FLYING) || !m_movementInfo.advFlying)
+        return;
 
-        if (!HasAura(SPELL_SKYRIDING_VIGOR_PULSE))
-            CastSpell(this, SPELL_SKYRIDING_VIGOR_PULSE, true);
-    }
-    else
+    FlightCapabilityEntry const* flightCapability = sFlightCapabilityStore.LookupEntry(GetFlightCapabilityID());
+    if (!flightCapability || flightCapability->VigorRegenMaxVelCoefficient <= 0.0f || flightCapability->MaxVel <= 0.0f)
+        return;
+
+    uint32 powerIndex = GetPowerIndex(POWER_ALTERNATE_MOUNT);
+    if (powerIndex == MAX_POWERS || powerIndex >= MAX_POWERS_PER_CLASS)
+        return;
+
+    // m_powerFraction is free for this power (vigor never regenerates fractional power) - repurpose
+    // it to accumulate the earned bonus recovery, and shift the recharge queue in >=500ms steps so
+    // the SetSpellCharges resyncs stay infrequent.
+    float velocityPct = std::min(m_movementInfo.advFlying->forwardVelocity / flightCapability->MaxVel, 1.0f);
+    m_powerFraction[powerIndex] += float(elapsedMs) * velocityPct * flightCapability->VigorRegenMaxVelCoefficient;
+    if (m_powerFraction[powerIndex] >= 500.0f)
     {
-        RemoveAurasDueToSpell(SPELL_SKYRIDING_VIGOR_FILL);
-        RemoveAurasDueToSpell(SPELL_SKYRIDING_VIGOR_PULSE);
+        history->ModifyChargeRecoveryTime(SPELL_CATEGORY_SKYRIDING_VIGOR, Milliseconds(-int64(m_powerFraction[powerIndex])));
+        m_powerFraction[powerIndex] = 0.0f;
     }
 }
 
