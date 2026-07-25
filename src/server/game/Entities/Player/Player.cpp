@@ -26201,11 +26201,6 @@ void Player::SendInitialPacketsBeforeAddToMap()
     // SMSG_SET_PCT_SPELL_MODIFIER
     // SMSG_SET_FLAT_SPELL_MODIFIER
 
-    /// SMSG_TALENTS_INFO
-    SendTalentsInfoData();
-    /// SMSG_INITIAL_SPELLS
-    SendKnownSpells();
-
     // Skyriding: the client gates the dynamic-flight UI (C_MountJournal.IsDragonridingUnlocked -
     // the mount journal's flight-style switch) behind PlayerCondition 106228 -> ModifierTree 282179,
     // whose only satisfiable leg in this build's data is having completed "Tour the Trading Post"
@@ -26233,7 +26228,19 @@ void Player::SendInitialPacketsBeforeAddToMap()
                     .ModifyValue(&UF::BitVectors::Values, vectorIndex)
                     .ModifyValue(&UF::BitVector::Values, fieldOffset), flag);
         }
+
+        // The spellbook's "Skyriding Flight Style" toggle (436854 Switch Flight Style,
+        // SkillLineAbility 49875 under Riding) is AcquireMethod=Learned - retail teaches it during
+        // the skyriding intro, which this core has no quest content for, so grant it with the kit.
+        // Learn before SendKnownSpells below so it rides the initial spell list.
+        if (!HasSpell(436854 /*Switch Flight Style*/))
+            LearnSpell(436854, false);
     }
+
+    /// SMSG_TALENTS_INFO
+    SendTalentsInfoData();
+    /// SMSG_INITIAL_SPELLS
+    SendKnownSpells();
 
     /// SMSG_SEND_UNLEARN_SPELLS
     SendUnlearnSpells();

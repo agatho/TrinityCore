@@ -5221,6 +5221,13 @@ void SpellMgr::LoadSpellInfoCorrections()
         spellInfo->AttributesCu |= SPELL_ATTR0_CU_AURA_CANNOT_BE_SAVED;
     });
 
+    // 436854 - Switch Flight Style: retail toggles the flight style while mounted (the current
+    // mount changes mode live), but the spell data lacks the allow-while-mounted attribute.
+    ApplySpellFix({ 436854 }, [](SpellInfo* spellInfo)
+    {
+        spellInfo->Attributes |= SPELL_ATTR0_ALLOW_WHILE_MOUNTED;
+    });
+
     // Sigil of Flame
     ApplySpellFix({ 204598 }, [](SpellInfo* spellInfo)
     {
