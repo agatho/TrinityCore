@@ -30626,37 +30626,39 @@ void Player::LoadActions(PreparedQueryResult result)
 void Player::EnsureSkyridingActionDefaults()
 {
     // While on a skyriding mount the client swaps the main bar to the skyriding bonus-bar page,
-    // which reads action-button slots 120-131. Retail's default UI populates that page with Surge
-    // Forward, Skyward Ascent, Dismount and Whirling Surge whenever they are missing from every
-    // bar; trait-granted spells never fire the client's on-learn auto-placement, so replicate the
-    // default here. Must run AFTER the async action-button load (_LoadActions clears and rebuilds
+    // which reads action-button slots 120-131. The retail default layout of that page, identical
+    // in the 66709 and 67314 sniffs' SMSG_UPDATE_ACTION_BUTTONS: 120 Whirling Surge, 121 Surge
+    // Forward, 122 empty, 123 Skyward Ascent, 124 Second Wind, 125 Aerial Halt (no Dismount).
+    // Trait-granted spells never fire the client's on-learn auto-placement, so replicate the
+    // default here - each spell only if known, missing from every bar, and its slot still free.
+    // Must run AFTER the async action-button load (_LoadActions clears and rebuilds
     // m_actionButtons), i.e. from LoadActions.
-    constexpr uint8 SKYRIDING_BAR_FIRST_SLOT = 120;
-    constexpr uint8 SKYRIDING_BAR_LAST_SLOT = 131;
+    static constexpr std::pair<uint8 /*slot*/, uint32 /*spellId*/> skyridingBarDefaults[] =
+    {
+        { 120, 361584 }, // Whirling Surge
+        { 121, 372608 }, // Surge Forward
+        { 123, 372610 }, // Skyward Ascent
+        { 124, 425782 }, // Second Wind
+        { 125, 403092 }, // Aerial Halt
+    };
 
-    for (uint32 barSpellId : { 372608u, 372610u, 377042u, 361584u })
+    for (auto const& [slot, barSpellId] : skyridingBarDefaults)
     {
         if (!HasSpell(barSpellId))
             continue;
 
-        bool onAnyBar = std::ranges::any_of(m_actionButtons, [barSpellId](auto const& button)
+        bool onAnyBar = std::ranges::any_of(m_actionButtons, [spellId = barSpellId](auto const& button)
         {
             return button.second.uState != ACTIONBUTTON_DELETED
                 && button.second.GetType() == ACTION_BUTTON_SPELL
-                && button.second.GetAction() == barSpellId;
+                && button.second.GetAction() == spellId;
         });
         if (onAnyBar)
             continue;
 
-        for (uint8 slot = SKYRIDING_BAR_FIRST_SLOT; slot <= SKYRIDING_BAR_LAST_SLOT; ++slot)
-        {
-            auto buttonItr = m_actionButtons.find(slot);
-            if (buttonItr == m_actionButtons.end() || buttonItr->second.uState == ACTIONBUTTON_DELETED)
-            {
-                AddActionButton(slot, barSpellId, ACTION_BUTTON_SPELL);
-                break;
-            }
-        }
+        auto buttonItr = m_actionButtons.find(slot);
+        if (buttonItr == m_actionButtons.end() || buttonItr->second.uState == ACTIONBUTTON_DELETED)
+            AddActionButton(slot, barSpellId, ACTION_BUTTON_SPELL);
     }
 }
 
