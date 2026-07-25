@@ -29,11 +29,12 @@
 
 enum DragonridingSpells
 {
-    SPELL_DRAGONRIDING_SURGE_FORWARD    = 372608,
-    SPELL_DRAGONRIDING_SKYWARD_ASCENT   = 372610,
-    SPELL_DRAGONRIDING_WHIRLING_SURGE   = 361584,
-    SPELL_DRAGONRIDING_LAUNCH_BOOST     = 392752,
-    SPELL_DRAGONRIDING_LIFT_OFF         = 374763,
+    SPELL_DRAGONRIDING_SURGE_FORWARD        = 372608,
+    SPELL_DRAGONRIDING_SKYWARD_ASCENT       = 372610,
+    SPELL_DRAGONRIDING_WHIRLING_SURGE       = 361584,
+    SPELL_DRAGONRIDING_LAUNCH_BOOST         = 392752,
+    SPELL_DRAGONRIDING_LIFT_OFF             = 374763,
+    SPELL_DRAGONRIDING_FLIGHT_STYLE_STEADY  = 404468,
 };
 
 // Blizzlike impulse values from sniff data (12.0.1.66709 dragonriding_midnight, 2026-03-31):
@@ -239,10 +240,40 @@ class spell_dragonriding_launch_boost_aura : public AuraScript
     }
 };
 
+// 436854 - Switch Flight Style (the spellbook "Skyriding Flight Style" toggle).
+// Steady flight is the marker aura 404468 "Flight Style: Steady" (CANNOT_BE_SAVED, so characters
+// default back to Skyriding on login); the skyriding mount capabilities' PlayerCondition (96927)
+// requires that aura to be ABSENT, so after toggling it a mount-capability re-evaluation flips the
+// current mount's flight mode live - exactly what the 67314 flight-style sniff shows.
+class spell_dragonriding_switch_flight_style : public SpellScript
+{
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellInfo({ SPELL_DRAGONRIDING_FLIGHT_STYLE_STEADY });
+    }
+
+    void HandleHit(SpellEffIndex /*effIndex*/)
+    {
+        Unit* caster = GetCaster();
+        if (caster->HasAura(SPELL_DRAGONRIDING_FLIGHT_STYLE_STEADY))
+            caster->RemoveAurasDueToSpell(SPELL_DRAGONRIDING_FLIGHT_STYLE_STEADY);
+        else
+            caster->CastSpell(caster, SPELL_DRAGONRIDING_FLIGHT_STYLE_STEADY, true);
+
+        caster->UpdateMountCapability();
+    }
+
+    void Register() override
+    {
+        OnEffectHitTarget += SpellEffectFn(spell_dragonriding_switch_flight_style::HandleHit, EFFECT_0, SPELL_EFFECT_DUMMY);
+    }
+};
+
 void AddSC_dragonriding_spell_scripts()
 {
     RegisterSpellAndAuraScriptPair(spell_dragonriding_launch_boost, spell_dragonriding_launch_boost_aura);
     RegisterSpellScript(spell_dragonriding_lift_off);
+    RegisterSpellScript(spell_dragonriding_switch_flight_style);
     RegisterSpellScript(spell_dragonriding_whirling_surge);
     RegisterSpellScript(spell_dragonriding_surge_forward);
     RegisterSpellScript(spell_dragonriding_skyward_ascent);
