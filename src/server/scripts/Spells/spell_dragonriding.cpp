@@ -240,6 +240,27 @@ class spell_dragonriding_launch_boost_aura : public AuraScript
     }
 };
 
+// 377042 - Dismount (the skyriding bar's dismount button). The spell's own effect only removes
+// mount auras carrying spell label 1607 (the 35 skyriding flagship mounts) - make it work for
+// whatever the player is riding, which is what the button promises.
+class spell_dragonriding_dismount : public SpellScript
+{
+    void HandleAfterCast()
+    {
+        Unit* caster = GetCaster();
+        if (caster->IsMounted() || caster->HasAuraType(SPELL_AURA_MOUNTED))
+        {
+            caster->RemoveAurasByType(SPELL_AURA_MOUNTED);
+            caster->Dismount();
+        }
+    }
+
+    void Register() override
+    {
+        AfterCast += SpellCastFn(spell_dragonriding_dismount::HandleAfterCast);
+    }
+};
+
 // 436854 - Switch Flight Style (the spellbook "Skyriding Flight Style" toggle).
 // Steady flight is the marker aura 404468 "Flight Style: Steady" (CANNOT_BE_SAVED, so characters
 // default back to Skyriding on login); the skyriding mount capabilities' PlayerCondition (96927)
@@ -272,6 +293,7 @@ class spell_dragonriding_switch_flight_style : public SpellScript
 void AddSC_dragonriding_spell_scripts()
 {
     RegisterSpellAndAuraScriptPair(spell_dragonriding_launch_boost, spell_dragonriding_launch_boost_aura);
+    RegisterSpellScript(spell_dragonriding_dismount);
     RegisterSpellScript(spell_dragonriding_lift_off);
     RegisterSpellScript(spell_dragonriding_switch_flight_style);
     RegisterSpellScript(spell_dragonriding_whirling_surge);
