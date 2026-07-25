@@ -9031,26 +9031,19 @@ void Unit::SetFlightCapabilityID(int32 flightCapabilityId, bool clientUpdate)
     // 1.0 is the neutral default; 0.0 would cause divide-by-zero on the client.
     SetUpdateFieldValue(m_values.ModifyValue(&Unit::m_unitData).ModifyValue(&UF::UnitData::GlideEventSpeedDivisor), 1.0f);
 
-    // When a capability engages, the client requires the COMPLETE parameter burst: the double-jump
-    // launch gate checks that its FlightCapability physics array is populated, and it may have been
-    // cleared by a previous dismount. The change-suppression in UpdateAdvFlyingSpeed would otherwise
-    // swallow most of the burst - m_advFlyingSpeed is pre-seeded with FlightCapability fallback row 1,
-    // which differs from typical live rows in only a field or two. Retail sends all 13 on every mount.
-    bool force = flightCapabilityId != 0;
-
-    UpdateAdvFlyingSpeed(ADV_FLYING_AIR_FRICTION, clientUpdate, force);
-    UpdateAdvFlyingSpeed(ADV_FLYING_MAX_VEL, clientUpdate, force);
-    UpdateAdvFlyingSpeed(ADV_FLYING_LIFT_COEFFICIENT, clientUpdate, force);
-    UpdateAdvFlyingSpeed(ADV_FLYING_DOUBLE_JUMP_VEL_MOD, clientUpdate, force);
-    UpdateAdvFlyingSpeed(ADV_FLYING_GLIDE_START_MIN_HEIGHT, clientUpdate, force);
-    UpdateAdvFlyingSpeed(ADV_FLYING_ADD_IMPULSE_MAX_SPEED, clientUpdate, force);
-    UpdateAdvFlyingSpeed(ADV_FLYING_BANKING_RATE, clientUpdate, force);
-    UpdateAdvFlyingSpeed(ADV_FLYING_PITCHING_RATE_DOWN, clientUpdate, force);
-    UpdateAdvFlyingSpeed(ADV_FLYING_PITCHING_RATE_UP, clientUpdate, force);
-    UpdateAdvFlyingSpeed(ADV_FLYING_TURN_VELOCITY_THRESHOLD, clientUpdate, force);
-    UpdateAdvFlyingSpeed(ADV_FLYING_SURFACE_FRICTION, clientUpdate, force);
-    UpdateAdvFlyingSpeed(ADV_FLYING_OVER_MAX_DECELERATION, clientUpdate, force);
-    UpdateAdvFlyingSpeed(ADV_FLYING_LAUNCH_SPEED_COEFFICIENT, clientUpdate, force);
+    UpdateAdvFlyingSpeed(ADV_FLYING_AIR_FRICTION, clientUpdate);
+    UpdateAdvFlyingSpeed(ADV_FLYING_MAX_VEL, clientUpdate);
+    UpdateAdvFlyingSpeed(ADV_FLYING_LIFT_COEFFICIENT, clientUpdate);
+    UpdateAdvFlyingSpeed(ADV_FLYING_DOUBLE_JUMP_VEL_MOD, clientUpdate);
+    UpdateAdvFlyingSpeed(ADV_FLYING_GLIDE_START_MIN_HEIGHT, clientUpdate);
+    UpdateAdvFlyingSpeed(ADV_FLYING_ADD_IMPULSE_MAX_SPEED, clientUpdate);
+    UpdateAdvFlyingSpeed(ADV_FLYING_BANKING_RATE, clientUpdate);
+    UpdateAdvFlyingSpeed(ADV_FLYING_PITCHING_RATE_DOWN, clientUpdate);
+    UpdateAdvFlyingSpeed(ADV_FLYING_PITCHING_RATE_UP, clientUpdate);
+    UpdateAdvFlyingSpeed(ADV_FLYING_TURN_VELOCITY_THRESHOLD, clientUpdate);
+    UpdateAdvFlyingSpeed(ADV_FLYING_SURFACE_FRICTION, clientUpdate);
+    UpdateAdvFlyingSpeed(ADV_FLYING_OVER_MAX_DECELERATION, clientUpdate);
+    UpdateAdvFlyingSpeed(ADV_FLYING_LAUNCH_SPEED_COEFFICIENT, clientUpdate);
 
     // Vigor - the Skyriding resource - is a spell-charge system: SpellCategory 2391 ("Skryriding
     // Charges - Core" [sic], 6 charges / 15s recovery) is consumed by Skyward Ascent / Surge Forward
@@ -9133,6 +9126,28 @@ void Unit::SetDriveCapabilityID(int32 driveCapabilityId, bool clientUpdate)
         moveUpdate.Status = &m_movementInfo;
         SendMessageToSet(moveUpdate.Write(), playerMover);
     }
+}
+
+void Unit::SendAdvFlyingSpeedBurst()
+{
+    // The complete FlightCapability parameter burst, in the retail order (sniff 66709: sent on every
+    // mount-engage, strictly AFTER SMSG_MOVE_SET_CAN_ADV_FLY). The client's double-jump launch gate
+    // requires its physics-param array populated, and the change-suppression in UpdateAdvFlyingSpeed
+    // would swallow most of it - m_advFlyingSpeed is pre-seeded with FlightCapability fallback row 1,
+    // which differs from typical live rows in only a field or two - so force all 13.
+    UpdateAdvFlyingSpeed(ADV_FLYING_AIR_FRICTION, true, true);
+    UpdateAdvFlyingSpeed(ADV_FLYING_MAX_VEL, true, true);
+    UpdateAdvFlyingSpeed(ADV_FLYING_LIFT_COEFFICIENT, true, true);
+    UpdateAdvFlyingSpeed(ADV_FLYING_DOUBLE_JUMP_VEL_MOD, true, true);
+    UpdateAdvFlyingSpeed(ADV_FLYING_GLIDE_START_MIN_HEIGHT, true, true);
+    UpdateAdvFlyingSpeed(ADV_FLYING_ADD_IMPULSE_MAX_SPEED, true, true);
+    UpdateAdvFlyingSpeed(ADV_FLYING_BANKING_RATE, true, true);
+    UpdateAdvFlyingSpeed(ADV_FLYING_PITCHING_RATE_DOWN, true, true);
+    UpdateAdvFlyingSpeed(ADV_FLYING_PITCHING_RATE_UP, true, true);
+    UpdateAdvFlyingSpeed(ADV_FLYING_TURN_VELOCITY_THRESHOLD, true, true);
+    UpdateAdvFlyingSpeed(ADV_FLYING_SURFACE_FRICTION, true, true);
+    UpdateAdvFlyingSpeed(ADV_FLYING_OVER_MAX_DECELERATION, true, true);
+    UpdateAdvFlyingSpeed(ADV_FLYING_LAUNCH_SPEED_COEFFICIENT, true, true);
 }
 
 void Unit::UpdateAdvFlyingSpeed(AdvFlyingRateTypeSingle speedType, bool clientUpdate, bool force /*= false*/)
