@@ -60,8 +60,16 @@ static void SendFacingImpulse(Unit* caster, float speed)
 static SpellCastResult CheckSkyriding(SpellScript* script)
 {
     Unit* caster = script->GetCaster();
+
+    // Server-authoritative gate: a flight capability is only engaged by UpdateMountCapability when
+    // a skyriding-capable mount is ridden where its conditions allow it (never in steady flight,
+    // never dismounted) - the movement flag alone is client-echoed state and could be replayed.
+    if (!caster->GetFlightCapabilityID())
+        return SPELL_FAILED_DRAGONRIDING_RIDING_REQUIREMENT;
+
     if (!caster->HasExtraUnitMovementFlag2(MOVEMENTFLAG3_CAN_ADV_FLY))
         return SPELL_FAILED_DRAGONRIDING_RIDING_REQUIREMENT;
+
     return SPELL_CAST_OK;
 }
 
