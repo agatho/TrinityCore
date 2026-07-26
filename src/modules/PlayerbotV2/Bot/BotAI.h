@@ -875,6 +875,31 @@ public:
     void       set_dungeon_route_wp(int32_t idx, uint32 map_id)
     { dungeon_route_wp_ = idx; dungeon_route_wp_map_ = map_id; }
     void       clear_dungeon_route_wp() { dungeon_route_wp_ = -1; dungeon_route_wp_map_ = 0; }
+    // Route re-plan epoch = the bosses_done_count the committed cursor was built
+    // for. A boss kill jumps route_boss_i forward to the NEXT boss's crumb; the
+    // monotonic cursor/floor — anchored LOW at the just-killed boss — then can
+    // only crawl forward via the leapfrog scan, which on the SFK cell->Silverlaine
+    // leg jumps the cursor STRAIGHT to the far crumb 18 and pins route_lo there
+    // (the >15y first path segment is mis-flagged an off-mesh jump and the tank
+    // oscillates on a descending step to z73.8, never climbing through the
+    // Courtyard Door). Clearing the cursor on the kill lets it re-establish at the
+    // tank's actual nearest crumb and chain-follow up. Compared per (map-bound)
+    // route rule tick; a fresh instance rebuilds BotAI so it starts at -1.
+    int32_t    dungeon_route_epoch() const { return dungeon_route_epoch_; }
+    void       set_dungeon_route_epoch(int32_t e) { dungeon_route_epoch_ = e; }
+
+    // ---- earliest-un-killed-boss "recently seen" stamp (2026-07-25) ----
+    // Boss-target hysteresis for the SFK Baron Ashbury flicker: the boss scan
+    // picks the earliest ALIVE boss it FINDS this tick, but Ashbury (bosses[0])
+    // drops out of the 500y scan ~79% of ticks, so the raw pick flips to the
+    // next boss (Silverlaine, crumb 18) and drags the tank NORTH off the
+    // un-killed Ashbury. Stamp the last time the earliest UN-KILLED boss
+    // (bosses[bosses_done_count]) was actually seen; while that stamp is fresh,
+    // the scan refuses to promote a LATER boss (yields the tick instead) so the
+    // tank stays committed to the boss it owes. No map key needed — the 10s
+    // window self-heals any staleness across an LFG teleport.
+    uint32     dungeon_earliest_boss_seen_ms() const { return dungeon_earliest_boss_seen_ms_; }
+    void       set_dungeon_earliest_boss_seen(uint32 now_ms) { dungeon_earliest_boss_seen_ms_ = now_ms; }
 
     // ---- route-aware combat-advance reached-crumb latch (2026-07-03, 1b) ----
     // Hysteresis for DungeonAdvanceTarget's 8y arrive boundary. INVARIANT: once
@@ -2120,6 +2145,51 @@ public:
                                // to its node order, driving off the gate), so the
                                // gate never breached (live: 1-2 vehicles reached
                                // the gate, fire_idle stuck ~2-5 over a whole match).
+        DungeonUseGo    = 46,  // target = gate-lever GO guid_low. The tank
+                               // pulling a boss-gating lever (SFK cell-door
+                               // lever 18900 -> Baron Ashbury's Cell Door
+                               // 18934, idle:dungeon_use_gate_lever). The
+                               // lever's SmartGameObjectAI toggles the door
+                               // on GO_STATE_CHANGED, so re-pulling within a
+                               // few seconds would flip it BACK shut. ~30s
+                               // override (below): long enough that one pull
+                               // opens the cell and the group engages the
+                               // boss before any re-pull, short enough to
+                               // retry if the first use was dropped/refused.
+        DungeonLeverBossSeen = 47, // target = gate-lever GO guid_low. NOT an
+                               // action — a per-lever LATCH stamping the last
+                               // tick an alive caged boss was seen within 40y of
+                               // the lever. The boss a lever frees (SFK Baron
+                               // Ashbury, a throne vehicle behind the closed Cell
+                               // Door) flickers in/out of the object scan (~21%
+                               // of ticks present), so gating the lever approach
+                               // on a per-tick sighting let the tank close only
+                               // intermittently and it never reached pull range
+                               // (live 2026-07-25: 3 approach fires, 0 pulls, 0/6
+                               // deadlock). While this latch is fresh the guard
+                               // treats the boss as present, committing the tank
+                               // to the pull through the flicker. ~20s override
+                               // (below) — long enough to bridge the out-of-scan
+                               // gaps during the approach, far shorter than the
+                               // 120s DungeonUseGo lockout so a genuinely dead
+                               // boss lapses the latch in seconds and cannot
+                               // reintroduce the spent-lever yo-yo.
+        DungeonLeverOperated = 48, // target = gate-lever GO guid_low. A run-
+                               // length latch marking that the tank has pulled
+                               // this lever at least once. The boss-near-lever
+                               // gate (which stops the tank re-approaching a
+                               // SPENT lever after its boss dies) must NOT gate
+                               // the FIRST pull: the caged boss (SFK Ashbury) is
+                               // scanned only ~15% of ticks and, worse, is
+                               // anti-correlated with the tank being AT the cell,
+                               // so requiring a sighting to pull deadlocked the
+                               // run (live 2026-07-25: tank held AT the cell 4y
+                               // from the lever, 0 pulls, 0/6). Until this latch
+                               // is set the lever is pulled regardless of the
+                               // boss scan; afterwards the boss-near gate governs
+                               // re-approach. ~1h lockout = effectively the whole
+                               // run (dungeon_reset/relog rebuilds BotAI, clearing
+                               // it for the next instance).
     };
     static constexpr uint32 kActionRetryLockoutMs = 5u * 60u * 1000u;
     // Per-kind cooldown override — most actions use the 5 min default, but
@@ -2134,6 +2204,27 @@ public:
                 // gate is the server-side seat-spell cooldown. 4s just dedups
                 // the cast intent without throttling the breach.
                 return 4u * 1000u;
+            case ActionKind::DungeonUseGo:
+                // Boss-gating lever. The door opens on the FIRST pull and the
+                // tank steps IN within a tick or two; a second pull would
+                // toggle the SmartAI door BACK shut. 120s comfortably spans
+                // tank-entry + the whole boss fight (and the door's own ~85s
+                // auto-close, Data1=85 on SFK's Cell Door), so it never
+                // re-toggles mid-encounter — yet still lets a rare
+                // dropped/refused first pull retry within two minutes.
+                return 120u * 1000u;
+            case ActionKind::DungeonLeverBossSeen:
+                // Latch window bridging the caged boss's scan flicker while the
+                // tank closes on and pulls the lever. Must exceed the longest
+                // out-of-scan gap during the approach (~10s observed) yet stay
+                // well below the 120s pull lockout so a dead boss lapses it in
+                // seconds — see the enum comment. 20s.
+                return 20u * 1000u;
+            case ActionKind::DungeonLeverOperated:
+                // Run-length "this lever was pulled once" latch — see the enum
+                // comment. 1h effectively spans any dungeon run; a reset/relog
+                // rebuilds BotAI so it never leaks into the next instance.
+                return 60u * 60u * 1000u;
             case ActionKind::AltHearth:
                 // Garrison Hearthstone is 15 min, Dalaran Hearthstone is
                 // 30 min server-side; pick 30 min as the upper bound so
@@ -3038,6 +3129,8 @@ private:
     // on map change). See dungeon_route_wp() for the anti-oscillation rationale.
     int32_t        dungeon_route_wp_ = -1;
     uint32         dungeon_route_wp_map_ = 0;
+    uint32         dungeon_earliest_boss_seen_ms_ = 0;  // boss-target hysteresis
+    int32_t        dungeon_route_epoch_ = -1;  // bosses_done_count the cursor was built for
     // Route-aware combat-advance reached-crumb latch + its map (self-
     // invalidates on map change). See adv_route_reached_idx() above.
     int32_t        adv_route_reached_idx_ = -1;

@@ -1701,6 +1701,176 @@ bool DungeonHonorCross(BotSnapshotView const& s, BotAI& ai,
     return true;
 }
 
+// Human-like gate-lever operation (SFK Baron Ashbury, 2026-07-24). A boss can
+// sit behind a CLOSED door that a nearby lever opens — SFK's Baron Ashbury is
+// caged behind Cell Door GO 18934, which Lever GO 18900 opens via the lever's
+// OWN SmartGameObjectAI (GO_STATE_CHANGED -> activate closest GO 18934); there
+// is no instance script. Bots otherwise beeline to the caged boss, get
+// SPELL_FAILED_LINE_OF_SIGHT at 0.4y, and stall 0/N in the courtyard. When the
+// tank is near an un-used lever whose entry the dungeon opted into
+// (advice.use_go_entries), walk to it and pull it — exactly as a human would.
+// Mirrors BgTryUseObjectiveGo. Tank-only + per-GUID DungeonUseGo lockout (~30s)
+// so five bots don't race the lever and a single lever isn't toggled back shut.
+// STRICT no-op when use_go_entries is empty (every dungeon but SFK), so it
+// cannot affect any other instance.
+static bool DungeonTryUseGateGo(BotSnapshotView const& s, BotAI& ai,
+                                BotIntentEmitter& emit,
+                                DungeonAdvice const& advice, uint32 now_ms)
+{
+    if (advice.use_go_entries.empty()) return false;
+    float sx = 0.f, sy = 0.f, sz = 0.f;
+    s.position(sx, sy, sz);
+    for (auto const& go : s.raw().world_objects.nearby_objects)
+    {
+        bool match = false;
+        for (uint32_t e : advice.use_go_entries)
+            if (go.entry == e) { match = true; break; }
+        if (!match) continue;
+        const float dx = go.x - sx, dy = go.y - sy;
+        const float d2 = dx * dx + dy * dy;
+        // Engage the lever once the tank is in the same courtyard quadrant.
+        // 35y (was 18y): the SFK route's last pre-cell crumb (5, -247,2143) sits
+        // ~30y N of the lever (-252,2114), and courtyard trash pins the tank
+        // there — with the flicker now fixed the tank commits to that spot and
+        // no longer oscillates close enough for a tight radius to catch it
+        // (live 2026-07-25: parked at crumb 4-5, ~30y, never triggering). The
+        // lever IS the first objective, so committing to it from across the
+        // SW quadrant is correct, not a detour; move_to walks the last yards
+        // and the API validates the path. Opt-in per dungeon, so no other
+        // instance widens.
+        if (d2 > 35.0f * 35.0f) continue;
+        const uint64 go_low = go.guid.GetCounter();
+        // Only operate a gating lever while the boss it frees is still ALIVE.
+        // Each lever exists to unblock a specific caged boss it sits next to
+        // (SFK Lever 18900 -> Baron Ashbury's cell, ~5y away). Once that boss
+        // is dead the lever is spent; without this guard the tank keeps re-
+        // approaching it every time the ~120s use-lockout lapses (the door
+        // auto-closes at ~85s), dragging it back to the empty cell and fighting
+        // the advance toward the NEXT boss (live 2026-07-25: after Ashbury died
+        // the tank yo-yo'd S to the lever instead of climbing N to Silverlaine).
+        // Require an ALIVE listed boss within 40y of the lever — a LoS-
+        // independent Cell scan, so a still-caged boss behind the closed door
+        // is detected and the FIRST pull is unaffected. General: ties every
+        // lever to its purpose with no hand-authored lever->boss map. Runs only
+        // for a lever already within 35y (SFK-only, use_go_entries), so the
+        // scan cost is negligible and confined to this instance.
+        if (!advice.bosses.empty())
+        {
+            bool boss_near_lever = false;
+            if (Player* scanner = ObjectAccessor::FindConnectedPlayer(s.raw().guid))
+            {
+                struct AliveBossNearGo
+                {
+                    std::vector<uint32_t> const& entries;
+                    float gx, gy, gz, r2;
+                    bool operator()(Creature* c) const
+                    {
+                        if (!c || !c->IsAlive()) return false;
+                        for (uint32_t e : entries)
+                            if (c->GetEntry() == e)
+                            {
+                                const float ex = c->GetPositionX() - gx;
+                                const float ey = c->GetPositionY() - gy;
+                                const float ez = c->GetPositionZ() - gz;
+                                return ex*ex + ey*ey + ez*ez <= r2;
+                            }
+                        return false;
+                    }
+                };
+                std::list<Creature*> bfound;
+                AliveBossNearGo bchk{advice.bosses, go.x, go.y, go.z, 40.0f * 40.0f};
+                Trinity::CreatureListSearcher<AliveBossNearGo> bsr(scanner, bfound, bchk);
+                Cell::VisitAllObjects(scanner, bsr, 80.0f);
+                boss_near_lever = !bfound.empty();
+            }
+            // Latch the sighting through the caged boss's scan flicker. SFK
+            // Baron Ashbury (a throne vehicle behind the closed Cell Door 18934)
+            // is visited by the object scan only ~21% of ticks, so a per-tick
+            // boss_near_lever gate let the tank approach the lever only
+            // intermittently and it never closed the last yards to PULL it
+            // (live 2026-07-25: 3 approach_gate_lever fires, 0 pulls, the tank
+            // oscillated at the cell 0/6, and each non-approach tick fell through
+            // to the boss-advance block, which — with Ashbury out of scan and
+            // boss_target flickered to Silverlaine — climbed the route cursor
+            // toward Silverlaine's far crumb and committed the tank to an
+            // off-mesh drop to z73.8, dragging it OFF the cell). While an alive
+            // caged boss has been seen within the last ~20s (DungeonLeverBossSeen
+            // latch), keep treating the lever as boss-gated so the tank stays
+            // committed to reaching and pulling it — which, because this guard
+            // returns true and preempts the boss-advance block, also stops the
+            // cursor-climb / off-mesh detour during the pre-kill approach. The
+            // latch is far shorter than the 120s post-pull DungeonUseGo lockout,
+            // so a genuinely dead boss lapses it in seconds and the session-3
+            // spent-lever advance-north is preserved.
+            if (boss_near_lever)
+                ai.note_action_retry(BotAI::ActionKind::DungeonLeverBossSeen,
+                                     go_low, now_ms);
+            else if (ai.action_recently_tried(BotAI::ActionKind::DungeonLeverBossSeen,
+                                              go_low, now_ms))
+                boss_near_lever = true;   // latched — commit through the flicker
+            // The boss-near gate stops the tank re-approaching a SPENT lever
+            // once its boss is dead — but it must NOT gate the FIRST pull. SFK
+            // Baron Ashbury (a throne vehicle behind the closed Cell Door) is
+            // scanned only ~15% of ticks and, worse, is anti-correlated with the
+            // tank being AT the cell, so neither a live sighting nor the latch
+            // above reliably arms while the tank stands at the lever — requiring
+            // one deadlocked the run (live 2026-07-25: tank held AT the cell 4y
+            // from the lever, 0 pulls, 0/6). Until the tank has operated this
+            // lever once, pull it regardless of the boss scan; afterwards the
+            // boss-near gate (with the flicker latch) governs re-approach so a
+            // spent lever is abandoned and the tank climbs N to the next boss.
+            const bool lever_operated_before = ai.action_recently_tried(
+                BotAI::ActionKind::DungeonLeverOperated, go_low, now_ms);
+            if (lever_operated_before && !boss_near_lever)
+                continue;   // spent lever — boss freed and killed
+        }
+        if (ai.action_recently_tried(BotAI::ActionKind::DungeonUseGo, go_low, now_ms))
+        {
+            // Pulled recently — the door is now open. The lever sits on the
+            // BOSS's side of the (former) door, ~1y from the caged boss, so
+            // step ONTO it: this walks the tank THROUGH the opened doorway INTO
+            // the cell, where it finally has LoS to the boss and the boss-engage
+            // (bd2<=25² && in_los) can fire. Without this the tank pulls from
+            // OUTSIDE the door, then combat pulls it back N of the doorway where
+            // the cell wall blocks LoS forever — it never engages and the door
+            // auto-closes (live 2026-07-25, lever pulled, 7 casts, 0/6). Once ON
+            // the lever (<3y, inside the cell) yield so the engage takes over;
+            // do NOT re-pull (that toggles the SmartAI door back shut).
+            if (d2 > 3.0f * 3.0f)
+            {
+                emit.move_to(go.x, go.y, go.z, /*run=*/true);
+                ai.set_last_rule_fired("idle:dungeon_enter_gate_cell");
+                return true;
+            }
+            continue;
+        }
+        if (d2 > 4.5f * 4.5f)   // close the last yards on foot, then use
+        {
+            emit.move_to(go.x, go.y, go.z, /*run=*/true);
+            ai.set_last_rule_fired("idle:dungeon_approach_gate_lever");
+            return true;
+        }
+        emit.use_game_object(go.guid);
+        ai.note_action_retry(BotAI::ActionKind::DungeonUseGo, go_low, now_ms);
+        ai.note_action_retry(BotAI::ActionKind::DungeonLeverOperated, go_low, now_ms);
+        // Arm the flicker latch on the pull itself. The first pull can happen
+        // WITHOUT a live sighting (scan-independent, above), so without this the
+        // post-pull boss-near gate could go false on the very next tick and skip
+        // the enter_gate_cell step — the tank would leave the freshly-opened cell
+        // before stepping in to engage. Latching here keeps it committed to
+        // entering for ~20s, by which point the opened door yields real sightings
+        // that refresh the latch through the kill; it then lapses so the tank
+        // advances N off the spent lever.
+        ai.note_action_retry(BotAI::ActionKind::DungeonLeverBossSeen, go_low, now_ms);
+        ai.set_last_rule_fired("idle:dungeon_use_gate_lever");
+        TC_LOG_INFO("playerbot.v2",
+            "[gate_lever] {} pull entry={} guid={} at ({:.1f},{:.1f},{:.1f}) d={:.1f}",
+            s.name(), go.entry, go_low, go.x, go.y, go.z, std::sqrt(d2));
+        return true;
+    }
+    return false;
+}
+
 bool DungeonCombatPositioning(BotSnapshotView const& s, BotAI& ai,
                               GroupSnapshotView const& g,
                               BotIntentEmitter& emit,
@@ -1769,6 +1939,17 @@ bool DungeonCombatPositioning(BotSnapshotView const& s, BotAI& ai,
     // strands the bot on the off-mesh poly (NoPath thereafter). Honoring the commit
     // here makes the jump uninterruptible. No-op when no crossing is in flight.
     if (s.is_in_dungeon() && DungeonHonorCross(s, ai, emit, now_ms))
+        return true;
+
+    // (-0.5) Human-like gate lever — pull a boss-gating lever the tank is
+    // standing next to (SFK Baron Ashbury's cell lever) BEFORE the boss-
+    // advance below beelines the tank into the closed door and stalls on
+    // SPELL_FAILED_LINE_OF_SIGHT. Runs in combat too (the courtyard keeps the
+    // tank permanently in trash combat, so an OOC-only rule would be starved,
+    // exactly like the cursor maintainer). Tank-only; strict no-op unless the
+    // dungeon authored use_go_entries — so no other instance is affected.
+    if (s.is_in_dungeon() && ai.effective_role(s) == Role::Tank &&
+        DungeonTryUseGateGo(s, ai, emit, advice, now_ms))
         return true;
 
     // (-1) Off-mesh void recovery — runs IN COMBAT (this helper is invoked from
@@ -5950,18 +6131,71 @@ bool DungeonDispatch(BotSnapshotView const& s, BotAI& ai,
                         // (advice.bosses is authored in encounter order). Once
                         // chosen, never skip ahead to a later boss this tick.
                         Creature* boss_target = nullptr;
-                        for (uint32_t bentry : advice.bosses)
+                        int       found_idx = -1;
+                        for (int bi = 0; bi < static_cast<int>(advice.bosses.size()); ++bi)
                         {
                             for (Creature* bc : bcre)
-                                if (bc && bc->GetEntry() == bentry && bc->IsAlive())
-                                { boss_target = bc; break; }
+                                if (bc && bc->GetEntry() == advice.bosses[bi] && bc->IsAlive())
+                                { boss_target = bc; found_idx = bi; break; }
                             if (boss_target) break;
                         }
+                        // Boss-target hysteresis (SFK Baron Ashbury flicker,
+                        // 2026-07-25). The earliest UN-KILLED boss is
+                        // bosses[bosses_done_count]; it is definitionally alive, so
+                        // promoting a LATER boss (found_idx > done) marches the tank
+                        // PAST it — exactly what the boss-priority nav exists to
+                        // prevent. SFK's Ashbury (bosses[0], caged behind Cell Door
+                        // 18934) drops out of the 500y scan ~79% of ticks, so the raw
+                        // earliest-found flips to Silverlaine (bosses[1], crumb 18)
+                        // and drags the tank NORTH off the freed Ashbury, so it never
+                        // sustains the engage (live 2026-07-24: lever pulled, door
+                        // open, but tank drifts N, 0/6). Stamp each real sighting of
+                        // the un-killed boss; while that stamp is fresh, REFUSE to
+                        // promote a later boss — yield the tick instead (boss_target
+                        // stays null → this whole boss/route block is skipped, the
+                        // committed route cursor holds the tank in place) so the next
+                        // tick the un-killed boss IS found re-commits to it. Bounded
+                        // by the 10s window so a genuinely-gone boss still yields to
+                        // progression after it lapses. STRICT no-op where the earliest
+                        // boss is seen every tick (RFC/Deadmines): found_idx == done,
+                        // the stamp refreshes, the suppression branch never runs.
+                        const int done_idx =
+                            static_cast<int>(s.raw().dungeon_exec.bosses_done_count);
+                        if (found_idx == done_idx)
+                            ai.set_dungeon_earliest_boss_seen(now_ms);
+                        else if (found_idx > done_idx && boss_target &&
+                                 now_ms - ai.dungeon_earliest_boss_seen_ms() < 10000u)
+                            boss_target = nullptr;
                         if (boss_target)
                         {
-                            const float btx = boss_target->GetPositionX();
-                            const float bty = boss_target->GetPositionY();
-                            const float btz = boss_target->GetPositionZ();
+                            // NAV coordinate vs ENGAGE creature. When the scan is looking
+                            // at the EARLIEST un-killed boss (found_idx == done_idx) both
+                            // are that live boss — behavior unchanged, and the ONLY case
+                            // RFC/Deadmines ever hit (their earliest boss is in scan every
+                            // tick, so the override below never runs and this is
+                            // byte-identical). When a LATER boss stood in because the
+                            // earliest one is caged and out of scan (SFK Baron Ashbury —
+                            // some runs 0 sightings; meanwhile Baron Silverlaine sits in
+                            // the open at crumb 18 and is scanned every tick), navigate to
+                            // the earliest boss's AUTHORED location (progression_waypoints
+                            // [done_idx], realigned 1:1 to the live Cata spawns 2026-07-25)
+                            // so the route cursor bound, the direct steppers AND the
+                            // incremental fallback all steer to the boss we still OWE
+                            // instead of chasing the open later boss and dropping off the
+                            // cell ledge (z73.8). DISABLE engage (null creature) so we
+                            // never pull the stand-in; once the tank closes and the caged
+                            // boss enters scan, found_idx == done_idx restores the live pull.
+                            Creature* engage_target = boss_target;
+                            float btx = boss_target->GetPositionX();
+                            float bty = boss_target->GetPositionY();
+                            float btz = boss_target->GetPositionZ();
+                            if (found_idx != done_idx && done_idx >= 0 && done_idx <
+                                static_cast<int>(advice.progression_waypoints.size()))
+                            {
+                                auto const& wp = advice.progression_waypoints[done_idx];
+                                btx = wp.x; bty = wp.y; btz = wp.z;
+                                engage_target = nullptr;
+                            }
                             adv_have_boss = true;
                             adv_boss_x = btx;
                             adv_boss_y = bty;
@@ -5969,7 +6203,8 @@ bool DungeonDispatch(BotSnapshotView const& s, BotAI& ai,
                             const float bdy = bty - by_adv;
                             const float bdz = btz - bz_adv;
                             const float bd2 = bdx*bdx + bdy*bdy + bdz*bdz;
-                            const bool  in_los = self_be->IsWithinLOSInMap(boss_target);
+                            const bool  in_los =
+                                engage_target && self_be->IsWithinLOSInMap(engage_target);
                             G3D::Vector3 boss_step;
                             bool boss_step_offmesh = false;
                             const bool reachable = DungeonTargetReachableAndStep(
@@ -6047,12 +6282,12 @@ bool DungeonDispatch(BotSnapshotView const& s, BotAI& ai,
                             // before ever pulling the boss (12+ deaths, 0 boss progress).
                             // The all-in pull is the right call for this encounter, so the
                             // tank engages the boss directly below.
-                            if (bd2 <= kBossEngageR2 && in_los)
+                            if (engage_target && bd2 <= kBossEngageR2 && in_los)
                             {
                                 // Pull: stationary boss, chasing can't overshoot.
-                                if (!emit.start_attack(boss_target->GetGUID()))
+                                if (!emit.start_attack(engage_target->GetGUID()))
                                     return false;
-                                ai.note_engage(boss_target->GetGUID(), now_ms);
+                                ai.note_engage(engage_target->GetGUID(), now_ms);
                                 ai.set_last_rule_fired("idle:dungeon_engage_boss");
                                 return true;
                             }
@@ -6176,6 +6411,40 @@ bool DungeonDispatch(BotSnapshotView const& s, BotAI& ai,
                             // helps (no chain, or none forward+reachable yet).
                             if (!advice.route_waypoints.empty())
                             {
+                                // Re-plan the route cursor when a boss is killed. The kill
+                                // jumps route_boss_i forward to the NEXT boss's crumb; the
+                                // monotonic cursor/floor, anchored LOW at the just-killed
+                                // boss, then only crawls forward via the leapfrog scan,
+                                // which on the SFK cell->Silverlaine leg pins the cursor at
+                                // the far crumb 18 (its >15y first path segment is
+                                // mis-flagged an off-mesh jump, so the tank oscillates on a
+                                // descending step to z73.8 and never climbs through the
+                                // Courtyard Door — post-1/6 stall, live 2026-07-25).
+                                // Clearing on the kill re-establishes the cursor at the
+                                // tank's actual nearest crumb and chain-follows up. Keyed by
+                                // bosses_done_count so it fires exactly once per kill; a
+                                // no-op mid-segment (epoch unchanged) → the shipped
+                                // monotonic behavior is untouched between kills.
+                                // Re-plan the committed cursor when a boss is killed (epoch
+                                // change): the objective jumps to the next boss's crumb, and
+                                // the monotonic floor anchored at the just-killed boss would
+                                // otherwise only crawl forward via the leapfrog scan, which
+                                // on the SFK cell->Silverlaine leg pins the cursor at the far
+                                // crumb 18 and drops the tank onto the z73.8 terrace (the
+                                // >15y first path segment is mis-flagged an off-mesh jump).
+                                // Clearing on the kill re-establishes the cursor at the
+                                // tank's actual nearest crumb and chain-follows up through
+                                // the Courtyard Door. Fires exactly once per kill; a no-op
+                                // mid-segment (epoch unchanged), so the shipped monotonic
+                                // forward-commitment behavior between kills is untouched
+                                // (a time-based stall re-plan was tried here and REVERTED —
+                                // it destroyed that forward commitment during RFC's long
+                                // 177y approach to its far 4th boss and froze the tank).
+                                if (ai.dungeon_route_epoch() != done_idx)
+                                {
+                                    ai.clear_dungeon_route_wp();
+                                    ai.set_dungeon_route_epoch(done_idx);
+                                }
                                 // Harbor: short, deliberate steps so the tank never
                                 // out-ranges the tight-cohesion healer between pulls
                                 // (see tight_engage above). Elsewhere the full stride.
@@ -6228,6 +6497,34 @@ bool DungeonDispatch(BotSnapshotView const& s, BotAI& ai,
                                     const float d = std::sqrt(dx*dx + dy*dy + dz*dz);
                                     if (d < route_boss_bd) { route_boss_bd = d; route_boss_i = i; }
                                 }
+                                // NOTE: route_boss_i is already anchored to the un-killed
+                                // boss's authored location by the btx/bty/btz nav-override
+                                // at the top of this boss block (progression_waypoints
+                                // [done_idx] when the caged earliest boss is out of scan),
+                                // so it never climbs to the open later boss's crumb here.
+                                // Clamp the high-water floor DOWN to the current boss's
+                                // chain node. The cursor advance is bounded by boss_i
+                                // (cur+1 <= boss_i below), so the floor can never
+                                // legitimately exceed it — route_lo > route_boss_i means
+                                // boss_i DECREASED: boss_target regressed to an EARLIER /
+                                // nearer boss than the one the floor was built for. Without
+                                // this, the monotonic write-back (route_cur < route_lo ?
+                                // route_lo, below) RE-PINS the stale high crumb every tick:
+                                // the reacquire correctly recomputes a low route_cur but the
+                                // commit clamps it back up, so the in-combat sibling
+                                // (DungeonAdvanceTarget) reads the stale far crumb and
+                                // beelines AWAY from the live boss. Live SFK 2026-07-24, 0/6
+                                // courtyard stall: boss_target flickered Ashbury (crumb 7,
+                                // ground SW) <-> Silverlaine (crumb 18, ground N) as
+                                // Ashbury's grid went inactive on the tank's north-drift;
+                                // Silverlaine ticks climbed the cursor to 18, then it stuck
+                                // at 18 while Ashbury sat un-pulled at crumb 7. Within a
+                                // single boss segment boss_i is fixed and route_lo <= boss_i
+                                // already holds, so this min is a no-op — Deadmines' and
+                                // RFC's forward-only chains are byte-unchanged. The pass-1
+                                // `lo` (below) already clamps this way; this extends the same
+                                // bound to pass 0, the commit, and the arrival-persist.
+                                if (route_lo > route_boss_i) route_lo = route_boss_i;
                                 // PASS 0 (monotonic): within the pre-boss prefix, the
                                 // STRICTLY-reachable waypoint CLOSEST to the boss that is
                                 // ALSO nearer the boss than we are. For a monotonic authored
@@ -6490,11 +6787,13 @@ bool DungeonDispatch(BotSnapshotView const& s, BotAI& ai,
                                             (best_wp_step.z - bz_adv) * (best_wp_step.z - bz_adv));
                                         TC_LOG_INFO("playerbot.v2",
                                             "[route_wp] {} boss={} self=({:.1f},{:.1f},{:.1f}) "
-                                            "step=({:.1f},{:.1f},{:.1f}) step_dist={:.1f} cur={} n_wp={}",
+                                            "step=({:.1f},{:.1f},{:.1f}) step_dist={:.1f} cur={} "
+                                            "lo={} boss_i={} n_wp={}",
                                             s.name(), boss_target->GetEntry(),
                                             bx_adv, by_adv, bz_adv,
                                             best_wp_step.x, best_wp_step.y, best_wp_step.z, sd,
-                                            route_cur, advice.route_waypoints.size());
+                                            route_cur, route_lo, route_boss_i,
+                                            advice.route_waypoints.size());
                                     }
                                     if (DungeonStepAlreadyInFlight(s, best_wp_step.x,
                                                                    best_wp_step.y, best_wp_step.z))
@@ -7035,17 +7334,28 @@ bool DungeonDispatch(BotSnapshotView const& s, BotAI& ai,
                         // the chosen target. Ground bosses spawn-on-approach, so the
                         // earliest reachable live boss is naturally the right one.
                         G3D::Vector3 boss_step;
-                        for (uint32_t bentry : advice.bosses)
+                        int next_boss_idx = -1;
+                        const int done_idx =
+                            static_cast<int>(s.raw().dungeon_exec.bosses_done_count);
+                        for (int bi = 0; bi < static_cast<int>(advice.bosses.size()); ++bi)
                         {
                             for (Creature* c : creatures)
-                                if (c && c->GetEntry() == bentry &&
+                                if (c && c->GetEntry() == advice.bosses[bi] &&
                                     DungeonTargetReachableAndStep(
                                         self,
                                         c->GetPositionX(), c->GetPositionY(), c->GetPositionZ(),
                                         kMaxAdvanceStep, boss_step))
-                                { next_boss = c; break; }
+                                { next_boss = c; next_boss_idx = bi; break; }
                             if (next_boss) break;
                         }
+                        // Same boss-target hysteresis as the primary scan above
+                        // (SFK Ashbury flicker): don't let this destination-walk
+                        // fallback march the tank PAST a recently-seen un-killed
+                        // boss to a later one either. No-op when the earliest boss
+                        // is the reachable one (found_idx == done).
+                        if (next_boss_idx > done_idx && next_boss &&
+                            now_ms - ai.dungeon_earliest_boss_seen_ms() < 10000u)
+                            next_boss = nullptr;
                         diag_boss_cand  = (int)creatures.size();
                         diag_boss_reach = next_boss != nullptr;
                         if (next_boss)

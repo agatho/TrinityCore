@@ -110,6 +110,19 @@ struct DungeonAdvice
     // objects (observed: Glubtok Firewall Platter blocking advance for 90+s).
     std::vector<uint32_t> ignore_entries;
 
+    // GameObject entries (levers / buttons) the tank should OPERATE during
+    // progression to unblock a boss or path — human-like: walk up and pull
+    // the lever. A boss can sit behind a CLOSED door a lever opens (SFK
+    // Baron Ashbury behind Cell Door 18934, opened by Lever 18900, wired by
+    // the lever's OWN SmartGameObjectAI — no instance script). Without this,
+    // bots beeline to the caged boss, get SPELL_FAILED_LINE_OF_SIGHT at
+    // point-blank, and stall 0/N. When the tank is near an un-used entry
+    // here, idle:dungeon_use_gate_lever walks to it and uses it (per-GUID
+    // lockout so the same lever is not toggled shut). Opt-in per dungeon:
+    // empty for every dungeon that has no such gating lever, so this is a
+    // strict no-op everywhere it is not authored.
+    std::vector<uint32_t> use_go_entries;
+
     // Per-dungeon progression waypoints — ordered positions that lead a
     // tank-spec bot through the canonical clear path. The tank-advance
     // rule walks them in sequence; each waypoint is meant to put the
