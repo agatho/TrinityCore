@@ -9059,16 +9059,32 @@ void Unit::SetFlightCapabilityID(int32 flightCapabilityId, bool clientUpdate)
     if (Player* vigorPlayer = ToPlayer())
     {
         constexpr uint32 SPELL_CATEGORY_SKYRIDING_VIGOR = 2391;
+        // 372773 "Dragonrider Energy" is the CasterAuraSpell required to cast every skyriding
+        // ability (Surge Forward, Skyward Ascent, Whirling Surge, Second Wind, Aerial Halt); the
+        // client blocks them with "You can't do that yet" without it. Retail applies it through the
+        // Skyriding mount aura's (406095) linked effect, but that only re-fires when 406095 is
+        // freshly cast - on login-while-mounted UpdateMountCapability sees 406095 already restored
+        // and skips the re-cast, so the (non-persisted) energy aura is missing until a remount.
+        // Engaging the flight capability runs on both the fresh-mount and login paths, so establish
+        // it here directly.
+        constexpr uint32 SPELL_SKYRIDING_ENERGY = 372773;
 
         if (flightCapabilityId)
         {
+            if (!vigorPlayer->HasAura(SPELL_SKYRIDING_ENERGY))
+                vigorPlayer->CastSpell(vigorPlayer, SPELL_SKYRIDING_ENERGY, true);
+
             vigorPlayer->SetMaxPower(POWER_ALTERNATE_MOUNT, vigorPlayer->GetSpellHistory()->GetMaxCharges(SPELL_CATEGORY_SKYRIDING_VIGOR));
             vigorPlayer->UpdateVigor();
         }
-        else if (vigorPlayer->GetMaxPower(POWER_ALTERNATE_MOUNT) > 0)
+        else
         {
-            vigorPlayer->SetPower(POWER_ALTERNATE_MOUNT, 0);
-            vigorPlayer->SetMaxPower(POWER_ALTERNATE_MOUNT, 0);
+            vigorPlayer->RemoveAurasDueToSpell(SPELL_SKYRIDING_ENERGY);
+            if (vigorPlayer->GetMaxPower(POWER_ALTERNATE_MOUNT) > 0)
+            {
+                vigorPlayer->SetPower(POWER_ALTERNATE_MOUNT, 0);
+                vigorPlayer->SetMaxPower(POWER_ALTERNATE_MOUNT, 0);
+            }
         }
     }
 }
