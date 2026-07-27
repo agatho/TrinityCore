@@ -55,6 +55,22 @@ SNAP_ZS     = [0.0, -6.0, 6.0, -20.0, 20.0, -45.0, 45.0]  # vertical offsets
 POLY_CAP    = 74       # the ~292y pathfinder poly cap mmap_probe truncates at
 DENSIFY_PASSES = 6     # densify_chain iterates until stable or this many passes
 
+# Per-map spacing overrides {map_id: (STEP, MAX_GAP)}. The default MAX_GAP (40y)
+# permits gaps the RUNTIME route-follower mis-handles: DungeonTargetReachableAndStep
+# flags ANY smoothed path segment > 15y (kOffMeshJumpYards) as an off-mesh JUMP and
+# commits an uninterruptible "cross" to its far vertex. On Shadowfang Keep's
+# cell->Silverlaine leg that far vertex is the z73.9 lower terrace, so the tank
+# dropped off the courtyard floor and froze in false combat (live 2026-07-25). SFK
+# has NO authored mmap off-mesh link there, so the flag is a pure false positive.
+# Keeping SFK crumb gaps < 15y makes the follower step crumb-to-crumb on the upper
+# floor with no >15y segment (verified: 131 crumbs, worst gap 12.8y, 130/0
+# followable, all 5 bosses reached; tank climbs the Courtyard Door cleanly). Do NOT
+# lower this globally without re-validating every map: some legit corridors need
+# a >14y hop and would fail the write gate (harmless -- keeps the old route -- but
+# noisy). The off-mesh length heuristic itself must NOT be gated off: Deadmines'
+# Gap-1 bridge depends on it (no authored link there either).
+MAP_STEP_OVERRIDE = {33: (12.0, 14.0)}   # Shadowfang Keep
+
 REACHED = ("OK", "FARFROMPOLY_END", "NORMAL")
 WALKABLE = ("SHORT", "PARTIAL", "INCOMPLETE")
 
@@ -747,6 +763,8 @@ def validate_route_gate(mapid, chain, stats, gaps, fok, ffail):
 
 
 def main():
+    global STEP, MAX_GAP
+    _step0, _gap0 = STEP, MAX_GAP     # env/default spacing, restored per non-override map
     args = sys.argv[1:]
     report = "--report" in args
     use_dump = ("--dump" in args) or report
@@ -774,6 +792,9 @@ def main():
         for name, mapid, did, bosses in dungeons:
             if only and mapid not in only:
                 continue
+            # Per-map spacing (tighter for maps whose runtime advance mis-flags a
+            # long path segment as an off-mesh jump -- see MAP_STEP_OVERRIDE).
+            STEP, MAX_GAP = MAP_STEP_OVERRIDE.get(mapid, (_step0, _gap0))
             log = []
             chain, st = gen_chain(name, mapid, did, bosses, log)
             links = load_nav_links(mapid)
