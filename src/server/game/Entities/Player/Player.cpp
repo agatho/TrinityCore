@@ -14506,6 +14506,18 @@ void Player::OnGossipSelect(WorldObject* source, int32 gossipOptionId, uint32 me
             PlayerTalkClass->SendCloseGossip();
             SendRespecWipeConfirm(guid, 0, SPEC_RESET_GLYPHS);
             break;
+        case GossipOptionNpc::GarrisonMissionNpc:
+            // WoD Command Table. Fall through to the !handled branch, which sends the RETAIL trigger
+            // SMSG_GOSSIP_OPTION_NPC_INTERACTION{GossipNpcOptionID=30323}. The client resolves 30323 via
+            // GossipNPCOption.db2 (type GarrisonMissionNpc) and enters PlayerInteractionType::GarrMission(32).
+            // That interaction alone does NOT open the frame — the client fires the legacy
+            // GARRISON_MISSION_NPC_OPENED(1) (-> GarrisonMissionFrame) from its SMSG_DELETE_EXPIRED_MISSIONS_RESULT
+            // handler while interaction 32 is active, gated on Result==0 && wire bit6(LegionUnkBit)==0
+            // (see Garrison::SendDeleteExpiredMissionsResult). (Do NOT send SMSG_NPC_INTERACTION_OPEN_RESULT{32};
+            // that routes into the modern PlayerInteractionManager which has no GarrMission frame and dead-ends.)
+            // Precondition: the gossip_menu_option row must have GossipNpcOptionID = 30323.
+            handled = false;
+            break;
         case GossipOptionNpc::GarrisonTradeskillNpc: // NYI
             break;
         case GossipOptionNpc::GarrisonRecruitment: // NYI

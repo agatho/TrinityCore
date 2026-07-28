@@ -594,6 +594,11 @@ namespace WorldPackets
             void Read() override;
 
             ObjectGuid NpcGUID;
+            // NOTE: the 68275 client appends a trailing uint8 (GarrFollowerTypeID) after the PackedGuid,
+            // producing a harmless "read stop at 14 from 15" tail warning. We intentionally do NOT read it:
+            // the handler ignores the packet entirely, and adding a field here changed the packet object's
+            // size, which — against a stale opcode-table wrapper — placed the field write on the stack GS
+            // cookie and hard-crashed (FAST_FAIL_STACK_COOKIE_CHECK). Leave the field out.
         };
 
         // ============================================================

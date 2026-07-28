@@ -622,6 +622,7 @@ void GarrisonMissionBonusRoll::Read()
 void OpenMissionNpc::Read()
 {
     _worldPacket >> NpcGUID;
+    // Trailing uint8 (GarrFollowerTypeID) is intentionally left unread — see GarrisonPackets.h.
 }
 
 void GarrisonGetMissionReward::Read()

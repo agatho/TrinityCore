@@ -22,8 +22,10 @@
 #include "GameTime.h"
 #include "Garrison.h"
 #include "GarrisonMgr.h"
+#include "GossipDef.h"
 #include "GarrisonPackets.h"
 #include "Group.h"
+#include "NPCPackets.h"
 #include "Log.h"
 #include "ObjectAccessor.h"
 #include "Player.h"
@@ -210,18 +212,22 @@ void WorldSession::HandleOpenMissionNpc(WorldPackets::Garrison::OpenMissionNpc& 
     if (!garrison)
         return;
 
-    // Send expired mission cleanup results for all garrison types
+    // Match the retail WoD open sequence EXACTLY (sniff 66102 + 68275 garrisonlevel2upgrade):
+    // the client already entered the GarrMission interaction from the gossip select
+    // (SMSG_GOSSIP_OPTION_NPC_INTERACTION / GossipNpcOptionID 30323). The ONLY server->client
+    // garrison packet retail sends in response to CMSG_OPEN_MISSION_NPC is
+    // SMSG_DELETE_EXPIRED_MISSIONS_RESULT, immediately followed by SMSG_GOSSIP_COMPLETE.
+    //
+    // We must NOT re-send the offered-mission list here (GenerateAvailableMissions + SendOfferedMissions
+    // + SendMissionStartConditionUpdate). Retail delivers the mission board once at login via
+    // GET_GARRISON_INFO and the frame reads it from cache; the extra ADD_MISSION_RESULT x15 +
+    // MISSION_START_CONDITION_UPDATE burst is a non-retail deviation (it produced the observed
+    // GARRISON_MISSION_LIST_UPDATE flood) and is the prime suspect for the client not firing its
+    // legacy open-event. Keep this handler byte-identical to retail's wire.
     for (auto const& [type, garr] : _player->GetGarrisons())
         garr->SendDeleteExpiredMissionsResult();
 
-    // Remove expired offers (sends GarrisonDeleteMissionResult per expired mission)
-    // and generate new missions (sends GarrisonAddMissionResult per new mission).
-    // Individual targeted packets are sent instead of a full GetGarrisonInfoResult.
-    garrison->RemoveExpiredMissions();
-    garrison->GenerateAvailableMissions();
-
-    // Send mission start condition update
-    garrison->SendMissionStartConditionUpdate();
+    _player->PlayerTalkClass->SendCloseGossip();
 }
 
 // ============================================================
