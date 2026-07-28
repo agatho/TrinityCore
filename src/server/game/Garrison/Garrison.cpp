@@ -267,9 +267,36 @@ bool Garrison::LoadFromDB(PreparedQueryResult garrison, PreparedQueryResult blue
 
             GarrMissionEntry const* missionEntry = sGarrMissionStore.LookupEntry(missionRecID);
             if (missionEntry)
+            {
                 mission.PacketInfo.MissionScalar = missionEntry->AutoMissionScalar;
+                mission.PacketInfo.Flags = missionEntry->Flags;
+
+                // Encounters, Rewards and OvermaxRewards are runtime-only (not stored in
+                // character_garrison_missions), so regenerate them from DB2 on load — otherwise a mission
+                // that was in progress across a restart reloads with an empty Rewards vector and
+                // ClaimMissionReward grants the player nothing. Same source used when the mission is first
+                // offered (AddMission -> PopulateMissionData), so the data is identical.
+                PopulateMissionData(mission, missionEntry);
+            }
 
         } while (missions->NextRow());
+    }
+
+    // Rebuild the mission -> assigned-followers link. CurrentFollowerDBIDs is runtime-only and not
+    // persisted; the authoritative record is each follower's persisted CurrentMissionID (== missionRecID,
+    // set in StartMission). Without this rebuild, a mission that was in progress across a restart reloads
+    // with an empty follower list, so ClaimMissionReward awards no follower XP and never clears
+    // CurrentMissionID — leaving the follower permanently stuck "on a mission". Followers whose mission is
+    // no longer present (already claimed/removed) are orphans and get freed here.
+    for (auto& [followerDbId, follower] : _followers)
+    {
+        if (follower.PacketInfo.CurrentMissionID == 0)
+            continue;
+
+        if (Mission* mission = GetMissionByRecID(follower.PacketInfo.CurrentMissionID))
+            mission->CurrentFollowerDBIDs.push_back(follower.PacketInfo.DbID);
+        else
+            follower.PacketInfo.CurrentMissionID = 0; // orphaned link — the mission is gone, free the follower
     }
 
     // Complete any talent research that finished while offline
@@ -1825,29 +1852,25 @@ GarrisonError Garrison::CompleteMission(uint32 missionRecID)
     if (now < missionEnd)
         return GARRISON_ERROR_MISSION_NOT_COMPLETE;
 
+    // Determine the outcome exactly once, here, and remember it. Both the result shown to the player
+    // (SMSG_GARRISON_COMPLETE_MISSION_RESULT) and the later reward grant (FinalizeMission) read this
+    // stored value, so a "success" banner can never diverge from a "no loot" grant.
+    if (!mission->ResultDetermined)
+    {
+        mission->Succeeded = RollMissionOutcome(*mission, missionRecID);
+        mission->ResultDetermined = true;
+    }
+
     mission->PacketInfo.MissionState = 2; // Completed
     return GARRISON_SUCCESS;
 }
 
-GarrisonError Garrison::ClaimMissionReward(uint32 missionRecID)
+// Rolls a mission's success outcome: auto-combat simulation for adventure missions, otherwise a
+// straight roll against the pre-computed SuccessChance. Pure computation — no state change, no grants.
+bool Garrison::RollMissionOutcome(Mission const& mission, uint32 missionRecID) const
 {
-    Mission* mission = GetMissionByRecID(missionRecID);
-    if (!mission)
-        return GARRISON_ERROR_INVALID_MISSION;
-
-    if (mission->PacketInfo.MissionState != 2 && mission->PacketInfo.MissionState != 3)
-        return GARRISON_ERROR_MISSION_NOT_COMPLETE;
-
-    GarrMissionEntry const* missionEntry = sGarrMissionStore.LookupEntry(missionRecID);
-    if (!missionEntry)
-        return GARRISON_ERROR_INVALID_MISSION;
-
-    // Determine success: use auto-combat simulation for adventure missions,
-    // otherwise roll against calculated success chance
-    bool succeeded = false;
     bool isAutoCombatMission = false;
-
-    for (auto const& encounter : mission->PacketInfo.Encounters)
+    for (auto const& encounter : mission.PacketInfo.Encounters)
     {
         if (encounter.GarrAutoCombatantID != 0)
         {
@@ -1858,10 +1881,9 @@ GarrisonError Garrison::ClaimMissionReward(uint32 missionRecID)
 
     if (isAutoCombatMission)
     {
-        // Build player units from assigned followers
         std::vector<AutoCombatCombatant> playerUnits;
         int8 boardIdx = 0;
-        for (uint64 followerDbId : mission->CurrentFollowerDBIDs)
+        for (uint64 followerDbId : mission.CurrentFollowerDBIDs)
         {
             if (Follower const* follower = GetFollower(followerDbId))
             {
@@ -1875,40 +1897,51 @@ GarrisonError Garrison::ClaimMissionReward(uint32 missionRecID)
             }
         }
 
-        // Build enemy units from mission encounters
         std::vector<AutoCombatCombatant> enemyUnits;
-        for (auto const& encounter : mission->PacketInfo.Encounters)
+        for (auto const& encounter : mission.PacketInfo.Encounters)
         {
             if (encounter.GarrAutoCombatantID == 0)
                 continue;
 
-            GarrAutoCombatantEntry const* combatant =
-                sGarrisonMgr.GetAutoCombatant(encounter.GarrAutoCombatantID);
+            GarrAutoCombatantEntry const* combatant = sGarrisonMgr.GetAutoCombatant(encounter.GarrAutoCombatantID);
             if (!combatant)
                 continue;
 
             enemyUnits.push_back(GarrisonAutoCombat::BuildEnemyCombatant(combatant));
         }
 
-        AutoCombatResult combatResult =
-            GarrisonAutoCombat::SimulateCombat(playerUnits, enemyUnits);
-        succeeded = combatResult.PlayerWon;
-
-        // combatResult.CombatLog is fully populated (rounds + per-target events) but
-        // not serialized into SMSG_GARRISON_COMPLETE_MISSION_RESULT here. The wire
-        // format for the auto-combat transcript (JamGarrisonAutoMissionRoundInfo /
-        // EventInfo / CombatantInfo) is brief Open Q #2 and not yet decoded — the
-        // client likely expects a nested rounds[].events[].combatants[].spell[] tree.
-        // SL Adventures replay UI will not show round-by-round detail until this is
-        // wired; mission outcome (succeeded/failed) is still reported correctly.
-
+        AutoCombatResult combatResult = GarrisonAutoCombat::SimulateCombat(playerUnits, enemyUnits);
         TC_LOG_DEBUG("garrison", "Auto-combat for mission %u: %s in %d rounds",
-            missionRecID, succeeded ? "WON" : "LOST", combatResult.TotalRounds);
+            missionRecID, combatResult.PlayerWon ? "WON" : "LOST", combatResult.TotalRounds);
+        return combatResult.PlayerWon;
     }
-    else
+
+    return static_cast<int32>(urand(0, 99)) < mission.PacketInfo.SuccessChance;
+}
+
+// Grants rewards + follower XP, frees the followers and removes the mission. Called from the opcodes the
+// WoD client actually sends (BONUS_ROLL on success, COMPLETE on failure) — NOT from the never-sent
+// GET_MISSION_REWARD. Uses the outcome stored at CompleteMission; re-rolls once only if the mission was
+// caught mid-completion by a restart (ResultDetermined lost with the runtime state).
+GarrisonError Garrison::FinalizeMission(uint32 missionRecID, bool grantOvermax)
+{
+    Mission* mission = GetMissionByRecID(missionRecID);
+    if (!mission)
+        return GARRISON_ERROR_INVALID_MISSION;
+
+    if (mission->PacketInfo.MissionState != 2 && mission->PacketInfo.MissionState != 3)
+        return GARRISON_ERROR_MISSION_NOT_COMPLETE;
+
+    GarrMissionEntry const* missionEntry = sGarrMissionStore.LookupEntry(missionRecID);
+    if (!missionEntry)
+        return GARRISON_ERROR_INVALID_MISSION;
+
+    if (!mission->ResultDetermined)
     {
-        succeeded = static_cast<int32>(urand(0, 99)) < mission->PacketInfo.SuccessChance;
+        mission->Succeeded = RollMissionOutcome(*mission, missionRecID);
+        mission->ResultDetermined = true;
     }
+    bool succeeded = mission->Succeeded;
 
     // Award follower XP (awarded regardless of success) and handle troop durability
     std::vector<uint64> troopsToRemove;
@@ -1950,8 +1983,12 @@ GarrisonError Garrison::ClaimMissionReward(uint32 missionRecID)
                     levelXP = sGarrisonMgr.GetFollowerLevelXP(followerTypeID, follower->PacketInfo.FollowerLevel);
                 }
 
-                // At max level, excess XP converts to quality (iLvl) progression
-                if (!levelXP || levelXP->XpToNextLevel == 0)
+                // Only a follower at its TRUE terminal level rolls excess XP into quality (iLvl). The DB2
+                // marks that level with XpToNextLevel == 0. A NULL levelXP means we simply have no row for
+                // this (type, level) — treat that as "can't level right now" and KEEP the accumulated XP;
+                // it must never be silently deleted (that zeroed every mission's follower XP when the
+                // GarrFollowerLevelXP row for the follower's level was absent).
+                if (levelXP && levelXP->XpToNextLevel == 0)
                 {
                     GarrFollowerQualityEntry const* qualityEntry = sGarrisonMgr.GetFollowerQuality(followerTypeID, follower->PacketInfo.Quality);
                     while (qualityEntry && qualityEntry->XpThreshold > 0 && follower->PacketInfo.Xp >= static_cast<uint32>(qualityEntry->XpThreshold))
@@ -1970,9 +2007,14 @@ GarrisonError Garrison::ClaimMissionReward(uint32 missionRecID)
                         qualityEntry = sGarrisonMgr.GetFollowerQuality(followerTypeID, follower->PacketInfo.Quality);
                     }
 
-                    // Cap XP at 0 if no further progression is possible
+                    // Fully maxed (top level AND top quality): no bar left to fill.
                     if (!qualityEntry || qualityEntry->XpThreshold == 0)
                         follower->PacketInfo.Xp = 0;
+                }
+                else if (!levelXP)
+                {
+                    TC_LOG_DEBUG("garrison", "No GarrFollowerLevelXP row for type={} level={}; follower {} keeps Xp={} without levelling (DB2 data gap)",
+                        followerTypeID, int32(follower->PacketInfo.FollowerLevel), follower->PacketInfo.DbID, follower->PacketInfo.Xp);
                 }
 
                 // Send follower XP update with old and new state
@@ -2020,8 +2062,8 @@ GarrisonError Garrison::ClaimMissionReward(uint32 missionRecID)
                 _owner->AddCurrency(reward.CurrencyID, reward.CurrencyQuantity, CurrencyGainSource::GarrisonMissionReward);
         }
 
-        // Check if bonus roll was done (state 3) and award overmax rewards
-        if (mission->PacketInfo.MissionState == 3)
+        // Award overmax (bonus-roll chest) rewards only when finalizing via BONUS_ROLL.
+        if (grantOvermax)
         {
             for (auto const& reward : mission->PacketInfo.OvermaxRewards)
             {
@@ -2112,22 +2154,26 @@ GarrisonError Garrison::ClaimMissionReward(uint32 missionRecID)
 
 GarrisonError Garrison::MissionBonusRoll(uint32 missionRecID)
 {
+    // The WoD client sends CMSG_GARRISON_MISSION_BONUS_ROLL when the player opens the reward chest on a
+    // successful mission — the client itself comments this call "-- complete mission". It is the finalize
+    // step: grant base + overmax (chest) rewards + follower XP, free the followers and remove the mission.
+    // (The reward code used to live only in ClaimMissionReward / GET_MISSION_REWARD, an opcode the WoD
+    // client never sends, so completed missions granted nothing and lingered forever.)
     Mission* mission = GetMissionByRecID(missionRecID);
     if (!mission)
         return GARRISON_ERROR_INVALID_MISSION;
 
-    if (mission->PacketInfo.MissionState != 2)
+    if (mission->PacketInfo.MissionState != 2 && mission->PacketInfo.MissionState != 3)
         return GARRISON_ERROR_MISSION_NOT_COMPLETE;
 
-    // The bonus roll uses the same success chance as the mission
-    // If the roll succeeds, the overmax rewards will be given when claiming
-    bool bonusSucceeded = static_cast<int32>(urand(0, 99)) < mission->PacketInfo.SuccessChance;
+    return FinalizeMission(missionRecID, true); // include overmax (chest) rewards
+}
 
-    mission->PacketInfo.MissionState = bonusSucceeded ? 3 : 2;
-    // State 3 = bonus rolled successfully (overmax rewards will be awarded)
-    // Keep state 2 if bonus failed (only base rewards will be awarded on claim)
-
-    return GARRISON_SUCCESS;
+// Legacy CMSG_GARRISON_GET_MISSION_REWARD path. The WoD command table never sends this opcode (it uses
+// COMPLETE + BONUS_ROLL), but keep it wired as a direct finalize for any Legion+/order-hall flow that does.
+GarrisonError Garrison::ClaimMissionReward(uint32 missionRecID)
+{
+    return FinalizeMission(missionRecID, true);
 }
 
 void Garrison::RemoveMission(uint32 missionRecID)

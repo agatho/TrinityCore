@@ -155,11 +155,14 @@ void WorldSession::HandleGarrisonCompleteMission(WorldPackets::Garrison::Garriso
 
     // Re-fetch mission after completion (state may have changed)
     mission = garrison->GetMissionByRecID(garrisonCompleteMission.MissionRecID);
+    bool succeeded = false;
     if (mission)
     {
         completeResult.Mission = mission->PacketInfo;
-        // Determine success based on the success chance roll
-        completeResult.Succeeded = static_cast<int32>(urand(0, 99)) < mission->PacketInfo.SuccessChance;
+        // Report the outcome CompleteMission already rolled and stored — do NOT roll again here, or the
+        // banner the player sees could disagree with the rewards granted at finalize.
+        completeResult.Succeeded = mission->Succeeded;
+        succeeded = mission->Succeeded;
     }
 
     // FollowerInfos / Rounds left empty: no auto-combat replay generated for non-auto
@@ -168,6 +171,12 @@ void WorldSession::HandleGarrisonCompleteMission(WorldPackets::Garrison::Garriso
     // missions don't drive the replay UI so they ship empty arrays here.
 
     SendPacket(completeResult.Write());
+
+    // On FAILURE the WoD client sends no bonus roll (there is no chest to open), so finalize the mission
+    // now: follower XP is still awarded, followers are freed and the mission is removed. On SUCCESS we
+    // wait for CMSG_GARRISON_MISSION_BONUS_ROLL (the chest open) to grant rewards and remove the mission.
+    if (result == GARRISON_SUCCESS && !succeeded)
+        garrison->FinalizeMission(garrisonCompleteMission.MissionRecID, false);
 }
 
 void WorldSession::HandleGarrisonMissionBonusRoll(WorldPackets::Garrison::GarrisonMissionBonusRoll& garrisonMissionBonusRoll)
@@ -176,14 +185,15 @@ void WorldSession::HandleGarrisonMissionBonusRoll(WorldPackets::Garrison::Garris
     if (!garrison)
         return;
 
-    GarrisonError result = garrison->MissionBonusRoll(garrisonMissionBonusRoll.MissionRecID);
-
     WorldPackets::Garrison::GarrisonMissionBonusRollResult bonusResult;
     bonusResult.MissionRecID = garrisonMissionBonusRoll.MissionRecID;
-    bonusResult.Result = result;
 
+    // Snapshot the mission (including its overmax/chest rewards) BEFORE finalizing — MissionBonusRoll grants
+    // the rewards and removes the mission, so the record is gone afterwards and the chest reveal needs it.
     if (Garrison::Mission const* mission = garrison->GetMissionByRecID(garrisonMissionBonusRoll.MissionRecID))
         bonusResult.Mission = mission->PacketInfo;
+
+    bonusResult.Result = garrison->MissionBonusRoll(garrisonMissionBonusRoll.MissionRecID);
 
     SendPacket(bonusResult.Write());
 }

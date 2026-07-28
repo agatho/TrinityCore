@@ -222,6 +222,12 @@ public:
     {
         WorldPackets::Garrison::GarrisonMission PacketInfo;
         std::vector<uint64> CurrentFollowerDBIDs;
+        // Outcome is rolled once at CMSG_GARRISON_COMPLETE_MISSION and reused when the mission is
+        // finalized (CMSG_GARRISON_MISSION_BONUS_ROLL on success / at complete-time on failure), so the
+        // result shown to the player matches the result used to grant rewards. Runtime-only: a mission
+        // caught mid-completion by a restart is re-rolled once at finalize (see FinalizeMission).
+        bool ResultDetermined = false;
+        bool Succeeded = false;
     };
 
     struct Shipment
@@ -333,6 +339,11 @@ public:
     GarrisonError CompleteMission(uint32 missionRecID);
     GarrisonError ClaimMissionReward(uint32 missionRecID);
     GarrisonError MissionBonusRoll(uint32 missionRecID);
+    // Grants rewards (if the stored outcome succeeded) + follower XP (always) + frees followers + removes
+    // the mission. Called from the opcodes the WoD client actually sends: BONUS_ROLL on success, and
+    // COMPLETE on failure (the client sends no bonus roll for a failed mission).
+    GarrisonError FinalizeMission(uint32 missionRecID, bool grantOvermax);
+    bool RollMissionOutcome(Mission const& mission, uint32 missionRecID) const;
     void RemoveMission(uint32 missionRecID);
     void GenerateAvailableMissions();
     uint64 GenerateMissionDbId();
