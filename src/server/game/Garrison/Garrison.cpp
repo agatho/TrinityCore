@@ -2697,8 +2697,10 @@ void Garrison::AddFollowerXP(uint64 dbId, uint32 xp)
         levelXP = sGarrisonMgr.GetFollowerLevelXP(followerTypeID, follower->PacketInfo.FollowerLevel);
     }
 
-    // At max level, excess XP converts to quality progression
-    if (!levelXP || levelXP->XpToNextLevel == 0)
+    // Only a follower at its TRUE terminal level (DB2 row present with XpToNextLevel == 0) rolls excess XP
+    // into quality. A NULL levelXP just means we have no row for this (type, level) — keep the accumulated
+    // XP rather than deleting it. (Mirrors the mission-reward path; see FinalizeMission.)
+    if (levelXP && levelXP->XpToNextLevel == 0)
     {
         GarrFollowerQualityEntry const* qualityEntry = sGarrisonMgr.GetFollowerQuality(followerTypeID, follower->PacketInfo.Quality);
         while (qualityEntry && qualityEntry->XpThreshold > 0 && follower->PacketInfo.Xp >= static_cast<uint32>(qualityEntry->XpThreshold))

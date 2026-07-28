@@ -2471,8 +2471,12 @@ struct GarrFollSupportSpellEntry
 struct GarrFollowerLevelXPEntry
 {
     uint32 ID;
-    int8 FollowerLevel;
-    uint8 GarrFollowerTypeID;
+    // 68275 db2 layout (WoWDBDefs LAYOUT 83953EF8): GarrFollowerTypeID comes BEFORE FollowerLevel.
+    // These were previously declared in the reverse order, so every row loaded with the two bytes
+    // swapped (FollowerLevel held the type value, GarrFollowerTypeID held the level) — GetFollowerLevelXP
+    // then missed for every real (type, level) pair and follower mission XP was silently discarded.
+    int8 GarrFollowerTypeID;
+    uint8 FollowerLevel;
     uint16 XpToNextLevel;
     uint16 ShipmentXP;
 };

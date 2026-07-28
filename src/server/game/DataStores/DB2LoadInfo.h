@@ -3062,8 +3062,8 @@ struct GarrFollowerLevelXPLoadInfo
     static constexpr DB2FieldMeta Fields[5] =
     {
         { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
-        { .IsSigned = true, .Type = FT_BYTE, .Name = "FollowerLevel" },
-        { .IsSigned = false, .Type = FT_BYTE, .Name = "GarrFollowerTypeID" },
+        { .IsSigned = true, .Type = FT_BYTE, .Name = "GarrFollowerTypeID" },
+        { .IsSigned = false, .Type = FT_BYTE, .Name = "FollowerLevel" },
         { .IsSigned = false, .Type = FT_SHORT, .Name = "XpToNextLevel" },
         { .IsSigned = false, .Type = FT_SHORT, .Name = "ShipmentXP" },
     };
