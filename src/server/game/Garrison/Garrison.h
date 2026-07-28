@@ -374,6 +374,13 @@ public:
     void RandomizeFollowerAbilities(uint64 dbId);
     void EndBuildingConstruction(uint32 garrPlotInstanceId);
     void SetGarrisonCacheSize(uint32 size);
+
+    // Garrison resource cache: the WoD cache GameObject accrues Garrison Resources (currency 824) over
+    // time (1 per CACHE_RESOURCE_INTERVAL, up to _garrisonCacheSize) and is collected when the player
+    // clicks it. GetPendingCacheResources reports what is currently banked; CollectGarrisonCache grants
+    // it, advancing the timer by the whole intervals consumed so sub-interval progress is not lost.
+    uint32 GetPendingCacheResources() const;
+    uint32 CollectGarrisonCache();
     Follower* GetFollowerByGarrFollowerID(uint32 garrFollowerID);
     GarrisonError UpgradeFollowerItemLevel(uint64 dbId, int32 amount, int32 slot, GarrItemLevelUpgradeDataEntry const* upgradeData = nullptr);
 
@@ -426,7 +433,10 @@ private:
     uint32 _followerActivationsRemainingToday;
     uint32 _updateTimer = 0;
     uint32 _garrisonCacheSize = 500;
+    time_t _cacheLastUsed = 0; // last time the resource cache was collected (advances by whole intervals)
     static constexpr uint32 GARRISON_UPDATE_INTERVAL = 60000; // 60 seconds
+    static constexpr uint32 CACHE_RESOURCE_INTERVAL = 600;    // WoD rate: 1 Garrison Resource per 10 minutes
+    static constexpr uint32 CURRENCY_GARRISON_RESOURCES = 824;
 
     std::unordered_map<uint32 /*garrPlotInstanceId*/, Plot> _plots;
     std::unordered_set<uint32 /*garrBuildingId*/> _knownBuildings;

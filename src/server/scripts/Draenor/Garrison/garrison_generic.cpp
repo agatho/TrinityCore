@@ -17,6 +17,9 @@
 
 #include "AreaTrigger.h"
 #include "AreaTriggerAI.h"
+#include "Chat.h"
+#include "GameObject.h"
+#include "GameObjectAI.h"
 #include "Garrison.h"
 #include "Map.h"
 #include "Player.h"
@@ -71,9 +74,32 @@ struct at_garrison_exit : AreaTriggerAI
     }
 };
 
+// Garrison resource cache: the WoD cache GameObject (types "Garrison Cache" / "Hefty" / "Full") accrues
+// Garrison Resources over time. Clicking it collects whatever has banked (Garrison::CollectGarrisonCache);
+// the currency toast is the player's confirmation, plus a short message with the exact amount.
+struct go_garrison_cache : GameObjectAI
+{
+    go_garrison_cache(GameObject* go) : GameObjectAI(go) { }
+
+    bool OnGossipHello(Player* player) override
+    {
+        Garrison* garrison = player->GetGarrison();
+        if (!garrison || garrison->GetType() != GARRISON_TYPE_GARRISON)
+            return false;
+
+        if (uint32 collected = garrison->CollectGarrisonCache())
+            ChatHandler(player->GetSession()).PSendSysMessage("You collect {} Garrison Resources from the cache.", collected);
+
+        return true; // the cache is fully handled here — suppress the default goober behaviour
+    }
+};
+
 void AddSC_garrison_generic()
 {
     // AreaTrigger
     RegisterAreaTriggerAI(at_garrison_enter);
     RegisterAreaTriggerAI(at_garrison_exit);
+
+    // GameObject
+    RegisterGameObjectAI(go_garrison_cache);
 }

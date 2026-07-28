@@ -55,6 +55,11 @@ bool Garrison::LoadFromDB(PreparedQueryResult garrison, PreparedQueryResult blue
     _garrType = static_cast<GarrisonType>(fields[2].GetUInt32());
     _missionsStartedToday = fields[3].GetUInt32();
     _lastMissionStartDay = fields[4].GetUInt32();
+    _cacheLastUsed = fields[5].GetInt64();
+    // Legacy rows (created before the cache was persisted) have 0 here; start their timer now so the
+    // resource cache begins accruing from this login rather than paying out for all of history at once.
+    if (!_cacheLastUsed)
+        _cacheLastUsed = GameTime::GetGameTime();
     if (!_siteLevel)
         return false;
 
@@ -316,6 +321,7 @@ void Garrison::SaveToDB(CharacterDatabaseTransaction trans)
     stmt->setUInt32(3, static_cast<uint32>(_garrType));
     stmt->setUInt32(4, _missionsStartedToday);
     stmt->setUInt32(5, _lastMissionStartDay);
+    stmt->setInt64(6, _cacheLastUsed);
     trans->Append(stmt);
 
     for (uint32 building : _knownBuildings)
@@ -522,6 +528,7 @@ bool Garrison::Create(uint32 garrSiteId)
 
     _siteLevel = siteLevel;
     _garrType = GetGarrisonTypeFromSiteId(garrSiteId);
+    _cacheLastUsed = GameTime::GetGameTime(); // start the resource cache accruing from creation
 
     InitializePlots();
 
@@ -2789,6 +2796,33 @@ void Garrison::EndBuildingConstruction(uint32 garrPlotInstanceId)
 void Garrison::SetGarrisonCacheSize(uint32 size)
 {
     _garrisonCacheSize = size;
+}
+
+uint32 Garrison::GetPendingCacheResources() const
+{
+    if (!_cacheLastUsed)
+        return 0;
+
+    time_t now = GameTime::GetGameTime();
+    if (now <= _cacheLastUsed)
+        return 0;
+
+    uint32 accrued = static_cast<uint32>((now - _cacheLastUsed) / CACHE_RESOURCE_INTERVAL);
+    return std::min(accrued, _garrisonCacheSize);
+}
+
+uint32 Garrison::CollectGarrisonCache()
+{
+    uint32 amount = GetPendingCacheResources();
+    if (!amount)
+        return 0;
+
+    // Advance the timer by the whole intervals we are paying out, so the sub-interval remainder keeps
+    // accruing toward the next resource instead of being discarded.
+    _cacheLastUsed += time_t(amount) * CACHE_RESOURCE_INTERVAL;
+
+    _owner->AddCurrency(CURRENCY_GARRISON_RESOURCES, amount, CurrencyGainSource::GarrisonResourceOverTime);
+    return amount;
 }
 
 Garrison::Follower* Garrison::GetFollowerByGarrFollowerID(uint32 garrFollowerID)
