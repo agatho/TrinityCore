@@ -459,6 +459,7 @@ private:
 
     // Shipments
     std::unordered_map<uint64 /*dbId*/, Shipment> _shipments;
+    bool _startupShipmentsProcessed = false;
     std::unordered_map<uint32 /*garrTalentID*/, Talent> _talents;
 
     // Trophies

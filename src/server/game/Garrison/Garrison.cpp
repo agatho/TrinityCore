@@ -641,6 +641,21 @@ void Garrison::Update(uint32 diff)
 
     _updateTimer -= GARRISON_UPDATE_INTERVAL;
 
+    // On the first update after the player is in the world, sweep up any work orders that finished
+    // while offline (or before the crate could be used) so their goods are delivered instead of the
+    // order sitting forever, blocking further placement. Live orders that finish during play are still
+    // collected by interacting with the crate (CollectReadyShipments / HandleOpenShipmentNpc).
+    if (!_startupShipmentsProcessed)
+    {
+        _startupShipmentsProcessed = true;
+        std::vector<uint64> readyOnLogin;
+        for (auto const& p : _shipments)
+            if (p.second.IsReady())
+                readyOnLogin.push_back(p.first);
+        for (uint64 dbId : readyOnLogin)
+            CompleteShipment(dbId);
+    }
+
     // Complete building constructions that have finished
     for (auto& [plotInstanceId, plot] : _plots)
     {
@@ -650,10 +665,6 @@ void Garrison::Update(uint32 diff)
                 ActivateBuilding(plotInstanceId);
         }
     }
-
-    // Work orders are NOT auto-collected. Once their timer elapses they remain in _shipments as
-    // "ready" (the client shows this from creationTime+duration) until the player collects them by
-    // interacting with the building's work-order crate (see CollectReadyShipments / HandleOpenShipmentNpc).
 
     // Complete talent research that has finished
     CompleteAllTalentResearch();
@@ -3274,6 +3285,14 @@ GarrisonError Garrison::CreateShipment(ObjectGuid npcGUID, uint32 count)
         CharacterDatabase.Execute(stmt);
 
         ++existingCount;
+
+        // Advance the tutorial quest on placement by crediting its "Work Order Started" creature.
+        // NOTE: do NOT cast the shipment spell here - that spell CREATES the output item (it is the
+        // craft), so casting it on placement instantly completed the order. The order must instead
+        // mature over its timer and yield the good on collection.
+        // TODO: generalise the per-profession "work order started" credit creature (data-driven).
+        if (container->ID == 50 || container->ID == 63) // Leatherworking work-order container (Alliance / Horde)
+            _owner->KilledMonsterCredit(86112);         // quest 36642 "Leatherworking Work Order Started"
 
         WorldPackets::Garrison::CreateShipmentResponse response;
         response.ShipmentID = shipment.DbID;
