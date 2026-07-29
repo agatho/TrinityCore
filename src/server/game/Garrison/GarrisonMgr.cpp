@@ -521,13 +521,22 @@ bool GarrisonMgr::DoesAbilityCounterMechanic(GarrAbilityEntry const* ability, Ga
         && ability->GarrAbilityCategoryID != 0;
 }
 
-CharShipmentContainerEntry const* GarrisonMgr::GetShipmentContainerForBuilding(uint8 garrBuildingType) const
+CharShipmentContainerEntry const* GarrisonMgr::GetShipmentContainerForBuilding(uint8 garrBuildingType, uint8 factionIndex) const
 {
     auto itr = _shipmentContainersByBuildingType.find(garrBuildingType);
-    if (itr != _shipmentContainersByBuildingType.end())
-        return itr->second;
+    if (itr == _shipmentContainersByBuildingType.end())
+        return nullptr;
 
-    return nullptr;
+    CharShipmentContainerEntry const* container = itr->second;
+    // WoD shipment containers come in an Alliance/Horde pair (CharShipmentContainer.Faction, CrossFactionID).
+    // The by-building-type index keeps only one of the pair, so pick the one matching the garrison's faction —
+    // sending the wrong-faction container crashes the client when it opens the work-order UI. Faction: 0=Horde,
+    // 1=Alliance, matching GarrisonFactionIndex.
+    if (container->Faction != int8(factionIndex) && container->CrossFactionID)
+        if (CharShipmentContainerEntry const* cross = sCharShipmentContainerStore.LookupEntry(container->CrossFactionID))
+            container = cross;
+
+    return container;
 }
 
 std::vector<CharShipmentEntry const*> const* GarrisonMgr::GetShipmentsForContainer(uint32 containerID) const

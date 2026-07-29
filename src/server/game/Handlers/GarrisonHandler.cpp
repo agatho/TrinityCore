@@ -637,9 +637,13 @@ void WorldSession::HandleOpenShipmentNpc(WorldPackets::Garrison::OpenShipmentNpc
     if (!building)
         return;
 
-    CharShipmentContainerEntry const* container = sGarrisonMgr.GetShipmentContainerForBuilding(building->BuildingType);
+    CharShipmentContainerEntry const* container = sGarrisonMgr.GetShipmentContainerForBuilding(building->BuildingType, uint8(garrison->GetFaction()));
     if (!container)
         return;
+
+    // Interacting with the work-order crate collects any finished orders on this plot (yielding their
+    // produced goods) before the crafter UI opens, matching the retail "loot the crate" behaviour.
+    garrison->CollectReadyShipments(plotInstanceId);
 
     WorldPackets::Garrison::OpenShipmentNpcResult result;
     result.NpcGUID = openShipmentNpc.NpcGUID;

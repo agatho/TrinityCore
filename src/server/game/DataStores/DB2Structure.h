@@ -777,13 +777,16 @@ struct CharacterLoadoutItemEntry
 
 struct CharShipmentEntry
 {
+    // Field order matches the 12.0.7 client db2 layout 0x91BEA68A (WoWDBDefs CharShipment.dbd).
+    // The previous order swapped DummyItemID/TreasureID and placed Duration before SpellID, so the
+    // loader read the SpellID column into Duration (e.g. 172858 instead of the real 14400).
     uint32 ID;
     uint16 ContainerID;
-    int32 TreasureID;
     uint32 DummyItemID;
-    int32 Duration;
+    uint32 TreasureID;
     int32 SpellID;
     uint32 OnCompleteSpellID;
+    int32 Duration;
     uint8 MaxShipments;
     uint16 GarrFollowerID;
     int32 Flags;

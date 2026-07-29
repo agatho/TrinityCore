@@ -391,7 +391,7 @@ public:
     // Shipments (work orders)
     GarrisonError CreateShipment(ObjectGuid npcGUID, uint32 count);
     void CompleteShipment(uint64 dbId);
-    void CompleteReadyShipments();
+    void CollectReadyShipments(uint32 plotInstanceId);
     std::vector<Shipment const*> GetShipmentsForPlot(uint32 plotInstanceId) const;
     std::vector<Shipment const*> GetAllShipments() const;
     void SendShipmentInfo(ObjectGuid npcGUID);

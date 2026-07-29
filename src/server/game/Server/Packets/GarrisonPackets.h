@@ -1589,6 +1589,7 @@ namespace WorldPackets
             int32 ShipmentRecID = 0;
             uint64 ShipmentID = 0;
             uint64 AssignedFollowerDBID = 0;
+            uint32 ContainerID = 0;   // sniff-decoded: sits between AssignedFollowerDBID and CreationTime
             Timestamp<> CreationTime;
             int32 ShipmentDuration = 0;
             int32 BuildingTypeID = 0;
@@ -1633,10 +1634,11 @@ namespace WorldPackets
         class OpenShipmentNpcResult final : public ServerPacket
         {
         public:
-            explicit OpenShipmentNpcResult() : ServerPacket(SMSG_OPEN_SHIPMENT_NPC_RESULT, 16 + 4) { }
+            explicit OpenShipmentNpcResult() : ServerPacket(SMSG_OPEN_SHIPMENT_NPC_RESULT, 1 + 16 + 4) { }
 
             WorldPacket const* Write() override;
 
+            bool Success = true;   // leading bit — sniff-verified (0x80): without it the client misaligns the guid read and crashes
             ObjectGuid NpcGUID;
             uint32 CharShipmentContainerID = 0;
         };

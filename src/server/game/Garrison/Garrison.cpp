@@ -34,6 +34,8 @@
 #include "PhasingHandler.h"
 #include "Player.h"
 #include "Random.h"
+#include "SpellInfo.h"
+#include "SpellMgr.h"
 #include "VehicleDefines.h"
 #include "advstd.h"
 
@@ -649,8 +651,9 @@ void Garrison::Update(uint32 diff)
         }
     }
 
-    // Complete shipments that have finished their timers
-    CompleteReadyShipments();
+    // Work orders are NOT auto-collected. Once their timer elapses they remain in _shipments as
+    // "ready" (the client shows this from creationTime+duration) until the player collects them by
+    // interacting with the building's work-order crate (see CollectReadyShipments / HandleOpenShipmentNpc).
 
     // Complete talent research that has finished
     CompleteAllTalentResearch();
@@ -3163,7 +3166,7 @@ GarrisonError Garrison::CreateShipment(ObjectGuid npcGUID, uint32 count)
     if (!building)
         return GARRISON_ERROR_NO_BUILDING;
 
-    CharShipmentContainerEntry const* container = sGarrisonMgr.GetShipmentContainerForBuilding(building->BuildingType);
+    CharShipmentContainerEntry const* container = sGarrisonMgr.GetShipmentContainerForBuilding(building->BuildingType, uint8(GetFaction()));
     if (!container)
         return GARRISON_ERROR_INTERNAL_ERROR;
 
@@ -3184,17 +3187,66 @@ GarrisonError Garrison::CreateShipment(ObjectGuid npcGUID, uint32 count)
     if (shipmentEntry->MaxShipments > 0)
         maxShipments = std::min(maxShipments, static_cast<uint32>(shipmentEntry->MaxShipments));
 
+    // A work order's cost is the reagents/currencies of its spell (CharShipment.SpellID) - exactly what
+    // the client shows in the work-order UI. TC's db2 loader decodes the SpellReagents pallet-array into
+    // SpellInfo, so we validate/consume precisely that data; no hardcoded items or amounts.
+    SpellInfo const* costSpell = shipmentEntry->SpellID > 0 ? sSpellMgr->GetSpellInfo(uint32(shipmentEntry->SpellID), DIFFICULTY_NONE) : nullptr;
+
+    auto canAfford = [&]() -> bool
+    {
+        if (!costSpell)
+            return true;
+        for (std::size_t r = 0; r < costSpell->Reagent.size(); ++r)
+            if (costSpell->Reagent[r] > 0 && costSpell->ReagentCount[r] > 0
+                && !_owner->HasItemCount(uint32(costSpell->Reagent[r]), uint32(costSpell->ReagentCount[r])))
+                return false;
+        for (SpellReagentsCurrencyEntry const* rc : costSpell->ReagentsCurrency)
+            if (rc->CurrencyCount > 0 && !_owner->HasCurrency(uint32(rc->CurrencyTypesID), uint32(rc->CurrencyCount)))
+                return false;
+        return true;
+    };
+
     for (uint32 i = 0; i < count; ++i)
     {
         if (existingCount >= maxShipments)
             break;
 
+        // Validate this order's cost up front; stop the batch cleanly once the player can no longer pay.
+        if (!canAfford())
+        {
+            WorldPackets::Garrison::CreateShipmentResponse fail;
+            fail.ShipmentID = 0;
+            fail.ShipmentRecID = shipmentEntry->ID;
+            fail.Result = GARRISON_ERROR_NOT_ENOUGH_CURRENCY;
+            _owner->SendDirectMessage(fail.Write());
+            break;
+        }
+
+        // Consume the cost (items + currencies) for this order.
+        if (costSpell)
+        {
+            for (std::size_t r = 0; r < costSpell->Reagent.size(); ++r)
+                if (costSpell->Reagent[r] > 0 && costSpell->ReagentCount[r] > 0)
+                    _owner->DestroyItemCount(uint32(costSpell->Reagent[r]), uint32(costSpell->ReagentCount[r]), true);
+            for (SpellReagentsCurrencyEntry const* rc : costSpell->ReagentsCurrency)
+                if (rc->CurrencyCount > 0)
+                    _owner->RemoveCurrency(uint32(rc->CurrencyTypesID), rc->CurrencyCount, CurrencyDestroyReason::Garrison);
+        }
+
         uint64 dbId = sGarrisonMgr.GenerateShipmentDbId();
+
+        // Work orders queue: a new order begins working when the latest in-progress order on this plot
+        // finishes (retail behaviour, matches FirestormWoD). CreationTime = start-of-work, not request time.
+        time_t startTime = GameTime::GetGameTime();
+        for (auto const& p : _shipments)
+            if (p.second.PlotInstanceID == plotInstanceId)
+                startTime = std::max<time_t>(startTime, p.second.CreationTime + p.second.Duration);
+
         Shipment& shipment = _shipments[dbId];
         shipment.DbID = dbId;
         shipment.ShipmentRecID = shipmentEntry->ID;
         shipment.PlotInstanceID = plotInstanceId;
-        shipment.CreationTime = GameTime::GetGameTime();
+        shipment.CreationTime = startTime;
         shipment.Duration = shipmentEntry->Duration;
         shipment.AssignedFollowerDBID = 0;
 
@@ -3207,6 +3259,19 @@ GarrisonError Garrison::CreateShipment(ObjectGuid npcGUID, uint32 count)
                 break;
             }
         }
+
+        // Persist immediately - a placed work order is a committed player action (materials were just
+        // consumed) and must survive a crash, not wait for the periodic character save.
+        CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_INS_CHARACTER_GARRISON_SHIPMENTS);
+        uint8 index = 0;
+        stmt->setUInt64(index++, shipment.DbID);
+        stmt->setUInt64(index++, _owner->GetGUID().GetCounter());
+        stmt->setUInt32(index++, shipment.ShipmentRecID);
+        stmt->setUInt32(index++, shipment.PlotInstanceID);
+        stmt->setInt64(index++, shipment.CreationTime);
+        stmt->setInt32(index++, shipment.Duration);
+        stmt->setUInt64(index++, shipment.AssignedFollowerDBID);
+        CharacterDatabase.Execute(stmt);
 
         ++existingCount;
 
@@ -3228,10 +3293,37 @@ void Garrison::CompleteShipment(uint64 dbId)
 
     Shipment& shipment = itr->second;
 
-    // Cast completion spell if defined
     CharShipmentEntry const* shipmentEntry = sCharShipmentStore.LookupEntry(shipment.ShipmentRecID);
-    if (shipmentEntry && shipmentEntry->OnCompleteSpellID)
-        _owner->CastSpell(_owner, shipmentEntry->OnCompleteSpellID, true);
+    if (shipmentEntry)
+    {
+        // Follower/buff shipments deliver their reward via a completion spell.
+        if (shipmentEntry->OnCompleteSpellID)
+            _owner->CastSpell(_owner, shipmentEntry->OnCompleteSpellID, true);
+
+        // Profession buildings yield a produced good: DummyItemID is the output item the work order
+        // creates (e.g. the Tannery yields Burnished Leather). Deliver to bags, mailing any overflow.
+        if (shipmentEntry->DummyItemID)
+        {
+            uint32 const itemId = shipmentEntry->DummyItemID;
+            uint32 const quantity = 1;
+            ItemPosCountVec dest;
+            if (_owner->CanStoreNewItem(NULL_BAG, NULL_SLOT, dest, itemId, quantity) == EQUIP_ERR_OK)
+            {
+                if (Item* item = _owner->StoreNewItem(dest, itemId, true))
+                    _owner->SendNewItem(item, quantity, true, false);
+            }
+            else
+            {
+                MailDraft draft("Garrison Work Order", "The goods produced by your completed work order.");
+                if (Item* item = Item::CreateItem(itemId, quantity, ItemContext::NONE, _owner))
+                {
+                    item->SaveToDB(CharacterDatabaseTransaction(nullptr));
+                    draft.AddItem(item);
+                    draft.SendMailTo(CharacterDatabaseTransaction(nullptr), MailReceiver(_owner), MailSender(MAIL_CREATURE, 0));
+                }
+            }
+        }
+    }
 
     WorldPackets::Garrison::CompleteShipmentResponse response;
     response.ShipmentID = dbId;
@@ -3239,13 +3331,20 @@ void Garrison::CompleteShipment(uint64 dbId)
     _owner->SendDirectMessage(response.Write());
 
     _shipments.erase(itr);
+
+    // Remove the persisted row immediately so a crash can't resurrect an already-collected order.
+    CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_DEL_CHARACTER_GARRISON_SHIPMENT);
+    stmt->setUInt64(0, dbId);
+    CharacterDatabase.Execute(stmt);
 }
 
-void Garrison::CompleteReadyShipments()
+void Garrison::CollectReadyShipments(uint32 plotInstanceId)
 {
+    // Collect (complete) every finished work order on this plot - triggered when the player interacts
+    // with the building's work-order crate. Each completed order yields its produced good.
     std::vector<uint64> readyShipments;
     for (auto const& p : _shipments)
-        if (p.second.IsReady())
+        if (p.second.PlotInstanceID == plotInstanceId && p.second.IsReady())
             readyShipments.push_back(p.first);
 
     for (uint64 dbId : readyShipments)
@@ -3323,7 +3422,7 @@ void Garrison::SendShipmentInfo(ObjectGuid npcGUID)
         return;
     }
 
-    CharShipmentContainerEntry const* container = sGarrisonMgr.GetShipmentContainerForBuilding(building->BuildingType);
+    CharShipmentContainerEntry const* container = sGarrisonMgr.GetShipmentContainerForBuilding(building->BuildingType, uint8(GetFaction()));
     if (!container)
     {
         _owner->SendDirectMessage(response.Write());
@@ -3337,8 +3436,12 @@ void Garrison::SendShipmentInfo(ObjectGuid npcGUID)
         return;
     }
 
+    // ShipmentID is a CharShipment.db2 id (the work-order recipe), NOT the container id — the client looks
+    // it up to load reagents/output, so an invalid value (the container id) null-derefs and crashes it
+    // (sniff-verified: retail sends the CharShipment whose ContainerID == this container).
+    CharShipmentEntry const* recipe = shipmentEntries->front();
     response.Success = true;
-    response.ShipmentID = container->ID;
+    response.ShipmentID = recipe->ID;
     response.MaxShipments = container->BaseCapacity;
     response.PlotInstanceID = plotInstanceId;
 
@@ -3373,7 +3476,10 @@ void Garrison::SendLandingPageShipments()
         packetShipment.AssignedFollowerDBID = shipment.AssignedFollowerDBID;
         packetShipment.CreationTime = shipment.CreationTime;
         packetShipment.ShipmentDuration = shipment.Duration;
-        packetShipment.BuildingTypeID = GetBuildingTypeForPlot(shipment.PlotInstanceID);
+        uint8 buildingType = GetBuildingTypeForPlot(shipment.PlotInstanceID);
+        packetShipment.BuildingTypeID = buildingType;
+        if (CharShipmentContainerEntry const* container = sGarrisonMgr.GetShipmentContainerForBuilding(buildingType, uint8(GetFaction())))
+            packetShipment.ContainerID = container->ID;
         packetShipment.GarrTypeID = static_cast<uint8>(GetType());
     }
 

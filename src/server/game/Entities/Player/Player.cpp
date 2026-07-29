@@ -14518,6 +14518,16 @@ void Player::OnGossipSelect(WorldObject* source, int32 gossipOptionId, uint32 me
             // Precondition: the gossip_menu_option row must have GossipNpcOptionID = 30323.
             handled = false;
             break;
+        case GossipOptionNpc::ShipmentCrafter:
+            // WoD work-order NPC (e.g. the Tannery's "Work Orders" clerk). Retail 12.0.7 flow (sniff-verified):
+            // selecting this option -> SMSG_GOSSIP_OPTION_NPC_INTERACTION{GossipNpcOptionID} establishes
+            // PlayerInteractionType::ShipmentCrafter -> the client then sends CMSG_GARRISON_OPEN_SHIPMENT_NPC
+            // (HandleOpenShipmentNpc), which resolves the NPC's building and returns its shipment container ->
+            // client opens GarrisonCapacitiveDisplayFrame. So just fall through to the !handled interaction
+            // path (identical to GarrisonMissionNpc). The gossip_menu_option MUST carry a real ShipmentCrafter
+            // GossipNpcOptionID (a NULL one crashes the client, ERROR #132).
+            handled = false;
+            break;
         case GossipOptionNpc::GarrisonTradeskillNpc: // NYI
             break;
         case GossipOptionNpc::GarrisonRecruitment: // NYI

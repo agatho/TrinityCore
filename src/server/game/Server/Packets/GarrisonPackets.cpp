@@ -1385,6 +1385,8 @@ void OpenShipmentNpc::Read()
 
 WorldPacket const* OpenShipmentNpcResult::Write()
 {
+    _worldPacket.WriteBit(Success);
+    _worldPacket.FlushBits();
     _worldPacket << NpcGUID;
     _worldPacket << uint32(CharShipmentContainerID);
 
@@ -1412,13 +1414,18 @@ WorldPacket const* GetLandingPageShipmentsResponse::Write()
     _worldPacket << uint32(Shipments.size());
     for (CharacterShipment const& shipment : Shipments)
     {
-        _worldPacket << int32(shipment.ShipmentRecID);
+        // Wire layout decoded from the 12.0.7 client binary (per-shipment reader RVA 0x6BCE20 reads
+        // exactly u32, u64, u64, u64, u64, u8 = 37 bytes). The client's C_Garrison.GetLandingPageShipmentInfo
+        // builds creationTime from field D's low dword ORed with field E's HIGH dword, so ANY non-zero value
+        // in field E's high 32 bits corrupts the cooldown (SetCooldownUNIX out of range). There is NO
+        // separate duration on the wire - the landing page reads duration from the client's CharShipment.db2.
+        // Field E is therefore BuildingType as a full u64 (high dword must be zero):
+        //   RecID(u32) ShipmentID(u64) AssignedFollowerDBID(u64) CreationTime(i64) BuildingType(u64) GarrType(u8)
+        _worldPacket << uint32(shipment.ShipmentRecID);
         _worldPacket << uint64(shipment.ShipmentID);
         _worldPacket << uint64(shipment.AssignedFollowerDBID);
         _worldPacket << shipment.CreationTime;
-        _worldPacket << int32(shipment.ShipmentDuration);
-        _worldPacket << int32(shipment.BuildingTypeID);
-        _worldPacket << int32(shipment.UnkInt32);
+        _worldPacket << uint64(uint32(shipment.BuildingTypeID));
         _worldPacket << uint8(shipment.GarrTypeID);
     }
 
