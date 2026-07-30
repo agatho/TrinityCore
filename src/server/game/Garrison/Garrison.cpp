@@ -3261,14 +3261,12 @@ GarrisonError Garrison::CreateShipment(ObjectGuid npcGUID, uint32 count)
             regularEntry = s;
     }
 
-    CharShipmentEntry const* shipmentEntry = regularEntry ? regularEntry : shipmentEntries->front();
+    // Is an intro "Your First X Work Order" quest active whose ITEM objective is this container's quest
+    // shipment output? (Player::HasQuestForItem only matches legacy Quest::RequiredItemId, NOT modern
+    // quest_objectives - the tutorial quests use an ITEM objective - so scan the quest log directly.)
+    bool tutorialActive = false;
     if (questEntry && questEntry->DummyItemID)
     {
-        // Use the quest shipment while a tutorial quest with this shipment's item as an objective is active.
-        // NOTE: Player::HasQuestForItem only matches legacy Quest::RequiredItemId, NOT modern quest_objectives
-        // (the "Your First X Work Order" quests use an ITEM objective), so it returns false here - scan the
-        // quest log for an active quest whose ITEM objective == the quest shipment's DummyItemID instead.
-        bool tutorialActive = false;
         for (uint16 questSlot = 0; questSlot < MAX_QUEST_LOG_SIZE && !tutorialActive; ++questSlot)
         {
             uint32 questId = _owner->GetQuestSlotQuestId(questSlot);
@@ -3286,8 +3284,10 @@ GarrisonError Garrison::CreateShipment(ObjectGuid npcGUID, uint32 count)
                     break;
                 }
         }
+    }
 
-        bool questOrderQueued = false;
+    bool questOrderQueued = false;
+    if (questEntry)
         for (auto const& p : _shipments)
             if (p.second.PlotInstanceID == plotInstanceId && p.second.ShipmentRecID == questEntry->ID)
             {
@@ -3295,46 +3295,47 @@ GarrisonError Garrison::CreateShipment(ObjectGuid npcGUID, uint32 count)
                 break;
             }
 
-        if (tutorialActive && !questOrderQueued)
-            shipmentEntry = questEntry;
-    }
-
     // Count existing shipments for this plot
     uint32 existingCount = 0;
     for (auto const& p : _shipments)
         if (p.second.PlotInstanceID == plotInstanceId)
             ++existingCount;
 
-    uint32 maxShipments = container->BaseCapacity;
-    if (shipmentEntry->MaxShipments > 0)
-        maxShipments = std::min(maxShipments, static_cast<uint32>(shipmentEntry->MaxShipments));
-
-    // A work order's cost is the reagents/currencies of its spell (CharShipment.SpellID) - exactly what
-    // the client shows in the work-order UI. TC's db2 loader decodes the SpellReagents pallet-array into
-    // SpellInfo, so we validate/consume precisely that data; no hardcoded items or amounts.
-    SpellInfo const* costSpell = shipmentEntry->SpellID > 0 ? sSpellMgr->GetSpellInfo(uint32(shipmentEntry->SpellID), DIFFICULTY_NONE) : nullptr;
-
-    auto canAfford = [&]() -> bool
-    {
-        if (!costSpell)
-            return true;
-        for (std::size_t r = 0; r < costSpell->Reagent.size(); ++r)
-            if (costSpell->Reagent[r] > 0 && costSpell->ReagentCount[r] > 0
-                && !_owner->HasItemCount(uint32(costSpell->Reagent[r]), uint32(costSpell->ReagentCount[r])))
-                return false;
-        for (SpellReagentsCurrencyEntry const* rc : costSpell->ReagentsCurrency)
-            if (rc->CurrencyCount > 0 && !_owner->HasCurrency(uint32(rc->CurrencyTypesID), uint32(rc->CurrencyCount)))
-                return false;
-        return true;
-    };
+    // Queue capacity is the BUILDING's ShipmentCapacity (scales with level, e.g. 7/14/21) - NOT the container
+    // BaseCapacity (which is 1). Using BaseCapacity wrongly limited the player to a single work order at a time
+    // even though the client showed more free slots.
+    uint32 const maxShipments = building->ShipmentCapacity ? building->ShipmentCapacity : container->BaseCapacity;
 
     for (uint32 i = 0; i < count; ++i)
     {
         if (existingCount >= maxShipments)
             break;
 
-        // Validate this order's cost up front; stop the batch cleanly once the player can no longer pay.
-        if (!canAfford())
+        // Select PER ORDER: the tutorial (quest) shipment only for the FIRST order while the intro quest is
+        // active and no quest order is queued; the regular shipment otherwise. Selecting once for the whole
+        // batch made "start all work orders" place N instant tutorial orders instead of one instant + the rest
+        // regular (each showing tutorial time / instantly finished).
+        CharShipmentEntry const* shipmentEntry = regularEntry ? regularEntry : shipmentEntries->front();
+        if (questEntry && tutorialActive && !questOrderQueued)
+            shipmentEntry = questEntry;
+
+        // A work order's cost is the reagents/currencies of its spell (CharShipment.SpellID) - exactly what
+        // the client shows. TC's db2 loader decodes the SpellReagents pallet-array into SpellInfo.
+        SpellInfo const* costSpell = shipmentEntry->SpellID > 0 ? sSpellMgr->GetSpellInfo(uint32(shipmentEntry->SpellID), DIFFICULTY_NONE) : nullptr;
+        bool affordable = true;
+        if (costSpell)
+        {
+            for (std::size_t r = 0; r < costSpell->Reagent.size() && affordable; ++r)
+                if (costSpell->Reagent[r] > 0 && costSpell->ReagentCount[r] > 0
+                    && !_owner->HasItemCount(uint32(costSpell->Reagent[r]), uint32(costSpell->ReagentCount[r])))
+                    affordable = false;
+            for (SpellReagentsCurrencyEntry const* rc : costSpell->ReagentsCurrency)
+                if (affordable && rc->CurrencyCount > 0 && !_owner->HasCurrency(uint32(rc->CurrencyTypesID), uint32(rc->CurrencyCount)))
+                    affordable = false;
+        }
+
+        // Stop the batch cleanly once the player can no longer pay.
+        if (!affordable)
         {
             WorldPackets::Garrison::CreateShipmentResponse fail;
             fail.ShipmentID = 0;
@@ -3396,6 +3397,8 @@ GarrisonError Garrison::CreateShipment(ObjectGuid npcGUID, uint32 count)
         CharacterDatabase.Execute(stmt);
 
         ++existingCount;
+        if (shipmentEntry == questEntry)
+            questOrderQueued = true; // the tutorial's single instant order is placed; the rest of the batch is regular
 
         // Advance the tutorial quest on placement by crediting its "Work Order Started" objective.
         // NOTE: do NOT cast the shipment spell here - that spell CREATES the output item (it is the
@@ -3702,7 +3705,7 @@ void Garrison::SendShipmentInfo(ObjectGuid npcGUID)
     CharShipmentEntry const* recipe = shipmentEntries->front();
     response.Success = true;
     response.ShipmentID = recipe->ID;
-    response.MaxShipments = container->BaseCapacity;
+    response.MaxShipments = building->ShipmentCapacity ? building->ShipmentCapacity : container->BaseCapacity; // per-level queue capacity, not container BaseCapacity(=1)
     response.PlotInstanceID = plotInstanceId;
 
     std::vector<Shipment const*> plotShipments = GetShipmentsForPlot(plotInstanceId);
