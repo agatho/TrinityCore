@@ -21,6 +21,7 @@
 #include "GameObject.h"
 #include "GameObjectAI.h"
 #include "Garrison.h"
+#include "GarrisonMap.h"
 #include "Map.h"
 #include "Player.h"
 #include "ScriptMgr.h"
@@ -81,6 +82,49 @@ struct go_garrison_cache : GameObjectAI
 {
     go_garrison_cache(GameObject* go) : GameObjectAI(go) { }
 
+    uint32 _displayTimer = 0;
+
+    Garrison* GetOwnerGarrison() const
+    {
+        if (Map* map = me->GetMap())
+            if (map->IsGarrison())
+                return static_cast<GarrisonMap*>(map)->GetGarrison();
+        return nullptr;
+    }
+
+    // The resource cache swaps its model as Garrison Resources bank up: Normal (< 200), Hefty (200-499),
+    // Full (>= 500, capped). DisplayInfoIDs are the per-faction Garrison Cache / Hefty / Full GO templates
+    // (Alliance 23775/23773/23777, Horde 23774/23772/23776). Collecting empties it back to the Normal model.
+    void RefreshDisplay()
+    {
+        Garrison* garrison = GetOwnerGarrison();
+        if (!garrison || garrison->GetType() != GARRISON_TYPE_GARRISON)
+            return;
+
+        uint32 const banked = garrison->GetPendingCacheResources();
+        bool const alliance = garrison->GetFaction() == GARRISON_FACTION_INDEX_ALLIANCE;
+
+        uint32 displayId;
+        if (banked >= 500)
+            displayId = alliance ? 23777 : 23776; // Full
+        else if (banked >= 200)
+            displayId = alliance ? 23773 : 23772; // Hefty
+        else
+            displayId = alliance ? 23775 : 23774; // Normal
+
+        if (me->GetDisplayId() != displayId)
+            me->SetDisplayId(displayId);
+    }
+
+    void UpdateAI(uint32 diff) override
+    {
+        _displayTimer += diff;
+        if (_displayTimer < 5000)
+            return;
+        _displayTimer = 0;
+        RefreshDisplay();
+    }
+
     bool OnGossipHello(Player* player) override
     {
         Garrison* garrison = player->GetGarrison();
@@ -88,6 +132,8 @@ struct go_garrison_cache : GameObjectAI
             return false;
 
         garrison->CollectGarrisonCache(); // grants the currency (client shows the standard gain toast)
+        me->SendCustomAnim(0);            // play the cache's use animation for loot feedback
+        RefreshDisplay();                 // banked resources reset to 0 -> revert to the empty (Normal) model
         return true; // the cache is fully handled here — suppress the default goober behaviour
     }
 };
