@@ -836,7 +836,10 @@ void WorldSession::HandleSetupWarbandGroups(WorldPackets::Character::SetupWarban
         stmt = CharacterDatabase.GetPreparedStatement(CHAR_INS_WARBAND_GROUP);
         stmt->setUInt64(0, groupId);
         stmt->setUInt32(1, battlenetAccountId);
-        stmt->setUInt8(2, groupIdx);
+        // Persist the actual OrderIndex (the same value the account-scoped key is derived from), NOT the loop
+        // position groupIdx - otherwise sparse/reordered slots (e.g. OrderIndex 0,2,5) are rewritten as 0,1,2 and
+        // the ordering is silently corrupted on reload.
+        stmt->setUInt8(2, group.OrderIndex);
         stmt->setUInt32(3, group.WarbandSceneID);
         stmt->setUInt32(4, group.Flags);
         stmt->setInt32(5, group.ContentSetID);

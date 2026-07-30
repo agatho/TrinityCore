@@ -103,10 +103,30 @@ void ContributionMgr::Contribute(Player* player, ObjectGuid collectorGuid, uint3
         }
     }
 
-    // Second pass: consume the cost and accumulate the contributed amount as progress. The progress increment is the
-    // total quantity turned in (progress bar == resources contributed); if a given managed world state is meant to
-    // count turn-ins rather than resources this would be a fixed 1 (documented modelling choice, DB2-content driven).
+    // Compute the total contribution (progress bar == resources contributed; a contribution with no consumable
+    // objectives still counts as one unit). The progress increment is the total quantity that would be turned in.
     int32 contributed = 0;
+    for (QuestObjective const& objective : quest->GetObjectives())
+    {
+        switch (objective.Type)
+        {
+            case QUEST_OBJECTIVE_ITEM:
+            case QUEST_OBJECTIVE_CURRENCY:
+                contributed += std::max<int32>(objective.Amount, 0);
+                break;
+            default:
+                break;
+        }
+    }
+    if (contributed <= 0)
+        contributed = 1;
+
+    // Record the progress BEFORE consuming the cost. AddProgress no-ops (returns false) when the managed world state
+    // is unknown or already clamped at its target - if we destroyed the items/currency first the player would lose
+    // the cost for zero progress with no refund. Only consume once the progress is actually recorded.
+    if (!sManagedWorldStateMgr->AddProgress(uint32(input->ManagedWorldStateID), contributed))
+        return;
+
     for (QuestObjective const& objective : quest->GetObjectives())
     {
         int32 const amount = std::max<int32>(objective.Amount, 0);
@@ -114,20 +134,12 @@ void ContributionMgr::Contribute(Player* player, ObjectGuid collectorGuid, uint3
         {
             case QUEST_OBJECTIVE_ITEM:
                 player->DestroyItemCount(uint32(objective.ObjectID), uint32(amount), true);
-                contributed += amount;
                 break;
             case QUEST_OBJECTIVE_CURRENCY:
                 player->RemoveCurrency(uint32(objective.ObjectID), amount, CurrencyDestroyReason::QuestTurnin);
-                contributed += amount;
                 break;
             default:
                 break;
         }
     }
-
-    // A contribution with no consumable objectives still counts as a single unit of progress.
-    if (contributed <= 0)
-        contributed = 1;
-
-    sManagedWorldStateMgr->AddProgress(uint32(input->ManagedWorldStateID), contributed);
 }

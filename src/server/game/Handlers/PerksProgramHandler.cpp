@@ -63,10 +63,20 @@ static bool PerksProgramPurchaseItem(WorldSession* session, Player* player, int3
     if (item->Price < 0 || !player->HasCurrency(CURRENCY_TYPE_TRADERS_TENDER, uint32(item->Price)))
         return false;
 
+    CollectionMgr* collectionMgr = session->GetCollectionMgr();
+
+    // Refuse to sell a collectible the player already owns. Otherwise we would charge tender, AddMount/AddToy would
+    // be a no-op, and we would still record a "refundable" purchase - whose refund later calls RemoveMount/RemoveToy
+    // and REVOKES the collectible the player earned elsewhere while handing back tender. A vendor item resolves to
+    // exactly one collectible.
+    if (item->MountID && collectionMgr->GetAccountMounts().find(uint32(item->MountID)) != collectionMgr->GetAccountMounts().end())
+        return false;
+    if (item->ToyID && collectionMgr->HasToy(uint32(item->ToyID)))
+        return false;
+
     player->RemoveCurrency(CURRENCY_TYPE_TRADERS_TENDER, item->Price, CurrencyDestroyReason::Vendor);
 
     // Grant the resolved collectible. A vendor item resolves to exactly one of these.
-    CollectionMgr* collectionMgr = session->GetCollectionMgr();
     if (item->MountID)
         collectionMgr->AddMount(uint32(item->MountID), MOUNT_STATUS_NONE);
     if (item->ToyID)
