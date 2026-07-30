@@ -24,6 +24,7 @@
 #include "GarrisonMap.h"
 #include "Map.h"
 #include "Player.h"
+#include "QuestDef.h"
 #include "ScriptMgr.h"
 #include "Unit.h"
 
@@ -141,6 +142,33 @@ struct go_garrison_cache : GameObjectAI
 // NOTE: the building work-order crate (GAMEOBJECT_TYPE_GARRISON_SHIPMENT) is handled entirely in core
 // (GameObject::Use -> Garrison::SendOpenShipmentUI); it needs no GameObject script here.
 
+// WoD Shipyard unlock. The Blizzlike path: at garrison Tier 3 the "Garrison Campaign: War Council" pop-up chain
+// starts from the faction leader, runs out to the Iron Docks (We Need a Shipwright -> Derailment -> The Train Gang
+// -> Hook, Line, and... Sink Him! -> Nothing Remains) and ends with "All Hands on Deck" back at the garrison,
+// whose completion builds the shipyard (retail casts reward spell 186007 Alliance / 185915 Horde). We hook the
+// terminal quest's REWARDED status directly (verified quest ids) rather than the reward spell, so the trigger does
+// not depend on that spell's effect layout. CreateShipyard() itself re-checks the Tier-3 prerequisite.
+enum ShipyardIntroQuests
+{
+    QUEST_ALL_HANDS_ON_DECK_ALLIANCE = 38259,
+    QUEST_ALL_HANDS_ON_DECK_HORDE    = 38574
+};
+
+// Bound to quests 38259 / 38574 via quest_template.ScriptName = 'quest_garrison_shipyard_intro'.
+struct quest_garrison_shipyard_intro : QuestScript
+{
+    quest_garrison_shipyard_intro() : QuestScript("quest_garrison_shipyard_intro") { }
+
+    void OnQuestStatusChange(Player* player, Quest const* /*quest*/, QuestStatus /*oldStatus*/, QuestStatus newStatus) override
+    {
+        if (newStatus != QUEST_STATUS_REWARDED)
+            return;
+
+        if (Garrison* garrison = player->GetGarrison())
+            garrison->CreateShipyard(); // no-op unless it is a Tier-3 garrison with no shipyard yet
+    }
+};
+
 void AddSC_garrison_generic()
 {
     // AreaTrigger
@@ -149,4 +177,7 @@ void AddSC_garrison_generic()
 
     // GameObject
     RegisterGameObjectAI(go_garrison_cache);
+
+    // Quest
+    new quest_garrison_shipyard_intro();
 }
