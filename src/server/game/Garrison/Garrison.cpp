@@ -662,6 +662,9 @@ void Garrison::Update(uint32 diff)
     // gameobject_template_addon.flags (GO_FLAG_IGNORE_CURRENT_STATE_FOR_USE_SPELL_EXCEPT_UNLOCKED,
     // 0x40000) - matching retail's on-wire crate - so no per-tick flag maintenance is needed here.
 
+    // Keep each work-order crate's "filled with goods" display in sync with the orders on its plot.
+    UpdateWorkOrderCrates();
+
     // Buildings are NOT auto-completed when their construction timer finishes. Retail leaves the finished
     // building as "ready to complete": the player walks to the plot and clicks it (construction sign), the
     // client then sends CMSG_GARRISON_SET_BUILDING_ACTIVE -> HandleGarrisonSetBuildingActive -> ActivateBuilding.
@@ -3452,6 +3455,63 @@ void Garrison::SendOpenShipmentUI(ObjectGuid npcGuid)
     result.NpcGUID = npcGuid;
     result.CharShipmentContainerID = container->ID;
     _owner->SendDirectMessage(result.Write());
+}
+
+void Garrison::UpdateWorkOrderCrates()
+{
+    // Fill each building's work-order crate GO with goods while it holds work orders. The crate's DisplayID
+    // is swapped to the CharShipmentContainer's Small/Medium/Large model (by order count vs the Medium/Large
+    // thresholds), and back to the GO's base (empty) model when no orders remain. DisplayID is a plain object
+    // field (not recomputed by ViewerDependentValue like dynamicFlags), so the swap reaches the client as-is.
+    if (!_owner->IsInWorld())
+        return;
+
+    Map* map = _owner->GetMap();
+    if (!map)
+        return;
+
+    for (auto const& [plotInstanceId, plot] : _plots)
+    {
+        if (!plot.BuildingInfo.PacketInfo || !plot.BuildingInfo.PacketInfo->Active)
+            continue;
+
+        GameObject* crate = nullptr;
+        for (ObjectGuid const& guid : plot.BuildingInfo.Spawns)
+            if (GameObject* go = map->GetGameObject(guid))
+                if (go->GetGoType() == GAMEOBJECT_TYPE_GARRISON_SHIPMENT)
+                {
+                    crate = go;
+                    break;
+                }
+
+        if (!crate)
+            continue;
+
+        uint32 orderCount = 0;
+        for (auto const& p : _shipments)
+            if (p.second.PlotInstanceID == plotInstanceId)
+                ++orderCount;
+
+        uint32 displayId = crate->GetGOInfo()->displayId; // base / empty
+        if (orderCount > 0)
+        {
+            GarrBuildingEntry const* building = sGarrBuildingStore.LookupEntry(plot.BuildingInfo.PacketInfo->GarrBuildingID);
+            CharShipmentContainerEntry const* container = building
+                ? sGarrisonMgr.GetShipmentContainerForBuilding(building->BuildingType, uint8(GetFaction())) : nullptr;
+            if (container)
+            {
+                if (container->LargeThreshold && orderCount >= container->LargeThreshold && container->LargeDisplayInfoID)
+                    displayId = container->LargeDisplayInfoID;
+                else if (container->MediumThreshold && orderCount >= container->MediumThreshold && container->MediumDisplayInfoID)
+                    displayId = container->MediumDisplayInfoID;
+                else if (container->SmallDisplayInfoID)
+                    displayId = container->SmallDisplayInfoID;
+            }
+        }
+
+        if (displayId && crate->GetDisplayId() != displayId)
+            crate->SetDisplayId(displayId);
+    }
 }
 
 std::vector<Garrison::Shipment const*> Garrison::GetShipmentsForPlot(uint32 plotInstanceId) const

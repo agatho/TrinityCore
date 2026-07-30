@@ -393,6 +393,9 @@ public:
     void CompleteShipment(uint64 dbId);
     void CollectReadyShipments(uint32 plotInstanceId);
     void SendOpenShipmentUI(ObjectGuid npcGuid);
+    // Swap each building's work-order crate GO display to the "filled" model (CharShipmentContainer
+    // Small/Medium/Large DisplayInfoID by order count) while it holds orders, base model when empty.
+    void UpdateWorkOrderCrates();
     std::vector<Shipment const*> GetShipmentsForPlot(uint32 plotInstanceId) const;
     std::vector<Shipment const*> GetAllShipments() const;
     void SendShipmentInfo(ObjectGuid npcGUID);
