@@ -303,6 +303,14 @@ public:
     void CreateShipyard();
     bool HasShipyard() const { return _shipyardBuilding != 0; }
     uint32 GetShipyardBuildingId() const { return _shipyardBuilding; }
+    // Whether missions/followers of the given GarrFollowerType are available to this garrison: the garrison's own
+    // primary type always is; the shipyard (naval) type only once the shipyard is built. Gates naval mission offers.
+    bool IsMissionFollowerTypeAvailable(int8 followerTypeId) const;
+    // Build a ship (a GarrFollowerType-2 GarrFollower) at the shipyard. Validates the shipyard exists, the id is a
+    // real ship, it is not already owned, and the ship soft-cap is not exceeded, then adds it as a follower.
+    GarrisonError BuildShip(uint32 garrFollowerId);
+    uint32 GetShipCount() const;
+    static constexpr uint32 SHIPYARD_FOLLOWER_SOFT_CAP = 6;
     void ActivateBuilding(uint32 garrPlotInstanceId);
     void SwapBuildings(uint32 plotId1, uint32 plotId2);
 

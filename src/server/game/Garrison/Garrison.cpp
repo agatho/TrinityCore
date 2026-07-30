@@ -694,6 +694,19 @@ void Garrison::CreateShipyard()
     SendInfo();
 }
 
+bool Garrison::IsMissionFollowerTypeAvailable(int8 followerTypeId) const
+{
+    // The garrison's own primary follower type is always available.
+    if (followerTypeId == static_cast<int8>(sGarrisonMgr.GetPrimaryFollowerType(static_cast<int8>(GetType()))))
+        return true;
+    // Naval (shipyard) missions/ships only become available once the shipyard has been built. Both share
+    // GarrTypeID 2 with the garrison, so without this gate the naval mission pool (GarrFollowerTypeID 2) would
+    // either never appear or leak in before the shipyard exists.
+    if (followerTypeId == static_cast<int8>(FOLLOWER_TYPE_SHIPYARD))
+        return HasShipyard();
+    return false;
+}
+
 void Garrison::Update(uint32 diff)
 {
     _updateTimer += diff;
@@ -1897,6 +1910,13 @@ GarrisonError Garrison::StartMission(uint32 missionRecID, std::vector<uint64> co
 
         if (follower->PacketInfo.FollowerStatus & FOLLOWER_STATUS_INACTIVE)
             return GARRISON_ERROR_FOLLOWER_INACTIVE;
+
+        // The follower must match the mission's follower type: garrison followers crew garrison missions,
+        // ships (GarrFollowerType 2) crew naval missions. Without this a ship could be slotted on a land
+        // mission (or vice versa) - the client filters by type, but validate server-side too.
+        if (GarrFollowerEntry const* followerEntry = sGarrFollowerStore.LookupEntry(follower->PacketInfo.GarrFollowerID))
+            if (followerEntry->GarrFollowerTypeID != missionEntry->GarrFollowerTypeID)
+                return GARRISON_ERROR_INVALID_FOLLOWER;
     }
 
     // Check required followers (GarrMissionXFollower.db2)
@@ -2432,8 +2452,10 @@ void Garrison::GenerateAvailableMissions()
         if (_activeMissionRecIDs.count(mission->ID))
             continue;
 
-        // Filter by follower type matching this garrison's primary follower type
-        if (mission->GarrFollowerTypeID != sGarrisonMgr.GetPrimaryFollowerType(garrTypeID))
+        // Filter by follower type: the garrison's primary type, plus naval (shipyard) missions once the
+        // shipyard is built. Both share GarrTypeID 2, so the shipyard gate is what keeps naval missions off
+        // the board until the player has a shipyard.
+        if (!IsMissionFollowerTypeAvailable(mission->GarrFollowerTypeID))
             continue;
 
         // Filter by target level, but ONLY when we actually have active followers to
@@ -2716,6 +2738,40 @@ GarrisonError Garrison::RecruitFollower(uint32 garrFollowerID)
     // Clear recruits after one is chosen
     _availableRecruits.clear();
 
+    return GARRISON_SUCCESS;
+}
+
+uint32 Garrison::GetShipCount() const
+{
+    uint32 count = 0;
+    for (auto const& p : _followers)
+        if (GarrFollowerEntry const* entry = sGarrFollowerStore.LookupEntry(p.second.PacketInfo.GarrFollowerID))
+            if (entry->GarrFollowerTypeID == static_cast<int8>(FOLLOWER_TYPE_SHIPYARD))
+                ++count;
+    return count;
+}
+
+// Build a ship at the shipyard. A "ship" is a GarrFollowerType-2 GarrFollower (102 exist in 12.0.7, ids 469+);
+// building one adds it as a follower via the normal AddFollower path. Retail builds ships over time from the naval
+// command table; the client-facing build request (CMSG) + build timer are sniff-gated (see [[shipyard_foundation_68275]]),
+// so this method is the validated server entry point that flow will call once its wire is known.
+GarrisonError Garrison::BuildShip(uint32 garrFollowerId)
+{
+    if (!HasShipyard())
+        return GARRISON_ERROR_NO_BUILDING;
+
+    GarrFollowerEntry const* shipEntry = sGarrFollowerStore.LookupEntry(garrFollowerId);
+    if (!shipEntry || shipEntry->GarrFollowerTypeID != static_cast<int8>(FOLLOWER_TYPE_SHIPYARD)
+        || shipEntry->GarrTypeID != static_cast<int8>(GetType()))
+        return GARRISON_ERROR_INVALID_FOLLOWER;
+
+    if (_followerIds.count(garrFollowerId))
+        return GARRISON_ERROR_FOLLOWER_EXISTS;
+
+    if (GetShipCount() >= SHIPYARD_FOLLOWER_SOFT_CAP)
+        return GARRISON_ERROR_INVALID_FOLLOWER;
+
+    AddFollower(garrFollowerId);
     return GARRISON_SUCCESS;
 }
 
