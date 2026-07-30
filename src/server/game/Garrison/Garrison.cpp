@@ -2427,22 +2427,32 @@ void Garrison::GenerateAvailableMissions()
     static constexpr uint32 MAX_MISSIONS_PER_GENERATION = 4;
     missionsToGenerate = std::min(missionsToGenerate, MAX_MISSIONS_PER_GENERATION);
 
-    // Get average follower level for filtering
-    int32 avgFollowerLevel = 0;
-    uint32 followerCount = 0;
+    // Average follower level, tracked PER follower type. A garrison offers land missions scaled to its
+    // garrison followers and naval missions scaled to its ships independently - using one combined average
+    // (e.g. level-~100 garrison followers) would filter naval missions against the wrong roster and could
+    // empty the naval board once the player has land followers. Keyed by GarrFollowerTypeID.
+    std::unordered_map<int8, std::pair<int64 /*sumLevel*/, uint32 /*count*/>> levelByType;
     for (auto const& p : _followers)
     {
-        if (!(p.second.PacketInfo.FollowerStatus & FOLLOWER_STATUS_INACTIVE))
-        {
-            avgFollowerLevel += p.second.PacketInfo.FollowerLevel;
-            ++followerCount;
-        }
+        if (p.second.PacketInfo.FollowerStatus & FOLLOWER_STATUS_INACTIVE)
+            continue;
+        int8 type = static_cast<int8>(FOLLOWER_TYPE_GARRISON);
+        if (GarrFollowerEntry const* fe = sGarrFollowerStore.LookupEntry(p.second.PacketInfo.GarrFollowerID))
+            type = fe->GarrFollowerTypeID;
+        auto& acc = levelByType[type];
+        acc.first += p.second.PacketInfo.FollowerLevel;
+        ++acc.second;
     }
 
-    if (followerCount > 0)
-        avgFollowerLevel /= static_cast<int32>(followerCount);
-    else
-        avgFollowerLevel = 90; // Default for no followers
+    // Average level of the followers that can actually crew a mission of the given type, or -1 if the player
+    // has none of that type yet (in which case the level filter is skipped and the whole pool is offered).
+    auto avgLevelForType = [&levelByType](int8 followerTypeId) -> int32
+    {
+        auto it = levelByType.find(followerTypeId);
+        if (it == levelByType.end() || it->second.second == 0)
+            return -1;
+        return static_cast<int32>(it->second.first / it->second.second);
+    };
 
     // Build eligible mission pool
     std::vector<GarrMissionEntry const*> eligibleMissions;
@@ -2458,15 +2468,13 @@ void Garrison::GenerateAvailableMissions()
         if (!IsMissionFollowerTypeAvailable(mission->GarrFollowerTypeID))
             continue;
 
-        // Filter by target level, but ONLY when we actually have active followers to
-        // scale against. Retail offers the standard mission pool to a garrison with no
-        // active followers (sniff "garrison and hall of class table quest.pkt": 42 missions
-        // offered), so the default-90 clamp must not starve a follower-less/all-inactive
-        // garrison down to zero.
-        if (followerCount > 0)
+        // Filter by target level, but ONLY when we actually have active followers OF THIS MISSION'S TYPE to
+        // scale against. Retail offers the standard mission pool to a garrison with no active followers (sniff
+        // "garrison and hall of class table quest.pkt": 42 missions offered), so a type with no roster yet must
+        // not be starved to zero - a just-built shipyard with no ships still offers the full naval pool.
+        if (int32 avgLevel = avgLevelForType(mission->GarrFollowerTypeID); avgLevel >= 0)
         {
-            int32 levelDiff = std::abs(avgFollowerLevel - static_cast<int32>(mission->TargetLevel));
-            if (levelDiff > 5)
+            if (std::abs(avgLevel - static_cast<int32>(mission->TargetLevel)) > 5)
                 continue;
         }
 
