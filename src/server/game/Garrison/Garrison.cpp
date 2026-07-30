@@ -3238,8 +3238,31 @@ GarrisonError Garrison::CreateShipment(ObjectGuid npcGUID, uint32 count)
     }
 
     CharShipmentEntry const* shipmentEntry = regularEntry ? regularEntry : shipmentEntries->front();
-    if (questEntry && questEntry->DummyItemID && _owner->HasQuestForItem(questEntry->DummyItemID))
+    if (questEntry && questEntry->DummyItemID)
     {
+        // Use the quest shipment while a tutorial quest with this shipment's item as an objective is active.
+        // NOTE: Player::HasQuestForItem only matches legacy Quest::RequiredItemId, NOT modern quest_objectives
+        // (the "Your First X Work Order" quests use an ITEM objective), so it returns false here - scan the
+        // quest log for an active quest whose ITEM objective == the quest shipment's DummyItemID instead.
+        bool tutorialActive = false;
+        for (uint16 questSlot = 0; questSlot < MAX_QUEST_LOG_SIZE && !tutorialActive; ++questSlot)
+        {
+            uint32 questId = _owner->GetQuestSlotQuestId(questSlot);
+            if (!questId || _owner->GetQuestStatus(questId) != QUEST_STATUS_INCOMPLETE)
+                continue;
+
+            Quest const* quest = sObjectMgr->GetQuestTemplate(questId);
+            if (!quest)
+                continue;
+
+            for (QuestObjective const& obj : quest->GetObjectives())
+                if (obj.Type == QUEST_OBJECTIVE_ITEM && uint32(obj.ObjectID) == questEntry->DummyItemID)
+                {
+                    tutorialActive = true;
+                    break;
+                }
+        }
+
         bool questOrderQueued = false;
         for (auto const& p : _shipments)
             if (p.second.PlotInstanceID == plotInstanceId && p.second.ShipmentRecID == questEntry->ID)
@@ -3248,7 +3271,7 @@ GarrisonError Garrison::CreateShipment(ObjectGuid npcGUID, uint32 count)
                 break;
             }
 
-        if (!questOrderQueued)
+        if (tutorialActive && !questOrderQueued)
             shipmentEntry = questEntry;
     }
 
