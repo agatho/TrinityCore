@@ -65,6 +65,8 @@ bool Garrison::LoadFromDB(PreparedQueryResult garrison, PreparedQueryResult blue
     // resource cache begins accruing from this login rather than paying out for all of history at once.
     if (!_cacheLastUsed)
         _cacheLastUsed = GameTime::GetGameTime();
+    // WoD Shipyard tier (GarrBuilding 205/206/207); 0 = not built. Not a plot building, so tracked directly.
+    _shipyardBuilding = fields[6].GetUInt32();
     if (!_siteLevel)
         return false;
 
@@ -327,6 +329,7 @@ void Garrison::SaveToDB(CharacterDatabaseTransaction trans)
     stmt->setUInt32(4, _missionsStartedToday);
     stmt->setUInt32(5, _lastMissionStartDay);
     stmt->setInt64(6, _cacheLastUsed);
+    stmt->setUInt32(7, _shipyardBuilding);
     trans->Append(stmt);
 
     for (uint32 building : _knownBuildings)
@@ -650,6 +653,44 @@ void Garrison::Upgrade()
 
     // Push fresh full garrison info so the world map (M) and Architect reflect the new site level + plot layout
     // immediately, rather than showing the previous level until the client next re-requests (relog / re-enter).
+    SendInfo();
+}
+
+// Build the WoD Shipyard. It is a garrison sub-feature (GarrBuilding 205/206/207 = Shipyard L1/L2/L3, BuildingType
+// 9) that, unlike normal buildings, has NO architect plot (no GarrBuildingPlotInst entry) and physically lives on
+// the naval map (1473 Alliance / 1474 Horde). We therefore track only its tier (_shipyardBuilding) rather than a
+// plot. Gated on a full garrison (type 2) at site level 3 - the same prerequisite retail uses (the naval command
+// table becomes available once the garrison reaches Tier 3). Persisted immediately so it survives a crash.
+//
+// NOTE (Phase 1): this establishes the server-side shipyard state + persistence. The client-facing pieces - showing
+// the shipyard building in GarrisonInfo (needs the exact naval-map plot-instance id the 12.0.7 client expects) and
+// the walk-in naval map + terrain swaps - are deliberately NOT wired here: pushing a guessed plot-instance id into
+// the info packet risks a client-side placement error (same failure class as the earlier crate/gossip issues), so
+// that value must be sniff-verified before it goes on the wire. See [[shipyard_foundation_68275]].
+void Garrison::CreateShipyard()
+{
+    // Only a real garrison has a shipyard, and only from Tier 3 onward.
+    if (GetType() != GARRISON_TYPE_GARRISON || !_siteLevel || _siteLevel->GarrLevel < 3)
+        return;
+
+    if (HasShipyard())
+        return;
+
+    GarrBuildingEntry const* shipyard = sGarrBuildingStore.LookupEntry(GARRISON_SHIPYARD_BUILDING_L1);
+    if (!shipyard)
+        return;
+
+    _shipyardBuilding = GARRISON_SHIPYARD_BUILDING_L1;
+
+    // Crash-safe immediate persistence (mirrors the work-order INSERT-on-place pattern) rather than waiting for the
+    // next full garrison save.
+    CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_UPD_CHARACTER_GARRISON_SHIPYARD);
+    stmt->setUInt32(0, _shipyardBuilding);
+    stmt->setUInt64(1, _owner->GetGUID().GetCounter());
+    stmt->setUInt32(2, static_cast<uint32>(_garrType));
+    CharacterDatabase.Execute(stmt);
+
+    // Refresh garrison info so the client picks up the new state on its next read.
     SendInfo();
 }
 

@@ -297,6 +297,12 @@ public:
     bool HasBlueprint(uint32 garrBuildingId) const { return _knownBuildings.find(garrBuildingId) != _knownBuildings.end(); }
     void PlaceBuilding(uint32 garrPlotInstanceId, uint32 garrBuildingId);
     void CancelBuildingConstruction(uint32 garrPlotInstanceId);
+
+    // WoD Shipyard. Unlike normal buildings it has no architect plot (no GarrBuildingPlotInst entry) and lives
+    // on the naval map; we track only its tier. CreateShipyard builds/upgrades it (gated on garrison level 3).
+    void CreateShipyard();
+    bool HasShipyard() const { return _shipyardBuilding != 0; }
+    uint32 GetShipyardBuildingId() const { return _shipyardBuilding; }
     void ActivateBuilding(uint32 garrPlotInstanceId);
     void SwapBuildings(uint32 plotId1, uint32 plotId2);
 
@@ -439,9 +445,14 @@ private:
     uint32 _updateTimer = 0;
     uint32 _garrisonCacheSize = 500;
     time_t _cacheLastUsed = 0; // last time the resource cache was collected (advances by whole intervals)
+    uint32 _shipyardBuilding = 0; // WoD Shipyard tier: GarrBuilding 205/206/207 (L1/L2/L3), 0 = not built
     static constexpr uint32 GARRISON_UPDATE_INTERVAL = 60000; // 60 seconds
     static constexpr uint32 CACHE_RESOURCE_INTERVAL = 600;    // WoD rate: 1 Garrison Resource per 10 minutes
     static constexpr uint32 CURRENCY_GARRISON_RESOURCES = 824;
+    // WoD Shipyard building tiers (GarrBuilding "Lunarfall/Frostwall Shipyard", BuildingType 9), verified in 12.0.7
+    static constexpr uint32 GARRISON_SHIPYARD_BUILDING_L1 = 205;
+    static constexpr uint32 GARRISON_SHIPYARD_BUILDING_L2 = 206;
+    static constexpr uint32 GARRISON_SHIPYARD_BUILDING_L3 = 207;
 
     std::unordered_map<uint32 /*garrPlotInstanceId*/, Plot> _plots;
     std::unordered_set<uint32 /*garrBuildingId*/> _knownBuildings;
