@@ -450,6 +450,7 @@ private:
     std::unordered_map<uint64 /*dbId*/, Mission> _missions;
     uint64 _missionDbIdGenerator = 1;
     time_t _lastMissionGenerationTime = 0;
+    uint32 _lastFinishedMissionCount = 0; // #17: re-sends garrison info when a mission's timer completes so the report refreshes
     std::unordered_set<uint32 /*missionRecID*/> _activeMissionRecIDs;
     uint32 _sessionMissionCount = 0;
     uint32 _missionsStartedToday = 0;

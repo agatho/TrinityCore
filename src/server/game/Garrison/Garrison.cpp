@@ -684,6 +684,30 @@ void Garrison::Update(uint32 diff)
     static constexpr time_t MISSION_GENERATION_INTERVAL = 10 * MINUTE;
     if (GameTime::GetGameTime() - _lastMissionGenerationTime >= MISSION_GENERATION_INTERVAL)
         GenerateAvailableMissions();
+
+    // #17: the client's garrison report only re-evaluates mission completion when it receives garrison
+    // info (which fires GARRISON_MISSION_LIST_UPDATE) - a follower mission finishing is a purely time-based
+    // client computation with no server event, so an open report goes stale until the next interaction.
+    // Count in-progress missions whose timer has elapsed; when that grows, re-send the garrison info so the
+    // report refreshes and shows them as ready to complete.
+    time_t const now = GameTime::GetGameTime();
+    uint32 finishedMissions = 0;
+    for (auto const& [dbId, mission] : _missions)
+    {
+        if (mission.PacketInfo.MissionState != 1) // 1 = In Progress
+            continue;
+        int64 const finishAt = int64(mission.PacketInfo.StartTime)
+            + Seconds(mission.PacketInfo.TravelDuration).count()
+            + Seconds(mission.PacketInfo.MissionDuration).count();
+        if (finishAt <= int64(now))
+            ++finishedMissions;
+    }
+
+    if (finishedMissions != _lastFinishedMissionCount)
+    {
+        _lastFinishedMissionCount = finishedMissions;
+        SendRemoteInfo();
+    }
 }
 
 void Garrison::Enter() const
