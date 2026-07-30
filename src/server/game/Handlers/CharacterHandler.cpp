@@ -1863,6 +1863,12 @@ void WorldSession::SendFeatureSystemStatus()
     features.ClubPresenceAllowSubscribeAll = true;
     features.ClubPresenceUnsubscribeDelay = 60000;
 
+    // Club Finder (guild recruitment) master gate. The client's C_ClubFinder.IsEnabled()
+    // reads this bit; while false the Club Finder / guild-recruitment UI is greyed out and
+    // no CMSG_CLUB_FINDER_* is ever sent, so our ClubFinderMgr guild-posting path is unreachable.
+    // We implemented the worldserver-side guild club finder (feature/club-finder), so advertise it.
+    features.ClubFinderEnabled = true;
+
     features.EuropaTicketSystemStatus.emplace();
     features.EuropaTicketSystemStatus->ThrottleState.MaxTries = 10;
     features.EuropaTicketSystemStatus->ThrottleState.PerMilliseconds = 60000;

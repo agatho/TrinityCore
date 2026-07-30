@@ -491,19 +491,14 @@ void WorldSession::HandleGarrisonCheckUpgradeable(WorldPackets::Garrison::Garris
         if (currentLevel)
         {
             GarrSiteLevelEntry const* nextLevel = sGarrisonMgr.GetGarrSiteLevelEntry(currentLevel->GarrSiteID, currentLevel->GarrLevel + 1);
+            // The client's upgrade button (C_Garrison.CanUpgradeGarrison) reflects whether an upgrade is
+            // AVAILABLE, not whether it is currently affordable. Retail enables the button whenever a next
+            // site level exists and shows the cost; affordability is enforced only at purchase time
+            // (HandleUpgradeGarrison already checks gold + Garrison Resources). Gating this response on
+            // affordability left the Architect's upgrade button greyed/"locked" whenever the player was
+            // short on Garrison Resources - even after finishing the prerequisite quests.
             if (nextLevel)
-            {
-                bool canAfford = true;
-                if (nextLevel->UpgradeGoldCost > 0 && !_player->HasEnoughMoney(uint64(nextLevel->UpgradeGoldCost)))
-                    canAfford = false;
-                if (nextLevel->UpgradeCost > 0 && !_player->HasCurrency(824 /*Garrison Resources*/, nextLevel->UpgradeCost))
-                    canAfford = false;
-
-                if (canAfford)
-                    upgradeResult = GARRISON_SUCCESS;
-                else
-                    upgradeResult = GARRISON_ERROR_NOT_ENOUGH_CURRENCY;
-            }
+                upgradeResult = GARRISON_SUCCESS;
             else
                 upgradeResult = GARRISON_ERROR_UPGRADE_LEVEL_EXCEEDS_GARRISON_LEVEL;
         }
@@ -625,30 +620,8 @@ void WorldSession::HandleOpenShipmentNpc(WorldPackets::Garrison::OpenShipmentNpc
     if (!garrison)
         return;
 
-    uint32 plotInstanceId = garrison->FindPlotInstanceForNpc(openShipmentNpc.NpcGUID);
-    if (!plotInstanceId)
-        return;
-
-    Garrison::Plot const* plot = garrison->GetPlot(plotInstanceId);
-    if (!plot || !plot->BuildingInfo.PacketInfo || !plot->BuildingInfo.PacketInfo->Active)
-        return;
-
-    GarrBuildingEntry const* building = sGarrBuildingStore.LookupEntry(plot->BuildingInfo.PacketInfo->GarrBuildingID);
-    if (!building)
-        return;
-
-    CharShipmentContainerEntry const* container = sGarrisonMgr.GetShipmentContainerForBuilding(building->BuildingType, uint8(garrison->GetFaction()));
-    if (!container)
-        return;
-
-    // Interacting with the work-order crate collects any finished orders on this plot (yielding their
-    // produced goods) before the crafter UI opens, matching the retail "loot the crate" behaviour.
-    garrison->CollectReadyShipments(plotInstanceId);
-
-    WorldPackets::Garrison::OpenShipmentNpcResult result;
-    result.NpcGUID = openShipmentNpc.NpcGUID;
-    result.CharShipmentContainerID = container->ID;
-    SendPacket(result.Write());
+    // Collects finished orders + opens the crafter UI (shared with the crate GO's OnGossipHello).
+    garrison->SendOpenShipmentUI(openShipmentNpc.NpcGUID);
 }
 
 void WorldSession::HandleCreateShipment(WorldPackets::Garrison::CreateShipment& createShipment)

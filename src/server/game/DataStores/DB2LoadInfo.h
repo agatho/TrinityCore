@@ -1128,9 +1128,9 @@ struct CharShipmentLoadInfo
         { .IsSigned = true, .Type = FT_INT, .Name = "SpellID" },
         { .IsSigned = true, .Type = FT_INT, .Name = "OnCompleteSpellID" },
         { .IsSigned = false, .Type = FT_INT, .Name = "Duration" },
-        { .IsSigned = false, .Type = FT_BYTE, .Name = "MaxShipments" },
-        { .IsSigned = false, .Type = FT_SHORT, .Name = "GarrFollowerID" },
         { .IsSigned = true, .Type = FT_INT, .Name = "Flags" },
+        { .IsSigned = false, .Type = FT_SHORT, .Name = "GarrFollowerID" },
+        { .IsSigned = false, .Type = FT_BYTE, .Name = "MaxShipments" },
     };
 
     static constexpr DB2LoadInfo Instance{ Fields, 10, &CharShipmentMeta::Instance, HOTFIX_SEL_CHAR_SHIPMENT };

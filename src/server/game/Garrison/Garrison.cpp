@@ -41,6 +41,9 @@
 
 Garrison::Garrison(Player* owner) : _owner(owner), _garrType(GARRISON_TYPE_GARRISON), _siteLevel(nullptr), _followerActivationsRemainingToday(1)
 {
+    // Fire the first periodic pass on the very next tick after login (instead of waiting a full interval),
+    // so finished-order crates activate, completed constructions/research resolve, etc. right away.
+    _updateTimer = GARRISON_UPDATE_INTERVAL;
 }
 
 bool Garrison::LoadFromDB(PreparedQueryResult garrison, PreparedQueryResult blueprints, PreparedQueryResult buildings,
@@ -606,6 +609,11 @@ void Garrison::Upgrade()
     // Advance to next site level
     _siteLevel = nextLevel;
 
+    // Credit the "reach garrison level N" criteria so the level-upgrade quests complete (e.g. quest 36615
+    // "My Very Own Castle" has a CRITERIA_TREE objective "Upgrade your garrison to Tier 3"). Without this the
+    // quest never registers the upgrade. miscValue1 = the new GarrLevel the criteria tree checks against.
+    _owner->UpdateCriteria(CriteriaType::UpgradeGarrison, _siteLevel->GarrLevel);
+
     // Re-initialize plots for the new level (this adds new plot slots)
     _plots.clear();
     InitializePlots();
@@ -631,6 +639,14 @@ void Garrison::Upgrade()
     // Update phasing for the new garrison level
     PhasingHandler::OnConditionChange(_owner);
     SendRemoteInfo();
+
+    // WoD garrison levels are distinct child maps (GarrSiteLevel.MapID), not just phases. The world only
+    // re-renders at the new level once the player is moved onto that level's map instance - its GarrisonMap
+    // grid-loader then spawns the level-appropriate buildings (mirrors what happens when the player re-enters
+    // the garrison via the entrance AreaTrigger -> Garrison::Enter). Retail performs this teleport under the
+    // upgrade cinematic; without it the Architect UI advances but the player stays on the old level's map.
+    if (_owner->IsInWorld() && int32(_owner->GetMapId()) != int32(_siteLevel->MapID))
+        _owner->TeleportTo(WorldLocation(_siteLevel->MapID, *_owner), TELE_TO_SEAMLESS);
 }
 
 void Garrison::Update(uint32 diff)
@@ -641,36 +657,30 @@ void Garrison::Update(uint32 diff)
 
     _updateTimer -= GARRISON_UPDATE_INTERVAL;
 
-    // On the first update after the player is in the world, sweep up any work orders that finished
-    // while offline (or before the crate could be used) so their goods are delivered instead of the
-    // order sitting forever, blocking further placement. Live orders that finish during play are still
-    // collected by interacting with the crate (CollectReadyShipments / HandleOpenShipmentNpc).
-    if (!_startupShipmentsProcessed)
-    {
-        _startupShipmentsProcessed = true;
-        std::vector<uint64> readyOnLogin;
-        for (auto const& p : _shipments)
-            if (p.second.IsReady())
-                readyOnLogin.push_back(p.first);
-        for (uint64 dbId : readyOnLogin)
-            CompleteShipment(dbId);
-    }
+    // Finished work orders stay "ready" and are collected by clicking the building's work-order crate
+    // (GameObject::Use -> CollectReadyShipments). The crate is made interactable purely by its base
+    // gameobject_template_addon.flags (GO_FLAG_IGNORE_CURRENT_STATE_FOR_USE_SPELL_EXCEPT_UNLOCKED,
+    // 0x40000) - matching retail's on-wire crate - so no per-tick flag maintenance is needed here.
 
-    // Complete building constructions that have finished
-    for (auto& [plotInstanceId, plot] : _plots)
-    {
-        if (plot.BuildingInfo.PacketInfo && !plot.BuildingInfo.PacketInfo->Active)
-        {
-            if (plot.BuildingInfo.CanActivate())
-                ActivateBuilding(plotInstanceId);
-        }
-    }
+    // Buildings are NOT auto-completed when their construction timer finishes. Retail leaves the finished
+    // building as "ready to complete": the player walks to the plot and clicks it (construction sign), the
+    // client then sends CMSG_GARRISON_SET_BUILDING_ACTIVE -> HandleGarrisonSetBuildingActive -> ActivateBuilding.
+    // The client already knows a building is ready from its TimeBuilt + BuildSeconds, so no server push is
+    // needed here. (Buildings that finished while offline get their finalizer/complete state on the next
+    // garrison map entry via Plot::CreateGameObject's CanActivate branch.)
 
     // Complete talent research that has finished
     CompleteAllTalentResearch();
 
     // Remove expired unclaimed missions
     RemoveExpiredMissions();
+
+    // Refill the mission board over time - retail continuously offers new follower missions up to the
+    // cap. Throttled so it tops up a few at a time rather than on every 60s tick. (This is what was
+    // missing: GenerateAvailableMissions existed but nothing ever called it, so the board never refilled.)
+    static constexpr time_t MISSION_GENERATION_INTERVAL = 10 * MINUTE;
+    if (GameTime::GetGameTime() - _lastMissionGenerationTime >= MISSION_GENERATION_INTERVAL)
+        GenerateAvailableMissions();
 }
 
 void Garrison::Enter() const
@@ -795,8 +805,10 @@ void Garrison::PlaceBuilding(uint32 garrPlotInstanceId, uint32 garrBuildingId)
             if (GameObject* go = plot->CreateGameObject(map, GetFaction()))
                 map->AddToMap(go);
 
-        _owner->RemoveCurrency(building->CurrencyTypeID, building->CurrencyQty, CurrencyDestroyReason::Garrison);
-        _owner->ModifyMoney(-building->GoldCost * GOLD, false);
+        if (building->CurrencyTypeID && building->CurrencyQty)
+            _owner->RemoveCurrency(building->CurrencyTypeID, building->CurrencyQty, CurrencyDestroyReason::Garrison);
+        if (building->GoldCost)
+            _owner->ModifyMoney(-building->GoldCost * GOLD, false);
 
         if (oldBuildingId)
         {
@@ -839,9 +851,11 @@ void Garrison::CancelBuildingConstruction(uint32 garrPlotInstanceId)
         _owner->SendDirectMessage(buildingRemoved.Write());
 
         GarrBuildingEntry const* constructing = sGarrBuildingStore.AssertEntry(buildingRemoved.GarrBuildingID);
-        // Refund construction/upgrade cost
-        _owner->AddCurrency(constructing->CurrencyTypeID, constructing->CurrencyQty, CurrencyGainSource::GarrisonBuildingRefund);
-        _owner->ModifyMoney(constructing->GoldCost * GOLD, false);
+        // Refund construction/upgrade cost (only what was actually charged)
+        if (constructing->CurrencyTypeID && constructing->CurrencyQty)
+            _owner->AddCurrency(constructing->CurrencyTypeID, constructing->CurrencyQty, CurrencyGainSource::GarrisonBuildingRefund);
+        if (constructing->GoldCost)
+            _owner->ModifyMoney(constructing->GoldCost * GOLD, false);
 
         if (constructing->UpgradeLevel > 1)
         {
@@ -2285,6 +2299,12 @@ void Garrison::GenerateAvailableMissions()
 
     uint32 missionsToGenerate = MAX_AVAILABLE_MISSIONS - currentOffered;
 
+    // Trickle new missions a few per pass rather than dumping the whole board at once: a large
+    // ADD_MISSION_RESULT burst floods GARRISON_MISSION_LIST_UPDATE (and previously broke the command
+    // table's open-event). The periodic caller tops the board back up to the cap over several ticks.
+    static constexpr uint32 MAX_MISSIONS_PER_GENERATION = 4;
+    missionsToGenerate = std::min(missionsToGenerate, MAX_MISSIONS_PER_GENERATION);
+
     // Get average follower level for filtering
     int32 avgFollowerLevel = 0;
     uint32 followerCount = 0;
@@ -2952,7 +2972,11 @@ GarrisonError Garrison::CheckBuildingPlacement(uint32 garrPlotInstanceId, uint32
         }
     }
 
-    if (!_owner->HasCurrency(building->CurrencyTypeID, building->CurrencyQty))
+    // Some buildings (e.g. the Lumber Mill and Trading Post) carry no resource cost (CurrencyTypeID/Qty = 0).
+    // HasCurrency(0, 0) fails on the invalid currency type 0, which wrongly reported "insufficient resources"
+    // and blocked construction. Only enforce the cost when the building actually has one (mirrors the garrison
+    // upgrade handler's `Cost > 0 &&` guard).
+    if (building->CurrencyTypeID && building->CurrencyQty && !_owner->HasCurrency(building->CurrencyTypeID, building->CurrencyQty))
         return GARRISON_ERROR_NOT_ENOUGH_CURRENCY;
 
     if (!_owner->HasEnoughMoney(uint64(building->GoldCost) * GOLD))
@@ -3185,8 +3209,39 @@ GarrisonError Garrison::CreateShipment(ObjectGuid npcGUID, uint32 count)
     if (!shipmentEntries || shipmentEntries->empty())
         return GARRISON_ERROR_INTERNAL_ERROR;
 
-    // Use first shipment for the container
-    CharShipmentEntry const* shipmentEntry = shipmentEntries->front();
+    // Pick the shipment for this container. Retail pairs each building with a fast "quest/tutorial" shipment
+    // (CharShipment.Flags & 0x1, Duration 0, outputs the intro quest's item) and a regular shipment (longer
+    // duration). Use the tutorial shipment only while the player still needs its reward for an active quest
+    // and hasn't already queued one; otherwise the regular shipment. Fully data-driven for every profession -
+    // the quest shipment's own output item completing the "Collected" objective needs no hardcoded ids.
+    constexpr int32 CHAR_SHIPMENT_FLAG_QUEST = 0x1;
+    CharShipmentEntry const* regularEntry = nullptr;
+    CharShipmentEntry const* questEntry = nullptr;
+    for (CharShipmentEntry const* s : *shipmentEntries)
+    {
+        if (s->Flags & CHAR_SHIPMENT_FLAG_QUEST)
+        {
+            if (!questEntry)
+                questEntry = s;
+        }
+        else if (!regularEntry)
+            regularEntry = s;
+    }
+
+    CharShipmentEntry const* shipmentEntry = regularEntry ? regularEntry : shipmentEntries->front();
+    if (questEntry && questEntry->DummyItemID && _owner->HasQuestForItem(questEntry->DummyItemID))
+    {
+        bool questOrderQueued = false;
+        for (auto const& p : _shipments)
+            if (p.second.PlotInstanceID == plotInstanceId && p.second.ShipmentRecID == questEntry->ID)
+            {
+                questOrderQueued = true;
+                break;
+            }
+
+        if (!questOrderQueued)
+            shipmentEntry = questEntry;
+    }
 
     // Count existing shipments for this plot
     uint32 existingCount = 0;
@@ -3368,6 +3423,35 @@ void Garrison::CollectReadyShipments(uint32 plotInstanceId)
 
     for (uint64 dbId : readyShipments)
         CompleteShipment(dbId);
+}
+
+void Garrison::SendOpenShipmentUI(ObjectGuid npcGuid)
+{
+    // Shared by the work-order NPC (CMSG_GARRISON_OPEN_SHIPMENT_NPC) and the crate GO's OnGossipHello.
+    // npcGuid is the interacted creature/gameobject; it belongs to a building plot via BuildingInfo.Spawns.
+    uint32 plotInstanceId = FindPlotInstanceForNpc(npcGuid);
+    if (!plotInstanceId)
+        return;
+
+    Plot const* plot = GetPlot(plotInstanceId);
+    if (!plot || !plot->BuildingInfo.PacketInfo || !plot->BuildingInfo.PacketInfo->Active)
+        return;
+
+    GarrBuildingEntry const* building = sGarrBuildingStore.LookupEntry(plot->BuildingInfo.PacketInfo->GarrBuildingID);
+    if (!building)
+        return;
+
+    CharShipmentContainerEntry const* container = sGarrisonMgr.GetShipmentContainerForBuilding(building->BuildingType, uint8(GetFaction()));
+    if (!container)
+        return;
+
+    // Opening the crafter UI is placement only - it must NOT collect finished orders, otherwise opening
+    // the UI to queue a new order would instantly hand over the previous order's goods. Collection is a
+    // separate action at the crate (GameObject::Use -> CollectReadyShipments).
+    WorldPackets::Garrison::OpenShipmentNpcResult result;
+    result.NpcGUID = npcGuid;
+    result.CharShipmentContainerID = container->ID;
+    _owner->SendDirectMessage(result.Write());
 }
 
 std::vector<Garrison::Shipment const*> Garrison::GetShipmentsForPlot(uint32 plotInstanceId) const

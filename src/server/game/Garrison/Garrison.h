@@ -392,6 +392,7 @@ public:
     GarrisonError CreateShipment(ObjectGuid npcGUID, uint32 count);
     void CompleteShipment(uint64 dbId);
     void CollectReadyShipments(uint32 plotInstanceId);
+    void SendOpenShipmentUI(ObjectGuid npcGuid);
     std::vector<Shipment const*> GetShipmentsForPlot(uint32 plotInstanceId) const;
     std::vector<Shipment const*> GetAllShipments() const;
     void SendShipmentInfo(ObjectGuid npcGUID);
@@ -459,7 +460,6 @@ private:
 
     // Shipments
     std::unordered_map<uint64 /*dbId*/, Shipment> _shipments;
-    bool _startupShipmentsProcessed = false;
     std::unordered_map<uint32 /*garrTalentID*/, Talent> _talents;
 
     // Trophies

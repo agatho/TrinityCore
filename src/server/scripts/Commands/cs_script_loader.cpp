@@ -31,6 +31,7 @@ void AddSC_conduit_commandscript();
 void AddSC_debug_commandscript();
 void AddSC_delve_commandscript();
 void AddSC_deserter_commandscript();
+void AddSC_garrison_commandscript();
 void AddSC_disable_commandscript();
 void AddSC_event_commandscript();
 void AddSC_gm_commandscript();
@@ -81,6 +82,7 @@ void AddCommandsScripts()
     AddSC_debug_commandscript();
     AddSC_delve_commandscript();
     AddSC_deserter_commandscript();
+    AddSC_garrison_commandscript();
     AddSC_disable_commandscript();
     AddSC_event_commandscript();
     AddSC_gm_commandscript();

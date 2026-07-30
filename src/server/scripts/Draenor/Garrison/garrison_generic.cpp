@@ -75,8 +75,8 @@ struct at_garrison_exit : AreaTriggerAI
 };
 
 // Garrison resource cache: the WoD cache GameObject (types "Garrison Cache" / "Hefty" / "Full") accrues
-// Garrison Resources over time. Clicking it collects whatever has banked (Garrison::CollectGarrisonCache);
-// the currency toast is the player's confirmation, plus a short message with the exact amount.
+// Garrison Resources over time. Clicking it collects whatever has banked (Garrison::CollectGarrisonCache).
+// Retail gives only the currency-gain toast as confirmation, so we don't emit a system chat message.
 struct go_garrison_cache : GameObjectAI
 {
     go_garrison_cache(GameObject* go) : GameObjectAI(go) { }
@@ -87,12 +87,13 @@ struct go_garrison_cache : GameObjectAI
         if (!garrison || garrison->GetType() != GARRISON_TYPE_GARRISON)
             return false;
 
-        if (uint32 collected = garrison->CollectGarrisonCache())
-            ChatHandler(player->GetSession()).PSendSysMessage("You collect {} Garrison Resources from the cache.", collected);
-
+        garrison->CollectGarrisonCache(); // grants the currency (client shows the standard gain toast)
         return true; // the cache is fully handled here — suppress the default goober behaviour
     }
 };
+
+// NOTE: the building work-order crate (GAMEOBJECT_TYPE_GARRISON_SHIPMENT) is handled entirely in core
+// (GameObject::Use -> Garrison::SendOpenShipmentUI); it needs no GameObject script here.
 
 void AddSC_garrison_generic()
 {

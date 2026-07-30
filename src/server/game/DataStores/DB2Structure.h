@@ -777,9 +777,11 @@ struct CharacterLoadoutItemEntry
 
 struct CharShipmentEntry
 {
-    // Field order matches the 12.0.7 client db2 layout 0x91BEA68A (WoWDBDefs CharShipment.dbd).
-    // The previous order swapped DummyItemID/TreasureID and placed Duration before SpellID, so the
-    // loader read the SpellID column into Duration (e.g. 172858 instead of the real 14400).
+    // Field order matches the 12.0.7 client db2 layout 0x91BEA68A (byte-decoded from the client
+    // CharShipment.db2). The tail is physically Flags, GarrFollowerID, MaxShipments - NOT
+    // MaxShipments/.../Flags. The previous order read the Flags bitmask (512/513) into MaxShipments and
+    // MaxShipments (0) into Flags, so the server saw Flags=0 for every shipment and could not tell the
+    // quest/tutorial row (Flags 0x1 set, Duration 0) from the regular row (Duration 14400).
     uint32 ID;
     uint16 ContainerID;
     uint32 DummyItemID;
@@ -787,9 +789,9 @@ struct CharShipmentEntry
     int32 SpellID;
     uint32 OnCompleteSpellID;
     int32 Duration;
-    uint8 MaxShipments;
-    uint16 GarrFollowerID;
     int32 Flags;
+    uint16 GarrFollowerID;
+    uint8 MaxShipments;
 };
 
 struct CharShipmentContainerEntry
