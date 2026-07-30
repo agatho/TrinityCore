@@ -276,6 +276,12 @@ void WorldSession::HandleLFGListDeclineApplicant(WorldPackets::LFGList::LFGListD
     if (!app)
         return;
 
+    // The application must belong to THIS leader's listing. Application ids are global, and the leader check above
+    // only proves the player owns packet.Ticket's listing - without this a leader could pass their own listing
+    // ticket together with an application id from someone else's listing and decline that stranger's applicant.
+    if (sLFGListMgr.GetListingByApplication(applicationId) != listing)
+        return;
+
     ObjectGuid const applicant = app->ApplicantGuid;
     SendApplicationStatus(applicant, applicationId, LFGList::ApplicationState::Declined);
     sLFGListMgr.RemoveApplication(applicationId);
@@ -295,6 +301,11 @@ void WorldSession::HandleLFGListInviteApplicant(WorldPackets::LFGList::LFGListIn
     uint32 const applicationId = packet.ApplicantTicket.Id;
     LFGList::Application* app = sLFGListMgr.GetApplication(applicationId);
     if (!app)
+        return;
+
+    // The application must belong to this leader's own listing (see HandleLFGListDeclineApplicant) - otherwise a
+    // leader could invite an applicant that applied to a different group's listing.
+    if (sLFGListMgr.GetListingByApplication(applicationId) != listing)
         return;
 
     sLFGListMgr.SetApplicationState(applicationId, LFGList::ApplicationState::Invited);
@@ -320,6 +331,12 @@ void WorldSession::HandleLFGListInviteResponse(WorldPackets::LFGList::LFGListInv
         SendApplicantList(*listing);
         return;
     }
+
+    // Accept is only valid for an application the leader actually invited. Without this an applicant could send
+    // CMSG_LFG_LIST_INVITE_RESPONSE{Accept} for its own still-pending (Applied) application and force-join a group
+    // that never invited it.
+    if (app->State != LFGList::ApplicationState::Invited)
+        return;
 
     Player* leader = ObjectAccessor::FindConnectedPlayer(listing->LeaderGuid);
     if (!leader)

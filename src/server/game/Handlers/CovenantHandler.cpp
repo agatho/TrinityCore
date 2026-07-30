@@ -37,6 +37,17 @@ void WorldSession::HandleActivateSoulbind(WorldPackets::Covenant::ActivateSoulbi
         return;
     }
 
+    // Authorize: a soulbind may only be activated by a member of its own covenant. ActivateSoulbind adopts the
+    // soulbind's covenant, so without this check any client could send CMSG_ACTIVATE_SOULBIND with an arbitrary
+    // valid SoulbindID and freely switch covenant + soulbind, bypassing the covenant-choice flow (and any renown
+    // gating). Covenant selection must go through its own path; here the soulbind must belong to the active covenant.
+    if (soulbind->CovenantID != int32(player->GetActiveCovenant()))
+    {
+        TC_LOG_DEBUG("network", "CMSG_ACTIVATE_SOULBIND: {} tried to activate soulbind {} of covenant {} while in covenant {}",
+            player->GetGUID().ToString(), packet.SoulbindID, soulbind->CovenantID, player->GetActiveCovenant());
+        return;
+    }
+
     player->ActivateSoulbind(soulbind);
 }
 

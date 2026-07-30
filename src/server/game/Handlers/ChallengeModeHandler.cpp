@@ -174,6 +174,12 @@ void WorldSession::HandleResetChallengeMode(WorldPackets::ChallengeMode::ResetCh
     // Abort the active run and stop the timer. Trash/boss respawn goes through the standard instance reset path.
     if (ChallengeMode* challenge = instanceMap->GetChallengeMode())
     {
+        // Only the player who started the run (the keystone owner) may reset it. Without this any group member -
+        // or anyone who wandered into the instance - could send CMSG_RESET_CHALLENGE_MODE and abort the whole
+        // party's active keystone at any time.
+        if (challenge->GetStarterGuid() != GetPlayer()->GetGUID())
+            return;
+
         if (challenge->IsActive())
         {
             challenge->Reset();

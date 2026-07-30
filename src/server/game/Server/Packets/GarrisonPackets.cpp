@@ -391,6 +391,11 @@ void GarrisonSocketTalent::Read()
 {
     _worldPacket >> GarrTalentID;
     uint32 count = _worldPacket.read<uint32>();
+    // Sanity cap the client-supplied socket count before resize(): a soulbind/conduit tree has at most a few dozen
+    // sockets, so this is well above any legitimate value while stopping a crafted count (e.g. 0xFFFFFFFF) from
+    // requesting a multi-gigabyte allocation. resize() throws std::bad_alloc, which the opcode dispatcher does not
+    // catch (only ByteBufferException), so an unbounded count would crash the world thread instead of disconnecting.
+    count = std::min<uint32>(count, 64);
     Sockets.resize(count);
     for (GarrisonTalentSocketData& socket : Sockets)
     {
