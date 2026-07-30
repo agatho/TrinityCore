@@ -3350,13 +3350,41 @@ GarrisonError Garrison::CreateShipment(ObjectGuid npcGUID, uint32 count)
 
         ++existingCount;
 
-        // Advance the tutorial quest on placement by crediting its "Work Order Started" creature.
+        // Advance the tutorial quest on placement by crediting its "Work Order Started" objective.
         // NOTE: do NOT cast the shipment spell here - that spell CREATES the output item (it is the
         // craft), so casting it on placement instantly completed the order. The order must instead
         // mature over its timer and yield the good on collection.
-        // TODO: generalise the per-profession "work order started" credit creature (data-driven).
-        if (container->ID == 50 || container->ID == 63) // Leatherworking work-order container (Alliance / Horde)
-            _owner->KilledMonsterCredit(86112);         // quest 36642 "Leatherworking Work Order Started"
+        //
+        // Data-driven for every profession: the "Your First X Work Order" quests pair a monster objective
+        // ("X Work Order Started", e.g. Alchemy 86114 / Leatherworking 86112 / Tailoring 86113) with an item
+        // objective whose item == the quest shipment's DummyItemID. So when this (quest) shipment is placed,
+        // find the player's active quest that needs this shipment's item and credit its monster objective.
+        if (shipmentEntry->DummyItemID)
+        {
+            for (uint16 questSlot = 0; questSlot < MAX_QUEST_LOG_SIZE; ++questSlot)
+            {
+                uint32 questId = _owner->GetQuestSlotQuestId(questSlot);
+                if (!questId)
+                    continue;
+
+                Quest const* quest = sObjectMgr->GetQuestTemplate(questId);
+                if (!quest || _owner->GetQuestStatus(questId) != QUEST_STATUS_INCOMPLETE)
+                    continue;
+
+                bool wantsShipmentItem = false;
+                uint32 startedCreatureId = 0;
+                for (QuestObjective const& obj : quest->GetObjectives())
+                {
+                    if (obj.Type == QUEST_OBJECTIVE_ITEM && uint32(obj.ObjectID) == shipmentEntry->DummyItemID)
+                        wantsShipmentItem = true;
+                    else if (obj.Type == QUEST_OBJECTIVE_MONSTER && obj.ObjectID > 0)
+                        startedCreatureId = uint32(obj.ObjectID);
+                }
+
+                if (wantsShipmentItem && startedCreatureId)
+                    _owner->KilledMonsterCredit(startedCreatureId);
+            }
+        }
 
         WorldPackets::Garrison::CreateShipmentResponse response;
         response.ShipmentID = shipment.DbID;
