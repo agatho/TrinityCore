@@ -2580,6 +2580,7 @@ void NeighborhoodInitiativeOp0D::Read()
     _worldPacket >> Header;
     uint32 count = 0;
     _worldPacket >> count;
+    count = std::min<uint32>(count, _worldPacket.size()); // cap before resize (uncapped -> std::bad_alloc -> world-thread crash)
     Pairs.resize(count);
     for (uint32 i = 0; i < count; ++i)
     {
@@ -2594,6 +2595,7 @@ void NeighborhoodInitiativeOp0E::Read()
 {
     uint32 count = 0;
     _worldPacket >> count;
+    count = std::min<uint32>(count, _worldPacket.size()); // cap before resize (uncapped -> std::bad_alloc -> world-thread crash)
     TaskIDs.resize(count);
     for (uint32 i = 0; i < count; ++i)
         _worldPacket >> TaskIDs[i];
@@ -2604,6 +2606,7 @@ void NeighborhoodInitiativeOp0F::Read()
 {
     uint32 count = 0;
     _worldPacket >> count;
+    count = std::min<uint32>(count, _worldPacket.size()); // cap before resize (uncapped -> std::bad_alloc -> world-thread crash)
     Records.resize(count);
     for (uint32 i = 0; i < count; ++i)
     {

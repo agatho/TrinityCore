@@ -126,6 +126,7 @@ void ClubFinderRequestClubsData::Read()
     _worldPacket >> Bits<1>(LinkedLookup);
     _worldPacket.ResetBitPos();
 
+    filterCount = std::min<uint32>(filterCount, _worldPacket.size()); // cap before resize (uncapped -> std::bad_alloc -> world-thread crash)
     Filters.resize(filterCount);
     for (ClubFinderPostingFilter& filter : Filters)
         _worldPacket >> filter;
@@ -160,6 +161,7 @@ void ClubFinderRequestClubsList::Read()
         _worldPacket.read(reinterpret_cast<uint8*>(SearchString.data()), searchStringLength);
     }
 
+    filterCount = std::min<uint32>(filterCount, _worldPacket.size()); // cap before resize (uncapped -> std::bad_alloc -> world-thread crash)
     Filters.resize(filterCount);
     for (ClubFinderPostingFilter& filter : Filters)
         _worldPacket >> filter;

@@ -54,6 +54,7 @@ void WorldPackets::Commentator::CommentatorGetPlayerCooldowns::Read()
     _worldPacket >> Player;
     uint32 count;
     _worldPacket >> count;
+    count = std::min<uint32>(count, _worldPacket.size()); // cap before resize (uncapped -> std::bad_alloc -> world-thread crash)
     TrackedSpells.resize(count);
     for (TrackedSpell& spell : TrackedSpells)
     {

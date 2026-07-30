@@ -309,7 +309,10 @@ WorldPacket const* NotifyReceivedMail::Write()
 
 void GetRegionwideCharacterRestrictionAndMailData::Read()
 {
-    Characters.resize(_worldPacket.read<uint32>());
+    // Cap before resize (uncapped client count -> std::bad_alloc -> world-thread crash; the dispatcher only catches
+    // ByteBufferException). A count can't legitimately exceed the packet's own byte size (each GUID is >= 1 byte).
+    uint32 count = std::min<uint32>(_worldPacket.read<uint32>(), _worldPacket.size());
+    Characters.resize(count);
     for (ObjectGuid& character : Characters)
         _worldPacket >> character;
 }

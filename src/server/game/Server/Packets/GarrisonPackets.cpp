@@ -602,6 +602,10 @@ void GarrisonStartMission::Read()
     _worldPacket >> followerCount;
     _worldPacket >> MissionRecID;
 
+    // Cap before resize(): a client-controlled count can't legitimately exceed the packet's own byte size (each
+    // element is >= 1 byte), so this bounds the allocation to a few KB. resize() throws std::bad_alloc, which the
+    // opcode dispatcher does NOT catch (only ByteBufferException) -> an uncapped count crashes the world thread.
+    followerCount = std::min<uint32>(followerCount, _worldPacket.size());
     FollowerDBIDs.resize(followerCount);
     for (uint32 i = 0; i < followerCount; ++i)
     {
