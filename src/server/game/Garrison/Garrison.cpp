@@ -2086,14 +2086,16 @@ GarrisonError Garrison::FinalizeMission(uint32 missionRecID, bool grantOvermax)
                 }
                 else
                 {
-                    // Mail overflow items
+                    // Mail overflow items (SendMailTo needs a real transaction - a null one crashes)
+                    CharacterDatabaseTransaction trans = CharacterDatabase.BeginTransaction();
                     MailDraft draft("Garrison Mission Reward", "A reward from a completed garrison mission.");
                     if (Item* item = Item::CreateItem(reward.ItemID, reward.ItemQuantity, ItemContext::NONE, _owner))
                     {
-                        item->SaveToDB(CharacterDatabaseTransaction(nullptr));
+                        item->SaveToDB(trans);
                         draft.AddItem(item);
-                        draft.SendMailTo(CharacterDatabaseTransaction(nullptr), MailReceiver(_owner), MailSender(MAIL_CREATURE, 0));
                     }
+                    draft.SendMailTo(trans, MailReceiver(_owner), MailSender(MAIL_CREATURE, 0));
+                    CharacterDatabase.CommitTransaction(trans);
                 }
             }
             if (reward.CurrencyID > 0 && reward.CurrencyQuantity > 0)
@@ -2115,13 +2117,15 @@ GarrisonError Garrison::FinalizeMission(uint32 missionRecID, bool grantOvermax)
                     }
                     else
                     {
+                        CharacterDatabaseTransaction trans = CharacterDatabase.BeginTransaction();
                         MailDraft draft("Garrison Mission Bonus", "A bonus reward from a garrison mission.");
                         if (Item* item = Item::CreateItem(reward.ItemID, reward.ItemQuantity, ItemContext::NONE, _owner))
                         {
-                            item->SaveToDB(CharacterDatabaseTransaction(nullptr));
+                            item->SaveToDB(trans);
                             draft.AddItem(item);
-                            draft.SendMailTo(CharacterDatabaseTransaction(nullptr), MailReceiver(_owner), MailSender(MAIL_CREATURE, 0));
                         }
+                        draft.SendMailTo(trans, MailReceiver(_owner), MailSender(MAIL_CREATURE, 0));
+                        CharacterDatabase.CommitTransaction(trans);
                     }
                 }
                 if (reward.CurrencyID > 0 && reward.CurrencyQuantity > 0)
@@ -2161,13 +2165,15 @@ GarrisonError Garrison::FinalizeMission(uint32 missionRecID, bool grantOvermax)
                 }
                 else
                 {
+                    CharacterDatabaseTransaction trans = CharacterDatabase.BeginTransaction();
                     MailDraft draft("Salvage", "Salvage from a garrison mission.");
                     if (Item* item = Item::CreateItem(salvageItemId, 1, ItemContext::NONE, _owner))
                     {
-                        item->SaveToDB(CharacterDatabaseTransaction(nullptr));
+                        item->SaveToDB(trans);
                         draft.AddItem(item);
-                        draft.SendMailTo(CharacterDatabaseTransaction(nullptr), MailReceiver(_owner), MailSender(MAIL_CREATURE, 0));
                     }
+                    draft.SendMailTo(trans, MailReceiver(_owner), MailSender(MAIL_CREATURE, 0));
+                    CharacterDatabase.CommitTransaction(trans);
                 }
             }
         }
@@ -3391,13 +3397,18 @@ void Garrison::CompleteShipment(uint64 dbId)
             }
             else
             {
+                // Bags full - mail the goods. MailDraft::SendMailTo appends its INSERTs to the passed
+                // transaction and dereferences it, so it MUST be a real transaction; a null
+                // CharacterDatabaseTransaction(nullptr) crashes here (access violation on collect).
+                CharacterDatabaseTransaction trans = CharacterDatabase.BeginTransaction();
                 MailDraft draft("Garrison Work Order", "The goods produced by your completed work order.");
                 if (Item* item = Item::CreateItem(itemId, quantity, ItemContext::NONE, _owner))
                 {
-                    item->SaveToDB(CharacterDatabaseTransaction(nullptr));
+                    item->SaveToDB(trans);
                     draft.AddItem(item);
-                    draft.SendMailTo(CharacterDatabaseTransaction(nullptr), MailReceiver(_owner), MailSender(MAIL_CREATURE, 0));
                 }
+                draft.SendMailTo(trans, MailReceiver(_owner), MailSender(MAIL_CREATURE, 0));
+                CharacterDatabase.CommitTransaction(trans);
             }
         }
     }
