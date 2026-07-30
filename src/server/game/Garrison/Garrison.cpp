@@ -3498,26 +3498,37 @@ void Garrison::UpdateWorkOrderCrates()
         if (!crate)
             continue;
 
-        uint32 orderCount = 0;
+        // Only READY orders show as goods to collect; in-progress orders show the "working" model (or
+        // stay on the base/empty model if the container has none). Counting all orders made the crate look
+        // full/ready while an order was still cooking, so clicking it collected nothing.
+        uint32 readyCount = 0;
+        uint32 inProgressCount = 0;
         for (auto const& p : _shipments)
             if (p.second.PlotInstanceID == plotInstanceId)
-                ++orderCount;
+            {
+                if (p.second.IsReady())
+                    ++readyCount;
+                else
+                    ++inProgressCount;
+            }
 
         uint32 displayId = crate->GetGOInfo()->displayId; // base / empty
-        if (orderCount > 0)
+        GarrBuildingEntry const* building = sGarrBuildingStore.LookupEntry(plot.BuildingInfo.PacketInfo->GarrBuildingID);
+        CharShipmentContainerEntry const* container = building
+            ? sGarrisonMgr.GetShipmentContainerForBuilding(building->BuildingType, uint8(GetFaction())) : nullptr;
+        if (container)
         {
-            GarrBuildingEntry const* building = sGarrBuildingStore.LookupEntry(plot.BuildingInfo.PacketInfo->GarrBuildingID);
-            CharShipmentContainerEntry const* container = building
-                ? sGarrisonMgr.GetShipmentContainerForBuilding(building->BuildingType, uint8(GetFaction())) : nullptr;
-            if (container)
+            if (readyCount > 0)
             {
-                if (container->LargeThreshold && orderCount >= container->LargeThreshold && container->LargeDisplayInfoID)
+                if (container->LargeThreshold && readyCount >= container->LargeThreshold && container->LargeDisplayInfoID)
                     displayId = container->LargeDisplayInfoID;
-                else if (container->MediumThreshold && orderCount >= container->MediumThreshold && container->MediumDisplayInfoID)
+                else if (container->MediumThreshold && readyCount >= container->MediumThreshold && container->MediumDisplayInfoID)
                     displayId = container->MediumDisplayInfoID;
                 else if (container->SmallDisplayInfoID)
                     displayId = container->SmallDisplayInfoID;
             }
+            else if (inProgressCount > 0 && container->WorkingDisplayInfoID)
+                displayId = container->WorkingDisplayInfoID;
         }
 
         if (displayId && crate->GetDisplayId() != displayId)
