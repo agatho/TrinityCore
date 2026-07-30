@@ -765,6 +765,16 @@ void WorldSession::HandleRequestAreaPoiUpdate(WorldPackets::Quest::RequestAreaPo
     SendPacket(response.Write());
 }
 
+// The client sends this variant on its own timer to refresh timed/scheduled area POIs (e.g. world-boss and
+// event countdowns). The response is identical to the on-demand request - the current active area-POI set with
+// their timers - so it mirrors HandleRequestAreaPoiUpdate exactly.
+void WorldSession::HandleRequestScheduledAreaPoiUpdate(WorldPackets::Quest::RequestScheduledAreaPoiUpdate& /*packet*/)
+{
+    WorldPackets::Quest::AreaPoiUpdateResponse response;
+    sAreaPoiMgr->FillActiveAreaPois(response.AreaPois);
+    SendPacket(response.Write());
+}
+
 void WorldSession::HandlePlayerChoiceResponse(WorldPackets::Quest::ChoiceResponse const& choiceResponse)
 {
     PlayerChoiceData const* playerChoiceData = _player->PlayerTalkClass->GetInteractionData().GetPlayerChoice();
@@ -825,6 +835,16 @@ void WorldSession::HandleCloseQuestChoice(WorldPackets::Quest::CloseQuestChoice&
     // The player dismissed the PlayerChoice UI. If a PlayerChoice interaction is active, end it so a late/duplicate
     // CMSG_CHOICE_RESPONSE can no longer be honoured against it (HandlePlayerChoiceResponse requires an active
     // GetPlayerChoice()). Leave any other interaction type untouched.
+    InteractionData& interaction = _player->PlayerTalkClass->GetInteractionData();
+    if (interaction.Type == PlayerInteractionType::PlayerChoice)
+        interaction.Reset();
+}
+
+// The client sends this when the PlayerChoice UI is hidden rather than explicitly closed (same net effect as
+// CMSG_CLOSE_QUEST_CHOICE): end the active PlayerChoice interaction so a late CMSG_CHOICE_RESPONSE cannot be
+// honoured against a UI the player has dismissed.
+void WorldSession::HandleHideQuestChoice(WorldPackets::Quest::HideQuestChoice& /*hideQuestChoice*/)
+{
     InteractionData& interaction = _player->PlayerTalkClass->GetInteractionData();
     if (interaction.Type == PlayerInteractionType::PlayerChoice)
         interaction.Reset();

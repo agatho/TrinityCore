@@ -734,6 +734,14 @@ namespace WorldPackets
             void Read() override { }
         };
 
+        class RequestScheduledAreaPoiUpdate final : public ClientPacket
+        {
+        public:
+            explicit RequestScheduledAreaPoiUpdate(WorldPacket&& packet) : ClientPacket(CMSG_REQUEST_SCHEDULED_AREA_POI_UPDATE, std::move(packet)) { }
+
+            void Read() override { }
+        };
+
         struct AreaPoiUpdateInfo
         {
             AreaPoiUpdateInfo(time_t lastUpdate, uint32 areaPoiID, uint32 timer, int32 variableID, int32 value) :
@@ -854,6 +862,14 @@ namespace WorldPackets
         {
         public:
             explicit CloseQuestChoice(WorldPacket&& packet) : ClientPacket(CMSG_CLOSE_QUEST_CHOICE, std::move(packet)) { }
+
+            void Read() override { }
+        };
+
+        class HideQuestChoice final : public ClientPacket
+        {
+        public:
+            explicit HideQuestChoice(WorldPacket&& packet) : ClientPacket(CMSG_HIDE_QUEST_CHOICE, std::move(packet)) { }
 
             void Read() override { }
         };
