@@ -21531,6 +21531,28 @@ bool Player::CollectConduit(uint32 conduitId, int32 rankIndex /*= -1*/)
     stmt->setUInt32(1, conduitId);
     stmt->setUInt32(2, uint32(rankIndex));
     CharacterDatabase.Execute(stmt);
+
+    // If this conduit is currently socketed in the active soulbind tree, refresh the applied conduit spells so the
+    // upgraded rank takes effect immediately. Without this the player keeps the OLD-rank spell until the next
+    // soulbind switch or relog. Guard on IsInWorld(): during character load conduits are applied once after the
+    // active soulbind is known (ApplyConduitSpells in the load path), so refreshing here would double-apply.
+    if (IsInWorld())
+    {
+        bool socketed = false;
+        for (auto const& [garrTalentId, socket] : m_soulbindConduitSockets)
+        {
+            if (socket.first == conduitId)
+            {
+                socketed = true;
+                break;
+            }
+        }
+        if (socketed)
+        {
+            RemoveConduitSpells();
+            ApplyConduitSpells();
+        }
+    }
     return true;
 }
 

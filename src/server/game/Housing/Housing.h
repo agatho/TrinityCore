@@ -266,6 +266,12 @@ private:
     ObjectGuid FindBaseRoomGuid() const;
     bool IsRoomGraphConnectedWithout(ObjectGuid excludeRoomGuid) const;
 
+    // A placement is charged to the EXTERIOR decor budget when it has no room (empty RoomGuid) OR its RoomGuid is
+    // the plot's exterior base-room identity. Single source of truth so the budget check, increment and reload
+    // recompute all classify identically (a mismatch let exterior decor bypass its cap and starved interior decor).
+    bool IsExteriorPlotRoomGuid(ObjectGuid const& roomGuid) const;
+    bool IsExteriorDecorPlacement(ObjectGuid const& roomGuid) const { return roomGuid.IsEmpty() || IsExteriorPlotRoomGuid(roomGuid); }
+
     // Immediate DB persistence helpers
     void PersistRoomToDB(ObjectGuid roomGuid, Room const& room);
     void PersistFixtureToDB(uint32 fixturePointId, uint32 optionId);

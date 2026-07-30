@@ -121,7 +121,11 @@ bool MythicPlusData::RecordRun(MythicPlusRunRecord const& run)
     if (itr != _bestRuns.end())
     {
         MythicPlusRunRecord const& best = itr->second;
-        if (run.Level < best.Level || (run.Level == best.Level && run.DurationMs >= best.DurationMs))
+        // Best run is the one that awards the most rating, which is the Score - NOT the keystone level. A higher
+        // keystone completed over time (depleted) scores lower than a lower keystone finished in time, so ranking
+        // by Level would let such a run overwrite the real best and LOWER the player's overall rating. Score already
+        // folds in level, timing and affixes.
+        if (run.Score <= best.Score)
             return false;
     }
 
