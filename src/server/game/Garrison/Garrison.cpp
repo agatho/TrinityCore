@@ -647,6 +647,10 @@ void Garrison::Upgrade()
     // upgrade cinematic; without it the Architect UI advances but the player stays on the old level's map.
     if (_owner->IsInWorld() && int32(_owner->GetMapId()) != int32(_siteLevel->MapID))
         _owner->TeleportTo(WorldLocation(_siteLevel->MapID, *_owner), TELE_TO_SEAMLESS);
+
+    // Push fresh full garrison info so the world map (M) and Architect reflect the new site level + plot layout
+    // immediately, rather than showing the previous level until the client next re-requests (relog / re-enter).
+    SendInfo();
 }
 
 void Garrison::Update(uint32 diff)
@@ -1241,6 +1245,30 @@ void Garrison::SendRemoteInfo() const
             remoteSiteInfo.Buildings.emplace_back(p.first, p.second.BuildingInfo.PacketInfo->GarrBuildingID);
 
     _owner->SendDirectMessage(remoteInfo.Write());
+}
+
+// Resend the full garrison info unsolicited (same payload as HandleGetGarrisonInfo). The client normally
+// requests this on login / on entering the garrison; after an in-session change that alters the site level or
+// building layout (e.g. an upgrade), the world map keeps showing the stale layout until the client re-requests.
+// Pushing it explicitly refreshes the site level + per-plot buildings so the world map (M) reflects the new level.
+void Garrison::SendInfo() const
+{
+    SendTroopQualityRefresh();
+
+    WorldPackets::Garrison::GetGarrisonInfoResult garrisonInfo;
+    garrisonInfo.FactionIndex = GetFaction();
+    BuildInfoPacket(garrisonInfo.Garrisons.emplace_back());
+    garrisonInfo.FollowerSoftCaps = {
+        { FOLLOWER_TYPE_GARRISON,     20 },
+        { FOLLOWER_TYPE_SHIPYARD,      6 },
+        { FOLLOWER_TYPE_CLASS_ORDER,   6 },
+        { FOLLOWER_TYPE_WAR_CAMPAIGN, 30 },
+        { FOLLOWER_TYPE_COVENANT,    100 }
+    };
+    _owner->SendDirectMessage(garrisonInfo.Write());
+
+    SendDeleteExpiredMissionsResult();
+    SendMissionStartConditionUpdate();
 }
 
 void Garrison::SendBlueprintAndSpecializationData()
@@ -1973,7 +2001,7 @@ bool Garrison::RollMissionOutcome(Mission const& mission, uint32 missionRecID) c
         }
 
         AutoCombatResult combatResult = GarrisonAutoCombat::SimulateCombat(playerUnits, enemyUnits);
-        TC_LOG_DEBUG("garrison", "Auto-combat for mission %u: %s in %d rounds",
+        TC_LOG_DEBUG("garrison", "Auto-combat for mission {}: {} in {} rounds",
             missionRecID, combatResult.PlayerWon ? "WON" : "LOST", combatResult.TotalRounds);
         return combatResult.PlayerWon;
     }

@@ -419,6 +419,7 @@ public:
 
     void BuildInfoPacket(WorldPackets::Garrison::GarrisonInfo& garrison) const;
     void SendRemoteInfo() const;
+    void SendInfo() const;
     void SendBlueprintAndSpecializationData();
     void SendMapData(Player* receiver) const;
     void SendMissionStartConditionUpdate() const;
