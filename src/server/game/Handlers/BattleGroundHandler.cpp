@@ -556,14 +556,11 @@ void WorldSession::HandleBattlemasterJoinArena(WorldPackets::Battleground::Battl
     if (!bracketEntry)
         return;
 
+    // Rated arena requires a premade party. A group-less player simply cannot queue. Do NOT synthesize a Group
+    // here: Group::Create() persists a real `groups` row to the character DB and registers a db-store id, but this
+    // caller never sGroupMgr->AddGroup()s it - leaving an untracked, DB-backed phantom 1-man party attached to the
+    // player (which then fails the party-size check anyway). Upstream just returns.
     Group* grp = _player->GetGroup();
-    if (!grp)
-    {
-        grp = new Group();
-        grp->Create(_player);
-    }
-
-    // no group found, error
     if (!grp)
         return;
 

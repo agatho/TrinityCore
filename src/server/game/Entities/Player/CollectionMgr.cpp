@@ -241,12 +241,16 @@ bool CollectionMgr::RemoveMount(uint32 spellId)
     if (itr == _mounts.end())
         return false;
 
+    // Erase FIRST, then revoke the paired faction mount. The FactionSpecificMounts mapping is symmetric (A<->B),
+    // so recursing before the erase re-enters RemoveMount(A) from RemoveMount(B) - which still finds A present -
+    // and loops forever until the stack overflows. Removing A up front makes the recursive call short-circuit at
+    // the find() guard above. (AddMount avoids this with a factionMount bool; erase-first is the equivalent here.)
+    _mounts.erase(itr);
+
     // Mirror AddMount's faction-specific pairing: revoke the paired faction mount too.
     MountDefinitionMap::const_iterator defItr = FactionSpecificMounts.find(spellId);
     if (defItr != FactionSpecificMounts.end())
         RemoveMount(defItr->second);
-
-    _mounts.erase(itr);
 
     LoginDatabasePreparedStatement* stmt = LoginDatabase.GetPreparedStatement(LOGIN_DEL_ACCOUNT_MOUNT);
     stmt->setUInt32(0, _owner->GetBattlenetAccountId());

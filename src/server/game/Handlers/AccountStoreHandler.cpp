@@ -146,16 +146,22 @@ void WorldSession::HandleAccountStoreBeginPurchaseOrRefund(WorldPackets::Account
         return;
     }
 
-    if (item->Price > 0)
+    // Only currency-purchasable rows can be bought through the worldserver. A row with no positive Price or no
+    // CurrencyTypesID is a real-money / externally-billed (VAS) item whose entitlement is delivered out-of-band -
+    // the world server must NOT hand it out for free just because the payment block would otherwise be skipped.
+    if (item->Price <= 0 || !item->CurrencyTypesID)
     {
-        if (!item->CurrencyTypesID || !player->HasCurrency(uint32(item->CurrencyTypesID), uint32(item->Price)))
-        {
-            sendResult(AccountStoreTransactionResult::InsufficientFunds, AccountStoreItemStatus::Unowned);
-            return;
-        }
-
-        player->RemoveCurrency(uint32(item->CurrencyTypesID), item->Price, CurrencyDestroyReason::Vendor);
+        sendResult(AccountStoreTransactionResult::Unavailable, AccountStoreItemStatus::Unowned);
+        return;
     }
+
+    if (!player->HasCurrency(uint32(item->CurrencyTypesID), uint32(item->Price)))
+    {
+        sendResult(AccountStoreTransactionResult::InsufficientFunds, AccountStoreItemStatus::Unowned);
+        return;
+    }
+
+    player->RemoveCurrency(uint32(item->CurrencyTypesID), item->Price, CurrencyDestroyReason::Vendor);
 
     // Grant the reward. A teaching SpellID adds mounts/pets/toys via the standard learn path; a TransmogSetID
     // is added directly to the account collection.

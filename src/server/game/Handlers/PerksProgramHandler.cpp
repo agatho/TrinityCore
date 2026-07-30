@@ -73,6 +73,10 @@ static bool PerksProgramPurchaseItem(WorldSession* session, Player* player, int3
         return false;
     if (item->ToyID && collectionMgr->HasToy(uint32(item->ToyID)))
         return false;
+    // Appearance rewards are append-only in the account collection and non-refundable, so an already-known
+    // appearance would just drain tender for a no-op AddItemAppearance. HasItemAppearance().first == already known.
+    if (item->ItemModifiedAppearanceID && collectionMgr->HasItemAppearance(uint32(item->ItemModifiedAppearanceID)).first)
+        return false;
 
     player->RemoveCurrency(CURRENCY_TYPE_TRADERS_TENDER, item->Price, CurrencyDestroyReason::Vendor);
 
