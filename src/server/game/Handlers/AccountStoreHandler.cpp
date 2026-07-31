@@ -82,6 +82,17 @@ void WorldSession::HandleAccountStoreBeginPurchaseOrRefund(WorldPackets::Account
             return;
         }
 
+        // The currency was debited from the single character that bought the item; a refund credits currency here, so
+        // it must go back to that SAME character. Refunding on a different character would mint currency that was
+        // destroyed elsewhere (an account-wide-ownership + per-character-wallet transfer exploit). Only the paying
+        // character may refund. (Legacy rows carry PayerGuid == 0 and are exempt from the scope check.)
+        CollectionMgr::AccountStorePurchase const* purchase = collectionMgr->GetAccountStorePurchase(refundItem->ID);
+        if (purchase && purchase->PayerGuid != 0 && purchase->PayerGuid != player->GetGUID().GetCounter())
+        {
+            sendResult(AccountStoreTransactionResult::NotSupported, AccountStoreItemStatus::Owned);
+            return;
+        }
+
         // RefundDuration == 0 means the item is non-refundable; otherwise the refund must fall inside the window.
         uint32 purchaseTime = collectionMgr->GetAccountStorePurchaseTime(refundItem->ID);
         if (refundItem->RefundDuration <= 0 || !purchaseTime
@@ -100,12 +111,17 @@ void WorldSession::HandleAccountStoreBeginPurchaseOrRefund(WorldPackets::Account
             return;
         }
 
-        // Revoke the reward: a mount teaching spell resyncs the account mount list; any other teaching spell is
-        // simply un-learned.
-        if (sDB2Manager.GetMount(uint32(refundItem->SpellID)))
-            collectionMgr->RemoveMount(uint32(refundItem->SpellID));
-        else
-            player->RemoveSpell(uint32(refundItem->SpellID));
+        // Revoke the reward - but only if THIS purchase actually taught it. If the payer already owned the mount/spell
+        // from another source at purchase time (Granted == false), stripping it here would destroy a collectible this
+        // purchase never granted; refund the currency but leave the collectible intact. A mount teaching spell resyncs
+        // the account mount list; any other teaching spell is simply un-learned.
+        if (!purchase || purchase->Granted)
+        {
+            if (sDB2Manager.GetMount(uint32(refundItem->SpellID)))
+                collectionMgr->RemoveMount(uint32(refundItem->SpellID));
+            else
+                player->RemoveSpell(uint32(refundItem->SpellID));
+        }
 
         if (refundItem->Price > 0 && refundItem->CurrencyTypesID)
             player->AddCurrency(uint32(refundItem->CurrencyTypesID), uint32(refundItem->Price), CurrencyGainSource::ItemRefund);
@@ -163,6 +179,10 @@ void WorldSession::HandleAccountStoreBeginPurchaseOrRefund(WorldPackets::Account
 
     player->RemoveCurrency(uint32(item->CurrencyTypesID), item->Price, CurrencyDestroyReason::Vendor);
 
+    // Capture whether this purchase actually teaches the SpellID collectible BEFORE learning it. If the payer already
+    // knows the spell/mount from another source, a later refund must not strip it (Granted == false records that).
+    bool const granted = !item->SpellID || !player->HasSpell(uint32(item->SpellID));
+
     // Grant the reward. A teaching SpellID adds mounts/pets/toys via the standard learn path; a TransmogSetID
     // is added directly to the account collection.
     if (item->SpellID)
@@ -170,7 +190,7 @@ void WorldSession::HandleAccountStoreBeginPurchaseOrRefund(WorldPackets::Account
     if (item->TransmogSetID)
         collectionMgr->AddTransmogSet(uint32(item->TransmogSetID));
 
-    collectionMgr->AddAccountStorePurchase(item->ID);
+    collectionMgr->AddAccountStorePurchase(item->ID, player->GetGUID().GetCounter(), granted);
 
     sendResult(AccountStoreTransactionResult::Success, AccountStoreItemStatus::Owned);
 }

@@ -168,8 +168,8 @@ void LoginDatabaseConnection::DoPrepareStatements()
     PrepareStatement(LOGIN_REP_ACCOUNT_TOYS, "REPLACE INTO battlenet_account_toys (accountId, itemId, isFavourite, hasFanfare) VALUES (?, ?, ?, ?)", CONNECTION_ASYNC);
     PrepareStatement(LOGIN_DEL_ACCOUNT_TOYS, "DELETE FROM battlenet_account_toys WHERE accountId = ? AND itemId = ?", CONNECTION_ASYNC);
     PrepareStatement(LOGIN_DEL_ACCOUNT_MOUNT, "DELETE FROM battlenet_account_mounts WHERE battlenetAccountId = ? AND mountSpellId = ?", CONNECTION_ASYNC);
-    PrepareStatement(LOGIN_SEL_ACCOUNT_STORE_PURCHASES, "SELECT accountStoreItemId, purchaseTime FROM battlenet_account_store_purchases WHERE accountId = ?", CONNECTION_ASYNC);
-    PrepareStatement(LOGIN_INS_ACCOUNT_STORE_PURCHASE, "INSERT IGNORE INTO battlenet_account_store_purchases (accountId, accountStoreItemId, purchaseTime) VALUES (?, ?, ?)", CONNECTION_ASYNC);
+    PrepareStatement(LOGIN_SEL_ACCOUNT_STORE_PURCHASES, "SELECT accountStoreItemId, purchaseTime, payerGuid, granted FROM battlenet_account_store_purchases WHERE accountId = ?", CONNECTION_ASYNC);
+    PrepareStatement(LOGIN_INS_ACCOUNT_STORE_PURCHASE, "INSERT IGNORE INTO battlenet_account_store_purchases (accountId, accountStoreItemId, purchaseTime, payerGuid, granted) VALUES (?, ?, ?, ?, ?)", CONNECTION_ASYNC);
     PrepareStatement(LOGIN_DEL_ACCOUNT_STORE_PURCHASE, "DELETE FROM battlenet_account_store_purchases WHERE accountId = ? AND accountStoreItemId = ?", CONNECTION_ASYNC);
     PrepareStatement(LOGIN_SEL_ACCOUNT_PERKS_PURCHASES, "SELECT perksVendorItemId, price, purchaseTime, mountId, toyId FROM battlenet_account_perks_purchases WHERE accountId = ?", CONNECTION_ASYNC);
     PrepareStatement(LOGIN_INS_ACCOUNT_PERKS_PURCHASE, "INSERT INTO battlenet_account_perks_purchases (accountId, perksVendorItemId, price, purchaseTime, mountId, toyId) VALUES (?, ?, ?, ?, ?, ?)", CONNECTION_ASYNC);

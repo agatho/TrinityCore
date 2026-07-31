@@ -184,26 +184,41 @@ void CollectionMgr::LoadAccountStorePurchases(PreparedQueryResult result)
     do
     {
         Field* fields = result->Fetch();
-        _accountStoreItems.emplace(fields[0].GetUInt32(), fields[1].GetUInt32());
+        AccountStorePurchase purchase;
+        purchase.PurchaseTime = fields[1].GetUInt32();
+        purchase.PayerGuid = fields[2].GetUInt64();
+        purchase.Granted = fields[3].GetBool();
+        _accountStoreItems.emplace(fields[0].GetUInt32(), purchase);
     } while (result->NextRow());
 }
 
 uint32 CollectionMgr::GetAccountStorePurchaseTime(uint32 accountStoreItemId) const
 {
     auto itr = _accountStoreItems.find(accountStoreItemId);
-    return itr != _accountStoreItems.end() ? itr->second : 0;
+    return itr != _accountStoreItems.end() ? itr->second.PurchaseTime : 0;
 }
 
-bool CollectionMgr::AddAccountStorePurchase(uint32 accountStoreItemId)
+CollectionMgr::AccountStorePurchase const* CollectionMgr::GetAccountStorePurchase(uint32 accountStoreItemId) const
 {
-    uint32 now = uint32(GameTime::GetGameTime());
-    if (!_accountStoreItems.emplace(accountStoreItemId, now).second)
+    auto itr = _accountStoreItems.find(accountStoreItemId);
+    return itr != _accountStoreItems.end() ? &itr->second : nullptr;
+}
+
+bool CollectionMgr::AddAccountStorePurchase(uint32 accountStoreItemId, uint64 payerGuid, bool granted)
+{
+    AccountStorePurchase purchase;
+    purchase.PurchaseTime = uint32(GameTime::GetGameTime());
+    purchase.PayerGuid = payerGuid;
+    purchase.Granted = granted;
+    if (!_accountStoreItems.emplace(accountStoreItemId, purchase).second)
         return false;
 
     LoginDatabasePreparedStatement* stmt = LoginDatabase.GetPreparedStatement(LOGIN_INS_ACCOUNT_STORE_PURCHASE);
     stmt->setUInt32(0, _owner->GetBattlenetAccountId());
     stmt->setUInt32(1, accountStoreItemId);
-    stmt->setUInt32(2, now);
+    stmt->setUInt32(2, purchase.PurchaseTime);
+    stmt->setUInt64(3, payerGuid);
+    stmt->setBool(4, granted);
     LoginDatabase.Execute(stmt);
     return true;
 }

@@ -147,11 +147,22 @@ public:
     // Revoke a mount (in-memory + un-learn spell + full mount resync + account DB). Returns false if not owned.
     bool RemoveMount(uint32 spellId);
 
-    // Account-wide AccountStore purchases (AccountStoreItem ID -> unix purchase time)
+    // Account-wide AccountStore purchase record. Ownership is account-wide, but the currency was debited from ONE
+    // character; PayerGuid is that character's low GUID so a refund can be scoped to it (currency must not move
+    // between characters via buy-here/refund-there). Granted records whether this purchase actually taught the
+    // collectible - if the payer already owned the spell/mount from another source, the refund must NOT strip it.
+    struct AccountStorePurchase
+    {
+        uint32 PurchaseTime = 0;
+        uint64 PayerGuid = 0;
+        bool Granted = true;
+    };
+
     void LoadAccountStorePurchases(PreparedQueryResult result);
     bool HasAccountStoreItem(uint32 accountStoreItemId) const { return _accountStoreItems.contains(accountStoreItemId); }
     uint32 GetAccountStorePurchaseTime(uint32 accountStoreItemId) const;
-    bool AddAccountStorePurchase(uint32 accountStoreItemId);
+    AccountStorePurchase const* GetAccountStorePurchase(uint32 accountStoreItemId) const;
+    bool AddAccountStorePurchase(uint32 accountStoreItemId, uint64 payerGuid, bool granted);
     bool RemoveAccountStorePurchase(uint32 accountStoreItemId);
 
     ToyBoxContainer const& GetAccountToys() const { return _toys; }
@@ -247,7 +258,7 @@ private:
     std::unique_ptr<boost::dynamic_bitset<uint32>> _transmogIllusions;
     Trinity::Containers::FlatSet<int32> _transmogOutfits;
     WarbandSceneCollectionContainer _warbandScenes;
-    std::unordered_map<uint32, uint32> _accountStoreItems;   // AccountStoreItem ID -> unix purchase time
+    std::unordered_map<uint32, AccountStorePurchase> _accountStoreItems;   // AccountStoreItem ID -> purchase record
     std::unordered_map<int32, PerksProgramPurchaseData> _perksPurchases;   // perksVendorItemId -> purchase record
 };
 
