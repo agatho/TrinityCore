@@ -46,11 +46,17 @@ void WorldSession::HandleRequestWeeklyRewards(WorldPackets::WeeklyRewards::Reque
         {
             uint32 const thresholdId = uint32(t) * 3 + slot;   // synthetic per-row/slot id
 
+            // Each vault slot rewards the level of the Nth-best run (N = this slot's run threshold), not the single
+            // best for every slot. Levels is sorted high->low; fall back to BestLevel only for legacy rows.
+            uint32 const runsNeeded = thresholds[slot];
+            uint32 const slotLevel = (row.Count < runsNeeded) ? 0u
+                : (runsNeeded <= row.Levels.size() ? row.Levels[runsNeeded - 1] : row.BestLevel);
+
             WorldPackets::WeeklyRewards::WeeklyRewardProgress p;
             p.ThresholdID = thresholdId;
             p.Amount = row.Count;
             p.ActivityTierID = uint32(t);
-            p.Level = row.BestLevel;
+            p.Level = slotLevel;
             p.Earned = row.Count >= thresholds[slot];
             progress.Progress.push_back(p);
 
@@ -63,7 +69,7 @@ void WorldSession::HandleRequestWeeklyRewards(WorldPackets::WeeklyRewards::Reque
                 threshold.ThresholdID = thresholdId;
                 WorldPackets::WeeklyRewards::WeeklyRewardItem& reward = threshold.Rewards.emplace_back();
                 reward.Type = uint32(t);
-                reward.Value = row.BestLevel;
+                reward.Value = slotLevel;
                 rewards.Thresholds.push_back(std::move(threshold));
             }
         }

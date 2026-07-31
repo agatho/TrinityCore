@@ -99,12 +99,30 @@ void WorldSession::ClaimRafActivity(uint32 activityId)
     uint32 accountId = GetBattlenetAccountId();
     int32 rewardQuestId = activity->RewardQuestID;
 
+    // Per-activity threshold. The Blizzlike gate is this activity's CriteriaTree, which the server can't fully
+    // evaluate offline (it keys off external subscription-months data - recruit-count stands in for that metric).
+    // But use the CriteriaTree's Amount as the PER-ACTIVITY requirement so each activity unlocks at its own
+    // threshold instead of EVERY activity unlocking on a single recruit (the old flat `recruitCount >= 1`).
+    uint32 requiredCount = 1;
+    if (CriteriaTreeEntry const* tree = sCriteriaTreeStore.LookupEntry(uint32(activity->CriteriaTreeID)))
+        if (tree->Amount > 0)
+            requiredCount = tree->Amount;
+
+    // Guard the async eligibility-check -> grant window: reject a second claim for this activity while one is already
+    // being processed. The eligibility SELECT runs before the claim-marker INSERT commits, so two rapidly-sent claim
+    // packets for the same activity could otherwise both see "not claimed" and double-grant.
+    if (!_rafActivityClaimsInProgress.insert(activityId).second)
+    {
+        SendClaimRafRewardResult(1);   // a claim for this activity is already in flight
+        return;
+    }
+
     LoginDatabasePreparedStatement* stmt = LoginDatabase.GetPreparedStatement(LOGIN_SEL_ACCOUNT_RAF_CLAIM_ELIGIBILITY);
     stmt->setUInt32(0, accountId);   // recruiterAccountId (recruit count)
     stmt->setUInt32(1, accountId);   // accountId (already-claimed check)
     stmt->setUInt32(2, activityId);
 
-    GetQueryProcessor().AddCallback(LoginDatabase.AsyncQuery(stmt).WithPreparedCallback([this, accountId, activityId, rewardQuestId](PreparedQueryResult result)
+    GetQueryProcessor().AddCallback(LoginDatabase.AsyncQuery(stmt).WithPreparedCallback([this, accountId, activityId, rewardQuestId, requiredCount](PreparedQueryResult result)
     {
         uint64 recruitCount = 0;
         uint64 alreadyClaimed = 0;
@@ -115,21 +133,26 @@ void WorldSession::ClaimRafActivity(uint32 activityId)
             alreadyClaimed = fields[1].GetUInt64();
         }
 
-        if (alreadyClaimed > 0 || recruitCount < 1)
+        if (alreadyClaimed > 0 || recruitCount < requiredCount)
         {
-            SendClaimRafRewardResult(1);   // already claimed, or not eligible
+            _rafActivityClaimsInProgress.erase(activityId);   // allow a later retry
+            SendClaimRafRewardResult(1);   // already claimed, or not yet eligible for this activity
             return;
         }
 
         Player* player = GetPlayer();
         if (!player)
+        {
+            _rafActivityClaimsInProgress.erase(activityId);
             return;
+        }
 
         // Do NOT mark the activity claimed unless the reward actually resolves and is granted. Otherwise an activity
         // whose RewardQuestID is unknown/unset is permanently consumed for nothing (marked claimed + success sent).
         Quest const* quest = sObjectMgr->GetQuestTemplate(uint32(rewardQuestId));
         if (!quest)
         {
+            _rafActivityClaimsInProgress.erase(activityId);   // allow retry once the reward is configured
             SendClaimRafRewardResult(1);   // reward not resolvable - leave the activity unclaimed
             return;
         }

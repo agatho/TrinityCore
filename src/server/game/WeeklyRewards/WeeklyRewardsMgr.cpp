@@ -20,9 +20,13 @@
 #include "DatabaseEnv.h"
 #include "Common.h"
 #include "GameTime.h"
+#include "Optional.h"
 #include "Player.h"
+#include "StringConvert.h"
 #include "Timer.h"
+#include "Util.h"
 #include <algorithm>
+#include <sstream>
 
 namespace WeeklyRewards
 {
@@ -103,6 +107,11 @@ void WeeklyRewardsMgr::LoadCharacter(ObjectGuid guid)
             {
                 vault.Rows[type].Count = f[2].GetUInt32();
                 vault.Rows[type].BestLevel = f[3].GetUInt32();
+                // Restore the serialized per-run levels (comma-separated, high->low). Empty for legacy rows.
+                vault.Rows[type].Levels.clear();
+                for (std::string_view tok : Trinity::Tokenize(f[4].GetStringView(), ',', false))
+                    if (Optional<uint32> lvl = Trinity::StringTo<uint32>(tok))
+                        vault.Rows[type].Levels.push_back(*lvl);
             }
         } while (res->NextRow());
     }
@@ -128,6 +137,10 @@ void WeeklyRewardsMgr::SaveVault(ObjectGuid guid)
         stmt->setUInt32(2, vault->Period);
         stmt->setUInt32(3, vault->Rows[type].Count);
         stmt->setUInt32(4, vault->Rows[type].BestLevel);
+        std::ostringstream levelsStr;
+        for (size_t i = 0; i < vault->Rows[type].Levels.size(); ++i)
+            levelsStr << (i ? "," : "") << vault->Rows[type].Levels[i];
+        stmt->setString(5, levelsStr.str());
         trans->Append(stmt);
     }
 
@@ -148,6 +161,13 @@ void WeeklyRewardsMgr::RecordActivity(Player* player, WeeklyRewards::ActivityTyp
     WeeklyRewards::ActivityRow& row = vault.Rows[uint8(type)];
     ++row.Count;
     row.BestLevel = std::max(row.BestLevel, level);
+
+    // Track each run's level (sorted high->low, capped at this activity's highest slot threshold) so the Great Vault
+    // can award the Nth-best run per slot instead of the single best for all three slots.
+    row.Levels.push_back(level);
+    std::sort(row.Levels.begin(), row.Levels.end(), std::greater<uint32>());
+    if (uint32 const maxRuns = WeeklyRewards::ThresholdsFor(type).back(); row.Levels.size() > maxRuns)
+        row.Levels.resize(maxRuns);
 
     SaveVault(player->GetGUID());
 }

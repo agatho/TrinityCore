@@ -2758,6 +2758,11 @@ class TC_GAME_API WorldSession
 
         std::unordered_map<uint32 /*instanceId*/, SystemTimePoint/*releaseTime*/> _instanceResetTimes;
 
+        // RAF activity ids with an in-flight claim (guards the async eligibility-check -> grant window so two
+        // rapidly-sent claim packets for the same activity cannot both pass the "already claimed" check and
+        // double-grant). Kept on success (the DB marker then blocks re-claims); erased on failure to allow retry.
+        std::unordered_set<uint32 /*rafActivityId*/> _rafActivityClaimsInProgress;
+
         PlayerDataAccount _playerDataAccount;
         std::vector<std::string> _registeredAddonPrefixes;
         bool _filterAddonMessages;

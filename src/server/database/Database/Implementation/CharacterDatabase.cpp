@@ -593,8 +593,8 @@ void CharacterDatabaseConnection::DoPrepareStatements()
     PrepareStatement(CHAR_UPD_RECENT_ALLY_NOTE, "UPDATE character_recent_allies SET note = ? WHERE ownerGuid = ? AND allyGuid = ?", CONNECTION_ASYNC);
     PrepareStatement(CHAR_SEL_RECENT_ALLY_SETTING, "SELECT allowSeeLocation FROM character_recent_ally_settings WHERE ownerGuid = ?", CONNECTION_SYNCH);
     PrepareStatement(CHAR_REP_RECENT_ALLY_SETTING, "REPLACE INTO character_recent_ally_settings (ownerGuid, allowSeeLocation) VALUES (?, ?)", CONNECTION_ASYNC);
-    PrepareStatement(CHAR_SEL_WEEKLY_REWARD_ACTIVITY, "SELECT period, activityType, count, bestLevel FROM character_weekly_reward_activity WHERE ownerGuid = ?", CONNECTION_SYNCH);
-    PrepareStatement(CHAR_REP_WEEKLY_REWARD_ACTIVITY, "REPLACE INTO character_weekly_reward_activity (ownerGuid, activityType, period, count, bestLevel) VALUES (?, ?, ?, ?, ?)", CONNECTION_ASYNC);
+    PrepareStatement(CHAR_SEL_WEEKLY_REWARD_ACTIVITY, "SELECT period, activityType, count, bestLevel, levels FROM character_weekly_reward_activity WHERE ownerGuid = ?", CONNECTION_SYNCH);
+    PrepareStatement(CHAR_REP_WEEKLY_REWARD_ACTIVITY, "REPLACE INTO character_weekly_reward_activity (ownerGuid, activityType, period, count, bestLevel, levels) VALUES (?, ?, ?, ?, ?, ?)", CONNECTION_ASYNC);
     PrepareStatement(CHAR_SEL_WEEKLY_REWARD_STATE, "SELECT claimedPeriod FROM character_weekly_reward_state WHERE ownerGuid = ?", CONNECTION_SYNCH);
     PrepareStatement(CHAR_REP_WEEKLY_REWARD_STATE, "REPLACE INTO character_weekly_reward_state (ownerGuid, claimedPeriod) VALUES (?, ?)", CONNECTION_ASYNC);
     // CONNECTION_ASYNC, like every other login-holder statement: this one is issued
