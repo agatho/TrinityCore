@@ -228,14 +228,21 @@ void WorldSession::HandleOpenMissionNpc(WorldPackets::Garrison::OpenMissionNpc& 
     // garrison packet retail sends in response to CMSG_OPEN_MISSION_NPC is
     // SMSG_DELETE_EXPIRED_MISSIONS_RESULT, immediately followed by SMSG_GOSSIP_COMPLETE.
     //
-    // We must NOT re-send the offered-mission list here (GenerateAvailableMissions + SendOfferedMissions
-    // + SendMissionStartConditionUpdate). Retail delivers the mission board once at login via
-    // GET_GARRISON_INFO and the frame reads it from cache; the extra ADD_MISSION_RESULT x15 +
-    // MISSION_START_CONDITION_UPDATE burst is a non-retail deviation (it produced the observed
-    // GARRISON_MISSION_LIST_UPDATE flood) and is the prime suspect for the client not firing its
-    // legacy open-event. Keep this handler byte-identical to retail's wire.
+    // Retail delivers the mission board once at login via GET_GARRISON_INFO and the frame reads it from
+    // cache; re-sending the whole board on every open (GenerateAvailableMissions + SendOfferedMissions +
+    // SendMissionStartConditionUpdate) is a non-retail ADD_MISSION_RESULT burst that floods
+    // GARRISON_MISSION_LIST_UPDATE and is the suspected cause of the client not firing its legacy
+    // open-event. So the default open sends only SMSG_DELETE_EXPIRED_MISSIONS_RESULT then GOSSIP_COMPLETE.
     for (auto const& [type, garr] : _player->GetGarrisons())
         garr->SendDeleteExpiredMissionsResult();
+
+    // Exception: when the board is already at its cap, the periodic GenerateAvailableMissions has nothing
+    // to add, so no ADD_MISSION_RESULT reaches the client on open and the table can appear empty for a
+    // garrison sitting at 15 offered missions. Re-send the existing offers ONLY in that full-pool case.
+    // While the board is still filling, GenerateAvailableMissions trickles new missions (each with its own
+    // ADD_MISSION_RESULT), so an extra full re-send here would be redundant and reintroduce the burst.
+    if (garrison->IsOfferPoolFull())
+        garrison->SendOfferedMissions();
 
     _player->PlayerTalkClass->SendCloseGossip();
 }
@@ -796,14 +803,38 @@ void WorldSession::HandleRevertMonumentAppearance(WorldPackets::Garrison::Revert
 
 void WorldSession::HandleGarrisonSocketTalent(WorldPackets::Garrison::GarrisonSocketTalent& packet)
 {
-    // Soulbind conduit socketing. The client only edits the currently-active soulbind's tree, so the target tree is
-    // the active soulbind's GarrTalentTreeID. Each socket is validated server-side (conduit exists, is owned, and its
-    // covenant matches) inside Player::SocketConduit, which fails closed on any invalid/unowned id.
-    SoulbindEntry const* soulbind = sSoulbindStore.LookupEntry(_player->GetActiveSoulbind());
-    if (!soulbind)
+    // Socket a conduit into a garrison/soulbind talent node. Validated against the talent's tree + the player's
+    // garrison of that type, then persisted through the garrison (character_garrison_talents SoulbindConduitID/Rank).
+    // NOTE: the integration branch routed this through the Covenant/Soulbind feature (Player::SocketConduit); that
+    // feature is not part of this garrison branch, so socketing goes straight through Garrison::SocketTalent here.
+    GarrTalentEntry const* talentEntry = sGarrTalentStore.LookupEntry(packet.GarrTalentID);
+    if (!talentEntry)
+    {
+        WorldPackets::Garrison::GarrisonResearchTalentResult result;
+        result.Result = GARRISON_ERROR_INVALID_TALENT;
+        SendPacket(result.Write());
         return;
+    }
 
-    uint32 treeId = uint32(soulbind->GarrTalentTreeID);
+    GarrTalentTreeEntry const* treeEntry = sGarrTalentTreeStore.LookupEntry(talentEntry->GarrTalentTreeID);
+    if (!treeEntry)
+    {
+        WorldPackets::Garrison::GarrisonResearchTalentResult result;
+        result.Result = GARRISON_ERROR_INVALID_TALENT;
+        SendPacket(result.Write());
+        return;
+    }
+
+    Garrison* garrison = _player->GetGarrison(static_cast<GarrisonType>(treeEntry->GarrTypeID));
+    if (!garrison)
+    {
+        WorldPackets::Garrison::GarrisonResearchTalentResult result;
+        result.Result = GARRISON_ERROR_NO_GARRISON;
+        result.GarrTypeID = treeEntry->GarrTypeID;
+        SendPacket(result.Write());
+        return;
+    }
+
     for (WorldPackets::Garrison::GarrisonTalentSocketData const& socket : packet.Sockets)
-        _player->SocketConduit(treeId, uint32(packet.GarrTalentID), uint32(socket.SoulbindConduitID));
+        garrison->SocketTalent(packet.GarrTalentID, socket.SoulbindConduitID, socket.SoulbindConduitRank);
 }
