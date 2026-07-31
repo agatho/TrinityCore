@@ -125,8 +125,16 @@ void WorldSession::ClaimRafActivity(uint32 activityId)
         if (!player)
             return;
 
-        if (Quest const* quest = sObjectMgr->GetQuestTemplate(uint32(rewardQuestId)))
-            player->RewardQuest(quest, LootItemType::Item, 0, player, false);
+        // Do NOT mark the activity claimed unless the reward actually resolves and is granted. Otherwise an activity
+        // whose RewardQuestID is unknown/unset is permanently consumed for nothing (marked claimed + success sent).
+        Quest const* quest = sObjectMgr->GetQuestTemplate(uint32(rewardQuestId));
+        if (!quest)
+        {
+            SendClaimRafRewardResult(1);   // reward not resolvable - leave the activity unclaimed
+            return;
+        }
+
+        player->RewardQuest(quest, LootItemType::Item, 0, player, false);
 
         LoginDatabasePreparedStatement* ins = LoginDatabase.GetPreparedStatement(LOGIN_INS_ACCOUNT_RAF_CLAIMED);
         ins->setUInt32(0, accountId);
