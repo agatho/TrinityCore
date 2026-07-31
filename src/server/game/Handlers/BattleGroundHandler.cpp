@@ -858,6 +858,16 @@ void WorldSession::HandleAcceptWargameInvite(WorldPackets::Battleground::AcceptW
     if (!bgTemplate)
         return;
 
+    // Both sides must field the same number of players, and fit the bracket. The queue/team size below is derived
+    // from the CHALLENGER's group only, but AddWargameSide adds each group wholesale - so a responder who disbanded
+    // and re-formed into a larger (or smaller) group between the challenge and the accept must be rejected rather
+    // than fielding a lopsided or over-capacity match.
+    if (initiatorGroup->GetMembersCount() != responderGroup->GetMembersCount())
+        return;
+    if (uint32 maxPerTeam = bgTemplate->GetMaxPlayersPerTeam())
+        if (initiatorGroup->GetMembersCount() > maxPerTeam)
+            return;
+
     // Arena war games carry a team size (derived from the challenging group); battleground war games use 0.
     uint8 teamSize = 0;
     if (bgTemplate->IsArena())

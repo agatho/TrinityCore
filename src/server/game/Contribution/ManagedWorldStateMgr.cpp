@@ -64,8 +64,22 @@ void ManagedWorldStateMgr::Load()
         if (entry->OccurrencesWorldStateID[0])
             state.Occurrences = WorldStateMgr::GetValue(entry->OccurrencesWorldStateID[0], nullptr);
 
-        state.CurrentPhase = Phase::Up;
-        state.PhaseTimerMs = entry->UpTimeSecs * IN_MILLISECONDS;
+        // Derive the phase from the restored Progress rather than always starting in Up. The phase + timers are NOT
+        // persisted (only Progress/Stage/Occurrences are), so a cycling state (both windows set) that was saved at or
+        // above its accumulation target was mid-DOWN (depleting). Forcing it back to Up would re-accumulate to the
+        // target and re-fire OnReachedTarget - a duplicate stage advance + buff (and turn-in over-reward) on every
+        // restart.
+        bool const cycles = entry->UpTimeSecs && entry->DownTimeSecs;
+        if (cycles && entry->AccumulationStateTargetValue && state.Progress >= entry->AccumulationStateTargetValue)
+        {
+            state.CurrentPhase = Phase::Down;
+            state.PhaseTimerMs = entry->DownTimeSecs * IN_MILLISECONDS;
+        }
+        else
+        {
+            state.CurrentPhase = Phase::Up;
+            state.PhaseTimerMs = entry->UpTimeSecs * IN_MILLISECONDS;
+        }
         state.AccumTimerMs = 0;
     }
 

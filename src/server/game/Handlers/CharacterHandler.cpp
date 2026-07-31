@@ -707,11 +707,18 @@ void WorldSession::HandleCharEnum(CharacterDatabaseQueryHolder const& holder)
                     defaultGroup.Members.push_back(member);
                 }
 
-                // Persist the default group asynchronously
+                // Persist the default group AND its members. Use the same account-scoped derived key the
+                // CMSG_SETUP_WARBAND_GROUPS handler uses (accountId*100 + orderIndex) instead of an AUTO_INCREMENT id:
+                // that lets us insert the members (which need the groupId) HERE rather than dropping them for want of
+                // LAST_INSERT_ID in the async transaction, and keeps the key stable so a later client setup REPLACEs
+                // the same rows. Without the member inserts the auto-populated roster was sent to the client but never
+                // saved, so it vanished on the next login - and the group row DID persist, so the default-creation
+                // branch never re-ran to rebuild it.
+                uint64 const defaultGroupId = uint64(enumHolder.GetBattlenetAccountId()) * 100 + 0; // orderIndex 0
                 CharacterDatabaseTransaction trans = CharacterDatabase.BeginTransaction();
 
                 CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_INS_WARBAND_GROUP);
-                stmt->setUInt64(0, 0); // AUTO_INCREMENT - will be assigned by DB
+                stmt->setUInt64(0, defaultGroupId);
                 stmt->setUInt32(1, enumHolder.GetBattlenetAccountId());
                 stmt->setUInt8(2, 0); // orderIndex
                 stmt->setUInt32(3, defaultSceneId);
@@ -720,13 +727,20 @@ void WorldSession::HandleCharEnum(CharacterDatabaseQueryHolder const& holder)
                 stmt->setString(6, std::string());
                 trans->Append(stmt);
 
-                CharacterDatabase.CommitTransaction(trans);
+                for (uint32 memberIdx = 0; memberIdx < defaultGroup.Members.size(); ++memberIdx)
+                {
+                    WorldPackets::Character::WarbandGroupMember const& member = defaultGroup.Members[memberIdx];
+                    stmt = CharacterDatabase.GetPreparedStatement(CHAR_INS_WARBAND_GROUP_MEMBER);
+                    stmt->setUInt64(0, defaultGroupId);
+                    stmt->setUInt8(1, uint8(memberIdx));
+                    stmt->setUInt64(2, member.Guid.GetCounter());
+                    stmt->setUInt32(3, member.WarbandScenePlacementID);
+                    stmt->setInt32(4, member.Type);
+                    stmt->setInt32(5, member.ContentSetID);
+                    trans->Append(stmt);
+                }
 
-                // We need the auto-generated groupId for subsequent member inserts.
-                // Since we can't get LAST_INSERT_ID in an async transaction easily,
-                // we'll set a temporary GroupID of 0 in the packet; the client echoes it back
-                // in CMSG_SETUP_WARBAND_GROUPS, but the handler re-derives the persistence key
-                // from the account id + order index, so the echoed value is never trusted.
+                CharacterDatabase.CommitTransaction(trans);
             }
         }
     }

@@ -3210,6 +3210,13 @@ void World::ResetWeeklyQuests()
     // reset all saved quest status
     CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_DEL_RESET_CHARACTER_QUESTSTATUS_WEEKLY);
     CharacterDatabase.Execute(stmt);
+
+    // Reset account-wide weekly Delves progress (weeklyCompletions / highest-this-week / bountiful / coffer shards).
+    // Delve progress is DB-authoritative - loaded on demand, never cached in memory - so one UPDATE across all rows
+    // resets every account. Without this, DelvesRewards::ResetWeeklyProgress had no caller and the weekly delve
+    // counters (which drive the Great Vault slots and the coffer-shard cap) never reset.
+    CharacterDatabase.Execute(CharacterDatabase.GetPreparedStatement(CHAR_UPD_RESET_DELVE_PROGRESS_WEEKLY));
+
     // reset all quest status in memory
     for (SessionMap::const_iterator itr = m_sessions.begin(); itr != m_sessions.end(); ++itr)
         if (Player* player = itr->second->GetPlayer())
