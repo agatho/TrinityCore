@@ -32289,6 +32289,15 @@ Garrison* Player::GetGarrison(GarrisonType type) const
     return nullptr;
 }
 
+Garrison* Player::GetGarrisonWithMission(uint32 missionRecID) const
+{
+    for (auto const& [type, garrison] : _garrisons)
+        if (garrison->GetMissionByRecID(missionRecID))
+            return garrison.get();
+
+    return nullptr;
+}
+
 void Player::CreateHousing(ObjectGuid neighborhoodGuid, uint8 plotIndex)
 {
     std::unique_ptr<Housing> housing(new Housing(this));
