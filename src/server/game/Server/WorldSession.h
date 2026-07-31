@@ -189,6 +189,9 @@ namespace WorldPackets
         class BuyBankTab;
         class UpdateBankTabSettings;
         class AutoDepositCharacterBank;
+        class AutoDepositAccountBank;
+        class AccountBankDepositMoney;
+        class AccountBankWithdrawMoney;
         class BankerActivate;
         class AccountBankDepositMoney;
         class AccountBankWithdrawMoney;
