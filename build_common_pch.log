@@ -1,0 +1,63 @@
+
+  fmt.vcxproj -> I:\TrinityCore\_integration-all-systems\build\dep\fmt\RelWithDebInfo\fmt.lib
+  argon2.vcxproj -> I:\TrinityCore\_integration-all-systems\build\dep\argon2\RelWithDebInfo\argon2.lib
+  sfmt.vcxproj -> I:\TrinityCore\_integration-all-systems\build\dep\SFMT\RelWithDebInfo\sfmt.lib
+  openssl_ed25519.vcxproj -> I:\TrinityCore\_integration-all-systems\build\bin\RelWithDebInfo\openssl_ed25519.dll
+  zlib.vcxproj -> I:\TrinityCore\_integration-all-systems\build\dep\zlib\RelWithDebInfo\zlib.lib
+  g3dlib.vcxproj -> I:\TrinityCore\_integration-all-systems\build\dep\g3dlite\RelWithDebInfo\g3dlib.lib
+  cmake_pch.cxx
+  Banner.cpp
+  Common.cpp
+  GitRevision.cpp
+  BoundingIntervalHierarchy.cpp
+  DynamicTree.cpp
+  VMapFactory.cpp
+  VMapManager.cpp
+  MapDefines.cpp
+  MapTree.cpp
+  GameObjectModel.cpp
+  ModelInstance.cpp
+  WorldModel.cpp
+  BuiltInConfig.cpp
+  Config.cpp
+  AES.cpp
+  ARC4.cpp
+  Argon2Hash.cpp
+  BigNumber.cpp
+  CryptoRandom.cpp
+  Ed25519.cpp
+  OpenSSLCrypto.cpp
+  RSA.cpp
+  TOTP.cpp
+  SRP6.cpp
+  WorldPacketCrypt.cpp
+  DB2FileLoader.cpp
+  DB2FileSystemSource.cpp
+  DB2Meta.cpp
+  Errors.cpp
+  Base32.cpp
+  Base64.cpp
+  Appender.cpp
+  AppenderConsole.cpp
+  AppenderFile.cpp
+  Log.cpp
+  LogMessage.cpp
+  LogOperation.cpp
+  Logger.cpp
+  enuminfo_AppenderConsole.cpp
+  enuminfo_LogCommon.cpp
+  Metric.cpp
+  ProcessPriority.cpp
+  Timezone.cpp
+  EventMap.cpp
+  EventProcessor.cpp
+  Locales.cpp
+  Random.cpp
+  SFMTRand.cpp
+  StartProcess.cpp
+  StringFormat.cpp
+  TaskScheduler.cpp
+  Util.cpp
+  WheatyExceptionReport.cpp
+  ServiceWin32.cpp
+  common.vcxproj -> I:\TrinityCore\_integration-all-systems\build\src\common\RelWithDebInfo\common.lib

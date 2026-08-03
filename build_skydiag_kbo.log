@@ -1,0 +1,25 @@
+MSBuild-Version 17.14.23+b0019275e für .NET Framework
+
+  Detour.vcxproj -> I:\TrinityCore\_integration-all-systems\build\dep\recastnavigation\Detour\Release\Detour.lib
+  fmt.vcxproj -> I:\TrinityCore\_integration-all-systems\build\dep\fmt\Release\fmt.lib
+  zlib.vcxproj -> I:\TrinityCore\_integration-all-systems\build\dep\zlib\Release\zlib.lib
+  g3dlib.vcxproj -> I:\TrinityCore\_integration-all-systems\build\dep\g3dlite\Release\g3dlib.lib
+  argon2.vcxproj -> I:\TrinityCore\_integration-all-systems\build\dep\argon2\Release\argon2.lib
+  Recast.vcxproj -> I:\TrinityCore\_integration-all-systems\build\dep\recastnavigation\Recast\Release\Recast.lib
+  openssl_ed25519.vcxproj -> I:\TrinityCore\_integration-all-systems\build\bin\Release\openssl_ed25519.dll
+  sfmt.vcxproj -> I:\TrinityCore\_integration-all-systems\build\dep\SFMT\Release\sfmt.lib
+  gsoap.vcxproj -> I:\TrinityCore\_integration-all-systems\build\dep\gsoap\Release\gsoap.lib
+  protobuf.vcxproj -> I:\TrinityCore\_integration-all-systems\build\dep\protobuf\Release\protobuf.lib
+  common.vcxproj -> I:\TrinityCore\_integration-all-systems\build\src\common\Release\common.lib
+  network.vcxproj -> I:\TrinityCore\_integration-all-systems\build\src\common\network\Release\trinity_network.lib
+  database.vcxproj -> I:\TrinityCore\_integration-all-systems\build\src\server\database\Release\database.lib
+  mmaps_common.vcxproj -> I:\TrinityCore\_integration-all-systems\build\src\common\mmaps_common\Release\mmaps_common.lib
+  proto.vcxproj -> I:\TrinityCore\_integration-all-systems\build\src\server\proto\Release\proto.lib
+  shared.vcxproj -> I:\TrinityCore\_integration-all-systems\build\src\server\shared\Release\shared.lib
+  SpellHandler.cpp
+  scripts.vcxproj -> I:\TrinityCore\_integration-all-systems\build\src\server\scripts\Release\scripts.lib
+  game.vcxproj -> I:\TrinityCore\_integration-all-systems\build\src\server\game\Release\game.lib
+     Bibliothek "I:/TrinityCore/_integration-all-systems/build/src/server/worldserver/Release/worldserver.lib" und Objekt "I:/TrinityCore/_integration-all-systems/build/src/server/worldserver/Release/worldserver.exp" werden erstellt.
+  worldserver.vcxproj -> I:\TrinityCore\_integration-all-systems\build\bin\Release\worldserver.exe
+  Der Befehl "pwsh.exe" ist entweder falsch geschrieben oder
+  konnte nicht gefunden werden.

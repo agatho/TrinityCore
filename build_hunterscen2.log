@@ -1,0 +1,20 @@
+
+  zlib.vcxproj -> I:\TrinityCore\_integration-all-systems\build\dep\zlib\RelWithDebInfo\zlib.lib
+  Recast.vcxproj -> I:\TrinityCore\_integration-all-systems\build\dep\recastnavigation\Recast\RelWithDebInfo\Recast.lib
+  Detour.vcxproj -> I:\TrinityCore\_integration-all-systems\build\dep\recastnavigation\Detour\RelWithDebInfo\Detour.lib
+  gsoap.vcxproj -> I:\TrinityCore\_integration-all-systems\build\dep\gsoap\RelWithDebInfo\gsoap.lib
+  protobuf.vcxproj -> I:\TrinityCore\_integration-all-systems\build\dep\protobuf\RelWithDebInfo\protobuf.lib
+  sfmt.vcxproj -> I:\TrinityCore\_integration-all-systems\build\dep\SFMT\RelWithDebInfo\sfmt.lib
+  argon2.vcxproj -> I:\TrinityCore\_integration-all-systems\build\dep\argon2\RelWithDebInfo\argon2.lib
+  openssl_ed25519.vcxproj -> I:\TrinityCore\_integration-all-systems\build\bin\RelWithDebInfo\openssl_ed25519.dll
+  fmt.vcxproj -> I:\TrinityCore\_integration-all-systems\build\dep\fmt\RelWithDebInfo\fmt.lib
+  g3dlib.vcxproj -> I:\TrinityCore\_integration-all-systems\build\dep\g3dlite\RelWithDebInfo\g3dlib.lib
+  common.vcxproj -> I:\TrinityCore\_integration-all-systems\build\src\common\RelWithDebInfo\common.lib
+  mmaps_common.vcxproj -> I:\TrinityCore\_integration-all-systems\build\src\common\mmaps_common\RelWithDebInfo\mmaps_common.lib
+  database.vcxproj -> I:\TrinityCore\_integration-all-systems\build\src\server\database\RelWithDebInfo\database.lib
+  network.vcxproj -> I:\TrinityCore\_integration-all-systems\build\src\common\network\RelWithDebInfo\trinity_network.lib
+  proto.vcxproj -> I:\TrinityCore\_integration-all-systems\build\src\server\proto\RelWithDebInfo\proto.lib
+  shared.vcxproj -> I:\TrinityCore\_integration-all-systems\build\src\server\shared\RelWithDebInfo\shared.lib
+  game.vcxproj -> I:\TrinityCore\_integration-all-systems\build\src\server\game\RelWithDebInfo\game.lib
+  zone_orderhall_hunter.cpp
+I:\TrinityCore\_integration-all-systems\src\server\scripts\BrokenIsles\Orderhalls\zone_orderhall_hunter.cpp(1,1): error C1853: 'I:/TrinityCore/_integration-all-systems/build/src/server/scripts/scripts.dir/RelWithDebInfo/cmake_pch.pch' precompiled header file is from a different version of the compiler, or the precompiled header is C++ and you are using it from C (or vice versa) [I:\TrinityCore\_integration-all-systems\build\src\server\scripts\scripts.vcxproj]

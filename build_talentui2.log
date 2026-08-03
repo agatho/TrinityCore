@@ -1,0 +1,25 @@
+
+  Detour.vcxproj -> I:\TrinityCore\_integration-all-systems\build\dep\recastnavigation\Detour\RelWithDebInfo\Detour.lib
+  argon2.vcxproj -> I:\TrinityCore\_integration-all-systems\build\dep\argon2\RelWithDebInfo\argon2.lib
+  Recast.vcxproj -> I:\TrinityCore\_integration-all-systems\build\dep\recastnavigation\Recast\RelWithDebInfo\Recast.lib
+  fmt.vcxproj -> I:\TrinityCore\_integration-all-systems\build\dep\fmt\RelWithDebInfo\fmt.lib
+  openssl_ed25519.vcxproj -> I:\TrinityCore\_integration-all-systems\build\bin\RelWithDebInfo\openssl_ed25519.dll
+  zlib.vcxproj -> I:\TrinityCore\_integration-all-systems\build\dep\zlib\RelWithDebInfo\zlib.lib
+  sfmt.vcxproj -> I:\TrinityCore\_integration-all-systems\build\dep\SFMT\RelWithDebInfo\sfmt.lib
+  g3dlib.vcxproj -> I:\TrinityCore\_integration-all-systems\build\dep\g3dlite\RelWithDebInfo\g3dlib.lib
+  gsoap.vcxproj -> I:\TrinityCore\_integration-all-systems\build\dep\gsoap\RelWithDebInfo\gsoap.lib
+  protobuf.vcxproj -> I:\TrinityCore\_integration-all-systems\build\dep\protobuf\RelWithDebInfo\protobuf.lib
+  GitRevision.cpp
+  common.vcxproj -> I:\TrinityCore\_integration-all-systems\build\src\common\RelWithDebInfo\common.lib
+  database.vcxproj -> I:\TrinityCore\_integration-all-systems\build\src\server\database\RelWithDebInfo\database.lib
+  network.vcxproj -> I:\TrinityCore\_integration-all-systems\build\src\common\network\RelWithDebInfo\trinity_network.lib
+  mmaps_common.vcxproj -> I:\TrinityCore\_integration-all-systems\build\src\common\mmaps_common\RelWithDebInfo\mmaps_common.lib
+  proto.vcxproj -> I:\TrinityCore\_integration-all-systems\build\src\server\proto\RelWithDebInfo\proto.lib
+  shared.vcxproj -> I:\TrinityCore\_integration-all-systems\build\src\server\shared\RelWithDebInfo\shared.lib
+  Player.cpp
+  scripts.vcxproj -> I:\TrinityCore\_integration-all-systems\build\src\server\scripts\RelWithDebInfo\scripts.lib
+  game.vcxproj -> I:\TrinityCore\_integration-all-systems\build\src\server\game\RelWithDebInfo\game.lib
+     Creating library I:/TrinityCore/_integration-all-systems/build/src/server/worldserver/RelWithDebInfo/worldserver.lib and object I:/TrinityCore/_integration-all-systems/build/src/server/worldserver/RelWithDebInfo/worldserver.exp
+  worldserver.vcxproj -> I:\TrinityCore\_integration-all-systems\build\bin\RelWithDebInfo\worldserver.exe
+  Der Befehl "pwsh.exe" ist entweder falsch geschrieben oder
+  konnte nicht gefunden werden.

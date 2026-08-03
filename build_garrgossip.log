@@ -1,0 +1,60 @@
+MSBuild-Version 17.14.23+b0019275e für .NET Framework
+
+  Detour.vcxproj -> I:\TrinityCore\_integration-all-systems\build\dep\recastnavigation\Detour\Release\Detour.lib
+  Recast.vcxproj -> I:\TrinityCore\_integration-all-systems\build\dep\recastnavigation\Recast\Release\Recast.lib
+  argon2.vcxproj -> I:\TrinityCore\_integration-all-systems\build\dep\argon2\Release\argon2.lib
+  fmt.vcxproj -> I:\TrinityCore\_integration-all-systems\build\dep\fmt\Release\fmt.lib
+  openssl_ed25519.vcxproj -> I:\TrinityCore\_integration-all-systems\build\bin\Release\openssl_ed25519.dll
+  zlib.vcxproj -> I:\TrinityCore\_integration-all-systems\build\dep\zlib\Release\zlib.lib
+  sfmt.vcxproj -> I:\TrinityCore\_integration-all-systems\build\dep\SFMT\Release\sfmt.lib
+  g3dlib.vcxproj -> I:\TrinityCore\_integration-all-systems\build\dep\g3dlite\Release\g3dlib.lib
+  gsoap.vcxproj -> I:\TrinityCore\_integration-all-systems\build\dep\gsoap\Release\gsoap.lib
+  protobuf.vcxproj -> I:\TrinityCore\_integration-all-systems\build\dep\protobuf\Release\protobuf.lib
+  common.vcxproj -> I:\TrinityCore\_integration-all-systems\build\src\common\Release\common.lib
+  network.vcxproj -> I:\TrinityCore\_integration-all-systems\build\src\common\network\Release\trinity_network.lib
+  proto.vcxproj -> I:\TrinityCore\_integration-all-systems\build\src\server\proto\Release\proto.lib
+  database.vcxproj -> I:\TrinityCore\_integration-all-systems\build\src\server\database\Release\database.lib
+  shared.vcxproj -> I:\TrinityCore\_integration-all-systems\build\src\server\shared\Release\shared.lib
+  mmaps_common.vcxproj -> I:\TrinityCore\_integration-all-systems\build\src\common\mmaps_common\Release\mmaps_common.lib
+  GarrisonHandler.cpp
+  scripts.vcxproj -> I:\TrinityCore\_integration-all-systems\build\src\server\scripts\Release\scripts.lib
+I:\TrinityCore\_integration-all-systems\src\server\game\Handlers\GarrisonHandler.cpp(235,12): error C2027: Verwendung des undefinierten Typs "PlayerMenu" [I:\TrinityCore\_integration-all-systems\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Handlers/GarrisonHandler.cpp“ wird kompiliert)
+      I:\TrinityCore\_integration-all-systems\src\server\game\Quests\QuestDef.h(583,18):
+      Siehe Deklaration von "PlayerMenu"
+  
+I:\TrinityCore\_integration-all-systems\src\server\game\Handlers\GarrisonHandler.cpp(235,31): error C2039: "SendCloseGossip" ist kein Member von "std::unique_ptr<PlayerMenu,std::default_delete<PlayerMenu>>". [I:\TrinityCore\_integration-all-systems\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Handlers/GarrisonHandler.cpp“ wird kompiliert)
+      C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\14.44.35207\include\memory(3347,7):
+      Siehe Deklaration von "std::unique_ptr<PlayerMenu,std::default_delete<PlayerMenu>>"
+  
+MSBuild-Version 17.14.23+b0019275e für .NET Framework
+
+  Detour.vcxproj -> I:\TrinityCore\_integration-all-systems\build\dep\recastnavigation\Detour\Release\Detour.lib
+  Recast.vcxproj -> I:\TrinityCore\_integration-all-systems\build\dep\recastnavigation\Recast\Release\Recast.lib
+  argon2.vcxproj -> I:\TrinityCore\_integration-all-systems\build\dep\argon2\Release\argon2.lib
+  fmt.vcxproj -> I:\TrinityCore\_integration-all-systems\build\dep\fmt\Release\fmt.lib
+  zlib.vcxproj -> I:\TrinityCore\_integration-all-systems\build\dep\zlib\Release\zlib.lib
+  g3dlib.vcxproj -> I:\TrinityCore\_integration-all-systems\build\dep\g3dlite\Release\g3dlib.lib
+  openssl_ed25519.vcxproj -> I:\TrinityCore\_integration-all-systems\build\bin\Release\openssl_ed25519.dll
+  sfmt.vcxproj -> I:\TrinityCore\_integration-all-systems\build\dep\SFMT\Release\sfmt.lib
+  common.vcxproj -> I:\TrinityCore\_integration-all-systems\build\src\common\Release\common.lib
+  database.vcxproj -> I:\TrinityCore\_integration-all-systems\build\src\server\database\Release\database.lib
+  mmaps_common.vcxproj -> I:\TrinityCore\_integration-all-systems\build\src\common\mmaps_common\Release\mmaps_common.lib
+  network.vcxproj -> I:\TrinityCore\_integration-all-systems\build\src\common\network\Release\trinity_network.lib
+  protobuf.vcxproj -> I:\TrinityCore\_integration-all-systems\build\dep\protobuf\Release\protobuf.lib
+  proto.vcxproj -> I:\TrinityCore\_integration-all-systems\build\src\server\proto\Release\proto.lib
+  shared.vcxproj -> I:\TrinityCore\_integration-all-systems\build\src\server\shared\Release\shared.lib
+  GarrisonHandler.cpp
+I:\TrinityCore\_integration-all-systems\src\server\game\Handlers\GarrisonHandler.cpp(235,12): error C2027: Verwendung des undefinierten Typs "PlayerMenu" [I:\TrinityCore\_integration-all-systems\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Handlers/GarrisonHandler.cpp“ wird kompiliert)
+      I:\TrinityCore\_integration-all-systems\src\server\game\Quests\QuestDef.h(583,18):
+      Siehe Deklaration von "PlayerMenu"
+  
+I:\TrinityCore\_integration-all-systems\src\server\game\Handlers\GarrisonHandler.cpp(235,31): error C2039: "SendCloseGossip" ist kein Member von "std::unique_ptr<PlayerMenu,std::default_delete<PlayerMenu>>". [I:\TrinityCore\_integration-all-systems\build\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Handlers/GarrisonHandler.cpp“ wird kompiliert)
+      C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\14.44.35207\include\memory(3347,7):
+      Siehe Deklaration von "std::unique_ptr<PlayerMenu,std::default_delete<PlayerMenu>>"
+  
+  gsoap.vcxproj -> I:\TrinityCore\_integration-all-systems\build\dep\gsoap\Release\gsoap.lib
+  scripts.vcxproj -> I:\TrinityCore\_integration-all-systems\build\src\server\scripts\Release\scripts.lib

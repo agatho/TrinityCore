@@ -1,0 +1,25 @@
+MSBuild-Version 17.14.23+b0019275e für .NET Framework
+
+  Detour.vcxproj -> I:\tc_allsys\build\dep\recastnavigation\Detour\Release\Detour.lib
+  fmt.vcxproj -> I:\tc_allsys\build\dep\fmt\Release\fmt.lib
+  zlib.vcxproj -> I:\tc_allsys\build\dep\zlib\Release\zlib.lib
+  g3dlib.vcxproj -> I:\tc_allsys\build\dep\g3dlite\Release\g3dlib.lib
+  argon2.vcxproj -> I:\tc_allsys\build\dep\argon2\Release\argon2.lib
+  Recast.vcxproj -> I:\tc_allsys\build\dep\recastnavigation\Recast\Release\Recast.lib
+  openssl_ed25519.vcxproj -> I:\tc_allsys\build\bin\Release\openssl_ed25519.dll
+  sfmt.vcxproj -> I:\tc_allsys\build\dep\SFMT\Release\sfmt.lib
+  gsoap.vcxproj -> I:\tc_allsys\build\dep\gsoap\Release\gsoap.lib
+  protobuf.vcxproj -> I:\tc_allsys\build\dep\protobuf\Release\protobuf.lib
+  common.vcxproj -> I:\tc_allsys\build\src\common\Release\common.lib
+  network.vcxproj -> I:\tc_allsys\build\src\common\network\Release\trinity_network.lib
+  database.vcxproj -> I:\tc_allsys\build\src\server\database\Release\database.lib
+  mmaps_common.vcxproj -> I:\tc_allsys\build\src\common\mmaps_common\Release\mmaps_common.lib
+  proto.vcxproj -> I:\tc_allsys\build\src\server\proto\Release\proto.lib
+  shared.vcxproj -> I:\tc_allsys\build\src\server\shared\Release\shared.lib
+  game.vcxproj -> I:\tc_allsys\build\src\server\game\Release\game.lib
+  scripts.vcxproj -> I:\tc_allsys\build\src\server\scripts\Release\scripts.lib
+     Bibliothek "I:/tc_allsys/build/src/server/worldserver/Release/worldserver.lib" und Objekt "I:/tc_allsys/build/src/server/worldserver/Release/worldserver.exp" werden erstellt.
+  worldserver.vcxproj -> I:\tc_allsys\build\bin\Release\worldserver.exe
+  Der Befehl "pwsh.exe" ist entweder falsch geschrieben oder
+  konnte nicht gefunden werden.
+EXIT=0
