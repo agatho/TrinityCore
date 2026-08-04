@@ -718,6 +718,9 @@ namespace WorldPackets
         class AddIgnore;
         class DelFriend;
         class DelIgnore;
+        class RecentAllyRequestData;
+        class RecentAllySetNote;
+        class SetAllowRecentAlliesSeeLocation;
         class SendContactList;
         class SetContactNotes;
         class SocialContractRequest;
@@ -1344,6 +1347,9 @@ class TC_GAME_API WorldSession
         void HandleAddIgnoreOpcode(WorldPackets::Social::AddIgnore& packet);
         void HandleDelIgnoreOpcode(WorldPackets::Social::DelIgnore& packet);
         void HandleSetContactNotesOpcode(WorldPackets::Social::SetContactNotes& packet);
+        void HandleSetAllowRecentAlliesSeeLocation(WorldPackets::Social::SetAllowRecentAlliesSeeLocation& packet);
+        void HandleRecentAllyRequestData(WorldPackets::Social::RecentAllyRequestData& packet);
+        void HandleRecentAllySetNote(WorldPackets::Social::RecentAllySetNote& packet);
 
         void HandleAreaTriggerOpcode(WorldPackets::AreaTrigger::AreaTrigger& packet);
         void HandleUpdateAreaTriggerVisual(WorldPackets::AreaTrigger::UpdateAreaTriggerVisual const& updateAreaTriggerVisual);

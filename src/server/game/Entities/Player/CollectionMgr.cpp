@@ -18,6 +18,7 @@
 #include "CollectionMgr.h"
 #include "CollectionPackets.h"
 #include "DatabaseEnv.h"
+#include "GameTime.h"
 #include "DB2Stores.h"
 #include "Item.h"
 #include "Log.h"
@@ -173,6 +174,117 @@ void CollectionMgr::SaveAccountToys(LoginDatabaseTransaction trans)
 bool CollectionMgr::UpdateAccountToys(uint32 itemId, bool isFavourite, bool hasFanfare)
 {
     return _toys.insert(ToyBoxContainer::value_type(itemId, GetToyFlags(isFavourite, hasFanfare))).second;
+}
+
+void CollectionMgr::LoadAccountStorePurchases(PreparedQueryResult result)
+{
+    if (!result)
+        return;
+
+    do
+    {
+        Field* fields = result->Fetch();
+        AccountStorePurchase purchase;
+        purchase.PurchaseTime = fields[1].GetUInt32();
+        purchase.PayerGuid = fields[2].GetUInt64();
+        purchase.Granted = fields[3].GetBool();
+        _accountStoreItems.emplace(fields[0].GetUInt32(), purchase);
+    } while (result->NextRow());
+}
+
+uint32 CollectionMgr::GetAccountStorePurchaseTime(uint32 accountStoreItemId) const
+{
+    auto itr = _accountStoreItems.find(accountStoreItemId);
+    return itr != _accountStoreItems.end() ? itr->second.PurchaseTime : 0;
+}
+
+CollectionMgr::AccountStorePurchase const* CollectionMgr::GetAccountStorePurchase(uint32 accountStoreItemId) const
+{
+    auto itr = _accountStoreItems.find(accountStoreItemId);
+    return itr != _accountStoreItems.end() ? &itr->second : nullptr;
+}
+
+bool CollectionMgr::AddAccountStorePurchase(uint32 accountStoreItemId, uint64 payerGuid, bool granted)
+{
+    AccountStorePurchase purchase;
+    purchase.PurchaseTime = uint32(GameTime::GetGameTime());
+    purchase.PayerGuid = payerGuid;
+    purchase.Granted = granted;
+    if (!_accountStoreItems.emplace(accountStoreItemId, purchase).second)
+        return false;
+
+    LoginDatabasePreparedStatement* stmt = LoginDatabase.GetPreparedStatement(LOGIN_INS_ACCOUNT_STORE_PURCHASE);
+    stmt->setUInt32(0, _owner->GetBattlenetAccountId());
+    stmt->setUInt32(1, accountStoreItemId);
+    stmt->setUInt32(2, purchase.PurchaseTime);
+    stmt->setUInt64(3, payerGuid);
+    stmt->setBool(4, granted);
+    LoginDatabase.Execute(stmt);
+    return true;
+}
+
+bool CollectionMgr::RemoveAccountStorePurchase(uint32 accountStoreItemId)
+{
+    if (_accountStoreItems.erase(accountStoreItemId) == 0)
+        return false;
+
+    LoginDatabasePreparedStatement* stmt = LoginDatabase.GetPreparedStatement(LOGIN_DEL_ACCOUNT_STORE_PURCHASE);
+    stmt->setUInt32(0, _owner->GetBattlenetAccountId());
+    stmt->setUInt32(1, accountStoreItemId);
+    LoginDatabase.Execute(stmt);
+    return true;
+}
+
+bool CollectionMgr::RemoveToy(uint32 itemId)
+{
+    if (_toys.erase(itemId) == 0)
+        return false;
+
+    if (Player* player = _owner->GetPlayer())
+        player->RemoveToy(int32(itemId));
+
+    LoginDatabasePreparedStatement* stmt = LoginDatabase.GetPreparedStatement(LOGIN_DEL_ACCOUNT_TOYS);
+    stmt->setUInt32(0, _owner->GetBattlenetAccountId());
+    stmt->setUInt32(1, itemId);
+    LoginDatabase.Execute(stmt);
+    return true;
+}
+
+bool CollectionMgr::RemoveMount(uint32 spellId)
+{
+    auto itr = _mounts.find(spellId);
+    if (itr == _mounts.end())
+        return false;
+
+    // Erase FIRST, then revoke the paired faction mount. The FactionSpecificMounts mapping is symmetric (A<->B),
+    // so recursing before the erase re-enters RemoveMount(A) from RemoveMount(B) - which still finds A present -
+    // and loops forever until the stack overflows. Removing A up front makes the recursive call short-circuit at
+    // the find() guard above. (AddMount avoids this with a factionMount bool; erase-first is the equivalent here.)
+    _mounts.erase(itr);
+
+    // Mirror AddMount's faction-specific pairing: revoke the paired faction mount too.
+    MountDefinitionMap::const_iterator defItr = FactionSpecificMounts.find(spellId);
+    if (defItr != FactionSpecificMounts.end())
+        RemoveMount(defItr->second);
+
+    LoginDatabasePreparedStatement* stmt = LoginDatabase.GetPreparedStatement(LOGIN_DEL_ACCOUNT_MOUNT);
+    stmt->setUInt32(0, _owner->GetBattlenetAccountId());
+    stmt->setUInt32(1, spellId);
+    LoginDatabase.Execute(stmt);
+
+    if (Player* player = _owner->GetPlayer())
+    {
+        if (player->HasSpell(spellId))
+            player->RemoveSpell(spellId);
+
+        // No single-mount-remove opcode exists; resync the whole account mount list so the client drops it.
+        WorldPackets::Misc::AccountMountUpdate mountUpdate;
+        mountUpdate.IsFullUpdate = true;
+        mountUpdate.Mounts = &_mounts;
+        player->SendDirectMessage(mountUpdate.Write());
+    }
+
+    return true;
 }
 
 void CollectionMgr::ToySetFavorite(uint32 itemId, bool favorite)
@@ -481,6 +593,60 @@ void CollectionMgr::SendSingleMountUpdate(std::pair<uint32, MountStatusFlags> mo
     mountUpdate.IsFullUpdate = false;
     mountUpdate.Mounts = &tempMounts;
     player->SendDirectMessage(mountUpdate.Write());
+}
+
+void CollectionMgr::LoadPerksProgramPurchases(PreparedQueryResult result)
+{
+    if (!result)
+        return;
+
+    do
+    {
+        Field* fields = result->Fetch();
+        PerksProgramPurchaseData data;
+        int32 perksVendorItemId = fields[0].GetInt32();
+        data.Price = fields[1].GetInt32();
+        data.PurchaseTime = fields[2].GetUInt32();
+        data.MountID = fields[3].GetInt32();
+        data.ToyID = fields[4].GetInt32();
+        _perksPurchases[perksVendorItemId] = data;
+    } while (result->NextRow());
+}
+
+void CollectionMgr::AddPerksProgramPurchase(int32 perksVendorItemId, int32 price, int32 mountId, int32 toyId)
+{
+    PerksProgramPurchaseData& data = _perksPurchases[perksVendorItemId];
+    data.Price = price;
+    data.PurchaseTime = uint32(GameTime::GetGameTime());
+    data.MountID = mountId;
+    data.ToyID = toyId;
+
+    LoginDatabasePreparedStatement* stmt = LoginDatabase.GetPreparedStatement(LOGIN_INS_ACCOUNT_PERKS_PURCHASE);
+    stmt->setUInt32(0, _owner->GetBattlenetAccountId());
+    stmt->setInt32(1, perksVendorItemId);
+    stmt->setInt32(2, price);
+    stmt->setUInt32(3, data.PurchaseTime);
+    stmt->setInt32(4, mountId);
+    stmt->setInt32(5, toyId);
+    LoginDatabase.Execute(stmt);
+}
+
+bool CollectionMgr::RemovePerksProgramPurchase(int32 perksVendorItemId)
+{
+    if (_perksPurchases.erase(perksVendorItemId) == 0)
+        return false;
+
+    LoginDatabasePreparedStatement* stmt = LoginDatabase.GetPreparedStatement(LOGIN_DEL_ACCOUNT_PERKS_PURCHASE);
+    stmt->setUInt32(0, _owner->GetBattlenetAccountId());
+    stmt->setInt32(1, perksVendorItemId);
+    LoginDatabase.Execute(stmt);
+    return true;
+}
+
+PerksProgramPurchaseData const* CollectionMgr::GetPerksProgramPurchase(int32 perksVendorItemId) const
+{
+    auto itr = _perksPurchases.find(perksVendorItemId);
+    return itr != _perksPurchases.end() ? &itr->second : nullptr;
 }
 
 template <std::invocable<uint32> OutputAction>
@@ -825,6 +991,23 @@ void CollectionMgr::RemoveTemporaryAppearance(Item* item)
         _owner->GetPlayer()->RemoveConditionalTransmog(itemModifiedAppearance->ID);
         _temporaryAppearances.erase(itr);
     }
+}
+
+bool CollectionMgr::MakeAppearancePermanent(uint32 itemModifiedAppearanceId)
+{
+    // Only an appearance the player currently holds *conditionally* (granted by an equipped/held item) may be
+    // promoted - this backs the client's "make appearance permanent" action on a temporary appearance.
+    if (_temporaryAppearances.find(itemModifiedAppearanceId) == _temporaryAppearances.end())
+        return false;
+
+    ItemModifiedAppearanceEntry const* itemModifiedAppearance = sItemModifiedAppearanceStore.LookupEntry(itemModifiedAppearanceId);
+    if (!itemModifiedAppearance)
+        return false;
+
+    // AddItemAppearance sets the permanent appearance bit, clears the conditional-transmog flag + temporary
+    // entry, and fires the LearnAnyTransmog criteria.
+    AddItemAppearance(itemModifiedAppearance);
+    return true;
 }
 
 std::pair<bool, bool> CollectionMgr::HasItemAppearance(uint32 itemModifiedAppearanceId) const
