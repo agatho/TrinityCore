@@ -559,17 +559,24 @@ namespace WorldPackets
         class MoveApplyMovementForceAck;
         class MoveRemoveMovementForceAck;
         class MoveInitActiveMoverComplete;
+        class MoveApplyInertiaAck;
+        class MoveRemoveInertiaAck;
+        class MoveAddImpulseAck;
+        class MoveSetCanDriveAck;
+        class MoveStartDriveForward;
     }
 
     namespace NPC
     {
         class Hello;
+        class GossipRefreshOptions;
         class GossipSelectOption;
         class SpiritHealerActivate;
         class TabardVendorActivate;
         class TrainerBuySpell;
         class RequestStabledPets;
         class SetPetSlot;
+        class SetPetFavorite;
     }
 
     namespace Party
@@ -1478,12 +1485,14 @@ class TC_GAME_API WorldSession
         void HandleTrainerBuySpellOpcode(WorldPackets::NPC::TrainerBuySpell& packet);
         void HandlePetitionShowList(WorldPackets::Petition::PetitionShowList& packet);
         void HandleGossipHelloOpcode(WorldPackets::NPC::Hello& packet);
+        void HandleGossipRefreshOptions(WorldPackets::NPC::GossipRefreshOptions& packet);
         void HandleGossipSelectOptionOpcode(WorldPackets::NPC::GossipSelectOption& packet);
         void HandleSpiritHealerActivate(WorldPackets::NPC::SpiritHealerActivate& packet);
         void HandleNpcTextQueryOpcode(WorldPackets::Query::QueryNPCText& packet);
         void HandleBinderActivateOpcode(WorldPackets::NPC::Hello& packet);
         void HandleRequestStabledPets(WorldPackets::NPC::RequestStabledPets& packet);
         void HandleSetPetSlot(WorldPackets::NPC::SetPetSlot& setPetSlot);
+        void HandleSetPetFavorite(WorldPackets::NPC::SetPetFavorite& setPetFavorite);
 
         void HandleCanDuel(WorldPackets::Duel::CanDuel& packet);
         void HandleDuelResponseOpcode(WorldPackets::Duel::DuelResponse& duelResponse);

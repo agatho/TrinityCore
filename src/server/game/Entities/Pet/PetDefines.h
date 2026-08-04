@@ -22,6 +22,7 @@
 #include "Optional.h"
 #include <array>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 enum ReactStates : uint8;
@@ -169,6 +170,9 @@ public:
     std::array<Optional<PetInfo>, MAX_ACTIVE_PETS> ActivePets;      // PET_SAVE_FIRST_ACTIVE_SLOT - PET_SAVE_LAST_ACTIVE_SLOT
     std::array<Optional<PetInfo>, MAX_PET_STABLES> StabledPets;     // PET_SAVE_FIRST_STABLE_SLOT - PET_SAVE_LAST_STABLE_SLOT
     std::vector<PetInfo> UnslottedPets;                             // PET_SAVE_NOT_IN_SLOT
+    std::unordered_set<uint32> FavoritePetNumbers;                  // pet numbers the player pinned as favorites (CMSG_SET_PET_FAVORITE), persisted in character_pet_favorite
+
+    bool IsFavorite(uint32 petNumber) const { return FavoritePetNumbers.find(petNumber) != FavoritePetNumbers.end(); }
 
     PetInfo* GetCurrentPet() { return const_cast<PetInfo*>(const_cast<PetStable const*>(this)->GetCurrentPet()); }
     PetInfo const* GetCurrentPet() const

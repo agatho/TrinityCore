@@ -22136,6 +22136,40 @@ void Player::RemovePet(Pet* pet, PetSaveMode mode, bool returnreagent)
     }
 }
 
+void Player::SetPetFavorite(uint32 petNumber, bool favorite)
+{
+    if (!m_petStable || favorite == m_petStable->IsFavorite(petNumber))
+        return;
+
+    if (favorite)
+        m_petStable->FavoritePetNumbers.insert(petNumber);
+    else
+        m_petStable->FavoritePetNumbers.erase(petNumber);
+
+    // Persist in the dedicated favorites table (keyed by pet number, so it survives the pet-row
+    // delete+reinsert that happens on every pet save).
+    CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(favorite ? CHAR_INS_PET_FAVORITE : CHAR_DEL_PET_FAVORITE);
+    stmt->setUInt64(0, GetGUID().GetCounter());
+    stmt->setUInt32(1, petNumber);
+    CharacterDatabase.Execute(stmt);
+
+    // Reflect the favorite star in the stable UI (StablePetInfo::PetFlags).
+    if (m_activePlayerData->PetStable.has_value())
+    {
+        int32 ufIndex = m_activePlayerData->PetStable->Pets.FindIndexIf([petNumber](UF::StablePetInfo const& p) { return p.PetNumber == petNumber; });
+        if (ufIndex >= 0)
+        {
+            auto petSetter = m_values.ModifyValue(&Player::m_activePlayerData)
+                .ModifyValue(&UF::ActivePlayerData::PetStable, 0)
+                .ModifyValue(&UF::StableInfo::Pets, ufIndex);
+            if (favorite)
+                SetUpdateFieldFlagValue(petSetter.ModifyValue(&UF::StablePetInfo::PetFlags), PET_STABLE_FAVORITE);
+            else
+                RemoveUpdateFieldFlagValue(petSetter.ModifyValue(&UF::StablePetInfo::PetFlags), PET_STABLE_FAVORITE);
+        }
+    }
+}
+
 void Player::DeletePetFromDB(uint32 petNumber)
 {
     if (m_activePlayerData->PetStable.has_value())
@@ -30012,6 +30046,16 @@ void Player::_LoadPetStable(uint32 summonedPetNumber, PreparedQueryResult result
 
     m_petStable = std::make_unique<PetStable>();
 
+    // Load which stable pets the player pinned as favorites (kept in its own table, keyed by pet number).
+    {
+        CharacterDatabasePreparedStatement* favStmt = CharacterDatabase.GetPreparedStatement(CHAR_SEL_PET_FAVORITES);
+        favStmt->setUInt64(0, GetGUID().GetCounter());
+        if (PreparedQueryResult favResult = CharacterDatabase.Query(favStmt))
+            do
+                m_petStable->FavoritePetNumbers.insert((*favResult)[0].GetUInt32());
+            while (favResult->NextRow());
+    }
+
     //         0      1        2      3    4           5     6     7        8          9       10      11        12              13       14              15
     // SELECT id, entry, modelid, level, exp, Reactstate, slot, name, renamed, curhealth, curmana, abdata, savetime, CreatedBySpell, PetType, specialization FROM character_pet WHERE owner = ?
     if (result)
@@ -30042,14 +30086,16 @@ void Player::_LoadPetStable(uint32 summonedPetNumber, PreparedQueryResult result
                 m_petStable->ActivePets[slot] = std::move(petInfo);
 
                 if (m_petStable->ActivePets[slot]->Type == HUNTER_PET)
-                    AddPetToUpdateFields(*m_petStable->ActivePets[slot], slot, PET_STABLE_ACTIVE);
+                    AddPetToUpdateFields(*m_petStable->ActivePets[slot], slot,
+                        PetStableFlags(PET_STABLE_ACTIVE | (m_petStable->IsFavorite(m_petStable->ActivePets[slot]->PetNumber) ? PET_STABLE_FAVORITE : 0)));
             }
             else if (slot >= PET_SAVE_FIRST_STABLE_SLOT && slot < PET_SAVE_LAST_STABLE_SLOT)
             {
                 m_petStable->StabledPets[slot - PET_SAVE_FIRST_STABLE_SLOT] = std::move(petInfo);
 
                 if (m_petStable->StabledPets[slot - PET_SAVE_FIRST_STABLE_SLOT]->Type == HUNTER_PET)
-                    AddPetToUpdateFields(*m_petStable->StabledPets[slot - PET_SAVE_FIRST_STABLE_SLOT], slot, PET_STABLE_INACTIVE);
+                    AddPetToUpdateFields(*m_petStable->StabledPets[slot - PET_SAVE_FIRST_STABLE_SLOT], slot,
+                        PetStableFlags(PET_STABLE_INACTIVE | (m_petStable->IsFavorite(m_petStable->StabledPets[slot - PET_SAVE_FIRST_STABLE_SLOT]->PetNumber) ? PET_STABLE_FAVORITE : 0)));
             }
             else if (slot == PET_SAVE_NOT_IN_SLOT)
                 m_petStable->UnslottedPets.push_back(std::move(petInfo));

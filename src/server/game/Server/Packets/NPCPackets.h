@@ -295,6 +295,17 @@ namespace WorldPackets
             uint32 PetNumber = 0;
             uint8 DestSlot = 0;
         };
+
+        class SetPetFavorite final : public ClientPacket
+        {
+        public:
+            explicit SetPetFavorite(WorldPacket&& packet) : ClientPacket(CMSG_SET_PET_FAVORITE, std::move(packet)) { }
+
+            void Read() override;
+
+            uint8 SlotID = 0;       // stable slot (PetSaveMode), matches C_StableInfo.SetPetFavorite(slotID, ...)
+            bool IsFavorite = false;
+        };
     }
 }
 

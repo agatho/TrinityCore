@@ -386,6 +386,31 @@ void WorldSession::HandleSetPetSlot(WorldPackets::NPC::SetPetSlot& setPetSlot)
     _player->SetPetSlot(setPetSlot.PetNumber, PetSaveMode(setPetSlot.DestSlot));
 }
 
+void WorldSession::HandleSetPetFavorite(WorldPackets::NPC::SetPetFavorite& setPetFavorite)
+{
+    // The client addresses the pet by its stable slot (C_StableInfo.SetPetFavorite(slotID, ...)); resolve it
+    // to the occupying pet and pin/unpin by that pet's persistent number so the star follows the pet.
+    PetStable* stable = _player->GetPetStable();
+    if (!stable)
+        return;
+
+    PetStable::PetInfo const* pet = nullptr;
+    PetSaveMode slot = PetSaveMode(setPetFavorite.SlotID);
+    if (slot >= PET_SAVE_FIRST_ACTIVE_SLOT && slot < PET_SAVE_LAST_ACTIVE_SLOT)
+    {
+        if (stable->ActivePets[slot])
+            pet = &stable->ActivePets[slot].value();
+    }
+    else if (slot >= PET_SAVE_FIRST_STABLE_SLOT && slot < PET_SAVE_LAST_STABLE_SLOT)
+    {
+        if (stable->StabledPets[slot - PET_SAVE_FIRST_STABLE_SLOT])
+            pet = &stable->StabledPets[slot - PET_SAVE_FIRST_STABLE_SLOT].value();
+    }
+
+    if (pet)
+        _player->SetPetFavorite(pet->PetNumber, setPetFavorite.IsFavorite);
+}
+
 void WorldSession::HandleRepairItemOpcode(WorldPackets::Item::RepairItem& packet)
 {
     TC_LOG_DEBUG("network", "WORLD: CMSG_REPAIR_ITEM: Npc {}, Item {}, UseGuildBank: {}",
