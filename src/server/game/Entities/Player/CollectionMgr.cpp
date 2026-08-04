@@ -993,6 +993,23 @@ void CollectionMgr::RemoveTemporaryAppearance(Item* item)
     }
 }
 
+bool CollectionMgr::MakeAppearancePermanent(uint32 itemModifiedAppearanceId)
+{
+    // Only an appearance the player currently holds *conditionally* (granted by an equipped/held item) may be
+    // promoted - this backs the client's "make appearance permanent" action on a temporary appearance.
+    if (_temporaryAppearances.find(itemModifiedAppearanceId) == _temporaryAppearances.end())
+        return false;
+
+    ItemModifiedAppearanceEntry const* itemModifiedAppearance = sItemModifiedAppearanceStore.LookupEntry(itemModifiedAppearanceId);
+    if (!itemModifiedAppearance)
+        return false;
+
+    // AddItemAppearance sets the permanent appearance bit, clears the conditional-transmog flag + temporary
+    // entry, and fires the LearnAnyTransmog criteria.
+    AddItemAppearance(itemModifiedAppearance);
+    return true;
+}
+
 std::pair<bool, bool> CollectionMgr::HasItemAppearance(uint32 itemModifiedAppearanceId) const
 {
     if (itemModifiedAppearanceId < _appearances->size() && _appearances->test(itemModifiedAppearanceId))

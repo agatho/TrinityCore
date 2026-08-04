@@ -1401,6 +1401,7 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         PetStable const* GetPetStable() const { return m_petStable.get(); }
         void AddPetToUpdateFields(PetStable::PetInfo const& pet, PetSaveMode slot, PetStableFlags flags);
         void SetPetSlot(uint32 petNumber, PetSaveMode dstPetSlot);
+        void SetPetFavorite(uint32 petNumber, bool favorite);   // CMSG_SET_PET_FAVORITE: pin/unpin a stable pet
         ObjectGuid GetStableMaster() const;
         void SetStableMaster(ObjectGuid stableMaster);
 
@@ -3018,6 +3019,7 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         // Covenant / Soulbind
         uint32 GetActiveCovenant() const { return m_activeCovenantId; }
         uint32 GetActiveSoulbind() const { return m_activeSoulbindId; }
+        void SetActiveCovenant(uint32 covenantId);              // SPELL_EFFECT_SET_COVENANT: join covenant, persist (soulbind-independent)
         void ActivateSoulbind(SoulbindEntry const* soulbind);   // validates + persists; reapplies conduit effects
 
         // Soulbind conduit collection (server-authoritative: conduitId -> owned RankIndex)

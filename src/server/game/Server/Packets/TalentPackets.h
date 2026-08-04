@@ -92,6 +92,16 @@ namespace WorldPackets
             Array<uint16, MAX_TALENT_TIERS> Talents;
         };
 
+        class UnlearnSpecialization final : public ClientPacket
+        {
+        public:
+            explicit UnlearnSpecialization(WorldPacket&& packet) : ClientPacket(CMSG_UNLEARN_SPECIALIZATION, std::move(packet)) { }
+
+            void Read() override;
+
+            uint8 SpecGroupIndex = 0;
+        };
+
         class RespecWipeConfirm final : public ServerPacket
         {
         public:

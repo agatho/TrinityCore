@@ -1378,6 +1378,53 @@ void WorldSession::HandleQueryCountdownTimer(WorldPackets::Misc::QueryCountdownT
     _player->SendDirectMessage(startTimer.Write());
 }
 
+void WorldSession::HandleDoCountdown(WorldPackets::Misc::DoCountdown& doCountdown)
+{
+    // The native raid/party pull countdown: the leader starts it, the server runs it and pushes the
+    // ticking timer to every group member (SMSG_START_TIMER), mirroring HandleQueryCountdownTimer's reply.
+    Group* group = _player->GetGroup();
+    if (!group)
+        return;
+
+    if (!group->IsLeader(_player->GetGUID()))
+        return;
+
+    Seconds duration(doCountdown.TotalTime);
+    if (duration <= Seconds::zero() || duration > Seconds(600))
+        return;
+
+    // A player-initiated countdown is always the PlayerCountdown slot; Pvp/ChallengeMode are server-driven.
+    group->StartCountdown(CountdownTimerType::PlayerCountdown, duration);
+
+    WorldPackets::Misc::StartTimer startTimer;
+    startTimer.Type = CountdownTimerType::PlayerCountdown;
+    startTimer.TotalTime = duration;
+    startTimer.TimeLeft = duration;
+    group->BroadcastPacket(startTimer.Write(), false);
+}
+
+void WorldSession::HandleGetRemainingGameTime(WorldPackets::Misc::GetRemainingGameTime& /*getRemainingGameTime*/)
+{
+    // Trinity accounts are not subscription-time-billed; report unlimited so the client clears the
+    // remaining-game-time UI instead of nagging.
+    WorldPackets::Misc::GetRemainingGameTimeResponse response;
+    response.SecondsRemaining = 0;
+    response.GameTimeParam = 0;
+    response.Unlimited = true;
+    SendPacket(response.Write());
+}
+
+void WorldSession::HandleSetStopConversation(WorldPackets::Misc::SetStopConversation& setStopConversation)
+{
+    Conversation* conversation = ObjectAccessor::GetConversation(*_player, setStopConversation.ConversationGUID);
+    if (!conversation)
+        return;
+
+    // Conversations are private objects owned by the player they play for; only that owner may stop one.
+    if (conversation->GetPrivateObjectOwner() == _player->GetGUID())
+        conversation->Remove();
+}
+
 void WorldSession::HandleSetCurrencyFlags(WorldPackets::Misc::SetCurrencyFlags const& setCurrenctFlags)
 {
     _player->SetCurrencyFlagsFromClient(setCurrenctFlags.CurrencyID, setCurrenctFlags.Flags);

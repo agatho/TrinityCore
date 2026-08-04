@@ -14777,6 +14777,12 @@ void Player::OnGossipSelect(WorldObject* source, int32 gossipOptionId, uint32 me
             break;
         case GossipOptionNpc::GarrisonRecruitment: // NYI
             break;
+        // GossipOptionNpc::GarrisonTalent (Order Advancement) intentionally falls through to `default` (handled=false):
+        // the class-hall talent frame opens via the client's immersive-interaction dispatch, which resolves the
+        // gossip option's GossipNpcOptionID in GossipNPCOption.db2 to PlayerInteractionType::GarrTalent and fires
+        // GARRISON_TALENT_NPC_OPENED. So the option only needs its GossipNpcOptionID set (e.g. Hunter=32330) and the
+        // generic SMSG_GOSSIP_OPTION_NPC_INTERACTION below does the rest. (Verified by client RE of sub_7FF72AB660A0 /
+        // sub_7FF72AB62640.) No dedicated open-talent opcode exists.
         case GossipOptionNpc::ChromieTimeNpc:
             handled = false;
             break;
@@ -14867,31 +14873,6 @@ void Player::OnGossipSelect(WorldObject* source, int32 gossipOptionId, uint32 me
         }
         PlayerTalkClass->SendCloseGossip();
     }
-
-    // Order Advancement: opening the class-hall talent tree requires SMSG_GARRISON_OPEN_TALENT_NPC, which fires
-    // GARRISON_TALENT_NPC_OPENED -> OrderHallTalentFrame:SetGarrisonType(garrType, tree). The generic NPC-interaction
-    // result above does NOT open that frame (it isn't registered with the interaction manager). Resolve the player's
-    // class-order talent tree (GarrTalentTree.ClassID == player class) and push the open packet.
-    if (gossipOptionNpc == GossipOptionNpc::GarrisonTalent)
-        if (GetGarrison(GARRISON_TYPE_CLASS_ORDER))
-        {
-            int32 treeId = 0;
-            if (std::vector<GarrTalentTreeEntry const*> const* trees = sGarrisonMgr.GetTalentTreesForGarrType(int8(GARRISON_TYPE_CLASS_ORDER)))
-                for (GarrTalentTreeEntry const* tree : *trees)
-                    if (tree->ClassID == int32(GetClass()))
-                    {
-                        treeId = tree->ID;
-                        break;
-                    }
-            if (treeId)
-            {
-                WorldPackets::Garrison::GarrisonOpenTalentNpc talentNpc;
-                talentNpc.NpcGUID = source->GetGUID();
-                talentNpc.GarrTalentTreeID = treeId;
-                talentNpc.GarrTypeID = GARRISON_TYPE_CLASS_ORDER;
-                SendDirectMessage(talentNpc.Write());
-            }
-        }
 
     ModifyMoney(-cost);
 }
@@ -19550,19 +19531,40 @@ bool Player::LoadFromDB(ObjectGuid guid, CharacterDatabaseQueryHolder const& hol
 
     _LoadPlayerData(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_DATA_ELEMENTS), holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_DATA_FLAGS));
 
-    std::unique_ptr<Garrison> garrison = std::make_unique<Garrison>(this);
-    if (garrison->LoadFromDB(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_GARRISON),
-        holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_GARRISON_BLUEPRINTS),
-        holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_GARRISON_BUILDINGS),
-        holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_GARRISON_FOLLOWERS),
-        holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_GARRISON_FOLLOWER_ABILITIES),
-        holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_GARRISON_MISSIONS),
-        holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_GARRISON_SPECIALIZATIONS),
-        holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_GARRISON_SHIPMENTS),
-        holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_GARRISON_TALENTS),
-        holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_GARRISON_TROPHIES),
-        holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_GARRISON_ARCHIVED_MISSIONS)))
-        _garrisons[garrison->GetType()] = std::move(garrison);
+    // A character may own several garrisons (WoD garrison, Legion order hall, BfA war campaign, covenant sanctum).
+    // The login holder's GARRISON query returns every character_garrison row; load each with its own sub-tables
+    // filtered by garrType. The sub-table result cursors are consumed once, so they can't be shared across garrisons
+    // - fetch each garrison's rows synchronously here. Garrison::LoadFromDB itself is unchanged (reads the current
+    // header row + the filtered sub-results exactly as before), so a single garrison loads byte-identically.
+    if (PreparedQueryResult garrisonResult = holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_GARRISON))
+    {
+        ObjectGuid::LowType lowGuid = GetGUID().GetCounter();
+        do
+        {
+            uint8 garrType = static_cast<uint8>(garrisonResult->Fetch()[2].GetUInt32());   // character_garrison.type
+            auto byType = [&](CharacterDatabaseStatements idx) -> PreparedQueryResult
+            {
+                CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(idx);
+                stmt->setUInt64(0, lowGuid);
+                stmt->setUInt8(1, garrType);
+                return CharacterDatabase.Query(stmt);
+            };
+
+            std::unique_ptr<Garrison> garrison = std::make_unique<Garrison>(this);
+            if (garrison->LoadFromDB(garrisonResult,
+                byType(CHAR_SEL_CHARACTER_GARRISON_BLUEPRINTS_BY_TYPE),
+                byType(CHAR_SEL_CHARACTER_GARRISON_BUILDINGS_BY_TYPE),
+                byType(CHAR_SEL_CHARACTER_GARRISON_FOLLOWERS_BY_TYPE),
+                byType(CHAR_SEL_CHARACTER_GARRISON_FOLLOWER_ABILITIES_BY_TYPE),
+                byType(CHAR_SEL_CHARACTER_GARRISON_MISSIONS_BY_TYPE),
+                byType(CHAR_SEL_CHARACTER_GARRISON_SPECIALIZATIONS_BY_TYPE),
+                byType(CHAR_SEL_CHARACTER_GARRISON_SHIPMENTS_BY_TYPE),
+                byType(CHAR_SEL_CHARACTER_GARRISON_TALENTS_BY_TYPE),
+                byType(CHAR_SEL_CHARACTER_GARRISON_TROPHIES_BY_TYPE),
+                byType(CHAR_SEL_CHARACTER_GARRISON_ARCHIVED_MISSIONS_BY_TYPE)))
+                _garrisons[garrison->GetType()] = std::move(garrison);
+        } while (garrisonResult->NextRow());
+    }
 
     _mythicPlusData = std::make_unique<MythicPlusData>(this);
     _mythicPlusData->LoadFromDB(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_MYTHIC_PLUS));
@@ -21880,6 +21882,24 @@ void Player::ActivateSoulbind(SoulbindEntry const* soulbind)
     ApplyConduitSpells();
 }
 
+void Player::SetActiveCovenant(uint32 covenantId)
+{
+    // Blizzlike join order is: choose covenant (this) -> then its soulbinds unlock. Driven by
+    // SPELL_EFFECT_SET_COVENANT (the covenant-choice quest's reward spell); there is no covenant opcode.
+    // Unlike ActivateSoulbind (which implies the covenant), this sets the covenant WITHOUT touching the
+    // active soulbind, so a player can join before picking a soulbind.
+    if (m_activeCovenantId == covenantId)
+        return;
+
+    m_activeCovenantId = covenantId;
+
+    CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_REP_CHARACTER_COVENANT);
+    stmt->setUInt64(0, GetGUID().GetCounter());
+    stmt->setUInt32(1, m_activeCovenantId);
+    stmt->setUInt32(2, m_activeSoulbindId);
+    CharacterDatabase.Execute(stmt);
+}
+
 void Player::_LoadSoulbindConduits(PreparedQueryResult result)
 {
     if (!result)
@@ -23940,6 +23960,40 @@ void Player::RemovePet(Pet* pet, PetSaveMode mode, bool returnreagent)
 
         if (GetGroup())
             SetGroupUpdateFlag(GROUP_UPDATE_FLAG_PET);
+    }
+}
+
+void Player::SetPetFavorite(uint32 petNumber, bool favorite)
+{
+    if (!m_petStable || favorite == m_petStable->IsFavorite(petNumber))
+        return;
+
+    if (favorite)
+        m_petStable->FavoritePetNumbers.insert(petNumber);
+    else
+        m_petStable->FavoritePetNumbers.erase(petNumber);
+
+    // Persist in the dedicated favorites table (keyed by pet number, so it survives the pet-row
+    // delete+reinsert that happens on every pet save).
+    CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(favorite ? CHAR_INS_PET_FAVORITE : CHAR_DEL_PET_FAVORITE);
+    stmt->setUInt64(0, GetGUID().GetCounter());
+    stmt->setUInt32(1, petNumber);
+    CharacterDatabase.Execute(stmt);
+
+    // Reflect the favorite star in the stable UI (StablePetInfo::PetFlags).
+    if (m_activePlayerData->PetStable.has_value())
+    {
+        int32 ufIndex = m_activePlayerData->PetStable->Pets.FindIndexIf([petNumber](UF::StablePetInfo const& p) { return p.PetNumber == petNumber; });
+        if (ufIndex >= 0)
+        {
+            auto petSetter = m_values.ModifyValue(&Player::m_activePlayerData)
+                .ModifyValue(&UF::ActivePlayerData::PetStable, 0)
+                .ModifyValue(&UF::StableInfo::Pets, ufIndex);
+            if (favorite)
+                SetUpdateFieldFlagValue(petSetter.ModifyValue(&UF::StablePetInfo::PetFlags), PET_STABLE_FAVORITE);
+            else
+                RemoveUpdateFieldFlagValue(petSetter.ModifyValue(&UF::StablePetInfo::PetFlags), PET_STABLE_FAVORITE);
+        }
     }
 }
 
@@ -32231,6 +32285,16 @@ void Player::_LoadPetStable(uint32 summonedPetNumber, PreparedQueryResult result
 
     m_petStable = std::make_unique<PetStable>();
 
+    // Load which stable pets the player pinned as favorites (kept in its own table, keyed by pet number).
+    {
+        CharacterDatabasePreparedStatement* favStmt = CharacterDatabase.GetPreparedStatement(CHAR_SEL_PET_FAVORITES);
+        favStmt->setUInt64(0, GetGUID().GetCounter());
+        if (PreparedQueryResult favResult = CharacterDatabase.Query(favStmt))
+            do
+                m_petStable->FavoritePetNumbers.insert((*favResult)[0].GetUInt32());
+            while (favResult->NextRow());
+    }
+
     //         0      1        2      3    4           5     6     7        8          9       10      11        12              13       14              15
     // SELECT id, entry, modelid, level, exp, Reactstate, slot, name, renamed, curhealth, curmana, abdata, savetime, CreatedBySpell, PetType, specialization FROM character_pet WHERE owner = ?
     if (result)
@@ -32261,14 +32325,16 @@ void Player::_LoadPetStable(uint32 summonedPetNumber, PreparedQueryResult result
                 m_petStable->ActivePets[slot] = std::move(petInfo);
 
                 if (m_petStable->ActivePets[slot]->Type == HUNTER_PET)
-                    AddPetToUpdateFields(*m_petStable->ActivePets[slot], slot, PET_STABLE_ACTIVE);
+                    AddPetToUpdateFields(*m_petStable->ActivePets[slot], slot,
+                        PetStableFlags(PET_STABLE_ACTIVE | (m_petStable->IsFavorite(m_petStable->ActivePets[slot]->PetNumber) ? PET_STABLE_FAVORITE : 0)));
             }
             else if (slot >= PET_SAVE_FIRST_STABLE_SLOT && slot < PET_SAVE_LAST_STABLE_SLOT)
             {
                 m_petStable->StabledPets[slot - PET_SAVE_FIRST_STABLE_SLOT] = std::move(petInfo);
 
                 if (m_petStable->StabledPets[slot - PET_SAVE_FIRST_STABLE_SLOT]->Type == HUNTER_PET)
-                    AddPetToUpdateFields(*m_petStable->StabledPets[slot - PET_SAVE_FIRST_STABLE_SLOT], slot, PET_STABLE_INACTIVE);
+                    AddPetToUpdateFields(*m_petStable->StabledPets[slot - PET_SAVE_FIRST_STABLE_SLOT], slot,
+                        PetStableFlags(PET_STABLE_INACTIVE | (m_petStable->IsFavorite(m_petStable->StabledPets[slot - PET_SAVE_FIRST_STABLE_SLOT]->PetNumber) ? PET_STABLE_FAVORITE : 0)));
             }
             else if (slot == PET_SAVE_NOT_IN_SLOT)
                 m_petStable->UnslottedPets.push_back(std::move(petInfo));

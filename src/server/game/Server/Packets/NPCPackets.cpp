@@ -274,4 +274,10 @@ void SetPetSlot::Read()
     _worldPacket >> DestSlot;
     _worldPacket >> StableMaster;
 }
+
+void SetPetFavorite::Read()
+{
+    _worldPacket >> SlotID;                 // raw uint8 stable slot (client serializer 0x6A51C0)
+    IsFavorite = _worldPacket.ReadBit();
+}
 }

@@ -113,6 +113,14 @@ void Totem::UnSummon(uint32 msTime)
     {
         if (GetOwner()->m_SummonSlot[i] == GetGUID())
         {
+            // Tell the owning client to drop the totem-bar button (mirror of the SMSG_TOTEM_CREATED sent on summon).
+            if (Player* owner = GetOwner()->ToPlayer())
+            {
+                WorldPackets::Totem::TotemRemoved totemRemoved;
+                totemRemoved.Totem = GetGUID();
+                totemRemoved.Slot = i - SUMMON_SLOT_TOTEM;
+                owner->SendDirectMessage(totemRemoved.Write());
+            }
             GetOwner()->m_SummonSlot[i].Clear();
             break;
         }

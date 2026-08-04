@@ -523,20 +523,10 @@ namespace WorldPackets
             std::vector<uint32> CraftableItemIDs;
         };
 
-        // Opens the class-hall Order Advancement talent tree. Fires GARRISON_TALENT_NPC_OPENED client-side ->
-        // OrderHallTalentFrame:SetGarrisonType(garrType, tree). Opcode recovered from the client binary; wire is a
-        // reconstruction (NpcGUID, tree, garrType) - verify against a sniff.
-        class GarrisonOpenTalentNpc final : public ServerPacket
-        {
-        public:
-            explicit GarrisonOpenTalentNpc() : ServerPacket(SMSG_GARRISON_OPEN_TALENT_NPC, 16 + 4 + 4) { }
-
-            WorldPacket const* Write() override;
-
-            ObjectGuid NpcGUID;
-            int32 GarrTalentTreeID = 0;
-            int32 GarrTypeID = 0;
-        };
+        // NOTE: the class-hall Order Advancement talent tree does NOT use a dedicated open packet. The client opens it
+        // from the gossip option itself: SMSG_GOSSIP_OPTION_NPC_INTERACTION carrying the option's GossipNpcOptionID,
+        // which the client resolves via GossipNPCOption.db2 to PlayerInteractionType::GarrTalent and fires
+        // GARRISON_TALENT_NPC_OPENED. See Player::OnGossipSelect (GarrisonTalent falls through to the generic path).
 
         // IDA case 4980817 (§8.51): generic byte-block helper. Conservative shape: {u32 NewMinLevel}.
         class GarrisonAutoTroopMinLevelUpdateResult final : public ServerPacket
@@ -1455,7 +1445,12 @@ namespace WorldPackets
 
             void Read() override;
 
+            // Wire (from client serializer CMSG_GARRISON_RESEARCH_TALENT_Write): PackedGuid NpcGUID, u32 GarrTalentID,
+            // u32 GarrTalentRank, Bits<1>. Reading only GarrTalentID (the old code) parsed the guid front as the id.
+            ObjectGuid NpcGUID;
             int32 GarrTalentID = 0;
+            int32 GarrTalentRank = 0;
+            bool Unused = false;
         };
 
         // IDA case 4980750: u32 Result, u8 GarrTypeID, Bits<1> (purpose unknown — observed

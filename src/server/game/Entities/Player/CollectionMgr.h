@@ -209,6 +209,9 @@ public:
     void AddTransmogSet(uint32 transmogSetId);
     bool IsSetCompleted(uint32 transmogSetId) const;
     void RemoveTemporaryAppearance(Item* item);
+    // Promote a currently-conditional (temporary) appearance to permanently collected. Returns false if the
+    // id is not an ItemModifiedAppearance the player only holds conditionally.
+    bool MakeAppearancePermanent(uint32 itemModifiedAppearanceId);
     // returns pair<hasAppearance, isTemporary>
     std::pair<bool, bool> HasItemAppearance(uint32 itemModifiedAppearanceId) const;
     std::unordered_set<ObjectGuid> GetItemsProvidingTemporaryAppearance(uint32 itemModifiedAppearanceId) const;

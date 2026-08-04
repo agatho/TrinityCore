@@ -912,6 +912,15 @@ void WorldSession::HandleSocketGems(WorldPackets::Item::SocketGems& socketGems)
     if (!socketGems.ItemGuid)
         return;
 
+    // Tell the client its socketing attempt was rejected (mirror of the SMSG_SOCKET_GEMS_SUCCESS sent on success),
+    // so the gem-socket UI clears the pending state instead of hanging.
+    auto sendSocketFailure = [&]()
+    {
+        WorldPackets::Item::SocketGemsFailure failure;
+        failure.Item = socketGems.ItemGuid;
+        SendPacket(failure.Write());
+    };
+
     //cheat -> tried to socket same gem multiple times
     if ((!socketGems.GemItem[0].IsEmpty() && (socketGems.GemItem[0] == socketGems.GemItem[1] || socketGems.GemItem[0] == socketGems.GemItem[2])) ||
         (!socketGems.GemItem[1].IsEmpty() && (socketGems.GemItem[1] == socketGems.GemItem[2])))
@@ -919,11 +928,17 @@ void WorldSession::HandleSocketGems(WorldPackets::Item::SocketGems& socketGems)
 
     Item* itemTarget = _player->GetItemByGuid(socketGems.ItemGuid);
     if (!itemTarget)                                         //missing item to socket
+    {
+        sendSocketFailure();
         return;
+    }
 
     ItemTemplate const* itemProto = itemTarget->GetTemplate();
     if (!itemProto)
+    {
+        sendSocketFailure();
         return;
+    }
 
     //this slot is excepted when applying / removing meta gem bonus
     uint8 slot = itemTarget->IsEquipped() ? itemTarget->GetSlot() : uint8(NULL_SLOT);
@@ -970,10 +985,16 @@ void WorldSession::HandleSocketGems(WorldPackets::Item::SocketGems& socketGems)
             {
                 // no prismatic socket
                 if (!itemTarget->GetEnchantmentId(PRISMATIC_ENCHANTMENT_SLOT))
+                {
+                    sendSocketFailure();
                     return;
+                }
 
                 if (i != firstPrismatic)
+                {
+                    sendSocketFailure();
                     return;
+                }
 
                 acceptableGemTypeMask = SOCKET_COLOR_RED | SOCKET_COLOR_YELLOW | SOCKET_COLOR_BLUE;
                 break;
@@ -990,7 +1011,10 @@ void WorldSession::HandleSocketGems(WorldPackets::Item::SocketGems& socketGems)
 
         // Gem must match socket color
         if (!(acceptableGemTypeMask & gemProperties[i]->Type))
+        {
+            sendSocketFailure();
             return;
+        }
     }
 
     // check unique-equipped conditions
