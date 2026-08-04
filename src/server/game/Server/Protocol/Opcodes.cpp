@@ -683,7 +683,7 @@ void OpcodeTable::InitializeClientOpcodes()
     DEFINE_HANDLER(CMSG_MAIL_RETURN_TO_SENDER,                              STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleMailReturnToSender);
     DEFINE_HANDLER(CMSG_MAIL_TAKE_ITEM,                                     STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleMailTakeItem);
     DEFINE_HANDLER(CMSG_MAIL_TAKE_MONEY,                                    STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleMailTakeMoney);
-    DEFINE_HANDLER(CMSG_MAKE_CONTITIONAL_APPEARANCE_PERMANENT,              STATUS_UNHANDLED, PROCESS_INPLACE,      &WorldSession::Handle_NULL);
+    DEFINE_HANDLER(CMSG_MAKE_CONTITIONAL_APPEARANCE_PERMANENT,              STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleMakeConditionalAppearancePermanent);
     DEFINE_HANDLER(CMSG_MASTER_LOOT_ITEM,                                   STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleLootMasterGiveOpcode);
     DEFINE_HANDLER(CMSG_MERGE_GUILD_BANK_ITEM_WITH_GUILD_BANK_ITEM,         STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleMergeGuildBankItemWithGuildBankItem);
     DEFINE_HANDLER(CMSG_MERGE_GUILD_BANK_ITEM_WITH_ITEM,                    STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleMergeGuildBankItemWithItem);
