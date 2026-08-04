@@ -50,6 +50,13 @@ void WorldSession::HandleLearnTalentsOpcode(WorldPackets::Talent::LearnTalents& 
         _player->SendTalentsInfoData();
 }
 
+void WorldSession::HandleUnlearnSpecialization(WorldPackets::Talent::UnlearnSpecialization& /*unlearnSpecialization*/)
+{
+    // Unlearn the active specialization at a trainer: reset spec talents + spec-granted spells back to the
+    // class default and resend talent info. ResetTalentSpecialization operates on the active spec group.
+    _player->ResetTalentSpecialization();
+}
+
 void WorldSession::HandleLearnPvpTalentsOpcode(WorldPackets::Talent::LearnPvpTalents& packet)
 {
     WorldPackets::Talent::LearnPvpTalentFailed learnPvpTalentFailed;
