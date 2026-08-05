@@ -2671,20 +2671,6 @@ void GameObject::Use(Unit* user, bool ignoreCastInProgress /*= false*/)
             player->SendPreparedGossip(this);
             return;
         }
-        case GAMEOBJECT_TYPE_GARRISON_SHIPMENT:             //45
-        {
-            // Building work-order crate. Made interactable by Garrison::UpdateWorkOrderCrates only while it
-            // holds finished orders; clicking (looting) it collects those orders and delivers their goods.
-            // Placement is a separate action at the building's work-order NPC. Handled in core (no script).
-            Player* player = user->ToPlayer();
-            if (!player)
-                return;
-
-            if (Garrison* garrison = player->GetGarrison())
-                if (uint32 plotInstanceId = garrison->FindPlotInstanceForNpc(GetGUID()))
-                    garrison->CollectReadyShipments(plotInstanceId);
-            return;
-        }
         case GAMEOBJECT_TYPE_CHEST:                         //3
         {
             Player* player = user->ToPlayer();
