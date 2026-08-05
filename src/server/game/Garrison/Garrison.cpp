@@ -18,6 +18,8 @@
 #include "Garrison.h"
 #include "Containers.h"
 #include "Creature.h"
+#include "MotionMaster.h"
+#include "TemporarySummon.h"
 #include "DatabaseEnv.h"
 #include "DB2Stores.h"
 #include "DB2Structure.h"
@@ -4006,7 +4008,8 @@ void Garrison::CollectReadyShipmentsForContainer(uint32 containerId)
     if (!entries)
         return;
 
-    std::vector<uint64> ready;
+    // Ready shipments for this container + the troop follower each yields (for the "troops march off" effect).
+    std::vector<std::pair<uint64 /*dbId*/, uint32 /*garrFollowerId*/>> ready;
     for (auto const& p : _shipments)
     {
         if (p.second.PlotInstanceID != 0 || !p.second.IsReady())
@@ -4014,11 +4017,45 @@ void Garrison::CollectReadyShipmentsForContainer(uint32 containerId)
         for (CharShipmentEntry const* e : *entries)
             if (e->ID == p.second.ShipmentRecID)
             {
-                ready.push_back(p.first);
+                ready.emplace_back(p.first, e->GarrFollowerID);
                 break;
             }
     }
-    for (uint64 dbId : ready)
+    if (ready.empty())
+        return;
+
+    // Cosmetic "getting real troops": spawn the recruited troop as creatures at the standard and march them off,
+    // then despawn the standard (the pickup is consumed). Private to the collecting player. The follower itself is
+    // minted by CompleteShipment below.
+    GarrisonMgr::OrderHallStandard const* spawn = sGarrisonMgr.GetOrderHallStandard(containerId);
+    Map* map = _owner->IsInWorld() ? _owner->GetMap() : nullptr;
+    if (spawn && map && _owner->GetMapId() == spawn->MapId)
+    {
+        for (auto const& [dbId, followerId] : ready)
+        {
+            GarrFollowerEntry const* follower = sGarrFollowerStore.LookupEntry(followerId);
+            uint32 creatureId = follower ? uint32(follower->AllianceCreatureID) : 0; // troops share the Horde/Alliance creature
+            if (!creatureId)
+                continue;
+
+            float const ang = spawn->Pos.GetOrientation();
+            for (uint32 i = 0; i < 3; ++i) // a small squad marches out
+            {
+                Position sp(spawn->Pos.GetPositionX() + frand(-1.5f, 1.5f), spawn->Pos.GetPositionY() + frand(-1.5f, 1.5f), spawn->Pos.GetPositionZ(), ang);
+                if (TempSummon* troop = _owner->SummonCreature(creatureId, sp, TEMPSUMMON_TIMED_DESPAWN, Seconds(8), 0, 0, _owner->GetGUID()))
+                    troop->GetMotionMaster()->MovePoint(0, sp.GetPositionX() + 14.0f * std::cos(ang), sp.GetPositionY() + 14.0f * std::sin(ang), sp.GetPositionZ());
+            }
+        }
+
+        if (auto sitr = _privateStandards.find(containerId); sitr != _privateStandards.end())
+        {
+            if (GameObject* go = map->GetGameObject(sitr->second))
+                go->Delete();
+            _privateStandards.erase(sitr);
+        }
+    }
+
+    for (auto const& [dbId, followerId] : ready)
         CompleteShipment(dbId);
 }
 
@@ -4027,71 +4064,92 @@ void Garrison::UpdateOrderHallStandards()
     if (!_owner->IsInWorld())
         return;
 
-    // Which containers currently have an order still recruiting (in-progress) for THIS owner.
-    std::unordered_map<uint32 /*containerId*/, bool> recruiting;
+    Map* map = _owner->IsInWorld() ? _owner->GetMap() : nullptr;
+    if (!map)
+        return;
+
+    // Per-container order state for THIS owner (plotless orders only).
+    std::unordered_map<uint32 /*containerId*/, std::pair<uint32 /*ready*/, uint32 /*inProgress*/>> counts;
     for (auto const& p : _shipments)
     {
-        if (p.second.PlotInstanceID != 0 || p.second.IsReady())
+        if (p.second.PlotInstanceID != 0)
             continue;
         CharShipmentEntry const* shipmentEntry = sCharShipmentStore.LookupEntry(p.second.ShipmentRecID);
-        if (shipmentEntry && shipmentEntry->ContainerID)
-            recruiting[shipmentEntry->ContainerID] = true;
+        if (!shipmentEntry || !shipmentEntry->ContainerID)
+            continue;
+        auto& c = counts[shipmentEntry->ContainerID];
+        if (p.second.IsReady())
+            ++c.first;
+        else
+            ++c.second;
     }
 
-    // Show a PER-PLAYER "working" clock on the container's standard GO. The standard is a SHARED world object (no
-    // personal phase exists in the class hall - sniff-confirmed PersonalGUID=0), so its model can't carry per-player
-    // state. Instead we play the CharShipmentContainer's WorkingSpellVisualID as a spell-visual kit sent ONLY to the
-    // owner (SMSG_GAME_OBJECT_PLAY_SPELL_VISUAL_KIT via SendDirectMessage) and cancel it for them when the order
-    // finishes - the retail-correct way to show a personal work-order clock on a shared standard.
-    auto sendWorkingVisual = [this](uint32 containerId, bool play)
+    for (auto const& [containerId, rc] : counts)
     {
         CharShipmentContainerEntry const* container = sCharShipmentContainerStore.LookupEntry(containerId);
-        if (!container || container->WorkingSpellVisualID <= 0)
-            return;
-        uint32 goEntry = sGarrisonMgr.GetStandardGoForContainer(containerId);
-        if (!goEntry)
-            return;
+        if (!container)
+            continue;
 
-        std::vector<GameObject*> standards;
-        _owner->GetGameObjectListWithEntryInGrid(standards, goEntry, 150.0f);
-        for (GameObject* standard : standards)
+        // (1) While an order is still RECRUITING, show the "working" clock on the RECRUITER NPC - sent only to this
+        // owner (personal spell-visual kit). The recruiter is the reverse of garrison_order_hall_shipment.
+        if (rc.second > 0 && container->WorkingSpellVisualID > 0)
         {
-            if (play)
+            if (uint32 npcEntry = sGarrisonMgr.GetRecruiterForContainer(containerId))
             {
-                WorldPackets::Spells::GameObjectPlaySpellVisualKit kit;
-                kit.Object = standard->GetGUID();
-                kit.KitRecID = container->WorkingSpellVisualID;
-                kit.KitType = 0;   // SpellCastDirected-style; loops until cancelled
-                kit.Duration = 0;
-                _owner->SendDirectMessage(kit.Write());
-            }
-            else
-            {
-                WorldPackets::Spells::CancelSpellVisualKit cancel;
-                cancel.Source = standard->GetGUID();
-                cancel.SpellVisualKitID = container->WorkingSpellVisualID;
-                _owner->SendDirectMessage(cancel.Write());
+                std::vector<Creature*> recruiters;
+                _owner->GetCreatureListWithEntryInGrid(recruiters, npcEntry, 100.0f);
+                for (Creature* recruiter : recruiters)
+                {
+                    WorldPackets::Spells::PlaySpellVisualKit kit;
+                    kit.Unit = recruiter->GetGUID();
+                    kit.KitRecID = container->WorkingSpellVisualID;
+                    kit.KitType = 0;
+                    kit.Duration = 0;
+                    _owner->SendDirectMessage(kit.Write());
+                }
             }
         }
-    };
 
-    // Start the clock for newly-recruiting containers; stop it for ones that just finished/collected.
-    for (auto const& [containerId, isRecruiting] : recruiting)
-    {
-        if (isRecruiting && !_shownStandardContainers.count(containerId))
+        // (2) When troops are READY, spawn the per-player "standard" at its spawn point - the pickup object. It only
+        // exists while an order is ready; clicking it (GameObject::Use) collects the troops and it despawns. Private
+        // to this owner (no personal phase in the class hall, so a private object is how retail makes it per-player).
+        GarrisonMgr::OrderHallStandard const* spawn = sGarrisonMgr.GetOrderHallStandard(containerId);
+        auto itr = _privateStandards.find(containerId);
+        GameObject* standard = itr != _privateStandards.end() ? map->GetGameObject(itr->second) : nullptr;
+
+        if (rc.first > 0 && spawn && _owner->GetMapId() == spawn->MapId)
         {
-            sendWorkingVisual(containerId, true);
-            _shownStandardContainers[containerId] = 1;
+            if (!standard)
+            {
+                QuaternionData rot = QuaternionData::fromEulerAnglesZYX(spawn->Pos.GetOrientation(), 0.0f, 0.0f);
+                standard = _owner->SummonGameObject(spawn->GoEntry, spawn->Pos, rot, Seconds(300));
+                if (standard)
+                {
+                    standard->SetPrivateObjectOwner(_owner->GetGUID());
+                    _privateStandards[containerId] = standard->GetGUID();
+                }
+            }
+            if (standard && container->SmallDisplayInfoID)
+                standard->SetDisplayId(container->SmallDisplayInfoID);
+        }
+        else if (standard) // only recruiting (no ready) -> no standard yet
+        {
+            standard->Delete();
+            _privateStandards.erase(containerId);
         }
     }
-    for (auto itr = _shownStandardContainers.begin(); itr != _shownStandardContainers.end(); )
+
+    // Drop standards for containers with no ready order left (collected, or a keepalive-expired entry).
+    for (auto itr = _privateStandards.begin(); itr != _privateStandards.end(); )
     {
-        if (recruiting.count(itr->first))
+        auto cItr = counts.find(itr->first);
+        if (cItr != counts.end() && cItr->second.first > 0)
             ++itr;
         else
         {
-            sendWorkingVisual(itr->first, false);
-            itr = _shownStandardContainers.erase(itr);
+            if (GameObject* go = map->GetGameObject(itr->second))
+                go->Delete();
+            itr = _privateStandards.erase(itr);
         }
     }
 }
