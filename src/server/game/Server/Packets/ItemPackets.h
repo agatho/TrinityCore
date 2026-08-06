@@ -632,6 +632,32 @@ namespace WorldPackets
 
             std::vector<int32> SpellID;
         };
+
+        // Item Interaction UI confirm (Matrix Catalyst conversion, Runecarver scrapping, ...). The client sends
+        // its held state: the pending item, the interaction agent it has open, the frame's interaction type
+        // (UIItemInteractionType: 4 = ItemConversion) and the conversion source item id.
+        class PerformItemInteraction final : public ClientPacket
+        {
+        public:
+            explicit PerformItemInteraction(WorldPacket&& packet) : ClientPacket(CMSG_PERFORM_ITEM_INTERACTION, std::move(packet)) { }
+
+            void Read() override;
+
+            ObjectGuid ItemGuid;
+            ObjectGuid AgentGuid;
+            int32 InteractionType = 0;
+            int32 BaseItemId = 0;
+        };
+
+        class ItemInteractionComplete final : public ServerPacket
+        {
+        public:
+            explicit ItemInteractionComplete() : ServerPacket(SMSG_ITEM_INTERACTION_COMPLETE, 1) { }
+
+            WorldPacket const* Write() override;
+
+            bool Error = false;     // single flushed bit; false closes the UI as a successful interaction
+        };
     }
 }
 

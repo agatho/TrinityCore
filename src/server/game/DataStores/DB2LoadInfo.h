@@ -2952,6 +2952,33 @@ struct ItemContextPickerEntryLoadInfo
     static constexpr DB2LoadInfo Instance{ Fields, 8, &ItemContextPickerEntryMeta::Instance, HOTFIX_SEL_ITEM_CONTEXT_PICKER_ENTRY };
 };
 
+struct ItemConversionLoadInfo
+{
+    static constexpr DB2FieldMeta Fields[6] =
+    {
+        { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "Unknown920" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "ItemBonusTreeID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "ItemLogicalCostGroupID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "AlternateItemLogicalCostGroupID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "PlayerConditionID" },
+    };
+
+    static constexpr DB2LoadInfo Instance{ Fields, 6, &ItemConversionMeta::Instance, HOTFIX_SEL_ITEM_CONVERSION };
+};
+
+struct ItemConversionEntryLoadInfo
+{
+    static constexpr DB2FieldMeta Fields[3] =
+    {
+        { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "ItemID" },
+        { .IsSigned = false, .Type = FT_INT, .Name = "ItemConversionID" },
+    };
+
+    static constexpr DB2LoadInfo Instance{ Fields, 3, &ItemConversionEntryMeta::Instance, HOTFIX_SEL_ITEM_CONVERSION_ENTRY };
+};
+
 struct ItemCreationContextLoadInfo
 {
     static constexpr DB2FieldMeta Fields[3] =

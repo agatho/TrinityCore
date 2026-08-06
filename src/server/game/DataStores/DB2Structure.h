@@ -2370,6 +2370,23 @@ struct ItemCreationContextEntry
     uint32 ItemCreationContextGroupID;
 };
 
+struct ItemConversionEntry
+{
+    uint32 ID;
+    int32 Unknown920;
+    int32 ItemBonusTreeID;
+    int32 ItemLogicalCostGroupID;
+    int32 AlternateItemLogicalCostGroupID;
+    int32 PlayerConditionID;
+};
+
+struct ItemConversionEntryEntry
+{
+    uint32 ID;
+    int32 ItemID;
+    uint32 ItemConversionID;
+};
+
 struct ItemCurrencyCostEntry
 {
     uint32 ID;

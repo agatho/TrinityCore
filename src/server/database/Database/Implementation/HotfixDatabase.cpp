@@ -936,6 +936,16 @@ void HotfixDatabaseConnection::DoPrepareStatements()
         "ItemContextPickerID FROM item_context_picker_entry WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
     PREPARE_MAX_ID_STMT(HOTFIX_SEL_ITEM_CONTEXT_PICKER_ENTRY, "SELECT MAX(ID) + 1 FROM item_context_picker_entry", CONNECTION_SYNCH);
 
+    // ItemConversion.db2
+    PrepareStatement(HOTFIX_SEL_ITEM_CONVERSION, "SELECT ID, Unknown920, ItemBonusTreeID, ItemLogicalCostGroupID, AlternateItemLogicalCostGroupID, "
+        "PlayerConditionID FROM item_conversion WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_ITEM_CONVERSION, "SELECT MAX(ID) + 1 FROM item_conversion", CONNECTION_SYNCH);
+
+    // ItemConversionEntry.db2
+    PrepareStatement(HOTFIX_SEL_ITEM_CONVERSION_ENTRY, "SELECT ID, ItemID, ItemConversionID FROM item_conversion_entry"
+        " WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_ITEM_CONVERSION_ENTRY, "SELECT MAX(ID) + 1 FROM item_conversion_entry", CONNECTION_SYNCH);
+
     // ItemCreationContext.db2
     PrepareStatement(HOTFIX_SEL_ITEM_CREATION_CONTEXT, "SELECT ID, ItemContext, ItemCreationContextGroupID FROM item_creation_context"
         " WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);

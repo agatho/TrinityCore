@@ -1232,6 +1232,23 @@ ChallengeMode.Reward.LootId = 0
 ChallengeMode.Vault.LootId = 0
 
 #
+#    ChallengeMode.Catalyst.*
+#        Description: Matrix Catalyst item conversion. Eligible input items come from the client's
+#                     ItemConversion.db2/ItemConversionEntry.db2; the class/slot -> output (tier piece) mapping is
+#                     server content in the item_conversion_output world table. Each conversion costs Cost charges
+#                     of CurrencyId (12.x: 3378 Dawnlight Manaflux). Charges accrue lazily at login: 1 at
+#                     FirstWeekTimestamp (unix time, usually the season start), +1 every CycleWeeks, lifetime-capped
+#                     at MaxCharges. FirstWeekTimestamp = 0 disables automatic charge accrual (grant the currency
+#                     by other means).
+#        Default:     CurrencyId = 3378, Cost = 1, MaxCharges = 8, CycleWeeks = 2, FirstWeekTimestamp = 0
+
+ChallengeMode.Catalyst.CurrencyId = 3378
+ChallengeMode.Catalyst.Cost = 1
+ChallengeMode.Catalyst.MaxCharges = 8
+ChallengeMode.Catalyst.CycleWeeks = 2
+ChallengeMode.Catalyst.FirstWeekTimestamp = 0
+
+#
 #    Instance.UnloadDelay
 #        Description: Time (in milliseconds) before instance maps are unloaded from memory if no
 #                     characters are inside.

@@ -148,6 +148,8 @@ TC_GAME_API extern DB2Storage<ItemBonusListLevelDeltaEntry>         sItemBonusLi
 TC_GAME_API extern DB2Storage<ItemBonusTreeEntry>                   sItemBonusTreeStore;
 TC_GAME_API extern DB2Storage<ItemBonusTreeNodeEntry>               sItemBonusTreeNodeStore;
 TC_GAME_API extern DB2Storage<ItemContextPickerEntryEntry>          sItemContextPickerEntryStore;
+TC_GAME_API extern DB2Storage<ItemConversionEntry>                  sItemConversionStore;
+TC_GAME_API extern DB2Storage<ItemConversionEntryEntry>             sItemConversionEntryStore;
 TC_GAME_API extern DB2Storage<ItemCreationContextEntry>             sItemCreationContextStore;
 TC_GAME_API extern DB2Storage<ItemDamageAmmoEntry>                  sItemDamageAmmoStore;
 TC_GAME_API extern DB2Storage<ItemDamageOneHandEntry>               sItemDamageOneHandStore;

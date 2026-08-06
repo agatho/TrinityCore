@@ -191,6 +191,8 @@ DB2Storage<ItemBonusTreeNodeEntry>              sItemBonusTreeNodeStore("ItemBon
 DB2Storage<ItemChildEquipmentEntry>             sItemChildEquipmentStore("ItemChildEquipment.db2", &ItemChildEquipmentLoadInfo::Instance);
 DB2Storage<ItemClassEntry>                      sItemClassStore("ItemClass.db2", &ItemClassLoadInfo::Instance);
 DB2Storage<ItemContextPickerEntryEntry>         sItemContextPickerEntryStore("ItemContextPickerEntry.db2", &ItemContextPickerEntryLoadInfo::Instance);
+DB2Storage<ItemConversionEntry>                 sItemConversionStore("ItemConversion.db2", &ItemConversionLoadInfo::Instance);
+DB2Storage<ItemConversionEntryEntry>            sItemConversionEntryStore("ItemConversionEntry.db2", &ItemConversionEntryLoadInfo::Instance);
 DB2Storage<ItemCreationContextEntry>            sItemCreationContextStore("ItemCreationContext.db2", &ItemCreationContextLoadInfo::Instance);
 DB2Storage<ItemCurrencyCostEntry>               sItemCurrencyCostStore("ItemCurrencyCost.db2", &ItemCurrencyCostLoadInfo::Instance);
 DB2Storage<ItemDamageAmmoEntry>                 sItemDamageAmmoStore("ItemDamageAmmo.db2", &ItemDamageAmmoLoadInfo::Instance);
@@ -824,6 +826,8 @@ uint32 DB2Manager::LoadStores(std::string const& dataPath, LocaleConstant defaul
     LOAD_DB2(sItemChildEquipmentStore);
     LOAD_DB2(sItemClassStore);
     LOAD_DB2(sItemContextPickerEntryStore);
+    LOAD_DB2(sItemConversionStore);
+    LOAD_DB2(sItemConversionEntryStore);
     LOAD_DB2(sItemCreationContextStore);
     LOAD_DB2(sItemCurrencyCostStore);
     LOAD_DB2(sItemDamageAmmoStore);
