@@ -17,6 +17,7 @@
 
 #include "InstanceScript.h"
 #include "ChallengeMode.h"
+#include "ChallengeModeMgr.h"
 #include "AreaBoundary.h"
 #include "Creature.h"
 #include "CreatureAI.h"
@@ -477,22 +478,30 @@ bool InstanceScript::SetBossState(uint32 id, EncounterState state)
         // Mythic Keystone: the run completes once every encounter in the instance is defeated.
         if (state == DONE)
         {
-            if (ChallengeMode* challenge = instance->GetChallengeMode())
+            bool allDone = true;
+            for (BossInfo const& boss : bosses)
             {
-                if (challenge->IsActive())
+                if (boss.state != DONE)
                 {
-                    bool allDone = true;
-                    for (BossInfo const& boss : bosses)
-                    {
-                        if (boss.state != DONE)
-                        {
-                            allDone = false;
-                            break;
-                        }
-                    }
+                    allDone = false;
+                    break;
+                }
+            }
 
-                    if (allDone)
+            if (allDone)
+            {
+                if (ChallengeMode* challenge = instance->GetChallengeMode())
+                {
+                    if (challenge->IsActive())
                         challenge->Complete();
+                }
+                // Mythic (M0): completing a season dungeon awards a first keystone to players without one.
+                else if (instance->GetDifficultyID() == DIFFICULTY_MYTHIC)
+                {
+                    instance->DoOnPlayers([](Player* player)
+                    {
+                        sChallengeModeMgr.OnMythicDungeonCompleted(player);
+                    });
                 }
             }
         }

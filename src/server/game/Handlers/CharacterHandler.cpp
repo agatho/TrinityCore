@@ -51,6 +51,7 @@
 #include "ObjectAccessor.h"
 #include "ObjectMgr.h"
 #include "Pet.h"
+#include "ChallengeModeMgr.h"
 #include "Player.h"
 #include "PlayerDump.h"
 #include "QueryHolder.h"
@@ -1320,6 +1321,10 @@ void WorldSession::HandlePlayerLogin(LoginQueryHolder const& holder)
     pCurrChar->RemoveAurasWithInterruptFlags(SpellAuraInterruptFlags::Login);
 
     pCurrChar->SendInitialPacketsAfterAddToMap();
+
+    // Mythic+ weekly keystone maintenance: after a weekly reset the carried keystone is adjusted from last week's
+    // runs and restamped with the new week's affixes (no new key is granted here; the Great Vault does that).
+    sChallengeModeMgr.UpdateKeystoneForNewWeek(pCurrChar, false /*createIfMissing*/);
 
     CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_UPD_CHAR_ONLINE);
     stmt->setUInt64(0, pCurrChar->GetGUID().GetCounter());

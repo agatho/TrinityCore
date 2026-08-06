@@ -20,7 +20,13 @@
 #include "DB2Stores.h"
 #include "DB2Structure.h"
 #include "DBCEnums.h"
+#include "Item.h"
+#include "ItemDefines.h"
 #include "Log.h"
+#include "MythicPlusData.h"
+#include "Player.h"
+#include "Random.h"
+#include "World.h"
 #include <algorithm>
 #include <sstream>
 
@@ -126,16 +132,97 @@ void ChallengeModeMgr::ResolveActiveSeason()
 
 void ChallengeModeMgr::LoadAffixRotation()
 {
-    // Weekly affix rotation ordering + level bands are server-side config in retail (no offline DB2 rotation table).
-    // Sourced from worldserver.conf so operators can match the live schedule without a rebuild:
+    // Explicit operator override (fixed weekly set): when ChallengeMode.AffixSchedule is set it is used verbatim
+    // (paired with ChallengeMode.AffixLevelBands) instead of the built-in Midnight S1 rotation below.
     //   ChallengeMode.AffixSchedule    = comma list of KeystoneAffix IDs applied this week (lowest band first)
     //   ChallengeMode.AffixLevelBands  = comma list of keystone levels at which each successive affix turns on
     _affixSchedule = ParseUInt32List(sConfigMgr->GetStringDefault("ChallengeMode.AffixSchedule", ""));
     _affixLevelBands = ParseUInt32List(sConfigMgr->GetStringDefault("ChallengeMode.AffixLevelBands", ""));
 
-    if (_affixSchedule.empty())
-        TC_LOG_INFO("server.loading", "ChallengeModeMgr: no ChallengeMode.AffixSchedule configured; runs will start "
-            "without affixes until set.");
+    if (!_affixSchedule.empty())
+        TC_LOG_INFO("server.loading", "ChallengeModeMgr: fixed affix schedule configured ({} affixes); the built-in "
+            "weekly rotation is bypassed.", _affixSchedule.size());
+    else
+        TC_LOG_INFO("server.loading", "ChallengeModeMgr: using the built-in Midnight S1 weekly affix rotation "
+            "(week index {}).", GetCurrentWeekIndex());
+}
+
+uint32 ChallengeModeMgr::GetCurrentWeekIndex() const
+{
+    // Anchor the rotation on the current week's reset boundary so every server sees a stable index for the whole
+    // week and the index advances exactly at the weekly reset. The offset lets operators phase-align with live.
+    int64 const weekStart = int64(sWorld->GetNextWeeklyQuestsResetTime()) - int64(WEEK);
+    int64 const index = weekStart / int64(WEEK) + sConfigMgr->GetIntDefault("ChallengeMode.Affix.WeekOffset", 0);
+    return uint32(std::max<int64>(index, 0));
+}
+
+std::vector<uint32> ChallengeModeMgr::GetActiveAffixes(uint32 keystoneLevel) const
+{
+    // Operator-fixed schedule: single affix per band, band N turns on at AffixLevelBands[N].
+    if (!_affixSchedule.empty())
+    {
+        std::vector<uint32> affixes;
+        for (std::size_t i = 0; i < _affixSchedule.size() && affixes.size() < 4; ++i)
+        {
+            uint32 requiredLevel = i < _affixLevelBands.size() ? _affixLevelBands[i] : 0;
+            if (keystoneLevel >= requiredLevel)
+                affixes.push_back(_affixSchedule[i]);
+        }
+        return affixes;
+    }
+
+    // Built-in Midnight S1 rotation. Level bands (config-tunable; retail 12.0.x defaults):
+    //   +2..+5  Lindormi's Guidance (constant)
+    //   +5..+11 Xal'atath's Bargain (weekly rotation Ascendant/Voidbound/Devour/Pulsar)
+    //   +7      Tyrannical or Fortified (weekly alternation)
+    //   +10     both Tyrannical and Fortified
+    //   +12+    Xal'atath's Guile replaces the Bargain
+    uint32 const week = GetCurrentWeekIndex();
+    std::vector<uint32> affixes;
+
+    uint32 const guidanceId = uint32(sConfigMgr->GetIntDefault("ChallengeMode.Affix.Guidance.Id", int32(ChallengeModeAffix::LindormisGuidance)));
+    uint32 const guidanceMax = uint32(sConfigMgr->GetIntDefault("ChallengeMode.Affix.Guidance.MaxLevel", 5));
+    if (guidanceId && keystoneLevel <= guidanceMax)
+        affixes.push_back(guidanceId);
+
+    uint32 const guileId = uint32(sConfigMgr->GetIntDefault("ChallengeMode.Affix.Guile.Id", int32(ChallengeModeAffix::XalatathsGuile)));
+    uint32 const guileStart = uint32(sConfigMgr->GetIntDefault("ChallengeMode.Affix.Guile.StartLevel", 12));
+    uint32 const bargainStart = uint32(sConfigMgr->GetIntDefault("ChallengeMode.Affix.Bargain.StartLevel", 5));
+    if (guileId && keystoneLevel >= guileStart)
+        affixes.push_back(guileId);
+    else if (keystoneLevel >= bargainStart)
+    {
+        static std::string const defaultRotation = "148,158,160,162"; // Ascendant, Voidbound, Devour, Pulsar
+        std::vector<uint32> const rotation = ParseUInt32List(sConfigMgr->GetStringDefault("ChallengeMode.Affix.Bargain.Rotation", defaultRotation));
+        if (!rotation.empty())
+            affixes.push_back(rotation[week % rotation.size()]);
+    }
+
+    uint32 const tyrFortStart = uint32(sConfigMgr->GetIntDefault("ChallengeMode.Affix.TyrannicalFortified.StartLevel", 7));
+    uint32 const bothLevel = uint32(sConfigMgr->GetIntDefault("ChallengeMode.Affix.TyrannicalFortified.BothLevel", 10));
+    if (keystoneLevel >= tyrFortStart)
+    {
+        bool const tyrannicalFirst = (week % 2) == 0;
+        affixes.push_back(tyrannicalFirst ? ChallengeModeAffix::Tyrannical : ChallengeModeAffix::Fortified);
+        if (keystoneLevel >= bothLevel)
+            affixes.push_back(tyrannicalFirst ? ChallengeModeAffix::Fortified : ChallengeModeAffix::Tyrannical);
+    }
+
+    if (affixes.size() > 4)
+        affixes.resize(4);
+    return affixes;
+}
+
+std::vector<uint32> ChallengeModeMgr::GetWeeklyAffixes() const
+{
+    // The full advertised weekly set = every band's affix in ascending band order, deduplicated. Derive it from
+    // the per-level sets so the fixed-schedule override and the built-in rotation share one code path.
+    std::vector<uint32> weekly;
+    for (uint32 level : { 2u, 5u, 7u, 10u, 12u, 20u })
+        for (uint32 affixId : GetActiveAffixes(level))
+            if (std::find(weekly.begin(), weekly.end(), affixId) == weekly.end())
+                weekly.push_back(affixId);
+    return weekly;
 }
 
 MapChallengeModeEntry const* ChallengeModeMgr::GetMapChallengeMode(uint32 challengeModeId) const
@@ -335,14 +422,135 @@ MythicPlusSeasonEntry const* ChallengeModeMgr::GetActiveSeason() const
     return sMythicPlusSeasonStore.LookupEntry(_activeSeasonId);
 }
 
-std::vector<uint32> ChallengeModeMgr::GetActiveAffixes(uint32 keystoneLevel) const
+uint32 ChallengeModeMgr::GetKeystoneItemId() const
 {
-    std::vector<uint32> affixes;
-    for (std::size_t i = 0; i < _affixSchedule.size(); ++i)
+    return uint32(sConfigMgr->GetIntDefault("ChallengeMode.Keystone.ItemId", 180653)); // 12.x "Mythic Keystone"
+}
+
+uint32 ChallengeModeMgr::GetKeystoneMinLevel() const
+{
+    return uint32(std::max(sConfigMgr->GetIntDefault("ChallengeMode.Keystone.MinLevel", 2), 2));
+}
+
+Item* ChallengeModeMgr::GetKeystone(Player* player) const
+{
+    uint32 const itemId = GetKeystoneItemId();
+    return itemId ? player->GetItemByEntry(itemId) : nullptr;
+}
+
+void ChallengeModeMgr::StampKeystone(Item* keystone, uint32 challengeModeId, uint32 keystoneLevel) const
+{
+    keystone->SetModifier(ITEM_MODIFIER_CHALLENGE_MAP_CHALLENGE_MODE_ID, challengeModeId);
+    keystone->SetModifier(ITEM_MODIFIER_CHALLENGE_KEYSTONE_LEVEL, keystoneLevel);
+
+    // Only the affixes active at this key's level are attached (a +2 key carries a single affix); the client
+    // tooltip renders one line per non-zero modifier.
+    std::vector<uint32> const affixes = GetActiveAffixes(keystoneLevel);
+    for (uint32 i = 0; i < 4; ++i)
+        keystone->SetModifier(ItemModifier(ITEM_MODIFIER_CHALLENGE_KEYSTONE_AFFIX_ID_1 + i), i < affixes.size() ? affixes[i] : 0u);
+
+    if (Player* owner = keystone->GetOwner())
+        keystone->SetState(ITEM_CHANGED, owner);
+}
+
+Item* ChallengeModeMgr::CreateOrUpdateKeystone(Player* player, uint32 challengeModeId, uint32 keystoneLevel) const
+{
+    if (!challengeModeId || !GetMapChallengeMode(challengeModeId))
+        return nullptr;
+
+    Item* keystone = GetKeystone(player);
+    if (!keystone)
     {
-        uint32 requiredLevel = i < _affixLevelBands.size() ? _affixLevelBands[i] : 0;
-        if (keystoneLevel >= requiredLevel)
-            affixes.push_back(_affixSchedule[i]);
+        uint32 const itemId = GetKeystoneItemId();
+        if (!itemId)
+            return nullptr;
+
+        ItemPosCountVec dest;
+        if (player->CanStoreNewItem(NULL_BAG, NULL_SLOT, dest, itemId, 1) != EQUIP_ERR_OK)
+        {
+            TC_LOG_DEBUG("challengemode", "ChallengeModeMgr: no bag space to grant keystone to player {}.",
+                player->GetGUID().ToString());
+            return nullptr;
+        }
+
+        keystone = player->StoreNewItem(dest, itemId, true, 0);
+        if (!keystone)
+            return nullptr;
     }
-    return affixes;
+
+    StampKeystone(keystone, challengeModeId, std::max(keystoneLevel, GetKeystoneMinLevel()));
+    return keystone;
+}
+
+uint32 ChallengeModeMgr::RollSeasonDungeon(uint32 excludeChallengeModeId /*= 0*/) const
+{
+    if (_seasonMaps.empty())
+        return 0;
+
+    // Reroll away from the excluded dungeon when the pool offers an alternative (retail rerolls to a different map).
+    if (_seasonMaps.size() > 1 && excludeChallengeModeId)
+    {
+        uint32 rolled;
+        do
+        {
+            rolled = _seasonMaps[urand(0, uint32(_seasonMaps.size() - 1))];
+        } while (rolled == excludeChallengeModeId);
+        return rolled;
+    }
+
+    return _seasonMaps[urand(0, uint32(_seasonMaps.size() - 1))];
+}
+
+void ChallengeModeMgr::OnMythicDungeonCompleted(Player* player) const
+{
+    if (!sConfigMgr->GetBoolDefault("ChallengeMode.Keystone.AwardOnMythicClear", true))
+        return;
+
+    // Only season dungeons hand out keystones, and only to players who do not already hold one (unique item).
+    if (!GetChallengeModeIdForMap(player->GetMapId()))
+        return;
+
+    if (GetKeystone(player))
+        return;
+
+    if (uint32 dungeon = RollSeasonDungeon())
+        if (CreateOrUpdateKeystone(player, dungeon, GetKeystoneMinLevel()))
+            TC_LOG_INFO("challengemode", "ChallengeModeMgr: awarded first keystone to player {} after Mythic clear of map {}.",
+                player->GetGUID().ToString(), player->GetMapId());
+}
+
+void ChallengeModeMgr::UpdateKeystoneForNewWeek(Player* player, bool createIfMissing) const
+{
+    MythicPlusData* data = player->GetMythicPlusData();
+    if (!data)
+        return;
+
+    Item* keystone = GetKeystone(player);
+    if (!keystone && !createIfMissing)
+        return;
+
+    if (!data->NeedsKeystoneAdjustment())
+    {
+        // Already adjusted this week; the vault-open grant still applies when the key was destroyed since.
+        if (!keystone && createIfMissing)
+            if (uint32 dungeon = RollSeasonDungeon())
+                CreateOrUpdateKeystone(player, dungeon, GetKeystoneMinLevel());
+        return;
+    }
+
+    uint32 const minLevel = GetKeystoneMinLevel();
+    uint32 const currentLevel = keystone ? keystone->GetModifier(ITEM_MODIFIER_CHALLENGE_KEYSTONE_LEVEL) : minLevel;
+    uint32 const newLevel = data->ComputeNewWeekKeystoneLevel(currentLevel, minLevel);
+
+    uint32 const currentDungeon = keystone ? keystone->GetModifier(ITEM_MODIFIER_CHALLENGE_MAP_CHALLENGE_MODE_ID) : 0;
+    uint32 const dungeon = RollSeasonDungeon(currentDungeon);
+    if (!dungeon)
+        return;
+
+    if (CreateOrUpdateKeystone(player, dungeon, newLevel))
+    {
+        data->SetKeystoneAdjusted();
+        TC_LOG_DEBUG("challengemode", "ChallengeModeMgr: weekly keystone adjustment for player {} -> dungeon {} level {}.",
+            player->GetGUID().ToString(), dungeon, newLevel);
+    }
 }

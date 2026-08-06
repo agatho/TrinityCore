@@ -23,12 +23,15 @@
 #include <unordered_map>
 #include <vector>
 
+class Item;
+class Player;
 struct MapChallengeModeEntry;
 struct MythicPlusSeasonEntry;
 
 // KeystoneAffix.db2 IDs (build 68275). Shared by the scaling engine and the per-run affix behaviours.
 namespace ChallengeModeAffix
 {
+    // Legacy roster (pre-Midnight seasons; behaviours kept for operator-configured schedules)
     constexpr uint32 Raging      = 6;
     constexpr uint32 Bolstering  = 7;
     constexpr uint32 Sanguine    = 8;
@@ -41,6 +44,14 @@ namespace ChallengeModeAffix
     constexpr uint32 Entangling  = 134;
     constexpr uint32 Afflicted   = 135;
     constexpr uint32 Incorporeal = 136;
+
+    // Midnight (12.x) roster
+    constexpr uint32 XalatathsGuile              = 147; // +12+: revokes Bargain boons, 15s death penalty
+    constexpr uint32 XalatathsBargainAscendant   = 148;
+    constexpr uint32 XalatathsBargainVoidbound   = 158;
+    constexpr uint32 XalatathsBargainDevour      = 160;
+    constexpr uint32 XalatathsBargainPulsar      = 162;
+    constexpr uint32 LindormisGuidance           = 165; // low keys: marked-trash training affix, no death penalty
 }
 
 // Global manager for Mythic Keystone (Challenge Mode) static data: the dungeon pool, per-map par times and
@@ -138,10 +149,32 @@ public:
     MythicPlusSeasonEntry const* GetActiveSeason() const;
     std::vector<uint32> const& GetSeasonMapChallengeModeIds() const { return _seasonMaps; }
     // The full weekly affix set (all bands), as advertised to the client in SMSG_MYTHIC_PLUS_CURRENT_AFFIXES.
-    std::vector<uint32> const& GetWeeklyAffixes() const { return _affixSchedule; }
-    // Affixes active for a given keystone level this week (level-band gated). Rotation is config/season driven
-    // (no offline DB2 rotation table exists); see worldserver.conf ChallengeMode.* and LoadAffixRotation().
+    std::vector<uint32> GetWeeklyAffixes() const;
+    // Affixes active for a given keystone level this week, in keystone slot order. The Midnight S1 rotation
+    // (Guidance / weekly Bargain / Tyrannical-Fortified alternation / Guile) is built in and week-indexed off the
+    // weekly reset; ChallengeMode.AffixSchedule overrides it verbatim when set (see LoadAffixRotation()).
     std::vector<uint32> GetActiveAffixes(uint32 keystoneLevel) const;
+    // Rotation week index (weeks since epoch at the current weekly-reset boundary, plus config offset).
+    uint32 GetCurrentWeekIndex() const;
+
+    // --- keystone item service ---
+    // The Mythic Keystone item (12.x: 180653), config-tunable. All keystone state lives in item modifiers
+    // 17 (dungeon) / 18 (level) / 19-22 (affixes, level-band gated) -- the tooltip renders from these.
+    uint32 GetKeystoneItemId() const;
+    uint32 GetKeystoneMinLevel() const;
+    // The player's keystone item, or nullptr (the item is unique, so first match wins).
+    Item* GetKeystone(Player* player) const;
+    // Writes dungeon/level and the week's level-gated affixes into the keystone item modifiers.
+    void StampKeystone(Item* keystone, uint32 challengeModeId, uint32 keystoneLevel) const;
+    // Creates the keystone (or restamps an existing one) for the player. Returns the item, or nullptr on failure.
+    Item* CreateOrUpdateKeystone(Player* player, uint32 challengeModeId, uint32 keystoneLevel) const;
+    // A random dungeon from the season pool, avoiding excludeChallengeModeId when the pool has alternatives.
+    uint32 RollSeasonDungeon(uint32 excludeChallengeModeId = 0) const;
+    // Mythic (M0) season-dungeon completion hook: awards a fresh minimum-level keystone to players without one.
+    void OnMythicDungeonCompleted(Player* player) const;
+    // Weekly keystone maintenance (login + Great Vault open): adjusts the level from last week's runs and
+    // restamps the current week's affixes; grants a fresh keystone when createIfMissing (the vault-open rule).
+    void UpdateKeystoneForNewWeek(Player* player, bool createIfMissing) const;
 
 private:
     void LoadScalingCurves();

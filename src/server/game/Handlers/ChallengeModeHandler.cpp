@@ -106,6 +106,11 @@ void WorldSession::HandleStartChallengeMode(WorldPackets::ChallengeMode::StartCh
         return;
     }
 
+    // Only the actual Mythic Keystone item may start a run (config-tunable; 0 disables the check).
+    if (uint32 keystoneItemId = sChallengeModeMgr.GetKeystoneItemId())
+        if (keystone->GetEntry() != keystoneItemId)
+            return;
+
     uint32 const mapChallengeModeId = keystone->GetModifier(ITEM_MODIFIER_CHALLENGE_MAP_CHALLENGE_MODE_ID);
     uint32 const keystoneLevel = keystone->GetModifier(ITEM_MODIFIER_CHALLENGE_KEYSTONE_LEVEL);
     if (!mapChallengeModeId || !keystoneLevel)
@@ -166,6 +171,10 @@ void WorldSession::HandleMythicPlusRequestMapStats(WorldPackets::ChallengeMode::
 void WorldSession::HandleRequestWeeklyRewards(WorldPackets::ChallengeMode::RequestWeeklyRewards& /*request*/)
 {
     Player* player = GetPlayer();
+
+    // Opening the Great Vault after a reset grants a fresh keystone when the player has none (retail rule) and
+    // applies the pending weekly level adjustment / affix restamp.
+    sChallengeModeMgr.UpdateKeystoneForNewWeek(player, true /*createIfMissing*/);
 
     WorldPackets::ChallengeMode::WeeklyRewardsProgressResult response;
 

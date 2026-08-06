@@ -1085,10 +1085,10 @@ ChallengeMode.SeasonId = 0
 
 #
 #    ChallengeMode.AffixSchedule
-#        Description: This week's Keystone affixes (KeystoneAffix.db2 IDs), comma-separated, lowest level band first.
-#                     Advertised to the client via SMSG_MYTHIC_PLUS_CURRENT_AFFIXES and applied to new runs. There is
-#                     no DB2 rotation table, so the weekly schedule is set here. Example: "10,7,124" (Fortified, Bolstering, Storming).
-#        Default:     "" - (no affixes)
+#        Description: OVERRIDE: a fixed weekly affix set (KeystoneAffix.db2 IDs), comma-separated, lowest level band
+#                     first. When set, this bypasses the built-in Midnight S1 weekly rotation entirely and is used
+#                     verbatim every week. Example: "10,7,124" (Fortified, Bolstering, Storming).
+#        Default:     "" - (use the built-in weekly rotation)
 
 ChallengeMode.AffixSchedule = ""
 
@@ -1097,9 +1097,56 @@ ChallengeMode.AffixSchedule = ""
 #        Description: Keystone levels at which each successive affix in ChallengeMode.AffixSchedule turns on,
 #                     comma-separated and parallel to that list. Example: "2,4,7" activates the 1st affix at +2,
 #                     the 2nd at +4, the 3rd at +7. Missing/short entries default to level 0 (always on).
+#                     Only used together with ChallengeMode.AffixSchedule.
 #        Default:     "" - (all listed affixes always on)
 
 ChallengeMode.AffixLevelBands = ""
+
+#
+#    ChallengeMode.Affix.WeekOffset
+#        Description: Shifts the built-in weekly rotation's week index (which advances at every weekly reset).
+#                     Use it to phase-align the Xal'atath's Bargain rotation and the Tyrannical/Fortified
+#                     alternation with the live schedule. May be negative.
+#        Default:     0
+
+ChallengeMode.Affix.WeekOffset = 0
+
+#
+#    ChallengeMode.Affix.Guidance.* / ChallengeMode.Affix.Bargain.* /
+#    ChallengeMode.Affix.TyrannicalFortified.* / ChallengeMode.Affix.Guile.*
+#        Description: Level bands of the built-in Midnight S1 rotation (12.0.x retail defaults):
+#                     +2..Guidance.MaxLevel        Lindormi's Guidance (Guidance.Id, constant every week)
+#                     Bargain.StartLevel..+11      one Xal'atath's Bargain, rotating weekly through Bargain.Rotation
+#                     TyrannicalFortified.Start    Tyrannical or Fortified (alternating weekly)
+#                     TyrannicalFortified.Both     both Tyrannical and Fortified
+#                     Guile.StartLevel and up      Xal'atath's Guile (Guile.Id) replaces the Bargain
+#                     Set an Id to 0 to drop that band entirely.
+#        Default:     Guidance.Id = 165, Guidance.MaxLevel = 5, Bargain.StartLevel = 5,
+#                     Bargain.Rotation = "148,158,160,162" (Ascendant, Voidbound, Devour, Pulsar),
+#                     TyrannicalFortified.StartLevel = 7, TyrannicalFortified.BothLevel = 10,
+#                     Guile.Id = 147, Guile.StartLevel = 12
+
+ChallengeMode.Affix.Guidance.Id = 165
+ChallengeMode.Affix.Guidance.MaxLevel = 5
+ChallengeMode.Affix.Bargain.StartLevel = 5
+ChallengeMode.Affix.Bargain.Rotation = "148,158,160,162"
+ChallengeMode.Affix.TyrannicalFortified.StartLevel = 7
+ChallengeMode.Affix.TyrannicalFortified.BothLevel = 10
+ChallengeMode.Affix.Guile.Id = 147
+ChallengeMode.Affix.Guile.StartLevel = 12
+
+#
+#    ChallengeMode.Keystone.*
+#        Description: Mythic Keystone item lifecycle. ItemId is the keystone item (12.x: 180653 "Mythic Keystone");
+#                     dungeon/level/affixes are written into its item modifiers, which the client tooltip renders.
+#                     AwardOnMythicClear grants a fresh MinLevel keystone for completing a Mythic (M0) season
+#                     dungeon to players without one; opening the Great Vault also grants/adjusts the weekly key.
+#                     Setting ItemId to 0 disables keystone handling (runs start from any item's modifiers).
+#        Default:     ItemId = 180653, MinLevel = 2, AwardOnMythicClear = 1
+
+ChallengeMode.Keystone.ItemId = 180653
+ChallengeMode.Keystone.MinLevel = 2
+ChallengeMode.Keystone.AwardOnMythicClear = 1
 
 #
 #    ChallengeMode.Affix.Fortified.* / ChallengeMode.Affix.Tyrannical.*

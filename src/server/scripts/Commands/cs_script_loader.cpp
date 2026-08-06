@@ -46,6 +46,7 @@ void AddSC_message_commandscript();
 void AddSC_misc_commandscript();
 void AddSC_mmaps_commandscript();
 void AddSC_modify_commandscript();
+void AddSC_mythic_plus_commandscript();
 void AddSC_npc_commandscript();
 void AddSC_pet_commandscript();
 void AddSC_quest_commandscript();
@@ -94,6 +95,7 @@ void AddCommandsScripts()
     AddSC_misc_commandscript();
     AddSC_mmaps_commandscript();
     AddSC_modify_commandscript();
+    AddSC_mythic_plus_commandscript();
     AddSC_npc_commandscript();
     AddSC_quest_commandscript();
     AddSC_pet_commandscript();
