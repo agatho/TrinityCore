@@ -1232,6 +1232,22 @@ ChallengeMode.Reward.LootId = 0
 ChallengeMode.Vault.LootId = 0
 
 #
+#    ChallengeMode.Score.*
+#        Description: Mythic+ rating formula (community-derived retail Midnight S1 constants; every term is
+#                     tunable). Per-run score = Base (a timed +2) + PerLevel per level above 2
+#                     + PerAffixBreakpoint for every AffixBreakpoints level reached, plus up to MaxTimeBonus for
+#                     finishing under par (linear, capped at 40% under). Over-par runs decay linearly to 0 score
+#                     at 40% over par. Overall rating = sum of the best run per dungeon.
+#        Default:     Base = 155, PerLevel = 15, PerAffixBreakpoint = 15, MaxTimeBonus = 15,
+#                     AffixBreakpoints = "5,7,10,12"
+
+ChallengeMode.Score.Base = 155
+ChallengeMode.Score.PerLevel = 15
+ChallengeMode.Score.PerAffixBreakpoint = 15
+ChallengeMode.Score.MaxTimeBonus = 15
+ChallengeMode.Score.AffixBreakpoints = "5,7,10,12"
+
+#
 #    ChallengeMode.Catalyst.*
 #        Description: Matrix Catalyst item conversion. Eligible input items come from the client's
 #                     ItemConversion.db2/ItemConversionEntry.db2; the class/slot -> output (tier piece) mapping is

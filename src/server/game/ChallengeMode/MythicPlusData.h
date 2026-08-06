@@ -26,6 +26,12 @@
 
 class Player;
 
+namespace WorldPackets::MythicPlus
+{
+    struct DungeonScoreData;
+    struct DungeonScoreSummary;
+}
+
 struct MythicPlusRunRecord
 {
     uint32 ChallengeModeID = 0;
@@ -68,6 +74,12 @@ public:
 
     // Sum of the best-run scores across all dungeons (the client's overall Mythic+ Rating).
     float GetOverallScore() const;
+
+    // --- client rating surfacing (update fields) ---
+    // Fills the public roster summary (PlayerData::DungeonScore -- what party/inspect UIs read).
+    void BuildDungeonScoreSummary(WorldPackets::MythicPlus::DungeonScoreSummary& summary) const;
+    // Fills the owner's full score tree (ActivePlayerData::DungeonScore -- what the Mythic+ UI reads).
+    void BuildDungeonScoreData(WorldPackets::MythicPlus::DungeonScoreData& data) const;
 
     // --- Great Vault weekly tracking ---
     // Records a run toward this week's vault (all runs count). Auto-resets the list when the weekly reset passes.

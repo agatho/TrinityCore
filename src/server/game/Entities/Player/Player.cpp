@@ -63,6 +63,7 @@
 #include "Garrison.h"
 #include "GarrisonMgr.h"
 #include "MythicPlusData.h"
+#include "MythicPlusPacketsCommon.h"
 #include "GitRevision.h"
 #include "GossipDef.h"
 #include "GridNotifiers.h"
@@ -18818,6 +18819,7 @@ bool Player::LoadFromDB(ObjectGuid guid, CharacterDatabaseQueryHolder const& hol
     _mythicPlusData->LoadFromDB(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_MYTHIC_PLUS));
     _mythicPlusData->LoadWeeklyFromDB(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_MYTHIC_PLUS_WEEKLY));
     _mythicPlusData->LoadVaultFromDB(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_MYTHIC_PLUS_VAULT));
+    UpdateDungeonScore();
 
     _InitHonorLevelOnLoadFromDB(fields.honor, fields.honorLevel);
 
@@ -30084,6 +30086,22 @@ void Player::DeleteGarrison()
         _garrison->Delete();
         _garrison.reset();
     }
+}
+
+void Player::UpdateDungeonScore()
+{
+    // The client renders Mythic+ rating purely from these two update fields: the public roster summary
+    // (party frames / inspect) and the owner's full per-season score tree (the Mythic+ UI, score colors).
+    WorldPackets::MythicPlus::DungeonScoreSummary summary;
+    WorldPackets::MythicPlus::DungeonScoreData data;
+    if (MythicPlusData* mythicPlus = GetMythicPlusData())
+    {
+        mythicPlus->BuildDungeonScoreSummary(summary);
+        mythicPlus->BuildDungeonScoreData(data);
+    }
+
+    SetUpdateFieldValue(m_values.ModifyValue(&Player::m_playerData).ModifyValue(&UF::PlayerData::DungeonScore), std::move(summary));
+    SetUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::DungeonScore), std::move(data));
 }
 
 void Player::SendMovementSetCollisionHeight(float height, WorldPackets::Movement::UpdateCollisionHeightReason reason)

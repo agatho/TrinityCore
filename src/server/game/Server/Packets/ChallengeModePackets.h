@@ -114,6 +114,18 @@ namespace WorldPackets
             uint32 MapID = 0;
         };
 
+        // SMSG_CHALLENGE_MODE_UPDATE_DEATH_COUNT — refreshes the client's live death counter / timer penalty
+        // display during a run. Wire: { uint32 DeathCount } (long-stable community layout; not present in the
+        // 68275 sniff because it was never sent before - verify on capture).
+        class ChallengeModeUpdateDeathCount final : public ServerPacket
+        {
+        public:
+            explicit ChallengeModeUpdateDeathCount() : ServerPacket(SMSG_CHALLENGE_MODE_UPDATE_DEATH_COUNT, 4) { }
+            WorldPacket const* Write() override;
+
+            uint32 DeathCount = 0;
+        };
+
         // SMSG_MYTHIC_PLUS_NEW_WEEK_RECORD (0x4200BA) / SMSG_CHALLENGE_MODE_NEW_PLAYER_RECORD (0x4200B1) — sent when a
         // new weekly/personal best is set. Wire (m+ run12.0.7.pkt, 12B each): { uint32 MapChallengeModeID; uint32 CompletionMs; uint32 KeystoneLevel }.
         class MythicPlusNewWeekRecord final : public ServerPacket

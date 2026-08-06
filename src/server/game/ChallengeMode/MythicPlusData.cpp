@@ -16,8 +16,10 @@
  */
 
 #include "MythicPlusData.h"
+#include "ChallengeModeMgr.h"
 #include "CharacterDatabase.h"
 #include "DatabaseEnv.h"
+#include "MythicPlusPacketsCommon.h"
 #include "Player.h"
 #include "World.h"
 #include <algorithm>
@@ -143,6 +145,70 @@ float MythicPlusData::GetOverallScore() const
     for (auto const& [challengeModeId, run] : _bestRuns)
         total += run.Score;
     return total;
+}
+
+namespace
+{
+    // A run counts as timed when its (death-penalty-inclusive) duration beat the dungeon's par time.
+    bool IsRunTimed(MythicPlusRunRecord const& run)
+    {
+        uint32 const parSeconds = sChallengeModeMgr.GetTimeLimit(run.ChallengeModeID);
+        return parSeconds && run.DurationMs <= parSeconds * IN_MILLISECONDS;
+    }
+}
+
+void MythicPlusData::BuildDungeonScoreSummary(WorldPackets::MythicPlus::DungeonScoreSummary& summary) const
+{
+    summary.OverallScoreCurrentSeason = GetOverallScore();
+    summary.LadderScoreCurrentSeason = 0.0f;
+
+    summary.Runs.reserve(_bestRuns.size());
+    for (auto const& [challengeModeId, run] : _bestRuns)
+    {
+        WorldPackets::MythicPlus::DungeonScoreMapSummary& mapSummary = summary.Runs.emplace_back();
+        mapSummary.ChallengeModeID = int32(challengeModeId);
+        mapSummary.MapScore = run.Score;
+        mapSummary.BestRunLevel = int32(run.Level);
+        mapSummary.BestRunDurationMS = int32(run.DurationMs);
+        mapSummary.FinishedSuccess = IsRunTimed(run);
+    }
+}
+
+void MythicPlusData::BuildDungeonScoreData(WorldPackets::MythicPlus::DungeonScoreData& data) const
+{
+    int32 const seasonId = int32(sChallengeModeMgr.GetActiveSeasonId());
+
+    WorldPackets::MythicPlus::DungeonScoreSeasonData& season = data.Seasons.emplace_back();
+    season.Season = seasonId;
+    season.SeasonScore = GetOverallScore();
+    season.LadderScore = 0.0f;
+
+    season.SeasonMaps.reserve(_bestRuns.size());
+    for (auto const& [challengeModeId, run] : _bestRuns)
+    {
+        WorldPackets::MythicPlus::DungeonScoreMapData& map = season.SeasonMaps.emplace_back();
+        map.MapChallengeModeID = int32(challengeModeId);
+        map.OverAllScore = run.Score;
+
+        // Scoring has been single-best-run since TWW, but the wire still keys best runs per affix; a single
+        // entry keyed by the run's first affix is what the client expects for the one tracked run.
+        WorldPackets::MythicPlus::DungeonScoreBestRunForAffix& bestRun = map.BestRuns.emplace_back();
+        bestRun.KeystoneAffixID = int32(run.Affixes[0]);
+        bestRun.Score = run.Score;
+
+        bestRun.Run.MapChallengeModeID = int32(challengeModeId);
+        bestRun.Run.Completed = IsRunTimed(run);
+        bestRun.Run.Level = run.Level;
+        bestRun.Run.DurationMs = int32(run.DurationMs);
+        bestRun.Run.StartDate = run.CompletionDate - int64(run.DurationMs / IN_MILLISECONDS);
+        bestRun.Run.CompletionDate = run.CompletionDate;
+        bestRun.Run.Season = seasonId;
+        bestRun.Run.RunScore = run.Score;
+        for (std::size_t i = 0; i < run.Affixes.size(); ++i)
+            bestRun.Run.KeystoneAffixIDs[i] = int32(run.Affixes[i]);
+    }
+
+    data.TotalRuns = int32(_bestRuns.size());
 }
 
 void MythicPlusData::PruneStaleWeek() const

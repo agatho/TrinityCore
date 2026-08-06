@@ -2886,6 +2886,9 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         void DeleteGarrison();
         Garrison* GetGarrison() const { return _garrison.get(); }
         MythicPlusData* GetMythicPlusData() const { return _mythicPlusData.get(); }
+        // Rebuilds the Mythic+ rating update fields (PlayerData + ActivePlayerData DungeonScore) from
+        // MythicPlusData. Called on load and after every recorded keystone run.
+        void UpdateDungeonScore();
 
         bool IsAdvancedCombatLoggingEnabled() const { return _advancedCombatLoggingEnabled; }
         void SetAdvancedCombatLogging(bool enabled) { _advancedCombatLoggingEnabled = enabled; }

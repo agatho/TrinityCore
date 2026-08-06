@@ -109,6 +109,12 @@ WorldPacket const* ChallengeModeReset::Write()
     return &_worldPacket;
 }
 
+WorldPacket const* ChallengeModeUpdateDeathCount::Write()
+{
+    _worldPacket << uint32(DeathCount);
+    return &_worldPacket;
+}
+
 WorldPacket const* MythicPlusNewWeekRecord::Write()
 {
     _worldPacket << uint32(MapChallengeModeID);

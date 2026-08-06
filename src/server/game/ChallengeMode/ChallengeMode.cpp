@@ -209,6 +209,11 @@ void ChallengeMode::OnPlayerDeath(Player* /*player*/)
 
     // Each death adds DEATH_TIME_PENALTY_MS to the effective run time (applied at completion via GetEffectiveTimeMs).
     ++_deathCount;
+
+    // Keep the client's live death counter (and its displayed time penalty) in sync.
+    WorldPackets::ChallengeMode::ChallengeModeUpdateDeathCount deathCountPacket;
+    deathCountPacket.DeathCount = _deathCount;
+    _instance->SendToPlayers(deathCountPacket.Write());
 }
 
 bool ChallengeMode::HasAffix(uint32 affixId) const
@@ -272,12 +277,7 @@ void ChallengeMode::Complete()
     uint32 const effectiveTimeMs = GetEffectiveTimeMs();
     uint32 const keystoneUpgrade = sChallengeModeMgr.GetKeystoneUpgradeAmount(_mapChallengeModeId, effectiveTimeMs / IN_MILLISECONDS);
 
-    uint32 affixCount = 0;
-    for (uint32 affixId : _affixes)
-        if (affixId)
-            ++affixCount;
-
-    float const runScore = sChallengeModeMgr.CalculateRunScore(_keystoneLevel, effectiveTimeMs, _timeLimitMs, affixCount);
+    float const runScore = sChallengeModeMgr.CalculateRunScore(_keystoneLevel, effectiveTimeMs, _timeLimitMs);
 
     // Record the run for every player present at completion (keeps the best per dungeon).
     MythicPlusRunRecord record;
@@ -296,6 +296,9 @@ void ChallengeMode::Complete()
         {
             data->RecordRun(record);
             data->RecordWeeklyRun(record.ChallengeModeID, record.Level, timed, record.CompletionDate);
+
+            // Push the refreshed rating to the client (Mythic+ UI / party frames read the update fields).
+            player->UpdateDungeonScore();
         }
     });
 

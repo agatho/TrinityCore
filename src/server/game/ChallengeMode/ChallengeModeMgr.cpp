@@ -272,25 +272,34 @@ uint32 ChallengeModeMgr::GetKeystoneUpgradeAmount(uint32 challengeModeId, uint32
     return 1;                                    // in time -> +1
 }
 
-float ChallengeModeMgr::CalculateRunScore(uint32 keystoneLevel, uint32 effectiveTimeMs, uint32 timeLimitMs, uint32 affixCount) const
+float ChallengeModeMgr::CalculateRunScore(uint32 keystoneLevel, uint32 effectiveTimeMs, uint32 timeLimitMs) const
 {
     if (!keystoneLevel)
         return 0.0f;
 
-    // Config-tunable Blizzlike-shaped rating. Constants are a server design value (not in the client/DB2);
-    // defaults approximate the retail shape and can be matched to a live sniff without a rebuild.
-    float const perLevel = sConfigMgr->GetFloatDefault("ChallengeMode.ScorePerLevel", 7.5f);
-    float const perAffix = sConfigMgr->GetFloatDefault("ChallengeMode.ScorePerAffix", 5.0f);
-    float const maxTimeBonus = sConfigMgr->GetFloatDefault("ChallengeMode.ScoreMaxTimeBonus", 7.5f);
+    // Retail Midnight S1 rating formula (community-derived, config-tunable): a timed +2 is worth Base points,
+    // +PerLevel per keystone level above 2, +PerAffixBreakpoint at every affix-band breakpoint the level has
+    // crossed (+5/+7/+10/+12, max 4). Finishing under par adds up to MaxTimeBonus (linear, capped at 40% under);
+    // finishing over par decays the whole score linearly to 0 at 40% over.
+    float const base = sConfigMgr->GetFloatDefault("ChallengeMode.Score.Base", 155.0f);
+    float const perLevel = sConfigMgr->GetFloatDefault("ChallengeMode.Score.PerLevel", 15.0f);
+    float const perBreakpoint = sConfigMgr->GetFloatDefault("ChallengeMode.Score.PerAffixBreakpoint", 15.0f);
+    float const maxTimeBonus = sConfigMgr->GetFloatDefault("ChallengeMode.Score.MaxTimeBonus", 15.0f);
 
-    float score = keystoneLevel * perLevel + affixCount * perAffix;
+    float score = base + perLevel * float(keystoneLevel > 2 ? keystoneLevel - 2 : 0);
 
-    // Time bonus: +maxTimeBonus for a 40%-under-par clear, tapering to -maxTimeBonus at/over par.
+    std::vector<uint32> const breakpoints = ParseUInt32List(sConfigMgr->GetStringDefault("ChallengeMode.Score.AffixBreakpoints", "5,7,10,12"));
+    for (uint32 breakpoint : breakpoints)
+        if (keystoneLevel >= breakpoint)
+            score += perBreakpoint;
+
     if (timeLimitMs)
     {
         float const parRatio = float(effectiveTimeMs) / float(timeLimitMs); // < 1.0 = under par
-        float const t = std::clamp((1.0f - parRatio) / 0.4f, -1.0f, 1.0f);
-        score += t * maxTimeBonus;
+        if (parRatio <= 1.0f)
+            score += std::min((1.0f - parRatio) / 0.4f, 1.0f) * maxTimeBonus;
+        else
+            score *= std::max(0.0f, 1.0f - (parRatio - 1.0f) / 0.4f);
     }
 
     return std::max(0.0f, score);
