@@ -34,7 +34,10 @@
 #include "ItemBonusMgr.h"
 #include "LanguageMgr.h"
 #include "Log.h"
+#include "ChallengeMode.h"
+#include "ChallengeModeMgr.h"
 #include "Map.h"
+#include "MythicPlusData.h"
 #include "MapManager.h"
 #include "MapUtils.h"
 #include "ObjectMgr.h"
@@ -3338,12 +3341,37 @@ bool CriteriaHandler::ModifierSatisfied(ModifierTreeEntry const* modifier, uint6
             if (!referencePlayer->CanEnableWarModeInArea())
                 return false;
             break;
-        case ModifierTreeType::MythicPlusKeystoneLevelEqualOrGreaterThan: // 247 NYI
-        case ModifierTreeType::MythicPlusCompletedInTime: // 248 NYI
-        case ModifierTreeType::MythicPlusMapChallengeMode: // 249 NYI
-        case ModifierTreeType::MythicPlusDisplaySeason: // 250 NYI
-        case ModifierTreeType::MythicPlusMilestoneSeason: // 251 NYI
-            return false;
+        case ModifierTreeType::MythicPlusKeystoneLevelEqualOrGreaterThan: // 247
+        {
+            InstanceMap* instanceMap = referencePlayer->GetMap()->ToInstanceMap();
+            ChallengeMode* challenge = instanceMap ? instanceMap->GetChallengeMode() : nullptr;
+            if (!challenge || (!challenge->IsActive() && !challenge->IsCompleted()) || challenge->GetKeystoneLevel() < reqValue)
+                return false;
+            break;
+        }
+        case ModifierTreeType::MythicPlusCompletedInTime: // 248
+        {
+            InstanceMap* instanceMap = referencePlayer->GetMap()->ToInstanceMap();
+            ChallengeMode* challenge = instanceMap ? instanceMap->GetChallengeMode() : nullptr;
+            if (!challenge || (!challenge->IsActive() && !challenge->IsCompleted()))
+                return false;
+            if (!challenge->GetTimeLimitMs() || challenge->GetEffectiveTimeMs() > challenge->GetTimeLimitMs())
+                return false;
+            break;
+        }
+        case ModifierTreeType::MythicPlusMapChallengeMode: // 249
+        {
+            InstanceMap* instanceMap = referencePlayer->GetMap()->ToInstanceMap();
+            ChallengeMode* challenge = instanceMap ? instanceMap->GetChallengeMode() : nullptr;
+            if (!challenge || challenge->GetMapChallengeModeId() != reqValue)
+                return false;
+            break;
+        }
+        case ModifierTreeType::MythicPlusDisplaySeason: // 250
+        case ModifierTreeType::MythicPlusMilestoneSeason: // 251
+            if (sChallengeModeMgr.GetActiveSeasonId() != reqValue)
+                return false;
+            break;
         case ModifierTreeType::PlayerVisibleRace: // 252
         {
             CreatureDisplayInfoEntry const* creatureDisplayInfo = sCreatureDisplayInfoStore.LookupEntry(referencePlayer->GetDisplayId());
@@ -3736,9 +3764,21 @@ bool CriteriaHandler::ModifierSatisfied(ModifierTreeEntry const* modifier, uint6
         case ModifierTreeType::CurrencySpentOnGarrisonTalentResearchEqualOrGreaterThan: // 318 NYI
         case ModifierTreeType::RenownCatchupActive: // 319 NYI
         case ModifierTreeType::RapidRenownCatchupActive: // 320 NYI
-        case ModifierTreeType::PlayerMythicPlusRatingEqualOrGreaterThan: // 321 NYI
-        case ModifierTreeType::PlayerMythicPlusRunCountInCurrentExpansionEqualOrGreaterThan: // 322 NYI
             return false;
+        case ModifierTreeType::PlayerMythicPlusRatingEqualOrGreaterThan: // 321
+        {
+            MythicPlusData* mythicPlus = referencePlayer->GetMythicPlusData();
+            if (!mythicPlus || mythicPlus->GetOverallScore() < float(reqValue))
+                return false;
+            break;
+        }
+        case ModifierTreeType::PlayerMythicPlusRunCountInCurrentExpansionEqualOrGreaterThan: // 322
+        {
+            MythicPlusData* mythicPlus = referencePlayer->GetMythicPlusData();
+            if (!mythicPlus || mythicPlus->GetBestRuns().size() < reqValue)
+                return false;
+            break;
+        }
         case ModifierTreeType::PlayerHasCustomizationChoice: // 323
         {
             int32 customizationChoiceIndex = referencePlayer->m_playerData->Customizations.FindIndexIf([reqValue](UF::ChrCustomizationChoice const& choice)

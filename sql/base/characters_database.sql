@@ -1184,6 +1184,94 @@ LOCK TABLES `character_inventory` WRITE;
 UNLOCK TABLES;
 
 --
+-- Table structure for table `character_mythic_plus`
+--
+
+DROP TABLE IF EXISTS `character_mythic_plus`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `character_mythic_plus` (
+  `guid` bigint unsigned NOT NULL DEFAULT '0' COMMENT 'Global Unique Identifier',
+  `challengeModeId` int unsigned NOT NULL DEFAULT '0' COMMENT 'MapChallengeMode.db2 ID',
+  `level` int unsigned NOT NULL DEFAULT '0' COMMENT 'Keystone level of the best run',
+  `durationMs` int unsigned NOT NULL DEFAULT '0' COMMENT 'Effective run time in milliseconds (incl. death penalty)',
+  `deaths` int unsigned NOT NULL DEFAULT '0',
+  `completionDate` bigint NOT NULL DEFAULT '0' COMMENT 'Unix time of the run',
+  `score` float NOT NULL DEFAULT '0',
+  `affix1` int unsigned NOT NULL DEFAULT '0',
+  `affix2` int unsigned NOT NULL DEFAULT '0',
+  `affix3` int unsigned NOT NULL DEFAULT '0',
+  `affix4` int unsigned NOT NULL DEFAULT '0',
+  PRIMARY KEY (`guid`,`challengeModeId`),
+  CONSTRAINT `fk_character_mythic_plus_character` FOREIGN KEY (`guid`) REFERENCES `characters` (`guid`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Mythic Keystone best runs';
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `character_mythic_plus`
+--
+
+LOCK TABLES `character_mythic_plus` WRITE;
+/*!40000 ALTER TABLE `character_mythic_plus` DISABLE KEYS */;
+/*!40000 ALTER TABLE `character_mythic_plus` ENABLE KEYS */;
+UNLOCK TABLES;
+
+--
+-- Table structure for table `character_mythic_plus_vault`
+--
+
+DROP TABLE IF EXISTS `character_mythic_plus_vault`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `character_mythic_plus_vault` (
+  `guid` bigint unsigned NOT NULL COMMENT 'Global Unique Identifier',
+  `claimedResetTime` bigint NOT NULL DEFAULT '0' COMMENT 'Weekly reset boundary the vault reward was claimed for',
+  `keystoneResetTime` bigint NOT NULL DEFAULT '0' COMMENT 'Weekly reset boundary the keystone was last adjusted for',
+  PRIMARY KEY (`guid`),
+  CONSTRAINT `fk_character_mythic_plus_vault_guid` FOREIGN KEY (`guid`) REFERENCES `characters` (`guid`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Per-character Great Vault weekly claim state';
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `character_mythic_plus_vault`
+--
+
+LOCK TABLES `character_mythic_plus_vault` WRITE;
+/*!40000 ALTER TABLE `character_mythic_plus_vault` DISABLE KEYS */;
+/*!40000 ALTER TABLE `character_mythic_plus_vault` ENABLE KEYS */;
+UNLOCK TABLES;
+
+--
+-- Table structure for table `character_mythic_plus_weekly`
+--
+
+DROP TABLE IF EXISTS `character_mythic_plus_weekly`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `character_mythic_plus_weekly` (
+  `guid` bigint unsigned NOT NULL COMMENT 'Global Unique Identifier',
+  `id` int unsigned NOT NULL AUTO_INCREMENT,
+  `challengeModeId` int unsigned NOT NULL DEFAULT '0',
+  `level` int unsigned NOT NULL DEFAULT '0',
+  `timed` tinyint unsigned NOT NULL DEFAULT '0' COMMENT 'Run beat the par time',
+  `completionDate` bigint NOT NULL DEFAULT '0',
+  `resetTime` bigint NOT NULL DEFAULT '0' COMMENT 'Weekly reset boundary these runs belong to',
+  PRIMARY KEY (`id`),
+  KEY `idx_guid` (`guid`),
+  CONSTRAINT `fk_character_mythic_plus_weekly_guid` FOREIGN KEY (`guid`) REFERENCES `characters` (`guid`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Per-character Mythic+ runs completed this Great Vault week';
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `character_mythic_plus_weekly`
+--
+
+LOCK TABLES `character_mythic_plus_weekly` WRITE;
+/*!40000 ALTER TABLE `character_mythic_plus_weekly` DISABLE KEYS */;
+/*!40000 ALTER TABLE `character_mythic_plus_weekly` ENABLE KEYS */;
+UNLOCK TABLES;
+
+--
 -- Table structure for table `character_pet`
 --
 
