@@ -466,11 +466,27 @@ void ChallengeMode::Complete()
     {
         if (MythicPlusData* data = player->GetMythicPlusData())
         {
-            data->RecordRun(record);
+            bool const newBest = data->RecordRun(record);
             data->RecordWeeklyRun(record.ChallengeModeID, record.Level, timed, record.CompletionDate);
 
             // Push the refreshed rating to the client (Mythic+ UI / party frames read the update fields).
             player->UpdateDungeonScore();
+
+            // Retail sends the personal + weekly record packets back-to-back on a new best (sniff-verified 12B each).
+            if (newBest)
+            {
+                WorldPackets::ChallengeMode::ChallengeModeNewPlayerRecord playerRecord;
+                playerRecord.MapChallengeModeID = record.ChallengeModeID;
+                playerRecord.CompletionMs = record.DurationMs;
+                playerRecord.KeystoneLevel = record.Level;
+                player->SendDirectMessage(playerRecord.Write());
+
+                WorldPackets::ChallengeMode::MythicPlusNewWeekRecord weekRecord;
+                weekRecord.MapChallengeModeID = record.ChallengeModeID;
+                weekRecord.CompletionMs = record.DurationMs;
+                weekRecord.KeystoneLevel = record.Level;
+                player->SendDirectMessage(weekRecord.Write());
+            }
         }
     });
 
@@ -494,6 +510,18 @@ void ChallengeMode::Complete()
         if (Group* group = starterPlayer->GetGroup())
             group->StartCountdown(CountdownTimerType::ChallengeMode, Seconds(0));
     }
+
+    // Retail grants every present player without a keystone a fresh key at the end of the run, each rolled to
+    // a random dungeon other than the one just completed (sniff: three ITEM_PUSHes, per-player dungeons).
+    _instance->DoOnPlayers([this](Player* player)
+    {
+        if (!sChallengeModeMgr.GetKeystone(player))
+        {
+            uint32 const floorLevel = std::max(sChallengeModeMgr.GetKeystoneMinLevel(), sChallengeModeMgr.GetKeystoneFloor(player));
+            if (uint32 dungeon = sChallengeModeMgr.RollSeasonDungeon(_mapChallengeModeId))
+                sChallengeModeMgr.CreateOrUpdateKeystone(player, dungeon, floorLevel);
+        }
+    });
 
     // End-of-run crest reward: the bracketed Dawncrest amount (+2/level within the bracket, capped, reduced when
     // over time) to each player. Guarded on the currency existing, so a wrong/absent id is a safe no-op.
@@ -533,17 +561,21 @@ void ChallengeMode::Complete()
         }
     }
 
-    // Announce the result to the party (map/level/affixes + present players as members). The per-run
-    // DungeonScoreData sub-lists are sent empty (not persisted server-side); the wire is exact (no desync).
+    // Announce the result to the party (sniff-exact layout: run summary + score pair + member names).
     WorldPackets::ChallengeMode::ChallengeModeComplete completePacket;
-    completePacket.MapSummary.MapChallengeModeID = _mapChallengeModeId;
-    completePacket.MapSummary.BestLevel = _keystoneLevel;
-    completePacket.MapSummary.DurationMs = effectiveTimeMs;
-    completePacket.MapSummary.Affixes = _affixes;
-    _instance->DoOnPlayers([&completePacket](Player* player)
+    completePacket.MapChallengeModeID = _mapChallengeModeId;
+    completePacket.KeystoneLevel = _keystoneLevel;
+    completePacket.CompletionMs = effectiveTimeMs;
+    completePacket.CompletionDate = record.CompletionDate;
+    for (std::size_t i = 0; i < _affixes.size(); ++i)
+        completePacket.Affixes[i] = _affixes[i];
+    completePacket.Score = runScore;
+    completePacket.BestScore = runScore;
+    _instance->DoOnPlayers([&completePacket, runScore](Player* player)
     {
-        WorldPackets::ChallengeMode::MythicPlusMapStatMember& member = completePacket.MapSummary.Members.emplace_back();
-        member.PlayerGUID = player->GetGUID();
+        if (MythicPlusData const* data = player->GetMythicPlusData())
+            if (MythicPlusRunRecord const* best = data->GetBestRun(completePacket.MapChallengeModeID))
+                completePacket.BestScore = std::max(runScore, best->Score);
 
         // Names list: the party members present at completion, shown on the client's run-result screen.
         WorldPackets::ChallengeMode::ChallengeModeComplete::MemberName& name = completePacket.Names.emplace_back();

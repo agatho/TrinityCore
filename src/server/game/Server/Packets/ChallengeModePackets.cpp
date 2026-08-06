@@ -148,18 +148,25 @@ WorldPacket const* ChallengeModeStart::Write()
 
 WorldPacket const* ChallengeModeComplete::Write()
 {
-    _worldPacket << MapSummary;
-    _worldPacket << uint32(Field124);
-    _worldPacket << uint32(Names.size());   // NamesCount
-    _worldPacket << uint32(Field216);
-    _worldPacket << uint8(Flags);       // 3 bit-flags packed in one byte
-    _worldPacket << uint32(0);          // RunsCount (per-run DungeonScoreData tree) - empty, not persisted
-    _worldPacket << uint32(0);          // PairsCount - empty
-    _worldPacket << uint64(Field208);
+    // Byte-for-byte the retail 68275 layout (m+ run12.0.7.pkt): head, score pair, then guid+name members.
+    _worldPacket << uint32(MapChallengeModeID);
+    _worldPacket << uint32(KeystoneLevel);
+    _worldPacket << uint64(CompletionMs);
+    _worldPacket << uint32(0);
+    _worldPacket << int64(CompletionDate);
+    _worldPacket << uint32(0);
+    for (uint32 affix : Affixes)
+        _worldPacket << uint32(affix);
+    _worldPacket << float(Score);
+    _worldPacket << uint32(0);
+    _worldPacket << uint8(Flags1);
+    _worldPacket << float(BestScore);
+    _worldPacket << uint32(Names.size());
+    _worldPacket << uint32(0);
+    _worldPacket << uint8(Flags2);
+    for (uint32 i = 0; i < 4; ++i)
+        _worldPacket << uint32(0);      // 16-byte zero block (unidentified; zero in the capture)
 
-    // Body order (client deserializer sub_7FF729090EE0): Pairs, Runs, Names. Pairs/Runs are empty
-    // (0 count above); the Names list follows. Element = PackedGuid + one packed byte
-    // ((Name.length() << 2) | (IsEligibleForScore << 1)) + the raw name bytes (no terminator).
     for (MemberName const& member : Names)
     {
         _worldPacket << member.PlayerGUID;

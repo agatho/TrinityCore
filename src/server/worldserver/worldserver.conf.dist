@@ -1243,18 +1243,18 @@ ChallengeMode.Affix.Voidbound.CreatureId = 0
 #                     AmountPerLevel per level within the bracket from the bracket base (Champion opens at
 #                     Champion.BaseAmount, later brackets at BaseAmount), capped at AmountCapLevel; retail:
 #                     +2=12C, +3=14C, +4=10H ... +8=18H, +9=10M ... +12+=16M. Untimed runs lose
-#                     UntimedReduction crests. Live currency ids per wowhead are 3343/3346/3348 (3345/3347 were
-#                     PTR values); the grant no-ops if the currency does not exist on this build.
-#        Default:     Champion 3343/<=3, Hero 3346/<=8, Myth 3348/9+,
+#                     UntimedReduction crests. Currency ids sniff-verified on 68275 (a +2 granted 12x 3343;
+#                     the wire carries 3341/3343/3345/3347); the grant no-ops if the currency does not exist.
+#        Default:     Champion 3343/<=3, Hero 3345/<=8, Myth 3347/9+,
 #                     Champion.BaseAmount = 12, BaseAmount = 10, AmountPerLevel = 2, AmountCapLevel = 12,
 #                     UntimedReduction = 4
 
 ChallengeMode.Crest.Champion.CurrencyId = 3343
 ChallengeMode.Crest.Champion.MaxLevel = 3
 ChallengeMode.Crest.Champion.BaseAmount = 12
-ChallengeMode.Crest.Hero.CurrencyId = 3346
+ChallengeMode.Crest.Hero.CurrencyId = 3345
 ChallengeMode.Crest.Hero.MaxLevel = 8
-ChallengeMode.Crest.Myth.CurrencyId = 3348
+ChallengeMode.Crest.Myth.CurrencyId = 3347
 ChallengeMode.Crest.BaseAmount = 10
 ChallengeMode.Crest.AmountPerLevel = 2
 ChallengeMode.Crest.AmountCapLevel = 12

@@ -428,12 +428,14 @@ namespace
 
 uint32 ChallengeModeMgr::GetCrestCurrencyForLevel(uint32 keystoneLevel) const
 {
-    // Midnight S1 brackets: Champion +2-3, Hero +4-8, Myth +9+ (wowhead currency pages + warcraft.wiki).
+    // Midnight S1 brackets: Champion +2-3, Hero +4-8, Myth +9+. Currency ids SNIFF-VERIFIED on 68275
+    // (m+ run12.0.7.pkt: a +2 run granted 12x 3343; SETUP_CURRENCY carries 3341/3342/3343/3345/3347 -
+    // the web-reported 3346/3348 do not exist on the wire).
     if (keystoneLevel <= uint32(sConfigMgr->GetIntDefault("ChallengeMode.Crest.Champion.MaxLevel", 3)))
         return uint32(sConfigMgr->GetIntDefault("ChallengeMode.Crest.Champion.CurrencyId", 3343));
     if (keystoneLevel <= uint32(sConfigMgr->GetIntDefault("ChallengeMode.Crest.Hero.MaxLevel", 8)))
-        return uint32(sConfigMgr->GetIntDefault("ChallengeMode.Crest.Hero.CurrencyId", 3346));
-    return uint32(sConfigMgr->GetIntDefault("ChallengeMode.Crest.Myth.CurrencyId", 3348));
+        return uint32(sConfigMgr->GetIntDefault("ChallengeMode.Crest.Hero.CurrencyId", 3345));
+    return uint32(sConfigMgr->GetIntDefault("ChallengeMode.Crest.Myth.CurrencyId", 3347));
 }
 
 uint32 ChallengeModeMgr::GetCrestAmountForLevel(uint32 keystoneLevel, bool timed) const

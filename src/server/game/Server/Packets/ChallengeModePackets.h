@@ -260,16 +260,18 @@ namespace WorldPackets
         //   NamesCount x { PackedGuid; uint8 packed(bit1=flag, value>>2=len); byte[len] name }.
         // The three trailing lists are sent empty (0 count); the DungeonScoreData/run tree is not persisted
         // server-side. MapSummary carries the completed run (map/level/affixes + present players as members).
+        // Wire layout RE-VERIFIED against real retail bytes (m+ run12.0.7.pkt, 180B body, 5 members; see
+        // c:\dumps\MPLUS_SNIFF_DEEP_68275.md): fixed head + score float pair + member (guid+name) records.
+        // Supersedes the earlier idat-derived MapSummary layout, which did not match the live server's bytes.
         class ChallengeModeComplete final : public ServerPacket
         {
         public:
-            explicit ChallengeModeComplete() : ServerPacket(SMSG_CHALLENGE_MODE_COMPLETE, 64) { }
+            explicit ChallengeModeComplete() : ServerPacket(SMSG_CHALLENGE_MODE_COMPLETE, 96) { }
 
             WorldPacket const* Write() override;
 
-            // Names (record-holder / eligible-player) list element, as the client deserializer
-            // (sub_7FF729090EE0) reads it: PackedGuid, then one packed byte (Name length in the high
-            // 6 bits, IsEligibleForScore in bit 1), then the raw name bytes.
+            // Member element: PackedGuid, one packed byte (Name length in the high 6 bits,
+            // IsEligibleForScore in bit 1), then the raw name bytes (no terminator).
             struct MemberName
             {
                 ObjectGuid PlayerGUID;
@@ -277,11 +279,15 @@ namespace WorldPackets
                 std::string Name;
             };
 
-            MythicPlusMapStat MapSummary;
-            uint32 Field124 = 0;
-            uint32 Field216 = 0;
-            uint64 Field208 = 0;
-            uint8 Flags = 0;
+            uint32 MapChallengeModeID = 0;
+            uint32 KeystoneLevel = 0;
+            uint64 CompletionMs = 0;
+            int64 CompletionDate = 0;           // unix time of the completion
+            std::array<uint32, 5> Affixes = { };
+            float Score = 0.0f;                 // this run's score
+            float BestScore = 0.0f;             // the map's best score (equals Score on a new record)
+            uint8 Flags1 = 0x80;                // sniff: 0x80 on a completed run
+            uint8 Flags2 = 0x60;                // sniff: matches SMSG_CHALLENGE_MODE_START's trailing flags
             std::vector<MemberName> Names;
         };
 
