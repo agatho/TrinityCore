@@ -114,11 +114,12 @@ public:
     uint32 GetAffixCreatureId(uint32 affixId) const;
 
     // --- end-of-run crest reward ---
-    // The season crest currency awarded on completion, by keystone-level tier. Currency ids are extracted from
-    // CurrencyTypes.db2 (68275 Midnight S1 Dawncrests: Veteran 3341 / Champion 3343 / Hero 3345 / Myth 3347); the
-    // tier breakpoints and the per-run amount are season tuning, so both are config-tunable (ChallengeMode.Crest.*).
+    // Midnight S1 Dawncrest ladder: Champion crests at +2-3, Hero at +4-8, Myth at +9+ (currency ids from
+    // CurrencyTypes.db2; live ids 3343/3346/3348 per wowhead - 3345/3347 were PTR values, hence config-tunable).
+    // Amount = the bracket's base + AmountPerLevel per keystone level into the bracket, growth capped at
+    // AmountCapLevel (retail: +2=12C ... +8=18H, +9=10M ... +12+=16M); untimed runs lose UntimedReduction crests.
     uint32 GetCrestCurrencyForLevel(uint32 keystoneLevel) const;
-    uint32 GetCrestAmount() const;
+    uint32 GetCrestAmountForLevel(uint32 keystoneLevel, bool timed) const;
 
     // Reference-loot template rolled for the end-of-run gear reward (reference_loot_template, ItemContext
     // MythicPlus_End_of_Run). The reward item POOL is server content; the item level is scaled authentically by

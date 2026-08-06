@@ -443,14 +443,13 @@ void ChallengeMode::Complete()
             group->StartCountdown(CountdownTimerType::ChallengeMode, Seconds(0));
     }
 
-    // End-of-run crest reward: award the season crest of the tier matching the keystone level to each player.
-    // Currency ids are extracted from CurrencyTypes.db2 (Midnight S1 Dawncrests); tier + amount are config-tunable.
-    // Guarded on the currency existing, so a wrong/absent id is a safe no-op.
+    // End-of-run crest reward: the bracketed Dawncrest amount (+2/level within the bracket, capped, reduced when
+    // over time) to each player. Guarded on the currency existing, so a wrong/absent id is a safe no-op.
     if (uint32 crestId = sChallengeModeMgr.GetCrestCurrencyForLevel(_keystoneLevel))
     {
         if (sCurrencyTypesStore.LookupEntry(crestId))
         {
-            uint32 const crestAmount = sChallengeModeMgr.GetCrestAmount();
+            uint32 const crestAmount = sChallengeModeMgr.GetCrestAmountForLevel(_keystoneLevel, timed);
             if (crestAmount)
                 _instance->DoOnPlayers([crestId, crestAmount](Player* player)
                 {
@@ -459,17 +458,27 @@ void ChallengeMode::Complete()
         }
     }
 
-    // End-of-run gear reward: roll the configured reward loot for each player and grant every item at the
-    // authentic Mythic+ item level. The item-level scaling is real (ItemBonusMgr resolves the end-of-run context +
-    // keystone level through the reward-sequence curves); the item POOL is server content
+    // End-of-run gear: retail awards a fixed number of items for the GROUP (2 timed / 1 untimed), personal-loot
+    // distributed to random present players at the authentic Mythic+ item level. The item POOL is server content
     // (reference_loot_template keyed by ChallengeMode.Reward.LootId). Disabled (0) or empty template -> no-op.
     if (uint32 rewardLootId = sChallengeModeMgr.GetGearRewardLootId())
     {
         if (LootTemplates_Reference.HaveLootFor(rewardLootId))
-            _instance->DoOnPlayers([this, rewardLootId](Player* player)
+        {
+            std::vector<Player*> presentPlayers;
+            _instance->DoOnPlayers([&presentPlayers](Player* player)
             {
-                AwardGearReward(player, rewardLootId);
+                presentPlayers.push_back(player);
             });
+
+            uint32 itemCount = timed
+                ? uint32(sConfigMgr->GetIntDefault("ChallengeMode.Reward.ItemsTimed", 2))
+                : uint32(sConfigMgr->GetIntDefault("ChallengeMode.Reward.ItemsUntimed", 1));
+
+            if (!presentPlayers.empty())
+                for (uint32 i = 0; i < itemCount; ++i)
+                    AwardGearReward(Trinity::Containers::SelectRandomContainerElement(presentPlayers), rewardLootId);
+        }
     }
 
     // Announce the result to the party (map/level/affixes + present players as members). The per-run

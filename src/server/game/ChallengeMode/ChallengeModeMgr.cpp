@@ -379,21 +379,54 @@ uint32 ChallengeModeMgr::GetAffixCreatureId(uint32 affixId) const
     }
 }
 
-uint32 ChallengeModeMgr::GetCrestCurrencyForLevel(uint32 keystoneLevel) const
+namespace
 {
-    // Tier by keystone level. Defaults follow the Midnight S1 crest ladder; breakpoints are config-tunable.
-    if (keystoneLevel <= uint32(sConfigMgr->GetIntDefault("ChallengeMode.Crest.Veteran.MaxLevel", 3)))
-        return uint32(sConfigMgr->GetIntDefault("ChallengeMode.Crest.Veteran.CurrencyId", 3341));
-    if (keystoneLevel <= uint32(sConfigMgr->GetIntDefault("ChallengeMode.Crest.Champion.MaxLevel", 6)))
-        return uint32(sConfigMgr->GetIntDefault("ChallengeMode.Crest.Champion.CurrencyId", 3343));
-    if (keystoneLevel <= uint32(sConfigMgr->GetIntDefault("ChallengeMode.Crest.Hero.MaxLevel", 9)))
-        return uint32(sConfigMgr->GetIntDefault("ChallengeMode.Crest.Hero.CurrencyId", 3345));
-    return uint32(sConfigMgr->GetIntDefault("ChallengeMode.Crest.Myth.CurrencyId", 3347));
+    // The keystone level at which a crest bracket begins (drives the +2/level amount growth within it).
+    uint32 CrestBracketStart(uint32 keystoneLevel)
+    {
+        if (keystoneLevel <= uint32(sConfigMgr->GetIntDefault("ChallengeMode.Crest.Champion.MaxLevel", 3)))
+            return 2;
+        if (keystoneLevel <= uint32(sConfigMgr->GetIntDefault("ChallengeMode.Crest.Hero.MaxLevel", 8)))
+            return uint32(sConfigMgr->GetIntDefault("ChallengeMode.Crest.Champion.MaxLevel", 3)) + 1;
+        return uint32(sConfigMgr->GetIntDefault("ChallengeMode.Crest.Hero.MaxLevel", 8)) + 1;
+    }
 }
 
-uint32 ChallengeModeMgr::GetCrestAmount() const
+uint32 ChallengeModeMgr::GetCrestCurrencyForLevel(uint32 keystoneLevel) const
 {
-    return uint32(sConfigMgr->GetIntDefault("ChallengeMode.Crest.Amount", 10));
+    // Midnight S1 brackets: Champion +2-3, Hero +4-8, Myth +9+ (wowhead currency pages + warcraft.wiki).
+    if (keystoneLevel <= uint32(sConfigMgr->GetIntDefault("ChallengeMode.Crest.Champion.MaxLevel", 3)))
+        return uint32(sConfigMgr->GetIntDefault("ChallengeMode.Crest.Champion.CurrencyId", 3343));
+    if (keystoneLevel <= uint32(sConfigMgr->GetIntDefault("ChallengeMode.Crest.Hero.MaxLevel", 8)))
+        return uint32(sConfigMgr->GetIntDefault("ChallengeMode.Crest.Hero.CurrencyId", 3346));
+    return uint32(sConfigMgr->GetIntDefault("ChallengeMode.Crest.Myth.CurrencyId", 3348));
+}
+
+uint32 ChallengeModeMgr::GetCrestAmountForLevel(uint32 keystoneLevel, bool timed) const
+{
+    if (keystoneLevel < 2)
+        return 0;
+
+    // Retail ladder: +2=12 Champion, +3=14; +4=10 Hero ... +8=18; +9=10 Myth ... +12+=16 (cap).
+    // The Champion bracket opens 2 higher than Hero/Myth (12 vs 10), hence the per-bracket base.
+    uint32 const bracketStart = CrestBracketStart(keystoneLevel);
+    uint32 const baseAmount = bracketStart == 2
+        ? uint32(sConfigMgr->GetIntDefault("ChallengeMode.Crest.Champion.BaseAmount", 12))
+        : uint32(sConfigMgr->GetIntDefault("ChallengeMode.Crest.BaseAmount", 10));
+    uint32 const perLevel = uint32(sConfigMgr->GetIntDefault("ChallengeMode.Crest.AmountPerLevel", 2));
+    uint32 const capLevel = uint32(sConfigMgr->GetIntDefault("ChallengeMode.Crest.AmountCapLevel", 12));
+
+    uint32 const effectiveLevel = std::min(keystoneLevel, std::max(capLevel, bracketStart));
+    uint32 amount = baseAmount + perLevel * (effectiveLevel - bracketStart);
+
+    // Untimed runs still reward crests, reduced by a flat amount (retail TWW rule was -4; 12.x unpublished).
+    if (!timed)
+    {
+        uint32 const reduction = uint32(sConfigMgr->GetIntDefault("ChallengeMode.Crest.UntimedReduction", 4));
+        amount = amount > reduction ? amount - reduction : 0;
+    }
+
+    return amount;
 }
 
 uint32 ChallengeModeMgr::GetGearRewardLootId() const
