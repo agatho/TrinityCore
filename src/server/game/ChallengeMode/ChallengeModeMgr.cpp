@@ -342,7 +342,7 @@ float ChallengeModeMgr::GetAffixDamageMultiplier(std::array<uint32, 4> const& af
     if (isBoss && HasAffixId(affixes, ChallengeModeAffix::Tyrannical))
         return sConfigMgr->GetFloatDefault("ChallengeMode.Affix.Tyrannical.Damage", 1.15f);
     if (!isBoss && HasAffixId(affixes, ChallengeModeAffix::Fortified))
-        return sConfigMgr->GetFloatDefault("ChallengeMode.Affix.Fortified.Damage", 1.30f);
+        return sConfigMgr->GetFloatDefault("ChallengeMode.Affix.Fortified.Damage", 1.20f); // Midnight guides: up to +20% (TWW-era was 30%)
     return 1.0f;
 }
 
@@ -350,11 +350,16 @@ uint32 ChallengeModeMgr::GetAffixSpellId(uint32 affixId) const
 {
     switch (affixId)
     {
+        // Legacy roster (pre-Midnight; usable via the AffixSchedule override)
         case ChallengeModeAffix::Bolstering: return uint32(sConfigMgr->GetIntDefault("ChallengeMode.Affix.Bolstering.SpellId", 209859)); // +20% max health & damage to nearby allies
         case ChallengeModeAffix::Bursting:   return uint32(sConfigMgr->GetIntDefault("ChallengeMode.Affix.Bursting.SpellId", 240443));   // stacking damage-over-time on all players
         case ChallengeModeAffix::Sanguine:   return uint32(sConfigMgr->GetIntDefault("ChallengeMode.Affix.Sanguine.SpellId", 226489));   // lingering ichor pool (heals allies / damages players)
         case ChallengeModeAffix::Raging:     return uint32(sConfigMgr->GetIntDefault("ChallengeMode.Affix.Raging.SpellId", 228318));     // enrage at low health
         case ChallengeModeAffix::Grievous:   return uint32(sConfigMgr->GetIntDefault("ChallengeMode.Affix.Grievous.SpellId", 240559));   // stacking bleed on wounded players
+        // Midnight roster
+        case ChallengeModeAffix::XalatathsBargainDevour: return uint32(sConfigMgr->GetIntDefault("ChallengeMode.Affix.Devour.SpellId", 440313));   // Devouring Rift debuff
+        case ChallengeModeAffix::XalatathsBargainPulsar: return uint32(sConfigMgr->GetIntDefault("ChallengeMode.Affix.Pulsar.SpellId", 1216858));  // orbiting Void Pulsar
+        case ChallengeModeAffix::LindormisGuidance:      return uint32(sConfigMgr->GetIntDefault("ChallengeMode.Affix.Guidance.SpellId", 1284818)); // Temporal Sands highlight
         default: return 0;
     }
 }
@@ -363,9 +368,13 @@ uint32 ChallengeModeMgr::GetAffixCreatureId(uint32 affixId) const
 {
     switch (affixId)
     {
+        // Legacy roster
         case ChallengeModeAffix::Spiteful:    return uint32(sConfigMgr->GetIntDefault("ChallengeMode.Affix.Spiteful.CreatureId", 174773));  // Spiteful Shade (fixate + self-decay AI)
         case ChallengeModeAffix::Incorporeal: return uint32(sConfigMgr->GetIntDefault("ChallengeMode.Affix.Incorporeal.CreatureId", 204560)); // Incorporeal Being (verify per build)
         case ChallengeModeAffix::Afflicted:   return uint32(sConfigMgr->GetIntDefault("ChallengeMode.Affix.Afflicted.CreatureId", 0));        // needs verified entry per build
+        // Midnight roster: Orbs of Ascendance / Void Emissary entries + AI are world content; 0 = disabled.
+        case ChallengeModeAffix::XalatathsBargainAscendant: return uint32(sConfigMgr->GetIntDefault("ChallengeMode.Affix.Ascendant.CreatureId", 0));
+        case ChallengeModeAffix::XalatathsBargainVoidbound: return uint32(sConfigMgr->GetIntDefault("ChallengeMode.Affix.Voidbound.CreatureId", 0));
         default: return 0;
     }
 }

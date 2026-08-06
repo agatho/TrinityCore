@@ -19,6 +19,7 @@
 #include "ChallengeModeMgr.h"
 #include "ChallengeModePackets.h"
 #include "CharacterDatabase.h"
+#include "Config.h"
 #include "Containers.h"
 #include "Creature.h"
 #include "DB2Stores.h"
@@ -90,6 +91,10 @@ void ChallengeMode::Start(uint32 mapChallengeModeId, uint32 keystoneLevel, std::
         if (creature && creature->IsAlive())
             creature->UpdateLevelDependantStats();
 
+    // Lindormi's Guidance: highlight the marked trash set right as the run begins.
+    if (HasAffix(ChallengeModeAffix::LindormisGuidance))
+        ApplyGuidanceMarks();
+
     TC_LOG_INFO("challengemode", "ChallengeMode start: instance {} challengeMode {} level {} timeLimit {}s",
         _instance->GetInstanceId(), mapChallengeModeId, keystoneLevel, _timeLimitMs / IN_MILLISECONDS);
 }
@@ -133,6 +138,121 @@ void ChallengeMode::Update(uint32 diff)
         _spawnTickTimer = 0;
         UpdateSpawnAffixes();
     }
+
+    // Xal'atath's Bargain: a 60s cadence event while the party is fighting. The timer accumulates freely but
+    // only fires (and resets) when someone is in combat, matching the retail "every 60 seconds in combat" rhythm.
+    _bargainTickTimer += diff;
+    uint32 const bargainInterval = uint32(sConfigMgr->GetIntDefault("ChallengeMode.Affix.Bargain.IntervalMs", 60 * IN_MILLISECONDS));
+    if (_bargainTickTimer >= bargainInterval)
+    {
+        _bargainTickTimer = bargainInterval;    // hold at the threshold until it can fire in combat
+
+        bool anyBargain = HasAffix(ChallengeModeAffix::XalatathsBargainAscendant)
+            || HasAffix(ChallengeModeAffix::XalatathsBargainVoidbound)
+            || HasAffix(ChallengeModeAffix::XalatathsBargainDevour)
+            || HasAffix(ChallengeModeAffix::XalatathsBargainPulsar);
+        if (!anyBargain)
+        {
+            _bargainTickTimer = 0;
+            return;
+        }
+
+        bool anyInCombat = false;
+        _instance->DoOnPlayers([&anyInCombat](Player* player)
+        {
+            if (player->IsAlive() && player->IsInCombat())
+                anyInCombat = true;
+        });
+
+        if (anyInCombat)
+        {
+            _bargainTickTimer = 0;
+            TriggerBargainEvent();
+        }
+    }
+}
+
+void ChallengeMode::TriggerBargainEvent()
+{
+    // Ascendant: a wave of Orbs of Ascendance (world-DB creature casting Cosmic Ascension) around a random
+    // fighting player. Voidbound: a single Void Emissary (shielded Dark Prayer caster). Both no-op without a
+    // configured creature entry, like every spawn affix.
+    for (uint32 affixId : { ChallengeModeAffix::XalatathsBargainAscendant, ChallengeModeAffix::XalatathsBargainVoidbound })
+    {
+        if (!HasAffix(affixId))
+            continue;
+
+        uint32 const creatureId = sChallengeModeMgr.GetAffixCreatureId(affixId);
+        if (!creatureId)
+            continue;
+
+        std::vector<Player*> combatants;
+        _instance->DoOnPlayers([&combatants](Player* player)
+        {
+            if (player->IsAlive() && player->IsInCombat())
+                combatants.push_back(player);
+        });
+        if (combatants.empty())
+            continue;
+
+        Player* anchor = Trinity::Containers::SelectRandomContainerElement(combatants);
+        uint32 const spawnCount = affixId == ChallengeModeAffix::XalatathsBargainAscendant
+            ? uint32(sConfigMgr->GetIntDefault("ChallengeMode.Affix.Ascendant.SpawnCount", 10)) : 1u;
+        for (uint32 i = 0; i < spawnCount; ++i)
+        {
+            Position pos = anchor->GetRandomNearPosition(12.0f);
+            anchor->SummonCreature(creatureId, pos, TEMPSUMMON_TIMED_OR_DEAD_DESPAWN, 60s);
+        }
+    }
+
+    // Devour: every player gains the Devouring Rift debuff (dispel it or heal it off for the boon; the boon /
+    // enemy-buff consequences ride on the spell scripts). Pulsar: every player gets an orbiting Void Pulsar.
+    for (uint32 affixId : { ChallengeModeAffix::XalatathsBargainDevour, ChallengeModeAffix::XalatathsBargainPulsar })
+    {
+        if (!HasAffix(affixId))
+            continue;
+
+        uint32 const spellId = sChallengeModeMgr.GetAffixSpellId(affixId);
+        if (!spellId || !sSpellMgr->GetSpellInfo(spellId, DIFFICULTY_NONE))
+            continue;
+
+        _instance->DoOnPlayers([spellId](Player* player)
+        {
+            if (player->IsAlive())
+                player->CastSpell(player, spellId, true);
+        });
+    }
+}
+
+void ChallengeMode::ApplyGuidanceMarks()
+{
+    // Marks MarkCount random alive non-boss enemies with the Temporal Sands highlight. The -5% health/damage
+    // component and the enemy-forces completion rule ride on the mark spell / forces tracking; the mark itself
+    // is the visible, functional part and no-ops without a valid spell (established affix pattern).
+    uint32 const spellId = sChallengeModeMgr.GetAffixSpellId(ChallengeModeAffix::LindormisGuidance);
+    if (!spellId || !sSpellMgr->GetSpellInfo(spellId, DIFFICULTY_NONE))
+        return;
+
+    std::vector<Creature*> candidates;
+    for (auto const& [spawnId, creature] : _instance->GetCreatureBySpawnIdStore())
+        if (creature && creature->IsAlive() && !creature->IsDungeonBoss() && creature->IsHostileToPlayers())
+            candidates.push_back(creature);
+
+    uint32 const markCount = uint32(sConfigMgr->GetIntDefault("ChallengeMode.Affix.Guidance.MarkCount", 8));
+    Trinity::Containers::RandomResize(candidates, markCount);
+    for (Creature* creature : candidates)
+        creature->CastSpell(creature, spellId, true);
+}
+
+uint32 ChallengeMode::GetDeathPenaltyMs() const
+{
+    // Retail 12.x banding: no penalty while Lindormi's Guidance is active (low keys), 15s under Xal'atath's
+    // Guile (+12+), 5s baseline otherwise. Values in seconds, config-tunable.
+    if (HasAffix(ChallengeModeAffix::LindormisGuidance))
+        return uint32(sConfigMgr->GetIntDefault("ChallengeMode.DeathPenalty.GuidanceSeconds", 0)) * IN_MILLISECONDS;
+    if (HasAffix(ChallengeModeAffix::XalatathsGuile))
+        return uint32(sConfigMgr->GetIntDefault("ChallengeMode.DeathPenalty.GuileSeconds", 15)) * IN_MILLISECONDS;
+    return uint32(sConfigMgr->GetIntDefault("ChallengeMode.DeathPenalty.BaseSeconds", 5)) * IN_MILLISECONDS;
 }
 
 void ChallengeMode::UpdateSpawnAffixes()
@@ -374,7 +494,7 @@ void ChallengeMode::Complete()
 
     TC_LOG_INFO("challengemode", "ChallengeMode complete: instance {} challengeMode {} level {} time {}s (+{}s deaths, limit {}s) -> +{} keystone, score {:.1f}",
         _instance->GetInstanceId(), _mapChallengeModeId, _keystoneLevel, GetElapsedMs() / IN_MILLISECONDS,
-        (_deathCount * DEATH_TIME_PENALTY_MS) / IN_MILLISECONDS, _timeLimitMs / IN_MILLISECONDS, keystoneUpgrade, runScore);
+        (_deathCount * GetDeathPenaltyMs()) / IN_MILLISECONDS, _timeLimitMs / IN_MILLISECONDS, keystoneUpgrade, runScore);
 }
 
 void ChallengeMode::AwardGearReward(Player* player, uint32 rewardLootId) const

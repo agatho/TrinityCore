@@ -1165,32 +1165,67 @@ ChallengeMode.Affix.Tyrannical.Damage = 1.15
 
 #
 #    ChallengeMode.Affix.<Name>.SpellId
-#        Description: Effect spell cast for each behavioural affix. Bolstering empowers nearby surviving
-#                     non-boss enemies on a trash death; Bursting stacks a damage-over-time on the party;
-#                     Sanguine drops a lingering ichor pool. These are Blizzard affix spells and must exist
-#                     in the loaded Spell.db2 - the server guards on the spell existing, so an unknown/0 id
-#                     is a safe no-op. Defaults are the long-stable ids; verify them against the live build.
+#        Description: Effect spell cast for each behavioural affix. Legacy roster (used via the AffixSchedule
+#                     override): Bolstering empowers nearby surviving non-boss enemies on a trash death; Bursting
+#                     stacks a damage-over-time on the party; Sanguine drops a lingering ichor pool. Midnight
+#                     roster (built-in rotation): Devour applies the Devouring Rift debuff to every player each
+#                     Bargain event; Pulsar attaches the orbiting Void Pulsar; Guidance is the Temporal Sands
+#                     mark applied to the highlighted trash set at run start. These are Blizzard affix spells and
+#                     must exist in the loaded Spell.db2 - the server guards on the spell existing, so an
+#                     unknown/0 id is a safe no-op. Verify ids against the live build.
 #        Default:     Bolstering = 209859, Bursting = 240443, Sanguine = 226489,
-#                     Raging = 228318, Grievous = 240559
+#                     Raging = 228318, Grievous = 240559,
+#                     Devour = 440313, Pulsar = 1216858, Guidance = 1284818
 
 ChallengeMode.Affix.Bolstering.SpellId = 209859
 ChallengeMode.Affix.Bursting.SpellId = 240443
 ChallengeMode.Affix.Sanguine.SpellId = 226489
 ChallengeMode.Affix.Raging.SpellId = 228318
 ChallengeMode.Affix.Grievous.SpellId = 240559
+ChallengeMode.Affix.Devour.SpellId = 440313
+ChallengeMode.Affix.Pulsar.SpellId = 1216858
+ChallengeMode.Affix.Guidance.SpellId = 1284818
+
+#
+#    ChallengeMode.Affix.Guidance.MarkCount / ChallengeMode.Affix.Bargain.IntervalMs /
+#    ChallengeMode.Affix.Ascendant.SpawnCount
+#        Description: Midnight affix event tuning: how many trash enemies Lindormi's Guidance marks at run
+#                     start, the in-combat cadence of the Xal'atath's Bargain events, and the size of the
+#                     Ascendant orb wave.
+#        Default:     MarkCount = 8, IntervalMs = 60000, SpawnCount = 10
+
+ChallengeMode.Affix.Guidance.MarkCount = 8
+ChallengeMode.Affix.Bargain.IntervalMs = 60000
+ChallengeMode.Affix.Ascendant.SpawnCount = 10
+
+#
+#    ChallengeMode.DeathPenalty.*
+#        Description: Seconds added to the run time per player death, banded per retail 12.x: no penalty while
+#                     Lindormi's Guidance is active (low keys), GuileSeconds under Xal'atath's Guile (+12+),
+#                     BaseSeconds otherwise.
+#        Default:     GuidanceSeconds = 0, BaseSeconds = 5, GuileSeconds = 15
+
+ChallengeMode.DeathPenalty.GuidanceSeconds = 0
+ChallengeMode.DeathPenalty.BaseSeconds = 5
+ChallengeMode.DeathPenalty.GuileSeconds = 15
 
 #
 #    ChallengeMode.Affix.<Name>.CreatureId
 #        Description: Summoned-add creature entry for a spawn affix. Spiteful summons a Spiteful Shade on each
-#                     non-boss death; the shade fixates a survivor and decays. The creature entry AND its Blizzlike
-#                     AI must exist in the world DB (SummonCreature no-ops on an absent entry). 0 = disabled.
-#                     Incorporeal + Afflicted spawn periodically while in combat (near a random fighting player).
-#                     Verify the entries for the live build; Afflicted defaults to 0 (no confirmed entry).
-#        Default:     Spiteful = 174773 (Spiteful Shade), Incorporeal = 204560 (Incorporeal Being), Afflicted = 0
+#                     non-boss death; the shade fixates a survivor and decays. Incorporeal + Afflicted spawn
+#                     periodically while in combat (near a random fighting player). Midnight Bargain events:
+#                     Ascendant spawns an orb wave (Orbs of Ascendance casting Cosmic Ascension), Voidbound a
+#                     single shielded Void Emissary - both every Bargain interval while fighting. The creature
+#                     entry AND its Blizzlike AI must exist in the world DB (SummonCreature no-ops on an absent
+#                     entry). 0 = disabled.
+#        Default:     Spiteful = 174773 (Spiteful Shade), Incorporeal = 204560 (Incorporeal Being), Afflicted = 0,
+#                     Ascendant = 0, Voidbound = 0 (add the Midnight creatures to the world DB, then set them here)
 
 ChallengeMode.Affix.Spiteful.CreatureId = 174773
 ChallengeMode.Affix.Incorporeal.CreatureId = 204560
 ChallengeMode.Affix.Afflicted.CreatureId = 0
+ChallengeMode.Affix.Ascendant.CreatureId = 0
+ChallengeMode.Affix.Voidbound.CreatureId = 0
 
 #
 #    ChallengeMode.Crest.*
