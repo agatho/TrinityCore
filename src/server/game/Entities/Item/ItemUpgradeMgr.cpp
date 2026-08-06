@@ -220,8 +220,7 @@ bool ItemUpgradeMgr::ApplyRankChange(Player* player, Item* item, ItemBonusListGr
     if (equipped)
         player->_ApplyItemMods(item, slot, false);
 
-    item->_bonusData.Initialize(item->GetTemplate());
-    item->SetBonuses(std::move(bonuses));
+    item->ReplaceBonuses(std::move(bonuses));
 
     if (equipped)
         player->_ApplyItemMods(item, slot, true);
@@ -240,8 +239,7 @@ void ItemUpgradeMgr::RaiseWatermark(Player* player, Item const* item) const
     if (player->m_activePlayerData->ItemUpgradeHighWatermark[slot] >= newLevel)
         return;
 
-    player->SetUpdateFieldValue(player->m_values.ModifyValue(&Player::m_activePlayerData)
-        .ModifyValue(&UF::ActivePlayerData::ItemUpgradeHighWatermark, slot), newLevel);
+    player->SetItemUpgradeWatermark(slot, newLevel);
 
     CharacterDatabase.PExecute("REPLACE INTO character_item_upgrade_watermark (guid, slotClass, itemLevel) VALUES ({}, {}, {})",
         player->GetGUID().GetCounter(), slot, uint32(newLevel));
@@ -257,8 +255,7 @@ void ItemUpgradeMgr::LoadWatermarks(Player* player) const
             Field* fields = result->Fetch();
             uint32 const slot = fields[0].GetUInt32();
             if (slot < WATERMARK_SLOTS)
-                player->SetUpdateFieldValue(player->m_values.ModifyValue(&Player::m_activePlayerData)
-                    .ModifyValue(&UF::ActivePlayerData::ItemUpgradeHighWatermark, slot), float(fields[1].GetUInt32()));
+                player->SetItemUpgradeWatermark(slot, float(fields[1].GetUInt32()));
         } while (result->NextRow());
     }
 }

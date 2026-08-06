@@ -2889,6 +2889,8 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         // Rebuilds the Mythic+ rating update fields (PlayerData + ActivePlayerData DungeonScore) from
         // MythicPlusData. Called on load and after every recorded keystone run.
         void UpdateDungeonScore();
+        // Sets one ActivePlayerData::ItemUpgradeHighWatermark slot (item upgrade crest-waiver display).
+        void SetItemUpgradeWatermark(uint32 slot, float itemLevel);
 
         bool IsAdvancedCombatLoggingEnabled() const { return _advancedCombatLoggingEnabled; }
         void SetAdvancedCombatLogging(bool enabled) { _advancedCombatLoggingEnabled = enabled; }
