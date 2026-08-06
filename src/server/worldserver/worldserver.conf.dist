@@ -1338,6 +1338,21 @@ ChallengeMode.Catalyst.CycleWeeks = 2
 ChallengeMode.Catalyst.FirstWeekTimestamp = 0
 
 #
+#    ChallengeMode.Upgrade.*
+#        Description: Gear upgrade (Dawncrest spending) tuning. Costs are data-driven from the client DB2s
+#                     (ItemBonusListGroupEntry -> ItemLogicalCost -> ItemExtendedCost: crest + gold per step);
+#                     the Fallback* values apply only when an upgrade step carries no cost data (0 currency =
+#                     free upgrades in that case). DiscountAchievements lists warband achievements that halve
+#                     a crest type's step cost ("currencyId:achievementId" pairs; retail ".. of the Dawn").
+#        Default:     FallbackCurrencyId = 0, FallbackCurrencyCount = 20, FallbackMoney = 1500000 (150g),
+#                     DiscountAchievements = "3383:61809,3341:42767,3343:42768,3345:42769,3347:42770"
+
+ChallengeMode.Upgrade.FallbackCurrencyId = 0
+ChallengeMode.Upgrade.FallbackCurrencyCount = 20
+ChallengeMode.Upgrade.FallbackMoney = 1500000
+ChallengeMode.Upgrade.DiscountAchievements = "3383:61809,3341:42767,3343:42768,3345:42769,3347:42770"
+
+#
 #    Instance.UnloadDelay
 #        Description: Time (in milliseconds) before instance maps are unloaded from memory if no
 #                     characters are inside.

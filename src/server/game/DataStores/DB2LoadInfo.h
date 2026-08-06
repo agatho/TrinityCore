@@ -3229,6 +3229,20 @@ struct ItemLimitCategoryConditionLoadInfo
     static constexpr DB2LoadInfo Instance{ Fields, 4, &ItemLimitCategoryConditionMeta::Instance, HOTFIX_SEL_ITEM_LIMIT_CATEGORY_CONDITION };
 };
 
+struct ItemLogicalCostLoadInfo
+{
+    static constexpr DB2FieldMeta Fields[5] =
+    {
+        { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "InventoryTypeSlotMask" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "Flags" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "ItemExtendedCostID" },
+        { .IsSigned = false, .Type = FT_INT, .Name = "ItemLogicalCostGroupID" },
+    };
+
+    static constexpr DB2LoadInfo Instance{ Fields, 5, &ItemLogicalCostMeta::Instance, HOTFIX_SEL_ITEM_LOGICAL_COST };
+};
+
 struct ItemModifiedAppearanceLoadInfo
 {
     static constexpr DB2FieldMeta Fields[7] =

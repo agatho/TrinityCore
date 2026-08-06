@@ -53,6 +53,7 @@
 #include "Pet.h"
 #include "ChallengeModeMgr.h"
 #include "ItemConversionMgr.h"
+#include "ItemUpgradeMgr.h"
 #include "Player.h"
 #include "PlayerDump.h"
 #include "QueryHolder.h"
@@ -1329,6 +1330,9 @@ void WorldSession::HandlePlayerLogin(LoginQueryHolder const& holder)
 
     // Matrix Catalyst charge accrual (biweekly drip, lazily granted at login).
     sItemConversionMgr.UpdateCharges(pCurrChar);
+
+    // Item upgrade watermarks (per-slot crest-waiver levels shown by the upgrade UI).
+    sItemUpgradeMgr.LoadWatermarks(pCurrChar);
 
     CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_UPD_CHAR_ONLINE);
     stmt->setUInt64(0, pCurrChar->GetGUID().GetCounter());

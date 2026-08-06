@@ -2512,6 +2512,15 @@ struct ItemLimitCategoryConditionEntry
     uint32 ParentItemLimitCategoryID;
 };
 
+struct ItemLogicalCostEntry
+{
+    uint32 ID;
+    int32 InventoryTypeSlotMask;
+    int32 Flags;
+    int32 ItemExtendedCostID;
+    uint32 ItemLogicalCostGroupID;
+};
+
 struct ItemModifiedAppearanceEntry
 {
     uint32 ID;

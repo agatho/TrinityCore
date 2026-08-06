@@ -29,6 +29,7 @@ EndScriptData */
 #include "DB2Stores.h"
 #include "Item.h"
 #include "ItemDefines.h"
+#include "ItemUpgradeMgr.h"
 #include "Player.h"
 #include "RBAC.h"
 #include "WorldSession.h"
@@ -44,8 +45,9 @@ public:
     {
         static ChatCommandTable mythicPlusCommandTable =
         {
-            { "keystone", HandleMythicPlusKeystoneCommand, rbac::RBAC_PERM_COMMAND_DEBUG, Console::No },
-            { "affixes",  HandleMythicPlusAffixesCommand,  rbac::RBAC_PERM_COMMAND_DEBUG, Console::No },
+            { "keystone",    HandleMythicPlusKeystoneCommand,    rbac::RBAC_PERM_COMMAND_DEBUG, Console::No },
+            { "affixes",     HandleMythicPlusAffixesCommand,     rbac::RBAC_PERM_COMMAND_DEBUG, Console::No },
+            { "upgradeitem", HandleMythicPlusUpgradeItemCommand, rbac::RBAC_PERM_COMMAND_DEBUG, Console::No },
         };
 
         static ChatCommandTable commandTable =
@@ -91,6 +93,35 @@ public:
             keystone->GetModifier(ITEM_MODIFIER_CHALLENGE_KEYSTONE_AFFIX_ID_2),
             keystone->GetModifier(ITEM_MODIFIER_CHALLENGE_KEYSTONE_AFFIX_ID_3),
             keystone->GetModifier(ITEM_MODIFIER_CHALLENGE_KEYSTONE_AFFIX_ID_4));
+        return true;
+    }
+
+    // .mythicplus upgradeitem <bag> <slot> — perform one upgrade step on the item at that position
+    // (same path as the retail upgrade spell; charges crests + gold, honors discounts/watermarks).
+    static bool HandleMythicPlusUpgradeItemCommand(ChatHandler* handler, uint8 bag, uint8 slot)
+    {
+        Player* player = handler->GetSession()->GetPlayer();
+        Item* item = player->GetItemByPos(bag, slot);
+        if (!item)
+        {
+            handler->SendSysMessage("No item at that bag/slot.");
+            return false;
+        }
+
+        ItemUpgradeMgr::UpgradeStep step;
+        if (!sItemUpgradeMgr.GetNextStep(player, item, step))
+        {
+            handler->SendSysMessage("Item has no upgrade track or is already at the final rank.");
+            return false;
+        }
+
+        if (!sItemUpgradeMgr.PerformUpgrade(player, item))
+        {
+            handler->PSendSysMessage("Upgrade failed (cost: {} x currency {}, {} money).", step.CurrencyCount, step.CurrencyID, step.Money);
+            return false;
+        }
+
+        handler->PSendSysMessage("Upgraded item {} to item level {}.", item->GetEntry(), item->GetItemLevel(player));
         return true;
     }
 
