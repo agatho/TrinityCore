@@ -1084,6 +1084,15 @@ Instance.IgnoreRaid = 0
 ChallengeMode.SeasonId = 0
 
 #
+#    ChallengeMode.DisplaySeasonId
+#        Description: Active Mythic+ DISPLAY season - the key of MythicPlusSeasonTrackedMap (season dungeon
+#                     pool), MythicPlusSeasonTrackedAffix and MythicPlusSeasonKeyFloor (Resilient Keystone
+#                     floor). 0 = auto-detect the newest season present in MythicPlusSeasonTrackedMap.db2.
+#        Default:     0 - (auto-detect)
+
+ChallengeMode.DisplaySeasonId = 0
+
+#
 #    ChallengeMode.AffixSchedule
 #        Description: OVERRIDE: a fixed weekly affix set (KeystoneAffix.db2 IDs), comma-separated, lowest level band
 #                     first. When set, this bypasses the built-in Midnight S1 weekly rotation entirely and is used

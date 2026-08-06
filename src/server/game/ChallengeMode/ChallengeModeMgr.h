@@ -152,8 +152,20 @@ public:
 
     // --- season / pool / affixes ---
     uint32 GetActiveSeasonId() const { return _activeSeasonId; }
+    // The active display season (MythicPlusSeasonTrackedMap/TrackedAffix/KeyFloor key). Auto-detected as the
+    // newest season present in MythicPlusSeasonTrackedMap.db2; override with ChallengeMode.DisplaySeasonId.
+    uint32 GetDisplaySeasonId() const { return _displaySeasonId; }
     MythicPlusSeasonEntry const* GetActiveSeason() const;
     std::vector<uint32> const& GetSeasonMapChallengeModeIds() const { return _seasonMaps; }
+
+    // Resilient Keystone floor (MythicPlusSeasonKeyFloor.db2): the highest KeyFloor of the active display
+    // season whose PlayerCondition the player meets. Weekly adjustment and depletion never go below it.
+    uint32 GetKeystoneFloor(Player const* player) const;
+
+    // Great Vault reward levels (MythicPlusSeasonRewardLevels.db2, active season): the key level reward scaling
+    // caps at (0 = uncapped/no data), and the activity tier id the vault UI expects for the M+ row.
+    uint32 GetVaultRewardLevelCap() const;
+    int32 GetVaultActivityTierId() const;
     // The full weekly affix set (all bands), as advertised to the client in SMSG_MYTHIC_PLUS_CURRENT_AFFIXES.
     std::vector<uint32> GetWeeklyAffixes() const;
     // Affixes active for a given keystone level this week, in keystone slot order. The Midnight S1 rotation
@@ -197,6 +209,7 @@ private:
     uint32 _damageCurveId = 0;
 
     uint32 _activeSeasonId = 0;
+    uint32 _displaySeasonId = 0;
     std::vector<uint32> _seasonMaps;
 
     // Weekly affix schedule: _affixSchedule[band] = keystoneAffixId, where band index maps to a level threshold

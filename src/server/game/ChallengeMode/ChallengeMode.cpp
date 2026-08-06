@@ -70,9 +70,13 @@ void ChallengeMode::Start(uint32 mapChallengeModeId, uint32 keystoneLevel, std::
         // Equivalent here: stamp the depleted result (one level lower, rerolled dungeon, fresh weekly affixes)
         // into the item immediately, so abandoning / disconnecting / unloading the instance can never dodge
         // depletion. A timed completion re-stamps the upgrade from the original level (see Complete()).
+        // Depletion respects the player's Resilient Keystone floor (same-level reroll at the floor).
         if (Item* keystone = starterPlayer->GetItemByGuid(_keystoneGuid))
+        {
+            uint32 const floorLevel = std::max(sChallengeModeMgr.GetKeystoneMinLevel(), sChallengeModeMgr.GetKeystoneFloor(starterPlayer));
             sChallengeModeMgr.StampKeystone(keystone, sChallengeModeMgr.RollSeasonDungeon(_mapChallengeModeId),
-                std::max(sChallengeModeMgr.GetKeystoneMinLevel(), _keystoneLevel > 0 ? _keystoneLevel - 1 : 0));
+                std::max(floorLevel, _keystoneLevel > 0 ? _keystoneLevel - 1 : 0));
+        }
     }
 
     BroadcastTimer(_timeLimitMs);

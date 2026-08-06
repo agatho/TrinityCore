@@ -252,6 +252,10 @@ DB2Storage<MountTypeXCapabilityEntry>           sMountTypeXCapabilityStore("Moun
 DB2Storage<MountXDisplayEntry>                  sMountXDisplayStore("MountXDisplay.db2", &MountXDisplayLoadInfo::Instance);
 DB2Storage<MovieEntry>                          sMovieStore("Movie.db2", &MovieLoadInfo::Instance);
 DB2Storage<MythicPlusSeasonEntry>               sMythicPlusSeasonStore("MythicPlusSeason.db2", &MythicPlusSeasonLoadInfo::Instance);
+DB2Storage<MythicPlusSeasonKeyFloorEntry>       sMythicPlusSeasonKeyFloorStore("MythicPlusSeasonKeyFloor.db2", &MythicPlusSeasonKeyFloorLoadInfo::Instance);
+DB2Storage<MythicPlusSeasonRewardLevelsEntry>   sMythicPlusSeasonRewardLevelsStore("MythicPlusSeasonRewardLevels.db2", &MythicPlusSeasonRewardLevelsLoadInfo::Instance);
+DB2Storage<MythicPlusSeasonTrackedAffixEntry>   sMythicPlusSeasonTrackedAffixStore("MythicPlusSeasonTrackedAffix.db2", &MythicPlusSeasonTrackedAffixLoadInfo::Instance);
+DB2Storage<MythicPlusSeasonTrackedMapEntry>     sMythicPlusSeasonTrackedMapStore("MythicPlusSeasonTrackedMap.db2", &MythicPlusSeasonTrackedMapLoadInfo::Instance);
 DB2Storage<NameGenEntry>                        sNameGenStore("NameGen.db2", &NameGenLoadInfo::Instance);
 DB2Storage<NamesProfanityEntry>                 sNamesProfanityStore("NamesProfanity.db2", &NamesProfanityLoadInfo::Instance);
 DB2Storage<NamesReservedEntry>                  sNamesReservedStore("NamesReserved.db2", &NamesReservedLoadInfo::Instance);
@@ -887,6 +891,10 @@ uint32 DB2Manager::LoadStores(std::string const& dataPath, LocaleConstant defaul
     LOAD_DB2(sMountXDisplayStore);
     LOAD_DB2(sMovieStore);
     LOAD_DB2(sMythicPlusSeasonStore);
+    LOAD_DB2(sMythicPlusSeasonKeyFloorStore);
+    LOAD_DB2(sMythicPlusSeasonRewardLevelsStore);
+    LOAD_DB2(sMythicPlusSeasonTrackedAffixStore);
+    LOAD_DB2(sMythicPlusSeasonTrackedMapStore);
     LOAD_DB2(sNameGenStore);
     LOAD_DB2(sNamesProfanityStore);
     LOAD_DB2(sNamesReservedStore);

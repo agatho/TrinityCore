@@ -16,6 +16,7 @@
  */
 
 #include "ChallengeModeMgr.h"
+#include "ConditionMgr.h"
 #include "Config.h"
 #include "DatabaseEnv.h"
 #include "DB2Stores.h"
@@ -139,18 +140,28 @@ void ChallengeModeMgr::ResolveActiveSeason()
         }
     }
 
-    // Season dungeon pool: filter the full pool by the active season's expansion. The exact tracked-map set lives
-    // in MythicPlusSeasonTrackedMap.db2; until that is wired, the expansion filter is the Blizzlike approximation.
-    _seasonMaps.clear();
-    if (MythicPlusSeasonEntry const* season = GetActiveSeason())
-    {
-        for (auto const& [challengeModeId, entry] : _mapChallengeModes)
-            if (int32(entry->ExpansionLevel) == season->ExpansionLevel)
-                _seasonMaps.push_back(challengeModeId);
-    }
+    // Display season (keys MythicPlusSeasonTrackedMap/TrackedAffix/KeyFloor): config override, else the newest
+    // season present in the tracked-map table -- the authoritative source of the live dungeon pool.
+    _displaySeasonId = uint32(sConfigMgr->GetIntDefault("ChallengeMode.DisplaySeasonId", 0));
+    if (!_displaySeasonId)
+        for (MythicPlusSeasonTrackedMapEntry const* trackedMap : sMythicPlusSeasonTrackedMapStore)
+            _displaySeasonId = std::max(_displaySeasonId, trackedMap->DisplaySeasonID);
 
-    TC_LOG_INFO("server.loading", "ChallengeModeMgr: active Mythic+ season {} ({} dungeons in pool).",
-        _activeSeasonId, _seasonMaps.size());
+    // Season dungeon pool: the tracked maps of the active display season (authentic). Fallback to the
+    // expansion filter when the DB2 has no rows for it (older data or stripped client).
+    _seasonMaps.clear();
+    for (MythicPlusSeasonTrackedMapEntry const* trackedMap : sMythicPlusSeasonTrackedMapStore)
+        if (trackedMap->DisplaySeasonID == _displaySeasonId && GetMapChallengeMode(uint32(trackedMap->MapChallengeModeID)))
+            _seasonMaps.push_back(uint32(trackedMap->MapChallengeModeID));
+
+    if (_seasonMaps.empty())
+        if (MythicPlusSeasonEntry const* season = GetActiveSeason())
+            for (auto const& [challengeModeId, entry] : _mapChallengeModes)
+                if (int32(entry->ExpansionLevel) == season->ExpansionLevel)
+                    _seasonMaps.push_back(challengeModeId);
+
+    TC_LOG_INFO("server.loading", "ChallengeModeMgr: active Mythic+ season {} (display season {}, {} dungeons in pool).",
+        _activeSeasonId, _displaySeasonId, _seasonMaps.size());
 }
 
 void ChallengeModeMgr::LoadAffixRotation()
@@ -496,6 +507,44 @@ MythicPlusSeasonEntry const* ChallengeModeMgr::GetActiveSeason() const
     return sMythicPlusSeasonStore.LookupEntry(_activeSeasonId);
 }
 
+uint32 ChallengeModeMgr::GetKeystoneFloor(Player const* player) const
+{
+    // Resilient Keystone: the highest floor row of the active display season whose PlayerCondition the player
+    // meets (retail: "time all season dungeons at +N"). Rows without a condition apply unconditionally.
+    uint32 floor = 0;
+    for (MythicPlusSeasonKeyFloorEntry const* keyFloor : sMythicPlusSeasonKeyFloorStore)
+    {
+        if (keyFloor->DisplaySeasonID != _displaySeasonId || keyFloor->KeyFloor <= int32(floor))
+            continue;
+
+        if (keyFloor->PlayerConditionID)
+            if (!ConditionMgr::IsPlayerMeetingCondition(player, uint32(keyFloor->PlayerConditionID)))
+                continue;
+
+        floor = uint32(keyFloor->KeyFloor);
+    }
+    return floor;
+}
+
+uint32 ChallengeModeMgr::GetVaultRewardLevelCap() const
+{
+    // Modern seasons cap vault reward scaling (retail 12.x: +10); the cap is the highest DifficultyLevel with
+    // a reward row for the active season. 0 = no data -> uncapped.
+    uint32 cap = 0;
+    for (MythicPlusSeasonRewardLevelsEntry const* rewardLevel : sMythicPlusSeasonRewardLevelsStore)
+        if (rewardLevel->MythicPlusSeasonID == _activeSeasonId)
+            cap = std::max(cap, uint32(std::max(rewardLevel->DifficultyLevel, 0)));
+    return cap;
+}
+
+int32 ChallengeModeMgr::GetVaultActivityTierId() const
+{
+    for (MythicPlusSeasonRewardLevelsEntry const* rewardLevel : sMythicPlusSeasonRewardLevelsStore)
+        if (rewardLevel->MythicPlusSeasonID == _activeSeasonId && rewardLevel->ActivityTierID)
+            return rewardLevel->ActivityTierID;
+    return 0;
+}
+
 uint32 ChallengeModeMgr::GetKeystoneItemId() const
 {
     return uint32(sConfigMgr->GetIntDefault("ChallengeMode.Keystone.ItemId", 180653)); // 12.x "Mythic Keystone"
@@ -612,7 +661,8 @@ void ChallengeModeMgr::UpdateKeystoneForNewWeek(Player* player, bool createIfMis
         return;
     }
 
-    uint32 const minLevel = GetKeystoneMinLevel();
+    // The weekly level never drops below the player's Resilient Keystone floor (MythicPlusSeasonKeyFloor).
+    uint32 const minLevel = std::max(GetKeystoneMinLevel(), GetKeystoneFloor(player));
     uint32 const currentLevel = keystone ? keystone->GetModifier(ITEM_MODIFIER_CHALLENGE_KEYSTONE_LEVEL) : minLevel;
     uint32 const newLevel = data->ComputeNewWeekKeystoneLevel(currentLevel, minLevel);
 

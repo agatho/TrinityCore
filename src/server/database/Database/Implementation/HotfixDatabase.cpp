@@ -1287,6 +1287,26 @@ void HotfixDatabaseConnection::DoPrepareStatements()
         " FROM mythic_plus_season WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
     PREPARE_MAX_ID_STMT(HOTFIX_SEL_MYTHIC_PLUS_SEASON, "SELECT MAX(ID) + 1 FROM mythic_plus_season", CONNECTION_SYNCH);
 
+    // MythicPlusSeasonKeyFloor.db2
+    PrepareStatement(HOTFIX_SEL_MYTHIC_PLUS_SEASON_KEY_FLOOR, "SELECT ID, KeyFloor, PlayerConditionID, DisplaySeasonID"
+        " FROM mythic_plus_season_key_floor WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_MYTHIC_PLUS_SEASON_KEY_FLOOR, "SELECT MAX(ID) + 1 FROM mythic_plus_season_key_floor", CONNECTION_SYNCH);
+
+    // MythicPlusSeasonRewardLevels.db2
+    PrepareStatement(HOTFIX_SEL_MYTHIC_PLUS_SEASON_REWARD_LEVELS, "SELECT ID, MythicPlusSeasonID, ActivityTierID, DifficultyLevel, WeeklyRewardLevel, "
+        "EndOfRunRewardLevel FROM mythic_plus_season_reward_levels WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_MYTHIC_PLUS_SEASON_REWARD_LEVELS, "SELECT MAX(ID) + 1 FROM mythic_plus_season_reward_levels", CONNECTION_SYNCH);
+
+    // MythicPlusSeasonTrackedAffix.db2
+    PrepareStatement(HOTFIX_SEL_MYTHIC_PLUS_SEASON_TRACKED_AFFIX, "SELECT ID, KeystoneAffixID, BonusRating, Field_9_1_0_38511_004, DisplaySeasonID"
+        " FROM mythic_plus_season_tracked_affix WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_MYTHIC_PLUS_SEASON_TRACKED_AFFIX, "SELECT MAX(ID) + 1 FROM mythic_plus_season_tracked_affix", CONNECTION_SYNCH);
+
+    // MythicPlusSeasonTrackedMap.db2
+    PrepareStatement(HOTFIX_SEL_MYTHIC_PLUS_SEASON_TRACKED_MAP, "SELECT ID, MapChallengeModeID, DisplaySeasonID"
+        " FROM mythic_plus_season_tracked_map WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_MYTHIC_PLUS_SEASON_TRACKED_MAP, "SELECT MAX(ID) + 1 FROM mythic_plus_season_tracked_map", CONNECTION_SYNCH);
+
     // NameGen.db2
     PrepareStatement(HOTFIX_SEL_NAME_GEN, "SELECT ID, Name, RaceID, Sex FROM name_gen WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
     PREPARE_MAX_ID_STMT(HOTFIX_SEL_NAME_GEN, "SELECT MAX(ID) + 1 FROM name_gen", CONNECTION_SYNCH);

@@ -193,11 +193,12 @@ void WorldSession::HandleRequestWeeklyRewards(WorldPackets::ChallengeMode::Reque
     std::vector<ChallengeModeMgr::VaultThreshold> const thresholds = sChallengeModeMgr.GetMythicPlusVaultThresholds();
 
     // A single M+ activity tier so the vault shows the dungeon row. Type=1 (MythicPlus) is authoritative; Level is
-    // the best slot's keystone level, Points the run count. ActivityTierID is left 0 (the WeeklyRewardChestActivityTier
-    // field semantics are opaque offline and not fabricated); the client categorises each slot via thresholdID.
+    // the best slot's keystone level, Points the run count. ActivityTierID comes from the active season's
+    // MythicPlusSeasonRewardLevels rows (0 when the DB2 has no data for the season).
     if (!thresholds.empty())
     {
         WorldPackets::ChallengeMode::WeeklyRewardActivityTier& tier = response.ActivityTiers.emplace_back();
+        tier.ActivityTierID = sChallengeModeMgr.GetVaultActivityTierId();
         tier.Type = 1;
         tier.Level = data ? int32(data->GetVaultSlotLevel(0)) : 0;
         tier.Points = int32(runCount);
@@ -221,11 +222,16 @@ void WorldSession::HandleRequestWeeklyRewards(WorldPackets::ChallengeMode::Reque
     uint32 const vaultLootId = sChallengeModeMgr.GetVaultRewardLootId();
     bool const poolReady = vaultLootId && LootTemplates_Reference.HaveLootFor(vaultLootId);
 
+    // Reward scaling caps at the season's highest reward level (retail 12.x: +10); higher keys are score-only.
+    uint32 const vaultLevelCap = sChallengeModeMgr.GetVaultRewardLevelCap();
+
     for (ChallengeModeMgr::VaultThreshold const& threshold : thresholds)
     {
-        uint32 const slotLevel = data ? data->GetVaultSlotLevel(threshold.Index) : 0;
+        uint32 slotLevel = data ? data->GetVaultSlotLevel(threshold.Index) : 0;
         if (!slotLevel)
             continue;   // locked slot -> no reward option
+        if (vaultLevelCap)
+            slotLevel = std::min(slotLevel, vaultLevelCap);
 
         WorldPackets::ChallengeMode::WeeklyRewardActivity& activity = result.Activities.emplace_back();
         activity.ThresholdID = threshold.ThresholdID;
@@ -273,6 +279,10 @@ void WorldSession::HandleClaimWeeklyReward(WorldPackets::ChallengeMode::ClaimWee
             break;
         }
     }
+
+    // Same season reward-level cap as the preview (retail 12.x: vault scaling stops at +10).
+    if (uint32 vaultLevelCap = sChallengeModeMgr.GetVaultRewardLevelCap())
+        rewardLevel = std::min(rewardLevel, vaultLevelCap);
 
     if (!rewardLevel)
     {

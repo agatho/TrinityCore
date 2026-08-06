@@ -2784,6 +2784,40 @@ struct KeychainEntry
     std::array<uint8, KEYCHAIN_SIZE> Key;
 };
 
+struct MythicPlusSeasonKeyFloorEntry
+{
+    uint32 ID;
+    int32 KeyFloor;
+    int32 PlayerConditionID;
+    uint32 DisplaySeasonID;
+};
+
+struct MythicPlusSeasonRewardLevelsEntry
+{
+    uint32 ID;
+    uint32 MythicPlusSeasonID;
+    int32 ActivityTierID;
+    int32 DifficultyLevel;
+    int32 WeeklyRewardLevel;
+    int32 EndOfRunRewardLevel;
+};
+
+struct MythicPlusSeasonTrackedAffixEntry
+{
+    uint32 ID;
+    int32 KeystoneAffixID;
+    int32 BonusRating;
+    int32 Field_9_1_0_38511_004;
+    uint32 DisplaySeasonID;
+};
+
+struct MythicPlusSeasonTrackedMapEntry
+{
+    uint32 ID;
+    int32 MapChallengeModeID;
+    uint32 DisplaySeasonID;
+};
+
 struct KeystoneAffixEntry
 {
     LocalizedString Name;
