@@ -16,6 +16,7 @@
  */
 
 #include "SpellInfo.h"
+#include "ChallengeMode.h"
 #include "Battleground.h"
 #include "Containers.h"
 #include "Corpse.h"
@@ -2521,8 +2522,14 @@ SpellCastResult SpellInfo::CheckTarget(WorldObject const* caster, WorldObject co
         if (Map* map = caster->GetMap())
             if (InstanceMap* iMap = map->ToInstanceMap())
                 if (InstanceScript* instance = iMap->GetInstanceScript())
-                    if (instance->GetCombatResurrectionCharges() == 0 && instance->IsEncounterInProgress())
+                {
+                    // The limit applies during raid encounters, and for the whole run in Mythic Keystone
+                    // dungeons (dungeon-wide charge pool, retail 12.x).
+                    bool const limitActive = instance->IsEncounterInProgress()
+                        || (iMap->GetChallengeMode() && iMap->GetChallengeMode()->IsActive());
+                    if (limitActive && instance->GetCombatResurrectionCharges() == 0)
                         return SPELL_FAILED_TARGET_CANNOT_BE_RESURRECTED;
+                }
 
     return SPELL_CAST_OK;
 }

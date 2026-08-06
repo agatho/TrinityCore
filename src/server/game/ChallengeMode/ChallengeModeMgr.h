@@ -76,6 +76,12 @@ public:
     uint32 GetChallengeModeIdForMap(uint32 mapId) const;
     uint32 GetMapIdForChallengeMode(uint32 challengeModeId) const;
 
+    // --- enemy forces ---
+    // Kills of hostile non-boss creatures required for 100% Enemy Forces in a dungeon (challenge_mode_enemy_forces
+    // world table; server content). 0 = no forces requirement (completion gates on bosses only, the pre-existing
+    // behaviour), so the gate only engages for dungeons the operator has counted.
+    uint32 GetEnemyForcesRequiredKills(uint32 challengeModeId) const;
+
     // --- timer / keystone upgrade (from MapChallengeMode.CriteriaCount: [0]=par, [1]=+2 @80%, [2]=+3 @60%) ---
     uint32 GetTimeLimit(uint32 challengeModeId) const;                     // par time, seconds
     std::array<uint32, 3> GetUpgradeThresholds(uint32 challengeModeId) const;
@@ -181,9 +187,11 @@ private:
     void LoadMapPool();
     void ResolveActiveSeason();
     void LoadAffixRotation();
+    void LoadEnemyForces();
 
     std::unordered_map<uint32 /*challengeModeId*/, MapChallengeModeEntry const*> _mapChallengeModes;
     std::unordered_map<uint32 /*mapId*/, uint32 /*challengeModeId*/> _challengeModeByMap;
+    std::unordered_map<uint32 /*challengeModeId*/, uint32 /*requiredKills*/> _enemyForces;
 
     uint32 _healthCurveId = 0;
     uint32 _damageCurveId = 0;

@@ -52,7 +52,10 @@ public:
     void OnCreatureDeath(Creature* victim);
 
     bool HasAffix(uint32 affixId) const;
-    // Called when a dungeon encounter reaches DONE; completes the run once every encounter is defeated.
+    // Called when every dungeon encounter has reached DONE. Completes the run immediately unless the dungeon
+    // has an enemy-forces requirement (challenge_mode_enemy_forces) that is not yet met -- then completion
+    // arms and fires from the trash kill that reaches 100%.
+    void OnAllEncountersDone();
     void Complete();
 
     bool IsActive() const { return _active && !_completed; }
@@ -94,9 +97,13 @@ private:
     ObjectGuid _starterGuid;
     ObjectGuid _keystoneGuid;
 
+    bool AreEnemyForcesMet() const;
+
     uint32 _timeLimitMs = 0;
     uint32 _elapsedMs = 0;
     uint32 _deathCount = 0;
+    uint32 _enemyKills = 0;
+    bool _awaitingEnemyForces = false;
     uint32 _affixTickTimer = 0;
     uint32 _spawnTickTimer = 0;
     uint32 _bargainTickTimer = 0;

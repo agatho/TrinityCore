@@ -17,6 +17,7 @@
 
 #include "ChallengeModeMgr.h"
 #include "Config.h"
+#include "DatabaseEnv.h"
 #include "DB2Stores.h"
 #include "DB2Structure.h"
 #include "DBCEnums.h"
@@ -68,6 +69,28 @@ void ChallengeModeMgr::Initialize()
     LoadMapPool();
     ResolveActiveSeason();
     LoadAffixRotation();
+    LoadEnemyForces();
+}
+
+void ChallengeModeMgr::LoadEnemyForces()
+{
+    _enemyForces.clear();
+    if (QueryResult result = WorldDatabase.Query("SELECT challengeModeId, requiredKills FROM challenge_mode_enemy_forces"))
+    {
+        do
+        {
+            Field* fields = result->Fetch();
+            _enemyForces[fields[0].GetUInt32()] = fields[1].GetUInt32();
+        } while (result->NextRow());
+    }
+
+    TC_LOG_INFO("server.loading", "ChallengeModeMgr: loaded enemy-forces requirements for {} dungeons.", _enemyForces.size());
+}
+
+uint32 ChallengeModeMgr::GetEnemyForcesRequiredKills(uint32 challengeModeId) const
+{
+    auto itr = _enemyForces.find(challengeModeId);
+    return itr != _enemyForces.end() ? itr->second : 0;
 }
 
 void ChallengeModeMgr::LoadScalingCurves()

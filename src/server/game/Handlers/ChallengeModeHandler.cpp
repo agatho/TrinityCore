@@ -20,6 +20,7 @@
 #include "ChallengeModeMgr.h"
 #include "ChallengeModePackets.h"
 #include "CharacterDatabase.h"
+#include "Config.h"
 #include "Item.h"
 #include "ItemBonusMgr.h"
 #include "ItemDefines.h"
@@ -128,6 +129,12 @@ void WorldSession::HandleStartChallengeMode(WorldPackets::ChallengeMode::StartCh
     ChallengeMode* challenge = instanceMap->GetChallengeMode();
     if (!challenge || challenge->IsActive() || challenge->IsCompleted())
         return;
+
+    // Retail activates the run from the Font of Power pedestal. When enforced, require the pedestal gameobject
+    // near the player; lenient by default because the GO spawn is world-DB content.
+    if (sConfigMgr->GetBoolDefault("ChallengeMode.RequireFontOfPower", false))
+        if (!player->FindNearestGameObjectOfType(GAMEOBJECT_TYPE_CHALLENGE_MODE_REWARD, 40.0f))
+            return;
 
     std::array<uint32, 4> const affixes =
     {

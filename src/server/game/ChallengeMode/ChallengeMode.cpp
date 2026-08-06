@@ -25,6 +25,7 @@
 #include "DB2Stores.h"
 #include "GameTime.h"
 #include "Group.h"
+#include "InstanceScript.h"
 #include "Item.h"
 #include "ItemBonusMgr.h"
 #include "ItemDefines.h"
@@ -95,6 +96,12 @@ void ChallengeMode::Start(uint32 mapChallengeModeId, uint32 keystoneLevel, std::
     if (HasAffix(ChallengeModeAffix::LindormisGuidance))
         ApplyGuidanceMarks();
 
+    // Run-wide combat-res pool (retail: 1 charge at activation, +1 per interval; shared by all battle-res
+    // spells). Encounters do not reset it during an active run (see InstanceScript::SetBossState).
+    if (InstanceScript* script = _instance->GetInstanceScript())
+        script->InitializeCombatResurrections(uint8(sConfigMgr->GetIntDefault("ChallengeMode.CombatRes.InitialCharges", 1)),
+            uint32(sConfigMgr->GetIntDefault("ChallengeMode.CombatRes.IntervalMs", 10 * MINUTE * IN_MILLISECONDS)));
+
     TC_LOG_INFO("challengemode", "ChallengeMode start: instance {} challengeMode {} level {} timeLimit {}s",
         _instance->GetInstanceId(), mapChallengeModeId, keystoneLevel, _timeLimitMs / IN_MILLISECONDS);
 }
@@ -106,6 +113,10 @@ void ChallengeMode::Reset()
         if (Group* group = starterPlayer->GetGroup())
             group->StartCountdown(CountdownTimerType::ChallengeMode, Seconds(0));
 
+    // Drop the run-wide combat-res pool.
+    if (InstanceScript* script = _instance->GetInstanceScript())
+        script->ResetCombatResurrections();
+
     _active = false;
     _completed = false;
     _mapChallengeModeId = 0;
@@ -116,6 +127,8 @@ void ChallengeMode::Reset()
     _timeLimitMs = 0;
     _elapsedMs = 0;
     _deathCount = 0;
+    _enemyKills = 0;
+    _awaitingEnemyForces = false;
 }
 
 void ChallengeMode::Update(uint32 diff)
@@ -347,6 +360,18 @@ void ChallengeMode::OnCreatureDeath(Creature* victim)
     if (!IsActive() || !victim || victim->IsDungeonBoss() || victim->IsPet() || victim->IsControlledByPlayer())
         return;
 
+    // Enemy forces: every hostile trash death counts one kill; when all bosses are already down, the kill that
+    // reaches 100% completes the run.
+    if (victim->IsHostileToPlayers())
+    {
+        ++_enemyKills;
+        if (_awaitingEnemyForces && AreEnemyForcesMet())
+        {
+            Complete();
+            return;
+        }
+    }
+
     // Bolstering: the death cry empowers nearby surviving non-boss enemies (buff spell handles the % itself).
     if (HasAffix(ChallengeModeAffix::Bolstering))
     {
@@ -384,6 +409,29 @@ void ChallengeMode::OnCreatureDeath(Creature* victim)
         if (uint32 creatureId = sChallengeModeMgr.GetAffixCreatureId(ChallengeModeAffix::Spiteful))
             victim->SummonCreature(creatureId, victim->GetPosition(), TEMPSUMMON_TIMED_OR_DEAD_DESPAWN, 30s);
     }
+}
+
+bool ChallengeMode::AreEnemyForcesMet() const
+{
+    uint32 const required = sChallengeModeMgr.GetEnemyForcesRequiredKills(_mapChallengeModeId);
+    return !required || _enemyKills >= required;
+}
+
+void ChallengeMode::OnAllEncountersDone()
+{
+    if (!IsActive())
+        return;
+
+    if (AreEnemyForcesMet())
+    {
+        Complete();
+        return;
+    }
+
+    // Bosses are down but trash remains: arm completion on the kill that reaches 100% enemy forces.
+    _awaitingEnemyForces = true;
+    TC_LOG_DEBUG("challengemode", "ChallengeMode: all encounters done, awaiting enemy forces ({}/{}).",
+        _enemyKills, sChallengeModeMgr.GetEnemyForcesRequiredKills(_mapChallengeModeId));
 }
 
 void ChallengeMode::Complete()

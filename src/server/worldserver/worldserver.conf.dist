@@ -1293,6 +1293,25 @@ ChallengeMode.Score.MaxTimeBonus = 15
 ChallengeMode.Score.AffixBreakpoints = "5,7,10,12"
 
 #
+#    ChallengeMode.CombatRes.*
+#        Description: Run-wide combat resurrection pool for keystone runs (retail 12.x): InitialCharges when the
+#                     run activates, +1 charge per IntervalMs, shared by all battle-res spells for the entire run
+#                     (encounters do not reset it while the run is active).
+#        Default:     InitialCharges = 1, IntervalMs = 600000 (10 minutes)
+
+ChallengeMode.CombatRes.InitialCharges = 1
+ChallengeMode.CombatRes.IntervalMs = 600000
+
+#
+#    ChallengeMode.RequireFontOfPower
+#        Description: Require the Font of Power pedestal gameobject (type CHALLENGE_MODE_REWARD) near the player
+#                     for CMSG_START_CHALLENGE_MODE to be accepted. Enable once the pedestal spawns exist in the
+#                     world DB for every season dungeon.
+#        Default:     0 - (Disabled, lenient)
+
+ChallengeMode.RequireFontOfPower = 0
+
+#
 #    ChallengeMode.Catalyst.*
 #        Description: Matrix Catalyst item conversion. Eligible input items come from the client's
 #                     ItemConversion.db2/ItemConversionEntry.db2; the class/slot -> output (tier piece) mapping is
