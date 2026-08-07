@@ -615,6 +615,11 @@ void CriteriaHandler::UpdateCriteria(Criteria const* criteria, uint64 miscValue1
         case CriteriaType::FulfillCraftingOrderType:
         // --- guild
         case CriteriaType::GuildTabardCreated:
+        // --- quests
+        case CriteriaType::CompleteAnyWorldQuest:
+        case CriteriaType::CompleteTrackingQuest:
+        // --- reputation
+        case CriteriaType::ParagonLevelIncreaseWithFaction:
             SetCriteriaProgress(criteria, 1, referencePlayer, PROGRESS_ACCUMULATE);
             break;
         // std case: increment at miscValue1
@@ -638,6 +643,8 @@ void CriteriaHandler::UpdateCriteria(Criteria const* criteria, uint64 miscValue1
         // guild-bank copper spent on repairs, guild achievement points
         case CriteriaType::MoneySpentOnGuildRepair:
         case CriteriaType::EarnGuildAchievementPoints:
+        // honor actually awarded (Player::RewardHonor)
+        case CriteriaType::PlayerHasEarnedHonor:
             SetCriteriaProgress(criteria, miscValue1, referencePlayer, PROGRESS_ACCUMULATE);
             break;
         case CriteriaType::KillCreature:
@@ -646,6 +653,8 @@ void CriteriaHandler::UpdateCriteria(Criteria const* criteria, uint64 miscValue1
         case CriteriaType::AcquireItem:
         case CriteriaType::LootItem:
         case CriteriaType::CurrencyGained:
+        // miscValue1 = FactionID (matched in RequirementsSatisfied), miscValue2 = the reputation GAINED
+        case CriteriaType::ReputationAmountGained:
             SetCriteriaProgress(criteria, miscValue2, referencePlayer, PROGRESS_ACCUMULATE);
             break;
         // std case: high value at miscValue1
@@ -907,9 +916,6 @@ void CriteriaHandler::UpdateCriteria(Criteria const* criteria, uint64 miscValue1
         case CriteriaType::KickTargetInLFGDungeon:
         case CriteriaType::AbandonedLFGDungeon:
         case CriteriaType::GroupedTankLeftEarlyInLFGDungeon:
-        case CriteriaType::CompleteAnyWorldQuest:
-        case CriteriaType::ParagonLevelIncreaseWithFaction:
-        case CriteriaType::PlayerHasEarnedHonor:
         case CriteriaType::ChooseRelicTalent:
         case CriteriaType::AccountHonorLevelReached:
         case CriteriaType::ObtainAnyItemWithCurrencyValue:
@@ -1765,6 +1771,14 @@ bool CriteriaHandler::RequirementsSatisfied(Criteria const* criteria, uint64 mis
             if (!miscValue1 || miscValue1 != uint32(criteria->Entry->Asset.MapID))
                 return false;
             break;
+        case CriteriaType::ParagonLevelIncreaseWithFaction:
+        case CriteriaType::ReputationAmountGained:
+            // Asset = FactionID. ReputationAmountGained accumulates miscValue2 (the gain), so it must be > 0.
+            if (!miscValue1 || miscValue1 != uint32(criteria->Entry->Asset.FactionID))
+                return false;
+            if (CriteriaType(criteria->Entry->Type) == CriteriaType::ReputationAmountGained && !miscValue2)
+                return false;
+            break;
         case CriteriaType::LearnTransmog:
             if (!miscValue1 || miscValue1 != uint32(criteria->Entry->Asset.ItemModifiedAppearanceID))
                 return false;
@@ -1837,6 +1851,9 @@ bool CriteriaHandler::RequirementsSatisfied(Criteria const* criteria, uint64 mis
         case CriteriaType::EarnGuildAchievementPoints:
         case CriteriaType::GuildBankTabsPurchased:
         case CriteriaType::GuildTabardCreated:
+        case CriteriaType::CompleteAnyWorldQuest:
+        case CriteriaType::CompleteTrackingQuest:
+        case CriteriaType::PlayerHasEarnedHonor:
             if (!miscValue1)
                 return false;
             break;
@@ -3417,8 +3434,11 @@ bool CriteriaHandler::ModifierSatisfied(ModifierTreeEntry const* modifier, uint6
                 return false;
             break;
         }
-        case ModifierTreeType::PlayerCreatedCharacterLessThanHoursAgoRealTime: // 204 NYI
-            return false;
+        case ModifierTreeType::PlayerCreatedCharacterLessThanHoursAgoRealTime: // 204
+            // Wall-clock age of the character, as opposed to the played-time variant below.
+            if (referencePlayer->GetCharacterCreateTime() + int64(Hours(reqValue).count()) * int64(HOUR) <= GameTime::GetGameTime())
+                return false;
+            break;
         case ModifierTreeType::PlayerCreatedCharacterLessThanHoursAgoGameTime: // 205
             if (Hours(reqValue) >= Seconds(referencePlayer->GetTotalPlayedTime()))
                 return false;
@@ -5501,7 +5521,7 @@ std::span<CriteriaType const> CriteriaMgr::GetRetroactivelyUpdateableCriteriaTyp
         //CriteriaType::LearnTransmogIllusion, /*NYI*/
         //CriteriaType::MythicPlusRatingAttained, // implemented, but event-driven only (ChallengeMode::Complete)
         //CriteriaType::MythicPlusDisplaySeasonEnded, /*NYI*/
-        //CriteriaType::CompleteTrackingQuest, /*NYI*/
+        //CriteriaType::CompleteTrackingQuest, // implemented, but event-driven only (Player::RewardQuest)
         CriteriaType::BankTabPurchased,
         CriteriaType::LearnTaxiNode,
 

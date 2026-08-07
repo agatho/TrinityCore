@@ -605,9 +605,22 @@ bool ReputationMgr::SetOneFactionReputation(FactionEntry const* factionEntry, in
             int32 oldParagonLevel = oldStanding / paragonReputation->LevelThreshold;
             int32 newParagonLevel = standing / paragonReputation->LevelThreshold;
             if (oldParagonLevel != newParagonLevel)
+            {
                 if (Quest const* paragonRewardQuest = sObjectMgr->GetQuestTemplate(paragonReputation->QuestID))
                     _player->AddQuestAndCheckCompletion(paragonRewardQuest, nullptr);
+
+                // CriteriaType::ParagonLevelIncreaseWithFaction (206, Asset = FactionID).
+                // miscValue2 = the paragon level reached.
+                if (newParagonLevel > oldParagonLevel)
+                    _player->UpdateCriteria(CriteriaType::ParagonLevelIncreaseWithFaction, factionEntry->ID, newParagonLevel);
+            }
         }
+
+        // CriteriaType::ReputationAmountGained (243, Asset = FactionID) - "accumulate, not highest", so this
+        // is the per-event GAIN (reputationChange), not the absolute standing that ReputationGained (46) uses.
+        // Only a positive change counts; losses must not be accumulated as gains.
+        if (reputationChange > 0)
+            _player->UpdateCriteria(CriteriaType::ReputationAmountGained, factionEntry->ID, uint32(reputationChange));
 
         _player->UpdateCriteria(CriteriaType::TotalFactionsEncountered, factionEntry->ID);
         _player->UpdateCriteria(CriteriaType::ReputationGained,         factionEntry->ID);

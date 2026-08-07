@@ -747,11 +747,11 @@ enum class CriteriaType : int16
     RecruitAnyGarrisonTroop                        = 200, // Recruit any Garrison Troop
     StartResearchAnyGarrisonTalent                 = 201, // Garrison Talent: Start Research Any
     StartResearchGarrisonTalent                    = 202, // Garrison Talent: Start Research "{GarrTalent}"
-    CompleteAnyWorldQuest                          = 203, /*NYI*/ // Complete Any Quest
+    CompleteAnyWorldQuest                          = 203, // Complete Any Quest
     EarnLicense                                    = 204, /*NYI*/ // Earn License "{BattlePayDeliverable}" (does NOT work for box level)
     CollectTransmogSetFromGroup                    = 205, // (Account Only) Collect a Transmog Set from Group "{TransmogSetGroup}"
-    ParagonLevelIncreaseWithFaction                = 206, /*NYI*/ // (Player) paragon level increase with faction "{Faction}"
-    PlayerHasEarnedHonor                           = 207, /*NYI*/ // Player has earned honor
+    ParagonLevelIncreaseWithFaction                = 206, // (Player) paragon level increase with faction "{Faction}"
+    PlayerHasEarnedHonor                           = 207, // Player has earned honor
     KillCreatureScenario                           = 208, /*NYI*/ // Kill NPC "{Creature}" (scenario criteria only, do not use for player)
     ArtifactPowerRankPurchased                     = 209, /*NYI*/ // Artifact Power Rank of "{ArtifactPower}" Purchased
     ChooseAnyRelicTalent                           = 210, /*NYI*/ // Choose any Relic Talent
@@ -782,13 +782,13 @@ enum class CriteriaType : int16
     WinRatedSoloShuffleRound                       = 239, /*NYI*/
     ParticipateInRatedSoloShuffleRound             = 240, /*NYI*/
 
-    ReputationAmountGained                         = 243, /*NYI*/ // Gain reputation amount with {FactionID}; accumulate, not highest
+    ReputationAmountGained                         = 243, // Gain reputation amount with {FactionID}; accumulate, not highest
 
     FulfillAnyCraftingOrder                        = 245,
     FulfillCraftingOrderType                       = 246, // {CraftingOrderType}
 
     PerksProgramMonthComplete                      = 249, /*NYI*/
-    CompleteTrackingQuest                          = 250, /*NYI*/
+    CompleteTrackingQuest                          = 250,
 
     GainLevels                                     = 253, // Gain levels
 
@@ -1889,7 +1889,7 @@ enum class ModifierTreeType : int32
     GarrisonTalentSelected                                              = 201, // Garrison has talent "{GarrTalent}" selected
     GarrisonTalentResearched                                            = 202, // Garrison has talent "{GarrTalent}" researched
     PlayerHasRestriction                                                = 203, // Player has restriction of type "{@CHARACTER_RESTRICTION_TYPE}"
-    PlayerCreatedCharacterLessThanHoursAgoRealTime                      = 204, /*NYI*/ // Player has created their character < {#Hours} hours ago (real time)
+    PlayerCreatedCharacterLessThanHoursAgoRealTime                      = 204, // Player has created their character < {#Hours} hours ago (real time)
     PlayerCreatedCharacterLessThanHoursAgoGameTime                      = 205, // Player has created their character < {#Hours} hours ago (in-game time)
     QuestHasQuestInfoId                                                 = 206, // Quest has Quest Info "{QuestInfo}"
     GarrisonTalentResearchInProgress                                    = 207, // Garrison is researching talent "{GarrTalent}"
