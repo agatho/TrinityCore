@@ -32,6 +32,9 @@ public:
 
     uint32 HandleSubscribe(club_membership::v1::client::SubscribeRequest const* request, club_membership::v1::client::SubscribeResponse* response, std::function<void(ServiceBase*, uint32, ::google::protobuf::Message const*)>& continuation) override;
     uint32 HandleUnsubscribe(club_membership::v1::client::UnsubscribeRequest const* request, NoData* response, std::function<void(ServiceBase*, uint32, ::google::protobuf::Message const*)>& continuation) override;
+    uint32 HandleGetStreamMentions(club_membership::v1::client::GetStreamMentionsRequest const* request, club_membership::v1::client::GetStreamMentionsResponse* response, std::function<void(ServiceBase*, uint32, ::google::protobuf::Message const*)>& continuation) override;
+    uint32 HandleRemoveStreamMentions(club_membership::v1::client::RemoveStreamMentionsRequest const* request, NoData* response, std::function<void(ServiceBase*, uint32, ::google::protobuf::Message const*)>& continuation) override;
+    uint32 HandleAdvanceStreamMentionViewTime(club_membership::v1::client::AdvanceStreamMentionViewTimeRequest const* request, NoData* response, std::function<void(ServiceBase*, uint32, ::google::protobuf::Message const*)>& continuation) override;
 
     static std::unique_ptr<club::v1::MemberId> CreateClubMemberId(ObjectGuid guid);
 };

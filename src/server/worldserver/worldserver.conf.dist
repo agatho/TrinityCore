@@ -1334,6 +1334,30 @@ Guild.BankEventLogRecordsCount = 25
 Guild.NewsLogRecordsCount = 250
 
 #
+#    Club.StreamHistory.MaxMessages
+#        Description: Number of chat messages kept per club stream (a guild has two: Guild and
+#                     Officer). This is the scrollback the Communities window and the chat frame
+#                     are served after a relog, and it is also how many messages are held in
+#                     memory per stream. Older messages are pruned from the cache and from the
+#                     club_message table as new ones arrive.
+#                     0 disables stream history entirely - nothing is stored and GetStreamHistory
+#                     returns an empty page. Per member unread markers keep working either way.
+#        Range:       0-2000
+#        Default:     200
+
+Club.StreamHistory.MaxMessages = 200
+
+#
+#    Club.StreamHistory.MaxDays
+#        Description: Age in days after which stored club stream messages and @name mentions are
+#                     deleted. Applied once at startup, before the history is loaded.
+#                     0 disables age based pruning; only Club.StreamHistory.MaxMessages then bounds
+#                     the table.
+#        Default:     30
+
+Club.StreamHistory.MaxDays = 30
+
+#
 #    Guild.SaveInterval
 #        Description: Time (in minutes) for guild save interval.
 #        Default:     15

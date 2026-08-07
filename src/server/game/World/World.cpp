@@ -72,6 +72,7 @@
 #include "ContributionMgr.h"
 #include "CraftingOrderMgr.h"
 #include "ClubFinderMgr.h"
+#include "ClubStreamHistoryMgr.h"
 #include "LFGListMgr.h"
 #include "LFGMgr.h"
 #include "Language.h"
@@ -861,6 +862,9 @@ void World::LoadConfigSettings(bool reload)
         { .Name = "Guild.NewsLogRecordsCount"sv, .DefaultValue = GUILD_NEWSLOG_MAX_RECORDS, .Index = CONFIG_GUILD_NEWS_LOG_COUNT, .Max = GUILD_NEWSLOG_MAX_RECORDS },
         { .Name = "Guild.EventLogRecordsCount"sv, .DefaultValue = GUILD_EVENTLOG_MAX_RECORDS, .Index = CONFIG_GUILD_EVENT_LOG_COUNT, .Max = GUILD_EVENTLOG_MAX_RECORDS },
         { .Name = "Guild.BankEventLogRecordsCount"sv, .DefaultValue = GUILD_BANKLOG_MAX_RECORDS, .Index = CONFIG_GUILD_BANK_EVENT_LOG_COUNT, .Max = GUILD_BANKLOG_MAX_RECORDS },
+        // Club (guild/officer) chat scrollback retention. 0 messages disables history entirely; 0 days disables age based pruning.
+        { .Name = "Club.StreamHistory.MaxMessages"sv, .DefaultValue = 200, .Index = CONFIG_CLUB_STREAM_HISTORY_MAX_MESSAGES, .Max = 2000 },
+        { .Name = "Club.StreamHistory.MaxDays"sv, .DefaultValue = 30, .Index = CONFIG_CLUB_STREAM_HISTORY_MAX_DAYS },
         { .Name = "Visibility.Notify.Period.OnContinents"sv, .DefaultValue = DEFAULT_VISIBILITY_NOTIFY_PERIOD, .Index = CONFIG_VISIBILITY_NOTIFY_PERIOD_CONTINENT },
         { .Name = "Visibility.Notify.Period.InInstances"sv, .DefaultValue = DEFAULT_VISIBILITY_NOTIFY_PERIOD, .Index = CONFIG_VISIBILITY_NOTIFY_PERIOD_INSTANCE },
         { .Name = "Visibility.Notify.Period.InBG"sv, .DefaultValue = DEFAULT_VISIBILITY_NOTIFY_PERIOD, .Index = CONFIG_VISIBILITY_NOTIFY_PERIOD_BATTLEGROUND },
@@ -1673,6 +1677,9 @@ bool World::SetInitialWorldSettings()
 
     TC_LOG_INFO("server.loading", "Loading club finder postings...");
     sClubFinderMgr->Load();
+
+    TC_LOG_INFO("server.loading", "Loading club stream history...");           // guild/officer chat scrollback + per member read markers
+    sClubStreamHistoryMgr->Load();
 
     TC_LOG_INFO("server.loading", "Loading in-game Shop (BattlePay) catalog...");
     sBattlePayMgr->Load();
