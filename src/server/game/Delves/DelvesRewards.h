@@ -62,6 +62,8 @@ public:
     static void LoadProgress(uint32 battlenetAccountId, DelveProgress& progress);
     static void SaveProgress(uint32 battlenetAccountId, DelveProgress const& progress);
     static void ResetWeeklyProgress(uint32 battlenetAccountId, DelveProgress& progress);
+    // Global weekly rollover: zeroes every account's weekly counters (hooked into World::ResetWeeklyQuests).
+    static void ResetAllWeeklyProgress();
 
     // Pushes DelveProgress to the client via the ActivePlayer JamDelveData mirror
     // (SMSG_UPDATE_OBJECT). Call after any progress mutation while the player is

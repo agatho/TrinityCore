@@ -33,7 +33,7 @@ DelveInstance::DelveInstance(InstanceMap* map, uint8 tier, DelveTemplate const* 
     , _tier(tier)
     , _remainingRevives(GetMaxRevivesForTier(tier))
     , _state(DelveState::Entering)
-    , _bountiful(tmpl ? sDelveMgr->IsDelveCurrentlyBountiful(tmpl->MapChallengeModeId) : false)
+    , _bountiful(tmpl ? sDelveMgr->IsDelveCurrentlyBountiful(tmpl->Id) : false)
 {
     TC_LOG_DEBUG("scripts.delves", "DelveInstance created for map {} tier {} (bountiful: {})",
         map->GetId(), tier, _bountiful);

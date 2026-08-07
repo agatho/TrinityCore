@@ -318,6 +318,11 @@ struct DelveTemplate
     // Blizzard_DelvesDifficultyPicker tier-selection UI. One value per delve
     // (sniff-derived; e.g. 1278258 for Atal'Aman, 1265777 for Shadow Enclave).
     uint32 WorldState26903 = 0;
+
+    // Creature entry whose death completes the delve (world content; 0 = no boss-kill completion — the run
+    // then only completes through the scenario path once that is wired). The pragmatic completion trigger,
+    // mirroring the boss-gated completion model proven for Mythic+.
+    uint32 FinalBossEntry = 0;
 };
 
 struct DelveTierReward

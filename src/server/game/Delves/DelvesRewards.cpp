@@ -215,6 +215,14 @@ void DelvesRewards::ResetWeeklyProgress(uint32 battlenetAccountId, DelveProgress
     SaveProgress(battlenetAccountId, progress);
 }
 
+void DelvesRewards::ResetAllWeeklyProgress()
+{
+    // Weekly rollover for every account at once; online players' cached progress reloads on next use.
+    CharacterDatabase.Execute("UPDATE delve_progress SET weeklyCompletions = 0, highestTierThisWeek = 0, "
+        "weeklyBountifulCount = 0, weeklyCofferShards = 0");
+    TC_LOG_INFO("delves", "DelvesRewards: weekly delve progress reset.");
+}
+
 void DelvesRewards::PublishProgress(Player* player)
 {
     DelveProgress progress;

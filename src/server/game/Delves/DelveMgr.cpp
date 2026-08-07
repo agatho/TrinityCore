@@ -78,7 +78,7 @@ void DelveMgr::LoadDelveTemplates()
         "gossipMenuId, lfgDungeonsId, broadcastTextId, firstTierGossipOptionId, "
         "entryX, entryY, entryZ, entryO, "
         "exitX, exitY, exitZ, exitO, "
-        "activeScenarioId, rewardScenarioId, worldState26903 "
+        "activeScenarioId, rewardScenarioId, worldState26903, finalBossEntry "
         "FROM delve_template");
 
     if (!result)
@@ -117,6 +117,7 @@ void DelveMgr::LoadDelveTemplates()
         tmpl.ActiveScenarioId         = fields[22].GetUInt32();
         tmpl.RewardScenarioId         = fields[23].GetUInt32();
         tmpl.WorldState26903          = fields[24].GetUInt32();
+        tmpl.FinalBossEntry           = fields[25].GetUInt32();
 
         _delveTemplatesByMap[tmpl.MapId] = tmpl;
         _delveTemplatesList.push_back(tmpl);
@@ -221,14 +222,16 @@ bool DelveMgr::IsTieredEntranceScenarioMap(uint32 mapId) const
     return _delveTemplatesByMap.find(mapId) != _delveTemplatesByMap.end();
 }
 
-bool DelveMgr::IsDelveCurrentlyBountiful(uint32 mapChallengeModeId) const
+bool DelveMgr::IsDelveCurrentlyBountiful(uint32 delveTemplateId) const
 {
     std::vector<uint32> bountiful = GetTodaysBountifulDelves();
-    return std::find(bountiful.begin(), bountiful.end(), mapChallengeModeId) != bountiful.end();
+    return std::find(bountiful.begin(), bountiful.end(), delveTemplateId) != bountiful.end();
 }
 
 std::vector<uint32> DelveMgr::GetTodaysBountifulDelves() const
 {
+    // Keyed on delve_template.Id — delves do not use MapChallengeMode ids (that column is 0 for every row,
+    // which previously made every delve "bountiful" through the 0 == 0 match).
     std::vector<uint32> result;
 
     if (_delveTemplatesList.empty())
@@ -236,8 +239,6 @@ std::vector<uint32> DelveMgr::GetTodaysBountifulDelves() const
 
     // Rotate through all delves: 4 per day, cycling so all delves appear before repeating
     uint32 totalDelves = static_cast<uint32>(_delveTemplatesList.size());
-    if (totalDelves == 0)
-        return result;
 
     // Day number since epoch
     uint32 dayNumber = static_cast<uint32>(GameTime::GetGameTime() / DAY);
@@ -247,7 +248,7 @@ std::vector<uint32> DelveMgr::GetTodaysBountifulDelves() const
     for (uint32 i = 0; i < BOUNTIFUL_DELVES_PER_DAY && i < totalDelves; ++i)
     {
         uint32 idx = (startIdx + i) % totalDelves;
-        result.push_back(_delveTemplatesList[idx].MapChallengeModeId);
+        result.push_back(_delveTemplatesList[idx].Id);
     }
 
     return result;
