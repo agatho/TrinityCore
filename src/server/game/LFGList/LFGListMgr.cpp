@@ -323,7 +323,7 @@ LFGList::Listing const* LFGListMgr::GetListing(uint32 listingId) const
     return itr != _listings.end() ? &itr->second : nullptr;
 }
 
-std::vector<LFGList::Listing const*> LFGListMgr::Search(uint8 category, uint8 activityGroup, uint32 activityId) const
+std::vector<LFGList::Listing const*> LFGListMgr::Search(uint32 category, uint32 activityGroup, uint32 activityId, std::string const& keyword) const
 {
     uint32 const maxResults = uint32(sConfigMgr->GetIntDefault("LFGList.MaxSearchResults", 100));
 
@@ -334,11 +334,15 @@ std::vector<LFGList::Listing const*> LFGListMgr::Search(uint8 category, uint8 ac
         // Category + activity group are derived from the listing's activity (GroupFinderActivity.db2), which is the
         // authoritative source — the descriptor carries the ActivityID, not the group ids.
         GroupFinderActivityEntry const* activity = sGroupFinderActivityStore.LookupEntry(d.ActivityID);
-        if (category && (!activity || activity->GroupFinderCategoryID != category))
+        if (category && (!activity || uint32(activity->GroupFinderCategoryID) != category))
             continue;
-        if (activityGroup && (!activity || activity->GroupFinderActivityGrpID != activityGroup))
+        if (activityGroup && (!activity || uint32(activity->GroupFinderActivityGrpID) != activityGroup))
             continue;
         if (activityId && d.ActivityID != activityId)
+            continue;
+
+        // Keyword search matches the listing title (case-insensitive substring, retail behaviour).
+        if (!keyword.empty() && !StringContainsStringI(d.Name, keyword))
             continue;
 
         results.push_back(&listing);

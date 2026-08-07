@@ -135,13 +135,38 @@ void LFGListLeave::Read()
 
 void LFGListSearch::Read()
 {
-    _worldPacket >> CategoryId >> ActivityGroupId >> Field2 >> Field3 >> Field4 >> Field5;
+    // Sniff-exact (43B no keyword / 56B with one): see header comment. All reads size-guarded.
+    uint32 const termCount = _worldPacket.ReadBits(5);
+    _worldPacket.ReadBit();                             // presence/flag bit (semantics approximate)
+    _worldPacket.ResetBitPos();
+
+    if (termCount)
+    {
+        std::array<uint32, 10> lengths = { };
+        for (uint32& len : lengths)
+            len = _worldPacket.ReadBits(5);             // ten bits(5) lengths packed into the 8-byte block
+        _worldPacket.ReadBits(64 - 10 * 5);             // padding to the full 8 bytes
+        _worldPacket.ResetBitPos();
+
+        SearchTerms.resize(std::min<uint32>(termCount, 10));
+        for (std::size_t i = 0; i < SearchTerms.size(); ++i)
+            if (lengths[i] && _worldPacket.rpos() + lengths[i] <= _worldPacket.size())
+                SearchTerms[i] = _worldPacket.ReadString(lengths[i]);
+    }
+
     for (uint32& f : Filters)
         _worldPacket >> f;
-    _worldPacket >> Field6 >> Field7;
-    for (uint32& f : Filters2)
-        _worldPacket >> f;
-    _worldPacket >> SearchGuid;
+    _worldPacket >> FilterByte1;                        // observed 0xFF
+    _worldPacket >> FilterByte2;                        // observed 0x05
+
+    uint32 guidCount = 0;
+    _worldPacket >> guidCount;
+    if (guidCount <= 50)
+    {
+        Guids.resize(guidCount);
+        for (ObjectGuid& guid : Guids)
+            _worldPacket >> guid;
+    }
 }
 
 void LFGListApplyToGroup::Read()

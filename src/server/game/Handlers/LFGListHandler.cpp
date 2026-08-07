@@ -271,7 +271,8 @@ void WorldSession::HandleLFGListSearch(WorldPackets::LFGList::LFGListSearch& pac
     if (!GetPlayer())
         return;
 
-    std::vector<LFGList::Listing const*> matches = sLFGListMgr.Search(packet.CategoryId, packet.ActivityGroupId, 0);
+    std::vector<LFGList::Listing const*> matches = sLFGListMgr.Search(packet.GetCategoryId(), 0, 0,
+        !packet.SearchTerms.empty() ? packet.SearchTerms.front() : std::string());
 
     WorldPackets::LFGList::LFGListSearchResults results;
     results.Listings.reserve(matches.size());

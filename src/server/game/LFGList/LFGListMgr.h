@@ -87,7 +87,7 @@ public:
     LFGList::Listing* GetListingByLeader(ObjectGuid leader);
 
     // Search the registry. Any argument left 0 acts as a wildcard. Results are capped by config.
-    std::vector<LFGList::Listing const*> Search(uint8 category, uint8 activityGroup, uint32 activityId) const;
+    std::vector<LFGList::Listing const*> Search(uint32 category, uint32 activityGroup, uint32 activityId, std::string const& keyword = std::string()) const;
 
     // Applications. An application gets a globally-unique id the client keys on via a RideTicket.
     LFGList::Application* AddApplication(uint32 listingId, ObjectGuid applicant, uint8 roleMask, uint32 specId, uint32 itemLevel, std::string const& comment);

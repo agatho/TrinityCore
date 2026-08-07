@@ -136,23 +136,22 @@ namespace WorldPackets
             void Read() override { }
         };
 
+        // Sniff-exact 43B/56B: bits(5) term count + presence bit (flushed); when terms follow, an 8-byte block
+        // of ten bits(5) per-term lengths + the term characters; then 9 fixed u32 filters (filter[0] =
+        // GroupFinderCategory id, filter[3] = language mask), u8 0xFF, u8 0x05, u32 guid-list count (+ guids).
         class LFGListSearch final : public ClientPacket
         {
         public:
             explicit LFGListSearch(WorldPacket&& packet) : ClientPacket(CMSG_LFG_LIST_SEARCH, std::move(packet)) { }
             void Read() override;
 
-            uint8 CategoryId = 0;
-            uint8 ActivityGroupId = 0;
-            uint8 Field2 = 0;
-            uint8 Field3 = 0;
-            uint8 Field4 = 0;
-            uint8 Field5 = 0;
+            std::vector<std::string> SearchTerms;
             std::array<uint32, 9> Filters = { };
-            uint8 Field6 = 0;
-            uint8 Field7 = 0;
-            std::array<uint32, 4> Filters2 = { };
-            ObjectGuid SearchGuid;
+            uint8 FilterByte1 = 0;
+            uint8 FilterByte2 = 0;
+            std::vector<ObjectGuid> Guids;
+
+            uint32 GetCategoryId() const { return Filters[0]; }
         };
 
         class LFGListApplyToGroup final : public ClientPacket
