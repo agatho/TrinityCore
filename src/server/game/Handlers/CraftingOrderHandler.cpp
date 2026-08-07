@@ -247,8 +247,22 @@ void WorldSession::HandleCraftingOrderFulfill(WorldPackets::CraftingOrders::Craf
             }
         }
 
+        CraftingOrders::OrderType const orderType = order->Type;
+        uint32 const skillLineAbilityId = order->SkillLineAbilityID;
+
         // Transition Claimed -> Fulfilled and release the escrowed tip to the crafter.
         ok = sCraftingOrderMgr.FulfillOrder(packet.OrderID, player->GetGUID());
+
+        if (ok)
+        {
+            // CriteriaType::FulfillAnyCraftingOrder (245) - plain counter ("Crafting Orders fulfilled").
+            // CriteriaType::FulfillCraftingOrderType (246) - Asset = {CraftingOrderType}; real Criteria rows
+            // carry 0/1/2/3, which is exactly CraftingOrders::OrderType (Public/Guild/Personal/Npc).
+            // miscValue2 carries the SkillLineAbility so ModifierTreeType::CraftingOrderSkillLineAbility (347)
+            // can discriminate the recipe.
+            player->UpdateCriteria(CriteriaType::FulfillAnyCraftingOrder, 1, skillLineAbilityId);
+            player->UpdateCriteria(CriteriaType::FulfillCraftingOrderType, uint32(orderType), skillLineAbilityId);
+        }
     }
 
     WorldPackets::CraftingOrders::CraftingOrderFulfillResult result;
