@@ -28,6 +28,7 @@
 #include "CharacterPackets.h"
 #include "ChatPackets.h"
 #include "ClientConfigPackets.h"
+#include "BnetPresenceMgr.h"
 #include "Containers.h"
 #include "DatabaseEnv.h"
 #include "DB2Stores.h"
@@ -593,6 +594,11 @@ void WorldSession::LogoutPlayer(bool save)
         // Remove any premade group finder listing this player owns.
         sLFGListMgr.RemoveListingsBy(_player->GetGUID());
         sLFGListMgr.UnregisterSearch(_player->GetGUID());
+
+        // Battle.net presence: the account stays connected but is no longer on a character. Pushed to
+        // presence.v1/v2 subscribers here rather than in World::UpdateSessions, which only sees the
+        // whole session going away.
+        sBnetPresenceMgr->OnCharacterLogout(_player);
 
         if (!_player->GetLootGUID().IsEmpty())
             DoLootReleaseAll();

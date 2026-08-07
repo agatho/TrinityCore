@@ -35,6 +35,7 @@
 #include "BattlegroundMgr.h"
 #include "BattlegroundPackets.h"
 #include "BattlegroundScore.h"
+#include "BnetPresenceMgr.h"
 #include "BattlePetMgr.h"
 #include "CellImpl.h"
 #include "Channel.h"
@@ -7847,6 +7848,11 @@ void Player::UpdateArea(uint32 newArea)
         UpdateCriteria(CriteriaType::EnterArea, newArea);
         UpdateCriteria(CriteriaType::LeaveArea, oldArea);
     }
+
+    // Battle.net presence: zone changes are one of the four events presence.v1/v2 subscribers are
+    // pushed on. UpdateArea covers both a subzone change and the tail of a full UpdateZone, and it is
+    // reached even when the zone id has no AreaTable entry, unlike UpdateZone's own body.
+    sBnetPresenceMgr->OnZoneChanged(this, m_zoneUpdateId, newArea);
 }
 
 void Player::UpdateZone(uint32 newZone, uint32 newArea)

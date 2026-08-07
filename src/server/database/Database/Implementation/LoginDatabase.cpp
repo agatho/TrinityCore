@@ -243,6 +243,14 @@ void LoginDatabaseConnection::DoPrepareStatements()
     PrepareStatement(LOGIN_INS_BNET_FRIEND_INVITE, "REPLACE INTO battlenet_account_friend_invite (id, senderId, targetId, targetTag, level, note, creationTime, expirationTime) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", CONNECTION_ASYNC);
     PrepareStatement(LOGIN_DEL_BNET_FRIEND_INVITE, "DELETE FROM battlenet_account_friend_invite WHERE id = ?", CONNECTION_ASYNC);
     PrepareStatement(LOGIN_DEL_BNET_FRIEND_INVITES_BY_SENDER, "DELETE FROM battlenet_account_friend_invite WHERE senderId = ?", CONNECTION_ASYNC);
+
+    // Battle.net presence: one row per game account, rewritten on login / logout / character switch / zone change.
+    PrepareStatement(LOGIN_REP_BNET_PRESENCE, "REPLACE INTO battlenet_game_account_presence (gameAccountId, bnetAccountId, isOnline, realmId, characterGuid, characterName, level, raceId, classId, factionId, zoneId, areaId, updateTime) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", CONNECTION_ASYNC);
+    // Any row still flagged online at worldserver startup is a leftover from an unclean shutdown.
+    PrepareStatement(LOGIN_UPD_BNET_PRESENCE_ALL_OFFLINE, "UPDATE battlenet_game_account_presence SET isOnline = 0", CONNECTION_ASYNC);
+    // Battle.net account-scope block list.
+    PrepareStatement(LOGIN_REP_BNET_BLOCKED, "REPLACE INTO battlenet_account_blocked (accountId, blockedAccountId, blockedBattleTag, creationTime, modifiedTime) VALUES (?, ?, ?, ?, ?)", CONNECTION_ASYNC);
+    PrepareStatement(LOGIN_DEL_BNET_BLOCKED, "DELETE FROM battlenet_account_blocked WHERE accountId = ? AND blockedAccountId = ?", CONNECTION_ASYNC);
 }
 
 LoginDatabaseConnection::LoginDatabaseConnection(MySQLConnectionInfo& connInfo, ConnectionFlags connectionFlags) : MySQLConnection(connInfo, connectionFlags)

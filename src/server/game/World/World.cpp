@@ -36,6 +36,9 @@
 #include "BattlenetRpcErrorCodes.h"
 #include "BlackMarketMgr.h"
 #include "BnetFriendsMgr.h"
+#include "BnetBlockListMgr.h"
+#include "BnetPresenceMgr.h"
+#include "NotificationService.h"
 #include "CalendarMgr.h"
 #include "ChannelMgr.h"
 #include "CharacterCache.h"
@@ -405,12 +408,21 @@ void World::AddSession_(WorldSession* s)
                 decrease_session = false;
             // not remove replaced session form queue if listed
             Trinity::Containers::MultimapErasePair(m_sessionsByBnetGuid, old->second->GetBattlenetAccountGUID(), old->second);
+            // Battle.net presence / block list / notification subscriptions are keyed by game account
+            // id, so the replaced session's entries must go before the id is handed to the new session.
+            sBnetPresenceMgr->OnSessionOffline(old->second);
+            sBnetBlockListMgr->OnSessionClosed(old->second);
+            Battlenet::Services::NotificationServiceV1::OnSessionClosed(old->second);
             delete old->second;
         }
     }
 
     m_sessions[s->GetAccountId()] = s;
     m_sessionsByBnetGuid.emplace(s->GetBattlenetAccountGUID(), s);
+
+    // The battlenet account is reachable from here on, even while the player is still at character
+    // select, which is exactly the state presence.v1/v2 subscribers are told about.
+    sBnetPresenceMgr->OnSessionOnline(s);
 
     uint32 Sessions = GetActiveAndQueuedSessionCount();
     uint32 pLimit = GetPlayerAmountLimit();
@@ -1684,6 +1696,8 @@ bool World::SetInitialWorldSettings()
 
     TC_LOG_INFO("server.loading", "Loading Battle.net friend graph...");
     sBnetFriendsMgr->Load();                                    // must be after the auth database is up; backs friends.v2
+    sBnetBlockListMgr->Load();                                  // account-scope block list, backs block_list.v1
+    sBnetPresenceMgr->Load();                                   // presence tracking, backs presence.v1/v2
 
     TC_LOG_INFO("server.loading", "Loading creature summoned data...");
     sObjectMgr->LoadCreatureSummonedData();                     // must be after LoadCreatureTemplates() and LoadQuests()
@@ -3100,6 +3114,9 @@ void World::UpdateSessions(uint32 diff)
             RemoveQueuedPlayer(pSession);
             m_sessions.erase(itr);
             Trinity::Containers::MultimapErasePair(m_sessionsByBnetGuid, pSession->GetBattlenetAccountGUID(), pSession);
+            sBnetPresenceMgr->OnSessionOffline(pSession);
+            sBnetBlockListMgr->OnSessionClosed(pSession);
+            Battlenet::Services::NotificationServiceV1::OnSessionClosed(pSession);
             delete pSession;
         }
     }

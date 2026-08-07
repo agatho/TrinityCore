@@ -223,6 +223,12 @@ enum LoginDatabaseStatements : uint32
     LOGIN_DEL_BNET_FRIEND_INVITE,
     LOGIN_DEL_BNET_FRIEND_INVITES_BY_SENDER,
 
+    // Battle.net presence (see BnetPresenceMgr) + account-scope block list (see BnetBlockListMgr)
+    LOGIN_REP_BNET_PRESENCE,
+    LOGIN_UPD_BNET_PRESENCE_ALL_OFFLINE,
+    LOGIN_REP_BNET_BLOCKED,
+    LOGIN_DEL_BNET_BLOCKED,
+
     MAX_LOGINDATABASE_STATEMENTS
 };
 

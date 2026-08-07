@@ -17,6 +17,7 @@
 
 #include "BnetFriendsMgr.h"
 #include "BattlenetRpcErrorCodes.h"
+#include "BnetBlockListMgr.h"
 #include "DatabaseEnv.h"
 #include "FriendsService.h"
 #include "GameTime.h"
@@ -486,6 +487,14 @@ uint32 BnetFriendsMgr::SendInvitation(uint32 senderId, uint32 targetId, std::str
 
     if (IsFriend(senderId, targetId))
         return ERROR_FRIENDS_FRIENDSHIP_ALREADY_EXISTS;
+
+    // block_list.v1: a blocked account cannot invite, in either direction. Checked before any of the
+    // capacity limits so a blocked sender is told the truth rather than "the target's list is full".
+    if (sBnetBlockListMgr->IsBlocked(targetId, senderId))
+        return ERROR_FRIENDS_INVITER_IS_BLOCKED_BY_INVITEE;
+
+    if (sBnetBlockListMgr->IsBlocked(senderId, targetId))
+        return ERROR_FRIENDS_ACCOUNT_BLOCKED;
 
     if (GetFriends(senderId).size() >= MaxFriends)
         return ERROR_FRIENDS_INVITER_AT_MAX_FRIENDS;
