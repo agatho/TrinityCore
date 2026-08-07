@@ -93,6 +93,7 @@
 #include "TransmogrificationPackets.h"
 #include "VehiclePackets.h"
 #include "VignettePackets.h"
+#include "WarfrontPackets.h"
 #include "WeeklyRewardsPackets.h"
 #include "WhoPackets.h"
 #include "WorldStatePackets.h"

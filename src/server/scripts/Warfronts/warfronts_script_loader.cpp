@@ -15,28 +15,17 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "ContributionPackets.h"
+// This is where scripts' loading functions should be declared:
+void AddSC_npc_warfront_recruiter();
+void AddSC_instance_warfront_arathi();
+void AddSC_instance_warfront_darkshore();
+void AddSC_warfront_bosses();
 
-namespace WorldPackets::Contribution
+// The name of this function must match the module directory: void Add${NameOfDirectory}Scripts()
+void AddWarfrontsScripts()
 {
-void ContributionContribute::Read()
-{
-    _worldPacket >> CollectorGUID;
-    _worldPacket >> ContributionID;
-}
-
-void ContributionLastUpdateRequest::Read()
-{
-    _worldPacket >> ContributionID;
-    _worldPacket >> ContributionGUID;
-}
-
-WorldPacket const* ContributionLastUpdateResponse::Write()
-{
-    _worldPacket << uint32(Data);
-    _worldPacket << uint32(ContributionID);
-    _worldPacket << uint32(ContributionGUID);
-
-    return &_worldPacket;
-}
+    AddSC_npc_warfront_recruiter();
+    AddSC_instance_warfront_arathi();
+    AddSC_instance_warfront_darkshore();
+    AddSC_warfront_bosses();
 }

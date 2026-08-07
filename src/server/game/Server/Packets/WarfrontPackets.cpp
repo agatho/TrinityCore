@@ -15,27 +15,14 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "ContributionPackets.h"
+#include "WarfrontPackets.h"
 
-namespace WorldPackets::Contribution
+namespace WorldPackets::Warfront
 {
-void ContributionContribute::Read()
+WorldPacket const* WarfrontComplete::Write()
 {
-    _worldPacket >> CollectorGUID;
-    _worldPacket >> ContributionID;
-}
-
-void ContributionLastUpdateRequest::Read()
-{
-    _worldPacket >> ContributionID;
-    _worldPacket >> ContributionGUID;
-}
-
-WorldPacket const* ContributionLastUpdateResponse::Write()
-{
-    _worldPacket << uint32(Data);
-    _worldPacket << uint32(ContributionID);
-    _worldPacket << uint32(ContributionGUID);
+    // INFERRED (needs sniff validation) - see WARFRONT_OPCODE_SPEC.md §C.
+    _worldPacket << uint32(BattlefieldId);
 
     return &_worldPacket;
 }

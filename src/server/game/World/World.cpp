@@ -117,6 +117,7 @@
 #include "VMapFactory.h"
 #include "VMapManager.h"
 #include "WaypointManager.h"
+#include "WarfrontMgr.h"
 #include "WeatherMgr.h"
 #include "WhoListStorage.h"
 #include "WorldSession.h"
@@ -1627,6 +1628,9 @@ bool World::SetInitialWorldSettings()
     TC_LOG_INFO("server.loading", "Loading Quest Greetings...");
     sObjectMgr->LoadQuestGreetings();
 
+    TC_LOG_INFO("server.loading", "Loading Quest Garrison Follower Rewards...");
+    sObjectMgr->LoadQuestGarrisonFollowers();                     // must be after quest load
+
     if (m_bool_configs[CONFIG_LOAD_LOCALES])
         sObjectMgr->LoadQuestGreetingLocales();
 
@@ -1649,6 +1653,9 @@ bool World::SetInitialWorldSettings()
 
     TC_LOG_INFO("server.loading", "Loading Contribution collectors...");
     sContributionMgr->Load();
+
+    TC_LOG_INFO("server.loading", "Initializing Warfronts...");
+    sWarfrontMgr->Initialize();                               // BfA warfront cycle owner; after managed world states are restored
 
     TC_LOG_INFO("server.loading", "Loading Game Event Data...");               // must be after loading pools fully
     sGameEventMgr->LoadFromDB();
@@ -2425,6 +2432,11 @@ void World::Update(uint32 diff)
     {
         TC_METRIC_TIMER("world_update_time", TC_METRIC_TAG("type", "Update battlefields"));
         sBattlefieldMgr->Update(diff);
+    }
+
+    {
+        TC_METRIC_TIMER("world_update_time", TC_METRIC_TAG("type", "Update warfronts"));
+        sWarfrontMgr->Update(diff);
     }
 
     sInitiativeManager.Update(diff);
