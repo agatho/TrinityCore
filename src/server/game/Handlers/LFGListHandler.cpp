@@ -81,11 +81,22 @@ namespace
         row.RawDescriptor = listing.Descriptor.RawBytes;    // verbatim echo of the client's descriptor bytes
 
         row.Members.clear();
+        auto addMember = [&row](ObjectGuid guid)
+        {
+            WorldPackets::LFGList::SearchResultMember& member = row.Members.emplace_back();
+            member.Guid = guid;
+            if (Player const* player = ObjectAccessor::FindConnectedPlayer(guid))
+            {
+                member.Level = uint8(player->GetLevel());
+                member.ClassID = uint8(player->GetClass());
+                member.SpecID = uint32(player->GetPrimarySpecialization());
+            }
+        };
         if (Group const* group = sGroupMgr->GetGroupByGUID(listing.GroupGuid))
             for (Group::MemberSlot const& slot : group->GetMemberSlots())
-                row.Members.push_back(slot.guid);
+                addMember(slot.guid);
         if (row.Members.empty())
-            row.Members.push_back(listing.LeaderGuid);      // solo listing: the leader is the only member
+            addMember(listing.LeaderGuid);                  // solo listing: the leader is the only member
     }
 
     // Push the full applicant list of a listing to every connected member of the listed group (sniff: the
@@ -191,6 +202,17 @@ void WorldSession::HandleLFGListJoin(WorldPackets::LFGList::LFGListJoin& packet)
         result.Result = 1; // invalid activity (exact enum value NEEDS-SNIFF)
         SendPacket(result.Write());
         return;
+    }
+
+    // Retail puts a solo lister into a real party at listing time (sniff: PARTY_UPDATE burst precedes the
+    // create UPDATE_STATUS) - applicants later join this group.
+    if (!player->GetGroup())
+    {
+        Group* group = new Group();
+        if (group->Create(player))
+            sGroupMgr->AddGroup(group);
+        else
+            delete group;
     }
 
     uint32 const id = sLFGListMgr.CreateListing(player, packet.Listing);
@@ -410,6 +432,17 @@ void WorldSession::HandleLFGListInviteResponse(WorldPackets::LFGList::LFGListInv
 
     sLFGListMgr.RemoveApplication(applicationId);
     SendApplicantList(*listing);
+
+    // Retail auto-delists when the group reaches the activity's player cap.
+    if (group->IsFull())
+    {
+        uint32 const listingId = listing->Id;
+        ObjectGuid const leaderGuid = listing->LeaderGuid;
+        sLFGListMgr.RemoveListing(listingId, leaderGuid);
+        if (Player* leaderPlayer = ObjectAccessor::FindConnectedPlayer(leaderGuid))
+            if (WorldSession* leaderSession = leaderPlayer->GetSession())
+                leaderSession->SendLFGListUpdateStatus(listingId, 0x08);
+    }
 }
 
 void WorldSession::HandleRequestLFGListBlacklist(WorldPackets::LFGList::RequestLFGListBlacklist& /*packet*/)

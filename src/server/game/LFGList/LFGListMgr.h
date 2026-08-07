@@ -97,6 +97,8 @@ public:
     void RemoveApplication(uint32 applicationId);
     // Drops every application this player has outstanding (logout cleanup).
     void RemoveApplicationsBy(ObjectGuid applicant);
+    // Refreshes the listing's expiry window (retail: activity extends the 30-minute lifetime).
+    void TouchListing(LFGList::Listing& listing);
 
 private:
     LFGListMgr() = default;

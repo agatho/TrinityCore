@@ -165,7 +165,15 @@ bool LFGListMgr::UpdateListing(uint32 listingId, ObjectGuid leader, WorldPackets
         return false;
 
     listing->Descriptor = descriptor;
+    TouchListing(*listing);
     return true;
+}
+
+void LFGListMgr::TouchListing(LFGList::Listing& listing)
+{
+    // Listing activity refreshes the expiry window (sniff: ExpirationTime moves to now + 1800 on edits/applies).
+    if (uint32 const expireMinutes = uint32(sConfigMgr->GetIntDefault("LFGList.ListingExpiryMinutes", 30)))
+        listing.ExpireTime = uint32(GameTime::GetGameTime()) + expireMinutes * MINUTE;
 }
 
 void LFGListMgr::RemoveListing(uint32 listingId, ObjectGuid leader)
@@ -250,6 +258,7 @@ LFGList::Application* LFGListMgr::AddApplication(uint32 listingId, ObjectGuid ap
     }
 
     listing->Applications.push_back(app);
+    TouchListing(*listing);
     _applicationIndex[app.Id] = listingId;
     return &listing->Applications.back();
 }

@@ -272,19 +272,18 @@ static void WriteSearchResultRowBody(ByteBuffer& data, SearchResultListing const
     data << uint32(0);                              // Blk_count == 0
 
     // === member detail list x MemberCount (sub_7FF7291DBF80 + tail sub_7FF729162CC0) ===
-    // Real member guids with zero-filled per-member stats (spec/ilvl/etc. are not recoverable offline;
-    // zero is honest here and the structure is parser-verified against the sniff).
-    for (ObjectGuid const& member : row.Members)
+    // Head fields decoded from the sniff (level 90 + live spec ids confirmed): guid, level, class, pad, spec.
+    for (SearchResultMember const& member : row.Members)
     {
-        data << member;                            // PackedGuid MemberGuid
-        data << uint8(0);                          // Role0
-        data << uint8(0);                          // Role1
-        data << uint8(0);                          // Role2
-        data << uint32(0);                         // Unk20
+        data << member.Guid;                       // PackedGuid MemberGuid
+        data << uint8(member.Level);
+        data << uint8(member.ClassID);
+        data << uint8(0);
+        data << uint32(member.SpecID);
         data << uint8(0);                          // Unk24
         data << uint8(0);                          // Unk16 (bit-as-byte)
         // tail (sub_7FF729162CC0)
-        data << member;                            // PackedGuid MemberGuid2
+        data << member.Guid;                       // PackedGuid MemberGuid2
         data << uint32(0);                         // T20
         data << uint32(0);                         // T24
         data << uint32(0);                         // T28
