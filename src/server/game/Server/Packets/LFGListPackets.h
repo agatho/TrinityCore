@@ -132,28 +132,26 @@ namespace WorldPackets
         {
         public:
             explicit LFGListGetStatus(WorldPacket&& packet) : ClientPacket(CMSG_LFG_LIST_GET_STATUS, std::move(packet)) { }
-            void Read() override;
-
-            LFG::RideTicket Ticket;
+            // Sniff-verified (premandegroups 68275): empty payload — the client requests its own status blind.
+            void Read() override { }
         };
 
+        // Sniff-exact 43B/56B: bits(5) term count + presence bit (flushed); when terms follow, an 8-byte block
+        // of ten bits(5) per-term lengths + the term characters; then 9 fixed u32 filters (filter[0] =
+        // GroupFinderCategory id, filter[3] = language mask), u8 0xFF, u8 0x05, u32 guid-list count (+ guids).
         class LFGListSearch final : public ClientPacket
         {
         public:
             explicit LFGListSearch(WorldPacket&& packet) : ClientPacket(CMSG_LFG_LIST_SEARCH, std::move(packet)) { }
             void Read() override;
 
-            uint8 CategoryId = 0;
-            uint8 ActivityGroupId = 0;
-            uint8 Field2 = 0;
-            uint8 Field3 = 0;
-            uint8 Field4 = 0;
-            uint8 Field5 = 0;
+            std::vector<std::string> SearchTerms;
             std::array<uint32, 9> Filters = { };
-            uint8 Field6 = 0;
-            uint8 Field7 = 0;
-            std::array<uint32, 4> Filters2 = { };
-            ObjectGuid SearchGuid;
+            uint8 FilterByte1 = 0;
+            uint8 FilterByte2 = 0;
+            std::vector<ObjectGuid> Guids;
+
+            uint32 GetCategoryId() const { return Filters[0]; }
         };
 
         class LFGListApplyToGroup final : public ClientPacket
@@ -162,8 +160,9 @@ namespace WorldPackets
             explicit LFGListApplyToGroup(WorldPacket&& packet) : ClientPacket(CMSG_LFG_LIST_APPLY_TO_GROUP, std::move(packet)) { }
             void Read() override;
 
+            // Sniff-verified 33B fixed: Ticket{groupGuid, ListingID, type 4, applyTime} + ActivityID + roles.
             LFG::RideTicket Ticket;         // the listing being applied to
-            uint32 ListingId = 0;
+            uint32 ActivityID = 0;          // GroupFinderActivity of the listing (was mislabeled ListingId)
             uint8 RoleMask = 0;
             uint8 Field2 = 0;
         };
@@ -236,7 +235,8 @@ namespace WorldPackets
             WorldPacket const* Write() override;
 
             LFG::RideTicket Ticket;
-            uint8 Status = 0;
+            uint64 ExpirationTime = 0;          // unix seconds the listing expires (sniff: post + 1800); 0 = not listed
+            uint8 Status = 0;                   // sniff codes: 0x06+0x38 create (twice), 0x38 steady, 0x19 member join, 0x08 delist, 0x01 left group
             std::vector<uint8> RawDescriptor;   // the listing's descriptor bytes, echoed verbatim (empty when not listed)
             bool Listed = true;
         };
@@ -266,13 +266,21 @@ namespace WorldPackets
         // deserializers and validated byte-exact against a real 12.0.7.68275 sniff (see
         // c:\dumps\lfg_search_results_layout.md). The embedded descriptor is echoed verbatim from the bytes
         // the client sent in CMSG_LFG_LIST_JOIN (same replay strategy proven for SMSG_LFG_LIST_UPDATE_STATUS).
+        struct SearchResultMember
+        {
+            ObjectGuid Guid;
+            uint8 Level = 0;                      // sniff-decoded MemberDetail head: guid, level, class, spec
+            uint8 ClassID = 0;
+            uint32 SpecID = 0;
+        };
+
         struct SearchResultListing
         {
             ObjectGuid GroupGuid;                 // party/group guid (also echoed as LeaderGuidEcho)
             uint32 ListingId = 0;                 // stable id the client sends back in APPLY_TO_GROUP
             uint64 PostTime = 0;                  // listing creation unix seconds (emitted twice)
             ObjectGuid LeaderGuid;                // fills Guid_A..E
-            std::vector<ObjectGuid> Members;      // group roster -> MemberCount + MemberDetail records
+            std::vector<SearchResultMember> Members;  // group roster -> MemberCount + MemberDetail records
             std::vector<uint8> RawDescriptor;     // verbatim ListingDescriptor bytes
         };
 
@@ -294,47 +302,50 @@ namespace WorldPackets
             std::vector<SearchResultListing> Listings;
         };
 
-        // One applicant row (352-byte element): applicant ticket, roles/spec/ilvl, comment.
+        // Wire state bits for application status (sniff MSB-first): 0x40 applied/pending, 0x20 invited,
+        // 0xA0 invite accepted. Declined/cancelled bytes were not captured (best-effort 0x10).
+        namespace ApplicationStateBits
+        {
+            constexpr uint8 Applied  = 0x40;
+            constexpr uint8 Invited  = 0x20;
+            constexpr uint8 Accepted = 0xA0;
+            constexpr uint8 Declined = 0x10;    // UNVERIFIED (not in the capture)
+        }
+
+        // One applicant entry of SMSG_LFG_LIST_APPLICANT_LIST_UPDATE (sniff-exact, status-only form:
+        // HasInfo=0). The full snapshot form (HasInfo=1, level/ilvl/slot table) is documented in
+        // c:\dumps\LFGLIST_SNIFF_DEEP_68275.md but several scalars are unresolved - status-only parses fine.
         struct ApplicantInfo
         {
-            ObjectGuid ApplicantGuid;
-            uint32 ApplicationId = 0;
-            uint8 State = 0;
-            uint8 RoleMask = 0;
+            LFG::RideTicket Ticket;             // application ticket (type 6, Id = ApplicationId)
             ObjectGuid PlayerGuid;
-            uint32 SpecID = 0;
-            uint32 ItemLevel = 0;
-            uint32 Field3 = 0;
-            uint8 Field4 = 0;
-            uint8 Field5 = 0;
-            std::array<uint32, 4> Fields = { };
-            uint8 Field6 = 0;
-            uint8 Field7 = 0;
-            uint32 Field8 = 0;
-            uint32 Field9 = 0;
-            std::string Comment;
+            uint8 StateBits = 0;
         };
 
         class LFGListApplicantListUpdate final : public ServerPacket
         {
         public:
-            explicit LFGListApplicantListUpdate() : ServerPacket(SMSG_LFG_LIST_APPLICANT_LIST_UPDATE, 8) { }
+            explicit LFGListApplicantListUpdate() : ServerPacket(SMSG_LFG_LIST_APPLICANT_LIST_UPDATE, 16) { }
             WorldPacket const* Write() override;
 
-            uint32 ListingId = 0;
+            LFG::RideTicket ListingTicket;      // listing ticket (type 4, Id = ListingId)
+            uint32 Unknown = 0;                 // sniff values 25/60/6
             std::vector<ApplicantInfo> Applicants;
         };
 
+        // Sniff-exact 67/68B: Ticket(app) + u64 0 + u32 UnkResult (8 applied / 60 invited - possibly the 60s
+        // invite window) + u8 RoleGranted + Ticket(listing) + u8 StateBits.
         class LFGListApplicationStatusUpdate final : public ServerPacket
         {
         public:
-            explicit LFGListApplicationStatusUpdate() : ServerPacket(SMSG_LFG_LIST_APPLICATION_STATUS_UPDATE, 24) { }
+            explicit LFGListApplicationStatusUpdate() : ServerPacket(SMSG_LFG_LIST_APPLICATION_STATUS_UPDATE, 68) { }
             WorldPacket const* Write() override;
 
-            LFG::RideTicket Ticket;
-            uint32 ApplicationId = 0;
-            uint8 State = 0;
-            uint8 Field2 = 0;
+            LFG::RideTicket Ticket;             // application ticket (type 6)
+            uint32 UnkResult = 8;
+            uint8 RoleGranted = 0;
+            LFG::RideTicket ListingTicket;      // listing ticket (type 4)
+            uint8 StateBits = 0;
         };
 
         class LFGListApplyToGroupResult final : public ServerPacket
@@ -343,13 +354,14 @@ namespace WorldPackets
             explicit LFGListApplyToGroupResult() : ServerPacket(SMSG_LFG_LIST_APPLY_TO_GROUP_RESULT, 64) { }
             WorldPacket const* Write() override;
 
-            LFG::RideTicket Ticket;
-            uint8 Result = 0;
-            uint8 Field1 = 0;
-            uint8 Field2 = 0;
-            uint32 ListingId = 0;
-            ObjectGuid LeaderGuid;
-            ListingInfo Listing;
+            // Sniff-exact: Ticket(app) + u64 ApplicationExpiration (now+300) + u8 Status(6) + u8 0 +
+            // Ticket(listing) + u8 0x10 + Ticket(listing again) + full search-row body from the age counter
+            // onward - the client renders the "applied" card from the embedded row without a re-search.
+            LFG::RideTicket Ticket;             // application ticket (type 6)
+            uint64 ApplicationExpiration = 0;
+            uint8 Status = 6;
+            LFG::RideTicket ListingTicket;      // listing ticket (type 4), written twice
+            SearchResultListing Row;
         };
 
         struct LFGListBlacklistEntry

@@ -47,6 +47,67 @@ void LFGListMgr::Update(uint32 diff)
     _expireTimer = 0;
 
     uint32 const now = GameTime::GetGameTime();
+
+    // Application timeout sweep (retail: 300s, sniff-verified AppExpiration = applyTime + 300): expired
+    // applications become soft-declined (removed; the applicant is told, the leader's list refreshes).
+    uint32 const applicationTimeout = uint32(sConfigMgr->GetIntDefault("LFGList.ApplicationTimeoutSeconds", 300));
+    if (applicationTimeout)
+    {
+        for (auto& [listingId, listing] : _listings)
+        {
+            bool changed = false;
+            for (auto appItr = listing.Applications.begin(); appItr != listing.Applications.end(); )
+            {
+                if (appItr->State == LFGList::ApplicationState::Applied && now >= appItr->AppliedTime + applicationTimeout)
+                {
+                    if (Player* applicant = ObjectAccessor::FindConnectedPlayer(appItr->ApplicantGuid))
+                    {
+                        WorldPackets::LFGList::LFGListApplicationStatusUpdate statusUpdate;
+                        statusUpdate.Ticket.RequesterGuid = appItr->ApplicantGuid;
+                        statusUpdate.Ticket.Id = appItr->Id;
+                        statusUpdate.Ticket.Type = WorldPackets::LFG::RideType::LfgListApplication;
+                        statusUpdate.Ticket.Time = int32(appItr->AppliedTime);
+                        statusUpdate.ListingTicket.RequesterGuid = listing.LeaderGuid;
+                        statusUpdate.ListingTicket.Id = listing.Id;
+                        statusUpdate.ListingTicket.Type = WorldPackets::LFG::RideType::LfgListListing;
+                        statusUpdate.ListingTicket.Time = int32(listing.CreatedTime);
+                        statusUpdate.UnkResult = 8;
+                        statusUpdate.StateBits = WorldPackets::LFGList::ApplicationStateBits::Declined;
+                        applicant->SendDirectMessage(statusUpdate.Write());
+                    }
+                    _applicationIndex.erase(appItr->Id);
+                    appItr = listing.Applications.erase(appItr);
+                    changed = true;
+                }
+                else
+                    ++appItr;
+            }
+
+            if (changed)
+            {
+                if (Player* leader = ObjectAccessor::FindConnectedPlayer(listing.LeaderGuid))
+                {
+                    WorldPackets::LFGList::LFGListApplicantListUpdate applicantList;
+                    applicantList.ListingTicket.RequesterGuid = listing.LeaderGuid;
+                    applicantList.ListingTicket.Id = listing.Id;
+                    applicantList.ListingTicket.Type = WorldPackets::LFG::RideType::LfgListListing;
+                    applicantList.ListingTicket.Time = int32(listing.CreatedTime);
+                    for (LFGList::Application const& app : listing.Applications)
+                    {
+                        WorldPackets::LFGList::ApplicantInfo& info = applicantList.Applicants.emplace_back();
+                        info.Ticket.RequesterGuid = app.ApplicantGuid;
+                        info.Ticket.Id = app.Id;
+                        info.Ticket.Type = WorldPackets::LFG::RideType::LfgListApplication;
+                        info.Ticket.Time = int32(app.AppliedTime);
+                        info.PlayerGuid = app.ApplicantGuid;
+                        info.StateBits = WorldPackets::LFGList::ApplicationStateBits::Applied;
+                    }
+                    leader->SendDirectMessage(applicantList.Write());
+                }
+            }
+        }
+    }
+
     for (auto itr = _listings.begin(); itr != _listings.end(); )
     {
         LFGList::Listing const& listing = itr->second;
@@ -85,7 +146,7 @@ uint32 LFGListMgr::CreateListing(Player* leader, WorldPackets::LFGList::ListingD
     // One active listing per leader; re-publishing replaces the old one.
     RemoveListingsBy(leader->GetGUID());
 
-    uint32 const expireMinutes = uint32(sConfigMgr->GetIntDefault("LFGList.ListingExpiryMinutes", 120));
+    uint32 const expireMinutes = uint32(sConfigMgr->GetIntDefault("LFGList.ListingExpiryMinutes", 30)); // sniff: 1800s, activity-refreshed
 
     uint32 const id = _nextListingId++;
     LFGList::Listing& listing = _listings[id];
@@ -111,10 +172,18 @@ bool LFGListMgr::UpdateListing(uint32 listingId, ObjectGuid leader, WorldPackets
         return false;
 
     listing->Descriptor = descriptor;
+    TouchListing(*listing);
 
     // Edited listings are pushed so open browsers show the new title/activity without re-searching.
     NotifyListingChanged(listingId);
     return true;
+}
+
+void LFGListMgr::TouchListing(LFGList::Listing& listing)
+{
+    // Listing activity refreshes the expiry window (sniff: ExpirationTime moves to now + 1800 on edits/applies).
+    if (uint32 const expireMinutes = uint32(sConfigMgr->GetIntDefault("LFGList.ListingExpiryMinutes", 30)))
+        listing.ExpireTime = uint32(GameTime::GetGameTime()) + expireMinutes * MINUTE;
 }
 
 void LFGListMgr::RemoveListing(uint32 listingId, ObjectGuid leader)
@@ -170,6 +239,7 @@ LFGList::Application* LFGListMgr::AddApplication(uint32 listingId, ObjectGuid ap
             existing.ItemLevel = itemLevel;
             existing.Comment = comment;
             existing.State = LFGList::ApplicationState::Applied;
+            existing.AppliedTime = uint32(GameTime::GetGameTime());
             return &existing;
         }
     }
@@ -182,7 +252,23 @@ LFGList::Application* LFGListMgr::AddApplication(uint32 listingId, ObjectGuid ap
     app.ItemLevel = itemLevel;
     app.Comment = comment;
     app.State = LFGList::ApplicationState::Applied;
+    app.AppliedTime = uint32(GameTime::GetGameTime());
+
+    // Retail cap: at most 5 concurrent applications per player (MAX_LFG_LIST_APPLICATIONS, unchanged in 12.x).
+    uint32 const maxApplications = uint32(sConfigMgr->GetIntDefault("LFGList.MaxApplicationsPerPlayer", 5));
+    if (maxApplications)
+    {
+        uint32 active = 0;
+        for (auto const& [otherId, otherListing] : _listings)
+            for (LFGList::Application const& otherApp : otherListing.Applications)
+                if (otherApp.ApplicantGuid == applicant && otherApp.State == LFGList::ApplicationState::Applied)
+                    ++active;
+        if (active >= maxApplications)
+            return nullptr;
+    }
+
     listing->Applications.push_back(app);
+    TouchListing(*listing);
     _applicationIndex[app.Id] = listingId;
     return &listing->Applications.back();
 }
@@ -224,13 +310,30 @@ void LFGListMgr::RemoveApplication(uint32 applicationId)
     _applicationIndex.erase(applicationId);
 }
 
+void LFGListMgr::RemoveApplicationsBy(ObjectGuid applicant)
+{
+    for (auto& [listingId, listing] : _listings)
+    {
+        for (auto itr = listing.Applications.begin(); itr != listing.Applications.end(); )
+        {
+            if (itr->ApplicantGuid == applicant)
+            {
+                _applicationIndex.erase(itr->Id);
+                itr = listing.Applications.erase(itr);
+            }
+            else
+                ++itr;
+        }
+    }
+}
+
 LFGList::Listing const* LFGListMgr::GetListing(uint32 listingId) const
 {
     auto itr = _listings.find(listingId);
     return itr != _listings.end() ? &itr->second : nullptr;
 }
 
-std::vector<LFGList::Listing const*> LFGListMgr::Search(uint8 category, uint8 activityGroup, uint32 activityId) const
+std::vector<LFGList::Listing const*> LFGListMgr::Search(uint32 category, uint32 activityGroup, uint32 activityId, std::string const& keyword) const
 {
     uint32 const maxResults = uint32(sConfigMgr->GetIntDefault("LFGList.MaxSearchResults", 100));
 
@@ -241,11 +344,15 @@ std::vector<LFGList::Listing const*> LFGListMgr::Search(uint8 category, uint8 ac
         // Category + activity group are derived from the listing's activity (GroupFinderActivity.db2), which is the
         // authoritative source — the descriptor carries the ActivityID, not the group ids.
         GroupFinderActivityEntry const* activity = sGroupFinderActivityStore.LookupEntry(d.ActivityID);
-        if (category && (!activity || activity->GroupFinderCategoryID != category))
+        if (category && (!activity || uint32(activity->GroupFinderCategoryID) != category))
             continue;
-        if (activityGroup && (!activity || activity->GroupFinderActivityGrpID != activityGroup))
+        if (activityGroup && (!activity || uint32(activity->GroupFinderActivityGrpID) != activityGroup))
             continue;
         if (activityId && d.ActivityID != activityId)
+            continue;
+
+        // Keyword search matches the listing title (case-insensitive substring, retail behaviour).
+        if (!keyword.empty() && !StringContainsStringI(d.Name, keyword))
             continue;
 
         results.push_back(&listing);
@@ -264,11 +371,22 @@ void LFGListMgr::FillSearchRow(WorldPackets::LFGList::SearchResultListing& row, 
     row.RawDescriptor = listing.Descriptor.RawBytes;    // verbatim echo of the client's descriptor bytes
 
     row.Members.clear();
+    auto addMember = [&row](ObjectGuid guid)
+    {
+        WorldPackets::LFGList::SearchResultMember& member = row.Members.emplace_back();
+        member.Guid = guid;
+        if (Player const* player = ObjectAccessor::FindConnectedPlayer(guid))
+        {
+            member.Level = uint8(player->GetLevel());
+            member.ClassID = uint8(player->GetClass());
+            member.SpecID = uint32(player->GetPrimarySpecialization());
+        }
+    };
     if (Group const* group = sGroupMgr->GetGroupByGUID(listing.GroupGuid))
         for (Group::MemberSlot const& slot : group->GetMemberSlots())
-            row.Members.push_back(slot.guid);
+            addMember(slot.guid);
     if (row.Members.empty())
-        row.Members.push_back(listing.LeaderGuid);      // solo listing: the leader is the only member
+        addMember(listing.LeaderGuid);                  // solo listing: the leader is the only member
 }
 
 void LFGListMgr::RegisterSearch(ObjectGuid player, uint8 category, uint8 activityGroup)

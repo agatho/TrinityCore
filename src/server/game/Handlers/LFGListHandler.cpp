@@ -17,6 +17,7 @@
 
 #include "WorldSession.h"
 #include "DB2Stores.h"
+#include "Config.h"
 #include "GameTime.h"
 #include "Group.h"
 #include "GroupMgr.h"
@@ -27,14 +28,36 @@
 
 namespace
 {
-    // Fill the RideTicket that keys a listing on the client (Id = listing id, Requester = leader).
+    // Fill the RideTicket that keys a listing on the client (sniff: type 4, Id = listing id, Time = post time).
     void FillListingTicket(WorldPackets::LFG::RideTicket& ticket, LFGList::Listing const& listing)
     {
         ticket.RequesterGuid = listing.LeaderGuid;
         ticket.Id = listing.Id;
-        ticket.Type = WorldPackets::LFG::RideType::Lfg;
-        ticket.Time = int32(GameTime::GetGameTime());
+        ticket.Type = WorldPackets::LFG::RideType::LfgListListing;
+        ticket.Time = int32(listing.CreatedTime);
         ticket.IsCrossFaction = false;
+    }
+
+    // Fill an application RideTicket (sniff: type 6, Id = application id, Time = apply time).
+    void FillApplicationTicket(WorldPackets::LFG::RideTicket& ticket, LFGList::Application const& app)
+    {
+        ticket.RequesterGuid = app.ApplicantGuid;
+        ticket.Id = app.Id;
+        ticket.Type = WorldPackets::LFG::RideType::LfgListApplication;
+        ticket.Time = int32(app.AppliedTime);
+        ticket.IsCrossFaction = false;
+    }
+
+    // Wire state bits for an application state (sniff: 0x40 applied, 0x20 invited, 0xA0 accepted).
+    uint8 ApplicationStateToBits(LFGList::ApplicationState state)
+    {
+        switch (state)
+        {
+            case LFGList::ApplicationState::Applied:  return WorldPackets::LFGList::ApplicationStateBits::Applied;
+            case LFGList::ApplicationState::Invited:  return WorldPackets::LFGList::ApplicationStateBits::Invited;
+            case LFGList::ApplicationState::Accepted: return WorldPackets::LFGList::ApplicationStateBits::Accepted;
+            default:                                  return WorldPackets::LFGList::ApplicationStateBits::Declined;
+        }
     }
 
     // Project a stored listing into the wire snapshot the client echoes in its UI.
@@ -48,58 +71,71 @@ namespace
             info.LeaderName = leader->GetName();
     }
 
-    // Build one search-result row for a listing.
-    // Push the full applicant list of a listing to its (connected) leader.
+    // Push the full applicant list of a listing to every connected member of the listed group (sniff: the
+    // packet goes to all members, not only the leader; solo listings notify just the leader).
     void SendApplicantList(LFGList::Listing const& listing)
     {
-        Player* leader = ObjectAccessor::FindConnectedPlayer(listing.LeaderGuid);
-        if (!leader)
-            return;
-
         WorldPackets::LFGList::LFGListApplicantListUpdate packet;
-        packet.ListingId = listing.Id;
+        FillListingTicket(packet.ListingTicket, listing);
         for (LFGList::Application const& app : listing.Applications)
         {
-            WorldPackets::LFGList::ApplicantInfo info;
-            info.ApplicationId = app.Id;
-            info.ApplicantGuid = app.ApplicantGuid;
+            WorldPackets::LFGList::ApplicantInfo& info = packet.Applicants.emplace_back();
+            FillApplicationTicket(info.Ticket, app);
             info.PlayerGuid = app.ApplicantGuid;
-            info.RoleMask = app.RoleMask;
-            info.State = uint8(app.State);
-            info.SpecID = app.SpecID;
-            info.ItemLevel = app.ItemLevel;
-            info.Comment = app.Comment;
-            packet.Applicants.push_back(std::move(info));
+            info.StateBits = ApplicationStateToBits(app.State);
         }
-        leader->SendDirectMessage(packet.Write());
+        WorldPacket const* data = packet.Write();
+
+        bool leaderNotified = false;
+        if (Group const* group = sGroupMgr->GetGroupByGUID(listing.GroupGuid))
+        {
+            for (Group::MemberSlot const& slot : group->GetMemberSlots())
+            {
+                if (Player* member = ObjectAccessor::FindConnectedPlayer(slot.guid))
+                {
+                    member->SendDirectMessage(data);
+                    leaderNotified = leaderNotified || slot.guid == listing.LeaderGuid;
+                }
+            }
+        }
+        if (!leaderNotified)
+            if (Player* leader = ObjectAccessor::FindConnectedPlayer(listing.LeaderGuid))
+                leader->SendDirectMessage(data);
     }
 
-    // Notify one applicant that the state of its application changed. Application tickets are keyed on the
-    // application id throughout, so both directions agree on which application a ticket refers to.
-    void SendApplicationStatus(ObjectGuid applicantGuid, uint32 applicationId, LFGList::ApplicationState state)
+    // Notify one applicant that the state of its application changed (sniff-exact 67/68B layout).
+    void SendApplicationStatus(LFGList::Listing const& listing, LFGList::Application const& app)
     {
-        Player* applicant = ObjectAccessor::FindConnectedPlayer(applicantGuid);
+        Player* applicant = ObjectAccessor::FindConnectedPlayer(app.ApplicantGuid);
         if (!applicant)
             return;
 
         WorldPackets::LFGList::LFGListApplicationStatusUpdate packet;
-        packet.Ticket.RequesterGuid = applicantGuid;
-        packet.Ticket.Id = applicationId;
-        packet.Ticket.Type = WorldPackets::LFG::RideType::Lfg;
-        packet.Ticket.Time = int32(GameTime::GetGameTime());
-        packet.ApplicationId = applicationId;
-        packet.State = uint8(state);
+        FillApplicationTicket(packet.Ticket, app);
+        FillListingTicket(packet.ListingTicket, listing);
+        packet.StateBits = ApplicationStateToBits(app.State);
+        // Sniff: UnkResult 8 while pending, 60 on invite (possibly the invite-response window in seconds);
+        // the granted role echoes the applied role only once invited.
+        if (app.State == LFGList::ApplicationState::Invited || app.State == LFGList::ApplicationState::Accepted)
+        {
+            packet.UnkResult = 60;
+            packet.RoleGranted = app.RoleMask;
+        }
+        else
+            packet.UnkResult = 8;
         applicant->SendDirectMessage(packet.Write());
     }
 }
 
 // Send the current status of one of the player's listings (or "not listed" when it is gone).
-void WorldSession::SendLFGListUpdateStatus(uint32 listingId)
+void WorldSession::SendLFGListUpdateStatus(uint32 listingId, uint8 status /*= 0x38*/)
 {
     WorldPackets::LFGList::LFGListUpdateStatus packet;
+    packet.Status = status;
     if (LFGList::Listing const* listing = sLFGListMgr.GetListing(listingId))
     {
         FillListingTicket(packet.Ticket, *listing);
+        packet.ExpirationTime = listing->ExpireTime;
         packet.RawDescriptor = listing->Descriptor.RawBytes;   // echo the client's descriptor verbatim
         packet.Listed = true;
     }
@@ -140,12 +176,24 @@ void WorldSession::HandleLFGListJoin(WorldPackets::LFGList::LFGListJoin& packet)
         return;
     }
 
+    // Retail puts a solo lister into a real party at listing time (sniff: PARTY_UPDATE burst precedes the
+    // create UPDATE_STATUS) - applicants later join this group.
+    if (!player->GetGroup())
+    {
+        Group* group = new Group();
+        if (group->Create(player))
+            sGroupMgr->AddGroup(group);
+        else
+            delete group;
+    }
+
     uint32 const id = sLFGListMgr.CreateListing(player, packet.Listing);
     if (id)
     {
-        // A successful create is signalled by UPDATE_STATUS alone - the sniff shows the retail server sends
-        // no JOIN_RESULT on success (only UPDATE_STATUS echoing the listing back).
-        SendLFGListUpdateStatus(id);
+        // A successful create is signalled by UPDATE_STATUS alone - no JOIN_RESULT on success. The sniff shows
+        // the retail server sends it TWICE with status 0x06 then 0x38.
+        SendLFGListUpdateStatus(id, 0x06);
+        SendLFGListUpdateStatus(id, 0x38);
     }
     else
     {
@@ -174,16 +222,20 @@ void WorldSession::HandleLFGListLeave(WorldPackets::LFGList::LFGListLeave& packe
     uint32 const listingId = packet.Ticket.Id;
     sLFGListMgr.RemoveListing(listingId, player->GetGUID());
 
-    // Confirm delisting to the client.
+    // Confirm delisting to the client (sniff: status 0x08, expiration 0, zeroed descriptor).
     WorldPackets::LFGList::LFGListUpdateStatus status;
     status.Ticket = packet.Ticket;
+    status.Status = 0x08;
     status.Listed = false;
     SendPacket(status.Write());
 }
 
-void WorldSession::HandleLFGListGetStatus(WorldPackets::LFGList::LFGListGetStatus& packet)
+void WorldSession::HandleLFGListGetStatus(WorldPackets::LFGList::LFGListGetStatus& /*packet*/)
 {
-    SendLFGListUpdateStatus(packet.Ticket.Id);
+    // Empty payload (sniff-verified): the client asks for its own listing status blind; answer from the
+    // leader index (0 = not listed).
+    LFGList::Listing const* listing = GetPlayer() ? sLFGListMgr.GetListingByLeader(GetPlayer()->GetGUID()) : nullptr;
+    SendLFGListUpdateStatus(listing ? listing->Id : 0);
 }
 
 void WorldSession::HandleLFGListSearch(WorldPackets::LFGList::LFGListSearch& packet)
@@ -193,9 +245,10 @@ void WorldSession::HandleLFGListSearch(WorldPackets::LFGList::LFGListSearch& pac
 
     // Keep this browser subscribed so listings published/edited from now on are pushed live via
     // SMSG_LFG_LIST_SEARCH_RESULTS_UPDATE instead of the player having to re-search.
-    sLFGListMgr.RegisterSearch(GetPlayer()->GetGUID(), packet.CategoryId, packet.ActivityGroupId);
+    sLFGListMgr.RegisterSearch(GetPlayer()->GetGUID(), uint8(packet.GetCategoryId()), 0);
 
-    std::vector<LFGList::Listing const*> matches = sLFGListMgr.Search(packet.CategoryId, packet.ActivityGroupId, 0);
+    std::vector<LFGList::Listing const*> matches = sLFGListMgr.Search(packet.GetCategoryId(), 0, 0,
+        !packet.SearchTerms.empty() ? packet.SearchTerms.front() : std::string());
 
     WorldPackets::LFGList::LFGListSearchResults results;
     results.Listings.reserve(matches.size());
@@ -223,24 +276,25 @@ void WorldSession::HandleLFGListApplyToGroup(WorldPackets::LFGList::LFGListApply
     if (!listing || listing->LeaderGuid == player->GetGUID())
         return;
 
+    // The client echoes the listing's activity id (sniff-verified field); a mismatch means a stale browse row.
+    if (packet.ActivityID && listing->Descriptor.ActivityID && packet.ActivityID != listing->Descriptor.ActivityID)
+        return;
+
     LFGList::Application* app = sLFGListMgr.AddApplication(listing->Id, player->GetGUID(), packet.RoleMask,
         uint32(player->GetPrimarySpecialization()), uint32(player->GetAverageItemLevel()), std::string());
     if (!app)
         return;
 
-    // Confirm the application to the applicant.
+    // Confirm the application to the applicant (sniff-exact: app ticket + expiration + listing tickets +
+    // the full row snapshot so the client renders the "applied" card without a re-search).
     WorldPackets::LFGList::LFGListApplyToGroupResult result;
-    result.Ticket.RequesterGuid = player->GetGUID();
-    result.Ticket.Id = app->Id;
-    result.Ticket.Type = WorldPackets::LFG::RideType::Lfg;
-    result.Ticket.Time = int32(GameTime::GetGameTime());
-    result.Result = 0;
-    result.ListingId = listing->Id;
-    result.LeaderGuid = listing->LeaderGuid;
-    FillListingInfo(result.Listing, *listing);
+    FillApplicationTicket(result.Ticket, *app);
+    result.ApplicationExpiration = uint64(app->AppliedTime + sConfigMgr->GetIntDefault("LFGList.ApplicationTimeoutSeconds", 300));
+    FillListingTicket(result.ListingTicket, *listing);
+    sLFGListMgr.FillSearchRow(result.Row, *listing);
     SendPacket(result.Write());
 
-    SendApplicationStatus(player->GetGUID(), app->Id, LFGList::ApplicationState::Applied);
+    SendApplicationStatus(*listing, *app);
     SendApplicantList(*listing);
 }
 
@@ -282,8 +336,9 @@ void WorldSession::HandleLFGListDeclineApplicant(WorldPackets::LFGList::LFGListD
     if (sLFGListMgr.GetListingByApplication(applicationId) != listing)
         return;
 
-    ObjectGuid const applicant = app->ApplicantGuid;
-    SendApplicationStatus(applicant, applicationId, LFGList::ApplicationState::Declined);
+    LFGList::Application declined = *app;
+    declined.State = LFGList::ApplicationState::Declined;
+    SendApplicationStatus(*listing, declined);
     sLFGListMgr.RemoveApplication(applicationId);
     SendApplicantList(*listing);
 }
@@ -309,7 +364,7 @@ void WorldSession::HandleLFGListInviteApplicant(WorldPackets::LFGList::LFGListIn
         return;
 
     sLFGListMgr.SetApplicationState(applicationId, LFGList::ApplicationState::Invited);
-    SendApplicationStatus(app->ApplicantGuid, applicationId, LFGList::ApplicationState::Invited);
+    SendApplicationStatus(*listing, *app);
     SendApplicantList(*listing);
 }
 
@@ -359,10 +414,29 @@ void WorldSession::HandleLFGListInviteResponse(WorldPackets::LFGList::LFGListInv
     if (group->IsFull() || applicant->GetGroup())
         return;
 
+    // Sniff-confirmed retail flow: accepting the invite adds the applicant to the party directly (no
+    // SMSG_PARTY_INVITE dialog), the accepted state (0xA0) is echoed, and the joining member receives the
+    // listing status (0x19).
     group->AddMember(applicant);
+
+    LFGList::Application accepted = *app;
+    accepted.State = LFGList::ApplicationState::Accepted;
+    SendApplicationStatus(*listing, accepted);
+    SendLFGListUpdateStatus(listing->Id, 0x19);
 
     sLFGListMgr.RemoveApplication(applicationId);
     SendApplicantList(*listing);
+
+    // Retail auto-delists when the group reaches the activity's player cap.
+    if (group->IsFull())
+    {
+        uint32 const listingId = listing->Id;
+        ObjectGuid const leaderGuid = listing->LeaderGuid;
+        sLFGListMgr.RemoveListing(listingId, leaderGuid);
+        if (Player* leaderPlayer = ObjectAccessor::FindConnectedPlayer(leaderGuid))
+            if (WorldSession* leaderSession = leaderPlayer->GetSession())
+                leaderSession->SendLFGListUpdateStatus(listingId, 0x08);
+    }
 }
 
 void WorldSession::HandleRequestLFGListBlacklist(WorldPackets::LFGList::RequestLFGListBlacklist& /*packet*/)

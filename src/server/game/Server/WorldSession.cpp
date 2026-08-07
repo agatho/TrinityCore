@@ -592,8 +592,9 @@ void WorldSession::LogoutPlayer(bool save)
 
     if (_player)
     {
-        // Remove any premade group finder listing this player owns.
+        // Remove any premade group finder listing this player owns, and any outstanding applications.
         sLFGListMgr.RemoveListingsBy(_player->GetGUID());
+        sLFGListMgr.RemoveApplicationsBy(_player->GetGUID());
         sLFGListMgr.UnregisterSearch(_player->GetGUID());
 
         // Drop the live club stream subscriptions and focus. A disconnect never sends UnsubscribeStream,
