@@ -29,7 +29,10 @@ Battlenet::WorldserverServiceDispatcher::WorldserverServiceDispatcher()
     AddService<Services::ClubService>();
     AddService<WorldserverService<connection::v1::ConnectionService>>();
     AddService<WorldserverService<friends::v1::FriendsService>>();
-    AddService<WorldserverService<friends::v2::client::FriendsService>>();
+    // friends::v2 is what the 68275 client drives; the bare template wrapper it used to be registered
+    // as answered every method with ERROR_RPC_NOT_IMPLEMENTED. friends::v1 above is left as transport
+    // only on purpose - this client does not call it.
+    AddService<Services::FriendsService>();
     AddService<WorldserverService<game_utilities::v1::GameUtilitiesService>>();
     AddService<Services::GameUtilitiesService>();
     AddService<WorldserverService<notification::v1::NotificationService>>();

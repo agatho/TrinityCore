@@ -35,6 +35,7 @@
 #include "BattlegroundMgr.h"
 #include "BattlenetRpcErrorCodes.h"
 #include "BlackMarketMgr.h"
+#include "BnetFriendsMgr.h"
 #include "CalendarMgr.h"
 #include "ChannelMgr.h"
 #include "CharacterCache.h"
@@ -1680,6 +1681,9 @@ bool World::SetInitialWorldSettings()
 
     TC_LOG_INFO("server.loading", "Loading WoW Token holdings...");
     sWowTokenMgr->Load();
+
+    TC_LOG_INFO("server.loading", "Loading Battle.net friend graph...");
+    sBnetFriendsMgr->Load();                                    // must be after the auth database is up; backs friends.v2
 
     TC_LOG_INFO("server.loading", "Loading creature summoned data...");
     sObjectMgr->LoadCreatureSummonedData();                     // must be after LoadCreatureTemplates() and LoadQuests()

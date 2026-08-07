@@ -35,6 +35,7 @@
 #include "Client/connection_service.pb.h"
 #include "Client/friends_service.pb.h"
 #include "Client/api/client/v2/friends_service.pb.h"
+#include "FriendsService.h"
 #include "WorldserverGameUtilitiesService.h"
 #include "Client/notification_service.pb.h"
 #include "Client/api/client/v2/notification_listener.pb.h"
