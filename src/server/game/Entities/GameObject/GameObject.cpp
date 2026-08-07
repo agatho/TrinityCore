@@ -34,6 +34,7 @@
 #include "GameObjectPackets.h"
 #include "SpellPackets.h"
 #include "GameTime.h"
+#include "Garrison.h"
 #include "GossipDef.h"
 #include "GridNotifiersImpl.h"
 #include "Group.h"
@@ -2670,20 +2671,6 @@ void GameObject::Use(Unit* user, bool ignoreCastInProgress /*= false*/)
             player->SendPreparedGossip(this);
             return;
         }
-        case GAMEOBJECT_TYPE_GARRISON_SHIPMENT:             //45
-        {
-            // Building work-order crate. Made interactable by Garrison::UpdateWorkOrderCrates only while it
-            // holds finished orders; clicking (looting) it collects those orders and delivers their goods.
-            // Placement is a separate action at the building's work-order NPC. Handled in core (no script).
-            Player* player = user->ToPlayer();
-            if (!player)
-                return;
-
-            if (Garrison* garrison = player->GetGarrison())
-                if (uint32 plotInstanceId = garrison->FindPlotInstanceForNpc(GetGUID()))
-                    garrison->CollectReadyShipments(plotInstanceId);
-            return;
-        }
         case GAMEOBJECT_TYPE_CHEST:                         //3
         {
             Player* player = user->ToPlayer();
@@ -3572,6 +3559,30 @@ void GameObject::Use(Unit* user, bool ignoreCastInProgress /*= false*/)
             if (Loot* loot = GetLootForPlayer(player))
                 player->SendLoot(*loot);
             break;
+        }
+        case GAMEOBJECT_TYPE_GARRISON_SHIPMENT:             //45
+        {
+            // Work-order "standard"/crate. Clicking it collects the finished orders and delivers their goods;
+            // placement is a separate action at the work-order NPC. Handled in core (no script).
+            Player* player = user->ToPlayer();
+            if (!player)
+                return;
+
+            // WoD building crate: collect the finished orders on the crate's garrison plot.
+            if (Garrison* garrison = player->GetGarrison())
+                if (uint32 plotInstanceId = garrison->FindPlotInstanceForNpc(GetGUID()))
+                {
+                    garrison->CollectReadyShipments(plotInstanceId);
+                    return;
+                }
+
+            // Order-hall / class-hall "standard" (plotless, e.g. "Training Troops" / "Seal of Broken Fate"):
+            // collect the finished orders for this GO's CharShipmentContainer -> troops join the roster, item
+            // orders deliver their goods.
+            if (uint32 containerId = GetGOInfo()->garrisonShipment.ShipmentContainer)
+                for (auto const& [garrType, garrison] : player->GetGarrisons())
+                    garrison->CollectReadyShipmentsForContainer(containerId);
+            return;
         }
         default:
             if (GetGoType() >= MAX_GAMEOBJECT_TYPE)

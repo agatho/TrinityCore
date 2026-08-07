@@ -298,6 +298,38 @@ namespace WorldPackets
             std::string Text;
             std::string DiagInfo;
         };
+
+        // CMSG_CRAFTING_ORDER_REPORT_PLAYER (0x3B0120). Wire derived from the 68275 client serializer at
+        // 0x7FF729155520: uint64, SupportTicketHeader (the shared {MapID, XYZ, Facing, Program} struct written by
+        // sub_7FF7291435E0 - the same one CMSG_SUPPORT_TICKET_SUBMIT_COMPLAINT uses), three uint32, then a
+        // 10-bit-sized string. The three uint32 occupy the same slot as the complaint packet's
+        // {ReportType, MajorCategory, MinorCategoryFlags} triple.
+        class CraftingOrderReportPlayer final : public ClientPacket
+        {
+        public:
+            explicit CraftingOrderReportPlayer(WorldPacket&& packet) : ClientPacket(CMSG_CRAFTING_ORDER_REPORT_PLAYER, std::move(packet)) { }
+
+            void Read() override;
+
+            uint64 OrderID = 0;
+            SupportTicketHeader Header;
+            int32 ReportType = 0;
+            int32 MajorCategory = 0;
+            int32 MinorCategoryFlags = 0;
+            std::string Note;
+        };
+
+        // CMSG_CHAT_REPORT_FILTERED (0x2B0004). Wire derived from the 68275 client serializer at
+        // 0x7FF7291E15A0: a single PackedGuid and nothing else.
+        class ChatReportFiltered final : public ClientPacket
+        {
+        public:
+            explicit ChatReportFiltered(WorldPacket&& packet) : ClientPacket(CMSG_CHAT_REPORT_FILTERED, std::move(packet)) { }
+
+            void Read() override;
+
+            ObjectGuid SenderGUID;
+        };
     }
 }
 

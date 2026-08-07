@@ -18,6 +18,8 @@
 #include "Garrison.h"
 #include "Containers.h"
 #include "Creature.h"
+#include "MotionMaster.h"
+#include "TemporarySummon.h"
 #include "DatabaseEnv.h"
 #include "DB2Stores.h"
 #include "DB2Structure.h"
@@ -36,6 +38,7 @@
 #include "Random.h"
 #include "SpellInfo.h"
 #include "SpellMgr.h"
+#include "SpellPackets.h"
 #include "VehicleDefines.h"
 #include "advstd.h"
 
@@ -293,9 +296,7 @@ bool Garrison::LoadFromDB(PreparedQueryResult garrison, PreparedQueryResult blue
             if (!sGarrMissionStore.LookupEntry(missionRecID))
                 continue;
 
-            if (_missionDbIdGenerator <= dbId)
-                _missionDbIdGenerator = dbId + 1;
-
+            // (mission dbId sequence is seeded globally in GarrisonMgr::InitializeDbIdSequences from the whole table)
             Mission& mission = _missions[dbId];
             mission.PacketInfo.DbID = dbId;
             mission.PacketInfo.MissionRecID = missionRecID;
@@ -745,6 +746,13 @@ void Garrison::Update(uint32 diff)
 
     // Keep each work-order crate's "filled with goods" display in sync with the orders on its plot.
     UpdateWorkOrderCrates();
+
+    // Class-hall / order-hall work orders (plotless) are NOT auto-completed. Retail leaves each finished order
+    // waiting at its container's "standard" GameObject (GAMEOBJECT_TYPE_GARRISON_SHIPMENT, e.g. "Training Troops"):
+    // the player walks up and clicks it to pick up the recruited troop / produced good
+    // (GameObject::Use -> CollectReadyShipmentsForContainer). See GameObject.cpp. Keep those standards' models in
+    // sync with the owner's orders (recruiting = "working" model, ready = filled model, else empty).
+    UpdateOrderHallStandards();
 
     // Buildings are NOT auto-completed when their construction timer finishes. Retail leaves the finished
     // building as "ready to complete": the player walks to the plot and clicks it (construction sign), the
@@ -2694,7 +2702,9 @@ void Garrison::GenerateAvailableMissions()
 
 uint64 Garrison::GenerateMissionDbId()
 {
-    return _missionDbIdGenerator++;
+    // Global across all of the character's garrisons - character_garrison_missions.dbId is a per-character PK, so a
+    // per-Garrison counter let the war-campaign garrison reuse the WoD garrison's ids (duplicate-key on save).
+    return sGarrisonMgr.GenerateMissionDbId();
 }
 
 // ============================================================
@@ -3507,7 +3517,7 @@ GarrisonError Garrison::CreateShipment(ObjectGuid npcGUID, uint32 count)
 {
     uint32 plotInstanceId = FindPlotInstanceForNpc(npcGUID);
     if (!plotInstanceId)
-        return GARRISON_ERROR_INVALID_PLOT_INSTANCEID;
+        return CreateTroopShipment(npcGUID, count); // recruiter NPC is not a garrison plot building (class/order hall troops)
 
     Plot* plot = GetPlot(plotInstanceId);
     if (!plot || !plot->BuildingInfo.PacketInfo || !plot->BuildingInfo.PacketInfo->Active)
@@ -3677,6 +3687,7 @@ GarrisonError Garrison::CreateShipment(ObjectGuid npcGUID, uint32 count)
         stmt->setInt64(index++, shipment.CreationTime);
         stmt->setInt32(index++, shipment.Duration);
         stmt->setUInt64(index++, shipment.AssignedFollowerDBID);
+        stmt->setUInt8(index++, static_cast<uint8>(_garrType)); // 8th column; the loader reads shipments BY_TYPE, so 0 would orphan them on relogin
         CharacterDatabase.Execute(stmt);
 
         ++existingCount;
@@ -3729,6 +3740,148 @@ GarrisonError Garrison::CreateShipment(ObjectGuid npcGUID, uint32 count)
     return GARRISON_SUCCESS;
 }
 
+GarrisonError Garrison::CreateTroopShipment(ObjectGuid npcGUID, uint32 count)
+{
+    // Class-hall / order-hall troop recruitment. The recruiter NPC is not a garrison plot building, so resolve
+    // its CharShipmentContainer from the garrison_order_hall_shipment map. Each queued order matures into a
+    // GarrFollower troop (see CompleteShipment). Shipments are stored plotless (PlotInstanceID = 0).
+    Creature* npc = ObjectAccessor::GetCreature(*_owner, npcGUID);
+    CharShipmentContainerEntry const* container = npc ? sGarrisonMgr.GetShipmentContainerForNpc(npc->GetEntry()) : nullptr;
+    if (!container)
+        return GARRISON_ERROR_INVALID_PLOT_INSTANCEID;
+
+    std::vector<CharShipmentEntry const*> const* shipmentEntries = sGarrisonMgr.GetShipmentsForContainer(container->ID);
+    if (!shipmentEntries || shipmentEntries->empty())
+        return GARRISON_ERROR_INTERNAL_ERROR;
+
+    // The troop shipment is the one carrying a GarrFollowerID. If the container has none (e.g. the "Requisition a
+    // Seal of Broken Fate" order unlocked by the Hunter "Unseen Path" talent), it is an item work order whose
+    // output is delivered by CompleteShipment (DummyItemID / OnCompleteSpellID) exactly like a WoD profession order.
+    CharShipmentEntry const* shipmentEntry = shipmentEntries->front();
+    for (CharShipmentEntry const* s : *shipmentEntries)
+        if (s->GarrFollowerID) { shipmentEntry = s; break; }
+
+    // Optional gate: a research-talent unlock and/or a weekly cap. "Unseen Path" (talent 377) unlocks the Hunter
+    // Seal of Broken Fate work order, capped at 3 per week. Both are configured per NPC in garrison_order_hall_shipment.
+    GarrisonMgr::OrderHallShipmentGate const* gate = sGarrisonMgr.GetOrderHallShipmentGate(npc->GetEntry());
+    uint32 weeklyPlaced = 0;
+    if (gate)
+    {
+        // The work order only exists once the unlocking talent has been researched (Rank >= 1 = completed).
+        if (gate->RequiredTalentId)
+        {
+            auto tItr = _talents.find(gate->RequiredTalentId);
+            if (tItr == _talents.end() || tItr->second.Rank < 1)
+                return GARRISON_ERROR_INVALID_TALENT;
+        }
+        // Per-week cap on placed orders (persisted; the counter resets at the weekly quest reset).
+        if (gate->WeeklyLimit)
+        {
+            time_t const now = GameTime::GetGameTime();
+            if (QueryResult r = CharacterDatabase.Query(Trinity::StringFormat(
+                    "SELECT placed, weekReset FROM character_garrison_weekly_shipments WHERE guid = {} AND npcEntry = {}",
+                    _owner->GetGUID().GetCounter(), npc->GetEntry()).c_str()))
+            {
+                Field* f = r->Fetch();
+                if (now < time_t(f[1].GetInt64()))      // counter is still valid for the current week
+                    weeklyPlaced = f[0].GetUInt32();
+            }
+            if (weeklyPlaced >= gate->WeeklyLimit)
+                return GARRISON_ERROR_INVALID_TALENT;   // already at this week's cap (client also gates this)
+        }
+    }
+
+    uint32 const maxShipments = container->BaseCapacity ? container->BaseCapacity : 1;
+    uint32 existingCount = 0;
+    for (auto const& p : _shipments)
+        if (p.second.PlotInstanceID == 0 && p.second.ShipmentRecID == shipmentEntry->ID)
+            ++existingCount;
+
+    for (uint32 i = 0; i < count; ++i)
+    {
+        if (existingCount >= maxShipments)
+            break;
+
+        // Cost = the shipment spell's reagents/currencies (identical to WoD work orders).
+        SpellInfo const* costSpell = shipmentEntry->SpellID > 0 ? sSpellMgr->GetSpellInfo(uint32(shipmentEntry->SpellID), DIFFICULTY_NONE) : nullptr;
+        bool affordable = true;
+        if (costSpell)
+        {
+            for (std::size_t r = 0; r < costSpell->Reagent.size() && affordable; ++r)
+                if (costSpell->Reagent[r] > 0 && costSpell->ReagentCount[r] > 0
+                    && !_owner->HasItemCount(uint32(costSpell->Reagent[r]), uint32(costSpell->ReagentCount[r])))
+                    affordable = false;
+            for (SpellReagentsCurrencyEntry const* rc : costSpell->ReagentsCurrency)
+                if (affordable && rc->CurrencyCount > 0 && !_owner->HasCurrency(uint32(rc->CurrencyTypesID), uint32(rc->CurrencyCount)))
+                    affordable = false;
+        }
+        if (!affordable)
+        {
+            WorldPackets::Garrison::CreateShipmentResponse fail;
+            fail.ShipmentID = 0;
+            fail.ShipmentRecID = shipmentEntry->ID;
+            fail.Result = GARRISON_ERROR_NOT_ENOUGH_CURRENCY;
+            _owner->SendDirectMessage(fail.Write());
+            break;
+        }
+        if (costSpell)
+        {
+            for (std::size_t r = 0; r < costSpell->Reagent.size(); ++r)
+                if (costSpell->Reagent[r] > 0 && costSpell->ReagentCount[r] > 0)
+                    _owner->DestroyItemCount(uint32(costSpell->Reagent[r]), uint32(costSpell->ReagentCount[r]), true);
+            for (SpellReagentsCurrencyEntry const* rc : costSpell->ReagentsCurrency)
+                if (rc->CurrencyCount > 0)
+                    _owner->RemoveCurrency(uint32(rc->CurrencyTypesID), rc->CurrencyCount, CurrencyDestroyReason::Garrison);
+        }
+
+        uint64 dbId = sGarrisonMgr.GenerateShipmentDbId();
+        // A new troop begins recruiting when the latest in-progress one for this container finishes.
+        time_t startTime = GameTime::GetGameTime();
+        for (auto const& p : _shipments)
+            if (p.second.PlotInstanceID == 0 && p.second.ShipmentRecID == shipmentEntry->ID)
+                startTime = std::max<time_t>(startTime, p.second.CreationTime + p.second.Duration);
+
+        Shipment& shipment = _shipments[dbId];
+        shipment.DbID = dbId;
+        shipment.ShipmentRecID = shipmentEntry->ID;
+        shipment.PlotInstanceID = 0;
+        shipment.CreationTime = startTime;
+        shipment.Duration = shipmentEntry->Duration;
+        shipment.AssignedFollowerDBID = 0;
+
+        CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_INS_CHARACTER_GARRISON_SHIPMENTS);
+        uint8 index = 0;
+        stmt->setUInt64(index++, shipment.DbID);
+        stmt->setUInt64(index++, _owner->GetGUID().GetCounter());
+        stmt->setUInt32(index++, shipment.ShipmentRecID);
+        stmt->setUInt32(index++, shipment.PlotInstanceID);
+        stmt->setInt64(index++, shipment.CreationTime);
+        stmt->setInt32(index++, shipment.Duration);
+        stmt->setUInt64(index++, shipment.AssignedFollowerDBID);
+        stmt->setUInt8(index++, static_cast<uint8>(_garrType)); // 8th column; the loader reads shipments BY_TYPE, so 0 would orphan them on relogin
+        CharacterDatabase.Execute(stmt);
+        ++existingCount;
+
+        // Count this placement against the weekly cap (Seal of Broken Fate = 3/week). Persisted so the limit
+        // survives relog; weekReset is the server's weekly quest reset, after which the counter starts fresh.
+        if (gate && gate->WeeklyLimit)
+        {
+            ++weeklyPlaced;
+            CharacterDatabase.Execute(Trinity::StringFormat(
+                "REPLACE INTO character_garrison_weekly_shipments (guid, npcEntry, placed, weekReset) VALUES ({}, {}, {}, {})",
+                _owner->GetGUID().GetCounter(), npc->GetEntry(), weeklyPlaced, int64(sWorld->GetNextWeeklyQuestsResetTime())).c_str());
+        }
+
+        WorldPackets::Garrison::CreateShipmentResponse response;
+        response.ShipmentID = shipment.DbID;
+        response.ShipmentRecID = 0;
+        response.Result = GARRISON_SUCCESS;
+        _owner->SendDirectMessage(response.Write());
+    }
+
+    return GARRISON_SUCCESS;
+}
+
 void Garrison::CompleteShipment(uint64 dbId)
 {
     auto itr = _shipments.find(dbId);
@@ -3772,6 +3925,12 @@ void Garrison::CompleteShipment(uint64 dbId)
                 CharacterDatabase.CommitTransaction(trans);
             }
         }
+
+        // Troop work orders (class-hall / order-hall recruitment): the shipment yields a GarrFollower "troop"
+        // (GarrFollowerTypeID 4, FOLLOWER_STATUS_TROOP) instead of an item. Mint it onto this garrison; it is
+        // persisted with the other followers by SaveToDB.
+        if (shipmentEntry->GarrFollowerID)
+            AddTroop(shipmentEntry->GarrFollowerID, GARRISON_TROOP_DEFAULT_DURABILITY);
     }
 
     WorldPackets::Garrison::CompleteShipmentResponse response;
@@ -3806,7 +3965,18 @@ void Garrison::SendOpenShipmentUI(ObjectGuid npcGuid)
     // npcGuid is the interacted creature/gameobject; it belongs to a building plot via BuildingInfo.Spawns.
     uint32 plotInstanceId = FindPlotInstanceForNpc(npcGuid);
     if (!plotInstanceId)
+    {
+        // Class-hall / order-hall recruiter: no plot building - resolve the container by NPC entry.
+        Creature* npc = ObjectAccessor::GetCreature(*_owner, npcGuid);
+        if (CharShipmentContainerEntry const* container = npc ? sGarrisonMgr.GetShipmentContainerForNpc(npc->GetEntry()) : nullptr)
+        {
+            WorldPackets::Garrison::OpenShipmentNpcResult result;
+            result.NpcGUID = npcGuid;
+            result.CharShipmentContainerID = container->ID;
+            _owner->SendDirectMessage(result.Write());
+        }
         return;
+    }
 
     Plot const* plot = GetPlot(plotInstanceId);
     if (!plot || !plot->BuildingInfo.PacketInfo || !plot->BuildingInfo.PacketInfo->Active)
@@ -3827,6 +3997,161 @@ void Garrison::SendOpenShipmentUI(ObjectGuid npcGuid)
     result.NpcGUID = npcGuid;
     result.CharShipmentContainerID = container->ID;
     _owner->SendDirectMessage(result.Write());
+}
+
+void Garrison::CollectReadyShipmentsForContainer(uint32 containerId)
+{
+    // Pick up every ready plotless work order belonging to this container. Fired when the player clicks the
+    // container's "standard" GameObject (GAMEOBJECT_TYPE_GARRISON_SHIPMENT, e.g. "Training Troops" / "Seal of Broken
+    // Fate"): CompleteShipment mints the recruited troop or delivers the produced good and removes the order.
+    std::vector<CharShipmentEntry const*> const* entries = sGarrisonMgr.GetShipmentsForContainer(containerId);
+    if (!entries)
+        return;
+
+    // Ready shipments for this container + the troop follower each yields (for the "troops march off" effect).
+    std::vector<std::pair<uint64 /*dbId*/, uint32 /*garrFollowerId*/>> ready;
+    for (auto const& p : _shipments)
+    {
+        if (p.second.PlotInstanceID != 0 || !p.second.IsReady())
+            continue;
+        for (CharShipmentEntry const* e : *entries)
+            if (e->ID == p.second.ShipmentRecID)
+            {
+                ready.emplace_back(p.first, e->GarrFollowerID);
+                break;
+            }
+    }
+    if (ready.empty())
+        return;
+
+    // Cosmetic "getting real troops": spawn the recruited troop as creatures at the standard and march them off,
+    // then despawn the standard (the pickup is consumed). Private to the collecting player. The follower itself is
+    // minted by CompleteShipment below.
+    GarrisonMgr::OrderHallStandard const* spawn = sGarrisonMgr.GetOrderHallStandard(containerId);
+    Map* map = _owner->IsInWorld() ? _owner->GetMap() : nullptr;
+    if (spawn && map && _owner->GetMapId() == spawn->MapId)
+    {
+        for (auto const& [dbId, followerId] : ready)
+        {
+            GarrFollowerEntry const* follower = sGarrFollowerStore.LookupEntry(followerId);
+            uint32 creatureId = follower ? uint32(follower->AllianceCreatureID) : 0; // troops share the Horde/Alliance creature
+            if (!creatureId)
+                continue;
+
+            float const ang = spawn->Pos.GetOrientation();
+            for (uint32 i = 0; i < 3; ++i) // a small squad marches out
+            {
+                Position sp(spawn->Pos.GetPositionX() + frand(-1.5f, 1.5f), spawn->Pos.GetPositionY() + frand(-1.5f, 1.5f), spawn->Pos.GetPositionZ(), ang);
+                if (TempSummon* troop = _owner->SummonCreature(creatureId, sp, TEMPSUMMON_TIMED_DESPAWN, Seconds(8), 0, 0, _owner->GetGUID()))
+                    troop->GetMotionMaster()->MovePoint(0, sp.GetPositionX() + 14.0f * std::cos(ang), sp.GetPositionY() + 14.0f * std::sin(ang), sp.GetPositionZ());
+            }
+        }
+
+        if (auto sitr = _privateStandards.find(containerId); sitr != _privateStandards.end())
+        {
+            if (GameObject* go = map->GetGameObject(sitr->second))
+                go->Delete();
+            _privateStandards.erase(sitr);
+        }
+    }
+
+    for (auto const& [dbId, followerId] : ready)
+        CompleteShipment(dbId);
+}
+
+void Garrison::UpdateOrderHallStandards()
+{
+    if (!_owner->IsInWorld())
+        return;
+
+    Map* map = _owner->IsInWorld() ? _owner->GetMap() : nullptr;
+    if (!map)
+        return;
+
+    // Per-container order state for THIS owner (plotless orders only).
+    std::unordered_map<uint32 /*containerId*/, std::pair<uint32 /*ready*/, uint32 /*inProgress*/>> counts;
+    for (auto const& p : _shipments)
+    {
+        if (p.second.PlotInstanceID != 0)
+            continue;
+        CharShipmentEntry const* shipmentEntry = sCharShipmentStore.LookupEntry(p.second.ShipmentRecID);
+        if (!shipmentEntry || !shipmentEntry->ContainerID)
+            continue;
+        auto& c = counts[shipmentEntry->ContainerID];
+        if (p.second.IsReady())
+            ++c.first;
+        else
+            ++c.second;
+    }
+
+    for (auto const& [containerId, rc] : counts)
+    {
+        CharShipmentContainerEntry const* container = sCharShipmentContainerStore.LookupEntry(containerId);
+        if (!container)
+            continue;
+
+        // (1) While an order is still RECRUITING, show the "working" clock on the RECRUITER NPC - sent only to this
+        // owner (personal spell-visual kit). The recruiter is the reverse of garrison_order_hall_shipment.
+        if (rc.second > 0 && container->WorkingSpellVisualID > 0)
+        {
+            if (uint32 npcEntry = sGarrisonMgr.GetRecruiterForContainer(containerId))
+            {
+                std::vector<Creature*> recruiters;
+                _owner->GetCreatureListWithEntryInGrid(recruiters, npcEntry, 100.0f);
+                for (Creature* recruiter : recruiters)
+                {
+                    WorldPackets::Spells::PlaySpellVisualKit kit;
+                    kit.Unit = recruiter->GetGUID();
+                    kit.KitRecID = container->WorkingSpellVisualID;
+                    kit.KitType = 0;
+                    kit.Duration = 0;
+                    _owner->SendDirectMessage(kit.Write());
+                }
+            }
+        }
+
+        // (2) When troops are READY, spawn the per-player "standard" at its spawn point - the pickup object. It only
+        // exists while an order is ready; clicking it (GameObject::Use) collects the troops and it despawns. Private
+        // to this owner (no personal phase in the class hall, so a private object is how retail makes it per-player).
+        GarrisonMgr::OrderHallStandard const* spawn = sGarrisonMgr.GetOrderHallStandard(containerId);
+        auto itr = _privateStandards.find(containerId);
+        GameObject* standard = itr != _privateStandards.end() ? map->GetGameObject(itr->second) : nullptr;
+
+        if (rc.first > 0 && spawn && _owner->GetMapId() == spawn->MapId)
+        {
+            if (!standard)
+            {
+                QuaternionData rot = QuaternionData::fromEulerAnglesZYX(spawn->Pos.GetOrientation(), 0.0f, 0.0f);
+                standard = _owner->SummonGameObject(spawn->GoEntry, spawn->Pos, rot, Seconds(300));
+                if (standard)
+                {
+                    standard->SetPrivateObjectOwner(_owner->GetGUID());
+                    _privateStandards[containerId] = standard->GetGUID();
+                }
+            }
+            if (standard && container->SmallDisplayInfoID)
+                standard->SetDisplayId(container->SmallDisplayInfoID);
+        }
+        else if (standard) // only recruiting (no ready) -> no standard yet
+        {
+            standard->Delete();
+            _privateStandards.erase(containerId);
+        }
+    }
+
+    // Drop standards for containers with no ready order left (collected, or a keepalive-expired entry).
+    for (auto itr = _privateStandards.begin(); itr != _privateStandards.end(); )
+    {
+        auto cItr = counts.find(itr->first);
+        if (cItr != counts.end() && cItr->second.first > 0)
+            ++itr;
+        else
+        {
+            if (GameObject* go = map->GetGameObject(itr->second))
+                go->Delete();
+            itr = _privateStandards.erase(itr);
+        }
+    }
 }
 
 void Garrison::UpdateWorkOrderCrates()
@@ -3950,6 +4275,33 @@ void Garrison::SendShipmentInfo(ObjectGuid npcGUID)
     uint32 plotInstanceId = FindPlotInstanceForNpc(npcGUID);
     if (!plotInstanceId)
     {
+        // Class-hall / order-hall recruiter: resolve container by NPC and report plotless troop shipments.
+        Creature* npc = ObjectAccessor::GetCreature(*_owner, npcGUID);
+        CharShipmentContainerEntry const* container = npc ? sGarrisonMgr.GetShipmentContainerForNpc(npc->GetEntry()) : nullptr;
+        std::vector<CharShipmentEntry const*> const* entries = container ? sGarrisonMgr.GetShipmentsForContainer(container->ID) : nullptr;
+        if (container && entries && !entries->empty())
+        {
+            CharShipmentEntry const* recipe = entries->front();
+            for (CharShipmentEntry const* s : *entries)
+                if (s->GarrFollowerID) { recipe = s; break; }
+            response.Success = true;
+            response.ShipmentID = recipe->ID;
+            response.MaxShipments = container->BaseCapacity ? container->BaseCapacity : 1;
+            response.PlotInstanceID = 0;
+            for (auto const& p : _shipments)
+                if (p.second.PlotInstanceID == 0 && p.second.ShipmentRecID == recipe->ID)
+                {
+                    WorldPackets::Garrison::CharacterShipment& ps = response.Shipments.emplace_back();
+                    ps.ShipmentRecID = p.second.ShipmentRecID;
+                    ps.ShipmentID = p.second.DbID;
+                    ps.AssignedFollowerDBID = p.second.AssignedFollowerDBID;
+                    ps.ContainerID = container->ID;
+                    ps.CreationTime = p.second.CreationTime;
+                    ps.ShipmentDuration = p.second.Duration;
+                    ps.BuildingTypeID = 0;
+                    ps.GarrTypeID = static_cast<uint8>(GetType());
+                }
+        }
         _owner->SendDirectMessage(response.Write());
         return;
     }
@@ -3999,6 +4351,7 @@ void Garrison::SendShipmentInfo(ObjectGuid npcGUID)
         packetShipment.ShipmentRecID = shipment->ShipmentRecID;
         packetShipment.ShipmentID = shipment->DbID;
         packetShipment.AssignedFollowerDBID = shipment->AssignedFollowerDBID;
+        packetShipment.ContainerID = container->ID;
         packetShipment.CreationTime = shipment->CreationTime;
         packetShipment.ShipmentDuration = shipment->Duration;
         packetShipment.BuildingTypeID = building->BuildingType;
@@ -4228,6 +4581,23 @@ uint32 Garrison::ResearchTalent(uint32 garrTalentID)
         talent.Rank++;
         talent.ResearchStartTime = 0;
     }
+
+    // Legion Order Advancement intro quests ("Using Lost Knowledge" 46940 and its per-class equivalents) close their
+    // "Start a Research Work Order" objective via a hidden monster-credit marker fired the moment a research begins.
+    // Each class order hall has its own marker; a character only ever holds their own class's quest, so crediting the
+    // whole set is safe -- KilledMonsterCredit is a no-op for a marker the player has no active objective for.
+    static constexpr uint32 ResearchWorkOrderCreditMarkers[] = {
+        120959, // Hunter        (46940 Using Lost Knowledge)
+        111740, // 43887
+        111739, // 43886
+        110624, // 43749
+        106942, // 43881
+        102641, // 43885
+         97111, // 43877
+         91190  // 43883
+    };
+    for (uint32 marker : ResearchWorkOrderCreditMarkers)
+        _owner->KilledMonsterCredit(marker);
 
     // Send result
     WorldPackets::Garrison::GarrisonResearchTalentResult result;

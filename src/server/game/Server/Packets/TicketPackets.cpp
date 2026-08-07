@@ -384,4 +384,21 @@ void BugReport::Read()
     _worldPacket >> SizedString::Data(DiagInfo);
     _worldPacket >> SizedString::Data(Text);
 }
+
+void CraftingOrderReportPlayer::Read()
+{
+    _worldPacket >> OrderID;
+    _worldPacket >> Header;
+    _worldPacket >> ReportType;
+    _worldPacket >> MajorCategory;
+    _worldPacket >> MinorCategoryFlags;
+
+    _worldPacket >> SizedString::BitsSize<10>(Note);
+    _worldPacket >> SizedString::Data(Note);
+}
+
+void ChatReportFiltered::Read()
+{
+    _worldPacket >> SenderGUID;
+}
 }

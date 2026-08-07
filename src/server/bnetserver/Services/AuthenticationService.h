@@ -38,7 +38,9 @@ namespace Battlenet::Services
                 std::string_view locale, uint32 applicationVersion, std::string_view deviceId);
             static uint32 HandleVerifyAuthToken(Session* session, std::string_view authToken,
                 std::function<void(uint32)> sendResponse, std::function<void(AccountInfo const*, std::string_view)> sendLogonComplete);
-            static uint32 HandleGenerateAuthToken(Session* session, std::function<void(std::string_view)> sendResponse);
+            // sendResponse is invoked with (status, token). On failure status != ERROR_OK and token is empty -
+            // callers must not send a token in that case (the account row can vanish between login and this call).
+            static uint32 HandleGenerateAuthToken(Session* session, std::function<void(uint32, std::string_view)> sendResponse);
         };
     }
 

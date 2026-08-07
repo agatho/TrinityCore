@@ -122,8 +122,36 @@ public:
 
     // Shipment system accessors
     CharShipmentContainerEntry const* GetShipmentContainerForBuilding(uint8 garrBuildingType, uint8 factionIndex) const;
+    CharShipmentContainerEntry const* GetShipmentContainerForNpc(uint32 creatureEntry) const;
     std::vector<CharShipmentEntry const*> const* GetShipmentsForContainer(uint32 containerID) const;
     uint64 GenerateShipmentDbId();
+    uint64 GenerateMissionDbId();
+
+    // Optional gate on an order-hall work order (e.g. the Hunter "Unseen Path" talent unlocks a
+    // "Requisition a Seal of Broken Fate" order, capped at 3 per week).
+    struct OrderHallShipmentGate
+    {
+        uint32 RequiredTalentId = 0;    // GarrTalent that must be researched to place this order (0 = none)
+        uint32 WeeklyLimit      = 0;    // per-week cap on orders placed at this NPC (0 = unlimited)
+    };
+    OrderHallShipmentGate const* GetOrderHallShipmentGate(uint32 creatureEntry) const;
+
+    // The "standard" GameObject (GAMEOBJECT_TYPE_GARRISON_SHIPMENT, e.g. "Training Troops") that displays and hands
+    // out a container's finished orders. 0 = none.
+    uint32 GetStandardGoForContainer(uint32 containerId) const;
+
+    // Where a container's per-player standard spawns when its troops are ready (garrison_order_hall_standard).
+    struct OrderHallStandard
+    {
+        uint32 GoEntry = 0;
+        uint32 MapId = 0;
+        Position Pos;
+    };
+    OrderHallStandard const* GetOrderHallStandard(uint32 containerId) const;
+    // The recruiter creature that hosts a container's work order (reverse of garrison_order_hall_shipment) - the NPC
+    // that shows the "working" clock while an order recruits. 0 = none.
+    uint32 GetRecruiterForContainer(uint32 containerId) const;
+    void LoadOrderHallStandards();
 
     // Talent system accessors
     std::vector<GarrTalentTreeEntry const*> const* GetTalentTreesForGarrType(int8 garrTypeID) const;
@@ -155,6 +183,7 @@ private:
     void LoadPlotFinalizeGOInfo();
     void LoadFollowerClassSpecAbilities();
     void LoadMissionRewards();
+    void LoadOrderHallShipments();
 
     std::unordered_map<std::pair<uint32 /*garrSiteId*/, uint32 /*level*/>, GarrSiteLevelEntry const*> _garrSiteLevelBySiteAndLevel;
     std::unordered_map<uint32 /*garrSiteId*/, std::vector<GarrSiteLevelPlotInstEntry const*>> _garrisonPlotInstBySiteLevel;
@@ -194,10 +223,16 @@ private:
 
     // Shipment system indices
     std::unordered_map<uint8 /*garrBuildingType*/, CharShipmentContainerEntry const*> _shipmentContainersByBuildingType;
+    std::unordered_map<uint32 /*creatureEntry*/, CharShipmentContainerEntry const*> _orderHallContainerByNpc;
+    std::unordered_map<uint32 /*creatureEntry*/, OrderHallShipmentGate> _orderHallGateByNpc;
+    std::unordered_map<uint32 /*containerId*/, uint32 /*goEntry*/> _orderHallStandardGoByContainer;
+    std::unordered_map<uint32 /*containerId*/, OrderHallStandard> _orderHallStandardByContainer;
+    std::unordered_map<uint32 /*containerId*/, uint32 /*npcEntry*/> _recruiterByContainer;
     std::unordered_map<uint32 /*containerID*/, std::vector<CharShipmentEntry const*>> _shipmentsByContainer;
 
     uint64 _followerDbIdGenerator = UI64LIT(1);
     uint64 _shipmentDbIdGenerator = UI64LIT(1);
+    uint64 _missionDbIdGenerator = UI64LIT(1);
 };
 
 #define sGarrisonMgr GarrisonMgr::Instance()

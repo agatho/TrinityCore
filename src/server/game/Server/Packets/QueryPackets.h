@@ -163,6 +163,56 @@ namespace WorldPackets
             std::vector<NameCacheLookupResult> Players;
         };
 
+        // The client's community/club member windows identify a member as
+        // JamBNetAccountAndCommunityID { ObjectGuid bnetAccount; uint64 communityID; } - the same 24-byte pair the
+        // response echoes back. communityID is TrinityCore's Clubs::CreateClubMemberId value (this is the field
+        // PlayerGuidLookupData exposes as GuildClubMemberID). Wire verified against the 68275 client serializers
+        // 0x7FF729081850 (single) and 0x7FF729081AE0 (batch).
+        struct BNetAccountAndCommunityID
+        {
+            ObjectGuid BnetAccountGUID;
+            uint64 CommunityID = 0;
+        };
+
+        // CMSG_QUERY_PLAYER_NAME_BY_COMMUNITY_ID (0x41000D)
+        class QueryPlayerNameByCommunityId final : public ClientPacket
+        {
+        public:
+            explicit QueryPlayerNameByCommunityId(WorldPacket&& packet) : ClientPacket(CMSG_QUERY_PLAYER_NAME_BY_COMMUNITY_ID, std::move(packet)) { }
+
+            void Read() override;
+
+            BNetAccountAndCommunityID Member;
+        };
+
+        // CMSG_QUERY_PLAYER_NAMES_FOR_COMMUNITY (0x41000E): { uint64 ClubID; uint32 count; count x member }
+        class QueryPlayerNamesForCommunity final : public ClientPacket
+        {
+        public:
+            explicit QueryPlayerNamesForCommunity(WorldPacket&& packet) : ClientPacket(CMSG_QUERY_PLAYER_NAMES_FOR_COMMUNITY, std::move(packet)) { }
+
+            void Read() override;
+
+            uint64 ClubID = 0;
+            Array<BNetAccountAndCommunityID, 200> Members;
+        };
+
+        // SMSG_QUERY_PLAYER_NAME_BY_COMMUNITY_ID_RESPONSE (0x5F000B). Verified against the 68275 client parser
+        // (dispatcher case 0x7FF72911F7B6): uint8 Result, PackedGuid, uint64, and - only when Result == 0 - a
+        // PlayerGuidLookupData written by the very same function (0x7FF72915C610) that parses the per-player
+        // payload of SMSG_QUERY_PLAYER_NAMES_RESPONSE, so the existing writer is reused verbatim.
+        class QueryPlayerNameByCommunityIdResponse final : public ServerPacket
+        {
+        public:
+            explicit QueryPlayerNameByCommunityIdResponse() : ServerPacket(SMSG_QUERY_PLAYER_NAME_BY_COMMUNITY_ID_RESPONSE, 60) { }
+
+            WorldPacket const* Write() override;
+
+            uint8 Result = 0;   // 0 = found (payload follows), != 0 = not found
+            BNetAccountAndCommunityID Member;
+            Optional<PlayerGuidLookupData> Data;
+        };
+
         class QueryPageText final : public ClientPacket
         {
         public:

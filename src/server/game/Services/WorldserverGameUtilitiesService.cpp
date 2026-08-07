@@ -48,6 +48,28 @@ Variant* GameUtilities::FindParamValue(std::vector<std::pair<std::string_view, V
     return itr != params.end() ? &itr->second : nullptr;
 }
 
+// Extracts the realm-list ticket the client echoed back, if any. Carried as a string or as a NUL-terminated blob.
+std::string_view GameUtilities::GetPresentedRealmListTicket(std::vector<std::pair<std::string_view, Variant>>& params)
+{
+    Variant const* ticket = FindParamValue(params, "Param_RealmListTicket");
+    if (!ticket)
+        return { };
+
+    if (std::holds_alternative<std::string>(*ticket))
+        return std::get<std::string>(*ticket);
+
+    if (std::holds_alternative<std::vector<uint8>>(*ticket))
+    {
+        std::vector<uint8> const& blob = std::get<std::vector<uint8>>(*ticket);
+        std::string_view view(reinterpret_cast<char const*>(blob.data()), blob.size());
+        if (std::size_t nul = view.find('\0'); nul != std::string_view::npos)
+            view = view.substr(0, nul);
+        return view;
+    }
+
+    return { };
+}
+
 uint32 GameUtilities::HandleClientRequest(WorldSession const* session,
     std::vector<std::pair<std::string_view, Variant>>& params,
     std::vector<std::pair<std::string_view, Variant>>& responseValues)
@@ -96,6 +118,9 @@ uint32 GameUtilities::GetRealmList(WorldSession const* session,
     std::vector<std::pair<std::string_view, Variant>>& params,
     std::vector<std::pair<std::string_view, Variant>>& responseValues)
 {
+    if (!session->IsBattlenetRealmListTicketValid(GetPresentedRealmListTicket(params)))
+        return ERROR_WOW_SERVICES_INVALID_REALM_LIST_TICKET;
+
     std::string subRegionId;
     if (Variant const* subRegion = FindParamValue(params, "Command_RealmListRequest_v1"); subRegion && std::holds_alternative<std::string>(*subRegion))
         subRegionId = std::get<std::string>(*subRegion);
@@ -132,6 +157,11 @@ uint32 GameUtilities::JoinRealm(WorldSession const* session,
     std::vector<std::pair<std::string_view, Variant>>& params,
     std::vector<std::pair<std::string_view, Variant>>& responseValues)
 {
+    // A realm join mints a session key for the target realm. Gate it on the per-session realm-list ticket rather
+    // than serving any in-game session that tunnels the command.
+    if (!session->IsBattlenetRealmListTicketValid(GetPresentedRealmListTicket(params)))
+        return ERROR_WOW_SERVICES_INVALID_REALM_LIST_TICKET;
+
     Variant const* realmAddress = FindParamValue(params, "Param_RealmAddress");
     if (!realmAddress || !std::holds_alternative<uint64>(*realmAddress))
         return ERROR_UTIL_SERVER_UNKNOWN_REALM;

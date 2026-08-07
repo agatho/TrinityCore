@@ -23,6 +23,8 @@
 namespace Battlenet::Services::Clubs
 {
 uint64 CreateClubMemberId(ObjectGuid guid);
+// Inverse of CreateClubMemberId. Returns an empty guid when the member id belongs to another realm.
+ObjectGuid GetGuidFromClubMemberId(uint64 memberId);
 }
 
 #endif // TRINITYCORE_CLUB_UTILS_H

@@ -1940,6 +1940,23 @@ void WorldSession::SendFeatureSystemStatus()
         }, gameRule.Value);
     }
 
+    // Recruit A Friend. WorldSession::HandleGetRafAccountInfo / HandleRafGenerateRecruitmentLink /
+    // HandleRafClaimActivityReward / HandleRemoveRafRecruit / HandleRafClaimNextReward (ReferAFriendHandler.cpp)
+    // implement the full 5-CMSG/4-SMSG surface against the login-DB recruit tables, but the client's
+    // C_RecruitAFriend.IsEnabled() reads these bits and they have never been assigned - so the whole feature has
+    // been unreachable. Advertise it.
+    features.RAFSystem.Enabled            = sWorld->getBoolConfig(CONFIG_FEATURE_RAF_ENABLED);
+    features.RAFSystem.RecruitingEnabled  = sWorld->getBoolConfig(CONFIG_FEATURE_RAF_RECRUITING_ENABLED);
+    features.RAFSystem.MaxRecruits        = sWorld->getIntConfig(CONFIG_RAF_MAX_RECRUITS);
+    features.RAFSystem.MaxRecruitMonths   = sWorld->getIntConfig(CONFIG_RAF_MAX_RECRUIT_MONTHS);
+    features.RAFSystem.MaxRecruitmentUses = sWorld->getIntConfig(CONFIG_RAF_MAX_RECRUITMENT_USES);
+    features.RAFSystem.DaysInCycle        = sWorld->getIntConfig(CONFIG_RAF_DAYS_IN_CYCLE);
+    features.RAFSystem.RewardsVersion     = 2;   // RAF 3.0 - what RafActivity.db2 (our reward source) describes
+
+    // Dungeon Finder. game/DungeonFinding/ (12 files) is fully wired - CMSG_DF_JOIN -> HandleLfgJoinOpcode etc.
+    // This bit gates the client-side Dungeon Finder UI; without it the tab is greyed and no CMSG_DF_* is ever sent.
+    features.LfdEnabled = sWorld->getIntConfig(CONFIG_LFG_OPTIONSMASK) != 0;
+
     features.AddonChatThrottle.MaxTries = 10;
     features.AddonChatThrottle.TriesRestoredPerSecond = 1;
     features.AddonChatThrottle.UsedTriesPerMessage = 1;
@@ -1949,6 +1966,82 @@ void WorldSession::SendFeatureSystemStatus()
     features.GroupChatThrottle.TriesRestoredPerSecond = 20;
 
     SendPacket(features.Write());
+}
+
+// CMSG_GET_ACCOUNT_CHARACTER_LIST -> SMSG_GET_ACCOUNT_CHARACTER_LIST_RESULT.
+//
+// The client's warband / collections / RAF / shop screens read this list through
+// C_AccountInfo.GetAccountCharacterInfo(index); until now the request was Handle_NULL and the response opcode was
+// send-blocked, so the list was always empty and the ACCOUNT_CHARACTER_LIST_RECIEVED event never fired.
+//
+// The answer is every non-deleted character on every game account linked to this battlenet account. On a
+// single-realm deployment that is the complete account-wide list, so no cross-realm aggregation is needed - all
+// entries carry this realm's virtual address and name.
+void WorldSession::HandleGetAccountCharacterList(WorldPackets::Character::GetAccountCharacterList& getAccountCharacterList)
+{
+    uint32 token = getAccountCharacterList.Token;
+
+    LoginDatabasePreparedStatement* stmt = LoginDatabase.GetPreparedStatement(LOGIN_SEL_BNET_GAME_ACCOUNT_IDS);
+    stmt->setUInt32(0, GetBattlenetAccountId());
+
+    GetQueryProcessor().AddCallback(LoginDatabase.AsyncQuery(stmt).WithPreparedCallback([this, token](PreparedQueryResult accountsResult)
+    {
+        if (!accountsResult)
+        {
+            WorldPackets::Character::GetAccountCharacterListResult failure;
+            failure.Token = token;
+            failure.Success = false;
+            SendPacket(failure.Write());
+            return;
+        }
+
+        std::string accountIds;
+        do
+        {
+            if (!accountIds.empty())
+                accountIds += ',';
+            accountIds += std::to_string(accountsResult->Fetch()[0].GetUInt32());
+        } while (accountsResult->NextRow());
+
+        // The game-account id list is variable length, so this cannot be a prepared statement. Every element is a
+        // uint32 rendered by std::to_string, so the interpolation carries no attacker-controlled text.
+        std::string sql = Trinity::StringFormat(
+            "SELECT guid, name, race, class, gender, level FROM characters WHERE account IN ({}) AND deleteDate IS NULL ORDER BY guid", accountIds);
+
+        GetQueryProcessor().AddCallback(CharacterDatabase.AsyncQuery(sql.c_str())
+            .WithCallback([this, token](QueryResult charactersResult)
+        {
+            WorldPackets::Character::GetAccountCharacterListResult response;
+            response.Token = token;
+            response.Success = true;
+
+            std::string realmName;
+            if (std::shared_ptr<Realm const> currentRealm = sRealmList->GetCurrentRealm())
+                realmName = currentRealm->Name;
+
+            uint32 virtualRealmAddress = GetVirtualRealmAddress();
+
+            if (charactersResult)
+            {
+                do
+                {
+                    Field* fields = charactersResult->Fetch();
+
+                    WorldPackets::Character::GetAccountCharacterListResult::AccountCharacter& character = response.Characters.emplace_back();
+                    character.CharacterGUID = ObjectGuid::Create<HighGuid::Player>(fields[0].GetUInt64());
+                    character.Name = fields[1].GetString();
+                    character.RaceID = fields[2].GetUInt8();
+                    character.ClassID = fields[3].GetUInt8();
+                    character.SexID = fields[4].GetUInt8();
+                    character.ExperienceLevel = fields[5].GetUInt8();
+                    character.VirtualRealmAddress = virtualRealmAddress;
+                    character.RealmName = realmName;
+                } while (charactersResult->NextRow());
+            }
+
+            SendPacket(response.Write());
+        }));
+    }));
 }
 
 void WorldSession::HandleSetFactionAtWar(WorldPackets::Character::SetFactionAtWar& packet)

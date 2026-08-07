@@ -184,6 +184,10 @@ enum GarrisonFollowerStatus
     FOLLOWER_STATUS_NO_XP_GAIN  = 0x10
 };
 
+// Charge count minted onto a recruited class-hall/order-hall troop. CharShipment carries no charge field;
+// Legion troops are created with 3 charges (each mission use spends one).
+enum : uint32 { GARRISON_TROOP_DEFAULT_DURABILITY = 3 };
+
 class TC_GAME_API Garrison
 {
 public:
@@ -414,8 +418,11 @@ public:
 
     // Shipments (work orders)
     GarrisonError CreateShipment(ObjectGuid npcGUID, uint32 count);
+    GarrisonError CreateTroopShipment(ObjectGuid npcGUID, uint32 count); // order-hall/class-hall troop work order (plotless)
     void CompleteShipment(uint64 dbId);
     void CollectReadyShipments(uint32 plotInstanceId);
+    void CollectReadyShipmentsForContainer(uint32 containerId); // plotless orders: picked up at the container's "standard" GO
+    void UpdateOrderHallStandards(); // sync each plotless container's "standard" GO display to the owner's orders (working/ready/empty)
     void SendOpenShipmentUI(ObjectGuid npcGuid);
     // Swap each building's work-order crate GO display to the "filled" model (CharShipmentContainer
     // Small/Medium/Large DisplayInfoID by order count) while it holds orders, base model when empty.
@@ -494,6 +501,8 @@ private:
 
     // Shipments
     std::unordered_map<uint64 /*dbId*/, Shipment> _shipments;
+    std::unordered_map<uint32 /*containerId*/, uint8> _shownStandardContainers; // standards we've lit up, so they reset to base after collection
+    std::unordered_map<uint32 /*containerId*/, ObjectGuid> _privateStandards;   // per-player private "standard" GOs showing THIS owner's order state
     std::unordered_map<uint32 /*garrTalentID*/, Talent> _talents;
 
     // Trophies

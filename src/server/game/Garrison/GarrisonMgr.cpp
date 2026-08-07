@@ -169,6 +169,114 @@ void GarrisonMgr::Initialize()
     LoadPlotFinalizeGOInfo();
     LoadFollowerClassSpecAbilities();
     LoadMissionRewards();
+    LoadOrderHallShipments();
+    LoadOrderHallStandards();
+}
+
+// Class-hall / order-hall (and any non-plot garrison) troop recruiters aren't garrison plot buildings, so the
+// WoD building-type container index can't resolve them (all GarrTypeID 3 containers have GarrBuildingType 0 and
+// collide). This world table maps a recruiter creature entry -> its CharShipmentContainer (whose CharShipment
+// rows carry a GarrFollowerID = the recruited troop). See Garrison::CreateTroopShipment.
+void GarrisonMgr::LoadOrderHallShipments()
+{
+    _orderHallContainerByNpc.clear();
+    _orderHallGateByNpc.clear();
+    _recruiterByContainer.clear();
+
+    QueryResult result = WorldDatabase.Query("SELECT npcEntry, containerId, requiredTalentId, weeklyLimit FROM garrison_order_hall_shipment");
+    if (!result)
+    {
+        TC_LOG_INFO("server.loading", ">> Loaded 0 order-hall troop recruiters. DB table `garrison_order_hall_shipment` is empty.");
+        return;
+    }
+
+    uint32 count = 0;
+    do
+    {
+        Field* fields = result->Fetch();
+        uint32 npcEntry = fields[0].GetUInt32();
+        uint32 containerId = fields[1].GetUInt32();
+        uint32 requiredTalentId = fields[2].GetUInt32();
+        uint32 weeklyLimit = fields[3].GetUInt32();
+
+        CharShipmentContainerEntry const* container = sCharShipmentContainerStore.LookupEntry(containerId);
+        if (!container)
+        {
+            TC_LOG_ERROR("sql.sql", "Non-existing CharShipmentContainer.db2 entry {} referenced in `garrison_order_hall_shipment` (npcEntry {}); skipped.", containerId, npcEntry);
+            continue;
+        }
+
+        _orderHallContainerByNpc[npcEntry] = container;
+        _recruiterByContainer[containerId] = npcEntry;
+        if (requiredTalentId || weeklyLimit)
+        {
+            OrderHallShipmentGate& gate = _orderHallGateByNpc[npcEntry];
+            gate.RequiredTalentId = requiredTalentId;
+            gate.WeeklyLimit = weeklyLimit;
+        }
+        ++count;
+    } while (result->NextRow());
+
+    TC_LOG_INFO("server.loading", ">> Loaded {} order-hall troop recruiter -> container mappings.", count);
+
+    // Map each CharShipmentContainer to its "standard" GameObject (GAMEOBJECT_TYPE_GARRISON_SHIPMENT), so finished
+    // plotless orders can light up the standard's ready/working display (Garrison::UpdateOrderHallStandards).
+    _orderHallStandardGoByContainer.clear();
+    for (auto const& [goEntry, goTemplate] : sObjectMgr->GetGameObjectTemplates())
+        if (goTemplate.type == GAMEOBJECT_TYPE_GARRISON_SHIPMENT && goTemplate.garrisonShipment.ShipmentContainer)
+            _orderHallStandardGoByContainer.emplace(goTemplate.garrisonShipment.ShipmentContainer, goEntry);
+}
+
+CharShipmentContainerEntry const* GarrisonMgr::GetShipmentContainerForNpc(uint32 creatureEntry) const
+{
+    auto itr = _orderHallContainerByNpc.find(creatureEntry);
+    return itr != _orderHallContainerByNpc.end() ? itr->second : nullptr;
+}
+
+uint32 GarrisonMgr::GetStandardGoForContainer(uint32 containerId) const
+{
+    auto itr = _orderHallStandardGoByContainer.find(containerId);
+    return itr != _orderHallStandardGoByContainer.end() ? itr->second : 0;
+}
+
+void GarrisonMgr::LoadOrderHallStandards()
+{
+    _orderHallStandardByContainer.clear();
+
+    QueryResult result = WorldDatabase.Query("SELECT containerId, goEntry, map, posX, posY, posZ, orientation FROM garrison_order_hall_standard");
+    if (!result)
+        return;
+
+    uint32 count = 0;
+    do
+    {
+        Field* fields = result->Fetch();
+        OrderHallStandard& standard = _orderHallStandardByContainer[fields[0].GetUInt32()];
+        standard.GoEntry = fields[1].GetUInt32();
+        standard.MapId = fields[2].GetUInt32();
+        standard.Pos.Relocate(fields[3].GetFloat(), fields[4].GetFloat(), fields[5].GetFloat(), fields[6].GetFloat());
+        ++count;
+    } while (result->NextRow());
+
+    TC_LOG_INFO("server.loading", ">> Loaded {} order-hall standard spawn points.", count);
+}
+
+GarrisonMgr::OrderHallStandard const* GarrisonMgr::GetOrderHallStandard(uint32 containerId) const
+{
+    auto itr = _orderHallStandardByContainer.find(containerId);
+    return itr != _orderHallStandardByContainer.end() ? &itr->second : nullptr;
+}
+
+uint32 GarrisonMgr::GetRecruiterForContainer(uint32 containerId) const
+{
+    auto itr = _recruiterByContainer.find(containerId);
+    return itr != _recruiterByContainer.end() ? itr->second : 0;
+}
+
+GarrisonMgr::OrderHallShipmentGate const* GarrisonMgr::GetOrderHallShipmentGate(uint32 creatureEntry) const
+{
+    auto itr = _orderHallGateByNpc.find(creatureEntry);
+    return itr != _orderHallGateByNpc.end() ? &itr->second : nullptr;
 }
 
 GarrSiteLevelEntry const* GarrisonMgr::GetGarrSiteLevelEntry(uint32 garrSiteId, uint32 level) const
@@ -568,6 +676,17 @@ uint64 GarrisonMgr::GenerateShipmentDbId()
     return _shipmentDbIdGenerator++;
 }
 
+uint64 GarrisonMgr::GenerateMissionDbId()
+{
+    if (_missionDbIdGenerator >= std::numeric_limits<uint64>::max())
+    {
+        TC_LOG_ERROR("misc", "Garrison mission db id overflow! Can't continue, shutting down server. ");
+        World::StopNow(ERROR_EXIT_CODE);
+    }
+
+    return _missionDbIdGenerator++;
+}
+
 std::vector<GarrTalentTreeEntry const*> const* GarrisonMgr::GetTalentTreesForGarrType(int8 garrTypeID) const
 {
     auto itr = _talentTreesByGarrType.find(garrTypeID);
@@ -611,6 +730,11 @@ void GarrisonMgr::InitializeDbIdSequences()
 
     if (QueryResult result = CharacterDatabase.Query("SELECT MAX(dbId) FROM character_garrison_shipments"))
         _shipmentDbIdGenerator = (*result)[0].GetUInt64() + 1;
+
+    // Global across ALL garrison types (WoD, order hall, war campaign, covenant): character_garrison_missions.dbId is
+    // a per-character PK, so a per-Garrison counter collided (war-campaign garrison reused the WoD garrison's ids).
+    if (QueryResult result = CharacterDatabase.Query("SELECT MAX(dbId) FROM character_garrison_missions"))
+        _missionDbIdGenerator = (*result)[0].GetUInt64() + 1;
 }
 
 void GarrisonMgr::LoadPlotFinalizeGOInfo()

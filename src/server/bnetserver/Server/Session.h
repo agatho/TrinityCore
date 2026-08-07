@@ -74,6 +74,8 @@ namespace Battlenet
         uint32 LoginTicketExpiry;
         bool IsBanned;
         bool IsPermanenetlyBanned;
+        time_t BanDate = 0;
+        time_t UnbanDate = 0;
 
         std::unordered_map<uint32, GameAccountInfo> GameAccounts;
     };
@@ -111,6 +113,24 @@ namespace Battlenet
         ClientBuild::VariantId GetBuildVariant() const { return _buildVariant; }
         Minutes GetTimezoneOffset() const { return _timezoneOffset; }
         std::array<uint8, 32> GetClientSecret() const { return _clientSecret; }
+
+        // Realm-list ticket. Minted per session by GameUtilities::GetRealmListTicket and required (and, when the
+        // client echoes it back, matched) by the subsequent realm-list / realm-join commands. Replaces the former
+        // hardcoded "AuthRealmListTicket\0" literal, which was identical for every session and never checked.
+        std::string const& GetRealmListTicket() const { return _realmListTicket; }
+        void SetRealmListTicket(std::string ticket, Seconds duration)
+        {
+            _realmListTicket = std::move(ticket);
+            _realmListTicketExpiry = std::chrono::system_clock::now() + duration;
+        }
+        bool IsRealmListTicketValid(std::string_view presented) const
+        {
+            if (_realmListTicket.empty() || std::chrono::system_clock::now() > _realmListTicketExpiry)
+                return false;
+
+            // The client is not required to echo the ticket on every command; when it does, it must match exactly.
+            return presented.empty() || presented == _realmListTicket;
+        }
 
         void SendResponse(uint32 token, pb::Message const* response);
         void SendResponse(uint32 token, uint32 status);
@@ -167,6 +187,9 @@ namespace Battlenet
         std::string _ipCountry;
 
         std::array<uint8, 32> _clientSecret;
+
+        std::string _realmListTicket;
+        SystemTimePoint _realmListTicketExpiry = SystemTimePoint::min();
 
         bool _authed;
 

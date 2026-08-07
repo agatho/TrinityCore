@@ -987,6 +987,64 @@ namespace WorldPackets
             bool Success = false;
             uint8 Faction = 0; // echoes the chosen FactionIndex so the client can update its faction-group state
         };
+
+        // CMSG_GET_ACCOUNT_CHARACTER_LIST (0x4000E4). Wire derived from the 68275 client serializer at
+        // 0x7FF729078BB0: uint32 Token, then a single bit. Both are hardcoded to 0/false at the client's only
+        // construction site (0x7FF72A9831F9), and the sibling CMSG_LIVE_REGION_GET_ACCOUNT_CHARACTER_LIST uses
+        // that byte for a regionID, so the meaning of the bit on this opcode could not be established - it is
+        // read and ignored rather than acted on.
+        class GetAccountCharacterList final : public ClientPacket
+        {
+        public:
+            explicit GetAccountCharacterList(WorldPacket&& packet) : ClientPacket(CMSG_GET_ACCOUNT_CHARACTER_LIST, std::move(packet)) { }
+
+            void Read() override;
+
+            uint32 Token = 0;
+            bool Unknown = false;
+        };
+
+        // SMSG_GET_ACCOUNT_CHARACTER_LIST_RESULT (0x420209). Wire derived from the 68275 client parser at
+        // 0x7FF7290A6D20 (top level) and 0x7FF72906CF00 (element, JamCliAccountCharacterData, stride 0x170).
+        // Top level: uint32 Token, uint32 count, 1 bit Success (the count is read BEFORE the bit), then the
+        // elements. Token/Success are proven: the client's handler fires ACCOUNT_CHARACTER_LIST_RECIEVED whose
+        // Lua payload is (success, token), and Token echoes the request's Token slot.
+        //
+        // Element semantics: Name / RealmName / ClassID / ExperienceLevel are proven via the Lua accessor
+        // GetAccountCharacterInfo (returns name, realmName, className, experienceLevel). CharacterGUID and
+        // VirtualRealmAddress are established from the client re-emitting them as the character identity in
+        // CMSG_LIVE_REGION_CHARACTER_COPY. RaceID/SexID are inferred from the JamJSONCharacterEntry field order
+        // (raceID, classID, sexID, experienceLevel), which is the only reflected 4-byte character-summary run
+        // consistent with the two proven anchors; no client code reads either byte.
+        //
+        // Unused / Unused1 / Unused2 occupy real wire slots that no client code path reads (verified by a
+        // whole-.text xref sweep of the parsed list), so their meaning is unknown and they are written as zero.
+        class GetAccountCharacterListResult final : public ServerPacket
+        {
+        public:
+            struct AccountCharacter
+            {
+                ObjectGuid Unused;                  // wire slot with no client consumer
+                ObjectGuid CharacterGUID;
+                uint32 VirtualRealmAddress = 0;
+                uint8 RaceID = 0;
+                uint8 ClassID = 0;
+                uint8 SexID = 0;
+                uint8 ExperienceLevel = 0;
+                uint64 Unused1 = 0;                 // wire slot with no client consumer
+                uint32 Unused2 = 0;                 // wire slot with no client consumer
+                std::string Name;                   // client buffer is char[49]
+                std::string RealmName;              // client buffer is char[257]
+            };
+
+            explicit GetAccountCharacterListResult() : ServerPacket(SMSG_GET_ACCOUNT_CHARACTER_LIST_RESULT, 12) { }
+
+            WorldPacket const* Write() override;
+
+            uint32 Token = 0;
+            bool Success = false;
+            std::vector<AccountCharacter> Characters;
+        };
     }
 }
 

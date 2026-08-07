@@ -16,6 +16,7 @@
  */
 
 #include "WorldserverServiceDispatcher.h"
+#include "BattlenetRpcErrorCodes.h"
 
 Battlenet::WorldserverServiceDispatcher::WorldserverServiceDispatcher()
 {
@@ -37,7 +38,7 @@ Battlenet::WorldserverServiceDispatcher::WorldserverServiceDispatcher()
     AddService<WorldserverService<presence::v2::client::PresenceService>>();
     AddService<WorldserverService<report::v1::ReportService>>();
     AddService<WorldserverService<report::v2::ReportService>>();
-    AddService<WorldserverService<report::v3::client::ReportService>>();
+    AddService<Services::WorldserverReportService>();
     AddService<WorldserverService<resources::v1::ResourcesService>>();
     AddService<WorldserverService<whisper::v2::client::WhisperService>>();
 }
@@ -46,9 +47,15 @@ void Battlenet::WorldserverServiceDispatcher::Dispatch(WorldSession* session, ui
 {
     auto itr = _dispatchers.find(serviceHash);
     if (itr != _dispatchers.end())
+    {
         itr->second(session, token, methodId, std::move(buffer));
-    else
-        TC_LOG_DEBUG("session.rpc", "{} tried to call invalid service 0x{:X}", session->GetPlayerInfo(), serviceHash);
+        return;
+    }
+
+    // Same defect as the bnetserver dispatcher: an unregistered service hash was logged and silently dropped,
+    // leaving the client's RPC token outstanding forever. Answer with a real RPC error.
+    TC_LOG_DEBUG("session.rpc", "{} tried to call invalid service 0x{:X}", session->GetPlayerInfo(), serviceHash);
+    session->SendBattlenetResponse(serviceHash, methodId, token, uint32(ERROR_RPC_INVALID_SERVICE));
 }
 
 Battlenet::WorldserverServiceDispatcher& Battlenet::WorldserverServiceDispatcher::Instance()

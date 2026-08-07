@@ -318,6 +318,7 @@ namespace WorldPackets
         class CharRaceOrFactionChange;
         class CheckCharacterNameAvailability;
         class GenerateRandomCharacterName;
+        class GetAccountCharacterList;
         class GetUndeleteCharacterCooldownStatus;
         class ReorderCharacters;
         class UndeleteCharacter;
@@ -963,6 +964,9 @@ namespace WorldPackets
         class QueryCreature;
         struct NameCacheLookupResult;
         class QueryPlayerNames;
+        class QueryPlayerNameByCommunityId;
+        class QueryPlayerNamesForCommunity;
+        struct BNetAccountAndCommunityID;
         class QueryPageText;
         class QueryNPCText;
         class QueryGameObject;
@@ -1051,6 +1055,7 @@ namespace WorldPackets
         class SetAllowRecentAlliesSeeLocation;
         class SetContactNotes;
         class SocialContractRequest;
+        class AcceptSocialContract;
     }
 
     namespace Spells
@@ -1109,6 +1114,8 @@ namespace WorldPackets
         class SubmitUserFeedback;
         class SupportTicketSubmitComplaint;
         class BugReport;
+        class CraftingOrderReportPlayer;
+        class ChatReportFiltered;
         class Complaint;
     }
 
@@ -1719,6 +1726,8 @@ class TC_GAME_API WorldSession
         void HandleSubmitUserFeedback(WorldPackets::Ticket::SubmitUserFeedback& userFeedback);
         void HandleSupportTicketSubmitComplaint(WorldPackets::Ticket::SupportTicketSubmitComplaint& packet);
         void HandleBugReportOpcode(WorldPackets::Ticket::BugReport& bugReport);
+        void HandleCraftingOrderReportPlayer(WorldPackets::Ticket::CraftingOrderReportPlayer& craftingOrderReportPlayer);
+        void HandleChatReportFiltered(WorldPackets::Ticket::ChatReportFiltered& chatReportFiltered);
         void HandleComplaint(WorldPackets::Ticket::Complaint& packet);
 
         void HandleTogglePvP(WorldPackets::Misc::TogglePvP& packet);
@@ -1743,6 +1752,7 @@ class TC_GAME_API WorldSession
         void HandleAreaTriggerOpcode(WorldPackets::AreaTrigger::AreaTrigger& packet);
         void HandleUpdateAreaTriggerVisual(WorldPackets::AreaTrigger::UpdateAreaTriggerVisual const& updateAreaTriggerVisual);
 
+        void HandleGetAccountCharacterList(WorldPackets::Character::GetAccountCharacterList& getAccountCharacterList);
         void HandleSetFactionAtWar(WorldPackets::Character::SetFactionAtWar& packet);
         void HandleSetFactionNotAtWar(WorldPackets::Character::SetFactionNotAtWar& packet);
         void HandleSetWatchedFactionOpcode(WorldPackets::Character::SetWatchedFaction& packet);
@@ -1757,6 +1767,9 @@ class TC_GAME_API WorldSession
         void HandleGameobjectReportUse(WorldPackets::GameObject::GameObjReportUse& packet);
 
         void HandleQueryPlayerNames(WorldPackets::Query::QueryPlayerNames& queryPlayerNames);
+        void HandleQueryPlayerNameByCommunityId(WorldPackets::Query::QueryPlayerNameByCommunityId& queryPlayerNameByCommunityId);
+        void HandleQueryPlayerNamesForCommunity(WorldPackets::Query::QueryPlayerNamesForCommunity& queryPlayerNamesForCommunity);
+        void SendPlayerNameByCommunityId(WorldPackets::Query::BNetAccountAndCommunityID const& member);
         void HandleQueryTimeOpcode(WorldPackets::Query::QueryTime& queryTime);
         void HandleCreatureQuery(WorldPackets::Query::QueryCreature& packet);
         void HandleGameObjectQueryOpcode(WorldPackets::Query::QueryGameObject& packet);
@@ -2625,6 +2638,12 @@ class TC_GAME_API WorldSession
         std::array<uint8, 32> const& GetRealmListSecret() const { return _realmListSecret; }
         void SetRealmListSecret(std::array<uint8, 32> const& secret) { _realmListSecret = secret; }
 
+        // In-game realm-list ticket, minted per session by HandleBattlenetChangeRealmTicket and required by the
+        // tunnelled Command_RealmListRequest_v1 / Command_RealmJoinRequest_v1. Replaces the former constant
+        // "WorldserverRealmListTicket" literal, which was identical for every session and never validated.
+        void SetBattlenetRealmListTicket(std::string ticket, Seconds duration);
+        bool IsBattlenetRealmListTicketValid(std::string_view presented) const;
+
         std::unordered_map<uint32, uint8> const& GetRealmCharacterCounts() const { return _realmCharacterCounts; }
 
         void HandleQueryRealmName(WorldPackets::Query::QueryRealmName& queryRealmName);
@@ -2647,6 +2666,7 @@ class TC_GAME_API WorldSession
         void HandleRequestLatestSplashScreen(WorldPackets::Misc::RequestLatestSplashScreen& requestLatestSplashScreen);
 
         void HandleSocialContractRequest(WorldPackets::Social::SocialContractRequest& socialContractRequest);
+        void HandleAcceptSocialContract(WorldPackets::Social::AcceptSocialContract& acceptSocialContract);
 
         void HandleRequestCurrencyDataForAccountCharacters(WorldPackets::Misc::RequestCurrencyDataForAccountCharacters& packet);
         void HandleTransferCurrencyFromAccountCharacter(WorldPackets::Misc::TransferCurrencyFromAccountCharacter& packet);
@@ -2750,6 +2770,8 @@ class TC_GAME_API WorldSession
         ClientBuild::VariantId _clientBuildVariant;
 
         std::array<uint8, 32> _realmListSecret;
+        std::string _realmListTicket;
+        SystemTimePoint _realmListTicketExpiry = SystemTimePoint::min();
         std::unordered_map<uint32 /*realmAddress*/, uint8> _realmCharacterCounts;
         std::unordered_map<uint32, std::function<void(MessageBuffer)>> _battlenetResponseCallbacks;
         uint32 _battlenetRequestToken;
