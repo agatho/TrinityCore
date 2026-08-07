@@ -7126,6 +7126,13 @@ bool Player::RewardHonor(Unit* victim, uint32 groupsize, int32 honor, HonorGainS
 
     AddHonorXP(honor);
 
+    // CriteriaType::PlayerHasEarnedHonor (207) - no asset; the real Criteria rows accumulate an honor total
+    // ("Earn 1500 Honor in the 3v3 bracket") and gate the bracket through ModifierTree
+    // (PlayerInArenaWithTeamSize 24 / PlayerInRankedArenaMatch 60 / PlayerInRatedBattleground 63), so
+    // miscValue1 must be the honor amount actually awarded.
+    if (honor > 0)
+        UpdateCriteria(CriteriaType::PlayerHasEarnedHonor, uint32(honor));
+
     if (InBattleground() && honor > 0)
     {
         if (Battleground* bg = GetBattleground())
@@ -15910,6 +15917,15 @@ void Player::RewardQuest(Quest const* quest, LootItemType rewardType, uint32 rew
     UpdateCriteria(CriteriaType::CompleteQuestsCount);
     UpdateCriteria(CriteriaType::CompleteQuest, quest->GetQuestId());
     UpdateCriteria(CriteriaType::CompleteAnyReplayQuest, 1);
+    // CriteriaType::CompleteAnyWorldQuest (203). No asset - every real Criteria row gates on
+    // ModifierTreeType::QuestHasQuestInfoId (206), which resolves miscValue1 as the quest id, so the quest
+    // id is what must be passed.
+    if (quest->IsWorldQuest())
+        UpdateCriteria(CriteriaType::CompleteAnyWorldQuest, quest->GetQuestId());
+    // CriteriaType::CompleteTrackingQuest (250). Tracking quests (QUEST_FLAGS_TRACKING_EVENT) are the hidden,
+    // auto-rewarded progress markers; they are rewarded through this same path.
+    if (quest->HasFlag(QUEST_FLAGS_TRACKING_EVENT))
+        UpdateCriteria(CriteriaType::CompleteTrackingQuest, quest->GetQuestId());
 
     // make full db save
     SaveToDB(false);

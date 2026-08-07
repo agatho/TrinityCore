@@ -1390,6 +1390,9 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         std::array<uint32, MAX_PLAYED_TIME_INDEX> m_Played_time;
         uint32 GetTotalPlayedTime() const { return m_Played_time[PLAYED_TIME_TOTAL]; }
         uint32 GetLevelPlayedTime() const { return m_Played_time[PLAYED_TIME_LEVEL]; }
+        // Wall-clock creation time of this character (characters.createTime). Used by ModifierTreeType
+        // PlayerCreatedCharacterLessThanHoursAgoRealTime (204), the real-time sibling of the played-time check.
+        time_t GetCharacterCreateTime() const { return m_createTime; }
 
         Gender GetNativeGender() const override { return Gender(*m_playerData->NativeSex); }
         void SetNativeGender(Gender gender) override { SetUpdateFieldValue(m_values.ModifyValue(&Player::m_playerData).ModifyValue(&UF::PlayerData::NativeSex), gender); }
