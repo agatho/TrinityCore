@@ -607,6 +607,9 @@ void CriteriaHandler::UpdateCriteria(Criteria const* criteria, uint64 miscValue1
         case CriteriaType::PlaceDecor:
         case CriteriaType::RemoveDecor:
         case CriteriaType::CollectUniqueDecor:
+        // --- collections
+        case CriteriaType::LearnAnyToy:
+        case CriteriaType::LearnAnyTransmogIllusion:
             SetCriteriaProgress(criteria, 1, referencePlayer, PROGRESS_ACCUMULATE);
             break;
         // std case: increment at miscValue1
@@ -751,6 +754,8 @@ void CriteriaHandler::UpdateCriteria(Criteria const* criteria, uint64 miscValue1
         case CriteriaType::CompleteResearchGarrisonTalent:
         case CriteriaType::SocketGarrisonTalent:
         case CriteriaType::CompleteChallengeMode:
+        case CriteriaType::LearnToy:
+        case CriteriaType::LearnTransmog:
             SetCriteriaProgress(criteria, 1, referencePlayer);
             break;
         case CriteriaType::BankSlotsPurchased:
@@ -881,8 +886,6 @@ void CriteriaHandler::UpdateCriteria(Criteria const* criteria, uint64 miscValue1
         case CriteriaType::KickVoterInLFRDungeon:
         case CriteriaType::KickTargetInLFRDungeon:
         case CriteriaType::GroupedTankLeftEarlyInLFRDungeon:
-        case CriteriaType::LearnToy:
-        case CriteriaType::LearnAnyToy:
         case CriteriaType::FindResearchObject:
         case CriteriaType::ExhaustAnyResearchSite:
         case CriteriaType::CompleteInternalCriteria:
@@ -903,7 +906,6 @@ void CriteriaHandler::UpdateCriteria(Criteria const* criteria, uint64 miscValue1
         case CriteriaType::AccountHonorLevelReached:
         case CriteriaType::ObtainAnyItemWithCurrencyValue:
         case CriteriaType::EarnExpansionLevel:
-        case CriteriaType::LearnTransmog:
         default:
             break;                          // Not implemented yet :(
     }
@@ -1582,6 +1584,7 @@ bool CriteriaHandler::RequirementsSatisfied(Criteria const* criteria, uint64 mis
         case CriteriaType::LootItem:
         case CriteriaType::EquipItem:
         case CriteriaType::LearnHeirloom:
+        case CriteriaType::LearnToy:
             if (!miscValue1 || uint32(criteria->Entry->Asset.ItemID )!= miscValue1)
                 return false;
             break;
@@ -1754,6 +1757,10 @@ bool CriteriaHandler::RequirementsSatisfied(Criteria const* criteria, uint64 mis
             if (!miscValue1 || miscValue1 != uint32(criteria->Entry->Asset.MapID))
                 return false;
             break;
+        case CriteriaType::LearnTransmog:
+            if (!miscValue1 || miscValue1 != uint32(criteria->Entry->Asset.ItemModifiedAppearanceID))
+                return false;
+            break;
         // ---------------------------------------------------------------------------------------------
         // Garrison (WoD 2 / Order Hall 3 / War Campaign 9 / Covenant 111) - see Garrison.cpp call sites.
         // ---------------------------------------------------------------------------------------------
@@ -1810,6 +1817,8 @@ bool CriteriaHandler::RequirementsSatisfied(Criteria const* criteria, uint64 mis
         case CriteriaType::PlaceDecor:
         case CriteriaType::RemoveDecor:
         case CriteriaType::CollectUniqueDecor:
+        case CriteriaType::LearnAnyToy:
+        case CriteriaType::LearnAnyTransmogIllusion:
             if (!miscValue1)
                 return false;
             break;
@@ -5464,9 +5473,9 @@ std::span<CriteriaType const> CriteriaMgr::GetRetroactivelyUpdateableCriteriaTyp
         //CriteriaType::AcquireGarrison, // implemented, but event-driven only (Garrison::Create)
         //CriteriaType::LearnGarrisonBlueprint, // implemented, but event-driven only (Garrison::LearnBlueprint)
         //CriteriaType::LearnGarrisonSpecialization, // implemented, but event-driven only (Garrison::LearnSpecialization)
-        //CriteriaType::LearnToy, /*NYI*/ // Learn Toy "{Item}"
-        //CriteriaType::LearnAnyToy, /*NYI*/ // Learn Any Toy
-        //CriteriaType::LearnTransmog, /*NYI*/
+        //CriteriaType::LearnToy, // implemented, but event-driven only (CollectionMgr::AddToy)
+        //CriteriaType::LearnAnyToy, // implemented, but event-driven only (CollectionMgr::AddToy)
+        //CriteriaType::LearnTransmog, // implemented, but event-driven only (CollectionMgr::AddItemAppearance)
         CriteriaType::HonorLevelIncrease,
         //CriteriaType::AccountHonorLevelReached, /*NYI*/
         CriteriaType::ReachMaxLevel,

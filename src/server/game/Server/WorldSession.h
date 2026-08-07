@@ -1057,6 +1057,7 @@ namespace WorldPackets
         class AddIgnore;
         class DelFriend;
         class DelIgnore;
+        class MakeConditionalAppearancePermanent;
         class RecentAllyRequestData;
         class RecentAllySetNote;
         class SendContactList;
