@@ -190,11 +190,12 @@ WorldPacket const* LFGListJoinResult::Write()
 
 WorldPacket const* LFGListUpdateStatus::Write()
 {
-    // Layout proven from the sniff: Ticket, Status byte, the listing descriptor echoed VERBATIM, then a
-    // single Listed bit (flushed). When not listed the descriptor is an all-zero 27-byte empty descriptor.
+    // Layout proven from the sniff: Ticket, u64 ExpirationTime, Status byte, the listing descriptor echoed
+    // VERBATIM, then a single Listed bit (flushed). Not listed = expiration 0 + all-zero 27-byte descriptor.
     static constexpr std::size_t EMPTY_DESCRIPTOR_SIZE = 27;
 
     _worldPacket << Ticket;
+    _worldPacket << uint64(Listed ? ExpirationTime : 0);
     _worldPacket << uint8(Status);
     if (Listed && !RawDescriptor.empty())
         _worldPacket.append(RawDescriptor.data(), RawDescriptor.size());
@@ -224,17 +225,11 @@ WorldPacket const* LFGListSearchStatus::Write()
 // Row-level "bit" fields are full wire bytes with the boolean in bit 7 (client reads x >> 7); PackedGuid uses
 // the standard TrinityCore ObjectGuid operator<< (u16 mask + data bytes). Unknown scalars are zero-filled
 // (the client parses them fine); the few observed retail constants are mirrored (Unk_b=4, Unk1816/Unk2160=5).
-static ByteBuffer& operator<<(ByteBuffer& data, SearchResultListing const& row)
+// The row body from the age counter onward — shared verbatim between SEARCH_RESULTS rows and the row
+// snapshot embedded in SMSG_LFG_LIST_APPLY_TO_GROUP_RESULT (sniff: identical bytes in both containers).
+static void WriteSearchResultRowBody(ByteBuffer& data, SearchResultListing const& row)
 {
-    // === header block (sub_7FF7291CCDB0) ===
-    data << row.GroupGuid;                          // PackedGuid GroupGuid
-    data << uint32(row.ListingId);                  // ListingId (APPLY_TO_GROUP key)
-    data << uint32(4);                              // Unk_b   (observed constant 4)
-    data << uint64(row.PostTime);                   // PostTime
-    data << uint8(0);                               // Unk_hdrbit (bit-as-byte, observed 0)
-
-    // === fixed fields ===
-    data << uint32(0);                              // Unk40
+    data << uint32(0);                              // Unk40 (age counter)
     data << uint8(5);                               // Unk1816 (observed 5)
     data << row.LeaderGuid;                         // Guid_A
     data << row.LeaderGuid;                         // Guid_B
@@ -300,7 +295,17 @@ static ByteBuffer& operator<<(ByteBuffer& data, SearchResultListing const& row)
         data << uint32(0);                         // T56
         data << uint8(0);                          // T_flag (bit-as-byte)
     }
+}
 
+// Emit one full row: header block (sub_7FF7291CCDB0) + body.
+static ByteBuffer& operator<<(ByteBuffer& data, SearchResultListing const& row)
+{
+    data << row.GroupGuid;                          // PackedGuid GroupGuid
+    data << uint32(row.ListingId);                  // ListingId (APPLY_TO_GROUP key)
+    data << uint32(4);                              // Unk_b   (observed constant 4)
+    data << uint64(row.PostTime);                   // PostTime
+    data << uint8(0);                               // Unk_hdrbit (bit-as-byte, observed 0)
+    WriteSearchResultRowBody(data, row);
     return data;
 }
 
@@ -321,52 +326,45 @@ WorldPacket const* LFGListSearchResultsUpdate::Write()
     return &_worldPacket;
 }
 
-static ByteBuffer& operator<<(ByteBuffer& data, ApplicantInfo const& a)
-{
-    data << a.ApplicantGuid;
-    data << uint32(a.ApplicationId);
-    data << uint8(a.State);
-    data << uint8(a.RoleMask);
-    data << a.PlayerGuid;
-    data << uint32(a.SpecID);
-    data << uint32(a.ItemLevel);
-    data << uint32(a.Field3);
-    data << uint8(a.Field4) << uint8(a.Field5);
-    for (uint32 f : a.Fields)
-        data << uint32(f);
-    data << uint8(a.Field6) << uint8(a.Field7);
-    data << uint32(a.Field8) << uint32(a.Field9);
-    data << SizedString::BitsSize<10>(a.Comment);
-    data.FlushBits();
-    data << SizedString::Data(a.Comment);
-    return data;
-}
-
 WorldPacket const* LFGListApplicantListUpdate::Write()
 {
-    _worldPacket << uint32(ListingId);
+    // Sniff-exact: Ticket(listing) + u32 count + u32 unk + entries. Entry (status-only form, HasInfo=0):
+    // Ticket(application) + PackedGuid player + u32 HasInfo(0) + u8 StateBits + u8 pad.
+    _worldPacket << ListingTicket;
     _worldPacket << uint32(Applicants.size());
+    _worldPacket << uint32(Unknown);
     for (ApplicantInfo const& a : Applicants)
-        _worldPacket << a;
+    {
+        _worldPacket << a.Ticket;
+        _worldPacket << a.PlayerGuid;
+        _worldPacket << uint32(0);          // HasInfo: 0 = status-only entry (full snapshot form documented, unresolved scalars)
+        _worldPacket << uint8(a.StateBits);
+        _worldPacket << uint8(0);           // pad
+    }
     return &_worldPacket;
 }
 
 WorldPacket const* LFGListApplicationStatusUpdate::Write()
 {
     _worldPacket << Ticket;
-    _worldPacket << uint32(ApplicationId);
-    _worldPacket << uint8(State);
-    _worldPacket << uint8(Field2);
+    _worldPacket << uint64(0);
+    _worldPacket << uint32(UnkResult);
+    _worldPacket << uint8(RoleGranted);
+    _worldPacket << ListingTicket;
+    _worldPacket << uint8(StateBits);
     return &_worldPacket;
 }
 
 WorldPacket const* LFGListApplyToGroupResult::Write()
 {
     _worldPacket << Ticket;
-    _worldPacket << uint8(Result) << uint8(Field1) << uint8(Field2);
-    _worldPacket << uint32(ListingId);
-    _worldPacket << LeaderGuid;
-    _worldPacket << Listing;
+    _worldPacket << uint64(ApplicationExpiration);
+    _worldPacket << uint8(Status);
+    _worldPacket << uint8(0);
+    _worldPacket << ListingTicket;
+    _worldPacket << uint8(0x10);            // observed constant
+    _worldPacket << ListingTicket;
+    WriteSearchResultRowBody(_worldPacket, Row);
     return &_worldPacket;
 }
 

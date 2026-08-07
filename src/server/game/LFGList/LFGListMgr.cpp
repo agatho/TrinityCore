@@ -61,10 +61,14 @@ void LFGListMgr::Update(uint32 diff)
                         WorldPackets::LFGList::LFGListApplicationStatusUpdate statusUpdate;
                         statusUpdate.Ticket.RequesterGuid = appItr->ApplicantGuid;
                         statusUpdate.Ticket.Id = appItr->Id;
-                        statusUpdate.Ticket.Type = WorldPackets::LFG::RideType::Lfg;
-                        statusUpdate.Ticket.Time = int32(now);
-                        statusUpdate.ApplicationId = appItr->Id;
-                        statusUpdate.State = uint8(LFGList::ApplicationState::Declined);
+                        statusUpdate.Ticket.Type = WorldPackets::LFG::RideType::LfgListApplication;
+                        statusUpdate.Ticket.Time = int32(appItr->AppliedTime);
+                        statusUpdate.ListingTicket.RequesterGuid = listing.LeaderGuid;
+                        statusUpdate.ListingTicket.Id = listing.Id;
+                        statusUpdate.ListingTicket.Type = WorldPackets::LFG::RideType::LfgListListing;
+                        statusUpdate.ListingTicket.Time = int32(listing.CreatedTime);
+                        statusUpdate.UnkResult = 8;
+                        statusUpdate.StateBits = WorldPackets::LFGList::ApplicationStateBits::Declined;
                         applicant->SendDirectMessage(statusUpdate.Write());
                     }
                     _applicationIndex.erase(appItr->Id);
@@ -80,18 +84,19 @@ void LFGListMgr::Update(uint32 diff)
                 if (Player* leader = ObjectAccessor::FindConnectedPlayer(listing.LeaderGuid))
                 {
                     WorldPackets::LFGList::LFGListApplicantListUpdate applicantList;
-                    applicantList.ListingId = listing.Id;
+                    applicantList.ListingTicket.RequesterGuid = listing.LeaderGuid;
+                    applicantList.ListingTicket.Id = listing.Id;
+                    applicantList.ListingTicket.Type = WorldPackets::LFG::RideType::LfgListListing;
+                    applicantList.ListingTicket.Time = int32(listing.CreatedTime);
                     for (LFGList::Application const& app : listing.Applications)
                     {
                         WorldPackets::LFGList::ApplicantInfo& info = applicantList.Applicants.emplace_back();
-                        info.ApplicationId = app.Id;
-                        info.ApplicantGuid = app.ApplicantGuid;
+                        info.Ticket.RequesterGuid = app.ApplicantGuid;
+                        info.Ticket.Id = app.Id;
+                        info.Ticket.Type = WorldPackets::LFG::RideType::LfgListApplication;
+                        info.Ticket.Time = int32(app.AppliedTime);
                         info.PlayerGuid = app.ApplicantGuid;
-                        info.RoleMask = app.RoleMask;
-                        info.State = uint8(app.State);
-                        info.SpecID = app.SpecID;
-                        info.ItemLevel = app.ItemLevel;
-                        info.Comment = app.Comment;
+                        info.StateBits = WorldPackets::LFGList::ApplicationStateBits::Applied;
                     }
                     leader->SendDirectMessage(applicantList.Write());
                 }

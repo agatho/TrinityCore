@@ -1746,7 +1746,7 @@ class TC_GAME_API WorldSession
         void HandleLFGListInviteApplicant(WorldPackets::LFGList::LFGListInviteApplicant& packet);
         void HandleLFGListInviteResponse(WorldPackets::LFGList::LFGListInviteResponse& packet);
         void HandleRequestLFGListBlacklist(WorldPackets::LFGList::RequestLFGListBlacklist& packet);
-        void SendLFGListUpdateStatus(uint32 listingId);
+        void SendLFGListUpdateStatus(uint32 listingId, uint8 status = 0x38);
 
         void SendLfgUpdateStatus(lfg::LfgUpdateData const& updateData, bool party);
         void SendLfgRoleChosen(ObjectGuid guid, uint8 roles);
