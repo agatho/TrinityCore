@@ -149,6 +149,16 @@ namespace WorldPackets
             void Read() override { }
         };
 
+        // CMSG_ACCEPT_SOCIAL_CONTRACT (0x400177) - empty body. Verified against the 68275 client serializer at
+        // 0x7FF72907FDE0, which writes the opcode and nothing else.
+        class AcceptSocialContract final : public ClientPacket
+        {
+        public:
+            explicit AcceptSocialContract(WorldPacket&& packet) : ClientPacket(CMSG_ACCEPT_SOCIAL_CONTRACT, std::move(packet)) { }
+
+            void Read() override { }
+        };
+
         class SocialContractRequestResponse final : public ServerPacket
         {
         public:

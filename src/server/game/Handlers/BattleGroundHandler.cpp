@@ -659,9 +659,17 @@ void WorldSession::HandleGetPVPOptionsEnabled(WorldPackets::Battleground::GetPVP
     WorldPackets::Battleground::PVPOptionsEnabled pvpOptionsEnabled;
     pvpOptionsEnabled.RatedBattlegrounds = false;
     pvpOptionsEnabled.PugBattlegrounds = true;
-    pvpOptionsEnabled.WargameBattlegrounds = false;
-    pvpOptionsEnabled.WargameArenas = false;
+    // War games are implemented: WorldSession::HandleStartWarGame (below) mints the challenge and pushes
+    // SMSG_CHECK_WARGAME_ENTRY to the opposing leader, HandleAcceptWargameInvite creates the battleground and
+    // ports both groups in via BattlegroundQueue::AddWargameSide (BattlegroundQueueIdType::Wargame). Both
+    // flags gate the client's "War Game" buttons in the PvP frame; while false the UI never sends
+    // CMSG_START_WAR_GAME, so the whole feature was unreachable.
+    pvpOptionsEnabled.WargameBattlegrounds = sWorld->getBoolConfig(CONFIG_FEATURE_WARGAMES_ENABLED);
+    pvpOptionsEnabled.WargameArenas = sWorld->getBoolConfig(CONFIG_FEATURE_WARGAMES_ENABLED);
     pvpOptionsEnabled.RatedArenas = true;
+    // NOT flipped: there is no skirmish queue path. CMSG_BATTLEMASTER_JOIN_SKIRMISH is STATUS_UNHANDLED ->
+    // Handle_NULL and nothing ever builds a BattlegroundQueueIdType::ArenaSkirmish queue id, so enabling this
+    // would open a UI button that sends an opcode the server drops.
     pvpOptionsEnabled.ArenaSkirmish = false;
     pvpOptionsEnabled.SoloShuffle = false;
     pvpOptionsEnabled.RatedSoloShuffle = false;

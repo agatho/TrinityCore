@@ -45,6 +45,7 @@
 #include "Client/report_service.pb.h"
 #include "Client/api/client/v2/report_service.pb.h"
 #include "Client/api/client/v3/report_service.pb.h"
+#include "WorldserverReportService.h"
 #include "Client/resource_service.pb.h"
 #include "Client/api/client/v2/whisper_listener.pb.h"
 #include "Client/api/client/v2/whisper_service.pb.h"

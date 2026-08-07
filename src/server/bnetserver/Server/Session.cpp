@@ -30,7 +30,7 @@
 
 void Battlenet::AccountInfo::LoadResult(PreparedQueryResult result)
 {
-    // ba.id, ba.email, ba.locked, ba.lock_country, ba.last_ip, ba.LoginTicketExpiry, bab.unbandate > UNIX_TIMESTAMP() OR bab.unbandate = bab.bandate, bab.unbandate = bab.bandate FROM battlenet_accounts ba LEFT JOIN battlenet_account_bans bab WHERE email = ?
+    // ba.id, ba.email, ba.locked, ba.lock_country, ba.last_ip, ba.LoginTicketExpiry, bab.unbandate > UNIX_TIMESTAMP() OR bab.unbandate = bab.bandate, bab.unbandate = bab.bandate, bab.bandate, bab.unbandate FROM battlenet_accounts ba LEFT JOIN battlenet_account_bans bab WHERE email = ?
     Field* fields = result->Fetch();
     Id = fields[0].GetUInt32();
     Login = fields[1].GetString();
@@ -40,8 +40,11 @@ void Battlenet::AccountInfo::LoadResult(PreparedQueryResult result)
     LoginTicketExpiry = fields[5].GetUInt32();
     IsBanned = fields[6].GetUInt64() != 0;
     IsPermanenetlyBanned = fields[7].GetUInt64() != 0;
+    // Ban timestamps, needed to answer account.v2 GetRestriction with real created/expire times.
+    BanDate = fields[8].GetUInt32();
+    UnbanDate = fields[9].GetUInt32();
 
-    static constexpr uint32 GameAccountFieldsOffset = 8;
+    static constexpr uint32 GameAccountFieldsOffset = 10;
 
     do
     {

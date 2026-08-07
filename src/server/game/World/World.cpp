@@ -681,6 +681,12 @@ void World::LoadConfigSettings(bool reload)
         { .Name = "ShowMuteInWorld"sv, .DefaultValue = false, .Index = CONFIG_SHOW_MUTE_IN_WORLD },
         { .Name = "ShowBanInWorld"sv, .DefaultValue = false, .Index = CONFIG_SHOW_BAN_IN_WORLD },
         { .Name = "FeatureSystem.CharacterUndelete.Enabled"sv, .DefaultValue = false, .Index = CONFIG_FEATURE_SYSTEM_CHARACTER_UNDELETE_ENABLED },
+        // Recruit A Friend. The full 5-CMSG/4-SMSG surface is implemented in ReferAFriendHandler.cpp; these two bits
+        // are what the client's C_RecruitAFriend.IsEnabled() / IsRecruitingEnabled() read to un-grey the RAF panel.
+        { .Name = "FeatureSystem.RecruitAFriend.Enabled"sv, .DefaultValue = true, .Index = CONFIG_FEATURE_RAF_ENABLED },
+        { .Name = "FeatureSystem.RecruitAFriend.RecruitingEnabled"sv, .DefaultValue = true, .Index = CONFIG_FEATURE_RAF_RECRUITING_ENABLED },
+        // War games. Backed by HandleStartWarGame / HandleAcceptWargameInvite + BattlegroundQueue::AddWargameSide.
+        { .Name = "FeatureSystem.WarGames.Enabled"sv, .DefaultValue = true, .Index = CONFIG_FEATURE_WARGAMES_ENABLED },
         { .Name = "DBC.EnforceItemAttributes"sv, .DefaultValue = true, .Index = CONFIG_DBC_ENFORCE_ITEM_ATTRIBUTES },
         { .Name = "InstancesResetAnnounce"sv, .DefaultValue = false, .Index = CONFIG_INSTANCES_RESET_ANNOUNCE },
         { .Name = "AutoBroadcast.On"sv, .DefaultValue = false, .Index = CONFIG_AUTOBROADCAST },
@@ -884,6 +890,11 @@ void World::LoadConfigSettings(bool reload)
         { .Name = "Command.LookupMaxResults"sv, .DefaultValue = 0, .Index = CONFIG_MAX_RESULTS_LOOKUP_COMMANDS },
         { .Name = "FeatureSystem.CharacterUndelete.Cooldown"sv, .DefaultValue = 2592000, .Index = CONFIG_FEATURE_SYSTEM_CHARACTER_UNDELETE_COOLDOWN },
         { .Name = "DungeonFinder.OptionsMask"sv, .DefaultValue = 1, .Index = CONFIG_LFG_OPTIONSMASK },
+        // Recruit A Friend tuning, mirroring retail RAF 3.0 (RewardsVersion 2).
+        { .Name = "FeatureSystem.RecruitAFriend.MaxRecruits"sv, .DefaultValue = 10, .Index = CONFIG_RAF_MAX_RECRUITS },
+        { .Name = "FeatureSystem.RecruitAFriend.MaxRecruitMonths"sv, .DefaultValue = 12, .Index = CONFIG_RAF_MAX_RECRUIT_MONTHS },
+        { .Name = "FeatureSystem.RecruitAFriend.MaxRecruitmentUses"sv, .DefaultValue = 10, .Index = CONFIG_RAF_MAX_RECRUITMENT_USES },
+        { .Name = "FeatureSystem.RecruitAFriend.DaysInCycle"sv, .DefaultValue = 30, .Index = CONFIG_RAF_DAYS_IN_CYCLE },
         { .Name = "Account.PasswordChangeSecurity"sv, .DefaultValue = 0, .Index = CONFIG_ACC_PASSCHANGESEC },
         { .Name = "Battleground.RewardWinnerHonorFirst"sv, .DefaultValue = 27000, .Index = CONFIG_BG_REWARD_WINNER_HONOR_FIRST },
         { .Name = "Battleground.RewardWinnerConquestFirst"sv, .DefaultValue = 10000, .Index = CONFIG_BG_REWARD_WINNER_CONQUEST_FIRST },

@@ -1581,6 +1581,63 @@ FeatureSystem.CharacterUndelete.Enabled = 0
 FeatureSystem.CharacterUndelete.Cooldown = 2592000
 
 #
+#   FeatureSystem.RecruitAFriend.Enabled
+#        Description: Master gate for the Recruit A Friend panel. The server-side RAF surface
+#                     (recruit list, recruitment link, activity rewards) is implemented; while this
+#                     is disabled the client greys the RAF UI and never sends any CMSG_RAF_*.
+#        Default:     1 - (Enabled)
+#                     0 - (Disabled)
+
+FeatureSystem.RecruitAFriend.Enabled = 1
+
+#
+#   FeatureSystem.RecruitAFriend.RecruitingEnabled
+#        Description: Allows generating/sharing a recruitment link. Requires
+#                     FeatureSystem.RecruitAFriend.Enabled.
+#        Default:     1 - (Enabled)
+#                     0 - (Disabled)
+
+FeatureSystem.RecruitAFriend.RecruitingEnabled = 1
+
+#
+#   FeatureSystem.RecruitAFriend.MaxRecruits
+#        Description: Maximum number of active recruits shown in the RAF panel.
+#        Default:     10 (retail)
+
+FeatureSystem.RecruitAFriend.MaxRecruits = 10
+
+#
+#   FeatureSystem.RecruitAFriend.MaxRecruitMonths
+#        Description: Maximum number of recruited months the panel will display.
+#        Default:     12 (retail)
+
+FeatureSystem.RecruitAFriend.MaxRecruitMonths = 12
+
+#
+#   FeatureSystem.RecruitAFriend.MaxRecruitmentUses
+#        Description: Maximum number of times a recruitment link may be used.
+#        Default:     10
+
+FeatureSystem.RecruitAFriend.MaxRecruitmentUses = 10
+
+#
+#   FeatureSystem.RecruitAFriend.DaysInCycle
+#        Description: Length of a RAF reward cycle, in days.
+#        Default:     30 (retail)
+
+FeatureSystem.RecruitAFriend.DaysInCycle = 30
+
+#
+#   FeatureSystem.WarGames.Enabled
+#        Description: Advertises war-game battlegrounds and arenas to the client. Backed by
+#                     CMSG_START_WAR_GAME / CMSG_ACCEPT_WARGAME_INVITE and the wargame battleground
+#                     queue. While disabled the client's War Game buttons are greyed.
+#        Default:     1 - (Enabled)
+#                     0 - (Disabled)
+
+FeatureSystem.WarGames.Enabled = 1
+
+#
 #    AllowLoggingIPAddressesInDatabase
 #        Description: Specifies if IP addresses can be logged to the database
 #        Default:     1 - (Enabled)
