@@ -295,7 +295,14 @@ void WorldSession::HandleMoveWorldportAck()
     }
 
     if (!seamlessTeleport)
+    {
         player->SendInitialPacketsAfterAddToMap();
+
+        // Any pending resurrect offer is void once the world port completes; 68275 sends the clear
+        // right after MOVE_UPDATE_TELEPORT on (non-seamless) map entry regardless of pending state.
+        player->ClearResurrectRequestData();
+        player->SendDirectMessage(WorldPackets::Misc::ClearResurrect().Write());
+    }
     else
     {
         player->UpdateVisibilityForPlayer();

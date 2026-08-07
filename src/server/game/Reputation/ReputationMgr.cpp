@@ -379,6 +379,12 @@ void ReputationMgr::SendInitialReputations()
     }
 
     _player->SendDirectMessage(initFactions.Write());
+
+    // 12.x reads the bonus list from the split-out SMSG_FACTION_BONUS_INFO at login (sniff 68275:
+    // one full-roster list per login, every flag 0 outside a reputation-bonus event).
+    WorldPackets::Reputation::FactionBonusInfo bonusInfo;
+    bonusInfo.Bonuses = std::move(initFactions.Bonuses);
+    _player->SendDirectMessage(bonusInfo.Write());
 }
 
 void ReputationMgr::SendVisible(FactionState const* faction, bool visible) const
