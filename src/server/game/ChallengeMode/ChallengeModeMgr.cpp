@@ -479,9 +479,12 @@ uint32 ChallengeModeMgr::GetAffixCreatureId(uint32 affixId) const
         case ChallengeModeAffix::Spiteful:    return uint32(sConfigMgr->GetIntDefault("ChallengeMode.Affix.Spiteful.CreatureId", 174773));  // Spiteful Shade (fixate + self-decay AI)
         case ChallengeModeAffix::Incorporeal: return uint32(sConfigMgr->GetIntDefault("ChallengeMode.Affix.Incorporeal.CreatureId", 204560)); // Incorporeal Being (verify per build)
         case ChallengeModeAffix::Afflicted:   return uint32(sConfigMgr->GetIntDefault("ChallengeMode.Affix.Afflicted.CreatureId", 0));        // needs verified entry per build
-        // Midnight roster: Orbs of Ascendance / Void Emissary entries + AI are world content; 0 = disabled.
-        case ChallengeModeAffix::XalatathsBargainAscendant: return uint32(sConfigMgr->GetIntDefault("ChallengeMode.Affix.Ascendant.CreatureId", 0));
-        case ChallengeModeAffix::XalatathsBargainVoidbound: return uint32(sConfigMgr->GetIntDefault("ChallengeMode.Affix.Voidbound.CreatureId", 0));
+        // Midnight roster: both entries ship in the imported world data (TWW-era ids kept for Midnight -
+        // the Bargains debuted in TWW S3): 229296 Orb of Ascendance, 229537 Voidbound Emissary
+        // (renamed from "Void Emissary" at build 66102). Dedicated AI remains world content; a plain
+        // spawn is killable, which drives both mechanics' baseline loop.
+        case ChallengeModeAffix::XalatathsBargainAscendant: return uint32(sConfigMgr->GetIntDefault("ChallengeMode.Affix.Ascendant.CreatureId", 229296));
+        case ChallengeModeAffix::XalatathsBargainVoidbound: return uint32(sConfigMgr->GetIntDefault("ChallengeMode.Affix.Voidbound.CreatureId", 229537));
         default: return 0;
     }
 }
