@@ -51,9 +51,8 @@ public:
     static void ConsumeCofferKey(Player* player);
     static void AwardCofferKeyShards(Player* player, uint32 amount);
 
-    // Great Vault tracking
-    static void UpdateGreatVaultProgress(Player* player, uint8 tier);
-    static uint8 GetGreatVaultSlotCount(uint32 weeklyCompletions);
+    // Great Vault tracking has no delve-private duplicate: AwardDelveCompletion credits the vault's World
+    // activity row through WeeklyRewardsMgr, which owns the slot thresholds and the weekly period.
 
     // Tier unlock validation
     static bool CanUnlockNextTier(uint8 currentHighest, uint8 completedTier, bool hasRevivesRemaining);

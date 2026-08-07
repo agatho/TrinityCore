@@ -35,7 +35,9 @@ EndScriptData */
 #include "Language.h"
 #include "Player.h"
 #include "RBAC.h"
+#include "WeeklyRewardsMgr.h"
 #include "WorldSession.h"
+#include <array>
 
 using namespace Trinity::ChatCommands;
 
@@ -180,7 +182,20 @@ public:
         handler->PSendSysMessage("Highest Tier This Week: {}", progress.HighestTierThisWeek);
         handler->PSendSysMessage("Weekly Bountiful: {}", progress.WeeklyBountifulCount);
         handler->PSendSysMessage("Weekly Coffer Shards: {}/{}", progress.WeeklyCofferShards, Delves::MAX_COFFER_KEY_SHARDS_PER_WEEK);
-        handler->PSendSysMessage("Great Vault Slots: {}", Delves::DelvesRewards::GetGreatVaultSlotCount(progress.WeeklyCompletions));
+        // Report the vault state the client will actually see, straight from the World activity row the delve
+        // completions credit (character-scoped, unlike the account-wide delve counters above).
+        WeeklyRewards::CharacterVault const& vault = sWeeklyRewardsMgr.GetVault(player->GetGUID());
+        WeeklyRewards::ActivityRow const& worldRow = vault.Rows[uint8(WeeklyRewards::ActivityType::World)];
+        std::array<uint32, 3> const& worldThresholds = WeeklyRewards::ThresholdsFor(WeeklyRewards::ActivityType::World);
+
+        uint8 earnedSlots = 0;
+        for (uint32 threshold : worldThresholds)
+            if (worldRow.Count >= threshold)
+                ++earnedSlots;
+
+        handler->PSendSysMessage("Great Vault (World row): {} completions, {}/{} slots earned (thresholds {}/{}/{})",
+            worldRow.Count, earnedSlots, worldThresholds.size(),
+            worldThresholds[0], worldThresholds[1], worldThresholds[2]);
 
         return true;
     }

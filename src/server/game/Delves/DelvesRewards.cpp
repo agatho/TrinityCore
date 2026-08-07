@@ -28,6 +28,7 @@
 #include "LootMgr.h"
 #include "Mail.h"
 #include "Player.h"
+#include "WeeklyRewardsMgr.h"
 
 namespace Delves
 {
@@ -110,8 +111,15 @@ void DelvesRewards::AwardDelveCompletion(Player* player, uint8 tier, bool bounti
         }
     }
 
-    // Update Great Vault progress
-    UpdateGreatVaultProgress(player, tier);
+    // Great Vault: an endgame delve completion credits the vault's World activity row - the row the client
+    // fills from WeeklyRewardChestThreshold.db2 Type 6 (live ids 196/197/198, slots at 2/4/8 completions).
+    // The level recorded per run is the delve TIER, so each slot is awarded the Nth-best tier of the week,
+    // exactly as a Mythic+ run credits the Dungeon row at its keystone level. The reward ITEM LEVEL that
+    // retail derives from that tier is content the server does not have a full table for yet (only the two
+    // endpoints are documented: T1 = 233, T8+ = 259, capped at Hero 1/6), so no ilvl is fabricated here -
+    // the vault advertises the slot and its tier, and the item comes from the vault reward pool.
+    if (tier >= DELVE_TIER_ENDGAME_START)
+        sWeeklyRewardsMgr.RecordActivity(player, WeeklyRewards::ActivityType::World, tier);
 
     // Check for tier unlock (must have revives remaining)
     if (hasRevivesRemaining && CanUnlockNextTier(progress.HighestTierUnlocked, tier, hasRevivesRemaining))
@@ -204,29 +212,6 @@ void DelvesRewards::AwardCofferKeyShards(Player* player, uint32 amount)
     // This happens when entering a delve, but we track the shards here
     TC_LOG_DEBUG("scripts.delves", "Awarded {} coffer key shards to {} (total: {}/{})",
         actualAmount, player->GetName(), progress.WeeklyCofferShards, MAX_COFFER_KEY_SHARDS_PER_WEEK);
-}
-
-void DelvesRewards::UpdateGreatVaultProgress(Player* player, uint8 tier)
-{
-    if (tier < DELVE_TIER_ENDGAME_START) // Only tier 4+ counts for vault
-        return;
-
-    // Great Vault tracking uses the existing WeeklyRewardChest system
-    // Completions at 2/4/8 unlock vault slots
-    // The highest tier completed determines the vault reward ilvl
-    // TODO: Integrate with existing WeeklyRewardChestActivity system
-    TC_LOG_DEBUG("scripts.delves", "Updated Great Vault progress for {} (tier {})", player->GetName(), tier);
-}
-
-uint8 DelvesRewards::GetGreatVaultSlotCount(uint32 weeklyCompletions)
-{
-    if (weeklyCompletions >= VAULT_SLOT_3_COMPLETIONS) // 8
-        return 3;
-    if (weeklyCompletions >= VAULT_SLOT_2_COMPLETIONS) // 4
-        return 2;
-    if (weeklyCompletions >= VAULT_SLOT_1_COMPLETIONS) // 2
-        return 1;
-    return 0;
 }
 
 bool DelvesRewards::CanUnlockNextTier(uint8 currentHighest, uint8 completedTier, bool hasRevivesRemaining)
