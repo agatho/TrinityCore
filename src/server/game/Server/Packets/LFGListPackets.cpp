@@ -133,11 +133,6 @@ void LFGListLeave::Read()
     _worldPacket >> Ticket;
 }
 
-void LFGListGetStatus::Read()
-{
-    _worldPacket >> Ticket;
-}
-
 void LFGListSearch::Read()
 {
     _worldPacket >> CategoryId >> ActivityGroupId >> Field2 >> Field3 >> Field4 >> Field5;
@@ -152,7 +147,7 @@ void LFGListSearch::Read()
 void LFGListApplyToGroup::Read()
 {
     _worldPacket >> Ticket;
-    _worldPacket >> ListingId;
+    _worldPacket >> ActivityID;
     _worldPacket >> RoleMask;
     _worldPacket >> Field2;
 }

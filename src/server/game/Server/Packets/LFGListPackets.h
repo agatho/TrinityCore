@@ -132,9 +132,8 @@ namespace WorldPackets
         {
         public:
             explicit LFGListGetStatus(WorldPacket&& packet) : ClientPacket(CMSG_LFG_LIST_GET_STATUS, std::move(packet)) { }
-            void Read() override;
-
-            LFG::RideTicket Ticket;
+            // Sniff-verified (premandegroups 68275): empty payload — the client requests its own status blind.
+            void Read() override { }
         };
 
         class LFGListSearch final : public ClientPacket
@@ -162,8 +161,9 @@ namespace WorldPackets
             explicit LFGListApplyToGroup(WorldPacket&& packet) : ClientPacket(CMSG_LFG_LIST_APPLY_TO_GROUP, std::move(packet)) { }
             void Read() override;
 
+            // Sniff-verified 33B fixed: Ticket{groupGuid, ListingID, type 4, applyTime} + ActivityID + roles.
             LFG::RideTicket Ticket;         // the listing being applied to
-            uint32 ListingId = 0;
+            uint32 ActivityID = 0;          // GroupFinderActivity of the listing (was mislabeled ListingId)
             uint8 RoleMask = 0;
             uint8 Field2 = 0;
         };

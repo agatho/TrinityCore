@@ -197,9 +197,12 @@ void WorldSession::HandleLFGListLeave(WorldPackets::LFGList::LFGListLeave& packe
     SendPacket(status.Write());
 }
 
-void WorldSession::HandleLFGListGetStatus(WorldPackets::LFGList::LFGListGetStatus& packet)
+void WorldSession::HandleLFGListGetStatus(WorldPackets::LFGList::LFGListGetStatus& /*packet*/)
 {
-    SendLFGListUpdateStatus(packet.Ticket.Id);
+    // Empty payload (sniff-verified): the client asks for its own listing status blind; answer from the
+    // leader index (0 = not listed).
+    LFGList::Listing const* listing = GetPlayer() ? sLFGListMgr.GetListingByLeader(GetPlayer()->GetGUID()) : nullptr;
+    SendLFGListUpdateStatus(listing ? listing->Id : 0);
 }
 
 void WorldSession::HandleLFGListSearch(WorldPackets::LFGList::LFGListSearch& packet)
@@ -233,6 +236,10 @@ void WorldSession::HandleLFGListApplyToGroup(WorldPackets::LFGList::LFGListApply
 
     LFGList::Listing* listing = sLFGListMgr.GetListing(packet.Ticket.Id);
     if (!listing || listing->LeaderGuid == player->GetGUID())
+        return;
+
+    // The client echoes the listing's activity id (sniff-verified field); a mismatch means a stale browse row.
+    if (packet.ActivityID && listing->Descriptor.ActivityID && packet.ActivityID != listing->Descriptor.ActivityID)
         return;
 
     LFGList::Application* app = sLFGListMgr.AddApplication(listing->Id, player->GetGUID(), packet.RoleMask,
