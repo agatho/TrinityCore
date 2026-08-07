@@ -4464,6 +4464,33 @@ struct ItemContextPickerEntryLoadInfo
     static constexpr DB2LoadInfo Instance{ Fields, 8, &ItemContextPickerEntryMeta::Instance, HOTFIX_SEL_ITEM_CONTEXT_PICKER_ENTRY };
 };
 
+struct ItemConversionLoadInfo
+{
+    static constexpr DB2FieldMeta Fields[6] =
+    {
+        { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "Unknown920" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "ItemBonusTreeID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "ItemLogicalCostGroupID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "AlternateItemLogicalCostGroupID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "PlayerConditionID" },
+    };
+
+    static constexpr DB2LoadInfo Instance{ Fields, 6, &ItemConversionMeta::Instance, HOTFIX_SEL_ITEM_CONVERSION };
+};
+
+struct ItemConversionEntryLoadInfo
+{
+    static constexpr DB2FieldMeta Fields[3] =
+    {
+        { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "ItemID" },
+        { .IsSigned = false, .Type = FT_INT, .Name = "ItemConversionID" },
+    };
+
+    static constexpr DB2LoadInfo Instance{ Fields, 3, &ItemConversionEntryMeta::Instance, HOTFIX_SEL_ITEM_CONVERSION_ENTRY };
+};
+
 struct ItemCreationContextLoadInfo
 {
     static constexpr DB2FieldMeta Fields[3] =
@@ -4712,6 +4739,20 @@ struct ItemLimitCategoryConditionLoadInfo
     };
 
     static constexpr DB2LoadInfo Instance{ Fields, 4, &ItemLimitCategoryConditionMeta::Instance, HOTFIX_SEL_ITEM_LIMIT_CATEGORY_CONDITION };
+};
+
+struct ItemLogicalCostLoadInfo
+{
+    static constexpr DB2FieldMeta Fields[5] =
+    {
+        { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "InventoryTypeSlotMask" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "Flags" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "ItemExtendedCostID" },
+        { .IsSigned = false, .Type = FT_INT, .Name = "ItemLogicalCostGroupID" },
+    };
+
+    static constexpr DB2LoadInfo Instance{ Fields, 5, &ItemLogicalCostMeta::Instance, HOTFIX_SEL_ITEM_LOGICAL_COST };
 };
 
 struct ItemModifiedAppearanceLoadInfo
@@ -5742,6 +5783,60 @@ struct MythicPlusSeasonLoadInfo
     };
 
     static constexpr DB2LoadInfo Instance{ Fields, 5, &MythicPlusSeasonMeta::Instance, HOTFIX_SEL_MYTHIC_PLUS_SEASON };
+};
+
+struct MythicPlusSeasonKeyFloorLoadInfo
+{
+    static constexpr DB2FieldMeta Fields[4] =
+    {
+        { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "KeyFloor" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "PlayerConditionID" },
+        { .IsSigned = false, .Type = FT_INT, .Name = "DisplaySeasonID" },
+    };
+
+    static constexpr DB2LoadInfo Instance{ Fields, 4, &MythicPlusSeasonKeyFloorMeta::Instance, HOTFIX_SEL_MYTHIC_PLUS_SEASON_KEY_FLOOR };
+};
+
+struct MythicPlusSeasonRewardLevelsLoadInfo
+{
+    static constexpr DB2FieldMeta Fields[6] =
+    {
+        { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
+        { .IsSigned = false, .Type = FT_INT, .Name = "MythicPlusSeasonID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "ActivityTierID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "DifficultyLevel" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "WeeklyRewardLevel" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "EndOfRunRewardLevel" },
+    };
+
+    static constexpr DB2LoadInfo Instance{ Fields, 6, &MythicPlusSeasonRewardLevelsMeta::Instance, HOTFIX_SEL_MYTHIC_PLUS_SEASON_REWARD_LEVELS };
+};
+
+struct MythicPlusSeasonTrackedAffixLoadInfo
+{
+    static constexpr DB2FieldMeta Fields[5] =
+    {
+        { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "KeystoneAffixID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "BonusRating" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "Field_9_1_0_38511_004" },
+        { .IsSigned = false, .Type = FT_INT, .Name = "DisplaySeasonID" },
+    };
+
+    static constexpr DB2LoadInfo Instance{ Fields, 5, &MythicPlusSeasonTrackedAffixMeta::Instance, HOTFIX_SEL_MYTHIC_PLUS_SEASON_TRACKED_AFFIX };
+};
+
+struct MythicPlusSeasonTrackedMapLoadInfo
+{
+    static constexpr DB2FieldMeta Fields[3] =
+    {
+        { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "MapChallengeModeID" },
+        { .IsSigned = false, .Type = FT_INT, .Name = "DisplaySeasonID" },
+    };
+
+    static constexpr DB2LoadInfo Instance{ Fields, 3, &MythicPlusSeasonTrackedMapMeta::Instance, HOTFIX_SEL_MYTHIC_PLUS_SEASON_TRACKED_MAP };
 };
 
 struct NameGenLoadInfo

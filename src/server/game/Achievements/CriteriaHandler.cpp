@@ -35,7 +35,10 @@
 #include "ItemBonusMgr.h"
 #include "LanguageMgr.h"
 #include "Log.h"
+#include "ChallengeMode.h"
+#include "ChallengeModeMgr.h"
 #include "Map.h"
+#include "MythicPlusData.h"
 #include "MapManager.h"
 #include "MapUtils.h"
 #include "ObjectMgr.h"
@@ -596,6 +599,9 @@ void CriteriaHandler::UpdateCriteria(Criteria const* criteria, uint64 miscValue1
         case CriteriaType::StartResearchAnyGarrisonTalent:
         case CriteriaType::CompleteResearchAnyGarrisonTalent:
         case CriteriaType::SocketAnySoulbindConduit:
+        // --- mythic keystone: one tick per completed run
+        case CriteriaType::MythicPlusCompleted:
+        case CriteriaType::CompleteAnyChallengeMode:
             SetCriteriaProgress(criteria, 1, referencePlayer, PROGRESS_ACCUMULATE);
             break;
         // std case: increment at miscValue1
@@ -635,6 +641,8 @@ void CriteriaHandler::UpdateCriteria(Criteria const* criteria, uint64 miscValue1
         case CriteriaType::HighestHealReceived:
         case CriteriaType::AnyArtifactPowerRankPurchased:
         case CriteriaType::AzeriteLevelReached:
+        // overall Mythic+ rating (sum of best runs); the required score lives in the CriteriaTree Amount
+        case CriteriaType::MythicPlusRatingAttained:
             SetCriteriaProgress(criteria, miscValue1, referencePlayer, PROGRESS_HIGHEST);
             break;
         case CriteriaType::ReachRenownLevel:
@@ -737,6 +745,7 @@ void CriteriaHandler::UpdateCriteria(Criteria const* criteria, uint64 miscValue1
         case CriteriaType::StartResearchGarrisonTalent:
         case CriteriaType::CompleteResearchGarrisonTalent:
         case CriteriaType::SocketGarrisonTalent:
+        case CriteriaType::CompleteChallengeMode:
             SetCriteriaProgress(criteria, 1, referencePlayer);
             break;
         case CriteriaType::BankSlotsPurchased:
@@ -872,9 +881,7 @@ void CriteriaHandler::UpdateCriteria(Criteria const* criteria, uint64 miscValue1
         case CriteriaType::FindResearchObject:
         case CriteriaType::ExhaustAnyResearchSite:
         case CriteriaType::CompleteInternalCriteria:
-        case CriteriaType::CompleteAnyChallengeMode:
         case CriteriaType::KilledAllUnitsInSpawnRegion:
-        case CriteriaType::CompleteChallengeMode:
         case CriteriaType::CreatedItemsByCastingSpellWithLimit:
         case CriteriaType::BattlePetAchievementPointsEarned:
         case CriteriaType::ReleasedSpirit:
@@ -889,7 +896,6 @@ void CriteriaHandler::UpdateCriteria(Criteria const* criteria, uint64 miscValue1
         case CriteriaType::PlayerHasEarnedHonor:
         case CriteriaType::ChooseRelicTalent:
         case CriteriaType::AccountHonorLevelReached:
-        case CriteriaType::MythicPlusCompleted:
         case CriteriaType::ObtainAnyItemWithCurrencyValue:
         case CriteriaType::EarnExpansionLevel:
         case CriteriaType::LearnTransmog:
@@ -1787,6 +1793,14 @@ bool CriteriaHandler::RequirementsSatisfied(Criteria const* criteria, uint64 mis
         case CriteriaType::SocketAnySoulbindConduit:
             // No asset - the ModifierTree does the discriminating, but it needs a real subject id in
             // miscValue1 (GarrFollower / GarrTalent / SoulbindConduit / GarrBuilding).
+        case CriteriaType::CompleteChallengeMode:
+            // Asset = MapID of the keystone dungeon; miscValue1 = the map that was completed.
+            if (!miscValue1 || miscValue1 != uint32(criteria->Entry->Asset.MapID))
+                return false;
+            break;
+        case CriteriaType::MythicPlusCompleted:
+        case CriteriaType::CompleteAnyChallengeMode:
+        case CriteriaType::MythicPlusRatingAttained:
             if (!miscValue1)
                 return false;
             break;
@@ -3681,12 +3695,45 @@ bool CriteriaHandler::ModifierSatisfied(ModifierTreeEntry const* modifier, uint6
             if (!referencePlayer->CanEnableWarModeInArea())
                 return false;
             break;
-        case ModifierTreeType::MythicPlusKeystoneLevelEqualOrGreaterThan: // 247 NYI
-        case ModifierTreeType::MythicPlusCompletedInTime: // 248 NYI
-        case ModifierTreeType::MythicPlusMapChallengeMode: // 249 NYI
+        case ModifierTreeType::MythicPlusKeystoneLevelEqualOrGreaterThan: // 247
+        {
+            InstanceMap* instanceMap = referencePlayer->GetMap()->ToInstanceMap();
+            ChallengeMode* challenge = instanceMap ? instanceMap->GetChallengeMode() : nullptr;
+            if (!challenge || (!challenge->IsActive() && !challenge->IsCompleted()) || challenge->GetKeystoneLevel() < reqValue)
+                return false;
+            break;
+        }
+        case ModifierTreeType::MythicPlusCompletedInTime: // 248
+        {
+            InstanceMap* instanceMap = referencePlayer->GetMap()->ToInstanceMap();
+            ChallengeMode* challenge = instanceMap ? instanceMap->GetChallengeMode() : nullptr;
+            // "In time" only means anything for a run that has actually finished - an active run that
+            // is merely still under par has not completed in time yet.
+            if (!challenge || !challenge->IsCompleted())
+                return false;
+            if (!challenge->GetTimeLimitMs() || challenge->GetEffectiveTimeMs() > challenge->GetTimeLimitMs())
+                return false;
+            break;
+        }
+        case ModifierTreeType::MythicPlusMapChallengeMode: // 249
+        {
+            InstanceMap* instanceMap = referencePlayer->GetMap()->ToInstanceMap();
+            ChallengeMode* challenge = instanceMap ? instanceMap->GetChallengeMode() : nullptr;
+            if (!challenge || challenge->GetMapChallengeModeId() != reqValue)
+                return false;
+            break;
+        }
         case ModifierTreeType::MythicPlusDisplaySeason: // 250 NYI
-        case ModifierTreeType::MythicPlusMilestoneSeason: // 251 NYI
+            // Needs DisplaySeason.db2, which this core does not load; the active MythicPlusSeason id uses a
+            // different numbering. Guessing the mapping would silently mis-gate every seasonal achievement.
             return false;
+        case ModifierTreeType::MythicPlusMilestoneSeason: // 251
+        {
+            MythicPlusSeasonEntry const* season = sChallengeModeMgr.GetActiveSeason();
+            if (!season || season->MilestoneSeason != int32(reqValue))
+                return false;
+            break;
+        }
         case ModifierTreeType::PlayerVisibleRace: // 252
         {
             CreatureDisplayInfoEntry const* creatureDisplayInfo = sCreatureDisplayInfoStore.LookupEntry(referencePlayer->GetDisplayId());
@@ -4118,9 +4165,21 @@ bool CriteriaHandler::ModifierSatisfied(ModifierTreeEntry const* modifier, uint6
         case ModifierTreeType::CurrencySpentOnGarrisonTalentResearchEqualOrGreaterThan: // 318 NYI
         case ModifierTreeType::RenownCatchupActive: // 319 NYI
         case ModifierTreeType::RapidRenownCatchupActive: // 320 NYI
-        case ModifierTreeType::PlayerMythicPlusRatingEqualOrGreaterThan: // 321 NYI
-        case ModifierTreeType::PlayerMythicPlusRunCountInCurrentExpansionEqualOrGreaterThan: // 322 NYI
             return false;
+        case ModifierTreeType::PlayerMythicPlusRatingEqualOrGreaterThan: // 321
+        {
+            MythicPlusData* mythicPlus = referencePlayer->GetMythicPlusData();
+            if (!mythicPlus || mythicPlus->GetOverallScore() < float(reqValue))
+                return false;
+            break;
+        }
+        case ModifierTreeType::PlayerMythicPlusRunCountInCurrentExpansionEqualOrGreaterThan: // 322
+        {
+            MythicPlusData* mythicPlus = referencePlayer->GetMythicPlusData();
+            if (!mythicPlus || mythicPlus->GetBestRuns().size() < reqValue)
+                return false;
+            break;
+        }
         case ModifierTreeType::PlayerHasCustomizationChoice: // 323
         {
             int32 customizationChoiceIndex = referencePlayer->m_playerData->Customizations.FindIndexIf([reqValue](UF::ChrCustomizationChoice const& choice)
@@ -5400,7 +5459,7 @@ std::span<CriteriaType const> CriteriaMgr::GetRetroactivelyUpdateableCriteriaTyp
         CriteriaType::ReachMaxLevel,
         //CriteriaType::MemorizeSpell, /*NYI*/
         //CriteriaType::LearnTransmogIllusion, /*NYI*/
-        //CriteriaType::MythicPlusRatingAttained, /*NYI*/
+        //CriteriaType::MythicPlusRatingAttained, // implemented, but event-driven only (ChallengeMode::Complete)
         //CriteriaType::MythicPlusDisplaySeasonEnded, /*NYI*/
         //CriteriaType::CompleteTrackingQuest, /*NYI*/
         CriteriaType::BankTabPurchased,

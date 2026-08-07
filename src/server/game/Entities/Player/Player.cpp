@@ -63,6 +63,7 @@
 #include "DelvesRewards.h"
 #include "DisableMgr.h"
 #include "DuelPackets.h"
+#include "ElapsedTimerMgr.h"
 #include "EquipmentSetPackets.h"
 #include "Formulas.h"
 #include "GameEventMgr.h"
@@ -72,6 +73,7 @@
 #include "GarrisonMgr.h"
 #include "GarrisonPackets.h"
 #include "MythicPlusData.h"
+#include "MythicPlusPacketsCommon.h"
 #include "GitRevision.h"
 #include "HouseInteriorMap.h"
 #include "Housing.h"
@@ -404,6 +406,10 @@ void Player::CleanupsBeforeDelete(bool finalCleanup)
 {
     TradeCancel(false);
     DuelComplete(DUEL_INTERRUPTED);
+
+    // Elapsed timers are per-session bookkeeping keyed by player GUID; drop ours so the manager
+    // does not accumulate entries for characters that are gone.
+    sElapsedTimerMgr->RemoveAllTimers(GetGUID());
 
     Unit::CleanupsBeforeDelete(finalCleanup);
 }
@@ -19610,6 +19616,7 @@ bool Player::LoadFromDB(ObjectGuid guid, CharacterDatabaseQueryHolder const& hol
     _mythicPlusData->LoadFromDB(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_MYTHIC_PLUS));
     _mythicPlusData->LoadWeeklyFromDB(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_MYTHIC_PLUS_WEEKLY));
     _mythicPlusData->LoadVaultFromDB(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_MYTHIC_PLUS_VAULT));
+    UpdateDungeonScore();
 
     std::unique_ptr<Housing> housing = std::make_unique<Housing>(this);
     if (housing->LoadFromDB(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_HOUSING),
@@ -27241,6 +27248,11 @@ void Player::SendInitialPacketsAfterAddToMap()
 
     // Push the account-wide store front (catalogue + per-item ownership) once the player is in the world.
     GetSession()->SendAccountStoreFrontUpdate();
+    // Resynchronise the client's world elapsed timers for the map we just entered. This is what
+    // makes a mid-run zone-in (or a relog inside a running Mythic+ instance) show the dungeon timer
+    // at the correct elapsed value - previously the timer was only ever pushed once, at run start,
+    // so anyone who was not present at that moment saw nothing.
+    sElapsedTimerMgr->SendActiveTimers(this);
 }
 
 void Player::SendUpdateToOutOfRangeGroupMembers()
@@ -32658,6 +32670,27 @@ void Player::UpdateInitiativeFavor(uint32 favor)
         h.MapID = s.MapID;
         h.PlotID = s.PlotID;
     }
+}
+
+void Player::UpdateDungeonScore()
+{
+    // The client renders Mythic+ rating purely from these two update fields: the public roster summary
+    // (party frames / inspect) and the owner's full per-season score tree (the Mythic+ UI, score colors).
+    WorldPackets::MythicPlus::DungeonScoreSummary summary;
+    WorldPackets::MythicPlus::DungeonScoreData data;
+    if (MythicPlusData* mythicPlus = GetMythicPlusData())
+    {
+        mythicPlus->BuildDungeonScoreSummary(summary);
+        mythicPlus->BuildDungeonScoreData(data);
+    }
+
+    SetUpdateFieldValue(m_values.ModifyValue(&Player::m_playerData).ModifyValue(&UF::PlayerData::DungeonScore), std::move(summary));
+    SetUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::DungeonScore), std::move(data));
+}
+
+void Player::SetItemUpgradeWatermark(uint32 slot, float itemLevel)
+{
+    SetUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::ItemUpgradeHighWatermark, slot), itemLevel);
 }
 
 void Player::SendMovementSetCollisionHeight(float height, WorldPackets::Movement::UpdateCollisionHeightReason reason)

@@ -30,6 +30,7 @@
 #include "WowTime.h"
 #include <array>
 #include <map>
+#include <vector>
 
 enum class CountdownTimerType : int32;
 enum class DisplayToastType : uint8;
@@ -1039,6 +1040,76 @@ namespace WorldPackets
             Duration<Seconds> TimeLeft;
             CountdownTimerType Type = {};
             Optional<ObjectGuid> PlayerGuid;
+        };
+
+        // Cancels the SMSG_START_TIMER countdown of a given type. Wire (12.0.7/68275) is a single
+        // uint32 carrying the CountdownTimerType - verified against the client deserializer for
+        // SMSG_STOP_TIMER (0x42003E), which performs exactly one 4-byte read.
+        class StopTimer final : public ServerPacket
+        {
+        public:
+            explicit StopTimer() : ServerPacket(SMSG_STOP_TIMER, 4) { }
+
+            WorldPacket const* Write() override;
+
+            CountdownTimerType Type = {};
+        };
+
+        // One entry of the client's "world elapsed timer" list (client type name: JamElaspedTimer).
+        //
+        // Wire, derived from the 68275 client deserializers and cross-checked against the
+        // known-good SMSG_START_TIMER layout in the same extraction:
+        //     { int64 CurrentDuration; uint32 TimerID; }
+        // i.e. the 8-byte duration comes FIRST. (This is a field-order/width change from the
+        // 7.3.5-era layout, where TimerID came first and the duration was a uint32.)
+        //
+        // TimerID indexes WorldElapsedTimer.db2. The client reads the timer *type* from that DB2
+        // row - it is NOT on the wire - and Blizzard_ScenarioObjectiveTracker only renders rows
+        // whose Type is ChallengeMode(1) or ProvingGround(2). See ElapsedTimerMgr.h.
+        struct ElapsedTimer
+        {
+            Duration<Seconds> CurrentDuration;
+            uint32 TimerID = 0;
+        };
+
+        ByteBuffer& operator<<(ByteBuffer& data, ElapsedTimer const& timer);
+
+        // Starts (or re-bases) a single elapsed timer. CurrentDuration is the time already elapsed;
+        // the client free-runs its own clock from that baseline.
+        class StartElapsedTimer final : public ServerPacket
+        {
+        public:
+            explicit StartElapsedTimer() : ServerPacket(SMSG_START_ELAPSED_TIMER, 8 + 4) { }
+
+            WorldPacket const* Write() override;
+
+            ElapsedTimer Timer;
+        };
+
+        // Bulk form, used to resynchronise every active timer on zone-in / relog. The client's
+        // PLAYER_ENTERING_WORLD handler calls GetWorldElapsedTimers(), so this is the packet that
+        // repopulates that list.
+        class StartElapsedTimers final : public ServerPacket
+        {
+        public:
+            explicit StartElapsedTimers() : ServerPacket(SMSG_START_ELAPSED_TIMERS, 4) { }
+
+            WorldPacket const* Write() override;
+
+            std::vector<ElapsedTimer> Timers;
+        };
+
+        // Wire: { uint32 TimerID; bit KeepTimer; } - verified against the client deserializer,
+        // which reads the flag as the top bit of one byte (matching OptionalInit/FlushBits packing).
+        class StopElapsedTimer final : public ServerPacket
+        {
+        public:
+            explicit StopElapsedTimer() : ServerPacket(SMSG_STOP_ELAPSED_TIMER, 4 + 1) { }
+
+            WorldPacket const* Write() override;
+
+            uint32 TimerID = 0;
+            bool KeepTimer = false;
         };
 
         class QueryCountdownTimer final : public ClientPacket

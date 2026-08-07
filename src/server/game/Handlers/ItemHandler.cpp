@@ -23,9 +23,11 @@
 #include "DB2Stores.h"
 #include "GossipDef.h"
 #include "Item.h"
+#include "ItemConversionMgr.h"
 #include "ItemPackets.h"
 #include "Log.h"
 #include "NPCPackets.h"
+#include "ObjectAccessor.h"
 #include "ObjectMgr.h"
 #include "Player.h"
 #include "World.h"
@@ -1338,18 +1340,27 @@ void WorldSession::HandleSetBankAutosortDisabled(WorldPackets::Item::SetBankAuto
 
 void WorldSession::HandlePerformItemInteraction(WorldPackets::Item::PerformItemInteraction& performItemInteraction)
 {
-    if (!_player->GetNPCIfCanInteractWith(performItemInteraction.Banker, UNIT_NPC_FLAG_NONE, UNIT_NPC_FLAG_2_NONE))
-        return;
+    Player* player = GetPlayer();
 
-    Item* item = _player->GetItemByGuid(performItemInteraction.ItemGuid);
-    if (!item)
-        return;
+    WorldPackets::Item::ItemInteractionComplete response;
+    response.Error = true;
 
-    // TODO: Implement specific item interaction logic based on InteractionID
-    // For now, acknowledge the interaction
-    WorldPackets::Item::ItemInteractionComplete result;
-    result.InteractionID = performItemInteraction.InteractionID;
-    SendPacket(result.Write());
+    // UIItemInteractionType::ItemConversion (4) is the only interaction the server implements (Matrix Catalyst).
+    constexpr int32 UI_ITEM_INTERACTION_ITEM_CONVERSION = 4;
+
+    // The interaction agent the client has open must exist near the player (the Catalyst console/steward).
+    // Kept as a range check only: which unit/GO offers the UI is world content (UiItemInteractionID links).
+    bool agentOk = performItemInteraction.AgentGuid.IsEmpty();
+    if (!agentOk)
+        if (WorldObject const* agent = ObjectAccessor::GetWorldObject(*player, performItemInteraction.AgentGuid))
+            agentOk = player->IsWithinDistInMap(agent, INTERACTION_DISTANCE * 4);
+
+    if (agentOk && performItemInteraction.InteractionType == UI_ITEM_INTERACTION_ITEM_CONVERSION)
+        if (Item* item = player->GetItemByGuid(performItemInteraction.ItemGuid))
+            if (sItemConversionMgr.PerformConversion(player, item))
+                response.Error = false;
+
+    SendPacket(response.Write());
 }
 
 void WorldSession::HandleConvertItemToBindToAccount(WorldPackets::Item::ConvertItemToBindToAccount& convertItemToBindToAccount)

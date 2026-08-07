@@ -2613,6 +2613,12 @@ void Item::AddBonuses(uint32 bonusListID)
     SetUpdateFieldValue(m_values.ModifyValue(&Item::m_itemData).ModifyValue(&UF::ItemData::ItemAppearanceModID), _bonusData.AppearanceModID);
 }
 
+void Item::ReplaceBonuses(std::vector<int32> bonusListIDs)
+{
+    _bonusData.Initialize(GetTemplate());
+    SetBonuses(std::move(bonusListIDs));
+}
+
 void Item::SetBonuses(std::vector<int32> bonusListIDs)
 {
     WorldPackets::Item::ItemBonusKey itemBonusKey;

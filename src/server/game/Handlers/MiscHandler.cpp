@@ -40,6 +40,7 @@
 #include "Guild.h"
 #include "GuildMgr.h"
 #include "InstancePackets.h"
+#include "ChallengeMode.h"
 #include "InstanceScript.h"
 #include "Language.h"
 #include "Log.h"
@@ -492,7 +493,12 @@ void WorldSession::HandleResurrectResponse(WorldPackets::Misc::ResurrectResponse
     {
         if (InstanceScript* instance = ressPlayer->GetInstanceScript())
         {
-            if (instance->IsEncounterInProgress())
+            // Raid encounters consume a charge while the encounter runs; Mythic Keystone dungeons use the
+            // run-wide pool for the entire active run (retail 12.x).
+            InstanceMap* instanceMap = ressPlayer->GetMap()->ToInstanceMap();
+            bool const limitActive = instance->IsEncounterInProgress()
+                || (instanceMap && instanceMap->GetChallengeMode() && instanceMap->GetChallengeMode()->IsActive());
+            if (limitActive)
             {
                 if (!instance->GetCombatResurrectionCharges())
                     return;

@@ -3015,6 +3015,11 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         Garrison* GetGarrisonWithMission(uint32 missionRecID) const;
         std::unordered_map<int32, std::unique_ptr<Garrison>> const& GetGarrisons() const { return _garrisons; }
         MythicPlusData* GetMythicPlusData() const { return _mythicPlusData.get(); }
+        // Rebuilds the Mythic+ rating update fields (PlayerData + ActivePlayerData DungeonScore) from
+        // MythicPlusData. Called on load and after every recorded keystone run.
+        void UpdateDungeonScore();
+        // Sets one ActivePlayerData::ItemUpgradeHighWatermark slot (item upgrade crest-waiver display).
+        void SetItemUpgradeWatermark(uint32 slot, float itemLevel);
 
         // Covenant / Soulbind
         uint32 GetActiveCovenant() const { return m_activeCovenantId; }

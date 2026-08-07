@@ -23,12 +23,15 @@
 #include <unordered_map>
 #include <vector>
 
+class Item;
+class Player;
 struct MapChallengeModeEntry;
 struct MythicPlusSeasonEntry;
 
 // KeystoneAffix.db2 IDs (build 68275). Shared by the scaling engine and the per-run affix behaviours.
 namespace ChallengeModeAffix
 {
+    // Legacy roster (pre-Midnight seasons; behaviours kept for operator-configured schedules)
     constexpr uint32 Raging      = 6;
     constexpr uint32 Bolstering  = 7;
     constexpr uint32 Sanguine    = 8;
@@ -41,6 +44,14 @@ namespace ChallengeModeAffix
     constexpr uint32 Entangling  = 134;
     constexpr uint32 Afflicted   = 135;
     constexpr uint32 Incorporeal = 136;
+
+    // Midnight (12.x) roster
+    constexpr uint32 XalatathsGuile              = 147; // +12+: revokes Bargain boons, 15s death penalty
+    constexpr uint32 XalatathsBargainAscendant   = 148;
+    constexpr uint32 XalatathsBargainVoidbound   = 158;
+    constexpr uint32 XalatathsBargainDevour      = 160;
+    constexpr uint32 XalatathsBargainPulsar      = 162;
+    constexpr uint32 LindormisGuidance           = 165; // low keys: marked-trash training affix, no death penalty
 }
 
 // Global manager for Mythic Keystone (Challenge Mode) static data: the dungeon pool, per-map par times and
@@ -65,18 +76,23 @@ public:
     uint32 GetChallengeModeIdForMap(uint32 mapId) const;
     uint32 GetMapIdForChallengeMode(uint32 challengeModeId) const;
 
+    // --- enemy forces ---
+    // Kills of hostile non-boss creatures required for 100% Enemy Forces in a dungeon (challenge_mode_enemy_forces
+    // world table; server content). 0 = no forces requirement (completion gates on bosses only, the pre-existing
+    // behaviour), so the gate only engages for dungeons the operator has counted.
+    uint32 GetEnemyForcesRequiredKills(uint32 challengeModeId) const;
+
     // --- timer / keystone upgrade (from MapChallengeMode.CriteriaCount: [0]=par, [1]=+2 @80%, [2]=+3 @60%) ---
     uint32 GetTimeLimit(uint32 challengeModeId) const;                     // par time, seconds
     std::array<uint32, 3> GetUpgradeThresholds(uint32 challengeModeId) const;
     // keystone levels gained on completion given time spent; 0 = over time (depleted / no upgrade)
     uint32 GetKeystoneUpgradeAmount(uint32 challengeModeId, uint32 timeUsedSeconds) const;
 
-    // Per-run dungeon score (the client's "Mythic+ Rating" contribution). The exact retail constants are a
-    // server-side design value (not present in the client binary or DB2), so the base-per-level and the
-    // time bonus/penalty are config-tunable (ChallengeMode.Score*) to be matched to a sniff without a rebuild.
-    // The shape is Blizzlike: score grows with keystone level, with a bonus for beating par and a penalty for
-    // running over. affixCount contributes a small per-affix bonus.
-    float CalculateRunScore(uint32 keystoneLevel, uint32 effectiveTimeMs, uint32 timeLimitMs, uint32 affixCount) const;
+    // Per-run dungeon score (the client's "Mythic+ Rating" contribution). Implements the retail Midnight S1
+    // formula (base 155 for a timed +2, +15/level, +15 per affix breakpoint at +5/+7/+10/+12, up to +15 time
+    // bonus at 40% under par, decay to 0 at 40% over). The constants are community-derived (not in client/DB2),
+    // so every term is config-tunable (ChallengeMode.Score.*).
+    float CalculateRunScore(uint32 keystoneLevel, uint32 effectiveTimeMs, uint32 timeLimitMs) const;
 
     // --- Blizzlike scaling engine: creature HP/damage multiplier by keystone level ---
     // Reproduces the client's C_ChallengeMode.GetPowerLevelDamageHealthMod via GlobalCurve
@@ -104,11 +120,12 @@ public:
     uint32 GetAffixCreatureId(uint32 affixId) const;
 
     // --- end-of-run crest reward ---
-    // The season crest currency awarded on completion, by keystone-level tier. Currency ids are extracted from
-    // CurrencyTypes.db2 (68275 Midnight S1 Dawncrests: Veteran 3341 / Champion 3343 / Hero 3345 / Myth 3347); the
-    // tier breakpoints and the per-run amount are season tuning, so both are config-tunable (ChallengeMode.Crest.*).
+    // Midnight S1 Dawncrest ladder: Champion crests at +2-3, Hero at +4-8, Myth at +9+ (currency ids from
+    // CurrencyTypes.db2; live ids 3343/3346/3348 per wowhead - 3345/3347 were PTR values, hence config-tunable).
+    // Amount = the bracket's base + AmountPerLevel per keystone level into the bracket, growth capped at
+    // AmountCapLevel (retail: +2=12C ... +8=18H, +9=10M ... +12+=16M); untimed runs lose UntimedReduction crests.
     uint32 GetCrestCurrencyForLevel(uint32 keystoneLevel) const;
-    uint32 GetCrestAmount() const;
+    uint32 GetCrestAmountForLevel(uint32 keystoneLevel, bool timed) const;
 
     // Reference-loot template rolled for the end-of-run gear reward (reference_loot_template, ItemContext
     // MythicPlus_End_of_Run). The reward item POOL is server content; the item level is scaled authentically by
@@ -135,27 +152,64 @@ public:
 
     // --- season / pool / affixes ---
     uint32 GetActiveSeasonId() const { return _activeSeasonId; }
+    // The active display season (MythicPlusSeasonTrackedMap/TrackedAffix/KeyFloor key). Auto-detected as the
+    // newest season present in MythicPlusSeasonTrackedMap.db2; override with ChallengeMode.DisplaySeasonId.
+    uint32 GetDisplaySeasonId() const { return _displaySeasonId; }
     MythicPlusSeasonEntry const* GetActiveSeason() const;
     std::vector<uint32> const& GetSeasonMapChallengeModeIds() const { return _seasonMaps; }
+
+    // Resilient Keystone floor (MythicPlusSeasonKeyFloor.db2): the highest KeyFloor of the active display
+    // season whose PlayerCondition the player meets. Weekly adjustment and depletion never go below it.
+    uint32 GetKeystoneFloor(Player const* player) const;
+
+    // Great Vault reward levels (MythicPlusSeasonRewardLevels.db2, active season): the key level reward scaling
+    // caps at (0 = uncapped/no data), and the activity tier id the vault UI expects for the M+ row.
+    uint32 GetVaultRewardLevelCap() const;
+    int32 GetVaultActivityTierId() const;
     // The full weekly affix set (all bands), as advertised to the client in SMSG_MYTHIC_PLUS_CURRENT_AFFIXES.
-    std::vector<uint32> const& GetWeeklyAffixes() const { return _affixSchedule; }
-    // Affixes active for a given keystone level this week (level-band gated). Rotation is config/season driven
-    // (no offline DB2 rotation table exists); see worldserver.conf ChallengeMode.* and LoadAffixRotation().
+    std::vector<uint32> GetWeeklyAffixes() const;
+    // Affixes active for a given keystone level this week, in keystone slot order. The Midnight S1 rotation
+    // (Guidance / weekly Bargain / Tyrannical-Fortified alternation / Guile) is built in and week-indexed off the
+    // weekly reset; ChallengeMode.AffixSchedule overrides it verbatim when set (see LoadAffixRotation()).
     std::vector<uint32> GetActiveAffixes(uint32 keystoneLevel) const;
+    // Rotation week index (weeks since epoch at the current weekly-reset boundary, plus config offset).
+    uint32 GetCurrentWeekIndex() const;
+
+    // --- keystone item service ---
+    // The Mythic Keystone item (12.x: 180653), config-tunable. All keystone state lives in item modifiers
+    // 17 (dungeon) / 18 (level) / 19-22 (affixes, level-band gated) -- the tooltip renders from these.
+    uint32 GetKeystoneItemId() const;
+    uint32 GetKeystoneMinLevel() const;
+    // The player's keystone item, or nullptr (the item is unique, so first match wins).
+    Item* GetKeystone(Player* player) const;
+    // Writes dungeon/level and the week's level-gated affixes into the keystone item modifiers.
+    void StampKeystone(Item* keystone, uint32 challengeModeId, uint32 keystoneLevel) const;
+    // Creates the keystone (or restamps an existing one) for the player. Returns the item, or nullptr on failure.
+    Item* CreateOrUpdateKeystone(Player* player, uint32 challengeModeId, uint32 keystoneLevel) const;
+    // A random dungeon from the season pool, avoiding excludeChallengeModeId when the pool has alternatives.
+    uint32 RollSeasonDungeon(uint32 excludeChallengeModeId = 0) const;
+    // Mythic (M0) season-dungeon completion hook: awards a fresh minimum-level keystone to players without one.
+    void OnMythicDungeonCompleted(Player* player) const;
+    // Weekly keystone maintenance (login + Great Vault open): adjusts the level from last week's runs and
+    // restamps the current week's affixes; grants a fresh keystone when createIfMissing (the vault-open rule).
+    void UpdateKeystoneForNewWeek(Player* player, bool createIfMissing) const;
 
 private:
     void LoadScalingCurves();
     void LoadMapPool();
     void ResolveActiveSeason();
     void LoadAffixRotation();
+    void LoadEnemyForces();
 
     std::unordered_map<uint32 /*challengeModeId*/, MapChallengeModeEntry const*> _mapChallengeModes;
     std::unordered_map<uint32 /*mapId*/, uint32 /*challengeModeId*/> _challengeModeByMap;
+    std::unordered_map<uint32 /*challengeModeId*/, uint32 /*requiredKills*/> _enemyForces;
 
     uint32 _healthCurveId = 0;
     uint32 _damageCurveId = 0;
 
     uint32 _activeSeasonId = 0;
+    uint32 _displaySeasonId = 0;
     std::vector<uint32> _seasonMaps;
 
     // Weekly affix schedule: _affixSchedule[band] = keystoneAffixId, where band index maps to a level threshold

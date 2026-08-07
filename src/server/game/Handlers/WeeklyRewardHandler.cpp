@@ -18,6 +18,7 @@
 #include "WorldSession.h"
 #include "Log.h"
 #include "Player.h"
+#include "ChallengeModeMgr.h"
 #include "WeeklyRewardsMgr.h"
 #include "WeeklyRewardsPackets.h"
 
@@ -28,6 +29,11 @@ void WorldSession::HandleRequestWeeklyRewards(WorldPackets::WeeklyRewards::Reque
     Player* player = GetPlayer();
     if (!player)
         return;
+
+    // Mythic+ (feature/mythic-plus): opening the vault after a weekly reset is also where the carried
+    // keystone is refreshed - a fresh key when the player has none, plus the pending level adjustment
+    // and affix restamp. Kept here because this is the handler bound to CMSG_REQUEST_WEEKLY_REWARDS.
+    sChallengeModeMgr.UpdateKeystoneForNewWeek(player, true /*createIfMissing*/);
 
     WeeklyRewards::CharacterVault const& vault = sWeeklyRewardsMgr.GetVault(player->GetGUID());
 

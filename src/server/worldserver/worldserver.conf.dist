@@ -1084,11 +1084,20 @@ Instance.IgnoreRaid = 0
 ChallengeMode.SeasonId = 0
 
 #
+#    ChallengeMode.DisplaySeasonId
+#        Description: Active Mythic+ DISPLAY season - the key of MythicPlusSeasonTrackedMap (season dungeon
+#                     pool), MythicPlusSeasonTrackedAffix and MythicPlusSeasonKeyFloor (Resilient Keystone
+#                     floor). 0 = auto-detect the newest season present in MythicPlusSeasonTrackedMap.db2.
+#        Default:     0 - (auto-detect)
+
+ChallengeMode.DisplaySeasonId = 0
+
+#
 #    ChallengeMode.AffixSchedule
-#        Description: This week's Keystone affixes (KeystoneAffix.db2 IDs), comma-separated, lowest level band first.
-#                     Advertised to the client via SMSG_MYTHIC_PLUS_CURRENT_AFFIXES and applied to new runs. There is
-#                     no DB2 rotation table, so the weekly schedule is set here. Example: "10,7,124" (Fortified, Bolstering, Storming).
-#        Default:     "" - (no affixes)
+#        Description: OVERRIDE: a fixed weekly affix set (KeystoneAffix.db2 IDs), comma-separated, lowest level band
+#                     first. When set, this bypasses the built-in Midnight S1 weekly rotation entirely and is used
+#                     verbatim every week. Example: "10,7,124" (Fortified, Bolstering, Storming).
+#        Default:     "" - (use the built-in weekly rotation)
 
 ChallengeMode.AffixSchedule = ""
 
@@ -1097,9 +1106,56 @@ ChallengeMode.AffixSchedule = ""
 #        Description: Keystone levels at which each successive affix in ChallengeMode.AffixSchedule turns on,
 #                     comma-separated and parallel to that list. Example: "2,4,7" activates the 1st affix at +2,
 #                     the 2nd at +4, the 3rd at +7. Missing/short entries default to level 0 (always on).
+#                     Only used together with ChallengeMode.AffixSchedule.
 #        Default:     "" - (all listed affixes always on)
 
 ChallengeMode.AffixLevelBands = ""
+
+#
+#    ChallengeMode.Affix.WeekOffset
+#        Description: Shifts the built-in weekly rotation's week index (which advances at every weekly reset).
+#                     Use it to phase-align the Xal'atath's Bargain rotation and the Tyrannical/Fortified
+#                     alternation with the live schedule. May be negative.
+#        Default:     0
+
+ChallengeMode.Affix.WeekOffset = 0
+
+#
+#    ChallengeMode.Affix.Guidance.* / ChallengeMode.Affix.Bargain.* /
+#    ChallengeMode.Affix.TyrannicalFortified.* / ChallengeMode.Affix.Guile.*
+#        Description: Level bands of the built-in Midnight S1 rotation (12.0.x retail defaults):
+#                     +2..Guidance.MaxLevel        Lindormi's Guidance (Guidance.Id, constant every week)
+#                     Bargain.StartLevel..+11      one Xal'atath's Bargain, rotating weekly through Bargain.Rotation
+#                     TyrannicalFortified.Start    Tyrannical or Fortified (alternating weekly)
+#                     TyrannicalFortified.Both     both Tyrannical and Fortified
+#                     Guile.StartLevel and up      Xal'atath's Guile (Guile.Id) replaces the Bargain
+#                     Set an Id to 0 to drop that band entirely.
+#        Default:     Guidance.Id = 165, Guidance.MaxLevel = 5, Bargain.StartLevel = 5,
+#                     Bargain.Rotation = "148,158,160,162" (Ascendant, Voidbound, Devour, Pulsar),
+#                     TyrannicalFortified.StartLevel = 7, TyrannicalFortified.BothLevel = 10,
+#                     Guile.Id = 147, Guile.StartLevel = 12
+
+ChallengeMode.Affix.Guidance.Id = 165
+ChallengeMode.Affix.Guidance.MaxLevel = 5
+ChallengeMode.Affix.Bargain.StartLevel = 5
+ChallengeMode.Affix.Bargain.Rotation = "148,158,160,162"
+ChallengeMode.Affix.TyrannicalFortified.StartLevel = 7
+ChallengeMode.Affix.TyrannicalFortified.BothLevel = 10
+ChallengeMode.Affix.Guile.Id = 147
+ChallengeMode.Affix.Guile.StartLevel = 12
+
+#
+#    ChallengeMode.Keystone.*
+#        Description: Mythic Keystone item lifecycle. ItemId is the keystone item (12.x: 180653 "Mythic Keystone");
+#                     dungeon/level/affixes are written into its item modifiers, which the client tooltip renders.
+#                     AwardOnMythicClear grants a fresh MinLevel keystone for completing a Mythic (M0) season
+#                     dungeon to players without one; opening the Great Vault also grants/adjusts the weekly key.
+#                     Setting ItemId to 0 disables keystone handling (runs start from any item's modifiers).
+#        Default:     ItemId = 180653, MinLevel = 2, AwardOnMythicClear = 1
+
+ChallengeMode.Keystone.ItemId = 180653
+ChallengeMode.Keystone.MinLevel = 2
+ChallengeMode.Keystone.AwardOnMythicClear = 1
 
 #
 #    ChallengeMode.Affix.Fortified.* / ChallengeMode.Affix.Tyrannical.*
@@ -1118,61 +1174,106 @@ ChallengeMode.Affix.Tyrannical.Damage = 1.15
 
 #
 #    ChallengeMode.Affix.<Name>.SpellId
-#        Description: Effect spell cast for each behavioural affix. Bolstering empowers nearby surviving
-#                     non-boss enemies on a trash death; Bursting stacks a damage-over-time on the party;
-#                     Sanguine drops a lingering ichor pool. These are Blizzard affix spells and must exist
-#                     in the loaded Spell.db2 - the server guards on the spell existing, so an unknown/0 id
-#                     is a safe no-op. Defaults are the long-stable ids; verify them against the live build.
+#        Description: Effect spell cast for each behavioural affix. Legacy roster (used via the AffixSchedule
+#                     override): Bolstering empowers nearby surviving non-boss enemies on a trash death; Bursting
+#                     stacks a damage-over-time on the party; Sanguine drops a lingering ichor pool. Midnight
+#                     roster (built-in rotation): Devour applies the Devouring Rift debuff to every player each
+#                     Bargain event; Pulsar attaches the orbiting Void Pulsar; Guidance is the Temporal Sands
+#                     mark applied to the highlighted trash set at run start. These are Blizzard affix spells and
+#                     must exist in the loaded Spell.db2 - the server guards on the spell existing, so an
+#                     unknown/0 id is a safe no-op. Verify ids against the live build.
 #        Default:     Bolstering = 209859, Bursting = 240443, Sanguine = 226489,
-#                     Raging = 228318, Grievous = 240559
+#                     Raging = 228318, Grievous = 240559,
+#                     Devour = 440313, Pulsar = 1216858, Guidance = 1284818
 
 ChallengeMode.Affix.Bolstering.SpellId = 209859
 ChallengeMode.Affix.Bursting.SpellId = 240443
 ChallengeMode.Affix.Sanguine.SpellId = 226489
 ChallengeMode.Affix.Raging.SpellId = 228318
 ChallengeMode.Affix.Grievous.SpellId = 240559
+ChallengeMode.Affix.Devour.SpellId = 440313
+ChallengeMode.Affix.Pulsar.SpellId = 1216858
+ChallengeMode.Affix.Guidance.SpellId = 1284818
+
+#
+#    ChallengeMode.Affix.Guidance.MarkCount / ChallengeMode.Affix.Bargain.IntervalMs /
+#    ChallengeMode.Affix.Ascendant.SpawnCount
+#        Description: Midnight affix event tuning: how many trash enemies Lindormi's Guidance marks at run
+#                     start, the in-combat cadence of the Xal'atath's Bargain events, and the size of the
+#                     Ascendant orb wave.
+#        Default:     MarkCount = 8, IntervalMs = 60000, SpawnCount = 10
+
+ChallengeMode.Affix.Guidance.MarkCount = 8
+ChallengeMode.Affix.Bargain.IntervalMs = 60000
+ChallengeMode.Affix.Ascendant.SpawnCount = 10
+
+#
+#    ChallengeMode.DeathPenalty.*
+#        Description: Seconds added to the run time per player death, banded per retail 12.x: no penalty while
+#                     Lindormi's Guidance is active (low keys), GuileSeconds under Xal'atath's Guile (+12+),
+#                     BaseSeconds otherwise.
+#        Default:     GuidanceSeconds = 0, BaseSeconds = 5, GuileSeconds = 15
+
+ChallengeMode.DeathPenalty.GuidanceSeconds = 0
+ChallengeMode.DeathPenalty.BaseSeconds = 5
+ChallengeMode.DeathPenalty.GuileSeconds = 15
 
 #
 #    ChallengeMode.Affix.<Name>.CreatureId
 #        Description: Summoned-add creature entry for a spawn affix. Spiteful summons a Spiteful Shade on each
-#                     non-boss death; the shade fixates a survivor and decays. The creature entry AND its Blizzlike
-#                     AI must exist in the world DB (SummonCreature no-ops on an absent entry). 0 = disabled.
-#                     Incorporeal + Afflicted spawn periodically while in combat (near a random fighting player).
-#                     Verify the entries for the live build; Afflicted defaults to 0 (no confirmed entry).
-#        Default:     Spiteful = 174773 (Spiteful Shade), Incorporeal = 204560 (Incorporeal Being), Afflicted = 0
+#                     non-boss death; the shade fixates a survivor and decays. Incorporeal + Afflicted spawn
+#                     periodically while in combat (near a random fighting player). Midnight Bargain events:
+#                     Ascendant spawns an orb wave (Orbs of Ascendance casting Cosmic Ascension), Voidbound a
+#                     single shielded Void Emissary - both every Bargain interval while fighting. The creature
+#                     entry AND its Blizzlike AI must exist in the world DB (SummonCreature no-ops on an absent
+#                     entry). 0 = disabled.
+#        Default:     Spiteful = 174773 (Spiteful Shade), Incorporeal = 204560 (Incorporeal Being), Afflicted = 0,
+#                     Ascendant = 0, Voidbound = 0 (add the Midnight creatures to the world DB, then set them here)
 
 ChallengeMode.Affix.Spiteful.CreatureId = 174773
 ChallengeMode.Affix.Incorporeal.CreatureId = 204560
 ChallengeMode.Affix.Afflicted.CreatureId = 0
+ChallengeMode.Affix.Ascendant.CreatureId = 0
+ChallengeMode.Affix.Voidbound.CreatureId = 0
 
 #
 #    ChallengeMode.Crest.*
-#        Description: End-of-run reward. On completion each player is granted Amount crests of the tier whose
-#                     MaxLevel covers the keystone level (Veteran <= 3, Champion <= 6, Hero <= 9, else Myth).
-#                     CurrencyIds are the Midnight Season 1 Dawncrests from CurrencyTypes.db2; the grant no-ops
-#                     if the currency does not exist on this build. Set an Id to 0 to disable that tier's grant.
-#                     Amount and the tier breakpoints are season tuning - adjust to match the live season.
-#        Default:     Amount = 10; Veteran 3341/<=3, Champion 3343/<=6, Hero 3345/<=9, Myth 3347/10+
+#        Description: End-of-run Dawncrest reward (Midnight S1 ladder). Tier by keystone level: Champion up to
+#                     Champion.MaxLevel (+2-3), Hero up to Hero.MaxLevel (+4-8), Myth above (+9+). Amount grows
+#                     AmountPerLevel per level within the bracket from the bracket base (Champion opens at
+#                     Champion.BaseAmount, later brackets at BaseAmount), capped at AmountCapLevel; retail:
+#                     +2=12C, +3=14C, +4=10H ... +8=18H, +9=10M ... +12+=16M. Untimed runs lose
+#                     UntimedReduction crests. Currency ids sniff-verified on 68275 (a +2 granted 12x 3343;
+#                     the wire carries 3341/3343/3345/3347); the grant no-ops if the currency does not exist.
+#        Default:     Champion 3343/<=3, Hero 3345/<=8, Myth 3347/9+,
+#                     Champion.BaseAmount = 12, BaseAmount = 10, AmountPerLevel = 2, AmountCapLevel = 12,
+#                     UntimedReduction = 4
 
-ChallengeMode.Crest.Amount = 10
-ChallengeMode.Crest.Veteran.CurrencyId = 3341
-ChallengeMode.Crest.Veteran.MaxLevel = 3
 ChallengeMode.Crest.Champion.CurrencyId = 3343
-ChallengeMode.Crest.Champion.MaxLevel = 6
+ChallengeMode.Crest.Champion.MaxLevel = 3
+ChallengeMode.Crest.Champion.BaseAmount = 12
 ChallengeMode.Crest.Hero.CurrencyId = 3345
-ChallengeMode.Crest.Hero.MaxLevel = 9
+ChallengeMode.Crest.Hero.MaxLevel = 8
 ChallengeMode.Crest.Myth.CurrencyId = 3347
+ChallengeMode.Crest.BaseAmount = 10
+ChallengeMode.Crest.AmountPerLevel = 2
+ChallengeMode.Crest.AmountCapLevel = 12
+ChallengeMode.Crest.UntimedReduction = 4
 
 #
-#    ChallengeMode.Reward.LootId
-#        Description: reference_loot_template entry rolled as the end-of-run gear reward (personal loot, one roll
-#                     per player). The item POOL is server content you provide in that loot table; the item LEVEL
-#                     is scaled automatically to the keystone level (ItemContext MythicPlus_End_of_Run). Use loot
-#                     groups / conditions there for per-dungeon pools. 0 disables the gear drop (crest still awarded).
-#        Default:     0 - (Disabled)
+#    ChallengeMode.Reward.*
+#        Description: reference_loot_template entry rolled for the end-of-run gear reward. Retail model: a fixed
+#                     number of items for the GROUP (ItemsTimed on a timed run, ItemsUntimed otherwise), each
+#                     granted personal-loot to a random present player. The item POOL is server content you
+#                     provide in that loot table; the item LEVEL is scaled automatically to the keystone level
+#                     (ItemContext MythicPlus_End_of_Run). Use loot groups / conditions there for per-dungeon
+#                     pools. LootId 0 disables the gear drop (crests still awarded).
+#        Default:     LootId = 0 (Disabled), ItemsTimed = 2, ItemsUntimed = 1
 #
 
 ChallengeMode.Reward.LootId = 0
+ChallengeMode.Reward.ItemsTimed = 2
+ChallengeMode.Reward.ItemsUntimed = 1
 
 #
 #    ChallengeMode.Vault.LootId
@@ -1183,6 +1284,73 @@ ChallengeMode.Reward.LootId = 0
 #
 
 ChallengeMode.Vault.LootId = 0
+
+#
+#    ChallengeMode.Score.*
+#        Description: Mythic+ rating formula (community-derived retail Midnight S1 constants; every term is
+#                     tunable). Per-run score = Base (a timed +2) + PerLevel per level above 2
+#                     + PerAffixBreakpoint for every AffixBreakpoints level reached, plus up to MaxTimeBonus for
+#                     finishing under par (linear, capped at 40% under). Over-par runs decay linearly to 0 score
+#                     at 40% over par. Overall rating = sum of the best run per dungeon.
+#        Default:     Base = 155, PerLevel = 15, PerAffixBreakpoint = 15, MaxTimeBonus = 15,
+#                     AffixBreakpoints = "5,7,10,12"
+
+ChallengeMode.Score.Base = 155
+ChallengeMode.Score.PerLevel = 15
+ChallengeMode.Score.PerAffixBreakpoint = 15
+ChallengeMode.Score.MaxTimeBonus = 15
+ChallengeMode.Score.AffixBreakpoints = "5,7,10,12"
+
+#
+#    ChallengeMode.CombatRes.*
+#        Description: Run-wide combat resurrection pool for keystone runs (retail 12.x): InitialCharges when the
+#                     run activates, +1 charge per IntervalMs, shared by all battle-res spells for the entire run
+#                     (encounters do not reset it while the run is active).
+#        Default:     InitialCharges = 1, IntervalMs = 600000 (10 minutes)
+
+ChallengeMode.CombatRes.InitialCharges = 1
+ChallengeMode.CombatRes.IntervalMs = 600000
+
+#
+#    ChallengeMode.RequireFontOfPower
+#        Description: Require the Font of Power pedestal gameobject (type CHALLENGE_MODE_REWARD) near the player
+#                     for CMSG_START_CHALLENGE_MODE to be accepted. Enable once the pedestal spawns exist in the
+#                     world DB for every season dungeon.
+#        Default:     0 - (Disabled, lenient)
+
+ChallengeMode.RequireFontOfPower = 0
+
+#
+#    ChallengeMode.Catalyst.*
+#        Description: Matrix Catalyst item conversion. Eligible input items come from the client's
+#                     ItemConversion.db2/ItemConversionEntry.db2; the class/slot -> output (tier piece) mapping is
+#                     server content in the item_conversion_output world table. Each conversion costs Cost charges
+#                     of CurrencyId (12.x: 3378 Dawnlight Manaflux). Charges accrue lazily at login: 1 at
+#                     FirstWeekTimestamp (unix time, usually the season start), +1 every CycleWeeks, lifetime-capped
+#                     at MaxCharges. FirstWeekTimestamp = 0 disables automatic charge accrual (grant the currency
+#                     by other means).
+#        Default:     CurrencyId = 3378, Cost = 1, MaxCharges = 8, CycleWeeks = 2, FirstWeekTimestamp = 0
+
+ChallengeMode.Catalyst.CurrencyId = 3378
+ChallengeMode.Catalyst.Cost = 1
+ChallengeMode.Catalyst.MaxCharges = 8
+ChallengeMode.Catalyst.CycleWeeks = 2
+ChallengeMode.Catalyst.FirstWeekTimestamp = 0
+
+#
+#    ChallengeMode.Upgrade.*
+#        Description: Gear upgrade (Dawncrest spending) tuning. Costs are data-driven from the client DB2s
+#                     (ItemBonusListGroupEntry -> ItemLogicalCost -> ItemExtendedCost: crest + gold per step);
+#                     the Fallback* values apply only when an upgrade step carries no cost data (0 currency =
+#                     free upgrades in that case). DiscountAchievements lists warband achievements that halve
+#                     a crest type's step cost ("currencyId:achievementId" pairs; retail ".. of the Dawn").
+#        Default:     FallbackCurrencyId = 0, FallbackCurrencyCount = 20, FallbackMoney = 1500000 (150g),
+#                     DiscountAchievements = "3383:61809,3341:42767,3343:42768,3345:42769,3347:42770"
+
+ChallengeMode.Upgrade.FallbackCurrencyId = 0
+ChallengeMode.Upgrade.FallbackCurrencyCount = 20
+ChallengeMode.Upgrade.FallbackMoney = 1500000
+ChallengeMode.Upgrade.DiscountAchievements = "3383:61809,3341:42767,3343:42768,3345:42769,3347:42770"
 
 #
 #    Instance.UnloadDelay

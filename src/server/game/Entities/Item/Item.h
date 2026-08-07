@@ -241,6 +241,9 @@ class TC_GAME_API Item : public Object
         void AddBonuses(uint32 bonusListID);
         std::vector<int32> const& GetBonusListIDs() const { return m_itemData->ItemBonusKey->BonusListIDs; }
         void SetBonuses(std::vector<int32> bonusListIDs);
+        // Replaces the item's bonus lists wholesale: resets the accumulated bonus data before applying
+        // (SetBonuses appends). Used by the item upgrade system to swap rank bonuses in place.
+        void ReplaceBonuses(std::vector<int32> bonusListIDs);
         void ClearBonuses();
 
         static void DeleteFromDB(CharacterDatabaseTransaction trans, ObjectGuid::LowType itemGuid);

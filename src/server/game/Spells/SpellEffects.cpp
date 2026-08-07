@@ -54,6 +54,7 @@
 #include "HousingPackets.h"
 #include "InstanceScript.h"
 #include "Item.h"
+#include "ItemUpgradeMgr.h"
 #include "Language.h"
 #include "Log.h"
 #include "Loot.h"
@@ -365,10 +366,10 @@ NonDefaultConstructible<SpellEffectHandlerFn> SpellEffectHandlers[TOTAL_SPELL_EF
     &Spell::EffectNULL,                                     //263 SPELL_EFFECT_REPAIR_ITEM
     &Spell::EffectNULL,                                     //264 SPELL_EFFECT_REMOVE_GEM
     &Spell::EffectLearnAzeriteEssencePower,                 //265 SPELL_EFFECT_LEARN_AZERITE_ESSENCE_POWER
-    &Spell::EffectNULL,                                     //266 SPELL_EFFECT_SET_ITEM_BONUS_LIST_GROUP_ENTRY
+    &Spell::EffectSetItemBonusListGroupEntry,               //266 SPELL_EFFECT_SET_ITEM_BONUS_LIST_GROUP_ENTRY
     &Spell::EffectCreatePrivateConversation,                //267 SPELL_EFFECT_CREATE_PRIVATE_CONVERSATION
     &Spell::EffectApplyMountEquipment,                      //268 SPELL_EFFECT_APPLY_MOUNT_EQUIPMENT
-    &Spell::EffectNULL,                                     //269 SPELL_EFFECT_INCREASE_ITEM_BONUS_LIST_GROUP_STEP
+    &Spell::EffectIncreaseItemBonusListGroupStep,           //269 SPELL_EFFECT_INCREASE_ITEM_BONUS_LIST_GROUP_STEP
     &Spell::EffectNULL,                                     //270 SPELL_EFFECT_270
     &Spell::EffectUnused,                                   //271 SPELL_EFFECT_APPLY_AREA_AURA_PARTY_NONRANDOM
     &Spell::EffectSetCovenant,                              //272 SPELL_EFFECT_SET_COVENANT
@@ -7027,4 +7028,31 @@ void Spell::EffectModifyFollowerItemLevel()
         garrison->UpgradeFollowerItemLevel(dbId, iLevelDelta, miscValueB, upgradeData);
         break;
     }
+}
+
+void Spell::EffectSetItemBonusListGroupEntry()
+{
+    if (effectHandleMode != SPELL_EFFECT_HANDLE_HIT_TARGET)
+        return;
+
+    Player* player = m_caster->ToPlayer();
+    if (!player || !itemTarget)
+        return;
+
+    // MiscValue = the ItemBonusListGroupEntry to set the item to (no cost; used by scripted conversions).
+    sItemUpgradeMgr.SetGroupEntry(player, itemTarget, uint32(effectInfo->MiscValue));
+}
+
+void Spell::EffectIncreaseItemBonusListGroupStep()
+{
+    if (effectHandleMode != SPELL_EFFECT_HANDLE_HIT_TARGET)
+        return;
+
+    // The retail 12.x gear-upgrade transaction: the client casts the item's upgrade spell once per rank
+    // (C_ItemUpgrade.UpgradeItem); the effect advances the track one step, charging crests + gold.
+    Player* player = m_caster->ToPlayer();
+    if (!player || !itemTarget)
+        return;
+
+    sItemUpgradeMgr.PerformUpgrade(player, itemTarget);
 }

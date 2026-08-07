@@ -21,6 +21,7 @@
 #include "ChallengeModePackets.h"
 #include "CharacterDatabase.h"
 #include "DatabaseEnv.h"
+#include "Config.h"
 #include "Item.h"
 #include "ItemBonusMgr.h"
 #include "ItemDefines.h"
@@ -107,6 +108,11 @@ void WorldSession::HandleStartChallengeMode(WorldPackets::ChallengeMode::StartCh
         return;
     }
 
+    // Only the actual Mythic Keystone item may start a run (config-tunable; 0 disables the check).
+    if (uint32 keystoneItemId = sChallengeModeMgr.GetKeystoneItemId())
+        if (keystone->GetEntry() != keystoneItemId)
+            return;
+
     uint32 const mapChallengeModeId = keystone->GetModifier(ITEM_MODIFIER_CHALLENGE_MAP_CHALLENGE_MODE_ID);
     uint32 const keystoneLevel = keystone->GetModifier(ITEM_MODIFIER_CHALLENGE_KEYSTONE_LEVEL);
     if (!mapChallengeModeId || !keystoneLevel)
@@ -124,6 +130,12 @@ void WorldSession::HandleStartChallengeMode(WorldPackets::ChallengeMode::StartCh
     ChallengeMode* challenge = instanceMap->GetChallengeMode();
     if (!challenge || challenge->IsActive() || challenge->IsCompleted())
         return;
+
+    // Retail activates the run from the Font of Power pedestal. When enforced, require the pedestal gameobject
+    // near the player; lenient by default because the GO spawn is world-DB content.
+    if (sConfigMgr->GetBoolDefault("ChallengeMode.RequireFontOfPower", false))
+        if (!player->FindNearestGameObjectOfType(GAMEOBJECT_TYPE_CHALLENGE_MODE_REWARD, 40.0f))
+            return;
 
     std::array<uint32, 4> const affixes =
     {
@@ -164,6 +176,15 @@ void WorldSession::HandleMythicPlusRequestMapStats(WorldPackets::ChallengeMode::
     SendPacket(response.Write());
 }
 
+// NOTE: feature/mythic-plus also implemented WorldSession::HandleRequestWeeklyRewards /
+// HandleClaimWeeklyReward here, over WorldPackets::ChallengeMode::* packet classes. integration already
+// binds CMSG_REQUEST_WEEKLY_REWARDS / CMSG_CLAIM_WEEKLY_REWARD to the WorldPackets::WeeklyRewards::*
+// handlers in WeeklyRewardHandler.cpp, which cover all three vault rows (Dungeon / Raid / World) rather
+// than the Mythic+ row alone. One opcode can only have one handler, so the multi-row version stays bound
+// and the Mythic+-only duplicates are not carried into the assembly. The one behaviour they had that the
+// bound handler lacked - refreshing the carried keystone when the vault is opened after a weekly reset -
+// is called from WeeklyRewardHandler.cpp instead. Folding the Mythic+ reward-item rolling into
+// WeeklyRewardsMgr is a follow-up on feature/mythic-plus, not something to hand-write on integration.
 
 void WorldSession::HandleResetChallengeMode(WorldPackets::ChallengeMode::ResetChallengeMode& /*resetChallengeMode*/)
 {

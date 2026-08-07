@@ -62,6 +62,8 @@
 #include "GameTables.h"
 #include "GameTime.h"
 #include "ChallengeModeMgr.h"
+#include "ItemConversionMgr.h"
+#include "ItemUpgradeMgr.h"
 #include "GarrisonMgr.h"
 #include "GitRevision.h"
 #include "HousingMgr.h"
@@ -2005,6 +2007,12 @@ bool World::SetInitialWorldSettings()
 
     TC_LOG_INFO("server.loading", "Loading Mythic+ (Challenge Mode) data...");
     sChallengeModeMgr.Initialize();
+
+    TC_LOG_INFO("server.loading", "Loading item conversions (Matrix Catalyst)...");
+    sItemConversionMgr.Initialize();
+
+    TC_LOG_INFO("server.loading", "Loading item upgrade tracks...");
+    sItemUpgradeMgr.Initialize();
 
     ///- Handle outdated emails (delete/return)
     TC_LOG_INFO("server.loading", "Returning old mails...");

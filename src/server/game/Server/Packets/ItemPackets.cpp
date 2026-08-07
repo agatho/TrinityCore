@@ -447,14 +447,16 @@ WorldPacket const* SendItemPassives::Write()
 
 void PerformItemInteraction::Read()
 {
-    _worldPacket >> Banker;
     _worldPacket >> ItemGuid;
-    _worldPacket >> InteractionID;
+    _worldPacket >> AgentGuid;
+    _worldPacket >> InteractionType;
+    _worldPacket >> BaseItemId;
 }
 
 WorldPacket const* ItemInteractionComplete::Write()
 {
-    _worldPacket << int32(InteractionID);
+    _worldPacket << Bits<1>(Error);
+    _worldPacket.FlushBits();
 
     return &_worldPacket;
 }

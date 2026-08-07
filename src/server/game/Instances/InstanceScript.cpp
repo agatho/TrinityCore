@@ -17,7 +17,9 @@
 
 #include "InstanceScript.h"
 #include "ChallengeMode.h"
+#include "ChallengeModeMgr.h"
 #include "AreaBoundary.h"
+#include "Config.h"
 #include "Creature.h"
 #include "CreatureAI.h"
 #include "CreatureAIImpl.h"
@@ -401,14 +403,23 @@ bool InstanceScript::SetBossState(uint32 id, EncounterState state)
                         if (minion->isWorldBoss() && minion->IsAlive())
                             return false;
 
+            // During a Mythic Keystone run the combat-res pool is run-wide (1 charge + 1 per interval, managed by
+            // ChallengeMode) and must not be re-initialized or cleared by individual encounters.
+            bool const activeChallengeMode = instance->GetChallengeMode() && instance->GetChallengeMode()->IsActive();
+
             DungeonEncounterEntry const* dungeonEncounter = nullptr;
             switch (state)
             {
                 case IN_PROGRESS:
                 {
-                    uint32 resInterval = GetCombatResurrectionChargeInterval();
-                    InitializeCombatResurrections(1, resInterval);
-                    SendEncounterStart(1, 9, resInterval, resInterval);
+                    if (!activeChallengeMode)
+                    {
+                        uint32 resInterval = GetCombatResurrectionChargeInterval();
+                        InitializeCombatResurrections(1, resInterval);
+                        SendEncounterStart(1, 9, resInterval, resInterval);
+                    }
+                    else
+                        SendEncounterStart(GetCombatResurrectionCharges(), 9, GetCombatResurrectionChargeInterval(), _combatResurrectionTimer);
 
                     dungeonEncounter = bossInfo->GetDungeonEncounterForDifficulty(instance->GetDifficultyID());
                     if (dungeonEncounter)
@@ -422,7 +433,8 @@ bool InstanceScript::SetBossState(uint32 id, EncounterState state)
                 }
                 case FAIL:
                 {
-                    ResetCombatResurrections();
+                    if (!activeChallengeMode)
+                        ResetCombatResurrections();
                     SendEncounterEnd();
 
                     dungeonEncounter = bossInfo->GetDungeonEncounterForDifficulty(instance->GetDifficultyID());
@@ -437,7 +449,8 @@ bool InstanceScript::SetBossState(uint32 id, EncounterState state)
                 }
                 case DONE:
                 {
-                    ResetCombatResurrections();
+                    if (!activeChallengeMode)
+                        ResetCombatResurrections();
                     SendEncounterEnd();
                     dungeonEncounter = bossInfo->GetDungeonEncounterForDifficulty(instance->GetDifficultyID());
                     if (dungeonEncounter)
@@ -497,22 +510,30 @@ bool InstanceScript::SetBossState(uint32 id, EncounterState state)
         // Mythic Keystone: the run completes once every encounter in the instance is defeated.
         if (state == DONE)
         {
-            if (ChallengeMode* challenge = instance->GetChallengeMode())
+            bool allDone = true;
+            for (BossInfo const& boss : bosses)
             {
-                if (challenge->IsActive())
+                if (boss.state != DONE)
                 {
-                    bool allDone = true;
-                    for (BossInfo const& boss : bosses)
-                    {
-                        if (boss.state != DONE)
-                        {
-                            allDone = false;
-                            break;
-                        }
-                    }
+                    allDone = false;
+                    break;
+                }
+            }
 
-                    if (allDone)
-                        challenge->Complete();
+            if (allDone)
+            {
+                if (ChallengeMode* challenge = instance->GetChallengeMode())
+                {
+                    if (challenge->IsActive())
+                        challenge->OnAllEncountersDone();
+                }
+                // Mythic (M0): completing a season dungeon awards a first keystone to players without one.
+                else if (instance->GetDifficultyID() == DIFFICULTY_MYTHIC)
+                {
+                    instance->DoOnPlayers([](Player* player)
+                    {
+                        sChallengeModeMgr.OnMythicDungeonCompleted(player);
+                    });
                 }
             }
         }
@@ -1070,6 +1091,12 @@ void InstanceScript::ResetCombatResurrections()
 
 uint32 InstanceScript::GetCombatResurrectionChargeInterval() const
 {
+    // Mythic Keystone runs use the retail dungeon-wide accrual (one charge per fixed interval, default 10 min)
+    // instead of the raid encounter formula (90 min / player count).
+    if (ChallengeMode const* challenge = instance->GetChallengeMode())
+        if (challenge->IsActive())
+            return uint32(sConfigMgr->GetIntDefault("ChallengeMode.CombatRes.IntervalMs", 10 * MINUTE * IN_MILLISECONDS));
+
     uint32 interval = 0;
     if (uint32 playerCount = instance->GetPlayers().size())
         interval = 90 * MINUTE * IN_MILLISECONDS / playerCount;

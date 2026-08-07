@@ -661,6 +661,9 @@ namespace WorldPackets
         // Item Interaction / Upgrades
         // ============================================================
 
+        // Item Interaction UI confirm (Matrix Catalyst conversion, Runecarver scrapping, ...). The client sends
+        // its held state: the pending item, the interaction agent it has open, the frame's interaction type
+        // (UIItemInteractionType: 4 = ItemConversion) and the conversion source item id.
         class PerformItemInteraction final : public ClientPacket
         {
         public:
@@ -668,21 +671,21 @@ namespace WorldPackets
 
             void Read() override;
 
-            ObjectGuid Banker;
             ObjectGuid ItemGuid;
-            int32 InteractionID = 0;
+            ObjectGuid AgentGuid;
+            int32 InteractionType = 0;
+            int32 BaseItemId = 0;
         };
 
         class ItemInteractionComplete final : public ServerPacket
         {
         public:
-            explicit ItemInteractionComplete() : ServerPacket(SMSG_ITEM_INTERACTION_COMPLETE, 4) { }
+            explicit ItemInteractionComplete() : ServerPacket(SMSG_ITEM_INTERACTION_COMPLETE, 1) { }
 
             WorldPacket const* Write() override;
 
-            int32 InteractionID = 0;
+            bool Error = false;     // single flushed bit; false closes the UI as a successful interaction
         };
-
         class ConvertItemToBindToAccount final : public ClientPacket
         {
         public:

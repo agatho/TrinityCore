@@ -26,6 +26,7 @@ void AddSC_go_scripts();
 void AddSC_npc_guard();
 void AddSC_item_scripts();
 void AddSC_npc_professions();
+void AddSC_npc_mythic_keystone();
 void AddSC_npcs_special();
 void AddSC_at_housing_plot();
 void AddSC_go_housing_door();
@@ -49,6 +50,7 @@ void AddWorldScripts()
     AddSC_npc_guard();
     AddSC_item_scripts();
     AddSC_npc_professions();
+    AddSC_npc_mythic_keystone();
     AddSC_npcs_special();
     AddSC_at_housing_plot();
     AddSC_go_housing_door();

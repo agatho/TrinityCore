@@ -33,8 +33,6 @@ class Player;
 class TC_GAME_API ChallengeMode
 {
 public:
-    // Each player death adds this much to the effective run time (retail Mythic+ death penalty).
-    static constexpr uint32 DEATH_TIME_PENALTY_MS = 5 * IN_MILLISECONDS;
     // How often the health-threshold affixes (Raging, Grievous) re-scan the instance.
     static constexpr uint32 AFFIX_TICK_INTERVAL_MS = 1 * IN_MILLISECONDS;
     // How often the periodic in-combat spawn affixes (Incorporeal, Afflicted) add a new mob.
@@ -55,7 +53,10 @@ public:
     void OnCreatureDeath(Creature* victim);
 
     bool HasAffix(uint32 affixId) const;
-    // Called when a dungeon encounter reaches DONE; completes the run once every encounter is defeated.
+    // Called when every dungeon encounter has reached DONE. Completes the run immediately unless the dungeon
+    // has an enemy-forces requirement (challenge_mode_enemy_forces) that is not yet met -- then completion
+    // arms and fires from the trash kill that reaches 100%.
+    void OnAllEncountersDone();
     void Complete();
 
     bool IsActive() const { return _active && !_completed; }
@@ -68,8 +69,11 @@ public:
 
     uint32 GetElapsedMs() const { return _elapsedMs; }
     uint32 GetDeathCount() const { return _deathCount; }
+    // Per-death time penalty for THIS run, banded per retail 12.x: 0s while Lindormi's Guidance is active,
+    // 15s under Xal'atath's Guile (+12+), 5s otherwise (all config-tunable, ChallengeMode.DeathPenalty.*).
+    uint32 GetDeathPenaltyMs() const;
     // Elapsed wall-clock plus the per-death time penalty; this is the time compared against the par thresholds.
-    uint32 GetEffectiveTimeMs() const { return _elapsedMs + _deathCount * DEATH_TIME_PENALTY_MS; }
+    uint32 GetEffectiveTimeMs() const { return _elapsedMs + _deathCount * GetDeathPenaltyMs(); }
     uint32 GetTimeLimitMs() const { return _timeLimitMs; }
 
 private:
@@ -79,6 +83,11 @@ private:
     void UpdateHealthThresholdAffixes();
     // Periodic (SPAWN_TICK_INTERVAL_MS) in-combat spawn of the add affixes (Incorporeal, Afflicted).
     void UpdateSpawnAffixes();
+    // Xal'atath's Bargain 60s in-combat event (Midnight 12.x): Ascendant orb wave, Voidbound emissary,
+    // Devour rift debuff, Pulsar orbiter. Fires only while at least one player is fighting.
+    void TriggerBargainEvent();
+    // Lindormi's Guidance: marks a set of non-boss enemies at run start (Temporal Sands highlight spell).
+    void ApplyGuidanceMarks();
     // Rolls the configured end-of-run reward loot for one player and grants each item at the Mythic+ item level.
     void AwardGearReward(Player* player, uint32 rewardLootId) const;
 
@@ -89,11 +98,16 @@ private:
     ObjectGuid _starterGuid;
     ObjectGuid _keystoneGuid;
 
+    bool AreEnemyForcesMet() const;
+
     uint32 _timeLimitMs = 0;
     uint32 _elapsedMs = 0;
     uint32 _deathCount = 0;
+    uint32 _enemyKills = 0;
+    bool _awaitingEnemyForces = false;
     uint32 _affixTickTimer = 0;
     uint32 _spawnTickTimer = 0;
+    uint32 _bargainTickTimer = 0;
     bool _active = false;
     bool _completed = false;
 };

@@ -16,8 +16,10 @@
  */
 
 #include "MythicPlusData.h"
+#include "ChallengeModeMgr.h"
 #include "CharacterDatabase.h"
 #include "DatabaseEnv.h"
+#include "MythicPlusPacketsCommon.h"
 #include "Player.h"
 #include "World.h"
 #include <algorithm>
@@ -61,8 +63,9 @@ void MythicPlusData::LoadWeeklyFromDB(PreparedQueryResult result)
         MythicPlusWeeklyRun run;
         run.ChallengeModeID = fields[0].GetUInt32();
         run.Level = fields[1].GetUInt32();
-        run.CompletionDate = fields[2].GetInt64();
-        _weeklyResetTime = fields[3].GetInt64();
+        run.Timed = fields[2].GetUInt8() != 0;
+        run.CompletionDate = fields[3].GetInt64();
+        _weeklyResetTime = fields[4].GetInt64();
 
         _weeklyRuns.push_back(run);
     } while (result->NextRow());
@@ -109,8 +112,9 @@ void MythicPlusData::SaveToDB(CharacterDatabaseTransaction trans)
         stmt->setUInt64(0, guid);
         stmt->setUInt32(1, run.ChallengeModeID);
         stmt->setUInt32(2, run.Level);
-        stmt->setInt64(3, run.CompletionDate);
-        stmt->setInt64(4, _weeklyResetTime);
+        stmt->setUInt8(3, run.Timed ? 1 : 0);
+        stmt->setInt64(4, run.CompletionDate);
+        stmt->setInt64(5, _weeklyResetTime);
         trans->Append(stmt);
     }
 }
@@ -147,20 +151,99 @@ float MythicPlusData::GetOverallScore() const
     return total;
 }
 
+namespace
+{
+    // A run counts as timed when its (death-penalty-inclusive) duration beat the dungeon's par time.
+    bool IsRunTimed(MythicPlusRunRecord const& run)
+    {
+        uint32 const parSeconds = sChallengeModeMgr.GetTimeLimit(run.ChallengeModeID);
+        return parSeconds && run.DurationMs <= parSeconds * IN_MILLISECONDS;
+    }
+}
+
+void MythicPlusData::BuildDungeonScoreSummary(WorldPackets::MythicPlus::DungeonScoreSummary& summary) const
+{
+    summary.OverallScoreCurrentSeason = GetOverallScore();
+    summary.LadderScoreCurrentSeason = 0.0f;
+
+    summary.Runs.reserve(_bestRuns.size());
+    for (auto const& [challengeModeId, run] : _bestRuns)
+    {
+        WorldPackets::MythicPlus::DungeonScoreMapSummary& mapSummary = summary.Runs.emplace_back();
+        mapSummary.ChallengeModeID = int32(challengeModeId);
+        mapSummary.MapScore = run.Score;
+        mapSummary.BestRunLevel = int32(run.Level);
+        mapSummary.BestRunDurationMS = int32(run.DurationMs);
+        mapSummary.FinishedSuccess = IsRunTimed(run);
+    }
+}
+
+void MythicPlusData::BuildDungeonScoreData(WorldPackets::MythicPlus::DungeonScoreData& data) const
+{
+    int32 const seasonId = int32(sChallengeModeMgr.GetActiveSeasonId());
+
+    WorldPackets::MythicPlus::DungeonScoreSeasonData& season = data.Seasons.emplace_back();
+    season.Season = seasonId;
+    season.SeasonScore = GetOverallScore();
+    season.LadderScore = 0.0f;
+
+    season.SeasonMaps.reserve(_bestRuns.size());
+    for (auto const& [challengeModeId, run] : _bestRuns)
+    {
+        WorldPackets::MythicPlus::DungeonScoreMapData& map = season.SeasonMaps.emplace_back();
+        map.MapChallengeModeID = int32(challengeModeId);
+        map.OverAllScore = run.Score;
+
+        // Scoring has been single-best-run since TWW, but the wire still keys best runs per affix; a single
+        // entry keyed by the run's first affix is what the client expects for the one tracked run.
+        WorldPackets::MythicPlus::DungeonScoreBestRunForAffix& bestRun = map.BestRuns.emplace_back();
+        bestRun.KeystoneAffixID = int32(run.Affixes[0]);
+        bestRun.Score = run.Score;
+
+        bestRun.Run.MapChallengeModeID = int32(challengeModeId);
+        bestRun.Run.Completed = IsRunTimed(run);
+        bestRun.Run.Level = run.Level;
+        bestRun.Run.DurationMs = int32(run.DurationMs);
+        bestRun.Run.StartDate = run.CompletionDate - int64(run.DurationMs / IN_MILLISECONDS);
+        bestRun.Run.CompletionDate = run.CompletionDate;
+        bestRun.Run.Season = seasonId;
+        bestRun.Run.RunScore = run.Score;
+        for (std::size_t i = 0; i < run.Affixes.size(); ++i)
+            bestRun.Run.KeystoneAffixIDs[i] = int32(run.Affixes[i]);
+    }
+
+    data.TotalRuns = int32(_bestRuns.size());
+}
+
 void MythicPlusData::PruneStaleWeek() const
 {
     int64 const currentReset = int64(sWorld->GetNextWeeklyQuestsResetTime());
     if (_weeklyResetTime != currentReset)
     {
+        // Capture last week's best-run summary before discarding it: this feeds the weekly keystone adjustment
+        // (retail derives the new key level from the previous week's runs).
+        if (!_weeklyRuns.empty())
+        {
+            _prunedWeekResetTime = _weeklyResetTime;
+            _prunedWeekBestTimedLevel = 0;
+            _prunedWeekBestLevel = 0;
+            for (MythicPlusWeeklyRun const& run : _weeklyRuns)
+            {
+                _prunedWeekBestLevel = std::max(_prunedWeekBestLevel, run.Level);
+                if (run.Timed)
+                    _prunedWeekBestTimedLevel = std::max(_prunedWeekBestTimedLevel, run.Level);
+            }
+        }
+
         _weeklyRuns.clear();
         _weeklyResetTime = currentReset;
     }
 }
 
-void MythicPlusData::RecordWeeklyRun(uint32 challengeModeId, uint32 level, int64 date)
+void MythicPlusData::RecordWeeklyRun(uint32 challengeModeId, uint32 level, bool timed, int64 date)
 {
     PruneStaleWeek();
-    _weeklyRuns.push_back({ challengeModeId, level, date });
+    _weeklyRuns.push_back({ challengeModeId, level, timed, date });
 }
 
 std::vector<MythicPlusWeeklyRun> MythicPlusData::GetWeeklyRunsByLevel() const
@@ -200,7 +283,9 @@ void MythicPlusData::LoadVaultFromDB(PreparedQueryResult result)
     if (!result)
         return;
 
-    _vaultClaimedResetTime = result->Fetch()[0].GetInt64();
+    Field* fields = result->Fetch();
+    _vaultClaimedResetTime = fields[0].GetInt64();
+    _keystoneResetTime = fields[1].GetInt64();
 }
 
 bool MythicPlusData::IsVaultClaimedThisWeek() const
@@ -211,17 +296,50 @@ bool MythicPlusData::IsVaultClaimedThisWeek() const
 void MythicPlusData::SetVaultClaimed()
 {
     _vaultClaimedResetTime = int64(sWorld->GetNextWeeklyQuestsResetTime());
+    SaveVaultToDB();
+}
 
-    ObjectGuid::LowType guid = _owner->GetGUID().GetCounter();
+bool MythicPlusData::NeedsKeystoneAdjustment() const
+{
+    return _keystoneResetTime != int64(sWorld->GetNextWeeklyQuestsResetTime());
+}
 
-    CharacterDatabaseTransaction trans = CharacterDatabase.BeginTransaction();
-    CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_DEL_CHARACTER_MYTHIC_PLUS_VAULT);
-    stmt->setUInt64(0, guid);
-    trans->Append(stmt);
+void MythicPlusData::SetKeystoneAdjusted()
+{
+    _keystoneResetTime = int64(sWorld->GetNextWeeklyQuestsResetTime());
+    SaveVaultToDB();
+}
 
-    stmt = CharacterDatabase.GetPreparedStatement(CHAR_INS_CHARACTER_MYTHIC_PLUS_VAULT);
-    stmt->setUInt64(0, guid);
+uint32 MythicPlusData::ComputeNewWeekKeystoneLevel(uint32 currentLevel, uint32 minLevel) const
+{
+    // Make sure last week's summary has been captured if the boundary just rolled over.
+    PruneStaleWeek();
+
+    // Retail rule: new key = best timed level of last week, or one below the best run if it was untimed.
+    // With no runs last week the key decays one level from what it is now, and one further per fully idle week.
+    uint32 level;
+    int64 lastWeekBoundary = _weeklyResetTime - int64(WEEK);
+    if (_prunedWeekResetTime == lastWeekBoundary && _prunedWeekBestLevel)
+        level = std::max(_prunedWeekBestTimedLevel, _prunedWeekBestLevel - 1);
+    else
+    {
+        level = currentLevel > 0 ? currentLevel - 1 : 0;
+        // Additional decay for weeks fully skipped since the last recorded week (when known).
+        if (_prunedWeekResetTime && _prunedWeekResetTime < lastWeekBoundary)
+        {
+            int64 idleWeeks = (lastWeekBoundary - _prunedWeekResetTime) / int64(WEEK);
+            level -= uint32(std::min<int64>(idleWeeks, level));
+        }
+    }
+
+    return std::max(level, minLevel);
+}
+
+void MythicPlusData::SaveVaultToDB() const
+{
+    CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_INS_CHARACTER_MYTHIC_PLUS_VAULT);
+    stmt->setUInt64(0, _owner->GetGUID().GetCounter());
     stmt->setInt64(1, _vaultClaimedResetTime);
-    trans->Append(stmt);
-    CharacterDatabase.CommitTransaction(trans);
+    stmt->setInt64(2, _keystoneResetTime);
+    CharacterDatabase.Execute(stmt);
 }

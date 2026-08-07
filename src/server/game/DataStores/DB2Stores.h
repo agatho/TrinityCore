@@ -242,6 +242,8 @@ TC_GAME_API extern DB2Storage<ItemBonusListLevelDeltaEntry>         sItemBonusLi
 TC_GAME_API extern DB2Storage<ItemBonusTreeEntry>                   sItemBonusTreeStore;
 TC_GAME_API extern DB2Storage<ItemBonusTreeNodeEntry>               sItemBonusTreeNodeStore;
 TC_GAME_API extern DB2Storage<ItemContextPickerEntryEntry>          sItemContextPickerEntryStore;
+TC_GAME_API extern DB2Storage<ItemConversionEntry>                  sItemConversionStore;
+TC_GAME_API extern DB2Storage<ItemConversionEntryEntry>             sItemConversionEntryStore;
 TC_GAME_API extern DB2Storage<ItemCreationContextEntry>             sItemCreationContextStore;
 TC_GAME_API extern DB2Storage<ItemDamageAmmoEntry>                  sItemDamageAmmoStore;
 TC_GAME_API extern DB2Storage<ItemDamageOneHandEntry>               sItemDamageOneHandStore;
@@ -256,6 +258,7 @@ TC_GAME_API extern DB2Storage<ItemLevelSelectorEntry>               sItemLevelSe
 TC_GAME_API extern DB2Storage<ItemLevelSelectorQualityEntry>        sItemLevelSelectorQualityStore;
 TC_GAME_API extern DB2Storage<ItemLevelSelectorQualitySetEntry>     sItemLevelSelectorQualitySetStore;
 TC_GAME_API extern DB2Storage<ItemLimitCategoryEntry>               sItemLimitCategoryStore;
+TC_GAME_API extern DB2Storage<ItemLogicalCostEntry>                 sItemLogicalCostStore;
 TC_GAME_API extern DB2Storage<ItemModifiedAppearanceEntry>          sItemModifiedAppearanceStore;
 TC_GAME_API extern DB2Storage<ItemModifiedAppearanceExtraEntry>     sItemModifiedAppearanceExtraStore;
 TC_GAME_API extern DB2Storage<ItemNameDescriptionEntry>             sItemNameDescriptionStore;
@@ -301,6 +304,10 @@ TC_GAME_API extern DB2Storage<NeighborhoodInitiativeEntry>          sNeighborhoo
 TC_GAME_API extern DB2Storage<NeighborhoodMapEntry>                 sNeighborhoodMapStore;
 TC_GAME_API extern DB2Storage<NeighborhoodNameGenEntry>             sNeighborhoodNameGenStore;
 TC_GAME_API extern DB2Storage<NeighborhoodPlotEntry>                sNeighborhoodPlotStore;
+TC_GAME_API extern DB2Storage<MythicPlusSeasonKeyFloorEntry>        sMythicPlusSeasonKeyFloorStore;
+TC_GAME_API extern DB2Storage<MythicPlusSeasonRewardLevelsEntry>    sMythicPlusSeasonRewardLevelsStore;
+TC_GAME_API extern DB2Storage<MythicPlusSeasonTrackedAffixEntry>    sMythicPlusSeasonTrackedAffixStore;
+TC_GAME_API extern DB2Storage<MythicPlusSeasonTrackedMapEntry>      sMythicPlusSeasonTrackedMapStore;
 TC_GAME_API extern DB2Storage<OverrideSpellDataEntry>               sOverrideSpellDataStore;
 TC_GAME_API extern DB2Storage<ParagonReputationEntry>               sParagonReputationStore;
 TC_GAME_API extern DB2Storage<PerksActivityEntry>                   sPerksActivityStore;

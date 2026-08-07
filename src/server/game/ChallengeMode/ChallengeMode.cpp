@@ -1,4 +1,4 @@
-/*
+﻿/*
  * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
@@ -19,12 +19,16 @@
 #include "ChallengeModeMgr.h"
 #include "ChallengeModePackets.h"
 #include "CharacterDatabase.h"
+#include "Config.h"
 #include "Containers.h"
 #include "Creature.h"
 #include "DB2Stores.h"
 #include "DatabaseEnv.h"
+#include "DBCEnums.h"
+#include "ElapsedTimerMgr.h"
 #include "GameTime.h"
 #include "Group.h"
+#include "InstanceScript.h"
 #include "Item.h"
 #include "ItemBonusMgr.h"
 #include "ItemDefines.h"
@@ -62,10 +66,29 @@ void ChallengeMode::Start(uint32 mapChallengeModeId, uint32 keystoneLevel, std::
 
     // Drive the client dungeon timer via the group's ChallengeMode countdown slot (the one C_ChallengeMode reads).
     if (Player* starterPlayer = ObjectAccessor::GetPlayer(_instance, _starterGuid))
+    {
         if (Group* group = starterPlayer->GetGroup())
             group->StartCountdown(CountdownTimerType::ChallengeMode, Seconds(_timeLimitMs / IN_MILLISECONDS));
 
+        // Retail consumes the keystone at Font activation and hands the result key out at the end of the run.
+        // Equivalent here: stamp the depleted result (one level lower, rerolled dungeon, fresh weekly affixes)
+        // into the item immediately, so abandoning / disconnecting / unloading the instance can never dodge
+        // depletion. A timed completion re-stamps the upgrade from the original level (see Complete()).
+        // Depletion respects the player's Resilient Keystone floor (same-level reroll at the floor).
+        if (Item* keystone = starterPlayer->GetItemByGuid(_keystoneGuid))
+        {
+            uint32 const floorLevel = std::max(sChallengeModeMgr.GetKeystoneMinLevel(), sChallengeModeMgr.GetKeystoneFloor(starterPlayer));
+            sChallengeModeMgr.StampKeystone(keystone, sChallengeModeMgr.RollSeasonDungeon(_mapChallengeModeId),
+                std::max(floorLevel, _keystoneLevel > 0 ? _keystoneLevel - 1 : 0));
+        }
+    }
+
     BroadcastTimer(_timeLimitMs);
+
+    // Count-UP run timer for the objective tracker. This is the WorldElapsedTimer.db2 row the
+    // client maps to Enum.WorldElapsedTimerTypes.ChallengeMode, which is what makes
+    // ScenarioTimerMixin populate from the server instead of estimating locally.
+    sElapsedTimerMgr->StartTimerForMap(_instance, WORLD_ELAPSED_TIMER_CHALLENGE_MODE, 0s);
 
     // Announce the run (map / level / affixes) to the party UI. Member roster is omitted for now (see packet note).
     WorldPackets::ChallengeMode::ChallengeModeStart startPacket;
@@ -82,6 +105,16 @@ void ChallengeMode::Start(uint32 mapChallengeModeId, uint32 keystoneLevel, std::
         if (creature && creature->IsAlive())
             creature->UpdateLevelDependantStats();
 
+    // Lindormi's Guidance: highlight the marked trash set right as the run begins.
+    if (HasAffix(ChallengeModeAffix::LindormisGuidance))
+        ApplyGuidanceMarks();
+
+    // Run-wide combat-res pool (retail: 1 charge at activation, +1 per interval; shared by all battle-res
+    // spells). Encounters do not reset it during an active run (see InstanceScript::SetBossState).
+    if (InstanceScript* script = _instance->GetInstanceScript())
+        script->InitializeCombatResurrections(uint8(sConfigMgr->GetIntDefault("ChallengeMode.CombatRes.InitialCharges", 1)),
+            uint32(sConfigMgr->GetIntDefault("ChallengeMode.CombatRes.IntervalMs", 10 * MINUTE * IN_MILLISECONDS)));
+
     TC_LOG_INFO("challengemode", "ChallengeMode start: instance {} challengeMode {} level {} timeLimit {}s",
         _instance->GetInstanceId(), mapChallengeModeId, keystoneLevel, _timeLimitMs / IN_MILLISECONDS);
 }
@@ -93,6 +126,21 @@ void ChallengeMode::Reset()
         if (Group* group = starterPlayer->GetGroup())
             group->StartCountdown(CountdownTimerType::ChallengeMode, Seconds(0));
 
+    // Drop the run-wide combat-res pool.
+    if (InstanceScript* script = _instance->GetInstanceScript())
+        script->ResetCombatResurrections();
+
+    if (_active || _completed)
+    {
+        // Cancel the countdown widget outright rather than leaving it sitting at zero, and drop the
+        // run timer without keeping the value on screen - the run is being abandoned, not finished.
+        WorldPackets::Misc::StopTimer stopTimer;
+        stopTimer.Type = CountdownTimerType::ChallengeMode;
+        _instance->SendToPlayers(stopTimer.Write());
+
+        sElapsedTimerMgr->StopTimerForMap(_instance, WORLD_ELAPSED_TIMER_CHALLENGE_MODE, false);
+    }
+
     _active = false;
     _completed = false;
     _mapChallengeModeId = 0;
@@ -103,6 +151,8 @@ void ChallengeMode::Reset()
     _timeLimitMs = 0;
     _elapsedMs = 0;
     _deathCount = 0;
+    _enemyKills = 0;
+    _awaitingEnemyForces = false;
 }
 
 void ChallengeMode::Update(uint32 diff)
@@ -125,6 +175,121 @@ void ChallengeMode::Update(uint32 diff)
         _spawnTickTimer = 0;
         UpdateSpawnAffixes();
     }
+
+    // Xal'atath's Bargain: a 60s cadence event while the party is fighting. The timer accumulates freely but
+    // only fires (and resets) when someone is in combat, matching the retail "every 60 seconds in combat" rhythm.
+    _bargainTickTimer += diff;
+    uint32 const bargainInterval = uint32(sConfigMgr->GetIntDefault("ChallengeMode.Affix.Bargain.IntervalMs", 60 * IN_MILLISECONDS));
+    if (_bargainTickTimer >= bargainInterval)
+    {
+        _bargainTickTimer = bargainInterval;    // hold at the threshold until it can fire in combat
+
+        bool anyBargain = HasAffix(ChallengeModeAffix::XalatathsBargainAscendant)
+            || HasAffix(ChallengeModeAffix::XalatathsBargainVoidbound)
+            || HasAffix(ChallengeModeAffix::XalatathsBargainDevour)
+            || HasAffix(ChallengeModeAffix::XalatathsBargainPulsar);
+        if (!anyBargain)
+        {
+            _bargainTickTimer = 0;
+            return;
+        }
+
+        bool anyInCombat = false;
+        _instance->DoOnPlayers([&anyInCombat](Player* player)
+        {
+            if (player->IsAlive() && player->IsInCombat())
+                anyInCombat = true;
+        });
+
+        if (anyInCombat)
+        {
+            _bargainTickTimer = 0;
+            TriggerBargainEvent();
+        }
+    }
+}
+
+void ChallengeMode::TriggerBargainEvent()
+{
+    // Ascendant: a wave of Orbs of Ascendance (world-DB creature casting Cosmic Ascension) around a random
+    // fighting player. Voidbound: a single Void Emissary (shielded Dark Prayer caster). Both no-op without a
+    // configured creature entry, like every spawn affix.
+    for (uint32 affixId : { ChallengeModeAffix::XalatathsBargainAscendant, ChallengeModeAffix::XalatathsBargainVoidbound })
+    {
+        if (!HasAffix(affixId))
+            continue;
+
+        uint32 const creatureId = sChallengeModeMgr.GetAffixCreatureId(affixId);
+        if (!creatureId)
+            continue;
+
+        std::vector<Player*> combatants;
+        _instance->DoOnPlayers([&combatants](Player* player)
+        {
+            if (player->IsAlive() && player->IsInCombat())
+                combatants.push_back(player);
+        });
+        if (combatants.empty())
+            continue;
+
+        Player* anchor = Trinity::Containers::SelectRandomContainerElement(combatants);
+        uint32 const spawnCount = affixId == ChallengeModeAffix::XalatathsBargainAscendant
+            ? uint32(sConfigMgr->GetIntDefault("ChallengeMode.Affix.Ascendant.SpawnCount", 10)) : 1u;
+        for (uint32 i = 0; i < spawnCount; ++i)
+        {
+            Position pos = anchor->GetRandomNearPosition(12.0f);
+            anchor->SummonCreature(creatureId, pos, TEMPSUMMON_TIMED_OR_DEAD_DESPAWN, 60s);
+        }
+    }
+
+    // Devour: every player gains the Devouring Rift debuff (dispel it or heal it off for the boon; the boon /
+    // enemy-buff consequences ride on the spell scripts). Pulsar: every player gets an orbiting Void Pulsar.
+    for (uint32 affixId : { ChallengeModeAffix::XalatathsBargainDevour, ChallengeModeAffix::XalatathsBargainPulsar })
+    {
+        if (!HasAffix(affixId))
+            continue;
+
+        uint32 const spellId = sChallengeModeMgr.GetAffixSpellId(affixId);
+        if (!spellId || !sSpellMgr->GetSpellInfo(spellId, DIFFICULTY_NONE))
+            continue;
+
+        _instance->DoOnPlayers([spellId](Player* player)
+        {
+            if (player->IsAlive())
+                player->CastSpell(player, spellId, true);
+        });
+    }
+}
+
+void ChallengeMode::ApplyGuidanceMarks()
+{
+    // Marks MarkCount random alive non-boss enemies with the Temporal Sands highlight. The -5% health/damage
+    // component and the enemy-forces completion rule ride on the mark spell / forces tracking; the mark itself
+    // is the visible, functional part and no-ops without a valid spell (established affix pattern).
+    uint32 const spellId = sChallengeModeMgr.GetAffixSpellId(ChallengeModeAffix::LindormisGuidance);
+    if (!spellId || !sSpellMgr->GetSpellInfo(spellId, DIFFICULTY_NONE))
+        return;
+
+    std::vector<Creature*> candidates;
+    for (auto const& [spawnId, creature] : _instance->GetCreatureBySpawnIdStore())
+        if (creature && creature->IsAlive() && !creature->IsDungeonBoss() && creature->IsHostileToPlayers())
+            candidates.push_back(creature);
+
+    uint32 const markCount = uint32(sConfigMgr->GetIntDefault("ChallengeMode.Affix.Guidance.MarkCount", 8));
+    Trinity::Containers::RandomResize(candidates, markCount);
+    for (Creature* creature : candidates)
+        creature->CastSpell(creature, spellId, true);
+}
+
+uint32 ChallengeMode::GetDeathPenaltyMs() const
+{
+    // Retail 12.x banding: no penalty while Lindormi's Guidance is active (low keys), 15s under Xal'atath's
+    // Guile (+12+), 5s baseline otherwise. Values in seconds, config-tunable.
+    if (HasAffix(ChallengeModeAffix::LindormisGuidance))
+        return uint32(sConfigMgr->GetIntDefault("ChallengeMode.DeathPenalty.GuidanceSeconds", 0)) * IN_MILLISECONDS;
+    if (HasAffix(ChallengeModeAffix::XalatathsGuile))
+        return uint32(sConfigMgr->GetIntDefault("ChallengeMode.DeathPenalty.GuileSeconds", 15)) * IN_MILLISECONDS;
+    return uint32(sConfigMgr->GetIntDefault("ChallengeMode.DeathPenalty.BaseSeconds", 5)) * IN_MILLISECONDS;
 }
 
 void ChallengeMode::UpdateSpawnAffixes()
@@ -201,6 +366,11 @@ void ChallengeMode::OnPlayerDeath(Player* /*player*/)
 
     // Each death adds DEATH_TIME_PENALTY_MS to the effective run time (applied at completion via GetEffectiveTimeMs).
     ++_deathCount;
+
+    // Keep the client's live death counter (and its displayed time penalty) in sync.
+    WorldPackets::ChallengeMode::ChallengeModeUpdateDeathCount deathCountPacket;
+    deathCountPacket.DeathCount = _deathCount;
+    _instance->SendToPlayers(deathCountPacket.Write());
 }
 
 bool ChallengeMode::HasAffix(uint32 affixId) const
@@ -213,6 +383,18 @@ void ChallengeMode::OnCreatureDeath(Creature* victim)
     // On-death affixes only trigger off regular hostile trash, never bosses, pets or friendly summons.
     if (!IsActive() || !victim || victim->IsDungeonBoss() || victim->IsPet() || victim->IsControlledByPlayer())
         return;
+
+    // Enemy forces: every hostile trash death counts one kill; when all bosses are already down, the kill that
+    // reaches 100% completes the run.
+    if (victim->IsHostileToPlayers())
+    {
+        ++_enemyKills;
+        if (_awaitingEnemyForces && AreEnemyForcesMet())
+        {
+            Complete();
+            return;
+        }
+    }
 
     // Bolstering: the death cry empowers nearby surviving non-boss enemies (buff spell handles the % itself).
     if (HasAffix(ChallengeModeAffix::Bolstering))
@@ -253,6 +435,29 @@ void ChallengeMode::OnCreatureDeath(Creature* victim)
     }
 }
 
+bool ChallengeMode::AreEnemyForcesMet() const
+{
+    uint32 const required = sChallengeModeMgr.GetEnemyForcesRequiredKills(_mapChallengeModeId);
+    return !required || _enemyKills >= required;
+}
+
+void ChallengeMode::OnAllEncountersDone()
+{
+    if (!IsActive())
+        return;
+
+    if (AreEnemyForcesMet())
+    {
+        Complete();
+        return;
+    }
+
+    // Bosses are down but trash remains: arm completion on the kill that reaches 100% enemy forces.
+    _awaitingEnemyForces = true;
+    TC_LOG_DEBUG("challengemode", "ChallengeMode: all encounters done, awaiting enemy forces ({}/{}).",
+        _enemyKills, sChallengeModeMgr.GetEnemyForcesRequiredKills(_mapChallengeModeId));
+}
+
 void ChallengeMode::Complete()
 {
     if (!IsActive())
@@ -261,15 +466,18 @@ void ChallengeMode::Complete()
     _active = false;
     _completed = true;
 
+    // Freeze the run timer at its final value (keepTimer) so the completion time stays on screen,
+    // and cancel the count-down widget, which is now meaningless.
+    sElapsedTimerMgr->StopTimerForMap(_instance, WORLD_ELAPSED_TIMER_CHALLENGE_MODE, true);
+
+    WorldPackets::Misc::StopTimer stopCountdown;
+    stopCountdown.Type = CountdownTimerType::ChallengeMode;
+    _instance->SendToPlayers(stopCountdown.Write());
+
     uint32 const effectiveTimeMs = GetEffectiveTimeMs();
     uint32 const keystoneUpgrade = sChallengeModeMgr.GetKeystoneUpgradeAmount(_mapChallengeModeId, effectiveTimeMs / IN_MILLISECONDS);
 
-    uint32 affixCount = 0;
-    for (uint32 affixId : _affixes)
-        if (affixId)
-            ++affixCount;
-
-    float const runScore = sChallengeModeMgr.CalculateRunScore(_keystoneLevel, effectiveTimeMs, _timeLimitMs, affixCount);
+    float const runScore = sChallengeModeMgr.CalculateRunScore(_keystoneLevel, effectiveTimeMs, _timeLimitMs);
 
     // Record the run for every player present at completion (keeps the best per dungeon).
     MythicPlusRunRecord record;
@@ -281,42 +489,70 @@ void ChallengeMode::Complete()
     record.Score = runScore;
     record.Affixes = _affixes;
 
-    _instance->DoOnPlayers([&record](Player* player)
+    bool const timed = keystoneUpgrade > 0;
+    uint32 const completedMapId = _instance->GetId();
+    _instance->DoOnPlayers([&record, timed, completedMapId](Player* player)
     {
         if (MythicPlusData* data = player->GetMythicPlusData())
         {
-            data->RecordRun(record);
-            data->RecordWeeklyRun(record.ChallengeModeID, record.Level, record.CompletionDate);
+            bool const newBest = data->RecordRun(record);
+            data->RecordWeeklyRun(record.ChallengeModeID, record.Level, timed, record.CompletionDate);
+
+            // Push the refreshed rating to the client (Mythic+ UI / party frames read the update fields).
+            player->UpdateDungeonScore();
+
+            // Retail sends the personal + weekly record packets back-to-back on a new best (sniff-verified 12B each).
+            if (newBest)
+            {
+                WorldPackets::ChallengeMode::ChallengeModeNewPlayerRecord playerRecord;
+                playerRecord.MapChallengeModeID = record.ChallengeModeID;
+                playerRecord.CompletionMs = record.DurationMs;
+                playerRecord.KeystoneLevel = record.Level;
+                player->SendDirectMessage(playerRecord.Write());
+
+                WorldPackets::ChallengeMode::MythicPlusNewWeekRecord weekRecord;
+                weekRecord.MapChallengeModeID = record.ChallengeModeID;
+                weekRecord.CompletionMs = record.DurationMs;
+                weekRecord.KeystoneLevel = record.Level;
+                player->SendDirectMessage(weekRecord.Write());
+            }
         }
 
         // Great Vault: a completed Mythic+ keystone credits the Dungeon row at its true keystone level (the level
         // drives the reward tier). This is the only thing that feeds the Dungeon row — regular/heroic/mythic-0
         // dungeon boss kills do not (see InstanceScript encounter DONE, which only credits the Raid row).
         sWeeklyRewardsMgr.RecordActivity(player, WeeklyRewards::ActivityType::Dungeon, record.Level);
+        // Achievement criteria. All three are keyed off the run that just finished; the run-scoped
+        // ModifierTree nodes (MythicPlusKeystoneLevelEqualOrGreaterThan 247, MythicPlusCompletedInTime 248,
+        // MythicPlusMapChallengeMode 249) read the still-live ChallengeMode off the player's map, so these
+        // must be fired here - while the players are still inside the instance - and not on a later tick.
+        //   216 MythicPlusCompleted        : no asset; miscValue1 = keystone level, miscValue2 = MapChallengeMode
+        //   71  CompleteChallengeMode      : Asset = MapID
+        //   22  CompleteAnyChallengeMode   : no asset
+        player->UpdateCriteria(CriteriaType::MythicPlusCompleted, record.Level, record.ChallengeModeID);
+        player->UpdateCriteria(CriteriaType::CompleteChallengeMode, completedMapId, record.Level);
+        player->UpdateCriteria(CriteriaType::CompleteAnyChallengeMode, record.Level, record.ChallengeModeID);
+
+        // 230 MythicPlusRatingAttained: no asset - the required rating lives in the CriteriaTree Amount, so
+        // this is a highest-watermark of the player's overall Mythic+ rating (sum of best runs).
+        if (MythicPlusData const* data = player->GetMythicPlusData())
+            player->UpdateCriteria(CriteriaType::MythicPlusRatingAttained, uint64(data->GetOverallScore()));
     });
 
     if (Player* starterPlayer = ObjectAccessor::GetPlayer(_instance, _starterGuid))
     {
-        // Upgrade (or deplete) the activated keystone in place: a timed clear raises the level and rerolls the
-        // dungeon; an over-time clear depletes it by one (floor +2). Blizzlike-equivalent to the retail
-        // "receive a new keystone" reward, without depending on the seasonal keystone item entry.
-        if (Item* keystone = starterPlayer->GetItemByGuid(_keystoneGuid))
+        // The keystone already carries its depleted result (stamped at Start()). A timed clear re-stamps the
+        // upgrade from the original level, keeping the dungeon rolled at activation -- retail-equivalent of
+        // receiving the upgraded keystone at the end of the run.
+        if (timed)
         {
-            uint32 const newLevel = keystoneUpgrade > 0 ? _keystoneLevel + keystoneUpgrade : std::max<uint32>(2, _keystoneLevel - 1);
-
-            uint32 newChallengeModeId = _mapChallengeModeId;
-            std::vector<uint32> const& pool = sChallengeModeMgr.GetSeasonMapChallengeModeIds();
-            if (!pool.empty())
-                newChallengeModeId = pool[urand(0, uint32(pool.size() - 1))];
-
-            keystone->SetModifier(ITEM_MODIFIER_CHALLENGE_MAP_CHALLENGE_MODE_ID, newChallengeModeId);
-            keystone->SetModifier(ITEM_MODIFIER_CHALLENGE_KEYSTONE_LEVEL, newLevel);
-
-            std::vector<uint32> const newAffixes = sChallengeModeMgr.GetActiveAffixes(newLevel);
-            for (uint32 i = 0; i < 4; ++i)
-                keystone->SetModifier(ItemModifier(ITEM_MODIFIER_CHALLENGE_KEYSTONE_AFFIX_ID_1 + i), i < newAffixes.size() ? newAffixes[i] : 0u);
-
-            keystone->SetState(ITEM_CHANGED, starterPlayer);
+            if (Item* keystone = starterPlayer->GetItemByGuid(_keystoneGuid))
+            {
+                uint32 dungeon = keystone->GetModifier(ITEM_MODIFIER_CHALLENGE_MAP_CHALLENGE_MODE_ID);
+                if (!dungeon)
+                    dungeon = sChallengeModeMgr.RollSeasonDungeon(_mapChallengeModeId);
+                sChallengeModeMgr.StampKeystone(keystone, dungeon, _keystoneLevel + keystoneUpgrade);
+            }
         }
 
         // Stop the client dungeon timer.
@@ -324,14 +560,25 @@ void ChallengeMode::Complete()
             group->StartCountdown(CountdownTimerType::ChallengeMode, Seconds(0));
     }
 
-    // End-of-run crest reward: award the season crest of the tier matching the keystone level to each player.
-    // Currency ids are extracted from CurrencyTypes.db2 (Midnight S1 Dawncrests); tier + amount are config-tunable.
-    // Guarded on the currency existing, so a wrong/absent id is a safe no-op.
+    // Retail grants every present player without a keystone a fresh key at the end of the run, each rolled to
+    // a random dungeon other than the one just completed (sniff: three ITEM_PUSHes, per-player dungeons).
+    _instance->DoOnPlayers([this](Player* player)
+    {
+        if (!sChallengeModeMgr.GetKeystone(player))
+        {
+            uint32 const floorLevel = std::max(sChallengeModeMgr.GetKeystoneMinLevel(), sChallengeModeMgr.GetKeystoneFloor(player));
+            if (uint32 dungeon = sChallengeModeMgr.RollSeasonDungeon(_mapChallengeModeId))
+                sChallengeModeMgr.CreateOrUpdateKeystone(player, dungeon, floorLevel);
+        }
+    });
+
+    // End-of-run crest reward: the bracketed Dawncrest amount (+2/level within the bracket, capped, reduced when
+    // over time) to each player. Guarded on the currency existing, so a wrong/absent id is a safe no-op.
     if (uint32 crestId = sChallengeModeMgr.GetCrestCurrencyForLevel(_keystoneLevel))
     {
         if (sCurrencyTypesStore.LookupEntry(crestId))
         {
-            uint32 const crestAmount = sChallengeModeMgr.GetCrestAmount();
+            uint32 const crestAmount = sChallengeModeMgr.GetCrestAmountForLevel(_keystoneLevel, timed);
             if (crestAmount)
                 _instance->DoOnPlayers([crestId, crestAmount](Player* player)
                 {
@@ -340,30 +587,44 @@ void ChallengeMode::Complete()
         }
     }
 
-    // End-of-run gear reward: roll the configured reward loot for each player and grant every item at the
-    // authentic Mythic+ item level. The item-level scaling is real (ItemBonusMgr resolves the end-of-run context +
-    // keystone level through the reward-sequence curves); the item POOL is server content
+    // End-of-run gear: retail awards a fixed number of items for the GROUP (2 timed / 1 untimed), personal-loot
+    // distributed to random present players at the authentic Mythic+ item level. The item POOL is server content
     // (reference_loot_template keyed by ChallengeMode.Reward.LootId). Disabled (0) or empty template -> no-op.
     if (uint32 rewardLootId = sChallengeModeMgr.GetGearRewardLootId())
     {
         if (LootTemplates_Reference.HaveLootFor(rewardLootId))
-            _instance->DoOnPlayers([this, rewardLootId](Player* player)
+        {
+            std::vector<Player*> presentPlayers;
+            _instance->DoOnPlayers([&presentPlayers](Player* player)
             {
-                AwardGearReward(player, rewardLootId);
+                presentPlayers.push_back(player);
             });
+
+            uint32 itemCount = timed
+                ? uint32(sConfigMgr->GetIntDefault("ChallengeMode.Reward.ItemsTimed", 2))
+                : uint32(sConfigMgr->GetIntDefault("ChallengeMode.Reward.ItemsUntimed", 1));
+
+            if (!presentPlayers.empty())
+                for (uint32 i = 0; i < itemCount; ++i)
+                    AwardGearReward(Trinity::Containers::SelectRandomContainerElement(presentPlayers), rewardLootId);
+        }
     }
 
-    // Announce the result to the party (map/level/affixes + present players as members). The per-run
-    // DungeonScoreData sub-lists are sent empty (not persisted server-side); the wire is exact (no desync).
+    // Announce the result to the party (sniff-exact layout: run summary + score pair + member names).
     WorldPackets::ChallengeMode::ChallengeModeComplete completePacket;
-    completePacket.MapSummary.MapChallengeModeID = _mapChallengeModeId;
-    completePacket.MapSummary.BestLevel = _keystoneLevel;
-    completePacket.MapSummary.DurationMs = effectiveTimeMs;
-    completePacket.MapSummary.Affixes = _affixes;
-    _instance->DoOnPlayers([&completePacket](Player* player)
+    completePacket.MapChallengeModeID = _mapChallengeModeId;
+    completePacket.KeystoneLevel = _keystoneLevel;
+    completePacket.CompletionMs = effectiveTimeMs;
+    completePacket.CompletionDate = record.CompletionDate;
+    for (std::size_t i = 0; i < _affixes.size(); ++i)
+        completePacket.Affixes[i] = _affixes[i];
+    completePacket.Score = runScore;
+    completePacket.BestScore = runScore;
+    _instance->DoOnPlayers([&completePacket, runScore](Player* player)
     {
-        WorldPackets::ChallengeMode::MythicPlusMapStatMember& member = completePacket.MapSummary.Members.emplace_back();
-        member.PlayerGUID = player->GetGUID();
+        if (MythicPlusData const* data = player->GetMythicPlusData())
+            if (MythicPlusRunRecord const* best = data->GetBestRun(completePacket.MapChallengeModeID))
+                completePacket.BestScore = std::max(runScore, best->Score);
 
         // Names list: the party members present at completion, shown on the client's run-result screen.
         WorldPackets::ChallengeMode::ChallengeModeComplete::MemberName& name = completePacket.Names.emplace_back();
@@ -375,7 +636,7 @@ void ChallengeMode::Complete()
 
     TC_LOG_INFO("challengemode", "ChallengeMode complete: instance {} challengeMode {} level {} time {}s (+{}s deaths, limit {}s) -> +{} keystone, score {:.1f}",
         _instance->GetInstanceId(), _mapChallengeModeId, _keystoneLevel, GetElapsedMs() / IN_MILLISECONDS,
-        (_deathCount * DEATH_TIME_PENALTY_MS) / IN_MILLISECONDS, _timeLimitMs / IN_MILLISECONDS, keystoneUpgrade, runScore);
+        (_deathCount * GetDeathPenaltyMs()) / IN_MILLISECONDS, _timeLimitMs / IN_MILLISECONDS, keystoneUpgrade, runScore);
 }
 
 void ChallengeMode::AwardGearReward(Player* player, uint32 rewardLootId) const
