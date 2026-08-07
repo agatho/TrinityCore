@@ -16,15 +16,59 @@
  */
 
 #include "DelvesRewards.h"
+#include "Config.h"
 #include "DatabaseEnv.h"
+#include "DB2Stores.h"
 #include "DelveMgr.h"
 #include "DelvesCompanion.h"
 #include "DelvesSeason.h"
+#include "ItemBonusMgr.h"
 #include "Log.h"
+#include "Loot.h"
+#include "LootMgr.h"
+#include "Mail.h"
 #include "Player.h"
 
 namespace Delves
 {
+
+namespace
+{
+    // Rolls a reference_loot_template pool as personal loot at the delve item context and grants every item,
+    // scaled through ItemBonusMgr (the same authentic ilvl path the M+ rewards use). Mails on full bags.
+    void GrantDelveLoot(Player* player, uint32 lootId, uint8 itemContext)
+    {
+        if (!lootId || !LootTemplates_Reference.HaveLootFor(lootId))
+            return;
+
+        Loot loot(player->GetMap(), ObjectGuid::Empty, LOOT_NONE, nullptr);
+        loot.FillLoot(lootId, LootTemplates_Reference, player, true /*personal*/, true /*noEmptyError*/,
+            LOOT_MODE_DEFAULT, ItemContext(itemContext));
+
+        for (LootItem const& lootItem : loot.items)
+        {
+            if (!lootItem.itemid || !lootItem.count)
+                continue;
+
+            std::vector<int32> bonuses = ItemBonusMgr::GetBonusListsForItem(lootItem.itemid,
+                ItemBonusMgr::ItemBonusGenerationParams(ItemContext(itemContext)));
+
+            ItemPosCountVec dest;
+            if (player->CanStoreNewItem(NULL_BAG, NULL_SLOT, dest, lootItem.itemid, lootItem.count) == EQUIP_ERR_OK)
+                player->StoreNewItem(dest, lootItem.itemid, true, 0, GuidSet(), ItemContext(itemContext), &bonuses);
+            else if (Item* item = Item::CreateItem(lootItem.itemid, lootItem.count, ItemContext(itemContext), player, false))
+            {
+                item->SetBonuses(bonuses);
+                CharacterDatabaseTransaction trans = CharacterDatabase.BeginTransaction();
+                item->SaveToDB(trans);
+                MailDraft("Delve Reward", "Your delve reward.")
+                    .AddItem(item)
+                    .SendMailTo(trans, player, MailSender(player, MAIL_STATIONERY_GM), MAIL_CHECK_MASK_COPIED);
+                CharacterDatabase.CommitTransaction(trans);
+            }
+        }
+    }
+}
 
 void DelvesRewards::AwardDelveCompletion(Player* player, uint8 tier, bool bountiful, bool hasRevivesRemaining)
 {
@@ -45,6 +89,11 @@ void DelvesRewards::AwardDelveCompletion(Player* player, uint8 tier, bool bounti
     // Award companion XP
     AwardCompanionXP(player, tier);
 
+    // End-of-run gear (non-bountiful context; retail caps this at the tier-3 track). The item POOL is
+    // server content (reference_loot_template, Delves.Reward.LootId); the LEVEL comes from the item context.
+    GrantDelveLoot(player, uint32(sConfigMgr->GetIntDefault("Delves.Reward.LootId", 0)),
+        GetItemContextForTier(std::min<uint8>(tier, 3), false));
+
     // Handle bountiful rewards
     if (bountiful)
     {
@@ -53,7 +102,9 @@ void DelvesRewards::AwardDelveCompletion(Player* player, uint8 tier, bool bounti
         if (hasRevivesRemaining && HasCofferKey(player))
         {
             ConsumeCofferKey(player);
-            // TODO: Spawn Bountiful Coffer with enhanced loot
+            // Bountiful Coffer: the enhanced chest loot at the tier's bounty item context.
+            GrantDelveLoot(player, uint32(sConfigMgr->GetIntDefault("Delves.Coffer.LootId", 0)),
+                GetItemContextForTier(tier, true));
             TC_LOG_DEBUG("scripts.delves", "Player {} opened Bountiful Coffer (tier {}, ItemContext {})",
                 player->GetName(), tier, GetItemContextForTier(tier, true));
         }
@@ -85,10 +136,23 @@ void DelvesRewards::AwardCrests(Player* player, uint8 tier)
     if (!reward || reward->CrestType == CREST_NONE || reward->CrestCount == 0)
         return;
 
-    // TODO: Award actual crest currency items based on reward->CrestType and reward->CrestCount
-    // CrestType maps to specific currency IDs in the game
-    TC_LOG_DEBUG("scripts.delves", "Awarding {} crests of type {} to {} for tier {}",
-        reward->CrestCount, reward->CrestType, player->GetName(), tier);
+    // CrestType -> crest currency (Midnight S1 Dawncrest ladder; config-tunable, guarded on CurrencyTypes.db2
+    // so a wrong/absent id is a safe no-op). Delves top out at Hero crests (T11), matching retail.
+    uint32 currencyId = 0;
+    switch (reward->CrestType)
+    {
+        case CREST_WEATHERED: currencyId = uint32(sConfigMgr->GetIntDefault("Delves.Crest.Tier1.CurrencyId", 3383)); break; // Adventurer Dawncrest
+        case CREST_CARVED:    currencyId = uint32(sConfigMgr->GetIntDefault("Delves.Crest.Tier2.CurrencyId", 3341)); break; // Veteran Dawncrest
+        case CREST_RUNED:     currencyId = uint32(sConfigMgr->GetIntDefault("Delves.Crest.Tier3.CurrencyId", 3343)); break; // Champion Dawncrest
+        case CREST_GILDED:    currencyId = uint32(sConfigMgr->GetIntDefault("Delves.Crest.Tier4.CurrencyId", 3345)); break; // Hero Dawncrest
+        default: break;
+    }
+
+    if (currencyId && sCurrencyTypesStore.LookupEntry(currencyId))
+        player->AddCurrency(currencyId, reward->CrestCount, CurrencyGainSource::Loot);
+
+    TC_LOG_DEBUG("scripts.delves", "Awarded {} crests (currency {}) to {} for tier {}",
+        reward->CrestCount, currencyId, player->GetName(), tier);
 }
 
 void DelvesRewards::AwardCompanionXP(Player* player, uint8 tier)
