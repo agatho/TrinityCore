@@ -26,6 +26,7 @@
 #include "Battleground.h"
 #include "BattlegroundPackets.h"
 #include "CalendarMgr.h"
+#include "BnetPresenceMgr.h"
 #include "CharacterCache.h"
 #include "CharacterPackets.h"
 #include "Chat.h"
@@ -1868,6 +1869,10 @@ void WorldSession::HandlePlayerLogin(LoginQueryHolder const& holder)
     _player->UpdateCriteria(CriteriaType::Login, 1);
 
     sScriptMgr->OnPlayerLogin(pCurrChar, firstLogin);
+
+    // Battle.net presence: the account is now on a specific character. Pushed to presence.v1/v2
+    // subscribers and mirrored into battlenet_game_account_presence.
+    sBnetPresenceMgr->OnCharacterLogin(pCurrChar);
 
     TC_METRIC_EVENT("player_events", "Login", pCurrChar->GetName());
 }

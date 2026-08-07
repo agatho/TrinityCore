@@ -19,6 +19,7 @@
 #include "AccountMgr.h"
 #include "Channel.h"
 #include "ChannelMgr.h"
+#include "BnetBlockListMgr.h"
 #include "Chat.h"
 #include "ChatPackets.h"
 #include "Common.h"
@@ -309,6 +310,15 @@ ChatMessageResult WorldSession::HandleChatMessage(ChatMsg type, Language lang, s
                 receiver = ObjectAccessor::FindConnectedPlayerByName(extName.Name);
             }
             if (!receiver || (lang != LANG_ADDON && !receiver->isAcceptWhispers() && receiver->GetSession()->HasPermission(rbac::RBAC_PERM_CAN_FILTER_WHISPERS) && !receiver->IsInWhisperWhiteList(sender->GetGUID())))
+            {
+                SendChatPlayerNotfoundNotice(target);
+                return ChatMessageResult::NoWhisperTarget;
+            }
+
+            // block_list.v1 is account scope, one level above PlayerSocial's per-character ignore:
+            // blocking a battlenet account silences every character behind it, in both directions.
+            // The sender is told the same thing retail tells them - the target is not there.
+            if (sBnetBlockListMgr->IsBlockedEitherWay(GetBattlenetAccountId(), receiver->GetSession()->GetBattlenetAccountId()))
             {
                 SendChatPlayerNotfoundNotice(target);
                 return ChatMessageResult::NoWhisperTarget;

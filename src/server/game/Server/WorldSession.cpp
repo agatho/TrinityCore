@@ -28,6 +28,7 @@
 #include "CharacterPackets.h"
 #include "ChatPackets.h"
 #include "ClientConfigPackets.h"
+#include "BnetPresenceMgr.h"
 #include "ClubStreamHistoryMgr.h"
 #include "Containers.h"
 #include "DatabaseEnv.h"
@@ -598,6 +599,11 @@ void WorldSession::LogoutPlayer(bool save)
         // Drop the live club stream subscriptions and focus. A disconnect never sends UnsubscribeStream,
         // so without this a stale focus would keep marking a stream read for a player who is gone.
         sClubStreamHistoryMgr->ClearSessionState(_player->GetGUID());
+
+        // Battle.net presence: the account stays connected but is no longer on a character. Pushed to
+        // presence.v1/v2 subscribers here rather than in World::UpdateSessions, which only sees the
+        // whole session going away.
+        sBnetPresenceMgr->OnCharacterLogout(_player);
 
         if (!_player->GetLootGUID().IsEmpty())
             DoLootReleaseAll();

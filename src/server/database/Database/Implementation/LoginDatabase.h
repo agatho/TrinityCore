@@ -213,6 +213,22 @@ enum LoginDatabaseStatements : uint32
     LOGIN_INS_ACCOUNT_WOW_TOKEN,
     LOGIN_UPD_ACCOUNT_WOW_TOKEN,
 
+    // Battle.net friends v2 - durable friend graph (see BnetFriendsMgr)
+    LOGIN_UPD_BNET_BATTLE_TAG,
+    LOGIN_SEL_BNET_ACCOUNT_IDENTITY,
+    LOGIN_REP_BNET_FRIEND,
+    LOGIN_UPD_BNET_FRIEND_STATE,
+    LOGIN_DEL_BNET_FRIEND_EDGE,
+    LOGIN_INS_BNET_FRIEND_INVITE,
+    LOGIN_DEL_BNET_FRIEND_INVITE,
+    LOGIN_DEL_BNET_FRIEND_INVITES_BY_SENDER,
+
+    // Battle.net presence (see BnetPresenceMgr) + account-scope block list (see BnetBlockListMgr)
+    LOGIN_REP_BNET_PRESENCE,
+    LOGIN_UPD_BNET_PRESENCE_ALL_OFFLINE,
+    LOGIN_REP_BNET_BLOCKED,
+    LOGIN_DEL_BNET_BLOCKED,
+
     MAX_LOGINDATABASE_STATEMENTS
 };
 
