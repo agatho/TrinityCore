@@ -16,10 +16,30 @@
  */
 
 #include "CovenantPackets.h"
+#include "Util.h"
 
 void WorldPackets::Covenant::ActivateSoulbind::Read()
 {
     _worldPacket >> SoulbindID;
+}
+
+WorldPacket const* WorldPackets::Covenant::ActivateSoulbindFailed::Write()
+{
+    // Reason is a 4-bit field occupying the high nibble of the first byte; the dword that follows is byte-aligned.
+    _worldPacket.WriteBits(AsUnderlyingType(Reason), 4);
+    _worldPacket.FlushBits();
+
+    _worldPacket << int32(SoulbindID);
+
+    return &_worldPacket;
+}
+
+WorldPacket const* WorldPackets::Covenant::CovenantPreviewOpenNpc::Write()
+{
+    _worldPacket << NpcGUID;
+    _worldPacket << int32(CovenantID);
+
+    return &_worldPacket;
 }
 
 WorldPacket const* WorldPackets::Covenant::CovenantCallingsAvailabilityResponse::Write()

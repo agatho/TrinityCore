@@ -3037,6 +3037,7 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         // PlayerSoulbindConduitCountAtRankEqualOrGreaterThan (309), which counts conduits at a minimum rank.
         std::unordered_map<uint32 /*conduitId*/, uint32 /*rankIndex*/> const& GetSoulbindConduits() const { return m_soulbindConduits; }
         bool CollectConduit(uint32 conduitId, int32 rankIndex = -1);   // grant/upgrade; rankIndex < 0 => lowest defined rank
+        void ApplyCovenantSkillLines();                         // grant the active covenant's SkillLine, strip the other three (idempotent)
         void TryCollectConduitFromItem(Item* item);                    // auto-collect when a conduit item is acquired (SoulbindConduitItem)
         // Socketed conduits for a soulbind tree: GarrTalent node id -> conduitId
         bool SocketConduit(uint32 garrTalentTreeId, uint32 garrTalentId, uint32 conduitId);   // validates ownership + covenant, persists, applies spell

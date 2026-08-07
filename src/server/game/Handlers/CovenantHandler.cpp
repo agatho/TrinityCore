@@ -17,11 +17,33 @@
 
 #include "WorldSession.h"
 #include "CovenantPackets.h"
+#include "ConditionMgr.h"
 #include "DB2Stores.h"
+#include "Garrison.h"
 #include "GameTime.h"
 #include "Log.h"
 #include "Player.h"
+#include "RestMgr.h"
+#include "SharedDefines.h"
 #include <algorithm>
+
+// True while the player may change soulbinds: retail allows it in a rest area or inside the covenant sanctum.
+// The exact sanctum area list is not derivable offline, so the sanctum test uses the maps that GarrSite 296
+// publishes through GarrSiteLevel.db2 (no hardcoded map ids). This errs permissive on purpose - a false negative
+// would lock a player out of their own soulbinds, which is far worse than a false positive.
+static bool CanChangeSoulbind(Player const* player)
+{
+    if (player->GetRestMgr().HasRestFlag(REST_FLAG_IN_TAVERN)
+        || player->GetRestMgr().HasRestFlag(REST_FLAG_IN_CITY)
+        || player->GetRestMgr().HasRestFlag(REST_FLAG_IN_FACTION_AREA))
+        return true;
+
+    for (GarrSiteLevelEntry const* siteLevel : sGarrSiteLevelStore)
+        if (siteLevel->GarrSiteID == GARR_SITE_COVENANT_SANCTUM && siteLevel->MapID == player->GetMapId())
+            return true;
+
+    return false;
+}
 
 void WorldSession::HandleActivateSoulbind(WorldPackets::Covenant::ActivateSoulbind& packet)
 {
@@ -29,11 +51,65 @@ void WorldSession::HandleActivateSoulbind(WorldPackets::Covenant::ActivateSoulbi
     if (!player)
         return;
 
+    // The client renders the error string itself from the reason code, so nothing else needs to be sent.
+    auto fail = [&](WorldPackets::Covenant::SoulbindActivationError reason)
+    {
+        WorldPackets::Covenant::ActivateSoulbindFailed failed;
+        failed.Reason = reason;
+        failed.SoulbindID = packet.SoulbindID;
+        SendPacket(failed.Write());
+    };
+    using SoulbindError = WorldPackets::Covenant::SoulbindActivationError;
+
     SoulbindEntry const* soulbind = sSoulbindStore.LookupEntry(packet.SoulbindID);
     if (!soulbind)
     {
         TC_LOG_DEBUG("network", "CMSG_ACTIVATE_SOULBIND: {} sent an unknown SoulbindID {}",
             player->GetGUID().ToString(), packet.SoulbindID);
+        fail(SoulbindError::CantDoThatRightNow);
+        return;
+    }
+
+    // A soulbind belongs to exactly one covenant and may only be activated by a member of it. Without this check a
+    // client could send any soulbind id and (before the matching fix in Player::ActivateSoulbind) free-switch its
+    // covenant - bypassing the whole covenant-choice flow, its costs and its cooldown.
+    if (soulbind->CovenantID <= 0 || uint32(soulbind->CovenantID) != player->GetActiveCovenant())
+    {
+        TC_LOG_DEBUG("network", "CMSG_ACTIVATE_SOULBIND: {} tried to activate soulbind {} of covenant {} while in covenant {}",
+            player->GetGUID().ToString(), soulbind->ID, soulbind->CovenantID, player->GetActiveCovenant());
+        fail(SoulbindError::CantDoThatRightNow);
+        return;
+    }
+
+    // Soulbinds unlock over the covenant campaign; Soulbind.db2 carries the unlock gate (PlayerConditionID 84407-84502).
+    if (soulbind->PlayerConditionID > 0 && !ConditionMgr::IsPlayerMeetingCondition(player, uint32(soulbind->PlayerConditionID)))
+    {
+        TC_LOG_DEBUG("network", "CMSG_ACTIVATE_SOULBIND: {} tried to activate not-yet-unlocked soulbind {} (PlayerCondition {})",
+            player->GetGUID().ToString(), soulbind->ID, soulbind->PlayerConditionID);
+        fail(SoulbindError::CantDoThatRightNow);
+        return;
+    }
+
+    if (soulbind->ID == player->GetActiveSoulbind())
+        return;     // already active - nothing to do, and not an error
+
+    // Retail refuses a soulbind swap while dead or in combat, and requires a rest area or the sanctum. The client
+    // owns the error text for each of these reasons, so only the reason code is sent.
+    if (!player->IsAlive())
+    {
+        fail(SoulbindError::PlayerDead);
+        return;
+    }
+
+    if (player->IsInCombat())
+    {
+        fail(SoulbindError::AffectingCombat);
+        return;
+    }
+
+    if (!CanChangeSoulbind(player))
+    {
+        fail(SoulbindError::RestArea);
         return;
     }
 
