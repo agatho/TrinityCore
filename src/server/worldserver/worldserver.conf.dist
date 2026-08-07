@@ -4882,8 +4882,8 @@ Load.Locales = 1
 #                     Crest.Tier1.CurrencyId = 3383 (Adventurer), Crest.Tier2.CurrencyId = 3341 (Veteran),
 #                     Crest.Tier3.CurrencyId = 3343 (Champion), Crest.Tier4.CurrencyId = 3345 (Hero)
 
-Delves.Reward.LootId = 0
-Delves.Coffer.LootId = 0
+Delves.Reward.LootId = 301000
+Delves.Coffer.LootId = 301000
 Delves.Crest.Tier1.CurrencyId = 3383
 Delves.Crest.Tier2.CurrencyId = 3341
 Delves.Crest.Tier3.CurrencyId = 3343
@@ -4895,7 +4895,9 @@ Delves.Crest.Tier4.CurrencyId = 3345
 #                     that template; retail Midnight S1: Valeera Sanguinar). 0 disables the companion.
 #        Default:     0 - (Disabled)
 
-Delves.Companion.CreatureId = 0
+# Best-known Midnight id: Valeera Sanguinar 248567 (variant 249057 also ships; PlayerCompanionInfo row 11
+# carries only her display 67214, so verify in-game which entry renders correctly and adjust if needed).
+Delves.Companion.CreatureId = 248567
 
 #
 #    Delves.Companion.<Role>.*SpellId
