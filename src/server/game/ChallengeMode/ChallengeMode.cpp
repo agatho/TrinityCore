@@ -595,8 +595,12 @@ void ChallengeMode::Complete()
     // End-of-run gear: retail awards a fixed number of items for the GROUP (2 timed / 1 untimed), personal-loot
     // distributed to random present players at the authentic Mythic+ item level. The item POOL is server content
     // (reference_loot_template keyed by ChallengeMode.Reward.LootId). Disabled (0) or empty template -> no-op.
+    // Retail drops from the COMPLETED dungeon's table, so a per-dungeon pool at <base>+<MapChallengeModeID>
+    // wins over the base pool when it exists.
     if (uint32 rewardLootId = sChallengeModeMgr.GetGearRewardLootId())
     {
+        if (LootTemplates_Reference.HaveLootFor(rewardLootId + _mapChallengeModeId))
+            rewardLootId += _mapChallengeModeId;
         if (LootTemplates_Reference.HaveLootFor(rewardLootId))
         {
             std::vector<Player*> presentPlayers;
