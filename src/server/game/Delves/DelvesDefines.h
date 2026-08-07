@@ -142,10 +142,9 @@ static constexpr uint8  MAX_COMPANION_GROUP_SIZE = 4;           // Companion joi
 // ---------------------------------------------------------------------------
 // Great Vault
 // ---------------------------------------------------------------------------
-
-static constexpr uint32 VAULT_SLOT_1_COMPLETIONS = 2;
-static constexpr uint32 VAULT_SLOT_2_COMPLETIONS = 4;
-static constexpr uint32 VAULT_SLOT_3_COMPLETIONS = 8;
+// No delve-private slot thresholds live here. Delve completions credit the vault's World activity row, and
+// that row's thresholds come from WeeklyRewardChestThreshold.db2 through WeeklyRewards::WORLD_THRESHOLDS
+// (Type 6, live ids 196/197/198 = 2/4/8) - a single source, so the two cannot drift apart.
 
 // ---------------------------------------------------------------------------
 // Well-Known IDs (from DelvesConstantsDocumentation.lua + WoWDBDefs)

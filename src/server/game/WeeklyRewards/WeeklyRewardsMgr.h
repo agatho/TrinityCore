@@ -28,22 +28,26 @@ class Player;
 
 namespace WeeklyRewards
 {
-    // The three Great Vault activity rows. Values match the client's WeeklyRewardChestThreshold activity grouping
-    // (the exact DB2 activity-type ids are configured server-side; these are the internal row indices).
+    // The three Great Vault activity rows. These are the internal row indices; each maps onto a
+    // WeeklyRewardChestThreshold.db2 Type (see the threshold arrays below).
     enum class ActivityType : uint8
     {
-        Dungeon = 0,    // Mythic+ / dungeon runs
-        Raid    = 1,    // raid boss kills
-        World   = 2,    // world / PvP activity
+        Dungeon = 0,    // Mythic+ / dungeon runs      (DB2 Type 1)
+        Raid    = 1,    // raid boss kills             (DB2 Type 3)
+        World   = 2,    // world activity: delves, PvP (DB2 Type 6)
 
         Max
     };
 
-    // The three reward slots per row unlock at these completion counts (retail Great Vault layout). A row with
-    // >= thresholds[i] qualifying completions this week has earned reward slot i.
+    // The three reward slots per row unlock at these completion counts. Taken from WeeklyRewardChestThreshold.db2
+    // under the client's highest-ID-per-(Type,Index) rule, which selects the live season's rows - for 12.0.7/68275
+    // that is ids 202/203/204 (Type 1) = 1/4/8, 199/200/201 (Type 3) = 2/4/6 and 196/197/198 (Type 6) = 2/4/8.
+    // Those same three row groups are what the client shows in the vault (sniffed row ids in
+    // C:\dumps\MPLUS_SNIFF_DEEP_68275.md section 5), and 2/4/8 for the World row is also what the delve
+    // documentation records ("Vault WORLD row 2/4/8 completions", I:\TrinityCore\delves\DELVES_RETAIL_FACTS.md).
     inline constexpr std::array<uint32, 3> DUNGEON_THRESHOLDS = { 1, 4, 8 };
     inline constexpr std::array<uint32, 3> RAID_THRESHOLDS    = { 2, 4, 6 };
-    inline constexpr std::array<uint32, 3> WORLD_THRESHOLDS   = { 1, 4, 8 };
+    inline constexpr std::array<uint32, 3> WORLD_THRESHOLDS   = { 2, 4, 8 };
 
     std::array<uint32, 3> const& ThresholdsFor(ActivityType type);
 
