@@ -137,13 +137,34 @@ void ChallengeModeMgr::LoadEnemyForces()
         } while (result->NextRow());
     }
 
-    TC_LOG_INFO("server.loading", "ChallengeModeMgr: loaded enemy-forces requirements for {} dungeons.", _enemyForces.size());
+    _enemyForcesWeights.clear();
+    if (QueryResult result = WorldDatabase.Query("SELECT challengeModeId, creatureEntry, points FROM challenge_mode_enemy_forces_creature"))
+    {
+        do
+        {
+            Field* fields = result->Fetch();
+            _enemyForcesWeights[fields[0].GetUInt32()][fields[1].GetUInt32()] = fields[2].GetUInt32();
+        } while (result->NextRow());
+    }
+
+    TC_LOG_INFO("server.loading", "ChallengeModeMgr: loaded enemy-forces requirements for {} dungeons ({} with per-creature weights).",
+        _enemyForces.size(), _enemyForcesWeights.size());
 }
 
 uint32 ChallengeModeMgr::GetEnemyForcesRequiredKills(uint32 challengeModeId) const
 {
     auto itr = _enemyForces.find(challengeModeId);
     return itr != _enemyForces.end() ? itr->second : 0;
+}
+
+Optional<uint32> ChallengeModeMgr::GetEnemyForcesPoints(uint32 challengeModeId, uint32 creatureEntry) const
+{
+    auto mapItr = _enemyForcesWeights.find(challengeModeId);
+    if (mapItr == _enemyForcesWeights.end())
+        return {};      // dungeon has no weight table - caller falls back to 1 point per kill
+
+    auto itr = mapItr->second.find(creatureEntry);
+    return itr != mapItr->second.end() ? Optional<uint32>(itr->second) : Optional<uint32>(0);  // weighted dungeon: unlisted creatures credit nothing
 }
 
 void ChallengeModeMgr::LoadScalingCurves()
