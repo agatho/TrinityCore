@@ -30,6 +30,7 @@
 #include "GameTime.h"
 #include "Garrison.h"
 #include "Group.h"
+#include "Housing.h"
 #include "InstanceScript.h"
 #include "Item.h"
 #include "ItemBonusMgr.h"
@@ -574,6 +575,10 @@ void CriteriaHandler::UpdateCriteria(Criteria const* criteria, uint64 miscValue1
         case CriteriaType::SellItemsToVendors:
         case CriteriaType::ReachMaxLevel:
         case CriteriaType::LearnTaxiNode:
+        // --- housing
+        case CriteriaType::PlaceDecor:
+        case CriteriaType::RemoveDecor:
+        case CriteriaType::CollectUniqueDecor:
             SetCriteriaProgress(criteria, 1, referencePlayer, PROGRESS_ACCUMULATE);
             break;
         // std case: increment at miscValue1
@@ -1717,6 +1722,13 @@ bool CriteriaHandler::RequirementsSatisfied(Criteria const* criteria, uint64 mis
             break;
         case CriteriaType::LearnTaxiNode:
             if (miscValue1 != uint32(criteria->Entry->Asset.TaxiNodesID))
+                return false;
+            break;
+        // No asset - the ModifierTree discriminates, but it needs a real HouseDecor entry in miscValue1.
+        case CriteriaType::PlaceDecor:
+        case CriteriaType::RemoveDecor:
+        case CriteriaType::CollectUniqueDecor:
+            if (!miscValue1)
                 return false;
             break;
         default:
@@ -4033,6 +4045,10 @@ bool CriteriaHandler::ModifierSatisfied(ModifierTreeEntry const* modifier, uint6
             break;
         case ModifierTreeType::PlayerIsInGuild: // 404
             if (!referencePlayer->GetGuildId())
+                return false;
+            break;
+        case ModifierTreeType::PlayerHousesCountEqualOrGreaterThan: // 419
+            if (referencePlayer->GetAllHousings().size() < reqValue)
                 return false;
             break;
         case ModifierTreeType::PlayerMoneyIsRelOp: // 417
