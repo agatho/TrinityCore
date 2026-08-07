@@ -4424,3 +4424,11 @@ Delves.Crest.Tier1.CurrencyId = 3383
 Delves.Crest.Tier2.CurrencyId = 3341
 Delves.Crest.Tier3.CurrencyId = 3343
 Delves.Crest.Tier4.CurrencyId = 3345
+
+#
+#    Delves.Companion.CreatureId
+#        Description: Creature entry summoned as the delve companion (world content + companion AI script on
+#                     that template; retail Midnight S1: Valeera Sanguinar). 0 disables the companion.
+#        Default:     0 - (Disabled)
+
+Delves.Companion.CreatureId = 0

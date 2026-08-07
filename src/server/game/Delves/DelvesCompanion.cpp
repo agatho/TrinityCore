@@ -16,6 +16,7 @@
  */
 
 #include "DelvesCompanion.h"
+#include "Config.h"
 #include "Creature.h"
 #include "DatabaseEnv.h"
 #include "DB2Stores.h"
@@ -85,9 +86,16 @@ Creature* DelvesCompanion::SpawnCompanion(InstanceMap* map, Player* owner, Compa
         return nullptr;
     }
 
-    // Use the CreatureDisplayInfoID to find the creature template
-    // The companion creature entry should be configured in creature_template with the companion AI script
-    uint32 creatureEntry = info->CreatureDisplayInfoID; // TODO: Map to actual creature_template entry
+    // The companion creature entry is world content (retail Midnight S1: Valeera Sanguinar) configured via
+    // Delves.Companion.CreatureId + the companion AI script on that creature_template. The previous code
+    // misused PlayerCompanionInfo.CreatureDisplayInfoID (a display id) as a creature entry, which never
+    // resolves to a template. 0 = companion disabled.
+    uint32 creatureEntry = uint32(sConfigMgr->GetIntDefault("Delves.Companion.CreatureId", 0));
+    if (!creatureEntry)
+    {
+        TC_LOG_DEBUG("scripts.delves", "Companion spawn skipped: Delves.Companion.CreatureId not configured.");
+        return nullptr;
+    }
 
     TempSummon* companion = map->SummonCreature(creatureEntry, pos, nullptr, 0ms, owner);
     if (!companion)

@@ -115,6 +115,13 @@ struct npc_delve_entranceAI : public ScriptedAI
         gossipMessage.LfgDungeonsID   = tmpl->LfgDungeonsId;
         gossipMessage.BroadcastTextID = tmpl->BroadcastTextId;
 
+        // Tier gating: only tiers up to the account's HighestTierUnlocked are selectable (retail: tier N+1
+        // unlocks by completing tier N with a life remaining; tiers 1-3 are open by default). Locked tiers
+        // are still listed, greyed out, matching the retail picker.
+        DelveProgress progress;
+        DelvesRewards::LoadProgress(player->GetSession()->GetBattlenetAccountId(), progress);
+        uint8 const highestUnlocked = std::min<uint8>(std::max<uint8>(progress.HighestTierUnlocked, 3), MAX_DELVE_TIER);
+
         for (uint32 i = 0; i < MAX_DELVE_TIER; ++i)
         {
             auto& opt = gossipMessage.GossipOptions.emplace_back();
@@ -123,8 +130,7 @@ struct npc_delve_entranceAI : public ScriptedAI
             opt.OptionNPC      = GossipOptionNpc::None;
             opt.Text           = TIER_NAMES[i];
             opt.SpellID        = TIER_SPELL_IDS[i];
-            // TODO: real eligibility (highestTierUnlocked, ilvl, achievements).
-            opt.Status         = GossipOptionStatus::Available;
+            opt.Status         = i < highestUnlocked ? GossipOptionStatus::Available : GossipOptionStatus::Locked;
         }
 
         player->PlayerTalkClass->GetInteractionData().StartInteraction(
@@ -157,6 +163,19 @@ struct npc_delve_entranceAI : public ScriptedAI
         }
 
         uint8 tier = uint8(gossipListId + 1);  // gossipListId is 0-based, tier is 1..11
+
+        // Server-side tier gate (the greyed-out menu is cosmetic; a modified client could send any index).
+        {
+            DelveProgress progress;
+            DelvesRewards::LoadProgress(player->GetSession()->GetBattlenetAccountId(), progress);
+            if (tier > std::max<uint8>(progress.HighestTierUnlocked, 3))
+            {
+                TC_LOG_DEBUG("scripts.delves", "npc_delve_entrance: player {} rejected for locked tier {} (unlocked {}).",
+                    player->GetName(), tier, progress.HighestTierUnlocked);
+                return true;
+            }
+        }
+
         TC_LOG_DEBUG("scripts.delves",
             "npc_delve_entrance: player {} selected tier {} -> teleporting to map {}",
             player->GetName(), tier, _delveTemplate->MapId);
