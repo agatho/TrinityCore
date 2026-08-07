@@ -1271,7 +1271,7 @@ ChallengeMode.Crest.UntimedReduction = 4
 #        Default:     LootId = 0 (Disabled), ItemsTimed = 2, ItemsUntimed = 1
 #
 
-ChallengeMode.Reward.LootId = 0
+ChallengeMode.Reward.LootId = 300000
 ChallengeMode.Reward.ItemsTimed = 2
 ChallengeMode.Reward.ItemsUntimed = 1
 
@@ -1285,7 +1285,7 @@ ChallengeMode.Reward.ItemsUntimed = 1
 #        Default:     0 - (Disabled)
 #
 
-ChallengeMode.Vault.LootId = 0
+ChallengeMode.Vault.LootId = 300000
 
 #
 #    ChallengeMode.Score.*
