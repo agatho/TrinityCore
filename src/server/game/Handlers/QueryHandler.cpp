@@ -30,6 +30,7 @@
 #include "ObjectAccessor.h"
 #include "ObjectMgr.h"
 #include "Player.h"
+#include "ClubUtils.h"
 #include "QueryPackets.h"
 #include "RealmList.h"
 #include "TerrainMgr.h"
@@ -82,6 +83,43 @@ void WorldSession::HandleQueryPlayerNames(WorldPackets::Query::QueryPlayerNames&
     }
 
     SendPacket(response.Write());
+}
+
+// The Communities window identifies club members only by their club MemberId (and their BNet account guid), not by
+// character guid, so the ordinary CMSG_QUERY_PLAYER_NAMES path cannot resolve them and member rows render without a
+// name. Both of these opcodes were Handle_NULL and the response opcode was send-blocked.
+//
+// Clubs::CreateClubMemberId packs {realmId<<48 | guid counter}; GetGuidFromClubMemberId inverts that. A member id
+// minted on another realm cannot be resolved from our character cache and is answered with a non-zero result.
+void WorldSession::SendPlayerNameByCommunityId(WorldPackets::Query::BNetAccountAndCommunityID const& member)
+{
+    WorldPackets::Query::QueryPlayerNameByCommunityIdResponse response;
+    response.Member = member;
+
+    ObjectGuid guid = Battlenet::Services::Clubs::GetGuidFromClubMemberId(member.CommunityID);
+    if (!guid.IsEmpty() && response.Data.emplace().Initialize(guid))
+        response.Result = 0;   // found - the payload is parsed only when Result == 0
+    else
+    {
+        response.Data.reset();
+        response.Result = 1;
+    }
+
+    SendPacket(response.Write());
+}
+
+void WorldSession::HandleQueryPlayerNameByCommunityId(WorldPackets::Query::QueryPlayerNameByCommunityId& queryPlayerNameByCommunityId)
+{
+    SendPlayerNameByCommunityId(queryPlayerNameByCommunityId.Member);
+}
+
+void WorldSession::HandleQueryPlayerNamesForCommunity(WorldPackets::Query::QueryPlayerNamesForCommunity& queryPlayerNamesForCommunity)
+{
+    // There is no batched response opcode in the 12.0.7 opcode set - the client resolves a community roster by
+    // matching each SMSG_QUERY_PLAYER_NAME_BY_COMMUNITY_ID_RESPONSE against the key it echoes, so answer one
+    // response per requested member.
+    for (WorldPackets::Query::BNetAccountAndCommunityID const& member : queryPlayerNamesForCommunity.Members)
+        SendPlayerNameByCommunityId(member);
 }
 
 void WorldSession::HandleQueryTimeOpcode(WorldPackets::Query::QueryTime& /*queryTime*/)

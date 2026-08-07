@@ -20,6 +20,8 @@
 #include "Common.h"
 #include "DatabaseEnv.h"
 #include "Log.h"
+#include "Player.h"
+#include "StringFormat.h"
 #include "SupportMgr.h"
 #include "TicketPackets.h"
 
@@ -118,4 +120,53 @@ void WorldSession::HandleComplaint(WorldPackets::Ticket::Complaint& packet)
     result.ComplaintType = packet.ComplaintType;
     result.Result = 0;
     SendPacket(result.Write());
+}
+
+// CMSG_CRAFTING_ORDER_REPORT_PLAYER. The crafting-order UI's Report button carries the full complaint payload
+// (position header, report type/categories and a note) plus the order id. Previously Handle_NULL, so the report was
+// discarded. Route it into the same ComplaintTicket queue the in-world report flow uses, with the order id folded
+// into the note so a reviewer can find the order.
+void WorldSession::HandleCraftingOrderReportPlayer(WorldPackets::Ticket::CraftingOrderReportPlayer& packet)
+{
+    if (!sSupportMgr->GetComplaintSystemStatus())
+        return;
+
+    ComplaintTicket* comp = new ComplaintTicket(GetPlayer());
+    comp->SetPosition(packet.Header.MapID, packet.Header.Position);
+    comp->SetFacing(packet.Header.Facing);
+    comp->SetReportType(ReportType(packet.ReportType));
+    comp->SetMajorCategory(ReportMajorCategory(packet.MajorCategory));
+    comp->SetMinorCategoryFlags(ReportMinorCategory(packet.MinorCategoryFlags));
+    comp->SetNote(Trinity::StringFormat("[Crafting order {}] {}", packet.OrderID, packet.Note));
+
+    sSupportMgr->AddTicket(comp);
+}
+
+// CMSG_CHAT_REPORT_FILTERED. The client reports a chat message it filtered, identifying only the sender. Previously
+// Handle_NULL. Recorded as a chat complaint against that sender so it is reviewable; de-duplicated against this
+// reporter's existing open complaints so a client that reports repeatedly cannot flood the ticket queue.
+void WorldSession::HandleChatReportFiltered(WorldPackets::Ticket::ChatReportFiltered& packet)
+{
+    if (!sSupportMgr->GetComplaintSystemStatus())
+        return;
+
+    Player* player = GetPlayer();
+    if (!player || packet.SenderGUID.IsEmpty() || packet.SenderGUID == player->GetGUID())
+        return;
+
+    // One open filtered-chat complaint per (reporter, target).
+    for (auto const& [ticketId, ticket] : sSupportMgr->GetComplaintsByPlayerGuid(player->GetGUID()))
+        if (!ticket->IsClosed() && ticket->GetTargetCharacterGuid() == packet.SenderGUID)
+            return;
+
+    ComplaintTicket* comp = new ComplaintTicket(player);
+    comp->SetPosition(player->GetMapId(), player->GetPosition());
+    comp->SetFacing(player->GetOrientation());
+    comp->SetTargetCharacterGuid(packet.SenderGUID);
+    comp->SetReportType(ReportType::Chat);
+    comp->SetMajorCategory(ReportMajorCategory::InappropriateCommunication);
+    comp->SetMinorCategoryFlags(ReportMinorCategory::TextChat);
+    comp->SetNote("Client-side chat filter report (CMSG_CHAT_REPORT_FILTERED)");
+
+    sSupportMgr->AddTicket(comp);
 }

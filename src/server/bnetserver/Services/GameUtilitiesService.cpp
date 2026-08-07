@@ -17,6 +17,7 @@
 
 #include "GameUtilitiesService.h"
 #include "BattlenetRpcErrorCodes.h"
+#include "CryptoRandom.h"
 #include "DatabaseEnv.h"
 #include "Hash.h"
 #include "Log.h"
@@ -26,6 +27,7 @@
 #include "RealmList.pb.h"
 #include "Session.h"
 #include "Types.h"
+#include "Util.h"
 #include <zlib.h>
 
 namespace Battlenet::Services
@@ -204,17 +206,51 @@ uint32 GameUtilities::GetRealmListTicket(Session* session,
 
     LoginDatabase.Execute(stmt);
 
+    // Mint a real, per-session ticket instead of the constant literal "AuthRealmListTicket\0" that every session
+    // used to receive and that nothing ever validated. 32 random bytes, hex-encoded, with an expiry; the
+    // subsequent Command_RealmListRequest_v1 / Command_RealmJoinRequest_v1 must present it (or at minimum must
+    // arrive on a session that holds an unexpired one).
+    std::string ticket = ByteArrayToHexStr(Trinity::Crypto::GetRandomBytes<32>());
+    session->SetRealmListTicket(ticket, RealmListTicketDuration);
+
     std::vector<uint8> realmListTicket;
-    std::ranges::copy("AuthRealmListTicket\0"sv, std::back_inserter(realmListTicket));
+    std::ranges::copy(ticket, std::back_inserter(realmListTicket));
+    realmListTicket.push_back(0);   // the client treats the blob as a NUL-terminated string
     responseValues.emplace_back("Param_RealmListTicket"sv, std::move(realmListTicket));
 
     return ERROR_OK;
+}
+
+// Extracts the realm-list ticket the client echoed back, if any. It is carried either as the value of the command
+// attribute itself or as an explicit Param_RealmListTicket blob, depending on the command.
+std::string_view GameUtilities::GetPresentedRealmListTicket(std::vector<std::pair<std::string_view, Variant>>& params)
+{
+    Variant const* ticket = FindParamValue(params, "Param_RealmListTicket");
+    if (!ticket)
+        return { };
+
+    if (std::holds_alternative<std::string>(*ticket))
+        return std::get<std::string>(*ticket);
+
+    if (std::holds_alternative<std::vector<uint8>>(*ticket))
+    {
+        std::vector<uint8> const& blob = std::get<std::vector<uint8>>(*ticket);
+        std::string_view view(reinterpret_cast<char const*>(blob.data()), blob.size());
+        if (std::size_t nul = view.find('\0'); nul != std::string_view::npos)
+            view = view.substr(0, nul);
+        return view;
+    }
+
+    return { };
 }
 
 uint32 GameUtilities::GetRealmList(Session const* session,
     std::vector<std::pair<std::string_view, Variant>>& params,
     std::vector<std::pair<std::string_view, Variant>>& responseValues)
 {
+    if (!session->IsRealmListTicketValid(GetPresentedRealmListTicket(params)))
+        return ERROR_WOW_SERVICES_INVALID_REALM_LIST_TICKET;
+
     std::string subRegionId;
     if (Variant const* subRegion = FindParamValue(params, "Command_RealmListRequest_v1"); subRegion && std::holds_alternative<std::string>(*subRegion))
         subRegionId = std::get<std::string>(*subRegion);
@@ -247,6 +283,11 @@ uint32 GameUtilities::JoinRealm(Session const* session,
     std::vector<std::pair<std::string_view, Variant>>& params,
     std::vector<std::pair<std::string_view, Variant>>& responseValues)
 {
+    // A realm join hands out the session key that lets the bearer enter the world; it must be gated on the
+    // per-session realm-list ticket rather than being reachable by any authed session that skips the handshake.
+    if (!session->IsRealmListTicketValid(GetPresentedRealmListTicket(params)))
+        return ERROR_WOW_SERVICES_INVALID_REALM_LIST_TICKET;
+
     Variant const* realmAddress = FindParamValue(params, "Param_RealmAddress");
     if (!realmAddress || !std::holds_alternative<uint64>(*realmAddress))
         return ERROR_UTIL_SERVER_UNKNOWN_REALM;

@@ -175,8 +175,30 @@ void WorldSession::HandleSetContactNotesOpcode(WorldPackets::Social::SetContactN
     _player->GetSocial()->SetFriendNote(packet.Player.Guid, packet.Notes);
 }
 
+// The social contract is a one-time per-battlenet-account acknowledgement. ShowSocialContract used to be
+// hardcoded false, which suppressed the flow entirely; it is now driven by the persisted acceptance flag on
+// battlenet_accounts. CMSG_SOCIAL_CONTRACT_REQUEST is STATUS_AUTHED (it can arrive before a player exists), so
+// the flag is read straight from the login DB rather than from cached session state.
 void WorldSession::HandleSocialContractRequest(WorldPackets::Social::SocialContractRequest& /*socialContractRequest*/)
 {
+    LoginDatabasePreparedStatement* stmt = LoginDatabase.GetPreparedStatement(LOGIN_SEL_BNET_SOCIAL_CONTRACT);
+    stmt->setUInt32(0, GetBattlenetAccountId());
+
+    GetQueryProcessor().AddCallback(LoginDatabase.AsyncQuery(stmt).WithPreparedCallback([this](PreparedQueryResult result)
+    {
+        WorldPackets::Social::SocialContractRequestResponse response;
+        response.ShowSocialContract = !result || !(*result)[0].GetBool();
+        SendPacket(response.Write());
+    }));
+}
+
+// The player accepted the social contract; persist it so the prompt does not return after relog.
+void WorldSession::HandleAcceptSocialContract(WorldPackets::Social::AcceptSocialContract& /*acceptSocialContract*/)
+{
+    LoginDatabasePreparedStatement* stmt = LoginDatabase.GetPreparedStatement(LOGIN_UPD_BNET_SOCIAL_CONTRACT);
+    stmt->setUInt32(0, GetBattlenetAccountId());
+    LoginDatabase.Execute(stmt);
+
     WorldPackets::Social::SocialContractRequestResponse response;
     response.ShowSocialContract = false;
     SendPacket(response.Write());

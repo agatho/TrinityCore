@@ -19,6 +19,7 @@
 #define TRINITYCORE_GAME_UTILITIES_SERVICE_H
 
 #include "Service.h"
+#include "Duration.h"
 #include "Client/game_utilities_service.pb.h"
 #include "Client/api/client/v2/game_utilities_service.pb.h"
 #include <variant>
@@ -43,7 +44,13 @@ namespace Battlenet::Services
 
             static uint32 HandleGetAllValuesForAttribute(Session const* session, std::string_view command, std::vector<Variant>& responseValues);
 
+            // Lifetime of a minted realm-list ticket: matches the default LoginREST.TicketDuration so it never
+            // expires before the login ticket that authorises the session, while still being bounded (a leaked
+            // ticket is not indefinitely replayable).
+            static constexpr Seconds RealmListTicketDuration = Seconds(3600);
+
         private:
+            static std::string_view GetPresentedRealmListTicket(std::vector<std::pair<std::string_view, Variant>>& params);
             static uint32 GetLastCharPlayed(Session const* session, std::vector<std::pair<std::string_view, Variant>>& params,
                 std::vector<std::pair<std::string_view, Variant>>& responseValues);
             static uint32 GetRealmListTicket(Session* session, std::vector<std::pair<std::string_view, Variant>>& params,

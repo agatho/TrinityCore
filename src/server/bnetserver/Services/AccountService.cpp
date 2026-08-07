@@ -95,10 +95,36 @@ uint32 Account::HandleGetAccountInfo(account::v2::client::GetAccountInfoRequest 
     return ERROR_OK;
 }
 
+// Account-scope (battlenet_account_bans) restrictions. This previously returned ERROR_OK with an empty body, so
+// account-level bans were invisible to the client while game-account bans were reported correctly by
+// HandleGetGameAccountRestriction below. Same shape, sourced from AccountInfo instead of GameAccountInfo.
 uint32 Account::HandleGetRestriction(account::v2::client::GetRestrictionRequest const* /*request*/,
-    account::v2::client::GetRestrictionResponse* /*response*/,
+    account::v2::client::GetRestrictionResponse* response,
     std::function<void(ServiceBase*, uint32, google::protobuf::Message const*)>& /*continuation*/)
 {
+    if (!_session->IsAuthed())
+        return ERROR_DENIED;
+
+    AccountInfo const* accountInfo = _session->GetAccountInfo();
+    if (!accountInfo)
+        return ERROR_OK;
+
+    if (accountInfo->IsPermanenetlyBanned)
+    {
+        account::v2::Restriction* restriction = response->add_restrictions();
+        restriction->set_title_id(ClientBuild::ToFourCC("WoW"sv));
+        restriction->set_type(account::v2::RESTRICTION_TYPE_LOGIN_BANNED);
+        restriction->set_created_time_ms(accountInfo->BanDate * IN_MILLISECONDS);
+    }
+    else if (accountInfo->IsBanned)
+    {
+        account::v2::Restriction* restriction = response->add_restrictions();
+        restriction->set_title_id(ClientBuild::ToFourCC("WoW"sv));
+        restriction->set_type(account::v2::RESTRICTION_TYPE_LOGIN_SUSPENDED);
+        restriction->set_created_time_ms(accountInfo->BanDate * IN_MILLISECONDS);
+        restriction->set_expire_time_ms(accountInfo->UnbanDate * IN_MILLISECONDS);
+    }
+
     return ERROR_OK;
 }
 

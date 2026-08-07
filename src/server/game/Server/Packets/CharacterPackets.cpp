@@ -953,4 +953,47 @@ WorldPacket const* NeutralPlayerFactionSelectResult::Write()
 
     return &_worldPacket;
 }
+
+void GetAccountCharacterList::Read()
+{
+    _worldPacket >> Token;
+    _worldPacket >> Bits<1>(Unknown);
+    _worldPacket.ResetBitPos();
+}
+
+ByteBuffer& operator<<(ByteBuffer& data, GetAccountCharacterListResult::AccountCharacter const& character)
+{
+    data << character.Unused;
+    data << character.CharacterGUID;
+    data << uint32(character.VirtualRealmAddress);
+    data << uint8(character.RaceID);
+    data << uint8(character.ClassID);
+    data << uint8(character.SexID);
+    data << uint8(character.ExperienceLevel);
+    data << uint64(character.Unused1);
+    data << uint32(character.Unused2);
+    // 6 + 9 bits of string lengths, then one pad bit to the byte boundary, then the raw (unterminated) bytes -
+    // the client appends its own NUL after reading exactly `length` bytes.
+    data << SizedString::BitsSize<6>(character.Name);
+    data << SizedString::BitsSize<9>(character.RealmName);
+    data.FlushBits();
+
+    data << SizedString::Data(character.Name);
+    data << SizedString::Data(character.RealmName);
+
+    return data;
+}
+
+WorldPacket const* GetAccountCharacterListResult::Write()
+{
+    _worldPacket << uint32(Token);
+    _worldPacket << Size<uint32>(Characters);   // the count is read before the Success bit
+    _worldPacket << Bits<1>(Success);
+    _worldPacket.FlushBits();
+
+    for (AccountCharacter const& character : Characters)
+        _worldPacket << character;
+
+    return &_worldPacket;
+}
 }

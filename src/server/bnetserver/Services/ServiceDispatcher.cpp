@@ -17,10 +17,12 @@
 
 #include "ServiceDispatcher.h"
 #include "AccountService.h"
+#include "BattlenetRpcErrorCodes.h"
 #include "AuthenticationService.h"
 #include "ConnectionService.h"
 #include "GameUtilitiesService.h"
 #include "Log.h"
+#include "ReportService.h"
 #include "Session.h"
 #include "Client/api/client/v1/block_list_listener.pb.h"
 #include "Client/api/client/v1/block_list_service.pb.h"
@@ -58,7 +60,7 @@ Battlenet::ServiceDispatcher::ServiceDispatcher()
     AddService<Service<presence::v2::client::PresenceService>>();
     AddService<Service<report::v1::ReportService>>();
     AddService<Service<report::v2::ReportService>>();
-    AddService<Service<report::v3::client::ReportService>>();
+    AddService<Services::V3::Report>();
     AddService<Service<resources::v1::ResourcesService>>();
     AddService<Service<whisper::v2::client::WhisperService>>();
 }
@@ -67,9 +69,16 @@ void Battlenet::ServiceDispatcher::Dispatch(Session* session, uint32 serviceHash
 {
     auto itr = _dispatchers.find(serviceHash);
     if (itr != _dispatchers.end())
+    {
         itr->second(session, token, methodId, std::move(buffer));
-    else
-        TC_LOG_DEBUG("session.rpc", "{} tried to call invalid service 0x{:X}", session->GetClientInfo(), serviceHash);
+        return;
+    }
+
+    // An unregistered service hash used to be logged and silently dropped, which left the client's RPC token
+    // outstanding forever - the call never completes and the client leaks the token (and, for anything it waits
+    // on, hangs). Answer with a real RPC error so the pending-call table is released.
+    TC_LOG_DEBUG("session.rpc", "{} tried to call invalid service 0x{:X}", session->GetClientInfo(), serviceHash);
+    session->SendResponse(token, uint32(ERROR_RPC_INVALID_SERVICE));
 }
 
 Battlenet::ServiceDispatcher& Battlenet::ServiceDispatcher::Instance()

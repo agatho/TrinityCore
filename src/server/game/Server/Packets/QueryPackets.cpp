@@ -267,6 +267,46 @@ WorldPacket const* QueryPlayerNamesResponse::Write()
     return &_worldPacket;
 }
 
+ByteBuffer& operator>>(ByteBuffer& data, BNetAccountAndCommunityID& member)
+{
+    data >> member.BnetAccountGUID;
+    data >> member.CommunityID;
+
+    return data;
+}
+
+ByteBuffer& operator<<(ByteBuffer& data, BNetAccountAndCommunityID const& member)
+{
+    data << member.BnetAccountGUID;
+    data << uint64(member.CommunityID);
+
+    return data;
+}
+
+void QueryPlayerNameByCommunityId::Read()
+{
+    _worldPacket >> Member;
+}
+
+void QueryPlayerNamesForCommunity::Read()
+{
+    _worldPacket >> ClubID;
+    _worldPacket >> Size<uint32>(Members);
+    for (BNetAccountAndCommunityID& member : Members)
+        _worldPacket >> member;
+}
+
+WorldPacket const* QueryPlayerNameByCommunityIdResponse::Write()
+{
+    _worldPacket << uint8(Result);
+    _worldPacket << Member;
+
+    if (Data)
+        _worldPacket << *Data;
+
+    return &_worldPacket;
+}
+
 void QueryPageText::Read()
 {
     _worldPacket >> PageTextID;

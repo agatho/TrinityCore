@@ -22,3 +22,12 @@ uint64 Battlenet::Services::Clubs::CreateClubMemberId(ObjectGuid guid)
 {
     return guid.GetCounter() | (uint64(sRealmList->GetCurrentRealmId().Realm & 0xFFF) << 48);
 }
+
+ObjectGuid Battlenet::Services::Clubs::GetGuidFromClubMemberId(uint64 memberId)
+{
+    // The realm id occupies bits 48-59; anything from another realm cannot be resolved from our character cache.
+    if (uint32((memberId >> 48) & 0xFFF) != (sRealmList->GetCurrentRealmId().Realm & 0xFFF))
+        return ObjectGuid::Empty;
+
+    return ObjectGuid::Create<HighGuid::Player>(memberId & UI64LIT(0x0000FFFFFFFFFFFF));
+}

@@ -117,7 +117,7 @@ void LoginDatabaseConnection::DoPrepareStatements()
     PrepareStatement(LOGIN_SEL_ACCOUNT_TOTP_SECRET, "SELECT totp_secret FROM account WHERE id = ?", CONNECTION_SYNCH);
     PrepareStatement(LOGIN_UPD_ACCOUNT_TOTP_SECRET, "UPDATE account SET totp_secret = ? WHERE id = ?", CONNECTION_ASYNC);
 
-#define BnetAccountInfo "ba.id AS bnet_account_id, UPPER(ba.email), ba.locked, ba.lock_country, ba.last_ip, ba.LoginTicketExpiry, bab.unbandate > UNIX_TIMESTAMP() OR bab.unbandate = bab.bandate AS is_bnet_banned, bab.unbandate = bab.bandate AS is_bnet_permanently_banned"
+#define BnetAccountInfo "ba.id AS bnet_account_id, UPPER(ba.email), ba.locked, ba.lock_country, ba.last_ip, ba.LoginTicketExpiry, bab.unbandate > UNIX_TIMESTAMP() OR bab.unbandate = bab.bandate AS is_bnet_banned, bab.unbandate = bab.bandate AS is_bnet_permanently_banned, COALESCE(bab.bandate, 0) AS bnet_bandate, COALESCE(bab.unbandate, 0) AS bnet_unbandate"
 #define BnetGameAccountInfo "a.id AS account_id, a.username, ab.bandate, ab.unbandate AS account_unbandate, ab.unbandate = ab.bandate AS is_banned, aa.SecurityLevel"
 
     PrepareStatement(LOGIN_SEL_BNET_AUTHENTICATION, "SELECT ba.id, ba.srp_version, COALESCE(ba.salt, 0x0000000000000000000000000000000000000000000000000000000000000000), ba.verifier, ba.failed_logins, ba.LoginTicket, ba.LoginTicketExpiry, bab.unbandate > UNIX_TIMESTAMP() OR bab.unbandate = bab.bandate FROM battlenet_accounts ba LEFT JOIN battlenet_account_bans bab ON ba.id = bab.id WHERE email = ?", CONNECTION_ASYNC);
@@ -164,6 +164,15 @@ void LoginDatabaseConnection::DoPrepareStatements()
     PrepareStatement(LOGIN_SEL_ACCOUNT_RAF_CLAIMED_ALL, "SELECT activityId FROM battlenet_account_raf_claimed WHERE accountId = ?", CONNECTION_ASYNC);
     PrepareStatement(LOGIN_DEL_ACCOUNT_RAF_RECRUIT, "UPDATE battlenet_account_recruitment SET recruiterAccountId = 0, recruitName = '' WHERE accountId = ? AND recruiterAccountId = ?", CONNECTION_ASYNC);
     PrepareStatement(LOGIN_INS_ACCOUNT_RAF_CLAIMED, "INSERT IGNORE INTO battlenet_account_raf_claimed (accountId, activityId) VALUES (?, ?)", CONNECTION_ASYNC);
+
+    // All game accounts belonging to one battlenet account (account-wide character list).
+    PrepareStatement(LOGIN_SEL_BNET_GAME_ACCOUNT_IDS, "SELECT id FROM account WHERE battlenet_account = ? ORDER BY battlenet_index", CONNECTION_ASYNC);
+
+    // Social contract acceptance (per battlenet account) and Battle.net UI reports.
+    PrepareStatement(LOGIN_SEL_BNET_SOCIAL_CONTRACT, "SELECT accepted_social_contract FROM battlenet_accounts WHERE id = ?", CONNECTION_ASYNC);
+    PrepareStatement(LOGIN_UPD_BNET_SOCIAL_CONTRACT, "UPDATE battlenet_accounts SET accepted_social_contract = 1 WHERE id = ?", CONNECTION_ASYNC);
+    PrepareStatement(LOGIN_INS_BNET_REPORT, "INSERT INTO battlenet_account_report (reporterAccountId, targetAccountId, issueType, source, clubId, streamId, entityId, entityType, userDescription, submittedTime) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, UNIX_TIMESTAMP())", CONNECTION_ASYNC);
     PrepareStatement(LOGIN_SEL_ACCOUNT_TOYS, "SELECT itemId, isFavourite, hasFanfare FROM battlenet_account_toys WHERE accountId = ?", CONNECTION_ASYNC);
     PrepareStatement(LOGIN_REP_ACCOUNT_TOYS, "REPLACE INTO battlenet_account_toys (accountId, itemId, isFavourite, hasFanfare) VALUES (?, ?, ?, ?)", CONNECTION_ASYNC);
     PrepareStatement(LOGIN_DEL_ACCOUNT_TOYS, "DELETE FROM battlenet_account_toys WHERE accountId = ? AND itemId = ?", CONNECTION_ASYNC);
