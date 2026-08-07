@@ -961,6 +961,24 @@ namespace WorldPackets
             ObjectGuid SourceGuid;
         };
 
+        // Subsystem-specific interaction closers (empty wire). The client sends these when the player leaves the
+        // runeforge (legendary crafting) or trait-system window; the server clears the matching interaction gate.
+        class CloseRuneforgeInteraction final : public ClientPacket
+        {
+        public:
+            explicit CloseRuneforgeInteraction(WorldPacket&& packet) : ClientPacket(CMSG_CLOSE_RUNEFORGE_INTERACTION, std::move(packet)) { }
+
+            void Read() override { }
+        };
+
+        class CloseTraitSystemInteraction final : public ClientPacket
+        {
+        public:
+            explicit CloseTraitSystemInteraction(WorldPacket&& packet) : ClientPacket(CMSG_CLOSE_TRAIT_SYSTEM_INTERACTION, std::move(packet)) { }
+
+            void Read() override { }
+        };
+
         class StartTimer final : public ServerPacket
         {
         public:
