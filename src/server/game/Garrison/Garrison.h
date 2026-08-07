@@ -22,6 +22,7 @@
 #include "DatabaseEnvFwd.h"
 #include "GarrisonPackets.h"
 #include "Optional.h"
+#include "QueensConservatory.h"
 #include "QuaternionData.h"
 #include "SharedDefines.h"
 #include <algorithm>
@@ -488,12 +489,29 @@ public:
     // (Re)apply GarrTalentRank.PerkSpellID for every rank this garrison has already completed. Called on login,
     // after the garrisons and the covenant/soulbind state are both loaded.
     void ApplyAllTalentPerks();
+    // Covenant switching. Every covenant-scoped tree of the sanctum publishes its owner as
+    // GarrTalentTree.FeatureSubtypeIndex (= Covenant.db2 id), so the researched talents of the four covenants are
+    // already stored as disjoint sets and NOTHING here ever deletes a talent row - only the perks a row grants are
+    // scoped to the covenant currently being served. Strips the PerkSpellID of every covenant-scoped tree that is
+    // not the player's active covenant and (re)applies the active one's. Idempotent; safe with no covenant at all
+    // (everything covenant-scoped is stripped). A no-op for every garrison type except the covenant sanctum.
+    void RefreshCovenantTalentPerks();
+    // Seat the 14 talents of a covenant's ability tree (GarrTalentTree.FeatureTypeIndex 0). All four ability trees
+    // are authored cost 0 / gold 0 / duration 0 with no prerequisites, so LearnTalent puts each straight at rank 1
+    // and the class filtering happens through GarrTalentRank.PerkPlayerConditionID - i.e. this is exactly what the
+    // retail class + signature grant spells do, without hardcoding their ids. Already-known talents are skipped.
+    void GrantCovenantAbilityTalents(uint32 covenantId);
 
     // Trophy system
     void AddTrophy(uint32 trophyID);
     void RemoveTrophy(uint32 trophyID);
     bool HasTrophy(uint32 trophyID) const { return _trophies.count(trophyID) > 0; }
     std::unordered_set<uint32> const& GetTrophies() const { return _trophies; }
+
+    // Queen's Conservatory - the Night Fae unique sanctum feature (GarrTalentTree 319). Only meaningful on a
+    // GARRISON_TYPE_COVENANT garrison owned by a Night Fae character; it reports zero plots for anything else.
+    QueensConservatory& GetConservatory() { return _conservatory; }
+    QueensConservatory const& GetConservatory() const { return _conservatory; }
 
     void BuildInfoPacket(WorldPackets::Garrison::GarrisonInfo& garrison) const;
     void SendRemoteInfo() const;
@@ -576,6 +594,9 @@ private:
 
     // Trophies
     std::unordered_set<uint32 /*trophyID*/> _trophies;
+
+    // Night Fae unique sanctum feature; inert for every other garrison type.
+    QueensConservatory _conservatory;
 
     // Temporary storage for BuildInfoPacket (mission copies with cleared inline rewards)
     mutable std::vector<WorldPackets::Garrison::GarrisonMission> _infoMissions;

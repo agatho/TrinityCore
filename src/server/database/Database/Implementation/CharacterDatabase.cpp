@@ -905,6 +905,12 @@ void CharacterDatabaseConnection::DoPrepareStatements()
     PrepareStatement(CHAR_SEL_CHARACTER_GARRISON_ARCHIVED_MISSIONS_BY_TYPE, "SELECT garrType, missionRecID FROM character_garrison_archived_missions WHERE guid = ? AND garrType = ?", CONNECTION_SYNCH);
     PrepareStatement(CHAR_DEL_CHARACTER_GARRISON_ARCHIVED_MISSIONS, "DELETE FROM character_garrison_archived_missions WHERE guid = ? AND garrType = ?", CONNECTION_ASYNC);
 
+    // Queen's Conservatory wildseed plots. Loaded synchronously from Garrison::LoadFromDB (covenant sanctum only),
+    // so it follows the same CONNECTION_SYNCH pattern as the other per-garrison-type loads above.
+    PrepareStatement(CHAR_SEL_CHARACTER_GARRISON_CONSERVATORY, "SELECT plotId, wildseedEntry, plantedTime, maturesAt, catalyst1, catalyst2, catalyst3, catalyst4, state FROM character_garrison_conservatory WHERE guid = ?", CONNECTION_SYNCH);
+    PrepareStatement(CHAR_INS_CHARACTER_GARRISON_CONSERVATORY, "INSERT INTO character_garrison_conservatory (guid, plotId, wildseedEntry, plantedTime, maturesAt, catalyst1, catalyst2, catalyst3, catalyst4, state) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", CONNECTION_ASYNC);
+    PrepareStatement(CHAR_DEL_CHARACTER_GARRISON_CONSERVATORY, "DELETE FROM character_garrison_conservatory WHERE guid = ?", CONNECTION_ASYNC);
+
     // Black Market
     PrepareStatement(CHAR_SEL_BLACKMARKET_AUCTIONS, "SELECT marketId, currentBid, time, numBids, bidder FROM blackmarket_auctions", CONNECTION_SYNCH);
     PrepareStatement(CHAR_DEL_BLACKMARKET_AUCTIONS, "DELETE FROM blackmarket_auctions WHERE marketId = ?", CONNECTION_ASYNC);
@@ -1060,6 +1066,8 @@ void CharacterDatabaseConnection::DoPrepareStatements()
 
     PrepareStatement(CHAR_SEL_CHARACTER_COVENANT, "SELECT covenantId, soulbindId FROM character_covenant WHERE guid = ?", CONNECTION_ASYNC);
     PrepareStatement(CHAR_REP_CHARACTER_COVENANT, "REPLACE INTO character_covenant (guid, covenantId, soulbindId) VALUES (?, ?, ?)", CONNECTION_ASYNC);
+    PrepareStatement(CHAR_SEL_CHARACTER_COVENANT_SOULBINDS, "SELECT covenantId, soulbindId FROM character_covenant_soulbind WHERE guid = ?", CONNECTION_ASYNC);
+    PrepareStatement(CHAR_REP_CHARACTER_COVENANT_SOULBIND, "REPLACE INTO character_covenant_soulbind (guid, covenantId, soulbindId) VALUES (?, ?, ?)", CONNECTION_ASYNC);
     PrepareStatement(CHAR_SEL_CHARACTER_SOULBIND_CONDUIT, "SELECT conduitId, rankIndex FROM character_soulbind_conduits WHERE guid = ?", CONNECTION_ASYNC);
     PrepareStatement(CHAR_REP_CHARACTER_SOULBIND_CONDUIT, "REPLACE INTO character_soulbind_conduits (guid, conduitId, rankIndex) VALUES (?, ?, ?)", CONNECTION_ASYNC);
     PrepareStatement(CHAR_SEL_CHARACTER_SOULBIND_CONDUIT_SOCKET, "SELECT garrTalentId, conduitId, garrTalentTreeId FROM character_soulbind_conduit_sockets WHERE guid = ?", CONNECTION_ASYNC);

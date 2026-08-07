@@ -28,6 +28,7 @@
 #include "GameTime.h"
 #include "GarrisonAutoCombat.h"
 #include "GarrisonMgr.h"
+#include "QueensConservatory.h"
 #include "Item.h"
 #include "Log.h"
 #include "Mail.h"
@@ -46,7 +47,7 @@
 #include <limits>
 #include <vector>
 
-Garrison::Garrison(Player* owner) : _owner(owner), _garrType(GARRISON_TYPE_GARRISON), _siteLevel(nullptr), _followerActivationsRemainingToday(1)
+Garrison::Garrison(Player* owner) : _owner(owner), _garrType(GARRISON_TYPE_GARRISON), _siteLevel(nullptr), _followerActivationsRemainingToday(1), _conservatory(owner)
 {
     // Fire the first periodic pass on the very next tick after login (instead of waiting a full interval),
     // so finished-order crates activate, completed constructions/research resolve, etc. right away.
@@ -349,6 +350,16 @@ bool Garrison::LoadFromDB(PreparedQueryResult garrison, PreparedQueryResult blue
     // Complete any talent research that finished while offline
     CompleteAllTalentResearch();
 
+    // Queen's Conservatory wildseed plots (Night Fae unique sanctum feature). Only the covenant sanctum has one;
+    // every other garrison type leaves it empty. Loaded synchronously here rather than threaded through the
+    // login query set, so the covenant work stays contained to the sanctum path.
+    if (_garrType == GARRISON_TYPE_COVENANT)
+    {
+        CharacterDatabasePreparedStatement* conservatoryStmt = CharacterDatabase.GetPreparedStatement(CHAR_SEL_CHARACTER_GARRISON_CONSERVATORY);
+        conservatoryStmt->setUInt64(0, _owner->GetGUID().GetCounter());
+        _conservatory.LoadFromDB(CharacterDatabase.Query(conservatoryStmt));
+    }
+
     return true;
 }
 
@@ -368,6 +379,9 @@ void Garrison::SaveToDB(CharacterDatabaseTransaction trans)
     stmt->setInt64(6, _cacheLastUsed);
     stmt->setUInt32(7, _shipyardBuilding);
     trans->Append(stmt);
+
+    if (_garrType == GARRISON_TYPE_COVENANT)
+        _conservatory.SaveToDB(trans);
 
     for (uint32 building : _knownBuildings)
     {
@@ -528,6 +542,15 @@ void Garrison::DeleteFromDB(ObjectGuid::LowType ownerGuid, GarrisonType garrType
     del(CHAR_DEL_CHARACTER_GARRISON_TALENTS);
     del(CHAR_DEL_CHARACTER_GARRISON_TROPHIES);
     del(CHAR_DEL_CHARACTER_GARRISON_ARCHIVED_MISSIONS);
+
+    // The Queen's Conservatory only exists on the covenant sanctum, so its table is keyed by guid alone and is
+    // purged here rather than through the generic (guid, garrType) sweep above.
+    if (garrType == GARRISON_TYPE_COVENANT)
+    {
+        CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_DEL_CHARACTER_GARRISON_CONSERVATORY);
+        stmt->setUInt64(0, ownerGuid);
+        trans->Append(stmt);
+    }
 }
 
 void Garrison::DeleteFromDB(ObjectGuid::LowType ownerGuid, CharacterDatabaseTransaction trans)
@@ -795,6 +818,10 @@ void Garrison::Update(uint32 diff)
 
     // Complete talent research that has finished (push rank-ups to the client so the UI updates live)
     CompleteAllTalentResearch(true);
+
+    // Flip Queen's Conservatory wildseeds that have finished maturing to "ready to harvest".
+    if (_garrType == GARRISON_TYPE_COVENANT)
+        _conservatory.Update();
 
     // Remove expired unclaimed missions
     RemoveExpiredMissions();
@@ -4608,6 +4635,13 @@ void Garrison::ApplyTalentRankPerk(uint32 garrTalentID, int32 rankIndex)
                 return;
 
     GarrTalentTreeEntry const* treeEntry = sGarrTalentTreeStore.LookupEntry(talentEntry->GarrTalentTreeID);
+
+    // A covenant-scoped tree only grants while its own covenant is the active one. The talent row itself survives a
+    // covenant switch untouched (see RefreshCovenantTalentPerks); what a switch takes away is the effect, exactly as
+    // it already works for the soulbind trees below, where only the ACTIVE soulbind's traits may be running.
+    if (!IsTalentTreeOwnedByPlayerCovenant(treeEntry))
+        return;
+
     if (treeEntry && treeEntry->FeatureTypeIndex == GARR_TALENT_FEATURE_SOULBIND)
     {
         SoulbindEntry const* soulbind = sSoulbindStore.LookupEntry(_owner->GetActiveSoulbind());
@@ -4821,6 +4855,76 @@ void Garrison::ApplyAllTalentPerks()
     for (auto const& [talentId, talent] : _talents)
         for (int32 rankIndex = 0; rankIndex < talent.Rank; ++rankIndex)
             ApplyTalentRankPerk(talentId, rankIndex);
+}
+
+// Covenant switching, talent side.
+//
+// The DECISION this encodes (the P3.0 "sanctum talents are GarrType-scoped, not covenant-scoped" limitation):
+// researched sanctum talents are PER COVENANT and are KEPT across a switch; only the perks they grant follow the
+// active covenant. That is not a compromise, it is what the data says. Every covenant-scoped tree of GarrTypeID 111
+// names its owner in GarrTalentTree.FeatureSubtypeIndex (= Covenant.db2 id) and the four covenants never share a
+// tree: Anima Conductor 312/314/311/313, Transport Network 308/309/307/310, Command Table 316/317/315/318,
+// Reservoir 327/326/328/329, unique feature 320/324/319/321, Channel Anima 345/348/346/347, abilities 393/396/397/395
+// and the twelve soulbind trees are each owned by exactly one covenant. character_garrison_talents is keyed by
+// GarrTalentID, so a Kyrian Transport Network row and a Night Fae one are already different rows - the storage is
+// covenant-partitioned for free and there is nothing to delete or migrate. A returning member finds its sanctum
+// exactly as it left it.
+//
+// (The 24 FeatureSubtypeIndex 0 trees of GarrTypeID 111 are not covenant-scoped and are deliberately untouched.)
+void Garrison::RefreshCovenantTalentPerks()
+{
+    if (GetType() != GARRISON_TYPE_COVENANT)
+        return;
+
+    for (auto const& [talentId, talent] : _talents)
+    {
+        if (talent.Rank < 1)
+            continue;
+
+        GarrTalentEntry const* talentEntry = sGarrTalentStore.LookupEntry(talentId);
+        if (!talentEntry)
+            continue;
+
+        GarrTalentTreeEntry const* treeEntry = sGarrTalentTreeStore.LookupEntry(talentEntry->GarrTalentTreeID);
+        if (!treeEntry || !treeEntry->FeatureSubtypeIndex || treeEntry->GarrTypeID != static_cast<int8>(GARRISON_TYPE_COVENANT))
+            continue;   // not covenant-scoped - never touched by a switch
+
+        if (IsTalentTreeOwnedByPlayerCovenant(treeEntry))
+        {
+            for (int32 rankIndex = 0; rankIndex < talent.Rank; ++rankIndex)
+                ApplyTalentRankPerk(talentId, rankIndex);
+        }
+        else
+            RemoveTalentRankPerks(talentId, talent.Rank);
+    }
+}
+
+void Garrison::GrantCovenantAbilityTalents(uint32 covenantId)
+{
+    if (GetType() != GARRISON_TYPE_COVENANT || !covenantId)
+        return;
+
+    std::vector<GarrTalentTreeEntry const*> const* trees = sGarrisonMgr.GetTalentTreesForGarrType(static_cast<int8>(GARRISON_TYPE_COVENANT));
+    if (!trees)
+        return;
+
+    for (GarrTalentTreeEntry const* treeEntry : *trees)
+    {
+        if (treeEntry->FeatureTypeIndex != GARR_TALENT_FEATURE_ABILITIES || uint32(treeEntry->FeatureSubtypeIndex) != covenantId)
+            continue;
+
+        std::vector<GarrTalentEntry const*> const* talents = sGarrisonMgr.GetTalentsForTree(treeEntry->ID);
+        if (!talents)
+            continue;
+
+        for (GarrTalentEntry const* talentEntry : *talents)
+        {
+            if (_talents.count(talentEntry->ID))
+                continue;   // already seated - LearnTalent would only answer GARRISON_ERROR_INVALID_TALENT
+
+            LearnTalent(talentEntry->ID, false);
+        }
+    }
 }
 
 void Garrison::CompleteAllTalentResearch(bool sendUpdate /*= false*/)
