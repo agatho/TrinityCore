@@ -32,6 +32,7 @@
 #include "PetBattleMgr.h"
 #include "BattlefieldMgr.h"
 #include "DelveMgr.h"
+#include "DelvesRewards.h"
 #include "BattlegroundMgr.h"
 #include "BattlenetRpcErrorCodes.h"
 #include "BlackMarketMgr.h"
@@ -3286,6 +3287,9 @@ void World::ResetWeeklyQuests()
 
     // reselect pools
     sQuestPoolMgr->ChangeWeeklyQuests();
+
+    // Delves: weekly completion counters roll over with the weekly reset.
+    Delves::DelvesRewards::ResetAllWeeklyProgress();
 
     // Update faction balance
     UpdateWarModeRewardValues();

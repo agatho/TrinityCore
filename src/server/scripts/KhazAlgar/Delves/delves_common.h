@@ -39,6 +39,9 @@ public:
     void OnPlayerEnter(Player* player) override;
     void OnPlayerLeave(Player* player) override;
     void Update(uint32 diff) override;
+    // THE loop wiring: player deaths decrement the shared revive pool (fail at 0), and the death of the
+    // template's FinalBossEntry creature completes the delve and pays out.
+    void OnUnitDeath(Unit* unit) override;
 
     // Delve-specific hooks for subclasses to override
     virtual void OnDelveStart() { }

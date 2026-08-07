@@ -153,6 +153,7 @@ static constexpr uint32 VAULT_SLOT_3_COMPLETIONS = 8;
 
 static constexpr uint32 CONTENT_TUNING_DELVE_MIN_LEVEL = 2677;
 static constexpr uint32 CURRENCY_RESTORED_COFFER_KEY = 3028;
+static constexpr uint32 CURRENCY_COFFER_KEY_SHARDS = 3310;   // Midnight: shards are a currency (100 -> 1 key on delve entry)
 static constexpr uint32 PDE_COMPANION_INFO_SELECTION = 13;
 static constexpr uint32 WIDGET_SET_COMPANION_TOOLTIP = 1331;
 // TIERED_ENTRANCE_INFO_WORLD_TIER_DIFFICULTY_CHARACTER_ELEMENT_ID (NEW 12.0.7/68275):
@@ -318,6 +319,11 @@ struct DelveTemplate
     // Blizzard_DelvesDifficultyPicker tier-selection UI. One value per delve
     // (sniff-derived; e.g. 1278258 for Atal'Aman, 1265777 for Shadow Enclave).
     uint32 WorldState26903 = 0;
+
+    // Creature entry whose death completes the delve (world content; 0 = no boss-kill completion — the run
+    // then only completes through the scenario path once that is wired). The pragmatic completion trigger,
+    // mirroring the boss-gated completion model proven for Mythic+.
+    uint32 FinalBossEntry = 0;
 };
 
 struct DelveTierReward

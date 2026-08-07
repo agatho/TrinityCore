@@ -37,7 +37,7 @@ DelveInstance::DelveInstance(InstanceMap* map, uint8 tier, DelveTemplate const* 
     , _tier(tier)
     , _remainingRevives(GetMaxRevivesForTier(tier))
     , _state(DelveState::Entering)
-    , _bountiful(tmpl ? sDelveMgr->IsDelveCurrentlyBountiful(tmpl->MapChallengeModeId) : false)
+    , _bountiful(tmpl ? sDelveMgr->IsDelveCurrentlyBountiful(tmpl->Id) : false)
 {
     TC_LOG_DEBUG("scripts.delves", "DelveInstance created for map {} tier {} (bountiful: {})",
         map->GetId(), tier, _bountiful);
@@ -60,6 +60,13 @@ void DelveInstance::OnPlayerEnter(Player* player)
     {
         _owners.insert(player->GetGUID());
         PopulateDelveData(player);
+
+        // Retail: Coffer Key Shards auto-combine into Restored Coffer Keys on delve entry (100 -> 1).
+        while (player->GetCurrencyQuantity(CURRENCY_COFFER_KEY_SHARDS) >= COFFER_KEY_SHARDS_PER_KEY)
+        {
+            player->RemoveCurrency(CURRENCY_COFFER_KEY_SHARDS, int32(COFFER_KEY_SHARDS_PER_KEY));
+            player->AddCurrency(CURRENCY_RESTORED_COFFER_KEY, 1, CurrencyGainSource::Loot);
+        }
 
         // Spawn companion for the first player if group size <= MAX_COMPANION_GROUP_SIZE (4)
         if (_state == DelveState::Entering)

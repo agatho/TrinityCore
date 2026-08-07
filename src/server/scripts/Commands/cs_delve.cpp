@@ -61,6 +61,7 @@ public:
             { "bountiful",  HandleDelveBountifulCommand,     rbac::RBAC_PERM_COMMAND_DEBUG, Console::No },
             { "progress",   HandleDelveProgressCommand,      rbac::RBAC_PERM_COMMAND_DEBUG, Console::No },
             { "settier",    HandleDelveSetTierCommand,       rbac::RBAC_PERM_COMMAND_DEBUG, Console::No },
+            { "complete",   HandleDelveCompleteCommand,      rbac::RBAC_PERM_COMMAND_DEBUG, Console::No },
             { "companion",  delveCompanionTable },
         };
 
@@ -117,7 +118,7 @@ public:
         if (Delves::DelveTemplate const* tmpl = sDelveMgr->GetDelveTemplate(player->GetMapId()))
         {
             handler->PSendSysMessage("Current map IS a delve: mapId={}, zoneId={}", tmpl->MapId, tmpl->ZoneId);
-            if (sDelveMgr->IsDelveCurrentlyBountiful(tmpl->MapChallengeModeId))
+            if (sDelveMgr->IsDelveCurrentlyBountiful(tmpl->Id))
                 handler->PSendSysMessage("  This delve is currently BOUNTIFUL");
         }
         else
@@ -181,6 +182,25 @@ public:
         handler->PSendSysMessage("Weekly Coffer Shards: {}/{}", progress.WeeklyCofferShards, Delves::MAX_COFFER_KEY_SHARDS_PER_WEEK);
         handler->PSendSysMessage("Great Vault Slots: {}", Delves::DelvesRewards::GetGreatVaultSlotCount(progress.WeeklyCompletions));
 
+        return true;
+    }
+
+    // .delve complete — pays out the current delve for the player (testing shortcut for the boss-kill /
+    // scenario completion path). Uses the selected tier and the live bountiful state of the map's delve.
+    static bool HandleDelveCompleteCommand(ChatHandler* handler)
+    {
+        Player* player = handler->GetSession()->GetPlayer();
+        Delves::DelveTemplate const* tmpl = sDelveMgr->GetDelveTemplate(player->GetMapId());
+        if (!tmpl)
+        {
+            handler->SendSysMessage("You are not inside a known delve map.");
+            return false;
+        }
+
+        uint8 const tier = player->m_delveSelectedTier ? player->m_delveSelectedTier : 1;
+        bool const bountiful = sDelveMgr->IsDelveCurrentlyBountiful(tmpl->Id);
+        Delves::DelvesRewards::AwardDelveCompletion(player, tier, bountiful, true /*revives remaining*/);
+        handler->PSendSysMessage("Delve {} completed at tier {} (bountiful: {}).", tmpl->Id, tier, bountiful ? "yes" : "no");
         return true;
     }
 

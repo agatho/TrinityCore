@@ -59,7 +59,7 @@ public:
     DelveTierReward const* GetTierReward(uint8 tier) const;
 
     // Bountiful
-    bool IsDelveCurrentlyBountiful(uint32 mapChallengeModeId) const;
+    bool IsDelveCurrentlyBountiful(uint32 delveTemplateId) const;
     std::vector<uint32> GetTodaysBountifulDelves() const;
 
     // Tiered-entrance pipeline (see TieredEntranceCVarNames documentation in

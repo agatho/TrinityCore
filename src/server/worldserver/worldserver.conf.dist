@@ -4868,3 +4868,46 @@ Load.Locales = 1
 
 #
 ###################################################################################################
+
+#
+#    Delves.Reward.LootId / Delves.Coffer.LootId / Delves.Crest.*
+#        Description: Delve reward pools and crest payouts. LootIds are reference_loot_template entries
+#                     (server content) rolled as personal loot at the delve item context: Reward.LootId on
+#                     every completion (capped at the tier-3 context, retail end-of-run rule), Coffer.LootId
+#                     when a Bountiful Coffer is opened with a Restored Coffer Key (currency 3028; Coffer Key
+#                     Shards 3310 auto-combine 100:1 on delve entry). Crest currency ids follow the Midnight
+#                     Dawncrest ladder per delve crest bracket (T3-5 / T6-7 / T8-10 / T11); amounts come from
+#                     the delve_tier_rewards table. 0 disables the respective payout.
+#        Default:     Reward.LootId = 0, Coffer.LootId = 0,
+#                     Crest.Tier1.CurrencyId = 3383 (Adventurer), Crest.Tier2.CurrencyId = 3341 (Veteran),
+#                     Crest.Tier3.CurrencyId = 3343 (Champion), Crest.Tier4.CurrencyId = 3345 (Hero)
+
+Delves.Reward.LootId = 0
+Delves.Coffer.LootId = 0
+Delves.Crest.Tier1.CurrencyId = 3383
+Delves.Crest.Tier2.CurrencyId = 3341
+Delves.Crest.Tier3.CurrencyId = 3343
+Delves.Crest.Tier4.CurrencyId = 3345
+
+#
+#    Delves.Companion.CreatureId
+#        Description: Creature entry summoned as the delve companion (world content + companion AI script on
+#                     that template; retail Midnight S1: Valeera Sanguinar). 0 disables the companion.
+#        Default:     0 - (Disabled)
+
+Delves.Companion.CreatureId = 0
+
+#
+#    Delves.Companion.<Role>.*SpellId
+#        Description: Companion ability spells cast by the role AI (execute / rotation attack, emergency +
+#                     regular heal on the lowest-HP group member, taunt + defensive). The exact abilities are
+#                     season content (retail Midnight S1: Valeera's kit) and must exist in Spell.db2 - a 0 or
+#                     unknown id is a safe no-op, the companion then only follows and auto-attacks.
+#        Default:     all 0 - (Disabled)
+
+Delves.Companion.Dps.ExecuteSpellId = 0
+Delves.Companion.Dps.AttackSpellId = 0
+Delves.Companion.Heal.EmergencySpellId = 0
+Delves.Companion.Heal.SpellId = 0
+Delves.Companion.Tank.TauntSpellId = 0
+Delves.Companion.Tank.DefensiveSpellId = 0
