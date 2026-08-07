@@ -84,6 +84,10 @@ public:
     // --- Great Vault weekly tracking ---
     // Records a run toward this week's vault (all runs count). Auto-resets the list when the weekly reset passes.
     void RecordWeeklyRun(uint32 challengeModeId, uint32 level, bool timed, int64 date);
+    // Drops the finished week's run list (the vault-progress reset), capturing its best/best-timed summary for
+    // the weekly keystone rule first. Driven by the real weekly-reset event for online characters
+    // (ChallengeModeMgr::OnWeeklyReset) and lazily by any weekly accessor for characters that were offline.
+    void ResetWeeklyRuns();
     // This week's runs sorted by keystone level, highest first (what the vault slots draw from).
     std::vector<MythicPlusWeeklyRun> GetWeeklyRunsByLevel() const;
     // Keystone level rewarded at vault slot 0/1/2 (unlocked at 1/4/8 runs); 0 if the slot is still locked.
@@ -97,14 +101,21 @@ public:
     // Marks this week's vault reward as claimed and persists it immediately.
     void SetVaultClaimed();
 
-    // --- weekly keystone adjustment (retail: at reset the key becomes the best timed level of last week,
-    // one below the best run if it was untimed, and decays one further per fully idle week) ---
+    // --- weekly keystone adjustment ---
     // True until the keystone has been adjusted for the current reset boundary.
     bool NeedsKeystoneAdjustment() const;
     // Marks the keystone adjusted for this week's boundary and persists it immediately.
     void SetKeystoneAdjusted();
-    // The keystone level the player should carry this week, derived from last week's runs (captured before the
-    // weekly list is pruned). currentLevel is the level of the keystone being adjusted; result is floored at minLevel.
+    // The keystone level the player should carry this week, derived from the previous week's runs (captured
+    // before the weekly list is pruned). currentLevel is the level of the keystone being adjusted; the result is
+    // floored at minLevel (the Resilient Keystone floor, or the season minimum).
+    //
+    // Retail rule (Maxroll "Mythic+ Dungeon Guide: Keystone Basics, Rewards, Affixes & Scaling 12.0.7",
+    // https://maxroll.gg/wow/resources/mythic-dungeon-mechanics -- corroborated by Wowpedia "Mythic Keystone"):
+    //   1. "Same level as the highest Mythic+ Dungeon you completed in time previous week."
+    //   2. "One level lower than the highest Mythic+ Dungeon you completed the previous week which wasn't in time."
+    //   3. "One level lower for each consecutive week that you didn't complete a Mythic+ Dungeon."
+    //   4. "One level lower than the Keystone you received the previous week." (no recorded history at all)
     uint32 ComputeNewWeekKeystoneLevel(uint32 currentLevel, uint32 minLevel) const;
 
 private:
@@ -122,7 +133,10 @@ private:
     int64 _vaultClaimedResetTime = 0;       // weekly-reset boundary the vault was last claimed for (0 = never)
     int64 _keystoneResetTime = 0;           // weekly-reset boundary the keystone was last adjusted for (0 = never)
 
-    // Summary of the week that was pruned last (the "previous" week relative to the current boundary).
+    // Summary of the week that was pruned last (the "previous" week relative to the current boundary). Persisted
+    // with the vault row: the weekly run rows are deleted the moment the week is pruned, so without this the
+    // summary would be lost if the character saved (or the server restarted) between the weekly reset and the
+    // keystone adjustment, silently degrading the key to the "no history" rule.
     mutable int64 _prunedWeekResetTime = 0;
     mutable uint32 _prunedWeekBestTimedLevel = 0;
     mutable uint32 _prunedWeekBestLevel = 0;

@@ -3136,6 +3136,10 @@ void World::ResetWeeklyQuests()
     m_NextWeeklyQuestReset = next;
     SetPersistentWorldVariable(NextWeeklyQuestResetTimeVarId, uint64(next));
 
+    // Mythic+ weekly rollover. Must run AFTER m_NextWeeklyQuestReset has advanced: every piece of Mythic+ weekly
+    // state (vault run history, vault claim, keystone adjustment, affix week index) is keyed on that boundary.
+    sChallengeModeMgr.OnWeeklyReset();
+
     TC_LOG_INFO("misc", "Weekly quests for all characters have been reset.");
 }
 

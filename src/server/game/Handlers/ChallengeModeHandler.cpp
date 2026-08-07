@@ -19,59 +19,21 @@
 #include "ChallengeMode.h"
 #include "ChallengeModeMgr.h"
 #include "ChallengeModePackets.h"
-#include "CharacterDatabase.h"
 #include "Config.h"
 #include "Item.h"
-#include "ItemBonusMgr.h"
 #include "ItemDefines.h"
 #include "Log.h"
-#include "Loot.h"
-#include "LootMgr.h"
-#include "Mail.h"
 #include "Map.h"
 #include "MythicPlusData.h"
 #include "Player.h"
 
-namespace
-{
-    // Rolls the configured reward pool once (personal loot, tagged with the given context) and returns a single
-    // item id, or 0 if nothing rolled / the pool is empty.
-    uint32 RollMythicPlusRewardItem(Player* player, uint32 lootId, ItemContext context)
-    {
-        Loot loot(player->GetMap(), ObjectGuid::Empty, LOOT_NONE, nullptr);
-        loot.FillLoot(lootId, LootTemplates_Reference, player, true /*personal*/, true /*noEmptyError*/, LOOT_MODE_DEFAULT, context);
-        for (LootItem const& item : loot.items)
-            if (item.itemid)
-                return item.itemid;
-        return 0;
-    }
-
-    // Item bonuses that scale a reward item to the Mythic+ item level for the given context + keystone level.
-    std::vector<int32> MythicPlusRewardBonuses(uint32 itemId, ItemContext context, int32 keystoneLevel)
-    {
-        return ItemBonusMgr::GetBonusListsForItem(itemId, ItemBonusMgr::ItemBonusGenerationParams(context, keystoneLevel));
-    }
-
-    // Grants one item (bags, or mail on a full bag) carrying the given scaled bonuses.
-    void GrantMythicPlusItem(Player* player, uint32 itemId, ItemContext context, std::vector<int32> const& bonuses)
-    {
-        ItemPosCountVec dest;
-        if (player->CanStoreNewItem(NULL_BAG, NULL_SLOT, dest, itemId, 1) == EQUIP_ERR_OK)
-        {
-            player->StoreNewItem(dest, itemId, true, 0, GuidSet(), context, &bonuses);
-        }
-        else if (Item* item = Item::CreateItem(itemId, 1, context, player, false))
-        {
-            item->SetBonuses(bonuses);
-            CharacterDatabaseTransaction trans = CharacterDatabase.BeginTransaction();
-            item->SaveToDB(trans);
-            MailDraft("Great Vault Reward", "Your Great Vault reward.")
-                .AddItem(item)
-                .SendMailTo(trans, player, MailSender(player, MAIL_STATIONERY_GM), MAIL_CHECK_MASK_COPIED);
-            CharacterDatabase.CommitTransaction(trans);
-        }
-    }
-}
+// NOTE (assembly): the Great Vault reward-item logic for the Mythic+ row deliberately does NOT live in this file.
+// It is a service on ChallengeModeMgr (BuildMythicPlusVaultOptions / ClaimMythicPlusVaultReward /
+// GetMythicPlusVaultSlotForThreshold) so that whichever handler an assembly binds to CMSG_REQUEST_WEEKLY_REWARDS /
+// CMSG_CLAIM_WEEKLY_REWARD can drive it. On this branch that is the pair below, over the ChallengeMode packet
+// family; integration/all-systems binds WeeklyRewardHandler.cpp over the WeeklyRewards packet family (it also
+// serves the Raid and World vault rows) and calls the same service for the Mythic+ row. There is exactly one
+// handler bound per opcode in either assembly - the granting rules are shared, never duplicated.
 
 void WorldSession::HandleRequestMythicPlusSeasonData(WorldPackets::ChallengeMode::RequestMythicPlusSeasonData& /*requestMythicPlusSeasonData*/)
 {
@@ -216,42 +178,27 @@ void WorldSession::HandleRequestWeeklyRewards(WorldPackets::ChallengeMode::Reque
     SendPacket(response.Write());
 
     // Reward options: one previewed item per unlocked slot, rolled from the vault pool at that slot's Jackpot
-    // item level. The preview is an example (the granted item is rolled fresh on claim); empty when the vault
-    // reward pool (ChallengeMode.Vault.LootId) is not configured.
+    // item level. The preview is an example (the granted item is rolled fresh on claim); the option carries no
+    // item when the vault reward pool (ChallengeMode.Vault.LootId) is not configured.
     WorldPackets::ChallengeMode::WeeklyRewardsResult result;
-    uint32 const vaultLootId = sChallengeModeMgr.GetVaultRewardLootId();
-    bool const poolReady = vaultLootId && LootTemplates_Reference.HaveLootFor(vaultLootId);
 
-    // Reward scaling caps at the season's highest reward level (retail 12.x: +10); higher keys are score-only.
-    uint32 const vaultLevelCap = sChallengeModeMgr.GetVaultRewardLevelCap();
-
-    for (ChallengeModeMgr::VaultThreshold const& threshold : thresholds)
+    for (ChallengeModeMgr::VaultRewardOption& option : sChallengeModeMgr.BuildMythicPlusVaultOptions(player))
     {
-        uint32 slotLevel = data ? data->GetVaultSlotLevel(threshold.Index) : 0;
-        if (!slotLevel)
-            continue;   // locked slot -> no reward option
-        if (vaultLevelCap)
-            slotLevel = std::min(slotLevel, vaultLevelCap);
-
         WorldPackets::ChallengeMode::WeeklyRewardActivity& activity = result.Activities.emplace_back();
-        activity.ThresholdID = threshold.ThresholdID;
+        activity.ThresholdID = option.ThresholdID;
 
-        if (poolReady)
+        if (!option.ItemID)
+            continue;
+
+        WorldPackets::ChallengeMode::WeeklyReward& reward = activity.Rewards.emplace_back();
+        reward.HasItem = true;
+        reward.Item.ItemID = option.ItemID;
+
+        if (!option.BonusListIDs.empty())
         {
-            if (uint32 itemId = RollMythicPlusRewardItem(player, vaultLootId, ItemContext::MythicPlus_Jackpot))
-            {
-                WorldPackets::ChallengeMode::WeeklyReward& reward = activity.Rewards.emplace_back();
-                reward.HasItem = true;
-                reward.Item.ItemID = itemId;
-
-                std::vector<int32> bonuses = MythicPlusRewardBonuses(itemId, ItemContext::MythicPlus_Jackpot, int32(slotLevel));
-                if (!bonuses.empty())
-                {
-                    WorldPackets::Item::ItemBonuses& itemBonus = reward.Item.ItemBonus.emplace();
-                    itemBonus.Context = ItemContext::MythicPlus_Jackpot;
-                    itemBonus.BonusListIDs = std::move(bonuses);
-                }
-            }
+            WorldPackets::Item::ItemBonuses& itemBonus = reward.Item.ItemBonus.emplace();
+            itemBonus.Context = ItemContext::MythicPlus_Jackpot;
+            itemBonus.BonusListIDs = std::move(option.BonusListIDs);
         }
     }
 
@@ -261,45 +208,18 @@ void WorldSession::HandleRequestWeeklyRewards(WorldPackets::ChallengeMode::Reque
 void WorldSession::HandleClaimWeeklyReward(WorldPackets::ChallengeMode::ClaimWeeklyReward& claim)
 {
     Player* player = GetPlayer();
-    MythicPlusData* data = player->GetMythicPlusData();
+
+    // RewardID is the WeeklyRewardChestThreshold.ID of the chosen slot (not yet sniff-confirmed); an id that is
+    // not a live Mythic+ slot is rejected outright, so a wrong id can never yield a reward.
+    uint32 const slotIndex = sChallengeModeMgr.GetMythicPlusVaultSlotForThreshold(claim.RewardID);
+
+    // All validation + granting lives in the shared service (see the note at the top of this file).
+    ChallengeModeMgr::VaultClaimResult const claimResult = slotIndex != ChallengeModeMgr::VAULT_SLOT_NONE
+        ? sChallengeModeMgr.ClaimMythicPlusVaultReward(player, slotIndex)
+        : ChallengeModeMgr::VaultClaimResult::NotClaimable;
 
     WorldPackets::ChallengeMode::WeeklyRewardClaimResult result;
-
-    // Server-authoritative validation: needs data, an unclaimed week, and the requested slot actually unlocked.
-    // RewardID is assumed to be the WeeklyRewardChestThreshold.ID of the slot (not yet sniff-confirmed); an id
-    // that doesn't match an unlocked slot is rejected, so a wrong id never yields a reward.
-    uint32 rewardLevel = 0;
-    if (data && !data->IsVaultClaimedThisWeek())
-    {
-        for (ChallengeModeMgr::VaultThreshold const& threshold : sChallengeModeMgr.GetMythicPlusVaultThresholds())
-        {
-            if (threshold.ThresholdID != claim.RewardID)
-                continue;
-            rewardLevel = data->GetVaultSlotLevel(threshold.Index);
-            break;
-        }
-    }
-
-    // Same season reward-level cap as the preview (retail 12.x: vault scaling stops at +10).
-    if (uint32 vaultLevelCap = sChallengeModeMgr.GetVaultRewardLevelCap())
-        rewardLevel = std::min(rewardLevel, vaultLevelCap);
-
-    if (!rewardLevel)
-    {
-        result.Result = 1;      // not claimable: already claimed, locked slot, or unknown id
-        SendPacket(result.Write());
-        return;
-    }
-
-    // Grant one vault item at the slot's Jackpot item level, then lock the vault for the rest of the week.
-    if (uint32 vaultLootId = sChallengeModeMgr.GetVaultRewardLootId())
-        if (LootTemplates_Reference.HaveLootFor(vaultLootId))
-            if (uint32 itemId = RollMythicPlusRewardItem(player, vaultLootId, ItemContext::MythicPlus_Jackpot))
-                GrantMythicPlusItem(player, itemId, ItemContext::MythicPlus_Jackpot,
-                    MythicPlusRewardBonuses(itemId, ItemContext::MythicPlus_Jackpot, int32(rewardLevel)));
-
-    data->SetVaultClaimed();
-    result.Result = 0;          // success
+    result.Result = claimResult == ChallengeModeMgr::VaultClaimResult::Success ? 0 : 1;
     SendPacket(result.Write());
 }
 

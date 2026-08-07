@@ -1227,6 +1227,9 @@ CREATE TABLE `character_mythic_plus_vault` (
   `guid` bigint unsigned NOT NULL COMMENT 'Global Unique Identifier',
   `claimedResetTime` bigint NOT NULL DEFAULT '0' COMMENT 'Weekly reset boundary the vault reward was claimed for',
   `keystoneResetTime` bigint NOT NULL DEFAULT '0' COMMENT 'Weekly reset boundary the keystone was last adjusted for',
+  `prevWeekResetTime` bigint NOT NULL DEFAULT '0' COMMENT 'Weekly reset boundary the summarised previous week ended at',
+  `prevWeekBestLevel` int unsigned NOT NULL DEFAULT '0' COMMENT 'Highest keystone level completed in that week (timed or not)',
+  `prevWeekBestTimedLevel` int unsigned NOT NULL DEFAULT '0' COMMENT 'Highest keystone level completed IN TIME in that week',
   PRIMARY KEY (`guid`),
   CONSTRAINT `fk_character_mythic_plus_vault_guid` FOREIGN KEY (`guid`) REFERENCES `characters` (`guid`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Per-character Great Vault weekly claim state';
