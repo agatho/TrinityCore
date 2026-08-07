@@ -15,15 +15,18 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include "Config.h"
 #include "DelvesCompanion.h"
 #include "DelvesDefines.h"
 #include "DelvesPackets.h"
+#include "Group.h"
 #include "MotionMaster.h"
 #include "Player.h"
 #include "ScriptedGossip.h"
 #include "ScriptMgr.h"
 #include "ScriptedCreature.h"
 #include "SpellInfo.h"
+#include "SpellMgr.h"
 #include "WorldSession.h"
 
 using namespace Delves;
@@ -227,23 +230,32 @@ private:
         }
     }
 
+    // Casts a config-provided companion ability, guarded on Spell.db2 presence — the exact ability spells
+    // are world/season content (retail Midnight S1: Valeera's kit), so a 0/absent id is a safe no-op.
+    // Returns true when a cast actually went out.
+    bool CastConfiguredSpell(Unit* target, char const* configKey)
+    {
+        uint32 const spellId = uint32(sConfigMgr->GetIntDefault(configKey, 0));
+        if (!spellId || !sSpellMgr->GetSpellInfo(spellId, DIFFICULTY_NONE))
+            return false;
+        me->CastSpell(target, spellId, false);
+        return true;
+    }
+
     void HandleDpsAbility()
     {
         Unit* victim = me->GetVictim();
         if (!victim)
             return;
 
-        // Kill Shot on low HP targets (below 30%, 5% for bosses)
+        // Execute on low HP targets (below 30%, 5% for bosses)
         float executeThreshold = victim->IsCreature() && victim->ToCreature()->IsDungeonBoss() ? 5.0f : 30.0f;
         if (victim->GetHealthPct() < executeThreshold)
-        {
-            // TODO: Cast Kill Shot spell when spell IDs are known
-            TC_LOG_TRACE("scripts.delves", "Brann (DPS): Execute phase on {} ({}% HP)",
-                victim->GetName(), static_cast<int>(victim->GetHealthPct()));
-        }
+            if (CastConfiguredSpell(victim, "Delves.Companion.Dps.ExecuteSpellId"))
+                return;
 
         // Standard damage rotation
-        // TODO: Cast abilities when spell IDs are determined from trait tree
+        CastConfiguredSpell(victim, "Delves.Companion.Dps.AttackSpellId");
     }
 
     void HandleHealCheck()
@@ -255,25 +267,22 @@ private:
         if (!owner || !owner->IsAlive())
             return;
 
-        // Emergency heal
-        if (owner->GetHealthPct() < EMERGENCY_HEAL_THRESHOLD_PCT)
+        // Pick the lowest-HP group member (the owner when solo) as the heal target.
+        Player* healTarget = owner;
+        if (Group const* group = owner->GetGroup())
+            for (GroupReference const& ref : group->GetMembers())
+                if (Player* member = ref.GetSource(); member && member->IsAlive()
+                    && member->IsInMap(me) && member->GetHealthPct() < healTarget->GetHealthPct())
+                    healTarget = member;
+
+        if (healTarget->GetHealthPct() < EMERGENCY_HEAL_THRESHOLD_PCT)
         {
-            // TODO: Cast emergency heal spell
-            TC_LOG_TRACE("scripts.delves", "Brann (Healer): Emergency heal on {} ({}% HP)",
-                owner->GetName(), static_cast<int>(owner->GetHealthPct()));
-            return;
+            if (CastConfiguredSpell(healTarget, "Delves.Companion.Heal.EmergencySpellId"))
+                return;
         }
 
-        // Regular heal
-        if (owner->GetHealthPct() < HEAL_THRESHOLD_PCT)
-        {
-            // TODO: Cast regular heal spell
-            TC_LOG_TRACE("scripts.delves", "Brann (Healer): Healing {} ({}% HP)",
-                owner->GetName(), static_cast<int>(owner->GetHealthPct()));
-        }
-
-        // Also check other group members
-        // TODO: Iterate group members and heal lowest HP
+        if (healTarget->GetHealthPct() < HEAL_THRESHOLD_PCT)
+            CastConfiguredSpell(healTarget, "Delves.Companion.Heal.SpellId");
     }
 
     void HandleTankAbility()
@@ -288,14 +297,13 @@ private:
             if (ownerTarget->GetVictim() == owner && ownerTarget != me->GetVictim())
             {
                 AttackStart(ownerTarget);
-                // TODO: Cast taunt spell
-                TC_LOG_TRACE("scripts.delves", "Brann (Tank): Taunting {} off {}",
-                    ownerTarget->GetName(), owner->GetName());
+                CastConfiguredSpell(ownerTarget, "Delves.Companion.Tank.TauntSpellId");
             }
         }
 
-        // Defensive cooldowns
-        // TODO: Cast shield/defensive abilities when spell IDs known
+        // Defensive cooldown while taking hits.
+        if (me->IsInCombat() && me->GetHealthPct() < 60.0f)
+            CastConfiguredSpell(me, "Delves.Companion.Tank.DefensiveSpellId");
     }
 
     void HandleCombatCheck()

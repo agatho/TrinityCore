@@ -4432,3 +4432,18 @@ Delves.Crest.Tier4.CurrencyId = 3345
 #        Default:     0 - (Disabled)
 
 Delves.Companion.CreatureId = 0
+
+#
+#    Delves.Companion.<Role>.*SpellId
+#        Description: Companion ability spells cast by the role AI (execute / rotation attack, emergency +
+#                     regular heal on the lowest-HP group member, taunt + defensive). The exact abilities are
+#                     season content (retail Midnight S1: Valeera's kit) and must exist in Spell.db2 - a 0 or
+#                     unknown id is a safe no-op, the companion then only follows and auto-attacks.
+#        Default:     all 0 - (Disabled)
+
+Delves.Companion.Dps.ExecuteSpellId = 0
+Delves.Companion.Dps.AttackSpellId = 0
+Delves.Companion.Heal.EmergencySpellId = 0
+Delves.Companion.Heal.SpellId = 0
+Delves.Companion.Tank.TauntSpellId = 0
+Delves.Companion.Tank.DefensiveSpellId = 0
