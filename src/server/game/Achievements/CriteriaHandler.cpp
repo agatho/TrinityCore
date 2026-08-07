@@ -572,6 +572,9 @@ void CriteriaHandler::UpdateCriteria(Criteria const* criteria, uint64 miscValue1
         case CriteriaType::SellItemsToVendors:
         case CriteriaType::ReachMaxLevel:
         case CriteriaType::LearnTaxiNode:
+        // --- mythic keystone: one tick per completed run
+        case CriteriaType::MythicPlusCompleted:
+        case CriteriaType::CompleteAnyChallengeMode:
             SetCriteriaProgress(criteria, 1, referencePlayer, PROGRESS_ACCUMULATE);
             break;
         // std case: increment at miscValue1
@@ -611,6 +614,8 @@ void CriteriaHandler::UpdateCriteria(Criteria const* criteria, uint64 miscValue1
         case CriteriaType::HighestHealReceived:
         case CriteriaType::AnyArtifactPowerRankPurchased:
         case CriteriaType::AzeriteLevelReached:
+        // overall Mythic+ rating (sum of best runs); the required score lives in the CriteriaTree Amount
+        case CriteriaType::MythicPlusRatingAttained:
             SetCriteriaProgress(criteria, miscValue1, referencePlayer, PROGRESS_HIGHEST);
             break;
         case CriteriaType::ReachRenownLevel:
@@ -703,6 +708,8 @@ void CriteriaHandler::UpdateCriteria(Criteria const* criteria, uint64 miscValue1
         case CriteriaType::CollectTransmogSetFromGroup:
         case CriteriaType::EnterTopLevelArea:
         case CriteriaType::LeaveTopLevelArea:
+        // one-shot "did this specific thing" criteria - the asset already pins the exact subject
+        case CriteriaType::CompleteChallengeMode:
             SetCriteriaProgress(criteria, 1, referencePlayer);
             break;
         case CriteriaType::BankSlotsPurchased:
@@ -851,9 +858,7 @@ void CriteriaHandler::UpdateCriteria(Criteria const* criteria, uint64 miscValue1
         case CriteriaType::FindResearchObject:
         case CriteriaType::ExhaustAnyResearchSite:
         case CriteriaType::CompleteInternalCriteria:
-        case CriteriaType::CompleteAnyChallengeMode:
         case CriteriaType::KilledAllUnitsInSpawnRegion:
-        case CriteriaType::CompleteChallengeMode:
         case CriteriaType::CreatedItemsByCastingSpellWithLimit:
         case CriteriaType::BattlePetAchievementPointsEarned:
         case CriteriaType::ReleasedSpirit:
@@ -872,7 +877,6 @@ void CriteriaHandler::UpdateCriteria(Criteria const* criteria, uint64 miscValue1
         case CriteriaType::PlayerHasEarnedHonor:
         case CriteriaType::ChooseRelicTalent:
         case CriteriaType::AccountHonorLevelReached:
-        case CriteriaType::MythicPlusCompleted:
         case CriteriaType::SocketAnySoulbindConduit:
         case CriteriaType::ObtainAnyItemWithCurrencyValue:
         case CriteriaType::EarnExpansionLevel:
@@ -1715,6 +1719,17 @@ bool CriteriaHandler::RequirementsSatisfied(Criteria const* criteria, uint64 mis
             break;
         case CriteriaType::LearnTaxiNode:
             if (miscValue1 != uint32(criteria->Entry->Asset.TaxiNodesID))
+                return false;
+            break;
+        case CriteriaType::CompleteChallengeMode:
+            // Asset = MapID of the keystone dungeon; miscValue1 = the map that was completed.
+            if (!miscValue1 || miscValue1 != uint32(criteria->Entry->Asset.MapID))
+                return false;
+            break;
+        case CriteriaType::MythicPlusCompleted:
+        case CriteriaType::CompleteAnyChallengeMode:
+        case CriteriaType::MythicPlusRatingAttained:
+            if (!miscValue1)
                 return false;
             break;
         default:
@@ -3353,7 +3368,9 @@ bool CriteriaHandler::ModifierSatisfied(ModifierTreeEntry const* modifier, uint6
         {
             InstanceMap* instanceMap = referencePlayer->GetMap()->ToInstanceMap();
             ChallengeMode* challenge = instanceMap ? instanceMap->GetChallengeMode() : nullptr;
-            if (!challenge || (!challenge->IsActive() && !challenge->IsCompleted()))
+            // "In time" only means anything for a run that has actually finished - an active run that
+            // is merely still under par has not completed in time yet.
+            if (!challenge || !challenge->IsCompleted())
                 return false;
             if (!challenge->GetTimeLimitMs() || challenge->GetEffectiveTimeMs() > challenge->GetTimeLimitMs())
                 return false;
@@ -3367,11 +3384,17 @@ bool CriteriaHandler::ModifierSatisfied(ModifierTreeEntry const* modifier, uint6
                 return false;
             break;
         }
-        case ModifierTreeType::MythicPlusDisplaySeason: // 250
+        case ModifierTreeType::MythicPlusDisplaySeason: // 250 NYI
+            // Needs DisplaySeason.db2, which this core does not load; the active MythicPlusSeason id uses a
+            // different numbering. Guessing the mapping would silently mis-gate every seasonal achievement.
+            return false;
         case ModifierTreeType::MythicPlusMilestoneSeason: // 251
-            if (sChallengeModeMgr.GetActiveSeasonId() != reqValue)
+        {
+            MythicPlusSeasonEntry const* season = sChallengeModeMgr.GetActiveSeason();
+            if (!season || season->MilestoneSeason != int32(reqValue))
                 return false;
             break;
+        }
         case ModifierTreeType::PlayerVisibleRace: // 252
         {
             CreatureDisplayInfoEntry const* creatureDisplayInfo = sCreatureDisplayInfoStore.LookupEntry(referencePlayer->GetDisplayId());
@@ -5045,7 +5068,7 @@ std::span<CriteriaType const> CriteriaMgr::GetRetroactivelyUpdateableCriteriaTyp
         CriteriaType::ReachMaxLevel,
         //CriteriaType::MemorizeSpell, /*NYI*/
         //CriteriaType::LearnTransmogIllusion, /*NYI*/
-        //CriteriaType::MythicPlusRatingAttained, /*NYI*/
+        //CriteriaType::MythicPlusRatingAttained, // implemented, but event-driven only (ChallengeMode::Complete)
         //CriteriaType::MythicPlusDisplaySeasonEnded, /*NYI*/
         //CriteriaType::CompleteTrackingQuest, /*NYI*/
         CriteriaType::BankTabPurchased,

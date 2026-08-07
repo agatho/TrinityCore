@@ -23,6 +23,8 @@
 #include "Containers.h"
 #include "Creature.h"
 #include "DB2Stores.h"
+#include "DBCEnums.h"
+#include "ElapsedTimerMgr.h"
 #include "GameTime.h"
 #include "Group.h"
 #include "InstanceScript.h"
@@ -81,6 +83,11 @@ void ChallengeMode::Start(uint32 mapChallengeModeId, uint32 keystoneLevel, std::
 
     BroadcastTimer(_timeLimitMs);
 
+    // Count-UP run timer for the objective tracker. This is the WorldElapsedTimer.db2 row the
+    // client maps to Enum.WorldElapsedTimerTypes.ChallengeMode, which is what makes
+    // ScenarioTimerMixin populate from the server instead of estimating locally.
+    sElapsedTimerMgr->StartTimerForMap(_instance, WORLD_ELAPSED_TIMER_CHALLENGE_MODE, 0s);
+
     // Announce the run (map / level / affixes) to the party UI. Member roster is omitted for now (see packet note).
     WorldPackets::ChallengeMode::ChallengeModeStart startPacket;
     if (MapChallengeModeEntry const* challengeMode = sMapChallengeModeStore.LookupEntry(_mapChallengeModeId))
@@ -120,6 +127,17 @@ void ChallengeMode::Reset()
     // Drop the run-wide combat-res pool.
     if (InstanceScript* script = _instance->GetInstanceScript())
         script->ResetCombatResurrections();
+
+    if (_active || _completed)
+    {
+        // Cancel the countdown widget outright rather than leaving it sitting at zero, and drop the
+        // run timer without keeping the value on screen - the run is being abandoned, not finished.
+        WorldPackets::Misc::StopTimer stopTimer;
+        stopTimer.Type = CountdownTimerType::ChallengeMode;
+        _instance->SendToPlayers(stopTimer.Write());
+
+        sElapsedTimerMgr->StopTimerForMap(_instance, WORLD_ELAPSED_TIMER_CHALLENGE_MODE, false);
+    }
 
     _active = false;
     _completed = false;
@@ -446,6 +464,14 @@ void ChallengeMode::Complete()
     _active = false;
     _completed = true;
 
+    // Freeze the run timer at its final value (keepTimer) so the completion time stays on screen,
+    // and cancel the count-down widget, which is now meaningless.
+    sElapsedTimerMgr->StopTimerForMap(_instance, WORLD_ELAPSED_TIMER_CHALLENGE_MODE, true);
+
+    WorldPackets::Misc::StopTimer stopCountdown;
+    stopCountdown.Type = CountdownTimerType::ChallengeMode;
+    _instance->SendToPlayers(stopCountdown.Write());
+
     uint32 const effectiveTimeMs = GetEffectiveTimeMs();
     uint32 const keystoneUpgrade = sChallengeModeMgr.GetKeystoneUpgradeAmount(_mapChallengeModeId, effectiveTimeMs / IN_MILLISECONDS);
 
@@ -462,7 +488,8 @@ void ChallengeMode::Complete()
     record.Affixes = _affixes;
 
     bool const timed = keystoneUpgrade > 0;
-    _instance->DoOnPlayers([&record, timed](Player* player)
+    uint32 const completedMapId = _instance->GetId();
+    _instance->DoOnPlayers([&record, timed, completedMapId](Player* player)
     {
         if (MythicPlusData* data = player->GetMythicPlusData())
         {
@@ -488,6 +515,22 @@ void ChallengeMode::Complete()
                 player->SendDirectMessage(weekRecord.Write());
             }
         }
+
+        // Achievement criteria. All three are keyed off the run that just finished; the run-scoped
+        // ModifierTree nodes (MythicPlusKeystoneLevelEqualOrGreaterThan 247, MythicPlusCompletedInTime 248,
+        // MythicPlusMapChallengeMode 249) read the still-live ChallengeMode off the player's map, so these
+        // must be fired here - while the players are still inside the instance - and not on a later tick.
+        //   216 MythicPlusCompleted        : no asset; miscValue1 = keystone level, miscValue2 = MapChallengeMode
+        //   71  CompleteChallengeMode      : Asset = MapID
+        //   22  CompleteAnyChallengeMode   : no asset
+        player->UpdateCriteria(CriteriaType::MythicPlusCompleted, record.Level, record.ChallengeModeID);
+        player->UpdateCriteria(CriteriaType::CompleteChallengeMode, completedMapId, record.Level);
+        player->UpdateCriteria(CriteriaType::CompleteAnyChallengeMode, record.Level, record.ChallengeModeID);
+
+        // 230 MythicPlusRatingAttained: no asset - the required rating lives in the CriteriaTree Amount, so
+        // this is a highest-watermark of the player's overall Mythic+ rating (sum of best runs).
+        if (MythicPlusData const* data = player->GetMythicPlusData())
+            player->UpdateCriteria(CriteriaType::MythicPlusRatingAttained, uint64(data->GetOverallScore()));
     });
 
     if (Player* starterPlayer = ObjectAccessor::GetPlayer(_instance, _starterGuid))

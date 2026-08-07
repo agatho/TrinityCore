@@ -566,7 +566,7 @@ enum class CriteriaType : int16
     RunInstance                                    = 19,  /*NYI*/ // Run an instance which handles at most {#Max Players} players
     KilledByCreature                               = 20,  // Get killed by "{Creature}"
     CompleteInternalCriteria                       = 21,  /*NYI*/ // Designer Value{`Uses Record ID}
-    CompleteAnyChallengeMode                       = 22,  /*NYI*/ // Complete any challenge mode
+    CompleteAnyChallengeMode                       = 22, // Complete any challenge mode
     KilledByPlayer                                 = 23,  // Die to a player
     MaxDistFallenWithoutDying                      = 24,  // Maximum distance fallen without dying
     EarnChallengeModeMedal                         = 25,  /*NYI*/ // Earn a challenge mode medal of "{#Challenge Mode Medal (OBSOLETE)}" (OBSOLETE)
@@ -615,7 +615,7 @@ enum class CriteriaType : int16
     UseGameobject                                  = 68,  // Use Game Object "{GameObjects}"
     GainAura                                       = 69,  // Gain aura "{Spell}"
     KillPlayer                                     = 70,  // Kill a player (no honor check)
-    CompleteChallengeMode                          = 71,  /*NYI*/ // Complete a challenge mode on map "{Map}"
+    CompleteChallengeMode                          = 71, // Complete a challenge mode on map "{Map}"
     CatchFishInFishingHole                         = 72,  // Catch fish in the "{GameObjects}" fishing hole
     PlayerTriggerGameEvent                         = 73,  // Player will Trigger game event "{GameEvents}"
     Login                                          = 74,  // Login (USE SPARINGLY!)
@@ -760,7 +760,7 @@ enum class CriteriaType : int16
     AccountHonorLevelReached                       = 213, /*NYI*/ // (Account Only) honor level {#Level} reached
     EarnArtifactXPForAzeriteItem                   = 214, // Earn Artifact experience for Azerite Item
     AzeriteLevelReached                            = 215, // Azerite Level {#Azerite Level} reached
-    MythicPlusCompleted                            = 216, /*NYI*/ // Mythic Plus Completed
+    MythicPlusCompleted                            = 216, // Mythic Plus Completed
     ScenarioGroupCompleted                         = 217, /*NYI*/ // Scenario Group Completed
     CompleteAnyReplayQuest                         = 218, // Complete Any Replay Quest
     BuyItemsFromVendors                            = 219, // Buy items from vendors
@@ -774,7 +774,7 @@ enum class CriteriaType : int16
     SocketGarrisonTalent                           = 227, /*NYI*/ // Socket Garrison Talent {GarrTalent}
     SocketAnySoulbindConduit                       = 228, /*NYI*/ // Socket Any Soulbind Conduit
     ObtainAnyItemWithCurrencyValue                 = 229, /*NYI*/ // Obtain Any Item With Currency Value "{CurrencyTypes}"
-    MythicPlusRatingAttained                       = 230, /*NYI*/ // (Player) Mythic+ Rating "{#DungeonScore}" attained
+    MythicPlusRatingAttained                       = 230, // (Player) Mythic+ Rating "{#DungeonScore}" attained
     SpentTalentPoint                               = 231, /*NYI*/ // (Player) spent talent point
 
     MythicPlusDisplaySeasonEnded                   = 234, /*NYI*/ // {DisplaySeason}
@@ -1931,11 +1931,11 @@ enum class ModifierTreeType : int32
     PlayerHasWarModeEnabled                                             = 244, // Player has WarMode Enabled (regardless of shard state)
     PlayerIsOnWarModeShard                                              = 245, // Player is on a WarMode Shard
     PlayerIsAllowedToToggleWarModeInArea                                = 246, // Player is allowed to toggle WarMode in area
-    MythicPlusKeystoneLevelEqualOrGreaterThan                           = 247, /*NYI*/ // Mythic Plus Keystone Level Atleast {#Level}
-    MythicPlusCompletedInTime                                           = 248, /*NYI*/ // Mythic Plus Completed In Time
-    MythicPlusMapChallengeMode                                          = 249, /*NYI*/ // Mythic Plus Map Challenge Mode {MapChallengeMode}
+    MythicPlusKeystoneLevelEqualOrGreaterThan                           = 247, // Mythic Plus Keystone Level Atleast {#Level}
+    MythicPlusCompletedInTime                                           = 248, // Mythic Plus Completed In Time
+    MythicPlusMapChallengeMode                                          = 249, // Mythic Plus Map Challenge Mode {MapChallengeMode}
     MythicPlusDisplaySeason                                             = 250, /*NYI*/ // Mythic Plus Display Season {#Season}
-    MythicPlusMilestoneSeason                                           = 251, /*NYI*/ // Mythic Plus Milestone Season {#Season}
+    MythicPlusMilestoneSeason                                           = 251, // Mythic Plus Milestone Season {#Season}
     PlayerVisibleRace                                                   = 252, // Player visible race is "{ChrRaces}"
     TargetVisibleRace                                                   = 253, // Target visible race is "{ChrRaces}"
     FriendshipRepReactionEqual                                          = 254, // Friendship rep reaction is exactly "{FriendshipRepReaction}"
@@ -2005,7 +2005,7 @@ enum class ModifierTreeType : int32
     CurrencySpentOnGarrisonTalentResearchEqualOrGreaterThan             = 318, /*NYI*/ // Currency {CurrencyTypes} Spent on Garrison Talent Research in Tree {GarrTalentTree} is greater than or equal to {#Quantity}
     RenownCatchupActive                                                 = 319, /*NYI*/ // Renown Catchup Active
     RapidRenownCatchupActive                                            = 320, /*NYI*/ // Rapid Renown Catchup Active
-    PlayerMythicPlusRatingEqualOrGreaterThan                            = 321, /*NYI*/ // Player has Mythic+ Rating of at least "{#DungeonScore}"
+    PlayerMythicPlusRatingEqualOrGreaterThan                            = 321, // Player has Mythic+ Rating of at least "{#DungeonScore}"
     PlayerMythicPlusRunCountInCurrentExpansionEqualOrGreaterThan        = 322, /*NYI*/ // Player has completed at least "{#MythicKeystoneRuns}" Mythic+ runs in current expansion
     PlayerHasCustomizationChoice                                        = 323, // (Mainline) Player has Customization Choice "{ChrCustomizationChoice}"
     PlayerBestWeeklyWinPvpTier                                          = 324, // (Mainline) Player has best weekly win in PVP tier {PvpTier}

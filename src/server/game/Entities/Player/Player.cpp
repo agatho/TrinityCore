@@ -55,6 +55,7 @@
 #include "DatabaseEnv.h"
 #include "DisableMgr.h"
 #include "DuelPackets.h"
+#include "ElapsedTimerMgr.h"
 #include "EquipmentSetPackets.h"
 #include "Formulas.h"
 #include "GameEventMgr.h"
@@ -382,6 +383,10 @@ void Player::CleanupsBeforeDelete(bool finalCleanup)
 {
     TradeCancel(false);
     DuelComplete(DUEL_INTERRUPTED);
+
+    // Elapsed timers are per-session bookkeeping keyed by player GUID; drop ours so the manager
+    // does not accumulate entries for characters that are gone.
+    sElapsedTimerMgr->RemoveAllTimers(GetGUID());
 
     Unit::CleanupsBeforeDelete(finalCleanup);
 }
@@ -25130,6 +25135,12 @@ void Player::SendInitialPacketsAfterAddToMap()
     }
 
     GetSceneMgr().TriggerDelayedScenes();
+
+    // Resynchronise the client's world elapsed timers for the map we just entered. This is what
+    // makes a mid-run zone-in (or a relog inside a running Mythic+ instance) show the dungeon timer
+    // at the correct elapsed value - previously the timer was only ever pushed once, at run start,
+    // so anyone who was not present at that moment saw nothing.
+    sElapsedTimerMgr->SendActiveTimers(this);
 }
 
 void Player::SendUpdateToOutOfRangeGroupMembers()
