@@ -20,6 +20,8 @@
 
 #include "Packet.h"
 #include "ObjectGuid.h"
+#include <string>
+#include <vector>
 
 namespace WorldPackets
 {
@@ -136,6 +138,80 @@ public:
     uint32 MaxEligibleTier = 0;   // UNVERIFIED — needs sniff (client field +0x30)
     uint32 ReasonOrFlags = 0;     // UNVERIFIED — needs sniff (client field +0x34)
     bool IsEligible = false;      // UNVERIFIED — needs sniff (client field +0x38, wire byte MSB)
+};
+
+// CMSG_TIERED_ENTRANCE_OPEN (0x3B0133 @ 12.0.7.68275)
+// Wire RE'd from the `rated BG 12.0.7.pkt` sniff (12-byte body, sample
+// `27e7a2dd4366c001fee84120` = PackedGuid of Creature entry 260103, the
+// tiered-entrance NPC) and confirmed by the 68275 binary: sender 0x7FF7291559C0
+// writes the GUID only (sibling of the SELECT_DELVE_ENTRANCE_TIER sender).
+// Sent when the client opens the Blizzard_DelvesDifficultyPicker UI.
+// Full RE notes: C:\dumps\TIERED_ENTRANCE_RE_68275.md
+class TieredEntranceOpen final : public ClientPacket
+{
+public:
+    explicit TieredEntranceOpen(WorldPacket&& packet) : ClientPacket(CMSG_TIERED_ENTRANCE_OPEN, std::move(packet)) { }
+
+    void Read() override;
+
+    ObjectGuid EntranceGUID;
+};
+
+// Reward entry of a tiered-entrance tier. Field names from the C_DelvesUI lua
+// struct TieredEntranceRewardInfo { id, quantity, rewardType, context }.
+// Sniff (all 24 rewards): rewardType=0 (Item), quantity=1, context=0x68 (104,
+// ItemCreationContext of Midnight S1 site/delve loot), id = item IDs.
+struct TieredEntranceReward
+{
+    uint8 RewardType = 0;       // TieredEntranceRewardType: 0 Item, 1 Currency
+    uint32 Id = 0;              // ItemID (or CurrencyID when RewardType=1)
+    uint32 Quantity = 1;
+    uint8 Context = 0;          // ItemCreationContext (sniff: 0x68)
+};
+
+// One tier record — reflection struct JamTieredEntranceTier (all names from
+// jam_reflection_TYPED_68275.json; wire order byte-exact vs the 579B sniff).
+struct TieredEntranceTier
+{
+    uint32 TieredEntranceTierID = 0;           // sniff: 42..46, 86 (server-data row ids)
+    uint32 Tier = 0;                           // 1-based tier level
+    uint32 SuggestedILvl = 0;                  // sniff: 215/231/244/257/264/274 for tiers 1..6
+    uint32 UnlockPlayerConditionID = 0;        // sniff: 153815.. (0 = no condition)
+    uint32 DynamicUnlockPlayerConditionID = 0; // sniff: 154755.. (0 = no condition)
+    uint32 ModifierUIWidgetSetID = 0;          // sniff: 2058..2062, 2133
+    bool Unlocked = false;                     // 1 wire bit; sniff: tiers 1-2 unlocked
+    std::string TierDescription;               // "Tier 1", "Tier 3 - 1 Challenges", ...
+    std::vector<TieredEntranceReward> PreviewTreasureList;
+};
+
+// SMSG_TIERED_ENTRANCE_OPEN_RESPONSE (0x42037C @ 12.0.7.68275)
+// Layout RE'd byte-exact from the 579B response in `rated BG 12.0.7.pkt`
+// (Daggerspine Point, map 3074, 6 tiers). Round-trip re-serialization of the
+// full body is byte-identical — see C:\dumps\TIERED_ENTRANCE_RE_68275.md.
+// The OUTER struct's reflection names are behind the client obfuscation
+// barrier, hence the UnknownN fields (hex evidence in comments); the tier
+// records are fully named via JamTieredEntranceTier.
+//
+// Wire: PackedGuid echo, 8x uint32, WriteBits(descLen,12)+Flush, tier records,
+// then the description chars (no NUL) as the packet tail.
+class TieredEntranceOpenResponse final : public ServerPacket
+{
+public:
+    TieredEntranceOpenResponse() : ServerPacket(SMSG_TIERED_ENTRANCE_OPEN_RESPONSE, 200) { }
+
+    WorldPacket const* Write() override;
+
+    ObjectGuid EntranceGUID;                // MUST echo the CMSG guid byte-exact
+    uint32 EntranceType = 0;                // TieredEntranceType; sniff `02000000` = 2 (Sites)
+    uint32 MapID = 0;                       // sniff `020c0000` = 3074 = Map.db2 "Daggerspine Point"
+    uint32 Unknown3 = 0;                    // sniff `56000000` = 86 == last tier's TieredEntranceTierID
+    uint32 Unknown4 = 0;                    // sniff `03080000` = 2051; id-space of ModifierUIWidgetSetID (entrance widget set?)
+    // TierCount (uint32) is written here    // sniff `06000000` = 6
+    uint32 Unknown6 = 0;                    // sniff `a1040000` = 1185
+    uint32 Unknown7 = 0;                    // sniff `eb000000` = 235; PDE id? (C_DelvesUI.GetTieredEntrancePDEID)
+    uint32 Unknown8 = 0;                    // sniff `1f000000` = 31; TieredEntrance.db2 row id?
+    std::string EntranceDescription;        // sniff: "Daggerspine Point" (len 17 → bits `01 10`)
+    std::vector<TieredEntranceTier> Tiers;
 };
 
 } // namespace Delves
