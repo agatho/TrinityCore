@@ -1522,6 +1522,9 @@ void Guild::HandleSetEmblem(WorldSession* session, EmblemInfo const& emblemInfo)
         m_emblemInfo = emblemInfo;
         m_emblemInfo.SaveToDB(m_id);
 
+        // CriteriaType::GuildTabardCreated (133) - guild-scoped criterion, fired once per saved emblem.
+        UpdateCriteria(CriteriaType::GuildTabardCreated, 1, 0, 0, nullptr, player);
+
         SendSaveEmblemResult(session, ERR_GUILDEMBLEM_SUCCESS); // "Guild Emblem saved."
 
         HandleQuery(session);
@@ -1669,6 +1672,9 @@ void Guild::HandleBuyBankTab(WorldSession* session, uint8 tabId)
     _CreateNewBankTab(trans);
 
     CharacterDatabase.CommitTransaction(trans);
+
+    // CriteriaType::GuildBankTabsPurchased (128) - a running total, so pass the new purchased-tab count.
+    UpdateCriteria(CriteriaType::GuildBankTabsPurchased, _GetPurchasedTabsSize(), 0, 0, nullptr, player);
 
     WorldPackets::Guild::GuildEventTabAdded packet;
     BroadcastPacket(packet.Write());
@@ -2118,6 +2124,11 @@ bool Guild::HandleMemberWithdrawMoney(WorldSession* session, uint64 amount, bool
     // Log guild bank event
     _LogBankEvent(trans, repair ? GUILD_BANK_LOG_REPAIR_MONEY : GUILD_BANK_LOG_WITHDRAW_MONEY, uint8(0), player->GetGUID().GetCounter(), amount);
     CharacterDatabase.CommitTransaction(trans);
+
+    // CriteriaType::MoneySpentOnGuildRepair (124) - only the repair-flagged withdrawal is repair spend; a
+    // plain withdrawal is not. miscValue1 = the copper taken from the guild bank for the repair.
+    if (repair && amount)
+        UpdateCriteria(CriteriaType::MoneySpentOnGuildRepair, amount, 0, 0, nullptr, player);
 
     SendEventBankMoneyChanged();
     return true;

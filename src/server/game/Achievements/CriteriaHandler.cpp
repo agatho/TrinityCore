@@ -580,6 +580,8 @@ void CriteriaHandler::UpdateCriteria(Criteria const* criteria, uint64 miscValue1
         case CriteriaType::SellItemsToVendors:
         case CriteriaType::ReachMaxLevel:
         case CriteriaType::LearnTaxiNode:
+        // --- guild
+        case CriteriaType::GuildTabardCreated:
             SetCriteriaProgress(criteria, 1, referencePlayer, PROGRESS_ACCUMULATE);
             break;
         // std case: increment at miscValue1
@@ -600,6 +602,9 @@ void CriteriaHandler::UpdateCriteria(Criteria const* criteria, uint64 miscValue1
         case CriteriaType::EarnArtifactXPForAzeriteItem:
         case CriteriaType::GainLevels:
         case CriteriaType::EarnArtifactXP:
+        // guild-bank copper spent on repairs, guild achievement points
+        case CriteriaType::MoneySpentOnGuildRepair:
+        case CriteriaType::EarnGuildAchievementPoints:
             SetCriteriaProgress(criteria, miscValue1, referencePlayer, PROGRESS_ACCUMULATE);
             break;
         case CriteriaType::KillCreature:
@@ -716,6 +721,10 @@ void CriteriaHandler::UpdateCriteria(Criteria const* criteria, uint64 miscValue1
         case CriteriaType::BankSlotsPurchased:
             SetCriteriaProgress(criteria, referencePlayer->GetBankBagSlotCount(), referencePlayer);
             break;
+        case CriteriaType::GuildBankTabsPurchased:
+            // miscValue1 = the guild's purchased bank tab count after the purchase (running total)
+            SetCriteriaProgress(criteria, miscValue1, referencePlayer);
+            break;
         case CriteriaType::ReputationGained:
         {
             int32 reputation = referencePlayer->GetReputationMgr().GetReputation(criteria->Entry->Asset.FactionID);
@@ -821,14 +830,10 @@ void CriteriaHandler::UpdateCriteria(Criteria const* criteria, uint64 miscValue1
         case CriteriaType::RunInstance:
         case CriteriaType::EarnTeamArenaRating:
         case CriteriaType::EarnTitle:
-        case CriteriaType::MoneySpentOnGuildRepair:
         case CriteriaType::CreatedItemsByCastingSpell:
         case CriteriaType::FishInAnyPool:
-        case CriteriaType::GuildBankTabsPurchased:
-        case CriteriaType::EarnGuildAchievementPoints:
         case CriteriaType::WinAnyBattleground:
         case CriteriaType::EarnBattlegroundRating:
-        case CriteriaType::GuildTabardCreated:
         case CriteriaType::CompleteQuestsCountForGuild:
         case CriteriaType::HonorableKillsForGuild:
         case CriteriaType::KillAnyCreatureForGuild:
@@ -1724,6 +1729,13 @@ bool CriteriaHandler::RequirementsSatisfied(Criteria const* criteria, uint64 mis
             break;
         case CriteriaType::LearnTaxiNode:
             if (miscValue1 != uint32(criteria->Entry->Asset.TaxiNodesID))
+                return false;
+            break;
+        case CriteriaType::MoneySpentOnGuildRepair:
+        case CriteriaType::EarnGuildAchievementPoints:
+        case CriteriaType::GuildBankTabsPurchased:
+        case CriteriaType::GuildTabardCreated:
+            if (!miscValue1)
                 return false;
             break;
         default:
@@ -5083,10 +5095,10 @@ std::span<CriteriaType const> CriteriaMgr::GetRetroactivelyUpdateableCriteriaTyp
         //CriteriaType::AccountKnownPet,  /*NYI*/
         CriteriaType::LearnTradeskillSkillLine,
         CriteriaType::HonorableKills,
-        //CriteriaType::GuildBankTabsPurchased, /*NYI*/
-        //CriteriaType::EarnGuildAchievementPoints, /*NYI*/
+        //CriteriaType::GuildBankTabsPurchased, // implemented, but event-driven only (Guild::HandleBuyBankTab)
+        //CriteriaType::EarnGuildAchievementPoints, // implemented, but event-driven only (GuildAchievementMgr::CompletedAchievement)
         //CriteriaType::EarnBattlegroundRating, /*NYI*/
-        //CriteriaType::GuildTabardCreated, /*NYI*/
+        //CriteriaType::GuildTabardCreated, // implemented, but event-driven only (Guild::HandleSetEmblem)
         CriteriaType::LearnedNewPet,
         CriteriaType::UniquePetsOwned,
         //CriteriaType::UpgradeGarrison, /*NYI*/

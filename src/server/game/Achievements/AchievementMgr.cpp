@@ -1102,6 +1102,10 @@ void GuildAchievementMgr::CompletedAchievement(AchievementEntry const* achieveme
 
     UpdateCriteria(CriteriaType::EarnAchievement, achievement->ID, 0, 0, nullptr, referencePlayer);
     UpdateCriteria(CriteriaType::EarnAchievementPoints, achievement->Points, 0, 0, nullptr, referencePlayer);
+    // CriteriaType::EarnGuildAchievementPoints (129) - the guild-scoped variant of EarnAchievementPoints.
+    // Fired from the GUILD achievement manager, so it can only ever accumulate guild achievement points.
+    if (!(achievement->Flags & ACHIEVEMENT_FLAG_TRACKING_FLAG) && achievement->Points)
+        UpdateCriteria(CriteriaType::EarnGuildAchievementPoints, achievement->Points, 0, 0, nullptr, referencePlayer);
 
     sScriptMgr->OnAchievementCompleted(referencePlayer, achievement);
 }
