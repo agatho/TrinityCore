@@ -138,6 +138,11 @@ bool CollectionMgr::AddToy(uint32 itemId, bool isFavourite, bool hasFanfare)
     if (UpdateAccountToys(itemId, isFavourite, hasFanfare))
     {
         _owner->GetPlayer()->AddToy(itemId, GetToyFlags(isFavourite, hasFanfare).AsUnderlyingType());
+        // CriteriaType::LearnToy (185, Asset = ItemID) and CriteriaType::LearnAnyToy (186, "Collect 25 Toys").
+        // UpdateAccountToys returns false for an already-known toy, so this only fires on a genuinely new one
+        // - same guarantee AddHeirloom relies on for LearnHeirloom/LearnAnyHeirloom below.
+        _owner->GetPlayer()->UpdateCriteria(CriteriaType::LearnToy, itemId);
+        _owner->GetPlayer()->UpdateCriteria(CriteriaType::LearnAnyToy, 1);
         return true;
     }
 
@@ -946,6 +951,9 @@ void CollectionMgr::AddItemAppearance(ItemModifiedAppearanceEntry const* itemMod
     }
 
     owner->UpdateCriteria(CriteriaType::LearnAnyTransmog, 1);
+    // CriteriaType::LearnTransmog (192, Asset = ItemModifiedAppearanceID). CanAddAppearance/_appearances->test
+    // already rejected known appearances, so this is a genuinely new one.
+    owner->UpdateCriteria(CriteriaType::LearnTransmog, itemModifiedAppearance->ID);
 
     if (ItemEntry const* item = sItemStore.LookupEntry(itemModifiedAppearance->ItemID))
     {
@@ -1156,6 +1164,8 @@ void CollectionMgr::SaveAccountTransmogIllusions(LoginDatabaseTransaction trans)
 void CollectionMgr::AddTransmogIllusion(uint32 transmogIllusionId)
 {
     Player* owner = _owner->GetPlayer();
+    // Count the acquisition only when it is genuinely new - this function is not otherwise idempotent.
+    bool const alreadyKnown = HasTransmogIllusion(transmogIllusionId);
     if (_transmogIllusions->size() <= transmogIllusionId)
     {
         std::size_t numBlocks = _transmogIllusions->num_blocks();
@@ -1170,6 +1180,10 @@ void CollectionMgr::AddTransmogIllusion(uint32 transmogIllusionId)
     uint32 bitIndex = transmogIllusionId % 32;
 
     owner->AddIllusionFlag(blockIndex, 1 << bitIndex);
+
+    // CriteriaType::LearnAnyTransmogIllusion (224) - plain counter over newly learned illusions.
+    if (!alreadyKnown)
+        owner->UpdateCriteria(CriteriaType::LearnAnyTransmogIllusion, 1);
 }
 
 bool CollectionMgr::HasTransmogIllusion(uint32 transmogIllusionId) const
