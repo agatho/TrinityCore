@@ -398,6 +398,12 @@ namespace WorldPackets
         class CraftingOrderUpdateIgnoreList;
     }
 
+    namespace Contribution
+    {
+        class ContributionContribute;
+        class ContributionLastUpdateRequest;
+    }
+
     namespace Combat
     {
         class AttackSwing;

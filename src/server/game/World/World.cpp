@@ -1680,7 +1680,10 @@ bool World::SetInitialWorldSettings()
     sManagedWorldStateMgr->Load();                            // must be after world state values are available to restore persisted progress
 
     TC_LOG_INFO("server.loading", "Loading Contribution collectors...");
-    sContributionMgr->Load();
+    sContributionMgr->Load();                                 // must be after ManagedWorldStateMgr::Load (builds the ManagedWorldState -> Contribution reverse index)
+
+    TC_LOG_INFO("server.loading", "Initializing Warfronts...");
+    sWarfrontMgr->Initialize();                               // BfA warfront cycle owner; after world states are restored and the contribution bars exist
 
     TC_LOG_INFO("server.loading", "Initializing Warfronts...");
     sWarfrontMgr->Initialize();                               // BfA warfront cycle owner; after managed world states are restored
