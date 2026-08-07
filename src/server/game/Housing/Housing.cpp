@@ -20,6 +20,7 @@
 #include "HousingPlayerHouseEntity.h"
 #include "DatabaseEnv.h"
 #include "DB2Stores.h"
+#include "DBCEnums.h"
 #include "GameTime.h"
 #include "HousingMgr.h"
 #include "Neighborhood.h"
@@ -911,6 +912,10 @@ HousingResult Housing::PlaceDecorWithGuid(ObjectGuid decorGuid, uint32 decorEntr
     TC_LOG_DEBUG("housing", "Housing::PlaceDecorWithGuid: Player {} placed decor entry {} (GUID: {}) at ({}, {}, {}) in house {}",
         _owner->GetName(), decorEntryId, decorGuid.ToString(), x, y, z, _houseGuid.ToString());
 
+    // CriteriaType::PlaceDecor (270, "Place any decor"). miscValue1 = HouseDecor entry so decor-scoped
+    // ModifierTree conditions can still discriminate; this is the single commit point for a placement.
+    _owner->UpdateCriteria(CriteriaType::PlaceDecor, decorEntryId);
+
     SyncUpdateFields();
     return HOUSING_RESULT_SUCCESS;
 }
@@ -1268,6 +1273,10 @@ HousingResult Housing::RemoveDecor(ObjectGuid decorGuid)
 
     TC_LOG_DEBUG("housing", "Housing::RemoveDecor: Player {} removed decor {} from house {}, returned to catalog",
         _owner->GetName(), decorGuid.ToString(), _houseGuid.ToString());
+
+    // CriteriaType::RemoveDecor (271, "Remove any decor"). miscValue1 = the HouseDecor entry removed
+    // (captured before the erase invalidated the iterator).
+    _owner->UpdateCriteria(CriteriaType::RemoveDecor, decorEntryId);
 
     SyncUpdateFields();
     return HOUSING_RESULT_SUCCESS;
@@ -2162,6 +2171,11 @@ HousingResult Housing::AddToCatalog(uint32 decorEntryId, uint8 sourceType, std::
     if (_houseGuid.IsEmpty())
         return HOUSING_RESULT_HOUSE_NOT_FOUND;
 
+    // A decor entry the player has never owned before is a NEW unique collection entry
+    // (CriteriaType::CollectUniqueDecor 272). The catalog is quantity-based, so "first time" is exactly
+    // "no row existed before this add"; a second copy of the same entry must NOT count again.
+    bool const firstTimeAcquired = !_catalog.contains(decorEntryId);
+
     CatalogEntry& entry = _catalog[decorEntryId];
     entry.DecorEntryId = decorEntryId;
     entry.Count++;
@@ -2185,6 +2199,10 @@ HousingResult Housing::AddToCatalog(uint32 decorEntryId, uint8 sourceType, std::
 
     TC_LOG_DEBUG("housing", "Housing::AddToCatalog: Player {} added decor entry {} to catalog (count: {}) in house {}",
         _owner->GetName(), decorEntryId, entry.Count, _houseGuid.ToString());
+
+    // CriteriaType::CollectUniqueDecor (272) - counted once per distinct HouseDecor entry ever acquired.
+    if (firstTimeAcquired)
+        _owner->UpdateCriteria(CriteriaType::CollectUniqueDecor, decorEntryId);
 
     SyncUpdateFields();
     return HOUSING_RESULT_SUCCESS;

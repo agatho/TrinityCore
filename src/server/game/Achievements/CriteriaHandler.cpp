@@ -30,6 +30,7 @@
 #include "GameTime.h"
 #include "Garrison.h"
 #include "Group.h"
+#include "Housing.h"
 #include "InstanceScript.h"
 #include "Item.h"
 #include "ItemBonusMgr.h"
@@ -602,6 +603,10 @@ void CriteriaHandler::UpdateCriteria(Criteria const* criteria, uint64 miscValue1
         // --- mythic keystone: one tick per completed run
         case CriteriaType::MythicPlusCompleted:
         case CriteriaType::CompleteAnyChallengeMode:
+        // --- housing
+        case CriteriaType::PlaceDecor:
+        case CriteriaType::RemoveDecor:
+        case CriteriaType::CollectUniqueDecor:
             SetCriteriaProgress(criteria, 1, referencePlayer, PROGRESS_ACCUMULATE);
             break;
         // std case: increment at miscValue1
@@ -1744,6 +1749,11 @@ bool CriteriaHandler::RequirementsSatisfied(Criteria const* criteria, uint64 mis
             if (miscValue1 != uint32(criteria->Entry->Asset.TaxiNodesID))
                 return false;
             break;
+        case CriteriaType::CompleteChallengeMode:
+            // Asset = MapID of the keystone dungeon; miscValue1 = the map that was completed.
+            if (!miscValue1 || miscValue1 != uint32(criteria->Entry->Asset.MapID))
+                return false;
+            break;
         // ---------------------------------------------------------------------------------------------
         // Garrison (WoD 2 / Order Hall 3 / War Campaign 9 / Covenant 111) - see Garrison.cpp call sites.
         // ---------------------------------------------------------------------------------------------
@@ -1793,14 +1803,13 @@ bool CriteriaHandler::RequirementsSatisfied(Criteria const* criteria, uint64 mis
         case CriteriaType::SocketAnySoulbindConduit:
             // No asset - the ModifierTree does the discriminating, but it needs a real subject id in
             // miscValue1 (GarrFollower / GarrTalent / SoulbindConduit / GarrBuilding).
-        case CriteriaType::CompleteChallengeMode:
-            // Asset = MapID of the keystone dungeon; miscValue1 = the map that was completed.
-            if (!miscValue1 || miscValue1 != uint32(criteria->Entry->Asset.MapID))
-                return false;
-            break;
         case CriteriaType::MythicPlusCompleted:
         case CriteriaType::CompleteAnyChallengeMode:
         case CriteriaType::MythicPlusRatingAttained:
+        // No asset - the ModifierTree discriminates, but it needs a real HouseDecor entry in miscValue1.
+        case CriteriaType::PlaceDecor:
+        case CriteriaType::RemoveDecor:
+        case CriteriaType::CollectUniqueDecor:
             if (!miscValue1)
                 return false;
             break;
@@ -4469,6 +4478,10 @@ bool CriteriaHandler::ModifierSatisfied(ModifierTreeEntry const* modifier, uint6
             break;
         case ModifierTreeType::PlayerIsInGuild: // 404
             if (!referencePlayer->GetGuildId())
+                return false;
+            break;
+        case ModifierTreeType::PlayerHousesCountEqualOrGreaterThan: // 419
+            if (referencePlayer->GetAllHousings().size() < reqValue)
                 return false;
             break;
         case ModifierTreeType::PlayerMoneyIsRelOp: // 417
