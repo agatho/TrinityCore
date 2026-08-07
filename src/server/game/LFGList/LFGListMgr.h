@@ -51,6 +51,7 @@ namespace LFGList
         uint32 ItemLevel = 0;
         std::string Comment;
         ApplicationState State = ApplicationState::Applied;
+        uint32 AppliedTime = 0;             // drives the retail 300s application timeout (sniff-verified)
     };
 
     // One published group listing.
@@ -94,6 +95,8 @@ public:
     LFGList::Application* GetApplication(uint32 applicationId);
     bool SetApplicationState(uint32 applicationId, LFGList::ApplicationState state);
     void RemoveApplication(uint32 applicationId);
+    // Drops every application this player has outstanding (logout cleanup).
+    void RemoveApplicationsBy(ObjectGuid applicant);
 
 private:
     LFGListMgr() = default;

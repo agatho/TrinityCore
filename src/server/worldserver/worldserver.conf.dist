@@ -1402,7 +1402,17 @@ DungeonFinder.OptionsMask = 1
 #                     0 disables expiry.
 #        Default:     120
 
-LFGList.ListingExpiryMinutes = 120
+LFGList.ListingExpiryMinutes = 30
+
+#
+#    LFGList.ApplicationTimeoutSeconds / LFGList.MaxApplicationsPerPlayer
+#        Description: Application lifecycle (both sniff-verified retail 12.x values): pending applications
+#                     time out after ApplicationTimeoutSeconds (soft-decline); a player may have at most
+#                     MaxApplicationsPerPlayer pending applications at once. 0 disables the respective limit.
+#        Default:     ApplicationTimeoutSeconds = 300, MaxApplicationsPerPlayer = 5
+
+LFGList.ApplicationTimeoutSeconds = 300
+LFGList.MaxApplicationsPerPlayer = 5
 
 #
 #     LFGList.MaxSearchResults

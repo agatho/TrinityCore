@@ -566,8 +566,9 @@ void WorldSession::LogoutPlayer(bool save)
 
     if (_player)
     {
-        // Remove any premade group finder listing this player owns.
+        // Remove any premade group finder listing this player owns, and any outstanding applications.
         sLFGListMgr.RemoveListingsBy(_player->GetGUID());
+        sLFGListMgr.RemoveApplicationsBy(_player->GetGUID());
 
         if (!_player->GetLootGUID().IsEmpty())
             DoLootReleaseAll();
