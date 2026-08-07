@@ -218,26 +218,37 @@ void MythicPlusData::BuildDungeonScoreData(WorldPackets::MythicPlus::DungeonScor
 void MythicPlusData::PruneStaleWeek() const
 {
     int64 const currentReset = int64(sWorld->GetNextWeeklyQuestsResetTime());
-    if (_weeklyResetTime != currentReset)
-    {
-        // Capture last week's best-run summary before discarding it: this feeds the weekly keystone adjustment
-        // (retail derives the new key level from the previous week's runs).
-        if (!_weeklyRuns.empty())
-        {
-            _prunedWeekResetTime = _weeklyResetTime;
-            _prunedWeekBestTimedLevel = 0;
-            _prunedWeekBestLevel = 0;
-            for (MythicPlusWeeklyRun const& run : _weeklyRuns)
-            {
-                _prunedWeekBestLevel = std::max(_prunedWeekBestLevel, run.Level);
-                if (run.Timed)
-                    _prunedWeekBestTimedLevel = std::max(_prunedWeekBestTimedLevel, run.Level);
-            }
-        }
+    if (_weeklyResetTime == currentReset)
+        return;
 
-        _weeklyRuns.clear();
-        _weeklyResetTime = currentReset;
+    // Capture last week's best-run summary before discarding it: this feeds the weekly keystone adjustment
+    // (retail derives the new key level from the previous week's runs).
+    bool captured = false;
+    if (!_weeklyRuns.empty() && _weeklyResetTime)
+    {
+        _prunedWeekResetTime = _weeklyResetTime;
+        _prunedWeekBestTimedLevel = 0;
+        _prunedWeekBestLevel = 0;
+        for (MythicPlusWeeklyRun const& run : _weeklyRuns)
+        {
+            _prunedWeekBestLevel = std::max(_prunedWeekBestLevel, run.Level);
+            if (run.Timed)
+                _prunedWeekBestTimedLevel = std::max(_prunedWeekBestTimedLevel, run.Level);
+        }
+        captured = true;
     }
+
+    _weeklyRuns.clear();
+    _weeklyResetTime = currentReset;
+
+    // The run rows are gone from here on, so the summary has to be durable before anything else can save.
+    if (captured)
+        SaveVaultToDB();
+}
+
+void MythicPlusData::ResetWeeklyRuns()
+{
+    PruneStaleWeek();
 }
 
 void MythicPlusData::RecordWeeklyRun(uint32 challengeModeId, uint32 level, bool timed, int64 date)
@@ -286,6 +297,9 @@ void MythicPlusData::LoadVaultFromDB(PreparedQueryResult result)
     Field* fields = result->Fetch();
     _vaultClaimedResetTime = fields[0].GetInt64();
     _keystoneResetTime = fields[1].GetInt64();
+    _prunedWeekResetTime = fields[2].GetInt64();
+    _prunedWeekBestLevel = fields[3].GetUInt32();
+    _prunedWeekBestTimedLevel = fields[4].GetUInt32();
 }
 
 bool MythicPlusData::IsVaultClaimedThisWeek() const
@@ -312,24 +326,35 @@ void MythicPlusData::SetKeystoneAdjusted()
 
 uint32 MythicPlusData::ComputeNewWeekKeystoneLevel(uint32 currentLevel, uint32 minLevel) const
 {
-    // Make sure last week's summary has been captured if the boundary just rolled over.
+    // Make sure the finished week's summary has been captured if the boundary just rolled over.
     PruneStaleWeek();
 
-    // Retail rule: new key = best timed level of last week, or one below the best run if it was untimed.
-    // With no runs last week the key decays one level from what it is now, and one further per fully idle week.
+    // _weeklyResetTime is the current boundary after the prune above. A captured summary belongs to the week
+    // that ENDED at _prunedWeekResetTime, so exactly one boundary between the two means "last week".
+    int64 const currentBoundary = _weeklyResetTime;
     uint32 level;
-    int64 lastWeekBoundary = _weeklyResetTime - int64(WEEK);
-    if (_prunedWeekResetTime == lastWeekBoundary && _prunedWeekBestLevel)
+
+    if (_prunedWeekResetTime && _prunedWeekBestLevel && _prunedWeekResetTime <= currentBoundary)
+    {
+        // Rules 1 + 2: the highest dungeon completed that week, at its own level when it was timed and one
+        // level lower when it was not. (bestTimed <= best always, so the max() collapses to exactly that.)
         level = std::max(_prunedWeekBestTimedLevel, _prunedWeekBestLevel - 1);
+
+        // Rule 3: one level lower for every FURTHER consecutive week without a completion.
+        int64 const idleWeeks = (currentBoundary - _prunedWeekResetTime) / int64(WEEK) - 1;
+        if (idleWeeks > 0)
+            level -= uint32(std::min<int64>(idleWeeks, int64(level)));
+    }
     else
     {
-        level = currentLevel > 0 ? currentLevel - 1 : 0;
-        // Additional decay for weeks fully skipped since the last recorded week (when known).
-        if (_prunedWeekResetTime && _prunedWeekResetTime < lastWeekBoundary)
-        {
-            int64 idleWeeks = (lastWeekBoundary - _prunedWeekResetTime) / int64(WEEK);
-            level -= uint32(std::min<int64>(idleWeeks, level));
-        }
+        // Rule 4: nothing on record -> one level below the key carried, once per weekly boundary missed since
+        // the last adjustment (a character offline for three weeks drops three levels, not one).
+        int64 missedWeeks = 1;
+        if (_keystoneResetTime && currentBoundary > _keystoneResetTime)
+            missedWeeks = std::max<int64>((currentBoundary - _keystoneResetTime) / int64(WEEK), 1);
+
+        level = currentLevel;
+        level -= uint32(std::min<int64>(missedWeeks, int64(level)));
     }
 
     return std::max(level, minLevel);
@@ -341,5 +366,8 @@ void MythicPlusData::SaveVaultToDB() const
     stmt->setUInt64(0, _owner->GetGUID().GetCounter());
     stmt->setInt64(1, _vaultClaimedResetTime);
     stmt->setInt64(2, _keystoneResetTime);
+    stmt->setInt64(3, _prunedWeekResetTime);
+    stmt->setUInt32(4, _prunedWeekBestLevel);
+    stmt->setUInt32(5, _prunedWeekBestTimedLevel);
     CharacterDatabase.Execute(stmt);
 }

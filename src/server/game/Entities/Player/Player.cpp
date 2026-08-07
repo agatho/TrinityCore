@@ -19630,8 +19630,11 @@ bool Player::LoadFromDB(ObjectGuid guid, CharacterDatabaseQueryHolder const& hol
 
     _mythicPlusData = std::make_unique<MythicPlusData>(this);
     _mythicPlusData->LoadFromDB(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_MYTHIC_PLUS));
-    _mythicPlusData->LoadWeeklyFromDB(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_MYTHIC_PLUS_WEEKLY));
+    // The vault row must load BEFORE the weekly runs: loading the runs prunes a week that has already reset,
+    // and that prune both reads the stored claim/keystone boundaries and rewrites the row with the previous
+    // week's captured summary. Loading it afterwards would clobber the capture with the pre-reset values.
     _mythicPlusData->LoadVaultFromDB(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_MYTHIC_PLUS_VAULT));
+    _mythicPlusData->LoadWeeklyFromDB(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_MYTHIC_PLUS_WEEKLY));
     UpdateDungeonScore();
 
     std::unique_ptr<Housing> housing = std::make_unique<Housing>(this);

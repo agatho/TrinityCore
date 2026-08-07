@@ -16,6 +16,7 @@
  */
 
 #include "ChallengeModeMgr.h"
+#include "CharacterDatabase.h"
 #include "ConditionMgr.h"
 #include "Config.h"
 #include "DatabaseEnv.h"
@@ -23,12 +24,18 @@
 #include "DB2Structure.h"
 #include "DBCEnums.h"
 #include "Item.h"
+#include "ItemBonusMgr.h"
 #include "ItemDefines.h"
 #include "Log.h"
+#include "Loot.h"
+#include "LootMgr.h"
+#include "Mail.h"
+#include "Map.h"
 #include "MythicPlusData.h"
 #include "Player.h"
 #include "Random.h"
 #include "World.h"
+#include "WorldSession.h"
 #include <algorithm>
 #include <sstream>
 
@@ -52,6 +59,51 @@ namespace
             catch (std::exception const&) { }
         }
         return result;
+    }
+
+    // Rolls the vault reward pool once (personal loot, tagged MythicPlus_Jackpot) and returns a single item id,
+    // or 0 when nothing rolled. The pool itself is server content (reference_loot_template).
+    uint32 RollVaultRewardItem(Player* player, uint32 lootId)
+    {
+        Loot loot(player->GetMap(), ObjectGuid::Empty, LOOT_NONE, nullptr);
+        loot.FillLoot(lootId, LootTemplates_Reference, player, true /*personal*/, true /*noEmptyError*/,
+            LOOT_MODE_DEFAULT, ItemContext::MythicPlus_Jackpot);
+        for (LootItem const& item : loot.items)
+            if (item.itemid)
+                return item.itemid;
+        return 0;
+    }
+
+    // Item bonuses that scale a vault reward to its authentic item level. The ilvl is never a hardcoded number:
+    // ItemBonusMgr derives it from (ItemContext::MythicPlus_Jackpot, keystone level) through the client's own
+    // ItemBonus / ItemLevelSelector DB2 chain.
+    std::vector<int32> VaultRewardBonuses(uint32 itemId, int32 rewardLevel)
+    {
+        return ItemBonusMgr::GetBonusListsForItem(itemId,
+            ItemBonusMgr::ItemBonusGenerationParams(ItemContext::MythicPlus_Jackpot, rewardLevel));
+    }
+
+    // Grants one item carrying the given scaled bonuses; falls back to mail when the bags are full so a claim is
+    // never silently swallowed.
+    void GrantVaultItem(Player* player, uint32 itemId, std::vector<int32> const& bonuses)
+    {
+        ItemPosCountVec dest;
+        if (player->CanStoreNewItem(NULL_BAG, NULL_SLOT, dest, itemId, 1) == EQUIP_ERR_OK)
+        {
+            player->StoreNewItem(dest, itemId, true, 0, GuidSet(), ItemContext::MythicPlus_Jackpot, &bonuses);
+            return;
+        }
+
+        if (Item* item = Item::CreateItem(itemId, 1, ItemContext::MythicPlus_Jackpot, player, false))
+        {
+            item->SetBonuses(bonuses);
+            CharacterDatabaseTransaction trans = CharacterDatabase.BeginTransaction();
+            item->SaveToDB(trans);
+            MailDraft("Great Vault Reward", "Your Great Vault reward.")
+                .AddItem(item)
+                .SendMailTo(trans, player, MailSender(player, MAIL_STATIONERY_GM), MAIL_CHECK_MASK_COPIED);
+            CharacterDatabase.CommitTransaction(trans);
+        }
     }
 }
 
@@ -504,6 +556,102 @@ std::vector<ChallengeModeMgr::VaultThreshold> ChallengeModeMgr::GetMythicPlusVau
     return thresholds;
 }
 
+uint32 ChallengeModeMgr::GetMythicPlusVaultSlotForThreshold(uint32 thresholdId) const
+{
+    for (VaultThreshold const& threshold : GetMythicPlusVaultThresholds())
+        if (threshold.ThresholdID == thresholdId)
+            return threshold.Index;
+
+    return VAULT_SLOT_NONE;
+}
+
+uint32 ChallengeModeMgr::GetMythicPlusVaultSlotRewardLevel(Player* player, uint32 slotIndex) const
+{
+    MythicPlusData* data = player->GetMythicPlusData();
+    if (!data)
+        return 0;
+
+    // The slot's level is the Nth-best run of the week (N = the slot's run threshold); 0 until it unlocks.
+    uint32 level = data->GetVaultSlotLevel(slotIndex);
+    if (!level)
+        return 0;
+
+    // Reward scaling stops at the active season's highest MythicPlusSeasonRewardLevels row; higher keys are
+    // score-only. 0 = the DB2 has no rows for the season -> uncapped rather than invented.
+    if (uint32 cap = GetVaultRewardLevelCap())
+        level = std::min(level, cap);
+
+    return level;
+}
+
+std::vector<ChallengeModeMgr::VaultRewardOption> ChallengeModeMgr::BuildMythicPlusVaultOptions(Player* player) const
+{
+    std::vector<VaultRewardOption> options;
+
+    uint32 const lootId = GetVaultRewardLootId();
+    bool const poolReady = lootId && LootTemplates_Reference.HaveLootFor(lootId);
+
+    for (VaultThreshold const& threshold : GetMythicPlusVaultThresholds())
+    {
+        uint32 const rewardLevel = GetMythicPlusVaultSlotRewardLevel(player, threshold.Index);
+        if (!rewardLevel)
+            continue;   // slot still locked
+
+        VaultRewardOption& option = options.emplace_back();
+        option.ThresholdID = threshold.ThresholdID;
+        option.SlotIndex = threshold.Index;
+        option.RewardLevel = rewardLevel;
+
+        if (poolReady)
+        {
+            if (uint32 itemId = RollVaultRewardItem(player, lootId))
+            {
+                option.ItemID = itemId;
+                option.BonusListIDs = VaultRewardBonuses(itemId, int32(rewardLevel));
+            }
+        }
+    }
+
+    return options;
+}
+
+ChallengeModeMgr::VaultClaimResult ChallengeModeMgr::ClaimMythicPlusVaultReward(Player* player, uint32 slotIndex) const
+{
+    MythicPlusData* data = player->GetMythicPlusData();
+    if (!data || data->IsVaultClaimedThisWeek())
+        return VaultClaimResult::NotClaimable;
+
+    uint32 const rewardLevel = GetMythicPlusVaultSlotRewardLevel(player, slotIndex);
+    if (!rewardLevel)
+        return VaultClaimResult::NotClaimable;
+
+    uint32 const lootId = GetVaultRewardLootId();
+    if (!lootId || !LootTemplates_Reference.HaveLootFor(lootId))
+    {
+        TC_LOG_ERROR("challengemode", "ChallengeModeMgr: player {} claimed Mythic+ vault slot {} but no vault reward "
+            "pool is configured (ChallengeMode.Vault.LootId); the week is left unclaimed.",
+            player->GetGUID().ToString(), slotIndex);
+        return VaultClaimResult::RewardPoolUnavailable;
+    }
+
+    uint32 const itemId = RollVaultRewardItem(player, lootId);
+    if (!itemId)
+    {
+        TC_LOG_ERROR("challengemode", "ChallengeModeMgr: Mythic+ vault reward pool {} rolled nothing for player {}; "
+            "the week is left unclaimed.", lootId, player->GetGUID().ToString());
+        return VaultClaimResult::RewardPoolUnavailable;
+    }
+
+    GrantVaultItem(player, itemId, VaultRewardBonuses(itemId, int32(rewardLevel)));
+
+    // Only a claim that actually handed something over consumes the week.
+    data->SetVaultClaimed();
+
+    TC_LOG_INFO("challengemode", "ChallengeModeMgr: player {} claimed Mythic+ vault slot {} -> item {} at key level {}.",
+        player->GetGUID().ToString(), slotIndex, itemId, rewardLevel);
+    return VaultClaimResult::Success;
+}
+
 MythicPlusSeasonEntry const* ChallengeModeMgr::GetActiveSeason() const
 {
     return sMythicPlusSeasonStore.LookupEntry(_activeSeasonId);
@@ -679,4 +827,32 @@ void ChallengeModeMgr::UpdateKeystoneForNewWeek(Player* player, bool createIfMis
         TC_LOG_DEBUG("challengemode", "ChallengeModeMgr: weekly keystone adjustment for player {} -> dungeon {} level {}.",
             player->GetGUID().ToString(), dungeon, newLevel);
     }
+}
+
+void ChallengeModeMgr::OnWeeklyReset() const
+{
+    uint32 processed = 0;
+
+    for (auto const& [accountId, session] : sWorld->GetAllSessions())
+    {
+        if (!session)
+            continue;
+
+        Player* player = session->GetPlayer();
+        if (!player || !player->IsInWorld())
+            continue;
+
+        // Drop the finished week's vault progress first (this is what captures + persists the summary the
+        // keystone rule below reads), then re-issue the keystone for the new week.
+        if (MythicPlusData* data = player->GetMythicPlusData())
+            data->ResetWeeklyRuns();
+
+        // No fresh keystone here: retail only hands one out from the Great Vault or a Mythic 0 clear, so a
+        // player who ended the week without a key still has to go collect one.
+        UpdateKeystoneForNewWeek(player, false /*createIfMissing*/);
+        ++processed;
+    }
+
+    TC_LOG_INFO("challengemode", "ChallengeModeMgr: weekly reset rolled over {} online characters (week index {}); "
+        "characters offline at the reset are rolled over on their next login.", processed, GetCurrentWeekIndex());
 }

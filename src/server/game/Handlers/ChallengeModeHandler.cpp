@@ -19,60 +19,21 @@
 #include "ChallengeMode.h"
 #include "ChallengeModeMgr.h"
 #include "ChallengeModePackets.h"
-#include "CharacterDatabase.h"
-#include "DatabaseEnv.h"
 #include "Config.h"
 #include "Item.h"
-#include "ItemBonusMgr.h"
 #include "ItemDefines.h"
 #include "Log.h"
-#include "Loot.h"
-#include "LootMgr.h"
-#include "Mail.h"
 #include "Map.h"
 #include "MythicPlusData.h"
 #include "Player.h"
 
-namespace
-{
-    // Rolls the configured reward pool once (personal loot, tagged with the given context) and returns a single
-    // item id, or 0 if nothing rolled / the pool is empty.
-    [[maybe_unused]] uint32 RollMythicPlusRewardItem(Player* player, uint32 lootId, ItemContext context)
-    {
-        Loot loot(player->GetMap(), ObjectGuid::Empty, LOOT_NONE, nullptr);
-        loot.FillLoot(lootId, LootTemplates_Reference, player, true /*personal*/, true /*noEmptyError*/, LOOT_MODE_DEFAULT, context);
-        for (LootItem const& item : loot.items)
-            if (item.itemid)
-                return item.itemid;
-        return 0;
-    }
-
-    // Item bonuses that scale a reward item to the Mythic+ item level for the given context + keystone level.
-    [[maybe_unused]] std::vector<int32> MythicPlusRewardBonuses(uint32 itemId, ItemContext context, int32 keystoneLevel)
-    {
-        return ItemBonusMgr::GetBonusListsForItem(itemId, ItemBonusMgr::ItemBonusGenerationParams(context, keystoneLevel));
-    }
-
-    // Grants one item (bags, or mail on a full bag) carrying the given scaled bonuses.
-    [[maybe_unused]] void GrantMythicPlusItem(Player* player, uint32 itemId, ItemContext context, std::vector<int32> const& bonuses)
-    {
-        ItemPosCountVec dest;
-        if (player->CanStoreNewItem(NULL_BAG, NULL_SLOT, dest, itemId, 1) == EQUIP_ERR_OK)
-        {
-            player->StoreNewItem(dest, itemId, true, 0, GuidSet(), context, &bonuses);
-        }
-        else if (Item* item = Item::CreateItem(itemId, 1, context, player, false))
-        {
-            item->SetBonuses(bonuses);
-            CharacterDatabaseTransaction trans = CharacterDatabase.BeginTransaction();
-            item->SaveToDB(trans);
-            MailDraft("Great Vault Reward", "Your Great Vault reward.")
-                .AddItem(item)
-                .SendMailTo(trans, player, MailSender(player, MAIL_STATIONERY_GM), MAIL_CHECK_MASK_COPIED);
-            CharacterDatabase.CommitTransaction(trans);
-        }
-    }
-}
+// NOTE (assembly): the Great Vault reward-item logic for the Mythic+ row deliberately does NOT live in this file.
+// It is a service on ChallengeModeMgr (BuildMythicPlusVaultOptions / ClaimMythicPlusVaultReward /
+// GetMythicPlusVaultSlotForThreshold) so that whichever handler an assembly binds to CMSG_REQUEST_WEEKLY_REWARDS /
+// CMSG_CLAIM_WEEKLY_REWARD can drive it. On this branch that is the pair below, over the ChallengeMode packet
+// family; integration/all-systems binds WeeklyRewardHandler.cpp over the WeeklyRewards packet family (it also
+// serves the Raid and World vault rows) and calls the same service for the Mythic+ row. There is exactly one
+// handler bound per opcode in either assembly - the granting rules are shared, never duplicated.
 
 void WorldSession::HandleRequestMythicPlusSeasonData(WorldPackets::ChallengeMode::RequestMythicPlusSeasonData& /*requestMythicPlusSeasonData*/)
 {

@@ -150,6 +150,49 @@ public:
     // auto-tracks the current season (68275: ids 202/203/204 -> counts 1/4/8) with no hardcoding.
     std::vector<VaultThreshold> GetMythicPlusVaultThresholds() const;
 
+    // --- Great Vault reward service (Mythic+ row) ---
+    // The concrete reward-item logic for the Mythic+ vault row lives HERE, not in a packet handler, because the
+    // CMSG_REQUEST_WEEKLY_REWARDS / CMSG_CLAIM_WEEKLY_REWARD binding is owned by whichever weekly-rewards handler
+    // an assembly ships (this branch: ChallengeModeHandler.cpp over the ChallengeMode packet family;
+    // integration/all-systems: WeeklyRewardHandler.cpp over the WeeklyRewards packet family, which also serves the
+    // Raid and World rows). Both call these entry points, so the M+ granting rules exist exactly once and no
+    // second handler is ever bound to the same opcode.
+    //
+    // Everything below is keyed on the vault SLOT INDEX (0/1/2) - the one concept both packet families share.
+    // GetMythicPlusVaultSlotForThreshold() maps a WeeklyRewardChestThreshold.db2 id onto it.
+    static constexpr uint32 VAULT_SLOT_NONE = 0xFFFFFFFF;
+
+    // One previewed/claimable reward for a single unlocked Mythic+ vault slot. ItemID/BonusListIDs are empty when
+    // the server's vault reward pool (ChallengeMode.Vault.LootId) is not configured - the slot is still reported
+    // so the client shows the unlocked row rather than a fabricated item.
+    struct VaultRewardOption
+    {
+        uint32 ThresholdID = 0;
+        uint32 SlotIndex = 0;
+        uint32 RewardLevel = 0;             // keystone level the reward scales at, season cap applied
+        uint32 ItemID = 0;
+        std::vector<int32> BonusListIDs;
+    };
+
+    enum class VaultClaimResult : uint8
+    {
+        Success = 0,
+        NotClaimable = 1,                   // no data, already claimed this week, or the slot is still locked
+        RewardPoolUnavailable = 2           // slot is valid but the server has no vault loot configured
+    };
+
+    // Slot index for a WeeklyRewardChestThreshold.db2 id, or VAULT_SLOT_NONE when the id is not a live M+ slot.
+    uint32 GetMythicPlusVaultSlotForThreshold(uint32 thresholdId) const;
+    // Reward-scaling keystone level for a slot (0 = locked): the level of the Nth-best run this week, clamped to
+    // the active season's MythicPlusSeasonRewardLevels cap.
+    uint32 GetMythicPlusVaultSlotRewardLevel(Player* player, uint32 slotIndex) const;
+    // One option per unlocked slot, each rolled from the vault reference-loot pool and scaled by ItemBonusMgr at
+    // ItemContext::MythicPlus_Jackpot for that slot's level. Preview only - nothing is granted.
+    std::vector<VaultRewardOption> BuildMythicPlusVaultOptions(Player* player) const;
+    // Rolls and grants the reward for an unlocked slot (bags, or mail when the bags are full) and locks the vault
+    // for the rest of the week. The week is only consumed on Success.
+    VaultClaimResult ClaimMythicPlusVaultReward(Player* player, uint32 slotIndex) const;
+
     // --- season / pool / affixes ---
     uint32 GetActiveSeasonId() const { return _activeSeasonId; }
     // The active display season (MythicPlusSeasonTrackedMap/TrackedAffix/KeyFloor key). Auto-detected as the
@@ -190,9 +233,20 @@ public:
     uint32 RollSeasonDungeon(uint32 excludeChallengeModeId = 0) const;
     // Mythic (M0) season-dungeon completion hook: awards a fresh minimum-level keystone to players without one.
     void OnMythicDungeonCompleted(Player* player) const;
-    // Weekly keystone maintenance (login + Great Vault open): adjusts the level from last week's runs and
-    // restamps the current week's affixes; grants a fresh keystone when createIfMissing (the vault-open rule).
+    // Weekly keystone maintenance: adjusts the level from last week's runs and restamps the current week's
+    // affixes; grants a fresh keystone when createIfMissing (the vault-open rule). Driven from three places -
+    // the weekly reset itself (OnWeeklyReset, online characters), character login (characters that were offline
+    // at the reset) and the Great Vault open (createIfMissing).
     void UpdateKeystoneForNewWeek(Player* player, bool createIfMissing) const;
+
+    // --- weekly reset ---
+    // Invoked by World::ResetWeeklyQuests once the world's new weekly boundary is in place. Rolls every ONLINE
+    // character's Mythic+ week over immediately: the vault run history for the finished week is dropped (after
+    // its summary is captured and persisted for the keystone rule) and the carried keystone is re-issued at the
+    // retail level with the new week's affixes. Characters that are offline at the reset are rolled over on their
+    // next login - every piece of weekly state is keyed on the reset boundary, so it is a pure catch-up, and this
+    // mirrors how the core already handles per-character weekly state that lives in item modifiers.
+    void OnWeeklyReset() const;
 
 private:
     void LoadScalingCurves();
