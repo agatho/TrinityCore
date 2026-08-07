@@ -48,6 +48,19 @@ namespace WorldPackets
             std::vector<FactionBonusData> Bonuses;
         };
 
+        // SMSG_FACTION_BONUS_INFO (0x4201CD): the split-out bonus list the 12.x client reads at login.
+        // Wire (68275, 42 captures, 2139B = 4 + N*5): uint32 count, then per entry
+        // int32 FactionID + uint8 hasBonus. All flags observed 0 outside a bonus event.
+        class FactionBonusInfo final : public ServerPacket
+        {
+        public:
+            FactionBonusInfo() : ServerPacket(SMSG_FACTION_BONUS_INFO, 4) { }
+
+            WorldPacket const* Write() override;
+
+            std::vector<FactionBonusData> Bonuses;
+        };
+
         struct FactionStandingData
         {
             FactionStandingData() { }

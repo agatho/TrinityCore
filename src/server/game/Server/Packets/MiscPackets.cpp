@@ -170,6 +170,14 @@ WorldPacket const* SetupCurrency::Write()
     return &_worldPacket;
 }
 
+WorldPacket const* ReattachResurrect::Write()
+{
+    _worldPacket << uint8(Unknown1);
+    _worldPacket << uint8(Unknown2);
+
+    return &_worldPacket;
+}
+
 WorldPacket const* CurrencyTransferLog::Write()
 {
     _worldPacket << Size<uint32>(Entries);
