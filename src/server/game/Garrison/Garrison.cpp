@@ -741,6 +741,28 @@ bool Garrison::IsMissionFollowerTypeAvailable(int8 followerTypeId) const
     return false;
 }
 
+int32 Garrison::GetFollowerMaxHealth(GarrFollowerEntry const* followerEntry, uint32 followerLevel)
+{
+    if (!followerEntry || !followerEntry->AutoCombatantID)
+        return 0;
+
+    GarrAutoCombatantEntry const* statline = sGarrisonMgr.GetAutoCombatant(followerEntry->AutoCombatantID);
+    return statline ? GarrisonAutoCombat::ScaleHealth(statline, followerLevel) : 0;
+}
+
+bool Garrison::IsFollowerCovenantAllowed(GarrFollowerEntry const* followerEntry) const
+{
+    if (!followerEntry)
+        return false;
+
+    // 0 = not covenant-bound. Every WoD/Legion/War-Campaign follower is 0, so the other three
+    // garrison types never see this gate do anything.
+    if (!followerEntry->CovenantID)
+        return true;
+
+    return uint32(followerEntry->CovenantID) == _owner->GetActiveCovenant();
+}
+
 void Garrison::Update(uint32 diff)
 {
     _updateTimer += diff;
@@ -1205,6 +1227,16 @@ void Garrison::AddFollower(uint32 garrFollowerId)
         return;
     }
 
+    // Covenant ownership. GarrFollower.CovenantID splits the 138 Shadowlands companions
+    // {0: 41 shared, 1: 30 Kyrian, 2: 22 Venthyr, 3: 23 Night Fae, 4: 22 Necrolord} - a
+    // Necrolord companion must not end up in a Kyrian sanctum. 0 means "any covenant".
+    if (!IsFollowerCovenantAllowed(followerEntry))
+    {
+        addFollowerResult.Result = GARRISON_ERROR_INVALID_FOLLOWER;
+        _owner->SendDirectMessage(addFollowerResult.Write());
+        return;
+    }
+
     if (_followerIds.count(garrFollowerId))
     {
         addFollowerResult.Result = GARRISON_ERROR_FOLLOWER_EXISTS;
@@ -1227,6 +1259,10 @@ void Garrison::AddFollower(uint32 garrFollowerId)
     follower.PacketInfo.CurrentMissionID = 0;
     follower.PacketInfo.AbilityID = sGarrisonMgr.RollFollowerAbilities(garrFollowerId, followerEntry, follower.PacketInfo.Quality, GetFaction(), true);
     follower.PacketInfo.FollowerStatus = 0;
+    // Adventures companions carry health between missions; they start at the full value their
+    // GarrAutoCombatant statline gives at their level. Followers without a statline (all of
+    // WoD/Legion/War Campaign) keep the pre-existing durability-driven model untouched.
+    follower.PacketInfo.Health = GetFollowerMaxHealth(followerEntry, follower.PacketInfo.FollowerLevel);
 
     // Respect the active-follower cap: recruit as INACTIVE when the roster is already at MaxFollowers active. Without
     // this, bulk-recruiting a class hall's champions (e.g. all 9 hunter champions at once when the cap is 6) leaves
@@ -1726,18 +1762,21 @@ void Garrison::PopulateMissionData(Mission& mission, GarrMissionEntry const* mis
                     encounter.Mechanics.push_back(mechanic->GarrMechanicTypeID);
             }
 
-            // Also add the encounter's environment mechanic type if it has one
-            if (encounterEntry->EnvGarrMechanicTypeID != 0)
-                encounter.Mechanics.push_back(encounterEntry->EnvGarrMechanicTypeID);
+            // GarrEncounter publishes no mechanic column in build 12.0.7.68275 - an encounter's
+            // mechanics come from GarrEncounterXMechanic (above) and the mission-wide environment
+            // mechanic from GarrMission.EnvGarrMechanicTypeID, which the client reads from DB2
+            // itself. The field previously appended here was really GarrEncounter.Flags.
 
-            // Populate auto-combat data from combatant linked to this encounter
+            // Auto-combat statline for this encounter, scaled to the mission's target level. The
+            // board slot comes from GarrMissionXEncounter (GarrAutoCombatant has no board column).
             if (GarrAutoCombatantEntry const* combatant = sGarrisonMgr.GetAutoCombatantForEncounter(encounterEntry->ID))
             {
+                uint32 encounterLevel = uint32(std::max<int32>(missionEntry->TargetLevel, 1));
                 encounter.GarrAutoCombatantID = combatant->ID;
-                encounter.Health = combatant->Health;
-                encounter.MaxHealth = combatant->MaxHealth;
-                encounter.Attack = combatant->Attack;
-                encounter.BoardIndex = static_cast<int8>(combatant->BoardIndex);
+                encounter.MaxHealth = GarrisonAutoCombat::ScaleHealth(combatant, encounterLevel);
+                encounter.Health = encounter.MaxHealth;
+                encounter.Attack = GarrisonAutoCombat::ScaleAttack(combatant, encounterLevel);
+                encounter.BoardIndex = missionEncounter->BoardIndex;
             }
 
             mission.PacketInfo.Encounters.push_back(std::move(encounter));
@@ -2248,6 +2287,7 @@ bool Garrison::RollMissionOutcome(Mission const& mission, uint32 missionRecID) c
             if (Follower const* follower = GetFollower(followerDbId))
             {
                 AutoCombatCombatant unit = GarrisonAutoCombat::BuildFollowerCombatant(
+                    sGarrFollowerStore.LookupEntry(follower->PacketInfo.GarrFollowerID),
                     follower->PacketInfo.FollowerLevel, follower->PacketInfo.Quality,
                     follower->PacketInfo.ItemLevelWeapon, follower->PacketInfo.ItemLevelArmor,
                     follower->PacketInfo.BoardIndex >= 0 ? follower->PacketInfo.BoardIndex : boardIdx,
@@ -2256,6 +2296,11 @@ bool Garrison::RollMissionOutcome(Mission const& mission, uint32 missionRecID) c
                 ++boardIdx;
             }
         }
+
+        // Enemies scale to the mission's own target level, the same statline curve the companions
+        // use. The board slot and the level both come from the mission, never from the statline.
+        GarrMissionEntry const* missionEntry = sGarrMissionStore.LookupEntry(missionRecID);
+        uint32 encounterLevel = missionEntry ? uint32(std::max<int32>(missionEntry->TargetLevel, 1)) : 1u;
 
         std::vector<AutoCombatCombatant> enemyUnits;
         for (auto const& encounter : mission.PacketInfo.Encounters)
@@ -2267,7 +2312,7 @@ bool Garrison::RollMissionOutcome(Mission const& mission, uint32 missionRecID) c
             if (!combatant)
                 continue;
 
-            enemyUnits.push_back(GarrisonAutoCombat::BuildEnemyCombatant(combatant));
+            enemyUnits.push_back(GarrisonAutoCombat::BuildEnemyCombatant(combatant, encounterLevel, encounter.BoardIndex));
         }
 
         AutoCombatResult combatResult = GarrisonAutoCombat::SimulateCombat(playerUnits, enemyUnits);
@@ -2696,10 +2741,18 @@ void Garrison::GenerateAvailableMissions()
         // scale against. Retail offers the standard mission pool to a garrison with no active followers (sniff
         // "garrison and hall of class table quest.pkt": 42 missions offered), so a type with no roster yet must
         // not be starved to zero - a just-built shipyard with no ships still offers the full naval pool.
-        if (int32 avgLevel = avgLevelForType(mission->GarrFollowerTypeID); avgLevel >= 0)
+        // Shadowlands Adventures (GarrTypeID 111) are exempt: all 175 covenant missions are
+        // TargetLevel 60 while 87 of the 138 companions start at FollowerLevel 1, so a +/-5 window
+        // against the roster average would leave the Adventures board permanently empty. Retail
+        // gates those missions on renown and each mission's own difficulty, never on the average
+        // level of the roster. The window still applies to GarrTypes 2/3/9 exactly as before.
+        if (GetType() != GARRISON_TYPE_COVENANT)
         {
-            if (std::abs(avgLevel - static_cast<int32>(mission->TargetLevel)) > 5)
-                continue;
+            if (int32 avgLevel = avgLevelForType(mission->GarrFollowerTypeID); avgLevel >= 0)
+            {
+                if (std::abs(avgLevel - static_cast<int32>(mission->TargetLevel)) > 5)
+                    continue;
+            }
         }
 
         // NOTE: intentionally NOT gating the OFFER on current idle-follower count.
@@ -2825,6 +2878,11 @@ void Garrison::GenerateRecruits(uint32 faction)
 
         // Skip unique followers that are faction-specific
         if (follower->Flags & GARRISON_FOLLOWER_FLAG_UNIQUE)
+            continue;
+
+        // Never offer another covenant's companion (no-op for GarrTypes 2/3/9 - all their
+        // followers have CovenantID 0).
+        if (!IsFollowerCovenantAllowed(follower))
             continue;
 
         eligibleFollowers.push_back(follower);
@@ -3013,7 +3071,13 @@ void Garrison::HealAllFollowers()
 {
     for (auto& p : _followers)
     {
-        p.second.PacketInfo.Health = static_cast<int32>(p.second.PacketInfo.Durability);
+        GarrFollowerEntry const* followerEntry = sGarrFollowerStore.LookupEntry(p.second.PacketInfo.GarrFollowerID);
+        // Adventures companions heal back to their statline maximum; everyone else keeps the
+        // durability-driven value this function has always restored.
+        if (int32 maxHealth = GetFollowerMaxHealth(followerEntry, p.second.PacketInfo.FollowerLevel))
+            p.second.PacketInfo.Health = maxHealth;
+        else
+            p.second.PacketInfo.Health = static_cast<int32>(p.second.PacketInfo.Durability);
         p.second.PacketInfo.FollowerStatus &= ~FOLLOWER_STATUS_EXHAUSTED;
     }
 }
@@ -4589,6 +4653,139 @@ void Garrison::RemoveTalentRankPerks(uint32 garrTalentID, int32 completedRanks)
     }
 }
 
+bool Garrison::IsChannelAnimaTalent(GarrTalentEntry const* talentEntry)
+{
+    if (!talentEntry)
+        return false;
+
+    GarrTalentTreeEntry const* treeEntry = sGarrTalentTreeStore.LookupEntry(talentEntry->GarrTalentTreeID);
+    return treeEntry && treeEntry->GarrTypeID == static_cast<int8>(GARRISON_TYPE_COVENANT)
+        && treeEntry->FeatureTypeIndex == GARR_TALENT_FEATURE_CHANNEL_ANIMA;
+}
+
+// Paying for an Anima Conductor channel.
+//
+// The client offers exactly two ways to light a destination up, and GarrTalentRank publishes exactly two costs
+// for the six Channel Anima talents of each covenant (trees 345 Kyrian / 348 Venthyr / 346 Night Fae /
+// 347 Necrolord, six destinations each):
+//
+//   ResearchCost           = 25 x 1813 Reservoir Anima   -> C_AnimaDiversion.SelectAnimaNode(talentID, true)
+//                                                           the "Channel" popup; GarrTalent.ActiveDurationSecs
+//                                                           is 86400 and the popup counts down
+//                                                           C_DateAndTime.GetSecondsUntilDailyReset(), so the
+//                                                           channel lasts until the daily reset.
+//   AlternateResearchCost  = 10 x 1808 Channeled Anima   -> C_AnimaDiversion.SelectAnimaNode(talentID, false)
+//                                                           the "Reinforce" popup; the reinforce bar is ten gems
+//                                                           (MAX_ANIMA_GEM_COUNT) and the resulting node state is
+//                                                           Enum.AnimaDiversionNodeState.SelectedPermanent.
+//
+// The flag that picks between them reaches the server as the IsTemporary bit of CMSG_GARRISON_LEARN_TALENT,
+// which is the packet SelectAnimaNode(talentID, temporary) sends - the two have the same (int32, bool) shape and
+// the same meaning. (CMSG_GARRISON_RESEARCH_TALENT is a different opcode and is not what the Anima Diversion UI
+// uses; the Channel Anima ranks have ResearchDurationSecs 0 and are never "researched".)
+//
+// Costs, currencies and durations here are all read from GarrTalentRank - nothing is hardcoded.
+uint32 Garrison::TakeChannelAnimaCost(GarrTalentEntry const* talentEntry, bool permanent)
+{
+    std::vector<GarrTalentRankEntry const*> const* ranks = sGarrisonMgr.GetTalentRanksForTalent(talentEntry->ID);
+    if (!ranks || ranks->empty())
+        return GARRISON_ERROR_INVALID_TALENT;
+
+    GarrTalentRankEntry const* rankEntry = (*ranks)[0];
+
+    int32 const costCurrency = permanent ? rankEntry->AlternateResearchCostCurrencyTypesID : rankEntry->ResearchCostCurrencyTypesID;
+    int32 const cost = permanent ? rankEntry->AlternateResearchCost : rankEntry->ResearchCost;
+    int32 const goldCost = permanent ? rankEntry->AlternateResearchGoldCost : rankEntry->ResearchGoldCost;
+
+    // A branch the data does not publish is a branch the client cannot have meant. Refusing beats charging the
+    // primary cost for a request that asked for the other one.
+    if (cost <= 0 && goldCost <= 0)
+        return GARRISON_ERROR_INVALID_TALENT;
+
+    if (costCurrency && cost > 0 && !_owner->HasCurrency(uint32(costCurrency), uint32(cost)))
+        return GARRISON_ERROR_NOT_ENOUGH_CURRENCY;
+
+    if (goldCost > 0 && !_owner->HasEnoughMoney(uint64(goldCost) * GOLD))
+        return GARRISON_ERROR_NOT_ENOUGH_GOLD;
+
+    // Only one destination is channelled at a time. Selecting a new one takes the old temporary channel down -
+    // that is what the client previews when it greys every other Available pin to Cooldown while the confirm
+    // popup is open (AnimaDiversionFrameMixin:SetExclusiveSelectionNode). Permanently reinforced destinations
+    // are additive and are never removed by a later selection.
+    GarrTalentTreeEntry const* treeEntry = sGarrTalentTreeStore.LookupEntry(talentEntry->GarrTalentTreeID);
+    std::vector<uint32> displaced;
+    for (auto const& [talentId, talent] : _talents)
+    {
+        if (talentId == talentEntry->ID || !talent.IsTemporary())
+            continue;
+
+        GarrTalentEntry const* otherEntry = sGarrTalentStore.LookupEntry(talentId);
+        if (!otherEntry || !IsChannelAnimaTalent(otherEntry))
+            continue;
+
+        if (treeEntry && otherEntry->GarrTalentTreeID != treeEntry->ID)
+            continue;
+
+        displaced.push_back(talentId);
+    }
+
+    // Charge only once the request is known to be servable.
+    if (costCurrency && cost > 0)
+        _owner->RemoveCurrency(uint32(costCurrency), uint32(cost), CurrencyDestroyReason::Garrison);
+
+    if (goldCost > 0)
+        _owner->ModifyMoney(-int64(uint64(goldCost) * GOLD));
+
+    for (uint32 talentId : displaced)
+        RemoveChannelAnimaTalent(talentId);
+
+    // Re-selecting the destination that is already channelled temporarily (the temporary -> permanent upgrade)
+    // replaces its own entry, so clear it too and let the caller seat a fresh one.
+    RemoveChannelAnimaTalent(talentEntry->ID);
+
+    return GARRISON_SUCCESS;
+}
+
+void Garrison::RemoveChannelAnimaTalent(uint32 garrTalentID)
+{
+    auto itr = _talents.find(garrTalentID);
+    if (itr == _talents.end())
+        return;
+
+    RemoveTalentRankPerks(garrTalentID, itr->second.Rank);
+    _talents.erase(itr);
+
+    // Tell the client the node went dark. GarrisonTalentCompleted with Rank 0 is the same message the respec
+    // path uses (Garrison::ResetTalentTree), so no new wire is involved.
+    WorldPackets::Garrison::GarrisonTalentCompleted removed;
+    removed.GarrTypeID = static_cast<int32>(GetType());
+    removed.GarrTalentID = garrTalentID;
+    removed.Rank = 0;
+    removed.ResearchStartTime = 0;
+    _owner->SendDirectMessage(removed.Write());
+
+    CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_DEL_CHARACTER_GARRISON_TALENT);
+    stmt->setUInt64(0, _owner->GetGUID().GetCounter());
+    stmt->setUInt32(1, garrTalentID);
+    CharacterDatabase.Execute(stmt);
+}
+
+void Garrison::ExpireTemporaryChannelAnima()
+{
+    if (GetType() != GARRISON_TYPE_COVENANT)
+        return;
+
+    std::vector<uint32> expired;
+    for (auto const& [talentId, talent] : _talents)
+        if (talent.IsTemporary())
+            if (GarrTalentEntry const* talentEntry = sGarrTalentStore.LookupEntry(talentId))
+                if (IsChannelAnimaTalent(talentEntry))
+                    expired.push_back(talentId);
+
+    for (uint32 talentId : expired)
+        RemoveChannelAnimaTalent(talentId);
+}
+
 bool Garrison::IsChannelAnimaTalentAvailable(GarrTalentEntry const* talentEntry) const
 {
     if (!talentEntry || !talentEntry->PlayerConditionID)
@@ -4681,9 +4878,19 @@ uint32 Garrison::LearnTalent(uint32 garrTalentID, bool isTemporary)
     if (!treeEntry || treeEntry->GarrTypeID != static_cast<int8>(GetType()))
         return GARRISON_ERROR_INVALID_TALENT;
 
-    // Check if already learned
+    // An Anima Conductor destination is not a talent you learn once - it is a channel you switch on, pay for,
+    // and can switch on again after it lapses (or upgrade from temporary to permanent). So it is the one talent
+    // kind for which "already known" is not an error; everything else keeps the one-shot rule.
+    bool const channelAnima = IsChannelAnimaTalent(talentEntry);
+
     auto itr = _talents.find(garrTalentID);
-    if (itr != _talents.end())
+    if (itr != _talents.end() && !channelAnima)
+        return GARRISON_ERROR_INVALID_TALENT;
+
+    // A destination already channelled permanently cannot be bought again - the client refuses to offer it
+    // (AnimaDiversionPinMixin:OnClick returns early on Enum.AnimaDiversionNodeState.SelectedPermanent) and it
+    // would otherwise be a way to burn a player's currency for nothing.
+    if (channelAnima && itr != _talents.end() && itr->second.Rank > 0 && !itr->second.IsTemporary())
         return GARRISON_ERROR_INVALID_TALENT;
 
     // Check prerequisite talent
@@ -4708,14 +4915,45 @@ uint32 Garrison::LearnTalent(uint32 garrTalentID, bool isTemporary)
     if (!IsTalentTreeOwnedByPlayerCovenant(treeEntry))
         return GARRISON_ERROR_INVALID_TALENT;
 
+    // Charge the channel and take the previous one down. This may erase entries from _talents, so nothing may
+    // hold an iterator into it across the call.
+    if (channelAnima)
+        if (uint32 error = TakeChannelAnimaCost(talentEntry, !isTemporary))
+            return error;
+
     // Learn the talent at rank 0 (researching to rank 1 happens via ResearchTalent)
     Talent& talent = _talents[garrTalentID];
     talent.GarrTalentID = garrTalentID;
     talent.Rank = 0;
     talent.ResearchStartTime = 0;
-    talent.Flags = isTemporary ? GARRISON_TALENT_FLAG_TEMPORARY : GARRISON_TALENT_FLAG_NONE;
+    // The TEMPORARY flag is only ever meaningful for an Anima Conductor channel in a covenant sanctum, and the
+    // daily-reset sweep (World::DailyReset) deletes type-111 talents carrying it. Refusing to set it on anything
+    // else is what makes that sweep safe: a client cannot get a researched sanctum tier deleted every night by
+    // sending IsTemporary on it.
+    talent.Flags = (isTemporary && channelAnima) ? GARRISON_TALENT_FLAG_TEMPORARY : GARRISON_TALENT_FLAG_NONE;
     talent.SoulbindConduitID = 0;
     talent.SoulbindConduitRank = 0;
+
+    // A channel is switched on, not researched: it is active the moment it is paid for. Its rank ALSO costs
+    // currency, so it does not qualify for the free-rank shortcut below and has to be seated here.
+    if (channelAnima)
+    {
+        talent.Rank = 1;
+        ApplyTalentRankPerk(garrTalentID, 0);
+        _owner->UpdateCriteria(CriteriaType::CompleteResearchGarrisonTalent, garrTalentID, talent.Rank);
+        _owner->UpdateCriteria(CriteriaType::CompleteResearchAnyGarrisonTalent, garrTalentID, talent.Rank);
+
+        WorldPackets::Garrison::GarrisonResearchTalentResult channelResult;
+        channelResult.Result = GARRISON_SUCCESS;
+        channelResult.GarrTypeID = static_cast<uint8>(GetType());
+        channelResult.Talent.GarrTalentID = talent.GarrTalentID;
+        channelResult.Talent.Rank = talent.Rank;
+        channelResult.Talent.ResearchStartTime = time_t(talent.ResearchStartTime);
+        channelResult.Talent.Flags = talent.Flags;
+        _owner->SendDirectMessage(channelResult.Write());
+
+        return GARRISON_SUCCESS;
+    }
 
     // A rank that costs nothing and takes no time has no research step at all - picking it IS having it. That is how
     // the covenant ability trees (393/396/397/395) and the soulbind trait nodes are authored (cost 0 / gold 0 /

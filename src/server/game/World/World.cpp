@@ -65,6 +65,7 @@
 #include "ChallengeModeMgr.h"
 #include "ItemConversionMgr.h"
 #include "ItemUpgradeMgr.h"
+#include "Garrison.h"
 #include "GarrisonMgr.h"
 #include "GitRevision.h"
 #include "HousingMgr.h"
@@ -3235,6 +3236,15 @@ void World::DailyReset()
 
     stmt = CharacterDatabase.GetPreparedStatement(CHAR_UPD_CHARACTER_GARRISON_FOLLOWER_ACTIVATIONS);
     stmt->setUInt32(0, 1);
+    CharacterDatabase.Execute(stmt);
+
+    // Anima Conductor channels paid for with reservoir anima run until the daily reset. Online characters lose
+    // theirs through Player::DailyReset -> Garrison::ExpireTemporaryChannelAnima; this is the same expiry for
+    // everyone offline right now, so a channel cannot outlive its day by logging out. It must run BEFORE the
+    // in-memory pass below, whose owners rewrite their own rows on the next save.
+    stmt = CharacterDatabase.GetPreparedStatement(CHAR_DEL_CHARACTER_GARRISON_TEMPORARY_TALENTS_BY_TYPE);
+    stmt->setUInt8(0, uint8(GARRISON_TYPE_COVENANT));
+    stmt->setInt32(1, Garrison::GARRISON_TALENT_FLAG_TEMPORARY);
     CharacterDatabase.Execute(stmt);
 
     // reset all quest status in memory
