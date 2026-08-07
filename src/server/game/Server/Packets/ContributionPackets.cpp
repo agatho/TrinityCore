@@ -28,6 +28,15 @@ void ContributionContribute::Read()
 void ContributionLastUpdateRequest::Read()
 {
     _worldPacket >> ContributionID;
-    _worldPacket >> Field1;
+    _worldPacket >> ContributionGUID;
+}
+
+WorldPacket const* ContributionLastUpdateResponse::Write()
+{
+    _worldPacket << uint32(Data);
+    _worldPacket << uint32(ContributionID);
+    _worldPacket << uint32(ContributionGUID);
+
+    return &_worldPacket;
 }
 }

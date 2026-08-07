@@ -909,6 +909,9 @@ class TC_GAME_API Guild
         RankInfo const* GetRankInfo(GuildRankOrder rankOrder) const;
         RankInfo* GetRankInfo(GuildRankOrder rankOrder);
         bool _HasRankRight(Player const* player, uint32 right) const;
+
+        // Persists a guild/officer chat line as a club stream message and resolves its @name mentions.
+        void StoreClubStreamMessage(WorldSession* session, bool officerOnly, std::string_view msg, uint32 language) const;
     public:
         bool HasAnyRankRight(GuildRankId rankId, GuildRankRights rights) const;
 

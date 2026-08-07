@@ -23,12 +23,20 @@
 
 // War-effort "Contribution Collector": a player turns in the required currency/items (defined by the
 // ManagedWorldStateInput.QuestID of the contribution) to advance a realm-wide managed world state.
-// Wire recovered from the client serializers sub_7FF729154010 / sub_7FF729154070 (68275).
+//
+// The bar itself is NOT carried by any of these messages. C_ContributionCollector.GetState() is answered entirely
+// client-side from Contribution.db2 / ManagedWorldState.db2 plus the world-state values the server pushes with
+// SMSG_UPDATE_WORLD_STATE (confirmed in the 8.0.1.27377 war-effort sniff: opcode 10132, {int32 VariableID,
+// int32 Value, bit Hidden}, realm-wide, driving the war-effort totals). The only thing the collector round-trip
+// carries is a small "last update" acknowledgement keyed by contribution id.
 namespace WorldPackets
 {
 namespace Contribution
 {
-    // CMSG_CONTRIBUTION_CONTRIBUTE (0x3B00FD): { ObjectGuid CollectorGUID, uint32 ContributionID }.
+    // CMSG_CONTRIBUTION_CONTRIBUTE (0x3B00FD): { PackedGuid CollectorGUID, uint32 ContributionID }.
+    // Wire recovered from the 68275 client serializer (sub_7FF729154010). The payload id is the *contribution id*:
+    // the only argument of C_ContributionCollector.Contribute(contributionID), while GetOrderIndex(contributionID)
+    // is a pure client-side Contribution.db2 lookup and therefore never travels on the wire.
     class ContributionContribute final : public ClientPacket
     {
     public:
@@ -40,8 +48,7 @@ namespace Contribution
         uint32 ContributionID = 0;
     };
 
-    // CMSG_CONTRIBUTION_LAST_UPDATE_REQUEST (0x3B00FE): { uint32 ContributionID, uint32 Field1 }.
-    // Field1 is read but its semantics are not resolved offline (documented in the plan).
+    // CMSG_CONTRIBUTION_LAST_UPDATE_REQUEST (0x3B00FE): { uint32 ContributionID, uint32 ContributionGUID }.
     class ContributionLastUpdateRequest final : public ClientPacket
     {
     public:
@@ -50,7 +57,22 @@ namespace Contribution
         void Read() override;
 
         uint32 ContributionID = 0;
-        uint32 Field1 = 0;
+        uint32 ContributionGUID = 0;
+    };
+
+    // SMSG_CONTRIBUTION_LAST_UPDATE_RESPONSE (0x4202C4): exactly twelve bytes -
+    // { uint32 Data /*unix timestamp of the last update*/, uint32 ContributionID, uint32 ContributionGUID }.
+    // It is a timestamp acknowledgement only - no state, no percentage, no array.
+    class ContributionLastUpdateResponse final : public ServerPacket
+    {
+    public:
+        explicit ContributionLastUpdateResponse() : ServerPacket(SMSG_CONTRIBUTION_LAST_UPDATE_RESPONSE, 12) { }
+
+        WorldPacket const* Write() override;
+
+        uint32 Data = 0;                // time of the contribution's last update (unix time)
+        uint32 ContributionID = 0;
+        uint32 ContributionGUID = 0;    // echoed back from the request
     };
 }
 }

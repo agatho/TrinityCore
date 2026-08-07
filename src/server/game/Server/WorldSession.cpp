@@ -28,6 +28,7 @@
 #include "CharacterPackets.h"
 #include "ChatPackets.h"
 #include "ClientConfigPackets.h"
+#include "ClubStreamHistoryMgr.h"
 #include "Containers.h"
 #include "DatabaseEnv.h"
 #include "DB2Stores.h"
@@ -593,6 +594,10 @@ void WorldSession::LogoutPlayer(bool save)
         // Remove any premade group finder listing this player owns.
         sLFGListMgr.RemoveListingsBy(_player->GetGUID());
         sLFGListMgr.UnregisterSearch(_player->GetGUID());
+
+        // Drop the live club stream subscriptions and focus. A disconnect never sends UnsubscribeStream,
+        // so without this a stale focus would keep marking a stream read for a player who is gone.
+        sClubStreamHistoryMgr->ClearSessionState(_player->GetGUID());
 
         if (!_player->GetLootGUID().IsEmpty())
             DoLootReleaseAll();

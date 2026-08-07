@@ -18,6 +18,7 @@
 #ifndef TRINITYCORE_CLUB_SERVICE_H
 #define TRINITYCORE_CLUB_SERVICE_H
 
+#include "ClubStreamHistoryMgr.h"
 #include "WorldserverService.h"
 #include "Client/api/client/v1/club_service.pb.h"
 
@@ -39,11 +40,23 @@ public:
     uint32 HandleSetStreamFocus(club::v1::client::SetStreamFocusRequest const* request, NoData* response, std::function<void(ServiceBase*, uint32, ::google::protobuf::Message const*)>& continuation) override;
     uint32 HandleAdvanceStreamViewTime(club::v1::client::AdvanceStreamViewTimeRequest const* request, NoData* response, std::function<void(ServiceBase*, uint32, ::google::protobuf::Message const*)>& continuation) override;
     uint32 HandleCreateMessage(club::v1::client::CreateMessageRequest const* request, club::v1::client::CreateMessageResponse* response, std::function<void(ServiceBase*, uint32, ::google::protobuf::Message const*)>& continuation) override;
+    uint32 HandleGetStreamHistory(club::v1::client::GetStreamHistoryRequest const* request, club::v1::client::GetStreamHistoryResponse* response, std::function<void(ServiceBase*, uint32, ::google::protobuf::Message const*)>& continuation) override;
 
     static std::unique_ptr<club::v1::UniqueClubType> CreateGuildClubType();
 
+    // Fills a wire StreamMessage from a stored one. Shared with ClubMembershipService, which has to embed
+    // the mentioned message into a StreamMention when the client asks for fetch_messages.
+    static void FillStreamMessage(club::v1::client::StreamMessage* message, ClubStreamMessage const& stored);
+
+    // Fills a bgs.protocol.ViewMarker from the stored read marker and the stream's newest message.
+    static void FillStreamViewMarker(ViewMarker* marker, uint64 clubId, uint64 streamId, ObjectGuid member);
+
 private:
     static void FillStreamMessage(club::v1::client::StreamMessage* message, std::string_view msg, std::chrono::microseconds messageTime, ObjectGuid author);
+
+    // Resolves the stream a request names and checks the player may read it. Returns 0 when the stream
+    // does not exist or the player lacks the rank right, with the matching error in errorCode.
+    uint64 ResolveReadableStream(uint64 clubId, uint64 streamId, uint32& errorCode) const;
 };
 }
 
