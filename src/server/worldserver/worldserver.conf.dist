@@ -4895,21 +4895,28 @@ Delves.Crest.Tier4.CurrencyId = 3345
 #                     that template; retail Midnight S1: Valeera Sanguinar). 0 disables the companion.
 #        Default:     0 - (Disabled)
 
-# Best-known Midnight id: Valeera Sanguinar 248567 (variant 249057 also ships; PlayerCompanionInfo row 11
-# carries only her display 67214, so verify in-game which entry renders correctly and adjust if needed).
+# Midnight S1: Valeera Sanguinar 248567. Proven, not assumed - Spell.db2 1246491/1247560/1247562/1247563
+# all carry SPELL_EFFECT_SUMMON with EffectMiscValue = 248567. The 249057 "variant" mentioned in older
+# notes is NOT a companion: it is summoned by spell 1248032 "Killing Spree" (EffectMiscValue[0] = 249057),
+# i.e. the Killing Spree clone, and appears in the 68974 capture as a near-stationary scene actress
+# (28 moves) while 248567 follows the player (937 monster-move packets).
 Delves.Companion.CreatureId = 248567
 
 #
 #    Delves.Companion.FactionId
 #        Description: Faction that mirrors delve companion XP as reputation, making companion progression
-#                     visible in the client's reputation/renown UI (retail Midnight S1: faction 2742
-#                     "Delves: Season 1", RenownCurrencyID 3317). Every companion XP award credits the same
-#                     amount of reputation to this faction; the internal companion level/XP state remains
-#                     authoritative and is unaffected. An id missing from Faction.db2 is a safe no-op.
-#                     0 disables the mirror.
-#        Default:     2742 - (Delves: Season 1)
+#                     visible in the client's reputation/renown UI. Every companion XP award credits the
+#                     same amount of reputation to this faction; the internal companion level/XP state
+#                     remains authoritative and is unaffected. An id missing from Faction.db2 is a safe
+#                     no-op. 0 disables the mirror.
+#        Default:     2744 - (Valeera Sanguinar)
+#
+# CORRECTED from 2742. PlayerCompanionInfo.db2 row 11 - the Midnight row (DelvesSeasonID 4, TraitTreeID
+# 1168, CreatureDisplayInfoID 67214, unlock text "Void Walk With Me") - has FactionID = 2744
+# "Valeera Sanguinar" / "Trusty Delve Companion", her own companion rep track, exactly mirroring Brann's
+# 2640 on rows 1/9/10. 2742 is "Delves: Season 1", a different faction that is not the companion track.
 
-Delves.Companion.FactionId = 2742
+Delves.Companion.FactionId = 2744
 
 #
 #    Delves.Companion.<Role>.*SpellId
@@ -4918,13 +4925,47 @@ Delves.Companion.FactionId = 2742
 #                     season content (retail Midnight S1: Valeera's kit) and must exist in Spell.db2 - a 0 or
 #                     unknown id is a safe no-op, the companion then only follows and auto-attacks.
 #        Default:     all 0 - (Disabled)
+#
+# MIDNIGHT S1 KIT - derived, not chosen. The chain is entirely client data:
+#   PlayerCompanionInfo.db2 row 11 (DelvesSeasonID 4 = Midnight, CreatureDisplayInfoID 67214,
+#     unlock text "Void Walk With Me", FactionID 2744)
+#     -> TraitTreeID 1168
+#     -> TraitSubTreeID_DPS 108 / _Heal 109 / _Tank 110  (their descriptions name Valeera explicitly)
+#     -> TraitNode -> TraitNodeXTraitNodeEntry -> TraitNodeEntry -> TraitDefinition.SpellID
+#     -> that id is always a dummy wrapper; Spell.db2 Description_lang carries a "$@spelldescNNNNNNN"
+#        redirect to the executable spell, which is what is configured below.
+# Names re-read independently from SpellName.db2 before being written here.
+#
+#   1247770 "Rupture"                 trait 1249804, present in all three subtrees; PERIODIC_DAMAGE /
+#                                     MECHANIC_BLEED, 8s cd. Seen on the wire 57/45/19 times across the
+#                                     three local delve captures - the companion's actual filler.
+#   1250162 "Crimson Vial Fumes"      trait 1250822 (heal subtree); 15s cd cast -> areatrigger 1250166
+#                                     -> 1250741 PERIODIC_HEAL. The only real heal in the kit.
+#   1250763 "Pain Killer"             trait 1250823; SPELL_AURA_SCHOOL_ABSORB on an ally, 20s cd -
+#                                     directly castable, correct as the emergency save.
+#   1251050 "Your First Mistake"      trait 1251119 (tank subtree), 15s cd -> triggers 1251051 =
+#                                     SPELL_EFFECT_ATTACK_ME + SPELL_AURA_MOD_TAUNT (bp 400) + bleed.
+#                                     Cast 10x on the wire in the tank-role run.
+#   1250892 "Scar of Kathra'natir"    trait 1251118; SPELL_AURA_SCHOOL_ABSORB + dummy - a self-castable
+#                                     absorb, which is what HandleTankAbility() wants.
+#
+# Dps.ExecuteSpellId STAYS 0 ON PURPOSE. The derived execute is 1248339 "Assassinate" (trait 1249943,
+# DPS subtree only), and its base points 30.0 / 5.0 match the 30%-normal / 5%-boss thresholds already
+# hardcoded in npc_brann_bronzebeard_delves.cpp - which is strong evidence it IS the right spell. But
+# its effect is a literal SPELL_EFFECT_INSTAKILL, and TC's handler ignores base points, so wiring it up
+# would let the companion instantly kill every delve boss at 5% health. It is also never observed on the
+# wire (0 casts in three captures). Leave at 0 until the effect is health-gated server-side.
+#
+# The two Heal ids are client-data-only: no local capture contains a healer-role run (spell 1266070
+# "Healer Modifiers" never appears; only 1266068 DPS and 1266066 Tank do). One delve run with the
+# companion set to Healer would promote them to wire-confirmed.
 
 Delves.Companion.Dps.ExecuteSpellId = 0
-Delves.Companion.Dps.AttackSpellId = 0
-Delves.Companion.Heal.EmergencySpellId = 0
-Delves.Companion.Heal.SpellId = 0
-Delves.Companion.Tank.TauntSpellId = 0
-Delves.Companion.Tank.DefensiveSpellId = 0
+Delves.Companion.Dps.AttackSpellId = 1247770
+Delves.Companion.Heal.EmergencySpellId = 1250763
+Delves.Companion.Heal.SpellId = 1250162
+Delves.Companion.Tank.TauntSpellId = 1251050
+Delves.Companion.Tank.DefensiveSpellId = 1250892
 ###################################################################################################
 # GREAT VAULT (WEEKLY REWARDS)
 #

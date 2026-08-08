@@ -24,6 +24,7 @@
 #include <unordered_map>
 #include <vector>
 
+class Creature;
 struct DelvesSeasonEntry;
 struct PlayerCompanionInfoEntry;
 
@@ -53,6 +54,12 @@ public:
     DelveTemplate const* GetDelveTemplate(uint32 mapId) const;
     DelveTemplate const* GetDelveTemplateByChallengeModeId(uint32 mapChallengeModeId) const;
     DelveTemplate const* GetDelveTemplateByGossipMenuId(uint32 gossipMenuId) const;
+    // Resolves an entrance NPC to the delve it opens. Every caller that starts from an entrance
+    // creature must use this rather than GetDelveTemplateByGossipMenuId(creature->GetGossipMenuId()):
+    // Creature::SetGossipMenuId() is never called anywhere in the core, so GetGossipMenuId() - the
+    // "overridden by script" slot - is 0 for every DB-spawned creature and that lookup always misses.
+    // See the implementation for the ordered fallback chain.
+    DelveTemplate const* GetDelveTemplateForEntrance(Creature const* entrance) const;
     std::vector<DelveTemplate> const& GetAllDelveTemplates() const { return _delveTemplatesList; }
 
     // Tier rewards

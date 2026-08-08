@@ -66,45 +66,22 @@ struct npc_delve_entranceAI : public ScriptedAI
         if (!player || !player->GetSession())
             return true;
 
-        // Primary lookup: gossip menu id from spawn/template data.
-        uint32 gossipMenuId = me->GetGossipMenuId();
-        DelveTemplate const* tmpl = sDelveMgr->GetDelveTemplateByGossipMenuId(gossipMenuId);
-
-        // Fallback 1: NPC is inside the delve instance — match on map.
-        if (!tmpl)
-            tmpl = sDelveMgr->GetDelveTemplate(me->GetMapId());
-
-        // Fallback 2 (proximity): the entrance NPC sits near its delve's
-        // overworld exit position. Match on closest exit within 200 yards.
-        if (!tmpl)
-        {
-            float bestDistSq = 200.0f * 200.0f;
-            for (DelveTemplate const& candidate : sDelveMgr->GetAllDelveTemplates())
-            {
-                if (candidate.ExitX == 0.0f && candidate.ExitY == 0.0f)
-                    continue;
-                float dx = me->GetPositionX() - candidate.ExitX;
-                float dy = me->GetPositionY() - candidate.ExitY;
-                float distSq = dx * dx + dy * dy;
-                if (distSq < bestDistSq)
-                {
-                    bestDistSq = distSq;
-                    tmpl = &candidate;
-                }
-            }
-        }
-
+        // Shared with WorldSession::HandleTieredEntranceOpen / HandleSelectDelveEntranceTier so all
+        // three entrance paths agree on which delve an NPC opens. The local copy this replaced
+        // started from me->GetGossipMenuId(), which is always 0 (nothing in the core ever calls
+        // SetGossipMenuId), so it silently fell through to the proximity heuristic every time.
+        DelveTemplate const* tmpl = sDelveMgr->GetDelveTemplateForEntrance(me);
         if (!tmpl)
         {
             TC_LOG_ERROR("scripts.delves",
-                "npc_delve_entrance: no DelveTemplate found for GossipMenuID {} / MapID {} on NPC {} (pos {:.1f} {:.1f})",
-                gossipMenuId, me->GetMapId(), me->GetEntry(), me->GetPositionX(), me->GetPositionY());
+                "npc_delve_entrance: no DelveTemplate found for NPC {} on MapID {} (pos {:.1f} {:.1f})",
+                me->GetEntry(), me->GetMapId(), me->GetPositionX(), me->GetPositionY());
             return true;
         }
 
         TC_LOG_DEBUG("scripts.delves",
-            "npc_delve_entrance: player {} clicked NPC {} (GossipMenuID {} -> Map {})",
-            player->GetName(), me->GetEntry(), gossipMenuId, tmpl->MapId);
+            "npc_delve_entrance: player {} clicked NPC {} -> delve map {} (gossip menu {})",
+            player->GetName(), me->GetEntry(), tmpl->MapId, tmpl->GossipMenuId);
 
         player->PlayerTalkClass->ClearMenus();
         player->PlayerTalkClass->GetGossipMenu().SetMenuId(tmpl->GossipMenuId);
@@ -152,13 +129,13 @@ struct npc_delve_entranceAI : public ScriptedAI
             return true;
 
         if (!_delveTemplate)
-            _delveTemplate = sDelveMgr->GetDelveTemplateByGossipMenuId(me->GetGossipMenuId());
+            _delveTemplate = sDelveMgr->GetDelveTemplateForEntrance(me);
 
         if (!_delveTemplate)
         {
             TC_LOG_ERROR("scripts.delves",
-                "npc_delve_entrance::OnGossipSelect: no DelveTemplate for NPC {} GossipMenuID {}",
-                me->GetEntry(), me->GetGossipMenuId());
+                "npc_delve_entrance::OnGossipSelect: no DelveTemplate for NPC {} on MapID {}",
+                me->GetEntry(), me->GetMapId());
             return true;
         }
 
@@ -258,6 +235,13 @@ struct go_leave_delve : public GameObjectAI
 
 void AddSC_npc_delve_entrance()
 {
-    RegisterCreatureAI(npc_delve_entranceAI);
+    // RegisterCreatureAI() stringizes the type name, so `RegisterCreatureAI(npc_delve_entranceAI)`
+    // registered this under "npc_delve_entranceAI", while creature_template.ScriptName (set on
+    // creature 212407 by sql/updates/world/master/2026_04_29_01_world.sql) says
+    // "npc_delve_entrance". The two never matched, so the script was never bound to the NPC. The
+    // live realm logged it every boot: "Script 'npc_delve_entrance' is referenced by the database,
+    // but does not exist in the core!" (M:/IntegratedServer/logs/DBErrors.log). Register under the
+    // name the database actually uses.
+    new GenericCreatureScript<npc_delve_entranceAI>("npc_delve_entrance");
     RegisterGameObjectAI(go_leave_delve);
 }

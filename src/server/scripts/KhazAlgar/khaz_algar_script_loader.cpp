@@ -63,9 +63,11 @@ void AddSC_instance_zekvirs_lair();
 // Delves - Undermine / Khaz Algar (Season 2/3)
 void AddSC_instance_atal_aman_delve();
 void AddSC_instance_shadow_enclave_delve();
+void AddSC_shadow_enclave_encounters();
 // Delves - Common
 void AddSC_npc_delve_entrance();
 void AddSC_npc_brann_bronzebeard_delves();
+void AddSC_npc_delvers_supplies();
 
 // The name of this function should match:
 // void Add${NameOfDirectory}Scripts()
@@ -117,7 +119,9 @@ void AddKhazAlgarScripts()
     // Delves - Undermine / Khaz Algar (Season 2/3)
     AddSC_instance_atal_aman_delve();
     AddSC_instance_shadow_enclave_delve();
+    AddSC_shadow_enclave_encounters();
     // Delves - Common
     AddSC_npc_delve_entrance();
     AddSC_npc_brann_bronzebeard_delves();
+    AddSC_npc_delvers_supplies();
 }

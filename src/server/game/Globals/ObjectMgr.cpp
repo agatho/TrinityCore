@@ -9803,7 +9803,17 @@ void ObjectMgr::LoadGossipMenuAddon()
             }
         }
 
-        if (addon.LfgDungeonsID && sLFGDungeonsStore.LookupEntry(addon.LfgDungeonsID))
+        // The `!` was lost in e59eef5432 ("Core/PacketIO: Updated to 11.0.0") when the preceding
+        // `else` branch was rewritten into a standalone `if`, which inverted the test: the error
+        // fired - and the field was zeroed - for every LfgDungeonsID that DOES exist. The only rows
+        // in this table with a non-zero LfgDungeonsID are the delve tier pickers (39751 -> 3025
+        // Atal'Aman, 40277 -> 3069 The Shadow Enclave), so the net effect was that the client never
+        // received a LfgDungeonsID on SMSG_GOSSIP_MESSAGE and Blizzard_DelvesDifficultyPicker could
+        // never render. Confirmed live: M:/IntegratedServer/logs/DBErrors.log carries exactly the
+        // two lines "Table gossip_menu_addon: ID 39751/40277 is using non-existing LfgDungeonsID
+        // 3025/3069", while LFGDungeons.db2 (12.0.7, layout 34B02DE8) does contain both rows
+        // (3025 MapID=2962 Atal'Aman, 3069 MapID=2952 The Shadow Enclave).
+        if (addon.LfgDungeonsID && !sLFGDungeonsStore.LookupEntry(addon.LfgDungeonsID))
         {
             TC_LOG_ERROR("sql.sql", "Table gossip_menu_addon: ID {} is using non-existing LfgDungeonsID {}", menuID, addon.LfgDungeonsID);
             addon.LfgDungeonsID = 0;

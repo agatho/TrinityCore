@@ -16,6 +16,7 @@
  */
 
 #include "DelveMgr.h"
+#include "Creature.h"
 #include "DatabaseEnv.h"
 #include "DB2Stores.h"
 #include "GameTime.h"
@@ -24,6 +25,11 @@
 
 namespace Delves
 {
+
+// How close an entrance NPC has to stand to a delve's stored overworld exit for the proximity
+// fallback in GetDelveTemplateForEntrance() to claim it. Measured in the captures: 42 yd for The
+// Shadow Enclave, 35 yd for The Gulf of Memory.
+static constexpr float ENTRANCE_EXIT_MATCH_RADIUS = 200.0f;
 
 DelveMgr::DelveMgr() = default;
 DelveMgr::~DelveMgr() = default;
@@ -184,6 +190,86 @@ DelveTemplate const* DelveMgr::GetDelveTemplateByGossipMenuId(uint32 gossipMenuI
 {
     auto itr = _delveTemplatesByGossipMenuId.find(gossipMenuId);
     return itr != _delveTemplatesByGossipMenuId.end() ? itr->second : nullptr;
+}
+
+/*
+ * Resolve an entrance NPC to the delve it opens.
+ *
+ * The obvious lookup - GetDelveTemplateByGossipMenuId(entrance->GetGossipMenuId()) - never worked:
+ * Creature::SetGossipMenuId() has no call site anywhere in the core, so _gossipMenuId is 0 on every
+ * creature. That single miss killed all three entrance paths at once:
+ * npc_delve_entrance::OnGossipHello, WorldSession::HandleTieredEntranceOpen (the 12.0.7 path the
+ * live client actually uses) and WorldSession::HandleSelectDelveEntranceTier. The tiered-entrance
+ * handler in particular bailed out with "could not resolve entrance ... to a delve template" for
+ * every delve, every time.
+ *
+ * The fallback chain below, in order:
+ *   1. The script-set menu override, if some script ever does call SetGossipMenuId().
+ *   2. The map the NPC stands on, for entrance NPCs placed inside a delve instance.
+ *   3. Proximity to a delve's stored overworld exit. Delve entrances stand next to the point the
+ *      delve returns you to - measured in the captures: the Shadow Enclave entrance sits 42 yd from
+ *      delve_template(2952).exit and the Gulf of Memory entrance 35 yd from delve_template(2964).
+ *      exit. Templates with a zeroed exit are skipped so unfilled rows cannot capture a lookup.
+ *   4. The creature template's gossip menus (creature_template_gossip -> CreatureTemplate::
+ *      GossipMenuIds), e.g. 212407 "Enter Delve" -> 39751 (Atal'Aman).
+ *
+ * ORDER MATTERS, and it is not the obvious one. Step 4 looks like it should come first - it is the
+ * only explicitly authored link - but creature_template_gossip is keyed on the creature TEMPLATE,
+ * and 212407 "Enter Delve" is one shared entry used by every delve. Putting it first would make
+ * every "Enter Delve" spawn in the world open Atal'Aman. Position is the only thing that differs
+ * between those spawns, so proximity has to win, with the template menu as the last-resort default
+ * for a spawn that is nowhere near any known exit.
+ *
+ * Step 3 deliberately does NOT compare map ids: delve_template has no column for the overworld map,
+ * only for the delve's own. The 200 yd radius plus the "exit must be non-zero" guard keeps it
+ * unambiguous for every delve currently in the table - the filled exits are thousands of yards
+ * apart. If two delves ever land within 200 yd of each other this needs an exitMapId column rather
+ * than a wider heuristic. Step 2 runs ahead of step 3 for the mirror-image reason: Atal'Aman's
+ * stored "exit" (5121, -5861, 217.1) is actually a coordinate INSIDE map 2962, so an NPC standing
+ * in that instance must be resolved by map before proximity can agree with it by accident.
+ */
+DelveTemplate const* DelveMgr::GetDelveTemplateForEntrance(Creature const* entrance) const
+{
+    if (!entrance)
+        return nullptr;
+
+    // 1. Script override.
+    if (uint32 scriptMenuId = entrance->GetGossipMenuId())
+        if (DelveTemplate const* tmpl = GetDelveTemplateByGossipMenuId(scriptMenuId))
+            return tmpl;
+
+    // 2. The NPC stands inside the delve itself.
+    if (DelveTemplate const* tmpl = GetDelveTemplate(entrance->GetMapId()))
+        return tmpl;
+
+    // 3. Nearest stored overworld exit.
+    DelveTemplate const* closest = nullptr;
+    float bestDistSq = ENTRANCE_EXIT_MATCH_RADIUS * ENTRANCE_EXIT_MATCH_RADIUS;
+    for (DelveTemplate const& candidate : _delveTemplatesList)
+    {
+        if (candidate.ExitX == 0.0f && candidate.ExitY == 0.0f)
+            continue;
+
+        float const dx = entrance->GetPositionX() - candidate.ExitX;
+        float const dy = entrance->GetPositionY() - candidate.ExitY;
+        float const distSq = dx * dx + dy * dy;
+        if (distSq < bestDistSq)
+        {
+            bestDistSq = distSq;
+            closest = &candidate;
+        }
+    }
+
+    if (closest)
+        return closest;
+
+    // 4. Last resort: whatever delve menu the creature template carries.
+    if (CreatureTemplate const* creatureTemplate = entrance->GetCreatureTemplate())
+        for (uint32 menuId : creatureTemplate->GossipMenuIds)
+            if (DelveTemplate const* tmpl = GetDelveTemplateByGossipMenuId(menuId))
+                return tmpl;
+
+    return nullptr;
 }
 
 DelveTierReward const* DelveMgr::GetTierReward(uint8 tier) const
