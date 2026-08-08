@@ -33824,6 +33824,15 @@ void Player::SetItemUpgradeWatermark(uint32 slot, float itemLevel)
     SetUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::ItemUpgradeHighWatermark, slot), itemLevel);
 }
 
+Garrison* Player::GetGarrisonWithFollower(uint64 followerDbID) const
+{
+    for (auto const& [type, garrison] : _garrisons)
+        if (garrison->GetFollower(followerDbID))
+            return garrison.get();
+
+    return nullptr;
+}
+
 void Player::SendMovementSetCollisionHeight(float height, WorldPackets::Movement::UpdateCollisionHeightReason reason)
 {
     WorldPackets::Movement::MoveSetCollisionHeight setCollisionHeight;

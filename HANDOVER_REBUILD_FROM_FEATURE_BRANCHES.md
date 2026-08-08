@@ -81,6 +81,38 @@ against the 68974 captures and FIXED on their golden-source branches:
    are missing from that realm's quest_template until the Midnight quest import lands - they are skipped
    with logged errors, not fatal.
 
+## 3c. ADDENDUM (2026-08-08 late): chromie-time audit outcome — merge directives
+
+Full audit: C:\dumps\CHROMIE_AUDIT_REPORT.md (21 gaps: 2 critical, 8 major). Remediation is landing on
+feature/chromie-time (in flight; re-merge that branch when its push appears). Directives for the merge:
+1. **The branch's ChromieTimeNpc gossip case WINS over integration's NYI stub** (integration stubbed the
+   interaction; the branch has the working generic StartInteraction path).
+2. **Integration carries the same critical ContentTuning-redirect bit-test bug at its own
+   DB2Stores.cpp:2485** — the branch fix (audit item R1) must be ported/merged there; without it ALL
+   chromie scaling (creatures, quests, LFG, items, areas) is inert.
+3. The chromie world SQL at the branch's old filename 2026_03_06_00_world.sql was CLOBBERED by an
+   upstream warrior commit sharing the filename — the branch re-authors it as 2026_08_08_07_world.sql;
+   apply that new file on the realm DB (the old one currently contains only the warrior content).
+
+## 3d. ADDENDUM (2026-08-09): commerce audit — merge directives + one integration-side fix
+
+Full audit: C:\dumps\COMMERCE_AUDIT_REPORT.md (33 gaps). Remediation landing on feature/ingame-shop-battlepay
+(shop + BattlePay + the NEW catalog-admin system) and feature/wow-token (token + anti-abuse ledger); re-merge
+both when their pushes appear. Directives:
+1. **IN-1 (integration owns this one):** integration/all-systems is BEHIND both branch tips on the
+   purchase-record wire fix — it still has STATUS_DONE=3 and mid-record walletName in
+   BattlePayHandler.cpp / BattlePayPackets.cpp. Re-merging feature/wow-token + feature/ingame-shop-battlepay
+   brings the fix; verify by 2-file diff against the branch tips after merge.
+2. **Catalog-admin system** (feature/ingame-shop-battlepay): new world tables shop_product /
+   shop_product_deliverable / shop_slot_override + RBAC reload perm + `.shop` / `.reload shop_catalog`
+   commands. The old battlepay_product (4 rows) is migrated into shop_product via INSERT..SELECT and its
+   reader re-targeted. Apply the new world SQL. The 58KB catalog blob is a data/battlepay/ file (template);
+   the server reskins its 9 slots from DB rows — an admin edits shop_product rows, not the blob.
+3. **account_battlepay_purchase** (auth table, born on feature/wow-token): the shared purchase ledger both
+   branches use for GetPurchaseList + idempotency. Apply the auth SQL. Also account_wow_token (auth) was
+   never applied to integ_auth — apply it too (WowTokenMgr needs it).
+4. **New conf keys:** Shop.Enabled, CommercePricePollTimeSeconds. Merge conf.dist.
+
 ## 4. Do NOT
 
 - Merge `content/midnight-s1` or `feature/major-factions-1207` (retired transport branches).
