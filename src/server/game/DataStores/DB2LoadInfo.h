@@ -1002,6 +1002,21 @@ struct CampaignLoadInfo
     static constexpr DB2LoadInfo Instance{ Fields, 14, &CampaignMeta::Instance, HOTFIX_SEL_CAMPAIGN };
 };
 
+struct CampaignXConditionLoadInfo
+{
+    static constexpr DB2FieldMeta Fields[6] =
+    {
+        { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
+        { .IsSigned = false, .Type = FT_STRING, .Name = "FailureReason" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "PlayerConditionID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "OrderIndex" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "Flags" },
+        { .IsSigned = false, .Type = FT_INT, .Name = "CampaignID" },
+    };
+
+    static constexpr DB2LoadInfo Instance{ Fields, 6, &CampaignXConditionMeta::Instance, HOTFIX_SEL_CAMPAIGN_X_CONDITION };
+};
+
 struct CampaignXQuestLineLoadInfo
 {
     static constexpr DB2FieldMeta Fields[4] =
@@ -1939,6 +1954,20 @@ struct CriteriaTreeLoadInfo
     static constexpr DB2LoadInfo Instance{ Fields, 8, &CriteriaTreeMeta::Instance, HOTFIX_SEL_CRITERIA_TREE };
 };
 
+struct CurrencyCategoryLoadInfo
+{
+    static constexpr DB2FieldMeta Fields[5] =
+    {
+        { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
+        { .IsSigned = false, .Type = FT_STRING, .Name = "Name" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "Flags" },
+        { .IsSigned = false, .Type = FT_BYTE, .Name = "ExpansionID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "ParentCategoryID" },
+    };
+
+    static constexpr DB2LoadInfo Instance{ Fields, 5, &CurrencyCategoryMeta::Instance, HOTFIX_SEL_CURRENCY_CATEGORY };
+};
+
 struct CurrencyContainerLoadInfo
 {
     static constexpr DB2FieldMeta Fields[9] =
@@ -2550,6 +2579,21 @@ struct FactionLoadInfo
     };
 
     static constexpr DB2LoadInfo Instance{ Fields, 39, &FactionMeta::Instance, HOTFIX_SEL_FACTION };
+};
+
+struct FactionGroupLoadInfo
+{
+    static constexpr DB2FieldMeta Fields[6] =
+    {
+        { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
+        { .IsSigned = false, .Type = FT_STRING_NOT_LOCALIZED, .Name = "InternalName" },
+        { .IsSigned = false, .Type = FT_STRING, .Name = "Name" },
+        { .IsSigned = false, .Type = FT_BYTE, .Name = "MaskID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "HonorCurrencyTextureFileID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "ConquestCurrencyTextureFileID" },
+    };
+
+    static constexpr DB2LoadInfo Instance{ Fields, 6, &FactionGroupMeta::Instance, HOTFIX_SEL_FACTION_GROUP };
 };
 
 struct FactionTemplateLoadInfo
@@ -6604,6 +6648,23 @@ struct QuestInfoLoadInfo
     static constexpr DB2LoadInfo Instance{ Fields, 5, &QuestInfoMeta::Instance, HOTFIX_SEL_QUEST_INFO };
 };
 
+struct QuestLineLoadInfo
+{
+    static constexpr DB2FieldMeta Fields[8] =
+    {
+        { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
+        { .IsSigned = false, .Type = FT_STRING, .Name = "Name" },
+        { .IsSigned = false, .Type = FT_STRING, .Name = "Description" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "CompletionPlayerConditionID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "Flags" },
+        { .IsSigned = false, .Type = FT_INT, .Name = "QuestID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "PlayerConditionID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "Unknown1027_5" },
+    };
+
+    static constexpr DB2LoadInfo Instance{ Fields, 8, &QuestLineMeta::Instance, HOTFIX_SEL_QUEST_LINE };
+};
+
 struct QuestLineXQuestLoadInfo
 {
     static constexpr DB2FieldMeta Fields[6] =
@@ -8874,6 +8935,17 @@ struct UiSplashScreenLoadInfo
     };
 
     static constexpr DB2LoadInfo Instance{ Fields, 16, &UISplashScreenMeta::Instance, HOTFIX_SEL_UI_SPLASH_SCREEN };
+};
+
+struct UiTextureKitLoadInfo
+{
+    static constexpr DB2FieldMeta Fields[2] =
+    {
+        { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
+        { .IsSigned = false, .Type = FT_STRING_NOT_LOCALIZED, .Name = "KitPrefix" },
+    };
+
+    static constexpr DB2LoadInfo Instance{ Fields, 2, &UiTextureKitMeta::Instance, HOTFIX_SEL_UI_TEXTURE_KIT };
 };
 
 struct UnitConditionLoadInfo

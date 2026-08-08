@@ -81,6 +81,11 @@ public:
     // world table; server content). 0 = no forces requirement (completion gates on bosses only, the pre-existing
     // behaviour), so the gate only engages for dungeons the operator has counted.
     uint32 GetEnemyForcesRequiredKills(uint32 challengeModeId) const;
+    // Weighted forces (challenge_mode_enemy_forces_creature; retail model per CriteriaTree.db2 Enemy Forces
+    // subtree): points a kill of this creature credits toward requiredKills. Empty optional = the dungeon has
+    // no weight table (legacy 1-point-per-kill counting); 0 = weighted dungeon, this creature credits nothing
+    // (retail: boss adds and unlisted spawns give no forces credit).
+    Optional<uint32> GetEnemyForcesPoints(uint32 challengeModeId, uint32 creatureEntry) const;
 
     // --- timer / keystone upgrade (from MapChallengeMode.CriteriaCount: [0]=par, [1]=+2 @80%, [2]=+3 @60%) ---
     uint32 GetTimeLimit(uint32 challengeModeId) const;                     // par time, seconds
@@ -258,6 +263,7 @@ private:
     std::unordered_map<uint32 /*challengeModeId*/, MapChallengeModeEntry const*> _mapChallengeModes;
     std::unordered_map<uint32 /*mapId*/, uint32 /*challengeModeId*/> _challengeModeByMap;
     std::unordered_map<uint32 /*challengeModeId*/, uint32 /*requiredKills*/> _enemyForces;
+    std::unordered_map<uint32 /*challengeModeId*/, std::unordered_map<uint32 /*creatureEntry*/, uint32 /*points*/>> _enemyForcesWeights;
 
     uint32 _healthCurveId = 0;
     uint32 _damageCurveId = 0;

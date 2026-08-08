@@ -52,6 +52,7 @@
 #include "OutdoorPvP.h"
 #include "PhasingHandler.h"
 #include "Player.h"
+#include "ReputationMgr.h"
 #include "RestMgr.h"
 #include "ScriptMgr.h"
 #include "Spell.h"

@@ -695,6 +695,16 @@ struct CampaignEntry
     bool HasFlag(CampaignFlags flag) const { return EnumFlag(static_cast<CampaignFlags>(Flags)).HasFlag(flag); }
 };
 
+struct CampaignXConditionEntry
+{
+    uint32 ID;
+    LocalizedString FailureReason;
+    int32 PlayerConditionID;
+    int32 OrderIndex;
+    int32 Flags;
+    uint32 CampaignID;
+};
+
 struct CampaignXQuestLineEntry
 {
     uint32 ID;
@@ -1625,6 +1635,15 @@ struct CriteriaTreeEntry
     EnumFlag<CriteriaTreeFlags> GetFlags() const { return static_cast<CriteriaTreeFlags>(Flags); }
 };
 
+struct CurrencyCategoryEntry
+{
+    uint32 ID;
+    LocalizedString Name;
+    int32 Flags;
+    uint8 ExpansionID;
+    int32 ParentCategoryID;
+};
+
 struct CurrencyContainerEntry
 {
     uint32 ID;
@@ -2085,6 +2104,16 @@ struct FactionEntry
 };
 
 #define MAX_FACTION_RELATIONS 8
+
+struct FactionGroupEntry
+{
+    uint32 ID;
+    char const* InternalName;
+    LocalizedString Name;
+    uint8 MaskID;
+    int32 HonorCurrencyTextureFileID;
+    int32 ConquestCurrencyTextureFileID;
+};
 
 struct FactionTemplateEntry
 {
@@ -4808,6 +4837,18 @@ struct QuestInfoEntry
     uint16 Profession;
 };
 
+struct QuestLineEntry
+{
+    uint32 ID;
+    LocalizedString Name;
+    LocalizedString Description;
+    int32 CompletionPlayerConditionID;
+    int32 Flags;
+    uint32 QuestID;
+    int32 PlayerConditionID;
+    int32 Unknown1027_5;
+};
+
 struct QuestLineXQuestEntry
 {
     uint32 ID;
@@ -6260,6 +6301,12 @@ struct UIChromieTimeExpansionInfoEntry
     int32 CompletedPlayerConditionID;
     int32 SortPriority;
     int32 RecommendPlayerConditionID;
+};
+
+struct UiTextureKitEntry
+{
+    uint32 ID;
+    char const* KitPrefix;     // textureKit string (e.g. "MajorFaction-DragonscaleExpedition")
 };
 
 #define MAX_UNIT_CONDITION_VALUES 8

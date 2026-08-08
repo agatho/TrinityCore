@@ -93,6 +93,7 @@
 #include "MMapManager.h"
 #include "Map.h"
 #include "MapManager.h"
+#include "MajorFactionMgr.h"
 #include "MapUtils.h"
 #include "Metric.h"
 #include "MiscPackets.h"
@@ -1375,6 +1376,11 @@ bool World::SetInitialWorldSettings()
     sDB2Manager.LoadHotfixOptionalData(m_availableDbcLocaleMask);
     TC_LOG_INFO("server.loading", "Indexing loaded data stores...");
     sDB2Manager.IndexLoadedStores();
+
+    ///- Index Major Factions (Phase 10) - depends on Faction, Covenant, RenownRewards, ParagonReputation
+    TC_LOG_INFO("server.loading", "Indexing Major Factions...");
+    sMajorFactionMgr->Load();
+
     ///- Load M2 fly by cameras
     LoadM2Cameras(m_dataPath);
     ///- Load GameTables
@@ -1586,6 +1592,9 @@ bool World::SetInitialWorldSettings()
 
     TC_LOG_INFO("server.loading", "Loading Warband Reputation Factions...");
     sObjectMgr->LoadWarbandReputationFactions();
+
+    TC_LOG_INFO("server.loading", "Loading Major Faction Configurations...");
+    sMajorFactionMgr->LoadWorldData();
 
     TC_LOG_INFO("server.loading", "Loading Points Of Interest Data...");
     sObjectMgr->LoadPointsOfInterest();

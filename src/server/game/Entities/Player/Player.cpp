@@ -15777,6 +15777,10 @@ void Player::RewardQuest(Quest const* quest, LootItemType rewardType, uint32 rew
 
     SetQuestCompletedBit(quest_id, true);
 
+    // Phase 10F - if this quest is a Campaign.Completed marker, auto-grant the
+    // Campaign.RewardQuestID to the player (retail behavior).
+    QuestMgr::OnQuestCompletedHandleCampaignReward(this, quest_id);
+
     for (QuestObjective const& obj : quest->GetObjectives())
     {
         switch (obj.Type)
@@ -19538,6 +19542,9 @@ bool Player::LoadFromDB(ObjectGuid guid, CharacterDatabaseQueryHolder const& hol
     // must be before inventory (some items required reputation check)
     m_reputationMgr->LoadFromDB(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_REPUTATION));
     m_reputationMgr->LoadAccountWideFromDB(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_ACCOUNT_REPUTATION));
+    m_reputationMgr->LoadRenownRewardsGrantedFromDB(
+        holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_CHAR_RENOWN_REWARDS_GRANTED),
+        holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_WARBAND_RENOWN_REWARDS_GRANTED));
 
     if (PreparedQueryResult maxLevelResult = holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_WARBAND_MAX_LEVEL_COUNT))
         _warbandMaxLevelCharCount = std::min((*maxLevelResult)[0].GetUInt64(), uint64(5));
@@ -23615,8 +23622,8 @@ void Player::SaveToDB(LoginDatabaseTransaction loginTransaction, CharacterDataba
     _SaveStoredAuraTeleportLocations(trans);
     m_achievementMgr->SaveAccountWideToDB(trans);
     m_achievementMgr->SaveToDB(trans);
-    m_reputationMgr->SaveToDB(trans);
     m_reputationMgr->SaveAccountWideToDB(trans);
+    m_reputationMgr->SaveToDB(trans);
     m_questObjectiveCriteriaMgr->SaveToDB(trans);
     m_perksActivityMgr->SaveToDB(trans);
     _SaveEquipmentSets(trans);
@@ -28023,6 +28030,8 @@ void Player::SendInitialPacketsBeforeAddToMap()
     m_reputationMgr->SendInitialReputations();
     /// SMSG_SETUP_CURRENCY
     SendCurrencies();
+    /// SMSG_REATTACH_RESURRECT - 12.x login sequence reattaches (or zeroes) pending resurrect state here
+    SendDirectMessage(WorldPackets::Misc::ReattachResurrect().Write());
     /// SMSG_EQUIPMENT_SET_LIST
     SendEquipmentSetList();
 

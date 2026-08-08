@@ -61,5 +61,63 @@ WorldPacket const* PartyEligibilityForDelveTiersResponse::Write()
     return &_worldPacket;
 }
 
+void TieredEntranceOpen::Read()
+{
+    // 68275 wire: PackedGuid only (12B observed; sender 0x7FF7291559C0).
+    _worldPacket >> EntranceGUID;
+}
+
+WorldPacket const* TieredEntranceOpenResponse::Write()
+{
+    // Byte-exact reproduction of the 579B sniff body (rated BG 12.0.7.pkt).
+    // See C:\dumps\TIERED_ENTRANCE_RE_68275.md for the field table + evidence.
+    _worldPacket << EntranceGUID;
+    _worldPacket << uint32(EntranceType);
+    _worldPacket << uint32(MapID);
+    _worldPacket << uint32(Unknown3);
+    _worldPacket << uint32(Unknown4);
+    _worldPacket << uint32(Tiers.size());
+    _worldPacket << uint32(Unknown6);
+    _worldPacket << uint32(Unknown7);
+    _worldPacket << uint32(Unknown8);
+
+    // 12-bit description length, flushed with 4 pad bits (sniff: len 17 → `01 10`).
+    _worldPacket.WriteBits(EntranceDescription.length(), 12);
+    _worldPacket.FlushBits();
+
+    for (TieredEntranceTier const& tier : Tiers)
+    {
+        _worldPacket << uint32(tier.TieredEntranceTierID);
+        _worldPacket << uint32(tier.Tier);
+        _worldPacket << uint32(tier.SuggestedILvl);
+        _worldPacket << uint32(tier.UnlockPlayerConditionID);
+        _worldPacket << uint32(tier.DynamicUnlockPlayerConditionID);
+        _worldPacket << uint32(tier.ModifierUIWidgetSetID);
+
+        // unlocked bit + 12-bit tierDescription length, flushed with 3 pad bits
+        // (sniff: unlocked=1,len=6 → `80 30`; unlocked=0,len=21 → `00 a8`).
+        _worldPacket.WriteBit(tier.Unlocked);
+        _worldPacket.WriteBits(tier.TierDescription.length(), 12);
+        _worldPacket.FlushBits();
+
+        _worldPacket << uint32(tier.PreviewTreasureList.size());
+        for (TieredEntranceReward const& reward : tier.PreviewTreasureList)
+        {
+            _worldPacket << uint8(reward.RewardType);
+            _worldPacket << uint32(reward.Id);
+            _worldPacket << uint32(reward.Quantity);
+            _worldPacket << uint8(reward.Context);
+        }
+
+        // Description chars at record end, no NUL terminator.
+        _worldPacket.append(tier.TierDescription.data(), tier.TierDescription.length());
+    }
+
+    // Entrance description chars form the packet tail, no NUL terminator.
+    _worldPacket.append(EntranceDescription.data(), EntranceDescription.length());
+
+    return &_worldPacket;
+}
+
 } // namespace Delves
 } // namespace WorldPackets

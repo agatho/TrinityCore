@@ -169,6 +169,30 @@ namespace WorldPackets
             std::vector<Record> Data;
         };
 
+        // SMSG_REATTACH_RESURRECT (0x4201F3): login-sequence resurrect-state reattach (sniff 68275:
+        // sent between SETUP_CURRENCY and ALL_ACHIEVEMENT_DATA; body is two zero bytes when no
+        // resurrect offer is pending, the only state captured).
+        class ReattachResurrect final : public ServerPacket
+        {
+        public:
+            explicit ReattachResurrect() : ServerPacket(SMSG_REATTACH_RESURRECT, 2) { }
+
+            WorldPacket const* Write() override;
+
+            uint8 Unknown1 = 0;
+            uint8 Unknown2 = 0;
+        };
+
+        // SMSG_CLEAR_RESURRECT (0x420013): empty body; sniff 68275 sends it right after the
+        // MOVE_UPDATE_TELEPORT on instance entry - any pending resurrect offer is void on map change.
+        class ClearResurrect final : public ServerPacket
+        {
+        public:
+            explicit ClearResurrect() : ServerPacket(SMSG_CLEAR_RESURRECT, 0) { }
+
+            WorldPacket const* Write() override { return &_worldPacket; }
+        };
+
         class ViolenceLevel final : public ClientPacket
         {
         public:

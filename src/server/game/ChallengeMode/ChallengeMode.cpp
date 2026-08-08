@@ -384,15 +384,20 @@ void ChallengeMode::OnCreatureDeath(Creature* victim)
     if (!IsActive() || !victim || victim->IsDungeonBoss() || victim->IsPet() || victim->IsControlledByPlayer())
         return;
 
-    // Enemy forces: every hostile trash death counts one kill; when all bosses are already down, the kill that
-    // reaches 100% completes the run.
+    // Enemy forces: a hostile trash death credits its creature type's weight (retail CriteriaTree model,
+    // challenge_mode_enemy_forces_creature); in dungeons without a weight table every kill counts 1. When all
+    // bosses are already down, the kill that reaches 100% completes the run.
     if (victim->IsHostileToPlayers())
     {
-        ++_enemyKills;
-        if (_awaitingEnemyForces && AreEnemyForcesMet())
+        uint32 points = sChallengeModeMgr.GetEnemyForcesPoints(_mapChallengeModeId, victim->GetEntry()).value_or(1);
+        if (points)
         {
-            Complete();
-            return;
+            _enemyKills += points;
+            if (_awaitingEnemyForces && AreEnemyForcesMet())
+            {
+                Complete();
+                return;
+            }
         }
     }
 
@@ -590,8 +595,12 @@ void ChallengeMode::Complete()
     // End-of-run gear: retail awards a fixed number of items for the GROUP (2 timed / 1 untimed), personal-loot
     // distributed to random present players at the authentic Mythic+ item level. The item POOL is server content
     // (reference_loot_template keyed by ChallengeMode.Reward.LootId). Disabled (0) or empty template -> no-op.
+    // Retail drops from the COMPLETED dungeon's table, so a per-dungeon pool at <base>+<MapChallengeModeID>
+    // wins over the base pool when it exists.
     if (uint32 rewardLootId = sChallengeModeMgr.GetGearRewardLootId())
     {
+        if (LootTemplates_Reference.HaveLootFor(rewardLootId + _mapChallengeModeId))
+            rewardLootId += _mapChallengeModeId;
         if (LootTemplates_Reference.HaveLootFor(rewardLootId))
         {
             std::vector<Player*> presentPlayers;
