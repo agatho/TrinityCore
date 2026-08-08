@@ -67,7 +67,7 @@ void DelveInstanceScript::OnPlayerEnter(Player* player)
 
     // Re-send the WorldStates so the in-delve HUD reflects the active tier.
     player->SendUpdateWorldState(WS_DELVE_TIER, tier);
-    player->SendUpdateWorldState(WS_DELVE_IN_DELVE_FLAG, 2);
+    player->SendUpdateWorldState(WS_DELVE_IN_DELVE_FLAG, 1);
     player->SendUpdateWorldState(WS_DELVE_MAP_ID, instance->GetId());
     player->SendUpdateWorldState(WS_DELVE_TIER_SPELL, GetTierSpellId(tier));
     if (DelveTemplate const* tmpl = _delveInstance->GetTemplate())

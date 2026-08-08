@@ -11,6 +11,14 @@ DELETE FROM `gameobject` WHERE `guid` = 9000300;
 INSERT INTO `gameobject` (`guid`, `id`, `map`, `zoneId`, `areaId`, `spawnDifficulties`, `PhaseId`, `PhaseGroup`, `position_x`, `position_y`, `position_z`, `orientation`, `rotation0`, `rotation1`, `rotation2`, `rotation3`, `spawntimesecs`, `animprogress`, `state`, `VerifiedBuild`) VALUES
 (9000300, 246779, 2526, 0, 0, '8,23', 0, 0, 1408.444, -2785.141, 955.656, 1.4030, 0, 0, 0.645530, 0.763735, 7200, 0, 1, 68275);
 
+-- Sniff-mined delve world data (C:\dumps\GULF_FONT_MINE.md).
+--
+-- SPLIT NOTE: on content/midnight-s1 this file also carries the Font of Power gameobject
+-- spawn in Algeth'ar Academy (GO 246779, guid 9000300) — that statement belongs to
+-- feature/mythic-plus and is intentionally NOT part of this branch's copy. The filename is
+-- kept identical so the updates tracker does not double-apply it at integration time.
+--
+
 -- The Gulf of Memory (delve_template 25): full run data from the 12.0.1.66709 capture
 -- (values that are stable across builds: scenario, gossip ids, world positions).
 -- Entry NEW_WORLD map 2964 (155.129, 634.757, 187.334, o 2.8133); exit NEW_WORLD back to map 2694
@@ -28,4 +36,3 @@ WHERE `id` = 25;
 DELETE FROM `scenarios` WHERE `map` = 2964 AND `difficulty` = 208;
 INSERT INTO `scenarios` (`map`, `difficulty`, `scenario_A`, `scenario_H`) VALUES
 (2964, 208, 3177, 3177);
-
