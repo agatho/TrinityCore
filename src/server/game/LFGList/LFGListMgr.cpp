@@ -380,15 +380,19 @@ void LFGListMgr::FillSearchRow(WorldPackets::LFGList::SearchResultListing& row, 
     row.RawDescriptor = listing.Descriptor.RawBytes;    // verbatim echo of the client's descriptor bytes
 
     row.Members.clear();
-    auto addMember = [&row](ObjectGuid guid)
+    auto addMember = [&row, &listing](ObjectGuid guid)
     {
         WorldPackets::LFGList::SearchResultMember& member = row.Members.emplace_back();
         member.Guid = guid;
+        member.IsLeader = guid == listing.LeaderGuid;   // 68974: the head flag bit is set on the leader
         if (Player const* player = ObjectAccessor::FindConnectedPlayer(guid))
         {
             member.Level = uint8(player->GetLevel());
             member.ClassID = uint8(player->GetClass());
             member.SpecID = uint32(player->GetPrimarySpecialization());
+            // 68974: third head byte is the spec role (Outlaw rogue = 2 dps, Brewmaster monk = 0 tank).
+            if (ChrSpecializationEntry const* spec = player->GetPrimarySpecializationEntry())
+                member.Role = uint8(spec->Role);
         }
     };
     if (Group const* group = sGroupMgr->GetGroupByGUID(listing.GroupGuid))
@@ -398,12 +402,13 @@ void LFGListMgr::FillSearchRow(WorldPackets::LFGList::SearchResultListing& row, 
         addMember(listing.LeaderGuid);                  // solo listing: the leader is the only member
 }
 
-void LFGListMgr::RegisterSearch(ObjectGuid player, uint8 category, uint8 activityGroup)
+void LFGListMgr::RegisterSearch(ObjectGuid player, uint32 category, uint32 activityGroup, std::string const& keyword)
 {
     SearchSubscription& sub = _searchSubscriptions[player];
     sub.CategoryId = category;
     sub.ActivityGroupId = activityGroup;
-    sub.ExpireTime = GameTime::GetGameTime() + SEARCH_SUBSCRIPTION_TTL_SECONDS;
+    sub.Keyword = keyword;
+    sub.ExpireTime = uint32(GameTime::GetGameTime()) + SEARCH_SUBSCRIPTION_TTL_SECONDS;
 }
 
 void LFGListMgr::UnregisterSearch(ObjectGuid player)
@@ -420,9 +425,20 @@ void LFGListMgr::NotifyListingChanged(uint32 listingId)
     if (!listing)
         return;
 
-    // Category/activity group come from GroupFinderActivity.db2 - the same authority Search() uses, so a
-    // pushed row can never reach a browser whose filters would have excluded it.
-    GroupFinderActivityEntry const* activity = sGroupFinderActivityStore.LookupEntry(listing->GetActivityID());
+    WorldPackets::LFGList::ListingDescriptor const& d = listing->Descriptor;
+
+    // The filter test below mirrors Search() field for field, so a pushed row can never reach a browser whose
+    // filters would have excluded it from the search reply:
+    //  - category: the descriptor u32 @0x38 IS the GroupFinderCategory id, compared directly. It must NOT be
+    //    looked up in GroupFinderActivity.db2 (that was the empty-browse-pane bug fixed by the 68974 pass).
+    //  - activity group: resolve each id of the descriptor's trailing activity vector in GroupFinderActivity.db2
+    //    and match if ANY of them sits in the requested group. Unresolvable ids are skipped, as in Search().
+    //  - keyword: case-insensitive substring of the listing title, as in Search().
+    std::vector<uint32> listingActivityGroups;
+    listingActivityGroups.reserve(d.ActivityIDs.size());
+    for (uint32 listedActivity : d.ActivityIDs)
+        if (GroupFinderActivityEntry const* activity = sGroupFinderActivityStore.LookupEntry(listedActivity))
+            listingActivityGroups.push_back(uint32(activity->GroupFinderActivityGrpID));
 
     WorldPackets::LFGList::LFGListSearchResultsUpdate update;
     WorldPackets::LFGList::SearchResultListing row;
@@ -430,7 +446,7 @@ void LFGListMgr::NotifyListingChanged(uint32 listingId)
     update.Listings.push_back(std::move(row));
     WorldPacket const* packet = update.Write();
 
-    uint32 const now = GameTime::GetGameTime();
+    uint32 const now = uint32(GameTime::GetGameTime());
     for (auto itr = _searchSubscriptions.begin(); itr != _searchSubscriptions.end(); )
     {
         SearchSubscription const& sub = itr->second;
@@ -448,8 +464,9 @@ void LFGListMgr::NotifyListingChanged(uint32 listingId)
         }
 
         bool const matches =
-            (!sub.CategoryId || (activity && activity->GroupFinderCategoryID == sub.CategoryId)) &&
-            (!sub.ActivityGroupId || (activity && activity->GroupFinderActivityGrpID == sub.ActivityGroupId));
+            (!sub.CategoryId || d.CategoryID == sub.CategoryId) &&
+            (!sub.ActivityGroupId || std::find(listingActivityGroups.begin(), listingActivityGroups.end(), sub.ActivityGroupId) != listingActivityGroups.end()) &&
+            (sub.Keyword.empty() || StringContainsStringI(d.Name, sub.Keyword));
         if (matches)
             searcher->SendDirectMessage(packet);
 

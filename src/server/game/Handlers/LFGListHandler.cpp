@@ -60,16 +60,9 @@ namespace
         }
     }
 
-    // Project a stored listing into the wire snapshot the client echoes in its UI.
-    void FillListingInfo(WorldPackets::LFGList::ListingInfo& info, LFGList::Listing const& listing)
-    {
-        WorldPackets::LFGList::ListingDescriptor const& d = listing.Descriptor;
-        info.ActivityID = d.ActivityID;
-        info.RequiredItemLevel = d.OptionalValue1.value_or(0);   // nilable requiredItemLevel (LfgListingCreateData)
-        info.Comment = d.Comment;
-        if (Player* leader = ObjectAccessor::FindConnectedPlayer(listing.LeaderGuid))
-            info.LeaderName = leader->GetName();
-    }
+    // NOTE: the search-result row builder lives in LFGListMgr (LFGListMgr::FillSearchRow) so the search reply,
+    // the apply-result snapshot and the live SMSG_LFG_LIST_SEARCH_RESULTS_UPDATE push all serialize a listing
+    // through the exact same code.
 
     // Push the full applicant list of a listing to every connected member of the listed group (sniff: the
     // packet goes to all members, not only the leader; solo listings notify just the leader).
@@ -250,12 +243,14 @@ void WorldSession::HandleLFGListSearch(WorldPackets::LFGList::LFGListSearch& pac
     if (!GetPlayer())
         return;
 
-    // Keep this browser subscribed so listings published/edited from now on are pushed live via
-    // SMSG_LFG_LIST_SEARCH_RESULTS_UPDATE instead of the player having to re-search.
-    sLFGListMgr.RegisterSearch(GetPlayer()->GetGUID(), uint8(packet.GetCategoryId()), 0);
+    std::string const keyword = !packet.SearchTerms.empty() ? packet.SearchTerms.front() : std::string();
 
-    std::vector<LFGList::Listing const*> matches = sLFGListMgr.Search(packet.GetCategoryId(), 0, 0,
-        !packet.SearchTerms.empty() ? packet.SearchTerms.front() : std::string());
+    // Keep this browser subscribed so listings published/edited from now on are pushed live via
+    // SMSG_LFG_LIST_SEARCH_RESULTS_UPDATE instead of the player having to re-search. The filters recorded are
+    // exactly the ones handed to Search() below, so the push can only carry rows this reply would have carried.
+    sLFGListMgr.RegisterSearch(GetPlayer()->GetGUID(), packet.GetCategoryId(), 0, keyword);
+
+    std::vector<LFGList::Listing const*> matches = sLFGListMgr.Search(packet.GetCategoryId(), 0, 0, keyword);
 
     // 68974 capture: one CMSG_LFG_LIST_SEARCH (idx 8197) is answered by TWO SMSG_LFG_LIST_SEARCH_RESULTS —
     // an empty one first (idx 8215: u16 0 + u32 0) and then the populated one (idx 8224: 2 rows). No
@@ -511,14 +506,13 @@ namespace
 
 void WorldSession::HandleRequestLFGListBlacklist(WorldPackets::LFGList::RequestLFGListBlacklist& /*packet*/)
 {
-    // The premade-finder blacklist (recently-declined groups the client hides) is not persisted server-side,
-    // so a fresh request returns the current empty set. Entries would carry {activityId, reason}; populating
-    // them requires a soft-blacklist model that a 12.0.7 sniff should confirm before it is added.
-    //
-    // Send-site DISABLED (2026-07): SMSG_LFG_LIST_UPDATE_BLACKLIST is currently parked on UNKNOWN_OPCODE
-    // because 0x56000E was resolved by 12.0.7 sniff to belong to SMSG_HOUSING_CATALOG_STATE_SYNC. Transmitting
-    // this packet would put it on a bogus/colliding opcode, so it is held until a dedicated LFG-list sniff
-    // recovers its real wire value. Skipping the send is behaviorally identical to sending an empty blacklist.
-    // WorldPackets::LFGList::LFGListUpdateBlacklist packet;
-    // SendPacket(packet.Write());
+    WorldPackets::LFGList::LFGListUpdateBlacklist packet;
+    packet.Entries.reserve(std::size(LFGListActivityBlacklist));
+    for (LFGListBlacklistRow const& row : LFGListActivityBlacklist)
+    {
+        WorldPackets::LFGList::LFGListBlacklistEntry& entry = packet.Entries.emplace_back();
+        entry.ActivityID = row.ActivityID;
+        entry.Reason = row.Reason;
+    }
+    SendPacket(packet.Write());
 }
