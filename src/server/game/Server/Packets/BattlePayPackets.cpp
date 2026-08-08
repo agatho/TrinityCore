@@ -63,10 +63,12 @@ WorldPacket const* GetPurchaseListResponse::Write()
         _worldPacket << p.Status;
         _worldPacket << p.ResultCode;
         _worldPacket << p.ProductID;
-        _worldPacket << uint8(0);       // walletName: empty (8-bit length primitive, value 0)
         _worldPacket << p.BasePrice;
         _worldPacket << p.UserPrice;
         _worldPacket << p.TimeCreated;
+        _worldPacket << uint8(0);       // walletName: empty (8-bit length primitive, value 0), record-final
+                                        // (68974 capture: purchase times align at record offset 36 - the
+                                        // walletName length byte closes the 45B record, it does not follow ProductID)
     }
 
     return &_worldPacket;
@@ -86,6 +88,8 @@ WorldPacket const* PurchaseUpdate::Write()
         _worldPacket << p.UserPrice;
         _worldPacket << p.TimeCreated;
         _worldPacket << uint8(0);       // walletName: empty (8-bit length primitive, value 0), record-final
+                                        // (68974 capture: purchase times align at record offset 36 - the
+                                        // walletName length byte closes the 45B record, it does not follow ProductID)
     }
 
     return &_worldPacket;
