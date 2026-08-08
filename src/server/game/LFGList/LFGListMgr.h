@@ -65,7 +65,7 @@ namespace LFGList
         uint32 ExpireTime = 0;
         std::vector<Application> Applications;
 
-        uint32 GetActivityID() const { return Descriptor.ActivityID; }
+        uint32 GetCategoryID() const { return Descriptor.CategoryID; }
     };
 }
 
