@@ -22,6 +22,7 @@
 #include "Log.h"
 #include "QuestPackets.h"
 #include "Timer.h"
+#include "WorldStateMgr.h"
 
 namespace
 {
@@ -82,6 +83,11 @@ void AreaPoiMgr::Activate(AreaPoiTemplate const& tmpl, time_t now)
     active.EndTime = now + tmpl.Duration;
     active.VariableID = tmpl.VariableID;
     active.Value = tmpl.Value;
+
+    // Same activation-gating semantics as world quests: the (VariableID, Value) pair is a worldstate
+    // the client checks before displaying the POI, so publish it realm-wide.
+    if (tmpl.VariableID)
+        WorldStateMgr::SetValue(tmpl.VariableID, tmpl.Value, false, nullptr);
 }
 
 void AreaPoiMgr::Update(uint32 diff)
