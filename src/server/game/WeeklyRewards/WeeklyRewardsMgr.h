@@ -20,36 +20,71 @@
 
 #include "Define.h"
 #include "ObjectGuid.h"
+#include "Optional.h"
 #include <vector>
 #include <array>
 #include <unordered_map>
 
 class Player;
+enum class ItemContext : uint8;
 
 namespace WeeklyRewards
 {
     // The three Great Vault activity rows. These are the internal row indices; each maps onto a
-    // WeeklyRewardChestThreshold.db2 Type (see the threshold arrays below).
+    // WeeklyRewardChestThreshold.db2 `Type` (see DB2ThresholdType below).
     enum class ActivityType : uint8
     {
-        Dungeon = 0,    // Mythic+ / dungeon runs      (DB2 Type 1)
-        Raid    = 1,    // raid boss kills             (DB2 Type 3)
-        World   = 2,    // world activity: delves, PvP (DB2 Type 6)
+        Dungeon = 0,    // Mythic+ / dungeon runs      (DB2 Type 1 = Activities)
+        Raid    = 1,    // raid boss kills             (DB2 Type 3 = Raid)
+        World   = 2,    // world activity: delves, PvP (DB2 Type 6 = World)
 
         Max
     };
 
-    // The three reward slots per row unlock at these completion counts. Taken from WeeklyRewardChestThreshold.db2
-    // under the client's highest-ID-per-(Type,Index) rule, which selects the live season's rows - for 12.0.7/68275
-    // that is ids 202/203/204 (Type 1) = 1/4/8, 199/200/201 (Type 3) = 2/4/6 and 196/197/198 (Type 6) = 2/4/8.
-    // Those same three row groups are what the client shows in the vault (sniffed row ids in
-    // C:\dumps\MPLUS_SNIFF_DEEP_68275.md section 5), and 2/4/8 for the World row is also what the delve
-    // documentation records ("Vault WORLD row 2/4/8 completions", I:\TrinityCore\delves\DELVES_RETAIL_FACTS.md).
-    inline constexpr std::array<uint32, 3> DUNGEON_THRESHOLDS = { 1, 4, 8 };
-    inline constexpr std::array<uint32, 3> RAID_THRESHOLDS    = { 2, 4, 6 };
-    inline constexpr std::array<uint32, 3> WORLD_THRESHOLDS   = { 2, 4, 8 };
+    // WeeklyRewardChestThreshold.db2 `Type` for a row. The client's WeeklyRewardChestThresholdType enum is
+    // None=0, Activities=1, RankedPvP=2, Raid=3, AlsoReceive=4, Concession=5, World=6 - read out of the
+    // 12.0.7.68275 client's own enum-reflection registrar (sub_7FF72A0F6780 registers the members in that
+    // order and WeeklyRewardChestThresholdTypeMeta gives NumValues=7, MinValue=0, MaxValue=6, i.e. a
+    // contiguous 0..6 range, so the registration order IS the value order). World = 6 is NOT a guess and
+    // NOT the value WoWDBDefs documents (its comment stops at 5 = Concession).
+    uint8 DB2ThresholdType(ActivityType type);
 
+    // One live Great Vault slot of a row, straight out of WeeklyRewardChestThreshold.db2.
+    struct VaultSlot
+    {
+        uint32 ThresholdID = 0;     // the DB2 row id - what goes on the wire; the client resolves Type/Index from it
+        uint32 Index = 0;           // slot index 0/1/2 within the row
+        uint32 Threshold = 0;       // completions required to unlock the slot
+    };
+
+    // The live slots of a row, in Index order. The DB2 keeps every past season's rows, so the live set is the
+    // highest-ID row per (Type, Index) - the same rule the client uses ("these are not unique. It appears that
+    // the *last* entry is used in game", WoWDBDefs WeeklyRewardChestThreshold.dbd).
+    // For 12.0.7.68275 that resolves to ids 202/203/204 (Type 1) = 1/4/8, 199/200/201 (Type 3) = 2/4/6 and
+    // 196/197/198 (Type 6) = 2/4/8 - byte-for-byte what the client is sent in the wild
+    // (C:\dumps\MPLUS_SNIFF_DEEP_68275.md section 5 lists exactly those nine row ids).
+    // EMPTY when the DB2 has no rows of that type: the vault then has no such row at all, rather than a
+    // fabricated one.
+    std::vector<VaultSlot> const& SlotsFor(ActivityType type);
+
+    // The three completion counts of a row (0 in a slot the DB2 does not define). Convenience view over
+    // SlotsFor() for callers that only need the ladder (e.g. `.delve info`).
     std::array<uint32, 3> const& ThresholdsFor(ActivityType type);
+
+    // The item the vault would hand out for one slot: a roll from the row's reward pool, scaled to the item
+    // level the client's own DB2 chain derives for (context, level).
+    struct SlotReward
+    {
+        uint32 ItemID = 0;
+        std::vector<int32> BonusListIDs;
+        ItemContext Context = ItemContext(0);
+    };
+
+    // Whether a row can generate a reward item at all, i.e. whether an ItemContext is known for it. False for the
+    // Raid row: the client has no raid "jackpot" context and that row records a difficulty, not a reward level,
+    // so it shows progress only. A row that returns true but still produces no reward is a content/config problem
+    // (unset or empty loot pool) and is logged as an error.
+    bool HasRewardContext(ActivityType type);
 
     // A character's accumulated activity for one row in the current week.
     struct ActivityRow
@@ -93,6 +128,24 @@ public:
 
     void LoadCharacter(ObjectGuid guid);        // lazy load on demand
     void SaveVault(ObjectGuid guid);
+
+    // --- Great Vault slots ---
+
+    // Resolve a WeeklyRewardChestThreshold.db2 id (what CMSG_CLAIM_WEEKLY_REWARD carries) back to its row and
+    // slot. Returns false for an id that is not one of this season's live slots.
+    bool FindSlot(uint32 thresholdId, WeeklyRewards::ActivityType& type, WeeklyRewards::VaultSlot& slot) const;
+
+    // The level a slot of `row` is worth: the level of the Nth-best run of the week, N = the slot's threshold.
+    // 0 while the slot is still locked.
+    static uint32 GetSlotLevel(WeeklyRewards::ActivityRow const& row, WeeklyRewards::VaultSlot const& slot);
+
+    // Roll the item a slot would hand out, scaled to `level`. Empty when the row has no reward ItemContext or
+    // its reward pool is unconfigured/empty - the caller must then leave the slot without a reward rather than
+    // advertise one that pays nothing.
+    Optional<WeeklyRewards::SlotReward> BuildSlotReward(Player* player, WeeklyRewards::ActivityType type, uint32 level) const;
+
+    // Hand a rolled reward to the player (mails it when the bags are full, so a claim is never swallowed).
+    void GrantSlotReward(Player* player, WeeklyRewards::SlotReward const& reward) const;
 
 private:
     WeeklyRewardsMgr() = default;

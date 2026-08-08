@@ -4913,3 +4913,34 @@ Delves.Companion.Heal.EmergencySpellId = 0
 Delves.Companion.Heal.SpellId = 0
 Delves.Companion.Tank.TauntSpellId = 0
 Delves.Companion.Tank.DefensiveSpellId = 0
+###################################################################################################
+# GREAT VAULT (WEEKLY REWARDS)
+#
+# The Great Vault's three activity rows (Dungeon / Raid / World) take their slot ladder from
+# WeeklyRewardChestThreshold.db2 - nothing about the thresholds is configurable. What IS content,
+# and therefore configuration, is the reference_loot_template pool each row's reward is rolled from.
+# The item LEVEL is never configured: it is derived by ItemBonusMgr from the row's ItemContext
+# (Dungeon = MythicPlus_Jackpot, World = Delves_Jackpot) and the slot's run level/delve tier through
+# the client's own ItemBonusTreeNode -> ItemBonusListGroup -> ItemLevelSelector chain.
+#
+# A row whose pool is 0 or missing shows its progress but offers no reward, and claiming that slot is
+# refused (the week is left unclaimed) instead of paying nothing.
+#
+#    WeeklyRewards.Vault.Dungeon.LootId
+#        Description: reference_loot_template entry the Mythic+ / dungeon vault row rolls from.
+#                     When 0, falls back to ChallengeMode.Vault.LootId (the same pool, existing name).
+#        Default:     0 - (use ChallengeMode.Vault.LootId)
+#
+#    WeeklyRewards.Vault.World.LootId
+#        Description: reference_loot_template entry the World vault row (delves) rolls from.
+#                     When 0, falls back to Delves.Reward.LootId (the delve gear pool).
+#        Default:     0 - (use Delves.Reward.LootId)
+#
+# There is deliberately no Raid entry: the raid row records a difficulty, not a reward level, and the
+# client has no raid "jackpot" ItemContext, so no raid vault item is generated.
+
+WeeklyRewards.Vault.Dungeon.LootId = 0
+WeeklyRewards.Vault.World.LootId = 0
+
+#
+###################################################################################################

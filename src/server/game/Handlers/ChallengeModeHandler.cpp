@@ -27,14 +27,6 @@
 #include "MythicPlusData.h"
 #include "Player.h"
 
-// NOTE (assembly): the Great Vault reward-item logic for the Mythic+ row deliberately does NOT live in this file.
-// It is a service on ChallengeModeMgr (BuildMythicPlusVaultOptions / ClaimMythicPlusVaultReward /
-// GetMythicPlusVaultSlotForThreshold) so that whichever handler an assembly binds to CMSG_REQUEST_WEEKLY_REWARDS /
-// CMSG_CLAIM_WEEKLY_REWARD can drive it. On this branch that is the pair below, over the ChallengeMode packet
-// family; integration/all-systems binds WeeklyRewardHandler.cpp over the WeeklyRewards packet family (it also
-// serves the Raid and World vault rows) and calls the same service for the Mythic+ row. There is exactly one
-// handler bound per opcode in either assembly - the granting rules are shared, never duplicated.
-
 void WorldSession::HandleRequestMythicPlusSeasonData(WorldPackets::ChallengeMode::RequestMythicPlusSeasonData& /*requestMythicPlusSeasonData*/)
 {
     WorldPackets::ChallengeMode::MythicPlusSeasonData response;
@@ -137,15 +129,15 @@ void WorldSession::HandleMythicPlusRequestMapStats(WorldPackets::ChallengeMode::
     SendPacket(response.Write());
 }
 
-// NOTE: feature/mythic-plus also implemented WorldSession::HandleRequestWeeklyRewards /
-// HandleClaimWeeklyReward here, over WorldPackets::ChallengeMode::* packet classes. integration already
-// binds CMSG_REQUEST_WEEKLY_REWARDS / CMSG_CLAIM_WEEKLY_REWARD to the WorldPackets::WeeklyRewards::*
-// handlers in WeeklyRewardHandler.cpp, which cover all three vault rows (Dungeon / Raid / World) rather
-// than the Mythic+ row alone. One opcode can only have one handler, so the multi-row version stays bound
-// and the Mythic+-only duplicates are not carried into the assembly. The one behaviour they had that the
-// bound handler lacked - refreshing the carried keystone when the vault is opened after a weekly reset -
-// is called from WeeklyRewardHandler.cpp instead. Folding the Mythic+ reward-item rolling into
-// WeeklyRewardsMgr is a follow-up on feature/mythic-plus, not something to hand-write on integration.
+// NOTE (assembly): CMSG_REQUEST_WEEKLY_REWARDS / CMSG_CLAIM_WEEKLY_REWARD are NOT handled here.
+// This branch merges feature/great-vault, whose WeeklyRewardHandler.cpp serves all three Great Vault rows
+// (Dungeon / Raid / World) over the WorldPackets::WeeklyRewards packet family, and an opcode can only have one
+// bound handler. The Mythic+-only pair that used to live here (over WorldPackets::ChallengeMode) is gone; the one
+// behaviour it had that the bound handler lacked - refreshing the carried keystone when the vault is opened after
+// a weekly reset - is called from WeeklyRewardHandler.cpp instead. The reward rules stay shared, never duplicated:
+// the Mythic+ row's season reward-level cap still comes from ChallengeModeMgr (GetVaultRewardLevelCap), and
+// ChallengeModeMgr's BuildMythicPlusVaultOptions / ClaimMythicPlusVaultReward / GetMythicPlusVaultSlotForThreshold
+// remain available for an assembly that binds a Mythic+-only handler instead.
 
 void WorldSession::HandleResetChallengeMode(WorldPackets::ChallengeMode::ResetChallengeMode& /*resetChallengeMode*/)
 {

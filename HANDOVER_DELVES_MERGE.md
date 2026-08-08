@@ -62,6 +62,29 @@ elapsed timer/criteria + keystone weekly rollover). If they are pushed by now, r
      Lindormi (244792, ScriptName npc_lindormi) + Font of Power spawns
    - Delves.Reward/Coffer.LootId loot pools
 
+## 3b. NEW (2026-08-07 evening): merge feature/major-factions-1207
+
+`git merge feature/major-factions-1207` (@ ca762c5c9f, pushed) — based directly on integration's tip
+9619f2f2f8, so it merges clean. Brings the Phase 10 Major Factions system (MajorFactionMgr, renown
+reward dispatch, 4 new DB2s with 68275-verified layouts, 20-faction world seed) ported from the retired
+`major-factions` branch, plus a REAL BUG FIX integration needs: account-wide reputation save-order
+(account-wide must save before per-char wipes the dirty flags). Full worldserver linked in
+`I:\TrinityCore\grand-factions\build44`. Details, skipped-commit rationale, and SQL list:
+`I:\TrinityCore\grand-factions\MAJOR_FACTIONS_1207_PORT.md`. After this, the old `major-factions`
+branch is retired — do not merge it (its warband lineage duplicates integration's cherry-picks).
+
+## 3c. NEW (2026-08-08 overnight): merge content/midnight-s1
+
+`git merge content/midnight-s1` (@ fc3caf0f42, pushed) — based on feature/major-factions-1207's tip, so
+merge it AFTER (or instead of) that branch; it contains 3b's commits plus 11 more. Contents: Midnight S1
+season-table seeds, 9 delve templates, weighted Enemy Forces (new table + code) for all 8 M+ dungeons,
+per-dungeon M+ gear pools + delve gear pool (conf defaults now point at pools 300000/301000), Catalyst
+conversion-12 data, affix creature ids, Lindormi 259053 + Font of Power spawns, Gulf of Memory delve
+fully wired, TIERED_ENTRANCE_OPEN wire pair, FACTION_BONUS_INFO / REATTACH_RESURRECT / CLEAR_RESURRECT,
+M+ record-packet send fix. Full worldserver linked in grand-factions\build44. SQL updates to apply:
+world 2026_08_07_61..67, hotfixes 2026_08_07_70/71. Conf keys changed: ChallengeMode.Reward/Vault.LootId,
+Delves.Reward/Coffer.LootId, Delves.Companion.CreatureId, ChallengeMode.Affix.*.CreatureId defaults.
+
 ## 4. Do NOT
 
 - Merge `warband/phase9-delves` thinking it's the delve branch — it's the warband account-systems branch.
