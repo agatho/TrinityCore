@@ -111,12 +111,13 @@ void WorldSession::HandleSelectDelveEntranceTier(WorldPackets::Delves::SelectDel
         return;
 
     // The 68275 wire carries the entrance ObjectGuid, not a MapID — re-derive the
-    // delve map server-side. Our entrances are gossip NPCs, so resolve the creature
-    // and match its gossip menu against the delve templates.
+    // delve map server-side from the entrance creature. This used to read
+    // Creature::GetGossipMenuId() directly, which is always 0 because nothing in the core ever
+    // calls SetGossipMenuId(); DelveMgr::GetDelveTemplateForEntrance() does the real resolution.
     uint32 mapId = 0;
     if (packet.EntranceGUID.IsCreatureOrVehicle())
         if (Creature const* entrance = ObjectAccessor::GetCreature(*player, packet.EntranceGUID))
-            if (Delves::DelveTemplate const* tmpl = sDelveMgr->GetDelveTemplateByGossipMenuId(entrance->GetGossipMenuId()))
+            if (Delves::DelveTemplate const* tmpl = sDelveMgr->GetDelveTemplateForEntrance(entrance))
                 mapId = tmpl->MapId;
 
     if (!mapId)
@@ -142,11 +143,15 @@ void WorldSession::HandleTieredEntranceOpen(WorldPackets::Delves::TieredEntrance
         player->GetName(), packet.EntranceGUID.ToString());
 
     // Resolve the entrance NPC to a delve template (same pattern as
-    // HandleSelectDelveEntranceTier: entrances are gossip NPCs).
+    // HandleSelectDelveEntranceTier). This previously used
+    // GetDelveTemplateByGossipMenuId(entrance->GetGossipMenuId()); GetGossipMenuId() is the
+    // script-override slot and is 0 for every DB-spawned creature because SetGossipMenuId() has no
+    // call site in the core, so this handler bailed out with "could not resolve entrance" for every
+    // delve - i.e. the entire 12.0.7 tiered-entrance entry path was dead.
     Delves::DelveTemplate const* tmpl = nullptr;
     if (packet.EntranceGUID.IsCreatureOrVehicle())
         if (Creature const* entrance = ObjectAccessor::GetCreature(*player, packet.EntranceGUID))
-            tmpl = sDelveMgr->GetDelveTemplateByGossipMenuId(entrance->GetGossipMenuId());
+            tmpl = sDelveMgr->GetDelveTemplateForEntrance(entrance);
 
     if (!tmpl)
     {
