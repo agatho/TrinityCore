@@ -1176,6 +1176,11 @@ enum OpcodeServer : uint32
     SMSG_ACCOUNT_TOY_UPDATE                                         = 0x420048,
     SMSG_ACCOUNT_TRANSMOG_SET_FAVORITES_UPDATE                      = 0x420050,
     SMSG_ACCOUNT_TRANSMOG_UPDATE                                    = 0x42004F,
+    // 68887/68974 additions to the account-collection-update family; observed once each in the login
+    // stream of the 68974 tester capture (small id lists; see C:\dumps\TESTER_SNIFF_68974_MINE.md).
+    // Collection type unidentified - provisional names until a newer-client reflection dump names them.
+    SMSG_ACCOUNT_UNKNOWN_COLLECTION_UPDATE_1                        = 0x420051,
+    SMSG_ACCOUNT_UNKNOWN_COLLECTION_UPDATE_2                        = 0x420058,
     SMSG_ACCOUNT_WARBAND_SCENE_UPDATE                               = 0x420052,
     SMSG_ACHIEVEMENT_DELETED                                        = 0x420191,
     SMSG_ACHIEVEMENT_EARNED                                         = 0x4200EB,
@@ -1270,6 +1275,10 @@ enum OpcodeServer : uint32
     SMSG_BATTLE_PAY_BATTLE_PET_DELIVERED                            = 0x420222,
     SMSG_BATTLE_PAY_COLLECTION_ITEM_DELIVERED                       = 0x420223,
     SMSG_BATTLE_PAY_CONFIRM_PURCHASE                                = 0x420232,
+    // 68887/68974 addition, next value after the delivery family. Nine at login in the 68974 tester
+    // capture, each carrying a grant display string ("500 Tender", "Bananas", ...) - Trading Post
+    // tender/item grant toasts. Provisional name; layout partially unknown (see TESTER_SNIFF_68974_MINE.md).
+    SMSG_BATTLE_PAY_TENDER_GRANTED                                  = 0x420224,
     SMSG_BATTLE_PAY_DELIVERY_ENDED                                  = 0x420220,
     SMSG_BATTLE_PAY_DELIVERY_STARTED                                = 0x42021F,
     SMSG_BATTLE_PAY_DISTRIBUTION_ASSIGN_VAS_RESPONSE                = 0x420316,
