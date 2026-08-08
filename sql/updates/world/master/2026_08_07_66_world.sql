@@ -28,3 +28,4 @@ WHERE `id` = 25;
 DELETE FROM `scenarios` WHERE `map` = 2964 AND `difficulty` = 208;
 INSERT INTO `scenarios` (`map`, `difficulty`, `scenario_A`, `scenario_H`) VALUES
 (2964, 208, 3177, 3177);
+
