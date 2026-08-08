@@ -10,10 +10,10 @@ DELETE FROM `reference_loot_template` WHERE `Entry` IN (300000,300161,300239,300
 INSERT INTO `reference_loot_template` (`Entry`, `ItemType`, `Item`, `Chance`, `QuestRequired`, `LootMode`, `GroupId`, `MinCount`, `MaxCount`, `Comment`) VALUES
 (300000, 1, 300161, 0, 0, 1, 1, 1, 1, 'M+ S1 master -> Skyreach'),
 (300000, 1, 300239, 0, 0, 1, 1, 1, 1, 'M+ S1 master -> Seat of the Triumvirate'),
-(300000, 1, 300402, 0, 0, 1, 1, 1, 1, 'M+ S1 master -> Algeth'ar Academy'),
+(300000, 1, 300402, 0, 0, 1, 1, 1, 1, 'M+ S1 master -> Algeth''ar Academy'),
 (300000, 1, 300556, 0, 0, 1, 1, 1, 1, 'M+ S1 master -> Pit of Saron'),
 (300000, 1, 300557, 0, 0, 1, 1, 1, 1, 'M+ S1 master -> Windrunner Spire'),
-(300000, 1, 300558, 0, 0, 1, 1, 1, 1, 'M+ S1 master -> Magisters' Terrace'),
+(300000, 1, 300558, 0, 0, 1, 1, 1, 1, 'M+ S1 master -> Magisters'' Terrace'),
 (300000, 1, 300559, 0, 0, 1, 1, 1, 1, 'M+ S1 master -> Nexus-Point Xenas'),
 (300000, 1, 300560, 0, 0, 1, 1, 1, 1, 'M+ S1 master -> Maisara Caverns'),
 (300161, 0, 109759, 0, 0, 1, 1, 1, 1, 'Skyreach'),
