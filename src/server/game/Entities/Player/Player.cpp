@@ -18329,6 +18329,38 @@ bool Player::LoadFromDB(ObjectGuid guid, CharacterDatabaseQueryHolder const& hol
     //Other way is to saves m_team into characters table.
     SetFactionForRace(GetRace());
 
+    // Restore Chromie Time state from DB. A character at or above the deactivation level
+    // restores nothing: the update fields stay zeroed and the next save persists 0, so a
+    // stale DB value (e.g. written before a level-up cleared the state) cannot resurrect
+    // chromie time on login (audit R8/m3, SRV CHR-4).
+    if (fields.chromieTimeExpansionId > 0 && !IsMaxLevel())
+    {
+        if (UIChromieTimeExpansionInfoEntry const* entry = sUIChromieTimeExpansionInfoStore.LookupEntry(uint32(fields.chromieTimeExpansionId)))
+        {
+            SetUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData)
+                .ModifyValue(&UF::ActivePlayerData::UiChromieTimeExpansionID),
+                int32(fields.chromieTimeExpansionId));
+
+            SetUpdateFieldValue(m_values.ModifyValue(&Player::m_playerData)
+                .ModifyValue(&UF::PlayerData::CtrOptions)
+                .ModifyValue(&UF::CTROptions::ChromieTimeExpansionMask),
+                uint32(entry->ExpansionMask));
+
+            SetChromieTimeConditionalFlags(true);
+        }
+    }
+
+    if (fields.timerunningSeasonId)
+        SetUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData)
+            .ModifyValue(&UF::ActivePlayerData::TimerunningSeasonID),
+            int32(fields.timerunningSeasonId));
+
+    // Always set FactionGroup on CtrOptions (needed for party sync and content tuning)
+    SetUpdateFieldValue(m_values.ModifyValue(&Player::m_playerData)
+        .ModifyValue(&UF::PlayerData::CtrOptions)
+        .ModifyValue(&UF::CTROptions::FactionGroup),
+        GetFactionGroupForRace(GetRace()));
+
     // load home bind and check in same time class/race pair, it used later for restore broken positions
     if (!_LoadHomeBind(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_HOME_BIND)))
         return false;
