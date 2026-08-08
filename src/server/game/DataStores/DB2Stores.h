@@ -446,6 +446,7 @@ TC_GAME_API extern DB2Storage<TransmogSetGroupEntry>                sTransmogSet
 TC_GAME_API extern DB2Storage<TransmogSetItemEntry>                 sTransmogSetItemStore;
 TC_GAME_API extern DB2Storage<TransportAnimationEntry>              sTransportAnimationStore;
 TC_GAME_API extern DB2Storage<TransportRotationEntry>               sTransportRotationStore;
+TC_GAME_API extern DB2Storage<TrophyEntry>                          sTrophyStore;
 TC_GAME_API extern DB2Storage<UiMapEntry>                           sUiMapStore;
 TC_GAME_API extern DB2Storage<UIChromieTimeExpansionInfoEntry>      sUIChromieTimeExpansionInfoStore;
 TC_GAME_API extern DB2Storage<UISplashScreenEntry>                  sUISplashScreenStore;
