@@ -69,6 +69,16 @@ enum GarrTalentTreeFeatureType : uint8
     GARR_TALENT_FEATURE_CHANNEL_ANIMA       = 7     // trees 345/348/346/347
 };
 
+// GarrAbilityEffect.AbilityAction values the covenant sanctum talent layer consumes. A GarrTalent that carries a
+// GarrAbilityID publishes its effect through GarrAbilityEffect rows (12.0.7.68887: effect 1844 = ability 1274
+// 'Forward Planning' action 14 ActionValueFlat 1.25; effect 1843 = ability 1273 'Strategic Genius' action 17
+// ActionValueFlat 0.75). The names below describe what the published ActionValueFlat multiplies.
+enum GarrAbilityActionType : uint8
+{
+    GARR_ABILITY_ACTION_COMPANION_HEAL_RATE = 14,   // multiplies companion (follower type 123) health recovery rate
+    GARR_ABILITY_ACTION_MISSION_TRAVEL_TIME = 17    // multiplies adventure travel duration
+};
+
 enum GarrisonFactionIndex
 {
     GARRISON_FACTION_INDEX_HORDE    = 0,
@@ -394,6 +404,12 @@ public:
 
     void AddMission(uint32 garrMissionId);
     void SendOfferedMissions() const;
+    // Covenant Adventures gate: the command table only operates once the tier-0 'Tactical Insight' talent of the
+    // covenant's Command Table tree (1074 Night Fae / 1077 Kyrian / 1080 Venthyr / 1083 Necrolord, trees
+    // 315/316/317/318) is researched. Always true for every non-covenant garrison type - their tables have no
+    // such talent. Enforced at mission generation, board re-send and mission start; the client UI gates itself
+    // with the same talent, so an un-researched table simply shows an empty board.
+    bool IsMissionBoardUnlocked() const;
     // Whether the offered-mission board is already at MAX_AVAILABLE_MISSIONS (GenerateAvailableMissions
     // would add nothing, so no ADD_MISSION packets would otherwise reach the client on open).
     bool IsOfferPoolFull() const;
@@ -505,6 +521,14 @@ public:
     // retail class + signature grant spells do, without hardcoding their ids. Already-known talents are skipped.
     void GrantCovenantAbilityTalents(uint32 covenantId);
 
+    // Product of GarrAbilityEffect.ActionValueFlat over every effect with the given AbilityAction reachable from
+    // a researched (rank >= 1) talent of this garrison that carries a GarrTalent.GarrAbilityID - the generic
+    // dispatch for talent-published ability modifiers (the Command Table tiers 'Forward Planning' / 'Strategic
+    // Genius' today; any future GarrAbility-carrying talent for free). Covenant-scoped trees only count while
+    // their covenant is the player's active one, mirroring the PerkSpellID layer. Returns 1.0 when nothing
+    // applies.
+    float GetTalentAbilityActionMultiplier(uint8 abilityAction) const;
+
     // Trophy system. This is a SELECTION, not an inventory: which trophies a character may pick from is never
     // stored, it is computed from Trophy.db2 filtered by the monument's TrophyTypeID and gated on each row's
     // PlayerConditionID (see WorldSession::HandleGetTrophyList). What persists is only "which statue is on
@@ -561,9 +585,16 @@ private:
     // sitting at Rank N has completed rank indices [0, N).
     void ApplyTalentRankPerk(uint32 garrTalentID, int32 rankIndex);
     void RemoveTalentRankPerks(uint32 garrTalentID, int32 completedRanks);
-    // Channel Anima destinations are gated by their GarrTalent.PlayerConditionID on the Anima Conductor tiers.
-    // Returns true for every talent that is not a Channel Anima destination.
-    bool IsChannelAnimaTalentAvailable(GarrTalentEntry const* talentEntry) const;
+    // Transport Network (FeatureTypeIndex 2): the researched tier's authored teleport/taxi capability
+    // (world table `garrison_transport_network` - the client publishes no effect fields for these talents).
+    // Taxi-teach spells are cast once; verified teleport spells are learned/unlearned like rank perks.
+    void ApplyTransportNetworkPerks(uint32 garrTalentID);
+    void RemoveTransportNetworkPerks(uint32 garrTalentID);
+    // Evaluates the talent's published GarrTalent.PlayerConditionID for the covenant sanctum research trees
+    // (Channel Anima tiers, tier-0 level+covenant gates, Reservoir renown/covenant gates). Returns true for
+    // talents without a condition, for non-covenant garrison types, and for the documented exemptions
+    // (ability + soulbind trees) - see the implementation for the full rationale.
+    bool IsTalentAvailableForPlayer(GarrTalentEntry const* talentEntry) const;
     // True for the six Anima Conductor destinations of a covenant (GarrTalentTree.FeatureTypeIndex 7).
     static bool IsChannelAnimaTalent(GarrTalentEntry const* talentEntry);
     // Charge one Channel Anima selection and take the previous temporary channel down. Returns a GARRISON_*

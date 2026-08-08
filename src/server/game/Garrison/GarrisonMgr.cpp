@@ -150,6 +150,13 @@ void GarrisonMgr::Initialize()
     for (auto& [talentId, ranks] : _talentRanksByTalent)
         std::sort(ranks.begin(), ranks.end(), [](GarrTalentRankEntry const* a, GarrTalentRankEntry const* b) { return a->Rank < b->Rank; });
 
+    // Index GarrAbilityEffect by its owning GarrAbility (same shape as _talentsByTree above). This is what lets
+    // a GarrTalent.GarrAbilityID-carrying talent (e.g. the Command Table tiers: GarrAbility 1274 'Forward
+    // Planning' effect 1844 AbilityAction 14 / GarrAbility 1273 'Strategic Genius' effect 1843 AbilityAction 17)
+    // be dispatched data-driven instead of the store being loaded but never read.
+    for (GarrAbilityEffectEntry const* effect : sGarrAbilityEffectStore)
+        _abilityEffectsByAbility[effect->GarrAbilityID].push_back(effect);
+
     // Build talent research index (talent tree -> research entry via crossref)
     for (GarrTalTreeXGarrTalResearchEntry const* xref : sGarrTalTreeXGarrTalResearchStore)
     {
@@ -184,6 +191,66 @@ void GarrisonMgr::Initialize()
     LoadAbominationRecipes();
     LoadAscensionMemories();
     LoadEmberCourtGuests();
+    LoadTransportNetworkSpells();
+}
+
+// Transport Network (trees 308/309/307/310). The 12 talents are category (c) in the covenant sanctum audit:
+// every rank row publishes PerkSpellID 0 / GarrAbilityID 0 / Points 0, so the client data names NO effect at
+// all - the talents' own descriptions name destinations, and matching standalone teleport/taxi spells exist in
+// the build but nothing links them. That link is therefore authored content (garrison_transport_network), and
+// every authored row is validated here exactly like a rank perk would be: the talent must exist and belong to
+// a Transport Network tree, and the spell must exist.
+void GarrisonMgr::LoadTransportNetworkSpells()
+{
+    _transportNetworkSpells.clear();
+
+    QueryResult result = WorldDatabase.Query("SELECT garrTalentId, spellId FROM garrison_transport_network");
+    if (!result)
+    {
+        TC_LOG_INFO("server.loading", ">> Loaded 0 transport network spells. DB table `garrison_transport_network` is empty - "
+            "researching a Transport Network tier will grant nothing until it is authored.");
+        return;
+    }
+
+    uint32 count = 0;
+    do
+    {
+        Field* fields = result->Fetch();
+        uint32 talentId = fields[0].GetUInt32();
+        uint32 spellId = fields[1].GetUInt32();
+
+        GarrTalentEntry const* talentEntry = sGarrTalentStore.LookupEntry(talentId);
+        if (!talentEntry)
+        {
+            TC_LOG_ERROR("sql.sql", "Non-existing GarrTalent.db2 entry {} referenced in `garrison_transport_network` (spellId {}); skipped.", talentId, spellId);
+            continue;
+        }
+
+        GarrTalentTreeEntry const* treeEntry = sGarrTalentTreeStore.LookupEntry(talentEntry->GarrTalentTreeID);
+        if (!treeEntry || treeEntry->FeatureTypeIndex != GARR_TALENT_FEATURE_TRANSPORT_NETWORK)
+        {
+            TC_LOG_ERROR("sql.sql", "GarrTalent {} referenced in `garrison_transport_network` is not a Transport Network talent "
+                "(tree {}, FeatureTypeIndex {}); skipped.", talentId, talentEntry->GarrTalentTreeID, treeEntry ? treeEntry->FeatureTypeIndex : -1);
+            continue;
+        }
+
+        if (!sSpellMgr->GetSpellInfo(spellId, DIFFICULTY_NONE))
+        {
+            TC_LOG_ERROR("sql.sql", "Non-existing spell {} referenced in `garrison_transport_network` (garrTalentId {}); skipped.", spellId, talentId);
+            continue;
+        }
+
+        _transportNetworkSpells[talentId].push_back(spellId);
+        ++count;
+    } while (result->NextRow());
+
+    TC_LOG_INFO("server.loading", ">> Loaded {} transport network spell grants.", count);
+}
+
+std::vector<uint32> const* GarrisonMgr::GetTransportNetworkSpells(uint32 garrTalentId) const
+{
+    auto itr = _transportNetworkSpells.find(garrTalentId);
+    return itr != _transportNetworkSpells.end() ? &itr->second : nullptr;
 }
 
 // Class-hall / order-hall (and any non-plot garrison) troop recruiters aren't garrison plot buildings, so the
@@ -1309,6 +1376,15 @@ GarrTalentResearchEntry const* GarrisonMgr::GetTalentResearchForTree(uint32 garr
     auto itr = _talentResearchByTree.find(garrTalentTreeID);
     if (itr != _talentResearchByTree.end())
         return itr->second;
+
+    return nullptr;
+}
+
+std::vector<GarrAbilityEffectEntry const*> const* GarrisonMgr::GetGarrAbilityEffects(uint32 garrAbilityID) const
+{
+    auto itr = _abilityEffectsByAbility.find(garrAbilityID);
+    if (itr != _abilityEffectsByAbility.end())
+        return &itr->second;
 
     return nullptr;
 }

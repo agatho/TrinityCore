@@ -35,6 +35,7 @@
 struct CharShipmentEntry;
 struct CharShipmentContainerEntry;
 struct GameObjectsEntry;
+struct GarrAbilityEffectEntry;
 struct GarrAbilityEntry;
 struct GarrAutoCombatantEntry;
 struct GarrAutoSpellEntry;
@@ -219,11 +220,23 @@ public:
     // than started - EmberCourt::StartCourt answers EMBER_COURT_ERROR_NO_VENUE_CONTENT.
     bool IsEmberCourtVenueAuthored() const { return _emberCourtVenueAuthored; }
 
+    // Transport Network (the covenant sanctum travel feature, GarrTalentTree.FeatureTypeIndex 2, trees
+    // 308 Kyrian / 309 Venthyr / 307 NightFae / 310 Necrolord). All 12 rank rows publish ZERO effect fields
+    // (audit-verified against wago @68887), so which teleport/taxi spell each researched tier enables is not
+    // client data - it is authored in the world table `garrison_transport_network`, with every row's spell
+    // verified to carry a real teleport (SpellEffect 15/252 + TARGET_DEST_DB with a spell_target_position row)
+    // or a taxi-node teach (SPELL_EFFECT_DISCOVER_TAXI). See the authoring SQL for source labels.
+    void LoadTransportNetworkSpells();
+    std::vector<uint32> const* GetTransportNetworkSpells(uint32 garrTalentId) const;
+
     // Talent system accessors
     std::vector<GarrTalentTreeEntry const*> const* GetTalentTreesForGarrType(int8 garrTypeID) const;
     std::vector<GarrTalentEntry const*> const* GetTalentsForTree(uint32 garrTalentTreeID) const;
     std::vector<GarrTalentRankEntry const*> const* GetTalentRanksForTalent(uint32 garrTalentID) const;
     GarrTalentResearchEntry const* GetTalentResearchForTree(uint32 garrTalentTreeID) const;
+    // Every GarrAbilityEffect row published for one GarrAbility (GarrTalent.GarrAbilityID carriers included -
+    // that is how the Command Table talent modifiers reach the mission engine). nullptr = none published.
+    std::vector<GarrAbilityEffectEntry const*> const* GetGarrAbilityEffects(uint32 garrAbilityID) const;
 
     // Mission system accessors
     std::vector<GarrMissionEntry const*> const* GetMissionsByGarrType(int8 garrTypeID) const;
@@ -281,6 +294,7 @@ private:
     std::unordered_map<uint32 /*garrTalentTreeID*/, std::vector<GarrTalentEntry const*>> _talentsByTree;
     std::unordered_map<uint32 /*garrTalentID*/, std::vector<GarrTalentRankEntry const*>> _talentRanksByTalent;
     std::unordered_map<uint32 /*garrTalentTreeID*/, GarrTalentResearchEntry const*> _talentResearchByTree;
+    std::unordered_map<uint32 /*garrAbilityID*/, std::vector<GarrAbilityEffectEntry const*>> _abilityEffectsByAbility;
 
     // Auto-combat indices
     std::unordered_map<uint32 /*garrAutoSpellID*/, std::vector<GarrAutoSpellEffectEntry const*>> _autoSpellEffects;
@@ -311,6 +325,9 @@ private:
     // Path of Ascension. The memory roster is authored content; the arena flag is a fact about this world DB.
     std::unordered_map<uint32 /*memoryId*/, AscensionMemoryTemplate> _ascensionMemories;
     bool _ascensionArenaAuthored = false;
+
+    // Transport Network authored spell grants (world table `garrison_transport_network`).
+    std::unordered_map<uint32 /*garrTalentId*/, std::vector<uint32 /*spellId*/>> _transportNetworkSpells;
 
     // The Ember Court. The per-guest preferences are authored content; the venue flag is a fact about this
     // world DB.

@@ -1971,7 +1971,13 @@ void Garrison::AddMission(uint32 garrMissionId)
     mission.PacketInfo.OfferTime = GameTime::GetGameTime();
     mission.PacketInfo.OfferDuration = Seconds(missionEntry->OfferDuration);
     mission.PacketInfo.StartTime = time_t(2288912640);
-    mission.PacketInfo.TravelDuration = Seconds(missionEntry->TravelDuration);
+    // Command Table tier 2 (GarrAbility 1273 'Strategic Genius', GarrAbilityEffect 1843: AbilityAction 17,
+    // ActionValueFlat 0.75) multiplies the travel duration of a Shadowlands adventure. Applied at offer time so
+    // the discounted value is what persists and round-trips (character_garrison_missions.travelDuration).
+    // AMBIGUITY (sniff needed): the talent tooltip says total COMPLETION time while the ability text and
+    // AbilityAction 17 say TRAVEL time - this applies the published action (travel only). One retail
+    // SMSG_GARRISON_ADD_MISSION_RESULT capture with the tier-2 talent researched settles which duration shrinks.
+    mission.PacketInfo.TravelDuration = Seconds(int64(missionEntry->TravelDuration * GetTalentAbilityActionMultiplier(GARR_ABILITY_ACTION_MISSION_TRAVEL_TIME)));
     mission.PacketInfo.MissionDuration = Seconds(missionEntry->MissionDuration);
     mission.PacketInfo.MissionState = 0; // Offered
     mission.PacketInfo.SuccessChance = 0;
@@ -1999,6 +2005,10 @@ void Garrison::AddMission(uint32 garrMissionId)
 // on every open (sniff: GET_GARRISON_INFO_RESULT + per-mission ADD_MISSION_RESULT).
 void Garrison::SendOfferedMissions() const
 {
+    // An un-unlocked covenant command table has no board to re-send (see IsMissionBoardUnlocked).
+    if (!IsMissionBoardUnlocked())
+        return;
+
     for (auto const& [dbId, mission] : _missions)
     {
         if (mission.PacketInfo.MissionState != 0) // 0 = offered; skip in-progress/completed
@@ -2014,6 +2024,50 @@ void Garrison::SendOfferedMissions() const
         addMissionResult.CanStartMission = true;
         _owner->SendDirectMessage(addMissionResult.Write());
     }
+}
+
+// Finally a consumer for GARR_TALENT_FEATURE_COMMAND_TABLE: the audit (COVENANT_SANCTUM_AUDIT.md par.1.4) found
+// the covenant mission board served unconditionally while the tier-0 'Tactical Insight' talents gated nothing.
+// The gate is resolved from data, not talent ids: the Command Table tree of the player's ACTIVE covenant
+// (FeatureTypeIndex 3, FeatureSubtypeIndex = CovenantID), its Tier-0 talent, researched to rank >= 1. With no
+// active covenant there is no command table to serve at all.
+bool Garrison::IsMissionBoardUnlocked() const
+{
+    if (GetType() != GARRISON_TYPE_COVENANT)
+        return true;
+
+    std::vector<GarrTalentTreeEntry const*> const* trees = sGarrisonMgr.GetTalentTreesForGarrType(static_cast<int8>(GARRISON_TYPE_COVENANT));
+    if (!trees)
+        return true;
+
+    for (GarrTalentTreeEntry const* treeEntry : *trees)
+    {
+        if (treeEntry->FeatureTypeIndex != GARR_TALENT_FEATURE_COMMAND_TABLE)
+            continue;
+
+        if (uint32(treeEntry->FeatureSubtypeIndex) != _owner->GetActiveCovenant())
+            continue;
+
+        std::vector<GarrTalentEntry const*> const* talents = sGarrisonMgr.GetTalentsForTree(treeEntry->ID);
+        if (!talents)
+            continue;
+
+        for (GarrTalentEntry const* talentEntry : *talents)
+        {
+            if (talentEntry->Tier != 0)
+                continue;
+
+            Talent const* talent = GetTalent(talentEntry->ID);
+            if (talent && talent->Rank >= 1)
+                return true;
+        }
+
+        // The covenant's Command Table tree exists and its unlock tier is not researched.
+        return false;
+    }
+
+    // No Command Table tree matches (e.g. no active covenant yet) - there is no table to operate.
+    return false;
 }
 
 bool Garrison::IsOfferPoolFull() const
@@ -2193,6 +2247,11 @@ int32 Garrison::CalculateSuccessChance(uint32 missionRecID, std::vector<uint64> 
 
 GarrisonError Garrison::StartMission(uint32 missionRecID, std::vector<uint64> const& followerDBIDs)
 {
+    // A locked covenant command table can hold stale offers generated before the gate existed (they persist);
+    // refuse to start them rather than let a client bypass the Tactical Insight unlock.
+    if (!IsMissionBoardUnlocked())
+        return GARRISON_ERROR_MISSION_START_CONDITION_FAILED;
+
     GarrMissionEntry const* missionEntry = sGarrMissionStore.LookupEntry(missionRecID);
     if (!missionEntry)
         return GARRISON_ERROR_INVALID_MISSION;
@@ -2742,6 +2801,11 @@ void Garrison::GenerateAvailableMissions()
     if (!_siteLevel)
         return;
 
+    // Adventures are gated on the covenant's tier-0 Command Table talent - generate no offers before it is
+    // researched, so the board a locked table would show (and could start from) simply does not exist.
+    if (!IsMissionBoardUnlocked())
+        return;
+
     // Use the garrison's own type for mission lookups
     int8 garrTypeID = static_cast<int8>(GetType());
 
@@ -3144,6 +3208,15 @@ GarrisonError Garrison::BuildShip(uint32 garrFollowerId)
     return GARRISON_SUCCESS;
 }
 
+// TODO(GarrAbility 1274 'Forward Planning'): the Command Table tier-1 talents publish a companion heal-RATE
+// multiplier (GarrAbilityEffect 1844: AbilityAction 14, ActionValueFlat 1.25), readable via
+// GetTalentAbilityActionMultiplier(GARR_ABILITY_ACTION_COMPANION_HEAL_RATE). The core has NO base heal-over-time
+// mechanic for it to scale: companion health only moves through this full-heal and through the client-driven
+// CMSG_GARRISON_ADD_FOLLOWER_HEALTH flat amount (WorldSession::HandleGarrisonAddFollowerHealth) - multiplying a
+// full heal is meaningless and multiplying the client's own amount would double-apply whatever the client already
+// computed. When a base regen tick exists (needs retail GarrisonFollowerChanged health-delta sniffs over time, or
+// a deliberately authored base rate labeled as such), multiply its per-tick amount by that accessor - the data
+// side is done, only the base mechanic is missing.
 void Garrison::HealAllFollowers()
 {
     for (auto& p : _followers)
@@ -4649,6 +4722,43 @@ Garrison::Talent const* Garrison::GetTalent(uint32 garrTalentID) const
     return nullptr;
 }
 
+// Generic GarrAbilityEffect dispatch for talent-carried abilities. GarrTalent.GarrAbilityID was loaded but never
+// read, and sGarrAbilityEffectStore was loaded but never iterated - so the Command Table tier 1/2 talents (shared
+// GarrAbility 1274 'Forward Planning' and 1273 'Strategic Genius' across trees 316/317/315/318) published real
+// multipliers that nothing consumed. This accumulates the ActionValueFlat of every published effect matching
+// `abilityAction` across the researched talents of THIS garrison, so a caller multiplies exactly what the data
+// says and nothing more.
+float Garrison::GetTalentAbilityActionMultiplier(uint8 abilityAction) const
+{
+    float multiplier = 1.0f;
+    for (auto const& [talentId, talent] : _talents)
+    {
+        if (talent.Rank < 1)
+            continue;
+
+        GarrTalentEntry const* talentEntry = sGarrTalentStore.LookupEntry(talentId);
+        if (!talentEntry || !talentEntry->GarrAbilityID)
+            continue;
+
+        // A covenant-scoped tree's modifiers follow the active covenant, exactly like its PerkSpellID grants
+        // (see ApplyTalentRankPerk / RefreshCovenantTalentPerks): a researched Kyrian 'Wings of Light' must not
+        // keep discounting travel time after the player defects to the Venthyr.
+        GarrTalentTreeEntry const* treeEntry = sGarrTalentTreeStore.LookupEntry(talentEntry->GarrTalentTreeID);
+        if (!IsTalentTreeOwnedByPlayerCovenant(treeEntry))
+            continue;
+
+        std::vector<GarrAbilityEffectEntry const*> const* effects = sGarrisonMgr.GetGarrAbilityEffects(talentEntry->GarrAbilityID);
+        if (!effects)
+            continue;
+
+        for (GarrAbilityEffectEntry const* effect : *effects)
+            if (effect->AbilityAction == abilityAction && effect->ActionValueFlat > 0.0f)
+                multiplier *= effect->ActionValueFlat;
+    }
+
+    return multiplier;
+}
+
 // GarrTalentRank.PerkSpellID is what turns a researched talent from a stored row into a real effect: the covenant
 // ability trees (393/396/397/395) publish the class + signature abilities there, and the soulbind trees publish
 // their non-conduit trait nodes there. Nothing in the core read the column before this.
@@ -4667,6 +4777,21 @@ void Garrison::ApplyTalentRankPerk(uint32 garrTalentID, int32 rankIndex)
     if (!talentEntry)
         return;
 
+    GarrTalentTreeEntry const* treeEntry = sGarrTalentTreeStore.LookupEntry(talentEntry->GarrTalentTreeID);
+
+    // A covenant-scoped tree only grants while its own covenant is the active one. The talent row itself survives a
+    // covenant switch untouched (see RefreshCovenantTalentPerks); what a switch takes away is the effect, exactly as
+    // it already works for the soulbind trees below, where only the ACTIVE soulbind's traits may be running.
+    if (!IsTalentTreeOwnedByPlayerCovenant(treeEntry))
+        return;
+
+    // Transport Network tiers publish no PerkSpellID at all (all 12 rank rows are zero - audit-verified), so
+    // their effect is the authored spell set of `garrison_transport_network` instead of the rank perk below.
+    // The talents are single-rank; the covenant/soulbind refresh paths re-call this with rankIndex 0 too, so
+    // the grants follow covenant switches exactly like PerkSpellID grants do.
+    if (treeEntry && treeEntry->FeatureTypeIndex == GARR_TALENT_FEATURE_TRANSPORT_NETWORK && rankIndex == 0)
+        ApplyTransportNetworkPerks(garrTalentID);
+
     std::vector<GarrTalentRankEntry const*> const* ranks = sGarrisonMgr.GetTalentRanksForTalent(garrTalentID);
     if (!ranks || rankIndex < 0 || rankIndex >= static_cast<int32>(ranks->size()))
         return;
@@ -4683,14 +4808,6 @@ void Garrison::ApplyTalentRankPerk(uint32 garrTalentID, int32 rankIndex)
         if (PlayerConditionEntry const* perkCondition = sPlayerConditionStore.LookupEntry(uint32(rankEntry->PerkPlayerConditionID)))
             if (!ConditionMgr::IsPlayerMeetingCondition(_owner, perkCondition))
                 return;
-
-    GarrTalentTreeEntry const* treeEntry = sGarrTalentTreeStore.LookupEntry(talentEntry->GarrTalentTreeID);
-
-    // A covenant-scoped tree only grants while its own covenant is the active one. The talent row itself survives a
-    // covenant switch untouched (see RefreshCovenantTalentPerks); what a switch takes away is the effect, exactly as
-    // it already works for the soulbind trees below, where only the ACTIVE soulbind's traits may be running.
-    if (!IsTalentTreeOwnedByPlayerCovenant(treeEntry))
-        return;
 
     if (treeEntry && treeEntry->FeatureTypeIndex == GARR_TALENT_FEATURE_SOULBIND)
     {
@@ -4722,6 +4839,10 @@ void Garrison::RemoveTalentRankPerks(uint32 garrTalentID, int32 completedRanks)
     GarrTalentTreeEntry const* treeEntry = sGarrTalentTreeStore.LookupEntry(talentEntry->GarrTalentTreeID);
     bool const isSoulbindTrait = treeEntry && treeEntry->FeatureTypeIndex == GARR_TALENT_FEATURE_SOULBIND;
 
+    // Strip the authored Transport Network grants symmetrically with how ApplyTalentRankPerk seats them.
+    if (treeEntry && treeEntry->FeatureTypeIndex == GARR_TALENT_FEATURE_TRANSPORT_NETWORK && completedRanks > 0)
+        RemoveTransportNetworkPerks(garrTalentID);
+
     int32 const last = std::min<int32>(completedRanks, static_cast<int32>(ranks->size()));
     for (int32 i = 0; i < last; ++i)
     {
@@ -4734,6 +4855,59 @@ void Garrison::RemoveTalentRankPerks(uint32 garrTalentID, int32 completedRanks)
             _owner->RemoveAurasDueToSpell(perkSpellId);
         else
             _owner->RemoveSpell(perkSpellId);
+    }
+}
+
+// Transport Network research payoff. The client publishes zero effect fields for these talents, so the spell
+// set per tier is authored in `garrison_transport_network` (validated at load; see GarrisonMgr). Two grant
+// modes, decided by the spell's own published effects rather than an authored flag:
+//   * SPELL_EFFECT_DISCOVER_TAXI carriers (the Kyrian/Venthyr "Teach Taxi Node: ..." spells) are one-shot
+//     casts - the taught TaxiNodes row is the persistent capability, the spell itself is not learnable.
+//     Re-casting on login/covenant re-activation is a no-op for an already-known node.
+//   * Everything else (the verified "Traverse to ..." / "Mirror Teleport: ..." / "Teleport: Seat of the
+//     Primus" teleports) is learned as a castable spell - the honest scale of this implementation: retail
+//     drives these from world objects (mushroom rings, mirrors, ziggurat portals) that are not spawned or
+//     scripted yet, so the capability is granted directly until that world content exists.
+void Garrison::ApplyTransportNetworkPerks(uint32 garrTalentID)
+{
+    std::vector<uint32> const* spells = sGarrisonMgr.GetTransportNetworkSpells(garrTalentID);
+    if (!spells)
+        return;
+
+    for (uint32 spellId : *spells)
+    {
+        SpellInfo const* spellInfo = sSpellMgr->GetSpellInfo(spellId, DIFFICULTY_NONE);
+        if (!spellInfo)
+            continue;   // validated at load; belt and braces against reloads
+
+        if (spellInfo->HasEffect(SPELL_EFFECT_DISCOVER_TAXI))
+        {
+            _owner->CastSpell(_owner, spellId, true);
+            continue;
+        }
+
+        _owner->LearnSpell(spellId, false);
+    }
+}
+
+void Garrison::RemoveTransportNetworkPerks(uint32 garrTalentID)
+{
+    std::vector<uint32> const* spells = sGarrisonMgr.GetTransportNetworkSpells(garrTalentID);
+    if (!spells)
+        return;
+
+    for (uint32 spellId : *spells)
+    {
+        SpellInfo const* spellInfo = sSpellMgr->GetSpellInfo(spellId, DIFFICULTY_NONE);
+        if (!spellInfo)
+            continue;
+
+        // Discovered taxi nodes are deliberately kept: there is no retail precedent for stripping a known
+        // flight point on a covenant switch, and the taxi mask is not a spell to unlearn.
+        if (spellInfo->HasEffect(SPELL_EFFECT_DISCOVER_TAXI))
+            continue;
+
+        _owner->RemoveSpell(spellId);
     }
 }
 
@@ -4870,13 +5044,34 @@ void Garrison::ExpireTemporaryChannelAnima()
         RemoveChannelAnimaTalent(talentId);
 }
 
-bool Garrison::IsChannelAnimaTalentAvailable(GarrTalentEntry const* talentEntry) const
+// GarrTalent.PlayerConditionID enforcement. Originally only the Channel Anima destinations (FeatureTypeIndex 7)
+// evaluated their condition; every other sanctum tree's published gate was ignored, which let any covenant member
+// research Reservoir tier 2/3 with no renown and no tier 1 (the audit's ungated-tier-2 hole - PrerequisiteTalentID
+// is 0 on all 12 Reservoir talents, so the renown PlayerConditions ARE the tier ladder). Every condition the 24
+// sanctum trees publish is faithfully evaluable here (verified against wago @68887 + this core):
+//   84025 (tier-0 gates)     -> MT 156100: level >= 60 (type 69) AND covenant-choice quest 62000/57878 rewarded
+//                               (type 110); both types implemented, both quests shipped in the world DB
+//   82863 / 82871 (Reservoir) -> "Requires Renown 11/19": MT 145848/145864, type 119 on currency 1822 (synced)
+//   70102 / 70104 (Reservoir) -> plain PlayerCondition.CovenantID membership tests
+// Deliberately still unenforced, each for a stated reason:
+//   * non-covenant garrison types: the legacy order-hall/war-campaign trees carry level/ContentTuning and
+//     campaign-quest conditions that cannot be evaluated faithfully for a 12.0.7 character;
+//   * GARR_TALENT_FEATURE_ABILITIES: tree 396 (alone of the four) publishes per-class masks at TALENT level; the
+//     grant design seats all 14 rows and filters by class at the PerkPlayerConditionID layer (see
+//     GrantCovenantAbilityTalents), so enforcing here would asymmetrically break the Venthyr grant;
+//   * GARR_TALENT_FEATURE_SOULBIND: the soulbind rows mix evaluable renown gates with per-soulbind campaign
+//     ModifierTrees ("Continue the campaign to unlock X", e.g. PC 84478 -> MT 146013) whose quest chains are not
+//     audited on this core - enforcing unverified campaign state could brick trait selection entirely.
+bool Garrison::IsTalentAvailableForPlayer(GarrTalentEntry const* talentEntry) const
 {
     if (!talentEntry || !talentEntry->PlayerConditionID)
         return true;
 
     GarrTalentTreeEntry const* treeEntry = sGarrTalentTreeStore.LookupEntry(talentEntry->GarrTalentTreeID);
-    if (!treeEntry || treeEntry->FeatureTypeIndex != GARR_TALENT_FEATURE_CHANNEL_ANIMA)
+    if (!treeEntry || treeEntry->GarrTypeID != static_cast<int8>(GARRISON_TYPE_COVENANT))
+        return true;
+
+    if (treeEntry->FeatureTypeIndex == GARR_TALENT_FEATURE_ABILITIES || treeEntry->FeatureTypeIndex == GARR_TALENT_FEATURE_SOULBIND)
         return true;
 
     PlayerConditionEntry const* condition = sPlayerConditionStore.LookupEntry(talentEntry->PlayerConditionID);
@@ -5055,15 +5250,13 @@ uint32 Garrison::LearnTalent(uint32 garrTalentID, bool isTemporary)
             return GARRISON_ERROR_INVALID_TALENT;
     }
 
-    // Sanctum feature gate: the Channel Anima destinations (GarrTalentTree.FeatureTypeIndex 7) are the one sanctum
-    // chain whose GarrTalent.PlayerConditionID is a pure GarrisonTalentResearched (ModifierTree type 202) test on
-    // the covenant's Anima Conductor tiers - e.g. talent 1237 Purity's Pinnacle -> PlayerCondition 79227 ->
-    // ModifierTree 132493 -> "talent 1062 (Anima Conductor tier 1) researched". That is fully evaluable offline and
-    // is what gives the Anima Conductor an actual effect: tier 1 opens 2 destinations, tier 2 the next 2, tier 3 the
-    // last 2. Other sanctum/order-hall trees carry level/ContentTuning and campaign-quest conditions that TC cannot
-    // evaluate faithfully for a 12.0.7 character, so their PlayerConditionID is deliberately left unenforced.
-    if (!IsChannelAnimaTalentAvailable(talentEntry))
-        return GARRISON_ERROR_INVALID_TALENT;
+    // Published sanctum gate: GarrTalent.PlayerConditionID. For the Channel Anima destinations this is the
+    // Anima Conductor tier test (talent 1237 Purity's Pinnacle -> PC 79227 -> ModifierTree 132493 -> "talent 1062
+    // researched": tier 1 opens 2 destinations, tier 2 the next 2, tier 3 the last 2); for the other sanctum
+    // research trees it is the tier-0 covenant gate and the Reservoir renown/covenant gates. See
+    // IsTalentAvailableForPlayer for exactly what is enforced and what is deliberately exempt.
+    if (!IsTalentAvailableForPlayer(talentEntry))
+        return GARRISON_ERROR_FAILED_CONDITION;
 
     // A covenant-scoped tree belongs to exactly one covenant.
     if (!IsTalentTreeOwnedByPlayerCovenant(treeEntry))
@@ -5154,9 +5347,10 @@ uint32 Garrison::ResearchTalent(uint32 garrTalentID)
     if (!treeEntry || treeEntry->GarrTypeID != static_cast<int8>(GetType()))
         return GARRISON_ERROR_INVALID_TALENT;
 
-    // Anima Conductor gate for the Channel Anima destinations, and the covenant-ownership check (see LearnTalent).
-    if (!IsChannelAnimaTalentAvailable(talentEntry))
-        return GARRISON_ERROR_INVALID_TALENT;
+    // Published PlayerConditionID gate (Channel Anima tiers, tier-0 covenant gates, Reservoir renown gates - see
+    // IsTalentAvailableForPlayer), then the covenant-ownership check (see LearnTalent).
+    if (!IsTalentAvailableForPlayer(talentEntry))
+        return GARRISON_ERROR_FAILED_CONDITION;
 
     if (!IsTalentTreeOwnedByPlayerCovenant(treeEntry))
         return GARRISON_ERROR_INVALID_TALENT;
