@@ -90,3 +90,33 @@ Delves.Reward/Coffer.LootId, Delves.Companion.CreatureId, ChallengeMode.Affix.*.
 - Merge `warband/phase9-delves` thinking it's the delve branch — it's the warband account-systems branch.
 - Build with the 14.38 toolset target `worldserver` (links fail on Boost 1.89 symbols); lib-only compiles
   are fine there.
+
+---
+
+## STATUS: EXECUTED (2026-08-08)
+
+All sections done. Integration at `acfba4382bac`, deployed and booted clean on the integrated realm.
+
+- **§1-3** delves + mythic-plus: merged earlier (2026-08-07).
+- **§3b/§3c**: merged `content/midnight-s1` alone — `feature/major-factions-1207` is an ancestor of it, so
+  one merge covered both. Conflict: `PlayerLoginQueryIndex` enum (covenant-soulbinds vs the two
+  renown-rewards slots) resolved as a union; 101 slots, all unique.
+- **§3.1** reconfigure + build: done, 14.44 toolset.
+- **§3.2 Great Vault World row bridge**: done on `feature/mythic-plus-great-vault-world` →
+  `feature/mythic-plus` → integration. Several claims in §3.2 were **stale or wrong** — see that branch's
+  commit message. Notably: the two deletions were already done by `1cc42c3442`; all three rows already
+  existed (none were DB2-driven); the sniff citation belongs to `MPLUS_SNIFF_DEEP_68275.md` §5, not
+  `LFGLIST_SNIFF_DEEP_68275.md`; and the delve ilvl table is NOT needed — the ladder resolves from
+  `ItemBonusTreeNode` Delves_Jackpot bands. **World type = 6.** The real bug was synthetic ThresholdIDs
+  (`row*3+slot` = 0..8) that the client could not resolve, so no vault row could render at all.
+- **§3.3** SQL: applied. Four migrations failed as shipped and were fixed on `content/midnight-s1-sqlfix`:
+  `_64`/`_67` used the legacy `(Item, Reference)` loot columns instead of this codebase's
+  `(ItemType, Item)`; `_62` inserted a duplicate PK row; `_64` had two unescaped apostrophes.
+  Without those fixes the M+ per-dungeon gear pools and the delve pool did not exist.
+- **Conf**: the `.conf.dist` defaults are NOT the code defaults (code defaults are 0). 62 missing keys
+  appended to `M:/IntegratedServer/worldserver.conf`; backup `worldserver.conf.bak_pre_midnight_s1`.
+- **§4 Do NOT**: respected.
+
+Still open from §5 (content-ops, unchanged): delve_template rows for the remaining Midnight S1 delves,
+Shadow Enclave gossip, the 7 dangling delve ScriptNames, companion ability ids, and the loot pools listed
+there that midnight-s1 did not seed.
