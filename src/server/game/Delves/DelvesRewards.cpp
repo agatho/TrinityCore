@@ -28,6 +28,7 @@
 #include "LootMgr.h"
 #include "Mail.h"
 #include "Player.h"
+#include "ReputationMgr.h"
 #include "WeeklyRewardsMgr.h"
 #include "WorldSession.h"
 
@@ -172,6 +173,14 @@ void DelvesRewards::AwardCompanionXP(Player* player, uint8 tier)
     CompanionState state;
     DelvesCompanion::LoadFromDB(player->GetSession()->GetBattlenetAccountId(), state);
     DelvesCompanion::AwardCompanionXP(player->GetSession()->GetBattlenetAccountId(), state, xpAmount);
+
+    // Mirror the same amount into the retail-visible companion reputation track (Midnight faction 2742
+    // "Delves: Season 1", RenownCurrencyID 3317) so the client's rep/renown UI tracks companion
+    // progression. This is a mirror only - the internal CompanionState math above stays authoritative.
+    // Config-tunable and guarded on Faction.db2, so a wrong/absent id is a safe no-op.
+    if (uint32 factionId = uint32(sConfigMgr->GetIntDefault("Delves.Companion.FactionId", 2742)))
+        if (FactionEntry const* factionEntry = sFactionStore.LookupEntry(factionId))
+            player->GetReputationMgr().ModifyReputation(factionEntry, int32(xpAmount));
 
     TC_LOG_DEBUG("scripts.delves", "Awarded {} companion XP to {} (level {} -> {})",
         xpAmount, player->GetName(), state.Level, state.Level);
