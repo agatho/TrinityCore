@@ -548,6 +548,9 @@ namespace WorldPackets
         class ConversationLineStarted;
         class RequestLatestSplashScreen;
         class QueryCountdownTimer;
+        class DoCountdown;
+        class GetRemainingGameTime;
+        class SetStopConversation;
         class SetCurrencyFlags;
     }
 
@@ -770,6 +773,7 @@ namespace WorldPackets
     namespace Talent
     {
         class LearnTalents;
+        class UnlearnSpecialization;
         class LearnPvpTalents;
         class ConfirmRespecWipe;
     }
