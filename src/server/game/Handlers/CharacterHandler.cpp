@@ -811,19 +811,35 @@ void WorldSession::HandleSetupWarbandGroups(WorldPackets::Character::SetupWarban
 {
     uint32 battlenetAccountId = GetBattlenetAccountId();
 
-    // Validate: max 5 groups
-    if (setupWarbandGroups.Groups.size() > 5)
+    // Cap taken from the client itself, not from patch notes: the 12.0.7 client exposes the limit to Lua as
+    // GetMaxWarbandGroupCount(), which is a zero-argument constant getter returning 20. In the 68275 binary
+    // (wow_dump.bin, ImageBase 0x7FF7B3140000) that function is at RVA 0xAE7DF0 - it loads its own name string
+    // "GetMaxWarbandGroupCount" (RVA 0x3A87498) and the returned constant with
+    // "mov dword ptr [rbp+0x20], 0x14" at RVA 0xAE7E2F, i.e. 20. Reading that slot as the return value was
+    // validated by extracting the same pattern across all 26 sibling constant getters and checking the ones
+    // whose values are independently known: GetIslandsMaxGroupSize=3, GetMaxNumQuestsCanAccept=35,
+    // GetMaxNumTeams=2, GetWarResourcesCurrencyID=1560, GetDragonIslesSuppliesCurrencyID=2003,
+    // GetAzeriteCurrencyID=1553 - all correct. The client is also the thing that enforces this cap in the UI:
+    // Blizzard_GlueXML/Mainline/CharacterSelect.lua:1381 gates the Add Group button on
+    // "CharacterSelectListUtil.GetTotalGroupCount() >= GetMaxWarbandGroupCount()", and
+    // CharacterSelect/CharacterSelectList.lua:13 formats the disabled tooltip with the same value.
+    constexpr std::size_t MaxWarbandGroups = 20;
+
+    // The OrderIndex de-duplication below tracks seen indexes in a uint32 bitmask.
+    static_assert(MaxWarbandGroups <= 32, "seenOrderIndexes has room for at most 32 order indexes");
+
+    if (setupWarbandGroups.Groups.size() > MaxWarbandGroups)
     {
-        TC_LOG_ERROR("network", "WorldSession::HandleSetupWarbandGroups: Account {} sent {} groups, max is 5",
-            battlenetAccountId, setupWarbandGroups.Groups.size());
+        TC_LOG_ERROR("network", "WorldSession::HandleSetupWarbandGroups: Account {} sent {} groups, max is {}",
+            battlenetAccountId, setupWarbandGroups.Groups.size(), MaxWarbandGroups);
         return;
     }
 
     uint32 seenOrderIndexes = 0;
     for (auto const& group : setupWarbandGroups.Groups)
     {
-        // Validate order index: bounded and unique so the derived group key cannot collide
-        if (group.OrderIndex >= 20 || (seenOrderIndexes & (1u << group.OrderIndex)))
+        // Bound and de-duplicate OrderIndex against the same cap, so the two can never disagree.
+        if (group.OrderIndex >= MaxWarbandGroups || (seenOrderIndexes & (1u << group.OrderIndex)))
         {
             TC_LOG_ERROR("network", "WorldSession::HandleSetupWarbandGroups: Account {} sent invalid or duplicate OrderIndex {}",
                 battlenetAccountId, group.OrderIndex);
