@@ -25,7 +25,7 @@
 namespace
 {
     // BattlepayPurchaseStatus / PurchaseResult (extracted from the client enum registrar).
-    constexpr int32 STATUS_DONE   = 3;
+    constexpr int32 STATUS_DONE   = 6; // 68974 capture: retail reports completed purchases with Status=6 (was 3)
     constexpr int32 STATUS_FAILED = 4;
     constexpr int32 RESULT_OK                       = 0;
     constexpr int32 RESULT_NOT_ENOUGH_BALANCE       = 29;
