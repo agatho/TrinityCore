@@ -27,14 +27,6 @@
 #include "MythicPlusData.h"
 #include "Player.h"
 
-// NOTE (assembly): the Great Vault reward-item logic for the Mythic+ row deliberately does NOT live in this file.
-// It is a service on ChallengeModeMgr (BuildMythicPlusVaultOptions / ClaimMythicPlusVaultReward /
-// GetMythicPlusVaultSlotForThreshold) so that whichever handler an assembly binds to CMSG_REQUEST_WEEKLY_REWARDS /
-// CMSG_CLAIM_WEEKLY_REWARD can drive it. On this branch that is the pair below, over the ChallengeMode packet
-// family; integration/all-systems binds WeeklyRewardHandler.cpp over the WeeklyRewards packet family (it also
-// serves the Raid and World vault rows) and calls the same service for the Mythic+ row. There is exactly one
-// handler bound per opcode in either assembly - the granting rules are shared, never duplicated.
-
 void WorldSession::HandleRequestMythicPlusSeasonData(WorldPackets::ChallengeMode::RequestMythicPlusSeasonData& /*requestMythicPlusSeasonData*/)
 {
     WorldPackets::ChallengeMode::MythicPlusSeasonData response;
@@ -137,91 +129,15 @@ void WorldSession::HandleMythicPlusRequestMapStats(WorldPackets::ChallengeMode::
     SendPacket(response.Write());
 }
 
-void WorldSession::HandleRequestWeeklyRewards(WorldPackets::ChallengeMode::RequestWeeklyRewards& /*request*/)
-{
-    Player* player = GetPlayer();
-
-    // Opening the Great Vault after a reset grants a fresh keystone when the player has none (retail rule) and
-    // applies the pending weekly level adjustment / affix restamp.
-    sChallengeModeMgr.UpdateKeystoneForNewWeek(player, true /*createIfMissing*/);
-
-    WorldPackets::ChallengeMode::WeeklyRewardsProgressResult response;
-
-    MythicPlusData* data = player->GetMythicPlusData();
-    uint32 const runCount = data ? data->GetWeeklyRunCount() : 0;
-
-    // The live Mythic+ vault thresholds (WeeklyRewardChestThreshold.db2, Type=MythicPlus): slots 0/1/2 unlock at
-    // 1/4/8 completed runs this week. Missing DB2 -> empty -> no M+ row (safe).
-    std::vector<ChallengeModeMgr::VaultThreshold> const thresholds = sChallengeModeMgr.GetMythicPlusVaultThresholds();
-
-    // A single M+ activity tier so the vault shows the dungeon row. Type=1 (MythicPlus) is authoritative; Level is
-    // the best slot's keystone level, Points the run count. ActivityTierID comes from the active season's
-    // MythicPlusSeasonRewardLevels rows (0 when the DB2 has no data for the season).
-    if (!thresholds.empty())
-    {
-        WorldPackets::ChallengeMode::WeeklyRewardActivityTier& tier = response.ActivityTiers.emplace_back();
-        tier.ActivityTierID = sChallengeModeMgr.GetVaultActivityTierId();
-        tier.Type = 1;
-        tier.Level = data ? int32(data->GetVaultSlotLevel(0)) : 0;
-        tier.Points = int32(runCount);
-    }
-
-    for (ChallengeModeMgr::VaultThreshold const& threshold : thresholds)
-    {
-        WorldPackets::ChallengeMode::WeeklyRewardThresholdProgress& progress = response.Progress.emplace_back();
-        progress.ThresholdID = int32(threshold.ThresholdID);
-        progress.Amount = int32(runCount);
-        progress.Level = data ? int32(data->GetVaultSlotLevel(threshold.Index)) : 0;
-        progress.Earned = runCount >= threshold.Count;
-    }
-
-    SendPacket(response.Write());
-
-    // Reward options: one previewed item per unlocked slot, rolled from the vault pool at that slot's Jackpot
-    // item level. The preview is an example (the granted item is rolled fresh on claim); the option carries no
-    // item when the vault reward pool (ChallengeMode.Vault.LootId) is not configured.
-    WorldPackets::ChallengeMode::WeeklyRewardsResult result;
-
-    for (ChallengeModeMgr::VaultRewardOption& option : sChallengeModeMgr.BuildMythicPlusVaultOptions(player))
-    {
-        WorldPackets::ChallengeMode::WeeklyRewardActivity& activity = result.Activities.emplace_back();
-        activity.ThresholdID = option.ThresholdID;
-
-        if (!option.ItemID)
-            continue;
-
-        WorldPackets::ChallengeMode::WeeklyReward& reward = activity.Rewards.emplace_back();
-        reward.HasItem = true;
-        reward.Item.ItemID = option.ItemID;
-
-        if (!option.BonusListIDs.empty())
-        {
-            WorldPackets::Item::ItemBonuses& itemBonus = reward.Item.ItemBonus.emplace();
-            itemBonus.Context = ItemContext::MythicPlus_Jackpot;
-            itemBonus.BonusListIDs = std::move(option.BonusListIDs);
-        }
-    }
-
-    SendPacket(result.Write());
-}
-
-void WorldSession::HandleClaimWeeklyReward(WorldPackets::ChallengeMode::ClaimWeeklyReward& claim)
-{
-    Player* player = GetPlayer();
-
-    // RewardID is the WeeklyRewardChestThreshold.ID of the chosen slot (not yet sniff-confirmed); an id that is
-    // not a live Mythic+ slot is rejected outright, so a wrong id can never yield a reward.
-    uint32 const slotIndex = sChallengeModeMgr.GetMythicPlusVaultSlotForThreshold(claim.RewardID);
-
-    // All validation + granting lives in the shared service (see the note at the top of this file).
-    ChallengeModeMgr::VaultClaimResult const claimResult = slotIndex != ChallengeModeMgr::VAULT_SLOT_NONE
-        ? sChallengeModeMgr.ClaimMythicPlusVaultReward(player, slotIndex)
-        : ChallengeModeMgr::VaultClaimResult::NotClaimable;
-
-    WorldPackets::ChallengeMode::WeeklyRewardClaimResult result;
-    result.Result = claimResult == ChallengeModeMgr::VaultClaimResult::Success ? 0 : 1;
-    SendPacket(result.Write());
-}
+// NOTE (assembly): CMSG_REQUEST_WEEKLY_REWARDS / CMSG_CLAIM_WEEKLY_REWARD are NOT handled here.
+// This branch merges feature/great-vault, whose WeeklyRewardHandler.cpp serves all three Great Vault rows
+// (Dungeon / Raid / World) over the WorldPackets::WeeklyRewards packet family, and an opcode can only have one
+// bound handler. The Mythic+-only pair that used to live here (over WorldPackets::ChallengeMode) is gone; the one
+// behaviour it had that the bound handler lacked - refreshing the carried keystone when the vault is opened after
+// a weekly reset - is called from WeeklyRewardHandler.cpp instead. The reward rules stay shared, never duplicated:
+// the Mythic+ row's season reward-level cap still comes from ChallengeModeMgr (GetVaultRewardLevelCap), and
+// ChallengeModeMgr's BuildMythicPlusVaultOptions / ClaimMythicPlusVaultReward / GetMythicPlusVaultSlotForThreshold
+// remain available for an assembly that binds a Mythic+-only handler instead.
 
 void WorldSession::HandleResetChallengeMode(WorldPackets::ChallengeMode::ResetChallengeMode& /*resetChallengeMode*/)
 {
