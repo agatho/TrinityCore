@@ -324,5 +324,20 @@ private:
 
 void AddSC_npc_brann_bronzebeard_delves()
 {
-    RegisterCreatureAI(npc_brann_bronzebeard_delvesAI);
+    // Two names, one AI. The behaviour above is not Brann-specific: it is the generic delve
+    // companion (follow / assist / role rotation / open the companion configuration frame), and
+    // which creature wears it is season content picked by Delves.Companion.CreatureId.
+    //
+    // 1) "npc_brann_bronzebeard_delves" - RegisterCreatureAI() stringizes the type name, so the
+    //    previous `RegisterCreatureAI(npc_brann_bronzebeard_delvesAI)` registered the trailing
+    //    "AI", which does not match DelvesCompanion::COMPANION_AI_SCRIPT_NAME.
+    // 2) "npc_valeera_companion" - the Midnight S1 companion is Valeera Sanguinar, creature 248567
+    //    (Delves.Companion.CreatureId = 248567 in M:/IntegratedServer/worldserver.conf), and
+    //    sql/updates/world/master/2026_04_29_03_world.sql sets that ScriptName on 248567. Without
+    //    this the summoned companion fell back to the default CreatureAI: it did not follow, did
+    //    not assist, and its gossip never sent SMSG_SHOW_DELVES_COMPANION_CONFIGURATION_UI. The
+    //    live realm logged "Script 'npc_valeera_companion' is referenced by the database, but does
+    //    not exist in the core!" every boot (M:/IntegratedServer/logs/DBErrors.log).
+    new GenericCreatureScript<npc_brann_bronzebeard_delvesAI>(DelvesCompanion::COMPANION_AI_SCRIPT_NAME);
+    new GenericCreatureScript<npc_brann_bronzebeard_delvesAI>("npc_valeera_companion");
 }
