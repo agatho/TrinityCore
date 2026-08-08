@@ -1867,7 +1867,30 @@ enum OpcodeServer : uint32
     SMSG_LFG_LIST_SEARCH_RESULTS                                    = 0x560002,
     SMSG_LFG_LIST_SEARCH_RESULTS_UPDATE                             = 0x560010,
     SMSG_LFG_LIST_SEARCH_STATUS                                     = 0x560003,
-    SMSG_HOUSING_CATALOG_STATE_SYNC                                 = 0x56000E, // ClientMirrorSystem subgroup; sniff-verified wire = uint32 count + count*(uint32 ID, uint32 PackedState)
+    // 0x56000E is SMSG_LFG_LIST_UPDATE_BLACKLIST, matching upstream master. The 2026-05-11 "reclaim"
+    // of this value for SMSG_HOUSING_CATALOG_STATE_SYNC was a misidentification and is reverted here;
+    // the housing name is parked on UNKNOWN_OPCODE in the TC-CUSTOM block below. Evidence:
+    //  * Request/reply pairing is exact across 9 captures spanning builds 68275/68453/68974:
+    //    38 x CMSG_REQUEST_LFG_LIST_BLACKLIST (0x3A0183) <-> 38 x SMSG 0x56000E, and 0x56000E never
+    //    appears in any capture without a matching blacklist request.
+    //  * Every observed body satisfies size == 4 + 4 + count*8 exactly, i.e. uint32 count followed by
+    //    count * {uint32 GroupFinderActivityID, uint32 Reason}: 68275 count=506 (4056 B, housing12.0.7.pkt,
+    //    "m+ run12.0.7.pkt", "rated BG 12.0.7.pkt"), 507 (4064 B, ingame-shop capture), 68453 count=1085
+    //    (8688 B, garrisonlevel2upgrade.pkt), 68974 count=456 (3656 B,
+    //    dump_12.0.7.68974_2026-08-07_21-54-14.pkt). Activity IDs are unique and ascending; Reason is
+    //    always drawn from the small set {1,2,3,10,18,19}; no row is implausible as an activity id.
+    //  * The "~4KB ClientMirrorSystem bulk-sync payload" cited as proof of housing ownership IS this packet:
+    //    the 0x56000E record in housing12.0.7.pkt is 4056 B whose leading pairs decode to
+    //    (14,3) (15,3) (22,19) - the exact first rows of the LFG activity blacklist. The old comment's own
+    //    wire description ("uint32 count + count*(uint32 ID, uint32 PackedState)") is that same layout,
+    //    correctly decoded but mislabeled.
+    //  * C:/dumps/OPCODES_MASTER_12_0_7_68275.json: group 0x56 is a contiguous LFG/DF block
+    //    (0x560000..0x560021, 34 entries, all subsystem LFG) containing ZERO housing opcodes. Housing SMSG
+    //    live in groups 0x54 (28), 0x5C (19), 0x33 (16), 0x39 (15) etc, and housing12.0.7.pkt confirms this
+    //    at runtime: its housing traffic is on 0x54/0x55/0x5C, never 0x56.
+    //  * No client opcode named *_CATALOG_STATE_SYNC exists in the 68275 client at all;
+    //    SMSG_HOUSING_CATALOG_STATE_SYNC is a TC-invented name with no client counterpart.
+    SMSG_LFG_LIST_UPDATE_BLACKLIST                                  = 0x56000E,
     SMSG_LFG_LIST_UPDATE_EXPIRATION                                 = 0x56000B,
     SMSG_LFG_LIST_UPDATE_STATUS                                     = 0x56000A,
     SMSG_LFG_OFFER_CONTINUE                                         = 0x560018,
@@ -2571,8 +2594,14 @@ enum OpcodeServer : uint32
     //     UpdateField mechanism. Client fires HOUSE_PLOT_ENTERED via field-change
     //     callback when CurrentHouse changes (verified via IDA xref trace of
     //     sub_7FF75CC8BAA0 registered in the field-change callback table).
-    // SMSG_HOUSING_CATALOG_STATE_SYNC retired here 2026-05-11, real opcode 0x56000E reclaimed
-    // (previously mislabeled as SMSG_LFG_LIST_UPDATE_BLACKLIST per the LFG opcode block).
+    // SMSG_HOUSING_CATALOG_STATE_SYNC: the 2026-05-11 note here claimed 0x56000E was "reclaimed" from a
+    // supposedly mislabeled SMSG_LFG_LIST_UPDATE_BLACKLIST. That was backwards - 0x56000E really is the
+    // LFG blacklist (see the evidence block at the SMSG_LFG_LIST_UPDATE_BLACKLIST line above), so the
+    // value has been returned to it and this name is parked on UNKNOWN_OPCODE. Parking is free: the
+    // HousingCatalogStateSync class is constructed by Housing::BuildCatalogStateSync but nothing calls
+    // Build and there is no send site anywhere in the tree, so nothing regresses. If a real
+    // catalog-state-sync SMSG is ever identified from a capture, give it that verified value here.
+    SMSG_HOUSING_CATALOG_STATE_SYNC                                 = UNKNOWN_OPCODE,
     // Retired 2026-05-11: 5 speculative SMSGs (0xF1000003..0xF1000007) — Lua-API-confirmed dead.
     // No C_HousingDecor.BatchOperation/PlacementPreview/CreateCatalogSearcher; StartPlacingNewDecor
     // is fire-and-forget; GetHouseEditorAvailability returns sync. None correspond to a retail SMSG.
