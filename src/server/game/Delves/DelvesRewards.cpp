@@ -173,11 +173,16 @@ void DelvesRewards::AwardCompanionXP(Player* player, uint8 tier)
     DelvesCompanion::LoadFromDB(player->GetSession()->GetBattlenetAccountId(), state);
     DelvesCompanion::AwardCompanionXP(player->GetSession()->GetBattlenetAccountId(), state, xpAmount);
 
-    // Mirror the same amount into the retail-visible companion reputation track (Midnight faction 2742
-    // "Delves: Season 1", RenownCurrencyID 3317) so the client's rep/renown UI tracks companion
-    // progression. This is a mirror only - the internal CompanionState math above stays authoritative.
-    // Config-tunable and guarded on Faction.db2, so a wrong/absent id is a safe no-op.
-    if (uint32 factionId = uint32(sConfigMgr->GetIntDefault("Delves.Companion.FactionId", 2742)))
+    // Mirror the same amount into the retail-visible companion reputation track so the client's
+    // rep/renown UI tracks companion progression. This is a mirror only - the internal CompanionState
+    // math above stays authoritative. Config-tunable and guarded on Faction.db2, so a wrong or absent
+    // id is a safe no-op.
+    //
+    // Faction 2744 "Valeera Sanguinar" / "Trusty Delve Companion", NOT 2742 "Delves: Season 1":
+    // PlayerCompanionInfo.db2 row 11 is the Midnight row (DelvesSeasonID 4, TraitTreeID 1168,
+    // CreatureDisplayInfoID 67214) and its FactionID is 2744 - the companion's OWN track, exactly
+    // mirroring Brann's 2640 on rows 1/9/10. 2742 is the season faction, which is a different thing.
+    if (uint32 factionId = uint32(sConfigMgr->GetIntDefault("Delves.Companion.FactionId", 2744)))
         if (FactionEntry const* factionEntry = sFactionStore.LookupEntry(factionId))
             player->GetReputationMgr().ModifyReputation(factionEntry, int32(xpAmount));
 
