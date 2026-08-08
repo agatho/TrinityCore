@@ -815,7 +815,7 @@ void WorldSession::HandleSetupWarbandGroups(WorldPackets::Character::SetupWarban
     // GetMaxWarbandGroupCount(), which is a zero-argument constant getter returning 20. In the 68275 binary
     // (wow_dump.bin, ImageBase 0x7FF7B3140000) that function is at RVA 0xAE7DF0 - it loads its own name string
     // "GetMaxWarbandGroupCount" (RVA 0x3A87498) and the returned constant with
-    // "mov dword ptr [rbp+0x20], 0x14" at RVA 0xAE7E2F, i.e. 20. Reading that slot as the return value was
+    // "mov dword ptr [rbp+0x20], 0x14" at RVA 0xAE7E36, i.e. 20. Reading that slot as the return value was
     // validated by extracting the same pattern across all 26 sibling constant getters and checking the ones
     // whose values are independently known: GetIslandsMaxGroupSize=3, GetMaxNumQuestsCanAccept=35,
     // GetMaxNumTeams=2, GetWarResourcesCurrencyID=1560, GetDragonIslesSuppliesCurrencyID=2003,
