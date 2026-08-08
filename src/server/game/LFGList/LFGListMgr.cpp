@@ -17,6 +17,7 @@
 
 #include "LFGListMgr.h"
 #include "Config.h"
+#include <algorithm>
 #include "DB2Stores.h"
 #include "GameTime.h"
 #include "LFGListPackets.h"
@@ -341,14 +342,22 @@ std::vector<LFGList::Listing const*> LFGListMgr::Search(uint32 category, uint32 
     for (auto const& [id, listing] : _listings)
     {
         WorldPackets::LFGList::ListingDescriptor const& d = listing.Descriptor;
-        // Category + activity group are derived from the listing's activity (GroupFinderActivity.db2), which is the
-        // authoritative source — the descriptor carries the ActivityID, not the group ids.
-        GroupFinderActivityEntry const* activity = sGroupFinderActivityStore.LookupEntry(d.ActivityID);
-        if (category && (!activity || uint32(activity->GroupFinderCategoryID) != category))
+        // 68974 capture: the descriptor u32 @0x38 is the GroupFinderCategory id itself (JOIN carried 1 and the
+        // search echoed 1 as Filters[0]); the selected GroupFinderActivity ids ride in the trailing vector.
+        // The previous code looked the category value up in GroupFinderActivity.db2 and compared that entry's
+        // GroupFinderCategoryID against the search category — that excluded every listing (empty browse pane).
+        if (category && d.CategoryID != category)
             continue;
-        if (activityGroup && (!activity || uint32(activity->GroupFinderActivityGrpID) != activityGroup))
-            continue;
-        if (activityId && d.ActivityID != activityId)
+        if (activityGroup)
+        {
+            bool inGroup = false;
+            for (uint32 listedActivity : d.ActivityIDs)
+                if (GroupFinderActivityEntry const* activity = sGroupFinderActivityStore.LookupEntry(listedActivity))
+                    inGroup = inGroup || uint32(activity->GroupFinderActivityGrpID) == activityGroup;
+            if (!inGroup)
+                continue;
+        }
+        if (activityId && std::find(d.ActivityIDs.begin(), d.ActivityIDs.end(), activityId) == d.ActivityIDs.end())
             continue;
 
         // Keyword search matches the listing title (case-insensitive substring, retail behaviour).

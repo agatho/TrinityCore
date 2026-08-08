@@ -58,10 +58,14 @@ namespace WorldPackets
             float HeaderFloat0 = 0.0f;          // nested block leading floats (sub_7FF729167840)
             float HeaderFloat1 = 0.0f;
             std::vector<ListingMemberRequirement> MemberRequirements;
-            uint32 ActivityID = 0;              // GroupFinderActivity.db2 id (u32 @0x38; search/validation key)
+            // 68974 capture (2026-08-07): the u32 @0x38 is the GroupFinderCategory id, NOT a GroupFinderActivity
+            // id — the tester's JOIN carried 1 (questing) here and the follow-up CMSG_LFG_LIST_SEARCH echoed the
+            // same 1 as Filters[0]; the 68275 custom-category sniff carried 6 in both places. The real
+            // GroupFinderActivity ids ride in the trailing vector (JOIN vec=[1974], browse rows vec=[1943]).
+            uint32 CategoryID = 0;              // GroupFinderCategory.db2 id (u32 @0x38; search key)
             float RequiredDungeonScore = 0.0f;  // float @0x3c
             uint8 TrailingByte = 0;             // u8 @0x702
-            std::vector<uint32> ActivityIDs;    // trailing uint32 vector (count from the 5-bit header field)
+            std::vector<uint32> ActivityIDs;    // trailing uint32 vector: the selected GroupFinderActivity ids
             bool IsAutoAccept = false;          // presence bits (client offsets 0x6c3..0x6c6)
             bool IsCrossFactionListing = false;
             bool IsPrivateGroup = false;
@@ -269,9 +273,11 @@ namespace WorldPackets
         struct SearchResultMember
         {
             ObjectGuid Guid;
-            uint8 Level = 0;                      // sniff-decoded MemberDetail head: guid, level, class, spec
+            uint8 Level = 0;                      // sniff-decoded MemberDetail head: guid, level, class, role, spec
             uint8 ClassID = 0;
+            uint8 Role = 0;                       // 0 tank / 1 healer / 2 dps (68974: Outlaw-260 rogue = 2, Brewmaster-268 monk = 0)
             uint32 SpecID = 0;
+            bool IsLeader = false;                // head flag bit: set on both retail members (each was the listing leader)
         };
 
         struct SearchResultListing
@@ -279,6 +285,7 @@ namespace WorldPackets
             ObjectGuid GroupGuid;                 // party/group guid (also echoed as LeaderGuidEcho)
             uint32 ListingId = 0;                 // stable id the client sends back in APPLY_TO_GROUP
             uint64 PostTime = 0;                  // listing creation unix seconds (emitted twice)
+            uint32 Age = 0;                       // slow refresh/age counter (68974 rows: 3, later update rows: 3/4)
             ObjectGuid LeaderGuid;                // fills Guid_A..E
             std::vector<SearchResultMember> Members;  // group roster -> MemberCount + MemberDetail records
             std::vector<uint8> RawDescriptor;     // verbatim ListingDescriptor bytes
@@ -293,6 +300,9 @@ namespace WorldPackets
             std::vector<SearchResultListing> Listings;
         };
 
+        // Live refresh push for previously returned rows. 68974 capture: NOT the full search-result row —
+        // a compact 65/132-byte row (see LFGLIST_68974_FIX.md): header block + age + member records only.
+        // Retail pushes it unsolicited when a listed group changes (member level-up, delist).
         class LFGListSearchResultsUpdate final : public ServerPacket
         {
         public:
