@@ -85,6 +85,26 @@ M+ record-packet send fix. Full worldserver linked in grand-factions\build44. SQ
 world 2026_08_07_61..67, hotfixes 2026_08_07_70/71. Conf keys changed: ChallengeMode.Reward/Vault.LootId,
 Delves.Reward/Coffer.LootId, Delves.Companion.CreatureId, ChallengeMode.Affix.*.CreatureId defaults.
 
+## 3d. NEW (2026-08-08 afternoon): RE-merge content/midnight-s1 (tester-sniff round)
+
+`git merge content/midnight-s1` (@ 8c1b9e4baf, pushed) — 9 commits since the fc3caf0f42 state §STATUS
+already merged. Should be clean: the branch already CONTAINS your content/midnight-s1-sqlfix corrections
+(merged as 779d829649), so no conflict from that side. Contents, all mined from 3 tester captures
+(68974) and compile+link verified:
+- world_quest_template seeded: 314 + 75 rotation entries (world 2026_08_08_00 + 2026_08_08_02)
+- Lindormi CITY NPC corrected: creature 197711 (not the guides' 244792, not 259053 which is her
+  in-dungeon AA entry) — Silvermoon spawn, gossip 29898, key-replacement script flow (sniff-exact:
+  option pushes item 180653 and hides while holding a key), Timelost Saddle vendor rows (world 2026_08_08_01)
+- The Darkway delve wired (scenario 3184, entry coords; exit approximated — logout inside) + delve
+  corrections: in-delve WS=1, tier-1 spell 1260940 (world 2026_08_08_03)
+- fixes: housing photo-sharing result bool (was HousingResult enum), battlepay purchase-record
+  walletName position + completed Status=6, M+ FACTION_BONUS/RESURRECT packets from earlier round
+- companion XP now mirrors into faction 2742 rep (NEW conf key Delves.Companion.FactionId = 2742)
+- VerifiedBuild restamps to 68887 (world 2026_08_08_02 + hotfixes 2026_08_08_00)
+SQL to apply: world 2026_08_08_00..03, hotfixes 2026_08_08_00. Known non-blockers documented in-code:
+Darkway exit coords approximate, TIER_SPELL_IDS tiers 2-11 pending re-verification, shop STATUS_FAILED
+value unverified.
+
 ## 4. Do NOT
 
 - Merge `warband/phase9-delves` thinking it's the delve branch — it's the warband account-systems branch.
