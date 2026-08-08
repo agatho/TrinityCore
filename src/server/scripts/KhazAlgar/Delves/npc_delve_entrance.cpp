@@ -182,7 +182,7 @@ struct npc_delve_entranceAI : public ScriptedAI
 
         // Drive the Blizzard_DelvesDifficultyPicker / in-delve HUD via WorldStates.
         player->SendUpdateWorldState(WS_DELVE_TIER, tier);
-        player->SendUpdateWorldState(WS_DELVE_IN_DELVE_FLAG, 2);
+        player->SendUpdateWorldState(WS_DELVE_IN_DELVE_FLAG, 1);
         player->SendUpdateWorldState(WS_DELVE_MAP_ID, _delveTemplate->MapId);
         player->SendUpdateWorldState(WS_DELVE_TIER_SPELL, TIER_SPELL_IDS[gossipListId]);
         if (_delveTemplate->WorldState26903)
