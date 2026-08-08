@@ -1680,12 +1680,6 @@ bool World::SetInitialWorldSettings()
     TC_LOG_INFO("server.loading", "Loading Quest Pooling Data...");
     sQuestPoolMgr->LoadFromDB();                                // must be after quest templates
 
-    TC_LOG_INFO("server.loading", "Loading World Quests...");
-    sWorldQuestMgr->LoadFromDB();                               // must be after quest templates
-
-    TC_LOG_INFO("server.loading", "Loading Area POIs...");
-    sAreaPoiMgr->LoadFromDB();
-
     TC_LOG_INFO("server.loading", "Loading World State templates...");
     WorldStateMgr::LoadFromDB();                               // must be loaded before battleground, outdoor PvP, game events and conditions
 
@@ -1698,8 +1692,11 @@ bool World::SetInitialWorldSettings()
     TC_LOG_INFO("server.loading", "Initializing Warfronts...");
     sWarfrontMgr->Initialize();                               // BfA warfront cycle owner; after world states are restored and the contribution bars exist
 
-    TC_LOG_INFO("server.loading", "Initializing Warfronts...");
-    sWarfrontMgr->Initialize();                               // BfA warfront cycle owner; after managed world states are restored
+    TC_LOG_INFO("server.loading", "Loading World Quests...");
+    sWorldQuestMgr->LoadFromDB();                               // must be after quest templates and world states (registers activation worldstates)
+
+    TC_LOG_INFO("server.loading", "Loading Area POIs...");
+    sAreaPoiMgr->LoadFromDB();                                  // must be after world states (registers activation worldstates)
 
     TC_LOG_INFO("server.loading", "Loading Game Event Data...");               // must be after loading pools fully
     sGameEventMgr->LoadFromDB();

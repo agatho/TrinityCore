@@ -61,6 +61,26 @@ already received via content/midnight-s1, just under new hashes on new lineages.
    tag them as archive refs. Also: your `I:\TrinityCore\mythic-plus` worktree is 11+ commits behind
    origin (the backport push published your local vault-bridge commits) — pull before committing there.
 
+## 3b. ADDENDUM (2026-08-08): tester-regression fixes — re-merge two branches + DB action
+
+Tester reported (a) group finder returns nothing, (b) world quests not on the map. Both root-caused
+against the 68974 captures and FIXED on their golden-source branches:
+
+1. **`feature/lfg-list` @ 795ca3eb4f** — primary cause was server logic: the listing descriptor field
+   is a GroupFinderCategory id, but LFGListMgr::Search treated it as a GroupFinderActivity id, so EVERY
+   search filtered to zero rows. Also: removed the never-on-retail SEARCH_STATUS send, retail's
+   empty-then-populated SEARCH_RESULTS order, the 456-entry blacklist reply, triple UPDATE_STATUS on
+   create, silent GET_STATUS while unlisted, corrected member spec-role/leader bits and the compact
+   SEARCH_RESULTS_UPDATE row. No DB changes — just re-merge.
+2. **`feature/world-quests` @ 74847ddfef** — WorldQuestMgr never set the activation worldstates
+   (client hides any WQ whose VariableID worldstate isn't broadcast); now registered realm-wide on
+   activation, plus a World.cpp load-order fix (WorldStateMgr before the quest managers).
+3. **DB ACTION REQUIRED on the integrated realm**: `integ_world.world_quest_template` still holds 482
+   placeholder rows with VariableID=0 — the 2026_08_08 world updates were never applied there. Re-apply
+   them (the reseed is what makes quests appear). Also 27 of 389 seeded quests (Midnight 93k-97k block)
+   are missing from that realm's quest_template until the Midnight quest import lands - they are skipped
+   with logged errors, not fatal.
+
 ## 4. Do NOT
 
 - Merge `content/midnight-s1` or `feature/major-factions-1207` (retired transport branches).
