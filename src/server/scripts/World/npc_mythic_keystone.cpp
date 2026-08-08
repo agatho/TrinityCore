@@ -24,12 +24,18 @@
 #include "ScriptedCreature.h"
 #include "ScriptedGossip.h"
 
-// Lindormi <Mythic Keystones> (12.x NPC 244792): lowers the player's keystone one level per request, below any
-// floor, keeping the same dungeon and the current week's affixes. Assign via creature_template.ScriptName
-// 'npc_lindormi' (the creature itself is world content).
+// Lindormi <Mythic Keystones>: lowers the player's keystone one level per request, below any floor, keeping
+// the same dungeon and the current week's affixes, and replaces a lost keystone. Assign via
+// creature_template.ScriptName 'npc_lindormi' (the creature itself is world content).
+//
+// Sniff-verified identities (12.0.7 captures): the Silvermoon city Lindormi is creature 197711 (gossip menu
+// 29898; 2026-08-08 68974 tester capture) - selecting "I seem to have misplaced my Keystone." (GossipOptionID
+// 125048) pushes keystone item 180653 via ITEM_PUSH_RESULT; the option disappears from the re-shown menu once
+// the player holds a key. 259053 is the in-dungeon (Algeth'ar Academy) entry from the 68275 M+ run capture.
 enum LindormiGossip
 {
-    GOSSIP_ACTION_LOWER_KEYSTONE = 1
+    GOSSIP_ACTION_LOWER_KEYSTONE   = 1,
+    GOSSIP_ACTION_REPLACE_KEYSTONE = 2
 };
 
 struct npc_lindormi : public ScriptedAI
@@ -41,8 +47,16 @@ struct npc_lindormi : public ScriptedAI
         ClearGossipMenuFor(player);
 
         if (Item* keystone = sChallengeModeMgr.GetKeystone(player))
+        {
             if (keystone->GetModifier(ITEM_MODIFIER_CHALLENGE_KEYSTONE_LEVEL) > sChallengeModeMgr.GetKeystoneMinLevel())
                 AddGossipItemFor(player, GossipOptionNpc::None, "Lower my keystone by one level.", GOSSIP_SENDER_MAIN, GOSSIP_ACTION_LOWER_KEYSTONE);
+        }
+        else
+        {
+            // Retail (68974 capture): the option only shows while the player holds no keystone; selecting it
+            // pushes a fresh key (ITEM_PUSH_RESULT of item 180653) and the re-shown menu no longer offers it.
+            AddGossipItemFor(player, GossipOptionNpc::None, "I seem to have misplaced my Keystone.", GOSSIP_SENDER_MAIN, GOSSIP_ACTION_REPLACE_KEYSTONE);
+        }
 
         SendGossipMenuFor(player, player->GetGossipTextId(me), me->GetGUID());
         return true;
@@ -62,6 +76,14 @@ struct npc_lindormi : public ScriptedAI
                 if (level > sChallengeModeMgr.GetKeystoneMinLevel())
                     sChallengeModeMgr.StampKeystone(keystone, dungeon, level - 1);
             }
+        }
+        else if (action == GOSSIP_ACTION_REPLACE_KEYSTONE)
+        {
+            // Replace a lost key at the weekly floor (never below the player's Resilient Keystone floor).
+            if (!sChallengeModeMgr.GetKeystone(player))
+                if (uint32 dungeon = sChallengeModeMgr.RollSeasonDungeon())
+                    sChallengeModeMgr.CreateOrUpdateKeystone(player, dungeon,
+                        std::max(sChallengeModeMgr.GetKeystoneMinLevel(), sChallengeModeMgr.GetKeystoneFloor(player)));
         }
 
         return true;
