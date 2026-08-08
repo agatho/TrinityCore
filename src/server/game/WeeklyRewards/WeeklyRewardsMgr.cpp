@@ -273,11 +273,17 @@ bool WeeklyRewardsMgr::HasUnclaimedReward(ObjectGuid guid)
     if (vault.ClaimedPeriod == vault.Period)
         return false;
 
-    // A row with no live DB2 slots has nothing to claim (never "0 completions required").
+    // A row with no live DB2 slots has nothing to claim (never "0 completions required"), and neither has a row
+    // that cannot generate a reward at all - claiming it would consume the week for nothing.
     for (uint8 type = 0; type < uint8(WeeklyRewards::ActivityType::Max); ++type)
+    {
+        if (!WeeklyRewards::HasRewardContext(WeeklyRewards::ActivityType(type)))
+            continue;
+
         for (WeeklyRewards::VaultSlot const& slot : WeeklyRewards::SlotsFor(WeeklyRewards::ActivityType(type)))
             if (vault.Rows[type].Count >= slot.Threshold)
                 return true;
+    }
 
     return false;
 }
