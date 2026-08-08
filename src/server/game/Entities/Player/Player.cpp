@@ -6426,6 +6426,84 @@ uint8 Player::GetFactionGroupForRace(uint8 race)
     return 1;
 }
 
+void Player::SetChromieTime(int32 expansionId)
+{
+    // Snapshot the pre-change CtrOptions so the SMSG can carry [previous, current].
+    WorldPackets::Misc::CTROptionsBlock previous;
+    previous.ConditionalFlags.assign(m_playerData->CtrOptions->ConditionalFlags.begin(),
+        m_playerData->CtrOptions->ConditionalFlags.end());
+    previous.FactionGroup = m_playerData->CtrOptions->FactionGroup;
+    previous.ChromieTimeExpansionMask = m_playerData->CtrOptions->ChromieTimeExpansionMask;
+
+    SetUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData)
+        .ModifyValue(&UF::ActivePlayerData::UiChromieTimeExpansionID), expansionId);
+
+    // ChromieTimeExpansionMask comes from the DB2 entry's ExpansionMask, not 1 << id.
+    // Confirmed via 12.0.5 sniff: Pandaria (id=8) -> mask 0x10, Legion (id=10) -> mask 0x40.
+    uint32 expansionMask = 0;
+    if (expansionId > 0)
+        if (UIChromieTimeExpansionInfoEntry const* entry = sUIChromieTimeExpansionInfoStore.LookupEntry(uint32(expansionId)))
+            expansionMask = uint32(entry->ExpansionMask);
+
+    SetUpdateFieldValue(m_values.ModifyValue(&Player::m_playerData)
+        .ModifyValue(&UF::PlayerData::CtrOptions)
+        .ModifyValue(&UF::CTROptions::ChromieTimeExpansionMask), expansionMask);
+
+    SetChromieTimeConditionalFlags(expansionId > 0);
+
+    // Retail keeps FactionGroup populated from the player's faction independent of chromie
+    // state and never resets it on deselect (capture A rec 2149: fg 0->3 with mask 0 before
+    // any chromie interaction; equivalents B 2229 / C 1462). Alliance = 3 (Player|Alliance)
+    // is sniff-verified; the Horde value (expected 5 = Player|Horde per FactionTemplate)
+    // is unverified - no Horde 12.0.5+ sniff exists (audit R5 deferral).
+    SetUpdateFieldValue(m_values.ModifyValue(&Player::m_playerData)
+        .ModifyValue(&UF::PlayerData::CtrOptions)
+        .ModifyValue(&UF::CTROptions::FactionGroup), GetFactionGroupForRace(GetRace()));
+
+    SendCtrOptions(&previous);
+    PhasingHandler::OnConditionChange(this);
+}
+
+void Player::SetChromieTimeConditionalFlags(bool enabled)
+{
+    // Read current flags, modify, and write back as a whole
+    std::vector<uint32> conditionalFlags(m_playerData->CtrOptions->ConditionalFlags.begin(),
+        m_playerData->CtrOptions->ConditionalFlags.end());
+
+    if (conditionalFlags.empty())
+        conditionalFlags.push_back(0);
+
+    if (enabled)
+        conditionalFlags[0] |= 1;
+    else
+        conditionalFlags[0] &= ~1u;
+
+    SetUpdateFieldValue(m_values.ModifyValue(&Player::m_playerData)
+        .ModifyValue(&UF::PlayerData::CtrOptions)
+        .ModifyValue(&UF::CTROptions::ConditionalFlags), std::move(conditionalFlags));
+}
+
+void Player::SetTimerunningSeasonID(uint32 seasonId)
+{
+    SetUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData)
+        .ModifyValue(&UF::ActivePlayerData::TimerunningSeasonID), int32(seasonId));
+}
+
+void Player::SendCtrOptions(WorldPackets::Misc::CTROptionsBlock const* previous /*= nullptr*/) const
+{
+    WorldPackets::Misc::SetCtrOptions ctrOptions;
+    ctrOptions.Current.ConditionalFlags.assign(m_playerData->CtrOptions->ConditionalFlags.begin(),
+        m_playerData->CtrOptions->ConditionalFlags.end());
+    ctrOptions.Current.FactionGroup = m_playerData->CtrOptions->FactionGroup;
+    ctrOptions.Current.ChromieTimeExpansionMask = m_playerData->CtrOptions->ChromieTimeExpansionMask;
+
+    // Sniffs show retail always sends two blocks: previous + current. With no transition
+    // (e.g. login pulse) both blocks are identical to the current state.
+    ctrOptions.Previous = previous ? *previous : ctrOptions.Current;
+
+    SendDirectMessage(ctrOptions.Write());
+}
+
 void Player::SetFactionForRace(uint8 race)
 {
     m_team = TeamForRace(race);
@@ -25032,6 +25110,13 @@ void Player::SendInitialPacketsBeforeAddToMap()
     WorldPackets::Character::InitialSetup initialSetup;
     initialSetup.ServerExpansionLevel = sWorld->getIntConfig(CONFIG_EXPANSION);
     SendDirectMessage(initialSetup.Write());
+
+    // Retail sends SMSG_SET_CTR_OPTIONS during login to every player regardless of chromie
+    // state (captures A/B/C: pulses appear in all 32 non-chromie sessions too - audit M4),
+    // and the first send of a session carries a default-empty Previous block
+    // ([ (0,0,0,[]), current ] - A rec 721 / B 485 / C 469, audit m2).
+    WorldPackets::Misc::CTROptionsBlock emptyPrevious;
+    SendCtrOptions(&emptyPrevious);
 
     SetMovedUnit(this);
 }
