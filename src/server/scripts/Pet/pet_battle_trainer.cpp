@@ -28,22 +28,32 @@ struct npc_pet_battle_trainer : public ScriptedAI
 
     bool OnGossipHello(Player* player) override
     {
-        if (me->IsQuestGiver())
-            player->PrepareQuestMenu(me->GetGUID());
+        // Build the database defined menu first - this also prepares the quest menu.
+        // Battle pet trainers carry the retail "Trainer" and "Vendor" gossip options in
+        // gossip_menu_option (menus 14400 / 14991); the Trainer one resolves through
+        // creature_trainer to the trainer that sells "Battle Pet Training" (spell 125610),
+        // which is what unlocks the battle pet system. Replacing the menu outright, as this
+        // script used to do, hid both options and made the trainers unable to teach anything.
+        player->PrepareGossipMenu(me, player->GetGossipMenuForSource(me), true);
 
+        // Append the pet duel option on top of whatever the database provides.
         AddGossipItemFor(player, GossipOptionNpc::None, "I'd like to battle your pets.", GOSSIP_SENDER_MAIN, GOSSIP_ACTION_BATTLE);
-        SendGossipMenuFor(player, player->GetGossipTextId(me), me->GetGUID());
+
+        player->SendPreparedGossip(me);
         return true;
     }
 
     bool OnGossipSelect(Player* player, uint32 /*menuId*/, uint32 gossipListId) override
     {
-        uint32 const action = player->PlayerTalkClass->GetGossipOptionAction(gossipListId);
+        // Only consume the option this script added. Returning false lets the core handle every
+        // database defined option (Trainer, Vendor, sub menus) in Player::OnGossipSelect - options
+        // loaded from gossip_menu_option carry Sender = MenuID and Action = OrderIndex.
+        if (player->PlayerTalkClass->GetGossipOptionSender(gossipListId) != GOSSIP_SENDER_MAIN ||
+            player->PlayerTalkClass->GetGossipOptionAction(gossipListId) != GOSSIP_ACTION_BATTLE)
+            return false;
+
         CloseGossipMenuFor(player);
-
-        if (action == GOSSIP_ACTION_BATTLE)
-            player->GetSession()->StartNPCPetBattle(me);
-
+        player->GetSession()->StartNPCPetBattle(me);
         return true;
     }
 };
