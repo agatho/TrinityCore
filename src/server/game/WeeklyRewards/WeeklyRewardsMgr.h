@@ -20,6 +20,7 @@
 
 #include "Define.h"
 #include "ObjectGuid.h"
+#include <vector>
 #include <array>
 #include <unordered_map>
 
@@ -54,7 +55,11 @@ namespace WeeklyRewards
     struct ActivityRow
     {
         uint32 Count = 0;       // qualifying completions this period
-        uint32 BestLevel = 0;   // best key level / difficulty / tier seen (drives the reward tier)
+        uint32 BestLevel = 0;   // best key level / difficulty / tier seen (kept for legacy rows / fallback)
+        // Individual run levels this period, sorted high->low and capped at the highest slot threshold. Each Great
+        // Vault slot rewards the level of the Nth-best run (N = the slot's threshold), so slot 2 (4 runs) uses
+        // Levels[3], not the single BestLevel. Empty for legacy rows saved before this field existed.
+        std::vector<uint32> Levels;
     };
 
     struct CharacterVault
