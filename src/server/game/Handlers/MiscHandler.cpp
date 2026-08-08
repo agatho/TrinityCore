@@ -1239,3 +1239,49 @@ void WorldSession::HandleSetCurrencyFlags(WorldPackets::Misc::SetCurrencyFlags c
 {
     _player->SetCurrencyFlagsFromClient(setCurrenctFlags.CurrencyID, setCurrenctFlags.Flags);
 }
+
+void WorldSession::HandleChromieTimeSelectExpansion(WorldPackets::Misc::ChromieTimeSelectExpansion& chromieTimeSelectExpansion)
+{
+    Player* player = GetPlayer();
+    if (!player)
+        return;
+
+    // Wire format (12.0.5): PackedGuid Vendor + int32 ExpansionID, where ExpansionID is the
+    // UIChromieTimeExpansionInfo.ID (DB2 record id), not the Expansions enum.
+    // Verify the vendor is a gossip NPC the player is actually interacting with.
+    Creature const* vendor = player->GetNPCIfCanInteractWith(chromieTimeSelectExpansion.Vendor, UNIT_NPC_FLAG_GOSSIP, UNIT_NPC_FLAG_2_NONE);
+    if (!vendor)
+        return;
+
+    // Require an active ChromieTime interaction with this exact NPC, mirroring other
+    // interaction-driven handlers. The client always packages the interaction-source guid
+    // into the CMSG (SelectChromieTimeOption RVA 0xB79106), so a legitimate select can
+    // only arrive while the type-45 interaction started by the gossip option is open.
+    if (!player->PlayerTalkClass->GetInteractionData().IsInteractingWith(chromieTimeSelectExpansion.Vendor, PlayerInteractionType::ChromieTime))
+        return;
+
+    int32 expansionId = chromieTimeSelectExpansion.ExpansionID;
+
+    // Blizzlike: only available for levels 10-70 (below max level).
+    if (player->GetLevel() < 10 || player->IsMaxLevel())
+        return;
+
+    // 0 = "Return to the present"; clear without store lookup.
+    if (expansionId == 0)
+    {
+        player->SetChromieTime(0);
+        player->SendDirectMessage(WorldPackets::Misc::ChromieTimeSelectExpansionSuccess().Write());
+        return;
+    }
+
+    UIChromieTimeExpansionInfoEntry const* entry = sUIChromieTimeExpansionInfoStore.LookupEntry(uint32(expansionId));
+    if (!entry)
+        return;
+
+    if (entry->ShowPlayerConditionID && !ConditionMgr::IsPlayerMeetingCondition(player, entry->ShowPlayerConditionID))
+        return;
+
+    player->SetChromieTime(expansionId);
+
+    player->SendDirectMessage(WorldPackets::Misc::ChromieTimeSelectExpansionSuccess().Write());
+}
