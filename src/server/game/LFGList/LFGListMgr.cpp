@@ -24,10 +24,14 @@
 #include "ObjectAccessor.h"
 #include "Player.h"
 #include "Group.h"
+#include "GroupMgr.h"
 
 namespace
 {
     constexpr uint32 EXPIRE_CHECK_INTERVAL_MS = 10 * IN_MILLISECONDS;
+    // How long an open Premade Groups browser keeps receiving live pushes without re-searching. There is
+    // no "stopped searching" opcode, so the subscription lapses instead of leaking.
+    constexpr uint32 SEARCH_SUBSCRIPTION_TTL_SECONDS = 5 * MINUTE;
 }
 
 LFGListMgr& LFGListMgr::Instance()
@@ -156,6 +160,9 @@ uint32 LFGListMgr::CreateListing(Player* leader, WorldPackets::LFGList::ListingD
     listing.ExpireTime = expireMinutes ? listing.CreatedTime + expireMinutes * MINUTE : 0;
 
     _listingByLeader[leader->GetGUID()] = id;
+
+    // A newly published listing must appear in every open browser it matches.
+    NotifyListingChanged(id);
     return id;
 }
 
@@ -167,6 +174,9 @@ bool LFGListMgr::UpdateListing(uint32 listingId, ObjectGuid leader, WorldPackets
 
     listing->Descriptor = descriptor;
     TouchListing(*listing);
+
+    // Edited listings are pushed so open browsers show the new title/activity without re-searching.
+    NotifyListingChanged(listingId);
     return true;
 }
 
@@ -359,4 +369,107 @@ std::vector<LFGList::Listing const*> LFGListMgr::Search(uint32 category, uint32 
             break;
     }
     return results;
+}
+
+void LFGListMgr::FillSearchRow(WorldPackets::LFGList::SearchResultListing& row, LFGList::Listing const& listing) const
+{
+    row.GroupGuid = !listing.GroupGuid.IsEmpty() ? listing.GroupGuid : listing.LeaderGuid;
+    row.ListingId = listing.Id;
+    row.PostTime = listing.CreatedTime;
+    row.LeaderGuid = listing.LeaderGuid;
+    row.RawDescriptor = listing.Descriptor.RawBytes;    // verbatim echo of the client's descriptor bytes
+
+    row.Members.clear();
+    auto addMember = [&row, &listing](ObjectGuid guid)
+    {
+        WorldPackets::LFGList::SearchResultMember& member = row.Members.emplace_back();
+        member.Guid = guid;
+        member.IsLeader = guid == listing.LeaderGuid;   // 68974: the head flag bit is set on the leader
+        if (Player const* player = ObjectAccessor::FindConnectedPlayer(guid))
+        {
+            member.Level = uint8(player->GetLevel());
+            member.ClassID = uint8(player->GetClass());
+            member.SpecID = uint32(player->GetPrimarySpecialization());
+            // 68974: third head byte is the spec role (Outlaw rogue = 2 dps, Brewmaster monk = 0 tank).
+            if (ChrSpecializationEntry const* spec = player->GetPrimarySpecializationEntry())
+                member.Role = uint8(spec->Role);
+        }
+    };
+    if (Group const* group = sGroupMgr->GetGroupByGUID(listing.GroupGuid))
+        for (Group::MemberSlot const& slot : group->GetMemberSlots())
+            addMember(slot.guid);
+    if (row.Members.empty())
+        addMember(listing.LeaderGuid);                  // solo listing: the leader is the only member
+}
+
+void LFGListMgr::RegisterSearch(ObjectGuid player, uint32 category, uint32 activityGroup, std::string const& keyword)
+{
+    SearchSubscription& sub = _searchSubscriptions[player];
+    sub.CategoryId = category;
+    sub.ActivityGroupId = activityGroup;
+    sub.Keyword = keyword;
+    sub.ExpireTime = uint32(GameTime::GetGameTime()) + SEARCH_SUBSCRIPTION_TTL_SECONDS;
+}
+
+void LFGListMgr::UnregisterSearch(ObjectGuid player)
+{
+    _searchSubscriptions.erase(player);
+}
+
+void LFGListMgr::NotifyListingChanged(uint32 listingId)
+{
+    if (_searchSubscriptions.empty())
+        return;
+
+    LFGList::Listing const* listing = GetListing(listingId);
+    if (!listing)
+        return;
+
+    WorldPackets::LFGList::ListingDescriptor const& d = listing->Descriptor;
+
+    // The filter test below mirrors Search() field for field, so a pushed row can never reach a browser whose
+    // filters would have excluded it from the search reply:
+    //  - category: the descriptor u32 @0x38 IS the GroupFinderCategory id, compared directly. It must NOT be
+    //    looked up in GroupFinderActivity.db2 (that was the empty-browse-pane bug fixed by the 68974 pass).
+    //  - activity group: resolve each id of the descriptor's trailing activity vector in GroupFinderActivity.db2
+    //    and match if ANY of them sits in the requested group. Unresolvable ids are skipped, as in Search().
+    //  - keyword: case-insensitive substring of the listing title, as in Search().
+    std::vector<uint32> listingActivityGroups;
+    listingActivityGroups.reserve(d.ActivityIDs.size());
+    for (uint32 listedActivity : d.ActivityIDs)
+        if (GroupFinderActivityEntry const* activity = sGroupFinderActivityStore.LookupEntry(listedActivity))
+            listingActivityGroups.push_back(uint32(activity->GroupFinderActivityGrpID));
+
+    WorldPackets::LFGList::LFGListSearchResultsUpdate update;
+    WorldPackets::LFGList::SearchResultListing row;
+    FillSearchRow(row, *listing);
+    update.Listings.push_back(std::move(row));
+    WorldPacket const* packet = update.Write();
+
+    uint32 const now = uint32(GameTime::GetGameTime());
+    for (auto itr = _searchSubscriptions.begin(); itr != _searchSubscriptions.end(); )
+    {
+        SearchSubscription const& sub = itr->second;
+        if (sub.ExpireTime && now >= sub.ExpireTime)
+        {
+            itr = _searchSubscriptions.erase(itr);
+            continue;
+        }
+
+        Player* searcher = ObjectAccessor::FindConnectedPlayer(itr->first);
+        if (!searcher)
+        {
+            itr = _searchSubscriptions.erase(itr);
+            continue;
+        }
+
+        bool const matches =
+            (!sub.CategoryId || d.CategoryID == sub.CategoryId) &&
+            (!sub.ActivityGroupId || std::find(listingActivityGroups.begin(), listingActivityGroups.end(), sub.ActivityGroupId) != listingActivityGroups.end()) &&
+            (sub.Keyword.empty() || StringContainsStringI(d.Name, sub.Keyword));
+        if (matches)
+            searcher->SendDirectMessage(packet);
+
+        ++itr;
+    }
 }

@@ -89,6 +89,17 @@ public:
     // Search the registry. Any argument left 0 acts as a wildcard. Results are capped by config.
     std::vector<LFGList::Listing const*> Search(uint32 category, uint32 activityGroup, uint32 activityId, std::string const& keyword = std::string()) const;
 
+    // Fills one search-result row for a listing. Shared by the search reply, the apply-result snapshot and the
+    // live update push so all three serialize a listing identically.
+    void FillSearchRow(WorldPackets::LFGList::SearchResultListing& row, LFGList::Listing const& listing) const;
+
+    // Live search updates. While a player has the Premade Groups browser open, retail keeps pushing
+    // SMSG_LFG_LIST_SEARCH_RESULTS_UPDATE as listings appear/change. A search registers the player's filters
+    // here; listing mutations then push the affected row to every subscriber whose filters still match.
+    void RegisterSearch(ObjectGuid player, uint32 category, uint32 activityGroup, std::string const& keyword);
+    void UnregisterSearch(ObjectGuid player);
+    void NotifyListingChanged(uint32 listingId);
+
     // Applications. An application gets a globally-unique id the client keys on via a RideTicket.
     LFGList::Application* AddApplication(uint32 listingId, ObjectGuid applicant, uint8 roleMask, uint32 specId, uint32 itemLevel, std::string const& comment);
     LFGList::Listing* GetListingByApplication(uint32 applicationId);
@@ -103,12 +114,24 @@ public:
 private:
     LFGListMgr() = default;
 
+    // An open Premade Groups browser: the filters the player last searched with. 0 / empty = wildcard, matching
+    // Search(). Refreshed by every search; expires so a client that closed the browser (there is no "stopped
+    // searching" opcode) stops receiving pushes.
+    struct SearchSubscription
+    {
+        uint32 CategoryId = 0;
+        uint32 ActivityGroupId = 0;
+        std::string Keyword;
+        uint32 ExpireTime = 0;
+    };
+
     uint32 _nextListingId = 1;
     uint32 _nextApplicationId = 1;
     uint32 _expireTimer = 0;
     std::unordered_map<uint32 /*listingId*/, LFGList::Listing> _listings;
     std::unordered_map<ObjectGuid /*leader*/, uint32 /*listingId*/> _listingByLeader;
     std::unordered_map<uint32 /*applicationId*/, uint32 /*listingId*/> _applicationIndex;
+    std::unordered_map<ObjectGuid /*searcher*/, SearchSubscription> _searchSubscriptions;
 };
 
 #define sLFGListMgr LFGListMgr::Instance()

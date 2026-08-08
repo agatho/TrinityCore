@@ -60,37 +60,9 @@ namespace
         }
     }
 
-    // Build one search-result row for a listing.
-    void FillSearchRow(WorldPackets::LFGList::SearchResultListing& row, LFGList::Listing const& listing)
-    {
-        row.GroupGuid = !listing.GroupGuid.IsEmpty() ? listing.GroupGuid : listing.LeaderGuid;
-        row.ListingId = listing.Id;
-        row.PostTime = listing.CreatedTime;
-        row.LeaderGuid = listing.LeaderGuid;
-        row.RawDescriptor = listing.Descriptor.RawBytes;    // verbatim echo of the client's descriptor bytes
-
-        row.Members.clear();
-        auto addMember = [&row, &listing](ObjectGuid guid)
-        {
-            WorldPackets::LFGList::SearchResultMember& member = row.Members.emplace_back();
-            member.Guid = guid;
-            member.IsLeader = guid == listing.LeaderGuid;   // 68974: the head flag bit is set on the leader
-            if (Player const* player = ObjectAccessor::FindConnectedPlayer(guid))
-            {
-                member.Level = uint8(player->GetLevel());
-                member.ClassID = uint8(player->GetClass());
-                member.SpecID = uint32(player->GetPrimarySpecialization());
-                // 68974: third head byte is the spec role (Outlaw rogue = 2 dps, Brewmaster monk = 0 tank).
-                if (ChrSpecializationEntry const* spec = player->GetPrimarySpecializationEntry())
-                    member.Role = uint8(spec->Role);
-            }
-        };
-        if (Group const* group = sGroupMgr->GetGroupByGUID(listing.GroupGuid))
-            for (Group::MemberSlot const& slot : group->GetMemberSlots())
-                addMember(slot.guid);
-        if (row.Members.empty())
-            addMember(listing.LeaderGuid);                  // solo listing: the leader is the only member
-    }
+    // NOTE: the search-result row builder lives in LFGListMgr (LFGListMgr::FillSearchRow) so the search reply,
+    // the apply-result snapshot and the live SMSG_LFG_LIST_SEARCH_RESULTS_UPDATE push all serialize a listing
+    // through the exact same code.
 
     // Push the full applicant list of a listing to every connected member of the listed group (sniff: the
     // packet goes to all members, not only the leader; solo listings notify just the leader).
@@ -271,8 +243,14 @@ void WorldSession::HandleLFGListSearch(WorldPackets::LFGList::LFGListSearch& pac
     if (!GetPlayer())
         return;
 
-    std::vector<LFGList::Listing const*> matches = sLFGListMgr.Search(packet.GetCategoryId(), 0, 0,
-        !packet.SearchTerms.empty() ? packet.SearchTerms.front() : std::string());
+    std::string const keyword = !packet.SearchTerms.empty() ? packet.SearchTerms.front() : std::string();
+
+    // Keep this browser subscribed so listings published/edited from now on are pushed live via
+    // SMSG_LFG_LIST_SEARCH_RESULTS_UPDATE instead of the player having to re-search. The filters recorded are
+    // exactly the ones handed to Search() below, so the push can only carry rows this reply would have carried.
+    sLFGListMgr.RegisterSearch(GetPlayer()->GetGUID(), packet.GetCategoryId(), 0, keyword);
+
+    std::vector<LFGList::Listing const*> matches = sLFGListMgr.Search(packet.GetCategoryId(), 0, 0, keyword);
 
     // 68974 capture: one CMSG_LFG_LIST_SEARCH (idx 8197) is answered by TWO SMSG_LFG_LIST_SEARCH_RESULTS —
     // an empty one first (idx 8215: u16 0 + u32 0) and then the populated one (idx 8224: 2 rows). No
@@ -286,7 +264,7 @@ void WorldSession::HandleLFGListSearch(WorldPackets::LFGList::LFGListSearch& pac
     for (LFGList::Listing const* listing : matches)
     {
         WorldPackets::LFGList::SearchResultListing row;
-        FillSearchRow(row, *listing);
+        sLFGListMgr.FillSearchRow(row, *listing);
         results.Listings.push_back(std::move(row));
     }
     SendPacket(results.Write());
@@ -318,7 +296,7 @@ void WorldSession::HandleLFGListApplyToGroup(WorldPackets::LFGList::LFGListApply
     FillApplicationTicket(result.Ticket, *app);
     result.ApplicationExpiration = uint64(app->AppliedTime + sConfigMgr->GetIntDefault("LFGList.ApplicationTimeoutSeconds", 300));
     FillListingTicket(result.ListingTicket, *listing);
-    FillSearchRow(result.Row, *listing);
+    sLFGListMgr.FillSearchRow(result.Row, *listing);
     SendPacket(result.Write());
 
     SendApplicationStatus(*listing, *app);
@@ -357,6 +335,12 @@ void WorldSession::HandleLFGListDeclineApplicant(WorldPackets::LFGList::LFGListD
     if (!app)
         return;
 
+    // The application must belong to THIS leader's listing. Application ids are global, and the leader check above
+    // only proves the player owns packet.Ticket's listing - without this a leader could pass their own listing
+    // ticket together with an application id from someone else's listing and decline that stranger's applicant.
+    if (sLFGListMgr.GetListingByApplication(applicationId) != listing)
+        return;
+
     LFGList::Application declined = *app;
     declined.State = LFGList::ApplicationState::Declined;
     SendApplicationStatus(*listing, declined);
@@ -377,6 +361,11 @@ void WorldSession::HandleLFGListInviteApplicant(WorldPackets::LFGList::LFGListIn
     uint32 const applicationId = packet.ApplicantTicket.Id;
     LFGList::Application* app = sLFGListMgr.GetApplication(applicationId);
     if (!app)
+        return;
+
+    // The application must belong to this leader's own listing (see HandleLFGListDeclineApplicant) - otherwise a
+    // leader could invite an applicant that applied to a different group's listing.
+    if (sLFGListMgr.GetListingByApplication(applicationId) != listing)
         return;
 
     sLFGListMgr.SetApplicationState(applicationId, LFGList::ApplicationState::Invited);
@@ -402,6 +391,12 @@ void WorldSession::HandleLFGListInviteResponse(WorldPackets::LFGList::LFGListInv
         SendApplicantList(*listing);
         return;
     }
+
+    // Accept is only valid for an application the leader actually invited. Without this an applicant could send
+    // CMSG_LFG_LIST_INVITE_RESPONSE{Accept} for its own still-pending (Applied) application and force-join a group
+    // that never invited it.
+    if (app->State != LFGList::ApplicationState::Invited)
+        return;
 
     Player* leader = ObjectAccessor::FindConnectedPlayer(listing->LeaderGuid);
     if (!leader)
