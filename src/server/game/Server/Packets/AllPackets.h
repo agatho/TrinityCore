@@ -64,6 +64,7 @@
 #include "LFGPackets.h"
 #include "LootPackets.h"
 #include "MailPackets.h"
+#include "MajorFactionPackets.h"
 #include "MiscPackets.h"
 #include "MovementPackets.h"
 #include "NPCPackets.h"

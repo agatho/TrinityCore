@@ -42,6 +42,7 @@
 #include "InstancePackets.h"
 #include "ChallengeMode.h"
 #include "InstanceScript.h"
+#include "MajorFactionMgr.h"
 #include "Language.h"
 #include "Log.h"
 #include "Map.h"

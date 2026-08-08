@@ -102,7 +102,6 @@ TC_GAME_API extern DB2Storage<ContributionEntry>                    sContributio
 TC_GAME_API extern DB2Storage<ConversationLineEntry>                sConversationLineStore;
 TC_GAME_API extern DB2Storage<CorruptionEffectsEntry>               sCorruptionEffectsStore;
 TC_GAME_API extern DB2Storage<CovenantEntry>                        sCovenantStore;
-TC_GAME_API extern DB2Storage<RenownRewardsEntry>                   sRenownRewardsStore;
 TC_GAME_API extern DB2Storage<CraftingQualityEntry>                 sCraftingQualityStore;
 TC_GAME_API extern DB2Storage<CreatureDisplayInfoEntry>             sCreatureDisplayInfoStore;
 TC_GAME_API extern DB2Storage<CreatureDisplayInfoExtraEntry>        sCreatureDisplayInfoExtraStore;
@@ -342,6 +341,8 @@ TC_GAME_API extern DB2Storage<QuestMoneyRewardEntry>                sQuestMoneyR
 TC_GAME_API extern DB2Storage<QuestSortEntry>                       sQuestSortStore;
 TC_GAME_API extern DB2Storage<QuestXPEntry>                         sQuestXPStore;
 TC_GAME_API extern DB2Storage<RandPropPointsEntry>                  sRandPropPointsStore;
+TC_GAME_API extern DB2Storage<RenownRewardsEntry>                   sRenownRewardsStore;
+TC_GAME_API extern DB2Storage<RenownRewardsPlunderstormEntry>       sRenownRewardsPlunderstormStore;
 TC_GAME_API extern DB2Storage<RewardPackEntry>                      sRewardPackStore;
 TC_GAME_API extern DB2Storage<RoomComponentEntry>                   sRoomComponentStore;
 TC_GAME_API extern DB2Storage<RoomComponentOptionEntry>             sRoomComponentOptionStore;
@@ -457,6 +458,13 @@ TC_GAME_API extern DB2Storage<VignetteEntry>                        sVignetteSto
 TC_GAME_API extern DB2Storage<WarbandSceneEntry>                    sWarbandSceneStore;
 TC_GAME_API extern DB2Storage<WeeklyRewardChestThresholdEntry>      sWeeklyRewardChestThresholdStore;
 TC_GAME_API extern DB2Storage<WarbandScenePlacementEntry>           sWarbandScenePlacementStore;
+TC_GAME_API extern DB2Storage<WarbandSceneAnimationEntry>           sWarbandSceneAnimationStore;
+TC_GAME_API extern DB2Storage<WarbandSceneAnimChrSpecEntry>         sWarbandSceneAnimChrSpecStore;
+TC_GAME_API extern DB2Storage<WarbandScenePlacementFilterReqEntry>  sWarbandScenePlacementFilterReqStore;
+TC_GAME_API extern DB2Storage<WarbandScenePlacementOptionEntry>     sWarbandScenePlacementOptionStore;
+TC_GAME_API extern DB2Storage<WarbandScenePlcmntAnimOverrideEntry>  sWarbandScenePlcmntAnimOverrideStore;
+TC_GAME_API extern DB2Storage<WarbandPlacementDisplayInfoEntry>     sWarbandPlacementDisplayInfoStore;
+TC_GAME_API extern DB2Storage<WarbandSceneSourceInfoEntry>          sWarbandSceneSourceInfoStore;
 TC_GAME_API extern DB2Storage<WorldEffectEntry>                     sWorldEffectStore;
 TC_GAME_API extern DB2Storage<WorldMapOverlayEntry>                 sWorldMapOverlayStore;
 TC_GAME_API extern DB2Storage<WorldStateExpressionEntry>            sWorldStateExpressionStore;

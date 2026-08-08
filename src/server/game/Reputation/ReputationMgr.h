@@ -89,6 +89,13 @@ class TC_GAME_API ReputationMgr
         void LoadRenownRewardsGrantedFromDB(PreparedQueryResult charResult, PreparedQueryResult accountResult);
         bool IsRenownRewardGranted(uint32 renownRewardId, bool accountWide) const;
         void MarkRenownRewardGranted(uint32 renownRewardId, bool accountWide);
+
+        // -- Account-wide reputation read accessor (Phase 10E) ---------------
+        // Looks up the cached account-max renown level for a given faction,
+        // populated by LoadAccountWideFromDB at login. Returns the per-char
+        // renown level if the faction is not warband-shared or no account row
+        // exists.
+        int32 GetAccountRenownLevel(uint32 factionId) const;
     public:                                                 // statics
         static std::set<int32> const ReputationRankThresholds;
         static const int32 Reputation_Cap;

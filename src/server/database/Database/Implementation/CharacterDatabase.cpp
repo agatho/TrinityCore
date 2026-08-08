@@ -1121,7 +1121,7 @@ void CharacterDatabaseConnection::DoPrepareStatements()
     PrepareStatement(CHAR_SEL_ACCOUNT_REPUTATION, "SELECT faction, standing, renownLevel FROM warband_reputation WHERE battlenetAccountId = ?", CONNECTION_ASYNC);
     PrepareStatement(CHAR_REP_ACCOUNT_REPUTATION, "REPLACE INTO warband_reputation (battlenetAccountId, faction, standing, renownLevel) VALUES (?, ?, ?, ?)", CONNECTION_ASYNC);
 
-// Phase 10C - renown reward grant tracking
+    // Phase 10C - renown reward grant tracking
     PrepareStatement(CHAR_SEL_CHAR_RENOWN_REWARDS_GRANTED, "SELECT renownRewardId FROM character_renown_rewards_granted WHERE characterId = ?", CONNECTION_ASYNC);
     PrepareStatement(CHAR_INS_CHAR_RENOWN_REWARD_GRANTED, "INSERT IGNORE INTO character_renown_rewards_granted (characterId, renownRewardId) VALUES (?, ?)", CONNECTION_ASYNC);
     PrepareStatement(CHAR_SEL_WARBAND_RENOWN_REWARDS_GRANTED, "SELECT renownRewardId FROM warband_renown_rewards_granted WHERE battlenetAccountId = ?", CONNECTION_ASYNC);

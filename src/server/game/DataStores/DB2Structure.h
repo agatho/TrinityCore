@@ -1222,30 +1222,6 @@ struct CorruptionEffectsEntry
     int32 Flags;
 };
 
-struct RenownRewardsEntry
-{
-    uint32 ID;
-    LocalizedString Name;
-    LocalizedString Description;
-    LocalizedString ToastDescription;
-    int32 CovenantID;
-    int32 Level;
-    int32 Icon;
-    int32 Flags;
-    int32 UiOrder;
-    int32 ItemID;
-    int32 SpellID;
-    int32 MountID;
-    int32 TransmogID;
-    int32 TransmogSetID;
-    int32 CharTitlesID;
-    int32 GarrFollowerID;
-    int32 TransmogIllusionID;
-    int32 Field_12_0_0_63534_016;
-    int32 QuestID;
-    int32 PlayerConditionID;
-};
-
 struct CovenantEntry
 {
     uint32 ID;
@@ -4912,6 +4888,43 @@ struct RandPropPointsEntry
     std::array<uint32, 5> Good;
 };
 
+struct RenownRewardsEntry
+{
+    uint32 ID;
+    LocalizedString Name;
+    LocalizedString Description;
+    LocalizedString ToastDescription;
+    int32 CovenantID;
+    int32 Level;
+    int32 Icon;
+    int32 Flags;
+    int32 UiOrder;
+    int32 ItemID;
+    int32 SpellID;
+    int32 MountID;
+    int32 TransmogID;
+    int32 TransmogSetID;
+    int32 CharTitlesID;
+    int32 GarrFollowerID;
+    int32 TransmogIllusionID;
+    int32 RewardCategory;        // Field_12_0_0_63534_016 - reward category enum
+    int32 QuestID;
+    int32 PlayerConditionID;
+};
+
+struct RenownRewardsPlunderstormEntry
+{
+    uint32 ID;
+    LocalizedString Name;
+    LocalizedString Description;
+    int32 CovenantID;
+    int32 Level;
+    int32 Icon;
+    int32 RewardCategory;        // Field_10_2_6_53840_005
+    int32 UiOrder;
+    int32 SpellID;
+};
+
 struct RewardPackEntry
 {
     uint32 ID;
@@ -6507,6 +6520,71 @@ struct WarbandScenePlacementEntry
     int32 Field_12_0_0_63534_008;
     int32 SlotID;
     int32 Field_12_0_0_63534_010;
+};
+
+struct WarbandSceneAnimationEntry
+{
+    uint32 ID;
+    int32 SpellVisualKitID;
+    int32 Event;
+    int32 AnimKitID;
+    int32 Field_11_0_0_54210_003;
+    float TimeIsh;
+    uint8 StandState;
+    uint8 SheatheState;
+    int8 Field_11_1_0_58221_008;
+    std::array<int32, 2> Field_11_0_0_54210_005;
+};
+
+struct WarbandSceneAnimChrSpecEntry
+{
+    uint32 ID;
+    int32 WarbandSceneAnimationID;
+    int32 ChrSpecializationID;
+};
+
+struct WarbandScenePlacementFilterReqEntry
+{
+    uint32 ID;
+    uint16 Field_11_1_0_58221_002;
+    int8 Field_11_1_0_58221_005;
+    std::array<int32, 2> Field_11_1_0_58221_003;
+};
+
+struct WarbandScenePlacementOptionEntry
+{
+    DBCPosition3D Position;
+    uint32 ID;
+    uint32 WarbandScenePlacementID;
+    float Orientation;
+    float Scale;
+    int32 Field_11_1_0_58221_005;
+    int32 Field_11_1_0_58221_006;
+};
+
+struct WarbandScenePlcmntAnimOverrideEntry
+{
+    uint32 ID;
+    int32 Field_11_0_0_54210_000;
+    int32 WarbandSceneAnimationID;
+};
+
+struct WarbandPlacementDisplayInfoEntry
+{
+    uint32 ID;
+    uint32 WarbandScenePlacementID;
+    int32 Field_11_2_0_61476_001;
+    int32 Field_11_2_0_61476_002;
+    int32 Field_11_2_0_61476_003;
+    int32 Field_11_2_0_61476_004;
+};
+
+struct WarbandSceneSourceInfoEntry
+{
+    LocalizedString SourceDescription;
+    uint32 ID;
+    uint32 WarbandSceneID;
+    int8 SourceType;
 };
 
 struct WMOAreaTableEntry

@@ -794,6 +794,11 @@ namespace WorldPackets
         class SendMail;
     }
 
+    namespace MajorFactions
+    {
+        class RequestCatchupState;
+    }
+
     namespace Misc
     {
         class SetSelection;

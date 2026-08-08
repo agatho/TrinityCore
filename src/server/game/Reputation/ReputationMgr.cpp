@@ -973,6 +973,17 @@ void ReputationMgr::LoadRenownRewardsGrantedFromDB(PreparedQueryResult charResul
     }
 }
 
+int32 ReputationMgr::GetAccountRenownLevel(uint32 factionId) const
+{
+    auto itr = _accountReputation.find(factionId);
+    if (itr != _accountReputation.end())
+        return itr->second.renownLevel;
+
+    // Fallback: not in account-wide cache (faction is not warband-shared,
+    // or no row exists yet). Caller should treat this as "no catchup data".
+    return -1;
+}
+
 bool ReputationMgr::IsRenownRewardGranted(uint32 renownRewardId, bool accountWide) const
 {
     if (accountWide)
