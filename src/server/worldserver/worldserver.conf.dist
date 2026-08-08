@@ -4436,6 +4436,18 @@ Delves.Crest.Tier4.CurrencyId = 3345
 Delves.Companion.CreatureId = 248567
 
 #
+#    Delves.Companion.FactionId
+#        Description: Faction that mirrors delve companion XP as reputation, making companion progression
+#                     visible in the client's reputation/renown UI (retail Midnight S1: faction 2742
+#                     "Delves: Season 1", RenownCurrencyID 3317). Every companion XP award credits the same
+#                     amount of reputation to this faction; the internal companion level/XP state remains
+#                     authoritative and is unaffected. An id missing from Faction.db2 is a safe no-op.
+#                     0 disables the mirror.
+#        Default:     2742 - (Delves: Season 1)
+
+Delves.Companion.FactionId = 2742
+
+#
 #    Delves.Companion.<Role>.*SpellId
 #        Description: Companion ability spells cast by the role AI (execute / rotation attack, emergency +
 #                     regular heal on the lowest-HP group member, taunt + defensive). The exact abilities are
