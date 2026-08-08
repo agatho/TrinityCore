@@ -6457,11 +6457,14 @@ void Player::SetChromieTime(int32 expansionId)
 
     SetChromieTimeConditionalFlags(expansionId > 0);
 
-    // Sniffs show FactionGroup is 0 when chromie is inactive and 3/Alliance (or 5/Horde) when active.
+    // Retail keeps FactionGroup populated from the player's faction independent of chromie
+    // state and never resets it on deselect (capture A rec 2149: fg 0->3 with mask 0 before
+    // any chromie interaction; equivalents B 2229 / C 1462). Alliance = 3 (Player|Alliance)
+    // is sniff-verified; the Horde value (expected 5 = Player|Horde per FactionTemplate)
+    // is unverified - no Horde 12.0.5+ sniff exists (audit R5 deferral).
     SetUpdateFieldValue(m_values.ModifyValue(&Player::m_playerData)
         .ModifyValue(&UF::PlayerData::CtrOptions)
-        .ModifyValue(&UF::CTROptions::FactionGroup),
-        expansionId > 0 ? GetFactionGroupForRace(GetRace()) : uint8(0));
+        .ModifyValue(&UF::CTROptions::FactionGroup), GetFactionGroupForRace(GetRace()));
 
     SendCtrOptions(&previous);
     PhasingHandler::OnConditionChange(this);
@@ -25152,9 +25155,12 @@ void Player::SendInitialPacketsBeforeAddToMap()
     initialSetup.ServerExpansionLevel = sWorld->getIntConfig(CONFIG_EXPANSION);
     SendDirectMessage(initialSetup.Write());
 
-    // Send Chromie Time state to client on login
-    if (m_activePlayerData->UiChromieTimeExpansionID != 0)
-        SendCtrOptions();
+    // Retail sends SMSG_SET_CTR_OPTIONS during login to every player regardless of chromie
+    // state (captures A/B/C: pulses appear in all 32 non-chromie sessions too - audit M4),
+    // and the first send of a session carries a default-empty Previous block
+    // ([ (0,0,0,[]), current ] - A rec 721 / B 485 / C 469, audit m2).
+    WorldPackets::Misc::CTROptionsBlock emptyPrevious;
+    SendCtrOptions(&emptyPrevious);
 
     SetMovedUnit(this);
 }
