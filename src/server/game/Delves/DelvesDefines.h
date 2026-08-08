@@ -73,9 +73,15 @@ inline uint8 GetMaxRevivesForTier(uint8 tier)
 // This is the data layer that previous research (project_tiered_entrance_obfuscation
 // memory) flagged as Unknown — DelvesSeasonXSpell.db2 ships empty in the live
 // client; the actual spell list arrives via packet sniff. Now captured.
+//
+// 12.0.7 REVISION (68974 Darkway capture, TESTER_SNIFF3_DELVE_MINE.md): the Tier-1 run reports
+// WS_DELVE_TIER_SPELL = 1260940 — NOT the 66527-era 1260938 — and none of the 66527 ids are cast;
+// the select flow casts 1305941/426853/1254713 instead. Tier 1 is corrected below on that evidence;
+// tiers 2-11 still carry the 66527 values and NEED RE-VERIFICATION from further captures (the +2
+// offset of tier 1 suggests the whole ladder was re-issued, but one data point is not a ladder).
 static constexpr uint32 TIER_SPELL_IDS[MAX_DELVE_TIER] =
 {
-    1260938,  // Tier 1
+    1260940,  // Tier 1 (68974-verified; 66527 value was 1260938)
     1260942,  // Tier 2
     1260946,  // Tier 3
     1260950,  // Tier 4
@@ -114,7 +120,7 @@ static constexpr char const* TIER_NAMES[MAX_DELVE_TIER] =
 enum DelveWorldStates : uint32
 {
     WS_DELVE_TIER             = 24430,    // Selected tier (1..11)
-    WS_DELVE_IN_DELVE_FLAG    = 26345,    // 0 = outside, 2 = inside
+    WS_DELVE_IN_DELVE_FLAG    = 26345,    // 0 = outside, 1 = inside (68974 Darkway capture; older 66527 notes said 2)
     WS_DELVE_MAP_ID           = 26423,    // Active delve MapID
     WS_DELVE_TIER_SPELL       = 26931,    // The TIER_SPELL_IDS[] value cast for this run
     WS_DELVE_UNKNOWN_26903    = 26903,    // Per-delve, controls center spell display in tier picker

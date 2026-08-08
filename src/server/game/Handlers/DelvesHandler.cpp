@@ -187,8 +187,12 @@ void WorldSession::HandleTieredEntranceOpen(WorldPackets::Delves::TieredEntrance
     for (uint8 tier = 1; tier <= Delves::MAX_DELVE_TIER; ++tier)
     {
         WorldPackets::Delves::TieredEntranceTier& tierData = response.Tiers.emplace_back();
-        // No TieredEntranceTier DB2 exists client-side (server-data driven) —
-        // use the tier number as a stable row id.
+        // Retail uses TieredEntranceTier.db2 row ids here (68974 Darkway capture: 23..33; Daggerspine
+        // Sites entrance: 42-46,86) and the client echoes the chosen id back verbatim in
+        // CMSG_SELECT_DELVE_ENTRANCE_TIER. That DB2 ships empty client-side (rows arrive via hotfix),
+        // so the id is an opaque echo token to the client UI — we advertise the tier number as the id,
+        // which round-trips through the select handler's 1..MAX_DELVE_TIER validation. If real row ids
+        // are ever hotfix-pushed to clients, the select handler must learn to map them back.
         tierData.TieredEntranceTierID = tier;
         tierData.Tier = tier;
         tierData.SuggestedILvl = SUGGESTED_ILVL[tier - 1];
