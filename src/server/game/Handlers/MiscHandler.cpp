@@ -1446,13 +1446,17 @@ void WorldSession::HandleChromieTimeSelectExpansion(WorldPackets::Misc::ChromieT
     if (!vendor)
         return;
 
-    int32 expansionId = chromieTimeSelectExpansion.ExpansionID;
-
-    // Blizzlike: only available for levels 10-70 (below max level).
-    if (player->GetLevel() < 10 || player->IsMaxLevel())
+    // Require an active ChromieTime interaction with this exact NPC, mirroring other
+    // interaction-driven handlers. The client always packages the interaction-source guid
+    // into the CMSG (SelectChromieTimeOption RVA 0xB79106), so a legitimate select can
+    // only arrive while the type-45 interaction started by the gossip option is open.
+    if (!player->PlayerTalkClass->GetInteractionData().IsInteractingWith(chromieTimeSelectExpansion.Vendor, PlayerInteractionType::ChromieTime))
         return;
 
-    // 0 = "Return to the present"; clear without store lookup.
+    int32 expansionId = chromieTimeSelectExpansion.ExpansionID;
+
+    // 0 = "Return to the present"; always allowed (a chromie player above the entry
+    // ceiling - the 70..80 scaling band - must still be able to leave).
     if (expansionId == 0)
     {
         player->SetChromieTime(0);
@@ -1460,12 +1464,20 @@ void WorldSession::HandleChromieTimeSelectExpansion(WorldPackets::Misc::ChromieT
         return;
     }
 
+    // Retail 12.0.x entry gate: level band [10, 70). The @68887 ShowPlayerConditionIDs
+    // contain no level clause, so the ceiling is server policy (see Player.h, audit R10).
+    if (player->GetLevel() < Player::ChromieTimeMinLevel || player->GetLevel() >= Player::ChromieTimeMaxEntryLevel)
+        return;
+
     UIChromieTimeExpansionInfoEntry const* entry = sUIChromieTimeExpansionInfoStore.LookupEntry(uint32(expansionId));
     if (!entry)
         return;
 
-    if (entry->ShowPlayerConditionID && !ConditionMgr::IsPlayerMeetingCondition(player, entry->ShowPlayerConditionID))
-        return;
+    // Do NOT require ShowPlayerConditionID here: decoded @68887 each of those conditions is
+    // ModifierTree { All -> PlayerIsInChromieTime(own id) } with PlayerCondition flags 0x21
+    // (no InvertModifierTree) - i.e. "player is ALREADY in this timeline", the client UI's
+    // alreadyOn marker, not an eligibility gate. Requiring it inverted the gate and made
+    // every first-time selection fail (audit R10 decode).
 
     player->SetChromieTime(expansionId);
 

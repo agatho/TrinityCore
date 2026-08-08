@@ -1282,7 +1282,8 @@ namespace WorldPackets
         //   block { uint32 ConditionalFlagsCount; uint8 FactionGroup; uint32 ChromieTimeExpansionMask;
         //           uint32 ConditionalFlags[ConditionalFlagsCount]; }
         //   Two consecutive blocks: [Previous, Current].
-        //   Login pulse sends [current, current] (no transition); state changes send [pre, post].
+        //   The first send of a session carries a default-empty Previous block (capture A rec 721);
+        //   later no-transition pulses send [current, current]; state changes send [pre, post].
         struct CTROptionsBlock
         {
             std::vector<uint32> ConditionalFlags;
