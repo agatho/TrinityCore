@@ -48,7 +48,6 @@ INSERT INTO `challenge_mode_enemy_forces_creature` (`challengeModeId`, `creature
 (239, 122322, 4),
 (239, 122398, 4),
 (239, 122401, 4),
-(239, 122401, 4),
 (239, 122403, 4),
 (239, 122404, 4),
 (239, 122405, 4),
