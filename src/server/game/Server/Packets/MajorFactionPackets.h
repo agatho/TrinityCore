@@ -19,7 +19,6 @@
 #define TRINITYCORE_MAJOR_FACTION_PACKETS_H
 
 #include "Packet.h"
-#include <vector>
 
 namespace WorldPackets
 {
@@ -28,7 +27,7 @@ namespace WorldPackets
         // CMSG_COVENANT_RENOWN_REQUEST_CATCHUP_STATE (0x3B0111).
         // The client sends this when opening the Renown UI (covenant or major
         // faction). Empty payload - the server replies with the current
-        // catchup state for every applicable faction.
+        // catchup state.
         class RequestCatchupState final : public ClientPacket
         {
         public:
@@ -39,35 +38,25 @@ namespace WorldPackets
 
         // SMSG_COVENANT_RENOWN_SEND_CATCHUP_STATE (0x42030D).
         //
-        // Wire format derived from IDA decomp of ParseCovenantRenownCatchupState
-        // (sub_7FF75C0EB140) at build 12.0.5.67186:
-        //   uint8  Header   - (PayloadLen << 1) & 0xFE; top 7 bits = byte length,
-        //                     bit 0 always 0 (reserved).
-        //   uint8  Payload[PayloadLen]  - array of inner records, each:
-        //       int32 FactionID
-        //       int32 CatchupPercent  (0..100; client divides by 100 if
-        //                              Faction.dynamicFlags & 8, else uses raw)
+        // Wire format at build 12.0.7.68275+: a SINGLE 1-bit bool - "is
+        // accelerated renown catch-up active for this player right now".
+        // Evidence: C:\dumps\AREA_grand_factions_LAYOUTS_68275.md, opcode
+        // 0x42030d (struct sub_7FF7290B72C0 = one bool(1 bit)).
         //
-        // The header's 7-bit length limits the total payload to 127 bytes,
-        // i.e. up to 15 (factionID, percent) records per packet. With 20
-        // major factions today this is sufficient for any realistic catchup
-        // state because only factions where char renown < account renown
-        // are emitted.
+        // The former Phase 10E entry-list format (header byte + array of
+        // (FactionID, CatchupPercent) records) was reconstructed from the
+        // 12.0.5.67186 client and is obsolete - the 68275 client reads only
+        // the bit. Per-faction renown state reaches the client through the
+        // reputation/currency sync paths instead, not through this packet.
         class CovenantRenownSendCatchupState final : public ServerPacket
         {
         public:
-            struct Entry
-            {
-                int32 FactionID;
-                int32 CatchupPercent;
-            };
-
             CovenantRenownSendCatchupState()
-                : ServerPacket(SMSG_COVENANT_RENOWN_SEND_CATCHUP_STATE, 1 + 15 * 8) { }
+                : ServerPacket(SMSG_COVENANT_RENOWN_SEND_CATCHUP_STATE, 1) { }
 
             WorldPacket const* Write() override;
 
-            std::vector<Entry> Entries;
+            bool IsActive = false;
         };
     }
 }

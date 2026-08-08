@@ -1245,55 +1245,19 @@ void WorldSession::HandleSetCurrencyFlags(WorldPackets::Misc::SetCurrencyFlags c
 
 void WorldSession::HandleCovenantRenownRequestCatchupState(WorldPackets::MajorFactions::RequestCatchupState const& /*packet*/)
 {
-    // Phase 10E: respond with the per-faction catchup state. For every Major
-    // Faction where this character's renown is below the account-max, emit
-    // a (FactionID, CatchupPercent) record. CatchupPercent is computed as a
-    // 0..100 ratio of how far the character has to catch up; the client uses
-    // this to drive the renown-catchup-bonus reputation multiplier.
-    //
-    // Wire format header byte is (payloadLen << 1) & 0xFE; max payload 127B
-    // = 15 records. With 20 majors today this is sufficient in practice
-    // because typically only a few factions need catchup at any time.
-
+    // The 68275+ packet carries exactly one bit: is accelerated renown
+    // catch-up running for this player right now (wire evidence cited in
+    // MajorFactionPackets.h). This core has no code path that grants boosted
+    // renown gains - the warband account-wide renown model shares the level
+    // itself, it does not accelerate earning - so the truthful answer is
+    // "no"; advertising a catch-up bonus that is never paid would make the
+    // client's renown UI lie. Per-faction renown/account-renown state
+    // reaches the client through the reputation sync paths (ReputationMgr /
+    // account-wide warband reputation), not through this packet.
     if (!_player)
         return;
 
     WorldPackets::MajorFactions::CovenantRenownSendCatchupState response;
-
-    constexpr size_t MaxEntries = 127 / 8;  // 15 - matches the 127B header cap
-
-    for (uint32 factionId : sMajorFactionMgr->GetMajorFactionIDs())
-    {
-        if (response.Entries.size() >= MaxEntries)
-        {
-            TC_LOG_WARN("network", "HandleCovenantRenownRequestCatchupState: more than {} catchup-eligible majors for player {} - truncating",
-                MaxEntries, _player->GetName());
-            break;
-        }
-
-        FactionEntry const* faction = sFactionStore.LookupEntry(factionId);
-        if (!faction || !faction->CanHaveReputation())
-            continue;
-
-        // Read the per-character renown level via existing ReputationMgr path.
-        int32 charRenown = _player->GetReputationMgr().GetRenownLevel(faction);
-        uint32 maxRenown = sMajorFactionMgr->GetMaxRenownLevel(factionId);
-        if (maxRenown == 0)
-            continue;
-
-        // Look up the account-max renown level for this faction from the
-        // already-loaded ReputationMgr cache (populated by warband Phase 4
-        // LoadAccountWideFromDB at login). Returns -1 when the faction is
-        // not warband-shared or no row exists yet -> no catchup applies.
-        int32 accountRenown = _player->GetReputationMgr().GetAccountRenownLevel(factionId);
-        if (accountRenown < 0 || accountRenown <= charRenown)
-            continue;
-
-        int32 delta = accountRenown - charRenown;
-        int32 catchupPercent = std::min<int32>(100, (delta * 100) / int32(maxRenown));
-
-        response.Entries.push_back({ .FactionID = int32(factionId), .CatchupPercent = catchupPercent });
-    }
-
+    response.IsActive = false;
     SendPacket(response.Write());
 }

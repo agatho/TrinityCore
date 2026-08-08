@@ -21,23 +21,9 @@ namespace WorldPackets::MajorFactions
 {
     WorldPacket const* CovenantRenownSendCatchupState::Write()
     {
-        // Build the payload first so we can compute the length-prefix byte.
-        ByteBuffer payload;
-        for (Entry const& entry : Entries)
-        {
-            payload << int32(entry.FactionID);
-            payload << int32(entry.CatchupPercent);
-        }
+        _worldPacket.WriteBit(IsActive);
+        _worldPacket.FlushBits();
 
-        // Header byte: (payloadLen << 1) & 0xFE. The client masks bit 0
-        // off and right-shifts by one to recover the length. The 7-bit
-        // length field caps total payload at 127 bytes (15 entries).
-        ASSERT(payload.size() <= 127, "Catchup state payload exceeds 127 bytes (%zu bytes for %zu entries)",
-            payload.size(), Entries.size());
-
-        uint8 header = uint8((payload.size() << 1) & 0xFE);
-        _worldPacket << header;
-        _worldPacket.append(payload.data(), payload.size());
         return &_worldPacket;
     }
 }
