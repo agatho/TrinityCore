@@ -2539,6 +2539,39 @@ public:
         handler->GetSession()->SendShowMailBox(player->GetGUID());
         return true;
     }
+
+    // .chromietime [expansionId] — set Chromie Time expansion (0 = clear)
+    static bool HandleChromieTimeCommand(ChatHandler* handler, Optional<int32> expansionIdArg)
+    {
+        Player* target = handler->getSelectedPlayerOrSelf();
+        if (!target)
+        {
+            handler->SendSysMessage("No player selected.");
+            return false;
+        }
+
+        if (!expansionIdArg)
+        {
+            int32 currentExp = target->m_activePlayerData->UiChromieTimeExpansionID;
+            handler->PSendSysMessage("Chromie Time for %s: expansion %d", target->GetName().c_str(), currentExp);
+            return true;
+        }
+
+        int32 expansionId = *expansionIdArg;
+        // Chromie Time ids are UiChromieTimeExpansionInfo record ids (5-16 at 12.0.7), not Expansions
+        // enum values; validate against the store so ids without a row (which would leave
+        // ChromieTimeExpansionMask = 0, an inconsistent state) are rejected. 0 clears.
+        if (expansionId < 0 || (expansionId > 0 && !sUIChromieTimeExpansionInfoStore.LookupEntry(uint32(expansionId))))
+        {
+            handler->PSendSysMessage("Invalid Chromie Time expansion ID %d: must be 0 (clear) or a UiChromieTimeExpansionInfo record id.", expansionId);
+            return false;
+        }
+
+        target->SetChromieTime(expansionId);
+
+        handler->PSendSysMessage("Chromie Time for %s set to expansion %d.", target->GetName().c_str(), expansionId);
+        return true;
+    }
 };
 
 void AddSC_misc_commandscript()

@@ -2702,6 +2702,16 @@ bool ConditionMgr::isConditionTypeValid(Condition* cond) const
         case CONDITION_STRING_ID:
         case CONDITION_LABEL:
             break;
+        case CONDITION_CHROMIE_TIME:
+        {
+            // ConditionValue1 is a UiChromieTimeExpansionInfo record id (5-16 at 12.0.7), not an Expansions enum value; 0 = "any Chromie Time"
+            if (cond->ConditionValue1 && !sUIChromieTimeExpansionInfoStore.LookupEntry(cond->ConditionValue1))
+            {
+                TC_LOG_ERROR("sql.sql", "{} has non existing UiChromieTimeExpansionInfo id in value1 ({}), skipped.", *cond, cond->ConditionValue1);
+                return false;
+            }
+            break;
+        }
         case CONDITION_DIFFICULTY_ID:
             if (!sDifficultyStore.LookupEntry(cond->ConditionValue1))
             {
