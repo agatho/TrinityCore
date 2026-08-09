@@ -83,6 +83,20 @@ bool ItemUpgradeMgr::GetNextStep(Player const* player, Item const* item, Upgrade
 
     step.NextRank = *(rankItr + 1);
 
+    auto applyExtendedCost = [&step](ItemExtendedCostEntry const* extendedCost)
+    {
+        step.Money = extendedCost->Money;
+        for (std::size_t i = 0; i < extendedCost->CurrencyID.size(); ++i)
+        {
+            if (extendedCost->CurrencyID[i] && extendedCost->CurrencyCount[i])
+            {
+                step.CurrencyID = extendedCost->CurrencyID[i];
+                step.CurrencyCount = extendedCost->CurrencyCount[i];
+                break;
+            }
+        }
+    };
+
     // Step cost: the next rank's logical cost group, filtered by the item's inventory-type slot mask, resolved
     // through ItemExtendedCost (crest currency + amount; Money carries the gold fee).
     if (step.NextRank->ItemLogicalCostGroupID)
@@ -96,23 +110,23 @@ bool ItemUpgradeMgr::GetNextStep(Player const* player, Item const* item, Upgrade
                 continue;
 
             if (ItemExtendedCostEntry const* extendedCost = sItemExtendedCostStore.LookupEntry(uint32(logicalCost->ItemExtendedCostID)))
-            {
-                step.Money = extendedCost->Money;
-                for (std::size_t i = 0; i < extendedCost->CurrencyID.size(); ++i)
-                {
-                    if (extendedCost->CurrencyID[i] && extendedCost->CurrencyCount[i])
-                    {
-                        step.CurrencyID = extendedCost->CurrencyID[i];
-                        step.CurrencyCount = extendedCost->CurrencyCount[i];
-                        break;
-                    }
-                }
-            }
+                applyExtendedCost(extendedCost);
             break;
         }
     }
 
+    // The Midnight upgrade tracks do not use logical cost groups at all: ItemBonusListGroup 608-612
+    // (Adventurer/Veteran/Champion/Hero/Myth Dawncrest) carry ItemLogicalCostGroupID = 0 on every rank and
+    // put the cost straight on the rank row's ItemExtendedCostID (ids 10994-11018: 20 crests of that track's
+    // own tier plus 10/20/30/40/50g). Reading only the logical-cost path therefore left every Midnight
+    // upgrade with no currency at all, i.e. free. Honour the direct reference too.
+    if (!step.CurrencyID && step.NextRank->ItemExtendedCostID)
+        if (ItemExtendedCostEntry const* extendedCost = sItemExtendedCostStore.LookupEntry(uint32(step.NextRank->ItemExtendedCostID)))
+            applyExtendedCost(extendedCost);
+
     // Config fallback for stripped/absent cost data: flat crests of the season crest tier + flat gold.
+    // Left at 0 by default on purpose - see worldserver.conf.dist. There is no single correct crest to fall
+    // back to (each track bills its own tier), so billing a guessed one is worse than billing nothing.
     if (!step.CurrencyID)
     {
         step.CurrencyID = uint32(sConfigMgr->GetIntDefault("ChallengeMode.Upgrade.FallbackCurrencyId", 0));
