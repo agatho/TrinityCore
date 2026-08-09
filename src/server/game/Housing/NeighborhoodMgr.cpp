@@ -169,7 +169,7 @@ void NeighborhoodMgr::LoadFromDB()
     }
 }
 
-Neighborhood* NeighborhoodMgr::CreateNeighborhood(ObjectGuid ownerGuid, std::string const& name, uint32 neighborhoodMapID, int32 factionRestriction, bool isPublic /*= false*/)
+Neighborhood* NeighborhoodMgr::CreateNeighborhood(ObjectGuid ownerGuid, std::string const& name, uint32 neighborhoodMapID, int32 factionRestriction, bool isPublic /*= false*/, uint32 guildId /*= 0*/)
 {
     // Check if owner already has a neighborhood
     if (_ownerToNeighborhood.find(ownerGuid) != _ownerToNeighborhood.end())
@@ -201,6 +201,7 @@ Neighborhood* NeighborhoodMgr::CreateNeighborhood(ObjectGuid ownerGuid, std::str
     stmt->setInt32(index++, factionRestriction);
     stmt->setBool(index++, isPublic);
     stmt->setUInt32(index++, createTime);
+    stmt->setUInt32(index++, guildId); // M8: persist guild link at creation so the reload below populates _guildId
     trans->Append(stmt);
 
     // Insert the owner as a member with OWNER role
@@ -244,7 +245,7 @@ Neighborhood* NeighborhoodMgr::CreateNeighborhood(ObjectGuid ownerGuid, std::str
     return result;
 }
 
-Neighborhood* NeighborhoodMgr::CreateGuildNeighborhood(ObjectGuid ownerGuid, std::string const& name, uint32 neighborhoodMapID, uint32 factionID)
+Neighborhood* NeighborhoodMgr::CreateGuildNeighborhood(ObjectGuid ownerGuid, std::string const& name, uint32 neighborhoodMapID, uint32 factionID, uint32 guildId)
 {
     int32 factionRestriction = NEIGHBORHOOD_FACTION_NONE;
     if (factionID == HORDE)
@@ -252,7 +253,12 @@ Neighborhood* NeighborhoodMgr::CreateGuildNeighborhood(ObjectGuid ownerGuid, std
     else if (factionID == ALLIANCE)
         factionRestriction = NEIGHBORHOOD_FACTION_ALLIANCE;
 
-    return CreateNeighborhood(ownerGuid, name, neighborhoodMapID, factionRestriction);
+    // M8: persist the guild→neighborhood link so GetNeighborhoodByGuildId
+    // resolves this neighborhood (across restarts, via LoadFromDB).
+    Neighborhood* neighborhood = CreateNeighborhood(ownerGuid, name, neighborhoodMapID, factionRestriction, /*isPublic*/ false, guildId);
+    if (neighborhood)
+        neighborhood->SetGuildId(guildId);
+    return neighborhood;
 }
 
 void NeighborhoodMgr::DeleteNeighborhood(ObjectGuid neighborhoodGuid)
