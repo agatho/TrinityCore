@@ -836,6 +836,42 @@ HousingResult Neighborhood::EvictPlayer(ObjectGuid playerGuid)
     return HOUSING_RESULT_SUCCESS;
 }
 
+bool Neighborhood::ReleasePlot(ObjectGuid ownerGuid)
+{
+    bool freed = false;
+
+    // Free every plot recorded as owned by this player (normally one).
+    for (uint8 i = 0; i < MAX_NEIGHBORHOOD_PLOTS; ++i)
+    {
+        if (_plots[i].IsOccupied() && _plots[i].OwnerGuid == ownerGuid)
+        {
+            _plots[i] = PlotInfo{};
+            freed = true;
+        }
+    }
+
+    // Clear the member's plot assignment (memory + DB) so they can buy again.
+    auto it = std::find_if(_members.begin(), _members.end(),
+        [&ownerGuid](Member const& member) { return member.PlayerGuid == ownerGuid; });
+    if (it != _members.end() && it->PlotIndex != INVALID_PLOT_INDEX)
+    {
+        it->PlotIndex = INVALID_PLOT_INDEX;
+
+        CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_UPD_NEIGHBORHOOD_MEMBER_PLOT);
+        stmt->setUInt8(0, INVALID_PLOT_INDEX);
+        stmt->setUInt64(1, _guid.GetCounter());
+        stmt->setUInt64(2, ownerGuid.GetCounter());
+        CharacterDatabase.Execute(stmt);
+        freed = true;
+    }
+
+    if (freed)
+        TC_LOG_DEBUG("housing", "Neighborhood::ReleasePlot: Freed plot(s) owned by {} in neighborhood '{}'",
+            ownerGuid.ToString(), _name);
+
+    return freed;
+}
+
 HousingResult Neighborhood::TransferOwnership(ObjectGuid newOwnerGuid)
 {
     Member* oldOwner = nullptr;

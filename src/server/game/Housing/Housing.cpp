@@ -701,6 +701,15 @@ void Housing::Delete()
     TC_LOG_DEBUG("housing", "Housing::Delete: Player {} (GUID {}) deleted house {}",
         _owner->GetName(), _owner->GetGUID().GetCounter(), _houseGuid.ToString());
 
+    // m2/A5: release the neighborhood plot so it becomes vacant and
+    // re-purchasable instead of being orphaned forever (the old bug: delete /
+    // kiosk-reset removed the character rows but never freed the PlotInfo).
+    if (!_neighborhoodGuid.IsEmpty())
+    {
+        if (Neighborhood* neighborhood = sNeighborhoodMgr.GetNeighborhood(_neighborhoodGuid))
+            neighborhood->ReleasePlot(_owner->GetGUID());
+    }
+
     // Remove all decor storage entries from account UpdateField (only if storage is populated)
     if (_storagePopulated && _owner->GetSession() && !_placedDecor.empty())
     {
@@ -805,13 +814,10 @@ HousingResult Housing::PlaceDecorWithGuid(ObjectGuid decorGuid, uint32 decorEntr
     // budget/skip the interior _rooms lookup, while preserving the RoomGuid
     // as-sent so downstream consumers (DB row, move/remove round-trips) still
     // see what retail sends.
-    bool const isExteriorPlotRoom = !roomGuid.IsEmpty()
-        && roomGuid.GetHigh() == HighGuid::Housing
-        && uint32((roomGuid.GetRawValue(1) >> 53) & 0x1F) == 2
-        && uint32(roomGuid.GetRawValue(1) & 0xFFFFFFFFULL) == sHousingMgr.GetBaseRoomEntryId();
+    bool const isExterior = IsExteriorDecorPlacement(roomGuid);
 
     uint32 weightCost = sHousingMgr.GetDecorWeightCost(decorEntryId);
-    if (roomGuid.IsEmpty() || isExteriorPlotRoom)
+    if (isExterior)
     {
         if (_exteriorDecorWeightUsed + weightCost > GetMaxExteriorDecorBudget())
             return HOUSING_RESULT_MAX_DECOR_REACHED;
@@ -822,7 +828,7 @@ HousingResult Housing::PlaceDecorWithGuid(ObjectGuid decorGuid, uint32 decorEntr
             return HOUSING_RESULT_MAX_DECOR_REACHED;
     }
 
-    if (!roomGuid.IsEmpty() && !isExteriorPlotRoom)
+    if (!isExterior)
     {
         auto roomItr = _rooms.find(roomGuid);
         if (roomItr == _rooms.end())
@@ -866,7 +872,9 @@ HousingResult Housing::PlaceDecorWithGuid(ObjectGuid decorGuid, uint32 decorEntr
     if (catalogItr->second.Count == 0)
         _catalog.erase(catalogItr);
 
-    if (roomGuid.IsEmpty())
+    // M2: charge the SAME budget the CHECK validated (exterior-plot rooms count
+    // as exterior, not interior).
+    if (isExterior)
         _exteriorDecorWeightUsed += weightCost;
     else
         _interiorDecorWeightUsed += weightCost;
@@ -940,9 +948,10 @@ HousingResult Housing::PlaceDecor(uint32 decorEntryId, float x, float y, float z
     if (GetDecorCount() >= maxDecor)
         return HOUSING_RESULT_MAX_DECOR_REACHED;
 
-    // Check WeightCost-based budget (exterior vs interior)
+    // Check WeightCost-based budget (exterior vs interior) — M2: classify once.
     uint32 weightCost = sHousingMgr.GetDecorWeightCost(decorEntryId);
-    if (roomGuid.IsEmpty())
+    bool const isExterior = IsExteriorDecorPlacement(roomGuid);
+    if (isExterior)
     {
         // Outdoor decor uses exterior budget
         if (_exteriorDecorWeightUsed + weightCost > GetMaxExteriorDecorBudget())
@@ -956,7 +965,7 @@ HousingResult Housing::PlaceDecor(uint32 decorEntryId, float x, float y, float z
     }
 
     // Validate room exists if specified, and check per-room decor limit
-    if (!roomGuid.IsEmpty())
+    if (!isExterior)
     {
         auto roomItr = _rooms.find(roomGuid);
         if (roomItr == _rooms.end())
@@ -1007,8 +1016,8 @@ HousingResult Housing::PlaceDecor(uint32 decorEntryId, float x, float y, float z
     if (catalogItr->second.Count == 0)
         _catalog.erase(catalogItr);
 
-    // Update budget tracking (route to correct budget based on room)
-    if (roomGuid.IsEmpty())
+    // Update budget tracking (route to correct budget based on room) — M2.
+    if (isExterior)
         _exteriorDecorWeightUsed += weightCost;
     else
         _interiorDecorWeightUsed += weightCost;
@@ -1174,6 +1183,13 @@ HousingResult Housing::MoveDecor(ObjectGuid decorGuid, float x, float y, float z
     if (itr == _placedDecor.end())
         return HOUSING_RESULT_DECOR_NOT_FOUND;
 
+    // M1: MoveDecor previously performed NO spatial validation. Route the move
+    // target through the same room/plot AABB check as placement so a moved item
+    // cannot be flung to arbitrary coordinates.
+    HousingResult validationResult = sHousingMgr.ValidateDecorPlacement(itr->second.DecorEntryId, Position(x, y, z), _level);
+    if (validationResult != HOUSING_RESULT_SUCCESS)
+        return validationResult;
+
     PlacedDecor& decor = itr->second;
     decor.PosX = x;
     decor.PosY = y;
@@ -1221,7 +1237,7 @@ HousingResult Housing::RemoveDecor(ObjectGuid decorGuid)
     // Refund WeightCost budget (route to correct budget based on room)
     uint32 decorEntryId = itr->second.DecorEntryId;
     uint32 weightCost = sHousingMgr.GetDecorWeightCost(decorEntryId);
-    if (itr->second.RoomGuid.IsEmpty())
+    if (IsExteriorDecorPlacement(itr->second.RoomGuid))
     {
         if (_exteriorDecorWeightUsed >= weightCost)
             _exteriorDecorWeightUsed -= weightCost;
@@ -2409,6 +2425,20 @@ uint32 Housing::GetMaxFixtureBudget() const
     return sHousingMgr.GetFixtureBudgetForLevel(_level);
 }
 
+bool Housing::IsExteriorDecorPlacement(ObjectGuid roomGuid)
+{
+    // No room → yard/exterior placement.
+    if (roomGuid.IsEmpty())
+        return true;
+
+    // The plot's base (exterior) room identity: HighGuid::Housing, subType==2,
+    // low 32 bits of the high word == the base room entry id. Retail always
+    // sends this RoomGuid for exterior decor even though it is "on a room".
+    return roomGuid.GetHigh() == HighGuid::Housing
+        && uint32((roomGuid.GetRawValue(1) >> 53) & 0x1F) == 2
+        && uint32(roomGuid.GetRawValue(1) & 0xFFFFFFFFULL) == sHousingMgr.GetBaseRoomEntryId();
+}
+
 void Housing::RecalculateBudgets()
 {
     _interiorDecorWeightUsed = 0;
@@ -2420,7 +2450,7 @@ void Housing::RecalculateBudgets()
     for (auto const& [guid, decor] : _placedDecor)
     {
         uint32 weightCost = sHousingMgr.GetDecorWeightCost(decor.DecorEntryId);
-        if (decor.RoomGuid.IsEmpty())
+        if (IsExteriorDecorPlacement(decor.RoomGuid))
             _exteriorDecorWeightUsed += weightCost;
         else
             _interiorDecorWeightUsed += weightCost;

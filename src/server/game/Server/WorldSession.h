@@ -1587,6 +1587,9 @@ class TC_GAME_API WorldSession
         void HandleHouseInteriorLeaveHouse(WorldPackets::Housing::HouseInteriorLeaveHouse const& houseInteriorLeaveHouse);
 
         // Housing - Decor System
+        // m3/A6: returns false (and consumes no budget) when the per-session
+        // decoration throttle is exceeded; handlers then reply TOO_MANY_REQUESTS.
+        bool CheckHousingDecorThrottle();
         void HandleHousingDecorSetEditMode(WorldPackets::Housing::HousingDecorSetEditMode const& housingDecorSetEditMode);
         void HandleHousingDecorPlace(WorldPackets::Housing::HousingDecorPlace const& housingDecorPlace);
         void HandleHousingDecorMove(WorldPackets::Housing::HousingDecorMove const& housingDecorMove);
@@ -2331,6 +2334,13 @@ class TC_GAME_API WorldSession
         // The client's PlotIndex may differ from our DB2 PlotIndex values.
         uint32 _lastClientPlotIndex = 0;
         ObjectGuid _lastCornerstoneGuid;
+
+        // m3/A6 per-session decoration throttle. Each decor place/move/remove is
+        // an AddToMap + synchronous DB write; without a limit a scripted client
+        // can amplify GO-spawn / DB load. Sliding fixed window: up to
+        // HOUSING_DECOR_THROTTLE_BURST edits per HOUSING_DECOR_THROTTLE_WINDOW_MS.
+        uint32 _housingDecorThrottleWindowStart = 0;
+        uint32 _housingDecorThrottleCount = 0;
 
         WorldSession(WorldSession const& right) = delete;
         WorldSession& operator=(WorldSession const& right) = delete;

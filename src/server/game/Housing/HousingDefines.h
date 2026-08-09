@@ -731,6 +731,20 @@ enum HouseLevelRewardValueType : uint8
 };
 
 // Constants
+// M1/A4 spatial-validation bound. Decor positions are stored in local space
+// (relative to the room origin for interior placements, relative to the plot
+// origin for exterior). Legitimate placements sit well within a couple of dozen
+// units of the origin on every axis (a plot/interior is only a few tens of yards
+// across); the sniff-verified starter decor is all within ~15. This half-extent
+// is intentionally generous so it can never reject a legitimate placement, while
+// still slamming the door on arbitrary-coordinate GameObject spam that the old
+// Position::IsPositionValid() check (|coord| < ~64000) let straight through.
+static constexpr float HOUSING_MAX_DECOR_LOCAL_EXTENT  = 1024.0f;
+// m3/A6 decoration throttle: at most BURST place/move/remove ops per WINDOW_MS.
+// Generous enough for rapid legitimate redecorating, tight enough to cap the
+// AddToMap + synchronous-DB-write amplification a scripted client can drive.
+static constexpr uint32 HOUSING_DECOR_THROTTLE_WINDOW_MS = 10000;
+static constexpr uint32 HOUSING_DECOR_THROTTLE_BURST     = 40;
 static constexpr uint32 MAX_HOUSING_DECOR_PER_ROOM      = 50;
 static constexpr uint32 MAX_HOUSING_ROOMS_PER_HOUSE     = 20;
 static constexpr uint32 MAX_HOUSING_FIXTURES_PER_HOUSE  = 10;
