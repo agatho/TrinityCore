@@ -65,3 +65,14 @@ void WorldSession::HandleAdventureJournalUpdateSuggestions(WorldPackets::Adventu
 
     SendPacket(response.Write());
 }
+
+void WorldSession::HandleEncounterJournalStartArathiRpe(WorldPackets::AdventureJournal::EncounterJournalStartArathiRpe& /*startArathiRpe*/)
+{
+    // Adventure Guide "RPE Start" button -> C_EncounterJournal.StartArathiRPE(). RPE = Recommended Player
+    // Experience (the Midnight Arathi intro). Retail kicks off a world-scripted sequence (creature anim/move/
+    // emote/spell) rather than sending a dedicated reply. That scenario is unauthored content here, so this
+    // handler simply accepts the request - stopping the STATUS_UNHANDLED log spam and the client's re-click
+    // resends. TODO(content): trigger the Arathi RPE scenario once it is authored.
+    TC_LOG_DEBUG("network", "CMSG_ENCOUNTER_JOURNAL_START_ARATHI_RPE from {} (Arathi RPE scenario not yet authored)",
+        _player ? _player->GetName() : GetPlayerInfo());
+}
