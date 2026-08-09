@@ -475,16 +475,22 @@ uint32 ChallengeModeMgr::GetAffixCreatureId(uint32 affixId) const
 {
     switch (affixId)
     {
+        // Every default below is derived from client data rather than guessed: KeystoneAffix.db2 gives the
+        // affix name, SpellName.db2 the identically named spell, and that spell's SpellEffect.db2 row with
+        // Effect = 28 (SPELL_EFFECT_SUMMON) carries the creature entry in EffectMiscValue[0]. All five
+        // entries then resolve in creature_template under the expected name. See worldserver.conf.dist
+        // (ChallengeMode.Affix.<Name>.CreatureId) for the full derivation table.
+        //
         // Legacy roster
-        case ChallengeModeAffix::Spiteful:    return uint32(sConfigMgr->GetIntDefault("ChallengeMode.Affix.Spiteful.CreatureId", 174773));  // Spiteful Shade (fixate + self-decay AI)
-        case ChallengeModeAffix::Incorporeal: return uint32(sConfigMgr->GetIntDefault("ChallengeMode.Affix.Incorporeal.CreatureId", 204560)); // Incorporeal Being (verify per build)
-        case ChallengeModeAffix::Afflicted:   return uint32(sConfigMgr->GetIntDefault("ChallengeMode.Affix.Afflicted.CreatureId", 0));        // needs verified entry per build
+        case ChallengeModeAffix::Spiteful:    return uint32(sConfigMgr->GetIntDefault("ChallengeMode.Affix.Spiteful.CreatureId", 174773));    // spell 343491 -> 174773 Spiteful Shade
+        case ChallengeModeAffix::Incorporeal: return uint32(sConfigMgr->GetIntDefault("ChallengeMode.Affix.Incorporeal.CreatureId", 204560));  // spell 410501 -> 204560 Incorporeal Being
+        case ChallengeModeAffix::Afflicted:   return uint32(sConfigMgr->GetIntDefault("ChallengeMode.Affix.Afflicted.CreatureId", 204773));    // spell 408800 -> 204773 Afflicted Soul
         // Midnight roster: both entries ship in the imported world data (TWW-era ids kept for Midnight -
         // the Bargains debuted in TWW S3): 229296 Orb of Ascendance, 229537 Voidbound Emissary
         // (renamed from "Void Emissary" at build 66102). Dedicated AI remains world content; a plain
         // spawn is killable, which drives both mechanics' baseline loop.
-        case ChallengeModeAffix::XalatathsBargainAscendant: return uint32(sConfigMgr->GetIntDefault("ChallengeMode.Affix.Ascendant.CreatureId", 229296));
-        case ChallengeModeAffix::XalatathsBargainVoidbound: return uint32(sConfigMgr->GetIntDefault("ChallengeMode.Affix.Voidbound.CreatureId", 229537));
+        case ChallengeModeAffix::XalatathsBargainAscendant: return uint32(sConfigMgr->GetIntDefault("ChallengeMode.Affix.Ascendant.CreatureId", 229296));  // spell 461936 -> 229296
+        case ChallengeModeAffix::XalatathsBargainVoidbound: return uint32(sConfigMgr->GetIntDefault("ChallengeMode.Affix.Voidbound.CreatureId", 229537));  // spell 462671 -> 229537
         default: return 0;
     }
 }
