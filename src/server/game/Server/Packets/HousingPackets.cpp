@@ -2093,8 +2093,14 @@ WorldPacket const* NeighborhoodCharterUpdateResponse::Write()
     _worldPacket << uint32(Unknown);
     for (ObjectGuid const& signer : Signers)
         _worldPacket << signer;
-    _worldPacket << uint8(NeighborhoodName.size());
-    _worldPacket.WriteString(NeighborhoodName);
+    // M5: charter name is length-prefixed size+1 with a trailing NUL
+    // (retail rec 14982 = 09 'Colombia' 00), matching the Roster/HouseFinder
+    // writers. The old uint8(size)+WriteString dropped the terminator.
+    {
+        uint8 charterNameLen = static_cast<uint8>(std::min<size_t>(NeighborhoodName.size() + 1, 255));
+        _worldPacket << uint8(charterNameLen);
+        _worldPacket.append(NeighborhoodName.c_str(), charterNameLen);
+    }
 
     TC_LOG_DEBUG("network.opcode", "SMSG_NEIGHBORHOOD_CHARTER_UPDATE_RESPONSE Result: {} (error_bit={}) CharterGuid: {} MapID: {} SigCount: {} Signers: {} Name: '{}'",
         Result, Result != 0, CharterGuid.ToString(), MapID, SignatureCount, Signers.size(), NeighborhoodName);
@@ -2114,8 +2120,14 @@ WorldPacket const* NeighborhoodCharterOpenUIResponse::Write()
     _worldPacket << uint32(Unknown);
     for (ObjectGuid const& signer : Signers)
         _worldPacket << signer;
-    _worldPacket << uint8(NeighborhoodName.size());
-    _worldPacket.WriteString(NeighborhoodName);
+    // M5: charter name is length-prefixed size+1 with a trailing NUL
+    // (retail rec 14982 = 09 'Colombia' 00), matching the Roster/HouseFinder
+    // writers. The old uint8(size)+WriteString dropped the terminator.
+    {
+        uint8 charterNameLen = static_cast<uint8>(std::min<size_t>(NeighborhoodName.size() + 1, 255));
+        _worldPacket << uint8(charterNameLen);
+        _worldPacket.append(NeighborhoodName.c_str(), charterNameLen);
+    }
 
     TC_LOG_DEBUG("network.opcode", "SMSG_NEIGHBORHOOD_CHARTER_OPEN_UI_RESPONSE Result: {} (error_bit={}) CharterGuid: {} MapID: {} SigCount: {} Signers: {} Name: '{}'",
         Result, Result != 0, CharterGuid.ToString(), MapID, SignatureCount, Signers.size(), NeighborhoodName);
@@ -2130,8 +2142,14 @@ WorldPacket const* NeighborhoodCharterSignRequest::Write()
     _worldPacket << CharterGuid;
     _worldPacket << uint32(MapID);
     _worldPacket << uint32(Unknown);
-    _worldPacket << uint8(NeighborhoodName.size());
-    _worldPacket.WriteString(NeighborhoodName);
+    // M5: charter name is length-prefixed size+1 with a trailing NUL
+    // (retail rec 14982 = 09 'Colombia' 00), matching the Roster/HouseFinder
+    // writers. The old uint8(size)+WriteString dropped the terminator.
+    {
+        uint8 charterNameLen = static_cast<uint8>(std::min<size_t>(NeighborhoodName.size() + 1, 255));
+        _worldPacket << uint8(charterNameLen);
+        _worldPacket.append(NeighborhoodName.c_str(), charterNameLen);
+    }
 
     TC_LOG_DEBUG("network.opcode", "SMSG_NEIGHBORHOOD_CHARTER_SIGN_REQUEST Result: {} CharterGuid: {} MapID: {} Name: '{}'",
         Result, CharterGuid.ToString(), MapID, NeighborhoodName);
@@ -2157,8 +2175,14 @@ WorldPacket const* NeighborhoodCharterOpenConfirmationUIResponse::Write()
     _worldPacket << uint8(Result);
     _worldPacket << uint32(Field1);
     _worldPacket << uint32(Field2);
-    _worldPacket << uint8(NeighborhoodName.size());
-    _worldPacket.WriteString(NeighborhoodName);
+    // M5: charter name is length-prefixed size+1 with a trailing NUL
+    // (retail rec 14982 = 09 'Colombia' 00), matching the Roster/HouseFinder
+    // writers. The old uint8(size)+WriteString dropped the terminator.
+    {
+        uint8 charterNameLen = static_cast<uint8>(std::min<size_t>(NeighborhoodName.size() + 1, 255));
+        _worldPacket << uint8(charterNameLen);
+        _worldPacket.append(NeighborhoodName.c_str(), charterNameLen);
+    }
 
     TC_LOG_DEBUG("network.opcode", "SMSG_NEIGHBORHOOD_CHARTER_OPEN_CONFIRMATION_UI_RESPONSE Result: {} Field1: {} Field2: {} Name: '{}'",
         Result, Field1, Field2, NeighborhoodName);

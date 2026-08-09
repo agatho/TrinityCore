@@ -149,8 +149,23 @@ void WorldSession::HandleNeighborhoodCharterCreate(WorldPackets::Neighborhood::N
     charter.SaveToDB(trans);
     CharacterDatabase.CommitTransaction(trans);
 
+    // M4: populate the success response so the client charter panel renders the
+    // charter GUID + name + signature progress (previously only Result was set,
+    // leaving CharterGuid/MapID/SignatureCount/Name default → blank panel, and
+    // the client never learned the charter GUID). CharterGuid is built the same
+    // way as the sign-request path. `Unknown` carries the required signature
+    // count (server policy MIN_CHARTER_SIGNATURES; retail rec 14982 shows 0x0a).
+    // NOTE: leadByte/Result semantics left as documented (uint8 Result, client
+    // tests != 0 for error); the sniff's 0x42 leadByte is unverified for the
+    // success path and intentionally not hardcoded here.
     WorldPackets::Neighborhood::NeighborhoodCharterUpdateResponse response;
     response.Result = static_cast<uint8>(HOUSING_RESULT_SUCCESS);
+    response.CharterGuid = ObjectGuid::Create<HighGuid::Housing>(0, 0, 0, charterId);
+    response.MapID = neighborhoodCharterCreate.NeighborhoodMapID;
+    response.SignatureCount = charter.GetSignatureCount();
+    response.Signers = charter.GetSignatures();
+    response.Unknown = MIN_CHARTER_SIGNATURES;
+    response.NeighborhoodName = neighborhoodCharterCreate.Name;
     SendPacket(response.Write());
 
     TC_LOG_DEBUG("housing", "Player {} created neighborhood charter '{}' (ID: {}, MapID: {})",
