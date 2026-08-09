@@ -27,6 +27,14 @@ WorldPacket const* ProductListResponse::Write()
     return &_worldPacket;
 }
 
+WorldPacket const* GetDistributionListResponse::Write()
+{
+    if (RawData && !RawData->empty())
+        _worldPacket.append(RawData->data(), RawData->size());
+
+    return &_worldPacket;
+}
+
 void StartPurchase::Read()
 {
     _worldPacket >> ProductID;
@@ -36,7 +44,7 @@ void StartPurchase::Read()
 
 void OpenCheckout::Read()
 {
-    _worldPacket >> DistributionID;
+    _worldPacket >> ClientToken;
 }
 
 WorldPacket const* StartPurchaseResponse::Write()
@@ -48,11 +56,32 @@ WorldPacket const* StartPurchaseResponse::Write()
     return &_worldPacket;
 }
 
+// INFERRED layout - see the ConfirmPurchase comment in the header. Gated off by default.
+WorldPacket const* ConfirmPurchase::Write()
+{
+    _worldPacket << PurchaseID;
+    _worldPacket << ProductID;
+    _worldPacket << CurrentPriceFixedPoint;
+    _worldPacket << ServerToken;
+    _worldPacket.WriteBits(0u, 8);      // walletName length (empty), bit-packed like the other records
+    _worldPacket.FlushBits();
+
+    return &_worldPacket;
+}
+
+void ConfirmPurchaseResponse::Read()
+{
+    _worldPacket >> ServerToken;
+    Confirmed = _worldPacket.ReadBit();
+}
+
 // Record order proven against the live 68974 purchase list (TESTER_SNIFF2_LINDORMI_MINE, 458 B =
 // 8 + 10x45): { u64 PurchaseID, i32 Status, i32 ResultCode, u32 ProductID, u64 BasePrice,
 // u64 UserPrice, i64 TimeCreated, u8 walletNameLen }. walletName sits at the END of the record -
 // in all 10 live records the unix purchase time aligns at record offset 36 and byte 44 is the
 // empty-wallet 0; with the u8 after ProductID the time would start at 37, one byte late.
+// Shares the JamBattlePayPurchase record layout with PurchaseUpdate::Write (walletName length
+// record-final - see the comment there). Answered honestly-empty today (no purchase ledger yet).
 WorldPacket const* GetPurchaseListResponse::Write()
 {
     _worldPacket << Result;
@@ -67,8 +96,6 @@ WorldPacket const* GetPurchaseListResponse::Write()
         _worldPacket << p.UserPrice;
         _worldPacket << p.TimeCreated;
         _worldPacket << uint8(0);       // walletName: empty (8-bit length primitive, value 0), record-final
-                                        // (68974 capture: purchase times align at record offset 36 - the
-                                        // walletName length byte closes the 45B record, it does not follow ProductID)
     }
 
     return &_worldPacket;
@@ -88,8 +115,6 @@ WorldPacket const* PurchaseUpdate::Write()
         _worldPacket << p.UserPrice;
         _worldPacket << p.TimeCreated;
         _worldPacket << uint8(0);       // walletName: empty (8-bit length primitive, value 0), record-final
-                                        // (68974 capture: purchase times align at record offset 36 - the
-                                        // walletName length byte closes the 45B record, it does not follow ProductID)
     }
 
     return &_worldPacket;

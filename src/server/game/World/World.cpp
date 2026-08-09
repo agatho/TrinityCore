@@ -733,6 +733,9 @@ void World::LoadConfigSettings(bool reload)
         { .Name = "AllowLoggingIPAddressesInDatabase"sv, .DefaultValue = true, .Index = CONFIG_ALLOW_LOGGING_IP_ADDRESSES_IN_DATABASE },
         { .Name = "Loot.EnableAELoot"sv, .DefaultValue = true, .Index = CONFIG_ENABLE_AE_LOOT },
         { .Name = "Load.Locales"sv, .DefaultValue = true, .Index = CONFIG_LOAD_LOCALES },
+        { .Name = "Shop.Enabled"sv, .DefaultValue = true, .Index = CONFIG_SHOP_ENABLED },
+        { .Name = "Shop.PurchaseConfirmation"sv, .DefaultValue = false, .Index = CONFIG_SHOP_PURCHASE_CONFIRMATION },
+        { .Name = "WowToken.Market.Enabled"sv, .DefaultValue = false, .Index = CONFIG_WOW_TOKEN_MARKET_ENABLED },
         { .Name = "Housing.EnableBuyHouse"sv, .DefaultValue = true, .Index = CONFIG_HOUSING_ENABLE_BUY_HOUSE },
         { .Name = "Housing.EnableDeleteHouse"sv, .DefaultValue = true, .Index = CONFIG_HOUSING_ENABLE_DELETE_HOUSE },
         { .Name = "Housing.EnableMoveHouse"sv, .DefaultValue = true, .Index = CONFIG_HOUSING_ENABLE_MOVE_HOUSE },
@@ -1709,7 +1712,7 @@ bool World::SetInitialWorldSettings()
 
     TC_LOG_INFO("server.loading", "Loading in-game Shop (BattlePay) catalog...");
     sBattlePayMgr->Load();
-    sBattlePayMgr->LoadProducts();
+    sBattlePayMgr->LoadCatalog();
 
     TC_LOG_INFO("server.loading", "Loading WoW Token holdings...");
     sWowTokenMgr->Load();
@@ -2289,6 +2292,9 @@ void World::Update(uint32 diff)
         m_timers[WUPDATE_WHO_LIST].Reset();
         sWhoListStorageMgr->Update();
     }
+
+    ///- Rebuild the in-game Shop catalog when an availability-window boundary passes (restart-free rotation).
+    sBattlePayMgr->RebuildIfDue(currentGameTime);
 
     if (IsStopped() || m_timers[WUPDATE_CHANNEL_SAVE].Passed())
     {

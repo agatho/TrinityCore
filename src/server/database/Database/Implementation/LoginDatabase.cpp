@@ -251,6 +251,11 @@ void LoginDatabaseConnection::DoPrepareStatements()
     // Battle.net account-scope block list.
     PrepareStatement(LOGIN_REP_BNET_BLOCKED, "REPLACE INTO battlenet_account_blocked (accountId, blockedAccountId, blockedBattleTag, creationTime, modifiedTime) VALUES (?, ?, ?, ?, ?)", CONNECTION_ASYNC);
     PrepareStatement(LOGIN_DEL_BNET_BLOCKED, "DELETE FROM battlenet_account_blocked WHERE accountId = ? AND blockedAccountId = ?", CONNECTION_ASYNC);
+
+    // In-game Shop (BattlePay) persistent purchase ledger: GetPurchaseList + idempotency (TK-6).
+    PrepareStatement(LOGIN_INS_BATTLEPAY_PURCHASE, "INSERT INTO account_battlepay_purchase (id, account, productId, status, resultCode, basePrice, userPrice, timeCreated, walletName) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", CONNECTION_ASYNC);
+    PrepareStatement(LOGIN_SEL_BATTLEPAY_PURCHASE_ACCOUNT, "SELECT id, status, resultCode, productId, basePrice, userPrice, timeCreated FROM account_battlepay_purchase WHERE account = ? ORDER BY id ASC", CONNECTION_ASYNC);
+    PrepareStatement(LOGIN_SEL_BATTLEPAY_PURCHASE_MAXID, "SELECT MAX(id) FROM account_battlepay_purchase WHERE id BETWEEN ? AND ?", CONNECTION_SYNCH);
 }
 
 LoginDatabaseConnection::LoginDatabaseConnection(MySQLConnectionInfo& connInfo, ConnectionFlags connectionFlags) : MySQLConnection(connInfo, connectionFlags)

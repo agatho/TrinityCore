@@ -133,6 +133,7 @@ namespace WorldPackets
         class GetPurchaseList;
         class StartPurchase;
         class OpenCheckout;
+        class ConfirmPurchaseResponse;
     }
 
     namespace AreaTrigger
@@ -2546,7 +2547,7 @@ class TC_GAME_API WorldSession
         void HandleConsumableTokenCanVeteranBuy(WorldPackets::Token::ConsumableTokenCanVeteranBuy& consumableTokenCanVeteranBuy);
         void HandleCanRedeemTokenForBalance(WorldPackets::Token::CanRedeemTokenForBalance& canRedeemTokenForBalance);
         void SendCommerceTokenUpdate();
-        void SendGenerateSsoToken();
+        void SendGenerateSsoToken(uint32 clientToken);
 
         // Compact Unit Frames (4.x)
         void HandleSaveCUFProfiles(WorldPackets::Misc::SaveCUFProfiles& packet);
@@ -2647,7 +2648,9 @@ class TC_GAME_API WorldSession
         void HandleBattlePayGetPurchaseList(WorldPackets::BattlePay::GetPurchaseList& getPurchaseList);
         void HandleBattlePayStartPurchase(WorldPackets::BattlePay::StartPurchase& startPurchase);
         void HandleBattlePayOpenCheckout(WorldPackets::BattlePay::OpenCheckout& openCheckout);
+        void HandleBattlePayConfirmPurchaseResponse(WorldPackets::BattlePay::ConfirmPurchaseResponse& confirmPurchaseResponse);
         void BattlePayProcessPurchase(uint32 productID);
+        void SendBattlePayDistributionList();
 
         void SendBattlenetResponse(uint32 serviceHash, uint32 methodId, uint32 token, pb::Message const* response);
         void SendBattlenetResponse(uint32 serviceHash, uint32 methodId, uint32 token, uint32 status);
@@ -2717,6 +2720,11 @@ class TC_GAME_API WorldSession
         QueryCallbackProcessor _queryProcessor;
         AsyncCallbackProcessor<TransactionCallback> _transactionCallbacks;
         AsyncCallbackProcessor<SQLQueryHolderCallback> _queryHolderProcessor;
+
+        // In-game Shop (BattlePay) purchase anti-abuse: throttle + in-flight guard so a replayed or
+        // double-clicked CMSG_BATTLE_PAY_START_PURCHASE is charged exactly once (C-13).
+        bool _battlePayPurchaseInFlight = false;
+        uint32 _lastBattlePayPurchaseMSTime = 0;
 
     friend class World;
     protected:
@@ -2837,6 +2845,15 @@ class TC_GAME_API WorldSession
 
         // Packets cooldown
         time_t _calendarEventCreationCooldown;
+
+        // In-game Shop: last catalog generation this session was served the product-list blob for
+        // (0 = never). Throttles the 58 KB blob to once per generation; see BattlePayMgr.
+        uint32 _battlePayCatalogGeneration = 0;
+
+        // In-game Shop: pending purchase awaiting the client's confirmation response (two-step flow,
+        // Shop.PurchaseConfirmation). _battlePayConfirmToken 0 = nothing pending.
+        uint32 _battlePayPendingProductID = 0;
+        uint32 _battlePayConfirmToken = 0;
 
         std::unique_ptr<BattlePets::BattlePetMgr> _battlePetMgr;
 
