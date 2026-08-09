@@ -44,6 +44,18 @@ namespace WorldPackets
             bool OnLevelUp = false;
         };
 
+        // CMSG_ENCOUNTER_JOURNAL_START_ARATHI_RPE (0x3A0307): empty body. Fired by the Adventure Guide's
+        // "RPE Start" button (EncounterJournalRPEStartButtonMixin:OnClick -> C_EncounterJournal.StartArathiRPE);
+        // RPE = Recommended Player Experience (the Midnight Arathi intro flow). No dedicated reply on the wire
+        // (68275 chromiedf capture rec 35281: empty CMSG, no answering SMSG).
+        class EncounterJournalStartArathiRpe final : public ClientPacket
+        {
+        public:
+            explicit EncounterJournalStartArathiRpe(WorldPacket&& packet) : ClientPacket(CMSG_ENCOUNTER_JOURNAL_START_ARATHI_RPE, std::move(packet)) { }
+
+            void Read() override { }
+        };
+
         struct AdventureJournalEntry
         {
             int32 AdventureJournalID = 0;
