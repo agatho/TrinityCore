@@ -4473,9 +4473,12 @@ void WorldSession::HandleHousingPhotoSharingCompleteAuthorization(WorldPackets::
     Housing* housing = player->GetHousing();
     WorldPackets::Housing::HousingPhotoSharingAuthorizationResult response;
 
+    // The result byte is NOT a HousingResult - it is the authorized flag: the 68974 tester capture
+    // (TESTER_SNIFF_68974_MINE.md) shows retail answering a successful completion with 01, and the
+    // sibling SMSG_HOUSING_PHOTO_SHARING_AUTHORIZATION_CLEARED_RESULT is a single bool-u8 as well.
     if (!housing || housing->GetHouseGuid().IsEmpty())
     {
-        response.Result = static_cast<uint8>(HOUSING_RESULT_HOUSE_NOT_FOUND);
+        response.Result = 0;
         SendPacket(response.Write());
         return;
     }
@@ -4483,7 +4486,7 @@ void WorldSession::HandleHousingPhotoSharingCompleteAuthorization(WorldPackets::
     // Track authorization state on the Housing object (per-session, volatile).
     // Actual screenshot hosting requires an external CDN — server only tracks the auth grant.
     housing->SetPhotoSharingAuthorized(true);
-    response.Result = static_cast<uint8>(HOUSING_RESULT_SUCCESS);
+    response.Result = 1;
     SendPacket(response.Write());
 
     TC_LOG_DEBUG("housing", "CMSG_HOUSING_PHOTO_SHARING_COMPLETE_AUTHORIZATION Player: {} authorized photo sharing for house {}",
