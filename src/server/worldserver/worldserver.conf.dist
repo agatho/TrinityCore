@@ -1227,14 +1227,45 @@ ChallengeMode.DeathPenalty.GuileSeconds = 15
 #                     single shielded Void Emissary - both every Bargain interval while fighting. The creature
 #                     entry AND its Blizzlike AI must exist in the world DB (SummonCreature no-ops on an absent
 #                     entry). 0 = disabled.
-#        Default:     Spiteful = 174773 (Spiteful Shade), Incorporeal = 204560 (Incorporeal Being), Afflicted = 0,
-#                     Ascendant = 0, Voidbound = 0 (add the Midnight creatures to the world DB, then set them here)
+#
+#                     Every entry below is derived from client data, not guessed. The chain, per affix, is
+#                     KeystoneAffix.db2 (affix id -> affix name) -> SpellName.db2 (spell of the same name) ->
+#                     SpellEffect.db2 row with Effect = 28 (SPELL_EFFECT_SUMMON) whose EffectMiscValue[0] is
+#                     the summoned creature entry -> creature_template. Recovered from 12.0.7 client data
+#                     (SpellEffect.db2 schema WOWSTATIC_12_0_7_67808):
+#                       affix 123 Spiteful                       -> spell 343491 "Spiteful Shade" -> 174773 Spiteful Shade
+#                       affix 136 Incorporeal                    -> spell 410501 "Incorporeal"    -> 204560 Incorporeal Being
+#                       affix 135 Afflicted                      -> spell 408800 "Afflicted"      -> 204773 Afflicted Soul
+#                       affix 148 Xal'atath's Bargain: Ascendant -> spell 461936 (same name)      -> 229296 Orb of Ascendance
+#                       affix 158 Xal'atath's Bargain: Voidbound -> spell 462671 (same name)      -> 229537 Voidbound Emissary
+#                     The first two rows are the control: they reproduce the two entries that were already
+#                     seeded by hand, which is what makes the other three trustworthy. Spiteful, Incorporeal,
+#                     Afflicted and Ascendant additionally share one chain shape - an Effect 32
+#                     (trigger-missile) spell that fires the Effect 28 summon - which rules out the other
+#                     summons carrying the same names (461918 and 463410 summon 229244 / 229536 "Xal'atath",
+#                     the narrator avatar, not the add).
+#
+#                     One residual ambiguity, on Voidbound only: the 12.x spell block also contains 1263422,
+#                     likewise named "Xal'atath's Bargain: Voidbound", summoning 229537's near-twin 254788
+#                     "Void Emissary" with the same SummonProperties. Neither Voidbound summon has a
+#                     trigger-missile parent, so the chain shape cannot separate them. 229537 is used here
+#                     because the affix's own 12.0.7 description text - "Xal'atath summons a Voidbound
+#                     Emissary" - names it exactly, while 254788 is "Void Emissary". A sniff of a key on a
+#                     week whose Bargain rotation includes affix 158 would settle it outright: look for the
+#                     SMSG_UPDATE_OBJECT create whose EntryID follows the SMSG_SPELL_GO for 462671 or 1263422.
+#
+#                     NOTE: 204773 / 229296 / 229537 exist in creature_template but currently carry no AIName
+#                     or ScriptName (unlike 174773 / 204560, which are SmartAI). They will spawn and be
+#                     targetable, but do nothing until their AI is scripted.
+#        Default:     Spiteful = 174773 (Spiteful Shade), Incorporeal = 204560 (Incorporeal Being),
+#                     Afflicted = 204773 (Afflicted Soul), Ascendant = 229296 (Orb of Ascendance),
+#                     Voidbound = 229537 (Voidbound Emissary)
 
 ChallengeMode.Affix.Spiteful.CreatureId = 174773
 ChallengeMode.Affix.Incorporeal.CreatureId = 204560
-ChallengeMode.Affix.Afflicted.CreatureId = 0
-ChallengeMode.Affix.Ascendant.CreatureId = 0
-ChallengeMode.Affix.Voidbound.CreatureId = 0
+ChallengeMode.Affix.Afflicted.CreatureId = 204773
+ChallengeMode.Affix.Ascendant.CreatureId = 229296
+ChallengeMode.Affix.Voidbound.CreatureId = 229537
 
 #
 #    ChallengeMode.Crest.*
@@ -1341,12 +1372,20 @@ ChallengeMode.Catalyst.FirstWeekTimestamp = 0
 
 #
 #    ChallengeMode.Upgrade.*
-#        Description: Gear upgrade (Dawncrest spending) tuning. Costs are data-driven from the client DB2s
-#                     (ItemBonusListGroupEntry -> ItemLogicalCost -> ItemExtendedCost: crest + gold per step);
-#                     the Fallback* values apply only when an upgrade step carries no cost data (0 currency =
-#                     free upgrades in that case). DiscountAchievements lists warband achievements that halve
-#                     a crest type's step cost ("currencyId:achievementId" pairs; retail ".. of the Dawn").
-#        Default:     FallbackCurrencyId = 0, FallbackCurrencyCount = 20, FallbackMoney = 1500000 (150g),
+#        Description: Gear upgrade (Dawncrest spending) tuning. Costs are data-driven from the client DB2s:
+#                     ItemBonusListGroupEntry -> ItemExtendedCost directly, or, on older tracks,
+#                     ItemBonusListGroupEntry -> ItemLogicalCost -> ItemExtendedCost (crest + gold per step).
+#                     The Midnight tracks are the direct kind: ItemBonusListGroup 608/609/610/611/612 =
+#                     Adventurer/Veteran/Champion/Hero/Myth Dawncrest, ranks 2-6 of each carrying
+#                     ItemExtendedCostID 10994-11018 = 20 crests of that track's own tier + 10/20/30/40/50g.
+#
+#                     FallbackCurrencyId stays 0 deliberately. It only applies to a step that carries no cost
+#                     data at all, and there is no single currency that would be correct there: the five
+#                     Dawncrest tiers (3383/3341/3343/3345/3347) each bill their own track, so any fixed value
+#                     bills the wrong crest on four tracks out of five. Charging nothing is the safer error.
+#                     Set it only if you deliberately want a flat, uniform upgrade currency.
+#        Default:     FallbackCurrencyId = 0 (no fallback - refuse to guess a crest), FallbackCurrencyCount = 20,
+#                     FallbackMoney = 1500000 (150g),
 #                     DiscountAchievements = "3383:61809,3341:42767,3343:42768,3345:42769,3347:42770"
 
 ChallengeMode.Upgrade.FallbackCurrencyId = 0
