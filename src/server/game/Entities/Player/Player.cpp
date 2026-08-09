@@ -14852,7 +14852,14 @@ void Player::OnGossipSelect(WorldObject* source, int32 gossipOptionId, uint32 me
             handled = false;
             break;
         }
-        case GossipOptionNpc::ChromieTimeNpc: // NYI
+        case GossipOptionNpc::ChromieTimeNpc:
+            // Fall through to the generic !handled branch, which sends
+            // SMSG_GOSSIP_OPTION_NPC_INTERACTION{GossipNpcOptionID}; the client resolves that through
+            // GossipNPCOption.db2 into PlayerInteractionType::ChromieTime (45) and raises the timeline
+            // picker. Consuming the option here (the old "// NYI" stub) swallowed it and nothing opened.
+            // This matches feature/chromie-time, which owns this handler - integration kept its stub
+            // through the merge even though the branch had already changed this line.
+            handled = false;
             break;
         case GossipOptionNpc::RuneforgeLegendaryCrafting: // NYI
             break;
