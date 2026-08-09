@@ -1239,7 +1239,20 @@ ChallengeMode.DeathPenalty.GuileSeconds = 15
 #                       affix 148 Xal'atath's Bargain: Ascendant -> spell 461936 (same name)      -> 229296 Orb of Ascendance
 #                       affix 158 Xal'atath's Bargain: Voidbound -> spell 462671 (same name)      -> 229537 Voidbound Emissary
 #                     The first two rows are the control: they reproduce the two entries that were already
-#                     seeded by hand, which is what makes the other three trustworthy.
+#                     seeded by hand, which is what makes the other three trustworthy. Spiteful, Incorporeal,
+#                     Afflicted and Ascendant additionally share one chain shape - an Effect 32
+#                     (trigger-missile) spell that fires the Effect 28 summon - which rules out the other
+#                     summons carrying the same names (461918 and 463410 summon 229244 / 229536 "Xal'atath",
+#                     the narrator avatar, not the add).
+#
+#                     One residual ambiguity, on Voidbound only: the 12.x spell block also contains 1263422,
+#                     likewise named "Xal'atath's Bargain: Voidbound", summoning 229537's near-twin 254788
+#                     "Void Emissary" with the same SummonProperties. Neither Voidbound summon has a
+#                     trigger-missile parent, so the chain shape cannot separate them. 229537 is used here
+#                     because the affix's own 12.0.7 description text - "Xal'atath summons a Voidbound
+#                     Emissary" - names it exactly, while 254788 is "Void Emissary". A sniff of a key on a
+#                     week whose Bargain rotation includes affix 158 would settle it outright: look for the
+#                     SMSG_UPDATE_OBJECT create whose EntryID follows the SMSG_SPELL_GO for 462671 or 1263422.
 #
 #                     NOTE: 204773 / 229296 / 229537 exist in creature_template but currently carry no AIName
 #                     or ScriptName (unlike 174773 / 204560, which are SmartAI). They will spawn and be
