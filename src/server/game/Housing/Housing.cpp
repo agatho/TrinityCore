@@ -36,6 +36,29 @@
 #include <queue>
 #include <unordered_set>
 
+namespace
+{
+    // M13: normalize a decor rotation quaternion to a unit quaternion before it
+    // is stored. The client sends Euler angles which the handler converts to a
+    // quaternion each place/move; normalizing removes any float drift so a decor
+    // item at a cardinal angle (0/90/180/270) round-trips through the FLOAT
+    // columns to the exact same orientation instead of subtly re-rotating on
+    // reload (the retail rotation bug we must not replicate). A degenerate
+    // (near-zero) quaternion falls back to identity.
+    void NormalizeDecorRotation(float& x, float& y, float& z, float& w)
+    {
+        float len = std::sqrt(x * x + y * y + z * z + w * w);
+        if (!std::isfinite(len) || len < 1e-6f)
+        {
+            x = y = z = 0.0f;
+            w = 1.0f;
+            return;
+        }
+        float inv = 1.0f / len;
+        x *= inv; y *= inv; z *= inv; w *= inv;
+    }
+}
+
 // Global DB ID generators — initialized from MAX(id) at server startup
 std::atomic<uint64> Housing::s_nextDecorDbId{1};
 std::atomic<uint64> Housing::s_nextRoomDbId{1};
@@ -851,6 +874,9 @@ HousingResult Housing::PlaceDecorWithGuid(ObjectGuid decorGuid, uint32 decorEntr
     // Remove from pending placements
     _pendingPlacements.erase(decorGuid);
 
+    // M13: persist a normalized unit quaternion for a lossless cardinal round-trip.
+    NormalizeDecorRotation(rotX, rotY, rotZ, rotW);
+
     PlacedDecor& decor = _placedDecor[decorGuid];
     decor.Guid = decorGuid;
     decor.DecorEntryId = decorEntryId;
@@ -993,6 +1019,9 @@ HousingResult Housing::PlaceDecor(uint32 decorEntryId, float x, float y, float z
     ObjectGuid decorGuid = ObjectGuid::Create<HighGuid::Housing>(
         /*subType*/ 1, /*arg1*/ sRealmList->GetCurrentRealmId().Realm,
         /*arg2*/ decorEntryId, newDbId);
+
+    // M13: persist a normalized unit quaternion for a lossless cardinal round-trip.
+    NormalizeDecorRotation(rotX, rotY, rotZ, rotW);
 
     PlacedDecor& decor = _placedDecor[decorGuid];
     decor.Guid = decorGuid;
@@ -1189,6 +1218,9 @@ HousingResult Housing::MoveDecor(ObjectGuid decorGuid, float x, float y, float z
     HousingResult validationResult = sHousingMgr.ValidateDecorPlacement(itr->second.DecorEntryId, Position(x, y, z), _level);
     if (validationResult != HOUSING_RESULT_SUCCESS)
         return validationResult;
+
+    // M13: normalize the rotation quaternion for a lossless cardinal round-trip.
+    NormalizeDecorRotation(rotX, rotY, rotZ, rotW);
 
     PlacedDecor& decor = itr->second;
     decor.PosX = x;
