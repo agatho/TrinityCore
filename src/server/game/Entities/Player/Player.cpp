@@ -14896,9 +14896,22 @@ void Player::OnGossipSelect(WorldObject* source, int32 gossipOptionId, uint32 me
             break;
         case GossipOptionNpc::RuneforgeLegendaryUpgrade: // NYI
             break;
-        case GossipOptionNpc::ProfessionsCraftingOrder: // NYI
-            break;
-        case GossipOptionNpc::ProfessionsCustomerOrder: // NYI
+        // GossipOptionNpc::ProfessionsCraftingOrder (48) deliberately keeps no case and is NOT listed here: the
+        // 12.0.7 client's GossipNPCOption.db2 carries zero rows of that type, so no live NPC can raise it. If a
+        // future build adds one, give it the same fall-through the customer-order option gets below.
+        case GossipOptionNpc::ProfessionsCustomerOrder:
+            // Crafting-order clerk (Clerk Galesong/Goldspark on menu 27907, Head Clerk Mimzy Sprazzlerock and the
+            // other eight clerks on menu 30243). Fall through to the generic !handled branch, which sends
+            // SMSG_GOSSIP_OPTION_NPC_INTERACTION{GossipNpcOptionID}; the client resolves that id through
+            // GossipNPCOption.db2 (rows 32410 and 42522, both ProfessionID=2) into
+            // PlayerInteractionType::ProfessionsCustomerOrder and raises the crafting-order frame. From there the
+            // CMSG_CRAFTING_ORDER_* handlers this branch already implements take over.
+            //
+            // This was an upstream "// NYI" stub, which consumed the option as handled and sent nothing - so every
+            // clerk in the game was a dead click even though the whole crafting-order backend was live. The
+            // accompanying world SQL populates gossip_menu_option.GossipNpcOptionID on both menus; without it the
+            // fall-through would send NPCInteractionOpenResult instead, which is not the retail trigger.
+            handled = false;
             break;
         case GossipOptionNpc::BarbersChoice: // NYI - unknown if needs sending
             break;
