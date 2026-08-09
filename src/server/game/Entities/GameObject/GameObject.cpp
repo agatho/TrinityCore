@@ -3469,6 +3469,29 @@ void GameObject::Use(Unit* user, bool ignoreCastInProgress /*= false*/)
             player->SendDirectMessage(gameObjectUILink.Write());
             return;
         }
+        case GAMEOBJECT_TYPE_WEEKLY_REWARD_CHEST:           //59
+        {
+            // The Great Vault. Six of these are spawned across the expansion hubs, yet type 59 had no case here at
+            // all - so clicking one did nothing: no packet left the server, and PlayerInteractionType::WeeklyRewards
+            // (49) had zero send-sites anywhere in the core.
+            //
+            // The 12.0.7 client registers WeeklyRewardsFrame against that interaction type, so establishing the
+            // interaction IS the trigger; the frame then drives itself with CMSG_REQUEST_WEEKLY_REWARDS ->
+            // WorldSession::HandleRequestWeeklyRewards, which already answers with the real
+            // WeeklyRewardChestThreshold.db2-driven rows.
+            //
+            // Sent as GameObjectInteraction (the GO-side packet), mirroring GAMEOBJECT_TYPE_UI_LINK above, rather
+            // than NPCInteractionOpenResult, which is the creature-side form.
+            Player* player = user->ToPlayer();
+            if (!player)
+                return;
+
+            WorldPackets::GameObject::GameObjectInteraction weeklyRewards;
+            weeklyRewards.ObjectGUID = GetGUID();
+            weeklyRewards.InteractionType = PlayerInteractionType::WeeklyRewards;
+            player->SendDirectMessage(weeklyRewards.Write());
+            return;
+        }
         case GAMEOBJECT_TYPE_GATHERING_NODE:                //50
         {
             Player* player = user->ToPlayer();
