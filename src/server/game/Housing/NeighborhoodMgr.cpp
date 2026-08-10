@@ -441,7 +441,17 @@ Neighborhood* NeighborhoodMgr::FindOrCreatePublicNeighborhood(uint32 teamId)
 
     if (targetMapId == 0)
     {
-        TC_LOG_ERROR("housing", "FindOrCreatePublicNeighborhood: No system-generatable NeighborhoodMap found for team {}", teamId);
+        char const* factionName = (teamId == ALLIANCE) ? "Alliance" : (teamId == HORDE) ? "Horde" : "unknown";
+        uint32 wantBit = (teamId == ALLIANCE) ? 0x1 : 0x2;
+        // Do NOT fabricate a map that does not exist — return nullptr, but make the
+        // reason and the fix unmistakable: this is a full housing lockout for the faction.
+        TC_LOG_ERROR("housing",
+            "FindOrCreatePublicNeighborhood: HOUSING LOCKOUT for {} — NeighborhoodMap has no system-generatable "
+            "row (Flags bit 0x4) carrying the {} flag (0x{:X}). Players of this faction cannot enter housing. "
+            "Apply the neighborhood_map hotfix (sql/housing/hotfixes_housing.sql): "
+            "Alliance = ID 1 / MapID 2735 / FactionRestriction 5 (0x1|0x4), "
+            "Horde = ID 2 / MapID 2736 / FactionRestriction 6 (0x2|0x4).",
+            factionName, factionName, wantBit);
         return nullptr;
     }
 
@@ -594,10 +604,32 @@ void NeighborhoodMgr::EnsurePublicNeighborhoods()
     }
 
     if (hasAlliancePublic && hasHordePublic)
+    {
         TC_LOG_INFO("server.loading", ">> Public neighborhoods verified for both factions");
-    else if (!hasAlliancePublic || !hasHordePublic)
-        TC_LOG_WARN("server.loading", ">> Missing public neighborhood for {} — no system-generatable NeighborhoodMap found",
-            !hasAlliancePublic ? "Alliance" : "Horde");
+        return;
+    }
+
+    // If either faction still lacks a public neighborhood, the NeighborhoodMap data
+    // has no system-generatable (Flags bit 0x4) row carrying that faction's flag.
+    // That faction's players cannot enter housing at all — this is a hard data error,
+    // not a warning. Report each missing faction independently with the exact fix.
+    // (Deliberately NOT falling back to the both-faction purchasable maps ID 4/ID 7:
+    //  they are not system-generatable and the client tutorial routes each faction to
+    //  its own DB2 ID — Alliance->ID1, Horde->ID2 — so a public neighborhood hosted on
+    //  ID 4/7 would remain unreachable and would not resolve the lockout. The correct
+    //  and only safe remedy is to seed the missing system-generatable row.)
+    if (!hasAlliancePublic)
+        TC_LOG_ERROR("server.loading",
+            ">> HOUSING LOCKOUT: no public Alliance neighborhood exists and none could be created. "
+            "NeighborhoodMap has no system-generatable map with the Alliance flag (0x1|0x4). "
+            "Apply the neighborhood_map hotfix (sql/housing/hotfixes_housing.sql): "
+            "ID 1 must be MapID 2735 with FactionRestriction 5 (0x1 Alliance | 0x4 SystemGenerate).");
+    if (!hasHordePublic)
+        TC_LOG_ERROR("server.loading",
+            ">> HOUSING LOCKOUT: no public Horde neighborhood exists and none could be created. "
+            "NeighborhoodMap has no system-generatable map with the Horde flag (0x2|0x4). "
+            "Apply the neighborhood_map hotfix (sql/housing/hotfixes_housing.sql): "
+            "ID 2 must be MapID 2736 with FactionRestriction 6 (0x2 Horde | 0x4 SystemGenerate).");
 }
 
 void NeighborhoodMgr::MigrateWrongFactionResidents()
