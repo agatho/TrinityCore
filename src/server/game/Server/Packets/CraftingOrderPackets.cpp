@@ -50,7 +50,15 @@ void CraftingOrderCreate::Read()
 
     uint32 counts[4];
     for (uint32& c : counts)
+    {
         _worldPacket >> c;
+        // Sanity cap the client-supplied reagent-slot counts before any resize(): a crafting order has at most a
+        // couple dozen reagent slots, so this is far above any legitimate value while preventing a single crafted
+        // packet (e.g. count = 0xFFFFFFFF) from requesting a multi-gigabyte allocation. resize() throws
+        // std::bad_alloc, which the opcode dispatcher does NOT catch (only ByteBufferException), so an unbounded
+        // count would crash the world thread rather than just disconnect the sender.
+        c = std::min<uint32>(c, 256);
+    }
 
     _worldPacket >> TargetGUID;                    // PackedGuid
 

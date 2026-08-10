@@ -19,6 +19,7 @@
 #include "CraftingOrderMgr.h"
 #include "CraftingOrderPackets.h"
 #include "CharacterDatabase.h"
+#include "DatabaseEnv.h"
 #include "DB2Stores.h"
 #include "GameTime.h"
 #include "Item.h"

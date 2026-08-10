@@ -23,6 +23,7 @@
 #include "Mail.h"
 #include "ObjectAccessor.h"
 #include "Player.h"
+#include "WorldSession.h"
 #include <algorithm>
 
 namespace
@@ -225,8 +226,15 @@ bool CraftingOrderMgr::ClaimOrder(uint64 orderId, ObjectGuid crafter)
     if (order->Type == CraftingOrders::OrderType::Personal && order->CrafterGUID != crafter)
         return false;
 
+    // Give the crafter a bounded window to fulfil a claimed order. Without this ClaimEndDate stays 0, so the
+    // claim-expiry branch in Update() (which requires ClaimEndDate != 0) never fires: a claimed-then-abandoned
+    // order would sit in state Claimed forever with the customer's tip locked and the customer unable to cancel
+    // (CancelOrder only allows the Created state). CLAIM_DURATION is a safety-release window (tunable) - it just
+    // bounds abandonment; a crafter who completes normally never hits it.
+    constexpr int64 CLAIM_DURATION = 24 * HOUR;
     order->State = CraftingOrders::OrderState::Claimed;
     order->CrafterGUID = crafter;
+    order->ClaimEndDate = GameTime::GetGameTime() + CLAIM_DURATION;
     SaveOrderToDB(*order);
     return true;
 }
@@ -251,9 +259,14 @@ bool CraftingOrderMgr::RejectOrder(uint64 orderId, ObjectGuid crafter, std::stri
     if (!order)
         return false;
 
-    // A crafter may reject an order they have claimed, or a personal order directed specifically at them.
+    // A crafter may reject an order they have claimed, or a personal order directed specifically at them - but ONLY
+    // while it is still in a non-terminal state. A Fulfilled or already-Rejected order must not be rejectable:
+    // reject refunds the escrowed tip, and the personal-order branch used to omit the state check, so a targeted
+    // crafter could spam CMSG_CRAFTING_ORDER_REJECT against their own already-fulfilled personal order and mint the
+    // tip to the customer on every call (gold duplication). Escrow is released exactly once per terminal transition.
     bool const claimedByCrafter = order->State == CraftingOrders::OrderState::Claimed && order->CrafterGUID == crafter;
-    bool const personalForCrafter = order->Type == CraftingOrders::OrderType::Personal && order->CrafterGUID == crafter;
+    bool const personalForCrafter = order->Type == CraftingOrders::OrderType::Personal && order->CrafterGUID == crafter
+        && (order->State == CraftingOrders::OrderState::Created || order->State == CraftingOrders::OrderState::Claimed);
     if (!claimedByCrafter && !personalForCrafter)
         return false;
 
