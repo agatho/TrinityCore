@@ -36,6 +36,29 @@
 #include <queue>
 #include <unordered_set>
 
+namespace
+{
+    // M13: normalize a decor rotation quaternion to a unit quaternion before it
+    // is stored. The client sends Euler angles which the handler converts to a
+    // quaternion each place/move; normalizing removes any float drift so a decor
+    // item at a cardinal angle (0/90/180/270) round-trips through the FLOAT
+    // columns to the exact same orientation instead of subtly re-rotating on
+    // reload (the retail rotation bug we must not replicate). A degenerate
+    // (near-zero) quaternion falls back to identity.
+    void NormalizeDecorRotation(float& x, float& y, float& z, float& w)
+    {
+        float len = std::sqrt(x * x + y * y + z * z + w * w);
+        if (!std::isfinite(len) || len < 1e-6f)
+        {
+            x = y = z = 0.0f;
+            w = 1.0f;
+            return;
+        }
+        float inv = 1.0f / len;
+        x *= inv; y *= inv; z *= inv; w *= inv;
+    }
+}
+
 // Global DB ID generators — initialized from MAX(id) at server startup
 std::atomic<uint64> Housing::s_nextDecorDbId{1};
 std::atomic<uint64> Housing::s_nextRoomDbId{1};
@@ -701,6 +724,15 @@ void Housing::Delete()
     TC_LOG_DEBUG("housing", "Housing::Delete: Player {} (GUID {}) deleted house {}",
         _owner->GetName(), _owner->GetGUID().GetCounter(), _houseGuid.ToString());
 
+    // m2/A5: release the neighborhood plot so it becomes vacant and
+    // re-purchasable instead of being orphaned forever (the old bug: delete /
+    // kiosk-reset removed the character rows but never freed the PlotInfo).
+    if (!_neighborhoodGuid.IsEmpty())
+    {
+        if (Neighborhood* neighborhood = sNeighborhoodMgr.GetNeighborhood(_neighborhoodGuid))
+            neighborhood->ReleasePlot(_owner->GetGUID());
+    }
+
     // Remove all decor storage entries from account UpdateField (only if storage is populated)
     if (_storagePopulated && _owner->GetSession() && !_placedDecor.empty())
     {
@@ -805,10 +837,10 @@ HousingResult Housing::PlaceDecorWithGuid(ObjectGuid decorGuid, uint32 decorEntr
     // budget/skip the interior _rooms lookup, while preserving the RoomGuid
     // as-sent so downstream consumers (DB row, move/remove round-trips) still
     // see what retail sends.
-    bool const isExteriorPlotRoom = IsExteriorPlotRoomGuid(roomGuid);
+    bool const isExterior = IsExteriorDecorPlacement(roomGuid);
 
     uint32 weightCost = sHousingMgr.GetDecorWeightCost(decorEntryId);
-    if (roomGuid.IsEmpty() || isExteriorPlotRoom)
+    if (isExterior)
     {
         if (_exteriorDecorWeightUsed + weightCost > GetMaxExteriorDecorBudget())
             return HOUSING_RESULT_MAX_DECOR_REACHED;
@@ -819,7 +851,7 @@ HousingResult Housing::PlaceDecorWithGuid(ObjectGuid decorGuid, uint32 decorEntr
             return HOUSING_RESULT_MAX_DECOR_REACHED;
     }
 
-    if (!roomGuid.IsEmpty() && !isExteriorPlotRoom)
+    if (!isExterior)
     {
         auto roomItr = _rooms.find(roomGuid);
         if (roomItr == _rooms.end())
@@ -842,6 +874,9 @@ HousingResult Housing::PlaceDecorWithGuid(ObjectGuid decorGuid, uint32 decorEntr
     // Remove from pending placements
     _pendingPlacements.erase(decorGuid);
 
+    // M13: persist a normalized unit quaternion for a lossless cardinal round-trip.
+    NormalizeDecorRotation(rotX, rotY, rotZ, rotW);
+
     PlacedDecor& decor = _placedDecor[decorGuid];
     decor.Guid = decorGuid;
     decor.DecorEntryId = decorEntryId;
@@ -863,11 +898,9 @@ HousingResult Housing::PlaceDecorWithGuid(ObjectGuid decorGuid, uint32 decorEntr
     if (catalogItr->second.Count == 0)
         _catalog.erase(catalogItr);
 
-    // Must use the SAME interior/exterior classification as the budget CHECK above (line 813): an exterior plot
-    // placement carries a non-empty RoomGuid equal to the base-room entry (isExteriorPlotRoom), so an IsEmpty-only
-    // test here would charge it to the interior budget while the check debited the exterior budget - leaving the
-    // exterior cap unenforced (unlimited exterior decor) and wrongly rejecting real interior placements.
-    if (roomGuid.IsEmpty() || isExteriorPlotRoom)
+    // M2: charge the SAME budget the CHECK validated (exterior-plot rooms count
+    // as exterior, not interior).
+    if (isExterior)
         _exteriorDecorWeightUsed += weightCost;
     else
         _interiorDecorWeightUsed += weightCost;
@@ -943,7 +976,8 @@ HousingResult Housing::PlaceDecor(uint32 decorEntryId, float x, float y, float z
 
     // Check WeightCost-based budget (exterior vs interior) - same classification as the reload recompute.
     uint32 weightCost = sHousingMgr.GetDecorWeightCost(decorEntryId);
-    if (IsExteriorDecorPlacement(roomGuid))
+    bool const isExterior = IsExteriorDecorPlacement(roomGuid);
+    if (isExterior)
     {
         // Outdoor / exterior-plot decor uses exterior budget
         if (_exteriorDecorWeightUsed + weightCost > GetMaxExteriorDecorBudget())
@@ -957,7 +991,7 @@ HousingResult Housing::PlaceDecor(uint32 decorEntryId, float x, float y, float z
     }
 
     // Validate room exists if specified, and check per-room decor limit
-    if (!roomGuid.IsEmpty())
+    if (!isExterior)
     {
         auto roomItr = _rooms.find(roomGuid);
         if (roomItr == _rooms.end())
@@ -986,6 +1020,9 @@ HousingResult Housing::PlaceDecor(uint32 decorEntryId, float x, float y, float z
         /*subType*/ 1, /*arg1*/ sRealmList->GetCurrentRealmId().Realm,
         /*arg2*/ decorEntryId, newDbId);
 
+    // M13: persist a normalized unit quaternion for a lossless cardinal round-trip.
+    NormalizeDecorRotation(rotX, rotY, rotZ, rotW);
+
     PlacedDecor& decor = _placedDecor[decorGuid];
     decor.Guid = decorGuid;
     decor.DecorEntryId = decorEntryId;
@@ -1008,9 +1045,8 @@ HousingResult Housing::PlaceDecor(uint32 decorEntryId, float x, float y, float z
     if (catalogItr->second.Count == 0)
         _catalog.erase(catalogItr);
 
-    // Update budget tracking (route to correct budget based on room) - must match the check above and the reload
-    // recompute (IsExteriorDecorPlacement) so exterior-plot decor is charged consistently to the exterior budget.
-    if (IsExteriorDecorPlacement(roomGuid))
+    // Update budget tracking (route to correct budget based on room) — M2.
+    if (isExterior)
         _exteriorDecorWeightUsed += weightCost;
     else
         _interiorDecorWeightUsed += weightCost;
@@ -1176,6 +1212,16 @@ HousingResult Housing::MoveDecor(ObjectGuid decorGuid, float x, float y, float z
     if (itr == _placedDecor.end())
         return HOUSING_RESULT_DECOR_NOT_FOUND;
 
+    // M1: MoveDecor previously performed NO spatial validation. Route the move
+    // target through the same room/plot AABB check as placement so a moved item
+    // cannot be flung to arbitrary coordinates.
+    HousingResult validationResult = sHousingMgr.ValidateDecorPlacement(itr->second.DecorEntryId, Position(x, y, z), _level);
+    if (validationResult != HOUSING_RESULT_SUCCESS)
+        return validationResult;
+
+    // M13: normalize the rotation quaternion for a lossless cardinal round-trip.
+    NormalizeDecorRotation(rotX, rotY, rotZ, rotW);
+
     PlacedDecor& decor = itr->second;
     decor.PosX = x;
     decor.PosY = y;
@@ -1223,7 +1269,7 @@ HousingResult Housing::RemoveDecor(ObjectGuid decorGuid)
     // Refund WeightCost budget (route to correct budget based on room)
     uint32 decorEntryId = itr->second.DecorEntryId;
     uint32 weightCost = sHousingMgr.GetDecorWeightCost(decorEntryId);
-    if (itr->second.RoomGuid.IsEmpty())
+    if (IsExteriorDecorPlacement(itr->second.RoomGuid))
     {
         if (_exteriorDecorWeightUsed >= weightCost)
             _exteriorDecorWeightUsed -= weightCost;

@@ -43,8 +43,8 @@ bool Neighborhood::LoadFromDB(PreparedQueryResult neighborhood, PreparedQueryRes
 
     //          0     1       2            3                    4         5
     // SELECT guid, name, neighborhoodMapID, ownerGuid, factionRestriction, isPublic,
-    //          6
-    //        createTime FROM neighborhoods WHERE guid = ?
+    //          6          7
+    //        createTime, guildId FROM neighborhoods WHERE guid = ?
 
     // _guid is already set in constructor
     _name               = fields[1].GetString();
@@ -56,6 +56,9 @@ bool Neighborhood::LoadFromDB(PreparedQueryResult neighborhood, PreparedQueryRes
     _factionRestriction = fields[4].GetInt32();
     _isPublic           = fields[5].GetBool();
     _createTime         = fields[6].GetUInt32();
+    // M8: guild→neighborhood link (0 = not a guild neighborhood). Without this
+    // load GetNeighborhoodByGuildId always returned nullptr after a restart.
+    _guildId            = fields[7].GetUInt32();
 
     TC_LOG_DEBUG("housing", "Neighborhood::LoadFromDB: Loaded neighborhood '{}' (guid: {}), owner: {}, mapId: {}, members: loading...",
         _name, _guid.ToString(), _ownerGuid.ToString(), _neighborhoodMapID);
@@ -300,6 +303,7 @@ void Neighborhood::SaveToDB(CharacterDatabaseTransaction trans)
     stmt->setInt32(index++, _factionRestriction);
     stmt->setBool(index++, _isPublic);
     stmt->setUInt32(index++, _createTime);
+    stmt->setUInt32(index++, _guildId); // M8
     trans->Append(stmt);
 
     // Delete all members and re-insert
@@ -422,7 +426,11 @@ HousingResult Neighborhood::AddManager(ObjectGuid playerGuid)
     {
         TC_LOG_DEBUG("housing", "Neighborhood::AddManager: Neighborhood '{}' has reached max managers ({})",
             _name, MAX_NEIGHBORHOOD_MANAGERS);
-        return HOUSING_RESULT_PLOT_NOT_VACANT;
+        // m7: was PLOT_NOT_VACANT, which the client rendered as a spurious plot
+        // error. HousingResult (build 68275) has no dedicated "too many managers"
+        // value, so use PERMISSION_DENIED (the promotion is refused) until a
+        // retail sniff confirms the exact enum for the manager-cap condition.
+        return HOUSING_RESULT_PERMISSION_DENIED;
     }
 
     targetMember->Role = NEIGHBORHOOD_ROLE_MANAGER;
@@ -437,17 +445,9 @@ HousingResult Neighborhood::AddManager(ObjectGuid playerGuid)
     TC_LOG_DEBUG("housing", "Neighborhood::AddManager: Player {} promoted to manager in neighborhood '{}'",
         playerGuid.ToString(), _name);
 
-    // Push roster update to all online members
-    {
-        WorldPackets::Neighborhood::NeighborhoodRosterResidentUpdate update;
-        WorldPackets::Neighborhood::NeighborhoodRosterResidentUpdate::ResidentEntry entry;
-        entry.PlayerGuid = playerGuid;
-        entry.UpdateType = 1; // RoleChanged
-        entry.IsPrivileged = true; // Manager = privileged
-        update.Residents.push_back(entry);
-        BroadcastPacket(update.Write());
-    }
-
+    // m4: roster broadcast happens in the handler layer
+    // (HandleNeighborhoodAddSecondaryOwner), which also refreshes mirror data.
+    // Broadcasting here too produced two deltas per promote.
     return HOUSING_RESULT_SUCCESS;
 }
 
@@ -483,17 +483,9 @@ HousingResult Neighborhood::RemoveManager(ObjectGuid playerGuid)
             TC_LOG_DEBUG("housing", "Neighborhood::RemoveManager: Player {} demoted to resident in neighborhood '{}'",
                 playerGuid.ToString(), _name);
 
-            // Push roster update to all online members
-            {
-                WorldPackets::Neighborhood::NeighborhoodRosterResidentUpdate update;
-                WorldPackets::Neighborhood::NeighborhoodRosterResidentUpdate::ResidentEntry entry;
-                entry.PlayerGuid = playerGuid;
-                entry.UpdateType = 1; // RoleChanged
-                entry.IsPrivileged = false; // Resident = not privileged
-                update.Residents.push_back(entry);
-                BroadcastPacket(update.Write());
-            }
-
+            // m4: roster broadcast happens in the handler layer
+            // (HandleNeighborhoodRemoveSecondaryOwner), which also refreshes
+            // mirror data. Broadcasting here too produced two deltas per demote.
             return HOUSING_RESULT_SUCCESS;
         }
     }
@@ -576,6 +568,22 @@ HousingResult Neighborhood::InviteResident(ObjectGuid inviterGuid, ObjectGuid in
                     inviteeGuid.ToString(), _name);
                 return HOUSING_RESULT_INCORRECT_FACTION;
             }
+        }
+    }
+
+    // M6: consume the invitee's auto-decline-neighborhood-invites flag. Setting
+    // PLAYER_FLAGS_EX_AUTO_DECLINE_NEIGHBORHOOD previously had no effect — the
+    // invite + notification were created regardless. If the invitee is online
+    // with the flag set, skip the invite entirely and tell the inviter it was
+    // auto-declined (their filter rejected it). Offline invitees fall through
+    // (the flag is only observable while online).
+    if (Player* invitee = ObjectAccessor::FindPlayer(inviteeGuid))
+    {
+        if (invitee->HasPlayerFlagEx(PLAYER_FLAGS_EX_AUTO_DECLINE_NEIGHBORHOOD))
+        {
+            TC_LOG_DEBUG("housing", "Neighborhood::InviteResident: Player {} auto-declines neighborhood invites; invite to '{}' suppressed",
+                inviteeGuid.ToString(), _name);
+            return HOUSING_RESULT_FILTER_REJECTED;
         }
     }
 
@@ -783,7 +791,12 @@ HousingResult Neighborhood::DeclineInvitation(ObjectGuid playerGuid)
     TC_LOG_DEBUG("housing", "Neighborhood::DeclineInvitation: Player {} declined invite to neighborhood '{}'",
         playerGuid.ToString(), _name);
 
-    return HOUSING_RESULT_GENERIC_FAILURE;
+    // M7: the invite was successfully erased — return SUCCESS. The response
+    // Result byte is a HousingResult enum (uint8) the client compares against
+    // Enum.HousingResult.Success(0); returning GENERIC_FAILURE here made the
+    // client render a successful decline as failed (sibling CancelInvitation
+    // already returns SUCCESS).
+    return HOUSING_RESULT_SUCCESS;
 }
 
 HousingResult Neighborhood::EvictPlayer(ObjectGuid playerGuid)
@@ -834,6 +847,42 @@ HousingResult Neighborhood::EvictPlayer(ObjectGuid playerGuid)
     }
 
     return HOUSING_RESULT_SUCCESS;
+}
+
+bool Neighborhood::ReleasePlot(ObjectGuid ownerGuid)
+{
+    bool freed = false;
+
+    // Free every plot recorded as owned by this player (normally one).
+    for (uint8 i = 0; i < MAX_NEIGHBORHOOD_PLOTS; ++i)
+    {
+        if (_plots[i].IsOccupied() && _plots[i].OwnerGuid == ownerGuid)
+        {
+            _plots[i] = PlotInfo{};
+            freed = true;
+        }
+    }
+
+    // Clear the member's plot assignment (memory + DB) so they can buy again.
+    auto it = std::find_if(_members.begin(), _members.end(),
+        [&ownerGuid](Member const& member) { return member.PlayerGuid == ownerGuid; });
+    if (it != _members.end() && it->PlotIndex != INVALID_PLOT_INDEX)
+    {
+        it->PlotIndex = INVALID_PLOT_INDEX;
+
+        CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_UPD_NEIGHBORHOOD_MEMBER_PLOT);
+        stmt->setUInt8(0, INVALID_PLOT_INDEX);
+        stmt->setUInt64(1, _guid.GetCounter());
+        stmt->setUInt64(2, ownerGuid.GetCounter());
+        CharacterDatabase.Execute(stmt);
+        freed = true;
+    }
+
+    if (freed)
+        TC_LOG_DEBUG("housing", "Neighborhood::ReleasePlot: Freed plot(s) owned by {} in neighborhood '{}'",
+            ownerGuid.ToString(), _name);
+
+    return freed;
 }
 
 HousingResult Neighborhood::TransferOwnership(ObjectGuid newOwnerGuid)

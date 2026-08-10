@@ -150,8 +150,23 @@ void WorldSession::HandleNeighborhoodCharterCreate(WorldPackets::Neighborhood::N
     charter.SaveToDB(trans);
     CharacterDatabase.CommitTransaction(trans);
 
+    // M4: populate the success response so the client charter panel renders the
+    // charter GUID + name + signature progress (previously only Result was set,
+    // leaving CharterGuid/MapID/SignatureCount/Name default → blank panel, and
+    // the client never learned the charter GUID). CharterGuid is built the same
+    // way as the sign-request path. `Unknown` carries the required signature
+    // count (server policy MIN_CHARTER_SIGNATURES; retail rec 14982 shows 0x0a).
+    // NOTE: leadByte/Result semantics left as documented (uint8 Result, client
+    // tests != 0 for error); the sniff's 0x42 leadByte is unverified for the
+    // success path and intentionally not hardcoded here.
     WorldPackets::Neighborhood::NeighborhoodCharterUpdateResponse response;
     response.Result = static_cast<uint8>(HOUSING_RESULT_SUCCESS);
+    response.CharterGuid = ObjectGuid::Create<HighGuid::Housing>(0, 0, 0, charterId);
+    response.MapID = neighborhoodCharterCreate.NeighborhoodMapID;
+    response.SignatureCount = charter.GetSignatureCount();
+    response.Signers = charter.GetSignatures();
+    response.Unknown = MIN_CHARTER_SIGNATURES;
+    response.NeighborhoodName = neighborhoodCharterCreate.Name;
     SendPacket(response.Write());
 
     TC_LOG_DEBUG("housing", "Player {} created neighborhood charter '{}' (ID: {}, MapID: {})",
@@ -1033,6 +1048,43 @@ void WorldSession::HandleNeighborhoodBuyHouse(WorldPackets::Neighborhood::Neighb
     // Auto-join neighborhood if not already a member — buying a plot implies joining
     if (!neighborhood->IsMember(player->GetGUID()))
     {
+        // M9/A2: enforce faction restriction + private-neighborhood invite gating
+        // BEFORE auto-join. AddResident itself performs no such checks (unlike
+        // InviteResident), so a wrong-faction or uninvited player could otherwise
+        // join a private/faction-locked neighborhood simply by buying a plot.
+        int32 faction = neighborhood->GetFactionRestriction();
+        if (faction != NEIGHBORHOOD_FACTION_NONE)
+        {
+            uint32 team = player->GetTeam();
+            if ((faction == NEIGHBORHOOD_FACTION_HORDE && team != HORDE) ||
+                (faction == NEIGHBORHOOD_FACTION_ALLIANCE && team != ALLIANCE))
+            {
+                WorldPackets::Neighborhood::NeighborhoodBuyHouseResponse response;
+                response.Result = static_cast<uint8>(HOUSING_RESULT_INCORRECT_FACTION);
+                SendPacket(response.Write());
+
+                TC_LOG_DEBUG("housing", "HandleNeighborhoodBuyHouse: Player {} faction mismatch for neighborhood '{}'",
+                    player->GetGUID().ToString(), neighborhood->GetName());
+                return;
+            }
+        }
+
+        // Private (non-public) neighborhoods require a matching pending invite,
+        // unless the player is already an owner/manager of that neighborhood.
+        if (!neighborhood->IsPublic()
+            && !neighborhood->HasPendingInvite(player->GetGUID())
+            && !neighborhood->IsManager(player->GetGUID())
+            && !neighborhood->IsOwner(player->GetGUID()))
+        {
+            WorldPackets::Neighborhood::NeighborhoodBuyHouseResponse response;
+            response.Result = static_cast<uint8>(HOUSING_RESULT_MISSING_PRIVATE_NEIGHBORHOOD_INVITE);
+            SendPacket(response.Write());
+
+            TC_LOG_DEBUG("housing", "HandleNeighborhoodBuyHouse: Player {} has no pending invite to private neighborhood '{}'",
+                player->GetGUID().ToString(), neighborhood->GetName());
+            return;
+        }
+
         HousingResult joinResult = neighborhood->AddResident(player->GetGUID());
         if (joinResult != HOUSING_RESULT_SUCCESS)
         {
@@ -1058,6 +1110,23 @@ void WorldSession::HandleNeighborhoodBuyHouse(WorldPackets::Neighborhood::Neighb
         TC_LOG_DEBUG("housing", "HandleNeighborhoodBuyHouse: Player {} already has a house in neighborhood {}",
             player->GetGUID().ToString(), neighborhood->GetGuid().ToString());
         return;
+    }
+
+    // m2/A5: enforce a configurable global house cap across ALL neighborhoods
+    // (retail allows 2 per account — one Alliance hub, one Horde hub). 0 = no
+    // limit. Prevents plot hoarding across the realm.
+    if (uint32 maxHouses = sWorld->getIntConfig(CONFIG_HOUSING_MAX_HOUSES_PER_ACCOUNT))
+    {
+        if (player->GetAllHousings().size() >= maxHouses)
+        {
+            WorldPackets::Neighborhood::NeighborhoodBuyHouseResponse response;
+            response.Result = static_cast<uint8>(HOUSING_RESULT_MORE_HOUSE_SLOTS_NEEDED);
+            SendPacket(response.Write());
+
+            TC_LOG_DEBUG("housing", "HandleNeighborhoodBuyHouse: Player {} at global house cap ({}/{})",
+                player->GetGUID().ToString(), player->GetAllHousings().size(), maxHouses);
+            return;
+        }
     }
 
     // Deduct gold cost (sniff-verified: 1000g = 10,000,000 copper)

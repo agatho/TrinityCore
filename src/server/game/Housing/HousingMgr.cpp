@@ -958,9 +958,19 @@ HousingResult HousingMgr::ValidateDecorPlacement(uint32 decorId, Position const&
     if (!decorEntry)
         return HOUSING_RESULT_DECOR_NOT_FOUND;
 
-    // Validate position is within reasonable bounds
+    // Validate position is finite / not obviously corrupt.
     if (!pos.IsPositionValid())
         return HOUSING_RESULT_BOUNDS_FAILURE_ROOM;
+
+    // M1/A4: reject placements outside the plausible room/plot AABB. Decor
+    // coordinates are local-space (room- or plot-relative), so a legitimate
+    // target is always close to the origin; anything beyond HOUSING_MAX_DECOR_
+    // LOCAL_EXTENT on any axis is arbitrary-coordinate GameObject spam and is
+    // refused with a bounds-failure the client renders as "out of bounds".
+    if (std::fabs(pos.GetPositionX()) > HOUSING_MAX_DECOR_LOCAL_EXTENT ||
+        std::fabs(pos.GetPositionY()) > HOUSING_MAX_DECOR_LOCAL_EXTENT ||
+        std::fabs(pos.GetPositionZ()) > HOUSING_MAX_DECOR_LOCAL_EXTENT)
+        return HOUSING_RESULT_BOUNDS_FAILURE_PLOT;
 
     // Validate house level meets decor requirements (if any level restriction exists)
     // For now, all decor is available at any level; future DB2 fields may add restrictions

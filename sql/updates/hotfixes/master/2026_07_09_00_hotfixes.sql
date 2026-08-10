@@ -5,7 +5,7 @@
 -- =============================================================================
 -- Trinity Housing — bundled installation master file
 -- Target database: hotfixes
--- Generated: 2026-07-08
+-- Generated: 2026-08-10
 --
 -- This file aggregates every housing-related SQL file from sql/housing/ in the
 -- correct install order. To install, run against the hotfixes database:
@@ -803,17 +803,29 @@ CREATE TABLE `neighborhood_map` (
 
 --
 -- Data for table `neighborhood_map`
--- Map 2736: Horde "Razorwind Shores" neighborhood
+--
+-- MUST match client NeighborhoodMap.db2 (build 12.0.7.68887) EXACTLY. The
+-- `FactionRestriction` column carries the same bitmask as the DB2 `Flags`
+-- field (0x1 Alliance | 0x2 Horde | 0x4 SystemGenerate). Positions come from
+-- the DB2 EntryPosition_0/1/2 fields. A mismatch between this server seed and
+-- the client DB2 crosses the two factions' housing entry flows and locks one
+-- faction out of housing entirely.
+--   ID 1 -> MapID 2735, Flags 5  => ALLIANCE (Founder's Point),  system-generatable
+--   ID 2 -> MapID 2736, Flags 6  => HORDE    (Razorwind Shores), system-generatable
+--   ID 4 -> MapID 2640, Flags 3  => both-faction purchasable (NOT system-generatable)
+--   ID 7 -> MapID 2783, Flags 3  => House Interior, both factions (NOT system-generatable)
 --
 
-DELETE FROM `neighborhood_map` WHERE `ID` IN (1, 2, 7);
+DELETE FROM `neighborhood_map` WHERE `ID` IN (1, 2, 4, 7);
 INSERT INTO `neighborhood_map` (`PositionX`, `PositionY`, `PositionZ`, `ID`, `MapID`, `Radius`, `PlotCount`, `FactionRestriction`, `VerifiedBuild`) VALUES
--- ID=1: Horde (Map 2736 Razorwind Shores), FactionRestriction=6 (0x2 Horde | 0x4 SystemGenerate)
-(1100, 200, 50, 1, 2736, 1500, 55, 6, 56263),
--- ID=2: Alliance (Map 2735 Founder's Point), FactionRestriction=5 (0x1 Alliance | 0x4 SystemGenerate)
-(2997, 435, 114, 2, 2735, 1500, 55, 5, 56263),
--- ID=7: House Interior (Map 2783), both factions, Flags=3 (0x1|0x2)
-(-1000, -1000, 0.1, 7, 2783, 1500, 0, 3, 56263);
+-- ID=1: Alliance (Map 2735 Founder's Point), FactionRestriction=5 (0x1 Alliance | 0x4 SystemGenerate)
+(3807.7600097656, -160.42700195313, 194.11099243164, 1, 2735, 1500, 55, 5, 56263),
+-- ID=2: Horde (Map 2736 Razorwind Shores), FactionRestriction=6 (0x2 Horde | 0x4 SystemGenerate)
+(2053.6000976562, 175.46800231934, 175.11999511719, 2, 2736, 1500, 55, 6, 56263),
+-- ID=4: both-faction purchasable neighborhood (Map 2640), FactionRestriction=3 (0x1|0x2), not system-generatable
+(-1033, -733, 0, 4, 2640, 1500, 55, 3, 56263),
+-- ID=7: House Interior (Map 2783), both factions, FactionRestriction=3 (0x1|0x2), not system-generatable
+(-1000, -1000, 0.10000000149, 7, 2783, 1500, 0, 3, 56263);
 
 --
 -- Table structure for table `neighborhood_name_gen`

@@ -43,8 +43,8 @@ public:
     void Update(uint32 diff);
 
     // Neighborhood lifecycle
-    Neighborhood* CreateNeighborhood(ObjectGuid ownerGuid, std::string const& name, uint32 neighborhoodMapID, int32 factionRestriction, bool isPublic = false);
-    Neighborhood* CreateGuildNeighborhood(ObjectGuid ownerGuid, std::string const& name, uint32 neighborhoodMapID, uint32 factionID);
+    Neighborhood* CreateNeighborhood(ObjectGuid ownerGuid, std::string const& name, uint32 neighborhoodMapID, int32 factionRestriction, bool isPublic = false, uint32 guildId = 0);
+    Neighborhood* CreateGuildNeighborhood(ObjectGuid ownerGuid, std::string const& name, uint32 neighborhoodMapID, uint32 factionID, uint32 guildId);
     void DeleteNeighborhood(ObjectGuid neighborhoodGuid);
     Neighborhood* GetNeighborhood(ObjectGuid neighborhoodGuid);
     Neighborhood const* GetNeighborhood(ObjectGuid neighborhoodGuid) const;

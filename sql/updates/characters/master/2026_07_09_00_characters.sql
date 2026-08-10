@@ -6,7 +6,7 @@
 -- =============================================================================
 -- Trinity Housing — bundled installation master file
 -- Target database: characters
--- Generated: 2026-04-23
+-- Generated: 2026-08-10
 --
 -- This file aggregates every housing-related SQL file from sql/housing/ in the
 -- correct install order. To install, run against the characters database:
@@ -209,9 +209,11 @@ CREATE TABLE `neighborhoods` (
     `factionRestriction` INT NOT NULL DEFAULT 0 COMMENT 'NeighborhoodFactionRestriction: 0=None, 1=Horde, 2=Alliance',
     `isPublic` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Boolean: 1 = publicly listed and joinable',
     `createTime` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Unix timestamp of neighborhood creation',
+    `guildId` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'M8: owning guild id for guild neighborhoods (0 = not guild-linked)',
     PRIMARY KEY (`guid`),
     INDEX `idx_owner` (`ownerGuid`),
-    INDEX `idx_map` (`neighborhoodMapId`)
+    INDEX `idx_map` (`neighborhoodMapId`),
+    INDEX `idx_guild` (`guildId`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ---------------------------------------------------------------------------
@@ -669,4 +671,122 @@ PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
 SET @c := (SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='character_housing_decor' AND column_name='scale');
 SET @s := IF(@c=0, 'ALTER TABLE `character_housing_decor` ADD COLUMN `scale` FLOAT NOT NULL DEFAULT 1.0 AFTER `rotW`', 'SELECT 1');
 PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
+
+
+-- ============================================================================
+-- Source: sql/housing/characters_neighborhood_guild_link.sql
+-- ============================================================================
+-- ---------------------------------------------------------------------------
+-- 2026-08-09  M8: guild -> neighborhood link
+-- Adds neighborhoods.guildId so guild neighborhoods created via
+-- CMSG_HOUSING_SVCS_GUILD_CREATE_NEIGHBORHOOD persist their owning guild id and
+-- NeighborhoodMgr::GetNeighborhoodByGuildId resolves after a server restart.
+-- Idempotent: safe to re-run.
+-- ---------------------------------------------------------------------------
+
+SET @dbname := DATABASE();
+
+-- Add the column only if it does not already exist.
+SET @col_exists := (
+    SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA = @dbname AND TABLE_NAME = 'neighborhoods' AND COLUMN_NAME = 'guildId'
+);
+SET @ddl := IF(@col_exists = 0,
+    "ALTER TABLE `neighborhoods` ADD COLUMN `guildId` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'M8: owning guild id for guild neighborhoods (0 = not guild-linked)' AFTER `createTime`",
+    "SELECT 'neighborhoods.guildId already present'");
+PREPARE stmt FROM @ddl; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+-- Add the lookup index only if it does not already exist.
+SET @idx_exists := (
+    SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS
+    WHERE TABLE_SCHEMA = @dbname AND TABLE_NAME = 'neighborhoods' AND INDEX_NAME = 'idx_guild'
+);
+SET @ddl := IF(@idx_exists = 0,
+    "ALTER TABLE `neighborhoods` ADD INDEX `idx_guild` (`guildId`)",
+    "SELECT 'neighborhoods.idx_guild already present'");
+PREPARE stmt FROM @ddl; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+
+-- ============================================================================
+-- Source: sql/housing/characters_neighborhood_map_faction_fix.sql
+-- ============================================================================
+-- ---------------------------------------------------------------------------
+-- 2026-08-10  Housing: correct SYSTEM public neighborhoods after the
+--             NeighborhoodMap faction/map seed correction.
+--
+-- Background
+-- ----------
+-- The server seed for `hotfixes`.`neighborhood_map` had NeighborhoodMap IDs 1
+-- and 2 swapped relative to the client NeighborhoodMap.db2:
+--     WRONG seed: ID1 = Map 2736 / Horde,    ID2 = Map 2735 / Alliance
+--     CLIENT db2: ID1 = Map 2735 / Alliance,  ID2 = Map 2736 / Horde
+-- Because of that, EnsurePublicNeighborhoods() built the two SYSTEM public
+-- neighborhoods on the wrong NeighborhoodMap IDs:
+--     Alliance system neighborhood -> neighborhoodMapId = 2  (should be 1)
+--     Horde    system neighborhood -> neighborhoodMapId = 1  (should be 2)
+-- The client UI routes each faction by the DB2 ID (Alliance -> ID1,
+-- Horde -> ID2), so one faction could never reach its public neighborhood.
+--
+-- This migration realigns the two SYSTEM neighborhoods with the corrected map
+-- seed by moving each to the NeighborhoodMap ID that resolves to the SAME
+-- physical MapID it was already built on (2735 stays Alliance, 2736 stays
+-- Horde). factionRestriction is left as-is because it is already correct for
+-- each system neighborhood and, after this move, matches the corrected map
+-- flags (so NeighborhoodMgr::VerifyNeighborhoodFactions converges instead of
+-- fighting the fix).
+--
+-- Why the UPDATE (relabel) approach and not DELETE + recreate
+-- ----------------------------------------------------------
+-- Public neighborhoods can already contain player-purchased plots, houses,
+-- rooms and decor (that is the entire point of a public neighborhood).
+-- Deleting a system neighborhood would orphan/destroy that player data.
+-- Relabeling only the `neighborhoodMapId` of the two SYSTEM rows preserves
+-- every plot/house/decor/member row unchanged (they reference the
+-- neighborhood by its stable `guid`, which this migration never changes).
+--
+-- Safety: player data is NEVER touched
+-- ------------------------------------
+-- The two SYSTEM public neighborhoods are the ONLY neighborhoods whose
+-- `ownerGuid` is 0: EnsurePublicNeighborhoods() creates them with a sentinel
+-- housing owner guid whose counter is 0 (see NeighborhoodMgr.cpp). Every
+-- player- or guild-founded neighborhood has a non-zero ownerGuid. The WHERE
+-- clauses below are therefore scoped to `ownerGuid = 0 AND isPublic = 1 AND
+-- guildId = 0`, which can only match the two system-generated public
+-- neighborhoods. No character_housing / *_decor / *_rooms / plot row is read
+-- or modified.
+--
+-- factionRestriction values (see HousingDefines.h):
+--     1 = Horde, 2 = Alliance
+--
+-- Ordering / ops note
+-- -------------------
+-- Apply this file to the `characters` database together with the corrected
+-- `hotfixes`.`neighborhood_map` seed, BEFORE the first server restart that
+-- loads the corrected seed. In that (standard) maintenance flow the system
+-- neighborhoods are still in the original swapped state, so the faction-keyed
+-- WHERE clauses match exactly. Idempotent: re-running is a no-op once the two
+-- rows are on the correct NeighborhoodMap IDs.
+-- ---------------------------------------------------------------------------
+
+-- Alliance system public neighborhood: physically on Map 2735, currently
+-- mislabeled with neighborhoodMapId = 2. The corrected seed maps 2735 -> ID 1.
+UPDATE `neighborhoods`
+   SET `neighborhoodMapId` = 1,
+       `factionRestriction` = 2
+ WHERE `ownerGuid` = 0
+   AND `isPublic` = 1
+   AND `guildId` = 0
+   AND `factionRestriction` = 2
+   AND `neighborhoodMapId` = 2;
+
+-- Horde system public neighborhood: physically on Map 2736, currently
+-- mislabeled with neighborhoodMapId = 1. The corrected seed maps 2736 -> ID 2.
+UPDATE `neighborhoods`
+   SET `neighborhoodMapId` = 2,
+       `factionRestriction` = 1
+ WHERE `ownerGuid` = 0
+   AND `isPublic` = 1
+   AND `guildId` = 0
+   AND `factionRestriction` = 1
+   AND `neighborhoodMapId` = 1;
 
