@@ -342,6 +342,18 @@ enum NeighborhoodFactionRestriction : int32
     NEIGHBORHOOD_FACTION_ALLIANCE   = 2
 };
 
+// closedInfoFramesAccountWide is the client's FrameTutorialAccount bitfield, kept in the
+// GLOBAL_CONFIG_CACHE account data as two space-separated uint32 words (48 bits; word 0 = bits 0-31,
+// word 1 = bits 32-47). The housing editor keeps its expert/cleanup/layout/customize modes locked until
+// bit 38 "HousingModesUnlocked" is set: 38 - 32 = 6 within word 1, so 1 << 6 = 64 -> "0 64".
+//
+// Set ONLY that bit. Writing the whole field (the old "4294967295 4294967295") also marked every other
+// FrameTutorialAccount step as already seen and, together with housingTutorialsEnabled=0, told the client
+// the housing tutorial was already finished - so a first-time buyer was dropped straight into the House
+// Finder instead of being walked through it. Unlocking the editor modes was the only thing that change
+// was ever meant to do.
+constexpr char const* HOUSING_MODES_UNLOCKED_CVAR = "0 64";
+
 // HouseSettingFlags enum - 11 values (bitmask), verified against client binary
 // Two groups: HouseAccess (bits 0-4) for interior, PlotAccess (bits 5-9) for exterior
 enum HouseSettingFlags : uint32

@@ -1206,8 +1206,10 @@ void WorldSession::HandleNeighborhoodBuyHouse(WorldPackets::Neighborhood::Neighb
                 }
             };
 
-            ensureCVar("closedInfoFramesAccountWide", "4294967295 4294967295");
-            ensureCVar("housingTutorialsEnabled", "0");
+            // Editor modes only - see HOUSING_MODES_UNLOCKED_CVAR. housingTutorialsEnabled stays untouched.
+            ensureCVar("closedInfoFramesAccountWide", HOUSING_MODES_UNLOCKED_CVAR);
+            // Repair the persisted "0" written by the old code - see the login site for why.
+            ensureCVar("housingTutorialsEnabled", "1");
 
             if (modified)
             {
