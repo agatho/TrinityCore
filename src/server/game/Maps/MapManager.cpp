@@ -183,7 +183,22 @@ void MapManager::PreloadHousingMaps()
 
     for (Neighborhood* neighborhood : sNeighborhoodMgr.GetAllNeighborhoods())
     {
-        uint32 mapId = neighborhood->GetNeighborhoodMapID();
+        // Neighborhood::GetNeighborhoodMapID() is a NeighborhoodMap.db2 id (1, 2, 4, 7), NOT a Map.db2 id -
+        // the world map lives in that row's MapID column (1 -> 2735, 2 -> 2736, 4 -> 2640, 7 -> 2783). Every
+        // other consumer resolves it through sHousingMgr.GetNeighborhoodMapData() first; this one used the raw
+        // id as a map id, so it looked up Map 1 "Kalimdor" and Map 2 "Outland", found InstanceType 0 instead of
+        // MAP_HOUSE_NEIGHBORHOOD, and skipped BOTH public neighborhoods at startup. With neither map preloaded
+        // a player could not be placed into a neighborhood at all - which presented as "cannot choose a
+        // neighborhood" even though the rows existed and the faction seed was correct.
+        NeighborhoodMapData const* nmData = sHousingMgr.GetNeighborhoodMapData(neighborhood->GetNeighborhoodMapID());
+        if (!nmData)
+        {
+            TC_LOG_ERROR("housing", "MapManager::PreloadHousingMaps: neighborhood '{}' references NeighborhoodMap id {} which is not in NeighborhoodMap.db2 - skipping",
+                neighborhood->GetName(), neighborhood->GetNeighborhoodMapID());
+            continue;
+        }
+
+        uint32 mapId = uint32(nmData->MapID);
         uint32 instanceId = static_cast<uint32>(neighborhood->GetGuid().GetCounter());
 
         if (FindMap_i(mapId, instanceId))
