@@ -19017,21 +19017,13 @@ bool Player::LoadFromDB(ObjectGuid guid, CharacterDatabaseQueryHolder const& hol
     // housingTutorialsEnabled=0, which unlocked the editor but also told the client the entire housing
     // tutorial was already done, so first-time buyers were dropped straight into the House Finder.
     //
-    // Mark all tutorials as seen. Retail sniff shows all 256 tutorial bits set to 1 (0xFF bytes).
+    // The 256-bit server tutorial flags are NOT touched here. They used to be blanket-set to all-ones on every
+    // login ("retail sniff shows all 256 bits set" - true of a veteran retail account, not of a fresh one), which
+    // permanently marked every tutorial in the game as already seen for the account. The client owns this state
+    // and reports each step through CMSG_TUTORIAL (WorldSession::HandleTutorialFlag), so letting it drive them is
+    // both correct and self-repairing.
     if (GetSession())
     {
-        bool needsUpdate = false;
-        for (uint8 i = 0; i < MAX_ACCOUNT_TUTORIAL_VALUES; ++i)
-        {
-            if (GetSession()->GetTutorialInt(i) != 0xFFFFFFFF)
-            {
-                GetSession()->SetTutorialInt(i, 0xFFFFFFFF);
-                needsUpdate = true;
-            }
-        }
-        if (needsUpdate)
-            GetSession()->SendTutorialsData();
-
         // The 256-bit server tutorial flags (above) are separate from the client's
         // FrameTutorialAccount UI flags. The client stores those in the CVar bitfield
         // "closedInfoFramesAccountWide" within the GLOBAL_CONFIG_CACHE account data.

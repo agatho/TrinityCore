@@ -1162,10 +1162,9 @@ void WorldSession::HandleNeighborhoodBuyHouse(WorldPackets::Neighborhood::Neighb
 
         // TODO: Replace with quest-driven tutorial progression when the housing tutorial
         // questline is implemented. See Player.cpp LoadFromDB for full explanation.
-        // Mark all server tutorial flags as seen (retail sniff: all 256 bits = 0xFF).
-        for (uint8 i = 0; i < MAX_ACCOUNT_TUTORIAL_VALUES; ++i)
-            SetTutorialInt(i, 0xFFFFFFFF);
-        SendTutorialsData();
+        // Deliberately NOT marking the 256 server tutorial flags as seen here (it used to set all of them).
+        // Buying a house is precisely when the housing tutorial should START, so suppressing every tutorial at
+        // that moment was backwards. The client tracks its own progress via CMSG_TUTORIAL.
 
         // Also inject FrameTutorialAccount CVars into GLOBAL_CONFIG_CACHE.
         // The client's housing UI checks closedInfoFramesAccountWide bit 38
