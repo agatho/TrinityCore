@@ -1,0 +1,17 @@
+--
+-- Housing: stop the plot AreaTrigger painting a solid slab over every plot.
+--
+-- areatrigger_create_properties 37358 is the per-plot boundary trigger we spawn at each plot centre. It is
+-- LOCALLY AUTHORED (VerifiedBuild = 0), and its DecalPropertiesId was set to 621 on the assumption that this
+-- is the retail "plot boundary" decal. With Shape = 1 (Box) 35 x 30 x 94 that decal covers a 70 x 60 yard
+-- footprint, and it renders as a solid brown rectangle across the whole plot - which is what a tester reported
+-- as a bug on Founder's Point.
+--
+-- Clear the decal but keep the trigger. The AreaTrigger itself is load-bearing and must stay: HousingMap uses
+-- it to resolve which plot a player is standing in (plot boundary / IsInsidePlot, decor placement limits) and
+-- the client needs it present to open the plot edit menu. Only the visual is removed.
+--
+-- 621 was never sniff-verified. If a capture later shows which DecalProperties row retail actually uses for an
+-- unsold plot, set it here rather than reinstating 621.
+--
+UPDATE `areatrigger_create_properties` SET `DecalPropertiesId` = 0 WHERE `Id` = 37358 AND `IsCustom` = 0;
