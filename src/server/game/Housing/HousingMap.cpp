@@ -249,19 +249,34 @@ void HousingMap::SpawnPlotGameObjects()
             continue;
         }
 
-        // Build rotation from the stored euler angles.
+        // Cornerstone transform. GameObjects.db2 is the authority where it has a row for this entry: a
+        // WowPacketParser decode of the 65940 housing sniffs shows the wire position AND quaternion equal
+        // GameObjects.db2[CornerstoneGameObjectID].Pos/.Rot exactly for 55/55 plots on map 2735, while
+        // NeighborhoodPlot.CornerstonePosition/Rotation match 0/55 there (off by 1.5-18 yards, and rotation
+        // off by PI +/- 0.2..0.5 rad even where the position agrees) - i.e. that map's plot rows are simply
+        // wrong and no rotation offset can rescue them.
         //
-        // The extra half-turn is empirical, from a tester report that every cornerstone faced away from its
-        // plot path. NeighborhoodPlot.CornerstoneRotation is a yaw-only euler triple ([0]=[1]=0 on all 110
-        // plots, e.g. 0.1309 / 5.3145 / 5.5065 rad), so the DATA is fine and the model's forward axis is the
-        // opposite of the convention assumed here.
-        //
-        // GameObjects.db2 was checked as an alternative source and rejected: for these cornerstone entries its
-        // Pos differs from CornerstonePosition on 37 of 55 plots by up to 15 yards, so it describes a different
-        // placement (it is what the client uses for House Finder map pins) and switching to it would move every
-        // cornerstone. Position from the plot data is correct - only the facing was.
-        float rotZ = plot->CornerstoneRotation[2] + float(M_PI);
-        QuaternionData rot = QuaternionData::fromEulerAnglesZYX(rotZ, plot->CornerstoneRotation[1], plot->CornerstoneRotation[0]);
+        // Map 2736 is the opposite case: GameObjects.db2 has NO DisplayID-110660 rows for OwnerID 2736, and
+        // there the sniff shows wire_orientation == CornerstoneRotation.Z + PI for 48/55 plots (the 7 misses
+        // are plots whose position also drifted between builds). So the plot data plus a half turn is both the
+        // only available source and the correct one for that map.
+        float rotZ;
+        QuaternionData rot;
+        if (GameObjectsEntry const* goData = sGameObjectsStore.LookupEntry(goEntry))
+        {
+            x = goData->Pos.X;
+            y = goData->Pos.Y;
+            z = goData->Pos.Z;
+            LoadGrid(x, y);
+            rot = QuaternionData(goData->Rot[0], goData->Rot[1], goData->Rot[2], goData->Rot[3]);
+            float unusedY = 0.0f, unusedX = 0.0f;
+            rot.toEulerAnglesZYX(rotZ, unusedY, unusedX);
+        }
+        else
+        {
+            rotZ = plot->CornerstoneRotation[2] + float(M_PI);
+            rot = QuaternionData::fromEulerAnglesZYX(rotZ, plot->CornerstoneRotation[1], plot->CornerstoneRotation[0]);
+        }
 
         // GOState 0 (ACTIVE) = Owned/Claimed cornerstone, GOState 1 (READY) = ForSale sign
         GOState plotState = isOwned ? GO_STATE_ACTIVE : GO_STATE_READY;
@@ -316,6 +331,19 @@ void HousingMap::SpawnPlotGameObjects()
         // Sniff-verified: Box shape 35x30x94, DecalPropertiesId=621 (plot boundary visual),
         // SpellForVisuals=1282351, FHousingPlotAreaTrigger_C entity fragment with owner data.
         // The AT is required for the client to show the edit menu and plot boundary decal.
+        //
+        // OWNED PLOTS ONLY. Retail never creates this AreaTrigger for an unsold plot: across four
+        // WowPacketParser-decoded housing sniffs (builds 65940 x2 and 11.2.7 x2, maps 2735 and 2736) there are
+        // 55 CreateObject1 blocks for entry 37358 and HouseGUID is non-zero in 55 of 55 - none for an unsold
+        // plot. The creation is caused by the purchase: CMSG_NEIGHBORHOOD_BUY_HOUSE -> worldstate 0->1 ->
+        // cornerstone State 1->0 -> the AT appears -> HousingRoom appears. It is not a visibility artifact
+        // either; the observed player was standing at the cornerstone, well inside the AT's 46 yd bounds.
+        //
+        // Spawning it unconditionally is what painted a 70x60 brown slab (DecalPropertiesId 621, half-extents
+        // 35x30) across every empty plot. The 70x60 marker a player SHOULD see on an unsold plot is drawn by
+        // the client itself from its own GameObjects.db2 row (PlotGameObjectID, DisplayID 113004, GeoBox
+        // 70x60x0), gated on the plot worldstate - the server neither sends nor spawns it.
+        if (isOwned)
         {
             float hx = plot->HousePosition[0];
             float hy = plot->HousePosition[1];
