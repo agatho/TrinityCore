@@ -28,6 +28,7 @@ class Housing;
 class HousingMirrorEntity;
 class HousingRoomEntity;
 class MeshObject;
+struct NeighborhoodPlotData;
 class Neighborhood;
 class Player;
 struct QuaternionData;
@@ -48,6 +49,10 @@ public:
     // Returns the plot index whose plot-bounds AT equals `atGuid`, or -1 when none.
     int8 GetPlotIndexForAreaTrigger(ObjectGuid atGuid) const;
     GameObject* GetPlotGameObject(uint8 plotIndex);
+
+    // Create/remove the visible for-sale sign for a plot. Safe to call repeatedly.
+    void SpawnPlotForSaleSign(NeighborhoodPlotData const* plot);
+    void RemovePlotForSaleSign(uint8 plotIndex);
     void SetPlotOwnershipState(uint8 plotIndex, bool owned);
     HousingPlotOwnerType GetPlotOwnerTypeForPlayer(Player const* player, uint8 plotIndex) const;
     void SendPerPlayerPlotWorldStates(Player* player);
@@ -218,6 +223,12 @@ private:
     std::unordered_map<ObjectGuid, Housing*> _playerHousings;
     std::unordered_map<uint8, ObjectGuid> _plotAreaTriggers;
     std::unordered_map<uint8, ObjectGuid> _plotGameObjects;
+    // The visible "for sale" plot marker, which is a SEPARATE object from the cornerstone:
+    // NeighborhoodPlot.db2 gives each plot both a CornerstoneGameObjectID (type 48 UI_LINK,
+    // displayId 110660 - the interaction point) and a PlotGameObjectID (type 5 GENERIC,
+    // displayId 113004 - the sign the player actually sees on an unsold plot). Only unowned
+    // plots carry one.
+    std::unordered_map<uint8, ObjectGuid> _plotForSaleSigns;
 
     // House structure GO tracking (plotIndex -> house GO GUID)
     std::unordered_map<uint8, ObjectGuid> _houseGameObjects;
