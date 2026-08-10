@@ -90,7 +90,8 @@ void NeighborhoodMgr::LoadFromDB()
         if (guidLow >= _nextGuid)
             _nextGuid = guidLow + 1;
 
-        ObjectGuid neighborhoodGuid = ObjectGuid::Create<HighGuid::Housing>(/*subType*/ 4, /*arg1*/ sRealmList->GetCurrentRealmId().Realm, /*arg2*/ 0, guidLow);
+        // Rebuild exactly what GenerateNeighborhoodGuid minted: arg1 = neighborhoodMapID (fields[2]).
+        ObjectGuid neighborhoodGuid = ObjectGuid::Create<HighGuid::Housing>(/*subType*/ 4, /*arg1*/ fields[2].GetUInt32(), /*arg2*/ 0, guidLow);
 
         auto neighborhood = std::make_unique<Neighborhood>(neighborhoodGuid);
 
@@ -135,6 +136,7 @@ void NeighborhoodMgr::LoadFromDB()
         ObjectGuid ownerGuid = neighborhood->GetOwnerGuid();
         _ownerToNeighborhood[ownerGuid] = neighborhoodGuid;
         _neighborhoods[neighborhoodGuid] = std::move(neighborhood);
+        _neighborhoodsByCounter[guidLow] = _neighborhoods[neighborhoodGuid].get();
         ++count;
 
     } while (result->NextRow());
@@ -179,7 +181,7 @@ Neighborhood* NeighborhoodMgr::CreateNeighborhood(ObjectGuid ownerGuid, std::str
         return nullptr;
     }
 
-    ObjectGuid neighborhoodGuid = GenerateNeighborhoodGuid();
+    ObjectGuid neighborhoodGuid = GenerateNeighborhoodGuid(neighborhoodMapID);
 
     auto neighborhood = std::make_unique<Neighborhood>(neighborhoodGuid);
 
@@ -238,6 +240,7 @@ Neighborhood* NeighborhoodMgr::CreateNeighborhood(ObjectGuid ownerGuid, std::str
     Neighborhood* result = neighborhood.get();
     _ownerToNeighborhood[ownerGuid] = neighborhoodGuid;
     _neighborhoods[neighborhoodGuid] = std::move(neighborhood);
+    _neighborhoodsByCounter[neighborhoodGuid.GetCounter()] = result;
 
     TC_LOG_DEBUG("housing", "NeighborhoodMgr::CreateNeighborhood: Created neighborhood '{}' (guid: {}) for owner {}",
         name, neighborhoodGuid.ToString(), ownerGuid.ToString());
@@ -280,6 +283,7 @@ void NeighborhoodMgr::DeleteNeighborhood(ObjectGuid neighborhoodGuid)
 
     // Remove from maps
     _ownerToNeighborhood.erase(ownerGuid);
+    _neighborhoodsByCounter.erase(it->first.GetCounter());
     _neighborhoods.erase(it);
 
     TC_LOG_DEBUG("housing", "NeighborhoodMgr::DeleteNeighborhood: Deleted neighborhood {}",
@@ -466,6 +470,12 @@ Neighborhood* NeighborhoodMgr::FindOrCreatePublicNeighborhood(uint32 teamId)
     EnsurePublicNeighborhoods();
 
     return FindPublicNeighborhoodForMap(targetMapId);
+}
+
+Neighborhood* NeighborhoodMgr::GetNeighborhoodByCounter(uint64 counter) const
+{
+    auto itr = _neighborhoodsByCounter.find(counter);
+    return itr != _neighborhoodsByCounter.end() ? itr->second : nullptr;
 }
 
 Neighborhood* NeighborhoodMgr::FindPublicNeighborhoodForMap(uint32 neighborhoodMapId) const
@@ -953,7 +963,7 @@ void NeighborhoodMgr::CheckAndExpandNeighborhoods()
     }
 }
 
-ObjectGuid NeighborhoodMgr::GenerateNeighborhoodGuid()
+ObjectGuid NeighborhoodMgr::GenerateNeighborhoodGuid(uint32 neighborhoodMapID)
 {
     if (_nextGuid >= 0xFFFFFFFFFFFFFFFE)
     {
@@ -962,5 +972,12 @@ ObjectGuid NeighborhoodMgr::GenerateNeighborhoodGuid()
     }
 
     uint64 counter = _nextGuid++;
-    return ObjectGuid::Create<HighGuid::Housing>(/*subType*/ 4, /*arg1*/ sRealmList->GetCurrentRealmId().Realm, /*arg2*/ 0, counter);
+    // arg1 MUST be the NeighborhoodMap.db2 record id, not the realm id. The client slices this 16-bit field out
+    // of the GUID and uses it as that store's key; with a realm id in it the lookup misses and the client both
+    // reports "wrong faction" (DoesFactionMatchNeighborhood returns false on a miss) and never resolves a UI map
+    // (GetUIMapIDForNeighborhood -> nil), which shows as a House Finder that lists the neighborhood but refuses
+    // it and spins forever. Realm 3 made this visible; a realm whose id happened to equal a real
+    // NeighborhoodMap id (e.g. 1 = the Alliance map) masked it for Alliance characters and would still have
+    // failed for Horde.
+    return ObjectGuid::Create<HighGuid::Housing>(/*subType*/ 4, /*arg1*/ neighborhoodMapID, /*arg2*/ 0, counter);
 }

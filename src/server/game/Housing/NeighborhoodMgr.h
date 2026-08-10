@@ -69,11 +69,18 @@ public:
     // Find a public neighborhood on the given map (for visitors, no membership change)
     Neighborhood* FindPublicNeighborhoodForMap(uint32 neighborhoodMapId) const;
 
+    // Resolve by the counter that is persisted in the DB (neighborhoods.guid and every FK to it).
+    Neighborhood* GetNeighborhoodByCounter(uint64 counter) const;
+
     // Expansion
     void CheckAndExpandNeighborhoods();
 
-    // Charter support
-    ObjectGuid GenerateNeighborhoodGuid();
+    // Charter support.
+    // neighborhoodMapID becomes arg1 of the GUID: the 12.0.7 client slices that 16-bit field straight out of
+    // the high qword and uses it as the record ID into NeighborhoodMap.db2 (both
+    // C_Housing.DoesFactionMatchNeighborhood @ RVA 0xF7C1B0 and C_Housing.GetUIMapIDForNeighborhood @ 0xF80C90
+    // do `shr rax,0x20; movzx edx,ax` and look up the store at data RVA 0x486F5C0). It is NOT a realm id.
+    ObjectGuid GenerateNeighborhoodGuid(uint32 neighborhoodMapID);
 
     // Startup guarantee
     void VerifyNeighborhoodFactions();
@@ -89,6 +96,10 @@ private:
     NeighborhoodMgr() = default;
 
     std::unordered_map<ObjectGuid, std::unique_ptr<Neighborhood>> _neighborhoods;
+    // Counter -> neighborhood. _neighborhoods is keyed by the FULL ObjectGuid, so now that arg1 varies per
+    // neighborhood map, nothing may rebuild a lookup GUID from a bare persisted counter - the persisted tables
+    // store only GetCounter(). Every such site resolves through GetNeighborhoodByCounter instead.
+    std::unordered_map<uint64, Neighborhood*> _neighborhoodsByCounter;
     std::unordered_map<ObjectGuid, ObjectGuid> _ownerToNeighborhood; // owner guid -> neighborhood guid
     uint64 _nextGuid = 1;
     uint32 _expansionCheckTimer = 0;

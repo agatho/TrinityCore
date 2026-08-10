@@ -686,8 +686,10 @@ Housing* HousingMap::GetHousingForPlayer(ObjectGuid playerGuid) const
 
 void HousingMap::LoadNeighborhoodData()
 {
-    ObjectGuid neighborhoodGuid = ObjectGuid::Create<HighGuid::Housing>(/*subType*/ 4, /*arg1*/ sRealmList->GetCurrentRealmId().Realm, /*arg2*/ 0, static_cast<uint64>(_neighborhoodId));
-    _neighborhood = sNeighborhoodMgr.GetNeighborhood(neighborhoodGuid);
+    // Resolve by the persisted counter. Rebuilding the GUID here is not possible any more: arg1 is the
+    // neighborhood's NeighborhoodMapID (see NeighborhoodMgr::GenerateNeighborhoodGuid), which this code does not
+    // know, and guessing it wrong silently yields nullptr.
+    _neighborhood = sNeighborhoodMgr.GetNeighborhoodByCounter(static_cast<uint64>(_neighborhoodId));
 
     if (!_neighborhood)
         TC_LOG_ERROR("housing", "HousingMap::LoadNeighborhoodData: Failed to load neighborhood {} for map {} instanceId {}",
