@@ -296,13 +296,6 @@ void HousingMap::SpawnPlotGameObjects()
         // Track the plot GO for later swap (purchase/eviction)
         _plotGameObjects[static_cast<uint8>(plot->PlotIndex)] = go->GetGUID();
 
-        // The cornerstone above is the type-48 UI_LINK interaction point. The thing the player actually SEES on
-        // an unsold plot is a second, separate object: NeighborhoodPlot.db2's PlotGameObjectID (type 5 GENERIC,
-        // displayId 113004). It was loaded and even auto-registered as a template in HousingMgr, but never
-        // spawned - which is why Founder's Point had no plot signs despite 55 cornerstones being created.
-        if (!isOwned)
-            SpawnPlotForSaleSign(plot);
-
         TC_LOG_DEBUG("housing", "HousingMap::SpawnPlotGameObjects: Plot {} GO entry={} displayId={} type={} name='{}' guid={}",
             plot->PlotIndex, goEntry, go->GetGOInfo()->displayId, go->GetGOInfo()->type,
             go->GetGOInfo()->name, go->GetGUID().ToString());
@@ -609,82 +602,6 @@ int8 HousingMap::GetPlotIndexForAreaTrigger(ObjectGuid atGuid) const
     return -1;
 }
 
-void HousingMap::SpawnPlotForSaleSign(NeighborhoodPlotData const* plot)
-{
-    if (!plot || !plot->PlotGameObjectID)
-        return;
-
-    uint8 const plotIndex = static_cast<uint8>(plot->PlotIndex);
-    if (_plotForSaleSigns.count(plotIndex))
-        return; // already up
-
-    // Position comes from GameObjects.db2, keyed by the plot GO's own entry id - NOT from the plot's
-    // HousePosition. This is the client's own source of truth: when it builds the House Finder map pins it
-    // resolves NeighborhoodPlot.PlotGameObjectID through GameObjects.db2 and transforms that record's Pos[3]
-    // into UI-map space, so spawning the sign anywhere else makes the world object and the map pin disagree
-    // (HousePosition is off by 4-11 yards, and up to 4 in Z).
-    GameObjectsEntry const* goData = sGameObjectsStore.LookupEntry(static_cast<uint32>(plot->PlotGameObjectID));
-    if (!goData)
-    {
-        TC_LOG_ERROR("housing", "HousingMap::SpawnPlotForSaleSign: plot {} GO {} has no GameObjects.db2 record - cannot place it",
-            plotIndex, plot->PlotGameObjectID);
-        return;
-    }
-
-    float const x = goData->Pos.X;
-    float const y = goData->Pos.Y;
-    float const z = goData->Pos.Z;
-    LoadGrid(x, y);
-
-    // GameObjects.db2 stores the orientation as a quaternion directly; derive the facing for Position from it.
-    QuaternionData const rot(goData->Rot[0], goData->Rot[1], goData->Rot[2], goData->Rot[3]);
-    float facing = 0.0f, unusedY = 0.0f, unusedX = 0.0f;
-    rot.toEulerAnglesZYX(facing, unusedY, unusedX);
-    Position const pos(x, y, z, facing);
-
-    GameObject* sign = GameObject::CreateGameObject(static_cast<uint32>(plot->PlotGameObjectID), this, pos, rot, 255, GO_STATE_READY);
-    if (!sign)
-    {
-        TC_LOG_ERROR("housing", "HousingMap::SpawnPlotForSaleSign: failed to create GO {} for plot {} in neighborhood '{}'",
-            plot->PlotGameObjectID, plotIndex, _neighborhood ? _neighborhood->GetName() : "");
-        return;
-    }
-
-    sign->SetFlag(GO_FLAG_NODESPAWN);
-    // Dynamically spawned, so it has no phase_area association - mark it universally visible for the same
-    // reason the cornerstone is.
-    PhasingHandler::InitDbPhaseShift(sign->GetPhaseShift(), PHASE_USE_FLAGS_ALWAYS_VISIBLE, 0, 0);
-
-    if (!AddToMap(sign))
-    {
-        delete sign;
-        TC_LOG_ERROR("housing", "HousingMap::SpawnPlotForSaleSign: failed to add GO {} to map for plot {}",
-            plot->PlotGameObjectID, plotIndex);
-        return;
-    }
-
-    sign->setActive(true);
-    sign->SetFarVisible(true);
-    _plotForSaleSigns[plotIndex] = sign->GetGUID();
-
-    TC_LOG_DEBUG("housing", "HousingMap::SpawnPlotForSaleSign: plot {} sign entry={} at ({:.1f}, {:.1f}, {:.1f}) guid={}",
-        plotIndex, plot->PlotGameObjectID, x, y, z, sign->GetGUID().ToString());
-}
-
-void HousingMap::RemovePlotForSaleSign(uint8 plotIndex)
-{
-    auto itr = _plotForSaleSigns.find(plotIndex);
-    if (itr == _plotForSaleSigns.end())
-        return;
-
-    if (GameObject* sign = GetGameObject(itr->second))
-        sign->AddObjectToRemoveList();
-
-    _plotForSaleSigns.erase(itr);
-
-    TC_LOG_DEBUG("housing", "HousingMap::RemovePlotForSaleSign: plot {} sign removed", plotIndex);
-}
-
 GameObject* HousingMap::GetPlotGameObject(uint8 plotIndex)
 {
     auto itr = _plotGameObjects.find(plotIndex);
@@ -698,19 +615,6 @@ void HousingMap::SetPlotOwnershipState(uint8 plotIndex, bool owned)
 {
     if (!_neighborhood)
         return;
-
-    // The visible for-sale sign only exists while the plot is unsold.
-    if (owned)
-        RemovePlotForSaleSign(plotIndex);
-    else
-    {
-        for (NeighborhoodPlotData const* plot : sHousingMgr.GetPlotsForMap(_neighborhood->GetNeighborhoodMapID()))
-            if (static_cast<uint8>(plot->PlotIndex) == plotIndex)
-            {
-                SpawnPlotForSaleSign(plot);
-                break;
-            }
-    }
 
     // Toggle GOState on the existing Cornerstone GO.
     // GOState 0 (ACTIVE) = Owned/Claimed cornerstone, GOState 1 (READY) = ForSale sign
