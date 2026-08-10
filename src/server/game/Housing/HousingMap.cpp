@@ -249,8 +249,18 @@ void HousingMap::SpawnPlotGameObjects()
             continue;
         }
 
-        // Build rotation from the stored euler angles
-        float rotZ = plot->CornerstoneRotation[2];
+        // Build rotation from the stored euler angles.
+        //
+        // The extra half-turn is empirical, from a tester report that every cornerstone faced away from its
+        // plot path. NeighborhoodPlot.CornerstoneRotation is a yaw-only euler triple ([0]=[1]=0 on all 110
+        // plots, e.g. 0.1309 / 5.3145 / 5.5065 rad), so the DATA is fine and the model's forward axis is the
+        // opposite of the convention assumed here.
+        //
+        // GameObjects.db2 was checked as an alternative source and rejected: for these cornerstone entries its
+        // Pos differs from CornerstonePosition on 37 of 55 plots by up to 15 yards, so it describes a different
+        // placement (it is what the client uses for House Finder map pins) and switching to it would move every
+        // cornerstone. Position from the plot data is correct - only the facing was.
+        float rotZ = plot->CornerstoneRotation[2] + float(M_PI);
         QuaternionData rot = QuaternionData::fromEulerAnglesZYX(rotZ, plot->CornerstoneRotation[1], plot->CornerstoneRotation[0]);
 
         // GOState 0 (ACTIVE) = Owned/Claimed cornerstone, GOState 1 (READY) = ForSale sign
