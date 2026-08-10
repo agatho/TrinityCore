@@ -4070,7 +4070,18 @@ void WorldSession::HandleHousingSvcsGetHouseFinderInfo(WorldPackets::Housing::Ho
                 occupiedBitmask |= (uint64(1) << plotIdx);
         }
         entry.Field1 = occupiedBitmask;
-        entry.Field2 = 0;
+        // The neighborhood's NeighborhoodMap id. This handler used to send 0 here, while the other builder of
+        // this very struct (HandleHousingSvcsGetBnetFriendNeighborhoods) sends the map id - and the struct's own
+        // field comment documents it as the mapID. Two builders of one struct cannot both be right.
+        //
+        // Without it the client has no way to tell which zone, and therefore which faction, a finder entry
+        // belongs to: it listed the one neighborhood the faction filter correctly returned and then refused it
+        // with "Your character is in the wrong faction to purchase a House in this Neighborhood".
+        //
+        // Safe under the other reading of this field too. Even if the client really does treat Field1|Field2 as
+        // one 128-bit occupied-plot bitmask (see the comment above), Field2 covers plot indices 64-127 and a
+        // neighborhood has at most 55 plots, so those bits are never consulted.
+        entry.Field2 = static_cast<uint64>(neighborhood->GetNeighborhoodMapID());
         entry.ExtraFlags = 0x20; // Retail sniff: finder list entries always have ExtraFlags=0x20
 
         // Retail LIST response has an EMPTY Houses array — the client only needs houses in
