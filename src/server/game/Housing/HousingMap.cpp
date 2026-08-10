@@ -618,29 +618,16 @@ void HousingMap::SpawnPlotForSaleSign(NeighborhoodPlotData const* plot)
     if (_plotForSaleSigns.count(plotIndex))
         return; // already up
 
-    // Position comes from GameObjects.db2, keyed by the plot GO's own entry id - NOT from the plot's
-    // HousePosition. This is the client's own source of truth: when it builds the House Finder map pins it
-    // resolves NeighborhoodPlot.PlotGameObjectID through GameObjects.db2 and transforms that record's Pos[3]
-    // into UI-map space, so spawning the sign anywhere else makes the world object and the map pin disagree
-    // (HousePosition is off by 4-11 yards, and up to 4 in Z).
-    GameObjectsEntry const* goData = sGameObjectsStore.LookupEntry(static_cast<uint32>(plot->PlotGameObjectID));
-    if (!goData)
-    {
-        TC_LOG_ERROR("housing", "HousingMap::SpawnPlotForSaleSign: plot {} GO {} has no GameObjects.db2 record - cannot place it",
-            plotIndex, plot->PlotGameObjectID);
-        return;
-    }
-
-    float const x = goData->Pos.X;
-    float const y = goData->Pos.Y;
-    float const z = goData->Pos.Z;
+    // The sign marks the plot itself, so it sits at the plot's own build position (HousePosition) with the
+    // matching rotation - the cornerstone has its own separate CornerstonePosition and is placed above.
+    float const x = plot->HousePosition[0];
+    float const y = plot->HousePosition[1];
+    float const z = plot->HousePosition[2];
     LoadGrid(x, y);
 
-    // GameObjects.db2 stores the orientation as a quaternion directly; derive the facing for Position from it.
-    QuaternionData const rot(goData->Rot[0], goData->Rot[1], goData->Rot[2], goData->Rot[3]);
-    float facing = 0.0f, unusedY = 0.0f, unusedX = 0.0f;
-    rot.toEulerAnglesZYX(facing, unusedY, unusedX);
-    Position const pos(x, y, z, facing);
+    float const rotZ = plot->HouseRotation[2];
+    QuaternionData const rot = QuaternionData::fromEulerAnglesZYX(rotZ, plot->HouseRotation[1], plot->HouseRotation[0]);
+    Position const pos(x, y, z, rotZ);
 
     GameObject* sign = GameObject::CreateGameObject(static_cast<uint32>(plot->PlotGameObjectID), this, pos, rot, 255, GO_STATE_READY);
     if (!sign)
