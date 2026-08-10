@@ -1,0 +1,22 @@
+--
+-- Housing: restore the plot AreaTrigger's decal - it was right all along.
+--
+-- 2026_08_10_00_world.sql cleared areatrigger_create_properties 37358's DecalPropertiesId to 0 to stop a
+-- 70x60 brown slab appearing on every empty plot. That diagnosis was wrong. A WowPacketParser decode of the
+-- retail housing sniffs confirms all four of this row's values byte-for-byte, on the wire, for builds 65940 /
+-- 67186 / 68275:
+--
+--     EntryID            37358
+--     DecalPropertiesID  621
+--     ShapeType          1 (Box), Extents = 35 x 30 x 94, ExtentsTarget identical
+--     SpellForVisuals    1282351   (with SpellXSpellVisualID 510142, BoundsRadius2D 46.0977211)
+--
+-- (VerifiedBuild = 0 on this row only means nobody stamped it; commit f52312f380 already noted it matched a
+-- sniff, and it does.)
+--
+-- The real defect was WHEN we create the AreaTrigger, not what is in it: retail creates it only for an OWNED
+-- plot - 55 of 55 CreateObject1 blocks across four decoded sniffs carry a non-zero HouseGUID, and the create
+-- is triggered by CMSG_NEIGHBORHOOD_BUY_HOUSE. HousingMap now gates the spawn on ownership, so an empty plot
+-- has no AreaTrigger and therefore no decal, while an owned plot gets the retail-correct one back.
+--
+UPDATE `areatrigger_create_properties` SET `DecalPropertiesId` = 621 WHERE `Id` = 37358 AND `IsCustom` = 0;
