@@ -105,7 +105,15 @@ bool Housing::LoadFromDB(PreparedQueryResult housing, PreparedQueryResult decor,
     // Housing GUID counter must match HousingPlayerHouseEntity GUID (WorldSession.cpp), which uses battlenetAccountId.
     uint32 bnetAccountId = _owner->GetSession()->GetBattlenetAccountId();
     _houseGuid = ObjectGuid::Create<HighGuid::Housing>(/*subType*/ 3, /*arg1*/ sRealmList->GetCurrentRealmId().Realm, /*arg2*/ 7, uint64(bnetAccountId));
-    _neighborhoodGuid = ObjectGuid::Create<HighGuid::Housing>(/*subType*/ 4, /*arg1*/ sRealmList->GetCurrentRealmId().Realm, /*arg2*/ 0, fields[1].GetUInt64());
+    // Take the neighborhood's real GUID from the manager rather than rebuilding it: arg1 is its
+    // NeighborhoodMapID, and this GUID goes out to the client in house/neighborhood packets, so a wrong arg1
+    // reproduces the client-side NeighborhoodMap.db2 miss on the house path too.
+    _neighborhoodGuid.Clear();
+    if (Neighborhood const* neighborhood = sNeighborhoodMgr.GetNeighborhoodByCounter(fields[1].GetUInt64()))
+        _neighborhoodGuid = neighborhood->GetGuid();
+    else
+        TC_LOG_ERROR("housing", "Housing::LoadFromDB: house references neighborhood counter {} which is not loaded",
+            fields[1].GetUInt64());
     _plotIndex = fields[2].GetUInt8();
     _level = fields[3].GetUInt32();
     _favor = fields[4].GetUInt32();

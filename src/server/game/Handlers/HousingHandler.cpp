@@ -4050,7 +4050,11 @@ void WorldSession::HandleHousingSvcsGetHouseFinderInfo(WorldPackets::Housing::Ho
         entry.NeighborhoodGUID = neighborhood->GetGuid();
         entry.OwnerGUID = neighborhood->GetOwnerGuid();
         entry.Name = neighborhood->GetName();
-        // Field1 | Field2 is a BITMASK of "unavailable" plots (IDA: client ORs them at offset 520,
+        // Field1 is the occupied-plot bitmask (1 << plotIndex). Proven against the retail capture: in all three
+        // house-bearing records, set-bits(Field1) == sorted(the per-house uint8), so that uint8 is PlotIndex and
+        // Field1 indexes the same plot space. Field2 is NOT a continuation of it - retail sends Field2=0 in 6 of 7
+        // list entries and 0 in both detail responses (one entry carries 0x10000, i.e. "plot 80", which cannot
+        // exist in a 55-plot neighborhood), so the old "client ORs Field1|Field2 at offset 520,
         // then checks (1LL << plotIndex) & bitmask to determine if plot is occupied on the finder map).
         // Include both permanently-occupied plots AND plots currently held by ANOTHER player's
         // 5-minute reservation, so the user can't keep clicking Reserve on the same plot
@@ -4143,7 +4147,12 @@ void WorldSession::HandleHousingSvcsGetHouseFinderNeighborhood(WorldPackets::Hou
     }
     response.Neighborhood.Field1 = occupiedBitmask;
     response.Neighborhood.Field2 = 0;
-    response.Neighborhood.ExtraFlags = 0x20; // Retail sniff: finder detail always has ExtraFlags=0x20
+    // ExtraFlags is Enum.HouseFinderSuggestionReason (None=0 .. Random=32, HomeOwner=64), i.e. list-context
+    // metadata rather than a neighborhood property: the retail capture
+    // dump_12.0.5.67186_2026-04-24_13-23-54 sends 0x40/0x20 in the LIST but 0x00 in BOTH detail responses -
+    // including for the same neighborhood 0x6CCE, which is 0x40 in the list and 0x00 in the detail. The old
+    // comment claiming "finder detail always has ExtraFlags=0x20" was the wrong way round.
+    response.Neighborhood.ExtraFlags = 0x00;
 
     TC_LOG_INFO("housing", "  DETAIL: occupiedBitmask=0x{:016X} occupiedCount={}",
         occupiedBitmask, neighborhood->GetOccupiedPlotCount());

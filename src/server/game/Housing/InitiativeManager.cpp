@@ -472,8 +472,8 @@ void InitiativeManager::CompleteInitiative(uint64 neighborhoodGuid, uint32 initi
             // Broadcast completion to neighborhood via the real SMSG_INITIATIVE_COMPLETE.
             // Speculative SendInitiativeUpdateStatus(COMPLETED) + SendInitiativePointsUpdate(max,max)
             // retired 2026-05-11 — completion state propagates via entity-fragment updates.
-            ObjectGuid nhObjGuid = ObjectGuid::Create<HighGuid::Housing>(4, 0, 0, neighborhoodGuid);
-            Neighborhood* neighborhood = sNeighborhoodMgr.GetNeighborhood(nhObjGuid);
+            // Resolve by persisted counter - arg1 is the NeighborhoodMapID, not 0 (this site never matched anyway).
+            Neighborhood* neighborhood = sNeighborhoodMgr.GetNeighborhoodByCounter(neighborhoodGuid);
             if (neighborhood)
                 BroadcastInitiativeComplete(neighborhood, initiativeID);
 
@@ -554,8 +554,8 @@ void InitiativeManager::UpdateTaskProgress(uint64 neighborhoodGuid, uint32 initi
         taskProgress.Status = INITIATIVE_TASK_STATUS_COMPLETE;
         PersistSingleTaskProgress(initiative->DbId, taskID, taskProgress.Progress, static_cast<uint8>(taskProgress.Status));
 
-        ObjectGuid nhObjGuid = ObjectGuid::Create<HighGuid::Housing>(4, 0, 0, neighborhoodGuid);
-        Neighborhood* neighborhood = sNeighborhoodMgr.GetNeighborhood(nhObjGuid);
+        // Resolve by persisted counter - arg1 is the NeighborhoodMapID, not 0 (this site never matched anyway).
+        Neighborhood* neighborhood = sNeighborhoodMgr.GetNeighborhoodByCounter(neighborhoodGuid);
         if (neighborhood)
             BroadcastTaskComplete(neighborhood, initiativeID, taskID);
 
@@ -578,8 +578,8 @@ void InitiativeManager::UpdateTaskProgress(uint64 neighborhoodGuid, uint32 initi
     }
 
     // Send points update to neighborhood
-    ObjectGuid nhObjGuid = ObjectGuid::Create<HighGuid::Housing>(4, 0, 0, neighborhoodGuid);
-    Neighborhood* neighborhood = sNeighborhoodMgr.GetNeighborhood(nhObjGuid);
+    // Resolve by persisted counter - arg1 is the NeighborhoodMapID, not 0 (this site never matched anyway).
+    Neighborhood* neighborhood = sNeighborhoodMgr.GetNeighborhoodByCounter(neighborhoodGuid);
 
     // Calculate current aggregate points: sum of all task progress values
     // Speculative SendInitiativePointsUpdate(currentPoints, maxPoints) retired 2026-05-11 —
