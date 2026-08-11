@@ -1915,9 +1915,6 @@ bool World::SetInitialWorldSettings()
     TC_LOG_INFO("server.loading", "Loading initiative info...");
     sInitiativeManager.Initialize();
 
-    TC_LOG_INFO("server.loading", "Pre-loading housing neighborhood maps...");
-    sMapMgr->PreloadHousingMaps();
-
     ///- Handle outdated emails (delete/return)
     TC_LOG_INFO("server.loading", "Returning old mails...");
     sObjectMgr->ReturnOrDeleteOldMails(false);
@@ -1946,6 +1943,19 @@ bool World::SetInitialWorldSettings()
     TC_LOG_INFO("server.loading", "Initializing Scripts...");
     sScriptMgr->Initialize();
     sScriptMgr->OnConfigLoad(false);                                // must be done after the ScriptMgr has been properly initialized
+
+    ///- MUST run after sScriptMgr->Initialize(). The preload spawns every occupied plot's
+    /// house: the front-door GameObject and the plot AreaTrigger (entry 37358) are created
+    /// here, and both pick their AI once, at construction, via AIM_Initialize(). Run before
+    /// the scripts are registered and the registry lookup misses, so both silently get the
+    /// default AI and are never revisited - go_housing_door::OnGossipHello (the whole "enter
+    /// the house" path) and at_housing_plot::OnUnitEnter (which calls SetCurrentHouse, the
+    /// value the client's C_Housing.IsInsidePlot reads) never run. Symptoms were a door that
+    /// showed the gear cursor but did nothing, and "out of plot bounds" on decor placement.
+    /// Only bites when a house already exists at startup; houses bought mid-session spawn
+    /// on demand, after this point, and worked - which is what made it look intermittent.
+    TC_LOG_INFO("server.loading", "Pre-loading housing neighborhood maps...");
+    sMapMgr->PreloadHousingMaps();
 
     TC_LOG_INFO("server.loading", "Validating spell scripts...");
     sObjectMgr->ValidateSpellScripts();
