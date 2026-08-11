@@ -19,6 +19,7 @@
 #include "CollectionMgr.h"
 #include "DB2Stores.h"
 #include "DBCEnums.h"
+#include "GameTime.h"
 #include "GossipDef.h"
 #include "Player.h"
 #include "PerksProgramActivityMgr.h"
@@ -149,6 +150,13 @@ void WorldSession::HandlePerksProgramRequestRefund(WorldPackets::PerksProgram::P
     // cross-character refund could not duplicate currency anyway, but scoping the refund to the original buyer
     // matches the client's per-character "recent purchases" list and blocks refunding another character's record.
     if (purchase->BuyerGuid != player->GetGUID().GetCounter())
+        return;
+
+    // Enforce the retail 2-hour refund window server-side (the client only shows the countdown). A crafted refund
+    // packet, or a record that has outlived the window, is rejected here. The revocable reward types (mount/toy
+    // account-collection entries) have no separate "used/consumed" state to gate on beyond ownership, which the
+    // confirmed-revoke check below already covers; appearances are non-refundable by policy.
+    if (GameTime::GetGameTime() - time_t(purchase->PurchaseTime) > 2 * HOUR)
         return;
 
     // Revoke the reward and ONLY credit Trader's Tender when the collectible was actually removed. Gating the
