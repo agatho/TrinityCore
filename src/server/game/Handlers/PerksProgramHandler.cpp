@@ -26,6 +26,10 @@
 #include "PerksProgramMgr.h"
 #include "PerksProgramPackets.h"
 #include "UnitDefines.h"
+#include <limits>
+#include <unordered_set>
+#include <utility>
+#include <vector>
 
 // Every mutating Trading Post request (purchase / refund / cart / freeze) carries the interacted vendor GUID.
 // Validate it against an active PerksProgramVendor interaction the player actually opened, and re-check the NPC
@@ -69,28 +73,26 @@ void WorldSession::SendPerksProgramActivityUpdate()
     SendPacket(activityUpdate.Write());
 }
 
-// Validates a single Trading Post vendor item, deducts its Trader's Tender cost and grants the
-// resolved collectible. Returns false (leaving the player untouched) if the item is not currently
-// offered or the player cannot afford it.
-static bool PerksProgramPurchaseItem(WorldSession* session, Player* player, int32 vendorItemId)
+// Resolves an offered, grantable Trading Post vendor item WITHOUT charging or granting. Returns nullptr if the
+// item is not currently offered, is disabled, has an invalid price, or resolves to no reward the server can grant
+// (a battle pet / illusion / transmog set / warband scene, which BuildVendorList does not yet resolve -- see G2).
+static WorldPackets::PerksProgram::PerksVendorItem const* ResolvePerksPurchase(int32 vendorItemId)
 {
     WorldPackets::PerksProgram::PerksVendorItem const* item = sPerksProgramMgr->GetVendorItem(vendorItemId);
-    if (!item || item->Disabled)
-        return false;
+    if (!item || item->Disabled || item->Price < 0)
+        return nullptr;
 
-    if (item->Price < 0 || !player->HasCurrency(CURRENCY_TYPE_TRADERS_TENDER, uint32(item->Price)))
-        return false;
-
-    // Reject BEFORE charging if the item resolves to nothing we can actually grant. BuildVendorList only resolves
-    // mounts, toys and item appearances; a battle pet / illusion / transmog set / warband scene resolves to none
-    // of these. Deducting Trader's Tender for a reward we cannot deliver is a guaranteed, non-refundable loss, so
-    // refuse the purchase instead (safe interim until those categories are resolvable + grantable).
     if (!item->MountID && !item->ToyID && !item->ItemModifiedAppearanceID)
-        return false;
+        return nullptr;
 
-    player->RemoveCurrency(CURRENCY_TYPE_TRADERS_TENDER, item->Price, CurrencyDestroyReason::Vendor);
+    return item;
+}
 
-    // Grant the resolved collectible. A vendor item resolves to exactly one of these.
+// Grants the resolved collectible and records the purchase. Does NOT charge -- the caller deducts the price (a
+// single purchase deducts one item; a cart deducts the pre-summed total once). A vendor item resolves to exactly
+// one collectible.
+static void GrantPerksPurchase(WorldSession* session, Player* player, int32 vendorItemId, WorldPackets::PerksProgram::PerksVendorItem const* item)
+{
     CollectionMgr* collectionMgr = session->GetCollectionMgr();
     if (item->MountID)
         collectionMgr->AddMount(uint32(item->MountID), MOUNT_STATUS_NONE);
@@ -103,7 +105,22 @@ static bool PerksProgramPurchaseItem(WorldSession* session, Player* player, int3
     // Record the purchase so it can later be refunded (price paid + the exact collectible to revoke + the
     // purchasing character, so only that character can refund it).
     collectionMgr->AddPerksProgramPurchase(vendorItemId, item->Price, item->MountID, item->ToyID, player->GetGUID().GetCounter());
+}
 
+// Validates a single Trading Post vendor item, deducts its Trader's Tender cost and grants the resolved
+// collectible. Returns false (leaving the player untouched) if the item is not currently offered/grantable or the
+// player cannot afford it.
+static bool PerksProgramPurchaseItem(WorldSession* session, Player* player, int32 vendorItemId)
+{
+    WorldPackets::PerksProgram::PerksVendorItem const* item = ResolvePerksPurchase(vendorItemId);
+    if (!item)
+        return false;
+
+    if (!player->HasCurrency(CURRENCY_TYPE_TRADERS_TENDER, uint32(item->Price)))
+        return false;
+
+    player->RemoveCurrency(CURRENCY_TYPE_TRADERS_TENDER, item->Price, CurrencyDestroyReason::Vendor);
+    GrantPerksPurchase(session, player, vendorItemId, item);
     return true;
 }
 
@@ -198,10 +215,34 @@ void WorldSession::HandlePerksProgramRequestCartCheckout(WorldPackets::PerksProg
     if (!HasActivePerksProgramVendor(player, packet.VendorGUID))
         return;
 
-    // Each item is validated + charged independently; an unaffordable entry is simply skipped so the
-    // rest of the cart still goes through (mirrors buying them one by one).
+    // Atomic checkout: resolve + validate every item and sum the total up front. If any entry is invalid or
+    // duplicated, or the player cannot afford the full total, reject the whole cart -- no per-item silent skip,
+    // no partial charge. Only once everything is validated and affordable do we deduct the total once and grant.
+    std::vector<std::pair<int32, WorldPackets::PerksProgram::PerksVendorItem const*>> resolved;
+    resolved.reserve(packet.PerksVendorItemIDs.size());
+    std::unordered_set<int32> seen;
+    int64 total = 0;
     for (int32 vendorItemId : packet.PerksVendorItemIDs)
-        PerksProgramPurchaseItem(this, player, vendorItemId);
+    {
+        if (!seen.insert(vendorItemId).second)
+            return; // duplicate id in the cart -> reject the whole checkout
+
+        WorldPackets::PerksProgram::PerksVendorItem const* item = ResolvePerksPurchase(vendorItemId);
+        if (!item)
+            return;
+
+        total += item->Price;
+        resolved.emplace_back(vendorItemId, item);
+    }
+
+    if (total < 0 || total > int64(std::numeric_limits<int32>::max()) || !player->HasCurrency(CURRENCY_TYPE_TRADERS_TENDER, uint32(total)))
+        return;
+
+    if (total > 0)
+        player->RemoveCurrency(CURRENCY_TYPE_TRADERS_TENDER, int32(total), CurrencyDestroyReason::Vendor);
+
+    for (auto const& [vendorItemId, item] : resolved)
+        GrantPerksPurchase(this, player, vendorItemId, item);
 }
 
 void WorldSession::HandlePerksProgramSetFrozenVendorItem(WorldPackets::PerksProgram::PerksProgramSetFrozenVendorItem& packet)
