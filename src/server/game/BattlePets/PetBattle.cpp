@@ -495,9 +495,14 @@ void PetBattle::ProcessRound()
         _teams[0].FrontPetIndex, _teams[0].Pets[_teams[0].FrontPetIndex].Health, _teams[0].Pets[_teams[0].FrontPetIndex].MaxHealth,
         _teams[1].FrontPetIndex, _teams[1].Pets[_teams[1].FrontPetIndex].Health, _teams[1].Pets[_teams[1].FrontPetIndex].MaxHealth);
 
-    // Process turns in speed order
+    // Process turns in speed order.
+    // Guard on both FINISHED and FINAL_ROUND: a trap capture (or MOVE_QUIT forfeit)
+    // ends the battle from inside ProcessTurnForTeam by calling FinishBattle, which sets
+    // _state = FINAL_ROUND (not FINISHED). Without the FINAL_ROUND check the just-captured
+    // wild pet would still take its turn (and could flip a capture WIN into a LOSS), and the
+    // end-of-round HasAlivePets block below would call FinishBattle a second time (double XP/credit).
     ProcessTurnForTeam(firstTeam);
-    if (!IsFinished())
+    if (!IsFinished() && !IsFinalRound())
         ProcessTurnForTeam(secondTeam);
 
     TC_LOG_DEBUG("server.loading", "PetBattle ProcessRound: AFTER TURNS - Team0 pet[{}] HP={}/{} Team1 pet[{}] HP={}/{} effects={}",
@@ -505,7 +510,7 @@ void PetBattle::ProcessRound()
         _teams[1].FrontPetIndex, _teams[1].Pets[_teams[1].FrontPetIndex].Health, _teams[1].Pets[_teams[1].FrontPetIndex].MaxHealth,
         _roundEffects.size());
 
-    if (IsFinished())
+    if (IsFinished() || IsFinalRound())
         return;
 
     // Tick auras and weather (DoTs, HoTs, weather periodic, expiry)
@@ -2254,6 +2259,14 @@ void PetBattle::AwardExperience()
 
 void PetBattle::FinishBattle(PetBattleResult result)
 {
+    // Idempotency guard: completion effects (AwardExperience, WinPetBattle criteria,
+    // KilledMonsterCredit 65355, DEFEATBATTLEPET quest credit) must fire EXACTLY ONCE.
+    // FinishBattle can be re-entered in the same round (e.g. a trap capture calls it from
+    // ProcessTurnForTeam, then the end-of-round HasAlivePets check would call it again).
+    // Bail before mutating winner/state or awarding anything once the battle is already ending.
+    if (IsFinalRound() || IsFinished())
+        return;
+
     _state = PET_BATTLE_STATE_FINAL_ROUND;
     _finishDelayMs = 1500; // 1.5 second delay for death animation before showing result
 
