@@ -1469,7 +1469,12 @@ void HousingMgr::EnsureDoorGameObjectTemplates()
             {
                 sObjectMgr->GetGameObjectTemplateStoreForHotfix()[goEntry].ScriptId = doorScriptId;
                 ++scripted;
+                TC_LOG_INFO("housing", "EnsureDoorGameObjectTemplates: bound go_housing_door (scriptId={}) to existing GO {} ('{}') comp {}",
+                    doorScriptId, goEntry, existing->name, entry->ID);
             }
+            else
+                TC_LOG_INFO("housing", "EnsureDoorGameObjectTemplates: GO {} ('{}') already has scriptId={} - left alone",
+                    goEntry, existing->name, existing->ScriptId);
             continue;
         }
 

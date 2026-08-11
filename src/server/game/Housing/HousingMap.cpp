@@ -35,6 +35,7 @@
 #include "Housing.h"
 #include "HousingDefines.h"
 #include "HousingMgr.h"
+#include "ScriptMgr.h"
 #include "HousingPackets.h"
 #include "Log.h"
 #include "MeshObject.h"
@@ -2944,6 +2945,11 @@ uint32 HousingMap::SpawnExtCompTree(uint8 plotIndex, uint32 extCompID,
                 if (AddToMap(doorGo))
                 {
                     _houseGameObjects[plotIndex] = doorGo->GetGUID();
+                    // Door interaction lives entirely in go_housing_door::OnGossipHello, so a GO that
+                    // spawns without that AI is silently inert (click -> goober animation, no teleport).
+                    TC_LOG_INFO("housing", "SpawnExtCompTree: Door GO {} scriptId={} templateScriptId={} scriptedAI={}",
+                        doorGoEntry, doorGo->GetScriptId(), doorGo->GetGOInfo()->ScriptId,
+                        sScriptMgr->CanCreateGameObjectAI(doorGo->GetScriptId()));
                     TC_LOG_INFO("housing", "SpawnExtCompTree: Door GO spawned blizzlike — entry={} guid={} "
                         "at ({:.1f},{:.1f},{:.1f}) for comp={} (hook local: {:.1f},{:.1f},{:.1f}) exitPt=({:.1f},{:.1f},{:.1f}) plot={}",
                         doorGoEntry, doorGo->GetGUID().ToString(),
