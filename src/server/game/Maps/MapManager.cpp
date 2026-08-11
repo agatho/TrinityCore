@@ -264,7 +264,13 @@ HouseInteriorMap* MapManager::CreateHouseInterior(uint32 mapId, uint32 instanceI
     // map, and that's where they need to teleport back to.
     uint32 sourceWorldMapId = 0;
     uint8 sourcePlotIndex = 0;
-    if (creator->GetMap() && creator->GetMap()->GetEntry()->IsNeighborhood())
+    // FindMap(), not GetMap(): the creator has no map yet when this runs from
+    // Player::LoadFromDB - logging in while saved inside a house interior reaches
+    // CreateMap -> CreateHouseInterior before the player is placed on any map. GetMap()
+    // ASSERTs on a null m_currMap rather than returning null, so the `&&` guard here
+    // never protected anything and the whole worldserver went down on that login.
+    Map const* creatorMap = creator->FindMap();
+    if (creatorMap && creatorMap->GetEntry()->IsNeighborhood())
         sourceWorldMapId = creator->GetMapId();
     if (sourceWorldMapId == 0)
     {
@@ -422,8 +428,11 @@ Map* MapManager::CreateMap(uint32 mapId, Player* player, Optional<uint32> lfgDun
             {
                 if (Housing* housing = player->GetHousing())
                 {
+                    // FindMap(), not GetMap() - same reason as in CreateHouseInterior: this also
+                    // runs from Player::LoadFromDB, before the player is on any map.
+                    Map const* playerMap = player->FindMap();
                     uint32 sourceWorldMapId = 0;
-                    if (player->GetMap() && player->GetMap()->GetEntry()->IsNeighborhood())
+                    if (playerMap && playerMap->GetEntry()->IsNeighborhood())
                         sourceWorldMapId = player->GetMapId();
                     if (sourceWorldMapId == 0)
                     {
