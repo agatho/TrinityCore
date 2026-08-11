@@ -23,6 +23,7 @@
 #include "Group.h"
 #include "Guild.h"
 #include "Housing.h"
+#include "HousingDefines.h"
 #include "Log.h"
 #include "Neighborhood.h"
 #include "NeighborhoodMgr.h"
@@ -1500,10 +1501,32 @@ void HousingMgr::EnsureDoorGameObjectTemplates()
             goEntry, name, entry->ID);
     }
 
+    // The INTERIOR doors are not reachable from ExteriorComponent - HouseInteriorMap picks them
+    // by faction in code (Alliance 575017 / Horde 587318), so the DB2 walk above never sees them
+    // and they stayed unscripted after the exterior doors were fixed: the front door worked, the
+    // one inside the house did nothing. Keep this list in step with HouseInteriorMap.
+    for (uint32 goEntry : { INTERIOR_DOOR_GO_ALLIANCE, INTERIOR_DOOR_GO_HORDE })
+    {
+        GameObjectTemplate const* existing = sObjectMgr->GetGameObjectTemplate(goEntry);
+        if (!existing)
+        {
+            TC_LOG_ERROR("housing", "EnsureDoorGameObjectTemplates: interior door GO {} has no template - the interior door will not work", goEntry);
+            continue;
+        }
+
+        if (!existing->ScriptId)
+        {
+            sObjectMgr->GetGameObjectTemplateStoreForHotfix()[goEntry].ScriptId = doorScriptId;
+            ++scripted;
+            TC_LOG_INFO("housing", "EnsureDoorGameObjectTemplates: bound go_housing_door (scriptId={}) to interior door GO {} ('{}')",
+                doorScriptId, goEntry, existing->name);
+        }
+    }
+
     if (created)
         TC_LOG_INFO("server.loading", ">> Auto-created {} missing door GO templates from ExteriorComponent DB2", created);
     if (scripted)
-        TC_LOG_INFO("server.loading", ">> Bound go_housing_door to {} existing door GO templates", scripted);
+        TC_LOG_INFO("server.loading", ">> Bound go_housing_door to {} door GO templates", scripted);
 }
 
 void HousingMgr::BuildExteriorComponentIndexes()
