@@ -1339,6 +1339,13 @@ void WorldSession::HandleNeighborhoodBuyHouse(WorldPackets::Neighborhood::Neighb
             GameObject* houseGo = housingMap->SpawnHouseForPlot(resolvedPlotIndex, nullptr, buyExtCompID, buyWmoDataID);
             TC_LOG_ERROR("housing", "HandleNeighborhoodBuyHouse: SpawnHouseForPlot result: {}",
                 houseGo ? houseGo->GetGUID().ToString() : "FAILED/NULL");
+
+            // The house is made of MeshObjects, which ordinary grid visibility does NOT deliver -
+            // every other site in this system transmits them by hand. SpawnHouseForPlot sends
+            // nothing, so a house bought while the buyer is standing on the plot existed only on
+            // the server: the cornerstone flipped to owned (a GameObject, sent normally) and no
+            // house appeared until the player re-entered the map and AddPlayerToMap pushed them.
+            housingMap->SendPlotMeshObjectsToPlayers(resolvedPlotIndex);
         }
         else
         {

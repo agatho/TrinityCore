@@ -192,6 +192,11 @@ public:
     // Accessor for fixture MeshObjects (plotIndex → vector of MeshObject GUIDs)
     std::unordered_map<uint8, std::vector<ObjectGuid>> const& GetPlotMeshObjects() const { return _meshObjects; }
 
+    // Transmit a plot's house MeshObjects to everyone currently on this map. MeshObjects are not
+    // delivered by ordinary grid visibility — every other site in this system sends them by hand —
+    // so a house spawned while players are already standing here has to be pushed explicitly.
+    void SendPlotMeshObjectsToPlayers(uint8 plotIndex);
+
     // Manual spell packet helpers — called from AddPlayerToMap and at_housing_plot AT script.
     // These spells don't exist in DB2, so CastSpell() silently fails; manual packets are required.
     void SendPostTutorialAuras(Player* player);

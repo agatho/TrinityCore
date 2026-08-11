@@ -3050,6 +3050,53 @@ uint32 HousingMap::SpawnExtCompTree(uint8 plotIndex, uint32 extCompID,
     return count;
 }
 
+void HousingMap::SendPlotMeshObjectsToPlayers(uint8 plotIndex)
+{
+    auto meshItr = _meshObjects.find(plotIndex);
+    if (meshItr == _meshObjects.end() || meshItr->second.empty())
+    {
+        TC_LOG_ERROR("housing", "HousingMap::SendPlotMeshObjectsToPlayers: plot {} has no MeshObjects to send", plotIndex);
+        return;
+    }
+
+    for (MapReference const& ref : GetPlayers())
+    {
+        Player* p = ref.GetSource();
+        if (!p || !p->IsInWorld())
+            continue;
+
+        UpdateData updateData(GetId());
+        uint32 created = 0;
+        for (ObjectGuid const& meshGuid : meshItr->second)
+        {
+            MeshObject* meshObj = GetMeshObject(meshGuid);
+            if (!meshObj || !meshObj->IsInWorld())
+                continue;
+
+            // Re-CREATEing a GUID the client already holds crashes it - refresh instead.
+            if (p->HaveAtClient(meshObj))
+            {
+                meshObj->BuildValuesUpdateBlockForPlayer(&updateData, p);
+                continue;
+            }
+
+            meshObj->BuildCreateUpdateBlockForPlayer(&updateData, p);
+            p->m_clientGUIDs.insert(meshGuid);
+            ++created;
+        }
+
+        if (!updateData.HasData())
+            continue;
+
+        WorldPacket packet;
+        updateData.BuildPacket(&packet);
+        p->SendDirectMessage(&packet);
+
+        TC_LOG_INFO("housing", "HousingMap::SendPlotMeshObjectsToPlayers: plot {} -> player {} ({} CREATE of {} meshes)",
+            plotIndex, p->GetGUID().ToString(), created, uint32(meshItr->second.size()));
+    }
+}
+
 void HousingMap::DespawnAllMeshObjectsForPlot(uint8 plotIndex)
 {
     auto itr = _meshObjects.find(plotIndex);
