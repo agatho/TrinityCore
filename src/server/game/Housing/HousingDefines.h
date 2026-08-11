@@ -352,7 +352,19 @@ enum NeighborhoodFactionRestriction : int32
 // the housing tutorial was already finished - so a first-time buyer was dropped straight into the House
 // Finder instead of being walked through it. Unlocking the editor modes was the only thing that change
 // was ever meant to do.
-constexpr char const* HOUSING_MODES_UNLOCKED_CVAR = "0 64";
+// TEST (2026-08-11): forced OFF, was "0 64" (bit 38 = HousingModesUnlocked).
+//
+// Retail shows an unsold plot as plain grass with a signpost - no ground rectangle - and the plot-border
+// visual is an EDIT-MODE effect. We force the editor-modes-unlocked bit on for every account, which is a
+// plausible reason the client renders the 70x60 plot footprint decal (GameObjects.db2 DisplayID 113004,
+// GeoBox 70x60x0) permanently instead of only while editing. Everything else has been eliminated by test:
+// the decal is not ours to spawn, the plot AreaTrigger is now owned-plots-only, and granting/removing the
+// objects' PhaseID 27437/27531 changed nothing.
+//
+// If this clears the rectangle, the proper fix is to stop forcing the bit at all and let the housing tutorial
+// set it as the player progresses - which is now possible, since TUTORIAL_ACTION_RESET no longer marks every
+// tutorial as already seen. Restore "0 64" if the rectangle is unrelated.
+constexpr char const* HOUSING_MODES_UNLOCKED_CVAR = "0 0";
 
 // HouseSettingFlags enum - 11 values (bitmask), verified against client binary
 // Two groups: HouseAccess (bits 0-4) for interior, PlotAccess (bits 5-9) for exterior
