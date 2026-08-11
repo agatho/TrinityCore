@@ -2693,10 +2693,14 @@ uint8 PetBattle::GetTrapStatus(uint8 playerTeam) const
     if (wildPet.IsCaptured)
         return PET_BATTLE_TRAP_STATUS_CANT_TRAP_TWICE;
 
-    // Check species is capturable (boss pets are never capturable)
+    // Check species is capturable (boss pets are never capturable).
+    // Also require WellKnown (learnable): BattlePetMgr::AddPet early-returns for a
+    // non-WellKnown species, so without this gate a "successful" capture would fire
+    // capture credit / KillCredit 65356 while AddPet no-ops and the pet is silently lost.
     if (BattlePetSpeciesEntry const* species = sBattlePetSpeciesStore.LookupEntry(wildPet.Species))
     {
         if (!species->GetFlags().HasFlag(BattlePetSpeciesFlags::Capturable) ||
+            !species->GetFlags().HasFlag(BattlePetSpeciesFlags::WellKnown) ||
             species->GetFlags().HasFlag(BattlePetSpeciesFlags::Boss))
             return PET_BATTLE_TRAP_STATUS_CANT_TRAP_NOT_CAPTURABLE;
     }
