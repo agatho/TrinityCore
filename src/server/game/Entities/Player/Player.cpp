@@ -6925,6 +6925,31 @@ void Player::_LoadCurrency(PreparedQueryResult result)
 
     } while (result->NextRow());
 
+    // Trader's Tender (currency 2032) is account-wide: its authoritative balance lives in the login DB and was
+    // cached at session init. Override the per-character row with the shared balance so earn/spend/refund all act
+    // on one wallet. A missing account row (cache == -1) means this is the first login since the account-wide
+    // wallet was introduced -> seed the shared balance from this character's existing per-character amount.
+    {
+        PlayerCurrenciesMap::iterator itr = _currencyStorage.find(CURRENCY_TYPE_TRADERS_TENDER);
+        int64 accountTender = GetSession()->GetAccountPerksTender();
+        if (accountTender < 0)
+        {
+            uint32 seed = (itr != _currencyStorage.end()) ? itr->second.Quantity : 0u;
+            GetSession()->StoreAccountPerksTender(seed);
+            accountTender = int64(seed);
+        }
+
+        if (itr == _currencyStorage.end())
+        {
+            PlayerCurrency cur{};
+            cur.state = PLAYERCURRENCY_UNCHANGED;
+            cur.Quantity = uint32(accountTender);
+            _currencyStorage.emplace(CURRENCY_TYPE_TRADERS_TENDER, cur);
+        }
+        else
+            itr->second.Quantity = uint32(accountTender);
+    }
+
     // Mirror the Trader's Tender balance into the perks-program field the Trading Post UI reads.
     if (PlayerCurrenciesMap::const_iterator itr = _currencyStorage.find(CURRENCY_TYPE_TRADERS_TENDER); itr != _currencyStorage.end())
         SetUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::PerksProgramCurrency), int32(itr->second.Quantity));
@@ -6938,6 +6963,14 @@ void Player::_SaveCurrency(CharacterDatabaseTransaction trans)
         CurrencyTypesEntry const* entry = sCurrencyTypesStore.LookupEntry(itr->first);
         if (!entry) // should never happen
             continue;
+
+        // Trader's Tender is account-wide (persisted to the login DB by StoreAccountPerksTender); never write it
+        // to the per-character character_currency table, which would create a divergent second source of truth.
+        if (itr->first == CURRENCY_TYPE_TRADERS_TENDER)
+        {
+            itr->second.state = PLAYERCURRENCY_UNCHANGED;
+            continue;
+        }
 
         switch (itr->second.state)
         {
@@ -7136,9 +7169,13 @@ void Player::ModifyCurrency(uint32 id, int32 amount, CurrencyGainSource gainSour
 
     itr->second.Quantity += amount;
 
-    // Keep the perks-program field the Trading Post UI reads in sync with the tender balance.
+    // Keep the perks-program field the Trading Post UI reads in sync with the tender balance, and persist the
+    // shared account-wide balance to the login DB (Trader's Tender is never written to character_currency).
     if (id == CURRENCY_TYPE_TRADERS_TENDER)
+    {
         SetUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::PerksProgramCurrency), int32(itr->second.Quantity));
+        GetSession()->StoreAccountPerksTender(itr->second.Quantity);
+    }
 
     if (amount > 0 && !ignoreCaps) // Ignore total values update for refund
     {

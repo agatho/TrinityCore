@@ -1241,6 +1241,13 @@ class TC_GAME_API WorldSession
 
         CollectionMgr* GetCollectionMgr() const { return _collectionMgr.get(); }
 
+        // Account-wide Trader's Tender (currency 2032). The authoritative balance lives in the login DB
+        // (battlenet_account_perks_tender), shared by every character of the bnet account; -1 means no row
+        // has been loaded yet (first login since the account-wide wallet was introduced -> seed from the
+        // loading character's existing per-character balance).
+        int64 GetAccountPerksTender() const { return _accountPerksTender; }
+        void StoreAccountPerksTender(uint32 amount);   // updates the session cache + persists to the login DB
+
     public:                                                 // opcodes handlers
 
         void Handle_NULL(WorldPackets::Null& null);          // not used
@@ -2067,6 +2074,8 @@ class TC_GAME_API WorldSession
         std::unique_ptr<BattlePets::BattlePetMgr> _battlePetMgr;
 
         std::unique_ptr<CollectionMgr> _collectionMgr;
+
+        int64 _accountPerksTender = -1;   // cached account-wide Trader's Tender balance; -1 = not loaded / no row yet
 
         ConnectToKey _instanceConnectKey;
 

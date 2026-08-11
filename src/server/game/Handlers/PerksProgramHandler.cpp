@@ -75,8 +75,9 @@ static bool PerksProgramPurchaseItem(WorldSession* session, Player* player, int3
         if (ItemModifiedAppearanceEntry const* appearance = sItemModifiedAppearanceStore.LookupEntry(uint32(item->ItemModifiedAppearanceID)))
             collectionMgr->AddItemAppearance(appearance->ItemID, appearance->ItemAppearanceModifierID);
 
-    // Record the purchase so it can later be refunded (price paid + the exact collectible to revoke).
-    collectionMgr->AddPerksProgramPurchase(vendorItemId, item->Price, item->MountID, item->ToyID);
+    // Record the purchase so it can later be refunded (price paid + the exact collectible to revoke + the
+    // purchasing character, so only that character can refund it).
+    collectionMgr->AddPerksProgramPurchase(vendorItemId, item->Price, item->MountID, item->ToyID, player->GetGUID().GetCounter());
 
     return true;
 }
@@ -88,6 +89,8 @@ static bool PerksProgramPurchaseItem(WorldSession* session, Player* player, int3
 void WorldSession::HandlePerksProgramGetRecentPurchases(WorldPackets::PerksProgram::PerksProgramGetRecentPurchases& /*packet*/)
 {
     CollectionMgr* collectionMgr = GetCollectionMgr();
+    Player* player = GetPlayer();
+    uint64 playerGuid = player ? player->GetGUID().GetCounter() : 0;
 
     WorldPackets::PerksProgram::ResponsePerkRecentPurchases response;
     for (auto const& [vendorItemId, data] : collectionMgr->GetPerksProgramPurchases())
@@ -95,9 +98,10 @@ void WorldSession::HandlePerksProgramGetRecentPurchases(WorldPackets::PerksProgr
         WorldPackets::PerksProgram::ResponsePerkRecentPurchases::RecentPurchase& entry = response.Purchases.emplace_back();
         entry.PerksVendorItemID = vendorItemId;
         entry.PurchaseTime = data.PurchaseTime;
-        // A purchase is refundable while its reward is cleanly revocable (a mount or toy); appearance/transmog
-        // rewards are append-only in the account collection, matching the refund handler's policy.
-        entry.Refundable = (data.MountID != 0 || data.ToyID != 0);
+        // A purchase is refundable only for the character that made it (the refund handler enforces the same
+        // buyer scope) and while its reward is cleanly revocable (a mount or toy); appearance/transmog rewards
+        // are append-only in the account collection, matching the refund handler's policy.
+        entry.Refundable = (data.MountID != 0 || data.ToyID != 0) && data.BuyerGuid == playerGuid;
     }
 
     SendPacket(response.Write());
@@ -114,12 +118,22 @@ void WorldSession::HandlePerksProgramRequestRefund(WorldPackets::PerksProgram::P
     if (!purchase)
         return;
 
-    // Revoke the reward. Only mounts and toys can be cleanly removed; anything else is not refundable.
+    // A refund is only honoured for the character that made the purchase. Trader's Tender is account-wide, so a
+    // cross-character refund could not duplicate currency anyway, but scoping the refund to the original buyer
+    // matches the client's per-character "recent purchases" list and blocks refunding another character's record.
+    if (purchase->BuyerGuid != player->GetGUID().GetCounter())
+        return;
+
+    // Revoke the reward and ONLY credit Trader's Tender when the collectible was actually removed. Gating the
+    // credit on a confirmed revoke is what prevents creating currency by "refunding" a collectible that is already
+    // gone (double-refund, or removed by another path). Only mounts and toys are cleanly revocable.
+    bool revoked = false;
     if (purchase->MountID)
-        collectionMgr->RemoveMount(uint32(purchase->MountID));
+        revoked = collectionMgr->RemoveMount(uint32(purchase->MountID));
     else if (purchase->ToyID)
-        collectionMgr->RemoveToy(uint32(purchase->ToyID));
-    else
+        revoked = collectionMgr->RemoveToy(uint32(purchase->ToyID));
+
+    if (!revoked)
         return;
 
     if (purchase->Price > 0)
