@@ -88,6 +88,19 @@ static WorldPackets::PerksProgram::PerksVendorItem const* ResolvePerksPurchase(i
     return item;
 }
 
+// Whether the resolved reward is already known to the account. Retail hides/blocks owned items; buying one again
+// would burn Trader's Tender and stack a redundant purchase record, so reject it (G11).
+static bool IsPerksRewardOwned(CollectionMgr* collectionMgr, WorldPackets::PerksProgram::PerksVendorItem const* item)
+{
+    if (item->MountID && collectionMgr->GetAccountMounts().contains(uint32(item->MountID)))
+        return true;
+    if (item->ToyID && collectionMgr->HasToy(uint32(item->ToyID)))
+        return true;
+    if (item->ItemModifiedAppearanceID && collectionMgr->HasItemAppearance(uint32(item->ItemModifiedAppearanceID)).first)
+        return true;
+    return false;
+}
+
 // Grants the resolved collectible and records the purchase. Does NOT charge -- the caller deducts the price (a
 // single purchase deducts one item; a cart deducts the pre-summed total once). A vendor item resolves to exactly
 // one collectible.
@@ -114,6 +127,9 @@ static bool PerksProgramPurchaseItem(WorldSession* session, Player* player, int3
 {
     WorldPackets::PerksProgram::PerksVendorItem const* item = ResolvePerksPurchase(vendorItemId);
     if (!item)
+        return false;
+
+    if (IsPerksRewardOwned(session->GetCollectionMgr(), item))
         return false;
 
     if (!player->HasCurrency(CURRENCY_TYPE_TRADERS_TENDER, uint32(item->Price)))
@@ -230,6 +246,9 @@ void WorldSession::HandlePerksProgramRequestCartCheckout(WorldPackets::PerksProg
         WorldPackets::PerksProgram::PerksVendorItem const* item = ResolvePerksPurchase(vendorItemId);
         if (!item)
             return;
+
+        if (IsPerksRewardOwned(GetCollectionMgr(), item))
+            return; // already-owned item in the cart -> reject the whole checkout (no charge)
 
         total += item->Price;
         resolved.emplace_back(vendorItemId, item);
