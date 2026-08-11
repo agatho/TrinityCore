@@ -7171,10 +7171,10 @@ struct WarbandScenePlacementFilterReqLoadInfo
     static constexpr DB2FieldMeta Fields[5] =
     {
         { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
-        { .IsSigned = true, .Type = FT_SHORT, .Name = "Field_11_1_0_58221_002" },
+        { .IsSigned = false, .Type = FT_SHORT, .Name = "Field_11_1_0_58221_002" },
         { .IsSigned = true, .Type = FT_BYTE, .Name = "Field_11_1_0_58221_005" },
-        { .IsSigned = true, .Type = FT_INT, .Name = "RaceMasks1" },
-        { .IsSigned = true, .Type = FT_INT, .Name = "RaceMasks2" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "Field_11_1_0_58221_003_0" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "Field_11_1_0_58221_003_1" },
     };
 
     static constexpr DB2LoadInfo Instance{ Fields, 5, &WarbandScenePlacementFilterReqMeta::Instance, HOTFIX_SEL_WARBAND_SCENE_PLACEMENT_FILTER_REQ };
