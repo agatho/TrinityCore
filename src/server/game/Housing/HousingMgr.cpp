@@ -1439,9 +1439,21 @@ void HousingMgr::EnsureDoorGameObjectTemplates()
     // clickable entrance GO. If the template doesn't exist, create one based on
     // the known working template (entry 586576, type 10/GOOBER).
     uint32 created = 0;
+    uint32 scripted = 0;
 
     GameObjectTemplate const* referenceTemplate = sObjectMgr->GetGameObjectTemplate(586576);
     uint32 referenceDisplayId = referenceTemplate ? referenceTemplate->displayId : 116973;
+
+    // Every door - whether it comes from the world DB or is synthesised below - must carry
+    // go_housing_door, because that script's OnGossipHello IS the "enter the house" handler.
+    // GameObject::Use() calls AI()->OnGossipHello() for every GO type, so with no ScriptName
+    // the click reaches the default AI, falls through to the GOOBER branch, plays the open
+    // animation and does nothing else: the door looked interactive (gear cursor, client sends
+    // CMSG_GAME_OBJ_USE) but never teleported anyone. The goober.spell fallback (1271876,
+    // spell_housing_door_open) cannot cover for it either - GO_JUST_DEACTIVATED self-casts it
+    // player->player, so the script's GetExplTargetWorldObject() is the player and its
+    // ToGameObject() is null, and it bails before re-entering Use().
+    uint32 const doorScriptId = sObjectMgr->GetScriptId("go_housing_door", false);
 
     for (ExteriorComponentEntry const* entry : sExteriorComponentStore)
     {
@@ -1449,8 +1461,17 @@ void HousingMgr::EnsureDoorGameObjectTemplates()
             continue;
 
         uint32 goEntry = static_cast<uint32>(entry->GameObjectID);
-        if (sObjectMgr->GetGameObjectTemplate(goEntry))
-            continue; // already exists
+        if (GameObjectTemplate const* existing = sObjectMgr->GetGameObjectTemplate(goEntry))
+        {
+            // Present already (world DB). Attach the door script unless something
+            // deliberate is bound there - never clobber an explicit ScriptName.
+            if (!existing->ScriptId)
+            {
+                sObjectMgr->GetGameObjectTemplateStoreForHotfix()[goEntry].ScriptId = doorScriptId;
+                ++scripted;
+            }
+            continue;
+        }
 
         // Create a GOOBER template (type=10) — clickable interaction object for house entry
         std::string name = entry->Name[DEFAULT_LOCALE] ? entry->Name[DEFAULT_LOCALE] : "Housing Door";
@@ -1466,6 +1487,7 @@ void HousingMgr::EnsureDoorGameObjectTemplates()
         goTemplate.goober.open = 4296;          // Lock_ ID for "Opening" cast bar
         goTemplate.goober.autoClose = 3000;     // 3 seconds auto-close
         goTemplate.goober.startOpen = 1;        // start in open state
+        goTemplate.ScriptId = doorScriptId;
         goTemplate.InitializeQueryData();
 
         ++created;
@@ -1475,6 +1497,8 @@ void HousingMgr::EnsureDoorGameObjectTemplates()
 
     if (created)
         TC_LOG_INFO("server.loading", ">> Auto-created {} missing door GO templates from ExteriorComponent DB2", created);
+    if (scripted)
+        TC_LOG_INFO("server.loading", ">> Bound go_housing_door to {} existing door GO templates", scripted);
 }
 
 void HousingMgr::BuildExteriorComponentIndexes()
