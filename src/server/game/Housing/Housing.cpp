@@ -1119,21 +1119,41 @@ uint32 Housing::PlaceStarterDecor()
 
     // Find the visual room (non-base room, typically Room 1)
     ObjectGuid visualRoomGuid;
+    Room const* visualRoom = nullptr;
     for (auto const& [guid, room] : _rooms)
     {
         if (!sHousingMgr.IsBaseRoom(room.RoomEntryId))
         {
             visualRoomGuid = guid;
+            visualRoom = &room;
             break;
         }
     }
 
-    if (visualRoomGuid.IsEmpty())
+    if (visualRoomGuid.IsEmpty() || !visualRoom)
     {
         TC_LOG_ERROR("housing", "Housing::PlaceStarterDecor: No visual room found for house {} — cannot place starter decor",
             _houseGuid.ToString());
         return 0;
     }
+
+    // PlaceDecor stores a WORLD position in interior-map space, because that is what the
+    // client's placement packet carries and it is the same field HouseInteriorMap reads back.
+    // The table below is room-local (sniff-derived), so convert it here - otherwise the five
+    // starter items are written in a second, incompatible convention and land about a
+    // kilometre outside the house, present in the DB but never visible. Proven by decor 726:
+    // starter-written as (9.844,-8.013,0.02), then rewritten by the client as
+    // (-985.787,-997.955,7.726) the moment the player moved that same item.
+    float roomOriginX = -1000.0f, roomOriginY = -1000.0f, roomOriginZ = 0.1f;
+    if (NeighborhoodMapData const* nmData = sHousingMgr.GetNeighborhoodMapDataForWorldMap(HOUSE_INTERIOR_MAP_ID))
+    {
+        roomOriginX = nmData->Origin[0];
+        roomOriginY = nmData->Origin[1];
+        roomOriginZ = nmData->Origin[2];
+    }
+    roomOriginX += static_cast<float>(visualRoom->GridX);
+    roomOriginY += static_cast<float>(visualRoom->GridY);
+    roomOriginZ += static_cast<float>(visualRoom->FloorIndex) * HOUSE_INTERIOR_FLOOR_HEIGHT;
 
     // Sniff-verified starter decor positions (room-local coordinates in the visual room).
     // Both factions use the same Room 1 geometry — only the DecorEntryIDs differ.
@@ -1181,7 +1201,8 @@ uint32 Housing::PlaceStarterDecor()
         if (catalogItr == _catalog.end() || catalogItr->second.Count == 0)
             continue;
 
-        HousingResult result = PlaceDecor(p.DecorEntryId, p.X, p.Y, p.Z,
+        HousingResult result = PlaceDecor(p.DecorEntryId,
+            roomOriginX + p.X, roomOriginY + p.Y, roomOriginZ + p.Z,
             p.RotX, p.RotY, p.RotZ, p.RotW, visualRoomGuid);
 
         if (result == HOUSING_RESULT_SUCCESS)
