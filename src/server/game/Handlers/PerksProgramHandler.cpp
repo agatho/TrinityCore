@@ -63,6 +63,13 @@ static bool PerksProgramPurchaseItem(WorldSession* session, Player* player, int3
     if (item->Price < 0 || !player->HasCurrency(CURRENCY_TYPE_TRADERS_TENDER, uint32(item->Price)))
         return false;
 
+    // Reject BEFORE charging if the item resolves to nothing we can actually grant. BuildVendorList only resolves
+    // mounts, toys and item appearances; a battle pet / illusion / transmog set / warband scene resolves to none
+    // of these. Deducting Trader's Tender for a reward we cannot deliver is a guaranteed, non-refundable loss, so
+    // refuse the purchase instead (safe interim until those categories are resolvable + grantable).
+    if (!item->MountID && !item->ToyID && !item->ItemModifiedAppearanceID)
+        return false;
+
     player->RemoveCurrency(CURRENCY_TYPE_TRADERS_TENDER, item->Price, CurrencyDestroyReason::Vendor);
 
     // Grant the resolved collectible. A vendor item resolves to exactly one of these.
