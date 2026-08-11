@@ -198,7 +198,10 @@ void HousingRoomEntity::SetFlags(int32 flags)
 
 void HousingRoomEntity::SetFloorIndex(int32 floorIndex)
 {
-    SetUpdateFieldValue(m_values.ModifyValue(&HousingRoomEntity::m_housingRoomData).ModifyValue(&UF::HousingRoomData::FloorIndex), floorIndex);
+    // Server-side only since 12.0.7 - the client no longer carries FloorIndex in
+    // the FHousingRoom_C fragment (see UF::HousingRoomData). Kept for the interior
+    // map's floor bookkeeping.
+    _floorIndex = floorIndex;
 }
 
 void HousingRoomEntity::AddMeshObject(ObjectGuid meshObjectGuid)

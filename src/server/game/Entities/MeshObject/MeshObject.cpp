@@ -333,7 +333,8 @@ void MeshObject::InitHousingRoomData(ObjectGuid houseGuid, int32 houseRoomID,
     SetUpdateFieldValue(roomData.ModifyValue(&UF::HousingRoomData::HouseGUID), houseGuid);
     SetUpdateFieldValue(roomData.ModifyValue(&UF::HousingRoomData::HouseRoomID), houseRoomID);
     SetUpdateFieldValue(roomData.ModifyValue(&UF::HousingRoomData::Flags), flags);
-    SetUpdateFieldValue(roomData.ModifyValue(&UF::HousingRoomData::FloorIndex), floorIndex);
+    // floorIndex is no longer part of the FHousingRoom_C wire layout in 12.0.7
+    // (see UF::HousingRoomData); it is only kept for the log line below.
 
     // Register FHousingRoom_C entity fragment
     m_entityFragments.Add(WowCS::EntityFragment::FHousingRoom_C, IsInWorld(),
