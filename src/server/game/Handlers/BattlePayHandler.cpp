@@ -42,6 +42,10 @@ namespace
     // enum-registrar Done=3 we previously assumed; a failed VAS flow showed status=12/result=63.
     constexpr int32 STATUS_DONE   = 6;
     constexpr int32 STATUS_FAILED = 4;
+    // The client will not open the confirmation prompt, and PurchaseProductConfirm refuses to send the
+    // response at all (Buy AND Cancel), unless a JamBattlePayPurchase record for this purchaseID exists
+    // in its list with status == 9 and resultCode == 0. Verified at 0x13EB72C / 0x13EB736.
+    constexpr int32 STATUS_CONFIRMATION_PENDING = 9;
     constexpr int32 RESULT_OK                       = 0;
     constexpr int32 RESULT_NOT_ENOUGH_BALANCE       = 29;
     constexpr int32 RESULT_PRODUCT_NOT_PURCHASABLE  = 57;
@@ -455,10 +459,37 @@ void WorldSession::HandleBattlePayStartPurchase(WorldPackets::BattlePay::StartPu
         _battlePayPendingProductID = startPurchase.ProductID;
         _battlePayConfirmToken = uint32(purchaseID) | 0x1u;     // non-zero token = a purchase is pending
 
+        // ORDER MATTERS. The confirmation dialog reads the product name, wallet and both prices out of
+        // the client's own purchase RECORD, not out of the confirm packet - GetConfirmationInfo returns
+        // nil when no record for this purchaseID exists, and the Lua then hides the frame. So the record
+        // has to arrive first: StartPurchaseResponse, then a PURCHASE_UPDATE carrying one record in
+        // status 9, and only then the 12-byte confirm packet.
+        // Sending the confirm packet on its own (what we did before) is why the client never answered.
+        {
+            WorldPackets::BattlePay::StartPurchaseResponse ack;
+            ack.PurchaseID = purchaseID;
+            ack.ResultB = uint32(RESULT_OK);
+            SendPacket(ack.Write());
+        }
+
+        {
+            // Prices are echoed back by the client from what it DISPLAYS, so keep them whole cents -
+            // sub-cent precision can never compare equal on the way back.
+            uint64 const price = product->Currency == 1 ? (product->Price / 10000) * 100 : 0;
+
+            WorldPackets::BattlePay::PurchaseUpdate update;
+            WorldPackets::BattlePay::PurchaseRecord& rec = update.Purchases.emplace_back();
+            rec.PurchaseID = purchaseID;
+            rec.Status     = STATUS_CONFIRMATION_PENDING;
+            rec.ResultCode = int32(RESULT_OK);
+            rec.ProductID  = startPurchase.ProductID;
+            rec.BasePrice  = price;
+            rec.UserPrice  = price;
+            SendPacket(update.Write());
+        }
+
         WorldPackets::BattlePay::ConfirmPurchase confirm;
         confirm.PurchaseID = purchaseID;
-        confirm.ProductID = startPurchase.ProductID;
-        confirm.CurrentPriceFixedPoint = product->Currency == 1 ? (product->Price / 10000) * 100000 : 0;  // copper -> shop fixed-point
         confirm.ServerToken = _battlePayConfirmToken;
         SendPacket(confirm.Write());
         return;

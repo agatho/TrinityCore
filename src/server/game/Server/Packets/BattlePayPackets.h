@@ -240,14 +240,19 @@ namespace WorldPackets
         class ConfirmPurchase final : public ServerPacket
         {
         public:
-            explicit ConfirmPurchase() : ServerPacket(SMSG_BATTLE_PAY_CONFIRM_PURCHASE, 8 + 4 + 8 + 4 + 1) { }
+            explicit ConfirmPurchase() : ServerPacket(SMSG_BATTLE_PAY_CONFIRM_PURCHASE, 8 + 4) { }
 
             WorldPacket const* Write() override;
 
+            // EXACTLY 12 bytes - recovered from the client's handler (0x23D06D0 reads a u64 at +0 and a
+            // u32 at +8, stores both to globals and fires STORE_CONFIRM_PURCHASE; the message class does
+            // not field-parse, it takes a raw pointer to the payload). Nothing past +12 is ever read, so
+            // the price and the bit-packed string we used to append were dead weight. Full RE:
+            // c:\dumps\BATTLEPAY_CONFIRM_PURCHASE_WIRE_68275.md
             uint64 PurchaseID = 0;
-            uint32 ProductID = 0;
-            uint64 CurrentPriceFixedPoint = 0;  // wire fixed-point /100000 (same scale as the catalog)
-            uint32 ServerToken = 0;             // echoed back in the response so we can match the prompt
+            // The client echoes WHATEVER sits at +8 back to us as the token. We previously wrote ProductID
+            // here, so the echo never matched the token we were comparing against.
+            uint32 ServerToken = 0;
         };
 
         // Client's answer to the confirmation prompt. Layout byte-grounded from the 68275 client read of
@@ -260,7 +265,14 @@ namespace WorldPackets
 
             void Read() override;
 
+            // 13 bytes, from the client's serializer (0x5D9FF0, class id via vtable 0x5DA060):
+            //   u32 ServerToken @0  - echo of the SMSG's +8
+            //   u64 price      @4  - dollars*10000 + cents*100, ZERO on cancel
+            //   bits{1}        @12 - Confirmed, MSB-first then flush
+            // The u64 used to be missing here, so ReadBit() read a bit of the price and Confirmed was
+            // always false - i.e. even a working prompt would have been treated as a cancel.
             uint32 ServerToken = 0;
+            uint64 ClientPriceFixedPoint = 0;
             bool Confirmed = false;
         };
 

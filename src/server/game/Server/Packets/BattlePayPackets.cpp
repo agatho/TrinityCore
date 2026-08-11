@@ -163,21 +163,22 @@ WorldPacket const* StartPurchaseResponse::Write()
 // INFERRED layout - see the ConfirmPurchase comment in the header. Gated off by default.
 WorldPacket const* ConfirmPurchase::Write()
 {
-    _worldPacket << PurchaseID;
-    _worldPacket << ProductID;
-    _worldPacket << CurrentPriceFixedPoint;
-    _worldPacket << ServerToken;
-    _worldPacket.WriteBits(0u, 8);      // walletName length (empty), bit-packed like the other records
-    _worldPacket.FlushBits();
+    _worldPacket << PurchaseID;     // +0
+    _worldPacket << ServerToken;    // +8 - echoed back verbatim by the client
 
     return &_worldPacket;
 }
 
+
+
 void ConfirmPurchaseResponse::Read()
 {
     _worldPacket >> ServerToken;
+    _worldPacket >> ClientPriceFixedPoint;
     Confirmed = _worldPacket.ReadBit();
 }
+
+
 
 // Record order proven against the live 68974 purchase list (TESTER_SNIFF2_LINDORMI_MINE, 458 B =
 // 8 + 10x45): { u64 PurchaseID, i32 Status, i32 ResultCode, u32 ProductID, u64 BasePrice,
