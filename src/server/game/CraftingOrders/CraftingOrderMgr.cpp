@@ -196,8 +196,18 @@ void CraftingOrderMgr::Update(uint32 diff)
         CraftingOrders::Order& order = itr->second;
         bool const postingExpired = order.State == CraftingOrders::OrderState::Created && order.EndDate && now >= order.EndDate;
         bool const claimExpired = order.State == CraftingOrders::OrderState::Claimed && order.ClaimEndDate && now >= order.ClaimEndDate;
+        // Terminal orders (Fulfilled/Rejected) have already released their escrow (payout on fulfil, refund on reject).
+        // They are kept only long enough for the state-change broadcast to reach the open client, then reaped on the
+        // next tick so the DB/memory pool and the customer's My-Orders view do not grow without bound (G10).
+        bool const terminal = order.State == CraftingOrders::OrderState::Fulfilled || order.State == CraftingOrders::OrderState::Rejected;
 
-        if (claimExpired)
+        if (terminal)
+        {
+            uint64 const reapId = order.OrderID;
+            itr = _orders.erase(itr);
+            DeleteOrderFromDB(reapId);
+        }
+        else if (claimExpired)
         {
             // Crafter missed the deadline: return the order to the open pool (P4 will also notify + re-list).
             order.State = CraftingOrders::OrderState::Created;
