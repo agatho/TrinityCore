@@ -113,6 +113,22 @@ both when their pushes appear. Directives:
    never applied to integ_auth — apply it too (WowTokenMgr needs it).
 4. **New conf keys:** Shop.Enabled, CommercePricePollTimeSeconds. Merge conf.dist.
 
+## 3e. SUPERSEDES 3d (2026-08-09): commerce consolidated into feature/commerce
+
+The two commerce branches are RETIRED and REPLACED by a single clean golden source:
+**`feature/commerce` @ 37e42f536d** (Shop + BattlePay + WoW Token + catalog-admin, worldserver linked).
+- **Merge `feature/commerce`, NOT feature/ingame-shop-battlepay and NOT feature/wow-token.** The latter is
+  a fork of the whole original dev line (~230 cross-system commits) — never merge it; its non-commerce
+  content already lives on the per-feature branches + integration.
+- SQL to apply from feature/commerce: auth 2026_07_20_00 (account_wow_token), 2026_07_20_01
+  (account_battlepay_purchase ledger), 2026_08_09_00 (RBAC 886/887); world 2026_08_09_00 (catalog-admin
+  tables, drops battlepay_product) + 2026_08_09_01 (token product row, slot 574806).
+- Data blobs to <DataDir>/battlepay/: product_list + distribution_list.
+- Conf keys: Shop.Enabled, Shop.PurchaseConfirmation (default off), CommercePricePollTimeSeconds,
+  WowToken.Market.Enabled (default off).
+- The old §3d IN-1 purchase-wire fix is included; the GrantType-3->WowTokenMgr deliverable is wired here
+  (was the cross-branch gap), so a token sells through the catalog end-to-end.
+
 ## 4. Do NOT
 
 - Merge `content/midnight-s1` or `feature/major-factions-1207` (retired transport branches).
