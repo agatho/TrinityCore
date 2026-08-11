@@ -777,6 +777,15 @@ void WorldSession::HandleHousingDecorSetEditMode(WorldPackets::Housing::HousingD
                         if (!meshObj || !meshObj->IsInWorld())
                             continue;
 
+                        // A duplicate CREATE for a GUID the client already holds kills it
+                        // (ACCESS_VIOLATION, null read) - refresh via a values update instead,
+                        // same as the fixture path below.
+                        if (player->HaveAtClient(meshObj))
+                        {
+                            meshObj->BuildValuesUpdateBlockForPlayer(&updateData, player);
+                            continue;
+                        }
+
                         meshObj->BuildCreateUpdateBlockForPlayer(&updateData, player);
                         player->m_clientGUIDs.insert(meshObjGuid);
                         ++meshCreateCount;
@@ -790,6 +799,15 @@ void WorldSession::HandleHousingDecorSetEditMode(WorldPackets::Housing::HousingD
                         MeshObject* meshObj = interiorMap->GetMeshObject(meshObjGuid);
                         if (!meshObj || !meshObj->IsInWorld())
                             continue;
+
+                        // A duplicate CREATE for a GUID the client already holds kills it
+                        // (ACCESS_VIOLATION, null read) - refresh via a values update instead,
+                        // same as the fixture path below.
+                        if (player->HaveAtClient(meshObj))
+                        {
+                            meshObj->BuildValuesUpdateBlockForPlayer(&updateData, player);
+                            continue;
+                        }
 
                         meshObj->BuildCreateUpdateBlockForPlayer(&updateData, player);
                         player->m_clientGUIDs.insert(meshObjGuid);
@@ -1444,6 +1462,15 @@ void WorldSession::HandleHousingDecorRequestStorage(WorldPackets::Housing::Housi
                 MeshObject* meshObj = playerMap->GetMeshObject(meshObjGuid);
                 if (!meshObj || !meshObj->IsInWorld())
                     continue;
+
+                // A duplicate CREATE for a GUID the client already holds kills it
+                // (ACCESS_VIOLATION, null read) - refresh via a values update instead,
+                // same as the fixture path below.
+                if (player->HaveAtClient(meshObj))
+                {
+                    meshObj->BuildValuesUpdateBlockForPlayer(&updateData, player);
+                    continue;
+                }
 
                 meshObj->BuildCreateUpdateBlockForPlayer(&updateData, player);
                 player->m_clientGUIDs.insert(meshObjGuid);
