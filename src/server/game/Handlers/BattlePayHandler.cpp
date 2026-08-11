@@ -28,6 +28,7 @@
 #include "Mail.h"
 #include "ObjectMgr.h"
 #include "Player.h"
+#include "RealmList.h"
 #include "World.h"
 #include "WowTokenMgr.h"
 #include <algorithm>
@@ -44,6 +45,17 @@ namespace
     constexpr int32 RESULT_OK                       = 0;
     constexpr int32 RESULT_NOT_ENOUGH_BALANCE       = 29;
     constexpr int32 RESULT_PRODUCT_NOT_PURCHASABLE  = 57;
+
+    // Distribution-specific PurchaseResult codes, taken from the client's own generated API
+    // documentation (Blizzard_APIDocumentationGenerated/BattlepayConstantsDocumentation.lua), so these
+    // values are the client's, not ours.
+    constexpr int32 RESULT_NOT_ALLOWED_IN_GLUE_SCREEN = 27;   // ErrorBuyingProductNotAllowedInGlueScreen
+    constexpr int32 RESULT_DISTRIBUTION_NOT_FOUND     = 19;   // ErrorDistributionObjectNotFound
+    constexpr int32 RESULT_DISTRIBUTION_INVALID_TARGET = 42;  // ErrorDistributionObjectInvalidTarget
+
+    // A single distribution list must stay inside the wire's 11-bit count field; this is far below that
+    // and keeps one account from ever pushing a multi-kilobyte list.
+    constexpr size_t MAX_LISTED_ENTITLEMENTS = 64;
 
     // Delivers `count` of `itemId` in full: as much as fits into the player's bags, the remainder by
     // mail (retail parity - a near-full inventory must never turn a full-price purchase into a partial
@@ -162,8 +174,9 @@ void WorldSession::BattlePayProcessPurchase(uint32 productID)
     };
 
     // Resolve the advertised (slot) productID to its admin product via the catalog routing map.
-    // Placeholder / unrouted slots have no product -> not purchasable.
-    ShopProduct const* product = player ? sBattlePayMgr->GetProductByAdvertisedId(productID) : nullptr;
+    // Placeholder / unrouted slots have no product -> not purchasable. The lookup itself needs no
+    // player, so it also works at character select.
+    ShopProduct const* product = sBattlePayMgr->GetProductByAdvertisedId(productID);
     if (!product)
     {
         // Most cards in the shipped catalog are UNTOUCHED retail records - only the slots we reskin
@@ -175,32 +188,85 @@ void WorldSession::BattlePayProcessPurchase(uint32 productID)
         return;
     }
 
+    time_t const now = GameTime::GetGameTime();
+    bool const entitlementsEnabled = sWorld->getBoolConfig(CONFIG_SHOP_ENTITLEMENTS_ENABLED);
+
+    // A product with no deliverables is display-only (e.g. the template's showcase mounts/pets): visible
+    // in the catalog but not for sale, so it must never report a successful purchase.
+    if (product->Deliverables.empty())
+    {
+        respond(STATUS_FAILED, RESULT_PRODUCT_NOT_PURCHASABLE, 0);
+        return;
+    }
+
+    // ---- Character select: no player, so nothing can be granted and nothing can be charged ----------
+    //
+    // This is the case the Shop hits when it is opened from the glue screen. Previously it always failed
+    // (the product lookup was gated on `player`). With entitlements on, the purchase instead creates an
+    // owned-but-unapplied entitlement the player assigns to a character later.
+    //
+    // Only free products can be bought here, and that is a real constraint rather than a shortcut: the
+    // price is denominated in a character's gold, and at character select there is no character to take
+    // it from. Anything with a price is refused with the client's own
+    // ErrorBuyingProductNotAllowedInGlueScreen, which is exactly what that code is for.
+    if (!player)
+    {
+        if (!entitlementsEnabled)
+        {
+            TC_LOG_INFO("network", "BattlePay: {} tried to buy product {} at character select, but "
+                "Shop.Entitlements.Enabled is off.", GetPlayerInfo(), productID);
+            respond(STATUS_FAILED, RESULT_NOT_ALLOWED_IN_GLUE_SCREEN, 0);
+            return;
+        }
+
+        if (!product->Enabled || (product->AvailableFrom && now < product->AvailableFrom)
+            || (product->AvailableUntil && now > product->AvailableUntil))
+        {
+            respond(STATUS_FAILED, RESULT_PRODUCT_NOT_PURCHASABLE, 0);
+            return;
+        }
+
+        if (product->Currency != 0 || product->Price || product->PriceItemId)
+        {
+            TC_LOG_INFO("network", "BattlePay: {} tried to buy priced product {} at character select; only "
+                "free products can be bought without a character to charge.", GetPlayerInfo(), productID);
+            respond(STATUS_FAILED, RESULT_NOT_ALLOWED_IN_GLUE_SCREEN, 0);
+            return;
+        }
+
+        int32 const result = BattlePayCreateEntitlement(*product, purchaseID);
+        respond(result == RESULT_OK ? STATUS_DONE : STATUS_FAILED, result, 0);
+        return;
+    }
+
     // Authoritative server-side gate for everything the wire cannot express (enabled/window/level/
     // faction/hideIfOwned/condition). Also refuse a spell-only product the player already fully owns
     // so a repeat purchase never takes gold for nothing (audit C-05), regardless of the HideIfOwned flag.
-    // A product with no deliverables is display-only (e.g. the template's showcase mounts/pets): visible
-    // in the catalog but not for sale, so it must never report a successful purchase (audit parity - these
-    // had no battlepay_product row before and returned 57).
-    time_t const now = GameTime::GetGameTime();
-    if (product->Deliverables.empty()
-        || !sBattlePayMgr->IsPurchasable(*product, player, now)
+    if (!sBattlePayMgr->IsPurchasable(*product, player, now)
         || BattlePayMgr::IsAlreadyFullyOwned(*product, player))
     {
         respond(STATUS_FAILED, RESULT_PRODUCT_NOT_PURCHASABLE, 0);
         return;
     }
 
-    // Reserved / unavailable deliverable types abort the whole purchase BEFORE charging: types 4 (game
-    // time) / 5 (service) are schema-reserved with no delivery impl yet. Type 3 (WoW Token) is delivered
-    // through WowTokenMgr in the grant loop below (seam A - the shop base previously refused it with 57
-    // because no WowTokenMgr existed; the token layer now provides it). Purchase result 57 until 4/5 land.
-    for (ShopDeliverable const& d : product->Deliverables)
+    // A service deliverable (type 5) has no immediate form at all: its target is a character chosen
+    // AFTER the purchase, which is precisely what an entitlement is for. With entitlements on, such a
+    // product is sold as an entitlement even to a logged-in buyer.
+    bool const deferred = entitlementsEnabled && BattlePayMgr::NeedsEntitlement(*product, player);
+
+    // Reserved / unavailable deliverable types abort the whole purchase BEFORE charging: type 4 (game
+    // time) is schema-reserved with no delivery impl, and type 5 (service) lands here only when
+    // entitlements are off. Type 3 (WoW Token) is delivered through WowTokenMgr in the grant loop below.
+    if (!deferred)
     {
-        if (d.Type < 1 || d.Type > 3)
+        for (ShopDeliverable const& d : product->Deliverables)
         {
-            TC_LOG_DEBUG("network", "BattlePay: product {} has unsupported deliverable type {} - refused.", productID, d.Type);
-            respond(STATUS_FAILED, RESULT_PRODUCT_NOT_PURCHASABLE, 0);
-            return;
+            if (d.Type < 1 || d.Type > 3)
+            {
+                TC_LOG_DEBUG("network", "BattlePay: product {} has unsupported deliverable type {} - refused.", productID, d.Type);
+                respond(STATUS_FAILED, RESULT_PRODUCT_NOT_PURCHASABLE, 0);
+                return;
+            }
         }
     }
 
@@ -213,6 +279,53 @@ void WorldSession::BattlePayProcessPurchase(uint32 productID)
     if (product->Currency == 2 && product->PriceItemId && !player->HasItemCount(product->PriceItemId, product->PriceItemCount))
     {
         respond(STATUS_FAILED, RESULT_NOT_ENOUGH_BALANCE, product->Price);
+        return;
+    }
+
+    // ---- Deferred (entitlement) purchase by a logged-in player -------------------------------------
+    //
+    // Charge first and commit it synchronously, THEN create the entitlement. This inverts the normal
+    // grant-before-charge rule for the same reason the WoW Token path does: the entitlement is written
+    // to the auth DB immediately and durably, while the buyer's gold would otherwise sit in Player
+    // memory until the next periodic save. Charging last would mean a crash in that (minutes-long)
+    // window left the account holding a paid-for entitlement that was never paid for - the server
+    // losing value, which is the one outcome we never accept. The surviving failure is "charged, no
+    // entitlement", and that path refunds explicitly below.
+    if (deferred)
+    {
+        if (product->Currency == 1 && product->Price)
+            player->ModifyMoney(-int64(product->Price));
+        if (product->Currency == 2 && product->PriceItemId)
+            player->DestroyItemCount(product->PriceItemId, product->PriceItemCount, true);
+
+        {
+            CharacterDatabaseTransaction trans = CharacterDatabase.BeginTransaction();
+            player->SaveInventoryAndGoldToDB(trans);
+            CharacterDatabase.DirectCommitTransaction(trans);
+        }
+
+        int32 const result = BattlePayCreateEntitlement(*product, purchaseID);
+        if (result != RESULT_OK)
+        {
+            // Give the price back: the player paid and got nothing.
+            if (product->Currency == 1 && product->Price)
+                player->ModifyMoney(int64(product->Price));
+            if (product->Currency == 2 && product->PriceItemId)
+                BattlePayDeliverItem(player, product->PriceItemId, product->PriceItemCount);
+
+            CharacterDatabaseTransaction trans = CharacterDatabase.BeginTransaction();
+            player->SaveInventoryAndGoldToDB(trans);
+            CharacterDatabase.DirectCommitTransaction(trans);
+
+            TC_LOG_ERROR("network", "BattlePay: entitlement for product {} could not be created for {}; "
+                "the price was refunded.", productID, GetPlayerInfo());
+            respond(STATUS_FAILED, result, product->Price);
+            return;
+        }
+
+        TC_LOG_INFO("network", "BattlePay: {} purchased product {} ({}) as an entitlement for {} (currency {}).",
+            GetPlayerInfo(), productID, product->Name, product->Price, product->Currency);
+        respond(STATUS_DONE, RESULT_OK, product->Price);
         return;
     }
 
@@ -394,13 +507,77 @@ void WorldSession::HandleBattlePayOpenCheckout(WorldPackets::BattlePay::OpenChec
     SendGenerateSsoToken(openCheckout.ClientToken);
 }
 
-// Replays the captured distribution-list blob unsolicited at session start. There is no CMSG that
-// requests it; retail pushes it after the glue feature status, and the client's StoreFrame_IsLoading
-// gate stays stuck until HasDistributionList() flips, which this response does.
+namespace
+{
+    // Renders one entitlement as the wire object the client parses. The structure is proven (see
+    // DistributionObject in BattlePayPackets.h); what is OURS to choose is which values go in it.
+    //
+    // `DeliverableID` is set to the product id because this core has no separate deliverable-id
+    // namespace - shop_product_deliverable is keyed (productId, seq). The client does not need it to
+    // resolve anything: the full deliverable record is embedded inline right after it, exactly as in
+    // the capture.
+    void BuildDistributionObject(ShopEntitlement const& entitlement, WorldPackets::BattlePay::DistributionObject& out)
+    {
+        out.DistributionID = entitlement.DistributionID;
+        out.Status         = entitlement.Status;
+        out.DeliverableID  = entitlement.ProductID;
+        out.PurchaseID     = entitlement.PurchaseID;
+        // LicenseGameAccountGUID / TargetPlayer stay empty: an unassigned entitlement has no target, and
+        // the capture's licence guid has no server-side meaning we could reproduce honestly.
+
+        ShopProduct const* product = sBattlePayMgr->GetProduct(entitlement.ProductID);
+        if (!product || product->Deliverables.empty())
+            return;                                 // hasDeliverable stays 0 - structurally valid
+
+        WorldPackets::BattlePay::DistributionDeliverable& deliverable = out.Deliverable.emplace();
+        deliverable.DeliverableID = entitlement.ProductID;
+        deliverable.Name = product->Name.substr(0, 255);        // client buffer is char[256]
+
+        // Map our deliverable vocabulary onto the catalog's. A type-5 (service) row carries the
+        // catalog's own deliverable type in `id` (1 CharacterBoost, 5 NameChange, 6 FactionChange,
+        // 8 RaceChange, 11 CharacterTransfer), so it passes straight through.
+        ShopDeliverable const& first = product->Deliverables.front();
+        switch (first.Type)
+        {
+            case 1:                                             // item
+                deliverable.Type = 14;                          // Item/Toy
+                deliverable.ItemID = first.Id;
+                deliverable.Quantity = first.Count;
+                break;
+            case 2:                                             // spell (mount / toy / appearance)
+                deliverable.Type = 3;                           // Mount
+                deliverable.MountSpellID = first.Id;
+                break;
+            case 3:                                             // WoW Token
+                deliverable.Type = 4;                           // WowToken
+                deliverable.Quantity = first.Count;
+                break;
+            case 5:                                             // service
+                deliverable.Type = first.Id;
+                break;
+            default:
+                break;
+        }
+    }
+}
+
+// Sent unsolicited at session start (character select) and again at login. There is no CMSG that
+// requests it - the client has no such opcode in this build. The client's StoreFrame_IsLoading gate
+// keeps the Shop on "Loading, please wait" until C_StoreSecure.HasDistributionList() flips, which this
+// response does.
+//
+// With entitlements off this replays the captured blob exactly as before. With entitlements on it
+// answers from this account's real, unapplied entitlements - so the load has to finish first.
 void WorldSession::SendBattlePayDistributionList()
 {
     if (!sWorld->getBoolConfig(CONFIG_SHOP_ENABLED))
         return;
+
+    if (sWorld->getBoolConfig(CONFIG_SHOP_ENTITLEMENTS_ENABLED))
+    {
+        LoadBattlePayEntitlements(true);
+        return;
+    }
 
     if (!sBattlePayMgr->HasDistributionList())
         return;
@@ -408,6 +585,306 @@ void WorldSession::SendBattlePayDistributionList()
     WorldPackets::BattlePay::GetDistributionListResponse response;
     response.RawData = &sBattlePayMgr->GetDistributionListBlob();
     SendPacket(response.Write());
+}
+
+// Refreshes this session's cached entitlements from the account store, optionally pushing the list
+// afterwards. Async like the purchase list; the callback runs on the world thread via _queryProcessor,
+// which is serviced at character select as well as in world.
+void WorldSession::LoadBattlePayEntitlements(bool sendList)
+{
+    if (!sWorld->getBoolConfig(CONFIG_SHOP_ENABLED) || !sWorld->getBoolConfig(CONFIG_SHOP_ENTITLEMENTS_ENABLED))
+        return;
+
+    LoginDatabasePreparedStatement* stmt = LoginDatabase.GetPreparedStatement(LOGIN_SEL_BATTLEPAY_ENTITLEMENT_ACCOUNT);
+    stmt->setUInt32(0, GetAccountId());
+
+    _queryProcessor.AddCallback(LoginDatabase.AsyncQuery(stmt)
+        .WithPreparedCallback([this, sendList](PreparedQueryResult result)
+    {
+        _battlePayEntitlements.clear();
+        if (result)
+        {
+            do
+            {
+                Field* fields = result->Fetch();
+                ShopEntitlement& e = _battlePayEntitlements.emplace_back();
+                e.DistributionID = fields[0].GetUInt64();
+                e.ProductID      = fields[1].GetUInt32();
+                e.ServiceType    = fields[2].GetUInt8();
+                e.Status         = fields[3].GetUInt8();
+                e.PurchaseID     = fields[4].GetUInt64();
+                e.CreateTime     = fields[5].GetInt64();
+            }
+            while (result->NextRow());
+        }
+
+        if (sendList)
+            SendBattlePayDistributionListNow();
+    }));
+}
+
+void WorldSession::SendBattlePayDistributionListNow()
+{
+    WorldPackets::BattlePay::GetDistributionListResponse response;
+    response.BuildFromObjects = true;
+    response.Result = RESULT_OK;
+
+    for (ShopEntitlement const& e : _battlePayEntitlements)
+    {
+        if (e.Status != SHOP_ENTITLEMENT_AVAILABLE)
+            continue;
+        if (response.Distributions.size() >= MAX_LISTED_ENTITLEMENTS)
+            break;
+        BuildDistributionObject(e, response.Distributions.emplace_back());
+    }
+
+    SendPacket(response.Write());
+}
+
+// Pushes one entitlement so the client fires PRODUCT_DISTRIBUTIONS_UPDATED and refreshes its token row.
+void WorldSession::SendBattlePayDistributionUpdate(ShopEntitlement const& entitlement)
+{
+    WorldPackets::BattlePay::DistributionUpdate update;
+    BuildDistributionObject(entitlement, update.Distribution);
+    SendPacket(update.Write());
+}
+
+// Turns a purchase into an owned-but-unapplied entitlement instead of an immediate grant. Returns the
+// PurchaseResult to report; RESULT_OK means the entitlement exists and the caller may charge.
+int32 WorldSession::BattlePayCreateEntitlement(ShopProduct const& product, uint64 purchaseID)
+{
+    // Cap what one account may hoard. Free products at character select are otherwise an unbounded row
+    // generator (the 2 s purchase throttle limits the rate, not the total), and the wire cannot show
+    // more than this anyway.
+    size_t available = 0;
+    for (ShopEntitlement const& e : _battlePayEntitlements)
+        if (e.Status == SHOP_ENTITLEMENT_AVAILABLE)
+            ++available;
+
+    if (available >= MAX_LISTED_ENTITLEMENTS)
+    {
+        TC_LOG_INFO("network", "BattlePay: {} already holds {} unapplied entitlements; refusing another.",
+            GetPlayerInfo(), available);
+        return RESULT_PRODUCT_NOT_PURCHASABLE;
+    }
+
+    uint64 const distributionId = sBattlePayMgr->CreateEntitlement(GetAccountId(), product.ProductID,
+        BattlePayMgr::GetServiceType(product), purchaseID);
+    if (!distributionId)
+        return RESULT_PRODUCT_NOT_PURCHASABLE;
+
+    ShopEntitlement& e = _battlePayEntitlements.emplace_back();
+    e.DistributionID = distributionId;
+    e.ProductID      = product.ProductID;
+    e.ServiceType    = BattlePayMgr::GetServiceType(product);
+    e.Status         = SHOP_ENTITLEMENT_AVAILABLE;
+    e.PurchaseID     = purchaseID;
+    e.CreateTime     = GameTime::GetGameTime();
+
+    SendBattlePayDistributionUpdate(e);
+    SendBattlePayDistributionListNow();
+    return RESULT_OK;
+}
+
+// Applies one owned entitlement to a character the client has chosen.
+//
+// The request's four fields are structurally proven from the client's serializer, but the packet has
+// never been seen on the wire, so nothing here trusts the field NAMES either: the DistributionID must
+// be one this server issued to THIS account, and the target must be a character THIS session
+// enumerated. A crafted or misread packet therefore cannot grant anything.
+void WorldSession::HandleBattlePayDistributionAssignToTarget(WorldPackets::BattlePay::DistributionAssignToTarget& assign)
+{
+    if (!sWorld->getBoolConfig(CONFIG_SHOP_ENABLED) || !sWorld->getBoolConfig(CONFIG_SHOP_ENTITLEMENTS_ENABLED))
+        return;
+
+    // Diagnostic first: this is the first build in which we answer this opcode at all, and this log is
+    // what will confirm the field reading against a real client.
+    TC_LOG_INFO("network", "BattlePay: DistributionAssignToTarget from {}: clientToken={} distributionID={} "
+        "target={} productChoice={}", GetPlayerInfo(), assign.ClientToken, assign.DistributionID,
+        assign.TargetCharacter.ToString(), assign.ProductChoice);
+
+    if (!sWorld->getBoolConfig(CONFIG_SHOP_ENTITLEMENT_ASSIGN_ENABLED))
+    {
+        TC_LOG_INFO("network", "BattlePay: assignment ignored - Shop.Entitlements.AssignEnabled is off.");
+        return;
+    }
+
+    auto respond = [&](int32 result)
+    {
+        WorldPackets::BattlePay::StartDistributionAssignToTargetResponse response;
+        response.Result = uint32(result);
+        response.DistributionID = assign.DistributionID;
+        SendPacket(response.Write());
+    };
+
+    // 1. Is it ours, and still unapplied? The cache is authoritative for "what this account owns"; the
+    //    compare-and-swap below is authoritative for "nobody else took it first".
+    ShopEntitlement const* wanted = nullptr;
+    for (ShopEntitlement const& e : _battlePayEntitlements)
+        if (e.Status == SHOP_ENTITLEMENT_AVAILABLE && e.DistributionID == assign.DistributionID)
+            wanted = &e;
+
+    if (!wanted)
+    {
+        TC_LOG_INFO("network", "BattlePay: {} named entitlement {}, which is not an available entitlement of "
+            "this account ({} cached).", GetPlayerInfo(), assign.DistributionID, _battlePayEntitlements.size());
+        respond(RESULT_DISTRIBUTION_NOT_FOUND);
+        return;
+    }
+
+    // 2. Is the target really one of this account's characters? _legitCharacters is filled from the
+    //    character enumeration, so this also rejects a guid belonging to somebody else entirely.
+    if (assign.TargetCharacter.IsEmpty() || !IsLegitCharacterForAccount(assign.TargetCharacter))
+    {
+        TC_LOG_INFO("network", "BattlePay: {} tried to assign entitlement {} to {}, which is not a character "
+            "of this account.", GetPlayerInfo(), assign.DistributionID, assign.TargetCharacter.ToString());
+        respond(RESULT_DISTRIBUTION_INVALID_TARGET);
+        return;
+    }
+
+    uint64 const distributionId = wanted->DistributionID;
+    uint64 const purchaseId = wanted->PurchaseID;
+
+    // 3. Claim it. This is the only step that may never run twice, and the compare-and-swap in the
+    //    manager guarantees that: a replayed assign, or a second realm on the shared auth DB, loses the
+    //    race and lands here with a failure instead of a second grant.
+    uint64 claimToken = 0;
+    ShopEntitlement claimed;
+    int32 claimResult = 0;
+    if (!sBattlePayMgr->ClaimEntitlement(GetAccountId(), distributionId, sRealmList->GetCurrentRealmId().Realm,
+        assign.TargetCharacter.GetCounter(), claimToken, claimed, claimResult))
+    {
+        TC_LOG_INFO("network", "BattlePay: {} could not claim entitlement {} (result {}).",
+            GetPlayerInfo(), distributionId, claimResult);
+        respond(claimResult);
+        LoadBattlePayEntitlements(true);            // resync: our cache was stale
+        return;
+    }
+
+    // 4. Commit the claim as BOUND. The payload is handed over the next time that character logs in -
+    //    the target is offline right now (this is character select), and delivering through the proven
+    //    online path beats hand-writing another character's inventory.
+    if (!sBattlePayMgr->TransitionEntitlement(distributionId, SHOP_ENTITLEMENT_CLAIMED, claimToken,
+        SHOP_ENTITLEMENT_BOUND, 0))
+    {
+        // Could not finish the hand-off: put it back, so the player still owns what they paid for.
+        sBattlePayMgr->TransitionEntitlement(distributionId, SHOP_ENTITLEMENT_CLAIMED, claimToken,
+            SHOP_ENTITLEMENT_AVAILABLE, 0);
+        TC_LOG_ERROR("network", "BattlePay: failed to bind entitlement {} to {}; returned it to the account.",
+            distributionId, assign.TargetCharacter.ToString());
+        respond(RESULT_PRODUCT_NOT_PURCHASABLE);
+        LoadBattlePayEntitlements(true);
+        return;
+    }
+
+    TC_LOG_INFO("network", "BattlePay: {} assigned entitlement {} (product {}) to {}; it will be delivered "
+        "at that character's next login.", GetPlayerInfo(), distributionId, claimed.ProductID,
+        assign.TargetCharacter.ToString());
+
+    respond(RESULT_OK);
+
+    // Tell the client the entitlement moved on, then resend the (now shorter) list.
+    claimed.Status = SHOP_ENTITLEMENT_BOUND;
+    claimed.PurchaseID = purchaseId;
+    SendBattlePayDistributionUpdate(claimed);
+    LoadBattlePayEntitlements(true);
+}
+
+// Delivers every entitlement bound to the character that just entered the world.
+//
+// Ordering is deliberately mark-then-deliver, the inverse of the normal grant-before-charge rule and for
+// the same reason the WoW Token path inverts it: the entitlement is already paid for and already durable
+// in the auth DB, so the only failure worth engineering against is delivering it twice. Consuming the row
+// first means a crash mid-delivery costs the player one payload (refundable by a GM) instead of letting a
+// relog loop mint goods forever.
+void WorldSession::RedeemBattlePayEntitlements()
+{
+    if (!sWorld->getBoolConfig(CONFIG_SHOP_ENABLED) || !sWorld->getBoolConfig(CONFIG_SHOP_ENTITLEMENTS_ENABLED))
+        return;
+
+    Player* player = GetPlayer();
+    if (!player)
+        return;
+
+    LoginDatabasePreparedStatement* stmt = LoginDatabase.GetPreparedStatement(LOGIN_SEL_BATTLEPAY_ENTITLEMENT_PENDING_CHAR);
+    stmt->setUInt32(0, sRealmList->GetCurrentRealmId().Realm);
+    stmt->setUInt64(1, player->GetGUID().GetCounter());
+
+    _queryProcessor.AddCallback(LoginDatabase.AsyncQuery(stmt)
+        .WithPreparedCallback([this](PreparedQueryResult result)
+    {
+        if (!result)
+            return;
+
+        Player* target = GetPlayer();
+        if (!target || !target->IsInWorld())
+            return;
+
+        do
+        {
+            Field* fields = result->Fetch();
+            uint64 const distributionId = fields[0].GetUInt64();
+            uint32 const productId      = fields[1].GetUInt32();
+            uint8 const serviceType     = fields[2].GetUInt8();
+
+            // Consume first (see the ordering note above). A losing racer simply finds nothing to do.
+            if (!sBattlePayMgr->TransitionEntitlement(distributionId, SHOP_ENTITLEMENT_BOUND, 0,
+                SHOP_ENTITLEMENT_FINISHED, 0))
+            {
+                TC_LOG_INFO("network", "BattlePay: entitlement {} was already consumed; skipping.", distributionId);
+                continue;
+            }
+
+            if (serviceType != 0)
+            {
+                // A VAS service (boost, rename, faction/race change, transfer). This core implements none
+                // of them, so refuse loudly rather than silently swallowing a paid entitlement - and hand
+                // it straight back so nothing is lost.
+                sBattlePayMgr->TransitionEntitlement(distributionId, SHOP_ENTITLEMENT_FINISHED, 0,
+                    SHOP_ENTITLEMENT_AVAILABLE, 0);
+                TC_LOG_ERROR("network", "BattlePay: entitlement {} names VAS service type {}, which this core "
+                    "cannot perform; returned it to account {}.", distributionId, serviceType, GetAccountId());
+                continue;
+            }
+
+            ShopProduct const* product = sBattlePayMgr->GetProduct(productId);
+            if (!product || product->Deliverables.empty())
+            {
+                sBattlePayMgr->TransitionEntitlement(distributionId, SHOP_ENTITLEMENT_FINISHED, 0,
+                    SHOP_ENTITLEMENT_AVAILABLE, 0);
+                TC_LOG_ERROR("network", "BattlePay: entitlement {} points at product {}, which no longer exists "
+                    "or has no deliverables; returned it to account {}.", distributionId, productId, GetAccountId());
+                continue;
+            }
+
+            for (ShopDeliverable const& d : product->Deliverables)
+            {
+                switch (d.Type)
+                {
+                    case 1:
+                        BattlePayDeliverItem(target, d.Id, d.Count);
+                        break;
+                    case 2:
+                        if (!target->HasSpell(d.Id))
+                            target->LearnSpell(d.Id, false);
+                        break;
+                    case 3:
+                        for (uint32 i = 0; i < std::max<uint32>(d.Count, 1u); ++i)
+                            sWowTokenMgr->CreateToken(GetAccountId(), WOW_TOKEN_STATE_AUCTIONABLE);
+                        SendCommerceTokenUpdate();
+                        break;
+                    default:
+                        TC_LOG_ERROR("network", "BattlePay: entitlement {} carries unsupported deliverable type {}.",
+                            distributionId, d.Type);
+                        break;
+                }
+            }
+
+            TC_LOG_INFO("network", "BattlePay: delivered entitlement {} (product {} '{}') to {}.",
+                distributionId, productId, product->Name, target->GetName());
+        }
+        while (result->NextRow());
+    }));
 }
 
 void WorldSession::HandleBattlePayGetPurchaseList(WorldPackets::BattlePay::GetPurchaseList& /*getPurchaseList*/)

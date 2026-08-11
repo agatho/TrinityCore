@@ -19,6 +19,9 @@
 #define TRINITYCORE_BATTLE_PAY_PACKETS_H
 
 #include "Packet.h"
+#include "ObjectGuid.h"
+#include "Optional.h"
+#include <string>
 #include <vector>
 
 namespace WorldPackets
@@ -57,10 +60,69 @@ namespace WorldPackets
             std::vector<uint8> const* RawData = nullptr;
         };
 
-        // Sent unsolicited at session start (there is no matching CMSG). The client's shop panel gate
-        // StoreFrame_IsLoading blocks until HasDistributionList() is true, which this response flips.
-        // We replay a byte-exact 107 B blob captured from a real 68275 session (6 B header + 101 B
-        // JamBattlePayDistributionObject record). RawData is the message BODY (opcode header prepended).
+        // JamBattlePayDeliverable - what a product actually hands over. Layout recovered from the client's
+        // own parser (sub_7FF729139460 @ image base 0x7FF728AA0000) and validated byte-exact against the
+        // 68275 capture, where the embedded record decodes with zero remainder to catalog deliverable
+        // 1161 { type = 1 CharacterBoost, boostID = 11, flags = 1620 } - the very values our decoded
+        // catalog carries for that deliverable, which is what closes the loop on this struct.
+        //
+        // `Type` is the catalog's own deliverable vocabulary: 1 CharacterBoost, 2 BattlePet, 3 Mount,
+        // 4 WowToken, 5 NameChange, 6 FactionChange, 8 RaceChange, 11 CharacterTransfer, 13 TransmogSet,
+        // 14 Item/Toy, 18 GameUpgrade, 26 TransmogEnsemble.
+        struct DistributionDeliverable
+        {
+            uint32 DeliverableID = 0;
+            uint32 Type = 0;
+            uint32 ItemID = 0;
+            uint32 Quantity = 0;
+            uint32 MountSpellID = 0;
+            uint32 BattlePetCreatureID = 0;
+            uint32 BoostID = 0;
+            uint32 Flags = 0;
+            uint32 TransItemModifiedAppearanceID = 0;
+            uint32 TransmogSetID = 0;
+            uint32 CharTitleID = 0;
+            uint32 SpellItemEnchantmentID = 0;
+            uint32 WarbandSceneID = 0;
+            std::string Name;
+            bool AlreadyOwns = false;
+            // Choices and DisplayInfo are never emitted: DisplayInfo is a ~21 KB bit-packed struct that
+            // has NOT been decoded (it is absent from both capture samples, has_displayInfo = 0), so we
+            // always write the "no choices, no display info" form the captures show.
+        };
+
+        // JamBattlePayDistributionObject - one entitlement. Layout recovered from the client's parser
+        // (sub_7FF729139990) and validated byte-exact: the captured 101-byte body decodes to
+        // { distributionID = 0x1E828000009EECAC, status = 1, deliverableID = 1161,
+        //   licenseGameAccountGUID = packed mask 0x800F, targetPlayer = empty, realms = 0,
+        //   purchaseID = 0, manualReview = 0, flags = 0x80 (hasDeliverable) } + the 55-byte deliverable,
+        // consuming all 101 bytes with nothing left over.
+        struct DistributionObject
+        {
+            uint64 DistributionID = 0;
+            uint32 Status = 0;              // 1 = available; the only value ever observed on the wire
+            uint32 DeliverableID = 0;
+            ObjectGuid LicenseGameAccountGUID;
+            ObjectGuid TargetPlayer;        // empty while unassigned
+            uint32 TargetNativeRealm = 0;
+            uint32 TargetVirtualRealm = 0;
+            uint64 PurchaseID = 0;
+            uint32 ManualReview = 0;
+            bool Revoked = false;
+            Optional<DistributionDeliverable> Deliverable;
+        };
+
+        // Sent unsolicited at session start (character select) and again at login. There is no CMSG that
+        // requests it - confirmed against the client's opcode table: no CMSG_BATTLE_PAY_GET_DISTRIBUTION_LIST
+        // exists in this build. The client's StoreFrame_IsLoading gate keeps the Shop on "Loading, please
+        // wait" until C_StoreSecure.HasDistributionList() flips, which this response does.
+        //
+        // Header PROVEN: the captured body starts `00 00 00 00 00 20`, and `uint32 Result` followed by
+        // WriteBits(1, 11) + FlushBits() reproduces those six bytes exactly. The client reads the count
+        // back as `(b0 << 3) | (b1 >> 5)`, which is precisely TC's 11-bit MSB-first encoding. An empty
+        // list is the 6-byte form, also observed live.
+        //
+        // RawData replays the captured blob instead, and is what we send while entitlements are off.
         class GetDistributionListResponse final : public ServerPacket
         {
         public:
@@ -69,6 +131,59 @@ namespace WorldPackets
             WorldPacket const* Write() override;
 
             std::vector<uint8> const* RawData = nullptr;
+
+            bool BuildFromObjects = false;
+            uint32 Result = 0;                              // PurchaseResult; 0 = Ok in every capture
+            std::vector<DistributionObject> Distributions;
+        };
+
+        // Pushes a single changed entitlement: the body is exactly one DistributionObject with NO header
+        // of any kind (the client's parser sub_7FF7290A8090 does nothing but read the object). Proven by
+        // the 68275 capture, where this opcode appears 297 times with a 101-byte body byte-identical to
+        // the object embedded in the 107-byte list response. Receiving it makes the client fire
+        // PRODUCT_DISTRIBUTIONS_UPDATED, which refreshes the character-select token row and the Shop.
+        class DistributionUpdate final : public ServerPacket
+        {
+        public:
+            explicit DistributionUpdate() : ServerPacket(SMSG_BATTLE_PAY_DISTRIBUTION_UPDATE, 101) { }
+
+            WorldPacket const* Write() override;
+
+            DistributionObject Distribution;
+        };
+
+        // Client asks to apply one owned entitlement to a character it picked. Layout PROVEN by
+        // disassembling the client's serializer (sub_7FF729079930): it writes the opcode and then
+        // exactly uint32, uint64, PackedGuid, uint32. This packet appears in none of our captures, so the
+        // field NAMES below are the plausible reading rather than a client-derived fact - which is why
+        // the handler additionally validates both ids against values this server issued before acting.
+        class DistributionAssignToTarget final : public ClientPacket
+        {
+        public:
+            explicit DistributionAssignToTarget(WorldPacket&& packet) : ClientPacket(CMSG_BATTLE_PAY_DISTRIBUTION_ASSIGN_TO_TARGET, std::move(packet)) { }
+
+            void Read() override;
+
+            uint32 ClientToken = 0;
+            uint64 DistributionID = 0;
+            ObjectGuid TargetCharacter;
+            uint32 ProductChoice = 0;       // a ChrSpecialization id for boosts, per the external fork
+        };
+
+        // Server's answer to an assign. Structure PROVEN by disassembling the client's parser
+        // (sub_7FF7290A8F70): uint32, uint32, uint64. Never observed on the wire, so the field meanings
+        // are inferred - the first uint32 is taken to be the PurchaseResult the client surfaces through
+        // PRODUCT_ASSIGN_TO_TARGET_FAILED, and the middle uint32 is sent as 0 because we do not know it.
+        class StartDistributionAssignToTargetResponse final : public ServerPacket
+        {
+        public:
+            explicit StartDistributionAssignToTargetResponse() : ServerPacket(SMSG_BATTLE_PAY_START_DISTRIBUTION_ASSIGN_TO_TARGET_RESPONSE, 16) { }
+
+            WorldPacket const* Write() override;
+
+            uint32 Result = 0;
+            uint32 Unknown = 0;
+            uint64 DistributionID = 0;
         };
 
         // Client initiates an in-game purchase. Layout from the client Write method (0x5d9f90):

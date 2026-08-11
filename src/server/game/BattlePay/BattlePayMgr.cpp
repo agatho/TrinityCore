@@ -23,6 +23,7 @@
 #include "GameTime.h"
 #include "Log.h"
 #include "Player.h"
+#include "Random.h"
 #include "Realm.h"
 #include "RealmList.h"
 #include "Shop2Service.h"
@@ -36,6 +37,7 @@ namespace
 {
     constexpr uint32 DISPLAY_FLAG_HIDDEN_PRICE   = 8;
     constexpr uint32 DISPLAY_FLAG_HIDE_WHEN_OWNED = 256;
+
 
     bool InWindow(ShopProduct const& p, time_t now)
     {
@@ -114,6 +116,17 @@ void BattlePayMgr::Load()
         _purchaseCounter = (*maxIdResult)[0].GetUInt64();
     else
         _purchaseCounter = realmBase;
+
+    // DistributionIDs are allocated on exactly the same terms as PurchaseIDs: persistent, monotonic and
+    // namespaced by realm, so an id the client is holding never comes to mean a different entitlement.
+    LoginDatabasePreparedStatement* distStmt = LoginDatabase.GetPreparedStatement(LOGIN_SEL_BATTLEPAY_ENTITLEMENT_MAXID);
+    distStmt->setUInt64(0, realmBase);
+    distStmt->setUInt64(1, realmBase | UI64LIT(0xFFFFFFFF));
+    PreparedQueryResult maxDistResult = LoginDatabase.Query(distStmt);
+    if (maxDistResult && !(*maxDistResult)[0].IsNull())
+        _distributionCounter = (*maxDistResult)[0].GetUInt64();
+    else
+        _distributionCounter = realmBase;
 }
 
 void BattlePayMgr::RecordPurchase(uint32 accountId, uint64 purchaseID, int32 status, int32 resultCode,
@@ -130,6 +143,143 @@ void BattlePayMgr::RecordPurchase(uint32 accountId, uint64 purchaseID, int32 sta
     stmt->setInt64(7, GameTime::GetGameTime());
     stmt->setString(8, std::string());     // walletName: empty on this core (sent record-final on the wire)
     LoginDatabase.Execute(stmt);
+}
+
+uint8 BattlePayMgr::GetServiceType(ShopProduct const& product)
+{
+    for (ShopDeliverable const& d : product.Deliverables)
+        if (d.Type == 5)
+            return uint8(d.Id);
+    return 0;
+}
+
+bool BattlePayMgr::NeedsEntitlement(ShopProduct const& product, Player* player)
+{
+    // A service deliverable never has an immediate form: its target is a character chosen after the
+    // purchase, so it always becomes an entitlement even for a logged-in buyer.
+    if (GetServiceType(product) != 0)
+        return true;
+
+    // Otherwise it is only deferred because there is nobody to deliver to - i.e. we are at character
+    // select. A product with no deliverables at all is display-only and never reaches here.
+    return player == nullptr && !product.Deliverables.empty();
+}
+
+uint64 BattlePayMgr::CreateEntitlement(uint32 accountId, uint32 productId, uint8 serviceType, uint64 purchaseId)
+{
+    uint64 const distributionId = GenerateDistributionID();
+    time_t const now = GameTime::GetGameTime();
+
+    LoginDatabasePreparedStatement* stmt = LoginDatabase.GetPreparedStatement(LOGIN_INS_BATTLEPAY_ENTITLEMENT);
+    stmt->setUInt64(0, distributionId);
+    stmt->setUInt32(1, accountId);
+    stmt->setUInt32(2, productId);
+    stmt->setUInt8(3, serviceType);
+    stmt->setUInt8(4, SHOP_ENTITLEMENT_AVAILABLE);
+    stmt->setUInt64(5, purchaseId);
+    stmt->setInt64(6, now);
+    stmt->setInt64(7, now);
+    LoginDatabase.DirectExecute(stmt);
+
+    // Read it back: a synchronous insert that silently failed (duplicate id after a hand-edited table,
+    // lost connection) must not be reported as an entitlement the buyer now owns and can be charged for.
+    LoginDatabasePreparedStatement* verify = LoginDatabase.GetPreparedStatement(LOGIN_SEL_BATTLEPAY_ENTITLEMENT_BY_ID);
+    verify->setUInt64(0, distributionId);
+    PreparedQueryResult result = LoginDatabase.Query(verify);
+    if (!result || (*result)[0].GetUInt32() != accountId)
+    {
+        TC_LOG_ERROR("network", "BattlePay: failed to persist entitlement {} (account {}, product {}).",
+            distributionId, accountId, productId);
+        return 0;
+    }
+
+    TC_LOG_INFO("network", "BattlePay: created entitlement {} for account {} (product {}, service {}).",
+        distributionId, accountId, productId, serviceType);
+    return distributionId;
+}
+
+bool BattlePayMgr::ClaimEntitlement(uint32 accountId, uint64 distributionId, uint32 realmId, uint64 targetCharacter,
+    uint64& outToken, ShopEntitlement& outEntitlement, int32& outResult)
+{
+    // Client PurchaseResult codes, straight out of the client's own generated API documentation
+    // (Blizzard_APIDocumentationGenerated/BattlepayConstantsDocumentation.lua).
+    constexpr int32 RESULT_DISTRIBUTION_NOT_FOUND       = 19;
+    constexpr int32 RESULT_DISTRIBUTION_ALREADY_ASSIGNED = 20;
+    constexpr int32 RESULT_DISTRIBUTION_WRONG_ACCOUNT   = 65;
+
+    outResult = RESULT_DISTRIBUTION_NOT_FOUND;
+
+    // A token of 0 is the "unclaimed" sentinel in the table, so never hand one out.
+    uint64 token = (uint64(rand32()) << 32) | rand32();
+    if (!token)
+        token = 1;
+
+    // Compare-and-swap: claim only if the row is still AVAILABLE and still ours.
+    LoginDatabasePreparedStatement* claim = LoginDatabase.GetPreparedStatement(LOGIN_UPD_BATTLEPAY_ENTITLEMENT_CLAIM);
+    claim->setUInt64(0, token);
+    claim->setUInt32(1, realmId);
+    claim->setUInt64(2, targetCharacter);
+    claim->setInt64(3, GameTime::GetGameTime());
+    claim->setUInt64(4, distributionId);
+    claim->setUInt32(5, accountId);
+    LoginDatabase.DirectExecute(claim);
+
+    // Read the row back and proceed only if OUR token is the one sitting there. This is what makes the
+    // claim atomic without an affected-rows count: a racing claimant either never wrote (the status
+    // guard rejected it) or wrote first, in which case the token we read back is not ours and we lose.
+    LoginDatabasePreparedStatement* verify = LoginDatabase.GetPreparedStatement(LOGIN_SEL_BATTLEPAY_ENTITLEMENT_BY_ID);
+    verify->setUInt64(0, distributionId);
+    PreparedQueryResult result = LoginDatabase.Query(verify);
+    if (!result)
+        return false;
+
+    Field* fields = result->Fetch();
+    uint32 const rowAccount = fields[0].GetUInt32();
+    uint8 const rowStatus   = fields[3].GetUInt8();
+    uint64 const rowToken   = fields[4].GetUInt64();
+
+    if (rowAccount != accountId)
+    {
+        outResult = RESULT_DISTRIBUTION_WRONG_ACCOUNT;
+        return false;
+    }
+    if (rowStatus != SHOP_ENTITLEMENT_CLAIMED || rowToken != token)
+    {
+        // Either it was already spent, or another claimant got there first.
+        outResult = rowStatus == SHOP_ENTITLEMENT_AVAILABLE
+            ? RESULT_DISTRIBUTION_NOT_FOUND : RESULT_DISTRIBUTION_ALREADY_ASSIGNED;
+        return false;
+    }
+
+    outToken = token;
+    outEntitlement.DistributionID = distributionId;
+    outEntitlement.ProductID      = fields[1].GetUInt32();
+    outEntitlement.ServiceType    = fields[2].GetUInt8();
+    outEntitlement.Status         = rowStatus;
+    outResult = 0;
+    return true;
+}
+
+bool BattlePayMgr::TransitionEntitlement(uint64 distributionId, uint8 fromStatus, uint64 fromToken,
+    uint8 toStatus, uint64 toToken)
+{
+    LoginDatabasePreparedStatement* stmt = LoginDatabase.GetPreparedStatement(LOGIN_UPD_BATTLEPAY_ENTITLEMENT_STATUS);
+    stmt->setUInt8(0, toStatus);
+    stmt->setUInt64(1, toToken);
+    stmt->setInt64(2, GameTime::GetGameTime());
+    stmt->setUInt64(3, distributionId);
+    stmt->setUInt8(4, fromStatus);
+    stmt->setUInt64(5, fromToken);
+    LoginDatabase.DirectExecute(stmt);
+
+    LoginDatabasePreparedStatement* verify = LoginDatabase.GetPreparedStatement(LOGIN_SEL_BATTLEPAY_ENTITLEMENT_BY_ID);
+    verify->setUInt64(0, distributionId);
+    PreparedQueryResult result = LoginDatabase.Query(verify);
+    if (!result)
+        return false;
+
+    Field* fields = result->Fetch();
+    return fields[3].GetUInt8() == toStatus && fields[4].GetUInt64() == toToken;
 }
 
 void BattlePayMgr::LoadProducts()
