@@ -9413,7 +9413,6 @@ void HousingRoomData::WriteCreate(EnumFlag<UpdateFieldFlag> fieldVisibilityFlags
     data << int32(Flags);
     data << uint32(MeshObjects.size());
     data << uint32(Doors.size());
-    data << int32(FloorIndex);
     for (uint32 i = 0; i < MeshObjects.size(); ++i)
     {
         data << MeshObjects[i];
@@ -9431,7 +9430,7 @@ void HousingRoomData::WriteUpdate(EnumFlag<UpdateFieldFlag> fieldVisibilityFlags
 
 void HousingRoomData::WriteUpdate(Mask const& changesMask, ByteBuffer& data, Player const* receiver, BaseEntity const* owner, bool ignoreNestedChangesMask) const
 {
-    data.WriteBits(changesMask.GetBlock(0), 7);
+    data.WriteBits(changesMask.GetBlock(0), 6);
 
     if (changesMask[0])
     {
@@ -9485,10 +9484,6 @@ void HousingRoomData::WriteUpdate(Mask const& changesMask, ByteBuffer& data, Pla
         {
             data << int32(Flags);
         }
-        if (changesMask[6])
-        {
-            data << int32(FloorIndex);
-        }
     }
 }
 
@@ -9499,7 +9494,6 @@ void HousingRoomData::ClearChangesMask()
     Base::ClearChangesMask(HouseGUID);
     Base::ClearChangesMask(HouseRoomID);
     Base::ClearChangesMask(Flags);
-    Base::ClearChangesMask(FloorIndex);
     _changesMask.ResetAll();
 }
 
