@@ -926,6 +926,12 @@ static constexpr uint32 HOUSING_MIN_PLAYER_LEVEL = 10;
 // Required expansion for housing access (The War Within = 10)
 static constexpr uint32 HOUSING_REQUIRED_EXPANSION = 10;
 
+// Kill credit that completes QUEST_HOUSING_TUTORIAL_COMPLETE. Packet-attested in the retail
+// Horde starter capture: creature "[DNT] Kill Credit: Housing - Tutorial - 01 - House Entered"
+// is credited the moment the player first stands inside their house, and the quest - which is
+// AUTO_ACCEPT|AUTO_COMPLETE and has no quest-giver NPC on either end - then auto-submits.
+static constexpr uint32 NPC_HOUSING_TUTORIAL_HOUSE_ENTERED_CREDIT = 257763;
+
 // House interior instance map (MAP_HOUSE_INTERIOR = 7)
 static constexpr uint32 HOUSE_INTERIOR_MAP_ID = 2783;
 
