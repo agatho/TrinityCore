@@ -1727,6 +1727,15 @@ bool HouseInteriorMap::AddPlayerToMap(Player* player, bool initPlayer /*= true*/
                     // Status+Permissions before it is wasteful. The exterior AT handler
                     // (at_housing_plot.cpp) also sends Status+Permissions AFTER ENTER_PLOT.
 
+                    // 0) Drive the housing tutorial forward. The editor UI stays locked until
+                    // QUEST_HOUSING_TUTORIAL_COMPLETE ("Home at Last") is REWARDED, and that quest
+                    // is AUTO_ACCEPT|AUTO_COMPLETE with no quest-giver NPC on either end - retail
+                    // grants it by script and completes it with a kill credit the moment the player
+                    // first stands inside their house (both packet-attested in the starter captures).
+                    // Without this the chain is unenterable: no NPC ever offers it, so the player
+                    // reaches the end of the visible questline and the editor never unlocks.
+                    GrantHousingTutorialProgress(p);
+
                     // 1) PostTutorialAuras (slots 8, 9, 50)
                     SendPostTutorialAuras(p);
 
@@ -2118,6 +2127,58 @@ void HouseInteriorMap::RemovePlayerFromMap(Player* player, bool remove)
         _roomsSpawned, uint32(_roomMeshObjects.size()), uint32(_decorGuidToObjGuid.size()), (void*)this);
 
     Map::RemovePlayerFromMap(player, remove);
+}
+
+void HouseInteriorMap::GrantHousingTutorialProgress(Player* player)
+{
+    if (!player)
+        return;
+
+    if (player->GetQuestRewardStatus(QUEST_HOUSING_TUTORIAL_COMPLETE))
+        return; // tutorial already finished - editor is unlocked
+
+    Quest const* quest = sObjectMgr->GetQuestTemplate(QUEST_HOUSING_TUTORIAL_COMPLETE);
+    if (!quest)
+    {
+        TC_LOG_ERROR("housing", "GrantHousingTutorialProgress: quest {} missing from quest_template - the housing "
+            "editor can never unlock", QUEST_HOUSING_TUTORIAL_COMPLETE);
+        return;
+    }
+
+    // Retail grants this by script, not through a quest chain: it is AUTO_ACCEPT and no NPC offers
+    // it, so unless we put it in the log the player can never obtain it.
+    if (player->GetQuestStatus(QUEST_HOUSING_TUTORIAL_COMPLETE) == QUEST_STATUS_NONE)
+    {
+        if (!player->CanTakeQuest(quest, false) || !player->CanAddQuest(quest, false))
+        {
+            TC_LOG_ERROR("housing", "GrantHousingTutorialProgress: player {} cannot take quest {} (log full or "
+                "requirements unmet) - housing editor stays locked",
+                player->GetGUID().ToString(), QUEST_HOUSING_TUTORIAL_COMPLETE);
+            return;
+        }
+
+        player->AddQuestAndCheckCompletion(quest, nullptr);
+        TC_LOG_INFO("housing", "GrantHousingTutorialProgress: granted quest {} to player {}",
+            QUEST_HOUSING_TUTORIAL_COMPLETE, player->GetGUID().ToString());
+    }
+
+    // Completing objective: retail credits this creature the moment the player stands in the house.
+    player->KilledMonsterCredit(NPC_HOUSING_TUTORIAL_HOUSE_ENTERED_CREDIT);
+
+    // AUTO_COMPLETE quests are submitted by the client with the PLAYER as the quest giver. Our editor
+    // gate reads GetQuestRewardStatus, so close the loop here rather than depending on that round trip.
+    if (player->GetQuestStatus(QUEST_HOUSING_TUTORIAL_COMPLETE) == QUEST_STATUS_COMPLETE
+        && quest->HasFlag(QUEST_FLAGS_AUTO_COMPLETE))
+    {
+        player->RewardQuest(quest, LootItemType::Item, 0, player, false);
+        TC_LOG_INFO("housing", "GrantHousingTutorialProgress: auto-completed quest {} for player {} - housing editor unlocked",
+            QUEST_HOUSING_TUTORIAL_COMPLETE, player->GetGUID().ToString());
+    }
+    else
+        TC_LOG_INFO("housing", "GrantHousingTutorialProgress: quest {} status for player {} is {} after credit {}",
+            QUEST_HOUSING_TUTORIAL_COMPLETE, player->GetGUID().ToString(),
+            uint32(player->GetQuestStatus(QUEST_HOUSING_TUTORIAL_COMPLETE)),
+            NPC_HOUSING_TUTORIAL_HOUSE_ENTERED_CREDIT);
 }
 
 void HouseInteriorMap::SendPostTutorialAuras(Player* player)
