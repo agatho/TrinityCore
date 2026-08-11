@@ -19,10 +19,27 @@
 #include "CollectionMgr.h"
 #include "DB2Stores.h"
 #include "DBCEnums.h"
+#include "GossipDef.h"
 #include "Player.h"
 #include "PerksProgramActivityMgr.h"
 #include "PerksProgramMgr.h"
 #include "PerksProgramPackets.h"
+#include "UnitDefines.h"
+
+// Every mutating Trading Post request (purchase / refund / cart / freeze) carries the interacted vendor GUID.
+// Validate it against an active PerksProgramVendor interaction the player actually opened, and re-check the NPC
+// still exists in range with the perks-vendor flag. This blocks currency/collection mutation from a crafted
+// packet sent with a zero or spoofed GUID from anywhere, bypassing the client's interaction gate.
+static bool HasActivePerksProgramVendor(Player* player, ObjectGuid vendorGuid)
+{
+    if (vendorGuid.IsEmpty())
+        return false;
+
+    if (!player->PlayerTalkClass->GetInteractionData().IsInteractingWith(vendorGuid, PlayerInteractionType::PerksProgramVendor))
+        return false;
+
+    return player->GetNPCIfCanInteractWith(vendorGuid, UNIT_NPC_FLAG_NONE, UNIT_NPC_FLAG_2_PERKS_VENDOR) != nullptr;
+}
 
 void WorldSession::HandlePerksProgramStatusRequest(WorldPackets::PerksProgram::PerksProgramStatusRequest& /*packet*/)
 {
@@ -120,6 +137,9 @@ void WorldSession::HandlePerksProgramRequestRefund(WorldPackets::PerksProgram::P
     if (!player)
         return;
 
+    if (!HasActivePerksProgramVendor(player, packet.VendorGUID))
+        return;
+
     CollectionMgr* collectionMgr = GetCollectionMgr();
     PerksProgramPurchaseData const* purchase = collectionMgr->GetPerksProgramPurchase(packet.PerksVendorItemID);
     if (!purchase)
@@ -151,14 +171,23 @@ void WorldSession::HandlePerksProgramRequestRefund(WorldPackets::PerksProgram::P
 
 void WorldSession::HandlePerksProgramRequestPurchase(WorldPackets::PerksProgram::PerksProgramRequestPurchase& packet)
 {
-    if (Player* player = GetPlayer())
-        PerksProgramPurchaseItem(this, player, packet.PerksVendorItemID);
+    Player* player = GetPlayer();
+    if (!player)
+        return;
+
+    if (!HasActivePerksProgramVendor(player, packet.VendorGUID))
+        return;
+
+    PerksProgramPurchaseItem(this, player, packet.PerksVendorItemID);
 }
 
 void WorldSession::HandlePerksProgramRequestCartCheckout(WorldPackets::PerksProgram::PerksProgramRequestCartCheckout& packet)
 {
     Player* player = GetPlayer();
     if (!player)
+        return;
+
+    if (!HasActivePerksProgramVendor(player, packet.VendorGUID))
         return;
 
     // Each item is validated + charged independently; an unaffordable entry is simply skipped so the
@@ -171,6 +200,9 @@ void WorldSession::HandlePerksProgramSetFrozenVendorItem(WorldPackets::PerksProg
 {
     Player* player = GetPlayer();
     if (!player)
+        return;
+
+    if (!HasActivePerksProgramVendor(player, packet.NpcGUID))
         return;
 
     // Freeze pins the chosen Trading Post item so it carries to next rotation (client shows the frozen indicator);
