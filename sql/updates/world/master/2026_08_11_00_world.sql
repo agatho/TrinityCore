@@ -25,3 +25,14 @@
 --
 UPDATE `gameobject_template` SET `name` = 'Cornerstone'
   WHERE `name` LIKE 'Cornerstone - Plot%' AND `type` = 48 AND `displayId` = 110660;
+
+-- Entry 457142 is the template retail actually spawns for every plot on map 2735 (see the query response
+-- above). We already have the row - IconName 'buy', Data0 4, Data8 1266097 all match - but its name was left
+-- empty, and no plot currently references it because our spawner uses the per-plot
+-- NeighborhoodPlot.CornerstoneGameObjectID as the GO entry instead. Name it correctly either way.
+--
+-- NOTE for later: retail spawns ONE shared template (457142) per plot and carries the per-plot cornerstone id
+-- in a separate field of the create block, identifying the plot through the FJamHousingCornerstone_C fragment
+-- (which holds Cost and PlotIndex). Ours works and renders identically; the difference is only noted here.
+UPDATE `gameobject_template` SET `name` = 'Cornerstone'
+  WHERE `entry` = 457142 AND `type` = 48 AND `displayId` = 110660 AND (`name` IS NULL OR `name` = '');
