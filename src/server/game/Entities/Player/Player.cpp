@@ -20980,6 +20980,9 @@ void Player::SaveToDB(LoginDatabaseTransaction loginTransaction, CharacterDataba
         stmt->setInt32(index++, m_playerData->PersonalTabard->BackgroundColor);
         stmt->setInt32(index++, m_activePlayerData->TransmogMetadata->TransmogOutfitID);
         stmt->setBool(index++, m_activePlayerData->TransmogMetadata->Locked);
+        // Denormalised Bnet account id so warband features (currency transfer, alt-XP) can
+        // filter characters by Battle.net account without a cross-DB join (MJ-1).
+        stmt->setUInt32(index++, GetSession()->GetBattlenetAccountId());
     }
     else
     {

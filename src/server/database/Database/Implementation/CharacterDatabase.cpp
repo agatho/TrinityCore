@@ -516,8 +516,8 @@ void CharacterDatabaseConnection::DoPrepareStatements()
                      "death_expire_time, taxi_path, totalKills, todayKills, yesterdayKills, chosenTitle, watchedFaction, drunk, health, "
                      "power1, power2, power3, power4, power5, power6, power7, power8, power9, power10, "
                      "latency, activeTalentGroup, lootSpecId, exploredZones, knownTitles, actionBars, lastLoginBuild, "
-                     "personalTabardEmblemStyle, personalTabardEmblemColor, personalTabardBorderStyle, personalTabardBorderColor, personalTabardBackgroundColor, transmogOutfitEquippedId, transmogOutfitLocked) VALUES "
-                     "(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", CONNECTION_ASYNC);
+                     "personalTabardEmblemStyle, personalTabardEmblemColor, personalTabardBorderStyle, personalTabardBorderColor, personalTabardBackgroundColor, transmogOutfitEquippedId, transmogOutfitLocked, battlenetAccount) VALUES "
+                     "(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", CONNECTION_ASYNC);
     PrepareStatement(CHAR_UPD_CHARACTER, "UPDATE characters SET name=?,race=?,class=?,gender=?,level=?,xp=?,money=?,inventorySlots=?,inventoryBagFlags=?,bagSlotFlags1=?,bagSlotFlags2=?,bagSlotFlags3=?,bagSlotFlags4=?,bagSlotFlags5=?,"
                      "bankSlots=?,bankTabs=?,bankBagFlags=?,restState=?,playerFlags=?,playerFlagsEx=?,"
                      "map=?,instance_id=?,dungeonDifficulty=?,raidDifficulty=?,legacyRaidDifficulty=?,position_x=?,position_y=?,position_z=?,orientation=?,trans_x=?,trans_y=?,trans_z=?,trans_o=?,transguid=?,taximask=?,cinematic=?,totaltime=?,leveltime=?,rest_bonus=?,"
@@ -870,9 +870,16 @@ void CharacterDatabaseConnection::DoPrepareStatements()
     PrepareStatement(CHAR_REP_ACCOUNT_REPUTATION, "REPLACE INTO warband_reputation (battlenetAccountId, faction, standing, renownLevel) VALUES (?, ?, ?, ?)", CONNECTION_ASYNC);
 
     PrepareStatement(CHAR_SEL_ACCOUNT_CHARACTER_CURRENCIES, "SELECT c.guid, c.name, c.class, c.level, pc.Currency, pc.Quantity FROM characters c INNER JOIN character_currency pc ON c.guid = pc.CharacterGuid WHERE c.battlenetAccount = ? AND c.deleteDate IS NULL", CONNECTION_ASYNC);
-    PrepareStatement(CHAR_INS_WARBAND_CURRENCY_TRANSFER_LOG, "INSERT INTO warband_currency_transfer_log (battlenetAccountId, currencyTypeId, sourceCharacterGuid, destCharacterGuid, quantity, timestamp) VALUES (?, ?, ?, ?, ?, ?)", CONNECTION_ASYNC);
-    PrepareStatement(CHAR_SEL_WARBAND_CURRENCY_TRANSFER_LOG, "SELECT currencyTypeId, sourceCharacterGuid, destCharacterGuid, quantity, timestamp FROM warband_currency_transfer_log WHERE battlenetAccountId = ? ORDER BY timestamp DESC LIMIT 50", CONNECTION_ASYNC);
+    PrepareStatement(CHAR_INS_WARBAND_CURRENCY_TRANSFER_LOG, "INSERT INTO warband_currency_transfer_log (battlenetAccountId, currencyTypeId, sourceCharacterGuid, destCharacterGuid, quantity, receivedQuantity, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?)", CONNECTION_ASYNC);
+    PrepareStatement(CHAR_SEL_WARBAND_CURRENCY_TRANSFER_LOG, "SELECT currencyTypeId, sourceCharacterGuid, destCharacterGuid, quantity, receivedQuantity, timestamp FROM warband_currency_transfer_log WHERE battlenetAccountId = ? ORDER BY timestamp DESC LIMIT 50", CONNECTION_ASYNC);
     PrepareStatement(CHAR_UPD_PLAYER_CURRENCY_QUANTITY, "UPDATE character_currency SET Quantity = ? WHERE CharacterGuid = ? AND Currency = ?", CONNECTION_ASYNC);
+    // Atomic guarded decrement for account currency transfer (CR-4): subtracts the amount only
+    // if the source still has it, so N racing transfers cannot each debit the same stale
+    // balance. The caller credits the destination only when this affected exactly one row.
+    PrepareStatement(CHAR_UPD_PLAYER_CURRENCY_QUANTITY_GUARDED, "UPDATE character_currency SET Quantity = Quantity - ? WHERE CharacterGuid = ? AND Currency = ? AND Quantity >= ?", CONNECTION_ASYNC);
+    // Denormalised Bnet account id refresh, applied at every login so the characters.battlenetAccount
+    // column that the warband currency/alt-XP queries filter on is always populated (MJ-1).
+    PrepareStatement(CHAR_UPD_CHARACTER_BNET_ACCOUNT, "UPDATE characters SET battlenetAccount = ? WHERE guid = ?", CONNECTION_ASYNC);
 }
 
 CharacterDatabaseConnection::CharacterDatabaseConnection(MySQLConnectionInfo& connInfo, ConnectionFlags connectionFlags) : MySQLConnection(connInfo, connectionFlags)

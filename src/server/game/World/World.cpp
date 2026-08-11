@@ -3407,6 +3407,22 @@ void World::ReleaseAccountInventoryLock(ObjectGuid battlenetAccountGuid, WorldSe
         m_accountInventoryLockOwners.erase(it);
 }
 
+bool World::BeginCurrencyTransfer(ObjectGuid sourceCharacterGuid)
+{
+    if (sourceCharacterGuid.IsEmpty())
+        return false;
+
+    std::lock_guard<std::mutex> guard(m_currencyTransferMutex);
+    // Atomic test-and-set: succeeds only if no transfer from this source is already in flight.
+    return m_currencyTransfersInProgress.insert(sourceCharacterGuid).second;
+}
+
+void World::EndCurrencyTransfer(ObjectGuid sourceCharacterGuid)
+{
+    std::lock_guard<std::mutex> guard(m_currencyTransferMutex);
+    m_currencyTransfersInProgress.erase(sourceCharacterGuid);
+}
+
 bool World::IsPvPRealm() const
 {
     return (getIntConfig(CONFIG_GAME_TYPE) == REALM_TYPE_PVP || getIntConfig(CONFIG_GAME_TYPE) == REALM_TYPE_RPPVP || getIntConfig(CONFIG_GAME_TYPE) == REALM_TYPE_FFA_PVP);
