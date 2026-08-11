@@ -21,6 +21,7 @@
 #include "Common.h"
 #include "AsyncCallbackProcessor.h"
 #include "AuthDefines.h"
+#include "BattlePayMgr.h"          // ShopProduct / ShopEntitlement
 #include "ClientBuildInfo.h"
 #include "DatabaseEnvFwd.h"
 #include "Duration.h"
@@ -134,6 +135,7 @@ namespace WorldPackets
         class StartPurchase;
         class OpenCheckout;
         class ConfirmPurchaseResponse;
+        class DistributionAssignToTarget;
     }
 
     namespace AreaTrigger
@@ -2655,6 +2657,14 @@ class TC_GAME_API WorldSession
         void BattlePayProcessPurchase(uint32 productID);
         void SendBattlePayDistributionList();
 
+        // In-game Shop entitlements ("distributions"): buy now, apply to a character later.
+        void HandleBattlePayDistributionAssignToTarget(WorldPackets::BattlePay::DistributionAssignToTarget& assign);
+        void LoadBattlePayEntitlements(bool sendList);
+        void SendBattlePayDistributionListNow();
+        void SendBattlePayDistributionUpdate(ShopEntitlement const& entitlement);
+        int32 BattlePayCreateEntitlement(ShopProduct const& product, uint64 purchaseID);
+        void RedeemBattlePayEntitlements();
+
         void SendBattlenetResponse(uint32 serviceHash, uint32 methodId, uint32 token, pb::Message const* response);
         void SendBattlenetResponse(uint32 serviceHash, uint32 methodId, uint32 token, uint32 status);
         void SendBattlenetRequest(uint32 serviceHash, uint32 methodId, pb::Message const* request, std::function<void(MessageBuffer)> callback);
@@ -2857,6 +2867,11 @@ class TC_GAME_API WorldSession
         // Shop.PurchaseConfirmation). _battlePayConfirmToken 0 = nothing pending.
         uint32 _battlePayPendingProductID = 0;
         uint32 _battlePayConfirmToken = 0;
+
+        // In-game Shop: this account's unapplied entitlements ("distributions"), refreshed from the auth
+        // DB at character select and after every change. Cached because the assign handler must decide
+        // synchronously whether the id the client named is one this account actually owns.
+        std::vector<ShopEntitlement> _battlePayEntitlements;
 
         std::unique_ptr<BattlePets::BattlePetMgr> _battlePetMgr;
 
