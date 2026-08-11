@@ -222,21 +222,21 @@ enum PetBattleAbilityEffectAction : uint16
 };
 
 // Type effectiveness matrix [attacker type][defender type]
-// 1.0 = normal, 1.5 = strong (super effective), 0.66 = weak (not very effective)
+// 1.0 = normal, 1.5 = strong (super effective), 0.6667 = weak (not very effective, retail 2/3)
 // Values from BattlePetTypeDamageMod.txt GameTable
 static constexpr float PET_TYPE_EFFECTIVENESS[PET_TYPE_COUNT][PET_TYPE_COUNT] =
 {
     //                        Hum    Drk    Fly    Und    Cri    Mag    Ele    Bst    Aqu    Mec
-    /* Humanoid    */ {  1.0f,  1.5f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 0.66f, 1.0f,  1.0f },
-    /* Dragonkin   */ {  1.0f,  1.0f, 1.0f, 0.66f,1.0f, 1.5f, 1.0f, 1.0f,  1.0f,  1.0f },
-    /* Flying      */ {  1.0f, 0.66f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f,  1.5f,  1.0f },
-    /* Undead      */ {  1.5f,  1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 0.66f,  1.0f },
-    /* Critter     */ { 0.66f,  1.0f, 1.0f, 1.5f, 1.0f, 1.0f, 1.0f, 1.0f,  1.0f,  1.0f },
-    /* Magic       */ {  1.0f,  1.0f, 1.5f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f,  1.0f, 0.66f },
-    /* Elemental   */ {  1.0f,  1.0f, 1.0f, 1.0f, 0.66f,1.0f, 1.0f, 1.0f,  1.0f,  1.5f },
-    /* Beast       */ {  1.0f,  1.0f, 0.66f,1.0f, 1.5f, 1.0f, 1.0f, 1.0f,  1.0f,  1.0f },
-    /* Aquatic     */ {  1.0f,  1.0f, 1.0f, 1.0f, 1.0f, 0.66f,1.5f, 1.0f,  1.0f,  1.0f },
-    /* Mechanical  */ {  1.0f,  1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 0.66f,1.5f,  1.0f,  1.0f },
+    /* Humanoid    */ {  1.0f,  1.5f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 0.6667f, 1.0f,  1.0f },
+    /* Dragonkin   */ {  1.0f,  1.0f, 1.0f, 0.6667f,1.0f, 1.5f, 1.0f, 1.0f,  1.0f,  1.0f },
+    /* Flying      */ {  1.0f, 0.6667f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f,  1.5f,  1.0f },
+    /* Undead      */ {  1.5f,  1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 0.6667f,  1.0f },
+    /* Critter     */ { 0.6667f,  1.0f, 1.0f, 1.5f, 1.0f, 1.0f, 1.0f, 1.0f,  1.0f,  1.0f },
+    /* Magic       */ {  1.0f,  1.0f, 1.5f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f,  1.0f, 0.6667f },
+    /* Elemental   */ {  1.0f,  1.0f, 1.0f, 1.0f, 0.6667f,1.0f, 1.0f, 1.0f,  1.0f,  1.5f },
+    /* Beast       */ {  1.0f,  1.0f, 0.6667f,1.0f, 1.5f, 1.0f, 1.0f, 1.0f,  1.0f,  1.0f },
+    /* Aquatic     */ {  1.0f,  1.0f, 1.0f, 1.0f, 1.0f, 0.6667f,1.5f, 1.0f,  1.0f,  1.0f },
+    /* Mechanical  */ {  1.0f,  1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 0.6667f,1.5f,  1.0f,  1.0f },
 };
 
 inline float GetTypeEffectiveness(PetBattlePetType attackerType, PetBattlePetType defenderType)
