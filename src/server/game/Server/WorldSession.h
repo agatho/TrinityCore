@@ -1977,6 +1977,11 @@ class TC_GAME_API WorldSession
         void moveItems(Item* myItems[], Item* hisItems[]);
 
         bool CanUseBank(ObjectGuid bankerGUID = ObjectGuid::Empty) const;
+        // True only if this session is allowed to MUTATE the account-wide (warband) bank right
+        // now: it must have a valid Bnet linkage (bnetId != 0) and hold the single-holder
+        // account inventory lock. Every account bank mutation opcode gates on this so a second
+        // same-bnet session (or an injected packet from one) can never mutate concurrently.
+        bool CanMutateAccountBank() const;
 
         // logging helper
         void LogUnexpectedOpcode(WorldPacket* packet, char const* status, const char *reason);

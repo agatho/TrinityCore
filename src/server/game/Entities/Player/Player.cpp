@@ -20688,6 +20688,22 @@ void Player::ModifyAccountBankCoinage(int64 delta)
     if (uint64(next) > MAX_MONEY_AMOUNT)
         next = int64(MAX_MONEY_AMOUNT);
     SetAccountBankCoinage(uint64(next));
+
+    // Persist the change immediately as an ATOMIC delta rather than relying on the
+    // last-writer-wins REPLACE at save time (CR-3). Combined with the single-holder account
+    // bank lock (only the holder ever reaches this path) this guarantees the shared balance
+    // in the DB is always authoritative and can never be duped or lost across overlapping
+    // same-bnet sessions. Unlinked accounts (bnetId == 0) never persist shared state.
+    int64 applied = next - current;
+    uint32 bnetAccountId = GetSession() ? GetSession()->GetBattlenetAccountId() : 0;
+    if (!bnetAccountId || applied == 0)
+        return;
+
+    CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_UPD_ACCOUNT_BANK_COINAGE_DELTA);
+    stmt->setUInt32(0, bnetAccountId);
+    stmt->setInt64(1, applied);
+    stmt->setInt64(2, applied);
+    CharacterDatabase.Execute(stmt);
 }
 
 void Player::_LoadAccountBankItems(PreparedQueryResult result, uint32 timeDiff)
@@ -22152,6 +22168,12 @@ void Player::_SaveAccountBankCoinage(CharacterDatabaseTransaction trans) const
     if (!bnetAccountId)
         return;
 
+    // Only the single account bank lock holder is the authoritative writer of the shared bank.
+    // A non-holder's in-memory copy may be stale (the holder can have mutated the bank since
+    // this session loaded it), so letting it write back would revert the holder's changes.
+    if (!HasPlayerLocalFlag(PLAYER_LOCAL_FLAG_HAS_ACCOUNT_BANK_LOCK))
+        return;
+
     CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_REP_ACCOUNT_BANK_COINAGE);
     stmt->setUInt32(0, bnetAccountId);
     stmt->setUInt64(1, GetAccountBankCoinage());
@@ -22161,6 +22183,13 @@ void Player::_SaveAccountBankCoinage(CharacterDatabaseTransaction trans) const
 void Player::_SaveAccountBankItems(CharacterDatabaseTransaction trans)
 {
     uint32 bnetAccountId = GetSession()->GetBattlenetAccountId();
+
+    // Refuse to persist shared account bank items for an unlinked account (bnetId == 0) — all
+    // such accounts would otherwise share and overwrite one another's rows (MJ-2/M2). Also
+    // refuse for any session that does not hold the account bank lock: it is not the
+    // authoritative writer and its cached copy may be stale (see _SaveAccountBankCoinage).
+    if (!bnetAccountId || !HasPlayerLocalFlag(PLAYER_LOCAL_FLAG_HAS_ACCOUNT_BANK_LOCK))
+        return;
 
     // Delete all account bank item positions — they will be re-inserted below
     CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_DEL_ACCOUNT_BANK_ITEMS_BY_BNET);
@@ -25515,10 +25544,13 @@ void Player::SendInitialPacketsBeforeAddToMap()
     initialSetup.ServerExpansionLevel = sWorld->getIntConfig(CONFIG_EXPANSION);
     SendDirectMessage(initialSetup.Write());
 
-    // Account-wide bank lock: grant to this session if no other session for the same
-    // Bnet account already holds it. Without this flag the client shows the
-    // "The bank is being used by another member of your Warband" prompt.
-    if (!sWorld->IsAccountInventoryLockAcquired(GetSession()->GetBattlenetAccountGUID(), GetSession()))
+    // Account-wide bank lock: atomically reserve the shared account bank for this session
+    // if no other session for the same Bnet account already holds it. Without this flag the
+    // client shows the "The bank is being used by another member of your Warband" prompt, and
+    // — critically — the server refuses every account bank mutation from a non-holder, so the
+    // reservation is what actually serialises concurrent same-bnet access. Unlinked accounts
+    // (bnetId == 0) are never granted the lock (TryAcquire rejects an empty Bnet GUID).
+    if (sWorld->TryAcquireAccountInventoryLock(GetSession()->GetBattlenetAccountGUID(), GetSession()))
         SetPlayerLocalFlag(PLAYER_LOCAL_FLAG_HAS_ACCOUNT_BANK_LOCK);
 
     SetMovedUnit(this);

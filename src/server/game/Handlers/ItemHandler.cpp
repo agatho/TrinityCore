@@ -105,6 +105,11 @@ void WorldSession::HandleSwapInvItemOpcode(WorldPackets::Item::SwapInvItem& swap
         return;
     }
 
+    // Moving an item into or out of the shared account bank requires the account bank lock.
+    if ((Player::IsAccountBankPos(INVENTORY_SLOT_BAG_0, swapInvItem.Slot1)
+        || Player::IsAccountBankPos(INVENTORY_SLOT_BAG_0, swapInvItem.Slot2)) && !CanMutateAccountBank())
+        return;
+
     uint16 src = ((INVENTORY_SLOT_BAG_0 << 8) | swapInvItem.Slot1);
     uint16 dst = ((INVENTORY_SLOT_BAG_0 << 8) | swapInvItem.Slot2);
 
@@ -168,6 +173,11 @@ void WorldSession::HandleSwapItem(WorldPackets::Item::SwapItem& swapItem)
         TC_LOG_DEBUG("network", "HandleSwapItem - Unit ({}) not found or you can't interact with him.", _player->PlayerTalkClass->GetInteractionData().SourceGuid.ToString());
         return;
     }
+
+    // Moving an item into or out of the shared account bank requires the account bank lock.
+    if ((Player::IsAccountBankPos(swapItem.ContainerSlotA, swapItem.SlotA)
+        || Player::IsAccountBankPos(swapItem.ContainerSlotB, swapItem.SlotB)) && !CanMutateAccountBank())
+        return;
 
     _player->SwapItem(src, dst);
 }
@@ -1223,6 +1233,14 @@ void WorldSession::HandleUseCritterItem(WorldPackets::Item::UseCritterItem& useC
 
 void WorldSession::HandleSortAccountBankBags(WorldPackets::Item::SortAccountBankBags& /*sortAccountBankBags*/)
 {
+    // Sorting mutates the shared account bank, so it must be gated on the account bank lock
+    // once implemented. Acknowledge to the client either way so its bags do not stay locked.
+    if (!CanMutateAccountBank())
+    {
+        SendPacket(WorldPackets::Item::BagCleanupFinished().Write());
+        return;
+    }
+
     // TODO: Implement sorting
     // Placeholder to prevent completely locking out bags clientside
     SendPacket(WorldPackets::Item::BagCleanupFinished().Write());

@@ -3380,20 +3380,28 @@ bool World::IsBattlePetJournalLockAcquired(ObjectGuid battlenetAccountGuid)
     return false;
 }
 
-bool World::IsAccountInventoryLockAcquired(ObjectGuid battlenetAccountGuid, WorldSession const* exclude)
+bool World::TryAcquireAccountInventoryLock(ObjectGuid battlenetAccountGuid, WorldSession* session)
 {
-    for (auto&& sessionForBnet : Trinity::Containers::MapEqualRange(m_sessionsByBnetGuid, battlenetAccountGuid))
-    {
-        WorldSession const* session = sessionForBnet.second;
-        if (session == exclude)
-            continue;
+    // Never reserve for an unlinked account (bnetId == 0): those collapse into one shared
+    // namespace, so a lock there would be meaningless and would let a bnet-0 session mutate.
+    if (battlenetAccountGuid.IsEmpty())
+        return false;
 
-        Player const* other = session->GetPlayer();
-        if (other && other->HasPlayerLocalFlag(PLAYER_LOCAL_FLAG_HAS_ACCOUNT_BANK_LOCK))
-            return true;
-    }
+    std::lock_guard<std::mutex> guard(m_accountInventoryLockMutex);
+    auto [it, inserted] = m_accountInventoryLockOwners.try_emplace(battlenetAccountGuid, session);
+    // Granted iff we just created the entry, or this session already owns it (idempotent).
+    return inserted || it->second == session;
+}
 
-    return false;
+void World::ReleaseAccountInventoryLock(ObjectGuid battlenetAccountGuid, WorldSession const* session)
+{
+    if (battlenetAccountGuid.IsEmpty())
+        return;
+
+    std::lock_guard<std::mutex> guard(m_accountInventoryLockMutex);
+    auto it = m_accountInventoryLockOwners.find(battlenetAccountGuid);
+    if (it != m_accountInventoryLockOwners.end() && it->second == session)
+        m_accountInventoryLockOwners.erase(it);
 }
 
 bool World::IsPvPRealm() const

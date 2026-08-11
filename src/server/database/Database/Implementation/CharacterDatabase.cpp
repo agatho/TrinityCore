@@ -853,6 +853,10 @@ void CharacterDatabaseConnection::DoPrepareStatements()
     PrepareStatement(CHAR_DEL_ACCOUNT_BANK_ITEMS_BY_BNET, "DELETE FROM account_bank_item WHERE battlenetAccountId = ?", CONNECTION_ASYNC);
     PrepareStatement(CHAR_SEL_ACCOUNT_BANK_COINAGE, "SELECT coinage FROM account_bank_coinage WHERE battlenetAccountId = ?", CONNECTION_ASYNC);
     PrepareStatement(CHAR_REP_ACCOUNT_BANK_COINAGE, "REPLACE INTO account_bank_coinage (battlenetAccountId, coinage) VALUES (?, ?)", CONNECTION_ASYNC);
+    // Atomic in-place adjustment of the shared account bank balance. Applied on every
+    // deposit/withdraw so the persisted balance is authoritative and cannot be clobbered by a
+    // stale cached value; the ON DUPLICATE KEY branch keeps the delta additive at the DB level.
+    PrepareStatement(CHAR_UPD_ACCOUNT_BANK_COINAGE_DELTA, "INSERT INTO account_bank_coinage (battlenetAccountId, coinage) VALUES (?, ?) ON DUPLICATE KEY UPDATE coinage = coinage + ?", CONNECTION_ASYNC);
 
     PrepareStatement(CHAR_SEL_WARBAND_GROUPS, "SELECT groupId, orderIndex, warbandSceneId, flags, contentSetId, name FROM character_warband_groups WHERE battlenetAccountId = ? ORDER BY orderIndex", CONNECTION_ASYNC);
     PrepareStatement(CHAR_SEL_WARBAND_GROUP_MEMBERS, "SELECT gm.groupId, gm.memberIndex, gm.guid, gm.warbandScenePlacementId, gm.memberType, gm.contentSetId FROM character_warband_group_members gm INNER JOIN character_warband_groups g ON gm.groupId = g.groupId WHERE g.battlenetAccountId = ? ORDER BY gm.groupId, gm.memberIndex", CONNECTION_ASYNC);
