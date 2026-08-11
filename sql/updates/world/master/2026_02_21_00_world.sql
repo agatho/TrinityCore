@@ -5,7 +5,7 @@ CREATE TABLE IF NOT EXISTS `warband_reputation_faction` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- The War Within account-wide renown factions
-INSERT INTO `warband_reputation_faction` (`factionId`, `comment`) VALUES
+INSERT IGNORE INTO `warband_reputation_faction` (`factionId`, `comment`) VALUES
 (2570, 'Hallowfall Arathi'),
 (2590, 'Council of Dornogal'),
 (2594, 'The Assembly of the Deeps'),
