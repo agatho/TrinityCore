@@ -19,6 +19,7 @@
 #define CraftingOrderMgr_h__
 
 #include "Define.h"
+#include "DatabaseEnvFwd.h"
 #include "ObjectGuid.h"
 #include <string>
 #include <unordered_map>
@@ -92,13 +93,22 @@ public:
     void LoadFromDB();
     void Update(uint32 diff);                   // expiry ticker
 
-    // Post a new order; returns the new order id (0 on failure). Escrow of tip/reagents is the caller's job (P1).
-    uint64 CreateOrder(Player* customer, CraftingOrders::Order order);
-    bool ClaimOrder(uint64 orderId, ObjectGuid crafter);
+    // Authorization gate shared by claim + fulfil: does this crafter actually know the recipe and meet its skill
+    // floor? Resolves the order's SkillLineAbility -> spell and requires HasSpell(spell), plus GetSkillValue of the
+    // recipe's SkillLine >= MinSkillLineRank when the recipe carries a skill requirement. Prevents any player from
+    // minting an arbitrary recipe's output from a client-supplied SkillLineAbilityID (anti-abuse G1).
+    static bool CanCraft(Player* crafter, CraftingOrders::Order const& order);
+
+    // Post a new order; returns the new order id (0 on failure). The order/reagent rows are appended to the caller's
+    // transaction (never self-committed) so the customer's gold debit and the order INSERT commit atomically in ONE
+    // transaction — a crash between them can no longer leave a persisted, tip-bearing order that was never paid for
+    // (anti-abuse G3).
+    uint64 CreateOrder(Player* customer, CraftingOrders::Order order, CharacterDatabaseTransaction trans);
+    bool ClaimOrder(uint64 orderId, Player* crafter);
     bool ReleaseOrder(uint64 orderId, ObjectGuid crafter);   // un-claim, back to the pool
     bool RejectOrder(uint64 orderId, ObjectGuid crafter, std::string reason);   // crafter declines
     bool CancelOrder(uint64 orderId, ObjectGuid customer);
-    bool FulfillOrder(uint64 orderId, ObjectGuid crafter);   // crafter delivers: Claimed -> Fulfilled, tip paid out
+    bool FulfillOrder(uint64 orderId, Player* crafter);      // crafter delivers: Claimed -> Fulfilled, item + tip paid out
     void RemoveOrder(uint64 orderId);
 
     CraftingOrders::Order* GetOrder(uint64 orderId);
@@ -121,7 +131,8 @@ public:
 private:
     CraftingOrderMgr() = default;
 
-    void SaveOrderToDB(CraftingOrders::Order const& order) const;
+    void SaveOrderToDB(CraftingOrders::Order const& order) const;                                  // owns a transaction
+    void SaveOrderToDB(CraftingOrders::Order const& order, CharacterDatabaseTransaction trans) const;  // appends to caller's
     void DeleteOrderFromDB(uint64 orderId) const;
 
     uint64 _nextOrderId = 1;

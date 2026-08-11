@@ -75,9 +75,30 @@ void WorldSession::HandleCraftingOrderCreate(WorldPackets::CraftingOrders::Craft
         return;
     }
 
+    CraftingOrders::OrderType const orderType = CraftingOrders::OrderType(packet.OrderType);
+
+    // Server-side re-validation of the client-gated invariants (a modified client can bypass the UI checks, G12):
+    //  - a Personal order must name the crafter it is directed at (InvalidTarget otherwise);
+    //  - the tip must be positive (the client blocks tip <= 0; a 0-tip order carries no escrow and is refused).
+    if (orderType == CraftingOrders::OrderType::Personal && packet.TargetGUID.IsEmpty())
+    {
+        WorldPackets::CraftingOrders::CraftingOrderCreateResult result;
+        result.Result = WorldPackets::CraftingOrders::CraftingOrderResult::InvalidTarget;
+        SendPacket(result.Write());
+        return;
+    }
+
+    if (!packet.TipAmount)
+    {
+        WorldPackets::CraftingOrders::CraftingOrderCreateResult result;
+        result.Result = WorldPackets::CraftingOrders::CraftingOrderResult::CannotCreate;
+        SendPacket(result.Write());
+        return;
+    }
+
     CraftingOrders::Order order;
     order.SkillLineAbilityID = packet.SkillLineAbilityID;
-    order.Type = CraftingOrders::OrderType(packet.OrderType);
+    order.Type = orderType;
     order.MinQuality = packet.MinQuality;
     order.TipAmount = packet.TipAmount;
     order.CustomerNotes = packet.CustomerNotes;
@@ -89,22 +110,18 @@ void WorldSession::HandleCraftingOrderCreate(WorldPackets::CraftingOrders::Craft
     int64 const now = GameTime::GetGameTime();
     order.EndDate = now + 30 * DAY;
 
-    // Reagents the customer provided (Vectors[0]). Field semantics are not yet confirmed, so they are stored
-    // positionally; reagent validation/escrow is handled in a later phase. The wire is consumed byte-exact.
-    for (WorldPackets::CraftingOrders::CraftingReagentSlot const& slot : packet.Vectors[0])
-    {
-        CraftingOrders::OrderReagent reagent;
-        reagent.ItemID = int32(slot.Field1);
-        reagent.Quantity = slot.Field2;
-        reagent.Slot = slot.Extra.value_or(0);
-        order.Reagents.push_back(reagent);
-    }
+    // Customer-provided reagents are NOT stored or advertised (G5b interim). Real reagent escrow (validate + destroy
+    // at create, consume at fulfil, refund on terminal) is deferred: the create-wire reagent field semantics
+    // (CraftingReagentSlot.Field1/Field2) are still UNCONFIRMED, so destroying the customer's items off them would risk
+    // consuming the wrong items. Until escrow lands we deliberately drop them rather than persist a phantom manifest and
+    // advertise it as customer-provided (Flags=1) - which is the cross-player reagent-theft/deception path (G5). The
+    // wire is still consumed byte-exact by CraftingOrderCreate::Read; we simply do not act on packet.Vectors[0] here.
 
-    // The tip is escrowed up front (like an auction deposit): the customer must have the gold, and it is held by
-    // the order until it is fulfilled (paid to the crafter) or dies (refunded). This is the only place gold leaves
-    // the customer; every terminal transition releases exactly the escrowed amount, so no gold is created or lost.
+    // The tip is escrowed up front (like an auction deposit): the customer must have the gold, and it is held by the
+    // order until it is fulfilled (paid to the crafter) or dies (refunded). This is the only place gold leaves the
+    // customer; every terminal transition releases exactly the escrowed amount, so no gold is created or lost.
     uint64 const tip = packet.TipAmount;
-    if (tip && !player->HasEnoughMoney(tip))
+    if (!player->HasEnoughMoney(tip))
     {
         WorldPackets::CraftingOrders::CraftingOrderCreateResult result;
         result.Result = WorldPackets::CraftingOrders::CraftingOrderResult::MissingCurrency;
@@ -112,24 +129,31 @@ void WorldSession::HandleCraftingOrderCreate(WorldPackets::CraftingOrders::Craft
         return;
     }
 
-    uint64 const id = sCraftingOrderMgr.CreateOrder(player, std::move(order));
+    // Atomic escrow-at-create (anti-abuse G3): debit the tip in memory, then commit the gold write and the order/reagent
+    // rows in ONE transaction. Previously the order INSERT committed in its own transaction BEFORE a separate gold-debit
+    // transaction, so a crash in between persisted a tip-bearing order that was never paid for - re-minted on the next
+    // terminal transition after LoadFromDB. Now a crash before the single commit leaves NEITHER the debit NOR the order.
+    player->ModifyMoney(-int64(tip));
+
+    CharacterDatabaseTransaction trans = CharacterDatabase.BeginTransaction();
+    player->SaveInventoryAndGoldToDB(trans);
+    uint64 const id = sCraftingOrderMgr.CreateOrder(player, std::move(order), trans);
+    if (!id)
+    {
+        // CreateOrder never queued anything on failure; undo the in-memory debit and drop the uncommitted transaction.
+        player->ModifyMoney(int64(tip));
+
+        WorldPackets::CraftingOrders::CraftingOrderCreateResult result;
+        result.Result = WorldPackets::CraftingOrders::CraftingOrderResult::CannotCreate;
+        SendPacket(result.Write());
+        return;
+    }
+    CharacterDatabase.CommitTransaction(trans);
 
     WorldPackets::CraftingOrders::CraftingOrderCreateResult result;
-    result.Result = id ? WorldPackets::CraftingOrders::CraftingOrderResult::Ok
-                       : WorldPackets::CraftingOrders::CraftingOrderResult::CannotCreate;
+    result.Result = WorldPackets::CraftingOrders::CraftingOrderResult::Ok;
     result.CraftingOrderID = id;
     SendPacket(result.Write());
-
-    if (!id)
-        return;
-
-    if (tip)
-    {
-        player->ModifyMoney(-int64(tip));
-        CharacterDatabaseTransaction trans = CharacterDatabase.BeginTransaction();
-        player->SaveInventoryAndGoldToDB(trans);
-        CharacterDatabase.CommitTransaction(trans);
-    }
 
     TC_LOG_DEBUG("network", "CMSG_CRAFTING_ORDER_CREATE: {} posted order {} for recipe {} (tip {})",
         player->GetGUID().ToString(), id, packet.SkillLineAbilityID, packet.TipAmount);
@@ -141,7 +165,7 @@ void WorldSession::HandleCraftingOrderClaim(WorldPackets::CraftingOrders::Crafti
     if (!player)
         return;
 
-    bool const ok = sCraftingOrderMgr.ClaimOrder(packet.OrderID, player->GetGUID());
+    bool const ok = sCraftingOrderMgr.ClaimOrder(packet.OrderID, player);
 
     WorldPackets::CraftingOrders::CraftingOrderClaimResult result;
     result.Result = ok ? WorldPackets::CraftingOrders::CraftingOrderResult::Ok
@@ -213,56 +237,25 @@ void WorldSession::HandleCraftingOrderFulfill(WorldPackets::CraftingOrders::Craf
     if (!player)
         return;
 
+    // Capture the criteria inputs before the fulfil transition (the order may be reaped shortly after it turns
+    // terminal). Recipe authorization, item derivation, the Claimed->Fulfilled state write, item delivery and the tip
+    // payout are all done atomically inside FulfillOrder (state-first, single transaction) so a crash cannot dupe the
+    // crafted item or the tip (anti-abuse G1/G4/G11).
     CraftingOrders::Order const* order = sCraftingOrderMgr.GetOrder(packet.OrderID);
-    bool ok = order && order->State == CraftingOrders::OrderState::Claimed && order->CrafterGUID == player->GetGUID();
+    CraftingOrders::OrderType const orderType = order ? order->Type : CraftingOrders::OrderType::Public;
+    uint32 const skillLineAbilityId = order ? uint32(order->SkillLineAbilityID) : 0u;
+
+    bool const ok = sCraftingOrderMgr.FulfillOrder(packet.OrderID, player);
 
     if (ok)
     {
-        // No crafted item rides the fulfil wire — derive the recipe's output (SkillLineAbility -> spell ->
-        // SPELL_EFFECT_CREATE_ITEM) and mail it to the customer, mirroring the client's craft-then-fulfil flow.
-        uint32 outItemId = 0;
-        int32 outCount = 1;
-        if (SkillLineAbilityEntry const* ability = sSkillLineAbilityStore.LookupEntry(order->SkillLineAbilityID))
-            if (SpellInfo const* recipe = sSpellMgr->GetSpellInfo(ability->Spell, DIFFICULTY_NONE))
-                for (SpellEffectInfo const& effect : recipe->GetEffects())
-                    if (effect.IsEffect(SPELL_EFFECT_CREATE_ITEM))
-                    {
-                        outItemId = effect.ItemType;
-                        outCount = std::max<int32>(1, effect.CalcValue(player));
-                        break;
-                    }
-
-        ObjectGuid const customerGuid = order->CustomerGUID;
-        if (outItemId)
-        {
-            if (Item* crafted = Item::CreateItem(outItemId, uint32(outCount), ItemContext::NONE, player))
-            {
-                CharacterDatabaseTransaction trans = CharacterDatabase.BeginTransaction();
-                crafted->SaveToDB(trans);
-                MailDraft("Crafting Order Complete", "Your crafted item is enclosed.")
-                    .AddItem(crafted)
-                    .SendMailTo(trans, MailReceiver(ObjectAccessor::FindConnectedPlayer(customerGuid), customerGuid.GetCounter()),
-                        MailSender(player, MAIL_STATIONERY_DEFAULT), MAIL_CHECK_MASK_COPIED);
-                CharacterDatabase.CommitTransaction(trans);
-            }
-        }
-
-        CraftingOrders::OrderType const orderType = order->Type;
-        uint32 const skillLineAbilityId = order->SkillLineAbilityID;
-
-        // Transition Claimed -> Fulfilled and release the escrowed tip to the crafter.
-        ok = sCraftingOrderMgr.FulfillOrder(packet.OrderID, player->GetGUID());
-
-        if (ok)
-        {
-            // CriteriaType::FulfillAnyCraftingOrder (245) - plain counter ("Crafting Orders fulfilled").
-            // CriteriaType::FulfillCraftingOrderType (246) - Asset = {CraftingOrderType}; real Criteria rows
-            // carry 0/1/2/3, which is exactly CraftingOrders::OrderType (Public/Guild/Personal/Npc).
-            // miscValue2 carries the SkillLineAbility so ModifierTreeType::CraftingOrderSkillLineAbility (347)
-            // can discriminate the recipe.
-            player->UpdateCriteria(CriteriaType::FulfillAnyCraftingOrder, 1, skillLineAbilityId);
-            player->UpdateCriteria(CriteriaType::FulfillCraftingOrderType, uint32(orderType), skillLineAbilityId);
-        }
+        // CriteriaType::FulfillAnyCraftingOrder (245) - plain counter ("Crafting Orders fulfilled").
+        // CriteriaType::FulfillCraftingOrderType (246) - Asset = {CraftingOrderType}; real Criteria rows
+        // carry 0/1/2/3, which is exactly CraftingOrders::OrderType (Public/Guild/Personal/Npc).
+        // miscValue2 carries the SkillLineAbility so ModifierTreeType::CraftingOrderSkillLineAbility (347)
+        // can discriminate the recipe.
+        player->UpdateCriteria(CriteriaType::FulfillAnyCraftingOrder, 1, skillLineAbilityId);
+        player->UpdateCriteria(CriteriaType::FulfillCraftingOrderType, uint32(orderType), skillLineAbilityId);
     }
 
     WorldPackets::CraftingOrders::CraftingOrderFulfillResult result;
@@ -276,9 +269,11 @@ void WorldSession::HandleCraftingOrderFulfill(WorldPackets::CraftingOrders::Craf
             BroadcastCraftingOrderState(*fulfilled);
 }
 
-// Projects a stored order into the client's JamCraftingOrder wire form. Customer-provided reagents are now emitted
-// (JamCraftingOrderItem records, validated byte-exact vs the live sniff); the optional recraft/output/npc
-// sub-structs are still sent absent, which is byte-exact for a basic public order.
+// Projects a stored order into the client's JamCraftingOrder wire form. The scalar head is byte-exact vs the live
+// NPC-order sniff; customer-provided reagents are currently NOT emitted (orders carry none while reagent escrow is
+// deferred, G5b), so the reagent vector serializes empty. The optional recraft/output/customerNpc sub-structs are also
+// sent absent, which is byte-exact for a basic public player order. (The player-order customerPlayer path below is
+// RE/reflection-verified only - the sniff is NPC-order-only and cannot exercise it, G14.)
 static WorldPackets::CraftingOrders::CraftingOrderData BuildCraftingOrderData(CraftingOrders::Order const& order)
 {
     WorldPackets::CraftingOrders::CraftingOrderData data;

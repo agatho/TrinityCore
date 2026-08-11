@@ -16,13 +16,18 @@
  */
 
 #include "CraftingOrderMgr.h"
+#include "CharacterCache.h"
 #include "CharacterDatabase.h"
 #include "DatabaseEnv.h"
+#include "DB2Stores.h"
 #include "GameTime.h"
+#include "Item.h"
 #include "Log.h"
 #include "Mail.h"
 #include "ObjectAccessor.h"
 #include "Player.h"
+#include "SpellInfo.h"
+#include "SpellMgr.h"
 #include "WorldSession.h"
 #include <algorithm>
 
@@ -33,16 +38,26 @@ namespace
     // Delivers a crafting-order tip by mail (payout to the crafter on fulfil, or refund to the customer when the
     // order dies unfulfilled). Works whether the recipient is online or not. The tip is escrowed from the customer
     // at create time, so this only ever moves already-reserved gold — it never creates any.
+    // Appends a tip-money mail to the caller's transaction (does NOT commit): lets the payout ride the same atomic
+    // transaction as the state write (used by the fulfil path so item+state+tip are all-or-nothing, anti-abuse G4).
+    void MailCraftingOrderTip(CharacterDatabaseTransaction trans, ObjectGuid recipient, uint64 amount, char const* subject, char const* body)
+    {
+        if (!amount || recipient.IsEmpty())
+            return;
+
+        MailDraft(subject, body)
+            .AddMoney(amount)
+            .SendMailTo(trans, MailReceiver(ObjectAccessor::FindConnectedPlayer(recipient), recipient.GetCounter()),
+                MailSender(MAIL_NORMAL, UI64LIT(0), MAIL_STATIONERY_DEFAULT), MAIL_CHECK_MASK_COPIED);
+    }
+
     void MailCraftingOrderTip(ObjectGuid recipient, uint64 amount, char const* subject, char const* body)
     {
         if (!amount || recipient.IsEmpty())
             return;
 
         CharacterDatabaseTransaction trans = CharacterDatabase.BeginTransaction();
-        MailDraft(subject, body)
-            .AddMoney(amount)
-            .SendMailTo(trans, MailReceiver(ObjectAccessor::FindConnectedPlayer(recipient), recipient.GetCounter()),
-                MailSender(MAIL_NORMAL, UI64LIT(0), MAIL_STATIONERY_DEFAULT), MAIL_CHECK_MASK_COPIED);
+        MailCraftingOrderTip(trans, recipient, amount, subject, body);
         CharacterDatabase.CommitTransaction(trans);
     }
 }
@@ -111,7 +126,14 @@ void CraftingOrderMgr::LoadFromDB()
 void CraftingOrderMgr::SaveOrderToDB(CraftingOrders::Order const& order) const
 {
     CharacterDatabaseTransaction trans = CharacterDatabase.BeginTransaction();
+    SaveOrderToDB(order, trans);
+    CharacterDatabase.CommitTransaction(trans);
+}
 
+// Appends the order + reagent write to the caller's transaction without committing, so it can be batched atomically
+// with a gold debit / other statements (see CreateOrder / FulfillOrder, anti-abuse G3/G4).
+void CraftingOrderMgr::SaveOrderToDB(CraftingOrders::Order const& order, CharacterDatabaseTransaction trans) const
+{
     CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_REP_CRAFTING_ORDER);
     uint8 i = 0;
     stmt->setUInt64(i++, order.OrderID);
@@ -144,8 +166,6 @@ void CraftingOrderMgr::SaveOrderToDB(CraftingOrders::Order const& order) const
         stmt->setUInt32(4, reagent.Quantity);
         trans->Append(stmt);
     }
-
-    CharacterDatabase.CommitTransaction(trans);
 }
 
 void CraftingOrderMgr::DeleteOrderFromDB(uint64 orderId) const
@@ -200,7 +220,32 @@ void CraftingOrderMgr::Update(uint32 diff)
     }
 }
 
-uint64 CraftingOrderMgr::CreateOrder(Player* customer, CraftingOrders::Order order)
+// Recipe-knowledge + skill-floor gate. Any player can send an arbitrary SkillLineAbilityID on the claim/fulfil wire;
+// without this a crafter who does not know the recipe could claim it and mint its output for free (anti-abuse G1).
+bool CraftingOrderMgr::CanCraft(Player* crafter, CraftingOrders::Order const& order)
+{
+    if (!crafter)
+        return false;
+
+    SkillLineAbilityEntry const* ability = sSkillLineAbilityStore.LookupEntry(order.SkillLineAbilityID);
+    if (!ability)
+        return false;
+
+    // The crafter must actually know the recipe spell (learned/trained it) - not merely send its id.
+    if (ability->Spell <= 0 || !crafter->HasSpell(uint32(ability->Spell)))
+        return false;
+
+    // ...and meet the recipe's skill-rank floor for the recipe's skill line, when it carries one.
+    if (ability->SkillLine && ability->MinSkillLineRank > 0 && crafter->GetSkillValue(ability->SkillLine) < ability->MinSkillLineRank)
+        return false;
+
+    // NOTE: order.MinQuality (the customer's minimum requested crafted quality) is intentionally NOT gated here: the
+    // achievable craft quality depends on the crafter's live skill/tools/reagents and a full craft simulation, none of
+    // which is resolvable at claim time. Enforcing recipe-knowledge + skill-floor is the defensible server-side gate.
+    return true;
+}
+
+uint64 CraftingOrderMgr::CreateOrder(Player* customer, CraftingOrders::Order order, CharacterDatabaseTransaction trans)
 {
     if (!customer)
         return 0;
@@ -212,19 +257,45 @@ uint64 CraftingOrderMgr::CreateOrder(Player* customer, CraftingOrders::Order ord
 
     uint64 const id = order.OrderID;
     CraftingOrders::Order& stored = (_orders[id] = std::move(order));
-    SaveOrderToDB(stored);
+    // Append to the caller's transaction (which also carries the gold debit) - committed atomically by the caller.
+    SaveOrderToDB(stored, trans);
     return id;
 }
 
-bool CraftingOrderMgr::ClaimOrder(uint64 orderId, ObjectGuid crafter)
+bool CraftingOrderMgr::ClaimOrder(uint64 orderId, Player* crafter)
 {
+    if (!crafter)
+        return false;
+
     CraftingOrders::Order* order = GetOrder(orderId);
     if (!order || !order->IsClaimable())
         return false;
 
-    // Personal orders may only be claimed by their designated crafter.
-    if (order->Type == CraftingOrders::OrderType::Personal && order->CrafterGUID != crafter)
+    ObjectGuid const crafterGuid = crafter->GetGUID();
+
+    // Self-order wash guard: a player must not claim their own order, nor an order posted by any character on the
+    // same game account. Otherwise post Public -> self-claim -> self-fulfil round-trips a free minted item and the
+    // full tip back to the same wallet at zero net cost, and farms the fulfil achievement (anti-abuse G2).
+    if (order->CustomerGUID == crafterGuid)
         return false;
+    if (order->CustomerAccountId && order->CustomerAccountId == crafter->GetSession()->GetAccountId())
+        return false;
+
+    // Recipe authorization: the crafter must actually know the recipe (re-checked again at fulfil) - G1.
+    if (!CanCraft(crafter, *order))
+        return false;
+
+    // Personal orders may only be claimed by their designated crafter.
+    if (order->Type == CraftingOrders::OrderType::Personal && order->CrafterGUID != crafterGuid)
+        return false;
+
+    // Guild orders may only be claimed by a member of the customer's guild (anti-abuse G8).
+    if (order->Type == CraftingOrders::OrderType::Guild)
+    {
+        ObjectGuid::LowType const customerGuild = sCharacterCache->GetCharacterGuildIdByGuid(order->CustomerGUID);
+        if (!customerGuild || crafter->GetGuildId() != customerGuild)
+            return false;
+    }
 
     // Give the crafter a bounded window to fulfil a claimed order. Without this ClaimEndDate stays 0, so the
     // claim-expiry branch in Update() (which requires ClaimEndDate != 0) never fires: a claimed-then-abandoned
@@ -233,7 +304,7 @@ bool CraftingOrderMgr::ClaimOrder(uint64 orderId, ObjectGuid crafter)
     // bounds abandonment; a crafter who completes normally never hits it.
     constexpr int64 CLAIM_DURATION = 24 * HOUR;
     order->State = CraftingOrders::OrderState::Claimed;
-    order->CrafterGUID = crafter;
+    order->CrafterGUID = crafterGuid;
     order->ClaimEndDate = GameTime::GetGameTime() + CLAIM_DURATION;
     SaveOrderToDB(*order);
     return true;
@@ -283,18 +354,66 @@ bool CraftingOrderMgr::RejectOrder(uint64 orderId, ObjectGuid crafter, std::stri
     return true;
 }
 
-bool CraftingOrderMgr::FulfillOrder(uint64 orderId, ObjectGuid crafter)
+bool CraftingOrderMgr::FulfillOrder(uint64 orderId, Player* crafter)
 {
-    CraftingOrders::Order* order = GetOrder(orderId);
-    if (!order || order->State != CraftingOrders::OrderState::Claimed || order->CrafterGUID != crafter)
+    if (!crafter)
         return false;
 
-    order->State = CraftingOrders::OrderState::Fulfilled;
-    SaveOrderToDB(*order);
+    CraftingOrders::Order* order = GetOrder(orderId);
+    if (!order || order->State != CraftingOrders::OrderState::Claimed || order->CrafterGUID != crafter->GetGUID())
+        return false;
 
-    // Release the escrowed tip to the crafter who completed the work.
-    MailCraftingOrderTip(order->CrafterGUID, order->TipAmount,
+    // Re-validate recipe authorization at fulfil, not only at claim: a crafter could unlearn the recipe (or the claim
+    // guard could be bypassed) between claim and fulfil. No output is minted for a recipe the crafter cannot craft (G1).
+    if (!CanCraft(crafter, *order))
+        return false;
+
+    // Derive the recipe's output (SkillLineAbility -> spell -> SPELL_EFFECT_CREATE_ITEM) BEFORE mutating state so a
+    // failure to resolve it aborts the whole fulfil cleanly (order stays Claimed, nothing sent).
+    uint32 outItemId = 0;
+    uint32 outCount = 1;
+    if (SkillLineAbilityEntry const* ability = sSkillLineAbilityStore.LookupEntry(order->SkillLineAbilityID))
+        if (SpellInfo const* recipe = sSpellMgr->GetSpellInfo(ability->Spell, DIFFICULTY_NONE))
+            for (SpellEffectInfo const& effect : recipe->GetEffects())
+                if (effect.IsEffect(SPELL_EFFECT_CREATE_ITEM))
+                {
+                    outItemId = effect.ItemType;
+                    outCount = uint32(std::max<int32>(1, effect.CalcValue(crafter)));
+                    break;
+                }
+
+    ObjectGuid const customerGuid = order->CustomerGUID;
+    // House cut is skimmed from the tip and sunk; the crafter is paid the remainder (defaults to the full tip while
+    // HouseCutAmount is 0). Deducting it makes a self/collusive wash trade net-negative rather than net-zero (G11).
+    uint64 const houseCut = std::min(order->HouseCutAmount, order->TipAmount);
+    uint64 const payout = order->TipAmount - houseCut;
+
+    // ONE transaction carries the entire fulfilment: the Claimed->Fulfilled state write (idempotency guard), the
+    // crafted item + its delivery mail, and the tip payout. Either every row commits or none does, so a crash mid-way
+    // leaves the order Claimed with no item minted and no tip paid; the replay then completes it exactly once. State
+    // is written first, so once this commits any replay hits the state!=Claimed guard above and is a no-op (G4).
+    CharacterDatabaseTransaction trans = CharacterDatabase.BeginTransaction();
+
+    order->State = CraftingOrders::OrderState::Fulfilled;
+    order->ClaimEndDate = 0;
+    SaveOrderToDB(*order, trans);
+
+    if (outItemId)
+    {
+        if (Item* crafted = Item::CreateItem(outItemId, outCount, ItemContext::NONE, crafter))
+        {
+            crafted->SaveToDB(trans);
+            MailDraft("Crafting Order Complete", "Your crafted item is enclosed.")
+                .AddItem(crafted)
+                .SendMailTo(trans, MailReceiver(ObjectAccessor::FindConnectedPlayer(customerGuid), customerGuid.GetCounter()),
+                    MailSender(crafter, MAIL_STATIONERY_DEFAULT), MAIL_CHECK_MASK_COPIED);
+        }
+    }
+
+    MailCraftingOrderTip(trans, order->CrafterGUID, payout,
         "Crafting Order Payment", "Payment for a completed crafting order is enclosed.");
+
+    CharacterDatabase.CommitTransaction(trans);
     return true;
 }
 
