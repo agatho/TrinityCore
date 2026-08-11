@@ -1482,6 +1482,50 @@ void WorldSession::HandleChromieTimeSelectExpansion(WorldPackets::Misc::ChromieT
     player->SetChromieTime(expansionId);
 
     player->SendDirectMessage(WorldPackets::Misc::ChromieTimeSelectExpansionSuccess().Write());
+
+    // Audit R13 FIX 1: retail completes quest 85026 "Where Legends are Made" (objective
+    // 453674 = QUEST_OBJECTIVE_MONSTER, ObjectID 167032 = Chromie, Amount 1,
+    // "Timewalking Campaign selected") by granting Chromie kill-credit on a successful
+    // selection. Always safe: KilledMonsterCredit no-ops if the player is not on the quest.
+    player->KilledMonsterCredit(167032);
+
+    // Audit R13 FIX 2: auto-offer the era's Chromie Time breadcrumb ("<Expansion>: Onward
+    // to Adventure in <zone>") for the chosen timeline, matching retail's per-expansion
+    // intro quest. The breadcrumbs are faction-paired (Alliance/Horde); the id set below is
+    // client-verified against integ_world.quest_template (LogTitle + AllowableRaces bitmask:
+    // 0x55155555B1354C4D = Alliance, 0xAA2AAAAA4E0AB3B2 = Horde) and, for WotLK and DF,
+    // cross-checked against sniffs (DF A rec 4620) and wowhead (WotLK 60962/60963).
+    // expansionId is the UiChromieTimeExpansionInfo.ID (DB2 record id, wago @12.0.7.68887):
+    // Cata=5, TBC=6, WotLK=7, MoP=8, WoD=9, Legion=10, SL=14, BfA=15, DF=16.
+    // SL (14) and BfA (15) are deferred: BfA has no "Onward to Adventure" breadcrumb pair
+    // (Horde intro 53372 "Hour of Reckoning" only; Alliance id unverified) and SL is not a
+    // Chromie Time leveling era. Only offer when the player can take the quest and is not
+    // already on/past it (CanTakeQuest also re-validates AllowableRaces, so a neutral
+    // pandaren or any faction mismatch simply results in no offer rather than a wrong quest).
+    struct ChromieIntroQuest { int32 ExpansionId; uint32 AllianceQuest; uint32 HordeQuest; };
+    static constexpr ChromieIntroQuest ChromieIntroQuests[] =
+    {
+        {  5, 60891, 60887 }, // Cataclysm             (A: Eastern Kingdoms / H: Kalimdor)
+        {  6, 60959, 60961 }, // Burning Crusade       (Outland)
+        {  7, 60962, 60963 }, // Wrath of the Lich King (Northrend)
+        {  8, 60965, 60964 }, // Mists of Pandaria     (Pandaria)
+        {  9, 60969, 60968 }, // Warlords of Draenor   (Draenor)
+        { 10, 60971, 60970 }, // Legion                (Broken Isles)
+        { 16, 65436, 65435 }, // Dragonflight          (Dragon Isles)
+    };
+
+    for (ChromieIntroQuest const& intro : ChromieIntroQuests)
+    {
+        if (intro.ExpansionId != expansionId)
+            continue;
+
+        uint32 introQuestId = (player->GetTeam() == ALLIANCE) ? intro.AllianceQuest : intro.HordeQuest;
+        if (Quest const* introQuest = sObjectMgr->GetQuestTemplate(introQuestId))
+            if (player->GetQuestStatus(introQuestId) == QUEST_STATUS_NONE && player->CanTakeQuest(introQuest, false))
+                player->AddQuestAndCheckCompletion(introQuest, nullptr);
+
+        break;
+    }
 }
 
 void WorldSession::HandleSetCurrencyFlags(WorldPackets::Misc::SetCurrencyFlags const& setCurrenctFlags)
