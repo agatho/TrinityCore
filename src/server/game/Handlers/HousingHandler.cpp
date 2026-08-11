@@ -1801,6 +1801,14 @@ void WorldSession::HandleHousingFixtureSetEditMode(WorldPackets::Housing::Housin
     }
 
     // 2) SMSG_HOUSE_EXTERIOR_LOCK_RESPONSE — tells client the fixture entity is locked for editing
+    // Only when we actually have a fixture entity to name. Inside the interior the lookup
+    // above runs against a HousingMap and finds nothing, so this used to go out with
+    // FixtureEntityGuid = 0: the client resolves that GUID to lock it, gets null, and dies
+    // (ACCESS_VIOLATION on a null read) the moment interior edit mode starts. The retail
+    // interior-customize capture (wall_floor_ceiling_customize, 66838) contains no
+    // exterior-lock response at all - that flow is DECOR_SET_EDIT_MODE /
+    // ROOM_SET_LAYOUT_EDIT_MODE - so suppressing it indoors matches retail too.
+    if (!fixtureEntityGuid.IsEmpty())
     {
         WorldPackets::Housing::HouseExteriorLockResponse lockResponse;
         lockResponse.FixtureEntityGuid = fixtureEntityGuid;
@@ -1809,6 +1817,10 @@ void WorldSession::HandleHousingFixtureSetEditMode(WorldPackets::Housing::Housin
         lockResponse.Active = entering;
         SendPacket(lockResponse.Write());
     }
+    else
+        TC_LOG_INFO("housing", "HandleHousingFixtureSetEditMode: no fixture entity for player {} on map {} - "
+            "suppressing SMSG_HOUSE_EXTERIOR_LOCK_RESPONSE (an empty FixtureEntityGuid crashes the client)",
+            player->GetGUID().ToString(), player->GetMapId());
 
     // 3) SMSG_MOVE_SET_COMPOUND_STATE — root + disable gravity on enter, unroot + enable gravity on exit
     //    Also update server-side movement flags so movement validation stays consistent.
