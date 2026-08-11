@@ -926,4 +926,10 @@ static constexpr uint32 HOUSING_MIN_PLAYER_LEVEL = 10;
 // Required expansion for housing access (The War Within = 10)
 static constexpr uint32 HOUSING_REQUIRED_EXPANSION = 10;
 
+// Interior front-door GameObjects, picked by faction in HouseInteriorMap. Unlike the exterior
+// doors these are NOT reachable from ExteriorComponent (Type 11), so HousingMgr has to bind the
+// go_housing_door script to them explicitly - without it the door inside the house is inert.
+static constexpr uint32 INTERIOR_DOOR_GO_ALLIANCE = 575017; // displayId 113554
+static constexpr uint32 INTERIOR_DOOR_GO_HORDE    = 587318;
+
 #endif // TRINITYCORE_HOUSING_DEFINES_H

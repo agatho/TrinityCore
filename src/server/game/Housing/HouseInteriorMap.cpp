@@ -658,11 +658,36 @@ void HouseInteriorMap::DespawnAllRoomMeshObjects()
     }
     _roomEntities.clear();
 
+    // Placed decor must go with the rooms. Its visuals hang off the room entities we just
+    // destroyed, and _decorGuidToObjGuid is what SpawnInteriorDecor consults to decide a decor
+    // item is "already spawned". Leaving it populated made every subsequent respawn skip all
+    // decor silently ("Spawned 0 decor entities (total=3, exteriorSkipped=0)"), so a house whose
+    // rooms were respawned came back completely empty.
+    uint32 decorDespawned = 0;
+    for (auto const& [decorGuid, objGuid] : _decorGuidToObjGuid)
+    {
+        if (objGuid.IsGameObject())
+        {
+            if (GameObject* go = GetGameObject(objGuid))
+            {
+                RemoveFromMap(go, true);
+                ++decorDespawned;
+            }
+        }
+        else if (MeshObject* mesh = GetMeshObject(objGuid))
+        {
+            RemoveFromMap(mesh, true);
+            ++decorDespawned;
+        }
+    }
+    _decorGuidToObjGuid.clear();
+    despawnCount += decorDespawned;
+
     _roomMeshObjects.clear();
     _roomsSpawned = false;
 
-    TC_LOG_DEBUG("housing", "HouseInteriorMap::DespawnAllRoomMeshObjects: Despawned {} objects (owner={})",
-        despawnCount, _owner.ToString());
+    TC_LOG_DEBUG("housing", "HouseInteriorMap::DespawnAllRoomMeshObjects: Despawned {} objects incl. {} decor (owner={})",
+        despawnCount, decorDespawned, _owner.ToString());
 }
 
 void HouseInteriorMap::DespawnRoomEntities(ObjectGuid roomGuid)
@@ -1875,7 +1900,7 @@ bool HouseInteriorMap::AddPlayerToMap(Player* player, bool initPlayer /*= true*/
                             float fbX = _originX - 2.52f;
                             float fbY = _originY;
                             float fbZ = _originZ + 0.02f;
-                            if (GameObject* doorGo = p->SummonGameObject(575017,
+                            if (GameObject* doorGo = p->SummonGameObject(INTERIOR_DOOR_GO_ALLIANCE,
                                 Position(fbX, fbY, fbZ, 0.0f), QuaternionData(0, 0, 0, 1), 0s))
                             {
                                 doorGo->ReplaceAllFlags(GameObjectFlags(0x40000));
@@ -1885,11 +1910,11 @@ bool HouseInteriorMap::AddPlayerToMap(Player* player, bool initPlayer /*= true*/
                             return;
                         }
 
-                        uint32 doorGoEntry = 575017; // Alliance default
+                        uint32 doorGoEntry = INTERIOR_DOOR_GO_ALLIANCE; // Alliance default
                         Neighborhood* nbh = sNeighborhoodMgr.GetNeighborhood(ownerHousing->GetNeighborhoodGuid());
                         int32 faction = nbh ? nbh->GetFactionRestriction() : NEIGHBORHOOD_FACTION_ALLIANCE;
                         if (faction == NEIGHBORHOOD_FACTION_HORDE)
-                            doorGoEntry = 587318;
+                            doorGoEntry = INTERIOR_DOOR_GO_HORDE;
 
                         TC_LOG_INFO("housing", "InteriorDoor: faction={} doorGoEntry={}",
                             faction == NEIGHBORHOOD_FACTION_HORDE ? "Horde" : "Alliance", doorGoEntry);
