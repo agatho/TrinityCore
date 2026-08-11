@@ -926,6 +926,14 @@ static constexpr uint32 HOUSING_MIN_PLAYER_LEVEL = 10;
 // Required expansion for housing access (The War Within = 10)
 static constexpr uint32 HOUSING_REQUIRED_EXPANSION = 10;
 
+// House interior instance map (MAP_HOUSE_INTERIOR = 7)
+static constexpr uint32 HOUSE_INTERIOR_MAP_ID = 2783;
+
+// Vertical spacing between stacked interior rooms. Must match the value HouseInteriorMap
+// actually positions rooms with (roomZ = origin + FloorIndex * this) or anything deriving a
+// room origin from FloorIndex lands on the wrong floor.
+static constexpr float HOUSE_INTERIOR_FLOOR_HEIGHT = 12.0f;
+
 // Interior front-door GameObjects, picked by faction in HouseInteriorMap. Unlike the exterior
 // doors these are NOT reachable from ExteriorComponent (Type 11), so HousingMgr has to bind the
 // go_housing_door script to them explicitly - without it the door inside the house is inert.
