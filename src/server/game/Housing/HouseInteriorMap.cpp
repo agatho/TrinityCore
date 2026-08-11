@@ -1146,29 +1146,29 @@ void HouseInteriorMap::SpawnInteriorDecorFromList(std::vector<Housing::PlacedDec
             }
         }
 
-        // decor.Pos is ROOM-LOCAL whenever RoomGuid is set - it is stored exactly as the client
-        // sends it, and the client places decor relative to the room entity it is attached to
-        // (character_housing_decor rows sit inside the room geobox, e.g. 11.5/7.6/3.0 for a room
-        // whose half-extent is 11.51, while the room itself is at world -985/-1000/0.1). This
-        // used to be read as a WORLD position and the room origin subtracted from it, which put
-        // every interior decor roughly 1400 yards outside the house - present, but never visible.
-        float localX = decor.PosX;
-        float localY = decor.PosY;
-        float localZ = decor.PosZ;
-
-        float worldX = localX, worldY = localY, worldZ = localZ;
-        if (!roomEntityGuid.IsEmpty())
-        {
-            float roomFacing = roomWorldPos.GetOrientation();
-            float cosF = std::cos(roomFacing);
-            float sinF = std::sin(roomFacing);
-            worldX = roomWorldPos.GetPositionX() + (cosF * localX - sinF * localY);
-            worldY = roomWorldPos.GetPositionY() + (sinF * localX + cosF * localY);
-            worldZ = roomWorldPos.GetPositionZ() + localZ;
-        }
+        // decor.Pos is a WORLD position in interior-map space - it is stored verbatim from the
+        // client's placement packet, and the client sends world coords (rows placed live read
+        // e.g. -980.4/-1005.2/0.07 for a room sitting at -985/-1000/0.1). PositionLocalSpace is
+        // therefore derived by subtracting the room origin, NOT the other way round.
+        float worldX = decor.PosX;
+        float worldY = decor.PosY;
+        float worldZ = decor.PosZ;
         LoadGrid(worldX, worldY);
 
         QuaternionData rot(decor.RotationX, decor.RotationY, decor.RotationZ, decor.RotationW);
+
+        float localX = worldX, localY = worldY, localZ = worldZ;
+        if (!roomEntityGuid.IsEmpty())
+        {
+            float dx = worldX - roomWorldPos.GetPositionX();
+            float dy = worldY - roomWorldPos.GetPositionY();
+            float roomFacing = roomWorldPos.GetOrientation();
+            float cosF = std::cos(roomFacing);
+            float sinF = std::sin(roomFacing);
+            localX =  cosF * dx + sinF * dy;
+            localY = -sinF * dx + cosF * dy;
+            localZ = worldZ - roomWorldPos.GetPositionZ();
+        }
 
         Position localPos(localX, localY, localZ);
         Position worldPos(worldX, worldY, worldZ);
@@ -1345,21 +1345,24 @@ void HouseInteriorMap::SpawnSingleInteriorDecor(Housing::PlacedDecor const& deco
         }
     }
 
-    // decor.Pos is ROOM-LOCAL when RoomGuid is set - see SpawnInteriorDecorFromList.
-    float localX = decor.PosX, localY = decor.PosY, localZ = decor.PosZ;
-    float worldX = localX, worldY = localY, worldZ = localZ;
-    if (!roomEntityGuid.IsEmpty())
-    {
-        float roomFacing = roomWorldPos.GetOrientation();
-        float cosF = std::cos(roomFacing);
-        float sinF = std::sin(roomFacing);
-        worldX = roomWorldPos.GetPositionX() + (cosF * localX - sinF * localY);
-        worldY = roomWorldPos.GetPositionY() + (sinF * localX + cosF * localY);
-        worldZ = roomWorldPos.GetPositionZ() + localZ;
-    }
+    // decor.Pos is a WORLD position in interior-map space - see SpawnInteriorDecorFromList.
+    float worldX = decor.PosX, worldY = decor.PosY, worldZ = decor.PosZ;
     LoadGrid(worldX, worldY);
 
     QuaternionData rot(decor.RotationX, decor.RotationY, decor.RotationZ, decor.RotationW);
+
+    float localX = worldX, localY = worldY, localZ = worldZ;
+    if (!roomEntityGuid.IsEmpty())
+    {
+        float dx = worldX - roomWorldPos.GetPositionX();
+        float dy = worldY - roomWorldPos.GetPositionY();
+        float roomFacing = roomWorldPos.GetOrientation();
+        float cosF = std::cos(roomFacing);
+        float sinF = std::sin(roomFacing);
+        localX =  cosF * dx + sinF * dy;
+        localY = -sinF * dx + cosF * dy;
+        localZ = worldZ - roomWorldPos.GetPositionZ();
+    }
 
     Position localPos(localX, localY, localZ);
     Position worldPos(worldX, worldY, worldZ);
