@@ -1121,41 +1121,54 @@ void HouseInteriorMap::SpawnInteriorDecorFromList(std::vector<Housing::PlacedDec
         ObjectGuid roomEntityGuid = decor.RoomGuid;
         Position roomWorldPos;
 
-        Housing* ownerHousing = GetOwnerHousing();
-        if (ownerHousing && !roomEntityGuid.IsEmpty())
+        // Resolve the room's world position from the room entity we just spawned. The old
+        // lookup went through GetOwnerHousing()->GetRooms(), which returns nothing on some
+        // passes (owner not loaded), and a miss silently left roomWorldPos at (0,0,0) - which
+        // is why the same decor item computed a different position on consecutive respawns.
+        bool roomResolved = false;
+        if (!roomEntityGuid.IsEmpty())
         {
-            for (Housing::Room const* rm : ownerHousing->GetRooms())
+            for (HousingRoomEntity const* re : _roomEntities)
             {
-                if (rm->Guid == roomEntityGuid)
+                if (re && re->GetGUID() == roomEntityGuid)
                 {
-                    static constexpr float FLOOR_HEIGHT = 12.0f;
-                    roomWorldPos = Position(_originX + static_cast<float>(rm->GridX),
-                                            _originY + static_cast<float>(rm->GridY),
-                                            _originZ + static_cast<float>(rm->FloorIndex) * FLOOR_HEIGHT, 0.0f);
+                    roomWorldPos = Position(re->GetPositionX(), re->GetPositionY(), re->GetPositionZ(), re->GetOrientation());
+                    roomResolved = true;
                     break;
                 }
             }
+
+            if (!roomResolved)
+            {
+                TC_LOG_ERROR("housing", "HouseInteriorMap::SpawnInteriorDecor: room entity {} not spawned for decor entry {} - skipping",
+                    roomEntityGuid.ToString(), decor.DecorEntryId);
+                continue;
+            }
         }
 
-        float worldX = decor.PosX;
-        float worldY = decor.PosY;
-        float worldZ = decor.PosZ;
-        LoadGrid(worldX, worldY);
+        // decor.Pos is ROOM-LOCAL whenever RoomGuid is set - it is stored exactly as the client
+        // sends it, and the client places decor relative to the room entity it is attached to
+        // (character_housing_decor rows sit inside the room geobox, e.g. 11.5/7.6/3.0 for a room
+        // whose half-extent is 11.51, while the room itself is at world -985/-1000/0.1). This
+        // used to be read as a WORLD position and the room origin subtracted from it, which put
+        // every interior decor roughly 1400 yards outside the house - present, but never visible.
+        float localX = decor.PosX;
+        float localY = decor.PosY;
+        float localZ = decor.PosZ;
 
-        QuaternionData rot(decor.RotationX, decor.RotationY, decor.RotationZ, decor.RotationW);
-
-        float localX = worldX, localY = worldY, localZ = worldZ;
+        float worldX = localX, worldY = localY, worldZ = localZ;
         if (!roomEntityGuid.IsEmpty())
         {
-            float dx = worldX - roomWorldPos.GetPositionX();
-            float dy = worldY - roomWorldPos.GetPositionY();
             float roomFacing = roomWorldPos.GetOrientation();
             float cosF = std::cos(roomFacing);
             float sinF = std::sin(roomFacing);
-            localX =  cosF * dx + sinF * dy;
-            localY = -sinF * dx + cosF * dy;
-            localZ = worldZ - roomWorldPos.GetPositionZ();
+            worldX = roomWorldPos.GetPositionX() + (cosF * localX - sinF * localY);
+            worldY = roomWorldPos.GetPositionY() + (sinF * localX + cosF * localY);
+            worldZ = roomWorldPos.GetPositionZ() + localZ;
         }
+        LoadGrid(worldX, worldY);
+
+        QuaternionData rot(decor.RotationX, decor.RotationY, decor.RotationZ, decor.RotationW);
 
         Position localPos(localX, localY, localZ);
         Position worldPos(worldX, worldY, worldZ);
@@ -1309,39 +1322,44 @@ void HouseInteriorMap::SpawnSingleInteriorDecor(Housing::PlacedDecor const& deco
         }
     }
 
-    // Find the room's world position from its grid coordinates
-    if (ownerHousing)
+    // Take the room's world position from the spawned room entity (authoritative, and unlike
+    // the GetRooms() walk it cannot silently miss and leave roomWorldPos at the origin).
+    if (!roomEntityGuid.IsEmpty())
     {
-        for (Housing::Room const* rm : ownerHousing->GetRooms())
+        bool roomResolved = false;
+        for (HousingRoomEntity const* re : _roomEntities)
         {
-            if (rm->Guid == roomEntityGuid)
+            if (re && re->GetGUID() == roomEntityGuid)
             {
-                static constexpr float FLOOR_HEIGHT = 7.0f;
-                roomWorldPos = Position(_originX + static_cast<float>(rm->GridX),
-                                        _originY + static_cast<float>(rm->GridY),
-                                        _originZ + static_cast<float>(rm->FloorIndex) * FLOOR_HEIGHT, 0.0f);
+                roomWorldPos = Position(re->GetPositionX(), re->GetPositionY(), re->GetPositionZ(), re->GetOrientation());
+                roomResolved = true;
                 break;
             }
         }
+
+        if (!roomResolved)
+        {
+            TC_LOG_ERROR("housing", "HouseInteriorMap::SpawnSingleInteriorDecor: room entity {} not spawned for decor {} - skipping",
+                roomEntityGuid.ToString(), decor.Guid.ToString());
+            return;
+        }
     }
 
-    float worldX = decor.PosX, worldY = decor.PosY, worldZ = decor.PosZ;
-    LoadGrid(worldX, worldY);
-
-    QuaternionData rot(decor.RotationX, decor.RotationY, decor.RotationZ, decor.RotationW);
-
-    float localX = worldX, localY = worldY, localZ = worldZ;
+    // decor.Pos is ROOM-LOCAL when RoomGuid is set - see SpawnInteriorDecorFromList.
+    float localX = decor.PosX, localY = decor.PosY, localZ = decor.PosZ;
+    float worldX = localX, worldY = localY, worldZ = localZ;
     if (!roomEntityGuid.IsEmpty())
     {
-        float dx = worldX - roomWorldPos.GetPositionX();
-        float dy = worldY - roomWorldPos.GetPositionY();
         float roomFacing = roomWorldPos.GetOrientation();
         float cosF = std::cos(roomFacing);
         float sinF = std::sin(roomFacing);
-        localX =  cosF * dx + sinF * dy;
-        localY = -sinF * dx + cosF * dy;
-        localZ = worldZ - roomWorldPos.GetPositionZ();
+        worldX = roomWorldPos.GetPositionX() + (cosF * localX - sinF * localY);
+        worldY = roomWorldPos.GetPositionY() + (sinF * localX + cosF * localY);
+        worldZ = roomWorldPos.GetPositionZ() + localZ;
     }
+    LoadGrid(worldX, worldY);
+
+    QuaternionData rot(decor.RotationX, decor.RotationY, decor.RotationZ, decor.RotationW);
 
     Position localPos(localX, localY, localZ);
     Position worldPos(worldX, worldY, worldZ);
