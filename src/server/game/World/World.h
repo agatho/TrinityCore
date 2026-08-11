@@ -766,7 +766,16 @@ class TC_GAME_API World
         void UpdateAreaDependentAuras();
 
         bool IsBattlePetJournalLockAcquired(ObjectGuid battlenetAccountGuid);
-        bool IsAccountInventoryLockAcquired(ObjectGuid battlenetAccountGuid, WorldSession const* exclude = nullptr);
+
+        // Account-wide (warband) bank exclusivity lock. The account bank is shared across
+        // every character of a Battle.net account, and on this realm several of those
+        // characters may be online at once. Mutation is therefore serialised through a
+        // single-holder, server-side reservation: exactly one session per Bnet account may
+        // hold it, the acquisition is atomic (test-and-set under a mutex), and every account
+        // bank mutation opcode is refused unless the caller holds it. This makes concurrent
+        // same-bnet mutation impossible and closes the item/coinage duplication vectors.
+        bool TryAcquireAccountInventoryLock(ObjectGuid battlenetAccountGuid, WorldSession* session);
+        void ReleaseAccountInventoryLock(ObjectGuid battlenetAccountGuid, WorldSession const* session);
 
         uint32 GetCleaningFlags() const { return m_CleaningFlags; }
         void SetCleaningFlags(uint32 flags) { m_CleaningFlags = flags; }
@@ -835,6 +844,11 @@ class TC_GAME_API World
 
         SessionMap m_sessions;
         std::unordered_multimap<ObjectGuid, WorldSession*> m_sessionsByBnetGuid;
+        // Owner of the account-wide bank lock, keyed by Battle.net account GUID. Guarded by
+        // m_accountInventoryLockMutex so the test-and-set on acquisition is atomic against
+        // two same-bnet sessions entering the world simultaneously.
+        std::unordered_map<ObjectGuid, WorldSession*> m_accountInventoryLockOwners;
+        std::mutex m_accountInventoryLockMutex;
         typedef std::unordered_map<uint32, time_t> DisconnectMap;
         DisconnectMap m_disconnects;
         uint32 m_maxActiveSessionCount;

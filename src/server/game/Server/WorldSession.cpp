@@ -622,9 +622,13 @@ void WorldSession::LogoutPlayer(bool save)
         if (_battlePetMgr->HasJournalLock())
             _battlePetMgr->ToggleJournalLock(false);
 
-        ///- Release account-wide bank inventory lock
+        ///- Release account-wide bank inventory lock (both the client-facing flag and the
+        ///  authoritative server-side reservation) so another same-bnet session can acquire it.
         if (_player->HasPlayerLocalFlag(PLAYER_LOCAL_FLAG_HAS_ACCOUNT_BANK_LOCK))
+        {
             _player->RemovePlayerLocalFlag(PLAYER_LOCAL_FLAG_HAS_ACCOUNT_BANK_LOCK);
+            sWorld->ReleaseAccountInventoryLock(GetBattlenetAccountGUID(), this);
+        }
 
         ///- Clear whisper whitelist
         _player->ClearWhisperWhiteList();

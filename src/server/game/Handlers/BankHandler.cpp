@@ -26,6 +26,23 @@
 #include "Log.h"
 #include "NPCPackets.h"
 #include "Player.h"
+#include "World.h"
+
+bool WorldSession::CanMutateAccountBank() const
+{
+    if (!_player)
+        return false;
+
+    // Unlinked accounts (bnetId == 0) collapse into a single shared warband namespace, which
+    // would let one session read and mutate every un-linked character's account bank. Refuse.
+    if (!GetBattlenetAccountId())
+        return false;
+
+    // Only the single server-side lock holder may mutate the shared account bank. A session
+    // that does not hold the reservation is rejected, so concurrent same-bnet mutation — the
+    // root of the item (C1/CR-2) and coinage (C2/CR-3) duplication vectors — cannot happen.
+    return _player->HasPlayerLocalFlag(PLAYER_LOCAL_FLAG_HAS_ACCOUNT_BANK_LOCK);
+}
 
 void WorldSession::HandleAutoBankItemOpcode(WorldPackets::Bank::AutoBankItem& packet)
 {
@@ -46,6 +63,8 @@ void WorldSession::HandleAutoBankItemOpcode(WorldPackets::Bank::AutoBankItem& pa
 
     if (packet.BankType == BankType::Account)
     {
+        if (!CanMutateAccountBank())
+            return;
         msg = _player->CanAccountBankItem(NULL_BAG, NULL_SLOT, dest, item, false);
     }
     else if (packet.BankType == BankType::Character)
@@ -143,6 +162,9 @@ void WorldSession::HandleAutoStoreBankItemOpcode(WorldPackets::Bank::AutoStoreBa
     }
     else if (_player->IsAccountBankPos(packet.Bag, packet.Slot))       // moving from account bank to inventory
     {
+        if (!CanMutateAccountBank())
+            return;
+
         ItemPosCountVec dest;
         InventoryResult msg = _player->CanStoreItem(NULL_BAG, NULL_SLOT, dest, item, false);
         if (msg != EQUIP_ERR_OK)
@@ -185,6 +207,10 @@ void WorldSession::HandleBuyBankTab(WorldPackets::Bank::BuyBankTab const& buyBan
             _player->GetGUID(), buyBankTab.BankType);
         return;
     }
+
+    // Buying an account bank tab mutates shared account state — gate on the account bank lock.
+    if (buyBankTab.BankType == BankType::Account && !CanMutateAccountBank())
+        return;
 
     uint32 itemId = 0;
     uint8 slot = 0;
@@ -271,6 +297,8 @@ void WorldSession::HandleUpdateBankTabSettings(WorldPackets::Bank::UpdateBankTab
                 updateBankTabSettings.Settings.Icon, updateBankTabSettings.Settings.Description, updateBankTabSettings.Settings.DepositFlags);
             break;
         case BankType::Account:
+            if (!CanMutateAccountBank())
+                return;
             if (updateBankTabSettings.Tab >= _player->m_activePlayerData->AccountBankTabSettings.size())
             {
                 TC_LOG_DEBUG("network", "WorldSession::HandleUpdateBankTabSettings {} doesn't have bank tab {} in bank type {}.",
@@ -366,6 +394,9 @@ void WorldSession::HandleAutoDepositAccountBank(WorldPackets::Bank::AutoDepositA
         return;
     }
 
+    if (!CanMutateAccountBank())
+        return;
+
     if (_player->GetAccountBankTabCount() == 0)
     {
         _player->SendEquipError(EQUIP_ERR_BANK_FULL);
@@ -393,6 +424,9 @@ void WorldSession::HandleAccountBankDepositMoney(WorldPackets::Bank::AccountBank
         return;
     }
 
+    if (!CanMutateAccountBank())
+        return;
+
     if (!accountBankDepositMoney.Money)
         return;
 
@@ -413,6 +447,9 @@ void WorldSession::HandleAccountBankWithdrawMoney(WorldPackets::Bank::AccountBan
         TC_LOG_DEBUG("network", "WORLD: HandleAccountBankWithdrawMoney - {} not found or you can't interact with him.", accountBankWithdrawMoney.Banker.ToString());
         return;
     }
+
+    if (!CanMutateAccountBank())
+        return;
 
     if (!accountBankWithdrawMoney.Money)
         return;
