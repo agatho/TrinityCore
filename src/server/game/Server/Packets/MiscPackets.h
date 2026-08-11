@@ -1120,10 +1120,11 @@ namespace WorldPackets
         public:
             struct CurrencyTransferLogEntry
             {
-                int32 CurrencyTypeID = 0;
                 ObjectGuid SourceCharacterGUID;
                 ObjectGuid DestCharacterGUID;
-                int32 Quantity = 0;
+                int32 CurrencyTypeID = 0;
+                int32 QuantityReceived = 0;
+                int32 QuantitySent = 0;
                 uint32 Timestamp = 0;
             };
 

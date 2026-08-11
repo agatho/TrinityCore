@@ -899,13 +899,17 @@ WorldPacket const* CurrencyTransferLog::Write()
 {
     _worldPacket << Size<uint32>(Entries);
 
+    // Retail 12.0.7 entry layout (verified against sniff SMSG_CURRENCY_TRANSFER_LOG):
+    // Source, Dest, CurrencyTypeID, QuantityReceived, QuantitySent, Timestamp, trailing int32(0).
     for (CurrencyTransferLogEntry const& entry : Entries)
     {
-        _worldPacket << int32(entry.CurrencyTypeID);
         _worldPacket << entry.SourceCharacterGUID;
         _worldPacket << entry.DestCharacterGUID;
-        _worldPacket << int32(entry.Quantity);
+        _worldPacket << int32(entry.CurrencyTypeID);
+        _worldPacket << int32(entry.QuantityReceived);
+        _worldPacket << int32(entry.QuantitySent);
         _worldPacket << uint32(entry.Timestamp);
+        _worldPacket << int32(0);
     }
 
     return &_worldPacket;

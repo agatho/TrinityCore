@@ -24,10 +24,19 @@
 #include "MiscPackets.h"
 #include "ObjectAccessor.h"
 #include "Player.h"
+#include "World.h"
 
 void WorldSession::HandleRequestCurrencyDataForAccountCharacters(WorldPackets::Misc::RequestCurrencyDataForAccountCharacters& /*packet*/)
 {
     uint32 bnetAccountId = GetBattlenetAccountId();
+
+    // Refuse enumeration for an unlinked account: WHERE battlenetAccount = 0 would otherwise
+    // match every un-backfilled character on the realm (MJ-2).
+    if (!bnetAccountId)
+    {
+        SendPacket(WorldPackets::Misc::AccountCharacterCurrencyLists().Write());
+        return;
+    }
 
     CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_SEL_ACCOUNT_CHARACTER_CURRENCIES);
     stmt->setUInt32(0, bnetAccountId);
@@ -94,48 +103,58 @@ void WorldSession::HandleTransferCurrencyFromAccountCharacter(WorldPackets::Misc
     if (!player)
         return;
 
-    // Validate currency
-    CurrencyTypesEntry const* currencyType = sCurrencyTypesStore.LookupEntry(packet.CurrencyID);
-    if (!currencyType)
+    auto sendResult = [this, currencyId = packet.CurrencyID](AccountCurrencyTransferResult res)
     {
         WorldPackets::Misc::CurrencyTransferResult result;
-        result.CurrencyID = packet.CurrencyID;
-        result.Result = AccountCurrencyTransferResult::InvalidCurrency;
+        result.CurrencyID = currencyId;
+        result.Result = res;
         SendPacket(result.Write());
+    };
+
+    // Warband economy operations require a linked Battle.net account. With bnetId == 0 every
+    // unlinked account collapses into one shared namespace and could enumerate/drain any
+    // character (MJ-2), so refuse outright.
+    uint32 bnetAccountId = GetBattlenetAccountId();
+    if (!bnetAccountId)
+    {
+        sendResult(AccountCurrencyTransferResult::ServerError);
         return;
     }
 
-    if (!currencyType->IsAccountTransferable())
+    // Validate currency
+    CurrencyTypesEntry const* currencyType = sCurrencyTypesStore.LookupEntry(packet.CurrencyID);
+    if (!currencyType || !currencyType->IsAccountTransferable())
     {
-        WorldPackets::Misc::CurrencyTransferResult result;
-        result.CurrencyID = packet.CurrencyID;
-        result.Result = AccountCurrencyTransferResult::InvalidCurrency;
-        SendPacket(result.Write());
+        sendResult(AccountCurrencyTransferResult::InvalidCurrency);
         return;
     }
 
     if (packet.Quantity <= 0)
     {
-        WorldPackets::Misc::CurrencyTransferResult result;
-        result.CurrencyID = packet.CurrencyID;
-        result.Result = AccountCurrencyTransferResult::InsufficientCurrency;
-        SendPacket(result.Write());
+        sendResult(AccountCurrencyTransferResult::InsufficientCurrency);
         return;
     }
 
     // Check source character is not logged in
     if (ObjectAccessor::FindPlayer(packet.SourceCharacterGUID))
     {
-        WorldPackets::Misc::CurrencyTransferResult result;
-        result.CurrencyID = packet.CurrencyID;
-        result.Result = AccountCurrencyTransferResult::CharacterLoggedIn;
-        SendPacket(result.Write());
+        sendResult(AccountCurrencyTransferResult::CharacterLoggedIn);
         return;
     }
 
-    // Verify source character belongs to same bnet account
-    uint32 bnetAccountId = GetBattlenetAccountId();
-    ObjectGuid::LowType sourceGuid = packet.SourceCharacterGUID.GetCounter();
+    ObjectGuid sourceCharacterGuid = packet.SourceCharacterGUID;
+    ObjectGuid::LowType sourceGuid = sourceCharacterGuid.GetCounter();
+
+    // Reserve the source character for the duration of the read-modify-write. Two overlapping
+    // transfers from the same source (a same-session burst or two same-bnet sessions) would
+    // otherwise both read the same stale balance and each credit their destination while the
+    // source is debited once — the TOCTOU currency dupe (CR-4). BeginCurrencyTransfer is an
+    // atomic test-and-set; the reservation is released on every exit path of the callback.
+    if (!sWorld->BeginCurrencyTransfer(sourceCharacterGuid))
+    {
+        sendResult(AccountCurrencyTransferResult::TransactionInProgress);
+        return;
+    }
 
     CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_SEL_ACCOUNT_CHARACTER_CURRENCIES);
     stmt->setUInt32(0, bnetAccountId);
@@ -144,15 +163,35 @@ void WorldSession::HandleTransferCurrencyFromAccountCharacter(WorldPackets::Misc
     int32 requestedQuantity = packet.Quantity;
 
     _queryProcessor.AddCallback(CharacterDatabase.AsyncQuery(stmt)
-        .WithPreparedCallback([this, currencyId, requestedQuantity, sourceGuid, bnetAccountId](PreparedQueryResult result)
+        .WithPreparedCallback([this, currencyId, requestedQuantity, sourceGuid, sourceCharacterGuid, bnetAccountId](PreparedQueryResult result)
     {
+        // Always release the source reservation, whatever happens below.
+        auto finish = [&](AccountCurrencyTransferResult res, int32 quantity, int32 total)
+        {
+            sWorld->EndCurrencyTransfer(sourceCharacterGuid);
+
+            WorldPackets::Misc::CurrencyTransferResult transferResult;
+            transferResult.CurrencyID = currencyId;
+            transferResult.Quantity = quantity;
+            transferResult.TotalQuantity = total;
+            transferResult.Result = res;
+            SendPacket(transferResult.Write());
+        };
+
         Player* player = GetPlayer();
         if (!player)
+        {
+            // Destination logged out mid-transfer: release the reservation, nothing to send.
+            sWorld->EndCurrencyTransfer(sourceCharacterGuid);
             return;
+        }
 
         CurrencyTypesEntry const* currencyType = sCurrencyTypesStore.LookupEntry(currencyId);
         if (!currencyType)
+        {
+            finish(AccountCurrencyTransferResult::InvalidCurrency, 0, 0);
             return;
+        }
 
         // Find source character's currency quantity
         bool sourceFound = false;
@@ -178,19 +217,13 @@ void WorldSession::HandleTransferCurrencyFromAccountCharacter(WorldPackets::Misc
 
         if (!sourceFound)
         {
-            WorldPackets::Misc::CurrencyTransferResult transferResult;
-            transferResult.CurrencyID = currencyId;
-            transferResult.Result = AccountCurrencyTransferResult::NoValidSourceCharacter;
-            SendPacket(transferResult.Write());
+            finish(AccountCurrencyTransferResult::NoValidSourceCharacter, 0, 0);
             return;
         }
 
         if (sourceQuantity < requestedQuantity)
         {
-            WorldPackets::Misc::CurrencyTransferResult transferResult;
-            transferResult.CurrencyID = currencyId;
-            transferResult.Result = AccountCurrencyTransferResult::InsufficientCurrency;
-            SendPacket(transferResult.Write());
+            finish(AccountCurrencyTransferResult::InsufficientCurrency, 0, 0);
             return;
         }
 
@@ -198,10 +231,7 @@ void WorldSession::HandleTransferCurrencyFromAccountCharacter(WorldPackets::Misc
         int32 receivedAmount = static_cast<int32>(std::floor(requestedQuantity * currencyType->AccountTransferPercentage / 100.0f));
         if (receivedAmount <= 0)
         {
-            WorldPackets::Misc::CurrencyTransferResult transferResult;
-            transferResult.CurrencyID = currencyId;
-            transferResult.Result = AccountCurrencyTransferResult::InsufficientCurrency;
-            SendPacket(transferResult.Write());
+            finish(AccountCurrencyTransferResult::InsufficientCurrency, 0, 0);
             return;
         }
 
@@ -210,52 +240,54 @@ void WorldSession::HandleTransferCurrencyFromAccountCharacter(WorldPackets::Misc
         uint32 maxQuantity = player->GetCurrencyMaxQuantity(currencyType);
         if (maxQuantity && (currentQuantity + receivedAmount) > maxQuantity)
         {
-            WorldPackets::Misc::CurrencyTransferResult transferResult;
-            transferResult.CurrencyID = currencyId;
-            transferResult.Result = AccountCurrencyTransferResult::MaxQuantity;
-            SendPacket(transferResult.Write());
+            finish(AccountCurrencyTransferResult::MaxQuantity, 0, 0);
             return;
         }
 
-        // Execute transfer in a transaction
+        // Debit the source and write the log in a single transaction. The decrement is guarded
+        // (SET Quantity = Quantity - ? WHERE ... AND Quantity >= ?) so the source balance can
+        // never go negative even under a race, and the source reservation above guarantees no
+        // concurrent transfer observed the same pre-debit balance.
         CharacterDatabaseTransaction trans = CharacterDatabase.BeginTransaction();
 
-        // Subtract from source (offline character, direct DB update)
-        int32 newSourceQuantity = sourceQuantity - requestedQuantity;
-        CharacterDatabasePreparedStatement* updateStmt = CharacterDatabase.GetPreparedStatement(CHAR_UPD_PLAYER_CURRENCY_QUANTITY);
-        updateStmt->setUInt32(0, newSourceQuantity);
+        CharacterDatabasePreparedStatement* updateStmt = CharacterDatabase.GetPreparedStatement(CHAR_UPD_PLAYER_CURRENCY_QUANTITY_GUARDED);
+        updateStmt->setInt32(0, requestedQuantity);
         updateStmt->setUInt64(1, sourceGuid);
         updateStmt->setUInt16(2, currencyId);
+        updateStmt->setInt32(3, requestedQuantity);
         trans->Append(updateStmt);
 
-        // Log the transfer
+        // Log both the sent (requested) and received (post-tax) amounts (MJ-4 / MN-1).
         CharacterDatabasePreparedStatement* logStmt = CharacterDatabase.GetPreparedStatement(CHAR_INS_WARBAND_CURRENCY_TRANSFER_LOG);
         logStmt->setUInt32(0, bnetAccountId);
         logStmt->setUInt32(1, currencyId);
         logStmt->setUInt64(2, sourceGuid);
         logStmt->setUInt64(3, player->GetGUID().GetCounter());
         logStmt->setInt32(4, requestedQuantity);
-        logStmt->setUInt32(5, uint32(GameTime::GetGameTime()));
+        logStmt->setInt32(5, receivedAmount);
+        logStmt->setUInt32(6, uint32(GameTime::GetGameTime()));
         trans->Append(logStmt);
 
         CharacterDatabase.CommitTransaction(trans);
 
-        // Add currency to destination (online player)
+        // Credit the destination (online player, in-memory). Ordered AFTER the source debit
+        // commits so a crash in between loses currency (recoverable from the log) rather than
+        // duplicating it.
         player->ModifyCurrency(currencyId, receivedAmount, CurrencyGainSource::AccountCopy);
 
-        // Send success result
-        WorldPackets::Misc::CurrencyTransferResult transferResult;
-        transferResult.CurrencyID = currencyId;
-        transferResult.Quantity = receivedAmount;
-        transferResult.TotalQuantity = player->GetCurrencyQuantity(currencyId);
-        transferResult.Result = AccountCurrencyTransferResult::Ok;
-        SendPacket(transferResult.Write());
+        finish(AccountCurrencyTransferResult::Ok, receivedAmount, player->GetCurrencyQuantity(currencyId));
     }));
 }
 
 void WorldSession::HandleGetCharacterCurrencyTransferLog(WorldPackets::Misc::GetCharacterCurrencyTransferLog& /*packet*/)
 {
     uint32 bnetAccountId = GetBattlenetAccountId();
+
+    if (!bnetAccountId)
+    {
+        SendPacket(WorldPackets::Misc::CurrencyTransferLog().Write());
+        return;
+    }
 
     CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_SEL_WARBAND_CURRENCY_TRANSFER_LOG);
     stmt->setUInt32(0, bnetAccountId);
@@ -271,12 +303,14 @@ void WorldSession::HandleGetCharacterCurrencyTransferLog(WorldPackets::Misc::Get
             {
                 Field* fields = result->Fetch();
 
+                // SELECT order: currencyTypeId, source, dest, quantity(sent), receivedQuantity, timestamp
                 WorldPackets::Misc::CurrencyTransferLog::CurrencyTransferLogEntry entry;
                 entry.CurrencyTypeID = fields[0].GetUInt32();
                 entry.SourceCharacterGUID = ObjectGuid::Create<HighGuid::Player>(fields[1].GetUInt64());
                 entry.DestCharacterGUID = ObjectGuid::Create<HighGuid::Player>(fields[2].GetUInt64());
-                entry.Quantity = fields[3].GetInt32();
-                entry.Timestamp = fields[4].GetUInt32();
+                entry.QuantitySent = fields[3].GetInt32();
+                entry.QuantityReceived = fields[4].GetInt32();
+                entry.Timestamp = fields[5].GetUInt32();
                 response.Entries.push_back(std::move(entry));
 
             } while (result->NextRow());

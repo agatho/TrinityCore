@@ -36,6 +36,7 @@
 #include <map>
 #include <memory>
 #include <unordered_map>
+#include <unordered_set>
 #include <variant>
 #include <vector>
 
@@ -777,6 +778,14 @@ class TC_GAME_API World
         bool TryAcquireAccountInventoryLock(ObjectGuid battlenetAccountGuid, WorldSession* session);
         void ReleaseAccountInventoryLock(ObjectGuid battlenetAccountGuid, WorldSession const* session);
 
+        // Serialises account currency transfers by SOURCE character GUID. A transfer reads the
+        // offline source balance asynchronously and then debits it, so two overlapping transfers
+        // from the same source (same session burst or two same-bnet sessions) would otherwise
+        // both act on the same stale balance and dupe the currency (CR-4). BeginCurrencyTransfer
+        // is an atomic test-and-set: only one transfer per source may be in flight at a time.
+        bool BeginCurrencyTransfer(ObjectGuid sourceCharacterGuid);
+        void EndCurrencyTransfer(ObjectGuid sourceCharacterGuid);
+
         uint32 GetCleaningFlags() const { return m_CleaningFlags; }
         void SetCleaningFlags(uint32 flags) { m_CleaningFlags = flags; }
         void ResetEventSeasonalQuests(uint16 event_id, time_t eventStartTime);
@@ -849,6 +858,9 @@ class TC_GAME_API World
         // two same-bnet sessions entering the world simultaneously.
         std::unordered_map<ObjectGuid, WorldSession*> m_accountInventoryLockOwners;
         std::mutex m_accountInventoryLockMutex;
+        // Source character GUIDs with an account currency transfer currently in flight.
+        std::unordered_set<ObjectGuid> m_currencyTransfersInProgress;
+        std::mutex m_currencyTransferMutex;
         typedef std::unordered_map<uint32, time_t> DisconnectMap;
         DisconnectMap m_disconnects;
         uint32 m_maxActiveSessionCount;
