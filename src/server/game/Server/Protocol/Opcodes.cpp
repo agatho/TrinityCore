@@ -833,7 +833,7 @@ void OpcodeTable::InitializeClientOpcodes()
     DEFINE_HANDLER(CMSG_PARTY_UNINVITE,                                     STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandlePartyUninviteOpcode);
     DEFINE_HANDLER(CMSG_PERFORM_ITEM_INTERACTION,                           STATUS_UNHANDLED, PROCESS_INPLACE,      &WorldSession::Handle_NULL);
     DEFINE_HANDLER(CMSG_PERKS_PROGRAM_GET_RECENT_PURCHASES,                 STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandlePerksProgramGetRecentPurchases);
-    DEFINE_HANDLER(CMSG_PERKS_PROGRAM_ITEMS_REFRESHED,                      STATUS_UNHANDLED, PROCESS_INPLACE,      &WorldSession::Handle_NULL);
+    DEFINE_HANDLER(CMSG_PERKS_PROGRAM_ITEMS_REFRESHED,                      STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandlePerksProgramItemsRefreshed);
     DEFINE_HANDLER(CMSG_PERKS_PROGRAM_REQUEST_CART_CHECKOUT,                STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandlePerksProgramRequestCartCheckout);
     DEFINE_HANDLER(CMSG_PERKS_PROGRAM_REQUEST_PENDING_REWARDS,              STATUS_UNHANDLED, PROCESS_INPLACE,      &WorldSession::Handle_NULL);
     DEFINE_HANDLER(CMSG_PERKS_PROGRAM_REQUEST_PURCHASE,                     STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandlePerksProgramRequestPurchase);

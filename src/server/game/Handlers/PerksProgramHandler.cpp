@@ -83,6 +83,18 @@ void WorldSession::HandlePerksProgramStatusRequest(WorldPackets::PerksProgram::P
     SendPerksProgramActivityUpdate();
 }
 
+// CMSG_PERKS_PROGRAM_ITEMS_REFRESHED: the client asks the server to resend the current Trading Post listing.
+// Resend the vendor + activity update (reusing the same writers as the status request). No monthly-cache grant
+// here -- a listing refresh is not an interaction that should award currency.
+void WorldSession::HandlePerksProgramItemsRefreshed(WorldPackets::PerksProgram::PerksProgramItemsRefreshed& /*packet*/)
+{
+    WorldPackets::PerksProgram::PerksProgramVendorUpdate vendorUpdate;
+    vendorUpdate.VendorItems = sPerksProgramMgr->GetCurrentVendorItems();
+    SendPacket(vendorUpdate.Write());
+
+    SendPerksProgramActivityUpdate();
+}
+
 // Sends SMSG_PERKS_PROGRAM_ACTIVITY_UPDATE: the current Trading Post period plus the player's
 // completed activities for it. Completed-activity tracking (deriving completion from each
 // PerksActivity's CriteriaTree and awarding threshold tender) is a separate phase, so today the
