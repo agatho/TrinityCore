@@ -46,8 +46,36 @@ static bool HasActivePerksProgramVendor(Player* player, ObjectGuid vendorGuid)
     return player->GetNPCIfCanInteractWith(vendorGuid, UNIT_NPC_FLAG_NONE, UNIT_NPC_FLAG_2_PERKS_VENDOR) != nullptr;
 }
 
+// The automatic base monthly Trader's Tender granted by the Collector's Cache (web-sourced retail value: 500 per
+// Trading Post interval, account-wide).
+static constexpr uint32 PERKS_MONTHLY_CACHE_TENDER = 500;
+
+// Grants the account's base monthly Trader's Tender once per Trading Post interval, keyed on the current UTC
+// month-start period, so it is idempotent per account per period (Tender is account-wide after G6). Triggered on
+// the first Trading Post interaction of the period. Note: two game accounts of one bnet account online at once can
+// each grant once for the same period (bounded, non-repeatable) since account state is not live-synced between
+// concurrent sessions -- consistent with how the rest of the account collection behaves.
+static void GrantMonthlyPerksCache(WorldSession* session, Player* player)
+{
+    uint64 periodStart = 0;
+    uint64 periodEnd = 0;
+    sPerksProgramMgr->GetCurrentPeriod(periodStart, periodEnd);
+
+    if (session->GetAccountPerksCacheGrantPeriod() == periodStart)
+        return;
+
+    // Mark the period granted BEFORE crediting so the balance-persist stamps the new period, then persist again
+    // explicitly to guarantee the flag is saved even if the credit itself was a no-op.
+    session->SetAccountPerksCacheGrantPeriod(periodStart);
+    player->AddCurrency(CURRENCY_TYPE_TRADERS_TENDER, PERKS_MONTHLY_CACHE_TENDER, CurrencyGainSource::Script);
+    session->StoreAccountPerksTender(player->GetCurrencyQuantity(CURRENCY_TYPE_TRADERS_TENDER));
+}
+
 void WorldSession::HandlePerksProgramStatusRequest(WorldPackets::PerksProgram::PerksProgramStatusRequest& /*packet*/)
 {
+    if (Player* player = GetPlayer())
+        GrantMonthlyPerksCache(this, player);
+
     WorldPackets::PerksProgram::PerksProgramVendorUpdate vendorUpdate;
     vendorUpdate.VendorItems = sPerksProgramMgr->GetCurrentVendorItems();
     SendPacket(vendorUpdate.Write());

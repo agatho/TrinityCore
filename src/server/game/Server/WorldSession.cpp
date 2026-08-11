@@ -1448,7 +1448,11 @@ void WorldSession::InitializeSessionCallback(LoginDatabaseQueryHolder const& hol
     // Account-wide Trader's Tender: cache the shared balance so _LoadCurrency can override the per-character
     // row when the player enters the world (a missing row leaves the cache at -1 -> seeded from the character).
     if (PreparedQueryResult tenderResult = holder.GetPreparedResult(AccountInfoQueryHolder::PERKS_PROGRAM_TENDER))
-        _accountPerksTender = int64((*tenderResult)[0].GetUInt32());
+    {
+        Field* tenderFields = tenderResult->Fetch();
+        _accountPerksTender = int64(tenderFields[0].GetUInt32());
+        _accountPerksCacheGrantPeriod = tenderFields[1].GetUInt64();
+    }
     _collectionMgr->LoadAccountHeirlooms(holder.GetPreparedResult(AccountInfoQueryHolder::GLOBAL_ACCOUNT_HEIRLOOMS));
     _collectionMgr->LoadAccountMounts(holder.GetPreparedResult(AccountInfoQueryHolder::MOUNTS));
     _collectionMgr->LoadAccountItemAppearances(holder.GetPreparedResult(AccountInfoQueryHolder::ITEM_APPEARANCES), holder.GetPreparedResult(AccountInfoQueryHolder::ITEM_FAVORITE_APPEARANCES));
@@ -1499,6 +1503,7 @@ void WorldSession::StoreAccountPerksTender(uint32 amount)
     LoginDatabasePreparedStatement* stmt = LoginDatabase.GetPreparedStatement(LOGIN_REP_ACCOUNT_PERKS_TENDER);
     stmt->setUInt32(0, GetBattlenetAccountId());
     stmt->setUInt32(1, amount);
+    stmt->setUInt64(2, _accountPerksCacheGrantPeriod);
     LoginDatabase.Execute(stmt);
 }
 

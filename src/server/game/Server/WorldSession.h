@@ -1248,6 +1248,11 @@ class TC_GAME_API WorldSession
         int64 GetAccountPerksTender() const { return _accountPerksTender; }
         void StoreAccountPerksTender(uint32 amount);   // updates the session cache + persists to the login DB
 
+        // The Trading Post interval (UTC month-start) for which the account last received its base monthly Tender
+        // (Collector's Cache), used to grant it exactly once per period. Persisted alongside the balance.
+        uint64 GetAccountPerksCacheGrantPeriod() const { return _accountPerksCacheGrantPeriod; }
+        void SetAccountPerksCacheGrantPeriod(uint64 period) { _accountPerksCacheGrantPeriod = period; }
+
     public:                                                 // opcodes handlers
 
         void Handle_NULL(WorldPackets::Null& null);          // not used
@@ -2076,6 +2081,7 @@ class TC_GAME_API WorldSession
         std::unique_ptr<CollectionMgr> _collectionMgr;
 
         int64 _accountPerksTender = -1;   // cached account-wide Trader's Tender balance; -1 = not loaded / no row yet
+        uint64 _accountPerksCacheGrantPeriod = 0;   // interval the base monthly Tender was last granted for this account
 
         ConnectToKey _instanceConnectKey;
 
