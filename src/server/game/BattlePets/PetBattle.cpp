@@ -720,9 +720,13 @@ void PetBattle::ProcessTurnForTeam(uint8 teamIdx)
 
             float healthPct = wildPet.MaxHealth > 0 ? (float(wildPet.Health) / float(wildPet.MaxHealth)) * 100.0f : 100.0f;
 
+            // Trap level is never initialized on the branch (GetTrapLevel() returns 0),
+            // which drives baseChance down to 0.15 for every capture. Clamp to a minimum of
+            // 1 so the base rate matches the intended 0.20. Persisting an actual per-account
+            // trap-upgrade level (Strong/Pristine trap progression) is out of scope here.
             uint16 trapLevel = 1;
             if (Player* player = GetPlayerForTeam(teamIdx))
-                trapLevel = player->GetSession()->GetBattlePetMgr()->GetTrapLevel();
+                trapLevel = std::max<uint16>(1, player->GetSession()->GetBattlePetMgr()->GetTrapLevel());
 
             float captureChance = GetCaptureChance(trapLevel, healthPct, wildPet.Quality, _trapFailBonus);
 
