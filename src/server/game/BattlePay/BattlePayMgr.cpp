@@ -287,11 +287,12 @@ bool BattlePayMgr::AssembleCatalog(std::vector<uint8>& outBlob, std::unordered_m
             if (ovr->second != 0)                       // pinned; 0 = forced placeholder
                 assigned = GetProduct(ovr->second);
         }
-        else
-        {
-            if (candIdx < candidates.size())
-                assigned = candidates[candIdx++];
-        }
+        // NOTE: no automatic slot filling any more. The catalog we ship already describes 94 real
+        // products with our own gold prices patched in, and shop_product is keyed on those same
+        // wire productIDs, so every card resolves on its own. Auto-assigning candidates to slots
+        // here would stamp one product's name and price onto a different product's card - harmless
+        // when only 9 rows existed, actively wrong now there are 66. Explicit shop_slot_override
+        // pins still work above for anyone who wants to re-badge a specific slot.
 
         if (assigned)
         {
@@ -389,10 +390,17 @@ ShopProduct const* BattlePayMgr::GetProduct(uint32 adminProductId) const
 
 ShopProduct const* BattlePayMgr::GetProductByAdvertisedId(uint32 advertisedProductId) const
 {
-    auto route = _slotRouting.find(advertisedProductId);
-    if (route == _slotRouting.end())
-        return nullptr;
-    return GetProduct(route->second);
+    // A slot override wins when one is pinned...
+    if (auto route = _slotRouting.find(advertisedProductId); route != _slotRouting.end())
+        return GetProduct(route->second);
+
+    // ...otherwise the id the client sent IS the catalog's Product.productID, and shop_product is
+    // keyed on exactly that. This fallback is what makes the whole catalog sellable instead of only
+    // the pinned slots. Previously an unrouted id returned nullptr and the purchase refused, which
+    // was every purchase: the old writer model was off by 4 bytes at the header, so the values that
+    // went into shop_product.productId were displayInfo.fileDataIDs, not product ids, and no client
+    // id could ever match them.
+    return GetProduct(advertisedProductId);
 }
 
 bool BattlePayMgr::IsAlreadyFullyOwned(ShopProduct const& product, Player* player)
