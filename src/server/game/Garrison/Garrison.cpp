@@ -48,6 +48,7 @@
 #include <algorithm>
 #include <array>
 #include <limits>
+#include <unordered_set>
 #include <vector>
 
 Garrison::Garrison(Player* owner) : _owner(owner), _garrType(GARRISON_TYPE_GARRISON), _siteLevel(nullptr), _followerActivationsRemainingToday(1), _conservatory(owner), _abominationFactory(owner), _pathOfAscension(owner), _emberCourt(owner)
@@ -233,11 +234,20 @@ bool Garrison::LoadFromDB(PreparedQueryResult garrison, PreparedQueryResult blue
             follower.PacketInfo.CustomName = fields[11].GetString();
             follower.PacketInfo.Health = fields[12].GetInt32();
             follower.PacketInfo.BoardIndex = fields[13].GetInt8();
-            // Rows written before health was persisted come back as 0. A companion with a statline is
-            // never legitimately at 0 outside a fight it just lost, and it would show as a dead puck,
-            // so restore those to full rather than leaving the roster looking wiped.
+            // A statline (Adventures) companion that ended a fight at 0 health is DEAD and must stay dead
+            // across relog - the previous unconditional "Health <= 0 -> max" reset was a free auto-revive
+            // that nullified the whole death penalty. It must now be healed (paid, see RushHealFollower).
+            // Durability-model followers have no GarrAutoCombatant statline (GetFollowerMaxHealth == 0) and
+            // are governed by durability, not health; for them a persisted 0 is just "never initialised"
+            // (their Health mirrors Durability), so restore that - and it also repairs legacy rows written
+            // before the health column existed, which only ever affected durability-model followers.
             if (follower.PacketInfo.Health <= 0)
-                follower.PacketInfo.Health = GetFollowerMaxHealth(sGarrFollowerStore.LookupEntry(followerId), follower.PacketInfo.FollowerLevel);
+            {
+                int32 statlineMaxHealth = GetFollowerMaxHealth(sGarrFollowerStore.LookupEntry(followerId), follower.PacketInfo.FollowerLevel);
+                if (statlineMaxHealth == 0)
+                    follower.PacketInfo.Health = static_cast<int32>(follower.PacketInfo.Durability);
+                // else: statline companion at 0 HP stays dead until paid-healed - no free relog revive.
+            }
             follower.PacketInfo.ZoneSupportSpellID = sGarrisonMgr.GetFollowerZoneSupportSpell(followerId, GetFaction());
             if (!sGarrBuildingStore.LookupEntry(follower.PacketInfo.CurrentBuildingID))
                 follower.PacketInfo.CurrentBuildingID = 0;
@@ -2012,7 +2022,11 @@ void Garrison::AddMission(uint32 garrMissionId)
     mission.PacketInfo.MissionRecID = garrMissionId;
     mission.PacketInfo.OfferTime = GameTime::GetGameTime();
     mission.PacketInfo.OfferDuration = Seconds(missionEntry->OfferDuration);
-    mission.PacketInfo.StartTime = time_t(2288912640);
+    // Sentinel StartTime for an offered (not-yet-started) mission. The client keys "offered" off
+    // MissionState == 0 and does not render a start timer for it, but the value should still match
+    // retail's far-PAST sentinel (~year 0) rather than the old far-FUTURE ~2042 value (2288912640),
+    // which could render as a bogus future start if a client ever read it.
+    mission.PacketInfo.StartTime = time_t(-62169984000);
     // Command Table tier 2 (GarrAbility 1273 'Strategic Genius', GarrAbilityEffect 1843: AbilityAction 17,
     // ActionValueFlat 0.75) multiplies the travel duration of a Shadowlands adventure. Applied at offer time so
     // the discounted value is what persists and round-trips (character_garrison_missions.travelDuration).
@@ -2579,8 +2593,19 @@ GarrisonError Garrison::StartMission(uint32 missionRecID, std::vector<uint64> co
         return GARRISON_ERROR_MISSION_SIZE_INVALID;
 
     // Validate all followers
+    // Reject duplicate follower dbIDs up front. The not-already-on-mission check below only reads
+    // CurrentMissionID, which is still 0 for every entry here (it is set AFTER this loop, at the
+    // "Assign followers to mission" step), so it cannot catch the same follower listed twice. Without
+    // this guard one companion could fill every slot: CalculateSuccessChance would count its bias N
+    // times (success ~100%), RollMissionOutcome would build N combatants from it, and FinalizeMission
+    // would award its follower XP / decrement its troop durability N times — a guaranteed-win XP farm
+    // from a single follower. De-dup before any other check.
+    std::unordered_set<uint64> seenFollowerDbIds;
     for (uint64 followerDbId : followerDBIDs)
     {
+        if (!seenFollowerDbIds.insert(followerDbId).second)
+            return GARRISON_ERROR_INVALID_FOLLOWER;
+
         Follower const* follower = GetFollower(followerDbId);
         if (!follower)
             return GARRISON_ERROR_INVALID_FOLLOWER;
@@ -2594,9 +2619,20 @@ GarrisonError Garrison::StartMission(uint32 missionRecID, std::vector<uint64> co
         // The follower must match the mission's follower type: garrison followers crew garrison missions,
         // ships (GarrFollowerType 2) crew naval missions. Without this a ship could be slotted on a land
         // mission (or vice versa) - the client filters by type, but validate server-side too.
-        if (GarrFollowerEntry const* followerEntry = sGarrFollowerStore.LookupEntry(follower->PacketInfo.GarrFollowerID))
-            if (followerEntry->GarrFollowerTypeID != missionEntry->GarrFollowerTypeID)
-                return GARRISON_ERROR_INVALID_FOLLOWER;
+        GarrFollowerEntry const* followerEntry = sGarrFollowerStore.LookupEntry(follower->PacketInfo.GarrFollowerID);
+        if (followerEntry && followerEntry->GarrFollowerTypeID != missionEntry->GarrFollowerTypeID)
+            return GARRISON_ERROR_INVALID_FOLLOWER;
+
+        // Health / exhaustion deploy gate. A statline (Adventures) companion at 0 health is DEAD and an
+        // EXHAUSTED follower is spent - neither may be sent on a mission; they must be healed first (paid,
+        // RushHealFollower). GetFollowerMaxHealth is > 0 only for followers that publish a GarrAutoCombatant
+        // statline, so durability-model followers (WoD garrison / order hall, max 0) are governed by
+        // durability rather than health and are never blocked here for a 0 Health.
+        if (GetFollowerMaxHealth(followerEntry, follower->PacketInfo.FollowerLevel) > 0 && follower->PacketInfo.Health <= 0)
+            return GARRISON_ERROR_INVALID_FOLLOWER;
+
+        if (follower->PacketInfo.FollowerStatus & FOLLOWER_STATUS_EXHAUSTED)
+            return GARRISON_ERROR_INVALID_FOLLOWER;
     }
 
     // Check required followers (GarrMissionXFollower.db2)
@@ -2747,8 +2783,12 @@ bool Garrison::RollMissionOutcome(Mission& mission, uint32 missionRecID)
                     follower->PacketInfo.ItemLevelWeapon, follower->PacketInfo.ItemLevelArmor,
                     follower->PacketInfo.BoardIndex, followerDbId);
                 // Companions carry damage between missions: they enter the fight on the health they
-                // ended the last one with, not at full.
-                if (follower->PacketInfo.Health > 0 && follower->PacketInfo.Health < unit.MaxHealth)
+                // ended the last one with, not at full. This includes 0 = dead: a statline companion that
+                // was killed does NOT silently come back at full (unit.MaxHealth is the statline max, > 0
+                // only for Adventures companions, so durability-model followers are untouched and fight at
+                // the combatant default). The StartMission health gate normally stops a dead follower being
+                // deployed at all; carrying 0 here is defence-in-depth for any already-in-flight mission.
+                if (unit.MaxHealth > 0 && follower->PacketInfo.Health >= 0 && follower->PacketInfo.Health < unit.MaxHealth)
                     unit.CurrentHealth = follower->PacketInfo.Health;
                 playerUnits.push_back(std::move(unit));
             }
@@ -2812,6 +2852,19 @@ GarrisonError Garrison::FinalizeMission(uint32 missionRecID, bool grantOvermax)
         mission->ResultDetermined = true;
     }
     bool succeeded = mission->Succeeded;
+
+    // Idempotent grant (SRV-G4): persist the mission's removal NOW, before granting anything, rather than
+    // relying on the next character SaveToDB to wipe+reinsert the mission rows. Some rewards below commit to
+    // the DB on their own (mail overflow, currency), so without this a crash after such a commit but before
+    // the next SaveToDB would reload the still-present MissionState==2 row and let BONUS_ROLL/GET_REWARD
+    // re-grant it. Deleting the row up front closes that window: a reload can no longer find the mission, so
+    // it cannot be finalized twice. If we crash between this delete and the grant the player simply loses the
+    // reward (rare) - never a double grant, which is the property we must guarantee. In-memory removal still
+    // happens at the end of this function for the live session.
+    CharacterDatabasePreparedStatement* delMissionStmt = CharacterDatabase.GetPreparedStatement(CHAR_DEL_CHARACTER_GARRISON_MISSION);
+    delMissionStmt->setUInt64(0, _owner->GetGUID().GetCounter());
+    delMissionStmt->setUInt64(1, mission->PacketInfo.DbID);
+    CharacterDatabase.Execute(delMissionStmt);
 
     // Award follower XP (awarded regardless of success) and handle troop durability
     std::vector<uint64> troopsToRemove;
@@ -3553,8 +3606,66 @@ GarrisonError Garrison::BuildShip(uint32 garrFollowerId)
 // computed. When a base regen tick exists (needs retail GarrisonFollowerChanged health-delta sniffs over time, or
 // a deliberately authored base rate labeled as such), multiply its per-tick amount by that accessor - the data
 // side is done, only the base mechanic is missing.
+GarrisonError Garrison::HealFollower(uint64 followerDbId)
+{
+    Follower* follower = GetFollower(followerDbId);
+    if (!follower)
+        return GARRISON_ERROR_INVALID_FOLLOWER;
+
+    GarrFollowerEntry const* followerEntry = sGarrFollowerStore.LookupEntry(follower->PacketInfo.GarrFollowerID);
+    // Adventures companions heal back to their statline maximum; everyone else keeps the durability-driven
+    // value this path has always restored.
+    int32 maxHealth = GetFollowerMaxHealth(followerEntry, follower->PacketInfo.FollowerLevel);
+    if (!maxHealth)
+        maxHealth = static_cast<int32>(follower->PacketInfo.Durability);
+
+    // Nothing to undo: a follower already at full and not exhausted is a no-op, and must not be charged.
+    if (follower->PacketInfo.Health >= maxHealth && !(follower->PacketInfo.FollowerStatus & FOLLOWER_STATUS_EXHAUSTED))
+        return GARRISON_SUCCESS;
+
+    // --- Rush-heal cost (SRV-G2) --------------------------------------------------------------------
+    // Retail RushHealFollower / RushHealAllFollowers charge a currency to undo companion attrition
+    // (Legion order halls: Order Resources 1220; Shadowlands Adventures: Reservoir Anima 1813; WoD
+    // garrison falls back to Garrison Resources 824). Currency ids are from GARRISON_CONSTANTS_68275.
+    // The per-follower AMOUNT is a DATA value we have no sniff/DB2 source for yet, so it is a documented
+    // PLACEHOLDER: the mechanic (charge-before-heal, refuse when unaffordable, no free heal) is the
+    // correct fix; only the magnitude still needs the real number from a heal-interaction sniff (audit
+    // gap SNF-G-D) or a constants source before it can be called balanced. Do NOT treat this as final.
+    uint32 healCurrencyId;
+    switch (_garrType)
+    {
+        case GARRISON_TYPE_COVENANT:    healCurrencyId = 1813; break; // Reservoir Anima
+        case GARRISON_TYPE_CLASS_ORDER: healCurrencyId = 1220; break; // Order Resources
+        default:                        healCurrencyId = 824;  break; // Garrison Resources
+    }
+    constexpr uint32 GARRISON_FOLLOWER_RUSH_HEAL_COST_PLACEHOLDER = 100; // per follower - PLACEHOLDER, needs sniff/constants source
+
+    if (GARRISON_FOLLOWER_RUSH_HEAL_COST_PLACEHOLDER > 0)
+    {
+        if (!_owner->HasCurrency(healCurrencyId, GARRISON_FOLLOWER_RUSH_HEAL_COST_PLACEHOLDER))
+            return GARRISON_ERROR_NOT_ENOUGH_CURRENCY;
+        _owner->RemoveCurrency(healCurrencyId, GARRISON_FOLLOWER_RUSH_HEAL_COST_PLACEHOLDER, CurrencyDestroyReason::Garrison);
+    }
+
+    follower->PacketInfo.Health = maxHealth;
+    follower->PacketInfo.FollowerStatus &= ~FOLLOWER_STATUS_EXHAUSTED;
+    return GARRISON_SUCCESS;
+}
+
+void Garrison::RushHealAllFollowers()
+{
+    // PAID heal-all (UI button). Charge per wounded follower. HealFollower skips those already full (no
+    // charge) and returns NOT_ENOUGH_CURRENCY once the owner can no longer pay; stop there so the rest stay
+    // wounded rather than being healed for free.
+    for (auto& p : _followers)
+        if (HealFollower(p.second.PacketInfo.DbID) == GARRISON_ERROR_NOT_ENOUGH_CURRENCY)
+            break;
+}
+
 void Garrison::HealAllFollowers()
 {
+    // FREE full restore - used only by the script/spell-driven vitality restore, where the spell is the
+    // cost. The UI rush-heal button must NOT reach this; it goes through RushHealAllFollowers (paid).
     for (auto& p : _followers)
     {
         GarrFollowerEntry const* followerEntry = sGarrFollowerStore.LookupEntry(p.second.PacketInfo.GarrFollowerID);
@@ -3591,6 +3702,13 @@ void Garrison::FinishMission(uint32 garrMissionRecID)
 
     mission->PacketInfo.MissionState = 2; // Completed
     mission->PacketInfo.SuccessChance = 100; // Instant complete = guaranteed success
+
+    // Lock in the win. Setting SuccessChance alone is NOT enough for an auto-combat (Adventures) mission:
+    // FinalizeMission re-rolls the outcome via RollMissionOutcome whenever ResultDetermined is false, and
+    // that simulation can still LOSE regardless of SuccessChance. Nail the result here so a force-completed
+    // mission is genuinely guaranteed to succeed, matching the "instant complete" intent.
+    mission->ResultDetermined = true;
+    mission->Succeeded = true;
 }
 
 void Garrison::FinishShipment(uint32 plotInstanceId)
