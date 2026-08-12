@@ -66,6 +66,40 @@ namespace Prey
     constexpr uint32 JOURNEY_POINTS_WEEKLY_BONUS = 1000;
     constexpr uint32 JOURNEY_POINTS_PER_HUNT     = 50;
     constexpr uint32 JOURNEY_RANK_NIGHTMARE_GATE = 4;
+
+    // =====================================================================
+    // TODO(CAPTURE-BLOCKED) — PROVISIONAL PLACEHOLDER REWARD AMOUNTS.
+    // The grant MECHANISM below (currency 3387, ReputationMgr rep for 2764,
+    // Dawncrest / Nebulous Voidcore currency writes) is DB2-anchored and LIVE.
+    // The exact per-difficulty AMOUNTS and the Journey point/reputation CADENCE
+    // are NOT DB2-confirmed — no hunt-completion reward packet was ever captured
+    // (blueprint §2/§7 capture ask #2 & #5). These constants exist ONLY so the
+    // chain compiles and runs end-to-end on a disposable test DB. DO NOT treat
+    // them as correct — they must be replaced once a completion capture lands.
+    // =====================================================================
+
+    // Per-difficulty Preyseeker's Journey (currency 3387) award per completed hunt.
+    constexpr uint32 PLACEHOLDER_JOURNEY_POINTS_NORMAL    = 50;   // TODO(CAPTURE-BLOCKED)
+    constexpr uint32 PLACEHOLDER_JOURNEY_POINTS_HARD      = 75;   // TODO(CAPTURE-BLOCKED)
+    constexpr uint32 PLACEHOLDER_JOURNEY_POINTS_NIGHTMARE = 100;  // TODO(CAPTURE-BLOCKED)
+
+    // Per-difficulty faction-2764 reputation granted per hunt. This is what moves
+    // the 3386 renown *level* (ReputationMgr crosses per-level thresholds and bumps
+    // 3386 via CurrencyGainSource::RenownRepGain). Amount is a pure guess.
+    constexpr int32  PLACEHOLDER_RENOWN_REP_NORMAL    = 250;  // TODO(CAPTURE-BLOCKED)
+    constexpr int32  PLACEHOLDER_RENOWN_REP_HARD      = 375;  // TODO(CAPTURE-BLOCKED)
+    constexpr int32  PLACEHOLDER_RENOWN_REP_NIGHTMARE = 500;  // TODO(CAPTURE-BLOCKED)
+
+    // Per-difficulty direct Dawncrest / Voidcore currency counts per hunt.
+    constexpr int32  PLACEHOLDER_DAWNCREST_COUNT_NORMAL    = 1;  // TODO(CAPTURE-BLOCKED)
+    constexpr int32  PLACEHOLDER_DAWNCREST_COUNT_HARD      = 1;  // TODO(CAPTURE-BLOCKED)
+    constexpr int32  PLACEHOLDER_DAWNCREST_COUNT_NIGHTMARE = 1;  // TODO(CAPTURE-BLOCKED) each of Champion+Hero
+    constexpr int32  PLACEHOLDER_NEBULOUS_VOIDCORE_COUNT   = 1;  // TODO(CAPTURE-BLOCKED) Nightmare only
+
+    // character_prey_hunt.Status values.
+    constexpr uint8  HUNT_STATUS_AVAILABLE = 0;
+    constexpr uint8  HUNT_STATUS_ACTIVE    = 1;
+    constexpr uint8  HUNT_STATUS_COMPLETED = 2;
 }
 
 enum class PreyDifficulty : uint8
@@ -111,20 +145,36 @@ class TC_GAME_API PreyMgr
 
         PreyHuntTemplate const* GetHuntTemplate(uint32 huntId) const;
 
-        // ---- Progression seams (LIVE-safe helpers over stock currency/faction) ----
-        // Grant Preyseeker's Journey progress (currency 3387 + renown display 3386).
-        void GrantJourneyProgress(Player* player, uint32 points);
+        // True once prey_hunt_template is present + non-empty. Gates every economy
+        // grant and every character_prey_hunt query so the shared realm (which never
+        // has the table) is a hard no-op.
+        bool IsEnabled() const { return _enabled; }
 
-        // ---- CAPTURE-BLOCKED seams (documented no-ops until the wire is captured) ----
+        // ---- Progression grants (LIVE — ride stock currency/faction APIs) ----
+        // Award Preyseeker's Journey progress for a completed hunt of this difficulty:
+        //   currency 3387 (per-difficulty points) + faction-2764 reputation via
+        //   ReputationMgr (which drives the 3386 renown display currency by level).
+        // Amounts are PLACEHOLDER — see Prey::PLACEHOLDER_* / TODO(CAPTURE-BLOCKED).
+        void GrantJourneyProgress(Player* player, PreyDifficulty difficulty);
+
+        // Grant the per-difficulty direct rewards for a completed hunt:
+        //   Dawncrest currency (Adventurer/Veteran/Champion+Hero) and, on Nightmare,
+        //   Nebulous Voidcore 3418. Then record the weekly hunt state. Amounts are
+        //   PLACEHOLDER — see TODO(CAPTURE-BLOCKED). Great Vault credit is a documented
+        //   no-op here (needs WeeklyRewardsMgr from feature/mythic-plus — blueprint §5).
+        void CompleteHunt(Player* player, PreyDifficulty difficulty);
+
+        // ---- CAPTURE-BLOCKED seam (documented no-op until the wire is captured) ----
         // The Hunt Table open/activate flow is a mission-table opcode set not yet
-        // captured; StartHunt is the future entry point for that handler.
+        // captured; StartHunt is the future entry point for that handler. The temporary
+        // .prey grant debug command stands in for it (calls CompleteHunt directly).
         void StartHunt(Player* player, uint32 huntId, PreyDifficulty difficulty);
-        // On hunt completion: grant Dawncrest/Journey, credit the Great Vault row,
-        // and (Nightmare) award Nebulous Voidcore. Vault credit rides the fork's
-        // weekly-reward framework — wired in a later phase.
-        void CompleteHunt(Player* player, uint32 huntId, PreyDifficulty difficulty);
 
     private:
+        // Persist a completed hunt into character_prey_hunt (gated on IsEnabled()).
+        // Tolerant of an absent table (async Execute logs, never crashes).
+        void RecordHuntCompletion(Player* player, PreyDifficulty difficulty);
+
         std::unordered_map<uint32, PreyHuntTemplate> _huntTemplates;
         bool _enabled = false;
 };
