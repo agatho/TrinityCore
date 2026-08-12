@@ -151,6 +151,14 @@ void BattlegroundMgr::Update(uint32 diff)
                     GetBattlegroundQueue(ratedArenaQueueId).BattlegroundQueueUpdate(diff, BattlegroundBracketId(bracket), 0);
             }
 
+            // Battleground Blitz is a rated queue too and needs the same periodic sweep. Without it the
+            // queue is only ever re-evaluated by the ScheduleQueueUpdate a join or a leave triggers, so a
+            // queue that could not form a match at join time (for example the healer quota was not met yet)
+            // would sit idle until the next player happens to join, rather than retrying on its own.
+            BattlegroundQueueTypeId blitzQueueId = BGQueueTypeId(BATTLEGROUND_BLITZ, BattlegroundQueueIdType::RatedBattlegroundBlitz, true, 0);
+            for (int bracket = BG_BRACKET_ID_FIRST; bracket < MAX_BATTLEGROUND_BRACKETS; ++bracket)
+                GetBattlegroundQueue(blitzQueueId).BattlegroundQueueUpdate(diff, BattlegroundBracketId(bracket), 0);
+
             m_NextRatedArenaUpdate = sWorld->getIntConfig(CONFIG_ARENA_RATED_UPDATE_TIMER);
         }
         else
