@@ -35,10 +35,31 @@
 // RegisterBattlegroundMapScript(..., 2799) and bound at runtime through the
 // world DB `battleground_scripts` row (ships on this branch, see the SQL).
 //
-// STATUS: SKELETON. The reinforcement / worldstate spine is live. Node capture,
-// the domanaar bosses, spawns and graveyards are TODO(CAPTURE-BLOCKED) — the
-// exact spawn/GO coords and boss creature ids are not yet DB2/sniff-anchored.
-// See C:\dumps\SLAYERS_RISE_BLUEPRINT.md for the evidence inventory + asks.
+// STATUS: BUILDABLE GAMEPLAY SLICE.
+//   IMPLEMENTED (this pass):
+//     * Capturable node state machine (neutral -> assaulted -> controlled per
+//       faction) for Bastion of Valor / Bastion of Might / Shenzar Refinery,
+//       modelled on the Isle of Conquest ICNodePoint state machine, driving the
+//       DB2-confirmed AreaPOI worldstates WS 29506 / 29509 / 29510.
+//     * Because the capture-flag GameObject ids are NOT datamineable, the node
+//       captures run on a COORD-PROXIMITY STAND-IN (area-trigger substitute) at
+//       the DB2 AreaPOI centres — clearly flagged; swap for the real capture GOs
+//       + DoAction() banner path (IoC pattern) once the GO ids are captured.
+//     * Reinforcement spine: player kills drain the victim team; every held
+//       capturable node applies siege pressure draining the OPPOSING team; a team
+//       reaching 0 ends the battleground for the other team (premature-winner
+//       path also present).
+//   STUB / TODO(CAPTURE-BLOCKED):
+//     * Domanaar bosses (Vidious / Ziadan) creature ids — world DB, not DB2.
+//       OnDomanaarKilled() -> EndBattleground() seam is wired and reads the (empty)
+//       NPC id constants; it activates the moment the ids land. No fake spawns.
+//     * Graveyards + start locations — WorldSafeLocs.db2 is not exposed for build
+//       12.0.7.68887 ("Table not found"), so per-base graveyards + spirit guides +
+//       real start locs cannot be seeded without invention. See the SQL + §7 asks.
+//     * Reinforcement-counter display worldstate ids + starting count — need an
+//       INIT_WORLD_STATES capture on map 2799 (AV's 600 used as a flagged default).
+//     * Shenzar Refinery "Ethereal assistance" NPC set + capture-flag GO.
+// See C:\dumps\SLAYERS_RISE_BLUEPRINT.md for the full evidence inventory + asks.
 // ---------------------------------------------------------------------------
 
 #include "Battleground.h"
@@ -46,6 +67,7 @@
 #include "Creature.h"
 #include "Map.h"
 #include "Player.h"
+#include "Position.h"
 #include "ScriptMgr.h"
 #include <array>
 
@@ -55,14 +77,29 @@ namespace SlayersRise
     inline constexpr uint32 MAP_ID               = 2799; // Map.db2
     inline constexpr uint32 BATTLEMASTER_LIST_ID = 1141; // BattlemasterList.db2
 
-    // --- Reinforcement model (mirrors AV/IoC). Cap is a PLACEHOLDER ----------
-    // TODO(CAPTURE-BLOCKED): confirm the real starting reinforcement count.
-    inline constexpr uint16 MAX_REINFORCEMENTS = 1500;
+    // --- Reinforcement model (mirrors AV/IoC). Count is a PLACEHOLDER --------
+    // TODO(CAPTURE-BLOCKED): confirm the real starting reinforcement count from
+    // an INIT_WORLD_STATES capture on map 2799. AV ships 600; we use that as a
+    // sensible flagged default (the blueprint noted 1500 — neither is captured).
+    inline constexpr uint16 MAX_REINFORCEMENTS = 600;
 
     // --- Node control worldstates [DB2 AreaPOI.WorldStateID, ContinentID 2799]
+    // Confirmed AreaPOI blip worldstates. Each AreaPOI exposes ONE worldstate id;
+    // the client's value ENCODING (neutral / A / H / contested) is not yet
+    // captured, so we push an internal NodeStateCode (documented below) and flag
+    // it PLACEHOLDER until an INIT_WORLD_STATES / node-transition sniff confirms it.
     inline constexpr int32 WS_BASTION_OF_VALOR = 29506; // AreaPOI 8378 (Alliance base)
     inline constexpr int32 WS_BASTION_OF_MIGHT = 29509; // AreaPOI 8379 (Horde base)
     inline constexpr int32 WS_SHENZAR_REFINERY = 29510; // AreaPOI 8382 (capturable — Ethereal assist)
+
+    // --- Additional DB2-datamined node worldstates on map 2799 (NOT modelled
+    //     this pass — listed so the capture asks are complete). Their faction
+    //     role / capture rules are not yet established, so we do not invent them:
+    //       AreaPOI 8620 "Stareater Pavilion"  WS 29507
+    //       AreaPOI 8621 "Shadowridge Outpost" WS 29508
+    //       AreaPOI 8645 "Gates of Might"       WS 29511
+    //       AreaPOI 8646 "Gates of Valor"       WS 29512
+    //     Add them to _nodes[] once their behaviour is captured.
 
     // --- Reinforcement display worldstates -----------------------------------
     // NOT YET CAPTURED. 0 == "unknown / do not push". Guarded at every use.
@@ -74,43 +111,113 @@ namespace SlayersRise
     // --- Domanaar bosses [DB2 Vignette]: Vidious 7169, Ziadan 7170 -----------
     // Creature ids live in the world DB (not client DB2). 0 == disabled.
     // TODO(CAPTURE-BLOCKED): capture the Vidious/Ziadan creature ids on map 2799.
-    inline constexpr uint32 NPC_VIDIOUS = 0; // Alliance domanaar @ Grief Spire
-    inline constexpr uint32 NPC_ZIADAN  = 0; // Horde domanaar @ Hate Spire
+    // These constants are the (currently empty) source the win-condition seam
+    // reads; the seam goes live automatically the moment real ids are filled in.
+    inline constexpr uint32 NPC_VIDIOUS = 0; // Alliance domanaar @ Grief Spire (8375)
+    inline constexpr uint32 NPC_ZIADAN  = 0; // Horde domanaar @ Hate Spire (8376)
 
     // --- Objective centres [DB2 AreaPOI.Pos on ContinentID 2799] -------------
-    // Grief Spire     AreaPOI 8375 : (3116.45, -1467.79,  -66.16)
-    // Hate Spire      AreaPOI 8376 : (3749.13,  1004.42, -129.64)
-    // Bastion of Valor AreaPOI 8378: (2902.60,  -825.52, -137.37)
-    // Bastion of Might AreaPOI 8379: (3278.65,   514.06, -199.38)
-    // Shenzar Refinery AreaPOI 8382: (3829.10,  -442.49, -204.99)
-    // Path of Predation AreaPOI 8403:(3256.77,  -206.77, -207.57)
-    // (Used as spawn anchors once GO/creature spawn SQL is authored.)
+    // Grief Spire      AreaPOI 8375 : (3116.45, -1467.79,  -66.16)
+    // Hate Spire       AreaPOI 8376 : (3749.13,  1004.42, -129.64)
+    // Path of Predation AreaPOI 8403: (3256.77,  -206.77, -207.57)
+    // (Bastion/Refinery centres are on the Node table below.)
 
-    inline constexpr uint32 RESOURCE_TICK_MS     = 45u * IN_MILLISECONDS; // placeholder cadence
-    inline constexpr uint16 RESOURCE_TICK_AMOUNT = 1;
+    // --- Node capture (COORD-PROXIMITY STAND-IN) -----------------------------
+    // Placeholder tuning — flagged. Real values want a capture (capture GO radius
+    // + cast time). Radius/time chosen to be playable, not authoritative.
+    inline constexpr float CAPTURE_RADIUS      = 25.0f;             // yards (PLACEHOLDER)
+    inline constexpr uint32 CAPTURE_CHECK_MS   = 1u * IN_MILLISECONDS;
+    inline constexpr uint32 CAPTURE_TIME_MS    = 8u * IN_MILLISECONDS; // sole-occupancy dwell to flip (PLACEHOLDER)
+
+    // --- Node-control siege pressure -> reinforcement drain -------------------
+    inline constexpr uint32 RESOURCE_TICK_MS     = 15u * IN_MILLISECONDS; // placeholder cadence
+    inline constexpr uint16 RESOURCE_DRAIN_BASE  = 1;  // per held capturable node, per tick (PLACEHOLDER)
+    inline constexpr uint16 RESOURCE_DRAIN_REFINERY = 2; // Shenzar Refinery "Ethereal assistance" (PLACEHOLDER)
+
+    // Internal node identifiers.
+    enum NodeId : uint8
+    {
+        NODE_BASTION_OF_VALOR = 0, // Alliance base
+        NODE_BASTION_OF_MIGHT,     // Horde base
+        NODE_SHENZAR_REFINERY,     // neutral, capturable
+        NODE_COUNT
+    };
+
+    // Full node state machine (mirrors IsleOfConquestNodeState).
+    enum class NodeState : uint8
+    {
+        Neutral,
+        ConflictA,   // Alliance assaulting
+        ConflictH,   // Horde assaulting
+        ControlledA,
+        ControlledH
+    };
+
+    // Worldstate value ENCODING pushed to the AreaPOI worldstate. PLACEHOLDER —
+    // the real client encoding is not captured. Kept small + documented so a
+    // single capture can remap it.
+    enum NodeStateCode : int32
+    {
+        NODE_CODE_NEUTRAL     = 0,
+        NODE_CODE_CONTROLLED_A = 1,
+        NODE_CODE_CONTROLLED_H = 2,
+        NODE_CODE_CONFLICT_A   = 3,
+        NODE_CODE_CONFLICT_H   = 4
+    };
 }
 
 struct battleground_slayers_rise : BattlegroundScript
 {
+    // A single capturable node: DB2 AreaPOI centre + its worldstate + live state.
+    struct Node
+    {
+        SlayersRise::NodeId Id;
+        int32 WorldStateId;
+        Position Center;
+        bool Capturable;                 // false = base seldom flips but still sieged
+        SlayersRise::NodeState State;
+        TeamId Controller;               // TEAM_NEUTRAL if uncontrolled
+        TeamId Assaulter;                // team currently contesting, else TEAM_NEUTRAL
+        uint32 CaptureTimer;             // ms of sole-occupancy remaining to flip
+    };
+
     explicit battleground_slayers_rise(BattlegroundMap* map) : BattlegroundScript(map),
-        _reinforcements({ }), _resourceTimer(SlayersRise::RESOURCE_TICK_MS)
+        _reinforcements({ }), _resourceTimer(SlayersRise::RESOURCE_TICK_MS), _captureTimer(SlayersRise::CAPTURE_CHECK_MS)
     {
         _reinforcements = { SlayersRise::MAX_REINFORCEMENTS, SlayersRise::MAX_REINFORCEMENTS };
+
+        // Node table — centres are DB2 AreaPOI positions on ContinentID 2799.
+        // Bastions begin controlled by their owning faction; the Refinery neutral.
+        _nodes = { {
+            { SlayersRise::NODE_BASTION_OF_VALOR, SlayersRise::WS_BASTION_OF_VALOR,
+              { 2902.60f, -825.52f, -137.37f, 0.0f }, /*Capturable*/ true,
+              SlayersRise::NodeState::ControlledA, TEAM_ALLIANCE, TEAM_NEUTRAL, SlayersRise::CAPTURE_TIME_MS },
+            { SlayersRise::NODE_BASTION_OF_MIGHT, SlayersRise::WS_BASTION_OF_MIGHT,
+              { 3278.65f, 514.06f, -199.38f, 0.0f }, /*Capturable*/ true,
+              SlayersRise::NodeState::ControlledH, TEAM_HORDE, TEAM_NEUTRAL, SlayersRise::CAPTURE_TIME_MS },
+            { SlayersRise::NODE_SHENZAR_REFINERY, SlayersRise::WS_SHENZAR_REFINERY,
+              { 3829.10f, -442.49f, -204.99f, 0.0f }, /*Capturable*/ true,
+              SlayersRise::NodeState::Neutral, TEAM_NEUTRAL, TEAM_NEUTRAL, SlayersRise::CAPTURE_TIME_MS },
+        } };
     }
 
     void OnInit() override
     {
         BattlegroundScript::OnInit();
-        // TODO(CAPTURE-BLOCKED): initialise node ownership (Shenzar Refinery neutral,
-        // each Bastion owned by its faction) and spawn spirit guides / capture GOs
-        // once the spawn coordinates are captured.
+        // Node ownership is initialised in the ctor (Bastions owned, Refinery neutral).
+        // TODO(CAPTURE-BLOCKED): spawn spirit guides + capture-flag GameObjects
+        // once their ids/coords are captured; until then captures run on the
+        // coord-proximity stand-in in OnUpdate().
     }
 
     void OnStart() override
     {
         BattlegroundScript::OnStart();
+        for (Node const& node : _nodes)
+            UpdateNodeWorldState(node);
         UpdateReinforcementWorldStates();
-        // TODO: open the faction gates at Bastion of Valor / Bastion of Might.
+        // TODO: open the faction gates at Bastion of Valor / Bastion of Might
+        // (Gates of Valor 29512 / Gates of Might 29511) once the gate GOs are seeded.
     }
 
     void OnUpdate(uint32 diff) override
@@ -119,11 +226,20 @@ struct battleground_slayers_rise : BattlegroundScript
         if (battleground->GetStatus() != STATUS_IN_PROGRESS)
             return;
 
+        // Node capture stand-in (coord proximity — area-trigger substitute).
+        if (_captureTimer <= diff)
+        {
+            UpdateNodeCaptures(SlayersRise::CAPTURE_CHECK_MS);
+            _captureTimer = SlayersRise::CAPTURE_CHECK_MS;
+        }
+        else
+            _captureTimer -= diff;
+
+        // Node-control siege pressure -> reinforcement drain.
         if (_resourceTimer <= diff)
         {
             _resourceTimer = SlayersRise::RESOURCE_TICK_MS;
-            // TODO(CAPTURE-BLOCKED): grant periodic resources / Ethereal assistance
-            // for the faction controlling Shenzar Refinery.
+            TickNodeSiegePressure();
         }
         else
             _resourceTimer -= diff;
@@ -136,13 +252,7 @@ struct battleground_slayers_rise : BattlegroundScript
             return;
 
         TeamId const victimTeamId = Battleground::GetTeamIndexByTeamId(battleground->GetPlayerTeam(player->GetGUID()));
-        if (_reinforcements[victimTeamId] > 0)
-            _reinforcements[victimTeamId] -= 1;
-
-        UpdateReinforcementWorldStates();
-
-        if (_reinforcements[victimTeamId] < 1 && killer)
-            battleground->EndBattleground(battleground->GetPlayerTeam(killer->GetGUID()));
+        DrainReinforcements(victimTeamId, 1);
     }
 
     void OnUnitKilled(Creature* unit, Unit* killer) override
@@ -151,12 +261,7 @@ struct battleground_slayers_rise : BattlegroundScript
         if (battleground->GetStatus() != STATUS_IN_PROGRESS)
             return;
 
-        uint32 const entry = unit->GetEntry();
-        // Win condition [DB2 Map.db2 2799]: slay the enemy domanaar.
-        if (SlayersRise::NPC_VIDIOUS && entry == SlayersRise::NPC_VIDIOUS)
-            battleground->EndBattleground(HORDE);     // Horde slew the Alliance domanaar
-        else if (SlayersRise::NPC_ZIADAN && entry == SlayersRise::NPC_ZIADAN)
-            battleground->EndBattleground(ALLIANCE);  // Alliance slew the Horde domanaar
+        OnDomanaarKilled(unit->GetEntry());
     }
 
     Team GetPrematureWinner() override
@@ -169,6 +274,39 @@ struct battleground_slayers_rise : BattlegroundScript
     }
 
 private:
+    // --- Win condition seam (STUB until creature ids captured) ---------------
+    // [DB2 Map.db2 2799]: slaying the enemy domanaar ends the BG. Reads the
+    // (currently empty) NPC id constants; a 0 id can never match a real entry,
+    // so this is inert until captured — no fake bosses, no invented ids.
+    void OnDomanaarKilled(uint32 entry)
+    {
+        if (SlayersRise::NPC_VIDIOUS && entry == SlayersRise::NPC_VIDIOUS)
+            battleground->EndBattleground(HORDE);     // Horde slew the Alliance domanaar
+        else if (SlayersRise::NPC_ZIADAN && entry == SlayersRise::NPC_ZIADAN)
+            battleground->EndBattleground(ALLIANCE);  // Alliance slew the Horde domanaar
+    }
+
+    // --- Reinforcement drain (shared by kills + node siege) ------------------
+    void DrainReinforcements(TeamId victimTeamId, uint16 amount)
+    {
+        if (victimTeamId != TEAM_ALLIANCE && victimTeamId != TEAM_HORDE)
+            return;
+
+        if (_reinforcements[victimTeamId] > amount)
+            _reinforcements[victimTeamId] -= amount;
+        else
+            _reinforcements[victimTeamId] = 0;
+
+        UpdateReinforcementWorldStates();
+
+        if (_reinforcements[victimTeamId] == 0)
+        {
+            // The team that ran the victim out of reinforcements wins.
+            TeamId const winnerTeamId = victimTeamId == TEAM_ALLIANCE ? TEAM_HORDE : TEAM_ALLIANCE;
+            battleground->EndBattleground(winnerTeamId == TEAM_ALLIANCE ? ALLIANCE : HORDE);
+        }
+    }
+
     void UpdateReinforcementWorldStates() const
     {
         if (SlayersRise::WS_ALLIANCE_REINFORCEMENTS)
@@ -177,8 +315,137 @@ private:
             UpdateWorldState(SlayersRise::WS_HORDE_REINFORCEMENTS, _reinforcements[TEAM_HORDE]);
     }
 
+    // --- Node siege: each held capturable node drains the opposing team -------
+    void TickNodeSiegePressure()
+    {
+        for (Node const& node : _nodes)
+        {
+            if (node.Controller == TEAM_NEUTRAL)
+                continue;
+            if (node.State != SlayersRise::NodeState::ControlledA && node.State != SlayersRise::NodeState::ControlledH)
+                continue;
+
+            uint16 const amount = node.Id == SlayersRise::NODE_SHENZAR_REFINERY
+                ? SlayersRise::RESOURCE_DRAIN_REFINERY : SlayersRise::RESOURCE_DRAIN_BASE;
+
+            TeamId const enemyTeamId = node.Controller == TEAM_ALLIANCE ? TEAM_HORDE : TEAM_ALLIANCE;
+            DrainReinforcements(enemyTeamId, amount);
+
+            if (battleground->GetStatus() != STATUS_IN_PROGRESS)
+                return; // a drain just ended the BG
+        }
+    }
+
+    // --- Node capture state machine (coord-proximity stand-in) ----------------
+    void UpdateNodeCaptures(uint32 diff)
+    {
+        // Tally players of each team standing within CAPTURE_RADIUS of each node.
+        std::array<std::array<uint32, PVP_TEAMS_COUNT>, SlayersRise::NODE_COUNT> occupancy = { };
+
+        battlegroundMap->DoOnPlayers([&](Player* player)
+        {
+            if (!player->IsAlive())
+                return;
+
+            TeamId const teamId = Battleground::GetTeamIndexByTeamId(battleground->GetPlayerTeam(player->GetGUID()));
+            if (teamId != TEAM_ALLIANCE && teamId != TEAM_HORDE)
+                return;
+
+            for (Node const& node : _nodes)
+                if (player->GetExactDist2d(node.Center) <= SlayersRise::CAPTURE_RADIUS)
+                    ++occupancy[node.Id][teamId];
+        });
+
+        for (Node& node : _nodes)
+        {
+            if (!node.Capturable)
+                continue;
+
+            uint32 const allies = occupancy[node.Id][TEAM_ALLIANCE];
+            uint32 const horde  = occupancy[node.Id][TEAM_HORDE];
+
+            // Contested by both, or empty: no progress (hold current state).
+            if ((allies > 0 && horde > 0) || (allies == 0 && horde == 0))
+                continue;
+
+            TeamId const occupant = allies > 0 ? TEAM_ALLIANCE : TEAM_HORDE;
+            AdvanceNodeCapture(node, occupant, diff);
+        }
+    }
+
+    void AdvanceNodeCapture(Node& node, TeamId occupant, uint32 diff)
+    {
+        // Sole occupant already controls it: reset any enemy contest (defended).
+        if (node.Controller == occupant)
+        {
+            if (node.Assaulter != TEAM_NEUTRAL)
+            {
+                node.Assaulter = TEAM_NEUTRAL;
+                node.CaptureTimer = SlayersRise::CAPTURE_TIME_MS;
+                SetNodeControlled(node, occupant);
+            }
+            return;
+        }
+
+        // New assaulter — start / restart the contest.
+        if (node.Assaulter != occupant)
+        {
+            node.Assaulter = occupant;
+            node.CaptureTimer = SlayersRise::CAPTURE_TIME_MS;
+            node.State = occupant == TEAM_ALLIANCE ? SlayersRise::NodeState::ConflictA : SlayersRise::NodeState::ConflictH;
+            // TODO(CAPTURE-BLOCKED): award a "node assaulted" PvP stat once the
+            // Slayer's Rise PvP-stat id is captured (no DB2 anchor for it yet).
+            UpdateNodeWorldState(node);
+            return;
+        }
+
+        // Continued sole occupancy by the assaulter — tick down to capture.
+        if (node.CaptureTimer > diff)
+        {
+            node.CaptureTimer -= diff;
+            return;
+        }
+
+        node.CaptureTimer = SlayersRise::CAPTURE_TIME_MS;
+        node.Assaulter = TEAM_NEUTRAL;
+        SetNodeControlled(node, occupant);
+    }
+
+    void SetNodeControlled(Node& node, TeamId team)
+    {
+        node.Controller = team;
+        node.State = team == TEAM_ALLIANCE ? SlayersRise::NodeState::ControlledA : SlayersRise::NodeState::ControlledH;
+        UpdateNodeWorldState(node);
+        // TODO(CAPTURE-BLOCKED): on Shenzar Refinery capture, spawn/empower the
+        // "Ethereal assistance" NPC set (ids not datamineable). The siege-pressure
+        // drain (TickNodeSiegePressure) already rewards holding it.
+        battlegroundMap->UpdateSpawnGroupConditions();
+    }
+
+    // Push the AreaPOI worldstate. Value is a PLACEHOLDER encoding (see NodeStateCode)
+    // pending an INIT_WORLD_STATES / node-transition capture on map 2799.
+    void UpdateNodeWorldState(Node const& node) const
+    {
+        if (!node.WorldStateId)
+            return;
+
+        int32 code = SlayersRise::NODE_CODE_NEUTRAL;
+        switch (node.State)
+        {
+            case SlayersRise::NodeState::ControlledA: code = SlayersRise::NODE_CODE_CONTROLLED_A; break;
+            case SlayersRise::NodeState::ControlledH: code = SlayersRise::NODE_CODE_CONTROLLED_H; break;
+            case SlayersRise::NodeState::ConflictA:   code = SlayersRise::NODE_CODE_CONFLICT_A;   break;
+            case SlayersRise::NodeState::ConflictH:   code = SlayersRise::NODE_CODE_CONFLICT_H;   break;
+            case SlayersRise::NodeState::Neutral:     code = SlayersRise::NODE_CODE_NEUTRAL;      break;
+        }
+
+        UpdateWorldState(node.WorldStateId, code);
+    }
+
     std::array<uint16, PVP_TEAMS_COUNT> _reinforcements;
+    std::array<Node, SlayersRise::NODE_COUNT> _nodes;
     uint32 _resourceTimer;
+    uint32 _captureTimer;
 };
 
 void AddSC_battleground_slayers_rise()

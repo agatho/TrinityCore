@@ -9,8 +9,11 @@
 --   Map 2799 "Slayer's Rise" (Voidstorm)
 --
 -- CAPTURE-BLOCKED: the WorldSafeLocs start-location ids + graveyard ids for map 2799
--- are NOT yet captured. The battleground_template start-loc ids below are PLACEHOLDER 0
--- and MUST be replaced with real WorldSafeLocs.db2 ids before the BG is playable.
+-- are NOT yet captured. WorldSafeLocs.db2 is NOT exposed on wago.tools for build
+-- 12.0.7.68887 (the CSV endpoint returns {"errors":"Table not found."}), so those
+-- ids cannot be datamined and MUST NOT be invented. The battleground_template
+-- start-loc ids below are PLACEHOLDER 0 and MUST be replaced with real
+-- WorldSafeLocs.db2 ids before graveyards / start locations work.
 --
 
 -- --- Script binding (this is what actually activates battleground_slayers_rise) ---
@@ -33,9 +36,14 @@ INSERT INTO `battleground_template` (`ID`, `AllianceStartLoc`, `HordeStartLoc`, 
 --     (Hate Spire) and spirit guides — creature ids + coords CAPTURE-BLOCKED.
 --   * gameobject spawn SQL for the Bastion gates + Shenzar Refinery capture flag.
 --   * world_state rows scoping node worldstates 29506 / 29509 / 29510 to map 2799
---     and the (uncaptured) reinforcement-counter worldstates.
+--     and the (uncaptured) reinforcement-counter worldstates + starting count
+--     (the script uses AV's 600 as a flagged default until captured).
 -- Node objective centres are DB2-anchored (AreaPOI on ContinentID 2799):
 --   Grief Spire 8375, Hate Spire 8376, Bastion of Valor 8378 (WS 29506),
 --   Bastion of Might 8379 (WS 29509), Shenzar Refinery 8382 (WS 29510),
 --   Path of Predation 8403 — see the .cpp header for coords.
+-- Additional DB2-datamined node worldstates on map 2799 (NOT modelled yet — role
+-- uncaptured, do not invent): Stareater Pavilion 8620 (WS 29507),
+--   Shadowridge Outpost 8621 (WS 29508), Gates of Might 8645 (WS 29511),
+--   Gates of Valor 8646 (WS 29512).
 -- ---------------------------------------------------------------------------
