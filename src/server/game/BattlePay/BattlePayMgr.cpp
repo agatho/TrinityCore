@@ -370,12 +370,13 @@ bool BattlePayMgr::AssembleCatalog(std::vector<uint8>& outBlob, std::unordered_m
     if (_templateBlob.empty())
         return false;
 
-    std::vector<uint32> header;
-    std::vector<BattlePayCatalogRecord> records;
-    std::vector<uint8> remainder;
-    if (!BattlePayCatalogWriter::Parse(_templateBlob, header, records, remainder))
+    // The writer now decodes ALL FOUR arrays (94 products, 116 deliverables, 21 groups, 97 shop
+    // entries) with a byte-exact round trip, instead of only the first 9 "simple shape" records.
+    BattlePayCatalog catalog;
+    std::string parseError;
+    if (!BattlePayCatalogWriter::Parse(_templateBlob, catalog, &parseError))
     {
-        TC_LOG_ERROR("server.loading", "BattlePay: catalog template did not parse; serving it verbatim.");
+        TC_LOG_ERROR("server.loading", "BattlePay: catalog template did not parse ({}); serving it verbatim.", parseError);
         outBlob = _templateBlob;
         return false;
     }
@@ -402,7 +403,7 @@ bool BattlePayMgr::AssembleCatalog(std::vector<uint8>& outBlob, std::unordered_m
         return a->ProductID < b->ProductID;
     });
 
-    auto reskin = [&](BattlePayCatalogRecord& rec, ShopProduct const& product)
+    auto reskin = [&](BattlePayCatalogProduct& rec, ShopProduct const& product)
     {
         uint64 displayPrice;
         if (product.HasDisplayPrice)
@@ -418,17 +419,30 @@ bool BattlePayMgr::AssembleCatalog(std::vector<uint8>& outBlob, std::unordered_m
         if (product.HideIfOwned)
             flags |= DISPLAY_FLAG_HIDE_WHEN_OWNED;
 
-        rec.Name         = product.Name;
-        rec.Description  = product.Description;
-        rec.NormalPrice  = displayPrice;
-        rec.CurrentPrice = displayPrice;
-        rec.Flags        = flags;
+        rec.NormalPriceFixedPoint  = displayPrice;
+        rec.CurrentPriceFixedPoint = displayPrice;
+        rec.Flags                  = int32(flags);
+
+        // Name and description live in the product's DisplayInfo, not on the product record. 54 of the
+        // 94 shipped records have no DisplayInfo at all - that is exactly why their purchase
+        // confirmation showed a nil name and the generic INV_Misc_Note_02 fallback icon.
+        if (!rec.DisplayInfo)
+            rec.DisplayInfo = BattlePayCatalogWriter::MakeDisplayInfo(product.Name, product.Description);
+        else
+        {
+            rec.DisplayInfo->Name1 = product.Name;
+            rec.DisplayInfo->Name3 = product.Description;
+        }
     };
 
     size_t candIdx = 0;
-    for (size_t slot = 0; slot < records.size(); ++slot)
+    for (size_t slot = 0; slot < catalog.Products.size(); ++slot)
     {
-        uint32 const slotProductId = records[slot].ProductID;
+        // The id the client actually purchases by. The previous code read record+81, which is really
+        // DisplayInfo.fileDataID - the card ARTWORK id - so the routing map was built from FileDataIDs
+        // and never resolved. Purchases only worked because GetProductByAdvertisedId falls through to
+        // GetProduct(id).
+        uint32 const slotProductId = catalog.Products[slot].ProductID;
         ShopProduct const* assigned = nullptr;
 
         auto ovr = _slotOverrides.find(uint8(slot));
@@ -446,7 +460,7 @@ bool BattlePayMgr::AssembleCatalog(std::vector<uint8>& outBlob, std::unordered_m
 
         if (assigned)
         {
-            reskin(records[slot], *assigned);
+            reskin(catalog.Products[slot], *assigned);
             outRouting[slotProductId] = assigned->ProductID;
             if (report)
                 report->append(Trinity::StringFormat("  slot {}: [{}] '{}' -> product {} (price {}, {}{})\n",
@@ -455,11 +469,17 @@ bool BattlePayMgr::AssembleCatalog(std::vector<uint8>& outBlob, std::unordered_m
         }
         else
         {
-            records[slot].Name = placeholderName;
-            records[slot].Description.clear();
-            records[slot].NormalPrice = 0;
-            records[slot].CurrentPrice = 0;
-            records[slot].Flags |= DISPLAY_FLAG_HIDDEN_PRICE;
+            // Not pinned. Leave the shipped record's price alone - the blob already describes a real
+            // product with our gold price patched in, and shop_product is keyed on the same wire
+            // productID. Only give it a DisplayInfo when it has none, so the confirmation dialog can
+            // render a name instead of erroring on nil.
+            if (!catalog.Products[slot].DisplayInfo)
+            {
+                if (ShopProduct const* known = GetProduct(slotProductId))
+                    catalog.Products[slot].DisplayInfo = BattlePayCatalogWriter::MakeDisplayInfo(known->Name, known->Description);
+                else
+                    catalog.Products[slot].DisplayInfo = BattlePayCatalogWriter::MakeDisplayInfo(placeholderName, std::string());
+            }
             if (report)
                 report->append(Trinity::StringFormat("  slot {}: [{}] <placeholder - not purchasable>\n", slot, slotProductId));
         }
@@ -467,9 +487,9 @@ bool BattlePayMgr::AssembleCatalog(std::vector<uint8>& outBlob, std::unordered_m
 
     if (report && candIdx < candidates.size())
         report->append(Trinity::StringFormat("  OVERFLOW: {} enabled product(s) could not be shown (only {} slots).\n",
-            candidates.size() - candIdx, records.size()));
+            candidates.size() - candIdx, catalog.Products.size()));
 
-    outBlob = BattlePayCatalogWriter::Serialize(header, records, remainder);
+    outBlob = BattlePayCatalogWriter::Serialize(catalog);
     return true;
 }
 
