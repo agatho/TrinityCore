@@ -2939,6 +2939,19 @@ Battleground.StoreStatistics.Enable = 0
 Battleground.InvitationType = 0
 
 #
+#    BattlegroundBlitz.HealersPerTeam
+#        Description: Healers required per team before a Battleground Blitz match pops.
+#                     Blitz is 8v8 (BattlemasterList 1101). The client tells the server which
+#                     role a player queued as, but nothing in the client states how retail
+#                     balances the two teams, so this quota is configuration rather than a
+#                     value derived from the client.
+#                     0 disables role balancing entirely (the first 16 in the queue play).
+#                     Ignored while arena/bg testing mode is enabled.
+#        Default:     2
+
+BattlegroundBlitz.HealersPerTeam = 2
+
+#
 #    Battleground.PrematureFinishTimer
 #        Description: Time (in milliseconds) before battleground will end prematurely if there are
 #                     not enough players on one team. (Values defined in battleground template)

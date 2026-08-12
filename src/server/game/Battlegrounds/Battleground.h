@@ -236,7 +236,13 @@ enum class BattlegroundQueueIdType : uint8
     Arena           = 1,
     Wargame         = 2,
     Cheat           = 3,
-    ArenaSkirmish   = 4
+    ArenaSkirmish   = 4,
+    // Value 9 is not guessed: a live 12.0.7.68275 capture shows retail answering
+    // CMSG_BATTLEMASTER_JOIN_RATED_BG_BLITZ with SMSG_BATTLEFIELD_STATUS_QUEUED carrying
+    // QueueID 0x1F1000000019044D, which BattlegroundQueueTypeId::FromPacked decodes as
+    // { BattlemasterListId = 1101, Type = 9, Rated = true, TeamSize = 0 }.
+    // (C:\sniff\rated BG 12.0.7.pkt, the SMSG 366 ms after the join at tick 135643.)
+    RatedBattlegroundBlitz = 9
 };
 
 enum class BattlegroundPointCaptureStatus

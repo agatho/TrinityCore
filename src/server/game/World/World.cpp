@@ -839,6 +839,7 @@ void World::LoadConfigSettings(bool reload)
         { .Name = "Death.SicknessLevel"sv, .DefaultValue = 11, .Index = CONFIG_DEATH_SICKNESS_LEVEL },
         { .Name = "Battleground.ReportAFK"sv, .DefaultValue = 3, .Index = CONFIG_BATTLEGROUND_REPORT_AFK, .Min = 1, .Max = 9 },
         { .Name = "Battleground.InvitationType"sv, .DefaultValue = 0, .Index = CONFIG_BATTLEGROUND_INVITATION_TYPE },
+        { .Name = "BattlegroundBlitz.HealersPerTeam"sv, .DefaultValue = 2, .Index = CONFIG_BATTLEGROUND_BLITZ_HEALERS_PER_TEAM, .Min = 0, .Max = 8 },
         { .Name = "Battleground.PrematureFinishTimer"sv, .DefaultValue = 5 * MINUTE * IN_MILLISECONDS, .Index = CONFIG_BATTLEGROUND_PREMATURE_FINISH_TIMER },
         { .Name = "Battleground.PremadeGroupWaitForMatch"sv, .DefaultValue = 30 * MINUTE * IN_MILLISECONDS, .Index = CONFIG_BATTLEGROUND_PREMADE_GROUP_WAIT_FOR_MATCH },
         { .Name = "Arena.MaxRatingDifference"sv, .DefaultValue = 150, .Index = CONFIG_ARENA_MAX_RATING_DIFFERENCE },

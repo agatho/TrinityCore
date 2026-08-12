@@ -46,6 +46,11 @@ struct GroupQueueInfo                                       // stores informatio
     uint32  ArenaMatchmakerRating;                          // if rated match, inited to the rating of the team
     uint32  OpponentsTeamRating;                            // for rated arena matches
     uint32  OpponentsMatchmakerRating;                      // for rated arena matches
+    uint8   Roles;                                          // lfg::PLAYER_ROLE_* mask from the join packet.
+                                                            // Solo-queue modes (Battleground Blitz) match on this.
+                                                            // For a group this is the QUEUER's mask only: the wire
+                                                            // carries no per-member roles, so the other members'
+                                                            // roles are genuinely unknown, not merely unread.
 };
 
 enum BattlegroundQueueGroupTypes
@@ -78,7 +83,11 @@ class TC_GAME_API BattlegroundQueue
         bool CheckPremadeMatch(BattlegroundBracketId bracket_id, uint32 MinPlayersPerTeam, uint32 MaxPlayersPerTeam);
         bool CheckNormalMatch(BattlegroundBracketId bracket_id, uint32 minPlayers, uint32 maxPlayers);
         bool CheckSkirmishForSameFaction(BattlegroundBracketId bracket_id, uint32 minPlayersPerTeam);
-        GroupQueueInfo* AddGroup(Player const* leader, Group const* group, Team team, PVPDifficultyEntry const*  bracketEntry, bool isPremade, uint32 ArenaRating, uint32 MatchmakerRating);
+        // Solo-queue matchmaker for Battleground Blitz: fills both selection pools from the rated (premade-indexed)
+        // lists, honouring a healer quota per team. Returns false and leaves the pools untouched when the queue
+        // cannot yet field two full role-valid teams.
+        bool CheckSoloQueueMatch(BattlegroundBracketId bracket_id, uint32 playersPerTeam, uint32 healersPerTeam);
+        GroupQueueInfo* AddGroup(Player const* leader, Group const* group, Team team, PVPDifficultyEntry const*  bracketEntry, bool isPremade, uint32 ArenaRating, uint32 MatchmakerRating, uint8 roles = 0);
         // War games bypass matchmaking: both premade groups are known up front, so this queues one side onto a
         // forced team and immediately sends its members the enter-confirmation for the given battleground.
         bool AddWargameSide(Player* leader, Group* group, Battleground* bg, PVPDifficultyEntry const* bracketEntry, Team team);

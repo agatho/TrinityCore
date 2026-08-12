@@ -25,6 +25,7 @@
 #include "GameTime.h"
 #include "Group.h"
 #include "Language.h"
+#include "LFG.h"
 #include "Log.h"
 #include "ObjectAccessor.h"
 #include "Player.h"
@@ -130,7 +131,7 @@ bool BattlegroundQueue::SelectionPool::AddGroup(GroupQueueInfo* ginfo, uint32 de
 /*********************************************************/
 
 // add group or player (grp == NULL) to bg queue with the given leader and bg specifications
-GroupQueueInfo* BattlegroundQueue::AddGroup(Player const* leader, Group const* group, Team team, PVPDifficultyEntry const* bracketEntry, bool isPremade, uint32 ArenaRating, uint32 MatchmakerRating)
+GroupQueueInfo* BattlegroundQueue::AddGroup(Player const* leader, Group const* group, Team team, PVPDifficultyEntry const* bracketEntry, bool isPremade, uint32 ArenaRating, uint32 MatchmakerRating, uint8 roles)
 {
     BattlegroundBracketId bracketId = bracketEntry->GetBracketId();
 
@@ -144,6 +145,7 @@ GroupQueueInfo* BattlegroundQueue::AddGroup(Player const* leader, Group const* g
     ginfo->ArenaMatchmakerRating     = MatchmakerRating;
     ginfo->OpponentsTeamRating       = 0;
     ginfo->OpponentsMatchmakerRating = 0;
+    ginfo->Roles                     = roles;
 
     ginfo->Players.clear();
 
@@ -768,6 +770,122 @@ bool BattlegroundQueue::CheckSkirmishForSameFaction(BattlegroundBracketId bracke
     return true;
 }
 
+// Solo-queue matchmaker for Battleground Blitz (and any future rated solo-queue mode).
+//
+// Differs from CheckNormalMatch/CheckPremadeMatch in two ways:
+//  - it draws from the RATED lists. AddGroup only pushes an entry into BG_QUEUE_NORMAL_* when the queue is
+//    unrated (`if (!m_queueId.Rated && !isPremade) index += PVP_TEAMS_COUNT`), so for a rated queue every
+//    entry - solo or duo - lives in BG_QUEUE_PREMADE_ALLIANCE / _HORDE.
+//  - it is faction-blind. Blitz matches cross-faction, so entries are dealt into whichever pool needs them
+//    and their Team is rewritten, exactly as CheckSkirmishForSameFaction does for same-faction skirmishes.
+//
+// healersPerTeam is a configured quota, not a client-derived constant: the wire tells us the queuer's role
+// mask but nothing about how retail balances a Blitz match. 0 disables role balancing entirely.
+bool BattlegroundQueue::CheckSoloQueueMatch(BattlegroundBracketId bracket_id, uint32 playersPerTeam, uint32 healersPerTeam)
+{
+    uint8 const ratedLists[PVP_TEAMS_COUNT] = { uint8(BG_QUEUE_PREMADE_ALLIANCE), uint8(BG_QUEUE_PREMADE_HORDE) };
+
+    std::vector<GroupQueueInfo*> healers;
+    std::vector<GroupQueueInfo*> others;
+    uint32 totalPlayers = 0;
+
+    for (uint8 list : ratedLists)
+    {
+        for (GroupQueueInfo* ginfo : m_QueuedGroups[bracket_id][list])
+        {
+            if (ginfo->IsInvitedToBGInstanceGUID)
+                continue;
+
+            totalPlayers += uint32(ginfo->Players.size());
+
+            // Only the QUEUER's role mask exists on the wire, so a duo contributes one known role and one
+            // unknown one. Classify the whole entry by the mask we actually received rather than inventing a
+            // role for the partner.
+            if (ginfo->Roles & lfg::PLAYER_ROLE_HEALER)
+                healers.push_back(ginfo);
+            else
+                others.push_back(ginfo);
+        }
+    }
+
+    if (totalPlayers < playersPerTeam * PVP_TEAMS_COUNT)
+        return false;
+
+    if (healers.size() < size_t(healersPerTeam) * PVP_TEAMS_COUNT)
+        return false;
+
+    for (uint32 i = 0; i < PVP_TEAMS_COUNT; ++i)
+        m_SelectionPools[i].Init();
+
+    // Healers first so the quota is guaranteed, then everyone else fills the remaining slots.
+    size_t healerIdx = 0;
+    for (uint32 team = 0; team < PVP_TEAMS_COUNT; ++team)
+        for (uint32 n = 0; n < healersPerTeam && healerIdx < healers.size(); ++n)
+            if (!m_SelectionPools[team].AddGroup(healers[healerIdx++], playersPerTeam))
+                break;
+
+    auto fillFrom = [&](std::vector<GroupQueueInfo*> const& source, size_t from)
+    {
+        for (size_t i = from; i < source.size(); ++i)
+        {
+            GroupQueueInfo* ginfo = source[i];
+            bool placed = false;
+            for (uint32 team = 0; team < PVP_TEAMS_COUNT && !placed; ++team)
+                if (m_SelectionPools[team].GetPlayerCount() < playersPerTeam)
+                    placed = m_SelectionPools[team].AddGroup(ginfo, playersPerTeam);
+
+            if (!placed && m_SelectionPools[TEAM_ALLIANCE].GetPlayerCount() >= playersPerTeam
+                        && m_SelectionPools[TEAM_HORDE].GetPlayerCount() >= playersPerTeam)
+                return;
+        }
+    };
+
+    fillFrom(others, 0);
+    fillFrom(healers, healerIdx);
+
+    if (m_SelectionPools[TEAM_ALLIANCE].GetPlayerCount() != playersPerTeam
+        || m_SelectionPools[TEAM_HORDE].GetPlayerCount() != playersPerTeam)
+    {
+        // Leave no half-built selection behind for the next caller.
+        for (uint32 i = 0; i < PVP_TEAMS_COUNT; ++i)
+            m_SelectionPools[i].Init();
+        return false;
+    }
+
+    // Both pools are full. Re-home every entry that ended up on the other faction's side: set its Team, push it
+    // into the destination rated list and erase it from the source list. Skipping the list move makes
+    // RemovePlayer fail to find the entry and leaks queue slots - the same idiom as CheckSkirmishForSameFaction.
+    for (uint32 i = 0; i < PVP_TEAMS_COUNT; ++i)
+    {
+        TeamId const poolTeam = TeamId(TEAM_ALLIANCE + i);
+        Team const poolTeamId = poolTeam == TEAM_ALLIANCE ? ALLIANCE : HORDE;
+
+        for (GroupQueueInfo* ginfo : m_SelectionPools[poolTeam].SelectedGroups)
+        {
+            if (ginfo->Team == poolTeamId)
+                continue;
+
+            uint8 const sourceList = ginfo->Team == ALLIANCE ? uint8(BG_QUEUE_PREMADE_ALLIANCE) : uint8(BG_QUEUE_PREMADE_HORDE);
+            uint8 const destList   = poolTeam == TEAM_ALLIANCE ? uint8(BG_QUEUE_PREMADE_ALLIANCE) : uint8(BG_QUEUE_PREMADE_HORDE);
+
+            ginfo->Team = poolTeamId;
+            m_QueuedGroups[bracket_id][destList].push_front(ginfo);
+
+            for (GroupsQueueType::iterator itr = m_QueuedGroups[bracket_id][sourceList].begin();
+                 itr != m_QueuedGroups[bracket_id][sourceList].end(); ++itr)
+            {
+                if (*itr == ginfo)
+                {
+                    m_QueuedGroups[bracket_id][sourceList].erase(itr);
+                    break;
+                }
+            }
+        }
+    }
+
+    return true;
+}
+
 void BattlegroundQueue::UpdateEvents(uint32 diff)
 {
     m_events.Update(diff);
@@ -1012,6 +1130,33 @@ void BattlegroundQueue::BattlegroundQueueUpdate(uint32 /*diff*/, BattlegroundBra
 
             TC_LOG_DEBUG("bg.battleground", "Starting rated arena match!");
             arena->StartBattleground();
+        }
+    }
+    else if (BattlegroundQueueIdType(m_queueId.Type) == BattlegroundQueueIdType::RatedBattlegroundBlitz)
+    {
+        // Rated + non-arena previously fell through here doing nothing at all, which is why a rated
+        // battleground queue could never pop.
+        uint32 const perTeam = sBattlegroundMgr->isTesting() ? 1 : MaxPlayersPerTeam;
+        uint32 const healers = sBattlegroundMgr->isTesting() ? 0 : sWorld->getIntConfig(CONFIG_BATTLEGROUND_BLITZ_HEALERS_PER_TEAM);
+
+        if (CheckSoloQueueMatch(bracket_id, perTeam, healers))
+        {
+            Battleground* bg2 = sBattlegroundMgr->CreateNewBattleground(m_queueId, bracket_id);
+            if (!bg2)
+            {
+                TC_LOG_ERROR("bg.battleground", "BattlegroundQueue::Update - Cannot create Battleground Blitz instance: {}", m_queueId.BattlemasterListId);
+                return;
+            }
+
+            for (uint32 i = 0; i < PVP_TEAMS_COUNT; ++i)
+                for (GroupsQueueType::const_iterator citr = m_SelectionPools[TEAM_ALLIANCE + i].SelectedGroups.begin(); citr != m_SelectionPools[TEAM_ALLIANCE + i].SelectedGroups.end(); ++citr)
+                    InviteGroupToBG((*citr), bg2, (*citr)->Team);
+
+            TC_LOG_DEBUG("bg.battleground", "Starting Battleground Blitz match ({} per team, {} healers per team)", perTeam, healers);
+            bg2->StartBattleground();
+
+            m_SelectionPools[TEAM_ALLIANCE].Init();
+            m_SelectionPools[TEAM_HORDE].Init();
         }
     }
 }
