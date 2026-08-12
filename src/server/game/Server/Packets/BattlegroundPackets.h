@@ -290,6 +290,34 @@ namespace WorldPackets
             uint8 Roles = 0;
         };
 
+        // CMSG_BATTLEMASTER_JOIN_SKIRMISH (0x3B00BF), body = 3 bytes.
+        //
+        // Serializer VA 0x7FF729153120 writes obj+0x20 then obj+0x21, then one bit from obj+0x22 and flushes.
+        // Producers are C_PvP.JoinSkirmish(id) (RVA 0x2024F30) and C_PvP.RequeueSkirmish() (RVA 0x2025000).
+        //
+        // WARNING: the field order is the REVERSE of BattlemasterJoinArena. There the wire is
+        // TeamSizeIndex then Roles; here Roles comes FIRST. JoinSkirmish stores the role mask with
+        // `mov byte [rsp+0x40], al` and the bracket with `mov word [rsp+0x41], 4`. Copy-pasting the arena
+        // reader would silently swap the two bytes.
+        //
+        // Bracket is the client's own API parameter name (C_PvP.GetSkirmishInfo(pvpBracket)). Its enum
+        // identity is UNKNOWN and it is deliberately NOT mapped onto BattlegroundBracketId or
+        // PVPBracketTypes: the client's valid bracket space from GetPersonalRatedInfo is {0,1,2,3,6,8} and
+        // does not contain 4. JoinSkirmish only ever sends 4 (and hard-rejects anything else with the Lua
+        // error "Invalid bracket id."); RequeueSkirmish sends 255 together with the Requeue bit set.
+        class BattlemasterJoinSkirmish final : public ClientPacket
+        {
+        public:
+            explicit BattlemasterJoinSkirmish(WorldPacket&& packet)
+                : ClientPacket(CMSG_BATTLEMASTER_JOIN_SKIRMISH, std::move(packet)) { }
+
+            void Read() override;
+
+            uint8 Roles = 0;
+            uint8 Bracket = 0;
+            bool Requeue = false;
+        };
+
         class BattlefieldLeave final : public ClientPacket
         {
         public:
