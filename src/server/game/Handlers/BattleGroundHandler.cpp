@@ -192,7 +192,12 @@ void WorldSession::HandleBattlemasterJoinOpcode(WorldPackets::Battleground::Batt
             return;
 
         BattlegroundQueue& bgQueue = sBattlegroundMgr->GetBattlegroundQueue(bgQueueTypeId);
-        GroupQueueInfo* ginfo = bgQueue.AddGroup(_player, nullptr, getQueueTeam(), bracketEntry, false, isPremade, 0);
+        // The parameter order is (…, bool isPremade, uint32 ArenaRating, uint32 MatchmakerRating, uint8 roles).
+        // This call used to read (…, false, isPremade, 0): isPremade was landing in ArenaRating while the real
+        // isPremade parameter was hardcoded false. Because AddGroup buckets with
+        // `if (!m_queueId.Rated && !isPremade) index += PVP_TEAMS_COUNT`, every unrated group was filed under
+        // BG_QUEUE_NORMAL_* and CheckPremadeMatch could never fire.
+        GroupQueueInfo* ginfo = bgQueue.AddGroup(_player, nullptr, getQueueTeam(), bracketEntry, isPremade, 0, 0, battlemasterJoin.Roles);
         uint32 avgTime = bgQueue.GetAverageQueueWaitTime(ginfo, bracketEntry->GetBracketId());
         uint32 queueSlot = _player->AddBattlegroundQueueId(bgQueueTypeId);
 
@@ -220,7 +225,8 @@ void WorldSession::HandleBattlemasterJoinOpcode(WorldPackets::Battleground::Batt
         if (!err)
         {
             TC_LOG_DEBUG("bg.battleground", "Battleground: the following players are joining as group:");
-            ginfo = bgQueue.AddGroup(_player, grp, getQueueTeam(), bracketEntry, false, isPremade, 0);
+            // Same argument-order fix as the solo path above.
+            ginfo = bgQueue.AddGroup(_player, grp, getQueueTeam(), bracketEntry, isPremade, 0, 0, battlemasterJoin.Roles);
             avgTime = bgQueue.GetAverageQueueWaitTime(ginfo, bracketEntry->GetBracketId());
         }
 
@@ -247,6 +253,139 @@ void WorldSession::HandleBattlemasterJoinOpcode(WorldPackets::Battleground::Batt
         }
         TC_LOG_DEBUG("bg.battleground", "Battleground: group end");
     }
+
+    sBattlegroundMgr->ScheduleQueueUpdate(0, bgQueueTypeId, bracketEntry->GetBracketId());
+}
+
+// CMSG_BATTLEMASTER_JOIN_RATED_BG_BLITZ (0x3B00BE) - rated 8v8 solo/duo queue.
+//
+// Unlike CMSG_BATTLEMASTER_JOIN, this packet carries NO queue identity: the client sends a single role-mask
+// byte and the mode is implied entirely by the opcode. The server therefore builds the queue id itself. The
+// value used here is not invented - a live 12.0.7.68275 capture shows retail replying to this exact opcode
+// with SMSG_BATTLEFIELD_STATUS_QUEUED carrying packed QueueID 0x1F1000000019044D, which decodes to
+// { BattlemasterListId = 1101, Type = 9, Rated = true, TeamSize = 0 }.
+void WorldSession::HandleBattlemasterJoinRatedBGBlitz(WorldPackets::Battleground::BattlemasterJoinRatedBGBlitz& packet)
+{
+    BattlegroundQueueTypeId bgQueueTypeId =
+        BattlegroundMgr::BGQueueTypeId(BATTLEGROUND_BLITZ, BattlegroundQueueIdType::RatedBattlegroundBlitz, true, 0);
+
+    if (!BattlegroundMgr::IsValidQueueId(bgQueueTypeId))
+    {
+        TC_LOG_ERROR("network", "Battleground Blitz: queue id rejected by IsValidQueueId - BattlemasterList {} is missing from the client DB2 the server loaded.",
+            uint32(BATTLEGROUND_BLITZ));
+        return;
+    }
+
+    BattlemasterListEntry const* battlemasterListEntry = sBattlemasterListStore.AssertEntry(bgQueueTypeId.BattlemasterListId);
+
+    if (DisableMgr::IsDisabledFor(DISABLE_TYPE_BATTLEGROUND, bgQueueTypeId.BattlemasterListId, nullptr) || battlemasterListEntry->GetFlags().HasFlag(BattlemasterListFlags::InternalOnly))
+    {
+        ChatHandler(this).PSendSysMessage(LANG_BG_DISABLED);
+        return;
+    }
+
+    if (_player->InBattleground())
+        return;
+
+    BattlegroundTemplate const* bgTemplate = sBattlegroundMgr->GetBattlegroundTemplateByTypeId(BATTLEGROUND_BLITZ);
+    if (!bgTemplate)
+    {
+        TC_LOG_ERROR("bg.battleground", "Battleground Blitz: no battleground_template row for {} - apply the Blitz world migration.", uint32(BATTLEGROUND_BLITZ));
+        return;
+    }
+
+    PVPDifficultyEntry const* bracketEntry = DB2Manager::GetBattlegroundBracketByLevel(bgTemplate->MapIDs.front(), _player->GetLevel());
+    if (!bracketEntry)
+        return;
+
+    auto sendFailed = [&](GroupJoinBattlegroundResult result)
+    {
+        WorldPackets::Battleground::BattlefieldStatusFailed battlefieldStatus;
+        BattlegroundMgr::BuildBattlegroundStatusFailed(&battlefieldStatus, bgQueueTypeId, _player, 0, result);
+        SendPacket(battlefieldStatus.Write());
+    };
+
+    // The retail client refuses to send this opcode with no role selected, so a zero mask means either a
+    // modified client or a UI state we do not model. Either way the matchmaker cannot place the player.
+    if (!packet.Roles)
+    {
+        sendFailed(ERR_BATTLEGROUND_JOIN_FAILED);
+        return;
+    }
+
+    Group const* grp = _player->GetGroup();
+    if (grp)
+    {
+        if (grp->GetLeaderGUID() != _player->GetGUID())
+            return;
+
+        // BattlemasterList 1101 caps the queueing party at MaxGroupSize (2 on retail - solo or duo).
+        if (grp->GetMembersCount() > battlemasterListEntry->MaxGroupSize)
+        {
+            sendFailed(ERR_BATTLEGROUND_JOIN_FAILED);
+            return;
+        }
+    }
+
+    if (GetPlayer()->isUsingLfg())
+    {
+        sendFailed(ERR_LFG_CANT_USE_BATTLEGROUND);
+        return;
+    }
+
+    if (!_player->CanJoinToBattleground(bgTemplate))
+    {
+        sendFailed(ERR_BATTLEGROUND_JOIN_TIMED_OUT);
+        return;
+    }
+
+    if (_player->IsDeserter())
+    {
+        sendFailed(ERR_GROUP_JOIN_BATTLEGROUND_DESERTERS);
+        return;
+    }
+
+    // already queued for Blitz
+    if (_player->GetBattlegroundQueueIndex(bgQueueTypeId) < PLAYER_MAX_BATTLEGROUND_QUEUES)
+        return;
+
+    if (!_player->HasFreeBattlegroundQueueId())
+    {
+        sendFailed(ERR_BATTLEGROUND_TOO_MANY_QUEUES);
+        return;
+    }
+
+    // check Freeze debuff
+    if (_player->HasAura(9454))
+        return;
+
+    BattlegroundQueue& bgQueue = sBattlegroundMgr->GetBattlegroundQueue(bgQueueTypeId);
+    GroupQueueInfo* ginfo = bgQueue.AddGroup(_player, grp, Team(_player->GetTeam()), bracketEntry, false, 0, 0, packet.Roles);
+    uint32 avgTime = bgQueue.GetAverageQueueWaitTime(ginfo, bracketEntry->GetBracketId());
+
+    if (grp)
+    {
+        for (GroupReference const& itr : grp->GetMembers())
+        {
+            Player* member = itr.GetSource();
+            uint32 memberSlot = member->AddBattlegroundQueueId(bgQueueTypeId);
+
+            WorldPackets::Battleground::BattlefieldStatusQueued battlefieldStatus;
+            BattlegroundMgr::BuildBattlegroundStatusQueued(&battlefieldStatus, member, memberSlot, ginfo->JoinTime, bgQueueTypeId, avgTime, true);
+            member->SendDirectMessage(battlefieldStatus.Write());
+        }
+    }
+    else
+    {
+        uint32 queueSlot = _player->AddBattlegroundQueueId(bgQueueTypeId);
+
+        WorldPackets::Battleground::BattlefieldStatusQueued battlefieldStatus;
+        BattlegroundMgr::BuildBattlegroundStatusQueued(&battlefieldStatus, _player, queueSlot, ginfo->JoinTime, bgQueueTypeId, avgTime, false);
+        SendPacket(battlefieldStatus.Write());
+    }
+
+    TC_LOG_DEBUG("bg.battleground", "Battleground Blitz: {} ({}) queued with roles {:#x}",
+        _player->GetName(), _player->GetGUID().ToString(), packet.Roles);
 
     sBattlegroundMgr->ScheduleQueueUpdate(0, bgQueueTypeId, bracketEntry->GetBracketId());
 }
@@ -574,7 +713,7 @@ void WorldSession::HandleBattlemasterJoinArena(WorldPackets::Battleground::Battl
     {
         TC_LOG_DEBUG("bg.battleground", "Battleground: arena team id {}, leader {} queued with matchmaker rating {} for type {}", _player->GetArenaTeamId(packet.TeamSizeIndex), _player->GetName(), matchmakerRating, arenatype);
 
-        ginfo = bgQueue.AddGroup(_player, grp, Team(_player->GetTeam()), bracketEntry, false, arenaRating, matchmakerRating);
+        ginfo = bgQueue.AddGroup(_player, grp, Team(_player->GetTeam()), bracketEntry, false, arenaRating, matchmakerRating, packet.Roles);
         avgTime = bgQueue.GetAverageQueueWaitTime(ginfo, bracketEntry->GetBracketId());
     }
 
@@ -644,7 +783,11 @@ void WorldSession::HandleGetPVPOptionsEnabled(WorldPackets::Battleground::GetPVP
     pvpOptionsEnabled.SoloShuffle = false;
     pvpOptionsEnabled.RatedSoloShuffle = false;
     pvpOptionsEnabled.BattlegroundBlitz = false;
-    pvpOptionsEnabled.RatedBattlegroundBlitz = false;
+    // Flipped because HandleBattlemasterJoinRatedBGBlitz now exists and really queues: this bit gates the
+    // client's "Battleground Blitz" button, and retail sets it (sniffed SMSG_PVP_OPTIONS_ENABLED body = FF C0,
+    // all ten bits). The remaining four stay false until their own handlers land - enabling a bit whose opcode
+    // the server drops just produces a button that silently does nothing.
+    pvpOptionsEnabled.RatedBattlegroundBlitz = true;
     SendPacket(pvpOptionsEnabled.Write());
 }
 

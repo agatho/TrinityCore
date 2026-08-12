@@ -207,6 +207,9 @@ void BattlegroundMgr::BuildBattlegroundStatusQueued(WorldPackets::Battleground::
     battlefieldStatus->SuspendedQueue = false;
     battlefieldStatus->EligibleForMatchmaking = true;
     battlefieldStatus->WaitTime = GetMSTimeDiffToNow(joinTime);
+    // Retail populates this: the sniffed reply to a Battleground Blitz join carried SpecSelected 257
+    // (Holy Priest) for a healer-flagged queuer. It was previously left at 0 for every queue.
+    battlefieldStatus->SpecSelected = AsUnderlyingType(player->GetPrimarySpecialization());
 }
 
 void BattlegroundMgr::BuildBattlegroundStatusFailed(WorldPackets::Battleground::BattlefieldStatusFailed* battlefieldStatus, BattlegroundQueueTypeId queueId, Player const* player, uint32 ticketId, GroupJoinBattlegroundResult result, ObjectGuid const* errorGuid /*= nullptr*/)
@@ -424,7 +427,11 @@ void BattlegroundMgr::LoadBattlegroundTemplates()
         bgTemplate.BattlemasterEntry = bl;
         bgTemplate.MapIDs            = std::move(mapsByBattleground[bgTypeId]);
 
-        if (bgTemplate.Id != BATTLEGROUND_AA && !IsRandomBattleground(bgTemplate.Id))
+        // Aggregate templates (All Arenas, the random-BG pools, Battleground Blitz) never spawn anyone
+        // themselves: CreateNewBattleground resolves their BattlemasterListXMap maps back to the individual
+        // single-map templates, which carry the real start locations. Requiring a WorldSafeLocs id here would
+        // mean inventing one that is never used, and a wrong id silently drops the whole template.
+        if (bgTemplate.Id != BATTLEGROUND_AA && bgTemplate.Id != BATTLEGROUND_BLITZ && !IsRandomBattleground(bgTemplate.Id))
         {
             uint32 startId = fields[1].GetUInt32();
             if (WorldSafeLocsEntry const* start = sObjectMgr->GetWorldSafeLoc(startId))
@@ -572,6 +579,17 @@ bool BattlegroundMgr::IsValidQueueId(BattlegroundQueueTypeId bgQueueTypeId)
             if (!bgQueueTypeId.Rated)
                 return false;
             if (bgQueueTypeId.TeamSize != ARENA_TYPE_3v3)
+                return false;
+            break;
+        case BattlegroundQueueIdType::RatedBattlegroundBlitz:
+            // BattlemasterList 1101 ("Battleground Blitz") carries PvpType 0, so GetType() is Battleground and
+            // not Arena, even though the mode is rated. Rated must be set and TeamSize must be 0 - both read
+            // straight off the packed QueueID retail sent back to the client (0x1F1000000019044D).
+            if (battlemasterList->GetType() != BattlemasterType::Battleground)
+                return false;
+            if (!bgQueueTypeId.Rated)
+                return false;
+            if (bgQueueTypeId.TeamSize)
                 return false;
             break;
         default:
