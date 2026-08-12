@@ -375,7 +375,9 @@ void PetBattleMgr::BuildEffectActionMap()
             action = PET_BATTLE_EFFECT_ACTION_DAMAGE; // Conditional — evaluate at use site, fall through to damage
         else
         {
-            action = PET_BATTLE_EFFECT_ACTION_DAMAGE; // Safe fallback — default handler checks basePower
+            // Unclassified: route to the ProcessEffect default branch (skip + log) instead of
+            // defaulting to DAMAGE, so an effect we don't understand never fabricates damage.
+            action = PET_BATTLE_EFFECT_ACTION_UNKNOWN;
             if (hasAnyLabel)
             {
                 ++unclassifiedCount;
@@ -440,7 +442,7 @@ PetBattleAbilityEffectAction PetBattleMgr::GetEffectAction(uint16 propsID) const
     auto it = _effectActionMap.find(propsID);
     if (it != _effectActionMap.end())
         return it->second;
-    return PET_BATTLE_EFFECT_ACTION_DAMAGE; // Fallback for unmapped IDs
+    return PET_BATTLE_EFFECT_ACTION_UNKNOWN; // Unmapped IDs: skip + log, never fabricate damage
 }
 
 AuraTargetType PetBattleMgr::GetAuraTarget(uint32 abilityID) const

@@ -219,7 +219,11 @@ enum PetBattleAbilityEffectAction : uint16
     PET_BATTLE_EFFECT_ACTION_REMOVE_AURA        = 16,
     PET_BATTLE_EFFECT_ACTION_MULTI_TURN_BEGIN   = 17,
     PET_BATTLE_EFFECT_ACTION_MULTI_TURN_END     = 18,
-    PET_BATTLE_EFFECT_ACTION_COUNT              = 19,
+    // Sentinel for EffectProperties that the classifier could not resolve and for unmapped
+    // PropsIDs. Routed to the ProcessEffect default branch (skip + log) rather than silently
+    // dealing damage, so an unrecognized effect can never fabricate a damage number.
+    PET_BATTLE_EFFECT_ACTION_UNKNOWN            = 19,
+    PET_BATTLE_EFFECT_ACTION_COUNT              = 20,
 };
 
 // Type effectiveness matrix [attacker type][defender type]

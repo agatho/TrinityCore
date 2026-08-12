@@ -124,6 +124,13 @@ struct PetBattlePetData
 
     // Battle state
     bool IsAlive() const { return Health > 0; }
+    int32 GetState(uint32 stateID) const
+    {
+        for (auto const& [id, val] : States)
+            if (id == stateID)
+                return val;
+        return 0;
+    }
     bool IsCaptured = false;
     bool IsStunned = false;             // skips next turn
 

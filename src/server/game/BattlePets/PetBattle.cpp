@@ -27,6 +27,7 @@
 #include "PetBattleMgr.h"
 #include "Player.h"
 #include "Random.h"
+#include "Util.h"
 #include "WorldSession.h"
 #include <algorithm>
 
@@ -878,37 +879,22 @@ void PetBattle::ApplyAbilityEffects(uint8 attackerTeam, uint8 attackerPet, uint3
     TC_LOG_DEBUG("server.loading", "PetBattle ApplyAbilityEffects: abilityID={} turns={}", abilityID, turns ? turns->size() : 0);
     if (!turns || turns->empty())
     {
-        // Fallback: apply simple damage if no DB2 turn data exists
-        PetBattlePetData& defender = _teams[defenderTeam].Pets[defenderPet];
-        if (attacker.IsAlive() && defender.IsAlive())
-        {
-            BattlePetAbilityEntry const* ability = sBattlePetAbilityStore.LookupEntry(abilityID);
-            DamageResult dmg = CalculateAbilityDamage(
-                attacker.EffectivePower, attacker.EffectivePower,
-                ability ? PetBattlePetType(ability->PetTypeEnum) : PetBattlePetType(attacker.PetType),
-                attacker, defender);
+        // No DB2 turn/effect chain for this ability. The previous fallback invented damage as
+        // CalculateAbilityDamage(EffectivePower, EffectivePower, ...) = EffectivePower^2/20, which
+        // massively over-scales (a ~200-power pet one-shots). Rather than fabricate a number we
+        // cannot source, log it and emit a benign STATUS_CHANGE so the client still shows the
+        // ability was used this turn. This is a missing-data case, not a real ability outcome.
+        TC_LOG_WARN("server.loading", "PetBattle ApplyAbilityEffects: abilityID={} has no BattlePetAbilityTurn "
+            "data; skipping effect resolution (no fabricated damage).", abilityID);
 
-            defender.Health = std::max(0, defender.Health - dmg.Damage);
-
-            PetBattleRoundEffect effect;
-            effect.AbilityEffectID = abilityID;
-            effect.EffectType = PET_BATTLE_EFFECT_SET_HEALTH;
-            effect.SourceTeam = attackerTeam;
-            effect.SourcePet = attackerPet;
-            effect.TargetTeam = defenderTeam;
-            effect.TargetPet = defenderPet;
-            effect.Param1 = defender.Health;
-            effect.Flags |= PET_BATTLE_EFFECT_FLAG_SUCCESS_CHAIN;
-            if (dmg.IsCrit)
-                effect.Flags |= PET_BATTLE_EFFECT_FLAG_CRIT;
-            if (dmg.TypeMod > 1.0f)
-                effect.Flags |= PET_BATTLE_EFFECT_FLAG_STRONG;
-            else if (dmg.TypeMod < 1.0f)
-                effect.Flags |= PET_BATTLE_EFFECT_FLAG_WEAK;
-            _roundEffects.push_back(effect);
-
-            ApplyPassiveOnDamageDealt(attackerTeam, attackerPet, defenderTeam, defenderPet, dmg.Damage);
-        }
+        PetBattleRoundEffect effect;
+        effect.AbilityEffectID = abilityID;
+        effect.EffectType = PET_BATTLE_EFFECT_STATUS_CHANGE;
+        effect.SourceTeam = attackerTeam;
+        effect.SourcePet = attackerPet;
+        effect.TargetTeam = attackerTeam;
+        effect.TargetPet = attackerPet;
+        _roundEffects.push_back(effect);
         return;
     }
 
@@ -1013,11 +999,35 @@ void PetBattle::ProcessEffect(BattlePetAbilityEffectEntry const* effect, uint8 a
 
     // Determine effect action from BattlePetEffectPropertiesEntry
     uint16 effectPropsID = effect->BattlePetEffectPropertiesID;
+    BattlePetEffectPropertiesEntry const* effectProps = sBattlePetEffectPropertiesStore.LookupEntry(effectPropsID);
 
-    // The Param array from BattlePetAbilityEffectEntry provides effect-specific values
-    // Param[0] typically = base power/amount, Param[1] = accuracy%, Param[2-5] = additional modifiers
-    int16 basePower = effect->Param[0];
-    int16 accuracy = effect->Param[1];
+    // Resolve effect parameters by their DB2 ParamLabel rather than by fixed index. The
+    // BattlePetAbilityEffect Param[] slots are not positionally fixed across effects, so
+    // reading accuracy blindly from Param[1] rolled spurious misses on effects whose slot 1
+    // is actually Duration/State/etc. Match each slot's label; fall back to a legacy index
+    // only where the effect carries no labels at all.
+    auto paramByLabel = [effect, effectProps](std::initializer_list<char const*> wanted, int fallbackIndex) -> int16
+    {
+        if (effectProps)
+        {
+            for (uint8 i = 0; i < 6; ++i)
+            {
+                char const* lbl = effectProps->ParamLabel[i];
+                if (!lbl || !lbl[0])
+                    continue;
+                for (char const* w : wanted)
+                    if (StringEqualI(lbl, w))
+                        return effect->Param[i];
+            }
+        }
+        return fallbackIndex >= 0 ? effect->Param[fallbackIndex] : int16(0);
+    };
+
+    // Amount ("Points"/"Percentage"); keep the legacy Param[0] when no labels are present.
+    int16 basePower = paramByLabel({ "Points", "Percentage" }, 0);
+    // Accuracy only when an "Accuracy" label exists — NO legacy fallback. Reading Param[1]
+    // unconditionally was the source of spurious misses on non-accuracy effects.
+    int16 accuracy = paramByLabel({ "Accuracy" }, -1);
 
     // Weather accuracy modifier (Elemental passive: ignores weather)
     if (accuracy > 0 && attacker.PetType != PET_TYPE_ELEMENTAL)
@@ -1050,7 +1060,6 @@ void PetBattle::ProcessEffect(BattlePetAbilityEffectEntry const* effect, uint8 a
     // Look up the abstract action type from the DB2 PropsID mapping (built at startup)
     PetBattleAbilityEffectAction effectAction = sPetBattleMgr->GetEffectAction(effectPropsID);
 
-    BattlePetEffectPropertiesEntry const* effectProps = sBattlePetEffectPropertiesStore.LookupEntry(effectPropsID);
     TC_LOG_DEBUG("server.loading", "PetBattle ProcessEffect: propsID={} action={} basePower={} accuracy={}",
         effectPropsID, uint16(effectAction), basePower, accuracy);
 
@@ -1106,7 +1115,7 @@ void PetBattle::ProcessEffect(BattlePetAbilityEffectEntry const* effect, uint8 a
         case PET_BATTLE_EFFECT_ACTION_APPLY_AURA:
         case PET_BATTLE_EFFECT_ACTION_PERIODIC_DAMAGE:
         {
-            int8 auraDuration = static_cast<int8>(effect->Param[2]);
+            int8 auraDuration = static_cast<int8>(paramByLabel({ "Duration" }, 2));
             if (auraDuration <= 0)
                 auraDuration = 3; // Default duration
 
@@ -1255,7 +1264,7 @@ void PetBattle::ProcessEffect(BattlePetAbilityEffectEntry const* effect, uint8 a
         }
         case PET_BATTLE_EFFECT_ACTION_PERIODIC_HEAL:
         {
-            int8 auraDuration = static_cast<int8>(effect->Param[2]);
+            int8 auraDuration = static_cast<int8>(paramByLabel({ "Duration" }, 2));
             if (auraDuration <= 0)
                 auraDuration = 3;
 
@@ -1653,35 +1662,14 @@ void PetBattle::ProcessEffect(BattlePetAbilityEffectEntry const* effect, uint8 a
                 for (uint8 i = 0; i < 6; ++i)
                     if (effectProps->ParamLabel[i] && effectProps->ParamLabel[i][0] != '\0')
                         labels += Trinity::StringFormat("[{}]={} ", i, effectProps->ParamLabel[i]);
-            TC_LOG_WARN("server.loading", "PetBattle ProcessEffect: UNHANDLED propsID={} action={} basePower={} defenderAlive={} params=[{},{},{},{},{},{}] labels={}",
+            TC_LOG_WARN("server.loading", "PetBattle ProcessEffect: UNHANDLED/UNKNOWN propsID={} action={} basePower={} defenderAlive={} params=[{},{},{},{},{},{}] labels={} — skipping (no fabricated damage)",
                 effectPropsID, uint16(effectAction), basePower, defender.IsAlive(),
                 effect->Param[0], effect->Param[1], effect->Param[2], effect->Param[3], effect->Param[4], effect->Param[5],
                 labels);
-            // Unhandled effect category - treat as damage if basePower > 0
-            if (basePower > 0 && defender.IsAlive())
-            {
-                DamageResult dmg = CalculateAbilityDamage(basePower, attacker.EffectivePower, abilityType, attacker, defender);
-                defender.Health = std::max(0, defender.Health - dmg.Damage);
-
-                PetBattleRoundEffect roundEffect;
-                roundEffect.AbilityEffectID = effect->ID;
-                roundEffect.EffectType = PET_BATTLE_EFFECT_SET_HEALTH;
-                roundEffect.SourceTeam = attackerTeam;
-                roundEffect.SourcePet = attackerPet;
-                roundEffect.TargetTeam = defenderTeam;
-                roundEffect.TargetPet = defenderPet;
-                roundEffect.Param1 = defender.Health;
-                roundEffect.Flags |= PET_BATTLE_EFFECT_FLAG_SUCCESS_CHAIN;
-                if (dmg.IsCrit)
-                    roundEffect.Flags |= PET_BATTLE_EFFECT_FLAG_CRIT;
-                if (dmg.TypeMod > 1.0f)
-                    roundEffect.Flags |= PET_BATTLE_EFFECT_FLAG_STRONG;
-                else if (dmg.TypeMod < 1.0f)
-                    roundEffect.Flags |= PET_BATTLE_EFFECT_FLAG_WEAK;
-                _roundEffects.push_back(roundEffect);
-
-                ApplyPassiveOnDamageDealt(attackerTeam, attackerPet, defenderTeam, defenderPet, dmg.Damage);
-            }
+            // Deliberately skip: an effect we could not classify must NOT be silently treated
+            // as damage (the old "basePower>0 => damage" default mis-scaled unmapped effects and
+            // could deal damage for buffs/utility effects). The warning above surfaces the
+            // PropsID + labels so it can be given an explicit classification.
             break;
         }
     }
@@ -1746,8 +1734,14 @@ DamageResult PetBattle::CalculateAbilityDamage(int32 abilityPower, int32 attacke
         if (stateID == BattlePets::STATE_MOD_DAMAGE_TAKEN_PERCENT && stateValue != 0)
             rawDamage *= (1.0f + stateValue / 100.0f);
 
-    // Critical hit check (5% base chance, 1.5x multiplier)
-    if (frand(0.0f, 1.0f) < PET_BATTLE_BASE_CRIT_CHANCE)
+    // Critical hit check: 5% base plus the attacker's crit-chance state (set by
+    // abilities/auras and, for non-Elemental pets, weather) rather than a flat 5%.
+    // STATE_STAT_CRIT_CHANCE is stored as a whole-percent value. 1.5x on crit.
+    float critChance = PET_BATTLE_BASE_CRIT_CHANCE + attacker.GetState(BattlePets::STATE_STAT_CRIT_CHANCE) / 100.0f;
+    if (attacker.PetType != PET_TYPE_ELEMENTAL)
+        critChance += _environments[PET_BATTLE_WEATHER_ENV_SLOT].GetState(BattlePets::STATE_STAT_CRIT_CHANCE) / 100.0f;
+    critChance = std::clamp(critChance, 0.0f, 1.0f);
+    if (frand(0.0f, 1.0f) < critChance)
     {
         rawDamage *= PET_BATTLE_CRIT_MULTIPLIER;
         result.IsCrit = true;
