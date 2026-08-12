@@ -302,9 +302,16 @@ namespace WorldPackets
             int64 TimeCreated = 0;
         };
 
-        // Server drives purchase progress/completion. Layout from client read ctor (0x6090d0):
-        // u32 result, then a u32-counted vector of JamBattlePayPurchase. status=6 signals completion
-        // (live 68974 value; see PurchaseRecord) and the record echoes the productID delivered.
+        // Server drives purchase progress/completion.
+        //
+        // Body = { uint32 Count, Count x JamBattlePayPurchase }. There is NO leading Result: the client
+        // read ctor at RVA 0x6090D0 performs exactly ONE ReadUInt32 and passes it straight to
+        // vector_resize. An earlier comment here claimed "u32 result, then a u32-counted vector", which
+        // was wrong and cost a working shop - see PurchaseUpdate::Write.
+        //
+        // status = 6 signals completion (live 68974 value; see PurchaseRecord) and the record echoes the
+        // productID delivered; status = 9 (ConfirmationPending) with resultCode 0 is what the
+        // confirmation dialog needs before the client will send CMSG_BATTLE_PAY_CONFIRM_PURCHASE_RESPONSE.
         class PurchaseUpdate final : public ServerPacket
         {
         public:
@@ -312,12 +319,17 @@ namespace WorldPackets
 
             WorldPacket const* Write() override;
 
-            uint32 Result = 0;
             std::vector<PurchaseRecord> Purchases;
         };
 
-        // Reply to CMSG_BATTLE_PAY_GET_PURCHASE_LIST. Body layout is identical to
-        // SMSG_BATTLE_PAY_PURCHASE_UPDATE: { uint32 Result, uint32 Count, Count x PurchaseRecord }.
+        // Reply to CMSG_BATTLE_PAY_GET_PURCHASE_LIST. Body = { uint32 Result, uint32 Count,
+        // Count x PurchaseRecord }.
+        //
+        // NOTE the header is NOT the same as SMSG_BATTLE_PAY_PURCHASE_UPDATE, which has no Result and
+        // starts straight at Count. This message's ctor (RVA 0x607DA0) does TWO ReadUInt32; the other's
+        // does one. The client structs confirm it: the record vector lives at +0x28 here and at +0x20
+        // there, displaced by exactly these 4 bytes. Assuming the two were identical is what broke the
+        // purchase flow.
         // Proven against a live sniff: a retail account with 9 purchases produced a 413-byte body, and
         // 8 (header) + 9 * 45 (PurchaseRecord = u64+i32+i32+u32+u64+u64+i64+u8) == 413 exactly. The
         // record layout (walletName length record-final) matches the fixed PurchaseUpdate serializer.
