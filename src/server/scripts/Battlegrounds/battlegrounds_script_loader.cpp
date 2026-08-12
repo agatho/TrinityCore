@@ -63,6 +63,9 @@ void AddSC_battleground_temple_of_kotmogu();
 
 void AddSC_battleground_deephaul_ravine();
 
+// Slayer's Rise (Midnight S1, 40v40 Epic Battleground)
+void AddSC_battleground_slayers_rise();
+
 void AddSC_arena_tol_viron_arena();
 
 void AddSC_arena_the_tigers_peak();
@@ -132,6 +135,7 @@ void AddBattlegroundsScripts()
     AddSC_battleground_silvershard_mines();
     AddSC_battleground_temple_of_kotmogu();
     AddSC_battleground_deephaul_ravine();
+    AddSC_battleground_slayers_rise();
 
     AddSC_arena_tol_viron_arena();
 
