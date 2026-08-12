@@ -33,6 +33,7 @@
 // in hand. See C:\dumps\QUELTHALAS_EVENTS_BLUEPRINT.md.
 
 #include "Define.h"
+#include "ObjectGuid.h"
 #include <ctime>
 #include <unordered_map>
 #include <vector>
@@ -71,6 +72,38 @@ struct ZoneEventTemplate
     int32        MeterCap              = 0; // assault fill cap (1000000 for Stormarion), 0 = none
 };
 
+// One row of `zone_event_spawn` (ships on this branch). Drives the OnEventStart
+// spawn mechanism for the event actor creature (256697) and the Stormarion
+// destructibles (Conjured Defense 241418 / Ward Fragment 241419). The exact
+// spawn COORDINATES are CAPTURE-BLOCKED, so this table ships with NO data rows;
+// the mechanism iterates whatever rows exist and is a safe no-op when empty.
+struct ZoneEventSpawn
+{
+    uint32 EventId     = 0;  // FK -> zone_event_template.Id
+    uint8  Kind        = 0;  // 0 = creature, 1 = gameobject
+    uint32 Entry       = 0;  // creature_template / gameobject_template entry
+    uint32 MapId       = 0;  // map to summon on (0 = use the event's MapId)
+    float  PosX        = 0.f;
+    float  PosY        = 0.f;
+    float  PosZ        = 0.f;
+    float  Orientation = 0.f;
+};
+
+// One wave of an event's handoff scenario (`zone_event_scenario_step`, ships on
+// this branch). For Stormarion Assault this is Scenario 3021's three waves; each
+// wave's CriteriaTree completing feeds the assault meter (WS 29616) by MeterStep.
+// All ids are DB2-confirmed (build 68887) -- see the blueprint. The reward quest
+// itself is granted by the stock scenario system (Scenario::CompleteStep).
+struct ZoneEventWave
+{
+    uint32 EventId        = 0;  // FK -> zone_event_template.Id
+    uint32 ScenarioId     = 0;  // 3021 "Stormarion Assault"
+    uint8  WaveIndex      = 0;  // 1..3
+    uint32 CriteriaTreeId = 0;  // 210107 / 211420 / 211423
+    uint32 RewardQuestId  = 0;  // 91464 / 91465 / 90943 (granted by scenario system)
+    int32  MeterStep      = 0;  // meter increment on wave completion (+500)
+};
+
 // Live runtime state for one active/scheduled event instance.
 struct ZoneEventState
 {
@@ -79,7 +112,12 @@ struct ZoneEventState
     time_t EndTime    = 0; // unix time this active window closes
     int32  Meter      = 0; // current assault-meter value (mirrors WS 29616)
     uint8  Phase      = 0; // rotation phase index (mirrors WS 5207/5208)
+    uint8  WavesDone  = 0; // scenario waves completed this window
     bool   Active     = false;
+
+    // Objects summoned by the spawn mechanism this window (despawned on end).
+    std::vector<ObjectGuid> SpawnedCreatures;
+    std::vector<ObjectGuid> SpawnedGameObjects;
 };
 
 class TC_GAME_API ZoneEventMgr
@@ -105,6 +143,21 @@ public:
     // --- accessors (used by scripts / debug commands) ---
     ZoneEventTemplate const* GetTemplate(uint32 id) const;
     bool IsEventActive(uint32 id) const;
+    int32 GetMeter(uint32 id) const;
+
+    // --- assault-meter mechanism (WS 29616) ---
+    // Advance the assault meter of event `templateId` by `amount` (defaults to
+    // the +500 step). Broadcasts WS 29616 and, on reaching MeterCap, drives the
+    // completion path (reward hook + phase advance + window reset). Safe no-op if
+    // the event is not active or has no meter cap.
+    void AddAssaultProgress(uint32 templateId, int32 amount = ASSAULT_METER_STEP);
+
+    // Wave-completion hook. Called from Scenario::CompleteStep when any scenario
+    // step's CriteriaTree completes; if that tree is a registered event wave the
+    // meter is advanced. No-op for every unrelated scenario.
+    void OnScenarioCriteriaCompleted(uint32 criteriaTreeId);
+
+    static constexpr int32 ASSAULT_METER_STEP = 500; // WS 29616 step (confirmed on wire)
 
 private:
     // Rotation / scheduling core (implemented in skeleton).
@@ -112,17 +165,31 @@ private:
     void DeactivateEvent(ZoneEventState& state, ZoneEventTemplate const& tmpl, time_t now);
     void BroadcastTimers(ZoneEventTemplate const& tmpl, ZoneEventState const& state);
 
-    // --- CAPTURE-BLOCKED per-event hooks (stubbed; see blueprint) ---
-    // Spawn/despawn of event creatures/GOs + destructibles (Conjured Defense
-    // 241418 / Ward Fragment 241419), and completion -> renown/currency/loot.
-    void OnEventStart(ZoneEventTemplate const& tmpl);   // TODO CAPTURE-BLOCKED
-    void OnEventComplete(ZoneEventTemplate const& tmpl); // TODO CAPTURE-BLOCKED
+    // Per-event start/end content hooks. The spawn/despawn MECHANISM is live
+    // (reads `zone_event_spawn`; no-op when the table is empty). The reward tail
+    // is CAPTURE-BLOCKED (see OnAssaultComplete).
+    void OnEventStart(ZoneEventTemplate const& tmpl, ZoneEventState& state);
+    void OnEventComplete(ZoneEventTemplate const& tmpl, ZoneEventState& state);
+
+    // Spawn mechanism (reads `zone_event_spawn`).
+    void SpawnEventActors(ZoneEventTemplate const& tmpl, ZoneEventState& state);
+    void DespawnEventActors(ZoneEventTemplate const& tmpl, ZoneEventState& state);
+
+    // Assault meter reached MeterCap -> completion. Grants the (CAPTURE-BLOCKED)
+    // reward tail then ends the window early via DeactivateEvent.
+    void OnAssaultComplete(ZoneEventTemplate const& tmpl, ZoneEventState& state, time_t now);
+
+    // Loaders for the shipped side tables.
+    void LoadSpawns();
+    void LoadScenarioWaves();
 
     static constexpr uint32 ZONE_EVENT_UPDATE_INTERVAL = 1000; // ms; 1 Hz is enough for the countdown WS
 
     uint32 _updateAccumulator;
     std::unordered_map<uint32, ZoneEventTemplate> _templates;
     std::unordered_map<uint32, ZoneEventState>    _states;
+    std::vector<ZoneEventSpawn>                   _spawns;             // all spawn rows (filtered by EventId at spawn time)
+    std::unordered_map<uint32, ZoneEventWave>     _wavesByCriteriaTree; // CriteriaTreeId -> wave
 };
 
 #define sZoneEventMgr ZoneEventMgr::instance()
