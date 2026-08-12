@@ -1372,7 +1372,12 @@ namespace WorldPackets
 
             WorldPacket const* Write() override;
 
-            uint32 GarrSiteLevelID = 0;
+            // This is the GarrSite id, NOT the GarrSiteLevel id, despite what the field was previously
+            // called. Four captures carry 2, 161, 299 and 168 - and TC's own GetGarrisonTypeFromSiteId
+            // map (Garrison.cpp) lists 2 = WoD garrison, 161 = Legion order hall, 168 = BfA war campaign.
+            // The war campaign's GarrSiteLevel ids are 599/600/601, so a site-level id could not produce
+            // 168. Sending _siteLevel->ID here would have put the wrong number on the wire.
+            uint32 GarrSiteID = 0;
             uint32 NumActivationsRemaining = 0;
         };
 
