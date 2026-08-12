@@ -301,29 +301,54 @@ namespace WorldPackets
         // Realm-wide encounter packets
         // ============================================================
 
+        // SMSG_ENCOUNTER_START (0x420226) = 14 bytes:
+        //   uint32 DungeonEncounterID, uint16 DifficultyID, uint32 GroupSize, uint32 <trailing array count>.
+        //
+        // DifficultyID is a uint16, NOT a uint32, and the packet ends with an array count rather than a
+        // data id. Client parser RVA 0x608700 reads uint32 / uint16 (helper 0x33CC3C0) / uint32 / uint32,
+        // and four captures in C:\sniff\m+ run12.0.7.pkt are each exactly 14 bytes, e.g.
+        //   03 0A 00 00 | 08 00 | 05 00 00 00 | 00 00 00 00
+        //   = encounter 2563, difficulty 8 (Mythic Keystone), group 5, count 0.
+        //
+        // This was previously written as four uint32s (16 bytes), which shifted everything after the
+        // difficulty: the client reconstructed GroupSize as (DifficultyID >> 16) | (GroupSize << 16).
+        // The trailing array is always empty in every capture, so its element layout is unknown and it is
+        // modelled as a bare count of 0 rather than guessed at.
         class EncounterStart final : public ServerPacket
         {
         public:
-            explicit EncounterStart() : ServerPacket(SMSG_ENCOUNTER_START, 4 + 4 + 4 + 4) { }
+            explicit EncounterStart() : ServerPacket(SMSG_ENCOUNTER_START, 4 + 2 + 4 + 4) { }
 
             WorldPacket const* Write() override;
 
             uint32 DungeonEncounterID = 0;
-            uint32 DifficultyID = 0;
+            uint16 DifficultyID = 0;
             uint32 GroupSize = 0;
-            int32 UnkEncounterDataID = 0;
         };
 
+        // SMSG_ENCOUNTER_END (0x420227) = 15 bytes:
+        //   uint32 DungeonEncounterID, uint16 DifficultyID, uint32 GroupSize, uint32 DurationMs,
+        //   then one bit-packed byte carrying Success at 0x80.
+        //
+        // Client parser RVA 0x608820. Two problems with the previous version: DifficultyID was a uint32,
+        // and the DurationMs field was missing entirely, so the packet was 13 bytes where the client reads
+        // 15 - it under-ran the buffer and Success was read from whatever followed.
+        //
+        // DurationMs is the encounter's elapsed time in milliseconds. That is not a guess: across the four
+        // START/END pairs in C:\sniff\m+ run12.0.7.pkt the field tracks the sniff's own tick delta between
+        // the pair - 74898 vs 74894, 101076 vs 101076 (exact to the millisecond), 85874 vs 86388,
+        // 115044 vs 114500.
         class EncounterEnd final : public ServerPacket
         {
         public:
-            explicit EncounterEnd() : ServerPacket(SMSG_ENCOUNTER_END, 4 + 4 + 4 + 1) { }
+            explicit EncounterEnd() : ServerPacket(SMSG_ENCOUNTER_END, 4 + 2 + 4 + 4 + 1) { }
 
             WorldPacket const* Write() override;
 
             uint32 DungeonEncounterID = 0;
-            uint32 DifficultyID = 0;
+            uint16 DifficultyID = 0;
             uint32 GroupSize = 0;
+            uint32 DurationMs = 0;
             bool Success = false;
         };
 
