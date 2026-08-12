@@ -157,3 +157,26 @@ void WorldSession::HandleBattlePayGetPurchaseList(WorldPackets::BattlePay::GetPu
     response.Result = 0;    // PurchaseResult::Ok
     SendPacket(response.Write());
 }
+
+// VAS (Value Added Services) status queries.
+//
+// These are the only two VAS opcodes a retail client actually sends unprompted - both appear at character
+// select in every capture on this machine, and both have empty bodies. They were registered STATUS_IGNORED,
+// which in this core is a bare `break;` in WorldSession: the packet was dropped without even a log line, so
+// the client's VAS caches were never refreshed and never cleared.
+//
+// Answering with "nothing in flight" is the accurate state of this realm, and it is byte-identical to what
+// retail sends when a player has no pending purchase.
+void WorldSession::HandleUpdateVasPurchaseStates(WorldPackets::BattlePay::UpdateVasPurchaseStates& /*packet*/)
+{
+    WorldPackets::BattlePay::EnumVasPurchaseStatesResponse response;
+    SendPacket(response.Write());
+}
+
+void WorldSession::HandleVasGetServiceStatus(WorldPackets::BattlePay::VasGetServiceStatus& /*packet*/)
+{
+    // ServiceStatus 0: this realm offers no paid character services. The low nibble's meaning is unknown,
+    // so it is left 0 rather than given an invented value.
+    WorldPackets::BattlePay::VasGetServiceStatusResponse response;
+    SendPacket(response.Write());
+}
