@@ -18,6 +18,7 @@
 #include "BattlePayPackets.h"
 #include "StringFormat.h"
 #include "Log.h"
+#include "PacketOperators.h"
 
 namespace WorldPackets::BattlePay
 {
