@@ -26,6 +26,28 @@
 #include "Player.h"
 #include "WorldSession.h"
 
+// CF-6: managing a guild's recruitment (posting, reading its applicant list, responding to and
+// whispering applicants) is not leader-only. Retail lets any officer whose guild rank carries the
+// recruiter permission act on the posting, so the leader-only gate here was stricter than retail.
+//
+// The client and the wire/enum expose no dedicated club-finder/recruiter right, so the guild invite
+// right (GR_RIGHT_INVITE) - the same rank right that governs bringing new members into the guild - is
+// used as the recruiter-equivalent: managing recruitment is exactly the act of inviting members. The
+// guild leader holds the GuildMaster rank (GR_RIGHT_ALL) and therefore always passes; a member whose
+// rank lacks the invite right, or a player not in the guild at all, is refused with the existing
+// CLUB_FINDER error.
+static bool CanManageClubRecruitment(Guild const* guild, Player const* player)
+{
+    if (!guild || !player)
+        return false;
+
+    if (guild->GetLeaderGUID() == player->GetGUID())
+        return true;
+
+    Guild::Member const* member = guild->GetMember(player->GetGUID());
+    return member && guild->HasAnyRankRight(member->GetRankId(), GR_RIGHT_INVITE);
+}
+
 // Club Finder P0: a guild advertises itself for recruitment.
 //
 // The client clamps Name to 96 and Description to 2048 before sending, and the wire encodes those
@@ -66,9 +88,9 @@ void WorldSession::HandleClubFinderPost(WorldPackets::ClubFinder::ClubFinderPost
         return;
     }
 
-    if (guild->GetLeaderGUID() != player->GetGUID())
+    if (!CanManageClubRecruitment(guild, player))
     {
-        TC_LOG_DEBUG("network", "CMSG_CLUB_FINDER_POST: {} is not the leader of guild {}.",
+        TC_LOG_DEBUG("network", "CMSG_CLUB_FINDER_POST: {} lacks recruitment permission in guild {}.",
             GetPlayerInfo(), guild->GetId());
         sendError(CLUB_FINDER_ERROR_NO_POSTING_PERMISSIONS);
         return;
@@ -286,6 +308,13 @@ void WorldSession::HandleClubFinderRequestClubsList(WorldPackets::ClubFinder::Cl
     ClubFinderMgr::SearchCriteria criteria;
     criteria.SearchString = request.SearchString;
     criteria.Type = request.Type;
+
+    // CF-7: the searcher's faction drives cross-faction search visibility - an opposite-faction posting
+    // is hidden from search unless its guild advertises cross-faction. Apply/accept remain ungated;
+    // this is a search-visibility filter only.
+    if (Player* player = GetPlayer())
+        criteria.SearcherTeamId = int8(player->GetTeamId());
+
     ApplySearchFilters(request.Filters, criteria);
 
     WorldPackets::ClubFinder::ClubFinderReturnRecruitingClubs response;
@@ -423,8 +452,8 @@ void WorldSession::HandleClubFinderGetApplicantsList(WorldPackets::ClubFinder::C
     ClubFinderPosting const* posting = guild ? sClubFinderMgr->GetPostingForClub(guild->GetId()) : nullptr;
 
     // No posting, or no authority over it: an empty list is the truthful answer, and never another
-    // guild applicants.
-    if (!posting || guild->GetLeaderGUID() != player->GetGUID())
+    // guild applicants. Any officer with the recruiter (invite) right may read it, not just the leader.
+    if (!posting || !CanManageClubRecruitment(guild, player))
     {
         SendPacket(response.Write());
         return;
@@ -465,7 +494,7 @@ void WorldSession::HandleClubFinderRespondToApplicant(WorldPackets::ClubFinder::
         return;
     }
 
-    if (guild->GetLeaderGUID() != player->GetGUID())
+    if (!CanManageClubRecruitment(guild, player))
     {
         sendError(CLUB_FINDER_ERROR_NO_INVITE_PERMISSIONS);
         return;
@@ -578,7 +607,7 @@ void WorldSession::HandleClubFinderWhisperApplicantRequest(WorldPackets::ClubFin
 
     ClubFinderPosting const* posting = GetPostingFromGUID(request.ClubFinderGUID);
     Guild* guild = posting ? sGuildMgr->GetGuildById(posting->ClubId) : nullptr;
-    if (!posting || !guild || guild->GetLeaderGUID() != player->GetGUID())
+    if (!posting || !guild || !CanManageClubRecruitment(guild, player))
         return;
 
     if (!sClubFinderMgr->GetApplication(posting->PostingId, request.PlayerGUID))

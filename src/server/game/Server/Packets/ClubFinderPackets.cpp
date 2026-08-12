@@ -227,6 +227,11 @@ void ClubFinderRespondToApplicant::Read()
     _worldPacket >> PlayerGUID;
     _worldPacket >> Bits<1>(ShouldAccept);
     _worldPacket >> Bits<3>(Type);
+    // CF-7: ForceAccept is read off the wire to keep the bit stream aligned, but it is DELIBERATELY
+    // NOT HONOURED per realm policy. The client sets it to skip the applicant's own accept step and
+    // force the join through; this realm always routes an accept through the normal consent path
+    // (Guild::AddMember with the applicant's status guard), so the parsed value is intentionally
+    // ignored by the handler rather than silently dropped as an unnamed bit.
     _worldPacket >> Bits<1>(ForceAccept);
     _worldPacket.ResetBitPos();
 }
