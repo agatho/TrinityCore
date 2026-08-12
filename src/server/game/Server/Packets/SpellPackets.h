@@ -1293,6 +1293,23 @@ namespace WorldPackets
             bool IsFavorite = false;
         };
 
+        // CMSG_OPEN_TRADESKILL_NPC (0x3A01E9): the client telling the server a trade-skill window opened.
+        // Wire: PackedGuid NpcGUID - a PackedGuid, so 2 bytes when empty, NOT a fixed 16.
+        //
+        // Across 124 captured instances the guid is EMPTY in 123 of them (the player's own profession
+        // window) and a real creature guid in 1 (crafting at an NPC, preceded by CMSG_SET_SELECTION on the
+        // same guid). Both shapes are handled: an empty guid clears any stale crafter binding, a real one
+        // establishes the interaction the later profession opcodes are validated against.
+        class OpenTradeSkillNpc final : public ClientPacket
+        {
+        public:
+            explicit OpenTradeSkillNpc(WorldPacket&& packet) : ClientPacket(CMSG_OPEN_TRADESKILL_NPC, std::move(packet)) { }
+
+            void Read() override;
+
+            ObjectGuid NpcGUID;
+        };
+
         class KeyboundOverride final : public ClientPacket
         {
         public:
