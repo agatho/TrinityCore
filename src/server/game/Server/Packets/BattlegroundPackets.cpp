@@ -173,6 +173,11 @@ void BattlemasterJoinArena::Read()
     _worldPacket >> Roles;
 }
 
+void BattlemasterJoinRatedBGBlitz::Read()
+{
+    _worldPacket >> Roles;
+}
+
 ByteBuffer& operator<<(ByteBuffer& data, BattlefieldStatusHeader const& header)
 {
     data << header.Ticket;

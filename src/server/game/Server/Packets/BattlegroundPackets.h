@@ -267,6 +267,29 @@ namespace WorldPackets
             uint8 Roles = 0;
         };
 
+        // CMSG_BATTLEMASTER_JOIN_RATED_BG_BLITZ (0x3B00BE), body = exactly 1 byte.
+        //
+        // The client serializer at VA 0x7FF729153060 writes a single uint8 from obj+0x20 and returns;
+        // C_PvP.JoinRatedBGBlitz (RVA 0x1278130) fills that byte with (selectedPvpRoles & ChrClasses.RolesMask).
+        // The bits are the same LFG role flags the rest of the core already uses (lfg::PLAYER_ROLE_*):
+        // 0x01 leader, 0x02 tank, 0x04 healer, 0x08 damage - confirmed from SetPVPRoles (VA 0x7FF72AACBE70),
+        // which builds the mask as tank?2 | healer?4 | dps?8, and from the one live capture of this opcode
+        // (C:\sniff\rated BG 12.0.7.pkt record 10612, body = 04 = HEALER; the server's reply 366 ms later
+        // carried SpecSelected 257 = Holy Priest, a healer spec).
+        //
+        // NOTE the field order differs from BattlemasterJoinArena above, which reads TeamSizeIndex THEN Roles.
+        // Here Roles comes first and there is no second byte at all.
+        class BattlemasterJoinRatedBGBlitz final : public ClientPacket
+        {
+        public:
+            explicit BattlemasterJoinRatedBGBlitz(WorldPacket&& packet)
+                : ClientPacket(CMSG_BATTLEMASTER_JOIN_RATED_BG_BLITZ, std::move(packet)) { }
+
+            void Read() override;
+
+            uint8 Roles = 0;
+        };
+
         class BattlefieldLeave final : public ClientPacket
         {
         public:
