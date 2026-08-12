@@ -33,6 +33,16 @@ public:
     void Read() override { }
 };
 
+// CMSG_PERKS_PROGRAM_ITEMS_REFRESHED (0x3A02B5): no payload. The client sends it to ask the server to resend the
+// current Trading Post listing (retail answers each one with a VENDOR_UPDATE resend).
+class PerksProgramItemsRefreshed final : public ClientPacket
+{
+public:
+    explicit PerksProgramItemsRefreshed(WorldPacket&& packet) : ClientPacket(CMSG_PERKS_PROGRAM_ITEMS_REFRESHED, std::move(packet)) { }
+
+    void Read() override { }
+};
+
 // CMSG_PERKS_PROGRAM_REQUEST_PURCHASE wire (12.0.7.68275, from the client serializer sub_7FF72914B790):
 //   uint32 PerksVendorItemID, PackedGUID VendorGUID (the interacted Trading Post vendor).
 class PerksProgramRequestPurchase final : public ClientPacket

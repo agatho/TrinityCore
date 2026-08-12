@@ -19,12 +19,74 @@
 #include "CollectionMgr.h"
 #include "DB2Stores.h"
 #include "DBCEnums.h"
+#include "GameTime.h"
+#include "GossipDef.h"
 #include "Player.h"
 #include "PerksProgramActivityMgr.h"
 #include "PerksProgramMgr.h"
 #include "PerksProgramPackets.h"
+#include "UnitDefines.h"
+#include <limits>
+#include <unordered_set>
+#include <utility>
+#include <vector>
+
+// Every mutating Trading Post request (purchase / refund / cart / freeze) carries the interacted vendor GUID.
+// Validate it against an active PerksProgramVendor interaction the player actually opened, and re-check the NPC
+// still exists in range with the perks-vendor flag. This blocks currency/collection mutation from a crafted
+// packet sent with a zero or spoofed GUID from anywhere, bypassing the client's interaction gate.
+static bool HasActivePerksProgramVendor(Player* player, ObjectGuid vendorGuid)
+{
+    if (vendorGuid.IsEmpty())
+        return false;
+
+    if (!player->PlayerTalkClass->GetInteractionData().IsInteractingWith(vendorGuid, PlayerInteractionType::PerksProgramVendor))
+        return false;
+
+    return player->GetNPCIfCanInteractWith(vendorGuid, UNIT_NPC_FLAG_NONE, UNIT_NPC_FLAG_2_PERKS_VENDOR) != nullptr;
+}
+
+// The automatic base monthly Trader's Tender granted by the Collector's Cache (web-sourced retail value: 500 per
+// Trading Post interval, account-wide).
+static constexpr uint32 PERKS_MONTHLY_CACHE_TENDER = 500;
+
+// Grants the account's base monthly Trader's Tender once per Trading Post interval, keyed on the current UTC
+// month-start period, so it is idempotent per account per period (Tender is account-wide after G6). Triggered on
+// the first Trading Post interaction of the period. Note: two game accounts of one bnet account online at once can
+// each grant once for the same period (bounded, non-repeatable) since account state is not live-synced between
+// concurrent sessions -- consistent with how the rest of the account collection behaves.
+static void GrantMonthlyPerksCache(WorldSession* session, Player* player)
+{
+    uint64 periodStart = 0;
+    uint64 periodEnd = 0;
+    sPerksProgramMgr->GetCurrentPeriod(periodStart, periodEnd);
+
+    if (session->GetAccountPerksCacheGrantPeriod() == periodStart)
+        return;
+
+    // Mark the period granted BEFORE crediting so the balance-persist stamps the new period, then persist again
+    // explicitly to guarantee the flag is saved even if the credit itself was a no-op.
+    session->SetAccountPerksCacheGrantPeriod(periodStart);
+    player->AddCurrency(CURRENCY_TYPE_TRADERS_TENDER, PERKS_MONTHLY_CACHE_TENDER, CurrencyGainSource::Script);
+    session->StoreAccountPerksTender(player->GetCurrencyQuantity(CURRENCY_TYPE_TRADERS_TENDER));
+}
 
 void WorldSession::HandlePerksProgramStatusRequest(WorldPackets::PerksProgram::PerksProgramStatusRequest& /*packet*/)
+{
+    if (Player* player = GetPlayer())
+        GrantMonthlyPerksCache(this, player);
+
+    WorldPackets::PerksProgram::PerksProgramVendorUpdate vendorUpdate;
+    vendorUpdate.VendorItems = sPerksProgramMgr->GetCurrentVendorItems();
+    SendPacket(vendorUpdate.Write());
+
+    SendPerksProgramActivityUpdate();
+}
+
+// CMSG_PERKS_PROGRAM_ITEMS_REFRESHED: the client asks the server to resend the current Trading Post listing.
+// Resend the vendor + activity update (reusing the same writers as the status request). No monthly-cache grant
+// here -- a listing refresh is not an interaction that should award currency.
+void WorldSession::HandlePerksProgramItemsRefreshed(WorldPackets::PerksProgram::PerksProgramItemsRefreshed& /*packet*/)
 {
     WorldPackets::PerksProgram::PerksProgramVendorUpdate vendorUpdate;
     vendorUpdate.VendorItems = sPerksProgramMgr->GetCurrentVendorItems();
@@ -51,36 +113,43 @@ void WorldSession::SendPerksProgramActivityUpdate()
     SendPacket(activityUpdate.Write());
 }
 
-// Validates a single Trading Post vendor item, deducts its Trader's Tender cost and grants the
-// resolved collectible. Returns false (leaving the player untouched) if the item is not currently
-// offered or the player cannot afford it.
-static bool PerksProgramPurchaseItem(WorldSession* session, Player* player, int32 vendorItemId)
+// Resolves an offered, grantable Trading Post vendor item WITHOUT charging or granting. Returns nullptr if the
+// item is not currently offered, is disabled, has an invalid price, or resolves to no reward the server can grant
+// (a battle pet / illusion / transmog set / warband scene, which BuildVendorList does not yet resolve -- see G2).
+static WorldPackets::PerksProgram::PerksVendorItem const* ResolvePerksPurchase(int32 vendorItemId)
 {
     WorldPackets::PerksProgram::PerksVendorItem const* item = sPerksProgramMgr->GetVendorItem(vendorItemId);
-    if (!item || item->Disabled)
-        return false;
+    if (!item || item->Disabled || item->Price < 0)
+        return nullptr;
 
-    if (item->Price < 0 || !player->HasCurrency(CURRENCY_TYPE_TRADERS_TENDER, uint32(item->Price)))
-        return false;
+    if (!item->MountID && !item->ToyID && !item->ItemModifiedAppearanceID)
+        return nullptr;
 
-    CollectionMgr* collectionMgr = session->GetCollectionMgr();
+    return item;
+}
 
-    // Refuse to sell a collectible the player already owns. Otherwise we would charge tender, AddMount/AddToy would
-    // be a no-op, and we would still record a "refundable" purchase - whose refund later calls RemoveMount/RemoveToy
-    // and REVOKES the collectible the player earned elsewhere while handing back tender. A vendor item resolves to
-    // exactly one collectible.
-    if (item->MountID && collectionMgr->GetAccountMounts().find(uint32(item->MountID)) != collectionMgr->GetAccountMounts().end())
-        return false;
+// Whether the resolved reward is already known to the account. Retail hides/blocks owned items; buying one again
+// would burn Trader's Tender and stack a redundant purchase record, so reject it (G11).
+// Otherwise we would charge tender, AddMount/AddToy would be a no-op, and we would still record a
+// "refundable" purchase - whose refund later calls RemoveMount/RemoveToy and REVOKES the collectible
+// the player earned elsewhere while handing back tender.
+static bool IsPerksRewardOwned(CollectionMgr* collectionMgr, WorldPackets::PerksProgram::PerksVendorItem const* item)
+{
+    if (item->MountID && collectionMgr->GetAccountMounts().contains(uint32(item->MountID)))
+        return true;
     if (item->ToyID && collectionMgr->HasToy(uint32(item->ToyID)))
-        return false;
-    // Appearance rewards are append-only in the account collection and non-refundable, so an already-known
-    // appearance would just drain tender for a no-op AddItemAppearance. HasItemAppearance().first == already known.
+        return true;
     if (item->ItemModifiedAppearanceID && collectionMgr->HasItemAppearance(uint32(item->ItemModifiedAppearanceID)).first)
-        return false;
+        return true;
+    return false;
+}
 
-    player->RemoveCurrency(CURRENCY_TYPE_TRADERS_TENDER, item->Price, CurrencyDestroyReason::Vendor);
-
-    // Grant the resolved collectible. A vendor item resolves to exactly one of these.
+// Grants the resolved collectible and records the purchase. Does NOT charge -- the caller deducts the price (a
+// single purchase deducts one item; a cart deducts the pre-summed total once). A vendor item resolves to exactly
+// one collectible.
+static void GrantPerksPurchase(WorldSession* session, Player* player, int32 vendorItemId, WorldPackets::PerksProgram::PerksVendorItem const* item)
+{
+    CollectionMgr* collectionMgr = session->GetCollectionMgr();
     if (item->MountID)
         collectionMgr->AddMount(uint32(item->MountID), MOUNT_STATUS_NONE);
     if (item->ToyID)
@@ -89,9 +158,28 @@ static bool PerksProgramPurchaseItem(WorldSession* session, Player* player, int3
         if (ItemModifiedAppearanceEntry const* appearance = sItemModifiedAppearanceStore.LookupEntry(uint32(item->ItemModifiedAppearanceID)))
             collectionMgr->AddItemAppearance(appearance->ItemID, appearance->ItemAppearanceModifierID);
 
-    // Record the purchase so it can later be refunded (price paid + the exact collectible to revoke).
-    collectionMgr->AddPerksProgramPurchase(vendorItemId, item->Price, item->MountID, item->ToyID);
+    // Record the purchase so it can later be refunded (price paid + the exact collectible to revoke + the
+    // purchasing character, so only that character can refund it).
+    collectionMgr->AddPerksProgramPurchase(vendorItemId, item->Price, item->MountID, item->ToyID, player->GetGUID().GetCounter());
+}
 
+// Validates a single Trading Post vendor item, deducts its Trader's Tender cost and grants the resolved
+// collectible. Returns false (leaving the player untouched) if the item is not currently offered/grantable or the
+// player cannot afford it.
+static bool PerksProgramPurchaseItem(WorldSession* session, Player* player, int32 vendorItemId)
+{
+    WorldPackets::PerksProgram::PerksVendorItem const* item = ResolvePerksPurchase(vendorItemId);
+    if (!item)
+        return false;
+
+    if (IsPerksRewardOwned(session->GetCollectionMgr(), item))
+        return false;
+
+    if (!player->HasCurrency(CURRENCY_TYPE_TRADERS_TENDER, uint32(item->Price)))
+        return false;
+
+    player->RemoveCurrency(CURRENCY_TYPE_TRADERS_TENDER, item->Price, CurrencyDestroyReason::Vendor);
+    GrantPerksPurchase(session, player, vendorItemId, item);
     return true;
 }
 
@@ -102,6 +190,8 @@ static bool PerksProgramPurchaseItem(WorldSession* session, Player* player, int3
 void WorldSession::HandlePerksProgramGetRecentPurchases(WorldPackets::PerksProgram::PerksProgramGetRecentPurchases& /*packet*/)
 {
     CollectionMgr* collectionMgr = GetCollectionMgr();
+    Player* player = GetPlayer();
+    uint64 playerGuid = player ? player->GetGUID().GetCounter() : 0;
 
     WorldPackets::PerksProgram::ResponsePerkRecentPurchases response;
     for (auto const& [vendorItemId, data] : collectionMgr->GetPerksProgramPurchases())
@@ -109,9 +199,10 @@ void WorldSession::HandlePerksProgramGetRecentPurchases(WorldPackets::PerksProgr
         WorldPackets::PerksProgram::ResponsePerkRecentPurchases::RecentPurchase& entry = response.Purchases.emplace_back();
         entry.PerksVendorItemID = vendorItemId;
         entry.PurchaseTime = data.PurchaseTime;
-        // A purchase is refundable while its reward is cleanly revocable (a mount or toy); appearance/transmog
-        // rewards are append-only in the account collection, matching the refund handler's policy.
-        entry.Refundable = (data.MountID != 0 || data.ToyID != 0);
+        // A purchase is refundable only for the character that made it (the refund handler enforces the same
+        // buyer scope) and while its reward is cleanly revocable (a mount or toy); appearance/transmog rewards
+        // are append-only in the account collection, matching the refund handler's policy.
+        entry.Refundable = (data.MountID != 0 || data.ToyID != 0) && data.BuyerGuid == playerGuid;
     }
 
     SendPacket(response.Write());
@@ -123,17 +214,37 @@ void WorldSession::HandlePerksProgramRequestRefund(WorldPackets::PerksProgram::P
     if (!player)
         return;
 
+    if (!HasActivePerksProgramVendor(player, packet.VendorGUID))
+        return;
+
     CollectionMgr* collectionMgr = GetCollectionMgr();
     PerksProgramPurchaseData const* purchase = collectionMgr->GetPerksProgramPurchase(packet.PerksVendorItemID);
     if (!purchase)
         return;
 
-    // Revoke the reward. Only mounts and toys can be cleanly removed; anything else is not refundable.
+    // A refund is only honoured for the character that made the purchase. Trader's Tender is account-wide, so a
+    // cross-character refund could not duplicate currency anyway, but scoping the refund to the original buyer
+    // matches the client's per-character "recent purchases" list and blocks refunding another character's record.
+    if (purchase->BuyerGuid != player->GetGUID().GetCounter())
+        return;
+
+    // Enforce the retail 2-hour refund window server-side (the client only shows the countdown). A crafted refund
+    // packet, or a record that has outlived the window, is rejected here. The revocable reward types (mount/toy
+    // account-collection entries) have no separate "used/consumed" state to gate on beyond ownership, which the
+    // confirmed-revoke check below already covers; appearances are non-refundable by policy.
+    if (GameTime::GetGameTime() - time_t(purchase->PurchaseTime) > 2 * HOUR)
+        return;
+
+    // Revoke the reward and ONLY credit Trader's Tender when the collectible was actually removed. Gating the
+    // credit on a confirmed revoke is what prevents creating currency by "refunding" a collectible that is already
+    // gone (double-refund, or removed by another path). Only mounts and toys are cleanly revocable.
+    bool revoked = false;
     if (purchase->MountID)
-        collectionMgr->RemoveMount(uint32(purchase->MountID));
+        revoked = collectionMgr->RemoveMount(uint32(purchase->MountID));
     else if (purchase->ToyID)
-        collectionMgr->RemoveToy(uint32(purchase->ToyID));
-    else
+        revoked = collectionMgr->RemoveToy(uint32(purchase->ToyID));
+
+    if (!revoked)
         return;
 
     if (purchase->Price > 0)
@@ -144,8 +255,14 @@ void WorldSession::HandlePerksProgramRequestRefund(WorldPackets::PerksProgram::P
 
 void WorldSession::HandlePerksProgramRequestPurchase(WorldPackets::PerksProgram::PerksProgramRequestPurchase& packet)
 {
-    if (Player* player = GetPlayer())
-        PerksProgramPurchaseItem(this, player, packet.PerksVendorItemID);
+    Player* player = GetPlayer();
+    if (!player)
+        return;
+
+    if (!HasActivePerksProgramVendor(player, packet.VendorGUID))
+        return;
+
+    PerksProgramPurchaseItem(this, player, packet.PerksVendorItemID);
 }
 
 void WorldSession::HandlePerksProgramRequestCartCheckout(WorldPackets::PerksProgram::PerksProgramRequestCartCheckout& packet)
@@ -154,16 +271,49 @@ void WorldSession::HandlePerksProgramRequestCartCheckout(WorldPackets::PerksProg
     if (!player)
         return;
 
-    // Each item is validated + charged independently; an unaffordable entry is simply skipped so the
-    // rest of the cart still goes through (mirrors buying them one by one).
+    if (!HasActivePerksProgramVendor(player, packet.VendorGUID))
+        return;
+
+    // Atomic checkout: resolve + validate every item and sum the total up front. If any entry is invalid or
+    // duplicated, or the player cannot afford the full total, reject the whole cart -- no per-item silent skip,
+    // no partial charge. Only once everything is validated and affordable do we deduct the total once and grant.
+    std::vector<std::pair<int32, WorldPackets::PerksProgram::PerksVendorItem const*>> resolved;
+    resolved.reserve(packet.PerksVendorItemIDs.size());
+    std::unordered_set<int32> seen;
+    int64 total = 0;
     for (int32 vendorItemId : packet.PerksVendorItemIDs)
-        PerksProgramPurchaseItem(this, player, vendorItemId);
+    {
+        if (!seen.insert(vendorItemId).second)
+            return; // duplicate id in the cart -> reject the whole checkout
+
+        WorldPackets::PerksProgram::PerksVendorItem const* item = ResolvePerksPurchase(vendorItemId);
+        if (!item)
+            return;
+
+        if (IsPerksRewardOwned(GetCollectionMgr(), item))
+            return; // already-owned item in the cart -> reject the whole checkout (no charge)
+
+        total += item->Price;
+        resolved.emplace_back(vendorItemId, item);
+    }
+
+    if (total < 0 || total > int64(std::numeric_limits<int32>::max()) || !player->HasCurrency(CURRENCY_TYPE_TRADERS_TENDER, uint32(total)))
+        return;
+
+    if (total > 0)
+        player->RemoveCurrency(CURRENCY_TYPE_TRADERS_TENDER, int32(total), CurrencyDestroyReason::Vendor);
+
+    for (auto const& [vendorItemId, item] : resolved)
+        GrantPerksPurchase(this, player, vendorItemId, item);
 }
 
 void WorldSession::HandlePerksProgramSetFrozenVendorItem(WorldPackets::PerksProgram::PerksProgramSetFrozenVendorItem& packet)
 {
     Player* player = GetPlayer();
     if (!player)
+        return;
+
+    if (!HasActivePerksProgramVendor(player, packet.NpcGUID))
         return;
 
     // Freeze pins the chosen Trading Post item so it carries to next rotation (client shows the frozen indicator);
