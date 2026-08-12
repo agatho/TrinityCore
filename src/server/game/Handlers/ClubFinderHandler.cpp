@@ -164,6 +164,12 @@ void WorldSession::HandleClubFinderPost(WorldPackets::ClubFinder::ClubFinderPost
 // guild rather than cached on the posting, so a browsing player sees the guild's real current state.
 static bool BuildClubCacheData(ClubFinderPosting const& posting, WorldPackets::ClubFinder::ClubFinderLookupClubPostingsList::ClubCacheData& data)
 {
+    // A direct REQUEST_CLUBS_DATA lookup names posting ids straight out and must not become a way to
+    // read the postings moderation hid from search: apply the same visibility predicate Search uses, so
+    // a crafted request cannot enumerate banned, delisted, pending-delete, unlisted or expired postings.
+    if (!ClubFinderMgr::IsPostingVisible(posting))
+        return false;
+
     Guild* guild = sGuildMgr->GetGuildById(posting.ClubId);
     if (!guild)
         return false;
@@ -235,8 +241,9 @@ void WorldSession::HandleClubFinderRequestClubsData(WorldPackets::ClubFinder::Cl
     SendPacket(response.Write());
 }
 
-// Decodes the client's filter list into search criteria. Filter types 1, 2, 3 and 5 map directly onto
-// data the posting carries; 4 (class) and 6 (locale) are parsed but not yet matched - see below.
+// Decodes the client's filter list into search criteria. Filter types 1, 2, 3, 4, 5 and 6 all map onto
+// data the posting carries: 1/2/4 are bit groups of the posting's recruitmentFlags, 6 its packed
+// recruitment locale.
 static void ApplySearchFilters(std::vector<WorldPackets::ClubFinder::ClubFinderPostingFilter> const& filters,
     ClubFinderMgr::SearchCriteria& criteria)
 {
@@ -256,8 +263,9 @@ static void ApplySearchFilters(std::vector<WorldPackets::ClubFinder::ClubFinderP
             case 5:     // specialization bitmask
                 criteria.Specs = filter.Uint64Value;
                 break;
-            case 4:     // the searching player class id
-                criteria.ClassId = uint8(filter.UintValue);
+            case 4:     // recruited class-role flags (Tank / Healer / Damage), bits 9-11 of the same
+                        // recruitmentFlags bit space as the focus and size groups.
+                criteria.RoleFlags = filter.UintValue;
                 break;
             case 6:     // applicant locale flags, a bitmask of (1 << WowLocale). The client applies no
                         // validation to this value, so it is masked to the legal locale set here.
@@ -353,11 +361,12 @@ void WorldSession::HandleClubFinderRequestMembershipToClub(WorldPackets::ClubFin
         return;
     }
 
-    // Applying to your own guild is meaningless, and a guild that stopped listing or let its posting
-    // lapse is not accepting.
-    if (player->GetGuildId() == posting->ClubId
-        || !(posting->RecruitmentFlags & CLUB_FINDER_SETTING_ENABLE_LISTING)
-        || ClubFinderMgr::IsPostingExpired(*posting))
+    // Applying to your own guild is meaningless, and a posting that is not visible to search is not
+    // accepting applications either: IsPostingVisible rejects a guild that stopped listing or let its
+    // posting lapse, and - the gap this closes - also rejects a banned, delisted or pending-delete
+    // posting, so a player holding a stale clubFinderGUID cannot lodge an application against a posting
+    // moderation has removed.
+    if (player->GetGuildId() == posting->ClubId || !ClubFinderMgr::IsPostingVisible(*posting))
     {
         sendError(CLUB_FINDER_ERROR_APPLY_CLUB);
         return;
@@ -368,10 +377,27 @@ void WorldSession::HandleClubFinderRequestMembershipToClub(WorldPackets::ClubFin
     application.PlayerGuid = player->GetGUID();
     application.Comment    = request.Comment.substr(0, 512);
     application.Specs      = request.RecruitingSpecs;
+    application.Status     = CLUB_FINDER_APPLICATION_PENDING;
 
-    // A guild that auto-accepts admits the applicant without the officer step.
-    application.Status = (posting->RecruitmentFlags & CLUB_FINDER_SETTING_AUTO_ACCEPT)
-        ? CLUB_FINDER_APPLICATION_AUTO_APPROVED : CLUB_FINDER_APPLICATION_PENDING;
+    // A guild that auto-accepts admits the applicant without the officer step - but the admission has
+    // to be a real guild join, exactly like the officer accept path. Reporting AUTO_APPROVED without
+    // adding the member (the old behaviour) left an auto-accept guild gaining zero members. Only mark
+    // the application JOINED when the transactional add actually succeeds; otherwise leave it PENDING
+    // so an officer can still act on it. A player already in another guild cannot be auto-joined, so
+    // the already-guilded guard simply leaves the application pending.
+    if (posting->RecruitmentFlags & CLUB_FINDER_SETTING_AUTO_ACCEPT)
+    {
+        Guild* guild = sGuildMgr->GetGuildById(posting->ClubId);
+        if (guild && !player->GetGuildId())
+        {
+            CharacterDatabaseTransaction trans = CharacterDatabase.BeginTransaction();
+            if (guild->AddMember(trans, player->GetGUID()))
+            {
+                CharacterDatabase.CommitTransaction(trans);
+                application.Status = CLUB_FINDER_APPLICATION_JOINED;
+            }
+        }
+    }
 
     sClubFinderMgr->SaveApplication(std::move(application));
 
@@ -447,6 +473,19 @@ void WorldSession::HandleClubFinderRespondToApplicant(WorldPackets::ClubFinder::
 
     ClubFinderApplication const* existing = sClubFinderMgr->GetApplication(posting->PostingId, request.PlayerGUID);
     if (!existing)
+    {
+        sendError(CLUB_FINDER_ERROR_RESPOND_APPLICANT);
+        return;
+    }
+
+    // Consent guard: an applicant controls their own membership, so only a still-live request may be
+    // acted on. The old code checked only that an application row existed, which let a leader accept a
+    // withdrawn (CANCELED), declined, already-joined, or expired application and force a player into the
+    // guild against their current consent - the applicant may have cancelled, or the offer may have
+    // lapsed. Refuse anything that is not a pending (or auto-approved) and unexpired request; the
+    // client surfaces CLUB_FINDER_ERROR_RESPOND_APPLICANT and re-requests the applicant list.
+    if ((existing->Status != CLUB_FINDER_APPLICATION_PENDING && existing->Status != CLUB_FINDER_APPLICATION_AUTO_APPROVED)
+        || ClubFinderMgr::IsApplicationExpired(*existing))
     {
         sendError(CLUB_FINDER_ERROR_RESPOND_APPLICANT);
         return;
