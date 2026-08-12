@@ -60,6 +60,34 @@ void BattlePayMgr::Load()
 
     TC_LOG_INFO("server.loading", "BattlePay: loaded {}-byte in-game Shop catalog in {} ms.",
         _productListBlob.size(), GetMSTimeDiffToNow(oldMSTime));
+
+    // Decode the blob into fields and prove the model on the exact bytes we are about to serve: only a
+    // byte-exact Serialize(Parse(blob)) == blob licenses rebuilding the catalog from fields later. A
+    // failure is not fatal - we keep serving the captured blob verbatim, we just refuse to rewrite it.
+    _catalog = BattlePayCatalog();
+    _catalogDecoded = false;
+
+    std::string error;
+    if (!BattlePayCatalogWriter::Parse(_productListBlob, _catalog, &error))
+    {
+        TC_LOG_ERROR("server.loading", "BattlePay: catalog blob did not decode ({}) - serving it verbatim.", error);
+        return;
+    }
+
+    _catalogDecoded = BattlePayCatalogWriter::SelfCheck(_productListBlob);
+    if (!_catalogDecoded)
+        return;
+
+    uint32 withoutDisplayInfo = 0;
+    for (BattlePayCatalogProduct const& product : _catalog.Products)
+        if (!product.DisplayInfo)
+            ++withoutDisplayInfo;
+
+    // A product with no DisplayInfo renders a nil name in the purchase confirmation dialog; the fix is
+    // to give it one (BattlePayCatalogWriter::MakeDisplayInfo) when the catalog is assembled.
+    TC_LOG_INFO("server.loading", "BattlePay: catalog decoded - {} products ({} without DisplayInfo), "
+        "{} deliverables, {} groups, {} shop entries.", _catalog.Products.size(), withoutDisplayInfo,
+        _catalog.Deliverables.size(), _catalog.Groups.size(), _catalog.Entries.size());
 }
 
 void BattlePayMgr::LoadProducts()

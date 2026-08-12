@@ -18,6 +18,7 @@
 #ifndef TRINITYCORE_BATTLE_PAY_MGR_H
 #define TRINITYCORE_BATTLE_PAY_MGR_H
 
+#include "BattlePayCatalogWriter.h"
 #include "Define.h"
 #include <string>
 #include <unordered_map>
@@ -39,11 +40,18 @@ struct BattlePayProduct
 
 // In-game Shop (BattlePay / StoreUI) backend.
 //
-// The 12.0.7 GET_PRODUCT_LIST_RESPONSE catalog is a nested reflection bitstream whose per-field bit
-// widths are not recoverable offline, so we cannot author a custom catalog field-by-field yet. For P0
-// the manager loads a byte-exact catalog blob captured from a real 68275 client session and replays it
-// verbatim, so the shop opens and shows real products. The purchase/deliver-for-gold path is layered on
-// top later (tracked separately) once the buy flow is grounded.
+// The manager loads a byte-exact catalog blob captured from a real 68275 client session and replays it,
+// so the shop opens and shows real products. The blob is ALSO decoded field-by-field by
+// BattlePayCatalogWriter (all 94 product records, all four arrays, byte-exact round trip), so a caller
+// can rewrite ids/prices/names or give a product the DisplayInfo it lacks and re-serialize. The bit
+// widths are no longer "not recoverable offline": they come from the client's own reflection
+// descriptors - see BattlePayCatalogWriter.h.
+//
+// NOTE for whoever wires the DB-driven reskin on top of this: the advertised product id is
+// BattlePayCatalogProduct::ProductID (248, 253, 80, ...), NOT the value the previous writer called
+// "ProductID" (that was DisplayInfo.fileDataID, an artwork FileDataID). Any slot-routing map keyed on
+// the old value routes purchases by an id the client never sends, and ShopEntry::ProductID must agree
+// with the product it points at.
 class TC_GAME_API BattlePayMgr
 {
 public:
@@ -58,6 +66,11 @@ public:
     bool HasCatalog() const { return !_productListBlob.empty(); }
     std::vector<uint8> const& GetProductListBlob() const { return _productListBlob; }
 
+    // The decoded catalog behind that blob. Valid only when IsCatalogDecoded() - a blob that fails the
+    // byte-exact self-check is still served verbatim, but must never be rebuilt from fields.
+    bool IsCatalogDecoded() const { return _catalogDecoded; }
+    BattlePayCatalog const& GetCatalog() const { return _catalog; }
+
     BattlePayProduct const* GetProduct(uint32 productID) const;
     uint64 GeneratePurchaseID() { return ++_purchaseCounter; }
 
@@ -68,6 +81,8 @@ private:
     BattlePayMgr& operator=(BattlePayMgr const&) = delete;
 
     std::vector<uint8> _productListBlob;
+    BattlePayCatalog _catalog;
+    bool _catalogDecoded = false;
     std::unordered_map<uint32, BattlePayProduct> _products;
     uint64 _purchaseCounter = 0;
 };
