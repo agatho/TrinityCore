@@ -92,9 +92,10 @@ enum ClubFinderSettingFlag : uint32
     CLUB_FINDER_SETTING_FACTION_ALLIANCE = 1 << 16,
     CLUB_FINDER_SETTING_FACTION_NEUTRAL  = 1 << 17,
 
-    // The masks the client itself slices out when building filters 1 and 2.
+    // The masks the client itself slices out when building filters 1, 2 and 4.
     CLUB_FINDER_SETTING_MASK_FOCUS       = 0x3E,    // Dungeons .. Social
-    CLUB_FINDER_SETTING_MASK_SIZE        = 0x1C0    // Small / Medium / Large
+    CLUB_FINDER_SETTING_MASK_SIZE        = 0x1C0,   // Small / Medium / Large
+    CLUB_FINDER_SETTING_MASK_ROLE        = 0xE00    // Tank / Healer / Damage (bits 9-11)
 };
 
 // The client renders a posting as expired after 30 days without an update, and an application after 7
@@ -221,7 +222,7 @@ public:
         uint32 FocusFlags   = 0;    // filter 1: Dungeons / Raids / PvP / RP / Social
         uint32 SizeFlags    = 0;    // filter 2: Small / Medium / Large
         uint32 LocaleFlags  = 0;    // filter 6: bitmask of (1 << WowLocale)
-        uint8 ClassId       = 0;    // filter 4: the searching player class
+        uint32 RoleFlags    = 0;    // filter 4: recruited class-role bits (Tank / Healer / Damage)
         uint8 Type          = CLUB_FINDER_REQUEST_TYPE_ALL;
     };
 

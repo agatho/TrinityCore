@@ -369,15 +369,15 @@ std::vector<ClubFinderPosting const*> ClubFinderMgr::Search(SearchCriteria const
         if (criteria.SizeFlags && !(posting.RecruitmentFlags & criteria.SizeFlags & CLUB_FINDER_SETTING_MASK_SIZE))
             continue;
 
+        // Class-role filter (Tank / Healer / Damage): the client sends the requested role bits in the
+        // same recruitmentFlags bit space as focus and size, so it matches directly against the
+        // posting's recruited-role bits (9-11) - the guild must recruit at least one requested role.
+        if (criteria.RoleFlags && !(posting.RecruitmentFlags & criteria.RoleFlags & CLUB_FINDER_SETTING_MASK_ROLE))
+            continue;
+
         // A spec filter matches when the guild recruits at least one of the requested specs.
         if (criteria.Specs && posting.RecruitingSpecs && !(posting.RecruitingSpecs & criteria.Specs))
             continue;
-
-        // A class filter matches when the guild recruits any specialisation of that class. The spec
-        // mask uses the client bit ordering, rebuilt in BuildSpecBitIndex.
-        if (criteria.ClassId && posting.RecruitingSpecs)
-            if (uint64 classMask = GetSpecMaskForClass(criteria.ClassId); classMask && !(posting.RecruitingSpecs & classMask))
-                continue;
 
         // Locale: the posting packs (locale + 1) into bits 21-25 of its flags, the applicant sends a
         // bitmask of (1 << locale). An unset posting locale (packed 0) or an empty applicant mask is

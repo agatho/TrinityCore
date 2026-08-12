@@ -241,8 +241,9 @@ void WorldSession::HandleClubFinderRequestClubsData(WorldPackets::ClubFinder::Cl
     SendPacket(response.Write());
 }
 
-// Decodes the client's filter list into search criteria. Filter types 1, 2, 3 and 5 map directly onto
-// data the posting carries; 4 (class) and 6 (locale) are parsed but not yet matched - see below.
+// Decodes the client's filter list into search criteria. Filter types 1, 2, 3, 4, 5 and 6 all map onto
+// data the posting carries: 1/2/4 are bit groups of the posting's recruitmentFlags, 6 its packed
+// recruitment locale.
 static void ApplySearchFilters(std::vector<WorldPackets::ClubFinder::ClubFinderPostingFilter> const& filters,
     ClubFinderMgr::SearchCriteria& criteria)
 {
@@ -262,8 +263,9 @@ static void ApplySearchFilters(std::vector<WorldPackets::ClubFinder::ClubFinderP
             case 5:     // specialization bitmask
                 criteria.Specs = filter.Uint64Value;
                 break;
-            case 4:     // the searching player class id
-                criteria.ClassId = uint8(filter.UintValue);
+            case 4:     // recruited class-role flags (Tank / Healer / Damage), bits 9-11 of the same
+                        // recruitmentFlags bit space as the focus and size groups.
+                criteria.RoleFlags = filter.UintValue;
                 break;
             case 6:     // applicant locale flags, a bitmask of (1 << WowLocale). The client applies no
                         // validation to this value, so it is masked to the legal locale set here.
