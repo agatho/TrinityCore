@@ -318,6 +318,36 @@ void PetBattle::InitWildBattle(Player* player, ObjectGuid wildCreatureGUID)
     _state = PET_BATTLE_STATE_WAITING_PRE_BATTLE;
 }
 
+// Retail PvP normalizes every pet to effective level 25 for the duration of the match
+// (sub-25 pets are boosted), so outcomes depend on species/quality/breed/ability choices
+// rather than grind level. This recomputes level-scaled stats on the battle-copy pet ONLY
+// (PetBattlePetData is never written back to the journal), using the same stat formula as
+// BattlePet::CalculateStats / CalculateWildPetStats. Base stats (breed+species) and quality
+// were already populated by LoadPlayerTeam, so only the level scaling changes.
+static void NormalizePetToBattleLevel(PetBattlePetData& pet, uint16 level)
+{
+    float qualityMultiplier = 1.0f;
+    for (BattlePetBreedQualityEntry const* entry : sBattlePetBreedQualityStore)
+        if (entry->QualityEnum == pet.Quality)
+        {
+            qualityMultiplier = entry->StateMultiplier;
+            break;
+        }
+
+    pet.Level = level;
+
+    float health = float(pet.BaseStamina) * qualityMultiplier * level;
+    float power  = float(pet.BasePower)   * qualityMultiplier * level;
+    float speed  = float(pet.BaseSpeed)   * qualityMultiplier * level;
+
+    pet.MaxHealth = int32(round(health / 20.0f) + 100);
+    pet.Health = pet.MaxHealth; // PvP teams enter at full health
+    pet.Power = std::max(1, int32(round(power / 100.0f)));
+    pet.Speed = std::max(1, int32(round(speed / 100.0f)));
+    pet.EffectivePower = pet.Power;
+    pet.EffectiveSpeed = pet.Speed;
+}
+
 void PetBattle::InitPvPBattle(Player* player1, Player* player2)
 {
     _battleType = PET_BATTLE_TYPE_PVP;
@@ -325,6 +355,11 @@ void PetBattle::InitPvPBattle(Player* player1, Player* player2)
 
     LoadPlayerTeam(player1, _teams[PET_BATTLE_TEAM_1]);
     LoadPlayerTeam(player2, _teams[PET_BATTLE_TEAM_2]);
+
+    // Normalize both teams to effective level 25 for this battle instance only.
+    for (uint8 t = 0; t < MAX_PET_BATTLE_PLAYERS; ++t)
+        for (uint8 p = 0; p < _teams[t].PetCount; ++p)
+            NormalizePetToBattleLevel(_teams[t].Pets[p], PET_BATTLE_PVP_NORMALIZED_LEVEL);
 
     // Validate both teams have at least 1 alive pet
     if (!_teams[PET_BATTLE_TEAM_1].HasAlivePets() || !_teams[PET_BATTLE_TEAM_2].HasAlivePets())
