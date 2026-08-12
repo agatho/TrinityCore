@@ -129,3 +129,35 @@ void WorldSession::HandleTradeSkillSetFavorite(WorldPackets::Spells::TradeSkillS
 
     _player->SetSpellFavorite(tradeSkillSetFavorite.RecipeID, tradeSkillSetFavorite.IsFavorite);
 }
+
+// CMSG_OPEN_TRADESKILL_NPC (0x3A01E9): the client reports that a trade-skill window opened.
+//
+// This fires constantly - 124 times across the captures on this machine - and was landing in
+// Handle_NULL. In 123 of those the guid is EMPTY (the player opened their own profession window);
+// in 1 it is a real creature guid (crafting at an NPC, preceded by CMSG_SET_SELECTION on the same guid).
+//
+// The guid is a PackedGuid, so the empty case is a 2-byte body. Reading it as a fixed 16 bytes would
+// throw ByteBufferPositionException on almost every one of these packets.
+//
+// The server-side effect is the interaction binding that every later profession opcode is validated
+// against: a real guid starts a GarrTradeskill interaction after the usual can-interact checks, and an
+// empty guid clears a stale crafter binding so a previous NPC session cannot keep authorising crafts.
+void WorldSession::HandleOpenTradeSkillNpc(WorldPackets::Spells::OpenTradeSkillNpc const& packet)
+{
+    if (packet.NpcGUID.IsEmpty())
+    {
+        // Own profession window: drop any NPC crafter binding that is still standing.
+        // InteractionData exposes Type directly; IsInteractingWith needs a guid we do not have here.
+        if (_player->PlayerTalkClass->GetInteractionData().Type == PlayerInteractionType::GarrTradeskill)
+            _player->PlayerTalkClass->GetInteractionData().Reset();
+
+        return;
+    }
+
+    // Crafting at an NPC: only bind if the player really can interact with it right now.
+    Creature* npc = _player->GetNPCIfCanInteractWith(packet.NpcGUID, NPCFlags::None, NPCFlags2::None);
+    if (!npc)
+        return;
+
+    _player->PlayerTalkClass->GetInteractionData().StartInteraction(packet.NpcGUID, PlayerInteractionType::GarrTradeskill);
+}
