@@ -107,6 +107,7 @@
 #include "WhoListStorage.h"
 #include "WorldSession.h"
 #include "WorldStateMgr.h"
+#include "ZoneEventMgr.h"
 #include <zlib.h>
 
 TC_GAME_API std::atomic<bool> World::m_stopEvent(false);
@@ -1614,6 +1615,9 @@ bool World::SetInitialWorldSettings()
     TC_LOG_INFO("server.loading", "Loading World State templates...");
     WorldStateMgr::LoadFromDB();                               // must be loaded before battleground, outdoor PvP, game events and conditions
 
+    TC_LOG_INFO("server.loading", "Loading Quel'Thalas Zone Events...");      // must be after world states
+    sZoneEventMgr->LoadFromDB();
+
     TC_LOG_INFO("server.loading", "Loading Game Event Data...");               // must be after loading pools fully
     sGameEventMgr->LoadFromDB();
 
@@ -2417,6 +2421,11 @@ void World::Update(uint32 diff)
     }
 
     WorldStateMgr::Update();
+
+    {
+        TC_METRIC_TIMER("world_update_time", TC_METRIC_TAG("type", "Update Quel'Thalas zone events"));
+        sZoneEventMgr->Update(diff);
+    }
 
     {
         TC_METRIC_TIMER("world_update_time", TC_METRIC_TAG("type", "Process cli commands"));
