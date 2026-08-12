@@ -106,6 +106,7 @@
 #include "WeatherMgr.h"
 #include "WhoListStorage.h"
 #include "WorldSession.h"
+#include "OmniumFolioMgr.h"
 #include "WorldStateMgr.h"
 #include <zlib.h>
 
@@ -1614,6 +1615,9 @@ bool World::SetInitialWorldSettings()
     TC_LOG_INFO("server.loading", "Loading World State templates...");
     WorldStateMgr::LoadFromDB();                               // must be loaded before battleground, outdoor PvP, game events and conditions
 
+    TC_LOG_INFO("server.loading", "Loading Omnium Folio seasonal schedule...");
+    sOmniumFolioMgr->LoadFromDB();                             // realm-safe: tolerates absent omnium_folio_season table
+
     TC_LOG_INFO("server.loading", "Loading Game Event Data...");               // must be after loading pools fully
     sGameEventMgr->LoadFromDB();
 
@@ -2417,6 +2421,8 @@ void World::Update(uint32 diff)
     }
 
     WorldStateMgr::Update();
+
+    sOmniumFolioMgr->Update(diff);
 
     {
         TC_METRIC_TIMER("world_update_time", TC_METRIC_TAG("type", "Process cli commands"));

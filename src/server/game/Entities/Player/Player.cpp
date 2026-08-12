@@ -130,6 +130,7 @@
 #include "ToyPackets.h"
 #include "TradeData.h"
 #include "TraitMgr.h"
+#include "OmniumFolioMgr.h"
 #include "TraitPacketsCommon.h"
 #include "TransmogMgr.h"
 #include "TransmogrificationPackets.h"
@@ -18663,6 +18664,10 @@ bool Player::LoadFromDB(ObjectGuid guid, CharacterDatabaseQueryHolder const& hol
 
     _LoadTraits(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_TRAIT_CONFIGS),
         holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_TRAIT_ENTRIES)); // must be after loading spells
+
+    // Omnium Folio (Midnight S1 rune ledger) rides the generic-trait config minted
+    // above; ensure an eligible player owns it. Realm-safe no-op while idle.
+    sOmniumFolioMgr->OnPlayerLogin(this);
 
     // must be before inventory (some items required reputation check)
     m_reputationMgr->LoadFromDB(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_REPUTATION));
