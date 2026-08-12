@@ -368,10 +368,27 @@ void WorldSession::HandleClubFinderRequestMembershipToClub(WorldPackets::ClubFin
     application.PlayerGuid = player->GetGUID();
     application.Comment    = request.Comment.substr(0, 512);
     application.Specs      = request.RecruitingSpecs;
+    application.Status     = CLUB_FINDER_APPLICATION_PENDING;
 
-    // A guild that auto-accepts admits the applicant without the officer step.
-    application.Status = (posting->RecruitmentFlags & CLUB_FINDER_SETTING_AUTO_ACCEPT)
-        ? CLUB_FINDER_APPLICATION_AUTO_APPROVED : CLUB_FINDER_APPLICATION_PENDING;
+    // A guild that auto-accepts admits the applicant without the officer step - but the admission has
+    // to be a real guild join, exactly like the officer accept path. Reporting AUTO_APPROVED without
+    // adding the member (the old behaviour) left an auto-accept guild gaining zero members. Only mark
+    // the application JOINED when the transactional add actually succeeds; otherwise leave it PENDING
+    // so an officer can still act on it. A player already in another guild cannot be auto-joined, so
+    // the already-guilded guard simply leaves the application pending.
+    if (posting->RecruitmentFlags & CLUB_FINDER_SETTING_AUTO_ACCEPT)
+    {
+        Guild* guild = sGuildMgr->GetGuildById(posting->ClubId);
+        if (guild && !player->GetGuildId())
+        {
+            CharacterDatabaseTransaction trans = CharacterDatabase.BeginTransaction();
+            if (guild->AddMember(trans, player->GetGUID()))
+            {
+                CharacterDatabase.CommitTransaction(trans);
+                application.Status = CLUB_FINDER_APPLICATION_JOINED;
+            }
+        }
+    }
 
     sClubFinderMgr->SaveApplication(std::move(application));
 
