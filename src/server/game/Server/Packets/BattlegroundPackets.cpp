@@ -178,6 +178,14 @@ void BattlemasterJoinRatedBGBlitz::Read()
     _worldPacket >> Roles;
 }
 
+void BattlemasterJoinSkirmish::Read()
+{
+    // Roles FIRST - see the class comment. This is the opposite order to BattlemasterJoinArena.
+    _worldPacket >> Roles;
+    _worldPacket >> Bracket;
+    Requeue = _worldPacket.ReadBit();
+}
+
 ByteBuffer& operator<<(ByteBuffer& data, BattlefieldStatusHeader const& header)
 {
     data << header.Ticket;
