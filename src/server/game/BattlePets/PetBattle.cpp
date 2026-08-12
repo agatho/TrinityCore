@@ -2418,10 +2418,20 @@ void PetBattle::CompleteBattle()
             {
                 if (wildTeam.Pets[p].IsCaptured)
                 {
+                    // Retail capture level-reduction (warcraft.wiki.gg): a captured wild pet
+                    // joins the journal one level below capture for levels 16-20, two below for
+                    // 21-25, and unchanged at level <=15. AddPet recomputes stats from the level
+                    // passed here, so reducing the level here also corrects the journal stats.
+                    uint16 capturedLevel = wildTeam.Pets[p].Level;
+                    if (capturedLevel >= 21)
+                        capturedLevel -= 2;
+                    else if (capturedLevel >= 16)
+                        capturedLevel -= 1;
+
                     petMgr->AddPet(wildTeam.Pets[p].Species, wildTeam.Pets[p].DisplayID,
                         wildTeam.Pets[p].Breed,
                         BattlePets::BattlePetBreedQuality(wildTeam.Pets[p].Quality),
-                        wildTeam.Pets[p].Level);
+                        capturedLevel);
 
                     player->UpdateCriteria(CriteriaType::AccountObtainPetThroughBattle, wildTeam.Pets[p].Species);
                     player->UpdateCriteria(CriteriaType::PlayerObtainPetThroughBattle, wildTeam.Pets[p].Species);
