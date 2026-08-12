@@ -409,8 +409,16 @@ WorldPacket const* ReadyCheckStarted::Write()
 
 void ReadyCheckResponseClient::Read()
 {
-    _worldPacket >> Bits<1>(IsReady);
+    // The optional's has-value bit comes FIRST, then IsReady. This was reversed, and because the client
+    // always sets has_value = 1 the server read that bit as IsReady - so a player who DECLINED a ready
+    // check was recorded as ready, and PartyIndex picked up the real IsReady bit.
+    //
+    // Confirmed two ways. The client serializer (RVA 0x5D32A0 in the 12.0.7.68275 dump) writes the
+    // optional-init bit before the bool. And every other packet in this file already reads
+    // OptionalInit(PartyIndex) first - PartyInviteResponse::Read above is the exact analogue
+    // (OptionalInit, then Bits<1>(Accept)), so this one was the odd one out.
     _worldPacket >> OptionalInit(PartyIndex);
+    _worldPacket >> Bits<1>(IsReady);
     if (PartyIndex)
         _worldPacket >> *PartyIndex;
 }
