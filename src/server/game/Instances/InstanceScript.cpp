@@ -16,6 +16,8 @@
  */
 
 #include "InstanceScript.h"
+#include "Timer.h"
+#include "GameTime.h"
 #include "ChallengeMode.h"
 #include "AreaBoundary.h"
 #include "Creature.h"
@@ -940,11 +942,13 @@ void InstanceScript::SendEncounterEnd()
 
 void InstanceScript::SendRealmEncounterStart(uint32 dungeonEncounterId)
 {
+    // Remember when this encounter began so SendRealmEncounterEnd can report the real elapsed time.
+    _encounterStartTimes[dungeonEncounterId] = GameTime::GetGameTimeMS();
+
     WorldPackets::Instance::EncounterStart encounterStart;
     encounterStart.DungeonEncounterID = dungeonEncounterId;
-    encounterStart.DifficultyID = instance->GetDifficultyID();
+    encounterStart.DifficultyID = uint16(instance->GetDifficultyID());
     encounterStart.GroupSize = instance->GetPlayersCountExceptGMs();
-    encounterStart.UnkEncounterDataID = 0;
 
     instance->SendToPlayers(encounterStart.Write());
 }
@@ -953,9 +957,17 @@ void InstanceScript::SendRealmEncounterEnd(uint32 dungeonEncounterId, bool succe
 {
     WorldPackets::Instance::EncounterEnd encounterEnd;
     encounterEnd.DungeonEncounterID = dungeonEncounterId;
-    encounterEnd.DifficultyID = instance->GetDifficultyID();
+    encounterEnd.DifficultyID = uint16(instance->GetDifficultyID());
     encounterEnd.GroupSize = instance->GetPlayersCountExceptGMs();
     encounterEnd.Success = success;
+
+    // Real elapsed time, not a placeholder. If we never saw the start (server restarted mid-encounter,
+    // or an encounter ended that was never announced) report 0 rather than a fabricated duration.
+    if (auto itr = _encounterStartTimes.find(dungeonEncounterId); itr != _encounterStartTimes.end())
+    {
+        encounterEnd.DurationMs = GetMSTimeDiffToNow(itr->second);
+        _encounterStartTimes.erase(itr);
+    }
 
     instance->SendToPlayers(encounterEnd.Write());
 }

@@ -206,9 +206,9 @@ WorldPacket const* BossKill::Write()
 WorldPacket const* EncounterStart::Write()
 {
     _worldPacket << uint32(DungeonEncounterID);
-    _worldPacket << uint32(DifficultyID);
+    _worldPacket << uint16(DifficultyID);
     _worldPacket << uint32(GroupSize);
-    _worldPacket << int32(UnkEncounterDataID);
+    _worldPacket << uint32(0);      // trailing array count; empty in every capture, element layout unknown
 
     return &_worldPacket;
 }
@@ -216,8 +216,9 @@ WorldPacket const* EncounterStart::Write()
 WorldPacket const* EncounterEnd::Write()
 {
     _worldPacket << uint32(DungeonEncounterID);
-    _worldPacket << uint32(DifficultyID);
+    _worldPacket << uint16(DifficultyID);
     _worldPacket << uint32(GroupSize);
+    _worldPacket << uint32(DurationMs);
     _worldPacket << Bits<1>(Success);
     _worldPacket.FlushBits();
 
