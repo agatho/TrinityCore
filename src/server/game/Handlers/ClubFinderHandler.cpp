@@ -164,6 +164,12 @@ void WorldSession::HandleClubFinderPost(WorldPackets::ClubFinder::ClubFinderPost
 // guild rather than cached on the posting, so a browsing player sees the guild's real current state.
 static bool BuildClubCacheData(ClubFinderPosting const& posting, WorldPackets::ClubFinder::ClubFinderLookupClubPostingsList::ClubCacheData& data)
 {
+    // A direct REQUEST_CLUBS_DATA lookup names posting ids straight out and must not become a way to
+    // read the postings moderation hid from search: apply the same visibility predicate Search uses, so
+    // a crafted request cannot enumerate banned, delisted, pending-delete, unlisted or expired postings.
+    if (!ClubFinderMgr::IsPostingVisible(posting))
+        return false;
+
     Guild* guild = sGuildMgr->GetGuildById(posting.ClubId);
     if (!guild)
         return false;

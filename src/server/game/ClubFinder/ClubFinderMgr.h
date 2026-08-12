@@ -203,6 +203,12 @@ public:
     static bool IsPostingExpired(ClubFinderPosting const& posting);
     static bool IsApplicationExpired(ClubFinderApplication const& application);
 
+    // Whether a posting may be shown to a browsing/looking-up player at all: it must not be under a
+    // moderation removal (banned / delisted / pending delete), must have its listing enabled, and must
+    // not have expired. Search and the direct posting-id lookup share this predicate so a crafted
+    // lookup cannot enumerate postings the moderation system hid from search.
+    static bool IsPostingVisible(ClubFinderPosting const& posting);
+
     // All currently listed postings, for the browse responses built on top of this in P1.
     std::vector<ClubFinderPosting const*> GetAllPostings() const;
 

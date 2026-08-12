@@ -282,6 +282,24 @@ bool ClubFinderMgr::IsApplicationExpired(ClubFinderApplication const& applicatio
         && GameTime::GetGameTime() - application.LastUpdatedTime > time_t(CLUB_FINDER_APPLICATION_EXPIRY_DAYS) * DAY;
 }
 
+bool ClubFinderMgr::IsPostingVisible(ClubFinderPosting const& posting)
+{
+    // A delisted, pending-delete or banned posting has been removed by moderation and must never
+    // surface, whether through search or a direct posting-id lookup.
+    if (posting.DisplayFlags & (CLUB_FINDER_POSTING_FLAG_POST_DELISTED | CLUB_FINDER_POSTING_FLAG_PENDING_DELETE | CLUB_FINDER_POSTING_FLAG_BANNED))
+        return false;
+
+    // A guild that has not enabled its listing is not advertising.
+    if (!(posting.RecruitmentFlags & CLUB_FINDER_SETTING_ENABLE_LISTING))
+        return false;
+
+    // The client stops showing a posting as active after 30 days; do not offer it either.
+    if (IsPostingExpired(posting))
+        return false;
+
+    return true;
+}
+
 bool ClubFinderMgr::AddPostingDisplayFlags(uint32 postingId, uint32 flags)
 {
     auto itr = _postings.find(postingId);
@@ -333,16 +351,9 @@ std::vector<ClubFinderPosting const*> ClubFinderMgr::Search(SearchCriteria const
         if (criteria.Type != CLUB_FINDER_REQUEST_TYPE_ALL && posting.Type != criteria.Type)
             continue;
 
-        // A delisted or removed posting must not surface in a search.
-        if (posting.DisplayFlags & (CLUB_FINDER_POSTING_FLAG_POST_DELISTED | CLUB_FINDER_POSTING_FLAG_PENDING_DELETE | CLUB_FINDER_POSTING_FLAG_BANNED))
-            continue;
-
-        // A guild that has not enabled its listing is not advertising.
-        if (!(posting.RecruitmentFlags & CLUB_FINDER_SETTING_ENABLE_LISTING))
-            continue;
-
-        // The client stops showing a posting as active after 30 days; do not offer it either.
-        if (IsPostingExpired(posting))
+        // Moderation removal, unlisted and expiry gates - shared with the direct posting-id lookup so
+        // the two cannot disagree about which postings are hidden.
+        if (!IsPostingVisible(posting))
             continue;
 
         // The posting only advertises to players who meet its own item level requirement.
