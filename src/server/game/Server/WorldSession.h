@@ -131,6 +131,8 @@ namespace WorldPackets
 
     namespace BattlePay
     {
+        class UpdateVasPurchaseStates;
+        class VasGetServiceStatus;
         class GetProductList;
         class GetPurchaseList;
         class StartPurchase;
@@ -2677,6 +2679,8 @@ class TC_GAME_API WorldSession
         // In-game Shop (BattlePay)
         void HandleBattlePayGetProductList(WorldPackets::BattlePay::GetProductList& getProductList);
         void HandleBattlePayGetPurchaseList(WorldPackets::BattlePay::GetPurchaseList& getPurchaseList);
+        void HandleUpdateVasPurchaseStates(WorldPackets::BattlePay::UpdateVasPurchaseStates& packet);
+        void HandleVasGetServiceStatus(WorldPackets::BattlePay::VasGetServiceStatus& packet);
         void HandleBattlePayStartPurchase(WorldPackets::BattlePay::StartPurchase& startPurchase);
         void HandleBattlePayOpenCheckout(WorldPackets::BattlePay::OpenCheckout& openCheckout);
         void HandleBattlePayConfirmPurchaseResponse(WorldPackets::BattlePay::ConfirmPurchaseResponse& confirmPurchaseResponse);

@@ -224,4 +224,22 @@ WorldPacket const* PurchaseUpdate::Write()
 
     return &_worldPacket;
 }
+
+WorldPacket const* EnumVasPurchaseStatesResponse::Write()
+{
+    // Six-bit count, then flush. With no purchases this is the single 0x00 byte retail sends.
+    _worldPacket << Bits<6>(0);
+    _worldPacket.FlushBits();
+
+    return &_worldPacket;
+}
+
+WorldPacket const* VasGetServiceStatusResponse::Write()
+{
+    _worldPacket << Bits<4>(ServiceStatus);
+    _worldPacket << Bits<4>(Unknown);
+    _worldPacket.FlushBits();
+
+    return &_worldPacket;
+}
 }
