@@ -1177,7 +1177,7 @@ WorldPacket const* GarrisonGetClassSpecCategoryInfoResult::Write()
 
 WorldPacket const* GarrisonFollowerActivationsSet::Write()
 {
-    _worldPacket << uint32(GarrSiteLevelID);
+    _worldPacket << uint32(GarrSiteID);
     _worldPacket << uint32(NumActivationsRemaining);
 
     return &_worldPacket;

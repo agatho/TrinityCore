@@ -403,6 +403,7 @@ public:
     void SendTroopQualityRefresh() const;
 
     void ResetFollowerActivationLimit() { _followerActivationsRemainingToday = 1; }
+    uint32 GetFollowerActivationsRemaining() const { return _followerActivationsRemainingToday; }
 
 private:
     Map* FindMap() const;

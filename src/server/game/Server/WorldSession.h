@@ -2756,6 +2756,9 @@ class TC_GAME_API WorldSession
         PlayerDataAccount _playerDataAccount;
         std::vector<std::string> _registeredAddonPrefixes;
         bool _filterAddonMessages;
+        // Garrison login prologue (FOLLOWER_FATIGUE_CLEARED + FOLLOWER_ACTIVATIONS_SET) is sniff-confirmed
+        // to be sent only before the FIRST GetGarrisonInfo result of a session.
+        bool _sentGarrisonLoginPrologue = false;
         uint32 recruiterId;
         bool isRecruiter;
         bool _isCommentator = false;                        // account is currently in commentator (spectator) mode
