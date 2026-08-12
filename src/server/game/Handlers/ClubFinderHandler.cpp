@@ -469,6 +469,19 @@ void WorldSession::HandleClubFinderRespondToApplicant(WorldPackets::ClubFinder::
         return;
     }
 
+    // Consent guard: an applicant controls their own membership, so only a still-live request may be
+    // acted on. The old code checked only that an application row existed, which let a leader accept a
+    // withdrawn (CANCELED), declined, already-joined, or expired application and force a player into the
+    // guild against their current consent - the applicant may have cancelled, or the offer may have
+    // lapsed. Refuse anything that is not a pending (or auto-approved) and unexpired request; the
+    // client surfaces CLUB_FINDER_ERROR_RESPOND_APPLICANT and re-requests the applicant list.
+    if ((existing->Status != CLUB_FINDER_APPLICATION_PENDING && existing->Status != CLUB_FINDER_APPLICATION_AUTO_APPROVED)
+        || ClubFinderMgr::IsApplicationExpired(*existing))
+    {
+        sendError(CLUB_FINDER_ERROR_RESPOND_APPLICANT);
+        return;
+    }
+
     ClubFinderApplication updated = *existing;
     updated.Status = request.ShouldAccept ? CLUB_FINDER_APPLICATION_APPROVED : CLUB_FINDER_APPLICATION_DECLINED;
 
