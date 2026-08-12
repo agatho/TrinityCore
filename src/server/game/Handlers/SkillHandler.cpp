@@ -155,7 +155,7 @@ void WorldSession::HandleOpenTradeSkillNpc(WorldPackets::Spells::OpenTradeSkillN
     }
 
     // Crafting at an NPC: only bind if the player really can interact with it right now.
-    Creature* npc = _player->GetNPCIfCanInteractWith(packet.NpcGUID, NPCFlags::None, NPCFlags2::None);
+    Creature* npc = _player->GetNPCIfCanInteractWith(packet.NpcGUID, UNIT_NPC_FLAG_NONE, UNIT_NPC_FLAG_2_NONE);
     if (!npc)
         return;
 
