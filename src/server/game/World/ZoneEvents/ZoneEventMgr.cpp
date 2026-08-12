@@ -27,6 +27,7 @@
 #include "QuaternionData.h"
 #include "TemporarySummon.h"
 #include "Timer.h"
+#include "World.h"
 #include "WorldStateMgr.h"
 #include <algorithm>
 
@@ -89,8 +90,12 @@ void ZoneEventMgr::LoadFromDB()
 
         ZoneEventState& state = _states[tmpl.Id];
         state.TemplateId = tmpl.Id;
-        // Schedule the first activation at the next period boundary from server start.
-        state.NextStart  = now + static_cast<time_t>(tmpl.PeriodSeconds);
+        // Schedule the first activation. Weekly events snap to the server's weekly
+        // reset boundary (ComputeNextStart); ComputeNextStart returns 0 here because
+        // LoadFromDB runs before InitQuestResetTimes, so Update() re-derives it on the
+        // first tick once the weekly reset time is populated. Non-weekly events get a
+        // one-period offset from server start.
+        state.NextStart  = ComputeNextStart(tmpl, now);
         state.Active     = false;
 
         ++count;
@@ -187,6 +192,27 @@ void ZoneEventMgr::LoadScenarioWaves()
     TC_LOG_INFO("server.loading", ">> Loaded {} Quel'Thalas zone-event scenario waves", _wavesByCriteriaTree.size());
 }
 
+// Weekly-cadence events (Saltheril's Soiree, Legends of the Haranir) open on the
+// realm's weekly reset boundary. We reuse the existing weekly-reset time source --
+// World::GetNextWeeklyQuestsResetTime() -- rather than hardcoding a wall-clock or
+// counting a raw week from server boot, so the soiree window tracks the same reset
+// the weekly quests roll over on. That value is 0 until World::InitQuestResetTimes()
+// runs (which is AFTER ZoneEventMgr::LoadFromDB in SetInitialWorldSettings); when it
+// is not yet available we return 0 and Update() retries on a later tick.
+time_t ZoneEventMgr::ComputeNextStart(ZoneEventTemplate const& tmpl, time_t now) const
+{
+    if (IsWeeklyCadence(tmpl))
+    {
+        time_t const weeklyReset = sWorld->GetNextWeeklyQuestsResetTime();
+        if (weeklyReset > now)
+            return weeklyReset;      // next weekly reset boundary
+        return 0;                    // not initialised yet -> Update() re-derives it
+    }
+
+    // Sub-weekly rotations (Abundance 8h, Stormarion 30m) key off server start.
+    return now + static_cast<time_t>(tmpl.PeriodSeconds);
+}
+
 void ZoneEventMgr::Update(uint32 diff)
 {
     // Throttle: 1 Hz is sufficient for the second-resolution countdown worldstate.
@@ -209,6 +235,15 @@ void ZoneEventMgr::Update(uint32 diff)
 
         if (!state.Active)
         {
+            // Weekly events seeded with NextStart == 0 (weekly reset time was not yet
+            // available at LoadFromDB) are snapped to the reset boundary here, once.
+            if (state.NextStart == 0)
+            {
+                state.NextStart = ComputeNextStart(tmpl, now);
+                if (state.NextStart == 0)
+                    continue; // reset time still not ready -> retry next tick
+            }
+
             if (now >= state.NextStart)
                 ActivateEvent(state, tmpl, now);
         }
@@ -254,7 +289,11 @@ void ZoneEventMgr::ActivateEvent(ZoneEventState& state, ZoneEventTemplate const&
 void ZoneEventMgr::DeactivateEvent(ZoneEventState& state, ZoneEventTemplate const& tmpl, time_t now)
 {
     state.Active    = false;
-    state.NextStart = now + static_cast<time_t>(tmpl.PeriodSeconds);
+    // Reschedule. Weekly events snap to the next weekly reset (by now the reset
+    // framework has advanced GetNextWeeklyQuestsResetTime() past this window);
+    // sub-weekly events advance one period. A 0 here (weekly reset momentarily
+    // unavailable) is re-derived by Update() on a later tick.
+    state.NextStart = ComputeNextStart(tmpl, now);
     state.Meter     = 0;
 
     if (tmpl.CountdownWorldStateId)
@@ -385,15 +424,82 @@ void ZoneEventMgr::OnAssaultComplete(ZoneEventTemplate const& tmpl, ZoneEventSta
 void ZoneEventMgr::OnEventStart(ZoneEventTemplate const& tmpl, ZoneEventState& state)
 {
     SpawnEventActors(tmpl, state);
+
+    switch (tmpl.Type)
+    {
+        case ZoneEventType::SaltherilSoiree:
+            OnSoireeStart(tmpl, state);
+            break;
+        default:
+            break; // Stormarion/Abundance/Haranir bodies handled elsewhere / CAPTURE-BLOCKED
+    }
 }
 
 void ZoneEventMgr::OnEventComplete(ZoneEventTemplate const& tmpl, ZoneEventState& state)
 {
     DespawnEventActors(tmpl, state);
 
+    switch (tmpl.Type)
+    {
+        case ZoneEventType::SaltherilSoiree:
+            OnSoireeComplete(tmpl, state);
+            break;
+        default:
+            break;
+    }
+
     // TODO(CAPTURE-BLOCKED): grant renown/currency/loot on completion. Needs the
     // completion reward packet + currency ids from a full-run capture
     // (SCENARIO_STATE was n=0 in the sniffs on hand). Reward-grant seam is here.
+}
+
+// ---------------------------------------------------------------------------
+// Saltheril's Soiree (weekly) -- Quel'Thalas zone event #2.
+//
+// The quest side is already LIVE and needs NO authoring here: quest 89289 "Favor
+// of the Court" (giver/ender creature 240832, objective ObjectID 241313) is
+// authored in content/midnight-s1 and present in the live world DB. This body's
+// only job is to open the weekly window and advertise AreaPOI 8600 "Saltheril's
+// Soiree" (confirmed DB2: AreaID 15968, coords (7212.02,-3886.55,69.62),
+// QuestLine 5841 "Saltheril's Haven", PoiData 89289) while the window is open, so
+// the map marker points players at the already-completable quest.
+//
+// AreaPOI 8600 is a client DB2 record whose visibility is gated by
+// PlayerConditionID 152346. The server-side signal that PlayerCondition reads is a
+// worldstate; the generic spine already broadcasts this event's StateWorldStateId
+// (WS 5208, the rotation state) on ActivateEvent, which is the "soiree is live"
+// signal for the zone. Binding the POI to the EXACT worldstate value the client
+// checks is CAPTURE-BLOCKED (PlayerConditionID 152346 not yet decoded -- see the
+// blueprint tester-ask list), and this fork has no server-side area_poi loader on
+// this branch, so the POI seed ships as LISTED SQL (reference block in the .sql)
+// rather than an invented loader. Everything below is realm-safe and non-inventing.
+// ---------------------------------------------------------------------------
+void ZoneEventMgr::OnSoireeStart(ZoneEventTemplate const& tmpl, ZoneEventState& /*state*/)
+{
+    // The zone-scoped "soiree active" worldstate (StateWorldStateId = WS 5208) has
+    // already been set by ActivateEvent; that is the server signal AreaPOI 8600's
+    // PlayerConditionID 152346 keys on. Nothing further to emit until 152346 is
+    // decoded to the exact gated value.
+    TC_LOG_DEBUG("misc", "ZoneEventMgr: Saltheril's Soiree (event {}) open in zone {}; "
+        "advertising AreaPOI 8600 / QuestLine 5841, quest 89289 available (WS {} = {})",
+        tmpl.Id, tmpl.ZoneId, tmpl.StateWorldStateId, GetMeter(tmpl.Id));
+
+    // TODO(CAPTURE-BLOCKED): the soiree's INTERNAL activities (host gossip chain
+    // 243357/243553/241450/241452/243500/243352/243349/243527, the party mini-games,
+    // and any reward beyond quest 89289 / the "Fortify the Runestones" warband unlock)
+    // are not captured -- do NOT invent them. This body advertises the existing quest
+    // only. See blueprint tester-ask list for the soiree-internals capture.
+}
+
+void ZoneEventMgr::OnSoireeComplete(ZoneEventTemplate const& tmpl, ZoneEventState& /*state*/)
+{
+    // Window closed: DeactivateEvent already rescheduled NextStart to the next weekly
+    // reset and re-broadcast the timer WS. The POI-drop signal (what the client checks
+    // to HIDE AreaPOI 8600 once the window ends) is CAPTURE-BLOCKED with the same
+    // PlayerConditionID 152346 decode -- this fork also lacks a server-side area_poi
+    // toggle path on this branch, so we do not invent a clear here. Documented TODO.
+    TC_LOG_DEBUG("misc", "ZoneEventMgr: Saltheril's Soiree (event {}) closed; "
+        "next window at weekly reset (AreaPOI 8600 drop signal CAPTURE-BLOCKED)", tmpl.Id);
 }
 
 // Summon every zone_event_spawn row for this event on its target map. With no

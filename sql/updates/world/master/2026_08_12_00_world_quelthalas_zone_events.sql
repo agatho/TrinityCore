@@ -113,3 +113,55 @@ CREATE TABLE `zone_event_spawn` (
 -- each id lists the zone AreaIDs (15968/15969) so WorldStateMgr scopes the
 -- broadcast. Those rows are stock Blizzard worldstates; if absent on the test DB,
 -- add them alongside this file. Deferred until per-event content is unblocked.
+
+-- ---------------------------------------------------------------------------
+-- Phase 3 (Saltheril's Soiree) content wiring.
+-- ---------------------------------------------------------------------------
+--
+-- The Saltheril seed row already ships above:
+--   (3, 1, 15968, 0, 5208, 22984, 0, 604800, 86400, 0)
+--   Type 1 (Saltheril), weekly cadence (PeriodSeconds 604800 == one week), so
+--   ZoneEventMgr snaps its activation to the server's weekly quest reset boundary
+--   (World::GetNextWeeklyQuestsResetTime -- same source the weekly-reset framework
+--   uses). StateWorldStateId 5208 is the zone rotation state broadcast on activate;
+--   TimerWorldStateId 22984 carries the next-window unix stamp. No meter, no countdown.
+--   DurationSeconds 86400 (1 day active window) is the skeleton assumption -- the
+--   exact retail window length is CAPTURE-BLOCKED (not derivable from the data on
+--   hand); adjust once captured.
+--
+-- The quest side is ALREADY LIVE and authored in content/midnight-s1 (applied to the
+-- live world DB): quest 89289 "Favor of the Court", giver/ender creature 240832,
+-- objective ObjectID 241313, QuestLine 5841 "Saltheril's Haven". NO quest authoring
+-- here -- the event only advertises the already-completable quest on its weekly window.
+--
+-- AreaPOI 8600 "Saltheril's Soiree" -- map-marker seed (LISTED, NOT APPLIED).
+--   Confirmed DB2 values (build 12.0.7.68887, live-realm verified):
+--     PoiId               8600
+--     Position            (7212.02, -3886.55, 69.62)
+--     AreaID              15968  (Eversong Woods; sub-area 15997 "Saltheril's Haven")
+--     PlayerConditionID   152346 (gates POI visibility; EXACT gated value CAPTURE-BLOCKED)
+--     PoiData             89289  (keyed to the weekly quest)
+--     QuestLineID         5841   ("Saltheril's Haven")
+--     UiWidgetSetID       1941
+--     UiTextureKitID      2710
+--   AreaPOI is a client DB2 record; stock TrinityCore has no server-side area_poi
+--   table, and this branch (off baseline 560165c0a6) ships no AreaPoiMgr / area_poi
+--   loader -- that arrives with feature/world-quests (see blueprint merge plan). So
+--   this seed is LISTED for reference only; it is NOT inserted (no reader exists on
+--   this branch, and inventing a loader is out of scope). When AreaPoiMgr merges,
+--   materialise it there. The server-side "soiree live" signal ZoneEventMgr already
+--   emits is StateWorldStateId (WS 5208) on activate; binding AreaPOI 8600's
+--   PlayerConditionID 152346 to that worldstate value is CAPTURE-BLOCKED (decode 152346).
+--
+--   Reference row (DO NOT APPLY on this branch -- no area_poi_template reader here):
+--     -- INSERT INTO `area_poi_template`
+--     --   (`ID`,`PosX`,`PosY`,`PosZ`,`AreaID`,`PlayerConditionID`,`PoiData`,`QuestLineID`,`UiWidgetSetID`,`UiTextureKitID`) VALUES
+--     --   (8600, 7212.02, -3886.55, 69.62, 15968, 152346, 89289, 5841, 1941, 2710);
+--
+-- CAPTURE-BLOCKED / deferred for the soiree (documented, NOT invented):
+--   * Decode PlayerConditionID 152346 -> the exact worldstate value AreaPOI 8600 gates on
+--     (so the marker follows the server rotation and hides on window close).
+--   * The soiree's INTERNAL activities beyond quest 89289 (host gossip chain
+--     243357/243553/241450/241452/243500/243352/243349/243527, party mini-games) and
+--     any reward beyond the quest / the "Fortify the Runestones" warband unlock.
+--   * The exact weekly active-window length (DurationSeconds; 86400 is a placeholder).

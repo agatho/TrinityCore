@@ -32,6 +32,7 @@
 // logic is stubbed and marked CAPTURE-BLOCKED where wire/DB2 evidence is not yet
 // in hand. See C:\dumps\QUELTHALAS_EVENTS_BLUEPRINT.md.
 
+#include "Common.h"
 #include "Define.h"
 #include "ObjectGuid.h"
 #include <ctime>
@@ -165,6 +166,16 @@ private:
     void DeactivateEvent(ZoneEventState& state, ZoneEventTemplate const& tmpl, time_t now);
     void BroadcastTimers(ZoneEventTemplate const& tmpl, ZoneEventState const& state);
 
+    // Next-activation scheduling. Weekly-cadence events (Saltheril's Soiree,
+    // Legends of the Haranir) align to the server's weekly quest reset boundary
+    // (World::GetNextWeeklyQuestsResetTime -- the same time source the weekly-reset
+    // framework uses), NOT a wall-clock offset from server boot. Every other event
+    // schedules at now + PeriodSeconds. Returns 0 when a weekly reset time is not
+    // yet available (LoadFromDB runs before InitQuestResetTimes); Update() then
+    // re-derives it lazily on a later tick.
+    time_t ComputeNextStart(ZoneEventTemplate const& tmpl, time_t now) const;
+    static bool IsWeeklyCadence(ZoneEventTemplate const& tmpl) { return tmpl.PeriodSeconds == uint32(WEEK); }
+
     // Per-event start/end content hooks. The spawn/despawn MECHANISM is live
     // (reads `zone_event_spawn`; no-op when the table is empty). The reward tail
     // is CAPTURE-BLOCKED (see OnAssaultComplete).
@@ -174,6 +185,15 @@ private:
     // Spawn mechanism (reads `zone_event_spawn`).
     void SpawnEventActors(ZoneEventTemplate const& tmpl, ZoneEventState& state);
     void DespawnEventActors(ZoneEventTemplate const& tmpl, ZoneEventState& state);
+
+    // Saltheril's Soiree (weekly) event body. Advertises AreaPOI 8600 "Saltheril's
+    // Soiree" (QuestLine 5841 "Saltheril's Haven", quest 89289 "Favor of the Court",
+    // already live) for the duration of the weekly window, then clears it. The POI
+    // marker itself is a client DB2 record gated by PlayerConditionID 152346; the
+    // server signal it reads is the event's StateWorldStateId, broadcast by the
+    // generic spine. See OnSoireeStart for the CAPTURE-BLOCKED PlayerCondition decode.
+    void OnSoireeStart(ZoneEventTemplate const& tmpl, ZoneEventState& state);
+    void OnSoireeComplete(ZoneEventTemplate const& tmpl, ZoneEventState& state);
 
     // Assault meter reached MeterCap -> completion. Grants the (CAPTURE-BLOCKED)
     // reward tail then ends the window early via DeactivateEvent.
