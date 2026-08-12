@@ -391,6 +391,145 @@ void WorldSession::HandleBattlemasterJoinRatedBGBlitz(WorldPackets::Battleground
     sBattlegroundMgr->ScheduleQueueUpdate(0, bgQueueTypeId, bracketEntry->GetBracketId());
 }
 
+// CMSG_BATTLEMASTER_JOIN_SKIRMISH (0x3B00BF) - unrated 3v3 arena, solo or small group.
+//
+// Like the Blitz join this packet carries no queue identity; the mode is implied by the opcode. It queues
+// against BattlemasterList 6 ("All Arenas"), which already has a battleground_template row and whose 15
+// arena maps all have templates - so this phase needs no SQL.
+//
+// Matchmaking needs no new code either: the queue is unrated, so entries land in BG_QUEUE_NORMAL_* and the
+// existing `!m_queueId.Rated` branch of BattlegroundQueueUpdate already runs
+// CheckNormalMatch(...) || (IsArena && CheckSkirmishForSameFaction(...)).
+void WorldSession::HandleBattlemasterJoinSkirmish(WorldPackets::Battleground::BattlemasterJoinSkirmish& packet)
+{
+    // JoinSkirmish only ever sends Bracket 4 and hard-rejects anything else client-side; RequeueSkirmish
+    // sends 255 with the Requeue bit set. Accept exactly those two shapes. The value is NOT mapped onto a
+    // BattlegroundBracketId - its enum identity is unknown (see BattlemasterJoinSkirmish's comment).
+    bool const validBracket = (packet.Bracket == 4) || (packet.Bracket == 255 && packet.Requeue);
+
+    BattlegroundQueueTypeId bgQueueTypeId =
+        BattlegroundMgr::BGQueueTypeId(BATTLEGROUND_AA, BattlegroundQueueIdType::ArenaSkirmish, false, ARENA_TYPE_3v3);
+
+    if (!BattlegroundMgr::IsValidQueueId(bgQueueTypeId))
+        return;
+
+    auto sendFailed = [&](GroupJoinBattlegroundResult result)
+    {
+        WorldPackets::Battleground::BattlefieldStatusFailed battlefieldStatus;
+        BattlegroundMgr::BuildBattlegroundStatusFailed(&battlefieldStatus, bgQueueTypeId, _player, 0, result);
+        SendPacket(battlefieldStatus.Write());
+    };
+
+    if (!validBracket)
+    {
+        TC_LOG_DEBUG("bg.battleground", "Skirmish: {} sent an unexpected Bracket {} (Requeue {})",
+            _player->GetName(), uint32(packet.Bracket), packet.Requeue ? "true" : "false");
+        sendFailed(ERR_BATTLEGROUND_JOIN_FAILED);
+        return;
+    }
+
+    BattlemasterListEntry const* battlemasterListEntry = sBattlemasterListStore.AssertEntry(bgQueueTypeId.BattlemasterListId);
+
+    if (DisableMgr::IsDisabledFor(DISABLE_TYPE_BATTLEGROUND, bgQueueTypeId.BattlemasterListId, nullptr) || battlemasterListEntry->GetFlags().HasFlag(BattlemasterListFlags::InternalOnly))
+    {
+        ChatHandler(this).PSendSysMessage(LANG_ARENA_DISABLED);
+        return;
+    }
+
+    if (_player->InBattleground())
+        return;
+
+    BattlegroundTemplate const* bgTemplate = sBattlegroundMgr->GetBattlegroundTemplateByTypeId(BATTLEGROUND_AA);
+    if (!bgTemplate)
+    {
+        TC_LOG_ERROR("bg.battleground", "Skirmish: template bg (all arenas) not found");
+        return;
+    }
+
+    PVPDifficultyEntry const* bracketEntry = DB2Manager::GetBattlegroundBracketByLevel(bgTemplate->MapIDs.front(), _player->GetLevel());
+    if (!bracketEntry)
+        return;
+
+    Group* grp = _player->GetGroup();
+    if (grp && grp->GetLeaderGUID() != _player->GetGUID())
+        return;
+
+    if (GetPlayer()->isUsingLfg())
+    {
+        sendFailed(ERR_LFG_CANT_USE_BATTLEGROUND);
+        return;
+    }
+
+    if (!_player->CanJoinToBattleground(bgTemplate))
+    {
+        sendFailed(ERR_BATTLEGROUND_JOIN_TIMED_OUT);
+        return;
+    }
+
+    if (_player->IsDeserter())
+    {
+        sendFailed(ERR_GROUP_JOIN_BATTLEGROUND_DESERTERS);
+        return;
+    }
+
+    if (_player->GetBattlegroundQueueIndex(bgQueueTypeId) < PLAYER_MAX_BATTLEGROUND_QUEUES)
+        return;
+
+    if (!_player->HasFreeBattlegroundQueueId())
+    {
+        sendFailed(ERR_BATTLEGROUND_TOO_MANY_QUEUES);
+        return;
+    }
+
+    if (_player->HasAura(9454))
+        return;
+
+    ObjectGuid errorGuid;
+    GroupJoinBattlegroundResult err = ERR_BATTLEGROUND_NONE;
+    if (grp && !sBattlegroundMgr->isArenaTesting())
+        err = grp->CanJoinBattlegroundQueue(bgTemplate, bgQueueTypeId, ARENA_TYPE_3v3, ARENA_TYPE_3v3, false, 0, errorGuid);
+
+    if (err)
+    {
+        WorldPackets::Battleground::BattlefieldStatusFailed battlefieldStatus;
+        BattlegroundMgr::BuildBattlegroundStatusFailed(&battlefieldStatus, bgQueueTypeId, _player, 0, err, &errorGuid);
+        SendPacket(battlefieldStatus.Write());
+        return;
+    }
+
+    BattlegroundQueue& bgQueue = sBattlegroundMgr->GetBattlegroundQueue(bgQueueTypeId);
+    // Unrated, so no rating is carried. Roles are stored but no skirmish matchmaker consults them - the wire
+    // only ever tells us the queuer's own mask, never the other party members'.
+    GroupQueueInfo* ginfo = bgQueue.AddGroup(_player, grp, Team(_player->GetTeam()), bracketEntry, false, 0, 0, packet.Roles);
+    uint32 avgTime = bgQueue.GetAverageQueueWaitTime(ginfo, bracketEntry->GetBracketId());
+
+    if (grp)
+    {
+        for (GroupReference const& itr : grp->GetMembers())
+        {
+            Player* member = itr.GetSource();
+            uint32 memberSlot = member->AddBattlegroundQueueId(bgQueueTypeId);
+
+            WorldPackets::Battleground::BattlefieldStatusQueued battlefieldStatus;
+            BattlegroundMgr::BuildBattlegroundStatusQueued(&battlefieldStatus, member, memberSlot, ginfo->JoinTime, bgQueueTypeId, avgTime, true);
+            member->SendDirectMessage(battlefieldStatus.Write());
+        }
+    }
+    else
+    {
+        uint32 queueSlot = _player->AddBattlegroundQueueId(bgQueueTypeId);
+
+        WorldPackets::Battleground::BattlefieldStatusQueued battlefieldStatus;
+        BattlegroundMgr::BuildBattlegroundStatusQueued(&battlefieldStatus, _player, queueSlot, ginfo->JoinTime, bgQueueTypeId, avgTime, false);
+        SendPacket(battlefieldStatus.Write());
+    }
+
+    TC_LOG_DEBUG("bg.battleground", "Skirmish: {} ({}) queued with roles {:#x} (bracket {}, requeue {})",
+        _player->GetName(), _player->GetGUID().ToString(), packet.Roles, uint32(packet.Bracket), packet.Requeue ? "true" : "false");
+
+    sBattlegroundMgr->ScheduleQueueUpdate(0, bgQueueTypeId, bracketEntry->GetBracketId());
+}
+
 void WorldSession::HandlePVPLogDataOpcode(WorldPackets::Battleground::PVPLogDataRequest& /*pvpLogDataRequest*/)
 {
     Battleground* bg = _player->GetBattleground();
@@ -806,10 +945,10 @@ void WorldSession::HandleGetPVPOptionsEnabled(WorldPackets::Battleground::GetPVP
     pvpOptionsEnabled.WargameBattlegrounds = sWorld->getBoolConfig(CONFIG_FEATURE_WARGAMES_ENABLED);
     pvpOptionsEnabled.WargameArenas = sWorld->getBoolConfig(CONFIG_FEATURE_WARGAMES_ENABLED);
     pvpOptionsEnabled.RatedArenas = true;
-    // NOT flipped: there is no skirmish queue path. CMSG_BATTLEMASTER_JOIN_SKIRMISH is STATUS_UNHANDLED ->
-    // Handle_NULL and nothing ever builds a BattlegroundQueueIdType::ArenaSkirmish queue id, so enabling this
-    // would open a UI button that sends an opcode the server drops.
-    pvpOptionsEnabled.ArenaSkirmish = false;
+    // Flipped because HandleBattlemasterJoinSkirmish now exists: it builds a real
+    // BattlegroundQueueIdType::ArenaSkirmish queue id and the existing unrated matchmaker
+    // (CheckSkirmishForSameFaction) pairs the entries up. This bit gates the client's Skirmish button.
+    pvpOptionsEnabled.ArenaSkirmish = true;
     pvpOptionsEnabled.SoloShuffle = false;
     pvpOptionsEnabled.RatedSoloShuffle = false;
     pvpOptionsEnabled.BattlegroundBlitz = false;

@@ -589,7 +589,11 @@ bool BattlegroundMgr::IsValidQueueId(BattlegroundQueueTypeId bgQueueTypeId)
         case BattlegroundQueueIdType::ArenaSkirmish:
             if (battlemasterList->GetType() != BattlemasterType::Arena)
                 return false;
-            if (!bgQueueTypeId.Rated)
+            // A skirmish is UNRATED. This test used to be `if (!Rated) return false;`, which made the case
+            // self-contradictory and unreachable in practice: the only skirmish matchmaker,
+            // CheckSkirmishForSameFaction, is called exclusively from the `if (!m_queueId.Rated)` branch of
+            // BattlegroundQueueUpdate, so a queue id that satisfied this check could never be matched.
+            if (bgQueueTypeId.Rated)
                 return false;
             if (bgQueueTypeId.TeamSize != ARENA_TYPE_3v3)
                 return false;
