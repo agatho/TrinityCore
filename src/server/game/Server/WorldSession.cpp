@@ -1246,6 +1246,22 @@ bool WorldSession::CanAccessAlliedRaces() const
     return GetAccountExpansion() >= EXPANSION_BATTLE_FOR_AZEROTH;
 }
 
+bool WorldSession::HasRaceUnlockAchievement(uint32 achievementId) const
+{
+    // TODO(feature/haranir-allied-race): resolve the account-wide (Battle.net) completion state
+    // of `achievementId` - for Haranir this is the unlock achievement 61506 ("Allied Race:
+    // Haranir") and the heritage achievement 61942 ("Heritage of the Haranir"). TrinityCore
+    // currently persists achievements per-character (`character_achievement`); there is no
+    // account-wide allied-race unlock store available at session scope, which is exactly why
+    // upstream left the char-creation achievement gate commented out. Returning false here
+    // preserves the existing permissive behaviour: creation is NOT blocked server-side and the
+    // race is simply reported as "achievement not yet earned" to the client unless the
+    // CharacterCreating.DisableAlliedRaceAchievementRequirement override is set. Replace this
+    // body with the real account-achievement lookup once that storage exists.
+    (void)achievementId;
+    return false;
+}
+
 void WorldSession::LoadPermissions()
 {
     uint32 id = GetAccountId();
