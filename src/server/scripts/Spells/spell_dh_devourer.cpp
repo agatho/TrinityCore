@@ -45,8 +45,14 @@ enum DevourerSpells
 };
 
 // 1217605 - Void Metamorphosis (activation)
-// TODO(devourer): on cast, gate on required Soul Fragments; the 1217607 transform buff is applied
-// by the data-driven TRIGGER effect. This script owns the enhanced-ability state + the sustain seam.
+// Effects [DB2 12.0.7]: EFFECT_0 TRIGGER 1217607 (transform buff, data-driven), EFFECT_1 TRIGGER
+// 201453 (shared Metamorphosis movement helper, data-driven), EFFECT_2 DUMMY (bp 2) - the seam a
+// script would hook for an on-activation Soul-Fragment gate.
+// TODO(RESEARCH): the EFFECT_2 dummy carries bp = 2, but the client tooltip / a combat capture has
+// NOT confirmed whether that is a Soul-Fragment cost (and if so, whether 2 is the required count) or
+// an unrelated value. Per the blueprint's evidence-vs-invention rule the fragment count is NOT
+// guessed here; the existing DH Soul-Fragment consume path (spell_dh.cpp) would be wired in once the
+// requirement is source-confirmed. Realm-safe no-op until then.
 class spell_dh_void_metamorphosis : public SpellScript
 {
     bool Validate(SpellInfo const* /*spellInfo*/) override
@@ -56,8 +62,8 @@ class spell_dh_void_metamorphosis : public SpellScript
 
     void HandleActivate() const
     {
-        // TODO(devourer): consume required Soul Fragments; kick off the Fury-drain sustain aura.
-        // Realm-safe no-op until implemented.
+        // TODO(RESEARCH): consume the required Soul Fragments once the EFFECT_2 (bp 2) requirement is
+        // confirmed. No-op today; the transform buff 1217607 is applied by the data-driven TRIGGER.
     }
 
     void Register() override
@@ -67,20 +73,53 @@ class spell_dh_void_metamorphosis : public SpellScript
 };
 
 // 1217607 - Void Metamorphosis (transform buff): drives the per-tick Fury drain that ends the form
-// when Fury is exhausted (Grim Focus 1260008 slows the rate out of combat / while CC'd).
-// TODO(devourer): implement the periodic Fury drain + auto-cancel. Stubbed no-op for now.
+// when Fury is exhausted. Enhanced Consume/Reap (SPELL_AURA_OVERRIDE_ACTIONBAR_SPELLS -> 1217610 /
+// 1245453) and the empower package on this same aura are all data-driven; the ONLY custom piece is
+// this sustain drain.
+//
+// Effect layout on 1217607 [DB2 12.0.7.68275, blueprint-confirmed]:
+//   EFFECT_6  = SPELL_AURA_PERIODIC_DUMMY (aura 226), period 1000 ms  -> the drain tick cadence
+//   EFFECT_10 = SPELL_AURA_DUMMY (aura 4), base points 25             -> the Fury drained per tick
+//   EFFECT_13 = SPELL_AURA_DUMMY (aura 4), base points 1000           -> unresolved secondary dummy
+// The per-tick amount is read LIVE from the EFFECT_10 dummy (GetAmount) so it tracks DB2/hotfix data
+// rather than a hardcoded constant. NOTE(RESEARCH): the exact per-tick value and the 1-second cadence
+// are provisional pending a Devourer combat capture (no Devourer sniff exists yet); if a capture shows
+// a different rate, only the DB2 rows change - this script needs no edit. The EFFECT_13 (bp 1000)
+// dummy's role is not source-confirmed and is deliberately NOT used here.
 class spell_dh_void_metamorphosis_drain : public AuraScript
 {
+    // Index of the SPELL_AURA_DUMMY effect on 1217607 that carries the per-tick Fury drain amount.
+    static constexpr SpellEffIndex EFFECT_FURY_DRAIN_AMOUNT = EFFECT_10;
+
     bool Validate(SpellInfo const* /*spellInfo*/) override
     {
-        return ValidateSpellInfo({ SPELL_DH_VOID_METAMORPHOSIS_TRANSFORM });
+        return ValidateSpellEffect({ { SPELL_DH_VOID_METAMORPHOSIS_TRANSFORM, EFFECT_6 },
+                                     { SPELL_DH_VOID_METAMORPHOSIS_TRANSFORM, EFFECT_FURY_DRAIN_AMOUNT } });
     }
 
     void HandlePeriodic(AuraEffect const* /*aurEff*/)
     {
-        // TODO(devourer): drain Fury each tick (rate from the SPELL_AURA_DUMMY effects on this aura);
-        // if Fury <= 0 remove the transform. The "Consume/Reap enhanced while active" behaviour is
-        // already data-driven via SPELL_AURA_OVERRIDE_ACTIONBAR_SPELLS on this same aura (1217607).
+        Unit* target = GetTarget();
+
+        // Drain amount is data-driven: read it from the aura's own SPELL_AURA_DUMMY effect.
+        AuraEffect const* drainEffect = GetEffect(EFFECT_FURY_DRAIN_AMOUNT);
+        int32 const drain = drainEffect ? drainEffect->GetAmount() : 0;
+        if (drain <= 0)
+            return;
+
+        // Already out of Fury -> cannot sustain the void form; end it (mirrors how other sustained
+        // transforms are cancelled - remove the transform buff this aura lives on).
+        if (target->GetPower(POWER_FURY) <= 0)
+        {
+            Remove();
+            return;
+        }
+
+        // ModifyPower clamps at 0, so a partial-affordability tick still drains to empty.
+        target->ModifyPower(POWER_FURY, -drain);
+
+        if (target->GetPower(POWER_FURY) <= 0)
+            Remove();
     }
 
     void Register() override
@@ -91,7 +130,13 @@ class spell_dh_void_metamorphosis_drain : public AuraScript
 };
 
 // 1234195 - Void Nova
-// TODO(devourer): AoE cosmic damage + the DUMMY effect (knockback / debuff) at the caster.
+// Effects [DB2 12.0.7]: EFFECT_0 APPLY_AURA (aura 12 SPELL_AURA_MOD_STUN, data-driven), EFFECT_1
+// SCHOOL_DAMAGE (the AoE cosmic damage, data-driven), EFFECT_2 DUMMY (bp 30) - the secondary seam.
+// Both the damage and the stun already resolve from data, so no script is required for the confirmed
+// behaviour. Only the EFFECT_2 dummy needs custom code, and its mechanic (knockback vs. slow vs.
+// soul-scatter) is RESEARCH-flagged in the blueprint and NOT decodable from bp = 30 alone.
+// TODO(RESEARCH): confirm the EFFECT_2 secondary effect from an enhanced tooltip or a combat capture
+// before implementing. Registered no-op keeps the binding realm-safe; the mechanic is not guessed.
 class spell_dh_void_nova : public SpellScript
 {
     bool Validate(SpellInfo const* /*spellInfo*/) override
@@ -101,7 +146,8 @@ class spell_dh_void_nova : public SpellScript
 
     void HandleDummy(SpellEffIndex /*effIndex*/) const
     {
-        // TODO(devourer): apply the Void Nova secondary effect. Realm-safe no-op for now.
+        // TODO(RESEARCH): apply the Void Nova secondary effect (EFFECT_2 DUMMY bp 30) once the exact
+        // mechanic is source-confirmed. Realm-safe no-op for now.
     }
 
     void Register() override
