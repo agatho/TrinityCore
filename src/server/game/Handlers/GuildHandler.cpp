@@ -712,15 +712,17 @@ namespace
 void WorldSession::HandleGuildQueryRecipes(WorldPackets::Guild::GuildQueryRecipes& packet)
 {
     Guild* guild = sGuildMgr->GetGuildByGuid(packet.GuildGUID);
-    if (!guild || !guild->GetMember(_player->GetGUID()))
+    if (!guild || !guild->IsMember(_player->GetGUID()))
         return;
 
     GuildMemberSet members = CollectGuildMembers(guild);
     if (members.LowGuidList.empty())
         return;
 
+    std::string const spellQuery = Trinity::StringFormat("SELECT spell FROM character_spell WHERE guid IN ({})", members.LowGuidList);
+
     GetQueryProcessor().AddCallback(
-        CharacterDatabase.AsyncQuery(Trinity::StringFormat("SELECT spell FROM character_spell WHERE guid IN ({})", members.LowGuidList))
+        CharacterDatabase.AsyncQuery(spellQuery.c_str())
         .WithCallback([this, memberGuids = std::move(members.Guids)](QueryResult result)
     {
         auto const& abilitiesBySpell = GetAbilitiesBySpell();
@@ -767,11 +769,11 @@ void WorldSession::HandleGuildQueryRecipes(WorldPackets::Guild::GuildQueryRecipe
 void WorldSession::HandleGuildQueryMemberRecipes(WorldPackets::Guild::GuildQueryMemberRecipes& packet)
 {
     Guild* guild = sGuildMgr->GetGuildByGuid(packet.GuildGUID);
-    if (!guild || !guild->GetMember(_player->GetGUID()))
+    if (!guild || !guild->IsMember(_player->GetGUID()))
         return;
 
     // Only answer for someone who is actually in this guild - never leak another guild's members.
-    if (!guild->GetMember(packet.MemberGUID))
+    if (!guild->IsMember(packet.MemberGUID))
         return;
 
     if (!sDB2Manager.GetSkillLineAbilitiesBySkill(packet.SkillLineID))
@@ -827,7 +829,7 @@ void WorldSession::HandleGuildQueryMemberRecipes(WorldPackets::Guild::GuildQuery
 void WorldSession::HandleGuildQueryMembersForRecipe(WorldPackets::Guild::GuildQueryMembersForRecipe& packet)
 {
     Guild* guild = sGuildMgr->GetGuildByGuid(packet.GuildGUID);
-    if (!guild || !guild->GetMember(_player->GetGUID()))
+    if (!guild || !guild->IsMember(_player->GetGUID()))
         return;
 
     GuildMemberSet members = CollectGuildMembers(guild);
@@ -837,9 +839,11 @@ void WorldSession::HandleGuildQueryMembersForRecipe(WorldPackets::Guild::GuildQu
     uint32 const skillLineId = packet.SkillLineID;
     uint32 const recipeSpellId = packet.RecipeSpellID;
 
+    std::string const memberQuery = Trinity::StringFormat("SELECT guid FROM character_spell WHERE spell = {} AND guid IN ({})",
+        recipeSpellId, members.LowGuidList);
+
     GetQueryProcessor().AddCallback(
-        CharacterDatabase.AsyncQuery(Trinity::StringFormat("SELECT guid FROM character_spell WHERE spell = {} AND guid IN ({})",
-            recipeSpellId, members.LowGuidList))
+        CharacterDatabase.AsyncQuery(memberQuery.c_str())
         .WithCallback([this, skillLineId, recipeSpellId, memberGuids = std::move(members.Guids)](QueryResult result)
     {
         std::unordered_set<ObjectGuid> found;
