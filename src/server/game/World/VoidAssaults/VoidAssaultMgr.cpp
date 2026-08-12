@@ -23,12 +23,14 @@
 #include "Log.h"
 #include "Map.h"
 #include "MapManager.h"
+#include "Player.h"
 #include "Position.h"
 #include "QuaternionData.h"
 #include "TemporarySummon.h"
 #include "Timer.h"
 #include "WorldStateMgr.h"
 #include <algorithm>
+#include <limits>
 
 VoidAssaultMgr::VoidAssaultMgr() : _updateAccumulator(0) { }
 VoidAssaultMgr::~VoidAssaultMgr() = default;
@@ -187,10 +189,12 @@ void VoidAssaultMgr::Update(uint32 diff)
 
 void VoidAssaultMgr::ActivateAssault(VoidAssaultState& state, VoidAssaultTemplate const& tmpl, time_t now)
 {
-    state.Active      = true;
-    state.EndTime     = now + static_cast<time_t>(tmpl.DurationSeconds);
-    state.Meter       = 0;
-    state.StrikesDone = 0;
+    state.Active              = true;
+    state.EndTime             = now + static_cast<time_t>(tmpl.DurationSeconds);
+    state.Meter               = 0;
+    state.StrikesDone         = 0;
+    state.IncursionPhase      = false;
+    state.IncursionScenarioId = 0;
 
     // Advance rotation phase (mirrors the 3-phase 5207/5208 cycle observed on the wire).
     state.Phase = static_cast<uint8>((state.Phase + 1) % 3);
@@ -217,10 +221,12 @@ void VoidAssaultMgr::ActivateAssault(VoidAssaultState& state, VoidAssaultTemplat
 
 void VoidAssaultMgr::DeactivateAssault(VoidAssaultState& state, VoidAssaultTemplate const& tmpl, time_t now)
 {
-    state.Active      = false;
-    state.NextStart   = now + static_cast<time_t>(tmpl.PeriodSeconds);
-    state.Meter       = 0;
-    state.StrikesDone = 0;
+    state.Active              = false;
+    state.NextStart           = now + static_cast<time_t>(tmpl.PeriodSeconds);
+    state.Meter               = 0;
+    state.StrikesDone         = 0;
+    state.IncursionPhase      = false;
+    state.IncursionScenarioId = 0;
 
     if (tmpl.CountdownWorldStateId)
         WorldStateMgr::SetValue(tmpl.CountdownWorldStateId, 0, false, nullptr);
@@ -333,8 +339,9 @@ void VoidAssaultMgr::AddAssaultProgress(uint32 templateId, int32 amount)
 
     TC_LOG_DEBUG("misc", "VoidAssaultMgr: assault {} meter -> {} / {}", tmpl.Id, state.Meter, tmpl.MeterCap);
 
-    if (state.Meter >= tmpl.MeterCap)
-        OnAssaultComplete(tmpl, state, GameTime::GetGameTime());
+    // Cap reached -> flip to the climactic Void Incursion phase (once).
+    if (state.Meter >= tmpl.MeterCap && !state.IncursionPhase)
+        FlipToIncursion(tmpl, state);
 }
 
 void VoidAssaultMgr::OnVoidStrikeCompleted(uint32 templateId)
@@ -358,26 +365,143 @@ void VoidAssaultMgr::OnVoidStrikeCompleted(uint32 templateId)
     ++state.StrikesDone;
     TC_LOG_DEBUG("misc", "VoidAssaultMgr: assault {} strikes {}/{}", tmpl.Id, state.StrikesDone, tmpl.StrikesPerIncursion);
 
-    // Enough Strikes -> flip the meter to cap to trigger the Incursion completion.
+    // Enough Strikes -> flip the meter to cap to trigger the Incursion phase.
     if (state.StrikesDone >= tmpl.StrikesPerIncursion && tmpl.MeterCap > 0)
         AddAssaultProgress(templateId, tmpl.MeterCap);
 }
 
-void VoidAssaultMgr::OnAssaultComplete(VoidAssaultTemplate const& tmpl, VoidAssaultState& state, time_t now)
+// Player-facing Void Strike entry point. Resolves the primary meter-driven assault
+// and drives one strike's worth of progress. Today invoked by the temporary
+// .voidassault debug command; at integration by the Void Strike quest turn-in.
+void VoidAssaultMgr::OnVoidStrikeCompleted(Player* player)
 {
-    TC_LOG_DEBUG("misc", "VoidAssaultMgr: assault {} meter reached cap ({}); running Incursion completion",
-        tmpl.Id, tmpl.MeterCap);
+    if (!IsEnabled())
+        return;
 
-    // TODO(CAPTURE-BLOCKED): grant the Incursion completion reward tail. The
-    // economy ids are DB2-confirmed (Field Accolade 3405, Voidlight Marl 3316)
-    // but the per-completion AMOUNTS + Great-Vault "World Content" credit packet
-    // are not captured (SCENARIO_STATE was n=0 in every sniff on hand). The
-    // reward-grant seam is OnWindowExpired(); left as a no-op so the completion
-    // path is realm-safe until the reward packet is captured.
+    uint32 const id = GetPrimaryAssaultId();
+    if (!id)
+        return;
 
-    // End the active window immediately on cap and reschedule the next one. This
-    // resets the meter (WS 29616 -> 0) and the countdown via DeactivateAssault.
-    DeactivateAssault(state, tmpl, now);
+    // player is reserved for the (future) per-player "Field Accolade per strike"
+    // credit named in the Void Assaults POI reward text; the zone meter is shared.
+    (void)player;
+
+    OnVoidStrikeCompleted(id);
+}
+
+// Meter cap reached -> flip the active window into its climactic Void Incursion
+// phase (Scenario 3173/3174 handoff). Mirrors how ZoneEventMgr/Stormarion relates
+// its assault meter to a Scenario: the window stays active and the phase is
+// recorded + broadcast. The real open-world InstanceScenario spin-up +
+// SMSG_SCENARIO_STATE transitions are CAPTURE-BLOCKED (n=0 in every sniff on hand),
+// so we do NOT fabricate a scenario start here -- that is a documented TODO.
+void VoidAssaultMgr::FlipToIncursion(VoidAssaultTemplate const& tmpl, VoidAssaultState& state)
+{
+    state.IncursionPhase = true;
+    // A/H variants share the same open-world climax; default to the A variant
+    // (3173). The A/H selection wire is not captured.
+    state.IncursionScenarioId = VoidAssault::SCENARIO_VOID_INCURSION_A;
+
+    // Signal the climactic phase to clients via the rotation worldstate (5207/5208
+    // family) when this window carries one (i.e. it is not the fill-meter itself).
+    if (tmpl.StateWorldStateId && tmpl.MeterCap <= 0)
+        WorldStateMgr::SetValue(tmpl.StateWorldStateId, state.Phase, false, nullptr);
+
+    TC_LOG_INFO("misc", "VoidAssaultMgr: assault {} meter capped -> climactic Void Incursion phase "
+        "(Scenario {}); scenario spin-up + SCENARIO_STATE handoff CAPTURE-BLOCKED",
+        tmpl.Id, state.IncursionScenarioId);
+
+    // TODO(CAPTURE-BLOCKED): start the open-world Void Incursion scenario
+    // (3173/3174) via the ScenarioMgr path and drive its SMSG_SCENARIO_STATE
+    // transitions. Requires the incursion scenario wire (SCENARIO_STATE was n=0 in
+    // every capture on hand; blueprint §7 ask #3). At integration this is the seam
+    // that hands off to ZoneEventMgr's scenario spine.
+}
+
+// Void Incursion completion. Grants the completion reward tail via the stock
+// currency path, advances the escalation/rotation state, and closes the window.
+// Today invoked by the temporary .voidassault debug command; at integration by the
+// real Void Incursion completion.
+void VoidAssaultMgr::CompleteAssault(Player* player)
+{
+    if (!IsEnabled() || !player)
+        return;
+
+    uint32 const id = GetPrimaryAssaultId();
+    if (!id)
+        return;
+
+    auto stateItr = _states.find(id);
+    auto tmplItr = _templates.find(id);
+    if (stateItr == _states.end() || tmplItr == _templates.end())
+        return;
+    VoidAssaultState& state = stateItr->second;
+    VoidAssaultTemplate const& tmpl = tmplItr->second;
+
+    // --- Reward tail (LIVE mechanism, PLACEHOLDER amounts) ----------------------
+    // Grant the Field Accolade (3405) named in the Void Assaults POI reward text
+    // via the stock ModifyCurrency path (CurrencyGainSource::Script; ModifyCurrency
+    // clamps to the DB2 cap). Voidlight Marl (3316) is wired as the documented
+    // secondary cosmetic/renown grant. Both ids are DB2-confirmed; the COUNTS are
+    // PLACEHOLDER (TODO CAPTURE-BLOCKED) -- see VoidAssault namespace.
+    player->ModifyCurrency(VoidAssault::CURRENCY_FIELD_ACCOLADE,
+        int32(VoidAssault::PLACEHOLDER_FIELD_ACCOLADE_COUNT), CurrencyGainSource::Script);
+    player->ModifyCurrency(VoidAssault::CURRENCY_VOIDLIGHT_MARL,
+        int32(VoidAssault::PLACEHOLDER_VOIDLIGHT_MARL_COUNT), CurrencyGainSource::Script);
+
+    // TODO(CAPTURE-BLOCKED): Great Vault "World Content" credit. Needs
+    // WeeklyRewardsMgr (feature/mythic-plus), absent this baseline -> documented
+    // no-op (blueprint §4 Phase 5).
+
+    // Advance the persistent escalation counter (one more Incursion completed).
+    ++state.EscalationCount;
+
+    TC_LOG_INFO("misc", "VoidAssaultMgr: assault {} Incursion completed by {} (escalation #{}, incursionPhase was {}); "
+        "granted Field Accolade x{} + Voidlight Marl x{} [PLACEHOLDER amounts]",
+        tmpl.Id, player->GetName(), state.EscalationCount, state.IncursionPhase,
+        VoidAssault::PLACEHOLDER_FIELD_ACCOLADE_COUNT, VoidAssault::PLACEHOLDER_VOIDLIGHT_MARL_COUNT);
+
+    // Close the window: resets meter (WS 29616 -> 0), clears the incursion phase and
+    // reschedules the next activation (which advances the rotation phase / portal
+    // world on the next ActivateAssault).
+    DeactivateAssault(state, tmpl, GameTime::GetGameTime());
+}
+
+// DEBUG/DEV stand-in for the CAPTURE-BLOCKED portal-world activation wire.
+void VoidAssaultMgr::DebugForceActivatePrimary()
+{
+    if (!IsEnabled())
+        return;
+
+    uint32 const id = GetPrimaryAssaultId();
+    if (!id)
+        return;
+
+    auto stateItr = _states.find(id);
+    auto tmplItr = _templates.find(id);
+    if (stateItr == _states.end() || tmplItr == _templates.end())
+        return;
+
+    if (!stateItr->second.Active)
+        ActivateAssault(stateItr->second, tmplItr->second, GameTime::GetGameTime());
+}
+
+// Resolve the primary meter-driven assault: the lowest Id whose window carries a
+// fill-meter (MeterCap>0). That is the Void Strike -> Incursion window the core
+// loop feeds. 0 if none configured.
+uint32 VoidAssaultMgr::GetPrimaryAssaultId() const
+{
+    uint32 best = 0;
+    uint32 bestId = std::numeric_limits<uint32>::max();
+    for (auto const& [id, tmpl] : _templates)
+    {
+        if (tmpl.MeterCap > 0 && id < bestId)
+        {
+            bestId = id;
+            best = id;
+        }
+    }
+    return best;
 }
 
 // ---------------------------------------------------------------------------

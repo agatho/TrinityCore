@@ -55,6 +55,8 @@
 #include <unordered_map>
 #include <vector>
 
+class Player;
+
 // Classification of a Void invasion, ordered by evidence strength / buildability.
 enum class VoidAssaultType : uint8
 {
@@ -111,6 +113,29 @@ namespace VoidAssault
                                                           // (HP curve 90579, DMG curve 90578, lvl 80-90).
                                                           // Heroic World Tier scaling row is CAPTURE-BLOCKED:
                                                           // no DB2 row is NAMED "Heroic World Tier" @68887.
+
+    // --- Void Incursion climax scenario (DB2) ---
+    // The communal scenario the assault flips to when its fill-meter caps. A/H
+    // variants; the open-world InstanceScenario spin-up + SMSG_SCENARIO_STATE
+    // handoff is CAPTURE-BLOCKED (SCENARIO_STATE was n=0 in every sniff on hand),
+    // so the flip records + broadcasts the climactic phase and leaves the real
+    // scenario start a documented TODO -- mirroring how ZoneEventMgr/Stormarion
+    // relates its meter to Scenario 3021.
+    constexpr uint32 SCENARIO_VOID_INCURSION_A = 3173; // [DB2 Scenario] "Void Incursion"
+    constexpr uint32 SCENARIO_VOID_INCURSION_B = 3174; // [DB2 Scenario] "Void Incursion"
+
+    // =====================================================================
+    // TODO(CAPTURE-BLOCKED) -- PROVISIONAL PLACEHOLDER completion reward amounts.
+    // The grant MECHANISM (Player::ModifyCurrency onto the DB2-confirmed ids
+    // 3405 Field Accolade / 3316 Voidlight Marl, CurrencyGainSource::Script) is
+    // LIVE and correct. The per-completion COUNTS below are NOT captured -- no
+    // Void Incursion completion reward packet was ever sniffed (SCENARIO_STATE
+    // was n=0 in every capture on hand; blueprint §2/§7 ask #2 & #3). They exist
+    // ONLY so the reward tail compiles and runs end-to-end on a disposable test
+    // DB. DO NOT treat them as correct -- replace once a completion capture lands.
+    // =====================================================================
+    constexpr uint32 PLACEHOLDER_FIELD_ACCOLADE_COUNT = 35; // TODO(CAPTURE-BLOCKED) per POI text "each strike disrupted"
+    constexpr uint32 PLACEHOLDER_VOIDLIGHT_MARL_COUNT = 5;  // TODO(CAPTURE-BLOCKED) secondary cosmetic/renown grant
 
     // --- Void Assault open-world markers (DB2) ---
     constexpr uint32 AREAPOI_VOID_ASSAULT_A = 8697; // [DB2 AreaPOI] "Void Assaults", PoiData 94385, cond 153246
@@ -190,6 +215,18 @@ struct VoidAssaultState
     bool            HeroicTier  = false; // Heroic World Tier active for this window
     bool            Active      = false;
 
+    // Climactic phase: set when the meter caps and the assault flips to its Void
+    // Incursion scenario. Cleared on window reset. IncursionScenarioId records the
+    // handoff target (3173/3174) for the (CAPTURE-BLOCKED) scenario spin-up.
+    bool            IncursionPhase      = false;
+    uint32          IncursionScenarioId = 0;
+
+    // Persistent escalation counter: how many Void Incursions this window has
+    // completed. Advanced by CompleteAssault(); the weekly rotation phase advances
+    // on each (re)activation. Kept in the manager (in-memory) per the skeleton;
+    // any future DB persistence is gated behind IsEnabled().
+    uint32          EscalationCount = 0;
+
     // Objects summoned by the spawn mechanism this window (despawned on end).
     std::vector<ObjectGuid> SpawnedCreatures;
     std::vector<ObjectGuid> SpawnedGameObjects;
@@ -215,12 +252,48 @@ public:
     // Called every World::Update tick; throttled internally to VOID_ASSAULT_UPDATE_INTERVAL.
     void Update(uint32 diff);
 
+    // True only when void_assault_template is seeded (LoadFromDB populated at least
+    // one template). The shared realm has no such table, so this is false there and
+    // every player-facing / reward path below is a hard no-op. All DB access is
+    // gated on this.
+    bool IsEnabled() const { return !_templates.empty(); }
+
     // --- accessors (used by scripts / debug commands) ---
     VoidAssaultTemplate const* GetTemplate(uint32 id) const;
     bool IsAssaultActive(uint32 id) const;
     int32 GetMeter(uint32 id) const;
     VoidPortalWorld GetActiveWorld(uint32 id) const;
     bool IsHeroicWorldTier(uint32 id) const;
+
+    // Resolve the primary meter-driven assault (lowest Id with MeterCap>0 -- the
+    // Void Strike -> Incursion window). 0 if none configured. Used to drive the
+    // core loop from the Void Strike wire / temporary debug command without a
+    // per-call template id.
+    uint32 GetPrimaryAssaultId() const;
+
+    // --- core-loop entry points (player-facing) ---------------------------------
+    // Today these are driven by the temporary .voidassault debug command; at
+    // integration they are driven by the Void Strike quest turn-in and the Void
+    // Incursion completion, folded onto ZoneEventMgr. Both resolve the primary
+    // assault internally and are hard no-ops unless IsEnabled().
+
+    // One completed Void Strike: advance the primary assault meter by the +500 step
+    // (WS 29616); on reaching the 1,000,000 cap, flip the assault into its climactic
+    // Void Incursion phase (Scenario 3173/3174 handoff). player is used for
+    // messaging / (future) per-player strike credit.
+    void OnVoidStrikeCompleted(Player* player);
+
+    // Void Incursion completion: grant the completion reward (Field Accolade 3405,
+    // + Voidlight Marl 3316 secondary) via the stock ModifyCurrency path, advance
+    // the escalation/rotation state, and close out the active window.
+    void CompleteAssault(Player* player);
+
+    // DEBUG/DEV ONLY -- TEMPORARY stand-in for the CAPTURE-BLOCKED portal-world
+    // activation wire. Force the primary assault active immediately, off its weekly
+    // rotation timer, so the meter->scenario->reward loop is exercisable in-game.
+    // Called only by the temporary .voidassault debug command; remove when the real
+    // activation wire lands.
+    void DebugForceActivatePrimary();
 
     // --- escalation-meter mechanism (WS 29616) ---
     // Advance the assault meter of window `templateId` by `amount` (defaults to
@@ -245,10 +318,15 @@ private:
     // Portal-world rotation (VoidEscalation): pick Naigtal/Val for this window.
     void RotatePortalWorld(VoidAssaultState& state, VoidAssaultTemplate const& tmpl);
 
+    // Meter-cap handler: flip the active window into its climactic Void Incursion
+    // phase (Scenario 3173/3174 handoff). The window stays active until the
+    // Incursion is completed (CompleteAssault). Real open-world InstanceScenario
+    // spin-up is CAPTURE-BLOCKED; this records the phase + broadcasts it.
+    void FlipToIncursion(VoidAssaultTemplate const& tmpl, VoidAssaultState& state);
+
     // Per-window start/end content hooks. Spawn/despawn MECHANISM is live (reads
     // `void_assault_spawn`; no-op when empty). Reward tail is CAPTURE-BLOCKED.
     void OnAssaultStart(VoidAssaultTemplate const& tmpl, VoidAssaultState& state);
-    void OnAssaultComplete(VoidAssaultTemplate const& tmpl, VoidAssaultState& state, time_t now);
     void OnWindowExpired(VoidAssaultTemplate const& tmpl, VoidAssaultState& state);
 
     // Spawn mechanism (reads `void_assault_spawn`).
