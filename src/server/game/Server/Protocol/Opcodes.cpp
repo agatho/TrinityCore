@@ -449,7 +449,7 @@ void OpcodeTable::InitializeClientOpcodes()
     DEFINE_HANDLER(CMSG_EMOTE,                                              STATUS_LOGGEDIN,  PROCESS_INPLACE,      &WorldSession::HandleEmoteOpcode);
     DEFINE_HANDLER(CMSG_ENABLE_NAGLE,                                       STATUS_NEVER,     PROCESS_INPLACE,      &WorldSession::Handle_EarlyProccess);
     DEFINE_HANDLER(CMSG_ENABLE_TAXI_NODE,                                   STATUS_LOGGEDIN,  PROCESS_THREADSAFE,   &WorldSession::HandleEnableTaxiNodeOpcode);
-    DEFINE_HANDLER(CMSG_ENCOUNTER_JOURNAL_START_ARATHI_RPE,                 STATUS_UNHANDLED, PROCESS_INPLACE,      &WorldSession::Handle_NULL);
+    DEFINE_HANDLER(CMSG_ENCOUNTER_JOURNAL_START_ARATHI_RPE,                 STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleEncounterJournalStartArathiRpe);
     DEFINE_HANDLER(CMSG_ENGINE_SURVEY,                                      STATUS_UNHANDLED, PROCESS_INPLACE,      &WorldSession::Handle_NULL);
     DEFINE_HANDLER(CMSG_ENTER_ENCRYPTED_MODE_ACK,                           STATUS_NEVER,     PROCESS_INPLACE,      &WorldSession::Handle_EarlyProccess);
     DEFINE_HANDLER(CMSG_ENUM_CHARACTERS,                                    STATUS_AUTHED,    PROCESS_THREADUNSAFE, &WorldSession::HandleCharEnumOpcode);
