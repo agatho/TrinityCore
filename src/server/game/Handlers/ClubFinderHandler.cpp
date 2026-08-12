@@ -308,6 +308,13 @@ void WorldSession::HandleClubFinderRequestClubsList(WorldPackets::ClubFinder::Cl
     ClubFinderMgr::SearchCriteria criteria;
     criteria.SearchString = request.SearchString;
     criteria.Type = request.Type;
+
+    // CF-7: the searcher's faction drives cross-faction search visibility - an opposite-faction posting
+    // is hidden from search unless its guild advertises cross-faction. Apply/accept remain ungated;
+    // this is a search-visibility filter only.
+    if (Player* player = GetPlayer())
+        criteria.SearcherTeamId = int8(player->GetTeamId());
+
     ApplySearchFilters(request.Filters, criteria);
 
     WorldPackets::ClubFinder::ClubFinderReturnRecruitingClubs response;

@@ -224,6 +224,12 @@ public:
         uint32 LocaleFlags  = 0;    // filter 6: bitmask of (1 << WowLocale)
         uint32 RoleFlags    = 0;    // filter 4: recruited class-role bits (Tank / Healer / Damage)
         uint8 Type          = CLUB_FINDER_REQUEST_TYPE_ALL;
+
+        // CF-7 cross-faction search visibility: the searching player's faction, as a TeamId
+        // (TEAM_ALLIANCE / TEAM_HORDE). -1 means "no faction filter" (a console/GM search that is not
+        // tied to a character). A posting whose guild is the opposite faction is hidden from the
+        // search UNLESS the posting advertises cross-faction; same-faction postings are always shown.
+        int8 SearcherTeamId = -1;
     };
 
     std::vector<ClubFinderPosting const*> Search(SearchCriteria const& criteria) const;

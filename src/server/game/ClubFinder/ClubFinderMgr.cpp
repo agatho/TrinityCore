@@ -16,11 +16,15 @@
  */
 
 #include "ClubFinderMgr.h"
+#include "CharacterCache.h"
 #include "DatabaseEnv.h"
 #include "DB2Stores.h"
 #include "Common.h"
 #include "GameTime.h"
+#include "Guild.h"
+#include "GuildMgr.h"
 #include "Log.h"
+#include "Player.h"
 #include "Timer.h"
 #include <algorithm>
 #include <cctype>
@@ -340,6 +344,23 @@ bool ClubFinderMgr::RemovePostingDisplayFlags(uint32 postingId, uint32 flags)
     return true;
 }
 
+// CF-7: the faction a posting recruits for is its guild's own faction, and a guild's faction is that
+// of its leader. Resolved from the leader's cached race so it works whether or not the leader is
+// online. Returns TEAM_NEUTRAL when the guild or leader cannot be resolved, which the search treats
+// as "no faction constraint" (permissive) rather than hiding a posting on missing data.
+static TeamId GetPostingTeamId(ClubFinderPosting const& posting)
+{
+    Guild const* guild = sGuildMgr->GetGuildById(posting.ClubId);
+    if (!guild)
+        return TEAM_NEUTRAL;
+
+    CharacterCacheEntry const* leader = sCharacterCache->GetCharacterCacheByGuid(guild->GetLeaderGUID());
+    if (!leader)
+        return TEAM_NEUTRAL;
+
+    return Player::TeamIdForRace(leader->Race);
+}
+
 std::vector<ClubFinderPosting const*> ClubFinderMgr::Search(SearchCriteria const& criteria) const
 {
     std::string needle = criteria.SearchString;
@@ -355,6 +376,19 @@ std::vector<ClubFinderPosting const*> ClubFinderMgr::Search(SearchCriteria const
         // the two cannot disagree about which postings are hidden.
         if (!IsPostingVisible(posting))
             continue;
+
+        // CF-7 cross-faction search visibility: a posting whose guild is the OPPOSITE faction from the
+        // searching player is hidden here, UNLESS the guild advertises cross-faction (posting.CrossFaction),
+        // in which case it stays visible to both factions. Same-faction postings are always visible, and a
+        // posting whose faction cannot be resolved (TEAM_NEUTRAL) is left visible. This is deliberately a
+        // search-only filter: the direct posting-id lookup (BuildClubCacheData) has no searcher and is not
+        // faction-gated, and apply/accept impose no faction gate at all - a cross-faction join is allowed.
+        if (criteria.SearcherTeamId != -1 && !posting.CrossFaction)
+        {
+            TeamId const postingTeam = GetPostingTeamId(posting);
+            if (postingTeam != TEAM_NEUTRAL && postingTeam != TeamId(criteria.SearcherTeamId))
+                continue;
+        }
 
         // The posting only advertises to players who meet its own item level requirement.
         if (criteria.ItemLevel && posting.ItemLevelRequirement > criteria.ItemLevel)
