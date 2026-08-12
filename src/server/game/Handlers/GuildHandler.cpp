@@ -669,6 +669,20 @@ namespace
         return index;
     }
 
+    // A recipe browser means professions. Without this filter the guild-wide response would carry a
+    // 600-byte blob for EVERY skill line any member has an ability in - class skills, weapon skills,
+    // languages and so on - because SkillLineAbility covers all of them. That is not wrong data, but it
+    // bloats one packet by tens of kilobytes for something the recipe UI never shows.
+    bool IsRecipeSkillLine(uint32 skillLineId)
+    {
+        SkillLineEntry const* skillLine = sSkillLineStore.LookupEntry(skillLineId);
+        if (!skillLine)
+            return false;
+
+        return skillLine->CategoryID == SKILL_CATEGORY_PROFESSION
+            || skillLine->CategoryID == SKILL_CATEGORY_SECONDARY;
+    }
+
     void SetRecipeBit(WorldPackets::Guild::GuildRecipeBlob& blob, uint16 uniqueBit)
     {
         // HeaderCount is emitted as 0 (bytes 0-1 stay zero), so the bit array starts at offset 2.
@@ -735,7 +749,8 @@ void WorldSession::HandleGuildQueryRecipes(WorldPackets::Guild::GuildQueryRecipe
                 return;
 
             for (SkillLineAbilityEntry const* ability : itr->second)
-                SetRecipeBit(blobsBySkillLine[ability->SkillLine], ability->UniqueBit);
+                if (IsRecipeSkillLine(ability->SkillLine))
+                    SetRecipeBit(blobsBySkillLine[ability->SkillLine], ability->UniqueBit);
         };
 
         if (result)
