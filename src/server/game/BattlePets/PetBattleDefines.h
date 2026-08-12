@@ -33,6 +33,7 @@ static constexpr uint32 PET_BATTLE_MAX_ROUND_TIME = 30;       // seconds per tur
 static constexpr uint32 PET_BATTLE_MAX_GAME_LENGTH = 1800;    // 30 minutes total
 static constexpr uint32 PET_BATTLE_PVP_PROPOSAL_TIMEOUT = 60000; // 60 seconds to accept PvP proposal
 static constexpr uint32 PET_BATTLE_TRAP_ABILITY_ID = 427;     // "Trap" ability used for capture
+static constexpr uint16 PET_BATTLE_PVP_NORMALIZED_LEVEL = 25; // PvP boosts every pet to effective level 25
 static constexpr uint32 MAX_PET_BATTLE_AURAS = 10;            // max auras on a single pet
 static constexpr uint32 MAX_PET_BATTLE_ENVIRONMENTS = 3;      // Pad0(0), Pad1(1), Weather(2)
 static constexpr uint32 PBOID_ENVIRONMENT_BASE = MAX_PET_BATTLE_PLAYERS * MAX_PET_BATTLE_TEAM_SIZE; // PBOID 6 = environment slot 0
@@ -218,25 +219,29 @@ enum PetBattleAbilityEffectAction : uint16
     PET_BATTLE_EFFECT_ACTION_REMOVE_AURA        = 16,
     PET_BATTLE_EFFECT_ACTION_MULTI_TURN_BEGIN   = 17,
     PET_BATTLE_EFFECT_ACTION_MULTI_TURN_END     = 18,
-    PET_BATTLE_EFFECT_ACTION_COUNT              = 19,
+    // Sentinel for EffectProperties that the classifier could not resolve and for unmapped
+    // PropsIDs. Routed to the ProcessEffect default branch (skip + log) rather than silently
+    // dealing damage, so an unrecognized effect can never fabricate a damage number.
+    PET_BATTLE_EFFECT_ACTION_UNKNOWN            = 19,
+    PET_BATTLE_EFFECT_ACTION_COUNT              = 20,
 };
 
 // Type effectiveness matrix [attacker type][defender type]
-// 1.0 = normal, 1.5 = strong (super effective), 0.66 = weak (not very effective)
+// 1.0 = normal, 1.5 = strong (super effective), 0.6667 = weak (not very effective, retail 2/3)
 // Values from BattlePetTypeDamageMod.txt GameTable
 static constexpr float PET_TYPE_EFFECTIVENESS[PET_TYPE_COUNT][PET_TYPE_COUNT] =
 {
     //                        Hum    Drk    Fly    Und    Cri    Mag    Ele    Bst    Aqu    Mec
-    /* Humanoid    */ {  1.0f,  1.5f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 0.66f, 1.0f,  1.0f },
-    /* Dragonkin   */ {  1.0f,  1.0f, 1.0f, 0.66f,1.0f, 1.5f, 1.0f, 1.0f,  1.0f,  1.0f },
-    /* Flying      */ {  1.0f, 0.66f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f,  1.5f,  1.0f },
-    /* Undead      */ {  1.5f,  1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 0.66f,  1.0f },
-    /* Critter     */ { 0.66f,  1.0f, 1.0f, 1.5f, 1.0f, 1.0f, 1.0f, 1.0f,  1.0f,  1.0f },
-    /* Magic       */ {  1.0f,  1.0f, 1.5f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f,  1.0f, 0.66f },
-    /* Elemental   */ {  1.0f,  1.0f, 1.0f, 1.0f, 0.66f,1.0f, 1.0f, 1.0f,  1.0f,  1.5f },
-    /* Beast       */ {  1.0f,  1.0f, 0.66f,1.0f, 1.5f, 1.0f, 1.0f, 1.0f,  1.0f,  1.0f },
-    /* Aquatic     */ {  1.0f,  1.0f, 1.0f, 1.0f, 1.0f, 0.66f,1.5f, 1.0f,  1.0f,  1.0f },
-    /* Mechanical  */ {  1.0f,  1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 0.66f,1.5f,  1.0f,  1.0f },
+    /* Humanoid    */ {  1.0f,  1.5f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 0.6667f, 1.0f,  1.0f },
+    /* Dragonkin   */ {  1.0f,  1.0f, 1.0f, 0.6667f,1.0f, 1.5f, 1.0f, 1.0f,  1.0f,  1.0f },
+    /* Flying      */ {  1.0f, 0.6667f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f,  1.5f,  1.0f },
+    /* Undead      */ {  1.5f,  1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 0.6667f,  1.0f },
+    /* Critter     */ { 0.6667f,  1.0f, 1.0f, 1.5f, 1.0f, 1.0f, 1.0f, 1.0f,  1.0f,  1.0f },
+    /* Magic       */ {  1.0f,  1.0f, 1.5f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f,  1.0f, 0.6667f },
+    /* Elemental   */ {  1.0f,  1.0f, 1.0f, 1.0f, 0.6667f,1.0f, 1.0f, 1.0f,  1.0f,  1.5f },
+    /* Beast       */ {  1.0f,  1.0f, 0.6667f,1.0f, 1.5f, 1.0f, 1.0f, 1.0f,  1.0f,  1.0f },
+    /* Aquatic     */ {  1.0f,  1.0f, 1.0f, 1.0f, 1.0f, 0.6667f,1.5f, 1.0f,  1.0f,  1.0f },
+    /* Mechanical  */ {  1.0f,  1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 0.6667f,1.5f,  1.0f,  1.0f },
 };
 
 inline float GetTypeEffectiveness(PetBattlePetType attackerType, PetBattlePetType defenderType)

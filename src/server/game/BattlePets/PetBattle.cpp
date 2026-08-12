@@ -28,6 +28,7 @@
 #include "PetBattleMgr.h"
 #include "Player.h"
 #include "Random.h"
+#include "Util.h"
 #include "WorldSession.h"
 #include <algorithm>
 
@@ -317,6 +318,36 @@ void PetBattle::InitWildBattle(Player* player, ObjectGuid wildCreatureGUID)
     _state = PET_BATTLE_STATE_WAITING_PRE_BATTLE;
 }
 
+// Retail PvP normalizes every pet to effective level 25 for the duration of the match
+// (sub-25 pets are boosted), so outcomes depend on species/quality/breed/ability choices
+// rather than grind level. This recomputes level-scaled stats on the battle-copy pet ONLY
+// (PetBattlePetData is never written back to the journal), using the same stat formula as
+// BattlePet::CalculateStats / CalculateWildPetStats. Base stats (breed+species) and quality
+// were already populated by LoadPlayerTeam, so only the level scaling changes.
+static void NormalizePetToBattleLevel(PetBattlePetData& pet, uint16 level)
+{
+    float qualityMultiplier = 1.0f;
+    for (BattlePetBreedQualityEntry const* entry : sBattlePetBreedQualityStore)
+        if (entry->QualityEnum == pet.Quality)
+        {
+            qualityMultiplier = entry->StateMultiplier;
+            break;
+        }
+
+    pet.Level = level;
+
+    float health = float(pet.BaseStamina) * qualityMultiplier * level;
+    float power  = float(pet.BasePower)   * qualityMultiplier * level;
+    float speed  = float(pet.BaseSpeed)   * qualityMultiplier * level;
+
+    pet.MaxHealth = int32(round(health / 20.0f) + 100);
+    pet.Health = pet.MaxHealth; // PvP teams enter at full health
+    pet.Power = std::max(1, int32(round(power / 100.0f)));
+    pet.Speed = std::max(1, int32(round(speed / 100.0f)));
+    pet.EffectivePower = pet.Power;
+    pet.EffectiveSpeed = pet.Speed;
+}
+
 void PetBattle::InitPvPBattle(Player* player1, Player* player2)
 {
     _battleType = PET_BATTLE_TYPE_PVP;
@@ -324,6 +355,11 @@ void PetBattle::InitPvPBattle(Player* player1, Player* player2)
 
     LoadPlayerTeam(player1, _teams[PET_BATTLE_TEAM_1]);
     LoadPlayerTeam(player2, _teams[PET_BATTLE_TEAM_2]);
+
+    // Normalize both teams to effective level 25 for this battle instance only.
+    for (uint8 t = 0; t < MAX_PET_BATTLE_PLAYERS; ++t)
+        for (uint8 p = 0; p < _teams[t].PetCount; ++p)
+            NormalizePetToBattleLevel(_teams[t].Pets[p], PET_BATTLE_PVP_NORMALIZED_LEVEL);
 
     // Validate both teams have at least 1 alive pet
     if (!_teams[PET_BATTLE_TEAM_1].HasAlivePets() || !_teams[PET_BATTLE_TEAM_2].HasAlivePets())
@@ -494,9 +530,14 @@ void PetBattle::ProcessRound()
         _teams[0].FrontPetIndex, _teams[0].Pets[_teams[0].FrontPetIndex].Health, _teams[0].Pets[_teams[0].FrontPetIndex].MaxHealth,
         _teams[1].FrontPetIndex, _teams[1].Pets[_teams[1].FrontPetIndex].Health, _teams[1].Pets[_teams[1].FrontPetIndex].MaxHealth);
 
-    // Process turns in speed order
+    // Process turns in speed order.
+    // Guard on both FINISHED and FINAL_ROUND: a trap capture (or MOVE_QUIT forfeit)
+    // ends the battle from inside ProcessTurnForTeam by calling FinishBattle, which sets
+    // _state = FINAL_ROUND (not FINISHED). Without the FINAL_ROUND check the just-captured
+    // wild pet would still take its turn (and could flip a capture WIN into a LOSS), and the
+    // end-of-round HasAlivePets block below would call FinishBattle a second time (double XP/credit).
     ProcessTurnForTeam(firstTeam);
-    if (!IsFinished())
+    if (!IsFinished() && !IsFinalRound())
         ProcessTurnForTeam(secondTeam);
 
     TC_LOG_DEBUG("server.loading", "PetBattle ProcessRound: AFTER TURNS - Team0 pet[{}] HP={}/{} Team1 pet[{}] HP={}/{} effects={}",
@@ -504,7 +545,7 @@ void PetBattle::ProcessRound()
         _teams[1].FrontPetIndex, _teams[1].Pets[_teams[1].FrontPetIndex].Health, _teams[1].Pets[_teams[1].FrontPetIndex].MaxHealth,
         _roundEffects.size());
 
-    if (IsFinished())
+    if (IsFinished() || IsFinalRound())
         return;
 
     // Tick auras and weather (DoTs, HoTs, weather periodic, expiry)
@@ -714,9 +755,13 @@ void PetBattle::ProcessTurnForTeam(uint8 teamIdx)
 
             float healthPct = wildPet.MaxHealth > 0 ? (float(wildPet.Health) / float(wildPet.MaxHealth)) * 100.0f : 100.0f;
 
+            // Trap level is never initialized on the branch (GetTrapLevel() returns 0),
+            // which drives baseChance down to 0.15 for every capture. Clamp to a minimum of
+            // 1 so the base rate matches the intended 0.20. Persisting an actual per-account
+            // trap-upgrade level (Strong/Pristine trap progression) is out of scope here.
             uint16 trapLevel = 1;
             if (Player* player = GetPlayerForTeam(teamIdx))
-                trapLevel = player->GetSession()->GetBattlePetMgr()->GetTrapLevel();
+                trapLevel = std::max<uint16>(1, player->GetSession()->GetBattlePetMgr()->GetTrapLevel());
 
             float captureChance = GetCaptureChance(trapLevel, healthPct, wildPet.Quality, _trapFailBonus);
 
@@ -833,37 +878,22 @@ void PetBattle::ApplyAbilityEffects(uint8 attackerTeam, uint8 attackerPet, uint3
     TC_LOG_DEBUG("server.loading", "PetBattle ApplyAbilityEffects: abilityID={} turns={}", abilityID, turns ? turns->size() : 0);
     if (!turns || turns->empty())
     {
-        // Fallback: apply simple damage if no DB2 turn data exists
-        PetBattlePetData& defender = _teams[defenderTeam].Pets[defenderPet];
-        if (attacker.IsAlive() && defender.IsAlive())
-        {
-            BattlePetAbilityEntry const* ability = sBattlePetAbilityStore.LookupEntry(abilityID);
-            DamageResult dmg = CalculateAbilityDamage(
-                attacker.EffectivePower, attacker.EffectivePower,
-                ability ? PetBattlePetType(ability->PetTypeEnum) : PetBattlePetType(attacker.PetType),
-                attacker, defender);
+        // No DB2 turn/effect chain for this ability. The previous fallback invented damage as
+        // CalculateAbilityDamage(EffectivePower, EffectivePower, ...) = EffectivePower^2/20, which
+        // massively over-scales (a ~200-power pet one-shots). Rather than fabricate a number we
+        // cannot source, log it and emit a benign STATUS_CHANGE so the client still shows the
+        // ability was used this turn. This is a missing-data case, not a real ability outcome.
+        TC_LOG_WARN("server.loading", "PetBattle ApplyAbilityEffects: abilityID={} has no BattlePetAbilityTurn "
+            "data; skipping effect resolution (no fabricated damage).", abilityID);
 
-            defender.Health = std::max(0, defender.Health - dmg.Damage);
-
-            PetBattleRoundEffect effect;
-            effect.AbilityEffectID = abilityID;
-            effect.EffectType = PET_BATTLE_EFFECT_SET_HEALTH;
-            effect.SourceTeam = attackerTeam;
-            effect.SourcePet = attackerPet;
-            effect.TargetTeam = defenderTeam;
-            effect.TargetPet = defenderPet;
-            effect.Param1 = defender.Health;
-            effect.Flags |= PET_BATTLE_EFFECT_FLAG_SUCCESS_CHAIN;
-            if (dmg.IsCrit)
-                effect.Flags |= PET_BATTLE_EFFECT_FLAG_CRIT;
-            if (dmg.TypeMod > 1.0f)
-                effect.Flags |= PET_BATTLE_EFFECT_FLAG_STRONG;
-            else if (dmg.TypeMod < 1.0f)
-                effect.Flags |= PET_BATTLE_EFFECT_FLAG_WEAK;
-            _roundEffects.push_back(effect);
-
-            ApplyPassiveOnDamageDealt(attackerTeam, attackerPet, defenderTeam, defenderPet, dmg.Damage);
-        }
+        PetBattleRoundEffect effect;
+        effect.AbilityEffectID = abilityID;
+        effect.EffectType = PET_BATTLE_EFFECT_STATUS_CHANGE;
+        effect.SourceTeam = attackerTeam;
+        effect.SourcePet = attackerPet;
+        effect.TargetTeam = attackerTeam;
+        effect.TargetPet = attackerPet;
+        _roundEffects.push_back(effect);
         return;
     }
 
@@ -968,11 +998,35 @@ void PetBattle::ProcessEffect(BattlePetAbilityEffectEntry const* effect, uint8 a
 
     // Determine effect action from BattlePetEffectPropertiesEntry
     uint16 effectPropsID = effect->BattlePetEffectPropertiesID;
+    BattlePetEffectPropertiesEntry const* effectProps = sBattlePetEffectPropertiesStore.LookupEntry(effectPropsID);
 
-    // The Param array from BattlePetAbilityEffectEntry provides effect-specific values
-    // Param[0] typically = base power/amount, Param[1] = accuracy%, Param[2-5] = additional modifiers
-    int16 basePower = effect->Param[0];
-    int16 accuracy = effect->Param[1];
+    // Resolve effect parameters by their DB2 ParamLabel rather than by fixed index. The
+    // BattlePetAbilityEffect Param[] slots are not positionally fixed across effects, so
+    // reading accuracy blindly from Param[1] rolled spurious misses on effects whose slot 1
+    // is actually Duration/State/etc. Match each slot's label; fall back to a legacy index
+    // only where the effect carries no labels at all.
+    auto paramByLabel = [effect, effectProps](std::initializer_list<char const*> wanted, int fallbackIndex) -> int16
+    {
+        if (effectProps)
+        {
+            for (uint8 i = 0; i < 6; ++i)
+            {
+                char const* lbl = effectProps->ParamLabel[i];
+                if (!lbl || !lbl[0])
+                    continue;
+                for (char const* w : wanted)
+                    if (StringEqualI(lbl, w))
+                        return effect->Param[i];
+            }
+        }
+        return fallbackIndex >= 0 ? effect->Param[fallbackIndex] : int16(0);
+    };
+
+    // Amount ("Points"/"Percentage"); keep the legacy Param[0] when no labels are present.
+    int16 basePower = paramByLabel({ "Points", "Percentage" }, 0);
+    // Accuracy only when an "Accuracy" label exists — NO legacy fallback. Reading Param[1]
+    // unconditionally was the source of spurious misses on non-accuracy effects.
+    int16 accuracy = paramByLabel({ "Accuracy" }, -1);
 
     // Weather accuracy modifier (Elemental passive: ignores weather)
     if (accuracy > 0 && attacker.PetType != PET_TYPE_ELEMENTAL)
@@ -1005,7 +1059,6 @@ void PetBattle::ProcessEffect(BattlePetAbilityEffectEntry const* effect, uint8 a
     // Look up the abstract action type from the DB2 PropsID mapping (built at startup)
     PetBattleAbilityEffectAction effectAction = sPetBattleMgr->GetEffectAction(effectPropsID);
 
-    BattlePetEffectPropertiesEntry const* effectProps = sBattlePetEffectPropertiesStore.LookupEntry(effectPropsID);
     TC_LOG_DEBUG("server.loading", "PetBattle ProcessEffect: propsID={} action={} basePower={} accuracy={}",
         effectPropsID, uint16(effectAction), basePower, accuracy);
 
@@ -1061,7 +1114,7 @@ void PetBattle::ProcessEffect(BattlePetAbilityEffectEntry const* effect, uint8 a
         case PET_BATTLE_EFFECT_ACTION_APPLY_AURA:
         case PET_BATTLE_EFFECT_ACTION_PERIODIC_DAMAGE:
         {
-            int8 auraDuration = static_cast<int8>(effect->Param[2]);
+            int8 auraDuration = static_cast<int8>(paramByLabel({ "Duration" }, 2));
             if (auraDuration <= 0)
                 auraDuration = 3; // Default duration
 
@@ -1210,7 +1263,7 @@ void PetBattle::ProcessEffect(BattlePetAbilityEffectEntry const* effect, uint8 a
         }
         case PET_BATTLE_EFFECT_ACTION_PERIODIC_HEAL:
         {
-            int8 auraDuration = static_cast<int8>(effect->Param[2]);
+            int8 auraDuration = static_cast<int8>(paramByLabel({ "Duration" }, 2));
             if (auraDuration <= 0)
                 auraDuration = 3;
 
@@ -1608,35 +1661,14 @@ void PetBattle::ProcessEffect(BattlePetAbilityEffectEntry const* effect, uint8 a
                 for (uint8 i = 0; i < 6; ++i)
                     if (effectProps->ParamLabel[i] && effectProps->ParamLabel[i][0] != '\0')
                         labels += Trinity::StringFormat("[{}]={} ", i, effectProps->ParamLabel[i]);
-            TC_LOG_WARN("server.loading", "PetBattle ProcessEffect: UNHANDLED propsID={} action={} basePower={} defenderAlive={} params=[{},{},{},{},{},{}] labels={}",
+            TC_LOG_WARN("server.loading", "PetBattle ProcessEffect: UNHANDLED/UNKNOWN propsID={} action={} basePower={} defenderAlive={} params=[{},{},{},{},{},{}] labels={} — skipping (no fabricated damage)",
                 effectPropsID, uint16(effectAction), basePower, defender.IsAlive(),
                 effect->Param[0], effect->Param[1], effect->Param[2], effect->Param[3], effect->Param[4], effect->Param[5],
                 labels);
-            // Unhandled effect category - treat as damage if basePower > 0
-            if (basePower > 0 && defender.IsAlive())
-            {
-                DamageResult dmg = CalculateAbilityDamage(basePower, attacker.EffectivePower, abilityType, attacker, defender);
-                defender.Health = std::max(0, defender.Health - dmg.Damage);
-
-                PetBattleRoundEffect roundEffect;
-                roundEffect.AbilityEffectID = effect->ID;
-                roundEffect.EffectType = PET_BATTLE_EFFECT_SET_HEALTH;
-                roundEffect.SourceTeam = attackerTeam;
-                roundEffect.SourcePet = attackerPet;
-                roundEffect.TargetTeam = defenderTeam;
-                roundEffect.TargetPet = defenderPet;
-                roundEffect.Param1 = defender.Health;
-                roundEffect.Flags |= PET_BATTLE_EFFECT_FLAG_SUCCESS_CHAIN;
-                if (dmg.IsCrit)
-                    roundEffect.Flags |= PET_BATTLE_EFFECT_FLAG_CRIT;
-                if (dmg.TypeMod > 1.0f)
-                    roundEffect.Flags |= PET_BATTLE_EFFECT_FLAG_STRONG;
-                else if (dmg.TypeMod < 1.0f)
-                    roundEffect.Flags |= PET_BATTLE_EFFECT_FLAG_WEAK;
-                _roundEffects.push_back(roundEffect);
-
-                ApplyPassiveOnDamageDealt(attackerTeam, attackerPet, defenderTeam, defenderPet, dmg.Damage);
-            }
+            // Deliberately skip: an effect we could not classify must NOT be silently treated
+            // as damage (the old "basePower>0 => damage" default mis-scaled unmapped effects and
+            // could deal damage for buffs/utility effects). The warning above surfaces the
+            // PropsID + labels so it can be given an explicit classification.
             break;
         }
     }
@@ -1701,8 +1733,14 @@ DamageResult PetBattle::CalculateAbilityDamage(int32 abilityPower, int32 attacke
         if (stateID == BattlePets::STATE_MOD_DAMAGE_TAKEN_PERCENT && stateValue != 0)
             rawDamage *= (1.0f + stateValue / 100.0f);
 
-    // Critical hit check (5% base chance, 1.5x multiplier)
-    if (frand(0.0f, 1.0f) < PET_BATTLE_BASE_CRIT_CHANCE)
+    // Critical hit check: 5% base plus the attacker's crit-chance state (set by
+    // abilities/auras and, for non-Elemental pets, weather) rather than a flat 5%.
+    // STATE_STAT_CRIT_CHANCE is stored as a whole-percent value. 1.5x on crit.
+    float critChance = PET_BATTLE_BASE_CRIT_CHANCE + attacker.GetState(BattlePets::STATE_STAT_CRIT_CHANCE) / 100.0f;
+    if (attacker.PetType != PET_TYPE_ELEMENTAL)
+        critChance += _environments[PET_BATTLE_WEATHER_ENV_SLOT].GetState(BattlePets::STATE_STAT_CRIT_CHANCE) / 100.0f;
+    critChance = std::clamp(critChance, 0.0f, 1.0f);
+    if (frand(0.0f, 1.0f) < critChance)
     {
         rawDamage *= PET_BATTLE_CRIT_MULTIPLIER;
         result.IsCrit = true;
@@ -2253,6 +2291,14 @@ void PetBattle::AwardExperience()
 
 void PetBattle::FinishBattle(PetBattleResult result)
 {
+    // Idempotency guard: completion effects (AwardExperience, WinPetBattle criteria,
+    // KilledMonsterCredit 65355, DEFEATBATTLEPET quest credit) must fire EXACTLY ONCE.
+    // FinishBattle can be re-entered in the same round (e.g. a trap capture calls it from
+    // ProcessTurnForTeam, then the end-of-round HasAlivePets check would call it again).
+    // Bail before mutating winner/state or awarding anything once the battle is already ending.
+    if (IsFinalRound() || IsFinished())
+        return;
+
     _state = PET_BATTLE_STATE_FINAL_ROUND;
     _finishDelayMs = 1500; // 1.5 second delay for death animation before showing result
 
@@ -2400,10 +2446,20 @@ void PetBattle::CompleteBattle()
             {
                 if (wildTeam.Pets[p].IsCaptured)
                 {
+                    // Retail capture level-reduction (warcraft.wiki.gg): a captured wild pet
+                    // joins the journal one level below capture for levels 16-20, two below for
+                    // 21-25, and unchanged at level <=15. AddPet recomputes stats from the level
+                    // passed here, so reducing the level here also corrects the journal stats.
+                    uint16 capturedLevel = wildTeam.Pets[p].Level;
+                    if (capturedLevel >= 21)
+                        capturedLevel -= 2;
+                    else if (capturedLevel >= 16)
+                        capturedLevel -= 1;
+
                     petMgr->AddPet(wildTeam.Pets[p].Species, wildTeam.Pets[p].DisplayID,
                         wildTeam.Pets[p].Breed,
                         BattlePets::BattlePetBreedQuality(wildTeam.Pets[p].Quality),
-                        wildTeam.Pets[p].Level);
+                        capturedLevel);
 
                     player->UpdateCriteria(CriteriaType::AccountObtainPetThroughBattle, wildTeam.Pets[p].Species);
                     player->UpdateCriteria(CriteriaType::PlayerObtainPetThroughBattle, wildTeam.Pets[p].Species);
@@ -2675,10 +2731,14 @@ uint8 PetBattle::GetTrapStatus(uint8 playerTeam) const
     if (wildPet.IsCaptured)
         return PET_BATTLE_TRAP_STATUS_CANT_TRAP_TWICE;
 
-    // Check species is capturable (boss pets are never capturable)
+    // Check species is capturable (boss pets are never capturable).
+    // Also require WellKnown (learnable): BattlePetMgr::AddPet early-returns for a
+    // non-WellKnown species, so without this gate a "successful" capture would fire
+    // capture credit / KillCredit 65356 while AddPet no-ops and the pet is silently lost.
     if (BattlePetSpeciesEntry const* species = sBattlePetSpeciesStore.LookupEntry(wildPet.Species))
     {
         if (!species->GetFlags().HasFlag(BattlePetSpeciesFlags::Capturable) ||
+            !species->GetFlags().HasFlag(BattlePetSpeciesFlags::WellKnown) ||
             species->GetFlags().HasFlag(BattlePetSpeciesFlags::Boss))
             return PET_BATTLE_TRAP_STATUS_CANT_TRAP_NOT_CAPTURABLE;
     }
