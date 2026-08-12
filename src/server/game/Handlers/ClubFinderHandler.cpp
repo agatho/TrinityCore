@@ -359,11 +359,12 @@ void WorldSession::HandleClubFinderRequestMembershipToClub(WorldPackets::ClubFin
         return;
     }
 
-    // Applying to your own guild is meaningless, and a guild that stopped listing or let its posting
-    // lapse is not accepting.
-    if (player->GetGuildId() == posting->ClubId
-        || !(posting->RecruitmentFlags & CLUB_FINDER_SETTING_ENABLE_LISTING)
-        || ClubFinderMgr::IsPostingExpired(*posting))
+    // Applying to your own guild is meaningless, and a posting that is not visible to search is not
+    // accepting applications either: IsPostingVisible rejects a guild that stopped listing or let its
+    // posting lapse, and - the gap this closes - also rejects a banned, delisted or pending-delete
+    // posting, so a player holding a stale clubFinderGUID cannot lodge an application against a posting
+    // moderation has removed.
+    if (player->GetGuildId() == posting->ClubId || !ClubFinderMgr::IsPostingVisible(*posting))
     {
         sendError(CLUB_FINDER_ERROR_APPLY_CLUB);
         return;
