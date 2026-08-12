@@ -20,7 +20,12 @@ CREATE TABLE IF NOT EXISTS `omnium_folio_season` (
   PRIMARY KEY (`SeasonId`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Omnium Folio seasonal schedule (Midnight S1)';
 
--- Seed row is intentionally left commented so the shared realm stays idle. A test
--- realm enables the seam by inserting:
--- INSERT INTO `omnium_folio_season` (`SeasonId`,`Enabled`,`Comment`) VALUES
---   (1, 1, 'Midnight Season 1 - Omnium Folio');
+-- Seed Midnight Season 1 as ACTIVE. This is the intended live state: only the
+-- integration session applies branch SQL (never the shared realm), so seeding it
+-- here makes the folio eligibility/mint seam engage the moment this SQL is applied
+-- to a disposable test DB. With Enabled=1, an eligible character (achievement 62606,
+-- no existing TraitSystem-48 config) is minted a folio config on login.
+DELETE FROM `omnium_folio_season` WHERE `SeasonId` = 1;
+INSERT INTO `omnium_folio_season`
+  (`SeasonId`,`Enabled`,`TraitTreeId`,`TraitSystemId`,`UnlockSpellId`,`WeeklyResetHour`,`Comment`) VALUES
+  (1, 1, 1186, 48, 1279717, 15, 'Midnight Season 1 - Omnium Folio');

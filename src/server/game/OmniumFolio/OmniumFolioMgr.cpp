@@ -17,7 +17,10 @@
 
 #include "OmniumFolioMgr.h"
 #include "DatabaseEnv.h"
+#include "DBCEnums.h"
 #include "Log.h"
+#include "ObjectGuid.h"
+#include "Player.h"
 
 // The five weekly-unlock achievements that each source +1 "Mote of Omnial Inquiry"
 // (TraitCurrency 4230) via DB2 TraitCurrencySource. Kept here for reference; the
@@ -76,7 +79,40 @@ void OmniumFolioMgr::OnPlayerLogin(Player* player)
     EnsureFolioForPlayer(player);
 }
 
-void OmniumFolioMgr::EnsureFolioForPlayer(Player* /*player*/)
+bool OmniumFolioMgr::HasFolioConfig(Player const* player)
+{
+    // Any generic TraitConfig whose TraitSystemID is the folio system (48) is the
+    // folio config. Mirrors the duplicate guard in Spell::EffectCreateTraitTreeConfig.
+    return player->m_activePlayerData->TraitConfigs.FindIf([](UF::TraitConfig const& config)
+    {
+        return static_cast<TraitConfigType>(*config.Type) == TraitConfigType::Generic
+            && config.TraitSystemID == TRAIT_SYSTEM_ID;
+    }).second != nullptr;
+}
+
+uint32 OmniumFolioMgr::GetLastSeasonMinted(ObjectGuid guid)
+{
+    // Optional per-character bookkeeping table. Only queried for eligible players on
+    // an enabled (seeded) DB, so the shared realm never hits it. Absent row/table
+    // => 0 (never minted).
+    QueryResult result = CharacterDatabase.PQuery(
+        "SELECT LastSeasonMinted FROM character_omnium_folio WHERE guid = {}", guid.GetCounter());
+    if (!result)
+        return 0;
+
+    return (*result)[0].GetUInt32();
+}
+
+void OmniumFolioMgr::SaveSeasonBookkeeping(ObjectGuid guid, uint32 seasonId)
+{
+    CharacterDatabase.PExecute(
+        "INSERT INTO character_omnium_folio (guid, LastSeasonMinted, UnlockedAt) "
+        "VALUES ({}, {}, UNIX_TIMESTAMP()) "
+        "ON DUPLICATE KEY UPDATE LastSeasonMinted = VALUES(LastSeasonMinted)",
+        guid.GetCounter(), seasonId);
+}
+
+void OmniumFolioMgr::EnsureFolioForPlayer(Player* player)
 {
     // POWER-GRANT SEAM.
     //
@@ -89,18 +125,56 @@ void OmniumFolioMgr::EnsureFolioForPlayer(Player* /*player*/)
     //   * Motes (TraitCurrency 4230) are computed live from TraitCurrencySource
     //     (achievements 62606..62610 + level-1 base) inside TraitMgr -- no store.
     //
-    // CAPTURE-BLOCKED / content-gated: the unlock questline ("The Magisters' Call"
-    // -> "The Omnium Reawakens", Magister Umbric / Grand Magister Rommath) and the
-    // weekly achievement cadence are world-DB content not yet seeded on this branch.
-    // Until it lands, this seam intentionally does nothing so we never cast on the
-    // shared realm. Intended action once enabled + eligibility content exists:
-    //
-    //     if (playerHasCompletedUnlockQuest && !playerHasFolioConfig)
-    //         player->CastSpell(player, UNLOCK_SPELL_ID, true);
+    // This coordinator only decides WHETHER to mint: season active + player eligible
+    // + no existing folio config. Everything it calls already exists in core.
+    if (!player || !_enabled)
+        return;
+
+    // Eligibility gate. The unlock questline ("The Magisters' Call" -> "The Omnium
+    // Reawakens") that AWARDS achievement 62606 is CAPTURE-BLOCKED world content
+    // seeded later; keying on the confirmed achievement id keeps this code stable.
+    if (!player->HasAchieved(UNLOCK_ACHIEVEMENT_ID))
+        return;
+
+    bool const hasConfig = HasFolioConfig(player);
+    uint32 const lastSeasonMinted = GetLastSeasonMinted(player->GetGUID());
+
+    // Already provisioned for the current season -> nothing to do (idempotent relog).
+    if (hasConfig && lastSeasonMinted == _seasonId)
+        return;
+
+    // Config exists but was minted for an earlier season -> season rollover.
+    if (hasConfig && lastSeasonMinted != _seasonId)
+    {
+        ResetForNewSeason(player);
+        return;
+    }
+
+    // No folio config yet -> mint it via stock trait code. The effect itself also
+    // guards against duplicating a system-48 config, so this stays idempotent even
+    // if bookkeeping and update-fields ever disagree.
+    player->CastSpell(player, UNLOCK_SPELL_ID, true);
+
+    SaveSeasonBookkeeping(player->GetGUID(), _seasonId);
 }
 
-void OmniumFolioMgr::ResetForNewSeason(Player* /*player*/)
+void OmniumFolioMgr::ResetForNewSeason(Player* player)
 {
-    // TODO(season-reset): drop the player's generic folio config and re-mint it for
-    // the new season (re-cast UNLOCK_SPELL_ID). No-op until the schedule is seeded.
+    if (!player)
+        return;
+
+    // Cross-season reset semantics for the folio (wipe existing rune selections vs.
+    // carry them forward vs. mint a fresh parallel config) are NOT source-confirmed
+    // at build 12.0.7.68887. TODO(CAPTURE-BLOCKED): confirm via a two-season sniff
+    // before enabling any DESTRUCTIVE wipe (DeleteTraitConfig).
+    //
+    // Conservative choice implemented here: never destroy the player's existing
+    // selections. We only guarantee a config exists (mint if the character somehow
+    // has none) and advance the season bookkeeping so the new season's achievement
+    // motes become spendable on the existing ledger. This is realm-safe and
+    // non-lossy; a confirmed wipe can be layered on later behind the same seam.
+    if (!HasFolioConfig(player))
+        player->CastSpell(player, UNLOCK_SPELL_ID, true);
+
+    SaveSeasonBookkeeping(player->GetGUID(), _seasonId);
 }

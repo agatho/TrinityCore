@@ -21,6 +21,7 @@
 #include "Define.h"
 
 class Player;
+class ObjectGuid;
 
 // ---------------------------------------------------------------------------
 // Omnium Folio  --  Midnight (patch 12.0.7 "Revelations") Season 1 seasonal
@@ -64,6 +65,10 @@ public:
     static constexpr int32  TRAIT_SYSTEM_ID  = 48;
     static constexpr int32  CURRENCY_ID      = 4230;   // "Mote of Omnial Inquiry" (TraitSourced)
     static constexpr uint32 UNLOCK_SPELL_ID  = 1279717; // SPELL_EFFECT_CREATE_TRAIT_TREE_CONFIG, MiscValue=1186
+    // Eligibility gate. DB2 Achievement 62606 "The Sunstrider Omnium" ("Complete the
+    // quest The Omnium Reawakens") is the confirmed unlock. The questline that AWARDS
+    // it is CAPTURE-BLOCKED content seeded later; the achievement id is the stable key.
+    static constexpr uint32 UNLOCK_ACHIEVEMENT_ID = 62606;
 
     // Loads the (optional) seasonal schedule for this fork. Realm-safe: absent
     // table/row => system stays idle and definitions still ride TraitMgr.
@@ -94,6 +99,15 @@ private:
     OmniumFolioMgr(OmniumFolioMgr&&) = delete;
     OmniumFolioMgr& operator=(OmniumFolioMgr const&) = delete;
     OmniumFolioMgr& operator=(OmniumFolioMgr&&) = delete;
+
+    // True if the player already owns a generic TraitSystem-48 folio config
+    // (idempotency guard so we never mint a second one).
+    static bool HasFolioConfig(Player const* player);
+
+    // Per-character season bookkeeping (character_omnium_folio). Season the folio
+    // config was last minted/reset for; 0 if never / table absent.
+    static uint32 GetLastSeasonMinted(ObjectGuid guid);
+    static void   SaveSeasonBookkeeping(ObjectGuid guid, uint32 seasonId);
 
     bool   _enabled    = false;
     uint32 _seasonId   = 0;
