@@ -91,9 +91,18 @@ void WorldSession::HandleSupportTicketSubmitComplaint(WorldPackets::Ticket::Supp
     {
         ReportType const reportType = ReportType(packet.ReportType);
         if (reportType == ReportType::ClubFinderPosting || reportType == ReportType::ClubFinderApplicant)
-            if (sClubFinderMgr->AddPostingDisplayFlags(uint32(packet.ClubFinderInfo->PostingID), CLUB_FINDER_POSTING_FLAG_UNDER_REVIEW))
+        {
+            // Do not trust the posting id on its own: the old code flagged whatever posting id the
+            // packet named, so any client could push an arbitrary posting UNDER_REVIEW by supplying a
+            // posting id it has no relationship to. Resolve the posting the reported club actually owns
+            // and only flag it when the supplied posting id matches that club's real posting; a
+            // mismatched (club, posting) pair is ignored.
+            ClubFinderPosting const* posting = sClubFinderMgr->GetPostingForClub(packet.ClubFinderInfo->ClubID);
+            if (posting && posting->PostingId == uint32(packet.ClubFinderInfo->PostingID)
+                && sClubFinderMgr->AddPostingDisplayFlags(posting->PostingId, CLUB_FINDER_POSTING_FLAG_UNDER_REVIEW))
                 TC_LOG_INFO("network", "ClubFinder: posting {} (club {}) flagged under review after a report by {}.",
-                    packet.ClubFinderInfo->PostingID, packet.ClubFinderInfo->ClubID, GetPlayerInfo());
+                    posting->PostingId, packet.ClubFinderInfo->ClubID, GetPlayerInfo());
+        }
     }
 }
 
