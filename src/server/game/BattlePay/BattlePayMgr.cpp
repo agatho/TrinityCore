@@ -370,12 +370,13 @@ bool BattlePayMgr::AssembleCatalog(std::vector<uint8>& outBlob, std::unordered_m
     if (_templateBlob.empty())
         return false;
 
-    std::vector<uint32> header;
-    std::vector<BattlePayCatalogRecord> records;
-    std::vector<uint8> remainder;
-    if (!BattlePayCatalogWriter::Parse(_templateBlob, header, records, remainder))
+    // The writer now decodes ALL FOUR arrays (94 products, 116 deliverables, 21 groups, 97 shop
+    // entries) with a byte-exact round trip, instead of only the first 9 "simple shape" records.
+    BattlePayCatalog catalog;
+    std::string parseError;
+    if (!BattlePayCatalogWriter::Parse(_templateBlob, catalog, &parseError))
     {
-        TC_LOG_ERROR("server.loading", "BattlePay: catalog template did not parse; serving it verbatim.");
+        TC_LOG_ERROR("server.loading", "BattlePay: catalog template did not parse ({}); serving it verbatim.", parseError);
         outBlob = _templateBlob;
         return false;
     }
@@ -402,7 +403,7 @@ bool BattlePayMgr::AssembleCatalog(std::vector<uint8>& outBlob, std::unordered_m
         return a->ProductID < b->ProductID;
     });
 
-    auto reskin = [&](BattlePayCatalogRecord& rec, ShopProduct const& product)
+    auto reskin = [&](BattlePayCatalogProduct& rec, ShopProduct const& product)
     {
         uint64 displayPrice;
         if (product.HasDisplayPrice)
@@ -412,23 +413,59 @@ bool BattlePayMgr::AssembleCatalog(std::vector<uint8>& outBlob, std::unordered_m
         else
             displayPrice = 0;
 
-        uint32 flags = product.DisplayFlags;
-        if (!product.HasDisplayPrice && product.Currency != 0 && product.Currency != 1)
-            flags |= DISPLAY_FLAG_HIDDEN_PRICE;         // non-gold currency w/o override: hide the price line
-        if (product.HideIfOwned)
-            flags |= DISPLAY_FLAG_HIDE_WHEN_OWNED;
+        // Only what the admin row actually asks for. The two synthesised bits below are DISABLED because
+        // their values were never verified against the client:
+        //
+        //   DISPLAY_FLAG_HIDE_WHEN_OWNED = 256  and  DISPLAY_FLAG_HIDDEN_PRICE = 8
+        //
+        // They were harmless while Flags was (incorrectly) being written into DisplayInfo.modelSceneID -
+        // nothing read them. Now that Flags reaches the client's real BattlepayDisplayFlags, ORing 256 in
+        // for every product (all 66 admin rows carry hideIfOwned = 1) made pets and mounts the player does
+        // NOT own render as already owned. So bit 256 does not mean "hide when owned"; its true meaning is
+        // unknown.
+        //
+        // Do not re-enable either bit until BattlepayDisplayFlags is recovered from the client. Emitting a
+        // flag whose meaning we are guessing at is exactly how this regression happened.
+        // Do NOT overwrite the shipped Product.Flags. It is a SEPARATE, unreflected enum - not
+        // BattlepayDisplayFlags - and its bits 1/3 drive `buyableHere`. Writing our admin DisplayFlags
+        // (0 for all 66 rows) over it clears buyableHere and makes a pinned product unpurchasable.
+        // Admin display flags belong on DisplayInfo.Flags, which is what sharedData.flags actually
+        // loads from (client RVA 0x23D0DA7); Product.flags is never read for display.
+        uint32 const displayInfoFlags = product.DisplayFlags;
 
-        rec.Name         = product.Name;
-        rec.Description  = product.Description;
-        rec.NormalPrice  = displayPrice;
-        rec.CurrentPrice = displayPrice;
-        rec.Flags        = flags;
+        rec.NormalPriceFixedPoint  = displayPrice;
+        rec.CurrentPriceFixedPoint = displayPrice;
+        // rec.Flags deliberately left as shipped - see above.
+
+        // Name and description live in the product's DisplayInfo, not on the product record. 54 of the
+        // 94 shipped records have no DisplayInfo at all - that is exactly why their purchase
+        // confirmation showed a nil name and the generic INV_Misc_Note_02 fallback icon.
+        if (!rec.DisplayInfo)
+            rec.DisplayInfo = BattlePayCatalogWriter::MakeDisplayInfo(product.Name, product.Description);
+        else
+        {
+            rec.DisplayInfo->Name1 = product.Name;
+            rec.DisplayInfo->Name3 = product.Description;
+        }
+
+        // Enum.BattlepayDisplayFlags (client registrar RVA 0x13EF840, 12 values):
+        //   1 Expansion, 2 CardDoesNotShowModel, 4 CardAlwaysShowsTexture, 8 HiddenPrice,
+        //   16 UseHorizontalLayoutForFullCard, 32/64 Deprecated, 128 UseSquareIconBorder,
+        //   256 HideWhenOwned, 512 RafReward, 1024 ShowFancyToast, 2048 UseIconBorderWithOverrideTexture.
+        // These belong on DisplayInfo.Flags. 256 only hides an ALREADY-owned entry from the grid; it is
+        // not what made everything look owned (that was Product.Eligibility - see below).
+        if (displayInfoFlags)
+            rec.DisplayInfo->Flags = displayInfoFlags;
     };
 
     size_t candIdx = 0;
-    for (size_t slot = 0; slot < records.size(); ++slot)
+    for (size_t slot = 0; slot < catalog.Products.size(); ++slot)
     {
-        uint32 const slotProductId = records[slot].ProductID;
+        // The id the client actually purchases by. The previous code read record+81, which is really
+        // DisplayInfo.fileDataID - the card ARTWORK id - so the routing map was built from FileDataIDs
+        // and never resolved. Purchases only worked because GetProductByAdvertisedId falls through to
+        // GetProduct(id).
+        uint32 const slotProductId = catalog.Products[slot].ProductID;
         ShopProduct const* assigned = nullptr;
 
         auto ovr = _slotOverrides.find(uint8(slot));
@@ -446,7 +483,7 @@ bool BattlePayMgr::AssembleCatalog(std::vector<uint8>& outBlob, std::unordered_m
 
         if (assigned)
         {
-            reskin(records[slot], *assigned);
+            reskin(catalog.Products[slot], *assigned);
             outRouting[slotProductId] = assigned->ProductID;
             if (report)
                 report->append(Trinity::StringFormat("  slot {}: [{}] '{}' -> product {} (price {}, {}{})\n",
@@ -455,11 +492,17 @@ bool BattlePayMgr::AssembleCatalog(std::vector<uint8>& outBlob, std::unordered_m
         }
         else
         {
-            records[slot].Name = placeholderName;
-            records[slot].Description.clear();
-            records[slot].NormalPrice = 0;
-            records[slot].CurrentPrice = 0;
-            records[slot].Flags |= DISPLAY_FLAG_HIDDEN_PRICE;
+            // Not pinned. Leave the shipped record's price alone - the blob already describes a real
+            // product with our gold price patched in, and shop_product is keyed on the same wire
+            // productID. Only give it a DisplayInfo when it has none, so the confirmation dialog can
+            // render a name instead of erroring on nil.
+            if (!catalog.Products[slot].DisplayInfo)
+            {
+                if (ShopProduct const* known = GetProduct(slotProductId))
+                    catalog.Products[slot].DisplayInfo = BattlePayCatalogWriter::MakeDisplayInfo(known->Name, known->Description);
+                else
+                    catalog.Products[slot].DisplayInfo = BattlePayCatalogWriter::MakeDisplayInfo(placeholderName, std::string());
+            }
             if (report)
                 report->append(Trinity::StringFormat("  slot {}: [{}] <placeholder - not purchasable>\n", slot, slotProductId));
         }
@@ -467,9 +510,33 @@ bool BattlePayMgr::AssembleCatalog(std::vector<uint8>& outBlob, std::unordered_m
 
     if (report && candIdx < candidates.size())
         report->append(Trinity::StringFormat("  OVERFLOW: {} enabled product(s) could not be shown (only {} slots).\n",
-            candidates.size() - candIdx, records.size()));
+            candidates.size() - candIdx, catalog.Products.size()));
 
-    outBlob = BattlePayCatalogWriter::Serialize(header, records, remainder);
+    // THE OWNERSHIP GATE. The captured retail catalog marks products the CAPTURING account already owned:
+    //   - Product.Eligibility == 2 (Enum.PurchaseEligibility.Owned), which Lua's
+    //     StoreFrame_IsCompletelyOwned reads via sharedData.eligibility and which greys the Buy button;
+    //     the client also promotes Eligibility 1 (PartiallyOwned) to Owned unless Product.flags bit
+    //     15/16 is set, so 12 records are affected, not just the 7 marked 2.
+    //   - Deliverable.AlreadyOwns == 1, which IsProductAlreadyOwned (client RVA 0x23CC780) walks via
+    //     Product.DeliverableIDs. C_StoreSecure.PurchaseProduct (RVA 0x23CDFD0) consults it and then
+    //     NEVER SENDS THE CMSG, and GetProducts (RVA 0x23D1A06) hides owned products outright.
+    //
+    // BOTH have to be cleared. Clearing only Eligibility restores the Buy button but clicking it does
+    // nothing, because the deliverable check silently swallows the purchase.
+    //
+    // This is not a display preference - it is stale state from someone else's account that we were
+    // shipping back verbatim. Ownership on THIS realm is decided by IsPurchasable() at purchase time.
+    for (BattlePayCatalogProduct& product : catalog.Products)
+        product.Eligibility = 0;                        // PurchaseEligibility::Ok
+
+    for (BattlePayDeliverable& deliverable : catalog.Deliverables)
+    {
+        deliverable.AlreadyOwns = 0;
+        for (BattlePayDeliverableChoice& choice : deliverable.Choices)
+            choice.AlreadyOwns = 0;
+    }
+
+    outBlob = BattlePayCatalogWriter::Serialize(catalog);
     return true;
 }
 
