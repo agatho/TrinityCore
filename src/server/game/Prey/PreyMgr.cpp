@@ -16,9 +16,12 @@
  */
 
 #include "PreyMgr.h"
+#include "Common.h"
 #include "DatabaseEnv.h"
 #include "Log.h"
 #include "Player.h"
+#include "World.h"
+#include <algorithm>
 
 PreyMgr::PreyMgr() = default;
 PreyMgr::~PreyMgr() = default;
@@ -32,6 +35,12 @@ PreyMgr::~PreyMgr() = default;
 void PreyMgr::LoadFromDB()
 {
     _huntTemplates.clear();
+    _huntsByBucket.clear();
+    // World::InitQuestResetTimes() has not run yet at this point in
+    // SetInitialWorldSettings, so the week index is still 0 here. The first
+    // Update tick establishes the real one and logs the opening rotation.
+    _weekIndex = GetCurrentWeekIndex();
+    _rotationCheckTimer = 0;
     _enabled = false;
 
     // Realm-safe: the shipped table may not be applied on the shared realm.
@@ -55,18 +64,40 @@ void PreyMgr::LoadFromDB()
         tmpl.ContentTuningId = fields[3].GetUInt32();
         tmpl.VaultActivityId = fields[4].GetUInt32();
         _huntTemplates.emplace(tmpl.Id, tmpl);
+        _huntsByBucket[{ uint8(tmpl.Difficulty), tmpl.ZoneId }].push_back(tmpl.Id);
         ++count;
     } while (result->NextRow());
 
+    // Sort every bucket so the weekly pick depends only on the week index and
+    // the zone, never on row order coming back from MySQL.
+    for (auto& bucket : _huntsByBucket)
+        std::sort(bucket.second.begin(), bucket.second.end());
+
     _enabled = count != 0;
-    TC_LOG_INFO("server.loading", ">> Prey: loaded {} hunt template(s).", count);
+    TC_LOG_INFO("server.loading", ">> Prey: loaded {} hunt template(s) in {} rotation bucket(s).", count, _huntsByBucket.size());
 }
 
-void PreyMgr::Update(uint32 /*diff*/)
+void PreyMgr::Update(uint32 diff)
 {
-    // Reserved for weekly-reset / hunt-lifecycle timers. No-op until content lands.
     if (!_enabled)
         return;
+
+    // The rotation only ever moves on a weekly boundary, so poll cheaply rather
+    // than on every world tick.
+    if (_rotationCheckTimer > diff)
+    {
+        _rotationCheckTimer -= diff;
+        return;
+    }
+
+    _rotationCheckTimer = MINUTE * IN_MILLISECONDS;
+
+    uint32 weekIndex = GetCurrentWeekIndex();
+    if (weekIndex == _weekIndex)
+        return;
+
+    _weekIndex = weekIndex;
+    TC_LOG_INFO("misc", "Prey: hunt rotation advanced to week {}; {} hunt(s) now active.", _weekIndex, GetWeeklyHuntQuests().size());
 }
 
 void PreyMgr::OnPlayerLogin(Player* /*player*/)
@@ -79,6 +110,141 @@ PreyHuntTemplate const* PreyMgr::GetHuntTemplate(uint32 huntId) const
 {
     auto it = _huntTemplates.find(huntId);
     return it != _huntTemplates.end() ? &it->second : nullptr;
+}
+
+/*static*/ uint32 PreyMgr::GetCurrentWeekIndex()
+{
+    // Anchor to the world's own weekly quest reset rather than to a private
+    // timer, so a Prey hunt turns over at the same instant as everything else
+    // the realm resets weekly. The stored stamp is the *end* of the current
+    // week, so step back one period to get an index that is stable all week.
+    time_t nextReset = sWorld->GetNextWeeklyQuestsResetTime();
+    if (nextReset <= time_t(WEEK))
+        return 0;
+
+    return uint32((uint64(nextReset) - WEEK) / WEEK);
+}
+
+/*static*/ std::span<uint32 const> PreyMgr::GetStaticHuntPool(PreyDifficulty difficulty)
+{
+    switch (difficulty)
+    {
+        case PreyDifficulty::Normal: return Prey::HUNT_QUESTS_NORMAL;
+        case PreyDifficulty::Hard:   return Prey::HUNT_QUESTS_HARD;
+        // Nightmare has no captured quest ids. Returning empty is deliberate:
+        // an invented id would be worse than an advertised gap.
+        default:                     return {};
+    }
+}
+
+std::vector<uint32> const* PreyMgr::GetRegisteredHuntPool(PreyDifficulty difficulty, uint32 zoneId) const
+{
+    auto it = _huntsByBucket.find({ uint8(difficulty), zoneId });
+    if (it != _huntsByBucket.end() && !it->second.empty())
+        return &it->second;
+
+    // ZoneId 0 is the "unscoped" bucket every shipped row currently lands in.
+    // A zone with no hunts of its own falls back to it rather than going dark.
+    if (zoneId != 0)
+    {
+        it = _huntsByBucket.find({ uint8(difficulty), 0u });
+        if (it != _huntsByBucket.end() && !it->second.empty())
+            return &it->second;
+    }
+
+    return nullptr;
+}
+
+uint32 PreyMgr::GetWeeklyHuntQuest(PreyDifficulty difficulty, uint32 zoneId) const
+{
+    if (difficulty >= PreyDifficulty::Max)
+        return 0;
+
+    std::span<uint32 const> pool;
+    if (std::vector<uint32> const* registered = GetRegisteredHuntPool(difficulty, zoneId))
+        pool = *registered;
+    else
+        pool = GetStaticHuntPool(difficulty);
+
+    if (pool.empty())
+        return 0;
+
+    // Offsetting by the zone keeps two zones from advertising the same hunt in
+    // the same week. With every row at ZoneId 0 this is a no-op, which is the
+    // correct behaviour for the data we actually have.
+    uint64 index = uint64(GetCurrentWeekIndex()) + uint64(zoneId);
+    return pool[index % pool.size()];
+}
+
+std::vector<uint32> PreyMgr::GetWeeklyHuntQuests() const
+{
+    std::vector<uint32> active;
+
+    if (!_huntsByBucket.empty())
+    {
+        for (auto const& [bucket, hunts] : _huntsByBucket)
+        {
+            if (hunts.empty())
+                continue;
+
+            uint64 index = uint64(GetCurrentWeekIndex()) + uint64(bucket.second);
+            active.push_back(hunts[index % hunts.size()]);
+        }
+    }
+    else
+    {
+        for (uint8 difficulty = 0; difficulty < uint8(PreyDifficulty::Max); ++difficulty)
+            if (uint32 questId = GetWeeklyHuntQuest(PreyDifficulty(difficulty), 0))
+                active.push_back(questId);
+    }
+
+    std::sort(active.begin(), active.end());
+    active.erase(std::unique(active.begin(), active.end()), active.end());
+    return active;
+}
+
+bool PreyMgr::IsHuntQuest(uint32 questId) const
+{
+    return GetHuntDifficulty(questId) != PreyDifficulty::Max;
+}
+
+PreyDifficulty PreyMgr::GetHuntDifficulty(uint32 questId) const
+{
+    // Registry first — it is the shipped source of truth once the SQL is
+    // applied. The static pools answer for a realm that has not applied it.
+    if (PreyHuntTemplate const* tmpl = GetHuntTemplate(questId))
+        return tmpl->Difficulty;
+
+    for (uint8 difficulty = 0; difficulty < uint8(PreyDifficulty::Max); ++difficulty)
+    {
+        std::span<uint32 const> pool = GetStaticHuntPool(PreyDifficulty(difficulty));
+        if (std::find(pool.begin(), pool.end(), questId) != pool.end())
+            return PreyDifficulty(difficulty);
+    }
+
+    return PreyDifficulty::Max;
+}
+
+void PreyMgr::CreditHuntProgress(Player* player)
+{
+    if (!player)
+        return;
+
+    // Objective 0 of every hunt: ObjectID 246472 "Credit: Hunt your Prey",
+    // Amount 1, no flags. Filling it reveals the SEQUENCED second objective.
+    player->KilledMonsterCredit(Prey::NPC_CREDIT_HUNT_PROGRESS);
+}
+
+void PreyMgr::CreditHuntTargetSlain(Player* player)
+{
+    if (!player)
+        return;
+
+    // Objective 1 of every hunt: ObjectID 253450 "Credit: Multiple Credit",
+    // Amount 1, Flags 2 SEQUENCED. This is the one the named target's death
+    // must drive; the target creature entries are not in the capture, so the
+    // call has to come from that creature's script once it is imported.
+    player->KilledMonsterCredit(Prey::NPC_CREDIT_TARGET_SLAIN);
 }
 
 void PreyMgr::GrantJourneyProgress(Player* player, uint32 points)
@@ -100,22 +266,28 @@ void PreyMgr::GrantJourneyProgress(Player* player, uint32 points)
 
 void PreyMgr::StartHunt(Player* /*player*/, uint32 /*huntId*/, PreyDifficulty /*difficulty*/)
 {
-    // CAPTURE-BLOCKED: the Hunt Table (npc 245824, subname "missions") activation
-    // is a mission-table opcode flow not present in captures. This is the future
-    // entry point for that handler. See blueprint §6 tester-capture ask #1.
+    // STILL CAPTURE-BLOCKED: the Hunt Table (npc 245824, subname "missions")
+    // activation is a mission-table opcode flow not present in any capture we
+    // hold, and the 12.1.0.69273 sniff did not change that — its opcode space is
+    // renumbered, so even a matching packet there could not be trusted here.
+    // The hunt *content* now exists (quests, objectives, credit ids), but the
+    // handler that hands a player a hunt does not. This remains the seam.
 }
 
 void PreyMgr::CompleteHunt(Player* player, uint32 huntId, PreyDifficulty difficulty)
 {
-    // CAPTURE-BLOCKED for the exact reward packet, but the *design* rewards are
-    // DB2-anchored. This seam is intentionally inert until the completion wire and
-    // the fork's weekly-reward vault-credit call are wired (blueprint Phase 2/3).
+    // The completion *packet* is still unknown, but the completion *mechanic* is
+    // not: a hunt is an ordinary quest whose two objectives are kill credits on
+    // shared bunnies, so finishing one is two KilledMonsterCredit calls and the
+    // stock quest system does the rest.
     if (!player)
         return;
 
-    PreyHuntTemplate const* tmpl = GetHuntTemplate(huntId);
-    if (!tmpl)
+    if (!IsHuntQuest(huntId))
         return;
+
+    CreditHuntProgress(player);
+    CreditHuntTargetSlain(player);
 
     // Journey progress (design cadence — [RESEARCH], not DB2-confirmed).
     GrantJourneyProgress(player, Prey::JOURNEY_POINTS_PER_HUNT);
