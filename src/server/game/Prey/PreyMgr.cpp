@@ -23,8 +23,43 @@
 #include "Log.h"
 #include "Player.h"
 #include "ReputationMgr.h"
+#include "StringFormat.h"
 #include "World.h"
+#include "WorldSession.h"
 #include <algorithm>
+
+namespace
+{
+    // A table that does not exist is NOT a recoverable error in this core.
+    //
+    // MySQLConnection::_HandleMySQLErrno() classifies ER_NO_SUCH_TABLE (1146) and
+    // ER_BAD_FIELD_ERROR (1054) as "your database structure is not up to date",
+    // sleeps ten seconds and calls ABORT() -> Trinity::Abort(), which is [[noreturn]]
+    // and takes the whole process down. There is no result code to inspect and no
+    // null QueryResult to branch on: control never returns to the caller.
+    //
+    // This is equally true of the ASYNCHRONOUS path. DatabaseWorkerPool<T>::Execute()
+    // only posts the statement to a worker thread, which then calls the very same
+    // MySQLConnection::Execute() -> _HandleMySQLErrno(). An async write against a
+    // missing table kills the process just as dead, merely from a database worker
+    // thread instead of the world thread. "Async, therefore safe" is false.
+    //
+    // So core code may never probe an optional table by simply running a query
+    // against it. information_schema always exists, so asking it cannot raise 1146
+    // and cannot abort. LoginRESTService uses the same technique to test for an
+    // optional column.
+    bool PreyHuntTemplateExists()
+    {
+        return WorldDatabase.Query("SELECT 1 FROM information_schema.TABLES"
+            " WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'prey_hunt_template'") != nullptr;
+    }
+
+    bool CharacterPreyHuntExists()
+    {
+        return CharacterDatabase.Query("SELECT 1 FROM information_schema.TABLES"
+            " WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'character_prey_hunt'") != nullptr;
+    }
+}
 
 PreyMgr::PreyMgr() = default;
 PreyMgr::~PreyMgr() = default;
@@ -45,13 +80,21 @@ void PreyMgr::LoadFromDB()
     _weekIndex = GetCurrentWeekIndex();
     _rotationCheckTimer = 0;
     _enabled = false;
+    _characterHuntTableReady = false;
 
-    // Realm-safe: the shipped table may not be applied on the shared realm.
-    // A missing table yields a null result (logged, non-fatal) -> silent no-op.
+    // Existence is established against information_schema BEFORE the table is read.
+    // Reading it to "see whether it is there" does not yield a null result on a realm
+    // that has not applied the migration - it aborts the worldserver during startup.
+    if (!PreyHuntTemplateExists())
+    {
+        TC_LOG_INFO("server.loading", ">> Prey: prey_hunt_template is not present in the world database; Prey system idle.");
+        return;
+    }
+
     QueryResult result = WorldDatabase.Query("SELECT Id, ZoneId, Difficulty, ContentTuningId, VaultActivityId FROM prey_hunt_template");
     if (!result)
     {
-        TC_LOG_INFO("server.loading", ">> Prey: prey_hunt_template absent or empty; Prey system idle.");
+        TC_LOG_INFO("server.loading", ">> Prey: prey_hunt_template is empty; Prey system idle.");
         return;
     }
 
@@ -77,6 +120,20 @@ void PreyMgr::LoadFromDB()
         std::sort(bucket.second.begin(), bucket.second.end());
 
     _enabled = count != 0;
+
+    // The per-character state lives in a DIFFERENT DATABASE behind a DIFFERENT
+    // migration (sql/updates/characters/master/2026_08_12_00_characters_prey_voidforge.sql).
+    // _enabled therefore says nothing whatsoever about whether character_prey_hunt
+    // exists, so it is probed separately and every access to that table is gated on
+    // this flag instead. Treating the world-side flag as authority over a
+    // characters-side table is what made a realm with the world SQL applied and the
+    // characters SQL missing abort on every single login.
+    _characterHuntTableReady = CharacterPreyHuntExists();
+    if (_enabled && !_characterHuntTableReady)
+        TC_LOG_WARN("server.loading", ">> Prey: prey_hunt_template is loaded but character_prey_hunt is absent from the "
+            "characters database - apply 2026_08_12_00_characters_prey_voidforge.sql. Per-character hunt state is disabled "
+            "for this run; the rotation and the reward grants are unaffected.");
+
     TC_LOG_INFO("server.loading", ">> Prey: loaded {} hunt template(s) in {} rotation bucket(s).", count, _huntsByBucket.size());
 }
 
@@ -105,27 +162,47 @@ void PreyMgr::Update(uint32 diff)
 
 void PreyMgr::OnPlayerLogin(Player* player)
 {
-    // Gated on IsEnabled(): the shared realm has no prey_hunt_template, so we never
-    // even touch character_prey_hunt there (realm-safe). On a seeded test DB, read
-    // back this week's completed hunts so future logic (weekly cap / Journey rank UI)
-    // can consult them. Tolerant of an absent table: a null result is a clean no-op.
-    if (!_enabled || !player)
+    // Gated on _characterHuntTableReady, NOT on IsEnabled(). IsEnabled() reflects
+    // prey_hunt_template in the WORLD database; the query below reads
+    // character_prey_hunt in the CHARACTERS database. Two databases, two migrations,
+    // and a realm can trivially have one without the other - which is precisely what
+    // happened: the world SQL was applied, _enabled came up true, and the resulting
+    // query against the missing characters table aborted the worldserver on every
+    // login until the characters migration was applied.
+    if (!_enabled || !_characterHuntTableReady || !player)
+        return;
+
+    WorldSession* session = player->GetSession();
+    if (!session)
         return;
 
     time_t const now = GameTime::GetGameTime();
     uint32 const weekStart = uint32(now - (now % WEEK));
 
-    QueryResult result = CharacterDatabase.PQuery(
-        "SELECT HuntId, Difficulty, Status FROM character_prey_hunt WHERE guid = {} AND WeekStart = {}",
-        player->GetGUID().GetCounter(), weekStart);
-    if (!result)
-        return;
+    // Read this week's completed hunts so future logic (weekly cap / Journey rank UI)
+    // can consult them. Asynchronous on purpose: this runs inside Player::LoadFromDB on
+    // the world thread and nothing here is needed synchronously, so it must not stall
+    // the world update for a MySQL round-trip once per login. The callback belongs to
+    // the session's own QueryCallbackProcessor, so it dies with the session; the guid
+    // re-check covers the character being swapped out before the result lands.
+    session->GetQueryProcessor().AddCallback(CharacterDatabase.AsyncQuery(
+        Trinity::StringFormat("SELECT HuntId, Difficulty, Status FROM character_prey_hunt WHERE guid = {} AND WeekStart = {}",
+            player->GetGUID().GetCounter(), weekStart).c_str())
+        .WithCallback([session, playerGuid = player->GetGUID()](QueryResult result)
+    {
+        if (!result)
+            return;
 
-    uint32 rows = 0;
-    do { ++rows; } while (result->NextRow());
+        Player* thisPlayer = session->GetPlayer();
+        if (!thisPlayer || thisPlayer->GetGUID() != playerGuid)
+            return;
 
-    TC_LOG_DEBUG("entities.player", "Prey: player {} has {} hunt record(s) this week.",
-        player->GetGUID().ToString(), rows);
+        uint32 rows = 0;
+        do { ++rows; } while (result->NextRow());
+
+        TC_LOG_DEBUG("entities.player", "Prey: player {} has {} hunt record(s) this week.",
+            playerGuid.ToString(), rows);
+    }));
 }
 
 PreyHuntTemplate const* PreyMgr::GetHuntTemplate(uint32 huntId) const
@@ -377,13 +454,15 @@ void PreyMgr::CompleteHunt(Player* player, PreyDifficulty difficulty, uint32 hun
     // branch is merged, credit the row here, e.g.:
     //   sWeeklyRewardsMgr->RecordActivity(player, ActivityType::Prey, preyLevel);
 
-    // Persist the weekly hunt state (gated + table-tolerant inside).
+    // Persist the weekly hunt state (skipped inside when character_prey_hunt is absent).
     RecordHuntCompletion(player, difficulty);
 }
 
 void PreyMgr::RecordHuntCompletion(Player* player, PreyDifficulty difficulty)
 {
-    if (!_enabled || !player)
+    // Same gate, same reason as OnPlayerLogin: this is a CHARACTERS-database table and
+    // the world-database _enabled flag cannot vouch for it.
+    if (!_enabled || !_characterHuntTableReady || !player)
         return;
 
     // Weekly-reset bucket. NOTE: a coarse UTC-week truncation, not the live weekly
@@ -394,7 +473,12 @@ void PreyMgr::RecordHuntCompletion(Player* player, PreyDifficulty difficulty)
     // Debug/economy slice: there is no real hunt template (activation is CAPTURE-BLOCKED),
     // so key the row by difficulty. This preserves the intended 1-record-per-difficulty
     // -per-week shape via PK(guid, HuntId, WeekStart). REPLACE keeps re-grants idempotent.
-    // Async PExecute is tolerant of an absent table (logs a DB error, never crashes).
+    //
+    // NOTE: being asynchronous buys this statement NOTHING in safety. PExecute posts the
+    // statement to a database worker thread which runs the identical
+    // MySQLConnection::Execute -> _HandleMySQLErrno, and ER_NO_SUCH_TABLE ABORT()s the
+    // process from that thread. The existence probe above is the only thing making this
+    // call safe on a realm without the characters migration.
     CharacterDatabase.PExecute(
         "REPLACE INTO character_prey_hunt (guid, HuntId, Difficulty, Status, WeekStart) VALUES ({}, {}, {}, {}, {})",
         player->GetGUID().GetCounter(), uint32(difficulty), uint32(difficulty),

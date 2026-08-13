@@ -182,7 +182,10 @@ class TC_GAME_API PreyMgr
         static PreyMgr* instance();
 
         // World load path (World::SetInitialWorldSettings / World::Update).
-        // LoadFromDB tolerates absent tables (realm-safe no-op).
+        // LoadFromDB checks each optional table against information_schema before it
+        // reads it. That check is not a nicety: querying a table that does not exist
+        // makes MySQLConnection::_HandleMySQLErrno ABORT() the process, so "absent
+        // table -> null result" is never a thing that happens.
         void LoadFromDB();
         void Update(uint32 diff);
 
@@ -217,8 +220,12 @@ class TC_GAME_API PreyMgr
         void CreditHuntProgress(Player* player);   // objective 0, 246472
         void CreditHuntTargetSlain(Player* player); // objective 1, 253450
 
-        // True once prey_hunt_template is present + non-empty. Gates every economy grant
-        // and every character_prey_hunt query so the shared realm is a hard no-op.
+        // True once prey_hunt_template (WORLD database) is present + non-empty. Gates
+        // every economy grant.
+        //
+        // It deliberately does NOT gate character_prey_hunt access: that table lives in
+        // the CHARACTERS database behind its own migration, and a realm can have either
+        // one without the other. _characterHuntTableReady is the flag for that side.
         bool IsEnabled() const { return _enabled; }
 
         // ---- Progression grants (LIVE - ride stock currency/faction APIs) ----
@@ -241,8 +248,10 @@ class TC_GAME_API PreyMgr
         // weekly-reward framework — wired in a later phase.
 
     private:
-        // Persist a completed hunt into character_prey_hunt (gated on IsEnabled()).
-        // Tolerant of an absent table (async Execute logs, never crashes).
+        // Persist a completed hunt into character_prey_hunt. Gated on
+        // _characterHuntTableReady, because an async Execute against a missing table
+        // aborts the process from the database worker thread exactly as a synchronous
+        // one aborts from the world thread.
         void RecordHuntCompletion(Player* player, PreyDifficulty difficulty);
 
         // Static fallback pool for a tier, used when the registry is empty.
@@ -256,7 +265,11 @@ class TC_GAME_API PreyMgr
         std::map<std::pair<uint8, uint32>, std::vector<uint32>> _huntsByBucket;
         uint32 _weekIndex = 0;
         uint32 _rotationCheckTimer = 0;
+        // prey_hunt_template (WORLD db) present and non-empty.
         bool _enabled = false;
+        // character_prey_hunt (CHARACTERS db) present. Established once at load against
+        // information_schema and never inferred from _enabled - see LoadFromDB.
+        bool _characterHuntTableReady = false;
 };
 
 #define sPreyMgr PreyMgr::instance()
