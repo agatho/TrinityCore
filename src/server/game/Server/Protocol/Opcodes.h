@@ -2653,13 +2653,21 @@ enum OpcodeServer : uint32
     // SMSG_INITIATIVE_REWARD_AVAILABLE (0x42036B), plus entity-fragment updates.
 };
 
-inline constexpr std::size_t NUM_SMSG_OPCODES = 1654;
+// 1654 was the old end of the table. Three groups are appended past it: 0x40 (843 slots, 1654-2496),
+// 0x58 (55, 2497-2551) and 0x5C (51, 2552-2602). The slots the latter two used to occupy at 1300 and
+// 1437 are simply left unused - reclaiming them would mean moving every group base after them.
+inline constexpr std::size_t NUM_SMSG_OPCODES = 2603;
 
 inline constexpr std::ptrdiff_t GetOpcodeArrayIndex(OpcodeServer opcode)
 {
     uint32 idInGroup = opcode & 0xFFFF;
     switch (opcode >> 16)
     {
+        // Group 0x40 had no server-side case at all, so every SMSG in it returned -1 and could not be
+        // registered - including SMSG_FEATURE_SYSTEM_STATUS2 (0x40034A, id 842), the four
+        // SMSG_ACCOUNT_HOUSING_* packets and the three WoW Labs ones. Its block is appended past the
+        // old end of the array (1653 + 1) so no existing group base moves.
+        case 0x40: return idInGroup < 843 ? idInGroup + 1654 : -1;
         case 0x42: return idInGroup < 901 ? idInGroup +    0 : -1;
         case 0x43: return idInGroup <   5 ? idInGroup +  901 : -1;
         case 0x46: return idInGroup <  20 ? idInGroup +  906 : -1;
@@ -2676,10 +2684,14 @@ inline constexpr std::ptrdiff_t GetOpcodeArrayIndex(OpcodeServer opcode)
         case 0x54: return idInGroup <  36 ? idInGroup + 1222 : -1;
         case 0x55: return idInGroup <   8 ? idInGroup + 1258 : -1;
         case 0x56: return idInGroup <  34 ? idInGroup + 1266 : -1;
-        case 0x58: return idInGroup <   1 ? idInGroup + 1300 : -1;
+        // Was capped at 1, which excluded SMSG_MOVE_SET_CANT_SWIM (id 53) and SMSG_MOVE_UNSET_CANT_SWIM
+        // (54). It cannot grow in place because 0x5A starts at 1301, so the block moves to the end.
+        case 0x58: return idInGroup <  55 ? idInGroup + 2497 : -1;
         case 0x5A: return idInGroup < 130 ? idInGroup + 1301 : -1;
         case 0x5B: return idInGroup <   6 ? idInGroup + 1431 : -1;
-        case 0x5C: return idInGroup <  20 ? idInGroup + 1437 : -1;
+        // Was capped at 20, which excluded SMSG_TAKE_SCREENSHOT_FOR_COMPLAINT (id 50). 0x5E starts at
+        // 1457, so this block moves to the end too.
+        case 0x5C: return idInGroup <  51 ? idInGroup + 2552 : -1;
         case 0x5E: return idInGroup <   8 ? idInGroup + 1457 : -1;
         case 0x5F: return idInGroup <  52 ? idInGroup + 1465 : -1;
         case 0x60: return idInGroup <  41 ? idInGroup + 1517 : -1;
