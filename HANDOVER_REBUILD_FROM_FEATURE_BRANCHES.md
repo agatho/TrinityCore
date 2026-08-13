@@ -236,3 +236,119 @@ Shop2 files:
 `feature/pvp-rated-bg` (`6b16315443`) still holds content not in any integration line, and is
 deliberately unmerged because it does not compile. Its commit message lists what is missing.
 
+> **STALE (verified 2026-08-13 late).** There is no branch `feature/pvp-rated-bg` in `.bare` any more,
+> and `git branch -a --contains 6b16315443` returns nothing — that WIP commit is unreferenced. It is
+> also superseded: the finished rated-battleground wire is `feature/pvp-queue-variants` @ `535244448c`,
+> which is merged into BOTH integration lines. Nothing is missing; only the pointer was.
+
+
+### §6 — NEXT INTEGRATION SESSION PROMPT (value-based test merge, prepared 2026-08-13)
+Integration test merge — Midnight gap-build (session 2026-08-12/13). Full detail: §3h/§4/§5 above.
+
+MERGE these branches (value-positive, testable now) from origin:
+  feature/crafting-orders        7c0c615143   (dupe fix)
+  feature/garrison-systems       fab2715fab   (dupe fix + covenant)
+  feature/perks-program          fbe91d15a5   (Tender dupe fix)  + APPLY 2 auth SQL
+  feature/pet-battles            eec4e6f053   (double-XP fix)
+  feature/club-finder            cc01f30f17   (auto-accept/consent/authz)
+  feature/omnium-folio           a1ab111366   (functional end-to-end)
+  feature/devourer-spec          3ead6a3a12   (playable spec)
+  feature/loa-blessings          8b139a882f   (altar worship + 8 blessings)
+  feature/quelthalas-zone-events 26a07296f5   (framework + Saltheril, live quest 89289)
+
+DO NOT MERGE yet (debug-harness/stub, no player value until captures land):
+  feature/prey-voidforge, feature/void-assaults, feature/slayers-rise-bg, feature/delve-nemesis
+SKIP: feature/haranir-allied-race (base race already at baseline).
+
+ORDER / DEPS: substrate must be present first — content/midnight-s1, feature/world-quests,
+  feature/warband, feature/delves, feature/mythic-plus, major-factions. Then the new content.
+CONFLICT: src/server/game/World/World.cpp is the one guaranteed conflict — resolve by UNION
+  (keep every manager's include + LoadFromDB() + Update() call).
+
+SQL to APPLY (auto-updates are OFF — apply manually to activate; realm-safe if omitted, but dark):
+  perks:  sql/updates/auth/master/2026_08_12_00_auth.sql, 2026_08_12_01_auth.sql
+  omnium: world/master/2026_08_12_00_world_omnium_folio.sql,
+          characters/master/2026_08_12_00_characters_omnium_folio.sql,
+          world/master/2026_08_12_02_world_omnium_questlines.sql
+  zone-events: world/master/2026_08_12_00_world_quelthalas_zone_events.sql
+  loa:    world/master/2026_08_13_00_world_loa_blessings.sql
+  devourer: world/master/2026_08_12_00_world_devourer_spec.sql (spell_script_names)
+
+Build worldserver green, then bring the realm up centrally. Report any conflict beyond World.cpp.
+
+### §6-VALIDATED (2026-08-13) — merge-set content branches pre-merged & build-tested TOGETHER, GREEN
+Throwaway scratch off baseline 560165c0a6, merged omnium-folio -> quelthalas-zone-events -> devourer-spec ->
+loa-blessings (deferred prey/void-assaults EXCLUDED; remediations excluded = disjoint files, not World.cpp).
+COMBINED worldserver GREEN (0 compile/0 link errors). 6 SQL files, NO collisions.
+ ONLY conflict = World.cpp LoadFromDB() region: union-keep ALL THREE sOmniumFolioMgr->LoadFromDB() +
+ sZoneEventMgr->LoadFromDB() + sLoaBlessingMgr->LoadFromDB() (loa has NO per-tick Update BY DESIGN - altar/event
+ driven, not a dropped call). spell_script_loader/custom_script_loader + per-manager Update() auto-merge (disjoint
+ lines). No dup-symbol/missing-include fallout. Scratch branch _validate-mergeset local-only, never pushed; central
+ realm untouched. => §6 merge set is a CONFIRMED GO.
+
+### §7 — STATUS AUDIT + RE-MERGE FROM GOLDEN SOURCE (2026-08-13 late)
+
+Every claim in §1-§6 was re-checked against `.bare` this session. Read this section BEFORE acting on
+anything above it.
+
+**Merged this session (both lines now agree with the golden source on these):**
+
+| Branch | Tip | into `integration/all-systems` | into `integration/with-bots` |
+|---|---|---|---|
+| feature/encounter-start-end | 5e2c5f8686 | `2f318be572` | `203dd8c246` |
+| feature/garrison-systems | 3addcd0356 | `3d4bdab9a2` | `fa380dc031` |
+| feature/commerce | fefb03ea97 | `8ac9321f82` | `d1fcdd22ee` |
+| feature/pvp-queue-variants | 535244448c | already in (`f480f0a3ab`) | `34e073c878` |
+| feature/tradeskill-npc | fdf268f7ca | already in | `a31b35f04e` |
+
+On all-systems the first three were content-neutral (the work had already arrived through short-lived
+branches that were merged and deleted); the whole net delta is one superseded comment block in
+`GarrisonPackets.h` plus one deduped pair of VAS declarations in `WorldSession.h`. On with-bots
+`feature/commerce` was a REAL merge (22 conflicted files) because that line carried an older lineage of
+the same commerce work — see commit `d1fcdd22ee` for the per-file decision record.
+
+**Two things that merge as duplicates rather than as conflicts — check for them every time:**
+git happily produces two copies of a declaration when the two sides put it in different places, and a
+duplicate declaration is a compile error, not a merge marker. This session that hit
+`WorldSession.h` (the two VAS handlers, both lines), `CharacterDatabase.{h,cpp}`
+(`CHAR_SEL_ACCOUNT_TOTAL_MONEY`) and `BattlePayHandler.cpp` (a whole second
+`HandleBattlePayGetPurchaseList` + a second VAS pair + a repeated `#include`). After every merge, grep
+the touched files for repeated symbols; a clean `git status` proves nothing.
+
+**RBAC id collision, now hit twice.** `feature/commerce` ships the two shop perms as 886/887, but 886
+is `RBAC_PERM_USE_COMMENTATOR_MODE` (feature/commentator, already applied to the live auth DB). Both
+integration lines renumber them to 887/888 in `RBAC.h` and in `2026_08_09_00_auth.sql`. **This should
+be back-ported to `feature/commerce`** so the third merge does not have to rediscover it.
+
+**SQL filename collisions (both lines resolved identically):**
+- `auth/master/2026_07_20_01_auth.sql` — club-finder RBAC 1001 + the BattlePay purchase ledger. UNION.
+- `auth/master/2026_08_12_00_auth.sql` — commerce's `account_battlepay_entitlement`; the two perks
+  halves live at `2026_08_12_02/03_auth.sql` (byte-identical content, renamed).
+- `auth/master/2026_08_09_00_auth.sql` — RBAC 887/888 per the renumber above.
+NOTHING WAS APPLIED. The SQL still outstanding for with-bots is listed in the session report.
+
+**Stale entries corrected:**
+- §1's branch tips are historical; all eight of those branches are ancestors of `integration/all-systems`
+  today. §1 is DONE, not a to-do list.
+- §3b/§3c/§3d/§3e branch tips are all superseded, and every branch they name is now merged into
+  all-systems. §3d is superseded by §3e (as it says); §3e's `feature/commerce @ 37e42f536d` is now
+  `fefb03ea97`.
+- The retired transport branches `content/midnight-s1`, `feature/major-factions-1207` and
+  `content/midnight-s1-sqlfix` NO LONGER EXIST, so §3's housekeeping step 4 is done and §4's/§6's
+  "merge order" and "substrate must be present first" lines that name them (and `feature/warband`,
+  also gone) cannot be followed literally. The substrate they refer to IS present: world-quests,
+  delves, mythic-plus, major-factions and lfg-list are all ancestors of all-systems.
+- The `feature/pvp-rated-bg` note above §6 is stale — see the block there.
+
+**Genuinely still outstanding from §6 — the four content branches are in NEITHER line:**
+`feature/omnium-folio` (a1ab111366), `feature/loa-blessings` (8b139a882f),
+`feature/quelthalas-zone-events` and `feature/devourer-spec`. The other five §6 entries
+(crafting-orders, garrison-systems, perks-program, pet-battles, club-finder) are already in
+all-systems. Two warnings before merging the four:
+- the §6 tips are wrong for two of them, and the LOCAL branches are not the origin branches:
+  `feature/quelthalas-zone-events` local `e857d66597` vs origin `26a07296f5` (local is BEHIND — §6's
+  Saltheril work is only on origin), and `feature/devourer-spec` local `aa65673156` vs origin
+  `3ead6a3a12` (DIVERGED, local is not a descendant). Decide which side is golden before merging.
+- with-bots is missing far more than §6: `feature/world-quests`, `feature/mythic-plus`,
+  `feature/delves`, `major-factions`, `feature/lfg-list` and `feature/ingame-shop-battlepay` are all
+  in all-systems but NOT in with-bots. Rebuilding with-bots to parity is its own session.
