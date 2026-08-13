@@ -951,7 +951,8 @@ void OpcodeTable::InitializeClientOpcodes()
     DEFINE_HANDLER(CMSG_REQUEST_CURRENCY_DATA_FOR_ACCOUNT_CHARACTERS,       STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleRequestCurrencyDataForAccountCharacters);
     DEFINE_HANDLER(CMSG_REQUEST_GUILD_PARTY_STATE,                          STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleGuildRequestPartyState);
     DEFINE_HANDLER(CMSG_REQUEST_GUILD_REWARDS_LIST,                         STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleRequestGuildRewardsList);
-    DEFINE_HANDLER(CMSG_REQUEST_INSTANCE_ENCOUNTER_EVENT_SYNC,              STATUS_UNHANDLED, PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
+    // PROCESS_THREADUNSAFE, not PROCESS_INPLACE: the handler reads _player and its instance script.
+    DEFINE_HANDLER(CMSG_REQUEST_INSTANCE_ENCOUNTER_EVENT_SYNC,              STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleRequestInstanceEncounterEventSync);
     DEFINE_HANDLER(CMSG_REQUEST_LATEST_SPLASH_SCREEN,                       STATUS_LOGGEDIN,  PROCESS_INPLACE,      &WorldSession::HandleRequestLatestSplashScreen);
     DEFINE_HANDLER(CMSG_REQUEST_LFG_LIST_BLACKLIST,                         STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleRequestLFGListBlacklist);
     DEFINE_HANDLER(CMSG_REQUEST_PARTY_ELIGIBILITY_FOR_DELVE_TIERS,          STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleRequestPartyEligibilityForDelveTiers);
@@ -1827,11 +1828,22 @@ void OpcodeTable::InitializeServerOpcodes()
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_INSTANCE_ENCOUNTER_DISENGAGE_UNIT,                            STATUS_NEVER,       CONNECTION_TYPE_INSTANCE);
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_INSTANCE_ENCOUNTER_END,                                       STATUS_NEVER,       CONNECTION_TYPE_INSTANCE);
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_INSTANCE_ENCOUNTER_ENGAGE_UNIT,                               STATUS_NEVER,       CONNECTION_TYPE_INSTANCE);
+    // APPEND and CAST_UPDATE are written byte for byte and driven by real code paths, but no shipped
+    // encounter script schedules a timeline event yet, so nothing would actually put them on the wire.
+    // They stay blocked deliberately - flip them the moment a boss script starts using the scheduler.
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_INSTANCE_ENCOUNTER_EVENT_APPEND,                              STATUS_UNHANDLED,   CONNECTION_TYPE_REALM);
+    // No capture contains BLOCKED_CHANGED, RESPAWN or TIMELINE_SYNC, and their extra scalars are
+    // unexplained: TIMELINE_SYNC has a GUID plus a uint32, RESPAWN a uint32 ahead of its element list, and
+    // BLOCKED_CHANGED gives no indication which of its two trailing bits IsEventBlocked reads. The shared
+    // element layout is known, but there is nothing to drive them with and nothing to check a guess
+    // against, so they stay blocked.
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_INSTANCE_ENCOUNTER_EVENT_BLOCKED_CHANGED,                     STATUS_UNHANDLED,   CONNECTION_TYPE_REALM);
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_INSTANCE_ENCOUNTER_EVENT_CAST_UPDATE,                         STATUS_UNHANDLED,   CONNECTION_TYPE_REALM);
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_INSTANCE_ENCOUNTER_EVENT_RESPAWN,                             STATUS_UNHANDLED,   CONNECTION_TYPE_REALM);
-    DEFINE_SERVER_OPCODE_HANDLER(SMSG_INSTANCE_ENCOUNTER_EVENT_SEQUENCE,                            STATUS_UNHANDLED,   CONNECTION_TYPE_REALM);
+    // SEQUENCE is emitted for real: on encounter engage, on encounter end (the empty count 0 form retail
+    // uses to clear the timeline), whenever the live set changes, and as the answer to
+    // CMSG_REQUEST_INSTANCE_ENCOUNTER_EVENT_SYNC, which the client sends by itself after entering the world.
+    DEFINE_SERVER_OPCODE_HANDLER(SMSG_INSTANCE_ENCOUNTER_EVENT_SEQUENCE,                            STATUS_NEVER,       CONNECTION_TYPE_REALM);
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_INSTANCE_ENCOUNTER_GAIN_COMBAT_RESURRECTION_CHARGE,           STATUS_NEVER,       CONNECTION_TYPE_INSTANCE);
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_INSTANCE_ENCOUNTER_IN_COMBAT_RESURRECTION,                    STATUS_NEVER,       CONNECTION_TYPE_INSTANCE);
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_INSTANCE_ENCOUNTER_OBJECTIVE_COMPLETE,                        STATUS_NEVER,       CONNECTION_TYPE_INSTANCE);

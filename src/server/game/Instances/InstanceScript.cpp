@@ -48,7 +48,9 @@
 #include "World.h"
 #include "WorldSession.h"
 #include "WorldStateMgr.h"
+#include <algorithm>
 #include <cstdarg>
+#include <vector>
 
 #ifdef TRINITY_API_USE_DYNAMIC_LINKING
 #include "ScriptMgr.h"
@@ -71,7 +73,8 @@ DungeonEncounterEntry const* BossInfo::GetDungeonEncounterForDifficulty(Difficul
 }
 
 InstanceScript::InstanceScript(InstanceMap* map) noexcept : instance(map), _instanceSpawnGroups(sObjectMgr->GetInstanceSpawnGroupsForMap(map->GetId())),
-_entranceId(0), _temporaryEntranceId(0), _combatResurrectionTimer(0), _combatResurrectionCharges(0), _combatResurrectionTimerStarted(false)
+_entranceId(0), _temporaryEntranceId(0), _combatResurrectionTimer(0), _combatResurrectionCharges(0), _combatResurrectionTimerStarted(false),
+_nextEncounterTimelineEventId(0)
 {
 #ifdef TRINITY_API_USE_DYNAMIC_LINKING
     uint32 scriptId = sObjectMgr->GetInstanceTemplate(map->GetId())->ScriptId;
@@ -425,7 +428,14 @@ bool InstanceScript::SetBossState(uint32 id, EncounterState state)
 
                     dungeonEncounter = bossInfo->GetDungeonEncounterForDifficulty(instance->GetDifficultyID());
                     if (dungeonEncounter)
+                    {
                         SendRealmEncounterStart(dungeonEncounter->ID);
+
+                        // Retail sends SMSG_INSTANCE_ENCOUNTER_EVENT_SEQUENCE on the same sniff tick as
+                        // SMSG_ENCOUNTER_START (ticks 496010 and 743769 of C:\sniff\m+ run12.0.7.pkt).
+                        // A fresh pull starts from an empty timeline for this encounter.
+                        ClearEncounterTimeline(dungeonEncounter->ID);
+                    }
 
                     instance->DoOnPlayers([](Player* player)
                     {
@@ -441,7 +451,13 @@ bool InstanceScript::SetBossState(uint32 id, EncounterState state)
 
                     dungeonEncounter = bossInfo->GetDungeonEncounterForDifficulty(instance->GetDifficultyID());
                     if (dungeonEncounter)
+                    {
                         SendRealmEncounterEnd(dungeonEncounter->ID, false);
+
+                        // Retail clears the timeline with an empty 4-byte SEQUENCE on the same sniff tick
+                        // as SMSG_ENCOUNTER_END (tick 570908 of C:\sniff\m+ run12.0.7.pkt).
+                        ClearEncounterTimeline(dungeonEncounter->ID);
+                    }
 
                     instance->DoOnPlayers([](Player* player)
                     {
@@ -459,6 +475,7 @@ bool InstanceScript::SetBossState(uint32 id, EncounterState state)
                     {
                         bool const isRaidEncounter = instance->IsRaid();
                         SendRealmEncounterEnd(dungeonEncounter->ID, true);
+                        ClearEncounterTimeline(dungeonEncounter->ID);
 
                         instance->DoOnPlayers([&](Player* player)
                         {
@@ -991,6 +1008,131 @@ void InstanceScript::SendRealmEncounterEnd(uint32 dungeonEncounterId, bool succe
     }
 
     instance->SendToPlayers(encounterEnd.Write());
+}
+
+namespace
+{
+// Fills one wire element from one live timeline event.
+//
+// Duration and the nested cast entry are kept in the relation that holds in all 11 captured elements,
+// Duration == TimeToCastMs + MaxQueueDuration. Retail only ever emits an element at the moment the event
+// is created, so it has no capture that shows what Duration does once the countdown has advanced; keeping
+// the observed invariant is the only choice that is backed by bytes.
+void BuildEncounterTimelineEvent(InstanceScript::EncounterTimelineEvent const& source, uint32 timestamp,
+    WorldPackets::Instance::EncounterTimelineEvent& target)
+{
+    target.Severity = source.Severity;
+    target.EventID = source.EventID;
+    target.EncounterEventID = source.EncounterEventID;
+    target.SpellID = source.SpellID;
+    target.IconFileID = source.IconFileID;
+    target.Caster = source.Caster;
+    target.Timestamp = timestamp;
+    target.MaxQueueDuration = uint32(source.MaxQueueDuration.count());
+    target.Duration = uint32(source.TimeToCast.count() + source.MaxQueueDuration.count());
+    target.CastState = 2;                   // EncounterEventCastState::NotCasting, as in every captured element
+    target.Casts.emplace_back();
+    target.Casts.back().TimeToCastMs = uint32(source.TimeToCast.count());
+}
+}
+
+uint32 InstanceScript::ScheduleEncounterTimelineEvent(ObjectGuid caster, uint32 dungeonEncounterId, uint32 encounterEventId,
+    uint32 spellId, int32 iconFileId, uint8 severity, Milliseconds timeToCast, Milliseconds maxQueueDuration)
+{
+    EncounterTimelineEvent& timelineEvent = _encounterTimeline.emplace_back();
+    timelineEvent.EventID = ++_nextEncounterTimelineEventId;    // ENCOUNTER_TIMELINE_INVALID_EVENT is 0, so never hand out 0
+    timelineEvent.DungeonEncounterID = dungeonEncounterId;
+    timelineEvent.EncounterEventID = encounterEventId;
+    timelineEvent.SpellID = spellId;
+    timelineEvent.IconFileID = iconFileId;
+    timelineEvent.Severity = severity;
+    timelineEvent.Caster = caster;
+    timelineEvent.TimeToCast = timeToCast;
+    timelineEvent.OriginalTimeToCast = timeToCast;
+    timelineEvent.MaxQueueDuration = maxQueueDuration;
+
+    WorldPackets::Instance::InstanceEncounterEventAppend append;
+    BuildEncounterTimelineEvent(timelineEvent, GameTime::GetGameTimeMS(), append.Events.emplace_back());
+    instance->SendToPlayers(append.Write());
+
+    return timelineEvent.EventID;
+}
+
+void InstanceScript::CancelEncounterTimelineEvent(uint32 eventId)
+{
+    auto itr = std::find_if(_encounterTimeline.begin(), _encounterTimeline.end(),
+        [eventId](EncounterTimelineEvent const& timelineEvent) { return timelineEvent.EventID == eventId; });
+    if (itr == _encounterTimeline.end())
+        return;
+
+    _encounterTimeline.erase(itr);
+
+    // There is no "remove one event" opcode in the family, so the whole sequence is resent - which is
+    // what SEQUENCE is for.
+    SendEncounterTimeline();
+}
+
+void InstanceScript::ClearEncounterTimeline(uint32 dungeonEncounterId)
+{
+    std::erase_if(_encounterTimeline, [dungeonEncounterId](EncounterTimelineEvent const& timelineEvent)
+    {
+        return timelineEvent.DungeonEncounterID == dungeonEncounterId;
+    });
+
+    SendEncounterTimeline();
+}
+
+void InstanceScript::SendEncounterTimeline() const
+{
+    WorldPackets::Instance::InstanceEncounterEventSequence sequence;
+    uint32 timestamp = GameTime::GetGameTimeMS();
+    for (EncounterTimelineEvent const& timelineEvent : _encounterTimeline)
+        BuildEncounterTimelineEvent(timelineEvent, timestamp, sequence.Events.emplace_back());
+
+    instance->SendToPlayers(sequence.Write());
+}
+
+void InstanceScript::SendEncounterTimelineTo(Player* player) const
+{
+    WorldPackets::Instance::InstanceEncounterEventSequence sequence;
+    uint32 timestamp = GameTime::GetGameTimeMS();
+    for (EncounterTimelineEvent const& timelineEvent : _encounterTimeline)
+        BuildEncounterTimelineEvent(timelineEvent, timestamp, sequence.Events.emplace_back());
+
+    player->SendDirectMessage(sequence.Write());
+}
+
+void InstanceScript::UpdateEncounterTimeline(uint32 diff)
+{
+    if (_encounterTimeline.empty())
+        return;
+
+    Milliseconds elapsed(diff);
+    uint32 timestamp = GameTime::GetGameTimeMS();
+
+    for (auto itr = _encounterTimeline.begin(); itr != _encounterTimeline.end(); )
+    {
+        if (itr->TimeToCast > elapsed)
+        {
+            itr->TimeToCast -= elapsed;
+            ++itr;
+            continue;
+        }
+
+        // Countdown reached zero: the ability is being cast now. CAST_UPDATE reports the countdown the
+        // event was created with, not the residual - see the InstancePackets.h comment.
+        WorldPackets::Instance::InstanceEncounterEventCastUpdate castUpdate;
+        castUpdate.EventID = itr->EventID;
+        castUpdate.EncounterEventID = itr->EncounterEventID;
+        castUpdate.Caster = itr->Caster;
+        castUpdate.DungeonEncounterID = itr->DungeonEncounterID;
+        castUpdate.CastState = 1;           // EncounterEventCastState::Casting, as in every captured CAST_UPDATE
+        castUpdate.Timestamp = timestamp;
+        castUpdate.TimeToCastMs = uint32(itr->OriginalTimeToCast.count());
+        instance->SendToPlayers(castUpdate.Write());
+
+        itr = _encounterTimeline.erase(itr);
+    }
 }
 
 void InstanceScript::SendUpdateAllowReleaseInProgress(bool allowRelease)

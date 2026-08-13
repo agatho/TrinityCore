@@ -1237,6 +1237,34 @@ void WorldSession::HandleToggleDifficulty(WorldPackets::Instance::ToggleDifficul
     // normal/heroic modes - not yet implemented
 }
 
+// The client asks for its encounter timeline to be resynchronised; the request body is just the
+// requesting player's own GUID (both captures in C:\sniff\m+ run12.0.7.pkt carry a HighGuid::Player
+// GUID and nothing else). The answer is the current timeline as a SEQUENCE, which is exactly how retail
+// pushes the whole timeline - including the 4-byte, count 0 form when there is nothing on it.
+void WorldSession::HandleRequestInstanceEncounterEventSync(WorldPackets::Instance::RequestInstanceEncounterEventSync& request)
+{
+    // Every capture has the sender asking about itself. Anything else is a client asking about a unit it
+    // has no business asking about, so it is refused rather than answered with someone else's timeline.
+    if (request.Unit != _player->GetGUID())
+    {
+        TC_LOG_DEBUG("network", "WorldSession::HandleRequestInstanceEncounterEventSync: player {} asked for the timeline of {}",
+            _player->GetGUID().ToString(), request.Unit.ToString());
+        return;
+    }
+
+    InstanceScript* instance = _player->GetInstanceScript();
+    if (!instance)
+    {
+        // Not in a scripted instance, so the timeline is empty. Retail's own representation of an empty
+        // timeline is a SEQUENCE with count 0 (tick 570908 of the capture above), so send that.
+        WorldPackets::Instance::InstanceEncounterEventSequence sequence;
+        SendPacket(sequence.Write());
+        return;
+    }
+
+    instance->SendEncounterTimelineTo(_player);
+}
+
 void WorldSession::HandleViolenceLevel(WorldPackets::Misc::ViolenceLevel& /*violenceLevel*/)
 {
     // do something?

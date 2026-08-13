@@ -352,3 +352,22 @@ all-systems. Two warnings before merging the four:
 - with-bots is missing far more than §6: `feature/world-quests`, `feature/mythic-plus`,
   `feature/delves`, `major-factions`, `feature/lfg-list` and `feature/ingame-shop-battlepay` are all
   in all-systems but NOT in with-bots. Rebuilding with-bots to parity is its own session.
+
+### §7 — BACKLOG TIER 2 (2026-08-13, #8 + raid-season + Turbulent Timeways + small activities + housing pair)
+All golden-source, all worldserver-green. NOT yet integration-validated together.
+ feature/voidscar-arena         @ a9201cbea3 — #8 8th dungeon (map 2923 REAL). InstanceMapScript + 3-boss encounter journal
+   (Taz'Rah/Atroxus/Charonus, DungeonEncounter 3285/3286/3287). SQL 2026_08_13_00_world_voidscar_arena.sql (instance_template
+   2923). Bosses capture-blocked. Auto-joins M+ on MapChallengeMode DB2 row. DEP: feature/mythic-plus.
+ feature/raid-season-s1         @ 104e16f467 — flex-Mythic Difficulty 233 (15-25) BUILT; Chiming Void Curio item 249367 =
+   vendor token (Kirana, capture-blocked); Sporefall Map 1592 = DevMapE dev shell. SQL 2026_08_13_00_world_raid_season_s1.sql
+   (raid_season_curio_reward EMPTY). No DB2 hotfix (233 stock).
+ feature/turbulent-timeways     @ ff61add5c9 — weekly TW-rotation OFFER layer (chromie-time lacks it). Currency 1166, Holiday
+   1425. SQL 2026_08_13_50_world_turbulent_timeways.sql (turbulent_timeways_rotation, 10 rows). DEP: feature/chromie-time.
+   Gate worldstates + vendors capture-blocked.
+ feature/midnight-small-activities @ e41b15724d — Ritual Sites BUILT (faction 2792/currency 3428/title 1291), Abyss Anglers
+   reward-seam (currency 3373; dive capture-blocked), Darkspear Dash research-only. SQL 2026_08_13_30/31_world_*.
+ feature/housing-system         @ d092de76b6 (advanced a08039ea49..d092de76b6) — OUTDOOR LIGHTING live + closes housing-audit
+   A3 (cap 300/350) + A4 (light overlap, result 44); DECOR DUELS scaffolding (achiev cat 15574) + capture-blocked round seam.
+   SQL 2026_08_13_00_world_decor_duel.sql (decor_duel_template, disabled seed).
+VALUE NOTE for merge triage: buildable/testable-now = Voidscar (instanceable dungeon shell), flex-Mythic 233, Ritual Sites,
+ housing outdoor-lighting (+audit fixes). Turbulent Timeways/Abyss/Decor-Duels/Darkspear = stub/scaffolding until captures.

@@ -709,6 +709,7 @@ namespace WorldPackets
         class InstanceAbandonVoteResponse;
         class InstanceInfo;
         class InstanceLockResponse;
+        class RequestInstanceEncounterEventSync;
         class ResetInstances;
         class SetDifficultyID;
         class StartInstanceAbandonVote;
@@ -2368,6 +2369,7 @@ class TC_GAME_API WorldSession
         void HandleInstanceAbandonVoteResponse(WorldPackets::Instance::InstanceAbandonVoteResponse& packet);
         void HandleSetDifficultyID(WorldPackets::Instance::SetDifficultyID& packet);
         void HandleToggleDifficulty(WorldPackets::Instance::ToggleDifficulty& packet);
+        void HandleRequestInstanceEncounterEventSync(WorldPackets::Instance::RequestInstanceEncounterEventSync& packet);
 
         // Looking for Dungeon/Raid
         void SendLfgPlayerLockInfo();

@@ -353,6 +353,184 @@ namespace WorldPackets
         };
 
         // ============================================================
+        // Encounter timeline packets (12.0 "boss ability timeline" HUD)
+        // ============================================================
+        //
+        // The client side of this is C_EncounterTimeline (Blizzard_APIDocumentationGenerated/
+        // EncounterTimelineDocumentation.lua in the 12.0.7.68275 UI source). The server pushes a set of
+        // upcoming boss abilities, each with a countdown, and tells the client when one of them is
+        // actually being cast.
+        //
+        // Every message in the family carries the same 104-byte-in-memory element, parsed by
+        // sub_7FF7291132C0 (image base 0x7FF728AA0000). Disassembling that parser gives the wire order
+        // with no ambiguity, because it is a flat run of reader calls:
+        //
+        //   byte                          -> +0x00
+        //   uint32 x3                     -> +0x04 +0x08 +0x0C
+        //   uint32                        -> passed to the vector-grow helper sub_7FF7291158B0(this+0x10)
+        //                                    i.e. it is the COUNT of a nested list, not a scalar
+        //   uint32 x4                     -> +0x28 +0x2C +0x30 +0x34
+        //   ObjectGuid (packed)           -> +0x38
+        //   uint32 x4                     -> +0x4C +0x54 +0x58 +0x5C
+        //   byte                          -> +0x60
+        //   byte, bit-unpacked            -> bit7 -> +0x48, bit6 -> +0x50
+        //   then COUNT times: uint32 -> elem+0, byte bit7 -> elem+4
+        //
+        // That gives 67 fixed bytes (with a 16-byte packed GUID) plus 5 bytes per nested entry. It is
+        // confirmed by the captures: in C:\sniff\m+ run12.0.7.pkt the 292-byte SEQUENCE is
+        // 4 + 4*72 and the 217-byte SEQUENCE is 4 + 3*71, the 71 arising because that encounter's caster
+        // GUID packs to 15 bytes instead of 16. Zero slack in either case.
+        //
+        // Field meanings, strongest evidence first:
+        //
+        //  Severity          (+0x00) observed 1 and 2. Named after EncounterEventSeverity
+        //                    (Low=0/Medium=1/High=2) and EncounterEvent.db2's Severity column. INFERRED -
+        //                    the only other single-byte enum in range would be EncounterTimelineEventSource,
+        //                    which is excluded because server-pushed events are Source=Encounter=0 and this
+        //                    byte is never 0.
+        //  EventID           (+0x04) PROVEN. Monotonically increasing instance id (1,2,3,4 then 5,6 from
+        //                    APPENDs, then 7..). CAST_UPDATE refers back to it.
+        //  EncounterEventID  (+0x08) observed 278-285, stable 1:1 with (SpellID, IconFileID) across every
+        //                    packet. INFERRED to be the EncounterEvent.db2 row id ("ID of the encounter
+        //                    event record" - EncounterEventInfo.encounterEventID).
+        //  SpellID           (+0x0C) observed 377034/376997/377004 and 388544/388567/388796/388923.
+        //  Unused_28         (+0x28) 0 in all 11 observed elements.
+        //  Unknown_2C        (+0x2C) 0 in 9 of 11; 230954 and 223315 in one element each. NOT a FileDataID
+        //                    (230954 resolves to a draenei face texture in the CASC listfile, i.e. noise).
+        //                    Left unnamed.
+        //  Unused_30         (+0x30) 0 in all 11 observed elements.
+        //  IconFileID        (+0x34) PROVEN. All 7 distinct observed values resolve in the CASC listfile to
+        //                    interface/icons/*.blp (spell_lifegivingseed, spell_nature_earthquake,
+        //                    ability_smash, inv_misc_branch_01, inv_icon_wing06b,
+        //                    inv_misc_raptortalon_nightmare, ability_vehicle_sonicshockwave). 7/7.
+        //  Caster            (+0x38) packed GUID, HighGuid 8 (Creature) / 9 (Vehicle). Identical for every
+        //                    element of a given packet.
+        //  Timestamp         (+0x4C) PROVEN to be a millisecond clock: two SEQUENCE packets 59026 sniff-ms
+        //                    apart differ by 59025 here, and an APPEND 9025 ms later differs by 9019.
+        //                    Written as GameTime::GetGameTimeMS().
+        //  Unused_54         (+0x54) 0 in all 11 observed elements.
+        //  MaxQueueDuration  (+0x58) 5000 in all 11 observed elements. Named after
+        //                    EncounterTimelineEventInfo.maxQueueDuration ("hold duration for this event
+        //                    after it reaches the end of the timeline"). INFERRED.
+        //  Duration          (+0x5C) PROVEN to equal TimeToCastMs + MaxQueueDuration in all 11 elements
+        //                    (23000/18000, 60000/55000, 14000/9000, 35000/30000, 33000/28000, 38000/33000,
+        //                    25000/20000, 10000/5000, 19000/14000, ...). Named after
+        //                    EncounterTimelineEventInfo.duration.
+        //  CastState         (+0x60) 2 in every SEQUENCE/APPEND element, 1 in every CAST_UPDATE. That is
+        //                    exactly EncounterEventCastState (Casting=1, NotCasting=2, Expired=3), and the
+        //                    CAST_UPDATE parser's constructor pre-seeds this byte with 2 before reading.
+        //  UnkBit7/UnkBit6   both false in every observed element.
+        //  Casts             nested list, count 1 in every observed element. The uint32 is PROVEN to be the
+        //                    milliseconds from Timestamp until the ability is cast: eight independent
+        //                    CAST_UPDATEs land at their event's value to within the sniff's own tick
+        //                    resolution (18000 vs 18027, 30000 vs 30029, 28000 vs 27998, 33000 vs 33000,
+        //                    55000 vs 55074, 9000 vs 9025, 5000 vs 5026). The per-entry bit is false
+        //                    throughout.
+        struct EncounterTimelineCast
+        {
+            uint32 TimeToCastMs = 0;
+            bool UnkBit7 = false;
+        };
+
+        struct EncounterTimelineEvent
+        {
+            uint8 Severity = 0;
+            uint32 EventID = 0;
+            uint32 EncounterEventID = 0;
+            int32 SpellID = 0;
+            uint32 Unused_28 = 0;
+            uint32 Unknown_2C = 0;
+            uint32 Unused_30 = 0;
+            int32 IconFileID = 0;
+            ObjectGuid Caster;
+            uint32 Timestamp = 0;
+            uint32 Unused_54 = 0;
+            uint32 MaxQueueDuration = 0;
+            uint32 Duration = 0;
+            uint8 CastState = 2;                    // EncounterEventCastState::NotCasting
+            bool UnkBit7 = false;
+            bool UnkBit6 = false;
+            std::vector<EncounterTimelineCast> Casts;
+        };
+
+        ByteBuffer& operator<<(ByteBuffer& data, EncounterTimelineEvent const& timelineEvent);
+
+        // SMSG_INSTANCE_ENCOUNTER_EVENT_SEQUENCE (0x420228): uint32 count, then count elements.
+        // Parser sub_7FF7290A8910 reads exactly that and nothing else. Observed in
+        // C:\sniff\m+ run12.0.7.pkt at 292 bytes (count 4), 217 bytes (count 3) and 4 bytes (count 0) -
+        // the empty form is what retail sends at the moment the encounter ends, to clear the timeline.
+        class InstanceEncounterEventSequence final : public ServerPacket
+        {
+        public:
+            explicit InstanceEncounterEventSequence() : ServerPacket(SMSG_INSTANCE_ENCOUNTER_EVENT_SEQUENCE, 4) { }
+
+            WorldPacket const* Write() override;
+
+            std::vector<EncounterTimelineEvent> Events;
+        };
+
+        // SMSG_INSTANCE_ENCOUNTER_EVENT_APPEND (0x42022A): same shape as SEQUENCE (parser
+        // sub_7FF7290A8AE0). Observed at 76 bytes = 4 + 1*72. Retail sends one of these at the instant a
+        // scheduled ability fires, carrying the next occurrence of that same ability.
+        class InstanceEncounterEventAppend final : public ServerPacket
+        {
+        public:
+            explicit InstanceEncounterEventAppend() : ServerPacket(SMSG_INSTANCE_ENCOUNTER_EVENT_APPEND, 4 + 72) { }
+
+            WorldPacket const* Write() override;
+
+            std::vector<EncounterTimelineEvent> Events;
+        };
+
+        // SMSG_INSTANCE_ENCOUNTER_EVENT_CAST_UPDATE (0x42022D), parser sub_7FF7290A8D40:
+        //   uint32 EventID, uint32 EncounterEventID, ObjectGuid Caster, uint32 DungeonEncounterID,
+        //   uint8 CastState, uint8 Unknown_3D, uint32 Timestamp, uint32 TimeToCastMs, bit7|bit6 byte.
+        // 4+4+16+4+1+1+4+4+1 = 39, and 38 when the GUID packs to 15 bytes. Both sizes are in the capture.
+        //
+        // DungeonEncounterID is not a guess: the two CAST_UPDATE runs in C:\sniff\m+ run12.0.7.pkt carry
+        // 0x0A03 (2563) and 0x0A04 (2564), and SMSG_ENCOUNTER_START at the very same sniff ticks (496010,
+        // 743769) carries those same two DungeonEncounterIDs - see the EncounterStart comment above.
+        //
+        // TimeToCastMs here is the event's ORIGINAL countdown, not the residual at cast time: CAST_UPDATE
+        // for EventID 1 arrives 18027 ms after the SEQUENCE that created it with 18000, and reports 18000,
+        // not 0. Same for 30000, 28000, 33000, 55000, 9000, 5000.
+        //
+        // The trailing byte is 0x80 in all eight captured CAST_UPDATEs, i.e. bit7 set, while it is 0x00 in
+        // every SEQUENCE/APPEND element. Whatever the bit means, it flips on when the cast happens.
+        class InstanceEncounterEventCastUpdate final : public ServerPacket
+        {
+        public:
+            explicit InstanceEncounterEventCastUpdate() : ServerPacket(SMSG_INSTANCE_ENCOUNTER_EVENT_CAST_UPDATE, 4 + 4 + 16 + 4 + 1 + 1 + 4 + 4 + 1) { }
+
+            WorldPacket const* Write() override;
+
+            uint32 EventID = 0;
+            uint32 EncounterEventID = 0;
+            ObjectGuid Caster;
+            uint32 DungeonEncounterID = 0;
+            uint8 CastState = 1;                    // EncounterEventCastState::Casting
+            uint8 Unknown_3D = 0;                   // 0 in every capture
+            uint32 Timestamp = 0;
+            uint32 TimeToCastMs = 0;
+            bool UnkBit7 = true;                    // 0x80 in every capture
+            bool UnkBit6 = false;
+        };
+
+        // CMSG_REQUEST_INSTANCE_ENCOUNTER_EVENT_SYNC (0x3A0196), serializer sub_7FF7291490C0: a single
+        // packed GUID and nothing else. The two captures in C:\sniff\m+ run12.0.7.pkt are both 9 bytes -
+        // masks 0x0F/0xE0 (4 + 3 set bits) plus 7 data bytes - and decode to the capturing player's own
+        // GUID (HighGuid 2 = Player). The client sends it shortly after entering the world.
+        class RequestInstanceEncounterEventSync final : public ClientPacket
+        {
+        public:
+            explicit RequestInstanceEncounterEventSync(WorldPacket&& packet) : ClientPacket(CMSG_REQUEST_INSTANCE_ENCOUNTER_EVENT_SYNC, std::move(packet)) { }
+
+            void Read() override;
+
+            ObjectGuid Unit;
+        };
+
+        // ============================================================
         // Release control packets
         // ============================================================
 

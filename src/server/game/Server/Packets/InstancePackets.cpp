@@ -225,6 +225,80 @@ WorldPacket const* EncounterEnd::Write()
     return &_worldPacket;
 }
 
+// Wire order is the read order of the shared element parser sub_7FF7291132C0 - see the long comment
+// on EncounterTimelineEvent in InstancePackets.h. Note that the nested cast list contributes its COUNT
+// up front, between SpellID and Unused_28, and its entries only at the very end of the element.
+ByteBuffer& operator<<(ByteBuffer& data, EncounterTimelineEvent const& timelineEvent)
+{
+    data << uint8(timelineEvent.Severity);
+    data << uint32(timelineEvent.EventID);
+    data << uint32(timelineEvent.EncounterEventID);
+    data << int32(timelineEvent.SpellID);
+    data << uint32(timelineEvent.Casts.size());
+    data << uint32(timelineEvent.Unused_28);
+    data << uint32(timelineEvent.Unknown_2C);
+    data << uint32(timelineEvent.Unused_30);
+    data << int32(timelineEvent.IconFileID);
+    data << timelineEvent.Caster;
+    data << uint32(timelineEvent.Timestamp);
+    data << uint32(timelineEvent.Unused_54);
+    data << uint32(timelineEvent.MaxQueueDuration);
+    data << uint32(timelineEvent.Duration);
+    data << uint8(timelineEvent.CastState);
+    data << Bits<1>(timelineEvent.UnkBit7);
+    data << Bits<1>(timelineEvent.UnkBit6);
+    data.FlushBits();
+
+    for (EncounterTimelineCast const& cast : timelineEvent.Casts)
+    {
+        data << uint32(cast.TimeToCastMs);
+        data << Bits<1>(cast.UnkBit7);
+        data.FlushBits();
+    }
+
+    return data;
+}
+
+WorldPacket const* InstanceEncounterEventSequence::Write()
+{
+    _worldPacket << uint32(Events.size());
+    for (EncounterTimelineEvent const& timelineEvent : Events)
+        _worldPacket << timelineEvent;
+
+    return &_worldPacket;
+}
+
+WorldPacket const* InstanceEncounterEventAppend::Write()
+{
+    _worldPacket << uint32(Events.size());
+    for (EncounterTimelineEvent const& timelineEvent : Events)
+        _worldPacket << timelineEvent;
+
+    return &_worldPacket;
+}
+
+WorldPacket const* InstanceEncounterEventCastUpdate::Write()
+{
+    _worldPacket << uint32(EventID);
+    _worldPacket << uint32(EncounterEventID);
+    _worldPacket << Caster;
+    _worldPacket << uint32(DungeonEncounterID);
+    _worldPacket << uint8(CastState);
+    _worldPacket << uint8(Unknown_3D);
+    _worldPacket << uint32(Timestamp);
+    _worldPacket << uint32(TimeToCastMs);
+    _worldPacket << Bits<1>(UnkBit7);
+    _worldPacket << Bits<1>(UnkBit6);
+    _worldPacket.FlushBits();
+
+    return &_worldPacket;
+}
+
+void RequestInstanceEncounterEventSync::Read()
+{
+    _worldPacket >> Unit;
+}
+
 WorldPacket const* InstanceEncounterUpdateAllowReleaseInProgress::Write()
 {
     _worldPacket << Bits<1>(AllowRelease);

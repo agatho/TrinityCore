@@ -1,0 +1,5 @@
+warning: in the working copy of 'HANDOVER_REBUILD_FROM_FEATURE_BRANCHES.md', LF will be replaced by CRLF the next time Git touches it
+Auto-merging src/server/game/Handlers/MiscHandler.cpp
+Merge made by the 'ort' strategy.
+ src/server/game/Handlers/MiscHandler.cpp | 40 ++++++++++++++++++--------------
+ 1 file changed, 23 insertions(+), 17 deletions(-)

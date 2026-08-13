@@ -11,12 +11,12 @@
 -- Found MySQL executable: C:/Program Files/MySQL/MySQL Server 9.4/bin/mysql.exe
 cmake : 
 In Zeile:1 Zeichen:352
-+ ... gration-all-systems\build; cmake . > ..\cmake_reconf.log 2>&1; "confi ...
-+                                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
++ ... ration-all-systems\build; cmake . > ..\cmake_reconf2.log 2>&1; $env:C ...
++                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     + CategoryInfo          : NotSpecified: (:String) [], RemoteException
     + FullyQualifiedErrorId : NativeCommandError
  
-* TrinityCore revision   : 7962b2d65081+ 2026-08-13 13:52:59 +0200 (integration/all-systems branch)
+* TrinityCore revision   : b337f5ed7585+ 2026-08-13 14:13:26 +0200 (integration/all-systems branch)
 
 * Install core to        : C:/Program Files/TrinityCore
 * Install configs to     : C:/Program Files/TrinityCore
@@ -70,6 +70,6 @@ In Zeile:1 Zeichen:352
     |   +- Zandalar
     |
 
--- Configuring done (18.9s)
--- Generating done (7.7s)
+-- Configuring done (3.4s)
+-- Generating done (5.0s)
 -- Build files have been written to: I:/TrinityCore/_integration-all-systems/build
