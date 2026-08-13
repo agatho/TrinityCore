@@ -206,6 +206,7 @@ namespace WorldPackets
         class BattlemasterJoinArena;
         class BattlemasterJoinRatedBGBlitz;
         class BattlemasterJoinSkirmish;
+        class JoinRatedBattleground;
         class StartWarGame;
         class AcceptWargameInvite;
         class BattlefieldLeave;
@@ -2251,6 +2252,7 @@ class TC_GAME_API WorldSession
         void HandleBattlemasterJoinArena(WorldPackets::Battleground::BattlemasterJoinArena& packet);
         void HandleBattlemasterJoinRatedBGBlitz(WorldPackets::Battleground::BattlemasterJoinRatedBGBlitz& packet);
         void HandleBattlemasterJoinSkirmish(WorldPackets::Battleground::BattlemasterJoinSkirmish& packet);
+        void HandleJoinRatedBattleground(WorldPackets::Battleground::JoinRatedBattleground& packet);
         void HandleStartWarGame(WorldPackets::Battleground::StartWarGame& packet);
         void HandleAcceptWargameInvite(WorldPackets::Battleground::AcceptWargameInvite& packet);
         void HandleReportPvPAFK(WorldPackets::Battleground::ReportPvPPlayerAFK& reportPvPPlayerAFK);

@@ -624,7 +624,7 @@ void OpcodeTable::InitializeClientOpcodes()
     DEFINE_HANDLER(CMSG_ITEM_PURCHASE_REFUND,                               STATUS_LOGGEDIN,  PROCESS_INPLACE,      &WorldSession::HandleItemRefund);
     DEFINE_HANDLER(CMSG_ITEM_TEXT_QUERY,                                    STATUS_LOGGEDIN,  PROCESS_INPLACE,      &WorldSession::HandleItemTextQuery);
     DEFINE_HANDLER(CMSG_JOIN_PET_BATTLE_QUEUE,                              STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleJoinPetBattleQueue);
-    DEFINE_HANDLER(CMSG_JOIN_RATED_BATTLEGROUND,                            STATUS_UNHANDLED, PROCESS_INPLACE,      &WorldSession::Handle_NULL);
+    DEFINE_HANDLER(CMSG_JOIN_RATED_BATTLEGROUND,                            STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleJoinRatedBattleground);
     DEFINE_HANDLER(CMSG_KEEP_ALIVE,                                         STATUS_NEVER,     PROCESS_INPLACE,      &WorldSession::Handle_EarlyProccess);
     DEFINE_HANDLER(CMSG_KEYBOUND_OVERRIDE,                                  STATUS_LOGGEDIN,  PROCESS_THREADSAFE,   &WorldSession::HandleKeyboundOverride);
     DEFINE_HANDLER(CMSG_KIOSK_ENABLE_GOD_MODE,                              STATUS_UNHANDLED, PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
