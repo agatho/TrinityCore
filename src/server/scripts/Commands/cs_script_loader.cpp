@@ -52,6 +52,7 @@ void AddSC_modify_commandscript();
 void AddSC_mythic_plus_commandscript();
 void AddSC_npc_commandscript();
 void AddSC_pet_commandscript();
+void AddSC_prey_commandscript();
 void AddSC_quest_commandscript();
 void AddSC_rbac_commandscript();
 void AddSC_reload_commandscript();
@@ -107,6 +108,7 @@ void AddCommandsScripts()
     AddSC_npc_commandscript();
     AddSC_quest_commandscript();
     AddSC_pet_commandscript();
+    AddSC_prey_commandscript();
     AddSC_rbac_commandscript();
     AddSC_reload_commandscript();
     AddSC_reset_commandscript();
