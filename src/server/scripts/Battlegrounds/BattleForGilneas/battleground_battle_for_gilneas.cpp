@@ -106,6 +106,15 @@ struct battleground_battle_for_gilneas : BattlegroundScript
         _tickTracker.Reset(1s);
     }
 
+    void OnInit() override
+    {
+        BattlegroundScript::OnInit();
+
+        // The resource cap the client needs for SMSG_BATTLEGROUND_INIT - the same constant the win condition
+        // below is checked against.
+        battleground->SetMaxTeamScore(uint16(MAX_TEAM_SCORE));
+    }
+
     void OnUpdate(uint32 diff) override
     {
         if (battleground->GetStatus() != STATUS_IN_PROGRESS)

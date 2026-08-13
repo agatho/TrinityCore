@@ -481,6 +481,38 @@ WorldPacket const* PVPMatchComplete::Write()
     return &_worldPacket;
 }
 
+WorldPacket const* BattlegroundPoints::Write()
+{
+    _worldPacket << uint16(BgPoints);
+    _worldPacket << Bits<1>(Team);
+    _worldPacket.FlushBits();
+
+    return &_worldPacket;
+}
+
+WorldPacket const* BattlegroundInit::Write()
+{
+    _worldPacket << uint32(ServerTime);
+    _worldPacket << uint16(MaxPoints);
+
+    return &_worldPacket;
+}
+
+WorldPacket const* PVPMatchStart::Write()
+{
+    _worldPacket << uint32(MapID);
+    _worldPacket << uint32(ArenaSeason);
+    _worldPacket << uint8(Bracket);
+    _worldPacket << Bits<1>(Unknown1207);
+    _worldPacket.FlushBits();
+    // Counted array of 720-byte per-player records. Empty in the only capture of this opcode and its element
+    // layout is unverified, so we never emit entries - see the comment on the class.
+    _worldPacket << uint32(0);
+    _worldPacket << StartTime;
+
+    return &_worldPacket;
+}
+
 ByteBuffer& operator<<(ByteBuffer& data, BattlegroundCapturePointInfo const& battlegroundCapturePointInfo)
 {
     data << battlegroundCapturePointInfo.Guid;

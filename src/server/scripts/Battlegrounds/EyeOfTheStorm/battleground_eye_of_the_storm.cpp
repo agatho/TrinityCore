@@ -275,6 +275,10 @@ struct battleground_eye_of_the_storm : BattlegroundScript
     void OnInit() override
     {
         UpdateWorldState(EY_MAX_RESOURCES, BG_EY_MAX_TEAM_SCORE);
+
+        // The same cap once more, this time for SMSG_BATTLEGROUND_INIT. The client keeps its own two-entry
+        // score cap array, filled only by that packet and unrelated to the world state above.
+        battleground->SetMaxTeamScore(uint16(BG_EY_MAX_TEAM_SCORE));
     }
 
     void OnUpdate(uint32 diff) override
