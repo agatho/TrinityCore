@@ -615,21 +615,39 @@ void WorldSession::HandleGuildGetAchievementMembers(WorldPackets::Achievement::G
 
 void WorldSession::HandleGuildChangeNameRequest(WorldPackets::Guild::GuildChangeNameRequest& packet)
 {
+    // Every rejection below has to answer the client. SMSG_GUILD_CHANGE_NAME_RESULT would be the natural
+    // reply, but it is STATUS_UNHANDLED and appears in none of our 12.0.7 captures, so its layout is not
+    // known and guessing it would be worse than not sending it. SMSG_GUILD_COMMAND_RESULT is already sent
+    // elsewhere and does carry the right text; PetitionsHandler uses exactly this pairing - command type
+    // GUILD_COMMAND_CREATE_GUILD with a name error - for the petition-driven guild rename, so it is the
+    // established in-tree way to report a bad guild name rather than an invention.
     Guild* guild = GetPlayer()->GetGuild();
     if (!guild)
+    {
+        Guild::SendCommandResult(this, GUILD_COMMAND_CREATE_GUILD, ERR_GUILD_PLAYER_NOT_IN_GUILD);
         return;
+    }
 
     // Only the guild master may rename the guild.
     if (guild->GetLeaderGUID() != GetPlayer()->GetGUID())
+    {
+        Guild::SendCommandResult(this, GUILD_COMMAND_CREATE_GUILD, ERR_GUILD_PERMISSIONS);
         return;
+    }
 
-    // Reject a name already taken by another guild. Guild::SetName performs the remaining validation (non-empty,
-    // <= 24 chars, not reserved, valid charter name, actually changed) and, on success, persists the new name and
-    // broadcasts SMSG_GUILD_NAME_CHANGED to every member so their client reflects it.
+    // Reject a name already taken by another guild.
     if (sGuildMgr->GetGuildByName(packet.NewName))
+    {
+        Guild::SendCommandResult(this, GUILD_COMMAND_CREATE_GUILD, ERR_GUILD_NAME_EXISTS_S, packet.NewName);
         return;
+    }
 
-    guild->SetName(packet.NewName);
+    // SetName performs the remaining validation - non-empty, <= 24 chars, not reserved, a valid charter name,
+    // and actually different - and on success persists the new name and broadcasts SMSG_GUILD_NAME_CHANGED to
+    // every member. Its bool return was previously discarded, so an over-long or reserved name left the player
+    // staring at an unchanged guild name with no idea why.
+    if (!guild->SetName(packet.NewName))
+        Guild::SendCommandResult(this, GUILD_COMMAND_CREATE_GUILD, ERR_GUILD_NAME_INVALID, packet.NewName);
 }
 
 // =====================================================================================================
