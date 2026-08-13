@@ -32,6 +32,7 @@
 #include "World.h"
 #include "WowTokenMgr.h"
 #include <algorithm>
+#include <set>
 #include "Timer.h"
 
 namespace
@@ -540,28 +541,21 @@ void WorldSession::HandleBattlePayOpenCheckout(WorldPackets::BattlePay::OpenChec
 
 namespace
 {
-    // Renders one entitlement as the wire object the client parses. The structure is proven (see
-    // DistributionObject in BattlePayPackets.h); what is OURS to choose is which values go in it.
+    // Renders one product as the JamBattlePayDeliverable the client parses. The same struct is embedded
+    // in a DistributionObject and listed by SMSG_SYNC_WOW_ENTITLEMENTS, and both must describe a product
+    // identically - so both go through here. Returns false when the product is unknown or display-only,
+    // i.e. there is no deliverable to write at all.
     //
-    // `DeliverableID` is set to the product id because this core has no separate deliverable-id
-    // namespace - shop_product_deliverable is keyed (productId, seq). The client does not need it to
-    // resolve anything: the full deliverable record is embedded inline right after it, exactly as in
-    // the capture.
-    void BuildDistributionObject(ShopEntitlement const& entitlement, WorldPackets::BattlePay::DistributionObject& out)
+    // `DeliverableID` is the product id because this core has no separate deliverable-id namespace -
+    // shop_product_deliverable is keyed (productId, seq). The client does not need it to resolve
+    // anything: the full deliverable record travels inline with it, exactly as in the capture.
+    bool BuildDeliverable(uint32 productID, WorldPackets::BattlePay::DistributionDeliverable& deliverable)
     {
-        out.DistributionID = entitlement.DistributionID;
-        out.Status         = entitlement.Status;
-        out.DeliverableID  = entitlement.ProductID;
-        out.PurchaseID     = entitlement.PurchaseID;
-        // LicenseGameAccountGUID / TargetPlayer stay empty: an unassigned entitlement has no target, and
-        // the capture's licence guid has no server-side meaning we could reproduce honestly.
-
-        ShopProduct const* product = sBattlePayMgr->GetProduct(entitlement.ProductID);
+        ShopProduct const* product = sBattlePayMgr->GetProduct(productID);
         if (!product || product->Deliverables.empty())
-            return;                                 // hasDeliverable stays 0 - structurally valid
+            return false;
 
-        WorldPackets::BattlePay::DistributionDeliverable& deliverable = out.Deliverable.emplace();
-        deliverable.DeliverableID = entitlement.ProductID;
+        deliverable.DeliverableID = productID;
         deliverable.Name = product->Name.substr(0, 255);        // client buffer is char[256]
 
         // Map our deliverable vocabulary onto the catalog's. A type-5 (service) row carries the
@@ -589,6 +583,26 @@ namespace
             default:
                 break;
         }
+
+        return true;
+    }
+
+    // Renders one entitlement as the wire object the client parses. The structure is proven (see
+    // DistributionObject in BattlePayPackets.h); what is OURS to choose is which values go in it.
+    void BuildDistributionObject(ShopEntitlement const& entitlement, WorldPackets::BattlePay::DistributionObject& out)
+    {
+        out.DistributionID = entitlement.DistributionID;
+        out.Status         = entitlement.Status;
+        out.DeliverableID  = entitlement.ProductID;
+        out.PurchaseID     = entitlement.PurchaseID;
+        // LicenseGameAccountGUID / TargetPlayer stay empty: an unassigned entitlement has no target, and
+        // the capture's licence guid has no server-side meaning we could reproduce honestly.
+
+        WorldPackets::BattlePay::DistributionDeliverable deliverable;
+        if (!BuildDeliverable(entitlement.ProductID, deliverable))
+            return;                                 // hasDeliverable stays 0 - structurally valid
+
+        out.Deliverable = std::move(deliverable);
     }
 }
 
@@ -670,6 +684,10 @@ void WorldSession::SendBattlePayDistributionListNow()
     }
 
     SendPacket(response.Write());
+
+    // The captures pair these two: the entitlement ledger goes out in the same block as the
+    // distribution list, at character select and again on entering the world.
+    SendBattlePayEntitlementSync();
 }
 
 // Pushes one entitlement so the client fires PRODUCT_DISTRIBUTIONS_UPDATED and refreshes its token row.
@@ -678,6 +696,58 @@ void WorldSession::SendBattlePayDistributionUpdate(ShopEntitlement const& entitl
     WorldPackets::BattlePay::DistributionUpdate update;
     BuildDistributionObject(entitlement, update.Distribution);
     SendPacket(update.Write());
+}
+
+// The account's entitlement ledger - "what this account has bought" - which is what lets the Shop show
+// a product as already owned rather than offering it again.
+//
+// This is deliberately a WIDER set than the distribution list. The distribution list carries only
+// entitlements still awaiting assignment (AVAILABLE); ownership does not end when an entitlement is
+// applied to a character, so anything that reached CLAIMED, BOUND or FINISHED still belongs in the
+// ledger. REVOKED is the one status excluded: a refunded purchase is no longer owned.
+//
+// Every field we cannot source is sent as zero, which is exactly what the captures show for all 92 of
+// the 93 rows we decoded: a permanent, fully-available entitlement with no expiry and no manual review.
+// Nothing here is invented - the deliverable definitions come from our own catalog, and the entitlement
+// rows from our own battlepay_entitlement table.
+void WorldSession::SendBattlePayEntitlementSync()
+{
+    if (!sWorld->getBoolConfig(CONFIG_SHOP_ENABLED) || !sWorld->getBoolConfig(CONFIG_SHOP_ENTITLEMENTS_ENABLED))
+        return;
+
+    WorldPackets::BattlePay::SyncWowEntitlements sync;
+
+    // One row per owned deliverable. An account can hold several entitlements for the same product
+    // (buy the same pet twice), but the ledger is keyed by deliverable and every captured body had
+    // strictly ascending, unique DeliverableIDs - so collapse duplicates rather than emit a shape the
+    // client has never been sent.
+    std::set<uint32> seen;
+    for (ShopEntitlement const& e : _battlePayEntitlements)
+    {
+        if (e.Status == SHOP_ENTITLEMENT_NONE || e.Status == SHOP_ENTITLEMENT_REVOKED)
+            continue;
+        if (sync.Entitlements.size() >= MAX_LISTED_ENTITLEMENTS)
+            break;
+        if (!seen.insert(e.ProductID).second)
+            continue;
+
+        WorldPackets::BattlePay::DistributionDeliverable deliverable;
+        if (!BuildDeliverable(e.ProductID, deliverable))
+            continue;                               // display-only or vanished product: nothing to own
+
+        WorldPackets::BattlePay::AccountEntitlement entitlement;
+        entitlement.DeliverableID = e.ProductID;
+        // ExpireDate / DisplayExpireDate / UnitsRemaining / ManualReviewStatus stay zero: our
+        // entitlements never expire, are not metered, and are not manually reviewed.
+
+        sync.Entitlements.emplace_back(entitlement, std::move(deliverable));
+    }
+
+    // The client is only ever sent this ascending by DeliverableID.
+    std::sort(sync.Entitlements.begin(), sync.Entitlements.end(),
+        [](auto const& left, auto const& right) { return left.first.DeliverableID < right.first.DeliverableID; });
+
+    SendPacket(sync.Write());
 }
 
 // Turns a purchase into an owned-but-unapplied entitlement instead of an immediate grant. Returns the

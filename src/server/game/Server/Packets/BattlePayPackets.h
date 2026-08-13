@@ -22,6 +22,7 @@
 #include "ObjectGuid.h"
 #include "Optional.h"
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace WorldPackets
@@ -60,7 +61,7 @@ namespace WorldPackets
             std::vector<uint8> const* RawData = nullptr;
         };
 
-        // JamBattlePayDeliverable - what a product actually hands over. Layout recovered from the client's
+        // What a product actually hands over. Layout recovered from the client's
         // own parser (sub_7FF729139460 @ image base 0x7FF728AA0000) and validated byte-exact against the
         // 68275 capture, where the embedded record decodes with zero remainder to catalog deliverable
         // 1161 { type = 1 CharacterBoost, boostID = 11, flags = 1620 } - the very values our decoded
@@ -68,7 +69,14 @@ namespace WorldPackets
         //
         // `Type` is the catalog's own deliverable vocabulary: 1 CharacterBoost, 2 BattlePet, 3 Mount,
         // 4 WowToken, 5 NameChange, 6 FactionChange, 8 RaceChange, 11 CharacterTransfer, 13 TransmogSet,
-        // 14 Item/Toy, 18 GameUpgrade, 26 TransmogEnsemble.
+        // 14 Item/Toy, 18 GameUpgrade, 26 TransmogEnsemble. Captures also show 9, 12, 19, 20, 27 and 33
+        // in use by retail; 12 is the Trading Post tender grant (Quantity = tender, Name = "500 Tender"),
+        // which our catalog has no way to express and which the Perks Program owns.
+        //
+        // NAMING: this struct is the client's `JamBattlePayProduct`, not `JamBattlePayDeliverable`. The
+        // 13 scalars below match that type's reflection descriptor (RVA 0x36A1FD8) member-for-member;
+        // `JamBattlePayDeliverable` is a different 7-field type. The C++ name here is kept as-is because
+        // it is what the shop code already calls it - only the comment was wrong.
         struct DistributionDeliverable
         {
             uint32 DeliverableID = 0;
@@ -150,6 +158,69 @@ namespace WorldPackets
             WorldPacket const* Write() override;
 
             DistributionObject Distribution;
+        };
+
+        // NOT IMPLEMENTED, deliberately: opcode 0x420224 carries exactly one of the structs above, bare
+        // and with no header. Its layout is fully proven - 138 occurrences across all 13 of our 12.0.7
+        // captures decode to 13 x uint32 + uint8 nameLen + 2 bit-packed bytes + name, with zero bytes
+        // left over at all four observed lengths (55/62/65/66) - so WriteDeliverable would serve it
+        // as-is. It is not wired because the 12.0.7 client DISCARDS IT:
+        //
+        //   the SMSG jump table (0x7FF729111D54 entry 548) reaches a live case at 0x7FF72910C327 that
+        //   parses the body and calls the dispatch thunk 0x7FF7290A83E0, which is
+        //       mov rax, [rip+0x3DFA4F9]   ; global 0x7FF72CEA28E0
+        //       test rax, rax / je ret     ; always taken
+        //   and that global is never written anywhere in the image. BattlePayMgr::RegisterMessageHandlers
+        //   (0x7FF72AE74360) installs 21 handler slots; this is not one of them.
+        //
+        // So there is no client reaction to reproduce and no trigger condition to get right. Retail sends
+        // it for entitlements whose product Type is 12 or 20 (rule matched exactly on both captured
+        // accounts: 9-of-77 and 1-of-7) - types our catalog never emits anyway. Send the product through
+        // 0x42021E or the distribution list instead; those have registered handlers.
+
+        // One row of the account's entitlement ledger: which deliverable the account owns, and for how
+        // long. Stride is exactly 25 bytes on the wire (4 + 8 + 8 + 4 + 1), which is what makes the
+        // whole message decode with zero remainder.
+        //
+        // Every captured row carries ExpireDate = DisplayExpireDate = 0, UnitsRemaining = 0 and
+        // ManualReviewStatus = 0, with a single exception in one capture where both dates are INT_MAX
+        // (0x7FFFFFFF) - the "never expires" sentinel. So zero is the ordinary value for a permanent,
+        // fully-available entitlement, not a "spent" marker.
+        struct AccountEntitlement
+        {
+            uint32 DeliverableID = 0;
+            int64 ExpireDate = 0;               // 8 bytes on the wire - never sized from a reserve hint
+            int64 DisplayExpireDate = 0;
+            uint32 UnitsRemaining = 0;
+            bool ManualReviewStatus = false;
+        };
+
+        // The account's full entitlement ledger: what this account owns, plus the definition of each
+        // owned deliverable. This is what lets the Shop mark a product as already purchased.
+        //
+        // Layout PROVEN byte-exact, with ZERO bytes left over, against every occurrence in our 12.0.7
+        // captures - three distinct body sizes (617, 7247, 7343) across two different accounts holding
+        // 7, 77 and 78 entitlements respectively:
+        //
+        //     uint32 entitlementCount
+        //     uint32 deliverableCount
+        //     entitlementCount x AccountEntitlement   (stride 25)
+        //     deliverableCount x JamBattlePayDeliverable  (variable, same struct as the distribution
+        //                                                  list embeds - see WriteDeliverable)
+        //
+        // The two counts were equal in every capture and the two arrays ran in the SAME order, both
+        // ascending by DeliverableID: entitlement[i].DeliverableID == deliverable[i].DeliverableID for
+        // all i, in all five distinct bodies. Write() enforces that pairing rather than trusting the
+        // caller to keep two vectors in step.
+        class SyncWowEntitlements final : public ServerPacket
+        {
+        public:
+            explicit SyncWowEntitlements() : ServerPacket(SMSG_SYNC_WOW_ENTITLEMENTS) { }
+
+            WorldPacket const* Write() override;
+
+            // Paired one-to-one and emitted in ascending DeliverableID order.
+            std::vector<std::pair<AccountEntitlement, DistributionDeliverable>> Entitlements;
         };
 
         // Client asks to apply one owned entitlement to a character it picked. Layout PROVEN by
