@@ -689,7 +689,11 @@ namespace WorldPackets
         class PVPMatchInitialize final : public ServerPacket
         {
         public:
-            explicit PVPMatchInitialize() : ServerPacket(SMSG_PVP_MATCH_INITIALIZE, 4 + 1 + 4 + 4 + 1 + 4 + 1) { }
+            // Reserve size only (no wire effect). StartTime and Duration are each EIGHT bytes on the wire,
+            // not four - see the evidence block on PVPMatchInitialize::Write(). The old 4+1+4+4+1+4+1 spelling
+            // understated both and has already misled one reader into "hunting" a nonexistent 4-byte hole.
+            // 27 = base packet; a present DeserterPenalty adds 12 more for 39 total.
+            explicit PVPMatchInitialize() : ServerPacket(SMSG_PVP_MATCH_INITIALIZE, 4 + 1 + 8 + 8 + 1 + 4 + 1) { }
 
             WorldPacket const* Write() override;
 
