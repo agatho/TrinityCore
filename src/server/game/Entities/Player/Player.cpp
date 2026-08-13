@@ -24925,7 +24925,24 @@ void Player::SetGroup(Group* group, int8 subgroup)
         m_group.setSubGroup((uint8)subgroup);
     }
 
+    // the incremental party state baseline only means anything to the group it was broadcast in
+    ResetPartyMemberState();
+
     UpdateObjectVisibility(false);
+}
+
+WorldPackets::Party::PartyMemberStatsSnapshot& Player::GetPartyMemberStateSnapshot()
+{
+    if (!m_partyMemberState)
+        m_partyMemberState = std::make_unique<WorldPackets::Party::PartyMemberStatsSnapshot>();
+
+    return *m_partyMemberState;
+}
+
+void Player::ResetPartyMemberState()
+{
+    m_partyMemberState.reset();
+    m_partyMemberStateRecipients.clear();
 }
 
 void Player::SendInitialPacketsBeforeAddToMap()
