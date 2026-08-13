@@ -36,6 +36,7 @@
 #include "PartyPackets.h"
 #include "Pet.h"
 #include "Player.h"
+#include "RecentAlliesMgr.h"
 #include "UpdateData.h"
 #include "WorldSession.h"
 
@@ -558,6 +559,17 @@ bool Group::AddMember(Player* player)
             groupData.BuildPacket(&groupDataPacket);
             player->SendDirectMessage(&groupDataPacket);
         }
+    }
+
+    {
+        // Everyone here has now grouped with the joiner: persist the pairing and feed the clients' recent-player
+        // name caches (SMSG_UPDATE_RECENT_PLAYER_GUIDS). Collected first so the joiner gets a single batched packet.
+        std::vector<Player const*> existingMembers;
+        for (GroupReference const& itr : GetMembers())
+            if (Player const* existingMember = itr.GetSource(); existingMember != player)
+                existingMembers.push_back(existingMember);
+
+        RecentAllies::RecordGroupJoin(player, existingMembers);
     }
 
     return true;
