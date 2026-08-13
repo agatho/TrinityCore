@@ -426,11 +426,16 @@ bool BattlePayMgr::AssembleCatalog(std::vector<uint8>& outBlob, std::unordered_m
         //
         // Do not re-enable either bit until BattlepayDisplayFlags is recovered from the client. Emitting a
         // flag whose meaning we are guessing at is exactly how this regression happened.
-        uint32 flags = product.DisplayFlags;
+        // Do NOT overwrite the shipped Product.Flags. It is a SEPARATE, unreflected enum - not
+        // BattlepayDisplayFlags - and its bits 1/3 drive `buyableHere`. Writing our admin DisplayFlags
+        // (0 for all 66 rows) over it clears buyableHere and makes a pinned product unpurchasable.
+        // Admin display flags belong on DisplayInfo.Flags, which is what sharedData.flags actually
+        // loads from (client RVA 0x23D0DA7); Product.flags is never read for display.
+        uint32 const displayInfoFlags = product.DisplayFlags;
 
         rec.NormalPriceFixedPoint  = displayPrice;
         rec.CurrentPriceFixedPoint = displayPrice;
-        rec.Flags                  = int32(flags);
+        // rec.Flags deliberately left as shipped - see above.
 
         // Name and description live in the product's DisplayInfo, not on the product record. 54 of the
         // 94 shipped records have no DisplayInfo at all - that is exactly why their purchase
@@ -442,6 +447,15 @@ bool BattlePayMgr::AssembleCatalog(std::vector<uint8>& outBlob, std::unordered_m
             rec.DisplayInfo->Name1 = product.Name;
             rec.DisplayInfo->Name3 = product.Description;
         }
+
+        // Enum.BattlepayDisplayFlags (client registrar RVA 0x13EF840, 12 values):
+        //   1 Expansion, 2 CardDoesNotShowModel, 4 CardAlwaysShowsTexture, 8 HiddenPrice,
+        //   16 UseHorizontalLayoutForFullCard, 32/64 Deprecated, 128 UseSquareIconBorder,
+        //   256 HideWhenOwned, 512 RafReward, 1024 ShowFancyToast, 2048 UseIconBorderWithOverrideTexture.
+        // These belong on DisplayInfo.Flags. 256 only hides an ALREADY-owned entry from the grid; it is
+        // not what made everything look owned (that was Product.Eligibility - see below).
+        if (displayInfoFlags)
+            rec.DisplayInfo->Flags = displayInfoFlags;
     };
 
     size_t candIdx = 0;
@@ -497,6 +511,30 @@ bool BattlePayMgr::AssembleCatalog(std::vector<uint8>& outBlob, std::unordered_m
     if (report && candIdx < candidates.size())
         report->append(Trinity::StringFormat("  OVERFLOW: {} enabled product(s) could not be shown (only {} slots).\n",
             candidates.size() - candIdx, catalog.Products.size()));
+
+    // THE OWNERSHIP GATE. The captured retail catalog marks products the CAPTURING account already owned:
+    //   - Product.Eligibility == 2 (Enum.PurchaseEligibility.Owned), which Lua's
+    //     StoreFrame_IsCompletelyOwned reads via sharedData.eligibility and which greys the Buy button;
+    //     the client also promotes Eligibility 1 (PartiallyOwned) to Owned unless Product.flags bit
+    //     15/16 is set, so 12 records are affected, not just the 7 marked 2.
+    //   - Deliverable.AlreadyOwns == 1, which IsProductAlreadyOwned (client RVA 0x23CC780) walks via
+    //     Product.DeliverableIDs. C_StoreSecure.PurchaseProduct (RVA 0x23CDFD0) consults it and then
+    //     NEVER SENDS THE CMSG, and GetProducts (RVA 0x23D1A06) hides owned products outright.
+    //
+    // BOTH have to be cleared. Clearing only Eligibility restores the Buy button but clicking it does
+    // nothing, because the deliverable check silently swallows the purchase.
+    //
+    // This is not a display preference - it is stale state from someone else's account that we were
+    // shipping back verbatim. Ownership on THIS realm is decided by IsPurchasable() at purchase time.
+    for (BattlePayCatalogProduct& product : catalog.Products)
+        product.Eligibility = 0;                        // PurchaseEligibility::Ok
+
+    for (BattlePayDeliverable& deliverable : catalog.Deliverables)
+    {
+        deliverable.AlreadyOwns = 0;
+        for (BattlePayDeliverableChoice& choice : deliverable.Choices)
+            choice.AlreadyOwns = 0;
+    }
 
     outBlob = BattlePayCatalogWriter::Serialize(catalog);
     return true;

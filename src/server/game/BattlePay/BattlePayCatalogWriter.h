@@ -157,7 +157,10 @@ struct BattlePayCatalogProduct
     uint64 NormalPriceFixedPoint = 0;           // fixed point, /100000
     uint64 CurrentPriceFixedPoint = 0;
     int32 Type = 0;
-    int32 Flags = 0;                            // BattlepayDisplayFlags (NOT the old rec+85 modelSceneID)
+    int32 Flags = 0;                            // NOT BattlepayDisplayFlags and NOT the old rec+85
+                                                // modelSceneID. A separate, unreflected enum: bit 15 is
+                                                // IsDynamicBundle and bits 1/3 drive `buyableHere`.
+                                                // Display flags live on DisplayInfo.Flags instead.
     uint32 RequiredDeliverableID = 0;
     int32 Eligibility = 0;
     uint64 PmtProductID = 0;
