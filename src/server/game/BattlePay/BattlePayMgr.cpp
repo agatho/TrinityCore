@@ -413,11 +413,20 @@ bool BattlePayMgr::AssembleCatalog(std::vector<uint8>& outBlob, std::unordered_m
         else
             displayPrice = 0;
 
+        // Only what the admin row actually asks for. The two synthesised bits below are DISABLED because
+        // their values were never verified against the client:
+        //
+        //   DISPLAY_FLAG_HIDE_WHEN_OWNED = 256  and  DISPLAY_FLAG_HIDDEN_PRICE = 8
+        //
+        // They were harmless while Flags was (incorrectly) being written into DisplayInfo.modelSceneID -
+        // nothing read them. Now that Flags reaches the client's real BattlepayDisplayFlags, ORing 256 in
+        // for every product (all 66 admin rows carry hideIfOwned = 1) made pets and mounts the player does
+        // NOT own render as already owned. So bit 256 does not mean "hide when owned"; its true meaning is
+        // unknown.
+        //
+        // Do not re-enable either bit until BattlepayDisplayFlags is recovered from the client. Emitting a
+        // flag whose meaning we are guessing at is exactly how this regression happened.
         uint32 flags = product.DisplayFlags;
-        if (!product.HasDisplayPrice && product.Currency != 0 && product.Currency != 1)
-            flags |= DISPLAY_FLAG_HIDDEN_PRICE;         // non-gold currency w/o override: hide the price line
-        if (product.HideIfOwned)
-            flags |= DISPLAY_FLAG_HIDE_WHEN_OWNED;
 
         rec.NormalPriceFixedPoint  = displayPrice;
         rec.CurrentPriceFixedPoint = displayPrice;
