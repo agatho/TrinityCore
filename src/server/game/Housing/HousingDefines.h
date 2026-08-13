@@ -752,6 +752,17 @@ enum HouseLevelRewardValueType : uint8
 // still slamming the door on arbitrary-coordinate GameObject spam that the old
 // Position::IsPositionValid() check (|coord| < ~64000) let straight through.
 static constexpr float HOUSING_MAX_DECOR_LOCAL_EXTENT  = 1024.0f;
+// #16 Outdoor Lighting (12.0.7): DecorCategory.db2 id 4 "Lighting" (subcategories
+// 16-21: Large/Wall/Ceiling/Small/Misc Lights). 12.0.7 lets Lighting decor be
+// placed outdoors on the plot; the placement path classifies a decor as Lighting
+// through DecorXDecorSubcategory -> DecorSubcategory.DecorCategoryID.
+static constexpr uint32 HOUSING_DECOR_CATEGORY_LIGHTING = 4;
+// A4 / RETAIL PARITY-OUTDOOR-LIGHT-RADIUS: 12.0.7 rule "two lights cannot overlap".
+// The exact light-to-light overlap radius is NOT datamineable from DB2 or any
+// capture we hold (CAPTURE-BLOCKED). This is a documented default minimum
+// separation between two exterior lights, in local decor space (yards) — replace
+// with the sniffed value once an outdoor-light placement capture exists.
+static constexpr float HOUSING_LIGHT_OVERLAP_RADIUS = 3.0f;
 // m3/A6 decoration throttle: at most BURST place/move/remove ops per WINDOW_MS.
 // Generous enough for rapid legitimate redecorating, tight enough to cap the
 // AddToMap + synchronous-DB-write amplification a scripted client can drive.
