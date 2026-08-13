@@ -196,6 +196,10 @@ struct battleground_arathi_basin : BattlegroundScript
 
         UpdateWorldState(BG_AB_WS_RESOURCES_MAX, BG_AB_MAX_TEAM_SCORE);
         UpdateWorldState(BG_AB_WS_RESOURCES_WARNING, BG_AB_WARNING_NEAR_VICTORY_SCORE);
+
+        // The same cap once more, this time for SMSG_BATTLEGROUND_INIT. The client keeps its own two-entry
+        // score cap array, filled only by that packet and unrelated to the world states above.
+        battleground->SetMaxTeamScore(uint16(BG_AB_MAX_TEAM_SCORE));
     }
 
     void OnUpdate(uint32 diff) override
