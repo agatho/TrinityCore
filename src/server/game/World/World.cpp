@@ -84,6 +84,7 @@
 #include "PoolMgr.h"
 #include "QuestMgr.h"
 #include "QuestPools.h"
+#include "RaidSeasonS1Mgr.h"
 #include "RealmList.h"
 #include "ScenarioMgr.h"
 #include "ScriptMgr.h"
@@ -1411,6 +1412,9 @@ bool World::SetInitialWorldSettings()
     TC_LOG_INFO("server.loading", "Loading instances...");
     sMapMgr->InitInstanceIds();
     sInstanceLockMgr.Load();
+
+    TC_LOG_INFO("server.loading", "Loading Season 1 raid-season data (Chiming Void Curio / Sporefall flex-Mythic)...");
+    sRaidSeasonS1Mgr.Initialize();
 
     TC_LOG_INFO("server.loading", "Loading Localization strings...");
     uint32 oldMSTime = getMSTime();
