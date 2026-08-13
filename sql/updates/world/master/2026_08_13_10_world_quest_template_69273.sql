@@ -180,7 +180,13 @@ INSERT IGNORE INTO `world_quest_template` (`QuestID`, `Duration`, `VariableID`, 
  (93752,604800,30402,2), -- Murder Row
  (94386,604800,29528,2), -- Void Assaults: Zul'Aman
  (94866,604800,29306,1), -- Special Assignment: Ours Once More!
- (96591,86400,30562,4), -- Prey: Venom Ambush
+-- HELD BACK, deliberately: quest 96591 "Prey: Venom Ambush" is defined (feature/prey-voidforge
+-- adds quest_template 96591 and objectives 473640-473644), but three of its objective creatures
+-- - 266443, 266444, 266445 - have no creature_template in this build and the capture does not
+-- carry them. Activating it would put a world quest on the map with nothing to kill, which is
+-- worse for a player than the quest simply not being offered. Re-enable this line once those
+-- three creatures are imported.
+-- (96591,86400,30562,4), -- Prey: Venom Ambush
  (96726,604800,30609,1), -- Sparks of War: Naigtal
  (97084,604800,30609,1), -- More Disruption: Naigtal
  (97085,604800,30609,1), -- Dangerous Enemies: Naigtal
