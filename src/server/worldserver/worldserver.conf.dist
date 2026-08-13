@@ -5252,14 +5252,23 @@ Shop.Shop2CurrencyCode = "USD"
 #    Shop.PurchaseConfirmation
 #        Description: Route in-game Shop purchases through the retail two-step confirmation handshake
 #                     (server sends SMSG_BATTLE_PAY_CONFIRM_PURCHASE, completes on the client's
-#                     CMSG_BATTLE_PAY_CONFIRM_PURCHASE_RESPONSE). The confirm packet layout is INFERRED
-#                     (uncracked client struct, absent from all sniffs) and may disconnect a live
-#                     client, so this is OFF by default; the proven direct-grant path is used instead.
-#                     Enable only to validate the confirm round-trip against a live client.
-#        Default:     0 - (Disabled, direct grant)
-#                     1 - (Enabled, two-step confirmation)
+#                     CMSG_BATTLE_PAY_CONFIRM_PURCHASE_RESPONSE).
+#
+#                     DO NOT TURN THIS OFF. The client cannot complete a purchase without it.
+#                     Blizzard_Shared_StoreUISecure sets WaitingOnConfirmation when the player presses
+#                     Buy and clears it only on STORE_CONFIRM_PURCHASE, which nothing but
+#                     SMSG_BATTLE_PAY_CONFIRM_PURCHASE raises - STORE_PURCHASE_LIST_UPDATED does not.
+#                     With this disabled the shop sits on "Connecting to the shop / Please wait"
+#                     forever, while the server has already charged the player and delivered the goods.
+#
+#                     An earlier version of this note claimed the confirm layout was inferred and might
+#                     disconnect a live client. That is out of date: the layout was recovered and
+#                     verified (12-byte uint64 PurchaseID + uint32 ServerToken), and it is the direct
+#                     path that is now known not to complete.
+#        Default:     1 - (Enabled, two-step confirmation)
+#                     0 - (Disabled, direct grant - purchases complete server-side but the UI hangs)
 
-Shop.PurchaseConfirmation = 0
+Shop.PurchaseConfirmation = 1
 
 #
 #    Shop.Entitlements.Enabled

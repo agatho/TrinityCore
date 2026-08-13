@@ -439,10 +439,18 @@ void WorldSession::HandleBattlePayStartPurchase(WorldPackets::BattlePay::StartPu
     }
     _lastBattlePayPurchaseMSTime = now;
 
-    // Two-step retail confirmation flow (opt-in): stash the pending product, prompt the client, and
-    // complete the purchase only when it answers CMSG_BATTLE_PAY_CONFIRM_PURCHASE_RESPONSE. Off by
-    // default because the confirm packet layout is inferred (see ConfirmPurchase in BattlePayPackets.h);
-    // the proven direct path runs otherwise.
+    // Two-step retail confirmation flow, and the default: stash the pending product, prompt the client, and
+    // complete the purchase only when it answers CMSG_BATTLE_PAY_CONFIRM_PURCHASE_RESPONSE.
+    //
+    // The branch below is a fallback for operators who deliberately disable the handshake, and it does NOT
+    // finish the transaction from the client's point of view. Blizzard_Shared_StoreUISecure sets
+    // WaitingOnConfirmation when Buy is pressed and clears it only on STORE_CONFIRM_PURCHASE, which nothing
+    // but SMSG_BATTLE_PAY_CONFIRM_PURCHASE raises - STORE_PURCHASE_LIST_UPDATED does not. So the direct path
+    // charges the player, delivers the goods, and leaves the shop spinning on "Connecting to the shop".
+    //
+    // The old comment here said this was off by default because the confirm layout was inferred. That is
+    // stale: the layout was recovered and verified against the client, and it is the direct path that is
+    // now known to be the incomplete one.
     if (sWorld->getBoolConfig(CONFIG_SHOP_PURCHASE_CONFIRMATION))
     {
         Player* player = GetPlayer();
