@@ -1250,8 +1250,10 @@ namespace WorldPackets
         // IDA cases 0x4C0045 - 0x4C004C, see SNIFF_AUDIT §8.54-8.61.
         // ============================================================
 
-        // IDA case 4980805 (§8.54): wrapper + 1 byte + varU32 GarrTalentID + JamGarrisonTalentSocket.
-        // Conservative: {u8 GarrTypeID, u8 CollectionEntryFlags, u32 GarrTalentID, GarrisonTalentSocketData}.
+        // SUPERSEDED: this used to be described as "Conservative: {u8 GarrTypeID, u8 CollectionEntryFlags,
+        // u32 GarrTalentID, GarrisonTalentSocketData}" - an admitted guess, and a wrong one (14 bytes
+        // written where the client reads 13). The real shape was read off the client and is documented on
+        // the fields below.
         class GarrisonCollectionUpdateEntry final : public ServerPacket
         {
         public:
