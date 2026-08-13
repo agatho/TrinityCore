@@ -169,8 +169,7 @@ enum ScriptsType
 {
     SCRIPTS_FIRST = 1,
 
-    SCRIPTS_SPELL = SCRIPTS_FIRST,
-    SCRIPTS_EVENT,
+    SCRIPTS_EVENT = SCRIPTS_FIRST,
     SCRIPTS_WAYPOINT,
 
     SCRIPTS_LAST
@@ -413,7 +412,6 @@ typedef std::multimap<uint32, ScriptInfo> ScriptMap;
 typedef std::map<uint32, ScriptMap> ScriptMapMap;
 typedef std::multimap<uint32 /*spell id*/, std::pair<uint32 /*script id*/, bool /*enabled*/>> SpellScriptsContainer;
 typedef std::pair<SpellScriptsContainer::iterator, SpellScriptsContainer::iterator> SpellScriptsBounds;
-TC_GAME_API extern ScriptMapMap sSpellScripts;
 TC_GAME_API extern ScriptMapMap sEventScripts;
 
 std::string GetScriptsTableNameByType(ScriptsType type);
@@ -449,14 +447,7 @@ struct TC_GAME_API SpellClickInfo
 
 typedef std::multimap<uint32, SpellClickInfo> SpellClickInfoContainer;
 
-struct AreaTriggerTeleport
-{
-    uint32 target_mapId;
-    float  target_X;
-    float  target_Y;
-    float  target_Z;
-    float  target_Orientation;
-};
+using AreaTriggerTeleport = WorldSafeLocsEntry;
 
 struct AreaTriggerPolygon
 {
@@ -829,7 +820,7 @@ struct QuestPOIData
     std::vector<QuestPOIBlobData> Blobs;
 
     void InitializeQueryData();
-    ByteBuffer QueryDataBuffer;
+    std::vector<uint8> QueryDataBuffer;
 };
 
 typedef std::unordered_map<uint32, QuestPOIData> QuestPOIContainer;
@@ -986,7 +977,7 @@ class TC_GAME_API ObjectMgr
         typedef std::unordered_map<uint32, Trinity::unique_trackable_ptr<Quest>> QuestContainer;
         typedef std::unordered_map<uint32 /*questObjectiveId*/, QuestObjective const*> QuestObjectivesByIdContainer;
 
-        typedef std::unordered_map<uint32, AreaTriggerTeleport> AreaTriggerContainer;
+        typedef std::unordered_map<uint32, AreaTriggerTeleport const*> AreaTriggerContainer;
 
         typedef std::unordered_map<uint32, uint32> AreaTriggerScriptContainer;
 
@@ -1166,8 +1157,6 @@ class TC_GAME_API ObjectMgr
             return nullptr;
         }
 
-        int32 GetBaseReputationOf(FactionEntry const* factionEntry, uint8 race, uint8 playerClass) const;
-
         RepSpilloverTemplate const* GetRepSpilloverTemplate(uint32 factionId) const
         {
             RepSpilloverTemplateContainer::const_iterator itr = _repSpilloverTemplateStore.find(factionId);
@@ -1219,7 +1208,6 @@ class TC_GAME_API ObjectMgr
         bool LoadTrinityStrings();
 
         void LoadEventScripts();
-        void LoadSpellScripts();
 
         void LoadSpellScriptNames();
         void ValidateSpellScripts();

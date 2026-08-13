@@ -31,15 +31,15 @@ class RandomMovementGenerator : public MovementGeneratorMedium<T, RandomMovement
     public:
         explicit RandomMovementGenerator(float distance, Optional<Milliseconds> duration = {}, Optional<float> speed = {},
             MovementWalkRunSpeedSelectionMode speedSelectionMode = MovementWalkRunSpeedSelectionMode::Default,
-            Optional<Scripting::v2::ActionResultSetter<MovementStopReason>>&& scriptResult = {});
+            Scripting::v2::ActionResultSetter<MovementStopReason>&& scriptResult = {});
 
         MovementGeneratorType GetMovementGeneratorType() const override;
 
         void Pause(uint32 timer) override;
         void Resume(uint32 overrideTimer) override;
 
-        void DoInitialize(T*);
-        void DoReset(T*);
+        bool DoInitialize(T*);
+        bool DoReset(T*);
         bool DoUpdate(T*, uint32);
         void DoDeactivate(T*);
         void DoFinalize(T*, bool, bool);

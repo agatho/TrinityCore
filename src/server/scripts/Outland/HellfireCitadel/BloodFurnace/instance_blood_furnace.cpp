@@ -22,7 +22,7 @@
 #include "Map.h"
 #include "ScriptedCreature.h"
 
-DoorData const doorData[] =
+static constexpr DoorData doorData[] =
 {
     { GO_PRISON_DOOR_01, DATA_KELIDAN_THE_BREAKER, EncounterDoorBehavior::OpenWhenDone },
     { GO_PRISON_DOOR_02, DATA_THE_MAKER,           EncounterDoorBehavior::OpenWhenNotInProgress },
@@ -30,22 +30,19 @@ DoorData const doorData[] =
     { GO_PRISON_DOOR_04, DATA_BROGGOK,             EncounterDoorBehavior::OpenWhenDone },
     { GO_PRISON_DOOR_05, DATA_BROGGOK,             EncounterDoorBehavior::OpenWhenNotInProgress },
     { GO_SUMMON_DOOR,    DATA_KELIDAN_THE_BREAKER, EncounterDoorBehavior::OpenWhenDone },
-    { 0,                 0,                        EncounterDoorBehavior::OpenWhenNotInProgress } // END
 };
 
-ObjectData const creatureData[] =
+static constexpr ObjectData creatureData[] =
 {
     { NPC_BROGGOK,             DATA_BROGGOK             },
-    { 0,                       0                        } // END
 };
 
-ObjectData const gameObjectData[] =
+static constexpr ObjectData gameObjectData[] =
 {
     { GO_BROGGOK_LEVER,      DATA_BROGGOK_LEVER },
-    { 0,                     0                  } //END
 };
 
-DungeonEncounterData const encounters[] =
+static constexpr DungeonEncounterData encounters[] =
 {
     { DATA_THE_MAKER, {{ 1922 }} },
     { DATA_BROGGOK, {{ 1924 }} },
@@ -236,7 +233,6 @@ class instance_blood_furnace : public InstanceMapScript
             {
                 if (!prisoner->IsAlive())
                     prisoner->Respawn(true);
-                prisoner->SetUnitFlag(UNIT_FLAG_NON_ATTACKABLE);
                 prisoner->SetImmuneToAll(true);
                 if (prisoner->IsAIEnabled())
                     prisoner->AI()->EnterEvadeMode();
@@ -328,7 +324,6 @@ class instance_blood_furnace : public InstanceMapScript
                 for (GuidSet::const_iterator i = prisoners.begin(); i != prisoners.end(); ++i)
                     if (Creature* prisoner = instance->GetCreature(*i))
                     {
-                        prisoner->RemoveUnitFlag(UNIT_FLAG_NON_ATTACKABLE);
                         prisoner->SetImmuneToAll(false);
                         prisoner->AI()->DoZoneInCombat();
                     }
