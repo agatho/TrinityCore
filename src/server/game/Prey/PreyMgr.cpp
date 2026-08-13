@@ -18,6 +18,8 @@
 #include "PreyMgr.h"
 #include "Common.h"
 #include "DatabaseEnv.h"
+#include "DB2Stores.h"
+#include "GameTime.h"
 #include "Log.h"
 #include "Player.h"
 #include "ReputationMgr.h"
