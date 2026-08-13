@@ -20,6 +20,7 @@
 
 #include "Define.h"
 #include "ObjectGuid.h"
+#include <span>
 #include <string>
 #include <vector>
 
@@ -38,8 +39,15 @@ namespace RecentAllies
         std::string Note;
     };
 
-    // Record that two players were grouped together (writes both directions). No-op for the same player.
+    // Record that two players were grouped together (writes both directions) and tell both clients to add the other
+    // to their recent-player name cache. No-op for the same player.
     void RecordGrouping(Player const* a, Player const* b);
+
+    // Batch form of RecordGrouping, for a player joining a group that already has members: records `joiner` against
+    // every entry of `existing` in both directions, sends each existing member a one-GUID update, and sends the
+    // joiner a SINGLE update carrying all of them. The batching is not cosmetic - retail sends one packet holding
+    // 19 GUIDs when a player joins a 20-man raid, not 19 packets.
+    void RecordGroupJoin(Player const* joiner, std::span<Player const* const> existing);
 
     // Read a character's recent allies (most-recent first, capped). Synchronous query — used only when the client
     // opens the recent-allies UI.

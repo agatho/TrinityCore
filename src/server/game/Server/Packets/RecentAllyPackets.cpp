@@ -71,4 +71,17 @@ WorldPacket const* RecentAllyNoteUpdated::Write()
     _worldPacket.WriteString(Note);
     return &_worldPacket;
 }
+
+WorldPacket const* UpdateRecentPlayerGuids::Write()
+{
+    // Both counts are written before either list - the client deserializer reads two uint32s, sizes both vectors,
+    // and only then reads the two runs of PackedGuids.
+    _worldPacket << uint32(Added.size());
+    _worldPacket << uint32(Removed.size());
+    for (ObjectGuid const& guid : Added)
+        _worldPacket << guid;                       // PackedGuid
+    for (ObjectGuid const& guid : Removed)
+        _worldPacket << guid;                       // PackedGuid
+    return &_worldPacket;
+}
 }

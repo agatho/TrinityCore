@@ -105,6 +105,28 @@ namespace Social
         uint64 WowAccount = 0;
         std::string Note;
     };
+
+    // SMSG_UPDATE_RECENT_PLAYER_GUIDS (0x420097). Wire form, as read by the client deserializer at RVA 0x5EF950:
+    //     uint32 addedCount; uint32 removedCount; PackedGuid added[addedCount]; PackedGuid removed[removedCount];
+    // Both counts precede both lists. Decodes with zero leftover on all 111 occurrences across six 12.0.7 captures.
+    //
+    // This is NOT the recent-allies note list (that is SMSG_RECENT_ALLY_DATA_RESPONSE, sent on request). It is the
+    // incremental feed for the client's player-name cache. The handler at RVA 0x1F14000 walks `removed` first,
+    // erasing each GUID from a hash container and clearing entry flag 0x100, then walks `added`, inserting into the
+    // same container and setting flags 0x120. Flag 0x100 is registered by name as "RecentPlayer" (0x20 is "Online"),
+    // so `added` marks a player as a recent player and `removed` un-marks them.
+    //
+    // We never populate Removed - see RecentAlliesMgr.cpp for why.
+    class UpdateRecentPlayerGuids final : public ServerPacket
+    {
+    public:
+        UpdateRecentPlayerGuids() : ServerPacket(SMSG_UPDATE_RECENT_PLAYER_GUIDS) { }
+
+        WorldPacket const* Write() override;
+
+        std::vector<ObjectGuid> Added;
+        std::vector<ObjectGuid> Removed;
+    };
 }
 }
 
