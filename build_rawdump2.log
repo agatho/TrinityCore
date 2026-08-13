@@ -1,0 +1,19 @@
+﻿MSBuild-Version 17.14.23+b0019275e für .NET Framework
+
+  Detour.vcxproj -> I:\TrinityCore\commerce\build44\dep\recastnavigation\Detour\RelWithDebInfo\Detour.lib
+  Recast.vcxproj -> I:\TrinityCore\commerce\build44\dep\recastnavigation\Recast\RelWithDebInfo\Recast.lib
+  argon2.vcxproj -> I:\TrinityCore\commerce\build44\dep\argon2\RelWithDebInfo\argon2.lib
+  fmt.vcxproj -> I:\TrinityCore\commerce\build44\dep\fmt\RelWithDebInfo\fmt.lib
+  zlib.vcxproj -> I:\TrinityCore\commerce\build44\dep\zlib\RelWithDebInfo\zlib.lib
+  g3dlib.vcxproj -> I:\TrinityCore\commerce\build44\dep\g3dlite\RelWithDebInfo\g3dlib.lib
+  openssl_ed25519.vcxproj -> I:\TrinityCore\commerce\build44\bin\RelWithDebInfo\openssl_ed25519.dll
+  sfmt.vcxproj -> I:\TrinityCore\commerce\build44\dep\SFMT\RelWithDebInfo\sfmt.lib
+  common.vcxproj -> I:\TrinityCore\commerce\build44\src\common\RelWithDebInfo\common.lib
+  database.vcxproj -> I:\TrinityCore\commerce\build44\src\server\database\RelWithDebInfo\database.lib
+  mmaps_common.vcxproj -> I:\TrinityCore\commerce\build44\src\common\mmaps_common\RelWithDebInfo\mmaps_common.lib
+  network.vcxproj -> I:\TrinityCore\commerce\build44\src\common\network\RelWithDebInfo\trinity_network.lib
+  protobuf.vcxproj -> I:\TrinityCore\commerce\build44\dep\protobuf\RelWithDebInfo\protobuf.lib
+  proto.vcxproj -> I:\TrinityCore\commerce\build44\src\server\proto\RelWithDebInfo\proto.lib
+  shared.vcxproj -> I:\TrinityCore\commerce\build44\src\server\shared\RelWithDebInfo\shared.lib
+  BattlePayPackets.cpp
+  game.vcxproj -> I:\TrinityCore\commerce\build44\src\server\game\RelWithDebInfo\game.lib

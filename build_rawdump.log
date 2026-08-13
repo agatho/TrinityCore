@@ -1,0 +1,62 @@
+﻿MSBuild-Version 17.14.23+b0019275e für .NET Framework
+
+  Detour.vcxproj -> I:\TrinityCore\commerce\build44\dep\recastnavigation\Detour\RelWithDebInfo\Detour.lib
+  Recast.vcxproj -> I:\TrinityCore\commerce\build44\dep\recastnavigation\Recast\RelWithDebInfo\Recast.lib
+  argon2.vcxproj -> I:\TrinityCore\commerce\build44\dep\argon2\RelWithDebInfo\argon2.lib
+  fmt.vcxproj -> I:\TrinityCore\commerce\build44\dep\fmt\RelWithDebInfo\fmt.lib
+  zlib.vcxproj -> I:\TrinityCore\commerce\build44\dep\zlib\RelWithDebInfo\zlib.lib
+  g3dlib.vcxproj -> I:\TrinityCore\commerce\build44\dep\g3dlite\RelWithDebInfo\g3dlib.lib
+  openssl_ed25519.vcxproj -> I:\TrinityCore\commerce\build44\bin\RelWithDebInfo\openssl_ed25519.dll
+  sfmt.vcxproj -> I:\TrinityCore\commerce\build44\dep\SFMT\RelWithDebInfo\sfmt.lib
+  GitRevision.cpp
+  common.vcxproj -> I:\TrinityCore\commerce\build44\src\common\RelWithDebInfo\common.lib
+  database.vcxproj -> I:\TrinityCore\commerce\build44\src\server\database\RelWithDebInfo\database.lib
+  mmaps_common.vcxproj -> I:\TrinityCore\commerce\build44\src\common\mmaps_common\RelWithDebInfo\mmaps_common.lib
+  network.vcxproj -> I:\TrinityCore\commerce\build44\src\common\network\RelWithDebInfo\trinity_network.lib
+  protobuf.vcxproj -> I:\TrinityCore\commerce\build44\dep\protobuf\RelWithDebInfo\protobuf.lib
+  proto.vcxproj -> I:\TrinityCore\commerce\build44\src\server\proto\RelWithDebInfo\proto.lib
+  shared.vcxproj -> I:\TrinityCore\commerce\build44\src\server\shared\RelWithDebInfo\shared.lib
+  BattlePayPackets.cpp
+I:\TrinityCore\commerce\src\server\game\Server\Packets\BattlePayPackets.cpp(52,62): error C2039: "contents" ist kein Member von "WorldPacket". [I:\TrinityCore\commerce\build44\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Server/Packets/BattlePayPackets.cpp“ wird kompiliert)
+      I:\TrinityCore\commerce\src\server\game\Server\WorldPacket.h(25,7):
+      Siehe Deklaration von "WorldPacket"
+  
+I:\TrinityCore\commerce\src\server\game\Server\Packets\BattlePayPackets.cpp(52,38): error C7595: "fmt::v12::fstring<>::fstring": Der Aufruf einer unmittelbaren Funktion ist kein konstanter Ausdruck. [I:\TrinityCore\commerce\build44\src\server\game\game.vcxproj]
+  (Quelldatei „../../../../src/server/game/Server/Packets/BattlePayPackets.cpp“ wird kompiliert)
+      I:\TrinityCore\commerce\dep\fmt\include\fmt\base.h(2465,48):
+      Fehler wurde durch den Aufruf einer nicht definierten Funktion oder eines nicht deklarierten "constexpr" verursacht
+      I:\TrinityCore\commerce\dep\fmt\include\fmt\base.h(2465,48):
+      siehe Verwendung von "fmt::v12::report_error"
+      I:\TrinityCore\commerce\src\server\game\Server\Packets\BattlePayPackets.cpp(52,38):
+      Die Aufrufliste der Auswertung (der älteste Aufruf zuerst) ist
+          I:\TrinityCore\commerce\src\server\game\Server\Packets\BattlePayPackets.cpp(52,38):
+          beim Auswerten der Funktion „fmt::v12::fstring<>::fstring<8>(const char (&)[8])“
+          I:\TrinityCore\commerce\dep\fmt\include\fmt\base.h(2755,53):
+          beim Auswerten der Funktion „void fmt::v12::detail::parse_format_string<char,fmt::v12::detail::format_string_checker<char,0,0,false>>(fmt::v12::basic_string_view<char>,Handler &&)“
+          with
+          [
+              Handler=fmt::v12::detail::format_string_checker<char,0,0,false>
+          ]
+          I:\TrinityCore\commerce\dep\fmt\include\fmt\base.h(1660,42):
+          beim Auswerten der Funktion „const Char *fmt::v12::detail::parse_replacement_field<Char,Handler&>(const Char *,const Char *,fmt::v12::detail::format_string_checker<Char,0,0,false>&)“
+          with
+          [
+              Char=char,
+              Handler=fmt::v12::detail::format_string_checker<char,0,0,false>
+          ]
+          I:\TrinityCore\commerce\dep\fmt\include\fmt\base.h(1620,39):
+          beim Auswerten der Funktion „int fmt::v12::detail::format_string_checker<char,0,0,false>::on_arg_id(void)“
+          I:\TrinityCore\commerce\dep\fmt\include\fmt\base.h(1727,70):
+          beim Auswerten der Funktion „int fmt::v12::detail::compile_parse_context<Char>::next_arg_id(void)“
+          with
+          [
+              Char=char
+          ]
+          I:\TrinityCore\commerce\dep\fmt\include\fmt\base.h(1266,31):
+          beim Auswerten der Funktion „int fmt::v12::parse_context<char>::next_arg_id(void)“
+          I:\TrinityCore\commerce\dep\fmt\include\fmt\base.h(893,20):
+          beim Auswerten der Funktion „void fmt::v12::parse_context<char>::do_check_arg_id(int)“
+          I:\TrinityCore\commerce\dep\fmt\include\fmt\base.h(2465,48):
+          beim Auswerten der Funktion „void fmt::v12::report_error(const char *)“
+  
