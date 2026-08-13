@@ -916,6 +916,8 @@ void OpcodeTable::InitializeClientOpcodes()
     DEFINE_HANDLER(CMSG_REQUEST_GARRISON_TALENT_WORLD_QUEST_UNLOCKS,        STATUS_UNHANDLED, PROCESS_INPLACE,      &WorldSession::Handle_NULL);
     DEFINE_HANDLER(CMSG_REQUEST_GUILD_PARTY_STATE,                          STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleGuildRequestPartyState);
     DEFINE_HANDLER(CMSG_REQUEST_GUILD_REWARDS_LIST,                         STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleRequestGuildRewardsList);
+    // PROCESS_THREADUNSAFE, not PROCESS_INPLACE: the handler reads _player and its instance script.
+    DEFINE_HANDLER(CMSG_REQUEST_INSTANCE_ENCOUNTER_EVENT_SYNC,               STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleRequestInstanceEncounterEventSync);
     DEFINE_HANDLER(CMSG_REQUEST_LATEST_SPLASH_SCREEN,                       STATUS_LOGGEDIN,  PROCESS_INPLACE,      &WorldSession::HandleRequestLatestSplashScreen);
     DEFINE_HANDLER(CMSG_REQUEST_LFG_LIST_BLACKLIST,                         STATUS_UNHANDLED, PROCESS_INPLACE,      &WorldSession::Handle_NULL);
     DEFINE_HANDLER(CMSG_REQUEST_MYTHIC_PLUS_AFFIXES,                        STATUS_UNHANDLED, PROCESS_INPLACE,      &WorldSession::Handle_NULL);
@@ -1691,6 +1693,27 @@ void OpcodeTable::InitializeServerOpcodes()
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_INSTANCE_ENCOUNTER_TIMER_START,          STATUS_NEVER,        CONNECTION_TYPE_INSTANCE);
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_INSTANCE_ENCOUNTER_UPDATE_ALLOW_RELEASE_IN_PROGRESS, STATUS_NEVER, CONNECTION_TYPE_INSTANCE);
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_INSTANCE_ENCOUNTER_UPDATE_SUPPRESS_RELEASE, STATUS_NEVER, CONNECTION_TYPE_INSTANCE);
+    // Encounter timeline family.
+    //
+    // SEQUENCE is emitted for real: on encounter engage, on encounter end (the empty count 0 form retail
+    // uses to clear the timeline), whenever the live set changes, and as the answer to
+    // CMSG_REQUEST_INSTANCE_ENCOUNTER_EVENT_SYNC - which the client sends by itself after entering the
+    // world. So it is STATUS_NEVER.
+    DEFINE_SERVER_OPCODE_HANDLER(SMSG_INSTANCE_ENCOUNTER_EVENT_SEQUENCE,       STATUS_NEVER,        CONNECTION_TYPE_REALM);
+    // APPEND and CAST_UPDATE are fully implemented (InstanceScript::ScheduleEncounterTimelineEvent and
+    // ::UpdateEncounterTimeline write them byte for byte), but no shipped encounter script schedules a
+    // timeline event yet, so nothing actually puts them on the wire. They deliberately stay blocked until
+    // a boss script starts using the scheduler - flip these two lines at that point.
+    DEFINE_SERVER_OPCODE_HANDLER(SMSG_INSTANCE_ENCOUNTER_EVENT_APPEND,         STATUS_UNHANDLED,    CONNECTION_TYPE_REALM);
+    DEFINE_SERVER_OPCODE_HANDLER(SMSG_INSTANCE_ENCOUNTER_EVENT_CAST_UPDATE,    STATUS_UNHANDLED,    CONNECTION_TYPE_REALM);
+    // No capture contains any of these three, and their extra scalars are unexplained: TIMELINE_SYNC has a
+    // GUID plus one uint32, RESPAWN has one uint32 ahead of its element list, and BLOCKED_CHANGED carries a
+    // bare element with no indication of which of its two trailing bits is the "blocked" flag that
+    // C_EncounterTimeline.IsEventBlocked reads. The element layout is known from the shared parser, but
+    // there is nothing to drive them with and nothing to check a guess against, so they stay blocked.
+    DEFINE_SERVER_OPCODE_HANDLER(SMSG_INSTANCE_ENCOUNTER_EVENT_BLOCKED_CHANGED, STATUS_UNHANDLED,   CONNECTION_TYPE_REALM);
+    DEFINE_SERVER_OPCODE_HANDLER(SMSG_INSTANCE_ENCOUNTER_EVENT_RESPAWN,        STATUS_UNHANDLED,    CONNECTION_TYPE_REALM);
+    DEFINE_SERVER_OPCODE_HANDLER(SMSG_INSTANCE_ENCOUNTER_TIMELINE_SYNC,        STATUS_UNHANDLED,    CONNECTION_TYPE_REALM);
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_INSTANCE_GROUP_SIZE_CHANGED,             STATUS_NEVER,        CONNECTION_TYPE_REALM);
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_INSTANCE_INFO,                           STATUS_NEVER,        CONNECTION_TYPE_REALM);
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_INSTANCE_RESET,                          STATUS_NEVER,        CONNECTION_TYPE_REALM);

@@ -808,6 +808,7 @@ enum OpcodeClient : uint32
     CMSG_REQUEST_GARRISON_TALENT_WORLD_QUEST_UNLOCKS  = 0x39029C,
     CMSG_REQUEST_GUILD_PARTY_STATE                    = 0x390054,
     CMSG_REQUEST_GUILD_REWARDS_LIST                   = 0x390053,
+    CMSG_REQUEST_INSTANCE_ENCOUNTER_EVENT_SYNC        = 0x3A0196,
     CMSG_REQUEST_LATEST_SPLASH_SCREEN                 = 0x390273,
     CMSG_REQUEST_LFG_LIST_BLACKLIST                   = 0x390180,
     CMSG_REQUEST_MYTHIC_PLUS_AFFIXES                  = 0x3900B8,
@@ -999,7 +1000,11 @@ enum OpcodeClient : uint32
     CMSG_WRAP_ITEM                                    = 0x3B0000,
 };
 
-inline constexpr std::size_t NUM_CMSG_OPCODES = 1881;
+// 1881 handler slots for the opcode table below, plus 103 more so that group 0x3A reaches
+// CMSG_REQUEST_INSTANCE_ENCOUNTER_EVENT_SYNC (0x3A0196 = id 406 in group; the group used to stop
+// at 304). GetOpcodeArrayIndex only assigns array slots, so widening a group and pushing the later
+// group bases up by the same 103 is value-neutral for every existing opcode.
+inline constexpr std::size_t NUM_CMSG_OPCODES = 1984;
 
 inline constexpr std::ptrdiff_t GetOpcodeArrayIndex(OpcodeClient opcode)
 {
@@ -1020,11 +1025,11 @@ inline constexpr std::ptrdiff_t GetOpcodeArrayIndex(OpcodeClient opcode)
         case 0x37: return idInGroup < 8 ? idInGroup + 212 : -1;
         case 0x38: return idInGroup < 16 ? idInGroup + 220 : -1;
         case 0x39: return idInGroup < 768 ? idInGroup + 236 : -1;
-        case 0x3A: return idInGroup < 304 ? idInGroup + 1004 : -1;
-        case 0x3B: return idInGroup < 10 ? idInGroup + 1308 : -1;
-        case 0x3C: return idInGroup < 132 ? idInGroup + 1318 : -1;
-        case 0x3E: return idInGroup < 413 ? idInGroup + 1450 : -1;
-        case 0x3F: return idInGroup < 18 ? idInGroup + 1863 : -1;
+        case 0x3A: return idInGroup < 407 ? idInGroup + 1004 : -1;
+        case 0x3B: return idInGroup < 10 ? idInGroup + 1411 : -1;
+        case 0x3C: return idInGroup < 132 ? idInGroup + 1421 : -1;
+        case 0x3E: return idInGroup < 413 ? idInGroup + 1553 : -1;
+        case 0x3F: return idInGroup < 18 ? idInGroup + 1966 : -1;
         default: return -1;
     }
 }
@@ -1597,6 +1602,19 @@ enum OpcodeServer : uint32
     SMSG_INSTANCE_ENCOUNTER_DISENGAGE_UNIT            = 0x40024C,
     SMSG_INSTANCE_ENCOUNTER_END                       = 0x400255,
     SMSG_INSTANCE_ENCOUNTER_ENGAGE_UNIT               = 0x40024B,
+    // Encounter timeline family. These seven values are the real 12.0.7 wire values (client build
+    // 68275 and 68974 both use them, and they are what appears in the C:\sniff captures). They are
+    // also exactly what the current TrinityCore base declares. Note that the rest of this file is a
+    // *stale* opcode table - 2055 of the 2143 names it shares with the current base carry different
+    // values (e.g. SMSG_ENCOUNTER_START is 0x40021F here but 0x420226 on the wire), so this branch
+    // needs an Opcodes.h resync before any of it reaches a real client. The seven values below are
+    // spelled the way the resynced table spells them so that the resync is a no-op for them.
+    SMSG_INSTANCE_ENCOUNTER_EVENT_APPEND              = 0x42022A,
+    SMSG_INSTANCE_ENCOUNTER_EVENT_BLOCKED_CHANGED     = 0x42022C,
+    SMSG_INSTANCE_ENCOUNTER_EVENT_CAST_UPDATE         = 0x42022D,
+    SMSG_INSTANCE_ENCOUNTER_EVENT_RESPAWN             = 0x42022B,
+    SMSG_INSTANCE_ENCOUNTER_EVENT_SEQUENCE            = 0x420228,
+    SMSG_INSTANCE_ENCOUNTER_TIMELINE_SYNC             = 0x420229,
     SMSG_INSTANCE_ENCOUNTER_GAIN_COMBAT_RESURRECTION_CHARGE = 0x400257,
     SMSG_INSTANCE_ENCOUNTER_IN_COMBAT_RESURRECTION    = 0x400256,
     SMSG_INSTANCE_ENCOUNTER_OBJECTIVE_COMPLETE        = 0x400250,
@@ -2291,7 +2309,9 @@ enum OpcodeServer : uint32
     SMSG_ARENA_TEAM_STATS                             = UNKNOWN_OPCODE,
 };
 
-inline constexpr std::size_t NUM_SMSG_OPCODES = 1600;
+// 1600 handler slots for the opcode table below, plus a 558 entry block for group 0x42, which this
+// stale table does not cover at all and which holds the encounter timeline family (0x420228-0x42022D).
+inline constexpr std::size_t NUM_SMSG_OPCODES = 2158;
 
 inline constexpr std::ptrdiff_t GetOpcodeArrayIndex(OpcodeServer opcode)
 {
@@ -2323,6 +2343,7 @@ inline constexpr std::ptrdiff_t GetOpcodeArrayIndex(OpcodeServer opcode)
         case 0x5F: return idInGroup < 85 ? idInGroup + 1506 : -1;
         case 0x60: return idInGroup < 8 ? idInGroup + 1591 : -1;
         case 0x62: return idInGroup < 1 ? idInGroup + 1599 : -1;
+        case 0x42: return idInGroup < 558 ? idInGroup + 1600 : -1;
         default: return -1;
     }
 }
