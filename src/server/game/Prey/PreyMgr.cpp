@@ -20,6 +20,7 @@
 #include "DatabaseEnv.h"
 #include "Log.h"
 #include "Player.h"
+#include "ReputationMgr.h"
 #include "World.h"
 #include <algorithm>
 
@@ -100,10 +101,29 @@ void PreyMgr::Update(uint32 diff)
     TC_LOG_INFO("misc", "Prey: hunt rotation advanced to week {}; {} hunt(s) now active.", _weekIndex, GetWeeklyHuntQuests().size());
 }
 
-void PreyMgr::OnPlayerLogin(Player* /*player*/)
+void PreyMgr::OnPlayerLogin(Player* player)
 {
-    // Reserved: restore in-flight hunt state / Journey rank UI on login.
-    // No-op until hunt persistence (character_prey_hunt) is populated.
+    // Gated on IsEnabled(): the shared realm has no prey_hunt_template, so we never
+    // even touch character_prey_hunt there (realm-safe). On a seeded test DB, read
+    // back this week's completed hunts so future logic (weekly cap / Journey rank UI)
+    // can consult them. Tolerant of an absent table: a null result is a clean no-op.
+    if (!_enabled || !player)
+        return;
+
+    time_t const now = GameTime::GetGameTime();
+    uint32 const weekStart = uint32(now - (now % WEEK));
+
+    QueryResult result = CharacterDatabase.PQuery(
+        "SELECT HuntId, Difficulty, Status FROM character_prey_hunt WHERE guid = {} AND WeekStart = {}",
+        player->GetGUID().GetCounter(), weekStart);
+    if (!result)
+        return;
+
+    uint32 rows = 0;
+    do { ++rows; } while (result->NextRow());
+
+    TC_LOG_DEBUG("entities.player", "Prey: player {} has {} hunt record(s) this week.",
+        player->GetGUID().ToString(), rows);
 }
 
 PreyHuntTemplate const* PreyMgr::GetHuntTemplate(uint32 huntId) const
@@ -247,21 +267,46 @@ void PreyMgr::CreditHuntTargetSlain(Player* player)
     player->KilledMonsterCredit(Prey::NPC_CREDIT_TARGET_SLAIN);
 }
 
-void PreyMgr::GrantJourneyProgress(Player* player, uint32 points)
+void PreyMgr::GrantJourneyProgress(Player* player, PreyDifficulty difficulty)
 {
-    if (!player || !points)
+    // Gated on IsEnabled() so this is a hard no-op on the shared realm.
+    if (!_enabled || !player)
         return;
 
-    // Preyseeker's Journey (currency 3387, FactionID 2764) is a plain currency track;
-    // ModifyCurrency clamps to the DB2 cap.
-    player->ModifyCurrency(Prey::CURRENCY_PREYSEEKERS_JOURNEY, int32(points));
+    // --- Preyseeker's Journey track (currency 3387, FactionID 2764) ---
+    // Plain CurrencyTypes track; ModifyCurrency clamps to the DB2 cap. Uses the stock
+    // helper — no hand-rolled currency math. Amount is PLACEHOLDER (CAPTURE-BLOCKED).
+    uint32 journeyPoints = 0;
+    // --- faction-2764 reputation that drives the 3386 renown display currency ---
+    int32 renownRep = 0;
+    switch (difficulty)
+    {
+        case PreyDifficulty::Normal:
+            journeyPoints = Prey::PLACEHOLDER_JOURNEY_POINTS_NORMAL;
+            renownRep     = Prey::PLACEHOLDER_RENOWN_REP_NORMAL;
+            break;
+        case PreyDifficulty::Hard:
+            journeyPoints = Prey::PLACEHOLDER_JOURNEY_POINTS_HARD;
+            renownRep     = Prey::PLACEHOLDER_RENOWN_REP_HARD;
+            break;
+        case PreyDifficulty::Nightmare:
+            journeyPoints = Prey::PLACEHOLDER_JOURNEY_POINTS_NIGHTMARE;
+            renownRep     = Prey::PLACEHOLDER_RENOWN_REP_NIGHTMARE;
+            break;
+        default:
+            return;
+    }
 
-    // NOTE: the renown *level* (currency 3386, faction 2764's RenownCurrencyID) is
-    // NOT written directly. Per ReputationMgr::SetOneFactionReputation, renown level
-    // is derived from reputation crossing per-level thresholds, which bumps 3386 via
-    // ModifyCurrency(..., CurrencyGainSource::RenownRepGain). The correct grant is
-    //   player->GetReputationMgr().ModifyReputation(factionEntry, <rep>, ...);
-    // Wired in a later phase once the per-hunt reputation amount is DB2-confirmed.
+    if (journeyPoints)
+        player->ModifyCurrency(Prey::CURRENCY_PREYSEEKERS_JOURNEY, int32(journeyPoints), CurrencyGainSource::Script);
+
+    // Renown display currency 3386 is faction 2764's RenownCurrencyID: it is NEVER
+    // written directly. Feeding reputation through ReputationMgr crosses the per-level
+    // thresholds, which bumps 3386 by level (CurrencyGainSource::RenownRepGain) inside
+    // the stock path. This is the correct, non-reinvented renown grant.
+    if (renownRep)
+        if (FactionEntry const* factionEntry = sFactionStore.LookupEntry(Prey::FACTION_PREY_SEASON_1))
+            player->GetReputationMgr().ModifyReputation(factionEntry, renownRep);
 }
 
 void PreyMgr::StartHunt(Player* /*player*/, uint32 /*huntId*/, PreyDifficulty /*difficulty*/)
@@ -274,26 +319,82 @@ void PreyMgr::StartHunt(Player* /*player*/, uint32 /*huntId*/, PreyDifficulty /*
     // handler that hands a player a hunt does not. This remains the seam.
 }
 
-void PreyMgr::CompleteHunt(Player* player, uint32 huntId, PreyDifficulty difficulty)
+void PreyMgr::CompleteHunt(Player* player, PreyDifficulty difficulty, uint32 huntId)
 {
-    // The completion *packet* is still unknown, but the completion *mechanic* is
-    // not: a hunt is an ordinary quest whose two objectives are kill credits on
-    // shared bunnies, so finishing one is two KilledMonsterCredit calls and the
-    // stock quest system does the rest.
-    if (!player)
+    // Grant the per-difficulty DIRECT rewards. Gated on IsEnabled() (shared-realm-safe).
+    // The reward MECHANISM (ModifyCurrency onto DB2-confirmed ids) is LIVE; the AMOUNTS
+    // are PLACEHOLDER — see Prey::PLACEHOLDER_* / TODO(CAPTURE-BLOCKED). The exact reward
+    // packet was never captured (blueprint §7 ask #2).
+    if (!_enabled || !player)
         return;
 
-    if (!IsHuntQuest(huntId))
+    // Kill credit runs only when we know WHICH hunt finished. A hunt is an ordinary quest
+    // whose two objectives are kill credits on shared bunnies, so completing one is these two
+    // calls and the stock quest system does the rest. The `.prey grant` debug driver passes no
+    // hunt id: it exercises the economy without pretending a quest was completed.
+    if (huntId && IsHuntQuest(huntId))
+    {
+        CreditHuntProgress(player);
+        CreditHuntTargetSlain(player);
+    }
+
+    // Journey points and faction-2764 reputation are deliberately NOT granted here:
+    // GrantJourneyProgress is a separate public call and the debug driver invokes it
+    // alongside this one. Granting in both places would double every hunt's Journey.
+
+    // Clean difficulty -> direct-reward dispatch.
+    switch (difficulty)
+    {
+        case PreyDifficulty::Normal:
+            // Adventurer Dawncrest (3383).
+            player->ModifyCurrency(Prey::CURRENCY_DAWNCREST_ADVENTURER,
+                Prey::PLACEHOLDER_DAWNCREST_COUNT_NORMAL, CurrencyGainSource::Script);
+            break;
+        case PreyDifficulty::Hard:
+            // Veteran Dawncrest (3341).
+            player->ModifyCurrency(Prey::CURRENCY_DAWNCREST_VETERAN,
+                Prey::PLACEHOLDER_DAWNCREST_COUNT_HARD, CurrencyGainSource::Script);
+            break;
+        case PreyDifficulty::Nightmare:
+            // Champion (3343) + Hero (3345) Dawncrests, plus the Voidforge bonus-roll
+            // currency Nebulous Voidcore (3418).
+            player->ModifyCurrency(Prey::CURRENCY_DAWNCREST_CHAMPION,
+                Prey::PLACEHOLDER_DAWNCREST_COUNT_NIGHTMARE, CurrencyGainSource::Script);
+            player->ModifyCurrency(Prey::CURRENCY_DAWNCREST_HERO,
+                Prey::PLACEHOLDER_DAWNCREST_COUNT_NIGHTMARE, CurrencyGainSource::Script);
+            player->ModifyCurrency(Prey::CURRENCY_NEBULOUS_VOIDCORE,
+                Prey::PLACEHOLDER_NEBULOUS_VOIDCORE_COUNT, CurrencyGainSource::Script);
+            break;
+        default:
+            return;
+    }
+
+    // TODO(CAPTURE-BLOCKED — vault dependency): Great Vault credit is a deliberate
+    // no-op here. It rides the fork's WeeklyRewardsMgr::RecordActivity, which lives on
+    // feature/mythic-plus and is ABSENT from this baseline (blueprint §5). Once that
+    // branch is merged, credit the row here, e.g.:
+    //   sWeeklyRewardsMgr->RecordActivity(player, ActivityType::Prey, preyLevel);
+
+    // Persist the weekly hunt state (gated + table-tolerant inside).
+    RecordHuntCompletion(player, difficulty);
+}
+
+void PreyMgr::RecordHuntCompletion(Player* player, PreyDifficulty difficulty)
+{
+    if (!_enabled || !player)
         return;
 
-    CreditHuntProgress(player);
-    CreditHuntTargetSlain(player);
+    // Weekly-reset bucket. NOTE: a coarse UTC-week truncation, not the live weekly
+    // reset alignment (that lands with the hunt-lifecycle wire, blueprint Phase 3).
+    time_t const now = GameTime::GetGameTime();
+    uint32 const weekStart = uint32(now - (now % WEEK));
 
-    // Journey progress (design cadence — [RESEARCH], not DB2-confirmed).
-    GrantJourneyProgress(player, Prey::JOURNEY_POINTS_PER_HUNT);
-
-    // Per-difficulty Dawncrest + (Nightmare) Nebulous Voidcore are granted here in a
-    // later phase; Great Vault row credit (VaultActivityId) rides the weekly-reward
-    // framework. Left as documented TODO to avoid inventing the reward amounts.
-    (void)difficulty;
+    // Debug/economy slice: there is no real hunt template (activation is CAPTURE-BLOCKED),
+    // so key the row by difficulty. This preserves the intended 1-record-per-difficulty
+    // -per-week shape via PK(guid, HuntId, WeekStart). REPLACE keeps re-grants idempotent.
+    // Async PExecute is tolerant of an absent table (logs a DB error, never crashes).
+    CharacterDatabase.PExecute(
+        "REPLACE INTO character_prey_hunt (guid, HuntId, Difficulty, Status, WeekStart) VALUES ({}, {}, {}, {}, {})",
+        player->GetGUID().GetCounter(), uint32(difficulty), uint32(difficulty),
+        uint32(Prey::HUNT_STATUS_COMPLETED), weekStart);
 }
