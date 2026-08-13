@@ -219,40 +219,20 @@ NOTE: batch 2 NOT yet integration-validated together (batch 1's 5 were). All rea
 
 ---
 
-## INTEGRATION-ONLY SHOP FIXES — must not be lost in a re-merge (2026-08-13)
+## SHOP FIXES — now on feature/commerce (2026-08-13, superseded note)
 
-Three pieces of work live **only on `integration/all-systems`** and are reachable from no feature
-branch. If `feature/ingame-shop-battlepay` or `feature/commerce` is ever re-merged and these files are
-resolved to the branch side, all three are silently lost and the in-game Shop breaks in ways that
-produce **no error anywhere**.
+An earlier version of this section argued that three shop fixes could reasonably live only on
+`integration/all-systems`. **That reasoning was wrong and the note is withdrawn.** Integration is a
+test assembly that gets rebuilt from the feature branches; anything living only here is not stored at
+all. All of it now sits on **`feature/commerce`** (commit `fefb03ea97`), which owns the BattlePay and
+Shop2 files:
 
-| commit | what it does | symptom if lost |
-|---|---|---|
-| `4c03e9de9a` (merge resolution) | adapts `BattlePayMgr::AssembleCatalog` to the 94-record writer API | catalog assembly fails to compile, or falls back to serving 9 records |
-| `81ea8d113a` | stops emitting `DISPLAY_FLAG_HIDE_WHEN_OWNED` / `HIDDEN_PRICE`, whose values were never verified | every product renders as already owned |
-| `b8ea0ff99d` | clears `Product.Eligibility` and `Deliverable.AlreadyOwns` from the captured retail blob; stops overwriting `Product.Flags` | 12 products show as owned with a greyed Buy button, and every slot-pinned product becomes unpurchasable (`buyableHere` cleared) |
+- the 94-record `BattlePayCatalogWriter` (was 9) plus three corrected field mappings
+- `SMSG_BATTLE_PAY_PURCHASE_UPDATE` has no leading `Result` — the fix that made purchases work
+- clearing `Product.Eligibility` / `Deliverable.AlreadyOwns` (the captured retail account's ownership)
+- not overwriting `Product.Flags` with admin display flags (`buyableHere` lives in those bits)
+- the two VAS status handlers
 
-**Why they are not on a feature branch** (checked, not assumed):
-`feature/ingame-shop-battlepay` (tip `a96906dacd`) still carries the OLD 9-record writer, so
-`AssembleCatalog` there has a different shape and these hunks have nowhere to apply. Meanwhile the
-current `BattlePayMgr.cpp` on this line is an assembly of at least four branches —
-`ingame-shop-battlepay`, `commerce` (3 commits), `catalog-writer-94`, plus a token ledger commit — so
-no single branch owns the file's present state. Transplanting this line's version onto the owner would
-push other branches' work into it.
+`feature/pvp-rated-bg` (`6b16315443`) still holds content not in any integration line, and is
+deliberately unmerged because it does not compile. Its commit message lists what is missing.
 
-**Rule for the next re-merge:** for the four files below, `integration/all-systems` is the superset.
-Resolve conflicts by keeping THIS line's version and re-applying the branch's genuinely new hunks on
-top — never by taking the branch side wholesale.
-
-    src/server/game/BattlePay/BattlePayCatalogWriter.h
-    src/server/game/BattlePay/BattlePayCatalogWriter.cpp
-    src/server/game/BattlePay/BattlePayMgr.h
-    src/server/game/BattlePay/BattlePayMgr.cpp
-
-Evidence for the fixes themselves: `c:\dumps\BATTLEPAY_DISPLAY_FLAGS_68275.md`,
-`c:\dumps\BATTLEPAY_CATALOG_RECORD_FORMAT_68275.md`, `c:\dumps\SHOP_PURCHASE_BROKEN_DIAGNOSIS.md`.
-
-### Also outstanding
-
-`feature/pvp-rated-bg` (tip `6b16315443`) is committed but **INCOMPLETE and does not compile** — it is
-deliberately NOT merged into either integration line. The commit message lists exactly what is missing.
