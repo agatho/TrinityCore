@@ -318,6 +318,23 @@ namespace WorldPackets
             bool Requeue = false;
         };
 
+        // CMSG_JOIN_RATED_BATTLEGROUND (0x3A0025), body = exactly 1 byte: uint8 Roles.
+        //
+        // Same shape as the Blitz join despite the different opcode group. Client serializer
+        // VA 0x7FF7291455E0 writes one uint8 from obj+0x20; producer is the Lua binding
+        // JoinRatedBattlefield (RVA 0x2024540), called with no arguments from Blizzard_PVPUI.lua.
+        // The byte is the LFG role mask (0x01 leader, 0x02 tank, 0x04 healer, 0x08 damage).
+        class JoinRatedBattleground final : public ClientPacket
+        {
+        public:
+            explicit JoinRatedBattleground(WorldPacket&& packet)
+                : ClientPacket(CMSG_JOIN_RATED_BATTLEGROUND, std::move(packet)) { }
+
+            void Read() override;
+
+            uint8 Roles = 0;
+        };
+
         class BattlefieldLeave final : public ClientPacket
         {
         public:
