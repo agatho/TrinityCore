@@ -30,6 +30,7 @@ void AddSC_npcs_special();
 void AddSC_at_housing_plot();
 void AddSC_go_housing_door();
 void AddSC_npc_housing_steward();
+void AddSC_npc_going_postal();
 void AddSC_achievement_scripts();
 void AddSC_action_ip_logger();
 void AddSC_scene_scripts();
@@ -53,6 +54,7 @@ void AddWorldScripts()
     AddSC_at_housing_plot();
     AddSC_go_housing_door();
     AddSC_npc_housing_steward();
+    AddSC_npc_going_postal();
     AddSC_achievement_scripts();
     AddSC_chat_log(); // location: scripts\World\chat_log.cpp
     AddSC_scene_scripts();
