@@ -24,6 +24,7 @@
 #include "Optional.h"
 #include <array>
 #include <map>
+#include <unordered_map>
 #include <set>
 #include <variant>
 
@@ -363,6 +364,10 @@ class TC_GAME_API InstanceScript : public ZoneScript
         static void LoadObjectData(ObjectData const* creatureData, ObjectInfoMap& objectInfo);
         void LoadDungeonEncounterData(uint32 bossId, std::array<uint32, MAX_DUNGEON_ENCOUNTERS_PER_BOSS> const& dungeonEncounterIds);
         void UpdateLfgEncounterState(BossInfo const* bossInfo);
+
+        // Start time (GameTime::GetGameTimeMS) of each dungeon encounter currently in progress, so
+        // SMSG_ENCOUNTER_END can report the real elapsed duration the client expects.
+        std::unordered_map<uint32, uint32> _encounterStartTimes;
 
         std::string headers;
         std::vector<BossInfo> bosses;
