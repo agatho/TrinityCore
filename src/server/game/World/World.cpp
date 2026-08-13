@@ -682,6 +682,7 @@ void World::LoadConfigSettings(bool reload)
         { .Name = "Battleground.QueueAnnouncer.Enable"sv, .DefaultValue = false, .Index = CONFIG_BATTLEGROUND_QUEUE_ANNOUNCER_ENABLE },
         { .Name = "Battleground.QueueAnnouncer.PlayerOnly"sv, .DefaultValue = false, .Index = CONFIG_BATTLEGROUND_QUEUE_ANNOUNCER_PLAYERONLY },
         { .Name = "Battleground.StoreStatistics.Enable"sv, .DefaultValue = false, .Index = CONFIG_BATTLEGROUND_STORE_STATISTICS_ENABLE },
+        { .Name = "Brawl.Enabled"sv, .DefaultValue = true, .Index = CONFIG_BRAWL_ENABLED },
         { .Name = "Battleground.GiveXPForKills"sv, .DefaultValue = false, .Index = CONFIG_BG_XP_FOR_KILL },
         { .Name = "Arena.QueueAnnouncer.Enable"sv, .DefaultValue = false, .Index = CONFIG_ARENA_QUEUE_ANNOUNCER_ENABLE },
         { .Name = "Arena.ArenaSeason.InProgress"sv, .DefaultValue = false, .Index = CONFIG_ARENA_SEASON_IN_PROGRESS },
@@ -874,6 +875,9 @@ void World::LoadConfigSettings(bool reload)
         { .Name = "Battleground.ReportAFK"sv, .DefaultValue = 3, .Index = CONFIG_BATTLEGROUND_REPORT_AFK, .Min = 1, .Max = 9 },
         { .Name = "Battleground.InvitationType"sv, .DefaultValue = 0, .Index = CONFIG_BATTLEGROUND_INVITATION_TYPE },
         { .Name = "BattlegroundBlitz.HealersPerTeam"sv, .DefaultValue = 2, .Index = CONFIG_BATTLEGROUND_BLITZ_HEALERS_PER_TEAM, .Min = 0, .Max = 8 },
+        // PvpBrawl.db2 row 11 "Brawl: Deep Six" -> BattlemasterList 879 (BATTLEGROUND_BRAWL_DS).
+        { .Name = "Brawl.PvpBrawlID"sv, .DefaultValue = 11, .Index = CONFIG_BRAWL_PVP_BRAWL_ID },
+        { .Name = "Brawl.BattlemasterListID"sv, .DefaultValue = BATTLEGROUND_BRAWL_DS, .Index = CONFIG_BRAWL_BATTLEMASTER_LIST_ID },
         { .Name = "Battleground.PrematureFinishTimer"sv, .DefaultValue = 5 * MINUTE * IN_MILLISECONDS, .Index = CONFIG_BATTLEGROUND_PREMATURE_FINISH_TIMER },
         { .Name = "Battleground.PremadeGroupWaitForMatch"sv, .DefaultValue = 30 * MINUTE * IN_MILLISECONDS, .Index = CONFIG_BATTLEGROUND_PREMADE_GROUP_WAIT_FOR_MATCH },
         { .Name = "Arena.MaxRatingDifference"sv, .DefaultValue = 150, .Index = CONFIG_ARENA_MAX_RATING_DIFFERENCE },

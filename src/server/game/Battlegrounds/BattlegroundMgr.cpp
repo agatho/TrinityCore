@@ -455,12 +455,18 @@ void BattlegroundMgr::LoadBattlegroundTemplates()
         bgTemplate.BattlemasterEntry = bl;
         bgTemplate.MapIDs            = std::move(mapsByBattleground[bgTypeId]);
 
-        // Aggregate templates (All Arenas, the random-BG pools, Battleground Blitz) never spawn anyone
-        // themselves: CreateNewBattleground resolves their BattlemasterListXMap maps back to the individual
-        // single-map templates, which carry the real start locations. Requiring a WorldSafeLocs id here would
-        // mean inventing one that is never used, and a wrong id silently drops the whole template.
+        // Aggregate templates (All Arenas, the random-BG pools, Battleground Blitz, multi-map brawls) never
+        // spawn anyone themselves: CreateNewBattleground resolves their BattlemasterListXMap maps back to the
+        // individual single-map templates, which carry the real start locations. Requiring a WorldSafeLocs id
+        // here would mean inventing one that is never used, and a wrong id silently drops the whole template.
+        //
+        // A brawl only qualifies when it really is multi-map - the single-map brawl rows (PvpBrawl 12-16, the
+        // per-map Deep Six entries) point at one map each and would then register themselves over that map's own
+        // template two lines below, hijacking normal queues for it.
+        bool const isMultiMapBrawl = bgTemplate.MapIDs.size() > 1 && bl->GetFlags().HasFlag(BattlemasterListFlags::IsBrawl);
+
         if (bgTemplate.Id != BATTLEGROUND_AA && bgTemplate.Id != BATTLEGROUND_BLITZ
-            && bgTemplate.Id != BATTLEGROUND_RATED_BG && !IsRandomBattleground(bgTemplate.Id))
+            && bgTemplate.Id != BATTLEGROUND_RATED_BG && !IsRandomBattleground(bgTemplate.Id) && !isMultiMapBrawl)
         {
             uint32 startId = fields[1].GetUInt32();
             if (WorldSafeLocsEntry const* start = sObjectMgr->GetWorldSafeLoc(startId))
@@ -495,6 +501,74 @@ void BattlegroundMgr::LoadBattlegroundTemplates()
     while (result->NextRow());
 
     TC_LOG_INFO("server.loading", ">> Loaded {} battlegrounds in {} ms", count, GetMSTimeDiffToNow(oldMSTime));
+}
+
+// Which brawl is running is a server-side decision on TrinityCore, and that is not a shortcut - it is what the
+// client dictates. PvpBrawl.db2 has exactly seven columns (Name_lang, Description_lang, Objective_lang, ID,
+// BattlemasterListID, LFGDungeonsID, RewardsQuestID); there is no holiday reference, no date and no flags in it,
+// and no other client table schedules brawls. The client learns the running brawl only from
+// SMSG_REQUEST_SCHEDULED_PVP_INFO_RESPONSE, whose handler (client VA 0x7FF72AAC2120) is the sole writer of the
+// two globals the entire brawl UI reads. So the rotation has to come from configuration.
+//
+// Everything after the config read is a refusal to advertise a brawl we could not actually run: the whole point
+// of gating here is that HandleRequestScheduledPvpInfo and HandleBattlemasterJoinBrawl consult the same function,
+// so the client is never shown a queueable Brawl button for a mode the queue would drop.
+Optional<BattlegroundMgr::ActiveBrawl> BattlegroundMgr::GetActiveBrawl()
+{
+    if (!sWorld->getBoolConfig(CONFIG_BRAWL_ENABLED))
+        return {};
+
+    ActiveBrawl brawl;
+    brawl.PvpBrawlId = sWorld->getIntConfig(CONFIG_BRAWL_PVP_BRAWL_ID);
+    brawl.BattlemasterListId = sWorld->getIntConfig(CONFIG_BRAWL_BATTLEMASTER_LIST_ID);
+
+    if (!brawl.PvpBrawlId || !brawl.BattlemasterListId)
+        return {};
+
+    // This runs once per client login, so a bad config would otherwise repeat its complaint forever. Say it once.
+    static uint32 loggedBadConfigFor = 0;
+    auto complainOnce = [&](char const* what)
+    {
+        if (loggedBadConfigFor == brawl.BattlemasterListId)
+            return;
+
+        loggedBadConfigFor = brawl.BattlemasterListId;
+        TC_LOG_ERROR("bg.battleground", "Brawl.BattlemasterListID {} {} - no brawl will be advertised.", brawl.BattlemasterListId, what);
+    };
+
+    BattlemasterListEntry const* battlemasterList = sBattlemasterListStore.LookupEntry(brawl.BattlemasterListId);
+    if (!battlemasterList)
+    {
+        complainOnce("does not exist in BattlemasterList.db2");
+        return {};
+    }
+
+    // BattlemasterList.Flags bit 0x20 is IsBrawl. Refusing anything else keeps a typo in the config from turning
+    // an ordinary battleground into "the brawl" and mislabelling it in every client that asks.
+    if (!battlemasterList->GetFlags().HasFlag(BattlemasterListFlags::IsBrawl))
+    {
+        complainOnce("is not flagged IsBrawl in BattlemasterList.db2");
+        return {};
+    }
+
+    if (battlemasterList->GetFlags().HasFlag(BattlemasterListFlags::InternalOnly))
+        return {};
+
+    if (DisableMgr::IsDisabledFor(DISABLE_TYPE_BATTLEGROUND, brawl.BattlemasterListId, nullptr))
+        return {};
+
+    // No battleground_template row means CreateNewBattleground would fail: the queue could accept players and
+    // never pop. Do not advertise it.
+    BattlegroundTemplate const* bgTemplate = GetBattlegroundTemplateByTypeId(BattlegroundTypeId(brawl.BattlemasterListId));
+    if (!bgTemplate || bgTemplate->MapIDs.empty())
+        return {};
+
+    // GetRandomBG resolves the brawl's BattlemasterListXMap maps back to the single-map templates that own the
+    // start locations. If none of them resolves there is no map to send anyone to.
+    if (GetRandomBG(BattlegroundTypeId(brawl.BattlemasterListId)) == BATTLEGROUND_TYPE_NONE)
+        return {};
+
+    return brawl;
 }
 
 void BattlegroundMgr::SendBattlegroundList(Player* player, ObjectGuid const& guid, BattlegroundTypeId bgTypeId)
