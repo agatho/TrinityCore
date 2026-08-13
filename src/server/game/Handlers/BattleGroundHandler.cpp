@@ -530,6 +530,129 @@ void WorldSession::HandleBattlemasterJoinSkirmish(WorldPackets::Battleground::Ba
     sBattlegroundMgr->ScheduleQueueUpdate(0, bgQueueTypeId, bracketEntry->GetBracketId());
 }
 
+// CMSG_JOIN_RATED_BATTLEGROUND (0x3A0025) - the classic 10v10 rated battleground, premade-group only.
+//
+// Like the Blitz and Skirmish joins this carries no queue identity, only the role mask; the mode is implied
+// by the opcode. The queue id is { BattlemasterListId = 100, Type = 0 (BATTLEGROUND), Rated = true,
+// TeamSize = 0 }.
+//
+// Type 0 rather than a dedicated "rated bg" nibble is not a guess. The client decodes the nibble through a
+// pure switch (VA 0x7FF72AAB59E0) whose cases are 0 BATTLEGROUND, 1 ARENA, 2 WARGAME, 3 CHEAT,
+// 4 ARENASKIRMISH, 6 BRAWLSHUFFLE, 7 RATEDSHUFFLE, 8 BRAWLSOLORBG, 9 RATEDSOLORBG - there is no
+// RATEDBATTLEGROUND value, because rated-ness lives in bit 20, not in the nibble. The client's own
+// SMSG_BATTLEFIELD_STATUS_FAILED handler (VA 0x7FF72AABA380) tests exactly
+// "QueueID != 0 && bit20 && nibble == 0" as its notion of a rated battleground.
+//
+// The client only sends this from a full 10-man group with the leader pressing the button, so the same
+// constraint is enforced here rather than trusted.
+void WorldSession::HandleJoinRatedBattleground(WorldPackets::Battleground::JoinRatedBattleground& packet)
+{
+    BattlegroundQueueTypeId bgQueueTypeId =
+        BattlegroundMgr::BGQueueTypeId(BATTLEGROUND_RATED_BG, BattlegroundQueueIdType::Battleground, true, 0);
+
+    if (!BattlegroundMgr::IsValidQueueId(bgQueueTypeId))
+    {
+        TC_LOG_ERROR("network", "Rated Battleground: queue id rejected by IsValidQueueId - BattlemasterList {} missing from the client DB2.",
+            uint32(BATTLEGROUND_RATED_BG));
+        return;
+    }
+
+    BattlemasterListEntry const* battlemasterListEntry = sBattlemasterListStore.AssertEntry(bgQueueTypeId.BattlemasterListId);
+
+    if (DisableMgr::IsDisabledFor(DISABLE_TYPE_BATTLEGROUND, bgQueueTypeId.BattlemasterListId, nullptr) || battlemasterListEntry->GetFlags().HasFlag(BattlemasterListFlags::InternalOnly))
+    {
+        ChatHandler(this).PSendSysMessage(LANG_BG_DISABLED);
+        return;
+    }
+
+    if (_player->InBattleground())
+        return;
+
+    BattlegroundTemplate const* bgTemplate = sBattlegroundMgr->GetBattlegroundTemplateByTypeId(BATTLEGROUND_RATED_BG);
+    if (!bgTemplate)
+    {
+        TC_LOG_ERROR("bg.battleground", "Rated Battleground: no battleground_template row for {} - apply the rated-BG world migration.", uint32(BATTLEGROUND_RATED_BG));
+        return;
+    }
+
+    PVPDifficultyEntry const* bracketEntry = DB2Manager::GetBattlegroundBracketByLevel(bgTemplate->MapIDs.front(), _player->GetLevel());
+    if (!bracketEntry)
+        return;
+
+    auto sendFailed = [&](GroupJoinBattlegroundResult result, ObjectGuid const* errorGuid = nullptr)
+    {
+        WorldPackets::Battleground::BattlefieldStatusFailed battlefieldStatus;
+        BattlegroundMgr::BuildBattlegroundStatusFailed(&battlefieldStatus, bgQueueTypeId, _player, 0, result, errorGuid);
+        SendPacket(battlefieldStatus.Write());
+    };
+
+    if (!packet.Roles)
+    {
+        sendFailed(ERR_BATTLEGROUND_JOIN_FAILED);
+        return;
+    }
+
+    Group* grp = _player->GetGroup();
+    if (!grp)
+    {
+        sendFailed(ERR_BATTLEGROUND_JOIN_FAILED);
+        return;
+    }
+
+    if (grp->GetLeaderGUID() != _player->GetGUID())
+        return;
+
+    // Rated battlegrounds are a full-roster mode: BattlemasterList 100 is 10v10 and the client's own UI
+    // refuses to send unless the group is full.
+    if (grp->GetMembersCount() != bgTemplate->GetMaxPlayersPerTeam())
+    {
+        sendFailed(ERR_ARENA_TEAM_PARTY_SIZE);
+        return;
+    }
+
+    if (GetPlayer()->isUsingLfg())
+    {
+        sendFailed(ERR_LFG_CANT_USE_BATTLEGROUND);
+        return;
+    }
+
+    if (_player->GetBattlegroundQueueIndex(bgQueueTypeId) < PLAYER_MAX_BATTLEGROUND_QUEUES)
+        return;
+
+    if (!_player->HasFreeBattlegroundQueueId())
+    {
+        sendFailed(ERR_BATTLEGROUND_TOO_MANY_QUEUES);
+        return;
+    }
+
+    ObjectGuid errorGuid;
+    GroupJoinBattlegroundResult err = grp->CanJoinBattlegroundQueue(bgTemplate, bgQueueTypeId, 0, bgTemplate->GetMaxPlayersPerTeam(), true, 0, errorGuid);
+    if (err)
+    {
+        sendFailed(err, &errorGuid);
+        return;
+    }
+
+    BattlegroundQueue& bgQueue = sBattlegroundMgr->GetBattlegroundQueue(bgQueueTypeId);
+    GroupQueueInfo* ginfo = bgQueue.AddGroup(_player, grp, Team(_player->GetTeam()), bracketEntry, true, 0, 0, packet.Roles);
+    uint32 avgTime = bgQueue.GetAverageQueueWaitTime(ginfo, bracketEntry->GetBracketId());
+
+    for (GroupReference const& itr : grp->GetMembers())
+    {
+        Player* member = itr.GetSource();
+        uint32 memberSlot = member->AddBattlegroundQueueId(bgQueueTypeId);
+
+        WorldPackets::Battleground::BattlefieldStatusQueued battlefieldStatus;
+        BattlegroundMgr::BuildBattlegroundStatusQueued(&battlefieldStatus, member, memberSlot, ginfo->JoinTime, bgQueueTypeId, avgTime, true);
+        member->SendDirectMessage(battlefieldStatus.Write());
+    }
+
+    TC_LOG_DEBUG("bg.battleground", "Rated Battleground: {} queued a {}-man group with roles {:#x}",
+        _player->GetName(), grp->GetMembersCount(), packet.Roles);
+
+    sBattlegroundMgr->ScheduleQueueUpdate(0, bgQueueTypeId, bracketEntry->GetBracketId());
+}
+
 void WorldSession::HandlePVPLogDataOpcode(WorldPackets::Battleground::PVPLogDataRequest& /*pvpLogDataRequest*/)
 {
     Battleground* bg = _player->GetBattleground();
@@ -935,7 +1058,8 @@ void WorldSession::HandleRequestScheduledPvpInfo(WorldPackets::Battleground::Req
 void WorldSession::HandleGetPVPOptionsEnabled(WorldPackets::Battleground::GetPVPOptionsEnabled& /*getPvPOptionsEnabled*/)
 {
     WorldPackets::Battleground::PVPOptionsEnabled pvpOptionsEnabled;
-    pvpOptionsEnabled.RatedBattlegrounds = false;
+    // Flipped: HandleJoinRatedBattleground exists and queues for real.
+    pvpOptionsEnabled.RatedBattlegrounds = true;
     pvpOptionsEnabled.PugBattlegrounds = true;
     // War games are implemented: WorldSession::HandleStartWarGame (below) mints the challenge and pushes
     // SMSG_CHECK_WARGAME_ENTRY to the opposing leader, HandleAcceptWargameInvite creates the battleground and
