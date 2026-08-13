@@ -184,6 +184,30 @@ void WorldSession::HandleQuestgiverAcceptQuestOpcode(WorldPackets::Quest::QuestG
             _player->PlayerTalkClass->ClearMenus();
             _player->PrepareGossipMenu(worldObject, _player->GetGossipMenuForSource(worldObject), true);
             _player->SendPreparedGossip(worldObject);
+
+            // Retail follows the relaunched menu with SMSG_GOSSIP_QUEST_UPDATE naming the quest that
+            // was just accepted, so the client repaints that single entry instead of rebuilding the
+            // frame. Evidence from the five captured occurrences (12.0.7) that this is the branch
+            // they come from: each one sits next to an SMSG_GOSSIP_MESSAGE for the same NPC (four of
+            // them between two byte-identical ones, i.e. a menu that was resent unchanged), three
+            // carry exactly the QuestID and questgiver guid of a CMSG_QUEST_GIVER_ACCEPT_QUEST sent
+            // moments earlier, and four of the five transmit QuestFlags[0] with 0x20000000 -
+            // QUEST_FLAGS_LAUNCH_GOSSIP_ACCEPT - set, which is the flag guarding this very block.
+            // The icon is read back out of the menu PrepareGossipMenu has just rebuilt so it is the
+            // same value SendGossipMenu would emit for that quest; all five captures carry 4, the
+            // icon PrepareQuestMenu assigns to a quest the player is now on. If the quest is not in
+            // the rebuilt menu there is no entry for the client to update and nothing is sent.
+            QuestMenu const& questMenu = _player->PlayerTalkClass->GetQuestMenu();
+            for (uint8 i = 0; i < questMenu.GetMenuItemCount(); ++i)
+            {
+                QuestMenuItem const& menuItem = questMenu.GetItem(i);
+                if (menuItem.QuestId == quest->GetQuestId())
+                {
+                    _player->PlayerTalkClass->SendGossipQuestUpdate(worldObject->GetGUID(), quest, menuItem.QuestIcon);
+                    break;
+                }
+            }
+
             _player->PlayerTalkClass->GetInteractionData().IsLaunchedByQuest = true;
         };
 

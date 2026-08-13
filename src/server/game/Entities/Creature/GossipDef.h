@@ -31,6 +31,11 @@ struct GossipMenuItems;
 enum class PlayerInteractionType : int32;
 enum class QuestGiverStatus : uint64;
 
+namespace WorldPackets::NPC
+{
+    struct ClientGossipText;
+}
+
 #define GOSSIP_MAX_MENU_ITEMS               32
 #define DEFAULT_GOSSIP_MESSAGE              0xffffff
 
@@ -331,6 +336,7 @@ class TC_GAME_API PlayerMenu
         bool IsGossipOptionCoded(uint32 selection) const { return _gossipMenu.IsMenuItemCoded(selection); }
 
         void SendGossipMenu(uint32 titleTextId, ObjectGuid objectGUID);
+        void SendGossipQuestUpdate(ObjectGuid objectGUID, Quest const* quest, uint32 questIcon) const;
         void SendCloseGossip();
         void SendPointOfInterest(uint32 poiId) const;
 
@@ -348,6 +354,8 @@ class TC_GAME_API PlayerMenu
         void SendQuestGiverRequestItems(Quest const* quest, ObjectGuid npcGUID, bool canComplete, bool autoLaunched);
 
     private:
+        void BuildClientGossipText(WorldPackets::NPC::ClientGossipText& text, Quest const* quest, uint32 questIcon) const;
+
         GossipMenu _gossipMenu;
         QuestMenu  _questMenu;
         WorldSession* _session;

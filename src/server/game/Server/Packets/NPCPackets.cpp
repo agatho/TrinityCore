@@ -134,6 +134,14 @@ WorldPacket const* GossipMessage::Write()
     return &_worldPacket;
 }
 
+WorldPacket const* GossipQuestUpdate::Write()
+{
+    _worldPacket << GossipGUID;
+    _worldPacket << TextData;
+
+    return &_worldPacket;
+}
+
 ByteBuffer& operator<<(ByteBuffer& data, VendorItem const& item)
 {
     data << uint64(item.Price);

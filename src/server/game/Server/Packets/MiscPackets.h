@@ -329,6 +329,48 @@ namespace WorldPackets
             int16 DifficultyID = 0;
         };
 
+        // Values recovered from the 12.0.7 client's own game-error table (the handler indexes it
+        // with these ids and each entry names one ERR_DIFFICULTY_* string), so the names below are
+        // the client's, not invented. Which trailing fields are present depends on the value -
+        // see ChangePlayerDifficultyResult::Write.
+        enum class ChangePlayerDifficultyResultCode : uint8
+        {
+            Cooldown                        = 0,    // ERR_DIFFICULTY_CHANGE_COOLDOWN_S, or
+                                                    // ERR_DIFFICULTY_CHANGE_COMBAT_COOLDOWN_S when InCombat is set
+            WorldState                      = 1,    // ERR_DIFFICULTY_CHANGE_WORLDSTATE
+            Encounter                       = 2,    // ERR_DIFFICULTY_CHANGE_ENCOUNTER
+            Combat                          = 3,    // ERR_DIFFICULTY_CHANGE_COMBAT
+            PlayerBusy                      = 4,    // ERR_DIFFICULTY_CHANGE_PLAYER_BUSY
+            PlayerOnVehicle                 = 5,    // ERR_DIFFICULTY_CHANGE_PLAYER_ON_VEHICLE
+            Pending                         = 6,    // no error text; client arms a deadline at now + Cooldown
+            AlreadyStarted                  = 7,    // ERR_DIFFICULTY_CHANGE_ALREADY_STARTED
+            MapDifficultyMessage            = 8,    // client displays MapDifficulty.db2 Message_lang of MapDifficultyID
+            OtherHeroic                     = 9,    // ERR_DIFFICULTY_CHANGE_OTHER_HEROIC_S, %s = name of PlayerGUID
+            HeroicInstanceAlreadyRunning    = 10,   // ERR_DIFFICULTY_CHANGE_HEROIC_INSTANCE_ALREADY_RUNNING
+            DisabledInLFG                   = 11,   // ERR_DIFFICULTY_DISABLED_IN_LFG
+            Success                         = 12    // client stores DifficultyID if MapID is the map it is on
+        };
+
+        // Layout taken from the client's deserializer, which switches on Result to decide what else
+        // to read; both captured 12.0.7 bodies re-encode byte for byte through it (Result 12 with
+        // MapID 2526 + DifficultyID 8, and Result 6 with a negative Cooldown).
+        class ChangePlayerDifficultyResult final : public ServerPacket
+        {
+        public:
+            explicit ChangePlayerDifficultyResult(ChangePlayerDifficultyResultCode result)
+                : ServerPacket(SMSG_CHANGE_PLAYER_DIFFICULTY_RESULT, 1 + 8), Result(result) { }
+
+            WorldPacket const* Write() override;
+
+            ChangePlayerDifficultyResultCode Result;
+            bool InCombat = false;                  // only read for Cooldown and Pending
+            int64 Cooldown = 0;                     // seconds; only for Cooldown and Pending
+            int32 MapID = 0;                        // only for Success
+            uint16 DifficultyID = 0;                // only for Success
+            int32 MapDifficultyID = 0;              // only for MapDifficultyMessage
+            ObjectGuid PlayerGUID;                  // only for OtherHeroic
+        };
+
         class DungeonDifficultySet final : public ServerPacket
         {
         public:
