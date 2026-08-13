@@ -339,6 +339,16 @@ namespace WorldPackets
             int32 Reason = 0;
         };
 
+        class ChatNotInParty final : public ServerPacket
+        {
+        public:
+            explicit ChatNotInParty(ChatMsg chatType) : ServerPacket(SMSG_CHAT_NOT_IN_PARTY, 4), ChatType(chatType) { }
+
+            WorldPacket const* Write() override;
+
+            ChatMsg ChatType;
+        };
+
         class CanLocalWhisperTargetRequest final : public ClientPacket
         {
         public:

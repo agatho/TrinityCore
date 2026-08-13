@@ -337,6 +337,13 @@ WorldPacket const* ChatRestricted::Write()
     return &_worldPacket;
 }
 
+WorldPacket const* ChatNotInParty::Write()
+{
+    _worldPacket << int32(ChatType);
+
+    return &_worldPacket;
+}
+
 void CanLocalWhisperTargetRequest::Read()
 {
     _worldPacket >> WhisperTarget;
