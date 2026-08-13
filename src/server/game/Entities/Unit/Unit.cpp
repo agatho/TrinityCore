@@ -91,6 +91,7 @@
 #include "World.h"
 #include "WorldPacket.h"
 #include "WorldSession.h"
+#include <array>
 #include <queue>
 #include <sstream>
 #include <cmath>
@@ -5673,7 +5674,37 @@ void Unit::SendAttackStateUpdate(CalcDamageInfo* damageInfo)
     if (contentTuningParams.GenerateDataForUnits(damageInfo->Attacker, damageInfo->Target))
         packet.ContentTuning = contentTuningParams;
 
-    SendCombatLogMessage(&packet);
+    // A swing that did not connect only produces SWING_MISSED on the client, and retail never sends the landed
+    // log for one: of 11548 captured 12.0.7 SMSG_ATTACK_SWING_LANDED_LOG none had HITINFO_MISS and all had
+    // VictimState == VICTIMSTATE_HIT, matching the 11544 SMSG_ATTACKER_STATE_UPDATE that reported a clean hit.
+    if (damageInfo->TargetState != VICTIMSTATE_HIT || (damageInfo->HitInfo & HITINFO_MISS))
+    {
+        SendCombatLogMessage(&packet);
+        return;
+    }
+
+    WorldPackets::CombatLog::AttackSwingLandedLog landedLog;
+    // HITINFO_NO_ANIMATION, HITINFO_RAGE_GAIN and HITINFO_FAKE_DAMAGE describe the attacker's swing, not the
+    // hit that landed, and never appear on this opcode in the captures (0 of 11548 each, while the paired
+    // SMSG_ATTACKER_STATE_UPDATE carried them 72, 4884 and 1024 times). Their packets are still sent, so the
+    // flags are masked rather than used as a send condition.
+    landedLog.Flags = damageInfo->HitInfo & ~(HITINFO_NO_ANIMATION | HITINFO_RAGE_GAIN | HITINFO_FAKE_DAMAGE);
+    landedLog.AttackerGUID = packet.AttackerGUID;
+    landedLog.VictimGUID = packet.VictimGUID;
+    landedLog.Damage = packet.Damage;
+    landedLog.OriginalDamage = packet.OriginalDamage;
+    landedLog.OverDamage = packet.OverDamage;
+    landedLog.SubDmg = packet.SubDmg;
+    landedLog.VictimState = packet.VictimState;
+    landedLog.BlockAmount = packet.BlockAmount;
+    landedLog.ContentTuning = packet.ContentTuning;
+
+    // The whole point of the opcode: the advanced combat logging block describes the unit that was hit. The
+    // client attaches it to the victim and uses the health it carries to correct the victim's health bar.
+    landedLog.LogData.Initialize(damageInfo->Target);
+
+    std::array<WorldPackets::CombatLog::CombatLogServerPacket*, 2> combatLogs = { &packet, &landedLog };
+    SendCombatLogMessages(combatLogs);
 }
 
 void Unit::SendAttackStateUpdate(uint32 HitInfo, Unit* target, uint8 /*SwingType*/, SpellSchoolMask damageSchoolMask, uint32 Damage, uint32 AbsorbDamage, uint32 Resist, VictimState TargetState, uint32 BlockedAmount, uint32 RageGained)
