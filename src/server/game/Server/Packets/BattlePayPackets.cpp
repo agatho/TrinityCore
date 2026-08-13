@@ -116,6 +116,34 @@ WorldPacket const* DistributionUpdate::Write()
     return &_worldPacket;
 }
 
+WorldPacket const* SyncWowEntitlements::Write()
+{
+    // Both counts up front, then the two parallel arrays - see the class comment for the byte proof.
+    // They are written from one vector of pairs so the two arrays cannot fall out of step.
+    _worldPacket << uint32(Entitlements.size());
+    _worldPacket << uint32(Entitlements.size());
+
+    for (auto const& pair : Entitlements)
+    {
+        AccountEntitlement const& entitlement = pair.first;
+        _worldPacket << entitlement.DeliverableID;
+        _worldPacket << entitlement.ExpireDate;
+        _worldPacket << entitlement.DisplayExpireDate;
+        _worldPacket << entitlement.UnitsRemaining;
+
+        // The client bit-unpacks this trailing byte, so it is written as a bit group. We only ever
+        // emit false, which is 0x00 under either reading - every captured row had it clear, so the
+        // encoding of a set flag is untested and deliberately unused.
+        _worldPacket.WriteBit(entitlement.ManualReviewStatus);
+        _worldPacket.FlushBits();
+    }
+
+    for (auto const& pair : Entitlements)
+        WriteDeliverable(_worldPacket, pair.second);
+
+    return &_worldPacket;
+}
+
 void DistributionAssignToTarget::Read()
 {
     _worldPacket >> ClientToken;

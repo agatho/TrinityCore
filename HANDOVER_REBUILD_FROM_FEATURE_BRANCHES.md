@@ -371,3 +371,58 @@ All golden-source, all worldserver-green. NOT yet integration-validated together
    SQL 2026_08_13_00_world_decor_duel.sql (decor_duel_template, disabled seed).
 VALUE NOTE for merge triage: buildable/testable-now = Voidscar (instanceable dungeon shell), flex-Mythic 233, Ritual Sites,
  housing outdoor-lighting (+audit fixes). Turbulent Timeways/Abyss/Decor-Duels/Darkspear = stub/scaffolding until captures.
+
+### §6-UPDATED (2026-08-13) — SUPERSEDES §6. Full value-based test-merge prompt (both overnight runs + tier 2)
+Integration test merge — Midnight gap-build. Value-based cut: merge what's testable NOW, hold stubs.
+Full per-system detail: §3h/§4/§5/§7. Batch-1 content validated-together GREEN (§6-VALIDATED). Tier-2 value set
+NOT yet validated-together — either run the same throwaway merge-build check first, or watch the World.cpp union.
+
+MERGE (value-positive, testable now) from origin:
+  # remediations (fix live dupe/security bugs)
+  feature/crafting-orders          7c0c615143
+  feature/garrison-systems         fab2715fab
+  feature/perks-program            fbe91d15a5   + APPLY 2 auth SQL
+  feature/pet-battles              eec4e6f053
+  feature/club-finder              cc01f30f17
+  # batch-1 content (validated together, §6-VALIDATED)
+  feature/omnium-folio             a1ab111366   (functional end-to-end)
+  feature/devourer-spec            3ead6a3a12   (playable spec)
+  feature/loa-blessings            8b139a882f   (altar worship + 8 blessings)
+  feature/quelthalas-zone-events   26a07296f5   (framework + Saltheril, live quest 89289)
+  # tier-2 value (NOT yet validated together)
+  feature/voidscar-arena           a9201cbea3   (instanceable 8th dungeon + encounter journal; map 2923 real)
+  feature/raid-season-s1           104e16f467   (flex-Mythic Difficulty 233 live; no SQL needed for the difficulty)
+  feature/midnight-small-activities e41b15724d  (Ritual Sites rep/title spine usable)
+  feature/housing-system           d092de76b6   (outdoor lighting live + closes audit A3/A4; was already an integration branch)
+
+DO NOT MERGE yet (debug-harness/stub/dep-gated — no player value until captures/deps land):
+  feature/prey-voidforge, feature/void-assaults, feature/slayers-rise-bg, feature/delve-nemesis,
+  feature/turbulent-timeways (needs feature/chromie-time + gate-worldstate captures)
+SKIP: feature/haranir-allied-race (base race already at baseline).
+
+ORDER / DEPS: substrate first — content/midnight-s1, feature/world-quests, feature/warband, feature/delves,
+  feature/mythic-plus (also req by voidscar M+ + prey vault), major-factions, feature/chromie-time. Then content.
+  Within new content: quelthalas-zone-events before void-assaults (deferred); feature/delves before delve-nemesis (deferred).
+CONFLICT: src/server/game/World/World.cpp is the one guaranteed conflict — resolve by UNION, keeping ALL manager
+  LoadFromDB()/Update() calls: sOmniumFolioMgr, sZoneEventMgr, sLoaBlessingMgr (+ sDecorDuelMgr from housing).
+  (Loa + DecorDuel have no per-tick Update by design — not dropped calls.) Script-module loaders auto-merge (disjoint lines).
+
+SQL to APPLY (auto-updates OFF — apply manually to activate; realm-safe if omitted, but dark):
+  perks:  auth/master/2026_08_12_00_auth.sql, 2026_08_12_01_auth.sql
+  omnium: world/master/2026_08_12_00_world_omnium_folio.sql, characters/master/2026_08_12_00_characters_omnium_folio.sql,
+          world/master/2026_08_12_02_world_omnium_questlines.sql
+  zone-events: world/master/2026_08_12_00_world_quelthalas_zone_events.sql
+  devourer:    world/master/2026_08_12_00_world_devourer_spec.sql (spell_script_names)
+  loa:         world/master/2026_08_13_00_world_loa_blessings.sql
+  voidscar:    world/master/2026_08_13_00_world_voidscar_arena.sql (instance_template 2923)
+  raid-season: world/master/2026_08_13_00_world_raid_season_s1.sql (curio table empty; flex-Mythic needs no SQL)
+  small-act:   world/master/2026_08_13_30_world_ritual_sites.sql, world/master/2026_08_13_31_world_abyss_anglers.sql
+  housing:     world/master/2026_08_13_00_world_decor_duel.sql (disabled seed)
+  haranir hotfix = COMMENTED (client-blocked) — skip.
+
+Build worldserver green, then bring the realm up centrally. Report any conflict beyond World.cpp.
+
+### §6-UPDATED correction (2026-08-13): feature/loa-blessings tip advanced 8b139a882f -> 8679501705
+Deepen pass seeded the FULL 44-option major×minor blessing matrix (36 pairings triple-confirmed from DB2, no capture;
+SQL-only, in 2026_08_13_00_world_loa_blessings.sql). Merge the NEWER tip 8679501705 (matrix-complete) instead of
+8b139a882f. Same SQL file, now with the full grid. Loa Blessings is content-complete for worship.

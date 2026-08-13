@@ -2700,6 +2700,7 @@ class TC_GAME_API WorldSession
         void LoadBattlePayEntitlements(bool sendList);
         void SendBattlePayDistributionListNow();
         void SendBattlePayDistributionUpdate(ShopEntitlement const& entitlement);
+        void SendBattlePayEntitlementSync();
         int32 BattlePayCreateEntitlement(ShopProduct const& product, uint64 purchaseID);
         void RedeemBattlePayEntitlements();
 
