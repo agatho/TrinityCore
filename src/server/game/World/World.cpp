@@ -133,6 +133,7 @@
 #include "WorldSession.h"
 #include "WorldStateMgr.h"
 #include "WowTokenMgr.h"
+#include "PreyMgr.h"
 #include <zlib.h>
 
 TC_GAME_API std::atomic<bool> World::m_stopEvent(false);
@@ -1705,6 +1706,8 @@ bool World::SetInitialWorldSettings()
 
     TC_LOG_INFO("server.loading", "Loading Area POIs...");
     sAreaPoiMgr->LoadFromDB();                                  // must be after world states (registers activation worldstates)
+    TC_LOG_INFO("server.loading", "Loading Prey hunt templates...");
+    sPreyMgr->LoadFromDB();                                    // Midnight S1 Prey/Voidforge — realm-safe no-op if table absent
 
     TC_LOG_INFO("server.loading", "Loading Game Event Data...");               // must be after loading pools fully
     sGameEventMgr->LoadFromDB();
@@ -2612,6 +2615,8 @@ void World::Update(uint32 diff)
     }
 
     WorldStateMgr::Update();
+
+    sPreyMgr->Update(diff);
 
     {
         TC_METRIC_TIMER("world_update_time", TC_METRIC_TAG("type", "Process cli commands"));
