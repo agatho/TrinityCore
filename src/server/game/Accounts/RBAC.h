@@ -754,10 +754,10 @@ enum RBACPermissions
     RBAC_PERM_COMMAND_BG_START                               = 884,
     RBAC_PERM_COMMAND_BG_STOP                                = 885,
     RBAC_PERM_USE_COMMENTATOR_MODE                           = 886,
-    // NOTE (merge feature/commerce, 2026-08-09): feature/commerce shipped these two as 886/887, which
-    // collides with RBAC_PERM_USE_COMMENTATOR_MODE = 886 (claimed first by feature/commentator in
-    // sql/updates/auth/master/2026_07_07_01_auth.sql, already applied to the live auth DB). Renumbered
-    // to 887/888 here; 2026_08_09_00_auth.sql renumbered to match. BACK-PORT THIS TO feature/commerce.
+    // 886 above is USE_COMMENTATOR_MODE, claimed first by the commentator feature and already applied to
+    // the live auth DB. feature/commerce originally shipped the two shop permissions as 886/887, which
+    // collided; that is now FIXED ON feature/commerce itself (commit ea245726c5), so this line no longer
+    // has to re-patch it on every rebuild.
     RBAC_PERM_COMMAND_RELOAD_SHOP_CATALOG                    = 887,
     RBAC_PERM_COMMAND_SHOP                                   = 888,
     //
