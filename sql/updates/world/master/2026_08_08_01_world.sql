@@ -25,7 +25,13 @@ INSERT INTO `creature` (`guid`, `id`, `map`, `zoneId`, `areaId`, `spawnDifficult
 
 -- Follow-up to 2026_08_07_63_world.sql assumptions: the city entry is 197711 (not 259053, and not
 -- 197915 as that file's comment guessed for the DF-era id). Wire the sniffed menu/flags/script to it.
-UPDATE `creature_template` SET `ScriptName` = 'npc_lindormi', `npcflag` = 129, `faction` = 35, `gossip_menu_id` = 29898, `subname` = 'Mythic Keystones', `VerifiedBuild` = 68974 WHERE `entry` = 197711;
+-- No `gossip_menu_id` in this UPDATE: `creature_template` has no such column in this schema - gossip
+-- is attached through `creature_template_gossip`. Including it aborted the entire file at this line
+-- with error 1054, so every statement below never ran on a fresh database build.
+UPDATE `creature_template` SET `ScriptName` = 'npc_lindormi', `npcflag` = 129, `faction` = 35, `subname` = 'Mythic Keystones', `VerifiedBuild` = 68974 WHERE `entry` = 197711;
+
+DELETE FROM `creature_template_gossip` WHERE `CreatureID` = 197711 AND `MenuID` = 29898;
+INSERT INTO `creature_template_gossip` (`CreatureID`, `MenuID`, `VerifiedBuild`) VALUES (197711, 29898, 68974);
 
 -- Gossip menu 29898 options (repo world data lacks them; ids/texts/order sniffed 68974).
 -- gossip_menu row intentionally untouched: TextID (npc_text) is not on the wire in this build.
