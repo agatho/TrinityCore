@@ -996,7 +996,14 @@ void WorldSession::HandleSetDungeonDifficultyOpcode(WorldPackets::Misc::SetDunge
             return;
 
         if (group->isLFGGroup())
+        {
+            // Refusing without a word leaves the difficulty button looking broken. The client has
+            // one error for exactly this condition - ERR_DIFFICULTY_DISABLED_IN_LFG, result 11 in
+            // its own game-error table - so say so instead of returning silently.
+            SendPacket(WorldPackets::Misc::ChangePlayerDifficultyResult(
+                WorldPackets::Misc::ChangePlayerDifficultyResultCode::DisabledInLFG).Write());
             return;
+        }
 
         // the difficulty is set even if the instances can't be reset
         group->ResetInstances(InstanceResetMethod::OnChangeDifficulty, _player);
@@ -1065,7 +1072,12 @@ void WorldSession::HandleSetRaidDifficultyOpcode(WorldPackets::Misc::SetRaidDiff
             return;
 
         if (group->isLFGGroup())
+        {
+            // Same refusal as the dungeon path, same client-side error.
+            SendPacket(WorldPackets::Misc::ChangePlayerDifficultyResult(
+                WorldPackets::Misc::ChangePlayerDifficultyResultCode::DisabledInLFG).Write());
             return;
+        }
 
         // the difficulty is set even if the instances can't be reset
         group->ResetInstances(InstanceResetMethod::OnChangeDifficulty, _player);
