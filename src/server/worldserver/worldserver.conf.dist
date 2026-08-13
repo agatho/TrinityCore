@@ -4471,6 +4471,19 @@ Shop.Shop2Enabled = 0
 #                     Only advertised when Shop.Shop2Enabled is 1 AND the value is non-empty.
 #        Default:     "" - (not advertised)
 
+#
+#    Shop.Shop2CertificatesFile
+#    Shop.Shop2PrivateKeyFile
+#        Description: TLS material for the shop2 listener. You do NOT need a new certificate:
+#                     point these at the SAME pair your bnetserver already uses for its login REST
+#                     service (bnetserver.conf -> CertificatesFile / PrivateKeyFile, typically
+#                     bnetserver.cert.pem / bnetserver.key.pem). The client completes a TLS
+#                     handshake against that certificate on every login, so a second listener
+#                     presenting it is trusted on exactly the same basis. A separate port is enough;
+#                     a separate identity is not.
+#        Example:     Shop.Shop2CertificatesFile = "M:/PlayerbotServer/bnetserver.cert.pem"
+#                     Shop.Shop2PrivateKeyFile   = "M:/PlayerbotServer/bnetserver.key.pem"
+
 Shop.Shop2HostUrlRequests = ""
 Shop.Shop2HostUrlAuth = ""
 Shop.Shop2ClientId = ""

@@ -753,8 +753,13 @@ enum RBACPermissions
     RBAC_PERM_COMMAND_QUEST_OBJECTIVE_COMPLETE               = 883,
     RBAC_PERM_COMMAND_BG_START                               = 884,
     RBAC_PERM_COMMAND_BG_STOP                                = 885,
-    RBAC_PERM_COMMAND_RELOAD_SHOP_CATALOG                    = 886,
-    RBAC_PERM_COMMAND_SHOP                                   = 887,
+    // 886 is DELIBERATELY SKIPPED. It is RBAC_PERM_USE_COMMENTATOR_MODE, claimed first by the
+    // commentator feature and already applied to the live auth database. These two used to sit at
+    // 886/887 and collided; the clash has now been rediscovered twice while assembling the
+    // integration lines, so the correct ids are fixed here on the owning branch rather than being
+    // re-patched downstream every time.
+    RBAC_PERM_COMMAND_RELOAD_SHOP_CATALOG                    = 887,
+    RBAC_PERM_COMMAND_SHOP                                   = 888,
     //
     // IF YOU ADD NEW PERMISSIONS, ADD THEM IN 3.3.5 BRANCH AS WELL!
     //
