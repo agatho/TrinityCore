@@ -217,6 +217,40 @@ void PlayerMenu::ClearMenus()
     _questMenu.ClearMenu();
 }
 
+void PlayerMenu::BuildClientGossipText(WorldPackets::NPC::ClientGossipText& text, Quest const* quest, uint32 questIcon) const
+{
+    text.QuestID = quest->GetQuestId();
+    text.ContentTuningID = quest->GetContentTuningId();
+    text.QuestType = questIcon;
+    text.QuestFlags[0] = quest->GetFlags();
+    text.QuestFlags[1] = quest->GetFlagsEx();
+    text.QuestFlags[2] = quest->GetFlagsEx2();
+    text.QuestFlags[3] = quest->GetFlagsEx3();
+    text.Repeatable = quest->IsTurnIn() && quest->IsRepeatable() && !quest->IsDailyOrWeekly() && !quest->IsMonthly();
+    text.ResetByScheduler = quest->IsResetByScheduler();
+    text.Important = quest->IsImportant();
+    text.Meta = quest->IsMeta();
+
+    text.QuestTitle = quest->GetLogTitle();
+    LocaleConstant localeConstant = _session->GetSessionDbLocaleIndex();
+    if (localeConstant != LOCALE_enUS)
+        if (QuestTemplateLocale const* questTemplateLocale = sObjectMgr->GetQuestLocale(quest->GetQuestId()))
+            ObjectMgr::GetLocaleString(questTemplateLocale->LogTitle, localeConstant, text.QuestTitle);
+}
+
+// Refreshes a single quest entry of an already-open gossip instead of resending the whole menu.
+// The wire is a PackedGuid naming the gossip source plus exactly one ClientGossipText - the same
+// per-quest block SMSG_GOSSIP_MESSAGE carries as a list - and re-encoding it that way reproduces
+// all 5 captured 12.0.7 bodies byte for byte with nothing left over.
+void PlayerMenu::SendGossipQuestUpdate(ObjectGuid objectGUID, Quest const* quest, uint32 questIcon) const
+{
+    WorldPackets::NPC::GossipQuestUpdate packet;
+    packet.GossipGUID = objectGUID;
+    BuildClientGossipText(packet.TextData, quest, questIcon);
+
+    _session->SendPacket(packet.Write());
+}
+
 void PlayerMenu::SendGossipMenu(uint32 titleTextId, ObjectGuid objectGUID)
 {
     _interactionData.StartInteraction(objectGUID, PlayerInteractionType::Gossip);
@@ -259,25 +293,7 @@ void PlayerMenu::SendGossipMenu(uint32 titleTextId, ObjectGuid objectGUID)
         uint32 questID = item.QuestId;
         if (Quest const* quest = sObjectMgr->GetQuestTemplate(questID))
         {
-            WorldPackets::NPC::ClientGossipText& text = packet.GossipText[count];
-            text.QuestID = questID;
-            text.ContentTuningID = quest->GetContentTuningId();
-            text.QuestType = item.QuestIcon;
-            text.QuestFlags[0] = quest->GetFlags();
-            text.QuestFlags[1] = quest->GetFlagsEx();
-            text.QuestFlags[2] = quest->GetFlagsEx2();
-            text.QuestFlags[3] = quest->GetFlagsEx3();
-            text.Repeatable = quest->IsTurnIn() && quest->IsRepeatable() && !quest->IsDailyOrWeekly() && !quest->IsMonthly();
-            text.ResetByScheduler = quest->IsResetByScheduler();
-            text.Important = quest->IsImportant();
-            text.Meta = quest->IsMeta();
-
-            text.QuestTitle = quest->GetLogTitle();
-            LocaleConstant localeConstant = _session->GetSessionDbLocaleIndex();
-            if (localeConstant != LOCALE_enUS)
-                if (QuestTemplateLocale const* questTemplateLocale = sObjectMgr->GetQuestLocale(questID))
-                    ObjectMgr::GetLocaleString(questTemplateLocale->LogTitle, localeConstant, text.QuestTitle);
-
+            BuildClientGossipText(packet.GossipText[count], quest, item.QuestIcon);
             ++count;
         }
     }
