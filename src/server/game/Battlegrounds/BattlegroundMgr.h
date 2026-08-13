@@ -120,6 +120,17 @@ class TC_GAME_API BattlegroundMgr
 
         static void SendToBattleground(Player* player, Battleground const* battleground);
 
+        /* PvP Brawl */
+        struct ActiveBrawl
+        {
+            uint32 PvpBrawlId = 0;              // PvpBrawl.db2 row id - what the client is told
+            uint32 BattlemasterListId = 0;      // PvpBrawl.db2 BattlemasterListID - what the server queues
+        };
+
+        // The running brawl, or nothing. Returns nothing unless the configured brawl can genuinely produce a
+        // match, so callers may treat a value as "advertising this is honest".
+        Optional<ActiveBrawl> GetActiveBrawl();
+
         /* Battleground queues */
         static bool IsValidQueueId(BattlegroundQueueTypeId bgQueueTypeId);
         BattlegroundQueue& GetBattlegroundQueue(BattlegroundQueueTypeId bgQueueTypeId) { return m_BattlegroundQueues.emplace(bgQueueTypeId, bgQueueTypeId).first->second; }

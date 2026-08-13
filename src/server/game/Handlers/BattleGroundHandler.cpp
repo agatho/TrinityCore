@@ -652,6 +652,163 @@ void WorldSession::HandleJoinRatedBattleground(WorldPackets::Battleground::JoinR
     sBattlegroundMgr->ScheduleQueueUpdate(0, bgQueueTypeId, bracketEntry->GetBracketId());
 }
 
+// CMSG_BATTLEMASTER_JOIN_BRAWL (0x3B00C2) - the rotating PvP Brawl. Body is uint8 Roles + one bit
+// IsSpecialBrawl (see BattlemasterJoinBrawl's comment for the serializer that says so).
+//
+// Like the other three joins in this file the packet carries no queue identity, but here that is not just a
+// convention: the client already knows which brawl is running because the server told it, in
+// SMSG_REQUEST_SCHEDULED_PVP_INFO_RESPONSE. C_PvP.JoinBrawl (client RVA 0x1277770) resolves the brawl by reading
+// back the very global that packet's handler wrote (dword_7FF72F082BB8, or dword_7FF72F082BBC when
+// isSpecialBrawl is set) and looking it up in PvpBrawl.db2. So the authoritative queue identity is whatever this
+// server last advertised, which is exactly what GetActiveBrawl returns - asking it again here rather than
+// trusting anything in the packet keeps the two in step.
+//
+// Queue identity: { BattlemasterListId = the brawl's, Type = 0 (BATTLEGROUND), Rated = false, TeamSize = 0 }.
+// Type 0 is not a placeholder for a missing "brawl" nibble - the client's nibble decoder (VA 0x7FF72AAB59E0) has
+// no brawl case at all; its nine values are 0 BATTLEGROUND, 1 ARENA, 2 WARGAME, 3 CHEAT, 4 ARENASKIRMISH,
+// 6 BRAWLSHUFFLE, 7 RATEDSHUFFLE, 8 BRAWLSOLORBG, 9 RATEDSOLORBG. Brawl-ness is carried by the
+// BattlemasterList row (Flags & 0x20 = IsBrawl), which is what the client itself tests when it decides to render
+// a queue as a brawl (0x7FF72AAB9DBB, and the isBrawl field of QueueSpecificInfo at 0x7FF72AA8D7D5). Unrated,
+// because a brawl has no rating; that also puts the queue on the existing CheckNormalMatch path.
+void WorldSession::HandleBattlemasterJoinBrawl(WorldPackets::Battleground::BattlemasterJoinBrawl& packet)
+{
+    // We never advertise a special-event brawl (HandleRequestScheduledPvpInfo leaves that block out), so the
+    // client has nothing to set this bit for. Retail's captured special-event brawl is an LFGDungeons brawl with
+    // no BattlemasterList at all, which this queue could not serve even if it were advertised.
+    if (packet.IsSpecialBrawl)
+        return;
+
+    Optional<BattlegroundMgr::ActiveBrawl> brawl = sBattlegroundMgr->GetActiveBrawl();
+    if (!brawl)
+        return;
+
+    BattlegroundQueueTypeId bgQueueTypeId =
+        BattlegroundMgr::BGQueueTypeId(uint16(brawl->BattlemasterListId), BattlegroundQueueIdType::Battleground, false, 0);
+
+    if (!BattlegroundMgr::IsValidQueueId(bgQueueTypeId))
+        return;
+
+    BattlemasterListEntry const* battlemasterListEntry = sBattlemasterListStore.AssertEntry(bgQueueTypeId.BattlemasterListId);
+
+    if (_player->InBattleground())
+        return;
+
+    // GetActiveBrawl already refused to advertise a brawl without a template, so this is a reload race, not a
+    // configuration error.
+    BattlegroundTemplate const* bgTemplate = sBattlegroundMgr->GetBattlegroundTemplateByTypeId(BattlegroundTypeId(bgQueueTypeId.BattlemasterListId));
+    if (!bgTemplate)
+        return;
+
+    PVPDifficultyEntry const* bracketEntry = DB2Manager::GetBattlegroundBracketByLevel(bgTemplate->MapIDs.front(), _player->GetLevel());
+    if (!bracketEntry)
+        return;
+
+    auto sendFailed = [&](GroupJoinBattlegroundResult result, ObjectGuid const* errorGuid = nullptr)
+    {
+        WorldPackets::Battleground::BattlefieldStatusFailed battlefieldStatus;
+        BattlegroundMgr::BuildBattlegroundStatusFailed(&battlefieldStatus, bgQueueTypeId, _player, 0, result, errorGuid);
+        SendPacket(battlefieldStatus.Write());
+    };
+
+    // C_PvP.JoinBrawl refuses to emit the packet when the selected roles and the class's allowed roles do not
+    // intersect (client error 0x33A), so a zero mask means a client we do not model.
+    if (!packet.Roles)
+    {
+        sendFailed(ERR_BATTLEGROUND_JOIN_FAILED);
+        return;
+    }
+
+    Group* grp = _player->GetGroup();
+    if (grp)
+    {
+        if (grp->GetLeaderGUID() != _player->GetGUID())
+            return;
+
+        // BattlemasterList.MaxGroupSize is the brawl's own party cap (5 for Deep Six).
+        if (grp->GetMembersCount() > battlemasterListEntry->MaxGroupSize)
+        {
+            sendFailed(ERR_BATTLEGROUND_JOIN_FAILED);
+            return;
+        }
+    }
+
+    if (GetPlayer()->isUsingLfg())
+    {
+        sendFailed(ERR_LFG_CANT_USE_BATTLEGROUND);
+        return;
+    }
+
+    if (!_player->CanJoinToBattleground(bgTemplate))
+    {
+        sendFailed(ERR_BATTLEGROUND_JOIN_TIMED_OUT);
+        return;
+    }
+
+    if (_player->IsDeserter())
+    {
+        sendFailed(ERR_GROUP_JOIN_BATTLEGROUND_DESERTERS);
+        return;
+    }
+
+    if (_player->GetBattlegroundQueueIndex(bgQueueTypeId) < PLAYER_MAX_BATTLEGROUND_QUEUES)
+        return;
+
+    if (!_player->HasFreeBattlegroundQueueId())
+    {
+        sendFailed(ERR_BATTLEGROUND_TOO_MANY_QUEUES);
+        return;
+    }
+
+    // check Freeze debuff
+    if (_player->HasAura(9454))
+        return;
+
+    ObjectGuid errorGuid;
+    GroupJoinBattlegroundResult err = ERR_BATTLEGROUND_NONE;
+    if (grp)
+        err = grp->CanJoinBattlegroundQueue(bgTemplate, bgQueueTypeId, 0, bgTemplate->GetMaxPlayersPerTeam(), false, 0, errorGuid);
+
+    if (err)
+    {
+        sendFailed(err, &errorGuid);
+        return;
+    }
+
+    BattlegroundQueue& bgQueue = sBattlegroundMgr->GetBattlegroundQueue(bgQueueTypeId);
+
+    // isPremade true only for a group that already fills a side, matching HandleBattlemasterJoinOpcode.
+    bool const isPremade = grp && grp->GetMembersCount() >= bgTemplate->GetMinPlayersPerTeam();
+
+    GroupQueueInfo* ginfo = bgQueue.AddGroup(_player, grp, Team(_player->GetTeam()), bracketEntry, isPremade, 0, 0, packet.Roles);
+    uint32 avgTime = bgQueue.GetAverageQueueWaitTime(ginfo, bracketEntry->GetBracketId());
+
+    if (grp)
+    {
+        for (GroupReference const& itr : grp->GetMembers())
+        {
+            Player* member = itr.GetSource();
+            uint32 memberSlot = member->AddBattlegroundQueueId(bgQueueTypeId);
+
+            WorldPackets::Battleground::BattlefieldStatusQueued battlefieldStatus;
+            BattlegroundMgr::BuildBattlegroundStatusQueued(&battlefieldStatus, member, memberSlot, ginfo->JoinTime, bgQueueTypeId, avgTime, true);
+            member->SendDirectMessage(battlefieldStatus.Write());
+        }
+    }
+    else
+    {
+        uint32 queueSlot = _player->AddBattlegroundQueueId(bgQueueTypeId);
+
+        WorldPackets::Battleground::BattlefieldStatusQueued battlefieldStatus;
+        BattlegroundMgr::BuildBattlegroundStatusQueued(&battlefieldStatus, _player, queueSlot, ginfo->JoinTime, bgQueueTypeId, avgTime, false);
+        SendPacket(battlefieldStatus.Write());
+    }
+
+    TC_LOG_DEBUG("bg.battleground", "Brawl: {} ({}) queued for PvpBrawl {} (BattlemasterList {}) with roles {:#x}",
+        _player->GetName(), _player->GetGUID().ToString(), brawl->PvpBrawlId, bgQueueTypeId.BattlemasterListId, packet.Roles);
+
+    sBattlegroundMgr->ScheduleQueueUpdate(0, bgQueueTypeId, bracketEntry->GetBracketId());
+}
+
 void WorldSession::HandlePVPLogDataOpcode(WorldPackets::Battleground::PVPLogDataRequest& /*pvpLogDataRequest*/)
 {
     Battleground* bg = _player->GetBattleground();
@@ -1031,6 +1188,38 @@ void WorldSession::HandleRequestRatedPvpInfo(WorldPackets::Battleground::Request
 {
     WorldPackets::Battleground::RatedPvpInfo ratedPvpInfo;
     SendPacket(ratedPvpInfo.Write());
+}
+
+// This is the packet that publishes the running PvP Brawl. It used to answer all-inactive because nothing here
+// scheduled a brawl; now it answers with whatever BattlegroundMgr::GetActiveBrawl() vouches for, and with nothing
+// when it vouches for nothing. GetActiveBrawl only returns a brawl whose BattlemasterList exists, is flagged
+// IsBrawl, is not disabled, and has a battleground_template that resolves to a real map - so the Brawl button can
+// only ever light up for a queue that can actually pop.
+//
+// The special-event slot is left empty on purpose. Retail's captured value for it is PvpBrawl 155 "Decor Duel",
+// whose PvpBrawl.db2 BattlemasterListID is 0 - it is an LFGDungeons brawl, not a battleground, and there is no
+// queue here that could serve it.
+void WorldSession::HandleRequestScheduledPvpInfo(WorldPackets::Battleground::RequestScheduledPvpInfo& /*packet*/)
+{
+    WorldPackets::Battleground::RequestScheduledPvpInfoResponse response;
+
+    if (Optional<BattlegroundMgr::ActiveBrawl> brawl = sBattlegroundMgr->GetActiveBrawl())
+    {
+        WorldPackets::Battleground::RequestScheduledPvpInfoResponse::BrawlInfo& info = response.Brawl.emplace();
+        info.BrawlID = brawl->PvpBrawlId;
+        info.CanQueue = true;
+
+        // The client turns this into `timeLeftUntilNextChange` by adding it to the moment this packet arrived,
+        // and hides the brawl entirely once that deadline passes - so it must be a real future instant, not a
+        // decoration. The brawl here is a fixed configuration rather than a rotation, so the honest deadline is
+        // the next weekly reset: that is when an operator changing the config would take effect, and it is the
+        // cadence retail rotates on. Re-asking after the reset gets a fresh window.
+        time_t const now = GameTime::GetGameTime();
+        time_t const nextChange = sWorld->GetNextWeeklyQuestsResetTime();
+        info.SecondsUntilNextChange = nextChange > now ? uint32(nextChange - now) : uint32(WEEK);
+    }
+
+    SendPacket(response.Write());
 }
 
 void WorldSession::HandleGetPVPOptionsEnabled(WorldPackets::Battleground::GetPVPOptionsEnabled& /*getPvPOptionsEnabled*/)

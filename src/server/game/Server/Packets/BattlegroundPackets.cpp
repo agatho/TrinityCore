@@ -191,6 +191,12 @@ void BattlemasterJoinSkirmish::Read()
     Requeue = _worldPacket.ReadBit();
 }
 
+void BattlemasterJoinBrawl::Read()
+{
+    _worldPacket >> Roles;
+    IsSpecialBrawl = _worldPacket.ReadBit();
+}
+
 ByteBuffer& operator<<(ByteBuffer& data, BattlefieldStatusHeader const& header)
 {
     data << header.Ticket;
@@ -395,6 +401,33 @@ WorldPacket const* RatedPvpInfo::Write()
 {
     for (BracketInfo const& bracket : Bracket)
         _worldPacket << bracket;
+
+    return &_worldPacket;
+}
+
+WorldPacket const* RequestScheduledPvpInfoResponse::Write()
+{
+    // Both presence bits share one flushed byte - the client's reader pulls a single byte and tests bit 7 and
+    // bit 6 of it. Each optional block then ends with its own flush, so its trailing bool costs a whole byte.
+    _worldPacket << OptionalInit(Brawl);
+    _worldPacket << OptionalInit(SpecialEventBrawl);
+    _worldPacket.FlushBits();
+
+    if (Brawl)
+    {
+        _worldPacket << uint32(Brawl->BrawlID);
+        _worldPacket << uint32(Brawl->SecondsUntilNextChange);
+        _worldPacket << Bits<1>(Brawl->CanQueue);
+        _worldPacket.FlushBits();
+    }
+
+    if (SpecialEventBrawl)
+    {
+        _worldPacket << uint32(SpecialEventBrawl->BrawlID);
+        _worldPacket << uint32(SpecialEventBrawl->SecondsUntilNextChange);
+        _worldPacket << Bits<1>(SpecialEventBrawl->CanQueue);
+        _worldPacket.FlushBits();
+    }
 
     return &_worldPacket;
 }
