@@ -198,6 +198,11 @@ void TimeSyncResponse::Read()
     _worldPacket >> ClientTime;
 }
 
+void DiscardedTimeSyncAcks::Read()
+{
+    _worldPacket >> MaxSequenceIndex;
+}
+
 WorldPacket const* TriggerCinematic::Write()
 {
     _worldPacket << uint32(CinematicID);

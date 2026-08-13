@@ -226,6 +226,18 @@ namespace WorldPackets
             uint32 SequenceIndex = 0; // Same index as in request
         };
 
+        // Sent when the client throws away time sync work it had queued, typically around a map
+        // transfer. Everything up to and including MaxSequenceIndex will never be answered.
+        class DiscardedTimeSyncAcks final : public ClientPacket
+        {
+        public:
+            explicit DiscardedTimeSyncAcks(WorldPacket&& packet) : ClientPacket(CMSG_DISCARDED_TIME_SYNC_ACKS, std::move(packet)) { }
+
+            void Read() override;
+
+            uint32 MaxSequenceIndex = 0;
+        };
+
         class TriggerCinematic final : public ServerPacket
         {
         public:

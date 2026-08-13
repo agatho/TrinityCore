@@ -329,6 +329,15 @@ void WorldSession::AddInstanceConnection(WorldSession* session, std::weak_ptr<Wo
 
     socket->SetWorldSession(session);
     session->m_Socket[CONNECTION_TYPE_INSTANCE] = std::move(socket);
+
+    // Opens the suspend window that HandleContinuePlayerLogin closes with SMSG_RESUME_COMMS one call
+    // below. The captures put SMSG_SUSPEND_COMMS exactly here: on the instance connection, right
+    // after CMSG_ENTER_ENCRYPTED_MODE_ACK, which is the call that lands us in this function.
+    WorldPackets::Auth::SuspendComms suspendComms(CONNECTION_TYPE_INSTANCE);
+    suspendComms.SerialNumber = SPECIAL_SUSPEND_COMMS_TIME_SYNC_COUNTER;
+    session->SendPacket(suspendComms.Write());
+    session->RegisterTimeSync(SPECIAL_SUSPEND_COMMS_TIME_SYNC_COUNTER);
+
     session->HandleContinuePlayerLogin();
 }
 
