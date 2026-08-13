@@ -25,6 +25,7 @@
 #include "GameTime.h"
 #include "Log.h"
 #include "PerksProgramMgr.h"
+#include "PerksProgramPackets.h"
 #include "Player.h"
 #include "SharedDefines.h"
 #include "WorldSession.h"
@@ -268,6 +269,14 @@ void PerksProgramActivityMgr::CompleteActivity(PerksActivityEntry const* activit
     TC_LOG_INFO("criteria", "PerksProgramActivityMgr::CompleteActivity({}). {}", activity->ID, GetOwnerInfo());
 
     AwardThresholds(oldTotal, newTotal);
+
+    // Announce the individual completion before the full-state refresh: the client queues the id as "pending
+    // completion", fires PERKS_ACTIVITY_COMPLETED, prints the "monthly activities updated" system message and
+    // scrolls the Traveler's Log to the activity. Without it the activity only silently turns green on the next
+    // SMSG_PERKS_PROGRAM_ACTIVITY_UPDATE.
+    WorldPackets::PerksProgram::PerksProgramActivityComplete activityComplete;
+    activityComplete.PerksActivityID = activity->ID;
+    SendPacket(activityComplete.Write());
 
     // Refresh the client's Trading Post activity state with the new completion.
     _owner->GetSession()->SendPerksProgramActivityUpdate();
