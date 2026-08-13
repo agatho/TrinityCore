@@ -51,6 +51,7 @@
 #include "DetourMemoryFunctions.h"
 #include "DisableMgr.h"
 #include "GameEventMgr.h"
+#include "TurbulentTimewaysMgr.h"
 #include "GameObjectModel.h"
 #include "GameTables.h"
 #include "GameTime.h"
@@ -1617,6 +1618,9 @@ bool World::SetInitialWorldSettings()
     TC_LOG_INFO("server.loading", "Loading Game Event Data...");               // must be after loading pools fully
     sGameEventMgr->LoadFromDB();
 
+    TC_LOG_INFO("server.loading", "Loading Turbulent Timeways rotation...");   // rotating Timewalking meta-event scheduler (extends chromie-time)
+    sTurbulentTimewaysMgr->LoadFromDB();
+
     TC_LOG_INFO("server.loading", "Loading creature summoned data...");
     sObjectMgr->LoadCreatureSummonedData();                     // must be after LoadCreatureTemplates() and LoadQuests()
 
@@ -2417,6 +2421,8 @@ void World::Update(uint32 diff)
     }
 
     WorldStateMgr::Update();
+
+    sTurbulentTimewaysMgr->Update(diff);
 
     {
         TC_METRIC_TIMER("world_update_time", TC_METRIC_TAG("type", "Process cli commands"));
