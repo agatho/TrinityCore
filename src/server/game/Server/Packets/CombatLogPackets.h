@@ -328,6 +328,38 @@ namespace WorldPackets
             Spells::ContentTuningParams ContentTuning;
         };
 
+        // Victim side twin of SMSG_ATTACKER_STATE_UPDATE, sent for the same swing whenever that swing connects.
+        // The 12.0.7 client (68275) deserializes it at 0x7FF7290FB9C0 and handles it at 0x7FF72A87ABC0: it emits
+        // the COMBAT_LOG_EVENT_UNFILTERED subevent SWING_DAMAGE_LANDED (combat log subevent name table
+        // 0x7FF72CC63EF0, index 50) plus one SWING_DAMAGE_LANDED_SUPPORT (index 62) per Supporters entry,
+        // attaches the advanced combat logging fields taken from LogData to the *victim*, and corrects the
+        // victim's client side health. SMSG_ATTACKER_STATE_UPDATE can deliver none of that: its LogData
+        // describes the attacker and its handler emits SWING_DAMAGE / SWING_MISSED (indices 1 / 2) instead.
+        // The body is byte for byte an AttackerStateUpdate prefixed with the Supporters list; verified against
+        // 11548 captured 12.0.7 packets (see AttackSwingLandedLog::Write for what retail never populates).
+        class AttackSwingLandedLog final : public CombatLogServerPacket
+        {
+        public:
+            explicit AttackSwingLandedLog() : CombatLogServerPacket(SMSG_ATTACK_SWING_LANDED_LOG, 70) { }
+
+            WorldPacket const* Write() override;
+
+            std::vector<Spells::SpellSupportInfo> Supporters;
+            uint32 Flags = 0; // Flags
+            ObjectGuid AttackerGUID;
+            ObjectGuid VictimGUID;
+            int32 Damage = 0;
+            int32 OriginalDamage = 0;
+            int32 OverDamage = -1; // (damage - health) or -1 if unit is still alive
+            Optional<SubDamage> SubDmg;
+            uint8 VictimState = 0;
+            uint32 AttackerState = 0;
+            uint32 MeleeSpellID = 0;
+            int32 BlockAmount = 0;
+            HitInfoData HitInfo;
+            Spells::ContentTuningParams ContentTuning;
+        };
+
         class SpellAbsorbLog final : public CombatLogServerPacket
         {
         public:
