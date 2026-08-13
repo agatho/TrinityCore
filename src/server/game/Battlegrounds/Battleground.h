@@ -456,9 +456,17 @@ class TC_GAME_API Battleground
             return &itr->second;
         }
 
-        void AddPoint(Team team, uint32 points = 1) { m_TeamScores[GetTeamIndexByTeamId(team)] += points; }
-        void SetTeamPoint(Team team, uint32 points = 0) { m_TeamScores[GetTeamIndexByTeamId(team)] = points; }
-        void RemovePoint(Team team, uint32 points = 1) { m_TeamScores[GetTeamIndexByTeamId(team)] -= points; }
+        // All three funnel through SetTeamScore so that every score movement, wherever it originates, reaches
+        // the client as SMSG_BATTLEGROUND_POINTS.
+        void AddPoint(Team team, uint32 points = 1) { SetTeamScore(GetTeamIndexByTeamId(team), m_TeamScores[GetTeamIndexByTeamId(team)] + int32(points)); }
+        void SetTeamPoint(Team team, uint32 points = 0) { SetTeamScore(GetTeamIndexByTeamId(team), int32(points)); }
+        void RemovePoint(Team team, uint32 points = 1) { SetTeamScore(GetTeamIndexByTeamId(team), m_TeamScores[GetTeamIndexByTeamId(team)] - int32(points)); }
+
+        // Resource-race battlegrounds publish their score cap here. Battlegrounds that have no cap leave it
+        // at zero, and then no SMSG_BATTLEGROUND_INIT is sent at all - which is what the client wants, since
+        // its handler discards a zero cap anyway.
+        void SetMaxTeamScore(uint16 maxTeamScore);
+        uint16 GetMaxTeamScore() const { return _maxTeamScore; }
 
         Trinity::unique_weak_ptr<Battleground> GetWeakPtr() const { return m_weakRef; }
         void SetWeakPtr(Trinity::unique_weak_ptr<Battleground> weakRef) { m_weakRef = std::move(weakRef); }
@@ -527,6 +535,9 @@ class TC_GAME_API Battleground
         int32 m_TeamScores[PVP_TEAMS_COUNT];
 
     private:
+        void SetTeamScore(TeamId teamId, int32 score);
+        void SendMatchScoreState(Player* player) const;
+
         // Battleground
         uint32 m_InstanceID;                                // Battleground Instance's GUID!
         BattlegroundStatus m_Status;
@@ -544,6 +555,7 @@ class TC_GAME_API Battleground
         bool   m_IsRated;                                   // is this battle rated?
         bool   m_PrematureCountDown;
         uint32 m_LastPlayerPositionBroadcast;
+        uint16 _maxTeamScore;                               // 0 = this battleground has no resource cap
 
         // Player lists
         std::deque<ObjectGuid> m_OfflineQueue;              // Player GUID

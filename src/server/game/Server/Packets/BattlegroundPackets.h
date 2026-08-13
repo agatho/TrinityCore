@@ -244,6 +244,43 @@ namespace WorldPackets
             WorldPackets::LFG::RideTicket Ticket;
         };
 
+        // SMSG_BATTLEFIELD_STATUS_WAIT_FOR_GROUPS (0x48000D) and
+        // SMSG_BATTLEFIELD_STATUS_GROUP_PROPOSAL_FAILED (0x48000E) are DELIBERATELY not implemented.
+        //
+        // Their wire form is fully known - it was decoded byte for byte from the 18 + 2 occurrences in
+        // C:\sniff\rated BG 12.0.7.pkt and confirmed against the client readers - and it is recorded here so
+        // the work is not repeated. (Note that "rbg rated BG 12.0.7.pkt" is a byte-identical copy of that
+        // file, so this is one capture and not two.)
+        //
+        //   0x48000D  BattlefieldStatusHeader (the struct above, read by sub_7FF7290FAAE0 - identical field
+        //             order to operator<<(ByteBuffer&, BattlefieldStatusHeader const&))
+        //             uint32 MapID, uint32 TimeoutMs (30000 in every capture). The first of the two is only
+        //             INFERRED to be a map: it holds 2656, 2107 and then 2245 across the three proposal
+        //             runs, and the match that finally started ran on map 2245 - plus the already-working
+        //             siblings above write Mapid immediately before Timeout in exactly this position.
+        //             uint8 SlotsPerSide[2] and uint8 AwaitedPerSide[2], written index-interleaved as
+        //                 SlotsPerSide[0], AwaitedPerSide[0], SlotsPerSide[1], AwaitedPerSide[1],
+        //             then the 3x3 role block below.
+        //   0x48000E  BattlefieldStatusHeader, then the 3x3 role block below. Nothing else.
+        //
+        // The role block is read by sub_7FF7290FAD90 into three uint8[3] arrays A/B/C indexed by role, and
+        // the wire order is index-interleaved: A[0],B[0],C[0], A[1],B[1],C[1], A[2],B[2],C[2], then one bit
+        // plus a flush. The role order is TANK, HEALER, DAMAGER - read straight out of the client's own
+        // name table at 0x7FF72C3C5DE0. The consumers (sub_7FF72AAB93E0 for 0x48000D, sub_7FF72AAB97D0 for
+        // 0x48000E) build a vector of a struct the client itself names PvpRoleQueueInfo, whose fields are
+        // { roleName, A[i] + B[i] + C[i], B[i], C[i] } - so the three counts SUM to that role's requirement.
+        // The captured rated Blitz match reads as 0 tanks / 4 healers / 12 damagers = 16 players = 8v8, and
+        // every one of the 18 samples balances: sum(A) equals AwaitedPerSide[0] + AwaitedPerSide[1] and
+        // sum(B) equals the players already secured.
+        //
+        // What is missing is not the layout, it is the server state. Sending either packet honestly requires
+        // a role-aware battleground matchmaker with a group-proposal phase: a per-role target composition, a
+        // running count of which queued players fill which role, and a 30 second proposal that individual
+        // players accept or decline (0x48000E is the "they did not all accept" outcome - its handler raises
+        // client message 0x336 and plays sound 0x43BD). This core has none of that: BattlegroundQueue fills
+        // by team headcount only, and there is no proposal step for battlegrounds at all. Every number in
+        // these two packets would therefore have to be fabricated, so they stay STATUS_UNHANDLED.
+
         class BattlemasterJoin final : public ClientPacket
         {
         public:
@@ -688,6 +725,121 @@ namespace WorldPackets
             WorldPackets::Duration<Seconds> Duration;
             Optional<PVPMatchStatistics> LogData;
             uint32 SoloShuffleStatus = 0;
+        };
+
+        // SMSG_BATTLEGROUND_POINTS (0x480028), body = exactly 3 bytes.
+        //
+        // Client reader at VA 0x7FF7290FD3F3: one uint16 (helper 0x7FF72BE6C3C0) then one byte whose top bit
+        // is taken as a bool (helper 0x7FF72BE6C370 followed by `shr al, 7`). The handler, VA 0x7FF72AABB450,
+        // is a single statement - `scores[Team] = Points` - writing an int[2] at 0x7FF72F082C38 and then
+        // firing one Lua event. So the bool is nothing but the index into the client's two-team score array.
+        //
+        // Which index is which faction is settled by C:\sniff\rated BG 12.0.7.pkt, which carries 322 of these
+        // for one complete Deephaul Ravine style resource race. The Team=false stream ends on exactly 1500 -
+        // the cap SMSG_BATTLEGROUND_INIT announced in the same match - while the Team=true stream stops at
+        // 1427, and SMSG_PVP_MATCH_COMPLETE names winner 0. Winner 0 is PVP_TEAM_HORDE, and that packet's
+        // field positions are independently pinned by its Duration of 496, which matches the 496575 ms
+        // between SMSG_PVP_MATCH_SET_STATE(Engaged) and SMSG_PVP_MATCH_SET_STATE(Inactive) in the capture.
+        // Team is therefore the PvPTeamId, false = PVP_TEAM_HORDE (0), true = PVP_TEAM_ALLIANCE (1) - the
+        // OPPOSITE order from TeamId, which Battleground::m_TeamScores is indexed by.
+        //
+        // Retail sends this only when a team's score actually moves: across all 322 captured packets no
+        // stream ever repeats a value, even though the source battleground ticks every two seconds.
+        class BattlegroundPoints final : public ServerPacket
+        {
+        public:
+            explicit BattlegroundPoints() : ServerPacket(SMSG_BATTLEGROUND_POINTS, 2 + 1) { }
+
+            WorldPacket const* Write() override;
+
+            uint16 BgPoints = 0;
+            bool Team = false;
+        };
+
+        // SMSG_BATTLEGROUND_INIT (0x480029), body = exactly 6 bytes.
+        //
+        // The reader at VA 0x7FF7290FD47E does not parse this one: helper 0x7FF72BE6C980 just hands the
+        // handler a pointer to the remaining bytes. The field split comes from the handler instead,
+        // VA 0x7FF72AABB490, which does exactly two things with that blob:
+        //   [0..3] uint32  ->  dword_7FF72CEEAF04 = clientNowMs - value, i.e. the client keeps the offset
+        //                      between its own millisecond clock and ours so it can reconstruct server time.
+        //   [4..5] uint16  ->  written into BOTH halves of the int[2] at 0x7FF72F082C40, the per-team score
+        //                      cap that sits directly next to the score array SMSG_BATTLEGROUND_POINTS
+        //                      writes. Guarded by `if (value)`, so a zero cap is ignored outright - which is
+        //                      why this core only sends the packet for battlegrounds that declare a cap.
+        // Field names below are ours; the client exports none. The sole capture reads
+        // 73 E0 B5 38 | DC 05 = { 951820403, 1500 }, and 1500 is the cap the winning team stopped on.
+        class BattlegroundInit final : public ServerPacket
+        {
+        public:
+            explicit BattlegroundInit() : ServerPacket(SMSG_BATTLEGROUND_INIT, 4 + 2) { }
+
+            WorldPacket const* Write() override;
+
+            uint32 ServerTime = 0;
+            uint16 MaxPoints = 0;
+        };
+
+        // Match kinds the client can name. This is not a guessed enum: it is the client's own label table at
+        // 0x7FF72C3C61B0, read in order, which SMSG_PVP_MATCH_START's uint8 indexes directly (see below).
+        // It also finally explains the bracket space referenced by BattlemasterJoinSkirmish above - the
+        // rated-only subset {0,1,2,3,6,8} that C_PvP.GetPersonalRatedInfo accepts, and the value 4 that
+        // C_PvP.JoinSkirmish always sends, are exactly the Skirmish and rated entries of this table.
+        enum class PVPMatchBracket : uint8
+        {
+            Arena2v2            = 0,    // "2v2"
+            Arena3v3            = 1,    // "3v3"
+            Arena5v5            = 2,    // "5v5"
+            RatedBattleground   = 3,    // "Rated BG"
+            Skirmish            = 4,    // "Skirmish"
+            BrawlSoloShuffle    = 5,    // "Brawl Solo Shuffle"
+            RatedSoloShuffle    = 6,    // "Rated Solo Shuffle"
+            BrawlSoloRBG        = 7,    // "Brawl Solo RBG"
+            RatedSoloRBG        = 8     // "Rated Solo RBG"
+        };
+
+        // SMSG_PVP_MATCH_START (0x48002D), body = 22 bytes in the one capture we have.
+        //
+        // Reader at VA 0x7FF7290FD73D, in wire order: uint32, uint32, uint8, one bit + flush, uint32 element
+        // count, int64, then that many 720-byte elements. The capture's count is 0, which accounts for all
+        // 22 bytes with nothing left over: C5 08 00 00 | 29 00 00 00 | 08 | 00 | 00 00 00 00 | B5 F5 4B 6A ...
+        //
+        // The handler, VA 0x7FF72AABBAD0, formats the client's combat-log line
+        //     "ARENA_MATCH_START,%d,%d,%s,%d"
+        // from fields 1, 2, 4 and the bit, where %s is off_7FF72C3C61B0[field3] - so field 3 is a
+        // PVPMatchBracket. It also stashes field 1 in dword_7FF72D34F5BC and derives a match-kind byte from
+        // field 3 (5 or 6, the two Solo Shuffle entries, take a different branch from everything else).
+        //
+        // Field by field:
+        //   MapID        2245, the same value SMSG_PVP_MATCH_INITIALIZE carried for this match 126 s earlier.
+        //   ArenaSeason  INFERRED, not proven. The capture's value is 41, and the SMSG_SEASON_INFO sent to
+        //                the same session reports CurrentArenaSeason 41 (PreviousArenaSeason 40,
+        //                PvpSeasonID 39), so 41 is the current arena season and nothing else in the session
+        //                matches it. The client only ever prints this field, so a wrong value costs a wrong
+        //                number in a combat-log line and nothing more.
+        //   Bracket      8 = "Rated Solo RBG". The capture is a rated Battleground Blitz, and the queue id
+        //                the server echoed, 0x1F1000000019044D, decodes to BattlemasterListId 1101 =
+        //                BATTLEGROUND_BLITZ. The label and the queue agree.
+        //   Unknown1207  MEANING UNKNOWN. It is a single bit, it is only ever printed as the last %d of the
+        //                combat-log line, and it was false in the only observation. It is not "rated": this
+        //                match was rated and the bit was clear. We write the observed value and no more.
+        //   Statistics   A counted array of 720-byte records read by sub_7FF729112EB0. It was empty in the
+        //                capture, and its element layout is unverified, so Write() emits the observed count
+        //                of zero and this packet carries no per-player payload.
+        //   StartTime    1783169973, seven seconds after SMSG_PVP_MATCH_INITIALIZE's StartTime and 29 ms
+        //                after SMSG_PVP_MATCH_SET_STATE(Engaged) - i.e. the moment the gates open.
+        class PVPMatchStart final : public ServerPacket
+        {
+        public:
+            explicit PVPMatchStart() : ServerPacket(SMSG_PVP_MATCH_START, 4 + 4 + 1 + 1 + 4 + 8) { }
+
+            WorldPacket const* Write() override;
+
+            uint32 MapID = 0;
+            uint32 ArenaSeason = 0;
+            PVPMatchBracket Bracket = PVPMatchBracket::Arena2v2;
+            bool Unknown1207 = false;
+            Timestamp<> StartTime;
         };
 
         enum class BattlegroundCapturePointState : uint8
