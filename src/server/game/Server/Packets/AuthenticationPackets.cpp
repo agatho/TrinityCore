@@ -391,4 +391,17 @@ void QueuedMessagesEnd::Read()
 {
     _worldPacket >> Timestamp;
 }
+
+WorldPacket const* SuspendComms::Write()
+{
+    _worldPacket << uint32(SerialNumber);
+
+    return &_worldPacket;
+}
+
+void SuspendCommsAck::Read()
+{
+    _worldPacket >> SerialNumber;
+    _worldPacket >> Timestamp;
+}
 }

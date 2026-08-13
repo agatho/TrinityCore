@@ -156,6 +156,7 @@ namespace WorldPackets
     {
         enum class ConnectToSerial : uint32;
         class QueuedMessagesEnd;
+        class SuspendCommsAck;
     }
 
     namespace Azerite
@@ -517,6 +518,7 @@ namespace WorldPackets
         class GetCharacterCurrencyTransferLog;
         class RequestCurrencyDataForAccountCharacters;
         class TimeSyncResponse;
+        class DiscardedTimeSyncAcks;
         class TutorialSetFlag;
         class SetDungeonDifficulty;
         class SetRaidDifficulty;
@@ -1241,6 +1243,7 @@ class TC_GAME_API WorldSession
 
         static constexpr uint32 SPECIAL_INIT_ACTIVE_MOVER_TIME_SYNC_COUNTER = 0xFFFFFFFF;
         static constexpr uint32 SPECIAL_RESUME_COMMS_TIME_SYNC_COUNTER      = 0xFFFFFFFE;
+        static constexpr uint32 SPECIAL_SUSPEND_COMMS_TIME_SYNC_COUNTER     = 0xFFFFFFFD;
 
         // Packets cooldown
         time_t GetCalendarEventCreationCooldown() const { return _calendarEventCreationCooldown; }
@@ -1742,7 +1745,9 @@ class TC_GAME_API WorldSession
         void HandleSetTitleOpcode(WorldPackets::Character::SetTitle& packet);
         void HandleTimeSync(uint32 counter, int64 clientTime, TimePoint responseReceiveTime);
         void HandleTimeSyncResponse(WorldPackets::Misc::TimeSyncResponse const& timeSyncResponse);
+        void HandleDiscardedTimeSyncAcks(WorldPackets::Misc::DiscardedTimeSyncAcks const& discardedTimeSyncAcks);
         void HandleQueuedMessagesEnd(WorldPackets::Auth::QueuedMessagesEnd const& queuedMessagesEnd);
+        void HandleSuspendCommsAck(WorldPackets::Auth::SuspendCommsAck const& suspendCommsAck);
         void HandleWhoIsOpcode(WorldPackets::Who::WhoIsRequest& packet);
         void HandleResetInstancesOpcode(WorldPackets::Instance::ResetInstances& packet);
         void HandleInstanceLockResponse(WorldPackets::Instance::InstanceLockResponse& packet);
