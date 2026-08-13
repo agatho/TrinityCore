@@ -551,23 +551,38 @@ Optional<BattlegroundMgr::ActiveBrawl> BattlegroundMgr::GetActiveBrawl()
         return {};
     }
 
+    // These two are deliberate operator choices rather than mistakes, so they are not errors - but they still
+    // have to be findable, because from the player's side the only symptom is a Brawl button that never appears.
     if (battlemasterList->GetFlags().HasFlag(BattlemasterListFlags::InternalOnly))
+    {
+        TC_LOG_DEBUG("bg.battleground", "Brawl {} not advertised: BattlemasterList is flagged InternalOnly.", brawl.BattlemasterListId);
         return {};
+    }
 
     if (DisableMgr::IsDisabledFor(DISABLE_TYPE_BATTLEGROUND, brawl.BattlemasterListId, nullptr))
+    {
+        TC_LOG_DEBUG("bg.battleground", "Brawl {} not advertised: disabled via the `disables` table.", brawl.BattlemasterListId);
         return {};
+    }
 
     // No battleground_template row means CreateNewBattleground would fail: the queue could accept players and
     // never pop. Do not advertise it.
     BattlegroundTemplate const* bgTemplate = GetBattlegroundTemplateByTypeId(BattlegroundTypeId(brawl.BattlemasterListId));
     if (!bgTemplate || bgTemplate->MapIDs.empty())
+    {
+        complainOnce("has no `battleground_template` row (or the row resolves to no maps)");
         return {};
+    }
 
     // GetRandomBG resolves the brawl's BattlemasterListXMap maps back to the single-map templates that own the
     // start locations. If none of them resolves there is no map to send anyone to.
     if (GetRandomBG(BattlegroundTypeId(brawl.BattlemasterListId)) == BATTLEGROUND_TYPE_NONE)
+    {
+        complainOnce("has no runnable map - none of its BattlemasterListXMap maps has a single-map template here");
         return {};
+    }
 
+    TC_LOG_DEBUG("bg.battleground", "Brawl advertised: PvpBrawl {} on BattlemasterList {}.", brawl.PvpBrawlId, brawl.BattlemasterListId);
     return brawl;
 }
 
