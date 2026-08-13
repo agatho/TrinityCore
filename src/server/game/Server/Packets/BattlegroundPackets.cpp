@@ -178,6 +178,11 @@ void BattlemasterJoinRatedBGBlitz::Read()
     _worldPacket >> Roles;
 }
 
+void JoinRatedBattleground::Read()
+{
+    _worldPacket >> Roles;
+}
+
 void BattlemasterJoinSkirmish::Read()
 {
     // Roles FIRST - see the class comment. This is the opposite order to BattlemasterJoinArena.

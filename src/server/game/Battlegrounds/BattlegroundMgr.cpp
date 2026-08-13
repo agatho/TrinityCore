@@ -159,6 +159,13 @@ void BattlegroundMgr::Update(uint32 diff)
             for (int bracket = BG_BRACKET_ID_FIRST; bracket < MAX_BATTLEGROUND_BRACKETS; ++bracket)
                 GetBattlegroundQueue(blitzQueueId).BattlegroundQueueUpdate(diff, BattlegroundBracketId(bracket), 0);
 
+            // Rated battlegrounds are matched by CheckPremadeMatch, which only runs when something
+            // schedules an update. Sweep it on the same timer so a queue that could not pair two
+            // premades at join time retries instead of sitting idle.
+            BattlegroundQueueTypeId ratedBgQueueId = BGQueueTypeId(BATTLEGROUND_RATED_BG, BattlegroundQueueIdType::Battleground, true, 0);
+            for (int bracket = BG_BRACKET_ID_FIRST; bracket < MAX_BATTLEGROUND_BRACKETS; ++bracket)
+                GetBattlegroundQueue(ratedBgQueueId).BattlegroundQueueUpdate(diff, BattlegroundBracketId(bracket), 0);
+
             m_NextRatedArenaUpdate = sWorld->getIntConfig(CONFIG_ARENA_RATED_UPDATE_TIMER);
         }
         else
@@ -439,7 +446,8 @@ void BattlegroundMgr::LoadBattlegroundTemplates()
         // themselves: CreateNewBattleground resolves their BattlemasterListXMap maps back to the individual
         // single-map templates, which carry the real start locations. Requiring a WorldSafeLocs id here would
         // mean inventing one that is never used, and a wrong id silently drops the whole template.
-        if (bgTemplate.Id != BATTLEGROUND_AA && bgTemplate.Id != BATTLEGROUND_BLITZ && !IsRandomBattleground(bgTemplate.Id))
+        if (bgTemplate.Id != BATTLEGROUND_AA && bgTemplate.Id != BATTLEGROUND_BLITZ
+            && bgTemplate.Id != BATTLEGROUND_RATED_BG && !IsRandomBattleground(bgTemplate.Id))
         {
             uint32 startId = fields[1].GetUInt32();
             if (WorldSafeLocsEntry const* start = sObjectMgr->GetWorldSafeLoc(startId))
