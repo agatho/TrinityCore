@@ -52,6 +52,40 @@ WorldPacket const* ResponsePerkRecentPurchases::Write()
     return &_worldPacket;
 }
 
+WorldPacket const* ResponsePerkPendingRewards::Write()
+{
+    _worldPacket << uint32(Rewards.size());
+    for (PendingReward const& reward : Rewards)
+    {
+        // The discriminant sits in the top three bits of a byte of its own: the client reads one byte and
+        // shifts it right by five, so the remaining five bits are padding.
+        _worldPacket << Bits<3>(TransactionTypeActivityThreshold);
+        _worldPacket.FlushBits();
+        _worldPacket << reward.Owner;
+        _worldPacket << int32(reward.Amount);
+        _worldPacket << int32(reward.ActivityMonthID);
+        _worldPacket << int32(reward.ThresholdOrderIndex);
+    }
+
+    return &_worldPacket;
+}
+
+WorldPacket const* PerksAnimToggleKillSwitch::Write()
+{
+    _worldPacket << Bits<1>(AttackAnimToggleEnabled);
+    _worldPacket << Bits<1>(MountSpecialAnimToggleEnabled);
+    _worldPacket.FlushBits();
+
+    return &_worldPacket;
+}
+
+WorldPacket const* PerksProgramActivityComplete::Write()
+{
+    _worldPacket << uint32(PerksActivityID);
+
+    return &_worldPacket;
+}
+
 void PerksProgramRequestCartCheckout::Read()
 {
     uint32 itemCount;

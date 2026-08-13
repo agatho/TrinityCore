@@ -1209,6 +1209,10 @@ void WorldSession::HandlePlayerLogin(LoginQueryHolder const& holder)
 
     SendFeatureSystemStatus();
 
+    // Trading Post animation-toggle kill switch; retail places it here, between SMSG_FEATURE_SYSTEM_STATUS and
+    // SMSG_MOTD.
+    SendPerksAnimToggleKillSwitch();
+
     // Send MOTD
     {
         WorldPackets::System::MOTD motd;
