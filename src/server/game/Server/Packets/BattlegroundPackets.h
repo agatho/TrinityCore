@@ -345,6 +345,34 @@ namespace WorldPackets
             uint8 Roles = 0;
         };
 
+        // CMSG_BATTLEMASTER_JOIN_BRAWL (0x3B00C2), body = 2 bytes.
+        //
+        // Client serializer VA 0x7FF7291531A0: after the opcode header it writes one uint8 from obj+0x20,
+        // then a single bit from obj+0x21 and flushes. Derived by the same reading of the same three
+        // helpers (0x7FF72BE6CE60 = header, 0x7FF72BE6CD20 = uint8, 0x7FF729064E60 = bits+flush) that
+        // reproduces the three siblings already implemented here byte for byte:
+        //   0x7FF729153060 (Blitz)     header + uint8 obj+0x20                       -> uint8 Roles
+        //   0x7FF7291455E0 (RatedBG)   header + uint8 obj+0x20                       -> uint8 Roles
+        //   0x7FF729153120 (Skirmish)  header + uint8 obj+0x20 + uint8 obj+0x21 + bit -> Roles, Bracket, Requeue
+        //
+        // The producer is the Lua binding C_PvP.JoinBrawl([isSpecialBrawl]) at RVA 0x1277770. It fills
+        // obj+0x20 with the role mask exactly as C_PvP.JoinRatedBGBlitz does - `movzx esi, al` from the
+        // allowed-roles call at 0x7FF72A99E020 ANDed with the player's selected roles byte, and it refuses
+        // to send at all (error 0x33A) when that intersection is empty - and obj+0x21 with the parsed
+        // isSpecialBrawl argument (`mov byte [rsp+0x51], r14b` at 0x7FF729D178FA, r14b = byte [rbp+0x70],
+        // the bool the argument parser wrote).
+        class BattlemasterJoinBrawl final : public ClientPacket
+        {
+        public:
+            explicit BattlemasterJoinBrawl(WorldPacket&& packet)
+                : ClientPacket(CMSG_BATTLEMASTER_JOIN_BRAWL, std::move(packet)) { }
+
+            void Read() override;
+
+            uint8 Roles = 0;
+            bool IsSpecialBrawl = false;
+        };
+
         class BattlefieldLeave final : public ClientPacket
         {
         public:
@@ -528,11 +556,42 @@ namespace WorldPackets
             void Read() override { }
         };
 
-        // SMSG_REQUEST_SCHEDULED_PVP_INFO_RESPONSE (0x480015): describes the currently-scheduled special PvP event
-        // (e.g. a PvP brawl / timewalking-PvP rotation). Wire from the client reader (all_smsg_layouts):
-        // { uint8; uint32; uint32; bit; uint32; uint32; bit }. TrinityCore has no PvP-event scheduler, so the
-        // response is all-inactive (every field 0 / flag false) -- the truthful "no scheduled PvP event", mirroring
-        // how HandleRequestRatedPvpInfo answers with a default/empty RatedPvpInfo.
+        // SMSG_REQUEST_SCHEDULED_PVP_INFO_RESPONSE (0x480015). This is the packet that tells the client which
+        // PvP Brawl is currently running; there is no other source. Its handler, VA 0x7FF72AAC2120, is the only
+        // writer of the two globals the whole brawl UI reads: dword_7FF72F082BB8 (the active brawl) and
+        // dword_7FF72F082BBC (the active special-event brawl). Both are PvpBrawl.db2 row ids - the handler feeds
+        // each straight into GetRow(&off_7FF72EDDD740 /*PvpBrawl.db2*/, id). C_PvP.GetAvailableBrawlInfo and
+        // C_PvP.JoinBrawl read those same globals, so with this packet unsent the Brawl button can never become
+        // queueable and CMSG_BATTLEMASTER_JOIN_BRAWL is never produced.
+        //
+        // The previous field names here (Field1..Flag2) were a guess at a flat layout. The real wire is
+        // conditional, and the earlier "uint8 Field1" was in fact the two presence bits. Client deserializer at
+        // 0x7FF7290FCA84 (message vtable 0x7FF72C4BA618, whose slot 3 is the GetOpcode thunk 0x7FF7290FB7E0 for
+        // 0x480015 - that is what pins this decode to this opcode):
+        //     read one byte; bit 7 -> HasBrawl, bit 6 -> HasSpecialEventBrawl
+        //     if (HasBrawl)             uint32, uint32, one bit
+        //     if (HasSpecialEventBrawl) uint32, uint32, one bit
+        // (0x7FF72BE6C370 and 0x7FF72BE6C410 are the 1-byte and 4-byte stream reads; the "bits" are single
+        // flushed bytes tested against 0x80, i.e. TrinityCore's Bits<1> + FlushBits, MSB first.)
+        //
+        // Confirmed on the wire. Every live 12.0.7 capture in C:\sniff carries the identical 19-byte body, e.g.
+        // C:\sniff\b_pets12.0.7.pkt tick 23699:
+        //     C0 | 78 00 00 00 | 47 0F 01 00 | 80 | 9B 00 00 00 | 00 00 00 00 | 80
+        //     C0            = both presence bits set
+        //     BrawlID 0x78  = 120 = PvpBrawl.db2 "Brawl: Classic Ashran"  (BattlemasterList 1021)
+        //     0x00010F47    = 69447 seconds until the brawl rotates
+        //     0x80          = CanQueue
+        //     BrawlID 0x9B  = 155 = PvpBrawl.db2 "Decor Duel"             (no BattlemasterList - LFG brawl)
+        //
+        // CanQueue is the client's own field name: the handler stores this bit at PvpBrawlInfo+0x80, which
+        // PvpInfoDocumentation.lua's PvpBrawlInfo structure names `canQueue`. The builder behind
+        // C_PvP.GetAvailableBrawlInfo then computes `endTime = arrivalTime + (canQueue ? SecondsUntilNextChange
+        // : 0)` and returns nil once now > endTime (0x7FF72AABEB7F-0x7FF72AABEBA6), so sending it false
+        // advertises a brawl that expires the instant it arrives.
+        //
+        // The second block's SecondsUntilNextChange is read off the wire and then dropped on the floor: the
+        // handler never stores it, and C_PvP.GetSpecialEventBrawlInfo hardcodes canQueue = 1. It is written
+        // here only because the client's reader consumes the four bytes.
         class RequestScheduledPvpInfoResponse final : public ServerPacket
         {
         public:
@@ -540,13 +599,15 @@ namespace WorldPackets
 
             WorldPacket const* Write() override;
 
-            uint8 Field1 = 0;
-            uint32 Field2 = 0;
-            uint32 Field3 = 0;
-            bool Flag1 = false;
-            uint32 Field4 = 0;
-            uint32 Field5 = 0;
-            bool Flag2 = false;
+            struct BrawlInfo
+            {
+                uint32 BrawlID = 0;                     // PvpBrawl.db2 row id
+                uint32 SecondsUntilNextChange = 0;
+                bool CanQueue = false;
+            };
+
+            Optional<BrawlInfo> Brawl;
+            Optional<BrawlInfo> SpecialEventBrawl;
         };
 
         class RatedPvpInfo final : public ServerPacket
