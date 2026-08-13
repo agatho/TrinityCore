@@ -134,3 +134,125 @@ The two commerce branches are RETIRED and REPLACED by a single clean golden sour
 - Merge `content/midnight-s1` or `feature/major-factions-1207` (retired transport branches).
 - Develop anything on integration — fixes found during boot/testing go to the OWNING feature branch
   first, then re-merge here.
+
+### §4 — NEW MIDNIGHT CONTENT SYSTEMS (gap backlog build 2026-08-12, user order 2->5->4->3->1)
+Five net-new golden-source branches, all off baseline 560165c0a6, all game+worldserver GREEN, integ realm untouched.
+Blueprints in C:\dumps\*_BLUEPRINT.md; per-branch continuation memory in the memory dir.
+
+ feature/omnium-folio      @ d9d4efb1ce  — #5 seasonal rune ledger. It's a STOCK Trait tree (1186/sys48); core DONE.
+     SQL: world/master/2026_08_12_00_world_omnium_folio.sql (omnium_folio_season, seeds season1=active);
+          characters/master/2026_08_12_00_characters_omnium_folio.sql (character_omnium_folio).
+ feature/quelthalas-zone-events @ e857d66597 — #2 renown loop. ZoneEventMgr + Stormarion built; 3 events capture-gated.
+     SQL: world/master/2026_08_12_00_world_quelthalas_zone_events.sql (zone_event_template + scenarios(2771,1,3021,3021)
+          + zone_event_scenario_step 3 rows + zone_event_spawn schema/0 rows).
+     Merge order: content/midnight-s1 -> feature/world-quests -> feature/warband -> feature/quelthalas-zone-events.
+ feature/prey-voidforge    @ 0c4734fedc  — #4 solo hunts. Economy slice built (debug-triggered); Hunt Table opcode blocked.
+     SQL: world/master/2026_08_12_00_world_prey_voidforge.sql (prey_hunt_template, seeds commented);
+          characters/master/2026_08_12_00_characters_prey_voidforge.sql (character_prey_hunt).
+     Merge order: feature/mythic-plus (WeeklyRewardsMgr/vault) -> major-factions -> world-quests -> delves -> prey-voidforge.
+ feature/void-assaults     @ 8b7e810383  — #3 invasion framework. Core slice built (debug-triggered). DESIGNED TO FOLD
+     INTO ZoneEventMgr (ships mirrored VoidAssaultMgr since baseline lacks it). SQL: world/master/2026_08_12_00_world_void_assaults.sql
+     (void_assault_template 2 rows + void_assault_spawn empty). Merge order: quelthalas-zone-events FIRST, then void-assaults last.
+ feature/devourer-spec     @ 3ead6a3a12  — #1 DH spec. NOT net-new (baseline+upstream already ship it); added the one
+     real gap = Void-Metamorphosis Fury-drain (1217607). SQL: world/master/2026_08_12_00_world_devourer_spec.sql
+     (spell_script_names: 1217605/1217607/1234195). MUST apply for the scripts to attach.
+
+NOTE: every branch's LoadFromDB tolerates absent tables (realm-safe no-op) so merging code without the SQL is safe;
+apply each branch's SQL to activate. Debug commands (.prey / .voidassault) are RBAC_PERM_COMMAND_DEBUG, TEMP-flagged
+for removal once the capture-blocked real activation wires land. See §4-CAPTURES below.
+
+### §4-CAPTURES — tester captures that unblock the remaining content work (highest leverage)
+ 1. FULL Stormarion Assault + Void Incursion run to COMPLETION (zone 15968 / Scenario 3021 + 3173) -> meter->reset
+    flip, completion reward packet (currency/renown ids + AMOUNTS), SCENARIO_STATE n>0, destructible/boss spawn coords.
+    Unblocks #2 Stormarion reward tail AND #3 Void Assault reward tail (shared machinery).
+ 2. SMSG_ACTIVE_SCHEDULED_WORLD_STATE_INFO raw bytes (7x per zone-change in 15968/15969) -> timer packing for all events.
+ 3. OPEN the Prey Hunt Table (npc 245824, Astalor's Sanctum Silvermoon): right-click board, select contract+difficulty.
+    First CMSG on interact identifies the opcode family -> unblocks #4 hunt activation.
+ 4. Enter Naigtal (Map 3075) / Val (Map 3047) + the Normal/Heroic portal prompt; kill a portal boss -> #3 portal worlds.
+ 5. Abundance cave across a rotation boundary -> PlayerConditionID 149863-7 gate -> #2 Abundance event.
+ 6. A Devourer combat log -> exact Fury-drain tick (#1); Legends of Haranir warband scenario started (map 2694, SCENARIO_STATE n>0) -> #2.
+
+### §4-VALIDATED — the 5 new branches were pre-merged & build-tested TOGETHER (2026-08-12, throwaway scratch)
+Scratch worktree off baseline 560165c0a6, merged all 5 in order omnium->zone-events->void-assaults->prey->devourer.
+COMBINED worldserver builds GREEN (0 compile/0 link errors). No SQL-filename collisions (7 files, all distinct
+descriptive suffixes, none pre-existing upstream). Central realm untouched; scratch branch never pushed.
+ THE ONE CONFLICT HOTSPOT = src/server/game/World/World.cpp (all 4 branches insert into the SAME 3 regions:
+ includes block, LoadFromDB region after WorldStateMgr::LoadFromDB, Update region after WorldStateMgr::Update).
+ Resolve by UNION (keep all 4 includes + all 4 LoadFromDB() + all 4 Update() calls). Player.cpp / cs_script_loader.cpp
+ / spell_script_loader.cpp AUTO-MERGE clean. Total shared-seam delta = +41 lines, 0 deletions.
+ NOTE: Omnium login hook is OnPlayerLogin (not EnsureFolioForPlayer). Live smoke-test of .prey/.voidassault/
+ Void-Meta debug commands still DEFERRED to the integration session on a disposable DB (build-only check here).
+ Scratch worktree left at I:/TrinityCore/valint (branch _validate-new-systems, local-only) for inspection.
+
+### §4-CAPTURES refinement (2026-08-12, from Hunt Table RE — C:\dumps\PREY_HUNT_TABLE_RE.md)
+Capture #3 (Prey Hunt Table) SHARPENED: client binary can't resolve it (68275 predates the Prey UI; open is
+gossip-gated/server-driven). The capture needs exactly the SMSG_GOSSIP_MESSAGE OptionNPC byte of the contract
+option when npc 245824 is OPENED (27=garrison-mission -> HandleOpenMissionNpc already exists / 31=Adventure Map /
+quest-option=plain gossip) + the CMSG sent after selecting it. Mouse-over does not trigger the gossip exchange.
+
+### §4 update (2026-08-12) — Omnium questlines + Saltheril event added
+feature/omnium-folio advanced d9d4efb1ce..a1ab111366: adds sql/updates/world/master/2026_08_12_02_world_omnium_questlines.sql
+(17 quest shells + chain + starter/ender on NPCs 237504/246025). APPLY it so 96233 exists -> ach 62606 fires ->
+Omnium engine engages. Quests are completable SHELLS (real objectives are TODO comments, entities unseeded) - the
+user-accepted wowhead-sourced fidelity tradeoff. feature/quelthalas-zone-events advanced e857d66597..26a07296f5
+(Saltheril's Soiree weekly event = 2nd of 4; hooks live quest 89289; AreaPOI 8600 shipped LISTED/commented pending
+AreaPoiMgr from feature/world-quests).
+
+### §5 — OVERNIGHT BATCH 2 (2026-08-13, user order 7->6->10->9) — 4 more golden-source branches, all worldserver-green
+ feature/slayers-rise-bg   @ 6f92a9ab7f — #7 40v40 epic BG (map 2799 REAL). BattlegroundScript by MapID + IoC node
+   capture + reinforcement + S1 PvP rules (16s DR, -20% healing, PvPSeasonRules.h). SQL: world/master/2026_08_13_00_world_slayers_rise_bg.sql
+   (battleground_scripts + battleground_template placeholder start locs). CAPTURE: Vidious/Ziadan creature ids, WorldSafeLocs
+   graveyards/start-locs (WorldSafeLocs.db2 NOT exposed @68887), INIT_WORLD_STATES reinforcement counts. USER DECISION
+   pending: S1 rules stay here or move to feature/pvp-rated-bg (self-contained/movable).
+ feature/haranir-allied-race @ e6fcba98ae — #6 allied race. BASE RACE ALREADY AT BASELINE (upstream); creation+racials
+   from DB2 (ChrRaces 86 Ally/91 Horde, SkillLine 2930). Adds permissive HasRaceUnlockAchievement seam (no regression).
+   SQL: hotfixes/master/2026_08_13_00_hotfixes.sql (COMMENTED heritage-link, client-blocked HeritageArmorAchievementID=0).
+   Heritage armor client-blocked; unlock enforcement config-gated refinement pending achiev 61506 earnable.
+ feature/loa-blessings     @ 8b139a882f — #10 Zul'Aman altar worship. LoaBlessingMgr + npc_altar_of_blessings on creature
+   256508; worship spine + 8 confirmed blessings LIVE. SQL: world/master/2026_08_13_00_world_loa_blessings.sql
+   (loa_blessing_option + 8 rows + ScriptName UPDATE on 256508). CAPTURE: major×minor matrix pairings, Abundance reward wire.
+ feature/delve-nemesis     @ 902deca352 — #9 T4+ escalation. NemesisMgr (folds into feature/delves DelveInstance/DelvesRewards);
+   Pactsworn spine + Strongbox banding + Nullaeus solo achievement tail LIVE. SQL: world/master/2026_08_13_00_world_delve_nemesis.sql
+   (nemesis_pactsworn_pack, empty). MERGE feature/delves FIRST. CAPTURE: Pactsworn creature entries, Torment's Rise scenario id, Strongbox loot.
+NOTE: batch 2 NOT yet integration-validated together (batch 1's 5 were). All realm-safe (absent tables tolerated). Debug
+ commands (.voidassault/.prey precedent; slayers/delve-nemesis GM cmds) TEMP-flagged.
+
+---
+
+## INTEGRATION-ONLY SHOP FIXES — must not be lost in a re-merge (2026-08-13)
+
+Three pieces of work live **only on `integration/all-systems`** and are reachable from no feature
+branch. If `feature/ingame-shop-battlepay` or `feature/commerce` is ever re-merged and these files are
+resolved to the branch side, all three are silently lost and the in-game Shop breaks in ways that
+produce **no error anywhere**.
+
+| commit | what it does | symptom if lost |
+|---|---|---|
+| `4c03e9de9a` (merge resolution) | adapts `BattlePayMgr::AssembleCatalog` to the 94-record writer API | catalog assembly fails to compile, or falls back to serving 9 records |
+| `81ea8d113a` | stops emitting `DISPLAY_FLAG_HIDE_WHEN_OWNED` / `HIDDEN_PRICE`, whose values were never verified | every product renders as already owned |
+| `b8ea0ff99d` | clears `Product.Eligibility` and `Deliverable.AlreadyOwns` from the captured retail blob; stops overwriting `Product.Flags` | 12 products show as owned with a greyed Buy button, and every slot-pinned product becomes unpurchasable (`buyableHere` cleared) |
+
+**Why they are not on a feature branch** (checked, not assumed):
+`feature/ingame-shop-battlepay` (tip `a96906dacd`) still carries the OLD 9-record writer, so
+`AssembleCatalog` there has a different shape and these hunks have nowhere to apply. Meanwhile the
+current `BattlePayMgr.cpp` on this line is an assembly of at least four branches —
+`ingame-shop-battlepay`, `commerce` (3 commits), `catalog-writer-94`, plus a token ledger commit — so
+no single branch owns the file's present state. Transplanting this line's version onto the owner would
+push other branches' work into it.
+
+**Rule for the next re-merge:** for the four files below, `integration/all-systems` is the superset.
+Resolve conflicts by keeping THIS line's version and re-applying the branch's genuinely new hunks on
+top — never by taking the branch side wholesale.
+
+    src/server/game/BattlePay/BattlePayCatalogWriter.h
+    src/server/game/BattlePay/BattlePayCatalogWriter.cpp
+    src/server/game/BattlePay/BattlePayMgr.h
+    src/server/game/BattlePay/BattlePayMgr.cpp
+
+Evidence for the fixes themselves: `c:\dumps\BATTLEPAY_DISPLAY_FLAGS_68275.md`,
+`c:\dumps\BATTLEPAY_CATALOG_RECORD_FORMAT_68275.md`, `c:\dumps\SHOP_PURCHASE_BROKEN_DIAGNOSIS.md`.
+
+### Also outstanding
+
+`feature/pvp-rated-bg` (tip `6b16315443`) is committed but **INCOMPLETE and does not compile** — it is
+deliberately NOT merged into either integration line. The commit message lists exactly what is missing.
