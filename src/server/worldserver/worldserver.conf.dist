@@ -2814,13 +2814,27 @@ Battleground.StoreStatistics.Enable = 0
 Battleground.InvitationType = 0
 
 #
+#    BattlegroundBlitz.TanksPerTeam
+#        Description: Tanks required per team before a Battleground Blitz match pops.
+#                     Together with BattlegroundBlitz.HealersPerTeam this fully specifies a
+#                     team, because the remaining slots are damagers. Roles are resolved per
+#                     player from the character's specialization (ChrSpecialization.db2 Role),
+#                     narrowed by the role mask the queuer sent.
+#                     0 together with HealersPerTeam 0 disables role balancing entirely.
+#                     Ignored while arena/bg testing mode is enabled.
+#        Default:     0 - the composition the client was actually told in the 12.0.7 rated
+#                         Blitz capture was 0 tanks / 4 healers / 12 damagers over 8v8.
+
+BattlegroundBlitz.TanksPerTeam = 0
+
+#
 #    BattlegroundBlitz.HealersPerTeam
 #        Description: Healers required per team before a Battleground Blitz match pops.
 #                     Blitz is 8v8 (BattlemasterList 1101). The client tells the server which
 #                     role a player queued as, but nothing in the client states how retail
 #                     balances the two teams, so this quota is configuration rather than a
 #                     value derived from the client.
-#                     0 disables role balancing entirely (the first 16 in the queue play).
+#                     0 disables the healer quota; see BattlegroundBlitz.TanksPerTeam.
 #                     Ignored while arena/bg testing mode is enabled.
 #        Default:     2
 

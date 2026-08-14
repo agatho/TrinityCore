@@ -23,6 +23,7 @@
 #include "Battleground.h"
 #include "BattlegroundQueue.h"
 #include "UniqueTrackablePtr.h"
+#include <array>
 #include <unordered_map>
 
 class Battleground;
@@ -73,11 +74,14 @@ namespace WorldPackets
     namespace Battleground
     {
         struct BattlefieldStatusHeader;
+        struct PvpRoleQueueCounts;
         class BattlefieldStatusNone;
         class BattlefieldStatusNeedConfirmation;
         class BattlefieldStatusActive;
         class BattlefieldStatusQueued;
         class BattlefieldStatusFailed;
+        class BattlefieldStatusWaitForGroups;
+        class BattlefieldStatusGroupProposalFailed;
     }
 }
 
@@ -105,6 +109,16 @@ class TC_GAME_API BattlegroundMgr
         static void BuildBattlegroundStatusActive(WorldPackets::Battleground::BattlefieldStatusActive* battlefieldStatus, Battleground const* bg, Player const* player, uint32 ticketId, uint32 joinTime, BattlegroundQueueTypeId queueId);
         static void BuildBattlegroundStatusQueued(WorldPackets::Battleground::BattlefieldStatusQueued* battlefieldStatus, Player const* player, uint32 ticketId, uint32 joinTime, BattlegroundQueueTypeId queueId, uint32 avgWaitTime, bool asGroup);
         static void BuildBattlegroundStatusFailed(WorldPackets::Battleground::BattlefieldStatusFailed* battlefieldStatus, BattlegroundQueueTypeId queueId, Player const* player, uint32 ticketId, GroupJoinBattlegroundResult result, ObjectGuid const* errorGuid = nullptr);
+        static void BuildBattlegroundStatusWaitForGroups(WorldPackets::Battleground::BattlefieldStatusWaitForGroups* battlefieldStatus, Player const* player, uint32 ticketId, uint32 joinTime, BattlegroundQueueTypeId queueId,
+            uint32 mapId, uint32 timeout, std::array<uint8, 2> const& slotsPerSide, std::array<uint8, 2> const& awaitedPerSide, WorldPackets::Battleground::PvpRoleQueueCounts const& roles);
+        static void BuildBattlegroundStatusGroupProposalFailed(WorldPackets::Battleground::BattlefieldStatusGroupProposalFailed* battlefieldStatus, Player const* player, uint32 ticketId, uint32 joinTime, BattlegroundQueueTypeId queueId,
+            WorldPackets::Battleground::PvpRoleQueueCounts const& roles);
+
+        // Everything CMSG_BATTLEFIELD_PORT does once an invite is accepted and all the cheat checks have
+        // passed: leave the queue, drop out of any current battleground and teleport in. Split out of
+        // WorldSession::HandleBattleFieldPortOpcode because a group proposal has to run it for every member
+        // at once, not only for the session that happened to send the packet.
+        static void PortPlayerToBattleground(Player* player, Battleground* bg, Team team, BattlegroundQueueTypeId queueId, uint32 ticketId);
 
         /* Battlegrounds */
         Battleground* GetBattleground(uint32 InstanceID, BattlegroundTypeId bgTypeId);

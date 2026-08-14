@@ -270,6 +270,46 @@ WorldPacket const* BattlefieldStatusFailed::Write()
     return &_worldPacket;
 }
 
+// Index-interleaved, as read by sub_7FF7290FAD90: the three counters of role 0, then of role 1, then of
+// role 2, then the "role counts are populated" bit. See the decode block in BattlegroundPackets.h.
+ByteBuffer& operator<<(ByteBuffer& data, PvpRoleQueueCounts const& counts)
+{
+    for (std::size_t i = 0; i < PVP_QUEUE_ROLE_COUNT; ++i)
+    {
+        data << uint8(counts.Awaited[i]);
+        data << uint8(counts.Secured[i]);
+        data << uint8(counts.Lost[i]);
+    }
+
+    data << Bits<1>(counts.HasRoleCounts);
+    data.FlushBits();
+
+    return data;
+}
+
+WorldPacket const* BattlefieldStatusWaitForGroups::Write()
+{
+    _worldPacket << Hdr;
+    _worldPacket << uint32(Mapid);
+    _worldPacket << uint32(Timeout);
+    for (std::size_t i = 0; i < SlotsPerSide.size(); ++i)
+    {
+        _worldPacket << uint8(SlotsPerSide[i]);
+        _worldPacket << uint8(AwaitedPerSide[i]);
+    }
+    _worldPacket << Roles;
+
+    return &_worldPacket;
+}
+
+WorldPacket const* BattlefieldStatusGroupProposalFailed::Write()
+{
+    _worldPacket << Hdr;
+    _worldPacket << Roles;
+
+    return &_worldPacket;
+}
+
 void BattlefieldPort::Read()
 {
     _worldPacket >> Ticket;
