@@ -34,6 +34,10 @@ class HomeMovementGenerator : public MovementGeneratorMedium< T, HomeMovementGen
         void DoDeactivate(T*);
         void DoFinalize(T*, bool, bool);
 
+        // The evade spline takes its velocity from the owner's speed (no SetVelocity call in
+        // SetTargetLocation), so a snare expiring or being applied mid-evade must rebuild it.
+        void UnitSpeedChanged() override { this->AddFlag(MOVEMENTGENERATOR_FLAG_SPEED_UPDATE_PENDING); }
+
     private:
         void SetTargetLocation(T*);
 };
