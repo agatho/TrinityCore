@@ -32,7 +32,9 @@
 #include "SpellHistory.h"
 #include "SpellMgr.h"
 #include "SpellScript.h"
+#include "TemporarySummon.h"
 #include <numeric>
+#include <unordered_set>
 
 enum DeathKnightSpells
 {
@@ -70,7 +72,11 @@ enum DeathKnightSpells
     SPELL_DK_DEATH_STRIKE_ENABLER               = 89832, // Server Side
     SPELL_DK_DEATH_STRIKE_HEAL                  = 45470,
     SPELL_DK_DEATH_STRIKE_OFFHAND               = 66188,
-    SPELL_DK_FESTERING_WOUND                    = 194310,
+    SPELL_DK_DOOMED_BIDDING                     = 455386,
+    SPELL_DK_DREAD_PLAGUE                       = 1240996,
+    SPELL_DK_DREAD_PLAGUE_ERUPT                 = 1241171,
+    SPELL_DK_FORBIDDEN_KNOWLEDGE                = 1256565,
+    SPELL_DK_FORBIDDEN_SACRIFICE                = 1256576,
     SPELL_DK_FROST                              = 137006,
     SPELL_DK_FROST_FEVER                        = 55095,
     SPELL_DK_FROST_SCYTHE                       = 207230,
@@ -85,12 +91,18 @@ enum DeathKnightSpells
     SPELL_DK_ICE_PRISON_ROOT                    = 454787,
     SPELL_DK_ICE_PRISON_TALENT                  = 454786,
     SPELL_DK_KILLING_MACHINE_PROC               = 51124,
+    SPELL_DK_LESSER_GHOUL_BUFF                  = 1254252,
+    SPELL_DK_LESSER_GHOUL_SUMMON                = 275430,
     SPELL_DK_MARK_OF_BLOOD_HEAL                 = 206945,
     SPELL_DK_NECROSIS_EFFECT                    = 216974,
     SPELL_DK_OBLITERATION                       = 281238,
     SPELL_DK_OBLITERATION_RUNE_ENERGIZE         = 281327,
     SPELL_DK_PILLAR_OF_FROST                    = 51271,
+    SPELL_DK_PUTREFY                            = 1247378,
+    SPELL_DK_PUTREFY_EXPLODE                    = 390220,
+    SPELL_DK_PUTREFY_STRIKE                     = 1277016,
     SPELL_DK_RAISE_DEAD_SUMMON                  = 52150,
+    SPELL_DK_SUDDEN_DOOM                        = 81340,
     SPELL_DK_REAPER_OF_SOULS_PROC               = 469172,
     SPELL_DK_RECENTLY_USED_DEATH_STRIKE         = 180612,
     SPELL_DK_RUNIC_CORRUPTION                   = 51460,
@@ -107,13 +119,16 @@ enum DeathKnightSpells
     SPELL_DK_SUBDUING_GRASP_TALENT              = 454822,
     SPELL_DK_UNHOLY                             = 137007,
     SPELL_DK_UNHOLY_VIGOR                       = 196263,
+    SPELL_DK_VIRULENT_PLAGUE                    = 191587,
+    SPELL_DK_VIRULENT_PLAGUE_ERUPT              = 1241167,
     SPELL_DH_VORACIOUS_LEECH                    = 274009,
     SPELL_DH_VORACIOUS_TALENT                   = 273953
 };
 
 enum Misc
 {
-    NPC_DK_DANCING_RUNE_WEAPON                  = 27893
+    NPC_DK_DANCING_RUNE_WEAPON                  = 27893,
+    NPC_DK_LESSER_GHOUL                         = 237409
 };
 
 // 70656 - Advantage (T10 4P Melee Bonus)
@@ -198,6 +213,28 @@ private:
     SpellEffectValue absorbPct;
     uint64 maxHealth;
     uint32 absorbedAmount;
+};
+
+// 275699 - Apocalypse
+class spell_dk_apocalypse : public SpellScript
+{
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellInfo({ SPELL_DK_LESSER_GHOUL_SUMMON });
+    }
+
+    void HandleSummon(SpellEffIndex /*effIndex*/) const
+    {
+        Unit* caster = GetCaster();
+        for (int32 i = GetEffectValueAsInt(); i > 0; --i)
+            caster->CastSpell(nullptr, SPELL_DK_LESSER_GHOUL_SUMMON, true);
+    }
+
+    void Register() override
+    {
+        // The ghoul count dummy has no implicit target, so it is only handled in the no-target hit phase
+        OnEffectHit += SpellEffectFn(spell_dk_apocalypse::HandleSummon, EFFECT_1, SPELL_EFFECT_DUMMY);
+    }
 };
 
 // 195182 - Marrowrend
@@ -786,19 +823,27 @@ private:
 // 85948 - Festering Strike
 class spell_dk_festering_strike : public SpellScript
 {
-    bool Validate(SpellInfo const* /*spellInfo*/) override
+    bool Validate(SpellInfo const* spellInfo) override
     {
-        return ValidateSpellInfo({ SPELL_DK_FESTERING_WOUND });
+        return ValidateSpellInfo({ SPELL_DK_LESSER_GHOUL_BUFF })
+            && ValidateSpellEffect({ { spellInfo->Id, EFFECT_3 } });
     }
 
-    void HandleScriptEffect(SpellEffIndex /*effIndex*/)
+    void HandleScriptEffect(SpellEffIndex /*effIndex*/) const
     {
-        GetCaster()->CastSpell(GetHitUnit(), SPELL_DK_FESTERING_WOUND, CastSpellExtraArgs(TRIGGERED_FULL_MASK).AddSpellMod(SPELLVALUE_AURA_STACK, GetEffectValueAsInt()));
+        Unit* caster = GetCaster();
+
+        // EFFECT_2 and EFFECT_3 are the low and high end of the granted charge count ("your next $s3-$s4 Scourge Strikes")
+        int32 low = GetEffectValueAsInt();
+        int32 charges = irand(low, std::max(low, GetEffectInfo(EFFECT_3).CalcValueAsInt(caster)));
+
+        caster->CastSpell(caster, SPELL_DK_LESSER_GHOUL_BUFF, CastSpellExtraArgs(TRIGGERED_FULL_MASK)
+            .AddSpellMod(SPELLVALUE_AURA_STACK, charges));
     }
 
     void Register() override
     {
-        OnEffectHitTarget += SpellEffectFn(spell_dk_festering_strike::HandleScriptEffect, EFFECT_1, SPELL_EFFECT_DUMMY);
+        OnEffectHitTarget += SpellEffectFn(spell_dk_festering_strike::HandleScriptEffect, EFFECT_2, SPELL_EFFECT_DUMMY);
     }
 };
 
@@ -1183,7 +1228,101 @@ class spell_dk_pvp_4p_bonus : public AuraScript
     }
 };
 
-// 46584 - Raise Dead
+// 1256576 - Forbidden Sacrifice (triggered by Putrefy when 1256565 - Forbidden Knowledge is known)
+class spell_dk_forbidden_sacrifice : public AuraScript
+{
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellEffect({ { SPELL_DK_FORBIDDEN_KNOWLEDGE, EFFECT_0 } });
+    }
+
+    void CalculateAmount(AuraEffect const* /*aurEff*/, SpellEffectValue& amount, bool& canBeRecalculated) const
+    {
+        if (Unit const* caster = GetCaster())
+            if (AuraEffect const* knowledge = caster->GetAuraEffect(SPELL_DK_FORBIDDEN_KNOWLEDGE, EFFECT_0))
+                amount = knowledge->GetAmount();
+
+        canBeRecalculated = false;
+    }
+
+    void Register() override
+    {
+        DoEffectCalcAmount += AuraEffectCalcAmountFn(spell_dk_forbidden_sacrifice::CalculateAmount, EFFECT_0, SPELL_AURA_MASTERY);
+    }
+};
+
+// 1247378 - Putrefy
+class spell_dk_putrefy : public SpellScript
+{
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellInfo({ SPELL_DK_LESSER_GHOUL_SUMMON, SPELL_DK_PUTREFY_STRIKE, SPELL_DK_PUTREFY_EXPLODE,
+            SPELL_DK_FORBIDDEN_KNOWLEDGE, SPELL_DK_FORBIDDEN_SACRIFICE, SPELL_DK_LESSER_GHOUL_BUFF })
+            && ValidateSpellEffect({ { SPELL_DK_FORBIDDEN_KNOWLEDGE, EFFECT_1 } });
+    }
+
+    void HandleDummy(SpellEffIndex /*effIndex*/) const
+    {
+        Unit* caster = GetCaster();
+        Unit* target = GetHitUnit();
+
+        std::unordered_set<ObjectGuid> existing;
+        std::list<TempSummon*> minions;
+        caster->GetAllMinionsByEntry(minions, NPC_DK_LESSER_GHOUL);
+        for (TempSummon* minion : minions)
+            existing.insert(minion->GetGUID());
+
+        caster->CastSpell(nullptr, SPELL_DK_LESSER_GHOUL_SUMMON, CastSpellExtraArgsInit{
+            .TriggerFlags = TRIGGERED_IGNORE_CAST_IN_PROGRESS | TRIGGERED_DONT_REPORT_CAST_ERROR,
+            .TriggeringSpell = GetSpell()
+        });
+
+        minions.clear();
+        caster->GetAllMinionsByEntry(minions, NPC_DK_LESSER_GHOUL);
+        TempSummon* ghoul = nullptr;
+        for (TempSummon* minion : minions)
+        {
+            if (!existing.contains(minion->GetGUID()))
+            {
+                ghoul = minion;
+                break;
+            }
+        }
+
+        if (ghoul)
+        {
+            // Tooltip: strike the enemy, then explode for nearby damage - one-shot Putrefy ghoul, not a lingering pet
+            ghoul->CastSpell(target, SPELL_DK_PUTREFY_STRIKE, CastSpellExtraArgsInit{
+                .TriggerFlags = TRIGGERED_IGNORE_CAST_IN_PROGRESS | TRIGGERED_DONT_REPORT_CAST_ERROR
+            });
+            ghoul->CastSpell(target, SPELL_DK_PUTREFY_EXPLODE, CastSpellExtraArgsInit{
+                .TriggerFlags = TRIGGERED_IGNORE_CAST_IN_PROGRESS | TRIGGERED_DONT_REPORT_CAST_ERROR
+            });
+            if (Creature* creature = ghoul->ToCreature())
+                creature->DespawnOrUnsummon(500ms);
+        }
+
+        if (AuraEffect const* knowledgeCharges = caster->GetAuraEffect(SPELL_DK_FORBIDDEN_KNOWLEDGE, EFFECT_1))
+        {
+            caster->CastSpell(caster, SPELL_DK_LESSER_GHOUL_BUFF, CastSpellExtraArgsInit{
+                .TriggerFlags = TRIGGERED_IGNORE_CAST_IN_PROGRESS | TRIGGERED_DONT_REPORT_CAST_ERROR,
+                .TriggeringSpell = GetSpell(),
+                .SpellValueOverrides = { { SPELLVALUE_AURA_STACK, knowledgeCharges->GetAmountAsInt() } }
+            });
+            caster->CastSpell(caster, SPELL_DK_FORBIDDEN_SACRIFICE, CastSpellExtraArgsInit{
+                .TriggerFlags = TRIGGERED_IGNORE_CAST_IN_PROGRESS | TRIGGERED_DONT_REPORT_CAST_ERROR,
+                .TriggeringSpell = GetSpell()
+            });
+        }
+    }
+
+    void Register() override
+    {
+        OnEffectHitTarget += SpellEffectFn(spell_dk_putrefy::HandleDummy, EFFECT_0, SPELL_EFFECT_DUMMY);
+    }
+};
+
+// 1242866 - Raise Dead (triggered by 46584 - Raise Dead)
 class spell_dk_raise_dead : public SpellScript
 {
     bool Validate(SpellInfo const* /*spellInfo*/) override
@@ -1191,15 +1330,15 @@ class spell_dk_raise_dead : public SpellScript
         return ValidateSpellInfo({ SPELL_DK_RAISE_DEAD_SUMMON });
     }
 
-    void HandleDummy(SpellEffIndex /*effIndex*/)
+    void HandleSummon(SpellEffIndex /*effIndex*/) const
     {
-        uint32 spellId = SPELL_DK_RAISE_DEAD_SUMMON;
-        GetCaster()->CastSpell(nullptr, spellId, true);
+        GetCaster()->CastSpell(nullptr, SPELL_DK_RAISE_DEAD_SUMMON, true);
     }
 
     void Register() override
     {
-        OnEffectHitTarget += SpellEffectFn(spell_dk_raise_dead::HandleDummy, EFFECT_0, SPELL_EFFECT_DUMMY);
+        // The marker aura is permanent, so a recast only refreshes it - hook the cast, not the aura apply
+        OnEffectHitTarget += SpellEffectFn(spell_dk_raise_dead::HandleSummon, EFFECT_0, SPELL_EFFECT_APPLY_AURA);
     }
 };
 
@@ -1343,6 +1482,115 @@ class spell_dk_subduing_grasp : public SpellScript
         else
             OnEffectHitTarget += SpellEffectFn(spell_dk_subduing_grasp::HandleSubduingGrasp, EFFECT_0, SPELL_EFFECT_SCRIPT_EFFECT);
     }
+};
+
+// 81340 - Sudden Doom
+// Doomed Bidding (455386): consuming this buff summons a Lesser Ghoul. Spellmod consume removes the
+// aura with AURA_REMOVE_BY_DEFAULT; duration expire must not summon.
+class spell_dk_sudden_doom : public AuraScript
+{
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellInfo({ SPELL_DK_DOOMED_BIDDING, SPELL_DK_LESSER_GHOUL_SUMMON });
+    }
+
+    void AfterRemove(AuraEffect const* /*aurEff*/, AuraEffectHandleModes /*mode*/) const
+    {
+        if (GetTargetApplication()->GetRemoveMode() != AURA_REMOVE_BY_DEFAULT)
+            return;
+
+        Unit* target = GetTarget();
+        if (!target->HasAura(SPELL_DK_DOOMED_BIDDING))
+            return;
+
+        target->CastSpell(nullptr, SPELL_DK_LESSER_GHOUL_SUMMON, CastSpellExtraArgsInit{
+            .TriggerFlags = TRIGGERED_IGNORE_CAST_IN_PROGRESS | TRIGGERED_DONT_REPORT_CAST_ERROR
+        });
+    }
+
+    void Register() override
+    {
+        AfterEffectRemove += AuraEffectRemoveFn(spell_dk_sudden_doom::AfterRemove, EFFECT_0, SPELL_AURA_ADD_FLAT_MODIFIER, AURA_EFFECT_HANDLE_REAL);
+    }
+};
+
+// 55090 - Scourge Strike
+class spell_dk_scourge_strike_plague_erupt : public SpellScript
+{
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellInfo({ SPELL_DK_VIRULENT_PLAGUE, SPELL_DK_VIRULENT_PLAGUE_ERUPT,
+            SPELL_DK_DREAD_PLAGUE, SPELL_DK_DREAD_PLAGUE_ERUPT });
+    }
+
+    void EruptPlague(Unit* caster, Unit* target, uint32 plagueId, uint32 eruptId, int32 effectivenessPct) const
+    {
+        AuraEffect const* plague = target->GetAuraEffect(plagueId, EFFECT_0, caster->GetGUID());
+        if (!plague)
+            return;
+
+        uint32 ticks = plague->GetTotalTicks();
+        if (!ticks)
+            return;
+
+        SpellEffectValue damage = CalculatePct(plague->GetAmount() * ticks, effectivenessPct);
+        if (damage <= 0)
+            return;
+
+        caster->CastSpell(target, eruptId, CastSpellExtraArgsInit{
+            .TriggerFlags = TRIGGERED_IGNORE_CAST_IN_PROGRESS | TRIGGERED_DONT_REPORT_CAST_ERROR,
+            .TriggeringSpell = GetSpell(),
+            .SpellValueOverrides = { { SPELLVALUE_BASE_POINT0, damage } }
+        });
+    }
+
+    void HandleDummy(SpellEffIndex /*effIndex*/) const
+    {
+        Unit* caster = GetCaster();
+        Unit* target = GetHitUnit();
+        int32 effectivenessPct = GetEffectValueAsInt();
+        EruptPlague(caster, target, SPELL_DK_VIRULENT_PLAGUE, SPELL_DK_VIRULENT_PLAGUE_ERUPT, effectivenessPct);
+        EruptPlague(caster, target, SPELL_DK_DREAD_PLAGUE, SPELL_DK_DREAD_PLAGUE_ERUPT, effectivenessPct);
+    }
+
+    void Register() override
+    {
+        OnEffectHitTarget += SpellEffectFn(spell_dk_scourge_strike_plague_erupt::HandleDummy, EFFECT_1, SPELL_EFFECT_DUMMY);
+    }
+};
+
+// 55090 - Scourge Strike
+// 433895 - Vampiric Strike
+class spell_dk_summon_lesser_ghoul : public SpellScript
+{
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellInfo({ SPELL_DK_LESSER_GHOUL_BUFF, SPELL_DK_LESSER_GHOUL_SUMMON });
+    }
+
+    void HandleSummon(SpellEffIndex /*effIndex*/)
+    {
+        if (_summoned)
+            return;
+
+        Unit* caster = GetCaster();
+        Aura* charges = caster->GetAura(SPELL_DK_LESSER_GHOUL_BUFF, caster->GetGUID());
+        if (!charges)
+            return;
+
+        _summoned = true;
+        caster->CastSpell(nullptr, SPELL_DK_LESSER_GHOUL_SUMMON, true);
+        charges->ModStackAmount(-1);
+    }
+
+    void Register() override
+    {
+        // Cleaving Strikes can spread the damage effect over several targets - one charge per cast, not per target
+        OnEffectHitTarget += SpellEffectFn(spell_dk_summon_lesser_ghoul::HandleSummon, EFFECT_0, SPELL_EFFECT_SCHOOL_DAMAGE);
+    }
+
+private:
+    bool _summoned = false;
 };
 
 // 374049 - Suppression
@@ -1492,6 +1740,7 @@ void AddSC_deathknight_spell_scripts()
 {
     RegisterSpellScript(spell_dk_advantage_t10_4p);
     RegisterSpellScript(spell_dk_anti_magic_shell);
+    RegisterSpellScript(spell_dk_apocalypse);
     RegisterSpellScriptWithArgs(spell_dk_apply_bone_shield, "spell_dk_marrowrend_apply_bone_shield", EFFECT_2);
     RegisterSpellScriptWithArgs(spell_dk_apply_bone_shield, "spell_dk_deaths_caress_apply_bone_shield", EFFECT_2);
     RegisterSpellScript(spell_dk_army_transform);
@@ -1513,6 +1762,7 @@ void AddSC_deathknight_spell_scripts()
     RegisterSpellScript(spell_dk_death_strike);
     RegisterSpellScript(spell_dk_death_strike_enabler);
     RegisterSpellScript(spell_dk_festering_strike);
+    RegisterSpellScript(spell_dk_forbidden_sacrifice);
     RegisterSpellScript(spell_dk_frost_fever_proc);
     RegisterSpellScript(spell_dk_ghoul_explode);
     RegisterSpellScript(spell_dk_glyph_of_scourge_strike_script);
@@ -1528,13 +1778,17 @@ void AddSC_deathknight_spell_scripts()
     RegisterSpellScript(spell_dk_permafrost);
     RegisterSpellScript(spell_dk_pet_geist_transform);
     RegisterSpellScript(spell_dk_pet_skeleton_transform);
+    RegisterSpellScript(spell_dk_putrefy);
     RegisterSpellScript(spell_dk_pvp_4p_bonus);
     RegisterSpellScript(spell_dk_raise_dead);
     RegisterSpellScript(spell_dk_reaper_of_souls);
     RegisterSpellScript(spell_dk_rime);
     RegisterSpellScriptWithArgs(spell_dk_soul_reaper, "spell_dk_soul_reaper", EFFECT_1, EFFECT_2);
     RegisterSpellScriptWithArgs(spell_dk_soul_reaper, "spell_dk_soul_reaper_reaper_of_souls", EFFECT_0, Optional<SpellEffIndex>());
+    RegisterSpellScript(spell_dk_scourge_strike_plague_erupt);
     RegisterSpellScript(spell_dk_subduing_grasp);
+    RegisterSpellScript(spell_dk_sudden_doom);
+    RegisterSpellScript(spell_dk_summon_lesser_ghoul);
     RegisterSpellScript(spell_dk_suppression);
     RegisterSpellScript(spell_dk_t20_2p_rune_empowered);
     RegisterSpellScript(spell_dk_vampiric_blood);
