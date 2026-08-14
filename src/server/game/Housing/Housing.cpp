@@ -2279,6 +2279,37 @@ HousingResult Housing::AddToCatalog(uint32 decorEntryId, uint8 sourceType, std::
     if (firstTimeAcquired)
         _owner->UpdateCriteria(CriteriaType::CollectUniqueDecor, decorEntryId);
 
+    // SMSG_HOUSING_DECOR_ADD_TO_HOUSE_CHEST_RESPONSE (0x510008): retail emits this on EVERY
+    // decor acquisition, carrying the GUID of the freshly minted decor instance.
+    //
+    // Capture-verified against the 12.0.7 (68275/68453) sniffs:
+    //   "garrison and hall of class table quest.pkt" — SMSG_HOUSING_FIRST_TIME_DECOR_ACQUISITION
+    //   (decorID 0x1E8E) is immediately followed by 0x510008 whose PackedGUID decodes to
+    //   HighGuid::Housing with arg2 == 0x1E8E, i.e. the same decor entry.
+    //   "garrisonlevel2upgrade.pkt" — two more 0x510008 with NO preceding FIRST_TIME packet
+    //   (re-acquisition of already-known decor), which is why this lives here, at the
+    //   acquisition choke point, and not next to the first-time notification.
+    // Negative control: "housing12.0.7.pkt" carries 10 SMSG_HOUSING_DECOR_REMOVE_RESPONSE and
+    //   zero 0x510008, so this packet is NOT the decor-removal / return-to-storage response.
+    // Wire: uint8(0x80 = success) + uint32(count=1) + PackedGUID — all three captures parse to
+    //   exactly the packet length with no trailing bytes.
+    // GUID scheme matches PopulateCatalogStorageEntries()/EffectCollectHousingDecor():
+    //   subType=1, arg1=realm, arg2=decorEntryId, counter=ownerBase + entry*100 + instanceIndex.
+    if (_owner && _owner->GetSession())
+    {
+        uint64 uniqueId = _owner->GetGUID().GetCounter() * 100000 + uint64(decorEntryId) * 100
+            + (entry.Count > 0 ? entry.Count - 1 : 0);
+
+        WorldPackets::Housing::HousingDecorAddToHouseChestResponse chestResponse;
+        chestResponse.Success = true;
+        chestResponse.DecorGuids.push_back(ObjectGuid::Create<HighGuid::Housing>(
+            /*subType*/ 1,
+            /*arg1*/ sRealmList->GetCurrentRealmId().Realm,
+            /*arg2*/ decorEntryId,
+            uniqueId));
+        _owner->SendDirectMessage(chestResponse.Write());
+    }
+
     SyncUpdateFields();
     return HOUSING_RESULT_SUCCESS;
 }
