@@ -91,6 +91,42 @@ namespace WorldPackets
             int32 GameTimeHolidayOffset = 0;
         };
 
+        // SMSG_GAME_TIME_SET / SMSG_GAME_TIME_UPDATE are LoginSetTimeSpeed without the NewSpeed
+        // float - the clock rate is handed out once, at login, and these two correct the clock
+        // afterwards. Both bodies are a uniform 16 bytes in every 12.0.7 capture:
+        //   +0 uint32 ServerTime (packed WowTime)   +8  int32 ServerTimeHolidayOffset
+        //   +4 uint32 GameTime   (packed WowTime)   +12 int32 GameTimeHolidayOffset
+        //
+        // The two client handlers (GameTime_C.cpp) differ in what they apply:
+        //   SMSG_GAME_TIME_SET    re-applies server time AND game time - a hard re-base.
+        //   SMSG_GAME_TIME_UPDATE re-applies game time only and merely validates the server time
+        //                         pair - the cheap periodic correction.
+        class GameTimeSet final : public ServerPacket
+        {
+        public:
+            explicit GameTimeSet() : ServerPacket(SMSG_GAME_TIME_SET, 16) { }
+
+            WorldPacket const* Write() override;
+
+            WowTime ServerTime;
+            WowTime GameTime;
+            int32 ServerTimeHolidayOffset = 0;
+            int32 GameTimeHolidayOffset = 0;
+        };
+
+        class GameTimeUpdate final : public ServerPacket
+        {
+        public:
+            explicit GameTimeUpdate() : ServerPacket(SMSG_GAME_TIME_UPDATE, 16) { }
+
+            WorldPacket const* Write() override;
+
+            WowTime ServerTime;
+            WowTime GameTime;
+            int32 ServerTimeHolidayOffset = 0;
+            int32 GameTimeHolidayOffset = 0;
+        };
+
         class ResetWeeklyCurrency final : public ServerPacket
         {
         public:
@@ -1031,6 +1067,20 @@ namespace WorldPackets
             int32 AreaLightID = 0;
             int32 TransitionMilliseconds = 0;
             int32 OverrideLightID = 0;
+        };
+
+        // 4 byte body in all 211 captured 12.0.7 occurrences - a single Lightning.db2 id.
+        // 205 of them carry 0, which is the stop form: the client keeps the storm it was last
+        // told about, so leaving a storming zone has to restate it as 0.
+        class StartLightningStorm final : public ServerPacket
+        {
+        public:
+            explicit StartLightningStorm() : ServerPacket(SMSG_START_LIGHTNING_STORM, 4) { }
+            explicit StartLightningStorm(int32 lightningID) : ServerPacket(SMSG_START_LIGHTNING_STORM, 4), LightningID(lightningID) { }
+
+            WorldPacket const* Write() override;
+
+            int32 LightningID = 0;
         };
 
         class TC_GAME_API DisplayGameError final : public ServerPacket

@@ -56,6 +56,26 @@ WorldPacket const* LoginSetTimeSpeed::Write()
     return &_worldPacket;
 }
 
+WorldPacket const* GameTimeSet::Write()
+{
+    _worldPacket << ServerTime;
+    _worldPacket << GameTime;
+    _worldPacket << int32(ServerTimeHolidayOffset);
+    _worldPacket << int32(GameTimeHolidayOffset);
+
+    return &_worldPacket;
+}
+
+WorldPacket const* GameTimeUpdate::Write()
+{
+    _worldPacket << ServerTime;
+    _worldPacket << GameTime;
+    _worldPacket << int32(ServerTimeHolidayOffset);
+    _worldPacket << int32(GameTimeHolidayOffset);
+
+    return &_worldPacket;
+}
+
 WorldPacket const* SetCurrency::Write()
 {
     _worldPacket << int32(Type);
@@ -780,6 +800,13 @@ WorldPacket const* OverrideLight::Write()
     _worldPacket << int32(AreaLightID);
     _worldPacket << int32(OverrideLightID);
     _worldPacket << int32(TransitionMilliseconds);
+
+    return &_worldPacket;
+}
+
+WorldPacket const* StartLightningStorm::Write()
+{
+    _worldPacket << int32(LightningID);
 
     return &_worldPacket;
 }

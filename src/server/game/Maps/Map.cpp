@@ -79,7 +79,7 @@
 GridState* si_GridStates[MAX_GRID_STATE];
 
 ZoneDynamicInfo::ZoneDynamicInfo() : MusicId(0), DefaultWeather(nullptr), WeatherId(WEATHER_STATE_FINE),
-    Intensity(0.0f) { }
+    Intensity(0.0f), LightningId(0) { }
 
 RespawnInfo::~RespawnInfo() = default;
 
@@ -3994,23 +3994,29 @@ void Map::RemoveOldCorpses()
 
 void Map::SendZoneDynamicInfo(uint32 zoneId, Player* player) const
 {
-    auto itr = _zoneDynamicInfo.find(zoneId);
-    if (itr == _zoneDynamicInfo.end())
-        return;
-
-    if (uint32 music = itr->second.MusicId)
-        player->SendDirectMessage(WorldPackets::Misc::PlayMusic(music).Write());
-
-    SendZoneWeather(itr->second, player);
-
-    for (ZoneDynamicInfo::LightOverride const& lightOverride : itr->second.LightOverrides)
+    ZoneDynamicInfo const* zoneDynamicInfo = Trinity::Containers::MapGetValuePtr(_zoneDynamicInfo, zoneId);
+    if (zoneDynamicInfo)
     {
-        WorldPackets::Misc::OverrideLight overrideLight;
-        overrideLight.AreaLightID = lightOverride.AreaLightId;
-        overrideLight.OverrideLightID = lightOverride.OverrideLightId;
-        overrideLight.TransitionMilliseconds = lightOverride.TransitionMilliseconds;
-        player->SendDirectMessage(overrideLight.Write());
+        if (uint32 music = zoneDynamicInfo->MusicId)
+            player->SendDirectMessage(WorldPackets::Misc::PlayMusic(music).Write());
+
+        SendZoneWeather(*zoneDynamicInfo, player);
+
+        for (ZoneDynamicInfo::LightOverride const& lightOverride : zoneDynamicInfo->LightOverrides)
+        {
+            WorldPackets::Misc::OverrideLight overrideLight;
+            overrideLight.AreaLightID = lightOverride.AreaLightId;
+            overrideLight.OverrideLightID = lightOverride.OverrideLightId;
+            overrideLight.TransitionMilliseconds = lightOverride.TransitionMilliseconds;
+            player->SendDirectMessage(overrideLight.Write());
+        }
     }
+
+    // Unlike everything above, the storm has to be restated even when this zone has no dynamic
+    // info at all: the client holds on to the last id it was given until it is told otherwise,
+    // so walking out of a storming zone has to push the 0 that stops it. Retail does exactly
+    // that - 205 of the 211 captured SMSG_START_LIGHTNING_STORM bodies are 0.
+    player->SendDirectMessage(WorldPackets::Misc::StartLightningStorm(zoneDynamicInfo ? zoneDynamicInfo->LightningId : 0).Write());
 }
 
 void Map::SendZoneWeather(uint32 zoneId, Player* player) const
@@ -4105,6 +4111,31 @@ void Map::SetZoneWeather(uint32 zoneId, WeatherState weatherId, float intensity)
                 if (player->GetZoneId() == zoneId && !player->HasAuraType(SPELL_AURA_FORCE_WEATHER))
                     player->SendDirectMessage(weather.GetRawPacket());
     }
+}
+
+int32 Map::GetZoneLightning(uint32 zoneId) const
+{
+    if (ZoneDynamicInfo const* zoneDynamicInfo = Trinity::Containers::MapGetValuePtr(_zoneDynamicInfo, zoneId))
+        return zoneDynamicInfo->LightningId;
+
+    return 0;
+}
+
+// lightningId is a Lightning.db2 id, 0 stops the storm.
+//
+// This is script/command driven state, not weather driven: Weather.db2 carries a
+// RevertToWeatherLightningID per weather row, but WeatherMgr loads the game_weather world table
+// instead of Weather.db2, so there is nothing to read that field from yet. Hooking the two
+// together needs a new DB2 store and is left out on purpose.
+void Map::SetZoneLightning(uint32 zoneId, int32 lightningId)
+{
+    ZoneDynamicInfo& info = _zoneDynamicInfo[zoneId];
+    if (info.LightningId == lightningId)
+        return;
+
+    info.LightningId = lightningId;
+
+    SendZoneMessage(zoneId, WorldPackets::Misc::StartLightningStorm(lightningId).Write());
 }
 
 void Map::SetZoneOverrideLight(uint32 zoneId, uint32 areaLightId, uint32 overrideLightId, Milliseconds transitionTime)

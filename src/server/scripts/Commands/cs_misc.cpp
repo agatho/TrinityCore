@@ -114,6 +114,7 @@ public:
             { "unpossess",        HandleUnPossessCommand,        rbac::RBAC_PERM_COMMAND_UNPOSSESS,        Console::No },
             { "unstuck",          HandleUnstuckCommand,          rbac::RBAC_PERM_COMMAND_UNSTUCK,          Console::Yes },
             { "wchange",          HandleChangeWeather,           rbac::RBAC_PERM_COMMAND_WCHANGE,          Console::No },
+            { "lightning",        HandleLightningCommand,        rbac::RBAC_PERM_COMMAND_WCHANGE,          Console::No },
             { "mailbox",          HandleMailBoxCommand,          rbac::RBAC_PERM_COMMAND_MAILBOX,          Console::No },
             { "chromietime",      HandleChromieTimeCommand,      rbac::RBAC_PERM_COMMAND_CHROMIE_TIME,     Console::No },
         };
@@ -1415,6 +1416,32 @@ public:
         }
 
         weather->SetWeather(type, intensity);
+
+        return true;
+    }
+
+    // .lightning <Lightning.db2 id>, 0 stops the storm.
+    // Sets the storm for the zone the caller is standing in and pushes it to everyone in that
+    // zone; players entering the zone afterwards pick it up from Map::SendZoneDynamicInfo.
+    // 12.0.7 ships Lightning.db2 ids 7-13 and 115-119; the client ignores ids it does not know.
+    static bool HandleLightningCommand(ChatHandler* handler, int32 lightningId)
+    {
+        if (lightningId < 0)
+        {
+            handler->SendSysMessage("Lightning id must not be negative (0 stops the storm).");
+            handler->SetSentErrorMessage(true);
+            return false;
+        }
+
+        Player* player = handler->GetSession()->GetPlayer();
+        uint32 const zoneId = player->GetZoneId();
+
+        player->GetMap()->SetZoneLightning(zoneId, lightningId);
+
+        if (lightningId)
+            handler->PSendSysMessage("Lightning storm %d started in zone %u.", lightningId, zoneId);
+        else
+            handler->PSendSysMessage("Lightning storm stopped in zone %u.", zoneId);
 
         return true;
     }
