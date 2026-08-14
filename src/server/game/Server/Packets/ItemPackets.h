@@ -27,7 +27,6 @@
 #include "Optional.h"
 #include <array>
 
-struct VoidStorageItem;
 enum class BagSlotFlags : uint32;
 
 namespace WorldPackets
