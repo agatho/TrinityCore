@@ -434,6 +434,29 @@ void LootRoll::SendLootRollWon(ObjectGuid const& targetGuid, int32 rollNumber, R
     }
 }
 
+// Tells every participant that this item's roll is settled, so the client can retire the roll frame
+// instead of leaving it up until its own local timer lapses.
+void LootRoll::SendRollsComplete() const
+{
+    WorldPackets::Loot::LootRollsComplete lootRollsComplete;
+    lootRollsComplete.LootObj = m_loot->GetGUID();
+    lootRollsComplete.LootListID = m_lootItem->LootListId;
+    lootRollsComplete.DungeonEncounterID = m_loot->GetDungeonEncounterId();
+    lootRollsComplete.Write();
+
+    for (auto const& [playerGuid, roll] : m_rollVoteMap)
+    {
+        if (roll.Vote == RollVote::NotValid)
+            continue;
+
+        Player* player = ObjectAccessor::GetPlayer(m_map, playerGuid);
+        if (!player)
+            continue;
+
+        player->SendDirectMessage(lootRollsComplete.GetRawPacket());
+    }
+}
+
 void LootRoll::FillPacket(WorldPackets::Loot::LootItemData& lootItem) const
 {
     lootItem.Quantity = m_lootItem->count;
@@ -711,6 +734,11 @@ void LootRoll::Finish(RollVoteMap::const_iterator winnerItr)
                 player->StoreLootItem(m_loot->GetOwnerGUID(), m_lootItem->LootListId, m_loot);
         }
     }
+
+    // Both outcomes above (all passed / a winner) end the roll, so the completion notice belongs here
+    // rather than in either branch.
+    SendRollsComplete();
+
     m_isStarted = false;
 }
 

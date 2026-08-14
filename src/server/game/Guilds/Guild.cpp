@@ -3639,6 +3639,13 @@ void Guild::_SendBankContentUpdate(MoveItemData* pSrc, MoveItemData* pDest) cons
     }
 
     _SendBankContentUpdate(tabId, slots);
+
+    // The slot pushes above only reach members who already hold a bank list for the affected tab, and only
+    // because we broadcast partial updates to the whole guild (see the HACK in SendBankList). This event is
+    // the tab-agnostic "something moved in the bank" signal a client needs to re-query on its own. Broadcast
+    // it once per completed move - the two-tab case above already sent its own slot update, and duplicating
+    // the event for it would make the same move look like two.
+    BroadcastPacket(WorldPackets::Guild::GuildEventBankContentsChanged().Write());
 }
 
 void Guild::_SendBankContentUpdate(uint8 tabId, SlotIds slots) const

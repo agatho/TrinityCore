@@ -183,6 +183,17 @@ bool Petition::IsPetitionSignedByAccount(uint32 accountId) const
     return false;
 }
 
+// Which character of that account actually signed. The client cannot work this out on its own, which is
+// why SMSG_PETITION_ALREADY_SIGNED carries a guid rather than just repeating the sign-result error code.
+ObjectGuid Petition::GetSignerByAccount(uint32 accountId) const
+{
+    for (Signature const& signature : Signatures)
+        if (signature.first == accountId)
+            return signature.second;
+
+    return ObjectGuid::Empty;
+}
+
 void Petition::AddSignature(uint32 accountId, ObjectGuid playerGuid, bool isLoading)
 {
     Signatures.emplace_back(accountId, playerGuid);

@@ -570,6 +570,29 @@ void CalendarMgr::SendCalendarEventStatus(CalendarEvent const& calendarEvent, Ca
         packetBuilder(receiver);
 }
 
+void CalendarMgr::SendCalendarEventStatusAlert(CalendarEvent const& calendarEvent, CalendarInvite const& invite) const
+{
+    // Targeted counterpart of SendCalendarEventStatus, mirroring the SendCalendarEventInviteRemove /
+    // SendCalendarEventInviteRemoveAlert pair used by RemoveInvite: the broadcast tells every event relative
+    // which invitee changed, this alerts the invitee that somebody else changed it for them. Guild events
+    // already reach the invitee through the guild-wide broadcast, so skip them exactly like RemoveInvite does.
+    if (calendarEvent.IsGuildEvent() || calendarEvent.IsGuildAnnouncement())
+        return;
+
+    Player* player = ObjectAccessor::FindConnectedPlayer(invite.GetInviteeGUID());
+    if (!player)
+        return;
+
+    WorldPackets::Calendar::CalendarInviteStatusAlert packet;
+    packet.EventID = calendarEvent.GetEventId();
+    packet.Date.SetUtcTimeFromUnixTime(calendarEvent.GetDate());
+    packet.Date += player->GetSession()->GetTimezoneOffset();
+    packet.Flags = calendarEvent.GetFlags();
+    packet.Status = invite.GetStatus();
+
+    player->SendDirectMessage(packet.Write());
+}
+
 void CalendarMgr::SendCalendarEventRemovedAlert(CalendarEvent const& calendarEvent) const
 {
     auto packetBuilder = [&](Player const* receiver)

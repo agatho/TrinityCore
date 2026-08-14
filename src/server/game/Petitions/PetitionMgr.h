@@ -58,6 +58,7 @@ struct Petition
     SignaturesVector Signatures;
 
     bool IsPetitionSignedByAccount(uint32 accountId) const;
+    ObjectGuid GetSignerByAccount(uint32 accountId) const;
     void AddSignature(uint32 accountId, ObjectGuid playerGuid, bool isLoading);
     void UpdateName(std::string const& newName);
     void RemoveSignatureBySigner(ObjectGuid playerGuid);

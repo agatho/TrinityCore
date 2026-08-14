@@ -478,6 +478,14 @@ void WorldSession::HandleCalendarStatus(WorldPackets::Calendar::CalendarStatus& 
 
             sCalendarMgr->UpdateInvite(invite);
             sCalendarMgr->SendCalendarEventStatus(*calendarEvent, *invite);
+
+            // Unlike CMSG_CALENDAR_RSVP, here the status is imposed on the invitee by the event owner or a
+            // moderator, so the invitee needs to be alerted that their attendance was changed for them.
+            // Suppressed when a moderator edits their own invite - they already know, and their client gets
+            // the broadcast with ClearPending set.
+            if (invite->GetInviteeGUID() != guid)
+                sCalendarMgr->SendCalendarEventStatusAlert(*calendarEvent, *invite);
+
             sCalendarMgr->SendCalendarClearPendingAction(calendarStatus.Guid);
         }
         else
