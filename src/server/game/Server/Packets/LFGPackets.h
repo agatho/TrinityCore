@@ -23,6 +23,7 @@
 #include "ItemPacketsCommon.h"
 #include "LFGPacketsCommon.h"
 #include "Optional.h"
+#include <array>
 
 namespace lfg
 {
@@ -203,6 +204,61 @@ namespace WorldPackets
 
             LFGBlackList BlackList;
             std::vector<LfgPlayerDungeonInfo> Dungeon;
+        };
+
+        // SMSG_REQUEST_PVP_REWARDS_RESPONSE (0x480014). Reply to the empty CMSG_REQUEST_PVP_REWARDS
+        // (0x3A0041); in every capture the reply follows the request 100-250 ms later, 1:1.
+        //
+        // The body is a FIXED thirteen activity blocks - there is no count field - with two loose bytes
+        // after the first block. Each block is exactly LfgPlayerQuestReward above, which is why that struct
+        // already carries the `Honor` optional. Decoded from all 6 occurrences in the 12.0.7 captures
+        // (bodies 304, 304, 348, 348, 584, 592); the parser consumes every one with zero bytes left over,
+        // and the client reader sub_7FF7290FB600 independently calls the per-block reader sub_7FF7291DAB70
+        // exactly thirteen times with the same two loose u8 reads after block 0.
+        //
+        // Retail leaves blocks it has nothing to say about entirely zero - the rated Blitz capture sent 11
+        // of 13 populated, a levelling character only 4 - so an unimplemented activity is written empty
+        // rather than omitted, and that is a wire-legal state rather than a stub.
+        class RequestPvpRewardsResponse final : public ServerPacket
+        {
+        public:
+            // Slot order is not guesswork: each block lands in its own client global, and each global is
+            // read by exactly one C_PvP getter which embeds its own name string as the Lua arg-check
+            // argument, so the blocks are self-labelling. Blocks 3/4 and 5/6/8/10 are the two multiplexed
+            // getters (GetArenaRewards by team size, GetBrawlRewards by brawl type).
+            enum PvpRewardSlot : uint8
+            {
+                RandomBattleground      = 0,        // C_PvP.GetRandomBGRewards
+                RatedBattleground       = 1,        // C_PvP.GetRatedBGRewards
+                ArenaSkirmish           = 2,        // C_PvP.GetArenaSkirmishRewards
+                Arena2v2                = 3,        // C_PvP.GetArenaRewards(2)
+                Arena3v3                = 4,        // C_PvP.GetArenaRewards(3)
+                BrawlBattleground       = 5,        // C_PvP.GetBrawlRewards(Battleground)
+                BrawlArena              = 6,        // C_PvP.GetBrawlRewards(Arena), aliased by (LFG)
+                RandomEpicBattleground  = 7,        // C_PvP.GetRandomEpicBGRewards
+                BrawlSoloShuffle        = 8,        // C_PvP.GetBrawlRewards(SoloShuffle)
+                RatedSoloShuffle        = 9,        // C_PvP.GetRatedSoloShuffleRewards
+                BrawlSoloRbg            = 10,       // C_PvP.GetBrawlRewards(SoloRbg)
+                BattlegroundBlitz       = 11,       // C_PvP.GetRatedSoloRBGRewards
+                RandomTrainingGround    = 12,       // C_PvP.GetRandomTrainingGroundRewards
+                MaxPvpRewardSlot        = 13
+            };
+
+            explicit RequestPvpRewardsResponse() : ServerPacket(SMSG_REQUEST_PVP_REWARDS_RESPONSE) { }
+
+            WorldPacket const* Write() override;
+
+            std::array<LfgPlayerQuestReward, MaxPvpRewardSlot> Activity = { };
+
+            // The two loose bytes are twelve MSB-first booleans, of which only half are understood. Five of
+            // them (BrawlFlags 0x08/0x04/0x02 and ExtraFlags 0x40) are the per-brawl-type "has already won
+            // this brawl" markers the client returns as the extra `hasWon` value from GetBrawlRewards; we
+            // run no brawl rotation, so those are false and are written false. ExtraFlags 0x80 was set in
+            // every capture and gates something inside the client's Rated Solo Shuffle path; its meaning is
+            // not established, so it is written at the value that was observed and nothing more. The
+            // remaining six bits were zero in every capture and are left zero.
+            uint8 BrawlFlags = 0x00;
+            uint8 ExtraFlags = 0x80;
         };
 
         class LfgPartyInfo final : public ServerPacket

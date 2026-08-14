@@ -70,6 +70,10 @@
 #include "GitRevision.h"
 #include "HousingMgr.h"
 #include "InitiativeManager.h"
+// NeighborhoodMgr holds unordered_map<ObjectGuid, unique_ptr<Neighborhood>> against a
+// forward declaration, so any TU that instantiates the map's destructor needs the
+// complete type. Other branches get it transitively; do not rely on that.
+#include "Neighborhood.h"
 #include "NeighborhoodMgr.h"
 #include "GridNotifiersImpl.h"
 #include "GroupMgr.h"
