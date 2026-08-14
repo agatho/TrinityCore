@@ -775,6 +775,18 @@ static constexpr uint32 MAX_HOUSE_LEVEL                 = 20;
 // post-purchase HousingSvcsUpdateHousesLevelFavor pair).
 static constexpr uint64 HOUSE_PURCHASE_STARTER_FAVOR    = 910;
 
+// Neighborhood initiative ("Endeavor" in the client UI) progress is reported to the client on a
+// 0..1000 point scale — sniff-verified: PlayerInitiativeInfo.ProgressRequired == 1000.
+// InitiativeTask.ProgressContributionAmount (12.0.7 DB2 values 10/25/50/75/100/150/300) is how
+// many of those points ONE completion of that task is worth.
+static constexpr float INITIATIVE_PROGRESS_REQUIRED     = 1000.0f;
+
+// InitiativeMilestone.RequiredContributionAmount is a PERCENTAGE of initiative completion, not a
+// 0..1 fraction: the 12.0.7 DB2 holds exactly 25/50/75/100 and only the 100.0 rows carry
+// INITIATIVE_MILESTONE_FLAG_FINAL. ActiveInitiative::Progress is a 0..1 fraction, so it has to be
+// scaled by this before being compared against a milestone threshold.
+static constexpr float INITIATIVE_MILESTONE_SCALE       = 100.0f;
+
 // Quest 91863 objective 17 ("Acquire a house") kill credit, granted on successful purchase.
 static constexpr uint32 NPC_KILL_CREDIT_BUY_HOME        = 248858;
 

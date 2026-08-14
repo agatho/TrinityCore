@@ -36,6 +36,7 @@
 #include "Random.h"
 #include "WorldSession.h"
 #include <algorithm>
+#include <cmath>
 
 InitiativeManager& InitiativeManager::Instance()
 {
@@ -88,6 +89,7 @@ void InitiativeManager::BuildDB2IndexMaps()
         taskData.CriteriaTreeID = taskEntry->CriteriaTreeID;
         taskData.QuestID = taskEntry->QuestID;
         taskData.ProgressContributionAmount = taskEntry->ProgressContributionAmount;
+        taskData.RepetitionDampeningCurveID = taskEntry->RepetitionContributionDampeningCurve;
         taskData.SortOrder = xTask->SortOrder;
 
         _initiativeTasks[xTask->NeighborhoodInitiativeID].push_back(taskData);
@@ -222,7 +224,8 @@ void InitiativeManager::LoadFromDB()
             // Initialize defaults from progress float
             auto const& milestones = GetMilestonesForCycle(cycleID);
             for (auto const& milestone : milestones)
-                initiative->MilestonesReached[milestone.MilestoneOrderIndex] = (initiative->Progress >= milestone.RequiredContributionAmount);
+                initiative->MilestonesReached[milestone.MilestoneOrderIndex] =
+                    (initiative->Progress * INITIATIVE_MILESTONE_SCALE >= milestone.RequiredContributionAmount);
 
             // Overwrite with persisted milestone state
             if (initiative->DbId)
@@ -530,34 +533,66 @@ void InitiativeManager::UpdateTaskProgress(uint64 neighborhoodGuid, uint32 initi
     if (taskProgress.Status == INITIATIVE_TASK_STATUS_COMPLETE)
         return;
 
-    // Get contribution weight from DB2 (ProgressContributionAmount = how much each completion contributes)
     InitiativeTaskEntry const* taskEntry = sInitiativeTaskStore.LookupEntry(taskID);
-    int32 targetCount = taskEntry ? taskEntry->ProgressContributionAmount : 1;
-    if (targetCount <= 0)
-        targetCount = 1;
+
+    // InitiativeTask.ProgressContributionAmount is the contribution WEIGHT one completion of this
+    // task is worth (12.0.7 DB2 values 10/25/50/75/100/150/300 out of INITIATIVE_PROGRESS_REQUIRED).
+    // It is NOT a target count: using it as one made a 300-weight task demand 300 criteria hits while
+    // a 10-weight task demanded 10, and left the weight itself with no effect on anything.
+    // The task's own completion target is its CriteriaTree root Amount.
+    int32 contributionWeight = taskEntry && taskEntry->ProgressContributionAmount > 0 ? taskEntry->ProgressContributionAmount : 1;
+    uint32 targetCount = GetTaskTargetCount(taskEntry);
 
     taskProgress.Progress += progressDelta;
     if (taskProgress.Status == INITIATIVE_TASK_STATUS_NOT_STARTED)
         taskProgress.Status = INITIATIVE_TASK_STATUS_IN_PROGRESS;
 
-    // Track per-player contribution
+    // Contribution points this update is worth, before dampening.
+    float contribution = float(contributionWeight) * float(progressDelta);
+
+    uint64 contribGuid = contributor ? contributor->GetGUID().GetCounter() : UI64LIT(0);
     if (contributor)
     {
-        uint64 contribGuid = contributor->GetGUID().GetCounter();
-        initiative->PlayerContributions[contribGuid][taskID] += progressDelta;
-        PersistContribution(initiative->DbId, contribGuid, taskID, progressDelta);
+        // Repeat contributions to the same task by the same player are worth progressively less —
+        // that is exactly what InitiativeTask.RepetitionContributionDampeningCurve is for. The curve
+        // is sampled at the contribution this player has already banked on this task.
+        uint32 alreadyOnTask = 0;
+        auto playerItr = initiative->PlayerContributions.find(contribGuid);
+        if (playerItr != initiative->PlayerContributions.end())
+        {
+            auto perTaskItr = playerItr->second.find(taskID);
+            if (perTaskItr != playerItr->second.end())
+                alreadyOnTask = perTaskItr->second;
+        }
+
+        contribution *= GetRepetitionDampening(taskEntry, float(alreadyOnTask));
+    }
+
+    uint32 award = static_cast<uint32>(std::lround(contribution));
+
+    // Track per-player contribution
+    if (contributor && award)
+    {
+        uint32 totalBefore = GetPlayerContribution(neighborhoodGuid, initiativeID, contribGuid);
+
+        initiative->PlayerContributions[contribGuid][taskID] += award;
+        PersistContribution(initiative->DbId, contribGuid, taskID, award);
         UpdatePlayerInitiativeFavor(contributor, neighborhoodGuid);
+
+        // Endeavor task contributions pay House XP. This is the only producer of
+        // HOUSING_FAVOR_SOURCE_INITIATIVE_TASK.
+        GrantInitiativeTaskFavor(contributor, initiativeID, totalBefore, totalBefore + award);
     }
 
     // Persist individual task progress to DB
     PersistSingleTaskProgress(initiative->DbId, taskID, taskProgress.Progress, static_cast<uint8>(taskProgress.Status));
 
-    TC_LOG_DEBUG("housing", "InitiativeManager::UpdateTaskProgress: Task {} in initiative {} progress: {}/{} (contributor: {})",
-        taskID, initiativeID, taskProgress.Progress, targetCount,
+    TC_LOG_DEBUG("housing", "InitiativeManager::UpdateTaskProgress: Task {} in initiative {} progress: {}/{} (+{} contribution points, contributor: {})",
+        taskID, initiativeID, taskProgress.Progress, targetCount, award,
         contributor ? contributor->GetGUID().ToString() : "none");
 
     // Check if task completed
-    if (static_cast<int32>(taskProgress.Progress) >= targetCount)
+    if (taskProgress.Progress >= targetCount)
     {
         taskProgress.Status = INITIATIVE_TASK_STATUS_COMPLETE;
         PersistSingleTaskProgress(initiative->DbId, taskID, taskProgress.Progress, static_cast<uint8>(taskProgress.Status));
@@ -571,19 +606,12 @@ void InitiativeManager::UpdateTaskProgress(uint64 neighborhoodGuid, uint32 initi
             taskID, initiativeID, neighborhoodGuid);
     }
 
-    // Recalculate overall progress
-    auto const& allTasks = GetTasksForInitiative(initiativeID);
-    if (!allTasks.empty())
-    {
-        uint32 completedTasks = 0;
-        for (auto const& task : allTasks)
-        {
-            auto tItr = initiative->TaskProgress.find(task.TaskID);
-            if (tItr != initiative->TaskProgress.end() && tItr->second.Status == INITIATIVE_TASK_STATUS_COMPLETE)
-                ++completedTasks;
-        }
-        initiative->Progress = static_cast<float>(completedTasks) / static_cast<float>(allTasks.size());
-    }
+    // Overall initiative progress is the accumulated contribution pool, not the fraction of tasks
+    // finished: every completion is worth ProgressContributionAmount out of the 1000 points the
+    // client is told the initiative requires. Progress stays a 0..1 fraction (the wire scales it by
+    // INITIATIVE_PROGRESS_REQUIRED in Player::BuildInitiative*), so the persisted column is unchanged.
+    if (award)
+        initiative->Progress = std::min(1.0f, initiative->Progress + float(award) / INITIATIVE_PROGRESS_REQUIRED);
 
     // Send points update to neighborhood
     // Resolve by persisted counter - arg1 is the NeighborhoodMapID, not 0 (this site never matched anyway).
@@ -1467,6 +1495,72 @@ void InitiativeManager::UpdatePlayerInitiativeFavor(Player* player, uint64 neigh
     player->UpdateInitiativeFavor(totalFavor);
 }
 
+uint32 InitiativeManager::GetTaskTargetCount(InitiativeTaskEntry const* taskEntry)
+{
+    if (!taskEntry || taskEntry->CriteriaTreeID <= 0)
+        return 1;
+
+    CriteriaTree const* tree = sCriteriaMgr->GetCriteriaTree(static_cast<uint32>(taskEntry->CriteriaTreeID));
+    if (!tree || !tree->Entry || !tree->Entry->Amount)
+        return 1;
+
+    return tree->Entry->Amount;
+}
+
+float InitiativeManager::GetRepetitionDampening(InitiativeTaskEntry const* taskEntry, float alreadyContributed)
+{
+    if (!taskEntry || taskEntry->RepetitionContributionDampeningCurve <= 0)
+        return 1.0f;
+
+    // DB2Manager::GetCurveValueAt returns 0.0f for a curve with no CurvePoint rows, and 127 of the
+    // 168 12.0.7 InitiativeTask rows point at a single curve. Treat a non-positive result as "no
+    // dampening data" rather than "contribution is worth nothing" — a missing curve must never
+    // silently zero out every endeavor contribution on the realm.
+    float value = sDB2Manager.GetCurveValueAt(static_cast<uint32>(taskEntry->RepetitionContributionDampeningCurve), alreadyContributed);
+    if (value <= 0.0f)
+        return 1.0f;
+
+    // The curve is a dampening factor. Blizzard encodes such curves either as a 0..1 multiplier or as
+    // a 0..100 percentage; accept both and never let it amplify a contribution.
+    if (value > 1.0f)
+        value /= 100.0f;
+
+    return std::min(value, 1.0f);
+}
+
+void InitiativeManager::GrantInitiativeTaskFavor(Player* player, uint32 initiativeID, uint32 contributionBefore, uint32 contributionAfter) const
+{
+    if (!player)
+        return;
+
+    Housing* housing = player->GetHousing();
+    if (!housing)
+        return;
+
+    // "Favor" is House XP: HouseFavorBar.lua drives an XP status bar off HOUSE_LEVEL_FAVOR_UPDATED,
+    // measuring houseFavor between C_Housing.GetHouseLevelFavorForLevel(level) and (level + 1).
+    // InitiativeCycle.HouseXPCap is the ceiling on how much House XP one player may take out of a
+    // single endeavor cycle — the dashboard shows the remainder via
+    // C_NeighborhoodInitiative.GetAvailableHouseXP(). Applying the cap to the player's cumulative
+    // contribution (which is already persisted) keeps this stateless: no new column, no migration.
+    uint32 cap = 0;
+    if (uint32 cycleID = GetActiveCycleForInitiative(initiativeID))
+        if (InitiativeCycleEntry const* cycle = sInitiativeCycleStore.LookupEntry(cycleID))
+            if (cycle->HouseXPCap > 0)
+                cap = static_cast<uint32>(cycle->HouseXPCap);
+
+    if (cap)
+    {
+        contributionBefore = std::min(contributionBefore, cap);
+        contributionAfter = std::min(contributionAfter, cap);
+    }
+
+    if (contributionAfter <= contributionBefore)
+        return;
+
+    housing->AddFavor(contributionAfter - contributionBefore, HOUSING_FAVOR_SOURCE_INITIATIVE_TASK);
+}
+
 void InitiativeManager::CheckMilestones(ActiveInitiative& initiative, Neighborhood* neighborhood)
 {
     uint32 cycleID = GetActiveCycleForInitiative(initiative.InitiativeID);
@@ -1477,7 +1571,8 @@ void InitiativeManager::CheckMilestones(ActiveInitiative& initiative, Neighborho
     for (auto const& milestone : milestones)
     {
         bool wasReached = initiative.MilestonesReached[milestone.MilestoneOrderIndex];
-        bool isReached = (initiative.Progress >= milestone.RequiredContributionAmount);
+        // RequiredContributionAmount is a percentage (25/50/75/100), Progress is a 0..1 fraction.
+        bool isReached = (initiative.Progress * INITIATIVE_MILESTONE_SCALE >= milestone.RequiredContributionAmount);
 
         if (isReached && !wasReached)
         {

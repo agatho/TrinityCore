@@ -19216,15 +19216,17 @@ bool Player::LoadFromDB(ObjectGuid guid, CharacterDatabaseQueryHolder const& hol
             }
 
             // Calculate progress in the 0-1000 scale (sniff: ProgressRequired=1000)
-            float progressRequired = 1000.0f;
+            float progressRequired = INITIATIVE_PROGRESS_REQUIRED;
             float currentProgress = activeInit->Progress * progressRequired;
 
-            // Find current milestone
+            // Find current milestone. RequiredContributionAmount is a percentage (DB2: 25/50/75/100)
+            // while Progress is a 0..1 fraction, so it has to be scaled before comparing — comparing
+            // them raw pinned CurrentMilestoneID to the first milestone forever.
             int32 currentMilestoneID = -1;
             auto milestones = sInitiativeManager.GetMilestonesForCycle(cycleID);
             for (auto const& m : milestones)
             {
-                if (activeInit->Progress < m.RequiredContributionAmount)
+                if (activeInit->Progress * INITIATIVE_MILESTONE_SCALE < m.RequiredContributionAmount)
                 {
                     currentMilestoneID = static_cast<int32>(m.MilestoneID);
                     break;

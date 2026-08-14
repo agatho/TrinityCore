@@ -29,6 +29,7 @@
 class Neighborhood;
 class Player;
 class WorldSession;
+struct InitiativeTaskEntry;
 
 // Status of an individual task within an initiative
 enum InitiativeTaskStatus : uint32
@@ -76,6 +77,7 @@ struct InitiativeTaskData
     int32  CriteriaTreeID = 0;              // DB2: CriteriaTreeID FK->CriteriaTree (task completion criteria)
     int32  QuestID = 0;                     // DB2: QuestID FK->QuestV2 (associated quest)
     int32  ProgressContributionAmount = 0;  // DB2: ProgressContributionAmount (contribution weight per completion)
+    int32  RepetitionDampeningCurveID = 0;  // DB2: RepetitionContributionDampeningCurve FK->Curve
     int32  SortOrder = 0;                   // From InitiativeXTask join
 };
 
@@ -164,6 +166,21 @@ private:
     void PersistContribution(uint64 initiativeDbId, uint64 playerGuid, uint32 taskId, uint32 amount);
     void CheckMilestones(ActiveInitiative& initiative, Neighborhood* neighborhood);
     void GrantMilestoneRewards(Player* player, uint32 milestoneID);
+
+    // How many criteria hits finish this task. This is the task's CriteriaTree root Amount — NOT
+    // InitiativeTask.ProgressContributionAmount, which is the contribution weight one completion is
+    // worth. Returns 1 when the tree carries no amount (a single criteria hit finishes the task).
+    static uint32 GetTaskTargetCount(InitiativeTaskEntry const* taskEntry);
+
+    // InitiativeTask.RepetitionContributionDampeningCurve evaluated at alreadyContributed. Returns a
+    // multiplier in (0, 1]; returns 1.0 (no dampening) when the task has no curve or the curve has no
+    // points, so a missing curve can never zero a contribution out.
+    static float GetRepetitionDampening(InitiativeTaskEntry const* taskEntry, float alreadyContributed);
+
+    // Pays House XP ("Favor") for an endeavor task contribution, capped per cycle by
+    // InitiativeCycle.HouseXPCap. Takes the player's before/after contribution totals so the cap can
+    // be applied without any extra persisted state.
+    void GrantInitiativeTaskFavor(Player* player, uint32 initiativeID, uint32 contributionBefore, uint32 contributionAfter) const;
     uint32 SelectWeightedCycle(uint32 initiativeID) const;
     uint32 CalculateMaxPoints(uint32 initiativeID) const;
     void BuildCriteriaIndex();
