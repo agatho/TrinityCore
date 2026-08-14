@@ -44,6 +44,7 @@
 #include "ScriptedCreature.h"
 #include "ScriptReloadMgr.h"
 #include "SmartEnum.h"
+#include "SpellInfo.h"
 #include "SpellMgr.h"
 #include "World.h"
 #include "WorldSession.h"
@@ -503,6 +504,16 @@ bool InstanceScript::SetBossState(uint32 id, EncounterState state)
                     {
                         player->AtEndOfEncounter(EncounterType::DungeonEncounter);
                     });
+                    break;
+                }
+                case NOT_STARTED:
+                {
+                    // BossAI::_Reset drops a boss back to NOT_STARTED on evade rather than to FAIL, so this
+                    // is the path a wipe-and-reset actually takes. Without clearing here the timeline armed
+                    // by the previous pull keeps counting down against a boss that has already reset, and
+                    // keeps announcing casts that will never happen.
+                    if (DungeonEncounterEntry const* resetEncounter = bossInfo->GetDungeonEncounterForDifficulty(instance->GetDifficultyID()))
+                        ClearEncounterTimeline(resetEncounter->ID);
                     break;
                 }
                 default:
@@ -1025,7 +1036,9 @@ void BuildEncounterTimelineEvent(InstanceScript::EncounterTimelineEvent const& s
     target.EventID = source.EventID;
     target.EncounterEventID = source.EncounterEventID;
     target.SpellID = source.SpellID;
+    target.BroadcastTextID = source.BroadcastTextID;
     target.IconFileID = source.IconFileID;
+    target.Flags = source.Flags;
     target.Caster = source.Caster;
     target.Timestamp = timestamp;
     target.MaxQueueDuration = uint32(source.MaxQueueDuration.count());
@@ -1036,8 +1049,8 @@ void BuildEncounterTimelineEvent(InstanceScript::EncounterTimelineEvent const& s
 }
 }
 
-uint32 InstanceScript::ScheduleEncounterTimelineEvent(ObjectGuid caster, uint32 dungeonEncounterId, uint32 encounterEventId,
-    uint32 spellId, int32 iconFileId, uint8 severity, Milliseconds timeToCast, Milliseconds maxQueueDuration)
+InstanceScript::EncounterTimelineEvent& InstanceScript::AddEncounterTimelineEvent(ObjectGuid caster, uint32 dungeonEncounterId,
+    uint32 encounterEventId, uint32 spellId, int32 iconFileId, uint8 severity, Milliseconds timeToCast, Milliseconds maxQueueDuration)
 {
     EncounterTimelineEvent& timelineEvent = _encounterTimeline.emplace_back();
     timelineEvent.EventID = ++_nextEncounterTimelineEventId;    // ENCOUNTER_TIMELINE_INVALID_EVENT is 0, so never hand out 0
@@ -1050,12 +1063,60 @@ uint32 InstanceScript::ScheduleEncounterTimelineEvent(ObjectGuid caster, uint32 
     timelineEvent.TimeToCast = timeToCast;
     timelineEvent.OriginalTimeToCast = timeToCast;
     timelineEvent.MaxQueueDuration = maxQueueDuration;
+    return timelineEvent;
+}
+
+uint32 InstanceScript::ScheduleEncounterTimelineEvent(ObjectGuid caster, uint32 dungeonEncounterId, uint32 encounterEventId,
+    uint32 spellId, int32 iconFileId, uint8 severity, Milliseconds timeToCast, Milliseconds maxQueueDuration)
+{
+    EncounterTimelineEvent const& timelineEvent = AddEncounterTimelineEvent(caster, dungeonEncounterId, encounterEventId,
+        spellId, iconFileId, severity, timeToCast, maxQueueDuration);
 
     WorldPackets::Instance::InstanceEncounterEventAppend append;
     BuildEncounterTimelineEvent(timelineEvent, GameTime::GetGameTimeMS(), append.Events.emplace_back());
     instance->SendToPlayers(append.Write());
 
     return timelineEvent.EventID;
+}
+
+// Arms an encounter's whole timeline from `instance_encounter_timeline` at the moment it is pulled.
+//
+// The rows are a prediction of what the boss script is going to do, and they are only worth sending if
+// they were copied from that script - a timeline that disagrees with the encounter is worse than none,
+// because the client draws a countdown the player then plans around.
+void InstanceScript::StartEncounterTimeline(uint32 dungeonEncounterId, ObjectGuid caster)
+{
+    std::vector<InstanceEncounterTimelineInfo> const* timeline = sObjectMgr->GetInstanceEncounterTimeline(dungeonEncounterId);
+    if (!timeline)
+        return;
+
+    uint32 difficultyId = uint32(instance->GetDifficultyID());
+    bool armed = false;
+
+    for (InstanceEncounterTimelineInfo const& info : *timeline)
+    {
+        if (info.DifficultyID && info.DifficultyID != difficultyId)
+            continue;
+
+        // Retail sends the spell's own icon here, not EncounterEvent.db2's IconFileDataID (which is 0 in
+        // 621 of its 622 rows), so a row that leaves IconFileID at 0 gets the spell's icon resolved for it.
+        int32 iconFileId = info.IconFileID;
+        if (!iconFileId)
+            if (SpellInfo const* spellInfo = sSpellMgr->GetSpellInfo(info.SpellID, instance->GetDifficultyID()))
+                iconFileId = int32(spellInfo->IconFileDataId);
+
+        EncounterTimelineEvent& timelineEvent = AddEncounterTimelineEvent(caster, dungeonEncounterId, info.EncounterEventID,
+            info.SpellID, iconFileId, info.Severity, info.FirstCast, info.MaxQueueDuration);
+        timelineEvent.BroadcastTextID = info.BroadcastTextID;
+        timelineEvent.Flags = info.Flags;
+        timelineEvent.RepeatCast = info.RepeatCast;
+        armed = true;
+    }
+
+    // SetBossState already sent the empty SEQUENCE that clears the previous pull; only spend another packet
+    // when there is actually something to draw.
+    if (armed)
+        SendEncounterTimeline();
 }
 
 void InstanceScript::CancelEncounterTimelineEvent(uint32 eventId)
@@ -1102,16 +1163,63 @@ void InstanceScript::SendEncounterTimelineTo(Player* player) const
     player->SendDirectMessage(sequence.Write());
 }
 
+// Emits one CAST_UPDATE for an event. castState 1 is Casting, 3 is Expired; the two are alternative
+// endings for the same event and the capture never shows both for one EventID.
+//
+// The Expired form is not a variation on the Casting form - the 3 expired CAST_UPDATEs in
+// C:\sniff\m+ run12.0.7.pkt carry Unknown_3D 0xFF and TimeToCastMs 0, where all 49 casting ones carry 0
+// and the event's original countdown.
+void InstanceScript::SendEncounterTimelineCastUpdate(EncounterTimelineEvent const& timelineEvent, uint8 castState) const
+{
+    WorldPackets::Instance::InstanceEncounterEventCastUpdate castUpdate;
+    castUpdate.EventID = timelineEvent.EventID;
+    castUpdate.EncounterEventID = timelineEvent.EncounterEventID;
+    castUpdate.Caster = timelineEvent.Caster;
+    castUpdate.DungeonEncounterID = timelineEvent.DungeonEncounterID;
+    castUpdate.CastState = castState;
+    castUpdate.Timestamp = GameTime::GetGameTimeMS();
+    castUpdate.Unknown_3D = castState == 3 ? 0xFF : 0;
+    castUpdate.TimeToCastMs = castState == 3 ? 0 : uint32(timelineEvent.OriginalTimeToCast.count());
+    instance->SendToPlayers(castUpdate.Write());
+}
+
+void InstanceScript::ExpireEncounterTimelineEvent(uint32 eventId)
+{
+    auto itr = std::find_if(_encounterTimeline.begin(), _encounterTimeline.end(),
+        [eventId](EncounterTimelineEvent const& timelineEvent) { return timelineEvent.EventID == eventId; });
+    if (itr == _encounterTimeline.end())
+        return;
+
+    SendEncounterTimelineCastUpdate(*itr, 3);       // EncounterEventCastState::Expired
+    _encounterTimeline.erase(itr);
+}
+
 void InstanceScript::UpdateEncounterTimeline(uint32 diff)
 {
     if (_encounterTimeline.empty())
         return;
 
     Milliseconds elapsed(diff);
-    uint32 timestamp = GameTime::GetGameTimeMS();
 
     for (auto itr = _encounterTimeline.begin(); itr != _encounterTimeline.end(); )
     {
+        // An event whose countdown ran out with no caster left to cast it is held for its queue window and
+        // then reported Expired, which is where the capture puts those: at Timestamp + Duration, i.e. the
+        // cast moment plus MaxQueueDuration.
+        if (itr->Expiring)
+        {
+            if (itr->QueueRemaining > elapsed)
+            {
+                itr->QueueRemaining -= elapsed;
+                ++itr;
+                continue;
+            }
+
+            SendEncounterTimelineCastUpdate(*itr, 3);       // EncounterEventCastState::Expired
+            itr = _encounterTimeline.erase(itr);
+            continue;
+        }
+
         if (itr->TimeToCast > elapsed)
         {
             itr->TimeToCast -= elapsed;
@@ -1119,17 +1227,42 @@ void InstanceScript::UpdateEncounterTimeline(uint32 diff)
             continue;
         }
 
-        // Countdown reached zero: the ability is being cast now. CAST_UPDATE reports the countdown the
-        // event was created with, not the residual - see the InstancePackets.h comment.
-        WorldPackets::Instance::InstanceEncounterEventCastUpdate castUpdate;
-        castUpdate.EventID = itr->EventID;
-        castUpdate.EncounterEventID = itr->EncounterEventID;
-        castUpdate.Caster = itr->Caster;
-        castUpdate.DungeonEncounterID = itr->DungeonEncounterID;
-        castUpdate.CastState = 1;           // EncounterEventCastState::Casting, as in every captured CAST_UPDATE
-        castUpdate.Timestamp = timestamp;
-        castUpdate.TimeToCastMs = uint32(itr->OriginalTimeToCast.count());
-        instance->SendToPlayers(castUpdate.Write());
+        // Countdown reached zero. The timeline is a prediction; before reporting the ability as being cast,
+        // check the one thing that can falsify it without guessing - whether the unit that was supposed to
+        // cast it is still there and alive. A dead or departed caster casts nothing, and saying otherwise
+        // would put a lie on the wire.
+        Unit* caster = itr->Caster.IsPlayer() ? static_cast<Unit*>(instance->GetPlayer(itr->Caster))
+                                              : static_cast<Unit*>(instance->GetCreature(itr->Caster));
+        if (!itr->Caster.IsEmpty() && (!caster || !caster->IsAlive()))
+        {
+            itr->Expiring = true;
+            itr->QueueRemaining = itr->MaxQueueDuration;
+            itr->TimeToCast = 0ms;      // so a SEQUENCE sent during the queue window shows it as due, not pending
+            ++itr;
+            continue;
+        }
+
+        // CAST_UPDATE reports the countdown the event was created with, not the residual - see the
+        // InstancePackets.h comment.
+        SendEncounterTimelineCastUpdate(*itr, 1);           // EncounterEventCastState::Casting
+
+        // A repeating row re-arms as a fresh event, which is how retail's timeline behaves: every cast is
+        // its own EventID, announced by its own APPEND.
+        if (itr->RepeatCast > 0ms)
+        {
+            EncounterTimelineEvent repeated = *itr;
+            repeated.EventID = ++_nextEncounterTimelineEventId;
+            repeated.TimeToCast = repeated.RepeatCast;
+            repeated.OriginalTimeToCast = repeated.RepeatCast;
+
+            WorldPackets::Instance::InstanceEncounterEventAppend append;
+            BuildEncounterTimelineEvent(repeated, GameTime::GetGameTimeMS(), append.Events.emplace_back());
+            instance->SendToPlayers(append.Write());
+
+            *itr = repeated;
+            ++itr;
+            continue;
+        }
 
         itr = _encounterTimeline.erase(itr);
     }

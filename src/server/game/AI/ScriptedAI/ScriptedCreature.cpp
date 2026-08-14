@@ -591,7 +591,14 @@ void BossAI::_JustEngagedWith(Unit* who)
             EnterEvadeMode(EvadeReason::SequenceBreak);
             return;
         }
-        instance->SetBossState(_bossId, IN_PROGRESS);
+        if (instance->SetBossState(_bossId, IN_PROGRESS))
+        {
+            // The encounter timeline needs the unit the pending abilities hang off, and this is the first
+            // point in the pull where that unit is known - SetBossState only sees a boss id. Encounters
+            // without rows in `instance_encounter_timeline` send nothing extra.
+            if (DungeonEncounterEntry const* dungeonEncounter = instance->GetBossDungeonEncounter(_bossId))
+                instance->StartEncounterTimeline(dungeonEncounter->ID, me->GetGUID());
+        }
     }
 
     me->setActive(true);

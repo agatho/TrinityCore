@@ -435,6 +435,28 @@ struct TC_GAME_API InstanceSpawnGroupInfo
     uint8 Flags;
 };
 
+// One scheduled ability on a boss encounter's client-side timeline (C_EncounterEvents and the
+// SMSG_INSTANCE_ENCOUNTER_EVENT_* family). Loaded from the world table `instance_encounter_timeline`.
+//
+// EncounterEventID is a row id of the client's own EncounterEvent.db2. That is not a detail - see the
+// header comment on ObjectMgr::LoadInstanceEncounterTimeline for why it may not be invented.
+struct TC_GAME_API InstanceEncounterTimelineInfo
+{
+    uint32 DungeonEncounterID;
+    uint32 DifficultyID;                    // 0 = applies to every difficulty
+    uint32 EncounterEventID;
+    uint32 SpellID;
+    uint32 BroadcastTextID;
+    int32 IconFileID;                       // 0 = resolve the spell's own icon, which is what retail sends
+    uint32 Flags;                           // EncounterEvent.db2 Flags, echoed back on the wire
+    uint8 Severity;
+    Milliseconds FirstCast;                 // offset from the pull
+    Milliseconds RepeatCast;                // 0 = fires once per pull
+    Milliseconds MaxQueueDuration;
+};
+
+typedef std::unordered_map<uint32 /*dungeonEncounterId*/, std::vector<InstanceEncounterTimelineInfo>> InstanceEncounterTimelineContainer;
+
 struct TC_GAME_API SpellClickInfo
 {
     uint32 spellId;
@@ -1259,6 +1281,7 @@ class TC_GAME_API ObjectMgr
         void LoadSpawnGroupTemplates();
         void LoadSpawnGroups();
         void LoadInstanceSpawnGroups();
+        void LoadInstanceEncounterTimeline();
         void LoadItemTemplates();
         void LoadItemTemplateAddon();
         void LoadItemScriptNames();
@@ -1384,6 +1407,7 @@ class TC_GAME_API ObjectMgr
         Trinity::IteratorPair<SpawnGroupLinkContainer::const_iterator> GetSpawnMetadataForGroup(uint32 groupId) const { return Trinity::Containers::MapEqualRange(_spawnGroupMapStore, groupId); }
         std::vector<uint32> const* GetSpawnGroupsForMap(uint32 mapId) const { auto it = _spawnGroupsByMap.find(mapId); return it != _spawnGroupsByMap.end() ? &it->second : nullptr; }
         std::vector<InstanceSpawnGroupInfo> const* GetInstanceSpawnGroupsForMap(uint32 mapId) const { auto it = _instanceSpawnGroupStore.find(mapId); return it != _instanceSpawnGroupStore.end() ? &it->second : nullptr; }
+        std::vector<InstanceEncounterTimelineInfo> const* GetInstanceEncounterTimeline(uint32 dungeonEncounterId) const { auto it = _instanceEncounterTimelineStore.find(dungeonEncounterId); return it != _instanceEncounterTimelineStore.end() ? &it->second : nullptr; }
 
         SpawnTrackingTemplateData const* GetSpawnTrackingData(uint32 spawnTrackingId) const;
         Trinity::IteratorPair<SpawnTrackingLinkContainer::const_iterator> GetSpawnMetadataForSpawnTracking(uint32 spawnTrackingId) const { return Trinity::Containers::MapEqualRange(_spawnTrackingMapStore, spawnTrackingId); }
@@ -1858,6 +1882,7 @@ class TC_GAME_API ObjectMgr
         std::unordered_map<uint32, std::vector<uint32>> _spawnGroupsByMap;
         SpawnGroupLinkContainer _spawnGroupMapStore;
         InstanceSpawnGroupContainer _instanceSpawnGroupStore;
+        InstanceEncounterTimelineContainer _instanceEncounterTimelineStore;
         SpawnTrackingTemplateContainer _spawnTrackingDataStore;
         SpawnTrackingLinkContainer _spawnTrackingMapStore;
         SpawnTrackingQuestObjectiveContainer _spawnTrackingQuestObjectiveStore;

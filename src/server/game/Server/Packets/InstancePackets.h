@@ -384,35 +384,47 @@ namespace WorldPackets
         // Field meanings, strongest evidence first:
         //
         //  Severity          (+0x00) observed 1 and 2. Named after EncounterEventSeverity
-        //                    (Low=0/Medium=1/High=2) and EncounterEvent.db2's Severity column. INFERRED -
-        //                    the only other single-byte enum in range would be EncounterTimelineEventSource,
-        //                    which is excluded because server-pushed events are Source=Encounter=0 and this
-        //                    byte is never 0.
+        //                    (Low=0/Medium=1/High=2) and EncounterEvent.db2's Severity column. No longer
+        //                    inferred: that column reads 1 for rows 278/279/280 and 2 for row 285, which is
+        //                    what the capture carries alongside those EncounterEventIDs.
         //  EventID           (+0x04) PROVEN. Monotonically increasing instance id (1,2,3,4 then 5,6 from
         //                    APPENDs, then 7..). CAST_UPDATE refers back to it.
         //  EncounterEventID  (+0x08) observed 278-285, stable 1:1 with (SpellID, IconFileID) across every
-        //                    packet. INFERRED to be the EncounterEvent.db2 row id ("ID of the encounter
-        //                    event record" - EncounterEventInfo.encounterEventID).
-        //  SpellID           (+0x0C) observed 377034/376997/377004 and 388544/388567/388796/388923.
+        //                    packet. NOW PROVEN, not inferred: the client's own EncounterEvent.db2 (present
+        //                    in the extracted data as dbc/enUS/EncounterEvent.db2, WDC5, 622 rows, ids
+        //                    1-809) has rows 278/279/280 carrying SpellID 376997/377004/377034 and rows
+        //                    282/283/284/285 carrying 388544/388567/388796/388923 - i.e. all 7 captured
+        //                    (EncounterEventID, SpellID) pairs are that table's rows, exactly. Its
+        //                    parent-lookup column is the DungeonEncounterID, so the client already knows
+        //                    which events belong to which encounter.
+        //  SpellID           (+0x0C) observed 377034/376997/377004 and 388544/388567/388796/388923. Equal to
+        //                    EncounterEvent.db2's SpellID for the accompanying EncounterEventID, 7/7.
         //  Unused_28         (+0x28) 0 in all 11 observed elements.
-        //  Unknown_2C        (+0x2C) 0 in most elements; 230954, 223315 and 308255 observed. NOT a
-        //                    FileDataID (230954 resolves to a draenei face texture in the CASC listfile,
-        //                    i.e. noise). Left unnamed.
+        //  BroadcastTextID   (+0x2C) 0 in most elements; 230954, 223315 and 308255 observed. Was left
+        //                    unnamed as "NOT a FileDataID"; that was right about what it is not. It is
+        //                    EncounterEvent.db2's BroadcastTextID column: rows 285, 279 and 274 carry
+        //                    exactly 230954, 223315 and 308255, and 513 of the 622 rows carry 0, matching
+        //                    "0 in most elements". 3/3 on the non-zero values.
         //  Unused_30         (+0x30) 0 in all 11 observed elements.
         //  IconFileID        (+0x34) PROVEN. All 7 distinct observed values resolve in the CASC listfile to
         //                    interface/icons/*.blp (spell_lifegivingseed, spell_nature_earthquake,
         //                    ability_smash, inv_misc_branch_01, inv_icon_wing06b,
         //                    inv_misc_raptortalon_nightmare, ability_vehicle_sonicshockwave). 7/7.
+        //                    Note it is NOT EncounterEvent.db2's IconFileDataID: that column is 0 in 621 of
+        //                    its 622 rows, so retail is sending the *spell's* icon here. Which is why
+        //                    InstanceScript falls back to SpellInfo::IconFileDataId when a timeline row
+        //                    leaves this at 0.
         //  Caster            (+0x38) packed GUID, HighGuid 8 (Creature) / 9 (Vehicle). Identical for every
         //                    element of a given packet.
         //  Timestamp         (+0x4C) PROVEN to be a millisecond clock: two SEQUENCE packets 59026 sniff-ms
         //                    apart differ by 59025 here, and an APPEND 9025 ms later differs by 9019.
         //                    Written as GameTime::GetGameTimeMS().
-        //  Unknown_54        (+0x54) was recorded as "0 in all 11 observed elements" when only the SEQUENCE
-        //                    packets of one capture had been decoded. Decoding the APPENDs too disproves
-        //                    that: it is 128 in every element carrying EncounterEventID 294 (spell 1282251)
-        //                    and 0 everywhere else, i.e. it is a per-event flag byte in the low bits of a
-        //                    uint32, not padding. Meaning still unknown, so it is written as 0.
+        //  Flags             (+0x54) was Unknown_54: 128 in every element carrying EncounterEventID 294
+        //                    (spell 1282251) and 0 everywhere else. That is EncounterEvent.db2's Flags
+        //                    column echoed back - row 294 is the one row among the captured ids whose Flags
+        //                    is 128, and rows 278-285, 293 and 295 all carry 0. 11/11 across the capture.
+        //                    Observed values across the whole table are 0/1/4/5/8/32/64/128/132/136/161/
+        //                    192/256/260/264/384/512, so it is a real flag field, not padding.
         //  MaxQueueDuration  (+0x58) 5000 in all 11 observed elements. Named after
         //                    EncounterTimelineEventInfo.maxQueueDuration ("hold duration for this event
         //                    after it reaches the end of the timeline"). INFERRED.
@@ -443,12 +455,12 @@ namespace WorldPackets
             uint32 EncounterEventID = 0;
             int32 SpellID = 0;
             uint32 Unused_28 = 0;
-            uint32 Unknown_2C = 0;
+            uint32 BroadcastTextID = 0;             // EncounterEvent.db2 BroadcastTextID
             uint32 Unused_30 = 0;
             int32 IconFileID = 0;
             ObjectGuid Caster;
             uint32 Timestamp = 0;
-            uint32 Unknown_54 = 0;
+            uint32 Flags = 0;                       // EncounterEvent.db2 Flags
             uint32 MaxQueueDuration = 0;
             uint32 Duration = 0;
             uint8 CastState = 2;                    // EncounterEventCastState::NotCasting
@@ -519,11 +531,18 @@ namespace WorldPackets
         // same ability (EncounterEventID 294) that casts normally on other pulls, so state 1 and state 3
         // are genuine alternatives for one event, not a property of the ability.
         //
-        // The server does not emit the Expired branch. Emitting it needs a "the scheduled cast did not
-        // happen" signal, and InstanceScript's timeline fires state 1 unconditionally when the countdown
-        // reaches zero because the script that scheduled the ability is the same thing that casts it.
-        // The fields are here so the branch can be expressed the moment a caller can distinguish the two;
-        // guessing a trigger for it would be inventing behaviour, so it is left unsent and documented.
+        // The server now emits the Expired branch, because the data-driven timeline supplies the "the
+        // scheduled cast did not happen" signal that was missing. Rows in `instance_encounter_timeline` are
+        // a prediction made ahead of the cast rather than an announcement by the caster, so the prediction
+        // can be falsified: InstanceScript::UpdateEncounterTimeline checks, at the moment a countdown
+        // reaches zero, whether the unit that was supposed to cast is still present and alive. If it is
+        // not, the event is held for MaxQueueDuration and then reported Expired - which lands it at
+        // Timestamp + Duration, exactly where the 3 captured Expired updates land.
+        //
+        // That check is deliberately the only trigger. It is the one falsification available without
+        // guessing: observing "the boss did not cast this" in general would need a spell-cast hook the core
+        // does not have, and polling for an instant cast would miss it and report a false Expired.
+        // InstanceScript::ExpireEncounterTimelineEvent lets a script state it outright.
         class InstanceEncounterEventCastUpdate final : public ServerPacket
         {
         public:

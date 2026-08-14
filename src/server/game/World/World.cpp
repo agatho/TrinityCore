@@ -1660,6 +1660,9 @@ bool World::SetInitialWorldSettings()
     TC_LOG_INFO("server.loading", "Loading instance spawn groups...");
     sObjectMgr->LoadInstanceSpawnGroups();
 
+    TC_LOG_INFO("server.loading", "Loading instance encounter timelines...");
+    sObjectMgr->LoadInstanceEncounterTimeline();      // must be after LoadSpellInfoStore(), validates SpellID
+
     TC_LOG_INFO("server.loading", "Loading GameObject Addon Data...");
     sObjectMgr->LoadGameObjectAddons();                          // must be after LoadGameObjects()
 
