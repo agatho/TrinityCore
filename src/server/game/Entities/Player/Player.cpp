@@ -1606,9 +1606,12 @@ void Player::RegenerateAll()
         if (power != POWER_RUNES)
             Regenerate(power);
 
-    // Runes act as cooldowns, and they don't need to send any data
     if (GetClass() == CLASS_DEATH_KNIGHT)
     {
+        // Draining a rune is announced through the cast packets' rune list, but a rune coming back is not:
+        // SetRuneCooldown only republishes the POWER_RUNES count, which says how many are ready and never
+        // which ones. Collect the runes that finished this tick and name them.
+        uint32 addedRunesMask = 0;
         uint32 regeneratedRunes = 0;
         uint32 regenIndex = 0;
         while (regeneratedRunes < MAX_RECHARGING_RUNES && m_runes->CooldownOrder.size() > regenIndex)
@@ -1621,9 +1624,19 @@ void Player::RegenerateAll()
                 ++regenIndex;
             }
             else
+            {
                 SetRuneCooldown(runeToRegen, 0);
+                addedRunesMask |= 1u << runeToRegen;
+            }
 
             ++regeneratedRunes;
+        }
+
+        if (addedRunesMask)
+        {
+            WorldPackets::Spells::AddRunePower addRunePower;
+            addRunePower.AddedRunesMask = addedRunesMask;
+            SendDirectMessage(addRunePower.Write());
         }
     }
 

@@ -270,6 +270,13 @@ void WorldSession::HandleSignPetition(WorldPackets::Petition::SignPetition& pack
     {
         signResult.Error = int32(PETITION_SIGN_ALREADY_SIGNED);
 
+        // The check above is per account, but the client only blocks a repeat signature per character, so it
+        // has no idea which of the account's characters already signed. Name that character before the sign
+        // result closes the dialog - otherwise the refusal looks arbitrary to the player.
+        WorldPackets::Petition::PetitionAlreadySigned alreadySigned;
+        alreadySigned.SignerGUID = petition->GetSignerByAccount(GetAccountId());
+        SendPacket(alreadySigned.Write());
+
         // close at signer side
         SendPacket(signResult.Write());
 
@@ -322,31 +329,50 @@ void WorldSession::HandleDeclinePetition(WorldPackets::Petition::DeclinePetition
 
 void WorldSession::HandleOfferPetition(WorldPackets::Petition::OfferPetition& packet)
 {
+    // Every failure below leaves the offering client waiting on a charter it will never see signed, so answer
+    // each one naming the player the offer was aimed at. The guild command results kept alongside carry the
+    // human readable reason; this packet is what releases the offer state for that target.
+    auto sendOfferError = [&]
+    {
+        WorldPackets::Petition::OfferPetitionError offerError;
+        offerError.PlayerGUID = packet.TargetPlayer;
+        SendPacket(offerError.Write());
+    };
+
     Player* player = ObjectAccessor::FindConnectedPlayer(packet.TargetPlayer);
     if (!player)
+    {
+        sendOfferError();
         return;
+    }
 
     Petition const* petition = sPetitionMgr->GetPetition(packet.ItemGUID);
     if (!petition)
+    {
+        sendOfferError();
         return;
+    }
 
     TC_LOG_DEBUG("network", "OFFER PETITION: {}, to {}", packet.ItemGUID.ToString(), packet.TargetPlayer.ToString());
 
     if (!sWorld->getBoolConfig(CONFIG_ALLOW_TWO_SIDE_INTERACTION_GUILD) && GetPlayer()->GetTeam() != player->GetTeam())
     {
         Guild::SendCommandResult(this, GUILD_COMMAND_CREATE_GUILD, ERR_GUILD_NOT_ALLIED);
+        sendOfferError();
         return;
     }
 
     if (player->GetGuildId())
     {
         Guild::SendCommandResult(this, GUILD_COMMAND_INVITE_PLAYER, ERR_ALREADY_IN_GUILD_S, _player->GetName());
+        sendOfferError();
         return;
     }
 
     if (player->GetGuildIdInvited())
     {
         Guild::SendCommandResult(this, GUILD_COMMAND_INVITE_PLAYER, ERR_ALREADY_INVITED_TO_GUILD_S, _player->GetName());
+        sendOfferError();
         return;
     }
 

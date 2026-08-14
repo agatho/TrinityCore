@@ -343,6 +343,7 @@ class TC_GAME_API CalendarMgr
         void SendCalendarEventInviteRemoveAlert(ObjectGuid guid, CalendarEvent const& calendarEvent, CalendarInviteStatus status) const;
         void SendCalendarEventUpdateAlert(CalendarEvent const& calendarEvent, time_t originalDate) const;
         void SendCalendarEventStatus(CalendarEvent const& calendarEvent, CalendarInvite const& invite) const;
+        void SendCalendarEventStatusAlert(CalendarEvent const& calendarEvent, CalendarInvite const& invite) const;
         void SendCalendarEventRemovedAlert(CalendarEvent const& calendarEvent) const;
         void SendCalendarEventModeratorStatusAlert(CalendarEvent const& calendarEvent, CalendarInvite const& invite) const;
         void SendCalendarClearPendingAction(ObjectGuid guid) const;
