@@ -33,7 +33,9 @@ void WorldPackets::Commentator::CommentatorEnterInstance::Read()
     _worldPacket >> MapID;
     _worldPacket >> InstanceIDLow;
     _worldPacket >> InstanceIDHigh;
-    Field3 = _worldPacket.ReadBit();
+    _worldPacket >> Field3;         // whole uint8, not a bit — see CommentatorPackets.h
+    _worldPacket >> Field4;
+    _worldPacket >> Field5;
 }
 
 void WorldPackets::Commentator::CommentatorSpectate::Read()
@@ -46,7 +48,7 @@ void WorldPackets::Commentator::CommentatorGetPlayerInfo::Read()
     _worldPacket >> Field0;
     _worldPacket >> Field1;
     _worldPacket >> Field2;
-    Field3 = _worldPacket.ReadBit();
+    _worldPacket >> Field3;         // whole uint8, not a bit — see CommentatorPackets.h
 }
 
 void WorldPackets::Commentator::CommentatorGetPlayerCooldowns::Read()
