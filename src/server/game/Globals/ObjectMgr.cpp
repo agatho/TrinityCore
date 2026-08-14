@@ -2910,6 +2910,118 @@ void ObjectMgr::LoadInstanceSpawnGroups()
     TC_LOG_INFO("server.loading", ">> Loaded {} instance spawn groups in {} ms", n, GetMSTimeDiffToNow(oldMSTime));
 }
 
+// Loads the boss-ability timelines that drive SMSG_INSTANCE_ENCOUNTER_EVENT_SEQUENCE / _APPEND /
+// _CAST_UPDATE. Without this table the whole opcode family is machinery with no content: it is what
+// InstanceScript::StartEncounterTimeline reads on every pull.
+//
+// About EncounterEventID, because getting this wrong is the easy mistake here:
+//
+// It is NOT a value this project may allocate. It is a row id of EncounterEvent.db2, which the *client*
+// ships and reads - C_EncounterEvents.GetEventInfo(encounterEventID) resolves it to that row's SpellID,
+// Severity, BroadcastTextID, Flags and IconFileDataID for display. The 12.0.7 client's copy holds 622 rows
+// (ids 1-809) whose parent-lookup column is the DungeonEncounterID, so the client already knows which
+// events belong to which encounter. An id we made up would simply miss, HasEventInfo would return false,
+// and the entry would carry no client-side identity.
+//
+// So every row's EncounterEventID must be copied out of EncounterEvent.db2 for the matching
+// DungeonEncounterID, and SpellID must be the SpellID that row carries. The server does not have that DB2
+// loaded (adding the store would need hotfix-database plumbing), which is exactly why these values live in
+// a world table: they are data, and a build that does load the DB2 later can validate this table against
+// it without any code change.
+void ObjectMgr::LoadInstanceEncounterTimeline()
+{
+    uint32 oldMSTime = getMSTime();
+
+    _instanceEncounterTimelineStore.clear();
+
+    //                                               0                   1             2                 3        4                5           6      7         8            9             10
+    QueryResult result = WorldDatabase.Query("SELECT DungeonEncounterID, DifficultyID, EncounterEventID, SpellID, BroadcastTextID, IconFileID, Flags, Severity, FirstCastMs, RepeatCastMs, MaxQueueDurationMs FROM instance_encounter_timeline ORDER BY DungeonEncounterID, FirstCastMs");
+
+    if (!result)
+    {
+        TC_LOG_INFO("server.loading", ">> Loaded 0 instance encounter timeline events. DB table `instance_encounter_timeline` is empty.");
+        return;
+    }
+
+    uint32 count = 0;
+    do
+    {
+        Field* fields = result->Fetch();
+
+        InstanceEncounterTimelineInfo info;
+        info.DungeonEncounterID = fields[0].GetUInt32();
+        info.DifficultyID       = fields[1].GetUInt32();
+        info.EncounterEventID   = fields[2].GetUInt32();
+        info.SpellID            = fields[3].GetUInt32();
+        info.BroadcastTextID    = fields[4].GetUInt32();
+        info.IconFileID         = fields[5].GetInt32();
+        info.Flags              = fields[6].GetUInt32();
+        info.Severity           = fields[7].GetUInt8();
+        info.FirstCast          = Milliseconds(fields[8].GetUInt32());
+        info.RepeatCast         = Milliseconds(fields[9].GetUInt32());
+        info.MaxQueueDuration   = Milliseconds(fields[10].GetUInt32());
+
+        if (!sDungeonEncounterStore.LookupEntry(info.DungeonEncounterID))
+        {
+            TC_LOG_ERROR("sql.sql", "Table `instance_encounter_timeline` has an entry for non-existing DungeonEncounterID {}, skipped.", info.DungeonEncounterID);
+            continue;
+        }
+
+        if (info.DifficultyID && !sDifficultyStore.LookupEntry(info.DifficultyID))
+        {
+            TC_LOG_ERROR("sql.sql", "Table `instance_encounter_timeline` (DungeonEncounterID {}, EncounterEventID {}) has a non-existing DifficultyID {}, skipped.",
+                info.DungeonEncounterID, info.EncounterEventID, info.DifficultyID);
+            continue;
+        }
+
+        // A zero id would be indistinguishable from "no event" to the client, and the timeline entry could
+        // never resolve to anything it can draw.
+        if (!info.EncounterEventID)
+        {
+            TC_LOG_ERROR("sql.sql", "Table `instance_encounter_timeline` (DungeonEncounterID {}) has EncounterEventID 0, which cannot resolve in the client's EncounterEvent.db2, skipped.",
+                info.DungeonEncounterID);
+            continue;
+        }
+
+        if (!sSpellMgr->GetSpellInfo(info.SpellID, DIFFICULTY_NONE))
+        {
+            TC_LOG_ERROR("sql.sql", "Table `instance_encounter_timeline` (DungeonEncounterID {}, EncounterEventID {}) has a non-existing SpellID {}, skipped.",
+                info.DungeonEncounterID, info.EncounterEventID, info.SpellID);
+            continue;
+        }
+
+        // EncounterEventSeverity is Low=0 / Medium=1 / High=2 in the client's enum registrar.
+        if (info.Severity > 2)
+        {
+            TC_LOG_ERROR("sql.sql", "Table `instance_encounter_timeline` (DungeonEncounterID {}, EncounterEventID {}) has Severity {} outside EncounterEventSeverity (0-2), skipped.",
+                info.DungeonEncounterID, info.EncounterEventID, info.Severity);
+            continue;
+        }
+
+        // The countdown is the whole point of the entry; a zero-length one would fire on the tick it was
+        // created and the client would never draw it.
+        if (info.FirstCast <= 0ms)
+        {
+            TC_LOG_ERROR("sql.sql", "Table `instance_encounter_timeline` (DungeonEncounterID {}, EncounterEventID {}) has FirstCastMs 0, skipped.",
+                info.DungeonEncounterID, info.EncounterEventID);
+            continue;
+        }
+
+        if (info.MaxQueueDuration <= 0ms)
+        {
+            TC_LOG_ERROR("sql.sql", "Table `instance_encounter_timeline` (DungeonEncounterID {}, EncounterEventID {}) has MaxQueueDurationMs 0, skipped.",
+                info.DungeonEncounterID, info.EncounterEventID);
+            continue;
+        }
+
+        _instanceEncounterTimelineStore[info.DungeonEncounterID].push_back(info);
+        ++count;
+    } while (result->NextRow());
+
+    TC_LOG_INFO("server.loading", ">> Loaded {} instance encounter timeline events for {} encounters in {} ms",
+        count, _instanceEncounterTimelineStore.size(), GetMSTimeDiffToNow(oldMSTime));
+}
+
 SpawnData const* ObjectMgr::GetSpawnData(SpawnObjectType type, ObjectGuid::LowType spawnId) const
 {
     if (!SpawnData::TypeHasData(type))

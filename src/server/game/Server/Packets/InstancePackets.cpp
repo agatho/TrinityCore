@@ -236,12 +236,12 @@ ByteBuffer& operator<<(ByteBuffer& data, EncounterTimelineEvent const& timelineE
     data << int32(timelineEvent.SpellID);
     data << uint32(timelineEvent.Casts.size());
     data << uint32(timelineEvent.Unused_28);
-    data << uint32(timelineEvent.Unknown_2C);
+    data << uint32(timelineEvent.BroadcastTextID);
     data << uint32(timelineEvent.Unused_30);
     data << int32(timelineEvent.IconFileID);
     data << timelineEvent.Caster;
     data << uint32(timelineEvent.Timestamp);
-    data << uint32(timelineEvent.Unknown_54);
+    data << uint32(timelineEvent.Flags);
     data << uint32(timelineEvent.MaxQueueDuration);
     data << uint32(timelineEvent.Duration);
     data << uint8(timelineEvent.CastState);

@@ -319,22 +319,31 @@ class TC_GAME_API InstanceScript : public ZoneScript
         // SMSG_ENCOUNTER_START (496010, 743769) and an empty 4-byte SEQUENCE on the same tick as
         // SMSG_ENCOUNTER_END (570908).
         //
-        // Nothing populates the timeline automatically, because TrinityCore has no data source for "which
-        // ability this boss will use next and when" - retail drives it from its own encounter scripts and
-        // so must we. ScheduleEncounterTimelineEvent is that entry point for boss scripts.
+        // The timeline is populated from the world table `instance_encounter_timeline`: StartEncounterTimeline
+        // reads the rows for the encounter being pulled and arms them. ScheduleEncounterTimelineEvent stays
+        // the direct entry point for a boss script (or the GM harness) that wants to push one entry itself.
         struct EncounterTimelineEvent
         {
             uint32 EventID = 0;
             uint32 DungeonEncounterID = 0;
             uint32 EncounterEventID = 0;
             uint32 SpellID = 0;
+            uint32 BroadcastTextID = 0;
             int32 IconFileID = 0;
+            uint32 Flags = 0;
             uint8 Severity = 0;
             ObjectGuid Caster;
             Milliseconds TimeToCast = Milliseconds(0);          // remaining countdown, ticked down in UpdateEncounterTimeline
             Milliseconds OriginalTimeToCast = Milliseconds(0);  // countdown the event was created with, reported by CAST_UPDATE
             Milliseconds MaxQueueDuration = Milliseconds(0);
+            Milliseconds RepeatCast = Milliseconds(0);          // 0 = one shot; otherwise re-armed after it fires
+            Milliseconds QueueRemaining = Milliseconds(0);      // only while Expiring: time left of the queue window
+            bool Expiring = false;                              // countdown elapsed with the caster unable to cast it
         };
+
+        // Arms every `instance_encounter_timeline` row for this encounter and pushes them as one SEQUENCE.
+        // Does nothing (and sends nothing) when the encounter has no rows.
+        void StartEncounterTimeline(uint32 dungeonEncounterId, ObjectGuid caster);
 
         // Adds one pending ability to the timeline and returns its event id. Sends APPEND immediately.
         uint32 ScheduleEncounterTimelineEvent(ObjectGuid caster, uint32 dungeonEncounterId, uint32 encounterEventId,
@@ -344,6 +353,11 @@ class TC_GAME_API InstanceScript : public ZoneScript
         // Drops an event without reporting a cast (e.g. the boss changed phase and the ability is no
         // longer coming). Resends the full sequence so the client's view matches ours.
         void CancelEncounterTimelineEvent(uint32 eventId);
+
+        // Reports a queued ability as EncounterEventCastState::Expired - "the countdown ran out and the cast
+        // did not happen" - instead of dropping it silently. Unlike Cancel this is a statement about the
+        // ability, so the client can retire the entry the way retail does rather than have it vanish.
+        void ExpireEncounterTimelineEvent(uint32 eventId);
 
         // Drops every event belonging to one encounter and resends the sequence.
         void ClearEncounterTimeline(uint32 dungeonEncounterId);
@@ -403,6 +417,12 @@ class TC_GAME_API InstanceScript : public ZoneScript
         static void LoadObjectData(std::span<ObjectData const> creatureData, ObjectInfoMap& objectInfo);
         void LoadDungeonEncounterData(uint32 bossId, std::array<uint32, MAX_DUNGEON_ENCOUNTERS_PER_BOSS> const& dungeonEncounterIds);
         void UpdateLfgEncounterState(BossInfo const* bossInfo);
+
+        // Appends one armed event to the live timeline without sending anything. Callers decide whether the
+        // client learns about it through APPEND (one event) or SEQUENCE (a whole encounter's worth).
+        EncounterTimelineEvent& AddEncounterTimelineEvent(ObjectGuid caster, uint32 dungeonEncounterId, uint32 encounterEventId,
+            uint32 spellId, int32 iconFileId, uint8 severity, Milliseconds timeToCast, Milliseconds maxQueueDuration);
+        void SendEncounterTimelineCastUpdate(EncounterTimelineEvent const& timelineEvent, uint8 castState) const;
 
         // Start time (GameTime::GetGameTimeMS) of each dungeon encounter currently in progress, so
         // SMSG_ENCOUNTER_END can report the real elapsed duration the client expects.

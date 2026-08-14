@@ -132,7 +132,8 @@ public:
             { "objectcount",        HandleDebugObjectCountCommand,         rbac::RBAC_PERM_COMMAND_DEBUG,   Console::Yes },
             { "questreset",         HandleDebugQuestResetCommand,          rbac::RBAC_PERM_COMMAND_DEBUG,   Console::Yes },
             { "personalclone",      HandleDebugBecomePersonalClone,        rbac::RBAC_PERM_COMMAND_DEBUG,   Console::No },
-            { "encountertimeline",  HandleDebugEncounterTimelineCommand,   rbac::RBAC_PERM_COMMAND_DEBUG,   Console::No }
+            { "encountertimeline",  HandleDebugEncounterTimelineCommand,   rbac::RBAC_PERM_COMMAND_DEBUG,   Console::No },
+            { "encountertimelineexpire", HandleDebugEncounterTimelineExpireCommand, rbac::RBAC_PERM_COMMAND_DEBUG, Console::No }
         };
         static ChatCommandTable commandTable =
         {
@@ -1398,6 +1399,26 @@ public:
         handler->PSendSysMessage("Scheduled encounter timeline event %u (dungeonEncounter %u, encounterEvent %u, spell %u) "
             "on %s in %u ms. APPEND sent now, CAST_UPDATE follows when the countdown expires.",
             eventId, dungeonEncounterId, encounterEventId, spellId, caster->GetName().c_str(), timeToCastMs);
+        return true;
+    }
+
+    // .debug encountertimelineexpire <eventId>
+    //
+    // Reports a live timeline event as EncounterEventCastState::Expired instead of waiting for its
+    // countdown. This exists so the Expired branch of CAST_UPDATE - which normally only happens when the
+    // caster dies or leaves before its countdown runs out - can be exercised on demand.
+    static bool HandleDebugEncounterTimelineExpireCommand(ChatHandler* handler, uint32 eventId)
+    {
+        Player* player = handler->GetSession()->GetPlayer();
+        InstanceScript* instance = player->GetInstanceScript();
+        if (!instance)
+        {
+            handler->PSendSysMessage("You are not in an instance with an InstanceScript.");
+            return false;
+        }
+
+        instance->ExpireEncounterTimelineEvent(eventId);
+        handler->PSendSysMessage("Sent CAST_UPDATE with CastState 3 (Expired) for timeline event %u.", eventId);
         return true;
     }
 
