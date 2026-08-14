@@ -27,13 +27,92 @@
 #include "Language.h"
 #include "LFG.h"
 #include "Log.h"
+#include "MapUtils.h"
 #include "ObjectAccessor.h"
 #include "Player.h"
 #include "World.h"
+#include <algorithm>
+#include <utility>
 
 /*********************************************************/
 /***            BATTLEGROUND QUEUE SYSTEM              ***/
 /*********************************************************/
+
+namespace
+{
+// Resolve one queued player to a single role.
+//
+// The specialization is the primary source: ChrSpecialization.db2 Role is a fact about the character, it
+// exists for every member of a duo and not only for the queuer who sent the packet, and its numbering
+// (Tank 0, Healer 1, Dps 2) is the very numbering the client expects back in the role block of
+// SMSG_BATTLEFIELD_STATUS_WAIT_FOR_GROUPS.
+//
+// declaredRoles is the queuer's lfg::PLAYER_ROLE_* mask and is only used to NARROW that: a player whose spec
+// role is not among the roles they offered is placed on one they did offer instead. It is deliberately not
+// the primary source - it is self-reported, it is absent for every member except the queuer, and three of the
+// join handlers accept a mask with several bits set at once.
+ChrSpecializationRole ResolveQueueRole(Player const* player, uint8 declaredRoles)
+{
+    ChrSpecializationRole specRole = ChrSpecializationRole::Dps;
+    if (ChrSpecializationEntry const* spec = player->GetPrimarySpecializationEntry())
+        specRole = spec->GetRole();
+
+    if (!declaredRoles)
+        return specRole;
+
+    auto declares = [declaredRoles](ChrSpecializationRole role)
+    {
+        switch (role)
+        {
+            case ChrSpecializationRole::Tank:   return (declaredRoles & lfg::PLAYER_ROLE_TANK) != 0;
+            case ChrSpecializationRole::Healer: return (declaredRoles & lfg::PLAYER_ROLE_HEALER) != 0;
+            case ChrSpecializationRole::Dps:    return (declaredRoles & lfg::PLAYER_ROLE_DAMAGE) != 0;
+            default:                            return false;
+        }
+    };
+
+    if (declares(specRole))
+        return specRole;
+
+    // Spec role was not offered. Take the scarcest role they did offer - a tank who queued as anything else
+    // is far more useful to the matchmaker as that other thing than as a tank it cannot actually field.
+    if (declares(ChrSpecializationRole::Tank))
+        return ChrSpecializationRole::Tank;
+    if (declares(ChrSpecializationRole::Healer))
+        return ChrSpecializationRole::Healer;
+    if (declares(ChrSpecializationRole::Dps))
+        return ChrSpecializationRole::Dps;
+
+    // Mask carried only PLAYER_ROLE_LEADER or nothing recognisable.
+    return specRole;
+}
+
+std::size_t RoleIndex(ChrSpecializationRole role)
+{
+    return std::size_t(AsUnderlyingType(role));
+}
+
+// What one side of a solo-queue match must consist of. Damagers are whatever the other two quotas leave.
+PvpRoleHeadcount SideQuota(uint32 playersPerTeam, uint32 tanksPerTeam, uint32 healersPerTeam)
+{
+    return
+    {
+        uint8(tanksPerTeam),
+        uint8(healersPerTeam),
+        uint8(playersPerTeam - tanksPerTeam - healersPerTeam)
+    };
+}
+
+// A role the mode does not ask for is not a role in that mode: its players are damage dealers, which is both
+// what retail does - the captured rated Blitz lobby wanted 0 tanks and reported every protection or blood
+// spec in it as a damager - and the only sane alternative to leaving tanks queued forever behind a quota of
+// zero they can never fill. It is also what turns both quotas being 0 into "no role balancing at all",
+// because then every player folds into the damage bucket and the damage bucket is the whole team.
+ChrSpecializationRole FoldRole(ChrSpecializationRole role, PvpRoleHeadcount const& quota)
+{
+    return quota[RoleIndex(role)] ? role : ChrSpecializationRole::Dps;
+}
+}
 
 BattlegroundQueue::BattlegroundQueue(BattlegroundQueueTypeId queueId) : m_queueId(queueId)
 {
@@ -176,6 +255,9 @@ GroupQueueInfo* BattlegroundQueue::AddGroup(Player const* leader, Group const* g
             PlayerQueueInfo& pl_info = m_QueuedPlayers[member->GetGUID()];
             pl_info.LastOnlineTime   = lastOnlineTime;
             pl_info.GroupInfo        = ginfo;
+            // Only the queuer's declared mask exists on the wire, so it narrows only the queuer's own role;
+            // every other member is resolved from their specialization alone.
+            pl_info.Role             = ResolveQueueRole(member, member == leader ? roles : uint8(0));
             // add the pinfo to ginfo's list
             ginfo->Players[member->GetGUID()]  = &pl_info;
         }
@@ -185,6 +267,7 @@ GroupQueueInfo* BattlegroundQueue::AddGroup(Player const* leader, Group const* g
         PlayerQueueInfo& pl_info = m_QueuedPlayers[leader->GetGUID()];
         pl_info.LastOnlineTime   = lastOnlineTime;
         pl_info.GroupInfo        = ginfo;
+        pl_info.Role             = ResolveQueueRole(leader, roles);
         ginfo->Players[leader->GetGUID()]  = &pl_info;
     }
 
@@ -444,7 +527,7 @@ uint32 BattlegroundQueue::GetPlayersInQueue(TeamId id)
     return m_SelectionPools[id].GetPlayerCount();
 }
 
-bool BattlegroundQueue::InviteGroupToBG(GroupQueueInfo* ginfo, Battleground* bg, Team side)
+bool BattlegroundQueue::InviteGroupToBG(GroupQueueInfo* ginfo, Battleground* bg, Team side, uint32 inviteTime /*= INVITE_ACCEPT_WAIT_TIME*/, bool proposalManaged /*= false*/)
 {
     // set side if needed
     if (side)
@@ -459,7 +542,7 @@ bool BattlegroundQueue::InviteGroupToBG(GroupQueueInfo* ginfo, Battleground* bg,
         BattlegroundQueueTypeId bgQueueTypeId = m_queueId;
         BattlegroundBracketId bracket_id = bg->GetBracketId();
 
-        ginfo->RemoveInviteTime = GameTime::GetGameTimeMS() + INVITE_ACCEPT_WAIT_TIME;
+        ginfo->RemoveInviteTime = GameTime::GetGameTimeMS() + inviteTime;
 
         // loop through the players
         for (std::map<ObjectGuid, PlayerQueueInfo*>::iterator itr = ginfo->Players.begin(); itr != ginfo->Players.end(); ++itr)
@@ -480,11 +563,19 @@ bool BattlegroundQueue::InviteGroupToBG(GroupQueueInfo* ginfo, Battleground* bg,
             player->SetInviteForBattlegroundQueueType(bgQueueTypeId, ginfo->IsInvitedToBGInstanceGUID);
 
             // create remind invite events
-            BGQueueInviteEvent* inviteEvent = new BGQueueInviteEvent(player->GetGUID(), ginfo->IsInvitedToBGInstanceGUID, bgTypeId, ginfo->RemoveInviteTime, m_queueId);
-            m_events.AddEvent(inviteEvent, m_events.CalculateTime(Milliseconds(INVITATION_REMIND_TIME)));
-            // create automatic remove events
-            BGQueueRemoveEvent* removeEvent = new BGQueueRemoveEvent(player->GetGUID(), ginfo->IsInvitedToBGInstanceGUID, bgQueueTypeId, ginfo->RemoveInviteTime);
-            m_events.AddEvent(removeEvent, m_events.CalculateTime(Milliseconds(INVITE_ACCEPT_WAIT_TIME)));
+            if (inviteTime > INVITATION_REMIND_TIME)
+            {
+                BGQueueInviteEvent* inviteEvent = new BGQueueInviteEvent(player->GetGUID(), ginfo->IsInvitedToBGInstanceGUID, bgTypeId, ginfo->RemoveInviteTime, m_queueId);
+                m_events.AddEvent(inviteEvent, m_events.CalculateTime(Milliseconds(inviteTime - INVITATION_REMIND_TIME)));
+            }
+            // create automatic remove events - but never under a proposal, whose own deadline event removes
+            // the players who did not accept and requeues the ones who did. Both firing on the same tick
+            // would tear the lobby in half.
+            if (!proposalManaged)
+            {
+                BGQueueRemoveEvent* removeEvent = new BGQueueRemoveEvent(player->GetGUID(), ginfo->IsInvitedToBGInstanceGUID, bgQueueTypeId, ginfo->RemoveInviteTime);
+                m_events.AddEvent(removeEvent, m_events.CalculateTime(Milliseconds(inviteTime)));
+            }
 
             uint32 queueSlot = player->GetBattlegroundQueueIndex(bgQueueTypeId);
 
@@ -492,7 +583,7 @@ bool BattlegroundQueue::InviteGroupToBG(GroupQueueInfo* ginfo, Battleground* bg,
                  player->GetName(), player->GetGUID().ToString(), bg->GetInstanceID(), queueSlot, m_queueId.BattlemasterListId);
 
             WorldPackets::Battleground::BattlefieldStatusNeedConfirmation battlefieldStatus;
-            BattlegroundMgr::BuildBattlegroundStatusNeedConfirmation(&battlefieldStatus, bg, player, queueSlot, player->GetBattlegroundQueueJoinTime(bgQueueTypeId), INVITE_ACCEPT_WAIT_TIME, bgQueueTypeId);
+            BattlegroundMgr::BuildBattlegroundStatusNeedConfirmation(&battlefieldStatus, bg, player, queueSlot, player->GetBattlegroundQueueJoinTime(bgQueueTypeId), inviteTime, bgQueueTypeId);
             player->SendDirectMessage(battlefieldStatus.Write());
         }
         return true;
@@ -779,14 +870,28 @@ bool BattlegroundQueue::CheckSkirmishForSameFaction(BattlegroundBracketId bracke
 //  - it is faction-blind. Blitz matches cross-faction, so entries are dealt into whichever pool needs them
 //    and their Team is rewritten, exactly as CheckSkirmishForSameFaction does for same-faction skirmishes.
 //
-// healersPerTeam is a configured quota, not a client-derived constant: the wire tells us the queuer's role
-// mask but nothing about how retail balances a Blitz match. 0 disables role balancing entirely.
-bool BattlegroundQueue::CheckSoloQueueMatch(BattlegroundBracketId bracket_id, uint32 playersPerTeam, uint32 healersPerTeam)
+// tanksPerTeam and healersPerTeam are configured quotas; damagers are the remainder of playersPerTeam, so a
+// team composition is fully specified by those two numbers. They are not client-derived: the wire says what
+// a queuer is willing to play, not how retail balances a Blitz match. Setting both to 0 turns the role check
+// off and leaves a pure headcount match. The defaults (0 tanks, 2 healers, 8 per side) reproduce the
+// 0 tanks / 4 healers / 12 damagers composition the client was told in C:\sniff\rated BG 12.0.7.pkt.
+//
+// Roles come from PlayerQueueInfo::Role, so they are per player, not per queue entry - a duo whose members
+// have different specs is counted as the two roles it really contains.
+bool BattlegroundQueue::CheckSoloQueueMatch(BattlegroundBracketId bracket_id, uint32 playersPerTeam, uint32 tanksPerTeam, uint32 healersPerTeam)
 {
+    if (tanksPerTeam + healersPerTeam > playersPerTeam)
+    {
+        TC_LOG_ERROR("bg.battleground", "BattlegroundQueue: solo queue {} is configured with {} tanks + {} healers per team but only {} slots; refusing to match.",
+            m_queueId.BattlemasterListId, tanksPerTeam, healersPerTeam, playersPerTeam);
+        return false;
+    }
+
     uint8 const ratedLists[PVP_TEAMS_COUNT] = { uint8(BG_QUEUE_PREMADE_ALLIANCE), uint8(BG_QUEUE_PREMADE_HORDE) };
 
-    std::vector<GroupQueueInfo*> healers;
-    std::vector<GroupQueueInfo*> others;
+    PvpRoleHeadcount const perSideQuota = SideQuota(playersPerTeam, tanksPerTeam, healersPerTeam);
+
+    std::vector<GroupQueueInfo*> candidates;
     uint32 totalPlayers = 0;
 
     for (uint8 list : ratedLists)
@@ -797,51 +902,58 @@ bool BattlegroundQueue::CheckSoloQueueMatch(BattlegroundBracketId bracket_id, ui
                 continue;
 
             totalPlayers += uint32(ginfo->Players.size());
-
-            // Only the QUEUER's role mask exists on the wire, so a duo contributes one known role and one
-            // unknown one. Classify the whole entry by the mask we actually received rather than inventing a
-            // role for the partner.
-            if (ginfo->Roles & lfg::PLAYER_ROLE_HEALER)
-                healers.push_back(ginfo);
-            else
-                others.push_back(ginfo);
+            candidates.push_back(ginfo);
         }
     }
 
     if (totalPlayers < playersPerTeam * PVP_TEAMS_COUNT)
         return false;
 
-    if (healers.size() < size_t(healersPerTeam) * PVP_TEAMS_COUNT)
-        return false;
+    // Longest waiting first, so the role quota never becomes a reason to jump the queue.
+    std::stable_sort(candidates.begin(), candidates.end(), [](GroupQueueInfo const* left, GroupQueueInfo const* right)
+    {
+        return left->JoinTime < right->JoinTime;
+    });
 
     for (uint32 i = 0; i < PVP_TEAMS_COUNT; ++i)
         m_SelectionPools[i].Init();
 
-    // Healers first so the quota is guaranteed, then everyone else fills the remaining slots.
-    size_t healerIdx = 0;
-    for (uint32 team = 0; team < PVP_TEAMS_COUNT; ++team)
-        for (uint32 n = 0; n < healersPerTeam && healerIdx < healers.size(); ++n)
-            if (!m_SelectionPools[team].AddGroup(healers[healerIdx++], playersPerTeam))
-                break;
+    // Remaining need of each side, drained as entries are placed.
+    std::array<PvpRoleHeadcount, PVP_TEAMS_COUNT> need;
+    need.fill(perSideQuota);
 
-    auto fillFrom = [&](std::vector<GroupQueueInfo*> const& source, size_t from)
+    for (GroupQueueInfo* ginfo : candidates)
     {
-        for (size_t i = from; i < source.size(); ++i)
+        if (m_SelectionPools[TEAM_ALLIANCE].GetPlayerCount() >= playersPerTeam
+            && m_SelectionPools[TEAM_HORDE].GetPlayerCount() >= playersPerTeam)
+            break;
+
+        // What this entry brings, per role. A duo of a healer and a damager counts as one of each.
+        PvpRoleHeadcount entryRoles = { };
+        for (std::pair<ObjectGuid const, PlayerQueueInfo*> const& player : ginfo->Players)
+            ++entryRoles[RoleIndex(FoldRole(player.second->Role, perSideQuota))];
+
+        for (uint32 side = 0; side < PVP_TEAMS_COUNT; ++side)
         {
-            GroupQueueInfo* ginfo = source[i];
-            bool placed = false;
-            for (uint32 team = 0; team < PVP_TEAMS_COUNT && !placed; ++team)
-                if (m_SelectionPools[team].GetPlayerCount() < playersPerTeam)
-                    placed = m_SelectionPools[team].AddGroup(ginfo, playersPerTeam);
+            // SelectionPool::AddGroup answers "may I keep filling", not "did I take it", so the fit has to be
+            // decided here - otherwise the role budget below would be spent on an entry that was never added.
+            if (m_SelectionPools[side].GetPlayerCount() + ginfo->Players.size() > playersPerTeam)
+                continue;
 
-            if (!placed && m_SelectionPools[TEAM_ALLIANCE].GetPlayerCount() >= playersPerTeam
-                        && m_SelectionPools[TEAM_HORDE].GetPlayerCount() >= playersPerTeam)
-                return;
+            bool fits = true;
+            for (std::size_t role = 0; role < PVP_QUEUE_ROLE_COUNT && fits; ++role)
+                fits = entryRoles[role] <= need[side][role];
+
+            if (!fits)
+                continue;
+
+            m_SelectionPools[side].AddGroup(ginfo, playersPerTeam);
+
+            for (std::size_t role = 0; role < PVP_QUEUE_ROLE_COUNT; ++role)
+                need[side][role] -= entryRoles[role];
+            break;
         }
-    };
-
-    fillFrom(others, 0);
-    fillFrom(healers, healerIdx);
+    }
 
     if (m_SelectionPools[TEAM_ALLIANCE].GetPlayerCount() != playersPerTeam
         || m_SelectionPools[TEAM_HORDE].GetPlayerCount() != playersPerTeam)
@@ -884,6 +996,298 @@ bool BattlegroundQueue::CheckSoloQueueMatch(BattlegroundBracketId bracket_id, ui
     }
 
     return true;
+}
+
+/*********************************************************/
+/***          ALL-OR-NOTHING GROUP PROPOSALS           ***/
+/*********************************************************/
+
+BattlegroundProposal* BattlegroundQueue::FindProposalFor(ObjectGuid guid)
+{
+    return const_cast<BattlegroundProposal*>(std::as_const(*this).FindProposalFor(guid));
+}
+
+BattlegroundProposal const* BattlegroundQueue::FindProposalFor(ObjectGuid guid) const
+{
+    for (std::pair<uint32 const, BattlegroundProposal> const& pair : m_Proposals)
+        for (BattlegroundProposalMember const& member : pair.second.Members)
+            if (member.Guid == guid)
+                return &pair.second;
+
+    return nullptr;
+}
+
+bool BattlegroundQueue::IsInProposal(ObjectGuid guid) const
+{
+    return FindProposalFor(guid) != nullptr;
+}
+
+void BattlegroundQueue::StartProposal(Battleground* bg, BattlegroundBracketId bracketId, uint32 playersPerTeam, PvpRoleHeadcount const& perSideQuota)
+{
+    BattlegroundProposal proposal;
+    proposal.BgInstanceGUID = bg->GetInstanceID();
+    proposal.BgTypeId = bg->GetTypeID();
+    proposal.BracketId = bracketId;
+    proposal.MapId = bg->GetMapId();
+    proposal.SlotsPerSide.fill(uint8(playersPerTeam));
+
+    for (uint32 side = 0; side < PVP_TEAMS_COUNT; ++side)
+    {
+        for (GroupQueueInfo const* ginfo : m_SelectionPools[side].SelectedGroups)
+        {
+            for (std::pair<ObjectGuid const, PlayerQueueInfo*> const& player : ginfo->Players)
+            {
+                // Mirrors InviteGroupToBG, which only invites and only counts players it finds online.
+                if (!ObjectAccessor::FindConnectedPlayer(player.first))
+                    continue;
+
+                BattlegroundProposalMember& member = proposal.Members.emplace_back();
+                member.Guid = player.first;
+                member.Side = TeamId(side);
+                // Folded exactly as CheckSoloQueueMatch folded it, so the role block the client is sent
+                // describes the same lobby the matcher built.
+                member.Role = FoldRole(player.second->Role, perSideQuota);
+            }
+        }
+    }
+
+    if (proposal.Members.empty())
+        return;
+
+    uint32 const instanceId = proposal.BgInstanceGUID;
+    BattlegroundProposal const& stored = m_Proposals.insert_or_assign(instanceId, std::move(proposal)).first->second;
+
+    m_events.AddEvent(new BGQueueProposalTimeoutEvent(instanceId, m_queueId), m_events.CalculateTime(Milliseconds(PROPOSAL_ACCEPT_WAIT_TIME)));
+
+    TC_LOG_DEBUG("bg.battleground", "Battleground: opened a {} ms group proposal over BG instance {} (bracket {}, map {}) for {} players.",
+        uint32(PROPOSAL_ACCEPT_WAIT_TIME), instanceId, uint32(bracketId), stored.MapId, uint32(stored.Members.size()));
+
+    SendProposalStatus(stored, BattlegroundProposalStatus::Waiting);
+}
+
+// Tells every member where the proposal stands.
+//   Waiting - SMSG_BATTLEFIELD_STATUS_WAIT_FOR_GROUPS, accepted players as Secured, undecided ones as Awaited.
+//   Failed  - SMSG_BATTLEFIELD_STATUS_GROUP_PROPOSAL_FAILED, which keeps Secured and moves the outstanding
+//             players into Lost. That is the exact shape of both captured 0x48000E bodies.
+//   Formed  - SMSG_BATTLEFIELD_STATUS_WAIT_FOR_GROUPS with every counter zeroed, matching the terminal
+//             0x48000D body the capture ends on once the match exists.
+void BattlegroundQueue::SendProposalStatus(BattlegroundProposal const& proposal, BattlegroundProposalStatus status) const
+{
+    WorldPackets::Battleground::PvpRoleQueueCounts counts;
+    std::array<uint8, PVP_TEAMS_COUNT> awaitedPerSide = { };
+
+    if (status != BattlegroundProposalStatus::Formed)
+    {
+        for (BattlegroundProposalMember const& member : proposal.Members)
+        {
+            std::size_t const role = RoleIndex(member.Role);
+            if (member.Accepted)
+            {
+                ++counts.Secured[role];
+                continue;
+            }
+
+            ++awaitedPerSide[member.Side];
+            if (status == BattlegroundProposalStatus::Failed)
+                ++counts.Lost[role];
+            else
+                ++counts.Awaited[role];
+        }
+    }
+
+    for (BattlegroundProposalMember const& member : proposal.Members)
+    {
+        Player* player = ObjectAccessor::FindConnectedPlayer(member.Guid);
+        if (!player)
+            continue;
+
+        uint32 const queueSlot = player->GetBattlegroundQueueIndex(m_queueId);
+        if (queueSlot >= PLAYER_MAX_BATTLEGROUND_QUEUES)
+            continue;
+
+        uint32 const joinTime = player->GetBattlegroundQueueJoinTime(m_queueId);
+
+        if (status == BattlegroundProposalStatus::Failed)
+        {
+            WorldPackets::Battleground::BattlefieldStatusGroupProposalFailed packet;
+            BattlegroundMgr::BuildBattlegroundStatusGroupProposalFailed(&packet, player, queueSlot, joinTime, m_queueId, counts);
+            player->SendDirectMessage(packet.Write());
+        }
+        else
+        {
+            WorldPackets::Battleground::BattlefieldStatusWaitForGroups packet;
+            BattlegroundMgr::BuildBattlegroundStatusWaitForGroups(&packet, player, queueSlot, joinTime, m_queueId,
+                proposal.MapId, PROPOSAL_ACCEPT_WAIT_TIME, proposal.SlotsPerSide, awaitedPerSide, counts);
+            player->SendDirectMessage(packet.Write());
+        }
+    }
+}
+
+bool BattlegroundQueue::ProposalAccept(ObjectGuid guid)
+{
+    BattlegroundProposal* proposal = FindProposalFor(guid);
+    if (!proposal)
+        return false;
+
+    bool everyoneAccepted = true;
+    for (BattlegroundProposalMember& member : proposal->Members)
+    {
+        if (member.Guid == guid)
+            member.Accepted = true;
+
+        if (!member.Accepted)
+            everyoneAccepted = false;
+    }
+
+    if (!everyoneAccepted)
+    {
+        // Held. The client is told who is still missing rather than being left on a dialog that did nothing.
+        SendProposalStatus(*proposal, BattlegroundProposalStatus::Waiting);
+        return true;
+    }
+
+    ResolveProposal(proposal->BgInstanceGUID, true);
+    return true;
+}
+
+bool BattlegroundQueue::ProposalDecline(ObjectGuid guid)
+{
+    BattlegroundProposal* proposal = FindProposalFor(guid);
+    if (!proposal)
+        return false;
+
+    TC_LOG_DEBUG("bg.battleground", "Battleground: {} declined the group proposal over BG instance {}; collapsing it.",
+        guid.ToString(), proposal->BgInstanceGUID);
+
+    // The decliner is dropped from the proposal first: their own removal from the queue is the caller's
+    // ordinary leave-queue path, and the collapse below must not touch them twice.
+    uint32 const instanceId = proposal->BgInstanceGUID;
+    std::erase_if(proposal->Members, [guid](BattlegroundProposalMember const& member) { return member.Guid == guid; });
+
+    ResolveProposal(instanceId, false);
+    return true;
+}
+
+void BattlegroundQueue::ProposalTimeout(uint32 bgInstanceGuid)
+{
+    if (m_Proposals.find(bgInstanceGuid) == m_Proposals.end())
+        return;                                             // already resolved - completed, or collapsed by a decline
+
+    TC_LOG_DEBUG("bg.battleground", "Battleground: group proposal over BG instance {} expired; collapsing it.", bgInstanceGuid);
+    ResolveProposal(bgInstanceGuid, false);
+}
+
+void BattlegroundQueue::ResolveProposal(uint32 bgInstanceGuid, bool accepted)
+{
+    std::unordered_map<uint32, BattlegroundProposal>::iterator itr = m_Proposals.find(bgInstanceGuid);
+    if (itr == m_Proposals.end())
+        return;
+
+    // Take the proposal out of the map before doing anything that can re-enter this queue: porting a player
+    // calls RemovePlayer, which can free the GroupQueueInfo the pools point at.
+    BattlegroundProposal proposal = std::move(itr->second);
+    m_Proposals.erase(itr);
+
+    Battleground* bg = sBattlegroundMgr->GetBattleground(proposal.BgInstanceGUID, proposal.BgTypeId);
+
+    if (accepted)
+    {
+        if (!bg)
+        {
+            TC_LOG_ERROR("bg.battleground", "BattlegroundQueue: group proposal over BG instance {} completed but the battleground is gone.", proposal.BgInstanceGUID);
+            return;
+        }
+
+        // The client clears its role display when the match forms - that is what the terminal 0x48000D body
+        // in the capture is - so say so before the ports start rewriting queue state.
+        SendProposalStatus(proposal, BattlegroundProposalStatus::Formed);
+
+        for (BattlegroundProposalMember const& member : proposal.Members)
+        {
+            Player* player = ObjectAccessor::FindConnectedPlayer(member.Guid);
+            if (!player)
+                continue;                                   // logged out between accepting and the last accept
+
+            uint32 const queueSlot = player->GetBattlegroundQueueIndex(m_queueId);
+            if (queueSlot >= PLAYER_MAX_BATTLEGROUND_QUEUES)
+                continue;
+
+            Team const team = member.Side == TEAM_ALLIANCE ? ALLIANCE : HORDE;
+            BattlegroundMgr::PortPlayerToBattleground(player, bg, team, m_queueId, queueSlot);
+        }
+
+        TC_LOG_DEBUG("bg.battleground", "Battleground: group proposal over BG instance {} was accepted by all {} members.",
+            proposal.BgInstanceGUID, uint32(proposal.Members.size()));
+        return;
+    }
+
+    // Collapse. Everyone still listed loses the invite; whether they keep their queue slot depends on whether
+    // they accepted.
+    SendProposalStatus(proposal, BattlegroundProposalStatus::Failed);
+
+    for (BattlegroundProposalMember const& member : proposal.Members)
+    {
+        // The invited count was raised once per invited PLAYER, so it has to come back down once per member,
+        // while the group's invite flag is a per-entry thing that is only cleared the first time.
+        if (PlayerQueueInfo const* playerInfo = Trinity::Containers::MapGetValuePtr(m_QueuedPlayers, member.Guid))
+        {
+            if (GroupQueueInfo* ginfo = playerInfo->GroupInfo)
+            {
+                if (bg)
+                    bg->DecreaseInvitedCount(ginfo->Team);
+
+                if (ginfo->IsInvitedToBGInstanceGUID == proposal.BgInstanceGUID)
+                {
+                    ginfo->IsInvitedToBGInstanceGUID = 0;
+                    ginfo->RemoveInviteTime = 0;
+                }
+            }
+        }
+
+        Player* player = ObjectAccessor::FindConnectedPlayer(member.Guid);
+        if (!player)
+            continue;
+
+        player->SetInviteForBattlegroundQueueType(m_queueId, 0);
+
+        uint32 const queueSlot = player->GetBattlegroundQueueIndex(m_queueId);
+        if (queueSlot >= PLAYER_MAX_BATTLEGROUND_QUEUES)
+            continue;
+
+        uint32 const joinTime = player->GetBattlegroundQueueJoinTime(m_queueId);
+
+        if (!member.Accepted)
+        {
+            // Never answered, or answered no. Same outcome a plain invite timeout has: out of the queue.
+            player->RemoveBattlegroundQueueId(m_queueId);
+            RemovePlayer(member.Guid, false);
+
+            WorldPackets::Battleground::BattlefieldStatusNone packet;
+            BattlegroundMgr::BuildBattlegroundStatusNone(&packet, player, queueSlot, joinTime);
+            player->SendDirectMessage(packet.Write());
+            continue;
+        }
+
+        // Accepted, and is being sent back through no fault of their own. Their GroupQueueInfo is left alone,
+        // so JoinTime - and with it the position CheckSoloQueueMatch orders by - is exactly what it was.
+        GroupQueueInfo groupInfo;
+        uint32 const avgWaitTime = GetPlayerGroupInfoData(member.Guid, &groupInfo)
+            ? GetAverageQueueWaitTime(&groupInfo, proposal.BracketId) : 0;
+
+        WorldPackets::Battleground::BattlefieldStatusQueued packet;
+        BattlegroundMgr::BuildBattlegroundStatusQueued(&packet, player, queueSlot, joinTime, m_queueId, avgWaitTime, false);
+        player->SendDirectMessage(packet.Write());
+    }
+
+    // The battleground was created for this proposal only. Drop it, so the next attempt picks a fresh map -
+    // which is what retail does across the three proposal runs in the capture.
+    if (bg)
+    {
+        bg->RemoveFromBGFreeSlotQueue();
+        bg->SetDeleteThis();
+    }
+
+    sBattlegroundMgr->ScheduleQueueUpdate(0, m_queueId, proposal.BracketId);
 }
 
 void BattlegroundQueue::UpdateEvents(uint32 diff)
@@ -1137,10 +1541,20 @@ void BattlegroundQueue::BattlegroundQueueUpdate(uint32 /*diff*/, BattlegroundBra
         // Rated + non-arena previously fell through here doing nothing at all, which is why a rated
         // battleground queue could never pop.
         uint32 const perTeam = sBattlegroundMgr->isTesting() ? 1 : MaxPlayersPerTeam;
+        uint32 const tanks   = sBattlegroundMgr->isTesting() ? 0 : sWorld->getIntConfig(CONFIG_BATTLEGROUND_BLITZ_TANKS_PER_TEAM);
         uint32 const healers = sBattlegroundMgr->isTesting() ? 0 : sWorld->getIntConfig(CONFIG_BATTLEGROUND_BLITZ_HEALERS_PER_TEAM);
 
-        if (CheckSoloQueueMatch(bracket_id, perTeam, healers))
+        // One proposal at a time per bracket: a second lobby built while the first is still deciding would be
+        // drawing from entries the first one has already claimed.
+        for (std::pair<uint32 const, BattlegroundProposal> const& pending : m_Proposals)
+            if (pending.second.BracketId == bracket_id)
+                return;
+
+        if (CheckSoloQueueMatch(bracket_id, perTeam, tanks, healers))
         {
+            // The battleground is created BEFORE anyone is asked to confirm, which is what makes the map id
+            // and the per-side split real numbers rather than guesses - see the decode block in
+            // BattlegroundPackets.h. A proposal that collapses drops this instance again.
             Battleground* bg2 = sBattlegroundMgr->CreateNewBattleground(m_queueId, bracket_id);
             if (!bg2)
             {
@@ -1148,12 +1562,19 @@ void BattlegroundQueue::BattlegroundQueueUpdate(uint32 /*diff*/, BattlegroundBra
                 return;
             }
 
+            // Registers the instance with BattlegroundMgr, which CMSG_BATTLEFIELD_PORT needs to resolve the
+            // invite. Rated battlegrounds are skipped by the free-slot filler above, so this does not let
+            // anyone else be dealt into the lobby while it is deciding.
+            bg2->StartBattleground();
+
             for (uint32 i = 0; i < PVP_TEAMS_COUNT; ++i)
                 for (GroupsQueueType::const_iterator citr = m_SelectionPools[TEAM_ALLIANCE + i].SelectedGroups.begin(); citr != m_SelectionPools[TEAM_ALLIANCE + i].SelectedGroups.end(); ++citr)
-                    InviteGroupToBG((*citr), bg2, (*citr)->Team);
+                    InviteGroupToBG((*citr), bg2, (*citr)->Team, PROPOSAL_ACCEPT_WAIT_TIME, true);
 
-            TC_LOG_DEBUG("bg.battleground", "Starting Battleground Blitz match ({} per team, {} healers per team)", perTeam, healers);
-            bg2->StartBattleground();
+            TC_LOG_DEBUG("bg.battleground", "Proposing a Battleground Blitz match ({} per team: {} tanks, {} healers, {} damagers)",
+                perTeam, tanks, healers, perTeam - tanks - healers);
+
+            StartProposal(bg2, bracket_id, perTeam, SideQuota(perTeam, tanks, healers));
 
             m_SelectionPools[TEAM_ALLIANCE].Init();
             m_SelectionPools[TEAM_HORDE].Init();
@@ -1193,6 +1614,18 @@ bool BGQueueInviteEvent::Execute(uint64 /*e_time*/, uint32 /*p_time*/)
 }
 
 void BGQueueInviteEvent::Abort(uint64 /*e_time*/)
+{
+    //do nothing
+}
+
+bool BGQueueProposalTimeoutEvent::Execute(uint64 /*e_time*/, uint32 /*p_time*/)
+{
+    // No-op when the proposal already resolved - it is looked up by instance id, which is never reused.
+    sBattlegroundMgr->GetBattlegroundQueue(m_QueueId).ProposalTimeout(m_BgInstanceGUID);
+    return true;                                            //event will be deleted
+}
+
+void BGQueueProposalTimeoutEvent::Abort(uint64 /*e_time*/)
 {
     //do nothing
 }

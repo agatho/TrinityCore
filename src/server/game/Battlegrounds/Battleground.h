@@ -134,6 +134,11 @@ enum BattlegroundTimeIntervals
     //REMIND_INTERVAL                 = 10000,                // ms
     INVITATION_REMIND_TIME          = 20000,                // ms
     INVITE_ACCEPT_WAIT_TIME         = 90000,                // ms
+    // Deadline of an all-or-nothing group proposal (solo-queue modes). Shorter than INVITE_ACCEPT_WAIT_TIME
+    // because it is not a per-player invite the rest of the lobby can outlive - the whole proposal collapses
+    // when it expires. 30000 is what SMSG_BATTLEFIELD_STATUS_WAIT_FOR_GROUPS advertises in every captured
+    // body of C:\sniff\rated BG 12.0.7.pkt, and all three captured proposal runs fit inside it.
+    PROPOSAL_ACCEPT_WAIT_TIME       = 30000,                // ms
     TIME_AUTOCLOSE_BATTLEGROUND     = 120000,               // ms
     MAX_OFFLINE_TIME                = 300,                  // secs
     RESPAWN_ONE_DAY                 = 86400,                // secs
