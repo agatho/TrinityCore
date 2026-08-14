@@ -21,8 +21,10 @@
 #include "GameTime.h"
 #include "Log.h"
 #include "QuestPackets.h"
+#include "ScheduleClock.h"
 #include "Timer.h"
 #include "WorldStateMgr.h"
+#include "WorldStatePackets.h"
 
 namespace
 {
@@ -77,10 +79,18 @@ void AreaPoiMgr::LoadFromDB()
 
 void AreaPoiMgr::Activate(AreaPoiTemplate const& tmpl, time_t now)
 {
+    // Anchored to the reset clock, not to `now`. Activating at `now` would put the POI's expiry at
+    // whatever wall-clock time the realm happened to boot, and since the client derives its countdown
+    // from LastUpdate + Timer, the blip timer would then disagree with the reset the player sees in
+    // every other rotating system - and would move every restart. The 12.0.7 captures of
+    // SMSG_ACTIVE_SCHEDULED_WORLD_STATE_INFO show retail holding `StartTime % Duration` fixed for two
+    // months per world state, so cycle boundaries there are a property of the calendar.
+    time_t const cycleStart = ScheduleClock::GetCycleStart(tmpl.Duration, now);
+
     ActiveAreaPoi& active = _active[tmpl.AreaPoiID];
     active.AreaPoiID = tmpl.AreaPoiID;
-    active.StartTime = now;
-    active.EndTime = now + tmpl.Duration;
+    active.StartTime = cycleStart;
+    active.EndTime = cycleStart + tmpl.Duration;
     active.VariableID = tmpl.VariableID;
     active.Value = tmpl.Value;
 
@@ -101,6 +111,7 @@ void AreaPoiMgr::Update(uint32 diff)
     _updateAccumulator = 0;
 
     time_t const now = GameTime::GetGameTime();
+    bool rolledOver = false;
     for (auto& [areaPoiId, active] : _active)
     {
         if (now < active.EndTime)
@@ -108,8 +119,15 @@ void AreaPoiMgr::Update(uint32 diff)
 
         auto itr = _templates.find(areaPoiId);
         if (itr != _templates.end())
+        {
             Activate(itr->second, now);
+            rolledOver = true;
+        }
     }
+
+    // A rollover moved the cycle window every client is counting down against, so their copy is stale.
+    if (rolledOver)
+        WorldStateMgr::SendActiveScheduledWorldStateInfo();
 }
 
 void AreaPoiMgr::FillActiveAreaPois(std::vector<WorldPackets::Quest::AreaPoiUpdateInfo>& pois) const
@@ -120,5 +138,18 @@ void AreaPoiMgr::FillActiveAreaPois(std::vector<WorldPackets::Quest::AreaPoiUpda
         // Timer is the full active duration; the client derives remaining time from LastUpdate + Timer.
         pois.emplace_back(active.StartTime, active.AreaPoiID,
             uint32(active.EndTime - active.StartTime), active.VariableID, active.Value);
+    }
+}
+
+void AreaPoiMgr::FillScheduledWorldStates(std::vector<WorldPackets::WorldState::ScheduledWorldStateInfo>& schedules) const
+{
+    for (auto const& [areaPoiId, active] : _active)
+    {
+        // A POI with no world state gating it contributes no schedule - the client has nothing to key on.
+        if (!active.VariableID)
+            continue;
+
+        schedules.emplace_back(active.StartTime, uint32(active.EndTime - active.StartTime),
+            uint32(active.VariableID), active.Value);
     }
 }

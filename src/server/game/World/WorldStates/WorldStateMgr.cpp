@@ -16,12 +16,15 @@
  */
 
 #include "WorldStateMgr.h"
+#include "AreaPoiMgr.h"
 #include "DB2Stores.h"
 #include "DatabaseEnv.h"
+#include "GameEventMgr.h"
 #include "Log.h"
 #include "Map.h"
 #include "MapUtils.h"
 #include "ObjectMgr.h"
+#include "Player.h"
 #include "ScriptMgr.h"
 #include "StringConvert.h"
 #include "Util.h"
@@ -314,4 +317,39 @@ void WorldStateMgr::FillInitialWorldStates(WorldPackets::WorldState::InitWorldSt
 
         initWorldStates.Worldstates.emplace_back(worldStateId, value);
     }
+}
+
+void WorldStateMgr::FillActiveScheduledWorldStates(WorldPackets::WorldState::ActiveScheduledWorldStateInfo& packet)
+{
+    // The two schedulers the realm already runs. Neither owns the concept on its own: area POIs rotate
+    // their gating world state on the POI's own duration, and repeating game events flip theirs on the
+    // event's recurrence. Both are the same thing to the client - a world state with a cycle.
+    sAreaPoiMgr->FillScheduledWorldStates(packet.Schedules);
+    sGameEventMgr->FillScheduledWorldStates(packet.Schedules);
+
+    // The client stores these in a map keyed by VariableID, so a duplicate would silently resolve to
+    // whichever entry was written last rather than being an error. Resolve it here instead. The sort is
+    // stable so that a world state claimed by both schedulers always resolves to the area POI - the
+    // more specific of the two - and so a re-send that changed nothing produces identical bytes.
+    std::ranges::stable_sort(packet.Schedules, {}, &WorldPackets::WorldState::ScheduledWorldStateInfo::VariableID);
+
+    auto duplicates = std::ranges::unique(packet.Schedules, {}, &WorldPackets::WorldState::ScheduledWorldStateInfo::VariableID);
+    packet.Schedules.erase(duplicates.begin(), duplicates.end());
+}
+
+void WorldStateMgr::SendActiveScheduledWorldStateInfo(Player const* player /*= nullptr*/)
+{
+    WorldPackets::WorldState::ActiveScheduledWorldStateInfo packet;
+    FillActiveScheduledWorldStates(packet);
+
+    // An empty schedule set is a legitimate state for a realm that rotates nothing, and the client
+    // handler clears its map from the payload, so sending it is meaningful - but only to a player who
+    // asked. Broadcasting emptiness to the whole realm on every event flip is pure noise.
+    if (packet.Schedules.empty() && !player)
+        return;
+
+    if (player)
+        player->SendDirectMessage(packet.Write());
+    else
+        sWorld->SendGlobalMessage(packet.Write());
 }

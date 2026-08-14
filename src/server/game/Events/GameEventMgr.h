@@ -29,6 +29,11 @@
 #include <unordered_map>
 #include <vector>
 
+namespace WorldPackets::WorldState
+{
+    struct ScheduledWorldStateInfo;
+}
+
 #define max_ge_check_delay DAY  // 1 day in seconds
 
 enum GameEventState
@@ -123,6 +128,10 @@ class TC_GAME_API GameEventMgr
         void StopEvent(uint16 event_id, bool overwrite = false);
         void HandleQuestComplete(uint32 quest_id);  // called on world event type quest completions
         uint64 GetNPCFlag(Creature* cr);
+
+        // Appends the recurrence of every repeating event that drives a world state, for
+        // SMSG_ACTIVE_SCHEDULED_WORLD_STATE_INFO.
+        void FillScheduledWorldStates(std::vector<WorldPackets::WorldState::ScheduledWorldStateInfo>& schedules) const;
 
     private:
         void SendWorldStateUpdate(Player* player, uint16 event_id);

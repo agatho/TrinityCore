@@ -22,9 +22,11 @@
 #include "WorldStateDefines.h"
 
 class Map;
+class Player;
 
 namespace WorldPackets::WorldState
 {
+    class ActiveScheduledWorldStateInfo;
     class InitWorldStates;
 }
 
@@ -44,6 +46,13 @@ namespace WorldStateMgr
     WorldStateValueContainer GetInitialWorldStatesForMap(Map const* map);
 
     void FillInitialWorldStates(WorldPackets::WorldState::InitWorldStates& initWorldStates, Map const* map, uint32 playerAreaId);
+
+    // Collects every world state the realm rotates on a timer, from all schedulers that drive one.
+    TC_GAME_API void FillActiveScheduledWorldStates(WorldPackets::WorldState::ActiveScheduledWorldStateInfo& packet);
+
+    // SMSG_ACTIVE_SCHEDULED_WORLD_STATE_INFO, to one player or (with no player) to the whole realm. The
+    // payload is realm-global, so the broadcast is what keeps clients in step when a schedule rolls over.
+    TC_GAME_API void SendActiveScheduledWorldStateInfo(Player const* player = nullptr);
 };
 
 #endif
