@@ -1537,8 +1537,8 @@ void OpcodeTable::InitializeServerOpcodes()
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_EMOTE,                                                        STATUS_NEVER,       CONNECTION_TYPE_INSTANCE);
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_ENABLE_BARBER_SHOP,                                           STATUS_NEVER,       CONNECTION_TYPE_REALM);
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_ENCHANTMENT_LOG,                                              STATUS_NEVER,       CONNECTION_TYPE_INSTANCE);
-    DEFINE_SERVER_OPCODE_HANDLER(SMSG_ENCOUNTER_END,                                                STATUS_NEVER,   CONNECTION_TYPE_REALM);
-    DEFINE_SERVER_OPCODE_HANDLER(SMSG_ENCOUNTER_START,                                              STATUS_NEVER,   CONNECTION_TYPE_REALM);
+    DEFINE_SERVER_OPCODE_HANDLER(SMSG_ENCOUNTER_END,                                                STATUS_NEVER,       CONNECTION_TYPE_REALM);
+    DEFINE_SERVER_OPCODE_HANDLER(SMSG_ENCOUNTER_START,                                              STATUS_NEVER,       CONNECTION_TYPE_REALM);
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_END_LIGHTNING_STORM,                                          STATUS_UNHANDLED,   CONNECTION_TYPE_REALM);
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_ENTER_ENCRYPTED_MODE,                                         STATUS_NEVER,       CONNECTION_TYPE_REALM);
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_ENUM_CHARACTERS_RESULT,                                       STATUS_NEVER,       CONNECTION_TYPE_REALM);
@@ -1831,21 +1831,23 @@ void OpcodeTable::InitializeServerOpcodes()
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_INSTANCE_ENCOUNTER_DISENGAGE_UNIT,                            STATUS_NEVER,       CONNECTION_TYPE_INSTANCE);
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_INSTANCE_ENCOUNTER_END,                                       STATUS_NEVER,       CONNECTION_TYPE_INSTANCE);
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_INSTANCE_ENCOUNTER_ENGAGE_UNIT,                               STATUS_NEVER,       CONNECTION_TYPE_INSTANCE);
-    // APPEND and CAST_UPDATE are written byte for byte and driven by real code paths, but no shipped
-    // encounter script schedules a timeline event yet, so nothing would actually put them on the wire.
-    // They stay blocked deliberately - flip them the moment a boss script starts using the scheduler.
-    DEFINE_SERVER_OPCODE_HANDLER(SMSG_INSTANCE_ENCOUNTER_EVENT_APPEND,                              STATUS_UNHANDLED,   CONNECTION_TYPE_REALM);
-    // No capture contains BLOCKED_CHANGED, RESPAWN or TIMELINE_SYNC, and their extra scalars are
-    // unexplained: TIMELINE_SYNC has a GUID plus a uint32, RESPAWN a uint32 ahead of its element list, and
-    // BLOCKED_CHANGED gives no indication which of its two trailing bits IsEventBlocked reads. The shared
-    // element layout is known, but there is nothing to drive them with and nothing to check a guess
-    // against, so they stay blocked.
+    // APPEND and CAST_UPDATE are emitted by InstanceScript::ScheduleEncounterTimelineEvent and
+    // ::UpdateEncounterTimeline respectively. Both layouts are byte-verified against every 68275-family
+    // capture we hold (20 APPEND at 76 bytes, 52 CAST_UPDATE at 39/38, zero trailing slack in all 72), so
+    // the send path is real and must not be dropped at SendPacket. They share CONNECTION_TYPE_REALM with
+    // SEQUENCE deliberately: all three carry the same element and must stay mutually ordered, which only
+    // holds while they travel the same socket. Retail groups them the same way (all three, plus
+    // ENCOUNTER_START/END, are connection index 1 in every capture).
+    DEFINE_SERVER_OPCODE_HANDLER(SMSG_INSTANCE_ENCOUNTER_EVENT_APPEND,                              STATUS_NEVER,       CONNECTION_TYPE_REALM);
+    // BLOCKED_CHANGED, RESPAWN and TIMELINE_SYNC (further down) appear in no capture and have unexplained
+    // scalars, so there is nothing to drive them with and nothing to check a guess against. Those three
+    // stay blocked - the CAST_UPDATE line between them is unblocked on purpose, see the note above.
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_INSTANCE_ENCOUNTER_EVENT_BLOCKED_CHANGED,                     STATUS_UNHANDLED,   CONNECTION_TYPE_REALM);
-    DEFINE_SERVER_OPCODE_HANDLER(SMSG_INSTANCE_ENCOUNTER_EVENT_CAST_UPDATE,                         STATUS_UNHANDLED,   CONNECTION_TYPE_REALM);
+    DEFINE_SERVER_OPCODE_HANDLER(SMSG_INSTANCE_ENCOUNTER_EVENT_CAST_UPDATE,                         STATUS_NEVER,       CONNECTION_TYPE_REALM);
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_INSTANCE_ENCOUNTER_EVENT_RESPAWN,                             STATUS_UNHANDLED,   CONNECTION_TYPE_REALM);
-    // SEQUENCE is emitted for real: on encounter engage, on encounter end (the empty count 0 form retail
-    // uses to clear the timeline), whenever the live set changes, and as the answer to
-    // CMSG_REQUEST_INSTANCE_ENCOUNTER_EVENT_SYNC, which the client sends by itself after entering the world.
+    // SEQUENCE genuinely goes out: on engage, on end (the empty count 0 form retail uses to clear the
+    // timeline), on any change to the live set, and as the answer to CMSG_REQUEST_INSTANCE_ENCOUNTER_EVENT_SYNC,
+    // which the client sends by itself after entering the world.
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_INSTANCE_ENCOUNTER_EVENT_SEQUENCE,                            STATUS_NEVER,       CONNECTION_TYPE_REALM);
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_INSTANCE_ENCOUNTER_GAIN_COMBAT_RESURRECTION_CHARGE,           STATUS_NEVER,       CONNECTION_TYPE_INSTANCE);
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_INSTANCE_ENCOUNTER_IN_COMBAT_RESURRECTION,                    STATUS_NEVER,       CONNECTION_TYPE_INSTANCE);

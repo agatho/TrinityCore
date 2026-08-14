@@ -395,9 +395,9 @@ namespace WorldPackets
         //                    event record" - EncounterEventInfo.encounterEventID).
         //  SpellID           (+0x0C) observed 377034/376997/377004 and 388544/388567/388796/388923.
         //  Unused_28         (+0x28) 0 in all 11 observed elements.
-        //  Unknown_2C        (+0x2C) 0 in 9 of 11; 230954 and 223315 in one element each. NOT a FileDataID
-        //                    (230954 resolves to a draenei face texture in the CASC listfile, i.e. noise).
-        //                    Left unnamed.
+        //  Unknown_2C        (+0x2C) 0 in most elements; 230954, 223315 and 308255 observed. NOT a
+        //                    FileDataID (230954 resolves to a draenei face texture in the CASC listfile,
+        //                    i.e. noise). Left unnamed.
         //  Unused_30         (+0x30) 0 in all 11 observed elements.
         //  IconFileID        (+0x34) PROVEN. All 7 distinct observed values resolve in the CASC listfile to
         //                    interface/icons/*.blp (spell_lifegivingseed, spell_nature_earthquake,
@@ -408,7 +408,11 @@ namespace WorldPackets
         //  Timestamp         (+0x4C) PROVEN to be a millisecond clock: two SEQUENCE packets 59026 sniff-ms
         //                    apart differ by 59025 here, and an APPEND 9025 ms later differs by 9019.
         //                    Written as GameTime::GetGameTimeMS().
-        //  Unused_54         (+0x54) 0 in all 11 observed elements.
+        //  Unknown_54        (+0x54) was recorded as "0 in all 11 observed elements" when only the SEQUENCE
+        //                    packets of one capture had been decoded. Decoding the APPENDs too disproves
+        //                    that: it is 128 in every element carrying EncounterEventID 294 (spell 1282251)
+        //                    and 0 everywhere else, i.e. it is a per-event flag byte in the low bits of a
+        //                    uint32, not padding. Meaning still unknown, so it is written as 0.
         //  MaxQueueDuration  (+0x58) 5000 in all 11 observed elements. Named after
         //                    EncounterTimelineEventInfo.maxQueueDuration ("hold duration for this event
         //                    after it reaches the end of the timeline"). INFERRED.
@@ -444,7 +448,7 @@ namespace WorldPackets
             int32 IconFileID = 0;
             ObjectGuid Caster;
             uint32 Timestamp = 0;
-            uint32 Unused_54 = 0;
+            uint32 Unknown_54 = 0;
             uint32 MaxQueueDuration = 0;
             uint32 Duration = 0;
             uint8 CastState = 2;                    // EncounterEventCastState::NotCasting
@@ -487,6 +491,15 @@ namespace WorldPackets
         //   uint8 CastState, uint8 Unknown_3D, uint32 Timestamp, uint32 TimeToCastMs, bit7|bit6 byte.
         // 4+4+16+4+1+1+4+4+1 = 39, and 38 when the GUID packs to 15 bytes. Both sizes are in the capture.
         //
+        // The 39/38 split is ENTIRELY the PackedGUID width - there is no optional or conditional field in
+        // this packet. Across all 52 CAST_UPDATEs in the 68275-family captures, the 45 that are 39 bytes
+        // carry a 16-byte caster GUID and the 7 that are 38 bytes carry a 15-byte one, and every one of the
+        // 52 parses to exactly zero trailing slack. The same effect explains SEQUENCE's 292 (4 + 4*72) and
+        // 217 (4 + 3*71). All 7 short ones belong to DungeonEncounterID 2564: every caster in these
+        // captures shares low mask 0xE7, but 2564's caster is the one whose high qword ends in a zero byte
+        // (high = 0x202F313BC0BB3E00), so its high mask is 0xFE instead of 0xFF and one data byte drops.
+        // Nothing about the packet's field set changes - only how many bytes the GUID spends.
+        //
         // DungeonEncounterID is not a guess: the two CAST_UPDATE runs in C:\sniff\m+ run12.0.7.pkt carry
         // 0x0A03 (2563) and 0x0A04 (2564), and SMSG_ENCOUNTER_START at the very same sniff ticks (496010,
         // 743769) carries those same two DungeonEncounterIDs - see the EncounterStart comment above.
@@ -495,8 +508,22 @@ namespace WorldPackets
         // for EventID 1 arrives 18027 ms after the SEQUENCE that created it with 18000, and reports 18000,
         // not 0. Same for 30000, 28000, 33000, 55000, 9000, 5000.
         //
-        // The trailing byte is 0x80 in all eight captured CAST_UPDATEs, i.e. bit7 set, while it is 0x00 in
+        // The trailing byte is 0x80 in all 52 captured CAST_UPDATEs, i.e. bit7 set, while it is 0x00 in
         // every SEQUENCE/APPEND element. Whatever the bit means, it flips on when the cast happens.
+        //
+        // CastState is NOT always 1. 49 of the 52 carry 1 (Casting) with Unknown_3D 0, but 3 carry
+        // CastState 3 (EncounterEventCastState::Expired) with Unknown_3D 0xFF and TimeToCastMs 0. Those 3
+        // are the retail "the queued ability was never actually cast" branch, and they land at
+        // Timestamp + Duration, i.e. the event's cast moment plus MaxQueueDuration - matching to within
+        // 190/258/71 ms on the three occurrences, which is far too tight to be coincidence. All 3 are the
+        // same ability (EncounterEventID 294) that casts normally on other pulls, so state 1 and state 3
+        // are genuine alternatives for one event, not a property of the ability.
+        //
+        // The server does not emit the Expired branch. Emitting it needs a "the scheduled cast did not
+        // happen" signal, and InstanceScript's timeline fires state 1 unconditionally when the countdown
+        // reaches zero because the script that scheduled the ability is the same thing that casts it.
+        // The fields are here so the branch can be expressed the moment a caller can distinguish the two;
+        // guessing a trigger for it would be inventing behaviour, so it is left unsent and documented.
         class InstanceEncounterEventCastUpdate final : public ServerPacket
         {
         public:
@@ -508,8 +535,8 @@ namespace WorldPackets
             uint32 EncounterEventID = 0;
             ObjectGuid Caster;
             uint32 DungeonEncounterID = 0;
-            uint8 CastState = 1;                    // EncounterEventCastState::Casting
-            uint8 Unknown_3D = 0;                   // 0 in every capture
+            uint8 CastState = 1;                    // EncounterEventCastState::Casting; 3 == Expired
+            uint8 Unknown_3D = 0;                   // 0 alongside CastState 1, 0xFF alongside CastState 3
             uint32 Timestamp = 0;
             uint32 TimeToCastMs = 0;
             bool UnkBit7 = true;                    // 0x80 in every capture
