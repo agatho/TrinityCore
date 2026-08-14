@@ -655,11 +655,12 @@ namespace WorldPackets
             void Read() override;
 
             ObjectGuid NpcGUID;
-            // NOTE: the 68275 client appends a trailing uint8 (GarrFollowerTypeID) after the PackedGuid,
-            // producing a harmless "read stop at 14 from 15" tail warning. We intentionally do NOT read it:
-            // the handler ignores the packet entirely, and adding a field here changed the packet object's
-            // size, which — against a stale opcode-table wrapper — placed the field write on the stack GS
-            // cookie and hard-crashed (FAST_FAIL_STACK_COOKIE_CHECK). Leave the field out.
+            // NOTE: the 68275 client appends a trailing uint8 (GarrFollowerTypeID) after the PackedGuid
+            // (client serializer RVA 0x6A9A70: write_PackedGuid then write_uint8). No field is declared for
+            // it on purpose: the handler ignores the packet entirely, and adding a member here changed the
+            // packet object's size, which — against a stale opcode-table wrapper — placed the field write on
+            // the stack GS cookie and hard-crashed (FAST_FAIL_STACK_COOKIE_CHECK). Read() consumes the byte
+            // without storing it, which keeps the object layout identical and clears the tail warning.
         };
 
         // ============================================================
@@ -1847,6 +1848,10 @@ namespace WorldPackets
 
             void Read() override;
 
+            // The wire carries a raw uint64 *before* the PackedGuid (client serializer RVA 0x6A81F0:
+            // write_uint64(msg+0x20) then write_PackedGuid(msg+0x28)). Reading only the PackedGuid parsed the
+            // first eight raw bytes as guid mask+data, so NpcGUID was garbage and the creature lookup in the
+            // handler always missed - the client got an empty pet name for every query.
             ObjectGuid NpcGUID;
         };
 
@@ -1879,7 +1884,13 @@ namespace WorldPackets
 
             void Read() override;
 
-            ObjectGuid NpcGUID;
+            // Unlike its sibling CMSG_GARRISON_MISSION_BONUS_ROLL (client RVA 0x6AA250, which really does send
+            // a PackedGuid), this one writes a RAW uint64 followed by the uint32 - client serializer RVA
+            // 0x6AA8E0: write_uint64(payload[0]) then write_uint32(payload[8]). Reading a PackedGuid here
+            // consumed a mask-directed number of bytes off the front of that uint64, so MissionRecID was taken
+            // from the wrong offset and the reward claim acted on a mission id the player never picked.
+            // uint64 + mission record id is the Garrison::Mission { DbID, MissionRecID } pair.
+            uint64 DbID = 0;
             uint32 MissionRecID = 0;
         };
 

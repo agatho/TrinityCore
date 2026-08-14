@@ -55,10 +55,16 @@ namespace WorldPackets
 
             void Read() override;
 
+            // Client serializer RVA 0x5D09E0 writes, in this order:
+            //   uint32 msg+0x20, uint32 msg+0x24, uint32 msg+0x2C, uint8 msg+0x28, uint64 msg+0x30, uint16 msg+0x38
+            // - 23 bytes. Field3 is a whole uint8, not a packed bit (there is no bit accumulator anywhere in
+            // that function), and the uint64/uint16 tail was not being read at all.
             uint32 MapID = 0;
             uint32 InstanceIDLow = 0;
             uint32 InstanceIDHigh = 0;
-            bool Field3 = false;                            // trailing bit (unnamed offline)
+            uint8 Field3 = 0;                               // full byte, not a bit (unnamed offline)
+            uint64 Field4 = 0;                              // unnamed offline
+            uint16 Field5 = 0;                              // unnamed offline
         };
 
         class CommentatorExitInstance final : public ClientPacket
@@ -86,10 +92,13 @@ namespace WorldPackets
 
             void Read() override;
 
+            // Client serializer RVA 0x5D07C0: uint32 msg+0x20, uint32 msg+0x24, uint32 msg+0x2C, uint8 msg+0x28.
+            // Field3 is a whole uint8; reading it as a bit returned only bit 7 of that byte, so any value
+            // below 0x80 came through as false.
             uint32 Field0 = 0;                               // request context (unnamed offline)
             uint32 Field1 = 0;
             uint32 Field2 = 0;
-            bool Field3 = false;
+            uint8 Field3 = 0;
         };
 
         class CommentatorGetPlayerCooldowns final : public ClientPacket
