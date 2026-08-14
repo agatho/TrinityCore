@@ -14344,8 +14344,36 @@ void Player::OnGossipSelect(WorldObject* source, int32 gossipOptionId, uint32 me
             break;
         case GossipOptionNpc::ProfessionsCraftingOrder: // NYI
             break;
-        case GossipOptionNpc::ProfessionsCustomerOrder: // NYI
+        case GossipOptionNpc::ProfessionsCustomerOrder:
+        {
+            // The crafting-order clerk has its own dedicated open opcode, so it belongs in this
+            // switch rather than in the generic !handled fall-through — exactly like the auctioneer
+            // above. SMSG_CRAFTING_HOUSE_HELLO_RESPONSE REPLACES SMSG_GOSSIP_OPTION_NPC_INTERACTION
+            // here; it does not accompany it.
+            //
+            // Capture evidence (build 68275, ingame-shop_ordersCrafting_professions.pkt, three
+            // identical sequences at ticks 383194 / 761111 / 788488, clerk menu 30243 — the same menu
+            // the crafting-order work targets):
+            //     CMSG_GOSSIP_SELECT_OPTION{guid, 30243, 107733}
+            //   ~150 ms later
+            //     SMSG_CRAFTING_HOUSE_HELLO_RESPONSE{guid, 0x40}      <- the only reply
+            //     CMSG_CRAFTING_ORDER_LIST_MY_ORDERS{same guid}
+            // SMSG_GOSSIP_OPTION_NPC_INTERACTION appears zero times in those windows, and
+            // SMSG_NPC_INTERACTION_OPEN_RESULT zero times in the whole 12.0.7 capture set. That is
+            // not a dead mechanism in the session: the same capture carries three
+            // SMSG_GOSSIP_OPTION_NPC_INTERACTION records for a GameObject, so retail deliberately
+            // does not use it for this clerk.
+            //
+            // The client handler (sub_7FF72ACDB8D0) opens PlayerInteractionType 60 itself and then
+            // fires CRAFTINGORDERS_SHOW_CUSTOMER, so nothing else is needed to raise the frame.
+            PlayerTalkClass->GetInteractionData().StartInteraction(guid, PlayerInteractionType::ProfessionsCustomerOrder);
+
+            WorldPackets::Housing::CraftingHouseHelloResponse craftingHouseHello;
+            craftingHouseHello.Guid = guid;
+            craftingHouseHello.OpenForBusiness = true;  // clear raises CRAFTING_HOUSE_DISABLED instead
+            SendDirectMessage(craftingHouseHello.Write());
             break;
+        }
         case GossipOptionNpc::BarbersChoice: // NYI - unknown if needs sending
             break;
         default:

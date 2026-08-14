@@ -2103,18 +2103,33 @@ namespace WorldPackets::Housing
     };
 
     // SMSG_CRAFTING_HOUSE_HELLO_RESPONSE (0x42033C)
-    // IDA-verified wire (build 67186, sub_7FF75C0ED150):
-    //   PackedGUID HouseGuid
-    //   uint8 Flags     (bit 7 -> Field0, bit 6 -> Field1)
+    // Despite the name and this file, it is NOT a housing packet: "Crafting House" is Blizzard's own
+    // term for the crafting-order house, and CRAFTING_HOUSE_DISABLED is a registered Lua event in the
+    // 68275 client sitting right before the CRAFTINGORDERS_* block. The opcode lives inside the
+    // crafting-order block (0x420332..0x42033F). It is the exact structural twin of
+    // SMSG_AUCTION_HELLO_RESPONSE: greeting for the crafting-order clerk NPC.
+    //
+    // IDA-verified wire, unchanged 67186 -> 68275 (68275 deserializer sub_7FF7290B9C90):
+    //   PackedGUID Guid    — the CLERK CREATURE's guid (the old "HouseGuid" name was wrong; the
+    //                        capture guid decodes to HighGuid type 8 / Creature, entry 243279, and is
+    //                        byte-identical to the guid in the preceding CMSG_GOSSIP_SELECT_OPTION)
+    //   uint8      Flags   — bit 0x80 -> Field0, bit 0x40 -> OpenForBusiness
+    //
+    // Client handler sub_7FF72ACDB8D0 reads only the guid and the 0x40 bit, opens
+    // PlayerInteractionType 60 (ProfessionsCustomerOrder), then fires CRAFTINGORDERS_SHOW_CUSTOMER
+    // when the bit is set and CRAFTING_HOUSE_DISABLED when it is clear — the positional analogue of
+    // AuctionHelloResponse::OpenForBusiness. Bit 0x80 is stored by the deserializer and read by
+    // nothing in the 68275 client; retail sent it clear. Capture: 3 samples, body a7e7 <13-byte
+    // packed guid> 40.
     class CraftingHouseHelloResponse final : public ServerPacket
     {
     public:
         CraftingHouseHelloResponse() : ServerPacket(SMSG_CRAFTING_HOUSE_HELLO_RESPONSE) { }
         WorldPacket const* Write() override;
 
-        ObjectGuid HouseGuid;
-        bool Field0 = false; // bit 7 of Flags byte
-        bool Field1 = false; // bit 6 of Flags byte
+        ObjectGuid Guid;
+        bool Field0 = false;            // bit 0x80 — dead in the 68275 client, meaning unrecovered
+        bool OpenForBusiness = false;   // bit 0x40 — false raises CRAFTING_HOUSE_DISABLED instead
     };
 
     // SMSG_GUILD_OTHERS_OWNED_HOUSES_RESULT (0x4E0047)
