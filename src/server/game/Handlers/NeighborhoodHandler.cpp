@@ -639,6 +639,19 @@ void WorldSession::HandleNeighborhoodUpdateName(WorldPackets::Neighborhood::Neig
         }
     }
 
+    // SMSG_INVALIDATE_NEIGHBORHOOD (0x5F0008) is the neighborhood twin of SMSG_INVALIDATE_PLAYER
+    // (0x5F0007): the 12.0.7 dispatcher handles both in the same switch with the same shape —
+    // read one PackedGUID, then call a registered nullary C++ callback (no Lua event). It is a
+    // pure "drop your cached record for this GUID" signal, so it must reach cache holders who are
+    // NOT members (house-finder browsers, visitors), not just the members handled above.
+    // Sent realm-wide exactly as CharacterCache::UpdateCharacterData sends InvalidatePlayer on a
+    // character rename; the client's follow-up CMSG_QUERY_NEIGHBORHOOD_INFO is already answered
+    // by HandleQueryNeighborhoodInfo. Renames are rare and explicitly operator-driven, so this
+    // does not put the realm-wide send on a hot path.
+    WorldPackets::Housing::InvalidateNeighborhood invalidateRecord;
+    invalidateRecord.NeighborhoodGuid = neighborhoodGuid;
+    sWorld->SendGlobalMessage(invalidateRecord.Write());
+
     WorldPackets::Neighborhood::NeighborhoodUpdateNameResponse response;
     response.Result = static_cast<uint8>(HOUSING_RESULT_SUCCESS);
     SendPacket(response.Write());
@@ -2208,6 +2221,22 @@ void WorldSession::HandleNeighborhoodEvictPlot(WorldPackets::Neighborhood::Neigh
         WorldPackets::Neighborhood::NeighborhoodRosterResidentUpdate rosterUpdate;
         rosterUpdate.Residents.push_back({ evictedPlayerGuid, 2 /*Removed*/, false });
         neighborhood->BroadcastPacket(rosterUpdate.Write(), player->GetGUID());
+
+        // SMSG_NEIGHBORHOOD_EVICT_PLAYER (0x5C0000). The 12.0.7 client handler (case 6029312)
+        // does not decode any field — it consumes the remaining bytes as a blob and then fires
+        // three neighborhood-view refreshes (codes 2, 3, 1). It is a "the roster you are showing
+        // is stale, rebuild it" notification, which is exactly the state after an eviction, so it
+        // goes to everyone whose view just changed: the remaining members and the evicted player.
+        if (!evictedPlayerGuid.IsEmpty())
+        {
+            WorldPackets::Neighborhood::NeighborhoodEvictPlayerResponse evictNotification;
+            evictNotification.PlayerGuid = evictedPlayerGuid;
+            WorldPacket const* evictPkt = evictNotification.Write();
+
+            neighborhood->BroadcastPacket(evictPkt);
+            if (Player* evictedPlayer = ObjectAccessor::FindPlayer(evictedPlayerGuid))
+                evictedPlayer->SendDirectMessage(evictPkt);
+        }
 
         // Refresh NeighborhoodMirrorData (Houses[] changed)
         neighborhood->RefreshMirrorDataForOnlineMembers();
