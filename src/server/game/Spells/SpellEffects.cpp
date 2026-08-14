@@ -408,8 +408,8 @@ NonDefaultConstructible<SpellEffectHandlerFn> SpellEffectHandlers[TOTAL_SPELL_EF
     &Spell::EffectNULL,                                     //305 SPELL_EFFECT_305
     &Spell::EffectUpdateInteractions,                       //306 SPELL_EFFECT_UPDATE_INTERACTIONS
     &Spell::EffectNULL,                                     //307 SPELL_EFFECT_307
-    &Spell::EffectNULL,                                     //308 SPELL_EFFECT_CANCEL_PRELOAD_WORLD
-    &Spell::EffectNULL,                                     //309 SPELL_EFFECT_PRELOAD_WORLD
+    &Spell::EffectCancelPreloadWorld,                       //308 SPELL_EFFECT_CANCEL_PRELOAD_WORLD
+    &Spell::EffectPreloadWorld,                             //309 SPELL_EFFECT_PRELOAD_WORLD
     &Spell::EffectNULL,                                     //310 SPELL_EFFECT_310
     &Spell::EffectSkipQuestLine,                            //311 SPELL_EFFECT_SKIP_QUESTLINE
     &Spell::EffectNULL,                                     //312 SPELL_EFFECT_312
@@ -6328,6 +6328,43 @@ void Spell::EffectUpdateInteractions()
         return;
 
     target->UpdateVisibleObjectInteractions(true, false, true, true);
+}
+
+// MiscValue is the map the client should start streaming. Every SpellEffect.db2 row using
+// this effect targets the caster and names a map that is one seamless step away from where
+// the spell is cast (e.g. "Leave Delves" -> Khaz Algar surface).
+void Spell::EffectPreloadWorld()
+{
+    if (effectHandleMode != SPELL_EFFECT_HANDLE_HIT_TARGET)
+        return;
+
+    Player* target = Object::ToPlayer(unitTarget);
+    if (!target)
+        return;
+
+    if (!sMapStore.LookupEntry(effectInfo->MiscValue))
+        return;
+
+    // The spell names only the destination map - it carries no arrival position - so the
+    // client is asked to stream around the coordinates the player already occupies. That is
+    // exact for map pairs sharing a coordinate frame, which is how seamless transfers are
+    // set up here; callers that do know the arrival spot can pass it instead.
+    target->SendPreloadWorld(effectInfo->MiscValue, *target);
+}
+
+void Spell::EffectCancelPreloadWorld()
+{
+    if (effectHandleMode != SPELL_EFFECT_HANDLE_HIT_TARGET)
+        return;
+
+    Player* target = Object::ToPlayer(unitTarget);
+    if (!target)
+        return;
+
+    if (!sMapStore.LookupEntry(effectInfo->MiscValue))
+        return;
+
+    target->SendCancelPreloadWorld(effectInfo->MiscValue);
 }
 
 void Spell::EffectSkipQuestLine()

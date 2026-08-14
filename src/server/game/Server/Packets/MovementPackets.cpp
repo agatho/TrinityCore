@@ -786,6 +786,25 @@ WorldPacket const* NewWorld::Write()
     return &_worldPacket;
 }
 
+WorldPacket const* PreloadWorld::Write()
+{
+    _worldPacket << int32(MapID);
+    _worldPacket << Loc;
+    _worldPacket << uint32(Reason);
+    _worldPacket << MovementOffset;
+    _worldPacket << Bits<1>(Unknown_1107);
+    _worldPacket.FlushBits();
+
+    return &_worldPacket;
+}
+
+WorldPacket const* CancelPreloadWorld::Write()
+{
+    _worldPacket << int32(MapID);
+
+    return &_worldPacket;
+}
+
 WorldPacket const* MoveTeleport::Write()
 {
     _worldPacket << MoverGUID;

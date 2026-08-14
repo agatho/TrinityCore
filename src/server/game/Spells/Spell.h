@@ -480,6 +480,8 @@ class TC_GAME_API Spell
         void EffectChangeActiveCombatTraitConfig();
         void EffectTeleportGraveyard();
         void EffectUpdateInteractions();
+        void EffectPreloadWorld();
+        void EffectCancelPreloadWorld();
         void EffectSkipQuestLine();
         void EffectLearnWarbandScene();
         void EffectSetPlayerDataElementAccount();
