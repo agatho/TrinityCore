@@ -2259,6 +2259,7 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
 
         ObjectGuid const& GetLootGUID() const { return m_playerData->LootTargetGUID; }
         void SetLootGUID(ObjectGuid const& guid) { SetUpdateFieldValue(m_values.ModifyValue(&Player::m_playerData).ModifyValue(&UF::PlayerData::LootTargetGUID), guid); }
+        void SetOfferedScriptQuestID(int32 questId);
         Loot* GetLootByWorldObjectGUID(ObjectGuid const& lootWorldObjectGuid) const;
         std::unordered_map<ObjectGuid, Loot*> const& GetAELootView() const { return m_AELootView; }
         LootRoll* GetLootRoll(ObjectGuid const& lootObjectGuid, uint8 lootListId);

@@ -9025,6 +9025,15 @@ void Player::RemoveLootRoll(LootRoll* roll)
     m_lootRolls.erase(std::remove(m_lootRolls.begin(), m_lootRolls.end(), roll), m_lootRolls.end());
 }
 
+void Player::SetOfferedScriptQuestID(int32 questId)
+{
+    if (m_playerData->OfferedScriptQuestID == questId)
+        return;
+
+    SetUpdateFieldValue(m_values.ModifyValue(&Player::m_playerData).ModifyValue(&UF::PlayerData::OfferedScriptQuestID), questId);
+    SendUpdateToPlayer(this);
+}
+
 /*  If in a battleground a player dies, and an enemy removes the insignia, the player's bones is lootable
     Called by remove insignia spell effect    */
 void Player::RemovedInsignia(Player* looterPlr)
