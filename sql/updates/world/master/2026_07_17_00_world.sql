@@ -1,5 +1,23 @@
 --
-SET @CGUID := 147466; -- 24
+-- LOCAL DIVERGENCE FROM UPSTREAM - @CGUID re-based, deliberately.
+--
+-- Upstream ships this file with `SET @CGUID := 147466;`. On this realm guids 147466-147489 are
+-- already occupied by 24 unrelated live map-1 Ashenvale spawns (Thistlefur Wise One, Wild Buck,
+-- Roach, Rat, Wildthorn Stalker, Elder Shadowhorn Stag, Shadethicket Wood Shaper, Stardust
+-- Sentinel). Line 29 below does `DELETE FROM creature WHERE guid BETWEEN @CGUID+00 AND @CGUID+23`,
+-- so applying the file unmodified would have destroyed all 24 of them - silently, since the
+-- delete names no entry ids.
+--
+-- @CGUID is used by exactly two tables, `creature` and `spawn_group` (spawnType 0), and the block
+-- 2000000-2000023 was verified empty in both, plus `creature_addon`, before this change. The
+-- nearest occupants of that decade start at 8000876.
+--
+-- @SPAWN_GROUP_ID is NOT re-based: 377-380 was verified clear in `spawn_group_template`, and it is
+-- a separate id space that does not collide.
+--
+-- Do not "fix" this back to the upstream value on the next merge. If a future upstream file reuses
+-- 2000000+, re-base again rather than reverting - the Ashenvale spawns are real content here.
+SET @CGUID := 2000000; -- 24 (upstream: 147466 - occupied on this realm, see above)
 SET @SPAWN_GROUP_ID := 377; -- 4
 
 -- Medivh
