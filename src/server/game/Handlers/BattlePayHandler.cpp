@@ -19,6 +19,7 @@
 #include "BattlePayMgr.h"
 #include "BattlePayPackets.h"
 #include "DatabaseEnv.h"
+#include "DB2Stores.h"
 #include "DBCEnums.h"
 #include "GameTime.h"
 #include "Item.h"
@@ -407,7 +408,53 @@ void WorldSession::BattlePayProcessPurchase(uint32 productID)
     TC_LOG_INFO("network", "BattlePay: {} purchased product {} ({}) for {} (currency {}).",
         GetPlayerInfo(), productID, product->Name, product->Price, product->Currency);
 
+    // Announce the delivery before the completing PURCHASE_UPDATE - see SendBattlePayDeliveryNotifications.
+    SendBattlePayDeliveryNotifications(*product, purchaseID);
+
     respond(STATUS_DONE, RESULT_OK, product->Price);
+}
+
+// Tells the client that the payload of `product` has just been handed over, so its collection UI
+// refreshes instead of waiting for a reload.
+//
+// WHY HERE: this is called from the two places where delivery actually happens - the immediate grant loop
+// in BattlePayProcessPurchase, and the entitlement redemption loop in RedeemBattlePayEntitlements. Both
+// call it AFTER every deliverable has succeeded and after the charge has settled, and BEFORE the
+// completing SMSG_BATTLE_PAY_PURCHASE_UPDATE goes out. That ordering is deliberate: the client's Shop
+// closes the purchase on the PURCHASE_UPDATE, so the collection refresh has to have been requested
+// before then for the new mount or toy to be present when the frame comes back. It also means a purchase
+// that fails or gets refunded never announces a delivery, because those paths return earlier.
+//
+// The per-deliverable opcode is chosen by what was actually granted, but note (see BattlePayPackets.h)
+// that the 12.0.7 client routes MOUNT_DELIVERED and COLLECTION_ITEM_DELIVERED to the same handler and the
+// same Lua event, so the distinction is honesty about what we sent rather than a behavioural difference.
+void WorldSession::SendBattlePayDeliveryNotifications(ShopProduct const& product, uint64 purchaseID)
+{
+    for (ShopDeliverable const& d : product.Deliverables)
+    {
+        OpcodeServer opcode;
+        switch (d.Type)
+        {
+            case 1:     // item / toy -> a collection item
+                opcode = SMSG_BATTLE_PAY_COLLECTION_ITEM_DELIVERED;
+                break;
+            case 2:     // spell: a mount spell is a mount, anything else lands in the collection
+                opcode = sDB2Manager.GetMount(d.Id) ? SMSG_BATTLE_PAY_MOUNT_DELIVERED
+                                                    : SMSG_BATTLE_PAY_COLLECTION_ITEM_DELIVERED;
+                break;
+            default:    // type 3 (WoW Token) already pushes its own SendCommerceTokenUpdate; nothing else
+                        // in this vocabulary delivers into a collection.
+                continue;
+        }
+
+        WorldPackets::BattlePay::DeliveryNotification notification(opcode);
+        SendPacket(notification.Write());
+    }
+
+    WorldPackets::BattlePay::DeliveryEnded ended;
+    ended.PurchaseID = purchaseID;
+    ended.Products.emplace_back().ProductID = product.ProductID;
+    SendPacket(ended.Write());
 }
 
 void WorldSession::HandleBattlePayStartPurchase(WorldPackets::BattlePay::StartPurchase& startPurchase)
@@ -935,6 +982,7 @@ void WorldSession::RedeemBattlePayEntitlements()
             uint64 const distributionId = fields[0].GetUInt64();
             uint32 const productId      = fields[1].GetUInt32();
             uint8 const serviceType     = fields[2].GetUInt8();
+            uint64 const purchaseId     = fields[3].GetUInt64();
 
             // Consume first (see the ordering note above). A losing racer simply finds nothing to do.
             if (!sBattlePayMgr->TransitionEntitlement(distributionId, SHOP_ENTITLEMENT_BOUND, 0,
@@ -988,6 +1036,10 @@ void WorldSession::RedeemBattlePayEntitlements()
                         break;
                 }
             }
+
+            // Same delivery announcement as the immediate-purchase path: the payload has just landed in
+            // this character's collection, so tell the client to refresh it.
+            SendBattlePayDeliveryNotifications(*product, purchaseId);
 
             TC_LOG_INFO("network", "BattlePay: delivered entitlement {} (product {} '{}') to {}.",
                 distributionId, productId, product->Name, target->GetName());

@@ -177,6 +177,125 @@ namespace WorldPackets
         // it for entitlements whose product Type is 12 or 20 (rule matched exactly on both captured
         // accounts: 9-of-77 and 1-of-7) - types our catalog never emits anyway. Send the product through
         // 0x42021E or the distribution list instead; those have registered handlers.
+        //
+        // RE-VERIFIED against the 68275 image (2026-08-14), by a stronger method than the original
+        // finding: the 12.0.7 client dispatches every message in this group through a per-opcode thunk
+        // that indirects through a writable function-pointer slot, and the slot for 0x420224 is
+        // rva 0x44028E0 (VA 0x7FF72CEA28E0). A linear scan of the WHOLE image for RIP-relative stores
+        // (`48/4C 89 /r mod=00 rm=101` and `48 C7 05 ...`) targeting that slot finds ZERO write sites,
+        // while every one of its neighbours has exactly two (a register in the BattlePay registrar at
+        // rva 0x23D4360 and a null-out in the matching unregister at rva 0x23D4574). The dispatch is
+        // therefore a permanent no-op. THE FINDING STILL HOLDS - do not wire this opcode.
+
+        // ---------------------------------------------------------------------------------------------
+        // Purchase delivery notifications (0x42021F - 0x420223).
+        //
+        // HOW THESE WERE RECOVERED (no capture exists and none ever will - retail is on 12.1.0):
+        // the client's SMSG dispatcher is one giant switch, sub_7FF729103660, keyed on the raw opcode.
+        // Each case runs three calls in order: a per-opcode PARSER, then a dispatch THUNK, then the
+        // message destructor. The parser gives the wire layout; the thunk indirects through a global
+        // slot that the BattlePay registrar (rva 0x23D4360) fills in, and THAT is what decides whether
+        // the client does anything at all with the message.
+        //
+        // What the five delivery opcodes actually do in 12.0.7:
+        //
+        //   0x42021F DELIVERY_STARTED   parser rva 0x608110  slot 0x4402910 -> rva 0x1D80E0
+        //                               *** rva 0x1D80E0 is the three bytes `C2 00 00` = `ret 0`. ***
+        //                               The client parses the body and calls a function that returns
+        //                               immediately. NOT WIRED - see the refusal note below.
+        //   0x420220 DELIVERY_ENDED     parser rva 0x608190  slot 0x4402908 -> rva 0x23CD870  (real)
+        //   0x420221 MOUNT_DELIVERED    parser rva 0x608270  slot 0x4402900 -> rva 0x23CD930  (real)
+        //   0x420222 BATTLE_PET_DELIV.  parser rva 0x6082F0  slot 0x44028F0 -> rva 0x23CD930  (real)
+        //   0x420223 COLLECTION_ITEM_D. parser rva 0x608380  slot 0x44028F8 -> rva 0x23CD930  (real)
+        //
+        // The three *_DELIVERED opcodes share ONE handler, rva 0x23CD930, whose entire body is
+        // "fire the Lua event whose id is 0xF8EB3D280E974224" - it never touches the parsed payload.
+        // DELIVERY_ENDED's handler (rva 0x23CD870) walks its element vector under a feature-flag gate
+        // and then fires THE SAME event id. So all four live opcodes collapse to a single client-visible
+        // effect: one "a delivery happened, refresh" event. That is exactly the signal a freshly granted
+        // mount or toy needs in order to appear without a UI reload, and it is what this server was
+        // missing: the grant happened silently and only PURCHASE_UPDATE went out.
+        //
+        // DELIVERY_STARTED is deliberately NOT implemented. Wiring it would put bytes on the wire for a
+        // handler that is a bare `ret` - the same situation as SMSG_BATTLE_PAY_TENDER_GRANTED above, and
+        // refused for the same reason. It is not "unsupported"; it is proven inert.
+        //
+        // SMSG_BATTLE_PAY_BATTLE_PET_DELIVERED is also not implemented, and for a different reason worth
+        // stating: its layout IS recovered (parser rva 0x6082F0 = `uint32; PackedGuid`), but the handler
+        // provably ignores both fields, and this server has no proven source for either of them. Wiring
+        // it would mean inventing two field values to obtain a client effect that
+        // SMSG_BATTLE_PAY_COLLECTION_ITEM_DELIVERED - which has no fields to invent - already produces
+        // identically. Battle-pet grants therefore ride the collection-item notification.
+        // ---------------------------------------------------------------------------------------------
+
+        // SMSG_BATTLE_PAY_MOUNT_DELIVERED (0x420221) and SMSG_BATTLE_PAY_COLLECTION_ITEM_DELIVERED
+        // (0x420223) have IDENTICAL wire shape. Their parsers (rva 0x608270 / 0x608380) make exactly one
+        // call, to rva 0x33CC980, with the count argument computed as `packet[0x18] - packet[0x1C]`,
+        // i.e. "however many bytes are left". That primitive (disassembled at rva 0x33CC980) zeroes the
+        // out-pointer first, bounds-checks the request, and on success stores a POINTER into the packet
+        // buffer and advances the read cursor - it is a zero-copy blob view, and the length is never
+        // stored anywhere in the message object. The handler then never reads it.
+        //
+        // So these messages carry NO fields. An empty body is the complete and correct encoding, not a
+        // placeholder: there is no value the client could observe, and because the primitive zeroes its
+        // output before the bounds check, an empty body cannot leave the client reading uninitialised
+        // memory either (that was checked specifically, since the parser does not pre-zero its own slot).
+        class DeliveryNotification final : public ServerPacket
+        {
+        public:
+            explicit DeliveryNotification(OpcodeServer opcode) : ServerPacket(opcode, 0) { }
+
+            WorldPacket const* Write() override { return &_worldPacket; }
+        };
+
+        // One entry of SMSG_BATTLE_PAY_DELIVERY_ENDED's element vector. Shape proven from the element
+        // parser at rva 0x72BD40 (memory stride 0x70) and the nested reader it calls at rva 0x72C010:
+        //
+        //     uint32   ProductID                          (READ_U32   -> elem+0x00)
+        //     Bits<1>  hasUnlockList ; FlushBits          (READ_U8 + `shr dl,7` -> optional flag elem+0x28)
+        //     Bits<7>  choiceCount   ; FlushBits          (nested, READ_U8 + `shr rdx,1`)
+        //     choiceCount x { uint8; uint32 }             (nested loop, 8-byte stride)
+        //     if (hasUnlockList) {
+        //         uint8  kind                             (READ_U8  -> elem+0x08)
+        //         uint32 count                            (READ_U32)
+        //         count x uint32                          (loop -> vector at elem+0x10)
+        //     }
+        //
+        // Note both bit fields are read as whole bytes with a shift, i.e. each is written and flushed on
+        // its own - they are NOT one packed group. Nothing here is guessed: every read is a call to a
+        // known primitive (0x33CC410 = uint32, 0x33CC370 = uint8, both confirmed by disassembly, the
+        // latter being the byte a bit group is flushed into).
+        //
+        // We emit ProductID and leave both sub-lists empty, because this server genuinely has neither: a
+        // "choice" only exists for products the client picks a variant of, and the unlock list is a set of
+        // ids we do not produce. Empty is a legal encoding of both - the client's loops are plain
+        // `for (i < count)` and its per-element call is behind a feature gate that an empty element
+        // satisfies trivially.
+        struct DeliveredProduct
+        {
+            uint32 ProductID = 0;
+        };
+
+        // SMSG_BATTLE_PAY_DELIVERY_ENDED (0x420220). Layout proven from the parser at rva 0x608190:
+        //
+        //     uint64 PurchaseID                  (READ_U64, primitive rva 0x33CC460 - disassembled and
+        //                                         confirmed to read exactly 8 bytes and advance by 8)
+        //     uint32 Count                       (READ_U32)
+        //     Count x DeliveredProduct
+        //
+        // The client's handler (rva 0x23CD870) reads only the vector pointer and the count; PurchaseID is
+        // parsed and never touched. We send the real PurchaseID anyway - it is the id of the purchase
+        // whose delivery just ended, it costs nothing, and inventing was never necessary here.
+        class DeliveryEnded final : public ServerPacket
+        {
+        public:
+            explicit DeliveryEnded() : ServerPacket(SMSG_BATTLE_PAY_DELIVERY_ENDED, 8 + 4) { }
+
+            WorldPacket const* Write() override;
+
+            uint64 PurchaseID = 0;
+            std::vector<DeliveredProduct> Products;
+        };
 
         // One row of the account's entitlement ledger: which deliverable the account owns, and for how
         // long. Stride is exactly 25 bytes on the wire (4 + 8 + 8 + 4 + 1), which is what makes the

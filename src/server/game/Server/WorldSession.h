@@ -1907,6 +1907,9 @@ class TC_GAME_API WorldSession
         void HandleBattlePayConfirmPurchaseResponse(WorldPackets::BattlePay::ConfirmPurchaseResponse& confirmPurchaseResponse);
         void BattlePayProcessPurchase(uint32 productID);
         void SendBattlePayDistributionList();
+        // Purchase delivery notifications: SMSG_BATTLE_PAY_MOUNT_DELIVERED /
+        // SMSG_BATTLE_PAY_COLLECTION_ITEM_DELIVERED per deliverable, then SMSG_BATTLE_PAY_DELIVERY_ENDED.
+        void SendBattlePayDeliveryNotifications(ShopProduct const& product, uint64 purchaseID);
 
         // In-game Shop entitlements ("distributions"): buy now, apply to a character later.
         void HandleBattlePayDistributionAssignToTarget(WorldPackets::BattlePay::DistributionAssignToTarget& assign);
