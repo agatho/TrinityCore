@@ -1812,14 +1812,19 @@ void OpcodeTable::InitializeServerOpcodes()
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_INSTANCE_ENCOUNTER_DISENGAGE_UNIT,                            STATUS_NEVER,       CONNECTION_TYPE_INSTANCE);
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_INSTANCE_ENCOUNTER_END,                                       STATUS_NEVER,       CONNECTION_TYPE_INSTANCE);
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_INSTANCE_ENCOUNTER_ENGAGE_UNIT,                               STATUS_NEVER,       CONNECTION_TYPE_INSTANCE);
-    // APPEND and CAST_UPDATE are written byte for byte and driven by real code paths, but no shipped
-    // encounter script schedules a timeline event yet, so nothing would put them on the wire. Flip them
-    // when a boss script starts using the scheduler.
-    DEFINE_SERVER_OPCODE_HANDLER(SMSG_INSTANCE_ENCOUNTER_EVENT_APPEND,                              STATUS_UNHANDLED,   CONNECTION_TYPE_REALM);
-    // BLOCKED_CHANGED, RESPAWN and TIMELINE_SYNC appear in no capture and have unexplained scalars, so
-    // there is nothing to drive them with and nothing to check a guess against. They stay blocked.
+    // APPEND and CAST_UPDATE are emitted by InstanceScript::ScheduleEncounterTimelineEvent and
+    // ::UpdateEncounterTimeline respectively. Both layouts are byte-verified against every 68275-family
+    // capture we hold (20 APPEND at 76 bytes, 52 CAST_UPDATE at 39/38, zero trailing slack in all 72), so
+    // the send path is real and must not be dropped at SendPacket. They share CONNECTION_TYPE_REALM with
+    // SEQUENCE deliberately: all three carry the same element and must stay mutually ordered, which only
+    // holds while they travel the same socket. Retail groups them the same way (all three, plus
+    // ENCOUNTER_START/END, are connection index 1 in every capture).
+    DEFINE_SERVER_OPCODE_HANDLER(SMSG_INSTANCE_ENCOUNTER_EVENT_APPEND,                              STATUS_NEVER,       CONNECTION_TYPE_REALM);
+    // BLOCKED_CHANGED, RESPAWN and TIMELINE_SYNC (further down) appear in no capture and have unexplained
+    // scalars, so there is nothing to drive them with and nothing to check a guess against. Those three
+    // stay blocked - the CAST_UPDATE line between them is unblocked on purpose, see the note above.
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_INSTANCE_ENCOUNTER_EVENT_BLOCKED_CHANGED,                     STATUS_UNHANDLED,   CONNECTION_TYPE_REALM);
-    DEFINE_SERVER_OPCODE_HANDLER(SMSG_INSTANCE_ENCOUNTER_EVENT_CAST_UPDATE,                         STATUS_UNHANDLED,   CONNECTION_TYPE_REALM);
+    DEFINE_SERVER_OPCODE_HANDLER(SMSG_INSTANCE_ENCOUNTER_EVENT_CAST_UPDATE,                         STATUS_NEVER,       CONNECTION_TYPE_REALM);
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_INSTANCE_ENCOUNTER_EVENT_RESPAWN,                             STATUS_UNHANDLED,   CONNECTION_TYPE_REALM);
     // SEQUENCE genuinely goes out: on engage, on end (the empty count 0 form retail uses to clear the
     // timeline), on any change to the live set, and as the answer to CMSG_REQUEST_INSTANCE_ENCOUNTER_EVENT_SYNC,

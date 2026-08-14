@@ -131,7 +131,8 @@ public:
             { "guidlimits",         HandleDebugGuidLimitsCommand,          rbac::RBAC_PERM_COMMAND_DEBUG,   Console::Yes },
             { "objectcount",        HandleDebugObjectCountCommand,         rbac::RBAC_PERM_COMMAND_DEBUG,   Console::Yes },
             { "questreset",         HandleDebugQuestResetCommand,          rbac::RBAC_PERM_COMMAND_DEBUG,   Console::Yes },
-            { "personalclone",      HandleDebugBecomePersonalClone,        rbac::RBAC_PERM_COMMAND_DEBUG,   Console::No }
+            { "personalclone",      HandleDebugBecomePersonalClone,        rbac::RBAC_PERM_COMMAND_DEBUG,   Console::No },
+            { "encountertimeline",  HandleDebugEncounterTimelineCommand,   rbac::RBAC_PERM_COMMAND_DEBUG,   Console::No }
         };
         static ChatCommandTable commandTable =
         {
@@ -1357,6 +1358,46 @@ public:
             handler->PSendSysMessage("Target creature's PhaseGroup in DB: %d", abs(target->GetDBPhase()));
 
         PhasingHandler::PrintToChat(handler, target);
+        return true;
+    }
+
+    // .debug encountertimeline <dungeonEncounterId> <encounterEventId> <spellId> <timeToCastMs> [severity] [iconFileId]
+    //
+    // Pushes one event onto the instance's encounter timeline, exactly as a boss script would. This exists
+    // because SMSG_INSTANCE_ENCOUNTER_EVENT_APPEND and _CAST_UPDATE have complete, byte-verified senders in
+    // InstanceScript but no caller: retail drives the timeline from its own encounter scripts plus
+    // EncounterEvent.db2, and this core has neither, so without a way to schedule an event by hand the two
+    // opcodes could never be observed on a live client at all.
+    //
+    // It is a test harness, not a substitute for the missing content - it invents no boss behaviour and
+    // guesses no timings; every value that reaches the wire is one the GM typed. Scheduling sends APPEND
+    // immediately; CAST_UPDATE follows on its own when the countdown reaches zero.
+    static bool HandleDebugEncounterTimelineCommand(ChatHandler* handler, uint32 dungeonEncounterId, uint32 encounterEventId,
+        uint32 spellId, uint32 timeToCastMs, Optional<uint8> severity, Optional<int32> iconFileId)
+    {
+        Player* player = handler->GetSession()->GetPlayer();
+        InstanceScript* instance = player->GetInstanceScript();
+        if (!instance)
+        {
+            handler->PSendSysMessage("You are not in an instance with an InstanceScript.");
+            return false;
+        }
+
+        // The caster GUID is what the client attaches the timeline entry to, so it has to be a real unit in
+        // the instance rather than a synthesised guid - selection is the only honest source for it here.
+        Unit* caster = handler->getSelectedUnit();
+        if (!caster)
+        {
+            handler->PSendSysMessage("Select the unit that should own the timeline event first.");
+            return false;
+        }
+
+        uint32 eventId = instance->ScheduleEncounterTimelineEvent(caster->GetGUID(), dungeonEncounterId, encounterEventId,
+            spellId, iconFileId.value_or(0), severity.value_or(1), Milliseconds(timeToCastMs));
+
+        handler->PSendSysMessage("Scheduled encounter timeline event %u (dungeonEncounter %u, encounterEvent %u, spell %u) "
+            "on %s in %u ms. APPEND sent now, CAST_UPDATE follows when the countdown expires.",
+            eventId, dungeonEncounterId, encounterEventId, spellId, caster->GetName().c_str(), timeToCastMs);
         return true;
     }
 
