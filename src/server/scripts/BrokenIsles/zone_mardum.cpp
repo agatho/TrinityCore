@@ -22,7 +22,9 @@
 #include "Conversation.h"
 #include "ConversationAI.h"
 #include "CreatureAIImpl.h"
+#include "DB2Stores.h"
 #include "EventProcessor.h"
+#include "GameObjectAI.h"
 #include "GridNotifiersImpl.h"
 #include "MapUtils.h"
 #include "MotionMaster.h"
@@ -31,6 +33,7 @@
 #include "PassiveAI.h"
 #include "PhasingHandler.h"
 #include "Player.h"
+#include "PlayerChoice.h"
 #include "ScriptMgr.h"
 #include "ScriptedCreature.h"
 #include "ScriptedGossip.h"
@@ -525,12 +528,9 @@ private:
     EventMap _events;
 };
 
-// 98459 - Kayn Sunfury
-// 98458 - Jayce Darkweaver
-// 98456 - Allari the Souleater
-// 98460 - Korvas Bloodthorn
-// 99919 - Sevis Brightflame
-// 98457 - Cyana Nightglaive
+// Staged-fight Illidari on Mardum (map 1481) — named Invasion Begins + ambient Demon Hunters.
+// 98459 Kayn, 98458 Jace, 98456 Allari, 98460 Kor'vas, 99919 Sevis, 98457 Cyana
+// 94704/94705/96930/96931 Demon Hunter ambient (retail sniff: FactionTemplate 2843 + Target=Legion)
 struct npc_illidari_fighting_invasion_begins : public ScriptedAI
 {
     npc_illidari_fighting_invasion_begins(Creature* creature) : ScriptedAI(creature) { }
@@ -553,10 +553,15 @@ struct npc_illidari_fighting_invasion_begins : public ScriptedAI
         Trinity::AnyUnfriendlyUnitInObjectRangeCheck checker(me, me, 100.0f);
         Trinity::UnitListSearcher<Trinity::AnyUnfriendlyUnitInObjectRangeCheck> searcher(me, targetList, checker);
         Cell::VisitAllObjects(me, searcher, 100.0f);
-        targetList.remove_if([](Unit* possibleTarget)
+        targetList.remove_if([this](Unit* possibleTarget)
         {
-            return possibleTarget->isAttackingPlayer();
+            // Do not skip units already attacking a player (assist).
+            // Skip players and anything we cannot legally attack (faction / immunities).
+            return !possibleTarget || possibleTarget->IsPlayer() || !me->IsValidAttackTarget(possibleTarget);
         });
+        if (targetList.empty())
+            return nullptr;
+
         return Trinity::Containers::SelectRandomContainerElement(targetList);
     }
 
@@ -592,7 +597,7 @@ struct npc_illidari_fighting_invasion_begins : public ScriptedAI
 
     void EnterEvadeMode(EvadeReason why) override
     {
-        // manualling calling it to not move to home position but move to next target instead
+        // manually calling it to not move to home position but move to next target instead
         _EnterEvadeMode(why);
         Reset();
         ScheduleTargetSelection();
@@ -2247,6 +2252,244 @@ class spell_fel_lord_caza_disarmed : public AuraScript
     }
 };
 
+enum MardumLateChainData
+{
+    QUEST_CRY_HAVOC                     = 39516,
+    QUEST_ON_FELBAT_WINGS               = 39663,
+    QUEST_THE_KEYSTONE                  = 38728,
+    QUEST_STOP_THE_BOMBARDMENT          = 38727,
+    QUEST_BEFORE_WERE_OVERRUN           = 38766,
+
+    PLAYER_CHOICE_FEL_SECRETS           = 231,
+    PLAYER_CHOICE_RESPONSE_HAVOC        = 478,
+    PLAYER_CHOICE_RESPONSE_VENGEANCE    = 479,
+
+    SPELL_LAUNCH_FEL_SECRETS_CHOICE     = 194938,
+    SPELL_FEL_SECRETS_HAVOC             = 194940,
+    SPELL_FEL_SECRETS_VENGEANCE         = 194939,
+    SPELL_LEARN_DH_SPECIALIZATION       = 200749,
+    SPELL_CRY_HAVOC_TEACH_KORVAS        = 195021,
+    SPELL_CRY_HAVOC_TEACH_MANNETHREL    = 195022,
+    SPELL_ON_FELBAT_WINGS_TAXI          = 192136,
+    SPELL_RETURN_BT_MOVIE               = 192140,
+    SPELL_RETURN_BT_TELEPORT            = 192141,
+
+    MOVIE_RETURN_TO_BLACK_TEMPLE        = 471,
+    CHR_SPEC_VENGEANCE                  = 581,
+
+    NPC_LEGION_DEVASTATOR_DOOM          = 96732,
+    NPC_LEGION_DEVASTATOR_FORGE         = 96731,
+    NPC_LEGION_DEVASTATOR_SOUL          = 93762,
+    NPC_KILLCREDIT_DOOM_BANNER          = 96734,
+    NPC_KILLCREDIT_FORGE_BANNER         = 96733,
+    NPC_KILLCREDIT_SOUL_BANNER          = 96692,
+    NPC_KILLCREDIT_KEYSTONE_ACTIVATED   = 100651,
+    NPC_KILLCREDIT_KEYSTONE_DOWNSTAIRS  = 101760,
+    NPC_KILLCREDIT_BELIASH_SLAIN        = 106003,
+
+    GO_ILLIDARI_BANNER_SOUL             = 243965,
+    GO_ILLIDARI_BANNER_FORGE            = 243967,
+    GO_ILLIDARI_BANNER_DOOM             = 243968,
+
+    GOSSIP_MENU_KORVAS_CRY_HAVOC        = 18937,
+    GOSSIP_MENU_MANNETHREL_CRY_HAVOC    = 18823,
+    GOSSIP_MENU_IZAL_FELBAT             = 18776
+};
+
+// 231 - PlayerChoice Fel Secrets
+class playerchoice_mardum_fel_secrets : public PlayerChoiceScript
+{
+public:
+    playerchoice_mardum_fel_secrets() : PlayerChoiceScript("playerchoice_mardum_fel_secrets") { }
+
+    void OnResponse(WorldObject* /*object*/, Player* player, PlayerChoice const* /*choice*/, PlayerChoiceResponse const* response, uint16 /*clientIdentifier*/) override
+    {
+        player->CastSpell(player, SPELL_LEARN_DH_SPECIALIZATION, CastSpellExtraArgsInit{ .TriggerFlags = TRIGGERED_FULL_MASK });
+
+        switch (response->ResponseId)
+        {
+            case PLAYER_CHOICE_RESPONSE_HAVOC:
+                player->CastSpell(player, SPELL_FEL_SECRETS_HAVOC, CastSpellExtraArgsInit{ .TriggerFlags = TRIGGERED_FULL_MASK });
+                break;
+            case PLAYER_CHOICE_RESPONSE_VENGEANCE:
+                player->CastSpell(player, SPELL_FEL_SECRETS_VENGEANCE, CastSpellExtraArgsInit{ .TriggerFlags = TRIGGERED_FULL_MASK });
+                if (ChrSpecializationEntry const* spec = sChrSpecializationStore.LookupEntry(CHR_SPEC_VENGEANCE))
+                    player->ActivateTalentGroup(spec);
+                break;
+            default:
+                break;
+        }
+    }
+};
+
+// Movie 471 (spell 192140 RewardSpell on 38729) → teleport spell 192141 (sniff LOAD_SCREEN / NEW_WORLD map 1468)
+class player_mardum_return_to_black_temple : public PlayerScript
+{
+public:
+    player_mardum_return_to_black_temple() : PlayerScript("player_mardum_return_to_black_temple") { }
+
+    void OnMovieComplete(Player* player, uint32 movieId) override
+    {
+        if (movieId != MOVIE_RETURN_TO_BLACK_TEMPLE || player->GetMapId() != 1481)
+            return;
+
+        player->CastSpell(player, SPELL_RETURN_BT_TELEPORT, CastSpellExtraArgsInit{ .TriggerFlags = TRIGGERED_FULL_MASK });
+    }
+};
+
+// 243965 / 243967 / 243968 - Illidari Banner (Stop the Bombardment)
+struct go_mardum_illidari_banner : public GameObjectAI
+{
+    using GameObjectAI::GameObjectAI;
+
+    bool OnGossipHello(Player* player) override
+    {
+        if (player->GetQuestStatus(QUEST_STOP_THE_BOMBARDMENT) != QUEST_STATUS_INCOMPLETE)
+            return false;
+
+        uint32 devastatorEntry = 0;
+        uint32 killCreditEntry = 0;
+        switch (me->GetEntry())
+        {
+            case GO_ILLIDARI_BANNER_DOOM:
+                devastatorEntry = NPC_LEGION_DEVASTATOR_DOOM;
+                killCreditEntry = NPC_KILLCREDIT_DOOM_BANNER;
+                break;
+            case GO_ILLIDARI_BANNER_FORGE:
+                devastatorEntry = NPC_LEGION_DEVASTATOR_FORGE;
+                killCreditEntry = NPC_KILLCREDIT_FORGE_BANNER;
+                break;
+            case GO_ILLIDARI_BANNER_SOUL:
+                devastatorEntry = NPC_LEGION_DEVASTATOR_SOUL;
+                killCreditEntry = NPC_KILLCREDIT_SOUL_BANNER;
+                break;
+            default:
+                return false;
+        }
+
+        if (Creature* devastator = player->FindNearestCreature(devastatorEntry, 50.0f))
+        {
+            player->KilledMonsterCredit(devastatorEntry);
+            player->KilledMonsterCredit(killCreditEntry);
+            if (Creature* personal = player->SummonCreature(devastatorEntry, *devastator, TEMPSUMMON_TIMED_DESPAWN, 5s))
+                personal->KillSelf();
+        }
+
+        return true;
+    }
+};
+
+// 245728 - Sargerite Keystone
+struct go_mardum_sargerite_keystone : public GameObjectAI
+{
+    using GameObjectAI::GameObjectAI;
+
+    bool OnGossipHello(Player* player) override
+    {
+        if (player->GetQuestStatus(QUEST_THE_KEYSTONE) == QUEST_STATUS_INCOMPLETE)
+            player->KilledMonsterCredit(NPC_KILLCREDIT_KEYSTONE_ACTIVATED);
+        return false;
+    }
+};
+
+// 99045 - Kor'vas Bloodthorn (Cry Havoc)
+struct npc_mardum_cry_havoc_korvas : public ScriptedAI
+{
+    npc_mardum_cry_havoc_korvas(Creature* creature) : ScriptedAI(creature) { }
+
+    bool OnGossipSelect(Player* player, uint32 menuId, uint32 /*gossipListId*/) override
+    {
+        if (menuId != GOSSIP_MENU_KORVAS_CRY_HAVOC || player->GetQuestStatus(QUEST_CRY_HAVOC) != QUEST_STATUS_INCOMPLETE)
+            return false;
+
+        CloseGossipMenuFor(player);
+        player->CastSpell(player, SPELL_CRY_HAVOC_TEACH_KORVAS, CastSpellExtraArgsInit{ .TriggerFlags = TRIGGERED_FULL_MASK });
+        return true;
+    }
+};
+
+// 96652 - Mannethrel Darkstar (Cry Havoc)
+struct npc_mardum_cry_havoc_mannethrel : public ScriptedAI
+{
+    npc_mardum_cry_havoc_mannethrel(Creature* creature) : ScriptedAI(creature) { }
+
+    bool OnGossipSelect(Player* player, uint32 menuId, uint32 /*gossipListId*/) override
+    {
+        if (menuId != GOSSIP_MENU_MANNETHREL_CRY_HAVOC || player->GetQuestStatus(QUEST_CRY_HAVOC) != QUEST_STATUS_INCOMPLETE)
+            return false;
+
+        CloseGossipMenuFor(player);
+        player->CastSpell(me, SPELL_CRY_HAVOC_TEACH_MANNETHREL, CastSpellExtraArgsInit{ .TriggerFlags = TRIGGERED_FULL_MASK });
+        return true;
+    }
+};
+
+// 96653 - Izal Whitemoon (On Felbat Wings)
+struct npc_mardum_izal_whitemoon_felbat : public ScriptedAI
+{
+    npc_mardum_izal_whitemoon_felbat(Creature* creature) : ScriptedAI(creature) { }
+
+    bool OnGossipSelect(Player* player, uint32 menuId, uint32 /*gossipListId*/) override
+    {
+        if (menuId != GOSSIP_MENU_IZAL_FELBAT)
+            return false;
+
+        if (player->GetQuestStatus(QUEST_ON_FELBAT_WINGS) != QUEST_STATUS_INCOMPLETE &&
+            player->GetQuestStatus(QUEST_ON_FELBAT_WINGS) != QUEST_STATUS_REWARDED)
+            return false;
+
+        CloseGossipMenuFor(player);
+        player->CastSpell(player, SPELL_ON_FELBAT_WINGS_TAXI, CastSpellExtraArgsInit{ .TriggerFlags = TRIGGERED_FULL_MASK });
+        return true;
+    }
+};
+
+// 93802 - Brood Queen Tyranna
+struct npc_mardum_brood_queen_tyranna : public ScriptedAI
+{
+    npc_mardum_brood_queen_tyranna(Creature* creature) : ScriptedAI(creature) { }
+
+    void JustDied(Unit* /*killer*/) override
+    {
+        std::list<Player*> players;
+        me->GetPlayerListInGrid(players, 100.0f);
+        for (Player* player : players)
+            if (player->GetQuestStatus(QUEST_THE_KEYSTONE) == QUEST_STATUS_INCOMPLETE)
+                player->KilledMonsterCredit(NPC_KILLCREDIT_KEYSTONE_DOWNSTAIRS);
+    }
+};
+
+// 93221 - Doom Commander Beliash (Before We're Overrun — credit 106003, not KillCredit1)
+struct npc_mardum_doom_commander_beliash : public ScriptedAI
+{
+    npc_mardum_doom_commander_beliash(Creature* creature) : ScriptedAI(creature) { }
+
+    void JustDied(Unit* /*killer*/) override
+    {
+        std::list<Player*> players;
+        me->GetPlayerListInGrid(players, 100.0f);
+        for (Player* player : players)
+            if (player->GetQuestStatus(QUEST_BEFORE_WERE_OVERRUN) == QUEST_STATUS_INCOMPLETE)
+                player->KilledMonsterCredit(NPC_KILLCREDIT_BELIASH_SLAIN);
+    }
+};
+
+// 242987 / 242989 / 242990 / 244916 - Jailer Cage (Set Them Free) — one-shot after free
+struct go_mardum_jailer_cage : public GameObjectAI
+{
+    using GameObjectAI::GameObjectAI;
+
+    void OnLootStateChanged(uint32 state, Unit* /*unit*/) override
+    {
+        if (state != GO_ACTIVATED)
+            return;
+
+        me->SetFlag(GO_FLAG_NOT_SELECTABLE);
+        me->SetGoState(GO_STATE_ACTIVE);
+        me->DespawnOrUnsummon(2s, 7_days);
+    }
+};
+
 void AddSC_zone_mardum()
 {
     // Creature
@@ -2296,6 +2539,18 @@ void AddSC_zone_mardum()
     // Quests
     new quest_enter_the_illidari_shivarra();
     new quest_hidden_no_more();
+
+    // Late Mardum (P1)
+    new playerchoice_mardum_fel_secrets();
+    new player_mardum_return_to_black_temple();
+    RegisterGameObjectAI(go_mardum_illidari_banner);
+    RegisterGameObjectAI(go_mardum_sargerite_keystone);
+    RegisterGameObjectAI(go_mardum_jailer_cage);
+    RegisterCreatureAI(npc_mardum_cry_havoc_korvas);
+    RegisterCreatureAI(npc_mardum_cry_havoc_mannethrel);
+    RegisterCreatureAI(npc_mardum_izal_whitemoon_felbat);
+    RegisterCreatureAI(npc_mardum_brood_queen_tyranna);
+    RegisterCreatureAI(npc_mardum_doom_commander_beliash);
 
     // Spells
     RegisterSpellScript(spell_demon_hunter_intro_aura);
