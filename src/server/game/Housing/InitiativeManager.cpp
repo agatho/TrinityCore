@@ -27,6 +27,7 @@
 #include "HousingPackets.h"
 #include "Item.h"
 #include "Log.h"
+#include "MiscPackets.h"
 #include "Neighborhood.h"
 #include "NeighborhoodMgr.h"
 #include "ObjectAccessor.h"
@@ -582,6 +583,15 @@ void InitiativeManager::UpdateTaskProgress(uint64 neighborhoodGuid, uint32 initi
         // Endeavor task contributions pay House XP. This is the only producer of
         // HOUSING_FAVOR_SOURCE_INITIATIVE_TASK.
         GrantInitiativeTaskFavor(contributor, initiativeID, totalBefore, totalBefore + award);
+
+        // Float the "+Neighborly" world text the retail client shows for a neighborhood deed. In the
+        // build-68275 housing capture this lands immediately before the SMSG_CRITERIA_UPDATE batch
+        // for the deed, which is exactly this code path — OnCriteriaProgress is the criteria event.
+        // Null anchor guid and both args zero, byte-for-byte as captured; the client falls back to
+        // the receiving player as the anchor.
+        WorldPackets::Misc::DisplayWorldText worldText;
+        worldText.Text = HOUSING_WORLD_TEXT_NEIGHBORLY;
+        contributor->SendDirectMessage(worldText.Write());
     }
 
     // Persist individual task progress to DB

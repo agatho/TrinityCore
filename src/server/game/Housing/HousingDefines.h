@@ -787,6 +787,15 @@ static constexpr float INITIATIVE_PROGRESS_REQUIRED     = 1000.0f;
 // scaled by this before being compared against a milestone threshold.
 static constexpr float INITIATIVE_MILESTONE_SCALE       = 100.0f;
 
+// Floating world-text shown when a player earns neighborhood contribution credit. Reproduced
+// byte-for-byte from the retail build-68275 housing capture (housing12.0.7.pkt, four
+// SMSG_DISPLAY_WORLD_TEXT records, each immediately followed by the SMSG_CRITERIA_UPDATE batch for
+// the deed that earned it): null anchor guid, Arg1 = Arg2 = 0, and this exact 34-byte string. The
+// colour token is resolved client-side; the "+Neighborly" wording matches the CriteriaTree strings
+// "Neighborly deeds performed" / "Good Neighbor Points". Only the enUS sample exists, so this is not
+// localized — retail presumably sends the client's locale here.
+constexpr char const HOUSING_WORLD_TEXT_NEIGHBORLY[] = "|cnYELLOW_FONT_COLOR:+Neighborly|r";
+
 // Quest 91863 objective 17 ("Acquire a house") kill credit, granted on successful purchase.
 static constexpr uint32 NPC_KILL_CREDIT_BUY_HOME        = 248858;
 
