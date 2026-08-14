@@ -49,6 +49,7 @@
 #include "SpellAuras.h"
 #include "SpellInfo.h"
 #include "SpellMgr.h"
+#include "TimeEvents.h"
 #include "World.h"
 #include "WorldSession.h"
 #include "WorldStateMgr.h"
@@ -3576,41 +3577,10 @@ bool CriteriaHandler::ModifierSatisfied(ModifierTreeEntry const* modifier, uint6
                 return false;
             break;
         case ModifierTreeType::HasTimeEventPassed: // 289
-        {
-            time_t eventTimestamp = GameTime::GetGameTime();
-            switch (reqValue)
-            {
-                case 111: // Battle for Azeroth Season 4 Start
-                    eventTimestamp = time_t(1579618800); // January 21, 2020 8:00
-                    break;
-                case 120: // Patch 9.0.1
-                    eventTimestamp = time_t(1602601200); // October 13, 2020 8:00
-                    break;
-                case 121: // Shadowlands Season 1 Start
-                    eventTimestamp = time_t(1607439600); // December 8, 2020 8:00
-                    break;
-                case 123: // Shadowlands Season 1 End
-                    // timestamp = unknown
-                    break;
-                case 149: // Shadowlands Season 2 End
-                    // timestamp = unknown
-                    break;
-                case 349: // Dragonflight Season 3 Start (pre-season)
-                    eventTimestamp = time_t(1699340400); // November 7, 2023 8:00
-                    break;
-                case 350: // Dragonflight Season 3 Start
-                    eventTimestamp = time_t(1699945200); // November 14, 2023 8:00
-                    break;
-                case 352: // Dragonflight Season 3 End
-                    // eventTimestamp = time_t(); unknown
-                    break;
-                default:
-                    break;
-            }
-            if (GameTime::GetGameTime() < eventTimestamp)
+            // known time events live in TimeEvents.h, shared with ChallengeModeItemBonusOverride handling
+            if (!TimeEvents::HasPassed(reqValue))
                 return false;
             break;
-        }
         case ModifierTreeType::GarrisonHasPermanentTalent: // 290 NYI
             return false;
         case ModifierTreeType::HasActiveSoulbind: // 291
