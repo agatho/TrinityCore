@@ -944,12 +944,18 @@ void World::LoadConfigSettings(bool reload)
         { .Name = "FeatureSystem.RecruitAFriend.MaxRecruitmentUses"sv, .DefaultValue = 10, .Index = CONFIG_RAF_MAX_RECRUITMENT_USES },
         { .Name = "FeatureSystem.RecruitAFriend.DaysInCycle"sv, .DefaultValue = 30, .Index = CONFIG_RAF_DAYS_IN_CYCLE },
         { .Name = "Account.PasswordChangeSecurity"sv, .DefaultValue = 0, .Index = CONFIG_ACC_PASSCHANGESEC },
-        { .Name = "Battleground.RewardWinnerHonorFirst"sv, .DefaultValue = 27000, .Index = CONFIG_BG_REWARD_WINNER_HONOR_FIRST },
+        // Flat honor amounts paid on random / Call to Arms battleground completion - see
+        // Battleground::GetBattlegroundCompletionHonor. The historical 27000/13500/4500/3500 were
+        // Cataclysm honor *currency* units, from an era when honor was a currency carrying the 100x
+        // scaler; modern honor is unscaled honor XP (Player::AddHonorXP), so the same rewards are the
+        // scaler-free 270/135/45/35. "First" = first random-battleground win of the day, "Last" = every
+        // win after that.
+        { .Name = "Battleground.RewardWinnerHonorFirst"sv, .DefaultValue = 270, .Index = CONFIG_BG_REWARD_WINNER_HONOR_FIRST },
         { .Name = "Battleground.RewardWinnerConquestFirst"sv, .DefaultValue = 10000, .Index = CONFIG_BG_REWARD_WINNER_CONQUEST_FIRST },
-        { .Name = "Battleground.RewardWinnerHonorLast"sv, .DefaultValue = 13500, .Index = CONFIG_BG_REWARD_WINNER_HONOR_LAST },
+        { .Name = "Battleground.RewardWinnerHonorLast"sv, .DefaultValue = 135, .Index = CONFIG_BG_REWARD_WINNER_HONOR_LAST },
         { .Name = "Battleground.RewardWinnerConquestLast"sv, .DefaultValue = 5000, .Index = CONFIG_BG_REWARD_WINNER_CONQUEST_LAST },
-        { .Name = "Battleground.RewardLoserHonorFirst"sv, .DefaultValue = 4500, .Index = CONFIG_BG_REWARD_LOSER_HONOR_FIRST },
-        { .Name = "Battleground.RewardLoserHonorLast"sv, .DefaultValue = 3500, .Index = CONFIG_BG_REWARD_LOSER_HONOR_LAST },
+        { .Name = "Battleground.RewardLoserHonorFirst"sv, .DefaultValue = 45, .Index = CONFIG_BG_REWARD_LOSER_HONOR_FIRST },
+        { .Name = "Battleground.RewardLoserHonorLast"sv, .DefaultValue = 35, .Index = CONFIG_BG_REWARD_LOSER_HONOR_LAST },
         { .Name = "AccountInstancesPerHour"sv, .DefaultValue = 10, .Index = CONFIG_MAX_INSTANCES_PER_HOUR },
         { .Name = "AutoBroadcast.Center"sv, .DefaultValue = 0, .Index = CONFIG_AUTOBROADCAST_CENTER },
         { .Name = "AutoBroadcast.Timer"sv, .DefaultValue = 60000, .Index = CONFIG_AUTOBROADCAST_INTERVAL },

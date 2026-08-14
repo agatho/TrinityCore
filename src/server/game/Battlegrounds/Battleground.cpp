@@ -768,8 +768,11 @@ void Battleground::EndBattleground(Team winner)
         player->RemoveAura(SPELL_HONORABLE_DEFENDER_25Y);
         player->RemoveAura(SPELL_HONORABLE_DEFENDER_60Y);
 
-        uint32 winnerKills = player->GetRandomWinner() ? sWorld->getIntConfig(CONFIG_BG_REWARD_WINNER_HONOR_LAST) : sWorld->getIntConfig(CONFIG_BG_REWARD_WINNER_HONOR_FIRST);
-        uint32 loserKills = player->GetRandomWinner() ? sWorld->getIntConfig(CONFIG_BG_REWARD_LOSER_HONOR_LAST) : sWorld->getIntConfig(CONFIG_BG_REWARD_LOSER_HONOR_FIRST);
+        // Flat honor amounts, pre-Rate.Honor: these go to RewardHonor (via UpdatePlayerScore), which
+        // applies the rate itself. Player::SendPvpRewards advertises the same two numbers from the same
+        // function, so the advertised figure cannot drift from the paid one.
+        uint32 winnerHonor = GetBattlegroundCompletionHonor(true, player->GetRandomWinner(), false);
+        uint32 loserHonor = GetBattlegroundCompletionHonor(false, player->GetRandomWinner(), false);
 
         if (isBattleground() && sWorld->getBoolConfig(CONFIG_BATTLEGROUND_STORE_STATISTICS_ENABLE))
         {
@@ -817,7 +820,7 @@ void Battleground::EndBattleground(Team winner)
                     if (!player->GetRandomWinner())
                         source = BattlegroundMgr::IsRandomBattleground(bgPlayer->queueTypeId.BattlemasterListId) ? HonorGainSource::RandomBGCompletion : HonorGainSource::HolidayBGCompletion;
 
-                    UpdatePlayerScore(player, SCORE_BONUS_HONOR, GetBonusHonorFromKill(winnerKills), true, source);
+                    UpdatePlayerScore(player, SCORE_BONUS_HONOR, winnerHonor, true, source);
                     if (!player->GetRandomWinner())
                     {
                         player->SetRandomWinner(true);
@@ -847,7 +850,7 @@ void Battleground::EndBattleground(Team winner)
             {
                 if (BattlegroundMgr::IsRandomBattleground(bgPlayer->queueTypeId.BattlemasterListId)
                     || BattlegroundMgr::IsBGWeekend(BattlegroundTypeId(bgPlayer->queueTypeId.BattlemasterListId)))
-                    UpdatePlayerScore(player, SCORE_BONUS_HONOR, GetBonusHonorFromKill(loserKills), true, HonorGainSource::BGCompletion);
+                    UpdatePlayerScore(player, SCORE_BONUS_HONOR, loserHonor, true, HonorGainSource::BGCompletion);
             }
         }
 
@@ -874,6 +877,33 @@ uint32 Battleground::GetBonusHonorFromKill(uint32 kills) const
     //variable kills means how many honorable kills you scored (so we need kills * honor_for_one_kill)
     uint32 maxLevel = std::min<uint32>(GetMaxLevel(), 80U);
     return Trinity::Honor::hk_honor_at_level(maxLevel, float(kills));
+}
+
+// Battleground.RewardWinnerHonor*/RewardLoserHonor* are flat honor amounts, exactly as their names say -
+// not honorable-kill counts. They were kill counts once (30/15/5/5) and were therefore fed to
+// GetBonusHonorFromKill(); the upstream 4.3.4 merge ce742dc7a07 (2013-09-09) rescaled the values to
+// Cataclysm honor *currency* units (27000/13500/4500/3500) without touching the call site, so every
+// random-battleground win paid hk_honor_at_level(80, 27000) = ceil(27000 * 80 * 1.55) = 3,348,000 honor.
+// GetBonusHonorFromKill() itself is unchanged and stays correct for its other callers, which all pass
+// genuine kill counts (1-4 and the Alterac Valley bonus constants).
+//
+// The defaults have that era's 100x honor-currency scaler taken back out, since modern honor is unscaled
+// honor XP via Player::AddHonorXP: 270/135 winner, 45/35 loser.
+uint32 Battleground::GetBattlegroundCompletionHonor(bool winner, bool alreadyWonRandomToday, bool applyHonorRate)
+{
+    uint32 honor;
+    if (winner)
+        honor = sWorld->getIntConfig(alreadyWonRandomToday ? CONFIG_BG_REWARD_WINNER_HONOR_LAST : CONFIG_BG_REWARD_WINNER_HONOR_FIRST);
+    else
+        honor = sWorld->getIntConfig(alreadyWonRandomToday ? CONFIG_BG_REWARD_LOSER_HONOR_LAST : CONFIG_BG_REWARD_LOSER_HONOR_FIRST);
+
+    // Player::RewardHonor applies Rate.Honor to the amount it is given and truncates to int32. Callers
+    // that go through RewardHonor must NOT pre-apply the rate; callers that only display the number must,
+    // and must do it exactly the same way, which is why the arithmetic lives here and not at either site.
+    if (applyHonorRate)
+        honor = uint32(float(honor) * sWorld->getRate(RATE_HONOR));
+
+    return honor;
 }
 
 void Battleground::BlockMovement(Player* player)

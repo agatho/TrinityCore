@@ -3386,26 +3386,46 @@ Battleground.Random.ResetHour = 6
 
 #
 #     Battleground.RewardWinnerHonorFirst
-#     Battleground.RewardWinnerConquestFirst
 #     Battleground.RewardWinnerHonorLast
-#     Battleground.RewardWinnerConquestLast
 #     Battleground.RewardLoserHonorFirst
 #     Battleground.RewardLoserHonorLast
-#        Description: Random Battlegrounds / call to the arms rewards.
-#        Default:     30 - Battleground.RewardWinnerHonorFirst
-#                     25 - Battleground.RewardWinnerArenaFirst
-#                     15 - Battleground.RewardWinnerHonorLast
-#                     0  - Battleground.RewardWinnerArenaLast
-#                     5  - Battleground.RewardLoserHonorFirst
-#                     5  - Battleground.RewardLoserHonorLast
+#        Description: Honor paid on completion of a random battleground or a battleground currently
+#                     flagged as Call to Arms. These are FLAT HONOR AMOUNTS, not honorable-kill
+#                     counts - the value reaches Player::AddHonorXP as-is. Normal (non-random,
+#                     non-holiday) battlegrounds pay no completion honor.
+#                     "First" applies to the first random-battleground win of the day, "Last" to
+#                     every win after that. Rate.Honor still scales the result, and the figure the
+#                     PvP rewards frame advertises is computed from these same values, so what is
+#                     shown is what is paid.
+#        Default:     270 - Battleground.RewardWinnerHonorFirst
+#                     135 - Battleground.RewardWinnerHonorLast
+#                     45  - Battleground.RewardLoserHonorFirst
+#                     35  - Battleground.RewardLoserHonorLast
 #
 
-Battleground.RewardWinnerHonorFirst     = 27000
+Battleground.RewardWinnerHonorFirst     = 270
+Battleground.RewardWinnerHonorLast      = 135
+Battleground.RewardLoserHonorFirst      = 45
+Battleground.RewardLoserHonorLast       = 35
+
+#
+#     Battleground.RewardWinnerConquestFirst
+#     Battleground.RewardWinnerConquestLast
+#        Description: DEAD KEYS. Both are declared and parsed, but read by no code whatsoever, so
+#                     setting them awards nothing. They describe a Cataclysm mechanic (random
+#                     battlegrounds paying Conquest) that retail no longer has - in 12.0.x Conquest
+#                     comes from rated PvP only. The values below are the historical ones and are
+#                     in that era's honor-currency units (Conquest is CurrencyTypes.db2 record 1602
+#                     with the _100_Scaler flag set, so 10000/5000 meant 100/50 Conquest). They are
+#                     left in place, unread, rather than silently repurposed; implementing rated-PvP
+#                     Conquest needs a season/cap source first, which record 1602 does not carry
+#                     (MaxQty 0, MaxEarnablePerWeek 0, no ComputedWeeklyMaximum).
+#        Default:     10000 - Battleground.RewardWinnerConquestFirst
+#                     5000  - Battleground.RewardWinnerConquestLast
+#
+
 Battleground.RewardWinnerConquestFirst  = 10000
-Battleground.RewardWinnerHonorLast      = 13500
 Battleground.RewardWinnerConquestLast   = 5000
-Battleground.RewardLoserHonorFirst      = 4500
-Battleground.RewardLoserHonorLast       = 3500
 
 #
 #    Battleground.ReportAFK
@@ -5011,6 +5031,69 @@ Warfront.Contribution.MinutesPerDonation = 60.0
 #        Default:     1.0 - (retail rate)
 
 Contribution.AccumulationRate = 1.0
+
+#    Warfront.QueueMinPlayers
+#        Description: How many enrolled players a warfront assault needs before it launches. Read by
+#                     WarfrontMgr; the value is floored at 1, so 0 behaves as 1. The Blizzlike group
+#                     requirement is 20 - the default of 1 exists so a single tester can start an
+#                     assault without a raid.
+#        Default:     1 - (a single player may launch an assault)
+#                     20 - (Blizzlike)
+
+Warfront.QueueMinPlayers = 1
+
+#    Warfront.Battle.AutoAdvance
+#        Description: Whether a warfront battle instance advances through its scenario steps on its own.
+#                     Disable to freeze the scenario at its current step so a tester can walk the
+#                     battlefield and inspect state; the .warfront commands still drive it manually.
+#        Default:     1 - (Enabled; the assault runs itself)
+#                     0 - (Disabled; examination mode)
+
+Warfront.Battle.AutoAdvance = 1
+
+#    Warfront.Battle.StepSeconds
+#        Description: Seconds between automatic warfront battle scenario steps, so the whole assault can
+#                     be compressed for testing. Floored at 1. Has no effect when
+#                     Warfront.Battle.AutoAdvance is disabled.
+#        Default:     30
+
+Warfront.Battle.StepSeconds = 30
+
+#
+###################################################################################################
+
+###################################################################################################
+# HOUSING SETTINGS
+#
+#    Housing.EnableBuyHouse
+#    Housing.EnableDeleteHouse
+#    Housing.EnableMoveHouse
+#    Housing.EnableCreateCharterNeighborhood
+#    Housing.EnableCreateGuildNeighborhood
+#        Description: Per-operation gates for the player housing system. Each one gates the matching
+#                     client request; disabling a gate makes the server refuse that operation while
+#                     leaving the rest of housing working.
+#        Default:     1 - (Enabled)
+#                     0 - (Disabled)
+
+Housing.EnableBuyHouse = 1
+Housing.EnableDeleteHouse = 1
+Housing.EnableMoveHouse = 1
+Housing.EnableCreateCharterNeighborhood = 1
+Housing.EnableCreateGuildNeighborhood = 1
+
+#    Housing.TutorialsEnabled
+#        Description: Send the housing tutorial / first-run prompts to the client.
+#        Default:     1 - (Enabled)
+#                     0 - (Disabled)
+
+Housing.TutorialsEnabled = 1
+
+#    Housing.MaxHousesPerAccount
+#        Description: How many houses a single account may own at once across all its characters.
+#        Default:     2
+
+Housing.MaxHousesPerAccount = 2
 
 #
 ###################################################################################################

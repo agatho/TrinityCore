@@ -7489,11 +7489,15 @@ void Player::SendCurrencies() const
 //
 // Only what this core will actually pay is published, and it is read from the same configuration the award
 // path reads, so the advertised figure cannot drift from the received one:
-//   - Honour is the winner's bonus from Battleground::EndBattleground. That path treats the config value as
-//     a KILL COUNT and runs it through GetBonusHonorFromKill, so the same conversion is done here rather
-//     than printing the raw config number, and the first-win-of-the-day distinction is the player's own
-//     GetRandomWinner() flag exactly as it is there. Outside a battleground there is no bracket to take a
-//     max level from, so the player's own level (capped at 80, as GetBonusHonorFromKill caps it) stands in.
+//   - Honour is the winner's bonus from Battleground::EndBattleground, obtained by calling the very
+//     function that path calls - Battleground::GetBattlegroundCompletionHonor - instead of re-deriving it
+//     here. It was re-derived once, and that was a live drift hazard rather than a theoretical one: the
+//     award path treated the config value as an honorable-kill COUNT, and when that was fixed a
+//     re-derivation here would have gone on advertising ceil(270 * 80 * 1.55) = 33,480 for a win that
+//     pays 270. The first-win-of-the-day distinction is the player's own GetRandomWinner() flag, exactly
+//     as it is there. Rate.Honor IS applied to the advertised figure, because the award path's
+//     Player::RewardHonor applies it before the player receives anything and this frame states what the
+//     player receives; the shared function does that arithmetic so both sites agree by construction.
 //   - Conquest is deliberately NOT advertised. CONFIG_BG_REWARD_WINNER_CONQUEST_FIRST/LAST are declared in
 //     World.cpp and read by nothing at all, so this core awards no Conquest; publishing a figure would
 //     promise a payout that never arrives.
@@ -7512,11 +7516,9 @@ void Player::SendPvpRewards() const
 {
     WorldPackets::LFG::RequestPvpRewardsResponse response;
 
-    // Mirrors Battleground::EndBattleground: the config is a kill count, not an honour amount.
-    uint32 const winnerKills = GetRandomWinner()
-        ? sWorld->getIntConfig(CONFIG_BG_REWARD_WINNER_HONOR_LAST)
-        : sWorld->getIntConfig(CONFIG_BG_REWARD_WINNER_HONOR_FIRST);
-    uint32 const winnerHonor = Trinity::Honor::hk_honor_at_level(std::min<uint8>(GetLevel(), 80), float(winnerKills));
+    // The same function Battleground::EndBattleground pays out of, with Rate.Honor applied because that
+    // path's RewardHonor applies it before the player sees the honor. Never re-derive this here.
+    uint32 const winnerHonor = Battleground::GetBattlegroundCompletionHonor(true, GetRandomWinner(), true);
 
     // Every battleground pays this same bonus - EndBattleground does not vary it by bracket - so the
     // battleground-shaped activities this core actually queues for all advertise it, and nothing else does.
