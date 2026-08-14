@@ -362,16 +362,19 @@ void WorldSession::HandleOfferPetition(WorldPackets::Petition::OfferPetition& pa
         return;
     }
 
+    // Both errors describe the offer target, so they must name 'player' - not '_player', who is the one
+    // making the offer and reading the message. (In HandleSignPetition the same two errors are about the
+    // signer, which is _player there, so the argument correctly differs between the two call sites.)
     if (player->GetGuildId())
     {
-        Guild::SendCommandResult(this, GUILD_COMMAND_INVITE_PLAYER, ERR_ALREADY_IN_GUILD_S, _player->GetName());
+        Guild::SendCommandResult(this, GUILD_COMMAND_INVITE_PLAYER, ERR_ALREADY_IN_GUILD_S, player->GetName());
         sendOfferError();
         return;
     }
 
     if (player->GetGuildIdInvited())
     {
-        Guild::SendCommandResult(this, GUILD_COMMAND_INVITE_PLAYER, ERR_ALREADY_INVITED_TO_GUILD_S, _player->GetName());
+        Guild::SendCommandResult(this, GUILD_COMMAND_INVITE_PLAYER, ERR_ALREADY_INVITED_TO_GUILD_S, player->GetName());
         sendOfferError();
         return;
     }
