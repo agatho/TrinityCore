@@ -463,7 +463,8 @@ WorldPacket const* ItemInteractionComplete::Write()
 
 void ConvertItemToBindToAccount::Read()
 {
-    _worldPacket >> ItemGuid;
+    _worldPacket >> ItemIndex;      // see ItemPackets.h - a client-side list index, not a guid
+    _worldPacket >> Flag;
 }
 
 WorldPacket const* ItemChanged::Write()

@@ -689,7 +689,12 @@ namespace WorldPackets
 
             void Read() override;
 
-            uint32 DifficultyID = 0;
+            // The 68275 client writes this as a uint16, not a uint32: the serializer at client RVA 0x6A7840
+            // does `movzx edx, word ptr [msg+0x20]; call write_uint16 (0x33CCDC0)` and nothing else, so the
+            // whole body is two bytes. Reading a uint32 off a two-byte packet threw ByteBufferPositionException
+            // and the handler never ran. The sibling CMSG_SET_DUNGEON_DIFFICULTY (client RVA 0x5D7650) uses the
+            // same uint16 write and MiscPackets already reads it as int16 - this one was the odd man out.
+            uint16 DifficultyID = 0;
         };
 
         class ToggleDifficulty final : public ClientPacket

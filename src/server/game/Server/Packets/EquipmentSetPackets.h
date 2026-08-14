@@ -79,8 +79,6 @@ namespace WorldPackets
 
             uint64 Guid = 0;        ///< Set Identifier
             int32 SpecIndex = 0;    ///< Specialization index to auto-equip this set for (-1 clears the assignment)
-            uint64 GUID = 0; ///< Set Identifier
-            int32 AssignedSpecIndex = 0;
         };
 
         class UseEquipmentSet final : public ClientPacket
