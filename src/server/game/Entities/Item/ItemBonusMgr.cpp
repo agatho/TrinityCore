@@ -21,6 +21,7 @@
 #include "MapUtils.h"
 #include "ObjectMgr.h"
 #include "Player.h"
+#include "TimeEvents.h"
 
 namespace
 {
@@ -193,47 +194,80 @@ bool CanApplyBonusTreeToItem(ItemTemplate const* itemTemplate, uint32 itemBonusT
 
 uint32 GetBonusTreeIdOverride(uint32 itemBonusTreeId, ItemBonusGenerationParams const& params)
 {
-    std::vector<int32> passedTimeEvents; // sorted by date TODO: configure globally
+    auto itemBonusOverrides = Trinity::Containers::MapEqualRange(_challengeModeItemBonusOverrides, itemBonusTreeId);
+    if (itemBonusOverrides.begin() == itemBonusOverrides.end())
+        return itemBonusTreeId;
 
-    if (!passedTimeEvents.empty())
+    // The TimeEvent table is serverside only, we know a mere handful of its entries (see TimeEvents.h).
+    // Picking between the overrides of this tree means ordering them by season, which we can only do
+    // when every event they reference is known to us - otherwise the newest season we happen to know
+    // would win over the (unknown, but actually current) one and hand out stale item levels. That is
+    // worse than applying no override at all, so leave the tree untouched in that case.
+    bool anyTimeEvent = false;
+    for (auto const& [_, itemBonusOverride] : itemBonusOverrides)
     {
-        int32 selectedLevel = -1;
-        std::ptrdiff_t selectedMilestoneSeason = -1;
-        ChallengeModeItemBonusOverrideEntry const* selectedItemBonusOverride = nullptr;
-        for (auto& [_, itemBonusOverride] : Trinity::Containers::MapEqualRange(_challengeModeItemBonusOverrides, itemBonusTreeId))
+        for (int32 timeEventId : { itemBonusOverride->RequiredTimeEventPassed, itemBonusOverride->RequiredTimeEventNotPassed })
         {
-            if (params.MythicPlusKeystoneLevel && itemBonusOverride->Value > *params.MythicPlusKeystoneLevel)
+            if (!timeEventId)
                 continue;
 
-            if (params.PvpTier && itemBonusOverride->Value > *params.PvpTier)
-                continue;
+            if (!TimeEvents::GetTimestamp(timeEventId))
+                return itemBonusTreeId;
 
-            if (itemBonusOverride->RequiredTimeEventPassed)
-            {
-                auto itr = std::ranges::find(passedTimeEvents, itemBonusOverride->RequiredTimeEventPassed);
-                if (itr == passedTimeEvents.end())
-                    continue;       // season not started yet
-
-                std::ptrdiff_t overrideMilestoneSeason = std::ranges::distance(passedTimeEvents.begin(), itr);
-                if (selectedMilestoneSeason > overrideMilestoneSeason)
-                    continue;       // older season that what was selected
-
-                if (selectedMilestoneSeason == overrideMilestoneSeason)
-                    if (selectedLevel > itemBonusOverride->Value)
-                        continue;   // lower level in current season than what was already found
-
-                selectedMilestoneSeason = overrideMilestoneSeason;
-            }
-            else if (selectedLevel > itemBonusOverride->Value)
-                continue;
-
-            selectedLevel = itemBonusOverride->Value;
-            selectedItemBonusOverride = itemBonusOverride;
+            anyTimeEvent = true;
         }
-
-        if (selectedItemBonusOverride && selectedItemBonusOverride->DstItemBonusTreeID)
-            itemBonusTreeId = selectedItemBonusOverride->DstItemBonusTreeID;
     }
+
+    std::vector<int32> passedTimeEvents; // sorted by date
+    if (anyTimeEvent)
+        passedTimeEvents = TimeEvents::GetPassedEventsOldestFirst();
+
+    int32 selectedLevel = -1;
+    std::ptrdiff_t selectedMilestoneSeason = -1;
+    ChallengeModeItemBonusOverrideEntry const* selectedItemBonusOverride = nullptr;
+    for (auto const& [_, itemBonusOverride] : itemBonusOverrides)
+    {
+        // Value is the mythic keystone level / pvp tier at which the override starts applying.
+        // With neither of them known this item is not being generated in a challenge mode or rated
+        // pvp context, so a level gated override must not fire - only unconditional ones (Value < 0).
+        if (itemBonusOverride->Value >= 0 && !params.MythicPlusKeystoneLevel && !params.PvpTier)
+            continue;
+
+        if (params.MythicPlusKeystoneLevel && itemBonusOverride->Value > *params.MythicPlusKeystoneLevel)
+            continue;
+
+        if (params.PvpTier && itemBonusOverride->Value > *params.PvpTier)
+            continue;
+
+        if (itemBonusOverride->RequiredTimeEventNotPassed
+            && std::ranges::find(passedTimeEvents, itemBonusOverride->RequiredTimeEventNotPassed) != passedTimeEvents.end())
+            continue;               // override already expired
+
+        if (itemBonusOverride->RequiredTimeEventPassed)
+        {
+            auto itr = std::ranges::find(passedTimeEvents, itemBonusOverride->RequiredTimeEventPassed);
+            if (itr == passedTimeEvents.end())
+                continue;       // season not started yet
+
+            std::ptrdiff_t overrideMilestoneSeason = std::ranges::distance(passedTimeEvents.begin(), itr);
+            if (selectedMilestoneSeason > overrideMilestoneSeason)
+                continue;       // older season that what was selected
+
+            if (selectedMilestoneSeason == overrideMilestoneSeason)
+                if (selectedLevel > itemBonusOverride->Value)
+                    continue;   // lower level in current season than what was already found
+
+            selectedMilestoneSeason = overrideMilestoneSeason;
+        }
+        else if (selectedLevel > itemBonusOverride->Value)
+            continue;
+
+        selectedLevel = itemBonusOverride->Value;
+        selectedItemBonusOverride = itemBonusOverride;
+    }
+
+    if (selectedItemBonusOverride && selectedItemBonusOverride->DstItemBonusTreeID)
+        itemBonusTreeId = selectedItemBonusOverride->DstItemBonusTreeID;
 
     return itemBonusTreeId;
 }
