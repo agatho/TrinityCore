@@ -1277,6 +1277,13 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         void SendSupercededSpell(uint32 oldSpell, uint32 newSpell) const;
         void SendTransferAborted(uint32 mapid, TransferAbortReason reason, uint8 arg = 0, int32 mapDifficultyXConditionID = 0) const;
 
+        // Asks the client to start streaming mapId ahead of a seamless transfer, so that the
+        // transfer itself needs no loading screen. destination is where the player will end up,
+        // expressed in the destination map's frame; the client is sent the delta from the
+        // player's current position.
+        void SendPreloadWorld(int32 mapId, Position const& destination) const;
+        void SendCancelPreloadWorld(int32 mapId) const;
+
         bool CanInteractWithQuestGiver(Object* questGiver) const;
         Creature* GetNPCIfCanInteractWith(ObjectGuid const& guid, NPCFlags npcFlags, NPCFlags2 npcFlags2) const;
         GameObject* GetGameObjectIfCanInteractWith(ObjectGuid const& guid) const;

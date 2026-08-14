@@ -319,6 +319,34 @@ namespace WorldPackets
             uint64 InstanceID = 0u;                          // Required for damageMeterResetOnNewInstance cvar to function
         };
 
+        // Asks the client to start streaming a destination world before the player is
+        // actually moved there, so that the following seamless transfer needs no loading
+        // screen. Shares NewWorld's leading field layout - retail only ever sends it with
+        // Reason == NEW_WORLD_SEAMLESS.
+        class PreloadWorld final : public ServerPacket
+        {
+        public:
+            explicit PreloadWorld() : ServerPacket(SMSG_PRELOAD_WORLD, 4 + 4 + 4 + 4 + 4 + 4 + 4 + 4 + 4 + 4 + 1) { }
+
+            WorldPacket const* Write() override;
+
+            int32 MapID = 0;
+            uint32 Reason = 0;
+            TeleportLocation Loc;                            // Player position in its current map's frame
+            TaggedPosition<Position::XYZ> MovementOffset;    // Destination position minus Loc.Pos
+            bool Unknown_1107 = false;                       // Client stores it but its meaning is undetermined; 0 in every observed retail sample
+        };
+
+        class CancelPreloadWorld final : public ServerPacket
+        {
+        public:
+            explicit CancelPreloadWorld() : ServerPacket(SMSG_CANCEL_PRELOAD_WORLD, 4) { }
+
+            WorldPacket const* Write() override;
+
+            int32 MapID = 0;
+        };
+
         class WorldPortResponse final : public ClientPacket
         {
         public:

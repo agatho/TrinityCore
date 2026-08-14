@@ -25188,6 +25188,26 @@ void Player::SendTransferAborted(uint32 mapid, TransferAbortReason reason, uint8
     SendDirectMessage(transferAborted.Write());
 }
 
+void Player::SendPreloadWorld(int32 mapId, Position const& destination) const
+{
+    WorldPackets::Movement::PreloadWorld preloadWorld;
+    preloadWorld.MapID = mapId;
+    // Retail sends the player's current position with a zeroed facing, and expresses the
+    // destination as a delta from it - the client streams around Loc.Pos + MovementOffset.
+    preloadWorld.Loc.Pos = Position(GetPositionX(), GetPositionY(), GetPositionZ(), 0.0f);
+    preloadWorld.Reason = NEW_WORLD_SEAMLESS;
+    preloadWorld.MovementOffset = Position(destination.GetPositionX() - GetPositionX(),
+        destination.GetPositionY() - GetPositionY(), destination.GetPositionZ() - GetPositionZ());
+    SendDirectMessage(preloadWorld.Write());
+}
+
+void Player::SendCancelPreloadWorld(int32 mapId) const
+{
+    WorldPackets::Movement::CancelPreloadWorld cancelPreloadWorld;
+    cancelPreloadWorld.MapID = mapId;
+    SendDirectMessage(cancelPreloadWorld.Write());
+}
+
 void Player::ApplyEquipCooldown(Item* pItem)
 {
     if (pItem->GetTemplate()->HasFlag(ITEM_FLAG_NO_EQUIP_COOLDOWN))
