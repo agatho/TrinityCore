@@ -37,6 +37,7 @@
 #include "SocialMgr.h"
 #include "World.h"
 #include "WorldSession.h"
+#include <algorithm>
 #include <sstream>
 
 namespace lfg
@@ -381,9 +382,292 @@ void LFGMgr::Update(uint32 diff)
         m_QueueTimer = 0;
         for (LfgQueueContainer::iterator it = QueuesStore.begin(); it != QueuesStore.end(); ++it)
             it->second.UpdateQueueTimers(it->first, currTime);
+
+        // Piggy-backed on the queue-status sweep on purpose: this is the one place that already runs over
+        // every live queue on a timer, and the prompt is a "you have been waiting a while" notification,
+        // so LFG_QUEUEUPDATE_INTERVAL granularity is the right resolution for it.
+        UpdateExpandSearchPrompts(currTime);
     }
     else
         m_QueueTimer += diff;
+}
+
+/**
+    Translates a TC LfgLockStatusType into the client's Enum.LFGSlotInvalidReason, which is what
+    SMSG_LFG_SLOT_INVALID's first dword is indexed by client side (LFG_INSTANCE_INVALID_CODES).
+
+    Two deliberate divergences from a straight cast:
+      - LFG_LOCKSTATUS_NO_SPEC is 14 in TC but NoSpec is 13 in the client enum, where 14 is
+        CannotRunAnyChildDungeon. A straight cast would tell the player the wrong thing.
+      - TC folds PlayerCondition failures into 1000 + the client's condition code. Retail sends
+        PlayerConditionFailed (19) with the condition code in SubReason1, which is what the client's
+        LFG_INSTANCE_CONDITION_FAILED_CODES table actually reads.
+*/
+static LfgSlotInvalidReason LockStatusToSlotInvalidReason(LfgLockInfoData const& info, int32& subReason1, int32& subReason2)
+{
+    subReason1 = 0;
+    subReason2 = 0;
+
+    switch (info.lockStatus)
+    {
+        case LFG_LOCKSTATUS_INSUFFICIENT_EXPANSION:
+            return LFG_SLOT_INVALID_EXPANSION_TOO_LOW;
+        case LFG_LOCKSTATUS_TOO_LOW_LEVEL:
+            return LFG_SLOT_INVALID_LEVEL_TOO_LOW;
+        case LFG_LOCKSTATUS_TOO_HIGH_LEVEL:
+            return LFG_SLOT_INVALID_LEVEL_TOO_HIGH;
+        case LFG_LOCKSTATUS_TOO_LOW_GEAR_SCORE:
+            subReason1 = int32(info.requiredItemLevel);
+            subReason2 = int32(info.currentItemLevel);
+            return LFG_SLOT_INVALID_GEAR_TOO_LOW;
+        case LFG_LOCKSTATUS_TOO_HIGH_GEAR_SCORE:
+            subReason1 = int32(info.requiredItemLevel);
+            subReason2 = int32(info.currentItemLevel);
+            return LFG_SLOT_INVALID_GEAR_TOO_HIGH;
+        case LFG_LOCKSTATUS_RAID_LOCKED:
+            return LFG_SLOT_INVALID_RAID_LOCKED;
+        case LFG_LOCKSTATUS_NO_SPEC:
+            return LFG_SLOT_INVALID_NO_SPEC;
+        case LFG_LOCKSTATUS_HAS_RESTRICTION:
+            return LFG_SLOT_INVALID_RESTRICTED;
+        default:
+            break;
+    }
+
+    if (info.lockStatus > 1000)
+    {
+        subReason1 = int32(info.lockStatus - 1000);
+        return LFG_SLOT_INVALID_PLAYER_CONDITION_FAILED;
+    }
+
+    return LFG_SLOT_INVALID_NONE;
+}
+
+/**
+    Builds the dungeon set an already queued entry would be widened to.
+
+    Expanding the search is not a free-form widening: it is the set the same queue would have covered had
+    it been joined as a random for the same LFGDungeons group, minus anything the requester cannot enter
+    right now. Both halves are data TC already owns - CachedDungeonMapStore, which LoadLFGDungeons fills
+    per dungeon group, and GetLockedDungeons, which is recomputed live.
+
+    Randoms are already expanded to their whole group by JoinLfg, so they have nothing to gain here; this
+    is for a specific-dungeon queue.
+
+   @param[in]     pguid      Player whose eligibility bounds the expansion
+   @param[in]     current    Dungeons the entry is queued for right now
+   @param[out]    nowInvalid If given, receives the currently queued dungeons that have since become locked
+   @returns The widened dungeon set (never contains anything locked for pguid)
+*/
+LfgDungeonSet LFGMgr::BuildExpandedDungeons(ObjectGuid pguid, LfgDungeonSet const& current, LfgLockMap* nowInvalid)
+{
+    LfgDungeonSet expanded = current;
+
+    std::set<uint8> groups;
+    for (uint32 dungeonId : current)
+        if (LFGDungeonData const* dungeon = GetLFGDungeon(dungeonId))
+            groups.insert(dungeon->group);
+
+    for (uint8 group : groups)
+    {
+        LfgCachedDungeonContainer::const_iterator itr = CachedDungeonMapStore.find(group);
+        if (itr != CachedDungeonMapStore.end())
+            expanded.insert(itr->second.begin(), itr->second.end());
+    }
+
+    for (auto const& lock : GetLockedDungeons(pguid))
+    {
+        uint32 const dungeonId = lock.first & 0x00FFFFFF;
+        expanded.erase(dungeonId);
+        if (nowInvalid && current.find(dungeonId) != current.end())
+            (*nowInvalid)[lock.first] = lock.second;
+    }
+
+    return expanded;
+}
+
+/**
+    Offers SMSG_LFG_EXPAND_SEARCH_PROMPT to the owner of every queue entry that has been waiting longer
+    than LFG_TIME_EXPAND_SEARCH_PROMPT and that would actually gain dungeons by being widened. Prompted
+    owners are remembered so the popup is offered once per queue entry rather than once per sweep, and
+    that memory is pruned in the same pass against the set of owners still queued.
+*/
+void LFGMgr::UpdateExpandSearchPrompts(time_t currTime)
+{
+    GuidSet stillQueued;
+
+    for (auto const& itr : PlayersStore)
+    {
+        ObjectGuid const pguid = itr.first;
+        if (itr.second.GetState() != LFG_STATE_QUEUED)
+            continue;
+
+        Player* player = ObjectAccessor::FindConnectedPlayer(pguid);
+        if (!player)
+            continue;
+
+        ObjectGuid const gguid = GetGroup(pguid);
+        if (!gguid.IsEmpty())
+        {
+            // Only the leader can act on the prompt, so only the leader is asked.
+            Group const* group = sGroupMgr->GetGroupByGUID(gguid);
+            if (!group || group->GetLeaderGUID() != pguid)
+                continue;
+        }
+
+        ObjectGuid const owner = gguid.IsEmpty() ? pguid : gguid;
+        stillQueued.insert(owner);
+
+        if (ExpandSearchPromptedStore.find(owner) != ExpandSearchPromptedStore.end())
+            continue;
+
+        LFGQueue& queue = GetQueue(owner);
+        time_t const joinTime = queue.GetJoinTime(owner);
+        if (!joinTime || currTime - joinTime < LFG_TIME_EXPAND_SEARCH_PROMPT)
+            continue;
+
+        LfgDungeonSet const* queued = queue.GetQueuedDungeons(owner);
+        if (!queued || queued->empty())
+            continue;
+
+        LfgDungeonSet const expanded = BuildExpandedDungeons(pguid, *queued, nullptr);
+        bool const wouldGain = std::any_of(expanded.begin(), expanded.end(),
+            [queued](uint32 dungeonId) { return queued->find(dungeonId) == queued->end(); });
+        if (!wouldGain)
+            continue;
+
+        WorldPackets::LFG::RideTicket const* ticket = GetTicket(pguid);
+        if (!ticket)
+            continue;
+
+        ExpandSearchPromptedStore.insert(owner);
+        TC_LOG_DEBUG("lfg.queue.expand", "Offering search expansion to {} (owner {}): queued for {} dungeons, {} available",
+            pguid.ToString(), owner.ToString(), uint32(queued->size()), uint32(expanded.size()));
+        player->GetSession()->SendLfgExpandSearchPrompt(*ticket);
+    }
+
+    std::erase_if(ExpandSearchPromptedStore, [&stillQueued](ObjectGuid const& guid)
+    {
+        return stillQueued.find(guid) == stillQueued.end();
+    });
+}
+
+/**
+    Handles CMSG_DF_CONFIRM_EXPAND_SEARCH: the player accepted the "expand your search?" popup.
+
+    The entry is rebuilt with the widened dungeon set but the *original* join time, so accepting costs
+    nothing in queue position - the join time is what wait-time averages and ordering key off. Any dungeon
+    the entry was already queued for that has since become unenterable is reported through
+    SMSG_LFG_SLOT_INVALID before the swap, so the player is told why his selection shrank rather than
+    silently losing slots.
+
+   @param[in]     player Player that accepted the prompt (must be the queue owner or the group leader)
+   @param[in]     ticket Ticket echoed back by the client; must match the one we issued
+*/
+void LFGMgr::ConfirmExpandSearch(Player* player, WorldPackets::LFG::RideTicket const& ticket)
+{
+    if (!player)
+        return;
+
+    ObjectGuid const pguid = player->GetGUID();
+
+    if (GetState(pguid) != LFG_STATE_QUEUED)
+    {
+        TC_LOG_DEBUG("lfg.queue.expand", "{} confirmed a search expansion while not queued - ignored", pguid.ToString());
+        return;
+    }
+
+    WorldPackets::LFG::RideTicket const* ourTicket = GetTicket(pguid);
+    if (!ourTicket || ourTicket->RequesterGuid != ticket.RequesterGuid || ourTicket->Id != ticket.Id)
+    {
+        TC_LOG_DEBUG("lfg.queue.expand", "{} confirmed a search expansion with a ticket we did not issue - ignored", pguid.ToString());
+        return;
+    }
+
+    ObjectGuid const gguid = GetGroup(pguid);
+    if (!gguid.IsEmpty())
+    {
+        Group const* group = sGroupMgr->GetGroupByGUID(gguid);
+        if (!group || group->GetLeaderGUID() != pguid)
+        {
+            TC_LOG_DEBUG("lfg.queue.expand", "{} is not the leader of {} - search expansion ignored", pguid.ToString(), gguid.ToString());
+            return;
+        }
+    }
+
+    ObjectGuid const owner = gguid.IsEmpty() ? pguid : gguid;
+    LFGQueue& queue = GetQueue(owner);
+
+    time_t const joinTime = queue.GetJoinTime(owner);
+    LfgDungeonSet const* queuedPtr = queue.GetQueuedDungeons(owner);
+    LfgRolesMap const* rolesPtr = queue.GetQueuedRoles(owner);
+    if (!joinTime || !queuedPtr || !rolesPtr)
+    {
+        TC_LOG_DEBUG("lfg.queue.expand", "No queue data for owner {} - search expansion ignored", owner.ToString());
+        return;
+    }
+
+    LfgDungeonSet const queued = *queuedPtr;
+    LfgRolesMap const roles = *rolesPtr;
+
+    LfgLockMap nowInvalid;
+    LfgDungeonSet expanded = BuildExpandedDungeons(pguid, queued, &nowInvalid);
+
+    GuidSet players;
+    if (gguid.IsEmpty())
+        players.insert(pguid);
+    else
+        players = GetPlayers(gguid);
+
+    // Trim to what the whole party can actually enter - the same routine JoinLfg uses, so an expanded
+    // queue can never end up holding a dungeon one member is locked out of.
+    LfgLockPartyMap lockMap;
+    std::vector<std::string_view> playersMissingRequirement;
+    GetCompatibleDungeons(&expanded, players, &lockMap, &playersMissingRequirement, false);
+
+    for (auto const& invalid : nowInvalid)
+    {
+        int32 subReason1 = 0;
+        int32 subReason2 = 0;
+        LfgSlotInvalidReason const reason = LockStatusToSlotInvalidReason(invalid.second, subReason1, subReason2);
+        TC_LOG_DEBUG("lfg.queue.expand", "Queued dungeon {} is no longer valid for {} (lock status {} -> reason {})",
+            invalid.first & 0x00FFFFFF, pguid.ToString(), invalid.second.lockStatus, uint32(reason));
+        player->GetSession()->SendLfgSlotInvalid(reason, subReason1, subReason2);
+    }
+
+    if (expanded.empty())
+    {
+        // Everything we could have offered is locked. Leaving the entry queued for nothing would be a lie;
+        // the SMSG_LFG_SLOT_INVALID lines above have already told the player why.
+        TC_LOG_DEBUG("lfg.queue.expand", "Search expansion for owner {} left no valid dungeon - leaving queue", owner.ToString());
+        LeaveLfg(owner);
+        return;
+    }
+
+    if (expanded == queued)
+    {
+        // Nothing left to widen into (the queue can move between prompt and answer). Restate the queue so
+        // the client's popup closes against the real selection rather than against nothing.
+        for (GuidSet::const_iterator it = players.begin(); it != players.end(); ++it)
+            SendLfgUpdateStatus(*it, LfgUpdateData(LFG_UPDATETYPE_ADDED_TO_QUEUE, queued), !gguid.IsEmpty());
+        return;
+    }
+
+    // Re-add with the original join time. AddToQueue(reAdd = false) is deliberate: the widened selection
+    // has to be re-tested against everyone already queued, and the ordering that actually matters - the
+    // join time, which drives wait-time averages - is carried across explicitly.
+    queue.RemoveFromQueue(owner);
+    queue.AddQueueData(owner, joinTime, expanded, roles);
+    queue.AddToQueue(owner, false);
+
+    for (GuidSet::const_iterator it = players.begin(); it != players.end(); ++it)
+    {
+        SetSelectedDungeons(*it, expanded);
+        SendLfgUpdateStatus(*it, LfgUpdateData(LFG_UPDATETYPE_ADDED_TO_QUEUE, expanded), !gguid.IsEmpty());
+    }
+
+    TC_LOG_INFO("lfg.queue.expand", "Owner {} expanded search from {} to {} dungeons, join time preserved",
+        owner.ToString(), uint32(queued.size()), uint32(expanded.size()));
 }
 
 /**

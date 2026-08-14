@@ -111,6 +111,35 @@ enum LfgLockStatusType
     LFG_LOCKSTATUS_MISSING_ACHIEVEMENT           = 1034
 };
 
+/// Enum.LFGSlotInvalidReason, recovered verbatim from the 12.0.7 client's own reflection dump
+/// (Blizzard_APIDocumentationGenerated/LFGConstantsDocumentation.lua, entries 0..19). This is what
+/// SMSG_LFG_SLOT_INVALID carries in its first dword, and what the client's LFG_INSTANCE_INVALID_CODES
+/// table is indexed by. Note it is *not* the same numbering as LfgLockStatusType above for every value:
+/// NoSpec is 13 here while TC's LFG_LOCKSTATUS_NO_SPEC is 14, which is CannotRunAnyChildDungeon.
+enum LfgSlotInvalidReason : uint32
+{
+    LFG_SLOT_INVALID_NONE                        = 0,
+    LFG_SLOT_INVALID_EXPANSION_TOO_LOW           = 1,
+    LFG_SLOT_INVALID_LEVEL_TOO_LOW               = 2,
+    LFG_SLOT_INVALID_LEVEL_TOO_HIGH              = 3,
+    LFG_SLOT_INVALID_GEAR_TOO_LOW                = 4,
+    LFG_SLOT_INVALID_GEAR_TOO_HIGH               = 5,
+    LFG_SLOT_INVALID_RAID_LOCKED                 = 6,
+    LFG_SLOT_INVALID_LEVEL_TARGET_TOO_LOW        = 7,
+    LFG_SLOT_INVALID_LEVEL_TARGET_TOO_HIGH       = 8,
+    LFG_SLOT_INVALID_AREA_NOT_EXPLORED           = 9,
+    LFG_SLOT_INVALID_WRONG_FACTION               = 10,
+    LFG_SLOT_INVALID_NO_VALID_ROLES              = 11,
+    LFG_SLOT_INVALID_ENGAGED_IN_PVP              = 12,
+    LFG_SLOT_INVALID_NO_SPEC                     = 13,
+    LFG_SLOT_INVALID_CANNOT_RUN_ANY_CHILD_DUNGEON = 14,
+    LFG_SLOT_INVALID_RESTRICTED                  = 15,
+    LFG_SLOT_INVALID_CHROMIE_TIME                = 16,
+    LFG_SLOT_INVALID_NPE                         = 17,
+    LFG_SLOT_INVALID_TIMERUNNING                 = 18,
+    LFG_SLOT_INVALID_PLAYER_CONDITION_FAILED     = 19
+};
+
 /// Answer state (Also used to check compatibilites)
 enum LfgAnswer
 {
