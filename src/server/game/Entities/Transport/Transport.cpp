@@ -311,8 +311,16 @@ Transport* Transport::RemovePassenger(WorldObject* passenger)
 Creature* Transport::CreateNPCPassenger(ObjectGuid::LowType guid, CreatureData const* data)
 {
     Map* map = GetMap();
-    if (map->GetCreatureRespawnTime(guid))
-        return nullptr;
+    if (time_t respawnTime = map->GetCreatureRespawnTime(guid))
+    {
+        // still on its respawn timer, don't spawn it yet
+        if (respawnTime > GameTime::GetGameTime())
+            return nullptr;
+
+        // ready to respawn - the stored time has already elapsed, otherwise the passenger
+        // would be refused for as long as the (never cleaned up) respawn entry exists
+        map->RemoveRespawnTime(SPAWN_TYPE_CREATURE, guid);
+    }
 
     Creature* creature = Creature::CreateCreatureFromDB(guid, map, false, true);
     if (!creature)
@@ -356,8 +364,16 @@ Creature* Transport::CreateNPCPassenger(ObjectGuid::LowType guid, CreatureData c
 GameObject* Transport::CreateGOPassenger(ObjectGuid::LowType guid, GameObjectData const* data)
 {
     Map* map = GetMap();
-    if (map->GetGORespawnTime(guid))
-        return nullptr;
+    if (time_t respawnTime = map->GetGORespawnTime(guid))
+    {
+        // still on its respawn timer, don't spawn it yet
+        if (respawnTime > GameTime::GetGameTime())
+            return nullptr;
+
+        // ready to respawn - the stored time has already elapsed, otherwise the passenger
+        // would be refused for as long as the (never cleaned up) respawn entry exists
+        map->RemoveRespawnTime(SPAWN_TYPE_GAMEOBJECT, guid);
+    }
 
     GameObject* go = GameObject::CreateGameObjectFromDB(guid, map, false);
     if (!go)
