@@ -454,7 +454,8 @@ void Player::CalculateMinMaxDamage(WeaponAttackType attType, bool normalized, bo
 
     float versaDmgMod = 1.0f;
 
-    AddPct(versaDmgMod, GetRatingBonusValue(CR_VERSATILITY_DAMAGE_DONE) + float(GetTotalAuraModifier(SPELL_AURA_MOD_VERSATILITY)));
+    AddPct(versaDmgMod, GetRatingBonusValue(CR_VERSATILITY_DAMAGE_DONE) + float(GetTotalAuraModifier(SPELL_AURA_MOD_VERSATILITY))
+        + float(GetTotalAuraModifierByMiscValue(SPELL_AURA_MOD_SUPPORT_STAT, 6)));
 
     SpellShapeshiftFormEntry const* shapeshift = sSpellShapeshiftFormStore.LookupEntry(GetShapeshiftForm());
     if (shapeshift && shapeshift->CombatRoundTime)
@@ -576,7 +577,8 @@ void Player::UpdateHealingDonePercentMod()
 {
     float value = 1.0f;
 
-    AddPct(value, GetRatingBonusValue(CR_VERSATILITY_HEALING_DONE) + GetTotalAuraModifier(SPELL_AURA_MOD_VERSATILITY));
+    AddPct(value, GetRatingBonusValue(CR_VERSATILITY_HEALING_DONE) + GetTotalAuraModifier(SPELL_AURA_MOD_VERSATILITY)
+        + GetTotalAuraModifierByMiscValue(SPELL_AURA_MOD_SUPPORT_STAT, 6));
 
     for (AuraEffect const* auraEffect : GetAuraEffectsByType(SPELL_AURA_MOD_HEALING_DONE_PERCENT))
         AddPct(value, auraEffect->GetAmount());
@@ -713,6 +715,8 @@ void Player::UpdateSpellCritChance()
     crit += GetTotalAuraModifier(SPELL_AURA_MOD_SPELL_CRIT_CHANCE);
     // Increase crit from SPELL_AURA_MOD_CRIT_PCT
     crit += GetTotalAuraModifier(SPELL_AURA_MOD_CRIT_PCT);
+    // SPELL_AURA_MOD_SUPPORT_STAT misc 5 (e.g. Prescience)
+    crit += GetTotalAuraModifierByMiscValue(SPELL_AURA_MOD_SUPPORT_STAT, 5);
     // Increase crit from spell crit ratings
     crit += GetRatingBonusValue(CR_CRIT_SPELL);
 
@@ -764,6 +768,13 @@ void Player::UpdateSpellHitChances()
 {
     m_modSpellHitChance = 15.0f + GetTotalAuraModifier(SPELL_AURA_MOD_SPELL_HIT_CHANCE);
     m_modSpellHitChance += GetRatingBonusValue(CR_HIT_SPELL);
+}
+
+void Player::UpdateLeech()
+{
+    float leechValue = GetRatingBonusValue(CR_LIFESTEAL);
+    leechValue += GetTotalAuraModifier(SPELL_AURA_MOD_LEECH);
+    SetUpdateFieldStatValue(m_values.ModifyValue(&Unit::m_unitData).ModifyValue(&UF::UnitData::Lifesteal), leechValue);
 }
 
 void Player::UpdateExpertise(WeaponAttackType attack)

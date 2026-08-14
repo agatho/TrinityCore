@@ -1762,6 +1762,11 @@ bool Aura::CanStackWith(Aura const* existingAura) const
         if (!GetCastItemGUID().IsEmpty() && !existingAura->GetCastItemGUID().IsEmpty())
             if (GetCastItemGUID() != existingAura->GetCastItemGUID() && (m_spellInfo->HasAttribute(SPELL_ATTR0_CU_ENCHANT_PROC)))
                 return true;
+        // A Fire Inside (427775) — multiple Immolation Aura (258920) instances with independent durations
+        if (sameCaster && m_spellInfo->Id == 258920 && existingSpellInfo->Id == 258920)
+            if (Unit* caster = GetCaster())
+                if (caster->HasAura(427775))
+                    return true;
         // same spell with same caster should not stack
         return false;
     }

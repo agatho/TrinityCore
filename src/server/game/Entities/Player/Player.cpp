@@ -5319,7 +5319,9 @@ void Player::UpdateRating(CombatRating cr)
         case CR_SPEED:
         case CR_RESILIENCE_PLAYER_DAMAGE:
         case CR_RESILIENCE_CRIT_TAKEN:
+            break;
         case CR_LIFESTEAL:
+            UpdateLeech();
             break;
         case CR_HASTE_MELEE:
         case CR_HASTE_RANGED:
@@ -8267,6 +8269,8 @@ void Player::UpdateWeaponDependentCritAuras(WeaponAttackType attackType)
 
     // these auras don't have item requirement (only Combat Expertise in 3.3.5a)
     amount += GetTotalAuraModifier(SPELL_AURA_MOD_CRIT_PCT);
+    // SPELL_AURA_MOD_SUPPORT_STAT misc 5 (e.g. Prescience) — percent crit from support
+    amount += GetTotalAuraModifierByMiscValue(SPELL_AURA_MOD_SUPPORT_STAT, 5);
 
     SetBaseModFlatValue(modGroup, amount);
 }

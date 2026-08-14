@@ -490,11 +490,15 @@ m_spellValue(new SpellValue(m_spellInfo, caster)), _spellEvent(nullptr)
     // Get data for type of attack
     m_attackType = info->GetAttackType();
 
-    m_spellSchoolMask = info->GetSchoolMask();           // Can be override for some spell (wand shoot for example)
+    // Base school, then SPELL_AURA_MOD_ABILITY_SCHOOL_MASK (220) when present on the caster
+    if (Unit const* unitCaster = m_caster->ToUnit())
+        m_spellSchoolMask = unitCaster->GetSchoolMaskForSpell(info);
+    else
+        m_spellSchoolMask = info->GetSchoolMask();
 
     if (Player const* playerCaster = m_caster->ToPlayer())
     {
-        // wand case
+        // wand case (overrides ability school mask — wand damage type is authoritative)
         if (m_attackType == RANGED_ATTACK)
             if ((playerCaster->GetClassMask() & CLASSMASK_WAND_USERS) != 0)
                 if (Item* pItem = playerCaster->GetWeaponForAttack(RANGED_ATTACK))
@@ -2894,6 +2898,7 @@ void Spell::TargetInfo::DoDamageAndTriggers(Spell* spell)
 
             healInfo = std::make_unique<HealInfo>(caster, spell->unitTarget, addhealth, spell->m_spellInfo, spell->m_spellInfo->GetSchoolMask());
             caster->HealBySpell(*healInfo, IsCrit);
+            caster->ContributeLeech(healInfo->GetHeal(), spell->m_spellInfo);
             spell->unitTarget->GetThreatManager().ForwardThreatForAssistingMe(caster, float(healInfo->GetEffectiveHeal()) * 0.5f, spell->m_spellInfo);
             spell->m_healing = healInfo->GetEffectiveHeal();
 
@@ -2936,6 +2941,7 @@ void Spell::TargetInfo::DoDamageAndTriggers(Spell* spell)
                 spell->m_damage = damageInfo.damage;
 
                 caster->DealSpellDamage(&damageInfo, true);
+                caster->ContributeLeech(damageInfo.damage, spell->m_spellInfo);
 
                 // Send log damage message to client
                 caster->SendSpellNonMeleeDamageLog(&damageInfo);
@@ -4407,7 +4413,10 @@ void Spell::finish(SpellCastResult result)
     {
         // Empower spells trigger gcd at the end of cast instead of at start
         if (SpellInfo const* gcd = sSpellMgr->GetSpellInfo(SPELL_EMPOWER_HARDCODED_GCD, DIFFICULTY_NONE))
+        {
             unitCaster->GetSpellHistory()->AddGlobalCooldown(gcd, Milliseconds(gcd->StartRecoveryTime));
+            unitCaster->RewardLeech();
+        }
     }
 
     if (result != SPELL_CAST_OK)
@@ -9222,6 +9231,8 @@ void Spell::TriggerGlobalCooldown()
     }
 
     m_caster->ToUnit()->GetSpellHistory()->AddGlobalCooldown(m_spellInfo, gcd);
+    // Retail leech is GCD-batched (SimC / Nyr97 on TC#30385) — grant stored heal when a GCD starts
+    m_caster->ToUnit()->RewardLeech();
 }
 
 void Spell::CancelGlobalCooldown()
