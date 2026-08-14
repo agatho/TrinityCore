@@ -378,6 +378,32 @@ constexpr float ARATHI_RPE_POSITION_X = -1101.67f;
 constexpr float ARATHI_RPE_POSITION_Y = -3554.37f;
 constexpr float ARATHI_RPE_POSITION_Z = 48.9203f;
 constexpr float ARATHI_RPE_ORIENTATION = 6.2583666f;
+
+// The NoRpeReason enum is not decoded; 4 is the value CharacterPackets.h already documents as
+// "recently active" and is the packet default. UNVERIFIED beyond that comment.
+constexpr uint32 ARATHI_RPE_NO_REASON_RECENTLY_ACTIVE = 4;
+
+// One gate for both the character list (RpeAvailable) and the actual CMSG_PLAYER_LOGIN.RPE
+// teleport, so a modified client cannot relocate a recently active character to the RPE map.
+// The retail inactivity window is unknown, so it is a worldserver.conf value rather than a
+// baked in constant; 0 removes the inactivity requirement entirely.
+bool IsArathiRpeEligible(time_t lastActive)
+{
+    uint32 const inactiveDays = sWorld->getIntConfig(CONFIG_RETURNING_PLAYER_EXPERIENCE_INACTIVE_DAYS);
+    if (!inactiveDays)
+        return true;
+
+    return lastActive > 0
+        && GameTime::GetGameTime() >= lastActive + time_t(inactiveDays) * DAY;
+}
+
+void ApplyArathiRpeEnumEligibility(WorldPackets::Character::EnumCharactersResult::CharacterInfo& characterInfo)
+{
+    bool const eligible = IsArathiRpeEligible(time_t(characterInfo.Basic.LastActiveTime));
+
+    characterInfo.RestrictionsAndMails.RpeAvailable = eligible;
+    characterInfo.RestrictionsAndMails.NoRpeReason = eligible ? 0 : ARATHI_RPE_NO_REASON_RECENTLY_ACTIVE;
+}
 }
 
 class EnumCharactersQueryHolder : public CharacterDatabaseQueryHolder
@@ -453,10 +479,14 @@ void WorldSession::HandleCharEnum(CharacterDatabaseQueryHolder const& holder)
         {
             charEnum.Characters.emplace_back(result->Fetch());
 
-            WorldPackets::Character::EnumCharactersResult::CharacterInfoBasic& charInfo = charEnum.Characters.back().Basic;
+            WorldPackets::Character::EnumCharactersResult::CharacterInfo& characterInfo = charEnum.Characters.back();
+            WorldPackets::Character::EnumCharactersResult::CharacterInfoBasic& charInfo = characterInfo.Basic;
 
             if (std::vector<UF::ChrCustomizationChoice>* customizationsForChar = Trinity::Containers::MapGetValuePtr(customizations, charInfo.Guid.GetCounter()))
                 charInfo.Customizations = std::move(*customizationsForChar);
+
+            if (!charEnum.IsDeletedCharacters)
+                ApplyArathiRpeEnumEligibility(characterInfo);
 
             TC_LOG_INFO("network", "Loading char guid {} from account {}.", charInfo.Guid.ToString(), GetAccountId());
 
@@ -1200,8 +1230,17 @@ void WorldSession::HandlePlayerLogin(LoginQueryHolder const& holder)
     // pointing at the old map. Rebind exactly like MovementHandler::HandleMoveWorldportAck
     // (relocate, ResetMap, SetMap, UpdatePositionData) so that GetMap()->GetId() really is the RPE
     // map before AddPlayerToMap runs and grid/spawn/AI loading happens on the right map.
-    bool const enterArathiRpe = m_playerLoginRPE;
+    bool enterArathiRpe = m_playerLoginRPE;
     m_playerLoginRPE = false;
+    if (enterArathiRpe && !IsArathiRpeEligible(time_t(pCurrChar->m_playerData->LogoutTime)))
+    {
+        // EnumCharacters only advertises RpeAvailable - the login bit itself is client controlled,
+        // so re-check here or a modified client could relocate any character to the RPE map.
+        TC_LOG_ERROR("network", "Player {} requested Arathi RPE login but is not eligible (LogoutTime={})",
+            pCurrChar->GetGUID().ToString(), int64(pCurrChar->m_playerData->LogoutTime));
+        enterArathiRpe = false;
+    }
+
     if (enterArathiRpe)
     {
         if (!sMapStore.LookupEntry(ARATHI_RPE_MAP_ID))
