@@ -57,7 +57,6 @@ enum DeathKnightSpells
     SPELL_DK_BREATH_OF_SINDRAGOSA               = 152279,
     SPELL_DK_BRITTLE_DEBUFF                     = 374557,
     SPELL_DK_CLEAVING_STRIKES                   = 316916,
-    SPELL_DK_CORPSE_EXPLOSION_TRIGGERED         = 43999,
     SPELL_DK_CRIMSON_SCOURGE_BUFF               = 81141,
     SPELL_DK_DARK_SIMULACRUM_BUFF               = 77616,
     SPELL_DK_DARK_SIMULACRUM_SPELLPOWER_BUFF    = 94984,
@@ -822,7 +821,7 @@ class spell_dk_ghoul_explode : public SpellScript
 {
     bool Validate(SpellInfo const* spellInfo) override
     {
-        return ValidateSpellInfo({ SPELL_DK_CORPSE_EXPLOSION_TRIGGERED }) && ValidateSpellEffect({ { spellInfo->Id, EFFECT_2 } });
+        return ValidateSpellEffect({ { spellInfo->Id, EFFECT_2 } });
     }
 
     void HandleDamage(SpellEffIndex /*effIndex*/)
@@ -830,19 +829,9 @@ class spell_dk_ghoul_explode : public SpellScript
         SetHitDamage(GetCaster()->CountPctFromMaxHealth(GetEffectInfo(EFFECT_2).CalcValue(GetCaster())));
     }
 
-    void Suicide(SpellEffIndex /*effIndex*/)
-    {
-        if (Unit* unitTarget = GetHitUnit())
-        {
-            // Corpse Explosion (Suicide)
-            unitTarget->CastSpell(unitTarget, SPELL_DK_CORPSE_EXPLOSION_TRIGGERED, true);
-        }
-    }
-
     void Register() override
     {
-        OnEffectHitTarget += SpellEffectFn(spell_dk_ghoul_explode::HandleDamage, EFFECT_0, SPELL_EFFECT_SCHOOL_DAMAGE);
-        OnEffectHitTarget += SpellEffectFn(spell_dk_ghoul_explode::Suicide, EFFECT_1, SPELL_EFFECT_SCHOOL_DAMAGE);
+        OnEffectHitTarget += SpellEffectFn(spell_dk_ghoul_explode::HandleDamage, EFFECT_0, SPELL_EFFECT_WEAPON_PERCENT_DAMAGE);
     }
 };
 
@@ -1085,7 +1074,7 @@ class spell_dk_obliteration : public AuraScript
 
     void Register() override
     {
-        AfterEffectProc += AuraEffectProcFn(spell_dk_obliteration::HandleProc, EFFECT_0, SPELL_AURA_DUMMY);
+        AfterEffectProc += AuraEffectProcFn(spell_dk_obliteration::HandleProc, EFFECT_0, SPELL_AURA_PROC_TRIGGER_SPELL);
     }
 };
 
@@ -1267,7 +1256,7 @@ class spell_dk_rime : public AuraScript
 
     void Register() override
     {
-        DoCheckEffectProc += AuraCheckEffectProcFn(spell_dk_rime::CheckProc, EFFECT_0, SPELL_AURA_PROC_TRIGGER_SPELL);
+        DoCheckEffectProc += AuraCheckEffectProcFn(spell_dk_rime::CheckProc, EFFECT_0, SPELL_AURA_DUMMY);
     }
 };
 
@@ -1421,14 +1410,21 @@ class spell_dk_t20_2p_rune_empowered : public AuraScript
 // 55233 - Vampiric Blood
 class spell_dk_vampiric_blood : public AuraScript
 {
+    bool Validate(SpellInfo const* spellInfo) override
+    {
+        return ValidateSpellEffect({ { spellInfo->Id, EFFECT_3 } });
+    }
+
     void CalculateAmount(AuraEffect const* /*aurEff*/, SpellEffectValue& amount, bool& /*canBeRecalculated*/)
     {
-        amount = GetUnitOwner()->CountPctFromMaxHealth(amount);
+        // the health percentage moved to EFFECT_3 ($s4 in the tooltip); EFFECT_1 is only the flat carrier
+        Unit* owner = GetUnitOwner();
+        amount = owner->CountPctFromMaxHealth(GetEffectInfo(EFFECT_3).CalcValueAsInt(owner));
     }
 
     void Register() override
     {
-        DoEffectCalcAmount += AuraEffectCalcAmountFn(spell_dk_vampiric_blood::CalculateAmount, EFFECT_1, SPELL_AURA_MOD_INCREASE_HEALTH_2);
+        DoEffectCalcAmount += AuraEffectCalcAmountFn(spell_dk_vampiric_blood::CalculateAmount, EFFECT_1, SPELL_AURA_MOD_INCREASE_HEALTH);
     }
 };
 
