@@ -75,6 +75,10 @@ namespace WorldPackets
 
             void Read() override;
 
+            // The client writes a uint16 between these two (serializer RVA 0x6A5280: write_uint32(msg+0x20),
+            // write_uint16(msg+0x24), write_PackedGuid(msg+0x28)). Reading straight from SpecID to the guid
+            // started the PackedGuid two bytes early, so PetGUID never matched the player's actual pet and
+            // HandleSetPetSpecialization bailed on its first check every time.
             uint32 SpecID = 0;
             ObjectGuid PetGUID;
         };

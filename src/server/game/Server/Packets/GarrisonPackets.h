@@ -1540,8 +1540,12 @@ namespace WorldPackets
 
             void Read() override;
 
+            // Client serializer RVA 0x6A99C0 writes write_uint32(payload[0]) then write_uint32(payload[4]) -
+            // eight bytes, two whole uint32s. IsTemporary is the second one, not a packed bit: reading it as
+            // Bits<1> consumed a byte and returned only that byte's bit 7, so a flag of 1 arrived as false and
+            // no talent was ever treated as temporary.
             int32 GarrTalentID = 0;
-            bool IsTemporary = false;
+            uint32 IsTemporary = 0;
         };
 
         class GarrisonResearchTalent final : public ClientPacket

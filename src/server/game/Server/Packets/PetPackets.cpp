@@ -165,6 +165,9 @@ void PetAbandonByNumber::Read()
 void SetPetSpecializationRequest::Read()
 {
     _worldPacket >> SpecID;
+    // uint16 sitting between SpecID and the guid — see PetPackets.h. Consumed rather than stored so the
+    // packet object's layout is unchanged; the handler needs only SpecID and PetGUID.
+    _worldPacket.read_skip<uint16>();
     _worldPacket >> PetGUID;
 }
 

@@ -1286,7 +1286,7 @@ WorldPacket const* GarrisonSwapBuildingsResponse::Write()
 void GarrisonLearnTalent::Read()
 {
     _worldPacket >> GarrTalentID;
-    _worldPacket >> Bits<1>(IsTemporary);
+    _worldPacket >> IsTemporary;        // whole uint32, not a bit — see GarrisonPackets.h
 }
 
 void GarrisonResearchTalent::Read()
