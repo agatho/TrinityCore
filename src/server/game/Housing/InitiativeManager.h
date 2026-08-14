@@ -143,6 +143,10 @@ public:
     void BroadcastTaskComplete(Neighborhood* neighborhood, uint32 initiativeID, uint32 taskID) const;
     void BroadcastInitiativeComplete(Neighborhood* neighborhood, uint32 initiativeID) const;
     void BroadcastRewardAvailable(Neighborhood* neighborhood, uint32 initiativeID, uint32 milestoneIndex) const;
+    // SMSG_CLEAR_INITIATIVE_TASK_CRITERIA_PROGRESS (0x420367) — tells the client to zero its
+    // cached progress for the given leaf CriteriaIDs. Sent whenever server-side task progress
+    // is reset to zero, otherwise the client keeps rendering the pre-reset bars.
+    void BroadcastClearTaskCriteriaProgress(Neighborhood* neighborhood, std::vector<uint64> const& criteriaIDs) const;
 
     // Auto-start initiatives for neighborhoods that don't have one
     void CheckAndStartInitiatives();
@@ -163,6 +167,9 @@ private:
     uint32 SelectWeightedCycle(uint32 initiativeID) const;
     uint32 CalculateMaxPoints(uint32 initiativeID) const;
     void BuildCriteriaIndex();
+    // Leaf Criteria IDs reachable from a task's CriteriaTree (all tasks of an initiative when
+    // taskID == 0). These are exactly the IDs the client indexes its task progress cache by.
+    std::vector<uint64> CollectTaskCriteriaIDs(uint32 initiativeID, uint32 taskID) const;
 
     // Active initiatives: neighborhoodGuid -> list of active initiatives
     std::unordered_map<uint64, std::vector<std::unique_ptr<ActiveInitiative>>> _activeInitiatives;

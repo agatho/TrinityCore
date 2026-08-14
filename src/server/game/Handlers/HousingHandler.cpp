@@ -4663,17 +4663,33 @@ void WorldSession::HandleInvitePlayerToNeighborhood(WorldPackets::Housing::Invit
         return;
     }
 
-    // NOTE: resolves currently-connected players by name only; offline-name lookup
-    // (name cache / DB) is a follow-up.
+    // The client API is C_HousingNeighborhood.InvitePlayerToNeighborhood(playerName), so this
+    // opcode is a name -> GUID resolution as much as an invite. Resolve connected players first,
+    // then fall back to the character cache so offline characters resolve too.
     ObjectGuid inviteeGuid;
     if (Player* invitee = ObjectAccessor::FindConnectedPlayerByName(invitePlayerToNeighborhood.PlayerName))
         inviteeGuid = invitee->GetGUID();
+    else
+        inviteeGuid = sCharacterCache->GetCharacterGuidByName(invitePlayerToNeighborhood.PlayerName);
+
+    // SMSG_NEIGHBORHOOD_INVITE_NAME_LOOKUP_RESULT (0x5C0011) reports the outcome of that
+    // resolution. Client handler (68275, case 6029329) reads uint8 Result then a PackedGUID and
+    // only raises its Lua event when the GUID's HighGuid type field is non-zero — so "not found"
+    // is encoded as an empty GUID, which is what the failure path below sends.
+    WorldPackets::Neighborhood::NeighborhoodInviteNameLookupResult lookupResult;
+    lookupResult.Result = static_cast<uint8>(inviteeGuid.IsEmpty()
+        ? HOUSING_RESULT_PLAYER_NOT_FOUND : HOUSING_RESULT_SUCCESS);
+    lookupResult.PlayerGuid = inviteeGuid;
+    SendPacket(lookupResult.Write());
 
     if (inviteeGuid.IsEmpty())
     {
         WorldPackets::Neighborhood::NeighborhoodInviteResidentResponse response;
-        response.Result = static_cast<uint8>(HOUSING_RESULT_GENERIC_FAILURE);
+        response.Result = static_cast<uint8>(HOUSING_RESULT_PLAYER_NOT_FOUND);
         SendPacket(response.Write());
+
+        TC_LOG_DEBUG("housing", "CMSG_INVITE_PLAYER_TO_NEIGHBORHOOD: name '{}' did not resolve to a character",
+            invitePlayerToNeighborhood.PlayerName);
         return;
     }
 

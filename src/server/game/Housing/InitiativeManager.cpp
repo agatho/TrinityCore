@@ -35,6 +35,7 @@
 #include "QuestDef.h"
 #include "Random.h"
 #include "WorldSession.h"
+#include <algorithm>
 
 InitiativeManager& InitiativeManager::Instance()
 {
@@ -415,9 +416,16 @@ ActiveInitiative* InitiativeManager::StartInitiative(uint64 neighborhoodGuid, ui
 
     // Rebuild criteria reverse index now that a new initiative is active
     BuildCriteriaIndex();
+
     // Speculative SendInitiativeUpdateStatus(STARTED) + SendInitiativePointsUpdate(0,max)
     // retired 2026-05-11 — started-state + initial points propagate via entity-fragment
     // updates on the neighborhood entity.
+
+    // Every task of the new initiative starts at Progress=0 / NOT_STARTED. Clients that were
+    // in the neighborhood for the previous cycle still hold the old per-criteria progress, so
+    // tell them to drop it — otherwise the fresh initiative renders with the last cycle's bars.
+    if (Neighborhood* neighborhood = sNeighborhoodMgr.GetNeighborhoodByCounter(neighborhoodGuid))
+        BroadcastClearTaskCriteriaProgress(neighborhood, CollectTaskCriteriaIDs(initiativeID, /*all tasks*/ 0));
 
     return ptr;
 }
@@ -633,6 +641,10 @@ void InitiativeManager::ClearTaskCriteria(uint64 neighborhoodGuid, uint32 initia
 
     PersistSingleTaskProgress(initiative->DbId, taskID, 0, static_cast<uint8>(INITIATIVE_TASK_STATUS_NOT_STARTED));
     PersistInitiative(*initiative);
+
+    // Mirror the server-side reset on every member's client.
+    if (Neighborhood* neighborhood = sNeighborhoodMgr.GetNeighborhoodByCounter(neighborhoodGuid))
+        BroadcastClearTaskCriteriaProgress(neighborhood, CollectTaskCriteriaIDs(initiativeID, taskID));
 
     TC_LOG_DEBUG("housing", "InitiativeManager::ClearTaskCriteria: Cleared task {} in initiative {} (neighborhood {})",
         taskID, initiativeID, neighborhoodGuid);
@@ -1053,6 +1065,62 @@ void InitiativeManager::BroadcastRewardAvailable(Neighborhood* neighborhood, uin
 
     TC_LOG_DEBUG("housing", "InitiativeManager: Broadcast InitiativeRewardAvailable (initiative={}, milestone={}) to neighborhood '{}'",
         initiativeID, milestoneIndex, neighborhood->GetName());
+}
+
+std::vector<uint64> InitiativeManager::CollectTaskCriteriaIDs(uint32 initiativeID, uint32 taskID) const
+{
+    std::vector<uint64> criteriaIDs;
+
+    auto tasksItr = _initiativeTasks.find(initiativeID);
+    if (tasksItr == _initiativeTasks.end())
+        return criteriaIDs;
+
+    for (InitiativeTaskData const& task : tasksItr->second)
+    {
+        if (taskID != 0 && task.TaskID != taskID)
+            continue;
+
+        if (task.CriteriaTreeID <= 0)
+            continue;
+
+        CriteriaTree const* tree = sCriteriaMgr->GetCriteriaTree(static_cast<uint32>(task.CriteriaTreeID));
+        if (!tree)
+            continue;
+
+        CriteriaMgr::WalkCriteriaTree(tree, [&criteriaIDs](CriteriaTree const* node)
+        {
+            if (node->Criteria)
+                criteriaIDs.push_back(node->Criteria->ID);
+        });
+    }
+
+    // The same Criteria can hang off more than one tree node; the client indexes by ID, so
+    // send each one once.
+    std::sort(criteriaIDs.begin(), criteriaIDs.end());
+    criteriaIDs.erase(std::unique(criteriaIDs.begin(), criteriaIDs.end()), criteriaIDs.end());
+    return criteriaIDs;
+}
+
+void InitiativeManager::BroadcastClearTaskCriteriaProgress(Neighborhood* neighborhood, std::vector<uint64> const& criteriaIDs) const
+{
+    if (!neighborhood || criteriaIDs.empty())
+        return;
+
+    WorldPackets::Housing::ClearInitiativeTaskCriteriaProgress packet;
+    packet.CriteriaIDs = criteriaIDs;
+    WorldPacket const* data = packet.Write();
+
+    for (auto const& member : neighborhood->GetMembers())
+    {
+        if (Player* player = ObjectAccessor::FindPlayer(member.PlayerGuid))
+        {
+            if (player->GetSession())
+                player->GetSession()->SendPacket(data);
+        }
+    }
+
+    TC_LOG_DEBUG("housing", "InitiativeManager: Broadcast ClearInitiativeTaskCriteriaProgress ({} criteria) to neighborhood '{}'",
+        uint32(criteriaIDs.size()), neighborhood->GetName());
 }
 
 // ============================================================
