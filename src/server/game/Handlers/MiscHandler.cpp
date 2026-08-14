@@ -516,6 +516,19 @@ void WorldSession::HandleAreaTriggerOpcode(WorldPackets::AreaTrigger::AreaTrigge
     {
         TC_LOG_DEBUG("network", "HandleAreaTriggerOpcode: Player '{}' {} too far, ignore Area Trigger ID: {}",
             player->GetName(), player->GetGUID().ToString(), packet.AreaTriggerID);
+
+        // The client remembers which triggers it has an outstanding assertion for and will not
+        // mention this one again until that bookkeeping is undone, so silently dropping the
+        // message strands the trigger until the player leaves and returns. Echoing the rejected
+        // message back rolls the client's record back and it re-asserts on a later update, by
+        // which time our view of its position has caught up.
+        // Only this disagreement is answered: it is a transient desync that a retry resolves.
+        // The other refusals below are permanent for as long as the player stands there, and
+        // the client re-sends immediately and indefinitely when denied, so they stay silent.
+        WorldPackets::AreaTrigger::AreaTriggerDenied areaTriggerDenied;
+        areaTriggerDenied.AreaTriggerID = packet.AreaTriggerID;
+        areaTriggerDenied.Entered = packet.Entered;
+        SendPacket(areaTriggerDenied.Write());
         return;
     }
 
