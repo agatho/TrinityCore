@@ -2564,11 +2564,21 @@ void OpcodeTable::InitializeServerOpcodes()
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_VOICE_CHANNEL_INFO_RESPONSE,                                  STATUS_UNHANDLED,   CONNECTION_TYPE_INSTANCE);
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_VOICE_CHANNEL_STT_TOKEN_RESPONSE,                             STATUS_UNHANDLED,   CONNECTION_TYPE_INSTANCE);
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_VOICE_LOGIN_RESPONSE,                                         STATUS_UNHANDLED,   CONNECTION_TYPE_INSTANCE);
-    DEFINE_SERVER_OPCODE_HANDLER(SMSG_VOID_ITEM_SWAP_RESPONSE,                                      STATUS_NEVER,       CONNECTION_TYPE_INSTANCE);
-    DEFINE_SERVER_OPCODE_HANDLER(SMSG_VOID_STORAGE_CONTENTS,                                        STATUS_NEVER,       CONNECTION_TYPE_INSTANCE);
-    DEFINE_SERVER_OPCODE_HANDLER(SMSG_VOID_STORAGE_FAILED,                                          STATUS_NEVER,       CONNECTION_TYPE_INSTANCE);
-    DEFINE_SERVER_OPCODE_HANDLER(SMSG_VOID_STORAGE_TRANSFER_CHANGES,                                STATUS_NEVER,       CONNECTION_TYPE_INSTANCE);
-    DEFINE_SERVER_OPCODE_HANDLER(SMSG_VOID_TRANSFER_RESULT,                                         STATUS_NEVER,       CONNECTION_TYPE_INSTANCE);
+    // The five SMSG_VOID_* opcodes (0x630000-0x630004) are deliberately NOT registered. Void Storage is a
+    // dead feature in 12.0.7 - the client can neither ask for it nor display it, so a server that answers is
+    // talking to nobody. Verified against the 68275 client image (flat file, offset == RVA):
+    //  - no CMSG_VOID_* opcode exists at all, here or in the client. Nothing can open it.
+    //  - no C_VoidStorage Lua namespace, and none of CanUseVoidStorage / GetVoidItemInfo /
+    //    ClickVoidStorageSlot / ExecuteVoidTransfer / VoidStorageFrame, nor the VOID_STORAGE_OPEN /
+    //    VOID_STORAGE_UPDATE / VOID_TRANSFER_DONE events. The controls in that same scan are all present
+    //    (C_Bank @ 0x3A80732, C_AuctionHouse @ 0x3A7C68B, C_Housing @ 0x3ABBD50), so this is a missing
+    //    feature and not a failed scan.
+    //  - Interface/AddOns (wow-ui-source-12.0.5) has zero case-insensitive matches for "voidstorage".
+    // Inert leftovers do survive and are easy to mistake for a live feature: the JamVoidItem wire struct name
+    // (0x3A207D0), PlayerInteractionType::VoidStorageBanker (26), the VoidItem UI cursor type and ~21
+    // ERR_VOID_* GameError names. None is reachable without a request opcode and a frame to draw it.
+    // The enum values stay in Opcodes.h - they are real client opcode numbers and deleting entries shifts the
+    // table. It is registering send handlers for them that is wrong, so please do not "fix" this omission.
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_WAIT_QUEUE_FINISH,                                            STATUS_NEVER,       CONNECTION_TYPE_REALM);
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_WAIT_QUEUE_UPDATE,                                            STATUS_NEVER,       CONNECTION_TYPE_REALM);
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_WALK_IN_RESULT,                                               STATUS_UNHANDLED,   CONNECTION_TYPE_INSTANCE);

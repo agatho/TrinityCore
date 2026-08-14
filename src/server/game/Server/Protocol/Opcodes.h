@@ -2684,13 +2684,21 @@ inline constexpr std::ptrdiff_t GetOpcodeArrayIndex(OpcodeServer opcode)
         case 0x54: return idInGroup <  36 ? idInGroup + 1222 : -1;
         case 0x55: return idInGroup <   8 ? idInGroup + 1258 : -1;
         case 0x56: return idInGroup <  34 ? idInGroup + 1266 : -1;
-        // Was capped at 1, which excluded SMSG_MOVE_SET_CANT_SWIM (id 53) and SMSG_MOVE_UNSET_CANT_SWIM
-        // (54). It cannot grow in place because 0x5A starts at 1301, so the block moves to the end.
+        // The widening to 55 was a mistake and the reason recorded for it was wrong: it claimed to be making
+        // room for SMSG_MOVE_SET_CANT_SWIM / SMSG_MOVE_UNSET_CANT_SWIM at ids 53/54. Those opcodes are
+        // SMSG_MOVE_SET_CANNOT_SWIM (0x5A0037) and SMSG_MOVE_UNSET_CANNOT_SWIM (0x5A0038) - group 0x5A,
+        // ids 55/56, already covered by the 0x5A case below. Group 0x58 holds exactly one opcode,
+        // SMSG_UPDATE_OBJECT (id 0), so slots 2498-2551 are permanently empty. Harmless (an unused slot just
+        // reports "non existing handler"), left in place only because shrinking it moves the 0x5C base.
         case 0x58: return idInGroup <  55 ? idInGroup + 2497 : -1;
         case 0x5A: return idInGroup < 130 ? idInGroup + 1301 : -1;
         case 0x5B: return idInGroup <   6 ? idInGroup + 1431 : -1;
-        // Was capped at 20, which excluded SMSG_TAKE_SCREENSHOT_FOR_COMPLAINT (id 50). 0x5E starts at
-        // 1457, so this block moves to the end too.
+        // Same mistake as 0x58 above: the recorded reason was making room for
+        // SMSG_TAKE_SCREENSHOT_FOR_COMPLAINT at id 50, but no such opcode exists. The screenshot opcodes are
+        // SMSG_PLAYER_UPLOAD_SCREENSHOT (0x5F0032) and SMSG_PLAYER_DELAYED_UPLOAD_SCREENSHOT (0x5F0033) -
+        // group 0x5F, ids 50/51, already covered by the 0x5F case below. Group 0x5C is the neighbourhood
+        // block, 19 opcodes with a highest id of 0x13, so the original cap of 20 was correct and slots
+        // 2572-2602 are permanently empty. Harmless, kept only to avoid renumbering.
         case 0x5C: return idInGroup <  51 ? idInGroup + 2552 : -1;
         case 0x5E: return idInGroup <   8 ? idInGroup + 1457 : -1;
         case 0x5F: return idInGroup <  52 ? idInGroup + 1465 : -1;
