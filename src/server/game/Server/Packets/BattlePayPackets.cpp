@@ -265,6 +265,28 @@ WorldPacket const* PurchaseUpdate::Write()
     return &_worldPacket;
 }
 
+// Mirrors the client's element parser at rva 0x72BD40 exactly, including the detail that the two bit
+// fields are separately flushed bytes rather than one packed group (the parser reads each with its own
+// READ_U8 and then shifts: `shr dl,7` for the optional flag, `shr rdx,1` for the 7-bit choice count).
+// Writing them as one group would shift every following byte and desynchronise the whole vector.
+WorldPacket const* DeliveryEnded::Write()
+{
+    _worldPacket << PurchaseID;
+    _worldPacket << uint32(Products.size());
+    for (DeliveredProduct const& product : Products)
+    {
+        _worldPacket << product.ProductID;
+
+        _worldPacket.WriteBit(false);       // hasUnlockList - no unlock-id list to send (see the header)
+        _worldPacket.FlushBits();
+
+        _worldPacket << Bits<7>(0);         // choiceCount - our products have no client-chosen variants
+        _worldPacket.FlushBits();
+    }
+
+    return &_worldPacket;
+}
+
 WorldPacket const* EnumVasPurchaseStatesResponse::Write()
 {
     // Six-bit count, then flush. With no purchases this is the single 0x00 byte retail sends.

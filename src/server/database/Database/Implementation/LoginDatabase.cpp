@@ -271,7 +271,9 @@ void LoginDatabaseConnection::DoPrepareStatements()
     PrepareStatement(LOGIN_SEL_BATTLEPAY_ENTITLEMENT_ACCOUNT, "SELECT id, productId, serviceType, status, purchaseId, createTime FROM account_battlepay_entitlement WHERE account = ? AND status = 1 ORDER BY id ASC", CONNECTION_ASYNC);
     PrepareStatement(LOGIN_SEL_BATTLEPAY_ENTITLEMENT_MAXID, "SELECT MAX(id) FROM account_battlepay_entitlement WHERE id BETWEEN ? AND ?", CONNECTION_SYNCH);
     PrepareStatement(LOGIN_SEL_BATTLEPAY_ENTITLEMENT_BY_ID, "SELECT account, productId, serviceType, status, claimToken, realmId, targetCharacter FROM account_battlepay_entitlement WHERE id = ?", CONNECTION_SYNCH);
-    PrepareStatement(LOGIN_SEL_BATTLEPAY_ENTITLEMENT_PENDING_CHAR, "SELECT id, productId, serviceType FROM account_battlepay_entitlement WHERE realmId = ? AND targetCharacter = ? AND status = 3 ORDER BY id ASC", CONNECTION_ASYNC);
+    // purchaseId is selected so the delivery notification can name the purchase it completes. The column
+    // already exists (see LOGIN_INS_BATTLEPAY_ENTITLEMENT above), so this needs NO schema change.
+    PrepareStatement(LOGIN_SEL_BATTLEPAY_ENTITLEMENT_PENDING_CHAR, "SELECT id, productId, serviceType, purchaseId FROM account_battlepay_entitlement WHERE realmId = ? AND targetCharacter = ? AND status = 3 ORDER BY id ASC", CONNECTION_ASYNC);
     PrepareStatement(LOGIN_UPD_BATTLEPAY_ENTITLEMENT_CLAIM, "UPDATE account_battlepay_entitlement SET status = 2, claimToken = ?, realmId = ?, targetCharacter = ?, updateTime = ? WHERE id = ? AND account = ? AND status = 1", CONNECTION_SYNCH);
     PrepareStatement(LOGIN_UPD_BATTLEPAY_ENTITLEMENT_STATUS, "UPDATE account_battlepay_entitlement SET status = ?, claimToken = ?, updateTime = ? WHERE id = ? AND status = ? AND claimToken = ?", CONNECTION_SYNCH);
 }
