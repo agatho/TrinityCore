@@ -25,6 +25,8 @@
 #include "CombatAI.h"
 #include "GridNotifiersImpl.h"
 #include "MotionMaster.h"
+#include "SpellAuras.h"
+#include "TemporarySummon.h"
 
 enum DeathKnightSpells
 {
@@ -32,8 +34,38 @@ enum DeathKnightSpells
     SPELL_DK_SUMMON_GARGOYLE_1      = 49206,
     SPELL_DK_SUMMON_GARGOYLE_2      = 50514,
     SPELL_DK_DISMISS_GARGOYLE       = 50515,
-    SPELL_DK_SANCTUARY              = 54661
+    SPELL_DK_SANCTUARY              = 54661,
+    SPELL_DK_LESSER_GHOUL_COUNT     = 1242998, // "Lesser Ghoul" stack aura read by Outnumber (1241705); SPELL_AURA_MOD_SUMMON_DAMAGE (429) on EFFECT_1
+    SPELL_DK_LESSER_GHOUL_LEAP      = 1270475  // self-cast on spawn: EFFECT_1 SPELL_EFFECT_JUMP_CHARGE to TARGET_DEST_DEST_TARGET_TOWARDS_CASTER (leap past the target, landing behind it)
 };
+
+enum DeathKnightCreatures
+{
+    NPC_DK_LESSER_GHOUL             = 237409
+};
+
+// Keeps SPELL_DK_LESSER_GHOUL_COUNT's stack amount equal to owner's live Lesser Ghoul count (275430 -> NPC_DK_LESSER_GHOUL).
+// See docs/midnight-assessment/class-abilities/class-abilities-phase5a-mod-summon-damage-handoff.md Task 2.
+static void UpdateLesserGhoulCount(Unit* owner)
+{
+    if (!owner)
+        return;
+
+    std::list<TempSummon*> ghouls;
+    owner->GetAllMinionsByEntry(ghouls, NPC_DK_LESSER_GHOUL);
+
+    if (ghouls.empty())
+    {
+        owner->RemoveAurasDueToSpell(SPELL_DK_LESSER_GHOUL_COUNT);
+        return;
+    }
+
+    uint8 stacks = uint8(std::min<size_t>(ghouls.size(), 20));
+    if (Aura* aura = owner->GetAura(SPELL_DK_LESSER_GHOUL_COUNT))
+        aura->SetStackAmount(stacks);
+    else if (Aura* newAura = owner->AddAura(SPELL_DK_LESSER_GHOUL_COUNT, owner))
+        newAura->SetStackAmount(stacks);
+}
 
 // 28017 - Bloodworm
 struct npc_pet_dk_bloodworm : public AggressorAI
@@ -134,9 +166,45 @@ struct npc_pet_dk_risen_ghoul : public AggressorAI
     }
 };
 
+// 237409 - Lesser Ghoul
+struct npc_pet_dk_lesser_ghoul : public AggressorAI
+{
+    npc_pet_dk_lesser_ghoul(Creature* creature) : AggressorAI(creature) { }
+
+    bool CanAIAttack(Unit const* target) const override
+    {
+        Unit* owner = me->GetOwner();
+        if (owner && !target->IsInCombatWith(owner))
+            return false;
+        return AggressorAI::CanAIAttack(target);
+    }
+
+    void IsSummonedBy(WorldObject* summoner) override
+    {
+        if (Unit* owner = summoner->ToUnit())
+            UpdateLesserGhoulCount(owner);
+    }
+
+    // See docs/midnight-assessment/class-abilities/class-abilities-phase1b-midnight-unholy-ghouls-handoff.md R3 —
+    // 1270475 leaps the ghoul past its owner's current target so it lands already in melee range/behind it,
+    // instead of sitting at 275430's caster-relative summon destination.
+    void JustAppeared() override
+    {
+        if (Unit* owner = me->GetOwner())
+            if (Unit* victim = owner->GetVictim())
+                me->CastSpell(victim, SPELL_DK_LESSER_GHOUL_LEAP, TRIGGERED_IGNORE_CAST_IN_PROGRESS | TRIGGERED_DONT_REPORT_CAST_ERROR);
+    }
+
+    void OnDespawn() override
+    {
+        UpdateLesserGhoulCount(me->GetOwner());
+    }
+};
+
 void AddSC_deathknight_pet_scripts()
 {
     RegisterCreatureAI(npc_pet_dk_bloodworm);
     RegisterCreatureAI(npc_pet_dk_ebon_gargoyle);
     RegisterCreatureAI(npc_pet_dk_risen_ghoul);
+    RegisterCreatureAI(npc_pet_dk_lesser_ghoul);
 }
