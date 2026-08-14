@@ -146,6 +146,10 @@ struct ZoneDynamicInfo
     WeatherState WeatherId;
     float Intensity;
 
+    // Lightning.db2 id of the storm running in this zone, 0 for none. Deliberately not derived
+    // from the weather above - see the comment on Map::SetZoneLightning.
+    int32 LightningId;
+
     struct LightOverride
     {
         uint32 AreaLightId;
@@ -555,6 +559,8 @@ class TC_GAME_API Map : public GridRefManager<NGridType>
         Weather* GetOrGenerateZoneDefaultWeather(uint32 zoneId);
         WeatherState GetZoneWeather(uint32 zoneId) const;
         void SetZoneWeather(uint32 zoneId, WeatherState weatherId, float intensity);
+        int32 GetZoneLightning(uint32 zoneId) const;
+        void SetZoneLightning(uint32 zoneId, int32 lightningId);
         void SetZoneOverrideLight(uint32 zoneId, uint32 areaLightId, uint32 overrideLightId, Milliseconds transitionTime);
 
         void UpdateAreaDependentAuras();

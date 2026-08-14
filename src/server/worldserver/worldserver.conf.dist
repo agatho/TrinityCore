@@ -772,6 +772,18 @@ MaxWhoListReturns = 50
 WhoList.Update.Interval = 5
 
 #
+#    GameTime.Update.Interval
+#        Description: Interval in seconds at which the in-game clock is corrected on every client
+#                     that is in the world (SMSG_GAME_TIME_UPDATE, or SMSG_GAME_TIME_SET when the
+#                     server clock jumped instead of ticking - DST change, NTP step, resumed host).
+#                     Without this the clock is only ever set at login and then runs on the
+#                     client's own extrapolation. Costs 16 bytes per player per interval.
+#        Default:     60 - (seconds)
+#                     0  - (disabled, clock is set at login only)
+
+GameTime.Update.Interval = 60
+
+#
 #    CharacterCreating.Disabled
 #        Description: Disable character creation for players based on faction.
 #        Example:     3 - (1 + 2, Alliance and Horde are disabled)

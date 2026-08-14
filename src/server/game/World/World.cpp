@@ -107,6 +107,8 @@
 #include "WhoListStorage.h"
 #include "WorldSession.h"
 #include "WorldStateMgr.h"
+#include "WowTime.h"
+#include <algorithm>
 #include <zlib.h>
 
 TC_GAME_API std::atomic<bool> World::m_stopEvent(false);
@@ -149,6 +151,7 @@ World::World()
     m_NextCalendarOldEventsDeletionTime = 0;
     m_NextGuildReset = 0;
     m_NextCurrencyReset = 0;
+    m_lastGameTimeBroadcast = 0;
 
     m_defaultDbcLocale = LOCALE_enUS;
     m_availableDbcLocaleMask = 0;
@@ -854,6 +857,7 @@ void World::LoadConfigSettings(bool reload)
         { .Name = "Respawn.WarningFrequency"sv, .DefaultValue = 1800, .Index = CONFIG_RESPAWN_GUIDWARNING_FREQUENCY },
         { .Name = "MaxWhoListReturns"sv, .DefaultValue = 49, .Index = CONFIG_MAX_WHO },
         { .Name = "WhoList.Update.Interval"sv, .DefaultValue = 5, .Index = CONFIG_WHO_LIST_UPDATE_INTERVAL, .Min = 1 },
+        { .Name = "GameTime.Update.Interval"sv, .DefaultValue = 60, .Index = CONFIG_GAMETIME_UPDATE_INTERVAL, .Min = 0 },
         { .Name = "HonorPointsAfterDuel"sv, .DefaultValue = 0, .Index = CONFIG_HONOR_AFTER_DUEL },
         { .Name = "PvPToken.MapAllowType"sv, .DefaultValue = 4, .Index = CONFIG_PVP_TOKEN_MAP_TYPE, .Min = 1, .Max = 4 },
         { .Name = "PvPToken.ItemID"sv, .DefaultValue = 29434, .Index = CONFIG_PVP_TOKEN_ID },
@@ -1225,6 +1229,8 @@ void World::LoadConfigSettings(bool reload)
         m_timers[WUPDATE_AUTOBROADCAST].Reset();
         m_timers[WUPDATE_WHO_LIST].SetInterval(m_int_configs[CONFIG_WHO_LIST_UPDATE_INTERVAL] * IN_MILLISECONDS);
         m_timers[WUPDATE_WHO_LIST].Reset();
+        m_timers[WUPDATE_GAMETIME].SetInterval(m_int_configs[CONFIG_GAMETIME_UPDATE_INTERVAL] * IN_MILLISECONDS);
+        m_timers[WUPDATE_GAMETIME].Reset();
         WorldStateMgr::SetValue(WS_CURRENT_PVP_SEASON_ID, getBoolConfig(CONFIG_ARENA_SEASON_IN_PROGRESS) ? getIntConfig(CONFIG_ARENA_SEASON_ID) : 0, false, nullptr);
         WorldStateMgr::SetValue(WS_PREVIOUS_PVP_SEASON_ID, getIntConfig(CONFIG_ARENA_SEASON_ID) - getBoolConfig(CONFIG_ARENA_SEASON_IN_PROGRESS), false, nullptr);
 
@@ -1982,6 +1988,8 @@ bool World::SetInitialWorldSettings()
 
     m_timers[WUPDATE_CHANNEL_SAVE].SetInterval(getIntConfig(CONFIG_PRESERVE_CUSTOM_CHANNEL_INTERVAL) * MINUTE * IN_MILLISECONDS);
 
+    m_timers[WUPDATE_GAMETIME].SetInterval(getIntConfig(CONFIG_GAMETIME_UPDATE_INTERVAL) * IN_MILLISECONDS);
+
     //to set mailtimer to return mails every day between 4 and 5 am
     //mailtimer is increased when updating auctions
     //one second is 1000 -(tested on win system)
@@ -2148,6 +2156,14 @@ void World::Update(uint32 diff)
         TC_METRIC_TIMER("world_update_time", TC_METRIC_TAG("type", "Update who list"));
         m_timers[WUPDATE_WHO_LIST].Reset();
         sWhoListStorageMgr->Update();
+    }
+
+    ///- Keep the client clock in step with ours
+    if (getIntConfig(CONFIG_GAMETIME_UPDATE_INTERVAL) && m_timers[WUPDATE_GAMETIME].Passed())
+    {
+        TC_METRIC_TIMER("world_update_time", TC_METRIC_TAG("type", "Broadcast game time"));
+        m_timers[WUPDATE_GAMETIME].Reset();
+        BroadcastGameTime();
     }
 
     if (IsStopped() || m_timers[WUPDATE_CHANNEL_SAVE].Passed())
@@ -2434,6 +2450,52 @@ void World::Update(uint32 diff)
         // Stats logger update
         sMetric->Update();
         TC_METRIC_VALUE("update_time_diff", diff);
+    }
+}
+
+/// Push the current time out to everyone in the world.
+///
+/// SMSG_LOGIN_SET_TIME_SPEED hands the client a clock and a rate once, at login, and that used to
+/// be the last it heard from us - so the drift of the client's own extrapolation, a DST change, an
+/// NTP step or a resumed host all left the in-game clock wrong until the player logged back in.
+///
+/// Retail's cadence for these two is not recoverable from captures: the 12.0.7 sniffs put
+/// SMSG_GAME_TIME_SET anywhere from 173 ms to 283 s apart with no correlation to anything else in
+/// the stream, and contain exactly one SMSG_GAME_TIME_UPDATE. The interval is therefore a config,
+/// GameTime.Update.Interval, defaulting to 60 s - the client only ever displays hours and minutes,
+/// so a correction once a minute keeps the displayed value exact, for 16 bytes per player per
+/// minute. 0 turns the broadcast off.
+void World::BroadcastGameTime()
+{
+    time_t const now = GameTime::GetGameTime();
+
+    // An ordinary tick only has to re-apply game time, which is exactly what the client does with
+    // SMSG_GAME_TIME_UPDATE. If our clock jumped rather than ticked, the client's whole time base
+    // is wrong and wants the hard re-base of SMSG_GAME_TIME_SET, which re-applies server time too.
+    Seconds const expected = Seconds(m_timers[WUPDATE_GAMETIME].GetInterval() / IN_MILLISECONDS);
+    Seconds const elapsed = Seconds(now - m_lastGameTimeBroadcast);
+    Seconds const grace = std::max(expected, Seconds(30));
+    bool const clockJumped = m_lastGameTimeBroadcast != 0 && (elapsed < Seconds::zero() || elapsed > expected + grace);
+
+    m_lastGameTimeBroadcast = now;
+
+    WowTime const& wowTime = *GameTime::GetWowTime();
+
+    // Holiday offsets stay 0 for the same reason LoginSetTimeSpeed leaves them at 0 - we have no
+    // holiday time zone data to derive them from.
+    if (clockJumped)
+    {
+        WorldPackets::Misc::GameTimeSet gameTimeSet;
+        gameTimeSet.ServerTime = wowTime;
+        gameTimeSet.GameTime = wowTime;
+        SendGlobalMessage(gameTimeSet.Write());
+    }
+    else
+    {
+        WorldPackets::Misc::GameTimeUpdate gameTimeUpdate;
+        gameTimeUpdate.ServerTime = wowTime;
+        gameTimeUpdate.GameTime = wowTime;
+        SendGlobalMessage(gameTimeUpdate.Write());
     }
 }
 
