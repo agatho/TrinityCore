@@ -820,6 +820,7 @@ void World::LoadConfigSettings(bool reload)
         { .Name = "Death.SicknessLevel"sv, .DefaultValue = 11, .Index = CONFIG_DEATH_SICKNESS_LEVEL },
         { .Name = "Battleground.ReportAFK"sv, .DefaultValue = 3, .Index = CONFIG_BATTLEGROUND_REPORT_AFK, .Min = 1, .Max = 9 },
         { .Name = "Battleground.InvitationType"sv, .DefaultValue = 0, .Index = CONFIG_BATTLEGROUND_INVITATION_TYPE },
+        { .Name = "BattlegroundBlitz.TanksPerTeam"sv, .DefaultValue = 0, .Index = CONFIG_BATTLEGROUND_BLITZ_TANKS_PER_TEAM, .Min = 0, .Max = 8 },
         { .Name = "BattlegroundBlitz.HealersPerTeam"sv, .DefaultValue = 2, .Index = CONFIG_BATTLEGROUND_BLITZ_HEALERS_PER_TEAM, .Min = 0, .Max = 8 },
         // PvpBrawl.db2 row 11 "Brawl: Deep Six" -> BattlemasterList 879 (BATTLEGROUND_BRAWL_DS).
         { .Name = "Brawl.PvpBrawlID"sv, .DefaultValue = 11, .Index = CONFIG_BRAWL_PVP_BRAWL_ID },

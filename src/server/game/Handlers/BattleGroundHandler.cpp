@@ -932,44 +932,24 @@ void WorldSession::HandleBattleFieldPortOpcode(WorldPackets::Battleground::Battl
         if (!_player->IsInvitedForBattlegroundQueueType(bgQueueTypeId))
             return;                                 // cheating?
 
-        if (!_player->InBattleground())
-            _player->SetBattlegroundEntryPoint();
-
-        // resurrect the player
-        if (!_player->IsAlive())
-        {
-            _player->ResurrectPlayer(1.0f);
-            _player->SpawnCorpseBones();
-        }
-        // stop taxi flight at port
-        _player->FinishTaxiFlight();
-
-        WorldPackets::Battleground::BattlefieldStatusActive battlefieldStatus;
-        BattlegroundMgr::BuildBattlegroundStatusActive(&battlefieldStatus, bg, _player, battlefieldPort.Ticket.Id, _player->GetBattlegroundQueueJoinTime(bgQueueTypeId), bgQueueTypeId);
-        SendPacket(battlefieldStatus.Write());
-
-        // remove battleground queue status from BGmgr
-        bgQueue.RemovePlayer(_player->GetGUID(), false);
-        // this is still needed here if battleground "jumping" shouldn't add deserter debuff
-        // also this is required to prevent stuck at old battleground after SetBattlegroundId set to new
-        if (Battleground* currentBg = _player->GetBattleground())
-            currentBg->RemovePlayerAtLeave(_player->GetGUID(), false, true);
-
-        // set the destination instance id
-        _player->SetBattlegroundId(bg->GetInstanceID(), bg->GetTypeID(), bgQueueTypeId);
-        // set the destination team
-        _player->SetBGTeam(ginfo.Team);
+        // Solo-queue modes hold the whole lobby together: the accept is recorded, the client is told who is
+        // still deciding, and nobody ports until everyone has answered. ProposalAccept does the porting - for
+        // every member at once - when this accept is the last one.
+        if (bgQueue.ProposalAccept(_player->GetGUID()))
+            return;
 
         // bg->HandleBeforeTeleportToBattleground(_player);
-        BattlegroundMgr::SendToBattleground(_player, bg);
         // add only in HandleMoveWorldPortAck()
         // bg->AddPlayer(_player, team);
-        TC_LOG_DEBUG("bg.battleground", "Battleground: player {} ({}) joined battle for bg {}, bgtype {}, queue {{ BattlemasterListId: {}, Type: {}, Rated: {}, TeamSize: {} }}.",
-            _player->GetName(), _player->GetGUID().ToString(), bg->GetInstanceID(), bg->GetTypeID(),
-            bgQueueTypeId.BattlemasterListId, uint32(bgQueueTypeId.Type), bgQueueTypeId.Rated ? "true" : "false", uint32(bgQueueTypeId.TeamSize));
+        BattlegroundMgr::PortPlayerToBattleground(_player, bg, ginfo.Team, bgQueueTypeId, battlefieldPort.Ticket.Id);
     }
     else // leave queue
     {
+        // Under a group proposal a decline is not just this player leaving: the whole proposal collapses, the
+        // others get SMSG_BATTLEFIELD_STATUS_GROUP_PROPOSAL_FAILED and those who had already accepted are put
+        // back in the queue at the position they held. This player's own removal is the code below.
+        bgQueue.ProposalDecline(_player->GetGUID());
+
         // if player leaves rated arena match before match start, it is counted as he played but he lost
         if (bgQueue.GetQueueId().Rated && ginfo.IsInvitedToBGInstanceGUID)
         {

@@ -22,6 +22,9 @@
 #include "DBCEnums.h"
 #include "Battleground.h"
 #include "EventProcessor.h"
+#include <array>
+#include <unordered_map>
+#include <vector>
 
 //this container can't be deque, because deque doesn't like removing the last element - if you remove it, it invalidates next iterator and crash appears
 typedef std::list<Battleground*> BGFreeSlotQueueContainer;
@@ -33,6 +36,16 @@ struct PlayerQueueInfo                                      // stores informatio
 {
     uint32 LastOnlineTime;                                  // for tracking and removing offline players from queue after 5 minutes
     GroupQueueInfo* GroupInfo;                              // pointer to the associated groupqueueinfo
+    // This player's own role, resolved once at AddGroup time. Tank and damager used to be indistinguishable
+    // here because only lfg::PLAYER_ROLE_HEALER was ever tested anywhere under Battlegrounds/; they are told
+    // apart by this field instead, and per PLAYER rather than per queue entry, so that the second member of a
+    // duo does not have to inherit the queuer's role.
+    // Primary source is the character's specialization (ChrSpecialization.db2 Role) because that is a fact
+    // about the character rather than a claim on the wire, and because its numbering - Tank 0, Healer 1,
+    // Dps 2 - is exactly the role order the client reads out of the role block in
+    // SMSG_BATTLEFIELD_STATUS_WAIT_FOR_GROUPS. The queuer's declared lfg::PLAYER_ROLE_* mask narrows it when
+    // the mask excludes the spec role (a Feral druid queueing as damage only, say).
+    ChrSpecializationRole Role = ChrSpecializationRole::Dps;
 };
 
 struct GroupQueueInfo                                       // stores information about the group in queue (also used when joined as solo!)
@@ -47,10 +60,12 @@ struct GroupQueueInfo                                       // stores informatio
     uint32  OpponentsTeamRating;                            // for rated arena matches
     uint32  OpponentsMatchmakerRating;                      // for rated arena matches
     uint8   Roles;                                          // lfg::PLAYER_ROLE_* mask from the join packet.
-                                                            // Solo-queue modes (Battleground Blitz) match on this.
                                                             // For a group this is the QUEUER's mask only: the wire
-                                                            // carries no per-member roles, so the other members'
-                                                            // roles are genuinely unknown, not merely unread.
+                                                            // carries no per-member roles. Matchmaking therefore
+                                                            // does NOT read this - it reads PlayerQueueInfo::Role,
+                                                            // which exists for every member. This is kept as the
+                                                            // record of what the queuer asked for, and is what
+                                                            // narrows their own PlayerQueueInfo::Role.
 };
 
 enum BattlegroundQueueGroupTypes
@@ -69,6 +84,57 @@ enum BattlegroundQueueInvitationType
     BG_QUEUE_INVITATION_TYPE_EVEN       = 2  // teams even: N vs N players
 };
 
+std::size_t constexpr PVP_QUEUE_ROLE_COUNT = 3;             // ChrSpecializationRole: Tank, Healer, Dps
+
+// Per-role headcounts, indexed by ChrSpecializationRole. Used both as the matchmaker's quota and as the
+// payload of SMSG_BATTLEFIELD_STATUS_WAIT_FOR_GROUPS.
+using PvpRoleHeadcount = std::array<uint8, PVP_QUEUE_ROLE_COUNT>;
+
+struct BattlegroundProposalMember
+{
+    ObjectGuid Guid;
+    TeamId Side = TEAM_ALLIANCE;
+    ChrSpecializationRole Role = ChrSpecializationRole::Dps;
+    bool Accepted = false;
+};
+
+/*
+    An all-or-nothing group proposal, used by solo-queue modes (Battleground Blitz).
+
+    The plain battleground invite is per player: everyone who presses Enter Battle ports in immediately and a
+    decline only removes the decliner. That is wrong for a solo queue, where a 16 player lobby that loses one
+    member is not a match. A proposal is therefore layered on top of the ordinary invite: the battleground is
+    created and everyone is invited exactly as before, but nobody is ported until EVERY member has accepted.
+
+    Collapse is all-or-nothing in both directions. If any member declines or the deadline passes:
+      - the members who never accepted leave the queue, as a plain invite timeout would have done;
+      - the members who DID accept keep their GroupQueueInfo, and with it their JoinTime, so they return to
+        the queue in the position they already held rather than at the back of it - they get their invite
+        revoked, SMSG_BATTLEFIELD_STATUS_GROUP_PROPOSAL_FAILED, and then SMSG_BATTLEFIELD_STATUS_QUEUED again;
+      - the battleground that was created for the proposal is dropped, so the next attempt picks a fresh map -
+        which is exactly what retail does across the three proposal runs in C:\sniff\rated BG 12.0.7.pkt.
+*/
+struct BattlegroundProposal
+{
+    uint32 BgInstanceGUID = 0;
+    BattlegroundTypeId BgTypeId = BATTLEGROUND_TYPE_NONE;
+    BattlegroundBracketId BracketId = BattlegroundBracketId(0);
+    uint32 MapId = 0;
+    std::array<uint8, PVP_TEAMS_COUNT> SlotsPerSide = { };
+    // Members are the players who were actually invited, i.e. the ones InviteGroupToBG found online. An
+    // offline queue entry is neither invited nor able to accept, so counting it would deadlock the proposal
+    // until the deadline.
+    std::vector<BattlegroundProposalMember> Members;
+};
+
+// What SendProposalStatus should tell the members.
+enum class BattlegroundProposalStatus
+{
+    Waiting,                                                // still collecting accepts
+    Formed,                                                 // everyone accepted; clears the client's role display
+    Failed                                                  // collapsed; outstanding members become losses
+};
+
 class Battleground;
 class TC_GAME_API BattlegroundQueue
 {
@@ -84,9 +150,9 @@ class TC_GAME_API BattlegroundQueue
         bool CheckNormalMatch(BattlegroundBracketId bracket_id, uint32 minPlayers, uint32 maxPlayers);
         bool CheckSkirmishForSameFaction(BattlegroundBracketId bracket_id, uint32 minPlayersPerTeam);
         // Solo-queue matchmaker for Battleground Blitz: fills both selection pools from the rated (premade-indexed)
-        // lists, honouring a healer quota per team. Returns false and leaves the pools untouched when the queue
-        // cannot yet field two full role-valid teams.
-        bool CheckSoloQueueMatch(BattlegroundBracketId bracket_id, uint32 playersPerTeam, uint32 healersPerTeam);
+        // lists, honouring a full per-role quota per team - tanks, healers and, as the remainder, damagers.
+        // Returns false and leaves the pools untouched when the queue cannot yet field two full role-valid teams.
+        bool CheckSoloQueueMatch(BattlegroundBracketId bracket_id, uint32 playersPerTeam, uint32 tanksPerTeam, uint32 healersPerTeam);
         GroupQueueInfo* AddGroup(Player const* leader, Group const* group, Team team, PVPDifficultyEntry const*  bracketEntry, bool isPremade, uint32 ArenaRating, uint32 MatchmakerRating, uint8 roles = 0);
         // War games bypass matchmaking: both premade groups are known up front, so this queues one side onto a
         // forced team and immediately sends its members the enter-confirmation for the given battleground.
@@ -134,11 +200,44 @@ class TC_GAME_API BattlegroundQueue
         uint32 GetPlayersInQueue(TeamId id);
 
         BattlegroundQueueTypeId GetQueueId() const { return m_queueId; }
+
+        /* All-or-nothing group proposals - see BattlegroundProposal above. */
+
+        // True when this player is held by a proposal, i.e. their accept/decline must not be acted on alone.
+        bool IsInProposal(ObjectGuid guid) const;
+        // Records an accept. Returns false when the player is not in a proposal, in which case the caller
+        // must fall back to the ordinary per-player invite handling. When the accept completes the proposal
+        // this ports every member.
+        bool ProposalAccept(ObjectGuid guid);
+        // Records a decline and collapses the proposal around it. The decliner itself is NOT removed from the
+        // queue here; the caller's ordinary leave-queue path still does that. Returns false when the player is
+        // not in a proposal.
+        bool ProposalDecline(ObjectGuid guid);
+        // Deadline reached: collapses the proposal, dropping everyone who did not accept.
+        void ProposalTimeout(uint32 bgInstanceGuid);
+
     private:
 
         BattlegroundQueueTypeId m_queueId;
 
-        bool InviteGroupToBG(GroupQueueInfo* ginfo, Battleground* bg, Team side);
+        // inviteTime is how long the invited players have to answer. A proposal-managed invite passes
+        // PROPOSAL_ACCEPT_WAIT_TIME and suppresses the per-player BGQueueRemoveEvent, because the proposal's
+        // own deadline owns the removal - two independent removers racing on the same tick would strand half
+        // the lobby.
+        bool InviteGroupToBG(GroupQueueInfo* ginfo, Battleground* bg, Team side, uint32 inviteTime = INVITE_ACCEPT_WAIT_TIME, bool proposalManaged = false);
+
+        // Opens a proposal over the two filled selection pools and tells its members it is running.
+        void StartProposal(Battleground* bg, BattlegroundBracketId bracketId, uint32 playersPerTeam, PvpRoleHeadcount const& perSideQuota);
+        // Ends a proposal. accepted == true ports everyone; otherwise the collapse described on
+        // BattlegroundProposal runs. Erases the proposal either way.
+        void ResolveProposal(uint32 bgInstanceGuid, bool accepted);
+        void SendProposalStatus(BattlegroundProposal const& proposal, BattlegroundProposalStatus status) const;
+        BattlegroundProposal* FindProposalFor(ObjectGuid guid);
+        BattlegroundProposal const* FindProposalFor(ObjectGuid guid) const;
+
+        // keyed by battleground instance guid; at most one proposal per created battleground
+        std::unordered_map<uint32, BattlegroundProposal> m_Proposals;
+
         uint32 m_WaitTimes[PVP_TEAMS_COUNT][MAX_BATTLEGROUND_BRACKETS][COUNT_OF_PLAYERS_TO_AVERAGE_WAIT_TIME];
         uint32 m_WaitTimeLastPlayer[PVP_TEAMS_COUNT][MAX_BATTLEGROUND_BRACKETS];
         uint32 m_SumOfWaitTimes[PVP_TEAMS_COUNT][MAX_BATTLEGROUND_BRACKETS];
@@ -165,6 +264,25 @@ class BGQueueInviteEvent : public BasicEvent
         uint32 m_BgInstanceGUID;
         BattlegroundTypeId m_BgTypeId;
         uint32 m_RemoveTime;
+        BattlegroundQueueTypeId m_QueueId;
+};
+
+/*
+    Deadline of an all-or-nothing group proposal. One event per proposal, not per player: the whole lobby
+    stands or falls together, so a single timer collapses it rather than PROPOSAL_ACCEPT_WAIT_TIME worth of
+    per-player BGQueueRemoveEvents racing each other.
+*/
+class BGQueueProposalTimeoutEvent : public BasicEvent
+{
+    public:
+        BGQueueProposalTimeoutEvent(uint32 bgInstanceGUID, BattlegroundQueueTypeId queueId)
+            : m_BgInstanceGUID(bgInstanceGUID), m_QueueId(queueId)
+        { }
+
+        virtual bool Execute(uint64 e_time, uint32 p_time) override;
+        virtual void Abort(uint64 e_time) override;
+    private:
+        uint32 m_BgInstanceGUID;
         BattlegroundQueueTypeId m_QueueId;
 };
 
