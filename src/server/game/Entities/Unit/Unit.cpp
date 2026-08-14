@@ -8512,6 +8512,32 @@ void Unit::UpdateMountCapability()
 
             if (!HasAura(capability->ModSpellAuraID))
                 CastSpell(this, capability->ModSpellAuraID, aurEff);
+            else if (Aura* modAura = GetAura(capability->ModSpellAuraID))
+            {
+                // The mount aura can outlive its LINKED / LINKED_2 children across a login:
+                // CharacterHandler strips SpellAuraInterruptFlags::Login auras after LoadFromDB while
+                // leaving the ModSpellAura itself (e.g. Skyriding 406095) intact, and the re-cast above
+                // is skipped precisely because it is still there. A remount would re-fire the links;
+                // do the same here without disturbing the mount aura. Anything already present - such
+                // as Dragonrider Energy 372773, which SetFlightCapabilityID above re-establishes on the
+                // skyriding path - is left alone.
+
+                // snapshot first - casting may add or remove auras on this unit
+                std::vector<AuraEffect const*> linkedEffects;
+                for (AuraEffect const* modEff : modAura->GetAuraEffects())
+                {
+                    AuraType const auraType = modEff->GetAuraType();
+                    if (auraType != SPELL_AURA_LINKED && auraType != SPELL_AURA_LINKED_2)
+                        continue;
+
+                    if (modEff->GetSpellEffectInfo().TriggerSpell)
+                        linkedEffects.push_back(modEff);
+                }
+
+                for (AuraEffect const* modEff : linkedEffects)
+                    if (!HasAura(modEff->GetSpellEffectInfo().TriggerSpell))
+                        CastSpell(this, modEff->GetSpellEffectInfo().TriggerSpell, modEff);
+            }
         }
     }
 }

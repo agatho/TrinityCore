@@ -28782,6 +28782,12 @@ void Player::_LoadTraits(PreparedQueryResult configsResult, PreparedQueryResult 
 
         ApplyTraitConfig(id, true);
     }
+
+    // Everything that existed at login has now been applied exactly once. Configs created from here
+    // on (Spell::EffectCreateTraitTreeConfig, e.g. 384557 -> Skyriding tree 672) are no longer picked
+    // up by this sweep, so that effect applies them itself - it keys off this flag so the two paths
+    // stay mutually exclusive and a config can never be applied twice in one login.
+    m_traitConfigsApplied = true;
 }
 
 void Player::_SaveTalents(CharacterDatabaseTransaction trans)
@@ -29272,6 +29278,72 @@ void Player::CreateTraitConfig(WorldPackets::Traits::TraitConfig& traitConfig)
     }
 
     m_traitConfigStates[configId] = PLAYERSPELL_CHANGED;
+}
+
+// Bring an already existing config back in line with the current TraitCond::Granted data: add the
+// granted entries it is missing and raise GrantedRanks that grew. Without this a DB2/hotfix grant
+// change (or any newly satisfied Granted condition) only ever reaches characters whose config is
+// created afterwards - _LoadTraits seeds the granted entries once, at config creation time.
+void Player::SyncGrantedTraitEntries(int32 configId)
+{
+    UF::TraitConfig const* traitConfig = GetTraitConfig(configId);
+    if (!traitConfig)
+        return;
+
+    std::vector<UF::TraitEntry> grantedEntries = TraitMgr::GetGrantedTraitEntriesForConfig(WorldPackets::Traits::TraitConfig(*traitConfig), this);
+    if (grantedEntries.empty())
+        return;
+
+    // Before the _LoadTraits sweep nothing is applied yet: only bring the update fields up to date and
+    // let the sweep learn the spells, otherwise the entry would be applied twice in the same login.
+    bool const applyTraits = m_traitConfigsApplied;
+
+    auto configSetter = m_values.ModifyValue(&Player::m_activePlayerData)
+        .ModifyValue(&UF::ActivePlayerData::TraitConfigs, configId);
+
+    for (UF::TraitEntry const& grantedEntry : grantedEntries)
+    {
+        // re-fetch: ApplyTraitEntry learns spells, which can re-enter and grow the dynamic fields
+        traitConfig = GetTraitConfig(configId);
+        if (!traitConfig)
+            return;
+
+        int32 const existingIndex = traitConfig->Entries.FindIndexIf([&](UF::TraitEntry const& entry)
+        {
+            return entry.TraitNodeID == grantedEntry.TraitNodeID && entry.TraitNodeEntryID == grantedEntry.TraitNodeEntryID;
+        });
+
+        // same gate ApplyTraitConfig uses, so a node under an inactive sub-tree is stored but not learned
+        bool const applyEntry = applyTraits && TraitMgr::CanApplyTraitNode(*traitConfig, grantedEntry);
+
+        if (existingIndex < 0)
+        {
+            AddDynamicUpdateFieldValue(configSetter.ModifyValue(&UF::TraitConfig::Entries)) = grantedEntry;
+            m_traitConfigStates[configId] = PLAYERSPELL_CHANGED;
+
+            if (applyEntry)
+                ApplyTraitEntry(grantedEntry.TraitNodeEntryID, grantedEntry.Rank, grantedEntry.GrantedRanks, true);
+
+            continue;
+        }
+
+        int32 const existingRank = traitConfig->Entries[existingIndex].Rank;
+        int32 const existingGrantedRanks = traitConfig->Entries[existingIndex].GrantedRanks;
+        if (existingGrantedRanks >= grantedEntry.GrantedRanks)
+            continue;
+
+        // the learned spell carries rank + grantedRanks, so un-apply at the old rank before raising it
+        if (applyEntry)
+            ApplyTraitEntry(grantedEntry.TraitNodeEntryID, existingRank, existingGrantedRanks, false);
+
+        SetUpdateFieldValue(configSetter
+            .ModifyValue(&UF::TraitConfig::Entries, existingIndex)
+            .ModifyValue(&UF::TraitEntry::GrantedRanks), grantedEntry.GrantedRanks);
+        m_traitConfigStates[configId] = PLAYERSPELL_CHANGED;
+
+        if (applyEntry)
+            ApplyTraitEntry(grantedEntry.TraitNodeEntryID, existingRank, grantedEntry.GrantedRanks, true);
+    }
 }
 
 void Player::AddTraitConfig(WorldPackets::Traits::TraitConfig const& traitConfig)

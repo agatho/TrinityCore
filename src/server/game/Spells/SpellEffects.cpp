@@ -6236,7 +6236,18 @@ void Spell::EffectCreateTraitTreeConfig()
     }).first;
 
     if (!existingConfigIdForSystem)
+    {
         target->CreateTraitConfig(newConfig);
+
+        // CreateTraitConfig only writes the granted entries into the update fields, it never learns the
+        // TraitDefinition spells - without this the grants (e.g. tree 672 granting 376359) stay unlearned
+        // until the next login, when the _LoadTraits sweep applies every config. Skipped while that sweep
+        // has not run yet, because it would then apply this very config a second time.
+        if (target->AreTraitConfigsApplied())
+            target->ApplyTraitConfig(newConfig.ID, true);
+    }
+    else
+        target->SyncGrantedTraitEntries(*existingConfigIdForSystem);
 }
 
 void Spell::EffectChangeActiveCombatTraitConfig()
