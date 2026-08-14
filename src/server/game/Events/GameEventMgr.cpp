@@ -34,6 +34,7 @@
 #include "StringConvert.h"
 #include "World.h"
 #include "WorldStateMgr.h"
+#include "WorldStatePackets.h"
 #include "WowTime.h"
 
 GameEventMgr* GameEventMgr::instance()
@@ -1519,7 +1520,42 @@ void GameEventMgr::UpdateEventQuests(uint16 event_id, bool activate)
 void GameEventMgr::UpdateWorldStates(uint16 event_id, bool Activate)
 {
     if (Optional<int32> worldStateId = mGameEvent[event_id].WorldStateId)
+    {
         WorldStateMgr::SetValue(*worldStateId, Activate ? 1 : 0, false, nullptr);
+
+        // The event just changed the value this world state's schedule reports, so every client's copy
+        // of it is now stale.
+        WorldStateMgr::SendActiveScheduledWorldStateInfo();
+    }
+}
+
+void GameEventMgr::FillScheduledWorldStates(std::vector<WorldPackets::WorldState::ScheduledWorldStateInfo>& schedules) const
+{
+    time_t const now = GameTime::GetGameTime();
+
+    for (GameEventData const& event : mGameEvent)
+    {
+        // Only a repeating event that drives a world state has a cycle to report. `occurence` is that
+        // period in minutes; without one there is nothing recurring for the client to count down to.
+        if (!event.WorldStateId || !event.occurence || !event.isValid())
+            continue;
+
+        // Outside the event's overall lifetime there is no current cycle. `end` is 0 for events that
+        // never expire, so only treat it as a bound when it was actually set.
+        if (now < event.start || (event.end > event.start && now >= event.end))
+            continue;
+
+        time_t const period = time_t(event.occurence) * MINUTE;
+        time_t const cycleStart = event.start + ((now - event.start) / period) * period;
+
+        // Duration is the whole period, matching the wire: across the 12.0.7 captures a given world state
+        // keeps one Duration and its StartTimes step by exact multiples of it, so consecutive cycles tile
+        // the timeline rather than each describing only an active phase. Value is the world state's value
+        // right now rather than a prediction for the rest of the cycle - UpdateWorldStates re-sends this
+        // packet whenever the event flips, so what the client holds stays true.
+        schedules.emplace_back(cycleStart, uint32(period), uint32(*event.WorldStateId),
+            WorldStateMgr::GetValue(*event.WorldStateId, nullptr));
+    }
 }
 
 GameEventMgr::GameEventMgr() : isSystemInit(false)

@@ -58,6 +58,32 @@ namespace WorldPackets
             bool Hidden   = false; ///< @todo: research
             uint32 VariableID = 0;
         };
+
+        // One entry of SMSG_ACTIVE_SCHEDULED_WORLD_STATE_INFO: a world state that rotates on a fixed
+        // cycle, plus the cycle it is currently in. The client keys these by VariableID into
+        // CGWorldStateInfo::ScheduledWorldStateData and works out the end of the cycle itself, storing
+        // StartTime + Duration - that is where the countdown on a scheduled-content UI widget comes from.
+        // Duration is therefore the whole cycle length, not the time remaining in it.
+        struct ScheduledWorldStateInfo
+        {
+            ScheduledWorldStateInfo(time_t startTime, uint32 duration, uint32 variableID, int32 value)
+                : StartTime(startTime), Duration(duration), VariableID(variableID), Value(value) { }
+
+            Timestamp<> StartTime;
+            uint32 Duration;
+            uint32 VariableID;
+            int32 Value;
+        };
+
+        class TC_GAME_API ActiveScheduledWorldStateInfo final : public ServerPacket
+        {
+        public:
+            explicit ActiveScheduledWorldStateInfo() : ServerPacket(SMSG_ACTIVE_SCHEDULED_WORLD_STATE_INFO, 4) { }
+
+            WorldPacket const* Write() override;
+
+            std::vector<ScheduledWorldStateInfo> Schedules;
+        };
     }
 }
 

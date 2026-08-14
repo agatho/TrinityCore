@@ -9596,6 +9596,12 @@ void Player::SendInitWorldStates(uint32 zoneId, uint32 areaId) const
         mapId, zoneId, areaId, uint32(packet.Worldstates.size()));
 
     SendDirectMessage(packet.Write());
+
+    // The rotating world states go out with the static ones, which is where the 12.0.7 captures show
+    // them: SMSG_ACTIVE_SCHEDULED_WORLD_STATE_INFO sits in the same burst as SMSG_INIT_WORLD_STATES.
+    // Realm-global content, but the client needs it before it can put a countdown on any widget the
+    // zone it just entered shows.
+    WorldStateMgr::SendActiveScheduledWorldStateInfo(this);
 }
 
 void Player::SetBindPoint(ObjectGuid guid) const

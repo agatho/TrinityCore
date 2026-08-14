@@ -28,6 +28,11 @@ namespace WorldPackets::Quest
     struct AreaPoiUpdateInfo;
 }
 
+namespace WorldPackets::WorldState
+{
+    struct ScheduledWorldStateInfo;
+}
+
 // A map point-of-interest that can be broadcast as an active blip, loaded from `area_poi_template`.
 struct AreaPoiTemplate
 {
@@ -67,6 +72,10 @@ class TC_GAME_API AreaPoiMgr
 
         // Appends every currently-active POI to the SMSG_AREA_POI_UPDATE_RESPONSE payload.
         void FillActiveAreaPois(std::vector<WorldPackets::Quest::AreaPoiUpdateInfo>& pois) const;
+
+        // Appends the world state cycle behind every active POI that drives one, for
+        // SMSG_ACTIVE_SCHEDULED_WORLD_STATE_INFO. Skips POIs with no world state (VariableID 0).
+        void FillScheduledWorldStates(std::vector<WorldPackets::WorldState::ScheduledWorldStateInfo>& schedules) const;
 
     private:
         void Activate(AreaPoiTemplate const& tmpl, time_t now);
