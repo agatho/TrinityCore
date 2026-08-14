@@ -96,6 +96,7 @@
 #include "Language.h"
 #include "LanguageMgr.h"
 #include "LFGMgr.h"
+#include "LFGPackets.h"
 #include "ListUtils.h"
 #include "Log.h"
 #include "Loot.h"
@@ -7323,10 +7324,78 @@ void Player::SendCurrencies() const
     SendDirectMessage(packet.Write());
 }
 
+// SMSG_REQUEST_PVP_REWARDS_RESPONSE (0x480014) is decoded but DELIBERATELY not sent. The layout is recorded
+// here so the decode is not repeated; what blocks it is reward data this core does not have.
+//
+// The wire form was pinned from all 6 occurrences in the 12.0.7 family of captures (build-filtered to
+// 68275/68453/68974 and content-hash deduplicated - "rbg rated BG 12.0.7.pkt" is a byte-identical copy of
+// "rated BG 12.0.7.pkt", so the rated Blitz session counts once, not twice). Bodies are 304, 304, 348, 348,
+// 584 and 592 bytes. The shape is fixed, not counted:
+//
+//     RewardBlock[0]
+//     uint8  A            // 2 in the two small captures, 3 in the rated Blitz one
+//     uint8  B            // 0xC0 in all six
+//     RewardBlock[1] .. RewardBlock[12]        // 13 blocks in total, always all 13 present
+//
+// where RewardBlock is byte for byte the existing WorldPackets::LFG::LfgPlayerQuestReward and its
+// operator<< in LFGPackets.cpp - uint8 Mask, int32 RewardMoney, int32 RewardXP, the three uint32 counts up
+// front, then Item[]/Currency[]/BonusCurrency[] as {int32,int32} pairs, then one byte of MSB-first
+// OptionalInit bits (0x80 RewardSpellID, 0x40 ArtifactXPCategory, 0x20 ArtifactXP, 0x10 Honor) and the
+// present optionals in that order. That parser consumes all six bodies with ZERO bytes left over, which is
+// what settles the 13-block count: the client reader sub_7FF7290FB600 likewise calls the per-block reader
+// sub_7FF7291DAB70 thirteen times with two loose u8 reads after the first, and the two agree exactly.
+// Unpopulated activities are sent as all-zero blocks - retail itself left blocks 8 and 10 empty in the rated
+// Blitz capture, and left all but four blocks empty for a levelling character.
+//
+// Decoded values, for anyone verifying this later (currency 1792 = Honor, 1602 = Conquest): the rated Blitz
+// session carried e.g. Honor 300 + Conquest 8000 in block 0, Conquest 29800 + Honor 850 in block 1, and
+// Honor 200 with item 135539 in block 12; several blocks carry RewardSpellID 192953. The two non-PvP
+// captures are a levelling character and carry RewardXP (2150, 12250) where the max-level one carries none.
+//
+// The request side is already correct and needs no new trigger: CMSG_REQUEST_PVP_REWARDS (0x3A0041) has an
+// empty body, matching RequestPVPRewards, and every response in the captures is a direct 1:1 reply to it
+// 100-250 ms later. WorldSession::HandleRequestPvpReward -> here is exactly where retail answers.
+//
+// Only what this core will actually pay is published, and it is read from the same configuration the award
+// path reads, so the advertised figure cannot drift from the received one:
+//   - Honour is the winner's bonus from Battleground::EndBattleground. That path treats the config value as
+//     a KILL COUNT and runs it through GetBonusHonorFromKill, so the same conversion is done here rather
+//     than printing the raw config number, and the first-win-of-the-day distinction is the player's own
+//     GetRandomWinner() flag exactly as it is there. Outside a battleground there is no bracket to take a
+//     max level from, so the player's own level (capped at 80, as GetBonusHonorFromKill caps it) stands in.
+//   - Conquest is deliberately NOT advertised. CONFIG_BG_REWARD_WINNER_CONQUEST_FIRST/LAST are declared in
+//     World.cpp and read by nothing at all, so this core awards no Conquest; publishing a figure would
+//     promise a payout that never arrives.
+//   - No item or spell rewards are advertised, because nothing in this core grants the ones retail sends.
+//   - The arena blocks stay empty on purpose rather than by omission: RewardHonor returns early in arenas,
+//     so 2v2, 3v3 and Skirmish genuinely pay no honour here and empty is the truthful answer.
+//   - The remaining blocks are activities this core does not run, and retail itself transmits those as
+//     all-zero blocks, so they are left zero rather than filled with something invented.
+//
+// Note on the opcode table: retail sends 0x480014 on connection index 1, while it is declared
+// CONNECTION_TYPE_REALM here. That difference is intentional and must not be "fixed". REALM always has a
+// socket, this frame is opened in the open world where an instance socket need not exist, and
+// SMSG_BATTLEFIELD_STATUS_QUEUED is likewise declared REALM on this branch and works live despite retail
+// also sending it on index 1.
 void Player::SendPvpRewards() const
 {
-    //WorldPacket packet(SMSG_REQUEST_PVP_REWARDS_RESPONSE, 24);
-    //GetSession()->SendPacket(&packet);
+    WorldPackets::LFG::RequestPvpRewardsResponse response;
+
+    // Mirrors Battleground::EndBattleground: the config is a kill count, not an honour amount.
+    uint32 const winnerKills = GetRandomWinner()
+        ? sWorld->getIntConfig(CONFIG_BG_REWARD_WINNER_HONOR_LAST)
+        : sWorld->getIntConfig(CONFIG_BG_REWARD_WINNER_HONOR_FIRST);
+    uint32 const winnerHonor = Trinity::Honor::hk_honor_at_level(std::min<uint8>(GetLevel(), 80), float(winnerKills));
+
+    // Every battleground pays this same bonus - EndBattleground does not vary it by bracket - so the
+    // battleground-shaped activities this core actually queues for all advertise it, and nothing else does.
+    for (uint8 slot : { uint8(WorldPackets::LFG::RequestPvpRewardsResponse::RandomBattleground),
+                        uint8(WorldPackets::LFG::RequestPvpRewardsResponse::RatedBattleground),
+                        uint8(WorldPackets::LFG::RequestPvpRewardsResponse::BrawlBattleground),
+                        uint8(WorldPackets::LFG::RequestPvpRewardsResponse::BattlegroundBlitz) })
+        response.Activity[slot].Honor = int32(winnerHonor);
+
+    SendDirectMessage(response.Write());
 }
 
 void Player::SetCreateCurrency(uint32 id, uint32 amount)

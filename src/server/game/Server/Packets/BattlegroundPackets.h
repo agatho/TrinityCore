@@ -283,13 +283,38 @@ namespace WorldPackets
         // every one of the 18 samples balances: sum(A) equals AwaitedPerSide[0] + AwaitedPerSide[1] and
         // sum(B) equals the players already secured.
         //
-        // What is missing is not the layout, it is the server state. Sending either packet honestly requires
-        // a role-aware battleground matchmaker with a group-proposal phase: a per-role target composition, a
-        // running count of which queued players fill which role, and a 30 second proposal that individual
-        // players accept or decline (0x48000E is the "they did not all accept" outcome - its handler raises
-        // client message 0x336 and plays sound 0x43BD). This core has none of that: BattlegroundQueue fills
-        // by team headcount only, and there is no proposal step for battlegrounds at all. Every number in
-        // these two packets would therefore have to be fabricated, so they stay STATUS_UNHANDLED.
+        // Re-verified 2026-08-14 by decoding all 20 bodies again from scratch: the header is 46 bytes here
+        // (9-byte packed guid + 4 + 4 + 8 + 1 flush for the RideTicket, then count 1, RangeMin 0, RangeMax 90,
+        // TeamSize 0, InstanceID 0, one 8-byte QueueID 0x1F1000000019044D, then the two bits + flush), Ticket
+        // Type reads 1 = RideType::Battlegrounds, and Ticket.Time decodes as a sane unix timestamp only as an
+        // int64. 17 of the 18 0x48000D samples satisfy BOTH invariants above exactly; the 18th is the terminal
+        // message that zeroes the whole role block once the match is formed, so "secured" no longer applies to
+        // it. Nothing in either body is unaccounted for.
+        //
+        // What is missing is not the layout, it is the server state - but the earlier claim that EVERY number
+        // would have to be fabricated was too strong, and is corrected here so the next reader weighs the real
+        // obstacle rather than a wrong one. Three of the numbers are in fact derivable for the Blitz solo
+        // queue: the per-role targets fall straight out of MaxPlayersPerTeam and
+        // CONFIG_BATTLEGROUND_BLITZ_HEALERS_PER_TEAM (8 per side and 2 healers per side reproduce the captured
+        // 0 tanks / 4 healers / 12 damagers exactly), B follows from the healer/other partition
+        // CheckSoloQueueMatch already builds, and SlotsPerSide is just MaxPlayersPerTeam.
+        //
+        // What genuinely does not exist is the rest:
+        //   - There is no group-proposal phase for battlegrounds anywhere in this core. LFG has LfgProposal
+        //     with an id, a state machine, a cancel deadline and a per-player accept tri-state; the BG invite
+        //     flow has only ginfo->IsInvitedToBGInstanceGUID plus a RemoveInviteTime, no acceptance ledger,
+        //     and a decline removes ONLY the decliner while everyone else keeps their invite. So 0x48000E -
+        //     "they did not all accept" - has no event that could ever fire it, and 0x48000D would be
+        //     asserting a 30 second proposal that is not running.
+        //   - MapID is unknowable at that point: no instance is chosen until CreateNewBattleground, which
+        //     happens after the queue has already decided to pop.
+        //   - The per-side split of AwaitedPerSide has no source. Only the SUM is real; sides are not assigned
+        //     until the selection pools are filled.
+        //   - TANK and DAMAGER cannot be told apart. lfg::PLAYER_ROLE_HEALER is the only role bit examined
+        //     anywhere in Battlegrounds/; a tank-flagged queuer lands in "others" alongside the damage dealers.
+        // So they stay STATUS_UNHANDLED. Their CONNECTION_TYPE_REALM declaration is however confirmed correct
+        // rather than merely a safe default: retail sends both on connection index 0 in the capture, unlike
+        // SMSG_BATTLEFIELD_STATUS_QUEUED which it sends on index 1.
 
         class BattlemasterJoin final : public ClientPacket
         {

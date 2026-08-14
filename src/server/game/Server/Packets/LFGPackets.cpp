@@ -191,6 +191,19 @@ WorldPacket const* LfgPlayerInfo::Write()
     return &_worldPacket;
 }
 
+WorldPacket const* RequestPvpRewardsResponse::Write()
+{
+    // Block 0, then the two loose flag bytes, then blocks 1..12. The two bytes sit AFTER the first block,
+    // not at the head of the packet - that ordering is what makes the captured bodies balance exactly.
+    _worldPacket << Activity[RandomBattleground];
+    _worldPacket << uint8(BrawlFlags);
+    _worldPacket << uint8(ExtraFlags);
+    for (std::size_t slot = 1; slot < Activity.size(); ++slot)
+        _worldPacket << Activity[slot];
+
+    return &_worldPacket;
+}
+
 WorldPacket const* LfgPartyInfo::Write()
 {
     _worldPacket << Size<uint32>(Player);
