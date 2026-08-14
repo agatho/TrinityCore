@@ -20,6 +20,7 @@
 #include "Corpse.h"
 #include "DatabaseEnv.h"
 #include "DB2Stores.h"
+#include "DBCEnums.h"
 #include "GameTime.h"
 #include "Item.h"
 #include "Log.h"
@@ -347,11 +348,55 @@ void WorldSession::HandleQueryTreasurePicker(WorldPackets::Query::QueryTreasureP
     if (!questInfo)
         return;
 
+    // Only answer for pickers the quest actually advertises - refuse unrelated picker ids.
+    bool questUsesPicker = false;
+    for (int32 treasurePickerId : questInfo->GetTreasurePickerId())
+    {
+        if (uint32(treasurePickerId) == queryTreasurePicker.TreasurePickerID)
+        {
+            questUsesPicker = true;
+            break;
+        }
+    }
+
+    if (!questUsesPicker)
+        return;
+
     WorldPackets::Query::TreasurePickerResponse treasurePickerResponse;
     treasurePickerResponse.QuestID = queryTreasurePicker.QuestID;
     treasurePickerResponse.TreasurePickerID = queryTreasurePicker.TreasurePickerID;
 
-    // TODO: Missing treasure picker implementation
+    // A quest template can advertise a TreasurePickerID that world has no matching `treasure_picker`
+    // row for (e.g. the DH intro quest 40077 -> picker 3688). We must still answer: the client's quest
+    // frame blocks on the CMSG_QUERY_TREASURE_PICKER reply and never sends ACCEPT if we stay silent.
+    // So fall through to an empty SMSG_TREASURE_PICKER_RESPONSE rather than returning - no invented
+    // loot; fill `treasure_picker` when the data is actually known.
+    if (TreasurePickerTemplate const* treasurePicker = sObjectMgr->GetTreasurePicker(queryTreasurePicker.TreasurePickerID))
+    {
+        treasurePickerResponse.Treasure.Flags = treasurePicker->Flags;
+        treasurePickerResponse.Treasure.IsChoice = treasurePicker->IsChoice;
+        treasurePickerResponse.Treasure.Gold = treasurePicker->Gold;
+
+        Player* player = GetPlayer();
+        for (TreasurePickerItem const& pickerItem : treasurePicker->Items)
+        {
+            if (!sObjectMgr->IsTreasurePickerItemEligibleForPlayer(player, pickerItem.ItemID))
+                continue;
+
+            WorldPackets::Query::TreasurePickItem& itemPick = treasurePickerResponse.Treasure.ItemPicks.emplace_back();
+            itemPick.Item.ItemID = pickerItem.ItemID;
+            itemPick.Quantity = pickerItem.Quantity;
+            if (pickerItem.BonusListID)
+            {
+                itemPick.Item.ItemBonus.emplace();
+                itemPick.Item.ItemBonus->Context = ItemContext(pickerItem.Context);
+                itemPick.Item.ItemBonus->BonusListIDs.push_back(pickerItem.BonusListID);
+            }
+        }
+    }
+    else
+        TC_LOG_DEBUG("network", "WORLD: CMSG_QUERY_TREASURE_PICKER quest {} picker {} - no `treasure_picker` row, sending empty response",
+            queryTreasurePicker.QuestID, queryTreasurePicker.TreasurePickerID);
 
     SendPacket(treasurePickerResponse.Write());
 }

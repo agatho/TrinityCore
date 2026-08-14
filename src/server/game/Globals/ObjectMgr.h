@@ -45,6 +45,7 @@
 #include <unordered_map>
 
 class Item;
+class Player;
 class Unit;
 class Vehicle;
 class Map;
@@ -143,6 +144,25 @@ enum ChatType
 };
 
 typedef std::map<uint32, PageText> PageTextContainer;
+
+struct TreasurePickerItem
+{
+    uint32 ItemID = 0;
+    uint32 Quantity = 1;
+    int32 BonusListID = 0;
+    uint8 Context = 0;
+};
+
+struct TreasurePickerTemplate
+{
+    uint32 ID = 0;
+    int32 Flags = 0;
+    bool IsChoice = false;
+    uint64 Gold = 0;
+    std::vector<TreasurePickerItem> Items;
+};
+
+typedef std::unordered_map<uint32, TreasurePickerTemplate> TreasurePickerContainer;
 
 struct InstanceTemplate
 {
@@ -1183,11 +1203,18 @@ class TC_GAME_API ObjectMgr
         VehicleAccessoryList const* GetVehicleAccessoryList(Vehicle* veh) const;
 
         void LoadQuests();
+        void LoadTreasurePickerTemplates();
         void LoadQuestStartersAndEnders();
         void LoadGameobjectQuestStarters();
         void LoadGameobjectQuestEnders();
         void LoadCreatureQuestStarters();
         void LoadCreatureQuestEnders();
+
+        TreasurePickerTemplate const* GetTreasurePicker(uint32 treasurePickerId) const;
+        /// ItemSparse.AllowableClass (+ weapon/armor skill when AllowableClass == -1), race, faction flags.
+        bool IsTreasurePickerItemEligibleForPlayer(Player const* player, uint32 itemId) const;
+        /// Non-choice: first eligible offer row. Choice: matching ItemID if eligible.
+        TreasurePickerItem const* SelectTreasurePickerItem(TreasurePickerTemplate const* treasurePicker, Player const* player, uint32 choiceItemId = 0) const;
 
         QuestRelations* GetGOQuestRelationMapHACK() { return &_goQuestRelations; }
         QuestRelationResult GetGOQuestRelations(uint32 entry) const { return GetQuestRelationsFrom(_goQuestRelations, entry, true); }
@@ -1696,6 +1723,7 @@ class TC_GAME_API ObjectMgr
         QuestContainer _questTemplates;
         std::vector<Quest const*> _questTemplatesAutoPush;
         QuestObjectivesByIdContainer _questObjectives;
+        TreasurePickerContainer _treasurePickerStore;
 
         typedef std::unordered_map<uint32, NpcText> NpcTextContainer;
         typedef std::unordered_map<uint32, std::unordered_set<uint32>> QuestAreaTriggerContainer;
