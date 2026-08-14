@@ -1150,6 +1150,14 @@ class TC_GAME_API Unit : public WorldObject
         bool IsHovering() const { return m_movementInfo.HasMovementFlag(MOVEMENTFLAG_HOVER); }
         bool SetWalk(bool enable);
         bool SetDisableGravity(bool disable, bool updateAnimTier = true);
+        void BeginDeferDashMovementSpeedUpdates();
+        void EndDeferDashMovementSpeedUpdates();
+        bool IsDeferringDashMovementSpeedUpdates() const { return _deferDashMovementSpeedUpdates > 0; }
+        void FinalizeDashMovementSpeedUpdates();
+        void PrepareDashMovementState();
+        void CleanupDashMovementAfterAuraEnd();
+        void DeferDashGravityRestore();
+        void RestoreDeferredDashGravity();
         bool SetFall(bool enable);
         bool SetSwim(bool enable);
         bool SetCanFly(bool enable);
@@ -1945,6 +1953,10 @@ class TC_GAME_API Unit : public WorldObject
 
         std::array<float, MAX_MOVE_TYPE> m_speed_rate;
         std::array<float, ADV_FLYING_MAX_SPEED_TYPE> m_advFlyingSpeed;
+
+        uint32 _deferDashMovementSpeedUpdates = 0;
+        bool _dashMovementSpeedUpdatesFinalized = false;
+        bool _deferDashGravityRestore = false;
 
         Unit* m_unitMovedByMe;    // only ever set for players, and only for direct client control
         Player* m_playerMovingMe; // only set for direct client control (possess effects, vehicles and similar)
