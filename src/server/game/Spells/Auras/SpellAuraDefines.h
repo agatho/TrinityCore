@@ -304,7 +304,7 @@ enum AuraType : uint32
     SPELL_AURA_MOD_MELEE_HASTE_2                            = 217,
     SPELL_AURA_ADD_PCT_MODIFIER_BY_SPELL_LABEL              = 218,
     SPELL_AURA_ADD_FLAT_MODIFIER_BY_SPELL_LABEL             = 219,
-    SPELL_AURA_MOD_ABILITY_SCHOOL_MASK                      = 220,  // NYI
+    SPELL_AURA_MOD_ABILITY_SCHOOL_MASK                      = 220,  // implemented in Unit::GetSchoolMaskForSpell / Spell ctor / periodic damage school
     SPELL_AURA_MOD_DETAUNT                                  = 221,
     SPELL_AURA_REMOVE_TRANSMOG_COST                         = 222,
     SPELL_AURA_REMOVE_BARBER_SHOP_COST                      = 223,
@@ -513,7 +513,7 @@ enum AuraType : uint32
     SPELL_AURA_426                                          = 426,
     SPELL_AURA_SCALE_PLAYER_LEVEL                           = 427,  // NYI
     SPELL_AURA_LINKED_SUMMON                                = 428,
-    SPELL_AURA_MOD_SUMMON_DAMAGE                            = 429,  // NYI - increases damage done by all summons, not just controlled pets
+    SPELL_AURA_MOD_SUMMON_DAMAGE                            = 429,  // implemented in Unit::SpellDamagePctDone, Unit::MeleeDamageBonusDone - affects all summons (IsSummon()), not just controlled pets
     SPELL_AURA_PLAY_SCENE                                   = 430,
     SPELL_AURA_MOD_OVERRIDE_ZONE_PVP_TYPE                   = 431,
     SPELL_AURA_432                                          = 432,
@@ -527,7 +527,7 @@ enum AuraType : uint32
     SPELL_AURA_MOD_MULTISTRIKE_DAMAGE                       = 440,  // NYI
     SPELL_AURA_MOD_MULTISTRIKE_CHANCE                       = 441,  // NYI
     SPELL_AURA_MOD_READINESS                                = 442,  // NYI
-    SPELL_AURA_MOD_LEECH                                    = 443,  // NYI
+    SPELL_AURA_MOD_LEECH                                    = 443,  // implemented in Player::UpdateLeech / Unit::ContributeLeech
     SPELL_AURA_444                                          = 444,
     SPELL_AURA_445                                          = 445,
     SPELL_AURA_ADV_FLYING                                   = 446,
@@ -624,7 +624,7 @@ enum AuraType : uint32
     SPELL_AURA_MOD_SPELL_DAMAGE_FROM_CASTER_BY_LABEL        = 537,
     SPELL_AURA_MOD_FAKE_INEBRIATION_MOVEMENT_ONLY           = 538,
     SPELL_AURA_ALLOW_MOUNT_IN_COMBAT                        = 539,
-    SPELL_AURA_MOD_SUPPORT_STAT                             = 540, // NYI
+    SPELL_AURA_MOD_SUPPORT_STAT                             = 540, // MiscValue: 1 = primary (flat), 5 = crit %, 6 = versatility % — see AuraEffect::HandleModSupportStat
     SPELL_AURA_MOD_REQUIRED_MOUNT_CAPABILITY_FLAGS          = 541,
     SPELL_AURA_TRIGGER_SPELL_ON_STACK_AMOUNT                = 542, // NYI
     SPELL_AURA_543                                          = 543,
