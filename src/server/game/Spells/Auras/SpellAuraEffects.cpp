@@ -442,7 +442,7 @@ NonDefaultConstructible<pAuraEffectHandler> AuraEffectHandler[TOTAL_AURAS]=
     &AuraEffect::HandleNULL,                                      //370 SPELL_AURA_SPELL_OVERRIDE_NAME_GROUP
     &AuraEffect::HandleNoImmediateEffect,                         //371 SPELL_AURA_DISABLE_AUTOATTACK implemented in Unit::_UpdateAutoRepeatSpell and Unit::AttackerStateUpdate
     &AuraEffect::HandleNULL,                                      //372 SPELL_AURA_OVERRIDE_MOUNT_FROM_SET
-    &AuraEffect::HandleNULL,                                      //373 SPELL_AURA_MOD_SPEED_NO_CONTROL
+    &AuraEffect::HandleAuraModSpeedNoControl,                     //373 SPELL_AURA_MOD_SPEED_NO_CONTROL
     &AuraEffect::HandleNoImmediateEffect,                         //374 SPELL_AURA_MODIFY_FALL_DAMAGE_PCT implemented in Player::HandleFall
     &AuraEffect::HandleNULL,                                      //375 SPELL_AURA_HIDE_MODEL_AND_EQUIPEMENT_SLOTS implemented clientside
     &AuraEffect::HandleNULL,                                      //376 SPELL_AURA_MOD_CURRENCY_GAIN_FROM_SOURCE
@@ -3189,6 +3189,20 @@ static void HandleAuraDisableGravity(Unit* target, bool apply)
             || (target->IsCreature() && target->ToCreature()->IsFloating()))
         return;
 
+    if (target->IsDeferringDashMovementSpeedUpdates())
+    {
+        if (apply)
+            target->FinalizeDashMovementSpeedUpdates();
+        else
+        {
+            // Keep gravity off until the whole dash bundle has been unapplied, otherwise the client
+            // starts falling mid-transaction.
+            target->CleanupDashMovementAfterAuraEnd();
+            target->DeferDashGravityRestore();
+            return;
+        }
+    }
+
     if (target->SetDisableGravity(apply))
         if (!apply && !target->IsFlying())
             target->GetMotionMaster()->MoveFall();
@@ -3391,6 +3405,9 @@ void AuraEffect::HandleAuraModIncreaseSpeed(AuraApplication const* aurApp, uint8
 
     Unit* target = aurApp->GetTarget();
 
+    if (target->IsDeferringDashMovementSpeedUpdates())
+        return;
+
     target->UpdateSpeed(MOVE_RUN);
 }
 
@@ -3467,7 +3484,27 @@ void AuraEffect::HandleAuraModUseNormalSpeed(AuraApplication const* aurApp, uint
 
     Unit* target = aurApp->GetTarget();
 
+    if (target->IsDeferringDashMovementSpeedUpdates())
+        return;
+
     target->UpdateSpeed(MOVE_RUN);
+    target->UpdateSpeed(MOVE_SWIM);
+    target->UpdateSpeed(MOVE_FLIGHT);
+}
+
+void AuraEffect::HandleAuraModSpeedNoControl(AuraApplication const* aurApp, uint8 mode, bool /*apply*/) const
+{
+    if (!(mode & AURA_EFFECT_HANDLE_CHANGE_AMOUNT_MASK))
+        return;
+
+    Unit* target = aurApp->GetTarget();
+
+    if (target->IsDeferringDashMovementSpeedUpdates())
+        return;
+
+    target->UpdateSpeed(MOVE_RUN);
+    target->UpdateSpeed(MOVE_RUN_BACK);
+    target->UpdateSpeed(MOVE_WALK);
     target->UpdateSpeed(MOVE_SWIM);
     target->UpdateSpeed(MOVE_FLIGHT);
 }
@@ -3478,6 +3515,9 @@ void AuraEffect::HandleAuraModMinimumSpeedRate(AuraApplication const* aurApp, ui
         return;
 
     Unit* target = aurApp->GetTarget();
+
+    if (target->IsDeferringDashMovementSpeedUpdates())
+        return;
 
     target->UpdateSpeed(MOVE_RUN);
 }

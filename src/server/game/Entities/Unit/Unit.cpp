@@ -3573,11 +3573,40 @@ void Unit::_ApplyAuraEffect(Aura* aura, uint8 effIndex)
         aurApp->_HandleEffect(effIndex, true);
 }
 
+namespace
+{
+// RAII helper: while a Fel Rush style dash bundle is being (un)applied we suppress the
+// per-effect UpdateSpeed calls so the whole bundle lands in one movement transaction,
+// then flush once on scope exit (see Unit::EndDeferDashMovementSpeedUpdates).
+struct DashSpeedUpdateDeferGuard
+{
+    Unit* UnitPtr;
+    bool Active;
+
+    DashSpeedUpdateDeferGuard(Unit* unit, bool active) : UnitPtr(unit), Active(active)
+    {
+        if (Active)
+            UnitPtr->BeginDeferDashMovementSpeedUpdates();
+    }
+
+    DashSpeedUpdateDeferGuard(DashSpeedUpdateDeferGuard const&) = delete;
+    DashSpeedUpdateDeferGuard& operator=(DashSpeedUpdateDeferGuard const&) = delete;
+
+    ~DashSpeedUpdateDeferGuard()
+    {
+        if (Active)
+            UnitPtr->EndDeferDashMovementSpeedUpdates();
+    }
+};
+}
+
 // handles effects of aura application
 // should be done after registering aura in lists
 void Unit::_ApplyAura(AuraApplication* aurApp, uint32 effMask)
 {
     Aura* aura = aurApp->GetBase();
+
+    DashSpeedUpdateDeferGuard deferGuard(this, GetTypeId() == TYPEID_PLAYER && aura->GetSpellInfo()->IsDashMovementBundle());
 
     _RemoveNoStackAurasDueToAura(aura, false);
 
@@ -3681,6 +3710,8 @@ void Unit::_UnapplyAura(AuraApplicationMap::iterator& i, AuraRemoveMode removeMo
 
     aurApp->_Remove();
     aura->_UnapplyForTarget(this, caster, aurApp);
+
+    DashSpeedUpdateDeferGuard deferGuard(this, GetTypeId() == TYPEID_PLAYER && aura->GetSpellInfo()->IsDashMovementBundle());
 
     // remove effects of the spell - needs to be done after removing aura from lists
     for (AuraEffect const* aurEff : aura->GetAuraEffects())
@@ -8959,6 +8990,32 @@ void Unit::UpdateSpeed(UnitMoveType mtype)
             speed = min_speed;
     }
 
+    // SPELL_AURA_MOD_SPEED_NO_CONTROL: dash abilities push an absolute yards/sec floor through
+    // SPELL_AURA_USE_NORMAL_MOVEMENT_SPEED instead of a percentage speed mod.
+    // Threshold note (UNVERIFIED, inherited from the source branch): Fel Rush is reported to use a
+    // 66 yd/s floor while Monk Roll's aura 191 value (~35) is a cap only, hence only normalization
+    // values at or above 60 yd/s are treated as a forced floor. Needs an in-game/sniff re-check.
+    if (GetMaxPositiveAuraModifier(SPELL_AURA_MOD_SPEED_NO_CONTROL))
+    {
+        if (mtype == MOVE_RUN || mtype == MOVE_RUN_BACK || mtype == MOVE_WALK)
+        {
+            if (float normalization = GetMaxPositiveAuraModifier(SPELL_AURA_USE_NORMAL_MOVEMENT_SPEED))
+            {
+                float constexpr felRushNormalizationYardsPerSec = 60.0f;
+                if (normalization >= felRushNormalizationYardsPerSec)
+                {
+                    float baseSpeed = IsControlledByPlayer() ? playerBaseMoveSpeed[mtype] : baseMoveSpeed[mtype];
+                    if (baseSpeed > 0.0f)
+                    {
+                        float forcedRate = normalization / baseSpeed;
+                        if (speed < forcedRate)
+                            speed = forcedRate;
+                    }
+                }
+            }
+        }
+    }
+
     SetSpeedRate(mtype, speed);
 }
 
@@ -13493,6 +13550,94 @@ bool Unit::SetDisableGravity(bool disable, bool updateAnimTier /*= true*/)
     }
 
     return true;
+}
+
+void Unit::BeginDeferDashMovementSpeedUpdates()
+{
+    ++_deferDashMovementSpeedUpdates;
+    _dashMovementSpeedUpdatesFinalized = false;
+}
+
+void Unit::EndDeferDashMovementSpeedUpdates()
+{
+    ASSERT(_deferDashMovementSpeedUpdates > 0);
+    --_deferDashMovementSpeedUpdates;
+
+    if (_deferDashMovementSpeedUpdates == 0)
+    {
+        if (!_dashMovementSpeedUpdatesFinalized)
+        {
+            UpdateSpeed(MOVE_RUN);
+            UpdateSpeed(MOVE_RUN_BACK);
+            UpdateSpeed(MOVE_WALK);
+            UpdateSpeed(MOVE_SWIM);
+            UpdateSpeed(MOVE_FLIGHT);
+        }
+
+        RestoreDeferredDashGravity();
+        _dashMovementSpeedUpdatesFinalized = false;
+    }
+}
+
+void Unit::PrepareDashMovementState()
+{
+    // Matches the client's gravity-disable acknowledgement during a dash: moving Forward with
+    // gravity off and no horizontal fall carry (HasFallDirection false).
+    m_movementInfo.jump.sinAngle = 0.0f;
+    m_movementInfo.jump.cosAngle = 0.0f;
+    m_movementInfo.jump.xyspeed = 0.0f;
+    RemoveUnitMovementFlag(MOVEMENTFLAG_FALLING | MOVEMENTFLAG_FALLING_FAR);
+    AddUnitMovementFlag(MOVEMENTFLAG_FORWARD);
+}
+
+void Unit::FinalizeDashMovementSpeedUpdates()
+{
+    if (_dashMovementSpeedUpdatesFinalized)
+        return;
+
+    _dashMovementSpeedUpdatesFinalized = true;
+
+    PrepareDashMovementState();
+
+    UpdateSpeed(MOVE_RUN);
+    UpdateSpeed(MOVE_RUN_BACK);
+    UpdateSpeed(MOVE_WALK);
+    UpdateSpeed(MOVE_SWIM);
+    UpdateSpeed(MOVE_FLIGHT);
+}
+
+void Unit::CleanupDashMovementAfterAuraEnd()
+{
+    m_movementInfo.jump.Reset();
+    RemoveUnitMovementFlag(MOVEMENTFLAG_FALLING | MOVEMENTFLAG_FALLING_FAR);
+
+    if (Player* playerMover = GetPlayerMovingMe())
+    {
+        WorldPackets::Movement::MoveUpdate moveUpdate;
+        moveUpdate.Status = &m_movementInfo;
+        SendMessageToSet(moveUpdate.Write(), playerMover);
+    }
+}
+
+void Unit::DeferDashGravityRestore()
+{
+    _deferDashGravityRestore = true;
+}
+
+void Unit::RestoreDeferredDashGravity()
+{
+    if (!_deferDashGravityRestore)
+        return;
+
+    _deferDashGravityRestore = false;
+
+    if (HasAuraType(SPELL_AURA_MOD_ROOT_DISABLE_GRAVITY)
+        || HasAuraType(SPELL_AURA_MOD_STUN_DISABLE_GRAVITY)
+        || HasAuraType(SPELL_AURA_DISABLE_GRAVITY)
+        || (IsCreature() && ToCreature()->IsFloating()))
+        return;
+
+    SetDisableGravity(false);
 }
 
 bool Unit::SetFall(bool enable)
