@@ -2010,6 +2010,7 @@ class TC_GAME_API WorldSession
         time_t _logoutTime;
         bool m_inQueue;                                     // session wait in auth.queue
         ObjectGuid m_playerLoading;                         // code processed in LoginPlayer
+        bool m_playerLoginRPE = false;                      // CMSG_PLAYER_LOGIN.RPE - Returning Player ("Catch Up") Experience enter
         bool m_playerLogout;                                // code processed in LogoutPlayer
         bool m_playerRecentlyLogout;
         bool m_playerSave;

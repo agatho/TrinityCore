@@ -44,6 +44,7 @@
 #include "Language.h"
 #include "Log.h"
 #include "Map.h"
+#include "MapManager.h"
 #include "MapUtils.h"
 #include "Metric.h"
 #include "MiscPackets.h"
@@ -363,6 +364,20 @@ bool LoginQueryHolder::Initialize()
     res &= SetPreparedQuery(PLAYER_LOGIN_QUERY_LOAD_BANK_TAB_SETTINGS, stmt);
 
     return res;
+}
+
+namespace
+{
+// Arathi Returning Player Experience ("Catch Up"): CMSG_PLAYER_LOGIN.RPE drops the character
+// into the dedicated Arathi Highlands RPE map instead of its saved position.
+// Landing spot taken from a retail 12.0.7.68453 capture of the Catch Up login.
+// UNVERIFIED: map id 2927 could not be cross-checked against our Map.db2 in this worktree -
+// the lookup below degrades to a logged error and a normal login if it is absent.
+constexpr uint32 ARATHI_RPE_MAP_ID = 2927;
+constexpr float ARATHI_RPE_POSITION_X = -1101.67f;
+constexpr float ARATHI_RPE_POSITION_Y = -3554.37f;
+constexpr float ARATHI_RPE_POSITION_Z = 48.9203f;
+constexpr float ARATHI_RPE_ORIENTATION = 6.2583666f;
 }
 
 class EnumCharactersQueryHolder : public CharacterDatabaseQueryHolder
@@ -1100,12 +1115,14 @@ void WorldSession::HandlePlayerLoginOpcode(WorldPackets::Character::PlayerLogin&
     }
 
     m_playerLoading = playerLogin.Guid;
+    m_playerLoginRPE = playerLogin.RPE;
 
-    TC_LOG_DEBUG("network", "Character {} logging in", playerLogin.Guid.ToString());
+    TC_LOG_DEBUG("network", "Character {} logging in (RPE={})", playerLogin.Guid.ToString(), playerLogin.RPE);
 
     if (!IsLegitCharacterForAccount(playerLogin.Guid))
     {
         TC_LOG_ERROR("network", "Account ({}) can't login with that character ({}).", GetAccountId(), playerLogin.Guid.ToString());
+        m_playerLoginRPE = false;
         KickPlayer("WorldSession::HandlePlayerLoginOpcode Trying to login with a character of another account");
         return;
     }
@@ -1125,6 +1142,7 @@ void WorldSession::HandleContinuePlayerLogin()
     if (!holder->Initialize())
     {
         m_playerLoading.Clear();
+        m_playerLoginRPE = false;
         return;
     }
 
@@ -1148,6 +1166,7 @@ void WorldSession::AbortLogin(WorldPackets::Character::LoginFailureReason reason
     }
 
     m_playerLoading.Clear();
+    m_playerLoginRPE = false;
     SendPacket(WorldPackets::Character::CharacterLoginFailed(reason).Write());
 }
 
@@ -1171,7 +1190,44 @@ void WorldSession::HandlePlayerLogin(LoginQueryHolder const& holder)
         KickPlayer("WorldSession::HandlePlayerLogin Player::LoadFromDB failed"); // disconnect client, player no set to session and it will not deleted or saved at kick
         delete pCurrChar;                                   // delete it manually
         m_playerLoading.Clear();
+        m_playerLoginRPE = false;
         return;
+    }
+
+    // Arathi Returning Player Experience: honor CMSG_PLAYER_LOGIN.RPE.
+    // Player::LoadFromDB has already done CreateMap + SetMap + UpdatePositionData for the saved
+    // position, so a bare WorldRelocate would only move the WorldLocation and leave GetMap()
+    // pointing at the old map. Rebind exactly like MovementHandler::HandleMoveWorldportAck
+    // (relocate, ResetMap, SetMap, UpdatePositionData) so that GetMap()->GetId() really is the RPE
+    // map before AddPlayerToMap runs and grid/spawn/AI loading happens on the right map.
+    bool const enterArathiRpe = m_playerLoginRPE;
+    m_playerLoginRPE = false;
+    if (enterArathiRpe)
+    {
+        if (!sMapStore.LookupEntry(ARATHI_RPE_MAP_ID))
+            TC_LOG_ERROR("network", "Player {} requested Arathi RPE login but map {} is missing from Map.db2",
+                pCurrChar->GetGUID().ToString(), ARATHI_RPE_MAP_ID);
+        else if (Map* rpeMap = sMapMgr->CreateMap(ARATHI_RPE_MAP_ID, pCurrChar))
+        {
+            if (TransferAbortParams denyReason = rpeMap->CannotEnter(pCurrChar))
+                TC_LOG_ERROR("network", "Player {} requested Arathi RPE login but cannot enter map {} (reason {})",
+                    pCurrChar->GetGUID().ToString(), ARATHI_RPE_MAP_ID, uint32(denyReason.Reason));
+            else
+            {
+                pCurrChar->WorldRelocate(ARATHI_RPE_MAP_ID, ARATHI_RPE_POSITION_X, ARATHI_RPE_POSITION_Y,
+                    ARATHI_RPE_POSITION_Z, ARATHI_RPE_ORIENTATION);
+                pCurrChar->SetFallInformation(0, pCurrChar->GetPositionZ());
+                pCurrChar->ResetMap();
+                pCurrChar->SetMap(rpeMap);
+                pCurrChar->UpdatePositionData();
+
+                TC_LOG_DEBUG("network", "Player {} entering Arathi RPE map {} (GetMap={})",
+                    pCurrChar->GetGUID().ToString(), ARATHI_RPE_MAP_ID, pCurrChar->GetMap()->GetId());
+            }
+        }
+        else
+            TC_LOG_ERROR("network", "Player {} requested Arathi RPE login but CreateMap({}) failed",
+                pCurrChar->GetGUID().ToString(), ARATHI_RPE_MAP_ID);
     }
 
     if (!_timeSyncClockDeltaQueue->empty())
