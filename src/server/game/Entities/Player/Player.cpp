@@ -15011,22 +15011,48 @@ void Player::OnGossipSelect(WorldObject* source, int32 gossipOptionId, uint32 me
         case GossipOptionNpc::RuneforgeLegendaryUpgrade: // NYI
             break;
         // GossipOptionNpc::ProfessionsCraftingOrder (48) deliberately keeps no case and is NOT listed here: the
-        // 12.0.7 client's GossipNPCOption.db2 carries zero rows of that type, so no live NPC can raise it. If a
-        // future build adds one, give it the same fall-through the customer-order option gets below.
+        // 12.0.7 client's GossipNPCOption.db2 carries zero rows of that type, so no live NPC can raise it. It
+        // therefore reaches `default:`, which sets handled = false and opens the generic interaction - strictly
+        // more useful than the upstream "// NYI" stub, which consumed the option and sent nothing. That stub is
+        // deliberately NOT reinstated here: feature/housing-system still carried it only because the branch
+        // predates feature/crafting-orders' removal of it.
         case GossipOptionNpc::ProfessionsCustomerOrder:
-            // Crafting-order clerk (Clerk Galesong/Goldspark on menu 27907, Head Clerk Mimzy Sprazzlerock and the
-            // other eight clerks on menu 30243). Fall through to the generic !handled branch, which sends
-            // SMSG_GOSSIP_OPTION_NPC_INTERACTION{GossipNpcOptionID}; the client resolves that id through
-            // GossipNPCOption.db2 (rows 32410 and 42522, both ProfessionID=2) into
-            // PlayerInteractionType::ProfessionsCustomerOrder and raises the crafting-order frame. From there the
-            // CMSG_CRAFTING_ORDER_* handlers this branch already implements take over.
+        {
+            // The crafting-order clerk has its own dedicated open opcode, so it belongs in this
+            // switch rather than in the generic !handled fall-through — exactly like the auctioneer
+            // above. SMSG_CRAFTING_HOUSE_HELLO_RESPONSE REPLACES SMSG_GOSSIP_OPTION_NPC_INTERACTION
+            // here; it does not accompany it.
             //
-            // This was an upstream "// NYI" stub, which consumed the option as handled and sent nothing - so every
-            // clerk in the game was a dead click even though the whole crafting-order backend was live. The
-            // accompanying world SQL populates gossip_menu_option.GossipNpcOptionID on both menus; without it the
-            // fall-through would send NPCInteractionOpenResult instead, which is not the retail trigger.
-            handled = false;
+            // Capture evidence (build 68275, ingame-shop_ordersCrafting_professions.pkt, three
+            // identical sequences at ticks 383194 / 761111 / 788488, clerk menu 30243 — the same menu
+            // the crafting-order work targets):
+            //     CMSG_GOSSIP_SELECT_OPTION{guid, 30243, 107733}
+            //   ~150 ms later
+            //     SMSG_CRAFTING_HOUSE_HELLO_RESPONSE{guid, 0x40}      <- the only reply
+            //     CMSG_CRAFTING_ORDER_LIST_MY_ORDERS{same guid}
+            // SMSG_GOSSIP_OPTION_NPC_INTERACTION appears zero times in those windows, and
+            // SMSG_NPC_INTERACTION_OPEN_RESULT zero times in the whole 12.0.7 capture set. That is
+            // not a dead mechanism in the session: the same capture carries three
+            // SMSG_GOSSIP_OPTION_NPC_INTERACTION records for a GameObject, so retail deliberately
+            // does not use it for this clerk.
+            //
+            // The client handler (sub_7FF72ACDB8D0) opens PlayerInteractionType 60 itself and then
+            // fires CRAFTINGORDERS_SHOW_CUSTOMER, so nothing else is needed to raise the frame.
+            PlayerTalkClass->GetInteractionData().StartInteraction(guid, PlayerInteractionType::ProfessionsCustomerOrder);
+
+            WorldPackets::Housing::CraftingHouseHelloResponse craftingHouseHello;
+            craftingHouseHello.Guid = guid;
+            craftingHouseHello.OpenForBusiness = true;  // clear raises CRAFTING_HOUSE_DISABLED instead
+            SendDirectMessage(craftingHouseHello.Write());
+
+            // Merge note (integration/all-systems): feature/crafting-orders reached this line first and set
+            // handled = false here, shipping world SQL that populates gossip_menu_option.GossipNpcOptionID on
+            // menus 27907 and 30243. The capture evidence above wins, so the replace semantics are kept and
+            // `handled` stays true. That SQL is then only inert, not wrong: GossipNpcOptionID is read solely on
+            // the !handled path, which this case no longer takes. Leave the rows in place - they cost nothing
+            // and are the correct data if a future build ever restores the generic trigger.
             break;
+        }
         case GossipOptionNpc::BarbersChoice: // NYI - unknown if needs sending
             break;
         default:
@@ -20151,15 +20177,17 @@ bool Player::LoadFromDB(ObjectGuid guid, CharacterDatabaseQueryHolder const& hol
             }
 
             // Calculate progress in the 0-1000 scale (sniff: ProgressRequired=1000)
-            float progressRequired = 1000.0f;
+            float progressRequired = INITIATIVE_PROGRESS_REQUIRED;
             float currentProgress = activeInit->Progress * progressRequired;
 
-            // Find current milestone
+            // Find current milestone. RequiredContributionAmount is a percentage (DB2: 25/50/75/100)
+            // while Progress is a 0..1 fraction, so it has to be scaled before comparing — comparing
+            // them raw pinned CurrentMilestoneID to the first milestone forever.
             int32 currentMilestoneID = -1;
             auto milestones = sInitiativeManager.GetMilestonesForCycle(cycleID);
             for (auto const& m : milestones)
             {
-                if (activeInit->Progress < m.RequiredContributionAmount)
+                if (activeInit->Progress * INITIATIVE_MILESTONE_SCALE < m.RequiredContributionAmount)
                 {
                     currentMilestoneID = static_cast<int32>(m.MilestoneID);
                     break;
