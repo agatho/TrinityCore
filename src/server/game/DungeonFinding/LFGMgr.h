@@ -56,6 +56,10 @@ enum LFGMgrEnum
     LFG_TIME_ROLECHECK                           = 45,
     LFG_TIME_BOOT                                = 120,
     LFG_TIME_PROPOSAL                            = 45,
+    // Seconds a queue entry must have been waiting before its leader is offered the "expand your
+    // search?" prompt (SMSG_LFG_EXPAND_SEARCH_PROMPT). Evaluated on the existing queue-status sweep,
+    // so the effective granularity is LFG_QUEUEUPDATE_INTERVAL.
+    LFG_TIME_EXPAND_SEARCH_PROMPT                = 120,
     LFG_QUEUEUPDATE_INTERVAL                     = 15 * IN_MILLISECONDS,
     LFG_SPELL_DUNGEON_COOLDOWN                   = 71328,
     LFG_SPELL_DUNGEON_DESERTER                   = 71041,
@@ -427,6 +431,8 @@ class TC_GAME_API LFGMgr
         void JoinLfg(Player* player, uint8 roles, LfgDungeonSet& dungeons);
         /// Leaves lfg
         void LeaveLfg(ObjectGuid guid, bool disconnected = false);
+        /// CMSG_DF_CONFIRM_EXPAND_SEARCH: widen an already-queued entry's dungeon set without losing its place
+        void ConfirmExpandSearch(Player* player, WorldPackets::LFG::RideTicket const& ticket);
         /// Gets unique join queue data
         WorldPackets::LFG::RideTicket const* GetTicket(ObjectGuid guid) const;
 
@@ -478,6 +484,10 @@ class TC_GAME_API LFGMgr
         LfgDungeonSet const& GetDungeonsByRandom(uint32 randomdungeon);
         LfgType GetDungeonType(uint32 dungeon);
 
+        // Expand search
+        void UpdateExpandSearchPrompts(time_t currTime);
+        LfgDungeonSet BuildExpandedDungeons(ObjectGuid pguid, LfgDungeonSet const& current, LfgLockMap* nowInvalid);
+
         void SendLfgBootProposalUpdate(ObjectGuid guid, LfgPlayerBoot const& boot);
         void SendLfgJoinResult(ObjectGuid guid, LfgJoinResultData const& data);
         void SendLfgRoleChosen(ObjectGuid guid, ObjectGuid pguid, uint8 roles);
@@ -503,6 +513,7 @@ class TC_GAME_API LFGMgr
         LfgPlayerBootContainer BootsStore;                 /// Current player kicks
         LfgPlayerDataContainer PlayersStore;               /// Player data
         LfgGroupDataContainer GroupsStore;                 /// Group data
+        GuidSet ExpandSearchPromptedStore;                 /// Queue owners already offered SMSG_LFG_EXPAND_SEARCH_PROMPT
 };
 
 inline int32 format_as(LFGMgrEnum e) { return e; }

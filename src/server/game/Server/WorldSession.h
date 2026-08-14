@@ -86,6 +86,7 @@ namespace lfg
     struct LfgRoleCheck;
     struct LfgUpdateData;
     enum LfgTeleportResult : uint8;
+    enum LfgSlotInvalidReason : uint32;
 }
 
 namespace rbac
@@ -477,6 +478,8 @@ namespace WorldPackets
         class DFTeleport;
         class DFGetSystemInfo;
         class DFGetJoinStatus;
+        class DFConfirmExpandSearch;
+        struct RideTicket;
     }
 
     namespace LFGList
@@ -1733,6 +1736,7 @@ class TC_GAME_API WorldSession
         void HandleLfgTeleportOpcode(WorldPackets::LFG::DFTeleport& dfTeleport);
         void HandleDFGetSystemInfo(WorldPackets::LFG::DFGetSystemInfo& dfGetSystemInfo);
         void HandleDFGetJoinStatus(WorldPackets::LFG::DFGetJoinStatus& dfGetJoinStatus);
+        void HandleDFConfirmExpandSearch(WorldPackets::LFG::DFConfirmExpandSearch& dfConfirmExpandSearch);
 
         // Premade Group Finder (LFG List)
         void HandleLFGListJoin(WorldPackets::LFGList::LFGListJoin& packet);
@@ -1759,6 +1763,8 @@ class TC_GAME_API WorldSession
         void SendLfgDisabled();
         void SendLfgOfferContinue(uint32 dungeonEntry);
         void SendLfgTeleportError(lfg::LfgTeleportResult err);
+        void SendLfgExpandSearchPrompt(WorldPackets::LFG::RideTicket const& ticket);
+        void SendLfgSlotInvalid(lfg::LfgSlotInvalidReason reason, int32 subReason1, int32 subReason2);
 
         void HandleSelfResOpcode(WorldPackets::Spells::SelfRes& selfRes);
         void HandleRequestPetInfo(WorldPackets::Pet::RequestPetInfo& requestPetInfo);

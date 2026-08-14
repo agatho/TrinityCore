@@ -65,6 +65,13 @@ void DFTeleport::Read()
     _worldPacket >> Bits<1>(TeleportOut);
 }
 
+void DFConfirmExpandSearch::Read()
+{
+    _worldPacket >> Ticket;
+    _worldPacket >> Bits<1>(Accepted);
+    _worldPacket.ResetBitPos();
+}
+
 void DFGetSystemInfo::Read()
 {
     _worldPacket >> Bits<1>(Player);
@@ -409,6 +416,22 @@ WorldPacket const* LFGTeleportDenied::Write()
 {
     _worldPacket << Bits<4>(Reason);
     _worldPacket.FlushBits();
+
+    return &_worldPacket;
+}
+
+WorldPacket const* LFGExpandSearchPrompt::Write()
+{
+    _worldPacket << Ticket;
+
+    return &_worldPacket;
+}
+
+WorldPacket const* LFGSlotInvalid::Write()
+{
+    _worldPacket << uint32(Reason);
+    _worldPacket << int32(SubReason1);
+    _worldPacket << int32(SubReason2);
 
     return &_worldPacket;
 }

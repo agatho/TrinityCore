@@ -112,6 +112,25 @@ namespace WorldPackets
             bool Player = false;
         };
 
+        // Client serializer 12.0.7.68275 @ RVA 0x5D1980 (image base 0x7FF728AA0000):
+        //   write_u32(0x400036) ; write_PackedGuid(+0x20) ; write_u32(+0x30) ; write_u32(+0x34)
+        //   write_u64(+0x38)    ; WriteBit(+0x40) ; FlushBits          <- byte for byte a RideTicket
+        //   WriteBit(+0x48)     ; FlushBits
+        // The ticket is the one the client stashed from SMSG_LFG_EXPAND_SEARCH_PROMPT (handler @ RVA 0x2301A90
+        // copies the 40 bytes at msg+0x20 straight into a global), echoed back unchanged.
+        // In practice Accepted is always true: the LFG_QUEUE_EXPAND static popup wires OnAccept to
+        // C_LFGInfo.ConfirmLfgExpandSearch and gives button2 (NO) no handler at all, so a decline sends nothing.
+        class DFConfirmExpandSearch final : public ClientPacket
+        {
+        public:
+            explicit DFConfirmExpandSearch(WorldPacket&& packet) : ClientPacket(CMSG_DF_CONFIRM_EXPAND_SEARCH, std::move(packet)) { }
+
+            void Read() override;
+
+            RideTicket Ticket;
+            bool Accepted = false;
+        };
+
         class DFGetJoinStatus final : public ClientPacket
         {
         public:
@@ -426,6 +445,38 @@ namespace WorldPackets
             WorldPacket const* Write() override;
 
             lfg::LfgTeleportResult Reason;
+        };
+
+        // Dispatcher case 5636127 (0x56001F) inside the 0x56 group dispatcher @ RVA 0x739420 is a single
+        // RideTicket read and nothing else; the registered handler @ RVA 0x2301A90 copies msg+0x20..+0x48
+        // (guid 16 + id 4 + type 4 + time 8 + bit) into a global and fires SHOW_LFG_EXPAND_SEARCH_PROMPT,
+        // which LFGInfoDocumentation.lua declares with an empty payload. So: ticket only.
+        class LFGExpandSearchPrompt final : public ServerPacket
+        {
+        public:
+            explicit LFGExpandSearchPrompt() : ServerPacket(SMSG_LFG_EXPAND_SEARCH_PROMPT, 16 + 4 + 4 + 8 + 1) { }
+
+            WorldPacket const* Write() override;
+
+            RideTicket Ticket;
+        };
+
+        // Dispatcher case 5636116 (0x560014) only takes a reference to the remaining bytes - the parse is
+        // deferred to the handler. That handler (registration site RVA 0x1EE580E stores RVA 0x2301A40 into
+        // the slot at RVA 0x4404890) reads exactly three dwords off the tail:
+        //   eax = [payload+0] -> arg0 ; eax = [payload+4] -> arg1 ; eax = [payload+8] -> arg2
+        // and fires a three-number Lua event - LFG_INVALID_ERROR_MESSAGE(reason, subReason1, subReason2).
+        // Reason is Enum.LFGSlotInvalidReason (see lfg::LfgSlotInvalidReason).
+        class LFGSlotInvalid final : public ServerPacket
+        {
+        public:
+            explicit LFGSlotInvalid() : ServerPacket(SMSG_LFG_SLOT_INVALID, 4 + 4 + 4) { }
+
+            WorldPacket const* Write() override;
+
+            uint32 Reason = 0;
+            int32 SubReason1 = 0;
+            int32 SubReason2 = 0;
         };
     }
 }

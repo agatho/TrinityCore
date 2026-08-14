@@ -644,6 +644,24 @@ time_t LFGQueue::GetJoinTime(ObjectGuid guid) const
     return 0;
 }
 
+LfgDungeonSet const* LFGQueue::GetQueuedDungeons(ObjectGuid guid) const
+{
+    LfgQueueDataContainer::const_iterator itr = QueueDataStore.find(guid);
+    if (itr != QueueDataStore.end())
+        return &itr->second.dungeons;
+
+    return nullptr;
+}
+
+LfgRolesMap const* LFGQueue::GetQueuedRoles(ObjectGuid guid) const
+{
+    LfgQueueDataContainer::const_iterator itr = QueueDataStore.find(guid);
+    if (itr != QueueDataStore.end())
+        return &itr->second.roles;
+
+    return nullptr;
+}
+
 std::string LFGQueue::DumpQueueInfo() const
 {
     uint32 players = 0;

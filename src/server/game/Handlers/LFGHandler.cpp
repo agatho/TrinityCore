@@ -113,6 +113,19 @@ void WorldSession::HandleDFGetSystemInfo(WorldPackets::LFG::DFGetSystemInfo& dfG
         SendLfgPartyLockInfo();
 }
 
+void WorldSession::HandleDFConfirmExpandSearch(WorldPackets::LFG::DFConfirmExpandSearch& dfConfirmExpandSearch)
+{
+    TC_LOG_DEBUG("lfg", "CMSG_DF_CONFIRM_EXPAND_SEARCH {} accepted: {}", GetPlayerInfo(), dfConfirmExpandSearch.Accepted);
+
+    // A decline never reaches us - the client's LFG_QUEUE_EXPAND popup wires only its accept button to
+    // C_LFGInfo.ConfirmLfgExpandSearch. Honour the bit anyway rather than assuming it, and do nothing on
+    // a false: the prompt is one-shot per queue entry, so a decline simply leaves the queue as it was.
+    if (!dfConfirmExpandSearch.Accepted)
+        return;
+
+    sLFGMgr->ConfirmExpandSearch(GetPlayer(), dfConfirmExpandSearch.Ticket);
+}
+
 void WorldSession::HandleDFGetJoinStatus(WorldPackets::LFG::DFGetJoinStatus& /*dfGetJoinStatus*/)
 {
     TC_LOG_DEBUG("lfg", "CMSG_DF_GET_JOIN_STATUS {}", GetPlayerInfo());
@@ -507,4 +520,25 @@ void WorldSession::SendLfgTeleportError(lfg::LfgTeleportResult err)
     TC_LOG_DEBUG("lfg", "SMSG_LFG_TELEPORT_DENIED {} reason: {}",
         GetPlayerInfo(), err);
     SendPacket(WorldPackets::LFG::LFGTeleportDenied(err).Write());
+}
+
+void WorldSession::SendLfgExpandSearchPrompt(WorldPackets::LFG::RideTicket const& ticket)
+{
+    TC_LOG_DEBUG("lfg", "SMSG_LFG_EXPAND_SEARCH_PROMPT {}", GetPlayerInfo());
+
+    WorldPackets::LFG::LFGExpandSearchPrompt expandSearchPrompt;
+    expandSearchPrompt.Ticket = ticket;
+    SendPacket(expandSearchPrompt.Write());
+}
+
+void WorldSession::SendLfgSlotInvalid(lfg::LfgSlotInvalidReason reason, int32 subReason1, int32 subReason2)
+{
+    TC_LOG_DEBUG("lfg", "SMSG_LFG_SLOT_INVALID {} reason: {}, sub: {}/{}",
+        GetPlayerInfo(), uint32(reason), subReason1, subReason2);
+
+    WorldPackets::LFG::LFGSlotInvalid slotInvalid;
+    slotInvalid.Reason = uint32(reason);
+    slotInvalid.SubReason1 = subReason1;
+    slotInvalid.SubReason2 = subReason2;
+    SendPacket(slotInvalid.Write());
 }
