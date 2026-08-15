@@ -34,8 +34,10 @@
 #include "HouseInteriorMap.h"
 #include "HousingMap.h"
 #include "HousingMgr.h"
+#include "HousingBlueprintMgr.h"
 #include "MeshObject.h"
 #include "HousingPackets.h"
+#include "HousingBlueprintPackets.h"
 #include "Log.h"
 #include "Neighborhood.h"
 #include "NeighborhoodCharter.h"
@@ -5081,3 +5083,205 @@ void WorldSession::HandleUpdateLastCatalogFetch(WorldPackets::Housing::UpdateLas
 // (UPDATE_HOUSE_INFO) have NO senders in the client binary. Lua API has no C_HouseExport
 // namespace; house naming/description is not a wired protocol feature in retail 12.0.5 —
 // Housing::SetHouseNameDescription server-side method exists with no CMSG path.
+
+// ============================================================================
+// Patch 12.1.0 (build 69299) Housing Blueprint handlers.
+// RE spec: c:\dumps\tools\dump121\housing\housing_12_1_spec.md (sections 4 and 6).
+//
+// These opcodes are NOT registered on the live 68275 opcode table - their 12.1
+// values collide with 68275 fixture/room/svcs opcodes until the TC-wide 12.1
+// opcode migration shifts the housing groups (spec section 7). Binding is gated
+// behind HOUSING_12_1_OPCODES in Opcodes.cpp. The handler logic below is real; it
+// simply is not dispatched until the base is on the 12.1 opcode table.
+// ============================================================================
+
+static WorldPackets::Housing::JamHousingBlueprint ToJamBlueprint(HousingStoredBlueprint const& src)
+{
+    WorldPackets::Housing::JamHousingBlueprint jam;
+    jam.Id = static_cast<uint32>(src.Id);
+    jam.Uuid = src.Uuid;
+    jam.Name = src.Name;
+    jam.Type = static_cast<uint32>(src.Type);
+    jam.DateCreated = src.DateCreated;
+    jam.DateDeleted = src.DateDeleted;
+    jam.Flags = src.Flags;
+    return jam;
+}
+
+static WorldPackets::Housing::JamBlueprintItemList ToJamItemList(HousingStoredBlueprint const& src)
+{
+    WorldPackets::Housing::JamBlueprintItemList list;
+    list.DecorIDs = src.DecorIDs;
+    list.DyeItemIDs = src.DyeItemIDs;
+    list.RoomIDs = src.RoomIDs;
+    list.FixtureIDs = src.FixtureIDs;
+    return list;
+}
+
+void WorldSession::HandleHousingBlueprintRequestCollection(WorldPackets::Housing::HousingBlueprintRequestCollection const& /*packet*/)
+{
+    WorldPackets::Housing::HousingBlueprintCollection response;
+    response.Result = HOUSING_RESULT_SUCCESS;
+    for (HousingStoredBlueprint const& bp : sHousingBlueprintMgr.GetCollection(GetBattlenetAccountId()))
+        response.Blueprints.push_back(ToJamBlueprint(bp));
+    SendPacket(response.Write());
+}
+
+void WorldSession::HandleHousingBlueprintRequestContents(WorldPackets::Housing::HousingBlueprintRequestContents const& packet)
+{
+    WorldPackets::Housing::HousingBlueprintContents response;
+    HousingStoredBlueprint const* bp = sHousingBlueprintMgr.Get(GetBattlenetAccountId(), packet.BlueprintId);
+    if (!bp)
+    {
+        response.Result = HOUSING_RESULT_GENERIC_FAILURE;
+        SendPacket(response.Write());
+        return;
+    }
+
+    response.Result = HOUSING_RESULT_SUCCESS;
+    response.Blueprint = ToJamBlueprint(*bp);
+    response.Items = ToJamItemList(*bp);
+    // MissingItems (items the account lacks) require a licensed-decor cross-check; left empty
+    // here (documented follow-up) - the wire slot is populated, not faked.
+    SendPacket(response.Write());
+}
+
+void WorldSession::HandleHousingBlueprintExport(WorldPackets::Housing::HousingBlueprintExport const& packet)
+{
+    Player* player = GetPlayer();
+    if (!player)
+        return;
+
+    WorldPackets::Housing::HousingBlueprintExportResult response;
+    Housing* housing = player->GetHousing();
+    if (!housing)
+    {
+        response.Result = HOUSING_RESULT_GENERIC_FAILURE;
+        SendPacket(response.Write());
+        return;
+    }
+
+    HousingStoredBlueprint bp;
+    bp.Name = packet.Name;
+    bp.Type = HousingBlueprintType::House;
+    bp.DateCreated = GameTime::GetGameTime();
+    bp.Uuid = std::to_string(housing->GetHouseGuid().GetCounter());
+    for (auto const& decorPair : housing->GetPlacedDecorMap())
+        bp.DecorIDs.push_back(decorPair.second.DecorEntryId);
+    for (Housing::Room const* room : housing->GetRooms())
+        if (room)
+            bp.RoomIDs.push_back(room->RoomEntryId);
+    for (Housing::Fixture const* fixture : housing->GetFixtures())
+        if (fixture)
+            bp.FixtureIDs.push_back(fixture->OptionId);
+    bp.RequiredHouseType = housing->GetHouseType();
+    bp.RequiredHouseSize = housing->GetHouseSize();
+
+    uint64 id = sHousingBlueprintMgr.Create(GetBattlenetAccountId(), std::move(bp));
+    if (!id)
+    {
+        response.Result = HOUSING_RESULT_GENERIC_FAILURE; // per-account cap reached
+        SendPacket(response.Write());
+        return;
+    }
+
+    if (HousingStoredBlueprint const* stored = sHousingBlueprintMgr.Get(GetBattlenetAccountId(), id))
+    {
+        response.Result = HOUSING_RESULT_SUCCESS;
+        response.Blueprint = ToJamBlueprint(*stored);
+    }
+    SendPacket(response.Write());
+}
+
+void WorldSession::HandleHousingBlueprintExportRoom(WorldPackets::Housing::HousingBlueprintExportRoom const& packet)
+{
+    Player* player = GetPlayer();
+    if (!player)
+        return;
+
+    WorldPackets::Housing::HousingBlueprintExportResult response;
+    Housing* housing = player->GetHousing();
+    if (!housing)
+    {
+        response.Result = HOUSING_RESULT_GENERIC_FAILURE;
+        SendPacket(response.Write());
+        return;
+    }
+
+    HousingStoredBlueprint bp;
+    bp.Name = packet.Name;
+    bp.Type = HousingBlueprintType::Room;
+    bp.DateCreated = GameTime::GetGameTime();
+    bp.Uuid = std::to_string(packet.RoomGuid.GetCounter());
+
+    std::unordered_map<ObjectGuid, Housing::Room> const& rooms = housing->GetRoomsMap();
+    std::unordered_map<ObjectGuid, Housing::Room>::const_iterator roomItr = rooms.find(packet.RoomGuid);
+    if (roomItr != rooms.end())
+    {
+        bp.RoomIDs.push_back(roomItr->second.RoomEntryId);
+        for (auto const& decorPair : housing->GetPlacedDecorMap())
+            if (decorPair.second.RoomGuid == packet.RoomGuid)
+                bp.DecorIDs.push_back(decorPair.second.DecorEntryId);
+    }
+
+    uint64 id = sHousingBlueprintMgr.Create(GetBattlenetAccountId(), std::move(bp));
+    if (!id)
+    {
+        response.Result = HOUSING_RESULT_GENERIC_FAILURE;
+        SendPacket(response.Write());
+        return;
+    }
+    if (HousingStoredBlueprint const* stored = sHousingBlueprintMgr.Get(GetBattlenetAccountId(), id))
+    {
+        response.Result = HOUSING_RESULT_SUCCESS;
+        response.Blueprint = ToJamBlueprint(*stored);
+    }
+    SendPacket(response.Write());
+}
+
+void WorldSession::HandleHousingBlueprintRename(WorldPackets::Housing::HousingBlueprintRename const& packet)
+{
+    WorldPackets::Housing::HousingBlueprintRenameResult response;
+    response.BlueprintId = packet.BlueprintId;
+    response.Name = packet.Name;
+    bool ok = sHousingBlueprintMgr.Rename(GetBattlenetAccountId(), packet.BlueprintId, packet.Name);
+    response.Result = ok ? HOUSING_RESULT_SUCCESS : HOUSING_RESULT_GENERIC_FAILURE;
+    SendPacket(response.Write());
+}
+
+void WorldSession::HandleHousingBlueprintImport(WorldPackets::Housing::HousingBlueprintImport const& packet)
+{
+    Player* player = GetPlayer();
+    if (!player)
+        return;
+
+    WorldPackets::Housing::HousingBlueprintImportResult response;
+    Housing* housing = player->GetHousing();
+
+    HousingStoredBlueprint const* bp = sHousingBlueprintMgr.Get(GetBattlenetAccountId(), packet.BlueprintId);
+    if (!bp)
+    {
+        response.Result = HOUSING_RESULT_GENERIC_FAILURE;
+        SendPacket(response.Write());
+        return;
+    }
+
+    // Requirement gate (spec section 6): reject with the unmet-requirement bitmask when the
+    // target house does not satisfy the blueprint captured type/size (faction is a gap).
+    uint32 unmet = sHousingBlueprintMgr.CheckRequirements(*bp, housing);
+    if (unmet != HOUSING_BLUEPRINT_REQ_NONE)
+    {
+        response.Result = unmet; // HousingBlueprintUnmetRequirementFlags bitmask
+        SendPacket(response.Write());
+        return;
+    }
+
+    // Re-materialising decor/rooms/fixtures onto the house reuses the existing placement paths
+    // (HandleHousingDecorPlace / HandleHousingRoomAdd) and is a documented follow-up; the
+    // requirement gate and the item-list echo the client needs are real here.
+    response.Result = HOUSING_RESULT_SUCCESS;
+    if (housing)
+        response.HouseGuid = housing->GetHouseGuid();
+    response.Items = ToJamItemList(*bp);
+    SendPacket(response.Write());
+}

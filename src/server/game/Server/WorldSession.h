@@ -423,6 +423,13 @@ namespace WorldPackets
 
     namespace Housing
     {
+        // Patch 12.1.0 (build 69299) blueprint packets (HousingBlueprintPackets.h)
+        class HousingBlueprintRequestCollection;
+        class HousingBlueprintRequestContents;
+        class HousingBlueprintExport;
+        class HousingBlueprintExportRoom;
+        class HousingBlueprintRename;
+        class HousingBlueprintImport;
         class HouseExteriorCommitPosition;
         class HouseInteriorLeaveHouse;
         class HousingDecorSetEditMode;
@@ -1603,6 +1610,15 @@ class TC_GAME_API WorldSession
         // Retired 2026-05-11: HandleHousingDecorStartPlacingNewDecor + CatalogCreateSearcher (TC-CUSTOM CMSGs).
         void HandleGetLastCatalogFetch(WorldPackets::Housing::GetLastCatalogFetch const& getLastCatalogFetch);
         void HandleUpdateLastCatalogFetch(WorldPackets::Housing::UpdateLastCatalogFetch const& updateLastCatalogFetch);
+
+        // Housing - Blueprint System (Patch 12.1.0 / build 69299). See HousingHandler.cpp.
+        // Bound only when the base is on the 12.1 opcode table (HOUSING_12_1_OPCODES gate).
+        void HandleHousingBlueprintRequestCollection(WorldPackets::Housing::HousingBlueprintRequestCollection const& packet);
+        void HandleHousingBlueprintRequestContents(WorldPackets::Housing::HousingBlueprintRequestContents const& packet);
+        void HandleHousingBlueprintExport(WorldPackets::Housing::HousingBlueprintExport const& packet);
+        void HandleHousingBlueprintExportRoom(WorldPackets::Housing::HousingBlueprintExportRoom const& packet);
+        void HandleHousingBlueprintRename(WorldPackets::Housing::HousingBlueprintRename const& packet);
+        void HandleHousingBlueprintImport(WorldPackets::Housing::HousingBlueprintImport const& packet);
 
         // Housing - Fixture System
         void SendFixtureUpdateObject(Player* player, Housing* housing);
