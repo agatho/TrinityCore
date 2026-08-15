@@ -203,6 +203,13 @@ enum DemonHunterSpells
     SPELL_DH_FEL_DEVASTATION_HEAL                  = 212106,
     SPELL_DH_FEL_FLAME_FORTIFICATION_TALENT        = 389705,
     SPELL_DH_FEL_FLAME_FORTIFICATION_MOD_DAMAGE    = 393009,
+    // 195072 and 344865 are both called "Fel Rush" and share ChargeCategory 1545, but they are not
+    // interchangeable and this id must stay 195072: it is the id the deployed spell_script_names rows
+    // bind (spell_dh_fel_rush, spell_dh_havoc_fel_rush_felblade_talents) and the id spell_dh_glide and
+    // spell_dh_restless_hunter already act on - spell_dh_havoc_fel_rush_felblade_talents in particular
+    // compares it against its own GetSpellInfo()->Id, which would never match again if it were moved.
+    // 344865 carries a different SpellCooldowns row (0/1000/250 vs 500/1000/500) and has no consumer
+    // here. [DB2 12.0.7.68275 SpellCategories + SpellCooldowns]
     SPELL_DH_FEL_RUSH                              = 195072,
     SPELL_DH_FEL_RUSH_DMG                          = 192611,
     SPELL_DH_FEL_RUSH_GROUND                       = 197922,
@@ -1532,6 +1539,143 @@ class spell_dh_fel_flame_fortification : public AuraScript
     {
         AfterEffectApply += AuraEffectApplyFn(spell_dh_fel_flame_fortification::OnApply, EFFECT_0, SPELL_AURA_PERIODIC_TRIGGER_SPELL, AURA_EFFECT_HANDLE_REAL);
         AfterEffectRemove += AuraEffectRemoveFn(spell_dh_fel_flame_fortification::OnRemove, EFFECT_0, SPELL_AURA_PERIODIC_TRIGGER_SPELL, AURA_EFFECT_HANDLE_REAL);
+    }
+};
+
+// 195072 - Fel Rush
+// EFFECT_0 and EFFECT_1 are both SPELL_EFFECT_DUMMY on TARGET_UNIT_CASTER with base points 25 - the
+// dash distance in yards. EFFECT_0 owns the grounded / in-water dash, EFFECT_1 the airborne one; the
+// movement itself is data-driven off the 197922 / 197923 bundles (their EFFECT_1 is aura 373
+// SPELL_AURA_MOD_SPEED_NO_CONTROL). [DB2 12.0.7.68275 SpellEffect]
+class spell_dh_fel_rush : public SpellScript
+{
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellInfo({ SPELL_DH_FEL_RUSH_GROUND, SPELL_DH_FEL_RUSH_WATER_AIR, SPELL_DH_FEL_RUSH_DMG,
+            SPELL_DH_GLIDE, SPELL_DH_GLIDE_DURATION });
+    }
+
+    SpellCastResult CheckCast()
+    {
+        if (GetCaster()->HasUnitState(UNIT_STATE_ROOT))
+            return SPELL_FAILED_ROOTED;
+
+        return SPELL_CAST_OK;
+    }
+
+    // The dash bundles apply SPELL_AURA_DISABLE_CASTING_EXCEPT_ABILITIES, which would reject the path
+    // damage with SPELL_FAILED_CANT_DO_THAT_RIGHT_NOW, so 192611 has to go out first - from the
+    // pre-dash position, with the projected dash end as its destination. 192611 resolves its own
+    // targets from that destination (EFFECT_0 targets TARGET_DEST_DEST +
+    // TARGET_UNIT_LINE_CASTER_TO_DEST_ENEMY, handled natively by Spell::SelectImplicitLineTargets).
+    void CastPathDamage() const
+    {
+        Unit* caster = GetCaster();
+
+        float dashDistance = float(GetEffectInfo(EFFECT_0).CalcValue(caster));
+        if (dashDistance <= 0.0f)
+            return;
+
+        caster->CastSpell(caster->GetFirstCollisionPosition(dashDistance, 0.0f), SPELL_DH_FEL_RUSH_DMG, CastSpellExtraArgsInit{
+            .TriggerFlags = TRIGGERED_FULL_MASK,
+            .TriggeringSpell = GetSpell()
+        });
+    }
+
+    void PrepareDash(Unit* caster) const
+    {
+        caster->RemoveAurasDueToSpell(SPELL_DH_GLIDE);
+        caster->RemoveAurasDueToSpell(SPELL_DH_GLIDE_DURATION);
+        caster->m_movementInfo.inertia.reset();
+        caster->m_movementInfo.advFlying.reset();
+
+        if (Player* player = caster->ToPlayer())
+        {
+            // Mirror of the 250 ms Fel Rush lockout spell_dh_glide starts, in the other direction.
+            player->GetSpellHistory()->StartCooldown(sSpellMgr->AssertSpellInfo(SPELL_DH_GLIDE, GetCastDifficulty()), 0, nullptr, false, 250ms);
+            player->UpdateSpeed(MOVE_FLIGHT);
+        }
+    }
+
+    void HandleGroundDash(SpellEffIndex /*effIndex*/) const
+    {
+        Unit* caster = GetCaster();
+        if (caster->IsFalling() && !caster->IsInWater())
+            return;
+
+        CastPathDamage();
+        PrepareDash(caster);
+
+        caster->CastSpell(caster, SPELL_DH_FEL_RUSH_GROUND, CastSpellExtraArgsInit{
+            .TriggerFlags = TRIGGERED_FULL_MASK,
+            .TriggeringSpell = GetSpell()
+        });
+    }
+
+    void HandleAirDash(SpellEffIndex /*effIndex*/) const
+    {
+        Unit* caster = GetCaster();
+        if (!caster->IsFalling() || caster->IsInWater())
+            return;
+
+        CastPathDamage();
+        PrepareDash(caster);
+
+        caster->CastSpell(caster, SPELL_DH_FEL_RUSH_WATER_AIR, CastSpellExtraArgsInit{
+            .TriggerFlags = TRIGGERED_FULL_MASK,
+            .TriggeringSpell = GetSpell()
+        });
+    }
+
+    void Register() override
+    {
+        OnCheckCast += SpellCheckCastFn(spell_dh_fel_rush::CheckCast);
+        OnEffectHitTarget += SpellEffectFn(spell_dh_fel_rush::HandleGroundDash, EFFECT_0, SPELL_EFFECT_DUMMY);
+        OnEffectHitTarget += SpellEffectFn(spell_dh_fel_rush::HandleAirDash, EFFECT_1, SPELL_EFFECT_DUMMY);
+    }
+};
+
+// 197922 - Fel Rush (ground dash bundle)
+// 197923 - Fel Rush (air / water dash bundle)
+class spell_dh_fel_rush_aura : public AuraScript
+{
+    // EFFECT_5 on 197922 is SPELL_AURA_MECHANIC_IMMUNITY with base points 0; the dash is supposed to
+    // shed the mechanic rather than grant immunity to it, so the amount is driven negative.
+    void CalcImmunityAmount(AuraEffect const* /*aurEff*/, SpellEffectValue& amount, bool& /*canBeRecalculated*/) const
+    {
+        amount -= 100.0f;
+    }
+
+    // While the dash owns movement the run-back speed must not be touched - the dash engine batches
+    // the speed updates itself and re-sends them once it is done.
+    void ChangeRunBackSpeed(AuraEffect const* /*aurEff*/, AuraEffectHandleModes /*mode*/) const
+    {
+        Unit* target = GetTarget();
+        if (target->IsDeferringDashMovementSpeedUpdates())
+            return;
+
+        target->SetSpeed(MOVE_RUN_BACK, target->GetSpeed(MOVE_RUN));
+    }
+
+    void RestoreRunBackSpeed(AuraEffect const* /*aurEff*/, AuraEffectHandleModes /*mode*/) const
+    {
+        Unit* target = GetTarget();
+        if (target->IsDeferringDashMovementSpeedUpdates())
+            return;
+
+        target->UpdateSpeed(MOVE_RUN_BACK);
+    }
+
+    void Register() override
+    {
+        // Aura 191 SPELL_AURA_USE_NORMAL_MOVEMENT_SPEED sits on EFFECT_4 of both bundles, but
+        // SPELL_AURA_MECHANIC_IMMUNITY is EFFECT_5 on 197922 and EFFECT_7 on 197923, so the amount
+        // hook is only valid for the ground bundle. [DB2 12.0.7.68275 SpellEffect]
+        AfterEffectApply += AuraEffectApplyFn(spell_dh_fel_rush_aura::ChangeRunBackSpeed, EFFECT_4, SPELL_AURA_USE_NORMAL_MOVEMENT_SPEED, AURA_EFFECT_HANDLE_REAL);
+        AfterEffectRemove += AuraEffectRemoveFn(spell_dh_fel_rush_aura::RestoreRunBackSpeed, EFFECT_4, SPELL_AURA_USE_NORMAL_MOVEMENT_SPEED, AURA_EFFECT_HANDLE_REAL);
+
+        if (m_scriptSpellId == SPELL_DH_FEL_RUSH_GROUND)
+            DoEffectCalcAmount += AuraEffectCalcAmountFn(spell_dh_fel_rush_aura::CalcImmunityAmount, EFFECT_5, SPELL_AURA_MECHANIC_IMMUNITY);
     }
 };
 
@@ -6586,7 +6730,12 @@ class spell_dh_emptiness_haste : public AuraScript
 };
 
 // 1234195 - Void Nova: softcap dummy E2 (core stun/damage live)
-class spell_dh_void_nova : public SpellScript
+// Named _softcap rather than the bare spell_dh_void_nova on purpose: origin/feature/devourer-spec
+// carries a class of that exact name in src/server/scripts/Spells/spell_dh_devourer.cpp, which would
+// be an ODR violation across the two translation units on a static-scripts build (and a duplicate
+// ScriptName registration at runtime). See 2026_08_15_30_world_dh_devourer.sql for the full
+// reconciliation - that branch's three DH scripts are all superseded by real implementations here.
+class spell_dh_void_nova_softcap : public SpellScript
 {
     void HandleSoftcap(SpellEffIndex /*effIndex*/)
     {
@@ -6603,7 +6752,7 @@ class spell_dh_void_nova : public SpellScript
 
     void Register() override
     {
-        OnEffectHitTarget += SpellEffectFn(spell_dh_void_nova::HandleSoftcap, EFFECT_1, SPELL_EFFECT_SCHOOL_DAMAGE);
+        OnEffectHitTarget += SpellEffectFn(spell_dh_void_nova_softcap::HandleSoftcap, EFFECT_1, SPELL_EFFECT_SCHOOL_DAMAGE);
     }
 };
 
@@ -7330,6 +7479,8 @@ void AddSC_demon_hunter_spell_scripts()
     RegisterSpellScript(spell_dh_feast_of_souls);
     RegisterSpellScript(spell_dh_fel_devastation);
     RegisterSpellScript(spell_dh_fel_flame_fortification);
+    RegisterSpellScript(spell_dh_fel_rush);
+    RegisterSpellScript(spell_dh_fel_rush_aura);
     RegisterSpellScript(spell_dh_felblade);
     RegisterSpellScript(spell_dh_felblade_charge);
     RegisterSpellScript(spell_dh_felblade_cooldown_reset_proc);
@@ -7498,7 +7649,7 @@ void AddSC_demon_hunter_spell_scripts()
     RegisterSpellScript(spell_dh_hungering_slash);
     RegisterSpellScript(spell_dh_hungering_slash_damage);
     RegisterSpellScript(spell_dh_emptiness_haste);
-    RegisterSpellScript(spell_dh_void_nova);
+    RegisterSpellScript(spell_dh_void_nova_softcap);
 
     // Annihilator invent slice #7
     RegisterSpellScript(spell_dh_voidfall);
