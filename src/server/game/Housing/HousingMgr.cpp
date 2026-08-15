@@ -701,6 +701,14 @@ uint32 HousingMgr::GetFavorThresholdForLevel(uint32 level) const
 // Levels above 7 extrapolated linearly until a sniff covers higher tiers.
 // The HouseLevelData DB2 (hotfixes.house_level_data) only carries
 // ID/Level/QuestID — no budget columns — so this fallback is the hot path.
+//
+// #16 Outdoor Lighting (A3): 12.0.7 raised the EXTERIOR decor limit alongside
+// outdoor light placement — houses level 5-6 -> 300, levels 7+ -> 350 (per the
+// small-activities blueprint; the 66838 dump predates 12.0.7 so these two tiers
+// are DOCUMENTED-not-DB2-confirmed and flagged CAPTURE-BLOCKED until a 12.0.7
+// CREATE block is sniffed). Interior/room/fixture values are unchanged. The
+// exterior budget is now genuinely CHARGED on placement (see Housing.cpp M2), so
+// these caps are enforced rather than cosmetic.
 namespace {
     struct RetailBudget { uint32 interior, exterior, room, fixture; };
     static constexpr RetailBudget RetailBudgetByLevel[] = {
@@ -709,9 +717,9 @@ namespace {
         /* 2 */ {1155, 200, 2000, 24 },
         /* 3 */ {1450, 250, 3000, 30 },
         /* 4 */ {1745, 250, 4000, 36 },
-        /* 5 */ {2050, 250, 5000, 43 },
-        /* 6 */ {2360, 250, 5000, 50 },
-        /* 7 */ {3180, 250, 5000, 68 },
+        /* 5 */ {2050, 300, 5000, 43 },  // exterior 250->300 (12.0.7 #16, DOCUMENTED)
+        /* 6 */ {2360, 300, 5000, 50 },  // exterior 250->300 (12.0.7 #16, DOCUMENTED)
+        /* 7 */ {3180, 350, 5000, 68 },  // exterior 250->350 (12.0.7 #16, DOCUMENTED)
     };
     constexpr uint32 MAX_VERIFIED_LEVEL = 7;
 
@@ -975,6 +983,14 @@ HousingResult HousingMgr::ValidateDecorPlacement(uint32 decorId, Position const&
     // Validate house level meets decor requirements (if any level restriction exists)
     // For now, all decor is available at any level; future DB2 fields may add restrictions
     (void)houseLevel;
+
+    // #16 Outdoor Lighting: there is intentionally NO category gate here — 12.0.7
+    // permits DecorCategory 4 "Lighting" decor in the exterior/plot scope, so it
+    // flows through the same exterior placement path as any other yard decor. The
+    // light-specific "two lights cannot overlap" rule (A4) is enforced with the
+    // placed-decor context in Housing::CheckLightOverlap, not here (this validator
+    // is per-decor and stateless). Client-side indoor/outdoor gating via
+    // HouseDecor.Flags is tracked separately as audit item M10.
 
     return HOUSING_RESULT_SUCCESS;
 }
@@ -1322,6 +1338,12 @@ void HousingMgr::LoadDecorXDecorSubcategoryData()
     for (DecorXDecorSubcategoryEntry const* entry : sDecorXDecorSubcategoryStore)
     {
         _decorsBySubcategory[entry->DecorSubcategoryID].push_back(entry->HouseDecorID);
+        // #16 Outdoor Lighting: build a decor -> parent-category reverse index so
+        // the placement path can classify a decor (Lighting = category 4) in O(1)
+        // without walking subcategories. DecorSubcategory rows are already loaded
+        // (LoadDecorSubcategoryData runs before this pass).
+        if (DecorSubcategoryData const* sub = GetDecorSubcategoryData(entry->DecorSubcategoryID))
+            _categoryByDecor[entry->HouseDecorID] = uint32(sub->DecorCategoryID);
         ++count;
     }
 
@@ -1848,6 +1870,17 @@ DecorSubcategoryData const* HousingMgr::GetDecorSubcategoryData(uint32 id) const
 {
     auto itr = _decorSubcategoryStore.find(id);
     return itr != _decorSubcategoryStore.end() ? &itr->second : nullptr;
+}
+
+uint32 HousingMgr::GetDecorCategoryForDecor(uint32 decorId) const
+{
+    auto itr = _categoryByDecor.find(decorId);
+    return itr != _categoryByDecor.end() ? itr->second : 0;
+}
+
+bool HousingMgr::IsLightingDecor(uint32 decorId) const
+{
+    return GetDecorCategoryForDecor(decorId) == HOUSING_DECOR_CATEGORY_LIGHTING;
 }
 
 std::vector<DecorSubcategoryData const*> HousingMgr::GetSubcategoriesForCategory(uint32 categoryId) const

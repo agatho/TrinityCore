@@ -847,6 +847,11 @@ HousingResult Housing::PlaceDecorWithGuid(ObjectGuid decorGuid, uint32 decorEntr
     // see what retail sends.
     bool const isExterior = IsExteriorDecorPlacement(roomGuid);
 
+    // A4: enforce the outdoor "two lights cannot overlap" rule before charging.
+    if (HousingResult overlap = CheckLightOverlap(decorEntryId, x, y, z, isExterior);
+        overlap != HOUSING_RESULT_SUCCESS)
+        return overlap;
+
     uint32 weightCost = sHousingMgr.GetDecorWeightCost(decorEntryId);
     if (isExterior)
     {
@@ -985,6 +990,12 @@ HousingResult Housing::PlaceDecor(uint32 decorEntryId, float x, float y, float z
     // Check WeightCost-based budget (exterior vs interior) — M2: classify once.
     uint32 weightCost = sHousingMgr.GetDecorWeightCost(decorEntryId);
     bool const isExterior = IsExteriorDecorPlacement(roomGuid);
+
+    // A4: enforce the outdoor "two lights cannot overlap" rule before charging.
+    if (HousingResult overlap = CheckLightOverlap(decorEntryId, x, y, z, isExterior);
+        overlap != HOUSING_RESULT_SUCCESS)
+        return overlap;
+
     if (isExterior)
     {
         // Outdoor decor uses exterior budget
@@ -1247,6 +1258,13 @@ HousingResult Housing::MoveDecor(ObjectGuid decorGuid, float x, float y, float z
     HousingResult validationResult = sHousingMgr.ValidateDecorPlacement(itr->second.DecorEntryId, Position(x, y, z), _level);
     if (validationResult != HOUSING_RESULT_SUCCESS)
         return validationResult;
+
+    // A4: a moved light must also honour the "two lights cannot overlap" rule.
+    // Exclude the decor being moved so an in-place nudge never collides with itself.
+    if (HousingResult overlap = CheckLightOverlap(itr->second.DecorEntryId, x, y, z,
+            IsExteriorDecorPlacement(itr->second.RoomGuid), decorGuid);
+        overlap != HOUSING_RESULT_SUCCESS)
+        return overlap;
 
     // M13: normalize the rotation quaternion for a lossless cardinal round-trip.
     NormalizeDecorRotation(rotX, rotY, rotZ, rotW);
@@ -2529,6 +2547,36 @@ bool Housing::IsExteriorDecorPlacement(ObjectGuid roomGuid)
     return roomGuid.GetHigh() == HighGuid::Housing
         && uint32((roomGuid.GetRawValue(1) >> 53) & 0x1F) == 2
         && uint32(roomGuid.GetRawValue(1) & 0xFFFFFFFFULL) == sHousingMgr.GetBaseRoomEntryId();
+}
+
+HousingResult Housing::CheckLightOverlap(uint32 decorEntryId, float x, float y, float z,
+    bool isExterior, ObjectGuid excludeGuid /*= ObjectGuid::Empty*/) const
+{
+    // A4 / 12.0.7 "two lights cannot overlap". The rule is scoped to the exterior
+    // (outdoor-lighting) placement scope and only Lighting-category decor (cat 4)
+    // participates — non-lights and interior placements pass through untouched so
+    // ordinary decorating is never affected.
+    if (!isExterior || !sHousingMgr.IsLightingDecor(decorEntryId))
+        return HOUSING_RESULT_SUCCESS;
+
+    float const radiusSq = HOUSING_LIGHT_OVERLAP_RADIUS * HOUSING_LIGHT_OVERLAP_RADIUS;
+    for (auto const& [guid, decor] : _placedDecor)
+    {
+        if (guid == excludeGuid)
+            continue;
+        // Compare only against other EXTERIOR lights.
+        if (!IsExteriorDecorPlacement(decor.RoomGuid))
+            continue;
+        if (!sHousingMgr.IsLightingDecor(decor.DecorEntryId))
+            continue;
+
+        float const dx = decor.PosX - x;
+        float const dy = decor.PosY - y;
+        float const dz = decor.PosZ - z;
+        if ((dx * dx + dy * dy + dz * dz) < radiusSq)
+            return HOUSING_RESULT_INVALID_LIGHT_OVERLAP;
+    }
+    return HOUSING_RESULT_SUCCESS;
 }
 
 void Housing::RecalculateBudgets()

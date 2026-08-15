@@ -252,6 +252,12 @@ public:
     DecorCategoryData const* GetDecorCategoryData(uint32 id) const;
     DecorSubcategoryData const* GetDecorSubcategoryData(uint32 id) const;
 
+    // #16 Outdoor Lighting: classify a HouseDecor by its parent DecorCategory
+    // (via DecorXDecorSubcategory -> DecorSubcategory.DecorCategoryID). Returns 0
+    // when the decor has no category link. IsLightingDecor() == category 4.
+    uint32 GetDecorCategoryForDecor(uint32 decorId) const;
+    bool IsLightingDecor(uint32 decorId) const;
+
     // Indexed lookups
     std::vector<DecorSubcategoryData const*> GetSubcategoriesForCategory(uint32 categoryId) const;
     std::vector<uint32> GetDecorIdsForSubcategory(uint32 subcategoryId) const;
@@ -421,6 +427,7 @@ private:
     std::unordered_map<uint32 /*houseLevelId*/, std::vector<HouseLevelRewardInfoData const*>> _rewardsByLevel;
     std::unordered_map<uint32 /*categoryId*/, std::vector<DecorSubcategoryData const*>> _subcategoriesByCategory;
     std::unordered_map<uint32 /*subcategoryId*/, std::vector<uint32 /*houseDecorId*/>> _decorsBySubcategory;
+    std::unordered_map<uint32 /*houseDecorId*/, uint32 /*categoryId*/> _categoryByDecor;
     std::unordered_map<uint32 /*houseDecorId*/, std::vector<DecorDyeSlotData const*>> _dyeSlotsByDecor;
 
     // Reverse lookup: world MapID -> NeighborhoodMap ID

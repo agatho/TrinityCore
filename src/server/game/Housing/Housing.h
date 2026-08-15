@@ -281,6 +281,14 @@ private:
     // Populate starter fixtures (Base + Roof) on house creation
     void PopulateStarterFixtures();
 
+    // #16 Outdoor Lighting (A4): enforce the 12.0.7 "two lights cannot overlap"
+    // rule. Only applies when placing/moving a Lighting-category decor on the
+    // exterior/plot scope; rejects with HOUSING_RESULT_INVALID_LIGHT_OVERLAP if
+    // another exterior light sits within HOUSING_LIGHT_OVERLAP_RADIUS. excludeGuid
+    // skips the decor being moved so an in-place move never collides with itself.
+    HousingResult CheckLightOverlap(uint32 decorEntryId, float x, float y, float z,
+        bool isExterior, ObjectGuid excludeGuid = ObjectGuid::Empty) const;
+
     Player* _owner;
     ObjectGuid _houseGuid;
     ObjectGuid _neighborhoodGuid;

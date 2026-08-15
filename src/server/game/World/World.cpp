@@ -56,6 +56,8 @@
 #include "GameTime.h"
 #include "GarrisonMgr.h"
 #include "GitRevision.h"
+#include "DecorDuelMgr.h"
+#include "GoingPostalMgr.h"
 #include "HousingMgr.h"
 #include "InitiativeManager.h"
 #include "NeighborhoodMgr.h"
@@ -1914,6 +1916,12 @@ bool World::SetInitialWorldSettings()
 
     TC_LOG_INFO("server.loading", "Loading initiative info...");
     sInitiativeManager.Initialize();
+
+    TC_LOG_INFO("server.loading", "Loading Decor Duels (housing minigame) seam...");
+    sDecorDuelMgr.Initialize();
+
+    TC_LOG_INFO("server.loading", "Loading Going Postal (housing mail-race) minigame...");
+    sGoingPostalMgr.Initialize();
 
     ///- Handle outdated emails (delete/return)
     TC_LOG_INFO("server.loading", "Returning old mails...");
