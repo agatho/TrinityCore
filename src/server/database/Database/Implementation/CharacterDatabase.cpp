@@ -329,6 +329,9 @@ void CharacterDatabaseConnection::DoPrepareStatements()
     PrepareStatement(CHAR_UPD_GUILD_MEMBER_OFFNOTE, "UPDATE guild_member SET offnote = ? WHERE guid = ?", CONNECTION_ASYNC); // 0: string, 1: uint32
     PrepareStatement(CHAR_UPD_GUILD_MEMBER_RANK, "UPDATE guild_member SET `rank` = ? WHERE guid = ?", CONNECTION_ASYNC); // 0: uint8, 1: uint32
     PrepareStatement(CHAR_UPD_GUILD_MOTD, "UPDATE guild SET motd = ? WHERE guildid = ?", CONNECTION_ASYNC); // 0: string, 1: uint32
+    // 0: uint64 guildid, 1: uint32 settings, 2: uint64 discordGuildId, 3: uint64 discordChannelId
+    PrepareStatement(CHAR_REP_GUILD_DISCORD_SETTINGS, "REPLACE INTO guild_discord_settings (guildid, settings, discordGuildId, discordChannelId) VALUES (?, ?, ?, ?)", CONNECTION_ASYNC);
+    PrepareStatement(CHAR_DEL_GUILD_DISCORD_SETTINGS, "DELETE FROM guild_discord_settings WHERE guildid = ?", CONNECTION_ASYNC); // 0: uint64
     PrepareStatement(CHAR_UPD_GUILD_INFO, "UPDATE guild SET info = ? WHERE guildid = ?", CONNECTION_ASYNC); // 0: string, 1: uint32
     PrepareStatement(CHAR_UPD_GUILD_LEADER, "UPDATE guild SET leaderguid = ? WHERE guildid = ?", CONNECTION_ASYNC); // 0: uint32, 1: uint64
     PrepareStatement(CHAR_UPD_GUILD_RANK_ORDER, "UPDATE guild_rank SET RankOrder = ? WHERE rid = ? AND guildid = ?", CONNECTION_ASYNC); // 0-1: uint8, 2: uint32

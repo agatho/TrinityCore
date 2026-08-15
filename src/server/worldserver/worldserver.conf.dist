@@ -1225,6 +1225,31 @@ Guild.BankEventLogRecordsCount = 25
 Guild.NewsLogRecordsCount = 250
 
 #
+#    Guild.DiscordBridge.Enabled
+#        Description: Master switch for the Discord <-> guild-chat bridge (client 12.1.0).
+#                     When enabled, inbound messages delivered by an external Discord
+#                     provider surface in guild chat as CHAT_MSG_GUILD_DISCORD (value 0x45).
+#                     The core ships only a no-op provider: no real Discord connection is
+#                     made until an external bot/webhook provider is registered in code
+#                     (see DiscordBridge::SetProvider). Leaving this 0 keeps the feature dark.
+#                     NOTE: CHAT_MSG_GUILD_DISCORD is a 12.1 client chat type; do not enable
+#                     against a pre-12.1 client.
+#        Default:     0 - disabled
+#                     1 - enabled
+
+Guild.DiscordBridge.Enabled = 0
+
+#
+#    Guild.DiscordBridge.ForwardGuildChat
+#        Description: When the bridge is enabled, also mirror in-game guild chat lines out to
+#                     the linked Discord channel via the registered provider. No effect with
+#                     the default no-op provider.
+#        Default:     0 - do not forward
+#                     1 - forward guild chat to Discord
+
+Guild.DiscordBridge.ForwardGuildChat = 0
+
+#
 #    Guild.SaveInterval
 #        Description: Time (in minutes) for guild save interval.
 #        Default:     15

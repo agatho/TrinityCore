@@ -58,6 +58,7 @@
 #include "GitRevision.h"
 #include "GridNotifiersImpl.h"
 #include "GroupMgr.h"
+#include "DiscordBridge.h"
 #include "GuildMgr.h"
 #include "IPLocation.h"
 #include "InstanceLockMgr.h"
@@ -1800,6 +1801,9 @@ bool World::SetInitialWorldSettings()
 
     TC_LOG_INFO("server.loading", "Loading Guilds...");
     sGuildMgr->LoadGuilds();
+
+    TC_LOG_INFO("server.loading", "Initializing Discord bridge...");
+    sDiscordBridge->LoadConfig();
 
     TC_LOG_INFO("server.loading", "Loading ArenaTeams...");
     sArenaTeamMgr->LoadArenaTeams();
