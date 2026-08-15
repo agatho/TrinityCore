@@ -489,6 +489,26 @@ enum OpcodeClient : uint32
     CMSG_HOUSING_FIXTURE_SET_EDIT_MODE                              = 0x310000,
     CMSG_HOUSING_FIXTURE_SET_HOUSE_SIZE                             = 0x310003,
     CMSG_HOUSING_FIXTURE_SET_HOUSE_TYPE                             = 0x310004,
+    // ------------------------------------------------------------------
+    // Patch 12.1.0 (build 69299) NEW housing CMSG. Values are the FINAL 12.1
+    // wire values (client serializer sweep, spec §4). RE spec:
+    //   c:\dumps\tools\dump121\housing\housing_12_1_spec.md
+    // NOTE: 12.1 shifts the fixture group 0x31->0x33, freeing 0x31 for blueprints;
+    // until the TC-wide 12.1 opcode migration these values COLLIDE with the 68275
+    // fixture opcodes above (legal duplicate enum values), so their handlers are
+    // NOT registered on the live 68275 table — see Opcodes.cpp HOUSING_12_1_OPCODES
+    // gate and spec §7 base-migration dependency. Op NAMES are inferred from wire
+    // shape + C_HousingBlueprint Lua API [INF]; wire bytes are [BIN].
+    CMSG_HOUSING_BLUEPRINT_EXPORT                                   = 0x310000, // wire: bits<6> u8 pguid Blob
+    CMSG_HOUSING_BLUEPRINT_REQUEST_COLLECTION                      = 0x310001, // wire: (empty)
+    CMSG_HOUSING_BLUEPRINT_RENAME                                  = 0x310002, // wire: u64 bits<6> Blob
+    CMSG_HOUSING_BLUEPRINT_REQUEST_CONTENTS                        = 0x310003, // wire: u64
+    CMSG_HOUSING_BLUEPRINT_IMPORT                                  = 0x310005, // wire: bits<24> bits<1> u8 pguid u32 Blob
+    CMSG_HOUSING_BLUEPRINT_EXPORT_ROOM                             = 0x310008, // wire: bits<24> bits<1> u8 pguid Blob
+    // New decor sibling inserted in 12.1 (decor group 0x30->0x32); old full-transform
+    // DECOR_MOVE layout promoted to its own opcode (spec §3). Wire [BIN] / name [INF].
+    CMSG_HOUSING_DECOR_SET_TRANSFORM_12_1                          = 0x320002, // wire: pguid f32x11 pguid pguid pguid u32 u8 u8 bits<1>
+    // ------------------------------------------------------------------
     CMSG_HOUSING_GET_CURRENT_HOUSE_INFO                             = 0x350006,
     CMSG_HOUSING_GET_PLAYER_PERMISSIONS                             = 0x350007,
     CMSG_HOUSING_HOUSE_STATUS                                       = 0x350005,
@@ -1730,6 +1750,21 @@ enum OpcodeServer : uint32
     SMSG_HOUSING_DECOR_SET_EDIT_MODE_RESPONSE                       = 0x510000,
     SMSG_HOUSING_DECOR_SYSTEM_SET_DYE_SLOTS_RESPONSE                = 0x510009,
     SMSG_HOUSING_EXPORT_HOUSE_RESPONSE                              = 0x550003,
+    // ------------------------------------------------------------------
+    // Patch 12.1.0 (build 69299) NEW housing SMSG (blueprints + budgets). Values from
+    // new_69299_opcodes.json (new SMSG groups 0x54/0x62) [BIN]; opcode->JamType framing
+    // inferred from HOUSING_BLUEPRINT_* client events [INF]. JAM field layouts are [BIN]
+    // (spec §2,§4). Collide with 68275 SVCS-SMSG group 0x54 until the TC 12.1 opcode
+    // migration (0x54->0x58); handlers not sent on the live table — spec §7.
+    SMSG_HOUSING_BLUEPRINT_COLLECTION                               = 0x540000, // u32 result + vector<JamHousingBlueprint>
+    SMSG_HOUSING_BLUEPRINT_CONTENTS                                 = 0x540001, // JamHousingBlueprint + JamBlueprintItemList + vector<JamBlueprintMissingItem>
+    SMSG_HOUSING_BLUEPRINT_EXPORT_RESULT                            = 0x540002, // u32 result + JamHousingBlueprint
+    SMSG_HOUSING_BLUEPRINT_IMPORT_RESULT                            = 0x540003, // u32 result + houseGUID + JamBlueprintItemList
+    SMSG_HOUSING_BLUEPRINT_DELETE_RESULT                            = 0x540004, // u32 result + blueprintID
+    SMSG_HOUSING_BLUEPRINT_RENAME_RESULT                            = 0x540005, // u32 result + blueprintID + name
+    SMSG_HOUSING_BLUEPRINTS_AVAILABILITY_CHANGED                    = 0x540007, // bits<1> available + u32 maxPerBnet + u32 maxBackups
+    SMSG_HOUSING_HOUSE_BUDGETS_UPDATE                               = 0x620000, // JamHouseBudgets
+    // ------------------------------------------------------------------
     SMSG_HOUSING_FIRST_TIME_DECOR_ACQUISITION                       = 0x51000B,
     SMSG_HOUSING_FIXTURE_CREATE_BASIC_HOUSE_RESPONSE                = 0x520001,
     SMSG_HOUSING_FIXTURE_CREATE_FIXTURE_RESPONSE                    = 0x520006,
