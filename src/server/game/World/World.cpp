@@ -3120,7 +3120,12 @@ void World::ResetWeeklyQuests()
     // reset all quest status in memory
     for (SessionMap::const_iterator itr = m_sessions.begin(); itr != m_sessions.end(); ++itr)
         if (Player* player = itr->second->GetPlayer())
+        {
             player->ResetWeeklyQuestStatus();
+            // Roll the client's weekly-reward period for players online across the reset so the vault
+            // UI / PlayerHasWeeklyRewardsAvailable stay correct without a relog.
+            player->UpdateWeeklyRewardsPeriod();
+        }
 
     // reselect pools
     sQuestPoolMgr->ChangeWeeklyQuests();

@@ -143,6 +143,7 @@
 #include "VehiclePackets.h"
 #include "Vignette.h"
 #include "VignettePackets.h"
+#include "WeeklyRewardsMgr.h"
 #include "World.h"
 #include "WorldPacket.h"
 #include "WorldSession.h"
@@ -25101,6 +25102,10 @@ void Player::SendInitialPacketsBeforeAddToMap()
     initialSetup.ServerExpansionLevel = sWorld->getIntConfig(CONFIG_EXPANSION);
     SendDirectMessage(initialSetup.Write());
 
+    // Publish the current weekly-reward period so the client's vault UI and, crucially,
+    // ModifierTreeType::PlayerHasWeeklyRewardsAvailable (which fails while the field is 0) are correct.
+    UpdateWeeklyRewardsPeriod();
+
     SetMovedUnit(this);
 }
 
@@ -25659,6 +25664,16 @@ void Player::DailyReset()
         _garrison->ResetFollowerActivationLimit();
 
     FailCriteria(CriteriaFailEvent::DailyQuestsCleared, 0);
+}
+
+void Player::UpdateWeeklyRewardsPeriod()
+{
+    // WeeklyRewardsPeriodSinceOrigin is the week index the client uses to gate the Great Vault UI and
+    // ModifierTreeType::PlayerHasWeeklyRewardsAvailable (313), which returns false while the field is 0.
+    // It was never written, so that modifier always failed. Mirror the exact value the vault system
+    // uses (WeeklyRewardsMgr::GetCurrentPeriod) so the field and the vault roll over together.
+    SetUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::WeeklyRewardsPeriodSinceOrigin),
+        WeeklyRewardsMgr::GetCurrentPeriod());
 }
 
 void Player::ResetWeeklyQuestStatus()
