@@ -17,9 +17,12 @@
 
 #include "DiscordBridge.h"
 #include "Config.h"
+#include "DatabaseEnv.h"
+#include "DiscordRestProvider.h"
 #include "Guild.h"
 #include "GuildMgr.h"
 #include "Log.h"
+#include <unordered_map>
 
 DiscordBridge::DiscordBridge() : _provider(std::make_unique<IDiscordBridgeProvider>())
 {
@@ -36,15 +39,57 @@ void DiscordBridge::LoadConfig()
     _enabled = sConfigMgr->GetBoolDefault("Guild.DiscordBridge.Enabled", false);
     _forwardOutbound = sConfigMgr->GetBoolDefault("Guild.DiscordBridge.ForwardGuildChat", false);
 
-    if (!_provider)
+    if (!_enabled)
+    {
+        // Reloading with the bridge turned off: drop any live provider (joins its I/O thread).
         _provider = std::make_unique<IDiscordBridgeProvider>();
-
-    if (_enabled)
-        TC_LOG_INFO("server.loading", "Discord bridge enabled (provider: '{}', connected: {}). "
-            "Inbound Discord messages surface as CHAT_MSG_GUILD_DISCORD guild lines.",
-            _provider->GetProviderName(), _provider->IsConnected());
-    else
         TC_LOG_INFO("server.loading", "Discord bridge disabled (Guild.DiscordBridge.Enabled = 0).");
+        return;
+    }
+
+    // Enabled: install the real REST provider if a bot token is configured, otherwise fall back to
+    // the honest no-op (so the chat type / per-guild settings still exist, but nothing is claimed
+    // to be connected).
+    std::string botToken = sConfigMgr->GetStringDefault("Guild.DiscordBridge.BotToken", "");
+    if (botToken.empty())
+    {
+        _provider = std::make_unique<IDiscordBridgeProvider>();
+        TC_LOG_WARN("server.loading", "Discord bridge enabled but Guild.DiscordBridge.BotToken is empty - "
+            "running as no-op. Set a bot token to connect to Discord.");
+        return;
+    }
+
+    // Build the guildId -> Discord channel id map from guild_discord_settings.
+    std::unordered_map<uint64, uint64> linkedChannels;
+    if (QueryResult result = CharacterDatabase.Query("SELECT guildid, discordChannelId FROM guild_discord_settings WHERE discordChannelId <> 0"))
+    {
+        do
+        {
+            Field* fields = result->Fetch();
+            linkedChannels[fields[0].GetUInt64()] = fields[1].GetUInt64();
+        } while (result->NextRow());
+    }
+
+    if (linkedChannels.empty())
+    {
+        _provider = std::make_unique<IDiscordBridgeProvider>();
+        TC_LOG_WARN("server.loading", "Discord bridge enabled with a bot token but no guild has a linked "
+            "channel (guild_discord_settings.discordChannelId). Running as no-op until a channel is linked.");
+        return;
+    }
+
+    DiscordRestProvider::Settings settings;
+    settings.BotToken = std::move(botToken);
+    settings.ApiHost = sConfigMgr->GetStringDefault("Guild.DiscordBridge.ApiHost", "discord.com");
+    settings.CaBundleFile = sConfigMgr->GetStringDefault("Guild.DiscordBridge.CaBundle", "");
+    settings.PollIntervalMs = sConfigMgr->GetIntDefault("Guild.DiscordBridge.PollIntervalMs", 3000);
+    settings.VerifyCertificate = sConfigMgr->GetBoolDefault("Guild.DiscordBridge.VerifyCertificate", true);
+
+    SetProvider(std::make_unique<DiscordRestProvider>(std::move(settings), std::move(linkedChannels)));
+
+    TC_LOG_INFO("server.loading", "Discord bridge enabled (provider: '{}'). Inbound Discord messages "
+        "surface as CHAT_MSG_GUILD_DISCORD guild lines; outbound guild chat mirroring is {}.",
+        _provider->GetProviderName(), _forwardOutbound ? "ON" : "OFF");
 }
 
 void DiscordBridge::SetProvider(std::unique_ptr<IDiscordBridgeProvider> provider)
@@ -82,4 +127,29 @@ void DiscordBridge::ForwardGuildChat(ObjectGuid::LowType guildId, std::string_vi
 
     // No-op provider simply drops this; a real bot/webhook forwards to the linked channel.
     _provider->ForwardGuildChatToDiscord(guildId, senderName, message);
+}
+
+void DiscordBridge::QueueInbound(DiscordInboundMessage message)
+{
+    // Called from the provider's I/O thread - only touch the guarded queue here, never Guild state.
+    std::lock_guard<std::mutex> lock(_inboundMutex);
+    _inboundQueue.push_back(std::move(message));
+}
+
+void DiscordBridge::Update()
+{
+    if (!_enabled)
+        return;
+
+    std::vector<DiscordInboundMessage> pending;
+    {
+        std::lock_guard<std::mutex> lock(_inboundMutex);
+        if (_inboundQueue.empty())
+            return;
+        pending.swap(_inboundQueue);
+    }
+
+    // Now on the world thread: safe to touch GuildMgr / Guild.
+    for (DiscordInboundMessage const& message : pending)
+        OnDiscordMessage(message);
 }

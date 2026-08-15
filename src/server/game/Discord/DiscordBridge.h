@@ -22,8 +22,10 @@
 #include "DiscordDefines.h"
 #include "ObjectGuid.h"
 #include <memory>
+#include <mutex>
 #include <string>
 #include <string_view>
+#include <vector>
 
 // EXTERNAL BOUNDARY (spec section C).
 //
@@ -79,9 +81,17 @@ public:
     void SetProvider(std::unique_ptr<IDiscordBridgeProvider> provider);
     char const* GetProviderName() const;
 
-    // Inbound: a real provider calls this when Discord delivers a message. Routes it into
-    // guild chat as CHAT_MSG_GUILD_DISCORD (no-op if disabled or the guild is gone).
+    // Inbound (WORLD THREAD ONLY): routes a message into guild chat as CHAT_MSG_GUILD_DISCORD
+    // (no-op if disabled or the guild is gone). Called by Update() while draining the queue, or
+    // directly by world-thread code.
     void OnDiscordMessage(DiscordInboundMessage const& message);
+
+    // Inbound (THREAD SAFE): a real provider running on its own I/O thread calls this to hand a
+    // Discord message to the core. It is queued and delivered on the world thread by Update().
+    void QueueInbound(DiscordInboundMessage message);
+
+    // World-thread pump: drains the inbound queue and routes each message. Called from World::Update.
+    void Update();
 
     // Outbound: the core calls this when a guild chat line should be mirrored to Discord.
     // No-op unless enabled and a connected provider is installed.
@@ -93,6 +103,10 @@ private:
     bool _enabled = false;                                  // Guild.DiscordBridge.Enabled
     bool _forwardOutbound = false;                          // Guild.DiscordBridge.ForwardGuildChat
     std::unique_ptr<IDiscordBridgeProvider> _provider;      // no-op by default
+
+    // Inbound messages handed over from the provider's I/O thread, drained on the world thread.
+    std::mutex _inboundMutex;
+    std::vector<DiscordInboundMessage> _inboundQueue;
 };
 
 #define sDiscordBridge DiscordBridge::instance()

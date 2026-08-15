@@ -2433,6 +2433,9 @@ void World::Update(uint32 diff)
         sScriptMgr->OnWorldUpdate(diff);
     }
 
+    // Deliver any messages the Discord bridge received on its I/O thread as guild chat lines.
+    sDiscordBridge->Update();
+
     {
         TC_METRIC_TIMER("world_update_time", TC_METRIC_TAG("type", "Update metrics"));
         // Stats logger update
