@@ -424,7 +424,12 @@ Map* MapManager::CreateMap(uint32 mapId, Player* player, Optional<uint32> lfgDun
         {
             // Update source info on reuse — the player may re-enter from a different
             // neighborhood or plot each time.
-            if (HouseInteriorMap* interiorMap = dynamic_cast<HouseInteriorMap*>(map))
+            // H-13: only the OWNER may write this. The interior instance is shared with
+            // visitors, and the source map/plot is what HandleHouseInteriorLeaveHouse
+            // reads to decide where to put someone on the way out. A visitor writing
+            // their own plot here sent the owner out onto the visitor's plot, or onto a
+            // different neighborhood map entirely.
+            if (HouseInteriorMap* interiorMap = dynamic_cast<HouseInteriorMap*>(map); interiorMap && !isVisit)
             {
                 if (Housing* housing = player->GetHousing())
                 {

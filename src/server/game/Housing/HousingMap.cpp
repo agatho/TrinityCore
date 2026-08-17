@@ -1344,10 +1344,14 @@ void HousingMap::RemovePlayerFromMap(Player* player, bool remove)
     {
         // Remove all plot enter/presence auras (manual packets — spells not in DB2)
         SendPlotLeaveAuraRemoval(player);
-
-        // Clear plot tracking
-        ClearPlayerCurrentPlot(player->GetGUID());
     }
+
+    // H-20: plot tracking is cleared for EVERY player leaving, not just those who own
+    // a house here. It used to sit inside the branch above, so a visitor's entry
+    // survived their visit and lived as long as the map instance - which, since
+    // housing maps never unload, means forever. It also fed a stale plot index to the
+    // go_housing_door fallback on a later visit.
+    ClearPlayerCurrentPlot(player->GetGUID());
 
     RemovePlayerHousing(player->GetGUID());
 

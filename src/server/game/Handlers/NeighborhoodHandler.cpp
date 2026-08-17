@@ -2210,10 +2210,18 @@ void WorldSession::HandleNeighborhoodEvictPlot(WorldPackets::Neighborhood::Neigh
             }
             else
             {
-                // Offline: delete housing directly from DB
-                CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_DEL_CHARACTER_HOUSING);
-                stmt->setUInt64(0, evictedPlayerGuid.GetCounter());
-                CharacterDatabase.Execute(stmt);
+                // Offline: delete housing directly from DB.
+                //
+                // H-12: this used to run CHAR_DEL_CHARACTER_HOUSING alone, clearing one
+                // of the five tables and orphaning character_housing_decor, _rooms,
+                // _fixtures and _catalog. Those are selected by ownerGuid, not by house,
+                // so the rows were picked up again by the player's NEXT house - decor at
+                // the old coordinates, against a room layout that no longer existed.
+                // Housing::DeleteFromDB is the same clearing the online branch performs
+                // via DeleteHousing().
+                CharacterDatabaseTransaction trans = CharacterDatabase.BeginTransaction();
+                Housing::DeleteFromDB(evictedPlayerGuid.GetCounter(), trans);
+                CharacterDatabase.CommitTransaction(trans);
             }
         }
 

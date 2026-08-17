@@ -131,6 +131,73 @@ namespace
         return false;
     }
 
+    // Tear a house down: despawn everything it owns on the map, free the plot, drop
+    // the neighborhood membership and delete the rows. Returns the house GUID that was
+    // destroyed (empty if there was nothing to destroy) so callers can fill responses
+    // and notifications.
+    //
+    // H-08: relinquish did all of this and kiosk reset did none of it - kiosk reset was
+    // six lines that called DeleteHousing() and returned, leaving the ten MeshObjects
+    // and the door GO standing on a plot the server then considered vacant, and
+    // ignoring CONFIG_HOUSING_ENABLE_DELETE_HOUSE entirely. Two implementations of one
+    // operation is how they drifted apart, so there is now one.
+    ObjectGuid DestroyPlayerHousing(Player* player)
+    {
+        Housing const* housing = player->GetHousing();
+        if (!housing)
+            return ObjectGuid::Empty;
+
+        ObjectGuid houseGuid = housing->GetHouseGuid();
+        ObjectGuid neighborhoodGuid = housing->GetNeighborhoodGuid();
+        uint8 plotIndex = INVALID_PLOT_INDEX;
+
+        Neighborhood* neighborhood = sNeighborhoodMgr.GetNeighborhood(neighborhoodGuid);
+        if (neighborhood)
+            if (Neighborhood::Member const* member = neighborhood->GetMember(player->GetGUID()))
+                plotIndex = member->PlotIndex;
+
+        // Despawn map entities BEFORE the housing data goes away.
+        if (plotIndex != INVALID_PLOT_INDEX)
+        {
+            if (HousingMap* housingMap = dynamic_cast<HousingMap*>(player->GetMap()))
+            {
+                housingMap->DespawnAllDecorForPlot(plotIndex);
+                housingMap->DespawnAllMeshObjectsForPlot(plotIndex);
+                housingMap->DespawnRoomForPlot(plotIndex);
+                housingMap->DespawnHouseForPlot(plotIndex);
+                housingMap->SetPlotOwnershipState(plotIndex, false);
+            }
+        }
+
+        if (neighborhood)
+        {
+            neighborhood->EvictPlayer(player->GetGUID());
+
+            WorldPackets::Neighborhood::NeighborhoodRosterResidentUpdate rosterUpdate;
+            rosterUpdate.Residents.push_back({ player->GetGUID(), 2 /*Removed*/, false });
+            neighborhood->BroadcastPacket(rosterUpdate.Write(), player->GetGUID());
+            neighborhood->RefreshMirrorDataForOnlineMembers();
+        }
+
+        player->DeleteHousing(neighborhoodGuid);
+
+        if (!houseGuid.IsEmpty())
+        {
+            if (Guild* guild = sGuildMgr->GetGuildById(player->GetGuildId()))
+            {
+                WorldPackets::Housing::HousingSvcsGuildRemoveHouseNotification notification;
+                notification.House.HouseGUID = houseGuid;
+                notification.House.OwnerGUID = player->GetGUID();
+                guild->BroadcastPacket(notification.Write());
+            }
+        }
+
+        TC_LOG_INFO("housing", "DestroyPlayerHousing: Player {} destroyed house {} on plot {} in neighborhood {}",
+            player->GetGUID().ToString(), houseGuid.ToString(), plotIndex, neighborhoodGuid.ToString());
+
+        return houseGuid;
+    }
+
     // Sends manual SMSG_AURA_UPDATE + SMSG_SPELL_START + SMSG_SPELL_GO for a housing
     // spell that doesn't exist in our DB2/spell data. The sniff shows these spells use:
     //   AURA_UPDATE: CastID matches SPELL_START/SPELL_GO CastID
@@ -1447,9 +1514,22 @@ void WorldSession::HandleHousingDecorDeleteFromStorage(WorldPackets::Housing::Ho
         return;
     }
 
+    // m3/A6 + H-10: per-session decoration throttle, charged per GUID rather than per
+    // packet. Place, move and remove each cost one operation against the 40-per-10s
+    // budget; this opcode removes up to 31 decor in a single packet, each one a
+    // synchronous DB delete plus a catalog update and an account UpdateField write.
+    // Charging it once - or not at all, as before - let a client sustain many times
+    // the rate the throttle was written to permit, through the one decor path the
+    // throttle never saw.
     HousingResult result = HOUSING_RESULT_SUCCESS;
     for (ObjectGuid const& decorGuid : housingDecorDeleteFromStorage.DecorGuids)
     {
+        if (!CheckHousingDecorThrottle())
+        {
+            result = HOUSING_RESULT_TOO_MANY_REQUESTS;
+            break;
+        }
+
         HousingResult r = housing->RemoveDecor(decorGuid);
         if (r != HOUSING_RESULT_SUCCESS)
             result = r;
@@ -1629,10 +1709,7 @@ void WorldSession::HandleHousingDecorRedeemDeferredDecor(WorldPackets::Housing::
         return;
     }
 
-    // Generate a unique Housing GUID for the newly redeemed decor item.
-    // Sniff-verified format: subType=1, arg1=realmId, arg2=decorEntryId, counter=unique
-    // subType=0 hits the default case in ObjectGuidFactory::CreateHousing → returns Empty!
-    uint64 catalogGuidBase = player->GetGUID().GetCounter() * 100000;
+    // instanceIndex is still needed below to choose INSERT vs UPDATE on the catalog row.
     uint32 instanceIndex = 0;
     for (auto const* entry : housing->GetCatalogEntries())
     {
@@ -1642,12 +1719,16 @@ void WorldSession::HandleHousingDecorRedeemDeferredDecor(WorldPackets::Housing::
             break;
         }
     }
-    uint64 uniqueId = catalogGuidBase + decorEntryId * 100 + instanceIndex;
-    ObjectGuid decorGuid = ObjectGuid::Create<HighGuid::Housing>(
-        /*subType*/ 1,
-        /*arg1*/ sRealmList->GetCurrentRealmId().Realm,
-        /*arg2*/ decorEntryId,
-        uniqueId);
+
+    // H-15: the counter used to be computed as
+    //   playerGuidCounter * 100000 + decorEntryId * 100 + instanceIndex
+    // which allots each player a 100,000-wide band and each decor entry a 100-wide
+    // slot inside it. Neither bound holds - decorEntryId * 100 leaves the band once
+    // the entry id passes 999, and the starter tables already use 1700, 2549, 8910
+    // and 9144, so redeeming entry 8910 landed nearly nine bands into another
+    // character's range. Mint from the same global generator every other decor path
+    // uses instead; the banded arithmetic had no property worth preserving.
+    ObjectGuid decorGuid = housing->GenerateDecorGuid(decorEntryId);
 
     // Push the new decor entry to the Account entity's FHousingStorage_C fragment.
     // Sniff: SourceType=3 marks it as redeemed from deferred queue. HouseGUID=empty (not yet placed).
@@ -3604,74 +3685,22 @@ void WorldSession::HandleHousingSvcsRelinquishHouse(WorldPackets::Housing::Housi
         return;
     }
 
-    // Capture data BEFORE deletion
-    ObjectGuid houseGuid = housing->GetHouseGuid();
-    ObjectGuid neighborhoodGuid = housing->GetNeighborhoodGuid();
-    uint8 plotIndex = INVALID_PLOT_INDEX;
+    // Full teardown: despawn the structure, free the plot, drop membership, delete the
+    // rows, notify roster and guild. Shared with CMSG_HOUSING_RESET_KIOSK_MODE, which
+    // destroys a house by the same definition and used to do none of it (H-08).
+    ObjectGuid houseGuid = DestroyPlayerHousing(player);
 
-    Neighborhood* neighborhood = sNeighborhoodMgr.GetNeighborhood(neighborhoodGuid);
-    if (neighborhood)
-    {
-        // Find the player's plot index
-        Neighborhood::Member const* member = neighborhood->GetMember(player->GetGUID());
-        if (member)
-            plotIndex = member->PlotIndex;
-    }
-
-    // Step 1: Despawn all entities on the map BEFORE deleting housing data
-    if (plotIndex != INVALID_PLOT_INDEX)
-    {
-        if (HousingMap* housingMap = dynamic_cast<HousingMap*>(player->GetMap()))
-        {
-            housingMap->DespawnAllDecorForPlot(plotIndex);
-            housingMap->DespawnAllMeshObjectsForPlot(plotIndex);
-            housingMap->DespawnRoomForPlot(plotIndex);
-            housingMap->DespawnHouseForPlot(plotIndex);
-            housingMap->SetPlotOwnershipState(plotIndex, false);
-        }
-    }
-
-    // Step 2: Remove from neighborhood membership (evicts from plots array)
-    if (neighborhood)
-        neighborhood->EvictPlayer(player->GetGUID());
-
-    // Step 3: Delete Housing object (removes from player and DB)
-    player->DeleteHousing(neighborhoodGuid);
-
-    // Step 4: Send response
     WorldPackets::Housing::HousingSvcsRelinquishHouseResponse response;
     response.Result = static_cast<uint8>(HOUSING_RESULT_SUCCESS);
     response.HouseGuid = houseGuid;
     SendPacket(response.Write());
 
-    // Step 5: Request client to reload housing data
+    // Request client to reload housing data
     WorldPackets::Housing::HousingSvcRequestPlayerReloadData reloadData;
     SendPacket(reloadData.Write());
 
-    // Step 6: Broadcast roster update to remaining members and refresh mirror data
-    if (neighborhood)
-    {
-        WorldPackets::Neighborhood::NeighborhoodRosterResidentUpdate rosterUpdate;
-        rosterUpdate.Residents.push_back({ player->GetGUID(), 2 /*Removed*/, false });
-        neighborhood->BroadcastPacket(rosterUpdate.Write(), player->GetGUID());
-
-        neighborhood->RefreshMirrorDataForOnlineMembers();
-    }
-
-    // Step 7: Send guild notification for house removal
-    if (!houseGuid.IsEmpty())
-    {
-        if (Guild* guild = sGuildMgr->GetGuildById(player->GetGuildId()))
-        {
-            WorldPackets::Housing::HousingSvcsGuildRemoveHouseNotification notification;
-            notification.House.HouseGUID = houseGuid;
-            notification.House.OwnerGUID = player->GetGUID();
-            guild->BroadcastPacket(notification.Write());
-        }
-    }
-
-    TC_LOG_INFO("housing", "CMSG_HOUSING_SVCS_RELINQUISH_HOUSE: Player {} relinquished house {} on plot {} in neighborhood {}",
-        player->GetGUID().ToString(), houseGuid.ToString(), plotIndex, neighborhoodGuid.ToString());
+    TC_LOG_INFO("housing", "CMSG_HOUSING_SVCS_RELINQUISH_HOUSE: Player {} relinquished house {}",
+        player->GetGUID().ToString(), houseGuid.ToString());
 }
 
 void WorldSession::HandleHousingSvcsUpdateHouseSettings(WorldPackets::Housing::HousingSvcsUpdateHouseSettings const& housingSvcsUpdateHouseSettings)
@@ -4777,13 +4806,33 @@ void WorldSession::HandleHousingResetKioskMode(WorldPackets::Housing::HousingRes
     if (!player)
         return;
 
-    // Delete the context-aware housing (current neighborhood)
-    if (Housing const* housing = player->GetHousing())
-        player->DeleteHousing(housing->GetNeighborhoodGuid());
+    // H-08: this destroys a house, so it answers to the same switch as
+    // CMSG_HOUSING_SVCS_RELINQUISH_HOUSE. It previously ignored the config entirely,
+    // so a realm with house deletion disabled still lost houses through this opcode.
+    if (!sWorld->getBoolConfig(CONFIG_HOUSING_ENABLE_DELETE_HOUSE))
+    {
+        WorldPackets::Housing::HousingResetKioskModeResponse response;
+        response.Result = static_cast<uint8>(HOUSING_RESULT_SERVICE_NOT_AVAILABLE);
+        SendPacket(response.Write());
+        return;
+    }
+
+    // Full teardown, shared with relinquish: despawn the structure, free the plot,
+    // drop membership, delete the rows. This used to call DeleteHousing() alone,
+    // which left the ten MeshObjects and the door GO standing on a plot the server
+    // now considered vacant and re-purchasable.
+    ObjectGuid destroyedHouseGuid = DestroyPlayerHousing(player);
 
     WorldPackets::Housing::HousingResetKioskModeResponse response;
-    response.Result = static_cast<uint8>(HOUSING_RESULT_SUCCESS);
+    response.Result = static_cast<uint8>(destroyedHouseGuid.IsEmpty()
+        ? HOUSING_RESULT_HOUSE_NOT_FOUND : HOUSING_RESULT_SUCCESS);
     SendPacket(response.Write());
+
+    if (!destroyedHouseGuid.IsEmpty())
+    {
+        WorldPackets::Housing::HousingSvcRequestPlayerReloadData reloadData;
+        SendPacket(reloadData.Write());
+    }
 
     TC_LOG_INFO("housing", "CMSG_HOUSING_RESET_KIOSK_MODE processed for player {}",
         player->GetGUID().ToString());

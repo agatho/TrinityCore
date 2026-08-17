@@ -767,6 +767,13 @@ void Housing::Delete()
     _catalog.clear();
 }
 
+ObjectGuid Housing::GenerateDecorGuid(uint32 decorEntryId)
+{
+    return ObjectGuid::Create<HighGuid::Housing>(
+        /*subType*/ 1, /*arg1*/ sRealmList->GetCurrentRealmId().Realm,
+        /*arg2*/ decorEntryId, GenerateDecorDbId());
+}
+
 ObjectGuid Housing::StartPlacingNewDecor(uint32 catalogEntryId, HousingResult& result)
 {
     if (_houseGuid.IsEmpty())

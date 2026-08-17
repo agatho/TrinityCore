@@ -140,6 +140,13 @@ public:
     bool IsInInterior() const { return _isInInterior; }
 
     // Decor operations — StartPlacingNewDecor creates a pending placement, PlaceDecorWithGuid commits it
+    // Mint a decor GUID from the global generator. Every decor GUID must come
+    // from here or from StartPlacingNewDecor/PlaceDecor, all of which draw the
+    // counter from s_nextDecorDbId, so ids stay unique across players and across
+    // a reload. The deferred-redeem path used to compute its own from
+    // (playerGuid * 100000 + entryId * 100 + index), which overflows its band
+    // into another character's range as soon as the entry id passes 999.
+    ObjectGuid GenerateDecorGuid(uint32 decorEntryId);
     ObjectGuid StartPlacingNewDecor(uint32 catalogEntryId, HousingResult& result);
     uint32 GetPendingPlacementEntryId(ObjectGuid decorGuid) const;
     void CancelPendingPlacement(ObjectGuid decorGuid);
