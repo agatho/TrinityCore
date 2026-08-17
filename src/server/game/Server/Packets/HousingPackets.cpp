@@ -282,10 +282,7 @@ void HousingRoomMoveRoom::Read()
 void HousingRoomSetComponentTheme::Read()
 {
     _worldPacket >> RoomGuid;
-    uint32 count = 0;
-    _worldPacket >> count;
-    count = std::min<uint32>(count, _worldPacket.size() / sizeof(uint32)); // cap before resize (uncapped -> std::bad_alloc -> world-thread crash)
-    OptionIDs.resize(count);
+    _worldPacket >> BoundedSize<uint32>(OptionIDs); // NOT Size<> — an unbounded count here is a world-thread bad_alloc
     _worldPacket >> HouseThemeID;
     for (uint32& optionID : OptionIDs)
         _worldPacket >> optionID;
@@ -302,10 +299,7 @@ void HousingRoomApplyComponentMaterials::Read()
     // The byte sits BEFORE the array, not after — earlier guess parsed it as a
     // trailing Bits<1> which misaligned OptionIDs[0] one byte forward.
     _worldPacket >> RoomGuid;
-    uint32 count = 0;
-    _worldPacket >> count;
-    count = std::min<uint32>(count, _worldPacket.size() / sizeof(uint32)); // cap before resize (uncapped -> std::bad_alloc -> world-thread crash)
-    OptionIDs.resize(count);
+    _worldPacket >> BoundedSize<uint32>(OptionIDs); // NOT Size<> — an unbounded count here is a world-thread bad_alloc
     _worldPacket >> ColorOverride;
     _worldPacket >> RoomComponentTextureID;
     _worldPacket >> ComponentSlot;
