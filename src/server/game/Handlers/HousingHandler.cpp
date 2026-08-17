@@ -460,10 +460,22 @@ void WorldSession::HandleHouseInteriorLeaveHouse(WorldPackets::Housing::HouseInt
         plotIndex = interiorMap->GetSourcePlotIndex();
     }
 
-    // Fallback: resolve from the Housing object's neighborhood GUID
-    if (worldMapId == 0)
+    // The exit route belongs to the house being LEFT, which for a visitor is the
+    // host's house, not their own. `housing` is null for a player who owns none
+    // (Player::GetHousing returns nullptr on an empty _housings), so every use
+    // below has to tolerate that — resolving it here keeps the null in one place.
+    Housing const* exitHousing = housing;
+    if (isVisit && interiorMap)
     {
-        Neighborhood* neighborhood = sNeighborhoodMgr.ResolveNeighborhood(housing->GetNeighborhoodGuid(), player);
+        exitHousing = nullptr;
+        if (Player* owner = ObjectAccessor::FindPlayer(interiorMap->GetOwnerGuid()))
+            exitHousing = owner->GetHousing();
+    }
+
+    // Fallback: resolve from the Housing object's neighborhood GUID
+    if (worldMapId == 0 && exitHousing)
+    {
+        Neighborhood* neighborhood = sNeighborhoodMgr.ResolveNeighborhood(exitHousing->GetNeighborhoodGuid(), player);
         if (neighborhood)
         {
             neighborhoodMapId = neighborhood->GetNeighborhoodMapID();
@@ -505,10 +517,17 @@ void WorldSession::HandleHouseInteriorLeaveHouse(WorldPackets::Housing::HouseInt
             if (plot->HouseRotation[0] == 0.0f && plot->HouseRotation[1] == 0.0f && plot->HouseRotation[2] == 0.0f)
                 hFacing = std::atan2(plot->CornerstonePosition[1] - hy, plot->CornerstonePosition[0] - hx);
 
-            // Find the door hook + exit point from the player's fixture overrides
-            auto fixtureOverrides = housing->GetFixtureOverrideMap();
-            uint32 baseCompID = static_cast<uint32>(housing->GetCoreExteriorComponentID());
-            auto const* baseHooks = sHousingMgr.GetHooksOnComponent(baseCompID);
+            // Find the door hook + exit point from the fixture overrides of the house
+            // being left. Without an exitHousing (visitor whose host is offline, or a
+            // player who owns no house at all) the door hook is unresolvable — skip
+            // straight to the plot's TeleportPosition fallback below.
+            std::unordered_map<uint32, uint32> fixtureOverrides;
+            std::vector<ExteriorComponentHookEntry const*> const* baseHooks = nullptr;
+            if (exitHousing)
+            {
+                fixtureOverrides = exitHousing->GetFixtureOverrideMap();
+                baseHooks = sHousingMgr.GetHooksOnComponent(static_cast<uint32>(exitHousing->GetCoreExteriorComponentID()));
+            }
             if (baseHooks)
             {
                 for (ExteriorComponentHookEntry const* hook : *baseHooks)
