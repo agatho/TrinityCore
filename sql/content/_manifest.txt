@@ -1,0 +1,4 @@
+# Content apply manifest -- order matters (idempotent files; safe to re-run).
+# Applied to the local integration testserver for validation, not upstream/master
+# (content depends on integration-only systems). One line per slice, top-down.
+DragonIsles/WakingShores/65997-chasing-sendrax.sql
