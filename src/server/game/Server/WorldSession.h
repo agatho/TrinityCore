@@ -1597,6 +1597,11 @@ class TC_GAME_API WorldSession
         // m3/A6: returns false (and consumes no budget) when the per-session
         // decoration throttle is exceeded; handlers then reply TOO_MANY_REQUESTS.
         bool CheckHousingDecorThrottle();
+
+        // H-25: a charter may only be signed by someone who was asked to sign it.
+        void AddPendingCharterSignatureRequest(uint64 charterId) { _pendingCharterSignatureRequests.insert(charterId); }
+        bool HasPendingCharterSignatureRequest(uint64 charterId) const { return _pendingCharterSignatureRequests.contains(charterId); }
+        void ClearPendingCharterSignatureRequest(uint64 charterId) { _pendingCharterSignatureRequests.erase(charterId); }
         void HandleHousingDecorSetEditMode(WorldPackets::Housing::HousingDecorSetEditMode const& housingDecorSetEditMode);
         void HandleHousingDecorPlace(WorldPackets::Housing::HousingDecorPlace const& housingDecorPlace);
         void HandleHousingDecorMove(WorldPackets::Housing::HousingDecorMove const& housingDecorMove);
@@ -2357,6 +2362,15 @@ class TC_GAME_API WorldSession
         // HOUSING_DECOR_THROTTLE_BURST edits per HOUSING_DECOR_THROTTLE_WINDOW_MS.
         uint32 _housingDecorThrottleWindowStart = 0;
         uint32 _housingDecorThrottleCount = 0;
+
+        // H-25: charter ids this session has actually been asked to sign.
+        // CMSG_NEIGHBORHOOD_CHARTER_ADD_SIGNATURE takes the charter id from the client
+        // and charter ids are creator GUID counters, so without this any player could
+        // sign any charter on the realm by enumerating ids, and
+        // CMSG_NEIGHBORHOOD_CHARTER_SEND_SIGNATURE_REQUEST - which exists to invite a
+        // signer - was decorative. Session-scoped on purpose: a signature request is an
+        // in-the-moment offer, so it does not survive a relog, and nothing is persisted.
+        std::unordered_set<uint64> _pendingCharterSignatureRequests;
 
         WorldSession(WorldSession const& right) = delete;
         WorldSession& operator=(WorldSession const& right) = delete;

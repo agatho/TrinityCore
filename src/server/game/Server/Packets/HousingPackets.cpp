@@ -1504,8 +1504,16 @@ WorldPacket const* HousingExportHouseResponse::Write()
     // bit-packed length encoding of the present path is unconfirmed — flagged in the header.
     if (ExportName)
     {
-        _worldPacket << uint8(0x80 | static_cast<uint8>(ExportName->size() & 0x7F));
-        _worldPacket.WriteString(*ExportName);
+        // H-24: the length field carries 7 bits, so a name longer than 127 bytes used to
+        // write a masked-down length next to the full string - the client would then read
+        // the tail of the name as the start of BlobLen, desyncing every field after it.
+        // The encoding above 127 is not pinned by RE, so this does not invent a long form;
+        // it truncates the payload to match the length actually written, which keeps the
+        // stream parseable. If a capture ever shows the long form, encode it here.
+        std::string_view name = *ExportName;
+        name = name.substr(0, 0x7F);
+        _worldPacket << uint8(0x80 | static_cast<uint8>(name.size()));
+        _worldPacket.append(name.data(), name.size());
     }
     else
         _worldPacket << uint8(0);
@@ -1519,7 +1527,6 @@ WorldPacket const* HousingExportHouseResponse::Write()
     return &_worldPacket;
 }
 
-// Retired 2026-05-12: HousingExportHouseResponse::Write — orphaned after EXPORT_HOUSE CMSG retirement.
 // Retired 2026-05-11: HousingSystemHouseSnapshotResponse Write() deleted (no C_HouseSnapshot in retail).
 
 WorldPacket const* HousingGetPlayerPermissionsResponse::Write()

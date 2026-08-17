@@ -1716,9 +1716,11 @@ namespace WorldPackets::Housing
         std::vector<uint8> ExportBlob;
     };
 
-    // Retired 2026-05-12: HousingExportHouseResponse — orphaned after EXPORT_HOUSE CMSG retirement.
-    // No client sender for CMSG_HOUSING_SYSTEM_EXPORT_HOUSE (0x350003) in build 67186, so the
-    // SMSG can never be emitted in practice.
+    // Status 2026-06-30: NOT retired. Upstream re-added SMSG_HOUSING_EXPORT_HOUSE_RESPONSE
+    // at 0x550003 in the 12.0.7 sync, so the note that used to sit here (claiming the packet
+    // was orphaned and could never be emitted) described a state that no longer holds. There
+    // is still no server-side sender, so nothing emits it today - but it is live wire surface,
+    // not dead code, and Write() is maintained accordingly.
 
     // Retired 2026-05-11: HousingSystemHouseSnapshotResponse deleted (fake opcode 0xF1000011).
     // No `C_HouseSnapshot` Lua namespace exists in retail 12.0.5; feature does not exist.

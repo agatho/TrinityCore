@@ -745,7 +745,7 @@ bool WorldSession::CheckHousingDecorThrottle()
 
 void WorldSession::HandleHousingDecorSetEditMode(WorldPackets::Housing::HousingDecorSetEditMode const& housingDecorSetEditMode)
 {
-    TC_LOG_ERROR("housing", ">>> CMSG_HOUSING_DECOR_SET_EDIT_MODE Active={}", housingDecorSetEditMode.Active);
+    TC_LOG_DEBUG("housing", ">>> CMSG_HOUSING_DECOR_SET_EDIT_MODE Active={}", housingDecorSetEditMode.Active);
 
     Player* player = GetPlayer();
     if (!player)
@@ -838,7 +838,7 @@ void WorldSession::HandleHousingDecorSetEditMode(WorldPackets::Housing::HousingD
 
         // 3. Send the edit mode response BEFORE the UpdateObject
         WorldPacket const* editModePkt = response.Write();
-        TC_LOG_ERROR("housing", "<<< SMSG_HOUSING_DECOR_SET_EDIT_MODE_RESPONSE ({} bytes): {}",
+        TC_LOG_DEBUG("housing", "<<< SMSG_HOUSING_DECOR_SET_EDIT_MODE_RESPONSE ({} bytes): {}",
             editModePkt->size(), HexDumpPacket(editModePkt));
         TC_LOG_ERROR("housing", "    HouseGuid={} BNetAccountGuid={} AllowedEditors={} Result={}",
             response.HouseGuid.ToString(), response.BNetAccountGuid.ToString(),
@@ -1069,7 +1069,7 @@ void WorldSession::HandleHousingDecorSetEditMode(WorldPackets::Housing::HousingD
 
         // 3. Send the edit mode response (empty AllowedEditor = exit)
         WorldPacket const* exitModePkt = response.Write();
-        TC_LOG_ERROR("housing", "<<< SMSG_HOUSING_DECOR_SET_EDIT_MODE_RESPONSE EXIT ({} bytes): {}",
+        TC_LOG_DEBUG("housing", "<<< SMSG_HOUSING_DECOR_SET_EDIT_MODE_RESPONSE EXIT ({} bytes): {}",
             exitModePkt->size(), HexDumpPacket(exitModePkt));
         TC_LOG_ERROR("housing", "    HouseGuid={} BNetAccountGuid={} AllowedEditors=0 Result={}",
             response.HouseGuid.ToString(), response.BNetAccountGuid.ToString(), response.Result);
@@ -1310,10 +1310,10 @@ void WorldSession::HandleHousingDecorMove(WorldPackets::Housing::HousingDecorMov
     response.DecorGuid = housingDecorMove.DecorGuid;
     response.Result = static_cast<uint8>(result);
     WorldPacket const* movePkt = response.Write();
-    TC_LOG_ERROR("housing", ">>> CMSG_HOUSING_DECOR_MOVE DecorGuid={} Pos=({:.3f},{:.3f},{:.3f}) Rot=({:.3f},{:.3f},{:.3f}) Scale={:.2f} RoomGuid={} AttachParent={}",
+    TC_LOG_DEBUG("housing", ">>> CMSG_HOUSING_DECOR_MOVE DecorGuid={} Pos=({:.3f},{:.3f},{:.3f}) Rot=({:.3f},{:.3f},{:.3f}) Scale={:.2f} RoomGuid={} AttachParent={}",
         housingDecorMove.DecorGuid.ToString(), posX, posY, posZ, yaw, pitch, roll,
         housingDecorMove.Scale, housingDecorMove.RoomGuid.ToString(), housingDecorMove.AttachParentGuid.ToString());
-    TC_LOG_ERROR("housing", "<<< SMSG_HOUSING_DECOR_MOVE_RESPONSE ({} bytes): {}",
+    TC_LOG_DEBUG("housing", "<<< SMSG_HOUSING_DECOR_MOVE_RESPONSE ({} bytes): {}",
         movePkt->size(), HexDumpPacket(movePkt));
     TC_LOG_ERROR("housing", "    PlayerGuid={} DecorGuid={} Result={}", response.PlayerGuid.ToString(), response.DecorGuid.ToString(), response.Result);
     SendPacket(movePkt);
@@ -1390,8 +1390,8 @@ void WorldSession::HandleHousingDecorRemove(WorldPackets::Housing::HousingDecorR
     // UnkGUID and Field_13 stay at defaults (empty/0)
     response.Result = static_cast<uint8>(result);
     WorldPacket const* removePkt = response.Write();
-    TC_LOG_ERROR("housing", ">>> CMSG_HOUSING_DECOR_REMOVE DecorGuid={}", decorGuid.ToString());
-    TC_LOG_ERROR("housing", "<<< SMSG_HOUSING_DECOR_REMOVE_RESPONSE ({} bytes): {}",
+    TC_LOG_DEBUG("housing", ">>> CMSG_HOUSING_DECOR_REMOVE DecorGuid={}", decorGuid.ToString());
+    TC_LOG_DEBUG("housing", "<<< SMSG_HOUSING_DECOR_REMOVE_RESPONSE ({} bytes): {}",
         removePkt->size(), HexDumpPacket(removePkt));
     TC_LOG_ERROR("housing", "    DecorGuid={} Result={}", decorGuid.ToString(), uint32(result));
     SendPacket(removePkt);
@@ -1439,7 +1439,7 @@ void WorldSession::HandleHousingDecorLock(WorldPackets::Housing::HousingDecorLoc
 
     HousingResult result = housing->SetDecorLocked(housingDecorLock.DecorGuid, housingDecorLock.Locked);
 
-    TC_LOG_ERROR("housing", ">>> CMSG_HOUSING_DECOR_LOCK DecorGuid={} Locked={} (entry: {})",
+    TC_LOG_DEBUG("housing", ">>> CMSG_HOUSING_DECOR_LOCK DecorGuid={} Locked={} (entry: {})",
         housingDecorLock.DecorGuid.ToString(), housingDecorLock.Locked, decor->DecorEntryId);
 
     // Wire format: DecorGUID + PlayerGUID + uint32 Field_16 + uint8 Result + Bits(Locked, Field_17)
@@ -1450,7 +1450,7 @@ void WorldSession::HandleHousingDecorLock(WorldPackets::Housing::HousingDecorLoc
     response.Locked = (result == HOUSING_RESULT_SUCCESS) && housingDecorLock.Locked;
     response.Field_17 = true;
     WorldPacket const* lockPkt = response.Write();
-    TC_LOG_ERROR("housing", "<<< SMSG_HOUSING_DECOR_LOCK_RESPONSE ({} bytes): {}",
+    TC_LOG_DEBUG("housing", "<<< SMSG_HOUSING_DECOR_LOCK_RESPONSE ({} bytes): {}",
         lockPkt->size(), HexDumpPacket(lockPkt));
     TC_LOG_ERROR("housing", "    DecorGuid={} PlayerGuid={} Field_16={} Result={} Locked={} Field_17={}",
         response.DecorGuid.ToString(), response.PlayerGuid.ToString(),
@@ -1674,7 +1674,7 @@ void WorldSession::HandleHousingDecorRedeemDeferredDecor(WorldPackets::Housing::
     uint32 decorEntryId = housingDecorRedeemDeferredDecor.DeferredDecorID;
     uint32 sequenceIndex = housingDecorRedeemDeferredDecor.RedemptionToken;
 
-    TC_LOG_ERROR("housing", ">>> CMSG_HOUSING_DECOR_REDEEM_DEFERRED DeferredDecorID={} RedemptionToken={}",
+    TC_LOG_DEBUG("housing", ">>> CMSG_HOUSING_DECOR_REDEEM_DEFERRED DeferredDecorID={} RedemptionToken={}",
         decorEntryId, sequenceIndex);
 
     Housing* housing = player->GetHousing();
@@ -1743,7 +1743,7 @@ void WorldSession::HandleHousingDecorRedeemDeferredDecor(WorldPackets::Housing::
     response.Result = 0;
     response.SequenceIndex = sequenceIndex;
     WorldPacket const* redeemPkt = response.Write();
-    TC_LOG_ERROR("housing", "<<< SMSG_HOUSING_REDEEM_DEFERRED_DECOR_RESPONSE ({} bytes): {}",
+    TC_LOG_DEBUG("housing", "<<< SMSG_HOUSING_REDEEM_DEFERRED_DECOR_RESPONSE ({} bytes): {}",
         redeemPkt->size(), HexDumpPacket(redeemPkt));
     TC_LOG_ERROR("housing", "    DecorGuid={} Result={} SequenceIndex={}", decorGuid.ToString(), response.Result, sequenceIndex);
     SendPacket(redeemPkt);
@@ -3825,7 +3825,12 @@ void WorldSession::HandleHousingSvcsPlayerViewHousesByBnetAccount(WorldPackets::
     {
         for (auto const& plot : neighborhood->GetPlots())
         {
-            if (!plot.IsOccupied())
+            // H-21: filter to the queried account. Without the second condition this
+            // returned every occupied plot in every neighborhood that account lives in
+            // - the full roster of their neighbours, house GUID and owner GUID included
+            // - rather than that account's own houses. The by-player sibling handler
+            // filters correctly; this one did not.
+            if (!plot.IsOccupied() || plot.OwnerBnetGuid != housingSvcsPlayerViewHousesByBnetAccount.BnetAccountGuid)
                 continue;
             WorldPackets::Housing::JamCliHouse house;
             house.OwnerGUID = plot.OwnerGuid;
@@ -3862,7 +3867,7 @@ void WorldSession::HandleHousingSvcsGetPlayerHousesInfo(WorldPackets::Housing::H
     }
     for (auto const& h : response.Houses)
     {
-        TC_LOG_ERROR("network", "  [DASHBOARD] JamCliHouse: Owner={} House={} Neighborhood={} Level={} Plot={}",
+        TC_LOG_DEBUG("network", "  [DASHBOARD] JamCliHouse: Owner={} House={} Neighborhood={} Level={} Plot={}",
             h.OwnerGUID.ToString(), h.HouseGUID.ToString(), h.NeighborhoodGUID.ToString(),
             h.HouseLevel, h.PlotIndex);
     }
@@ -4585,7 +4590,7 @@ void WorldSession::HandleHousingHouseStatus(WorldPackets::Housing::HousingHouseS
     // If this line never appears in the log after interior entry, the client's
     // housing system context was never activated (missing 0x56000E init packet).
     bool isInterior = player->GetMap() && dynamic_cast<HouseInteriorMap*>(player->GetMap());
-    TC_LOG_ERROR("housing", ">>> CMSG_HOUSING_HOUSE_STATUS: CLIENT POLLED! player={} map={} isInterior={} pos=({:.1f},{:.1f},{:.1f})",
+    TC_LOG_DEBUG("housing", ">>> CMSG_HOUSING_HOUSE_STATUS: CLIENT POLLED! player={} map={} isInterior={} pos=({:.1f},{:.1f},{:.1f})",
         player->GetGUID().ToString(), player->GetMapId(), isInterior,
         player->GetPositionX(), player->GetPositionY(), player->GetPositionZ());
 
@@ -4639,8 +4644,8 @@ void WorldSession::HandleHousingHouseStatus(WorldPackets::Housing::HousingHouseS
         response.PermissionFlags = 0xE0;
     }
     WorldPacket const* statusPkt = response.Write();
-    TC_LOG_ERROR("housing", ">>> CMSG_HOUSING_HOUSE_STATUS (visitedPlot: {})", visitedPlot);
-    TC_LOG_ERROR("housing", "<<< SMSG_HOUSING_HOUSE_STATUS_RESPONSE ({} bytes): {}",
+    TC_LOG_DEBUG("housing", ">>> CMSG_HOUSING_HOUSE_STATUS (visitedPlot: {})", visitedPlot);
+    TC_LOG_DEBUG("housing", "<<< SMSG_HOUSING_HOUSE_STATUS_RESPONSE ({} bytes): {}",
         statusPkt->size(), HexDumpPacket(statusPkt));
     TC_LOG_ERROR("housing", "    HouseGuid={} AccountGuid={} OwnerPlayerGuid={} NeighborhoodGuid={} Status={} Permissions=0x{:02X}",
         response.HouseGuid.ToString(), response.AccountGuid.ToString(),
@@ -4718,7 +4723,7 @@ void WorldSession::HandleHousingGetPlayerPermissions(WorldPackets::Housing::Hous
         response.PermissionFlags = 0;
     }
     WorldPacket const* permPkt = response.Write();
-    TC_LOG_ERROR("housing", "<<< SMSG_HOUSING_GET_PLAYER_PERMISSIONS_RESPONSE ({} bytes): {}",
+    TC_LOG_DEBUG("housing", "<<< SMSG_HOUSING_GET_PLAYER_PERMISSIONS_RESPONSE ({} bytes): {}",
         permPkt->size(), HexDumpPacket(permPkt));
     TC_LOG_ERROR("housing", "    HouseGuid={} ResultCode={} PermissionFlags=0x{:02X}",
         response.HouseGuid.ToString(), response.ResultCode, response.PermissionFlags);
@@ -4793,7 +4798,7 @@ void WorldSession::HandleHousingGetCurrentHouseInfo(WorldPackets::Housing::Housi
     }
     response.Result = 0;
     WorldPacket const* houseInfoPkt = response.Write();
-    TC_LOG_ERROR("housing", "<<< SMSG_HOUSING_GET_CURRENT_HOUSE_INFO_RESPONSE ({} bytes) currentPlot={} HouseGuid={} OwnerGuid={} NeighborhoodGuid={} PlotIndex={} HouseLevel={}",
+    TC_LOG_DEBUG("housing", "<<< SMSG_HOUSING_GET_CURRENT_HOUSE_INFO_RESPONSE ({} bytes) currentPlot={} HouseGuid={} OwnerGuid={} NeighborhoodGuid={} PlotIndex={} HouseLevel={}",
         houseInfoPkt->size(), currentPlot,
         response.House.HouseGUID.ToString(), response.House.OwnerGUID.ToString(),
         response.House.NeighborhoodGUID.ToString(), response.House.PlotIndex, response.House.HouseLevel);

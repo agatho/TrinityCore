@@ -190,8 +190,13 @@ void WorldSession::HandleNeighborhoodCharterCreate(WorldPackets::Neighborhood::N
     charter.SetFactionFlags(neighborhoodCharterCreate.FactionFlags);
     charter.SetIsGuild(false);
 
-    // Creator auto-signs
-    charter.AddSignature(player->GetGUID());
+    // H-17: the creator does NOT count toward MIN_CHARTER_SIGNATURES. This used to
+    // call AddSignature(player->GetGUID()) under a "Creator auto-signs" comment, but
+    // AddSignature opens with a self-sign guard and returns false, so the call always
+    // failed and its result was discarded - the comment described behaviour that never
+    // happened. Stating the rule instead of pretending; whether the creator should
+    // count is a design decision, and the code now matches whichever way it is read
+    // today rather than claiming the opposite.
 
     // Persist to DB
     CharacterDatabaseTransaction trans = CharacterDatabase.BeginTransaction();
@@ -300,8 +305,13 @@ void WorldSession::HandleNeighborhoodCharterEdit(WorldPackets::Neighborhood::Nei
     charter.SetFactionFlags(neighborhoodCharterEdit.FactionFlags);
     charter.SetIsGuild(false);
 
-    // Creator auto-signs
-    charter.AddSignature(player->GetGUID());
+    // H-17: the creator does NOT count toward MIN_CHARTER_SIGNATURES. This used to
+    // call AddSignature(player->GetGUID()) under a "Creator auto-signs" comment, but
+    // AddSignature opens with a self-sign guard and returns false, so the call always
+    // failed and its result was discarded - the comment described behaviour that never
+    // happened. Stating the rule instead of pretending; whether the creator should
+    // count is a design decision, and the code now matches whichever way it is read
+    // today rather than claiming the opposite.
 
     // Re-persist
     CharacterDatabaseTransaction trans = CharacterDatabase.BeginTransaction();
@@ -453,6 +463,20 @@ void WorldSession::HandleNeighborhoodCharterAddSignature(WorldPackets::Neighborh
     // CharterGuid counter maps to charter DB ID
     uint64 charterId = neighborhoodCharterAddSignature.CharterGuid.GetCounter();
 
+    // H-25: only sign a charter this session was invited to sign. Session-scoped, so a
+    // relog means the requester has to ask again - a signature request is an
+    // in-the-moment offer, and nothing about it is persisted.
+    if (!HasPendingCharterSignatureRequest(charterId))
+    {
+        WorldPackets::Neighborhood::NeighborhoodCharterAddSignatureResponse response;
+        response.Result = static_cast<uint8>(HOUSING_RESULT_PERMISSION_DENIED);
+        SendPacket(response.Write());
+
+        TC_LOG_DEBUG("housing", "HandleNeighborhoodCharterAddSignature: Player {} was never asked to sign charter {}",
+            player->GetGUID().ToString(), charterId);
+        return;
+    }
+
     // Load charter from DB
     CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_SEL_NEIGHBORHOOD_CHARTER);
     stmt->setUInt64(0, charterId);
@@ -497,6 +521,10 @@ void WorldSession::HandleNeighborhoodCharterAddSignature(WorldPackets::Neighborh
         return;
     }
 
+    // H-25: one invitation, one signature. Without consuming it, a signer whose
+    // signature is later dropped by a charter edit could re-sign unasked.
+    ClearPendingCharterSignatureRequest(charterId);
+
     WorldPackets::Neighborhood::NeighborhoodCharterAddSignatureResponse response;
     response.Result = static_cast<uint8>(HOUSING_RESULT_SUCCESS);
     response.CharterGuid = neighborhoodCharterAddSignature.CharterGuid;
@@ -539,6 +567,13 @@ void WorldSession::HandleNeighborhoodCharterSendSignatureRequest(WorldPackets::N
     WorldPackets::Neighborhood::NeighborhoodCharterSignRequest signRequest;
     signRequest.CharterGuid = ObjectGuid::Create<HighGuid::Housing>(0, 0, 0, charterId);
     targetPlayer->SendDirectMessage(signRequest.Write());
+
+    // H-25: record that this player was actually asked. ADD_SIGNATURE takes the charter
+    // id straight from the client and charter ids are creator GUID counters, so without
+    // this the invite step is decorative and any charter can be signed by anyone who
+    // enumerates ids.
+    if (WorldSession* targetSession = targetPlayer->GetSession())
+        targetSession->AddPendingCharterSignatureRequest(charterId);
 
     // Acknowledge to the requester that the signature request was sent
     WorldPackets::Neighborhood::NeighborhoodCharterAddSignatureResponse ackResponse;
@@ -1908,7 +1943,7 @@ void WorldSession::HandleNeighborhoodOpenCornerstoneUI(WorldPackets::Neighborhoo
     WorldPacket const* pkt = response.Write();
     SendPacket(pkt);
 
-    TC_LOG_ERROR("housing", "=== SMSG_NEIGHBORHOOD_OPEN_CORNERSTONE_UI_RESPONSE (0x5C000A) ===\n"
+    TC_LOG_DEBUG("housing", "=== SMSG_NEIGHBORHOOD_OPEN_CORNERSTONE_UI_RESPONSE (0x5C000A) ===\n"
         "  PlotIndex={}, Cost={}, PurchaseStatus={}, CanPurchase={}, IsPlotOwned={}\n"
         "  PlotOwnerGuid: {} ({})\n"
         "  NeighborhoodGuid: {} ({})\n"
@@ -2111,7 +2146,7 @@ void WorldSession::HandleNeighborhoodGetRoster(WorldPackets::Neighborhood::Neigh
         }
     }
 
-    TC_LOG_ERROR("housing", "=== SMSG_NEIGHBORHOOD_GET_ROSTER_RESPONSE (0x5C000F) [handler] ===\n"
+    TC_LOG_DEBUG("housing", "=== SMSG_NEIGHBORHOOD_GET_ROSTER_RESPONSE (0x5C000F) [handler] ===\n"
         "  Result={}, Members={}, NeighborhoodName='{}'\n"
         "  GroupNeighborhoodGuid: {} ({})\n"
         "  GroupOwnerGuid: {} ({})\n"
