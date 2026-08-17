@@ -1647,22 +1647,52 @@ bool HouseInteriorMap::AddPlayerToMap(Player* player, bool initPlayer /*= true*/
                 // may have stale fragment formats (e.g., root MeshObjects with FHousingRoom_C that
                 // no longer exist in the current code). DespawnAll is safe here because the player
                 // hasn't received any entities yet (no DESTROY goes to the client).
+                //
+                // H-18: that justification holds for the owner arriving, who has received
+                // nothing yet - but not for anyone already standing in the interior.
+                // _roomsSpawned can be set by a visitor who pre-spawned the rooms through
+                // the offline-owner path, and that visitor HAS received the MeshObjects.
+                // Despawning here sends them a DESTROY and the house dissolves around them
+                // until the respawn lands. The stale-fragment problem the rebuild exists for
+                // is only possible for entities spawned by a PREVIOUS process; if someone
+                // else is standing in the map, this binary spawned what they are looking at
+                // and it is already current-format. So: rebuild when alone, leave the rooms
+                // standing when not.
+                bool spawnRooms = true;
                 if (_roomsSpawned)
-                    DespawnAllRoomMeshObjects();
-
-                TC_LOG_ERROR("housing", "HouseInteriorMap::AddPlayerToMap: === SPAWNING ROOMS ===");
-
-                for (Housing::Room const* room : housing->GetRooms())
                 {
-                    TC_LOG_ERROR("housing", "  Room: guid={} entryId={} slot={} grid=({},{}) orientation={} mirrored={}",
-                        room->Guid.ToString(), room->RoomEntryId, room->SlotIndex,
-                        room->GridX, room->GridY, room->Orientation, room->Mirrored);
+                    bool otherPlayersPresent = false;
+                    for (MapReference const& ref : GetPlayers())
+                    {
+                        if (ref.GetSource() != player)
+                        {
+                            otherPlayersPresent = true;
+                            break;
+                        }
+                    }
+
+                    if (otherPlayersPresent)
+                        spawnRooms = false;
+                    else
+                        DespawnAllRoomMeshObjects();
                 }
 
-                int32 faction = (player->GetTeamId() == TEAM_ALLIANCE)
-                    ? NEIGHBORHOOD_FACTION_ALLIANCE : NEIGHBORHOOD_FACTION_HORDE;
-                SpawnRoomMeshObjects(housing, faction);
-                _roomsSpawned = true;
+                if (spawnRooms)
+                {
+                    TC_LOG_ERROR("housing", "HouseInteriorMap::AddPlayerToMap: === SPAWNING ROOMS ===");
+
+                    for (Housing::Room const* room : housing->GetRooms())
+                    {
+                        TC_LOG_ERROR("housing", "  Room: guid={} entryId={} slot={} grid=({},{}) orientation={} mirrored={}",
+                            room->Guid.ToString(), room->RoomEntryId, room->SlotIndex,
+                            room->GridX, room->GridY, room->Orientation, room->Mirrored);
+                    }
+
+                    int32 faction = (player->GetTeamId() == TEAM_ALLIANCE)
+                        ? NEIGHBORHOOD_FACTION_ALLIANCE : NEIGHBORHOOD_FACTION_HORDE;
+                    SpawnRoomMeshObjects(housing, faction);
+                    _roomsSpawned = true;
+                }
             }
 
             // Always spawn interior decor (handles both first entry and re-entry).
