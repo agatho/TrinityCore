@@ -891,6 +891,26 @@ HousingResult Housing::PlaceDecorWithGuid(ObjectGuid decorGuid, uint32 decorEntr
     if (catalogItr == _catalog.end() || catalogItr->second.Count == 0)
         return HOUSING_RESULT_DECOR_NOT_FOUND_IN_STORAGE;
 
+    // H-09: decorGuid arrives from the client on the fallback path (no matching pending
+    // placement), and used to be trusted as the map key and the DB row id without ever
+    // being checked. Two consequences, both closed here.
+    //
+    // 1. _placedDecor[decorGuid] overwrote an existing entry in place. Re-sending the GUID
+    //    of something already placed destroyed the old record: its weight was never
+    //    returned to the budget (so the budget inflated permanently), the catalog was
+    //    still decremented, and the player silently lost the item that had been there.
+    //    Placement onto an occupied GUID is now refused instead of overwriting.
+    if (_placedDecor.contains(decorGuid))
+        return HOUSING_RESULT_INVALID_DECOR_ITEM;
+
+    // 2. A client-chosen counter never advanced s_nextDecorDbId, so the generator would
+    //    later hand the same id to a legitimate placement. Bump past it, the same way the
+    //    load path reconciles ids it did not issue.
+    uint64 const clientDbId = decorGuid.GetCounter();
+    uint64 expectedDbId = s_nextDecorDbId.load();
+    while (clientDbId >= expectedDbId && !s_nextDecorDbId.compare_exchange_weak(expectedDbId, clientDbId + 1))
+        ;
+
     // Remove from pending placements
     _pendingPlacements.erase(decorGuid);
 
