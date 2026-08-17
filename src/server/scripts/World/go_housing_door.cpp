@@ -194,14 +194,21 @@ public:
             {
                 // Permissions check. Prefer the live Housing object when the owner
                 // is online (the settingsFlags may have changed since the last DB
-                // write); fall back to any mirrored value we track.
-                uint32 settingsFlags = HOUSE_SETTING_DEFAULT;
-                Player* owner = ObjectAccessor::FindPlayer(plotInfo->OwnerGuid);
-                if (owner)
+                // write); fall back to the value mirrored onto PlotInfo at load.
+                //
+                // H-11: this used CanVisitorAccess, which returns false whenever
+                // `owner` is null - so every interior visit was refused while the
+                // owner was offline, regardless of their settings. CanVisitorAccessPlot
+                // resolves guild membership through CharacterCache and neighborhood
+                // membership through the Neighborhood objects, so it answers the same
+                // question with the owner logged out. It is the same function the
+                // teleport handler uses; the plot AreaTrigger now uses it too.
+                uint32 settingsFlags = plotInfo->HouseSettingsFlags;
+                if (Player* owner = ObjectAccessor::FindPlayer(plotInfo->OwnerGuid))
                     if (Housing const* oh = owner->GetHousing())
                         settingsFlags = oh->GetSettingsFlags();
 
-                if (!sHousingMgr.CanVisitorAccess(player, owner, settingsFlags, true))
+                if (!sHousingMgr.CanVisitorAccessPlot(player, plotInfo->OwnerGuid, settingsFlags, true))
                 {
                     TC_LOG_DEBUG("housing", "go_housing_door: Player {} denied interior access to plot {} "
                         "(owner {} flags 0x{:X})",

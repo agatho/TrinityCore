@@ -909,56 +909,6 @@ bool HousingMgr::CanVisitorAccessPlot(Player const* visitor, ObjectGuid ownerGui
     return false;
 }
 
-bool HousingMgr::CanVisitorAccess(Player const* visitor, Player const* owner, uint32 settingsFlags, bool isInterior) const
-{
-    if (!visitor || !owner)
-        return false;
-
-    // Owner always has access
-    if (visitor->GetGUID() == owner->GetGUID())
-        return true;
-
-    // Select the correct flag group based on access type
-    uint32 anyoneFlag    = isInterior ? HOUSE_SETTING_HOUSE_ACCESS_ANYONE    : HOUSE_SETTING_PLOT_ACCESS_ANYONE;
-    uint32 neighborsFlag = isInterior ? HOUSE_SETTING_HOUSE_ACCESS_NEIGHBORS : HOUSE_SETTING_PLOT_ACCESS_NEIGHBORS;
-    uint32 guildFlag     = isInterior ? HOUSE_SETTING_HOUSE_ACCESS_GUILD     : HOUSE_SETTING_PLOT_ACCESS_GUILD;
-    uint32 friendsFlag   = isInterior ? HOUSE_SETTING_HOUSE_ACCESS_FRIENDS   : HOUSE_SETTING_PLOT_ACCESS_FRIENDS;
-    uint32 partyFlag     = isInterior ? HOUSE_SETTING_HOUSE_ACCESS_PARTY     : HOUSE_SETTING_PLOT_ACCESS_PARTY;
-
-    // If no flags are set at all, default to open access (sniff behavior: plots are public by default)
-    uint32 accessMask = isInterior
-        ? (HOUSE_SETTING_HOUSE_ACCESS_ANYONE | HOUSE_SETTING_HOUSE_ACCESS_NEIGHBORS |
-           HOUSE_SETTING_HOUSE_ACCESS_GUILD | HOUSE_SETTING_HOUSE_ACCESS_FRIENDS | HOUSE_SETTING_HOUSE_ACCESS_PARTY)
-        : (HOUSE_SETTING_PLOT_ACCESS_ANYONE | HOUSE_SETTING_PLOT_ACCESS_NEIGHBORS |
-           HOUSE_SETTING_PLOT_ACCESS_GUILD | HOUSE_SETTING_PLOT_ACCESS_FRIENDS | HOUSE_SETTING_PLOT_ACCESS_PARTY);
-
-    if ((settingsFlags & accessMask) == 0)
-        return true; // No restrictions configured — open to all
-
-    if (settingsFlags & anyoneFlag)
-        return true;
-
-    if ((settingsFlags & partyFlag) && visitor->GetGroup() && visitor->GetGroup() == owner->GetGroup())
-        return true;
-
-    if ((settingsFlags & guildFlag) && visitor->GetGuildId() != 0 && visitor->GetGuildId() == owner->GetGuildId())
-        return true;
-
-    if ((settingsFlags & friendsFlag) && owner->GetSocial() && owner->GetSocial()->HasFriend(visitor->GetGUID()))
-        return true;
-
-    if ((settingsFlags & neighborsFlag))
-    {
-        // Check if both players are in the same neighborhood
-        Housing const* ownerHousing = owner->GetHousing();
-        Housing const* visitorHousing = visitor->GetHousing();
-        if (ownerHousing && visitorHousing &&
-            ownerHousing->GetNeighborhoodGuid() == visitorHousing->GetNeighborhoodGuid())
-            return true;
-    }
-
-    return false;
-}
 
 HousingResult HousingMgr::ValidateDecorPlacement(uint32 decorId, Position const& pos, uint32 houseLevel) const
 {

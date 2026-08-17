@@ -374,7 +374,11 @@ public:
 
     // Access control — checks if visitor can access a plot/house based on owner's settings
     // accessMask = HOUSE_SETTING_HOUSE_ACCESS_* for interior, HOUSE_SETTING_PLOT_ACCESS_* for exterior
-    bool CanVisitorAccess(Player const* visitor, Player const* owner, uint32 settingsFlags, bool isInterior) const;
+    // CanVisitorAccess(visitor, owner, ...) was removed (H-11): it returned false
+    // whenever `owner` was null, so every caller silently changed behaviour when the
+    // owner logged out - the door refused all visits, the plot AreaTrigger allowed
+    // all of them, and the permissions handler reported no access. Use
+    // CanVisitorAccessPlot, which answers the same question with the owner offline.
 
     // Same as CanVisitorAccess but works when owner is offline — uses CharacterCache + the
     // visitor's own social/group/guild/neighborhood data to resolve friend/party/guild/neighbor

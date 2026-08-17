@@ -763,6 +763,17 @@ static constexpr uint32 HOUSING_DECOR_CATEGORY_LIGHTING = 4;
 // separation between two exterior lights, in local decor space (yards) — replace
 // with the sniffed value once an outdoor-light placement capture exists.
 static constexpr float HOUSING_LIGHT_OVERLAP_RADIUS = 3.0f;
+
+// H-05 bound for CMSG_HOUSE_EXTERIOR_SET_HOUSE_POSITION. A player may nudge the
+// house around its own plot; they may not relocate it. The plot's placement
+// volume is the RoomWmoData geobox SpawnRoomForPlot uses (~+/-35 x +/-30 yards),
+// so these half-extents are deliberately a little wider than that - generous
+// enough never to reject a legitimate reposition, tight enough that the house
+// cannot be parked on a neighbour's plot or flung off the map. Before this the
+// handler validated std::isfinite() and nothing else, and the value was
+// persisted, so any finite coordinate survived a restart.
+static constexpr float HOUSING_MAX_HOUSE_PLOT_OFFSET_XY = 45.0f;
+static constexpr float HOUSING_MAX_HOUSE_PLOT_OFFSET_Z  = 50.0f;
 // m3/A6 decoration throttle: at most BURST place/move/remove ops per WINDOW_MS.
 // Generous enough for rapid legitimate redecorating, tight enough to cap the
 // AddToMap + synchronous-DB-write amplification a scripted client can drive.

@@ -71,19 +71,25 @@ struct at_housing_plot : AreaTriggerAI
         bool isOwnPlot = !ownerGuid.IsEmpty() && player->GetGUID() == ownerGuid;
 
         // Visitor access permission check — only matters for plots with an owner.
+        //
+        // H-11: the check used to sit inside `if (Player* owner = FindPlayer(...))`,
+        // so an offline owner meant the check was skipped entirely and access was
+        // GRANTED — the exact opposite of the door script, which refused every visit
+        // while the owner was offline. One setting, two implementations, opposite
+        // answers. Both now use CanVisitorAccessPlot, which handles the offline owner,
+        // and both fall back to the settings mirrored onto PlotInfo at load.
         if (!isOwnPlot && !ownerGuid.IsEmpty())
         {
+            uint32 settingsFlags = plotInfo ? plotInfo->HouseSettingsFlags : HOUSE_SETTING_DEFAULT;
             if (Player* owner = ObjectAccessor::FindPlayer(ownerGuid))
-            {
                 if (Housing const* ownerHousing = owner->GetHousing())
-                {
-                    if (!sHousingMgr.CanVisitorAccess(player, owner, ownerHousing->GetSettingsFlags(), false))
-                    {
-                        TC_LOG_DEBUG("housing", "at_housing_plot: Player {} denied plot access (owner {} flags 0x{:X})",
-                            player->GetGUID().ToString(), ownerGuid.ToString(), ownerHousing->GetSettingsFlags());
-                        return;
-                    }
-                }
+                    settingsFlags = ownerHousing->GetSettingsFlags();
+
+            if (!sHousingMgr.CanVisitorAccessPlot(player, ownerGuid, settingsFlags, false))
+            {
+                TC_LOG_DEBUG("housing", "at_housing_plot: Player {} denied plot access (owner {} flags 0x{:X})",
+                    player->GetGUID().ToString(), ownerGuid.ToString(), settingsFlags);
+                return;
             }
         }
 

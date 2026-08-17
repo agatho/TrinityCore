@@ -274,6 +274,18 @@ void WorldSession::HandleHouseExteriorSetHousePosition(WorldPackets::Housing::Ho
         return;
     }
 
+    // C1 gate: room and exterior geometry may only be mutated by the owner,
+    // standing on their own plot or inside their own interior. Without this the
+    // _housings[0] fallback lets the edit land on a house in another neighborhood,
+    // carrying coordinates from the wrong map.
+    if (!PlayerCanEditHousing(player, housing))
+    {
+        WorldPackets::Housing::HouseExteriorSetHousePositionResponse response;
+        response.Result = static_cast<uint8>(HOUSING_RESULT_NOT_ON_OWNED_PLOT);
+        SendPacket(response.Write());
+        return;
+    }
+
     if (!houseExteriorCommitPosition.HasPosition)
     {
         // HasPosition=false: the client is cancelling the position change, just acknowledge
@@ -296,6 +308,39 @@ void WorldSession::HandleHouseExteriorSetHousePosition(WorldPackets::Housing::Ho
         response.HouseGuid = housing->GetHouseGuid();
         SendPacket(response.Write());
         return;
+    }
+
+    // H-05: bound the position to the plot. isfinite() alone accepted any finite
+    // coordinate and SetHousePosition persists it, so the 10-piece structure and its
+    // door GO could be parked on a neighbour's plot or stranded off-map, surviving a
+    // restart. Decor already goes through ValidateDecorPlacement; the house did not.
+    if (HousingMap* housingMap = dynamic_cast<HousingMap*>(player->GetMap()))
+    {
+        if (Neighborhood const* neighborhood = housingMap->GetNeighborhood())
+        {
+            for (NeighborhoodPlotData const* plot : sHousingMgr.GetPlotsForMap(neighborhood->GetNeighborhoodMapID()))
+            {
+                if (plot->PlotIndex != static_cast<int32>(housing->GetPlotIndex()))
+                    continue;
+
+                if (std::fabs(posX - plot->HousePosition[0]) > HOUSING_MAX_HOUSE_PLOT_OFFSET_XY
+                    || std::fabs(posY - plot->HousePosition[1]) > HOUSING_MAX_HOUSE_PLOT_OFFSET_XY
+                    || std::fabs(posZ - plot->HousePosition[2]) > HOUSING_MAX_HOUSE_PLOT_OFFSET_Z)
+                {
+                    TC_LOG_INFO("housing", "CMSG_HOUSE_EXTERIOR_SET_HOUSE_POSITION: Player {} rejected - "
+                        "({:.1f}, {:.1f}, {:.1f}) is outside plot {} centred on ({:.1f}, {:.1f}, {:.1f})",
+                        player->GetGUID().ToString(), posX, posY, posZ, plot->PlotIndex,
+                        plot->HousePosition[0], plot->HousePosition[1], plot->HousePosition[2]);
+
+                    WorldPackets::Housing::HouseExteriorSetHousePositionResponse response;
+                    response.Result = static_cast<uint8>(HOUSING_RESULT_BOUNDS_FAILURE_PLOT);
+                    response.HouseGuid = housing->GetHouseGuid();
+                    SendPacket(response.Write());
+                    return;
+                }
+                break;
+            }
+        }
     }
 
     // Convert quaternion to facing angle for server-side storage
@@ -357,6 +402,18 @@ void WorldSession::HandleHouseExteriorLock(WorldPackets::Housing::HouseExteriorL
     {
         WorldPackets::Housing::HouseExteriorLockResponse response;
         response.Result = static_cast<uint8>(HOUSING_RESULT_HOUSE_NOT_FOUND);
+        SendPacket(response.Write());
+        return;
+    }
+
+    // C1 gate: room and exterior geometry may only be mutated by the owner,
+    // standing on their own plot or inside their own interior. Without this the
+    // _housings[0] fallback lets the edit land on a house in another neighborhood,
+    // carrying coordinates from the wrong map.
+    if (!PlayerCanEditHousing(player, housing))
+    {
+        WorldPackets::Housing::HouseExteriorLockResponse response;
+        response.Result = static_cast<uint8>(HOUSING_RESULT_NOT_ON_OWNED_PLOT);
         SendPacket(response.Write());
         return;
     }
@@ -2487,6 +2544,18 @@ void WorldSession::HandleHousingRoomSetLayoutEditMode(WorldPackets::Housing::Hou
         return;
     }
 
+    // C1 gate: room and exterior geometry may only be mutated by the owner,
+    // standing on their own plot or inside their own interior. Without this the
+    // _housings[0] fallback lets the edit land on a house in another neighborhood,
+    // carrying coordinates from the wrong map.
+    if (!PlayerCanEditHousing(player, housing))
+    {
+        WorldPackets::Housing::HousingRoomSetLayoutEditModeResponse response;
+        response.Result = static_cast<uint8>(HOUSING_RESULT_NOT_ON_OWNED_PLOT);
+        SendPacket(response.Write());
+        return;
+    }
+
     housing->SetEditorMode(housingRoomSetLayoutEditMode.Active ? HOUSING_EDITOR_MODE_LAYOUT : HOUSING_EDITOR_MODE_NONE);
 
     // Sniff-verified: retail sets UNIT_FLAG_PACIFIED, UNIT_FLAG2_NO_ACTIONS,
@@ -2590,6 +2659,18 @@ void WorldSession::HandleHousingRoomAdd(WorldPackets::Housing::HousingRoomAdd co
     {
         WorldPackets::Housing::HousingRoomAddResponse response;
         response.Result = static_cast<uint8>(HOUSING_RESULT_HOUSE_NOT_FOUND);
+        SendPacket(response.Write());
+        return;
+    }
+
+    // C1 gate: room and exterior geometry may only be mutated by the owner,
+    // standing on their own plot or inside their own interior. Without this the
+    // _housings[0] fallback lets the edit land on a house in another neighborhood,
+    // carrying coordinates from the wrong map.
+    if (!PlayerCanEditHousing(player, housing))
+    {
+        WorldPackets::Housing::HousingRoomAddResponse response;
+        response.Result = static_cast<uint8>(HOUSING_RESULT_NOT_ON_OWNED_PLOT);
         SendPacket(response.Write());
         return;
     }
@@ -2793,6 +2874,18 @@ void WorldSession::HandleHousingRoomRemove(WorldPackets::Housing::HousingRoomRem
         return;
     }
 
+    // C1 gate: room and exterior geometry may only be mutated by the owner,
+    // standing on their own plot or inside their own interior. Without this the
+    // _housings[0] fallback lets the edit land on a house in another neighborhood,
+    // carrying coordinates from the wrong map.
+    if (!PlayerCanEditHousing(player, housing))
+    {
+        WorldPackets::Housing::HousingRoomRemoveResponse response;
+        response.Result = static_cast<uint8>(HOUSING_RESULT_NOT_ON_OWNED_PLOT);
+        SendPacket(response.Write());
+        return;
+    }
+
     // Collect info BEFORE RemoveRoom erases data
     std::vector<ObjectGuid> roomDecorGuids;
     for (auto const* decor : housing->GetAllPlacedDecor())
@@ -2949,6 +3042,18 @@ void WorldSession::HandleHousingRoomRotate(WorldPackets::Housing::HousingRoomRot
         return;
     }
 
+    // C1 gate: room and exterior geometry may only be mutated by the owner,
+    // standing on their own plot or inside their own interior. Without this the
+    // _housings[0] fallback lets the edit land on a house in another neighborhood,
+    // carrying coordinates from the wrong map.
+    if (!PlayerCanEditHousing(player, housing))
+    {
+        WorldPackets::Housing::HousingRoomUpdateResponse response;
+        response.Result = static_cast<uint8>(HOUSING_RESULT_NOT_ON_OWNED_PLOT);
+        SendPacket(response.Write());
+        return;
+    }
+
     HousingResult result = housing->RotateRoom(housingRoomRotate.RoomGuid, housingRoomRotate.Clockwise);
 
     // Stairwell pair: if the rotated room is part of a stairwell stack, rotate
@@ -3022,6 +3127,18 @@ void WorldSession::HandleHousingRoomMoveRoom(WorldPackets::Housing::HousingRoomM
         return;
     }
 
+    // C1 gate: room and exterior geometry may only be mutated by the owner,
+    // standing on their own plot or inside their own interior. Without this the
+    // _housings[0] fallback lets the edit land on a house in another neighborhood,
+    // carrying coordinates from the wrong map.
+    if (!PlayerCanEditHousing(player, housing))
+    {
+        WorldPackets::Housing::HousingRoomUpdateResponse response;
+        response.Result = static_cast<uint8>(HOUSING_RESULT_NOT_ON_OWNED_PLOT);
+        SendPacket(response.Write());
+        return;
+    }
+
     HousingResult result = housing->MoveRoom(housingRoomMoveRoom.RoomGuid, housingRoomMoveRoom.TargetSlotIndex,
         housingRoomMoveRoom.TargetGuid, housingRoomMoveRoom.FloorIndex);
 
@@ -3048,6 +3165,18 @@ void WorldSession::HandleHousingRoomSetComponentTheme(WorldPackets::Housing::Hou
     {
         WorldPackets::Housing::HousingRoomSetComponentThemeResponse response;
         response.Result = static_cast<uint8>(HOUSING_RESULT_HOUSE_NOT_FOUND);
+        SendPacket(response.Write());
+        return;
+    }
+
+    // C1 gate: room and exterior geometry may only be mutated by the owner,
+    // standing on their own plot or inside their own interior. Without this the
+    // _housings[0] fallback lets the edit land on a house in another neighborhood,
+    // carrying coordinates from the wrong map.
+    if (!PlayerCanEditHousing(player, housing))
+    {
+        WorldPackets::Housing::HousingRoomSetComponentThemeResponse response;
+        response.Result = static_cast<uint8>(HOUSING_RESULT_NOT_ON_OWNED_PLOT);
         SendPacket(response.Write());
         return;
     }
@@ -3117,6 +3246,18 @@ void WorldSession::HandleHousingRoomApplyComponentMaterials(WorldPackets::Housin
         return;
     }
 
+    // C1 gate: room and exterior geometry may only be mutated by the owner,
+    // standing on their own plot or inside their own interior. Without this the
+    // _housings[0] fallback lets the edit land on a house in another neighborhood,
+    // carrying coordinates from the wrong map.
+    if (!PlayerCanEditHousing(player, housing))
+    {
+        WorldPackets::Housing::HousingRoomApplyComponentMaterialsResponse response;
+        response.Result = static_cast<uint8>(HOUSING_RESULT_NOT_ON_OWNED_PLOT);
+        SendPacket(response.Write());
+        return;
+    }
+
     HousingResult result = housing->ApplyRoomMaterial(housingRoomApplyComponentMaterials.RoomGuid,
         housingRoomApplyComponentMaterials.RoomComponentTextureID,
         housingRoomApplyComponentMaterials.ColorOverride,
@@ -3159,6 +3300,18 @@ void WorldSession::HandleHousingRoomSetDoorType(WorldPackets::Housing::HousingRo
     {
         WorldPackets::Housing::HousingRoomSetDoorTypeResponse response;
         response.Result = static_cast<uint8>(HOUSING_RESULT_HOUSE_NOT_FOUND);
+        SendPacket(response.Write());
+        return;
+    }
+
+    // C1 gate: room and exterior geometry may only be mutated by the owner,
+    // standing on their own plot or inside their own interior. Without this the
+    // _housings[0] fallback lets the edit land on a house in another neighborhood,
+    // carrying coordinates from the wrong map.
+    if (!PlayerCanEditHousing(player, housing))
+    {
+        WorldPackets::Housing::HousingRoomSetDoorTypeResponse response;
+        response.Result = static_cast<uint8>(HOUSING_RESULT_NOT_ON_OWNED_PLOT);
         SendPacket(response.Write());
         return;
     }
@@ -3208,6 +3361,18 @@ void WorldSession::HandleHousingRoomSetCeilingType(WorldPackets::Housing::Housin
     {
         WorldPackets::Housing::HousingRoomSetCeilingTypeResponse response;
         response.Result = static_cast<uint8>(HOUSING_RESULT_HOUSE_NOT_FOUND);
+        SendPacket(response.Write());
+        return;
+    }
+
+    // C1 gate: room and exterior geometry may only be mutated by the owner,
+    // standing on their own plot or inside their own interior. Without this the
+    // _housings[0] fallback lets the edit land on a house in another neighborhood,
+    // carrying coordinates from the wrong map.
+    if (!PlayerCanEditHousing(player, housing))
+    {
+        WorldPackets::Housing::HousingRoomSetCeilingTypeResponse response;
+        response.Result = static_cast<uint8>(HOUSING_RESULT_NOT_ON_OWNED_PLOT);
         SendPacket(response.Write());
         return;
     }
@@ -4505,8 +4670,11 @@ void WorldSession::HandleHousingGetPlayerPermissions(WorldPackets::Housing::Hous
                             if (plotHousing)
                             {
                                 response.HouseGuid = plotHousing->GetHouseGuid();
-                                Player* ownerPlayer = ObjectAccessor::FindPlayer(plotInfo->OwnerGuid);
-                                bool hasAccess = ownerPlayer && sHousingMgr.CanVisitorAccess(player, ownerPlayer, plotHousing->GetSettingsFlags(), false);
+                                // H-11: was CanVisitorAccess gated on `ownerPlayer &&`, which
+                                // reported "no permission" for every plot whose owner was
+                                // offline. Same rule, same function as the door and the plot AT.
+                                bool hasAccess = sHousingMgr.CanVisitorAccessPlot(player, plotInfo->OwnerGuid,
+                                    plotHousing->GetSettingsFlags(), false);
                                 response.PermissionFlags = hasAccess ? 0x40 : 0x00;
                             }
                         }
