@@ -322,14 +322,13 @@ void WorldSession::AddInstanceConnection(WorldSession* session, std::weak_ptr<Wo
     socket->SetWorldSession(session);
     session->m_Socket[CONNECTION_TYPE_INSTANCE] = std::move(socket);
 
-    // Opens the suspend window that HandleContinuePlayerLogin closes with SMSG_RESUME_COMMS one call
-    // below. The captures put SMSG_SUSPEND_COMMS exactly here: on the instance connection, right
-    // after CMSG_ENTER_ENCRYPTED_MODE_ACK, which is the call that lands us in this function.
-    WorldPackets::Auth::SuspendComms suspendComms(CONNECTION_TYPE_INSTANCE);
-    suspendComms.SerialNumber = SPECIAL_SUSPEND_COMMS_TIME_SYNC_COUNTER;
-    session->SendPacket(suspendComms.Write());
-    session->RegisterTimeSync(SPECIAL_SUSPEND_COMMS_TIME_SYNC_COUNTER);
-
+    // DISABLED (2026-08-18): sending SMSG_SUSPEND_COMMS here BREAKS enter-world. The 12.0.7 client
+    // receives SUSPEND_COMMS -> RESUME_COMMS and immediately disconnects (CMSG_LOG_DISCONNECT) before
+    // world entry - "login works, enter-world fails". It was added untested in 88bcee58de (its own
+    // message: "Nothing here has been compiled"). The pre-existing unpaired SMSG_RESUME_COMMS sent by
+    // HandleContinuePlayerLogin already works because a fresh instance connection behaves as suspended,
+    // so this "open bracket" is not needed. Re-enable ONLY after verifying the exact packet against a
+    // running client.
     session->HandleContinuePlayerLogin();
 }
 
