@@ -105,29 +105,33 @@ ON DUPLICATE KEY UPDATE `Text`=VALUES(`Text`), `Type`=VALUES(`Type`), `Language`
 --   at (4044.96, 254.76, 54.18, o 5.83) == Sendrax's spawn. scene_template 2920 already exists.
 --   No smart_scripts row plays it (action_type=129 exists 5x in DB, never with param1=2920).
 --
--- Sendrax's EXISTING SAI (source_type=0):  id=0 link=0 event=64(GOSSIP_HELLO) action=33
---   (CALL_KILLEDMONSTER) param1=187406 target_type=7  -> gives the "Sendrax found" credit.
--- This candidate CHAINS ON as a NEW row id=1 (does not touch id=0) using the SAME GOSSIP_HELLO
--- trigger, so the scene plays on the same interaction that already credits the objective.
+-- Sendrax's EXISTING SAI (source_type=0): id=0 event=64(GOSSIP_HELLO) action=33
+--   (CALL_KILLEDMONSTER) param1=187406 target_type=7 -> gives the "Sendrax found" credit.
+-- This chains a NEW row id=1 (does not touch id=0).
 --
--- TRIGGER = **UNCERTAIN** (flagged). GOSSIP_HELLO(64) is the most defensible (co-located with
--- the existing credit beat and the scene fired at her gossip). Alternatives the reviewer should
--- weigh: SMART_EVENT_ACCEPTED_QUEST(19, quest 65997) or SMART_EVENT_GOSSIP_SELECT(62). If the
--- scene should play once per player and not re-fire on every hello, add event_flags for
--- run-once / a quest-state condition at review time.
--- SMART_ACTION_SCENE_PLAY = 129, action_param1 = sceneId. target_type 1 = SMART_TARGET_SELF.
+-- TRIGGER = RESOLVED IN-GAME (2026-08-18). The first candidate used GOSSIP_HELLO + target
+-- SELF and NO cutscene played -- two bugs: (1) the capture timeline shows the scene fired
+-- ~4300 ticks AFTER the gossip opened, i.e. on SELECTING the option, not on window-open ->
+-- correct event is SMART_EVENT_GOSSIP_SELECT(62); (2) SMART_ACTION_SCENE_PLAY plays for a
+-- PLAYER, so the target must be the invoking player SMART_TARGET_ACTION_INVOKER(7), not SELF
+-- (Sendrax is not a player -> PlayScene never fired).
+-- The option is Sendrax's gossip menu 28097, OptionID 2 ("(Quest) What is happening here?",
+-- GossipOptionID 55225). GOSSIP_SELECT params = (menuID=28097, actionID=OptionID=2) -- verified
+-- empirically against existing GOSSIP_SELECT rows (actionID = the small per-menu OptionID,
+-- NOT the GossipOptionID). SMART_ACTION_SCENE_PLAY=129, action_param1=sceneId=2920 (scene_template
+-- 2920 exists; PlayScene(2920)). target_type 7 = SMART_TARGET_ACTION_INVOKER.
 
 INSERT INTO `smart_scripts`
  (`entryorguid`,`source_type`,`id`,`link`,`event_type`,`event_phase_mask`,`event_chance`,`event_flags`,
   `event_param1`,`event_param2`,`event_param3`,`event_param4`,
   `action_type`,`action_param1`,`action_param2`,`action_param3`,`action_param4`,`action_param5`,`action_param6`,
   `target_type`,`target_param1`,`target_param2`,`target_param3`,`target_param4`,`comment`) VALUES
- (187406, 0, 1, 0, 64, 0, 100, 0,
-  0, 0, 0, 0,
+ (187406, 0, 1, 0, 62, 0, 100, 0,
+  28097, 2, 0, 0,
   129, 2920, 0, 0, 0, 0, 0,
-  1, 0, 0, 0, 0,
-  'Sendrax - GOSSIP_HELLO - Play Scene 2920 [CANDIDATE; trigger UNCERTAIN: GOSSIP_HELLO assumed, alt ACCEPTED_QUEST(19,65997)/GOSSIP_SELECT(62); consider run-once flag/quest-state condition]')
-ON DUPLICATE KEY UPDATE `action_type`=VALUES(`action_type`), `action_param1`=VALUES(`action_param1`), `event_type`=VALUES(`event_type`), `comment`=VALUES(`comment`);
+  7, 0, 0, 0, 0,
+  'Sendrax - on gossip menu 28097 option 2 selected - Play Scene 2920 (quest 65997 Chasing Sendrax) [corrected after in-game no-play 2026-08-18: was GOSSIP_HELLO+SELF; re-test pending]')
+ON DUPLICATE KEY UPDATE `event_type`=VALUES(`event_type`), `event_param1`=VALUES(`event_param1`), `event_param2`=VALUES(`event_param2`), `action_type`=VALUES(`action_type`), `action_param1`=VALUES(`action_param1`), `target_type`=VALUES(`target_type`), `comment`=VALUES(`comment`);
 
 -- =====================================================================================
 -- END — review each row's confidence + uncertainty flag before applying to a feature branch.
