@@ -20,14 +20,18 @@
 -- do not map 1:1 onto either real table; this file authors against the REAL schema in both
 -- places, kept together here because the brief's Requirement 6 scopes them as one unit.
 --
--- ---- Money/XP: NO DELTA NEEDED for any of the 11 quests ----
--- wdb_quest_template.sql already carries the correct RewardBonusMoney/RewardXPDifficulty
--- for every quest with a live WDB row (5350/1 for 90882,83,85,86,87,88,97; 53500/5 for
--- 90893,95; 107000/6 for 90896 -- confirmed against plan Part 1.1's money/XP-tier column,
--- exact match). 90882/90883 are blank ONLY in their text columns (see 30_quest_template.sql)
--- -- their reward_money/reward_xp_difficulty are already populated correctly in the same
--- WDB row. 90911 is the hub terminus and has no reward at all (confirmed: no reward_money/
--- reward_items in either wdb_quest_template.sql or addon_quest_template.sql for 90911).
+-- ---- Money/XP: see 30_quest_template.sql (fix round 1 correction) ----
+-- 90882 and 90883 now get an EXPLICIT RewardBonusMoney/RewardXPDifficulty delta in
+-- 30_quest_template.sql (5350/1 each, plan Part 1.1 tier "t1") rather than being trusted
+-- from their own blank-text WDB rows -- reviewer correctly flagged that a row already
+-- known unreliable for text should not be silently trusted for its numeric fields either.
+-- The other 8 non-terminus quests (90885,86,87,88,93,95,96,97) have NON-blank WDB rows and
+-- keep their reward_money/reward_xp_difficulty TRUSTED-FROM-WORLD-DB (5350/1 for
+-- 85,86,87,88,97; 53500/5 for 93,95; 107000/6 for 96 -- exact match to plan Part 1.1's
+-- money/XP-tier column), pending Phase K verification against a real capture -- no delta
+-- authored for them here or in 30_quest_template.sql. 90911 is the hub terminus and has no
+-- reward at all (confirmed: no reward_money/reward_items in either wdb_quest_template.sql
+-- or addon_quest_template.sql for 90911).
 -- ============================================================================
 
 -- ---- SECTION 1 -- quest_offer_reward.RewardText (addon-sourced verbatim, [C]) ----

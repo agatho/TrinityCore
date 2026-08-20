@@ -20,14 +20,25 @@
 --   ID = QuestID*100 + StorageIndex*10 + row-within-StorageIndex
 -- e.g. 90882's five gnoll-credit rows (all StorageIndex 0) are 9088200..9088204.
 --
--- ---- Multi-target credit pattern (90882 gnolls, 90893 siege) ----
+-- ---- RESERVED SYNTHETIC KEY RANGES (fix round 1 documentation, no value change) ----
+-- This file reserves quest_objectives.ID range ~9088200-9091100 (QuestID*100+StorageIndex*10
+-- +row, per the scheme above); the companion file 31_quest_template_addon.sql reserves
+-- ExclusiveGroup values -190885 (farm trio) and -190893 (siege pair). Neither range is a
+-- real DB2/WDB-sourced value -- both are self-assigned by this task because none were
+-- captured. TODO Phase K: verify neither range collides with a real quest_objectives.ID or
+-- quest_template_addon.ExclusiveGroup value already present in the live world DB before
+-- this candidate SQL is ever applied to a branch.
+--
+-- ---- Multi-target credit pattern (90882 gnolls) ----
 -- Player::UpdateQuestObjectiveProgress (src/server/game/Entities/Player/Player.cpp:17854)
 -- looks up ALL quest_objectives rows matching (Type, ObjectID) via m_questObjectiveStatus,
 -- regardless of how many rows share a QuestID+StorageIndex -- so several creature entries
 -- can each independently increment the SAME player quest-slot counter (StorageIndex) as
 -- long as every row carries the same QuestID/StorageIndex/Amount. This is the standard TC
--- mechanism for "kill N of these several species" objectives; verified against this
--- worktree's Player.cpp, not guessed.
+-- mechanism for a plain "kill N of these several species" objective (90882); verified
+-- against this worktree's Player.cpp, not guessed. 90893's weighted PROGRESS_BAR objective
+-- below is a DIFFERENT pattern (each contributing species needs its OWN StorageIndex, not
+-- a shared one) -- see that section's banner for the fix-round-1 correction and why.
 -- ============================================================================
 
 -- ---- 90882 "Gnoll Way" -- Slay 10 gnolls within Hammerfall (5 creditable entries) ----
@@ -90,25 +101,53 @@ INSERT INTO `quest_objectives` (`ID`, `QuestID`, `Type`, `Order`, `StorageIndex`
 ON DUPLICATE KEY UPDATE `Type`=VALUES(`Type`), `Order`=VALUES(`Order`), `StorageIndex`=VALUES(`StorageIndex`), `ObjectID`=VALUES(`ObjectID`), `Amount`=VALUES(`Amount`), `Description`=VALUES(`Description`);
 
 -- ---- 90893 "Repelling the Siege" -- progress-bar objective (9 creditable entries) ----
--- [C] addon Description "Repel the Ogre Siege (0%)" -> stripped, Amount=100 (percent-to-
--- completion). Modeled as 9 Type=0 MONSTER credit rows sharing StorageIndex=0 (same
--- multi-target pattern as 90882) with an EQUAL ProgressBarWeight split (100/9 =~ 11.11 per
--- species) -- real retail per-species weighting is not recoverable from this capture, so
--- equal-split is a documented ASSUMPTION, not a captured value. TODO Phase K: replace with
--- real weights if a future capture records the progress-bar increments per kill.
+-- [C] addon Description "Repel the Ogre Siege (0%)" -> stripped. Modeled per this
+-- worktree's real engine mechanics (src/server/game/Quests/QuestDef.h:372-393,
+-- src/server/game/Entities/Player/Player.cpp:17971-17996/18254-18265/18401-18414),
+-- verified by direct code read, not assumed:
+--   * A MASTER row, Type=15 QUEST_OBJECTIVE_PROGRESS_BAR, its own StorageIndex, no
+--     PART_OF_PROGRESS_BAR flag -- this is the row `CanCompleteQuest`/
+--     `IsQuestObjectiveComplete` actually check quest-completion against.
+--   * 9 SUB rows, Type=0 MONSTER, `Flags`=64 (0x0040 QUEST_OBJECTIVE_FLAG_
+--     PART_OF_PROGRESS_BAR) -- `CanCompleteQuest` explicitly SKIPS these from its own
+--     per-objective completeness check (`!(obj.Flags & ...PART_OF_PROGRESS_BAR)` guard),
+--     delegating entirely to `IsQuestObjectiveProgressBarComplete`.
+--   * `IsQuestObjectiveProgressBarComplete` sums, per PART_OF_PROGRESS_BAR row,
+--     `GetQuestSlotObjectiveData(slot, obj) * obj.ProgressBarWeight` and completes at
+--     >=100.0. `GetQuestSlotObjectiveData` reads the player's per-StorageIndex kill
+--     counter for THAT row -- so every sub-row MUST have its OWN, DISTINCT StorageIndex
+--     (0-8 here; master row takes StorageIndex 9, within the 24-slot MAX_QUEST_COUNTS
+--     array, Player.h:699 / UpdateFields.h ObjectiveProgress[24]). Sharing one
+--     StorageIndex across all 9 (this file's original authoring, fixed here) would make
+--     every row read the SAME shared kill count, so
+--     `IsQuestObjectiveProgressBarComplete` would sum totalKills*(w1+...+w9) =
+--     totalKills*100 and complete after a single kill of ANY of the 9 species --
+--     caught and corrected in fix round 1, not part of the original review ask, but
+--     required for the fix to actually work per the traced engine logic above.
+-- Per-species ProgressBarWeight is an EQUAL split (100/9 =~ 11.11, remainder 0.01 on the
+-- last row so the pool sums to exactly 100.00) -- real retail per-species weighting is not
+-- recoverable from this capture; documented ASSUMPTION, not a captured value. TODO Phase K:
+-- replace with real weights if a future capture records the progress-bar increments per kill.
 -- Targets 244682/244685/244695/244711/244785/244691/244786/257072/244683 per plan Part 1.1
 -- (all confirmed in Task 1's 10_creature_template.sql).
-INSERT INTO `quest_objectives` (`ID`, `QuestID`, `Type`, `Order`, `StorageIndex`, `ObjectID`, `Amount`, `ProgressBarWeight`, `Description`) VALUES
- (9089300, 90893, 0, 0, 0, 244682, 100, 11.11, 'Repel the Ogre Siege'),  -- Kobold Waxmancer
- (9089301, 90893, 0, 0, 0, 244685, 100, 11.11, 'Repel the Ogre Siege'),  -- Ogre Basher
- (9089302, 90893, 0, 0, 0, 244695, 100, 11.11, 'Repel the Ogre Siege'),  -- Ettin Crusher
- (9089303, 90893, 0, 0, 0, 244711, 100, 11.11, 'Repel the Ogre Siege'),  -- Armored Cleaver
- (9089304, 90893, 0, 0, 0, 244785, 100, 11.11, 'Repel the Ogre Siege'),  -- Armored Cleaver
- (9089305, 90893, 0, 0, 0, 244691, 100, 11.11, 'Repel the Ogre Siege'),  -- Gnoll Charger
- (9089306, 90893, 0, 0, 0, 244786, 100, 11.11, 'Repel the Ogre Siege'),  -- Gnoll Charger
- (9089307, 90893, 0, 0, 0, 257072, 100, 11.12, 'Repel the Ogre Siege'),  -- Gnoll Biter (remainder to sum exactly 100)
- (9089308, 90893, 0, 0, 0, 244683, 100, 11.11, 'Repel the Ogre Siege')   -- Gnoll Prowler
-ON DUPLICATE KEY UPDATE `Type`=VALUES(`Type`), `Order`=VALUES(`Order`), `StorageIndex`=VALUES(`StorageIndex`), `ObjectID`=VALUES(`ObjectID`), `Amount`=VALUES(`Amount`), `ProgressBarWeight`=VALUES(`ProgressBarWeight`), `Description`=VALUES(`Description`);
+--
+-- 0-100% pool: 11.11(244682)+11.11(244685)+11.11(244695)+11.11(244711)+11.11(244785)
+--            +11.11(244691)+11.11(244786)+11.12(257072)+11.11(244683) = 100.00
+INSERT INTO `quest_objectives` (`ID`, `QuestID`, `Type`, `Order`, `StorageIndex`, `ObjectID`, `Amount`, `Flags`, `Description`) VALUES
+ (9089390, 90893, 15, 0, 9, 0, 100, 0, 'Repel the Ogre Siege')  -- MASTER progress-bar row, StorageIndex 9
+ON DUPLICATE KEY UPDATE `Type`=VALUES(`Type`), `Order`=VALUES(`Order`), `StorageIndex`=VALUES(`StorageIndex`), `ObjectID`=VALUES(`ObjectID`), `Amount`=VALUES(`Amount`), `Flags`=VALUES(`Flags`), `Description`=VALUES(`Description`);
+
+INSERT INTO `quest_objectives` (`ID`, `QuestID`, `Type`, `Order`, `StorageIndex`, `ObjectID`, `Amount`, `Flags`, `ProgressBarWeight`, `Description`) VALUES
+ (9089300, 90893, 0, 0, 0, 244682, 100, 64, 11.11, 'Repel the Ogre Siege'),  -- Kobold Waxmancer
+ (9089310, 90893, 0, 0, 1, 244685, 100, 64, 11.11, 'Repel the Ogre Siege'),  -- Ogre Basher
+ (9089320, 90893, 0, 0, 2, 244695, 100, 64, 11.11, 'Repel the Ogre Siege'),  -- Ettin Crusher
+ (9089330, 90893, 0, 0, 3, 244711, 100, 64, 11.11, 'Repel the Ogre Siege'),  -- Armored Cleaver
+ (9089340, 90893, 0, 0, 4, 244785, 100, 64, 11.11, 'Repel the Ogre Siege'),  -- Armored Cleaver
+ (9089350, 90893, 0, 0, 5, 244691, 100, 64, 11.11, 'Repel the Ogre Siege'),  -- Gnoll Charger
+ (9089360, 90893, 0, 0, 6, 244786, 100, 64, 11.11, 'Repel the Ogre Siege'),  -- Gnoll Charger
+ (9089370, 90893, 0, 0, 7, 257072, 100, 64, 11.12, 'Repel the Ogre Siege'),  -- Gnoll Biter (remainder to sum exactly 100)
+ (9089380, 90893, 0, 0, 8, 244683, 100, 64, 11.11, 'Repel the Ogre Siege')   -- Gnoll Prowler
+ON DUPLICATE KEY UPDATE `Type`=VALUES(`Type`), `Order`=VALUES(`Order`), `StorageIndex`=VALUES(`StorageIndex`), `ObjectID`=VALUES(`ObjectID`), `Amount`=VALUES(`Amount`), `Flags`=VALUES(`Flags`), `ProgressBarWeight`=VALUES(`ProgressBarWeight`), `Description`=VALUES(`Description`);
 
 -- ---- 90895 "Catapult Bombardment" -- Apply Jaina's Runes to 4 Catapults ----
 -- [C] addon Description "0/4 Catapults destroyed" -> stripped. Target 249269 Worn Catapult

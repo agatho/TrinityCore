@@ -24,6 +24,15 @@
 -- plan table's arrow (90887 for the farm trio, 90895 for the siege pair) carries a
 -- non-zero NextQuestID; siblings without an explicit "->" in the plan table keep
 -- NextQuestID=0 (their own PrevQuestID=90883/90888 already gates their availability).
+--
+-- ---- RESERVED SYNTHETIC KEY RANGES (fix round 1 documentation, no value change) ----
+-- This file reserves ExclusiveGroup values -190885 (farm trio) and -190893 (siege pair);
+-- the companion file 32_quest_objectives.sql reserves quest_objectives.ID range
+-- ~9088200-9091100 (QuestID*100+StorageIndex*10+row). Neither range is a real DB2/WDB-
+-- sourced value -- both are self-assigned by this task because none were captured.
+-- TODO Phase K: verify neither range collides with a real quest_template_addon.
+-- ExclusiveGroup or quest_objectives.ID value already present in the live world DB before
+-- this candidate SQL is ever applied to a branch.
 -- ============================================================================
 
 INSERT INTO `quest_template_addon` (`ID`, `PrevQuestID`, `NextQuestID`, `ExclusiveGroup`) VALUES
