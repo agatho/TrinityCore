@@ -61,7 +61,7 @@ INSERT INTO `creature_template_addon` (`entry`, `StandState`, `AnimTier`, `Sheat
 INSERT INTO `creature_template_addon` (`entry`, `StandState`, `AnimTier`, `SheathState`) VALUES (244676, 0, 0, 1) ON DUPLICATE KEY UPDATE `StandState`=VALUES(`StandState`), `AnimTier`=VALUES(`AnimTier`), `SheathState`=VALUES(`SheathState`);
 -- entry 244682 Kobold Waxmancer
 INSERT INTO `creature_template_addon` (`entry`, `StandState`, `AnimTier`, `SheathState`) VALUES (244682, 0, 0, 1) ON DUPLICATE KEY UPDATE `StandState`=VALUES(`StandState`), `AnimTier`=VALUES(`AnimTier`), `SheathState`=VALUES(`SheathState`);
--- entry 244683 Unknown
+-- entry 244683 Gnoll Prowler
 INSERT INTO `creature_template_addon` (`entry`, `StandState`, `AnimTier`, `SheathState`) VALUES (244683, 0, 0, 1) ON DUPLICATE KEY UPDATE `StandState`=VALUES(`StandState`), `AnimTier`=VALUES(`AnimTier`), `SheathState`=VALUES(`SheathState`);
 -- entry 244685 Ogre Basher
 INSERT INTO `creature_template_addon` (`entry`, `StandState`, `AnimTier`, `SheathState`) VALUES (244685, 0, 0, 1) ON DUPLICATE KEY UPDATE `StandState`=VALUES(`StandState`), `AnimTier`=VALUES(`AnimTier`), `SheathState`=VALUES(`SheathState`);

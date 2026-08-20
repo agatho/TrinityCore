@@ -93,18 +93,19 @@ INSERT INTO `creature_template` (`entry`, `name`, `minlevel`, `maxlevel`, `facti
 -- 244683 name resolved to 'Gnoll Prowler' (was 'Unknown' in the raw wdb/addon
 -- dumps) -- confirmed via conversation_actors.txt ('creatureEntry=244683
 -- name=\'Gnoll Prowler\' oracle=OK'), corroborated by emote_usage.txt and
--- synth_sai_report.txt (both label entry 244683 'Gnoll Prowler'). Authored
--- with the resolved name (not fabricated -- sourced from the conversation
--- actor oracle).
+-- synth_sai_report.txt (both label entry 244683 'Gnoll Prowler'). The resolved
+-- name 'Gnoll Prowler' is shipped in the INSERT VALUES below AND in every
+-- comment naming this entry across 10/10b/10d (not fabricated -- sourced from
+-- the conversation-actor oracle; NAME_OVERRIDE applied consistently).
 --
 -- 244669 Scavenging Hyena: BOTH addon_creature_template.sql and
--- wdb_creature_template.sql agree on rank=6, which is outside TrinityCore's
--- CreatureEliteType domain (0-4) and outside this task's stated 0-normal/
--- 1-elite range. Authored AS CAPTURED (source fidelity, no silent fix) with
--- this flag -- Phase K should confirm/clamp (most likely intent: 0 Normal, a
--- trash mob).
-  -- entry 244669 Scavenging Hyena [reaction=2 -> faction=14]
-INSERT INTO `creature_template` (`entry`, `name`, `minlevel`, `maxlevel`, `faction`, `npcflag`, `rank`, `type`, `unit_class`, `family`) VALUES (244669, 'Scavenging Hyena', 20, 20, 14, 0, 6, 1, 1, 25) ON DUPLICATE KEY UPDATE `name`=VALUES(`name`), `minlevel`=VALUES(`minlevel`), `maxlevel`=VALUES(`maxlevel`), `faction`=VALUES(`faction`), `npcflag`=VALUES(`npcflag`), `rank`=VALUES(`rank`), `type`=VALUES(`type`), `unit_class`=VALUES(`unit_class`), `family`=VALUES(`family`);
+-- wdb_creature_template.sql agree on a captured rank=6, which is outside
+-- TrinityCore's CreatureEliteType domain (0-4) and outside this task's stated
+-- 0-normal/1-elite range. NORMALIZED to rank=0 (Normal -- a Scavenging Hyena
+-- is a trash mob) rather than shipping a semantically-invalid value; see the
+-- inline TODO Phase K tag on the row below.
+  -- entry 244669 Scavenging Hyena [reaction=2 -> faction=14]  -- TODO Phase K: cache reported rank=6 (out-of-domain for CreatureEliteType 0-4); normalized to 0 (Normal)
+INSERT INTO `creature_template` (`entry`, `name`, `minlevel`, `maxlevel`, `faction`, `npcflag`, `rank`, `type`, `unit_class`, `family`) VALUES (244669, 'Scavenging Hyena', 20, 20, 14, 0, 0, 1, 1, 25) ON DUPLICATE KEY UPDATE `name`=VALUES(`name`), `minlevel`=VALUES(`minlevel`), `maxlevel`=VALUES(`maxlevel`), `faction`=VALUES(`faction`), `npcflag`=VALUES(`npcflag`), `rank`=VALUES(`rank`), `type`=VALUES(`type`), `unit_class`=VALUES(`unit_class`), `family`=VALUES(`family`);
   -- entry 244670 Gnoll Bowblaster [reaction=2 -> faction=14]
 INSERT INTO `creature_template` (`entry`, `name`, `minlevel`, `maxlevel`, `faction`, `npcflag`, `rank`, `type`, `unit_class`, `AIName`) VALUES (244670, 'Gnoll Bowblaster', 20, 20, 14, 0, 0, 7, 1, 'SmartAI') ON DUPLICATE KEY UPDATE `name`=VALUES(`name`), `minlevel`=VALUES(`minlevel`), `maxlevel`=VALUES(`maxlevel`), `faction`=VALUES(`faction`), `npcflag`=VALUES(`npcflag`), `rank`=VALUES(`rank`), `type`=VALUES(`type`), `unit_class`=VALUES(`unit_class`), `AIName`=VALUES(`AIName`);
   -- entry 244671 Gnoll Ripper [reaction=2 -> faction=14]
@@ -131,8 +132,8 @@ INSERT INTO `creature_template` (`entry`, `name`, `minlevel`, `maxlevel`, `facti
 INSERT INTO `creature_template` (`entry`, `name`, `minlevel`, `maxlevel`, `faction`, `npcflag`, `rank`, `type`, `unit_class`) VALUES (244674, 'Ogre Destroyer', 20, 20, 14, 0, 0, 7, 1) ON DUPLICATE KEY UPDATE `name`=VALUES(`name`), `minlevel`=VALUES(`minlevel`), `maxlevel`=VALUES(`maxlevel`), `faction`=VALUES(`faction`), `npcflag`=VALUES(`npcflag`), `rank`=VALUES(`rank`), `type`=VALUES(`type`), `unit_class`=VALUES(`unit_class`);
   -- entry 249254 Ogre Destroyer [reaction=2 -> faction=14]
 INSERT INTO `creature_template` (`entry`, `name`, `minlevel`, `maxlevel`, `faction`, `npcflag`, `rank`, `type`, `unit_class`) VALUES (249254, 'Ogre Destroyer', 20, 20, 14, 0, 0, 7, 1) ON DUPLICATE KEY UPDATE `name`=VALUES(`name`), `minlevel`=VALUES(`minlevel`), `maxlevel`=VALUES(`maxlevel`), `faction`=VALUES(`faction`), `npcflag`=VALUES(`npcflag`), `rank`=VALUES(`rank`), `type`=VALUES(`type`), `unit_class`=VALUES(`unit_class`);
-  -- entry 244683 Unknown [reaction=2 -> faction=14]
-INSERT INTO `creature_template` (`entry`, `name`, `minlevel`, `maxlevel`, `faction`, `npcflag`, `rank`, `type`, `unit_class`) VALUES (244683, 'Unknown', 20, 20, 14, 0, 0, 7, 1) ON DUPLICATE KEY UPDATE `name`=VALUES(`name`), `minlevel`=VALUES(`minlevel`), `maxlevel`=VALUES(`maxlevel`), `faction`=VALUES(`faction`), `npcflag`=VALUES(`npcflag`), `rank`=VALUES(`rank`), `type`=VALUES(`type`), `unit_class`=VALUES(`unit_class`);
+  -- entry 244683 Gnoll Prowler [reaction=2 -> faction=14]
+INSERT INTO `creature_template` (`entry`, `name`, `minlevel`, `maxlevel`, `faction`, `npcflag`, `rank`, `type`, `unit_class`) VALUES (244683, 'Gnoll Prowler', 20, 20, 14, 0, 0, 7, 1) ON DUPLICATE KEY UPDATE `name`=VALUES(`name`), `minlevel`=VALUES(`minlevel`), `maxlevel`=VALUES(`maxlevel`), `faction`=VALUES(`faction`), `npcflag`=VALUES(`npcflag`), `rank`=VALUES(`rank`), `type`=VALUES(`type`), `unit_class`=VALUES(`unit_class`);
 
 -- ---- Quest-interact CREATURES (type=7, subname='questinteract') ----
 -- subname is authored as the literal string 'questinteract' per Requirement 5,
