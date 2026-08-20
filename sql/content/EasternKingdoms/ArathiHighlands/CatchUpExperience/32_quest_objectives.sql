@@ -2,7 +2,7 @@
 -- CONTENT SLICE -- Arathi Catch-Up Experience :: Phase E quest objectives
 -- ============================================================================
 -- Branch: content   Path: sql/content/EasternKingdoms/ArathiHighlands/CatchUpExperience/
--- Server mapID: 2796  (client uiMapID 2451 is display-only, not used here)
+-- Server mapID: 2927 (CORRECTED from 2796 -- real server map, verified from wire; uiMap 2451 display-only)
 -- Source bundle: C:/dumps/tcharvest/out/catchup_zone/zone_2796/addon_quest_objectives.sql
 --   (live-counter Description text, stripped of its "N/M " progress prefix -- the DB
 --   stores the plain past-tense credit line, the client prepends the live counter),

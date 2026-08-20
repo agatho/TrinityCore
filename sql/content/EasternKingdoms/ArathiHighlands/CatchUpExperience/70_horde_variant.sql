@@ -3,7 +3,7 @@
 -- branch (quest 90898 "Back to Hammerfall")
 -- ============================================================================
 -- Branch: content   Path: sql/content/EasternKingdoms/ArathiHighlands/CatchUpExperience/
--- Server mapID: 2796  (client uiMapID 2451 is display-only, not used here)
+-- Server mapID: 2927 (CORRECTED from 2796 -- real server map, verified from wire; uiMap 2451 display-only)
 --
 -- STATUS: THIS IS A DOCUMENTED GAP STUB, NOT A CAPTURED HORDE QUESTLINE. The Horde
 -- run of the "Siege of Arathi Highlands" chain was NEVER CAPTURED (no addon dump, no

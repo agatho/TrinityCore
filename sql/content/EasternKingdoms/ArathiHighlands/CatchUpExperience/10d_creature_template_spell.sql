@@ -2,7 +2,7 @@
 -- CONTENT SLICE -- Arathi Catch-Up Experience :: Phase C creature/GO templates :: creature_template_spell
 -- ============================================================================
 -- Branch: content   Path: sql/content/EasternKingdoms/ArathiHighlands/CatchUpExperience/
--- Server mapID: 2796  (client uiMapID 2451 is display-only, not used here)
+-- Server mapID: 2927 (CORRECTED from 2796 -- real server map, verified from wire; uiMap 2451 display-only)
 -- Source bundle: C:/dumps/tcharvest/out/catchup_zone/zone_2796/ (TCHarvest self-serve capture)
 -- Sources used: addon_creature_template.sql, wdb_creature_template.sql,
 --   addon_creature_observed.txt (per-entry reaction), db2_creaturediff.sql

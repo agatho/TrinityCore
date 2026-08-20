@@ -2,7 +2,7 @@
 -- CONTENT SLICE -- Arathi Catch-Up Experience :: creature loot (Go'shek farm mobs)
 -- ============================================================================
 -- Branch: content   Path: sql/content/EasternKingdoms/ArathiHighlands/CatchUpExperience/
--- Server mapID: 2796  (client uiMapID 2451 is display-only, not used here)
+-- Server mapID: 2927 (CORRECTED from 2796 -- real server map, verified from wire; uiMap 2451 display-only)
 -- Source: C:/dumps/tcharvest/out/catchup_zone/zone_2796/creature_loot_template.sql
 --   (TCHarvest wire loot decoder, SMSG_LOOT_RESPONSE, opcode 0x4500BE), cross-confirmed
 --   against the addon loot_capture channel. sniff_loot_confidence.txt:

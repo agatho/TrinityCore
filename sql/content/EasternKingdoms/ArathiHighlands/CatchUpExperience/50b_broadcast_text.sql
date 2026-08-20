@@ -2,7 +2,7 @@
 -- CONTENT SLICE -- Arathi Catch-Up Experience :: Phase G narrative layer (broadcast_text)
 -- ============================================================================
 -- Branch: content   Path: sql/content/EasternKingdoms/ArathiHighlands/CatchUpExperience/
--- Server mapID: 2796
+-- Server mapID: 2927 (CORRECTED from 2796 -- real server map, verified from wire; uiMap 2451 display-only)
 -- Source bundle: C:/dumps/tcharvest/out/catchup_zone/zone_2796/ (TCHarvest self-serve
 --   capture): conversation_groups.txt (conversationId=0x021826bb group text) cross-
 --   referenced against broadcast_text.sql (bundle body empty -- new=0 changed=0 same=16,

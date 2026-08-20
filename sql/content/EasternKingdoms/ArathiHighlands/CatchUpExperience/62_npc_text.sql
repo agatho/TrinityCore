@@ -2,7 +2,7 @@
 -- CONTENT SLICE -- Arathi Catch-Up Experience :: Phase H npc_text (gossip bodies)
 -- ============================================================================
 -- Branch: content   Path: sql/content/EasternKingdoms/ArathiHighlands/CatchUpExperience/
--- Server mapID: 2796  (client uiMapID 2451 is display-only, not used here)
+-- Server mapID: 2927 (CORRECTED from 2796 -- real server map, verified from wire; uiMap 2451 display-only)
 -- Source bundle: C:/dumps/tcharvest/out/catchup_zone/zone_2796/addon_npc_text.sql (8 raw
 --   rows). Only the 2 rows belonging to NPCs THIS FEATURE OWNS (245026 Win'sa, 244714
 --   Jaina) are authored here per task-6-brief Req.5; the other 6 (npc:3370 guild, npc:5188

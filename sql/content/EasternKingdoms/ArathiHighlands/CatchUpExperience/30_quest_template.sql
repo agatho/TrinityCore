@@ -2,7 +2,7 @@
 -- CONTENT SLICE -- Arathi Catch-Up Experience :: Phase E quest_template deltas
 -- ============================================================================
 -- Branch: content   Path: sql/content/EasternKingdoms/ArathiHighlands/CatchUpExperience/
--- Server mapID: 2796  (client uiMapID 2451 is display-only, not used here)
+-- Server mapID: 2927 (CORRECTED from 2796 -- real server map, verified from wire; uiMap 2451 display-only)
 -- Source bundle: C:/dumps/tcharvest/out/catchup_zone/zone_2796/ (addon_quest_template.sql,
 --   wdb_quest_template.sql). Plan Part 1.1 (11-quest Alliance "Siege of Arathi Highlands"
 --   chain, 90882-90911). Depends on Task 1 creature_template (10_creature_template.sql)

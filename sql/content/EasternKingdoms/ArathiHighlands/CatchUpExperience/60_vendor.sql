@@ -2,7 +2,7 @@
 -- CONTENT SLICE -- Arathi Catch-Up Experience :: Phase H Win'sa vendor
 -- ============================================================================
 -- Branch: content   Path: sql/content/EasternKingdoms/ArathiHighlands/CatchUpExperience/
--- Server mapID: 2796  (client uiMapID 2451 is display-only, not used here)
+-- Server mapID: 2927 (CORRECTED from 2796 -- real server map, verified from wire; uiMap 2451 display-only)
 -- Source bundle: C:/dumps/tcharvest/out/catchup_zone/zone_2796/addon_npc_vendor.sql
 --   (22 raw rows: 5 for Win'sa 245026 + 17 for entry 5188). Entry 5188 is the Chromie-hub
 --   Timewalking-tabard vendor (see addon_npc_context.txt / addon_gossip_menu.sql

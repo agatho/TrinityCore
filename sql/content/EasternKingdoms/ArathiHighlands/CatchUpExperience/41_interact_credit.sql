@@ -2,7 +2,7 @@
 -- CONTENT SLICE -- Arathi Catch-Up Experience :: Final-review fix -- interact-credit SAI
 -- ============================================================================
 -- Branch: content   Path: sql/content/EasternKingdoms/ArathiHighlands/CatchUpExperience/
--- Server mapID: 2796
+-- Server mapID: 2927 (CORRECTED from 2796 -- real server map, verified from wire; uiMap 2451 display-only)
 -- Plan reference: .superpowers/sdd/CATCHUP_BLIZZLIKE_IMPLEMENTATION_PLAN/final-fix-brief.md
 --
 -- *** WHY THIS SLICE EXISTS ***

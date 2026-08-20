@@ -2,7 +2,7 @@
 -- CONTENT SLICE -- Arathi Catch-Up Experience :: Phase G narrative layer (creature_text)
 -- ============================================================================
 -- Branch: content   Path: sql/content/EasternKingdoms/ArathiHighlands/CatchUpExperience/
--- Server mapID: 2796
+-- Server mapID: 2927 (CORRECTED from 2796 -- real server map, verified from wire; uiMap 2451 display-only)
 -- Source bundle: C:/dumps/tcharvest/out/catchup_zone/zone_2796/creature_text.sql
 --   (16 rows, new=16 changed=0 same=16 against the reference -- captured verbatim).
 -- CANDIDATE ONLY -- review before applying to any branch. Never applied to a live

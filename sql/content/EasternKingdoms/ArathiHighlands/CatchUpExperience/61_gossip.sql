@@ -2,7 +2,7 @@
 -- CONTENT SLICE -- Arathi Catch-Up Experience :: Phase H gossip (vendor + outro)
 -- ============================================================================
 -- Branch: content   Path: sql/content/EasternKingdoms/ArathiHighlands/CatchUpExperience/
--- Server mapID: 2796  (client uiMapID 2451 is display-only, not used here)
+-- Server mapID: 2927 (CORRECTED from 2796 -- real server map, verified from wire; uiMap 2451 display-only)
 -- Source bundle: C:/dumps/tcharvest/out/catchup_zone/zone_2796/: creature_template_gossip.sql,
 --   gossip_menu_option.sql (properly-formed, real-schema captures for 39386/39348),
 --   addon_gossip_menu.sql, addon_gossip_menu_option.sql, addon_gossip_option_state.txt

@@ -2,7 +2,7 @@
 -- CONTENT SLICE -- Arathi Catch-Up Experience :: Phase E questgiver/turn-in links
 -- ============================================================================
 -- Branch: content   Path: sql/content/EasternKingdoms/ArathiHighlands/CatchUpExperience/
--- Server mapID: 2796  (client uiMapID 2451 is display-only, not used here)
+-- Server mapID: 2927 (CORRECTED from 2796 -- real server map, verified from wire; uiMap 2451 display-only)
 -- Source bundle: C:/dumps/tcharvest/out/catchup_zone/zone_2796/quest_structured_candidates.sql
 --   (hard-confirmed: 244643->90882 both queststarter and questender, [C hard]), plan
 --   Part 1.1 Giver/Ender columns for the remaining 10 quests (no further oracle rows were

@@ -2,7 +2,7 @@
 -- CONTENT SLICE -- Arathi Catch-Up Experience :: Phase E turn-in rewards
 -- ============================================================================
 -- Branch: content   Path: sql/content/EasternKingdoms/ArathiHighlands/CatchUpExperience/
--- Server mapID: 2796  (client uiMapID 2451 is display-only, not used here)
+-- Server mapID: 2927 (CORRECTED from 2796 -- real server map, verified from wire; uiMap 2451 display-only)
 -- Source bundle: C:/dumps/tcharvest/out/catchup_zone/zone_2796/quest_offer_reward.sql
 --   (RewardText, addon-captured verbatim) and addon_quest_template.sql (`reward_items`
 --   candidate choice rewards). Plan Part 1.1 money/XP-tier column + "Quest-authoring

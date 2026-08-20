@@ -2,7 +2,7 @@
 -- CONTENT SLICE -- Arathi Catch-Up Experience :: Phase E quest_poi_points (pin coords)
 -- ============================================================================
 -- Branch: content   Path: sql/content/EasternKingdoms/ArathiHighlands/CatchUpExperience/
--- Server mapID: 2796   client uiMapID 2451 (see 34_quest_poi.sql banner for source/caveats
+-- Server mapID: 2927 (CORRECTED from 2796 -- real server map, verified from wire; uiMap 2451 display-only)   client uiMapID 2451 (see 34_quest_poi.sql banner for source/caveats
 --   -- these points back the pins authored there, one (Idx1=1, Idx2=0) point per quest).
 -- X/Y/Z are integer world coordinates (schema: `X`/`Y`/`Z` int, matching the captured
 --   oracle rows' convention of plain truncated-int world coords, NOT a UiMap 0-100 scale).
