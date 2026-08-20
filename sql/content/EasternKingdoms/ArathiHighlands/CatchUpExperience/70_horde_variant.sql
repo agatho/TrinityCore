@@ -1,0 +1,211 @@
+-- ============================================================================
+-- CONTENT SLICE -- Arathi Catch-Up Experience :: Phase K stub -- Horde finale
+-- branch (quest 90898 "Back to Hammerfall")
+-- ============================================================================
+-- Branch: content   Path: sql/content/EasternKingdoms/ArathiHighlands/CatchUpExperience/
+-- Server mapID: 2796  (client uiMapID 2451 is display-only, not used here)
+--
+-- STATUS: THIS IS A DOCUMENTED GAP STUB, NOT A CAPTURED HORDE QUESTLINE. The Horde
+-- run of the "Siege of Arathi Highlands" chain was NEVER CAPTURED (no addon dump, no
+-- WDB cache rows, no sniff for anything Hammerfall-side). Only ONE fact about 90898 is
+-- retail-confirmed (Wowhead): its existence and its ID, as the Horde mirror of Alliance
+-- 90897, both hanging off 90896 "One Last Ogre" and both feeding 90911 "Your Next
+-- Adventure". Every other Horde-specific field authored below is either (a) direct
+-- branch-wiring math that follows mechanically from that one fact plus this worktree's
+-- own engine source, or (b) explicitly flagged inferred-by-analogy text, never
+-- fabricated as if captured. See the "PHASE-K HORDE-CAPTURE GAPS" banner at the bottom
+-- for the full list of what is NOT authored here.
+--
+-- CANDIDATE ONLY -- review before applying to any branch. Never applied to a live DB/realm.
+-- Idempotent (INSERT ... ON DUPLICATE KEY UPDATE -> re-apply safe).
+--
+-- DEPENDS ON (read-only): 30_quest_template.sql / 31_quest_template_addon.sql /
+-- 33_creature_quest_links.sql (Task 3, Alliance chain, owns 90882-90897/90911's rows --
+-- NOT re-inserted or altered here except the single idempotent partial-column UPDATE to
+-- 90911's PrevQuestID documented in section 2, which is a bug-fix completion of Task 3's
+-- own single-branch-only wiring, not a change to anything Task 3 actually authored for
+-- 90897). Must run AFTER 31_quest_template_addon.sql (file-order 70_ > 31_ already
+-- guarantees this) since section 2's UPDATE assumes the 90911 row already exists.
+-- ============================================================================
+
+
+-- ============================================================================
+-- 1) quest_template (90898 "Back to Hammerfall") -- minimal stub row
+-- ============================================================================
+-- LogTitle 'Back to Hammerfall' is the one retail-confirmed fact (Wowhead). Everything
+-- else below is either inferred-by-analogy (flagged [INFERRED]) or a real engine-level
+-- computation (AllowableRaces).
+--
+-- QuestDescription (the in-game "objectives" line) is authored as "Meet Thrall within
+-- Hammerfall" -- [INFERRED] by direct textual analogy to 90897's own QuestDescription
+-- "Meet Jaina within Stromgarde Keep" (see 32_quest_objectives.sql:166-172's companion
+-- Type=3 TALKTO objective for 90897, target 244714 Jaina) -- swapping Jaina->Thrall and
+-- Stromgarde Keep->Hammerfall per the brief's explicit instruction. This is NOT a
+-- captured string; it is a same-shaped placeholder so the quest is minimally
+-- self-consistent, pending Phase-K capture of the real text.
+--
+-- LogDescription (the quest-giver's spoken/flavor text) is intentionally OMITTED
+-- (left NULL, the column's schema default -- world_database.sql:3605) rather than
+-- filled with any placeholder string: unlike QuestDescription, no analogous short-form
+-- text exists to mirror (90897's own LogDescription is a full narrative paragraph, not
+-- reproduced in this Task's SQL either -- it's "trusted from world DB" per Task 3's
+-- 30_quest_template.sql banner, i.e. still not visible to us here) and inventing
+-- multi-sentence Thrall dialogue would cross from "inferred by analogy" into "fabricated
+-- as real". TODO Phase K: author LogDescription once a Horde capture (or a Wowhead/
+-- wowdb text pull explicitly sourced and cited) provides it.
+--
+-- RewardBonusMoney=5350 / RewardXPDifficulty=1 -- tier 1, by direct analogy to 90897
+-- and the rest of this chain's terminus-adjacent quests (30_quest_template.sql /
+-- 32_quest_objectives.sql precedent: every 908xx quest in this chain except the two
+-- "siege pair" quests 90893/90895 (tier 5) and 90896 (tier 6) is tier 1).
+--
+-- AllowableRaces = RACEMASK_HORDE, computed from THIS worktree's
+-- src/server/game/Miscellaneous/RaceMask.h (RACEMASK_HORDE_v = RACEMASK_ALL_PLAYABLE_v
+-- & ~(RACEMASK_NEUTRAL_v | RACEMASK_ALLIANCE_v), RaceMask.h:290), same method Task 3
+-- used for 90897's RACEMASK_ALLIANCE=2973060173 (30_quest_template.sql:78-87, sanity-
+-- checked by recomputing it here too and getting the identical value). Bit set (raceId,
+-- GetRaceBit() per RaceMask.h:97-147): {1 Orc, 4 Undead, 5 Tauren, 7 Troll, 8 Goblin,
+-- 9 BloodElf, 12 Vulpera, 13 Mag'har Orc, 15 Dracthyr(Horde), 17 Earthen(Horde),
+-- 19 Haranir(Horde), 25 Pandaren(Horde), 26 Nightborne, 27 Highmountain Tauren,
+-- 30 Zandalari Troll}. Sum of 2^bit = 1309324210.
+INSERT INTO `quest_template` (`ID`, `LogTitle`, `QuestDescription`, `RewardBonusMoney`, `RewardXPDifficulty`, `AllowableRaces`) VALUES
+ (90898, 'Back to Hammerfall',
+'Meet Thrall within Hammerfall', -- [INFERRED] analogy to 90897's "Meet Jaina within Stromgarde Keep" -- TODO Phase K
+5350, 1,
+1309324210) -- RACEMASK_HORDE, see banner above
+ON DUPLICATE KEY UPDATE `LogTitle`=VALUES(`LogTitle`), `QuestDescription`=VALUES(`QuestDescription`), `RewardBonusMoney`=VALUES(`RewardBonusMoney`), `RewardXPDifficulty`=VALUES(`RewardXPDifficulty`), `AllowableRaces`=VALUES(`AllowableRaces`);
+
+
+-- ============================================================================
+-- 2) quest_template_addon -- branch wiring for 90898, plus a required fix to
+--    90911's PrevQuestID so the shared terminus accepts EITHER faction finale
+-- ============================================================================
+--
+-- ---- 2a) 90898 itself: PrevQuestID=90896 (shared final Alliance/Horde ancestor,
+-- "One Last Ogre"), NextQuestID=90911 ("Your Next Adventure"), ExclusiveGroup=0. ----
+-- Mirrors 90897's own row exactly (31_quest_template_addon.sql:47-48:
+-- `(90896, 90895, 90897, 0)` / `(90897, 90896, 90911, 0)`).
+INSERT INTO `quest_template_addon` (`ID`, `PrevQuestID`, `NextQuestID`, `ExclusiveGroup`) VALUES
+ (90898, 90896, 90911, 0)
+ON DUPLICATE KEY UPDATE `PrevQuestID`=VALUES(`PrevQuestID`), `NextQuestID`=VALUES(`NextQuestID`), `ExclusiveGroup`=VALUES(`ExclusiveGroup`);
+
+-- ---- 2b) DECISION: AllowableRaces-only gating between 90897/90898, NOT a shared
+-- ExclusiveGroup. Reasoning, verified by reading this worktree's own engine source
+-- (not assumed): ----
+--
+-- The brief's Requirement 2 offered two options: "shared ExclusiveGroup (negative) OR
+-- rely on AllowableRaces to gate them per faction". A negative shared ExclusiveGroup is
+-- actively WRONG for this exact scenario and would have broken 90911 for BOTH factions
+-- if used -- traced via:
+--   * ObjectMgr.cpp:5292-5299 -- at load time, for EVERY quest with a nonzero
+--     NextQuestID, the engine automatically appends that quest's OWN id onto
+--     `<NextQuestID target>.DependentPreviousQuests`. Since both 90897.NextQuestID=90911
+--     (Task 3) and 90898.NextQuestID=90911 (section 2a above) are set, 90911's
+--     DependentPreviousQuests is auto-populated at runtime as [90897, 90898] -- NO SQL
+--     row encodes this list; it is purely reverse-derived from NextQuestID. This is the
+--     literal TC mechanism for "multiple predecessor quests funnel into one".
+--   * Player.cpp:15472-15476 (SatisfyQuestDependentQuests) requires BOTH
+--     SatisfyQuestPreviousQuest (the single scalar PrevQuestID field -- Player.cpp:
+--     15478-15503) AND SatisfyQuestDependentPreviousQuests (the auto-derived list above
+--     -- Player.cpp:15505-15546) to pass.
+--   * SatisfyQuestDependentPreviousQuests (Player.cpp:15517-15522): for each entry in
+--     the auto-derived list, "if IsQuestRewarded(prevId) return true" UNCONDITIONALLY
+--     as long as `questInfo->GetExclusiveGroup() >= 0` for that specific prev quest --
+--     i.e. plain OR-semantics (any ONE of 90897/90898 rewarded suffices) is the DEFAULT
+--     behavior precisely because both already carry ExclusiveGroup=0 (non-negative).
+--   * If either 90897 or 90898 carried a NEGATIVE ExclusiveGroup instead (the brief's
+--     first option), Player.cpp:15524-15546 flips to "each-from-all" semantics: it would
+--     then require EVERY quest in that exclusive group to ALSO be rewarded before 90911
+--     unlocks -- meaning a Horde player would need 90897 (Alliance-only, structurally
+--     impossible for them to ever complete) rewarded too. That would permanently lock
+--     90911 for both factions. CONFIRMED WRONG for this case; not used.
+--
+-- Therefore: 90897 and 90898 are left with ExclusiveGroup=0 (already true for 90897,
+-- Task 3's original value; set explicitly to 0 for 90898 in 2a above), and the
+-- faction split is enforced ENTIRELY by AllowableRaces (section 1's Horde mask here;
+-- 90897's Alliance mask in 30_quest_template.sql) -- a player only ever sees the one
+-- quest matching their own race, so the auto-derived OR-list on 90911 never actually
+-- offers a player the "wrong" branch; it only needs to accept whichever ONE the player
+-- legitimately completed.
+--
+-- ---- 2c) REQUIRED FIX: 90911.PrevQuestID 90897 -> 0 (idempotent partial-column UPDATE,
+-- does not touch NextQuestID/ExclusiveGroup or any other 90911 column). ----
+-- Task 3's original 90911 row (31_quest_template_addon.sql:49: `(90911, 90897, 0, 0)`)
+-- hardcoded PrevQuestID=90897 -- correct for an Alliance-only chain at the time it was
+-- authored, but SatisfyQuestPreviousQuest (Player.cpp:15478-15503) checks PrevQuestID as
+-- a SINGLE scalar id; it has no OR capability of its own. Left at 90897, a Horde player
+-- who rewards 90898 would satisfy the auto-derived SatisfyQuestDependentPreviousQuests
+-- check (section 2b) but FAIL SatisfyQuestPreviousQuest outright (90897 never rewarded,
+-- can't be, wrong race) -- and SatisfyQuestDependentQuests requires BOTH to pass
+-- (Player.cpp:15474, logical AND). Net effect: 90911 would stay permanently locked for
+-- every Horde character. Setting PrevQuestID=0 makes SatisfyQuestPreviousQuest a no-op
+-- (Player.cpp:15481-15482, `if (!qInfo->GetPrevQuestId()) return true;`), leaving
+-- SatisfyQuestDependentPreviousQuests (90897 OR 90898 rewarded) as 90911's sole and
+-- CORRECT gate for both factions. This is the "PrevQuestID handling for a faction-split
+-- predecessor" the brief's Requirement 2 asks to be resolved and commented.
+INSERT INTO `quest_template_addon` (`ID`, `PrevQuestID`) VALUES
+ (90911, 0)
+ON DUPLICATE KEY UPDATE `PrevQuestID`=VALUES(`PrevQuestID`);
+
+
+-- ============================================================================
+-- 3) creature_questender / creature_queststarter for 90898 -- NOT authored live
+-- ============================================================================
+-- The Horde questgiver/ender entry is UNKNOWN -- not captured. Per Requirement 3, this
+-- would be analogous to the Alliance pairing 244667 (giver, "Jaina, siege climax") /
+-- 244714 (ender/hub, "Jaina, Stromgarde Keep hub") from 33_creature_quest_links.sql:26,
+-- 41-42 -- the Horde equivalent is presumed to be a Thrall clone pair at/near Hammerfall,
+-- but its creature_template entry has never been captured or created (no Task 1 row
+-- exists for it, unlike every Alliance giver/ender in this chain).
+--
+-- Per the brief: author WITH a placeholder rather than skip silently, but do NOT
+-- fabricate a working link -- entry 0 is not a real creature (ObjectMgr.cpp:8575-8577 /
+-- 8589-8591 logs `Table 'creature_questender/queststarter' has data for nonexistent
+-- creature entry (0)` at world load for any row using it), so the statements below are
+-- left as INERT SQL COMMENTS (never executed even if this file were ever applied) rather
+-- than live INSERTs of a row we know is broken. Do NOT reuse 244667/244714 (Alliance
+-- Jaina) for a Horde turn-in -- that would silently misattribute the quest to the wrong
+-- faction's NPC if this file were ever applied verbatim.
+--
+-- TODO Phase K: Horde questgiver entry (analogous to Alliance 244667->244714 Jaina;
+-- Horde equivalent is a Thrall clone, entry uncaptured). Once a real entry exists
+-- (Task-1-style creature_template row from a Horde capture), uncomment and fill in:
+--
+-- INSERT INTO `creature_queststarter` (`id`, `quest`) VALUES
+--  (0, 90898)  -- TODO Phase K: replace 0 with the real Horde giver entry (Thrall clone, Hammerfall)
+-- ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `quest`=VALUES(`quest`);
+--
+-- INSERT INTO `creature_questender` (`id`, `quest`) VALUES
+--  (0, 90898)  -- TODO Phase K: replace 0 with the real Horde ender entry (Thrall clone, Hammerfall hub)
+-- ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `quest`=VALUES(`quest`);
+--
+-- The 90911 hub's OWN giver/ender (currently 244714 Jaina only, 33_creature_quest_links.sql:
+-- 27/42) is also Alliance-only in practice today -- a Horde player who rewards 90898 has no
+-- creature anywhere that offers/accepts 90911 for them either. That gap belongs to the same
+-- Phase-K Horde-capture item above (the Thrall-clone hub NPC), not a separate one.
+
+
+-- ============================================================================
+-- 4) PHASE-K HORDE-CAPTURE GAPS -- explicitly NOT authored in this task
+-- ============================================================================
+-- Everything below requires a real Horde playthrough capture (addon dump / sniff /
+-- WDB cache) of the "Siege of Arathi Highlands" Horde path before it can be authored as
+-- candidate SQL. None of it is guessed or stubbed above:
+--   * Horde questgiver/ender creature_template entries (Thrall clone(s) at Hammerfall
+--     and at the 90911 hub) -- entry IDs, model, npcflag, gossip_menu_id (mirroring
+--     Task 1's 244643/244655-244667/244714 Jaina/Thrall clone rows for the Alliance side).
+--   * Hammerfall-side creature spawns for the Horde mirror of this chain's encounters
+--     (90882's gnoll fight already happens at Hammerfall in the SHARED opening -- only
+--     the LATER, faction-diverging Stromgarde-vs-Hammerfall content is unconfirmed).
+--   * Horde-side PhaseIds/phase_area rows analogous to Task 2's 15901-15905 (Alliance
+--     narrative phasing) -- whether the Horde finale phases the zone at all, and how.
+--   * Dialogue text: 90898's LogDescription (flavor/narrative paragraph, see section 1
+--     banner) and any Conversation/creature_text rows for the Horde finale.
+--   * quest_objectives row(s) for 90898 -- out of this task's scope (Requirements 1-3
+--     only), but note for whoever picks this up: 90897's own objective
+--     (32_quest_objectives.sql:166-172, ID 9089700, Type=3 TALKTO, target 244714 Jaina)
+--     cannot be mirrored for 90898 until the Horde ender entry above exists -- do not
+--     reuse 244714 there either.
+--   * quest_poi / quest_poi_points for 90898 (Hammerfall-side map markers).
+--   * Any Horde-specific gossip_menu / npc_text content at the Hammerfall hub.
+-- ============================================================================
