@@ -57,13 +57,14 @@
 -- ALL positions in this file are [A]-approximate.
 --
 -- ---- NOTE on y-range vs. brief guidance ----
--- The brief's verification guidance approximates y in "-1000..-1600". The genuine
--- addon-captured y span for in-scope map-2796 rows is actually -870.3 (Ro'grok,
--- climax cluster) to -1642.5 (wildlife-area edge) -- wider than that rough estimate,
--- but still unambiguously server-map-2796 Arathi space, NOT bleed. Bleed rows (map-85
--- Chromie hub, map-84 Dornogal) sit in a completely different coordinate regime
--- (x~=+330 / -4200..-4380, y~=+1550..+1600 / -8300..-8315) and are excluded entirely
--- (see "DROPPED / bleed" list at the end of this banner).
+-- The brief's verification guidance approximates y in "-1000..-1600". The actual
+-- authored y span across all 65 rows in this file is -1569.1 (Stromgarde Citizen/
+-- Beggar, 229955/230004, addon-captured) to -860.3 (Ogre Basher climax "wave" #3,
+-- 8000305, a TODO-placeholder offset near Ro'grok) -- wider than that rough estimate
+-- at the top end, but still unambiguously server-map-2796 Arathi space, NOT bleed.
+-- Bleed rows (map-85 Chromie hub, map-84 Dornogal) sit in a completely different
+-- coordinate regime (x~=+330 / -4200..-4380, y~=+1550..+1600 / -8300..-8315) and are
+-- excluded entirely (see "DROPPED / bleed" list at the end of this banner).
 --
 -- ---- DROPPED entries (captured in addon_creature_spawns.sql map=2451 subset but
 -- NOT spawned here) -- bleed, not in Task 1's creature_template, or off-scope:
@@ -188,7 +189,7 @@ INSERT INTO `creature` (`guid`,`id`,`map`,`PhaseId`,`position_x`,`position_y`,`p
 ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES(`PhaseId`), `position_x`=VALUES(`position_x`), `position_y`=VALUES(`position_y`), `position_z`=VALUES(`position_z`), `orientation`=VALUES(`orientation`), `spawntimesecs`=VALUES(`spawntimesecs`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
 
 -- ============================================================================
--- PHASE 2 (PhaseId 15902) -- Go'shek / Dabyrie's Farmstead -- guid 8000100-8000111
+-- PHASE 2 (PhaseId 15902) -- Go'shek / Dabyrie's Farmstead -- guid 8000100-8000113
 -- Spawns on 90883 rewarded (see 22_conditions_phasing.sql). Quests 90885/86/87.
 -- ============================================================================
 
