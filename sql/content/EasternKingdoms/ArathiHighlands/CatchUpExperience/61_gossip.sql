@@ -1,36 +1,42 @@
 -- ============================================================================
--- CONTENT SLICE -- Arathi Catch-Up Experience :: Phase H gossip (vendor + entry + outro)
+-- CONTENT SLICE -- Arathi Catch-Up Experience :: Phase H gossip (vendor + outro)
 -- ============================================================================
 -- Branch: content   Path: sql/content/EasternKingdoms/ArathiHighlands/CatchUpExperience/
 -- Server mapID: 2796  (client uiMapID 2451 is display-only, not used here)
 -- Source bundle: C:/dumps/tcharvest/out/catchup_zone/zone_2796/: creature_template_gossip.sql,
 --   gossip_menu_option.sql (properly-formed, real-schema captures for 39386/39348),
 --   addon_gossip_menu.sql, addon_gossip_menu_option.sql, addon_gossip_option_state.txt
---   (REVIEW-ONLY behavioral capture -- see Section 3 note below).
+--   (REVIEW-ONLY behavioral capture -- see the Chromie reference block at the end of this
+--   file for why it is NOT authored as live data).
 -- CANDIDATE ONLY -- review before applying to any branch. Never applied to a live DB/realm.
 -- Idempotent (INSERT ... ON DUPLICATE KEY UPDATE -> re-apply safe).
 -- ============================================================================
--- SCHEMA NOTE (applies to all 3 menus below): the bundle's addon-captured
+-- FIX ROUND 1 (task-6 review): this file originally also authored a competing root
+-- gossip menu for Chromie (CreatureID 167032, MenuID 167032). Engine-verified regression:
+-- `Player::GetGossipMenuForSource` iterates `creature_template_gossip` as a flat vector
+-- and the LAST menu whose gossip_menu conditions pass wins; an unconditioned
+-- (167032,167032) row sorts after the shipped chromie-time menu (167032,25426) and would
+-- SILENTLY OVERRIDE Chromie's real menu server-wide for every Chromie interaction on the
+-- realm -- a live regression of already-shipped content. REMOVED. See the reference block
+-- at the end of this file for the captured data and the correct place for it (an option
+-- under the EXISTING menu 25426, chromie-time feature's domain, not authored here).
+-- ============================================================================
+-- SCHEMA NOTE (applies to the 2 menus below): the bundle's addon-captured
 -- gossip_menu_option rows use a SHORTHAND column set (menuid, optionindex, text, icon,
 -- OptionID) that is NOT the literal `gossip_menu_option` table. Cross-referencing the
 -- bundle's two PROPERLY-formed rows (39386/39348, sourced from a real capture that
 -- already used the live schema) shows the addon's "OptionID" field is actually the real
 -- table's `GossipOptionID` column (the DB2 "flavor" id), while the real table's
 -- `OptionID` column (PK component, PRIMARY KEY (MenuID,OptionID)) is a per-menu ordinal
--- NOT captured by the addon. For menu 167032 (no properly-formed capture exists, unlike
--- 39386/39348) this file maps the addon's captured `optionindex` (0-7, real observed
--- display order) 1:1 onto the real `OptionID` ordinal column -- the same pattern already
--- shipped for Chromie's OTHER root menu 25426 in 2026_08_09_20_world.sql (OptionID
--- 0,1,2,3 = GossipOptionID 51901,51902,51903,109278 in display order).
+-- NOT captured by the addon.
 -- ============================================================================
 
 -- ============================================================================
--- SECTION 1 -- creature_template_gossip (all 3 in-scope NPCs)
+-- SECTION 1 -- creature_template_gossip (in-scope NPCs owned by THIS feature only)
 -- ============================================================================
 INSERT INTO `creature_template_gossip` (`CreatureID`, `MenuID`, `VerifiedBuild`) VALUES
 (245026, 39386, 69382), -- Win'sa, Food Vendor (task-1 npcflag=129)
-(244714, 39348, 69382), -- Lady Jaina Proudmoore, Stromgarde Keep hub clone (task-1 npcflag=1)
-(167032, 167032, 69382) -- Chromie, entry-launch hub NPC on map 85 (NOT map 2796 -- see Section 3)
+(244714, 39348, 69382)  -- Lady Jaina Proudmoore, Stromgarde Keep hub clone (task-1 npcflag=1)
 ON DUPLICATE KEY UPDATE `VerifiedBuild`=VALUES(`VerifiedBuild`);
 
 -- ============================================================================
@@ -38,8 +44,7 @@ ON DUPLICATE KEY UPDATE `VerifiedBuild`=VALUES(`VerifiedBuild`);
 -- ============================================================================
 INSERT INTO `gossip_menu` (`MenuID`, `TextID`, `VerifiedBuild`) VALUES
 (39386, 39386, 69382),
-(39348, 39348, 69382),
-(167032, 167032, 69382)
+(39348, 39348, 69382)
 ON DUPLICATE KEY UPDATE `VerifiedBuild`=VALUES(`VerifiedBuild`);
 
 -- ============================================================================
@@ -64,65 +69,45 @@ INSERT INTO `gossip_menu_option` (`MenuID`, `GossipOptionID`, `OptionID`, `Optio
 ON DUPLICATE KEY UPDATE `GossipOptionID`=VALUES(`GossipOptionID`), `OptionNpc`=VALUES(`OptionNpc`), `OptionText`=VALUES(`OptionText`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
 
 -- ============================================================================
--- SECTION 3c -- gossip_menu_option 167032 (Chromie entry-launch hub, map 85)
+-- REFERENCE ONLY -- Chromie (167032) captured timeline-picker options (map 85)
+-- NOT LIVE DATA. No creature_template_gossip / gossip_menu / gossip_menu_option row is
+-- authored for these anywhere in this file (FIX ROUND 1 -- see header note above).
+--
+-- Why this NPC has no data here at all:
 -- Chromie (167032) is a hub NPC on map 85 (Eastern Kingdoms overworld), NOT inside the
--- instance -- this is GOSSIP DATA ONLY. Do NOT author a `creature` spawn row for her in
--- this content slice (map 2796 has no Chromie spawn; confirmed absent from
--- 20_creature_spawns.sql). The "launch the Arathi Catch-Up" action itself (Movie 470 +
--- teleport into map 2796, per addon_movie_capture.txt: movieID=470, map=85,
--- last_npc=167032, context_quests=51443,62568) is wired by C++ on OptionID 51901/51902,
--- deferred to Task 7 -- this file only supplies the static menu text/order.
+-- Arathi Catch-Up instance (map 2796) -- she was never in this feature's ownership.
+-- This content branch ALREADY ships her real root gossip menu, MenuID 25426
+-- (2026_08_09_20_world.sql / 2026_08_15_00_world_chromie_faq.sql -- the "Chromie Time"
+-- feature's own capture: options 51901/51902/51903/109278 + FAQ submenu 31336).
+-- `creature_template_gossip` PK is (CreatureID,MenuID); TrinityCore's
+-- `Player::GetGossipMenuForSource` walks that table as a FLAT VECTOR and the LAST menu
+-- whose gossip_menu conditions pass wins -- so adding a second, unconditioned
+-- (167032,167032) row (as this file originally did) sorts after the shipped (167032,25426)
+-- row and SILENTLY OVERRIDES Chromie's real menu server-wide, for every Chromie
+-- interaction on the realm. That is a live regression, not a scoped addition -- removed.
 --
--- NOTE ON THE EXISTING MENU 25426: this content branch already ships a DIFFERENT root
--- gossip menu for creature 167032 (MenuID 25426, `creature_template_gossip` also has a
--- (167032,25426) row from 2026_08_09_20_world.sql / 2026_08_15_00_world_chromie_faq.sql
--- -- the general "Chromie Time" feature's own capture, options 51901/51902/51903/109278
--- + FAQ submenu 31336). `creature_template_gossip` PK is (CreatureID,MenuID), so adding
--- (167032,167032) alongside the existing (167032,25426) is NOT a PK conflict -- TC allows
--- multiple candidate root menus per creature template; which one actually opens for the
--- Arathi Catch-Up launch context is a script/C++ concern (Task 7), not resolved here.
--- MenuID 167032 itself is a SELF-REFERENTIAL id (MenuID==CreatureID), matching the
--- bundle's own addon_gossip_menu.sql placeholder convention for this session's capture --
--- it is NOT asserted to be a real Blizzard-assigned menu id, only a locally-reserved slot
--- for this session's distinct option layout (which differs from 25426: no OptionNpc=40 /
--- GossipNpcOptionID=32282 custom-UI opener was captured for THIS menu).
+-- What was actually captured this session (addon_gossip_menu_option.sql + the REVIEW-ONLY
+-- addon_gossip_option_state.txt), preserved verbatim below for provenance / Phase-K reuse:
+--   optionindex 0: OptionID 51901 '|cFF0000FF(Recommended)|r Select a timeline.'  -- launch action
+--   optionindex 1: OptionID 51902 'Select a different timeline.'                 -- launch action
+--                  ALT (quest-state-gated, Q51443-only context): 109315 'What are Timewalking Campaigns?'
+--   optionindex 2: OptionID 51903 'I''d like to return to the present timeline, Chromie.' -- exit
+--                  ALT (quest-state-gated, Q51443-only context): 109313 'Can my friends join me?'
+--   optionindex 3: OptionID 109314 'What if I don''t want to stay in the timeline I chose?'
+--   optionindex 4: OptionID 109276 'I want to talk about something else.'
+--   optionindex 5: OptionID 109278 'I have a question about Timewalking Campaigns.'
+--   optionindex 6: OptionID 109317 'I want to explore the afterlives.'
+--   optionindex 7: OptionID 109316 'I have another question.'
+-- (The 109315/109313 alternates are NOT simultaneous options -- addon_gossip_option_state.txt
+-- shows they replace 51902/51903 under a different quest-state context; the session never
+-- resolved the triggering condition. Not authorable as static always-visible rows without
+-- fabricating that condition.)
 --
--- Primary 8 rows: addon_gossip_menu_option.sql, verbatim text/order (optionindex 0-7).
+-- Canonical retail entry point for the Arathi Catch-Up launch is the Adventure Guide
+-- (AdventureJournal DB2 row, Task 7 / player_catchup_enter.cpp) -- NOT this Chromie
+-- gossip path. If the captured Chromie-Time timeline-picker flow above is ever wanted as
+-- an ADDITIONAL entry into the Catch-Up Experience, it must be added as an OPTION under
+-- the EXISTING menu 25426 (ActionMenuID wiring on one of its options, or a new
+-- GossipOptionID within that menu) -- that is the chromie-time feature's domain, not this
+-- one's. Flagged as a cross-feature Phase-K coordination item; not actioned here.
 -- ============================================================================
-INSERT INTO `gossip_menu_option` (`MenuID`, `GossipOptionID`, `OptionID`, `OptionNpc`, `OptionText`, `OptionBroadcastTextID`, `Language`, `Flags`, `ActionMenuID`, `ActionPoiID`, `GossipNpcOptionID`, `BoxCoded`, `BoxMoney`, `BoxText`, `BoxBroadcastTextID`, `SpellID`, `OverrideIconID`, `VerifiedBuild`) VALUES
-(167032, 51901,  0, 0, '|cFF0000FF(Recommended)|r Select a timeline.', 0, 0, 0, 0, 0, NULL, 0, 0, NULL, 0, NULL, NULL, 69382), -- optionindex 0: launch action (Task 7)
-(167032, 51902,  1, 0, 'Select a different timeline.', 0, 0, 0, 0, 0, NULL, 0, 0, NULL, 0, NULL, NULL, 69382),                 -- optionindex 1: launch action (Task 7)
-(167032, 51903,  2, 0, 'I''d like to return to the present timeline, Chromie.', 0, 0, 0, 0, 0, NULL, 0, 0, NULL, 0, NULL, NULL, 69382), -- optionindex 2: exit
-(167032, 109314, 3, 0, 'What if I don''t want to stay in the timeline I chose?', 0, 0, 0, 0, 0, NULL, 0, 0, NULL, 0, NULL, NULL, 69382),
-(167032, 109276, 4, 0, 'I want to talk about something else.', 0, 0, 0, 0, 0, NULL, 0, 0, NULL, 0, NULL, NULL, 69382),
-(167032, 109278, 5, 0, 'I have a question about Timewalking Campaigns.', 0, 0, 0, 0, 0, NULL, 0, 0, NULL, 0, NULL, NULL, 69382),
-(167032, 109317, 6, 0, 'I want to explore the afterlives.', 0, 0, 0, 0, 0, NULL, 0, 0, NULL, 0, NULL, NULL, 69382),
-(167032, 109316, 7, 0, 'I have another question.', 0, 0, 0, 0, 0, NULL, 0, 0, NULL, 0, NULL, NULL, 69382)
-ON DUPLICATE KEY UPDATE `GossipOptionID`=VALUES(`GossipOptionID`), `OptionText`=VALUES(`OptionText`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
-
--- ---- Question-option quest-state ALTERNATES (task-6-brief Req.3: "109278/109315/109313
--- verbatim") ----
--- addon_gossip_option_state.txt (REVIEW-ONLY behavioral capture; explicitly NOT a
--- TrinityCore world table -- "Do NOT author INSERT SQL from this file blindly") shows
--- optionindex 1 and 2 each have a SECOND observed text, gated by quest state, that this
--- session's capture never resolves the trigger condition for:
---   optionindex 1: 51902 "Select a different timeline." (context Q51443,62568 / L10)
---                  vs 109315 "What are Timewalking Campaigns?" (context Q51443 only / L11)
---   optionindex 2: 51903 "I'd like to return..." (context Q51443,62568 / L10)
---                  vs 109313 "Can my friends join me?" (context Q51443 only / L11)
--- Both members of each pair are captured verbatim below as their OWN OptionID slots
--- (8/9) rather than collapsed onto slots 1/2 -- `gossip_menu_option`'s PK is
--- (MenuID,OptionID), so two different GossipOptionID values cannot share one OptionID
--- row. Authoring them as always-visible rows would be WRONG (retail shows only one
--- member of each pair at a time, gated by quest/Chromie-Time state) -- proper gating
--- needs `conditions` rows keyed the same way MenuID 25426's are (CONDITION_SOURCE_TYPE_
--- GOSSIP_MENU_OPTION=15 on SourceGroup=167032, SourceEntry=<OptionID>), which requires
--- knowing which quest/CT-state condition selects each pair member -- NOT captured this
--- session (the state-capture file only proves the pair EXISTS, not its trigger). Left as
--- an explicit GAP for Task 7 / a future capture pass; rows are present-but-unconditioned
--- (currently 10 total on this menu, all statically visible) rather than fabricated
--- guesses at the condition.
-INSERT INTO `gossip_menu_option` (`MenuID`, `GossipOptionID`, `OptionID`, `OptionNpc`, `OptionText`, `OptionBroadcastTextID`, `Language`, `Flags`, `ActionMenuID`, `ActionPoiID`, `GossipNpcOptionID`, `BoxCoded`, `BoxMoney`, `BoxText`, `BoxBroadcastTextID`, `SpellID`, `OverrideIconID`, `VerifiedBuild`) VALUES
-(167032, 109315, 8, 0, 'What are Timewalking Campaigns?', 0, 0, 0, 0, 0, NULL, 0, 0, NULL, 0, NULL, NULL, 69382), -- alt of optionindex 1 (51902) -- GAP: condition-gate unresolved
-(167032, 109313, 9, 0, 'Can my friends join me?', 0, 0, 0, 0, 0, NULL, 0, 0, NULL, 0, NULL, NULL, 69382)         -- alt of optionindex 2 (51903) -- GAP: condition-gate unresolved
-ON DUPLICATE KEY UPDATE `GossipOptionID`=VALUES(`GossipOptionID`), `OptionText`=VALUES(`OptionText`), `VerifiedBuild`=VALUES(`VerifiedBuild`);

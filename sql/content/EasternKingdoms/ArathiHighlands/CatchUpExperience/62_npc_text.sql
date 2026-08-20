@@ -4,19 +4,21 @@
 -- Branch: content   Path: sql/content/EasternKingdoms/ArathiHighlands/CatchUpExperience/
 -- Server mapID: 2796  (client uiMapID 2451 is display-only, not used here)
 -- Source bundle: C:/dumps/tcharvest/out/catchup_zone/zone_2796/addon_npc_text.sql (8 raw
---   rows). Only the 3 rows belonging to this task's in-scope NPCs (245026 Win'sa, 244714
---   Jaina, 167032 Chromie) are authored here per task-6-brief Req.5; the other 5
---   (npc:3370 guild, npc:5188 Chromie-hub tabard vendor, npc:189600/189603 dracthyr
---   intro, npc:241677 Sunwell) are OUT OF SCOPE for this task (not among 61_gossip.sql's
---   3 NPCs) and are not authored.
+--   rows). Only the 2 rows belonging to NPCs THIS FEATURE OWNS (245026 Win'sa, 244714
+--   Jaina) are authored here per task-6-brief Req.5; the other 6 (npc:3370 guild, npc:5188
+--   Chromie-hub tabard vendor, npc:167032 Chromie, npc:189600/189603 dracthyr intro,
+--   npc:241677 Sunwell) are OUT OF SCOPE and are not authored. Chromie (167032) in
+--   particular is a map-85 hub NPC never owned by this feature -- see FIX ROUND 1 note
+--   in 61_gossip.sql: her real gossip menu (25426) already ships elsewhere on this
+--   branch, and this file must not touch her data (removed here, was previously
+--   authored present-but-inert; see 61_gossip.sql's reference block for the captured
+--   text, preserved there for provenance instead).
 --
 -- SCHEMA NOTE: `npc_text` has no direct text column -- gossip body text is indirected
 -- through `BroadcastTextID0..7` (hotfixes-DB lookup). The bundle's addon_npc_text.sql
 -- gives only raw plain-text strings keyed by a placeholder 'npc:<id>' id (not a literal,
--- insertable npc_text row). Real broadcastTextIds for 2 of the 3 lines were cross-found
--- verbatim in conversation_groups.txt (same session capture, same exact text strings);
--- the 3rd (Chromie) has no broadcastTextId anywhere in the bundle -- left as an explicit
--- GAP rather than fabricated (see Section 2).
+-- insertable npc_text row). Real broadcastTextIds for both in-scope lines were cross-found
+-- verbatim in conversation_groups.txt (same session capture, same exact text strings).
 --
 -- CANDIDATE ONLY -- review before applying to any branch. Never applied to a live DB/realm.
 -- Idempotent (INSERT ... ON DUPLICATE KEY UPDATE -> re-apply safe).
@@ -49,17 +51,3 @@ INSERT INTO `npc_text` (`ID`, `Probability0`, `BroadcastTextID0`, `VerifiedBuild
 (39386, 1, 290606, 69382), -- Win'sa: "I got what ya need here."
 (39348, 1, 290473, 69382)  -- Jaina: "I know of a few places that could use your help."
 ON DUPLICATE KEY UPDATE `BroadcastTextID0`=VALUES(`BroadcastTextID0`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
-
--- ---- Chromie (167032) -- GAP: no broadcastTextId captured ----
--- addon_npc_text.sql captured the raw string verbatim:
---   "Hey there, Agathorz! Wherever you want to go, I can help you get there!
---
---   Time works in mysterious ways, but you don't look like a stranger to mystery."
--- ...but unlike Win'sa/Jaina, this exact string does not appear anywhere in
--- conversation_groups.txt (nor any other bundle file with a broadcastTextId attached), so
--- there is no real id to bind. Authored present-but-inert (BroadcastTextID0=0, matching
--- the column DEFAULT) rather than inventing one -- gossip body will render empty until a
--- future capture/DB2 search resolves the real broadcastTextId (Phase K).
-INSERT INTO `npc_text` (`ID`, `Probability0`, `BroadcastTextID0`, `VerifiedBuild`) VALUES
-(167032, 1, 0, 69382)
-ON DUPLICATE KEY UPDATE `VerifiedBuild`=VALUES(`VerifiedBuild`);
