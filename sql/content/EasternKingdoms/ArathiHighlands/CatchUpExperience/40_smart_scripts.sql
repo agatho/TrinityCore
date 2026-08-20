@@ -36,6 +36,11 @@
 --    the raw combat log for entry 244675 only directly captured the DEATH-
 --    triggered cast, not a separate HEALTH_PCT-triggered one. Flagged inline;
 --    unconfirmed, human must verify before enabling.
+--  * HORDE-XVAL ADD (2026-08-21): the Horde run directly observed Runk casting
+--    317547 at HP<=30% + death, proving Runk's real repertoire is the SAME pair
+--    as Ro'grok {305913, 317547} -- a Runk HEALTH_PCT<=20% -> CAST 317547 row
+--    (id4, mirroring Ro'grok id1) is now authored below, cross-capture-confirmed.
+--    Spell name still UNRESOLVED (Phase K).
 --  * EXCLUDED as capture artifacts (present in combatlog_smart_scripts.sql but
 --    NOT authored here because they are not corroborated by the plan sec 1.4
 --    evidence table, and are almost certainly "last spell observed before the
@@ -47,7 +52,14 @@
 --      244709 DEATH->cast 305913 (evidence table's death trigger for Ro'grok is
 --        explicitly "-> TALK (bark)", not a cast; this artifact row duplicates
 --        the HP<=20% cast id and is the last spell cast before dying)
---      244685 DEATH->cast 1270769 (evidence table lists 244685 as HEALTH_PCT-only)
+--      244685 DEATH->cast 1270769 (evidence table lists 244685 as HEALTH_PCT-only) --
+--        this DEATH-trigger exclusion still stands (last-cast-before-death noise), BUT
+--        see HORDE-XVAL ADD below: 1270769 is now separately authored as a REAL
+--        HEALTH_PCT-triggered ability for 244685 (id1), no longer treated as a pure
+--        capture artifact -- cross-capture (Alliance HP-adjacent death observation +
+--        Horde directly-observed HP<=30% mid-fight cast) confirms it belongs to
+--        244685's real kit (also present in 10d_creature_template_spell.sql's advertised
+--        spell list for 244685, index 12)
 --    Also out of this task's roster entirely (not in the plan sec 1.4 evidence
 --    table, so not authored): 244672, 244674, 244676, 244683, 257072.
 --  * Entries 244671 (Gnoll Ripper) and 244669 (Scavenging Hyena) are intentionally
@@ -103,6 +115,8 @@ VALUES
 -- ---- 244685 Ogre Basher (elite) -- AIName set above in this slice ----
   -- spell 33239 UNRESOLVED (Phase K SpellName.db2)
   (244685, 0, 0, 0, 2, 0, 100, 1, 0, 20, 0, 0, 0, 11, 33239, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0.0, 0.0, 0.0, 0.0, 'REVIEW-ONLY (1 combat capture, n=2): Ogre Basher HP<=20% cast, single-fire NOT_REPEATABLE, real cadence NOT captured -- spell 33239 UNRESOLVED (Phase K SpellName.db2); requires creature_template.AIName=SmartAI (see UPDATE above, elite not set by Task 1)'),
+  -- id1: HORDE-XVAL ADD (2026-08-21) -- HEALTH_PCT<=30% second cast, spell 1270769 UNRESOLVED (Phase K SpellName.db2)
+  (244685, 0, 1, 0, 2, 0, 100, 1, 0, 30, 0, 0, 0, 11, 1270769, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0.0, 0.0, 0.0, 0.0, 'HORDE-XVAL ADD, cross-capture-confirmed: Ogre Basher HP<=30% second cast -- Alliance capture observed 1270769 as a DEATH-adjacent last-observed-cast (treated as artifact, still excluded above), Horde run directly observed it fired mid-fight at HP<=30% (not death), confirming it is a REAL second ability distinct from the HP<=20% 33239 cast id0; single-fire NOT_REPEATABLE, real cadence NOT captured; spell 1270769 UNRESOLVED (Phase K SpellName.db2); also present in 10d_creature_template_spell.sql advertised spell list for 244685 (index 12); requires creature_template.AIName=SmartAI (see UPDATE above)'),
 
 -- ---- 244695 Ettin Crusher (elite) -- AIName set above in this slice ----
   -- spell 399062 UNRESOLVED (Phase K SpellName.db2)
@@ -117,6 +131,8 @@ VALUES
   (244675, 0, 2, 0, 6, 0, 100, 0, 0, 0, 0, 0, 0, 11, 305913, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0.0, 0.0, 0.0, 0.0, 'REVIEW-ONLY (1 combat capture, directly observed UNIT_DIED last-cast): Runk death cast -- spell 305913 UNRESOLVED (Phase K SpellName.db2)'),
   -- id3: death bark -- depends: Task 5 creature_text (groupid 1=death)
   (244675, 0, 3, 0, 6, 0, 100, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0.0, 0.0, 0.0, 0.0, 'REVIEW-ONLY: Runk death bark -- depends: Task 5 creature_text groupid 1 (death). Directly evidenced by plan sec 1.4 ("HEALTH_PCT/DEATH -> ACTION_CAST 305913 + TALK")'),
+  -- id4: HORDE-XVAL ADD (2026-08-21) -- HEALTH_PCT<=20% paired finisher cast, mirrors Ro'grok id1. spell 317547 UNRESOLVED (Phase K SpellName.db2)
+  (244675, 0, 4, 0, 2, 0, 100, 1, 0, 20, 0, 0, 0, 11, 317547, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0.0, 0.0, 0.0, 0.0, 'HORDE-XVAL ADD, cross-capture-confirmed: Horde run directly observed Runk casting 317547 at HP<=30% + death, proving Runk''s real repertoire is the SAME {305913, 317547} finisher pair as Ro''grok 244709 (mirrors Ro''grok''s id1 row exactly: HP<=20% -> CAST 317547). Runk''s existing id1 (305913 HP<=20%, INFERRED) remains flagged separately -- this new row is the corroborated second half of the pair; single-fire NOT_REPEATABLE, real cadence NOT captured; spell 317547 UNRESOLVED (Phase K SpellName.db2); also present in 10d_creature_template_spell.sql advertised spell list for 244675 (index 16)'),
 
 -- ---- 244709 Ro'grok (final boss) -- AIName already set by Task 1 ----
   -- id0: HEALTH_PCT<=20% primary cast, n=4. spell 305913 UNRESOLVED (Phase K SpellName.db2)

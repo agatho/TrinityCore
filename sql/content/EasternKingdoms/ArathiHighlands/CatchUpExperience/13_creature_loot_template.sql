@@ -50,6 +50,23 @@ INSERT INTO `creature_loot_template` (`Entry`, `Item`, `Reference`, `Chance`, `Q
 -- 244676 Kobold Pillager -> 220232 [non-quest; Chance=100 SINGLE-OBSERVATION placeholder, not verified drop%]
 INSERT INTO `creature_loot_template` (`Entry`, `Item`, `Reference`, `Chance`, `QuestRequired`, `LootMode`, `GroupId`, `MinCount`, `MaxCount`, `VerifiedBuild`) VALUES (244676, 220232, 0, 100.0, 0, 1, 0, 1, 1, 69382) ON DUPLICATE KEY UPDATE `Chance`=VALUES(`Chance`), `QuestRequired`=VALUES(`QuestRequired`), `LootMode`=VALUES(`LootMode`), `GroupId`=VALUES(`GroupId`), `MinCount`=VALUES(`MinCount`), `MaxCount`=VALUES(`MaxCount`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
 
+-- ---- SECTION 2b -- HORDE-XVAL ADD (2026-08-21): 244669 Scavenging Hyena -> 192617 ----
+-- Wire-decoded AND addon-confirmed by the Horde cross-validation run, context quest 90882
+-- (C:/dumps/tcharvest/out/catchup_horde/zone_2927/). Our build (this file's SECTION 1/2 plus
+-- 40_smart_scripts.sql / 51_creature_text.sql) treats 244669 as loot-less/autoattack-only --
+-- this is a genuinely NEW loot pair not previously authored for this entry. NON-quest
+-- (QuestRequired=0); Chance=100 is a SINGLE-SESSION/low-confidence placeholder only (same
+-- caveat as the 1376/220232 rows above -- one session cannot establish real drop%). Item
+-- 192617 is an existing 11.2.7 client item (Item DB2 import) -- NOT hand-authored here.
+-- TODO Phase K: confirm item_template row for 192617 exists in the world DB; if absent,
+-- import from DB2 before this loot table can resolve at runtime.
+-- lootid linkage: idempotent, scoped to only this entry (244674/244676/244677 already
+-- wired above in SECTION 1; 244669 was NOT in that list, so add it here explicitly --
+-- without this, creature_template.lootid stays 0 and the row below never resolves).
+UPDATE `creature_template` SET `lootid` = `entry` WHERE `entry` = 244669;
+-- 244669 Scavenging Hyena -> 192617 [non-quest; Chance=100 SINGLE-SESSION placeholder, not verified drop%]
+INSERT INTO `creature_loot_template` (`Entry`, `Item`, `Reference`, `Chance`, `QuestRequired`, `LootMode`, `GroupId`, `MinCount`, `MaxCount`, `VerifiedBuild`) VALUES (244669, 192617, 0, 100.0, 0, 1, 0, 2, 2, 69382) ON DUPLICATE KEY UPDATE `Chance`=VALUES(`Chance`), `QuestRequired`=VALUES(`QuestRequired`), `LootMode`=VALUES(`LootMode`), `GroupId`=VALUES(`GroupId`), `MinCount`=VALUES(`MinCount`), `MaxCount`=VALUES(`MaxCount`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
+
 -- ---- SECTION 3 -- money (Phase-K note, not authored here) ----
 -- The wire also captured ~20 money-only corpses across the run (loot_responses_decoded=27,
 -- money_only=20, total_coins_copper=1648 -- avg ~82c/corpse). This is coin evidence, not item
