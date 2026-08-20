@@ -26,11 +26,17 @@
 -- ============================================================================
 --
 -- ---- RESERVED GUID RANGE (unchanged from Fix Round 1; this file owns it) ----
--- Base 8000000, block 8000000-8000999 reserved. Actually used: 8000000-8000143, continuous,
--- 144 rows -- see per-section ranges below; the block has 856 guids of headroom left for a
+-- Base 8000000, block 8000000-8000999 reserved. Actually used: 8000000-8000204, continuous,
+-- 205 rows -- see per-section ranges below; the block has 795 guids of headroom left for a
 -- later re-mine/expansion (guid layout was renumbered continuously from Fix Round 1's
 -- gapped 8000000/8000100/8000200/8000300 sub-ranges since row counts changed substantially
 -- once exact multi-instance spawns -- e.g. 244711's 36 rows -- were added).
+-- HORDE-XVAL FIX (H1, 2026-08-20): guid 8000144-8000204 (61 rows) appended -- see the
+--   HORDE-XVAL FIX banner near the end of the file for the full breakdown. 29 pre-existing
+--   rows (guid 8000144's predecessors: 230004/230248/232022/232023/232030/232035/232038/
+--   244657/244658/244666/244667/244674/244675/244676/244677/244682/244683/244685/244695/
+--   244709/244956/249254, 29 rows total) were UPGRADED in place to Horde-wire-EXACT
+--   positions and VerifiedBuild bumped to 69404 (see report for the full guid list).
 --
 -- ---- POSITION-PRIORITY RULE APPLIED (brief Requirement 1) ----
 --   (a) EXACT remine position (creature_spawns_objupdate.zone_2927.sql), multiple distinct
@@ -100,7 +106,7 @@ ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES
 
 -- entry 230248 Hammerfall Grunt
 INSERT INTO `creature` (`guid`,`id`,`map`,`PhaseId`,`position_x`,`position_y`,`position_z`,`orientation`,`spawntimesecs`,`VerifiedBuild`) VALUES
- (8000003, 230248, 2927, 1961, -3516.3001, -915.1, 56.5, 0.0, 300, 69299)
+ (8000003, 230248, 2927, 1961, -1049.901, -3545.01, 55.301, 3.287, 300, 69404)
 ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES(`PhaseId`), `position_x`=VALUES(`position_x`), `position_y`=VALUES(`position_y`), `position_z`=VALUES(`position_z`), `orientation`=VALUES(`orientation`), `spawntimesecs`=VALUES(`spawntimesecs`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
 
 -- entry 232019 Mag'har Grunt
@@ -120,12 +126,12 @@ ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES
 
 -- entry 232022 Drum Fel
 INSERT INTO `creature` (`guid`,`id`,`map`,`PhaseId`,`position_x`,`position_y`,`position_z`,`orientation`,`spawntimesecs`,`VerifiedBuild`) VALUES
- (8000007, 232022, 2927, 1961, -3530.6001, -930.5, 56.5, 0.0, 300, 69299)
+ (8000007, 232022, 2927, 1961, -954.366, -3534.07, 70.604, 3.159, 300, 69404)
 ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES(`PhaseId`), `position_x`=VALUES(`position_x`), `position_y`=VALUES(`position_y`), `position_z`=VALUES(`position_z`), `orientation`=VALUES(`orientation`), `spawntimesecs`=VALUES(`spawntimesecs`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
 
 -- entry 232023 Gor'mul
 INSERT INTO `creature` (`guid`,`id`,`map`,`PhaseId`,`position_x`,`position_y`,`position_z`,`orientation`,`spawntimesecs`,`VerifiedBuild`) VALUES
- (8000008, 232023, 2927, 1961, -3484.4001, -958.9, 56.5, 0.0, 300, 69299)
+ (8000008, 232023, 2927, 1961, -968.964, -3481.259, 55.214, 4.214, 300, 69404)
 ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES(`PhaseId`), `position_x`=VALUES(`position_x`), `position_y`=VALUES(`position_y`), `position_z`=VALUES(`position_z`), `orientation`=VALUES(`orientation`), `spawntimesecs`=VALUES(`spawntimesecs`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
 
 -- entry 232028 Korin Fel
@@ -135,17 +141,17 @@ ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES
 
 -- entry 232030 Tharlidun, Stable Master
 INSERT INTO `creature` (`guid`,`id`,`map`,`PhaseId`,`position_x`,`position_y`,`position_z`,`orientation`,`spawntimesecs`,`VerifiedBuild`) VALUES
- (8000010, 232030, 2927, 1961, -3513.0, -979.9, 56.5, 0.0, 300, 69299)
+ (8000010, 232030, 2927, 1961, -955.191, -3491.03, 54.528, 2.981, 300, 69404)
 ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES(`PhaseId`), `position_x`=VALUES(`position_x`), `position_y`=VALUES(`position_y`), `position_z`=VALUES(`position_z`), `orientation`=VALUES(`orientation`), `spawntimesecs`=VALUES(`spawntimesecs`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
 
 -- entry 232035 Keena, Trade Goods
 INSERT INTO `creature` (`guid`,`id`,`map`,`PhaseId`,`position_x`,`position_y`,`position_z`,`orientation`,`spawntimesecs`,`VerifiedBuild`) VALUES
- (8000011, 232035, 2927, 1961, -3516.3001, -915.1, 56.5, 0.0, 300, 69299)
+ (8000011, 232035, 2927, 1961, -916.493, -3535.198, 70.544, 2.396, 300, 69404)
 ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES(`PhaseId`), `position_x`=VALUES(`position_x`), `position_y`=VALUES(`position_y`), `position_z`=VALUES(`position_z`), `orientation`=VALUES(`orientation`), `spawntimesecs`=VALUES(`spawntimesecs`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
 
 -- entry 232038 Uttnar, Butcher
 INSERT INTO `creature` (`guid`,`id`,`map`,`PhaseId`,`position_x`,`position_y`,`position_z`,`orientation`,`spawntimesecs`,`VerifiedBuild`) VALUES
- (8000012, 232038, 2927, 1961, -3485.8, -959.1, 56.5, 0.0, 300, 69299)
+ (8000012, 232038, 2927, 1961, -957.208, -3478.123, 54.467, 4.08, 300, 69404)
 ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES(`PhaseId`), `position_x`=VALUES(`position_x`), `position_y`=VALUES(`position_y`), `position_z`=VALUES(`position_z`), `orientation`=VALUES(`orientation`), `spawntimesecs`=VALUES(`spawntimesecs`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
 
 -- ============================================================================
@@ -248,22 +254,22 @@ ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES
 
 -- entry 244956 Prized Pumpkin
 INSERT INTO `creature` (`guid`,`id`,`map`,`PhaseId`,`position_x`,`position_y`,`position_z`,`orientation`,`spawntimesecs`,`VerifiedBuild`) VALUES
- (8000031, 244956, 2927, 1959, -3006.6001, -1536.9001, 42.2, 0.0, 300, 69299)
+ (8000031, 244956, 2927, 1959, -1514.288, -2971.832, 14.023, 0.0, 300, 69404)
 ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES(`PhaseId`), `position_x`=VALUES(`position_x`), `position_y`=VALUES(`position_y`), `position_z`=VALUES(`position_z`), `orientation`=VALUES(`orientation`), `spawntimesecs`=VALUES(`spawntimesecs`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
 
 -- entry 244956 Prized Pumpkin
 INSERT INTO `creature` (`guid`,`id`,`map`,`PhaseId`,`position_x`,`position_y`,`position_z`,`orientation`,`spawntimesecs`,`VerifiedBuild`) VALUES
- (8000032, 244956, 2927, 1959, -3010.6001, -1536.9001, 42.2, 0.0, 300, 69299)
+ (8000032, 244956, 2927, 1959, -1534.602, -3002.938, 14.025, 0.0, 300, 69404)
 ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES(`PhaseId`), `position_x`=VALUES(`position_x`), `position_y`=VALUES(`position_y`), `position_z`=VALUES(`position_z`), `orientation`=VALUES(`orientation`), `spawntimesecs`=VALUES(`spawntimesecs`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
 
 -- entry 244956 Prized Pumpkin
 INSERT INTO `creature` (`guid`,`id`,`map`,`PhaseId`,`position_x`,`position_y`,`position_z`,`orientation`,`spawntimesecs`,`VerifiedBuild`) VALUES
- (8000033, 244956, 2927, 1959, -3006.6001, -1540.9001, 42.2, 0.0, 300, 69299)
+ (8000033, 244956, 2927, 1959, -1514.288, -2971.832, 14.023, 0.0, 300, 69404)
 ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES(`PhaseId`), `position_x`=VALUES(`position_x`), `position_y`=VALUES(`position_y`), `position_z`=VALUES(`position_z`), `orientation`=VALUES(`orientation`), `spawntimesecs`=VALUES(`spawntimesecs`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
 
 -- entry 244956 Prized Pumpkin
 INSERT INTO `creature` (`guid`,`id`,`map`,`PhaseId`,`position_x`,`position_y`,`position_z`,`orientation`,`spawntimesecs`,`VerifiedBuild`) VALUES
- (8000034, 244956, 2927, 1959, -3010.6001, -1540.9001, 42.2, 0.0, 300, 69299)
+ (8000034, 244956, 2927, 1959, -1534.602, -3002.938, 14.025, 0.0, 300, 69404)
 ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES(`PhaseId`), `position_x`=VALUES(`position_x`), `position_y`=VALUES(`position_y`), `position_z`=VALUES(`position_z`), `orientation`=VALUES(`orientation`), `spawntimesecs`=VALUES(`spawntimesecs`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
 
 -- ============================================================================
@@ -272,17 +278,17 @@ ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES
 
 -- entry 244674 Ogre Destroyer
 INSERT INTO `creature` (`guid`,`id`,`map`,`PhaseId`,`position_x`,`position_y`,`position_z`,`orientation`,`spawntimesecs`,`VerifiedBuild`) VALUES
- (8000035, 244674, 2927, 4, -3051.8, -1544.6, 42.2, 0.0, 60, 69299)
+ (8000035, 244674, 2927, 4, -1437.175, -2943.42, 14.082, 6.048, 60, 69404)
 ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES(`PhaseId`), `position_x`=VALUES(`position_x`), `position_y`=VALUES(`position_y`), `position_z`=VALUES(`position_z`), `orientation`=VALUES(`orientation`), `spawntimesecs`=VALUES(`spawntimesecs`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
 
 -- entry 249254 Ogre Destroyer (alt entry)
 INSERT INTO `creature` (`guid`,`id`,`map`,`PhaseId`,`position_x`,`position_y`,`position_z`,`orientation`,`spawntimesecs`,`VerifiedBuild`) VALUES
- (8000036, 249254, 2927, 4, -3091.2, -1522.3, 42.2, 0.0, 60, 69299)
+ (8000036, 249254, 2927, 4, -1532.484, -3088.445, 25.998, 5.0, 60, 69404)
 ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES(`PhaseId`), `position_x`=VALUES(`position_x`), `position_y`=VALUES(`position_y`), `position_z`=VALUES(`position_z`), `orientation`=VALUES(`orientation`), `spawntimesecs`=VALUES(`spawntimesecs`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
 
 -- entry 244676 Kobold Pillager
 INSERT INTO `creature` (`guid`,`id`,`map`,`PhaseId`,`position_x`,`position_y`,`position_z`,`orientation`,`spawntimesecs`,`VerifiedBuild`) VALUES
- (8000037, 244676, 2927, 4, -3072.4001, -1531.1, 42.2, 0.0, 60, 69299)
+ (8000037, 244676, 2927, 4, -1564.078, -3025.773, 14.032, 0.316, 60, 69404)
 ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES(`PhaseId`), `position_x`=VALUES(`position_x`), `position_y`=VALUES(`position_y`), `position_z`=VALUES(`position_z`), `orientation`=VALUES(`orientation`), `spawntimesecs`=VALUES(`spawntimesecs`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
 
 -- entry 249255 Kobold Pillager (alt entry id, same name)
@@ -312,12 +318,12 @@ ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES
 
 -- entry 244677 Kobold Firetender
 INSERT INTO `creature` (`guid`,`id`,`map`,`PhaseId`,`position_x`,`position_y`,`position_z`,`orientation`,`spawntimesecs`,`VerifiedBuild`) VALUES
- (8000043, 244677, 2927, 4, -2933.8001, -1506.8001, 42.2, 0.0, 60, 69299)
+ (8000043, 244677, 2927, 4, -1468.59, -2890.844, 14.518, 5.761, 60, 69404)
 ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES(`PhaseId`), `position_x`=VALUES(`position_x`), `position_y`=VALUES(`position_y`), `position_z`=VALUES(`position_z`), `orientation`=VALUES(`orientation`), `spawntimesecs`=VALUES(`spawntimesecs`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
 
 -- entry 244675 Runk
 INSERT INTO `creature` (`guid`,`id`,`map`,`PhaseId`,`position_x`,`position_y`,`position_z`,`orientation`,`spawntimesecs`,`VerifiedBuild`) VALUES
- (8000044, 244675, 2927, 4, -2994.1001, -1476.9001, 42.2, 0.0, 300, 69299)
+ (8000044, 244675, 2927, 4, -1457.769, -3005.009, 14.383, 6.094, 300, 69404)
 ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES(`PhaseId`), `position_x`=VALUES(`position_x`), `position_y`=VALUES(`position_y`), `position_z`=VALUES(`position_z`), `orientation`=VALUES(`orientation`), `spawntimesecs`=VALUES(`spawntimesecs`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
 
 -- ============================================================================
@@ -326,12 +332,12 @@ ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES
 
 -- entry 244657 Thrall (siege-entry clone)
 INSERT INTO `creature` (`guid`,`id`,`map`,`PhaseId`,`position_x`,`position_y`,`position_z`,`orientation`,`spawntimesecs`,`VerifiedBuild`) VALUES
- (8000045, 244657, 2927, 1610, -1802.8001, -1474.4, 80.0, 0.0, 300, 69299)
+ (8000045, 244657, 2927, 1610, -1473.41, -1800.349, 94.86, 0.0, 300, 69404)
 ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES(`PhaseId`), `position_x`=VALUES(`position_x`), `position_y`=VALUES(`position_y`), `position_z`=VALUES(`position_z`), `orientation`=VALUES(`orientation`), `spawntimesecs`=VALUES(`spawntimesecs`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
 
 -- entry 244658 Lady Jaina Proudmoore (siege-entry clone)
 INSERT INTO `creature` (`guid`,`id`,`map`,`PhaseId`,`position_x`,`position_y`,`position_z`,`orientation`,`spawntimesecs`,`VerifiedBuild`) VALUES
- (8000046, 244658, 2927, 1610, -1802.8001, -1474.4, 80.0, 0.0, 300, 69299)
+ (8000046, 244658, 2927, 1610, -1473.169, -1803.616, 94.86, 0.0, 300, 69404)
 ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES(`PhaseId`), `position_x`=VALUES(`position_x`), `position_y`=VALUES(`position_y`), `position_z`=VALUES(`position_z`), `orientation`=VALUES(`orientation`), `spawntimesecs`=VALUES(`spawntimesecs`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
 
 -- entry 244714 Lady Jaina Proudmoore (Stromgarde Keep hub lead)
@@ -456,7 +462,7 @@ ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES
 
 -- entry 230004 Beggar
 INSERT INTO `creature` (`guid`,`id`,`map`,`PhaseId`,`position_x`,`position_y`,`position_z`,`orientation`,`spawntimesecs`,`VerifiedBuild`) VALUES
- (8000071, 230004, 2927, 1610, -1808.5, -1569.1, 80.0, 0.0, 300, 69299)
+ (8000071, 230004, 2927, 1610, -1577.957, -1790.967, 68.347, 3.287, 300, 69404)
 ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES(`PhaseId`), `position_x`=VALUES(`position_x`), `position_y`=VALUES(`position_y`), `position_z`=VALUES(`position_z`), `orientation`=VALUES(`orientation`), `spawntimesecs`=VALUES(`spawntimesecs`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
 
 -- entry 244690 Stromgarde Footman
@@ -500,12 +506,12 @@ ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES
 
 -- entry 244682 Kobold Waxmancer
 INSERT INTO `creature` (`guid`,`id`,`map`,`PhaseId`,`position_x`,`position_y`,`position_z`,`orientation`,`spawntimesecs`,`VerifiedBuild`) VALUES
- (8000079, 244682, 2927, 28, -1913.0, -1237.6, 80.0, 0.0, 60, 69299)
+ (8000079, 244682, 2927, 28, -1381.731, -1758.477, 52.871, 4.528, 60, 69404)
 ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES(`PhaseId`), `position_x`=VALUES(`position_x`), `position_y`=VALUES(`position_y`), `position_z`=VALUES(`position_z`), `orientation`=VALUES(`orientation`), `spawntimesecs`=VALUES(`spawntimesecs`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
 
 -- entry 244695 Ettin Crusher
 INSERT INTO `creature` (`guid`,`id`,`map`,`PhaseId`,`position_x`,`position_y`,`position_z`,`orientation`,`spawntimesecs`,`VerifiedBuild`) VALUES
- (8000080, 244695, 2927, 28, -1802.4, -1468.9, 80.0, 0.0, 300, 69299)
+ (8000080, 244695, 2927, 28, -1321.813, -1654.63, 51.882, 2.186, 300, 69404)
 ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES(`PhaseId`), `position_x`=VALUES(`position_x`), `position_y`=VALUES(`position_y`), `position_z`=VALUES(`position_z`), `orientation`=VALUES(`orientation`), `spawntimesecs`=VALUES(`spawntimesecs`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
 
 -- entry 244711 Armored Cleaver
@@ -770,17 +776,17 @@ ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES
 
 -- entry 244683 Gnoll Prowler
 INSERT INTO `creature` (`guid`,`id`,`map`,`PhaseId`,`position_x`,`position_y`,`position_z`,`orientation`,`spawntimesecs`,`VerifiedBuild`) VALUES
- (8000133, 244683, 2927, 28, -1803.9, -1371.4, 80.0, 0.0, 60, 69299)
+ (8000133, 244683, 2927, 28, -1243.903, -1661.156, 48.103, 3.209, 60, 69404)
 ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES(`PhaseId`), `position_x`=VALUES(`position_x`), `position_y`=VALUES(`position_y`), `position_z`=VALUES(`position_z`), `orientation`=VALUES(`orientation`), `spawntimesecs`=VALUES(`spawntimesecs`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
 
 -- entry 244685 Ogre Basher (siege-trash row)
 INSERT INTO `creature` (`guid`,`id`,`map`,`PhaseId`,`position_x`,`position_y`,`position_z`,`orientation`,`spawntimesecs`,`VerifiedBuild`) VALUES
- (8000134, 244685, 2927, 28, -1900.0, -1300.0, 80.0, 0.0, 60, 69299)
+ (8000134, 244685, 2927, 28, -1203.83, -1846.795, 115.122, 3.139, 60, 69404)
 ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES(`PhaseId`), `position_x`=VALUES(`position_x`), `position_y`=VALUES(`position_y`), `position_z`=VALUES(`position_z`), `orientation`=VALUES(`orientation`), `spawntimesecs`=VALUES(`spawntimesecs`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
 
 -- entry 244685 Ogre Basher (siege-trash row)
 INSERT INTO `creature` (`guid`,`id`,`map`,`PhaseId`,`position_x`,`position_y`,`position_z`,`orientation`,`spawntimesecs`,`VerifiedBuild`) VALUES
- (8000135, 244685, 2927, 28, -1892.0, -1292.0, 80.0, 0.0, 60, 69299)
+ (8000135, 244685, 2927, 28, -1292.62, -1924.504, 79.319, 2.507, 60, 69404)
 ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES(`PhaseId`), `position_x`=VALUES(`position_x`), `position_y`=VALUES(`position_y`), `position_z`=VALUES(`position_z`), `orientation`=VALUES(`orientation`), `spawntimesecs`=VALUES(`spawntimesecs`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
 
 -- entry 249269 Worn Catapult
@@ -799,34 +805,349 @@ ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES
 
 -- entry 244709 Ro'grok
 INSERT INTO `creature` (`guid`,`id`,`map`,`PhaseId`,`position_x`,`position_y`,`position_z`,`orientation`,`spawntimesecs`,`VerifiedBuild`) VALUES
- (8000138, 244709, 2927, 3, -2120.9001, -870.3, 80.0, 0.0, 300, 69299)
+ (8000138, 244709, 2927, 3, -854.188, -2133.155, 67.383, 5.228, 300, 69404)
 ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES(`PhaseId`), `position_x`=VALUES(`position_x`), `position_y`=VALUES(`position_y`), `position_z`=VALUES(`position_z`), `orientation`=VALUES(`orientation`), `spawntimesecs`=VALUES(`spawntimesecs`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
 
 -- entry 244666 Thrall (siege-climax clone)
 INSERT INTO `creature` (`guid`,`id`,`map`,`PhaseId`,`position_x`,`position_y`,`position_z`,`orientation`,`spawntimesecs`,`VerifiedBuild`) VALUES
- (8000139, 244666, 2927, 3, -1980.7001, -1004.5, 80.0, 0.0, 300, 69299)
+ (8000139, 244666, 2927, 3, -1000.915, -1982.212, 61.756, 5.586, 300, 69404)
 ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES(`PhaseId`), `position_x`=VALUES(`position_x`), `position_y`=VALUES(`position_y`), `position_z`=VALUES(`position_z`), `orientation`=VALUES(`orientation`), `spawntimesecs`=VALUES(`spawntimesecs`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
 
 -- entry 244667 Lady Jaina Proudmoore (siege-climax clone)
 INSERT INTO `creature` (`guid`,`id`,`map`,`PhaseId`,`position_x`,`position_y`,`position_z`,`orientation`,`spawntimesecs`,`VerifiedBuild`) VALUES
- (8000140, 244667, 2927, 3, -1983.7001, -1004.4, 80.0, 0.0, 300, 69299)
+ (8000140, 244667, 2927, 3, -1002.328, -1984.951, 61.629, 5.471, 300, 69404)
 ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES(`PhaseId`), `position_x`=VALUES(`position_x`), `position_y`=VALUES(`position_y`), `position_z`=VALUES(`position_z`), `orientation`=VALUES(`orientation`), `spawntimesecs`=VALUES(`spawntimesecs`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
 
 -- entry 244685 Ogre Basher (climax 'wave' reinforcement row)
 INSERT INTO `creature` (`guid`,`id`,`map`,`PhaseId`,`position_x`,`position_y`,`position_z`,`orientation`,`spawntimesecs`,`VerifiedBuild`) VALUES
- (8000141, 244685, 2927, 3, -2120.9001, -870.3, 80.0, 0.0, 60, 69299)
+ (8000141, 244685, 2927, 3, -1281.278, -1893.865, 76.205, 2.704, 60, 69404)
 ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES(`PhaseId`), `position_x`=VALUES(`position_x`), `position_y`=VALUES(`position_y`), `position_z`=VALUES(`position_z`), `orientation`=VALUES(`orientation`), `spawntimesecs`=VALUES(`spawntimesecs`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
 
 -- entry 244685 Ogre Basher (climax 'wave' reinforcement row)
 INSERT INTO `creature` (`guid`,`id`,`map`,`PhaseId`,`position_x`,`position_y`,`position_z`,`orientation`,`spawntimesecs`,`VerifiedBuild`) VALUES
- (8000142, 244685, 2927, 3, -2110.9001, -870.3, 80.0, 0.0, 60, 69299)
+ (8000142, 244685, 2927, 3, -1258.286, -1893.116, 80.569, 5.947, 60, 69404)
 ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES(`PhaseId`), `position_x`=VALUES(`position_x`), `position_y`=VALUES(`position_y`), `position_z`=VALUES(`position_z`), `orientation`=VALUES(`orientation`), `spawntimesecs`=VALUES(`spawntimesecs`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
 
 -- entry 244685 Ogre Basher (climax 'wave' reinforcement row)
 INSERT INTO `creature` (`guid`,`id`,`map`,`PhaseId`,`position_x`,`position_y`,`position_z`,`orientation`,`spawntimesecs`,`VerifiedBuild`) VALUES
- (8000143, 244685, 2927, 3, -2120.9001, -860.3, 80.0, 0.0, 60, 69299)
+ (8000143, 244685, 2927, 3, -1304.764, -1796.889, 63.989, 2.941, 60, 69404)
+ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES(`PhaseId`), `position_x`=VALUES(`position_x`), `position_y`=VALUES(`position_y`), `position_z`=VALUES(`position_z`), `orientation`=VALUES(`orientation`), `spawntimesecs`=VALUES(`spawntimesecs`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
+
+
+-- ============================================================================
+-- HORDE-XVAL FIX (H1) -- guid 8000144-8000204 (61 rows): 40 Task-1 EXPANSION rows
+--   (extra Horde-confirmed spawn points for 230004/230248/244674/244677/244682/244683/
+--   244685) + 21 Task-2 ADD rows (Horde-specific population: Hammerfall cluster +
+--   Stromgarde extras). Source: creature_spawns_objupdate.zone_2927.sql (Horde bundle),
+--   VerifiedBuild=69404. SPAWNS ONLY -- no new creature_template authored.
+-- ============================================================================
+
+-- entry 230004 Beggar (Horde-xval EXPAND, extra Horde-confirmed spawn point)
+INSERT INTO `creature` (`guid`,`id`,`map`,`PhaseId`,`position_x`,`position_y`,`position_z`,`orientation`,`spawntimesecs`,`VerifiedBuild`) VALUES
+ (8000144, 230004, 2927, 1610, -1631.634, -1780.17, 80.599, 1.611, 300, 69404)
+ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES(`PhaseId`), `position_x`=VALUES(`position_x`), `position_y`=VALUES(`position_y`), `position_z`=VALUES(`position_z`), `orientation`=VALUES(`orientation`), `spawntimesecs`=VALUES(`spawntimesecs`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
+
+-- entry 230004 Beggar (Horde-xval EXPAND, extra Horde-confirmed spawn point)
+INSERT INTO `creature` (`guid`,`id`,`map`,`PhaseId`,`position_x`,`position_y`,`position_z`,`orientation`,`spawntimesecs`,`VerifiedBuild`) VALUES
+ (8000145, 230004, 2927, 1610, -1532.016, -1907.175, 68.386, 3.606, 300, 69404)
+ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES(`PhaseId`), `position_x`=VALUES(`position_x`), `position_y`=VALUES(`position_y`), `position_z`=VALUES(`position_z`), `orientation`=VALUES(`orientation`), `spawntimesecs`=VALUES(`spawntimesecs`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
+
+-- entry 230004 Beggar (Horde-xval EXPAND, extra Horde-confirmed spawn point)
+INSERT INTO `creature` (`guid`,`id`,`map`,`PhaseId`,`position_x`,`position_y`,`position_z`,`orientation`,`spawntimesecs`,`VerifiedBuild`) VALUES
+ (8000146, 230004, 2927, 1610, -1524.858, -1666.906, 68.097, 3.15, 300, 69404)
+ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES(`PhaseId`), `position_x`=VALUES(`position_x`), `position_y`=VALUES(`position_y`), `position_z`=VALUES(`position_z`), `orientation`=VALUES(`orientation`), `spawntimesecs`=VALUES(`spawntimesecs`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
+
+-- entry 230004 Beggar (Horde-xval EXPAND, extra Horde-confirmed spawn point)
+INSERT INTO `creature` (`guid`,`id`,`map`,`PhaseId`,`position_x`,`position_y`,`position_z`,`orientation`,`spawntimesecs`,`VerifiedBuild`) VALUES
+ (8000147, 230004, 2927, 1610, -1705.071, -1910.026, 80.579, 4.73, 300, 69404)
+ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES(`PhaseId`), `position_x`=VALUES(`position_x`), `position_y`=VALUES(`position_y`), `position_z`=VALUES(`position_z`), `orientation`=VALUES(`orientation`), `spawntimesecs`=VALUES(`spawntimesecs`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
+
+-- entry 230248 Hammerfall Grunt (Horde-xval EXPAND, extra Horde-confirmed spawn point)
+INSERT INTO `creature` (`guid`,`id`,`map`,`PhaseId`,`position_x`,`position_y`,`position_z`,`orientation`,`spawntimesecs`,`VerifiedBuild`) VALUES
+ (8000148, 230248, 2927, 1961, -857.653, -3513.472, 73.0, 5.986, 300, 69404)
+ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES(`PhaseId`), `position_x`=VALUES(`position_x`), `position_y`=VALUES(`position_y`), `position_z`=VALUES(`position_z`), `orientation`=VALUES(`orientation`), `spawntimesecs`=VALUES(`spawntimesecs`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
+
+-- entry 230248 Hammerfall Grunt (Horde-xval EXPAND, extra Horde-confirmed spawn point)
+INSERT INTO `creature` (`guid`,`id`,`map`,`PhaseId`,`position_x`,`position_y`,`position_z`,`orientation`,`spawntimesecs`,`VerifiedBuild`) VALUES
+ (8000149, 230248, 2927, 1961, -1050.076, -3556.222, 55.269, 3.074, 300, 69404)
+ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES(`PhaseId`), `position_x`=VALUES(`position_x`), `position_y`=VALUES(`position_y`), `position_z`=VALUES(`position_z`), `orientation`=VALUES(`orientation`), `spawntimesecs`=VALUES(`spawntimesecs`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
+
+-- entry 230248 Hammerfall Grunt (Horde-xval EXPAND, extra Horde-confirmed spawn point)
+INSERT INTO `creature` (`guid`,`id`,`map`,`PhaseId`,`position_x`,`position_y`,`position_z`,`orientation`,`spawntimesecs`,`VerifiedBuild`) VALUES
+ (8000150, 230248, 2927, 1961, -857.986, -3524.934, 72.972, 0.157, 300, 69404)
+ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES(`PhaseId`), `position_x`=VALUES(`position_x`), `position_y`=VALUES(`position_y`), `position_z`=VALUES(`position_z`), `orientation`=VALUES(`orientation`), `spawntimesecs`=VALUES(`spawntimesecs`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
+
+-- entry 230248 Hammerfall Grunt (Horde-xval EXPAND, extra Horde-confirmed spawn point)
+INSERT INTO `creature` (`guid`,`id`,`map`,`PhaseId`,`position_x`,`position_y`,`position_z`,`orientation`,`spawntimesecs`,`VerifiedBuild`) VALUES
+ (8000151, 230248, 2927, 1961, -986.306, -3528.998, 57.09, 2.575, 300, 69404)
+ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES(`PhaseId`), `position_x`=VALUES(`position_x`), `position_y`=VALUES(`position_y`), `position_z`=VALUES(`position_z`), `orientation`=VALUES(`orientation`), `spawntimesecs`=VALUES(`spawntimesecs`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
+
+-- entry 244674 Ogre Destroyer (Horde-xval EXPAND, extra Horde-confirmed spawn point)
+INSERT INTO `creature` (`guid`,`id`,`map`,`PhaseId`,`position_x`,`position_y`,`position_z`,`orientation`,`spawntimesecs`,`VerifiedBuild`) VALUES
+ (8000152, 244674, 2927, 4, -1600.613, -2976.786, 22.345, 0.668, 60, 69404)
+ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES(`PhaseId`), `position_x`=VALUES(`position_x`), `position_y`=VALUES(`position_y`), `position_z`=VALUES(`position_z`), `orientation`=VALUES(`orientation`), `spawntimesecs`=VALUES(`spawntimesecs`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
+
+-- entry 244674 Ogre Destroyer (Horde-xval EXPAND, extra Horde-confirmed spawn point)
+INSERT INTO `creature` (`guid`,`id`,`map`,`PhaseId`,`position_x`,`position_y`,`position_z`,`orientation`,`spawntimesecs`,`VerifiedBuild`) VALUES
+ (8000153, 244674, 2927, 4, -1417.783, -2982.183, 19.155, 2.625, 60, 69404)
+ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES(`PhaseId`), `position_x`=VALUES(`position_x`), `position_y`=VALUES(`position_y`), `position_z`=VALUES(`position_z`), `orientation`=VALUES(`orientation`), `spawntimesecs`=VALUES(`spawntimesecs`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
+
+-- entry 244674 Ogre Destroyer (Horde-xval EXPAND, extra Horde-confirmed spawn point)
+INSERT INTO `creature` (`guid`,`id`,`map`,`PhaseId`,`position_x`,`position_y`,`position_z`,`orientation`,`spawntimesecs`,`VerifiedBuild`) VALUES
+ (8000154, 244674, 2927, 4, -1524.95, -2862.679, 14.025, 1.528, 60, 69404)
+ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES(`PhaseId`), `position_x`=VALUES(`position_x`), `position_y`=VALUES(`position_y`), `position_z`=VALUES(`position_z`), `orientation`=VALUES(`orientation`), `spawntimesecs`=VALUES(`spawntimesecs`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
+
+-- entry 244674 Ogre Destroyer (Horde-xval EXPAND, extra Horde-confirmed spawn point)
+INSERT INTO `creature` (`guid`,`id`,`map`,`PhaseId`,`position_x`,`position_y`,`position_z`,`orientation`,`spawntimesecs`,`VerifiedBuild`) VALUES
+ (8000155, 244674, 2927, 4, -1614.679, -2876.821, 19.783, 2.412, 60, 69404)
+ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES(`PhaseId`), `position_x`=VALUES(`position_x`), `position_y`=VALUES(`position_y`), `position_z`=VALUES(`position_z`), `orientation`=VALUES(`orientation`), `spawntimesecs`=VALUES(`spawntimesecs`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
+
+-- entry 244674 Ogre Destroyer (Horde-xval EXPAND, extra Horde-confirmed spawn point)
+INSERT INTO `creature` (`guid`,`id`,`map`,`PhaseId`,`position_x`,`position_y`,`position_z`,`orientation`,`spawntimesecs`,`VerifiedBuild`) VALUES
+ (8000156, 244674, 2927, 4, -1534.097, -2928.875, 14.243, 1.606, 60, 69404)
+ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES(`PhaseId`), `position_x`=VALUES(`position_x`), `position_y`=VALUES(`position_y`), `position_z`=VALUES(`position_z`), `orientation`=VALUES(`orientation`), `spawntimesecs`=VALUES(`spawntimesecs`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
+
+-- entry 244677 Kobold Firetender (Horde-xval EXPAND, extra Horde-confirmed spawn point)
+INSERT INTO `creature` (`guid`,`id`,`map`,`PhaseId`,`position_x`,`position_y`,`position_z`,`orientation`,`spawntimesecs`,`VerifiedBuild`) VALUES
+ (8000157, 244677, 2927, 4, -1470.748, -2944.911, 14.661, 1.482, 60, 69404)
+ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES(`PhaseId`), `position_x`=VALUES(`position_x`), `position_y`=VALUES(`position_y`), `position_z`=VALUES(`position_z`), `orientation`=VALUES(`orientation`), `spawntimesecs`=VALUES(`spawntimesecs`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
+
+-- entry 244677 Kobold Firetender (Horde-xval EXPAND, extra Horde-confirmed spawn point)
+INSERT INTO `creature` (`guid`,`id`,`map`,`PhaseId`,`position_x`,`position_y`,`position_z`,`orientation`,`spawntimesecs`,`VerifiedBuild`) VALUES
+ (8000158, 244677, 2927, 4, -1565.342, -2917.422, 14.023, 4.179, 60, 69404)
+ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES(`PhaseId`), `position_x`=VALUES(`position_x`), `position_y`=VALUES(`position_y`), `position_z`=VALUES(`position_z`), `orientation`=VALUES(`orientation`), `spawntimesecs`=VALUES(`spawntimesecs`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
+
+-- entry 244677 Kobold Firetender (Horde-xval EXPAND, extra Horde-confirmed spawn point)
+INSERT INTO `creature` (`guid`,`id`,`map`,`PhaseId`,`position_x`,`position_y`,`position_z`,`orientation`,`spawntimesecs`,`VerifiedBuild`) VALUES
+ (8000159, 244677, 2927, 4, -1517.613, -2944.642, 14.023, 0.981, 60, 69404)
+ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES(`PhaseId`), `position_x`=VALUES(`position_x`), `position_y`=VALUES(`position_y`), `position_z`=VALUES(`position_z`), `orientation`=VALUES(`orientation`), `spawntimesecs`=VALUES(`spawntimesecs`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
+
+-- entry 244677 Kobold Firetender (Horde-xval EXPAND, extra Horde-confirmed spawn point)
+INSERT INTO `creature` (`guid`,`id`,`map`,`PhaseId`,`position_x`,`position_y`,`position_z`,`orientation`,`spawntimesecs`,`VerifiedBuild`) VALUES
+ (8000160, 244677, 2927, 4, -1509.53, -2917.193, 14.023, 4.832, 60, 69404)
+ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES(`PhaseId`), `position_x`=VALUES(`position_x`), `position_y`=VALUES(`position_y`), `position_z`=VALUES(`position_z`), `orientation`=VALUES(`orientation`), `spawntimesecs`=VALUES(`spawntimesecs`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
+
+-- entry 244677 Kobold Firetender (Horde-xval EXPAND, extra Horde-confirmed spawn point)
+INSERT INTO `creature` (`guid`,`id`,`map`,`PhaseId`,`position_x`,`position_y`,`position_z`,`orientation`,`spawntimesecs`,`VerifiedBuild`) VALUES
+ (8000161, 244677, 2927, 4, -1463.666, -2952.973, 14.797, 1.764, 60, 69404)
+ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES(`PhaseId`), `position_x`=VALUES(`position_x`), `position_y`=VALUES(`position_y`), `position_z`=VALUES(`position_z`), `orientation`=VALUES(`orientation`), `spawntimesecs`=VALUES(`spawntimesecs`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
+
+-- entry 244682 Kobold Waxmancer (Horde-xval EXPAND, extra Horde-confirmed spawn point)
+INSERT INTO `creature` (`guid`,`id`,`map`,`PhaseId`,`position_x`,`position_y`,`position_z`,`orientation`,`spawntimesecs`,`VerifiedBuild`) VALUES
+ (8000162, 244682, 2927, 28, -1218.688, -1915.243, 87.644, 4.656, 60, 69404)
+ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES(`PhaseId`), `position_x`=VALUES(`position_x`), `position_y`=VALUES(`position_y`), `position_z`=VALUES(`position_z`), `orientation`=VALUES(`orientation`), `spawntimesecs`=VALUES(`spawntimesecs`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
+
+-- entry 244682 Kobold Waxmancer (Horde-xval EXPAND, extra Horde-confirmed spawn point)
+INSERT INTO `creature` (`guid`,`id`,`map`,`PhaseId`,`position_x`,`position_y`,`position_z`,`orientation`,`spawntimesecs`,`VerifiedBuild`) VALUES
+ (8000163, 244682, 2927, 28, -1235.885, -1930.812, 89.101, 5.518, 60, 69404)
+ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES(`PhaseId`), `position_x`=VALUES(`position_x`), `position_y`=VALUES(`position_y`), `position_z`=VALUES(`position_z`), `orientation`=VALUES(`orientation`), `spawntimesecs`=VALUES(`spawntimesecs`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
+
+-- entry 244682 Kobold Waxmancer (Horde-xval EXPAND, extra Horde-confirmed spawn point)
+INSERT INTO `creature` (`guid`,`id`,`map`,`PhaseId`,`position_x`,`position_y`,`position_z`,`orientation`,`spawntimesecs`,`VerifiedBuild`) VALUES
+ (8000164, 244682, 2927, 28, -1343.75, -1772.363, 49.434, 0.563, 60, 69404)
+ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES(`PhaseId`), `position_x`=VALUES(`position_x`), `position_y`=VALUES(`position_y`), `position_z`=VALUES(`position_z`), `orientation`=VALUES(`orientation`), `spawntimesecs`=VALUES(`spawntimesecs`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
+
+-- entry 244682 Kobold Waxmancer (Horde-xval EXPAND, extra Horde-confirmed spawn point)
+INSERT INTO `creature` (`guid`,`id`,`map`,`PhaseId`,`position_x`,`position_y`,`position_z`,`orientation`,`spawntimesecs`,`VerifiedBuild`) VALUES
+ (8000165, 244682, 2927, 28, -1175.727, -1936.566, 90.277, 4.656, 60, 69404)
+ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES(`PhaseId`), `position_x`=VALUES(`position_x`), `position_y`=VALUES(`position_y`), `position_z`=VALUES(`position_z`), `orientation`=VALUES(`orientation`), `spawntimesecs`=VALUES(`spawntimesecs`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
+
+-- entry 244682 Kobold Waxmancer (Horde-xval EXPAND, extra Horde-confirmed spawn point)
+INSERT INTO `creature` (`guid`,`id`,`map`,`PhaseId`,`position_x`,`position_y`,`position_z`,`orientation`,`spawntimesecs`,`VerifiedBuild`) VALUES
+ (8000166, 244682, 2927, 28, -1190.448, -1959.955, 91.041, 5.846, 60, 69404)
+ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES(`PhaseId`), `position_x`=VALUES(`position_x`), `position_y`=VALUES(`position_y`), `position_z`=VALUES(`position_z`), `orientation`=VALUES(`orientation`), `spawntimesecs`=VALUES(`spawntimesecs`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
+
+-- entry 244682 Kobold Waxmancer (Horde-xval EXPAND, extra Horde-confirmed spawn point)
+INSERT INTO `creature` (`guid`,`id`,`map`,`PhaseId`,`position_x`,`position_y`,`position_z`,`orientation`,`spawntimesecs`,`VerifiedBuild`) VALUES
+ (8000167, 244682, 2927, 28, -1186.182, -1928.766, 86.019, 0.297, 60, 69404)
+ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES(`PhaseId`), `position_x`=VALUES(`position_x`), `position_y`=VALUES(`position_y`), `position_z`=VALUES(`position_z`), `orientation`=VALUES(`orientation`), `spawntimesecs`=VALUES(`spawntimesecs`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
+
+-- entry 244682 Kobold Waxmancer (Horde-xval EXPAND, extra Horde-confirmed spawn point)
+INSERT INTO `creature` (`guid`,`id`,`map`,`PhaseId`,`position_x`,`position_y`,`position_z`,`orientation`,`spawntimesecs`,`VerifiedBuild`) VALUES
+ (8000168, 244682, 2927, 28, -1364.405, -1876.208, 51.688, 1.153, 60, 69404)
+ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES(`PhaseId`), `position_x`=VALUES(`position_x`), `position_y`=VALUES(`position_y`), `position_z`=VALUES(`position_z`), `orientation`=VALUES(`orientation`), `spawntimesecs`=VALUES(`spawntimesecs`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
+
+-- entry 244682 Kobold Waxmancer (Horde-xval EXPAND, extra Horde-confirmed spawn point)
+INSERT INTO `creature` (`guid`,`id`,`map`,`PhaseId`,`position_x`,`position_y`,`position_z`,`orientation`,`spawntimesecs`,`VerifiedBuild`) VALUES
+ (8000169, 244682, 2927, 28, -1376.998, -1871.345, 51.497, 1.448, 60, 69404)
+ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES(`PhaseId`), `position_x`=VALUES(`position_x`), `position_y`=VALUES(`position_y`), `position_z`=VALUES(`position_z`), `orientation`=VALUES(`orientation`), `spawntimesecs`=VALUES(`spawntimesecs`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
+
+-- entry 244682 Kobold Waxmancer (Horde-xval EXPAND, extra Horde-confirmed spawn point)
+INSERT INTO `creature` (`guid`,`id`,`map`,`PhaseId`,`position_x`,`position_y`,`position_z`,`orientation`,`spawntimesecs`,`VerifiedBuild`) VALUES
+ (8000170, 244682, 2927, 28, -1307.547, -1793.168, 63.431, 1.187, 60, 69404)
+ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES(`PhaseId`), `position_x`=VALUES(`position_x`), `position_y`=VALUES(`position_y`), `position_z`=VALUES(`position_z`), `orientation`=VALUES(`orientation`), `spawntimesecs`=VALUES(`spawntimesecs`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
+
+-- entry 244682 Kobold Waxmancer (Horde-xval EXPAND, extra Horde-confirmed spawn point)
+INSERT INTO `creature` (`guid`,`id`,`map`,`PhaseId`,`position_x`,`position_y`,`position_z`,`orientation`,`spawntimesecs`,`VerifiedBuild`) VALUES
+ (8000171, 244682, 2927, 28, -1263.309, -1737.608, 53.224, 6.212, 60, 69404)
+ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES(`PhaseId`), `position_x`=VALUES(`position_x`), `position_y`=VALUES(`position_y`), `position_z`=VALUES(`position_z`), `orientation`=VALUES(`orientation`), `spawntimesecs`=VALUES(`spawntimesecs`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
+
+-- entry 244682 Kobold Waxmancer (Horde-xval EXPAND, extra Horde-confirmed spawn point)
+INSERT INTO `creature` (`guid`,`id`,`map`,`PhaseId`,`position_x`,`position_y`,`position_z`,`orientation`,`spawntimesecs`,`VerifiedBuild`) VALUES
+ (8000172, 244682, 2927, 28, -1345.616, -1788.125, 50.779, 2.198, 60, 69404)
+ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES(`PhaseId`), `position_x`=VALUES(`position_x`), `position_y`=VALUES(`position_y`), `position_z`=VALUES(`position_z`), `orientation`=VALUES(`orientation`), `spawntimesecs`=VALUES(`spawntimesecs`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
+
+-- entry 244683 Gnoll Prowler (Horde-xval EXPAND, extra Horde-confirmed spawn point)
+INSERT INTO `creature` (`guid`,`id`,`map`,`PhaseId`,`position_x`,`position_y`,`position_z`,`orientation`,`spawntimesecs`,`VerifiedBuild`) VALUES
+ (8000173, 244683, 2927, 28, -1366.032, -1784.486, 61.988, 1.352, 60, 69404)
+ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES(`PhaseId`), `position_x`=VALUES(`position_x`), `position_y`=VALUES(`position_y`), `position_z`=VALUES(`position_z`), `orientation`=VALUES(`orientation`), `spawntimesecs`=VALUES(`spawntimesecs`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
+
+-- entry 244683 Gnoll Prowler (Horde-xval EXPAND, extra Horde-confirmed spawn point)
+INSERT INTO `creature` (`guid`,`id`,`map`,`PhaseId`,`position_x`,`position_y`,`position_z`,`orientation`,`spawntimesecs`,`VerifiedBuild`) VALUES
+ (8000174, 244683, 2927, 28, -1274.698, -1844.071, 81.709, 2.512, 60, 69404)
+ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES(`PhaseId`), `position_x`=VALUES(`position_x`), `position_y`=VALUES(`position_y`), `position_z`=VALUES(`position_z`), `orientation`=VALUES(`orientation`), `spawntimesecs`=VALUES(`spawntimesecs`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
+
+-- entry 244683 Gnoll Prowler (Horde-xval EXPAND, extra Horde-confirmed spawn point)
+INSERT INTO `creature` (`guid`,`id`,`map`,`PhaseId`,`position_x`,`position_y`,`position_z`,`orientation`,`spawntimesecs`,`VerifiedBuild`) VALUES
+ (8000175, 244683, 2927, 28, -1231.531, -1782.307, 64.936, 3.508, 60, 69404)
+ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES(`PhaseId`), `position_x`=VALUES(`position_x`), `position_y`=VALUES(`position_y`), `position_z`=VALUES(`position_z`), `orientation`=VALUES(`orientation`), `spawntimesecs`=VALUES(`spawntimesecs`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
+
+-- entry 244683 Gnoll Prowler (Horde-xval EXPAND, extra Horde-confirmed spawn point)
+INSERT INTO `creature` (`guid`,`id`,`map`,`PhaseId`,`position_x`,`position_y`,`position_z`,`orientation`,`spawntimesecs`,`VerifiedBuild`) VALUES
+ (8000176, 244683, 2927, 28, -1330.334, -1790.616, 61.988, 1.384, 60, 69404)
+ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES(`PhaseId`), `position_x`=VALUES(`position_x`), `position_y`=VALUES(`position_y`), `position_z`=VALUES(`position_z`), `orientation`=VALUES(`orientation`), `spawntimesecs`=VALUES(`spawntimesecs`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
+
+-- entry 244683 Gnoll Prowler (Horde-xval EXPAND, extra Horde-confirmed spawn point)
+INSERT INTO `creature` (`guid`,`id`,`map`,`PhaseId`,`position_x`,`position_y`,`position_z`,`orientation`,`spawntimesecs`,`VerifiedBuild`) VALUES
+ (8000177, 244683, 2927, 28, -1257.556, -1734.151, 53.389, 1.738, 60, 69404)
+ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES(`PhaseId`), `position_x`=VALUES(`position_x`), `position_y`=VALUES(`position_y`), `position_z`=VALUES(`position_z`), `orientation`=VALUES(`orientation`), `spawntimesecs`=VALUES(`spawntimesecs`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
+
+-- entry 244683 Gnoll Prowler (Horde-xval EXPAND, extra Horde-confirmed spawn point)
+INSERT INTO `creature` (`guid`,`id`,`map`,`PhaseId`,`position_x`,`position_y`,`position_z`,`orientation`,`spawntimesecs`,`VerifiedBuild`) VALUES
+ (8000178, 244683, 2927, 28, -1210.524, -1735.707, 59.291, 2.135, 60, 69404)
+ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES(`PhaseId`), `position_x`=VALUES(`position_x`), `position_y`=VALUES(`position_y`), `position_z`=VALUES(`position_z`), `orientation`=VALUES(`orientation`), `spawntimesecs`=VALUES(`spawntimesecs`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
+
+-- entry 244685 Ogre Basher (Horde-xval EXPAND, siege-trash, extra Horde-confirmed spawn point)
+INSERT INTO `creature` (`guid`,`id`,`map`,`PhaseId`,`position_x`,`position_y`,`position_z`,`orientation`,`spawntimesecs`,`VerifiedBuild`) VALUES
+ (8000179, 244685, 2927, 28, -1200.045, -1874.247, 91.668, 2.749, 60, 69404)
+ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES(`PhaseId`), `position_x`=VALUES(`position_x`), `position_y`=VALUES(`position_y`), `position_z`=VALUES(`position_z`), `orientation`=VALUES(`orientation`), `spawntimesecs`=VALUES(`spawntimesecs`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
+
+-- entry 244685 Ogre Basher (Horde-xval EXPAND, siege-trash, extra Horde-confirmed spawn point)
+INSERT INTO `creature` (`guid`,`id`,`map`,`PhaseId`,`position_x`,`position_y`,`position_z`,`orientation`,`spawntimesecs`,`VerifiedBuild`) VALUES
+ (8000180, 244685, 2927, 28, -1349.943, -1888.292, 63.067, 2.941, 60, 69404)
+ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES(`PhaseId`), `position_x`=VALUES(`position_x`), `position_y`=VALUES(`position_y`), `position_z`=VALUES(`position_z`), `orientation`=VALUES(`orientation`), `spawntimesecs`=VALUES(`spawntimesecs`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
+
+-- entry 244685 Ogre Basher (Horde-xval EXPAND, climax-wave, extra Horde-confirmed spawn point)
+INSERT INTO `creature` (`guid`,`id`,`map`,`PhaseId`,`position_x`,`position_y`,`position_z`,`orientation`,`spawntimesecs`,`VerifiedBuild`) VALUES
+ (8000181, 244685, 2927, 3, -1370.384, -1846.622, 62.975, 6.009, 60, 69404)
+ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES(`PhaseId`), `position_x`=VALUES(`position_x`), `position_y`=VALUES(`position_y`), `position_z`=VALUES(`position_z`), `orientation`=VALUES(`orientation`), `spawntimesecs`=VALUES(`spawntimesecs`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
+
+-- entry 244685 Ogre Basher (Horde-xval EXPAND, climax-wave, extra Horde-confirmed spawn point)
+INSERT INTO `creature` (`guid`,`id`,`map`,`PhaseId`,`position_x`,`position_y`,`position_z`,`orientation`,`spawntimesecs`,`VerifiedBuild`) VALUES
+ (8000182, 244685, 2927, 3, -1198.036, -1764.974, 58.873, 3.139, 60, 69404)
+ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES(`PhaseId`), `position_x`=VALUES(`position_x`), `position_y`=VALUES(`position_y`), `position_z`=VALUES(`position_z`), `orientation`=VALUES(`orientation`), `spawntimesecs`=VALUES(`spawntimesecs`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
+
+-- entry 244685 Ogre Basher (Horde-xval EXPAND, climax-wave, extra Horde-confirmed spawn point)
+INSERT INTO `creature` (`guid`,`id`,`map`,`PhaseId`,`position_x`,`position_y`,`position_z`,`orientation`,`spawntimesecs`,`VerifiedBuild`) VALUES
+ (8000183, 244685, 2927, 3, -1159.377, -1753.982, 54.206, 5.299, 60, 69404)
+ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES(`PhaseId`), `position_x`=VALUES(`position_x`), `position_y`=VALUES(`position_y`), `position_z`=VALUES(`position_z`), `orientation`=VALUES(`orientation`), `spawntimesecs`=VALUES(`spawntimesecs`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
+
+-- entry 232027 (Horde Hammerfall cluster, Horde-xval ADD)
+INSERT INTO `creature` (`guid`,`id`,`map`,`PhaseId`,`position_x`,`position_y`,`position_z`,`orientation`,`spawntimesecs`,`VerifiedBuild`) VALUES
+ (8000184, 232027, 2927, 1961, -894.12, -3550.656, 71.304, 2.191, 300, 69404)
+ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES(`PhaseId`), `position_x`=VALUES(`position_x`), `position_y`=VALUES(`position_y`), `position_z`=VALUES(`position_z`), `orientation`=VALUES(`orientation`), `spawntimesecs`=VALUES(`spawntimesecs`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
+
+-- entry 232031 (Horde Hammerfall cluster, Horde-xval ADD)
+INSERT INTO `creature` (`guid`,`id`,`map`,`PhaseId`,`position_x`,`position_y`,`position_z`,`orientation`,`spawntimesecs`,`VerifiedBuild`) VALUES
+ (8000185, 232031, 2927, 1961, -949.701, -3532.125, 57.065, 5.304, 300, 69404)
+ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES(`PhaseId`), `position_x`=VALUES(`position_x`), `position_y`=VALUES(`position_y`), `position_z`=VALUES(`position_z`), `orientation`=VALUES(`orientation`), `spawntimesecs`=VALUES(`spawntimesecs`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
+
+-- entry 232033 (Horde Hammerfall cluster, Horde-xval ADD)
+INSERT INTO `creature` (`guid`,`id`,`map`,`PhaseId`,`position_x`,`position_y`,`position_z`,`orientation`,`spawntimesecs`,`VerifiedBuild`) VALUES
+ (8000186, 232033, 2927, 1961, -1016.342, -3493.712, 62.186, 5.574, 300, 69404)
+ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES(`PhaseId`), `position_x`=VALUES(`position_x`), `position_y`=VALUES(`position_y`), `position_z`=VALUES(`position_z`), `orientation`=VALUES(`orientation`), `spawntimesecs`=VALUES(`spawntimesecs`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
+
+-- entry 232037 (Horde Hammerfall cluster, Horde-xval ADD)
+INSERT INTO `creature` (`guid`,`id`,`map`,`PhaseId`,`position_x`,`position_y`,`position_z`,`orientation`,`spawntimesecs`,`VerifiedBuild`) VALUES
+ (8000187, 232037, 2927, 1961, -880.905, -3503.436, 71.854, 4.327, 300, 69404)
+ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES(`PhaseId`), `position_x`=VALUES(`position_x`), `position_y`=VALUES(`position_y`), `position_z`=VALUES(`position_z`), `orientation`=VALUES(`orientation`), `spawntimesecs`=VALUES(`spawntimesecs`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
+
+-- entry 244715 Thrall (Horde hub -- template added by H2, Horde-xval ADD)
+INSERT INTO `creature` (`guid`,`id`,`map`,`PhaseId`,`position_x`,`position_y`,`position_z`,`orientation`,`spawntimesecs`,`VerifiedBuild`) VALUES
+ (8000188, 244715, 2927, 1961, -942.819, -3533.63, 70.639, 2.525, 300, 69404)
+ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES(`PhaseId`), `position_x`=VALUES(`position_x`), `position_y`=VALUES(`position_y`), `position_z`=VALUES(`position_z`), `orientation`=VALUES(`orientation`), `spawntimesecs`=VALUES(`spawntimesecs`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
+
+-- entry 246612 Stromgarde Exile (ENEMY, Horde-xval ADD)
+INSERT INTO `creature` (`guid`,`id`,`map`,`PhaseId`,`position_x`,`position_y`,`position_z`,`orientation`,`spawntimesecs`,`VerifiedBuild`) VALUES
+ (8000189, 246612, 2927, 37, -903.144, -3491.733, 70.645, 2.451, 60, 69404)
+ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES(`PhaseId`), `position_x`=VALUES(`position_x`), `position_y`=VALUES(`position_y`), `position_z`=VALUES(`position_z`), `orientation`=VALUES(`orientation`), `spawntimesecs`=VALUES(`spawntimesecs`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
+
+-- entry 246612 Stromgarde Exile (ENEMY, Horde-xval ADD)
+INSERT INTO `creature` (`guid`,`id`,`map`,`PhaseId`,`position_x`,`position_y`,`position_z`,`orientation`,`spawntimesecs`,`VerifiedBuild`) VALUES
+ (8000190, 246612, 2927, 37, -904.248, -3498.804, 70.597, 4.918, 60, 69404)
+ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES(`PhaseId`), `position_x`=VALUES(`position_x`), `position_y`=VALUES(`position_y`), `position_z`=VALUES(`position_z`), `orientation`=VALUES(`orientation`), `spawntimesecs`=VALUES(`spawntimesecs`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
+
+-- entry 246613 (Horde Hammerfall cluster, Horde-xval ADD)
+INSERT INTO `creature` (`guid`,`id`,`map`,`PhaseId`,`position_x`,`position_y`,`position_z`,`orientation`,`spawntimesecs`,`VerifiedBuild`) VALUES
+ (8000191, 246613, 2927, 1961, -903.788, -3501.516, 70.617, 2.062, 300, 69404)
+ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES(`PhaseId`), `position_x`=VALUES(`position_x`), `position_y`=VALUES(`position_y`), `position_z`=VALUES(`position_z`), `orientation`=VALUES(`orientation`), `spawntimesecs`=VALUES(`spawntimesecs`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
+
+-- entry 31216 (Horde Hammerfall cluster, Horde-xval ADD)
+INSERT INTO `creature` (`guid`,`id`,`map`,`PhaseId`,`position_x`,`position_y`,`position_z`,`orientation`,`spawntimesecs`,`VerifiedBuild`) VALUES
+ (8000192, 31216, 2927, 1961, -1091.763, -3554.803, 49.642, 0.0, 300, 69404)
+ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES(`PhaseId`), `position_x`=VALUES(`position_x`), `position_y`=VALUES(`position_y`), `position_z`=VALUES(`position_z`), `orientation`=VALUES(`orientation`), `spawntimesecs`=VALUES(`spawntimesecs`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
+
+-- entry 68662 (Horde Hammerfall cluster, Horde-xval ADD)
+INSERT INTO `creature` (`guid`,`id`,`map`,`PhaseId`,`position_x`,`position_y`,`position_z`,`orientation`,`spawntimesecs`,`VerifiedBuild`) VALUES
+ (8000193, 68662, 2927, 1961, -1028.302, -3554.224, 56.517, 0.637, 300, 69404)
+ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES(`PhaseId`), `position_x`=VALUES(`position_x`), `position_y`=VALUES(`position_y`), `position_z`=VALUES(`position_z`), `orientation`=VALUES(`orientation`), `spawntimesecs`=VALUES(`spawntimesecs`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
+
+-- entry 245052 Horde Grunt (Horde-xval ADD, supplements movement-src rows in 12_ambient_spawns.sql)
+INSERT INTO `creature` (`guid`,`id`,`map`,`PhaseId`,`position_x`,`position_y`,`position_z`,`orientation`,`spawntimesecs`,`VerifiedBuild`) VALUES
+ (8000194, 245052, 2927, 1961, -954.142, -3537.071, 56.926, 5.241, 300, 69404)
+ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES(`PhaseId`), `position_x`=VALUES(`position_x`), `position_y`=VALUES(`position_y`), `position_z`=VALUES(`position_z`), `orientation`=VALUES(`orientation`), `spawntimesecs`=VALUES(`spawntimesecs`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
+
+-- entry 245052 Horde Grunt (Horde-xval ADD, supplements movement-src rows in 12_ambient_spawns.sql)
+INSERT INTO `creature` (`guid`,`id`,`map`,`PhaseId`,`position_x`,`position_y`,`position_z`,`orientation`,`spawntimesecs`,`VerifiedBuild`) VALUES
+ (8000195, 245052, 2927, 1961, -952.947, -3523.74, 70.6, 4.307, 300, 69404)
+ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES(`PhaseId`), `position_x`=VALUES(`position_x`), `position_y`=VALUES(`position_y`), `position_z`=VALUES(`position_z`), `orientation`=VALUES(`orientation`), `spawntimesecs`=VALUES(`spawntimesecs`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
+
+-- entry 229959 (Stromgarde extras, Horde-xval ADD)
+INSERT INTO `creature` (`guid`,`id`,`map`,`PhaseId`,`position_x`,`position_y`,`position_z`,`orientation`,`spawntimesecs`,`VerifiedBuild`) VALUES
+ (8000196, 229959, 2927, 1610, -1696.443, -1584.203, 54.466, 1.941, 300, 69404)
+ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES(`PhaseId`), `position_x`=VALUES(`position_x`), `position_y`=VALUES(`position_y`), `position_z`=VALUES(`position_z`), `orientation`=VALUES(`orientation`), `spawntimesecs`=VALUES(`spawntimesecs`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
+
+-- entry 229966 (Stromgarde extras, Horde-xval ADD)
+INSERT INTO `creature` (`guid`,`id`,`map`,`PhaseId`,`position_x`,`position_y`,`position_z`,`orientation`,`spawntimesecs`,`VerifiedBuild`) VALUES
+ (8000197, 229966, 2927, 1610, -1783.613, -1594.852, 54.8, 1.571, 300, 69404)
+ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES(`PhaseId`), `position_x`=VALUES(`position_x`), `position_y`=VALUES(`position_y`), `position_z`=VALUES(`position_z`), `orientation`=VALUES(`orientation`), `spawntimesecs`=VALUES(`spawntimesecs`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
+
+-- entry 229967 (Stromgarde extras, Horde-xval ADD)
+INSERT INTO `creature` (`guid`,`id`,`map`,`PhaseId`,`position_x`,`position_y`,`position_z`,`orientation`,`spawntimesecs`,`VerifiedBuild`) VALUES
+ (8000198, 229967, 2927, 1610, -1778.295, -1597.351, 54.8, 0.925, 300, 69404)
+ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES(`PhaseId`), `position_x`=VALUES(`position_x`), `position_y`=VALUES(`position_y`), `position_z`=VALUES(`position_z`), `orientation`=VALUES(`orientation`), `spawntimesecs`=VALUES(`spawntimesecs`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
+
+-- entry 231218 (Stromgarde extras, Horde-xval ADD)
+INSERT INTO `creature` (`guid`,`id`,`map`,`PhaseId`,`position_x`,`position_y`,`position_z`,`orientation`,`spawntimesecs`,`VerifiedBuild`) VALUES
+ (8000199, 231218, 2927, 1610, -1597.818, -1773.37, 68.086, 2.078, 300, 69404)
+ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES(`PhaseId`), `position_x`=VALUES(`position_x`), `position_y`=VALUES(`position_y`), `position_z`=VALUES(`position_z`), `orientation`=VALUES(`orientation`), `spawntimesecs`=VALUES(`spawntimesecs`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
+
+-- entry 231218 (Stromgarde extras, Horde-xval ADD)
+INSERT INTO `creature` (`guid`,`id`,`map`,`PhaseId`,`position_x`,`position_y`,`position_z`,`orientation`,`spawntimesecs`,`VerifiedBuild`) VALUES
+ (8000200, 231218, 2927, 1610, -1597.3, -1751.754, 68.086, 3.445, 300, 69404)
+ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES(`PhaseId`), `position_x`=VALUES(`position_x`), `position_y`=VALUES(`position_y`), `position_z`=VALUES(`position_z`), `orientation`=VALUES(`orientation`), `spawntimesecs`=VALUES(`spawntimesecs`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
+
+-- entry 235709 (Stromgarde extras, Horde-xval ADD)
+INSERT INTO `creature` (`guid`,`id`,`map`,`PhaseId`,`position_x`,`position_y`,`position_z`,`orientation`,`spawntimesecs`,`VerifiedBuild`) VALUES
+ (8000201, 235709, 2927, 1610, -1703.24, -1559.866, 54.66, 0.0, 300, 69404)
+ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES(`PhaseId`), `position_x`=VALUES(`position_x`), `position_y`=VALUES(`position_y`), `position_z`=VALUES(`position_z`), `orientation`=VALUES(`orientation`), `spawntimesecs`=VALUES(`spawntimesecs`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
+
+-- entry 249423 (Stromgarde extras, Horde-xval ADD)
+INSERT INTO `creature` (`guid`,`id`,`map`,`PhaseId`,`position_x`,`position_y`,`position_z`,`orientation`,`spawntimesecs`,`VerifiedBuild`) VALUES
+ (8000202, 249423, 2927, 1610, -1473.38, -1808.148, 94.273, 0.326, 300, 69404)
+ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES(`PhaseId`), `position_x`=VALUES(`position_x`), `position_y`=VALUES(`position_y`), `position_z`=VALUES(`position_z`), `orientation`=VALUES(`orientation`), `spawntimesecs`=VALUES(`spawntimesecs`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
+
+-- entry 254547 Stromgarde Footman (Horde-xval ADD, supplements 11-row cluster in 12_ambient_spawns.sql)
+INSERT INTO `creature` (`guid`,`id`,`map`,`PhaseId`,`position_x`,`position_y`,`position_z`,`orientation`,`spawntimesecs`,`VerifiedBuild`) VALUES
+ (8000203, 254547, 2927, 1610, -1340.939, -1838.618, 62.567, 2.723, 300, 69404)
+ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES(`PhaseId`), `position_x`=VALUES(`position_x`), `position_y`=VALUES(`position_y`), `position_z`=VALUES(`position_z`), `orientation`=VALUES(`orientation`), `spawntimesecs`=VALUES(`spawntimesecs`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
+
+-- entry 254547 Stromgarde Footman (Horde-xval ADD, supplements 11-row cluster in 12_ambient_spawns.sql)
+INSERT INTO `creature` (`guid`,`id`,`map`,`PhaseId`,`position_x`,`position_y`,`position_z`,`orientation`,`spawntimesecs`,`VerifiedBuild`) VALUES
+ (8000204, 254547, 2927, 1610, -1484.065, -1801.192, 67.52, 0.065, 300, 69404)
 ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES(`PhaseId`), `position_x`=VALUES(`position_x`), `position_y`=VALUES(`position_y`), `position_z`=VALUES(`position_z`), `orientation`=VALUES(`orientation`), `spawntimesecs`=VALUES(`spawntimesecs`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
 
 -- ============================================================================
--- END -- 144 creature rows across guid 8000000-8000143 (reserved block 8000000-8000999).
+-- END -- 205 creature rows across guid 8000000-8000204 (reserved block 8000000-8000999).
+--   (144 Fix-Round-2 baseline + 40 Horde-xval Task-1 expansion + 21 Horde-xval Task-2 additions)
 -- ============================================================================
