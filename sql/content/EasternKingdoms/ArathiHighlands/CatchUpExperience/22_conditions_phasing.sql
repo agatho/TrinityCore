@@ -15,6 +15,15 @@
 --   tuple, per `conditions`.CREATE TABLE in sql/base/dev/world_database.sql).
 -- ============================================================================
 --
+-- **HORDE CROSS-VALIDATION CAVEAT (2026-08-20):** a full Horde capture (build 69404) was
+-- run through the --phaseshift decoder. Its personal phase ids ({1,13,65,1951}) are almost
+-- ENTIRELY DISJOINT from these Alliance ids ({1959,1961,1610,28,37,...}); even the coincidental
+-- overlaps (1965, 4) carry DIFFERENT quest windows. => the numeric personal-phase ids are
+-- SESSION/INSTANCE-ALLOCATED, NOT portable content constants. ONLY PhaseId 3 (slot-25 completion,
+-- whole-span) cross-validates as canonical on BOTH factions. The real spine is the QUEST-STATE
+-- CONDITIONS in 22_conditions_phasing.sql + server-assigned personal phases (instance/C++ per
+-- PhasingHandler) -- these numeric PhaseIds are ILLUSTRATIVE of the phase-graph SHAPE only. Do NOT
+-- port them to a Horde build or treat them as stable; Phase K: derive real ids per-realm at deploy.
 -- ---- THE REAL PhaseId MAP (Fix Round 2 -- replaces the FABRICATED 15901-15905 block) ----
 -- See 20_creature_spawns.sql / 21_phase_area.sql banners for the full graph. This file only
 -- gates the 7 PhaseIds actually attached to a creature spawn (1961, 37, 1959, 4, 1610, 28,
