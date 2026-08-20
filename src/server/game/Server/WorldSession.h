@@ -263,6 +263,7 @@ namespace WorldPackets
         class ReorderCharacters;
         class UndeleteCharacter;
         class PlayerLogin;
+        class EncounterJournalStartArathiRpe;
         class LogoutRequest;
         class LogoutCancel;
         class LoadingScreenNotify;
@@ -1242,6 +1243,13 @@ class TC_GAME_API WorldSession
         void HandleCharDeleteOpcode(WorldPackets::Character::CharDelete& charDelete);
         void HandleCharCreateOpcode(WorldPackets::Character::CreateCharacter& charCreate);
         void HandlePlayerLoginOpcode(WorldPackets::Character::PlayerLogin& playerLogin);
+
+        // Arathi Returning Player Experience: shared in-world entry point (Adventure Guide tile)
+        // for CMSG_ENCOUNTER_JOURNAL_START_ARATHI_RPE. See CharacterHandler.cpp for the login-time
+        // equivalent in HandlePlayerLogin(). Returns false (no-op) if the player is ineligible or
+        // the map is unavailable.
+        bool EnterArathiRpe(Player* player);
+        void HandleEncounterJournalStartArathiRpe(WorldPackets::Character::EncounterJournalStartArathiRpe& encounterJournalStartArathiRpe);
 
         void SendConnectToInstance(WorldPackets::Auth::ConnectToSerial serial);
         void HandleContinuePlayerLogin();

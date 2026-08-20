@@ -1597,6 +1597,64 @@ void WorldSession::HandlePlayerLogin(LoginQueryHolder const& holder)
     TC_METRIC_EVENT("player_events", "Login", pCurrChar->GetName());
 }
 
+// TODO: C_PlayerInfo.IsPlayerInRPE() (client Lua/UI) has no corresponding server-set field in this
+// fork - grepped ActivePlayerData / UpdateFields.h / DB2Structure.h for InRpe/IsPlayerInRPE/RPEMode
+// and found nothing beyond the WorldSession-local m_playerLoginRPE flag consumed above, which is
+// cleared before HandlePlayerLogin() returns and never exposed to the client. It may simply be
+// client-local state latched off the RPE bit on CMSG_PLAYER_LOGIN / this opcode, in which case
+// there is nothing to add here; if play-testing shows retail-only tutorials/UI gating depend on a
+// real server bit, that needs its own capture before inventing one.
+//
+// Arathi Returning Player Experience: in-game entry point for the Adventure Guide's "Catch Up"
+// tile (CMSG_ENCOUNTER_JOURNAL_START_ARATHI_RPE, handled below), reusing the same eligibility
+// gate, map id and landing spot as the CMSG_PLAYER_LOGIN.RPE path in HandlePlayerLogin() above.
+//
+// The player is already fully in the world for this entry point (unlike HandlePlayerLogin, which
+// runs before AddPlayerToMap and therefore needs the manual WorldRelocate/ResetMap/SetMap/
+// UpdatePositionData rebind), so a normal cross-map Player::TeleportTo is enough here - it already
+// performs the equivalent of that rebind plus the client-facing transfer packets for a live
+// player.
+bool WorldSession::EnterArathiRpe(Player* player)
+{
+    if (!player)
+        return false;
+
+    if (player->GetMapId() == ARATHI_RPE_MAP_ID)
+        return true; // already there (e.g. tile clicked twice)
+
+    if (!IsArathiRpeEligible(time_t(player->m_playerData->LogoutTime)))
+    {
+        TC_LOG_ERROR("network", "Player {} requested Arathi RPE via encounter journal but is not eligible (LogoutTime={})",
+            player->GetGUID().ToString(), int64(player->m_playerData->LogoutTime));
+        return false;
+    }
+
+    if (!sMapStore.LookupEntry(ARATHI_RPE_MAP_ID))
+    {
+        TC_LOG_ERROR("network", "Player {} requested Arathi RPE via encounter journal but map {} is missing from Map.db2",
+            player->GetGUID().ToString(), ARATHI_RPE_MAP_ID);
+        return false;
+    }
+
+    return player->TeleportTo(ARATHI_RPE_MAP_ID, ARATHI_RPE_POSITION_X, ARATHI_RPE_POSITION_Y,
+        ARATHI_RPE_POSITION_Z, ARATHI_RPE_ORIENTATION);
+}
+
+void WorldSession::HandleEncounterJournalStartArathiRpe(WorldPackets::Character::EncounterJournalStartArathiRpe& /*encounterJournalStartArathiRpe*/)
+{
+    Player* player = GetPlayer();
+    if (!player)
+        return;
+
+    if (!EnterArathiRpe(player))
+        return;
+
+    // Quest 90882 is authored on the landing-pad questgivers on the content branch and is expected
+    // to auto-offer once the player is standing at the pad; nothing is force-granted here on
+    // purpose so that a questgiver-driven offer (gossip/greeting) is not double-added. If
+    // play-testing shows retail force-grants it instead, add player->AddQuest(...) here.
+}
+
 void WorldSession::SendFeatureSystemStatus()
 {
     WorldPackets::System::FeatureSystemStatus features;

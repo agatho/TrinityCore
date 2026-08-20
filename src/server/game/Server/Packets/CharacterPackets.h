@@ -584,6 +584,17 @@ namespace WorldPackets
             bool RPE = false;
         };
 
+        // CMSG_ENCOUNTER_JOURNAL_START_ARATHI_RPE: sent by the Adventure Guide's Arathi "Catch Up"
+        // tile when clicked in-world (as opposed to RPE above, which only applies at login). Nullary
+        // - see WorldSession::HandleEncounterJournalStartArathiRpe in CharacterHandler.cpp.
+        class EncounterJournalStartArathiRpe final : public ClientPacket
+        {
+        public:
+            explicit EncounterJournalStartArathiRpe(WorldPacket&& packet) : ClientPacket(CMSG_ENCOUNTER_JOURNAL_START_ARATHI_RPE, std::move(packet)) { }
+
+            void Read() override { }
+        };
+
         class LoginVerifyWorld final : public ServerPacket
         {
         public:
