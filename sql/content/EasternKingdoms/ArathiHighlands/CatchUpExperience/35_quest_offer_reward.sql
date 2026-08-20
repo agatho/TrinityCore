@@ -81,3 +81,33 @@ INSERT INTO `quest_template` (`ID`, `RewardChoiceItemID1`, `RewardChoiceItemQuan
  (90895, 154004, 1, 153993, 1, 0,      0, 0,      0),
  (90896, 154003, 1, 154006, 1, 0,      0, 0,      0)
 ON DUPLICATE KEY UPDATE `RewardChoiceItemID1`=VALUES(`RewardChoiceItemID1`), `RewardChoiceItemQuantity1`=VALUES(`RewardChoiceItemQuantity1`), `RewardChoiceItemID2`=VALUES(`RewardChoiceItemID2`), `RewardChoiceItemQuantity2`=VALUES(`RewardChoiceItemQuantity2`), `RewardChoiceItemID3`=VALUES(`RewardChoiceItemID3`), `RewardChoiceItemQuantity3`=VALUES(`RewardChoiceItemQuantity3`), `RewardChoiceItemID4`=VALUES(`RewardChoiceItemID4`), `RewardChoiceItemQuantity4`=VALUES(`RewardChoiceItemQuantity4`);
+
+-- ============================================================================
+-- HORDE-XVAL FIX (H3, task-6) -- documented Horde reward-choice item ids (NOT AUTHORED)
+-- ============================================================================
+-- `RewardChoiceItemID1-6` (Section 2 above) is SINGLE-VALUED per quest_template row, but
+-- the Horde cross-validation capture confirms the actual reward-choice item SET differs by
+-- faction for most of this chain's quests (only 90883 shares the identical set both sides).
+-- Applying the Horde ids as a straight overwrite of Section 2 above would silently BREAK
+-- Alliance turn-ins (single scalar columns, no per-faction branching in the schema as-is)
+-- -- so they are documented here for Phase K, NOT inserted as live deltas. Per-faction
+-- reward selection needs either `condition` rows gating which reward SET is shown (no such
+-- mechanism exists for RewardChoiceItemID today) or a class/race-conditioned alternate
+-- quest_template row -- a genuine design decision, out of scope for this data-correction
+-- task. Do NOT overwrite Section 2's Alliance ids with these.
+--
+-- Horde RewardChoiceItemID set per quest (item ids, comma-separated, no quantities beyond
+-- qty 1 each, matching Section 2's pattern):
+--   90882 H: 153792, 153773
+--   90885 H: 153797, 153796
+--   90886 H: 153785, 153786
+--   90887 H: 153793
+--   90888 H: 153798, 153795
+--   90893 H: 153790, 153791
+--   90895 H: 153788, 153794
+--   90896 H: 153787, 153789
+--   90883: SAME both factions -- 249773, 249772, 249771, 188213 (already Section 2's live
+--     Alliance set; no Horde-specific delta needed for this one quest).
+-- TODO Phase K: design and author the per-faction reward-selection mechanism (conditions
+-- and/or a parallel quest_template row), then wire these ids in.
+-- ============================================================================

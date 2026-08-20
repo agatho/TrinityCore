@@ -1,20 +1,21 @@
 -- ============================================================================
--- CONTENT SLICE -- Arathi Catch-Up Experience :: Phase K stub -- Horde finale
--- branch (quest 90898 "Back to Hammerfall")
+-- CONTENT SLICE -- Arathi Catch-Up Experience :: Horde finale branch
+-- (quest 90898 "Back to Hammerfall")
 -- ============================================================================
 -- Branch: content   Path: sql/content/EasternKingdoms/ArathiHighlands/CatchUpExperience/
 -- Server mapID: 2927 (CORRECTED from 2796 -- real server map, verified from wire; uiMap 2451 display-only)
 --
--- STATUS: THIS IS A DOCUMENTED GAP STUB, NOT A CAPTURED HORDE QUESTLINE. The Horde
--- run of the "Siege of Arathi Highlands" chain was NEVER CAPTURED (no addon dump, no
--- WDB cache rows, no sniff for anything Hammerfall-side). Only ONE fact about 90898 is
--- retail-confirmed (Wowhead): its existence and its ID, as the Horde mirror of Alliance
--- 90897, both hanging off 90896 "One Last Ogre" and both feeding 90911 "Your Next
--- Adventure". Every other Horde-specific field authored below is either (a) direct
--- branch-wiring math that follows mechanically from that one fact plus this worktree's
--- own engine source, or (b) explicitly flagged inferred-by-analogy text, never
--- fabricated as if captured. See the "PHASE-K HORDE-CAPTURE GAPS" banner at the bottom
--- for the full list of what is NOT authored here.
+-- STATUS (Horde-xval H3, task-3): CAPTURE-SOURCED. The original authoring of this file was
+-- a documented gap stub -- the Horde run of the "Siege of Arathi Highlands" chain had not
+-- yet been captured, and section 1's quest_template row below was an [INFERRED]-by-analogy
+-- placeholder. A Horde cross-validation capture has since recorded the real 90898 data
+-- (LogDescription flavor text, QuestDescription, RewardBonusMoney, RewardText, and the real
+-- giver/ender creatures) -- section 1 and the new sections 1b/1c below now author that
+-- captured data directly, replacing the placeholder text and the two inert
+-- creature_queststarter/questender comment blocks from the original stub. Section 2
+-- (quest_template_addon branch wiring + the 90911 PrevQuestID fix) was already correct and
+-- is unchanged. See the trimmed "PHASE-K HORDE-CAPTURE GAPS" banner at the bottom for what
+-- STILL remains uncaptured (objectives, phasing, POI, gossip beyond the 244715 hub picker).
 --
 -- CANDIDATE ONLY -- review before applying to any branch. Never applied to a live DB/realm.
 -- Idempotent (INSERT ... ON DUPLICATE KEY UPDATE -> re-apply safe).
@@ -25,39 +26,31 @@
 -- 90911's PrevQuestID documented in section 2, which is a bug-fix completion of Task 3's
 -- own single-branch-only wiring, not a change to anything Task 3 actually authored for
 -- 90897). Must run AFTER 31_quest_template_addon.sql (file-order 70_ > 31_ already
--- guarantees this) since section 2's UPDATE assumes the 90911 row already exists.
+-- guarantees this) since section 2's UPDATE assumes the 90911 row already exists. Also
+-- depends on 33_creature_quest_links.sql's Horde-xval H3 task-2 addition of 244715's
+-- gossip-hub wiring (61_gossip.sql task-5) for the 90911 hand-off to actually be reachable.
 -- ============================================================================
 
 
 -- ============================================================================
--- 1) quest_template (90898 "Back to Hammerfall") -- minimal stub row
+-- 1) quest_template (90898 "Back to Hammerfall") -- CAPTURED Horde data
 -- ============================================================================
--- LogTitle 'Back to Hammerfall' is the one retail-confirmed fact (Wowhead). Everything
--- else below is either inferred-by-analogy (flagged [INFERRED]) or a real engine-level
--- computation (AllowableRaces).
+-- Horde-xval H3 task-3: replaces the original [INFERRED]-by-analogy stub row with the
+-- real captured LogDescription/QuestDescription text. LogTitle 'Back to Hammerfall' was
+-- already retail-confirmed (Wowhead) and is unchanged.
 --
--- QuestDescription (the in-game "objectives" line) is authored as "Meet Thrall within
--- Hammerfall" -- [INFERRED] by direct textual analogy to 90897's own QuestDescription
--- "Meet Jaina within Stromgarde Keep" (see 32_quest_objectives.sql:166-172's companion
--- Type=3 TALKTO objective for 90897, target 244714 Jaina) -- swapping Jaina->Thrall and
--- Stromgarde Keep->Hammerfall per the brief's explicit instruction. This is NOT a
--- captured string; it is a same-shaped placeholder so the quest is minimally
--- self-consistent, pending Phase-K capture of the real text.
+-- LogDescription is now capture-sourced (was previously OMITTED entirely -- no analogous
+-- short-form text existed to mirror, and inventing multi-sentence Thrall dialogue would
+-- have crossed from "inferred by analogy" into "fabricated as real"; that concern is now
+-- moot, this is the captured line).
 --
--- LogDescription (the quest-giver's spoken/flavor text) is intentionally OMITTED
--- (left NULL, the column's schema default -- world_database.sql:3605) rather than
--- filled with any placeholder string: unlike QuestDescription, no analogous short-form
--- text exists to mirror (90897's own LogDescription is a full narrative paragraph, not
--- reproduced in this Task's SQL either -- it's "trusted from world DB" per Task 3's
--- 30_quest_template.sql banner, i.e. still not visible to us here) and inventing
--- multi-sentence Thrall dialogue would cross from "inferred by analogy" into "fabricated
--- as real". TODO Phase K: author LogDescription once a Horde capture (or a Wowhead/
--- wowdb text pull explicitly sourced and cited) provides it.
+-- QuestDescription is now the captured short form "Return to Hammerfall." (previously an
+-- [INFERRED] "Meet Thrall within Hammerfall" placeholder mirrored off 90897's own
+-- QuestDescription -- superseded).
 --
--- RewardBonusMoney=5350 / RewardXPDifficulty=1 -- tier 1, by direct analogy to 90897
--- and the rest of this chain's terminus-adjacent quests (30_quest_template.sql /
--- 32_quest_objectives.sql precedent: every 908xx quest in this chain except the two
--- "siege pair" quests 90893/90895 (tier 5) and 90896 (tier 6) is tier 1).
+-- RewardBonusMoney=5350 / RewardXPDifficulty=1 -- tier 1, matches this chain's other
+-- terminus-adjacent quests (unchanged from the original analogy-based value; capture
+-- confirms it).
 --
 -- AllowableRaces = RACEMASK_HORDE, computed from THIS worktree's
 -- src/server/game/Miscellaneous/RaceMask.h (RACEMASK_HORDE_v = RACEMASK_ALL_PLAYABLE_v
@@ -67,13 +60,29 @@
 -- GetRaceBit() per RaceMask.h:97-147): {1 Orc, 4 Undead, 5 Tauren, 7 Troll, 8 Goblin,
 -- 9 BloodElf, 12 Vulpera, 13 Mag'har Orc, 15 Dracthyr(Horde), 17 Earthen(Horde),
 -- 19 Haranir(Horde), 25 Pandaren(Horde), 26 Nightborne, 27 Highmountain Tauren,
--- 30 Zandalari Troll}. Sum of 2^bit = 1309324210.
-INSERT INTO `quest_template` (`ID`, `LogTitle`, `QuestDescription`, `RewardBonusMoney`, `RewardXPDifficulty`, `AllowableRaces`) VALUES
+-- 30 Zandalari Troll}. Sum of 2^bit = 1309324210. Unchanged from original authoring
+-- (this value was always an engine-level computation, not a capture-dependent field).
+INSERT INTO `quest_template` (`ID`, `LogTitle`, `LogDescription`, `QuestDescription`, `RewardBonusMoney`, `RewardXPDifficulty`, `AllowableRaces`) VALUES
  (90898, 'Back to Hammerfall',
-'Meet Thrall within Hammerfall', -- [INFERRED] analogy to 90897's "Meet Jaina within Stromgarde Keep" -- TODO Phase K
+'We''re not always so lucky that a plan such as this is ended so swiftly and without a surprise portal or two.
+
+That being said, more dangers lurk throughout Azeroth. I know you can be of help to some.
+
+Let us return to Hammerfall to see how they''re recovering.',
+'Return to Hammerfall.',
 5350, 1,
 1309324210) -- RACEMASK_HORDE, see banner above
-ON DUPLICATE KEY UPDATE `LogTitle`=VALUES(`LogTitle`), `QuestDescription`=VALUES(`QuestDescription`), `RewardBonusMoney`=VALUES(`RewardBonusMoney`), `RewardXPDifficulty`=VALUES(`RewardXPDifficulty`), `AllowableRaces`=VALUES(`AllowableRaces`);
+ON DUPLICATE KEY UPDATE `LogTitle`=VALUES(`LogTitle`), `LogDescription`=VALUES(`LogDescription`), `QuestDescription`=VALUES(`QuestDescription`), `RewardBonusMoney`=VALUES(`RewardBonusMoney`), `RewardXPDifficulty`=VALUES(`RewardXPDifficulty`), `AllowableRaces`=VALUES(`AllowableRaces`);
+
+-- ============================================================================
+-- 1b) quest_offer_reward (90898) -- CAPTURED RewardText
+-- ============================================================================
+-- Real turn-in flavor text, same table/pattern as the Alliance chain's
+-- 35_quest_offer_reward.sql Section 1 (that file intentionally does not cover 90898/90911
+-- -- Horde-branch rows belong here instead).
+INSERT INTO `quest_offer_reward` (`ID`, `RewardText`) VALUES
+ (90898, 'Hammerfall will recover in time and become stronger than it was before.')
+ON DUPLICATE KEY UPDATE `RewardText`=VALUES(`RewardText`);
 
 
 -- ============================================================================
@@ -149,40 +158,33 @@ ON DUPLICATE KEY UPDATE `PrevQuestID`=VALUES(`PrevQuestID`);
 
 
 -- ============================================================================
--- 3) creature_questender / creature_queststarter for 90898 -- NOT authored live
+-- 3) creature_questender / creature_queststarter for 90898 -- CAPTURED, now live
 -- ============================================================================
--- The Horde questgiver/ender entry is UNKNOWN -- not captured. Per Requirement 3, this
--- would be analogous to the Alliance pairing 244667 (giver, "Jaina, siege climax") /
--- 244714 (ender/hub, "Jaina, Stromgarde Keep hub") from 33_creature_quest_links.sql:26,
--- 41-42 -- the Horde equivalent is presumed to be a Thrall clone pair at/near Hammerfall,
--- but its creature_template entry has never been captured or created (no Task 1 row
--- exists for it, unlike every Alliance giver/ender in this chain).
+-- The Horde questgiver/ender entries are now capture-sourced (previously UNKNOWN --
+-- left as inert SQL comments per Requirement 3's original authoring). Both creature
+-- entries already exist as real creature_template rows in this feature's Task 1
+-- (10_creature_template.sql): 244666 Thrall (siege climax, already wired as 90896's
+-- giver/90893's ender in 33_creature_quest_links.sql) and 244715 Thrall (the Horde
+-- finale/hub NPC, added by H2, npcflag=3 gossip+questgiver) -- so unlike the original
+-- stub, entry 0 is no longer a concern; both target creatures are real and confirmed.
 --
--- Per the brief: author WITH a placeholder rather than skip silently, but do NOT
--- fabricate a working link -- entry 0 is not a real creature (ObjectMgr.cpp:8575-8577 /
--- 8589-8591 logs `Table 'creature_questender/queststarter' has data for nonexistent
--- creature entry (0)` at world load for any row using it), so the statements below are
--- left as INERT SQL COMMENTS (never executed even if this file were ever applied) rather
--- than live INSERTs of a row we know is broken. Do NOT reuse 244667/244714 (Alliance
--- Jaina) for a Horde turn-in -- that would silently misattribute the quest to the wrong
--- faction's NPC if this file were ever applied verbatim.
+-- Giver: 244666 Thrall (siege climax) -- mirrors Alliance 244667 Jaina -> 90897 (same
+-- narrative beat, siege climax handing off to the "return home" quest).
+-- Ender: 244715 Thrall (Hammerfall hub) -- mirrors Alliance 244714 Jaina (Stromgarde Keep
+-- hub) -- same NPC that also starts/ends 90911 (Task 2 of this Horde-xval fix,
+-- 33_creature_quest_links.sql).
+INSERT INTO `creature_queststarter` (`id`, `quest`) VALUES
+ (244666, 90898)  -- Thrall (siege climax) -- mirror of Alliance 244667 Jaina -> 90897
+ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `quest`=VALUES(`quest`);
+
+INSERT INTO `creature_questender` (`id`, `quest`) VALUES
+ (244715, 90898)  -- Thrall (Hammerfall hub) -- mirror of Alliance 244714 Jaina
+ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `quest`=VALUES(`quest`);
 --
--- TODO Phase K: Horde questgiver entry (analogous to Alliance 244667->244714 Jaina;
--- Horde equivalent is a Thrall clone, entry uncaptured). Once a real entry exists
--- (Task-1-style creature_template row from a Horde capture), uncomment and fill in:
---
--- INSERT INTO `creature_queststarter` (`id`, `quest`) VALUES
---  (0, 90898)  -- TODO Phase K: replace 0 with the real Horde giver entry (Thrall clone, Hammerfall)
--- ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `quest`=VALUES(`quest`);
---
--- INSERT INTO `creature_questender` (`id`, `quest`) VALUES
---  (0, 90898)  -- TODO Phase K: replace 0 with the real Horde ender entry (Thrall clone, Hammerfall hub)
--- ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `quest`=VALUES(`quest`);
---
--- The 90911 hub's OWN giver/ender (currently 244714 Jaina only, 33_creature_quest_links.sql:
--- 27/42) is also Alliance-only in practice today -- a Horde player who rewards 90898 has no
--- creature anywhere that offers/accepts 90911 for them either. That gap belongs to the same
--- Phase-K Horde-capture item above (the Thrall-clone hub NPC), not a separate one.
+-- The 90911 hub's OWN giver/ender for Horde players (244715 Thrall) is now also wired --
+-- see Task 2 of this Horde-xval fix (33_creature_quest_links.sql) -- so a Horde player who
+-- rewards 90898 now has a creature (244715) that both accepts 90898's turn-in and
+-- offers/accepts 90911 immediately after. That gap is CLOSED as of this task.
 
 
 -- ============================================================================
@@ -190,22 +192,29 @@ ON DUPLICATE KEY UPDATE `PrevQuestID`=VALUES(`PrevQuestID`);
 -- ============================================================================
 -- Everything below requires a real Horde playthrough capture (addon dump / sniff /
 -- WDB cache) of the "Siege of Arathi Highlands" Horde path before it can be authored as
--- candidate SQL. None of it is guessed or stubbed above:
---   * Horde questgiver/ender creature_template entries (Thrall clone(s) at Hammerfall
---     and at the 90911 hub) -- entry IDs, model, npcflag, gossip_menu_id (mirroring
---     Task 1's 244643/244655-244667/244714 Jaina/Thrall clone rows for the Alliance side).
+-- candidate SQL. Updated by Horde-xval H3 task-3 -- several items below are now RESOLVED
+-- (struck through) since the 90898 giver/ender entries and text are now capture-sourced
+-- (section 1/1b/3 above); what remains is still genuinely uncaptured, not guessed:
+--   * [RESOLVED by H3] Horde questgiver/ender creature_template entries -- 244666 (giver)
+--     and 244715 (ender/hub) both exist and are now wired (section 3 above); no new
+--     creature_template rows were needed, both were already authored (244666 by Task 1,
+--     244715 by H2).
 --   * Hammerfall-side creature spawns for the Horde mirror of this chain's encounters
 --     (90882's gnoll fight already happens at Hammerfall in the SHARED opening -- only
 --     the LATER, faction-diverging Stromgarde-vs-Hammerfall content is unconfirmed).
 --   * Horde-side PhaseIds/phase_area rows analogous to Task 2's 15901-15905 (Alliance
 --     narrative phasing) -- whether the Horde finale phases the zone at all, and how.
---   * Dialogue text: 90898's LogDescription (flavor/narrative paragraph, see section 1
---     banner) and any Conversation/creature_text rows for the Horde finale.
---   * quest_objectives row(s) for 90898 -- out of this task's scope (Requirements 1-3
---     only), but note for whoever picks this up: 90897's own objective
---     (32_quest_objectives.sql:166-172, ID 9089700, Type=3 TALKTO, target 244714 Jaina)
---     cannot be mirrored for 90898 until the Horde ender entry above exists -- do not
---     reuse 244714 there either.
+--   * [RESOLVED by H3] Dialogue text: 90898's LogDescription and QuestDescription are now
+--     capture-sourced (section 1 above). Any Conversation/creature_text rows for the Horde
+--     finale beyond the quest_template text itself remain uncaptured.
+--   * quest_objectives row(s) for 90898 -- STILL out of scope (this task, H3, only fixes
+--     Task 4's 90883/90911 per the brief) -- but now that the real ender 244715 exists
+--     (section 3 above), a future pass CAN mirror 90897's own objective pattern
+--     (32_quest_objectives.sql:166-172, Type=3 TALKTO) as target 244715 Thrall instead of
+--     244714 Jaina. Do not reuse 244714 for a Horde objective.
 --   * quest_poi / quest_poi_points for 90898 (Hammerfall-side map markers).
---   * Any Horde-specific gossip_menu / npc_text content at the Hammerfall hub.
+--   * Any Horde-specific gossip_menu / npc_text content at the Hammerfall hub itself
+--     (distinct from the 244715 "next adventure" picker menu, which IS now wired --
+--     see 61_gossip.sql Horde-xval H3 task-5 -- this item is about a possible SEPARATE
+--     Hammerfall-hub-flavor gossip greeting, not the picker).
 -- ============================================================================

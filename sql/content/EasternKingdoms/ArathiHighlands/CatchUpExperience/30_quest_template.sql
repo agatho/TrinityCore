@@ -52,9 +52,26 @@
 -- ---- 90882 "Gnoll Way" -- text + reward delta (blank/unreliable WDB row) ----
 -- Reward fields authored explicitly (fix round 1) rather than trusted from this quest's
 -- own blank-text WDB row: plan Part 1.1 tier "t1" = money 5350 copper, RewardXPDifficulty 1.
+--
+-- ---- FIX ROUND 2 (Horde-xval H3, task-1) -- "Iluà" hardcode -- ----
+-- Original authoring hardcoded the literal string "Iluà" as the greeting name in
+-- LogDescription -- this was NEVER a real player name, it is a mis-transcribed/garbled
+-- capture artifact. WoW's quest text substitutes the token `$N` client-side for the
+-- reading player's own name (SharedStrings / quest text conventions, standard across every
+-- other quest in this worktree) -- fixed below to use `$N` like every other quest in this
+-- chain already does. Cross-slice grep (Horde-xval H3) confirms this was the ONLY
+-- "Iluà"/"Ilu" hardcode anywhere under this feature's SQL slices.
+--
+-- The stored text below is Alliance/Jaina-POV ("Good to have you here, $N. Thrall and I...").
+-- NOTE: the Horde/Thrall-POV variant of this SAME greeting differs in wording (retail:
+-- "Lok'tar, $N. Jaina and I...") -- per the brief this is NOT authored as a second row here;
+-- the client/quest-giver POV substitution for the shared opening greeter (244642 Thrall vs
+-- 244643 Jaina, both now wired to 90882 as of this task's Task 2) is a Phase-K text-capture
+-- item, not fixable by a $N token swap alone. Flagging so nobody assumes this single
+-- Alliance-POV string is what a Horde player will actually see.
 INSERT INTO `quest_template` (`ID`, `LogTitle`, `LogDescription`, `QuestDescription`, `RewardBonusMoney`, `RewardXPDifficulty`) VALUES
  (90882, 'Gnoll Way',
-'Good to have you here, Iluà.
+'Good to have you here, $N.
 
 Thrall and I were in the area when we heard reports of a massive gnoll attack on Hammerfall.
 

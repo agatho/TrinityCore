@@ -10,8 +10,10 @@
 -- No WDB quest_objectives rows exist for any 908xx quest (confirmed: wdb_quest_objectives.sql
 --   has zero 908xx rows) -- every row below is addon-sourced or plan-table-inferred, flagged
 --   per row. QuestObjective.Type enum verified against
---   src/server/game/Quests/QuestDef.h:358-376 in this worktree (0=MONSTER,1=ITEM,
---   3=TALKTO,10=AREATRIGGER,15=PROGRESS_BAR).
+--   src/server/game/Quests/QuestDef.h:354-378 in this worktree (0=MONSTER,1=ITEM,
+--   3=TALKTO,10=AREATRIGGER,14=CRITERIA_TREE,15=PROGRESS_BAR). 14 added Horde-xval H3
+--   task-4 (90883/90911 fixes, see those sections below for why AREATRIGGER/TALKTO were
+--   wrong for those two rows).
 -- CANDIDATE ONLY -- review before applying to any branch. Never applied to a live DB/realm.
 -- Idempotent (INSERT ... ON DUPLICATE KEY UPDATE -> re-apply safe; PK is `ID`).
 -- ============================================================================
@@ -54,15 +56,29 @@ INSERT INTO `quest_objectives` (`ID`, `QuestID`, `Type`, `Order`, `StorageIndex`
  (9088204, 90882, 0, 0, 0, 245027, 10, 'Gnoll slain')   -- Gnoll Assailant
 ON DUPLICATE KEY UPDATE `Type`=VALUES(`Type`), `Order`=VALUES(`Order`), `StorageIndex`=VALUES(`StorageIndex`), `ObjectID`=VALUES(`ObjectID`), `Amount`=VALUES(`Amount`), `Description`=VALUES(`Description`);
 
--- ---- 90883 "To Go'shek Farm" -- travel (INFERRED Type/ObjectID -- flagged [G]) ----
+-- ---- 90883 "To Go'shek Farm" -- travel (Horde-xval H3 task-4 FIX -- was wrong type) ----
 -- [C] addon Description "0/1 Ride a flying mount" (addon_quest_objectives.sql row 7) is a
--- genuine captured bonus-detail objective, not a guess -- but no AreaTrigger ID was
--- captured for the flight's landing point. Authored as Type=10 AREATRIGGER (the closest
--- fit for a scripted-taxi arrival credit) with ObjectID=0 as an explicit placeholder.
--- TODO Phase K: replace ObjectID with a real AreaTrigger once the landing trigger is
--- captured/created; until then this objective will not auto-complete in-game.
+-- genuine captured bonus-detail objective, not a guess. FIX ROUND 2 (Horde-xval H3):
+-- Type=10 AREATRIGGER with ObjectID=0 (the original authoring) is WRONG, not just
+-- incomplete -- ObjectMgr.cpp:8575-8577/8589-8591-style "nonexistent" placeholders aside,
+-- AREATRIGGER credits on a specific zone trigger id; the actual captured objective is a
+-- SKYRIDING flight on the player's OWN mount (Horde-xval combat log confirms spells
+-- 372608 Surge Forward / 372610 Skyward Ascent / 361584 Whirling Surge / 404184 Ground
+-- Skimming -- these are the dynamic-flight/skyriding ability set, not a vehicle or scripted
+-- taxi, so there is no AreaTrigger landing point to author at all). QuestDef.h:354-378
+-- (this worktree) has no dedicated "cast a skyriding spell" or "fly N yards" objective
+-- type -- the closest correct mechanism is Type=14 QUEST_OBJECTIVE_CRITERIA_TREE
+-- (Player.cpp:16343-16346, 16683-16686: driven by a criteria_tree row via
+-- m_questObjectiveCriteriaMgr, which IS how retail models bespoke "do this specific thing"
+-- quest credits like a flight). ObjectID is left 0 as an explicit placeholder (no
+-- criteria_tree row exists yet to reference) -- this does NOT silently auto-complete
+-- (unlike the removed AREATRIGGER/ObjectID=0, CRITERIA_TREE/ObjectID=0 has no matching
+-- criteria_tree row to satisfy, so it fails safe rather than pretending to be wired).
+-- TODO Phase K: author a real criteria_tree row (CriteriaType likely PlayerIsFlying=311,
+-- DBCEnums.h:1998, possibly gated to this zone/quest-active) that fires on one of the 4
+-- confirmed skyriding spells, then point ObjectID at that criteria_tree's ID.
 INSERT INTO `quest_objectives` (`ID`, `QuestID`, `Type`, `Order`, `StorageIndex`, `ObjectID`, `Amount`, `Description`) VALUES
- (9088300, 90883, 10, 0, 0, 0, 1, 'Ride a flying mount')
+ (9088300, 90883, 14, 0, 0, 0, 1, 'Ride a flying mount')
 ON DUPLICATE KEY UPDATE `Type`=VALUES(`Type`), `Order`=VALUES(`Order`), `StorageIndex`=VALUES(`StorageIndex`), `ObjectID`=VALUES(`ObjectID`), `Amount`=VALUES(`Amount`), `Description`=VALUES(`Description`);
 
 -- ---- 90885 "My Beautiful Pumpkins" -- Recover 4 Prized Pumpkins ----
@@ -171,10 +187,31 @@ INSERT INTO `quest_objectives` (`ID`, `QuestID`, `Type`, `Order`, `StorageIndex`
  (9089700, 90897, 3, 0, 0, 244714, 1, 'Jaina Proudmoore met')
 ON DUPLICATE KEY UPDATE `Type`=VALUES(`Type`), `Order`=VALUES(`Order`), `StorageIndex`=VALUES(`StorageIndex`), `ObjectID`=VALUES(`ObjectID`), `Amount`=VALUES(`Amount`), `Description`=VALUES(`Description`);
 
--- ---- 90911 "Your Next Adventure" -- gossip hub (Choose your next adventure) ----
--- [C] addon Description "0/1 Next Adventure Chosen" -> stripped. Type=3 TALKTO: completed
--- via gossip interaction with the ender 244714 (same clone, npcflag=1/gossip_menu_id=39348
--- per Task 1), matching the "gossip hub" framing in plan Part 1.1.
+-- ---- 90911 "Your Next Adventure" -- gossip hub (Horde-xval H3 task-4 FIX -- was wrong
+-- type AND Alliance-only hardcode) ----
+-- [C] addon Description "0/1 Next Adventure Chosen" -> stripped. FIX ROUND 2 (Horde-xval
+-- H3): the original Type=3 TALKTO / ObjectID=244714 authoring was WRONG on two counts --
+-- (1) mechanism: 90911 is completed by picking a response in the "Where Do You Want To
+-- Go?" PlayerChoice popup (choiceId ~902, see PlayerChoice.h / Player::SendPlayerChoice,
+-- Player.cpp:30235-30358), not by a plain TALKTO greet -- TALKTO credits on simply opening
+-- gossip with the NPC, before the player has actually made a choice; (2) faction: 244714
+-- is Jaina, an ALLIANCE-ONLY creature (30_quest_template.sql AllowableRaces on the
+-- Alliance side of this chain) -- hardcoding it as the objective's ObjectID meant this
+-- objective could NEVER complete for a Horde character even after this task's Task 2 wired
+-- 244715 Thrall as 90911's Horde giver/ender in 33_creature_quest_links.sql.
+-- QuestDef.h:354-378 (this worktree) has no dedicated "complete this PlayerChoice"
+-- objective type -- the closest correct mechanism is Type=14 QUEST_OBJECTIVE_CRITERIA_TREE
+-- (Player.cpp:16343-16346/16683-16686, same mechanism as 90883's fix above), which is how
+-- TC models bespoke non-kill/non-talk completions via a criteria_tree row. ObjectID is left
+-- 0 as an explicit placeholder (no creature id, faction-neutral by construction -- this
+-- fixes the Alliance hardcode even before the real criteria_tree exists) rather than
+-- reusing either 244714 or 244715.
+-- TODO Phase K: the real completion is PlayerChoice id ~902 (the "Where Do You Want To Go?"
+-- popup, authored separately per H6) -- author a criteria_tree row whose backing Criteria
+-- fires on completing PlayerChoice 902 (CriteriaType::PlayerChoice-adjacent gossip-option
+-- interaction enum, DBCEnums.h:2249, is an NPCInteractionType id not a CriteriaType --
+-- confirm the correct CriteriaType for "completed PlayerChoice N" against a live DB2 pull
+-- before wiring it), then point ObjectID at that criteria_tree's ID.
 INSERT INTO `quest_objectives` (`ID`, `QuestID`, `Type`, `Order`, `StorageIndex`, `ObjectID`, `Amount`, `Description`) VALUES
- (9091100, 90911, 3, 0, 0, 244714, 1, 'Next Adventure Chosen')
+ (9091100, 90911, 14, 0, 0, 0, 1, 'Next Adventure Chosen')
 ON DUPLICATE KEY UPDATE `Type`=VALUES(`Type`), `Order`=VALUES(`Order`), `StorageIndex`=VALUES(`StorageIndex`), `ObjectID`=VALUES(`ObjectID`), `Amount`=VALUES(`Amount`), `Description`=VALUES(`Description`);

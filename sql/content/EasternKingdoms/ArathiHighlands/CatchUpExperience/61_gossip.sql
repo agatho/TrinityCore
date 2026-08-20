@@ -36,15 +36,23 @@
 -- ============================================================================
 INSERT INTO `creature_template_gossip` (`CreatureID`, `MenuID`, `VerifiedBuild`) VALUES
 (245026, 39386, 69382), -- Win'sa, Food Vendor (task-1 npcflag=129)
-(244714, 39348, 69382)  -- Lady Jaina Proudmoore, Stromgarde Keep hub clone (task-1 npcflag=1)
+(244714, 39348, 69382), -- Lady Jaina Proudmoore, Stromgarde Keep hub clone (task-1 npcflag=1)
+(244715, 39349, 69382)  -- Thrall, Hammerfall hub clone (H2 npcflag=3) -- Horde-xval H3 task-5, PLACEHOLDER MenuID, see SECTION 3c banner
 ON DUPLICATE KEY UPDATE `VerifiedBuild`=VALUES(`VerifiedBuild`);
 
 -- ============================================================================
 -- SECTION 2 -- gossip_menu (TextID = matching npc_text.ID, see 62_npc_text.sql)
 -- ============================================================================
+-- NOTE (Horde-xval H3 task-5): MenuID 39349's TextID is set equal to itself (39349) by the
+-- same convention as 39386/39348, but NO npc_text row for 39349 exists anywhere in this
+-- feature's slices (62_npc_text.sql only has 39386/39348) -- 62_npc_text.sql is outside
+-- this task's file scope (brief Task 5 touches 61_gossip.sql only). TODO Phase K: author
+-- npc_text 39349 (or whatever the real MenuID turns out to be) in 62_npc_text.sql before
+-- this is ever applied, or the gossip window will render with empty header text.
 INSERT INTO `gossip_menu` (`MenuID`, `TextID`, `VerifiedBuild`) VALUES
 (39386, 39386, 69382),
-(39348, 39348, 69382)
+(39348, 39348, 69382),
+(39349, 39349, 69382) -- PLACEHOLDER MenuID -- Horde-xval H3 task-5, see SECTION 3c banner; npc_text 39349 NOT yet authored (out of this task's file scope)
 ON DUPLICATE KEY UPDATE `VerifiedBuild`=VALUES(`VerifiedBuild`);
 
 -- ============================================================================
@@ -66,6 +74,32 @@ ON DUPLICATE KEY UPDATE `GossipOptionID`=VALUES(`GossipOptionID`), `OptionNpc`=V
 -- ============================================================================
 INSERT INTO `gossip_menu_option` (`MenuID`, `GossipOptionID`, `OptionID`, `OptionNpc`, `OptionText`, `OptionBroadcastTextID`, `Language`, `Flags`, `ActionMenuID`, `ActionPoiID`, `GossipNpcOptionID`, `BoxCoded`, `BoxMoney`, `BoxText`, `BoxBroadcastTextID`, `SpellID`, `OverrideIconID`, `VerifiedBuild`) VALUES
 (39348, 133893, 16777216, 0, 'Show me where I could go next.', 0, 0, 0, 0, 0, NULL, 0, 0, NULL, 0, NULL, NULL, 69382)
+ON DUPLICATE KEY UPDATE `GossipOptionID`=VALUES(`GossipOptionID`), `OptionNpc`=VALUES(`OptionNpc`), `OptionText`=VALUES(`OptionText`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
+
+-- ============================================================================
+-- SECTION 3c -- gossip_menu_option 39349 (Thrall "next adventure" picker, Horde mirror)
+-- -- Horde-xval H3 task-5, NEW ----
+-- ============================================================================
+-- Mirrors Jaina's 39348/133893 row exactly, for Thrall 244715 at the Hammerfall hub.
+-- GossipOptionID=133894 and OptionText "Show me where I could go next." are CAPTURED
+-- (Horde-xval cross-validation) -- real, not inferred. OptionID=16777216 (0x1000000) is
+-- reused from Jaina's OptionNpc value BY ANALOGY (same PK-ordinal convention observed on
+-- the Alliance side, not independently captured for Thrall) -- flagged here rather than
+-- silently presented as equally-confirmed as GossipOptionID/OptionText.
+--
+-- *** MenuID=39349 IS A PLACEHOLDER, NOT A CAPTURED VALUE ***. The real Horde MenuID was
+-- NOT wire-decoded (the capture only exposed a synthetic addon key for this menu, not the
+-- server-assigned MenuID). 39349 is authored ONLY because it is Jaina 39348's numeric
+-- sibling (+1) and every OTHER captured MenuID/TextID pair in this file happens to equal
+-- its own CreatureID-adjacent id by the same shared-numbering convention -- this is an
+-- educated guess by analogy, explicitly flagged, NOT presented as real. Do not treat
+-- 39349 as confirmed anywhere downstream.
+-- TODO Phase K: capture/datamine the real Thrall "next adventure" picker MenuID (wire
+-- decode or a fresh addon dump that captures the real gossip_menu id, not just the
+-- synthetic key) and replace 39349 (here, in SECTION 1's creature_template_gossip row
+-- above, and in SECTION 2's gossip_menu row above) with the confirmed value.
+INSERT INTO `gossip_menu_option` (`MenuID`, `GossipOptionID`, `OptionID`, `OptionNpc`, `OptionText`, `OptionBroadcastTextID`, `Language`, `Flags`, `ActionMenuID`, `ActionPoiID`, `GossipNpcOptionID`, `BoxCoded`, `BoxMoney`, `BoxText`, `BoxBroadcastTextID`, `SpellID`, `OverrideIconID`, `VerifiedBuild`) VALUES
+(39349, 133894, 16777216, 0, 'Show me where I could go next.', 0, 0, 0, 0, 0, NULL, 0, 0, NULL, 0, NULL, NULL, 69382) -- PLACEHOLDER MenuID 39349, see banner above -- GossipOptionID/OptionText [C]
 ON DUPLICATE KEY UPDATE `GossipOptionID`=VALUES(`GossipOptionID`), `OptionNpc`=VALUES(`OptionNpc`), `OptionText`=VALUES(`OptionText`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
 
 -- ============================================================================
