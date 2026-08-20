@@ -74,7 +74,7 @@ ON DUPLICATE KEY UPDATE `Type`=VALUES(`Type`), `Order`=VALUES(`Order`), `Storage
 -- criteria_tree row exists yet to reference) -- this does NOT silently auto-complete
 -- (unlike the removed AREATRIGGER/ObjectID=0, CRITERIA_TREE/ObjectID=0 has no matching
 -- criteria_tree row to satisfy, so it fails safe rather than pretending to be wired).
--- TODO Phase K: author a real criteria_tree row (CriteriaType likely PlayerIsFlying=311,
+-- TODO Phase K: author a real criteria_tree row (ModifierTreeType likely PlayerIsFlying=311,
 -- DBCEnums.h:1998, possibly gated to this zone/quest-active) that fires on one of the 4
 -- confirmed skyriding spells, then point ObjectID at that criteria_tree's ID.
 INSERT INTO `quest_objectives` (`ID`, `QuestID`, `Type`, `Order`, `StorageIndex`, `ObjectID`, `Amount`, `Description`) VALUES
