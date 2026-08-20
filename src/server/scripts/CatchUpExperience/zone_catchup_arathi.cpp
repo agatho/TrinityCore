@@ -15,25 +15,30 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-// Catch-Up Experience -- Arathi Highlands (server map 2796).
+// Catch-Up Experience -- Arathi Highlands (server map 2927).
 // PlayerScript on-enter intro-cinematic trigger + AreaTriggerScript entry-
-// teleport stub for the map-2796 Catch-Up Experience, modeled on
+// teleport stub for the map-2927 Catch-Up Experience, modeled on
 // ExilesReach/zone_exiles_reach.cpp (player_exiles_reach_ship_crash's
 // OnMovieComplete usage and the at_* AreaTriggerScript/AreaTriggerAI stubs)
 // and on World/areatrigger_scripts.cpp's AreaTrigger_at_legion_teleporter
 // (the plain teleport-on-trigger pattern).
 //
-// Entry-flow ruling (content branch Task 6, carried into this scaffold):
-// the canonical launch is the Adventure Guide -> Tutorials tile (an
-// AdventureJournal DB2 row with QuestID 90882, served by the existing
-// AdventureJournalHandler). This file deliberately does NOT author a
+// Entry-flow ruling (verified by wire capture, superseding the earlier
+// content-branch Task 6 assumption): the canonical launch is the Adventure
+// Guide "Catch Up Experience" tile making the PLAYER CAST spell 1260320
+// "Teleport to Arathi Highlands" (~10s cast); on completion the player is
+// teleported into map 2927 at (-1101.67, -3554.37, 48.92, o=6.26). Quest
+// 90882 is NOT offered by the tile -- it is accepted in-instance from Jaina
+// (creature 244643) after arrival. The Adventure Guide tile's exact client
+// wiring (its AdventureJournal.db2 row) is a client-DB2/Phase-K item; the
+// server-side effect that matters here is spell 1260320 landing the player
+// at the known map-2927 coords. This file deliberately does NOT author a
 // competing Chromie gossip menu -- an earlier task proved that authoring a
 // second Chromie root menu regresses the shipped chromie-time feature
 // server-wide (creature_template_gossip is a flat, last-match-wins vector).
 // Any Chromie-Time launch path is an OPTION owned by the existing
 // chromie-time feature, not something this scaffold creates. This file's
-// job is on-enter cinematic + teleport plumbing keyed off quest 90882 /
-// map 2796 only.
+// job is on-enter cinematic + teleport plumbing keyed off map 2927 only.
 //
 // This CANNOT be compiled in the authoring environment -- compilation and
 // realm testing are an explicit Phase-K step (see
@@ -46,7 +51,7 @@
 
 enum CatchUpArathiData
 {
-    MAP_CATCHUP_ARATHI = 2796,
+    MAP_CATCHUP_ARATHI = 2927,
 
     // TODO Phase K: resolve the real CinematicSequences.db2 id for the
     // Arathi Catch-Up intro cinematic (fingerprint: 10-line subtitle
@@ -57,7 +62,7 @@ enum CatchUpArathiData
 
     // TODO Phase K: resolve the real PlayerConditionID that marks a player
     // as having already seen the Arathi Catch-Up intro cinematic, so
-    // OnMapChanged doesn't replay it on every re-entry to map 2796. 0
+    // OnMapChanged doesn't replay it on every re-entry to map 2927. 0
     // disables the gate (treated as "not yet seen") until Phase K supplies
     // a real id.
     PLAYERCONDITION_ARATHI_INTRO_SEEN = 0,
@@ -70,18 +75,24 @@ enum CatchUpArathiData
     AREATRIGGER_ARATHI_ENTRY = 0,
 };
 
-// TODO Phase K: resolve the real destination WorldSafeLoc for the entry
-// teleport (Hammerfall, map 2796) once the entry areatrigger id above is
-// captured/decoded and cross-referenced against Task 2's spawn coordinates.
-// These 0.0f placeholders are never dereferenced: OnTrigger returns before
-// calling TeleportTo while AREATRIGGER_ARATHI_ENTRY == 0.
-static constexpr float TELEPORT_DEST_X = 0.0f;
-static constexpr float TELEPORT_DEST_Y = 0.0f;
-static constexpr float TELEPORT_DEST_Z = 0.0f;
-static constexpr float TELEPORT_DEST_O = 0.0f;
+// The Adventure-Guide "Catch Up Experience" tile makes the player cast this
+// spell (~10s cast); on completion the player is teleported into map 2927 at
+// TELEPORT_DEST_X/Y/Z/O below. Verified by wire capture -- see file header
+// comment above.
+static constexpr uint32 SPELL_TELEPORT_TO_ARATHI = 1260320;
 
-// Plays the map-2796 Catch-Up Experience intro cinematic the first time a
-// player enters the zone.
+// Verified destination for the Catch-Up Experience entry teleport (map
+// 2927), confirmed by wire capture of spell 1260320's completion effect.
+// Reused here for the entry-areatrigger stub's destination; the areatrigger
+// itself is still a Phase-K TODO (see AREATRIGGER_ARATHI_ENTRY above).
+static constexpr float TELEPORT_DEST_X = -1101.67f;
+static constexpr float TELEPORT_DEST_Y = -3554.37f;
+static constexpr float TELEPORT_DEST_Z = 48.92f;
+static constexpr float TELEPORT_DEST_O = 6.26f;
+
+// Plays the map-2927 Catch-Up Experience intro cinematic the first time a
+// player enters the zone (i.e. the first time they arrive via spell
+// 1260320's teleport -- see file header comment above).
 class player_catchup_arathi : public PlayerScript
 {
 public:
@@ -89,6 +100,8 @@ public:
 
     void OnMapChanged(Player* player) override
     {
+        // Keys on entering map 2927, the real Catch-Up Experience instance
+        // map (see file header comment above).
         if (player->GetMapId() != MAP_CATCHUP_ARATHI)
             return;
 

@@ -15,8 +15,8 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-// Catch-Up Experience -- Arathi Highlands (server map 2796).
-// Script loader for the map-2796 Catch-Up Experience scaffold, modeled
+// Catch-Up Experience -- Arathi Highlands (server map 2927).
+// Script loader for the map-2927 Catch-Up Experience scaffold, modeled
 // directly on ExilesReach's exiles_reach_script_loader.cpp. This CANNOT be
 // compiled in the authoring environment -- compilation and realm testing are
 // an explicit Phase-K step (see CATCHUP_BLIZZLIKE_IMPLEMENTATION_PLAN

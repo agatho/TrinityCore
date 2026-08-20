@@ -15,8 +15,8 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-// Catch-Up Experience -- Arathi Highlands (server map 2796).
-// Minimal InstanceMapScript scaffold for the map-2796 Catch-Up Experience,
+// Catch-Up Experience -- Arathi Highlands (server map 2927).
+// Minimal InstanceMapScript scaffold for the map-2927 Catch-Up Experience,
 // modeled directly on
 // ExilesReach/DarkmaulCitadel/instance_darkmaul_citadel.cpp. Encounter
 // tracking is intentionally empty for now -- this personal-phased leveling
@@ -28,26 +28,29 @@
 #include "ScriptMgr.h"
 #include "InstanceScript.h"
 
-// TODO Phase K: scenario step wiring. The `scenarios` table row for map 2796
-// is currently a (2796, 0, 0) placeholder (content branch, Task 6) -- Arathi
-// Catch-Up scenario progression is data-driven via the `scenarios` table +
-// Scenario/ScenarioStep/CriteriaTree DB2 rows, NOT a scenario script class
-// here. Once real DB2 rows exist, bind boss/door/encounter data the same way
-// instance_darkmaul_citadel.cpp does: a static ObjectData[] / DoorData[] /
-// DungeonEncounterData[] table above this class, and
+// Map 2927 is a personally-phased instance-map, NOT a Scenario: a wire-level
+// capture of the launch flow confirmed zero scenario objects. Phasing is
+// driven by phase_area rows + conditions (real phase ids include 793), not
+// by the Scenario/ScenarioStep/CriteriaTree system. An InstanceMapScript is
+// still required here because a phased instance-map still binds an
+// InstanceScript to the map instance; there is just no scenario step wiring
+// to author. Once real boss/door/encounter data exists, bind it the same
+// way instance_darkmaul_citadel.cpp does: a static ObjectData[] / DoorData[]
+// / DungeonEncounterData[] table above this class, and
 // LoadObjectData(...)/LoadDoorData(...)/LoadDungeonEncounterData(...) calls
 // in the InstanceScript subclass constructor below.
 
 class instance_catchup_arathi : public InstanceMapScript
 {
 public:
-    instance_catchup_arathi() : InstanceMapScript("instance_catchup_arathi", 2796) { }
+    instance_catchup_arathi() : InstanceMapScript("instance_catchup_arathi", 2927) { }
 
     struct instance_catchup_arathi_InstanceMapScript : public InstanceScript
     {
         instance_catchup_arathi_InstanceMapScript(InstanceMap* map) : InstanceScript(map)
         {
-            // TODO Phase K: scenario step wiring -- see file header comment above.
+            // No scenario wiring: map 2927 is a phased instance-map, not a
+            // Scenario -- see file header comment above.
         }
     };
 
