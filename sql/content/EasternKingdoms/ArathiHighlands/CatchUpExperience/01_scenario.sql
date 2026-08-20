@@ -1,0 +1,27 @@
+-- ============================================================================
+-- CONTENT SLICE -- Arathi Catch-Up Experience :: Phase H scenario binding
+-- ============================================================================
+-- Branch: content   Path: sql/content/EasternKingdoms/ArathiHighlands/CatchUpExperience/
+-- Server mapID: 2796  (client uiMapID 2451 is display-only, not used here)
+-- Source bundle: C:/dumps/tcharvest/out/catchup_zone/zone_2796/ -- no scenario capture
+--   exists in this bundle (Scenario.db2 IDs are not observable via addon/sniff capture
+--   the way creature/quest/gossip rows are; they require a DB2-extract pass, Plan Phase K).
+-- CANDIDATE ONLY -- review before applying to any branch. Never applied to a live DB/realm.
+-- Idempotent (INSERT ... ON DUPLICATE KEY UPDATE -> re-apply safe).
+-- ============================================================================
+-- task-6-brief Req.2: `scenarios` PK is (map,difficulty). Map 2796 needs a row so the
+-- instance/scenario create path (Plan Part 1 architecture note) has something to bind
+-- to, but the real scenario_A/scenario_H IDs are a capture GAP -- they live in
+-- Scenario.db2 and were never observed this session (no ScenarioProgress /
+-- CriteriaTree wire traffic in the bundle's sniff_confidence.txt for map 2796).
+--
+-- *** GAP: scenario_A / scenario_H are PLACEHOLDER 0, NOT real Scenario IDs ***
+-- 0 is scenarios.scenario_A/scenario_H's own column DEFAULT, so this row is
+-- present-but-inert: the FK exists (map=2796,difficulty=0 resolves), but no client-side
+-- Scenario UI will bind to it until Phase K supplies real IDs.
+-- TODO Phase K: real Scenario IDs from Scenario.db2 (scenA/scenH unknown; 0 = disabled
+-- until authored). Do NOT replace with a guessed/fabricated ID -- resolve via a
+-- Scenario.db2 lookup keyed on this zone's ScenarioType, or a fresh sniff capture with
+-- SMSG_SCENARIO_STATE / SMSG_SCENARIO_PROGRESS_UPDATE unmasked, before editing this row.
+-- ============================================================================
+INSERT INTO `scenarios` (`map`, `difficulty`, `scenario_A`, `scenario_H`) VALUES (2796, 0, 0, 0) ON DUPLICATE KEY UPDATE `scenario_A`=VALUES(`scenario_A`), `scenario_H`=VALUES(`scenario_H`);
