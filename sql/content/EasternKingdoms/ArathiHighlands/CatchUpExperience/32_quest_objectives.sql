@@ -56,29 +56,19 @@ INSERT INTO `quest_objectives` (`ID`, `QuestID`, `Type`, `Order`, `StorageIndex`
  (9088204, 90882, 0, 0, 0, 245027, 10, 'Gnoll slain')   -- Gnoll Assailant
 ON DUPLICATE KEY UPDATE `Type`=VALUES(`Type`), `Order`=VALUES(`Order`), `StorageIndex`=VALUES(`StorageIndex`), `ObjectID`=VALUES(`ObjectID`), `Amount`=VALUES(`Amount`), `Description`=VALUES(`Description`);
 
--- ---- 90883 "To Go'shek Farm" -- travel (Horde-xval H3 task-4 FIX -- was wrong type) ----
--- [C] addon Description "0/1 Ride a flying mount" (addon_quest_objectives.sql row 7) is a
--- genuine captured bonus-detail objective, not a guess. FIX ROUND 2 (Horde-xval H3):
--- Type=10 AREATRIGGER with ObjectID=0 (the original authoring) is WRONG, not just
--- incomplete -- ObjectMgr.cpp:8575-8577/8589-8591-style "nonexistent" placeholders aside,
--- AREATRIGGER credits on a specific zone trigger id; the actual captured objective is a
--- SKYRIDING flight on the player's OWN mount (Horde-xval combat log confirms spells
--- 372608 Surge Forward / 372610 Skyward Ascent / 361584 Whirling Surge / 404184 Ground
--- Skimming -- these are the dynamic-flight/skyriding ability set, not a vehicle or scripted
--- taxi, so there is no AreaTrigger landing point to author at all). QuestDef.h:354-378
--- (this worktree) has no dedicated "cast a skyriding spell" or "fly N yards" objective
--- type -- the closest correct mechanism is Type=14 QUEST_OBJECTIVE_CRITERIA_TREE
--- (Player.cpp:16343-16346, 16683-16686: driven by a criteria_tree row via
--- m_questObjectiveCriteriaMgr, which IS how retail models bespoke "do this specific thing"
--- quest credits like a flight). ObjectID is left 0 as an explicit placeholder (no
--- criteria_tree row exists yet to reference) -- this does NOT silently auto-complete
--- (unlike the removed AREATRIGGER/ObjectID=0, CRITERIA_TREE/ObjectID=0 has no matching
--- criteria_tree row to satisfy, so it fails safe rather than pretending to be wired).
--- TODO Phase K: author a real criteria_tree row (ModifierTreeType likely PlayerIsFlying=311,
--- DBCEnums.h:1998, possibly gated to this zone/quest-active) that fires on one of the 4
--- confirmed skyriding spells, then point ObjectID at that criteria_tree's ID.
+-- ---- 90883 "To Go'shek Farm" -- "Ride a flying mount" (INTEGRATION FIX 2026-08-21) ----
+-- [C] addon Description "0/1 Ride a flying mount". This is a SKYRIDING flight on the player's
+-- OWN mount (no vehicle / no areatrigger landing). The OFFICIAL feature/arathi-rpe branch
+-- already implements the completion mechanism in C++: zone_arathi_highlands_rpe.cpp's
+-- PlayerScript credits NPC 239009 via KilledMonsterCredit(239009) when the player casts a
+-- MOUNTED-aura spell while on map 2927 with 90883 incomplete. So the CORRECT objective row is
+-- a Type=0 MONSTER kill-credit on NPC **239009** (NOT the earlier criteria-tree placeholder,
+-- which had no backing row and was a different, conflicting mechanism). This unifies both
+-- branches on ONE working mechanism: this objective + arathi-rpe's mount-credit script.
+-- (Skyriding itself lives on feature/skyriding-player-system, combined at central integration;
+--  the mount-aura credit works with or without it, so 90883 is testable now.)
 INSERT INTO `quest_objectives` (`ID`, `QuestID`, `Type`, `Order`, `StorageIndex`, `ObjectID`, `Amount`, `Description`) VALUES
- (9088300, 90883, 14, 0, 0, 0, 1, 'Ride a flying mount')
+ (9088300, 90883, 0, 0, 0, 239009, 1, 'Ride a flying mount')
 ON DUPLICATE KEY UPDATE `Type`=VALUES(`Type`), `Order`=VALUES(`Order`), `StorageIndex`=VALUES(`StorageIndex`), `ObjectID`=VALUES(`ObjectID`), `Amount`=VALUES(`Amount`), `Description`=VALUES(`Description`);
 
 -- ---- 90885 "My Beautiful Pumpkins" -- Recover 4 Prized Pumpkins ----
