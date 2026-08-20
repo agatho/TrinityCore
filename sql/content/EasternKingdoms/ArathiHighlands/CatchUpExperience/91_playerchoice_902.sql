@@ -18,7 +18,7 @@ DELETE FROM `playerchoice_response` WHERE `ChoiceId`=902;
 DELETE FROM `playerchoice` WHERE `ChoiceId`=902;
 
 INSERT INTO `playerchoice` (`ChoiceId`, `UiTextureKitId`, `SoundKitId`, `CloseSoundKitId`, `Duration`, `Question`, `PendingChoiceText`, `InfiniteRange`, `HideWarboardHeader`, `KeepOpenAfterChoice`, `ShowChoicesAsList`, `ForceDontShowChoicesAsList`, `RequiresSelection`, `MaxResponses`, `ScriptName`) VALUES
- (902, 0, 0, 0, 0, 'Where Do You Want To Go?', '', 0, 1, 0, 0, 0, 1, 3, '');
+ (902, 0, 0, 0, 0, 'Where Do You Want To Go?', '', 0, 1, 0, 0, 0, 1, 3, 'playerchoice_arathi_rpe_finale');
 
 INSERT INTO `playerchoice_response` (`ChoiceId`, `ResponseId`, `Index`, `ChoiceArtFileId`, `Flags`, `WidgetSetID`, `UiTextureAtlasElementID`, `SoundKitID`, `GroupID`, `UiTextureKitID`, `Answer`, `Header`, `SubHeader`, `ButtonTooltip`, `Description`, `Confirmation`, `RewardQuestID`) VALUES
  (902, 9021, 0, 0, 0, 0, 0, 0, 0, 0, 'Dragonflight',            'Dragonflight',            '', '', 'Adventure within the Dragon Isles to see events leading to the Worldsoul Saga!', '', 65436),
