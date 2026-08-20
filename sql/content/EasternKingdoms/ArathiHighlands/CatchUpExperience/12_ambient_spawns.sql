@@ -481,9 +481,12 @@ INSERT INTO `creature` (`guid`,`id`,`map`,`PhaseId`,`position_x`,`position_y`,`p
  (8001079, 230001, 2927, 1959, -1501.0647, -1880.5878, 68.1673, 6.1514, 300, 69382)
 ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES(`PhaseId`), `position_x`=VALUES(`position_x`), `position_y`=VALUES(`position_y`), `position_z`=VALUES(`position_z`), `orientation`=VALUES(`orientation`), `spawntimesecs`=VALUES(`spawntimesecs`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
 
--- entry 231219 Stromgarde Citizen (src=PLACEHOLDER)  [NO WIRE POSITION FOUND (remine decode was garbage/degenerate) -- PLACEHOLDER, Phase-K refine mandatory]
+-- entry 231219 Stromgarde Citizen (VALID Arathi ambient -- kept). REAL WANDER CENTROID recovered after
+--   the movement-decoder fix (was fixed-offset garbage; the true spline Points[0] sits at guid+30 not
+--   +35): 31 movement samples cluster at centroid (-1560.0, -1865.5, 67.7). It is a WANDERER (walks a
+--   waypoint path), so this is its wander anchor, not a fixed spot -- a real evidence-based position.
 INSERT INTO `creature` (`guid`,`id`,`map`,`PhaseId`,`position_x`,`position_y`,`position_z`,`orientation`,`spawntimesecs`,`VerifiedBuild`) VALUES
- (8001080, 231219, 2927, 1959, -1550.0, -1800.0, 67.6, 0.0, 300, 69382)
+ (8001080, 231219, 2927, 1959, -1560.0, -1865.5, 67.7, 0.0, 300, 69382)
 ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES(`PhaseId`), `position_x`=VALUES(`position_x`), `position_y`=VALUES(`position_y`), `position_z`=VALUES(`position_z`), `orientation`=VALUES(`orientation`), `spawntimesecs`=VALUES(`spawntimesecs`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
 
 -- entry 231287 Stromgarde Stonemason (src=objupdate)
@@ -611,15 +614,11 @@ INSERT INTO `creature` (`guid`,`id`,`map`,`PhaseId`,`position_x`,`position_y`,`p
  (8001105, 245052, 2927, 1959, -933.7572, -3531.5946, 70.8668, 0.0, 300, 69382)
 ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES(`PhaseId`), `position_x`=VALUES(`position_x`), `position_y`=VALUES(`position_y`), `position_z`=VALUES(`position_z`), `orientation`=VALUES(`orientation`), `spawntimesecs`=VALUES(`spawntimesecs`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
 
--- entry 62821 Mystic Birdhat (Transmogrifier) (src=PLACEHOLDER)  [NO WIRE POSITION FOUND (remine decode was garbage/degenerate) -- PLACEHOLDER, Phase-K refine mandatory]
-INSERT INTO `creature` (`guid`,`id`,`map`,`PhaseId`,`position_x`,`position_y`,`position_z`,`orientation`,`spawntimesecs`,`VerifiedBuild`) VALUES
- (8001106, 62821, 2927, 1959, -1550.0, -1800.0, 67.6, 0.0, 300, 69382)
-ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES(`PhaseId`), `position_x`=VALUES(`position_x`), `position_y`=VALUES(`position_y`), `position_z`=VALUES(`position_z`), `orientation`=VALUES(`orientation`), `spawntimesecs`=VALUES(`spawntimesecs`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
-
--- entry 62822 Cousin Slowhands (Traveling Trader) (src=PLACEHOLDER)  [NO WIRE POSITION FOUND (remine decode was garbage/degenerate) -- PLACEHOLDER, Phase-K refine mandatory]
-INSERT INTO `creature` (`guid`,`id`,`map`,`PhaseId`,`position_x`,`position_y`,`position_z`,`orientation`,`spawntimesecs`,`VerifiedBuild`) VALUES
- (8001107, 62822, 2927, 1959, -1550.0, -1800.0, 67.6, 0.0, 300, 69382)
-ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES(`PhaseId`), `position_x`=VALUES(`position_x`), `position_y`=VALUES(`position_y`), `position_z`=VALUES(`position_z`), `orientation`=VALUES(`orientation`), `spawntimesecs`=VALUES(`spawntimesecs`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
+-- entries 62821 Mystic Birdhat + 62822 Cousin Slowhands -- EXCLUDED (re-examined): these are roaming
+--   Trading Post vendors captured on the map-85 Chromie-Time hub (addon context: 62821 map=85,
+--   quests 51443/62568). The movement decoder's degenerate near-zero decode ALSO mis-tagged them
+--   map=2927 -- a decode artifact, not a real Arathi-2927 spawn. They are BLEED, not instance residents.
+--   No spawn authored.
 
 -- entry 249245 Training Dummy (src=objupdate)
 INSERT INTO `creature` (`guid`,`id`,`map`,`PhaseId`,`position_x`,`position_y`,`position_z`,`orientation`,`spawntimesecs`,`VerifiedBuild`) VALUES
