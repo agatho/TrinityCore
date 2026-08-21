@@ -541,6 +541,14 @@ public:
         TC_LOG_INFO("misc", "Re-Loading Quest Templates...");
         sObjectMgr->LoadQuests();
         sObjectMgr->InitializeQueriesData(QUERY_DATA_QUESTS);
+
+        // SMSG_CLEAR_TREASURE_PICKER_CACHE: LoadQuests also reloads `quest_treasure_pickers`, and the client
+        // caches every SMSG_TREASURE_PICKER_RESPONSE it ever got. Consumer 0x221F3C0 fires
+        // TREASURE_PICKER_CACHE_FLUSH, which is what makes the UI ask again.
+        for (auto const& [_, session] : sWorld->GetAllSessions())
+            if (Player* player = session->GetPlayer())
+                player->SendClearTreasurePickerCache();
+
         handler->SendGlobalGMSysMessage("DB table `quest_template` (quest definitions) reloaded.");
 
         /// dependent also from `gameobject` but this table not reloaded anyway
@@ -723,6 +731,14 @@ public:
         TC_LOG_INFO("misc", "Re-Loading Quest POI ..." );
         sObjectMgr->LoadQuestPOI();
         sObjectMgr->InitializeQueriesData(QUERY_DATA_POIS);
+
+        // SMSG_RESET_QUEST_POI: the client keeps everything it ever received from
+        // SMSG_QUEST_POI_QUERY_RESPONSE in 175 cache slots and never re-asks on its own. Without this the
+        // reload only takes effect for players who log in afterwards.
+        for (auto const& [_, session] : sWorld->GetAllSessions())
+            if (Player* player = session->GetPlayer())
+                player->SendResetQuestPOI();
+
         handler->SendGlobalGMSysMessage("DB Table `quest_poi` and `quest_poi_points` reloaded.");
         return true;
     }

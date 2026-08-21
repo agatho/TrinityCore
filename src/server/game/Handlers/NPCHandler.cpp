@@ -271,6 +271,35 @@ void WorldSession::HandleGossipSelectOptionOpcode(WorldPackets::NPC::GossipSelec
     }
 }
 
+// CMSG_GOSSIP_REFRESH_OPTIONS -> SMSG_GOSSIP_REFRESH_OPTIONS.
+// Lua C_GossipInfo.RefreshOptions(); the client asks for a fresh option list for the gossip window it already
+// has open, without reopening it. Retail's own callers are conditions that can change an option's
+// availability while the frame stays up -- Blizzard_TorghastLevelPicker refreshes on PARTY_LEADER_CHANGED,
+// GROUP_ROSTER_UPDATE, GROUP_FORMED, UNIT_AREA_CHANGED and UNIT_PHASE. The menu is therefore rebuilt from the
+// gossip source, not replayed from the cached one, or the refresh would answer with exactly what the client
+// already has.
+void WorldSession::HandleGossipRefreshOptions(WorldPackets::NPC::GossipRefreshOptions& /*packet*/)
+{
+    InteractionData const& interaction = _player->PlayerTalkClass->GetInteractionData();
+    if (interaction.Type != PlayerInteractionType::Gossip || interaction.SourceGuid.IsEmpty())
+        return;
+
+    WorldObject* source = nullptr;
+    if (interaction.SourceGuid.IsCreatureOrVehicle())
+        source = _player->GetNPCIfCanInteractWith(interaction.SourceGuid, UNIT_NPC_FLAG_GOSSIP, UNIT_NPC_FLAG_2_NONE);
+    else if (interaction.SourceGuid.IsGameObject())
+        source = _player->GetGameObjectIfCanInteractWith(interaction.SourceGuid);
+
+    if (!source)
+        return;
+
+    // PrepareGossipMenu clears the menu itself, so the id has to be taken first.
+    uint32 menuId = _player->PlayerTalkClass->GetGossipMenu().GetMenuId();
+    _player->PrepareGossipMenu(source, menuId, true);
+
+    _player->PlayerTalkClass->SendGossipRefreshOptions();
+}
+
 void WorldSession::HandleSpiritHealerActivate(WorldPackets::NPC::SpiritHealerActivate& packet)
 {
     Creature* unit = GetPlayer()->GetNPCIfCanInteractWith(packet.Healer, UNIT_NPC_FLAG_SPIRIT_HEALER, UNIT_NPC_FLAG_2_NONE);

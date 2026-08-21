@@ -126,6 +126,30 @@ namespace WorldPackets
             int32 LfgDungeonsID = 0;
         };
 
+        // CMSG_GOSSIP_REFRESH_OPTIONS -- the client asks the server to re-send the option list of the gossip
+        // window it already has open (Lua: C_GossipInfo.RefreshOptions). Empty payload: the client serializer
+        // 0x6DAD80 writes the opcode (0x3E0112 in 12.1.0.69382, GetOpcode stub 0x6DADA0) and nothing else.
+        class GossipRefreshOptions final : public ClientPacket
+        {
+        public:
+            explicit GossipRefreshOptions(WorldPacket&& packet) : ClientPacket(CMSG_GOSSIP_REFRESH_OPTIONS, std::move(packet)) { }
+
+            void Read() override { }
+        };
+
+        // SMSG_GOSSIP_REFRESH_OPTIONS -- reader 0x684C30: a bare uint32 count followed by that many
+        // ClientGossipOption elements, nothing else. Consumer 0x249D870 replaces the option list of the open
+        // gossip frame and fires the Lua event GOSSIP_OPTIONS_REFRESHED.
+        class GossipOptionsRefreshed final : public ServerPacket
+        {
+        public:
+            explicit GossipOptionsRefreshed() : ServerPacket(SMSG_GOSSIP_REFRESH_OPTIONS, 4) { }
+
+            WorldPacket const* Write() override;
+
+            std::vector<ClientGossipOptions> GossipOptions;
+        };
+
         class GossipSelectOption final : public ClientPacket
         {
         public:

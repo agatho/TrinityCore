@@ -14949,6 +14949,10 @@ void Player::IncompleteQuest(uint32 quest_id)
         uint16 log_slot = FindQuestSlot(quest_id);
         if (log_slot < MAX_QUEST_LOG_SIZE)
             RemoveQuestSlotState(log_slot, QUEST_STATE_COMPLETE);
+
+        // Mirror of CompleteQuest -> SendQuestComplete: the client caches per-quest completion state and only
+        // drops it when it is told to (consumer 0x1E23050).
+        SendQuestUpdateFailed(quest_id);
     }
 }
 
@@ -17283,6 +17287,143 @@ void Player::SendQuestComplete(uint32 questId) const
         data.QuestID = questId;
         SendDirectMessage(data.Write());
     }
+}
+
+// SMSG_QUEST_UPDATE_FAILED -- counterpart of SendQuestComplete/SMSG_QUEST_UPDATE_COMPLETE.
+// Consumer 0x1E23050 marks the quest dirty in the client QuestCache and schedules a re-query, exactly the way
+// the consumer of SMSG_QUEST_UPDATE_COMPLETE (0x1E22DD0) does; sent when a quest that was complete is
+// complete no longer.
+void Player::SendQuestUpdateFailed(uint32 questId) const
+{
+    if (!questId)
+        return;
+
+    WorldPackets::Quest::QuestUpdateFailed data;
+    data.QuestID = questId;
+    SendDirectMessage(data.Write());
+}
+
+// SMSG_QUEST_NON_LOG_UPDATE_COMPLETE -- consumer 0x1E22D80 fires the Lua event
+// WORLD_QUEST_COMPLETED_BY_SPELL(questID), which is what the opcode actually drives despite its name.
+void Player::SendQuestNonLogUpdateComplete(uint32 questId) const
+{
+    if (!questId)
+        return;
+
+    WorldPackets::Quest::QuestNonLogUpdateComplete data;
+    data.QuestID = questId;
+    SendDirectMessage(data.Write());
+}
+
+// SMSG_IS_QUEST_COMPLETE_RESPONSE -- the only consumer in the retail client (0x1E2B600) is a console
+// diagnostic that prints "Quest %d is[ NOT] complete"; the matching request opcode is not part of the
+// TrinityCore catalogue, so nothing in the public client asks for this. Kept as a send path because the wire
+// format is fully determined and the developer client does use it.
+void Player::SendIsQuestCompleteResponse(uint32 questId) const
+{
+    WorldPackets::Quest::IsQuestCompleteResponse data;
+    data.QuestID = questId;
+    data.Complete = GetQuestStatus(questId) == QUEST_STATUS_COMPLETE;
+    SendDirectMessage(data.Write());
+}
+
+// SMSG_DISPLAY_QUEST_POPUP -- consumer 0x221F090 calls the same routine as Lua
+// AddAutoQuestPopUp(questID, "OFFER") (0x2221810 with type 0; the string mapping sits in the binding
+// 0x223EA30: 0 -> "OFFER", 1 -> "COMPLETE"), i.e. it puts an offer toast for that quest into the objective
+// tracker.
+// UNVERIFIED: which server-side event makes retail push this. None of the ten 12.1 recordings contains a
+// single packet of this opcode, so the trigger cannot be read off the wire either -- see the aufnahme_noetig
+// entry of this unit. The payload itself is not a guess.
+void Player::SendDisplayQuestPopup(uint32 questId) const
+{
+    if (!questId)
+        return;
+
+    WorldPackets::Quest::DisplayQuestPopup data;
+    data.QuestID = questId;
+    SendDirectMessage(data.Write());
+}
+
+// SMSG_RESET_QUEST_POI -- empty signal. Consumer 0x221F0C0 calls 0x2230180, which wipes all 175 quest POI
+// cache slots, so the client re-queries every POI it needs afterwards.
+void Player::SendResetQuestPOI() const
+{
+    WorldPackets::Quest::ResetQuestPOI data;
+    SendDirectMessage(data.Write());
+}
+
+// SMSG_CLEAR_TREASURE_PICKER_CACHE -- empty signal, consumer 0x221F3C0 fires TREASURE_PICKER_CACHE_FLUSH.
+// The client caches what it learned from SMSG_TREASURE_PICKER_RESPONSE; this drops that cache.
+void Player::SendClearTreasurePickerCache() const
+{
+    WorldPackets::Quest::ClearTreasurePickerCache data;
+    SendDirectMessage(data.Write());
+}
+
+// SMSG_SHOW_QUEST_COMPLETION_TEXT -- the questgiver completion page without the reward block. Consumer
+// 0x1E24800 writes the six strings into the same UI globals as SMSG_QUEST_GIVER_QUEST_DETAILS and fires
+// QUEST_COMPLETE. The field sources are the same quest_template columns SendQuestGiverOfferReward uses.
+// UNVERIFIED: which server-side event makes retail send this instead of
+// SMSG_QUEST_GIVER_OFFER_REWARD_MESSAGE. No packet of this opcode occurs in the recordings -- see the
+// aufnahme_noetig entry of this unit. The payload itself is read off reader 0x6809B0.
+void Player::SendShowQuestCompletionText(Quest const* quest, ObjectGuid questGiverGUID) const
+{
+    WorldPackets::Quest::ShowQuestCompletionText data;
+    data.QuestID = quest->GetQuestId();
+    data.PortraitGiver = quest->GetQuestGiverPortrait();
+    data.PortraitGiverMount = quest->GetQuestGiverPortraitMount();
+    data.PortraitGiverModelSceneID = quest->GetQuestGiverPortraitModelSceneId();
+    data.PortraitTurnIn = quest->GetQuestTurnInPortrait();
+
+    if (Creature const* creature = ObjectAccessor::GetCreature(*this, questGiverGUID))
+        data.QuestGiverCreatureID = creature->GetCreatureTemplate()->Entry;
+
+    data.QuestTitle = quest->GetLogTitle();
+    data.CompletionText = quest->GetOfferRewardText();
+    data.PortraitGiverText = quest->GetPortraitGiverText();
+    data.PortraitGiverName = quest->GetPortraitGiverName();
+    data.PortraitTurnInText = quest->GetPortraitTurnInText();
+    data.PortraitTurnInName = quest->GetPortraitTurnInName();
+
+    LocaleConstant locale = GetSession()->GetSessionDbLocaleIndex();
+    std::ranges::transform(quest->GetConditionalOfferRewardText(), std::back_inserter(data.ConditionalCompletionText), [locale](QuestConditionalText const& text)
+    {
+        std::string_view content = text.Text[LOCALE_enUS];
+        ObjectMgr::GetLocaleString(text.Text, locale, content);
+        return WorldPackets::Quest::ConditionalQuestText{ text.PlayerConditionId, text.QuestgiverCreatureId, content };
+    });
+
+    if (locale != LOCALE_enUS)
+    {
+        if (QuestTemplateLocale const* questTemplateLocale = sObjectMgr->GetQuestLocale(quest->GetQuestId()))
+        {
+            ObjectMgr::GetLocaleString(questTemplateLocale->LogTitle,           locale, data.QuestTitle);
+            ObjectMgr::GetLocaleString(questTemplateLocale->PortraitGiverText,  locale, data.PortraitGiverText);
+            ObjectMgr::GetLocaleString(questTemplateLocale->PortraitGiverName,  locale, data.PortraitGiverName);
+            ObjectMgr::GetLocaleString(questTemplateLocale->PortraitTurnInText, locale, data.PortraitTurnInText);
+            ObjectMgr::GetLocaleString(questTemplateLocale->PortraitTurnInName, locale, data.PortraitTurnInName);
+        }
+
+        if (QuestOfferRewardLocale const* questOfferRewardLocale = sObjectMgr->GetQuestOfferRewardLocale(quest->GetQuestId()))
+            ObjectMgr::GetLocaleString(questOfferRewardLocale->RewardText, locale, data.CompletionText);
+    }
+
+    // The client keeps each of the six strings in a fixed buffer and the length goes out in a bit field that
+    // is exactly wide enough for that buffer: a longer string would write a truncated length and shift every
+    // byte behind it. Clamp instead.
+    auto clampText = [](std::string_view& text, std::size_t limit)
+    {
+        if (text.length() >= limit)
+            text = text.substr(0, limit - 1);
+    };
+    clampText(data.QuestTitle,          512);
+    clampText(data.CompletionText,     3000);
+    clampText(data.PortraitGiverText,  1024);
+    clampText(data.PortraitGiverName,   256);
+    clampText(data.PortraitTurnInText, 1024);
+    clampText(data.PortraitTurnInName,  256);
+
+    SendDirectMessage(data.Write());
 }
 
 void Player::SendQuestReward(Quest const* quest, Creature const* questGiver, uint32 xp, bool hideChatMessage) const

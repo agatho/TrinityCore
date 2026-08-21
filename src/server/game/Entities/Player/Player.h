@@ -1818,6 +1818,13 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         bool IsQuestObjectiveComplete(uint32 questId, uint32 objectiveId) const;
         bool IsQuestObjectiveProgressBarComplete(uint16 slot, Quest const* quest) const;
         void SendQuestComplete(uint32 questId) const;
+        void SendQuestUpdateFailed(uint32 questId) const;
+        void SendQuestNonLogUpdateComplete(uint32 questId) const;
+        void SendIsQuestCompleteResponse(uint32 questId) const;
+        void SendDisplayQuestPopup(uint32 questId) const;
+        void SendResetQuestPOI() const;
+        void SendClearTreasurePickerCache() const;
+        void SendShowQuestCompletionText(Quest const* quest, ObjectGuid questGiverGUID) const;
         void SendQuestReward(Quest const* quest, Creature const* questGiver, uint32 xp, bool hideChatMessage) const;
         void SendQuestFailed(uint32 questId, InventoryResult reason = EQUIP_ERR_OK) const;
         void SendQuestTimerFailed(uint32 questId) const;

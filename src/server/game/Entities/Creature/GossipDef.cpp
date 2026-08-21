@@ -233,23 +233,7 @@ void PlayerMenu::SendGossipMenu(uint32 titleTextId, ObjectGuid objectGUID)
     if (NpcText const* text = sObjectMgr->GetNpcText(titleTextId))
         packet.BroadcastTextID = Trinity::Containers::SelectRandomWeightedContainerElement(text->Data, [](NpcTextData const& data) { return data.Probability; })->BroadcastTextID;
 
-    packet.GossipOptions.reserve(_gossipMenu.GetMenuItems().size());
-    for (GossipMenuItem const& item : _gossipMenu.GetMenuItems())
-    {
-        WorldPackets::NPC::ClientGossipOptions& opt = packet.GossipOptions.emplace_back();
-        opt.GossipOptionID = item.GossipOptionID;
-        opt.OptionNPC = item.OptionNpc;
-        opt.OptionFlags = item.BoxCoded;    // makes pop up box password
-        opt.OptionCost = item.BoxMoney;     // money required to open menu, 2.0.3
-        opt.OptionLanguage = item.Language;
-        opt.Flags = item.Flags;
-        opt.OrderIndex = item.OrderIndex;
-        opt.Text = item.OptionText;         // text for gossip item
-        opt.Confirm = item.BoxText;         // accept text (related to money) pop up box, 2.0.3
-        opt.Status = GossipOptionStatus::Available;
-        opt.SpellID = item.SpellID;
-        opt.OverrideIconID = item.OverrideIconID;
-    }
+    BuildGossipOptions(packet.GossipOptions);
 
     packet.GossipText.resize(_questMenu.GetMenuItemCount());
     uint32 count = 0;
@@ -284,6 +268,39 @@ void PlayerMenu::SendGossipMenu(uint32 titleTextId, ObjectGuid objectGUID)
 
     // Shrink to the real size
     packet.GossipText.resize(count);
+
+    _session->SendPacket(packet.Write());
+}
+
+void PlayerMenu::BuildGossipOptions(std::vector<WorldPackets::NPC::ClientGossipOptions>& options) const
+{
+    options.reserve(_gossipMenu.GetMenuItems().size());
+    for (GossipMenuItem const& item : _gossipMenu.GetMenuItems())
+    {
+        WorldPackets::NPC::ClientGossipOptions& opt = options.emplace_back();
+        opt.GossipOptionID = item.GossipOptionID;
+        opt.OptionNPC = item.OptionNpc;
+        opt.OptionFlags = item.BoxCoded;    // makes pop up box password
+        opt.OptionCost = item.BoxMoney;     // money required to open menu, 2.0.3
+        opt.OptionLanguage = item.Language;
+        opt.Flags = item.Flags;
+        opt.OrderIndex = item.OrderIndex;
+        opt.Text = item.OptionText;         // text for gossip item
+        opt.Confirm = item.BoxText;         // accept text (related to money) pop up box, 2.0.3
+        opt.Status = GossipOptionStatus::Available;
+        opt.SpellID = item.SpellID;
+        opt.OverrideIconID = item.OverrideIconID;
+    }
+}
+
+// Answer to CMSG_GOSSIP_REFRESH_OPTIONS (Lua: C_GossipInfo.RefreshOptions). Re-sends only the option list of
+// the gossip window the client already has open -- no GUID, no texts, no quest list. Consumer 0x249D870
+// swaps the list and fires GOSSIP_OPTIONS_REFRESHED; the frame is not rebuilt, so the interaction is left
+// untouched here on purpose.
+void PlayerMenu::SendGossipRefreshOptions() const
+{
+    WorldPackets::NPC::GossipOptionsRefreshed packet;
+    BuildGossipOptions(packet.GossipOptions);
 
     _session->SendPacket(packet.Write());
 }

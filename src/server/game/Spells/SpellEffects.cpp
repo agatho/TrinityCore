@@ -3785,6 +3785,11 @@ void Spell::EffectQuestComplete()
         }
         else if (quest->HasFlag(QUEST_FLAGS_TRACKING_EVENT)) // Check if the quest is used as a serverside flag
             player->CompleteQuest(questId);
+
+        // SMSG_QUEST_NON_LOG_UPDATE_COMPLETE. Its consumer (0x1E22D80) fires WORLD_QUEST_COMPLETED_BY_SPELL,
+        // so this is the one place that opcode belongs: a spell effect just completed a world quest.
+        if (quest->IsWorldQuest() && player->GetQuestStatus(questId) != QUEST_STATUS_INCOMPLETE)
+            player->SendQuestNonLogUpdateComplete(questId);
     }
 }
 

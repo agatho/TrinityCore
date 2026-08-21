@@ -638,6 +638,83 @@ WorldPacket const* QuestUpdateComplete::Write()
     return &_worldPacket;
 }
 
+WorldPacket const* IsQuestCompleteResponse::Write()
+{
+    // 12.1.0.69382 dispatcher case 0x685348: Read<uint32> then one embedded bit (Read<uint8> >> 7).
+    // 5 bytes on the wire. Same shape as SMSG_QUEST_UPDATE_COMPLETE (0x650009), which measures a constant
+    // 5 bytes across 63 packets in the 12.1 recordings.
+    _worldPacket << int32(QuestID);
+    _worldPacket << Bits<1>(Complete);
+    _worldPacket.FlushBits();
+
+    return &_worldPacket;
+}
+
+WorldPacket const* QuestNonLogUpdateComplete::Write()
+{
+    // Consumer 0x1E22D80 reads exactly one uint32 from the raw payload and nothing else.
+    _worldPacket << int32(QuestID);
+
+    return &_worldPacket;
+}
+
+WorldPacket const* QuestUpdateFailed::Write()
+{
+    // Consumer 0x1E23050 reads exactly one uint32 from the raw payload and nothing else.
+    _worldPacket << int32(QuestID);
+
+    return &_worldPacket;
+}
+
+WorldPacket const* ShowQuestCompletionText::Write()
+{
+    // Reader 0x6809B0, field order verbatim:
+    //   uint32 QuestID / PortraitGiver / PortraitGiverMount / PortraitGiverModelSceneID / PortraitTurnIn
+    //   uint32 QuestGiverCreatureID
+    //   uint32 Count, then Count x ConditionalQuestText  <-- BEFORE the bit section
+    //   bits<9,12,10,8,10,8> = 57 bits -> 8 bytes, FlushBits
+    //   the six strings, byte aligned
+    // The array position is not an inference: the loop over the element reader 0x67F650 sits ahead of the
+    // eight Read<uint8> calls in 0x6809B0, and the same layout is measurable on the wire for the identically
+    // shaped SMSG_QUEST_GIVER_OFFER_REWARD_MESSAGE -- s69273_a.pkt #52401 carries Count=1 at offset 386, the
+    // element at 390..712 and the eight bit bytes at 713.
+    _worldPacket << int32(QuestID);
+    _worldPacket << int32(PortraitGiver);
+    _worldPacket << int32(PortraitGiverMount);
+    _worldPacket << int32(PortraitGiverModelSceneID);
+    _worldPacket << int32(PortraitTurnIn);
+    _worldPacket << int32(QuestGiverCreatureID);
+    _worldPacket << Size<uint32>(ConditionalCompletionText);
+
+    for (ConditionalQuestText const& conditionalQuestText : ConditionalCompletionText)
+        _worldPacket << conditionalQuestText;
+
+    _worldPacket << SizedString::BitsSize<9>(QuestTitle);
+    _worldPacket << SizedString::BitsSize<12>(CompletionText);
+    _worldPacket << SizedString::BitsSize<10>(PortraitGiverText);
+    _worldPacket << SizedString::BitsSize<8>(PortraitGiverName);
+    _worldPacket << SizedString::BitsSize<10>(PortraitTurnInText);
+    _worldPacket << SizedString::BitsSize<8>(PortraitTurnInName);
+    _worldPacket.FlushBits();
+
+    _worldPacket << SizedString::Data(QuestTitle);
+    _worldPacket << SizedString::Data(CompletionText);
+    _worldPacket << SizedString::Data(PortraitGiverText);
+    _worldPacket << SizedString::Data(PortraitGiverName);
+    _worldPacket << SizedString::Data(PortraitTurnInText);
+    _worldPacket << SizedString::Data(PortraitTurnInName);
+
+    return &_worldPacket;
+}
+
+WorldPacket const* DisplayQuestPopup::Write()
+{
+    // Consumer 0x221F090 reads one uint32 from the start of the raw payload.
+    _worldPacket << int32(QuestID);
+
+    return &_worldPacket;
+}
+
 WorldPacket const* QuestConfirmAcceptResponse::Write()
 {
     _worldPacket << uint32(QuestID);

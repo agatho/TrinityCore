@@ -23,6 +23,7 @@
 #include "ObjectGuid.h"
 #include "Optional.h"
 #include <variant>
+#include <vector>
 
 class Object;
 class Quest;
@@ -30,6 +31,11 @@ class WorldSession;
 struct GossipMenuItems;
 enum class PlayerInteractionType : int32;
 enum class QuestGiverStatus : uint64;
+
+namespace WorldPackets::NPC
+{
+    struct ClientGossipOptions;
+}
 
 #define GOSSIP_MAX_MENU_ITEMS               32
 #define DEFAULT_GOSSIP_MESSAGE              0xffffff
@@ -331,6 +337,7 @@ class TC_GAME_API PlayerMenu
         bool IsGossipOptionCoded(uint32 selection) const { return _gossipMenu.IsMenuItemCoded(selection); }
 
         void SendGossipMenu(uint32 titleTextId, ObjectGuid objectGUID);
+        void SendGossipRefreshOptions() const;
         void SendCloseGossip();
         void SendPointOfInterest(uint32 poiId) const;
 
@@ -348,6 +355,8 @@ class TC_GAME_API PlayerMenu
         void SendQuestGiverRequestItems(Quest const* quest, ObjectGuid npcGUID, bool canComplete, bool autoLaunched);
 
     private:
+        void BuildGossipOptions(std::vector<WorldPackets::NPC::ClientGossipOptions>& options) const;
+
         GossipMenu _gossipMenu;
         QuestMenu  _questMenu;
         WorldSession* _session;

@@ -46,6 +46,14 @@ ByteBuffer& operator<<(ByteBuffer& data, ClientGossipOptions const& gossipOption
     data << int8(gossipOption.OptionFlags);
     data << uint64(gossipOption.OptionCost);
     data << uint32(gossipOption.OptionLanguage);
+    // 12.1.0.69382: Treasure is read here -- directly after OptionLanguage and BEFORE Flags/OrderIndex and
+    // the bit section. Element reader 0x69E180 (called from SMSG_GOSSIP_MESSAGE) and the copy inlined into
+    // 0x684C30 (SMSG_GOSSIP_REFRESH_OPTIONS) agree byte for byte, and the wire agrees with both: parsing all
+    // 307 SMSG_GOSSIP_MESSAGE packets of the ten 12.1 recordings consumes the payload exactly in this order
+    // (307/307), while writing Treasure after FlushBits parses only the 52 packets that carry no gossip
+    // option at all.
+    data << gossipOption.Treasure;
+
     data << int32(gossipOption.Flags);
     data << int32(gossipOption.OrderIndex);
     data << SizedString::BitsSize<12>(gossipOption.Text);
@@ -55,8 +63,6 @@ ByteBuffer& operator<<(ByteBuffer& data, ClientGossipOptions const& gossipOption
     data << OptionalInit(gossipOption.OverrideIconID);
     data << SizedCString::BitsSize<8>(gossipOption.FailureDescription);
     data.FlushBits();
-
-    data << gossipOption.Treasure;
 
     data << SizedString::Data(gossipOption.Text);
     data << SizedString::Data(gossipOption.Confirm);
@@ -130,6 +136,15 @@ WorldPacket const* GossipMessage::Write()
 
     for (ClientGossipText const& text : GossipText)
         _worldPacket << text;
+
+    return &_worldPacket;
+}
+
+WorldPacket const* GossipOptionsRefreshed::Write()
+{
+    _worldPacket << Size<uint32>(GossipOptions);
+    for (ClientGossipOptions const& options : GossipOptions)
+        _worldPacket << options;
 
     return &_worldPacket;
 }
