@@ -28,3 +28,15 @@
 
 -- Revert the R1 feign-death corpse aura on 245027 -- our capture shows no aura 29266; live gnolls.
 UPDATE `creature_template_addon` SET `auras` = '' WHERE `entry` = 245027;
+
+-- Restore the leader POSE auras the consolidation dropped. BOTH are present in OUR OWN capture
+-- (aura-update opcode 0x670011, 6 frames): spell 1237118 "Casting (DNT)" and 1237057 "Kneel (DNT)"
+-- (names verified in SpellName.db2 -- developer pose spells, Effect=apply-aura, NO summon effect).
+-- Attribution 1237118->Jaina (244643, the mage in a persistent casting stance) / 1237057->Thrall
+-- (244642) matches the 50-57 third-party capture + the spell-name semantics; our capture confirms
+-- the auras exist. These make the leader HOLD an animation -- Jaina's casting stance is this aura,
+-- which the consolidation had replaced with a bare StandState=0. They do NOT summon the flying
+-- gnolls (no persistent gnoll-launch spell exists in the capture -- the flying gnolls are the intro
+-- cinematic's own choreography, fired by SendCinematicStart(77)).
+UPDATE `creature_template_addon` SET `auras` = '1237118' WHERE `entry` = 244643;  -- Jaina: Casting (DNT)
+UPDATE `creature_template_addon` SET `auras` = '1237057' WHERE `entry` = 244642;  -- Thrall: Kneel (DNT)
