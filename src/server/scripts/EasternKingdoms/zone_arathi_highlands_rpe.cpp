@@ -16,7 +16,9 @@
  */
 
 #include "ScriptMgr.h"
+#include "Duration.h"
 #include "GossipDef.h"
+#include "ObjectAccessor.h"
 #include "ObjectMgr.h"
 #include "Optional.h"
 #include "Player.h"
@@ -165,7 +167,17 @@ public:
         if (player->GetQuestRewardStatus(QUEST_ARATHI_RPE_FINALE))
             return;
 
-        player->SendCinematicStart(CINEMATIC_ARATHI_RPE_INTRO);
+        // OnMapChanged runs during the world-add, before the client has finished the loading screen,
+        // so a cinematic sent right now is dropped. Defer it ~1.5s so the client is fully in-world
+        // when SMSG_TRIGGER_CINEMATIC arrives. Re-resolve the player from GUID inside the event (the
+        // raw pointer must not be captured -- the player may have left by the time it fires).
+        ObjectGuid guid = player->GetGUID();
+        player->m_Events.AddEventAtOffset([guid]()
+        {
+            if (Player* p = ObjectAccessor::FindPlayer(guid))
+                if (p->GetMapId() == MAP_ARATHI_RPE && !p->GetQuestRewardStatus(QUEST_ARATHI_RPE_FINALE))
+                    p->SendCinematicStart(CINEMATIC_ARATHI_RPE_INTRO);
+        }, Milliseconds(1500));
     }
 };
 
