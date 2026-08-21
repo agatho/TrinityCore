@@ -379,6 +379,13 @@ constexpr float ARATHI_RPE_POSITION_Y = -3554.37f;
 constexpr float ARATHI_RPE_POSITION_Z = 48.9203f;
 constexpr float ARATHI_RPE_ORIENTATION = 6.2583666f;
 
+// Launch spell for the IN-GAME Adventure-Guide tile: the player casts "Teleport to Arathi
+// Highlands" (a ~10s cast the player sees as a cast bar), and its SPELL_EFFECT_TELEPORT_UNITS /
+// TARGET_DEST_DB effect does the actual move on completion, reading the destination from the
+// content branch's spell_target_position row (1260320 -> map 2927, same landing pad as above).
+// This is the retail flow - the direct TeleportTo skips the cast bar, so the tile path casts.
+constexpr uint32 ARATHI_RPE_LAUNCH_SPELL = 1260320;
+
 // The NoRpeReason enum is not decoded; 4 is the value CharacterPackets.h already documents as
 // "recently active" and is the packet default. UNVERIFIED beyond that comment.
 constexpr uint32 ARATHI_RPE_NO_REASON_RECENTLY_ACTIVE = 4;
@@ -1615,10 +1622,11 @@ void WorldSession::HandlePlayerLogin(LoginQueryHolder const& holder)
 // gate, map id and landing spot as the CMSG_PLAYER_LOGIN.RPE path in HandlePlayerLogin() above.
 //
 // The player is already fully in the world for this entry point (unlike HandlePlayerLogin, which
-// runs before AddPlayerToMap and therefore needs the manual WorldRelocate/ResetMap/SetMap/
-// UpdatePositionData rebind), so a normal cross-map Player::TeleportTo is enough here - it already
-// performs the equivalent of that rebind plus the client-facing transfer packets for a live
-// player.
+// runs before AddPlayerToMap and does a manual WorldRelocate rebind). Retail does NOT hard-teleport
+// here - the tile makes the player CAST the launch spell 1260320 ("Teleport to Arathi Highlands"),
+// a ~10s cast whose SPELL_EFFECT_TELEPORT_UNITS effect performs the map transfer on completion
+// (destination from spell_target_position, content branch). Casting it (rather than TeleportTo)
+// reproduces the cast bar the player sees and lets the launch be interrupted/cancelled like retail.
 bool WorldSession::EnterArathiRpe(Player* player)
 {
     if (!player)
@@ -1641,6 +1649,17 @@ bool WorldSession::EnterArathiRpe(Player* player)
         return false;
     }
 
+    // Untriggered self-cast: shows the cast bar and honours the spell's cast time; the teleport is
+    // the spell's own effect on successful completion.
+    SpellCastResult launchResult = player->CastSpell(player, ARATHI_RPE_LAUNCH_SPELL);
+    if (launchResult == SPELL_CAST_OK)
+        return true;
+
+    // Fallback: the launch spell could not start (e.g. spell 1260320 not present in the server's
+    // spell store because the DB2 was not imported). Hard-teleport so the player still reaches the
+    // experience rather than being stuck at the tile - they just miss the cast-bar flavour.
+    TC_LOG_ERROR("network", "Player {} Arathi RPE launch spell {} failed to cast ({}); falling back to direct teleport",
+        player->GetGUID().ToString(), ARATHI_RPE_LAUNCH_SPELL, uint32(launchResult));
     return player->TeleportTo(ARATHI_RPE_MAP_ID, ARATHI_RPE_POSITION_X, ARATHI_RPE_POSITION_Y,
         ARATHI_RPE_POSITION_Z, ARATHI_RPE_ORIENTATION);
 }
