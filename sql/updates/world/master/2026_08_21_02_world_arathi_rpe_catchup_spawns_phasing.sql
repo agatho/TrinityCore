@@ -2933,59 +2933,28 @@ INSERT INTO `creature_addon` (`guid`, `PathId`, `mount`, `StandState`, `AnimTier
 -- ============================================================================
 
 -- PhaseId 1961 (terrain, slot 0) -- Hammerfall/town base, active during quest 90883's window
-INSERT INTO `phase_area` (`AreaId`, `PhaseId`, `Comment`) VALUES
- (7658, 1961, 'Catch-Up Experience -- Hammerfall -- REAL PhaseId 1961 (terrain, quest 90883 window) -- TODO Phase K confirm AreaId on map 2927'),
- (7678, 1961, 'Catch-Up Experience -- Refuge Pointe corridor -- REAL PhaseId 1961 span -- TODO Phase K confirm AreaId on map 2927')
-ON DUPLICATE KEY UPDATE `Comment`=VALUES(`Comment`);
+-- FIX 2026-08-21 (ROOT CAUSE of invisible phased content): the AreaIds below were WRONG -- the
+-- content used ids from OTHER maps (7658="The Cove of Nashal" continent 1475, 7667/7680/7682 on
+-- continents 1220/1116, 7678="Lok'goron Foundry" continent 1116). None are on map 2927, so the
+-- player's phase set was NEVER assigned and every phased spawn (leaders, gnolls, siege...) was
+-- invisible. Corrected to the REAL map-2927 areas (AreaTable ContinentID=2927): the pad/Hammerfall
+-- is 16432 "Arathi Highlands" (confirmed -- the 2026_08_15_50..57 spawns use zoneId/areaId 16432),
+-- the farm is 16456 "Go'Shek Farm", the siege is 16453 "Stromgarde Keep", the climax is 16458
+-- "Boulderfist Hall". phase_area PK is (AreaId,PhaseId), so the old wrong-area rows are DELETEd
+-- first. (If a POI on the RPE map turns out to sit in a different map-2927 sub-area than its
+-- real-Arathi namesake, adjust that one AreaId -- but these are the correct-map ids now.)
+DELETE FROM `phase_area` WHERE `PhaseId` IN (1961, 37, 1959, 4, 8, 1965, 1610, 28, 3);
 
--- PhaseId 37 (per-quest, slot 11) -- Hammerfall gnoll-camp filler, gated to quest 90883
 INSERT INTO `phase_area` (`AreaId`, `PhaseId`, `Comment`) VALUES
- (7658, 37, 'Catch-Up Experience -- Hammerfall gnoll camp -- REAL PhaseId 37 (per-quest, quest 90883) -- TODO Phase K confirm AreaId on map 2927')
-ON DUPLICATE KEY UPDATE `Comment`=VALUES(`Comment`);
-
--- PhaseId 1959 (terrain, slot 0) -- Go'shek farm story-lead/prop base, broadest terrain
--- window (90885/86/87/88/93/95/96)
-INSERT INTO `phase_area` (`AreaId`, `PhaseId`, `Comment`) VALUES
- (7680, 1959, 'Catch-Up Experience -- Go''shek/Dabyrie''s Farmstead -- REAL PhaseId 1959 (terrain, quests 90885-90896 span) -- TODO Phase K confirm AreaId on map 2927')
-ON DUPLICATE KEY UPDATE `Comment`=VALUES(`Comment`);
-
--- PhaseId 4 (per-quest, slot 11) -- Go'shek farm trash + Runk, gated to 90885/86/87
-INSERT INTO `phase_area` (`AreaId`, `PhaseId`, `Comment`) VALUES
- (7680, 4, 'Catch-Up Experience -- Go''shek/Dabyrie''s Farmstead -- REAL PhaseId 4 (per-quest, quests 90885/86/87) -- TODO Phase K confirm AreaId on map 2927')
-ON DUPLICATE KEY UPDATE `Comment`=VALUES(`Comment`);
-
--- PhaseId 8 (per-quest, slot 11) -- documented for completeness only, NOT attached to any
--- spawn in this file; near-duplicate of PhaseId 4's window (90885/86/87). Same AreaId as 4.
-INSERT INTO `phase_area` (`AreaId`, `PhaseId`, `Comment`) VALUES
- (7680, 8, 'Catch-Up Experience -- Go''shek/Dabyrie''s Farmstead -- REAL PhaseId 8 (per-quest, quests 90885/86/87; near-duplicate of PhaseId 4, NOT used by any 20_creature_spawns.sql row -- documented for completeness) -- TODO Phase K confirm AreaId on map 2927')
-ON DUPLICATE KEY UPDATE `Comment`=VALUES(`Comment`);
-
--- PhaseId 1965 (terrain, slot 0) -- documented for completeness only, NOT attached to any
--- spawn in this file; near-duplicate of PhaseId 1959's window minus the 88/96 boundary
--- quests (90885/86/87/93/95). Farm+siege AreaIds both plausible; listed under farm.
-INSERT INTO `phase_area` (`AreaId`, `PhaseId`, `Comment`) VALUES
- (7680, 1965, 'Catch-Up Experience -- Go''shek/Dabyrie''s Farmstead -- REAL PhaseId 1965 (terrain, quests 90885/86/87/93/95; near-duplicate of PhaseId 1959, NOT used by any 20_creature_spawns.sql row -- documented for completeness) -- TODO Phase K confirm AreaId on map 2927')
-ON DUPLICATE KEY UPDATE `Comment`=VALUES(`Comment`);
-
--- PhaseId 1610 (terrain, slot 0) -- Stromgarde Keep hub leads/town NPCs base, siege window
--- (90893/95)
-INSERT INTO `phase_area` (`AreaId`, `PhaseId`, `Comment`) VALUES
- (7667, 1610, 'Catch-Up Experience -- Stromgarde Keep -- REAL PhaseId 1610 (terrain, quests 90893/95) -- TODO Phase K confirm AreaId on map 2927')
-ON DUPLICATE KEY UPDATE `Comment`=VALUES(`Comment`);
-
--- PhaseId 28 (per-quest, slot 11) -- Stromgarde siege trash + Worn Catapult, gated to
--- 90893/95
-INSERT INTO `phase_area` (`AreaId`, `PhaseId`, `Comment`) VALUES
- (7667, 28, 'Catch-Up Experience -- Stromgarde Keep siege battlefield -- REAL PhaseId 28 (per-quest, quests 90893/95) -- TODO Phase K confirm AreaId on map 2927')
-ON DUPLICATE KEY UPDATE `Comment`=VALUES(`Comment`);
-
--- PhaseId 3 (per-quest+"completion", slots 11 and 25) -- used here ONLY for the narrow
--- climax/Ro'grok cluster at Boulderfist Outpost/Hall, even though the graph shows this id's
--- full window spans the ENTIRE 90883-90896 run (the broadest phase on the wire) -- see
--- 20_creature_spawns.sql's banner "HONEST BOUNDARY" note for why only the climax cluster
--- uses it in this file.
-INSERT INTO `phase_area` (`AreaId`, `PhaseId`, `Comment`) VALUES
- (7682, 3, 'Catch-Up Experience -- Boulderfist Outpost/Hall (Ro''grok''s lair) -- REAL PhaseId 3 (per-quest/completion, full 90883-90896 window on the wire; authored here for the climax cluster only) -- TODO Phase K confirm AreaId on map 2927')
+ (16432, 1961, 'Catch-Up Experience -- Hammerfall (area 16432 Arathi Highlands, map 2927) -- PhaseId 1961 town base + arrival leaders'),
+ (16432, 37,   'Catch-Up Experience -- Hammerfall gnoll camp (area 16432) -- PhaseId 37, 90882 slay targets'),
+ (16456, 1959, 'Catch-Up Experience -- Go''Shek Farm (area 16456, map 2927) -- PhaseId 1959 terrain, 90885-90896 span'),
+ (16456, 4,    'Catch-Up Experience -- Go''Shek Farm (area 16456) -- PhaseId 4, quests 90885/86/87'),
+ (16456, 8,    'Catch-Up Experience -- Go''Shek Farm (area 16456) -- PhaseId 8 (documented; near-dup of 4)'),
+ (16456, 1965, 'Catch-Up Experience -- Go''Shek Farm (area 16456) -- PhaseId 1965 (documented; near-dup of 1959)'),
+ (16453, 1610, 'Catch-Up Experience -- Stromgarde Keep (area 16453, map 2927) -- PhaseId 1610 terrain, siege 90893/95'),
+ (16453, 28,   'Catch-Up Experience -- Stromgarde Keep siege (area 16453) -- PhaseId 28, quests 90893/95'),
+ (16458, 3,    'Catch-Up Experience -- Boulderfist Hall / Ro''grok (area 16458, map 2927) -- PhaseId 3, climax cluster')
 ON DUPLICATE KEY UPDATE `Comment`=VALUES(`Comment`);
 
 -- ============================================================================
