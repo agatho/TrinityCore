@@ -102,3 +102,25 @@ ON DUPLICATE KEY UPDATE `LogTitle`=VALUES(`LogTitle`), `LogDescription`=VALUES(`
 INSERT INTO `quest_template` (`ID`, `AllowableRaces`) VALUES
  (90897, 2973060173)
 ON DUPLICATE KEY UPDATE `AllowableRaces`=VALUES(`AllowableRaces`);
+
+-- ---- 8 gear-reward quests -- QuestPackageID delta (class-adaptive rewards) ----
+-- Wires each gear-reward quest to its minted QuestPackage (see 36_quest_package_item.sql,
+-- PackageID = 64000 + questID%1000). This is the class-adaptive reward fix (issue 4b): the
+-- retail RPE chain serves class-appropriate gear via QuestPackageItem.db2, NOT via the static
+-- quest_template.RewardChoiceItemID1-6 columns (which BuildQuestRewards sends to every class
+-- unfiltered). With QuestPackageID set + the package rows loaded, TC's CanSelectQuestPackageItem
+-- filters each row by the item's own class-spec mask (DisplayType=1 CLASS), so each player is
+-- offered only their class's set-family items. 35_quest_offer_reward.sql drops the old static
+-- RewardChoiceItemID rows for these same 8 quests (they must NOT coexist with the package).
+-- Excluded on purpose: 90883 (4 class-independent bags -- keeps its RewardChoiceItemID),
+-- 90897/90911 (no gear reward). Partial-column UPDATE -> idempotent, touches nothing else.
+INSERT INTO `quest_template` (`ID`, `QuestPackageID`) VALUES
+ (90882, 64882),
+ (90885, 64885),
+ (90886, 64886),
+ (90887, 64887),
+ (90888, 64888),
+ (90893, 64893),
+ (90895, 64895),
+ (90896, 64896)
+ON DUPLICATE KEY UPDATE `QuestPackageID`=VALUES(`QuestPackageID`);

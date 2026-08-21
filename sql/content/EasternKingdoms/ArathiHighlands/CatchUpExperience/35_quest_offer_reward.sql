@@ -56,31 +56,48 @@ I can barely read any of this.'),
  (90897, 'It''s good to see the people here in high spirits.')
 ON DUPLICATE KEY UPDATE `RewardText`=VALUES(`RewardText`);
 
--- ---- SECTION 2 -- quest_template.RewardChoiceItemID1-6 (candidate, addon-sourced, [A] unverified) ----
--- Source: addon_quest_template.sql `reward_items` column, item:qty pairs. Sanity-check
--- performed per Requirement 6: all IDs fall in two tight, plausible clusters (153973-154008
--- and 188213/249771-249773) consistent with recently-added Midnight-era quest-reward item
--- IDs (this build's item space runs well past 200000); each quest offers 1-4 distinct
--- items at qty 1, matching the standard "pick one" choice-reward shape used throughout
--- this quest chain's reward tier. PASSES the sanity check -- authored as
--- RewardChoiceItemID candidates. RewardChoiceItemDisplayID is left 0 (not captured) on
--- every row. CONFIDENCE MED -- item NAMES were not cross-checked against Item-sparse.db2
--- (out of scope for this task); TODO Phase K verify names before this ships live.
--- 90882's addon row captured `153983:1,153983:1` (item 153983 listed twice) -- treated as
--- a capture/scrape duplicate and collapsed to one slot (3 distinct items, not 4).
--- 90897 and 90911 have NO reward_items in the addon dump (90897's quest_template INSERT
--- omits the column entirely; 90911 is the no-reward hub terminus) -- no delta authored.
+-- ============================================================================
+-- SECTION 2 -- quest_template.RewardChoiceItemID1-6 :: 90883 BAGS ONLY (the 8 gear
+-- quests are now QuestPackage-driven -- see 36_quest_package_item.sql)
+-- ============================================================================
+-- ***** BUG FIX (issue 4b -- class-adaptive rewards) *****
+-- The 8 GEAR-reward quests (90882, 90885, 90886, 90887, 90888, 90893, 90895, 90896) NO
+-- LONGER carry static RewardChoiceItemID rows here. They previously did -- authored from a
+-- single class's Alliance-Shaman capture (153973/153983/154005 ...) -- and because
+-- Quest::BuildQuestRewards() copies RewardChoiceItemID1-6 into the reward packet for EVERY
+-- player with NO class filtering, every class of every player was offered Shaman mail. The
+-- retail RPE chain instead serves class-appropriate gear via the QuestPackage mechanism
+-- (quest_template.QuestPackageID -> QuestPackageItem.db2), which TrinityCore implements fully.
+-- The fix moves those rewards to a minted QuestPackage per quest:
+--   * 30_quest_template.sql sets QuestPackageID = 64000 + questID%1000 for the 8 quests.
+--   * 36_quest_package_item.sql loads every class's set-family items into those packages
+--     (DisplayType=1 CLASS -> TC filters each row by the item's own class-spec mask).
+-- The static RewardChoiceItemID authoring MUST NOT coexist with the package (it would still
+-- be sent unfiltered), so it is REMOVED here for all 8 gear quests. Full analysis:
+-- .superpowers/sdd/CATCHUP_BLIZZLIKE_IMPLEMENTATION_PLAN/phk-class-rewards-report.md
+--
+-- 90883 is the ONLY quest that keeps a static RewardChoiceItemID row: its 4 rewards are
+-- class-INDEPENDENT bags (AllowableClass -1), a genuine "pick one of 4" that every class
+-- sees identically -- exactly what the static columns are for, no package needed.
+-- 90897 and 90911 have NO reward_items (90897 omits the column; 90911 = no-reward terminus).
 INSERT INTO `quest_template` (`ID`, `RewardChoiceItemID1`, `RewardChoiceItemQuantity1`, `RewardChoiceItemID2`, `RewardChoiceItemQuantity2`, `RewardChoiceItemID3`, `RewardChoiceItemQuantity3`, `RewardChoiceItemID4`, `RewardChoiceItemQuantity4`) VALUES
- (90882, 153973, 1, 153983, 1, 154005, 1, 0,      0),  -- de-duplicated (addon listed 153983 twice)
- (90883, 249773, 1, 249772, 1, 249771, 1, 188213, 1),
- (90885, 153996, 1, 153995, 1, 0,      0, 0,      0),
- (90886, 154001, 1, 154002, 1, 0,      0, 0,      0),
- (90887, 153998, 1, 0,      0, 0,      0, 0,      0),
- (90888, 153997, 1, 153994, 1, 0,      0, 0,      0),
- (90893, 154007, 1, 154008, 1, 0,      0, 0,      0),
- (90895, 154004, 1, 153993, 1, 0,      0, 0,      0),
- (90896, 154003, 1, 154006, 1, 0,      0, 0,      0)
+ (90883, 249773, 1, 249772, 1, 249771, 1, 188213, 1)  -- class-independent bags (kept static)
 ON DUPLICATE KEY UPDATE `RewardChoiceItemID1`=VALUES(`RewardChoiceItemID1`), `RewardChoiceItemQuantity1`=VALUES(`RewardChoiceItemQuantity1`), `RewardChoiceItemID2`=VALUES(`RewardChoiceItemID2`), `RewardChoiceItemQuantity2`=VALUES(`RewardChoiceItemQuantity2`), `RewardChoiceItemID3`=VALUES(`RewardChoiceItemID3`), `RewardChoiceItemQuantity3`=VALUES(`RewardChoiceItemQuantity3`), `RewardChoiceItemID4`=VALUES(`RewardChoiceItemID4`), `RewardChoiceItemQuantity4`=VALUES(`RewardChoiceItemQuantity4`);
+
+-- ---- IDEMPOTENT CLEANUP -- clear any previously-applied static gear choices on the 8 quests ----
+-- A prior apply of this slice may have written the (now-removed) single-class RewardChoiceItemID
+-- rows for the 8 gear quests into a target DB. Since those rows are deleted from this file, a
+-- straight re-apply would leave the stale columns behind and they would STILL be sent
+-- unfiltered alongside the package. Explicitly zero all 6 choice slots for the 8 gear quests
+-- so re-apply converges to the package-only state.
+UPDATE `quest_template` SET
+ `RewardChoiceItemID1`=0, `RewardChoiceItemQuantity1`=0, `RewardChoiceItemDisplayID1`=0,
+ `RewardChoiceItemID2`=0, `RewardChoiceItemQuantity2`=0, `RewardChoiceItemDisplayID2`=0,
+ `RewardChoiceItemID3`=0, `RewardChoiceItemQuantity3`=0, `RewardChoiceItemDisplayID3`=0,
+ `RewardChoiceItemID4`=0, `RewardChoiceItemQuantity4`=0, `RewardChoiceItemDisplayID4`=0,
+ `RewardChoiceItemID5`=0, `RewardChoiceItemQuantity5`=0, `RewardChoiceItemDisplayID5`=0,
+ `RewardChoiceItemID6`=0, `RewardChoiceItemQuantity6`=0, `RewardChoiceItemDisplayID6`=0
+WHERE `ID` IN (90882, 90885, 90886, 90887, 90888, 90893, 90895, 90896);
 
 -- ============================================================================
 -- HORDE-XVAL FIX (H3, task-6) -- documented Horde reward-choice item ids (NOT AUTHORED)
