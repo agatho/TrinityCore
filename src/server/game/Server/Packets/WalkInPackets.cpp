@@ -15,46 +15,16 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "AreaTriggerPackets.h"
+#include "WalkInPackets.h"
 #include "PacketOperators.h"
 
-namespace WorldPackets::AreaTrigger
+namespace WorldPackets::WalkIn
 {
-void AreaTrigger::Read()
+WorldPacket const* WalkInResult::Write()
 {
-    _worldPacket >> AreaTriggerID;
-    _worldPacket >> Bits<1>(Entered);
-    _worldPacket >> Bits<1>(FromClient);
-}
-
-WorldPacket const* AreaTriggerDenied::Write()
-{
-    _worldPacket << int32(AreaTriggerID);
-    _worldPacket << Bits<1>(Entered);
+    _worldPacket << Bits<3>(Result);
     _worldPacket.FlushBits();
 
     return &_worldPacket;
-}
-
-WorldPacket const* AreaTriggerPlaySpellVisual::Write()
-{
-    _worldPacket << AreaTriggerGUID;
-    _worldPacket << uint32(SpellVisualID);
-
-    return &_worldPacket;
-}
-
-WorldPacket const* AreaTriggerUpdateDecalProperties::Write()
-{
-    _worldPacket << AreaTriggerGUID;
-
-    return &_worldPacket;
-}
-
-void UpdateAreaTriggerVisual::Read()
-{
-    _worldPacket >> SpellID;
-    _worldPacket >> Visual;
-    _worldPacket >> TargetGUID;
 }
 }

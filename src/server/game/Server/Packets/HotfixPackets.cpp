@@ -102,17 +102,29 @@ void HotfixRequest::Read()
         _worldPacket >> hotfixId;
 }
 
-ByteBuffer& operator<<(ByteBuffer& data, HotfixConnect::HotfixData const& hotfixData)
+ByteBuffer& operator<<(ByteBuffer& data, HotfixData const& hotfixData)
 {
-    data << hotfixData.Record;
+    data << hotfixData.Record;                      // PushID, UniqueID, TableHash, RecordID
     data << uint32(hotfixData.Size);
     data << Bits<3>(hotfixData.Record.HotfixStatus);
-    data.FlushBits();
+    data.FlushBits();                               // per record - 21 bytes each
 
     return data;
 }
 
 WorldPacket const* HotfixConnect::Write()
+{
+    _worldPacket << Size<uint32>(Hotfixes);
+    for (HotfixData const& hotfix : Hotfixes)
+        _worldPacket << hotfix;
+
+    _worldPacket << Size<uint32>(HotfixContent);
+    _worldPacket.append(HotfixContent);
+
+    return &_worldPacket;
+}
+
+WorldPacket const* HotfixMessage::Write()
 {
     _worldPacket << Size<uint32>(Hotfixes);
     for (HotfixData const& hotfix : Hotfixes)

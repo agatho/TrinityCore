@@ -36,7 +36,9 @@
 #include <atomic>
 #include <map>
 #include <memory>
+#include <span>
 #include <unordered_map>
+#include <vector>
 
 class BlackMarketEntry;
 class CollectionMgr;
@@ -44,6 +46,7 @@ class Creature;
 class InstanceLock;
 class Item;
 class LoginQueryHolder;
+class ByteBuffer;
 class MessageBuffer;
 class Player;
 class Unit;
@@ -415,6 +418,13 @@ namespace WorldPackets
     {
         class DBQueryBulk;
         class HotfixRequest;
+        struct HotfixData;
+    }
+
+    namespace WalkIn
+    {
+        class DelveTeleportOut;
+        enum class WalkInResultCode : uint8;
     }
 
     namespace Housing
@@ -649,6 +659,7 @@ namespace WorldPackets
     namespace Query
     {
         class QueryCreature;
+        class QueryNeighborhoodInfo;
         struct NameCacheLookupResult;
         class QueryPlayerNames;
         class QueryPageText;
@@ -1001,6 +1012,7 @@ class TC_GAME_API WorldSession
 
         void SendAuthResponse(uint32 code, bool queued, uint32 queuePos = 0);
         void SendClientCacheVersion(uint32 version);
+        void SendCacheInfo();
         void SendAvailableHotfixes();
 
         void InitializeSession();
@@ -1373,6 +1385,12 @@ class TC_GAME_API WorldSession
 
         void HandleDBQueryBulk(WorldPackets::Hotfix::DBQueryBulk& dbQuery);
         void HandleHotfixRequest(WorldPackets::Hotfix::HotfixRequest& hotfixQuery);
+        void BuildHotfixRecords(std::span<int32 const> hotfixIds, std::vector<WorldPackets::Hotfix::HotfixData>& records, ByteBuffer& content) const;
+        void SendHotfixMessage(std::span<int32 const> hotfixIds);
+
+        // walk-in (delve / follower dungeon) instance session
+        void HandleDelveTeleportOut(WorldPackets::WalkIn::DelveTeleportOut& packet);
+        void SendWalkInResult(WorldPackets::WalkIn::WalkInResultCode result);
 
         void HandleMoveWorldportAckOpcode(WorldPackets::Movement::WorldPortResponse& packet);
         void HandleMoveWorldportAck();                // for server-side calls
@@ -1567,6 +1585,7 @@ class TC_GAME_API WorldSession
         void HandleSetBackpackAutosortDisabled(WorldPackets::Item::SetBackpackAutosortDisabled const& setBackpackAutosortDisabled);
         void HandleSetBackpackSellJunkDisabled(WorldPackets::Item::SetBackpackSellJunkDisabled const& setBackpackSellJunkDisabled);
         void HandleSetBankAutosortDisabled(WorldPackets::Item::SetBankAutosortDisabled const& setBankAutosortDisabled);
+        void SendOpenContainer(ObjectGuid containerGuid);
 
         void HandleAttackSwingOpcode(WorldPackets::Combat::AttackSwing& packet);
         void HandleAttackStopOpcode(WorldPackets::Combat::AttackStop& packet);
@@ -1662,6 +1681,9 @@ class TC_GAME_API WorldSession
         void HandleCompleteMovie(WorldPackets::Misc::CompleteMovie& packet);
 
         void HandleQueryPageText(WorldPackets::Query::QueryPageText& packet);
+        void SendInvalidatePageText(uint32 pageTextId);
+        void HandleQueryNeighborhoodInfo(WorldPackets::Query::QueryNeighborhoodInfo& queryNeighborhoodInfo);
+        void SendInvalidateNeighborhoodName(ObjectGuid neighborhoodGuid);
 
         void HandleTutorialFlag(WorldPackets::Misc::TutorialSetFlag& packet);
 

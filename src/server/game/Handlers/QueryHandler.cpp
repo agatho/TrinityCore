@@ -355,3 +355,39 @@ void WorldSession::HandleQueryTreasurePicker(WorldPackets::Query::QueryTreasureP
 
     SendPacket(treasurePickerResponse.Write());
 }
+
+// Tells the client that one page text record is stale. The client drops exactly that record from
+// its page text cache (client handler RVA 0x351F00 -> DBCache::InvalidateRecord) and asks for it
+// again with CMSG_QUERY_PAGE_TEXT the next time it needs it. Nothing else is thrown away, and no
+// Lua event fires - the follow up query is the observable effect.
+void WorldSession::SendInvalidatePageText(uint32 pageTextId)
+{
+    WorldPackets::Query::InvalidatePageText invalidatePageText;
+    invalidatePageText.PageTextID = pageTextId;
+
+    SendPacket(invalidatePageText.Write());
+}
+
+// Answers the client's neighbourhood name cache. TrinityCore has no neighbourhood storage yet, so
+// the honest answer is "this guid has no name" - which is still a real answer: the client's cache
+// guards the request with an in-flight bit (RVA 0x34FF30), so a query that is never answered leaves
+// the entry blocked forever and NEIGHBORHOOD_NAME_UPDATED never fires again for that guid.
+// TODO: return the stored name once a housing neighbourhood system exists.
+void WorldSession::HandleQueryNeighborhoodInfo(WorldPackets::Query::QueryNeighborhoodInfo& queryNeighborhoodInfo)
+{
+    WorldPackets::Query::QueryNeighborhoodNameResponse response;
+    response.NeighborhoodGUID = queryNeighborhoodInfo.NeighborhoodGUID;
+
+    SendPacket(response.Write());
+}
+
+// Drops the cached name of one neighbourhood (consumer RVA 0x34F7D0). The client asks for it again
+// with CMSG_QUERY_NEIGHBORHOOD_INFO the next time it needs it, so this is how a rename reaches
+// clients that already know the old name.
+void WorldSession::SendInvalidateNeighborhoodName(ObjectGuid neighborhoodGuid)
+{
+    WorldPackets::Query::InvalidateNeighborhoodName invalidateNeighborhoodName;
+    invalidateNeighborhoodName.NeighborhoodGUID = neighborhoodGuid;
+
+    SendPacket(invalidateNeighborhoodName.Write());
+}

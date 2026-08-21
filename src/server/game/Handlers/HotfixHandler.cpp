@@ -72,12 +72,13 @@ void WorldSession::SendAvailableHotfixes()
     SendPacket(availableHotfixes.Write());
 }
 
-void WorldSession::HandleHotfixRequest(WorldPackets::Hotfix::HotfixRequest& hotfixQuery)
+// Shared record builder for SMSG_HOTFIX_CONNECT and SMSG_HOTFIX_MESSAGE - both carry the identical
+// payload (client element reader RVA 0x72AEA0 is used for both cases of the family 0x49 dispatcher).
+void WorldSession::BuildHotfixRecords(std::span<int32 const> hotfixIds, std::vector<WorldPackets::Hotfix::HotfixData>& records, ByteBuffer& content) const
 {
     DB2Manager::HotfixContainer const& hotfixes = sDB2Manager.GetHotfixData();
-    WorldPackets::Hotfix::HotfixConnect hotfixQueryResponse;
-    hotfixQueryResponse.Hotfixes.reserve(hotfixQuery.Hotfixes.size());
-    for (int32 hotfixId : hotfixQuery.Hotfixes)
+    records.reserve(records.size() + hotfixIds.size());
+    for (int32 hotfixId : hotfixIds)
     {
         if (DB2Manager::HotfixPush const* hotfixRecords = Trinity::Containers::MapGetValuePtr(hotfixes, hotfixId))
         {
@@ -86,31 +87,31 @@ void WorldSession::HandleHotfixRequest(WorldPackets::Hotfix::HotfixRequest& hotf
                 if (!(hotfixRecord.AvailableLocalesMask & (1 << GetSessionDbcLocale())))
                     continue;
 
-                WorldPackets::Hotfix::HotfixConnect::HotfixData& hotfixData = hotfixQueryResponse.Hotfixes.emplace_back();
+                WorldPackets::Hotfix::HotfixData& hotfixData = records.emplace_back();
                 hotfixData.Record = hotfixRecord;
                 if (hotfixRecord.HotfixStatus == DB2Manager::HotfixRecord::Status::Valid)
                 {
                     DB2StorageBase const* storage = sDB2Manager.GetStorage(hotfixRecord.TableHash);
                     if (storage && storage->HasRecord(uint32(hotfixRecord.RecordID)))
                     {
-                        std::size_t pos = hotfixQueryResponse.HotfixContent.size();
-                        storage->WriteRecord(uint32(hotfixRecord.RecordID), GetSessionDbcLocale(), hotfixQueryResponse.HotfixContent);
+                        std::size_t pos = content.size();
+                        storage->WriteRecord(uint32(hotfixRecord.RecordID), GetSessionDbcLocale(), content);
 
                         if (std::vector<DB2Manager::HotfixOptionalData> const* optionalDataEntries = sDB2Manager.GetHotfixOptionalData(hotfixRecord.TableHash, hotfixRecord.RecordID, GetSessionDbcLocale()))
                         {
                             for (DB2Manager::HotfixOptionalData const& optionalData : *optionalDataEntries)
                             {
-                                hotfixQueryResponse.HotfixContent << uint32(optionalData.Key);
-                                hotfixQueryResponse.HotfixContent.append(optionalData.Data.data(), optionalData.Data.size());
+                                content << uint32(optionalData.Key);
+                                content.append(optionalData.Data.data(), optionalData.Data.size());
                             }
                         }
 
-                        hotfixData.Size = hotfixQueryResponse.HotfixContent.size() - pos;
+                        hotfixData.Size = content.size() - pos;
                     }
                     else if (std::vector<uint8> const* blobData = sDB2Manager.GetHotfixBlobData(hotfixRecord.TableHash, hotfixRecord.RecordID, GetSessionDbcLocale()))
                     {
                         hotfixData.Size = blobData->size();
-                        hotfixQueryResponse.HotfixContent.append(blobData->data(), blobData->size());
+                        content.append(blobData->data(), blobData->size());
                     }
                     else
                         // Do not send Status::Valid when we don't have a hotfix blob for current locale
@@ -119,6 +120,26 @@ void WorldSession::HandleHotfixRequest(WorldPackets::Hotfix::HotfixRequest& hotf
             }
         }
     }
+}
+
+// Unsolicited push of hotfix records to an already connected client (SMSG_HOTFIX_MESSAGE, client
+// handler RVA 0x4A9BB0 - applies the records to the client's DB2 stores exactly like the reply to
+// CMSG_HOTFIX_REQUEST does). TrinityCore currently mutates hotfix data only during startup, so no
+// core code path triggers this yet; the sender exists for scripts and for a future runtime reload.
+void WorldSession::SendHotfixMessage(std::span<int32 const> hotfixIds)
+{
+    WorldPackets::Hotfix::HotfixMessage hotfixMessage;
+    BuildHotfixRecords(hotfixIds, hotfixMessage.Hotfixes, hotfixMessage.HotfixContent);
+    if (hotfixMessage.Hotfixes.empty())
+        return;
+
+    SendPacket(hotfixMessage.Write());
+}
+
+void WorldSession::HandleHotfixRequest(WorldPackets::Hotfix::HotfixRequest& hotfixQuery)
+{
+    WorldPackets::Hotfix::HotfixConnect hotfixQueryResponse;
+    BuildHotfixRecords(hotfixQuery.Hotfixes, hotfixQueryResponse.Hotfixes, hotfixQueryResponse.HotfixContent);
 
     SendPacket(hotfixQueryResponse.Write());
 }

@@ -470,6 +470,26 @@ void AreaTrigger::ClearOverrideMoveCurve()
     ClearScaleCurve(m_values.ModifyValue(&AreaTrigger::m_areaTriggerData).ModifyValue(&UF::AreaTriggerData::OverrideMoveCurveZ));
 }
 
+// Changing the decal at runtime needs two things: the update field so a client that only learns
+// about the area trigger later builds the right decal, and SMSG_AREA_TRIGGER_UPDATE_DECAL_PROPERTIES
+// for the clients that already have it - those rebuild the decal geometry from DecalProperties.db2
+// only when told to (client handler RVA 0x1F5E420). Sending it before the area trigger is in world
+// would be pointless: the client ignores the message while its own DecalPropertiesID is still 0.
+void AreaTrigger::SetDecalPropertiesId(uint32 decalPropertiesId)
+{
+    if (*m_areaTriggerData->DecalPropertiesID == decalPropertiesId)
+        return;
+
+    SetUpdateFieldValue(m_values.ModifyValue(&AreaTrigger::m_areaTriggerData).ModifyValue(&UF::AreaTriggerData::DecalPropertiesID), decalPropertiesId);
+
+    if (IsInWorld() && decalPropertiesId)
+    {
+        WorldPackets::AreaTrigger::AreaTriggerUpdateDecalProperties packet;
+        packet.AreaTriggerGUID = GetGUID();
+        SendMessageToSet(packet.Write(), false);
+    }
+}
+
 void AreaTrigger::SetSpellVisual(SpellCastVisual const& visual)
 {
     auto spellVisualMutator = m_values.ModifyValue(&AreaTrigger::m_areaTriggerData).ModifyValue(&UF::AreaTriggerData::SpellVisual);

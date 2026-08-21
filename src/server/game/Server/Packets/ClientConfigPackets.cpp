@@ -37,6 +37,35 @@ WorldPacket const* ClientCacheVersion::Write()
     return &_worldPacket;
 }
 
+WorldPacket const* CacheInfo::Write()
+{
+    // every length is six bits wide - a longer string would announce a truncated length and then
+    // write all of its bytes, which desyncs the client's stream instead of merely losing characters
+    auto clamp = [](std::string const& value) { return std::string_view(value).substr(0, (1 << 6) - 1); };
+
+    _worldPacket << Size<uint32>(Entries);
+    for (CacheInfoEntry const& entry : Entries)
+    {
+        std::string_view key = clamp(entry.Key);
+        std::string_view value = clamp(entry.Value);
+
+        // both lengths belong to one 12 bit group - a flush after each of them would emit a byte too many
+        _worldPacket << SizedString::BitsSize<6>(key);
+        _worldPacket << SizedString::BitsSize<6>(value);
+        _worldPacket.FlushBits();
+
+        _worldPacket << SizedString::Data(key);
+        _worldPacket << SizedString::Data(value);
+    }
+
+    std::string_view prefix = clamp(Prefix);
+    _worldPacket << SizedString::BitsSize<6>(prefix);
+    _worldPacket.FlushBits();
+    _worldPacket << SizedString::Data(prefix);
+
+    return &_worldPacket;
+}
+
 void RequestAccountData::Read()
 {
     _worldPacket >> PlayerGuid;

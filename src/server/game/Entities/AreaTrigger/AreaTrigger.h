@@ -166,6 +166,9 @@ class TC_GAME_API AreaTrigger final : public WorldObject, public GridObject<Area
 
         void SetSpellVisual(SpellCastVisual const& visual);
 
+        uint32 GetDecalPropertiesId() const { return m_areaTriggerData->DecalPropertiesID; }
+        void SetDecalPropertiesId(uint32 decalPropertiesId);
+
         int32 GetDuration() const { return _duration; }
         int32 GetTotalDuration() const { return _totalDuration; }
         void SetDuration(int32 newDuration);

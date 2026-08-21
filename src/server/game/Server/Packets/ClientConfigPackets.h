@@ -48,6 +48,29 @@ namespace WorldPackets
             uint32 CacheVersion = 0;
         };
 
+        // Cache invalidation signal. For every entry the client forms the CVar name
+        // "CACHE-<Prefix>-<Key>" and compares its stored value against Value case insensitively
+        // (client handler RVA 0x341AD0, format string RVA 0x3B6AA20, compare is _stricmp).
+        // On the first difference it notifies the first registered cache whose MatchesPrefix
+        // accepts Prefix, that cache throws its contents away, and all CVars are rewritten.
+        // An empty Entries list makes the client do nothing at all.
+        struct CacheInfoEntry
+        {
+            std::string Key;                                ///< max 63 characters (6 bit length)
+            std::string Value;                              ///< max 63 characters (6 bit length)
+        };
+
+        class CacheInfo final : public ServerPacket
+        {
+        public:
+            explicit CacheInfo() : ServerPacket(SMSG_CACHE_INFO) { }
+
+            WorldPacket const* Write() override;
+
+            std::vector<CacheInfoEntry> Entries;
+            std::string Prefix;                             ///< cache domain, one of WGOB, WNPC, WQST, WPTX, WPTN
+        };
+
         class RequestAccountData final : public ClientPacket
         {
         public:

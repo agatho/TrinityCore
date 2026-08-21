@@ -1283,3 +1283,23 @@ void WorldSession::HandleSetBankAutosortDisabled(WorldPackets::Item::SetBankAuto
 {
     _player->SetBankAutoSortDisabled(setBankAutosortDisabled.Disable);
 }
+
+// Asks the client to open one of the player's own bags. The client resolves the guid against the
+// backpack and its 16 container slots and fires BAG_OPEN(bagID), which ContainerFrame.lua turns
+// into OpenBag(bagID) (client handler RVA 0x1E1DB80). A guid that is not a carried container is
+// dropped without a word, so this is checked here rather than leaving it to the client.
+void WorldSession::SendOpenContainer(ObjectGuid containerGuid)
+{
+    Player* player = GetPlayer();
+    Item* container = player->GetItemByGuid(containerGuid);
+    if (!container || !container->IsBag())
+    {
+        TC_LOG_DEBUG("network", "WorldSession::SendOpenContainer: {} is not a container carried by {}", containerGuid.ToString(), GetPlayerInfo());
+        return;
+    }
+
+    WorldPackets::Item::OpenContainer openContainer;
+    openContainer.ContainerGUID = containerGuid;
+
+    SendPacket(openContainer.Write());
+}

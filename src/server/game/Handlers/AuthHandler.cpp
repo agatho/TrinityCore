@@ -20,8 +20,10 @@
 #include "BattlenetRpcErrorCodes.h"
 #include "CharacterTemplateDataStore.h"
 #include "ClientConfigPackets.h"
+#include "DB2Stores.h"
 #include "DisableMgr.h"
 #include "GameTime.h"
+#include "MapUtils.h"
 #include "ObjectMgr.h"
 #include "RBAC.h"
 #include "RealmList.h"
@@ -90,6 +92,62 @@ void WorldSession::SendClientCacheVersion(uint32 version)
     cache.CacheVersion = version;
 
     SendPacket(cache.Write());
+}
+
+// SMSG_CACHE_INFO, one packet per cache domain. Structure and key space are taken from live
+// 12.1 recordings (26 of 26 packets parse to the exact packet length): every entry is
+// "<DB2TableName>RecordCount" / "<DB2TableName>HotfixCount" for a table that feeds the domain.
+// The client stores each value in the CVar "CACHE-<Prefix>-<Key>"; on the first difference it
+// discards the whole cache behind Prefix and re-queries it (handler RVA 0x341AD0).
+// Observed domains: WGOB (GameObjects) and WQST (QuestV2, QuestObjective, QuestObjectiveXEffect).
+// QuestObjective and QuestObjectiveXEffect are not DB2 stores in TrinityCore - quest objectives
+// live in the world database - so only the tables this core actually owns are reported.
+// The client also knows WNPC, WPTX and WPTN (MatchesPrefix bodies at RVA 0x331100..0x331580);
+// no recording shows which keys the retail server sends for them, so they stay unpopulated.
+void WorldSession::SendCacheInfo()
+{
+    struct CacheDomain
+    {
+        std::string_view Prefix;
+        std::span<DB2StorageBase const* const> Stores;
+    };
+
+    static DB2StorageBase const* const gameObjectStores[] = { &sGameObjectsStore };
+    static DB2StorageBase const* const questStores[] = { &sQuestV2Store };
+    static CacheDomain const domains[] =        // recordings send WQST before WGOB
+    {
+        { "WQST", std::span(questStores)      },
+        { "WGOB", std::span(gameObjectStores) }
+    };
+
+    uint32 localeMask = 1 << GetSessionDbcLocale();
+
+    // one pass over the hotfix data, counting per table hash - it is walked once for all domains
+    std::unordered_map<uint32, uint32> hotfixCountByTableHash;
+    for (auto const& [pushId, push] : sDB2Manager.GetHotfixData())
+        for (DB2Manager::HotfixRecord const& record : push.Records)
+            if (record.AvailableLocalesMask & localeMask)
+                ++hotfixCountByTableHash[record.TableHash];
+
+    for (CacheDomain const& domain : domains)
+    {
+        WorldPackets::ClientConfig::CacheInfo cacheInfo;
+        cacheInfo.Prefix = domain.Prefix;
+        cacheInfo.Entries.reserve(domain.Stores.size() * 2);
+
+        for (DB2StorageBase const* store : domain.Stores)
+        {
+            std::string_view tableName = store->GetFileName();
+            tableName.remove_suffix(std::string_view(".db2").length());
+
+            uint32 const* hotfixCount = Trinity::Containers::MapGetValuePtr(hotfixCountByTableHash, store->GetTableHash());
+
+            cacheInfo.Entries.push_back({ Trinity::StringFormat("{}RecordCount", tableName), std::to_string(store->GetNumRows()) });
+            cacheInfo.Entries.push_back({ Trinity::StringFormat("{}HotfixCount", tableName), std::to_string(hotfixCount ? *hotfixCount : 0) });
+        }
+
+        SendPacket(cacheInfo.Write());
+    }
 }
 
 void WorldSession::SendSetTimeZoneInformation()

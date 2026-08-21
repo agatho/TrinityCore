@@ -1309,6 +1309,11 @@ void WorldSession::HandlePlayerLogin(LoginQueryHolder const& holder)
 
     pCurrChar->SendInitialPacketsAfterAddToMap();
 
+    // SMSG_CACHE_INFO belongs to the enter world burst, not to the auth sequence - in the 12.1
+    // recordings it follows directly on the initial SMSG_VIGNETTE_UPDATE sent by
+    // SendInitialPacketsAfterAddToMap, one packet per cache domain.
+    SendCacheInfo();
+
     CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_UPD_CHAR_ONLINE);
     stmt->setUInt64(0, pCurrChar->GetGUID().GetCounter());
     CharacterDatabase.Execute(stmt);

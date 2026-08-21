@@ -303,6 +303,13 @@ WorldPacket const* QueryPageTextResponse::Write()
     return &_worldPacket;
 }
 
+WorldPacket const* InvalidatePageText::Write()
+{
+    _worldPacket << uint32(PageTextID);
+
+    return &_worldPacket;
+}
+
 void QueryNPCText::Read()
 {
     _worldPacket >> TextID;
@@ -605,6 +612,34 @@ WorldPacket const* TreasurePickerResponse::Write()
     _worldPacket << uint32(QuestID);
     _worldPacket << uint32(TreasurePickerID);
     _worldPacket << Treasure;
+
+    return &_worldPacket;
+}
+
+void QueryNeighborhoodInfo::Read()
+{
+    _worldPacket >> NeighborhoodGUID;
+}
+
+WorldPacket const* QueryNeighborhoodNameResponse::Write()
+{
+    _worldPacket << NeighborhoodGUID;
+    _worldPacket << OptionalInit(Name);
+    _worldPacket.FlushBits();                       // HasName sits alone in its own byte
+
+    if (Name)
+    {
+        _worldPacket << SizedString::BitsSize<8>(*Name);
+        _worldPacket.FlushBits();                   // the length is a full byte of its own
+        _worldPacket << SizedString::Data(*Name);
+    }
+
+    return &_worldPacket;
+}
+
+WorldPacket const* InvalidateNeighborhoodName::Write()
+{
+    _worldPacket << NeighborhoodGUID;
 
     return &_worldPacket;
 }

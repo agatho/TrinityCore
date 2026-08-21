@@ -195,6 +195,21 @@ namespace WorldPackets
             std::vector<PageTextInfo> Pages;
         };
 
+        // Drops exactly one page text record from the client's page text cache; the client marks the
+        // record dirty and re-queries it with CMSG_QUERY_PAGE_TEXT the next time it is needed.
+        // Client handler RVA 0x351F00 reads the leading uint32 and forwards it to
+        // DBCache::InvalidateRecord of the WPTX (page text) cache - the rest of the packet is ignored.
+        // No Lua event fires; the observable effect is the follow up query.
+        class InvalidatePageText final : public ServerPacket
+        {
+        public:
+            explicit InvalidatePageText() : ServerPacket(SMSG_INVALIDATE_PAGE_TEXT, 4) { }
+
+            WorldPacket const* Write() override;
+
+            uint32 PageTextID = 0;
+        };
+
         class QueryNPCText final : public ClientPacket
         {
         public:
@@ -505,6 +520,50 @@ namespace WorldPackets
             uint32 QuestID = 0;
             uint32 TreasurePickerID = 0;
             TreasurePickerPick Treasure;
+        };
+
+        // Sent by the client's neighbourhood name cache whenever it is asked for a name it does not
+        // have (DataCache<JamCliNeighborhoodName>::Get miss, query callback RVA 0x34F540). The
+        // request is guarded by an "in flight" bit, so a server that never answers leaves the entry
+        // stuck forever and the client never asks again.
+        class QueryNeighborhoodInfo final : public ClientPacket
+        {
+        public:
+            explicit QueryNeighborhoodInfo(WorldPacket&& packet) : ClientPacket(CMSG_QUERY_NEIGHBORHOOD_INFO, std::move(packet)) { }
+
+            void Read() override;
+
+            ObjectGuid NeighborhoodGUID;
+        };
+
+        // Answer carrying the authoritative name of a housing neighbourhood. The client fires the Lua
+        // event NEIGHBORHOOD_NAME_UPDATED(neighborhoodGuid, neighborhoodName)
+        // (HousingNeighborhoodUIDocumentation.lua:324-334). Reader RVA 0x72E972: HasName and the
+        // 8 bit name length sit in two separate bytes, not in one bit group. The consumer
+        // (RVA 0x34F580) copies at most 128 bytes of the name.
+        class QueryNeighborhoodNameResponse final : public ServerPacket
+        {
+        public:
+            static constexpr std::size_t MaxNameLength = 128;
+
+            explicit QueryNeighborhoodNameResponse() : ServerPacket(SMSG_QUERY_NEIGHBORHOOD_NAME_RESPONSE) { }
+
+            WorldPacket const* Write() override;
+
+            ObjectGuid NeighborhoodGUID;
+            Optional<std::string> Name;
+        };
+
+        // Drops the cached name of one neighbourhood. Consumer RVA 0x34F7D0 takes the guid and
+        // nothing else; the client re-asks for the name afterwards.
+        class InvalidateNeighborhoodName final : public ServerPacket
+        {
+        public:
+            explicit InvalidateNeighborhoodName() : ServerPacket(SMSG_INVALIDATE_NEIGHBORHOOD_NAME, 16) { }
+
+            WorldPacket const* Write() override;
+
+            ObjectGuid NeighborhoodGUID;
         };
 
         ByteBuffer& operator<<(ByteBuffer& data, PlayerGuidLookupData const& lookupData);

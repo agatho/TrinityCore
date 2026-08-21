@@ -68,6 +68,21 @@ namespace WorldPackets
             uint32 SpellVisualID = 0;
         };
 
+        // Tells the client to rebuild the decal of one area trigger from DecalProperties.db2.
+        // Client handler RVA 0x1F5E420 looks the object up by guid (type mask 0x800) and only calls
+        // the rebuild when its own copy of AreaTriggerData::DecalPropertiesID is non zero - the
+        // packet is a no-op otherwise, so the update field has to reach the client first.
+        // No Lua event is involved; the effect is purely visual.
+        class AreaTriggerUpdateDecalProperties final : public ServerPacket
+        {
+        public:
+            explicit AreaTriggerUpdateDecalProperties() : ServerPacket(SMSG_AREA_TRIGGER_UPDATE_DECAL_PROPERTIES, 16) { }
+
+            WorldPacket const* Write() override;
+
+            ObjectGuid AreaTriggerGUID;
+        };
+
         class UpdateAreaTriggerVisual final : public ClientPacket
         {
         public:
