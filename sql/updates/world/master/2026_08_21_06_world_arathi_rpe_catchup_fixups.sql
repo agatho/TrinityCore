@@ -76,5 +76,9 @@ DELETE FROM `conditions` WHERE `SourceTypeOrReferenceId` = 26 AND `SourceGroup` 
 -- creature PLAY_SCENE aura re-plays for every player in range), independent of the intro cinematic.
 -- NOTE: exact anchor unit for the scene auras is inferred (Jaina); if the scene plays offset from the
 -- pad, the anchor may be a separate invisible scene-bunny -- adjust after in-game check.
-UPDATE `creature_template_addon` SET `auras` = '1237118 1237116 1248494' WHERE `entry` = 244643;  -- Jaina: Casting pose + scenes 3692/3749 (flying gnolls)
+-- Jaina keeps ONLY her casting-pose aura. The scene-play spells (1237116->3692, 1248494->3749) were
+-- moved OFF her: SPELL_AURA_PLAY_SCENE only fires when the aura target is a PLAYER (HandlePlayScene),
+-- so on a creature they did nothing. The scenes are now played on the arriving player by the zone
+-- script (player_arathi_rpe_intro_cinematic -> GetSceneMgr().PlayScene(3692/3749)).
+UPDATE `creature_template_addon` SET `auras` = '1237118' WHERE `entry` = 244643;  -- Jaina: Casting pose (DNT)
 UPDATE `creature_template_addon` SET `auras` = '1237057' WHERE `entry` = 244642;  -- Thrall: Kneel (DNT)

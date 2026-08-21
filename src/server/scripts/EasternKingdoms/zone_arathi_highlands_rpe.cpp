@@ -24,6 +24,7 @@
 #include "Player.h"
 #include "PlayerChoice.h"
 #include "QuestDef.h"
+#include "SceneMgr.h"
 #include "ScriptedCreature.h"
 #include "ScriptedGossip.h"
 #include "Spell.h"
@@ -79,7 +80,15 @@ enum ArathiRpe
     // DB2-join guess of "15 candidates 2..259" was wrong - it read the CinematicSequences enumeration
     // stream, not the trigger. The wire is authoritative.) Its camera Conversation carries the 10-line
     // Arathi narration (broadcast_text 295416-295418/295519-295520/301757-301761).
-    CINEMATIC_ARATHI_RPE_INTRO       = 77
+    CINEMATIC_ARATHI_RPE_INTRO       = 77,
+
+    // Ambient pad SCENES (verified on the wire, SMSG_PLAY_SCENE 0x4500DF at the arrival pad in both
+    // captures). Scene 3749 "Jaina stasis presentation" is the persistent flying-gnolls set-piece;
+    // 3692 is the general pad ambience. They are played FOR THE PLAYER (SceneMgr) on entry - the
+    // SPELL_AURA_PLAY_SCENE handler only fires when the aura target is a player, so anchoring the
+    // scene auras on Jaina (a creature) did nothing; the server plays them on the arriving player.
+    SCENE_ARATHI_RPE_PAD_AMBIENT     = 3692,
+    SCENE_ARATHI_RPE_JAINA_GNOLLS    = 3749
 };
 
 // Faction capitals to send the player to once the Catch Up finale choice has been made. These are
@@ -174,9 +183,17 @@ public:
         ObjectGuid guid = player->GetGUID();
         player->m_Events.AddEventAtOffset([guid]()
         {
-            if (Player* p = ObjectAccessor::FindPlayer(guid))
-                if (p->GetMapId() == MAP_ARATHI_RPE && !p->GetQuestRewardStatus(QUEST_ARATHI_RPE_FINALE))
-                    p->SendCinematicStart(CINEMATIC_ARATHI_RPE_INTRO);
+            Player* p = ObjectAccessor::FindPlayer(guid);
+            if (!p || p->GetMapId() != MAP_ARATHI_RPE || p->GetQuestRewardStatus(QUEST_ARATHI_RPE_FINALE))
+                return;
+
+            // Persistent pad set-dressing: the flying-gnolls scene (3749) + ambient (3692). These
+            // must be played FOR THE PLAYER (SceneMgr), not as an aura on Jaina. They keep playing
+            // after the intro cinematic (that is what the tester sees "persist"), and the cinematic
+            // camera films them.
+            p->GetSceneMgr().PlayScene(SCENE_ARATHI_RPE_PAD_AMBIENT);
+            p->GetSceneMgr().PlayScene(SCENE_ARATHI_RPE_JAINA_GNOLLS);
+            p->SendCinematicStart(CINEMATIC_ARATHI_RPE_INTRO);
         }, Milliseconds(1500));
     }
 };
