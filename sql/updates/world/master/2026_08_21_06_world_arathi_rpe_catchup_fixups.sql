@@ -34,6 +34,22 @@ UPDATE `creature_template_addon` SET `auras` = '' WHERE `entry` = 245027;
 -- (area 16466), where the leaders/base town live.
 UPDATE `creature` SET `PhaseId` = 1961 WHERE `map` = 2927 AND `id` = 249245;
 
+-- ---- PHASING ROOT-CAUSE FIXES (2026-08-21, from reading the live realm) ----
+-- (a) Phase 37 (Hammerfall gnoll camp) was NOT applied to the player at the pad while phase 1961
+--     (leaders) WAS -- despite identical area (16466) and condition. Empirically 1961 renders and 37
+--     does not, so move ALL Hammerfall gnoll content onto the proven-working phase 1961 (both are
+--     "Hammerfall, visible until 90883 rewarded" anyway). Applies to the whole gnoll camp.
+UPDATE `creature` SET `PhaseId` = 1961 WHERE `map` = 2927 AND `PhaseId` = 37;
+-- (b) CONDITION_SOURCE_TYPE_PHASE requires SourceEntry = the AreaId (the phase's area), not 0. Ours
+--     were 0, so every phase condition was orphaned ("Area 0 does not have phase X" in DBErrors.log)
+--     and the phases applied unconditionally. Fix the SourceEntry to each phase's real area.
+UPDATE `conditions` SET `SourceEntry` = 16466 WHERE `SourceTypeOrReferenceId` = 26 AND `SourceGroup` = 1961 AND `SourceEntry` = 0;
+UPDATE `conditions` SET `SourceEntry` = 16456 WHERE `SourceTypeOrReferenceId` = 26 AND `SourceGroup` = 1959 AND `SourceEntry` = 0;
+UPDATE `conditions` SET `SourceEntry` = 16453 WHERE `SourceTypeOrReferenceId` = 26 AND `SourceGroup` = 1610 AND `SourceEntry` = 0;
+UPDATE `conditions` SET `SourceEntry` = 16458 WHERE `SourceTypeOrReferenceId` = 26 AND `SourceGroup` = 3    AND `SourceEntry` = 0;
+-- Phase 37 is now emptied of spawns; drop its (orphaned) condition.
+DELETE FROM `conditions` WHERE `SourceTypeOrReferenceId` = 26 AND `SourceGroup` = 37;
+
 -- Restore the leader POSE auras the consolidation dropped. BOTH are present in OUR OWN capture
 -- (aura-update opcode 0x670011, 6 frames): spell 1237118 "Casting (DNT)" and 1237057 "Kneel (DNT)"
 -- (names verified in SpellName.db2 -- developer pose spells, Effect=apply-aura, NO summon effect).
