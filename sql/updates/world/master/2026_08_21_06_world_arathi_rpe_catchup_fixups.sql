@@ -38,5 +38,15 @@ UPDATE `creature_template_addon` SET `auras` = '' WHERE `entry` = 245027;
 -- which the consolidation had replaced with a bare StandState=0. They do NOT summon the flying
 -- gnolls (no persistent gnoll-launch spell exists in the capture -- the flying gnolls are the intro
 -- cinematic's own choreography, fired by SendCinematicStart(77)).
-UPDATE `creature_template_addon` SET `auras` = '1237118' WHERE `entry` = 244643;  -- Jaina: Casting (DNT)
+-- THE FLYING GNOLLS (persist after the intro; not selectable) = a SCENE, not creatures. Confirmed
+-- from OUR capture: SPELL_AURA_PLAY_SCENE auras 1237116 -> SceneID 3692 (ambient pad) and 1248494 ->
+-- SceneID 3749 ("Jaina stasis presentation" = the flying gnolls); both scene ids play via
+-- SMSG_PLAY_SCENE (opcode 0x4500DF) at the arrival pad (-1101.7,-3554.4) in both sniffs. The
+-- scene_template rows 3692/3749 are already authored (2026_08_21_04); what was missing is APPLYING
+-- the scene-play auras. Anchor them on Jaina (244643) -- the pad centerpiece / the scene's namesake --
+-- alongside her casting pose. This is why they are non-selectable (scene actors) and persist (a
+-- creature PLAY_SCENE aura re-plays for every player in range), independent of the intro cinematic.
+-- NOTE: exact anchor unit for the scene auras is inferred (Jaina); if the scene plays offset from the
+-- pad, the anchor may be a separate invisible scene-bunny -- adjust after in-game check.
+UPDATE `creature_template_addon` SET `auras` = '1237118 1237116 1248494' WHERE `entry` = 244643;  -- Jaina: Casting pose + scenes 3692/3749 (flying gnolls)
 UPDATE `creature_template_addon` SET `auras` = '1237057' WHERE `entry` = 244642;  -- Thrall: Kneel (DNT)
