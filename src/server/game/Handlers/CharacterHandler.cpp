@@ -1597,13 +1597,18 @@ void WorldSession::HandlePlayerLogin(LoginQueryHolder const& holder)
     TC_METRIC_EVENT("player_events", "Login", pCurrChar->GetName());
 }
 
-// TODO: C_PlayerInfo.IsPlayerInRPE() (client Lua/UI) has no corresponding server-set field in this
-// fork - grepped ActivePlayerData / UpdateFields.h / DB2Structure.h for InRpe/IsPlayerInRPE/RPEMode
-// and found nothing beyond the WorldSession-local m_playerLoginRPE flag consumed above, which is
-// cleared before HandlePlayerLogin() returns and never exposed to the client. It may simply be
-// client-local state latched off the RPE bit on CMSG_PLAYER_LOGIN / this opcode, in which case
-// there is nothing to add here; if play-testing shows retail-only tutorials/UI gating depend on a
-// real server bit, that needs its own capture before inventing one.
+// C_PlayerInfo.IsPlayerInRPE() (client Lua/UI) has no corresponding server-set field in this fork,
+// and Phase-K investigation (2026-08-21) confirmed there is none to add: three independent wire/RE
+// passes on the Alliance+Horde captures disproved PlayerFlags/PlayerFlagsEx as the backing (both
+// byte-identical between RPE and non-RPE snapshots), and this build's protocol-GENERATED
+// ActivePlayerData/PlayerData carry no RPE-named field at all - so a real retail RPE UpdateField
+// would have appeared in the generated struct and did not. IsPlayerInRPE() is therefore client-local
+// (the client latches it off its own RPE entry via CMSG_PLAYER_LOGIN.RPE / the Adventure-Guide
+// opcode), and there is nothing to set here or on exit. The client tutorial coaches are driven
+// client-side. If a live test ever shows a coach that genuinely fails to appear, the one remaining
+// probe is a targeted capture of an in-place RPE enter->leave toggle (no world change): its
+// SMSG_UPDATE_OBJECT changesMask would name the field, or name none (confirming client-local).
+// See I:/TrinityCore/content/.superpowers/sdd/CATCHUP_BLIZZLIKE_IMPLEMENTATION_PLAN/phk-rpe-*.md.
 //
 // Arathi Returning Player Experience: in-game entry point for the Adventure Guide's "Catch Up"
 // tile (CMSG_ENCOUNTER_JOURNAL_START_ARATHI_RPE, handled below), reusing the same eligibility

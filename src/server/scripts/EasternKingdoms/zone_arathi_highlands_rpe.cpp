@@ -16,10 +16,13 @@
  */
 
 #include "ScriptMgr.h"
+#include "GossipDef.h"
 #include "ObjectMgr.h"
 #include "Player.h"
 #include "PlayerChoice.h"
 #include "QuestDef.h"
+#include "ScriptedCreature.h"
+#include "ScriptedGossip.h"
 #include "Spell.h"
 #include "SpellInfo.h"
 
@@ -32,13 +35,45 @@ enum ArathiRpe
     // UNVERIFIED: taken from a third-party capture of retail 12.0.7.68453 and not confirmed
     // against our own data.
     MAP_ARATHI_RPE                  = 2927,
+    QUEST_GNOLL_WAY                 = 90882,   // first RPE quest, offered on the entry pad
     QUEST_TO_GOSHEK_FARM            = 90883,
     NPC_CREDIT_ARATHI_RPE_MOUNT     = 239009,
 
     // Finale: PlayerChoice 902 is the last beat of the Catch Up experience (content branch's
     // player_choice/player_choice_response 902 rows); quest 90911 carries the player up to it.
     QUEST_ARATHI_RPE_FINALE          = 90911,
-    PLAYERCHOICE_ARATHI_RPE_FINALE   = 902
+    PLAYERCHOICE_ARATHI_RPE_FINALE   = 902,
+
+    // The "Dragonflight" finale option routes to a faction-specific destination quest. A single
+    // player_choice_response row carries only ONE RewardQuestID, so whichever literal the content
+    // authored has to be remapped to the player's own team here (retail serves the faction-correct
+    // one per character). The other two options (TWW-Recap 93929, TWW 92405) are faction-neutral.
+    QUEST_DRAGONFLIGHT_ALLIANCE      = 65436,
+    QUEST_DRAGONFLIGHT_HORDE         = 65435,
+
+    // "Leave Catch Up Experience" early-exit affordance. The capture proves there is NO client
+    // opcode/API/string for leaving (only CMSG_ENCOUNTER_JOURNAL_START_ARATHI_RPE exists, for
+    // entering) - retail drives the exit through the RPE guide NPC's gossip. The guide NPCs already
+    // carry gossip in the capture: Alliance Jaina 244714 -> menu 39348, Horde Thrall 244715 -> menu
+    // 39349. The content branch (61_gossip.sql) adds a "Leave Catch Up Experience" option (OptionID
+    // = GOSSIP_OPTION_LEAVE_RPE) to those menus; this script handles its selection.
+    NPC_ARATHI_RPE_GUIDE_ALLIANCE    = 244714,
+    NPC_ARATHI_RPE_GUIDE_HORDE       = 244715,
+    GOSSIP_MENU_RPE_GUIDE_ALLIANCE   = 39348,
+    GOSSIP_MENU_RPE_GUIDE_HORDE      = 39349,
+    GOSSIP_OPTION_LEAVE_RPE          = 1,    // gossip_menu_option.OptionID -> arrives as gossipListId
+
+    // Catch Up intro cinematic - an in-engine CINEMATIC_START (not a movie) played on entering the
+    // RPE map, before any quest (capture: fired with an empty quest log). Its camera Conversation
+    // carries the 10-line Arathi narration (broadcast_text 295416-295418/295519-295520/301757-301761
+    // = ConversationLine 84918-84922/87758-87762). The exact CinematicSequences id is one of 15 RPE
+    // candidates whose CinematicCamera.ConversationID is in 16711-16726:
+    //   2, 21, 41, 61, 81, 101, 121, 141, 162, 163, 165, 170, 172, 173, 259
+    // It is DB2-gated (Conversation.db2 is not client-distributed, so the 15->1 join cannot be done
+    // from static data). PHASE K - PIN IT ON THE REALM: stand on map 2927 and run
+    // `.debug play cinematic <id>` for each candidate, match the narration above; set the winner
+    // here. Left 0 (disabled) so NO wrong cinematic ships until it is confirmed.
+    CINEMATIC_ARATHI_RPE_INTRO       = 0     // <-- PLACEHOLDER: resolve to the confirmed id, then the trigger fires
 };
 
 // Faction capitals to send the player to once the Catch Up finale choice has been made. These are
@@ -58,6 +93,22 @@ constexpr float ARATHI_RPE_LEAVE_ALLIANCE_Z = 97.9034f;
 constexpr float ARATHI_RPE_LEAVE_HORDE_X = 1633.33f;
 constexpr float ARATHI_RPE_LEAVE_HORDE_Y = -4439.11f;
 constexpr float ARATHI_RPE_LEAVE_HORDE_Z = 15.7588f;
+
+// Single exit path out of the Catch Up experience, shared by the finale PlayerChoice and the guide
+// NPC's "Leave Catch Up Experience" gossip option: send the player to their own faction capital.
+// IsPlayerInRPE note (Phase K, resolved): three independent wire/RE analyses concluded there is NO
+// server-side RPE UpdateField to set or clear here - PlayerFlags/PlayerFlagsEx were disproven on the
+// wire, and this build's protocol-generated ActivePlayerData/PlayerData carry no RPE field at all,
+// so C_PlayerInfo.IsPlayerInRPE() is client-local (the client knows it is in RPE because it
+// initiated entry via CMSG_ENCOUNTER_JOURNAL_START_ARATHI_RPE / character-select). Nothing to write
+// on entry or exit; the client tutorial coaches are driven client-side. See the Phase-K reports.
+inline void SendPlayerHomeFromRpe(Player* player)
+{
+    if (player->GetTeamId() == TEAM_ALLIANCE)
+        player->TeleportTo(MAP_EASTERN_KINGDOMS, ARATHI_RPE_LEAVE_ALLIANCE_X, ARATHI_RPE_LEAVE_ALLIANCE_Y, ARATHI_RPE_LEAVE_ALLIANCE_Z, 0.0f);
+    else
+        player->TeleportTo(MAP_KALIMDOR, ARATHI_RPE_LEAVE_HORDE_X, ARATHI_RPE_LEAVE_HORDE_Y, ARATHI_RPE_LEAVE_HORDE_Z, 0.0f);
+}
 
 // Quest 90883 has a kill-credit objective that retail satisfies when the player mounts up:
 // the capture shows SMSG_QUEST_UPDATE_ADD_CREDIT for QuestID 90883 / ObjectID 239009 with an
@@ -84,6 +135,40 @@ public:
             return;
 
         player->KilledMonsterCredit(NPC_CREDIT_ARATHI_RPE_MOUNT);
+    }
+};
+
+// Retail plays the Catch Up intro cinematic on ENTERING the RPE map, before the first quest (the
+// capture recorded CINEMATIC_START with an empty quest log, and the client RPE tutorial addon has
+// no cinematic call - so it is server-fired, not client-auto-played). OnMapChanged runs after the
+// teleport/login into map 2927 completes, which is the retail timing.
+class player_arathi_rpe_intro_cinematic : public PlayerScript
+{
+public:
+    player_arathi_rpe_intro_cinematic() : PlayerScript("player_arathi_rpe_intro_cinematic") { }
+
+    void OnMapChanged(Player* player) override
+    {
+        if (player->GetMapId() != MAP_ARATHI_RPE)
+            return;
+
+        // Play once, on the FIRST entry only - retail fires it before the first quest (the capture
+        // recorded an empty quest log at cinematic time). Once the player has accepted the opening
+        // quest 90882 it never replays, so a mid-run re-entry (or a returning player who already
+        // finished, gated redundantly by the finale reward) does not see it again. This quest-status
+        // gate is the intended mechanism - there is no server IsPlayerInRPE flag to key off (Phase K
+        // resolved it as client-local; see SendPlayerHomeFromRpe above).
+        if (player->GetQuestStatus(QUEST_GNOLL_WAY) != QUEST_STATUS_NONE)
+            return;
+
+        if (player->GetQuestRewardStatus(QUEST_ARATHI_RPE_FINALE))
+            return;
+
+        // CINEMATIC_ARATHI_RPE_INTRO is 0 until the exact CinematicSequences id is pinned on the
+        // realm (see the enum note); guard on it so nothing fires - and no WRONG cinematic ever
+        // fires - until it is confirmed.
+        if (CINEMATIC_ARATHI_RPE_INTRO)
+            player->SendCinematicStart(CINEMATIC_ARATHI_RPE_INTRO);
     }
 };
 
@@ -122,28 +207,56 @@ public:
         // ids in this file.
         if (response->RewardQuestID)
         {
-            if (Quest const* destination = sObjectMgr->GetQuestTemplate(*response->RewardQuestID))
+            // Remap the Dragonflight destination to the player's own faction. Either literal of the
+            // pair maps to the team-correct quest; the faction-neutral options pass through unchanged.
+            uint32 destinationQuestId = *response->RewardQuestID;
+            if (destinationQuestId == QUEST_DRAGONFLIGHT_ALLIANCE || destinationQuestId == QUEST_DRAGONFLIGHT_HORDE)
+                destinationQuestId = (player->GetTeamId() == TEAM_ALLIANCE) ? QUEST_DRAGONFLIGHT_ALLIANCE : QUEST_DRAGONFLIGHT_HORDE;
+
+            if (Quest const* destination = sObjectMgr->GetQuestTemplate(destinationQuestId))
             {
                 if (player->CanTakeQuest(destination, false) && !player->GetQuestRewardStatus(destination->GetQuestId()))
                     player->AddQuest(destination, nullptr);
             }
             else
-                TC_LOG_ERROR("scripts", "playerchoice_arathi_rpe_finale: response {} RewardQuestID {} is not a valid quest template",
-                    response->ResponseId, *response->RewardQuestID);
+                TC_LOG_ERROR("scripts", "playerchoice_arathi_rpe_finale: response {} destination quest {} is not a valid quest template",
+                    response->ResponseId, destinationQuestId);
         }
 
-        // "Leave Catch Up": there is no in-game gossip/"Leave" affordance yet (TODO - add one, or
-        // capture retail's own exit flow), so for a first playable pass just send the player home
-        // to their faction capital as soon as the finale choice is made.
-        if (player->GetTeamId() == TEAM_ALLIANCE)
-            player->TeleportTo(MAP_EASTERN_KINGDOMS, ARATHI_RPE_LEAVE_ALLIANCE_X, ARATHI_RPE_LEAVE_ALLIANCE_Y, ARATHI_RPE_LEAVE_ALLIANCE_Z, 0.0f);
-        else
-            player->TeleportTo(MAP_KALIMDOR, ARATHI_RPE_LEAVE_HORDE_X, ARATHI_RPE_LEAVE_HORDE_Y, ARATHI_RPE_LEAVE_HORDE_Z, 0.0f);
+        // Making the finale choice is itself an exit from the experience: send the player home to
+        // their faction capital. Shares the exact path with the guide NPC's "Leave" gossip option.
+        SendPlayerHomeFromRpe(player);
+    }
+};
+
+// The RPE guide NPC (Alliance Jaina 244714 / Horde Thrall 244715) carries a "Leave Catch Up
+// Experience" gossip option (authored on the content branch as gossip_menu_option.OptionID =
+// GOSSIP_OPTION_LEAVE_RPE on menus 39348/39349). Selecting it exits the experience early, through
+// the same SendPlayerHomeFromRpe path the finale uses. The NPCs keep their DB-driven questgiver
+// gossip and the native "Show me where I could go next" adventure-map option; this AI only adds a
+// handler for the Leave option. Requires creature_template.ScriptName = 'npc_arathi_rpe_guide' on
+// both NPCs (content branch).
+struct npc_arathi_rpe_guide : public ScriptedAI
+{
+    npc_arathi_rpe_guide(Creature* creature) : ScriptedAI(creature) { }
+
+    bool OnGossipSelect(Player* player, uint32 menuId, uint32 gossipListId) override
+    {
+        if ((menuId == GOSSIP_MENU_RPE_GUIDE_ALLIANCE || menuId == GOSSIP_MENU_RPE_GUIDE_HORDE)
+            && gossipListId == GOSSIP_OPTION_LEAVE_RPE)
+        {
+            CloseGossipMenuFor(player);
+            SendPlayerHomeFromRpe(player);
+            return true;
+        }
+        return false;
     }
 };
 
 void AddSC_arathi_highlands_rpe()
 {
     new player_arathi_rpe_mount_credit();
+    new player_arathi_rpe_intro_cinematic();
     new playerchoice_arathi_rpe_finale();
+    RegisterCreatureAI(npc_arathi_rpe_guide);
 }
