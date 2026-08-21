@@ -70,16 +70,14 @@ enum ArathiRpe
     GOSSIP_OPTION_LEAVE_RPE          = 1,    // gossip_menu_option.OptionID -> arrives as gossipListId
 
     // Catch Up intro cinematic - an in-engine CINEMATIC_START (not a movie) played on entering the
-    // RPE map, before any quest (capture: fired with an empty quest log). Its camera Conversation
-    // carries the 10-line Arathi narration (broadcast_text 295416-295418/295519-295520/301757-301761
-    // = ConversationLine 84918-84922/87758-87762). The exact CinematicSequences id is one of 15 RPE
-    // candidates whose CinematicCamera.ConversationID is in 16711-16726:
-    //   2, 21, 41, 61, 81, 101, 121, 141, 162, 163, 165, 170, 172, 173, 259
-    // It is DB2-gated (Conversation.db2 is not client-distributed, so the 15->1 join cannot be done
-    // from static data). PHASE K - PIN IT ON THE REALM: stand on map 2927 and run
-    // `.debug play cinematic <id>` for each candidate, match the narration above; set the winner
-    // here. Left 0 (disabled) so NO wrong cinematic ships until it is confirmed.
-    CINEMATIC_ARATHI_RPE_INTRO       = 0     // <-- PLACEHOLDER: resolve to the confirmed id, then the trigger fires
+    // RPE map, before any quest. CinematicSequences id PINNED FROM THE WIRE = 77: SMSG_TRIGGER_CINEMATIC
+    // (opcode 0x4C0005, 4-byte body = the sequence id) fires id 77 at the arrival tick in BOTH captures
+    // (Alliance 69382 arrival+328, Horde 69404 arrival+419) - the same 0x4C0005 also fires the finale
+    // cinematic 107 ~30min later in both, confirming it is the cinematic-trigger opcode. (An earlier
+    // DB2-join guess of "15 candidates 2..259" was wrong - it read the CinematicSequences enumeration
+    // stream, not the trigger. The wire is authoritative.) Its camera Conversation carries the 10-line
+    // Arathi narration (broadcast_text 295416-295418/295519-295520/301757-301761).
+    CINEMATIC_ARATHI_RPE_INTRO       = 77
 };
 
 // Faction capitals to send the player to once the Catch Up finale choice has been made. These are
