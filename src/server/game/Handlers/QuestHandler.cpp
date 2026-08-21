@@ -823,16 +823,21 @@ void WorldSession::HandlePlayerChoiceResponse(WorldPackets::Quest::ChoiceRespons
         return;
     }
 
+    // Everything the cleanup below needs is read BEFORE the script hook runs. The hook may answer a
+    // choice by opening the next one (Player::SendPlayerChoice), which overwrites SourceGuid and the
+    // stored choice id - reading them afterwards would describe the new choice, not the answered one.
     bool const keepOpen = playerChoice->KeepOpenAfterChoice;
+    uint32 const answeredChoiceId = playerChoiceData->GetChoiceId();
+    WorldObject* sender = ObjectAccessor::GetWorldObject(*_player, _player->PlayerTalkClass->GetInteractionData().SourceGuid);
 
-    sScriptMgr->OnPlayerChoiceResponse(ObjectAccessor::GetWorldObject(*_player, _player->PlayerTalkClass->GetInteractionData().SourceGuid), _player,
-        playerChoice, playerChoiceResponse, choiceResponse.ResponseIdentifier);
+    sScriptMgr->OnPlayerChoiceResponse(sender, _player, playerChoice, playerChoiceResponse, choiceResponse.ResponseIdentifier);
 
     // Player::SendPlayerChoice had no counterpart at all: the interaction data was never reset and the
     // frame was never closed from the server side. KeepOpenAfterChoice is the flag that says whether
     // the choice survives an answer, so it is also the flag that decides whether we close it.
+    // Passing the answered id makes the close a no-op if the hook already opened a follow-up choice.
     if (!keepOpen)
-        _player->ClearPlayerChoice();
+        _player->ClearPlayerChoice(answeredChoiceId);
 }
 
 void WorldSession::HandleUiMapQuestLinesRequest(WorldPackets::Quest::UiMapQuestLinesRequest& uiMapQuestLinesRequest)

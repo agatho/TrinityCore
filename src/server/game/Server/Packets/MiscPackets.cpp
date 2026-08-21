@@ -1007,6 +1007,21 @@ namespace
 // JamClientPlayerUploadScreenshotHeader, reader RVA 0x67BF70. Every string is a JamDynamicString:
 // the length prefix counts the terminator and the client drops the whole message when the last byte
 // of a string is not 0x00.
+//
+// SizedCString is exactly the right helper here, including for the empty string - checked against the
+// reader rather than assumed. ReadDynString (0x347D750) opens with
+//     0347D76C  cmp r8, 1          ; r8 = announced length
+//     0347D770  ja  0x347D792      ; only lengths ABOVE 1 take the reading path
+//     0347D772  mov rax, [rcx] / mov byte ptr [rax], 0 / mov al, 1   ; empty string, SUCCESS, ret
+// and that branch never touches the stream - it does not even reach the buffer fetch at 0x35AF730.
+// So an announced length of 0 or 1 consumes ZERO bytes on the wire, which is precisely what
+// SizedCString writes: BitsSize announces length() + 1 (PacketOperators.h:329) and Data writes
+// nothing when the string is empty (:368-375). TC's reader mirrors the same rule at :341.
+// Writing an explicit 0x00 for an empty field - the intuitive "fix" - would push one byte the client
+// never reads and desynchronise everything after it.
+// For a non-empty string the reader takes len bytes and requires the last to be 0x00
+// (0347D7B6 dec rdi / cmp byte ptr [rdi+rsi], 0 / jne fail), reporting length len-1; that is the
+// other half of what SizedCString writes.
 void WriteUploadScreenshotHeader(ByteBuffer& data, UploadScreenshotHeader const& header)
 {
     data << SizedCString::BitsSize<13>(header.Url);
@@ -1036,9 +1051,22 @@ WorldPacket const* PlayerUploadScreenshot::Write()
 
 WorldPacket const* PlayerDelayedUploadScreenshot::Write()
 {
-    // The flag bit and the following bits<13> url length share one MSB-first bit section - the
-    // client reads them out of the same stream, so no flush in between.
+    // The Delayed bit gets a byte of its OWN. It does not share a bit section with the bits<13> url
+    // length that follows, even though both are bit fields and nothing byte-aligned sits between them.
+    // Dispatcher case 0x640033 (RVA 0x67DEF2) reads a whole byte and throws away everything but bit 7:
+    //     0067DF5A  call 0x35AF050          ; Read<uint8> - advances the position by one
+    //     0067DF6A  shr  al, 7              ; Delayed; bits 6..0 are dropped
+    //     0067DF76  call 0x67BF70           ; header reader, three args, no bit state among them
+    // and the header reader then opens with two FRESH byte reads for the 13 bit length. There is no
+    // bit accumulator anywhere in this path - the whole family unpacks bits out of whole bytes by
+    // hand - so no accumulator can survive the call. The delayed variant is therefore one byte longer
+    // than SMSG_PLAYER_UPLOAD_SCREENSHOT, not the same length.
+    // An earlier version of this function omitted the flush, which made every packet exactly one byte
+    // short: the client would have built the url length from (DelayedByte << 5) | (B0 >> 3) and lost
+    // sync for the rest of the message.
     _worldPacket << Bits<1>(Delayed);
+    _worldPacket.FlushBits();
+
     WriteUploadScreenshotHeader(_worldPacket, Header);
 
     return &_worldPacket;

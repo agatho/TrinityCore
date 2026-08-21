@@ -3236,6 +3236,10 @@ void GameObject::Use(Unit* user, bool ignoreCastInProgress /*= false*/)
                 {
                     // Bare return leaves the player with no feedback at all - tell the client which
                     // PlayerCondition blocked so it can print Failure_description_lang.
+                    // UNVERIFIED: that retail sends the packet here. Derived, not observed - and on a
+                    // retail-shaped gameobject this branch is hard to reach at all, because
+                    // GO_DYNFLAG_LO_NO_INTERACT stops the client from sending the use request in the
+                    // first place. See Player::SendFailedPlayerCondition for the full note.
                     player->SendFailedPlayerCondition(m_goInfo->GetConditionID1());
                     return;
                 }
@@ -3411,6 +3415,7 @@ void GameObject::Use(Unit* user, bool ignoreCastInProgress /*= false*/)
             {
                 // Same reason as in the flag stand case above: without this the forge is simply
                 // unresponsive and the player is told nothing.
+                // UNVERIFIED: same reservation as the flag stand - derived send site, not observed.
                 player->SendFailedPlayerCondition(m_goInfo->GetConditionID1());
                 return;
             }

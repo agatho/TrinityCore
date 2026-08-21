@@ -17923,6 +17923,22 @@ bool Player::LoadPositionFromDB(uint32& mapid, float& x, float& y, float& z, flo
     return true;
 }
 
+// The only post-creation writer of characters.createMode. CHAR_UPD_CHARACTER does not carry the
+// column (Player::SaveToDB only writes it in the create branch), so a mode change that must outlive
+// the session has to say so explicitly - see WorldSession::HandleAbandonNPEResponse.
+void Player::SetCreateMode(PlayerCreateMode createMode, bool saveToDb /*= false*/)
+{
+    m_createMode = createMode;
+
+    if (!saveToDb)
+        return;
+
+    CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_UPD_CHARACTER_CREATE_MODE);
+    stmt->setInt8(0, AsUnderlyingType(m_createMode));
+    stmt->setUInt64(1, GetGUID().GetCounter());
+    CharacterDatabase.Execute(stmt);
+}
+
 void Player::SetHomebind(WorldLocation const& loc, uint32 areaId)
 {
     m_homebind.WorldRelocate(loc);
@@ -23765,6 +23781,8 @@ bool Player::BuyItemFromVendorSlot(ObjectGuid vendorguid, uint32 vendorslot, uin
         SendEquipError(EQUIP_ERR_ITEM_LOCKED, nullptr, nullptr);
         // The generic "item is locked" line says nothing about why. SMSG_FAILED_PLAYER_CONDITION lets
         // the client print PlayerCondition.Failure_description_lang for the condition that blocked.
+        // UNVERIFIED: that retail sends the packet here. Derived, not observed - see the source note
+        // on Player::SendFailedPlayerCondition, which also records what argues against this spot.
         SendFailedPlayerCondition(crItem->PlayerConditionId);
         return false;
     }
@@ -30260,9 +30278,27 @@ bool Player::MeetPlayerCondition(uint32 conditionId) const
 }
 
 // SMSG_FAILED_PLAYER_CONDITION (client 12.1 wire 0x640002, 4 bytes).
-// Consumer RVA 0x20970C0 resolves the id in PlayerCondition.db2 and prints Failure_description_lang.
-// Only 7.314 of the 47.959 rows in 69382 carry that text; for the rest the client shows nothing,
-// which is why this is an addition to an existing error path and never a replacement for one.
+// Consumer RVA 0x20970C0 resolves the id in PlayerCondition.db2 and, if Failure_description_lang is
+// non-empty, raises SystemInfoEvents::UiErrorMessageEvent with it - the UI_ERROR_MESSAGE path that
+// Blizzard_UIErrorsFrame consumes. Only 7.314 of the 47.959 rows in 69382 carry that text.
+//
+// UNVERIFIED: WHEN retail sends this. The consumer settles what the field means and nothing else.
+// It has no code xrefs at all beyond the dispatch table, so it carries no vendor, item or gameobject
+// context, and there is no Lua event for the packet anywhere in the UI source - so the client cannot
+// tell the caller apart either. No recording contains the packet (0 hits over 75 .pkt / 9.9M records),
+// which decides nothing here because no recording contains the situation either. The send sites below
+// are this unit's choice, argued from where the core already carries a PlayerConditionID, not from
+// evidence about retail. Two things speak against them and are recorded rather than hidden:
+//   - at a vendor the client already prints the failure text itself; it gets the id from
+//     SMSG_VENDOR_INVENTORY.PlayerConditionFailed (NPCPackets.cpp:145), so the extra packet is at
+//     best redundant there.
+//   - for a gameobject retail normally clears interaction via GO_DYNFLAG_LO_NO_INTERACT, and a client
+//     that cannot interact never sends CMSG_GAME_OBJ_USE, so the server side would not be reached.
+// The empty-text case is NOT silent, contrary to what this comment claimed before: when the row
+// exists but carries no text the consumer falls back to `sub_7FF78306AD90(0x20Fu)`, game error 527 =
+// ERR_RAID_GROUP_REQUIREMENTS_UNMATCH. For the ~85% of rows without text the player would therefore
+// get a raid-group worded line on top of the real error. That is the concrete cost of guessing the
+// send site wrong, and the reason the packet is only ever an addition to an existing error path.
 void Player::SendFailedPlayerCondition(uint32 conditionId) const
 {
     if (!conditionId)
@@ -30272,18 +30308,25 @@ void Player::SendFailedPlayerCondition(uint32 conditionId) const
 }
 
 // SMSG_PLAYER_CHOICE_CLEAR (client 0x640006, 5 bytes).
-// matchCurrentChoiceOnly mirrors the flag the subscriber (RVA 0x254BFE0) evaluates: set, the client
-// closes only when ChoiceID is the choice currently on screen; clear, it closes unconditionally.
-void Player::ClearPlayerChoice(bool matchCurrentChoiceOnly /*= true*/)
+// The two wire fields are left at the values retail uses: every recorded packet of this opcode is
+// 00 00 00 00 00, i.e. ChoiceID 0 with the match bit clear - an unconditional close. The subscriber
+// (RVA 0x254BFE0) does evaluate the pair (set -> close only when ChoiceID is the choice currently on
+// screen), but no retail packet has ever been seen using that form, so the gameplay path does not
+// invent one. The targeted form stays reachable from .debug send playerchoiceclear for the client
+// test of prufschritt 3.
+void Player::ClearPlayerChoice(Optional<uint32> expectedChoiceId /*= {}*/)
 {
     PlayerChoiceData* playerChoiceData = PlayerTalkClass->GetInteractionData().GetPlayerChoice();
     if (!playerChoiceData)
         return;
 
-    WorldPackets::PlayerChoice::PlayerChoiceClear playerChoiceClear;
-    playerChoiceClear.ChoiceID = playerChoiceData->GetChoiceId();
-    playerChoiceClear.MatchCurrentChoiceOnly = matchCurrentChoiceOnly;
-    SendDirectMessage(playerChoiceClear.Write());
+    // Reentrancy: the caller decided to close the choice it was handling, but a script hook may have
+    // opened a follow-up choice since - Player::SendPlayerChoice overwrites the interaction data with
+    // the new one. Closing here would close the new frame and Reset() would drop its bookkeeping.
+    if (expectedChoiceId && playerChoiceData->GetChoiceId() != *expectedChoiceId)
+        return;
+
+    SendDirectMessage(WorldPackets::PlayerChoice::PlayerChoiceClear().Write());
 
     PlayerTalkClass->GetInteractionData().Reset();
 }

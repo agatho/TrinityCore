@@ -44,6 +44,7 @@ EndScriptData */
 #include "M2Stores.h"
 #include "MapManager.h"
 #include "MiscPackets.h"
+#include "PlayerChoicePackets.h"
 #include "MovementPackets.h"
 #include "ObjectAccessor.h"
 #include "ObjectMgr.h"
@@ -334,10 +335,15 @@ public:
     // Each of these drives exactly one opcode so its effect can be observed in a running client.
     // See MiscPackets.h for the wire layouts and for what the client requires of each id.
 
-    // SMSG_PLAYER_CHOICE_CLEAR. matchCurrentChoiceOnly = false closes unconditionally.
-    static bool HandleDebugSendPlayerChoiceClearCommand(ChatHandler* handler, Optional<bool> matchCurrentChoiceOnly)
+    // SMSG_PLAYER_CHOICE_CLEAR. The gameplay path (Player::ClearPlayerChoice) always sends the shape
+    // retail sends - ChoiceID 0, match bit clear. This command writes the packet itself so the other
+    // wire form stays reachable for the client test: .debug send playerchoiceclear [choiceId] [match].
+    static bool HandleDebugSendPlayerChoiceClearCommand(ChatHandler* handler, Optional<int32> choiceId, Optional<bool> matchCurrentChoiceOnly)
     {
-        handler->GetPlayer()->ClearPlayerChoice(matchCurrentChoiceOnly.value_or(true));
+        WorldPackets::PlayerChoice::PlayerChoiceClear playerChoiceClear;
+        playerChoiceClear.ChoiceID = choiceId.value_or(0);
+        playerChoiceClear.MatchCurrentChoiceOnly = matchCurrentChoiceOnly.value_or(false);
+        handler->GetSession()->SendPacket(playerChoiceClear.Write());
         return true;
     }
 

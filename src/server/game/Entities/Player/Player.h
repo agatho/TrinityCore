@@ -2911,7 +2911,11 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         }
 
         void SendPlayerChoice(ObjectGuid sender, int32 choiceId);
-        void ClearPlayerChoice(bool matchCurrentChoiceOnly = true);
+        // Closes the player choice frame and drops the interaction. expectedChoiceId guards the
+        // reentrant case: a script hook that answers a choice by opening the next one has already
+        // replaced the interaction data by the time the caller gets to close the old choice, and
+        // closing then would shut the NEW frame and forget it server side.
+        void ClearPlayerChoice(Optional<uint32> expectedChoiceId = {});
         void SendPlayerChoiceDisplayError() const;
 
         bool MeetPlayerCondition(uint32 conditionId) const;
@@ -2940,7 +2944,11 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         void SendCheckAbandonNPE();
         bool WasAbandonNPEPrompted() const { return m_npeAbandonPrompted; }
         void SetAbandonNPEPrompted(bool prompted) { m_npeAbandonPrompted = prompted; }
-        void SetCreateMode(PlayerCreateMode createMode) { m_createMode = createMode; }
+        // saveToDb writes characters.createMode straight away. The NPE exit is the only thing that
+        // ever changes the mode after character creation, and CHAR_UPD_CHARACTER does not carry the
+        // column - without the explicit write the decision would be gone after the next relog and
+        // UpdateZone would ask again (see WorldSession::HandleAbandonNPEResponse).
+        void SetCreateMode(PlayerCreateMode createMode, bool saveToDb = false);
 
         bool HasPlayerFlag(PlayerFlags flags) const { return (*m_playerData->PlayerFlags & flags) != 0; }
         void SetPlayerFlag(PlayerFlags flags) { SetUpdateFieldFlagValue(m_values.ModifyValue(&Player::m_playerData).ModifyValue(&UF::PlayerData::PlayerFlags), flags); }

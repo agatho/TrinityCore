@@ -1055,6 +1055,21 @@ namespace WorldPackets
          * (image base 0x7FF780FD0000) unless a different reader RVA is named on the class.
          * Bit sections are MSB-first and are flushed before every byte-aligned field, which is exactly
          * ByteBuffer::WriteBits / FlushBits.
+         *
+         * UNVERIFIED (whole family, one reservation, stated once here instead of on 23 classes):
+         * the layouts come from 12.1.0.69382, where this family is 0x64, but this tree still numbers
+         * the family 0x5F (12.0.7.68275) in Opcodes.h. Nothing here has been proven against a running
+         * 12.1 client, because a 12.1 client would not map the 0x5F values registered here onto the
+         * 0x64 dispatcher cases the layouts were read from. Renumbering the family is a chain move
+         * across every unit and belongs to the orchestrator, not here.
+         * What HAS been checked is that the older build agrees wherever it can be made to speak: the
+         * 68275 dispatcher extraction (C:\dumpsll_smsg_layouts_68275.json, family 0x5F) resolves a
+         * concrete field list for eight of the 23 messages, and all eight match the 12.1 layout field
+         * for field - 0x5F0006 uint32+bit, 0x5F000F bit, 0x5F0016 uint32+string, 0x5F0003 u8+string,
+         * 0x5F000E guid+u32+u32+u8+9*u32+5 bit-section bytes+4 strings, 0x5F001A the two counts
+         * before both payload arrays, 0x5F002B uint32+bit, 0x5F0030 3*uint32+bit. For the remaining
+         * fifteen that extraction stops at "bytes[rest]" (the case hands the consumer the raw buffer),
+         * so the older build neither confirms nor contradicts them.
          */
 
         // Enum.SubscriptionInterstitialType - APIDoc/ExpansionDocumentation.lua:284-294
@@ -1300,6 +1315,25 @@ namespace WorldPackets
         // Case: Read<uint32>, then Read<uint8> >> 7. Lua SHOW_PARTY_POSE_UI, hash 0xA1EC8E9745484821,
         // payload { int PartyPoseID; bool Won }. EventImplementation.lua:163-165 passes the first
         // argument to C_PartyPose.GetPartyPoseInfoByID - so this is a UiPartyPose::ID, not a MapID.
+        //
+        // UNVERIFIED: when the server sends it. What the id means is settled, what triggers it is not.
+        // The only consumer is EventRouting.lua:98 -> GameEvent.HandleShowPartyPoseUi ->
+        // ShowMatchCelebrationPartyPoseFrame, i.e. Blizzard_MatchCelebrationPartyPoseUI ("End of match
+        // celebration screen"). Which match, the UI does not say. UiPartyPose.db2 at 69382 has 19 rows
+        // and narrows it a long way: IDs 6/107-120 are Island Expeditions and Warfronts, which do NOT
+        // use this packet at all (they run over ISLAND_COMPLETED / WARFRONT_COMPLETED and resolve the
+        // pose with GetPartyPoseInfoByMapID). The four rows that carry the fields this frame actually
+        // reads are 121-123 (map 2695, Plunderstorm - "You placed #%1986c", "Tournament Winner!") and
+        // 124 (map 2664 Fungal Folly, "Delve Complete!"). So the probable triggers are a Plunderstorm
+        // match ending and a delve being completed - probable, not proven: no recording of either
+        // situation exists, and the tree has neither system.
+        // What IS ruled out is the battleground: no row of UiPartyPose names a battleground or arena
+        // map, and the one recording that plays a rated battleground through to SMSG_PVP_MATCH_COMPLETE
+        // (rated BG 12.0.7.pkt, 397916 records) contains no party pose packet. An earlier version of
+        // this unit sent the pose from Battleground::EndBattleground; that call was removed rather
+        // than marked, because a map lookup against a table with no battleground row could never have
+        // fired anyway. Player::SendPartyPoseUI and .debug send partypose stay - they are how the
+        // opcode gets tested and how a Plunderstorm or delve implementation will use it.
         // The Victory bit switches only the model scene and the sound; the title text is shared.
         class PlayerShowPartyPoseUI final : public ServerPacket
         {
@@ -1442,7 +1476,11 @@ namespace WorldPackets
         };
 
         // SMSG_PLAYER_DELAYED_UPLOAD_SCREENSHOT - wire 0x640033.
-        // Case: Read<uint8> >> 7 first, then the same reader 0x67BF70 on an embedded object.
+        // Case (RVA 0x67DEF2): Read<uint8> >> 7 first - a WHOLE byte for the one bit - then the same
+        // reader 0x67BF70 on an embedded object, which restarts with two fresh byte reads for its
+        // bits<13>. The bit therefore does NOT share a section with the url length; this message is
+        // exactly one byte longer than SMSG_PLAYER_UPLOAD_SCREENSHOT. Min 7 bytes (1 + 2 + 4, empty
+        // url, no headers); max 7 + 8191 + N * 2049.
         // Same inert-in-retail caveat as SMSG_PLAYER_UPLOAD_SCREENSHOT.
         class PlayerDelayedUploadScreenshot final : public ServerPacket
         {

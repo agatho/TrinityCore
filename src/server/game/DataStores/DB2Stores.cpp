@@ -3447,6 +3447,12 @@ bool DB2Manager::IsUiMapPhase(uint32 phaseId) const
     return _uiMapPhases.find(phaseId) != _uiMapPhases.end();
 }
 
+// Do NOT use this to pick the pose for SMSG_PLAYER_SHOW_PARTY_POSE_UI. The MapID relation is what
+// the client's own C_PartyPose.GetPartyPoseInfoByMapID uses for the Island Expedition and Warfront
+// end screens, which do not go through that packet at all. At 12.1.0.69382 the table has 19 rows,
+// none of them a battleground or arena map, and the four rows the match celebration frame actually
+// reads (121-123 Plunderstorm, 124 delve) do not cover the map set they belong to either - there are
+// over twenty delve maps and exactly one delve row. Whatever sends the packet has to know the id.
 UiPartyPoseEntry const* DB2Manager::GetUiPartyPoseByMap(uint32 mapId) const
 {
     return Trinity::Containers::MapGetValuePtr(_uiPartyPoseByMap, mapId);

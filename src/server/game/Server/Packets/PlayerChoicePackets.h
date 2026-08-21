@@ -25,7 +25,16 @@ namespace WorldPackets::PlayerChoice
 // SMSG_PLAYER_CHOICE_CLEAR - client 12.1.0.69382 wire opcode 0x640006, dispatcher case in 0x67C100.
 // Wire: uint32 ChoiceID; bits<1> MatchCurrentChoiceOnly; FlushBits  -> always 5 bytes.
 // Source: dispatcher case reads Read<uint32> (0x35AF190) then Read<uint8> >> 7.
-// Sniff (12.1.0.69273, 8 packets / 12.0.7, 35 packets): all exactly 5 bytes.
+//
+// Reference bytes, from a recursive scan of all 75 recordings under C:\sniff: 136 packets over 18
+// builds from 12.0.1.65940 to 12.1.0.69404 (0x5F0006 below build 69273, 0x640006 from 69273 on -
+// the two prefixes never overlap, which is a second, independent witness for the family renumbering).
+// Every single one is 5 bytes and every single one is 00 00 00 00 00. So retail closes with ChoiceID
+// zero and the match bit clear, and Player::ClearPlayerChoice sends exactly that.
+// (An earlier note here said "8 + 35 = 43 packets". That came from a non-recursive scan that missed
+// C:\sniff\ymir_retail_12.1.0.69299\dumps - the only real 69382/69404 recordings - and double
+// counted a byte-identical duplicate file. The finding is unchanged, the evidence is three times
+// broader than stated.)
 class PlayerChoiceClear final : public ServerPacket
 {
 public:
@@ -33,9 +42,11 @@ public:
 
     WorldPacket const* Write() override;
 
+    // The defaults ARE the recorded retail values; the gameplay path never overrides them.
     int32 ChoiceID = 0;
     // Subscriber 0x254BFE0: true  -> close only if ChoiceID is the choice currently on screen
-    //                       false -> close unconditionally (this is what retail sends in the recorded case)
+    //                       false -> close unconditionally. No retail packet has ever been seen with
+    //                       this bit set, so only .debug send playerchoiceclear produces that form.
     bool MatchCurrentChoiceOnly = false;
 };
 

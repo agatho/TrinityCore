@@ -527,6 +527,12 @@ void CharacterDatabaseConnection::DoPrepareStatements()
                      "knownTitles=?,actionBars=?,online=?,honor=?,honorLevel=?,honorRestState=?,honorRestBonus=?,lastLoginBuild=?,"
                      "personalTabardEmblemStyle=?,personalTabardEmblemColor=?,personalTabardBorderStyle=?,personalTabardBorderColor=?,personalTabardBackgroundColor=?,transmogOutfitEquippedId=?,transmogOutfitLocked=? WHERE guid=?", CONNECTION_ASYNC);
 
+    // createMode is written by CHAR_INS_CHARACTER at creation and is deliberately absent from
+    // CHAR_UPD_CHARACTER (it never changes during normal play). The one thing that does change it is
+    // the NPE exit handshake (CMSG_ABANDON_NPE_RESPONSE), which needs the decision to survive relog -
+    // otherwise Player::UpdateZone re-arms the popup on the next zone change.
+    PrepareStatement(CHAR_UPD_CHARACTER_CREATE_MODE, "UPDATE characters SET createMode = ? WHERE guid = ?", CONNECTION_ASYNC);
+
     PrepareStatement(CHAR_UPD_ADD_AT_LOGIN_FLAG, "UPDATE characters SET at_login = at_login | ? WHERE guid = ?", CONNECTION_ASYNC);
     PrepareStatement(CHAR_UPD_REM_AT_LOGIN_FLAG, "UPDATE characters set at_login = at_login & ~ ? WHERE guid = ?", CONNECTION_ASYNC);
     PrepareStatement(CHAR_UPD_ALL_AT_LOGIN_FLAGS, "UPDATE characters SET at_login = at_login | ?", CONNECTION_ASYNC);
