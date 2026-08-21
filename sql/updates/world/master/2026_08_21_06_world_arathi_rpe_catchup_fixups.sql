@@ -26,8 +26,15 @@
 -- Idempotent. Applies after 2026_08_21_02 (spawns/phasing) and 01 (templates).
 -- ============================================================================
 
--- Revert the R1 feign-death corpse aura on 245027 -- our capture shows no aura 29266; live gnolls.
-UPDATE `creature_template_addon` SET `auras` = '' WHERE `entry` = 245027;
+-- Gnoll Assailants (245027) at the pad are the battle-aftermath CORPSES (tester-confirmed they
+-- should be dead) -> permanent Feign Death (aura 29266). (An earlier revision cleared this on the
+-- mistaken read that "gnolls don't move" meant they should be alive; the tester clarified they are
+-- meant to be dead.) The live fightable gnolls are the camp mobs 244670/671/672, not these.
+UPDATE `creature_template_addon` SET `auras` = '29266' WHERE `entry` = 245027;
+
+-- Training Dummy (249245) was faction 35 (friendly/unattackable). Use faction 7, the faction 110 of
+-- this realm's real training dummies use (attackable practice target).
+UPDATE `creature_template` SET `faction` = 7 WHERE `entry` = 249245;
 
 -- Training dummies (249245) are physically at the Hammerfall pad but were phased 1959 (the FARM
 -- phase, area 16456) -- so they never show at the pad. Move them to the Hammerfall phase 1961
