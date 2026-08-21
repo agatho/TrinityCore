@@ -67,6 +67,10 @@ namespace WorldPackets
             WorldPacket const* Write() override { return &_worldPacket; }
         };
 
+        // UNVERIFIED: what the client does with this. The wire format is read straight from the
+        // dispatcher (case 6815745), but the consumer cannot be followed: 0x1ED9540 is a jmp to
+        // 0x1DF32B0 and that function is obfuscated in this image - valid prologue, garbage after.
+        // Reading it needs a different dump; until then the UI effect is unknown.
         class VoidStorageContents final : public ServerPacket
         {
         public:
@@ -74,6 +78,10 @@ namespace WorldPackets
 
             WorldPacket const* Write() override;
 
+            // UNVERIFIED: written as a plain uint8. The codegen shows no shift or mask, so bits<8>
+            // followed by a flush and a plain byte are indistinguishable here - both produce the
+            // same wire bytes, and only a packet that put another bit field next to it would tell
+            // them apart. If one ever does, this is the field to revisit.
             std::vector<VoidItem> Items;                ///< at most 255, count is a single byte
         };
 

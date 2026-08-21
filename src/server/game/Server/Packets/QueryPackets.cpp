@@ -629,9 +629,14 @@ WorldPacket const* QueryNeighborhoodNameResponse::Write()
 
     if (Name)
     {
-        _worldPacket << SizedString::BitsSize<8>(*Name);
+        // the length is a full byte, so anything past 255 would announce a truncated length and
+        // then write all of its bytes, desyncing the client's stream; clamp to what the consumer
+        // actually copies (128 bytes, RVA 0x34F580) instead of merely to what fits on the wire
+        std::string_view name = std::string_view(*Name).substr(0, MaxNameLength);
+
+        _worldPacket << SizedString::BitsSize<8>(name);
         _worldPacket.FlushBits();                   // the length is a full byte of its own
-        _worldPacket << SizedString::Data(*Name);
+        _worldPacket << SizedString::Data(name);
     }
 
     return &_worldPacket;

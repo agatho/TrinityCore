@@ -360,6 +360,9 @@ void WorldSession::HandleQueryTreasurePicker(WorldPackets::Query::QueryTreasureP
 // its page text cache (client handler RVA 0x351F00 -> DBCache::InvalidateRecord) and asks for it
 // again with CMSG_QUERY_PAGE_TEXT the next time it needs it. Nothing else is thrown away, and no
 // Lua event fires - the follow up query is the observable effect.
+// No core path calls this yet: TrinityCore only knows the bulk ".reload page_text", not a change to
+// a single record. The bulk counterpart would be SMSG_CACHE_INFO with prefix WPTX, whose key space
+// no recording shows, so it is not invented here either.
 void WorldSession::SendInvalidatePageText(uint32 pageTextId)
 {
     WorldPackets::Query::InvalidatePageText invalidatePageText;
@@ -384,6 +387,8 @@ void WorldSession::HandleQueryNeighborhoodInfo(WorldPackets::Query::QueryNeighbo
 // Drops the cached name of one neighbourhood (consumer RVA 0x34F7D0). The client asks for it again
 // with CMSG_QUERY_NEIGHBORHOOD_INFO the next time it needs it, so this is how a rename reaches
 // clients that already know the old name.
+// No core path calls this yet - a rename presupposes a neighbourhood system, which this core does
+// not have (HousingHandler.cpp is 28 lines and there is no neighbourhood entity).
 void WorldSession::SendInvalidateNeighborhoodName(ObjectGuid neighborhoodGuid)
 {
     WorldPackets::Query::InvalidateNeighborhoodName invalidateNeighborhoodName;

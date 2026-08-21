@@ -17,6 +17,7 @@
 
 #include "WorldSession.h"
 #include "DB2Structure.h"
+#include "Group.h"
 #include "Map.h"
 #include "Player.h"
 #include "WalkInPackets.h"
@@ -56,16 +57,29 @@ void WorldSession::HandleDelveTeleportOut(WorldPackets::WalkIn::DelveTeleportOut
         return;
     }
 
+    // Where to put the player. GetInstanceEntrance only answers when an instance script reports an
+    // entrance location or an active instance lock carries an EntranceWorldSafeLocId; this core has
+    // no delve content whatsoever, so for a walk-in that is normally nothing. Refusing with
+    // InvalidTeleportLocation in that case would leave the player inside the instance with nothing
+    // but an error message, so this follows TrinityCore's own instance exit (MiscHandler.cpp, area
+    // trigger case), which falls back to the LFG entry point and then to a fixed location.
+    // UNVERIFIED: the return destination. The client only ever sees the one byte result code
+    // (handler RVA 0x21938A0), so no dump can say where retail puts the player. Instance entrance
+    // first is plausible but unproven, and both fallbacks below are this core's choice.
     WorldSafeLocsEntry const* entrance = player->GetInstanceEntrance(player->GetMapId());
-    if (!entrance)
-    {
-        SendWalkInResult(WorldPackets::WalkIn::WalkInResultCode::InvalidTeleportLocation);
-        return;
-    }
 
     // Success is silent on the client (handler RVA 0x21938A0 returns immediately for 0), it is sent
     // so that every path of the pair answers.
     SendWalkInResult(WorldPackets::WalkIn::WalkInResultCode::Success);
 
-    player->TeleportTo({ .Location = entrance->Loc });
+    if (entrance)
+    {
+        player->TeleportTo({ .Location = entrance->Loc });
+        return;
+    }
+
+    Group const* group = player->GetGroup();
+    bool teleported = group && group->isLFGGroup() && player->TeleportToBGEntryPoint();
+    if (!teleported)
+        player->TeleportTo(player->m_homebind);
 }

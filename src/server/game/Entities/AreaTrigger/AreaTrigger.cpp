@@ -174,9 +174,11 @@ bool AreaTrigger::Create(AreaTriggerCreatePropertiesId areaTriggerCreateProperti
         SetUpdateFieldValue(areaTriggerData.ModifyValue(&UF::AreaTriggerData::TimeToTargetPos), *m_areaTriggerData->Duration);
     }
     SetUpdateFieldValue(areaTriggerData.ModifyValue(&UF::AreaTriggerData::BoundsRadius2D), GetCreateProperties()->Shape.GetMaxSearchRadius());
-    SetUpdateFieldValue(areaTriggerData.ModifyValue(&UF::AreaTriggerData::DecalPropertiesID), GetCreateProperties()->DecalPropertiesId);
+    // through the setter so that it stays the single change point for DecalPropertiesID; the area
+    // trigger is not in world yet, so this writes the update field and sends nothing
+    SetDecalPropertiesId(GetCreateProperties()->DecalPropertiesId);
     if (IsServerSide())
-        SetUpdateFieldValue(areaTriggerData.ModifyValue(&UF::AreaTriggerData::DecalPropertiesID), 24); // Blue decal, for .debug areatrigger visibility
+        SetDecalPropertiesId(24); // Blue decal, for .debug areatrigger visibility
 
     SetScaleCurve(areaTriggerData.ModifyValue(&UF::AreaTriggerData::ExtraScaleCurve), 1.0f);
 
@@ -475,6 +477,13 @@ void AreaTrigger::ClearOverrideMoveCurve()
 // for the clients that already have it - those rebuild the decal geometry from DecalProperties.db2
 // only when told to (client handler RVA 0x1F5E420). Sending it before the area trigger is in world
 // would be pointless: the client ignores the message while its own DecalPropertiesID is still 0.
+// UNVERIFIED: that the client field at object offset +644 is called DecalPropertiesID. The
+// behaviour is proven (the handler gates the rebuild on it), the name is convention - the string
+// "decalPropertiesID" exists at RVA 0x3D66AC0 but no code relates it to offset 644.
+// UNVERIFIED: no caller changes the decal at runtime. Both call sites above run during Create(),
+// so this core never actually emits SMSG_AREA_TRIGGER_UPDATE_DECAL_PROPERTIES today; the send path
+// is untested against a live client. A spell or script effect that re-decals a live area trigger
+// would be the first real trigger.
 void AreaTrigger::SetDecalPropertiesId(uint32 decalPropertiesId)
 {
     if (*m_areaTriggerData->DecalPropertiesID == decalPropertiesId)

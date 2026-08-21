@@ -41,6 +41,11 @@ namespace WorldPackets
             LockedOut               = 5     ///< ERR_CLIENT_LOCKED_OUT (GameError 172); 6 and 7 show the same text
         };
 
+        // UNVERIFIED: when a server sends NotWhileFatigued or LockedOut. The values and their
+        // client side texts are read out of the jump table, but this core has neither a fatigue
+        // driven teleport block nor a walk-in lockout, so no path produces them and there is no
+        // recording that shows retail producing them either. They are wire truth, not behaviour.
+
         // Empty request sent by C_PartyInfo.DelveTeleportOut (client RVA 0x12DCAC0, serializer
         // RVA 0x6DC690 writes the opcode and no payload). The client pre-checks dead, falling,
         // on-transport and fatigued itself before it sends.

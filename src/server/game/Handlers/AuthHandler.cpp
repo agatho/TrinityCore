@@ -101,7 +101,13 @@ void WorldSession::SendClientCacheVersion(uint32 version)
 // discards the whole cache behind Prefix and re-queries it (handler RVA 0x341AD0).
 // Observed domains: WGOB (GameObjects) and WQST (QuestV2, QuestObjective, QuestObjectiveXEffect).
 // QuestObjective and QuestObjectiveXEffect are not DB2 stores in TrinityCore - quest objectives
-// live in the world database - so only the tables this core actually owns are reported.
+// live in the world database - so only the tables this core actually owns are reported. That is
+// wire correct but not complete, and the arithmetic makes the gap plain: the recorded packets run
+// 64..189 bytes, WGOB as built here is 4 + 30 + 25 + 5 = 64 (the exact minimum), while WQST with
+// only QuestV2 is 4 + 25 + 21 + 5 = 55 - shorter than any recording, because four of its six keys
+// are missing. Consequence to know before relying on it: a change to quest objectives alone will
+// not invalidate the client's WQST cache, it only does so when the QuestV2 counts happen to move
+// as well. Closing this needs the two tables as real DB2 stores, not a fabricated count.
 // The client also knows WNPC, WPTX and WPTN (MatchesPrefix bodies at RVA 0x331100..0x331580);
 // no recording shows which keys the retail server sends for them, so they stay unpopulated.
 void WorldSession::SendCacheInfo()
