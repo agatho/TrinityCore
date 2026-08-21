@@ -2946,8 +2946,8 @@ INSERT INTO `creature_addon` (`guid`, `PathId`, `mount`, `StandState`, `AnimTier
 DELETE FROM `phase_area` WHERE `PhaseId` IN (1961, 37, 1959, 4, 8, 1965, 1610, 28, 3);
 
 INSERT INTO `phase_area` (`AreaId`, `PhaseId`, `Comment`) VALUES
- (16432, 1961, 'Catch-Up Experience -- Hammerfall (area 16432 Arathi Highlands, map 2927) -- PhaseId 1961 town base + arrival leaders'),
- (16432, 37,   'Catch-Up Experience -- Hammerfall gnoll camp (area 16432) -- PhaseId 37, 90882 slay targets'),
+ (16466, 1961, 'Catch-Up Experience -- Hammerfall (AREA 16466 Hammerfall, zone 16432, map 2927 -- confirmed in-game via .gps) -- PhaseId 1961 town base + arrival leaders. NOTE: phase_area matches the AREA not the zone; 16432 is the zone and did NOT work.'),
+ (16466, 37,   'Catch-Up Experience -- Hammerfall gnoll camp (AREA 16466 confirmed via .gps) -- PhaseId 37, 90882 slay targets'),
  (16456, 1959, 'Catch-Up Experience -- Go''Shek Farm (area 16456, map 2927) -- PhaseId 1959 terrain, 90885-90896 span'),
  (16456, 4,    'Catch-Up Experience -- Go''Shek Farm (area 16456) -- PhaseId 4, quests 90885/86/87'),
  (16456, 8,    'Catch-Up Experience -- Go''Shek Farm (area 16456) -- PhaseId 8 (documented; near-dup of 4)'),
