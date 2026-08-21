@@ -1199,10 +1199,12 @@ INSERT INTO `creature` (`guid`,`id`,`map`,`PhaseId`,`position_x`,`position_y`,`p
  (8001217, 142347, 2927, 3, -1503.899, -1571.8815, 42.4699, 1.0923, 300, 69382)
 ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES(`PhaseId`), `position_x`=VALUES(`position_x`), `position_y`=VALUES(`position_y`), `position_z`=VALUES(`position_z`), `orientation`=VALUES(`orientation`), `spawntimesecs`=VALUES(`spawntimesecs`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
 
--- entry 223453 Arcane Phoenix (src=movement)  [movement-source row lacks facing; orientation defaulted to 0.0]
-INSERT INTO `creature` (`guid`,`id`,`map`,`PhaseId`,`position_x`,`position_y`,`position_z`,`orientation`,`spawntimesecs`,`VerifiedBuild`) VALUES
- (8001218, 223453, 2927, 3, -1046.0452, -3553.0237, 55.9417, 0.0, 300, 69382)
-ON DUPLICATE KEY UPDATE `id`=VALUES(`id`), `map`=VALUES(`map`), `PhaseId`=VALUES(`PhaseId`), `position_x`=VALUES(`position_x`), `position_y`=VALUES(`position_y`), `position_z`=VALUES(`position_z`), `orientation`=VALUES(`orientation`), `spawntimesecs`=VALUES(`spawntimesecs`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
+-- entry 223453 Arcane Phoenix -- REMOVED (tester-confirmed capture artifact, 2026-08-21).
+-- This was mined from a movement-source row right next to the arrival pad (-1046,-3553); it is a
+-- transient creature (a summoned/passing Arcane Phoenix, not a real RPE ambient spawn) that the
+-- miner picked up. Not part of the experience -- deleted rather than authored. The scoped DELETE
+-- also removes guid 8001218 from any DB where a prior apply already inserted it.
+DELETE FROM `creature` WHERE `guid` = 8001218;
 
 -- ============================================================================
 -- HORDE-XVAL FIX (H1) Task 2 -- Wildlife population the Alliance capture couldn't see.

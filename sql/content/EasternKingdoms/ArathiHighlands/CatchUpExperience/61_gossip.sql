@@ -127,10 +127,14 @@ INSERT INTO `gossip_menu_option` (`MenuID`, `GossipOptionID`, `OptionID`, `Optio
 (39349, 0, 1, 0, 'Leave Catch Up Experience', 0, 0, 0, 0, 0, NULL, 0, 0, NULL, 0, NULL, NULL, 69382)  -- Horde Thrall 244715 (PLACEHOLDER MenuID)
 ON DUPLICATE KEY UPDATE `GossipOptionID`=VALUES(`GossipOptionID`), `OptionNpc`=VALUES(`OptionNpc`), `OptionText`=VALUES(`OptionText`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
 
--- Wire the guide NPCs to the AI that handles the Leave option (RegisterCreatureAI(npc_arathi_rpe_guide)
--- on feature/arathi-rpe). This ScriptedAI is passive -- it only adds the OnGossipSelect handler and
--- does not disturb the NPCs' DB-driven questgiver gossip or the native adventure-map option.
-UPDATE `creature_template` SET `ScriptName`='npc_arathi_rpe_guide' WHERE `entry` IN (244714, 244715);
+-- Wire the four RPE faction leaders to npc_arathi_rpe_leader (RegisterCreatureAI on
+-- feature/arathi-rpe). This ScriptedAI does two things: (1) the "Leave Catch Up Experience" gossip
+-- handler on the hub leaders (244714/244715), and (2) the personal-phase faction gate on the shared
+-- co-given quests (90882/90883 at the pad greeters 244643/244642, 90911 at the hubs) -- both leaders
+-- stay visible, but only the player's OWN faction leader shows the '!' and offers the quest (the
+-- other faction's leader returns GetDialogStatus=None and an empty OnGossipHello). It does not
+-- disturb the correct leader's DB-driven questgiver gossip or the native adventure-map option.
+UPDATE `creature_template` SET `ScriptName`='npc_arathi_rpe_leader' WHERE `entry` IN (244643, 244642, 244714, 244715);
 
 -- ============================================================================
 -- REFERENCE ONLY -- Chromie (167032) captured timeline-picker options (map 85)
