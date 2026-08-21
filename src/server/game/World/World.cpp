@@ -1436,6 +1436,9 @@ bool World::SetInitialWorldSettings()
     TC_LOG_INFO("server.loading", "Loading Page Texts...");
     sObjectMgr->LoadPageTexts();
 
+    TC_LOG_INFO("server.loading", "Loading Cache Info Stamps...");             // SMSG_CACHE_INFO, sent on login
+    sObjectMgr->LoadCacheInfoStamps();
+
     TC_LOG_INFO("server.loading", "Loading Game Object Templates...");         // must be after LoadPageTexts
     sObjectMgr->LoadDestructibleHitpoints();
     sObjectMgr->LoadGameObjectTemplate();

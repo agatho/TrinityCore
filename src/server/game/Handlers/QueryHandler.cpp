@@ -361,8 +361,11 @@ void WorldSession::HandleQueryTreasurePicker(WorldPackets::Query::QueryTreasureP
 // again with CMSG_QUERY_PAGE_TEXT the next time it needs it. Nothing else is thrown away, and no
 // Lua event fires - the follow up query is the observable effect.
 // No core path calls this yet: TrinityCore only knows the bulk ".reload page_text", not a change to
-// a single record. The bulk counterpart would be SMSG_CACHE_INFO with prefix WPTX, whose key space
-// no recording shows, so it is not invented here either.
+// a single record, and this message carries exactly one record. The bulk case is covered elsewhere:
+// SendCacheInfo sends the WPTX domain with a PageTextCount, so a reload that adds or removes a page
+// text already makes the client drop its whole page text cache, and a row in the world table
+// `cache_info` forces the same for a reload that only edits existing rows. What is missing here is
+// therefore only the single record trigger, not the invalidation as such.
 void WorldSession::SendInvalidatePageText(uint32 pageTextId)
 {
     WorldPackets::Query::InvalidatePageText invalidatePageText;

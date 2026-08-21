@@ -23,7 +23,6 @@
 #include "DB2Stores.h"
 #include "DisableMgr.h"
 #include "GameTime.h"
-#include "MapUtils.h"
 #include "ObjectMgr.h"
 #include "RBAC.h"
 #include "RealmList.h"
@@ -31,6 +30,9 @@
 #include "Timezone.h"
 #include "Util.h"
 #include "World.h"
+#include <algorithm>
+#include <array>
+#include <span>
 
 void WorldSession::SendAuthResponse(uint32 code, bool queued, uint32 queuePos)
 {
@@ -94,63 +96,96 @@ void WorldSession::SendClientCacheVersion(uint32 version)
     SendPacket(cache.Write());
 }
 
-// SMSG_CACHE_INFO, one packet per cache domain. Structure and key space are taken from live
-// 12.1 recordings (26 of 26 packets parse to the exact packet length): every entry is
-// "<DB2TableName>RecordCount" / "<DB2TableName>HotfixCount" for a table that feeds the domain.
-// The client stores each value in the CVar "CACHE-<Prefix>-<Key>"; on the first difference it
-// discards the whole cache behind Prefix and re-queries it (handler RVA 0x341AD0).
-// Observed domains: WGOB (GameObjects) and WQST (QuestV2, QuestObjective, QuestObjectiveXEffect).
-// QuestObjective and QuestObjectiveXEffect are not DB2 stores in TrinityCore - quest objectives
-// live in the world database - so only the tables this core actually owns are reported. That is
-// wire correct but not complete, and the arithmetic makes the gap plain: the recorded packets run
-// 64..189 bytes, WGOB as built here is 4 + 30 + 25 + 5 = 64 (the exact minimum), while WQST with
-// only QuestV2 is 4 + 25 + 21 + 5 = 55 - shorter than any recording, because four of its six keys
-// are missing. Consequence to know before relying on it: a change to quest objectives alone will
-// not invalidate the client's WQST cache, it only does so when the QuestV2 counts happen to move
-// as well. Closing this needs the two tables as real DB2 stores, not a fabricated count.
-// The client also knows WNPC, WPTX and WPTN (MatchesPrefix bodies at RVA 0x331100..0x331580);
-// no recording shows which keys the retail server sends for them, so they stay unpopulated.
+// SMSG_CACHE_INFO, one packet per cache domain. The client turns every entry into the CVar
+// "CACHE-<Prefix>-<Key>" (format string RVA 0x3B6AA20) and compares the value case insensitively
+// against what it stored; on the first difference it discards the whole cache behind Prefix and
+// re-queries it (handler RVA 0x341AD0). A packet with no entries makes it do nothing at all.
+//
+// The Key space belongs to the server alone. There is exactly one "CACHE-" string in the whole
+// 69382 binary - that format string - and no CVar list carries a CACHE- entry, so the client has no
+// static idea which keys exist. What is closed is the PREFIX list, not the key list: only WGOB,
+// WNPC, WQST, WPTX and WPTN are matched (MatchesPrefix bodies at RVA 0x331100..0x331580), any other
+// prefix writes a CVar and discards nothing. All five are served below.
+//
+// The values are counts of the data behind each domain, which is what makes them useful: they move
+// exactly when the cached data moves. Where this core owns the data in its world database, the
+// count comes from there; where the data is a DB2, it comes from the store plus its hotfix count;
+// and the world table `cache_info` adds realm defined stamps on top, which is the only way to reach
+// a domain the core has no static count for - petitions, which live per character in the characters
+// database. A single hand written row there also lets an administrator force an invalidation after
+// an out of band change such as `.reload page_text`.
 void WorldSession::SendCacheInfo()
 {
     struct CacheDomain
     {
         std::string_view Prefix;
         std::span<DB2StorageBase const* const> Stores;
+        std::string_view WorldTableKey;                 ///< empty when this core owns no such table
+        std::size_t WorldTableRows;
     };
 
     static DB2StorageBase const* const gameObjectStores[] = { &sGameObjectsStore };
     static DB2StorageBase const* const questStores[] = { &sQuestV2Store };
-    static CacheDomain const domains[] =        // recordings send WQST before WGOB
+
+    CacheDomain const domains[] =               // recordings send WQST before WGOB
     {
-        { "WQST", std::span(questStores)      },
-        { "WGOB", std::span(gameObjectStores) }
+        { "WQST", std::span(questStores),      "QuestTemplateCount",      sObjectMgr->GetQuestTemplates().size()      },
+        { "WGOB", std::span(gameObjectStores), "GameObjectTemplateCount", sObjectMgr->GetGameObjectTemplates().size() },
+        { "WNPC", {},                          "CreatureTemplateCount",   sObjectMgr->GetCreatureTemplates().size()   },
+        { "WPTX", {},                          "PageTextCount",           sObjectMgr->GetPageTexts().size()           },
+        { "WPTN", {},                          {},                        0                                          }
     };
 
-    uint32 localeMask = 1 << GetSessionDbcLocale();
+    // Only two table hashes are ever asked for, so the filter goes in front of the counting instead
+    // of behind it - HandleHotfixRequest does the same with the push ids it was given. Without it
+    // every login walks every hotfix record of the realm on the map thread just to throw almost all
+    // of them away.
+    std::array<uint32, 2> const countedTableHashes = { sQuestV2Store.GetTableHash(), sGameObjectsStore.GetTableHash() };
+    std::array<uint32, 2> hotfixCounts = { };
 
-    // one pass over the hotfix data, counting per table hash - it is walked once for all domains
-    std::unordered_map<uint32, uint32> hotfixCountByTableHash;
+    uint32 localeMask = 1 << GetSessionDbcLocale();
     for (auto const& [pushId, push] : sDB2Manager.GetHotfixData())
+    {
         for (DB2Manager::HotfixRecord const& record : push.Records)
-            if (record.AvailableLocalesMask & localeMask)
-                ++hotfixCountByTableHash[record.TableHash];
+        {
+            if (!(record.AvailableLocalesMask & localeMask))
+                continue;
+
+            auto itr = std::ranges::find(countedTableHashes, record.TableHash);
+            if (itr != countedTableHashes.end())
+                ++hotfixCounts[std::distance(countedTableHashes.begin(), itr)];
+        }
+    }
 
     for (CacheDomain const& domain : domains)
     {
         WorldPackets::ClientConfig::CacheInfo cacheInfo;
         cacheInfo.Prefix = domain.Prefix;
-        cacheInfo.Entries.reserve(domain.Stores.size() * 2);
 
         for (DB2StorageBase const* store : domain.Stores)
         {
             std::string_view tableName = store->GetFileName();
             tableName.remove_suffix(std::string_view(".db2").length());
 
-            uint32 const* hotfixCount = Trinity::Containers::MapGetValuePtr(hotfixCountByTableHash, store->GetTableHash());
+            auto itr = std::ranges::find(countedTableHashes, store->GetTableHash());
+            uint32 hotfixCount = itr != countedTableHashes.end()
+                ? hotfixCounts[std::distance(countedTableHashes.begin(), itr)] : 0;
 
             cacheInfo.Entries.push_back({ Trinity::StringFormat("{}RecordCount", tableName), std::to_string(store->GetNumRows()) });
-            cacheInfo.Entries.push_back({ Trinity::StringFormat("{}HotfixCount", tableName), std::to_string(hotfixCount ? *hotfixCount : 0) });
+            cacheInfo.Entries.push_back({ Trinity::StringFormat("{}HotfixCount", tableName), std::to_string(hotfixCount) });
         }
+
+        if (!domain.WorldTableKey.empty())
+            cacheInfo.Entries.push_back({ std::string(domain.WorldTableKey), std::to_string(domain.WorldTableRows) });
+
+        for (CacheInfoStamp const& stamp : sObjectMgr->GetCacheInfoStamps())
+            if (stamp.Prefix == domain.Prefix)
+                cacheInfo.Entries.push_back({ stamp.Key, stamp.Value });
+
+        // An empty packet is a no-op for the client, so it is not worth sending. WPTN reaches this
+        // point empty unless the realm put a row into `cache_info` for it.
+        if (cacheInfo.Entries.empty())
+            continue;
 
         SendPacket(cacheInfo.Write());
     }

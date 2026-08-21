@@ -145,6 +145,19 @@ enum ChatType
 
 typedef std::map<uint32, PageText> PageTextContainer;
 
+// One row of the world table `cache_info`: a realm defined stamp that SMSG_CACHE_INFO sends for a
+// cache domain of the client. The client turns it into the CVar "CACHE-<Prefix>-<Key>" and discards
+// the cache behind Prefix as soon as Value differs from what it stored (handler RVA 0x341AD0).
+// Prefix is one of WGOB, WNPC, WQST, WPTX, WPTN - the five the client matches.
+struct CacheInfoStamp
+{
+    std::string Prefix;
+    std::string Key;
+    std::string Value;
+};
+
+typedef std::vector<CacheInfoStamp> CacheInfoStampContainer;
+
 struct InstanceTemplate
 {
     uint32 Parent;
@@ -1276,6 +1289,10 @@ class TC_GAME_API ObjectMgr
 
         void LoadPageTexts();
         PageText const* GetPageText(uint32 pageEntry);
+        PageTextContainer const& GetPageTexts() const { return _pageTextStore; }
+
+        void LoadCacheInfoStamps();
+        CacheInfoStampContainer const& GetCacheInfoStamps() const { return _cacheInfoStampStore; }
 
         void LoadPlayerInfo();
         void LoadPetLevelInfo();
@@ -1757,6 +1774,7 @@ class TC_GAME_API ObjectMgr
         LocaleConstant DBCLocaleIndex;
 
         PageTextContainer _pageTextStore;
+        CacheInfoStampContainer _cacheInfoStampStore;
         InstanceTemplateContainer _instanceTemplateStore;
 
     public:

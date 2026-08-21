@@ -57,29 +57,34 @@ void WorldSession::HandleDelveTeleportOut(WorldPackets::WalkIn::DelveTeleportOut
         return;
     }
 
-    // Where to put the player. GetInstanceEntrance only answers when an instance script reports an
-    // entrance location or an active instance lock carries an EntranceWorldSafeLocId; this core has
-    // no delve content whatsoever, so for a walk-in that is normally nothing. Refusing with
-    // InvalidTeleportLocation in that case would leave the player inside the instance with nothing
-    // but an error message, so this follows TrinityCore's own instance exit (MiscHandler.cpp, area
-    // trigger case), which falls back to the LFG entry point and then to a fixed location.
+    // Where to put the player. The order is the one this core already uses for leaving an instance
+    // through its exit area trigger (MiscHandler.cpp:684-695): LFG entry point first, instance
+    // entrance second, and only then a fixed location. GetInstanceEntrance answers only when an
+    // instance script reports an entrance location or an active instance lock carries an
+    // EntranceWorldSafeLocId; this core has no delve content at all, so for a walk-in that is
+    // normally nothing, which is why the homebind fallback exists rather than a refusal.
     // UNVERIFIED: the return destination. The client only ever sees the one byte result code
-    // (handler RVA 0x21938A0), so no dump can say where retail puts the player. Instance entrance
-    // first is plausible but unproven, and both fallbacks below are this core's choice.
-    WorldSafeLocsEntry const* entrance = player->GetInstanceEntrance(player->GetMapId());
+    // (handler RVA 0x21938A0), so no dump can say where retail puts the player. The order above is
+    // taken from this core's own instance exit; all three destinations are this core's choice.
+    bool teleported = false;
 
-    // Success is silent on the client (handler RVA 0x21938A0 returns immediately for 0), it is sent
-    // so that every path of the pair answers.
-    SendWalkInResult(WorldPackets::WalkIn::WalkInResultCode::Success);
+    if (Group const* group = player->GetGroup())
+        if (group->isLFGGroup())
+            teleported = player->TeleportToBGEntryPoint();
 
-    if (entrance)
-    {
-        player->TeleportTo({ .Location = entrance->Loc });
-        return;
-    }
-
-    Group const* group = player->GetGroup();
-    bool teleported = group && group->isLFGGroup() && player->TeleportToBGEntryPoint();
     if (!teleported)
-        player->TeleportTo(player->m_homebind);
+        if (WorldSafeLocsEntry const* entrance = player->GetInstanceEntrance(player->GetMapId()))
+            teleported = player->TeleportTo({ .Location = entrance->Loc });
+
+    if (!teleported)
+        teleported = player->TeleportTo(player->m_homebind);
+
+    // The result is sent AFTER the attempt, because Success is silent on the client: handler
+    // RVA 0x21938A0 returns immediately for 0, so it shows no text and performs no movement of its
+    // own. Announcing success first and then failing to move the player would leave him inside the
+    // instance without a single hint that anything went wrong. Every TeleportTo overload returns
+    // bool (Player.h:1250-1252) and every one of them is checked above.
+    SendWalkInResult(teleported
+        ? WorldPackets::WalkIn::WalkInResultCode::Success
+        : WorldPackets::WalkIn::WalkInResultCode::InvalidTeleportLocation);
 }

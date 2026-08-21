@@ -78,6 +78,8 @@
 #include "World.h"
 #include "advstd.h"
 #include <G3D/g3dmath.h>
+#include <algorithm>
+#include <array>
 #include <limits>
 #include <numeric>
 
@@ -6139,6 +6141,71 @@ void ObjectMgr::LoadPageTexts()
                 TC_LOG_ERROR("sql.sql", "Page text (ID: {}) has non-existing `NextPageID` ({})", itr->first, itr->second.NextPageID);
 
     TC_LOG_INFO("server.loading", ">> Loaded {} page texts in {} ms", count, GetMSTimeDiffToNow(oldMSTime));
+}
+
+// Realm defined stamps for SMSG_CACHE_INFO. WorldSession::SendCacheInfo derives a value of its own
+// for every domain whose data this core actually owns; this table covers the rest - petitions above
+// all, which live in the characters database and have no static count - and lets an administrator
+// force an invalidation by bumping a value.
+void ObjectMgr::LoadCacheInfoStamps()
+{
+    uint32 oldMSTime = getMSTime();
+
+    _cacheInfoStampStore.clear();
+
+    //                                               0        1      2
+    QueryResult result = WorldDatabase.Query("SELECT `Prefix`, `Key`, `Value` FROM cache_info");
+    if (!result)
+    {
+        TC_LOG_INFO("server.loading", ">> Loaded 0 cache info stamps. DB table `cache_info` is empty!");
+        return;
+    }
+
+    // The five prefixes the client compares against. Any other one still writes its CVar but
+    // discards no cache at all, which looks like it works and does nothing - so it is rejected here
+    // rather than silently sent (MatchesPrefix bodies at RVA 0x331100..0x331580, build 69382).
+    static constexpr std::array<std::string_view, 5> knownPrefixes = { "WGOB", "WNPC", "WQST", "WPTX", "WPTN" };
+
+    // Both lengths travel in a six bit field (SMSG_CACHE_INFO, one bit group per entry), so 63 is a
+    // hard wire limit, not a style choice.
+    constexpr std::size_t maxLength = (1 << 6) - 1;
+
+    do
+    {
+        Field* fields = result->Fetch();
+
+        CacheInfoStamp stamp;
+        stamp.Prefix = fields[0].GetString();
+        stamp.Key    = fields[1].GetString();
+        stamp.Value  = fields[2].GetString();
+
+        if (std::ranges::find(knownPrefixes, stamp.Prefix) == knownPrefixes.end())
+        {
+            TC_LOG_ERROR("sql.sql", "Table `cache_info` has a row with Prefix '{}' (Key '{}'), which the client does not "
+                "match against any cache - it would only write a CVar. Allowed are WGOB, WNPC, WQST, WPTX and WPTN. Skipped.",
+                stamp.Prefix, stamp.Key);
+            continue;
+        }
+
+        if (stamp.Key.empty())
+        {
+            TC_LOG_ERROR("sql.sql", "Table `cache_info` has a row with Prefix '{}' and an empty Key. Skipped.", stamp.Prefix);
+            continue;
+        }
+
+        if (stamp.Key.length() > maxLength || stamp.Value.length() > maxLength)
+        {
+            TC_LOG_ERROR("sql.sql", "Table `cache_info` row (Prefix '{}', Key '{}') has a Key or Value longer than {} characters, "
+                "which does not fit the six bit length field of SMSG_CACHE_INFO. Skipped.", stamp.Prefix, stamp.Key, maxLength);
+            continue;
+        }
+
+        _cacheInfoStampStore.push_back(std::move(stamp));
+    }
+    while (result->NextRow());
+
+    TC_LOG_INFO("server.loading", ">> Loaded {} cache info stamps in {} ms",
+        _cacheInfoStampStore.size(), GetMSTimeDiffToNow(oldMSTime));
 }
 
 PageText const* ObjectMgr::GetPageText(uint32 pageEntry)
