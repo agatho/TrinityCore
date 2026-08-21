@@ -18,6 +18,7 @@
 #include "ScriptMgr.h"
 #include "GossipDef.h"
 #include "ObjectMgr.h"
+#include "Optional.h"
 #include "Player.h"
 #include "PlayerChoice.h"
 #include "QuestDef.h"
@@ -57,8 +58,13 @@ enum ArathiRpe
     // carry gossip in the capture: Alliance Jaina 244714 -> menu 39348, Horde Thrall 244715 -> menu
     // 39349. The content branch (61_gossip.sql) adds a "Leave Catch Up Experience" option (OptionID
     // = GOSSIP_OPTION_LEAVE_RPE) to those menus; this script handles its selection.
-    NPC_ARATHI_RPE_GUIDE_ALLIANCE    = 244714,
-    NPC_ARATHI_RPE_GUIDE_HORDE       = 244715,
+    // The RPE faction leaders. Both stand together on the map (allied story beat, visible to both
+    // factions), but the shared quests they co-give (90882/90883 at the arrival pad, 90911 at the
+    // Stromgarde hub) must be offered ONLY by the player's own leader. NPC entries by side:
+    NPC_RPE_JAINA_PAD                = 244643,   // Alliance pad greeter (90882/90883)
+    NPC_RPE_THRALL_PAD               = 244642,   // Horde pad greeter (90882/90883)
+    NPC_ARATHI_RPE_GUIDE_ALLIANCE    = 244714,   // Alliance hub Jaina (90911 + Leave gossip)
+    NPC_ARATHI_RPE_GUIDE_HORDE       = 244715,   // Horde hub Thrall (90911 + Leave gossip)
     GOSSIP_MENU_RPE_GUIDE_ALLIANCE   = 39348,
     GOSSIP_MENU_RPE_GUIDE_HORDE      = 39349,
     GOSSIP_OPTION_LEAVE_RPE          = 1,    // gossip_menu_option.OptionID -> arrives as gossipListId
@@ -229,16 +235,57 @@ public:
     }
 };
 
-// The RPE guide NPC (Alliance Jaina 244714 / Horde Thrall 244715) carries a "Leave Catch Up
-// Experience" gossip option (authored on the content branch as gossip_menu_option.OptionID =
-// GOSSIP_OPTION_LEAVE_RPE on menus 39348/39349). Selecting it exits the experience early, through
-// the same SendPlayerHomeFromRpe path the finale uses. The NPCs keep their DB-driven questgiver
-// gossip and the native "Show me where I could go next" adventure-map option; this AI only adds a
-// handler for the Leave option. Requires creature_template.ScriptName = 'npc_arathi_rpe_guide' on
-// both NPCs (content branch).
-struct npc_arathi_rpe_guide : public ScriptedAI
+// Which faction a given RPE leader NPC belongs to (TEAM_NEUTRAL if it is not one of the four).
+inline TeamId ArathiRpeLeaderTeam(uint32 entry)
 {
-    npc_arathi_rpe_guide(Creature* creature) : ScriptedAI(creature) { }
+    switch (entry)
+    {
+        case NPC_RPE_JAINA_PAD:
+        case NPC_ARATHI_RPE_GUIDE_ALLIANCE:
+            return TEAM_ALLIANCE;
+        case NPC_RPE_THRALL_PAD:
+        case NPC_ARATHI_RPE_GUIDE_HORDE:
+            return TEAM_HORDE;
+        default:
+            return TEAM_NEUTRAL;
+    }
+}
+
+// AI for the four RPE faction leaders (Alliance Jaina 244643/244714, Horde Thrall 244642/244715).
+// Both leaders are visible to everyone (they are fighting together), but the quests they co-give are
+// single shared ids (90882/90883/90911) that retail personally-phases so only the player's OWN
+// leader offers them. TrinityCore gates quests per-quest, never per-(NPC, team), so this AI does the
+// personal-phase equivalent: for a player of the OTHER faction the leader shows no questgiver marker
+// (GetDialogStatus -> None) and his interaction offers nothing (OnGossipHello -> handled/closed),
+// while the player's own leader falls through to default questgiver behaviour. The hub leaders
+// (244714/244715) additionally carry the "Leave Catch Up Experience" gossip option, handled below.
+// Requires creature_template.ScriptName = 'npc_arathi_rpe_leader' on all four NPCs (content branch).
+struct npc_arathi_rpe_leader : public ScriptedAI
+{
+    npc_arathi_rpe_leader(Creature* creature) : ScriptedAI(creature) { }
+
+    bool IsWrongFactionLeaderFor(Player const* player) const
+    {
+        TeamId leaderTeam = ArathiRpeLeaderTeam(me->GetEntry());
+        return leaderTeam != TEAM_NEUTRAL && player->GetTeamId() != leaderTeam;
+    }
+
+    Optional<QuestGiverStatus> GetDialogStatus(Player const* player) override
+    {
+        if (IsWrongFactionLeaderFor(player))
+            return QuestGiverStatus::None;   // the other faction's leader: no '!' / no status-driven offer
+        return {};                           // own leader: default computation
+    }
+
+    bool OnGossipHello(Player* player) override
+    {
+        if (IsWrongFactionLeaderFor(player))
+        {
+            CloseGossipMenuFor(player);      // silent story ally for the other faction - offers nothing
+            return true;
+        }
+        return false;                        // own leader: default quest/gossip handling (offer proceeds)
+    }
 
     bool OnGossipSelect(Player* player, uint32 menuId, uint32 gossipListId) override
     {
@@ -258,5 +305,5 @@ void AddSC_arathi_highlands_rpe()
     new player_arathi_rpe_mount_credit();
     new player_arathi_rpe_intro_cinematic();
     new playerchoice_arathi_rpe_finale();
-    RegisterCreatureAI(npc_arathi_rpe_guide);
+    RegisterCreatureAI(npc_arathi_rpe_leader);
 }
