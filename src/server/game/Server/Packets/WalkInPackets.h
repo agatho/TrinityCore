@@ -41,10 +41,17 @@ namespace WorldPackets
             LockedOut               = 5     ///< ERR_CLIENT_LOCKED_OUT (GameError 172); 6 and 7 show the same text
         };
 
-        // UNVERIFIED: when a server sends NotWhileFatigued or LockedOut. The values and their
-        // client side texts are read out of the jump table, but this core has neither a fatigue
-        // driven teleport block nor a walk-in lockout, so no path produces them and there is no
-        // recording that shows retail producing them either. They are wire truth, not behaviour.
+        // Every value above has a producer in WorldSession::HandleDelveTeleportOut, which mirrors
+        // the condition list LFGMgr::TeleportPlayer already uses for the same operation - see the
+        // comment there. NotWhileFatigued comes from Player::IsMirrorTimerActive(FATIGUE_TIMER),
+        // which this core does have; LockedOut carries the cases that have no dedicated wire value
+        // (vehicle, transport, charm, Freeze) because ERR_CLIENT_LOCKED_OUT is the generic "not
+        // right now" text the UI itself uses for them.
+        // UNVERIFIED: which condition RETAIL puts behind NotWhileFatigued and behind 5, 6 and 7.
+        // The values and their texts are read out of the jump table at RVA 0x21938F0, and 5..7 are
+        // three distinct codes the client renders identically, so the client cannot tell us what
+        // distinguishes them. No recording shows a server sending any of them. The mapping above is
+        // this core's, chosen to match its own instance exit rules, not read off retail.
 
         // Empty request sent by C_PartyInfo.DelveTeleportOut (client RVA 0x12DCAC0, serializer
         // RVA 0x6DC690 writes the opcode and no payload). The client pre-checks dead, falling,

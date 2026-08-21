@@ -15,10 +15,23 @@
 --   WGOB  GameObject cache      WNPC  Creature cache     WQST  Quest cache
 --   WPTX  PageText cache        WPTN  Petition cache
 --
--- Rows here are sent in ADDITION to the counts the core derives by itself (DB2 row counts, hotfix
--- counts, and the world table row counts for creatures, gameobjects, quests and page texts). Use
--- them where the core has no count of its own - petitions above all - or to force an invalidation
--- after a change the counts cannot see, such as editing an existing row instead of adding one.
+-- THIS TABLE SHIPS EMPTY, ON PURPOSE. Retail sends exactly two packets per login - WQST and WGOB,
+-- measured over 22 packets in 11 recorded logins with C:\dumps\tools\w0_query_hotfix\round_trip.py -
+-- and WorldSession::SendCacheInfo reproduces exactly those two and nothing else. WNPC, WPTX and
+-- WPTN carry no key of their own and therefore produce no packet at all while this table is empty.
+-- Every row added here is a deliberate step away from retail, taken by the realm that adds it.
+--
+-- What the rows are for: the core fills only the retail keys it has data for (QuestV2RecordCount,
+-- QuestV2HotfixCount, QuestObjectiveRecordCount for WQST; GameObjectsRecordCount and
+-- GameObjectsHotfixCount for WGOB). Everything else needs a row here - petitions above all, which
+-- live per character in the characters database, and creature, page text or gameobject template
+-- edits, for which retail has no key because retail has no such tables. A row is also the only way
+-- to force an invalidation after a change no count can see, such as editing an existing row instead
+-- of adding one. A row is a hand written stamp, not a live count: it changes when someone changes it.
+--
+-- Example - make every client drop its petition cache at the next login:
+--   INSERT INTO `cache_info` VALUES ('WPTN', 'PetitionGeneration', '2', 'bumped after a petition wipe');
+--   .reload cache_info
 --
 -- To make a changed Value take effect: bump it, then run `.reload cache_info`. The table is read by
 -- ObjectMgr::LoadCacheInfoStamps, which the worldserver calls once at startup and the reload command
@@ -36,7 +49,3 @@ CREATE TABLE `cache_info` (
   `Comment` VARCHAR(255) DEFAULT NULL,
   PRIMARY KEY (`Prefix`, `Key`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='Realm defined SMSG_CACHE_INFO stamps';
-
-DELETE FROM `cache_info` WHERE `Prefix`='WPTN';
-INSERT INTO `cache_info` (`Prefix`, `Key`, `Value`, `Comment`) VALUES
-('WPTN', 'PetitionGeneration', '1', 'Petitions live in the characters database and change per player, so the core has no static count for this domain. Bump the value by hand to make clients drop their petition cache.');

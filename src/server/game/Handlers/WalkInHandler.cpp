@@ -33,8 +33,25 @@ void WorldSession::SendWalkInResult(WorldPackets::WalkIn::WalkInResultCode resul
 // LeaveWalkInParty() in the client is C_PartyInfo.DelveTeleportOut() (LFGUtil.lua:39); it asks the
 // server to end the private, queue free instance session and put the player back where they walked
 // in. The client already refuses to send while dead, falling, on a transport or fatigued
-// (RVA 0x12DCAC0), so everything below is the server side re-check plus the two conditions only the
+// (RVA 0x12DCAC0), so everything below is the server side re-check plus the conditions only the
 // server can judge - whether there is a recorded entrance to return to at all.
+//
+// The re-check follows LFGMgr::TeleportPlayer (LFGMgr.cpp:1385-1396), which guards the very same
+// operation - pulling a player out of an instance - and is the only place in this core that already
+// decides it. Its condition list is taken over one for one; only the result values differ, because
+// SMSG_WALK_IN_RESULT has its own three bit enum instead of LfgTeleportResult:
+//
+//   !IsAlive()                                  -> PlayerDead          (client also pre-checks)
+//   IsFalling() || UNIT_STATE_JUMPING           -> NotWhileFalling     (client also pre-checks)
+//   IsMirrorTimerActive(FATIGUE_TIMER)          -> NotWhileFatigued    (client also pre-checks)
+//   GetVehicle() / GetTransport()               -> LockedOut           (client pre-checks transport)
+//   charmed, or Freeze (spell 9454)             -> LockedOut
+//
+// The last two have no dedicated wire value. LockedOut is the client's generic refusal: its text is
+// ERR_CLIENT_LOCKED_OUT, which the UI itself uses for "you cannot do that right now" (equipment
+// changes blocked by combat, PaperDollFrame.lua and EquipmentManager.lua). Refusing with a text the
+// player can read is the whole point of the enum; teleporting a charmed or vehicle bound player
+// instead would leave the vehicle or the charm behind on the instance map.
 void WorldSession::HandleDelveTeleportOut(WorldPackets::WalkIn::DelveTeleportOut& /*packet*/)
 {
     Player* player = GetPlayer();
@@ -45,9 +62,21 @@ void WorldSession::HandleDelveTeleportOut(WorldPackets::WalkIn::DelveTeleportOut
         return;
     }
 
-    if (player->IsFalling())
+    if (player->IsFalling() || player->HasUnitState(UNIT_STATE_JUMPING))
     {
         SendWalkInResult(WorldPackets::WalkIn::WalkInResultCode::NotWhileFalling);
+        return;
+    }
+
+    if (player->IsMirrorTimerActive(FATIGUE_TIMER))
+    {
+        SendWalkInResult(WorldPackets::WalkIn::WalkInResultCode::NotWhileFatigued);
+        return;
+    }
+
+    if (player->GetVehicle() || player->GetTransport() || !player->GetCharmedGUID().IsEmpty() || player->HasAura(9454 /*Freeze*/))
+    {
+        SendWalkInResult(WorldPackets::WalkIn::WalkInResultCode::LockedOut);
         return;
     }
 

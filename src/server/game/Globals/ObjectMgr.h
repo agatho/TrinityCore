@@ -1106,6 +1106,11 @@ class TC_GAME_API ObjectMgr
             return itr != _questObjectives.end() ? itr->second : nullptr;
         }
 
+        /// Number of quest objective rows currently loaded. Used by SMSG_CACHE_INFO as the value
+        /// behind retail's WQST key `QuestObjectiveRecordCount`; O(1), so a login does not walk
+        /// the container.
+        std::size_t GetQuestObjectiveCount() const { return _questObjectives.size(); }
+
         std::unordered_set<uint32> const* GetQuestsForAreaTrigger(uint32 Trigger_ID) const
         {
             auto itr = _questAreaTriggerStore.find(Trigger_ID);
@@ -1289,7 +1294,6 @@ class TC_GAME_API ObjectMgr
 
         void LoadPageTexts();
         PageText const* GetPageText(uint32 pageEntry);
-        PageTextContainer const& GetPageTexts() const { return _pageTextStore; }
 
         void LoadCacheInfoStamps();
         CacheInfoStampContainer const& GetCacheInfoStamps() const { return _cacheInfoStampStore; }

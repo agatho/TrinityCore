@@ -103,7 +103,33 @@ void WorldSession::SendClientCacheVersion(uint32 version)
 // 69382 binary - that format string - and no CVar list carries a CACHE- entry, so the client has no
 // static idea which keys exist. What is closed is the PREFIX list, not the key list: only WGOB,
 // WNPC, WQST, WPTX and WPTN are matched (MatchesPrefix bodies at RVA 0x331100..0x331580), any other
-// prefix writes a CVar and discards nothing. All five are served below.
+// prefix writes a CVar and discards nothing. All five are known below; which of them actually go
+// out is the next paragraph.
+//
+// Which domains and which keys is not a design decision, it is measured. Retail sends exactly two
+// packets per login, and it sends them in every one of the 11 twelve-point-one recordings that
+// cover a login - 22 packets, counted and round-tripped byte for byte by
+// C:\dumps\tools\w0_query_hotfix\round_trip.py:
+//
+//   WQST  QuestObjectiveXEffectRecordCount, QuestObjectiveXEffectHotfixCount,
+//         QuestV2RecordCount, QuestV2HotfixCount,
+//         QuestObjectiveRecordCount, QuestObjectiveHotfixCount
+//   WGOB  GameObjectsRecordCount, GameObjectsHotfixCount
+//
+// WNPC, WPTX and WPTN are matched by the client but never sent, in any recording. That is not the
+// "absent from the sniff, so probably rare" fallacy: the situation that produces this message is
+// every single login, and every recorded login carries these two packets and no others. So the list
+// above is what "not more, not less" means here, and the table below sends nothing beyond it.
+// Whatever a realm wants on top goes through the `cache_info` world table, opt-in per row - the
+// three unused domains stay in the table for exactly that reason and send no packet while empty.
+//
+// Of the eight retail keys this core can fill five. There is no QuestObjective and no
+// QuestObjectiveXEffect DB2 in this core, nor in WoWDBDefs - quest objectives live in the world
+// database - so their HotfixCount companions have no table hash to count, and QuestObjectiveXEffect
+// has no counterpart at all. QuestObjectiveRecordCount does have one, and it is a true count of the
+// loaded `quest_objectives` rows; retail's value is that same table's DB2 row count, so the key
+// means the same thing on both sides and only the source differs, exactly as it already does for
+// QuestV2RecordCount.
 //
 // The values are counts, not checksums over the domain data, and it is worth being precise about
 // what that buys. A count moves when rows are ADDED or REMOVED; editing an existing row leaves it
@@ -111,22 +137,25 @@ void WorldSession::SendClientCacheVersion(uint32 version)
 // (DB2Store.h), the length of the table indexed by record id - so it only moves when a record above
 // the current highest id appears, and EraseRecord nulls a slot without shrinking it. Its companion
 // `<Table>HotfixCount` is a true count and covers the usual case, because every DB2 change on this
-// core arrives as a hotfix record. The world table counts (quests, gameobjects, creatures, page
-// texts) are true counts as well, and miss only the edit-in-place case.
+// core arrives as a hotfix record. QuestObjectiveRecordCount is a true count as well and misses
+// only the edit-in-place case; since almost every world side quest change adds or removes an
+// objective row, it is the key that actually moves when this core's quest data moves.
 //
 // What the counts cannot see, the world table `cache_info` covers: it adds realm defined stamps on
-// top, which is the only way to reach a domain the core has no static count for - petitions, which
-// live per character in the characters database - and the only way to force an invalidation after
-// an edit that moved no count. Bump the Value there and run `.reload cache_info`; every client that
-// logs in afterwards discards the domain.
+// top. That is the only way to reach a domain this core has no retail key for - petitions, which
+// live per character in the characters database, and creature, page text or gameobject template
+// edits, for which retail has no key because retail has no such tables - and the only way to force
+// an invalidation after an edit that moved no count. Bump the Value there and run
+// `.reload cache_info`; every client that logs in afterwards discards the domain. A stamp is a hand
+// written string, not a live count. That is the price of staying identical to retail by default.
 void WorldSession::SendCacheInfo()
 {
     struct CacheDomain
     {
         std::string_view Prefix;
         std::span<DB2StorageBase const* const> Stores;
-        std::string_view WorldTableKey;                 ///< empty when this core owns no such table
-        std::size_t WorldTableRows;
+        std::string_view CoreKey;                       ///< retail key this core fills from its own data; empty when there is none
+        std::size_t CoreCount;
     };
 
     static DB2StorageBase const* const gameObjectStores[] = { &sGameObjectsStore };
@@ -134,11 +163,11 @@ void WorldSession::SendCacheInfo()
 
     CacheDomain const domains[] =               // recordings send WQST before WGOB
     {
-        { "WQST", std::span(questStores),      "QuestTemplateCount",      sObjectMgr->GetQuestTemplates().size()      },
-        { "WGOB", std::span(gameObjectStores), "GameObjectTemplateCount", sObjectMgr->GetGameObjectTemplates().size() },
-        { "WNPC", {},                          "CreatureTemplateCount",   sObjectMgr->GetCreatureTemplates().size()   },
-        { "WPTX", {},                          "PageTextCount",           sObjectMgr->GetPageTexts().size()           },
-        { "WPTN", {},                          {},                        0                                          }
+        { "WQST", std::span(questStores),      "QuestObjectiveRecordCount", sObjectMgr->GetQuestObjectiveCount() },
+        { "WGOB", std::span(gameObjectStores), {},                          0                                    },
+        { "WNPC", {},                          {},                          0                                    },
+        { "WPTX", {},                          {},                          0                                    },
+        { "WPTN", {},                          {},                          0                                    }
     };
 
     for (CacheDomain const& domain : domains)
@@ -160,15 +189,16 @@ void WorldSession::SendCacheInfo()
             cacheInfo.Entries.push_back({ Trinity::StringFormat("{}HotfixCount", tableName), std::to_string(hotfixCount) });
         }
 
-        if (!domain.WorldTableKey.empty())
-            cacheInfo.Entries.push_back({ std::string(domain.WorldTableKey), std::to_string(domain.WorldTableRows) });
+        if (!domain.CoreKey.empty())
+            cacheInfo.Entries.push_back({ std::string(domain.CoreKey), std::to_string(domain.CoreCount) });
 
         for (CacheInfoStamp const& stamp : sObjectMgr->GetCacheInfoStamps())
             if (stamp.Prefix == domain.Prefix)
                 cacheInfo.Entries.push_back({ stamp.Key, stamp.Value });
 
-        // An empty packet is a no-op for the client, so it is not worth sending. WPTN reaches this
-        // point empty unless the realm put a row into `cache_info` for it.
+        // An empty packet is a no-op for the client, so it is not worth sending. WNPC, WPTX and WPTN
+        // reach this point empty unless the realm put a row into `cache_info` for them, which is
+        // what keeps the default output identical to the two packets retail sends.
         if (cacheInfo.Entries.empty())
             continue;
 

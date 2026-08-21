@@ -526,6 +526,9 @@ namespace WorldPackets
         // have (DataCache<JamCliNeighborhoodName>::Get miss, query callback RVA 0x34F540). The
         // request is guarded by an "in flight" bit, so a server that never answers leaves the entry
         // stuck forever and the client never asks again.
+        // Reference bytes: 12.1.0.69273_preyandwqpart1.pkt carries one, opcode 0x4300B7, 7 bytes -
+        // the packed guid and nothing else. Round-tripped byte for byte by
+        // C:\dumps\tools\w0_query_hotfix\round_trip.py.
         class QueryNeighborhoodInfo final : public ClientPacket
         {
         public:
@@ -541,6 +544,17 @@ namespace WorldPackets
         // (HousingNeighborhoodUIDocumentation.lua:324-334). Reader RVA 0x72E972: HasName and the
         // 8 bit name length sit in two separate bytes, not in one bit group. The consumer
         // (RVA 0x34F580) copies at most 128 bytes of the name.
+        // The layout is not only decompiled but measured. 12.1.0.69273_preyandwqpart1.pkt carries a
+        // retail answer, opcode 0x490012, 17 bytes:
+        //
+        //   03 d0 e1 67 01 80 dc | 80 | 08 | "62-74-76"
+        //   \_____ packed guid _/   ^     ^    \_ 8 name bytes
+        //                       HasName  full 8 bit length
+        //
+        // Write() below reproduces those 17 bytes exactly (round_trip.py, 1 of 1). That also settles
+        // the one question the decompilate left open - whether the length really is 8 bits and not a
+        // 6 bit SizedString like the rest of this file: read as bits<6> the length byte 0x08 would
+        // announce 2 characters and leave 6 bytes unconsumed, so the packet only closes with 8.
         class QueryNeighborhoodNameResponse final : public ServerPacket
         {
         public:
