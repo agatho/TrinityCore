@@ -156,23 +156,16 @@ public:
         if (player->GetMapId() != MAP_ARATHI_RPE)
             return;
 
-        // Play once, on the FIRST entry only - retail fires it before the first quest (the capture
-        // recorded an empty quest log at cinematic time). Once the player has accepted the opening
-        // quest 90882 it never replays, so a mid-run re-entry (or a returning player who already
-        // finished, gated redundantly by the finale reward) does not see it again. This quest-status
-        // gate is the intended mechanism - there is no server IsPlayerInRPE flag to key off (Phase K
-        // resolved it as client-local; see SendPlayerHomeFromRpe above).
-        if (player->GetQuestStatus(QUEST_GNOLL_WAY) != QUEST_STATUS_NONE)
-            return;
-
+        // Fire on entry to the RPE map until the experience is finished. Retail plays it once, on the
+        // very first entry, but gating on "90882 not yet accepted" made it impossible to re-see while
+        // testing (a character that already took the first quest never replays it). Gate only on the
+        // finale being rewarded, so it plays each time you enter map 2927 until you complete the
+        // experience, then stops. (QUEST_GNOLL_WAY is left in the enum; the once-per-first-entry
+        // behaviour can be restored later once testing is done.)
         if (player->GetQuestRewardStatus(QUEST_ARATHI_RPE_FINALE))
             return;
 
-        // CINEMATIC_ARATHI_RPE_INTRO is 0 until the exact CinematicSequences id is pinned on the
-        // realm (see the enum note); guard on it so nothing fires - and no WRONG cinematic ever
-        // fires - until it is confirmed.
-        if (CINEMATIC_ARATHI_RPE_INTRO)
-            player->SendCinematicStart(CINEMATIC_ARATHI_RPE_INTRO);
+        player->SendCinematicStart(CINEMATIC_ARATHI_RPE_INTRO);
     }
 };
 
