@@ -1693,6 +1693,7 @@ class TC_GAME_API WorldSession
 
         //Battleground
         void HandleBattlemasterHelloOpcode(WorldPackets::NPC::Hello& hello);
+        bool CheckBattlegroundInfoThrottle();
         void HandleBattlemasterJoinOpcode(WorldPackets::Battleground::BattlemasterJoin& battlemasterJoin);
         void HandlePVPLogDataOpcode(WorldPackets::Battleground::PVPLogDataRequest& pvpLogDataRequest);
         void HandleBattleFieldPortOpcode(WorldPackets::Battleground::BattlefieldPort& battlefieldPort);
@@ -2063,6 +2064,11 @@ class TC_GAME_API WorldSession
 
         // Packets cooldown
         time_t _calendarEventCreationCooldown;
+
+        // Battlemaster gossip rate limit, see CheckBattlegroundInfoThrottle. Session local and volatile on
+        // purpose: nothing behind SMSG_BATTLEGROUND_INFO_THROTTLED outlives the connection.
+        TimePoint _battlegroundInfoThrottlePeriodEnd = TimePoint::min();
+        uint32 _battlegroundInfoRequestsRemaining = 0;
 
         std::unique_ptr<BattlePets::BattlePetMgr> _battlePetMgr;
 

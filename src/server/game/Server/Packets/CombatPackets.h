@@ -81,6 +81,26 @@ namespace WorldPackets
             bool NowDead = false;
         };
 
+        // A swing the server threw away before it could land. Despite the "event failed" name this is not a
+        // log message: hook slot 0x462E0D8 holds the same consumer as SMSG_ATTACK_STOP (slot 0x462E0D0), the
+        // 9-byte thunk 0x1F79D90 -> 0x1F79C90 (both slots written at 0x210AD2 and 0x210B26), so the client ends
+        // the attack exactly as it would on an attack stop - auto attack off, target marker and swing timer
+        // cleared - and fires PLAYER_LEAVE_COMBAT, though only when the resolved unit is the local player.
+        // Only the first guid is resolved; the second is read and dropped, and the whole handler no-ops if the
+        // first does not resolve. Wire (dispatcher case 4915225): two calls to ReadPackedGuid 0x36012B0 and
+        // nothing else - notably NOT the trailing NowDead bit that SMSG_ATTACK_STOP carries, so the two are not
+        // wire-identical despite sharing a consumer. Byte-exact against five 24-byte 12.1 packets.
+        class CombatEventFailed final : public ServerPacket
+        {
+        public:
+            explicit CombatEventFailed() : ServerPacket(SMSG_COMBAT_EVENT_FAILED, 16 + 16) { }
+
+            WorldPacket const* Write() override;
+
+            ObjectGuid Attacker;
+            ObjectGuid Victim;
+        };
+
         struct ThreatInfo
         {
             ObjectGuid UnitGUID;
@@ -188,6 +208,28 @@ namespace WorldPackets
             WorldPacket const* Write() override;
 
             ObjectGuid Guid;
+        };
+
+        // Restarts the client side ranged swing cooldown. The payload is a raw-pointer opcode (dispatcher case
+        // 4915235 only takes a pointer to the unread rest via 0x35AF730); the format lives in the consumer
+        // 0x1D8A150, which dereferences **(_DWORD **)(a1 + 32) - exactly one uint32 at the buffer start.
+        // The value is a DURATION IN MILLISECONDS, not a spell or item id. Two independent proofs: 0x1D8A150
+        // walks the action bar and builds the same cooldown record as the regular cooldown handler 0x1D89890,
+        // where +32 is the duration and +28/+52 the start time (which the client sets to "now" here); and the
+        // value flows into 0x1D824C0, which does imul rcx, rbx, 0xF4240 - milliseconds to nanoseconds - before
+        // arming a timer. Zero is meaningful: test r15d,r15d at 0x1D8A275 skips both the record and the timer
+        // while still firing the UI refresh, so 0 means "apply no cooldown, redraw". All five 12.1 packets in
+        // the captures are 4 bytes of zero.
+        // UNVERIFIED: whether 0 also REMOVES an already running cooldown. 0x1DD64C0 is a pool append with no
+        // erase path on this code path, so the stronger reading is not supported by the disassembly.
+        class ResetRangedCombatTimer final : public ServerPacket
+        {
+        public:
+            explicit ResetRangedCombatTimer() : ServerPacket(SMSG_RESET_RANGED_COMBAT_TIMER, 4) { }
+
+            WorldPacket const* Write() override;
+
+            uint32 Cooldown = 0;
         };
 
         class HealthUpdate final : public ServerPacket

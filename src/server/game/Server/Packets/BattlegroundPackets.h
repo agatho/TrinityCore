@@ -485,6 +485,24 @@ namespace WorldPackets
             bool AcceptedInvite = false;
         };
 
+        // Refusal of a CMSG_BATTLEFIELD_PORT. We send zero bytes. Note the client does not require that: like
+        // every raw-pointer opcode (dispatcher case 4915211 calls 0x35AF730, which hands over the whole unread
+        // rest as an opaque blob) it would swallow any length silently - this consumer simply never reads it.
+        // The consumer 0x21C23E0 is 33 bytes: a null check on a global singleton getter (0x1DF32B0, 3287 call
+        // sites - not a gate specific to this message), then a tail call to ShowSystemMessage(0xAB) at
+        // 0x209AD90. String id 0xAB is entry 171 of the client error table at 0x43D55C0 (stride 24, +0 the ERR_
+        // key, +8 the display type): ERR_PLAYER_DEAD, type 2. Type 2 fires the Lua event UI_ERROR_MESSAGE, so
+        // this shows as red text in UIErrorsFrame; type 0 is the one that goes to the chat frame.
+        // The TrinityCore name is historical - the client carries no "port denied" text, and no SMSG_/CMSG_
+        // strings at all.
+        class BattlefieldPortDenied final : public ServerPacket
+        {
+        public:
+            explicit BattlefieldPortDenied() : ServerPacket(SMSG_BATTLEFIELD_PORT_DENIED, 0) { }
+
+            WorldPacket const* Write() override { return &_worldPacket; }
+        };
+
         class BattlefieldListRequest final : public ClientPacket
         {
         public:
@@ -493,6 +511,22 @@ namespace WorldPackets
             void Read() override;
 
             int32 ListID = 0;
+        };
+
+        // Rate-limit refusal for CMSG_BATTLEMASTER_HELLO, sent instead of a SMSG_BATTLEFIELD_LIST. Zero bytes,
+        // same raw-pointer shape as BattlefieldPortDenied (dispatcher case 4915212). The consumer 0x1E20180 is a
+        // 10-byte tail call - mov ecx, 2F8h ; jmp 0x209AD90 - with no guard and no condition. 0x2F8 is entry 760
+        // of the error table at 0x43D55C0: ERR_BATTLEGROUND_INFO_THROTTLED, display type 0, which is the chat
+        // frame path - not UIErrorsFrame, that is type 2. The tag matches the opcode name exactly, which is
+        // what pins the whole table indexing.
+        // Its client registrar (0x1E2F5D0) sits in the NPC interaction code rather than in the PvP queue
+        // registrar block (0x21BCF40) - the throttle belongs to talking to a battlemaster, not to the queue.
+        class BattlegroundInfoThrottled final : public ServerPacket
+        {
+        public:
+            explicit BattlegroundInfoThrottled() : ServerPacket(SMSG_BATTLEGROUND_INFO_THROTTLED, 0) { }
+
+            WorldPacket const* Write() override { return &_worldPacket; }
         };
 
         class BattlefieldList final : public ServerPacket
@@ -928,6 +962,23 @@ namespace WorldPackets
             BattlegroundCapturePointState State = BattlegroundCapturePointState::Neutral;
             Timestamp<> CaptureTime;
             Duration<Milliseconds, uint32> CaptureTotalDuration;
+        };
+
+        // The full set of capture points, sent once when a player enters the battleground; SMSG_UPDATE_CAPTURE_POINT
+        // carries the per-point deltas afterwards. Both paths stay live - the list consumer 0x21C2520 and the
+        // single consumer 0x21C25C0 write into the same array (qword_7FF7877DAE18) and both add the client's
+        // millisecond tick onto CaptureTime, so the init does not suppress later updates.
+        // Wire: uint32 count then count elements, list reader 0x732C20 stepping 48 bytes into element reader
+        // 0x731F80. There are no other scalars in the message. Note that the 48 bytes are the CLIENT struct
+        // size; on the wire Guid is a packed guid, so elements are variable length.
+        class MapObjectivesInit final : public ServerPacket
+        {
+        public:
+            explicit MapObjectivesInit() : ServerPacket(SMSG_MAP_OBJECTIVES_INIT, 4) { }
+
+            WorldPacket const* Write() override;
+
+            std::vector<BattlegroundCapturePointInfo> CapturePoints;
         };
 
         class UpdateCapturePoint final : public ServerPacket

@@ -450,6 +450,13 @@ class TC_GAME_API Battleground
         uint8 GetUniqueBracketId() const;
 
         void AddPlayerPosition(WorldPackets::Battleground::BattlegroundPlayerPosition const& position);
+
+        // Capture point bookkeeping. Kept on the battleground rather than in the scripts because the initial
+        // snapshot has to go out from AddPlayer, which runs before any script sees the joining player - and
+        // because a battleground whose script forgets to collect them still owes the client the snapshot.
+        // Maintained by GameObject::AddToWorld/RemoveFromWorld for GAMEOBJECT_TYPE_CAPTURE_POINT.
+        void AddCapturePoint(ObjectGuid guid);
+        void RemoveCapturePoint(ObjectGuid guid);
         void RemovePlayerPosition(ObjectGuid guid);
 
         BattlegroundPlayer const* GetBattlegroundPlayerData(ObjectGuid const& playerGuid) const
@@ -542,6 +549,7 @@ class TC_GAME_API Battleground
     private:
         void SetTeamScore(TeamId teamId, int32 score);
         void SendMatchScoreState(Player* player) const;
+        void SendMapObjectivesInit(Player* player) const;
 
         // Battleground
         uint32 m_InstanceID;                                // Battleground Instance's GUID!
@@ -588,6 +596,8 @@ class TC_GAME_API Battleground
         std::unordered_set<uint32> const* _pvpStatIds;
 
         std::vector<WorldPackets::Battleground::BattlegroundPlayerPosition> _playerPositions;
+
+        std::vector<ObjectGuid> _capturePoints;             // in spawn order, which is the order they are sent in
 
         // Time when the first message "the battle will begin in 2minutes" is send (or 1m for arenas)
         time_t _preparationStartTime;

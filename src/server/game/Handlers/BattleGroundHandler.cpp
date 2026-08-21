@@ -41,6 +41,38 @@
 #include "SpellInfo.h"
 #include "World.h"
 
+// Sliding window plus burst, wrap safe over GameTime::GetGameTimeMS(), modelled on AuctionHouseMgr::CheckThrottle:
+// the check itself answers the client rather than letting the caller return in silence. Returns false when the
+// request must be refused. The client's own registrar for SMSG_BATTLEGROUND_INFO_THROTTLED sits in its NPC
+// interaction code (0x1E2F5D0), not in the PvP queue registrar block, which is what places the throttle here
+// on battlemaster gossip rather than on the queue.
+// UNVERIFIED: the window and burst are ours. No capture of any build contains this message, so retail's own
+// limits are unknown; the defaults are picked to stay silent during normal play.
+bool WorldSession::CheckBattlegroundInfoThrottle()
+{
+    uint32 period = sWorld->getIntConfig(CONFIG_BATTLEGROUND_INFO_THROTTLE_PERIOD);
+    if (!period)
+        return true;
+
+    // A window is opened by the first request and by the first request after the previous one expired. The
+    // initial TimePoint::min() makes the very first call take that branch, so the budget starts full.
+    TimePoint now = GameTime::Now();
+    if (now > _battlegroundInfoThrottlePeriodEnd)
+    {
+        _battlegroundInfoThrottlePeriodEnd = now + Milliseconds(period);
+        _battlegroundInfoRequestsRemaining = sWorld->getIntConfig(CONFIG_BATTLEGROUND_INFO_THROTTLE_BURST);
+    }
+
+    if (!_battlegroundInfoRequestsRemaining)
+    {
+        SendPacket(WorldPackets::Battleground::BattlegroundInfoThrottled().Write());
+        return false;
+    }
+
+    --_battlegroundInfoRequestsRemaining;
+    return true;
+}
+
 void WorldSession::HandleBattlemasterHelloOpcode(WorldPackets::NPC::Hello& hello)
 {
     Creature* unit = GetPlayer()->GetNPCIfCanInteractWith(hello.Unit, UNIT_NPC_FLAG_BATTLEMASTER, UNIT_NPC_FLAG_2_NONE);
@@ -60,6 +92,11 @@ void WorldSession::HandleBattlemasterHelloOpcode(WorldPackets::NPC::Hello& hello
         SendNotification(LANG_YOUR_BG_LEVEL_REQ_ERROR);
         return;
     }
+
+    // Last gate before the list is rebuilt: on refusal the client gets the red ERR_BATTLEGROUND_INFO_THROTTLED
+    // text instead of a silently missing window.
+    if (!CheckBattlegroundInfoThrottle())
+        return;
 
     sBattlegroundMgr->SendBattlegroundList(_player, hello.Unit, bgTypeId);
 }
@@ -925,6 +962,21 @@ void WorldSession::HandleBattleFieldPortOpcode(WorldPackets::Battleground::Battl
 
     if (battlefieldPort.AcceptedInvite)
     {
+        // UNVERIFIED: the trigger, not the message. What SMSG_BATTLEFIELD_PORT_DENIED makes the client show is
+        // settled - consumer 0x21C23E0 tail-calls ShowSystemMessage(0xAB), entry 171 of the client error table
+        // at 0x43D55C0, which is ERR_PLAYER_DEAD, "you can't do that while you're dead". What is NOT settled is
+        // when retail raises it: there was no liveness check on this path before, no capture contains the
+        // message, and the name is TrinityCore's own - the client has no "port denied" string anywhere. So the
+        // gate below is read off the text the client displays and needs a recording of a dead character
+        // attempting a port to confirm.
+        // The seven other silent returns in this handler stay silent on purpose: answering them with this
+        // message would put a reason on screen that does not match what actually happened.
+        if (!_player->IsAlive())
+        {
+            SendPacket(WorldPackets::Battleground::BattlefieldPortDenied().Write());
+            return;
+        }
+
         // check Freeze debuff
         if (_player->HasAura(9454))
             return;

@@ -704,6 +704,8 @@ void World::LoadConfigSettings(bool reload)
         { .Name = "Auction.ReplicateItemsCooldown"sv, .DefaultValue = 900, .Index = CONFIG_AUCTION_REPLICATE_DELAY },
         { .Name = "Auction.SearchDelay"sv, .DefaultValue = 300, .Index = CONFIG_AUCTION_SEARCH_DELAY, .Min = 100, .Max = 10000 },
         { .Name = "Auction.TaintedSearchDelay"sv, .DefaultValue = 3000, .Index = CONFIG_AUCTION_TAINTED_SEARCH_DELAY, .Min = 100, .Max = 10000 },
+        { .Name = "Battleground.InfoThrottle.Period"sv, .DefaultValue = 5000, .Index = CONFIG_BATTLEGROUND_INFO_THROTTLE_PERIOD, .Min = 0, .Max = 60000 },
+        { .Name = "Battleground.InfoThrottle.Burst"sv, .DefaultValue = 5, .Index = CONFIG_BATTLEGROUND_INFO_THROTTLE_BURST, .Min = 1, .Max = 100 },
         { .Name = "ChatLevelReq.Channel"sv, .DefaultValue = 1, .Index = CONFIG_CHAT_CHANNEL_LEVEL_REQ },
         { .Name = "ChatLevelReq.Whisper"sv, .DefaultValue = 1, .Index = CONFIG_CHAT_WHISPER_LEVEL_REQ },
         { .Name = "ChatLevelReq.Emote"sv, .DefaultValue = 1, .Index = CONFIG_CHAT_EMOTE_LEVEL_REQ },

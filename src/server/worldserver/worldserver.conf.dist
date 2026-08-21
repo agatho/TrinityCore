@@ -546,6 +546,26 @@ Auction.ReplicateItemsCooldown = 900
 Auction.SearchDelay = 300
 
 #
+#    Battleground.InfoThrottle.Period
+#        Description: Length in milliseconds of the window used to rate limit battlemaster gossip
+#                     (CMSG_BATTLEMASTER_HELLO). Once a player has asked Battleground.InfoThrottle.Burst
+#                     times inside one window, further requests are answered with
+#                     SMSG_BATTLEGROUND_INFO_THROTTLED - the client shows the red
+#                     ERR_BATTLEGROUND_INFO_THROTTLED text - instead of rebuilding the battleground list.
+#                     Set to 0 to disable the throttle entirely.
+#                     Retail's own window is not known: no capture contains this message, so the defaults
+#                     below are chosen to be quiet for normal play, not measured from Blizzard.
+#        Default:     5000 - (5 second window)
+#
+#    Battleground.InfoThrottle.Burst
+#        Description: How many battlemaster gossip requests a player may make inside one
+#                     Battleground.InfoThrottle.Period before being throttled.
+#        Default:     5
+
+Battleground.InfoThrottle.Period = 5000
+Battleground.InfoThrottle.Burst = 5
+
+#
 #    Auction.TaintedSearchDelay
 #        Description: Sets the minimum time in milliseconds (seconds x 1000), that the client must wait between
 #                     auction search operations if auction house addon tainted lua environment. This can be increased

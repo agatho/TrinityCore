@@ -2267,23 +2267,41 @@ static uint32 CalcMeleeAttackRageGain(Unit const* attacker, WeaponAttackType att
 
 void Unit::AttackerStateUpdate(Unit* victim, WeaponAttackType attType, bool extra)
 {
+    // The six guards below discard a swing that had already passed range and facing in DoMeleeAttackIfReady,
+    // and up to now they returned in silence. SMSG_COMBAT_EVENT_FAILED is the client's channel for exactly
+    // that: its consumer is the same thunk SMSG_ATTACK_STOP uses (0x1F79D90 -> 0x1F79C90), so it stops the
+    // auto attack and fires PLAYER_LEAVE_COMBAT rather than printing a hint. It therefore must not be sent
+    // per swing - SetCombatEventFailed is edge triggered, like SetAttackSwingError next to it. This does not
+    // collide with SMSG_ATTACK_SWING_ERROR: that channel only ever carries NotInRange and BadFacing, the two
+    // "keep swinging" cases, and is raised by the caller before we get here.
+    auto discardSwing = [&]
+    {
+        if (Player* attackerPlayer = ToPlayer())
+            attackerPlayer->SetCombatEventFailed(victim);
+    };
+
     if (HasUnitFlag(UNIT_FLAG_PACIFIED))
-        return;
+        return discardSwing();
 
     if (HasUnitState(UNIT_STATE_CANNOT_AUTOATTACK) && !extra)
-        return;
+        return discardSwing();
 
     if (HasAuraType(SPELL_AURA_DISABLE_ATTACKING_EXCEPT_ABILITIES))
-        return;
+        return discardSwing();
 
     if (HasAuraType(SPELL_AURA_DISABLE_AUTOATTACK))
-        return;
+        return discardSwing();
 
     if (!victim->IsAlive())
-        return;
+        return discardSwing();
 
     if ((attType == BASE_ATTACK || attType == OFF_ATTACK) && !IsWithinLOSInMap(victim))
-        return;
+        return discardSwing();
+
+    // The swing goes through, so the next failure against this victim is a fresh edge again. The ranged
+    // early-out further down is deliberately not reported: it is ordinary control flow, not a refusal.
+    if (Player* attackerPlayer = ToPlayer())
+        attackerPlayer->SetCombatEventFailed(nullptr);
 
     AtTargetAttacked(victim, true);
     RemoveAurasWithInterruptFlags(SpellAuraInterruptFlags::Attacking);

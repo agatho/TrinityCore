@@ -620,6 +620,15 @@ ByteBuffer& operator<<(ByteBuffer& data, BattlegroundCapturePointInfo const& bat
     return data;
 }
 
+WorldPacket const* MapObjectivesInit::Write()
+{
+    _worldPacket << uint32(CapturePoints.size());
+    for (BattlegroundCapturePointInfo const& capturePoint : CapturePoints)
+        _worldPacket << capturePoint;
+
+    return &_worldPacket;
+}
+
 WorldPacket const* UpdateCapturePoint::Write()
 {
     _worldPacket << CapturePointInfo;

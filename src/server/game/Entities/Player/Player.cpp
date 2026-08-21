@@ -11669,6 +11669,25 @@ Item* Player::EquipItem(uint16 pos, Item* pItem, bool update)
             default:
                 break;
         }
+
+        // Swapping a weapon restarts the swing, so the client's ranged swing cooldown has to be dropped.
+        // UNVERIFIED: the trigger is read off the wire, not off the client. All five 12.1 occurrences of
+        // SMSG_RESET_RANGED_COMBAT_TIMER in C:\sniff follow a CMSG_AUTO_EQUIP_ITEM within 25 records, and
+        // only 5 of the 36 captured equips produce one - which fits "the item was a weapon", since the
+        // captures are mostly full armour sets. What the captures cannot show is whether retail narrows this
+        // further to ranged weapons only; the equip payload names the source bag slot, not the item. Settling
+        // it needs a recording of a hunter and a melee character each swapping weapons. Note that the brief's
+        // proposed site - Spell::SendSpellCooldown gated on IsAutoRepeat - is refuted by the same data: there
+        // is no auto-repeat shot anywhere near any of the five packets.
+        if (Player::GetAttackBySlot(slot, pItem->GetTemplate()->GetInventoryType()) != MAX_ATTACK)
+        {
+            // Zero is the value in all five captured packets and is meaningful: the consumer 0x1D8A150 stores
+            // it as the duration of the cooldown record it builds, so 0 clears the cooldown rather than setting
+            // one. Structurally identical to the duration field of the regular cooldown handler 0x1D89890.
+            WorldPackets::Combat::ResetRangedCombatTimer resetRangedCombatTimer;
+            resetRangedCombatTimer.Cooldown = 0;
+            SendDirectMessage(resetRangedCombatTimer.Write());
+        }
     }
     else
     {
@@ -21878,6 +21897,24 @@ void Player::SetAttackSwingError(Optional<AttackSwingErr> err)
         SendDirectMessage(WorldPackets::Combat::AttackSwingError(*err).Write());
 
     m_swingErrorMsg = err;
+}
+
+// Edge triggered twin of SetAttackSwingError for the other refusal channel. Pass nullptr once a swing lands
+// so the next discarded one against the same victim is reported again. Only the transition is sent: the
+// client treats SMSG_COMBAT_EVENT_FAILED as an attack stop, so repeating it every swing would flap the
+// player's auto attack and PLAYER_LEAVE_COMBAT for as long as the blocking aura lasts.
+void Player::SetCombatEventFailed(Unit const* victim)
+{
+    ObjectGuid victimGuid = victim ? victim->GetGUID() : ObjectGuid::Empty;
+    if (!victimGuid.IsEmpty() && victimGuid != m_combatEventFailedVictim)
+    {
+        WorldPackets::Combat::CombatEventFailed combatEventFailed;
+        combatEventFailed.Attacker = GetGUID();
+        combatEventFailed.Victim = victimGuid;
+        SendDirectMessage(combatEventFailed.Write());
+    }
+
+    m_combatEventFailedVictim = victimGuid;
 }
 
 void Player::SendAutoRepeatCancel(Unit* target)

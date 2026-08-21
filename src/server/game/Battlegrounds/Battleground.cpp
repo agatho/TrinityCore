@@ -27,6 +27,7 @@
 #include "DB2Stores.h"
 #include "Formulas.h"
 #include "GameEventSender.h"
+#include "GameObject.h"
 #include "GameTime.h"
 #include "GridNotifiersImpl.h"
 #include "Group.h"
@@ -1089,6 +1090,9 @@ void Battleground::AddPlayer(Player* player, BattlegroundQueueTypeId queueId)
     player->SendDirectMessage(pvpMatchInitialize.Write());
 
     SendMatchScoreState(player);
+    // Deliberately outside SendMatchScoreState: that one returns early when the battleground has no resource
+    // cap (_maxTeamScore == 0), and capture point battlegrounds are not necessarily capped.
+    SendMapObjectivesInit(player);
 
     player->RemoveAurasByType(SPELL_AURA_MOUNTED);
 
@@ -1588,6 +1592,53 @@ void Battleground::SendMatchScoreState(Player* player) const
         battlegroundPoints.Team = teamId == TEAM_ALLIANCE;
         player->SendDirectMessage(battlegroundPoints.Write());
     }
+}
+
+void Battleground::AddCapturePoint(ObjectGuid guid)
+{
+    if (std::ranges::find(_capturePoints, guid) == _capturePoints.end())
+        _capturePoints.push_back(guid);
+}
+
+void Battleground::RemoveCapturePoint(ObjectGuid guid)
+{
+    std::erase(_capturePoints, guid);
+}
+
+// The whole set of capture points in one message, sent when a player enters. Without it a player joining a
+// match in progress sees nothing for any point that has not changed state since - SMSG_UPDATE_CAPTURE_POINT
+// only ever carries deltas. Both paths stay live afterwards: the client feeds the list consumer (0x21C2520)
+// and the single-point consumer (0x21C25C0) into the same array and re-bases CaptureTime on its own clock in
+// both, so the snapshot does not suppress later updates.
+void Battleground::SendMapObjectivesInit(Player* player) const
+{
+    if (_capturePoints.empty())
+        return;
+
+    WorldPackets::Battleground::MapObjectivesInit mapObjectivesInit;
+    mapObjectivesInit.CapturePoints.reserve(_capturePoints.size());
+
+    for (ObjectGuid const& guid : _capturePoints)
+    {
+        GameObject const* capturePoint = GetBgMap()->GetGameObject(guid);
+        if (!capturePoint)
+            continue;
+
+        WorldPackets::Battleground::BattlegroundCapturePointInfo& info = mapObjectivesInit.CapturePoints.emplace_back();
+        info.Guid = capturePoint->GetGUID();
+        info.Pos = capturePoint->GetPosition();
+        info.State = capturePoint->GetGOValue()->CapturePoint.State;
+        // Same two assignments GameObject::UpdateCapturePoint makes for the single-point message: CaptureTime
+        // is the REMAINING assault time in milliseconds, not a timestamp - the client adds its own millisecond
+        // tick onto it. The Timestamp<> type name on the field is misleading but the width and value are right.
+        info.CaptureTotalDuration = Milliseconds(capturePoint->GetGOInfo()->capturePoint.CaptureTime);
+        info.CaptureTime = capturePoint->GetGOValue()->CapturePoint.AssaultTimer;
+    }
+
+    if (mapObjectivesInit.CapturePoints.empty())
+        return;
+
+    player->SendDirectMessage(mapObjectivesInit.Write());
 }
 
 uint32 Battleground::GetTeamScore(TeamId teamId) const
