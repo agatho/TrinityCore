@@ -462,6 +462,7 @@ public:
     void LoadHotfixOptionalData(uint32 localeMask);
     uint32 GetHotfixCount() const;
     HotfixContainer const& GetHotfixData() const;
+    uint32 GetHotfixRecordCount(uint32 tableHash, LocaleConstant locale) const;
     std::vector<uint8> const* GetHotfixBlobData(uint32 tableHash, int32 recordId, LocaleConstant locale) const;
     std::vector<HotfixOptionalData> const* GetHotfixOptionalData(uint32 tableHash, int32 recordId, LocaleConstant locale) const;
 

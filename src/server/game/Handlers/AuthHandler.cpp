@@ -30,8 +30,6 @@
 #include "Timezone.h"
 #include "Util.h"
 #include "World.h"
-#include <algorithm>
-#include <array>
 #include <span>
 
 void WorldSession::SendAuthResponse(uint32 code, bool queued, uint32 queuePos)
@@ -107,13 +105,20 @@ void WorldSession::SendClientCacheVersion(uint32 version)
 // WNPC, WQST, WPTX and WPTN are matched (MatchesPrefix bodies at RVA 0x331100..0x331580), any other
 // prefix writes a CVar and discards nothing. All five are served below.
 //
-// The values are counts of the data behind each domain, which is what makes them useful: they move
-// exactly when the cached data moves. Where this core owns the data in its world database, the
-// count comes from there; where the data is a DB2, it comes from the store plus its hotfix count;
-// and the world table `cache_info` adds realm defined stamps on top, which is the only way to reach
-// a domain the core has no static count for - petitions, which live per character in the characters
-// database. A single hand written row there also lets an administrator force an invalidation after
-// an out of band change such as `.reload page_text`.
+// The values are counts, not checksums over the domain data, and it is worth being precise about
+// what that buys. A count moves when rows are ADDED or REMOVED; editing an existing row leaves it
+// where it is. `<Table>RecordCount` is weaker still: DB2Store::GetNumRows returns _indexTableSize
+// (DB2Store.h), the length of the table indexed by record id - so it only moves when a record above
+// the current highest id appears, and EraseRecord nulls a slot without shrinking it. Its companion
+// `<Table>HotfixCount` is a true count and covers the usual case, because every DB2 change on this
+// core arrives as a hotfix record. The world table counts (quests, gameobjects, creatures, page
+// texts) are true counts as well, and miss only the edit-in-place case.
+//
+// What the counts cannot see, the world table `cache_info` covers: it adds realm defined stamps on
+// top, which is the only way to reach a domain the core has no static count for - petitions, which
+// live per character in the characters database - and the only way to force an invalidation after
+// an edit that moved no count. Bump the Value there and run `.reload cache_info`; every client that
+// logs in afterwards discards the domain.
 void WorldSession::SendCacheInfo()
 {
     struct CacheDomain
@@ -136,27 +141,6 @@ void WorldSession::SendCacheInfo()
         { "WPTN", {},                          {},                        0                                          }
     };
 
-    // Only two table hashes are ever asked for, so the filter goes in front of the counting instead
-    // of behind it - HandleHotfixRequest does the same with the push ids it was given. Without it
-    // every login walks every hotfix record of the realm on the map thread just to throw almost all
-    // of them away.
-    std::array<uint32, 2> const countedTableHashes = { sQuestV2Store.GetTableHash(), sGameObjectsStore.GetTableHash() };
-    std::array<uint32, 2> hotfixCounts = { };
-
-    uint32 localeMask = 1 << GetSessionDbcLocale();
-    for (auto const& [pushId, push] : sDB2Manager.GetHotfixData())
-    {
-        for (DB2Manager::HotfixRecord const& record : push.Records)
-        {
-            if (!(record.AvailableLocalesMask & localeMask))
-                continue;
-
-            auto itr = std::ranges::find(countedTableHashes, record.TableHash);
-            if (itr != countedTableHashes.end())
-                ++hotfixCounts[std::distance(countedTableHashes.begin(), itr)];
-        }
-    }
-
     for (CacheDomain const& domain : domains)
     {
         WorldPackets::ClientConfig::CacheInfo cacheInfo;
@@ -167,9 +151,10 @@ void WorldSession::SendCacheInfo()
             std::string_view tableName = store->GetFileName();
             tableName.remove_suffix(std::string_view(".db2").length());
 
-            auto itr = std::ranges::find(countedTableHashes, store->GetTableHash());
-            uint32 hotfixCount = itr != countedTableHashes.end()
-                ? hotfixCounts[std::distance(countedTableHashes.begin(), itr)] : 0;
+            // Looked up, not counted. DB2Manager keeps this number per table hash and locale while
+            // it fills _hotfixData, precisely so that a login does not have to walk every hotfix
+            // record of the realm on the map thread for the two hashes it actually asks about.
+            uint32 hotfixCount = sDB2Manager.GetHotfixRecordCount(store->GetTableHash(), GetSessionDbcLocale());
 
             cacheInfo.Entries.push_back({ Trinity::StringFormat("{}RecordCount", tableName), std::to_string(store->GetNumRows()) });
             cacheInfo.Entries.push_back({ Trinity::StringFormat("{}HotfixCount", tableName), std::to_string(hotfixCount) });

@@ -50,9 +50,13 @@ ByteBuffer& operator>>(ByteBuffer& data, DB2Manager::HotfixRecord& hotfixRecord)
 // SUBPLAN_W0 claimed this writes four uint32 where the client reads five, and called that a latent
 // bug worth the whole wave. It is not one. ID is HotfixId, which is two uint32 (PushID, UniqueID),
 // so this already writes five, and with the uint32 Size and the bits<3> Status that the callers
-// append, one record is 21 bytes on the wire - exactly what 15 recorded SMSG_HOTFIX_MESSAGE and 19
-// SMSG_HOTFIX_CONNECT packets show. The subplan's check formula "4 + 24*n + 4 + DataSize" used 24
-// because that is sizeof(HotfixRecord) in memory, not its wire size.
+// append, one record is 21 bytes on the wire - exactly what 9 recorded SMSG_HOTFIX_MESSAGE and 15
+// SMSG_HOTFIX_CONNECT packets show, every one of them round tripping byte identically
+// (C:/dumps/tools/w0_query_hotfix/round_trip.py over the 12 unique 12.1 recordings). Those two
+// counts replace the 15 and 19 this comment first carried; the earlier census counted one recording
+// three times and mixed 12.0 packets of the same numeric value into the set.
+// The subplan's check formula "4 + 24*n + 4 + DataSize" was wrong as well: 24 is
+// sizeof(HotfixRecord) in memory, not its wire size.
 ByteBuffer& operator<<(ByteBuffer& data, DB2Manager::HotfixRecord const& hotfixRecord)
 {
     data << hotfixRecord.ID;

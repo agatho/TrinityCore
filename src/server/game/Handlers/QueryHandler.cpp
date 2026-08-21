@@ -363,9 +363,11 @@ void WorldSession::HandleQueryTreasurePicker(WorldPackets::Query::QueryTreasureP
 // No core path calls this yet: TrinityCore only knows the bulk ".reload page_text", not a change to
 // a single record, and this message carries exactly one record. The bulk case is covered elsewhere:
 // SendCacheInfo sends the WPTX domain with a PageTextCount, so a reload that adds or removes a page
-// text already makes the client drop its whole page text cache, and a row in the world table
-// `cache_info` forces the same for a reload that only edits existing rows. What is missing here is
-// therefore only the single record trigger, not the invalidation as such.
+// text already makes the client drop its whole page text cache. A reload that only EDITS existing
+// rows moves no count; for that case the lever is the world table `cache_info` - bump a WPTX row
+// there and run `.reload cache_info` alongside `.reload page_text`, so that the new stamp is what
+// the next login sees. What is missing here is therefore only the single record trigger, not the
+// invalidation as such.
 void WorldSession::SendInvalidatePageText(uint32 pageTextId)
 {
     WorldPackets::Query::InvalidatePageText invalidatePageText;
@@ -375,9 +377,23 @@ void WorldSession::SendInvalidatePageText(uint32 pageTextId)
 }
 
 // Answers the client's neighbourhood name cache. TrinityCore has no neighbourhood storage yet, so
-// the honest answer is "this guid has no name" - which is still a real answer: the client's cache
-// guards the request with an in-flight bit (RVA 0x34FF30), so a query that is never answered leaves
-// the entry blocked forever and NEIGHBORHOOD_NAME_UPDATED never fires again for that guid.
+// the honest answer is "this guid has no name". That is still a real answer, and the HasName=false
+// branch of the consumer was read out to be sure of it (build 69382):
+//
+//   0x34F580, the response consumer, tests the HasName byte first. With it set it fills the cache
+//   entry, ORs the flag word at entry+296 with 5 and walks the CallbackNode list - that is the path
+//   that reaches Lua NEIGHBORHOOD_NAME_UPDATED. With it CLEAR it calls 0x34FAE0 with an empty key
+//   pair instead, and that function does three things: it rewrites the same flag word as
+//   `& ~6 | 4`, which CLEARS the in-flight bit 2 that 0x34FF30 sets before sending the query; it
+//   dispatches every pending callback through 0x34FEC0 with the failure argument set (a4 ^ 1 == 1,
+//   against 0 on the success path); and it finally drops the entry from the cache.
+//
+// So the client is not left blocked: the guard is released, the entry is gone, and the next time
+// something needs the name it queries again. What does NOT happen is the Lua event - the callbacks
+// are told "no data", and NEIGHBORHOOD_NAME_UPDATED carries a non-nilable string, so it cannot fire
+// without one. The cost of answering this way is a repeated query, not a dead cache entry.
+// Not answering at all would be the bad case: 0x34FF30 returns early while bit 2 is set, so an
+// unanswered query blocks that guid until the entry is evicted for other reasons.
 // TODO: return the stored name once a housing neighbourhood system exists.
 void WorldSession::HandleQueryNeighborhoodInfo(WorldPackets::Query::QueryNeighborhoodInfo& queryNeighborhoodInfo)
 {

@@ -90,6 +90,7 @@ public:
             { "areatrigger_template",          rbac::RBAC_PERM_COMMAND_RELOAD_AREATRIGGER_TEMPLATE,             true,  &HandleReloadAreaTriggerTemplateCommand,        "" },
             { "autobroadcast",                 rbac::RBAC_PERM_COMMAND_RELOAD_AUTOBROADCAST,                    true,  &HandleReloadAutobroadcastCommand,              "" },
             { "battleground_template",         rbac::RBAC_PERM_COMMAND_RELOAD_BATTLEGROUND_TEMPLATE,            true,  &HandleReloadBattlegroundTemplate,              "" },
+            { "cache_info",                    rbac::RBAC_PERM_COMMAND_RELOAD_CACHE_INFO,                       true,  &HandleReloadCacheInfoCommand,                  "" },
             { "character_template",            rbac::RBAC_PERM_COMMAND_RELOAD_CHARACTER_TEMPLATE,               true,  &HandleReloadCharacterTemplate,                 "" },
             { "conditions",                    rbac::RBAC_PERM_COMMAND_RELOAD_CONDITIONS,                       true,  &HandleReloadConditions,                        "" },
             { "config",                        rbac::RBAC_PERM_COMMAND_RELOAD_CONFIG,                           true,  &HandleReloadConfigCommand,                     "" },
@@ -877,6 +878,19 @@ public:
         TC_LOG_INFO("misc", "Re-Loading Page Text...");
         sObjectMgr->LoadPageTexts();
         handler->SendGlobalGMSysMessage("DB table `page_text` reloaded.");
+        return true;
+    }
+
+    // The stamps that WorldSession::SendCacheInfo puts into SMSG_CACHE_INFO. Without this command
+    // the table would be read exactly once, in World::SetInitialWorldSettings, and bumping a value
+    // to invalidate a client cache would need a realm restart to reach anybody. Already logged in
+    // sessions are unaffected either way - the packet goes out on login, so the new stamp reaches
+    // every client that logs in after the reload.
+    static bool HandleReloadCacheInfoCommand(ChatHandler* handler, char const* /*args*/)
+    {
+        TC_LOG_INFO("misc", "Re-Loading Cache Info Stamps...");
+        sObjectMgr->LoadCacheInfoStamps();
+        handler->SendGlobalGMSysMessage("DB table `cache_info` reloaded.");
         return true;
     }
 

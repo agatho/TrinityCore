@@ -18,8 +18,13 @@
 -- Rows here are sent in ADDITION to the counts the core derives by itself (DB2 row counts, hotfix
 -- counts, and the world table row counts for creatures, gameobjects, quests and page texts). Use
 -- them where the core has no count of its own - petitions above all - or to force an invalidation
--- after an out of band data change: bump the Value and every client discards that cache on its
--- next login.
+-- after a change the counts cannot see, such as editing an existing row instead of adding one.
+--
+-- To make a changed Value take effect: bump it, then run `.reload cache_info`. The table is read by
+-- ObjectMgr::LoadCacheInfoStamps, which the worldserver calls once at startup and the reload command
+-- calls again; without the reload the realm keeps sending the old stamp until it is restarted.
+-- SMSG_CACHE_INFO goes out on login, so the new stamp reaches every client that logs in after the
+-- reload - already connected sessions keep their cache until their next login either way.
 --
 -- Key and Value are limited to 63 characters each; the wire field is six bits wide.
 --

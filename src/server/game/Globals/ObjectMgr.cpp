@@ -6146,7 +6146,9 @@ void ObjectMgr::LoadPageTexts()
 // Realm defined stamps for SMSG_CACHE_INFO. WorldSession::SendCacheInfo derives a value of its own
 // for every domain whose data this core actually owns; this table covers the rest - petitions above
 // all, which live in the characters database and have no static count - and lets an administrator
-// force an invalidation by bumping a value.
+// force an invalidation by bumping a value. A bumped value only takes effect once this function
+// runs again, which is why `.reload cache_info` exists (cs_reload.cpp): the startup call would
+// otherwise be the only one, and the change would need a realm restart to reach anybody.
 void ObjectMgr::LoadCacheInfoStamps()
 {
     uint32 oldMSTime = getMSTime();

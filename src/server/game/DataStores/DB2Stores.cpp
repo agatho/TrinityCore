@@ -478,9 +478,25 @@ namespace
 
     StorageMap _stores;
     DB2Manager::HotfixContainer _hotfixData;
+    // Kept in step with _hotfixData right where records are pushed into it, because its only
+    // consumer - SMSG_CACHE_INFO - needs the number for a handful of table hashes once per login.
+    // Deriving it on demand would walk every hotfix record of the realm on the map thread for every
+    // logging in player, and the answer only changes when a record is added.
+    std::unordered_map<uint32 /*tableHash*/, std::array<uint32, TOTAL_LOCALES>> _hotfixRecordCountByTableHash;
     std::array<HotfixBlobMap, TOTAL_LOCALES> _hotfixBlob;
     std::unordered_multimap<uint32 /*tableHash*/, AllowedHotfixOptionalData> _allowedHotfixOptionalData;
     std::array<std::map<HotfixBlobKey, std::vector<DB2Manager::HotfixOptionalData>>, TOTAL_LOCALES> _hotfixOptionalData;
+
+    // Called from every place that pushes a record into _hotfixData, so that the counter above can
+    // never drift from it.
+    void CountHotfixRecord(DB2Manager::HotfixRecord const& hotfixRecord)
+    {
+        std::array<uint32, TOTAL_LOCALES>& counts = _hotfixRecordCountByTableHash[hotfixRecord.TableHash];
+        std::bitset<TOTAL_LOCALES> availableLocales = hotfixRecord.AvailableLocalesMask;
+        for (std::size_t locale = 0; locale < TOTAL_LOCALES; ++locale)
+            if (availableLocales[locale])
+                ++counts[locale];
+    }
 
     AreaGroupMemberContainer _areaGroupMembers;
     ArtifactPowersContainer _artifactPowers;
@@ -1787,6 +1803,7 @@ void DB2Manager::LoadHotfixData(uint32 localeMask)
         HotfixPush& push = _hotfixData[id];
         push.Records.push_back(hotfixRecord);
         push.AvailableLocalesMask |= hotfixRecord.AvailableLocalesMask;
+        CountHotfixRecord(hotfixRecord);
 
         _maxHotfixId = std::max(_maxHotfixId, id);
         deletedRecords[std::make_pair(tableHash, recordId)] = status == HotfixRecord::Status::RecordRemoved;
@@ -1940,6 +1957,18 @@ DB2Manager::HotfixContainer const& DB2Manager::GetHotfixData() const
     return _hotfixData;
 }
 
+// Number of hotfix records for one DB2 table that are available in one locale. Maintained while
+// _hotfixData is filled, so this is a lookup and not a walk - see _hotfixRecordCountByTableHash.
+uint32 DB2Manager::GetHotfixRecordCount(uint32 tableHash, LocaleConstant locale) const
+{
+    ASSERT(IsValidLocale(locale), "Locale %u is invalid locale", uint32(locale));
+
+    if (std::array<uint32, TOTAL_LOCALES> const* counts = Trinity::Containers::MapGetValuePtr(_hotfixRecordCountByTableHash, tableHash))
+        return (*counts)[locale];
+
+    return 0;
+}
+
 std::vector<uint8> const* DB2Manager::GetHotfixBlobData(uint32 tableHash, int32 recordId, LocaleConstant locale) const
 {
     ASSERT(IsValidLocale(locale), "Locale %u is invalid locale", uint32(locale));
@@ -1971,6 +2000,7 @@ void DB2Manager::InsertNewHotfix(uint32 tableHash, uint32 recordId)
     HotfixPush& push = _hotfixData[hotfixRecord.ID.PushID];
     push.Records.push_back(hotfixRecord);
     push.AvailableLocalesMask |= hotfixRecord.AvailableLocalesMask;
+    CountHotfixRecord(hotfixRecord);
 }
 
 std::vector<uint32> DB2Manager::GetAreasForGroup(uint32 areaGroupId) const
