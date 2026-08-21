@@ -539,6 +539,10 @@ namespace WorldPackets
         class RequestLatestSplashScreen;
         class QueryCountdownTimer;
         class SetCurrencyFlags;
+        class AbandonNPEResponse;
+        class SubscriptionInterstitialResponse;
+        class RequestScheduledAreaPoiUpdate;
+        class BonusRoll;
     }
 
     namespace Movement
@@ -1829,6 +1833,12 @@ class TC_GAME_API WorldSession
         void HandleKeyboundOverride(WorldPackets::Spells::KeyboundOverride& keyboundOverride);
         void HandleQueryCountdownTimer(WorldPackets::Misc::QueryCountdownTimer& queryCountdownTimer);
         void HandleSetCurrencyFlags(WorldPackets::Misc::SetCurrencyFlags const& setCurrenctFlags);
+
+        // Client family 0x64 - player state and UI remote control (12.1.0.69382)
+        void HandleAbandonNPEResponse(WorldPackets::Misc::AbandonNPEResponse& abandonNpeResponse);
+        void HandleSubscriptionInterstitialResponse(WorldPackets::Misc::SubscriptionInterstitialResponse& subscriptionInterstitialResponse);
+        void HandleRequestScheduledAreaPoiUpdate(WorldPackets::Misc::RequestScheduledAreaPoiUpdate& requestScheduledAreaPoiUpdate);
+        void HandleBonusRoll(WorldPackets::Misc::BonusRoll& bonusRoll);
 
         // Adventure Journal
         void HandleAdventureJournalOpenQuest(WorldPackets::AdventureJournal::AdventureJournalOpenQuest& openQuest);

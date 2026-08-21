@@ -317,7 +317,11 @@ TC_GAME_API extern DB2Storage<TransmogSetGroupEntry>                sTransmogSet
 TC_GAME_API extern DB2Storage<TransmogSetItemEntry>                 sTransmogSetItemStore;
 TC_GAME_API extern DB2Storage<TransportAnimationEntry>              sTransportAnimationStore;
 TC_GAME_API extern DB2Storage<TransportRotationEntry>               sTransportRotationStore;
+TC_GAME_API extern DB2Storage<UIArrowCalloutEntry>                  sUIArrowCalloutStore;
+TC_GAME_API extern DB2Storage<UIEventToastEntry>                    sUIEventToastStore;
+TC_GAME_API extern DB2Storage<UIGenericWidgetDisplayEntry>          sUIGenericWidgetDisplayStore;
 TC_GAME_API extern DB2Storage<UiMapEntry>                           sUiMapStore;
+TC_GAME_API extern DB2Storage<UiPartyPoseEntry>                     sUiPartyPoseStore;
 TC_GAME_API extern DB2Storage<UISplashScreenEntry>                  sUISplashScreenStore;
 TC_GAME_API extern DB2Storage<UnitConditionEntry>                   sUnitConditionStore;
 TC_GAME_API extern DB2Storage<UnitPowerBarEntry>                    sUnitPowerBarStore;
@@ -566,6 +570,7 @@ public:
         uint32* uiMapId = nullptr, DBCPosition2D* newPos = nullptr);
     bool Zone2MapCoordinates(uint32 areaId, float& x, float& y) const;
     void Map2ZoneCoordinates(uint32 areaId, float& x, float& y) const;
+    UiPartyPoseEntry const* GetUiPartyPoseByMap(uint32 mapId) const;
     bool IsUiMapPhase(uint32 phaseId) const;
     static WMOAreaTableEntry const* GetWMOAreaTable(int32 rootId, int32 adtId, int32 groupId, bool allowGroupFallback);
     std::unordered_set<uint32> const* GetPVPStatIDsForMap(uint32 mapId) const;

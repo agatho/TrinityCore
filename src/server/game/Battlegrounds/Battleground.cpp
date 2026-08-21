@@ -776,6 +776,13 @@ void Battleground::EndBattleground(Team winner)
 
         player->SendDirectMessage(pvpMatchComplete.GetRawPacket());
 
+        // SMSG_PLAYER_SHOW_PARTY_POSE_UI (client 12.1 wire 0x64002B) - the post match pose frame.
+        // The pose is selected by map on the server: UiPartyPose carries a MapID relation column for
+        // exactly this and nothing else in DB2 points at UiPartyPose::ID. The Victory bit only switches
+        // the model scene and the sound, the title text is shared between both outcomes.
+        if (UiPartyPoseEntry const* partyPose = sDB2Manager.GetUiPartyPoseByMap(GetMapId()))
+            player->SendPartyPoseUI(partyPose->ID, team == winner);
+
         player->UpdateCriteria(CriteriaType::ParticipateInBattleground, player->GetMapId());
 
         GetBgMap()->GetBattlegroundScript()->OnEnd(winner);

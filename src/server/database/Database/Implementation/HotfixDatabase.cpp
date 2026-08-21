@@ -2066,6 +2066,30 @@ void HotfixDatabaseConnection::DoPrepareStatements()
         " WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
     PREPARE_MAX_ID_STMT(HOTFIX_SEL_TRANSPORT_ROTATION, "SELECT MAX(ID) + 1 FROM transport_rotation", CONNECTION_SYNCH);
 
+    // UIArrowCallout.db2
+    PrepareStatement(HOTFIX_SEL_UI_ARROW_CALLOUT, "SELECT CalloutText, CalloutFrame, ID, Type, Direction, PlayerConditionID, UiWidgetSetID, "
+        "OffsetX, OffsetY FROM ui_arrow_callout WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_UI_ARROW_CALLOUT, "SELECT MAX(ID) + 1 FROM ui_arrow_callout", CONNECTION_SYNCH);
+    PREPARE_LOCALE_STMT(HOTFIX_SEL_UI_ARROW_CALLOUT, "SELECT ID, CalloutText_lang FROM ui_arrow_callout_locale"
+        " WHERE (`VerifiedBuild` > 0) = ? AND locale = ?", CONNECTION_SYNCH);
+
+    // UIEventToast.db2
+    PrepareStatement(HOTFIX_SEL_UI_EVENT_TOAST, "SELECT Title, Subtitle, InstructionText, SubIcon, TitleTooltip, SubtitleTooltip, ID, "
+        "PlayerConditionID, UiTextureAtlasMemberID, UiTextureKitID, EventType, DisplayType, EventAsset, Field_9_1_0_38312_011, IconFileID, "
+        "UiWidgetSetID, ExtraUiWidgetSetID, TitleTooltipUiWidgetSetID, SubtitleTooltipUiWidgetSetID, ShowSoundKitID, HideSoundKitID, "
+        "Field_10_2_5_52554_021 FROM ui_event_toast WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_UI_EVENT_TOAST, "SELECT MAX(ID) + 1 FROM ui_event_toast", CONNECTION_SYNCH);
+    PREPARE_LOCALE_STMT(HOTFIX_SEL_UI_EVENT_TOAST, "SELECT ID, Title_lang, Subtitle_lang, InstructionText_lang, SubIcon_lang, "
+        "TitleTooltip_lang, SubtitleTooltip_lang FROM ui_event_toast_locale WHERE (`VerifiedBuild` > 0) = ? AND locale = ?", CONNECTION_SYNCH);
+
+    // UIGenericWidgetDisplay.db2
+    PrepareStatement(HOTFIX_SEL_UI_GENERIC_WIDGET_DISPLAY, "SELECT Title, ExtraButtonText, CloseButtonText, ID, UiTextureKitID, "
+        "UiWidgetSetID, FrameWidth, FrameHeight, Field_10_1_0_48480_008, PlayerConditionID FROM ui_generic_widget_display"
+        " WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_UI_GENERIC_WIDGET_DISPLAY, "SELECT MAX(ID) + 1 FROM ui_generic_widget_display", CONNECTION_SYNCH);
+    PREPARE_LOCALE_STMT(HOTFIX_SEL_UI_GENERIC_WIDGET_DISPLAY, "SELECT ID, Title_lang, ExtraButtonText_lang, CloseButtonText_lang "
+        "FROM ui_generic_widget_display_locale WHERE (`VerifiedBuild` > 0) = ? AND locale = ?", CONNECTION_SYNCH);
+
     // UiMap.db2
     PrepareStatement(HOTFIX_SEL_UI_MAP, "SELECT Name, ID, ParentUiMapID, Flags, `System`, Type, BountySetID, BountyDisplayLocation, "
         "VisibilityPlayerConditionID, HelpTextPosition, BkgAtlasID, AlternateUiMapGroup, ContentTuningID, AdventureMapTextureKitID, "
@@ -2087,6 +2111,14 @@ void HotfixDatabaseConnection::DoPrepareStatements()
     // UiMapXMapArt.db2
     PrepareStatement(HOTFIX_SEL_UI_MAP_X_MAP_ART, "SELECT ID, PhaseID, UiMapArtID, UiMapID FROM ui_map_x_map_art WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
     PREPARE_MAX_ID_STMT(HOTFIX_SEL_UI_MAP_X_MAP_ART, "SELECT MAX(ID) + 1 FROM ui_map_x_map_art", CONNECTION_SYNCH);
+
+    // UiPartyPose.db2
+    PrepareStatement(HOTFIX_SEL_UI_PARTY_POSE, "SELECT TitleText, ExtraButtonText, ID, UiWidgetSetID, VictoryUiModelSceneID, "
+        "DefeatUiModelSceneID, VictorySoundKitID, DefeatSoundKitID, SpellID, UiTextureKitID, Flags, MapID FROM ui_party_pose"
+        " WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_UI_PARTY_POSE, "SELECT MAX(ID) + 1 FROM ui_party_pose", CONNECTION_SYNCH);
+    PREPARE_LOCALE_STMT(HOTFIX_SEL_UI_PARTY_POSE, "SELECT ID, TitleText_lang, ExtraButtonText_lang FROM ui_party_pose_locale"
+        " WHERE (`VerifiedBuild` > 0) = ? AND locale = ?", CONNECTION_SYNCH);
 
     // UiSplashScreen.db2
     PrepareStatement(HOTFIX_SEL_UI_SPLASH_SCREEN, "SELECT ID, Header, TopLeftFeatureTitle, TopLeftFeatureDesc, BottomLeftFeatureTitle, "

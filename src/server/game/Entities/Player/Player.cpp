@@ -104,6 +104,7 @@
 #include "PetitionMgr.h"
 #include "PhasingHandler.h"
 #include "PlayerChoice.h"
+#include "PlayerChoicePackets.h"
 #include "QueryCallback.h"
 #include "QueryHolder.h"
 #include "QueryResultStructured.h"
@@ -221,6 +222,7 @@ Player::Player(WorldSession* session) : Unit(true), m_sceneMgr(this)
 
     m_createTime = 0;
     m_createMode = PlayerCreateMode::Normal;
+    m_npeAbandonPrompted = false;
     m_cinematic = 0;
 
     m_movie = 0;
@@ -7521,6 +7523,16 @@ void Player::UpdateZone(uint32 newZone, uint32 newArea)
 
     GetMap()->UpdatePlayerZoneStats(oldZone, newZone);
 
+    // New player experience: the client asks the question only after the character has actually left
+    // the tutorial map, which is why this hangs off the zone change and not off a leave trigger.
+    // The start map is taken from playercreateinfo (createPositionNPE), not hardcoded to Exile's Reach.
+    if (m_createMode == PlayerCreateMode::NPE)
+    {
+        PlayerInfo const* info = sObjectMgr->GetPlayerInfo(GetRace(), GetClass());
+        if (info && info->createPositionNPE && info->createPositionNPE->Loc.GetMapId() != GetMapId())
+            SendCheckAbandonNPE();
+    }
+
     // call leave script hooks immedately (before updating flags)
     if (oldZone != newZone)
     {
@@ -9044,7 +9056,8 @@ void Player::RemovedInsignia(Player* looterPlr)
         return;
 
     // If not released spirit, do it !
-    if (m_deathTimer > 0)
+    bool forcedRepop = m_deathTimer > 0;
+    if (forcedRepop)
     {
         m_deathTimer = 0;
         BuildPlayerRepop();
@@ -9058,6 +9071,14 @@ void Player::RemovedInsignia(Player* looterPlr)
     Corpse* bones = GetMap()->ConvertCorpseToBones(GetGUID(), true);
     if (!bones)
         return;
+
+    // This is the situation SMSG_PLAYER_SKINNED describes: the corpse is gone, so the three resurrect
+    // popups are closed client side and DEATH_CORPSE_SKINNED is printed
+    // (GameEvent.HandlePlayerSkinned, EventImplementation.lua:171-176).
+    // UNVERIFIED: the value of the bit. The 12.1 Lua handler ignores hasFreeRepop entirely and no
+    // recording of this opcode exists, so "the server just repopped you for free" is a reading of the
+    // name, not a measurement.
+    SendPlayerSkinned(forcedRepop);
 
     // Now we must make bones lootable, and send player loot
     bones->SetCorpseDynamicFlag(CORPSE_DYNFLAG_LOOTABLE);
@@ -23742,6 +23763,9 @@ bool Player::BuyItemFromVendorSlot(ObjectGuid vendorguid, uint32 vendorslot, uin
     if (!ConditionMgr::IsPlayerMeetingCondition(this, crItem->PlayerConditionId))
     {
         SendEquipError(EQUIP_ERR_ITEM_LOCKED, nullptr, nullptr);
+        // The generic "item is locked" line says nothing about why. SMSG_FAILED_PLAYER_CONDITION lets
+        // the client print PlayerCondition.Failure_description_lang for the condition that blocked.
+        SendFailedPlayerCondition(crItem->PlayerConditionId);
         return false;
     }
 
@@ -30233,6 +30257,173 @@ void Player::SendPlayerChoice(ObjectGuid sender, int32 choiceId)
 bool Player::MeetPlayerCondition(uint32 conditionId) const
 {
     return ConditionMgr::IsPlayerMeetingCondition(this, conditionId);
+}
+
+// SMSG_FAILED_PLAYER_CONDITION (client 12.1 wire 0x640002, 4 bytes).
+// Consumer RVA 0x20970C0 resolves the id in PlayerCondition.db2 and prints Failure_description_lang.
+// Only 7.314 of the 47.959 rows in 69382 carry that text; for the rest the client shows nothing,
+// which is why this is an addition to an existing error path and never a replacement for one.
+void Player::SendFailedPlayerCondition(uint32 conditionId) const
+{
+    if (!conditionId)
+        return;
+
+    SendDirectMessage(WorldPackets::Misc::FailedPlayerCondition(conditionId).Write());
+}
+
+// SMSG_PLAYER_CHOICE_CLEAR (client 0x640006, 5 bytes).
+// matchCurrentChoiceOnly mirrors the flag the subscriber (RVA 0x254BFE0) evaluates: set, the client
+// closes only when ChoiceID is the choice currently on screen; clear, it closes unconditionally.
+void Player::ClearPlayerChoice(bool matchCurrentChoiceOnly /*= true*/)
+{
+    PlayerChoiceData* playerChoiceData = PlayerTalkClass->GetInteractionData().GetPlayerChoice();
+    if (!playerChoiceData)
+        return;
+
+    WorldPackets::PlayerChoice::PlayerChoiceClear playerChoiceClear;
+    playerChoiceClear.ChoiceID = playerChoiceData->GetChoiceId();
+    playerChoiceClear.MatchCurrentChoiceOnly = matchCurrentChoiceOnly;
+    SendDirectMessage(playerChoiceClear.Write());
+
+    PlayerTalkClass->GetInteractionData().Reset();
+}
+
+// SMSG_PLAYER_CHOICE_DISPLAY_ERROR (client 0x640005, empty).
+// The subscriber (RVA 0x254BFB0) is `return sub_7FF78306AD90(1147);` - it never touches the payload
+// and always prints ERR_PLAYER_CHOICE_ERROR_PENDING_CHOICE. There is no error code on the wire.
+void Player::SendPlayerChoiceDisplayError() const
+{
+    SendDirectMessage(WorldPackets::PlayerChoice::PlayerChoiceDisplayError().Write());
+}
+
+// SMSG_PLAYER_SHOW_UI_EVENT_TOAST (client 0x640025, 4 bytes).
+// The id must exist in UIEventToast.db2 AND its EventType must be one of
+// { 12, 13, 16, 17, 18, 19, 20, 22 } - the client (RVA 0x225CFF0) drops everything else silently.
+void Player::SendUiEventToast(int32 uiEventToastId) const
+{
+    SendDirectMessage(WorldPackets::Misc::PlayerShowUiEventToast(uiEventToastId).Write());
+}
+
+// SMSG_PLAYER_SHOW_GENERIC_WIDGET_DISPLAY (client 0x64002A, 4 bytes).
+void Player::SendGenericWidgetDisplay(int32 uiGenericWidgetDisplayId) const
+{
+    SendDirectMessage(WorldPackets::Misc::PlayerShowGenericWidgetDisplay(uiGenericWidgetDisplayId).Write());
+}
+
+// SMSG_PLAYER_SHOW_ARROW_CALLOUT (client 0x64002C, 4 bytes).
+void Player::SendShowArrowCallout(int32 arrowCalloutId) const
+{
+    SendDirectMessage(WorldPackets::Misc::PlayerShowArrowCallout(arrowCalloutId).Write());
+}
+
+// SMSG_PLAYER_HIDE_ARROW_CALLOUT (client 0x64002D, 4 bytes).
+void Player::SendHideArrowCallout(int32 arrowCalloutId) const
+{
+    SendDirectMessage(WorldPackets::Misc::PlayerHideArrowCallout(arrowCalloutId).Write());
+}
+
+// SMSG_PLAYER_ACKNOWLEDGE_ARROW_CALLOUT (client 0x64002E, 4 bytes).
+// Server -> client only: the client sets the acknowledgedArrowCallouts CVar bit itself and never
+// reports back, so the server has to keep that state if it needs to know about it.
+void Player::SendAcknowledgeArrowCallout(int32 arrowCalloutId) const
+{
+    SendDirectMessage(WorldPackets::Misc::PlayerAcknowledgeArrowCallout(arrowCalloutId).Write());
+}
+
+// SMSG_PLAYER_SHOW_PARTY_POSE_UI (client 0x64002B, 5 bytes).
+void Player::SendPartyPoseUI(int32 partyPoseId, bool victory) const
+{
+    WorldPackets::Misc::PlayerShowPartyPoseUI showPartyPoseUI;
+    showPartyPoseUI.PartyPoseID = partyPoseId;
+    showPartyPoseUI.Victory = victory;
+    SendDirectMessage(showPartyPoseUI.Write());
+}
+
+// SMSG_PLAYER_END_OF_MATCH_DETAILS (client 0x640030, 13 bytes).
+// The client hardcodes matchType = Plunderstorm, so a visible frame only appears in the WoW Labs
+// game type; the C side subscriber runs regardless.
+void Player::SendEndOfMatchDetails(int32 placement, int32 kills, int32 plunderAcquired, bool matchEnded) const
+{
+    WorldPackets::Misc::PlayerEndOfMatchDetails endOfMatchDetails;
+    endOfMatchDetails.Placement = placement;
+    endOfMatchDetails.Kills = kills;
+    endOfMatchDetails.PlunderAcquired = plunderAcquired;
+    endOfMatchDetails.MatchEnded = matchEnded;
+    SendDirectMessage(endOfMatchDetails.Write());
+}
+
+// SMSG_PLAYER_TUTORIAL_HIGHLIGHT_SPELL (client 0x640016, 5..132 bytes).
+// globalStringTag is a GlobalString KEY, not display text - Blizzard_BoostTutorial.lua:200 does
+// `_G[textID] or textID`, so an unknown key is shown verbatim instead of being dropped.
+void Player::SendTutorialHighlightSpell(int32 spellId, std::string_view globalStringTag) const
+{
+    WorldPackets::Misc::PlayerTutorialHighlightSpell tutorialHighlightSpell;
+    tutorialHighlightSpell.SpellID = spellId;
+    tutorialHighlightSpell.GlobalStringTag = globalStringTag;
+    SendDirectMessage(tutorialHighlightSpell.Write());
+}
+
+// SMSG_PLAYER_TUTORIAL_UNHIGHLIGHT_SPELL (client 0x640015, empty).
+void Player::SendTutorialUnhighlightSpell() const
+{
+    SendDirectMessage(WorldPackets::Misc::PlayerTutorialUnhighlightSpell().Write());
+}
+
+// SMSG_PLAYER_OPEN_SUBSCRIPTION_INTERSTITIAL (client 0x640017, 1 byte).
+// The Lua frame only loads for IsTrialAccount() / IsVeteranTrialAccount()
+// (EventImplementation.lua:830-832); the C side consumer runs either way.
+void Player::SendSubscriptionInterstitial(WorldPackets::Misc::SubscriptionInterstitialType type) const
+{
+    WorldPackets::Misc::PlayerOpenSubscriptionInterstitial openSubscriptionInterstitial;
+    openSubscriptionInterstitial.Type = type;
+    SendDirectMessage(openSubscriptionInterstitial.Write());
+}
+
+// SMSG_CHALLENGE_MODE_SET_LEAVER_PENALTY_TIMER (client 0x640031, 4 bytes).
+// timer > 0 starts the warning, timer == 0 ends it - one opcode, two Lua events. The dialog is
+// rebuilt on PLAYER_ENTERING_WORLD, so a running timer has to be resent after zone change and relog.
+void Player::SendChallengeModeLeaverPenaltyTimer(Seconds timer) const
+{
+    SendDirectMessage(WorldPackets::Misc::ChallengeModeSetLeaverPenaltyTimer(timer).Write());
+}
+
+// SMSG_PLAYER_SKINNED (client 0x64000F, 1 byte).
+void Player::SendPlayerSkinned(bool freeForAll) const
+{
+    SendDirectMessage(WorldPackets::Misc::PlayerSkinned(freeForAll).Write());
+}
+
+// SMSG_PLAYER_UPLOAD_SCREENSHOT (0x640032) / SMSG_PLAYER_DELAYED_UPLOAD_SCREENSHOT (0x640033).
+// Both are inert in the retail client (no registrar, no Lua surface at all) - their consumer sits in
+// the developer client. The wire format is fully determined, see MiscPackets.h.
+void Player::SendUploadScreenshot(WorldPackets::Misc::UploadScreenshotHeader const& header, Optional<bool> delayed /*= { }*/) const
+{
+    if (delayed)
+    {
+        WorldPackets::Misc::PlayerDelayedUploadScreenshot delayedUploadScreenshot;
+        delayedUploadScreenshot.Delayed = *delayed;
+        delayedUploadScreenshot.Header = header;
+        SendDirectMessage(delayedUploadScreenshot.Write());
+        return;
+    }
+
+    WorldPackets::Misc::PlayerUploadScreenshot uploadScreenshot;
+    uploadScreenshot.Header = header;
+    SendDirectMessage(uploadScreenshot.Write());
+}
+
+// SMSG_CHECK_ABANDON_NPE (client 0x640024, empty).
+// Fires Lua LEAVING_TUTORIAL_AREA -> StaticPopupDialogs["LEAVING_TUTORIAL_AREA"]. The warning text is
+// client side and faction dependent; the two buttons answer with CMSG_ABANDON_NPE_RESPONSE
+// (C_Tutorial.ReturnToTutorialArea writes bit 0, C_Tutorial.AbandonTutorialArea writes bit 1).
+// Asked once per session - the popup is session state, so the guard is too.
+void Player::SendCheckAbandonNPE()
+{
+    if (m_npeAbandonPrompted)
+        return;
+
+    m_npeAbandonPrompted = true;
+    SendDirectMessage(WorldPackets::Misc::CheckAbandonNPE().Write());
 }
 
 std::variant<int64, float> Player::GetDataElementAccount(uint32 dataElementId) const

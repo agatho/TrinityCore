@@ -6771,6 +6771,74 @@ struct TransportRotationLoadInfo
     static constexpr DB2LoadInfo Instance{ Fields, 7, &TransportRotationMeta::Instance, HOTFIX_SEL_TRANSPORT_ROTATION };
 };
 
+struct UIArrowCalloutLoadInfo
+{
+    static constexpr DB2FieldMeta Fields[9] =
+    {
+        { .IsSigned = false, .Type = FT_STRING, .Name = "CalloutText" },
+        { .IsSigned = false, .Type = FT_STRING_NOT_LOCALIZED, .Name = "CalloutFrame" },
+        { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
+        { .IsSigned = false, .Type = FT_BYTE, .Name = "Type" },
+        { .IsSigned = false, .Type = FT_BYTE, .Name = "Direction" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "PlayerConditionID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "UiWidgetSetID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "OffsetX" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "OffsetY" },
+    };
+
+    static constexpr DB2LoadInfo Instance{ Fields, 9, &UIArrowCalloutMeta::Instance, HOTFIX_SEL_UI_ARROW_CALLOUT };
+};
+
+struct UIEventToastLoadInfo
+{
+    static constexpr DB2FieldMeta Fields[22] =
+    {
+        { .IsSigned = false, .Type = FT_STRING, .Name = "Title" },
+        { .IsSigned = false, .Type = FT_STRING, .Name = "Subtitle" },
+        { .IsSigned = false, .Type = FT_STRING, .Name = "InstructionText" },
+        { .IsSigned = false, .Type = FT_STRING, .Name = "SubIcon" },
+        { .IsSigned = false, .Type = FT_STRING, .Name = "TitleTooltip" },
+        { .IsSigned = false, .Type = FT_STRING, .Name = "SubtitleTooltip" },
+        { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "PlayerConditionID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "UiTextureAtlasMemberID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "UiTextureKitID" },
+        { .IsSigned = false, .Type = FT_BYTE, .Name = "EventType" },
+        { .IsSigned = false, .Type = FT_BYTE, .Name = "DisplayType" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "EventAsset" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "Field_9_1_0_38312_011" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "IconFileID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "UiWidgetSetID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "ExtraUiWidgetSetID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "TitleTooltipUiWidgetSetID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "SubtitleTooltipUiWidgetSetID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "ShowSoundKitID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "HideSoundKitID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "Field_10_2_5_52554_021" },
+    };
+
+    static constexpr DB2LoadInfo Instance{ Fields, 22, &UIEventToastMeta::Instance, HOTFIX_SEL_UI_EVENT_TOAST };
+};
+
+struct UIGenericWidgetDisplayLoadInfo
+{
+    static constexpr DB2FieldMeta Fields[10] =
+    {
+        { .IsSigned = false, .Type = FT_STRING, .Name = "Title" },
+        { .IsSigned = false, .Type = FT_STRING, .Name = "ExtraButtonText" },
+        { .IsSigned = false, .Type = FT_STRING, .Name = "CloseButtonText" },
+        { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "UiTextureKitID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "UiWidgetSetID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "FrameWidth" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "FrameHeight" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "Field_10_1_0_48480_008" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "PlayerConditionID" },
+    };
+
+    static constexpr DB2LoadInfo Instance{ Fields, 10, &UIGenericWidgetDisplayMeta::Instance, HOTFIX_SEL_UI_GENERIC_WIDGET_DISPLAY };
+};
+
 struct UiMapLoadInfo
 {
     static constexpr DB2FieldMeta Fields[15] =
@@ -6854,6 +6922,27 @@ struct UiMapXMapArtLoadInfo
     };
 
     static constexpr DB2LoadInfo Instance{ Fields, 4, &UiMapXMapArtMeta::Instance, HOTFIX_SEL_UI_MAP_X_MAP_ART };
+};
+
+struct UiPartyPoseLoadInfo
+{
+    static constexpr DB2FieldMeta Fields[12] =
+    {
+        { .IsSigned = false, .Type = FT_STRING, .Name = "TitleText" },
+        { .IsSigned = false, .Type = FT_STRING, .Name = "ExtraButtonText" },
+        { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "UiWidgetSetID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "VictoryUiModelSceneID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "DefeatUiModelSceneID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "VictorySoundKitID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "DefeatSoundKitID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "SpellID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "UiTextureKitID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "Flags" },
+        { .IsSigned = false, .Type = FT_INT, .Name = "MapID" },
+    };
+
+    static constexpr DB2LoadInfo Instance{ Fields, 12, &UiPartyPoseMeta::Instance, HOTFIX_SEL_UI_PARTY_POSE };
 };
 
 struct UiSplashScreenLoadInfo

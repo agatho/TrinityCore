@@ -393,10 +393,14 @@ DB2Storage<TransmogSetGroupEntry>               sTransmogSetGroupStore("Transmog
 DB2Storage<TransmogSetItemEntry>                sTransmogSetItemStore("TransmogSetItem.db2", &TransmogSetItemLoadInfo::Instance);
 DB2Storage<TransportAnimationEntry>             sTransportAnimationStore("TransportAnimation.db2", &TransportAnimationLoadInfo::Instance);
 DB2Storage<TransportRotationEntry>              sTransportRotationStore("TransportRotation.db2", &TransportRotationLoadInfo::Instance);
+DB2Storage<UIArrowCalloutEntry>                 sUIArrowCalloutStore("UIArrowCallout.db2", &UIArrowCalloutLoadInfo::Instance);
+DB2Storage<UIEventToastEntry>                   sUIEventToastStore("UIEventToast.db2", &UIEventToastLoadInfo::Instance);
+DB2Storage<UIGenericWidgetDisplayEntry>         sUIGenericWidgetDisplayStore("UIGenericWidgetDisplay.db2", &UIGenericWidgetDisplayLoadInfo::Instance);
 DB2Storage<UiMapEntry>                          sUiMapStore("UiMap.db2", &UiMapLoadInfo::Instance);
 DB2Storage<UiMapAssignmentEntry>                sUiMapAssignmentStore("UiMapAssignment.db2", &UiMapAssignmentLoadInfo::Instance);
 DB2Storage<UiMapLinkEntry>                      sUiMapLinkStore("UiMapLink.db2", &UiMapLinkLoadInfo::Instance);
 DB2Storage<UiMapXMapArtEntry>                   sUiMapXMapArtStore("UiMapXMapArt.db2", &UiMapXMapArtLoadInfo::Instance);
+DB2Storage<UiPartyPoseEntry>                    sUiPartyPoseStore("UiPartyPose.db2", &UiPartyPoseLoadInfo::Instance);
 DB2Storage<UISplashScreenEntry>                 sUISplashScreenStore("UISplashScreen.db2", &UiSplashScreenLoadInfo::Instance);
 DB2Storage<UnitConditionEntry>                  sUnitConditionStore("UnitCondition.db2", &UnitConditionLoadInfo::Instance);
 DB2Storage<UnitPowerBarEntry>                   sUnitPowerBarStore("UnitPowerBar.db2", &UnitPowerBarLoadInfo::Instance);
@@ -557,6 +561,7 @@ namespace
     std::unordered_multimap<int32, UiMapAssignmentEntry const*> _uiMapAssignmentByWmoDoodadPlacement[MAX_UI_MAP_SYSTEM];
     std::unordered_multimap<int32, UiMapAssignmentEntry const*> _uiMapAssignmentByWmoGroup[MAX_UI_MAP_SYSTEM];
     std::unordered_set<int32> _uiMapPhases;
+    std::unordered_map<uint32 /*mapId*/, UiPartyPoseEntry const*> _uiPartyPoseByMap;
     WMOAreaTableLookupContainer _wmoAreaTableLookup;
     std::unordered_map<uint32, std::unordered_set<uint32>> _pvpStatIdsByMap;
 }
@@ -1036,10 +1041,14 @@ uint32 DB2Manager::LoadStores(std::string const& dataPath, LocaleConstant defaul
     LOAD_DB2(sTransmogSetItemStore);
     LOAD_DB2(sTransportAnimationStore);
     LOAD_DB2(sTransportRotationStore);
+    LOAD_DB2(sUIArrowCalloutStore);
+    LOAD_DB2(sUIEventToastStore);
+    LOAD_DB2(sUIGenericWidgetDisplayStore);
     LOAD_DB2(sUiMapStore);
     LOAD_DB2(sUiMapAssignmentStore);
     LOAD_DB2(sUiMapLinkStore);
     LOAD_DB2(sUiMapXMapArtStore);
+    LOAD_DB2(sUiPartyPoseStore);
     LOAD_DB2(sUISplashScreenStore);
     LOAD_DB2(sUnitConditionStore);
     LOAD_DB2(sUnitPowerBarStore);
@@ -1685,6 +1694,9 @@ void DB2Manager::IndexLoadedStores()
     for (UiMapXMapArtEntry const* uiMapArt : sUiMapXMapArtStore)
         if (uiMapArt->PhaseID)
             _uiMapPhases.insert(uiMapArt->PhaseID);
+
+    for (UiPartyPoseEntry const* uiPartyPose : sUiPartyPoseStore)
+        _uiPartyPoseByMap.emplace(uiPartyPose->MapID, uiPartyPose);
 
     for (WMOAreaTableEntry const* entry : sWMOAreaTableStore)
         _wmoAreaTableLookup[WMOAreaTableKey(entry->WmoID, entry->NameSetID, entry->WmoGroupID)] = entry;
@@ -3433,6 +3445,11 @@ void DB2Manager::Map2ZoneCoordinates(uint32 areaId, float& x, float& y) const
 bool DB2Manager::IsUiMapPhase(uint32 phaseId) const
 {
     return _uiMapPhases.find(phaseId) != _uiMapPhases.end();
+}
+
+UiPartyPoseEntry const* DB2Manager::GetUiPartyPoseByMap(uint32 mapId) const
+{
+    return Trinity::Containers::MapGetValuePtr(_uiPartyPoseByMap, mapId);
 }
 
 WMOAreaTableEntry const* DB2Manager::GetWMOAreaTable(int32 rootId, int32 adtId, int32 groupId, bool allowGroupFallback)

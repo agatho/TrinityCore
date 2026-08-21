@@ -125,6 +125,12 @@ namespace WorldPackets
         struct CustomTabardInfo;
     }
 
+    namespace Misc
+    {
+        enum class SubscriptionInterstitialType : uint8;
+        struct UploadScreenshotHeader;
+    }
+
     namespace Movement
     {
         enum class UpdateCollisionHeightReason : uint8;
@@ -2905,8 +2911,36 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         }
 
         void SendPlayerChoice(ObjectGuid sender, int32 choiceId);
+        void ClearPlayerChoice(bool matchCurrentChoiceOnly = true);
+        void SendPlayerChoiceDisplayError() const;
 
         bool MeetPlayerCondition(uint32 conditionId) const;
+        void SendFailedPlayerCondition(uint32 conditionId) const;
+
+        // Client family 0x64 - player state and UI remote control (12.1.0.69382).
+        // These are remote control primitives: retail drives them from quest/scenario script logic,
+        // so on this side they are a script/command facing API. See MiscPackets.h for the wire layouts
+        // and for what the client requires of each id.
+        void SendUiEventToast(int32 uiEventToastId) const;
+        void SendGenericWidgetDisplay(int32 uiGenericWidgetDisplayId) const;
+        void SendShowArrowCallout(int32 arrowCalloutId) const;
+        void SendHideArrowCallout(int32 arrowCalloutId) const;
+        void SendAcknowledgeArrowCallout(int32 arrowCalloutId) const;
+        void SendPartyPoseUI(int32 partyPoseId, bool victory) const;
+        void SendEndOfMatchDetails(int32 placement, int32 kills, int32 plunderAcquired, bool matchEnded) const;
+        void SendTutorialHighlightSpell(int32 spellId, std::string_view globalStringTag) const;
+        void SendTutorialUnhighlightSpell() const;
+        void SendSubscriptionInterstitial(WorldPackets::Misc::SubscriptionInterstitialType type) const;
+        void SendChallengeModeLeaverPenaltyTimer(Seconds timer) const;
+        void SendPlayerSkinned(bool freeForAll) const;
+        void SendUploadScreenshot(WorldPackets::Misc::UploadScreenshotHeader const& header, Optional<bool> delayed = { }) const;
+
+        // Exile's Reach / new player experience exit handshake:
+        // SMSG_CHECK_ABANDON_NPE -> client popup -> CMSG_ABANDON_NPE_RESPONSE.
+        void SendCheckAbandonNPE();
+        bool WasAbandonNPEPrompted() const { return m_npeAbandonPrompted; }
+        void SetAbandonNPEPrompted(bool prompted) { m_npeAbandonPrompted = prompted; }
+        void SetCreateMode(PlayerCreateMode createMode) { m_createMode = createMode; }
 
         bool HasPlayerFlag(PlayerFlags flags) const { return (*m_playerData->PlayerFlags & flags) != 0; }
         void SetPlayerFlag(PlayerFlags flags) { SetUpdateFieldFlagValue(m_values.ModifyValue(&Player::m_playerData).ModifyValue(&UF::PlayerData::PlayerFlags), flags); }
@@ -3274,6 +3308,7 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
 
         time_t m_createTime;
         PlayerCreateMode m_createMode;
+        bool m_npeAbandonPrompted;      // transient: SMSG_CHECK_ABANDON_NPE already sent this session
         uint8 m_cinematic;
 
         uint32 m_movie;

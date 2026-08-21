@@ -30,6 +30,9 @@
 #include "WowTime.h"
 #include <array>
 #include <map>
+#include <string>
+#include <string_view>
+#include <vector>
 
 enum class CountdownTimerType : int32;
 enum class DisplayToastType : uint8;
@@ -1043,6 +1046,467 @@ namespace WorldPackets
 
             bool IsFullUpdate = false;
             WarbandSceneCollectionContainer const* WarbandScenes = nullptr;
+        };
+
+        /*
+         * Client family 0x64 (12.1.0.69382) - player state and UI remote control.
+         *
+         * Every wire layout below is read off the client dispatcher SMSG_Dispatch_fam_64 @ RVA 0x67C100
+         * (image base 0x7FF780FD0000) unless a different reader RVA is named on the class.
+         * Bit sections are MSB-first and are flushed before every byte-aligned field, which is exactly
+         * ByteBuffer::WriteBits / FlushBits.
+         */
+
+        // Enum.SubscriptionInterstitialType - APIDoc/ExpansionDocumentation.lua:284-294
+        enum class SubscriptionInterstitialType : uint8
+        {
+            Standard    = 0,
+            LeftNpeArea = 1,
+            MaxLevel    = 2     // shows the Upgrade button instead of the Subscribe button
+        };
+
+        // WIRE values of the CMSG_SUBSCRIPTION_INTERSTITIAL_RESPONSE answer - these are NOT the Lua
+        // enum values. C_...SendSubscriptionInterstitialResponse (RVA 0xE948D0) remaps
+        // Enum.SubscriptionInterstitialResponseType (APIDoc/ExpansionDocumentation.lua:271-281)
+        // before writing bits<3>; the three-way branch at 0x7FF781E64987 is explicit:
+        //   Lua Clicked(0)     -> wire 1     (body byte 0x20)
+        //   Lua Closed(1)      -> wire 0     (body byte 0x00)
+        //   Lua WebRedirect(2) -> wire 4     (body byte 0x80)
+        // Taking the Lua numbering for the wire would silently swap Clicked and Closed.
+        enum class SubscriptionInterstitialResponseType : uint8
+        {
+            Closed      = 0,
+            Clicked     = 1,
+            WebRedirect = 4
+        };
+
+        // SMSG_FAILED_PLAYER_CONDITION - wire 0x640002, 4 bytes.
+        // Consumer 0x20970C0 reads exactly one uint32, looks it up in the PlayerCondition store
+        // (off_7FF785B8D120, meta string "PlayerCondition") and prints Failure_description_lang.
+        // An id without a failure description produces GameError 527 and no visible message.
+        class FailedPlayerCondition final : public ServerPacket
+        {
+        public:
+            explicit FailedPlayerCondition() : ServerPacket(SMSG_FAILED_PLAYER_CONDITION, 4) { }
+            explicit FailedPlayerCondition(int32 playerConditionID)
+                : ServerPacket(SMSG_FAILED_PLAYER_CONDITION, 4), PlayerConditionID(playerConditionID) { }
+
+            WorldPacket const* Write() override;
+
+            int32 PlayerConditionID = 0;
+        };
+
+        // SMSG_GM_REQUEST_PLAYER_INFO - wire 0x640003, 1..64 bytes.
+        // Dispatcher case, literally:
+        //   Read<uint8>(B); Flag = B >= 0x80; len = (B >> 1) & 0x3F; ReadBytes(len)
+        // Both bit fields live in ONE bit section - a flush between them writes a byte too many.
+        // UNVERIFIED: meaning of Flag. The retail consumer (hook 0x462DF10) is the shared no-op stub,
+        // so the binary gives the structure but not the semantics.
+        class GMRequestPlayerInfo final : public ServerPacket
+        {
+        public:
+            explicit GMRequestPlayerInfo() : ServerPacket(SMSG_GM_REQUEST_PLAYER_INFO, 1 + 63) { }
+
+            WorldPacket const* Write() override;
+
+            std::string_view Name;      // client buffer is 64 bytes -> bits<6>, max 63 characters
+            bool Flag = false;
+        };
+
+        // SMSG_GM_PLAYER_INFO - wire 0x64000E, reader RVA 0x67B1E0.
+        // ObjectGuid, 2x uint32, uint8 (a full byte, not a bit), 9x uint32, then one bit section
+        // holding four string lengths, then the four strings (no NUL on the wire).
+        // Bit widths are cross-checked against the client buffer sizes:
+        //   49 -> bits<6>, 97 -> bits<7>, 1281 -> bits<11>, 1281 -> bits<11>  (35 bits, 5 padding bits)
+        // UNVERIFIED: meaning of every field. Consumer (hook 0x462DE70) is the shared no-op stub.
+        class GMPlayerInfo final : public ServerPacket
+        {
+        public:
+            explicit GMPlayerInfo() : ServerPacket(SMSG_GM_PLAYER_INFO, 16 + 11 * 4 + 1 + 5) { }
+
+            WorldPacket const* Write() override;
+
+            ObjectGuid Player;
+            int32 Data1 = 0;
+            int32 Data2 = 0;
+            uint8 Data3 = 0;
+            std::array<int32, 9> Data4 = { };
+            std::string_view Text1;     // buffer   49 -> bits<6>,  max   48 characters
+            std::string_view Text2;     // buffer   97 -> bits<7>,  max   96 characters
+            std::string_view Text3;     // buffer 1281 -> bits<11>, max 1280 characters
+            std::string_view Text4;     // buffer 1281 -> bits<11>, max 1280 characters
+        };
+
+        // SMSG_PLAYER_CONDITION_RESULT - wire 0x640013.
+        // UNVERIFIED: the payload is undetermined. The dispatcher hands the consumer a raw pointer to
+        // the unread rest of the stream (0x35AF730) and parses nothing itself; the consumer
+        // (hook 0x462DE78) is the shared no-op stub, so there is no reader to derive a layout from.
+        // There is no JamType and no sniff packet either. Sent empty until that changes - do not
+        // invent fields here.
+        class PlayerConditionResult final : public ServerPacket
+        {
+        public:
+            explicit PlayerConditionResult() : ServerPacket(SMSG_PLAYER_CONDITION_RESULT, 0) { }
+
+            WorldPacket const* Write() override { return &_worldPacket; }
+        };
+
+        // SMSG_PLAYER_SKINNED - wire 0x64000F, 1 byte.
+        // Case: Read<uint8> >> 7. Fires Lua PLAYER_SKINNED(hasFreeRepop)
+        // (hash 0x69E51F7A6E5DEAE8). GameEvent.HandlePlayerSkinned closes the three resurrect
+        // popups and prints DEATH_CORPSE_SKINNED; it ignores the argument.
+        class PlayerSkinned final : public ServerPacket
+        {
+        public:
+            explicit PlayerSkinned() : ServerPacket(SMSG_PLAYER_SKINNED, 1) { }
+            explicit PlayerSkinned(bool freeForAll) : ServerPacket(SMSG_PLAYER_SKINNED, 1), FreeForAll(freeForAll) { }
+
+            WorldPacket const* Write() override;
+
+            bool FreeForAll = false;    // Lua calls it hasFreeRepop
+        };
+
+        // SMSG_PLAYER_TUTORIAL_UNHIGHLIGHT_SPELL - wire 0x640015, empty.
+        // Lua TUTORIAL_UNHIGHLIGHT_SPELL, hash 0x7D0D6305B5100CA5, no arguments.
+        class PlayerTutorialUnhighlightSpell final : public ServerPacket
+        {
+        public:
+            explicit PlayerTutorialUnhighlightSpell() : ServerPacket(SMSG_PLAYER_TUTORIAL_UNHIGHLIGHT_SPELL, 0) { }
+
+            WorldPacket const* Write() override { return &_worldPacket; }
+        };
+
+        // SMSG_PLAYER_TUTORIAL_HIGHLIGHT_SPELL - wire 0x640016, 5..132 bytes.
+        // Case: Read<uint32>, then 0x5D5340 = ReadBits(7), then ReadBytes(len) into a 128 byte buffer.
+        // Lua TUTORIAL_HIGHLIGHT_SPELL, hash 0x8661FCAFDC55E1EA, payload { int SpellID; char* Tag }.
+        // Tag is a GlobalString KEY, not display text: Blizzard_BoostTutorial.lua:200 does
+        // `_G[textID] or textID`, so an unknown key is shown verbatim instead of being dropped.
+        class PlayerTutorialHighlightSpell final : public ServerPacket
+        {
+        public:
+            explicit PlayerTutorialHighlightSpell() : ServerPacket(SMSG_PLAYER_TUTORIAL_HIGHLIGHT_SPELL, 4 + 1 + 127) { }
+
+            WorldPacket const* Write() override;
+
+            int32 SpellID = 0;
+            std::string_view GlobalStringTag;    // client buffer 128 -> bits<7>, max 127 characters
+        };
+
+        // SMSG_PLAYER_OPEN_SUBSCRIPTION_INTERSTITIAL - wire 0x640017, 1 byte.
+        // Case calls 0x5D4FD0 = ReadBits(2) (mask `a2 & 3`); consumer 0x209CEA0 distinguishes 0/1/2 only.
+        // Sniff (12.0.7): the single recorded packet is 1 byte 0x80 = 0b10...... = 2 = MaxLevel.
+        // Lua SHOW_SUBSCRIPTION_INTERSTITIAL, hash 0x55507E51164C9D2B.
+        class PlayerOpenSubscriptionInterstitial final : public ServerPacket
+        {
+        public:
+            explicit PlayerOpenSubscriptionInterstitial() : ServerPacket(SMSG_PLAYER_OPEN_SUBSCRIPTION_INTERSTITIAL, 1) { }
+
+            WorldPacket const* Write() override;
+
+            SubscriptionInterstitialType Type = SubscriptionInterstitialType::Standard;
+        };
+
+        // Element of SMSG_SCHEDULED_AREA_POI_UPDATE_RESPONSE, 24 bytes on the wire.
+        // Array element type is ScheduledAreaPOIEventData (resizer RVA 0x692060 names it).
+        struct ScheduledAreaPoiEvent
+        {
+            uint64 StartTime = 0;               // UNVERIFIED: read as uint64 at element offset +0
+            uint64 EndTime = 0;                 // UNVERIFIED: read as uint64 at element offset +8
+            int32 EventSchedulerEventID = 0;    // consumer 0x2428BB0 looks this up in DB2 EventSchedulerEvent
+            int32 Data = 0;                     // UNVERIFIED: read as uint32 at element offset +20
+        };
+
+        // SMSG_SCHEDULED_AREA_POI_UPDATE_RESPONSE - wire 0x64001A.
+        // Case, in order: Read<uint32> CountA; resize; Read<uint32> CountB; resize;
+        //                 CountA x Read<uint32>; CountB x { u64, u64, u32, u32 }
+        // Both counts come first, then both payload arrays - the array rule from
+        // BEFUND_ai_debug_kanal_4D_69382.md 3.4.
+        // The TrinityCore name is misleading in 12.1: the consumer resolves the second array against
+        // DB2 EventSchedulerEvent (store off_7FF787548ED0, meta string "EventSchedulerEvent") and fires
+        // Lua EVENT_SCHEDULER_UPDATE (hash 0x1FD62AAC7F60989D), not AREA_POIS_UPDATED. The first array
+        // still carries AreaPOI ids.
+        class ScheduledAreaPoiUpdateResponse final : public ServerPacket
+        {
+        public:
+            explicit ScheduledAreaPoiUpdateResponse() : ServerPacket(SMSG_SCHEDULED_AREA_POI_UPDATE_RESPONSE, 4 + 4) { }
+
+            WorldPacket const* Write() override;
+
+            std::vector<int32> AreaPoiIDs;
+            std::vector<ScheduledAreaPoiEvent> Events;
+        };
+
+        // SMSG_PLAYER_BONUS_ROLL_FAILED - wire 0x640022, empty.
+        // Lua BONUS_ROLL_FAILED, hash 0xB334D6421BDC2DAD, no arguments. The client shows no reason,
+        // so an error code on the wire would have no effect.
+        class PlayerBonusRollFailed final : public ServerPacket
+        {
+        public:
+            explicit PlayerBonusRollFailed() : ServerPacket(SMSG_PLAYER_BONUS_ROLL_FAILED, 0) { }
+
+            WorldPacket const* Write() override { return &_worldPacket; }
+        };
+
+        // SMSG_CHECK_ABANDON_NPE - wire 0x640024, empty.
+        // Lua LEAVING_TUTORIAL_AREA, hash 0xF9F41B606E43E658, no arguments; routed to
+        // GameEvent.HandleLeavingTutorialArea -> StaticPopup_Show("LEAVING_TUTORIAL_AREA")
+        // (EventImplementation.lua:259, EventRouting.lua:57). The warning text is client side and
+        // faction dependent (NPE_ABANDON_A_WARNING / NPE_ABANDON_H_WARNING). The client answers with
+        // CMSG_ABANDON_NPE_RESPONSE.
+        class CheckAbandonNPE final : public ServerPacket
+        {
+        public:
+            explicit CheckAbandonNPE() : ServerPacket(SMSG_CHECK_ABANDON_NPE, 0) { }
+
+            WorldPacket const* Write() override { return &_worldPacket; }
+        };
+
+        // SMSG_PLAYER_SHOW_UI_EVENT_TOAST - wire 0x640025, 4 bytes.
+        // Subscriber 0x2264F10 -> 0x225CFF0 reads one uint32 and resolves it in DB2 UIEventToast
+        // (store meta string "UIEventToast"). Sniff 12.1: 3 packets, 4 bytes each, ids 341/304/327.
+        // Hard client side gate (0x225CFF0): only UIEventToast.EventType in
+        // { 12, 13, 16, 17, 18, 19, 20, 22 } is processed, anything else is dropped without a message.
+        // This is NOT the embedded WorldPackets::Item::UiEventToast pair - the standalone opcode
+        // carries a bare uint32.
+        class PlayerShowUiEventToast final : public ServerPacket
+        {
+        public:
+            explicit PlayerShowUiEventToast() : ServerPacket(SMSG_PLAYER_SHOW_UI_EVENT_TOAST, 4) { }
+            explicit PlayerShowUiEventToast(int32 uiEventToastID)
+                : ServerPacket(SMSG_PLAYER_SHOW_UI_EVENT_TOAST, 4), UiEventToastID(uiEventToastID) { }
+
+            WorldPacket const* Write() override;
+
+            int32 UiEventToastID = 0;   // -> UIEventToastEntry::ID (WoWDBDefs calls the column EventToastID)
+        };
+
+        // SMSG_PLAYER_SHOW_GENERIC_WIDGET_DISPLAY - wire 0x64002A, 4 bytes.
+        // Subscriber 0x2490DB0 -> 0x24907D0 reads one uint32 and resolves it in DB2
+        // UIGenericWidgetDisplay (store off_7FF787558FD0). Lua GENERIC_WIDGET_DISPLAY_SHOW,
+        // hash 0x75039F3661BC513E. It carries the table id, not a raw UiWidgetSet::ID.
+        class PlayerShowGenericWidgetDisplay final : public ServerPacket
+        {
+        public:
+            explicit PlayerShowGenericWidgetDisplay() : ServerPacket(SMSG_PLAYER_SHOW_GENERIC_WIDGET_DISPLAY, 4) { }
+            explicit PlayerShowGenericWidgetDisplay(int32 uiGenericWidgetDisplayID)
+                : ServerPacket(SMSG_PLAYER_SHOW_GENERIC_WIDGET_DISPLAY, 4), UiGenericWidgetDisplayID(uiGenericWidgetDisplayID) { }
+
+            WorldPacket const* Write() override;
+
+            int32 UiGenericWidgetDisplayID = 0;     // -> UIGenericWidgetDisplay::ID
+        };
+
+        // SMSG_PLAYER_SHOW_PARTY_POSE_UI - wire 0x64002B, 5 bytes.
+        // Case: Read<uint32>, then Read<uint8> >> 7. Lua SHOW_PARTY_POSE_UI, hash 0xA1EC8E9745484821,
+        // payload { int PartyPoseID; bool Won }. EventImplementation.lua:163-165 passes the first
+        // argument to C_PartyPose.GetPartyPoseInfoByID - so this is a UiPartyPose::ID, not a MapID.
+        // The Victory bit switches only the model scene and the sound; the title text is shared.
+        class PlayerShowPartyPoseUI final : public ServerPacket
+        {
+        public:
+            explicit PlayerShowPartyPoseUI() : ServerPacket(SMSG_PLAYER_SHOW_PARTY_POSE_UI, 4 + 1) { }
+
+            WorldPacket const* Write() override;
+
+            int32 PartyPoseID = 0;      // -> UiPartyPose::ID
+            bool Victory = false;
+        };
+
+        // SMSG_PLAYER_SHOW_ARROW_CALLOUT - wire 0x64002C, 4 bytes.
+        // Subscriber 0x2328040 -> 0x2327730 reads one uint32 and resolves it in DB2 UIArrowCallout
+        // (store off_7FF78754A4B0). Lua SHOW_ARROW_CALLOUT, hash 0xE999F5CBCB426641, payload is the
+        // eight field calloutInfo table - which the client builds FROM the DB2 row, not from the wire.
+        // Two client side gates: UIArrowCallout field 5 is a PlayerConditionID that must pass, and the
+        // account CVar `acknowledgedArrowCallouts` (32 bit field) must not have bit CalloutID set.
+        class PlayerShowArrowCallout final : public ServerPacket
+        {
+        public:
+            explicit PlayerShowArrowCallout() : ServerPacket(SMSG_PLAYER_SHOW_ARROW_CALLOUT, 4) { }
+            explicit PlayerShowArrowCallout(int32 arrowCalloutID)
+                : ServerPacket(SMSG_PLAYER_SHOW_ARROW_CALLOUT, 4), ArrowCalloutID(arrowCalloutID) { }
+
+            WorldPacket const* Write() override;
+
+            int32 ArrowCalloutID = 0;   // -> UIArrowCallout::ID
+        };
+
+        // SMSG_PLAYER_HIDE_ARROW_CALLOUT - wire 0x64002D, 4 bytes.
+        // Subscriber 0x2327FF0 -> 0x23275F0. Lua HIDE_ARROW_CALLOUT, hash 0x086B0038DB2C8725.
+        class PlayerHideArrowCallout final : public ServerPacket
+        {
+        public:
+            explicit PlayerHideArrowCallout() : ServerPacket(SMSG_PLAYER_HIDE_ARROW_CALLOUT, 4) { }
+            explicit PlayerHideArrowCallout(int32 arrowCalloutID)
+                : ServerPacket(SMSG_PLAYER_HIDE_ARROW_CALLOUT, 4), ArrowCalloutID(arrowCalloutID) { }
+
+            WorldPacket const* Write() override;
+
+            int32 ArrowCalloutID = 0;
+        };
+
+        // SMSG_PLAYER_ACKNOWLEDGE_ARROW_CALLOUT - wire 0x64002E, 4 bytes.
+        // Subscriber 0x2327F60 sets the CVar bit for this id and then hides it via 0x23275F0.
+        // This is the server -> client direction: "treat this callout as acknowledged".
+        // There is no client -> server counterpart - C_ArrowCalloutManager.AcknowledgeCallout (0xA9A4E0)
+        // only writes the CVar bit locally and sends nothing, so the server never learns about a
+        // player side acknowledgement and has to track it itself if it needs to know.
+        class PlayerAcknowledgeArrowCallout final : public ServerPacket
+        {
+        public:
+            explicit PlayerAcknowledgeArrowCallout() : ServerPacket(SMSG_PLAYER_ACKNOWLEDGE_ARROW_CALLOUT, 4) { }
+            explicit PlayerAcknowledgeArrowCallout(int32 arrowCalloutID)
+                : ServerPacket(SMSG_PLAYER_ACKNOWLEDGE_ARROW_CALLOUT, 4), ArrowCalloutID(arrowCalloutID) { }
+
+            WorldPacket const* Write() override;
+
+            int32 ArrowCalloutID = 0;
+        };
+
+        // SMSG_PLAYER_END_OF_MATCH_DETAILS - wire 0x640030, 13 bytes.
+        // Case: 3x Read<uint32>, then Read<uint8> >> 7.
+        // Subscriber 0x2424C70 files the three values under Enum.MatchDetailType
+        // { Placement = 0, Kills = 1, PlunderAcquired = 2 } and hardcodes matchType = 1 (Plunderstorm),
+        // which is why the type is not on the wire. Lua SHOW_END_OF_MATCH_UI, hash 0xBEB85F3DE5B8121B.
+        // Placement is 1 based (Blizzard_EndOfMatchUI.lua:34-42: 1 = won, 2 = lost).
+        // MatchEnded = false means "you died, the match continues" and keeps the spectate path open.
+        class PlayerEndOfMatchDetails final : public ServerPacket
+        {
+        public:
+            explicit PlayerEndOfMatchDetails() : ServerPacket(SMSG_PLAYER_END_OF_MATCH_DETAILS, 4 + 4 + 4 + 1) { }
+
+            WorldPacket const* Write() override;
+
+            int32 Placement = 0;            // 1 based
+            int32 Kills = 0;
+            int32 PlunderAcquired = 0;
+            bool MatchEnded = false;
+        };
+
+        // SMSG_CHALLENGE_MODE_SET_LEAVER_PENALTY_TIMER - wire 0x640031, 4 bytes.
+        // Consumer 0x235D550: `v1 = (int)(float)((float)(int)**(_QWORD**)(msg + 32) * 1000.0)` - the
+        // value is seconds and is turned into an absolute millisecond deadline.
+        // Seconds != 0 fires CHALLENGE_MODE_LEAVER_TIMER_STARTED (hash 0x762E5814E6D1F595),
+        // Seconds == 0 fires CHALLENGE_MODE_LEAVER_TIMER_ENDED (hash 0x762A15EA11CAA7BD).
+        // One opcode serves both directions; the dialog is rebuilt on PLAYER_ENTERING_WORLD
+        // (InstanceAbandon.lua:146-148), so the server must resend after zone change and relog.
+        // UNVERIFIED: field width. The consumer dereferences the raw buffer as _QWORD* but only ever
+        // uses the low int half, so 8 bytes are not strictly excluded; uint32 is the derived reading.
+        class ChallengeModeSetLeaverPenaltyTimer final : public ServerPacket
+        {
+        public:
+            explicit ChallengeModeSetLeaverPenaltyTimer() : ServerPacket(SMSG_CHALLENGE_MODE_SET_LEAVER_PENALTY_TIMER, 4) { }
+            explicit ChallengeModeSetLeaverPenaltyTimer(Seconds timer)
+                : ServerPacket(SMSG_CHALLENGE_MODE_SET_LEAVER_PENALTY_TIMER, 4), Timer(timer) { }
+
+            WorldPacket const* Write() override;
+
+            Duration<Seconds, int32> Timer;
+        };
+
+        // One name/value pair of JamClientPlayerUploadScreenshotHeader, 80 bytes in the client struct.
+        // UNVERIFIED (deduced from the shape, no type name proves it): HTTP request headers.
+        struct UploadScreenshotHeaderField
+        {
+            std::string Name;       // bits<10> length INCLUDING the NUL
+            std::string Value;      // bits<10> length INCLUDING the NUL
+        };
+
+        // JamClientPlayerUploadScreenshotHeader, reader RVA 0x67BF70:
+        //   bits<13> UrlLen (incl. NUL); FlushBits; uint32 HeaderCount; JamDynamicString Url;
+        //   HeaderCount x { bits<10> NameLen; bits<10> ValueLen; FlushBits; string Name; string Value }
+        // The 13/10/10 widths are read off the byte recombinations in the reader, not guessed:
+        //   UrlLen   = (B0 << 5) | (B1 >> 3)
+        //   NameLen  = (C0 << 2) | (C1 >> 6)
+        //   ValueLen = ((C1 & 0x3F) << 4) | (C2 >> 4)
+        // Every string is a JamDynamicString: the length includes the terminator and the client
+        // rejects the whole message if the last byte is not 0x00 (0x347D750 returns 0).
+        struct UploadScreenshotHeader
+        {
+            std::string Url;
+            std::vector<UploadScreenshotHeaderField> Headers;
+        };
+
+        // SMSG_PLAYER_UPLOAD_SCREENSHOT - wire 0x640032.
+        // NOTE: inert in the retail client. off_7FF7855FDCC0[0] is set to nullptr by 0x226D10 and has
+        // no other writer, and there is no Lua surface at all (no UploadScreenshot / no
+        // PLAYER_UPLOAD_SCREENSHOT anywhere in the UI source). The message is real and fully specified;
+        // its consumer sits in the developer client.
+        class PlayerUploadScreenshot final : public ServerPacket
+        {
+        public:
+            explicit PlayerUploadScreenshot() : ServerPacket(SMSG_PLAYER_UPLOAD_SCREENSHOT, 2 + 4) { }
+
+            WorldPacket const* Write() override;
+
+            UploadScreenshotHeader Header;
+        };
+
+        // SMSG_PLAYER_DELAYED_UPLOAD_SCREENSHOT - wire 0x640033.
+        // Case: Read<uint8> >> 7 first, then the same reader 0x67BF70 on an embedded object.
+        // Same inert-in-retail caveat as SMSG_PLAYER_UPLOAD_SCREENSHOT.
+        class PlayerDelayedUploadScreenshot final : public ServerPacket
+        {
+        public:
+            explicit PlayerDelayedUploadScreenshot() : ServerPacket(SMSG_PLAYER_DELAYED_UPLOAD_SCREENSHOT, 1 + 2 + 4) { }
+
+            WorldPacket const* Write() override;
+
+            UploadScreenshotHeader Header;
+            bool Delayed = false;
+        };
+
+        // CMSG_ABANDON_NPE_RESPONSE - answer to SMSG_CHECK_ABANDON_NPE. Client wire 0x3D029C.
+        // Writer RVA 0x6D1CB0: Write<uint32>(opcode), then a single inline bit, then FlushBits.
+        // Body is exactly 1 byte, the flag in bit 7.
+        // Two Lua entry points feed the same opcode and differ only in that bit:
+        //   C_Tutorial.AbandonTutorialArea()  (RVA 0x1676430) stores 1 - leave for good
+        //   C_Tutorial.ReturnToTutorialArea() (RVA 0x1676D20) stores 0 - go back to the tutorial zone
+        // (GameDialogDefs.lua:1202/1205 = the two buttons of StaticPopupDialogs["LEAVING_TUTORIAL_AREA"])
+        class AbandonNPEResponse final : public ClientPacket
+        {
+        public:
+            explicit AbandonNPEResponse(WorldPacket&& packet) : ClientPacket(CMSG_ABANDON_NPE_RESPONSE, std::move(packet)) { }
+
+            void Read() override;
+
+            bool Abandon = false;
+        };
+
+        // CMSG_SUBSCRIPTION_INTERSTITIAL_RESPONSE - answer to SMSG_PLAYER_OPEN_SUBSCRIPTION_INTERSTITIAL.
+        // Client wire 0x3D0293, writer RVA 0x6D1C50: Write<uint32>(opcode), WriteBits(3), FlushBits.
+        // Body is exactly 1 byte. Triggered by SendSubscriptionInterstitialResponse(response)
+        // (ExpansionDocumentation.lua:220-228) from Blizzard_SubscriptionInterstitialUI.lua:27/29/123.
+        // See SubscriptionInterstitialResponseType for the Lua -> wire remap.
+        class SubscriptionInterstitialResponse final : public ClientPacket
+        {
+        public:
+            explicit SubscriptionInterstitialResponse(WorldPacket&& packet) : ClientPacket(CMSG_SUBSCRIPTION_INTERSTITIAL_RESPONSE, std::move(packet)) { }
+
+            void Read() override;
+
+            SubscriptionInterstitialResponseType Response = SubscriptionInterstitialResponseType::Closed;
+        };
+
+        // CMSG_REQUEST_SCHEDULED_AREA_POI_UPDATE - request for SMSG_SCHEDULED_AREA_POI_UPDATE_RESPONSE.
+        // Client wire 0x3D0238, writer RVA 0x6D1230 is `Write<uint32>(opcode); return 1;` - empty body,
+        // 4 bytes total. Sent by C_EventScheduler.RequestEvents() (RVA 0xE88F10, no arguments,
+        // EventSchedulerUIDocumentation.lua:116-119) from EventScheduler.lua:227/762, client throttled.
+        class RequestScheduledAreaPoiUpdate final : public ClientPacket
+        {
+        public:
+            explicit RequestScheduledAreaPoiUpdate(WorldPacket&& packet) : ClientPacket(CMSG_REQUEST_SCHEDULED_AREA_POI_UPDATE, std::move(packet)) { }
+
+            void Read() override { }
+        };
+
+        // CMSG_BONUS_ROLL - client wire 0x3D025D, writer RVA 0x6D16E0 is
+        // `Write<uint32>(opcode); return 1;` - empty body, 4 bytes total.
+        class BonusRoll final : public ClientPacket
+        {
+        public:
+            explicit BonusRoll(WorldPacket&& packet) : ClientPacket(CMSG_BONUS_ROLL, std::move(packet)) { }
+
+            void Read() override { }
         };
     }
 }

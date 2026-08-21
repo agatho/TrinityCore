@@ -3233,7 +3233,12 @@ void GameObject::Use(Unit* user, bool ignoreCastInProgress /*= false*/)
                     return;
 
                 if (!MeetsInteractCondition(player))
+                {
+                    // Bare return leaves the player with no feedback at all - tell the client which
+                    // PlayerCondition blocked so it can print Failure_description_lang.
+                    player->SendFailedPlayerCondition(m_goInfo->GetConditionID1());
                     return;
+                }
 
                 player->RemoveAurasByType(SPELL_AURA_MOD_STEALTH);
                 player->RemoveAurasByType(SPELL_AURA_MOD_INVISIBILITY);
@@ -3403,7 +3408,12 @@ void GameObject::Use(Unit* user, bool ignoreCastInProgress /*= false*/)
             Player* player = user->ToPlayer();
 
             if (!MeetsInteractCondition(player))
+            {
+                // Same reason as in the flag stand case above: without this the forge is simply
+                // unresponsive and the player is told nothing.
+                player->SendFailedPlayerCondition(m_goInfo->GetConditionID1());
                 return;
+            }
 
             switch (info->itemForge.ForgeType)
             {
