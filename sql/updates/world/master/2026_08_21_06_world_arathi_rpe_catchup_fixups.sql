@@ -1,33 +1,30 @@
 -- ============================================================================
 -- Arathi Catch-Up / RPE -- consolidation regression fixups (2026-08-21, post-live-test)
 -- ============================================================================
--- Live testing after the single-branch consolidation surfaced three regressions, all rooted in
--- the consolidation having replaced the always-visible PhaseId-0 opening-segment spawns (50-57,
--- now retired by 00_cleanup) with the content set, which carried two latent bugs:
+-- Live testing after the single-branch consolidation surfaced regressions. This file now carries
+-- only the feign-death revert; the phasing is fixed properly in 02 (see below), NOT by unphasing.
 --
--- (1)+(2) Initial Jaina/Thrall and the vendor (Win'sa) vanished on arrival. The content set
---   authored them at PhaseId 1961 -- a phase 22_conditions gates on QUESTTAKEN(90883). But those
---   NPCs GIVE the first quest 90882 (before 90883), so gating them on 90883 makes them invisible at
---   arrival (chicken-and-egg). The retired 50-57 copies sat at PhaseId 0 (always visible), which is
---   what made the pad work. The content per-quest phasing is UNVERIFIED (see 22_conditions banner)
---   and is what breaks the base state, so we restore the known-working behaviour: unphase the whole
---   RPE spawn set (PhaseId 0 = always visible, exactly as the 50-57 set was). Re-introducing a
---   correct per-quest phase layer (e.g. the warzone->peace swap after Ro'grok) is a later task.
+-- PHASING -- superseded approach. An earlier revision of this file did
+--   `UPDATE creature SET PhaseId=0 ... 8000000-8009999` to force everything always-visible. That was
+--   WRONG: the RPE questgivers are implemented as SEPARATE creature entries per POI (Jaina =
+--   244643 pad / 244655 farm / 244657 siege / 244667 climax / 244714 hub; Thrall likewise), each in
+--   its own quest-step phase, so they read as ONE character following you from POI to POI. Unphasing
+--   them to 0 shows ALL of them at once (five Jainas scattered across the map). The real bug was
+--   narrow: the two HAMMERFALL ARRIVAL phases (1961 town+leaders, 37 gnoll camp) were gated on
+--   QUESTTAKEN(90883) -- one quest too late, because the wire phase graph had no 90882/arrival
+--   window -- so the 90882 questgivers and slay-target gnolls were hidden at arrival. That is fixed
+--   at the source in 2026_08_21_02 (the two phase conditions re-gated to "active until 90883
+--   REWARDED"). The blanket PhaseId=0 UPDATE is REMOVED here; the per-POI leader phasing stands.
 --
--- (3) "Gnoll mobs at Hammerfall do not move." The 7 pad Gnoll Assailants (245027) had been given a
---   permanent Feign-Death aura (29266) during consolidation (ruling R1), on the strength of the
---   third-party 68453 opening-segment file calling them "corpses". Our OWN capture (69382) contains
---   ZERO occurrences of aura 29266 on 245027 -- they are LIVE gnolls in our data, not corpses. The
---   feign-death addon is exactly what froze them. Revert it: 245027 is a normal live standing gnoll.
---   (Their positions were never captured with wander movement, so they stand until engaged -- that is
---   capture-faithful; patrol/wander would be fabrication.)
+-- FEIGN-DEATH revert. The 7 pad Gnoll Assailants (245027) were given a permanent Feign-Death aura
+--   (29266) during consolidation (ruling R1), on the strength of the third-party 68453 file calling
+--   them "corpses". Our OWN capture (69382) contains ZERO occurrences of aura 29266 on 245027 --
+--   they are LIVE gnolls in our data, not corpses. The feign-death addon is exactly what froze them.
+--   Revert it: 245027 is a normal live standing gnoll. (No wander was captured, so they stand until
+--   engaged -- capture-faithful; patrol/wander would be fabrication.)
 --
--- Idempotent. Applies after 2026_08_21_02 (spawns) and 01 (templates).
+-- Idempotent. Applies after 2026_08_21_02 (spawns/phasing) and 01 (templates).
 -- ============================================================================
 
--- (1)+(2) Make the whole RPE spawn set always-visible again (restore the 50-57 PhaseId-0 behaviour).
-UPDATE `creature` SET `PhaseId` = 0 WHERE `map` = 2927 AND `guid` BETWEEN 8000000 AND 8009999;
-
--- (3) Revert the R1 feign-death corpse aura on 245027 -- our capture shows no aura 29266; they are
--- live gnolls. Clear the aura but keep the row (standing, sheathed) so re-apply is clean.
+-- Revert the R1 feign-death corpse aura on 245027 -- our capture shows no aura 29266; live gnolls.
 UPDATE `creature_template_addon` SET `auras` = '' WHERE `entry` = 245027;

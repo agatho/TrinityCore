@@ -3114,16 +3114,25 @@ INSERT INTO `phase_name` (`ID`, `Name`) VALUES
 --     phases actually drop out of the player's phase set once the player has progressed.
 -- ============================================================================
 
--- PhaseId 1961 (Hammerfall/town base) requires quest 90883 TAKEN (active window per the
--- wire graph). INFERRED gate -- see banner.
+-- FIX 2026-08-21 (post-live-test): re-gate the two HAMMERFALL ARRIVAL phases -- 1961 (town base +
+-- the arrival questgivers Jaina 244643 / Thrall 244642) and 37 (the 90882 slay-target gnoll camp) --
+-- so they are active from ARRIVAL. The wire graph had NO 90882/arrival window (its first correlated
+-- quest is 90883), so both were wrongly gated on QUESTTAKEN(90883), which hides the NPCs that GIVE
+-- 90882 and the gnolls you must slay for 90882 until after 90883 is taken (chicken-and-egg). They
+-- are re-gated to "active until 90883 is REWARDED" (NegativeCondition on QUESTREWARDED 90883), the
+-- clean complement of the farm phase 1959 (active once 90883 IS rewarded) -- so Hammerfall is
+-- populated through 90882+90883 then hands off to the farm. ConditionType is part of the conditions
+-- PK, so the old QUESTTAKEN(9) rows are DELETEd first.
+DELETE FROM `conditions` WHERE `SourceTypeOrReferenceId`=26 AND `SourceGroup` IN (1961, 37);
+
 INSERT INTO `conditions`
  (`SourceTypeOrReferenceId`,`SourceGroup`,`SourceEntry`,`SourceId`,`ElseGroup`,
   `ConditionTypeOrReference`,`ConditionTarget`,`ConditionValue1`,`ConditionValue2`,`ConditionValue3`,
   `ConditionStringValue1`,`NegativeCondition`,`ErrorType`,`ErrorTextId`,`ScriptName`,`Comment`)
 VALUES
- (26, 1961, 0, 0, 0, 9, 0, 90883, 0, 0, '', 0, 0, 0, '',
-  'Catch-Up Experience -- REAL PhaseId 1961 (Hammerfall/town base) requires quest 90883 taken (Fix Round 2, wire-graph quest window)')
-ON DUPLICATE KEY UPDATE `Comment`=VALUES(`Comment`);
+ (26, 1961, 0, 0, 0, 8, 0, 90883, 0, 0, '', 1, 0, 0, '',
+  'Catch-Up Experience -- PhaseId 1961 (Hammerfall/town base + arrival leaders 244643/244642) active from ARRIVAL until 90883 REWARDED (NegativeCondition on QUESTREWARDED 90883). FIX 2026-08-21: the wire graph had no 90882/arrival window so this was wrongly gated on QUESTTAKEN(90883), hiding the questgivers that GIVE 90882 -- corrected so the Hammerfall content is visible during 90882+90883 then hands off to the farm phase 1959 (active once 90883 rewarded).')
+ON DUPLICATE KEY UPDATE `ConditionTypeOrReference`=VALUES(`ConditionTypeOrReference`), `NegativeCondition`=VALUES(`NegativeCondition`), `Comment`=VALUES(`Comment`);
 
 -- PhaseId 37 (Hammerfall gnoll filler, per-quest) requires quest 90883 TAKEN -- same window
 -- as 1961 above (both real PhaseIds correlate to quest 90883 in the graph).
@@ -3132,9 +3141,9 @@ INSERT INTO `conditions`
   `ConditionTypeOrReference`,`ConditionTarget`,`ConditionValue1`,`ConditionValue2`,`ConditionValue3`,
   `ConditionStringValue1`,`NegativeCondition`,`ErrorType`,`ErrorTextId`,`ScriptName`,`Comment`)
 VALUES
- (26, 37, 0, 0, 0, 9, 0, 90883, 0, 0, '', 0, 0, 0, '',
-  'Catch-Up Experience -- REAL PhaseId 37 (Hammerfall gnoll filler) requires quest 90883 taken (Fix Round 2, wire-graph quest window)')
-ON DUPLICATE KEY UPDATE `Comment`=VALUES(`Comment`);
+ (26, 37, 0, 0, 0, 8, 0, 90883, 0, 0, '', 1, 0, 0, '',
+  'Catch-Up Experience -- PhaseId 37 (Hammerfall 90882 slay-target gnoll camp) active from ARRIVAL until 90883 REWARDED (NegativeCondition on QUESTREWARDED 90883). FIX 2026-08-21: was wrongly gated on QUESTTAKEN(90883), hiding the 90882 gnolls until after 90883 -- corrected to match 1961.')
+ON DUPLICATE KEY UPDATE `ConditionTypeOrReference`=VALUES(`ConditionTypeOrReference`), `NegativeCondition`=VALUES(`NegativeCondition`), `Comment`=VALUES(`Comment`);
 
 -- PhaseId 1959 (Go'shek farm base/leads/prop) requires quest 90883 REWARDED -- the "entry
 -- event" into the wire graph's whole 90885-90896 span for this id.
