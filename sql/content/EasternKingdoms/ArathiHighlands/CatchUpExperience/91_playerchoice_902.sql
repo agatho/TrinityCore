@@ -6,11 +6,14 @@
 --   Dragon Isles Await" 65435(Horde)/65436(Alliance); The War Within Recap (70-80) -> 93929;
 --   The War Within (80+) -> 92405 "Meet Arator". RewardQuestID is single-valued so the
 --   faction-specific Dragonflight quest (65435 H / 65436 A) is routed by the RPE C++ hook
---   (PlayerScript::OnPlayerChoiceResponse in zone_arathi_highlands_rpe.cpp on feature/arathi-rpe),
---   which also COMPLETES quest 90911 on any response. RewardQuestID below = the neutral/Alliance
---   default; the hook overrides for Horde DF.
--- TODO Phase K: level-bracket gating (show only the age-appropriate response) via response Flags/
---   conditions; confirm the exact retail response ordering + art. Choice text from screenshot.
+--   (PlayerChoiceScript::OnResponse in zone_arathi_highlands_rpe.cpp on feature/arathi-rpe -- this
+--   fork dispatches player choices via PlayerChoiceScript keyed on playerchoice.ScriptName, NOT a
+--   PlayerScript::OnPlayerChoiceResponse hook), which also COMPLETES quest 90911 on any response.
+--   RewardQuestID below = the neutral/Alliance default; the hook remaps the DF pair to the
+--   player's own faction (implemented Phase K 2026-08-21, zone_arathi_highlands_rpe.cpp).
+-- Phase K DONE (2026-08-21): level-bracket gating (show only the age-appropriate response) is now
+--   authored in 92_conditions_playerchoice_902.sql (CONDITION_SOURCE_TYPE_PLAYER_CHOICE_RESPONSE
+--   level ranges: 9021 DF 10-69, 9022 Recap 70-80, 9023 TWW >=80). Choice text from screenshot.
 -- CANDIDATE ONLY -- idempotent. Requires the RPE C++ finale hook to credit 90911 + route.
 -- ============================================================================
 DELETE FROM `playerchoice_response_reward` WHERE `ChoiceId`=902;

@@ -103,6 +103,36 @@ INSERT INTO `gossip_menu_option` (`MenuID`, `GossipOptionID`, `OptionID`, `Optio
 ON DUPLICATE KEY UPDATE `GossipOptionID`=VALUES(`GossipOptionID`), `OptionNpc`=VALUES(`OptionNpc`), `OptionText`=VALUES(`OptionText`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
 
 -- ============================================================================
+-- SECTION 4 -- "Leave Catch Up Experience" early-exit gossip option (Phase K #5)
+-- ============================================================================
+-- The capture proved there is NO client opcode/API/string for leaving the RPE (only
+-- CMSG_ENCOUNTER_JOURNAL_START_ARATHI_RPE exists, for entering); retail drives the early exit
+-- through the guide NPC's gossip. This adds a plain talk option "Leave Catch Up Experience" to
+-- BOTH guide menus (Alliance Jaina 244714/39348, Horde Thrall 244715/39349), alongside -- not
+-- replacing -- their native "Show me where I could go next." adventure-map option above.
+--
+-- OptionID = 1 is the per-menu ordinal (gossip_menu_option.OptionID -> struct OrderIndex ->
+-- arrives at the script as gossipListId); the C++ handler npc_arathi_rpe_guide::OnGossipSelect
+-- (feature/arathi-rpe, zone_arathi_highlands_rpe.cpp) matches gossipListId == 1 and teleports the
+-- player to their faction capital via the shared SendPlayerHomeFromRpe path (same exit the finale
+-- PlayerChoice 902 uses). OptionNpc=0 (None/plain talk) and GossipOptionID=0 render fine (the
+-- packet serializes every option unconditionally, GossipDef.cpp) -- no DB2 flavor row needed for a
+-- scripted talk option. The label text is authored server-side (retail's is too -- it is not in
+-- the client string table).
+-- NOTE: OptionID 1 does not collide with the native option above (its OptionID is 16777216).
+-- NOTE: MenuID 39349 remains a PLACEHOLDER (see SECTION 3c banner); when the real Horde guide
+--   MenuID is captured, update this row's MenuID together with the SECTION 1/2/3c rows.
+INSERT INTO `gossip_menu_option` (`MenuID`, `GossipOptionID`, `OptionID`, `OptionNpc`, `OptionText`, `OptionBroadcastTextID`, `Language`, `Flags`, `ActionMenuID`, `ActionPoiID`, `GossipNpcOptionID`, `BoxCoded`, `BoxMoney`, `BoxText`, `BoxBroadcastTextID`, `SpellID`, `OverrideIconID`, `VerifiedBuild`) VALUES
+(39348, 0, 1, 0, 'Leave Catch Up Experience', 0, 0, 0, 0, 0, NULL, 0, 0, NULL, 0, NULL, NULL, 69382), -- Alliance Jaina 244714
+(39349, 0, 1, 0, 'Leave Catch Up Experience', 0, 0, 0, 0, 0, NULL, 0, 0, NULL, 0, NULL, NULL, 69382)  -- Horde Thrall 244715 (PLACEHOLDER MenuID)
+ON DUPLICATE KEY UPDATE `GossipOptionID`=VALUES(`GossipOptionID`), `OptionNpc`=VALUES(`OptionNpc`), `OptionText`=VALUES(`OptionText`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
+
+-- Wire the guide NPCs to the AI that handles the Leave option (RegisterCreatureAI(npc_arathi_rpe_guide)
+-- on feature/arathi-rpe). This ScriptedAI is passive -- it only adds the OnGossipSelect handler and
+-- does not disturb the NPCs' DB-driven questgiver gossip or the native adventure-map option.
+UPDATE `creature_template` SET `ScriptName`='npc_arathi_rpe_guide' WHERE `entry` IN (244714, 244715);
+
+-- ============================================================================
 -- REFERENCE ONLY -- Chromie (167032) captured timeline-picker options (map 85)
 -- NOT LIVE DATA. No creature_template_gossip / gossip_menu / gossip_menu_option row is
 -- authored for these anywhere in this file (FIX ROUND 1 -- see header note above).

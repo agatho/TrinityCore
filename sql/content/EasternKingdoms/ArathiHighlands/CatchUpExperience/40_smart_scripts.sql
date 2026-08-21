@@ -19,9 +19,10 @@
 --    ONCE when HP first enters [0,20]% -- this is a conservative default, NOT a
 --    confirmed absence of a real repeat/enrage mechanic. A human must confirm
 --    real retail cadence before this is treated as ship-ready.
---  * Every SMART_ACTION_CAST (action_type=11) spell id is annotated UNRESOLVED --
---    spell NAMES were not captured (SpellName.db2 resolution is Phase K work);
---    do not fabricate names.
+--  * SMART_ACTION_CAST (action_type=11) spell NAMES resolved Phase K (2026-08-21) from
+--    SpellName.db2 (build 68275 cache) and annotated inline per id: 305913=Shadow Bolt,
+--    317547=Desecrate, 1270769=Whirlwind, 372369=Shoot, 448429=Fireball, 33239=Whirlwind,
+--    399062=Boulder Throw. Names are for readability only; the cast ids/logic are unchanged.
 --  * AGGRO barks for Runk (244675) and Ro'grok (244709) were NOT directly observed
 --    in the combat log (the log only captured HEALTH_PCT/DEATH beats) -- they are
 --    authored per task-4-brief.md Requirement 2 (boss aggro+death bark pattern)
@@ -40,7 +41,7 @@
 --    317547 at HP<=30% + death, proving Runk's real repertoire is the SAME pair
 --    as Ro'grok {305913, 317547} -- a Runk HEALTH_PCT<=20% -> CAST 317547 row
 --    (id4, mirroring Ro'grok id1) is now authored below, cross-capture-confirmed.
---    Spell name still UNRESOLVED (Phase K).
+--    Spell 317547 = Desecrate (resolved Phase K via SpellName.db2).
 --  * EXCLUDED as capture artifacts (present in combatlog_smart_scripts.sql but
 --    NOT authored here because they are not corroborated by the plan sec 1.4
 --    evidence table, and are almost certainly "last spell observed before the
@@ -101,44 +102,44 @@ INSERT INTO `smart_scripts`
   (`entryorguid`, `source_type`, `id`, `link`, `event_type`, `event_phase_mask`, `event_chance`, `event_flags`, `event_param1`, `event_param2`, `event_param3`, `event_param4`, `event_param5`, `action_type`, `action_param1`, `action_param2`, `action_param3`, `action_param4`, `action_param5`, `action_param6`, `action_param7`, `target_type`, `target_param1`, `target_param2`, `target_param3`, `target_param4`, `target_x`, `target_y`, `target_z`, `target_o`, `comment`)
 VALUES
 -- ---- 244670 Gnoll Bowblaster (trash) -- AIName already set by Task 1 ----
-  -- spell 372369 UNRESOLVED (Phase K SpellName.db2)
-  (244670, 0, 0, 0, 4, 0, 100, 0, 0, 0, 0, 0, 0, 11, 372369, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0.0, 0.0, 0.0, 0.0, 'REVIEW-ONLY (1 combat capture): Gnoll Bowblaster aggro cast -- spell 372369 UNRESOLVED (Phase K SpellName.db2)'),
+  -- spell 372369 = Shoot (resolved Phase K via SpellName.db2)
+  (244670, 0, 0, 0, 4, 0, 100, 0, 0, 0, 0, 0, 0, 11, 372369, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0.0, 0.0, 0.0, 0.0, 'REVIEW-ONLY (1 combat capture): Gnoll Bowblaster aggro cast -- spell 372369 = Shoot (resolved Phase K via SpellName.db2)'),
 
 -- ---- 244677 Kobold Firetender (trash) -- AIName set above in this slice ----
-  -- spell 448429 UNRESOLVED (Phase K SpellName.db2)
-  (244677, 0, 0, 0, 4, 0, 100, 0, 0, 0, 0, 0, 0, 11, 448429, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0.0, 0.0, 0.0, 0.0, 'REVIEW-ONLY (1 combat capture): Kobold Firetender aggro cast -- spell 448429 UNRESOLVED (Phase K SpellName.db2); requires creature_template.AIName=SmartAI (see UPDATE above, not set by Task 1)'),
+  -- spell 448429 = Fireball (resolved Phase K via SpellName.db2)
+  (244677, 0, 0, 0, 4, 0, 100, 0, 0, 0, 0, 0, 0, 11, 448429, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0.0, 0.0, 0.0, 0.0, 'REVIEW-ONLY (1 combat capture): Kobold Firetender aggro cast -- spell 448429 = Fireball (resolved Phase K via SpellName.db2); requires creature_template.AIName=SmartAI (see UPDATE above, not set by Task 1)'),
 
 -- ---- 244682 Kobold Waxmancer (trash) -- AIName already set by Task 1 ----
-  -- spell 448429 UNRESOLVED (Phase K SpellName.db2)
-  (244682, 0, 0, 0, 6, 0, 100, 0, 0, 0, 0, 0, 0, 11, 448429, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0.0, 0.0, 0.0, 0.0, 'REVIEW-ONLY (1 combat capture, weak signal n=1 per plan sec 1.4): Kobold Waxmancer death cast -- spell 448429 UNRESOLVED (Phase K SpellName.db2)'),
+  -- spell 448429 = Fireball (resolved Phase K via SpellName.db2)
+  (244682, 0, 0, 0, 6, 0, 100, 0, 0, 0, 0, 0, 0, 11, 448429, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0.0, 0.0, 0.0, 0.0, 'REVIEW-ONLY (1 combat capture, weak signal n=1 per plan sec 1.4): Kobold Waxmancer death cast -- spell 448429 = Fireball (resolved Phase K via SpellName.db2)'),
 
 -- ---- 244685 Ogre Basher (elite) -- AIName set above in this slice ----
-  -- spell 33239 UNRESOLVED (Phase K SpellName.db2)
-  (244685, 0, 0, 0, 2, 0, 100, 1, 0, 20, 0, 0, 0, 11, 33239, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0.0, 0.0, 0.0, 0.0, 'REVIEW-ONLY (1 combat capture, n=2): Ogre Basher HP<=20% cast, single-fire NOT_REPEATABLE, real cadence NOT captured -- spell 33239 UNRESOLVED (Phase K SpellName.db2); requires creature_template.AIName=SmartAI (see UPDATE above, elite not set by Task 1)'),
-  -- id1: HORDE-XVAL ADD (2026-08-21) -- HEALTH_PCT<=30% second cast, spell 1270769 UNRESOLVED (Phase K SpellName.db2)
-  (244685, 0, 1, 0, 2, 0, 100, 1, 0, 30, 0, 0, 0, 11, 1270769, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0.0, 0.0, 0.0, 0.0, 'HORDE-XVAL ADD, cross-capture-confirmed: Ogre Basher HP<=30% second cast -- Alliance capture observed 1270769 as a DEATH-adjacent last-observed-cast (treated as artifact, still excluded above), Horde run directly observed it fired mid-fight at HP<=30% (not death), confirming it is a REAL second ability distinct from the HP<=20% 33239 cast id0; single-fire NOT_REPEATABLE, real cadence NOT captured; spell 1270769 UNRESOLVED (Phase K SpellName.db2); also present in 10d_creature_template_spell.sql advertised spell list for 244685 (index 12); requires creature_template.AIName=SmartAI (see UPDATE above)'),
+  -- spell 33239 = Whirlwind (resolved Phase K via SpellName.db2)
+  (244685, 0, 0, 0, 2, 0, 100, 1, 0, 20, 0, 0, 0, 11, 33239, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0.0, 0.0, 0.0, 0.0, 'REVIEW-ONLY (1 combat capture, n=2): Ogre Basher HP<=20% cast, single-fire NOT_REPEATABLE, real cadence NOT captured -- spell 33239 = Whirlwind (resolved Phase K via SpellName.db2); requires creature_template.AIName=SmartAI (see UPDATE above, elite not set by Task 1)'),
+  -- id1: HORDE-XVAL ADD (2026-08-21) -- HEALTH_PCT<=30% second cast, spell 1270769 = Whirlwind (resolved Phase K via SpellName.db2)
+  (244685, 0, 1, 0, 2, 0, 100, 1, 0, 30, 0, 0, 0, 11, 1270769, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0.0, 0.0, 0.0, 0.0, 'HORDE-XVAL ADD, cross-capture-confirmed: Ogre Basher HP<=30% second cast -- Alliance capture observed 1270769 as a DEATH-adjacent last-observed-cast (treated as artifact, still excluded above), Horde run directly observed it fired mid-fight at HP<=30% (not death), confirming it is a REAL second ability distinct from the HP<=20% 33239 cast id0; single-fire NOT_REPEATABLE, real cadence NOT captured; spell 1270769 = Whirlwind (resolved Phase K via SpellName.db2); also present in 10d_creature_template_spell.sql advertised spell list for 244685 (index 12); requires creature_template.AIName=SmartAI (see UPDATE above)'),
 
 -- ---- 244695 Ettin Crusher (elite) -- AIName set above in this slice ----
-  -- spell 399062 UNRESOLVED (Phase K SpellName.db2)
-  (244695, 0, 0, 0, 6, 0, 100, 0, 0, 0, 0, 0, 0, 11, 399062, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0.0, 0.0, 0.0, 0.0, 'REVIEW-ONLY (1 combat capture): Ettin Crusher death cast -- spell 399062 UNRESOLVED (Phase K SpellName.db2); requires creature_template.AIName=SmartAI (see UPDATE above, elite not set by Task 1)'),
+  -- spell 399062 = Boulder Throw (resolved Phase K via SpellName.db2)
+  (244695, 0, 0, 0, 6, 0, 100, 0, 0, 0, 0, 0, 0, 11, 399062, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0.0, 0.0, 0.0, 0.0, 'REVIEW-ONLY (1 combat capture): Ettin Crusher death cast -- spell 399062 = Boulder Throw (resolved Phase K via SpellName.db2); requires creature_template.AIName=SmartAI (see UPDATE above, elite not set by Task 1)'),
 
 -- ---- 244675 Runk (mini-boss) -- AIName already set by Task 1 ----
   -- id0: aggro bark -- depends: Task 5 creature_text (groupid 0=aggro)
   (244675, 0, 0, 0, 4, 0, 100, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0.0, 0.0, 0.0, 0.0, 'REVIEW-ONLY: Runk aggro bark -- depends: Task 5 creature_text groupid 0 (aggro). NOT directly captured in combat log (log only recorded HEALTH_PCT/DEATH beats); authored per task-4-brief.md Req.2 boss bark pattern -- confirm against Task 5 authored text before enabling'),
-  -- id1: HEALTH_PCT<=20% cast -- INFERRED, see banner note. spell 305913 UNRESOLVED (Phase K SpellName.db2)
-  (244675, 0, 1, 0, 2, 0, 100, 1, 0, 20, 0, 0, 0, 11, 305913, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0.0, 0.0, 0.0, 0.0, 'REVIEW-ONLY, INFERRED (NOT directly captured for this entry): Runk HP<=20% cast mirrors Ro''grok pairing per plan sec 1.4 evidence table ("HEALTH_PCT/DEATH -> ACTION_CAST 305913"); raw combat log for 244675 only directly captured the DEATH-triggered cast below, not a separate HEALTH_PCT one -- unconfirmed, human must verify before enabling; single-fire NOT_REPEATABLE, cadence NOT captured; spell 305913 UNRESOLVED (Phase K SpellName.db2)'),
-  -- id2: DEATH cast, directly captured. spell 305913 UNRESOLVED (Phase K SpellName.db2)
-  (244675, 0, 2, 0, 6, 0, 100, 0, 0, 0, 0, 0, 0, 11, 305913, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0.0, 0.0, 0.0, 0.0, 'REVIEW-ONLY (1 combat capture, directly observed UNIT_DIED last-cast): Runk death cast -- spell 305913 UNRESOLVED (Phase K SpellName.db2)'),
+  -- id1: HEALTH_PCT<=20% cast -- INFERRED, see banner note. spell 305913 = Shadow Bolt (resolved Phase K via SpellName.db2)
+  (244675, 0, 1, 0, 2, 0, 100, 1, 0, 20, 0, 0, 0, 11, 305913, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0.0, 0.0, 0.0, 0.0, 'REVIEW-ONLY, INFERRED (NOT directly captured for this entry): Runk HP<=20% cast mirrors Ro''grok pairing per plan sec 1.4 evidence table ("HEALTH_PCT/DEATH -> ACTION_CAST 305913"); raw combat log for 244675 only directly captured the DEATH-triggered cast below, not a separate HEALTH_PCT one -- unconfirmed, human must verify before enabling; single-fire NOT_REPEATABLE, cadence NOT captured; spell 305913 = Shadow Bolt (resolved Phase K via SpellName.db2)'),
+  -- id2: DEATH cast, directly captured. spell 305913 = Shadow Bolt (resolved Phase K via SpellName.db2)
+  (244675, 0, 2, 0, 6, 0, 100, 0, 0, 0, 0, 0, 0, 11, 305913, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0.0, 0.0, 0.0, 0.0, 'REVIEW-ONLY (1 combat capture, directly observed UNIT_DIED last-cast): Runk death cast -- spell 305913 = Shadow Bolt (resolved Phase K via SpellName.db2)'),
   -- id3: death bark -- depends: Task 5 creature_text (groupid 1=death)
   (244675, 0, 3, 0, 6, 0, 100, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0.0, 0.0, 0.0, 0.0, 'REVIEW-ONLY: Runk death bark -- depends: Task 5 creature_text groupid 1 (death). Directly evidenced by plan sec 1.4 ("HEALTH_PCT/DEATH -> ACTION_CAST 305913 + TALK")'),
-  -- id4: HORDE-XVAL ADD (2026-08-21) -- HEALTH_PCT<=20% paired finisher cast, mirrors Ro'grok id1. spell 317547 UNRESOLVED (Phase K SpellName.db2)
-  (244675, 0, 4, 0, 2, 0, 100, 1, 0, 20, 0, 0, 0, 11, 317547, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0.0, 0.0, 0.0, 0.0, 'HORDE-XVAL ADD, cross-capture-confirmed: Horde run directly observed Runk casting 317547 at HP<=30% + death, proving Runk''s real repertoire is the SAME {305913, 317547} finisher pair as Ro''grok 244709 (mirrors Ro''grok''s id1 row exactly: HP<=20% -> CAST 317547). Runk''s existing id1 (305913 HP<=20%, INFERRED) remains flagged separately -- this new row is the corroborated second half of the pair; single-fire NOT_REPEATABLE, real cadence NOT captured; spell 317547 UNRESOLVED (Phase K SpellName.db2); also present in 10d_creature_template_spell.sql advertised spell list for 244675 (index 16)'),
+  -- id4: HORDE-XVAL ADD (2026-08-21) -- HEALTH_PCT<=20% paired finisher cast, mirrors Ro'grok id1. spell 317547 = Desecrate (resolved Phase K via SpellName.db2)
+  (244675, 0, 4, 0, 2, 0, 100, 1, 0, 20, 0, 0, 0, 11, 317547, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0.0, 0.0, 0.0, 0.0, 'HORDE-XVAL ADD, cross-capture-confirmed: Horde run directly observed Runk casting 317547 at HP<=30% + death, proving Runk''s real repertoire is the SAME {305913, 317547} finisher pair as Ro''grok 244709 (mirrors Ro''grok''s id1 row exactly: HP<=20% -> CAST 317547). Runk''s existing id1 (305913 HP<=20%, INFERRED) remains flagged separately -- this new row is the corroborated second half of the pair; single-fire NOT_REPEATABLE, real cadence NOT captured; spell 317547 = Desecrate (resolved Phase K via SpellName.db2); also present in 10d_creature_template_spell.sql advertised spell list for 244675 (index 16)'),
 
 -- ---- 244709 Ro'grok (final boss) -- AIName already set by Task 1 ----
-  -- id0: HEALTH_PCT<=20% primary cast, n=4. spell 305913 UNRESOLVED (Phase K SpellName.db2)
-  (244709, 0, 0, 0, 2, 0, 100, 1, 0, 20, 0, 0, 0, 11, 305913, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0.0, 0.0, 0.0, 0.0, 'REVIEW-ONLY (1 combat capture, n=4 per plan sec 1.4): Ro''grok HP<=20% cast, single-fire NOT_REPEATABLE, real cadence NOT captured -- spell 305913 UNRESOLVED (Phase K SpellName.db2)'),
-  -- id1: HEALTH_PCT<=20% paired finisher, n=2. spell 317547 UNRESOLVED (Phase K SpellName.db2)
-  (244709, 0, 1, 0, 2, 0, 100, 1, 0, 20, 0, 0, 0, 11, 317547, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0.0, 0.0, 0.0, 0.0, 'REVIEW-ONLY (1 combat capture, n=2 per plan sec 1.4): Ro''grok paired finisher cast, HP<=20%, single-fire NOT_REPEATABLE, real cadence NOT captured -- spell 317547 UNRESOLVED (Phase K SpellName.db2)'),
+  -- id0: HEALTH_PCT<=20% primary cast, n=4. spell 305913 = Shadow Bolt (resolved Phase K via SpellName.db2)
+  (244709, 0, 0, 0, 2, 0, 100, 1, 0, 20, 0, 0, 0, 11, 305913, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0.0, 0.0, 0.0, 0.0, 'REVIEW-ONLY (1 combat capture, n=4 per plan sec 1.4): Ro''grok HP<=20% cast, single-fire NOT_REPEATABLE, real cadence NOT captured -- spell 305913 = Shadow Bolt (resolved Phase K via SpellName.db2)'),
+  -- id1: HEALTH_PCT<=20% paired finisher, n=2. spell 317547 = Desecrate (resolved Phase K via SpellName.db2)
+  (244709, 0, 1, 0, 2, 0, 100, 1, 0, 20, 0, 0, 0, 11, 317547, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0.0, 0.0, 0.0, 0.0, 'REVIEW-ONLY (1 combat capture, n=2 per plan sec 1.4): Ro''grok paired finisher cast, HP<=20%, single-fire NOT_REPEATABLE, real cadence NOT captured -- spell 317547 = Desecrate (resolved Phase K via SpellName.db2)'),
   -- id2: aggro bark -- depends: Task 5 creature_text (groupid 0=aggro)
   (244709, 0, 2, 0, 4, 0, 100, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0.0, 0.0, 0.0, 0.0, 'REVIEW-ONLY: Ro''grok aggro bark -- depends: Task 5 creature_text groupid 0 (aggro). NOT directly captured in combat log; authored per task-4-brief.md Req.2 boss bark pattern -- confirm against Task 5 authored text before enabling'),
   -- id3: death bark, directly evidenced (plan sec 1.4 lists death trigger as TALK for Ro'grok, not a cast)

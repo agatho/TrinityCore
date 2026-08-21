@@ -34,6 +34,9 @@ UPDATE `creature_template` SET `lootid` = `entry` WHERE `entry` IN (244674, 2446
 -- session cannot establish a real drop%); real distribution needs a Phase-K farm-volume
 -- session or a Wowhead-fallback per capture-first precedence -- do NOT read 100% as verified
 -- for these two.
+-- Item names resolved Phase K (2026-08-21) from ItemSparse.db2 (build 68275 cache):
+--   243573 = "Poorly Written Plans" (quest item, quest 90886), 1376 = "Frayed Cloak",
+--   220232 = "Worm-Eaten Burlap Robe". All three are real 11.2.7 client items.
 -- TODO Phase K: confirm item_template rows for {243573, 1376, 220232} exist in the world DB
 -- (they are 11.2.7 client items sourced from the Item DB2 import, NOT hand-authored here); if
 -- absent, import from DB2 before this loot table can resolve at runtime.
@@ -45,9 +48,9 @@ INSERT INTO `creature_loot_template` (`Entry`, `Item`, `Reference`, `Chance`, `Q
 INSERT INTO `creature_loot_template` (`Entry`, `Item`, `Reference`, `Chance`, `QuestRequired`, `LootMode`, `GroupId`, `MinCount`, `MaxCount`, `VerifiedBuild`) VALUES (244676, 243573, 0, 100.0, 1, 1, 0, 1, 1, 69382) ON DUPLICATE KEY UPDATE `Chance`=VALUES(`Chance`), `QuestRequired`=VALUES(`QuestRequired`), `LootMode`=VALUES(`LootMode`), `GroupId`=VALUES(`GroupId`), `MinCount`=VALUES(`MinCount`), `MaxCount`=VALUES(`MaxCount`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
 -- 244677 Kobold Firetender -> 243573 "Poorly Written Plans" [quest item, quest 90886]
 INSERT INTO `creature_loot_template` (`Entry`, `Item`, `Reference`, `Chance`, `QuestRequired`, `LootMode`, `GroupId`, `MinCount`, `MaxCount`, `VerifiedBuild`) VALUES (244677, 243573, 0, 100.0, 1, 1, 0, 1, 1, 69382) ON DUPLICATE KEY UPDATE `Chance`=VALUES(`Chance`), `QuestRequired`=VALUES(`QuestRequired`), `LootMode`=VALUES(`LootMode`), `GroupId`=VALUES(`GroupId`), `MinCount`=VALUES(`MinCount`), `MaxCount`=VALUES(`MaxCount`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
--- 244674 Ogre Destroyer -> 1376 [non-quest; Chance=100 SINGLE-OBSERVATION placeholder, not verified drop%]
+-- 244674 Ogre Destroyer -> 1376 "Frayed Cloak" [non-quest; Chance=100 SINGLE-OBSERVATION placeholder, not verified drop%]
 INSERT INTO `creature_loot_template` (`Entry`, `Item`, `Reference`, `Chance`, `QuestRequired`, `LootMode`, `GroupId`, `MinCount`, `MaxCount`, `VerifiedBuild`) VALUES (244674, 1376, 0, 100.0, 0, 1, 0, 1, 1, 69382) ON DUPLICATE KEY UPDATE `Chance`=VALUES(`Chance`), `QuestRequired`=VALUES(`QuestRequired`), `LootMode`=VALUES(`LootMode`), `GroupId`=VALUES(`GroupId`), `MinCount`=VALUES(`MinCount`), `MaxCount`=VALUES(`MaxCount`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
--- 244676 Kobold Pillager -> 220232 [non-quest; Chance=100 SINGLE-OBSERVATION placeholder, not verified drop%]
+-- 244676 Kobold Pillager -> 220232 "Worm-Eaten Burlap Robe" [non-quest; Chance=100 SINGLE-OBSERVATION placeholder, not verified drop%]
 INSERT INTO `creature_loot_template` (`Entry`, `Item`, `Reference`, `Chance`, `QuestRequired`, `LootMode`, `GroupId`, `MinCount`, `MaxCount`, `VerifiedBuild`) VALUES (244676, 220232, 0, 100.0, 0, 1, 0, 1, 1, 69382) ON DUPLICATE KEY UPDATE `Chance`=VALUES(`Chance`), `QuestRequired`=VALUES(`QuestRequired`), `LootMode`=VALUES(`LootMode`), `GroupId`=VALUES(`GroupId`), `MinCount`=VALUES(`MinCount`), `MaxCount`=VALUES(`MaxCount`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
 
 -- ---- SECTION 2b -- HORDE-XVAL ADD (2026-08-21): 244669 Scavenging Hyena -> 192617 ----
@@ -57,14 +60,15 @@ INSERT INTO `creature_loot_template` (`Entry`, `Item`, `Reference`, `Chance`, `Q
 -- this is a genuinely NEW loot pair not previously authored for this entry. NON-quest
 -- (QuestRequired=0); Chance=100 is a SINGLE-SESSION/low-confidence placeholder only (same
 -- caveat as the 1376/220232 rows above -- one session cannot establish real drop%). Item
--- 192617 is an existing 11.2.7 client item (Item DB2 import) -- NOT hand-authored here.
+-- 192617 = "Hound Paw" (resolved Phase K from ItemSparse.db2, build 68275) -- an existing
+-- 11.2.7 client item (Item DB2 import), NOT hand-authored here.
 -- TODO Phase K: confirm item_template row for 192617 exists in the world DB; if absent,
 -- import from DB2 before this loot table can resolve at runtime.
 -- lootid linkage: idempotent, scoped to only this entry (244674/244676/244677 already
 -- wired above in SECTION 1; 244669 was NOT in that list, so add it here explicitly --
 -- without this, creature_template.lootid stays 0 and the row below never resolves).
 UPDATE `creature_template` SET `lootid` = `entry` WHERE `entry` = 244669;
--- 244669 Scavenging Hyena -> 192617 [non-quest; Chance=100 SINGLE-SESSION placeholder, not verified drop%]
+-- 244669 Scavenging Hyena -> 192617 "Hound Paw" [non-quest; Chance=100 SINGLE-SESSION placeholder, not verified drop%]
 INSERT INTO `creature_loot_template` (`Entry`, `Item`, `Reference`, `Chance`, `QuestRequired`, `LootMode`, `GroupId`, `MinCount`, `MaxCount`, `VerifiedBuild`) VALUES (244669, 192617, 0, 100.0, 0, 1, 0, 2, 2, 69382) ON DUPLICATE KEY UPDATE `Chance`=VALUES(`Chance`), `QuestRequired`=VALUES(`QuestRequired`), `LootMode`=VALUES(`LootMode`), `GroupId`=VALUES(`GroupId`), `MinCount`=VALUES(`MinCount`), `MaxCount`=VALUES(`MaxCount`), `VerifiedBuild`=VALUES(`VerifiedBuild`);
 
 -- ---- SECTION 3 -- money (Phase-K note, not authored here) ----
