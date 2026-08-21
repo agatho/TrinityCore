@@ -29,6 +29,11 @@
 -- Revert the R1 feign-death corpse aura on 245027 -- our capture shows no aura 29266; live gnolls.
 UPDATE `creature_template_addon` SET `auras` = '' WHERE `entry` = 245027;
 
+-- Training dummies (249245) are physically at the Hammerfall pad but were phased 1959 (the FARM
+-- phase, area 16456) -- so they never show at the pad. Move them to the Hammerfall phase 1961
+-- (area 16466), where the leaders/base town live.
+UPDATE `creature` SET `PhaseId` = 1961 WHERE `map` = 2927 AND `id` = 249245;
+
 -- Restore the leader POSE auras the consolidation dropped. BOTH are present in OUR OWN capture
 -- (aura-update opcode 0x670011, 6 frames): spell 1237118 "Casting (DNT)" and 1237057 "Kneel (DNT)"
 -- (names verified in SpellName.db2 -- developer pose spells, Effect=apply-aura, NO summon effect).
