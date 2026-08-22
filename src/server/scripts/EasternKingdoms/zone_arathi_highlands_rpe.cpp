@@ -30,6 +30,8 @@
 #include "ScriptedGossip.h"
 #include "Spell.h"
 #include "SpellInfo.h"
+#include "SpellMgr.h"
+#include "TemporarySummon.h"
 
 /*######
 ## Arathi Returning Player Experience ("Catch Up"), map 2927
@@ -99,7 +101,23 @@ enum ArathiRpe
     // so no explicit despawn is needed - the walk is the visible flourish before that.
     SAY_RPE_LEADER_SENDOFF           = 0,
     PATH_RPE_JAINA_PAD_SENDOFF       = 2218835,
-    PATH_RPE_THRALL_PAD_SENDOFF      = 2218842
+    PATH_RPE_THRALL_PAD_SENDOFF      = 2218842,
+
+    // "My Beautiful Pumpkins" (90885) escort. WIRE-CONFIRMED from the Horde capture (69404): the
+    // player spellclicks each Prized Pumpkin (244956) -- CMSG_SPELLCLICK x4, matching the 4-pumpkin
+    // objective 461736 -- whereupon the pumpkin casts spell 1236771 (its own launch/fly-to-peon visual;
+    // creature_template_spell 244956->1236771) and the Hammerfall Peon (249249) casts spell 382691
+    // (its carry visual; creature_template_spell 249249->382691), the peon following the player and
+    // ending the quest visibly carrying 4 pumpkins. Farmer Bruvk (244729) starts the quest. Implemented
+    // as a PERSONAL peon summon (private to the accepting player) that follows, accrues a carry stack
+    // per click, and self-despawns when the quest leaves the "in progress / ready to turn in" states.
+    QUEST_MY_BEAUTIFUL_PUMPKINS      = 90885,
+    NPC_ARATHI_RPE_FARMER_BRUVK      = 244729,   // 90885 quest starter
+    NPC_ARATHI_RPE_PRIZED_PUMPKIN    = 244956,   // spellclick target (x4)
+    NPC_ARATHI_RPE_PUMPKIN_PEON      = 249249,   // the carrying peon (summoned, follows player)
+    SPELL_ARATHI_RPE_PUMPKIN_LAUNCH  = 1236771,  // pumpkin's own on-click visual (wire: 244956 casts this)
+    SPELL_ARATHI_RPE_PEON_CARRY      = 382691,    // peon carry visual, stacked to the pumpkins carried
+    ARATHI_RPE_PUMPKINS_NEEDED       = 4
 };
 
 // Faction capitals to send the player to once the Catch Up finale choice has been made. These are
@@ -360,10 +378,138 @@ struct npc_arathi_rpe_leader : public ScriptedAI
     }
 };
 
+// "My Beautiful Pumpkins" (90885) -- the carrying peon. Summoned personally for the player who accepts
+// the quest (see npc_arathi_rpe_farmer_bruvk), it follows them, gains one carry-stack of SPELL_ARATHI_RPE
+// _PEON_CARRY per pumpkin recovered, and self-despawns once the quest is no longer in progress / ready.
+struct npc_arathi_rpe_pumpkin_peon : public ScriptedAI
+{
+    npc_arathi_rpe_pumpkin_peon(Creature* creature) : ScriptedAI(creature) { }
+
+    void IsSummonedBy(WorldObject* summoner) override
+    {
+        if (Player* player = summoner->ToPlayer())
+        {
+            _ownerGuid = player->GetGUID();
+            me->SetReactState(REACT_PASSIVE);
+            me->SetImmuneToAll(true);            // an escort prop, never a combatant
+            me->GetMotionMaster()->MoveFollow(player, 2.0f, float(M_PI));  // trail just behind the player
+        }
+    }
+
+    // Called by the pumpkin's OnSpellClick: accrue one carried pumpkin (capped at the objective count)
+    // and refresh the carry visual to that stack count.
+    void AddPumpkin()
+    {
+        if (_pumpkins >= ARATHI_RPE_PUMPKINS_NEEDED)
+            return;
+        ++_pumpkins;
+        if (sSpellMgr->GetSpellInfo(SPELL_ARATHI_RPE_PEON_CARRY, DIFFICULTY_NONE))
+        {
+            me->CastSpell(me, SPELL_ARATHI_RPE_PEON_CARRY, true);   // wire: peon casts 382691 on pickup
+            me->SetAuraStack(SPELL_ARATHI_RPE_PEON_CARRY, me, _pumpkins);
+        }
+    }
+
+    void UpdateAI(uint32 diff) override
+    {
+        // Entry 249249 is ALSO used for 6 ambient farm peons (static world spawns). This AI is on the
+        // template, so those get it too -- but they are never IsSummonedBy'd. Only the personal quest
+        // summon runs the escort/despawn logic; the ambient peons fall through and behave inertly.
+        if (!me->IsSummon())
+            return;
+
+        // Self-despawn watchdog: the peon is a personal escort for the pumpkin quest only. Once the
+        // owner is gone, or the quest is no longer in progress (INCOMPLETE) or ready to hand in
+        // (COMPLETE) -- i.e. rewarded or abandoned -- it has served its purpose. Poll cheaply (~1s).
+        _checkTimer += diff;
+        if (_checkTimer < 1000)
+            return;
+        _checkTimer = 0;
+
+        Player* owner = ObjectAccessor::FindPlayer(_ownerGuid);
+        if (!owner)
+        {
+            me->DespawnOrUnsummon();
+            return;
+        }
+        QuestStatus status = owner->GetQuestStatus(QUEST_MY_BEAUTIFUL_PUMPKINS);
+        if (status != QUEST_STATUS_INCOMPLETE && status != QUEST_STATUS_COMPLETE)
+            me->DespawnOrUnsummon(3s);   // brief beat so it lingers, carrying its 4 pumpkins, after turn-in
+    }
+
+    ObjectGuid GetOwnerGuid() const { return _ownerGuid; }
+
+private:
+    ObjectGuid _ownerGuid;
+    uint32 _pumpkins = 0;
+    uint32 _checkTimer = 0;
+};
+
+// Prized Pumpkin (244956): spellclick target. On click by a player on 90885, hand the pumpkin to that
+// player's peon (carry stack + credit) and consume it. The pumpkin's own launch visual (1236771) is
+// fired by the npc_spellclick_spells row (see the SQL), matching the wire; this AI does the rest.
+struct npc_arathi_rpe_prized_pumpkin : public ScriptedAI
+{
+    npc_arathi_rpe_prized_pumpkin(Creature* creature) : ScriptedAI(creature) { }
+
+    void OnSpellClick(Unit* clicker, bool /*spellClickHandled*/) override
+    {
+        Player* player = clicker ? clicker->ToPlayer() : nullptr;
+        if (!player || player->GetQuestStatus(QUEST_MY_BEAUTIFUL_PUMPKINS) != QUEST_STATUS_INCOMPLETE)
+            return;
+
+        // Route the pumpkin to the clicking player's own peon (personal summon).
+        if (Creature* peon = FindOwnedPeon(player))
+            if (auto* peonAI = CAST_AI(npc_arathi_rpe_pumpkin_peon, peon->AI()))
+                peonAI->AddPumpkin();
+
+        player->KilledMonsterCredit(NPC_ARATHI_RPE_PRIZED_PUMPKIN);   // objective 461736 (ObjectID 244956)
+        me->DespawnOrUnsummon(0s, Seconds(30));                       // consumed; respawns for the next run
+    }
+
+private:
+    Creature* FindOwnedPeon(Player const* player) const
+    {
+        std::list<Creature*> peons;
+        me->GetCreatureListWithEntryInGrid(peons, NPC_ARATHI_RPE_PUMPKIN_PEON, 100.0f);
+        for (Creature* peon : peons)
+            if (TempSummon* summon = peon->ToTempSummon())
+                if (summon->GetSummonerGUID() == player->GetGUID())
+                    return peon;
+        return nullptr;
+    }
+};
+
+// Farmer Bruvk (244729): starter of 90885. On accept, summon the player's personal carrying peon.
+struct npc_arathi_rpe_farmer_bruvk : public ScriptedAI
+{
+    npc_arathi_rpe_farmer_bruvk(Creature* creature) : ScriptedAI(creature) { }
+
+    void OnQuestAccept(Player* player, Quest const* quest) override
+    {
+        if (quest->GetQuestId() != QUEST_MY_BEAUTIFUL_PUMPKINS)
+            return;
+
+        // Guard against a duplicate peon if the quest is re-accepted before the old one despawns.
+        std::list<Creature*> peons;
+        me->GetCreatureListWithEntryInGrid(peons, NPC_ARATHI_RPE_PUMPKIN_PEON, 100.0f);
+        for (Creature* peon : peons)
+            if (TempSummon* summon = peon->ToTempSummon())
+                if (summon->GetSummonerGUID() == player->GetGUID())
+                    return;
+
+        // Private summon -> only the accepting player sees their own peon (fits the personally-phased RPE).
+        player->SummonCreature(NPC_ARATHI_RPE_PUMPKIN_PEON, *player, TEMPSUMMON_MANUAL_DESPAWN, 0s, 0, 0, player->GetGUID());
+    }
+};
+
 void AddSC_arathi_highlands_rpe()
 {
     new player_arathi_rpe_mount_credit();
     new player_arathi_rpe_intro_cinematic();
     new playerchoice_arathi_rpe_finale();
     RegisterCreatureAI(npc_arathi_rpe_leader);
+    RegisterCreatureAI(npc_arathi_rpe_pumpkin_peon);
+    RegisterCreatureAI(npc_arathi_rpe_prized_pumpkin);
+    RegisterCreatureAI(npc_arathi_rpe_farmer_bruvk);
 }
