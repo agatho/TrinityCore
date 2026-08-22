@@ -1062,14 +1062,43 @@ namespace WorldPackets
          * 12.1 client, because a 12.1 client would not map the 0x5F values registered here onto the
          * 0x64 dispatcher cases the layouts were read from. Renumbering the family is a chain move
          * across every unit and belongs to the orchestrator, not here.
-         * What HAS been checked is that the older build agrees wherever it can be made to speak: the
-         * 68275 dispatcher extraction (C:\dumpsll_smsg_layouts_68275.json, family 0x5F) resolves a
-         * concrete field list for eight of the 23 messages, and all eight match the 12.1 layout field
-         * for field - 0x5F0006 uint32+bit, 0x5F000F bit, 0x5F0016 uint32+string, 0x5F0003 u8+string,
-         * 0x5F000E guid+u32+u32+u8+9*u32+5 bit-section bytes+4 strings, 0x5F001A the two counts
-         * before both payload arrays, 0x5F002B uint32+bit, 0x5F0030 3*uint32+bit. For the remaining
-         * fifteen that extraction stops at "bytes[rest]" (the case hands the consumer the raw buffer),
-         * so the older build neither confirms nor contradicts them.
+         * What HAS been checked is that the older build agrees wherever it can be made to speak.
+         * There are two independent cross-build witnesses and together they cover 12 of the 23.
+         *
+         * (a) The 68275 dispatcher extraction (C:\dumps\all_smsg_layouts_68275.json, family 0x5F)
+         *     resolves a concrete field list for TEN of the 23, and all ten match the 12.1 layout
+         *     field for field:
+         *       0x5F0003  u8 + bytes[len]                     (bits<1>+bits<6> in one byte, string)
+         *       0x5F0006  uint32 + bool(bit7)
+         *       0x5F000E  ObjectGuid+u32+u32+u8+9*u32+5*u8+4 strings   (5*u8 = the 35-bit section)
+         *       0x5F000F  bool(bit7)
+         *       0x5F0016  uint32 + bytes[len]
+         *       0x5F001A  u32,u32,u32,<8>,<8>,u32,u32          (both counts first, 24 B per element)
+         *       0x5F002B  uint32 + bool(bit7)
+         *       0x5F0030  3*uint32 + bool(bit7)
+         *       0x5F0032  struct{u8,u8,u32,string,u8,u8,u8,string,string}
+         *       0x5F0033  bool(bit7) + that same struct
+         *     0x5F0017 comes back as "varbits" - a bit field whose width the extractor did not
+         *     resolve: consistent with bits<2>, but not by itself conclusive. The other twelve stop
+         *     at "bytes[rest]" (the case hands the consumer the raw buffer), so for them the older
+         *     build neither confirms nor contradicts.
+         *     0x5F0033 is worth singling out: the struct restarts with its OWN u8,u8 length pair
+         *     after the leading bit. That is the older build independently confirming that the
+         *     Delayed bit occupies a byte of its own - see PlayerDelayedUploadScreenshot::Write.
+         *
+         * (b) Reference bytes exist on BOTH sides of the renumbering for three of the messages, and
+         *     they are identical in length and content across it. Full scan of all 75 PKT 3.1
+         *     recordings under C:\sniff (9.93M records, 28 builds):
+         *       0x..0006  136 packets over 18 builds - 106 as 0x5F (65940..68974), 30 as 0x64
+         *                 (69273..69404, 13 of them at the target builds 69382/69404). Every one is
+         *                 5 bytes and every one is 00 00 00 00 00.
+         *       0x..0017  3 packets (68453, 69382, 69404). Every one is 1 byte, 0x80.
+         *       0x..0025  17 packets - 10 as 0x5F, 7 as 0x64. Every one is 4 bytes.
+         *     The two prefixes never co-occur in a single build, which is a second and independent
+         *     witness that the renumbering moved the family as a block.
+         *
+         * What that leaves: 02, 05, 13, 15, 22, 24, 2A, 2C, 2D, 2E and 31 have no cross-build
+         * evidence of any kind. For those eleven, D1 rests on the 12.1 dispatcher case alone.
          */
 
         // Enum.SubscriptionInterstitialType - APIDoc/ExpansionDocumentation.lua:284-294
@@ -1209,7 +1238,9 @@ namespace WorldPackets
 
         // SMSG_PLAYER_OPEN_SUBSCRIPTION_INTERSTITIAL - wire 0x640017, 1 byte.
         // Case calls 0x5D4FD0 = ReadBits(2) (mask `a2 & 3`); consumer 0x209CEA0 distinguishes 0/1/2 only.
-        // Sniff (12.0.7): the single recorded packet is 1 byte 0x80 = 0b10...... = 2 = MaxLevel.
+        // Sniff: 3 recorded packets over the full C:\sniff scan - build 68453 as 0x5F0017, builds
+        // 69382 and 69404 as 0x640017. All three are 1 byte 0x80 = 0b10...... = 2 = MaxLevel, so the
+        // bits<2> reading is confirmed at the exact target build and across the renumbering.
         // Lua SHOW_SUBSCRIPTION_INTERSTITIAL, hash 0x55507E51164C9D2B.
         class PlayerOpenSubscriptionInterstitial final : public ServerPacket
         {
@@ -1278,7 +1309,10 @@ namespace WorldPackets
 
         // SMSG_PLAYER_SHOW_UI_EVENT_TOAST - wire 0x640025, 4 bytes.
         // Subscriber 0x2264F10 -> 0x225CFF0 reads one uint32 and resolves it in DB2 UIEventToast
-        // (store meta string "UIEventToast"). Sniff 12.1: 3 packets, 4 bytes each, ids 341/304/327.
+        // (store meta string "UIEventToast"). Sniff, full C:\sniff scan: 17 packets, every one 4 bytes
+        // - 10 as 0x5F0025 (builds 66562/66709/68275/68974, ids 183, 288, 345, 346, 370) and 7 as
+        // 0x640025 (build 69273, ids 304, 327, 341). Confirms the bare uint32 on both sides of the
+        // renumbering. No packet at 69382/69404, so no reference bytes at the exact target build.
         // Hard client side gate (0x225CFF0): only UIEventToast.EventType in
         // { 12, 13, 16, 17, 18, 19, 20, 22 } is processed, anything else is dropped without a message.
         // This is NOT the embedded WorldPackets::Item::UiEventToast pair - the standalone opcode
@@ -1515,6 +1549,13 @@ namespace WorldPackets
         // Body is exactly 1 byte. Triggered by SendSubscriptionInterstitialResponse(response)
         // (ExpansionDocumentation.lua:220-228) from Blizzard_SubscriptionInterstitialUI.lua:27/29/123.
         // See SubscriptionInterstitialResponseType for the Lua -> wire remap.
+        // Sniff: 3 recorded packets over the full C:\sniff scan, all 1 byte - 68453 (0x3A0297) 0x00,
+        // 69382 (0x3D0293) 0x20, 69404 (0x3D0293) 0x00. Read as bits<3> MSB-first those are wire 0,
+        // 1, 0, i.e. Closed / Clicked / Closed - so two of the three remapped values in the enum
+        // above are confirmed by recorded bytes; only WebRedirect (wire 4, body 0x80) is not.
+        // Build 69382 carries the complete round trip: SMSG 0x640017 body 0x80 (MaxLevel) answered by
+        // CMSG 0x3D0293 body 0x20 (Clicked). That is the only recorded request/response pair of this
+        // unit, and it sits at the exact target build.
         class SubscriptionInterstitialResponse final : public ClientPacket
         {
         public:
