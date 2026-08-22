@@ -223,6 +223,7 @@ Player::Player(WorldSession* session) : Unit(true), m_sceneMgr(this)
     m_createTime = 0;
     m_createMode = PlayerCreateMode::Normal;
     m_npeAbandonPrompted = false;
+    m_npeOnStartMap = false;
     m_cinematic = 0;
 
     m_movie = 0;
@@ -7523,15 +7524,9 @@ void Player::UpdateZone(uint32 newZone, uint32 newArea)
 
     GetMap()->UpdatePlayerZoneStats(oldZone, newZone);
 
-    // New player experience: the client asks the question only after the character has actually left
-    // the tutorial map, which is why this hangs off the zone change and not off a leave trigger.
-    // The start map is taken from playercreateinfo (createPositionNPE), not hardcoded to Exile's Reach.
-    if (m_createMode == PlayerCreateMode::NPE)
-    {
-        PlayerInfo const* info = sObjectMgr->GetPlayerInfo(GetRace(), GetClass());
-        if (info && info->createPositionNPE && info->createPositionNPE->Loc.GetMapId() != GetMapId())
-            SendCheckAbandonNPE();
-    }
+    // New player experience: the exit handshake is decided here because UpdateZone is the one hook
+    // that runs both at login and after every map change. See Player::UpdateNPEExitState.
+    UpdateNPEExitState();
 
     // call leave script hooks immedately (before updating flags)
     if (oldZone != newZone)
@@ -30297,14 +30292,33 @@ bool Player::MeetPlayerCondition(uint32 conditionId) const
 // The empty-text case is NOT silent, contrary to what this comment claimed before: when the row
 // exists but carries no text the consumer falls back to `sub_7FF78306AD90(0x20Fu)`, game error 527 =
 // ERR_RAID_GROUP_REQUIREMENTS_UNMATCH. For the ~85% of rows without text the player would therefore
-// get a raid-group worded line on top of the real error. That is the concrete cost of guessing the
-// send site wrong, and the reason the packet is only ever an addition to an existing error path.
-void Player::SendFailedPlayerCondition(uint32 conditionId) const
+// get a raid-group worded line on top of the real error.
+//
+// That is why the send is gated on the same column the consumer reads. The server has the row -
+// sPlayerConditionStore is loaded and PlayerConditionEntry::FailureDescription is the very field the
+// client resolves - so the case can be decided here instead of being pushed onto the player as a
+// wrongly worded line. An id without failure text carries no message for the client to show, so the
+// packet has nothing to do and is not sent.
+//
+// The check reads DEFAULT_LOCALE. Failure_description_lang is a Blizzard authored string and is set
+// for every locale or for none, so the server's default locale answers the question for all of them;
+// picking the session locale instead would only matter for rows whose text exists in one locale and
+// not another, which no row in 69382 does.
+bool Player::SendFailedPlayerCondition(uint32 conditionId) const
 {
     if (!conditionId)
-        return;
+        return false;
+
+    PlayerConditionEntry const* playerCondition = sPlayerConditionStore.LookupEntry(conditionId);
+    if (!playerCondition)
+        return false;
+
+    char const* failureDescription = playerCondition->FailureDescription[DEFAULT_LOCALE];
+    if (!failureDescription || !failureDescription[0])
+        return false;
 
     SendDirectMessage(WorldPackets::Misc::FailedPlayerCondition(conditionId).Write());
+    return true;
 }
 
 // SMSG_PLAYER_CHOICE_CLEAR (client 0x640006, 5 bytes).
@@ -30339,47 +30353,155 @@ void Player::SendPlayerChoiceDisplayError() const
     SendDirectMessage(WorldPackets::PlayerChoice::PlayerChoiceDisplayError().Write());
 }
 
+// The senders below carry nothing but a row id: the whole payload the player gets to see lives in a
+// .db2 the client already has. That makes the store the only place where "this id is usable" can be
+// decided, and it is why the four stores are loaded at all - DB2Manager::LoadStores makes
+// UIEventToast, UIGenericWidgetDisplay, UIArrowCallout and UiPartyPose a start-up requirement either
+// way, and without a reader that requirement would buy nothing.
+// Each function mirrors the gate the client applies to the same row and returns false rather than
+// putting a packet on the wire that the client is going to drop without a word. Only gates that are
+// backed by the client or by the generated API documentation are mirrored; the ones the server cannot
+// answer are named in the individual comments instead of being guessed at.
+
+// Enum.EventToastDisplayType has 16 values (0..15) at 12.1.0.69382,
+// APIDoc/UIEventToastConstantsDocumentation.lua:13-28.
+constexpr uint8 MAX_EVENT_TOAST_DISPLAY_TYPE = 15;
+// Enum.ArrowCalloutDirection has four values (Up, Down, Left, Right),
+// APIDoc/ArrowCalloutConstantsDocumentation.lua:6-18.
+constexpr uint8 MAX_ARROW_CALLOUT_DIRECTION = 3;
+
 // SMSG_PLAYER_SHOW_UI_EVENT_TOAST (client 0x640025, 4 bytes).
-// The id must exist in UIEventToast.db2 AND its EventType must be one of
-// { 12, 13, 16, 17, 18, 19, 20, 22 } - the client (RVA 0x225CFF0) drops everything else silently.
-void Player::SendUiEventToast(int32 uiEventToastId) const
+// The id must exist in UIEventToast.db2, its EventType must be one of { 12, 13, 16, 17, 18, 19, 20,
+// 22 } - the C side subscriber (RVA 0x225CFF0) drops everything else silently - and its DisplayType
+// must be a value Enum.EventToastDisplayType knows (0..15), because EventToastManager.lua:345-348
+// aborts without a word when it finds no template for the display type.
+// The row's PlayerConditionID is deliberately NOT checked here: nothing in the subscriber or in the
+// toast manager was found to evaluate it for this path, and guessing a gate would suppress packets
+// retail sends.
+bool Player::SendUiEventToast(int32 uiEventToastId) const
 {
+    UIEventToastEntry const* uiEventToast = sUIEventToastStore.LookupEntry(uiEventToastId);
+    if (!uiEventToast)
+        return false;
+
+    if (!IsToastEventTypeShown(uiEventToast->EventType))
+        return false;
+
+    if (uiEventToast->DisplayType > MAX_EVENT_TOAST_DISPLAY_TYPE)
+        return false;
+
     SendDirectMessage(WorldPackets::Misc::PlayerShowUiEventToast(uiEventToastId).Write());
+    return true;
+}
+
+// The EventType values the toast frame accepts. Everything else reaches the C side subscriber and is
+// dropped there without a message (client RVA 0x225CFF0, the switch on field 10). These are
+// Enum.EventToastEventType QuestTurnedIn, WorldStateChange, PlayerAuraAdded, PlayerAuraRemoved,
+// SpellScript, CriteriaUpdated, PvPTierUpdate and TreasureItem - the level-up family is not among
+// them and does not travel through this opcode at all, it rides in the embedded JamUiEventToast.
+bool Player::IsToastEventTypeShown(uint8 eventType)
+{
+    switch (eventType)
+    {
+        case 12:    // QuestTurnedIn
+        case 13:    // WorldStateChange
+        case 16:    // PlayerAuraAdded
+        case 17:    // PlayerAuraRemoved
+        case 18:    // SpellScript
+        case 19:    // CriteriaUpdated
+        case 20:    // PvPTierUpdate
+        case 22:    // TreasureItem
+            return true;
+        default:
+            return false;
+    }
 }
 
 // SMSG_PLAYER_SHOW_GENERIC_WIDGET_DISPLAY (client 0x64002A, 4 bytes).
-void Player::SendGenericWidgetDisplay(int32 uiGenericWidgetDisplayId) const
+// 69382 ships rows 1, 6, 7, 8 and 9; an id outside the table leaves the frame without a title, a
+// texture kit and a widget set, so nothing is drawn. Field 9 of the row is a PlayerConditionID that
+// the client evaluates itself (RVA 0x24907D0).
+bool Player::SendGenericWidgetDisplay(int32 uiGenericWidgetDisplayId) const
 {
+    UIGenericWidgetDisplayEntry const* uiGenericWidgetDisplay = sUIGenericWidgetDisplayStore.LookupEntry(uiGenericWidgetDisplayId);
+    if (!uiGenericWidgetDisplay)
+        return false;
+
+    if (!MeetPlayerCondition(uiGenericWidgetDisplay->PlayerConditionID))
+        return false;
+
     SendDirectMessage(WorldPackets::Misc::PlayerShowGenericWidgetDisplay(uiGenericWidgetDisplayId).Write());
+    return true;
 }
 
 // SMSG_PLAYER_SHOW_ARROW_CALLOUT (client 0x64002C, 4 bytes).
-void Player::SendShowArrowCallout(int32 arrowCalloutId) const
+// UIArrowCallout field 5 is a PlayerConditionID: the client reads it (RVA 0x2327730) and hands it to
+// the PlayerCondition evaluator 0x2FC4FD0, skipping the check when it is 0. A row that fails it draws
+// nothing, so the server evaluates the same condition rather than sending into the void.
+// Direction has to be an Enum.ArrowCalloutDirection value as well - ArrowCalloutFrame.lua:128-131
+// does nothing at all outside 0..3.
+// Two further conditions of the client cannot be answered here and are not pretended to be: the
+// acknowledgedArrowCallouts CVar bit is account state the client owns (see SendAcknowledgeArrowCallout),
+// and CalloutFrame has to name a global frame that exists in the running UI.
+bool Player::SendShowArrowCallout(int32 arrowCalloutId) const
 {
+    UIArrowCalloutEntry const* uiArrowCallout = sUIArrowCalloutStore.LookupEntry(arrowCalloutId);
+    if (!uiArrowCallout)
+        return false;
+
+    if (uiArrowCallout->Direction > MAX_ARROW_CALLOUT_DIRECTION)
+        return false;
+
+    if (!MeetPlayerCondition(uiArrowCallout->PlayerConditionID))
+        return false;
+
     SendDirectMessage(WorldPackets::Misc::PlayerShowArrowCallout(arrowCalloutId).Write());
+    return true;
 }
 
 // SMSG_PLAYER_HIDE_ARROW_CALLOUT (client 0x64002D, 4 bytes).
-void Player::SendHideArrowCallout(int32 arrowCalloutId) const
+// Existence only: hiding is addressed to a callout that is already on screen, so the PlayerCondition
+// that decided whether to show it has no say in taking it away again.
+bool Player::SendHideArrowCallout(int32 arrowCalloutId) const
 {
+    if (!sUIArrowCalloutStore.HasRecord(arrowCalloutId))
+        return false;
+
     SendDirectMessage(WorldPackets::Misc::PlayerHideArrowCallout(arrowCalloutId).Write());
+    return true;
 }
 
 // SMSG_PLAYER_ACKNOWLEDGE_ARROW_CALLOUT (client 0x64002E, 4 bytes).
 // Server -> client only: the client sets the acknowledgedArrowCallouts CVar bit itself and never
-// reports back, so the server has to keep that state if it needs to know about it.
-void Player::SendAcknowledgeArrowCallout(int32 arrowCalloutId) const
+// reports back, so the server has to keep that state if it needs to know about it. Existence only,
+// for the same reason as the hide above - the CVar bit is indexed by the row id.
+bool Player::SendAcknowledgeArrowCallout(int32 arrowCalloutId) const
 {
+    if (!sUIArrowCalloutStore.HasRecord(arrowCalloutId))
+        return false;
+
     SendDirectMessage(WorldPackets::Misc::PlayerAcknowledgeArrowCallout(arrowCalloutId).Write());
+    return true;
 }
 
 // SMSG_PLAYER_SHOW_PARTY_POSE_UI (client 0x64002B, 5 bytes).
-void Player::SendPartyPoseUI(int32 partyPoseId, bool victory) const
+// The id must exist in UiPartyPose.db2: LoadPartyPose (Blizzard_PartyPoseUI.lua:350) indexes the row
+// for the model scene, the sound kit and the texture kit, and an id outside the table leaves it
+// indexing nil.
+// The MapID column of that table is NOT a way to pick the id. It is what C_PartyPose.GetPartyPoseInfoByMapID
+// uses for the Island Expedition and Warfront end screens, which do not go through this packet at all;
+// at 12.1.0.69382 the table has 19 rows and none of them names a battleground or arena map. Whatever
+// sends this packet has to know the id - hence the parameter, and hence no map lookup here.
+bool Player::SendPartyPoseUI(int32 partyPoseId, bool victory) const
 {
+    if (!sUiPartyPoseStore.HasRecord(partyPoseId))
+        return false;
+
     WorldPackets::Misc::PlayerShowPartyPoseUI showPartyPoseUI;
     showPartyPoseUI.PartyPoseID = partyPoseId;
     showPartyPoseUI.Victory = victory;
     SendDirectMessage(showPartyPoseUI.Write());
+    return true;
 }
 
 // SMSG_PLAYER_END_OF_MATCH_DETAILS (client 0x640030, 13 bytes).
@@ -30455,11 +30577,79 @@ void Player::SendUploadScreenshot(WorldPackets::Misc::UploadScreenshotHeader con
     SendDirectMessage(uploadScreenshot.Write());
 }
 
+// The gate in front of SMSG_CHECK_ABANDON_NPE. Runs from Player::UpdateZone, which covers login
+// (SendInitialPacketsAfterAddToMap), every world port (MovementHandler) and every map leave
+// (Map::RemovePlayerFromMap). The start map is taken from playercreateinfo (createPositionNPE), never
+// hardcoded to Exile's Reach.
+//
+// D2: the popup this packet raises reads "you are leaving the tutorial area ... you will not be able
+// to return" (NPE_ABANDON_A_WARNING / _H_WARNING, GameDialogDefs.lua:1197), so it belongs to the act
+// of leaving and to nothing else. The condition therefore is not "the character is somewhere other
+// than the tutorial map" but "the character was on the tutorial map in this session and is not any
+// more". Asking on a plain presence check would fire at every login of every character that was ever
+// created with UseNPE, including one that finished Exile's Reach long ago - and the "return" button
+// of that popup really does teleport, so a wrong ask is not cosmetic.
+//
+// The second half of the same problem is that nothing in this tree ever ends the NPE. TrinityCore has
+// no script for the last Exile's Reach quest (zone_exiles_reach.cpp stops at Westward Bound), so there
+// is no quest turn-in to hang a completion on, and characters.createMode would stay on NPE forever -
+// which also keeps dragging homebind and the first-login start position to the island (Player.cpp,
+// createPositionNPE branches). The completion path used here is the one fact the server can observe
+// without inventing data: a character that is already off the tutorial map when it enters the world
+// has left it, whatever the reason, and the tutorial is over for it. That decision is durable, so it
+// goes to the database at once, exactly like the "leave for good" answer.
+//
+// UNVERIFIED: retail's own trigger. Nothing in the client tells the server WHEN to ask - the packet
+// is empty, has no Lua surface beyond the popup and appears in no recording. What is verified is what
+// the popup says and what each button does; the send condition is derived from that and from what
+// this tree can observe, not from a recorded retail sequence. A character that finishes the tutorial
+// in the intended way still sees the popup once, at the moment it leaves the island, because no
+// completion event exists to suppress it; at that moment both answers are harmless (the character
+// really is leaving, and "return" really does return it).
+void Player::UpdateNPEExitState()
+{
+    if (m_createMode != PlayerCreateMode::NPE)
+        return;
+
+    PlayerInfo const* info = sObjectMgr->GetPlayerInfo(GetRace(), GetClass());
+    if (!info || !info->createPositionNPE)
+        return;
+
+    if (info->createPositionNPE->Loc.GetMapId() == GetMapId())
+    {
+        // Inside the tutorial. Map::RemovePlayerFromMap runs this once more while the character is
+        // still on the old map, so the flag is set before the arrival on the new map is evaluated.
+        m_npeOnStartMap = true;
+        // Being back inside the tutorial re-arms the question for the next departure. This is the only
+        // place that clears the guard: doing it in HandleAbandonNPEResponse instead would re-ask
+        // during the teleport it starts, because the map leave that belongs to that teleport still
+        // reports the map the character is coming from.
+        m_npeAbandonPrompted = false;
+        return;
+    }
+
+    if (m_npeOnStartMap)
+    {
+        // Just left it. This is the situation the popup describes.
+        SendCheckAbandonNPE();
+        return;
+    }
+
+    // Entered the world outside the tutorial map with the tutorial mode still set: the character left
+    // Exile's Reach in an earlier session (finished it, was ported off it, or ignored the popup and
+    // logged out). Retire the mode instead of asking - see the note above.
+    // Homebind is deliberately left alone here, unlike on the explicit "leave for good" answer. It is
+    // state the player owns and can move at any innkeeper, and relocating someone's hearthstone
+    // without being asked would be a real effect invented out of a silent bookkeeping fix.
+    SetCreateMode(PlayerCreateMode::Normal, true);
+}
+
 // SMSG_CHECK_ABANDON_NPE (client 0x640024, empty).
 // Fires Lua LEAVING_TUTORIAL_AREA -> StaticPopupDialogs["LEAVING_TUTORIAL_AREA"]. The warning text is
 // client side and faction dependent; the two buttons answer with CMSG_ABANDON_NPE_RESPONSE
 // (C_Tutorial.ReturnToTutorialArea writes bit 0, C_Tutorial.AbandonTutorialArea writes bit 1).
-// Asked once per session - the popup is session state, so the guard is too.
+// Asked once per session - the popup is session state, so the guard is too. HandleAbandonNPEResponse
+// re-arms the guard on the "return" answer, so a second departure asks again.
 void Player::SendCheckAbandonNPE()
 {
     if (m_npeAbandonPrompted)

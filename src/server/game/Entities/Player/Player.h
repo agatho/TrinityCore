@@ -2919,18 +2919,24 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         void SendPlayerChoiceDisplayError() const;
 
         bool MeetPlayerCondition(uint32 conditionId) const;
-        void SendFailedPlayerCondition(uint32 conditionId) const;
+        // Returns false when the packet was suppressed because PlayerCondition.db2 carries no
+        // Failure_description_lang for the id - see the implementation for why that is not silent.
+        bool SendFailedPlayerCondition(uint32 conditionId) const;
 
         // Client family 0x64 - player state and UI remote control (12.1.0.69382).
         // These are remote control primitives: retail drives them from quest/scenario script logic,
         // so on this side they are a script/command facing API. See MiscPackets.h for the wire layouts
         // and for what the client requires of each id.
-        void SendUiEventToast(int32 uiEventToastId) const;
-        void SendGenericWidgetDisplay(int32 uiGenericWidgetDisplayId) const;
-        void SendShowArrowCallout(int32 arrowCalloutId) const;
-        void SendHideArrowCallout(int32 arrowCalloutId) const;
-        void SendAcknowledgeArrowCallout(int32 arrowCalloutId) const;
-        void SendPartyPoseUI(int32 partyPoseId, bool victory) const;
+        // Each of these checks the id against the store the client itself indexes and returns false
+        // instead of sending when the client would drop the packet. The stores are loaded for exactly
+        // this: without a reader the four .db2 files would be a start-up requirement with no payload.
+        static bool IsToastEventTypeShown(uint8 eventType);
+        bool SendUiEventToast(int32 uiEventToastId) const;
+        bool SendGenericWidgetDisplay(int32 uiGenericWidgetDisplayId) const;
+        bool SendShowArrowCallout(int32 arrowCalloutId) const;
+        bool SendHideArrowCallout(int32 arrowCalloutId) const;
+        bool SendAcknowledgeArrowCallout(int32 arrowCalloutId) const;
+        bool SendPartyPoseUI(int32 partyPoseId, bool victory) const;
         void SendEndOfMatchDetails(int32 placement, int32 kills, int32 plunderAcquired, bool matchEnded) const;
         void SendTutorialHighlightSpell(int32 spellId, std::string_view globalStringTag) const;
         void SendTutorialUnhighlightSpell() const;
@@ -2941,6 +2947,10 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
 
         // Exile's Reach / new player experience exit handshake:
         // SMSG_CHECK_ABANDON_NPE -> client popup -> CMSG_ABANDON_NPE_RESPONSE.
+        // UpdateNPEExitState is the single decision point: it runs from Player::UpdateZone and decides
+        // per zone update whether the character is still inside the tutorial, has just left it, or has
+        // been outside it since login (in which case the tutorial mode is retired).
+        void UpdateNPEExitState();
         void SendCheckAbandonNPE();
         bool WasAbandonNPEPrompted() const { return m_npeAbandonPrompted; }
         void SetAbandonNPEPrompted(bool prompted) { m_npeAbandonPrompted = prompted; }
@@ -3317,6 +3327,7 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         time_t m_createTime;
         PlayerCreateMode m_createMode;
         bool m_npeAbandonPrompted;      // transient: SMSG_CHECK_ABANDON_NPE already sent this session
+        bool m_npeOnStartMap;           // transient: the character was seen on the NPE start map this session
         uint8 m_cinematic;
 
         uint32 m_movie;

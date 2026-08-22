@@ -1252,23 +1252,25 @@ void WorldSession::HandleAbandonNPEResponse(WorldPackets::Misc::AbandonNPERespon
     if (!info || !info->createPositionNPE)
         return;
 
-    _player->SetAbandonNPEPrompted(false);
-
     if (!abandonNpeResponse.Abandon)
     {
-        // "Return to the tutorial area" - put the character back where it started.
+        // "Return to the tutorial area" - put the character back where it started. The once-per-session
+        // guard is NOT cleared here: the far teleport that follows leaves the current map first, and
+        // that map leave still reports the map the character is coming from, so clearing the guard now
+        // would re-ask the question during the trip back. Player::UpdateNPEExitState clears it on
+        // arrival on the tutorial map instead, which is the moment the question makes sense again.
         _player->TeleportTo(info->createPositionNPE->Loc);
         return;
     }
 
     // "Leave for good". The create mode is what still points homebind, the graveyard fallback and the
     // intro scene at the tutorial (Player.cpp: createPositionNPE branches). Leaving it on NPE would
-    // keep dragging the character back and would re-arm this prompt on every zone change.
+    // keep dragging the character back and would re-arm this prompt on the next departure.
     // D4: this is the one durable state change of the whole handshake, so it goes to the database at
     // once (characters.createMode, written by CHAR_UPD_CHARACTER_CREATE_MODE; the column already
     // exists and is read back by Player::LoadFromDB, no migration). The in-memory setter alone would
     // lose the decision on relog - the sole guard against re-asking (m_npeAbandonPrompted) is
-    // transient by design, so Player::UpdateZone would open the popup again on the next zone change.
+    // transient by design, so the character would be asked once more after the next login.
     _player->SetCreateMode(PlayerCreateMode::Normal, true);
     _player->SetHomebind(*_player, _player->GetAreaId());
 }

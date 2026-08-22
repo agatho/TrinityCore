@@ -354,19 +354,28 @@ public:
         return true;
     }
 
-    // SMSG_PLAYER_SHOW_UI_EVENT_TOAST. Nothing appears unless the row exists in UIEventToast.db2 AND
-    // its EventType is one of { 12, 13, 16, 17, 18, 19, 20, 22 }.
+    // The four id driven .db2 commands below share this: the sender checks the id against the store the
+    // client itself indexes and refuses to send when the client would drop the packet. Report that
+    // refusal instead of leaving the tester with a command that looks as if it did something.
+    static bool ReportSuppressed(ChatHandler* handler, bool sent, char const* what, int32 id)
+    {
+        if (!sent)
+            handler->PSendSysMessage("{} {} not sent: the id is not usable for this character, see Player.cpp for the gate.", what, id);
+
+        return true;
+    }
+
+    // SMSG_PLAYER_SHOW_UI_EVENT_TOAST. Nothing appears unless the row exists in UIEventToast.db2, its
+    // EventType is one of { 12, 13, 16, 17, 18, 19, 20, 22 } and its DisplayType is at most 15.
     static bool HandleDebugSendUiEventToastCommand(ChatHandler* handler, int32 uiEventToastId)
     {
-        handler->GetPlayer()->SendUiEventToast(uiEventToastId);
-        return true;
+        return ReportSuppressed(handler, handler->GetPlayer()->SendUiEventToast(uiEventToastId), "UIEventToast", uiEventToastId);
     }
 
     // SMSG_PLAYER_SHOW_GENERIC_WIDGET_DISPLAY. 69382 ships rows 1, 6, 7, 8 and 9.
     static bool HandleDebugSendWidgetDisplayCommand(ChatHandler* handler, int32 uiGenericWidgetDisplayId)
     {
-        handler->GetPlayer()->SendGenericWidgetDisplay(uiGenericWidgetDisplayId);
-        return true;
+        return ReportSuppressed(handler, handler->GetPlayer()->SendGenericWidgetDisplay(uiGenericWidgetDisplayId), "UIGenericWidgetDisplay", uiGenericWidgetDisplayId);
     }
 
     // SMSG_PLAYER_SHOW / HIDE / ACKNOWLEDGE_ARROW_CALLOUT.
@@ -376,26 +385,26 @@ public:
     static bool HandleDebugSendArrowCalloutCommand(ChatHandler* handler, int32 arrowCalloutId, Optional<uint8> action)
     {
         Player* player = handler->GetPlayer();
+        bool sent = false;
         switch (action.value_or(0))
         {
             case 1:
-                player->SendHideArrowCallout(arrowCalloutId);
+                sent = player->SendHideArrowCallout(arrowCalloutId);
                 break;
             case 2:
-                player->SendAcknowledgeArrowCallout(arrowCalloutId);
+                sent = player->SendAcknowledgeArrowCallout(arrowCalloutId);
                 break;
             default:
-                player->SendShowArrowCallout(arrowCalloutId);
+                sent = player->SendShowArrowCallout(arrowCalloutId);
                 break;
         }
-        return true;
+        return ReportSuppressed(handler, sent, "UIArrowCallout", arrowCalloutId);
     }
 
     // SMSG_PLAYER_SHOW_PARTY_POSE_UI. The id must exist in UiPartyPose.db2 or LoadPartyPose indexes nil.
     static bool HandleDebugSendPartyPoseCommand(ChatHandler* handler, int32 partyPoseId, Optional<bool> victory)
     {
-        handler->GetPlayer()->SendPartyPoseUI(partyPoseId, victory.value_or(true));
-        return true;
+        return ReportSuppressed(handler, handler->GetPlayer()->SendPartyPoseUI(partyPoseId, victory.value_or(true)), "UiPartyPose", partyPoseId);
     }
 
     // SMSG_PLAYER_END_OF_MATCH_DETAILS. Placement is 1 based (1 = winner).
@@ -448,11 +457,15 @@ public:
         return true;
     }
 
-    // SMSG_FAILED_PLAYER_CONDITION. Only 7.314 of the 47.959 rows in 69382 carry a failure text; the
-    // rest produce no visible message at all, which is a property of the data and not of the packet.
+    // SMSG_FAILED_PLAYER_CONDITION. Only 7.314 of the 47.959 rows in 69382 carry a failure text. The
+    // rest are NOT silent in the client - they fall back to game error 527, a raid-group worded line -
+    // so Player::SendFailedPlayerCondition refuses to send them and this command says so.
     static bool HandleDebugSendFailedConditionCommand(ChatHandler* handler, uint32 playerConditionId)
     {
-        handler->GetPlayer()->SendFailedPlayerCondition(playerConditionId);
+        if (!handler->GetPlayer()->SendFailedPlayerCondition(playerConditionId))
+            handler->PSendSysMessage("PlayerCondition {} not sent: no row, or the row carries no Failure_description_lang. "
+                "Sending it would make the client print game error 527 instead.", playerConditionId);
+
         return true;
     }
 

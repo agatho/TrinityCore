@@ -561,7 +561,6 @@ namespace
     std::unordered_multimap<int32, UiMapAssignmentEntry const*> _uiMapAssignmentByWmoDoodadPlacement[MAX_UI_MAP_SYSTEM];
     std::unordered_multimap<int32, UiMapAssignmentEntry const*> _uiMapAssignmentByWmoGroup[MAX_UI_MAP_SYSTEM];
     std::unordered_set<int32> _uiMapPhases;
-    std::unordered_map<uint32 /*mapId*/, UiPartyPoseEntry const*> _uiPartyPoseByMap;
     WMOAreaTableLookupContainer _wmoAreaTableLookup;
     std::unordered_map<uint32, std::unordered_set<uint32>> _pvpStatIdsByMap;
 }
@@ -1694,9 +1693,6 @@ void DB2Manager::IndexLoadedStores()
     for (UiMapXMapArtEntry const* uiMapArt : sUiMapXMapArtStore)
         if (uiMapArt->PhaseID)
             _uiMapPhases.insert(uiMapArt->PhaseID);
-
-    for (UiPartyPoseEntry const* uiPartyPose : sUiPartyPoseStore)
-        _uiPartyPoseByMap.emplace(uiPartyPose->MapID, uiPartyPose);
 
     for (WMOAreaTableEntry const* entry : sWMOAreaTableStore)
         _wmoAreaTableLookup[WMOAreaTableKey(entry->WmoID, entry->NameSetID, entry->WmoGroupID)] = entry;
@@ -3445,17 +3441,6 @@ void DB2Manager::Map2ZoneCoordinates(uint32 areaId, float& x, float& y) const
 bool DB2Manager::IsUiMapPhase(uint32 phaseId) const
 {
     return _uiMapPhases.find(phaseId) != _uiMapPhases.end();
-}
-
-// Do NOT use this to pick the pose for SMSG_PLAYER_SHOW_PARTY_POSE_UI. The MapID relation is what
-// the client's own C_PartyPose.GetPartyPoseInfoByMapID uses for the Island Expedition and Warfront
-// end screens, which do not go through that packet at all. At 12.1.0.69382 the table has 19 rows,
-// none of them a battleground or arena map, and the four rows the match celebration frame actually
-// reads (121-123 Plunderstorm, 124 delve) do not cover the map set they belong to either - there are
-// over twenty delve maps and exactly one delve row. Whatever sends the packet has to know the id.
-UiPartyPoseEntry const* DB2Manager::GetUiPartyPoseByMap(uint32 mapId) const
-{
-    return Trinity::Containers::MapGetValuePtr(_uiPartyPoseByMap, mapId);
 }
 
 WMOAreaTableEntry const* DB2Manager::GetWMOAreaTable(int32 rootId, int32 adtId, int32 groupId, bool allowGroupFallback)

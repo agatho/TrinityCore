@@ -570,7 +570,6 @@ public:
         uint32* uiMapId = nullptr, DBCPosition2D* newPos = nullptr);
     bool Zone2MapCoordinates(uint32 areaId, float& x, float& y) const;
     void Map2ZoneCoordinates(uint32 areaId, float& x, float& y) const;
-    UiPartyPoseEntry const* GetUiPartyPoseByMap(uint32 mapId) const;
     bool IsUiMapPhase(uint32 phaseId) const;
     static WMOAreaTableEntry const* GetWMOAreaTable(int32 rootId, int32 adtId, int32 groupId, bool allowGroupFallback);
     std::unordered_set<uint32> const* GetPVPStatIDsForMap(uint32 mapId) const;
