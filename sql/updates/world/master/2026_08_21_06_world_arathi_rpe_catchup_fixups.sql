@@ -26,6 +26,11 @@
 -- Idempotent. Applies after 2026_08_21_02 (spawns/phasing) and 01 (templates).
 -- ============================================================================
 
+-- "Mirror Image" (entry 31216, guid 8000192) at the pad is a capture artifact -- the standard Mage
+-- Mirror Image combat summon, mined from a passing/present mage near the pad (same class of artifact
+-- as the Arcane Phoenix). Not an RPE spawn; remove it.
+DELETE FROM `creature` WHERE `guid` = 8000192;
+
 -- Gnoll Assailants (245027) at the pad are the battle-aftermath CORPSES (tester-confirmed they
 -- should be dead) -> permanent Feign Death (aura 29266). (An earlier revision cleared this on the
 -- mistaken read that "gnolls don't move" meant they should be alive; the tester clarified they are
