@@ -18,6 +18,7 @@
 #include "ScriptMgr.h"
 #include "Duration.h"
 #include "GossipDef.h"
+#include "MotionMaster.h"
 #include "ObjectAccessor.h"
 #include "ObjectMgr.h"
 #include "Optional.h"
@@ -88,7 +89,17 @@ enum ArathiRpe
     // SPELL_AURA_PLAY_SCENE handler only fires when the aura target is a player, so anchoring the
     // scene auras on Jaina (a creature) did nothing; the server plays them on the arriving player.
     SCENE_ARATHI_RPE_PAD_AMBIENT     = 3692,
-    SCENE_ARATHI_RPE_JAINA_GNOLLS    = 3749
+    SCENE_ARATHI_RPE_JAINA_GNOLLS    = 3749,
+
+    // "Gnoll Way" (90882) turn-in send-off. On reward the two pad leaders remark on the farm raid and
+    // walk out toward Go'shek Farm along the paths our capture recorded them taking (OOC one-shot
+    // WP_START, 69404). Text and paths are authored in SQL: creature_text group 0 on each leader, and
+    // waypoint_path 2218835 (Jaina) / 2218842 (Thrall). Personal-phasing (phase 1961, "until 90883
+    // rewarded") clears the pad leaders once the player hands the follow-up flight quest in at the farm,
+    // so no explicit despawn is needed - the walk is the visible flourish before that.
+    SAY_RPE_LEADER_SENDOFF           = 0,
+    PATH_RPE_JAINA_PAD_SENDOFF       = 2218835,
+    PATH_RPE_THRALL_PAD_SENDOFF      = 2218842
 };
 
 // Faction capitals to send the player to once the Catch Up finale choice has been made. These are
@@ -317,6 +328,35 @@ struct npc_arathi_rpe_leader : public ScriptedAI
             return true;
         }
         return false;
+    }
+
+    // One pad leader's send-off beat: say the captured "head to the farm" line and walk out along the
+    // captured path. Static so the clicked leader can drive its sibling too (see OnQuestReward).
+    static void StartPadLeaderSendoff(Creature* leader)
+    {
+        if (CreatureAI* ai = leader->AI())
+            ai->Talk(SAY_RPE_LEADER_SENDOFF);
+
+        uint32 pathId = leader->GetEntry() == NPC_RPE_THRALL_PAD ? uint32(PATH_RPE_THRALL_PAD_SENDOFF)
+                      : leader->GetEntry() == NPC_RPE_JAINA_PAD  ? uint32(PATH_RPE_JAINA_PAD_SENDOFF)
+                      : 0u;
+        if (pathId)
+            leader->GetMotionMaster()->MovePath(pathId, false);
+    }
+
+    void OnQuestReward(Player* /*player*/, Quest const* quest, LootItemType /*type*/, uint32 /*opt*/) override
+    {
+        if (quest->GetQuestId() != QUEST_GNOLL_WAY)
+            return;
+
+        // The pad leaders stand side by side as an allied pair (both visible to both factions), but
+        // OnQuestReward fires only on the leader the player actually handed the quest to. Drive both so
+        // Jaina and Thrall react together - each says its own creature_text group 0 and takes its own path.
+        StartPadLeaderSendoff(me);
+
+        uint32 siblingEntry = me->GetEntry() == NPC_RPE_THRALL_PAD ? uint32(NPC_RPE_JAINA_PAD) : uint32(NPC_RPE_THRALL_PAD);
+        if (Creature* sibling = me->FindNearestCreature(siblingEntry, 60.0f))
+            StartPadLeaderSendoff(sibling);
     }
 };
 
