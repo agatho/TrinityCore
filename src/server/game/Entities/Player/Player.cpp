@@ -30358,10 +30358,14 @@ void Player::SendPlayerChoiceDisplayError() const
 // decided, and it is why the four stores are loaded at all - DB2Manager::LoadStores makes
 // UIEventToast, UIGenericWidgetDisplay, UIArrowCallout and UiPartyPose a start-up requirement either
 // way, and without a reader that requirement would buy nothing.
-// Each function mirrors the gate the client applies to the same row and returns false rather than
-// putting a packet on the wire that the client is going to drop without a word. Only gates that are
-// backed by the client or by the generated API documentation are mirrored; the ones the server cannot
-// answer are named in the individual comments instead of being guessed at.
+// Each function checks what the server can decide on its own about the row and returns false rather
+// than putting a packet on the wire that the client is going to drop without a word. That is: the row
+// exists at all, and its value stays inside an enum the generated API documentation bounds.
+// What the CLIENT evaluates for itself is not mirrored - not the PlayerConditionIDs of these rows and
+// not the account state behind them. Re-deciding those here cannot add a check, only disagree with the
+// one that counts: ConditionMgr is a partial implementation, and where it differs the server would
+// swallow a packet retail sends, indistinguishable from the row simply not applying. The individual
+// comments name which condition is left to the client, and why.
 
 // Enum.EventToastDisplayType has 16 values (0..15) at 12.1.0.69382,
 // APIDoc/UIEventToastConstantsDocumentation.lua:13-28.
@@ -30419,15 +30423,17 @@ bool Player::IsToastEventTypeShown(uint8 eventType)
 
 // SMSG_PLAYER_SHOW_GENERIC_WIDGET_DISPLAY (client 0x64002A, 4 bytes).
 // 69382 ships rows 1, 6, 7, 8 and 9; an id outside the table leaves the frame without a title, a
-// texture kit and a widget set, so nothing is drawn. Field 9 of the row is a PlayerConditionID that
-// the client evaluates itself (RVA 0x24907D0).
+// texture kit and a widget set, so nothing is drawn. Existence is therefore checked here - the server
+// owns that answer.
+// Field 9 of the row is a PlayerConditionID, and it is deliberately NOT checked here: the client
+// evaluates it itself (RVA 0x24907D0), so a second evaluation on this side can only disagree with the
+// one that actually decides. Where ConditionMgr answers a sub-check differently from the client, the
+// server would swallow a packet retail sends, and nothing would say so - while the case it would
+// guard against is already handled by the client dropping the row on its own. Same reasoning as the
+// toast's PlayerConditionID in SendUiEventToast.
 bool Player::SendGenericWidgetDisplay(int32 uiGenericWidgetDisplayId) const
 {
-    UIGenericWidgetDisplayEntry const* uiGenericWidgetDisplay = sUIGenericWidgetDisplayStore.LookupEntry(uiGenericWidgetDisplayId);
-    if (!uiGenericWidgetDisplay)
-        return false;
-
-    if (!MeetPlayerCondition(uiGenericWidgetDisplay->PlayerConditionID))
+    if (!sUIGenericWidgetDisplayStore.HasRecord(uiGenericWidgetDisplayId))
         return false;
 
     SendDirectMessage(WorldPackets::Misc::PlayerShowGenericWidgetDisplay(uiGenericWidgetDisplayId).Write());
@@ -30435,11 +30441,16 @@ bool Player::SendGenericWidgetDisplay(int32 uiGenericWidgetDisplayId) const
 }
 
 // SMSG_PLAYER_SHOW_ARROW_CALLOUT (client 0x64002C, 4 bytes).
-// UIArrowCallout field 5 is a PlayerConditionID: the client reads it (RVA 0x2327730) and hands it to
-// the PlayerCondition evaluator 0x2FC4FD0, skipping the check when it is 0. A row that fails it draws
-// nothing, so the server evaluates the same condition rather than sending into the void.
-// Direction has to be an Enum.ArrowCalloutDirection value as well - ArrowCalloutFrame.lua:128-131
-// does nothing at all outside 0..3.
+// Existence and Direction are checked here: Direction has to be an Enum.ArrowCalloutDirection value,
+// ArrowCalloutFrame.lua:128-131 does nothing at all outside 0..3, and that bound is a property of the
+// row the server can read for itself.
+// UIArrowCallout field 5 is a PlayerConditionID, and it is deliberately NOT checked here. The client
+// reads it itself (RVA 0x2327730) and hands it to the PlayerCondition evaluator 0x2FC4FD0, skipping
+// the check when it is 0 - so the row is already dropped on the side that decides, and a second
+// evaluation here could only differ from it. ConditionMgr is a partial implementation; where it
+// answers a sub-check differently from the client, the server would suppress a packet retail sends
+// and that suppression is indistinguishable from "the row does not apply". Same reasoning as the
+// toast's PlayerConditionID in SendUiEventToast.
 // Two further conditions of the client cannot be answered here and are not pretended to be: the
 // acknowledgedArrowCallouts CVar bit is account state the client owns (see SendAcknowledgeArrowCallout),
 // and CalloutFrame has to name a global frame that exists in the running UI.
@@ -30450,9 +30461,6 @@ bool Player::SendShowArrowCallout(int32 arrowCalloutId) const
         return false;
 
     if (uiArrowCallout->Direction > MAX_ARROW_CALLOUT_DIRECTION)
-        return false;
-
-    if (!MeetPlayerCondition(uiArrowCallout->PlayerConditionID))
         return false;
 
     SendDirectMessage(WorldPackets::Misc::PlayerShowArrowCallout(arrowCalloutId).Write());
@@ -30613,6 +30621,20 @@ void Player::UpdateNPEExitState()
 
     PlayerInfo const* info = sObjectMgr->GetPlayerInfo(GetRace(), GetClass());
     if (!info || !info->createPositionNPE)
+        return;
+
+    // An instance is not a departure. Darkmaul Citadel (map 2236,
+    // scripts/ExilesReach/DarkmaulCitadel/instance_darkmaul_citadel.cpp) is the dungeon of the
+    // tutorial questline itself, so a character inside it has not left Exile's Reach - it is in the
+    // middle of it. Deciding anything here would either raise the popup mid-tutorial (whose "return"
+    // button teleports out of the dungeon and whose "leave" button would set homebind to an instance
+    // area) or, on a login inside the dungeon, retire createMode for good without asking. Neither
+    // branch below can tell that situation apart, so this one steps aside instead: nothing is decided
+    // on an instanceable map. m_npeOnStartMap survives the trip because it is only ever set, never
+    // cleared, so the state from before the dungeon still holds on the way back out.
+    // Instanceable() rather than IsDungeon(): a scenario, battleground or arena excursion is just as
+    // little a departure, and the tutorial map itself is MAP_COMMON, so it is never caught by this.
+    if (GetMap()->Instanceable())
         return;
 
     if (info->createPositionNPE->Loc.GetMapId() == GetMapId())
