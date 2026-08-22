@@ -26,6 +26,12 @@
 -- Idempotent. Applies after 2026_08_21_02 (spawns/phasing) and 01 (templates).
 -- ============================================================================
 
+-- Quest 90882 "Gnoll Way" had SIX kill objectives at the same StorageIndex 0 (the real Blizzard one
+-- 461730 = kill 10 x 244672, plus five fabricated copies 9088200-9088204 for the other gnoll
+-- entries) -> the client showed 6 "slay 10 gnolls" tasks and inflated the count. Keep only the real
+-- objective (461730); all live gnolls credit 244672 via creature_template.KillCredit1.
+DELETE FROM `quest_objectives` WHERE `QuestID`=90882 AND `ID` IN (9088200,9088201,9088202,9088203,9088204);
+
 -- "Mirror Image" (entry 31216, guid 8000192) at the pad is a capture artifact -- the standard Mage
 -- Mirror Image combat summon, mined from a passing/present mage near the pad (same class of artifact
 -- as the Arcane Phoenix). Not an RPE spawn; remove it.
