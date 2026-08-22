@@ -32,6 +32,12 @@
 -- objective (461730); all live gnolls credit 244672 via creature_template.KillCredit1.
 DELETE FROM `quest_objectives` WHERE `QuestID`=90882 AND `ID` IN (9088200,9088201,9088202,9088203,9088204);
 
+-- LEVEL SCALING: the RPE gnolls use ContentTuningID 4306 (scales to the player -> ~lvl 21) but the
+-- Hammerfall grunts had ContentTuningID 0 (fixed lvl 80), so the friendly grunts and the enemy gnolls
+-- were level-mismatched. Give the RPE-ONLY grunts (all on map 2927 only, safe to rescale globally)
+-- the same 4306 on the normal difficulty. NOT the bosses 244675/244709 (shared with map 0).
+UPDATE `creature_template_difficulty` SET `ContentTuningID`=4306 WHERE `Entry` IN (230248,232019,245028,245052) AND `DifficultyID`=0;
+
 -- "Mirror Image" (entry 31216, guid 8000192) at the pad is a capture artifact -- the standard Mage
 -- Mirror Image combat summon, mined from a passing/present mage near the pad (same class of artifact
 -- as the Arcane Phoenix). Not an RPE spawn; remove it.
