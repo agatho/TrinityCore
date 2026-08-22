@@ -346,39 +346,42 @@ public:
     using Sorter = typename T::Sorter;
 
     AuctionsResultBuilder(uint32 offset, LocaleConstant locale, std::span<WorldPackets::AuctionHouse::AuctionSortDef const> sorts, AuctionHouseResultLimits maxResults)
-        : _offset(offset), _sorter(locale, sorts), _maxResults(AsUnderlyingType(maxResults)), _hasMoreResults(false)
+        : _offset(offset), _sorter(locale, sorts), _maxResults(AsUnderlyingType(maxResults)), _totalCount(0)
     {
         _items.reserve(_maxResults + offset + 1);
     }
 
     void AddItem(T const* item)
     {
-        auto where = std::lower_bound(_items.begin(), _items.end(), item, std::cref(_sorter));
+        auto where = std::ranges::lower_bound(_items, item, std::cref(_sorter));
 
+        ++_totalCount;
         _items.insert(where, item);
         if (_items.size() > _maxResults + _offset)
-        {
             _items.pop_back();
-            _hasMoreResults = true;
-        }
     }
 
-    Trinity::IteratorPair<typename std::vector<T const*>::const_iterator> GetResultRange() const
+    std::span<T const* const> GetResultRange() const
     {
-        return Trinity::Containers::MakeIteratorPair(_items.begin() + _offset, _items.end());
+        return std::span(_items.begin() + _offset, _items.end());
+    }
+
+    std::size_t GetTotalCount() const
+    {
+        return _totalCount;
     }
 
     bool HasMoreResults() const
     {
-        return _hasMoreResults;
+        return _totalCount > _items.size();
     }
 
 private:
     uint32 _offset;
     Sorter _sorter;
     std::size_t _maxResults;
+    std::size_t _totalCount;
     std::vector<T const*> _items;
-    bool _hasMoreResults;
 };
 
 AuctionHouseMgr::AuctionHouseMgr() : mHordeAuctions(6), mAllianceAuctions(2), mNeutralAuctions(1), mGoblinAuctions(7), _replicateIdGenerator(0)
@@ -1234,15 +1237,19 @@ void AuctionHouseObject::BuildListBuckets(WorldPackets::AuctionHouse::AuctionLis
             else if (bucketData->ItemClass == ITEM_CLASS_CONSUMABLE || bucketData->ItemClass == ITEM_CLASS_RECIPE || bucketData->ItemClass == ITEM_CLASS_MISCELLANEOUS)
             {
                 ItemTemplate const* itemTemplate = ASSERT_NOTNULL(sObjectMgr->GetItemTemplate(bucket.first.ItemId));
-                if (itemTemplate->Effects.size() >= 2 && (itemTemplate->Effects[0]->SpellID == 483 || itemTemplate->Effects[0]->SpellID == 55884))
+                bool hasUnlearned = std::ranges::any_of(itemTemplate->Effects, [player, &knownPetSpecies](ItemEffectEntry const* itemEffect)
                 {
-                    if (player->HasSpell(itemTemplate->Effects[1]->SpellID))
-                        continue;
-
-                    if (BattlePetSpeciesEntry const* battlePetSpecies = BattlePets::BattlePetMgr::GetBattlePetSpeciesBySpell(itemTemplate->Effects[1]->SpellID))
+                    if (itemEffect->TriggerType != ITEM_SPELLTRIGGER_ON_LEARN)
+                        return false;
+                    if (player->HasSpell(itemEffect->SpellID))
+                        return false;
+                    if (BattlePetSpeciesEntry const* battlePetSpecies = BattlePets::BattlePetMgr::GetBattlePetSpeciesBySpell(itemEffect->SpellID))
                         if (knownPetSpecies.test(battlePetSpecies->ID))
-                            continue;
-                }
+                            return false;
+                    return true;
+                });
+                if (!hasUnlearned)
+                    continue;
             }
         }
 
@@ -1276,11 +1283,12 @@ void AuctionHouseObject::BuildListBuckets(WorldPackets::AuctionHouse::AuctionLis
 
     for (AuctionsBucketData const* resultBucket : builder.GetResultRange())
     {
-        listBucketsResult.Buckets.emplace_back();
-        WorldPackets::AuctionHouse::BucketInfo& bucketInfo = listBucketsResult.Buckets.back();
+        WorldPackets::AuctionHouse::BucketInfo& bucketInfo = listBucketsResult.Buckets.emplace_back();
         resultBucket->BuildBucketInfo(&bucketInfo, player);
     }
 
+    listBucketsResult.Filters = filters;
+    listBucketsResult.TotalCount = builder.GetTotalCount();
     listBucketsResult.HasMoreResults = builder.HasMoreResults();
 }
 
@@ -1302,11 +1310,11 @@ void AuctionHouseObject::BuildListBuckets(WorldPackets::AuctionHouse::AuctionLis
 
     for (AuctionsBucketData const* resultBucket : buckets)
     {
-        listBucketsResult.Buckets.emplace_back();
-        WorldPackets::AuctionHouse::BucketInfo& bucketInfo = listBucketsResult.Buckets.back();
+        WorldPackets::AuctionHouse::BucketInfo& bucketInfo = listBucketsResult.Buckets.emplace_back();
         resultBucket->BuildBucketInfo(&bucketInfo, player);
     }
 
+    listBucketsResult.TotalCount = buckets.size();
     listBucketsResult.HasMoreResults = false;
 }
 
@@ -1324,8 +1332,7 @@ void AuctionHouseObject::BuildListBiddedItems(WorldPackets::AuctionHouse::Auctio
 
     for (AuctionPosting const* resultAuction : auctions)
     {
-        listBiddedItemsResult.Items.emplace_back();
-        WorldPackets::AuctionHouse::AuctionItem& auctionItem = listBiddedItemsResult.Items.back();
+        WorldPackets::AuctionHouse::AuctionItem& auctionItem = listBiddedItemsResult.Items.emplace_back();
         resultAuction->BuildAuctionItem(&auctionItem, true, true, true, false);
     }
 
@@ -1335,7 +1342,7 @@ void AuctionHouseObject::BuildListBiddedItems(WorldPackets::AuctionHouse::Auctio
 void AuctionHouseObject::BuildListAuctionItems(WorldPackets::AuctionHouse::AuctionListItemsResult& listItemsResult, Player const* player, AuctionsBucketKey const& bucketKey,
     uint32 offset, std::span<WorldPackets::AuctionHouse::AuctionSortDef const> sorts) const
 {
-    listItemsResult.TotalCount = 0;
+    listItemsResult.TotalQuantity = 0;
     if (AuctionsBucketData const* bucket = Trinity::Containers::MapGetValuePtr(_buckets, bucketKey))
     {
         AuctionsResultBuilder<AuctionPosting> builder(offset, player->GetSession()->GetSessionDbcLocale(), sorts, AuctionHouseResultLimits::Items);
@@ -1344,17 +1351,17 @@ void AuctionHouseObject::BuildListAuctionItems(WorldPackets::AuctionHouse::Aucti
         {
             builder.AddItem(auction);
             for (Item* item : auction->Items)
-                listItemsResult.TotalCount += item->GetCount();
+                listItemsResult.TotalQuantity += item->GetCount();
         }
 
         for (AuctionPosting const* resultAuction : builder.GetResultRange())
         {
-            listItemsResult.Items.emplace_back();
-            WorldPackets::AuctionHouse::AuctionItem& auctionItem = listItemsResult.Items.back();
+            WorldPackets::AuctionHouse::AuctionItem& auctionItem = listItemsResult.Items.emplace_back();
             resultAuction->BuildAuctionItem(&auctionItem, false, false, resultAuction->OwnerAccount != player->GetSession()->GetAccountGUID(),
                 resultAuction->Bidder.IsEmpty());
         }
 
+        listItemsResult.TotalCount = builder.GetTotalCount();
         listItemsResult.HasMoreResults = builder.HasMoreResults();
     }
 }
@@ -1364,15 +1371,15 @@ void AuctionHouseObject::BuildListAuctionItems(WorldPackets::AuctionHouse::Aucti
 {
     AuctionsResultBuilder<AuctionPosting> builder(offset, player->GetSession()->GetSessionDbcLocale(), sorts, AuctionHouseResultLimits::Items);
     auto itr = _buckets.lower_bound(AuctionsBucketKey(itemId, 0, 0, 0));
-    auto end = _buckets.lower_bound(AuctionsBucketKey(itemId + 1, 0, 0, 0));
-    listItemsResult.TotalCount = 0;
-    while (itr != end)
+    auto end = _buckets.end();
+    listItemsResult.TotalQuantity = 0;
+    while (itr != end && itr->first.ItemId == itemId)
     {
         for (AuctionPosting const* auction : itr->second.Auctions)
         {
             builder.AddItem(auction);
             for (Item* item : auction->Items)
-                listItemsResult.TotalCount += item->GetCount();
+                listItemsResult.TotalQuantity += item->GetCount();
         }
 
         ++itr;
@@ -1380,12 +1387,12 @@ void AuctionHouseObject::BuildListAuctionItems(WorldPackets::AuctionHouse::Aucti
 
     for (AuctionPosting const* resultAuction : builder.GetResultRange())
     {
-        listItemsResult.Items.emplace_back();
-        WorldPackets::AuctionHouse::AuctionItem& auctionItem = listItemsResult.Items.back();
+        WorldPackets::AuctionHouse::AuctionItem& auctionItem = listItemsResult.Items.emplace_back();
         resultAuction->BuildAuctionItem(&auctionItem, false, true, resultAuction->OwnerAccount != player->GetSession()->GetAccountGUID(),
             resultAuction->Bidder.IsEmpty());
     }
 
+    listItemsResult.TotalCount = builder.GetTotalCount();
     listItemsResult.HasMoreResults = builder.HasMoreResults();
 }
 
@@ -1403,8 +1410,7 @@ void AuctionHouseObject::BuildListOwnedItems(WorldPackets::AuctionHouse::Auction
 
     for (AuctionPosting const* resultAuction : auctions)
     {
-        listOwnedItemsResult.Items.emplace_back();
-        WorldPackets::AuctionHouse::AuctionItem& auctionItem = listOwnedItemsResult.Items.back();
+        WorldPackets::AuctionHouse::AuctionItem& auctionItem = listOwnedItemsResult.Items.emplace_back();
         resultAuction->BuildAuctionItem(&auctionItem, true, true, false, false);
     }
 
@@ -1440,8 +1446,7 @@ void AuctionHouseObject::BuildReplicate(WorldPackets::AuctionHouse::AuctionRepli
     {
         AuctionPosting const& auction = itr->second;
 
-        replicateResponse.Items.emplace_back();
-        WorldPackets::AuctionHouse::AuctionItem& auctionItem = replicateResponse.Items.back();
+        WorldPackets::AuctionHouse::AuctionItem& auctionItem = replicateResponse.Items.emplace_back();
         auction.BuildAuctionItem(&auctionItem, false, true, true, auction.Bidder.IsEmpty());
         if (!--count)
             break;

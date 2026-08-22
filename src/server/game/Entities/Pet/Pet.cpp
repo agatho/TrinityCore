@@ -835,6 +835,14 @@ bool Pet::CreateBaseAtTamed(CreatureTemplate const* cinfo, Map* map)
     return true;
 }
 
+void Pet::SendNewlyTamed(bool playPingFx /*= true*/) const
+{
+    WorldPackets::Pet::PetNewlyTamed petNewlyTamed;
+    petNewlyTamed.UnitGUID = GetGUID();
+    petNewlyTamed.PlayPingFX = playPingFx;
+    SendMessageToSet(petNewlyTamed.Write(), true);
+}
+
 /// @todo Move stat mods code to pet passive auras
 bool Guardian::InitStatsForLevel(uint8 petlevel)
 {
@@ -905,7 +913,8 @@ bool Guardian::InitStatsForLevel(uint8 petlevel)
     {
         // remove elite bonuses included in DB values
         CreatureBaseStats const* stats = sObjectMgr->GetCreatureBaseStats(petlevel, cinfo->unit_class);
-        ApplyLevelScaling();
+        if (!m_Properties) // pet loaded from DB
+            ApplyLevelScaling(GetOwner()->m_unitData->ContentTuningID, GetOwner()->m_unitData->ScalingLevelDelta);
 
         CreatureDifficulty const* creatureDifficulty = GetCreatureDifficulty();
         SetCreateHealth(std::max(sDB2Manager.EvaluateExpectedStat(ExpectedStatType::CreatureHealth, petlevel, creatureDifficulty->GetHealthScalingExpansion(), m_unitData->ContentTuningID, Classes(cinfo->unit_class), 0) * creatureDifficulty->HealthModifier * GetHealthMod(cinfo->Classification), 1.0f));
@@ -1199,8 +1208,8 @@ void Pet::_LoadAuras(PreparedQueryResult auraResult, PreparedQueryResult effectR
 
                 AuraKey key{ casterGuid, itemGuid, fields[1].GetUInt32(), fields[2].GetUInt32() };
                 AuraLoadEffectInfo& info = effectInfo[key];
-                info.Amounts[effectIndex] = fields[4].GetInt32();
-                info.BaseAmounts[effectIndex] = fields[5].GetInt32();
+                info.Amounts[effectIndex] = fields[4].GetDouble();
+                info.BaseAmounts[effectIndex] = fields[5].GetDouble();
             }
         } while (effectResult->NextRow());
     }
@@ -1337,8 +1346,8 @@ void Pet::_SaveAuras(CharacterDatabaseTransaction trans)
             stmt->setUInt32(index++, key.SpellId);
             stmt->setUInt32(index++, key.EffectMask);
             stmt->setUInt8(index++, effect->GetEffIndex());
-            stmt->setInt32(index++, effect->GetAmount());
-            stmt->setInt32(index++, effect->GetBaseAmount());
+            stmt->setDouble(index++, effect->GetAmount());
+            stmt->setDouble(index++, effect->GetBaseAmount());
             trans->Append(stmt);
         }
     }
@@ -1685,7 +1694,6 @@ bool Pet::Create(ObjectGuid::LowType guidlow, Map* map, uint32 Entry, uint32 /*p
     // TODO: counter should be constructed as (summon_count << 32) | petNumber
     _Create(ObjectGuid::Create<HighGuid::Pet>(map->GetId(), Entry, guidlow));
 
-    m_spawnId = guidlow;
     m_originalEntry = Entry;
 
     if (!InitEntry(Entry))

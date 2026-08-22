@@ -30,6 +30,14 @@ WorldPacket const* BindPointUpdate::Write()
     return &_worldPacket;
 }
 
+WorldPacket const* PlayerBound::Write()
+{
+    _worldPacket << BinderID;
+    _worldPacket << uint32(AreaID);
+
+    return &_worldPacket;
+}
+
 WorldPacket const* InvalidatePlayer::Write()
 {
     _worldPacket << Guid;
@@ -175,9 +183,10 @@ void TimeSyncResponse::Read()
     _worldPacket >> ClientTime;
 }
 
-WorldPacket const* ServerTimeOffset::Write()
+WorldPacket const* TriggerCinematic::Write()
 {
-    _worldPacket << Time;
+    _worldPacket << uint32(CinematicID);
+    _worldPacket << ConversationGuid;
 
     return &_worldPacket;
 }
@@ -189,10 +198,9 @@ WorldPacket const* TriggerMovie::Write()
     return &_worldPacket;
 }
 
-WorldPacket const* TriggerCinematic::Write()
+WorldPacket const* ServerTimeOffset::Write()
 {
-    _worldPacket << uint32(CinematicID);
-    _worldPacket << ConversationGuid;
+    _worldPacket << Time;
 
     return &_worldPacket;
 }
@@ -343,14 +351,6 @@ WorldPacket const* SetAnimTier::Write()
     _worldPacket << Unit;
     _worldPacket << uint8(Tier);
     _worldPacket.FlushBits();
-
-    return &_worldPacket;
-}
-
-WorldPacket const* PlayerBound::Write()
-{
-    _worldPacket << BinderID;
-    _worldPacket << uint32(AreaID);
 
     return &_worldPacket;
 }
@@ -801,7 +801,7 @@ WorldPacket const* SplashScreenShowLatest::Write()
 WorldPacket const* DisplayToast::Write()
 {
     _worldPacket << uint64(Quantity);
-    _worldPacket << As<uint8>(DisplayToastMethod);
+    _worldPacket << As<uint32>(DisplayToastMethod);
     _worldPacket << uint32(QuestID);
 
     _worldPacket << Bits<1>(Mailed);

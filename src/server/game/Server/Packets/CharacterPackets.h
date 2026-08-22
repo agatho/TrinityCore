@@ -189,6 +189,7 @@ namespace WorldPackets
                     uint32 TransmogrifiedItemID = 0;
                     uint8 Subclass          = 0;
                     uint8 InvType           = 0;
+                    uint8 SheatheCategory   = 0;
                     uint32 DisplayID        = 0;
                     uint32 DisplayEnchantID = 0;
                     int32 SecondaryItemModifiedAppearanceID = 0; // also -1 is some special value
@@ -208,6 +209,7 @@ namespace WorldPackets
                 std::vector<std::string> MailSenders;
                 std::vector<uint32> MailSenderTypes;
                 bool RpeAvailable = false;
+                uint32 NoRpeReason = 4; // recently active
             };
 
             struct CharacterInfo
@@ -233,9 +235,11 @@ namespace WorldPackets
 
             struct ClassUnlock
             {
-               int8 ClassID = 0;
-               bool HasUnlockedAchievement = false;
-               uint32 AchievementID = 0;
+                int8 ClassID = 0;
+                bool HasExpansion = false;
+                bool HasUnlockedAchievement = false;
+                bool HasEntitlement = false;
+                uint32 AchievementID = 0;
             };
 
             struct RaceUnlock
@@ -244,8 +248,10 @@ namespace WorldPackets
                 bool HasUnlockedLicense = false;
                 bool HasUnlockedAchievement = false;
                 bool HasHeritageArmorUnlockAchievement = false;
+                bool HasEntitlement = false;
                 bool HideRaceOnClient = false;
                 bool FactionBalanceDisabled = false;
+                bool DoesNotHaveAvailableClasses = false;
                 std::vector<ClassUnlock> ClassUnlocks;
             };
 
@@ -417,7 +423,29 @@ namespace WorldPackets
             std::shared_ptr<CharCustomizeInfo> CustomizeInfo;
         };
 
-        /// @todo: CharCustomizeResult
+        class CharCustomizeSuccess final : public ServerPacket
+        {
+        public:
+            explicit CharCustomizeSuccess(CharCustomizeInfo const* customizeInfo);
+
+            WorldPacket const* Write() override;
+
+            ObjectGuid CharGUID;
+            std::string CharName;
+            uint8 SexID = 0;
+            Array<ChrCustomizationChoice, 250> const& Customizations;
+        };
+
+        class CharCustomizeFailure final : public ServerPacket
+        {
+        public:
+            explicit CharCustomizeFailure() : ServerPacket(SMSG_CHAR_CUSTOMIZE_FAILURE, 1 + 16) { }
+
+            WorldPacket const* Write() override;
+
+            uint32 Result = 0;
+            ObjectGuid CharGUID;
+        };
 
         class CharRaceOrFactionChange final : public ClientPacket
         {
@@ -837,30 +865,6 @@ namespace WorldPackets
             WorldPacket const* Write() override;
 
             uint32 FactionIndex = 0;
-        };
-
-        class CharCustomizeSuccess final : public ServerPacket
-        {
-        public:
-            explicit CharCustomizeSuccess(CharCustomizeInfo const* customizeInfo);
-
-            WorldPacket const* Write() override;
-
-            ObjectGuid CharGUID;
-            std::string CharName;
-            uint8 SexID = 0;
-            Array<ChrCustomizationChoice, 250> const& Customizations;
-        };
-
-        class CharCustomizeFailure final : public ServerPacket
-        {
-        public:
-            explicit CharCustomizeFailure() : ServerPacket(SMSG_CHAR_CUSTOMIZE_FAILURE, 1 + 16) { }
-
-            WorldPacket const* Write() override;
-
-            uint32 Result = 0;
-            ObjectGuid CharGUID;
         };
 
         class SetPlayerDeclinedNames final : public ClientPacket
