@@ -43,6 +43,12 @@ UPDATE `creature_template_difficulty` SET `ContentTuningID`=4306 WHERE `Entry` I
 -- as the Arcane Phoenix). Not an RPE spawn; remove it.
 DELETE FROM `creature` WHERE `guid` = 8000192;
 
+-- "Treant" (entry 54983, faction 35) -- 5 spawns mined near the pad/farm/Stromgarde. This is the Druid
+-- "Force of Nature" companion summon; the Horde capture character was a Druid, so these are that
+-- player's pets caught in the sniff -- the same class of artifact as the Mage Mirror Image / Arcane
+-- Phoenix. Not RPE content; remove all of them.
+DELETE FROM `creature` WHERE `map` = 2927 AND `id` = 54983;
+
 -- Gnoll Assailants (245027) at the pad are the battle-aftermath CORPSES (tester-confirmed they
 -- should be dead) -> permanent Feign Death (aura 29266). (An earlier revision cleared this on the
 -- mistaken read that "gnolls don't move" meant they should be alive; the tester clarified they are
