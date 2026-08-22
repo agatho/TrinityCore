@@ -99,3 +99,35 @@ DELETE FROM `conditions` WHERE `SourceTypeOrReferenceId` = 26 AND `SourceGroup` 
 -- script (player_arathi_rpe_intro_cinematic -> GetSceneMgr().PlayScene(3692/3749)).
 UPDATE `creature_template_addon` SET `auras` = '1237118' WHERE `entry` = 244643;  -- Jaina: Casting pose (DNT)
 UPDATE `creature_template_addon` SET `auras` = '1237057' WHERE `entry` = 244642;  -- Thrall: Kneel (DNT)
+
+-- ---- GO'SHEK FARM ARRIVAL FIXES (2026-08-22, from live test) ----
+-- The flight tutorial 90883 ("To Go'shek Farm") drops the player at the farm (map 2927, zone 16432,
+-- area 16456) with 90883 still IN PROGRESS -- you turn it in AT the farm. Four bugs made arrival wrong:
+--
+-- (A) Farm questgivers Jaina(244655)/Thrall(244656)/Farmer Bruvk(244729) are on the farm arrival phase
+--     1959, but its render condition was QUESTREWARDED(90883) -- i.e. only AFTER you hand in the very
+--     quest whose turn-in NPCs these are. Chicken-and-egg: the turn-in NPCs stay hidden until you turn
+--     in the quest. Re-gate 1959 to the PRECEDING quest 90882 "Gnoll Way" (rewarded just before you fly,
+--     and stays rewarded for the whole farm chapter) so the leaders are visible the moment you land.
+--     phase_area(16456,1959) already exists; this only fixes WHEN 1959 applies.
+UPDATE `conditions` SET `ConditionValue1`=90882
+ WHERE `SourceTypeOrReferenceId`=26 AND `SourceGroup`=1959 AND `ConditionTypeOrReference`=8 AND `ConditionValue1`=90883;
+--
+-- (B) The battle-aftermath corpses around the leaders are DEDICATED corpse entries -- 249254 Ogre
+--     Destroyer (1 spawn) + 249255 Kobold Pillager (5 spawns), corpse-only, all 6 at the farm -- NOT
+--     the live-kill mobs 244674/244676 (which drop quest items for 90886 and must stay killable). The
+--     corpses were on phase 4 (the post-turn-in combat phase) so they never showed with the leaders on
+--     arrival. Move them onto the leaders' arrival phase 1959 so the tableau is co-visible.
+UPDATE `creature` SET `PhaseId`=1959 WHERE `map`=2927 AND `id` IN (249254,249255);
+--
+-- (C) Those corpse entries had no death state ("kobold pillager and the one ogre destroyer around them
+--     has no death state"). Give them the permanent Feign-Death aura 29266 -- the exact mechanism the
+--     Hammerfall pad Gnoll Assailants (245027) use. Both entries are corpse-only, so template-level is safe.
+UPDATE `creature_template_addon` SET `auras`='29266' WHERE `entry` IN (249254,249255);
+--
+-- (D) Phase 4 (farm COMBAT phase: live 244674/244676/Runk 244675) had orphaned conditions -- SourceEntry
+--     was 0 ("Area 0 does not have phase 4" in DBErrors), so the phase applied UNCONDITIONALLY, showing
+--     the farm-fight mobs in every quest state (part of the "too many mobs" the tester saw). This phase
+--     was missed by the earlier SourceEntry sweep (which fixed 1961/1959/1610/3). Set it to farm area 16456
+--     so phase 4 is gated properly (90883 rewarded AND NOT 90888 rewarded).
+UPDATE `conditions` SET `SourceEntry`=16456 WHERE `SourceTypeOrReferenceId`=26 AND `SourceGroup`=4 AND `SourceEntry`=0;
