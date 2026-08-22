@@ -717,7 +717,7 @@ void WorldSession::HandleUpdateAccountData(WorldPackets::ClientConfig::UserClien
         return;
     }
 
-    if (packet.Size > 0xFFFF)
+    if (packet.Size > 0xFFFFFF)                         // MEDIUMBLOB cap (16 MB); modern addon/UI account data exceeds the old 0xFFFF BLOB limit
     {
         TC_LOG_ERROR("network", "UAD: Account data packet too big, size {}", packet.Size);
         return;
