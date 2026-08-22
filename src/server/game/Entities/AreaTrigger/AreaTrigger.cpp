@@ -540,7 +540,7 @@ float AreaTrigger::GetScaleCurveValueAtProgress(UF::ScaleCurve const& scaleCurve
     for (std::size_t i = 0; i < scaleCurve.Points.size(); ++i)
         points[i] = { .X = scaleCurve.Points[i].Pos.GetPositionX(), .Y = scaleCurve.Points[i].Pos.GetPositionY() };
 
-    CurveInterpolationMode mode = CurveInterpolationMode(*scaleCurve.ParameterCurve >> 1 & 0x7);
+    CurveInterpolationMode mode = CurveInterpolationMode(*scaleCurve.ParameterCurve >> 1 & 0xF);
     std::size_t pointCount = *scaleCurve.ParameterCurve >> 24 & 0xFF;
 
     return sDB2Manager.GetCurveValueAt(mode, std::span(points.begin(), pointCount), x);
@@ -585,9 +585,9 @@ void AreaTrigger::SetScaleCurve(UF::MutableFieldReference<UF::ScaleCurve, false>
     SetUpdateFieldValue(scaleCurveMutator.ModifyValue(&UF::ScaleCurve::OverrideActive), true);
     SetUpdateFieldValue(scaleCurveMutator.ModifyValue(&UF::ScaleCurve::StartTimeOffset), curve->StartTimeOffset);
 
-    Position point;
+    TaggedPosition<Position::XY> point;
     // ParameterCurve packing information
-    // (not_using_points & 1) | ((interpolation_mode & 0x7) << 1) | ((first_point_offset & 0xFFFFF) << 4) | ((point_count & 0xFF) << 24)
+    // (not_using_points & 1) | ((interpolation_mode & 0xF) << 1) | ((first_point_offset & 0x7FFFF) << 5) | ((point_count & 0xFF) << 24)
     //   if not_using_points is set then the entire field is simply read as a float (ignoring that lowest bit)
 
     if (float const* simpleFloat = std::get_if<float>(&curve->Curve))
@@ -632,7 +632,7 @@ void AreaTrigger::SetScaleCurve(UF::MutableFieldReference<UF::ScaleCurve, false>
 
         for (std::size_t i = 0; i < curvePoints->size(); ++i)
         {
-            point.Relocate((*curvePoints)[i].X, (*curvePoints)[i].Y);
+            point.Pos.Relocate((*curvePoints)[i].X, (*curvePoints)[i].Y);
             SetUpdateFieldValue(scaleCurveMutator.ModifyValue(&UF::ScaleCurve::Points, i), point);
         }
     }
@@ -895,8 +895,8 @@ void AreaTrigger::HandleUnitEnter(Unit* unit)
 
     _ai->OnUnitEnter(unit);
 
-    // OnUnitEnter script can despawn this areatrigger
-    if (!IsInWorld())
+    // OnUnitEnter script can despawn this areatrigger or teleport player to a different map
+    if (!IsInWorld() || !IsInMap(unit))
         return;
 
     // Register areatrigger in Unit after actions/scripts to allow them to determine
@@ -925,10 +925,11 @@ void AreaTrigger::HandleUnitExitInternal(Unit* unit, AreaTriggerExitReason exitM
 
     UndoActions(unit);
 
+    // OnUnitExit script can teleport player to another map, causing it to attempt to exit the areatrigger again (from Unit::ExitAllAreaTriggers)
+    unit->ExitAreaTrigger(this);
+
     if (canTriggerOnExit)
         _ai->OnUnitExit(unit, exitMode);
-
-    unit->ExitAreaTrigger(this);
 }
 
 void AreaTrigger::HandleUnitExit(Unit* unit)
@@ -1516,7 +1517,7 @@ void AreaTrigger::BuildValuesUpdate(UF::UpdateFieldFlag flags, ByteBuffer& data,
 }
 
 void AreaTrigger::BuildValuesUpdateForPlayerWithMask(UpdateData* data, UF::ObjectData::Mask const& requestedObjectMask,
-    UF::AreaTriggerData::Mask const& requestedAreaTriggerMask, Player const* target) const
+    UF::AreaTriggerData::Mask const& requestedAreaTriggerMask, Player const* target, bool ignoreNestedChangesMask) const
 {
     UF::UpdateFieldFlag flags = GetUpdateFieldFlagsFor(target);
     UpdateMask<NUM_CLIENT_OBJECT_TYPES> valuesMask;
@@ -1533,10 +1534,10 @@ void AreaTrigger::BuildValuesUpdateForPlayerWithMask(UpdateData* data, UF::Objec
     buffer << uint32(valuesMask.GetBlock(0));
 
     if (valuesMask[TYPEID_OBJECT])
-        m_objectData->WriteUpdate(requestedObjectMask, buffer, target, this, true);
+        m_objectData->WriteUpdate(requestedObjectMask, buffer, target, this, ignoreNestedChangesMask);
 
     if (valuesMask[TYPEID_AREATRIGGER])
-        m_areaTriggerData->WriteUpdate(requestedAreaTriggerMask, buffer, target, this, true);
+        m_areaTriggerData->WriteUpdate(requestedAreaTriggerMask, buffer, target, this, ignoreNestedChangesMask);
 
     buffer.put<uint32>(sizePos, buffer.wpos() - sizePos - 4);
 
@@ -1548,7 +1549,7 @@ void AreaTrigger::ValuesUpdateForPlayerWithMaskSender::operator()(Player const* 
     UpdateData udata(Owner->GetMapId());
     WorldPacket packet;
 
-    Owner->BuildValuesUpdateForPlayerWithMask(&udata, ObjectMask.GetChangesMask(), AreaTriggerMask.GetChangesMask(), player);
+    Owner->BuildValuesUpdateForPlayerWithMask(&udata, ObjectMask.GetChangesMask(), AreaTriggerMask.GetChangesMask(), player, IgnoreNestedChangesMask);
 
     udata.BuildPacket(&packet);
     player->SendDirectMessage(&packet);

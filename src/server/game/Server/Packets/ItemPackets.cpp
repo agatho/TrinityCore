@@ -30,11 +30,11 @@ void BuyItem::Read()
 {
     _worldPacket >> VendorGUID;
     _worldPacket >> ContainerGUID;
+    _worldPacket >> Item;
     _worldPacket >> Quantity;
     _worldPacket >> Muid;
     _worldPacket >> Slot;
     _worldPacket >> As<int32>(ItemType);
-    _worldPacket >> Item;
 }
 
 WorldPacket const* BuySucceeded::Write()
@@ -135,6 +135,11 @@ void SellItem::Read()
     _worldPacket >> VendorGUID;
     _worldPacket >> ItemGUID;
     _worldPacket >> Amount;
+}
+
+void SellAllJunkItems::Read()
+{
+    _worldPacket >> VendorGUID;
 }
 
 WorldPacket const* ItemTimeUpdate::Write()
@@ -254,6 +259,7 @@ WorldPacket const* ItemPushResult::Write()
     _worldPacket << PlayerGUID;
     _worldPacket << uint8(Slot);
     _worldPacket << int32(SlotInBag);
+    _worldPacket << Item;
     _worldPacket << int32(ProxyItemID);
     _worldPacket << int32(Quantity);
     _worldPacket << int32(QuantityInInventory);
@@ -278,13 +284,11 @@ WorldPacket const* ItemPushResult::Write()
     _worldPacket << OptionalInit(FirstCraftOperationID);
     _worldPacket.FlushBits();
 
-    _worldPacket << Item;
+    if (CraftingData)
+        _worldPacket << *CraftingData;
 
     if (FirstCraftOperationID)
         _worldPacket << uint32(*FirstCraftOperationID);
-
-    if (CraftingData)
-        _worldPacket << *CraftingData;
 
     return &_worldPacket;
 }
