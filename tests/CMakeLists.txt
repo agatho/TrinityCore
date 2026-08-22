@@ -25,7 +25,7 @@ target_link_libraries(tests
   PRIVATE
     trinity-core-interface
     game
-    Catch2::Catch2)
+    Catch2::Catch2WithMain)
 
 target_include_directories(tests
   PRIVATE
