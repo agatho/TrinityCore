@@ -32,6 +32,9 @@
 class DB2HotfixGeneratorBase;
 
 TC_GAME_API extern DB2Storage<AchievementEntry>                     sAchievementStore;
+TC_GAME_API extern DB2Storage<DelvesSeasonXSpellEntry>              sDelvesSeasonXSpellStore;
+TC_GAME_API extern DB2Storage<PlayerCompanionInfoEntry>             sPlayerCompanionInfoStore;
+TC_GAME_API extern DB2Storage<DelvesSeasonEntry>                    sDelvesSeasonStore;
 TC_GAME_API extern DB2Storage<Achievement_CategoryEntry>            sAchievementCategoryStore;
 TC_GAME_API extern DB2Storage<AdventureJournalEntry>                sAdventureJournalStore;
 TC_GAME_API extern DB2Storage<AdventureMapPOIEntry>                 sAdventureMapPOIStore;
@@ -506,6 +509,8 @@ public:
     std::pair<float, float> GetCurveXAxisRange(uint32 curveId) const;
     float GetCurveValueAt(uint32 curveId, float x) const;
     float GetCurveValueAt(CurveInterpolationMode mode, std::span<DBCPosition2D const> points, float x) const;
+    using DelvesSeasonXSpellContainer = std::vector<DelvesSeasonXSpellEntry const*>;
+    DelvesSeasonXSpellContainer const* GetDelvesSeasonSpells(uint32 delvesSeasonId) const;
     static std::string_view GetDifficultyName(Difficulty difficulty);
     EmotesTextSoundEntry const* GetTextSoundEmoteFor(uint32 emote, uint8 race, uint8 gender, uint8 class_) const;
     float EvaluateExpectedStat(ExpectedStatType stat, uint32 level, int32 expansion, uint32 contentTuningId, Classes unitClass, int32 mythicPlusMilestoneSeason) const;

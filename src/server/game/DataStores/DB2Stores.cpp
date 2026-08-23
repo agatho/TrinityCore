@@ -39,6 +39,9 @@
 #include <cmath>
 
 DB2Storage<AchievementEntry>                    sAchievementStore("Achievement.db2", &AchievementLoadInfo::Instance);
+DB2Storage<DelvesSeasonXSpellEntry>             sDelvesSeasonXSpellStore("DelvesSeasonXSpell.db2", &DelvesSeasonXSpellLoadInfo::Instance);
+DB2Storage<PlayerCompanionInfoEntry>            sPlayerCompanionInfoStore("PlayerCompanionInfo.db2", &PlayerCompanionInfoLoadInfo::Instance);
+DB2Storage<DelvesSeasonEntry>                   sDelvesSeasonStore("DelvesSeason.db2", &DelvesSeasonLoadInfo::Instance);
 DB2Storage<Achievement_CategoryEntry>           sAchievementCategoryStore("Achievement_Category.db2", &AchievementCategoryLoadInfo::Instance);
 DB2Storage<AdventureJournalEntry>               sAdventureJournalStore("AdventureJournal.db2", &AdventureJournalLoadInfo::Instance);
 DB2Storage<AdventureMapPOIEntry>                sAdventureMapPOIStore("AdventureMapPOI.db2", &AdventureMapPoiLoadInfo::Instance);
@@ -512,6 +515,7 @@ namespace
     std::unordered_map<uint32 /*creatureDifficultyId*/, std::vector<int32>> _creatureLabels;
     std::unordered_multimap<uint32, CurrencyContainerEntry const*> _currencyContainers;
     CurvePointsContainer _curvePoints;
+    std::unordered_map<uint32, DB2Manager::DelvesSeasonXSpellContainer> _delvesSeasonXSpellsBySeasonId;
     EmotesTextSoundContainer _emoteTextSounds;
     std::unordered_map<std::pair<uint32 /*level*/, int32 /*expansion*/>, ExpectedStatEntry const*> _expectedStatsByLevel;
     std::unordered_map<uint32 /*contentTuningId*/, std::vector<ContentTuningXExpectedEntry const*>> _expectedStatModsByContentTuning;
@@ -687,6 +691,9 @@ uint32 DB2Manager::LoadStores(std::string const& dataPath, LocaleConstant defaul
     };
 
     LOAD_DB2(sAchievementStore);
+    LOAD_DB2(sDelvesSeasonXSpellStore);
+    LOAD_DB2(sPlayerCompanionInfoStore);
+    LOAD_DB2(sDelvesSeasonStore);
     LOAD_DB2(sAchievementCategoryStore);
     LOAD_DB2(sAdventureJournalStore);
     LOAD_DB2(sAdventureMapPOIStore);
@@ -1325,6 +1332,9 @@ void DB2Manager::IndexLoadedStores()
             std::ranges::transform(curvePoints, points.begin(), &CurvePointEntry::Pos);
         }
     }
+
+    for (DelvesSeasonXSpellEntry const* delvesSeasonXSpell : sDelvesSeasonXSpellStore)
+        _delvesSeasonXSpellsBySeasonId[delvesSeasonXSpell->DelvesSeasonID].push_back(delvesSeasonXSpell);
 
     for (EmotesTextSoundEntry const* emoteTextSound : sEmotesTextSoundStore)
         _emoteTextSounds[EmotesTextSoundContainer::key_type(emoteTextSound->EmotesTextID, emoteTextSound->RaceID, emoteTextSound->SexID, emoteTextSound->ClassID)] = emoteTextSound;
@@ -2470,6 +2480,11 @@ float DB2Manager::GetCurveValueAt(CurveInterpolationMode mode, std::span<DBCPosi
     }
 
     return 0.0f;
+}
+
+DB2Manager::DelvesSeasonXSpellContainer const* DB2Manager::GetDelvesSeasonSpells(uint32 delvesSeasonId) const
+{
+    return Trinity::Containers::MapGetValuePtr(_delvesSeasonXSpellsBySeasonId, delvesSeasonId);
 }
 
 std::string_view DB2Manager::GetDifficultyName(Difficulty difficulty)

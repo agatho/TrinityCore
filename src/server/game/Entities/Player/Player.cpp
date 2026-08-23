@@ -16,6 +16,7 @@
  */
 
 #include "Player.h"
+#include "DelvesDefines.h"
 #include "AreaTrigger.h"
 #include "Account.h"
 #include "AccountMgr.h"
@@ -31791,4 +31792,69 @@ void Player::UpdateDungeonScore()
     }
     SetUpdateFieldValue(m_values.ModifyValue(&Player::m_playerData).ModifyValue(&UF::PlayerData::DungeonScore), std::move(summary));
     SetUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::DungeonScore), std::move(data));
+}
+
+void Player::SetDelveData(int32 mapId, int32 tier, uint64 instanceId, int32 entranceType,
+    std::vector<ObjectGuid> playersEligibleForRewards,
+    std::vector<int32> activeOptionalAffixIDs,
+    bool restrictRewardsToCurrentPlayers)
+{
+    auto delveData = m_values.ModifyValue(&Player::m_activePlayerData)
+        .ModifyValue(&UF::ActivePlayerData::DelveData, mapId);
+
+    SetUpdateFieldValue(delveData.ModifyValue(&UF::DelveData::MapID), mapId);
+    SetUpdateFieldValue(delveData.ModifyValue(&UF::DelveData::Tier), tier);
+    SetUpdateFieldValue(delveData.ModifyValue(&UF::DelveData::InstanceID), instanceId);
+    SetUpdateFieldValue(delveData.ModifyValue(&UF::DelveData::EntranceType), entranceType);
+    SetUpdateFieldValue(delveData.ModifyValue(&UF::DelveData::RestrictingRewardPlayers), uint8(restrictRewardsToCurrentPlayers ? 1 : 0));
+    SetUpdateFieldValue(delveData.ModifyValue(&UF::DelveData::PlayersEligibleForRewards), std::move(playersEligibleForRewards));
+    SetUpdateFieldValue(delveData.ModifyValue(&UF::DelveData::ActiveOptionalAffixIDs), std::move(activeOptionalAffixIDs));
+}
+
+void Player::ClearDelveData(int32 mapId)
+{
+    // Note (68275): the client's delve-map wire format has no delete op — a removed
+    // entry cannot be expressed in a values update (see WriteDelveMapFieldUpdate) and
+    // only disappears client-side with the next full ActivePlayer create block
+    // (e.g. the teleport out of the delve that accompanies every ClearDelveData call).
+    RemoveMapUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData)
+        .ModifyValue(&UF::ActivePlayerData::DelveData), mapId);
+}
+
+void Player::SetDelveProgressData(int32 key, int32 lastSelectedMapId, int32 highestTierUnlocked,
+    std::vector<int32> weeklyCounters)
+{
+    // Publishes account-wide delve progression (Delves::DelveProgress) into the
+    // JamDelveData mirror so the client UI can populate highest-unlocked /
+    // last-selected state. The wire layout of each map entry is byte-exact
+    // (68275 per-entry deserializer 0x7FF7291628A0):
+    //   uint32, uint32, uint64, guidCount, intCount, uint32, PackedGUID[], uint32[], bool(MSB)
+    // — matched 1:1 by UF::DelveData::WriteCreate/WriteUpdate.
+    //
+    // The struct FIELD NAMES are now authoritative retail names from the 68275
+    // reflection descriptors (mapID/tier/instanceID/restrictingRewardPlayers/
+    // playersEligibleForRewards/activeOptionalAffixIDs/entranceType) — i.e. the
+    // struct canonically describes ACTIVE-delve state. This progression entry
+    // deliberately REPURPOSES those fields, which remains a hypothesis:
+    // // UNVERIFIED — needs sniff: the map KEY meaning (we use the current delves
+    // season ID; could be scenario/map ID) and whether retail publishes a
+    // progression-shaped entry in this map at all.
+    //   MapID  <- last-selected delve map ID (0 = none)
+    //   Tier   <- HighestTierUnlocked
+    //   InstanceID <- 0 (no instance backs a progression entry)
+    //   EntranceType <- TIERED_ENTRANCE_TYPE_DELVE
+    //   ActiveOptionalAffixIDs <- { WeeklyCompletions, HighestTierThisWeek,
+    //                               WeeklyBountifulCount, WeeklyCofferShards }
+    //     (weakest part of the hypothesis — retail semantics are delve affix ids)
+    //   RestrictingRewardPlayers <- false
+    auto delveData = m_values.ModifyValue(&Player::m_activePlayerData)
+        .ModifyValue(&UF::ActivePlayerData::DelveData, key);
+
+    SetUpdateFieldValue(delveData.ModifyValue(&UF::DelveData::MapID), lastSelectedMapId);
+    SetUpdateFieldValue(delveData.ModifyValue(&UF::DelveData::Tier), highestTierUnlocked);
+    SetUpdateFieldValue(delveData.ModifyValue(&UF::DelveData::InstanceID), uint64(0));
+    SetUpdateFieldValue(delveData.ModifyValue(&UF::DelveData::EntranceType), int32(Delves::TIERED_ENTRANCE_TYPE_DELVE));
+    SetUpdateFieldValue(delveData.ModifyValue(&UF::DelveData::RestrictingRewardPlayers), uint8(0));
+    SetUpdateFieldValue(delveData.ModifyValue(&UF::DelveData::PlayersEligibleForRewards), std::vector<ObjectGuid>());
+    SetUpdateFieldValue(delveData.ModifyValue(&UF::DelveData::ActiveOptionalAffixIDs), std::move(weeklyCounters));
 }

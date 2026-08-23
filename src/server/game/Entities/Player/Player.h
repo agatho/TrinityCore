@@ -2569,6 +2569,16 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
 
         void SendInitWorldStates(uint32 zoneId, uint32 areaId) const;
         void SendUpdateWorldState(uint32 variable, uint32 value, bool hidden = false) const;
+        void SetDelveData(int32 mapId, int32 tier, uint64 instanceId, int32 entranceType,
+            std::vector<ObjectGuid> playersEligibleForRewards = {},
+            std::vector<int32> activeOptionalAffixIDs = {},
+            bool restrictRewardsToCurrentPlayers = false);
+        void ClearDelveData(int32 mapId);
+        void SetDelveProgressData(int32 key, int32 lastSelectedMapId, int32 highestTierUnlocked,
+            std::vector<int32> weeklyCounters);
+        bool HasActiveDelve() const { return !m_activePlayerData->DelveData.empty(); }
+        uint32 m_delveSelectedMapId = 0;
+        uint8 m_delveSelectedTier = 0;
         void SendDirectMessage(WorldPacket const* data) const;
 
         void SendAurasForTarget(Unit* target) const;

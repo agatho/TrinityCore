@@ -20,6 +20,11 @@
 
 void CharacterDatabaseConnection::DoPrepareStatements()
 {
+    PrepareStatement(CHAR_SEL_DELVE_COMPANION, "SELECT companionId, level, xp, selectedRole, combatCurioNodeId, utilityCurioNodeId FROM delve_companion WHERE battlenetAccountId = ? LIMIT 1", CONNECTION_SYNCH);
+    PrepareStatement(CHAR_REP_DELVE_COMPANION, "REPLACE INTO delve_companion (battlenetAccountId, companionId, level, xp, selectedRole, combatCurioNodeId, utilityCurioNodeId) VALUES (?, ?, ?, ?, ?, ?, ?)", CONNECTION_ASYNC);
+    PrepareStatement(CHAR_SEL_DELVE_PROGRESS, "SELECT highestTierUnlocked, weeklyCompletions, highestTierThisWeek, weeklyBountifulCount, weeklyCofferShards FROM delve_progress WHERE battlenetAccountId = ?", CONNECTION_SYNCH);
+    PrepareStatement(CHAR_REP_DELVE_PROGRESS, "REPLACE INTO delve_progress (battlenetAccountId, highestTierUnlocked, weeklyCompletions, highestTierThisWeek, weeklyBountifulCount, weeklyCofferShards) VALUES (?, ?, ?, ?, ?, ?)", CONNECTION_ASYNC);
+    PrepareStatement(CHAR_UPD_RESET_DELVE_PROGRESS_WEEKLY, "UPDATE delve_progress SET weeklyCompletions = 0, highestTierThisWeek = 0, weeklyBountifulCount = 0, weeklyCofferShards = 0", CONNECTION_ASYNC);
     PrepareStatement(CHAR_SEL_WEEKLY_REWARD_ACTIVITY, "SELECT period, activityType, count, bestLevel, levels FROM character_weekly_reward_activity WHERE ownerGuid = ?", CONNECTION_SYNCH);
     PrepareStatement(CHAR_REP_WEEKLY_REWARD_ACTIVITY, "REPLACE INTO character_weekly_reward_activity (ownerGuid, activityType, period, count, bestLevel, levels) VALUES (?, ?, ?, ?, ?, ?)", CONNECTION_ASYNC);
     PrepareStatement(CHAR_SEL_WEEKLY_REWARD_STATE, "SELECT claimedPeriod FROM character_weekly_reward_state WHERE ownerGuid = ?", CONNECTION_SYNCH);

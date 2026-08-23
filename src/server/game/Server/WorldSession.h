@@ -555,6 +555,13 @@ namespace WorldPackets
         class ClaimWeeklyReward;
         class RequestWeeklyRewards;
     }
+    namespace Delves
+    {
+        class DelveTeleportOut;
+        class RequestPartyEligibilityForDelveTiers;
+        class SelectDelveEntranceTier;
+        class TieredEntranceOpen;
+    }
     namespace Movement
     {
         class ClientPlayerMovement;
@@ -1328,6 +1335,11 @@ class TC_GAME_API WorldSession
         // Inertia
         void HandleMoveApplyInertiaAck(WorldPackets::Movement::MoveApplyInertiaAck& moveApplyInertiaAck);
         void HandleMoveRemoveInertiaAck(WorldPackets::Movement::MoveRemoveInertiaAck& moveRemoveInertiaAck);
+        // Delves
+        void HandleDelveTeleportOut(WorldPackets::Delves::DelveTeleportOut& delveTeleportOut);
+        void HandleRequestPartyEligibilityForDelveTiers(WorldPackets::Delves::RequestPartyEligibilityForDelveTiers& requestPartyEligibilityForDelveTiers);
+        void HandleSelectDelveEntranceTier(WorldPackets::Delves::SelectDelveEntranceTier& selectDelveEntranceTier);
+        void HandleTieredEntranceOpen(WorldPackets::Delves::TieredEntranceOpen& tieredEntranceOpen);
         // WeeklyRewards
         void HandleRequestWeeklyRewards(WorldPackets::WeeklyRewards::RequestWeeklyRewards& packet);
         void HandleClaimWeeklyReward(WorldPackets::WeeklyRewards::ClaimWeeklyReward& packet);
