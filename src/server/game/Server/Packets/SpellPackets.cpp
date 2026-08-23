@@ -1179,6 +1179,11 @@ void TradeSkillSetFavorite::Read()
     _worldPacket >> Bits<1>(IsFavorite);
 }
 
+void OpenTradeSkillNpc::Read()
+{
+    _worldPacket >> NpcGUID;
+}
+
 void KeyboundOverride::Read()
 {
     _worldPacket >> OverrideID;
