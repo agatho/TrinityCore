@@ -31768,3 +31768,194 @@ bool Player::CanExecutePendingSpellCastRequest()
 
     return true;
 }
+
+std::vector<Housing const*> Player::GetAllHousings() const
+{
+    std::vector<Housing const*> result;
+    result.reserve(_housings.size());
+    for (auto const& h : _housings)
+        if (h)
+            result.push_back(h.get());
+    return result;
+}
+
+Housing* Player::GetHousing() const
+{
+    if (_housings.empty())
+        return nullptr;
+
+    // If on a HousingMap, return the housing for that map's neighborhood
+    if (IsInWorld())
+    {
+        if (HousingMap* housingMap = dynamic_cast<HousingMap*>(GetMap()))
+        {
+            if (Neighborhood* neighborhood = housingMap->GetNeighborhood())
+            {
+                ObjectGuid neighborhoodGuid = neighborhood->GetGuid();
+                for (auto const& h : _housings)
+                    if (h && h->GetNeighborhoodGuid() == neighborhoodGuid)
+                        return h.get();
+            }
+        }
+    }
+
+    // Default: return first housing
+    return _housings[0].get();
+}
+
+Housing* Player::GetHousingForNeighborhood(ObjectGuid neighborhoodGuid) const
+{
+    for (auto const& h : _housings)
+        if (h && h->GetNeighborhoodGuid() == neighborhoodGuid)
+            return h.get();
+    return nullptr;
+}
+
+void Player::SetCurrentHouse(ObjectGuid houseGuid)
+{
+    if (!m_playerHouseInfoComponentData.has_value())
+        return;
+
+    if (*m_playerHouseInfoComponentData->CurrentHouse == houseGuid)
+        return;
+
+    SetUpdateFieldValue(m_values.ModifyValue(&Player::m_playerHouseInfoComponentData, 0)
+        .ModifyValue(&UF::PlayerHouseInfoComponentData::CurrentHouse), houseGuid);
+
+    TC_LOG_DEBUG("housing", "Player::SetCurrentHouse: player={} currentHouse={}",
+        GetGUID().ToString(), houseGuid.IsEmpty() ? "<empty>" : houseGuid.ToString());
+}
+
+void Player::SetHousingEditorModeUpdateField(uint8 mode)
+{
+    if (m_playerHouseInfoComponentData.has_value())
+    {
+        SetUpdateFieldValue(m_values.ModifyValue(&Player::m_playerHouseInfoComponentData, 0)
+            .ModifyValue(&UF::PlayerHouseInfoComponentData::EditorMode), mode);
+    }
+}
+
+void Player::UpdateHousingMapId(ObjectGuid houseGuid, int32 mapId)
+{
+    if (!m_playerHouseInfoComponentData.has_value())
+        return;
+
+    // DynamicUpdateField nested fields are PublicSet=false, so we snapshot, clear,
+    // and re-add entries with the updated MapID.
+    struct HouseSnapshot
+    {
+        ObjectGuid HouseGUID;
+        ObjectGuid NeighborhoodGUID;
+        uint32 Level;
+        uint32 Favor;
+        uint32 InitiativeFavor;
+        int32 MapID;
+        int32 PlotID;
+    };
+
+    UF::PlayerHouseInfoComponentData const& data = *m_playerHouseInfoComponentData;
+    bool found = false;
+    std::vector<HouseSnapshot> snapshots;
+    snapshots.reserve(data.Houses.size());
+
+    for (uint32 i = 0; i < data.Houses.size(); ++i)
+    {
+        HouseSnapshot s;
+        s.HouseGUID = data.Houses[i].HouseGUID;
+        s.NeighborhoodGUID = data.Houses[i].NeighborhoodGUID;
+        s.Level = data.Houses[i].Level;
+        s.Favor = data.Houses[i].Favor;
+        s.InitiativeFavor = data.Houses[i].InitiativeFavor;
+        s.PlotID = data.Houses[i].PlotID;
+
+        if (data.Houses[i].HouseGUID == houseGuid)
+        {
+            s.MapID = mapId;
+            found = true;
+        }
+        else
+        {
+            s.MapID = data.Houses[i].MapID;
+        }
+        snapshots.push_back(s);
+    }
+
+    if (!found)
+    {
+        TC_LOG_ERROR("housing", "Player::UpdateHousingMapId: House {} not found in PlayerHouseInfoComponentData for player {}",
+            houseGuid.ToString(), GetGUID().ToString());
+        return;
+    }
+
+    ClearDynamicUpdateFieldValues(m_values.ModifyValue(&Player::m_playerHouseInfoComponentData, 0)
+        .ModifyValue(&UF::PlayerHouseInfoComponentData::Houses));
+
+    for (auto const& s : snapshots)
+    {
+        UF::PlayerMirrorHouse& h = AddDynamicUpdateFieldValue(
+            m_values.ModifyValue(&Player::m_playerHouseInfoComponentData, 0)
+                .ModifyValue(&UF::PlayerHouseInfoComponentData::Houses));
+        h.HouseGUID = s.HouseGUID;
+        h.NeighborhoodGUID = s.NeighborhoodGUID;
+        h.Level = s.Level;
+        h.Favor = s.Favor;
+        h.InitiativeFavor = s.InitiativeFavor;
+        h.MapID = s.MapID;
+        h.PlotID = s.PlotID;
+    }
+
+    TC_LOG_ERROR("housing", "Player::UpdateHousingMapId: Updated house {} MapID to {} for player {}",
+        houseGuid.ToString(), mapId, GetGUID().ToString());
+}
+
+void Player::UpdateInitiativeFavor(uint32 favor)
+{
+    if (!m_playerHouseInfoComponentData.has_value())
+        return;
+
+    UF::PlayerHouseInfoComponentData const& data = *m_playerHouseInfoComponentData;
+
+    struct HouseSnapshot
+    {
+        ObjectGuid HouseGUID;
+        ObjectGuid NeighborhoodGUID;
+        uint32 Level;
+        uint32 Favor;
+        uint32 InitiativeFavor;
+        int32 MapID;
+        int32 PlotID;
+    };
+
+    std::vector<HouseSnapshot> snapshots;
+    snapshots.reserve(data.Houses.size());
+
+    for (uint32 i = 0; i < data.Houses.size(); ++i)
+    {
+        HouseSnapshot s;
+        s.HouseGUID = data.Houses[i].HouseGUID;
+        s.NeighborhoodGUID = data.Houses[i].NeighborhoodGUID;
+        s.Level = data.Houses[i].Level;
+        s.Favor = data.Houses[i].Favor;
+        s.InitiativeFavor = favor;
+        s.MapID = data.Houses[i].MapID;
+        s.PlotID = data.Houses[i].PlotID;
+        snapshots.push_back(s);
+    }
+
+    ClearDynamicUpdateFieldValues(m_values.ModifyValue(&Player::m_playerHouseInfoComponentData, 0)
+        .ModifyValue(&UF::PlayerHouseInfoComponentData::Houses));
+
+    for (auto const& s : snapshots)
+    {
+        UF::PlayerMirrorHouse& h = AddDynamicUpdateFieldValue(
+            m_values.ModifyValue(&Player::m_playerHouseInfoComponentData, 0)
+                .ModifyValue(&UF::PlayerHouseInfoComponentData::Houses));
+        h.HouseGUID = s.HouseGUID;
+        h.NeighborhoodGUID = s.NeighborhoodGUID;
+        h.Level = s.Level;
+        h.Favor = s.Favor;
+        h.InitiativeFavor = s.InitiativeFavor;
+        h.MapID = s.MapID;
+        h.PlotID = s.PlotID;
+    }
+}

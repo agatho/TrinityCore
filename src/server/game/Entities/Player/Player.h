@@ -81,6 +81,7 @@ class DynamicObject;
 class Garrison;
 class Group;
 class Guild;
+class Housing;
 class Item;
 class LootRoll;
 class LootStore;
@@ -2566,6 +2567,13 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         void SendInitWorldStates(uint32 zoneId, uint32 areaId) const;
         void SendUpdateWorldState(uint32 variable, uint32 value, bool hidden = false) const;
         void SendDirectMessage(WorldPacket const* data) const;
+        std::vector<Housing const*> GetAllHousings() const;
+        Housing* GetHousing() const;
+        Housing* GetHousingForNeighborhood(ObjectGuid neighborhoodGuid) const;
+        void SetCurrentHouse(ObjectGuid houseGuid);
+        void SetHousingEditorModeUpdateField(uint8 mode);
+        void UpdateHousingMapId(ObjectGuid houseGuid, int32 mapId);
+        void UpdateInitiativeFavor(uint32 favor);
 
         void SendAurasForTarget(Unit* target) const;
 
@@ -3062,6 +3070,7 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
 
         UF::UpdateField<UF::PlayerData, int32(WowCS::EntityFragment::CGObject), TYPEID_PLAYER> m_playerData;
         UF::UpdateField<UF::ActivePlayerData, int32(WowCS::EntityFragment::CGObject), TYPEID_ACTIVE_PLAYER> m_activePlayerData;
+        UF::OptionalUpdateField<UF::PlayerHouseInfoComponentData, int32(WowCS::EntityFragment::PlayerHouseInfoComponent_C), 0> m_playerHouseInfoComponentData;
 
         void SetAreaSpiritHealer(Creature* creature);
         ObjectGuid const& GetSpiritHealerGUID() const { return _areaSpiritHealerGUID; }

@@ -4744,3 +4744,50 @@ SpellInfo const* GameObject::GetSpellForLock(Player const* player) const
 
     return nullptr;
 }
+
+void GameObject::InitHousingCornerstoneData(uint64 cost, int32 plotIndex)
+{
+    if (m_housingCornerstoneData.has_value())
+        return;
+
+    SetUpdateFieldValue(m_values.ModifyValue(&GameObject::m_housingCornerstoneData, 0)
+        .ModifyValue(&UF::HousingCornerstoneData::Cost), cost);
+    SetUpdateFieldValue(m_values.ModifyValue(&GameObject::m_housingCornerstoneData, 0)
+        .ModifyValue(&UF::HousingCornerstoneData::PlotIndex), plotIndex);
+
+    m_entityFragments.Add(WowCS::EntityFragment::FJamHousingCornerstone_C, IsInWorld(),
+        WowCS::GetRawFragmentData(m_housingCornerstoneData));
+
+    TC_LOG_DEBUG("housing", "GameObject::InitHousingCornerstoneData: entry={} guid={} cost={} plotIndex={} "
+        "isInWorld={} fragmentCount={} updateableCount={}",
+        GetEntry(), GetGUID().ToString(), cost, plotIndex,
+        IsInWorld(), m_entityFragments.Count, m_entityFragments.UpdateableCount);
+}
+
+void GameObject::InitHousingDecorData(ObjectGuid decorGuid, ObjectGuid houseGuid,
+    uint8 flags, ObjectGuid attachParent /*= ObjectGuid::Empty*/,
+    uint8 sourceType /*= 0*/, std::string sourceValue /*= {}*/)
+
+void GameObject::InitHousingDecorMirroredPosition(Position const& localPos, QuaternionData const& localRot,
+    float localScale, ObjectGuid attachParent, uint8 attachFlags /*= 3*/)
+{
+    // Retail sniff-verified: GameObject decor carries FMirroredPositionData_C fragment
+    // with AttachParent=room entity and local-space position.
+    auto posData = m_values.ModifyValue(&GameObject::m_mirroredPositionData)
+        .ModifyValue(&UF::MirroredPositionData::PositionData);
+    SetUpdateFieldValue(posData.ModifyValue(&UF::MirroredMeshObjectData::AttachParentGUID), attachParent);
+    SetUpdateFieldValue(posData.ModifyValue(&UF::MirroredMeshObjectData::PositionLocalSpace),
+        TaggedPosition<Position::XYZ>(localPos.GetPositionX(), localPos.GetPositionY(), localPos.GetPositionZ()));
+    SetUpdateFieldValue(posData.ModifyValue(&UF::MirroredMeshObjectData::RotationLocalSpace), localRot);
+    SetUpdateFieldValue(posData.ModifyValue(&UF::MirroredMeshObjectData::ScaleLocalSpace), localScale);
+    SetUpdateFieldValue(posData.ModifyValue(&UF::MirroredMeshObjectData::AttachmentFlags), attachFlags);
+
+    m_entityFragments.Add(WowCS::EntityFragment::FMirroredPositionData_C, IsInWorld(),
+        WowCS::GetRawFragmentData(m_mirroredPositionData));
+
+    TC_LOG_DEBUG("housing", "GameObject::InitHousingDecorMirroredPosition: entry={} goGuid={} "
+        "localPos=({:.2f},{:.2f},{:.2f}) attachParent={} attachFlags={}",
+        GetEntry(), GetGUID().ToString(),
+        localPos.GetPositionX(), localPos.GetPositionY(), localPos.GetPositionZ(),
+        attachParent.ToString(), attachFlags);
+}
