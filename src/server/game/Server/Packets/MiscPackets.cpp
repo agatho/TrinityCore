@@ -791,6 +791,11 @@ void ConversationLineStarted::Read()
     _worldPacket >> LineID;
 }
 
+void ConversationCinematicReady::Read()
+{
+    _worldPacket >> ConversationGUID;
+}
+
 WorldPacket const* SplashScreenShowLatest::Write()
 {
     _worldPacket << int32(UISplashScreenID);

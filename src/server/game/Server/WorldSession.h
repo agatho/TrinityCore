@@ -536,6 +536,7 @@ namespace WorldPackets
         class MountSetFavorite;
         class CloseInteraction;
         class ConversationLineStarted;
+        class ConversationCinematicReady;
         class RequestLatestSplashScreen;
         class QueryCountdownTimer;
         class SetCurrencyFlags;
@@ -1828,6 +1829,7 @@ class TC_GAME_API WorldSession
         void HandleObjectUpdateRescuedOpcode(WorldPackets::Misc::ObjectUpdateRescued& objectUpdateRescued);
         void HandleCloseInteraction(WorldPackets::Misc::CloseInteraction& closeInteraction);
         void HandleConversationLineStarted(WorldPackets::Misc::ConversationLineStarted& conversationLineStarted);
+        void HandleConversationCinematicReady(WorldPackets::Misc::ConversationCinematicReady& conversationCinematicReady);
         void HandleKeyboundOverride(WorldPackets::Spells::KeyboundOverride& keyboundOverride);
         void HandleQueryCountdownTimer(WorldPackets::Misc::QueryCountdownTimer& queryCountdownTimer);
         void HandleSetCurrencyFlags(WorldPackets::Misc::SetCurrencyFlags const& setCurrenctFlags);
