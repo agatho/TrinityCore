@@ -1,0 +1,35 @@
+-- ============================================================================
+-- Arathi Catch-Up / RPE -- enable the authored boss/mob SmartAI  (2026-08-22)
+-- ============================================================================
+-- Found by grepping DBErrors.log while verifying this session's other changes -- the server has been
+-- saying it all along:
+--     SmartAIMgr::LoadSmartAIFromDB: Creature entry (244675) is not using SmartAI, skipped loading.
+--     SmartAIMgr::LoadSmartAIFromDB: Creature entry (244709) is not using SmartAI, skipped loading.
+--
+-- Four RPE creatures have authored `smart_scripts` rows but an EMPTY `creature_template.AIName`, so
+-- TrinityCore skips their scripts entirely at load. Both questline BOSSES are affected:
+--     244675 Runk     (quest 90887 "Farmer's Nemesis")   -- 5 script rows, none running
+--     244709 Ro'grok  (quest 90896 "One Last Ogre")      -- 4 script rows, none running
+--     244670 Gnoll Bowblaster                            -- 1 row (ranged Shoot on aggro)
+--     244682 Kobold Waxmancer                            -- 1 row
+-- In game that means both bosses fight with no abilities and say nothing.
+--
+-- VERIFIED SAFE BEFORE ENABLING (each checked against the live realm, not assumed):
+--   * The barks resolve: creature_text exists for both bosses with exactly the groups the scripts
+--     call -- group 0 = aggro line, group 1 = death line ("We take farm, Stromgarde, then ALL
+--     Arathi!" / "How... plan... fail?" and Ro'grok's pair). Action 1 = TALK, param1 = the group.
+--   * Every cast spell is bound in creature_template_spell, i.e. known-loaded: Shadow Bolt 305913 and
+--     Desecrate 317547 on both bosses, Shoot 372369 on the Bowblaster, Fireball 448429 on the Waxmancer.
+--   * Event ids confirmed against SmartScriptMgr.h: 2 = HEALTH_PCT (the sub-20% nukes), 4 = AGGRO,
+--     6 = DEATH.
+--
+-- KNOWN ODDITY, deliberately left alone: two rows fire a CAST on SMART_EVENT_DEATH (244675 id 2,
+-- 244682 id 0), which is very likely a mis-authored row from the original capture pass -- a corpse
+-- casting a spell. It is harmless (the cast simply fails) and removing it would be a guess about
+-- intent, so it stays until someone sees the encounter and decides. The DEATH rows that TALK are
+-- correct and are what give the bosses their dying line.
+--
+-- The scripts themselves are still tagged REVIEW-ONLY from the original capture pass (single combat
+-- sample for some rows); enabling them is strictly better than the current state of no AI at all.
+
+UPDATE `creature_template` SET `AIName` = 'SmartAI' WHERE `entry` IN (244675,244709,244670,244682);
