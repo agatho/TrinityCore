@@ -541,6 +541,20 @@ namespace WorldPackets
         class SetCurrencyFlags;
     }
 
+    namespace LFGList
+    {
+        class LFGListJoin;
+        class LFGListUpdateRequest;
+        class LFGListLeave;
+        class LFGListGetStatus;
+        class LFGListSearch;
+        class LFGListApplyToGroup;
+        class LFGListCancelApplication;
+        class LFGListDeclineApplicant;
+        class LFGListInviteApplicant;
+        class LFGListInviteResponse;
+        class RequestLFGListBlacklist;
+    }
     namespace Movement
     {
         class ClientPlayerMovement;
@@ -1314,6 +1328,19 @@ class TC_GAME_API WorldSession
         // Inertia
         void HandleMoveApplyInertiaAck(WorldPackets::Movement::MoveApplyInertiaAck& moveApplyInertiaAck);
         void HandleMoveRemoveInertiaAck(WorldPackets::Movement::MoveRemoveInertiaAck& moveRemoveInertiaAck);
+        // LFGList
+        void HandleLFGListJoin(WorldPackets::LFGList::LFGListJoin& packet);
+        void HandleLFGListUpdateRequest(WorldPackets::LFGList::LFGListUpdateRequest& packet);
+        void HandleLFGListLeave(WorldPackets::LFGList::LFGListLeave& packet);
+        void HandleLFGListGetStatus(WorldPackets::LFGList::LFGListGetStatus& packet);
+        void HandleLFGListSearch(WorldPackets::LFGList::LFGListSearch& packet);
+        void HandleLFGListApplyToGroup(WorldPackets::LFGList::LFGListApplyToGroup& packet);
+        void HandleLFGListCancelApplication(WorldPackets::LFGList::LFGListCancelApplication& packet);
+        void HandleLFGListDeclineApplicant(WorldPackets::LFGList::LFGListDeclineApplicant& packet);
+        void HandleLFGListInviteApplicant(WorldPackets::LFGList::LFGListInviteApplicant& packet);
+        void HandleLFGListInviteResponse(WorldPackets::LFGList::LFGListInviteResponse& packet);
+        void HandleRequestLFGListBlacklist(WorldPackets::LFGList::RequestLFGListBlacklist& packet);
+        void SendLFGListUpdateStatus(uint32 listingId, uint8 status = 0x38);
 
         void HandleRepopRequest(WorldPackets::Misc::RepopRequest& packet);
         void HandleAutostoreLootItemOpcode(WorldPackets::Loot::LootItem& packet);
