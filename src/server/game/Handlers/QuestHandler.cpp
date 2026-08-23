@@ -16,6 +16,7 @@
  */
 
 #include "WorldSession.h"
+#include "WorldQuestMgr.h"
 #include "Battleground.h"
 #include "Common.h"
 #include "Creature.h"
@@ -753,6 +754,7 @@ void WorldSession::HandleRequestWorldQuestUpdate(WorldPackets::Quest::RequestWor
 
     /// @todo: 7.x Has to be implemented
     //response.WorldQuestUpdates.push_back(WorldPackets::Quest::WorldQuestUpdateInfo(lastUpdate, questID, timer, variableID, value));
+    sWorldQuestMgr->FillActiveWorldQuests(response.WorldQuestUpdates);
 
     SendPacket(response.Write());
 }
