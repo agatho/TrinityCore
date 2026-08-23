@@ -541,6 +541,10 @@ namespace WorldPackets
         class SetCurrencyFlags;
     }
 
+    namespace MajorFactions
+    {
+        class RequestCatchupState;
+    }
     namespace Movement
     {
         class ClientPlayerMovement;

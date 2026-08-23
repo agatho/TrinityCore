@@ -20,6 +20,8 @@
 
 void CharacterDatabaseConnection::DoPrepareStatements()
 {
+    PrepareStatement(CHAR_INS_CHAR_RENOWN_REWARD_GRANTED, "INSERT IGNORE INTO character_renown_rewards_granted (characterId, renownRewardId) VALUES (?, ?)", CONNECTION_ASYNC);
+    PrepareStatement(CHAR_INS_WARBAND_RENOWN_REWARD_GRANTED, "INSERT IGNORE INTO warband_renown_rewards_granted (battlenetAccountId, renownRewardId) VALUES (?, ?)", CONNECTION_ASYNC);
     if (!m_reconnecting)
         m_stmts.resize(MAX_CHARACTERDATABASE_STATEMENTS);
 
