@@ -25,6 +25,7 @@
 #include "Player.h"
 #include "PlayerChoice.h"
 #include "QuestDef.h"
+#include "Random.h"
 #include "SceneMgr.h"
 #include "ScriptedCreature.h"
 #include "ScriptedGossip.h"
@@ -117,7 +118,20 @@ enum ArathiRpe
     NPC_ARATHI_RPE_PUMPKIN_PEON      = 249249,   // the carrying peon (summoned, follows player)
     SPELL_ARATHI_RPE_PUMPKIN_LAUNCH  = 1236771,  // pumpkin's own on-click visual (wire: 244956 casts this)
     SPELL_ARATHI_RPE_PEON_CARRY      = 382691,    // peon carry visual, stacked to the pumpkins carried
-    ARATHI_RPE_PUMPKINS_NEEDED       = 4
+    ARATHI_RPE_PUMPKINS_NEEDED       = 4,
+
+    // "Catapult Bombardment" (90895). WIRE-CONFIRMED in BOTH captures: exactly FOUR distinct Worn
+    // Catapult (249269) GUIDs bombard the Stromgarde approach on a loop, and each is SPELLCLICKED once
+    // (CMSG 0x3E002A) -- whereupon the player casts 1248670 and THAT catapult stops firing for good
+    // (0-1 trailing in-flight cast, and it never despawns: the wreck stays). 467 casts were recorded and
+    // 401 of them fall BEFORE the first click, so the bombardment is ambient siege fire, NOT a response
+    // to the click. The three shot spells cycle at roughly 2:2:1 and are already bound in
+    // creature_template_spell (so they are known-loaded and safe to cast).
+    QUEST_CATAPULT_BOMBARDMENT       = 90895,
+    NPC_ARATHI_RPE_WORN_CATAPULT     = 249269,
+    SPELL_ARATHI_RPE_CATAPULT_SHOT_A = 1248641,
+    SPELL_ARATHI_RPE_CATAPULT_SHOT_B = 1248649,
+    SPELL_ARATHI_RPE_CATAPULT_SHOT_C = 1248657
 };
 
 // Faction capitals to send the player to once the Catch Up finale choice has been made. These are
@@ -503,6 +517,77 @@ struct npc_arathi_rpe_farmer_bruvk : public ScriptedAI
     }
 };
 
+// Worn Catapult (249269) -- the Stromgarde siege bombardment, and the target of "Catapult Bombardment"
+// (90895, objective 461767 = 4 catapults destroyed). It fires ambiently on a loop until a player on the
+// quest spellclicks it, which credits that player and silences this catapult. Credit is tracked per
+// player so a shared spawn still works for a second character or a re-taken quest; the silence is on a
+// timer for the same reason (the capture, a solo run, only ever shows it stop for good).
+struct npc_arathi_rpe_worn_catapult : public ScriptedAI
+{
+    npc_arathi_rpe_worn_catapult(Creature* creature) : ScriptedAI(creature) { }
+
+    void Reset() override
+    {
+        _credited.clear();
+        _silenceTimer = 0;
+        _fireTimer = urand(1000, 6000);   // stagger the four catapults so they do not volley in lockstep
+    }
+
+    void UpdateAI(uint32 diff) override
+    {
+        if (_silenceTimer)
+        {
+            if (_silenceTimer <= diff)
+            {
+                _silenceTimer = 0;
+                me->SetNpcFlag(UNIT_NPC_FLAG_SPELLCLICK);   // becomes a target again
+                _fireTimer = urand(2000, 6000);
+            }
+            else
+            {
+                _silenceTimer -= diff;
+                return;                                     // destroyed: no bombardment
+            }
+        }
+
+        if (_fireTimer <= diff)
+        {
+            // Ambient bombardment. The wire mix is ~2:2:1 across the three shot spells; reproduce that
+            // ratio rather than picking uniformly, so the siege sounds the way it was captured.
+            static constexpr uint32 shotCycle[5] =
+            {
+                SPELL_ARATHI_RPE_CATAPULT_SHOT_A, SPELL_ARATHI_RPE_CATAPULT_SHOT_B,
+                SPELL_ARATHI_RPE_CATAPULT_SHOT_A, SPELL_ARATHI_RPE_CATAPULT_SHOT_B,
+                SPELL_ARATHI_RPE_CATAPULT_SHOT_C
+            };
+            DoCastSelf(shotCycle[urand(0, 4)], CastSpellExtraArgs(true));
+            _fireTimer = urand(4000, 9000);
+        }
+        else
+            _fireTimer -= diff;
+    }
+
+    void OnSpellClick(Unit* clicker, bool /*spellClickHandled*/) override
+    {
+        Player* player = clicker ? clicker->ToPlayer() : nullptr;
+        if (!player || player->GetQuestStatus(QUEST_CATAPULT_BOMBARDMENT) != QUEST_STATUS_INCOMPLETE)
+            return;
+        if (!_credited.insert(player->GetGUID()).second)
+            return;                                         // this player already wrecked this catapult
+
+        player->KilledMonsterCredit(NPC_ARATHI_RPE_WORN_CATAPULT);   // objective 461767
+
+        me->InterruptNonMeleeSpells(true);
+        me->RemoveNpcFlag(UNIT_NPC_FLAG_SPELLCLICK);        // no second click while it is a wreck
+        _silenceTimer = 2 * MINUTE * IN_MILLISECONDS;
+    }
+
+private:
+    GuidSet _credited;
+    uint32 _silenceTimer = 0;
+    uint32 _fireTimer = 0;
+};
+
 void AddSC_arathi_highlands_rpe()
 {
     new player_arathi_rpe_mount_credit();
@@ -512,4 +597,5 @@ void AddSC_arathi_highlands_rpe()
     RegisterCreatureAI(npc_arathi_rpe_pumpkin_peon);
     RegisterCreatureAI(npc_arathi_rpe_prized_pumpkin);
     RegisterCreatureAI(npc_arathi_rpe_farmer_bruvk);
+    RegisterCreatureAI(npc_arathi_rpe_worn_catapult);
 }
