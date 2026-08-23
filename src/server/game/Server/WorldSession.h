@@ -19,6 +19,7 @@
 #define __WORLDSESSION_H
 
 #include "Common.h"
+#include "BattlePayMgr.h"
 #include "AsyncCallbackProcessor.h"
 #include "AuthDefines.h"
 #include "ClientBuildInfo.h"
@@ -541,6 +542,19 @@ namespace WorldPackets
         class SetCurrencyFlags;
     }
 
+    namespace BattlePay
+    {
+        class UpdateVasPurchaseStates;
+        class VasGetServiceStatus;
+        class GetProductList;
+        class GetPurchaseList;
+        class StartPurchase;
+        class OpenCheckout;
+        class CatalogShopLicenseGameDataRequest;
+        class ConfirmPurchaseResponse;
+        class DistributionAssignToTarget;
+        class CharacterUpgradeStart;
+    }
     namespace Movement
     {
         class ClientPlayerMovement;
@@ -786,6 +800,15 @@ namespace WorldPackets
     {
         class CommerceTokenGetLog;
         class CommerceTokenGetMarketPrice;
+        class CommerceTokenGetCount;
+        class AuctionableTokenSell;
+        class AuctionableTokenSellAtMarketPrice;
+        class CanRedeemTokenForBalance;
+        class ConsumableTokenBuy;
+        class ConsumableTokenBuyAtMarketPrice;
+        class ConsumableTokenCanVeteranBuy;
+        class ConsumableTokenRedeem;
+        class ConsumableTokenRedeemConfirmation;
     }
 
     namespace Totem
@@ -1314,6 +1337,55 @@ class TC_GAME_API WorldSession
         // Inertia
         void HandleMoveApplyInertiaAck(WorldPackets::Movement::MoveApplyInertiaAck& moveApplyInertiaAck);
         void HandleMoveRemoveInertiaAck(WorldPackets::Movement::MoveRemoveInertiaAck& moveRemoveInertiaAck);
+        // Commerce
+        // Commerce Token
+        void HandleAuctionableTokenSell(WorldPackets::Token::AuctionableTokenSell& auctionableTokenSell);
+        void HandleAuctionableTokenSellAtMarketPrice(WorldPackets::Token::AuctionableTokenSellAtMarketPrice& auctionableTokenSellAtMarketPrice);
+        void HandleCanRedeemTokenForBalance(WorldPackets::Token::CanRedeemTokenForBalance& canRedeemTokenForBalance);
+        void HandleConsumableTokenBuy(WorldPackets::Token::ConsumableTokenBuy& consumableTokenBuy);
+        void HandleConsumableTokenBuyAtMarketPrice(WorldPackets::Token::ConsumableTokenBuyAtMarketPrice& consumableTokenBuyAtMarketPrice);
+        void HandleConsumableTokenCanVeteranBuy(WorldPackets::Token::ConsumableTokenCanVeteranBuy& consumableTokenCanVeteranBuy);
+        void HandleConsumableTokenRedeem(WorldPackets::Token::ConsumableTokenRedeem& consumableTokenRedeem);
+        void HandleConsumableTokenRedeemConfirmation(WorldPackets::Token::ConsumableTokenRedeemConfirmation& consumableTokenRedeemConfirmation);
+        void SendGenerateSsoToken(uint32 clientToken);
+        void SendCharacterEnum();
+        // Commerce members
+        bool IsCharacterShopBoosted(ObjectGuid::LowType characterGuid) const { return _shopBoostedCharacters.contains(characterGuid); }
+        bool IsCharacterShopTrial(ObjectGuid::LowType characterGuid) const { return _shopTrialCharacters.contains(characterGuid); }
+        bool _battlePayPurchaseInFlight = false;
+        uint32 _lastBattlePayPurchaseMSTime = 0;
+        uint32 _battlePayCatalogGeneration = 0;
+        uint32 _battlePayPendingProductID = 0;
+        uint32 _battlePayConfirmToken = 0;
+        std::unordered_set<ObjectGuid::LowType> _shopBoostedCharacters;
+        std::unordered_set<ObjectGuid::LowType> _shopTrialCharacters;
+        bool _shopBoostAdvertised = false;
+        void ApplyBattlePayCharacterBoost(CharacterDatabaseQueryHolder const& queryResult, ObjectGuid target,
+            uint32 specializationId, uint64 distributionId, uint64 purchaseId, uint32 productId);
+        void HandleCharacterUpgradeStart(WorldPackets::BattlePay::CharacterUpgradeStart& upgradeStart);
+        void HandleUpdateVasPurchaseStates(WorldPackets::BattlePay::UpdateVasPurchaseStates& packet);
+        void HandleVasGetServiceStatus(WorldPackets::BattlePay::VasGetServiceStatus& packet);
+        void HandleCommerceTokenGetCount(WorldPackets::Token::CommerceTokenGetCount& commerceTokenGetCount);
+        void SendCommerceTokenUpdate();
+        int32 BattlePayCreateEntitlement(ShopProduct const& product, uint64 purchaseID);
+        bool HasBattlePayCharacterBoost() const;
+        std::vector<ShopEntitlement> _battlePayEntitlements;
+        // BattlePay
+        void HandleBattlePayGetProductList(WorldPackets::BattlePay::GetProductList& getProductList);
+        void HandleBattlePayGetPurchaseList(WorldPackets::BattlePay::GetPurchaseList& getPurchaseList);
+        void HandleBattlePayStartPurchase(WorldPackets::BattlePay::StartPurchase& startPurchase);
+        void HandleBattlePayOpenCheckout(WorldPackets::BattlePay::OpenCheckout& openCheckout);
+        void HandleCatalogShopLicenseGameDataRequest(WorldPackets::BattlePay::CatalogShopLicenseGameDataRequest& request);
+        void HandleBattlePayConfirmPurchaseResponse(WorldPackets::BattlePay::ConfirmPurchaseResponse& confirmPurchaseResponse);
+        void BattlePayProcessPurchase(uint32 productID);
+        void SendBattlePayDistributionList();
+        void SendBattlePayDeliveryNotifications(ShopProduct const& product, uint64 purchaseID);
+        void HandleBattlePayDistributionAssignToTarget(WorldPackets::BattlePay::DistributionAssignToTarget& assign);
+        void LoadBattlePayEntitlements(bool sendList);
+        void SendBattlePayDistributionListNow();
+        void SendBattlePayDistributionUpdate(ShopEntitlement const& entitlement);
+        void SendBattlePayEntitlementSync();
+        void RedeemBattlePayEntitlements();
 
         void HandleRepopRequest(WorldPackets::Misc::RepopRequest& packet);
         void HandleAutostoreLootItemOpcode(WorldPackets::Loot::LootItem& packet);
