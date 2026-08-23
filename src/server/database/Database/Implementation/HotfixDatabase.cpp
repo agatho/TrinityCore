@@ -41,6 +41,26 @@ void HotfixDatabaseConnection::DoPrepareStatements()
         "Points, Flags, UiOrder, IconFileID, RewardItemID, CriteriaTree, SharesCriteria, CovenantID, HiddenBeforeDisplaySeason, LegacyAfterTimeEvent"
         " FROM achievement WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
     PREPARE_MAX_ID_STMT(HOTFIX_SEL_ACHIEVEMENT, "SELECT MAX(ID) + 1 FROM achievement", CONNECTION_SYNCH);
+    PrepareStatement(HOTFIX_SEL_MANAGED_WORLD_STATE, "SELECT ID, CurrentStageWorldStateID, ProgressWorldStateID, UpTimeSecs, DownTimeSecs,"
+        " AccumulationStateTargetValue, DepletionStateTargetValue, AccumulationAmountPerMinute, DepletionAmountPerMinute, Field_8_1_5_29418_009,"
+        " OccurrencesWorldStateID1, OccurrencesWorldStateID2, OccurrencesWorldStateID3, OccurrencesWorldStateID4 FROM managed_world_state"
+        " WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_MANAGED_WORLD_STATE, "SELECT MAX(ID) + 1 FROM managed_world_state", CONNECTION_SYNCH);
+    PrepareStatement(HOTFIX_SEL_MANAGED_WORLD_STATE_INPUT, "SELECT ID, ManagedWorldStateID, QuestID, ValidInputConditionID FROM managed_world_state_input"
+        " WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_MANAGED_WORLD_STATE_INPUT, "SELECT MAX(ID) + 1 FROM managed_world_state_input", CONNECTION_SYNCH);
+    PrepareStatement(HOTFIX_SEL_MANAGED_WORLD_STATE_BUFF, "SELECT ID, BuffSpellID, PlayerConditionID, OccurrenceValue, ManagedWorldStateID FROM managed_world_state_buff"
+        " WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_MANAGED_WORLD_STATE_BUFF, "SELECT MAX(ID) + 1 FROM managed_world_state_buff", CONNECTION_SYNCH);
+    PrepareStatement(HOTFIX_SEL_CREATURE_X_CONTRIBUTION, "SELECT ID, ContributionID, CreatureID FROM creature_x_contribution"
+        " WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_CREATURE_X_CONTRIBUTION, "SELECT MAX(ID) + 1 FROM creature_x_contribution", CONNECTION_SYNCH);
+    PrepareStatement(HOTFIX_SEL_CONTRIBUTION, "SELECT ID, Description, Name, ManagedWorldStateInputID, OrderIndex, ContributionStyleContainer,"
+        " UiTextureAtlasMemberID1, UiTextureAtlasMemberID2, UiTextureAtlasMemberID3, UiTextureAtlasMemberID4 FROM contribution"
+        " WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_CONTRIBUTION, "SELECT MAX(ID) + 1 FROM contribution", CONNECTION_SYNCH);
+    PREPARE_LOCALE_STMT(HOTFIX_SEL_CONTRIBUTION, "SELECT ID, Description_lang, Name_lang FROM contribution_locale"
+        " WHERE (`VerifiedBuild` > 0) = ? AND locale = ?", CONNECTION_SYNCH);
     PREPARE_LOCALE_STMT(HOTFIX_SEL_ACHIEVEMENT, "SELECT ID, Description_lang, Title_lang, Reward_lang FROM achievement_locale"
         " WHERE (`VerifiedBuild` > 0) = ? AND locale = ?", CONNECTION_SYNCH);
 

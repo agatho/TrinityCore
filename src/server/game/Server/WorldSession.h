@@ -541,6 +541,11 @@ namespace WorldPackets
         class SetCurrencyFlags;
     }
 
+    namespace Contribution
+    {
+        class ContributionContribute;
+        class ContributionLastUpdateRequest;
+    }
     namespace Movement
     {
         class ClientPlayerMovement;
@@ -1314,6 +1319,9 @@ class TC_GAME_API WorldSession
         // Inertia
         void HandleMoveApplyInertiaAck(WorldPackets::Movement::MoveApplyInertiaAck& moveApplyInertiaAck);
         void HandleMoveRemoveInertiaAck(WorldPackets::Movement::MoveRemoveInertiaAck& moveRemoveInertiaAck);
+        // Contribution
+        void HandleContributionContribute(WorldPackets::Contribution::ContributionContribute& contribute);
+        void HandleContributionLastUpdateRequest(WorldPackets::Contribution::ContributionLastUpdateRequest& request);
 
         void HandleRepopRequest(WorldPackets::Misc::RepopRequest& packet);
         void HandleAutostoreLootItemOpcode(WorldPackets::Loot::LootItem& packet);
