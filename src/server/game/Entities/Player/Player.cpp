@@ -30623,20 +30623,10 @@ void Player::UpdateNPEExitState()
     if (!info || !info->createPositionNPE)
         return;
 
-    // An instance is not a departure. Darkmaul Citadel (map 2236,
-    // scripts/ExilesReach/DarkmaulCitadel/instance_darkmaul_citadel.cpp) is the dungeon of the
-    // tutorial questline itself, so a character inside it has not left Exile's Reach - it is in the
-    // middle of it. Deciding anything here would either raise the popup mid-tutorial (whose "return"
-    // button teleports out of the dungeon and whose "leave" button would set homebind to an instance
-    // area) or, on a login inside the dungeon, retire createMode for good without asking. Neither
-    // branch below can tell that situation apart, so this one steps aside instead: nothing is decided
-    // on an instanceable map. m_npeOnStartMap survives the trip because it is only ever set, never
-    // cleared, so the state from before the dungeon still holds on the way back out.
-    // Instanceable() rather than IsDungeon(): a scenario, battleground or arena excursion is just as
-    // little a departure, and the tutorial map itself is MAP_COMMON, so it is never caught by this.
-    if (GetMap()->Instanceable())
-        return;
-
+    // The start map is tested FIRST, before the instance guard below. The order matters and is not
+    // cosmetic: it keeps this function from depending on what kind of map the tutorial happens to be.
+    // Whatever playercreateinfo names as the NPE start map, being on it means "inside the tutorial"
+    // and is handled here; the guard below then only ever sees maps that are NOT the start map.
     if (info->createPositionNPE->Loc.GetMapId() == GetMapId())
     {
         // Inside the tutorial. Map::RemovePlayerFromMap runs this once more while the character is
@@ -30649,6 +30639,20 @@ void Player::UpdateNPEExitState()
         m_npeAbandonPrompted = false;
         return;
     }
+
+    // Off the start map, but an instance is still not a departure. Darkmaul Citadel (map 2236,
+    // scripts/ExilesReach/DarkmaulCitadel/instance_darkmaul_citadel.cpp) is the dungeon of the
+    // tutorial questline itself, so a character inside it has not left Exile's Reach - it is in the
+    // middle of it. Deciding anything here would either raise the popup mid-tutorial (whose "return"
+    // button teleports out of the dungeon and whose "leave" button would set homebind to an instance
+    // area) or, on a login inside the dungeon, retire createMode for good without asking. Neither
+    // branch below can tell that situation apart, so this one steps aside instead: nothing is decided
+    // on an instanceable map. m_npeOnStartMap survives the trip because it is only ever set, never
+    // cleared, so the state from before the dungeon still holds on the way back out.
+    // Instanceable() rather than IsDungeon(): a scenario, battleground or arena excursion is just as
+    // little a departure.
+    if (GetMap()->Instanceable())
+        return;
 
     if (m_npeOnStartMap)
     {
@@ -30670,8 +30674,9 @@ void Player::UpdateNPEExitState()
 // Fires Lua LEAVING_TUTORIAL_AREA -> StaticPopupDialogs["LEAVING_TUTORIAL_AREA"]. The warning text is
 // client side and faction dependent; the two buttons answer with CMSG_ABANDON_NPE_RESPONSE
 // (C_Tutorial.ReturnToTutorialArea writes bit 0, C_Tutorial.AbandonTutorialArea writes bit 1).
-// Asked once per session - the popup is session state, so the guard is too. HandleAbandonNPEResponse
-// re-arms the guard on the "return" answer, so a second departure asks again.
+// Asked once per session - the popup is session state, so the guard is too. The guard is re-armed in
+// exactly one place, Player::UpdateNPEExitState, on arrival back on the tutorial map; see there for
+// why HandleAbandonNPEResponse must NOT do it.
 void Player::SendCheckAbandonNPE()
 {
     if (m_npeAbandonPrompted)
