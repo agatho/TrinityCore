@@ -3149,6 +3149,39 @@ struct MythicPlusSeasonEntry
     int32 HeroicLFGDungeonMinGear;
 };
 
+struct WeeklyRewardChestThresholdEntry
+{
+    uint32 ID;
+    int8 Type;
+    int32 Threshold;
+    int32 Index;
+};
+
+struct MythicPlusSeasonKeyFloorEntry
+{
+    uint32 ID;
+    int32 KeyFloor;
+    int32 PlayerConditionID;
+    uint32 DisplaySeasonID;
+};
+
+struct MythicPlusSeasonRewardLevelsEntry
+{
+    uint32 ID;
+    uint32 MythicPlusSeasonID;
+    int32 ActivityTierID;
+    int32 DifficultyLevel;
+    int32 WeeklyRewardLevel;
+    int32 EndOfRunRewardLevel;
+};
+
+struct MythicPlusSeasonTrackedMapEntry
+{
+    uint32 ID;
+    int32 MapChallengeModeID;
+    uint32 DisplaySeasonID;
+};
+
 struct NameGenEntry
 {
     uint32 ID;

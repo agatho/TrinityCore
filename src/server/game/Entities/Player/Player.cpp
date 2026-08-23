@@ -61,6 +61,8 @@
 #include "GameEventSender.h"
 #include "GameObjectAI.h"
 #include "Garrison.h"
+#include "MythicPlusData.h"
+#include "MythicPlusPacketsCommon.h"
 #include "GarrisonMgr.h"
 #include "GitRevision.h"
 #include "GossipDef.h"
@@ -18822,6 +18824,12 @@ bool Player::LoadFromDB(ObjectGuid guid, CharacterDatabaseQueryHolder const& hol
         holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_GARRISON_FOLLOWER_ABILITIES)))
         _garrison = std::move(garrison);
 
+    _mythicPlusData = std::make_unique<MythicPlusData>(this);
+    _mythicPlusData->LoadFromDB(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_MYTHIC_PLUS));
+    _mythicPlusData->LoadVaultFromDB(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_MYTHIC_PLUS_VAULT));
+    _mythicPlusData->LoadWeeklyFromDB(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_MYTHIC_PLUS_WEEKLY));
+    UpdateDungeonScore();
+
     _InitHonorLevelOnLoadFromDB(fields.honor, fields.honorLevel);
 
     _restMgr->LoadRestBonus(REST_TYPE_HONOR, fields.honorRestState, fields.honorRestBonus);
@@ -20765,6 +20773,9 @@ void Player::SaveToDB(LoginDatabaseTransaction loginTransaction, CharacterDataba
     _SaveCharacterBankTabSettings(trans);
     if (_garrison)
         _garrison->SaveToDB(trans);
+
+    if (_mythicPlusData)
+        _mythicPlusData->SaveToDB(trans);
 
     // check if stats should only be saved on logout
     // save stats can be out of transaction
@@ -31767,4 +31778,17 @@ bool Player::CanExecutePendingSpellCastRequest()
         return false;
 
     return true;
+}
+
+void Player::UpdateDungeonScore()
+{
+    WorldPackets::MythicPlus::DungeonScoreSummary summary;
+    WorldPackets::MythicPlus::DungeonScoreData data;
+    if (MythicPlusData* mythicPlus = GetMythicPlusData())
+    {
+        mythicPlus->BuildDungeonScoreSummary(summary);
+        mythicPlus->BuildDungeonScoreData(data);
+    }
+    SetUpdateFieldValue(m_values.ModifyValue(&Player::m_playerData).ModifyValue(&UF::PlayerData::DungeonScore), std::move(summary));
+    SetUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::DungeonScore), std::move(data));
 }

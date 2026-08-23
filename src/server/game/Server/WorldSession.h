@@ -541,6 +541,15 @@ namespace WorldPackets
         class SetCurrencyFlags;
     }
 
+    namespace ChallengeMode
+    {
+        class RequestMythicPlusSeasonData;
+        class RequestMythicPlusAffixes;
+        class StartChallengeMode;
+        class ResetChallengeMode;
+        class MythicPlusRequestMapStats;
+    }
+
     namespace Movement
     {
         class ClientPlayerMovement;
@@ -1314,6 +1323,12 @@ class TC_GAME_API WorldSession
         // Inertia
         void HandleMoveApplyInertiaAck(WorldPackets::Movement::MoveApplyInertiaAck& moveApplyInertiaAck);
         void HandleMoveRemoveInertiaAck(WorldPackets::Movement::MoveRemoveInertiaAck& moveRemoveInertiaAck);
+        // Challenge Mode (Mythic+)
+        void HandleRequestMythicPlusSeasonData(WorldPackets::ChallengeMode::RequestMythicPlusSeasonData& requestMythicPlusSeasonData);
+        void HandleRequestMythicPlusAffixes(WorldPackets::ChallengeMode::RequestMythicPlusAffixes& requestMythicPlusAffixes);
+        void HandleStartChallengeMode(WorldPackets::ChallengeMode::StartChallengeMode& startChallengeMode);
+        void HandleResetChallengeMode(WorldPackets::ChallengeMode::ResetChallengeMode& resetChallengeMode);
+        void HandleMythicPlusRequestMapStats(WorldPackets::ChallengeMode::MythicPlusRequestMapStats& request);
 
         void HandleRepopRequest(WorldPackets::Misc::RepopRequest& packet);
         void HandleAutostoreLootItemOpcode(WorldPackets::Loot::LootItem& packet);

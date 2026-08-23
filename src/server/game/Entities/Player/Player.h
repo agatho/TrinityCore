@@ -79,6 +79,7 @@ class CinematicMgr;
 class Creature;
 class DynamicObject;
 class Garrison;
+class MythicPlusData;
 class Group;
 class Guild;
 class Item;
@@ -1024,6 +1025,9 @@ enum PlayerLoginQueryIndex
     PLAYER_LOGIN_QUERY_LOAD_DATA_ELEMENTS,
     PLAYER_LOGIN_QUERY_LOAD_DATA_FLAGS,
     PLAYER_LOGIN_QUERY_LOAD_BANK_TAB_SETTINGS,
+    PLAYER_LOGIN_QUERY_LOAD_MYTHIC_PLUS,
+    PLAYER_LOGIN_QUERY_LOAD_MYTHIC_PLUS_WEEKLY,
+    PLAYER_LOGIN_QUERY_LOAD_MYTHIC_PLUS_VAULT,
     MAX_PLAYER_LOGIN_QUERY
 };
 
@@ -2882,6 +2886,8 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         void CreateGarrison(uint32 garrSiteId);
         void DeleteGarrison();
         Garrison* GetGarrison() const { return _garrison.get(); }
+        MythicPlusData* GetMythicPlusData() const { return _mythicPlusData.get(); }
+        void UpdateDungeonScore();
 
         bool IsAdvancedCombatLoggingEnabled() const { return _advancedCombatLoggingEnabled; }
         void SetAdvancedCombatLogging(bool enabled) { _advancedCombatLoggingEnabled = enabled; }
@@ -3402,6 +3408,7 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         uint32 _activeCheats;
 
         std::unique_ptr<Garrison> _garrison;
+        std::unique_ptr<MythicPlusData> _mythicPlusData;
 
         bool _advancedCombatLoggingEnabled;
 
