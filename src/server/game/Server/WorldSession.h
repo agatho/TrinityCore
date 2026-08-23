@@ -541,6 +541,21 @@ namespace WorldPackets
         class SetCurrencyFlags;
     }
 
+    namespace Social
+    {
+        class AddFriend;
+        class AddIgnore;
+        class DelFriend;
+        class DelIgnore;
+        class MakeConditionalAppearancePermanent;
+        class RecentAllyRequestData;
+        class RecentAllySetNote;
+        class SendContactList;
+        class SetAllowRecentAlliesSeeLocation;
+        class SetContactNotes;
+        class SocialContractRequest;
+        class AcceptSocialContract;
+    }
     namespace Movement
     {
         class ClientPlayerMovement;
@@ -1314,6 +1329,11 @@ class TC_GAME_API WorldSession
         // Inertia
         void HandleMoveApplyInertiaAck(WorldPackets::Movement::MoveApplyInertiaAck& moveApplyInertiaAck);
         void HandleMoveRemoveInertiaAck(WorldPackets::Movement::MoveRemoveInertiaAck& moveRemoveInertiaAck);
+        // Social
+        void HandleSetAllowRecentAlliesSeeLocation(WorldPackets::Social::SetAllowRecentAlliesSeeLocation& packet);
+        void HandleRecentAllyRequestData(WorldPackets::Social::RecentAllyRequestData& packet);
+        void HandleRecentAllySetNote(WorldPackets::Social::RecentAllySetNote& packet);
+        void HandleAcceptSocialContract(WorldPackets::Social::AcceptSocialContract& acceptSocialContract);
 
         void HandleRepopRequest(WorldPackets::Misc::RepopRequest& packet);
         void HandleAutostoreLootItemOpcode(WorldPackets::Loot::LootItem& packet);

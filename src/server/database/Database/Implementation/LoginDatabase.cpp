@@ -20,6 +20,26 @@
 
 void LoginDatabaseConnection::DoPrepareStatements()
 {
+    PrepareStatement(LOGIN_SEL_BNET_GAME_ACCOUNT_IDS, "SELECT id FROM account WHERE battlenet_account = ? ORDER BY battlenet_index", CONNECTION_ASYNC);
+    PrepareStatement(LOGIN_SEL_BNET_SOCIAL_CONTRACT, "SELECT accepted_social_contract FROM battlenet_accounts WHERE id = ?", CONNECTION_ASYNC);
+    PrepareStatement(LOGIN_UPD_BNET_SOCIAL_CONTRACT, "UPDATE battlenet_accounts SET accepted_social_contract = 1 WHERE id = ?", CONNECTION_ASYNC);
+    PrepareStatement(LOGIN_INS_BNET_REPORT, "INSERT INTO battlenet_account_report (reporterAccountId, targetAccountId, issueType, source, clubId, streamId, entityId, entityType, userDescription, submittedTime) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, UNIX_TIMESTAMP())", CONNECTION_ASYNC);
+    PrepareStatement(LOGIN_SEL_BNET_ITEM_FAVORITE_TRANSMOG_SETS, "SELECT transmogSetId FROM battlenet_item_favorite_transmog_sets WHERE battlenetAccountId = ?", CONNECTION_ASYNC);
+    PrepareStatement(LOGIN_INS_BNET_ITEM_FAVORITE_TRANSMOG_SET, "INSERT INTO battlenet_item_favorite_transmog_sets (battlenetAccountId, transmogSetId) VALUES (?, ?)", CONNECTION_ASYNC);
+    PrepareStatement(LOGIN_DEL_BNET_ITEM_FAVORITE_TRANSMOG_SET, "DELETE FROM battlenet_item_favorite_transmog_sets WHERE battlenetAccountId = ? AND transmogSetId = ?", CONNECTION_ASYNC);
+    PrepareStatement(LOGIN_UPD_BNET_BATTLE_TAG, "UPDATE battlenet_accounts SET battle_tag = ?, battle_tag_disc = ? WHERE id = ?", CONNECTION_ASYNC);
+    PrepareStatement(LOGIN_SEL_BNET_ACCOUNT_IDENTITY, "SELECT id, email, battle_tag, battle_tag_disc FROM battlenet_accounts WHERE id = ?", CONNECTION_SYNCH);
+    PrepareStatement(LOGIN_REP_BNET_FRIEND, "REPLACE INTO battlenet_account_friend (accountId, friendId, level, note, titleTags, creationTime) VALUES (?, ?, ?, ?, ?, ?)", CONNECTION_ASYNC);
+    PrepareStatement(LOGIN_UPD_BNET_FRIEND_STATE, "UPDATE battlenet_account_friend SET note = ?, titleTags = ? WHERE accountId = ? AND friendId = ?", CONNECTION_ASYNC);
+    PrepareStatement(LOGIN_DEL_BNET_FRIEND_EDGE, "DELETE FROM battlenet_account_friend WHERE (accountId = ? AND friendId = ?) OR (accountId = ? AND friendId = ?)", CONNECTION_ASYNC);
+    PrepareStatement(LOGIN_INS_BNET_FRIEND_INVITE, "REPLACE INTO battlenet_account_friend_invite (id, senderId, targetId, targetTag, level, note, creationTime, expirationTime) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", CONNECTION_ASYNC);
+    PrepareStatement(LOGIN_DEL_BNET_FRIEND_INVITE, "DELETE FROM battlenet_account_friend_invite WHERE id = ?", CONNECTION_ASYNC);
+    PrepareStatement(LOGIN_DEL_BNET_FRIEND_INVITES_BY_SENDER, "DELETE FROM battlenet_account_friend_invite WHERE senderId = ?", CONNECTION_ASYNC);
+    PrepareStatement(LOGIN_REP_BNET_PRESENCE, "REPLACE INTO battlenet_game_account_presence (gameAccountId, bnetAccountId, isOnline, realmId, characterGuid, characterName, level, raceId, classId, factionId, zoneId, areaId, updateTime) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", CONNECTION_ASYNC);
+    PrepareStatement(LOGIN_UPD_BNET_PRESENCE_ALL_OFFLINE, "UPDATE battlenet_game_account_presence SET isOnline = 0", CONNECTION_ASYNC);
+    PrepareStatement(LOGIN_REP_BNET_BLOCKED, "REPLACE INTO battlenet_account_blocked (accountId, blockedAccountId, blockedBattleTag, creationTime, modifiedTime) VALUES (?, ?, ?, ?, ?)", CONNECTION_ASYNC);
+    PrepareStatement(LOGIN_DEL_BNET_BLOCKED, "DELETE FROM battlenet_account_blocked WHERE accountId = ? AND blockedAccountId = ?", CONNECTION_ASYNC);
     if (!m_reconnecting)
         m_stmts.resize(MAX_LOGINDATABASE_STATEMENTS);
 
