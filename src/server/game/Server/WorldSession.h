@@ -550,6 +550,11 @@ namespace WorldPackets
         class MythicPlusRequestMapStats;
     }
 
+    namespace WeeklyRewards
+    {
+        class ClaimWeeklyReward;
+        class RequestWeeklyRewards;
+    }
     namespace Movement
     {
         class ClientPlayerMovement;
@@ -1323,6 +1328,9 @@ class TC_GAME_API WorldSession
         // Inertia
         void HandleMoveApplyInertiaAck(WorldPackets::Movement::MoveApplyInertiaAck& moveApplyInertiaAck);
         void HandleMoveRemoveInertiaAck(WorldPackets::Movement::MoveRemoveInertiaAck& moveRemoveInertiaAck);
+        // WeeklyRewards
+        void HandleRequestWeeklyRewards(WorldPackets::WeeklyRewards::RequestWeeklyRewards& packet);
+        void HandleClaimWeeklyReward(WorldPackets::WeeklyRewards::ClaimWeeklyReward& packet);
         // Challenge Mode (Mythic+)
         void HandleRequestMythicPlusSeasonData(WorldPackets::ChallengeMode::RequestMythicPlusSeasonData& requestMythicPlusSeasonData);
         void HandleRequestMythicPlusAffixes(WorldPackets::ChallengeMode::RequestMythicPlusAffixes& requestMythicPlusAffixes);
