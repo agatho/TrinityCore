@@ -553,16 +553,19 @@ bool SpellMgr::CanSpellTriggerProcOnEvent(SpellProcEntry const& procEntry, ProcE
         return false;
 
     // check spell family name/flags (if set) for spells
-    if (eventInfo.GetTypeMask() & SPELL_PROC_FLAG_MASK)
-    {
-        if (SpellInfo const* eventSpellInfo = eventInfo.GetSpellInfo())
-            if (!eventSpellInfo->IsAffected(procEntry.SpellFamilyName, procEntry.SpellFamilyMask))
-                return false;
+    // Gate this on the event actually carrying a spell, not on SPELL_PROC_FLAG_MASK. Spell-bearing
+    // events outside that mask - PROC_FLAG_CAST_ENDED is dispatched from Spell::finish with the
+    // spell attached - skipped the family filter entirely, so a spell_proc entry that declares a
+    // SpellFamilyName procced off every spell's cast-ended. Entries that declare no family are
+    // unaffected: SpellInfo::IsAffected returns true for familyName 0.
+    if (SpellInfo const* eventSpellInfo = eventInfo.GetSpellInfo())
+        if (!eventSpellInfo->IsAffected(procEntry.SpellFamilyName, procEntry.SpellFamilyMask))
+            return false;
 
-        // check spell type mask (if set)
+    // check spell type mask (if set) - still only meaningful for the hit-style proc events
+    if (eventInfo.GetTypeMask() & SPELL_PROC_FLAG_MASK)
         if (procEntry.SpellTypeMask && !(eventInfo.GetSpellTypeMask() & procEntry.SpellTypeMask))
             return false;
-    }
 
     // check spell phase mask
     if (eventInfo.GetTypeMask() & REQ_SPELL_PHASE_PROC_FLAG_MASK)
