@@ -1950,7 +1950,11 @@ void Unit::HandleEmoteCommand(Emote emoteId, Player* target /*=nullptr*/, Trinit
                 absorbAurEff->ChangeAmount(absorbAurEff->GetAmount() - currentAbsorb);
                 // Aura cannot absorb anything more - remove it
                 if (absorbAurEff->GetAmount() <= 0)
+                {
+                    // Notify observers that this absorb's point pool is exhausted before it is torn down.
+                    aurApp->GetTarget()->SendAuraPointsDepleted(aurApp->GetSlot(), uint8(absorbAurEff->GetEffIndex()));
                     absorbAurEff->GetBase()->Remove(AURA_REMOVE_BY_ENEMY_SPELL);
+                }
             }
         }
 
@@ -2027,7 +2031,11 @@ void Unit::HandleEmoteCommand(Emote emoteId, Player* target /*=nullptr*/, Trinit
             {
                 absorbAurEff->ChangeAmount(absorbAurEff->GetAmount() - currentAbsorb);
                 if ((absorbAurEff->GetAmount() <= 0))
+                {
+                    // Notify observers that this mana-shield's point pool is exhausted before it is torn down.
+                    aurApp->GetTarget()->SendAuraPointsDepleted(aurApp->GetSlot(), uint8(absorbAurEff->GetEffIndex()));
                     absorbAurEff->GetBase()->Remove(AURA_REMOVE_BY_ENEMY_SPELL);
+                }
             }
         }
 
@@ -2160,7 +2168,11 @@ void Unit::HandleEmoteCommand(Emote emoteId, Player* target /*=nullptr*/, Trinit
                 absorbAurEff->ChangeAmount(absorbAurEff->GetAmount() - currentAbsorb);
                 // Aura cannot absorb anything more - remove it
                 if (absorbAurEff->GetAmount() <= 0)
+                {
+                    // Notify observers that this heal-absorb's point pool is exhausted before it is torn down.
+                    aurApp->GetTarget()->SendAuraPointsDepleted(aurApp->GetSlot(), uint8(absorbAurEff->GetEffIndex()));
                     absorbAurEff->GetBase()->Remove(AURA_REMOVE_BY_ENEMY_SPELL);
+                }
             }
         }
 
@@ -12437,6 +12449,15 @@ void Unit::SendPlaySpellVisualKit(uint32 id, uint32 type, uint32 duration) const
     playSpellVisualKit.KitType = type;
     playSpellVisualKit.Duration = duration;
     SendMessageToSet(playSpellVisualKit.Write(), true);
+}
+
+void Unit::SendAuraPointsDepleted(uint16 slot, uint8 effectIndex) const
+{
+    WorldPackets::Spells::AuraPointsDepleted auraPointsDepleted;
+    auraPointsDepleted.Unit = GetGUID();
+    auraPointsDepleted.Slot = slot;
+    auraPointsDepleted.EffectIndex = effectIndex;
+    SendMessageToSet(auraPointsDepleted.Write(), true);
 }
 
 void Unit::SendCancelSpellVisualKit(uint32 id)

@@ -156,6 +156,15 @@ WorldPacket const* AuraUpdate::Write()
     return &_worldPacket;
 }
 
+WorldPacket const* AuraPointsDepleted::Write()
+{
+    _worldPacket << Unit;
+    _worldPacket << uint16(Slot);
+    _worldPacket << uint8(EffectIndex);
+
+    return &_worldPacket;
+}
+
 ByteBuffer& operator>>(ByteBuffer& buffer, TargetLocation& location)
 {
     buffer >> location.Transport;
