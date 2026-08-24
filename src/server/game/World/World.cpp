@@ -109,6 +109,7 @@
 #include "WeatherMgr.h"
 #include "WhoListStorage.h"
 #include "WorldSession.h"
+#include "OmniumFolioMgr.h"
 #include "WorldStateMgr.h"
 #include "NemesisMgr.h"
 #include "RitualSiteMgr.h"
@@ -1632,6 +1633,8 @@ bool World::SetInitialWorldSettings()
     TC_LOG_INFO("server.loading", "Loading Midnight small activities...");     // Ritual Sites + Abyss Anglers — realm-safe no-op if tables absent
     sRitualSiteMgr->LoadFromDB();
     sAbyssAnglersMgr->LoadFromDB();
+    TC_LOG_INFO("server.loading", "Loading Omnium Folio seasonal schedule...");
+    sOmniumFolioMgr->LoadFromDB();                             // realm-safe: tolerates absent omnium_folio_season table
 
     TC_LOG_INFO("server.loading", "Loading Game Event Data...");               // must be after loading pools fully
     sGameEventMgr->LoadFromDB();
@@ -2449,6 +2452,7 @@ void World::Update(uint32 diff)
     WorldStateMgr::Update();
 
     sNemesisMgr->Update(diff);
+    sOmniumFolioMgr->Update(diff);
 
     {
         TC_METRIC_TIMER("world_update_time", TC_METRIC_TAG("type", "Process cli commands"));
