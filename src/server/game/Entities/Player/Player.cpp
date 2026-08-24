@@ -16,6 +16,15 @@
  */
 
 #include "Player.h"
+#include "HousingDefines.h"
+#include "HousingMirrorEntity.h"
+#include "HousingNeighborhoodMirrorEntity.h"
+#include "HousingPlayerHouseEntity.h"
+#include "Housing.h"
+#include "HousingMap.h"
+#include "HousingRoomEntity.h"
+#include "HousingMgr.h"
+#include "HousingPackets.h"
 #include "AreaTrigger.h"
 #include "Account.h"
 #include "AccountMgr.h"

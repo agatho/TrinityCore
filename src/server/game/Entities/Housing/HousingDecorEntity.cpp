@@ -136,8 +136,6 @@ UF::UpdateFieldFlag HousingDecorEntity::GetUpdateFieldFlagsFor(Player const* /*t
 
 void HousingDecorEntity::ClearValuesChangesMask()
 {
-    m_values.ClearChangesMask(&HousingDecorEntity::m_housingDecorData);
-    m_values.ClearChangesMask(&HousingDecorEntity::m_mirroredPositionData);
     Object::ClearValuesChangesMask();
 }
 

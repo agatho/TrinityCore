@@ -557,10 +557,5 @@ void MeshObject::BuildValuesUpdate(UF::UpdateFieldFlag flags, ByteBuffer& data, 
 
 void MeshObject::ClearValuesChangesMask()
 {
-    m_values.ClearChangesMask(&MeshObject::m_meshObjectData);
-    m_values.ClearChangesMask(&MeshObject::m_mirroredPositionData);
-    m_values.ClearChangesMask(&Object::m_housingRoomComponentMeshData);
-    m_values.ClearChangesMask(&Object::m_housingDecorData);
-    m_values.ClearChangesMask(&Object::m_housingFixtureData);
     WorldObject::ClearValuesChangesMask();
 }

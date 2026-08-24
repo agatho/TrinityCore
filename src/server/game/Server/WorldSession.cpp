@@ -16,6 +16,8 @@
  */
 
 #include "WorldSession.h"
+#include "HousingPlayerHouseEntity.h"
+#include "HousingNeighborhoodMirrorEntity.h"
 #include "Account.h"
 #include "AccountMgr.h"
 #include "AuthenticationPackets.h"

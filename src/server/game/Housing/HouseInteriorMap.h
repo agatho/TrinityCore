@@ -36,7 +36,7 @@ class TC_GAME_API HouseInteriorMap : public Map
 public:
     HouseInteriorMap(uint32 id, time_t expiry, uint32 instanceId, ObjectGuid const& owner);
 
-    void LoadGridObjects(NGridType* grid, Cell const& cell) override;
+    void LoadGridObjects(NGridType* grid) override;
     void InitVisibilityDistance() override;
     bool AddPlayerToMap(Player* player, bool initPlayer = true) override;
     void RemovePlayerFromMap(Player* player, bool remove) override;

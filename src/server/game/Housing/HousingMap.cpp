@@ -183,7 +183,7 @@ void HousingMap::InitVisibilityDistance()
     m_VisibilityNotifyPeriod = sWorld->getIntConfig(CONFIG_VISIBILITY_NOTIFY_PERIOD_INSTANCE);
 }
 
-void HousingMap::LoadGridObjects(NGridType* grid, Cell const& cell)
+void HousingMap::LoadGridObjects(NGridType* grid)
 {
     Map::LoadGridObjects(grid, cell);
 }

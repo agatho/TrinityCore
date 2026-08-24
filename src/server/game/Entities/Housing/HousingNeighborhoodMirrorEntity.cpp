@@ -38,11 +38,6 @@ HousingNeighborhoodMirrorEntity::HousingNeighborhoodMirrorEntity(WorldSession* s
     m_entityFragments.Add(WowCS::EntityFragment::FNeighborhoodMirrorData_C, false, WowCS::GetRawFragmentData(m_neighborhoodMirrorData));
 }
 
-void HousingNeighborhoodMirrorEntity::ClearUpdateMask(bool remove)
-{
-    m_values.ClearChangesMask(&HousingNeighborhoodMirrorEntity::m_neighborhoodMirrorData);
-    BaseEntity::ClearUpdateMask(remove);
-}
 
 std::string HousingNeighborhoodMirrorEntity::GetNameForLocaleIdx(LocaleConstant /*locale*/) const
 {

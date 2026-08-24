@@ -87,7 +87,7 @@ void HouseInteriorMap::InitVisibilityDistance()
     m_VisibilityNotifyPeriod = sWorld->getIntConfig(CONFIG_VISIBILITY_NOTIFY_PERIOD_INSTANCE);
 }
 
-void HouseInteriorMap::LoadGridObjects(NGridType* grid, Cell const& cell)
+void HouseInteriorMap::LoadGridObjects(NGridType* grid)
 {
     Map::LoadGridObjects(grid, cell);
 

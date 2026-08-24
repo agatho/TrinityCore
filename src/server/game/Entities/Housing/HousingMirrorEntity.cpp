@@ -65,11 +65,6 @@ void HousingMirrorEntity::InitPositionData(ObjectGuid attachParent,
     }
 }
 
-void HousingMirrorEntity::ClearUpdateMask(bool remove)
-{
-    m_values.ClearChangesMask(&HousingMirrorEntity::m_mirroredPositionData);
-    BaseEntity::ClearUpdateMask(remove);
-}
 
 std::string HousingMirrorEntity::GetNameForLocaleIdx(LocaleConstant /*locale*/) const
 {

@@ -64,7 +64,6 @@ public:
         Position const& position, QuaternionData const& rotation,
         float scale, uint8 attachmentFlags, Tagging tagging);
 
-    void ClearUpdateMask(bool remove) override;
     std::string GetNameForLocaleIdx(LocaleConstant locale) const override;
     void BuildUpdate(UpdateDataMapType& data_map) override;
     std::string GetDebugInfo() const override;

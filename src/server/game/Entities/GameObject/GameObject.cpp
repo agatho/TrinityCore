@@ -4767,6 +4767,41 @@ void GameObject::InitHousingCornerstoneData(uint64 cost, int32 plotIndex)
 void GameObject::InitHousingDecorData(ObjectGuid decorGuid, ObjectGuid houseGuid,
     uint8 flags, ObjectGuid attachParent /*= ObjectGuid::Empty*/,
     uint8 sourceType /*= 0*/, std::string sourceValue /*= {}*/)
+{
+    if (m_housingDecorData.has_value())
+        return;
+
+    SetUpdateFieldValue(m_values.ModifyValue(&Object::m_housingDecorData, 0)
+        .ModifyValue(&UF::HousingDecorData::DecorGUID), decorGuid);
+    SetUpdateFieldValue(m_values.ModifyValue(&Object::m_housingDecorData, 0)
+        .ModifyValue(&UF::HousingDecorData::AttachParentGUID), attachParent);
+    SetUpdateFieldValue(m_values.ModifyValue(&Object::m_housingDecorData, 0)
+        .ModifyValue(&UF::HousingDecorData::Flags), flags);
+    SetUpdateFieldValue(m_values.ModifyValue(&Object::m_housingDecorData, 0)
+        .ModifyValue(&UF::HousingDecorData::TargetGameObjectGUID), GetGUID());
+
+    // Set persisted data (house ownership + source tracking)
+    auto persistedRef = m_values.ModifyValue(&Object::m_housingDecorData, 0)
+        .ModifyValue(&UF::HousingDecorData::PersistedData, 0);
+    SetUpdateFieldValue(persistedRef.ModifyValue(&UF::DecorStoragePersistedData::HouseGUID), houseGuid);
+    SetUpdateFieldValue(persistedRef.ModifyValue(&UF::DecorStoragePersistedData::SourceType), sourceType);
+    if (!sourceValue.empty())
+        SetUpdateFieldValue(persistedRef.ModifyValue(&UF::DecorStoragePersistedData::SourceValue), std::move(sourceValue));
+
+    m_entityFragments.Add(WowCS::EntityFragment::FHousingDecor_C, IsInWorld(),
+        WowCS::GetRawFragmentData(m_housingDecorData));
+
+    // 12.0.5 added Tag_HousingDecorProxyGameObject (=226) to mark a GameObject that is
+    // serving as a housing-decor proxy (chair/chest/mailbox/etc. placed as decor).
+    // Attach it alongside FHousingDecor_C so the client treats this entity as housing
+    // decor in addition to its normal GO behavior.
+    m_entityFragments.Add(WowCS::EntityFragment::Tag_HousingDecorProxyGameObject, IsInWorld());
+
+    TC_LOG_DEBUG("housing", "GameObject::InitHousingDecorData: entry={} goGuid={} decorGuid={} houseGuid={} flags={} "
+        "isInWorld={} fragmentCount={}",
+        GetEntry(), GetGUID().ToString(), decorGuid.ToString(), houseGuid.ToString(), flags,
+        IsInWorld(), m_entityFragments.Count);
+}
 
 void GameObject::InitHousingDecorMirroredPosition(Position const& localPos, QuaternionData const& localRot,
     float localScale, ObjectGuid attachParent, uint8 attachFlags /*= 3*/)
@@ -4791,3 +4826,4 @@ void GameObject::InitHousingDecorMirroredPosition(Position const& localPos, Quat
         localPos.GetPositionX(), localPos.GetPositionY(), localPos.GetPositionZ(),
         attachParent.ToString(), attachFlags);
 }
+

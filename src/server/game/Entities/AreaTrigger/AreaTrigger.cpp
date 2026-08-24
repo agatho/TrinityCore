@@ -1561,17 +1561,6 @@ void AreaTrigger::ClearValuesChangesMask()
     WorldObject::ClearValuesChangesMask();
 }
 
-AreaTrigger* AreaTrigger::CreateStaticAreaTrigger(AreaTriggerCreatePropertiesId areaTriggerCreatePropertiesId, Map* map, Position const& pos, int32 duration /*= -1*/, bool addToMap /*= true*/)
-{
-    AreaTrigger* at = new AreaTrigger();
-    if (!at->Create(areaTriggerCreatePropertiesId, map, pos, duration, nullptr, nullptr, nullptr, { 0, 0 }, nullptr, nullptr, nullptr, addToMap))
-    {
-        delete at;
-        return nullptr;
-    }
-
-    return at;
-}
 
 void AreaTrigger::InitHousingPlotVisuals()
 {

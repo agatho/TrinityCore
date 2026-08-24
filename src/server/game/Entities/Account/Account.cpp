@@ -36,11 +36,6 @@ Account::Account(WorldSession* session, ObjectGuid guid, std::string&& name) : m
     SetUpdateFieldValue(m_values.ModifyValue(&Account::m_housingStorageData).ModifyValue(&UF::HousingStorageData::DecorMaxOwnedCount), 5000);
 }
 
-void Account::ClearUpdateMask(bool remove)
-{
-    m_values.ClearChangesMask(&Account::m_housingStorageData);
-    BaseEntity::ClearUpdateMask(remove);
-}
 
 
 std::string Account::GetNameForLocaleIdx(LocaleConstant /*locale*/) const

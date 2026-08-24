@@ -165,8 +165,6 @@ UF::UpdateFieldFlag HousingRoomEntity::GetUpdateFieldFlagsFor(Player const* /*ta
 
 void HousingRoomEntity::ClearValuesChangesMask()
 {
-    m_values.ClearChangesMask(&HousingRoomEntity::m_housingRoomData);
-    m_values.ClearChangesMask(&HousingRoomEntity::m_mirroredPositionData);
     Object::ClearValuesChangesMask();
 }
 

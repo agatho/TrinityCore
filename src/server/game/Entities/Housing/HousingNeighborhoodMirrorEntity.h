@@ -29,7 +29,6 @@ class HousingNeighborhoodMirrorEntity final : public BaseEntity
 public:
     explicit HousingNeighborhoodMirrorEntity(WorldSession* session, ObjectGuid guid);
 
-    void ClearUpdateMask(bool remove) override;
     std::string GetNameForLocaleIdx(LocaleConstant locale) const override;
     void BuildUpdate(UpdateDataMapType& data_map) override;
     std::string GetDebugInfo() const override;
