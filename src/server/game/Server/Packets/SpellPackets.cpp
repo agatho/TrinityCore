@@ -161,6 +161,13 @@ WorldPacket const* AuraPointsDepleted::Write()
     _worldPacket << Unit;
     _worldPacket << uint16(Slot);
     _worldPacket << uint8(EffectIndex);
+WorldPacket const* DiminishingReturnStart::Write()
+{
+    _worldPacket << Unit;
+    _worldPacket << uint8(Category);
+    _worldPacket << Bits<1>(ShowCountdown);
+    _worldPacket << Bits<1>(IsImmune);
+    _worldPacket.FlushBits();
 
     return &_worldPacket;
 }
