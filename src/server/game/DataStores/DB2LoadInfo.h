@@ -98,6 +98,7 @@ struct AchievementLoadInfo
 };
 
 struct UIChromieTimeExpansionInfoLoadInfo
+struct ManagedWorldStateLoadInfo
 {
     static constexpr DB2FieldMeta Fields[14] =
     {
@@ -118,6 +119,80 @@ struct UIChromieTimeExpansionInfoLoadInfo
     };
 
     static constexpr DB2LoadInfo Instance{ Fields, 14, &UIChromieTimeExpansionInfoMeta::Instance, HOTFIX_SEL_UI_CHROMIE_TIME_EXPANSION_INFO };
+        { .IsSigned = true, .Type = FT_INT, .Name = "CurrentStageWorldStateID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "ProgressWorldStateID" },
+        { .IsSigned = false, .Type = FT_INT, .Name = "UpTimeSecs" },
+        { .IsSigned = false, .Type = FT_INT, .Name = "DownTimeSecs" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "AccumulationStateTargetValue" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "DepletionStateTargetValue" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "AccumulationAmountPerMinute" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "DepletionAmountPerMinute" },
+        { .IsSigned = true, .Type = FT_BYTE, .Name = "Field_8_1_5_29418_009" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "OccurrencesWorldStateID1" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "OccurrencesWorldStateID2" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "OccurrencesWorldStateID3" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "OccurrencesWorldStateID4" },
+    };
+
+    static constexpr DB2LoadInfo Instance{ Fields, 14, &ManagedWorldStateMeta::Instance, HOTFIX_SEL_MANAGED_WORLD_STATE };
+};
+
+struct ManagedWorldStateInputLoadInfo
+{
+    static constexpr DB2FieldMeta Fields[4] =
+    {
+        { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "ManagedWorldStateID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "QuestID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "ValidInputConditionID" },
+    };
+
+    static constexpr DB2LoadInfo Instance{ Fields, 4, &ManagedWorldStateInputMeta::Instance, HOTFIX_SEL_MANAGED_WORLD_STATE_INPUT };
+};
+
+struct ManagedWorldStateBuffLoadInfo
+{
+    static constexpr DB2FieldMeta Fields[5] =
+    {
+        { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "BuffSpellID" },
+        { .IsSigned = false, .Type = FT_INT, .Name = "PlayerConditionID" },
+        { .IsSigned = false, .Type = FT_INT, .Name = "OccurrenceValue" },
+        { .IsSigned = false, .Type = FT_INT, .Name = "ManagedWorldStateID" },
+    };
+
+    static constexpr DB2LoadInfo Instance{ Fields, 5, &ManagedWorldStateBuffMeta::Instance, HOTFIX_SEL_MANAGED_WORLD_STATE_BUFF };
+};
+
+struct CreatureXContributionLoadInfo
+{
+    static constexpr DB2FieldMeta Fields[3] =
+    {
+        { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "ContributionID" },
+        { .IsSigned = false, .Type = FT_INT, .Name = "CreatureID" },
+    };
+
+    static constexpr DB2LoadInfo Instance{ Fields, 3, &CreatureXContributionMeta::Instance, HOTFIX_SEL_CREATURE_X_CONTRIBUTION };
+};
+
+struct ContributionLoadInfo
+{
+    static constexpr DB2FieldMeta Fields[10] =
+    {
+        { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
+        { .IsSigned = false, .Type = FT_STRING, .Name = "Description" },
+        { .IsSigned = false, .Type = FT_STRING, .Name = "Name" },
+        { .IsSigned = false, .Type = FT_INT, .Name = "ManagedWorldStateInputID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "OrderIndex" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "ContributionStyleContainer" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "UiTextureAtlasMemberID1" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "UiTextureAtlasMemberID2" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "UiTextureAtlasMemberID3" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "UiTextureAtlasMemberID4" },
+    };
+
+    static constexpr DB2LoadInfo Instance{ Fields, 10, &ContributionMeta::Instance, HOTFIX_SEL_CONTRIBUTION };
 };
 
 struct AchievementCategoryLoadInfo

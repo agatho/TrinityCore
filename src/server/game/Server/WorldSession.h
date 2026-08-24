@@ -589,6 +589,10 @@ namespace WorldPackets
         class ConfirmPurchaseResponse;
         class DistributionAssignToTarget;
         class CharacterUpgradeStart;
+    namespace Contribution
+    {
+        class ContributionContribute;
+        class ContributionLastUpdateRequest;
     }
     namespace Movement
     {
@@ -1449,6 +1453,9 @@ class TC_GAME_API WorldSession
         void SendBattlePayDistributionUpdate(ShopEntitlement const& entitlement);
         void SendBattlePayEntitlementSync();
         void RedeemBattlePayEntitlements();
+        // Contribution
+        void HandleContributionContribute(WorldPackets::Contribution::ContributionContribute& contribute);
+        void HandleContributionLastUpdateRequest(WorldPackets::Contribution::ContributionLastUpdateRequest& request);
 
         void HandleRepopRequest(WorldPackets::Misc::RepopRequest& packet);
         void HandleAutostoreLootItemOpcode(WorldPackets::Loot::LootItem& packet);

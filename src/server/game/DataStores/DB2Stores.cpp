@@ -42,6 +42,11 @@ DB2Storage<AccountStoreCategoryEntry>           sAccountStoreCategoryStore("Acco
 DB2Storage<AccountStoreItemEntry>               sAccountStoreItemStore("AccountStoreItem.db2", &AccountStoreItemLoadInfo::Instance);
 DB2Storage<AchievementEntry>                    sAchievementStore("Achievement.db2", &AchievementLoadInfo::Instance);
 DB2Storage<UIChromieTimeExpansionInfoEntry>     sUIChromieTimeExpansionInfoStore("UIChromieTimeExpansionInfo.db2", &UIChromieTimeExpansionInfoLoadInfo::Instance);
+DB2Storage<ManagedWorldStateEntry>              sManagedWorldStateStore("ManagedWorldState.db2", &ManagedWorldStateLoadInfo::Instance);
+DB2Storage<ManagedWorldStateInputEntry>         sManagedWorldStateInputStore("ManagedWorldStateInput.db2", &ManagedWorldStateInputLoadInfo::Instance);
+DB2Storage<ManagedWorldStateBuffEntry>          sManagedWorldStateBuffStore("ManagedWorldStateBuff.db2", &ManagedWorldStateBuffLoadInfo::Instance);
+DB2Storage<CreatureXContributionEntry>          sCreatureXContributionStore("CreatureXContribution.db2", &CreatureXContributionLoadInfo::Instance);
+DB2Storage<ContributionEntry>                   sContributionStore("Contribution.db2", &ContributionLoadInfo::Instance);
 DB2Storage<Achievement_CategoryEntry>           sAchievementCategoryStore("Achievement_Category.db2", &AchievementCategoryLoadInfo::Instance);
 DB2Storage<AdventureJournalEntry>               sAdventureJournalStore("AdventureJournal.db2", &AdventureJournalLoadInfo::Instance);
 DB2Storage<AdventureMapPOIEntry>                sAdventureMapPOIStore("AdventureMapPOI.db2", &AdventureMapPoiLoadInfo::Instance);
@@ -693,6 +698,11 @@ uint32 DB2Manager::LoadStores(std::string const& dataPath, LocaleConstant defaul
     LOAD_DB2(sAccountStoreItemStore);
     LOAD_DB2(sAchievementStore);
     LOAD_DB2(sUIChromieTimeExpansionInfoStore);
+    LOAD_DB2(sManagedWorldStateStore);
+    LOAD_DB2(sManagedWorldStateInputStore);
+    LOAD_DB2(sManagedWorldStateBuffStore);
+    LOAD_DB2(sCreatureXContributionStore);
+    LOAD_DB2(sContributionStore);
     LOAD_DB2(sAchievementCategoryStore);
     LOAD_DB2(sAdventureJournalStore);
     LOAD_DB2(sAdventureMapPOIStore);
