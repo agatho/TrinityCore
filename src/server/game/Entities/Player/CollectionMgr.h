@@ -113,6 +113,7 @@ struct PerksProgramPurchaseData
     uint32 PurchaseTime = 0;
     int32 MountID = 0;   // mount teaching spell id, 0 if the reward was not a mount
     int32 ToyID = 0;     // toy item id, 0 if the reward was not a toy
+    uint64 BuyerGuid = 0; // low GUID of the purchasing character; a refund is only honoured for this same character
 };
 
 class TC_GAME_API CollectionMgr
@@ -175,6 +176,7 @@ public:
     // Account-wide Perks Program (Trading Post) purchase history, used to authorise refunds.
     void LoadPerksProgramPurchases(PreparedQueryResult result);
     void AddPerksProgramPurchase(int32 perksVendorItemId, int32 price, int32 mountId, int32 toyId);
+    void AddPerksProgramPurchase(int32 perksVendorItemId, int32 price, int32 mountId, int32 toyId, uint64 buyerGuid);
     bool RemovePerksProgramPurchase(int32 perksVendorItemId);
     PerksProgramPurchaseData const* GetPerksProgramPurchase(int32 perksVendorItemId) const;
     std::unordered_map<int32, PerksProgramPurchaseData> const& GetPerksProgramPurchases() const { return _perksPurchases; }
@@ -203,6 +205,7 @@ public:
     void MountClearFanfare(uint32 spellId);
     void SendSingleMountUpdate(std::pair<uint32, MountStatusFlags> mount);
     // Revoke a mount (in-memory + un-learn spell + full mount resync + account DB). Returns false if not owned.
+    bool RemoveMount(uint32 spellId);
     MountContainer const& GetAccountMounts() const { return _mounts; }
 
     // Appearances

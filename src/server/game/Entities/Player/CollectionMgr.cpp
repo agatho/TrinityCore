@@ -612,6 +612,54 @@ void CollectionMgr::SendSingleMountUpdate(std::pair<uint32, MountStatusFlags> mo
     player->SendDirectMessage(mountUpdate.Write());
 }
 
+bool CollectionMgr::RemoveToy(uint32 itemId)
+{
+    if (_toys.erase(itemId) == 0)
+        return false;
+
+    if (Player* player = _owner->GetPlayer())
+        player->RemoveToy(int32(itemId));
+
+    LoginDatabasePreparedStatement* stmt = LoginDatabase.GetPreparedStatement(LOGIN_DEL_ACCOUNT_TOYS);
+    stmt->setUInt32(0, _owner->GetBattlenetAccountId());
+    stmt->setUInt32(1, itemId);
+    LoginDatabase.Execute(stmt);
+    return true;
+}
+
+bool CollectionMgr::RemoveMount(uint32 spellId)
+{
+    auto itr = _mounts.find(spellId);
+    if (itr == _mounts.end())
+        return false;
+
+    // Mirror AddMount's faction-specific pairing: revoke the paired faction mount too.
+    MountDefinitionMap::const_iterator defItr = FactionSpecificMounts.find(spellId);
+    if (defItr != FactionSpecificMounts.end())
+        RemoveMount(defItr->second);
+
+    _mounts.erase(itr);
+
+    LoginDatabasePreparedStatement* stmt = LoginDatabase.GetPreparedStatement(LOGIN_DEL_ACCOUNT_MOUNT);
+    stmt->setUInt32(0, _owner->GetBattlenetAccountId());
+    stmt->setUInt32(1, spellId);
+    LoginDatabase.Execute(stmt);
+
+    if (Player* player = _owner->GetPlayer())
+    {
+        if (player->HasSpell(spellId))
+            player->RemoveSpell(spellId);
+
+        // No single-mount-remove opcode exists; resync the whole account mount list so the client drops it.
+        WorldPackets::Misc::AccountMountUpdate mountUpdate;
+        mountUpdate.IsFullUpdate = true;
+        mountUpdate.Mounts = &_mounts;
+        player->SendDirectMessage(mountUpdate.Write());
+    }
+
+    return true;
+}
+
 void CollectionMgr::LoadPerksProgramPurchases(PreparedQueryResult result)
 {
     if (!result)
@@ -626,17 +674,20 @@ void CollectionMgr::LoadPerksProgramPurchases(PreparedQueryResult result)
         data.PurchaseTime = fields[2].GetUInt32();
         data.MountID = fields[3].GetInt32();
         data.ToyID = fields[4].GetInt32();
+        data.BuyerGuid = fields[5].GetUInt64();
         _perksPurchases[perksVendorItemId] = data;
     } while (result->NextRow());
 }
 
 void CollectionMgr::AddPerksProgramPurchase(int32 perksVendorItemId, int32 price, int32 mountId, int32 toyId)
+void CollectionMgr::AddPerksProgramPurchase(int32 perksVendorItemId, int32 price, int32 mountId, int32 toyId, uint64 buyerGuid)
 {
     PerksProgramPurchaseData& data = _perksPurchases[perksVendorItemId];
     data.Price = price;
     data.PurchaseTime = uint32(GameTime::GetGameTime());
     data.MountID = mountId;
     data.ToyID = toyId;
+    data.BuyerGuid = buyerGuid;
 
     LoginDatabasePreparedStatement* stmt = LoginDatabase.GetPreparedStatement(LOGIN_INS_ACCOUNT_PERKS_PURCHASE);
     stmt->setUInt32(0, _owner->GetBattlenetAccountId());
@@ -645,6 +696,7 @@ void CollectionMgr::AddPerksProgramPurchase(int32 perksVendorItemId, int32 price
     stmt->setUInt32(3, data.PurchaseTime);
     stmt->setInt32(4, mountId);
     stmt->setInt32(5, toyId);
+    stmt->setUInt64(6, buyerGuid);
     LoginDatabase.Execute(stmt);
 }
 

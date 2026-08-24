@@ -898,6 +898,18 @@ namespace WorldPackets
         class TurnInPetition;
     }
 
+    namespace PerksProgram
+    {
+        class PerksProgramStatusRequest;
+        class PerksProgramGetRecentPurchases;
+        class PerksProgramRequestPurchase;
+        class PerksProgramRequestRefund;
+        class PerksProgramSetFrozenVendorItem;
+        class PerksProgramRequestCartCheckout;
+        class PerksProgramItemsRefreshed;
+        class PerksProgramRequestPendingRewards;
+    }
+
     namespace Query
     {
         class QueryCreature;
@@ -1508,6 +1520,18 @@ class TC_GAME_API WorldSession
 
         CollectionMgr* GetCollectionMgr() const { return _collectionMgr.get(); }
 
+        // Account-wide Trader's Tender (currency 2032). The authoritative balance lives in the login DB
+        // (battlenet_account_perks_tender), shared by every character of the bnet account; -1 means no row
+        // has been loaded yet (first login since the account-wide wallet was introduced -> seed from the
+        // loading character's existing per-character balance).
+        int64 GetAccountPerksTender() const { return _accountPerksTender; }
+        void StoreAccountPerksTender(uint32 amount);   // updates the session cache + persists to the login DB
+
+        // The Trading Post interval (UTC month-start) for which the account last received its base monthly Tender
+        // (Collector's Cache), used to grant it exactly once per period. Persisted alongside the balance.
+        uint64 GetAccountPerksCacheGrantPeriod() const { return _accountPerksCacheGrantPeriod; }
+        void SetAccountPerksCacheGrantPeriod(uint64 period) { _accountPerksCacheGrantPeriod = period; }
+
     public:                                                 // opcodes handlers
 
         void Handle_NULL(WorldPackets::Null& null);          // not used
@@ -1950,6 +1974,18 @@ class TC_GAME_API WorldSession
         void HandleGuildReplaceGuildMaster(WorldPackets::Guild::GuildReplaceGuildMaster& replaceGuildMaster);
         void HandleGuildSetAchievementTracking(WorldPackets::Guild::GuildSetAchievementTracking& packet);
         void HandleGuildGetAchievementMembers(WorldPackets::Achievement::GuildGetAchievementMembers& getAchievementMembers);
+        void HandleGuildChangeNameRequest(WorldPackets::Guild::GuildChangeNameRequest& packet);
+
+        void HandlePerksProgramStatusRequest(WorldPackets::PerksProgram::PerksProgramStatusRequest& packet);
+        void HandlePerksProgramGetRecentPurchases(WorldPackets::PerksProgram::PerksProgramGetRecentPurchases& packet);
+        void HandlePerksProgramRequestPurchase(WorldPackets::PerksProgram::PerksProgramRequestPurchase& packet);
+        void HandlePerksProgramRequestRefund(WorldPackets::PerksProgram::PerksProgramRequestRefund& packet);
+        void HandlePerksProgramSetFrozenVendorItem(WorldPackets::PerksProgram::PerksProgramSetFrozenVendorItem& packet);
+        void HandlePerksProgramRequestCartCheckout(WorldPackets::PerksProgram::PerksProgramRequestCartCheckout& packet);
+        void HandlePerksProgramItemsRefreshed(WorldPackets::PerksProgram::PerksProgramItemsRefreshed& packet);
+        void HandlePerksProgramRequestPendingRewards(WorldPackets::PerksProgram::PerksProgramRequestPendingRewards& packet);
+        void SendPerksProgramActivityUpdate();
+        void SendPerksAnimToggleKillSwitch();
         void HandleGuildSetGuildMaster(WorldPackets::Guild::GuildSetGuildMaster& packet);
         void HandleGuildUpdateMotdText(WorldPackets::Guild::GuildUpdateMotdText& packet);
         void HandleGuildNewsUpdateSticky(WorldPackets::Guild::GuildNewsUpdateSticky& packet);
@@ -2607,6 +2643,9 @@ class TC_GAME_API WorldSession
         std::unique_ptr<BattlePets::BattlePetMgr> _battlePetMgr;
 
         std::unique_ptr<CollectionMgr> _collectionMgr;
+
+        int64 _accountPerksTender = -1;   // cached account-wide Trader's Tender balance; -1 = not loaded / no row yet
+        uint64 _accountPerksCacheGrantPeriod = 0;   // interval the base monthly Tender was last granted for this account
 
         ConnectToKey _instanceConnectKey;
 

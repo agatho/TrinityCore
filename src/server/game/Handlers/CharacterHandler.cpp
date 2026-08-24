@@ -136,6 +136,14 @@ bool LoginQueryHolder::Initialize()
     stmt->setUInt64(0, lowGuid);
     res &= SetPreparedQuery(PLAYER_LOGIN_QUERY_LOAD_QUEST_STATUS_OBJECTIVES_CRITERIA_PROGRESS, stmt);
 
+    stmt = CharacterDatabase.GetPreparedStatement(CHAR_SEL_CHAR_PERKS_ACTIVITY);
+    stmt->setUInt64(0, lowGuid);
+    res &= SetPreparedQuery(PLAYER_LOGIN_QUERY_LOAD_PERKS_ACTIVITY, stmt);
+
+    stmt = CharacterDatabase.GetPreparedStatement(CHAR_SEL_CHAR_PERKS_ACTIVITY_CRITERIA);
+    stmt->setUInt64(0, lowGuid);
+    res &= SetPreparedQuery(PLAYER_LOGIN_QUERY_LOAD_PERKS_ACTIVITY_CRITERIA, stmt);
+
     stmt = CharacterDatabase.GetPreparedStatement(CHAR_SEL_CHARACTER_QUESTSTATUS_OBJECTIVES_SPAWN_TRACKING);
     stmt->setUInt64(0, lowGuid);
     res &= SetPreparedQuery(PLAYER_LOGIN_QUERY_LOAD_QUEST_STATUS_OBJECTIVES_SPAWN_TRACKING, stmt);
@@ -1374,6 +1382,10 @@ void WorldSession::HandlePlayerLogin(LoginQueryHolder const& holder)
     SendAccountDataTimes(playerGuid, ALL_ACCOUNT_DATA_CACHE_MASK);
 
     SendFeatureSystemStatus();
+
+    // Trading Post animation-toggle kill switch; retail places it here, between SMSG_FEATURE_SYSTEM_STATUS and
+    // SMSG_MOTD.
+    SendPerksAnimToggleKillSwitch();
 
     // Send MOTD
     {

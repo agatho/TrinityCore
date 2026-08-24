@@ -126,6 +126,7 @@
 #include "QueryResultStructured.h"
 #include "QuestDef.h"
 #include "QuestMgr.h"
+#include "PerksProgramActivityMgr.h"
 #include "QuestObjectiveCriteriaMgr.h"
 #include "QuestPackets.h"
 #include "RealmList.h"
@@ -364,6 +365,7 @@ Player::Player(WorldSession* session) : Unit(true), m_sceneMgr(this)
     m_achievementMgr = std::make_unique<PlayerAchievementMgr>(this);
     m_reputationMgr = std::make_unique<ReputationMgr>(this);
     m_questObjectiveCriteriaMgr = std::make_unique<QuestObjectiveCriteriaMgr>(this);
+    m_perksActivityMgr = std::make_unique<PerksProgramActivityMgr>(this);
 
     for (uint8 i = 0; i < MAX_CUF_PROFILES; ++i)
         _CUFProfiles[i] = nullptr;
@@ -7065,6 +7067,35 @@ void Player::_LoadCurrency(PreparedQueryResult result)
         _currencyStorage.insert(PlayerCurrenciesMap::value_type(currencyID, cur));
 
     } while (result->NextRow());
+
+    // Trader's Tender (currency 2032) is account-wide: its authoritative balance lives in the login DB and was
+    // cached at session init. Override the per-character row with the shared balance so earn/spend/refund all act
+    // on one wallet. A missing account row (cache == -1) means this is the first login since the account-wide
+    // wallet was introduced -> seed the shared balance from this character's existing per-character amount.
+    {
+        PlayerCurrenciesMap::iterator itr = _currencyStorage.find(CURRENCY_TYPE_TRADERS_TENDER);
+        int64 accountTender = GetSession()->GetAccountPerksTender();
+        if (accountTender < 0)
+        {
+            uint32 seed = (itr != _currencyStorage.end()) ? itr->second.Quantity : 0u;
+            GetSession()->StoreAccountPerksTender(seed);
+            accountTender = int64(seed);
+        }
+
+        if (itr == _currencyStorage.end())
+        {
+            PlayerCurrency cur{};
+            cur.state = PLAYERCURRENCY_UNCHANGED;
+            cur.Quantity = uint32(accountTender);
+            _currencyStorage.emplace(CURRENCY_TYPE_TRADERS_TENDER, cur);
+        }
+        else
+            itr->second.Quantity = uint32(accountTender);
+    }
+
+    // Mirror the Trader's Tender balance into the perks-program field the Trading Post UI reads.
+    if (PlayerCurrenciesMap::const_iterator itr = _currencyStorage.find(CURRENCY_TYPE_TRADERS_TENDER); itr != _currencyStorage.end())
+        SetUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::PerksProgramCurrency), int32(itr->second.Quantity));
 }
 
 void Player::_SaveCurrency(CharacterDatabaseTransaction trans)
@@ -7075,6 +7106,14 @@ void Player::_SaveCurrency(CharacterDatabaseTransaction trans)
         CurrencyTypesEntry const* entry = sCurrencyTypesStore.LookupEntry(itr->first);
         if (!entry) // should never happen
             continue;
+
+        // Trader's Tender is account-wide (persisted to the login DB by StoreAccountPerksTender); never write it
+        // to the per-character character_currency table, which would create a divergent second source of truth.
+        if (itr->first == CURRENCY_TYPE_TRADERS_TENDER)
+        {
+            itr->second.state = PLAYERCURRENCY_UNCHANGED;
+            continue;
+        }
 
         switch (itr->second.state)
         {
@@ -7272,6 +7311,14 @@ void Player::ModifyCurrency(uint32 id, int32 amount, CurrencyGainSource gainSour
         itr->second.state = PLAYERCURRENCY_CHANGED;
 
     itr->second.Quantity += amount;
+
+    // Keep the perks-program field the Trading Post UI reads in sync with the tender balance, and persist the
+    // shared account-wide balance to the login DB (Trader's Tender is never written to character_currency).
+    if (id == CURRENCY_TYPE_TRADERS_TENDER)
+    {
+        SetUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::PerksProgramCurrency), int32(itr->second.Quantity));
+        GetSession()->StoreAccountPerksTender(itr->second.Quantity);
+    }
 
     if (amount > 0 && !ignoreCaps) // Ignore total values update for refund
     {
@@ -18364,6 +18411,7 @@ bool Player::LoadFromDB(ObjectGuid guid, CharacterDatabaseQueryHolder const& hol
     // load achievements before anything else to prevent multiple gains for the same achievement/criteria on every loading (as loading does call UpdateCriteria)
     m_achievementMgr->LoadFromDB(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_ACHIEVEMENTS), holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_CRITERIA_PROGRESS));
     m_questObjectiveCriteriaMgr->LoadFromDB(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_QUEST_STATUS_OBJECTIVES_CRITERIA), holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_QUEST_STATUS_OBJECTIVES_CRITERIA_PROGRESS));
+    m_perksActivityMgr->LoadFromDB(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_PERKS_ACTIVITY), holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_PERKS_ACTIVITY_CRITERIA));
 
     SetMoney(std::min(fields.money, MAX_MONEY_AMOUNT));
 
@@ -21338,6 +21386,7 @@ void Player::SaveToDB(LoginDatabaseTransaction loginTransaction, CharacterDataba
     m_achievementMgr->SaveToDB(trans);
     m_reputationMgr->SaveToDB(trans);
     m_questObjectiveCriteriaMgr->SaveToDB(trans);
+    m_perksActivityMgr->SaveToDB(trans);
     _SaveEquipmentSets(trans);
     _SaveTransmogOutfits(trans);
     _SaveCharacterSelectOutfit(trans);
@@ -28859,6 +28908,7 @@ void Player::UpdateCriteria(CriteriaType type, uint64 miscValue1 /*= 0*/, uint64
 {
     m_achievementMgr->UpdateCriteria(type, miscValue1, miscValue2, miscValue3, ref, this);
     m_questObjectiveCriteriaMgr->UpdateCriteria(type, miscValue1, miscValue2, miscValue3, ref, this);
+    m_perksActivityMgr->UpdateCriteria(type, miscValue1, miscValue2, miscValue3, ref, this);
 
     // Update only individual achievement criteria here, otherwise we may get multiple updates
     // from a single boss kill
@@ -30736,6 +30786,15 @@ void Player::DeleteTraitConfig(int32 deletedConfigId)
         .ModifyValue(&UF::ActivePlayerData::TraitConfigs), deletedConfigId);
 
     m_traitConfigStates[deletedConfigId] = PLAYERSPELL_REMOVED;
+}
+
+void Player::SetFrozenPerksProgramVendorItem(WorldPackets::PerksProgram::PerksVendorItem const* item)
+{
+    auto setter = m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::FrozenPerksVendorItem);
+    if (item)
+        SetUpdateFieldValue(setter, *item);
+    else
+        SetUpdateFieldValue(setter, WorldPackets::PerksProgram::PerksVendorItem{});
 }
 
 void Player::ApplyTraitConfig(int32 configId, bool apply)
