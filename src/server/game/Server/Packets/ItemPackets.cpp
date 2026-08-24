@@ -433,4 +433,59 @@ WorldPacket const* SendItemPassives::Write()
 
     return &_worldPacket;
 }
+
+void PerformItemInteraction::Read()
+{
+    _worldPacket >> Banker;
+    _worldPacket >> ItemGuid;
+    _worldPacket >> InteractionID;
+}
+
+WorldPacket const* ItemInteractionComplete::Write()
+{
+    _worldPacket << int32(InteractionID);
+
+    return &_worldPacket;
+}
+
+void ConvertItemToBindToAccount::Read()
+{
+    _worldPacket >> ItemIndex;      // see ItemPackets.h - a client-side list index, not a guid
+    _worldPacket >> Flag;
+}
+
+WorldPacket const* ItemChanged::Write()
+{
+    _worldPacket << ItemGuid;
+    _worldPacket << int32(ChangeType);
+
+    return &_worldPacket;
+}
+
+WorldPacket const* SocketGemsFailure::Write()
+{
+    _worldPacket << Item;
+
+    return &_worldPacket;
+}
+
+WorldPacket const* BackpackDefaultSizeChanged::Write()
+{
+    _worldPacket << int32(Size);
+
+    return &_worldPacket;
+}
+
+WorldPacket const* InventoryFixupComplete::Write()
+{
+    return &_worldPacket;
+}
+
+WorldPacket const* ConvertItemsToCurrencyValue::Write()
+{
+    _worldPacket << int32(CurrencyType);
+    _worldPacket << uint64(Quantity);
+
+    return &_worldPacket;
+}
 }
